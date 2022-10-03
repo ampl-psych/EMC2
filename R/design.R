@@ -1,33 +1,55 @@
-#' make_design()
+#' Binds together elements that make up a model design as a list
 #'
 #' This function returns a list with the model design.
 #'
-#' @param Flist Formula list. Linear models for each parameter type (e.g., y ~ x)
-#' @param Ffactors Formula factors. All factors used in design formulas.
-#' @param Rlevels Response factor levels.
-#' @param model Model type.
-#' @param Clist Contrast list.
-#' @param matchfun Match scoring. Specifies whether a response was correct or not.
-#' @param constants Set constants.
+#' @param Flist A list. Contains the design formula of the type list(y ~ x).
+#' @param Ffactors A named list. Participant factor and all factors used in design formulas that are defined as factors in the data frame to be fit.
+#'
+#' Must use "subjects" as name for participant factor. For others don't use "trial", "R", "rt", "lR", or "lM".
+#' Also refrain from using "_" as factor names.
+#'
+#'
+#' @param Rlevels A character vector. Contains the response factor levels.
+#' @param model A function, Specifies the model type.
+#' @param Clist A list. Contrast list.
+#' @param matchfun A function. Specifies whether a response was correct or not.
+#'
+#' Example: `function(d)d$S==d$lR`
+#'
+#' @param constants A named vector. Sets constants. Any parameter named by `sampled_p_vector` can be set constant.
 #' @param Fcovariates Covariate factors. Covariate measures which may be included in the model and/or mapped to factors.
 #' @param Ffunctions Factor Functions. Functions to specify specific parameterisations, or functions of parameters.
 #' @param adapt
 #' @param report_p_vector if TRUE, returns the vector of parameters to be estimated.
 #'
-#' @return
+#' @return A list.
 #' @export
 #'
-#' @examples
+#' @examples  Mu varies by stimulus, emphasis, and latent match
+#' design_mu <- make_design(
+#'                   Ffactors=list(subjects=levels(dat$subjects),
+#'                   S=levels(dat$S),
+#'                   E=levels(dat$E)),
+#'                   Rlevels=levels(dat$R),
+#'                   matchfun=function(d)d$S==d$lR,
+#'                   Clist=list(lM=ADmat, lR=ADmat, E=Emat, S=ADmat),
+#'                   Flist=list(m~S*E*lM, s~1, t0~1),
+#'                   model=lnrMS())
+#'
+#'
+#'
 make_design <- function(Flist,Ffactors,Rlevels,model,
                         Clist=NULL,matchfun=NULL,constants=NULL,Fcovariates=NULL,Ffunctions=NULL,
-                        adapt=NULL,report_p_vector=TRUE)
-  # Binds together elements that make up a design a list
-{
-  if (model$type=="SDT") Clist[["lR"]] <- contr.increasing(length(Rlevels),Rlevels)
+                        adapt=NULL,report_p_vector=TRUE){
+  if (model$type=="SDT") {
+    Clist[["lR"]] <- contr.increasing(length(Rlevels),Rlevels)
+  }
+
   design <- list(Flist=Flist,Ffactors=Ffactors,Rlevels=Rlevels,
                  Clist=Clist,matchfun=matchfun,constants=constants,
                  Fcovariates=Fcovariates,Ffunctions=Ffunctions,adapt=adapt,model=model)
   p_vector <- sampled_p_vector(design,design$model)
+
   if (model$type=="SDT") {
     tnams <- dimnames(attr(p_vector,"map")$threshold)[[2]]
     max_threshold=paste0("lR",Rlevels[length(Rlevels)])
@@ -39,8 +61,12 @@ make_design <- function(Flist,Ffactors,Rlevels,model,
     }
   }
   attr(design,"p_vector") <- p_vector
-  if (report_p_vector) print(p_vector)
-  design
+
+  if (report_p_vector) {
+    print(p_vector)
+  }
+
+  return(design)
 }
 
 
