@@ -13,7 +13,6 @@
 #' @param Ffunctions Factor Functions. Functions to specify specific parameterisations, or functions of parameters.
 #' @param adapt
 #' @param report_p_vector if TRUE, returns the vector of parameters to be estimated.
-#' @param Rmap
 #'
 #' @return
 #' @export
@@ -21,8 +20,7 @@
 #' @examples
 make_design <- function(Flist,Ffactors,Rlevels,model,
                         Clist=NULL,matchfun=NULL,constants=NULL,Fcovariates=NULL,Ffunctions=NULL,
-                        adapt=NULL,report_p_vector=TRUE,
-                        Rmap=NULL)
+                        adapt=NULL,report_p_vector=TRUE)
   # Binds together elements that make up a design a list
 {
   if (model$type=="SDT") Clist[["lR"]] <- contr.increasing(length(Rlevels),Rlevels)
