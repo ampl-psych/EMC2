@@ -20,7 +20,7 @@
 #' @param Fcovariates Covariate factors. Covariate measures which may be included in the model and/or mapped to factors.
 #' @param Ffunctions Factor Functions. Functions to specify specific parameterisations, or functions of parameters.
 #' @param adapt
-#' @param report_p_vector if TRUE, returns the vector of parameters to be estimated.
+#' @param report_p_vector TRUE (default) or FALSE. if TRUE, returns the vector of parameters to be estimated.
 #'
 #' @return A list.
 #' @export
