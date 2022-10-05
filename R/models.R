@@ -13,7 +13,7 @@ dLNR <- function(rt,pars){
   rt <- rt - pars[,"t0"]
   out <- numeric(length(rt))
   ok <- rt > 0
-  out[ok] <- dlnorm(rt[ok],meanlog=pars[ok,"m"],sdlog=pars[ok,"s"])
+  out[ok] <- stats::dlnorm(rt[ok],meanlog=pars[ok,"m"],sdlog=pars[ok,"s"])
   out
 }
 
@@ -33,7 +33,7 @@ pLNR <- function(rt,pars){
   rt <- rt - pars[,"t0"]
   out <- numeric(length(rt))
   ok <- rt > 0
-  out[ok] <- plnorm(rt[ok],meanlog=pars[ok,"m"],sdlog=pars[ok,"s"])
+  out[ok] <- stats::plnorm(rt[ok],meanlog=pars[ok,"m"],sdlog=pars[ok,"s"])
   out
 
 }
@@ -52,7 +52,7 @@ pLNR <- function(rt,pars){
 rLNR <- function(lR,pars,p_types=c("m","s","t0")){
   if (!all(p_types %in% dimnames(pars)[[2]]))
     stop("pars must have columns ",paste(p_types,collapse = " "))
-  dt <- matrix(rlnorm(dim(pars)[1],meanlog=pars[,"m"],sdlog=pars[,"s"]),
+  dt <- matrix(stats::rlnorm(dim(pars)[1],meanlog=pars[,"m"],sdlog=pars[,"s"]),
                nrow=length(levels(lR)))
   R <- apply(dt,2,which.min)
   pick <- cbind(R,1:dim(dt)[2]) # Matrix to pick winner

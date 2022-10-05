@@ -25,18 +25,6 @@
 #' @return A list.
 #' @export
 #'
-#' @examples  Mu varies by stimulus, emphasis, and latent match
-#' design_mu <- make_design(
-#'                   Ffactors=list(subjects=levels(dat$subjects),
-#'                   S=levels(dat$S),
-#'                   E=levels(dat$E)),
-#'                   Rlevels=levels(dat$R),
-#'                   matchfun=function(d)d$S==d$lR,
-#'                   Clist=list(lM=ADmat, lR=ADmat, E=Emat, S=ADmat),
-#'                   Flist=list(m~S*E*lM, s~1, t0~1),
-#'                   model=lnrMS())
-#'
-#'
 #'
 make_design <- function(Flist,Ffactors,Rlevels,model,
                         Clist=NULL,matchfun=NULL,constants=NULL,Fcovariates=NULL,Ffunctions=NULL,
@@ -55,7 +43,7 @@ make_design <- function(Flist,Ffactors,Rlevels,model,
     max_threshold=paste0("lR",Rlevels[length(Rlevels)])
     tnams <- tnams[grepl(max_threshold,tnams)]
     if (!any(tnams %in% names(constants))) {
-      design$constants <- setNames(c(constants,rep(log(1e100),length(tnams))),
+      design$constants <- stats::setNames(c(constants,rep(log(1e100),length(tnams))),
                                    c(names(constants),tnams))
       p_vector <- sampled_p_vector(design,design$model)
     }
@@ -101,7 +89,7 @@ contr.increasing <- function(n,levels=NULL)
 #'
 #' @examples
 contr.anova <- function(n) {
-  contr <- contr.helmert(n)
+  contr <- stats::contr.helmert(n)
   contr/rep(2*apply(abs(contr),2,max),each=dim(contr)[1])
 }
 
@@ -145,7 +133,7 @@ sampled_p_vector <- function(design,model=NULL,doMap=TRUE)
     add_accumulators(data,matchfun=design$matchfun,type=model$type,Fcovariates=design$Fcovariates),
     design,model,add_acc=FALSE,verbose=FALSE,rt_check=FALSE,compress=FALSE)
   sampled_p_names <- attr(dadm,"sampled_p_names")
-  out <- setNames(numeric(length(sampled_p_names)),sampled_p_names)
+  out <- stats::setNames(numeric(length(sampled_p_names)),sampled_p_names)
   if (doMap) attr(out,"map") <-
     lapply(attributes(dadm)$designs,function(x){x[,,drop=FALSE]})
   out
@@ -338,13 +326,13 @@ design_model <- function(data,design,model=NULL,prior = NULL,
     # Truncation
     if (!is.null(attr(data,"UT"))) {
       if (length(attr(data,"UT"))==1 && is.null(names(attr(data,"UT"))))
-        attr(data,"UT") <- setNames(rep(attr(data,"UT"),length(levels(data$subjects))),
+        attr(data,"UT") <- stats::setNames(rep(attr(data,"UT"),length(levels(data$subjects))),
                                     levels(data$subjects))
       check_rt(attr(data,"UT"),data)
     }
     if (!is.null(attr(data,"LT"))) {
       if (length(attr(data,"LT"))==1 && is.null(names(attr(data,"LT"))))
-        attr(data,"LT") <- setNames(rep(attr(data,"LT"),length(levels(data$subjects))),
+        attr(data,"LT") <- stats::setNames(rep(attr(data,"LT"),length(levels(data$subjects))),
                                     levels(data$subjects))
       if (any(attr(data,"LT")<0)) stop("Lower truncation cannot be negative")
       check_rt(attr(data,"LT"),data,upper=FALSE)
@@ -357,7 +345,7 @@ design_model <- function(data,design,model=NULL,prior = NULL,
     # Censoring
     if (!is.null(attr(data,"UC"))) {
       if (length(attr(data,"UC"))==1 && is.null(names(attr(data,"UC"))))
-        attr(data,"UC") <- setNames(rep(attr(data,"UC"),length(levels(data$subjects))),
+        attr(data,"UC") <- stats::setNames(rep(attr(data,"UC"),length(levels(data$subjects))),
                                     levels(data$subjects))
       check_rt(attr(data,"UC"),data)
       if (!is.null(attr(data,"UT")) && attr(data,"UT") < attr(data,"UC"))
@@ -365,7 +353,7 @@ design_model <- function(data,design,model=NULL,prior = NULL,
     }
     if (!is.null(attr(data,"LC"))) {
       if (length(attr(data,"LC"))==1 && is.null(names(attr(data,"LC"))))
-        attr(data,"LC") <- setNames(rep(attr(data,"LC"),length(levels(data$subjects))),
+        attr(data,"LC") <- stats::setNames(rep(attr(data,"LC"),length(levels(data$subjects))),
                                     levels(data$subjects))
       if (any(attr(data,"LC")<0)) stop("Lower censor cannot be negative")
       check_rt(attr(data,"LC"),data,upper=FALSE)
@@ -393,7 +381,7 @@ design_model <- function(data,design,model=NULL,prior = NULL,
   da <- da[order(da$subjects),] # fixes different sort in add_accumulators depending on subject type
 
   if (!is.null(design$Ffunctions)) for (i in names(design$Ffunctions)) {
-    newF <- setNames(data.frame(design$Ffunctions[[i]](da)),i)
+    newF <- stats::setNames(data.frame(design$Ffunctions[[i]](da)),i)
     da <- cbind.data.frame(da,newF)
   }
 
@@ -409,26 +397,26 @@ design_model <- function(data,design,model=NULL,prior = NULL,
     stop("p_types, transform and Ntransform must be supplied")
   if (!all(unlist(lapply(design$Flist,class))=="formula"))
     stop("Flist must contain formulas")
-  nams <- unlist(lapply(design$Flist,function(x)as.character(terms(x)[[2]])))
+  nams <- unlist(lapply(design$Flist,function(x)as.character(stats::terms(x)[[2]])))
   names(design$Flist) <- nams
   if (!all(sort(model$p_types)==sort(nams)) & model$type != "MRI")
     stop("Flist must specify formulas for ",paste(model$p_types,collapse = " "))
-  if (is.null(design$Clist)) design$Clist=list(contr.treatment)
+  if (is.null(design$Clist)) design$Clist=list(stats::contr.treatment())
   if (class(design$Clist) != "list") stop("Clist must be a list")
   if (class(design$Clist[[1]])[1] !="list") # same contrasts for all p_types
-    design$Clist <- setNames(lapply(1:length(model$p_types),
+    design$Clist <- stats::setNames(lapply(1:length(model$p_types),
                                     function(x)design$Clist),model$p_types) else {
                                       missing_p_types <- model$p_types[!(model$p_types %in% names(design$Clist))]
                                       if (length(missing_p_types)>0) {
                                         nok <- length(design$Clist)
                                         for (i in 1:length(missing_p_types)) {
-                                          design$Clist[[missing_p_types[i]]] <- list(contr.treatment)
+                                          design$Clist[[missing_p_types[i]]] <- list(stats::contr.treatment)
                                           names(design$Clist)[nok+i] <- missing_p_types[i]
                                         }
                                       }
                                     }
   if(model$type != "MRI") for (i in model$p_types) attr(design$Flist[[i]],"Clist") <- design$Clist[[i]]
-  out <- lapply(design$Flist,make_dm,da=da,Fcovariates=Fcovariates)
+  out <- lapply(design$Flist,make_dm,da=da,Fcovariates=design$Fcovariates)
   if (!is.null(rt_resolution) & !is.null(da$rt)) da$rt <- round(da$rt/rt_resolution)*rt_resolution
   if (compress) dadm <- compress_dadm(da,designs=out,
                                       Fcov=design$Fcovariates,Ffun=names(design$Ffunctions)) else {
@@ -481,7 +469,7 @@ design_model <- function(data,design,model=NULL,prior = NULL,
   attr(dadm,"ok_trials") <- is.finite(data$rt)
   attr(dadm,"s_data") <- data$subjects
   if (!is.null(design$adapt)) {
-    attr(dadm,"adapt") <- setNames(
+    attr(dadm,"adapt") <- stats::setNames(
       lapply(levels(dadm$subjects),augment,da=dadm,design=design),
       levels(dadm$subjects))
     attr(dadm,"adapt")$design <- design$adapt
@@ -520,7 +508,7 @@ make_dm <- function(form,da,Clist=NULL,Fcovariates=NULL)
   }
 
   if (is.null(Clist)) Clist <- attr(form,"Clist")
-  pnam <- terms(form)[[2]]
+  pnam <- stats::terms(form)[[2]]
   da[[pnam]] <- 1
   for (i in names(Clist)) if (i %in% names(da)) {
     if (!is.factor(da[[i]]))
@@ -528,21 +516,50 @@ make_dm <- function(form,da,Clist=NULL,Fcovariates=NULL)
     levs <- levels(da[[i]])
     nl <- length(levs)
     if (class(Clist[[i]])[1]=="function")
-      contrasts(da[[i]]) <- do.call(Clist[[i]],list(n=levs)) else {
+      stats::contrasts(da[[i]]) <- do.call(Clist[[i]],list(n=levs)) else {
         if (!is.matrix(Clist[[i]]) || dim(Clist[[i]])[1]!=nl)
           stop("Clist for",i,"not a",nl,"x",nl-1,"matrix")
         dimnames(Clist[[i]])[[1]] <- levs
-        contrasts(da[[i]],how.many=dim(Clist[[i]])[2]) <- Clist[[i]]
+        stats::contrasts(da[[i]],how.many=dim(Clist[[i]])[2]) <- Clist[[i]]
       }
   }
-  out <- model.matrix(form,da)
+  out <- stats::model.matrix(form,da)
   if (dim(out)[2]==1) dimnames(out)[[2]] <- as.character(pnam) else {
-    if (attr(terms(form),"intercept")!=0) {
+    if (attr(stats::terms(form),"intercept")!=0) {
       cnams <- paste(pnam,dimnames(out)[[2]][-1],sep="_")
       dimnames(out)[[2]] <- c(pnam,cnams)
     } else dimnames(out)[[2]] <- paste(pnam,dimnames(out)[[2]],sep="_")
   }
   compress_dm(out)
+}
+
+
+#### Functions to look at parameters ----
+
+map_p <- function(p,dadm)
+  # Map p to dadm and returns matrix of mapped parameters
+  # p is either a vector or a matrix (ncol = number of subjects) of p_vectors
+{
+
+  if ( is.matrix(p) ) {
+    if (!all(sort(dimnames(p)[[2]])==sort(attr(dadm,"p_names"))))
+      stop("p col.names must be: ",paste(attr(dadm,"p_names"),collapse=", "))
+    if (!all(levels(dadm$subjects) %in% dimnames(p)[[1]]))
+      stop("p must have rows named for every subject in dadm")
+    p <- p[dadm$subjects,]
+  } else if (!all(sort(names(p))==sort(attr(dadm,"p_names"))))
+    stop("p names must be: ",paste(attr(dadm,"p_names"),collapse=", "))
+
+  pars <- matrix(nrow=dim(dadm)[1],ncol=length(attr(dadm,"model")$p_types),
+                 dimnames=list(NULL,attr(dadm,"model")$p_types))
+  for (i in attr(dadm,"model")$p_types) {
+    if ( !is.matrix(p) )
+      pars[,i] <- (attr(dadm,"designs")[[i]][attr(attr(dadm,"designs")[[i]],"expand"),,drop=FALSE] %*%
+                     p[dimnames(attr(dadm,"designs")[[i]])[[2]]]) else
+                       pars[,i] <- apply(p[,dimnames(attr(dadm,"designs")[[i]])[[2]],drop=FALSE] *
+                                           attr(dadm,"designs")[[i]][attr(attr(dadm,"designs")[[i]],"expand"),,drop=FALSE],1,sum)
+  }
+  pars
 }
 
 
