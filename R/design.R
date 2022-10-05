@@ -402,8 +402,8 @@ design_model <- function(data,design,model=NULL,prior = NULL,
   if (!all(sort(model$p_types)==sort(nams)) & model$type != "MRI")
     stop("Flist must specify formulas for ",paste(model$p_types,collapse = " "))
   if (is.null(design$Clist)) design$Clist=list(stats::contr.treatment())
-  if (class(design$Clist) != "list") stop("Clist must be a list")
-  if (class(design$Clist[[1]])[1] !="list") # same contrasts for all p_types
+  if (!is.list(design$Clist)) stop("Clist must be a list")
+  if (!is.list(design$Clist[[1]])[1]) # same contrasts for all p_types
     design$Clist <- stats::setNames(lapply(1:length(model$p_types),
                                     function(x)design$Clist),model$p_types) else {
                                       missing_p_types <- model$p_types[!(model$p_types %in% names(design$Clist))]
