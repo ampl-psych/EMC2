@@ -2,7 +2,7 @@
 % Please edit documentation in R/design.R
 \name{make_design}
 \alias{make_design}
-\title{make_design()}
+\title{Binds together elements that make up a model design as a list}
 \usage{
 make_design(
   Flist,
@@ -15,16 +15,37 @@ make_design(
   Fcovariates = NULL,
   Ffunctions = NULL,
   adapt = NULL,
-  report_p_vector = TRUE,
-  Rmap = NULL
+  report_p_vector = TRUE
 )
 }
 \arguments{
-\item{Flist}{Formula list. Linear models for each parameter type (e.g., y ~ x)}
+\item{Flist}{A list. Contains the design formula of the type list(y ~ x).}
 
-\item{Ffactors}{Formula factors. All factors used in design formulas.}
+\item{Ffactors}{A named list. Participant factor and all factors used in design formulas that are defined as factors in the data frame to be fit.
 
-\item{Rmap}{}
+Must use "subjects" as name for participant factor. For others don't use "trial", "R", "rt", "lR", or "lM".
+Also refrain from using "_" as factor names.}
+
+\item{Rlevels}{A character vector. Contains the response factor levels.}
+
+\item{model}{A function, Specifies the model type.}
+
+\item{Clist}{A list. Contrast list.}
+
+\item{matchfun}{A function. Specifies whether a response was correct or not.
+
+Example: \code{function(d)d$S==d$lR}}
+
+\item{constants}{A named vector. Sets constants. Any parameter named by \code{sampled_p_vector} can be set constant.}
+
+\item{Fcovariates}{Covariate factors. Covariate measures which may be included in the model and/or mapped to factors.}
+
+\item{Ffunctions}{Factor Functions. Functions to specify specific parameterisations, or functions of parameters.}
+
+\item{report_p_vector}{TRUE (default) or FALSE. if TRUE, returns the vector of parameters to be estimated.}
+}
+\value{
+A list.
 }
 \description{
 This function returns a list with the model design.

@@ -4,7 +4,13 @@
 \alias{add_accumulators}
 \title{add_accumulators()}
 \usage{
-add_accumulators(data, matchfun = NULL, simulate = FALSE, type = "RACE")
+add_accumulators(
+  data,
+  matchfun = NULL,
+  simulate = FALSE,
+  type = "RACE",
+  Fcovariates = NULL
+)
 }
 \arguments{
 \item{type}{}
