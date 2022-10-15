@@ -88,6 +88,254 @@ run_burn <- function(samplers,iter=300,
 }
 
 # New version fail handling
+# type=c("standard","diagonal","blocked","factor","factorRegression","single")[1]
+# n_chains=3; rt_resolution=0.02
+# prior_list = NULL;par_groups=NULL;n_factors=NULL;constraintMat = NULL;covariates=NULL
+# data_list=miletic1_rdm_simdat; design_list=design;model_list=NULL; rt_resolution=.001
+make_samplers <- function(data_list,design_list,model_list=NULL,
+                          type=c("standard","diagonal","blocked","factor","factorRegression","single")[1],
+                          n_chains=3,rt_resolution=0.02,
+                          prior_list = NULL,
+                          par_groups=NULL,
+                          subject_covariates = NULL,
+                          n_factors=NULL,constraintMat = NULL,covariates=NULL)
+
+{
+  if (!(type %in% c("standard","diagonal","blocked","factor","factorRegression","single")))
+    stop("type must be one of: standard,diagonal,blocked,factor,factorRegression,single")
+  if (class(data_list)=="data.frame") data_list <- list(data_list)
+  # Sort subject together and add unique trial within subject integer
+  # create overarching data list with one list per subject
+  data_list <- lapply(data_list,function(d){
+    if (!is.factor(d$subjects)) d$subjects <- factor(d$subjects)
+    d <- d[order(d$subjects),]
+    add_trials(d)
+  })
+  if (!is.null(names(design_list)[1]) && names(design_list)[1]=="Flist")
+    design_list <- list(design_list)
+  if (length(design_list)!=length(data_list))
+    design_list <- rep(design_list,length(data_list))
+  if (is.null(model_list)) model_list <- lapply(design_list,function(x){x$model})
+  if (any(unlist(lapply(model_list,is.null))))
+    stop("Must supply model_list if model is not in all design_list components")
+  if (!is.null(names(model_list)[1]) && names(model_list)[1]=="type")
+    model_list <- list(model_list)
+  if (length(model_list)!=length(data_list))
+    model_list <- rep(model_list,length(data_list))
+  if (!is.null(names(prior_list)) && any(names(prior_list)=="theta_mu_mean"))
+    prior_list <- list(prior_list)
+  if (length(prior_list)!=length(data_list))
+    prior_list <- rep(prior_list,length(data_list))
+  dadm_list <- vector(mode="list",length=length(data_list))
+  rt_resolution <- rep(rt_resolution,length.out=length(data_list))
+  for (i in 1:length(dadm_list)) {
+    message("Processing data set ",i)
+    # if (!is.null(design_list[[i]]$Ffunctions)) {
+    #   pars <- attr(data_list[[i]],"pars")
+    #   data_list[[i]] <- cbind.data.frame(data_list[[i]],data.frame(lapply(
+    #     design_list[[i]]$Ffunctions,function(f){f(data_list[[i]])})))
+    #   if (!is.null(pars)) attr(data_list[[i]],"pars") <- pars
+    # }
+    # create a design model
+    dadm_list[[i]] <- design_model(data=data_list[[i]],design=design_list[[i]],
+                                   model=model_list[[i]],rt_resolution=rt_resolution[i],prior=prior_list[[i]])
+  }
+  if(!is.null(subject_covariates)) attr(dadm_list, "subject_covariates") <- subject_covariates
+  if (type == "standard") {
+    variant_funs <- get_variant_funs(type = "standard")
+    out <- pmwgs(dadm_list, variant_funs)
+  } else if(type == "diagonal"){
+    source("samplers/pmwg/variants/diag.R")
+    out <- pmwgs(dadm_list)
+    out$source <- "samplers/pmwg/variants/diag.R"
+  } else if (type == "blocked") {
+    if (is.null(par_groups)) stop("Must specify par_groups for blocked type")
+    source("samplers/pmwg/variants/blocked.R")
+    out <- pmwgs(dadm_list,par_groups=par_groups)
+    out$source <- "samplers/pmwg/variants/blocked.R"
+  } else if (type=="factor") {
+    if (is.null(n_factors)) stop("Must specify n_factors for factor type")
+    source("samplers/pmwg/variants/factor.R")
+    out <- pmwgs(dadm_list,n_factors=n_factors,constraintMat=constraintMat)
+    out$source <- "samplers/pmwg/variants/factor.R"
+  } else if (type=="factorRegression") {
+    if (is.null(n_factors)) stop("Must specify n_factors for factorRegression type")
+    if (is.null(covariates)) stop("Must specify covariates for factorRegression type")
+    source("samplers/pmwg/variants/factorRegr.R")
+    out <- pmwgs(dadm_list,n_factors=n_factors,constraintMat=constraintMat,
+                 covariates=covariates)
+    out$source <- "samplers/pmwg/variants/factorRegr.R"
+  } else if (type == "single") {
+    source("samplers/pmwg/variants/single.R")
+    out <- pmwgs(dadm_list)
+    out$source <- "samplers/pmwg/variants/single.R"
+  }
+  # replicate chains
+  dadm_lists <- rep(list(out),n_chains)
+  # For post predict
+  attr(dadm_lists,"data_list") <- data_list
+  attr(dadm_lists,"design_list") <- design_list
+  attr(dadm_lists,"model_list") <- model_list
+  return(dadm_lists)
+}
+
+# data generation
+
+# Used in make_data and make_samplers
+add_trials <- function(dat)
+  # Add trials column, 1:n for each subject
+{
+  n <- table(dat$subjects)
+  if (!any(names(dat)=="trials")) dat <- cbind.data.frame(dat,trials=NA)
+  for (i in names(n)) dat$trials[dat$subjects==i] <- 1:n[i]
+  dat
+}
+
+extractDadms <- function(dadms, names = 1:length(dadms)){
+  N_models <- length(dadms)
+  subject_covariates <- attr(dadms, "subject_covariates")
+  pars <- attr(dadms[[1]], "sampled_p_names")
+  prior <- attr(dadms[[1]], "prior")
+  ll_func <- attr(dadms[[1]], "model")$log_likelihood
+  subjects <- unique(factor(sapply(dadms, FUN = function(x) levels(x$subjects))))
+  dadm_list <- dm_list(dadms[[1]])
+  components <- length(pars)
+  if(N_models > 1){
+    total_dadm_list <- vector("list", length = N_models)
+    k <- 1
+    pars <- paste(names[1], pars, sep = "|")
+    dadm_list[as.character(which(!subjects %in% unique(dadms[[1]]$subjects)))] <- NA
+    total_dadm_list[[1]] <- dadm_list
+    for(dadm in dadms[-1]){
+      k <- k + 1
+      tmp_list <- vector("list", length = length(subjects))
+      tmp_list[as.numeric(unique(dadm$subjects))] <- dm_list(dadm)
+      total_dadm_list[[k]] <- tmp_list
+      curr_pars <- attr(dadm, "sampled_p_names")
+      components <- c(components, max(components) + length(curr_pars))
+      pars <- c(pars, paste(names[k], curr_pars, sep = "|"))
+      prior$theta_mu_mean <- c(prior$theta_mu_mean, attr(dadm, "prior")$theta_mu_mean)
+      if(is.matrix(prior$theta_mu_var)){
+        prior$theta_mu_var <- magic::adiag(prior$theta_mu_var, attr(dadm, "prior")$theta_mu_var)
+      } else{
+        prior$theta_mu_var <- c(prior$theta_mu_var, attr(dadm, "prior")$theta_mu_var)
+      }
+    }
+    ll_func <- log_likelihood_joint
+    dadm_list <- do.call(mapply, c(list, total_dadm_list, SIMPLIFY = F))
+  }
+  subject_covariates_ok <- unlist(lapply(subject_covariates, FUN = function(x) length(x) == length(subjects)))
+  if(!is.null(subject_covariates_ok)) if(any(!subject_covariates_ok)) stop("subject_covariates must be as long as the number of subjects")
+  attr(dadm_list, "components") <- components
+  return(list(ll_func = ll_func, pars = pars, prior = prior,
+              dadm_list = dadm_list, subjects = subjects, subject_covariates = subject_covariates))
+}
+
+
+dm_list <- function(dadm)
+  # Makes data model into subjects list for use by likelihood
+  # Assumes each subject has the same design.
+{
+
+  sub_design <- function(designs,isin)
+    lapply(designs,function(x) {
+      attr(x,"expand") <- attr(x,"expand")[isin]
+      x
+    })
+
+
+  model <- attr(dadm,"model")
+  p_names <- attr(dadm,"p_names")
+  sampled_p_names <- attr(dadm,"sampled_p_names")
+  designs <- attr(dadm,"designs")
+  expand <- attr(dadm,"expand")
+  s_expand <- attr(dadm,"s_expand")
+  unique_nort <- attr(dadm,"unique_nort")
+  expand_nort <- attr(dadm,"expand_nort")
+  unique_nortR <- attr(dadm,"unique_nortR")
+  expand_nortR <- attr(dadm,"expand_nortR")
+  ok_trials <- attr(dadm,"ok_trials")
+  ok_dadm_winner <- attr(dadm,"ok_dadm_winner")
+  ok_dadm_looser <- attr(dadm,"ok_dadm_looser")
+  ok_da_winner <- attr(dadm,"ok_da_winner")
+  ok_da_looser <- attr(dadm,"ok_da_looser")
+  expand_uc <- attr(dadm,"expand_uc")
+  expand_lc <- attr(dadm,"expand_lc")
+  adapt <- attr(dadm,"adapt")
+
+  # winner on expanded dadm
+  expand_winner <- attr(dadm,"expand_winner")
+  # subjects for first level of lR in expanded dadm
+  slR1=dadm$subjects[expand][dadm$lR[expand]==levels(dadm$lR)[[1]]]
+
+  dl <- stats::setNames(vector(mode="list",length=length(levels(dadm$subjects))),
+                 levels(dadm$subjects))
+  for (i in levels(dadm$subjects)) {
+    isin <- dadm$subjects==i         # dadm
+    isin1 <- s_expand==i             # da
+    isin2 <- attr(dadm,"s_data")==i  # data
+    dl[[i]] <- dadm[isin,]
+    dl[[i]]$subjects <- factor(as.character(dl[[i]]$subjects))
+
+    attr(dl[[i]],"model") <- model
+    attr(dl[[i]],"p_names") <- p_names
+    attr(dl[[i]],"sampled_p_names") <- sampled_p_names
+    attr(dl[[i]],"designs") <- sub_design(designs,isin)
+    attr(dl[[i]],"expand") <- expand[isin1]-min(expand[isin1]) + 1
+    attr(dl[[i]],"s_expand") <- NULL
+
+    attr(dl[[i]],"ok_dadm_winner") <- ok_dadm_winner[isin]
+    attr(dl[[i]],"ok_dadm_looser") <- ok_dadm_looser[isin]
+
+    attr(dl[[i]],"ok_da_winner") <- ok_da_winner[isin1]
+    attr(dl[[i]],"ok_da_looser") <- ok_da_looser[isin1]
+
+    attr(dl[[i]],"unique_nort") <- unique_nort[isin]
+    attr(dl[[i]],"unique_nortR") <- unique_nortR[isin]
+
+    isinlR1 <- slR1==i
+    if (!is.null(expand_nort)){
+      attr(dl[[i]],"expand_nort") <-  expand_nort[isinlR1]- min( expand_nort[isinlR1]) + 1
+    }
+
+    if (!is.null(expand_nortR)){
+      attr(dl[[i]],"expand_nortR") <- expand_nortR[isinlR1]-min(expand_nortR[isinlR1]) + 1
+    }
+
+    attr(dl[[i]],"ok_trials") <- ok_trials[isin2]
+    if (!is.null(expand_winner)){
+      attr(dl[[i]],"expand_winner") <- expand_winner[isin2]-min(expand_winner[isin2]) + 1
+    }
+
+    if (!is.null(attr(dadm,"expand_uc"))){
+      attr(dl[[i]],"expand_uc") <- as.numeric(factor(expand_uc[isin2]))
+    }
+    if (!is.null(attr(dadm,"expand_lc"))){
+      attr(dl[[i]],"expand_lc") <- as.numeric(factor(expand_lc[isin2]))
+    }
+
+    if (!is.null(attr(dadm,"LT"))){
+      attr(dl[[i]],"LT") <- attr(dadm,"LT")[names(attr(dadm,"LT"))==i]
+    }
+    if (!is.null(attr(dadm,"UT"))){
+      attr(dl[[i]],"UT") <- attr(dadm,"UT")[names(attr(dadm,"UT"))==i]
+    }
+    if (!is.null(attr(dadm,"LC"))){
+      attr(dl[[i]],"LC") <- attr(dadm,"LC")[names(attr(dadm,"LC"))==i]
+    }
+    if (!is.null(attr(dadm,"UC"))){
+      attr(dl[[i]],"UC") <- attr(dadm,"UC")[names(attr(dadm,"UC"))==i]
+    }
+
+    # adapt models
+    if (!is.null(adapt)){
+      attr(dl[[i]],"adapt") <- stats::setNames(list(adapt[[i]],adapt$design),c(i,"design"))
+    }
+  }
+  return(dl)
+}
+
+
 run_gd <- function(samplers,iter=NA,max_trys=100,verbose=FALSE,burn=TRUE,
                    max_gd=1.1,thorough=TRUE, mapped=FALSE, shorten = TRUE,
                    epsilon = NULL, verbose_run_stage = FALSE,
@@ -208,14 +456,39 @@ run_gd <- function(samplers,iter=NA,max_trys=100,verbose=FALSE,burn=TRUE,
   }
 }
 
-# ndiscard=100;nstart=300;
-#                       particles=NA; particle_factor = 50; start_mu = NULL; start_var = NULL;
-#                       mix = NULL; verbose=TRUE;verbose_run_stage=FALSE;
-#                       epsilon = NULL; epsilon_upper_bound=15; p_accept=0.7;
-#                       cores_per_chain=1;cores_for_chains=NULL;
-#                       max_gd_trys=100;max_gd=1.2;
-#                       thorough=TRUE;mapped=FALSE; step_size = NA;
-#                       min_es=NULL;min_iter=NULL;max_iter=NULL
+
+#' Runs burn-in till the parameters have converged
+#'
+#' This function returns the samplers, one for each chain, with converged samples
+#'
+#' @param samplers List. Contains a sampler object for each chain, must be created using make_samplers()
+#' @param ndiscard Integer. The number of samples to discard before calculating gelman diagnostics
+#' @param nstart Integer. The number of samples to collect, added to ndiscard, before starting gelman diagnostics
+#' @param particles Integer. The amount of particles to use in the sampling. More leads to broader search, but slower sampling. If not specified uses particle_factor
+#' @param particle_factor Integer. Multiplied by the square root of the number of estimated parameters, this will determine the amount of particles to use in sampling if particles is not specified.
+#' @param start_mu Numeric vector. Optional, startpoints for mean of the group level distribution in the sampling process. If not specified will sample from the prior. Must have length equal to number of sampled parameters.
+#' @param start_var Matrix. Optional, startpoints for variance-covariance of the group level distribution in the sampling process. If not specified will sample from the prior. Nrow and ncol must be equal to number of sampled parameters.
+#' @param mix Numeric vector. Optional, in the sampling process different proposal distributions are used. Mix determines the proportions of particles from each distribution. First element is group level, second element is individual level, third element is efficient distribution, must be 0 in burn-in and adapt.
+#' @param verbose Logical. Whether to print messages related to EMC processes.
+#' @param verbose_run_stage Logical. Whether to print messages related to the sampling procedure.
+#' @param epsilon Integer. Dictates how wide PMwG will search the sampling space. If p_accept is set, serves merely as a start point.
+#' @param epsilon_upper_bound Integer. Will make sure that p_accept does not tune epsilon to be over this bound.
+#' @param p_accept Integer. PMwG will adaptively tune the sampling process to make sure that acceptance (the proportion of times a new set of parameters is accepted), matches p_accept.
+#' @param cores_per_chain Integer. How many cores to parallellize across per chain. Most efficient when matched with or evenly divisible by the number of subjects. Default is 1.
+#' @param cores_for_chains Integer. How many cores to parallellize across chains. Should either be evenly divisible or match the number of chains. Default is the number of chains.
+#' @param max_gd_trys Integer. After this many times step_size iterations, EMC will stop.
+#' @param max_gd Numeric. The max gelman diagnostic to consider unconverged.
+#' @param thorough Logical. Whether to include the parameters from all participants in calculating the Gelman diagnostics or do it only based on the multivariate potential scale reduction factor. See ref. Default is 1.2
+#' @param mapped Logical. Whether to calculate Gelman diagnostics over the parameters mapped back onto the scale they are interpreted at, or on their transformed scales. Default is FALSE.
+#' @param step_size Integer. After nstart and ndiscard are sampled, EMC2 will calculate gelman diagnostics every time after this many iterations. Defaults to 1/3 of nstart + ndiscard.
+#' @param min_es Integer. Optional, samples will only be considered converged if the effective sample size for each parameter is minimally min_es.
+#' @param min_iter Integer. Optional, the minimal number of iterations before EMC2 will calculate convergence.
+#' @param max_iter Integer. Optional, the maximum number of iterations before EMC2 will stop trying to run auto_burn.
+#'
+#' @return
+#' @export
+#'
+#' @examples
 auto_burn <- function(samplers,ndiscard=100,nstart=300,
                       particles=NA, particle_factor = 50, start_mu = NULL, start_var = NULL,
                       mix = NULL, verbose=TRUE,verbose_run_stage=FALSE,
@@ -481,15 +754,15 @@ check_stuck <- function(samples,filter=c("burn","sample")[1], # dont use adapt
   if (n>ns[1]) stop("n is larger than available samples")
   if (last) start <- ns[1]-n + 1
   iter <- 1:n
-  lls <- do.call(abind, list(lapply(samples,samplell,filter=filter,subfilter=iter+start-1), along = 3))
+  lls <- do.call(abind::abind, list(lapply(samples,samplell,filter=filter,subfilter=iter+start-1), along = 3))
   first <- 1:(round(n/3))
   last <- round(2*n/3):n
-  first <- apply(lls[,first,],c(1,3),median)
-  last <- apply(lls[,last,],c(1,3),median)
+  first <- apply(lls[,first,],c(1,3),stats::median)
+  last <- apply(lls[,last,],c(1,3),stats::median)
   isFlat <- 100*abs((last-first)/last) < flat
   # if(any(isFlat)){
   diff <- apply(last, 1, FUN = function(x) return(max(x) - min(x)))
-  IQRs <- apply(lls, c(1,3), FUN = IQR)
+  IQRs <- apply(lls, c(1,3), FUN = stats::IQR)
   best <- max.col(last)
   worst <- max.col(-last)
   n_subs <- samples[[1]]$n_subjects
@@ -499,16 +772,6 @@ check_stuck <- function(samples,filter=c("burn","sample")[1], # dont use adapt
 
   return(samples)
 }
-
-std_error_IS2 <- function(IS_samples, n_bootstrap = 50000){
-  log_marglik_boot= array(dim = n_bootstrap)
-  for (i in 1:n_bootstrap){
-    log_weight_boot = sample(IS_samples, length(IS_samples), replace = TRUE) #resample with replacement from the lw
-    log_marglik_boot[i] <- median(log_weight_boot)
-  }
-  return(sd(log_marglik_boot))
-}
-
 
 fix_stuck <- function(samples, bad_subs, best, worst){
   # This function takes the bad subjects and replaces the last entry of the
