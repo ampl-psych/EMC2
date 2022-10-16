@@ -175,9 +175,6 @@ run_stage <- function(pmwgs,
 
   }
   if (verbose) close(pb)
-  if(!is.null(thin) & !thin_eff_only){
-    pmwgs <- thin_objects(pmwgs, thin, i)
-  }
   return(pmwgs)
 }
 

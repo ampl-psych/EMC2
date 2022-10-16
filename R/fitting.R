@@ -450,7 +450,7 @@ run_gd <- function(samplers,iter=NA,max_trys=100,verbose=FALSE,burn=TRUE,
         samplers <- lapply(samplers_new,remove_iterations,select=n_remove,filter="burn")
       }
     }
-    enough <- enough_samples(samplers,min_es,min_iter,max_iter,filter=filter)
+    enough <- enough_samples(samplers,min_es,min_iter,max_iter,filter="burn")
     if (is.null(attr(enough,"es"))) es_message <- NULL else
       es_message <- paste(", Effective samples =",round(attr(enough,"es")))
     if (all(is.finite(gd))) {
@@ -685,14 +685,14 @@ run_sample <- function(samplers,iter=NA,verbose=TRUE,
   return(samplers)
 }
 
-run_IS2 <- function(samples, filter = "sample", subfilter = 0, IS_samples = 1000,
-                    stepsize_particles = 500, max_particles = 5000, n_cores = 1, df = 5){
-  variant <- basename(samples[[1]]$source)
-  source(paste0("samplers/IS2/variants/", variant))
-  samples_merged <- merge_samples(samples)
-  IS2(samples_merged, filter, subfilter = subfilter, IS_samples, stepsize_particles, max_particles, n_cores, df)
-}
-
+# run_IS2 <- function(samples, filter = "sample", subfilter = 0, IS_samples = 1000,
+#                     stepsize_particles = 500, max_particles = 5000, n_cores = 1, df = 5){
+#   variant <- basename(samples[[1]]$source)
+#   source(paste0("samplers/IS2/variants/", variant))
+#   samples_merged <- merge_samples(samples)
+#   IS2(samples_merged, filter, subfilter = subfilter, IS_samples, stepsize_particles, max_particles, n_cores, df)
+# }
+#
 
 test_adapted <- function(sampler, test_samples, min_unique, n_cores_conditional = 1,
                          verbose = FALSE)
