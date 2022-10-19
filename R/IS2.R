@@ -39,7 +39,7 @@ IS2 <- function(samples, filter = "sample", subfilter = 0, IS_samples = 1000, st
 
 get_sub_weights <- function(stepsize_particles, condMean, condVar, prop_theta, info, sub){
   wmix = c(.05, .95)
-  n1=rbinom(n=1,size=stepsize_particles,prob=wmix)
+  n1=stats::rbinom(n=1,size=stepsize_particles,prob=wmix)
   if (n1<2) n1=2
   if (n1>(stepsize_particles-2)) n1=stepsize_particles-2 ## These just avoid degenerate arrays.
   n2=stepsize_particles-n1
@@ -56,7 +56,7 @@ get_sub_weights <- function(stepsize_particles, condMean, condVar, prop_theta, i
   # below gets second part of equation 5 numerator ie density under prop_theta
   lw_second <- apply(particles, 1, variant_funs$group_dist, prop_theta, FALSE, NULL, info)
   # below is the denominator - ie mix of density under conditional and density under pro_theta
-  lw_third <- log(wmix*pmax(1e-25 * info$n_randeffect, dmvnorm(particles, condMean, condVar)) + (1-wmix) * exp(lw_second))
+  lw_third <- log(wmix*pmax(1e-25 * info$n_randeffect, mvtnorm::dmvnorm(particles, condMean, condVar)) + (1-wmix) * exp(lw_second))
   # does equation 5
   lw <- lw_first+lw_second-lw_third
   return(lw)
