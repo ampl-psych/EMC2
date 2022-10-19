@@ -378,4 +378,31 @@ condMVN <- function (mean, sigma, dependent.ind, given.ind, X.given, check.sigma
   list(condMean = cMu, condVar = cVar)
 }
 
+extract_samples <- function(sampler, stage = c("adapt", "sample"), thin, i, thin_eff_only) {
+  samples <- sampler$samples
+  stage_filter <- which(samples$stage %in% stage)
+  if(!is.null(thin)){
+    if(thin_eff_only){
+      # Assume there's no thinning done on the actual samples, just for the eff
+      thin <- seq(thin, samples$idx, by = thin)
+      full_filter <- intersect(thin, stage_filter)
+    } else{
+      # There has been thinning on prev samples, do it for current ones as well
+      old_idx <- 1:(samples$idx - i - 1)
+      old_filter <- intersect(old_idx, stage_filter)
+      if(i > thin){ # make sure we have enough
+        new_filter <- samples$idx - i + seq(thin,i,by=thin)
+        full_filter <- c(old_filter, new_filter)
+      } else{
+        full_filter <- old_filter
+      }
+    }
+  } else{
+    # No thinning
+    sampled_filter <- which(seq_along(samples$stage) <= samples$idx)
+    full_filter <- intersect(stage_filter, sampled_filter)
+  }
+  out <- variant_funs$filtered_samples(sampler, full_filter)
+  return(out)
+}
 
