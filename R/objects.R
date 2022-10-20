@@ -85,7 +85,6 @@ remove_iterations <- function(pmwg,select,remove=TRUE,last_select=FALSE,filter=N
   pmwg
 }
 
-
 merge_samples <- function(samples){
   out_samples <- samples[[1]]
   # Only thing that differs between the chains is the samples$samples
@@ -97,6 +96,8 @@ merge_samples <- function(samples){
   return(out_samples)
 }
 
+
+#### mcmc extraction ----
 
 as_Mcmc <- function(sampler,filter=stages,thin=1,subfilter=0,
                     selection=c("alpha","mu","variance","covariance","correlation","LL","epsilon")[1])
@@ -111,26 +112,17 @@ as_Mcmc <- function(sampler,filter=stages,thin=1,subfilter=0,
     if (!is.numeric(r)) stop("subfilter must be numeric\n")
     if (length(r)==1) r <- (r+1):dim(x)[d]
     if (min(r)<1 || max(r)>dim(x)[d]) stop("subfilter out of range\n")
-    if (d==2) {
-      return(x[,r,drop=FALSE])
-    } else {
-      return(x[,,r,drop=FALSE])
-    }
+    if (d==2) x[,r,drop=FALSE] else x[,,r,drop=FALSE]
   }
 
-  if (class(sampler) != "pmwgs") {
-    stop("sampler must be an pmwgs object\n")
-  }
+  if (class(sampler) != "pmwgs") stop("sampler must be an pmwgs object\n")
   stages <- c("burn", "adapt", "sample")
-  if (is.numeric(filter) && length(filter==1)) {
-    filter <- filter:sampler$samples$idx
-  }
-  if (is.numeric(selection)){
+  if (is.numeric(filter) && length(filter==1)) filter <- filter:sampler$samples$idx
+  if (is.numeric(selection))
     selection <- c("alpha","mu","variance","covariance","correlation","LL")[selection]
-  }
-  if (selection %in% c("mu","variance","covariance","correlation") && all(is.na((sampler$samples$theta_mu)))){
+  if (selection %in% c("mu","variance","covariance","correlation") &&
+      all(is.na((sampler$samples$theta_mu))))
     stop("Cannot select mu, variance, covariance or correlation for non-hierarchical model\n")
-  }
   if (all(filter %in% stages)) {
     filter <- which(sampler$samples$stage %in% filter)
   } else if (!all(filter %in% 1:sampler$samples$idx)) {
@@ -139,73 +131,57 @@ as_Mcmc <- function(sampler,filter=stages,thin=1,subfilter=0,
 
   if (selection == "mu") {
     mu <- sampler$samples$theta_mu[, filter,drop=FALSE]
-    if (is.null(subfilter)){
-      mu <- t(mu)
-    } else{
+    if (is.null(subfilter)) mu <- t(mu) else
       mu <- t(shorten(mu,subfilter,2))
-    }
     if (thin > dim(mu)[1]) stop("Thin to large\n")
     out <- coda::mcmc(mu[seq(thin,dim(mu)[1],by=thin),,drop=FALSE])
     attr(out,"selection") <- selection
     return(out)
   } else if (selection %in% c("variance","covariance","correlation")) {
     tvar <- sampler$samples$theta_var[, , filter,drop=FALSE]
-    if (selection=="correlation"){
-      tvar <- array(apply(tvar,3,cov2cor),dim=dim(tvar),dimnames=dimnames(tvar))
-    }
+    if (selection=="correlation")
+      tvar <- array(apply(tvar,3,stats::cov2cor),dim=dim(tvar),dimnames=dimnames(tvar))
     if (selection %in% c("covariance","correlation")) {
       lt <- lower.tri(tvar[,,1])
       pnams <- dimnames(tvar)[[1]]
       pnams <- outer(pnams,pnams,paste,sep=".")[lt]
       tvar <- apply(tvar,3,function(x){x[lt]})
       dimnames(tvar)[[1]] <- pnams
-      if (all(tvar==0)){
+      if (all(tvar==0))
         stop("All covariances/correlations zero, model assumes independence.")
-      }
-    } else {
-      tvar <- apply(tvar,3,diag)
-    }
-    if (is.null(subfilter)) {
-      tvar <- t(tvar)
-    } else{
+    } else tvar <- apply(tvar,3,diag)
+    if (is.null(subfilter)) tvar <- t(tvar) else
       tvar <- t(shorten(tvar,subfilter,2))
-    }
-    if (thin > dim(tvar)[1]) {
-      stop("Thin to large\n")
-    }
+    if (thin > dim(tvar)[1]) stop("Thin to large\n")
     out <- coda::mcmc(tvar[seq(thin,dim(tvar)[1],by=thin),,drop=FALSE])
     attr(out,"selection") <- selection
     return(out)
   } else if (selection == "alpha") {
     alpha <- sampler$samples$alpha[, , filter,drop=FALSE]
-    if (!is.null(subfilter)) {
-      alpha <- shorten(alpha,subfilter,3)
-    }
-    if (thin > dim(alpha)[3]) {
-      stop("Thin to large\n")
-    }
+    if (!is.null(subfilter)) alpha <- shorten(alpha,subfilter,3)
+    if (thin > dim(alpha)[3]) stop("Thin to large\n")
     alpha <- alpha[,,seq(thin,dim(alpha)[3],by=thin),drop=FALSE]
-    out <- stats::setNames(lapply(seq(dim(alpha)[2]), function(x) {coda::mcmc(t(alpha[, x, ]))}),names(sampler$data))
+    out <- stats::setNames(lapply(
+      seq(dim(alpha)[2]),
+      function(x) {
+        coda::mcmc(t(alpha[, x, ]))
+      }
+    ), names(sampler$data))
     attr(out,"selection") <- selection
     return(out)
   } else if (selection %in% c("LL","epsilon")) {
-    if (selection == "epsilon"){
-      LL <- sampler$samples$epsilon[, filter,drop=FALSE]
-    } else{
-      LL <- sampler$samples$subj_ll[, filter,drop=FALSE]
-    }
-    if (!is.null(subfilter)) {
-      LL <- shorten(LL,subfilter,2)
-    }
-    if (thin > dim(LL)[2]) {
-      stop("Thin to large\n")
-    }
-    out <- setNames(lapply(data.frame(t(LL[,seq(thin,dim(LL)[2],by=thin),drop=FALSE])),coda::mcmc), names(sampler$data))
-    attr(out,"selection") <- selection
-    return(out)
-  } else{
-    stop("Argument `selection` should be one of mu, variance, covariance, correlation, alpha, LL, or epsilon\n")
+    if (selection == "epsilon")
+      LL <- sampler$samples$epsilon[, filter,drop=FALSE] else
+        LL <- sampler$samples$subj_ll[, filter,drop=FALSE]
+      if (!is.null(subfilter)) LL <- shorten(LL,subfilter,2)
+      if (thin > dim(LL)[2]) stop("Thin to large\n")
+      out <- setNames(lapply(
+        data.frame(t(LL[,seq(thin,dim(LL)[2],by=thin),drop=FALSE])),coda::mcmc),
+        names(sampler$data))
+      attr(out,"selection") <- selection
+      return(out)
   }
+  stop("Argument `selection` should be one of mu, variance, covariance, correlation, alpha, LL, or epsilon\n")
 }
 
 

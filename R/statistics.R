@@ -16,14 +16,14 @@ es_pmwg <- function(pmwg_mcmc,selection="alpha",summary_alpha=mean,
     if (class(pmwg_mcmc)=="pmwgs"){
       pmwg_mcmc <- as_Mcmc(pmwg_mcmc,selection=selection,filter=filter,
                            thin=thin,subfilter=subfilter)
-    } else{
+    }
+    else{
       pmwg_mcmc <- as_mcmc.list(pmwg_mcmc,selection=selection,filter=filter,
                                 thin=thin,subfilter=subfilter)
     }
   }
-  if (attr(pmwg_mcmc,"selection")=="LL"){
+  if (attr(pmwg_mcmc,"selection")=="LL")
     stop("Effective size not sensible for LL\n")
-  }
   out <- do.call(rbind,lapply(pmwg_mcmc,effectiveSize))
   if (attr(pmwg_mcmc,"selection")=="alpha") {
     if (!is.null(summary_alpha)) out <- apply(out,2,summary_alpha)
