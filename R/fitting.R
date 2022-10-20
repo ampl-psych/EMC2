@@ -1,27 +1,5 @@
 #### Fitting automation
 
-#' Title
-#'
-#' @param sampler
-#' @param iter
-#' @param verbose
-#' @param verbose_run_stage
-#' @param particles
-#' @param particle_factor
-#' @param p_accept
-#' @param n_cores
-#' @param epsilon
-#' @param start_mu
-#' @param start_var
-#' @param mix
-#' @param epsilon_upper_bound
-#' @param eff_var
-#' @param eff_mu
-#'
-#' @return
-#' @export
-#'
-#' @examples
 run_stages <- function(sampler,iter=c(300,0,0),
                        verbose=FALSE,verbose_run_stage=FALSE,
                        particles=NA,particle_factor=50, p_accept= NULL, n_cores=1,

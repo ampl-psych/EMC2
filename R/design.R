@@ -19,7 +19,7 @@
 #' @param constants A named vector. Sets constants. Any parameter named by `sampled_p_vector` can be set constant.
 #' @param Fcovariates Covariate factors. Covariate measures which may be included in the model and/or mapped to factors.
 #' @param Ffunctions Factor Functions. Functions to specify specific parameterisations, or functions of parameters.
-#' @param adapt
+#' @param adapt For future compatibility. Ignore.
 #' @param report_p_vector TRUE (default) or FALSE. if TRUE, returns the vector of parameters to be estimated.
 #'
 #' @return A list.
