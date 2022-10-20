@@ -16,6 +16,8 @@ Config/testthat/edition: 3
 Imports: 
     abind,
     coda,
+    corpcor,
+    graphics,
     magic,
     MASS,
     MCMCpack,

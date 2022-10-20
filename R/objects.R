@@ -118,11 +118,10 @@ as_Mcmc <- function(sampler,filter=stages,thin=1,subfilter=0,
   if (class(sampler) != "pmwgs") stop("sampler must be an pmwgs object\n")
   stages <- c("burn", "adapt", "sample")
   if (is.numeric(filter) && length(filter==1)) filter <- filter:sampler$samples$idx
-  if (is.numeric(selection))
-    selection <- c("alpha","mu","variance","covariance","correlation","LL")[selection]
-  if (selection %in% c("mu","variance","covariance","correlation") &&
-      all(is.na((sampler$samples$theta_mu))))
+  if (is.numeric(selection)) selection <- c("alpha","mu","variance","covariance","correlation","LL")[selection]
+  if (selection %in% c("mu","variance","covariance","correlation") && all(is.na((sampler$samples$theta_mu)))){
     stop("Cannot select mu, variance, covariance or correlation for non-hierarchical model\n")
+  }
   if (all(filter %in% stages)) {
     filter <- which(sampler$samples$stage %in% filter)
   } else if (!all(filter %in% 1:sampler$samples$idx)) {
@@ -131,8 +130,11 @@ as_Mcmc <- function(sampler,filter=stages,thin=1,subfilter=0,
 
   if (selection == "mu") {
     mu <- sampler$samples$theta_mu[, filter,drop=FALSE]
-    if (is.null(subfilter)) mu <- t(mu) else
+    if (is.null(subfilter)){
+      mu <- t(mu)
+    }  else{
       mu <- t(shorten(mu,subfilter,2))
+    }
     if (thin > dim(mu)[1]) stop("Thin to large\n")
     out <- coda::mcmc(mu[seq(thin,dim(mu)[1],by=thin),,drop=FALSE])
     attr(out,"selection") <- selection
@@ -149,9 +151,14 @@ as_Mcmc <- function(sampler,filter=stages,thin=1,subfilter=0,
       dimnames(tvar)[[1]] <- pnams
       if (all(tvar==0))
         stop("All covariances/correlations zero, model assumes independence.")
-    } else tvar <- apply(tvar,3,diag)
-    if (is.null(subfilter)) tvar <- t(tvar) else
+    } else {
+      tvar <- apply(tvar,3,diag)
+    }
+    if (is.null(subfilter)){
+      tvar <- t(tvar)
+    } else{
       tvar <- t(shorten(tvar,subfilter,2))
+    }
     if (thin > dim(tvar)[1]) stop("Thin to large\n")
     out <- coda::mcmc(tvar[seq(thin,dim(tvar)[1],by=thin),,drop=FALSE])
     attr(out,"selection") <- selection
@@ -170,16 +177,18 @@ as_Mcmc <- function(sampler,filter=stages,thin=1,subfilter=0,
     attr(out,"selection") <- selection
     return(out)
   } else if (selection %in% c("LL","epsilon")) {
-    if (selection == "epsilon")
-      LL <- sampler$samples$epsilon[, filter,drop=FALSE] else
-        LL <- sampler$samples$subj_ll[, filter,drop=FALSE]
-      if (!is.null(subfilter)) LL <- shorten(LL,subfilter,2)
-      if (thin > dim(LL)[2]) stop("Thin to large\n")
-      out <- setNames(lapply(
-        data.frame(t(LL[,seq(thin,dim(LL)[2],by=thin),drop=FALSE])),coda::mcmc),
-        names(sampler$data))
-      attr(out,"selection") <- selection
-      return(out)
+    if (selection == "epsilon"){
+      LL <- sampler$samples$epsilon[, filter,drop=FALSE]
+    } else{
+      LL <- sampler$samples$subj_ll[, filter,drop=FALSE]
+    }
+    if (!is.null(subfilter)) LL <- shorten(LL,subfilter,2)
+    if (thin > dim(LL)[2]) stop("Thin to large\n")
+    out <- setNames(lapply(
+      data.frame(t(LL[,seq(thin,dim(LL)[2],by=thin),drop=FALSE])),coda::mcmc),
+      names(sampler$data))
+    attr(out,"selection") <- selection
+    return(out)
   }
   stop("Argument `selection` should be one of mu, variance, covariance, correlation, alpha, LL, or epsilon\n")
 }
@@ -199,14 +208,18 @@ as_mcmc.list <- function(samplers,
 
   stages <- c("burn", "adapt", "sample")
   if (length(filter)>1) filter <- filter[1]
-  if (!class(samplers)=="list" || !all(unlist(lapply(samplers,class))=="pmwgs"))
+  if (!class(samplers)=="list" || !all(unlist(lapply(samplers,class))=="pmwgs")) {
     stop("samplers must be a list of pmwgs objects")
-  if (!all(apply(do.call(rbind,lapply(samplers,function(x){
-    x$par_names})),2,function(x){all(x[1]==x[-1])})))
+  }
+  same_names <- all(apply(do.call(rbind,lapply(samplers,function(x){x$par_names})),2,function(x){all(x[1]==x[-1])}))
+  if (!same_names){
     stop("samplers must have the same parameter names")
-  if (!all(apply(do.call(rbind,lapply(samplers,function(x){
-    x$subjects})),2,function(x){all(x[1]==x[-1])})))
+  }
+  same_subjects <- all(apply(do.call(rbind,lapply(samplers,function(x){x$subjects})),2,function(x){all(x[1]==x[-1])}))
+  if (!same_subjects){
     stop("samplers must have the same subjects")
+  }
+
 
   subjects <- names(samplers[[1]]$data)
   mcmcList <- lapply(samplers,as_Mcmc,selection=selection,filter=filter,
@@ -229,13 +242,17 @@ as_mcmc.list <- function(samplers,
                          constants=attr(samplers,"design_list")[[1]]$constants)
     }
   }
-  if (selection %in% c("LL","epsilon"))
-    iter <- unlist(lapply(mcmcList,function(x){length(x[[1]])})) else
-      if (selection == "alpha")
-        iter <- unlist(lapply(mcmcList,function(x){dim(x[[1]])[1]})) else
-          iter <- unlist(lapply(mcmcList,function(x){dim(x)[1]}))
-  if (!all(iter[1]==iter[-1]))
-    message("Chains have different numbers of samples, using first ",min(iter))
+  if (selection %in% c("LL","epsilon")){
+    iter <- unlist(lapply(mcmcList,function(x){length(x[[1]])}))
+  } else{
+    if (selection == "alpha"){
+      iter <- unlist(lapply(mcmcList,function(x){dim(x[[1]])[1]}))
+    } else{
+      iter <- unlist(lapply(mcmcList,function(x){dim(x)[1]}))
+    }
+  }
+
+  if (!all(iter[1]==iter[-1])) message("Chains have different numbers of samples, using first ",min(iter))
   iter <- min(iter)
   if (selection %in% c("alpha","LL","epsilon")) {
     nChains <- length(mcmcList)
@@ -297,3 +314,4 @@ extract_samples <- function(sampler, stage = c("adapt", "sample"), thin, i, thin
   out <- variant_funs$filtered_samples(sampler, full_filter)
   return(out)
 }
+

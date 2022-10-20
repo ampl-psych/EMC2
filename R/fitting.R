@@ -822,3 +822,11 @@ run_emc <- function(file_name,nsample=1000, ...)
     return(file_name)
   }
 }
+
+run_IS2 <- function(samples, filter = "sample", subfilter = 0, IS_samples = 1000,
+                    stepsize_particles = 500, max_particles = 5000, n_cores = 1, df = 5){
+  samples_merged <- merge_samples(samples)
+  IS_samples <- IS2(samples_merged, filter, subfilter = subfilter, IS_samples, stepsize_particles, max_particles, n_cores, df)
+  attr(samples, "IS_samples") <- IS_samples
+  return(samples)
+}

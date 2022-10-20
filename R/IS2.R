@@ -9,7 +9,7 @@ IS2 <- function(samples, filter = "sample", subfilter = 0, IS_samples = 1000, st
   if (length(subfilter)==1) {
     if(subfilter > 0) idx <- idx[-c(1:subfilter)]
   } else idx <- idx[subfilter]
-  all_pars <- variant_funs$get_all_pars(samples, idx, info)
+  all_pars <- info$variant_funs$get_all_pars_IS2(samples, idx, info)
   muX<-apply(all_pars$X,2,mean)
   varX<-stats::cov(all_pars$X)
 
@@ -31,10 +31,10 @@ IS2 <- function(samples, filter = "sample", subfilter = 0, IS_samples = 1000, st
   logw_den <- mvtnorm::dmvt(prop_theta, delta=muX, sigma=varX,df=df, log = TRUE)
 
   finished <- unlist(logw_num) - logw_den
-  max.lw <- max(finished)
-  mean.centred.lw <- mean(exp(finished-max.lw)) #takes off the max and gets mean (avoids infs)
-  lw <- log(mean.centred.lw)+max.lw #puts max back on to get the lw
-  return(list(lw = lw, finished = finished))
+  # max.lw <- max(finished)
+  # mean.centred.lw <- mean(exp(finished-max.lw)) #takes off the max and gets mean (avoids infs)
+  # lw <- log(mean.centred.lw)+max.lw #puts max back on to get the lw
+  return(finished)
 }
 
 get_sub_weights <- function(stepsize_particles, condMean, condVar, prop_theta, info, sub){
@@ -46,7 +46,7 @@ get_sub_weights <- function(stepsize_particles, condMean, condVar, prop_theta, i
   data <- info$data
   particles1 <- mvtnorm::rmvnorm(n1, condMean,condVar)
   # Group level
-  particles2 <- variant_funs$group_dist(n_samples=n2, parameters = prop_theta,
+  particles2 <- info$variant_funs$group_dist_IS2(n_samples=n2, parameters = prop_theta,
                                         sample=TRUE, info = info)
   particles <- rbind(particles1,particles2)
   # names for ll function to work
@@ -54,7 +54,7 @@ get_sub_weights <- function(stepsize_particles, condMean, condVar, prop_theta, i
   # do lba log likelihood with given parameters for each subject, gets density of particle from ll func
   lw_first <- apply(particles, 1, info$ll_func, dadm = data[[sub]])
   # below gets second part of equation 5 numerator ie density under prop_theta
-  lw_second <- apply(particles, 1, variant_funs$group_dist, prop_theta, FALSE, NULL, info)
+  lw_second <- apply(particles, 1, info$variant_funs$group_dist_IS2, prop_theta, FALSE, NULL, info)
   # below is the denominator - ie mix of density under conditional and density under pro_theta
   lw_third <- log(wmix*pmax(1e-25 * info$n_randeffect, mvtnorm::dmvnorm(particles, condMean, condVar)) + (1-wmix) * exp(lw_second))
   # does equation 5
@@ -99,7 +99,7 @@ get_logp=function(prop_theta,stepsize_particles, max_particles, mu_tilde,var_til
 
 compute_lw_num=function(i, prop_theta,stepsize_particles, max_particles, mu_tilde,var_tilde,info){
   logp.out <- get_logp(prop_theta[i,], stepsize_particles, max_particles, mu_tilde, var_tilde, info)
-  logw_num <- logp.out+variant_funs$prior_dist(parameters = prop_theta[i,], info)
+  logw_num <- logp.out+info$variant_funs$prior_dist_IS2(parameters = prop_theta[i,], info)
   return(logw_num)
 }
 
@@ -107,6 +107,7 @@ add_info_base <- function(samples){
   info <- list(
     n_randeffect = samples$n_pars,
     n_subjects = samples$n_subjects,
+    variant_funs = attr(samples, "variant_funs"),
     par_names = samples$par_names,
     data = samples$data,
     ll_func = samples$ll_func,
@@ -115,32 +116,3 @@ add_info_base <- function(samples){
   )
   return(info)
 }
-
-condMVN <- function (mean, sigma, dependent.ind, given.ind, X.given, check.sigma = TRUE)
-{
-  if (missing(dependent.ind))
-    return("You must specify the indices of dependent random variables in `dependent.ind'")
-  if (missing(given.ind) & missing(X.given))
-    return(list(condMean = mean[dependent.ind], condVar = as.matrix(sigma[dependent.ind,
-                                                                          dependent.ind])))
-  if (length(given.ind) == 0)
-    return(list(condMean = mean[dependent.ind], condVar = as.matrix(sigma[dependent.ind,
-                                                                          dependent.ind])))
-  if (length(X.given) != length(given.ind))
-    stop("lengths of `X.given' and `given.ind' must be same")
-  if (check.sigma) {
-    if (!isSymmetric(sigma))
-      stop("sigma is not a symmetric matrix")
-    eigenvalues <- eigen(sigma, only.values = TRUE)$values
-    if (any(eigenvalues < 1e-08))
-      stop("sigma is not positive-definite")
-  }
-  B <- sigma[dependent.ind, dependent.ind]
-  C <- sigma[dependent.ind, given.ind, drop = FALSE]
-  D <- sigma[given.ind, given.ind]
-  CDinv <- C %*% chol2inv(chol(D))
-  cMu <- c(mean[dependent.ind] + CDinv %*% (X.given - mean[given.ind]))
-  cVar <- B - CDinv %*% t(C)
-  list(condMean = cMu, condVar = cVar)
-}
-
