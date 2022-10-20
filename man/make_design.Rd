@@ -42,6 +42,8 @@ Example: \code{function(d)d$S==d$lR}}
 
 \item{Ffunctions}{Factor Functions. Functions to specify specific parameterisations, or functions of parameters.}
 
+\item{adapt}{For future compatibility. Ignore.}
+
 \item{report_p_vector}{TRUE (default) or FALSE. if TRUE, returns the vector of parameters to be estimated.}
 }
 \value{
