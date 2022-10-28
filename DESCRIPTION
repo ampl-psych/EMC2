@@ -21,6 +21,7 @@ Imports:
     magic,
     MASS,
     MCMCpack,
+    methods,
     msm,
     mvtnorm,
     parallel,
