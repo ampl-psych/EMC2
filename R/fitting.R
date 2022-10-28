@@ -70,7 +70,7 @@ run_burn <- function(samplers,iter=300,
                              p_accept=p_accept, mix=mix, epsilon = epsilon, start_mu = start_mu, start_var = start_var,
                              epsilon_upper_bound=epsilon_upper_bound,
                              n_cores=cores_per_chain, mc.cores = cores_for_chains)
-    if (class(samplers_new)=="try-error" ||
+    if (is(samplers_new, "try-error") ||
         any(lapply(samplers_new,class)=="try-error")) {
       save(samplers,iter,particles,particle_factor,p_accept, # pdist_update_n,
            epsilon_upper_bound,file="fail_run_stage.RData")
@@ -103,7 +103,7 @@ make_samplers <- function(data_list,design_list,model_list=NULL,
 {
   if (!(type %in% c("standard","diagonal","blocked","factor","factorRegression","single")))
     stop("type must be one of: standard,diagonal,blocked,factor,factorRegression,single")
-  if (class(data_list)=="data.frame") data_list <- list(data_list)
+  if (is(data_list, "data.frame")) data_list <- list(data_list)
   # Sort subject together and add unique trial within subject integer
   # create overarching data list with one list per subject
   data_list <- lapply(data_list,function(d){
@@ -398,7 +398,7 @@ run_gd <- function(samplers,iter=NA,max_trys=100,verbose=FALSE,burn=TRUE,
                              verbose=FALSE,verbose_run_stage=verbose_run_stage,
                              mc.cores=cores_for_chains)
     trys <- trys+1
-    bad_new <- !class(samplers_new)=="list" || !all(unlist(lapply(samplers_new,class))=="pmwgs")
+    bad_new <- !is(samplers_new, "list") || !all(unlist(lapply(samplers_new, is, "pmwgs")))
     if (bad_new)  gd <- matrix(Inf) else
       gd <- gd_pmwg(as_mcmc.list(samplers_new,filter="burn"),!thorough,FALSE,
                     filter="burn",mapped=mapped)
@@ -406,7 +406,7 @@ run_gd <- function(samplers,iter=NA,max_trys=100,verbose=FALSE,burn=TRUE,
       samplers <- samplers_new
       if (shorten) {
         samplers_short <- lapply(samplers,remove_iterations,select=n_remove,filter="burn")
-        if (!class(samplers_short)=="list" || !all(unlist(lapply(samplers_short,class))=="pmwgs"))
+        if (!(is(samplers_short, "list")) || !all(unlist(lapply(samplers_short,is, "pmwgs"))))
           gd_short <- matrix(Inf) else
             gd_short <- gd_pmwg(as_mcmc.list(samplers_short,filter="burn"),!thorough,FALSE,
                                 filter="burn",mapped=mapped)
