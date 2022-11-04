@@ -88,8 +88,8 @@ gibbs_step_standard <- function(sampler, alpha){
   return(list(tmu = tmu,tvar = tvar,tvinv = tvinv,a_half = a_half,alpha = alpha))
 }
 
-get_conditionals_standard <- function(s, samples, n_pars){
-  iteration <- samples$iteration
+get_conditionals_standard <- function(s, samples, n_pars, iteration = NULL){
+  iteration <- ifelse(is.null(iteration), samples$iteration, iteration)
   pts2_unwound <- apply(samples$theta_var,3,unwind)
   all_samples <- rbind(samples$alpha[, s,],samples$theta_mu,pts2_unwound)
   mu_tilde <- rowMeans(all_samples)

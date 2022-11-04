@@ -18,6 +18,7 @@ Imports:
     coda,
     corpcor,
     graphics,
+    grDevices,
     magic,
     MASS,
     MCMCpack,
