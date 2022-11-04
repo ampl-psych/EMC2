@@ -13,7 +13,7 @@ es_pmwg <- function(pmwg_mcmc,selection="alpha",summary_alpha=mean,
   # Effective size
 {
   if (!(class(pmwg_mcmc[[1]]) %in% c("mcmc","mcmc.list"))) {
-    if (class(pmwg_mcmc)=="pmwgs"){
+    if (is(pmwg_mcmc, "pmwgs")){
       pmwg_mcmc <- as_Mcmc(pmwg_mcmc,selection=selection,filter=filter,
                            thin=thin,subfilter=subfilter)
     }
@@ -53,14 +53,14 @@ gd_pmwg <- function(pmwg_mcmc,return_summary=FALSE,print_summary=TRUE,
   gelman_diag_robust <- function(mcl,autoburnin,transform)
   {
     gd <- try(gelman.diag(mcl,autoburnin=autoburnin,transform=transform),silent=TRUE)
-    if (class(gd)=="try-error") list(psrf=matrix(Inf),mpsrf=Inf) else gd
+    if (is(gd, "try-error")) list(psrf=matrix(Inf),mpsrf=Inf) else gd
   }
 
   if ( selection=="LL" ) stop("Rhat not appropriate for LL")
   if (class(pmwg_mcmc[[1]]) %in% c("mcmc","mcmc.list")) {
     if (mapped) warning("Cannot transform to natural scale unless samples list provided")
   } else {
-    if (class(pmwg_mcmc)=="pmwgs") {
+    if (is(pmwg_mcmc, "pmwgs")) {
       if (mapped) warning("Cannot transform to natural scale unless samples list provided")
       pmwg_mcmc <- as_Mcmc(pmwg_mcmc,selection=selection,filter=filter,
                            thin=thin,subfilter=subfilter)
@@ -128,12 +128,12 @@ iat_pmwg <- function(pmwg_mcmc,
   }
 
   get_IAT <- function(mcs) {
-    if (class(mcs) != "mcmc.list") apply(mcs,2,IAT) else
+    if (!is(mcs, "mcmc.list")) apply(mcs,2,IAT) else
       apply(do.call(rbind,lapply(mcs,function(x){apply(x,2,IAT)})),2,mean)
   }
 
   if (!(class(pmwg_mcmc[[1]]) %in% c("mcmc","mcmc.list"))) {
-    if (class(pmwg_mcmc)=="pmwgs")
+    if (is(pmwg_mcmc, "pmwgs"))
       pmwg_mcmc <- as_Mcmc(pmwg_mcmc,selection=selection,filter=filter,
                            thin=thin,subfilter=subfilter) else
                              pmwg_mcmc <- as_mcmc.list(pmwg_mcmc,selection=selection,filter=filter,
@@ -182,7 +182,7 @@ p_test <- function(x,x_name,x_fun=NULL,
     stop("Can only analyze mapped mu or alpha parameters")
 
   # Process x
-  if (class(x[[1]])!="pmwgs") stop("x must be a list of pmwgs objects")
+  if (!is(x[[1]], "pmwgs")) stop("x must be a list of pmwgs objects")
   x <- as_mcmc.list(x,selection=selection,filter=filter,
                     subfilter=subfilter,mapped=mapped)
   # Individual subject analysis
@@ -205,7 +205,7 @@ p_test <- function(x,x_name,x_fun=NULL,
     attr(tab,alternative) <- p
     dimnames(tab)[[2]] <- c(x_name,"mu")
   } else {
-    if (class(y[[1]])!="pmwgs") stop("y must be a list of pmwgs objects")
+    if (!is(y[[1]], "pmwgs")) stop("y must be a list of pmwgs objects")
     y <- as_mcmc.list(y,selection=selection,filter=filter,
                       subfilter=subfilter,mapped=mapped)
     # Individual subject analysis
@@ -259,13 +259,13 @@ pmwg_IC <- function(samplers,filter="sample",subfilter=0,use_best_fit=TRUE,
 
 
   # Mean log-likelihood for each subject
-  if (class(samplers)=="pmwgs")
+  if (is(samplers, "pmwgs"))
     ll <- as_Mcmc(samplers,selection="LL",filter=filter,subfilter=subfilter) else
       ll <- as_mcmc.list(samplers,selection="LL",filter=filter,subfilter=subfilter)
     minDs <- -2*unlist(lapply(ll,function(x){max(unlist(x))}))
     mean_lls <- unlist(lapply(ll,function(x){mean(unlist(x))}))
 
-    if (class(samplers)=="pmwgs")
+    if (is(samplers, "pmwgs"))
       alpha <- as_Mcmc(samplers,selection="alpha",filter=filter,subfilter=subfilter) else
         alpha <- as_mcmc.list(samplers,selection="alpha",filter=filter,subfilter=subfilter)
     mean_pars <- lapply(alpha,function(x){apply(do.call(rbind,x),2,mean)})

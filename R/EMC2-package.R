@@ -9,6 +9,7 @@
 #' @importFrom coda mcmc
 #' @importFrom coda mcmc.list
 #' @importFrom graphics par
+#' @importFrom methods is
 #' @importFrom stats acf
 #' @importFrom stats cov
 #' @importFrom stats cov2cor

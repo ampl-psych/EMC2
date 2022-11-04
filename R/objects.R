@@ -3,7 +3,7 @@ thin_pmwg <- function(pmwg,thin=10)
 {
   # mcmc creation functions allow thinning, but for cases where you want to
   # reduce the size, this will thin the sample component of a pmwg object
-  if (class(pmwg) != "pmwgs") stop("Not a pmwgs object")
+  if (!is(pmwg, "pmwgs")) stop("Not a pmwgs object")
   if (thin >= pmwg$samples$idx) stop("Thin value to large\n")
   nmc_thin <- seq(thin,pmwg$samples$idx,by=thin)
   pmwg$samples <- base::rapply(pmwg$samples, f = function(x) filter_obj(x, nmc_thin), how = "replace")
@@ -30,7 +30,7 @@ filter_obj <- function(obj, idx){
 get_stage <- function(pmwg,stage="burn")
   # Returns object with only stage samples
 {
-  if (class(pmwg) != "pmwgs") stop("Not a pmwgs object")
+  if (!is(pmwg, "pmwgs")) stop("Not a pmwgs object")
   if (!(stage %in% pmwg$samples$stage))
     stop("stage not available")
   idx <- which(pmwg$samples$stage == stage)
@@ -46,7 +46,7 @@ remove_iterations <- function(pmwg,select,remove=TRUE,last_select=FALSE,filter=N
   # if remove=FALSE instead keeps these iterations
   # if last_select applies scalar select from last iteration
 {
-  if (class(pmwg) != "pmwgs") stop("Not a pmwgs object")
+  if (!is(pmwg, "pmwgs")) stop("Not a pmwgs object")
   if (length(select)==1) {
     if (is.null(filter)) {
       if (!last_select)
@@ -115,7 +115,7 @@ as_Mcmc <- function(sampler,filter=stages,thin=1,subfilter=0,
     if (d==2) x[,r,drop=FALSE] else x[,,r,drop=FALSE]
   }
 
-  if (class(sampler) != "pmwgs") stop("sampler must be an pmwgs object\n")
+  if (!is(sampler, "pmwgs")) stop("sampler must be an pmwgs object\n")
   stages <- c("burn", "adapt", "sample")
   if (is.numeric(filter) && length(filter==1)) filter <- filter:sampler$samples$idx
   if (is.numeric(selection)) selection <- c("alpha","mu","variance","covariance","correlation","LL")[selection]
@@ -208,7 +208,7 @@ as_mcmc.list <- function(samplers,
 
   stages <- c("burn", "adapt", "sample")
   if (length(filter)>1) filter <- filter[1]
-  if (!class(samplers)=="list" || !all(unlist(lapply(samplers,class))=="pmwgs")) {
+  if (!is(samplers, "list") || !all(unlist(lapply(samplers, is, "pmwgs")))) {
     stop("samplers must be a list of pmwgs objects")
   }
   same_names <- all(apply(do.call(rbind,lapply(samplers,function(x){x$par_names})),2,function(x){all(x[1]==x[-1])}))
