@@ -4,7 +4,7 @@ plot_chains <- function(pmwg_mcmc,layout=NA,subject=NA,ylim=NULL,
   # Plots chains  (if alpha, LL or epsilon can do individual subject, all by default)
 {
   if (!(class(pmwg_mcmc) %in% c("mcmc","mcmc.list"))) {
-    if (class(pmwg_mcmc)=="pmwgs")
+    if (is(pmwg_mcmc, "pmwgs"))
       pmwg_mcmc <- as_Mcmc(pmwg_mcmc,selection=selection,filter=filter,
                            thin=thin,subfilter=subfilter) else
                              pmwg_mcmc <- as_mcmc.list(pmwg_mcmc,selection=selection,filter=filter,
@@ -52,7 +52,7 @@ plot_acfs <- function(samples,layout=NULL,subject=1,
                       selection="alpha",filter="sample",subfilter=0)
   # Plots acf for all chains
 {
-  if (class(samples)=="pmwgs") samples <- list(samples)
+  if (is(samples, "pmwgs")) samples <- list(samples)
   if (selection=="alpha") {
     snams <- names(samples[[1]]$data)
     if (is.numeric(subject)) subject <- snams[subject]
