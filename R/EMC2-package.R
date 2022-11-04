@@ -9,12 +9,9 @@
 #' @importFrom coda mcmc
 #' @importFrom coda mcmc.list
 #' @importFrom graphics par
-<<<<<<< HEAD
 #' @importFrom grDevices dev.off
 #' @importFrom grDevices pdf
-=======
 #' @importFrom methods is
->>>>>>> 7e267da4ddd36090ef7f500aae023d4bd655fef3
 #' @importFrom stats acf
 #' @importFrom stats cov
 #' @importFrom stats cov2cor
