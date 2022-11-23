@@ -42,7 +42,7 @@ run_stages <- function(sampler,iter=c(300,0,0),
                        particles = particles, n_cores = n_cores, # pdist_update_n=pdist_update_n,
                        pstar = p_accept, verbose = verbose_run_stage, mix=mix, eff_mu = eff_mu,
                        eff_var = eff_var,  epsilon_upper_bound=epsilon_upper_bound)
-  sampler
+  return(sampler)
 }
 
 
