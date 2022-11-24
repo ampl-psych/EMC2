@@ -32,7 +32,8 @@ rPROBIT <- function(lR,pars,p_types=c("mean","sd","threshold"),lt=-Inf)
 
 # Normal, natural mu and log(sigma), increasing threshold (first natural,
 # others on log scale) parameterization
-probit <- list(
+probit <- function(){
+  list(
   type="SDT", # Discrete choice based on continuous latent, no RT
   p_types=c("mean","sd","threshold"),
   # Transform to natural scale
@@ -67,5 +68,5 @@ probit <- list(
   # Likelihood, lb is lower bound threshold for first response
   log_likelihood=function(p_vector,dadm,min_ll=log(1e-10)){
     log_likelihood_sdt(p_vector=p_vector, dadm = dadm, min_ll = min_ll, lb=-Inf)
-  }
-)
+  })
+}

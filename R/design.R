@@ -562,5 +562,120 @@ map_p <- function(p,dadm)
   pars
 }
 
+# data generation
+
+# Used in make_data and make_samplers
+add_trials <- function(dat)
+  # Add trials column, 1:n for each subject
+{
+  n <- table(dat$subjects)
+  if (!any(names(dat)=="trials")) dat <- cbind.data.frame(dat,trials=NA)
+  for (i in names(n)) dat$trials[dat$subjects==i] <- 1:n[i]
+  dat
+}
+
+dm_list <- function(dadm)
+  # Makes data model into subjects list for use by likelihood
+  # Assumes each subject has the same design.
+{
+
+  sub_design <- function(designs,isin)
+    lapply(designs,function(x) {
+      attr(x,"expand") <- attr(x,"expand")[isin]
+      x
+    })
+
+
+  model <- attr(dadm,"model")
+  p_names <- attr(dadm,"p_names")
+  sampled_p_names <- attr(dadm,"sampled_p_names")
+  designs <- attr(dadm,"designs")
+  expand <- attr(dadm,"expand")
+  s_expand <- attr(dadm,"s_expand")
+  unique_nort <- attr(dadm,"unique_nort")
+  expand_nort <- attr(dadm,"expand_nort")
+  unique_nortR <- attr(dadm,"unique_nortR")
+  expand_nortR <- attr(dadm,"expand_nortR")
+  ok_trials <- attr(dadm,"ok_trials")
+  ok_dadm_winner <- attr(dadm,"ok_dadm_winner")
+  ok_dadm_looser <- attr(dadm,"ok_dadm_looser")
+  ok_da_winner <- attr(dadm,"ok_da_winner")
+  ok_da_looser <- attr(dadm,"ok_da_looser")
+  expand_uc <- attr(dadm,"expand_uc")
+  expand_lc <- attr(dadm,"expand_lc")
+  adapt <- attr(dadm,"adapt")
+
+  # winner on expanded dadm
+  expand_winner <- attr(dadm,"expand_winner")
+  # subjects for first level of lR in expanded dadm
+  slR1=dadm$subjects[expand][dadm$lR[expand]==levels(dadm$lR)[[1]]]
+
+  dl <- stats::setNames(vector(mode="list",length=length(levels(dadm$subjects))),
+                        levels(dadm$subjects))
+  for (i in levels(dadm$subjects)) {
+    isin <- dadm$subjects==i         # dadm
+    isin1 <- s_expand==i             # da
+    isin2 <- attr(dadm,"s_data")==i  # data
+    dl[[i]] <- dadm[isin,]
+    dl[[i]]$subjects <- factor(as.character(dl[[i]]$subjects))
+
+    attr(dl[[i]],"model") <- model
+    attr(dl[[i]],"p_names") <- p_names
+    attr(dl[[i]],"sampled_p_names") <- sampled_p_names
+    attr(dl[[i]],"designs") <- sub_design(designs,isin)
+    attr(dl[[i]],"expand") <- expand[isin1]-min(expand[isin1]) + 1
+    attr(dl[[i]],"s_expand") <- NULL
+
+    attr(dl[[i]],"ok_dadm_winner") <- ok_dadm_winner[isin]
+    attr(dl[[i]],"ok_dadm_looser") <- ok_dadm_looser[isin]
+
+    attr(dl[[i]],"ok_da_winner") <- ok_da_winner[isin1]
+    attr(dl[[i]],"ok_da_looser") <- ok_da_looser[isin1]
+
+    attr(dl[[i]],"unique_nort") <- unique_nort[isin]
+    attr(dl[[i]],"unique_nortR") <- unique_nortR[isin]
+
+    isinlR1 <- slR1==i
+    if (!is.null(expand_nort)){
+      attr(dl[[i]],"expand_nort") <-  expand_nort[isinlR1]- min( expand_nort[isinlR1]) + 1
+    }
+
+    if (!is.null(expand_nortR)){
+      attr(dl[[i]],"expand_nortR") <- expand_nortR[isinlR1]-min(expand_nortR[isinlR1]) + 1
+    }
+
+    attr(dl[[i]],"ok_trials") <- ok_trials[isin2]
+    if (!is.null(expand_winner)){
+      attr(dl[[i]],"expand_winner") <- expand_winner[isin2]-min(expand_winner[isin2]) + 1
+    }
+
+    if (!is.null(attr(dadm,"expand_uc"))){
+      attr(dl[[i]],"expand_uc") <- as.numeric(factor(expand_uc[isin2]))
+    }
+    if (!is.null(attr(dadm,"expand_lc"))){
+      attr(dl[[i]],"expand_lc") <- as.numeric(factor(expand_lc[isin2]))
+    }
+
+    if (!is.null(attr(dadm,"LT"))){
+      attr(dl[[i]],"LT") <- attr(dadm,"LT")[names(attr(dadm,"LT"))==i]
+    }
+    if (!is.null(attr(dadm,"UT"))){
+      attr(dl[[i]],"UT") <- attr(dadm,"UT")[names(attr(dadm,"UT"))==i]
+    }
+    if (!is.null(attr(dadm,"LC"))){
+      attr(dl[[i]],"LC") <- attr(dadm,"LC")[names(attr(dadm,"LC"))==i]
+    }
+    if (!is.null(attr(dadm,"UC"))){
+      attr(dl[[i]],"UC") <- attr(dadm,"UC")[names(attr(dadm,"UC"))==i]
+    }
+
+    # adapt models
+    if (!is.null(adapt)){
+      attr(dl[[i]],"adapt") <- stats::setNames(list(adapt[[i]],adapt$design),c(i,"design"))
+    }
+  }
+  return(dl)
+}
+
 
 

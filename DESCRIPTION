@@ -22,9 +22,11 @@ Imports:
     magic,
     MASS,
     MCMCpack,
+    matrixcalc,
+    rtdists,
     methods,
     msm,
     mvtnorm,
     parallel,
-    rtdists,
-    stats
+    stats,
+    Matrix
