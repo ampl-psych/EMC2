@@ -145,3 +145,85 @@ make_data <- function(p_vector,design,model=NULL,trials=NULL,data=NULL,expand=1,
     for (i in dimnames(Rrt)[[2]]) data[[i]] <- Rrt[,i]
     missingFilter(data[,names(data)!="winner"],LT,UT,LC,UC,Rmissing)
 }
+
+add_Ffunctions <- function(data,design)
+  # Adds columns created by Ffunctions (if not already there)
+{
+  Fdf <- data.frame(lapply(design$Ffunctions,function(f){f(data)}))
+  ok <- !(names(Fdf) %in% names(data))
+  if (!any(ok)) data else
+    data <-  cbind.data.frame(data,Fdf[,ok,drop=FALSE])
+}
+
+post_predict <- function(samples,hyper=FALSE,n_post=100,expand=1,
+                         filter="sample",subfilter=0,thin=1,n_cores=1,
+                         use_par=c("random","mean","median")[1])
+  # Post predictions for samples object, based on random samples or some
+  # central tendency statistic.
+  # n_post is number of parameter vectors used
+  # expand=1 gives exact data design, larger values replicate whole design
+  # filter/subfilter/thin as for as_mcmc.list
+  # hyper=FALSE draws from alphas (participant level)
+  # hyper=TRUE draws from hyper
+{
+
+  data <- attr(samples,"data_list")
+  design <- attr(samples,"design_list")
+  model <- attr(samples,"model_list")
+  if(length(data) > 1){
+    jointModel <- TRUE
+    all_samples <- samples
+  } else{
+    jointModel <- FALSE
+  }
+  post_out <- vector("list", length = length(data))
+  for(j in 1:length(data)){
+    if(jointModel) samples <- single_out_joint(all_samples, j)
+    subjects <- levels(data[[j]]$subjects)
+
+    if (hyper) {
+      pars <- vector(mode="list",length=n_post)
+      for (i in 1:n_post) {
+        pars[[i]] <- get_prior_samples(samples,selection="alpha",
+                                       filter=filter,thin=thin,subfilter=subfilter,n_prior=length(subjects))
+        row.names(pars[[i]]) <- subjects
+      }
+    } else {
+      samps <- lapply(as_mcmc.list(samples,selection="alpha",
+                                   filter=filter,subfilter=subfilter,thin=thin),function(x){do.call(rbind,x)})
+      if (use_par != "random") {
+        p <- do.call(rbind,lapply(samps,function(x){apply(x,2,use_par)}))
+        row.names(p) <- subjects
+      }
+      pars <- vector(mode="list",length=n_post)
+      for (i in 1:n_post) {
+        if (use_par != "random") pars[[i]] <- p else {
+          pars[[i]] <- do.call(rbind,lapply(samps,function(x){x[sample(1:dim(x)[1],1),]}))
+          row.names(pars[[i]]) <- subjects
+        }
+      }
+    }
+    if (n_cores==1) {
+      simDat <- vector(mode="list",length=n_post)
+      for (i in 1:n_post) {
+        cat(".")
+        simDat[[i]] <- make_data(pars[[i]],design=design[[j]],model=model[[j]],data=data[[j]],expand=expand)
+      }
+      cat("\n")
+    } else {
+      simDat <- mclapply(1:n_post,function(i){
+        make_data(pars[[i]],design=design[[j]],model=model[[j]],data=data[[j]],expand=expand)
+      },mc.cores=n_cores)
+    }
+    if (!is.null(attr(simDat[[1]],"adapt"))) adapt <- attr(simDat[[1]],"adapt")
+    out <- cbind(postn=rep(1:n_post,each=dim(simDat[[1]])[1]),do.call(rbind,simDat))
+    if (!is.null(attr(simDat[[1]],"adapt"))) attr(out,"adapt") <- adapt
+    if (n_post==1) pars <- pars[[1]]
+    attr(out,"pars") <- pars
+    post_out[[j]] <- out
+  }
+  if(!jointModel) post_out <- post_out[[1]]
+  return(post_out)
+}
+
+
