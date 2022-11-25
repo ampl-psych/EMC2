@@ -296,15 +296,9 @@ chain_n <- function(samplers)
 extract_samples <- function(sampler, stage = c("adapt", "sample"), max_n_sample = NULL) {
   variant_funs <- attr(sampler, "variant_funs")
   samples <- sampler$samples
-  stage_filter <- which(samples$stage %in% stage)
-  if(!is.null(max_n_sample) & "sample" %in% stage){
-    sample_filter <- which(samples$stage == "sample" & seq_along(samples$stage) <= samples$idx)
-    new_sample_filter <- sample(sample_filter, max_n_sample)
-    full_filter <- intersect(stage_filter, new_sample_filter)
-  } else{
-    # No thinning
-    sampled_filter <- which(seq_along(samples$stage) <= samples$idx)
-    full_filter <- intersect(stage_filter, sampled_filter)
+  full_filter <- which(samples$stage %in% stage & seq_along(samples$stage) <= samples$idx)
+  if(!is.null(max_n_sample) & "sample" %in% stage & length(full_filter) > max_n_sample){
+    full_filter <- sample(full_filter, max_n_sample)
   }
   out <- variant_funs$filtered_samples(sampler, full_filter)
   return(out)
