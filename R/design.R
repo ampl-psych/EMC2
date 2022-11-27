@@ -155,7 +155,7 @@ sampled_p_vector <- function(design,model=NULL,doMap=TRUE)
 #' If not type RACE (e.g., DDM type) doesn't replicate data and adds dummy lR,
 #' lM and winner columns.
 #'
-#' @param data
+#' @param data A data frame
 #' @param matchfun
 #' @param simulate
 #' @param type
