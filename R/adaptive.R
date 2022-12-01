@@ -49,7 +49,7 @@ update_pars = function(s,npars,da,rfun=NULL,return_learning=FALSE,mapped_p=FALSE
   namStim <- colnames(adapt$stimulus$targets)
   # Maximum number of Q updates
   maxQupdates <- dim(index)[1]/nAcc
-  # fill an array of parameters, dim = accumulator x trial x
+  # fill an array of parameters, dims = accumulator x trial x
   # stimulus x parameter type ("v0"    "B"     "t0"    "alpha" "w"     "q0"    "A" )
   parArr <- aperm(
     array(apply(index,2,function(x){npars[x,]}),
