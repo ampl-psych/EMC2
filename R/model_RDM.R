@@ -19,16 +19,7 @@
 
 #### distribution functions
 
-
-dRDM <- function(rt,pars)
-  # density for single accumulator
-{
-
-  digt <- function(t,k=1,l=1,a=.1,tiny=1e-10) {
-    # pdf of inverse gaussian at t with k +/- a/2 uniform variability
-    # returns digt.0 if a<1e-10
-
-    digt.0 <- function(t,k=1,l=1) {
+digt0 <- function(t,k=1,l=1) {
       # pdf of inverse gaussian at t with no k variability
       # much faster than statmod's dinvgauss funciton
 
@@ -43,7 +34,13 @@ dRDM <- function(rt,pars)
       x <- exp(e + .5*log(lambda) - .5*log(2*t^3*pi))
       x[t<=0] <- 0
       x
-    }
+}
+
+
+digt <- function(t,k=1,l=1,a=.1,tiny=1e-10) {
+    # pdf of inverse gaussian at t with k +/- a/2 uniform variability
+    # returns digt0 if a<1e-10
+
 
     options(warn=-1)
     if(length(k)!=length(t)) k <- rep(k,length.out=length(t))
@@ -63,7 +60,7 @@ dRDM <- function(rt,pars)
 
     # No threshold variability
     if ( any(atiny) )
-      x[atiny] <- digt.0(t=t[atiny],k=k[atiny],l=l[atiny])
+      x[atiny] <- digt0(t=t[atiny],k=k[atiny],l=l[atiny])
 
     # Threshold variability
     if ( any(!atiny) ) {
@@ -101,8 +98,11 @@ dRDM <- function(rt,pars)
 
     x[x<0 | is.nan(x) ] <- 0
     x
-  }
+}
 
+dRDM <- function(rt,pars)
+  # density for single accumulator
+{
   rt <- rt - pars[,"t0"]
   out <- numeric(length(rt))
   ok <- !pars[,"v"] < 0  # code handles rate zero case
@@ -112,16 +112,7 @@ dRDM <- function(rt,pars)
   out
 }
 
-
-
-pRDM <- function(rt,pars)
-  # cumulative density for single accumulator
-{
-  pigt <- function(t,k=1,l=1,a=.1,tiny=1e-10) {
-    # cdf of inverse gaussian at t with k +/- a/2 uniform variability
-    # returns pigt.0 if a<=0
-
-    pigt.0 <- function(t,k=1,l=1) {
+pigt0 <- function(t,k=1,l=1) {
       # cdf of inverse gaussian at t with no k variability
       # much faster than statmod's pinvgauss funciton
 
@@ -138,7 +129,12 @@ pRDM <- function(rt,pars)
 
       x[t<0] <- 0
       x
-    }
+}
+
+
+pigt <- function(t,k=1,l=1,a=.1,tiny=1e-10) {
+    # cdf of inverse gaussian at t with k +/- a/2 uniform variability
+    # returns pigt0 if a<=0
 
     options(warn=-1)
     if(length(k)!=length(t)) k <- rep(k,length.out=length(t))
@@ -158,7 +154,7 @@ pRDM <- function(rt,pars)
 
     # No threshold variability
     if ( any(atiny) )
-      x[atiny] <- pigt.0(t[atiny],k[atiny],l[atiny])
+      x[atiny] <- pigt0(t[atiny],k[atiny],l[atiny])
 
     # Threshold variability
     if ( any(!atiny) ) {
@@ -206,8 +202,12 @@ pRDM <- function(rt,pars)
 
     x[x<0 | is.nan(x) ] <- 0
     x
-  }
+}
 
+
+pRDM <- function(rt,pars)
+  # cumulative density for single accumulator
+{
   rt <- rt - pars[,"t0"]
   out <- numeric(length(rt))
   ok <- !pars[,"v"] < 0  # code handles rate zero case
