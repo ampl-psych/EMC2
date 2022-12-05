@@ -382,7 +382,7 @@ extractDadms <- function(dadms, names = 1:length(dadms)){
   subject_covariates <- attr(dadms, "subject_covariates")
   pars <- attr(dadms[[1]], "sampled_p_names")
   prior <- attr(dadms[[1]], "prior")
-  ll_func <- attr(dadms[[1]], "model")$log_likelihood
+  ll_func <- attr(dadms[[1]], "model")()$log_likelihood
   subjects <- unique(factor(sapply(dadms, FUN = function(x) levels(x$subjects))))
   dadm_list <- dm_list(dadms[[1]])
   components <- rep(1, length(pars))

@@ -22,6 +22,7 @@
 #' @importFrom MCMCpack riwish
 #' @importFrom methods is
 #' @importFrom parallel mclapply
+#' @importFrom Rcpp sourceCpp
 #' @importFrom stats acf
 #' @importFrom stats cor
 #' @importFrom stats cov
@@ -41,5 +42,6 @@
 #' @importFrom stats setNames
 #' @importFrom stats terms
 #' @importFrom stats var
+#' @useDynLib EMC2, .registration = TRUE
 ## usethis namespace: end
 NULL
