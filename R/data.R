@@ -109,10 +109,13 @@ make_data <- function(p_vector,design,model=NULL,trials=NULL,data=NULL,expand=1,
       data <- add_trials(data[order(data$subjects),])
     }
     if (!is.factor(data$subjects)) data$subjects <- factor(data$subjects)
-    if ( is.null(model()$p_types) ) stop("model()$p_types must be specified")
-    if ( is.null(model()$transform) ) model()$transform <- identity
-    if ( is.null(model()$Ntransform) ) model()$Ntransform <- identity
-    if ( is.null(model()$Ttransform) ) model()$Ttransform <- identity
+    if (!is.null(model)) {
+      if (!is.function(model)) stop("model arguement must  be a function")
+      if ( is.null(model()$p_types) ) stop("model()$p_types must be specified")
+      if ( is.null(model()$transform) ) stop("model()$transform must be specified")
+      if ( is.null(model()$Ntransform) ) stop("model()$Ntransform must be specified")
+      if ( is.null(model()$Ttransform) ) stop("model()$Ttransform must be specified")
+    }
     data <- design_model(
       add_accumulators(data,design$matchfun,simulate=TRUE,type=model()$type,Fcovariates=design$Fcovariates),
       design,model,add_acc=FALSE,compress=FALSE,verbose=FALSE,
