@@ -270,7 +270,7 @@ pmwg_IC <- function(samplers,filter="sample",subfilter=0,use_best_fit=TRUE,
         alpha <- as_mcmc.list(samplers,selection="alpha",filter=filter,subfilter=subfilter)
     mean_pars <- lapply(alpha,function(x){apply(do.call(rbind,x),2,mean)})
     # log-likelihood for each subject using their mean parameter vector
-    ll_func <- attr(samplers,"design_list")[[1]]$model$log_likelihood
+    ll_func <- attr(samplers,"design_list")[[1]]$model()$log_likelihood
     data <- samplers[[1]]$data
     mean_pars_lls <- setNames(numeric(length(mean_pars)),names(mean_pars))
     for (sub in names(mean_pars))

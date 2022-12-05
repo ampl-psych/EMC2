@@ -109,16 +109,16 @@ make_data <- function(p_vector,design,model=NULL,trials=NULL,data=NULL,expand=1,
       data <- add_trials(data[order(data$subjects),])
     }
     if (!is.factor(data$subjects)) data$subjects <- factor(data$subjects)
-    if ( is.null(model$p_types) ) stop("model$p_types must be specified")
-    if ( is.null(model$transform) ) model$transform <- identity
-    if ( is.null(model$Ntransform) ) model$Ntransform <- identity
-    if ( is.null(model$Ttransform) ) model$Ttransform <- identity
+    if ( is.null(model()$p_types) ) stop("model()$p_types must be specified")
+    if ( is.null(model()$transform) ) model()$transform <- identity
+    if ( is.null(model()$Ntransform) ) model()$Ntransform <- identity
+    if ( is.null(model()$Ttransform) ) model()$Ttransform <- identity
     data <- design_model(
-      add_accumulators(data,design$matchfun,simulate=TRUE,type=model$type,Fcovariates=design$Fcovariates),
+      add_accumulators(data,design$matchfun,simulate=TRUE,type=model()$type,Fcovariates=design$Fcovariates),
       design,model,add_acc=FALSE,compress=FALSE,verbose=FALSE,
       rt_check=FALSE)
-    pars <- model$Ttransform(model$Ntransform(map_p(
-      model$transform(add_constants(p_vector,design$constants)),data
+    pars <- model()$Ttransform(model()$Ntransform(map_p(
+      model()$transform(add_constants(p_vector,design$constants)),data
     )),data)
     if (!is.null(design$adapt)) {
       if (expand>1) {
@@ -134,8 +134,8 @@ make_data <- function(p_vector,design,model=NULL,trials=NULL,data=NULL,expand=1,
     }
     if (mapped_p) return(cbind(data[,!(names(data) %in% c("R","rt"))],pars))
     if (expand==1)
-      Rrt <- model$rfun(data$lR,pars) else
-        Rrt <- model$rfun(rep(data$lR,expand),apply(pars,2,rep,times=expand))
+      Rrt <- model()$rfun(data$lR,pars) else
+        Rrt <- model()$rfun(rep(data$lR,expand),apply(pars,2,rep,times=expand))
     if (expand>1) data <- cbind(rep=rep(1:expand,each=dim(data)[1]),
                                 data.frame(lapply(data,rep,times=expand)))
     dropNames <- c("lR","lM")

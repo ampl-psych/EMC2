@@ -29,7 +29,7 @@
 make_design <- function(Flist,Ffactors,Rlevels,model,
                         Clist=NULL,matchfun=NULL,constants=NULL,Fcovariates=NULL,Ffunctions=NULL,
                         adapt=NULL,report_p_vector=TRUE){
-  if (model$type=="SDT") {
+  if (model()$type=="SDT") {
     Clist[["lR"]] <- contr.increasing(length(Rlevels),Rlevels)
   }
 
@@ -38,7 +38,7 @@ make_design <- function(Flist,Ffactors,Rlevels,model,
                  Fcovariates=Fcovariates,Ffunctions=Ffunctions,adapt=adapt,model=model)
   p_vector <- sampled_p_vector(design,design$model)
 
-  if (model$type=="SDT") {
+  if (model()$type=="SDT") {
     tnams <- dimnames(attr(p_vector,"map")$threshold)[[2]]
     max_threshold=paste0("lR",Rlevels[length(Rlevels)])
     tnams <- tnams[grepl(max_threshold,tnams)]
@@ -130,7 +130,7 @@ sampled_p_vector <- function(design,model=NULL,doMap=TRUE)
     data <- cbind.data.frame(data,covs)
   }
   dadm <- design_model(
-    add_accumulators(data,matchfun=design$matchfun,type=model$type,Fcovariates=design$Fcovariates),
+    add_accumulators(data,matchfun=design$matchfun,type=model()$type,Fcovariates=design$Fcovariates),
     design,model,add_acc=FALSE,verbose=FALSE,rt_check=FALSE,compress=FALSE)
   sampled_p_names <- attr(dadm,"sampled_p_names")
   out <- stats::setNames(numeric(length(sampled_p_names)),sampled_p_names)
@@ -216,7 +216,7 @@ design_model <- function(data,design,model=NULL,prior = NULL,
   # da is augmented data (from add_accumulators), must have all of the factors
   #   and covariates that are used in formulas
   # Clist is a list of either a single unnamed contrast (as in the default)
-  #   lists, one for each model$p_type (allowed to have some p_types missing).
+  #   lists, one for each model()$p_type (allowed to have some p_types missing).
   # These elements of model define the paramaterization being used
   #   ptypes defines the parameter types for which designs must be specified
   #   transform if a function acting on p_vector before mapping
@@ -308,14 +308,14 @@ design_model <- function(data,design,model=NULL,prior = NULL,
       stop("Model must be supplied if it has not been added to design")
     model <- design$model
   }
-  if (model$type=="SDT") rt_check <- FALSE
-  if(model$type == "MRI"){
+  if (model()$type=="SDT") rt_check <- FALSE
+  if(model()$type == "MRI"){
     rt_check <- FALSE
     add_acc <- FALSE
     compress <- FALSE
   }
   if (!is.null(design$adapt)) compress=FALSE # RL models
-  if (any(model$p_types %in% names(data)))
+  if (any(model()$p_types %in% names(data)))
     stop("Data cannot have columns with the same names as model parameters")
   if (!is.factor(data$subjects)) {
     data$subjects <- factor(data$subjects)
@@ -377,7 +377,7 @@ design_model <- function(data,design,model=NULL,prior = NULL,
   }
 
   if (!add_acc) da <- data else
-    da <- add_accumulators(data,design$matchfun,type=model$type,Fcovariates=design$Fcovariates)
+    da <- add_accumulators(data,design$matchfun,type=model()$type,Fcovariates=design$Fcovariates)
   da <- da[order(da$subjects),] # fixes different sort in add_accumulators depending on subject type
 
   if (!is.null(design$Ffunctions)) for (i in names(design$Ffunctions)) {
@@ -392,21 +392,21 @@ design_model <- function(data,design,model=NULL,prior = NULL,
   #   data.frame(lapply(da[!(names(da) %in% c("R","rt"))],function(x){
   #     if (all(is.na(x))) rep(0,length(x)) else x}))
 
-  if (is.null(model$p_types) | is.null(model$transform) |
-      is.null(model$Ntransform) | is.null(model$Ttransform))
+  if (is.null(model()$p_types) | is.null(model()$transform) |
+      is.null(model()$Ntransform) | is.null(model()$Ttransform))
     stop("p_types, transform and Ntransform must be supplied")
   if (!all(unlist(lapply(design$Flist,class))=="formula"))
     stop("Flist must contain formulas")
   nams <- unlist(lapply(design$Flist,function(x)as.character(stats::terms(x)[[2]])))
   names(design$Flist) <- nams
-  if (!all(sort(model$p_types)==sort(nams)) & model$type != "MRI")
-    stop("Flist must specify formulas for ",paste(model$p_types,collapse = " "))
+  if (!all(sort(model()$p_types)==sort(nams)) & model()$type != "MRI")
+    stop("Flist must specify formulas for ",paste(model()$p_types,collapse = " "))
   if (is.null(design$Clist)) design$Clist=list(stats::contr.treatment())
   if (!is.list(design$Clist)) stop("Clist must be a list")
   if (!is.list(design$Clist[[1]])[1]) # same contrasts for all p_types
-    design$Clist <- stats::setNames(lapply(1:length(model$p_types),
-                                    function(x)design$Clist),model$p_types) else {
-                                      missing_p_types <- model$p_types[!(model$p_types %in% names(design$Clist))]
+    design$Clist <- stats::setNames(lapply(1:length(model()$p_types),
+                                    function(x)design$Clist),model()$p_types) else {
+                                      missing_p_types <- model()$p_types[!(model()$p_types %in% names(design$Clist))]
                                       if (length(missing_p_types)>0) {
                                         nok <- length(design$Clist)
                                         for (i in 1:length(missing_p_types)) {
@@ -415,7 +415,7 @@ design_model <- function(data,design,model=NULL,prior = NULL,
                                         }
                                       }
                                     }
-  if(model$type != "MRI") for (i in model$p_types) attr(design$Flist[[i]],"Clist") <- design$Clist[[i]]
+  if(model()$type != "MRI") for (i in model()$p_types) attr(design$Flist[[i]],"Clist") <- design$Clist[[i]]
   out <- lapply(design$Flist,make_dm,da=da,Fcovariates=design$Fcovariates)
   if (!is.null(rt_resolution) & !is.null(da$rt)) da$rt <- round(da$rt/rt_resolution)*rt_resolution
   if (compress) dadm <- compress_dadm(da,designs=out,
@@ -550,9 +550,9 @@ map_p <- function(p,dadm)
   } else if (!all(sort(names(p))==sort(attr(dadm,"p_names"))))
     stop("p names must be: ",paste(attr(dadm,"p_names"),collapse=", "))
 
-  pars <- matrix(nrow=dim(dadm)[1],ncol=length(attr(dadm,"model")$p_types),
-                 dimnames=list(NULL,attr(dadm,"model")$p_types))
-  for (i in attr(dadm,"model")$p_types) {
+  pars <- matrix(nrow=dim(dadm)[1],ncol=length(attr(dadm,"model")()$p_types),
+                 dimnames=list(NULL,attr(dadm,"model")()$p_types))
+  for (i in attr(dadm,"model")()$p_types) {
     if ( !is.matrix(p) )
       pars[,i] <- (attr(dadm,"designs")[[i]][attr(attr(dadm,"designs")[[i]],"expand"),,drop=FALSE] %*%
                      p[dimnames(attr(dadm,"designs")[[i]])[[2]]]) else

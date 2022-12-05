@@ -1,10 +1,10 @@
 get_pars <- function(p_vector,dadm) {
   # Add constants, transform p_vector, map to design, transform mapped parameters
   # to the natural scale, and create trial-dependent parameters
-  attr(dadm,"model")$Ttransform(
-    attr(dadm,"model")$Ntransform(
+  attr(dadm,"model")()$Ttransform(
+    attr(dadm,"model")()$Ntransform(
       map_p(
-        attr(dadm,"model")$transform(add_constants(p_vector,attr(dadm,"constants"))),
+        attr(dadm,"model")()$transform(add_constants(p_vector,attr(dadm,"constants"))),
         dadm)),
     dadm)
 }
@@ -53,9 +53,9 @@ mapped_name_list <- function(design,model,save_design=FALSE)
   p_vector <- attr(design,"p_vector")
   mp <- mapped_par(p_vector,design)
   map <- attr(sampled_p_vector(design),"map")
-  pmat <- model$transform(add_constants(t(as.matrix(p_vector)),constants))
+  pmat <- model()$transform(add_constants(t(as.matrix(p_vector)),constants))
   plist <- lapply(map,doMap,pmat=pmat)
-  if (model$type=="SDT") {
+  if (model()$type=="SDT") {
     ht <- apply(map$threshold[,grepl("lR",dimnames(map$threshold)[[2]]),drop=FALSE],1,sum)
     plist$threshold <- plist$threshold[,ht!=max(ht),drop=FALSE]
   }
@@ -116,9 +116,9 @@ map_mcmc <- function(mcmc,design,model, include_constants = TRUE)
   map <- attr(sampled_p_vector(design),"map")
   constants <- design$constants
   mp <- mapped_par(mcmc[1,],design)
-  pmat <- model$transform(add_constants(mcmc,constants))
+  pmat <- model()$transform(add_constants(mcmc,constants))
   plist <- lapply(map,doMap,pmat=pmat)
-  if (model$type=="SDT") {
+  if (model()$type=="SDT") {
     ht <- apply(map$threshold[,grepl("lR",dimnames(map$threshold)[[2]]),drop=FALSE],1,sum)
     plist$threshold <- plist$threshold[,ht!=max(ht),drop=FALSE]
   }
@@ -139,7 +139,7 @@ map_mcmc <- function(mcmc,design,model, include_constants = TRUE)
   pmat <- do.call(cbind,plist)
   cnams <- dimnames(pmat)[[2]]
   dimnames(pmat)[[2]] <- get_p_types(cnams)
-  out <- model$Ntransform(pmat)[,1:length(cnams)]
+  out <- model()$Ntransform(pmat)[,1:length(cnams)]
   dimnames(out)[[2]] <- cnams
   if(!include_constants) out <- out[,!isConstant]
   out <- as.mcmc(out)
@@ -160,7 +160,7 @@ mapped_par <- function(p_vector,design,model=NULL,
                          rt_check=FALSE,compress=FALSE)
     ok <- !(names(dadm) %in% c("subjects","trials","R","rt","winner"))
     out <- cbind(dadm[,ok],round(get_pars(p_vector,dadm),digits))
-    if (model$type=="SDT")  out <- out[dadm$lR!=levels(dadm$lR)[length(levels(dadm$lR))],]
+    if (model()$type=="SDT")  out <- out[dadm$lR!=levels(dadm$lR)[length(levels(dadm$lR))],]
     return(out)
 }
 
@@ -178,9 +178,9 @@ map_mcmc <- function(mcmc,design,model, include_constants = TRUE)
   map <- attr(sampled_p_vector(design),"map")
   constants <- design$constants
   mp <- mapped_par(mcmc[1,],design)
-  pmat <- model$transform(add_constants(mcmc,constants))
+  pmat <- model()$transform(add_constants(mcmc,constants))
   plist <- lapply(map,doMap,pmat=pmat)
-  if (model$type=="SDT") {
+  if (model()$type=="SDT") {
     ht <- apply(map$threshold[,grepl("lR",dimnames(map$threshold)[[2]]),drop=FALSE],1,sum)
     plist$threshold <- plist$threshold[,ht!=max(ht),drop=FALSE]
   }
@@ -199,7 +199,7 @@ map_mcmc <- function(mcmc,design,model, include_constants = TRUE)
   pmat <- do.call(cbind,plist)
   cnams <- dimnames(pmat)[[2]]
   dimnames(pmat)[[2]] <- get_p_types(cnams)
-  out <- model$Ntransform(pmat)[,1:length(cnams)]
+  out <- model()$Ntransform(pmat)[,1:length(cnams)]
   dimnames(out)[[2]] <- cnams
   if(!include_constants) out <- out[,!isConstant]
   out <- as.mcmc(out)

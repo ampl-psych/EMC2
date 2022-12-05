@@ -28,7 +28,7 @@ augment = function(s,da,design)
 }
 
 # ARCHITECTURE OF FOLLOWING FUNCTION WILL NEED UPDATING FOR MULTIPLE ADAPT TYPES
-# s="10";npars=pars;da=data; rfun=model$rfun;return_learning=FALSE;mapped_p=FALSE
+# s="10";npars=pars;da=data; rfun=model()$rfun;return_learning=FALSE;mapped_p=FALSE
 update_pars = function(s,npars,da,rfun=NULL,return_learning=FALSE,mapped_p=FALSE,
                        return_all=FALSE)
   # for subject s
@@ -148,7 +148,7 @@ adapt_data <- function(data,design,model,pars,
   }
   daList <- setNames(
     lapply(levels(data$subjects),update_pars,npars=pars,da=data,return_all=return_all,
-           rfun=model$rfun,return_learning=return_learning,mapped_p=mapped_p),
+           rfun=model()$rfun,return_learning=return_learning,mapped_p=mapped_p),
     levels(data$subjects))
   if (return_learning) {
     return(daList)

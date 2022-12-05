@@ -704,7 +704,7 @@ profile_pmwg <- function(pname,p,p_min,p_max,dadm,n_point=100,main="",cores=1)
 
   lfun <- function(i,x,p,pname,dadm) {
     p[pname] <- x[i]
-    attr(dadm,"model")$log_likelihood(p,dadm)
+    attr(dadm,"model")()$log_likelihood(p,dadm)
   }
 
   x <- seq(p_min,p_max,length.out=n_point)

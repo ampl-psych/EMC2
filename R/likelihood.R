@@ -7,11 +7,11 @@ log_likelihood_race <- function(p_vector,dadm,min_ll=log(1e-10))
     ok <- !logical(dim(pars)[1]) else ok <- attr(pars,"ok")
 
     lds <- numeric(dim(dadm)[1]) # log pdf (winner) or survivor (losers)
-    lds[dadm$winner] <- log(attr(dadm,"model")$dfun(rt=dadm$rt[dadm$winner],
+    lds[dadm$winner] <- log(attr(dadm,"model")()$dfun(rt=dadm$rt[dadm$winner],
                                                     pars=pars[dadm$winner,]))
     n_acc <- length(levels(dadm$R))
     if (n_acc>1) lds[!dadm$winner] <-
-      log(1-attr(dadm,"model")$pfun(rt=dadm$rt[!dadm$winner],pars=pars[!dadm$winner,]))
+      log(1-attr(dadm,"model")()$pfun(rt=dadm$rt[!dadm$winner],pars=pars[!dadm$winner,]))
     lds[is.na(lds) | !ok] <- min_ll
     lds <- lds[attr(dadm,"expand")] # decompress
     if (n_acc>1) {
@@ -35,11 +35,11 @@ log_likelihood_race_missing <- function(p_vector,dadm,min_ll=log(1e-10))
     # matrix of parameters where first row is the winner.
   {
     if (!is.matrix(p)) p <- matrix(p,nrow=1,dimnames=list(NULL,names(p)))
-    out <- attr(dadm,"model")$dfun(t,
+    out <- attr(dadm,"model")()$dfun(t,
                                    matrix(rep(p[1,],each=length(t)),nrow=length(t),
                                           dimnames=list(NULL,dimnames(p)[[2]])))
     if (dim(p)[1]>1) for (i in 2:dim(p)[1])
-      out <- out*(1-attr(dadm,"model")$pfun(t,
+      out <- out*(1-attr(dadm,"model")()$pfun(t,
                                             matrix(rep(p[i,],each=length(t)),nrow=length(t),
                                                    dimnames=list(NULL,dimnames(p)[[2]]))))
     out
@@ -129,7 +129,7 @@ log_likelihood_race_missing <- function(p_vector,dadm,min_ll=log(1e-10))
 
   # Density for winner rows
   lds <- numeric(dim(dadm)[1]) # log pdf (winner) or survivor (losers)
-  lds[attr(dadm,"ok_dadm_winner")] <- log(attr(dadm,"model")$dfun(
+  lds[attr(dadm,"ok_dadm_winner")] <- log(attr(dadm,"model")()$dfun(
     rt=dadm$rt[attr(dadm,"ok_dadm_winner")],pars=pars[attr(dadm,"ok_dadm_winner"),]))
 
   n_acc <- length(levels(dadm$R))                # number of accumulators
@@ -153,7 +153,7 @@ log_likelihood_race_missing <- function(p_vector,dadm,min_ll=log(1e-10))
 
   # Survivors and truncation
   if (n_acc>1) {
-    lds[attr(dadm,"ok_dadm_looser")] <- log(1-attr(dadm,"model")$pfun(
+    lds[attr(dadm,"ok_dadm_looser")] <- log(1-attr(dadm,"model")()$pfun(
       rt=dadm$rt[attr(dadm,"ok_dadm_looser")],pars=pars[attr(dadm,"ok_dadm_looser"),]))
   }
   lds <- lds[attr(dadm,"expand")]  # decompress
@@ -179,11 +179,78 @@ log_likelihood_ddm <- function(p_vector,dadm,min_ll=log(1e-10))
   pars <- get_pars(p_vector,dadm)
   like <- numeric(dim(dadm)[1])
   if (any(attr(pars,"ok"))) like[attr(pars,"ok")] <-
-    attr(dadm,"model")$dfun(dadm$rt[attr(pars,"ok")],dadm$R[attr(pars,"ok")],pars[attr(pars,"ok"),,drop=FALSE])
+    attr(dadm,"model")()$dfun(dadm$rt[attr(pars,"ok")],dadm$R[attr(pars,"ok")],pars[attr(pars,"ok"),,drop=FALSE])
   like[attr(pars,"ok")][is.na(like[attr(pars,"ok")])] <- 0
   sum(pmax(min_ll,log(like[attr(dadm,"expand")])))
 }
 
+log_likelihood_race_ss <- function(p_vector,dadm,min_ll=log(1e-10))
+  # Race model summed log likelihood, one accumulator (lR=="stop") is ExGaussian
+  # others are Wald.
+{
+
+  pars <- get_pars(p_vector,dadm)
+
+  if (is.null(attr(pars,"ok")))
+    ok <- !logical(dim(pars)[1]) else ok <- attr(pars,"ok")
+
+  # standard race, ignores R=NA
+  isstop <- dadm[,"lR"]=="stop"
+  stopwinner <- dadm$winner & isstop
+  gowinner <- dadm$winner & !isstop
+  stoplooser <- !dadm$winner & isstop
+  golooser <- !dadm$winner & !isstop
+  lds <- numeric(dim(dadm)[1]) # log pdf (winner) or survivor (losers)
+  lds[gowinner] <- log(attr(dadm,"model")()$dfunG(rt=dadm$rt[gowinner],pars=pars[gowinner,,drop=FALSE]))
+  lds[stopwinner] <- log(attr(dadm,"model")()$dfunS(rt=dadm$rt[stopwinner],pars=pars[stopwinner,,drop=FALSE]))
+  n_acc <- length(levels(dadm$R))
+  if (n_acc>1) {
+    lds[golooser] <- log(1-attr(dadm,"model")()$pfunG(rt=dadm$rt[golooser],pars=pars[golooser,,drop=FALSE]))
+    lds[stoplooser] <- log(1-attr(dadm,"model")()$pfunS(rt=dadm$rt[stoplooser],pars=pars[stoplooser,,drop=FALSE]))
+  }
+  lds[is.na(lds) | !ok] <- 0
+  # lds[is.na(lds)] <- 0
+  lds <- lds[attr(dadm,"expand")] # decompress
+  winner <- dadm$winner[attr(dadm,"expand")]
+  if (n_acc>1) {
+    ll <- lds[winner]
+    if (n_acc==2)
+      ll <- ll + lds[!winner] else
+        ll <- ll + apply(matrix(lds[!winner],nrow=n_acc-1),2,sum)
+    ll[is.na(ll)] <- 0
+  } else ll <- lds
+  like <- exp(ll)
+
+  # stop success
+  stopsucess_accs <- is.finite(dadm$SSD[attr(dadm,"expand")]) & (dadm$R[attr(dadm,"expand")] == "stop")
+  stoptrial <- is.finite(dadm$SSD[attr(dadm,"expand")][winner])
+  goresp <- dadm$R[attr(dadm,"expand")][winner] != "stop"
+  if (any(stopsucess_accs)) {
+    parstop <- pars[attr(dadm,"expand"),][stopsucess_accs,]
+    like[stoptrial & !goresp] <- attr(dadm,"model")()$sfun(parstop,n_acc)
+  }
+
+  # trigger failures
+  tf <- pars[attr(dadm,"expand"),"tf"][winner]
+  dotf <- goresp & stoptrial & (tf > 0)
+  if (any(dotf)) {
+    tflike <- exp(apply(matrix(lds,nrow=n_acc)[-1,dotf,drop=FALSE],2,sum))
+    like[dotf] <- tf[dotf]*tflike + (1-tf[dotf])*like[dotf]
+    stopsucess <- !dotf & stoptrial
+    like[stopsucess] <- like[stopsucess]*(1-tf[stopsucess])
+  }
+
+  # go failures
+  gf <- pars[,"gf"][attr(dadm,"expand")][winner]
+  if (any(gf>0)) {
+    like[!goresp] <- gf[!goresp] + (1-gf[!goresp])*like[!goresp]
+    like[goresp] <- like[goresp]*(1-gf[goresp])
+  }
+
+  like[!ok[winner]] <- 0
+
+  sum(pmax(min_ll,log(like)))
+}
 
 #### sdt choice likelihoods ----
 
@@ -215,8 +282,8 @@ log_likelihood_sdt <- function(p_vector,dadm,lb=-Inf,min_ll=log(1e-10))
   if (!is.null(attr(pars,"ok"))) { # Bad parameter region
     ok <- attr(pars,"ok")
     okw <- ok[dadm$winner]
-    ll[ok] <- log(attr(dadm,"model")$pfun(lt=lt[okw],ut=ut[okw],pars=pars[dadm$winner & ok,]))
-  } else ll <- log(attr(dadm,"model")$pfun(lt=lt,ut=ut,pars=pars[dadm$winner,]))
+    ll[ok] <- log(attr(dadm,"model")()$pfun(lt=lt[okw],ut=ut[okw],pars=pars[dadm$winner & ok,]))
+  } else ll <- log(attr(dadm,"model")()$pfun(lt=lt,ut=ut,pars=pars[dadm$winner,]))
   ll <- ll[expand]
   ll[is.na(ll)] <- 0
   sum(pmax(min_ll,ll))
