@@ -13,6 +13,8 @@ add_accumulators(
 )
 }
 \arguments{
+\item{data}{A data frame}
+
 \item{type}{}
 }
 \description{
