@@ -364,9 +364,8 @@ make_samplers <- function(data_list,design_list,model_list=NULL,
                  covariates=covariates)
     out$source <- "samplers/pmwg/variants/factorRegr.R"
   } else if (type == "single") {
-    source("samplers/pmwg/variants/single.R")
-    out <- pmwgs(dadm_list)
-    out$source <- "samplers/pmwg/variants/single.R"
+    variant_funs <- get_variant_funs(type = "single")
+    out <- pmwgs(dadm_list, variant_funs)
   }
   # replicate chains
   dadm_lists <- rep(list(out),n_chains)
