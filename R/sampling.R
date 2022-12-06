@@ -9,7 +9,7 @@ pmwgs <- function(dadm, variant_funs, pars = NULL, ll_func = NULL, prior = NULL,
 
   # Storage for the samples.
   subjects <- sort(as.numeric(unique(dadm$subjects)))
-  samples <- variant_funs$sample_store(dadm, pars)
+  samples <- variant_funs$sample_store(dadm, pars, ...)
   sampler <- list(
     data = dadm_list,
     par_names = c(pars, names(dadm$subject_covariates)),
@@ -22,7 +22,7 @@ pmwgs <- function(dadm, variant_funs, pars = NULL, ll_func = NULL, prior = NULL,
     init = FALSE
   )
   class(sampler) <- "pmwgs"
-  sampler <- variant_funs$add_info(sampler, prior)
+  sampler <- variant_funs$add_info(sampler, prior, ...)
   attr(sampler, "variant_funs") <- variant_funs
   return(sampler)
 }
@@ -96,7 +96,7 @@ run_stage <- function(pmwgs,
 
   epsilon <- fix_epsilon(pmwgs, epsilon, force_prev_epsilon, components)
   if(length(particles == 1)){
-    particles <- rep(particles, min(pmwgs$n_subjects, 2)) # kluge to keep it as a vector
+    particles <- rep(particles, max(pmwgs$n_subjects, 2)) # kluge to keep it as a vector
   }
   # Build new sample storage
   pmwgs <- extend_sampler(pmwgs, iter, stage)
@@ -424,7 +424,35 @@ get_variant_funs <- function(type = "standard") {
       prior_dist_IS2 = prior_dist_single,
       group_dist_IS2 = group_dist_single
     )
-  }
+  } else if(type == "blocked"){
+    list_fun <- list(# store functions
+      sample_store = sample_store_standard,
+      add_info = add_info_blocked,
+      get_startpoints = get_startpoints_blocked,
+      get_group_level = get_group_level_standard,
+      fill_samples = fill_samples_standard,
+      gibbs_step = gibbs_step_blocked,
+      filtered_samples = filtered_samples_standard,
+      get_conditionals = get_conditionals_blocked,
+      get_all_pars_IS2 = get_all_pars_blocked,
+      prior_dist_IS2 = prior_dist_blocked,
+      group_dist_IS2 = group_dist_blocked
+  )
+  } else if(type == "diagonal"){
+    list_fun <- list(# store functions
+      sample_store = sample_store_standard,
+      add_info = add_info_diag,
+      get_startpoints = get_startpoints_diag,
+      get_group_level = get_group_level_standard,
+      fill_samples = fill_samples_standard,
+      gibbs_step = gibbs_step_diag,
+      filtered_samples = filtered_samples_standard,
+      get_conditionals = get_conditionals_diag,
+      get_all_pars_IS2 = get_all_pars_standard,
+      prior_dist_IS2 = prior_dist_diag,
+      group_dist_IS2 = group_dist_diag
+    )
+}
   return(list_fun)
 }
 
