@@ -52,7 +52,7 @@ run_samplers <- function(samplers, stage, iter = NULL, max_gd = NULL, min_es = 0
   return(samplers)
 }
 
-run_stages <- function(sampler, stage, iter=0, verbose = TRUE,
+run_stages <- function(sampler, stage = "preburn", iter=0, verbose = TRUE,
                        particles=NULL,particle_factor=50, p_accept= NULL, n_cores=1)
 {
 
