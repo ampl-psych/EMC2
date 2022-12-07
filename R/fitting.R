@@ -339,34 +339,12 @@ make_samplers <- function(data_list,design_list,model_list=NULL,
                                    model=model_list[[i]],rt_resolution=rt_resolution[i],prior=prior_list[[i]])
   }
   if(!is.null(subject_covariates)) attr(dadm_list, "subject_covariates") <- subject_covariates
-  if (type == "standard") {
-    variant_funs <- get_variant_funs(type = "standard")
+  variant_funs <- get_variant_funs(type = type)
+  if (type %in% c("standard", "single", "diagonal")) {
     out <- pmwgs(dadm_list, variant_funs)
-  } else if(type == "diagonal"){
-    source("samplers/pmwg/variants/diag.R")
-    out <- pmwgs(dadm_list)
-    out$source <- "samplers/pmwg/variants/diag.R"
   } else if (type == "blocked") {
     if (is.null(par_groups)) stop("Must specify par_groups for blocked type")
-    source("samplers/pmwg/variants/blocked.R")
-    out <- pmwgs(dadm_list,par_groups=par_groups)
-    out$source <- "samplers/pmwg/variants/blocked.R"
-  } else if (type=="factor") {
-    if (is.null(n_factors)) stop("Must specify n_factors for factor type")
-    source("samplers/pmwg/variants/factor.R")
-    out <- pmwgs(dadm_list,n_factors=n_factors,constraintMat=constraintMat)
-    out$source <- "samplers/pmwg/variants/factor.R"
-  } else if (type=="factorRegression") {
-    if (is.null(n_factors)) stop("Must specify n_factors for factorRegression type")
-    if (is.null(covariates)) stop("Must specify covariates for factorRegression type")
-    source("samplers/pmwg/variants/factorRegr.R")
-    out <- pmwgs(dadm_list,n_factors=n_factors,constraintMat=constraintMat,
-                 covariates=covariates)
-    out$source <- "samplers/pmwg/variants/factorRegr.R"
-  } else if (type == "single") {
-    source("samplers/pmwg/variants/single.R")
-    out <- pmwgs(dadm_list)
-    out$source <- "samplers/pmwg/variants/single.R"
+    out <- pmwgs(dadm_list,par_groups=par_groups, variant_funs)
   }
   # replicate chains
   dadm_lists <- rep(list(out),n_chains)

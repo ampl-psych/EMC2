@@ -91,7 +91,7 @@ accept_rate <- function(pmwgs, window_size = 200) {
     end <- n_samples
   }
   vals <- pmwgs$samples$alpha[1, , start:end]
-  if (is.null(dim(vals))) return(mean(diff(vals)==0))
+  if (is.null(dim(vals))) return(mean(diff(vals)!=0))
   apply(
     apply(vals, 1, diff) != 0, # If diff != 0
     2,

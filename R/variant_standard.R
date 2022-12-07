@@ -19,7 +19,7 @@ add_info_standard <- function(sampler, prior = NULL, ...){
     prior <- list(theta_mu_mean = rep(0, sampler$n_pars), theta_mu_var = diag(rep(1, sampler$n_pars)))
   }
   # Things I save rather than re-compute inside the loops.
-  prior$theta_mu_invar <- MASS::ginv(prior$theta_mu_var) #Inverse of the matrix
+  prior$theta_mu_invar <- ginv(prior$theta_mu_var) #Inverse of the matrix
 
   #Hyper parameters
   attr(sampler, "v_half") <- 2
@@ -29,11 +29,11 @@ add_info_standard <- function(sampler, prior = NULL, ...){
 }
 
 get_startpoints_standard <- function(pmwgs, start_mu, start_var){
-  if (is.null(start_mu)) start_mu <- mvtnorm::rmvnorm(1, mean = pmwgs$prior$theta_mu_mean, sigma = pmwgs$prior$theta_mu_var)
+  if (is.null(start_mu)) start_mu <- rmvnorm(1, mean = pmwgs$prior$theta_mu_mean, sigma = pmwgs$prior$theta_mu_var)
   # If no starting point for group var just sample some
   if (is.null(start_var)) start_var <- MCMCpack::riwish(pmwgs$n_pars * 3,diag(pmwgs$n_pars))
   start_a_half <- 1 / rgamma(n = pmwgs$n_pars, shape = 2, rate = 1)
-  return(list(tmu = start_mu, tvar = start_var, tvinv = MASS::ginv(start_var), a_half = start_a_half))
+  return(list(tmu = start_mu, tvar = start_var, tvinv = ginv(start_var), a_half = start_a_half))
 }
 
 get_group_level_standard <- function(parameters, s){
@@ -60,11 +60,11 @@ gibbs_step_standard <- function(sampler, alpha){
   prior <- sampler$prior
 
   # Here mu is group mean, so we are getting mean and variance
-  var_mu <- MASS::ginv(sampler$n_subjects * last$tvinv + prior$theta_mu_invar)
+  var_mu <- ginv(sampler$n_subjects * last$tvinv + prior$theta_mu_invar)
   mean_mu <- as.vector(var_mu %*% (last$tvinv %*% apply(alpha, 1, sum) +
                                      prior$theta_mu_invar %*% prior$theta_mu_mean))
   chol_var_mu <- t(chol(var_mu)) # t() because I want lower triangle.
-  tmu <- mvtnorm::rmvnorm(1, mean_mu, chol_var_mu %*% t(chol_var_mu))[1, ]
+  tmu <- rmvnorm(1, mean_mu, chol_var_mu %*% t(chol_var_mu))[1, ]
   names(tmu) <- sampler$par_names
 
   # New values for group var
@@ -73,13 +73,13 @@ gibbs_step_standard <- function(sampler, alpha){
   if(!is.null(hyper$std_df)){
     B_half <- hyper$std_scale * diag(1, nrow = sampler$n_pars) + cov_temp # nolint
     tvar <- MCMCpack::riwish(hyper$std_df + sampler$n_subjects, B_half) # New sample for group variance
-    tvinv <- MASS::ginv(tvar)
+    tvinv <- ginv(tvar)
     # Sample new mixing weights.
     a_half <- NULL
   } else{
     B_half <- 2 * hyper$v_half * diag(1 / last$a_half) + cov_temp # nolint
     tvar <- MCMCpack::riwish(hyper$v_half + sampler$n_pars - 1 + sampler$n_subjects, B_half) # New sample for group variance
-    tvinv <- MASS::ginv(tvar)
+    tvinv <- ginv(tvar)
 
     # Sample new mixing weights.
     a_half <- 1 / rgamma(n = sampler$n_pars,shape = (hyper$v_half + sampler$n_pars) / 2,
@@ -124,6 +124,7 @@ filtered_samples_standard <- function(sampler, filter){
   )
 }
 
+# Used by IS2
 get_all_pars_standard <- function(samples, idx, info){
   n_subjects <- samples$n_subjects
   n_iter = length(samples$samples$stage[idx])
@@ -159,6 +160,7 @@ get_all_pars_standard <- function(samples, idx, info){
   return(list(X = X, mu_tilde = mu_tilde, var_tilde = var_tilde, info = info))
 }
 
+# Used by IS2
 robust_diwish <- function (W, v, S) { #RJI_change: this function is to protect against weird proposals in the diwish function, where sometimes matrices weren't pos def
   if (!is.matrix(S)) S <- matrix(S)
   if (!is.matrix(W)) W <- matrix(W)
@@ -187,6 +189,7 @@ robust_diwish <- function (W, v, S) { #RJI_change: this function is to protect a
   return(exp(lpdf))
 }
 
+# Used by IS2
 unwind_IS2 <- function(x,reverse=FALSE) {
 
   if (reverse) {
@@ -203,20 +206,21 @@ unwind_IS2 <- function(x,reverse=FALSE) {
   return(out)
 }
 
-
+# Used by IS2
 group_dist_standard <- function(random_effect = NULL, parameters, sample = FALSE, n_samples = NULL, info){
   n_randeffect <- info$n_randeffect
   param.theta.mu <- parameters[1:n_randeffect]
   param.theta.sig.unwound <- parameters[(n_randeffect+1):(length(parameters)-n_randeffect)]
   param.theta.sig2 <- unwind_IS2(param.theta.sig.unwound, reverse = TRUE)
   if (sample){
-    return(mvtnorm::rmvnorm(n_samples, param.theta.mu,param.theta.sig2))
+    return(rmvnorm(n_samples, param.theta.mu,param.theta.sig2))
   }else{
-    logw_second<-max(-5000*info$n_randeffect, mvtnorm::dmvnorm(random_effect, param.theta.mu,param.theta.sig2,log=TRUE))
+    logw_second<-max(-5000*info$n_randeffect, dmvnorm(random_effect, param.theta.mu,param.theta.sig2,log=TRUE))
     return(logw_second)
   }
 }
 
+# Used by IS2
 prior_dist_standard <- function(parameters, info){
   n_randeffect <- info$n_randeffect
   prior <- info$prior
@@ -225,7 +229,7 @@ prior_dist_standard <- function(parameters, info){
   param.theta.sig.unwound <- parameters[(n_randeffect+1):(length(parameters)-n_randeffect)]
   param.theta.sig2 <- unwind_IS2(param.theta.sig.unwound, reverse = TRUE)
   param.a <- exp(parameters[((length(parameters)-n_randeffect)+1):(length(parameters))])
-  log_prior_mu=mvtnorm::dmvnorm(param.theta.mu, mean = prior$theta_mu_mean, sigma = prior$theta_mu_var, log =TRUE)
+  log_prior_mu=dmvnorm(param.theta.mu, mean = prior$theta_mu_mean, sigma = prior$theta_mu_var, log =TRUE)
   log_prior_sigma = log(robust_diwish(param.theta.sig2, v=hyper$v_half+ n_randeffect-1, S = 2*hyper$v_half*diag(1/param.a)))
   log_prior_a = sum(logdinvGamma(param.a,shape = 1/2,rate=1/(hyper$A_half^2)))
   # These are Jacobian corrections for the transformations on these
@@ -234,6 +238,7 @@ prior_dist_standard <- function(parameters, info){
   return(log_prior_mu + log_prior_sigma + log_prior_a - logw_den3 - logw_den2)
 }
 
+# Used by IS2
 logdinvGamma <- function(x, shape, rate){
   alpha <- shape
   beta <- 1/rate
