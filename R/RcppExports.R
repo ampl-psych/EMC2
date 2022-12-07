@@ -2,18 +2,18 @@
 # Generator token: 10BE3573-1514-4C36-9D1C-5A225CD40393
 
 pEXG <- function(q, mu = 5., sigma = 1., tau = 1., lower_tail = TRUE, log_p = FALSE) {
-    .Call('_EMC2_pEXG', PACKAGE = 'EMC2', q, mu, sigma, tau, lower_tail, log_p)
+    .Call(`_EMC2_pEXG`, q, mu, sigma, tau, lower_tail, log_p)
 }
 
 dEXG <- function(x, mu = 5., sigma = 1., tau = 1., log_d = FALSE) {
-    .Call('_EMC2_dEXG', PACKAGE = 'EMC2', x, mu, sigma, tau, log_d)
+    .Call(`_EMC2_dEXG`, x, mu, sigma, tau, log_d)
 }
 
 dEXGrace <- function(dt, mu, sigma, tau) {
-    .Call('_EMC2_dEXGrace', PACKAGE = 'EMC2', dt, mu, sigma, tau)
+    .Call(`_EMC2_dEXGrace`, dt, mu, sigma, tau)
 }
 
 stopfn_exg <- function(t, mu, sigma, tau, SSD) {
-    .Call('_EMC2_stopfn_exg', PACKAGE = 'EMC2', t, mu, sigma, tau, SSD)
+    .Call(`_EMC2_stopfn_exg`, t, mu, sigma, tau, SSD)
 }
 
