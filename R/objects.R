@@ -285,8 +285,15 @@ as_mcmc.list <- function(samplers,
   }
 }
 
+#' Returns the number of samples per chain per stage
+#'
+#' @param samplers A list of samplers, could be in any stage
+#'
+#' @return A table of iterations per stage per chain
+#' @export
+#'
+#' @examples
 chain_n <- function(samplers)
-  # Length of stages for each chain
 {
   do.call(rbind,lapply(samplers, function(x){
     table(factor(x$samples$stage,levels=c("preburn", "burn","adapt","sample")))
