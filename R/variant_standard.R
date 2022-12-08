@@ -72,21 +72,13 @@ gibbs_step_standard <- function(sampler, alpha){
   cov_temp <- (theta_temp) %*% (t(theta_temp))
   if(!is.null(hyper$std_df)){
     B_half <- hyper$std_scale * diag(1, nrow = sampler$n_pars) + cov_temp # nolint
-<<<<<<< HEAD
-    tvar <- MCMCpack::riwish(hyper$std_df + sampler$n_subjects, B_half) # New sample for group variance
-=======
     tvar <- riwish(hyper$std_df + sampler$n_subjects, B_half) # New sample for group variance
->>>>>>> origin/main
     tvinv <- ginv(tvar)
     # Sample new mixing weights.
     a_half <- NULL
   } else{
     B_half <- 2 * hyper$v_half * diag(1 / last$a_half) + cov_temp # nolint
-<<<<<<< HEAD
-    tvar <- MCMCpack::riwish(hyper$v_half + sampler$n_pars - 1 + sampler$n_subjects, B_half) # New sample for group variance
-=======
     tvar <- riwish(hyper$v_half + sampler$n_pars - 1 + sampler$n_subjects, B_half) # New sample for group variance
->>>>>>> origin/main
     tvinv <- ginv(tvar)
 
     # Sample new mixing weights.
@@ -132,7 +124,6 @@ filtered_samples_standard <- function(sampler, filter){
   )
 }
 
-# Used by IS2
 get_all_pars_standard <- function(samples, idx, info){
   n_subjects <- samples$n_subjects
   n_iter = length(samples$samples$stage[idx])
@@ -168,7 +159,6 @@ get_all_pars_standard <- function(samples, idx, info){
   return(list(X = X, mu_tilde = mu_tilde, var_tilde = var_tilde, info = info))
 }
 
-# Used by IS2
 robust_diwish <- function (W, v, S) { #RJI_change: this function is to protect against weird proposals in the diwish function, where sometimes matrices weren't pos def
   if (!is.matrix(S)) S <- matrix(S)
   if (!is.matrix(W)) W <- matrix(W)
@@ -197,7 +187,6 @@ robust_diwish <- function (W, v, S) { #RJI_change: this function is to protect a
   return(exp(lpdf))
 }
 
-# Used by IS2
 unwind_IS2 <- function(x,reverse=FALSE) {
 
   if (reverse) {
@@ -214,7 +203,7 @@ unwind_IS2 <- function(x,reverse=FALSE) {
   return(out)
 }
 
-# Used by IS2
+
 group_dist_standard <- function(random_effect = NULL, parameters, sample = FALSE, n_samples = NULL, info){
   n_randeffect <- info$n_randeffect
   param.theta.mu <- parameters[1:n_randeffect]
@@ -228,7 +217,6 @@ group_dist_standard <- function(random_effect = NULL, parameters, sample = FALSE
   }
 }
 
-# Used by IS2
 prior_dist_standard <- function(parameters, info){
   n_randeffect <- info$n_randeffect
   prior <- info$prior
@@ -246,7 +234,6 @@ prior_dist_standard <- function(parameters, info){
   return(log_prior_mu + log_prior_sigma + log_prior_a - logw_den3 - logw_den2)
 }
 
-# Used by IS2
 logdinvGamma <- function(x, shape, rate){
   alpha <- shape
   beta <- 1/rate
@@ -254,4 +241,3 @@ logdinvGamma <- function(x, shape, rate){
                                                         1) * log(x) - (beta/x)
   return(pmax(log.density, -50)) #Roughly equal to 1e-22 on real scale
 }
-
