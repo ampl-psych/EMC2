@@ -31,7 +31,7 @@ add_info_standard <- function(sampler, prior = NULL, ...){
 get_startpoints_standard <- function(pmwgs, start_mu, start_var){
   if (is.null(start_mu)) start_mu <- rmvnorm(1, mean = pmwgs$prior$theta_mu_mean, sigma = pmwgs$prior$theta_mu_var)
   # If no starting point for group var just sample some
-  if (is.null(start_var)) start_var <- MCMCpack::riwish(pmwgs$n_pars * 3,diag(pmwgs$n_pars))
+  if (is.null(start_var)) start_var <- riwish(pmwgs$n_pars * 3,diag(pmwgs$n_pars))
   start_a_half <- 1 / rgamma(n = pmwgs$n_pars, shape = 2, rate = 1)
   return(list(tmu = start_mu, tvar = start_var, tvinv = ginv(start_var), a_half = start_a_half))
 }
@@ -72,13 +72,21 @@ gibbs_step_standard <- function(sampler, alpha){
   cov_temp <- (theta_temp) %*% (t(theta_temp))
   if(!is.null(hyper$std_df)){
     B_half <- hyper$std_scale * diag(1, nrow = sampler$n_pars) + cov_temp # nolint
+<<<<<<< HEAD
     tvar <- MCMCpack::riwish(hyper$std_df + sampler$n_subjects, B_half) # New sample for group variance
+=======
+    tvar <- riwish(hyper$std_df + sampler$n_subjects, B_half) # New sample for group variance
+>>>>>>> origin/main
     tvinv <- ginv(tvar)
     # Sample new mixing weights.
     a_half <- NULL
   } else{
     B_half <- 2 * hyper$v_half * diag(1 / last$a_half) + cov_temp # nolint
+<<<<<<< HEAD
     tvar <- MCMCpack::riwish(hyper$v_half + sampler$n_pars - 1 + sampler$n_subjects, B_half) # New sample for group variance
+=======
+    tvar <- riwish(hyper$v_half + sampler$n_pars - 1 + sampler$n_subjects, B_half) # New sample for group variance
+>>>>>>> origin/main
     tvinv <- ginv(tvar)
 
     # Sample new mixing weights.

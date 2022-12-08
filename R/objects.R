@@ -214,19 +214,7 @@ as_mcmc.list <- function(samplers,
 {
 
   stages <- c("preburn", "burn", "adapt", "sample")
-  if (length(filter)>1) filter <- filter[1]
-  if (!is(samplers, "list") || !all(unlist(lapply(samplers, is, "pmwgs")))) {
-    stop("samplers must be a list of pmwgs objects")
-  }
-  same_names <- all(apply(do.call(rbind,lapply(samplers,function(x){x$par_names})),2,function(x){all(x[1]==x[-1])}))
-  if (!same_names){
-    stop("samplers must have the same parameter names")
-  }
-  same_subjects <- all(apply(do.call(rbind,lapply(samplers,function(x){x$subjects})),2,function(x){all(x[1]==x[-1])}))
-  if (!same_subjects){
-    stop("samplers must have the same subjects")
-  }
-
+  if(!all(filter %in% stages)) stop(paste0("must select filter from stages: ", stages))
 
   subjects <- names(samplers[[1]]$data)
   mcmcList <- lapply(samplers,as_Mcmc,selection=selection,filter=filter,
@@ -247,46 +235,40 @@ as_mcmc.list <- function(samplers,
     } else if (selection=="mu") {
       mcmcList <- lapply(mcmcList,add_constants_mcmc,
                          constants=attr(samplers,"design_list")[[1]]$constants)
-    }
-  }
-  if (selection %in% c("LL","epsilon")){
-    iter <- unlist(lapply(mcmcList,function(x){length(x[[1]])}))
-  } else{
-    if (selection == "alpha"){
-      iter <- unlist(lapply(mcmcList,function(x){dim(x[[1]])[1]}))
-    } else{
-      iter <- unlist(lapply(mcmcList,function(x){dim(x)[1]}))
-    }
+    } else warning("Can only include constants in alpha or mu")
   }
 
-  if (!all(iter[1]==iter[-1])) message("Chains have different numbers of samples, using first ",min(iter))
-  iter <- min(iter)
-  if (selection %in% c("alpha","LL","epsilon")) {
+  if (selection %in% c("alpha")) {
     nChains <- length(mcmcList)
     ns <- length(samplers[[1]]$subjects)
     out <- vector(mode="list",length=ns)
     lst <- vector(mode="list",length=nChains)
     for (i in 1:ns) {
-      for (j in 1:nChains) if (selection %in% c("LL","epsilon"))
-        lst[[j]] <- as.mcmc(mcmcList[[j]][[i]][1:iter]) else {
+      for (j in 1:nChains){
           isConstant <- attr(mcmcList[[j]][[i]],"isConstant")
-          lst[[j]] <- as.mcmc(mcmcList[[j]][[i]][1:iter,])
+          lst[[j]] <- as.mcmc(mcmcList[[j]][[i]])
           attr(lst[[j]],"isConstant") <- isConstant
-        }
+      }
       out[[i]] <- mcmc.list(lst)
     }
     out <- setNames(out,subjects)
-    attr(out,"selection") <- selection
-    return(out)
+
   } else {
     out <- mcmc.list(mcmcList)
-    attr(out,"selection") <- selection
-    return(out)
   }
+  attr(out,"selection") <- selection
+  return(out)
 }
 
+#' Returns the number of samples per chain per stage
+#'
+#' @param samplers A list of samplers, could be in any stage
+#'
+#' @return A table of iterations per stage per chain
+#' @export
+#'
+#' @examples
 chain_n <- function(samplers)
-  # Length of stages for each chain
 {
   do.call(rbind,lapply(samplers, function(x){
     table(factor(x$samples$stage,levels=c("preburn", "burn","adapt","sample")))
