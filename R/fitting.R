@@ -25,31 +25,6 @@ run_emc <- function(samplers, stage = NULL, iter = 1000, max_gd = NULL, min_es =
   return(samplers)
 }
 
-#' Generic function to run samplers for any stage and any requirements.
-#' Used by run_emc, auto_burn, run_adapt and run_sample
-#' Will break if you skip a stage, the stages have to be run in order (preburn, burn, adapt, sample)
-#' Either iter, max_gd, min_es or min_unique has to be specified. Multiple conditions for finishing can be specified. Will finish if all conditions are met.
-#' @param samplers A list of samplers, could be in any stage, as long as they've been initialized with make_samplers
-#' @param stage A string. Indicates which stage is to be run, either preburn, burn, adapt or sample
-#' @param iter An integer. Indicates how many iterations to run,
-#' @param max_gd A double. The maximum gelman diagnostic convergence allowed. Will stop if below this number.
-#' @param min_es An integer. The minimal effective size required to stop running.
-#' @param min_unique An integer. The minimal number of samples required. Only works in adaptation.
-#' @param p_accept A double. The target acceptance probability of the MCMC process. This will fine tune the width of the search space. Default = .8
-#' @param step_size An integer. After each of these steps, the requirements will be checked if they are met and proposal distributions will be updated. Default = 100.
-#' @param verbose Logical. Whether to print sampling related messages
-#' @param autosave Logical. Whether to automatically save the samplers to fileName. fileName has to be specified.
-#' @param fileName A string. Indicates what to save the samplers as, if autosave is enabled.
-#' @param particles An integer. How many particles to use, default is NULL and particle_factor is used. If specified will override particle_factor
-#' @param particle_factor An integer. Particle factor multiplied by the square root of the number of sampled parameters will determine the number of particles used.
-#' @param cores_per_chain An integer. How many cores to use per chain. Parallelizes across participant calculations.
-#' @param cores_for_chains An integer. How many cores to use across chains. Default is the number of chains.
-#' @param max_trys An integer. How many times it will try to meet the finish conditions. Default is 50.
-#'
-#' @return A list of samplers
-#' @export
-#'
-#' @examples
 run_samplers <- function(samplers, stage, iter = NULL, max_gd = NULL, min_es = 0, min_unique = 750,
                          p_accept = .8, step_size = 100, verbose = F, autosave = F, fileName = NULL,
                          particles = NULL, particle_factor = 50, cores_per_chain = 1,
@@ -77,7 +52,7 @@ run_samplers <- function(samplers, stage, iter = NULL, max_gd = NULL, min_es = 0
   return(samplers)
 }
 
-run_stages <- function(sampler, stage, iter=0, verbose,
+run_stages <- function(sampler, stage = "preburn", iter=0, verbose = TRUE,
                        particles=NULL,particle_factor=50, p_accept= NULL, n_cores=1)
 {
 
@@ -364,34 +339,12 @@ make_samplers <- function(data_list,design_list,model_list=NULL,
                                    model=model_list[[i]],rt_resolution=rt_resolution[i],prior=prior_list[[i]])
   }
   if(!is.null(subject_covariates)) attr(dadm_list, "subject_covariates") <- subject_covariates
-  if (type == "standard") {
-    variant_funs <- get_variant_funs(type = "standard")
+  variant_funs <- get_variant_funs(type = type)
+  if (type %in% c("standard", "single", "diagonal")) {
     out <- pmwgs(dadm_list, variant_funs)
-  } else if(type == "diagonal"){
-    source("samplers/pmwg/variants/diag.R")
-    out <- pmwgs(dadm_list)
-    out$source <- "samplers/pmwg/variants/diag.R"
   } else if (type == "blocked") {
     if (is.null(par_groups)) stop("Must specify par_groups for blocked type")
-    source("samplers/pmwg/variants/blocked.R")
-    out <- pmwgs(dadm_list,par_groups=par_groups)
-    out$source <- "samplers/pmwg/variants/blocked.R"
-  } else if (type=="factor") {
-    if (is.null(n_factors)) stop("Must specify n_factors for factor type")
-    source("samplers/pmwg/variants/factor.R")
-    out <- pmwgs(dadm_list,n_factors=n_factors,constraintMat=constraintMat)
-    out$source <- "samplers/pmwg/variants/factor.R"
-  } else if (type=="factorRegression") {
-    if (is.null(n_factors)) stop("Must specify n_factors for factorRegression type")
-    if (is.null(covariates)) stop("Must specify covariates for factorRegression type")
-    source("samplers/pmwg/variants/factorRegr.R")
-    out <- pmwgs(dadm_list,n_factors=n_factors,constraintMat=constraintMat,
-                 covariates=covariates)
-    out$source <- "samplers/pmwg/variants/factorRegr.R"
-  } else if (type == "single") {
-    source("samplers/pmwg/variants/single.R")
-    out <- pmwgs(dadm_list)
-    out$source <- "samplers/pmwg/variants/single.R"
+    out <- pmwgs(dadm_list,par_groups=par_groups, variant_funs)
   }
   # replicate chains
   dadm_lists <- rep(list(out),n_chains)
@@ -407,7 +360,7 @@ extractDadms <- function(dadms, names = 1:length(dadms)){
   subject_covariates <- attr(dadms, "subject_covariates")
   pars <- attr(dadms[[1]], "sampled_p_names")
   prior <- attr(dadms[[1]], "prior")
-  ll_func <- attr(dadms[[1]], "model")$log_likelihood
+  ll_func <- attr(dadms[[1]], "model")()$log_likelihood
   subjects <- unique(factor(sapply(dadms, FUN = function(x) levels(x$subjects))))
   dadm_list <- dm_list(dadms[[1]])
   components <- rep(1, length(pars))

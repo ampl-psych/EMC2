@@ -9,7 +9,7 @@ pmwgs <- function(dadm, variant_funs, pars = NULL, ll_func = NULL, prior = NULL,
 
   # Storage for the samples.
   subjects <- sort(as.numeric(unique(dadm$subjects)))
-  samples <- variant_funs$sample_store(dadm, pars)
+  samples <- variant_funs$sample_store(dadm, pars, ...)
   sampler <- list(
     data = dadm_list,
     par_names = c(pars, names(dadm$subject_covariates)),
@@ -22,30 +22,9 @@ pmwgs <- function(dadm, variant_funs, pars = NULL, ll_func = NULL, prior = NULL,
     init = FALSE
   )
   class(sampler) <- "pmwgs"
-  sampler <- variant_funs$add_info(sampler, prior)
+  sampler <- variant_funs$add_info(sampler, prior, ...)
   attr(sampler, "variant_funs") <- variant_funs
   return(sampler)
-}
-
-# some sort of variants, used to be called via a list called variant_funs
-
-get_variant_funs <- function(type = "standard") {
-  if(type == "standard") {
-    list_fun <- list(# store functions
-      sample_store = sample_store_standard,
-      add_info = add_info_standard,
-      get_startpoints = get_startpoints_standard,
-      get_group_level = get_group_level_standard,
-      fill_samples = fill_samples_standard,
-      gibbs_step = gibbs_step_standard,
-      filtered_samples = filtered_samples_standard,
-      get_conditionals = get_conditionals_standard,
-      get_all_pars_IS2 = get_all_pars_standard,
-      prior_dist_IS2 = prior_dist_standard,
-      group_dist_IS2 = group_dist_standard
-    )
-  }
-  return(list_fun)
 }
 
 init <- function(pmwgs, start_mu = NULL, start_var = NULL,
@@ -79,7 +58,7 @@ start_proposals <- function(s, parameters, n_particles, pmwgs, variant_funs){
   #Draw the first start point
   group_pars <- variant_funs$get_group_level(parameters, s)
   proposals <- particle_draws(n_particles, group_pars$mu, group_pars$var)
-  colnames(proposals) <- rownames(pmwgs$samples$theta_mu) # preserve par names
+  colnames(proposals) <- rownames(pmwgs$samples$alpha) # preserve par names
   lw <- apply(proposals,1,pmwgs$ll_func,dadm = pmwgs$data[[which(pmwgs$subjects == s)]])
   weight <- exp(lw - max(lw))
   idx <- sample(x = n_particles, size = 1, prob = weight)
@@ -117,7 +96,7 @@ run_stage <- function(pmwgs,
 
   epsilon <- fix_epsilon(pmwgs, epsilon, force_prev_epsilon, components)
   if(length(particles == 1)){
-    particles <- rep(particles, pmwgs$n_subjects)
+    particles <- rep(particles, max(pmwgs$n_subjects, 2)) # kluge to keep it as a vector
   }
   # Build new sample storage
   pmwgs <- extend_sampler(pmwgs, iter, stage)
@@ -363,7 +342,7 @@ fill_samples_base <- function(samples, group_level, proposals, epsilon, j = 1, n
   return(samples)
 }
 
-fill_samples_RE <- function(samples, proposals, epsilon, j = 1, n_pars){
+fill_samples_RE <- function(samples, proposals, epsilon, j = 1, n_pars, ...){
   # Only for random effects, separated because group level sometimes differs.
   samples$alpha[, , j] <- proposals[1:n_pars,]
   samples$subj_ll[, j] <- proposals[n_pars + 1,]
@@ -412,3 +391,68 @@ condMVN <- function (mean, sigma, dependent.ind, given.ind, X.given, check.sigma
   cVar <- B - CDinv %*% t(C)
   list(condMean = cMu, condVar = cVar)
 }
+
+
+# some sort of variants, used to be called via a list called variant_funs
+
+get_variant_funs <- function(type = "standard") {
+  if(type == "standard") {
+    list_fun <- list(# store functions
+      sample_store = sample_store_standard,
+      add_info = add_info_standard,
+      get_startpoints = get_startpoints_standard,
+      get_group_level = get_group_level_standard,
+      fill_samples = fill_samples_standard,
+      gibbs_step = gibbs_step_standard,
+      filtered_samples = filtered_samples_standard,
+      get_conditionals = get_conditionals_standard,
+      get_all_pars_IS2 = get_all_pars_standard,
+      prior_dist_IS2 = prior_dist_standard,
+      group_dist_IS2 = group_dist_standard
+    )
+  } else if(type == "single"){
+    list_fun <- list(# store functions
+      sample_store = sample_store_base,
+      add_info = add_info_single,
+      get_startpoints = get_startpoints_single,
+      get_group_level = get_group_level_single,
+      fill_samples = fill_samples_RE,
+      gibbs_step = gibbs_step_single,
+      filtered_samples = filtered_samples_single,
+      get_conditionals = get_conditionals_single,
+      get_all_pars_IS2 = get_all_pars_single,
+      prior_dist_IS2 = prior_dist_single,
+      group_dist_IS2 = group_dist_single
+    )
+  } else if(type == "blocked"){
+    list_fun <- list(# store functions
+      sample_store = sample_store_standard,
+      add_info = add_info_blocked,
+      get_startpoints = get_startpoints_blocked,
+      get_group_level = get_group_level_standard,
+      fill_samples = fill_samples_standard,
+      gibbs_step = gibbs_step_blocked,
+      filtered_samples = filtered_samples_standard,
+      get_conditionals = get_conditionals_blocked,
+      get_all_pars_IS2 = get_all_pars_blocked,
+      prior_dist_IS2 = prior_dist_blocked,
+      group_dist_IS2 = group_dist_blocked
+  )
+  } else if(type == "diagonal"){
+    list_fun <- list(# store functions
+      sample_store = sample_store_standard,
+      add_info = add_info_diag,
+      get_startpoints = get_startpoints_diag,
+      get_group_level = get_group_level_standard,
+      fill_samples = fill_samples_standard,
+      gibbs_step = gibbs_step_diag,
+      filtered_samples = filtered_samples_standard,
+      get_conditionals = get_conditionals_diag,
+      get_all_pars_IS2 = get_all_pars_standard,
+      prior_dist_IS2 = prior_dist_diag,
+      group_dist_IS2 = group_dist_diag
+    )
+}
+  return(list_fun)
+}
+

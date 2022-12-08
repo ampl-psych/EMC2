@@ -12,7 +12,7 @@ accept_progress_bar <- function(min = 0, max = 1) {
     acc_sep = " | ",
     acc_msg = "New(%3d%%)"
   )
-  width <- nchar(lapply(component, gettextf, 100), "w")
+  width <- c(1,2,2,4,3,9) # previous code was giving warnings
   width <- split(unname(width), names(component))
   width$extras <- sum(unlist(width)) - width$pchar
   width$term <- getOption("width")
@@ -91,7 +91,7 @@ accept_rate <- function(pmwgs, window_size = 200) {
     end <- n_samples
   }
   vals <- pmwgs$samples$alpha[1, , start:end]
-  if (is.null(dim(vals))) return(mean(diff(vals)==0))
+  if (is.null(dim(vals))) return(mean(diff(vals)!=0))
   apply(
     apply(vals, 1, diff) != 0, # If diff != 0
     2,

@@ -108,7 +108,7 @@ merge_samples <- function(samples){
 
 as_Mcmc <- function(sampler,filter=stages,thin=1,subfilter=0,
                     selection=c("alpha","mu","variance","covariance","correlation","LL","epsilon")[1])
-  # replacement for pmwg package as_mcmc
+  # replacement for pmwg package as_mccmc
   # allows for selection of subj_ll, and specifying selection as an integer
   # allows filter as single integer so can remove first filter samples
   # adds ability to thin and to subfilter (i.e., remove trials after removing
@@ -214,6 +214,20 @@ as_mcmc.list <- function(samplers,
 {
 
   stages <- c("preburn", "burn", "adapt", "sample")
+  if (length(filter)>1) filter <- filter[1]
+  if (!is(samplers, "list") || !all(unlist(lapply(samplers, is, "pmwgs")))) {
+    stop("samplers must be a list of pmwgs objects")
+  }
+  same_names <- all(apply(do.call(rbind,lapply(samplers,function(x){x$par_names})),2,function(x){all(x[1]==x[-1])}))
+  if (!same_names){
+    stop("samplers must have the same parameter names")
+  }
+  same_subjects <- all(apply(do.call(rbind,lapply(samplers,function(x){x$subjects})),2,function(x){all(x[1]==x[-1])}))
+  if (!same_subjects){
+    stop("samplers must have the same subjects")
+  }
+
+
   subjects <- names(samplers[[1]]$data)
   mcmcList <- lapply(samplers,as_Mcmc,selection=selection,filter=filter,
                      thin=thin,subfilter=subfilter)
@@ -244,6 +258,9 @@ as_mcmc.list <- function(samplers,
       iter <- unlist(lapply(mcmcList,function(x){dim(x)[1]}))
     }
   }
+
+  if (!all(iter[1]==iter[-1])) message("Chains have different numbers of samples, using first ",min(iter))
+  iter <- min(iter)
   if (selection %in% c("alpha","LL","epsilon")) {
     nChains <- length(mcmcList)
     ns <- length(samplers[[1]]$subjects)
@@ -268,14 +285,6 @@ as_mcmc.list <- function(samplers,
   }
 }
 
-#' Returns the number of samplers per chain per stage
-#'
-#' @param samplers A list of samplers, could be in any stage
-#'
-#' @return A table of iterations per stage per chain
-#' @export
-#'
-#' @examples
 chain_n <- function(samplers)
   # Length of stages for each chain
 {
