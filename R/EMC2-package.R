@@ -22,6 +22,7 @@
 #' @importFrom matrixcalc is.negative.semi.definite
 #' @importFrom MCMCpack riwish
 #' @importFrom methods is
+#' @importFrom mvtnorm dmvnorm
 #' @importFrom mvtnorm rmvnorm
 #' @importFrom parallel mclapply
 #' @importFrom Rcpp sourceCpp
