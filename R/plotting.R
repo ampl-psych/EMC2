@@ -221,7 +221,7 @@ plot_density <- function(pmwg_mcmc,layout=c(2,3),
 
   if (show_chains & plot_prior)
     warning("Prior plots not implemented for show_chains=TRUE")
-  if (!is.na(subjects) & plot_prior) {
+  if (!is.na(subject) & plot_prior) {
     warning("Can't plot prior for single subject.")
     plot_prior <- FALSE
   }
