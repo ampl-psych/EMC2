@@ -128,7 +128,7 @@ run_stage <- function(pmwgs,
     proposals=mclapply(X=1:pmwgs$n_subjects,FUN = new_particle, data, particles, pars, eff_mu,
                        eff_var, mix, pmwgs$ll_func, epsilon, subjects, components,
                        prev_ll = pmwgs$samples$subj_ll[,j-1], stage, chains_cov,
-                       variant_funs, mc.cores =n_cores)
+                       variant_funs, mc.cores = n_cores)
     proposals <- array(unlist(proposals), dim = c(pmwgs$n_pars + 2, pmwgs$n_subjects))
 
     #Fill samples

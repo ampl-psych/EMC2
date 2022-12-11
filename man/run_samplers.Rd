@@ -2,10 +2,7 @@
 % Please edit documentation in R/fitting.R
 \name{run_samplers}
 \alias{run_samplers}
-\title{Generic function to run samplers for any stage and any requirements.
-Used by run_emc, auto_burn, run_adapt and run_sample
-Will break if you skip a stage, the stages have to be run in order (preburn, burn, adapt, sample)
-Either iter, max_gd, min_es or min_unique has to be specified. Multiple conditions for finishing can be specified. Will finish if all conditions are met.}
+\title{Generic function to run samplers for any stage and any requirements.}
 \usage{
 run_samplers(
   samplers,
@@ -35,7 +32,7 @@ run_samplers(
 
 \item{max_gd}{A double. The maximum gelman diagnostic convergence allowed. Will stop if below this number.}
 
-\item{min_es}{An integer. The minimal effective size required to stop running.}
+\item{min_es}{An integer. The minimal effective size required.}
 
 \item{min_unique}{An integer. The minimal number of samples required. Only works in adaptation.}
 
@@ -63,8 +60,7 @@ run_samplers(
 A list of samplers
 }
 \description{
-Generic function to run samplers for any stage and any requirements.
-Used by run_emc, auto_burn, run_adapt and run_sample
-Will break if you skip a stage, the stages have to be run in order (preburn, burn, adapt, sample)
+Used by \code{\link[base:write.csv]{base::write.csv()}}, \code{auto_burn}, \code{run_adapt} and \code{run_sample}.
+Will break if you skip a stage, the stages have to be run in order (preburn, burn, adapt, sample).
 Either iter, max_gd, min_es or min_unique has to be specified. Multiple conditions for finishing can be specified. Will finish if all conditions are met.
 }

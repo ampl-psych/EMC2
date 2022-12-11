@@ -24,16 +24,16 @@ run_emc <- function(samplers, stage = NULL, iter = 1000, max_gd = NULL, min_es =
   }
   return(samplers)
 }
-
 #' Generic function to run samplers for any stage and any requirements.
-#' Used by run_emc, auto_burn, run_adapt and run_sample
-#' Will break if you skip a stage, the stages have to be run in order (preburn, burn, adapt, sample)
+#'
+#' Used by `run_emc`, `auto_burn`, `run_adapt` and `run_sample`.
+#' Will break if you skip a stage, the stages have to be run in order (preburn, burn, adapt, sample).
 #' Either iter, max_gd, min_es or min_unique has to be specified. Multiple conditions for finishing can be specified. Will finish if all conditions are met.
 #' @param samplers A list of samplers, could be in any stage, as long as they've been initialized with make_samplers
 #' @param stage A string. Indicates which stage is to be run, either preburn, burn, adapt or sample
 #' @param iter An integer. Indicates how many iterations to run,
 #' @param max_gd A double. The maximum gelman diagnostic convergence allowed. Will stop if below this number.
-#' @param min_es An integer. The minimal effective size required to stop running.
+#' @param min_es An integer. The minimal effective size required.
 #' @param min_unique An integer. The minimal number of samples required. Only works in adaptation.
 #' @param p_accept A double. The target acceptance probability of the MCMC process. This will fine tune the width of the search space. Default = .8
 #' @param step_size An integer. After each of these steps, the requirements will be checked if they are met and proposal distributions will be updated. Default = 100.
