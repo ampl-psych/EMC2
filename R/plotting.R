@@ -182,6 +182,12 @@ plot_defective_density <- function(data,subject=NULL,factors=NULL,
     invisible(tapply(correct_fun(dat),dat$subjects,mean))
 }
 
+
+# layout=c(2,3);selection="alpha";filter="sample";thin=1;subfilter=0;mapped=FALSE
+# plot_prior=TRUE;n_prior=1e3;xlim=NULL;ylim=NULL;
+# show_chains=FALSE;do_plot=TRUE;subject=NA;add_means=FALSE;
+# pars=NULL;probs=c(.025,.5,.975);bw = "nrd0";adjust = 1
+# subject=1; filter="burn"; subfilter=300
 plot_density <- function(pmwg_mcmc,layout=c(2,3),
                          selection="alpha",filter="sample",thin=1,subfilter=0,mapped=FALSE,
                          plot_prior=TRUE,n_prior=1e3,xlim=NULL,ylim=NULL,
@@ -215,6 +221,10 @@ plot_density <- function(pmwg_mcmc,layout=c(2,3),
 
   if (show_chains & plot_prior)
     warning("Prior plots not implemented for show_chains=TRUE")
+  if (!is.na(subject) & plot_prior) {
+    warning("Can't plot prior for single subject.")
+    plot_prior <- FALSE
+  }
   if (!(inherits(pmwg_mcmc, c("mcmc","mcmc.list")))) {
     if (plot_prior) {
       psamples <- get_prior_samples(pmwg_mcmc,selection,filter,thin,subfilter,n_prior)
@@ -228,12 +238,12 @@ plot_density <- function(pmwg_mcmc,layout=c(2,3),
     } else {
       if (mapped & !is.null(pars)) {
         pars <- map_mcmc(pars,design=attr(pmwg_mcmc,"design_list")[[1]],
-             model=attr(pmwg_mcmc,"model_list")[[1]])
-      if (!is.null(attr(pars,"isConstant")))
-        pars <- pars[,!attr(pars,"isConstant"),drop=FALSE]
+                         model=attr(pmwg_mcmc,"model_list")[[1]])
+        if (!is.null(attr(pars,"isConstant")))
+          pars <- pars[,!attr(pars,"isConstant"),drop=FALSE]
       }
       pmwg_mcmc <- as_mcmc.list(pmwg_mcmc,selection=selection,filter=filter,
-                    thin=thin,subfilter=subfilter,mapped=mapped)
+                                thin=thin,subfilter=subfilter,mapped=mapped)
     }
   } else plot_prior <- FALSE
   if (attr(pmwg_mcmc,"selection")=="LL")
@@ -713,5 +723,4 @@ profile_pmwg <- function(pname,p,p_min,p_max,dadm,n_point=100,main="",cores=1)
   abline(v=p[pname])
   c(true=p[pname],max=x[which.max(ll)],miss=p[pname]-x[which.max(ll)])
 }
-
 
