@@ -1,82 +1,37 @@
 #### Fitting automation
-#' Generic function to run samplers with default settings.
-#'
-#' Calls `auto_burn`, `run_adapt` and `run_sample` in order with default settings.
-#'
-#' @param samplers A list of samplers, or a fileName of where the samplers are stored.
-#' @param stage A string. Indicates which stage is to be run, either preburn, burn, adapt or sample
-#' @param iter An integer. Indicates how many iterations to run sampling stage.
-#' @param max_gd A double. The maximum gelman diagnostic convergence allowed. Will stop burn-in if below this number.
-#' @param min_es An integer. The minimal effective size required to stop sampling.
-#' @param min_unique An integer. The minimal number of samples required. Only works in adaptation.
-#' @param preburn An integer. Specifies how many iterations to run preburn stage.
-#' @param p_accept A double. The target acceptance probability of the MCMC process. This will fine tune the width of the search space. Default = .8
-#' @param step_size An integer. After each of these steps, the requirements will be checked if they are met and proposal distributions will be updated. Default = 100.
-#' @param verbose Logical. Whether to print sampling related messages
-#' @param autosave Logical. Whether to automatically save the samplers to fileName. fileName has to be specified.
-#' @param fileName A string. Indicates what to save the samplers as, if autosave is enabled.
-#' @param particles An integer. How many particles to use, default is NULL and particle_factor is used. If specified will override particle_factor
-#' @param particle_factor An integer. Particle factor multiplied by the square root of the number of sampled parameters will determine the number of particles used.
-#' @param cores_per_chain An integer. How many cores to use per chain. Parallelizes across participant calculations.
-#' @param cores_for_chains An integer. How many cores to use across chains. Default is the number of chains.
-#' @param max_trys An integer. How many times it will try to meet the finish conditions. Default is 50.
-#'
-#' @return A list of samplers
-#' @export
-#'
-#' @examples
+
 run_emc <- function(samplers, stage = NULL, iter = 1000, max_gd = NULL, min_es = 0, min_unique = 600, preburn = 150,
-                    p_accept = .8, step_size = 100, verbose = F, autosave = F, fileName = NULL,
+                    p_accept = .8, step_size = 100, verbose = FALSE, verboseProgress = FALSE, fileName = NULL,
                     particles = NULL, particle_factor = 50, cores_per_chain = 1,
                     cores_for_chains = length(samplers), max_trys = 50){
   if (is.character(samplers)) {
+    samplers <- fix_fileName(samplers)
     if(is.null(fileName)) fileName <- samplers
     samplers <- loadRData(samplers)
   }
   if(is.null(stage)){
     samplers <- auto_burn(samplers, max_gd = 1.2, cores_for_chains = cores_for_chains, p_accept = p_accept,
-                          step_size = step_size,  verbose = verbose, autosave = autosave, fileName = fileName,
+                          step_size = step_size,  verbose = verbose, verboseProgress = verboseProgress,
+                          fileName = fileName,
                           particles = particles, particle_factor =  particle_factor,
                           cores_per_chain = cores_per_chain, max_trys = max_trys)
     samplers <-  run_samplers(samplers, stage = "adapt", min_unique = min_unique, cores_for_chains = cores_for_chains, p_accept = p_accept,
-                              step_size = step_size,  verbose = verbose, autosave = autosave, fileName = fileName,
+                              step_size = step_size,  verbose = verbose, verboseProgress = verboseProgress,
+                              fileName = fileName,
                               particles = particles, particle_factor =  particle_factor,
                               cores_per_chain = cores_per_chain, max_trys = max_trys)
-    samplers <-  run_samplers(samplers, stage = "sample", iter = iter, max_gd = 1.1, min_es = min_es, cores_for_chains = cores_for_chains, p_accept = p_accept,
-                              step_size = step_size,  verbose = verbose, autosave = autosave, fileName = fileName,
+    samplers <-  run_samplers(samplers, stage = "sample", iter = iter, max_gd = 1.1, cores_for_chains = cores_for_chains, p_accept = p_accept,
+                              step_size = step_size,  verbose = verbose, verboseProgress = verboseProgress,
+                              fileName = fileName,
                               particles = particles, particle_factor = particle_factor,
                               cores_per_chain = cores_per_chain, max_trys = max_trys)
   }
   return(samplers)
 }
-#' Generic function to run samplers for any stage and any requirements.
-#'
-#' Used by `run_emc`, `auto_burn`, `run_adapt` and `run_sample`.
-#' Will break if you skip a stage, the stages have to be run in order (preburn, burn, adapt, sample).
-#' Either iter, max_gd, min_es or min_unique has to be specified. Multiple conditions for finishing can be specified. Will finish if all conditions are met.
-#' @param samplers A list of samplers, could be in any stage, as long as they've been initialized with make_samplers
-#' @param stage A string. Indicates which stage is to be run, either preburn, burn, adapt or sample
-#' @param iter An integer. Indicates how many iterations to run,
-#' @param max_gd A double. The maximum gelman diagnostic convergence allowed. Will stop if below this number.
-#' @param min_es An integer. The minimal effective size required.
-#' @param min_unique An integer. The minimal number of samples required. Only works in adaptation.
-#' @param p_accept A double. The target acceptance probability of the MCMC process. This will fine tune the width of the search space. Default = .8
-#' @param step_size An integer. After each of these steps, the requirements will be checked if they are met and proposal distributions will be updated. Default = 100.
-#' @param verbose Logical. Whether to print sampling related messages
-#' @param autosave Logical. Whether to automatically save the samplers to fileName. fileName has to be specified.
-#' @param fileName A string. Indicates what to save the samplers as, if autosave is enabled.
-#' @param particles An integer. How many particles to use, default is NULL and particle_factor is used. If specified will override particle_factor
-#' @param particle_factor An integer. Particle factor multiplied by the square root of the number of sampled parameters will determine the number of particles used.
-#' @param cores_per_chain An integer. How many cores to use per chain. Parallelizes across participant calculations.
-#' @param cores_for_chains An integer. How many cores to use across chains. Default is the number of chains.
-#' @param max_trys An integer. How many times it will try to meet the finish conditions. Default is 50.
-#'
-#' @return A list of samplers
-#' @export
-#'
-#' @examples
+
 run_samplers <- function(samplers, stage, iter = NULL, max_gd = NULL, min_es = 0, min_unique = 750,
-                         p_accept = .8, step_size = 100, verbose = F, autosave = F, fileName = NULL,
+                         p_accept = .8, step_size = 100, verbose = FALSE, verboseProgress = FALSE,
+                         fileName = NULL,
                          particles = NULL, particle_factor = 50, cores_per_chain = 1,
                          cores_for_chains = length(samplers), max_trys = 50){
   if (verbose) message(paste0("Running ", stage, " stage"))
@@ -86,23 +41,22 @@ run_samplers <- function(samplers, stage, iter = NULL, max_gd = NULL, min_es = 0
   while(!progress$done){
     samplers <- add_proposals(samplers, stage, cores_per_chain)
     samplers <- parallel::mclapply(samplers,run_stages, stage = stage, iter= progress$step_size,
-                                   verbose=verbose,  particles=particles,particle_factor=particle_factor,
+                                   verbose=verbose,  verboseProgress = verboseProgress,
+                                   particles=particles,particle_factor=particle_factor,
                                    p_accept=p_accept, n_cores=cores_per_chain, mc.cores = cores_for_chains)
-    progress <- check_progress(samplers, stage, iter, max_gd, min_es, min_unique, max_trys, step_size, cores_per_chain, verbose, progress)
+    progress <- check_progress(samplers, stage, iter, max_gd, min_es, min_unique, max_trys, step_size, cores_per_chain,
+                               verbose, progress)
     samplers <- progress$samplers
-    if(autosave){
-      if(is.null(fileName)){
-        warning("Won't autosave since no filename is specified")
-      } else{
-        save(samplers, file = fileName)
-      }
+    if(!is.null(fileName)){
+      fileName <- fix_fileName(fileName)
+      save(samplers, file = fileName)
     }
   }
   samplers <- get_attributes(samplers, attributes)
   return(samplers)
 }
 
-run_stages <- function(sampler, stage = "preburn", iter=0, verbose = TRUE,
+run_stages <- function(sampler, stage = "preburn", iter=0, verbose = TRUE, verboseProgress = TRUE,
                        particles=NULL,particle_factor=50, p_accept= NULL, n_cores=1)
 {
 
@@ -113,7 +67,7 @@ run_stages <- function(sampler, stage = "preburn", iter=0, verbose = TRUE,
   }
   if (iter == 0) return(sampler)
   sampler <- run_stage(sampler, stage = stage,iter = iter, particles = particles,
-                       n_cores = n_cores, p_accept = p_accept, verbose = verbose)
+    n_cores = n_cores, p_accept = p_accept, verbose = verbose, verboseProgress = verboseProgress)
   return(sampler)
 }
 
@@ -296,144 +250,68 @@ loadRData <- function(fileName){
 }
 
 
-
-#' Runs burn-in for samplers.
-#'
-#' Special instance of `run_samplers`, with default arguments specified for completing burn_in.
-#' Will run both preburn and burn.
-#'
-#' @param samplers A list of samplers, could be in any stage, as long as they've been initialized with make_samplers
-#' @param max_gd A double. The maximum gelman diagnostic convergence allowed. Will stop if below this number.
-#' @param min_es An integer. The minimal effective size required.
-#' @param preburn An integer. The number of iterations run for preburn stage.
-#' @param p_accept A double. The target acceptance probability of the MCMC process. This will fine tune the width of the search space. Default = .8
-#' @param step_size An integer. After each of these steps, the requirements will be checked if they are met and proposal distributions will be updated. Default = 100.
-#' @param verbose Logical. Whether to print sampling related messages
-#' @param autosave Logical. Whether to automatically save the samplers to fileName. fileName has to be specified.
-#' @param fileName A string. Indicates what to save the samplers as, if autosave is enabled.
-#' @param particles An integer. How many particles to use, default is NULL and particle_factor is used. If specified will override particle_factor
-#' @param particle_factor An integer. Particle factor multiplied by the square root of the number of sampled parameters will determine the number of particles used.
-#' @param cores_per_chain An integer. How many cores to use per chain. Parallelizes across participant calculations.
-#' @param cores_for_chains An integer. How many cores to use across chains. Default is the number of chains.
-#' @param max_trys An integer. How many times it will try to meet the finish conditions. Default is 50.
-#'
-#' @return A list of samplers
-#' @export
-#'
-#' @examples
 auto_burn <- function(samplers, max_gd = 1.2, min_es = 0, preburn = 150,
-                      p_accept = .8, step_size = 100, verbose = F, autosave = F, fileName = NULL,
+                      p_accept = .8, step_size = 100, verbose = FALSE, verboseProgress = FALSE,
+                      fileName = NULL,
                       particles = NULL, particle_factor = 50, cores_per_chain = 1,
                       cores_for_chains = length(samplers), max_trys = 50){
   samplers <- run_samplers(samplers, stage = "preburn", iter = preburn, cores_for_chains = cores_for_chains, p_accept = p_accept,
-                           step_size = step_size,  verbose = verbose, autosave = autosave, fileName = fileName,
+                           step_size = step_size,  verbose = verbose, verboseProgress = verboseProgress,
+                           fileName = fileName,
                            particles = particles, particle_factor =  particle_factor,
                            cores_per_chain = cores_per_chain, max_trys = max_trys)
   samplers <-  run_samplers(samplers, stage = "burn", max_gd = max_gd, min_es = min_es, cores_for_chains = cores_for_chains, p_accept = p_accept,
-                            step_size = step_size,  verbose = verbose, autosave = autosave, fileName = fileName,
+                            step_size = step_size,  verbose = verbose, verboseProgress = verboseProgress,
+                            fileName = fileName,
                             particles = particles, particle_factor =  particle_factor,
                             cores_per_chain = cores_per_chain, max_trys = max_trys)
   return(samplers)
 }
 
-#' Runs adapt stage for samplers.
-#'
-#' Special instance of `run_samplers`, with default arguments specified for completing adaptation.
-#'
-#' @param samplers A list of samplers, could be in any stage, as long as they've been initialized with make_samplers
-#' @param max_gd A double. The maximum gelman diagnostic convergence allowed. Will stop if below this number.
-#' @param min_es An integer. The minimal effective size required.
-#' @param min_unique An integer. The minimal number of samples required.
-#' @param p_accept A double. The target acceptance probability of the MCMC process. This will fine tune the width of the search space. Default = .8
-#' @param step_size An integer. After each of these steps, the requirements will be checked if they are met and proposal distributions will be updated. Default = 100.
-#' @param verbose Logical. Whether to print sampling related messages
-#' @param autosave Logical. Whether to automatically save the samplers to fileName. fileName has to be specified.
-#' @param fileName A string. Indicates what to save the samplers as, if autosave is enabled.
-#' @param particles An integer. How many particles to use, default is NULL and particle_factor is used. If specified will override particle_factor
-#' @param particle_factor An integer. Particle factor multiplied by the square root of the number of sampled parameters will determine the number of particles used.
-#' @param cores_per_chain An integer. How many cores to use per chain. Parallelizes across participant calculations.
-#' @param cores_for_chains An integer. How many cores to use across chains. Default is the number of chains.
-#' @param max_trys An integer. How many times it will try to meet the finish conditions. Default is 50.
-#'
-#' @return A list of samplers.
-#' @export
-#'
-#' @examples
 run_adapt <- function(samplers, max_gd = NULL, min_es = 0, min_unique = 600,
-                      p_accept = .8, step_size = 100, verbose = F, autosave = F, fileName = NULL,
+                      p_accept = .8, step_size = 100, verbose = FALSE, verboseProgress = FALSE,
+                      fileName = NULL,
                       particles = NULL, particle_factor = 50, cores_per_chain = 1,
                       cores_for_chains = length(samplers), max_trys = 50){
   samplers <- run_samplers(samplers, stage = "adapt",  max_gd = max_gd, min_es = min_es, min_unique = min_unique,
                            cores_for_chains = cores_for_chains, p_accept = p_accept,
-                           step_size = step_size,  verbose = verbose, autosave = autosave, fileName = fileName,
+                           step_size = step_size,  verbose = verbose, verboseProgress = verboseProgress,
+                           fileName = fileName,
                            particles = particles, particle_factor =  particle_factor,
                            cores_per_chain = cores_per_chain, max_trys = max_trys)
   return(samplers)
 }
-#' Runs sample stage for samplers.
-#'
-#' Special instance of `run_samplers`, with default arguments specified for running sample stage.
-#'
-#' @param samplers A list of samplers, could be in any stage, as long as they've been initialized with make_samplers
-#' @param iter An integer. Indicates how many iterations to run,
-#' @param max_gd A double. The maximum gelman diagnostic convergence allowed. Will stop if below this number.
-#' @param min_es An integer. The minimal effective size required.
-#' @param p_accept A double. The target acceptance probability of the MCMC process. This will fine tune the width of the search space. Default = .8
-#' @param step_size An integer. After each of these steps, the requirements will be checked if they are met and proposal distributions will be updated. Default = 100.
-#' @param verbose Logical. Whether to print sampling related messages
-#' @param autosave Logical. Whether to automatically save the samplers to fileName. fileName has to be specified.
-#' @param fileName A string. Indicates what to save the samplers as, if autosave is enabled.
-#' @param particles An integer. How many particles to use, default is NULL and particle_factor is used. If specified will override particle_factor
-#' @param particle_factor An integer. Particle factor multiplied by the square root of the number of sampled parameters will determine the number of particles used.
-#' @param cores_per_chain An integer. How many cores to use per chain. Parallelizes across participant calculations.
-#' @param cores_for_chains An integer. How many cores to use across chains. Default is the number of chains.
-#' @param max_trys An integer. How many times it will try to meet the finish conditions. Default is 50.
-#'
-#' @return A list of samplers
 
 run_sample <- function(samplers, iter = 1000, max_gd = 1.1,min_es = 0,
-                       p_accept = .8, step_size = 100, verbose = F, autosave = F, fileName = NULL,
+                       p_accept = .8, step_size = 100, verbose = FALSE, verboseProgress = verboseProgress,
+                       fileName = NULL,
                        particles = NULL, particle_factor = 50, cores_per_chain = 1,
                        cores_for_chains = length(samplers), max_trys = 50){
   samplers <- run_samplers(samplers, stage = "sample", iter = iter, max_gd = max_gd, min_es = min_es, cores_for_chains = cores_for_chains, p_accept = p_accept,
-                           step_size = step_size,  verbose = verbose, autosave = autosave, fileName = fileName,
+                           step_size = step_size,  verbose = verbose, verboseProgress = verboseProgress,
+                           fileName = fileName,
                            particles = particles, particle_factor =  particle_factor,
                            cores_per_chain = cores_per_chain, max_trys = max_trys)
   return(samplers)
 }
 
 
-
-#' Creates a sampler from data and design combined.
-#'
-#' This function is used to initialize samplers using the data and the prespecified design.
-#'
-#' @param data_list A dataframe of data, or a list of a dataframe. Should have the column subjects as identifiers.
-#' @param design_list A list with a prespecified design made with make_design.
-#' @param model_list A model list, if empty will use the model specified in the design_list.
-#' @param type A string indicating whether to run a standard group-level, or blocked, diagonal, factor, or single.
-#' @param n_chains An integer. Specifies the amount of mcmc chains to be run. Should be more than 1 to get gelman diagnostics.
-#' @param rt_resolution A double. Used for compression, rts will be binned based on this resolution.
-#' @param prior_list A list of priors for the group level. Prior distributions should match the type argument.
-#' @param par_groups A vector. Only to be specified with type blocked `c(1,1,1,2,2)` means first three parameters first block, last two parameters in the second block
-#' @param n_factors An integer. Only to be specified with type factor.
-#' @param constraintMat A matrix of rows equal to the number of estimated parameters, and columns equal to the number of factors, only to be specified with type factor.
-#' If null will use default settings as specified in Innes et al. 2022
-#'
-#' @return a list of samplers
-#' @export
-#'
-#' @examples
+# New version fail handling
+# type=c("standard","diagonal","blocked","factor","factorRegression","single")[1]
+# n_chains=3; rt_resolution=0.02
+# prior_list = NULL;par_groups=NULL;n_factors=NULL;constraintMat = NULL;covariates=NULL
+# data_list=miletic1_rdm_simdat; design_list=design;model_list=NULL; rt_resolution=.001
 make_samplers <- function(data_list,design_list,model_list=NULL,
                           type=c("standard","diagonal","blocked","factor","factorRegression","single")[1],
                           n_chains=3,rt_resolution=0.02,
                           prior_list = NULL,
                           par_groups=NULL,
+                          subject_covariates = NULL,
                           n_factors=NULL,constraintMat = NULL,covariates=NULL)
 
 {
-  if (!(type %in% c("standard","diagonal","blocked","factor","single")))
-    stop("type must be one of: standard,diagonal,blocked,factor,single")
+  if (!(type %in% c("standard","diagonal","blocked","factor","factorRegression","single")))
+    stop("type must be one of: standard,diagonal,blocked,factor,factorRegression,single")
   if (is(data_list, "data.frame")) data_list <- list(data_list)
   # Sort subject together and add unique trial within subject integer
   # create overarching data list with one list per subject
@@ -471,7 +349,7 @@ make_samplers <- function(data_list,design_list,model_list=NULL,
     dadm_list[[i]] <- design_model(data=data_list[[i]],design=design_list[[i]],
                                    model=model_list[[i]],rt_resolution=rt_resolution[i],prior=prior_list[[i]])
   }
-  # if(!is.null(subject_covariates)) attr(dadm_list, "subject_covariates") <- subject_covariates
+  if(!is.null(subject_covariates)) attr(dadm_list, "subject_covariates") <- subject_covariates
   variant_funs <- get_variant_funs(type = type)
   if (type %in% c("standard", "single", "diagonal")) {
     out <- pmwgs(dadm_list, variant_funs)
@@ -487,6 +365,17 @@ make_samplers <- function(data_list,design_list,model_list=NULL,
   attr(dadm_lists,"model_list") <- model_list
   return(dadm_lists)
 }
+
+fix_fileName <- function(x){
+  ext <- substr(x, nchar(x)-5, nchar(x))
+  if(ext != ".RData" & ext != ".Rdata"){
+    return(paste0(x, ".RData"))
+  } else{
+    return(x)
+  }
+}
+
+
 
 extractDadms <- function(dadms, names = 1:length(dadms)){
   N_models <- length(dadms)
@@ -530,25 +419,9 @@ extractDadms <- function(dadms, names = 1:length(dadms)){
 }
 
 
-#' Runs IS2
-#'
-#' Runs IS2 from Tran et al. 2021, on a list of samplers, only works for types standard, factor and diagonal yet.
-#'
-#' @param samplers A list of samplers
-#' @param filter A string. Indicates which stage to take samples from
-#' @param subfilter An integer or vector. If integer specifies how many samples to remove from within that stage. If vector used as index for samples to keep.
-#' @param IS_samples An integer. Specifies how many IS2 samples to collect
-#' @param max_particles An integer. Specifies the maximum number of particles to collect before stopping one IS iteration.
-#' @param n_cores An integer. Specifies how many cores to run IS2 on.
-#' @param df An integer. The degrees of freedom used in the t-distribution used as IS distribution for the group-level proposals.
-#'
-#' @return A vector of IS samples.
-#' @export
-#'
-#' @examples
-run_IS2 <- function(samplers, filter = "sample", subfilter = 0, IS_samples = 1000,
-                    max_particles = 5000, n_cores = 1, df = 5){
-  samples_merged <- merge_samples(samplers)
+run_IS2 <- function(samples, filter = "sample", subfilter = 0, IS_samples = 1000,
+                    stepsize_particles = 500, max_particles = 5000, n_cores = 1, df = 5){
+  samples_merged <- merge_samples(samples)
   IS_samples <- IS2(samples_merged, filter, subfilter = subfilter, IS_samples, stepsize_particles, max_particles, n_cores, df)
   attr(samples, "IS_samples") <- IS_samples
   return(samples)
