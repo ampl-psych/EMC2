@@ -9,6 +9,7 @@ run_IS2(
   filter = "sample",
   subfilter = 0,
   IS_samples = 1000,
+  stepsize_particles = 500,
   max_particles = 5000,
   n_cores = 1,
   df = 5
@@ -30,7 +31,7 @@ run_IS2(
 \item{df}{An integer. The degrees of freedom used in the t-distribution used as IS distribution for the group-level proposals.}
 }
 \value{
-A vector of IS samples.
+Samplers, with IS2 attribute
 }
 \description{
 Runs IS2 on a list of samplers, only works for types standard, factor and diagonal yet.

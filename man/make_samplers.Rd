@@ -8,11 +8,12 @@ make_samplers(
   data_list,
   design_list,
   model_list = NULL,
-  type = c("standard", "diagonal", "blocked", "factor", "factorRegression", "single")[1],
+  type = c("standard", "diagonal", "blocked", "factor", "single")[1],
   n_chains = 3,
   rt_resolution = 0.02,
   prior_list = NULL,
   par_groups = NULL,
+  subject_covariates = NULL,
   n_factors = NULL,
   constraintMat = NULL,
   covariates = NULL

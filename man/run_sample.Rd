@@ -11,8 +11,8 @@ run_sample(
   min_es = 0,
   p_accept = 0.8,
   step_size = 100,
-  verbose = F,
-  autosave = F,
+  verbose = FALSE,
+  verboseProgress = verboseProgress,
   fileName = NULL,
   particles = NULL,
   particle_factor = 50,
@@ -36,9 +36,7 @@ run_sample(
 
 \item{verbose}{Logical. Whether to print sampling related messages}
 
-\item{autosave}{Logical. Whether to automatically save the samplers to fileName. fileName has to be specified.}
-
-\item{fileName}{A string. Indicates what to save the samplers as, if autosave is enabled.}
+\item{fileName}{A string. If specified will autosave samplers at this location.}
 
 \item{particles}{An integer. How many particles to use, default is NULL and particle_factor is used. If specified will override particle_factor}
 
