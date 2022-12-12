@@ -530,16 +530,16 @@ extractDadms <- function(dadms, names = 1:length(dadms)){
 }
 
 
-#' Runs IS2 from Tran et al. 2021 on a list of samplers
+#' Runs IS2
 #'
-#' Runs IS2 on a list of samplers, only works for types standard, factor and diagonal yet.
+#' Runs IS2 from Tran et al. 2021, on a list of samplers, only works for types standard, factor and diagonal yet.
 #'
 #' @param samplers A list of samplers
 #' @param filter A string. Indicates which stage to take samples from
 #' @param subfilter An integer or vector. If integer specifies how many samples to remove from within that stage. If vector used as index for samples to keep.
 #' @param IS_samples An integer. Specifies how many IS2 samples to collect
 #' @param max_particles An integer. Specifies the maximum number of particles to collect before stopping one IS iteration.
-#' @param n_cores An integer. Specifies how many cores to run IS_2 on.
+#' @param n_cores An integer. Specifies how many cores to run IS2 on.
 #' @param df An integer. The degrees of freedom used in the t-distribution used as IS distribution for the group-level proposals.
 #'
 #' @return A vector of IS samples.

@@ -92,10 +92,20 @@ remove_iterations <- function(pmwg,select,remove=TRUE,last_select=FALSE,filter=N
   pmwg
 }
 
-merge_samples <- function(samples){
-  out_samples <- samples[[1]]
+
+#' Merge samples
+#'
+#' Merges samples from all chains together as one unlisted object
+#'
+#' @param samplers A list of samplers
+#'
+#' @return an unlisted sampler with all chains merged
+#' @export
+#'
+merge_samples <- function(samplers){
+  out_samples <- samplers[[1]]
   # Only thing that differs between the chains is the samples$samples
-  sampled_objects <- lapply(samples, FUN = function(x) return(x$samples))
+  sampled_objects <- lapply(samplers, FUN = function(x) return(x$samples))
   keys <- unique(unlist(lapply(sampled_objects, names)))
   sampled_objects <- setNames(do.call(mapply, c(abind, lapply(sampled_objects, '[', keys))), keys)
   sampled_objects$idx <- sum(sampled_objects$idx)
@@ -266,8 +276,7 @@ as_mcmc.list <- function(samplers,
 #'
 #' @return A table of iterations per stage per chain
 #' @export
-#'
-#' @examples
+
 chain_n <- function(samplers)
 {
   do.call(rbind,lapply(samplers, function(x){
@@ -350,6 +359,14 @@ subject_names <- function(samples)
       names(samples[[1]]$data)
 }
 
+
+#' Title
+#'
+#' @param samplers A list of samplers.
+#' @param thin An integer. Indicates by how much to thin.
+#'
+#' @return A thinned list of samplers
+#' @export
 
 thin_chains <- function(samplers,thin=5)
   # thins a set of chains
