@@ -217,4 +217,3 @@ map_mcmc <- function(mcmc,design,model, include_constants = TRUE)
 add_constants_mcmc <- function(p,constants){
   return(mcmc(add_constants(p,constants)))
 }
-
