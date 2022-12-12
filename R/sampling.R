@@ -70,6 +70,7 @@ run_stage <- function(pmwgs,
                       iter = 1000,
                       particles = 100,
                       verbose = TRUE,
+                      verboseProgress = TRUE,
                       force_prev_epsilon = TRUE,
                       n_cores = 1,
                       epsilon = NULL,
@@ -105,7 +106,7 @@ run_stage <- function(pmwgs,
   eff_var <- attr(pmwgs, "eff_var")
   chains_cov <- attr(pmwgs, "chains_cov")
   mix <- set_mix(stage, verbose)
-  if (verbose) {
+  if (verboseProgress) {
     pb <- accept_progress_bar(min = 0, max = iter)
   }
   start_iter <- pmwgs$samples$idx
@@ -116,7 +117,7 @@ run_stage <- function(pmwgs,
   variant_funs <- attr(pmwgs, "variant_funs")
   # Main iteration loop
   for (i in 1:iter) {
-    if (verbose) {
+    if (verboseProgress) {
       accRate <- mean(accept_rate(pmwgs))
       update_progress_bar(pb, i, extra = accRate)
     }
@@ -147,7 +148,7 @@ run_stage <- function(pmwgs,
     }
 
   }
-  if (verbose) close(pb)
+  if (verboseProgress) close(pb)
   attr(pmwgs, "epsilon") <- epsilon
   return(pmwgs)
 }
@@ -286,7 +287,7 @@ set_mix <- function(stage, verbose) {
   return(mix)
 }
 
-set_epsilon <- function(n_pars, verbose = T) {
+set_epsilon <- function(n_pars, verbose = TRUE) {
   if (n_pars > 15) {
     epsilon <- 0.1
   } else if (n_pars > 10) {

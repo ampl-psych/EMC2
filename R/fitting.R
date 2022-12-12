@@ -1,7 +1,7 @@
 #### Fitting automation
 
 run_emc <- function(samplers, stage = NULL, iter = 1000, max_gd = NULL, min_es = 0, min_unique = 600, preburn = 150,
-                    p_accept = .8, step_size = 100, verbose = F, autosave = F, fileName = NULL,
+                    p_accept = .8, step_size = 100, verbose = FALSE, verboseProgress = FALSE, autosave = F, fileName = NULL,
                     particles = NULL, particle_factor = 50, cores_per_chain = 1,
                     cores_for_chains = length(samplers), max_trys = 50){
   if (is.character(samplers)) {
@@ -10,48 +10,27 @@ run_emc <- function(samplers, stage = NULL, iter = 1000, max_gd = NULL, min_es =
   }
   if(is.null(stage)){
     samplers <- auto_burn(samplers, max_gd = 1.2, cores_for_chains = cores_for_chains, p_accept = p_accept,
-                          step_size = step_size,  verbose = verbose, autosave = autosave, fileName = fileName,
+                          step_size = step_size,  verbose = verbose, verboseProgress = verboseProgress,
+                          autosave = autosave, fileName = fileName,
                           particles = particles, particle_factor =  particle_factor,
                           cores_per_chain = cores_per_chain, max_trys = max_trys)
     samplers <-  run_samplers(samplers, stage = "adapt", min_unique = min_unique, cores_for_chains = cores_for_chains, p_accept = p_accept,
-                              step_size = step_size,  verbose = verbose, autosave = autosave, fileName = fileName,
+                              step_size = step_size,  verbose = verbose, verboseProgress = verboseProgress,
+                              autosave = autosave, fileName = fileName,
                               particles = particles, particle_factor =  particle_factor,
                               cores_per_chain = cores_per_chain, max_trys = max_trys)
     samplers <-  run_samplers(samplers, stage = "sample", iter = iter, max_gd = 1.1, cores_for_chains = cores_for_chains, p_accept = p_accept,
-                              step_size = step_size,  verbose = verbose, autosave = autosave, fileName = fileName,
+                              step_size = step_size,  verbose = verbose, verboseProgress = verboseProgress,
+                              autosave = autosave, fileName = fileName,
                               particles = particles, particle_factor = particle_factor,
                               cores_per_chain = cores_per_chain, max_trys = max_trys)
   }
   return(samplers)
 }
 
-#' Generic function to run samplers for any stage and any requirements.
-#' Used by run_emc, auto_burn, run_adapt and run_sample
-#' Will break if you skip a stage, the stages have to be run in order (preburn, burn, adapt, sample)
-#' Either iter, max_gd, min_es or min_unique has to be specified. Multiple conditions for finishing can be specified. Will finish if all conditions are met.
-#' @param samplers A list of samplers, could be in any stage, as long as they've been initialized with make_samplers
-#' @param stage A string. Indicates which stage is to be run, either preburn, burn, adapt or sample
-#' @param iter An integer. Indicates how many iterations to run,
-#' @param max_gd A double. The maximum gelman diagnostic convergence allowed. Will stop if below this number.
-#' @param min_es An integer. The minimal effective size required to stop running.
-#' @param min_unique An integer. The minimal number of samples required. Only works in adaptation.
-#' @param p_accept A double. The target acceptance probability of the MCMC process. This will fine tune the width of the search space. Default = .8
-#' @param step_size An integer. After each of these steps, the requirements will be checked if they are met and proposal distributions will be updated. Default = 100.
-#' @param verbose Logical. Whether to print sampling related messages
-#' @param autosave Logical. Whether to automatically save the samplers to fileName. fileName has to be specified.
-#' @param fileName A string. Indicates what to save the samplers as, if autosave is enabled.
-#' @param particles An integer. How many particles to use, default is NULL and particle_factor is used. If specified will override particle_factor
-#' @param particle_factor An integer. Particle factor multiplied by the square root of the number of sampled parameters will determine the number of particles used.
-#' @param cores_per_chain An integer. How many cores to use per chain. Parallelizes across participant calculations.
-#' @param cores_for_chains An integer. How many cores to use across chains. Default is the number of chains.
-#' @param max_trys An integer. How many times it will try to meet the finish conditions. Default is 50.
-#'
-#' @return A list of samplers
-#' @export
-#'
-#' @examples
 run_samplers <- function(samplers, stage, iter = NULL, max_gd = NULL, min_es = 0, min_unique = 750,
-                         p_accept = .8, step_size = 100, verbose = F, autosave = F, fileName = NULL,
+                         p_accept = .8, step_size = 100, verbose = FALSE, verboseProgress = FALSE,
+                         autosave = FALSE, fileName = NULL,
                          particles = NULL, particle_factor = 50, cores_per_chain = 1,
                          cores_for_chains = length(samplers), max_trys = 50){
   if (verbose) message(paste0("Running ", stage, " stage"))
@@ -61,9 +40,11 @@ run_samplers <- function(samplers, stage, iter = NULL, max_gd = NULL, min_es = 0
   while(!progress$done){
     samplers <- add_proposals(samplers, stage, cores_per_chain)
     samplers <- parallel::mclapply(samplers,run_stages, stage = stage, iter= progress$step_size,
-                                   verbose=verbose,  particles=particles,particle_factor=particle_factor,
+                                   verbose=verbose,  verboseProgress = verboseProgress,
+                                   particles=particles,particle_factor=particle_factor,
                                    p_accept=p_accept, n_cores=cores_per_chain, mc.cores = cores_for_chains)
-    progress <- check_progress(samplers, stage, iter, max_gd, min_es, min_unique, max_trys, step_size, cores_per_chain, verbose, progress)
+    progress <- check_progress(samplers, stage, iter, max_gd, min_es, min_unique, max_trys, step_size, cores_per_chain,
+                               verbose, progress)
     samplers <- progress$samplers
     if(autosave){
       if(is.null(fileName)){
@@ -77,7 +58,7 @@ run_samplers <- function(samplers, stage, iter = NULL, max_gd = NULL, min_es = 0
   return(samplers)
 }
 
-run_stages <- function(sampler, stage = "preburn", iter=0, verbose = TRUE,
+run_stages <- function(sampler, stage = "preburn", iter=0, verbose = TRUE, verboseProgress = TRUE,
                        particles=NULL,particle_factor=50, p_accept= NULL, n_cores=1)
 {
 
@@ -88,7 +69,7 @@ run_stages <- function(sampler, stage = "preburn", iter=0, verbose = TRUE,
   }
   if (iter == 0) return(sampler)
   sampler <- run_stage(sampler, stage = stage,iter = iter, particles = particles,
-                       n_cores = n_cores, p_accept = p_accept, verbose = verbose)
+    n_cores = n_cores, p_accept = p_accept, verbose = verbose, verboseProgress = verboseProgress)
   return(sampler)
 }
 
@@ -272,38 +253,45 @@ loadRData <- function(fileName){
 
 
 auto_burn <- function(samplers, max_gd = 1.2, min_es = 0, preburn = 150,
-                      p_accept = .8, step_size = 100, verbose = F, autosave = F, fileName = NULL,
+                      p_accept = .8, step_size = 100, verbose = FALSE, verboseProgress = FALSE,
+                      autosave = F, fileName = NULL,
                       particles = NULL, particle_factor = 50, cores_per_chain = 1,
                       cores_for_chains = length(samplers), max_trys = 50){
   samplers <- run_samplers(samplers, stage = "preburn", iter = preburn, cores_for_chains = cores_for_chains, p_accept = p_accept,
-                           step_size = step_size,  verbose = verbose, autosave = autosave, fileName = fileName,
+                           step_size = step_size,  verbose = verbose, verboseProgress = verboseProgress,
+                           autosave = autosave, fileName = fileName,
                            particles = particles, particle_factor =  particle_factor,
                            cores_per_chain = cores_per_chain, max_trys = max_trys)
   samplers <-  run_samplers(samplers, stage = "burn", max_gd = max_gd, min_es = min_es, cores_for_chains = cores_for_chains, p_accept = p_accept,
-                            step_size = step_size,  verbose = verbose, autosave = autosave, fileName = fileName,
+                            step_size = step_size,  verbose = verbose, verboseProgress = verboseProgress,
+                            autosave = autosave, fileName = fileName,
                             particles = particles, particle_factor =  particle_factor,
                             cores_per_chain = cores_per_chain, max_trys = max_trys)
   return(samplers)
 }
 
 run_adapt <- function(samplers, max_gd = NULL, min_es = 0, min_unique = 600,
-                      p_accept = .8, step_size = 100, verbose = F, autosave = F, fileName = NULL,
+                      p_accept = .8, step_size = 100, verbose = FALSE, verboseProgress = FALSE,
+                      autosave = F, fileName = NULL,
                       particles = NULL, particle_factor = 50, cores_per_chain = 1,
                       cores_for_chains = length(samplers), max_trys = 50){
   samplers <- run_samplers(samplers, stage = "adapt",  max_gd = max_gd, min_es = min_es, min_unique = min_unique,
                            cores_for_chains = cores_for_chains, p_accept = p_accept,
-                           step_size = step_size,  verbose = verbose, autosave = autosave, fileName = fileName,
+                           step_size = step_size,  verbose = verbose, verboseProgress = verboseProgress,
+                           autosave = autosave, fileName = fileName,
                            particles = particles, particle_factor =  particle_factor,
                            cores_per_chain = cores_per_chain, max_trys = max_trys)
   return(samplers)
 }
 
 run_sample <- function(samplers, iter = 1000, max_gd = 1.1,min_es = 0,
-                       p_accept = .8, step_size = 100, verbose = F, autosave = F, fileName = NULL,
+                       p_accept = .8, step_size = 100, verbose = FALSE, verboseProgress = verboseProgress,
+                       autosave = F, fileName = NULL,
                        particles = NULL, particle_factor = 50, cores_per_chain = 1,
                        cores_for_chains = length(samplers), max_trys = 50){
   samplers <- run_samplers(samplers, stage = "sample", iter = iter, max_gd = max_gd, min_es = min_es, cores_for_chains = cores_for_chains, p_accept = p_accept,
-                           step_size = step_size,  verbose = verbose, autosave = autosave, fileName = fileName,
+                           step_size = step_size,  verbose = verbose, verboseProgress = verboseProgress,
+                           autosave = autosave, fileName = fileName,
                            particles = particles, particle_factor =  particle_factor,
                            cores_per_chain = cores_per_chain, max_trys = max_trys)
   return(samplers)
