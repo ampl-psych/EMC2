@@ -22,7 +22,7 @@
 #' @param adapt For future compatibility. Ignore.
 #' @param report_p_vector TRUE (default) or FALSE. if TRUE, returns the vector of parameters to be estimated.
 #'
-#' @return A list.
+#' @return A design list.
 #' @export
 #'
 #'
@@ -100,9 +100,9 @@ contr.anova <- function(n) {
 #' Makes an empty p_vector corresponding to model.
 #' matchfun only needed in design if uses lM factor
 #'
-#' @param design
-#' @param model
-#' @param doMap
+#' @param design a list of the design made with make_design.
+#' @param model a model list. Default is the model specified in the design list.
+#' @param doMap logical. If TRUE will
 #'
 #' @return
 #' @export
@@ -110,7 +110,6 @@ contr.anova <- function(n) {
 #' @examples
 sampled_p_vector <- function(design,model=NULL,doMap=TRUE)
   # Makes an empty p_vector corresponding to model.
-  # matchfun only needed in design if uses lM factor
 {
   if (is.null(model)) model <- design$model
   if (is.null(model)) stop("Must supply model as not in design")
@@ -140,30 +139,6 @@ sampled_p_vector <- function(design,model=NULL,doMap=TRUE)
 }
 
 
-#' add_accumulators()
-#'
-#' Augments data for use in race model likelihood calculation or simulation.
-#' Must have an R = response factor (levels give number of accumulators).
-#' Must have a "subjects" factor and optionally a "trials" indicator column with
-#' unique values for each subject and trial (or trial within cell) (typically
-#' integer), then any number of factors. For the default race model type
-#' replicates data by number response levels, and adds accumulator factor lR.
-#' If matchfun is supplied adds a match factor (lM) scored by matchfun.
-#' For likelihood should have an rt column, R should have values and a "winner"
-#' logical column (latent and observed response agree) is added.
-#' For simulate R need not have values and an rt column is added.
-#' If not type RACE (e.g., DDM type) doesn't replicate data and adds dummy lR,
-#' lM and winner columns.
-#'
-#' @param data A data frame
-#' @param matchfun
-#' @param simulate
-#' @param type
-#'
-#' @return
-#' @export
-#'
-#' @examples
 add_accumulators <- function(data,matchfun=NULL,simulate=FALSE,type="RACE", Fcovariates=NULL) {
   if (!is.factor(data$R)) stop("data must have a factor R")
   factors <- names(data)[!names(data) %in% c("R","rt","trials",Fcovariates)]
@@ -193,22 +168,6 @@ add_accumulators <- function(data,matchfun=NULL,simulate=FALSE,type="RACE", Fcov
 }
 
 
-#' design_model()
-#'
-#' @param data
-#' @param design
-#' @param model
-#' @param prior
-#' @param add_acc
-#' @param rt_resolution
-#' @param verbose
-#' @param compress
-#' @param rt_check
-#'
-#' @return
-#' @export
-#'
-#' @examples
 design_model <- function(data,design,model=NULL,prior = NULL,
                          add_acc=TRUE,rt_resolution=0.02,verbose=TRUE,compress=TRUE,rt_check=TRUE)
   # Combines data frame with a design and model

@@ -7,7 +7,11 @@
 sampled_p_vector(design, model = NULL, doMap = TRUE)
 }
 \arguments{
-\item{doMap}{}
+\item{design}{a list of the design made with make_design.}
+
+\item{model}{a model list. Default is the model specified in the design list.}
+
+\item{doMap}{logical. If TRUE will}
 }
 \description{
 Makes an empty p_vector corresponding to model.
