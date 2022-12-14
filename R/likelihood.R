@@ -209,7 +209,6 @@ log_likelihood_race_ss <- function(p_vector,dadm,min_ll=log(1e-10))
     lds[stoplooser] <- log(1-attr(dadm,"model")()$pfunS(rt=dadm$rt[stoplooser],pars=pars[stoplooser,,drop=FALSE]))
   }
   lds[is.na(lds) | !ok] <- 0
-  # lds[is.na(lds)] <- 0
   lds <- lds[attr(dadm,"expand")] # decompress
   winner <- dadm$winner[attr(dadm,"expand")]
   if (n_acc>1) {
@@ -227,7 +226,9 @@ log_likelihood_race_ss <- function(p_vector,dadm,min_ll=log(1e-10))
   goresp <- dadm$R[attr(dadm,"expand")][winner] != "stop"
   if (any(stopsucess_accs)) {
     parstop <- pars[attr(dadm,"expand"),][stopsucess_accs,]
-    like[stoptrial & !goresp] <- attr(dadm,"model")()$sfun(parstop,n_acc)
+    iss <- stoptrial & !goresp
+    like[iss] <- attr(dadm,"model")()$sfun(parstop,n_acc)
+    like[iss][is.na(like[iss])] <- 0
   }
 
   # trigger failures
@@ -246,8 +247,6 @@ log_likelihood_race_ss <- function(p_vector,dadm,min_ll=log(1e-10))
     like[!goresp] <- gf[!goresp] + (1-gf[!goresp])*like[!goresp]
     like[goresp] <- like[goresp]*(1-gf[goresp])
   }
-
-  like[!ok[winner]] <- 0
 
   sum(pmax(min_ll,log(like)))
 }
