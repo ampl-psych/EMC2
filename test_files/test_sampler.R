@@ -55,3 +55,30 @@ design_test <- make_design(
 
 samplers <- make_samplers(dat, design_test, type = "standard", n_chains = 3)
 samplers <- run_emc(samplers, verbose = T, cores_for_chains = 3, cores_per_chain = 2)
+
+# some checks:
+plot_chains(samplers)
+gd_pmwg(samplers)
+es_pmwg(samplers)
+
+# Individual densities with group level prior
+plot_density(samplers)
+
+# posterior predict
+pp <- post_predict(samplers, n_cores = 4)
+plot_fit(dat, pp)
+
+# pairs plot
+samples_merged <- merge_samples(samplers)
+
+library(ggplot2)
+library(GGally)
+
+# for hyper
+ggpairs(as.data.frame(t(samples_merged$samples$theta_mu)))
+
+# for subject
+ggpairs(as.data.frame(t(samples_merged$samples$alpha[,1,])))
+
+# so lot higher correlations between s and t0, you would need to up the particle_factor to reduce this. Effective samples size still quite large tho so not a huge worry
+

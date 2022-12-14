@@ -409,7 +409,7 @@ run_adapt <- function(samplers, max_gd = NULL, min_es = 0, min_unique = 600,
 #'
 #' @return A list of samplers
 run_sample <- function(samplers, iter = 1000, max_gd = 1.1,min_es = 0,
-                       p_accept = .8, step_size = 100, verbose = FALSE, verboseProgress = verboseProgress,
+                       p_accept = .8, step_size = 100, verbose = FALSE, verboseProgress = FALSE,
                        fileName = NULL,
                        particles = NULL, particle_factor = 50, cores_per_chain = 1,
                        cores_for_chains = length(samplers), max_trys = 50){
