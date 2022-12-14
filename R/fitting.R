@@ -24,7 +24,7 @@
 #' @export
 #'
 #' @examples
-run_emc <- function(samplers, stage = NA, iter = 1000, max_gd = 1.1, min_es = 0, min_unique = 600, preburn = 150,
+run_emc <- function(samplers, stage = NULL, iter = 1000, max_gd = 1.1, min_es = 0, min_unique = 600, preburn = 150,
                     p_accept = .8, step_size = 100, verbose = FALSE, verboseProgress = FALSE, fileName = NULL,
                     particles = NULL, particle_factor = 50, cores_per_chain = 1,
                     cores_for_chains = length(samplers), max_trys = 50){
@@ -36,7 +36,7 @@ run_emc <- function(samplers, stage = NA, iter = 1000, max_gd = 1.1, min_es = 0,
   if(is.null(stage)){
     stage <- names(which(colSums(chain_n(samplers)) == 0))[1]
   }
-  if(stage == "preburn"){
+  if(stage == "preburn" || is.na(stage)  ){
     samplers <- run_samplers(samplers, stage = "preburn", iter = preburn, cores_for_chains = cores_for_chains, p_accept = p_accept,
                              step_size = step_size,  verbose = verbose, verboseProgress = verboseProgress,
                              fileName = fileName,
@@ -57,7 +57,7 @@ run_emc <- function(samplers, stage = NA, iter = 1000, max_gd = 1.1, min_es = 0,
                               particles = particles, particle_factor =  particle_factor,
                               cores_per_chain = cores_per_chain, max_trys = max_trys)
   }
-  if(any(stage %in% c("preburn", "burn", "adapt", "sample")) || is.na(stage)){
+  if(any(stage %in% c("preburn", "burn", "adapt", "sample")) || is.na(stage) ){
     samplers <-  run_samplers(samplers, stage = "sample", iter = iter, max_gd = max_gd, cores_for_chains = cores_for_chains, p_accept = p_accept,
                               step_size = step_size,  verbose = verbose, verboseProgress = verboseProgress,
                               fileName = fileName,

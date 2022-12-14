@@ -159,12 +159,20 @@ add_accumulators <- function(data,matchfun=NULL,simulate=FALSE,type="RACE", Fcov
     datar$winner[is.na(datar$winner)] <- FALSE
   }
   # sort cells together
-  if ("trials" %in% names(data))
-    datar[order(apply(datar[,c(factors)],1,paste,collapse="_"),
-                as.numeric(datar$trials),as.numeric(datar$lR)),] else
-                  datar[order(apply(datar[,c(factors)],1,paste,collapse="_"),
-                              as.numeric(datar$lR)),]
-  # datar[order(apply(datar[,c(factors,"lR")],1,paste,collapse="")),]
+  if ("trials" %in% names(data)){
+    if(length(factors) > 1){
+      datar[order(apply(datar[,c(factors)],1,paste,collapse="_"), as.numeric(datar$trials),as.numeric(datar$lR)),]
+    } else{
+      datar[order(datar[,c(factors)], as.numeric(datar$trials),as.numeric(datar$lR)),]
+    }
+  }
+   else{
+     if(length(factors) > 1){
+       datar[order(apply(datar[,c(factors)],1,paste,collapse="_"), as.numeric(datar$lR)),]
+     } else{
+       datar[order(datar[,c(factors)], as.numeric(datar$lR)),]
+     }
+  }
 }
 
 
@@ -360,7 +368,7 @@ design_model <- function(data,design,model=NULL,prior = NULL,
   names(design$Flist) <- nams
   if (!all(sort(model()$p_types)==sort(nams)) & model()$type != "MRI")
     stop("Flist must specify formulas for ",paste(model()$p_types,collapse = " "))
-  if (is.null(design$Clist)) design$Clist=list(stats::contr.treatment())
+  if (is.null(design$Clist)) design$Clist=list(stats::contr.treatment)
   if (!is.list(design$Clist)) stop("Clist must be a list")
   if (!is.list(design$Clist[[1]])[1]) # same contrasts for all p_types
     design$Clist <- stats::setNames(lapply(1:length(model()$p_types),
