@@ -171,8 +171,10 @@ check_gd <- function(samplers, stage, max_gd, trys, verbose){
   if(!samplers[[1]]$init | !stage %in% samplers[[1]]$samples$stage) return(list(gd_done = FALSE, samplers = samplers))
   gd <- gd_pmwg(as_mcmc.list(samplers,filter=stage), return_summary = FALSE,print_summary = FALSE,filter=stage,mapped=FALSE)
   n_remove <- round(chain_n(samplers)[,stage][1]/3)
-  samplers_short <- lapply(samplers,remove_iterations,select=n_remove,filter=stage)
-  gd_short <- gd_pmwg(as_mcmc.list(samplers_short,filter=stage), return_summary = FALSE, print_summary = FALSE, filter=stage,mapped=FALSE)
+  samplers_short <- try(lapply(samplers,remove_iterations,select=n_remove,filter=stage),silent=TRUE)
+  if (is(samplers_short,"try-error")) gd_short <- Inf else
+    gd_short <- gd_pmwg(as_mcmc.list(samplers_short,filter=stage), return_summary = FALSE,
+                        print_summary = FALSE, filter=stage,mapped=FALSE)
   if (mean(gd_short) < mean(gd)) {
     gd <- gd_short
     samplers <- samplers_short
