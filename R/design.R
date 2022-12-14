@@ -140,30 +140,6 @@ sampled_p_vector <- function(design,model=NULL,doMap=TRUE)
 }
 
 
-#' add_accumulators()
-#'
-#' Augments data for use in race model likelihood calculation or simulation.
-#' Must have an R = response factor (levels give number of accumulators).
-#' Must have a "subjects" factor and optionally a "trials" indicator column with
-#' unique values for each subject and trial (or trial within cell) (typically
-#' integer), then any number of factors. For the default race model type
-#' replicates data by number response levels, and adds accumulator factor lR.
-#' If matchfun is supplied adds a match factor (lM) scored by matchfun.
-#' For likelihood should have an rt column, R should have values and a "winner"
-#' logical column (latent and observed response agree) is added.
-#' For simulate R need not have values and an rt column is added.
-#' If not type RACE (e.g., DDM type) doesn't replicate data and adds dummy lR,
-#' lM and winner columns.
-#'
-#' @param data A data frame
-#' @param matchfun
-#' @param simulate
-#' @param type
-#'
-#' @return
-#' @export
-#'
-#' @examples
 add_accumulators <- function(data,matchfun=NULL,simulate=FALSE,type="RACE", Fcovariates=NULL) {
   if (!is.factor(data$R)) stop("data must have a factor R")
   factors <- names(data)[!names(data) %in% c("R","rt","trials",Fcovariates)]
@@ -184,13 +160,22 @@ add_accumulators <- function(data,matchfun=NULL,simulate=FALSE,type="RACE", Fcov
     datar$winner[is.na(datar$winner)] <- FALSE
   }
   # sort cells together
-  if ("trials" %in% names(data))
-    datar[order(apply(datar[,c(factors)],1,paste,collapse="_"),
-                as.numeric(datar$trials),as.numeric(datar$lR)),] else
-                  datar[order(apply(datar[,c(factors)],1,paste,collapse="_"),
-                              as.numeric(datar$lR)),]
-  # datar[order(apply(datar[,c(factors,"lR")],1,paste,collapse="")),]
+  if ("trials" %in% names(data)){
+    if(length(factors) > 1){
+      datar[order(apply(datar[,c(factors)],1,paste,collapse="_"), as.numeric(datar$trials),as.numeric(datar$lR)),]
+    } else{
+      datar[order(datar[,c(factors)], as.numeric(datar$trials),as.numeric(datar$lR)),]
+    }
+  }
+  else{
+    if(length(factors) > 1){
+      datar[order(apply(datar[,c(factors)],1,paste,collapse="_"), as.numeric(datar$lR)),]
+    } else{
+      datar[order(datar[,c(factors)], as.numeric(datar$lR)),]
+    }
+  }
 }
+
 
 
 #' design_model()
@@ -401,7 +386,7 @@ design_model <- function(data,design,model=NULL,prior = NULL,
   names(design$Flist) <- nams
   if (!all(sort(model()$p_types)==sort(nams)) & model()$type != "MRI")
     stop("Flist must specify formulas for ",paste(model()$p_types,collapse = " "))
-  if (is.null(design$Clist)) design$Clist=list(stats::contr.treatment())
+  if (is.null(design$Clist)) design$Clist=list(stats::contr.treatment)
   if (!is.list(design$Clist)) stop("Clist must be a list")
   if (!is.list(design$Clist[[1]])[1]) # same contrasts for all p_types
     design$Clist <- stats::setNames(lapply(1:length(model()$p_types),

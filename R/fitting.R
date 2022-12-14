@@ -24,7 +24,7 @@
 #' @export
 #'
 #' @examples
-run_emc <- function(samplers, stage = NA, iter = 1000, max_gd = 1.1, min_es = 0, min_unique = 600, preburn = 150,
+run_emc <- function(samplers, stage = NULL, iter = 1000, max_gd = 1.1, min_es = 0, min_unique = 600, preburn = 150,
                     p_accept = .8, step_size = 100, verbose = FALSE, verboseProgress = FALSE, fileName = NULL,
                     particles = NULL, particle_factor = 50, cores_per_chain = 1,
                     cores_for_chains = length(samplers), max_trys = 50){
