@@ -4,7 +4,7 @@
 #' Calls `auto_burn`, `run_adapt` and `run_sample` in order with default settings.
 #'
 #' @param samplers A list of samplers, or a fileName of where the samplers are stored.
-#' @param stage A string. Indicates which stage is to be run, either preburn, burn, adapt or sample
+#' @param stage A string. Indicates which stage is to be run, either preburn, burn, adapt or sample. If unspecified will assume the next unrun stage.
 #' @param iter An integer. Indicates how many iterations to run sampling stage.
 #' @param max_gd A double. The maximum gelman diagnostic convergence allowed. Will stop burn-in if below this number.
 #' @param min_es An integer. The minimal effective size required to stop sampling.
@@ -24,7 +24,7 @@
 #' @export
 #'
 #' @examples
-run_emc <- function(samplers, stage = NULL, iter = 1000, max_gd = NULL, min_es = 0, min_unique = 600, preburn = 150,
+run_emc <- function(samplers, stage = NULL, iter = 1000, max_gd = 1.1, min_es = 0, min_unique = 600, preburn = 150,
                     p_accept = .8, step_size = 100, verbose = FALSE, verboseProgress = FALSE, fileName = NULL,
                     particles = NULL, particle_factor = 50, cores_per_chain = 1,
                     cores_for_chains = length(samplers), max_trys = 50){
@@ -34,21 +34,42 @@ run_emc <- function(samplers, stage = NULL, iter = 1000, max_gd = NULL, min_es =
     samplers <- loadRData(samplers)
   }
   if(is.null(stage)){
-    samplers <- auto_burn(samplers, max_gd = 1.2, cores_for_chains = cores_for_chains, p_accept = p_accept,
-                          step_size = step_size,  verbose = verbose, verboseProgress = verboseProgress,
-                          fileName = fileName,
-                          particles = particles, particle_factor =  particle_factor,
-                          cores_per_chain = cores_per_chain, max_trys = max_trys)
-    samplers <-  run_samplers(samplers, stage = "adapt", min_unique = min_unique, cores_for_chains = cores_for_chains, p_accept = p_accept,
-                              step_size = step_size,  verbose = verbose, verboseProgress = verboseProgress,
-                              fileName = fileName,
-                              particles = particles, particle_factor =  particle_factor,
-                              cores_per_chain = cores_per_chain, max_trys = max_trys)
-    samplers <-  run_samplers(samplers, stage = "sample", iter = iter, max_gd = 1.1, cores_for_chains = cores_for_chains, p_accept = p_accept,
-                              step_size = step_size,  verbose = verbose, verboseProgress = verboseProgress,
-                              fileName = fileName,
-                              particles = particles, particle_factor = particle_factor,
-                              cores_per_chain = cores_per_chain, max_trys = max_trys)
+    stage_to_run <- names(which(colSums(chain_n(samplers)) == 0))[1]
+    if(stage_to_run == "preburn"){
+      samplers <- run_samplers(samplers, stage = "preburn", iter = preburn, cores_for_chains = cores_for_chains, p_accept = p_accept,
+                               step_size = step_size,  verbose = verbose, verboseProgress = verboseProgress,
+                               fileName = fileName,
+                               particles = particles, particle_factor =  particle_factor,
+                               cores_per_chain = cores_per_chain, max_trys = max_trys)
+    }
+    if(stage_to_run == "preburn" || stage_to_run == "burn"){
+      samplers <-  run_samplers(samplers, stage = "burn", max_gd = 1.2, cores_for_chains = cores_for_chains, p_accept = p_accept,
+                                step_size = step_size,  verbose = verbose, verboseProgress = verboseProgress,
+                                fileName = fileName,
+                                particles = particles, particle_factor =  particle_factor,
+                                cores_per_chain = cores_per_chain, max_trys = max_trys)
+    }
+    if(stage_to_run == "preburn" || stage_to_run == "burn" || stage_to_run == "adapt"){
+      samplers <-  run_samplers(samplers, stage = "adapt", min_unique = min_unique, cores_for_chains = cores_for_chains, p_accept = p_accept,
+                                step_size = step_size,  verbose = verbose, verboseProgress = verboseProgress,
+                                fileName = fileName,
+                                particles = particles, particle_factor =  particle_factor,
+                                cores_per_chain = cores_per_chain, max_trys = max_trys)
+    }
+    if(stage_to_run == "preburn" || stage_to_run == "burn" || stage_to_run == "adapt"  || stage_to_run == "sample" || is.na(stage_to_run)){
+      samplers <-  run_samplers(samplers, stage = "sample", iter = iter, max_gd = max_gd, cores_for_chains = cores_for_chains, p_accept = p_accept,
+                                step_size = step_size,  verbose = verbose, verboseProgress = verboseProgress,
+                                fileName = fileName,
+                                particles = particles, particle_factor = particle_factor,
+                                cores_per_chain = cores_per_chain, max_trys = max_trys)
+    }
+  } else{
+    samplers <- run_samplers(samplers, stage = stage, iter = iter, max_gd = max_gd, min_es = min_es, min_unique = min_unique,
+                             cores_for_chains = cores_for_chains, p_accept = p_accept,
+                             step_size = step_size,  verbose = verbose, verboseProgress = verboseProgress,
+                             fileName = fileName,
+                             particles = particles, particle_factor =  particle_factor,
+                             cores_per_chain = cores_per_chain, max_trys = max_trys)
   }
   return(samplers)
 }
