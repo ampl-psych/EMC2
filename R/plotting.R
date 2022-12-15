@@ -1,3 +1,6 @@
+# selection ="LL";layout=c(3,5); subject=NA;ylim=NULL,
+# selection="LL";filter="sample";thin=1;subfilter=0
+# plot_acf=FALSE;acf_chain=1; verbose=TRUE
 plot_chains <- function(pmwg_mcmc,layout=NA,subject=NA,ylim=NULL,
                         selection="alpha",filter="sample",thin=1,subfilter=0,
                         plot_acf=FALSE,acf_chain=1, verbose=TRUE) # ,use_par=NA
@@ -6,9 +9,9 @@ plot_chains <- function(pmwg_mcmc,layout=NA,subject=NA,ylim=NULL,
   if (!(inherits(pmwg_mcmc,  c("mcmc","mcmc.list")))) {
     if (inherits(pmwg_mcmc, "pmwgs"))
       pmwg_mcmc <- as_Mcmc(pmwg_mcmc,selection=selection,filter=filter,
-                           thin=thin,subfilter=subfilter) else
+                           thin=thin,subfilter=subfilter,thin=thin) else
                              pmwg_mcmc <- as_mcmc.list(pmwg_mcmc,selection=selection,filter=filter,
-                                                       thin=thin,subfilter=subfilter)
+                                                       thin=thin,subfilter=subfilter,thin=thin)
   }
   auto.layout <- any(is.na(layout))
   no_layout <- is.null(layout)
