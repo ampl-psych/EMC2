@@ -62,7 +62,8 @@ gd_pmwg(samplers)
 es_pmwg(samplers)
 
 # Individual densities with group level prior
-plot_density(samplers)
+debug(get_prior_samples)
+plot_density(samplers, selection = "mu")
 
 # posterior predict
 pp <- post_predict(samplers, n_cores = 4)
