@@ -247,7 +247,7 @@ log_likelihood_race_ss <- function(p_vector,dadm,min_ll=log(1e-10))
     like[!goresp] <- gf[!goresp] + (1-gf[!goresp])*like[!goresp]
     like[goresp] <- like[goresp]*(1-gf[goresp])
   }
-
+  like[like<0 | is.na(like)] <- 0
   sum(pmax(min_ll,log(like)))
 }
 
