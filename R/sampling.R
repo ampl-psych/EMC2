@@ -61,7 +61,7 @@ start_proposals <- function(s, parameters, n_particles, pmwgs, variant_funs, use
   group_pars <- variant_funs$get_group_level(parameters, s)
   proposals <- particle_draws(n_particles, group_pars$mu, group_pars$var)
   colnames(proposals) <- rownames(pmwgs$samples$alpha) # preserve par names
-  lw <- calc_ll_manager(proposals, dadm = dadm = pmwgs$data[[which(pmwgs$subjects == s)]],
+  lw <- calc_ll_manager(proposals, dadm = pmwgs$data[[which(pmwgs$subjects == s)]],
                         ll_func = pmwgs$ll_func, useC = useC)
   weight <- exp(lw - max(lw))
   idx <- sample(x = n_particles, size = 1, prob = weight)
@@ -203,9 +203,9 @@ new_particle <- function (s, data, num_particles, parameters, eff_mu = NULL,
 
     # Calculate likelihoods and other IS quantities
     if(components[length(components)] > 1){
-      lw <- calc_ll_manager(proposals, dadm = dadm = data[[which(subjects == s)]], likelihood_func, component = i, useC)
+      lw <- calc_ll_manager(proposals, dadm = data[[which(subjects == s)]], likelihood_func, component = i, useC)
     } else{
-      lw <- calc_ll_manager(proposals, dadm = dadm = data[[which(subjects == s)]], likelihood_func, useC)
+      lw <- calc_ll_manager(proposals, dadm = data[[which(subjects == s)]], likelihood_func, useC)
     }
     lw_total <- lw + prev_ll[s] - lw[1] # Bit inefficient but safes code, makes sure lls from other components are included
     lp <- mvtnorm::dmvnorm(x = proposals, mean = group_mu, sigma = group_var, log = TRUE)
@@ -462,9 +462,9 @@ get_variant_funs <- function(type = "standard") {
   return(list_fun)
 }
 
-calc_ll_manager <- function(proposals, dadm, use_c, ll_func){
+calc_ll_manager <- function(proposals, dadm, useC, ll_func){
   c_name <- attr(dadm,"model")()$c_name
-  if(is.null(c_name) | !use_c){ # use the R implementation
+  if(is.null(c_name) | !useC){ # use the R implementation
     apply(proposals,1, ll_func,dadm = dadm)
   } else{
     p_types <- attr(dadm,"model")()$p_types

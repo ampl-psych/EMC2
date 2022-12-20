@@ -296,6 +296,12 @@ rRDM <- function(lR,pars,p_types=c("v","B","A","t0"))
 
 
 # RDM_B parameterization with s=1 scaling (B = b-A done in rdm.R)
+#' Title
+#'
+#' @return
+#' @export
+#'
+#' @examples
 rdmB <- function(){
   list(
     type="RACE",
@@ -326,6 +332,12 @@ rdmB <- function(){
 
 
 # RDM_B parameterization with s=1 scaling (B = b-A done in rdm.R)
+#' Title
+#'
+#' @return
+#' @export
+#'
+#' @examples
 rdmBt0natural <- function(){
   list(
     type="RACE",
