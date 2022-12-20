@@ -30,9 +30,77 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// dlba
+NumericVector dlba(NumericVector t, NumericVector A, NumericVector b, NumericVector v, NumericVector sv, bool posdrift, bool robust);
+RcppExport SEXP _EMC2_dlba(SEXP tSEXP, SEXP ASEXP, SEXP bSEXP, SEXP vSEXP, SEXP svSEXP, SEXP posdriftSEXP, SEXP robustSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type t(tSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type A(ASEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type b(bSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type v(vSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type sv(svSEXP);
+    Rcpp::traits::input_parameter< bool >::type posdrift(posdriftSEXP);
+    Rcpp::traits::input_parameter< bool >::type robust(robustSEXP);
+    rcpp_result_gen = Rcpp::wrap(dlba(t, A, b, v, sv, posdrift, robust));
+    return rcpp_result_gen;
+END_RCPP
+}
+// plba
+NumericVector plba(NumericVector t, NumericVector A, NumericVector b, NumericVector v, NumericVector sv, bool posdrift, bool robust);
+RcppExport SEXP _EMC2_plba(SEXP tSEXP, SEXP ASEXP, SEXP bSEXP, SEXP vSEXP, SEXP svSEXP, SEXP posdriftSEXP, SEXP robustSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type t(tSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type A(ASEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type b(bSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type v(vSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type sv(svSEXP);
+    Rcpp::traits::input_parameter< bool >::type posdrift(posdriftSEXP);
+    Rcpp::traits::input_parameter< bool >::type robust(robustSEXP);
+    rcpp_result_gen = Rcpp::wrap(plba(t, A, b, v, sv, posdrift, robust));
+    return rcpp_result_gen;
+END_RCPP
+}
+// dWald
+NumericVector dWald(NumericVector t, NumericVector v, NumericVector B, NumericVector A, NumericVector t0);
+RcppExport SEXP _EMC2_dWald(SEXP tSEXP, SEXP vSEXP, SEXP BSEXP, SEXP ASEXP, SEXP t0SEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type t(tSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type v(vSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type B(BSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type A(ASEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type t0(t0SEXP);
+    rcpp_result_gen = Rcpp::wrap(dWald(t, v, B, A, t0));
+    return rcpp_result_gen;
+END_RCPP
+}
+// pWald
+NumericVector pWald(NumericVector t, NumericVector v, NumericVector B, NumericVector A, NumericVector t0);
+RcppExport SEXP _EMC2_pWald(SEXP tSEXP, SEXP vSEXP, SEXP BSEXP, SEXP ASEXP, SEXP t0SEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type t(tSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type v(vSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type B(BSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type A(ASEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type t0(t0SEXP);
+    rcpp_result_gen = Rcpp::wrap(pWald(t, v, B, A, t0));
+    return rcpp_result_gen;
+END_RCPP
+}
 
 static const R_CallMethodDef CallEntries[] = {
     {"_EMC2_calc_ll", (DL_FUNC) &_EMC2_calc_ll, 10},
+    {"_EMC2_dlba", (DL_FUNC) &_EMC2_dlba, 7},
+    {"_EMC2_plba", (DL_FUNC) &_EMC2_plba, 7},
+    {"_EMC2_dWald", (DL_FUNC) &_EMC2_dWald, 5},
+    {"_EMC2_pWald", (DL_FUNC) &_EMC2_pWald, 5},
     {NULL, NULL, 0}
 };
 

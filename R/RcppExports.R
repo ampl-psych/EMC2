@@ -5,3 +5,19 @@ calc_ll <- function(p_matrix, data, constants, designs, n_trials, type, p_types,
     .Call(`_EMC2_calc_ll`, p_matrix, data, constants, designs, n_trials, type, p_types, winner, expand, min_ll)
 }
 
+dlba <- function(t, A, b, v, sv, posdrift = TRUE, robust = FALSE) {
+    .Call(`_EMC2_dlba`, t, A, b, v, sv, posdrift, robust)
+}
+
+plba <- function(t, A, b, v, sv, posdrift = TRUE, robust = FALSE) {
+    .Call(`_EMC2_plba`, t, A, b, v, sv, posdrift, robust)
+}
+
+dWald <- function(t, v, B, A, t0) {
+    .Call(`_EMC2_dWald`, t, v, B, A, t0)
+}
+
+pWald <- function(t, v, B, A, t0) {
+    .Call(`_EMC2_pWald`, t, v, B, A, t0)
+}
+

@@ -1,16 +1,18 @@
 rm(list=ls())
-test_in_package <- F
+install.packages("EMC2")
 
-if(test_in_package){
-  library(devtools)
-  load_all()
-} else{
-  library(Rcpp)
-  all_files <- list.files("R")
-  all_files <- all_files[!all_files %in% "EMC2-package.R"]
-  for(file in all_files) source(paste0("R/", file))
-  sourceCpp("~/Documents/UVA/2022/test_rcpp/test_Niek.cpp")
-}
+# test_in_package <- F
+#
+# if(test_in_package){
+#   library(devtools)
+#   load_all()
+# } else{
+#   library(Rcpp)
+#   all_files <- list.files("R")
+#   all_files <- all_files[!all_files %in% "EMC2-package.R"]
+#   for(file in all_files) source(paste0("R/", file))
+#   sourceCpp("~/Documents/UVA/2022/test_rcpp/test_Niek.cpp")
+# }
 
 
 load("~/Documents/UVA/2022/EMC_test/PNAS.RData")
@@ -27,7 +29,7 @@ Emat <- matrix(c(0,-1,0,0,0,-1),nrow=3)
 dimnames(Emat) <- list(NULL,c("a-n","a-s"))
 Emat
 
-design_B <- make_design(
+design_RDM <- make_design(
   Ffactors=list(subjects=levels(dat$subjects),S=levels(dat$S),E=levels(dat$E)),
   Rlevels=levels(dat$R),matchfun=function(d)d$S==d$lR,
   Clist=list(lM=ADmat,lR=ADmat,S=ADmat,E=Emat),
