@@ -55,7 +55,7 @@ remove_iterations <- function(pmwg,select,remove=TRUE,last_select=FALSE,filter=N
     } else {
       n <- table(pmwg$samples$stage)
       if (filter == "preburn"){
-        if (select>n["preburn"]) stop("Removing more than available in burn")
+        if (select>n["preburn"]) stop("Removing more than available in preburn")
         if (!last_select)
           select <- 1:select else
             select <- (n["preburn"]-select+1):n["preburn"]

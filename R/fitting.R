@@ -130,7 +130,7 @@ run_stages <- function(sampler, stage = "preburn", iter=0, verbose = TRUE, verbo
   }
   if (iter == 0) return(sampler)
   sampler <- run_stage(sampler, stage = stage,iter = iter, particles = particles,
-    n_cores = n_cores, p_accept = p_accept, verbose = verbose, verboseProgress = verboseProgress)
+                       n_cores = n_cores, p_accept = p_accept, verbose = verbose, verboseProgress = verboseProgress)
   return(sampler)
 }
 
@@ -187,8 +187,10 @@ check_gd <- function(samplers, stage, max_gd, trys, verbose){
   if(!samplers[[1]]$init | !stage %in% samplers[[1]]$samples$stage) return(list(gd_done = FALSE, samplers = samplers))
   gd <- gd_pmwg(as_mcmc.list(samplers,filter=stage), return_summary = FALSE,print_summary = FALSE,filter=stage,mapped=FALSE)
   n_remove <- round(chain_n(samplers)[,stage][1]/3)
-  samplers_short <- lapply(samplers,remove_iterations,select=n_remove,filter=stage)
-  gd_short <- gd_pmwg(as_mcmc.list(samplers_short,filter=stage), return_summary = FALSE, print_summary = FALSE, filter=stage,mapped=FALSE)
+  samplers_short <- try(lapply(samplers,remove_iterations,select=n_remove,filter=stage),silent=TRUE)
+  if (is(samplers_short,"try-error")) gd_short <- Inf else
+    gd_short <- gd_pmwg(as_mcmc.list(samplers_short,filter=stage), return_summary = FALSE,
+                        print_summary = FALSE, filter=stage,mapped=FALSE)
   if (mean(gd_short) < mean(gd)) {
     gd <- gd_short
     samplers <- samplers_short
@@ -290,7 +292,7 @@ test_adapted <- function(sampler, test_samples, min_unique, n_cores_conditional 
     }
     attempt <- tryCatch({
       parallel::mclapply(X = 1:sampler$n_subjects,FUN = variant_funs$get_conditionals,samples = test_samples,
-               n_pars, mc.cores = n_cores_conditional)
+                         n_pars, mc.cores = n_cores_conditional)
     },error=function(e) e, warning=function(w) w)
     if (any(class(attempt) %in% c("warning", "error", "try-error"))) {
       if(verbose){
