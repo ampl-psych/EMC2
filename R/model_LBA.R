@@ -156,6 +156,7 @@ rLBA <- function(lR,pars,p_types=c("v","sv","b","A","t0"),posdrift = TRUE)
 lbaB <- function(){
   list(
     type="RACE",
+    c_name = "lbaB",
     # p_vector transform, sets sv as a scaling parameter
     p_types=c("v","sv","B","A","t0"),
     transform = function(p) p,

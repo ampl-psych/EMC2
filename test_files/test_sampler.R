@@ -29,7 +29,7 @@ design_RDM <- make_design(
 dat_single <- dat[which(dat$subjects %in% (unique(dat$subjects)[1])),]
 dat_single <- droplevels(dat_single)
 
-samplers <- make_samplers(dat_single, design_B, type = "single", n_chains = 3)
+samplers <- make_samplers(dat_single, design_RDM, type = "single", n_chains = 1)
 samplers <- auto_burn(samplers, verbose = T, min_es = 1000, useC = T)
 # samplers <- run_samplers(samplers, stage = "preburn", iter = 50, verbose = T, cores_per_chain = 1, cores_for_chains = 1)
 

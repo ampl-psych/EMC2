@@ -305,6 +305,7 @@ rRDM <- function(lR,pars,p_types=c("v","B","A","t0"))
 rdmB <- function(){
   list(
     type="RACE",
+    c_name = "rdmB",
     p_types=c("v","B","A","t0","s"),
     # Transform to natural scale
     Ntransform=function(x) {

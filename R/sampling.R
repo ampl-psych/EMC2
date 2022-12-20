@@ -34,16 +34,10 @@ init <- function(pmwgs, start_mu = NULL, start_var = NULL,
   # If no starting point for group mean just use zeros
   variant_funs <- attr(pmwgs, "variant_funs")
   startpoints <- variant_funs$get_startpoints(pmwgs, start_mu, start_var)
-  if(n_cores > 1){
-    proposals <- parallel::mclapply(X=1:pmwgs$n_subjects,FUN=start_proposals,
-                                    parameters = startpoints, n_particles = particles,
-                                    pmwgs = pmwgs, variant_funs = variant_funs,
-                                    useC = useC, mc.cores = n_cores)
-  } else{
-    proposals <- lapply(X=1:pmwgs$n_subjects,FUN=start_proposals,
-                        parameters = startpoints, n_particles = particles,
-                        pmwgs = pmwgs, variant_funs = variant_funs)
-  }
+  proposals <- parallel::mclapply(X=1:pmwgs$n_subjects,FUN=start_proposals,
+                                  parameters = startpoints, n_particles = particles,
+                                  pmwgs = pmwgs, variant_funs = variant_funs,
+                                  useC = useC, mc.cores = n_cores)
   proposals <- array(unlist(proposals), dim = c(pmwgs$n_pars + 2, pmwgs$n_subjects))
 
   # Sample the mixture variables' initial values.
@@ -465,7 +459,7 @@ get_variant_funs <- function(type = "standard") {
 calc_ll_manager <- function(proposals, dadm, useC, ll_func){
   c_name <- attr(dadm,"model")()$c_name
   if(is.null(c_name) | !useC){ # use the R implementation
-    apply(proposals,1, ll_func,dadm = dadm)
+    lls <- apply(proposals,1, ll_func,dadm = dadm)
   } else{
     p_types <- attr(dadm,"model")()$p_types
     designs <- list()
