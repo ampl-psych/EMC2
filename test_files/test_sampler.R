@@ -1,134 +1,71 @@
-<<<<<<< HEAD
-library(tidyverse)
-library(extraDistr)
-
-I <- 25 # nr of subjects
-J <- 400 # trials
-K <- 2 # nr of accumulators/response options
-Y <- array(NA, c(J,K,I)) # two accumulators
-mu_psi <- 0.28 # non-decision time/shift
-sigma_psi <- 0.02
-mu_drift_match <- 4
-sigma_drift_match <- 0.35
-mu_drift_mismatch <- 1
-sigma_drift_mismatch <- 0.35
-mu_sigma <- 0.7
-sigma_sigma <- 0.15
-boundary <- 1
-drift_match <- numeric(I)
-drift_mismatch <- numeric(I)
-sigma <- numeric(I)
-psi <- numeric(I)
-for(i in 1:I) {
-  drift_match[i] <- rnorm(1, mu_drift_match, sigma_drift_match)
-  drift_mismatch[i] <- rnorm(1, mu_drift_mismatch, sigma_drift_mismatch)
-  sigma[i] <- rnorm(1, mu_sigma, sigma_sigma)
-  psi[i] <- rtnorm(1, mean = mu_psi, sd = sigma_psi, a = 0)
-}
-dat <- data.frame(I = rep(1:I, each = J),
-                      m = rep(NA, I*J),
-                      t = rep(NA, I*J))
-for(i in 1:I){
-  for(j in 1:J){
-    Y[j,1,i] <- rwald(1, mu = boundary/drift_match[i], lambda = (boundary/sigma[i])^2)
-    Y[j,2,i] <- rwald(1, mu = boundary/drift_mismatch[i], lambda = (boundary/sigma[i])^2)
-    dat[dat$I==i,"t"][j] <- psi[i] + min(Y[j,,i])
-    dat[dat$I==i,"m"][j] <- which.min(Y[j,,i])
-  }
-}
-colnames(dat) <- c("subjects", "R", "rt")
-
-dat$R <- as.factor(dat$R)
-dat$subjects <- as.factor(dat$subjects)
-library(devtools)
-load_all()
-=======
 rm(list=ls())
-library(devtools)
-load_all()
+test_in_package <- F
+
+if(test_in_package){
+  library(devtools)
+  load_all()
+} else{
+  library(Rcpp)
+  all_files <- list.files("R")
+  all_files <- all_files[!all_files %in% "EMC2-package.R"]
+  for(file in all_files) source(paste0("R/", file))
+  sourceCpp("~/Documents/UVA/2022/test_rcpp/test_Niek.cpp")
+}
+
+
 load("~/Documents/UVA/2022/EMC_test/PNAS.RData")
+
 dat <- data[,c("s","E","S","R","RT")]
 names(dat)[c(1,5)] <- c("subjects","rt")
 levels(dat$R) <- levels(dat$S)
-# head(dat)
 
-
-# Average and difference matrix
+# Average rate = intercept, and rate d = difference (match-mismatch) contrast
 ADmat <- matrix(c(-1/2,1/2),ncol=1,dimnames=list(NULL,"d"))
 ADmat
 
 Emat <- matrix(c(0,-1,0,0,0,-1),nrow=3)
 dimnames(Emat) <- list(NULL,c("a-n","a-s"))
 Emat
->>>>>>> Andrew
 
-#### Models -----
-
-# Mu varies by stimulus, emphasis, and latent match
-<<<<<<< HEAD
-design_test <- make_design(
-  Ffactors=list(subjects=levels(dat$subjects)),
-  Rlevels=levels(dat$R),
-  Flist=list(v~R,B~1,s~1,t0~1, A ~ 1),
-  constants=c(B=log(1), A = log(0)),
-  model=rdmB)
-
-
-samplers <- make_samplers(dat, design_test, type = "standard", n_chains = 3)
-samplers <- run_emc(samplers, verbose = T, cores_for_chains = 3, cores_per_chain = 2)
-
-# some checks:
-plot_chains(samplers)
-gd_pmwg(samplers)
-es_pmwg(samplers)
-
-# Individual densities with group level prior
-debug(get_prior_samples)
-plot_density(samplers, selection = "mu")
-
-# posterior predict
-pp <- post_predict(samplers, n_cores = 4)
-plot_fit(dat, pp)
-
-# pairs plot
-samples_merged <- merge_samples(samplers)
-
-library(ggplot2)
-library(GGally)
-
-# for hyper
-ggpairs(as.data.frame(t(samples_merged$samples$theta_mu)))
-
-# for subject
-ggpairs(as.data.frame(t(samples_merged$samples$alpha[,1,])))
-
-# so lot higher correlations between s and t0, you would need to up the particle_factor to reduce this. Effective samples size still quite large tho so not a huge worry
-
-=======
-design_mu <- make_design(
+design_B <- make_design(
   Ffactors=list(subjects=levels(dat$subjects),S=levels(dat$S),E=levels(dat$E)),
   Rlevels=levels(dat$R),matchfun=function(d)d$S==d$lR,
-  Clist=list(lM=ADmat,lR=ADmat,E=Emat,S=ADmat),
-  Flist=list(m~S*E*lM,s~1,t0~1),
-  model=lnrMS)
+  Clist=list(lM=ADmat,lR=ADmat,S=ADmat,E=Emat),
+  Flist=list(v~lM,s~1,B~E,A~1,t0~1),
+  constants=c(s=log(1)),
+  model=rdmB)
 
 
 # Test single subject
 dat_single <- dat[which(dat$subjects %in% (unique(dat$subjects)[1])),]
 dat_single <- droplevels(dat_single)
 
-samplers <- make_samplers(dat_single, design_mu, type = "single", n_chains = 1)
-samplers <- run_emc(samplers, verbose = T, stage = "adapt")
+samplers <- make_samplers(dat_single, design_B, type = "single", n_chains = 3)
+samplers <- auto_burn(samplers, verbose = T, min_es = 1000)
+# samplers <- run_samplers(samplers, stage = "preburn", iter = 50, verbose = T, cores_per_chain = 1, cores_for_chains = 1)
 
-microbenchmark::microbenchmark(
-  samplers <- run_samplers(samplers, stage = "preburn", iter = 50, verbose = T, cores_per_chain = 1, cores_for_chains = 1),
-  times = 15
-)
-samplers <- run_samplers(samplers, stage = "burn", iter = 250, verbose = T, cores_per_chain = 1, cores_for_chains = 1)
+samplersC_merg <- merge_samples(samplers)
+samplersR_merg <- merge_samples(samplers)
+# microbenchmark::microbenchmark(
+#   samplers <- run_samplers(samplers, stage = "preburn", iter = 50, verbose = T, cores_per_chain = 1, cores_for_chains = 1),
+#   times = 15
+# )
 
-gd_pmwg(samplers, filter = c("preburn", "burn"), selection = "correlation", mapped = F)
 
-plot_chains(samplers, filter = c("preburn", "burn"))
+library(ggplot2)
+library(cowplot)
 
-test_imaginary_function()
->>>>>>> Andrew
+N <- 1500
+plots <- list()
+for(i in 1:nrow(samplersR_merg$samples$alpha)){
+  R <- samplersR_merg$samples$alpha[i,1,( samplersR_merg$samples$idx - N):  samplersR_merg$samples$idx]
+  C <- samplersC_merg$samples$alpha[i,1,( samplersC_merg$samples$idx - N):  samplersC_merg$samples$idx]
+  df <- data.frame(par_val = c(R, C), group = rep(c("R", "C"), each = N + 1))
+  ggp <- ggplot(df, aes(x = par_val, colour = group, fill = group)) +
+    geom_density(alpha = .1) + ggtitle(samplersR_merg$par_names[i]) + theme_bw()
+  plots[[i]] <- ggp
+}
+plot_grid(plots[[1]], plots[[2]])
+plot_grid(plots[[3]], plots[[4]])
+plot_grid(plots[[5]], plots[[6]])
+plot_grid(plots[[7]])

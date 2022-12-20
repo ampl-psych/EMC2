@@ -166,12 +166,6 @@ add_accumulators <- function(data,matchfun=NULL,simulate=FALSE,type="RACE", Fcov
       datar[order(datar[,c(factors)], as.numeric(datar$trials),as.numeric(datar$lR)),]
     }
   }
-   else{
-     if(length(factors) > 1){
-       datar[order(apply(datar[,c(factors)],1,paste,collapse="_"), as.numeric(datar$lR)),]
-     } else{
-       datar[order(datar[,c(factors)], as.numeric(datar$lR)),]
-     }
   else{
     if(length(factors) > 1){
       datar[order(apply(datar[,c(factors)],1,paste,collapse="_"), as.numeric(datar$lR)),]
