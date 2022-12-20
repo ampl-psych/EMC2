@@ -16,13 +16,12 @@ log_likelihood_race <- function(p_vector,dadm,min_ll=log(1e-10))
     if (n_acc>1) {
       winner <- dadm$winner[attr(dadm,"expand")]
       ll <- lds[winner]
-      if (n_acc==2){
+      if (n_acc==2) {
         ll <- ll + lds[!winner]
-      } else{
+      } else {
         ll <- ll + apply(matrix(lds[!winner],nrow=n_acc-1),2,sum)
-        ll[is.na(ll)] <- min_ll
       }
-     # 0  SM changed this from 0! exp(0) = pretty good
+      ll[is.na(ll)] <- min_ll
       return(sum(pmax(min_ll,ll)))
     } else return(sum(pmax(min_ll,lds)))
 }
@@ -42,8 +41,7 @@ log_likelihood_race_missing <- function(p_vector,dadm,min_ll=log(1e-10))
                                           dimnames=list(NULL,dimnames(p)[[2]])))
     if (dim(p)[1]>1) for (i in 2:dim(p)[1])
       out <- out*(1-attr(dadm,"model")()$pfun(t,
-                                            matrix(rep(p[i,],each=length(t)),nrow=length(t),
-                                                   dimnames=list(NULL,dimnames(p)[[2]]))))
+        matrix(rep(p[i,],each=length(t)),nrow=length(t),dimnames=list(NULL,dimnames(p)[[2]]))))
     out
   }
 
@@ -64,7 +62,7 @@ log_likelihood_race_missing <- function(p_vector,dadm,min_ll=log(1e-10))
         if (inherits(tmp, "try-error") || tmp$value == 0 ) lps[i] <- Inf else
           lps[i] <- log(tmp$value)
       }
-      lps[is.na(lps)] <- Inf
+      lps[is.na(lps) | is.nan(lps)] <- Inf
       return(lps[attr(dadm,"expand_nort")])
     } else return(0)
   }
@@ -122,7 +120,7 @@ log_likelihood_race_missing <- function(p_vector,dadm,min_ll=log(1e-10))
           }
         }
       }
-      lps[is.na(lps)] <- -Inf
+      lps[is.na(lps) | is.nan(lps)] <- -Inf
       if (upper) return(c(0,lps)[attr(dadm,"expand_uc")]) else
         return(c(0,lps)[attr(dadm,"expand_lc")])
   }
@@ -211,7 +209,6 @@ log_likelihood_race_ss <- function(p_vector,dadm,min_ll=log(1e-10))
     lds[stoplooser] <- log(1-attr(dadm,"model")()$pfunS(rt=dadm$rt[stoplooser],pars=pars[stoplooser,,drop=FALSE]))
   }
   lds[is.na(lds) | !ok] <- 0
-  # lds[is.na(lds)] <- 0
   lds <- lds[attr(dadm,"expand")] # decompress
   winner <- dadm$winner[attr(dadm,"expand")]
   if (n_acc>1) {
@@ -229,7 +226,9 @@ log_likelihood_race_ss <- function(p_vector,dadm,min_ll=log(1e-10))
   goresp <- dadm$R[attr(dadm,"expand")][winner] != "stop"
   if (any(stopsucess_accs)) {
     parstop <- pars[attr(dadm,"expand"),][stopsucess_accs,]
-    like[stoptrial & !goresp] <- attr(dadm,"model")()$sfun(parstop,n_acc)
+    iss <- stoptrial & !goresp
+    like[iss] <- attr(dadm,"model")()$sfun(parstop,n_acc)
+    like[iss][is.na(like[iss])] <- 0
   }
 
   # trigger failures
@@ -248,9 +247,7 @@ log_likelihood_race_ss <- function(p_vector,dadm,min_ll=log(1e-10))
     like[!goresp] <- gf[!goresp] + (1-gf[!goresp])*like[!goresp]
     like[goresp] <- like[goresp]*(1-gf[goresp])
   }
-
-  like[!ok[winner]] <- 0
-
+  like[like<0 | is.na(like)] <- 0
   sum(pmax(min_ll,log(like)))
 }
 
