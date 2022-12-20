@@ -159,10 +159,12 @@ check_progress <- function(samplers, stage, iter, max_gd, min_es, min_unique, ma
   iter_done <- ifelse(is.null(iter), TRUE, min(iters_total, total_iters_stage) >= iter)
   if(min_es == 0){
     es_done <- TRUE
-  } else{
-    curr_min_es <- min(es_pmwg(as_mcmc.list(samplers,selection="alpha",filter=stage)))
-    if(verbose) message("Smallest effective size = ", curr_min_es)
+  } else if(iters_total != 0){
+    curr_min_es <- min(es_pmwg(as_mcmc.list(samplers,selection="alpha",filter=stage), print_summary = F))
+    if(verbose) message("Smallest effective size = ", round(curr_min_es))
     es_done <- ifelse(!samplers[[1]]$init, FALSE, curr_min_es > min_es)
+  } else{
+    es_done <- FALSE
   }
   trys_done <- ifelse(is.null(max_trys), FALSE, trys >= max_trys)
   if(trys_done){

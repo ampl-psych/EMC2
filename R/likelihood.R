@@ -8,7 +8,7 @@ log_likelihood_race <- function(p_vector,dadm,min_ll=log(1e-10))
 
     lds <- numeric(dim(dadm)[1]) # log pdf (winner) or survivor (losers)
     lds[dadm$winner] <- log(attr(dadm,"model")()$dfun(rt=dadm$rt[dadm$winner],
-                                                    pars=pars[dadm$winner,]))
+                                                      pars=pars[dadm$winner,]))
     n_acc <- length(levels(dadm$R))
     if (n_acc>1) lds[!dadm$winner] <- log(1-attr(dadm,"model")()$pfun(rt=dadm$rt[!dadm$winner],pars=pars[!dadm$winner,]))
     lds[is.na(lds) | !ok] <- min_ll

@@ -1,7 +1,9 @@
 rm(list = ls())
 library(devtools)
+# Rcpp only works as fast with install like this unfortunately, if this throws errors, restarting Rstudio worked for me
 devtools::install("~/Documents/UVA/2022/EMC2")
 library(EMC2)
+# load_all()
 load("test_files/PNAS.RData")
 
 dat <- data[,c("s","E","S","R","RT")]
@@ -29,16 +31,29 @@ design_RDM <- make_design(
 dat_single <- dat[which(dat$subjects %in% (unique(dat$subjects)[1])),]
 dat_single <- droplevels(dat_single)
 
+# first speed test:
 samplers <- make_samplers(dat_single, design_RDM, type = "single", n_chains = 1)
-samplers <- auto_burn(samplers, verbose = T, min_es = 1000, useC = T)
-# samplers <- run_samplers(samplers, stage = "preburn", iter = 50, verbose = T, cores_per_chain = 1, cores_for_chains = 1)
+# first let's run init separately
+samplers <- run_samplers(samplers, stage = "preburn", iter = 10)
 
-samplersC_merg <- merge_samples(samplers)
-samplersR_merg <- merge_samples(samplers)
-# microbenchmark::microbenchmark(
-#   samplers <- run_samplers(samplers, stage = "preburn", iter = 50, verbose = T, cores_per_chain = 1, cores_for_chains = 1),
-#   times = 15
-# )
+
+# Note that the useC argument is a bit deceptive. It uses the C dists in any case, but if TRUE will also use the C log_likelihood_race
+microbenchmark::microbenchmark(
+  run_samplers(samplers, stage = "preburn", iter = 25),
+  run_samplers(samplers, stage = "preburn", iter = 25, useC = T), times = 10
+) # Literally twice as fast!
+
+# Then compare
+samplers <- make_samplers(dat_single, design_RDM, type = "single")
+samplersC <- auto_burn(samplers, verbose = T, min_es = 1000, useC = T)
+samplersR <- auto_burn(samplers, verbose = T, min_es = 1000, useC = F)
+# samplers <- run_samplers(samplers, stage = "preburn", iter = 50, verbose = T, cores_per_chain = 1, cores_for_chains = 1, useC = T)
+# samplers <- run_samplers(samplers, stage = "burn", iter = 50, verbose = T, cores_per_chain = 1, cores_for_chains = 1, useC = T)
+
+
+samplersC_merg <- merge_samples(samplersC)
+samplersR_merg <- merge_samples(samplersR)
+
 
 
 library(ggplot2)
@@ -58,3 +73,6 @@ plot_grid(plots[[1]], plots[[2]])
 plot_grid(plots[[3]], plots[[4]])
 plot_grid(plots[[5]], plots[[6]])
 plot_grid(plots[[7]])
+
+
+
