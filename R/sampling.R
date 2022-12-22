@@ -202,13 +202,13 @@ new_particle <- function (s, data, num_particles, parameters, eff_mu = NULL,
       lw <- calc_ll_manager(proposals, dadm = data[[which(subjects == s)]], likelihood_func, useC = useC)
     }
     lw_total <- lw + prev_ll[s] - lw[1] # Bit inefficient but safes code, makes sure lls from other components are included
-    lp <- mvtnorm::dmvnorm(x = proposals, mean = group_mu, sigma = group_var, log = TRUE)
-    prop_density <- mvtnorm::dmvnorm(x = proposals, mean = subj_mu, sigma = var_subj)
+    lp <- dmvnrm_arma_fast(x = proposals, mean = group_mu, sigma = group_var, log = TRUE)
+    prop_density <- dmvnrm_arma_fast(x = proposals, mean = subj_mu, sigma = var_subj)
     if (mix_proportion[3] == 0) {
       eff_density <- 0
     }
     else {
-      eff_density <- mvtnorm::dmvnorm(x = proposals, mean = eff_mu_sub, sigma = eff_var_curr)
+      eff_density <- dmvnrm_arma_fast(x = proposals, mean = eff_mu_sub, sigma = eff_var_curr)
     }
     lm <- log(mix_proportion[1] * exp(lp) + (mix_proportion[2] * prop_density) + (mix_proportion[3] * eff_density))
     # Calculate weights and center
@@ -456,21 +456,25 @@ get_variant_funs <- function(type = "standard") {
   return(list_fun)
 }
 
-calc_ll_manager <- function(proposals, dadm, useC, ll_func){
-  c_name <- attr(dadm,"model")()$c_name
-  if(is.null(c_name) | !useC){ # use the R implementation
-    lls <- apply(proposals,1, ll_func,dadm = dadm)
+calc_ll_manager <- function(proposals, dadm, useC, ll_func, component = NULL){
+  if(!is.data.frame(dadm)){
+    lls <- log_likelihood_joint(proposals, dadm, component, useC)
   } else{
-    p_types <- attr(dadm,"model")()$p_types
-    designs <- list()
-    for(p in p_types){
-      designs[[p]] <- attr(dadm,"designs")[[p]][attr(attr(dadm,"designs")[[p]],"expand"),,drop=FALSE]
+    c_name <- attr(dadm,"model")()$c_name
+    if(is.null(c_name) | !useC){ # use the R implementation
+      lls <- apply(proposals,1, ll_func,dadm = dadm)
+    } else{
+      p_types <- attr(dadm,"model")()$p_types
+      designs <- list()
+      for(p in p_types){
+        designs[[p]] <- attr(dadm,"designs")[[p]][attr(attr(dadm,"designs")[[p]],"expand"),,drop=FALSE]
+      }
+      constants <- attr(dadm, "constants")
+      if(is.null(constants)) constants <- NA
+      n_trials = nrow(dadm)
+      lls <- calc_ll(proposals, dadm, constants = constants, n_trials = n_trials, designs = designs, type = c_name, p_types = p_types,
+                     min_ll = log(1e-10), winner = dadm$winner, expand = attr(dadm, "expand"))
     }
-    constants <- attr(dadm, "constants")
-    if(is.null(constants)) constants <- NA
-    n_trials = nrow(dadm)
-    lls <- calc_ll(proposals, dadm, constants = constants, n_trials = n_trials, designs = designs, type = c_name, p_types = p_types,
-                   min_ll = log(1e-10), winner = dadm$winner, expand = attr(dadm, "expand"))
   }
   return(lls)
 }

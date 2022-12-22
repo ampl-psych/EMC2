@@ -32,4 +32,5 @@ Imports:
     Matrix,
     Rcpp
 LinkingTo: 
-    Rcpp
+    Rcpp,
+    RcppArmadillo
