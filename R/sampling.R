@@ -79,6 +79,10 @@ run_stage <- function(pmwgs,
   n_pars <- pmwgs$n_pars
   components <- attr(pmwgs$data, "components")
   shared_ll_idx <- attr(pmwgs$data, "shared_ll_idx")
+  if(stage == "sample"){
+    components <- rep(1, length(components))
+    shared_ll_idx <- rep(1, length(shared_ll_idx))
+  }
   # Display stage to screen
   if(verbose){
     msgs <- list(
@@ -197,12 +201,12 @@ new_particle <- function (s, data, num_particles, parameters, eff_mu = NULL,
 
     # Calculate likelihoods and other IS quantities
     if(components[length(components)] > 1){
-      lw <- calc_ll_manager(proposals, dadm = data[[which(subjects == s)]], likelihood_func, component = i, useC = useC)
+      lw <- calc_ll_manager(proposals[,idx], dadm = data[[which(subjects == s)]], likelihood_func, component = i, useC = useC)
     } else{
-      lw <- calc_ll_manager(proposals, dadm = data[[which(subjects == s)]], likelihood_func, useC = useC)
+      lw <- calc_ll_manager(proposals[,idx], dadm = data[[which(subjects == s)]], likelihood_func, useC = useC)
     }
     lw_total <- lw + prev_ll[s] - lw[1] # Bit inefficient but safes code, makes sure lls from other components are included
-    lp <- dmvnrm_arma_fast(x = proposals, mean = group_mu, sigma = group_var, log = TRUE)
+    lp <- dmvnrm_arma_fast(x = proposals, mean = group_mu, sigma = group_var, logd = TRUE)
     prop_density <- dmvnrm_arma_fast(x = proposals, mean = subj_mu, sigma = var_subj)
     if (mix_proportion[3] == 0) {
       eff_density <- 0
