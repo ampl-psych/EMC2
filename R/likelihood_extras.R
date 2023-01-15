@@ -211,7 +211,8 @@ log_likelihood_race_ss <- function(p_vector,dadm,min_ll=log(1e-10))
   sum(pmax(min_ll,log(like)))
 }
 
-log_likelihood_joint <- function(pars, dadms, component = NULL){
+log_likelihood_joint <- function(pars, dadms, component = NULL)
+{
   parPreFixs <- unique(gsub("[|].*", "", names(pars)))
   i <- 0
   total_ll <- 0
