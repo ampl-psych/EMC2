@@ -24,7 +24,7 @@
 #' @export
 #'
 #' @examples
-run_emc <- function(samplers, stage = NA, iter = 1000, max_gd = 1.1, min_es = 0, min_unique = 600, preburn = 150,
+run_emc <- function(samplers, stage = NULL, iter = 1000, max_gd = 1.1, min_es = 0, min_unique = 600, preburn = 150,
                     p_accept = .8, step_size = 100, verbose = FALSE, verboseProgress = FALSE, fileName = NULL,
                     particles = NULL, particle_factor = 50, cores_per_chain = 1,
                     cores_for_chains = length(samplers), max_trys = 50){
@@ -36,7 +36,7 @@ run_emc <- function(samplers, stage = NA, iter = 1000, max_gd = 1.1, min_es = 0,
   if(is.null(stage)){
     stage <- names(which(colSums(chain_n(samplers)) == 0))[1]
   }
-  if(stage == "preburn"){
+  if(stage == "preburn" || is.na(stage)  ){
     samplers <- run_samplers(samplers, stage = "preburn", iter = preburn, cores_for_chains = cores_for_chains, p_accept = p_accept,
                              step_size = step_size,  verbose = verbose, verboseProgress = verboseProgress,
                              fileName = fileName,
@@ -57,7 +57,7 @@ run_emc <- function(samplers, stage = NA, iter = 1000, max_gd = 1.1, min_es = 0,
                               particles = particles, particle_factor =  particle_factor,
                               cores_per_chain = cores_per_chain, max_trys = max_trys)
   }
-  if(any(stage %in% c("preburn", "burn", "adapt", "sample")) || is.na(stage)){
+  if(any(stage %in% c("preburn", "burn", "adapt", "sample")) || is.na(stage) ){
     samplers <-  run_samplers(samplers, stage = "sample", iter = iter, max_gd = max_gd, cores_for_chains = cores_for_chains, p_accept = p_accept,
                               step_size = step_size,  verbose = verbose, verboseProgress = verboseProgress,
                               fileName = fileName,
@@ -130,7 +130,7 @@ run_stages <- function(sampler, stage = "preburn", iter=0, verbose = TRUE, verbo
   }
   if (iter == 0) return(sampler)
   sampler <- run_stage(sampler, stage = stage,iter = iter, particles = particles,
-                       n_cores = n_cores, p_accept = p_accept, verbose = verbose, verboseProgress = verboseProgress)
+    n_cores = n_cores, p_accept = p_accept, verbose = verbose, verboseProgress = verboseProgress)
   return(sampler)
 }
 
@@ -158,13 +158,17 @@ check_progress <- function(samplers, stage, iter, max_gd, min_es, min_unique, ma
   iter_done <- ifelse(is.null(iter), TRUE, min(iters_total, total_iters_stage) >= iter)
   if(min_es == 0){
     es_done <- TRUE
-  } else{
-    curr_min_es <- min(es_pmwg(as_mcmc.list(samplers,selection="alpha",filter=stage)))
-    if(verbose) message("Smallest effective size = ", curr_min_es)
+  } else if(iters_total != 0){
+    curr_min_es <- min(es_pmwg(as_mcmc.list(samplers,selection="alpha",filter=stage), print_summary = F))
+    if(verbose) message("Smallest effective size = ", round(curr_min_es))
     es_done <- ifelse(!samplers[[1]]$init, FALSE, curr_min_es > min_es)
+  } else{
+    es_done <- FALSE
   }
-  trys_done <- ifelse(is.null(max_trys), FALSE, trys > max_trys)
-
+  trys_done <- ifelse(is.null(max_trys), FALSE, trys >= max_trys)
+  if(trys_done){
+    warning("Max trys reached. If this happens in burn-in while trying to get gelman diagnostics < 1.2, you might have a particularly hard model. Make sure your model is well specified. If so, you can run adapt and sample, if run for long enough, sample usually converges eventually.")
+  }
   if(stage == "adapt"){
     samples_merged <- merge_samples(samplers)
     test_samples <- extract_samples(samples_merged, stage = "adapt", samples_merged$samples$idx)
@@ -185,10 +189,8 @@ check_gd <- function(samplers, stage, max_gd, trys, verbose){
   if(!samplers[[1]]$init | !stage %in% samplers[[1]]$samples$stage) return(list(gd_done = FALSE, samplers = samplers))
   gd <- gd_pmwg(as_mcmc.list(samplers,filter=stage), return_summary = FALSE,print_summary = FALSE,filter=stage,mapped=FALSE)
   n_remove <- round(chain_n(samplers)[,stage][1]/3)
-  samplers_short <- try(lapply(samplers,remove_iterations,select=n_remove,filter=stage),silent=TRUE)
-  if (is(samplers_short,"try-error")) gd_short <- Inf else
-    gd_short <- gd_pmwg(as_mcmc.list(samplers_short,filter=stage), return_summary = FALSE,
-                        print_summary = FALSE, filter=stage,mapped=FALSE)
+  samplers_short <- lapply(samplers,remove_iterations,select=n_remove,filter=stage)
+  gd_short <- gd_pmwg(as_mcmc.list(samplers_short,filter=stage), return_summary = FALSE, print_summary = FALSE, filter=stage,mapped=FALSE)
   if (mean(gd_short) < mean(gd)) {
     gd <- gd_short
     samplers <- samplers_short
@@ -290,7 +292,7 @@ test_adapted <- function(sampler, test_samples, min_unique, n_cores_conditional 
     }
     attempt <- tryCatch({
       parallel::mclapply(X = 1:sampler$n_subjects,FUN = variant_funs$get_conditionals,samples = test_samples,
-                         n_pars, mc.cores = n_cores_conditional)
+               n_pars, mc.cores = n_cores_conditional)
     },error=function(e) e, warning=function(w) w)
     if (any(class(attempt) %in% c("warning", "error", "try-error"))) {
       if(verbose){
@@ -409,7 +411,7 @@ run_adapt <- function(samplers, max_gd = NULL, min_es = 0, min_unique = 600,
 #'
 #' @return A list of samplers
 run_sample <- function(samplers, iter = 1000, max_gd = 1.1,min_es = 0,
-                       p_accept = .8, step_size = 100, verbose = FALSE, verboseProgress = verboseProgress,
+                       p_accept = .8, step_size = 100, verbose = FALSE, verboseProgress = FALSE,
                        fileName = NULL,
                        particles = NULL, particle_factor = 50, cores_per_chain = 1,
                        cores_for_chains = length(samplers), max_trys = 50){
