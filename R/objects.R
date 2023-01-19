@@ -55,7 +55,7 @@ remove_iterations <- function(pmwg,select,remove=TRUE,last_select=FALSE,filter=N
     } else {
       n <- table(pmwg$samples$stage)
       if (filter == "preburn"){
-        if (select>n["preburn"]) stop("Removing more than available in burn")
+        if (select>n["preburn"]) stop("Removing more than available in preburn")
         if (!last_select)
           select <- 1:select else
             select <- (n["preburn"]-select+1):n["preburn"]
@@ -213,7 +213,7 @@ as_Mcmc <- function(sampler,filter=stages,thin=1,subfilter=0,
 
 
 
-# samplers=pmwg_mcmc
+# samplers=pmwg_mcmc; mapped=FALSE;include_constants=FALSE
 as_mcmc.list <- function(samplers,
                          selection=c("alpha","mu","variance","covariance","correlation","LL","epsilon")[1],
                          filter="burn",thin=1,subfilter=0,mapped=FALSE,include_constants=FALSE)
@@ -248,7 +248,7 @@ as_mcmc.list <- function(samplers,
     } else warning("Can only include constants in alpha or mu")
   }
 
-  if (selection %in% c("alpha")) {
+  if (selection %in% c("alpha","LL")) {
     nChains <- length(mcmcList)
     ns <- length(samplers[[1]]$subjects)
     out <- vector(mode="list",length=ns)
