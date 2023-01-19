@@ -180,7 +180,7 @@ check_progress <- function(samplers, stage, iter, max_gd, min_es, min_unique, ma
   }
   done <- (es_done & iter_done & gd$gd_done & adapted) | trys_done
   if(es_done & gd$gd_done & adapted & !iter_done){
-    step_size <- min(step_size, iter - iters_total)
+    step_size <- min(step_size, abs(iter - iters_total), abs(iter - total_iters_stage))
   }
   return(list(samplers = gd$samplers, done = done, step_size = step_size, trys = trys, iters_total = iters_total))
 }

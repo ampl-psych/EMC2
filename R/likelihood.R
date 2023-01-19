@@ -99,7 +99,7 @@ log_likelihood_joint <- function(proposals, dadms, component = NULL, useC){
       parPrefix <- parPreFixs[i]
       currentPars <- proposals[,grep(paste0(parPrefix, "|"), colnames(proposals), fixed = T)]
       colnames(currentPars) <- gsub(".*[|]", "", colnames(currentPars))
-      total_ll <- total_ll +  calc_ll_manager(currentPars, dadm, useC, attr(dadm, "model")$log_likelihood)
+      total_ll <- total_ll +  calc_ll_manager(currentPars, dadm, useC, attr(dadm, "model")()$log_likelihood)
     }
   }
   return(total_ll)
