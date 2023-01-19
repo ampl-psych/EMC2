@@ -1,6 +1,3 @@
-# selection ="LL";layout=c(3,5); subject=NA;ylim=NULL,
-# selection="LL";filter="sample";thin=1;subfilter=0
-# plot_acf=FALSE;acf_chain=1; verbose=TRUE
 plot_chains <- function(pmwg_mcmc,layout=NA,subject=NA,ylim=NULL,
                         selection="alpha",filter="sample",thin=1,subfilter=0,
                         plot_acf=FALSE,acf_chain=1, verbose=TRUE) # ,use_par=NA
@@ -9,9 +6,9 @@ plot_chains <- function(pmwg_mcmc,layout=NA,subject=NA,ylim=NULL,
   if (!(inherits(pmwg_mcmc,  c("mcmc","mcmc.list")))) {
     if (inherits(pmwg_mcmc, "pmwgs"))
       pmwg_mcmc <- as_Mcmc(pmwg_mcmc,selection=selection,filter=filter,
-                           thin=thin,subfilter=subfilter,thin=thin) else
+                           thin=thin,subfilter=subfilter) else
                              pmwg_mcmc <- as_mcmc.list(pmwg_mcmc,selection=selection,filter=filter,
-                                                       thin=thin,subfilter=subfilter,thin=thin)
+                                                       thin=thin,subfilter=subfilter)
   }
   auto.layout <- any(is.na(layout))
   no_layout <- is.null(layout)
@@ -241,12 +238,12 @@ plot_density <- function(pmwg_mcmc,layout=c(2,3),
     } else {
       if (mapped & !is.null(pars)) {
         pars <- map_mcmc(pars,design=attr(pmwg_mcmc,"design_list")[[1]],
-             model=attr(pmwg_mcmc,"model_list")[[1]])
-      if (!is.null(attr(pars,"isConstant")))
-        pars <- pars[,!attr(pars,"isConstant"),drop=FALSE]
+                         model=attr(pmwg_mcmc,"model_list")[[1]])
+        if (!is.null(attr(pars,"isConstant")))
+          pars <- pars[,!attr(pars,"isConstant"),drop=FALSE]
       }
       pmwg_mcmc <- as_mcmc.list(pmwg_mcmc,selection=selection,filter=filter,
-                    thin=thin,subfilter=subfilter,mapped=mapped)
+                                thin=thin,subfilter=subfilter,mapped=mapped)
     }
   } else plot_prior <- FALSE
   if (attr(pmwg_mcmc,"selection")=="LL")
@@ -726,5 +723,4 @@ profile_pmwg <- function(pname,p,p_min,p_max,dadm,n_point=100,main="",cores=1)
   abline(v=p[pname])
   c(true=p[pname],max=x[which.max(ll)],miss=p[pname]-x[which.max(ll)])
 }
-
 
