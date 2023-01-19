@@ -12,7 +12,7 @@ run_sample(
   p_accept = 0.8,
   step_size = 100,
   verbose = FALSE,
-  verboseProgress = verboseProgress,
+  verboseProgress = FALSE,
   fileName = NULL,
   particles = NULL,
   particle_factor = 50,

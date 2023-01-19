@@ -8,7 +8,7 @@ run_emc(
   samplers,
   stage = NULL,
   iter = 1000,
-  max_gd = NULL,
+  max_gd = 1.1,
   min_es = 0,
   min_unique = 600,
   preburn = 150,
@@ -27,7 +27,7 @@ run_emc(
 \arguments{
 \item{samplers}{A list of samplers, or a fileName of where the samplers are stored.}
 
-\item{stage}{A string. Indicates which stage is to be run, either preburn, burn, adapt or sample}
+\item{stage}{A string. Indicates which stage is to be run, either preburn, burn, adapt or sample. If unspecified will assume the next unrun stage.}
 
 \item{iter}{An integer. Indicates how many iterations to run sampling stage.}
 

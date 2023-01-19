@@ -47,7 +47,7 @@ Example: \code{function(d)d$S==d$lR}}
 \item{report_p_vector}{TRUE (default) or FALSE. if TRUE, returns the vector of parameters to be estimated.}
 }
 \value{
-A list.
+A design list.
 }
 \description{
 This function returns a list with the model design.
