@@ -451,9 +451,10 @@ get_variant_funs <- function(type = "standard") {
       get_conditionals = get_conditionals_diag,
       get_all_pars_IS2 = get_all_pars_standard,
       prior_dist_IS2 = prior_dist_diag,
-      group_dist_IS2 = group_dist_diag
+      group_dist_IS2 = group_dist_diag,
     )
-}
+  }
+  list_fun$type = type
   return(list_fun)
 }
 
