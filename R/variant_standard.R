@@ -241,3 +241,4 @@ logdinvGamma <- function(x, shape, rate){
                                                         1) * log(x) - (beta/x)
   return(pmax(log.density, -50)) #Roughly equal to 1e-22 on real scale
 }
+
