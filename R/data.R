@@ -1,19 +1,35 @@
-#' Title
+#' Simulates data
 #'
-#' @param p_vector
-#' @param design
-#' @param model
-#' @param trials
-#' @param data
-#' @param expand
-#' @param mapped_p
-#' @param LT
-#' @param UT
-#' @param LC
-#' @param UC
-#' @param Fcovariates
-#' @param n_cores
-#' @param return_Ffunctions
+#' Simulates data based on design and parameter vector arguments using the
+#' random function for a model (usually a design attribute, but if not can be
+#' supplied separately) by one of two methods
+#' 1) creating a fully crossed and balanced design specified by the design
+#' argument's formula list (Flist) and factor contrast list (Clist, if it is
+#' null the data frame creation defaults are used) with number of trials per
+#' cell specified by the trials argument ... or if the data argument is non-null
+#' 2) using the design implicit in a data frame supplied, which allows creation
+#' # of unbalanced and other irregular designs, and replacing previous data with
+#' simulated data.
+#' Accuracy scored by design matchfun argument.
+#'
+#' @param p_vector parameter vector
+#' @param design design created by make_Design
+#' @param model usually an attribute of design but if not must be given here.
+#' @param trials number of trials per design cell
+#' @param data A supplied that determines the design, with data sorted by subjects
+#' and a trials = 1:n trials/subject factor added (or overwriting any existing)
+#' @param expand replicates the design expand times
+#' @param mapped_p if true instead returns a data frame with one row per design
+#' cell and columns for each parameter specifying how they are mapped to the
+#' design cells.
+#' @param LT lower truncation bound below which data are removed
+#' @param UT upper truncation bound above which data are removed
+#' @param LC lower censoring bound below which data are turned into NA
+#' @param UC upper censoring bound above which data are turned into NA
+#' @param Fcovariates either a data frame of covariate valeus with the same
+#' number of rows as the data or a list of functions specifying covariates for
+#' each trial. Must have names specified in the design Fcovariates argument.
+#' @param return_Ffunctions if false covariates are not returned
 #'
 #' @return
 #' @export
@@ -21,25 +37,7 @@
 #' @examples
 make_data <- function(p_vector,design,model=NULL,trials=NULL,data=NULL,expand=1,
                       mapped_p=FALSE,LT=NULL,UT=NULL,LC=NULL,UC=NULL,
-                      Fcovariates=NULL,n_cores=1,return_Ffunctions=FALSE)
-  # Simulates data using rfun from model specified by a formula list (Flist)
-  # a factor contrast list (Clist, if null data frame creation defaults used)
-  # using model (list specifying p_types, transforms and rfun).
-  # If data is supplied that determines the design, with data sorted by subjects
-  #   and a trials = 1:n trials/subject factor added (or overwriting any existing)
-  #   NB: trials differs from generated where numbering is cell specific.
-  # Otherwise list cfactors and vector rfactor used to create a design fully
-  # crossed in cfactors with response (R) factor specified by rfactor,
-  #  e.g for simple  design cfactors = list(subjects=1:2,trials=1:2,S=1:2) and
-  #  rfactor= c(R=1:2).
-  #  NB Factor order level is always the same as cfactors and rfactor
-# expand replicates the design expand times
-# matchfun scores correct response accumulator lM, e.g., for scoring latent
-#   response = stimulus  matchfun = function(d)d$S==d$lR
-# If mapped_p is true instead returns cbind(da,pars), augmented data and
-# mapped pars.
-# Fcovariates = list of functions to specify covariates or data frame
-# n_cores: parallel generation over subjects for RL models
+                      Fcovariates=NULL,return_Ffunctions=FALSE)
 {
 
   missingFilter <- function(data,LT,UT,LC,UC,Rmissing)
@@ -92,7 +90,6 @@ make_data <- function(p_vector,design,model=NULL,trials=NULL,data=NULL,expand=1,
       if (mapped_p) trials <- 1
       if ( is.null(trials) )
         stop("If data is not provided need to specify number of trials")
-
       Ffactors=c(design$Ffactors,list(trials=1:trials))
       data <- as.data.frame.table(array(dim=unlist(lapply(Ffactors,length)),
                                         dimnames=Ffactors))
