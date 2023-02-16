@@ -120,6 +120,9 @@ NumericVector dWald(NumericVector t, NumericVector v,
 			pdf[i] = 0.;
 		} else {
 			pdf[i] = digt(t[i], B[i] + .5 * A[i], v[i], .5 * A[i]);
+		  if (pdf[i] < 0){
+			  pdf[i] = 0.;
+		  }
 		}
 	}
 	return pdf;
@@ -137,6 +140,13 @@ NumericVector pWald(NumericVector t, NumericVector v,
 			cdf[i] = 0.;
 		} else {
 			cdf[i] = pigt(t[i], B[i] + .5 * A[i], v[i], .5 * A[i]);
+		  if (cdf[i] < 0){
+			  cdf[i] = 0.;
+		  }
+		  if (cdf[i] > 1){
+			  cdf[i] = 1;
+		  }
+
 		}
 	}
 	return cdf;
