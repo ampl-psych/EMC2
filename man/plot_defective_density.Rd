@@ -29,11 +29,11 @@ subjects, R, rt or trials.}
 
 \item{layout}{2-vector specifying par(mfrow) or par(mfcol) (default NULL use current).}
 
-\item{mfcol}{default TRUE use mfcol else mfrow.}
+\item{mfcol}{boolean, default TRUE use mfcol else mfrow.}
 
 \item{xlim}{x-axis limit for all cells (default NULL = scale per cell).}
 
-\item{bw}{number or string bandwitdh for density (default "nrd0").}
+\item{bw}{number or string bandwidth for density (default "nrd0").}
 
 \item{adjust}{density function bandwidth adjust parameter.}
 
