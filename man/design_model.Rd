@@ -2,7 +2,7 @@
 % Please edit documentation in R/design.R
 \name{design_model}
 \alias{design_model}
-\title{Title}
+\title{Combines a data frame with a design and (optionally) a user-specified prior}
 \usage{
 design_model(
   data,
@@ -17,8 +17,38 @@ design_model(
 )
 }
 \arguments{
-\item{rt_check}{}
+\item{data}{data frame}
+
+\item{design}{matching design}
+
+\item{model}{if model not an attribute of design can be supplied here}
+
+\item{prior}{list specifying prior (default NULL uses default prior)}
+
+\item{add_acc}{default TRUE creates and 'augmented' data frame, which
+replicates and stacks the supplied data frame for each accumulator and
+adds factors to represent accumulators: lR = latent response, with a level
+for each response (R) represented by the accumulator and lM = latent match,
+a logical indicating if the accumulator represents the correct response as
+specified by the design's matchfun.}
+
+\item{rt_resolution}{maximum resolution of rt, NULL = no rounding}
+
+\item{verbose}{if true reports compression outcome}
+
+\item{compress}{default TRUE only keeps unique rows in terms of all
+parameter design matrices R, lR and rt (at given resolution)}
+
+\item{rt_check}{checks if any truncation and censoring specified in the design
+are respected.}
+}
+\value{
+a (possibly) augmented and compressed data frame with attributes
+specifying the design, pror and how to decompress ready supporting likelihood
+computation
 }
 \description{
-Title
+Performs a series to checks to make sure data frame and design match and
+(by default) augments the data frame by adding accumulator factors and
+compresses the result for efficient likelihood calculation.
 }

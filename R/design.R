@@ -176,25 +176,39 @@ add_accumulators <- function(data,matchfun=NULL,simulate=FALSE,type="RACE", Fcov
 }
 
 
-#' Title
+#' Combines a data frame with a design and (optionally) a user-specified prior
 #'
-#' @param data
-#' @param design
-#' @param model
-#' @param prior
-#' @param add_acc
-#' @param rt_resolution
-#' @param verbose
-#' @param compress
-#' @param rt_check
+#' Performs a series to checks to make sure data frame and design match and
+#' (by default) augments the data frame by adding accumulator factors and
+#' compresses the result for efficient likelihood calculation.
 #'
-#' @return
+#'
+#' @param data  data frame
+#' @param design matching design
+#' @param model if model not an attribute of design can be supplied here
+#' @param prior list specifying prior (default NULL uses default prior)
+#' @param add_acc default TRUE creates and 'augmented' data frame, which
+#' replicates and stacks the supplied data frame for each accumulator and
+#' adds factors to represent accumulators: lR = latent response, with a level
+#' for each response (R) represented by the accumulator and lM = latent match,
+#' a logical indicating if the accumulator represents the correct response as
+#' specified by the design's matchfun.
+#' @param rt_resolution maximum resolution of rt, NULL = no rounding
+#' @param verbose if true reports compression outcome
+#' @param compress default TRUE only keeps unique rows in terms of all
+#' parameter design matrices R, lR and rt (at given resolution)
+#' @param rt_check checks if any truncation and censoring specified in the design
+#' are respected.
+#'
+#' @return a (possibly) augmented and compressed data frame with attributes
+#' specifying the design, pror and how to decompress ready supporting likelihood
+#' computation
 #' @export
 #'
 #' @examples
 design_model <- function(data,design,model=NULL,prior = NULL,
-                         add_acc=TRUE,rt_resolution=0.02,verbose=TRUE,compress=TRUE,rt_check=TRUE)
-  # Combines data frame with a design and model
+                         add_acc=TRUE,rt_resolution=0.02,verbose=TRUE,
+                         compress=TRUE,rt_check=TRUE)
   # Flist is a list of formula objects, one for each p_type
   # da is augmented data (from add_accumulators), must have all of the factors
   #   and covariates that are used in formulas
@@ -204,12 +218,6 @@ design_model <- function(data,design,model=NULL,prior = NULL,
   #   ptypes defines the parameter types for which designs must be specified
   #   transform if a function acting on p_vector before mapping
   #   Ntransform is a function acting on the output of map_p
-  # rt_resolution specifies maximum resolution of rt, NULL = no rounding
-# Compress only keeps unique rows in terms of all parameters design matrices
-#  R, lR and rt (at given resolution). Must always be used in estimation,
-#  only FALSE in internal use by sampled_p_vector and make data.
-# If supplied adds in prior specification
-# Note p_names only contains non-constant parameters names
 {
     compress_dadm <- function(da,designs,Fcov,Ffun)
     # out keeps only unique rows in terms of all parameters design matrices
