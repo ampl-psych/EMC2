@@ -147,6 +147,12 @@ rLBA <- function(lR,pars,p_types=c("v","sv","b","A","t0"),posdrift = TRUE)
 }
 
 # lba_B parameterization
+#' Title
+#'
+#' @return
+#' @export
+#'
+#' @examples
 lbaB <- function(){
   list(
     type="RACE",
@@ -178,6 +184,12 @@ lbaB <- function(){
 }
 
 # lba_B parameterization
+#' Title
+#'
+#' @return
+#' @export
+#'
+#' @examples
 albaB <- function(){
   list(
     type="RACE",
