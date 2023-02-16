@@ -1,3 +1,24 @@
+#' Title
+#'
+#' @param p_vector
+#' @param design
+#' @param model
+#' @param trials
+#' @param data
+#' @param expand
+#' @param mapped_p
+#' @param LT
+#' @param UT
+#' @param LC
+#' @param UC
+#' @param Fcovariates
+#' @param n_cores
+#' @param return_Ffunctions
+#'
+#' @return
+#' @export
+#'
+#' @examples
 make_data <- function(p_vector,design,model=NULL,trials=NULL,data=NULL,expand=1,
                       mapped_p=FALSE,LT=NULL,UT=NULL,LC=NULL,UC=NULL,
                       Fcovariates=NULL,n_cores=1,return_Ffunctions=FALSE)

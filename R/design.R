@@ -176,6 +176,22 @@ add_accumulators <- function(data,matchfun=NULL,simulate=FALSE,type="RACE", Fcov
 }
 
 
+#' Title
+#'
+#' @param data
+#' @param design
+#' @param model
+#' @param prior
+#' @param add_acc
+#' @param rt_resolution
+#' @param verbose
+#' @param compress
+#' @param rt_check
+#'
+#' @return
+#' @export
+#'
+#' @examples
 design_model <- function(data,design,model=NULL,prior = NULL,
                          add_acc=TRUE,rt_resolution=0.02,verbose=TRUE,compress=TRUE,rt_check=TRUE)
   # Combines data frame with a design and model
