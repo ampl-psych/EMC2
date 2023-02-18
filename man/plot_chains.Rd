@@ -2,7 +2,7 @@
 % Please edit documentation in R/plotting.R
 \name{plot_chains}
 \alias{plot_chains}
-\title{Plots chains for a variety of quantities produced by sampling}
+\title{Title Plots chains for a variety of quantities produced by sampling}
 \usage{
 plot_chains(
   pmwg_mcmc,
@@ -22,5 +22,5 @@ plot_chains(
 \item{verbose}{}
 }
 \description{
-Plots chains for a variety of quantities produced by sampling
+Title Plots chains for a variety of quantities produced by sampling
 }

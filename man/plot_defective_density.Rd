@@ -2,7 +2,7 @@
 % Please edit documentation in R/plotting.R
 \name{plot_defective_density}
 \alias{plot_defective_density}
-\title{Plots defective densities for each subject and cell.}
+\title{Plot defective densities for each subject and cell.}
 \usage{
 plot_defective_density(
   data,
@@ -23,7 +23,7 @@ plot_defective_density(
 and rt (response time) columns,and optionally other factor columns with any name except
 subjects, R, rt or trials.}
 
-\item{subject}{string selecting a subject.}
+\item{subject}{string selecting a subject (default NULL = all).}
 
 \item{factors}{character vector of factor names in design (default NULL = all).}
 
@@ -47,5 +47,7 @@ subjects, R, rt or trials.}
 Invisibly if correct_fun specified a subject accuracy vector
 }
 \description{
-Plots defective densities for each subject and cell.
+Each panel contains a set of densities (i.e., densities for each possible
+possible response) that are defective (i.e., have areas potentially less
+than 1, where for all responses the area sums to 1).
 }

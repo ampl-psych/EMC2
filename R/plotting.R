@@ -1,4 +1,5 @@
-#' Plots chains for a variety of quantities produced by sampling
+#' Title Plots chains for a variety of quantities produced by sampling
+#'
 #'
 #' @param pmwg_mcmc
 #' @param layout
@@ -140,12 +141,16 @@ plot_alpha_recovery <- function(tabs,layout=c(2,3),
   invisible(list(RMSE = rmse,COVERAGE = coverage,PEARSON=pearson,SPEARMAN=spearman))
 }
 
-#' Plots defective densities for each subject and cell.
+#' Plot defective densities for each subject and cell.
+#'
+#' Each panel contains a set of densities (i.e., densities for each possible
+#' possible response) that are defective (i.e., have areas potentially less
+#' than 1, where for all responses the area sums to 1).
 #'
 #' @param data data frame with at least subjects (subjects factor) R (response factor)
 #' and rt (response time) columns,and optionally other factor columns with any name except
 #' subjects, R, rt or trials.
-#' @param subject string selecting a subject.
+#' @param subject string selecting a subject (default NULL = all).
 #' @param factors character vector of factor names in design (default NULL = all).
 #' @param layout 2-vector specifying par(mfrow) or par(mfcol) (default NULL use current).
 #' @param mfcol boolean, default TRUE use mfcol else mfrow.
