@@ -101,7 +101,10 @@ run_samplers <- function(samplers, stage, iter = NULL, max_gd = NULL, min_es = 0
   attributes <- get_attributes(samplers)
   progress <- check_progress(samplers, stage, iter, max_gd, min_es, min_unique, max_trys, step_size, cores_per_chain, verbose)
   samplers <- progress$samplers
+  total_iters_stage <- chain_n(samplers)[,stage][1]
+  iter <- iter + total_iters_stage
   while(!progress$done){
+    if(!is.numeric(progress$step_size) | progress$step_size < 1) warning("Something wrong with the stepsize again, Niek's to blame")
     samplers <- add_proposals(samplers, stage, cores_per_chain)
     samplers <- parallel::mclapply(samplers,run_stages, stage = stage, iter= progress$step_size,
                                    verbose=verbose,  verboseProgress = verboseProgress,
@@ -155,7 +158,7 @@ check_progress <- function(samplers, stage, iter, max_gd, min_es, min_unique, ma
     if(verbose) message(trys,": Iterations ", stage, " = ",total_iters_stage)
   }
   gd <- check_gd(samplers, stage, max_gd, trys, verbose)
-  iter_done <- ifelse(is.null(iter), TRUE, min(iters_total, total_iters_stage) >= iter)
+  iter_done <- ifelse(is.null(iter), TRUE, total_iters_stage >= iter)
   if(min_es == 0){
     es_done <- TRUE
   } else if(iters_total != 0){
@@ -172,17 +175,18 @@ check_progress <- function(samplers, stage, iter, max_gd, min_es, min_unique, ma
   if(stage == "adapt"){
     samples_merged <- merge_samples(samplers)
     test_samples <- extract_samples(samples_merged, stage = "adapt", samples_merged$samples$idx)
-    # Only need information like n_pars & n_subjects, so only need to pass the first chain
+    # Only need information like n_pars & n_subjects from the samplers, so only need to pass the first chain
     adapted <- test_adapted(samplers[[1]], test_samples, min_unique, n_cores, verbose)
   } else{
     adapted <- TRUE
   }
   done <- (es_done & iter_done & gd$gd_done & adapted) | trys_done
   if(es_done & gd$gd_done & adapted & !iter_done){
-    step_size <- min(step_size, iter - iters_total)
+    step_size <- min(step_size, abs(iter - total_iters_stage))[1]
   }
   return(list(samplers = gd$samplers, done = done, step_size = step_size, trys = trys, iters_total = iters_total))
 }
+
 
 check_gd <- function(samplers, stage, max_gd, trys, verbose){
   if(is.null(max_gd)) return(list(gd_done = TRUE, samplers = samplers))
