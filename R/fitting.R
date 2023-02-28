@@ -162,8 +162,7 @@ check_progress <- function (samplers, stage, iter, max_gd, min_es, min_unique,
       message(trys, ": Iterations ", stage, " = ", total_iters_stage)
   }
   gd <- check_gd(samplers, stage, max_gd, trys, verbose)
-  iter_done <- ifelse(is.null(iter), TRUE, total_iters_stage >=
-                        iter)
+  iter_done <- ifelse(is.null(iter) || length(iter) == 0, TRUE, total_iters_stage >= iter)
   if (min_es == 0) {
     es_done <- TRUE
   }
