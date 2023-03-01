@@ -164,7 +164,9 @@ make_data <- function(p_vector,design,model=NULL,trials=NULL,data=NULL,expand=1,
       dropNames <- c(dropNames,names(design$Ffunctions) )
     data <- data[data$lR==levels(data$lR)[1],!(names(data) %in% dropNames)]
     for (i in dimnames(Rrt)[[2]]) data[[i]] <- Rrt[,i]
-    missingFilter(data[,names(data)!="winner"],LT,UT,LC,UC,Rmissing)
+    data <- missingFilter(data[,names(data)!="winner"],LT,UT,LC,UC,Rmissing)
+    attr(data,"p_vector") <- p_vector;
+    data
 }
 
 add_Ffunctions <- function(data,design)
