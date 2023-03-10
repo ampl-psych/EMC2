@@ -147,44 +147,60 @@ add_proposals <- function(samplers, stage, n_cores){
   return(samplers)
 }
 
-check_progress <- function(samplers, stage, iter, max_gd, min_es, min_unique, max_trys, step_size, n_cores, verbose, progress = NULL){
-  total_iters_stage <- chain_n(samplers)[,stage][1]
-  if(is.null(progress)){
+check_progress <- function (samplers, stage, iter, max_gd, min_es, min_unique,
+          max_trys, step_size, n_cores, verbose, progress = NULL)
+{
+  total_iters_stage <- chain_n(samplers)[, stage][1]
+  if (is.null(progress)) {
     iters_total <- 0
     trys <- 0
-  } else{
+  }
+  else {
     iters_total <- progress$iters_total + step_size
     trys <- progress$trys + 1
-    if(verbose) message(trys,": Iterations ", stage, " = ",total_iters_stage)
+    if (verbose)
+      message(trys, ": Iterations ", stage, " = ", total_iters_stage)
   }
   gd <- check_gd(samplers, stage, max_gd, trys, verbose)
-  iter_done <- ifelse(is.null(iter), TRUE, total_iters_stage >= iter)
-  if(min_es == 0){
+  iter_done <- ifelse(is.null(iter) || length(iter) == 0, TRUE, total_iters_stage >= iter)
+  if (min_es == 0) {
     es_done <- TRUE
-  } else if(iters_total != 0){
-    curr_min_es <- min(es_pmwg(as_mcmc.list(samplers,selection="alpha",filter=stage), print_summary = F))
-    if(verbose) message("Smallest effective size = ", round(curr_min_es))
-    es_done <- ifelse(!samplers[[1]]$init, FALSE, curr_min_es > min_es)
-  } else{
+  }
+  else if (iters_total != 0) {
+    curr_min_es <- min(es_pmwg(as_mcmc.list(samplers, selection = "alpha",
+                                            filter = stage), print_summary = F))
+    if (verbose)
+      message("Smallest effective size = ", round(curr_min_es))
+    es_done <- ifelse(!samplers[[1]]$init, FALSE, curr_min_es >
+                        min_es)
+  }
+  else {
     es_done <- FALSE
   }
   trys_done <- ifelse(is.null(max_trys), FALSE, trys >= max_trys)
-  if(trys_done){
+  if (trys_done) {
     warning("Max trys reached. If this happens in burn-in while trying to get gelman diagnostics < 1.2, you might have a particularly hard model. Make sure your model is well specified. If so, you can run adapt and sample, if run for long enough, sample usually converges eventually.")
   }
-  if(stage == "adapt"){
+  if (stage == "adapt") {
     samples_merged <- merge_samples(samplers)
-    test_samples <- extract_samples(samples_merged, stage = "adapt", samples_merged$samples$idx)
-    # Only need information like n_pars & n_subjects from the samplers, so only need to pass the first chain
-    adapted <- test_adapted(samplers[[1]], test_samples, min_unique, n_cores, verbose)
-  } else{
+    test_samples <- extract_samples(samples_merged, stage = "adapt",
+                                    samples_merged$samples$idx)
+    adapted <- test_adapted(samplers[[1]], test_samples,
+                            min_unique, n_cores, verbose)
+  }
+  else {
     adapted <- TRUE
   }
   done <- (es_done & iter_done & gd$gd_done & adapted) | trys_done
+  if (is.na(es_done & gd$gd_done & adapted & !iter_done)){
+    save(samplers,stage, iter, max_gd, min_es, min_unique,
+         max_trys, step_size, n_cores, verbose,file="error.RData")
+  }
   if(es_done & gd$gd_done & adapted & !iter_done){
     step_size <- min(step_size, abs(iter - total_iters_stage))[1]
   }
-  return(list(samplers = gd$samplers, done = done, step_size = step_size, trys = trys, iters_total = iters_total))
+  return(list(samplers = gd$samplers, done = done, step_size = step_size,
+              trys = trys, iters_total = iters_total))
 }
 
 

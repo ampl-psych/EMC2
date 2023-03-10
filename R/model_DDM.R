@@ -43,6 +43,12 @@ pDDM <- function(rt,R,pars,precision=3)
              sz = pars[,"sz"], sv = pars[,"sv"],st0 = pars[,"st0"], s = pars[,"s"])
 }
 
+#' Title
+#'
+#' @return
+#' @export
+#'
+#' @examples
 ddmTZD <- function(){
   list(
     type="DDM",

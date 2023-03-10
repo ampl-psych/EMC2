@@ -1,3 +1,4 @@
+
 #' Plot MCMC chains
 #'
 #' @param pmwg_mcmc A list of samplers or samplers converted to mcmc objects.
@@ -10,7 +11,6 @@
 #' @param subfilter an integer or vector. If integer it will exclude up until that integer. If vector it will include everything in that range.
 #' @param plot_acf bool. If TRUE will also plot autocorrelation for the chain specified in acf_chain.
 #' @param acf_chain an integer. For which chain to plot the acf, if plot_acf = TRUE.
-
 #' @return
 #' @export
 #'
@@ -140,13 +140,34 @@ plot_alpha_recovery <- function(tabs,layout=c(2,3),
   invisible(list(RMSE = rmse,COVERAGE = coverage,PEARSON=pearson,SPEARMAN=spearman))
 }
 
+#' Plot defective densities for each subject and cell.
+#'
+#' Each panel contains a set of densities (i.e., densities for each possible
+#' possible response) that are defective (i.e., have areas potentially less
+#' than 1, where for all responses the area sums to 1).
+#'
+#' @param data data frame with at least subjects (subjects factor) R (response factor)
+#' and rt (response time) columns,and optionally other factor columns with any name except
+#' subjects, R, rt or trials.
+#' @param subject string selecting a subject (default NULL = all).
+#' @param factors character vector of factor names in design (default NULL = all).
+#' @param layout 2-vector specifying par(mfrow) or par(mfcol) (default NULL use current).
+#' @param mfcol boolean, default TRUE use mfcol else mfrow.
+#' @param xlim x-axis limit for all cells (default NULL = scale per cell).
+#' @param bw number or string bandwidth for density (default "nrd0").
+#' @param adjust density function bandwidth adjust parameter.
+#' @param correct_fun function scoring accuracy using columns in data.
+#' @param rt legend function position string for mean RT (default "top)
+#' @param accuracy legend function position string for accuracy (default "topright")
+#'
+#' @return Invisibly if correct_fun specified a subject accuracy vector
+#' @export
+#'
+#' @examples
 plot_defective_density <- function(data,subject=NULL,factors=NULL,
                                    layout=NULL,mfcol=TRUE,
                                    xlim=NULL,bw = "nrd0",adjust=1,
                                    correct_fun=NULL,rt="top",accuracy="topright")
-  # plots defective densities for each subject and cell in the full design (or
-  # a particular subject and factors if specified) if correct_fun specified
-  # returns a vector of subject accuracy.
 {
   if (!is.null(subject)) {
     dat <- data[data$subjects==subject,]
