@@ -153,6 +153,8 @@ log_likelihood_race_ss <- function(p_vector,dadm,min_ll=log(1e-10))
 
   if (is.null(attr(pars,"ok")))
     ok <- !logical(dim(pars)[1]) else ok <- attr(pars,"ok")
+  ok <- ok[attr(dadm,"expand")]
+  if (all(!ok)) return(min_ll*length(ok))
 
   # standard race, ignores R=NA
   isstop <- dadm[,"lR"]=="stop"
@@ -168,7 +170,7 @@ log_likelihood_race_ss <- function(p_vector,dadm,min_ll=log(1e-10))
     lds[golooser] <- log(1-attr(dadm,"model")()$pfunG(rt=dadm$rt[golooser],pars=pars[golooser,,drop=FALSE]))
     lds[stoplooser] <- log(1-attr(dadm,"model")()$pfunS(rt=dadm$rt[stoplooser],pars=pars[stoplooser,,drop=FALSE]))
   }
-  lds[is.na(lds) | !ok] <- 0
+  lds[is.na(lds)] <- 0
   lds <- lds[attr(dadm,"expand")] # decompress
   winner <- dadm$winner[attr(dadm,"expand")]
   if (n_acc>1) {
@@ -176,7 +178,7 @@ log_likelihood_race_ss <- function(p_vector,dadm,min_ll=log(1e-10))
     if (n_acc==2)
       ll <- ll + lds[!winner] else
         ll <- ll + apply(matrix(lds[!winner],nrow=n_acc-1),2,sum)
-    ll[is.na(ll)] <- 0
+      ll[is.na(ll)] <- 0
   } else ll <- lds
   like <- exp(ll)
 
@@ -207,8 +209,9 @@ log_likelihood_race_ss <- function(p_vector,dadm,min_ll=log(1e-10))
     like[!goresp] <- gf[!goresp] + (1-gf[!goresp])*like[!goresp]
     like[goresp] <- like[goresp]*(1-gf[goresp])
   }
-  like[like<0 | is.na(like)] <- 0
-  sum(pmax(min_ll,log(like)))
+  like[like<0 | is.na(like) | !ok] <- 0
+
+    sum(pmax(min_ll,log(like)))
 }
 
 
