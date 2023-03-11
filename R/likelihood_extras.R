@@ -211,7 +211,7 @@ log_likelihood_race_ss <- function(p_vector,dadm,min_ll=log(1e-10))
   }
   like[like<0 | is.na(like) | !ok] <- 0
 
-    sum(pmax(min_ll,log(like)))
+  sum(pmax(min_ll,log(like)))
 }
 
 
