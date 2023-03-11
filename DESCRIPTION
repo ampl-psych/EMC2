@@ -29,4 +29,7 @@ Imports:
     mvtnorm,
     parallel,
     stats,
-    Matrix
+    Matrix,
+    Rcpp
+LinkingTo: 
+    Rcpp
