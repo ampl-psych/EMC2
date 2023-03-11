@@ -153,7 +153,7 @@ log_likelihood_race_ss <- function(p_vector,dadm,min_ll=log(1e-10))
 
   if (is.null(attr(pars,"ok")))
     ok <- !logical(dim(pars)[1]) else ok <- attr(pars,"ok")
-  ok <- ok[attr(dadm,"expand")]
+  ok <- ok[attr(dadm,"expand")][dadm$winner[attr(dadm,"expand")]]
   if (all(!ok)) return(min_ll*length(ok))
 
   # standard race, ignores R=NA
@@ -211,7 +211,7 @@ log_likelihood_race_ss <- function(p_vector,dadm,min_ll=log(1e-10))
   }
   like[like<0 | is.na(like) | !ok] <- 0
 
-    sum(pmax(min_ll,log(like)))
+  sum(pmax(min_ll,log(like)))
 }
 
 
