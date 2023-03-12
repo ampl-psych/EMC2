@@ -2,7 +2,7 @@
 % Please edit documentation in R/plotting.R
 \name{plot_chains}
 \alias{plot_chains}
-\title{Title Plots chains for a variety of quantities produced by sampling}
+\title{Plot MCMC chains}
 \usage{
 plot_chains(
   pmwg_mcmc,
@@ -14,13 +14,30 @@ plot_chains(
   thin = 1,
   subfilter = 0,
   plot_acf = FALSE,
-  acf_chain = 1,
-  verbose = TRUE
+  acf_chain = 1
 )
 }
 \arguments{
-\item{verbose}{}
+\item{pmwg_mcmc}{A list of samplers or samplers converted to mcmc objects.}
+
+\item{layout}{A vector or matrix specifying the layout as in par(mfrow = layout).}
+
+\item{subject}{A string or integer which you can specify to only plot chains of that subject.}
+
+\item{ylim}{The y limits of the chain plot.}
+
+\item{selection}{a string. Specifies which chains you want to plot.}
+
+\item{filter}{a string. Specifies which stage you want to plot.}
+
+\item{thin}{an integer. Specify if you want to thin the chains by a factor n.}
+
+\item{subfilter}{an integer or vector. If integer it will exclude up until that integer. If vector it will include everything in that range.}
+
+\item{plot_acf}{bool. If TRUE will also plot autocorrelation for the chain specified in acf_chain.}
+
+\item{acf_chain}{an integer. For which chain to plot the acf, if plot_acf = TRUE.}
 }
 \description{
-Title Plots chains for a variety of quantities produced by sampling
+Plot MCMC chains
 }
