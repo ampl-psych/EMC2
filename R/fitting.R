@@ -192,10 +192,11 @@ check_progress <- function (samplers, stage, iter, max_gd, min_es, min_unique,
     adapted <- TRUE
   }
   done <- (es_done & iter_done & gd$gd_done & adapted) | trys_done
-  if (is.na(es_done & gd$gd_done & adapted & !iter_done))
+  if (is.na(es_done & gd$gd_done & adapted & !iter_done)){
     save(samplers,stage, iter, max_gd, min_es, min_unique,
          max_trys, step_size, n_cores, verbose,file="error.RData")
-  if (es_done & gd$gd_done & adapted & !iter_done) {
+  }
+  if(es_done & gd$gd_done & adapted & !iter_done){
     step_size <- min(step_size, abs(iter - total_iters_stage))[1]
   }
   return(list(samplers = gd$samplers, done = done, step_size = step_size,

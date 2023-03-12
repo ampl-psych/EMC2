@@ -1,25 +1,23 @@
-#' Title Plots chains for a variety of quantities produced by sampling
+
+#' Plot MCMC chains
 #'
-#'
-#' @param pmwg_mcmc
-#' @param layout
-#' @param subject
-#' @param ylim
-#' @param selection
-#' @param filter
-#' @param thin
-#' @param subfilter
-#' @param plot_acf
-#' @param acf_chain
-#' @param verbose
-#'
+#' @param pmwg_mcmc A list of samplers or samplers converted to mcmc objects.
+#' @param layout a vector or matrix specifying the layout as in par(mfrow = layout).
+#' @param subject a string or integer which you can specify to only plot chains of that subject.
+#' @param ylim an intenger. The y limits of the chain plot.
+#' @param selection a string. Specifies which chains you want to plot.
+#' @param filter a string. Specifies which stage you want to plot.
+#' @param thin an integer. Specify if you want to thin the chains by a factor n.
+#' @param subfilter an integer or vector. If integer it will exclude up until that integer. If vector it will include everything in that range.
+#' @param plot_acf bool. If TRUE will also plot autocorrelation for the chain specified in acf_chain.
+#' @param acf_chain an integer. For which chain to plot the acf, if plot_acf = TRUE.
 #' @return
 #' @export
 #'
 #' @examples
 plot_chains <- function(pmwg_mcmc,layout=NA,subject=NA,ylim=NULL,
                         selection="alpha",filter="sample",thin=1,subfilter=0,
-                        plot_acf=FALSE,acf_chain=1, verbose=TRUE) # ,use_par=NA
+                        plot_acf=FALSE,acf_chain=1) # ,use_par=NA
   # Plots chains  (if alpha, LL or epsilon can do individual subject, all by default)
 {
   if (!(inherits(pmwg_mcmc,  c("mcmc","mcmc.list")))) {
@@ -66,6 +64,7 @@ plot_chains <- function(pmwg_mcmc,layout=NA,subject=NA,ylim=NULL,
              ylab=attr(pmwg_mcmc,"selection"),smooth=FALSE)
   }
 }
+
 
 plot_acfs <- function(samples,layout=NULL,subject=1,
                       selection="alpha",filter="sample",subfilter=0)
