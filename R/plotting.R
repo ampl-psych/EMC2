@@ -86,6 +86,26 @@ plot_acfs <- function(samples,layout=NULL,subject=1,
   }
 }
 
+#' Title
+#'
+#' @param tabs
+#' @param layout
+#' @param do_ci
+#' @param ci_col
+#' @param cap
+#' @param do_rmse
+#' @param rmse_pos
+#' @param rmse_digits
+#' @param pearson_digits
+#' @param do_coverage
+#' @param coverage_pos
+#' @param coverage_digits
+#' @param spearman_digits
+#'
+#' @return
+#' @export
+#'
+#' @examples
 plot_alpha_recovery <- function(tabs,layout=c(2,3),
                                 do_ci = TRUE,ci_col="grey",cap=.05,
                                 do_rmse=FALSE,rmse_pos="topleft",
@@ -227,13 +247,39 @@ plot_defective_density <- function(data,subject=NULL,factors=NULL,
 # show_chains=FALSE;do_plot=TRUE;subject=NA;add_means=FALSE;
 # pars=NULL;probs=c(.025,.5,.975);bw = "nrd0";adjust = 1
 # subject=1; filter="burn"; subfilter=300
+#' Title
+#'
+#' @param pmwg_mcmc
+#' @param layout
+#' @param selection
+#' @param filter
+#' @param thin
+#' @param subfilter
+#' @param mapped
+#' @param plot_prior
+#' @param n_prior
+#' @param xlim
+#' @param ylim
+#' @param show_chains
+#' @param do_plot
+#' @param subject
+#' @param add_means
+#' @param pars
+#' @param probs
+#' @param bw
+#' @param adjust
+#'
+#' @return
+#' @export
+#'
+#' @examples
 plot_density <- function(pmwg_mcmc,layout=c(2,3),
                          selection="alpha",filter="sample",thin=1,subfilter=0,mapped=FALSE,
                          plot_prior=TRUE,n_prior=1e3,xlim=NULL,ylim=NULL,
                          show_chains=FALSE,do_plot=TRUE,subject=NA,add_means=FALSE,
                          pars=NULL,probs=c(.025,.5,.975),bw = "nrd0", adjust = 1)
   # Plots density (if alpha can do individual subject, all by default)
-  # If show_chains superimposes destinies for each chain on same plot
+  # If show_chains superimposes densities for each chain on same plot
   # invisibly returns tables of true and 95% CIs (for all chains combined
   # no matter what show_chains is)
 {
@@ -408,6 +454,37 @@ plot_density <- function(pmwg_mcmc,layout=c(2,3),
   }
 }
 
+#' Title
+#'
+#' @param data
+#' @param pp
+#' @param subject
+#' @param factors
+#' @param stat
+#' @param stat_name
+#' @param ci
+#' @param do_plot
+#' @param xlim
+#' @param ylim
+#' @param layout
+#' @param mfcol
+#' @param probs
+#' @param data_lwd
+#' @param fit_lwd
+#' @param qp_cex
+#' @param q_points
+#' @param pqp_cex
+#' @param lpos
+#' @param signalFactor
+#' @param zROC
+#' @param qfun
+#' @param lim
+#' @param rocfit_cex
+#'
+#' @return
+#' @export
+#'
+#' @examples
 plot_fit <- function(data,pp,subject=NULL,factors=NULL,
                      stat=NULL,stat_name="",
                      ci=c(.025,.5,.975),do_plot=TRUE,
@@ -589,6 +666,36 @@ plot_fit <- function(data,pp,subject=NULL,factors=NULL,
 }
 
 
+#' Title
+#'
+#' @param data
+#' @param pp
+#' @param factors
+#' @param stat
+#' @param stat_name
+#' @param ci
+#' @param do_plot
+#' @param xlim
+#' @param ylim
+#' @param layout
+#' @param mfcol
+#' @param probs
+#' @param data_lwd
+#' @param fit_lwd
+#' @param qp_cex
+#' @param q_points
+#' @param pqp_cex
+#' @param lpos
+#' @param signalFactor
+#' @param zROC
+#' @param qfun
+#' @param lim
+#' @param rocfit_cex
+#'
+#' @return
+#' @export
+#'
+#' @examples
 plot_fits <- function(data,pp,factors=NULL,
                       stat=NULL,stat_name="",ci=c(.025,.5,.975),do_plot=TRUE,
                       xlim=NULL,ylim=NULL,
@@ -604,6 +711,18 @@ plot_fits <- function(data,pp,factors=NULL,
              signalFactor,zROC=qfun,lim,rocfit_cex)
 }
 
+#' Title
+#'
+#' @param data
+#' @param zROC
+#' @param qfun
+#' @param main
+#' @param lim
+#'
+#' @return
+#' @export
+#'
+#' @examples
 plot_roc <- function(data,zROC=FALSE,qfun=NULL,main="",lim=NULL)
 
 {
@@ -697,6 +816,21 @@ plot_trials <- function(data,pp=NULL,subject=NULL,factors=NULL,Fcovariates=NULL,
 #                       filter="sample";subfilter=0
 #                       layout=c(3,4);width=NULL;height=NULL
 # subfilter=2000
+#' Title
+#'
+#' @param samples
+#' @param pdf_name
+#' @param interactive
+#' @param filter
+#' @param subfilter
+#' @param layout
+#' @param width
+#' @param height
+#'
+#' @return
+#' @export
+#'
+#' @examples
 check_run <- function(samples,pdf_name="check_run.pdf",interactive=TRUE,
                       filter="sample",subfilter=0,
                       layout=c(3,4),width=NULL,height=NULL) {
