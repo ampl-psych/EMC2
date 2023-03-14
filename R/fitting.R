@@ -218,7 +218,7 @@ check_gd <- function(samplers, stage, max_gd, trys, verbose){
     gd <- gd_short
     samplers <- samplers_short
   }
-  ok_gd <- ifelse(all(is.finite(gd)), all(gd < max_gd), FALSE)
+  ok_gd <- ifelse(all(is.finite(gd)), mean(gd) < max_gd, FALSE)
   if(verbose){
     message("Mean mpsrf= ",round(mean(gd),3),", Max alpha mpsrf/psrf = ",round(max(gd),3))
   }
