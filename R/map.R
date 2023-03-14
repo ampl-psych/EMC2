@@ -147,6 +147,19 @@ map_mcmc <- function(mcmc,design,model, include_constants = TRUE)
 }
 
 
+#' Maps a parameter vector through a design to show parameter values for each
+#' design cell.
+#'
+#' @param p_vector The parameter vector (must have form of sampled_p_vector(design)
+#' @param design The design (created by make_design)
+#' @param model Optional model type (if not in design)
+#' @param digits For rounding outputs
+#' @param remove_subjects Default true removes subjects from output design
+#'
+#' @return
+#' @export
+#'
+#' @examples
 mapped_par <- function(p_vector,design,model=NULL,
                        digits=3,remove_subjects=TRUE)
   # Show augmented data and corresponding mapped parameter

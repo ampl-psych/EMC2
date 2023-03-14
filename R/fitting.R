@@ -34,9 +34,12 @@ run_emc <- function(samplers, stage = NULL, iter = 1000, max_gd = 1.1, min_es = 
     samplers <- loadRData(samplers)
   }
   if(is.null(stage)){
-    stage <- names(which(colSums(chain_n(samplers)) == 0))[1]
-  }
-  if(stage == "preburn" || is.na(stage)  ){
+    nstage <- colSums(chain_n(samplers))
+    if (nstage["preburn"]==0) stage <- "preburn" else
+      if (nstage["sample"]>0) stage <- "sample" else
+       stage <- names(nstage)[which(nstage==0)[1]-1]
+    }
+  if(stage == "preburn"){
     samplers <- run_samplers(samplers, stage = "preburn", iter = preburn, cores_for_chains = cores_for_chains, p_accept = p_accept,
                              step_size = step_size,  verbose = verbose, verboseProgress = verboseProgress,
                              fileName = fileName,
@@ -57,7 +60,7 @@ run_emc <- function(samplers, stage = NULL, iter = 1000, max_gd = 1.1, min_es = 
                               particles = particles, particle_factor =  particle_factor,
                               cores_per_chain = cores_per_chain, max_trys = max_trys)
   }
-  if(any(stage %in% c("preburn", "burn", "adapt", "sample")) || is.na(stage) ){
+  if(any(stage %in% c("preburn", "burn", "adapt", "sample")) ){
     samplers <-  run_samplers(samplers, stage = "sample", iter = iter, max_gd = max_gd, cores_for_chains = cores_for_chains, p_accept = p_accept,
                               step_size = step_size,  verbose = verbose, verboseProgress = verboseProgress,
                               fileName = fileName,
