@@ -1,1 +1,3 @@
-EMC2.so
+*.o
+*.so
+*.dll
