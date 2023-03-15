@@ -1,17 +1,6 @@
 rm(list=ls())
-test_in_package <- F
-
-if(test_in_package){
-  library(devtools)
-  load_all()
-} else{
-  library(Rcpp)
-  all_files <- list.files("R")
-  all_files <- all_files[!all_files %in% "EMC2-package.R"]
-  for(file in all_files) source(paste0("R/", file))
-  sourceCpp("~/Documents/UVA/2022/test_rcpp/test_Niek.cpp")
-}
-
+library(devtools)
+load_all()
 
 load("~/Documents/UVA/2022/EMC_test/PNAS.RData")
 
@@ -41,8 +30,7 @@ dat_single <- dat[which(dat$subjects %in% (unique(dat$subjects)[1])),]
 dat_single <- droplevels(dat_single)
 
 samplers <- make_samplers(dat_single, design_B, type = "single", n_chains = 3)
-samplers <- auto_burn(samplers, verbose = T, min_es = 1000)
-# samplers <- run_samplers(samplers, stage = "preburn", iter = 50, verbose = T, cores_per_chain = 1, cores_for_chains = 1)
+samplers <- auto_burn(samplers, verbose = T, cores_per_chain = 4, mean_gd = 1.2)
 
 samplersC_merg <- merge_samples(samplers)
 samplersR_merg <- merge_samples(samplers)

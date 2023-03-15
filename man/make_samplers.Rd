@@ -14,8 +14,7 @@ make_samplers(
   prior_list = NULL,
   par_groups = NULL,
   n_factors = NULL,
-  constraintMat = NULL,
-  covariates = NULL
+  constraintMat = NULL
 )
 }
 \arguments{

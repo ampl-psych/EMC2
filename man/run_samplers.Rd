@@ -9,6 +9,7 @@ run_samplers(
   stage,
   iter = NULL,
   max_gd = NULL,
+  mean_gd = NULL,
   min_es = 0,
   min_unique = 750,
   p_accept = 0.8,
@@ -32,6 +33,8 @@ run_samplers(
 
 \item{max_gd}{A double. The maximum gelman diagnostic convergence allowed. Will stop if below this number.}
 
+\item{mean_gd}{A double. The mean gelman diagnostic convergence allowed. Will stop if below this number.}
+
 \item{min_es}{An integer. The minimal effective size required.}
 
 \item{min_unique}{An integer. The minimal number of samples required. Only works in adaptation.}
@@ -40,7 +43,9 @@ run_samplers(
 
 \item{step_size}{An integer. After each of these steps, the requirements will be checked if they are met and proposal distributions will be updated. Default = 100.}
 
-\item{verbose}{Logical. Whether to print sampling related messages}
+\item{verbose}{Logical. Whether to print emc related messages}
+
+\item{verboseProgress}{Logical. Whether to print sampling related messages}
 
 \item{fileName}{A string. If specified will autosave samplers at this location.}
 
