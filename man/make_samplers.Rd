@@ -13,7 +13,6 @@ make_samplers(
   rt_resolution = 0.02,
   prior_list = NULL,
   par_groups = NULL,
-  subject_covariates = NULL,
   n_factors = NULL,
   constraintMat = NULL,
   covariates = NULL

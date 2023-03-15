@@ -63,10 +63,10 @@ make_design <- function(Flist,Ffactors,Rlevels,model,
 #' special contrast for SDT threshold factor
 #' first = intercept, cumsum other (positive) levels to force non-decreasing
 #'
-#' @param n
-#' @param levels
+#' @param n an integer. The number of items for which to create the contrast.
+#' @param levels Character vector. the factor levels which will be the colnames of the returning matrix.
 #'
-#' @return
+#' @return a contrast matrix.
 #' @export
 #'
 #' @examples
@@ -80,11 +80,11 @@ contr.increasing <- function(n,levels=NULL)
 
 #' contr.anova()
 #'
-#' orthogonal helmert contrast scaled to estimate differences between conditions
+#' orthogonal helmert contrast scaled to estimate differences between conditions. Use in make_design.
 #'
-#' @param n
+#' @param n an integer. the number of items for which to create the contrast
 #'
-#' @return
+#' @return a contrast matrix.
 #' @export
 #'
 #' @examples
@@ -469,17 +469,6 @@ design_model <- function(data,design,model=NULL,prior = NULL,
 }
 
 
-#' make_dm()
-#'
-#' @param form
-#' @param da
-#' @param Clist
-#' @param Fcovariates
-#'
-#' @return
-#' @export
-#'
-#' @examples
 make_dm <- function(form,da,Clist=NULL,Fcovariates=NULL)
   # Makes a design matrix based on formula form from augmented data frame da
 {

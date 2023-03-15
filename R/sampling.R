@@ -12,10 +12,9 @@ pmwgs <- function(dadm, variant_funs, pars = NULL, ll_func = NULL, prior = NULL,
   samples <- variant_funs$sample_store(dadm, pars, ...)
   sampler <- list(
     data = dadm_list,
-    par_names = c(pars, names(dadm$subject_covariates)),
+    par_names = pars,
     subjects = subjects,
-    n_pars = length(pars) + length(dadm$subject_covariates),
-    subject_covariates = dadm$subject_covariates,
+    n_pars = length(pars),
     n_subjects = length(subjects),
     ll_func = ll_func,
     samples = samples,
@@ -124,7 +123,7 @@ run_stage <- function(pmwgs,
     j <- start_iter + i
 
     # Gibbs step
-    pars <- variant_funs$gibbs_step(pmwgs, rbind(pmwgs$samples$alpha[,,j-1], pmwgs$subject_covariates))
+    pars <- variant_funs$gibbs_step(pmwgs, pmwgs$samples$alpha[,,j-1])
     # Particle step
     proposals=mclapply(X=1:pmwgs$n_subjects,FUN = new_particle, data, particles, pars, eff_mu,
                        eff_var, mix, pmwgs$ll_func, epsilon, subjects, components,
