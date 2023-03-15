@@ -18,7 +18,9 @@ filter_obj <- function(obj, idx){
   dim_names <- dimnames(obj)
   if(is.null(dims)) return(obj)
   if(length(dims) == 2){
-    if(isSymmetric(round(obj, 3))) return(obj) #Don't extend priors and theta_mu_var_inv
+    if(nrow(obj) == ncol(obj)){
+      if(abs(sum(rowSums(obj/max(obj)) - colSums(obj/max(obj)))) < .1) return(obj)
+    }
   }
   obj <- obj[slice.index(obj, length(dims)) %in% idx]
   dims[length(dims)] <- length(idx)

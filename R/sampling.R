@@ -313,7 +313,9 @@ extend_obj <- function(obj, n_extend){
   n_dimensions <- length(old_dim)
   if(is.null(old_dim) | n_dimensions == 1) return(obj)
   if(n_dimensions == 2){
-    if(isSymmetric(round(obj, 1))) return(obj) #Don't extend priors and theta_mu_var_inv
+    if(nrow(obj) == ncol(obj)){
+      if(abs(sum(rowSums(obj/max(obj)) - colSums(obj/max(obj)))) < .1) return(obj)
+    }
   }
   new_dim <- c(rep(0, (n_dimensions -1)), n_extend)
   extended <- array(NA_real_, dim = old_dim +  new_dim, dimnames = dimnames(obj))

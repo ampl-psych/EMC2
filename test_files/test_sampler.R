@@ -26,11 +26,12 @@ design_B <- make_design(
 
 
 # Test single subject
-dat_single <- dat[which(dat$subjects %in% (unique(dat$subjects)[1])),]
+dat_single <- dat[which(dat$subjects %in% (unique(dat$subjects)[1:4])),]
 dat_single <- droplevels(dat_single)
 
-samplers <- make_samplers(dat_single, design_B, type = "single", n_chains = 3)
-samplers <- auto_burn(samplers, verbose = T, cores_per_chain = 4, mean_gd = 1.2)
+samplers <- make_samplers(dat_single, design_B, type = "standard", n_chains = 3)
+debug(extend_obj)
+samplers <- auto_burn(samplers, verbose = T, cores_per_chain = 4, cores_for_chains = 1, mean_gd = 1.2)
 
 samplersC_merg <- merge_samples(samplers)
 samplersR_merg <- merge_samples(samplers)
