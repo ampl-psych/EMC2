@@ -2,9 +2,9 @@
 #' Plot MCMC chains
 #'
 #' @param pmwg_mcmc A list of samplers or samplers converted to mcmc objects.
-#' @param layout a vector or matrix specifying the layout as in par(mfrow = layout).
-#' @param subject a string or integer which you can specify to only plot chains of that subject.
-#' @param ylim an intenger. The y limits of the chain plot.
+#' @param layout A vector or matrix specifying the layout as in par(mfrow = layout).
+#' @param subject A string or integer which you can specify to only plot chains of that subject.
+#' @param ylim The y limits of the chain plot.
 #' @param selection a string. Specifies which chains you want to plot.
 #' @param filter a string. Specifies which stage you want to plot.
 #' @param thin an integer. Specify if you want to thin the chains by a factor n.
