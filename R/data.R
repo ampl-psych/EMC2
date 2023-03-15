@@ -249,4 +249,25 @@ post_predict <- function(samples,hyper=FALSE,n_post=100,expand=1,
   return(post_out)
 }
 
+#' Make random effects.
+#'
+#' @param design A design list. The design as specified by `make_design`
+#' @param group_means A numeric vector. The group level means for each parameter, in the same order as `sampled_p_vector(design)`
+#' @param n_subj An integer. The number of random effects to create.
+#' @param variance_proportion A double. Optional. If covariances aren't specified, the variances will be created by multiplying the means by this number. The covariances will be 0.
+#' @param covariances A covariance matrix. Optional. Specify the intended covariance matrix.
+#'
+#' @return A matrix of random effects.
+#' @export
+#'
+#' @examples
+make_random_effects <- function(design, group_means, n_subj, variance_proportion = .2, covariances = NULL){
+  if(length(group_means) != length(sampled_p_vector(design))) stop("You must specify as many means as parameters in your design")
+  if(is.null(covariances)) covariances <- diag(abs(group_means)*variance_proportion)
+  random_effects <- mvtnorm::rmvnorm(n_subj,mean=group_means,sigma=covariances)
+  colnames(random_effects) <- names(sampled_p_vector(design))
+  rownames(random_effects) <- as.character(1:n_subj)
+  return(random_effects)
+}
+
 

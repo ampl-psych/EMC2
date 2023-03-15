@@ -6,7 +6,8 @@
 \usage{
 auto_burn(
   samplers,
-  max_gd = 1.2,
+  max_gd = NULL,
+  mean_gd = 1.1,
   min_es = 0,
   preburn = 150,
   p_accept = 0.8,
@@ -26,6 +27,8 @@ auto_burn(
 
 \item{max_gd}{A double. The maximum gelman diagnostic convergence allowed. Will stop if below this number.}
 
+\item{mean_gd}{A double. The mean gelman diagnostic convergence allowed. Will stop if below this number.}
+
 \item{min_es}{An integer. The minimal effective size required.}
 
 \item{preburn}{An integer. The number of iterations run for preburn stage.}
@@ -34,7 +37,9 @@ auto_burn(
 
 \item{step_size}{An integer. After each of these steps, the requirements will be checked if they are met and proposal distributions will be updated. Default = 100.}
 
-\item{verbose}{Logical. Whether to print sampling related messages}
+\item{verbose}{Logical. Whether to print emc related messages}
+
+\item{verboseProgress}{Logical. Whether to print sampling related messages}
 
 \item{fileName}{A string. If specified will autosave samplers at this location.}
 
