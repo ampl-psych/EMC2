@@ -118,7 +118,8 @@ run_samplers <- function(samplers, stage, iter = NULL, max_gd = NULL, min_es = 0
     samplers <- progress$samplers
     if(!is.null(fileName)){
       fileName <- fix_fileName(fileName)
-      save(samplers, file = fileName)
+
+      save(get_attributes(samplers, attributes), file = fileName)
     }
   }
   samplers <- get_attributes(samplers, attributes)
