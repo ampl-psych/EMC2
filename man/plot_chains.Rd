@@ -20,11 +20,11 @@ plot_chains(
 \arguments{
 \item{pmwg_mcmc}{A list of samplers or samplers converted to mcmc objects.}
 
-\item{layout}{a vector or matrix specifying the layout as in par(mfrow = layout).}
+\item{layout}{A vector or matrix specifying the layout as in par(mfrow = layout).}
 
-\item{subject}{a string or integer which you can specify to only plot chains of that subject.}
+\item{subject}{A string or integer which you can specify to only plot chains of that subject.}
 
-\item{ylim}{an intenger. The y limits of the chain plot.}
+\item{ylim}{The y limits of the chain plot.}
 
 \item{selection}{a string. Specifies which chains you want to plot.}
 
