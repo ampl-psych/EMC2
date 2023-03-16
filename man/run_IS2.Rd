@@ -24,6 +24,8 @@ run_IS2(
 
 \item{IS_samples}{An integer. Specifies how many IS2 samples to collect}
 
+\item{stepsize_particles}{An integer. It will increase particles till optimal variance with this stepsize.}
+
 \item{max_particles}{An integer. Specifies the maximum number of particles to collect before stopping one IS iteration.}
 
 \item{n_cores}{An integer. Specifies how many cores to run IS_2 on.}
