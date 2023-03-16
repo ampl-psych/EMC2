@@ -94,3 +94,4 @@ log_likelihood_joint <- function(pars, dadms, component = NULL)
   return(total_ll)
 }
 
+
