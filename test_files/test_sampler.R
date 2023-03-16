@@ -27,7 +27,7 @@ ll_func <- function(pars, dadm){
   return(sum(log(pmax(out, 1e-10))))
 }
 
-design_B <- make_design(custom_p_vector = c("B", "t0", "v"), model=ll_func)
+design_B <- make_design(custom_p_vector = c("a", "t0", "v"), model=ll_func)
 
 
 # Test single subject
@@ -35,7 +35,7 @@ dat_single <- dat[which(dat$subjects %in% (unique(dat$subjects)[1:4])),]
 dat_single <- droplevels(dat_single)
 
 samplers <- make_samplers(dat_single, design_B, type = "standard", n_chains = 3)
-samplers <- auto_burn(samplers, verbose = T, cores_per_chain = 4, cores_for_chains = 3, mean_gd = 1.2)
+samplers <- auto_burn(samplers, verbose = T, cores_per_chain = 4, cores_for_chains = 3)
 
 samplersC_merg <- merge_samples(samplers)
 samplersR_merg <- merge_samples(samplers)
