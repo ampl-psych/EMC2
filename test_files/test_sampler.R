@@ -5,6 +5,9 @@ load_all()
 load("~/Documents/UVA/2022/EMC_test/PNAS.RData")
 
 dat <- data[,c("s","E","S","R","RT")]
+dat$response <- dat$R
+dat$response[dat$response == "right"] <- "upper"
+dat$response[dat$response == "left"] <- 'lower'
 names(dat)[c(1,5)] <- c("subjects","rt")
 levels(dat$R) <- levels(dat$S)
 
@@ -16,13 +19,15 @@ Emat <- matrix(c(0,-1,0,0,0,-1),nrow=3)
 dimnames(Emat) <- list(NULL,c("a-n","a-s"))
 Emat
 
-design_B <- make_design(
-  Ffactors=list(subjects=levels(dat$subjects),S=levels(dat$S),E=levels(dat$E)),
-  Rlevels=levels(dat$R),matchfun=function(d)d$S==d$lR,
-  Clist=list(lM=ADmat,lR=ADmat,S=ADmat,E=Emat),
-  Flist=list(v~lM,s~1,B~E,A~1,t0~1),
-  constants=c(s=log(1)),
-  model=rdmB)
+ll_func <- function(pars, dadm){
+  out <- rtdists::ddiffusion(dadm, a = exp(pars["a"]), t0 = exp(pars["t0"]),
+                      v = pars["v"])
+  bad <- (out<1e-10)|(!is.finite(out))
+  out[bad] <- 1e-10
+  return(sum(log(pmax(out, 1e-10))))
+}
+
+design_B <- make_design(custom_p_vector = c("B", "t0", "v"), model=ll_func)
 
 
 # Test single subject
@@ -30,8 +35,7 @@ dat_single <- dat[which(dat$subjects %in% (unique(dat$subjects)[1:4])),]
 dat_single <- droplevels(dat_single)
 
 samplers <- make_samplers(dat_single, design_B, type = "standard", n_chains = 3)
-debug(extend_obj)
-samplers <- auto_burn(samplers, verbose = T, cores_per_chain = 4, cores_for_chains = 1, mean_gd = 1.2)
+samplers <- auto_burn(samplers, verbose = T, cores_per_chain = 4, cores_for_chains = 3, mean_gd = 1.2)
 
 samplersC_merg <- merge_samples(samplers)
 samplersR_merg <- merge_samples(samplers)
