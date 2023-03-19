@@ -87,6 +87,7 @@ dexGaussianS <- function(rt,pars)
   dexGaussS <- function(rt,pars)
   {
     rt <- rt - pars[,"SSD"]
+    dimnames(pars)[[2]][dimnames(pars)[[2]] %in% c("mu","sigma","tau")] <- c("x","y","z")
     dimnames(pars)[[2]][dimnames(pars)[[2]]=="muS"] <- "mu"
     dimnames(pars)[[2]][dimnames(pars)[[2]]=="sigmaS"] <- "sigma"
     dimnames(pars)[[2]][dimnames(pars)[[2]]=="tauS"] <- "tau"
@@ -106,6 +107,7 @@ pexGaussianS <- function(rt,pars)
   pexGaussS <- function(rt,pars)
   {
     rt <- rt - pars[,"SSD"]
+    dimnames(pars)[[2]][dimnames(pars)[[2]] %in% c("mu","sigma","tau")] <- c("x","y","z")
     dimnames(pars)[[2]][dimnames(pars)[[2]]=="muS"] <- "mu"
     dimnames(pars)[[2]][dimnames(pars)[[2]]=="sigmaS"] <- "sigma"
     dimnames(pars)[[2]][dimnames(pars)[[2]]=="tauS"] <- "tau"
