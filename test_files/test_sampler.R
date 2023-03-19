@@ -2,7 +2,7 @@ rm(list = ls())
 library(devtools)
 # Rcpp only works as fast with install like this unfortunately, if this throws errors, restarting Rstudio worked for me
 # devtools::install("~/Documents/UVA/2022/EMC2")
-library(EMC2)
+load_all()
 # load_all()
 load("test_files/PNAS.RData")
 
@@ -18,7 +18,6 @@ Emat <- matrix(c(0,-1,0,0,0,-1),nrow=3)
 dimnames(Emat) <- list(NULL,c("a-n","a-s"))
 Emat
 
-undebug(make_design)
 design_RDM <- make_design(
   Ffactors=list(subjects=levels(dat$subjects),S=levels(dat$S),E=levels(dat$E)),
   Rlevels=levels(dat$R),matchfun=function(d)d$S==d$lR,
@@ -33,12 +32,11 @@ dat_single <- dat[which(dat$subjects %in% (unique(dat$subjects)[1])),]
 dat_single <- droplevels(dat_single)
 
 # first speed test:
-undebug(make_samplers)
 samplers <- make_samplers(dat_single, design_RDM, type = "single", n_chains = 1)
 # first let's run init separately
 load_all()
-debug(calc_ll_manager)
-samplers <- run_samplers(samplers, stage = "preburn", iter = 10, cores_per_chain =1)
+debug(run_stage)
+samplers <- run_samplers(samplers, stage = "preburn", iter = 1000, cores_per_chain =1, useC = T)
 
 
 # Note that the useC argument is a bit deceptive. It uses the C dists in any case, but if TRUE will also use the C log_likelihood_race

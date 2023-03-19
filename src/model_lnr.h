@@ -23,14 +23,13 @@ NumericMatrix Ntransform_lnr(NumericMatrix x) {
 }
 
 NumericVector plnr_c(NumericVector rts, NumericMatrix pars, LogicalVector idx){
-  NumericVector t0 = pars(_, 2);
-  t0 = t0[idx];
-  rts = rts[idx];
-  rts = rts - t0;
-  NumericVector out(rts.length());
-  for(int i = 0; i < rts.length(); i++){
-    if(rts[i] > 0){
-      out[i] = R::plnorm(rts[i], pars(i, 0), pars(i, 1), TRUE, FALSE);
+  int n = sum(idx);
+  NumericVector out(n);
+  for(int i = 0; i < n; i++){
+    if(idx[i] == TRUE){
+      if(rts[i] - pars(i,2) > 0){
+        out[i] = R::plnorm(rts[i] - pars(i,2), pars(i, 0), pars(i, 1), TRUE, FALSE);
+      }
     }
   }
 
@@ -38,20 +37,19 @@ NumericVector plnr_c(NumericVector rts, NumericMatrix pars, LogicalVector idx){
 }
 
 NumericVector dlnr_c(NumericVector rts, NumericMatrix pars, LogicalVector idx){
-  NumericVector t0 = pars(_, 2);
-  t0 = t0[idx];
-  rts = rts[idx];
-  rts = rts - t0;
-  NumericVector out(rts.length());
-  for(int i = 0; i < rts.length(); i++){
-    if(rts[i] > 0){
-      out[i] = R::dlnorm(rts[i], pars(i, 0), pars(i, 1), FALSE);
+  int n = sum(idx);
+  NumericVector out(n);
+  for(int i = 0; i < n; i++){
+    if(idx[i] == TRUE){
+      if(rts[i] - pars(i,2) > 0){
+        out[i] = R::dlnorm(rts[i] - pars(i,2), pars(i, 0), pars(i, 1), FALSE);
+      }
     }
+
   }
 
   return(out);
 }
-
 
 
 #endif

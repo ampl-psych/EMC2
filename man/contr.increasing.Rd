@@ -7,7 +7,12 @@
 contr.increasing(n, levels = NULL)
 }
 \arguments{
-\item{levels}{}
+\item{n}{an integer. The number of items for which to create the contrast.}
+
+\item{levels}{Character vector. the factor levels which will be the colnames of the returning matrix.}
+}
+\value{
+a contrast matrix.
 }
 \description{
 special contrast for SDT threshold factor

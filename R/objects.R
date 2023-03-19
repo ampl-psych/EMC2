@@ -18,7 +18,11 @@ filter_obj <- function(obj, idx){
   dim_names <- dimnames(obj)
   if(is.null(dims)) return(obj)
   if(length(dims) == 2){
-    if(isSymmetric(round(obj, 3))) return(obj) #Don't extend priors and theta_mu_var_inv
+    if(nrow(obj) == ncol(obj)){
+      if(nrow(obj) > 1){
+        if(abs(sum(rowSums(obj/max(obj)) - colSums(obj/max(obj)))) < .1) return(obj)
+      }
+    }
   }
   obj <- obj[slice.index(obj, length(dims)) %in% idx]
   dims[length(dims)] <- length(idx)
@@ -213,7 +217,7 @@ as_Mcmc <- function(sampler,filter=stages,thin=1,subfilter=0,
 
 
 
-# samplers=pmwg_mcmc
+# samplers=pmwg_mcmc; mapped=FALSE;include_constants=FALSE
 as_mcmc.list <- function(samplers,
                          selection=c("alpha","mu","variance","covariance","correlation","LL","epsilon")[1],
                          filter="burn",thin=1,subfilter=0,mapped=FALSE,include_constants=FALSE)
@@ -248,7 +252,7 @@ as_mcmc.list <- function(samplers,
     } else warning("Can only include constants in alpha or mu")
   }
 
-  if (selection %in% c("alpha")) {
+  if (selection %in% c("alpha","LL")) {
     nChains <- length(mcmcList)
     ns <- length(samplers[[1]]$subjects)
     out <- vector(mode="list",length=ns)

@@ -90,53 +90,30 @@ double dlba_norm(double t, double A,double b, double v, double sv,
 }
 
 NumericVector dlba_c(NumericVector rts, NumericMatrix pars, LogicalVector idx){
-  NumericVector v = pars(_, 0);
-  NumericVector sv = pars(_, 1);
-  NumericVector B = pars(_, 2);
-  NumericVector A = pars(_, 3);
-  NumericVector t0 = pars(_, 4);
-
-  rts = rts[idx];
-  v = v[idx];
-  sv = sv[idx];
-  B = B[idx];
-  A = A[idx];
-  t0 = t0[idx];
-  NumericVector b = B + A;
-  rts = rts - t0;
-  int n = rts.length();
+  //v = 0, sv = 1, B = 2, A = 3, t0 = 4
+  int n = sum(idx);
   NumericVector out(n);
   for(int i = 0; i < n; i++){
-    if((rts[i] > 0) & (b[i] >= A[i]) & (t0[i] > 0.05) & ((A[i] > 1e-6) | (A[i] == 0))){
-      out[i] = dlba_norm(rts[i], A[i], b[i], v[i], sv[i], true, false);
+    if(idx[i] == TRUE){
+      if((rts[i] - pars(i,4) > 0) & (pars(i,2) >= 0) & (pars(i,4) > 0.05) & ((pars(i,3) > 1e-6) | (pars(i,3) == 0))){
+        out[i] = dlba_norm(rts[i] - pars(i,4), pars(i,3), pars(i,2) + pars(i,3), pars(i,0), pars(i,1), true, false);
+      }
     }
   }
-
   return(out);
 }
 
 NumericVector plba_c(NumericVector rts, NumericMatrix pars, LogicalVector idx){
-  NumericVector v = pars(_, 0);
-  NumericVector sv = pars(_, 1);
-  NumericVector B = pars(_, 2);
-  NumericVector A = pars(_, 3);
-  NumericVector t0 = pars(_, 4);
-  rts = rts[idx];
-  v = v[idx];
-  sv = sv[idx];
-  B = B[idx];
-  A = A[idx];
-  t0 = t0[idx];
-  NumericVector b = B + A;
-  rts = rts - t0;
-  int n = rts.length();
+  //v = 0, sv = 1, B = 2, A = 3, t0 = 4
+  int n = sum(idx);
   NumericVector out(n);
   for(int i = 0; i < n; i++){
-    if((rts[i] > 0) & (b[i] >= A[i]) & (t0[i] > 0.05) & ((A[i] > 1e-6) | (A[i] == 0))){
-      out[i] = plba_norm(rts[i], A[i], b[i], v[i], sv[i], true, false);
+    if(idx[i] == TRUE){
+      if((rts[i] > 0) & (pars(i,2) >= 0) & (pars(i,4) > 0.05) & ((pars(i,3) > 1e-6) | (pars(i,3) == 0))){
+        out[i] = plba_norm(rts[i] - pars(i,4), pars(i,3), pars(i,2) + pars(i,3), pars(i,0), pars(i,1), true, false);
+      }
     }
   }
-
   return(out);
 }
 

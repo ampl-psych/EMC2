@@ -7,8 +7,11 @@
 contr.anova(n)
 }
 \arguments{
-\item{n}{}
+\item{n}{an integer. the number of items for which to create the contrast}
+}
+\value{
+a contrast matrix.
 }
 \description{
-orthogonal helmert contrast scaled to estimate differences between conditions
+orthogonal helmert contrast scaled to estimate differences between conditions. Use in make_design.
 }

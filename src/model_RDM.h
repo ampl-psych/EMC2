@@ -111,24 +111,14 @@ double digt(double t, double k = 1., double l = 1., double a = .1, double thresh
 
 
 NumericVector drdm_c(NumericVector rts, NumericMatrix pars, LogicalVector idx){
-  NumericVector v = pars(_, 0);
-  NumericVector B = pars(_, 1);
-  NumericVector A = pars(_, 2);
-  NumericVector t0 = pars(_, 3);
-  NumericVector s = pars(_, 4);
-
-  rts = rts[idx];
-  v = v[idx];
-  B = B[idx];
-  A = A[idx];
-  t0 = t0[idx];
-  s = s[idx];
-  rts = rts - t0;
-  int n = rts.length();
+  //v = 0, B = 1, A = 2, t0 = 3, s = 4
+  int n = sum(idx);
   NumericVector out(n);
   for(int i = 0; i < n; i++){
-    if((rts[i] > 0) & (t0[i] > 0.05) & ((A[i] > 1e-6) | (A[i] == 0))){
-      out[i] = digt(rts[i], B[i]/s[i] + .5 * A[i]/s[i], v[i]/s[i], .5*A[i]/s[i]);
+    if(idx[i] == TRUE){
+      if((rts[i] - pars(i,3) > 0) & (pars(i,3) > 0.05) & ((pars(i,2) > 1e-6) | (pars(i,2) == 0))){
+        out[i] = digt(rts[i] - pars(i,3), pars(i,1)/pars(i,4) + .5 * pars(i,2)/pars(i,4), pars(i,0)/pars(i,4), .5*pars(i,2)/pars(i,4));
+      }
     }
   }
 
@@ -136,24 +126,14 @@ NumericVector drdm_c(NumericVector rts, NumericMatrix pars, LogicalVector idx){
 }
 
 NumericVector prdm_c(NumericVector rts, NumericMatrix pars, LogicalVector idx){
-  NumericVector v = pars(_, 0);
-  NumericVector B = pars(_, 1);
-  NumericVector A = pars(_, 2);
-  NumericVector t0 = pars(_, 3);
-  NumericVector s = pars(_, 4);
-
-  rts = rts[idx];
-  v = v[idx];
-  B = B[idx];
-  A = A[idx];
-  t0 = t0[idx];
-  s = s[idx];
-  rts = rts - t0;
-  int n = rts.length();
+  //v = 0, B = 1, A = 2, t0 = 3, s = 4
+  int n = sum(idx);
   NumericVector out(n);
   for(int i = 0; i < n; i++){
-    if((rts[i] > 0) & (t0[i] > 0.05) & ((A[i] > 1e-6) | (A[i] == 0))){
-      out[i] = pigt(rts[i], B[i]/s[i] + .5 * A[i]/s[i], v[i]/s[i], .5*A[i]/s[i]);
+    if(idx[i] == TRUE){
+      if((rts[i] - pars(i,3) > 0) & (pars(i,3) > 0.05) & ((pars(i,2) > 1e-6) | (pars(i,2) == 0))){
+        out[i] = pigt(rts[i] - pars(i,3), pars(i,1)/pars(i,4) + .5 * pars(i,2)/pars(i,4), pars(i,0)/pars(i,4), .5*pars(i,2)/pars(i,4));
+      }
     }
   }
 

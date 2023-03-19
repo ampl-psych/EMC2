@@ -1,14 +1,4 @@
-#' dLNR()
-#'
-#' density for single accumulator
-#'
-#' @param rt
-#' @param pars
-#'
-#' @return
-#' @export
-#'
-#' @examples
+
 dLNR <- function(rt,pars){
   rt <- rt - pars[,"t0"]
   out <- numeric(length(rt))
@@ -17,18 +7,6 @@ dLNR <- function(rt,pars){
   out
 }
 
-
-#' pLNR()
-#'
-#' Cumulative density for single accumulator
-#'
-#' @param rt
-#' @param pars
-#'
-#' @return
-#' @export
-#'
-#' @examples
 pLNR <- function(rt,pars){
   rt <- rt - pars[,"t0"]
   out <- numeric(length(rt))
@@ -38,17 +16,6 @@ pLNR <- function(rt,pars){
 
 }
 
-
-#' rLNR()
-#'
-#' @param lR empty latent response factor lR with one level for each accumulator.
-#' @param pars matrix of corresponding parameter values named as in p_types
-#' @param p_types
-#'
-#' @return
-#' @export
-#'
-#' @examples
 rLNR <- function(lR,pars,p_types=c("m","s","t0")){
   if (!all(p_types %in% dimnames(pars)[[2]]))
     stop("pars must have columns ",paste(p_types,collapse = " "))

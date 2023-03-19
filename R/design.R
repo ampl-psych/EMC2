@@ -21,14 +21,23 @@
 #' @param Ffunctions Factor Functions. Functions to specify specific parameterisations, or functions of parameters.
 #' @param adapt For future compatibility. Ignore.
 #' @param report_p_vector TRUE (default) or FALSE. if TRUE, returns the vector of parameters to be estimated.
+#' @param custom_p_vector A character vector. If specified, a custom likelihood function can be supplied.
 #'
 #' @return A design list.
 #' @export
 #'
 #'
-make_design <- function(Flist,Ffactors,Rlevels,model,
+make_design <- function(Flist = NULL,Ffactors = NULL,Rlevels = NULL,model,
                         Clist=NULL,matchfun=NULL,constants=NULL,Fcovariates=NULL,Ffunctions=NULL,
-                        adapt=NULL,report_p_vector=TRUE){
+                        adapt=NULL,report_p_vector=TRUE, custom_p_vector = NULL){
+  if(!is.null(custom_p_vector)){
+    design <- list(Flist = Flist, model = model, Ffactors = Ffactors)
+    attr(design, "sampled_p_names") <-custom_p_vector
+    attr(design, "custom_ll") <- TRUE
+    return(design)
+  }
+
+
   if (model()$type=="SDT") {
     Clist[["lR"]] <- contr.increasing(length(Rlevels),Rlevels)
   }
@@ -63,10 +72,10 @@ make_design <- function(Flist,Ffactors,Rlevels,model,
 #' special contrast for SDT threshold factor
 #' first = intercept, cumsum other (positive) levels to force non-decreasing
 #'
-#' @param n
-#' @param levels
+#' @param n an integer. The number of items for which to create the contrast.
+#' @param levels Character vector. the factor levels which will be the colnames of the returning matrix.
 #'
-#' @return
+#' @return a contrast matrix.
 #' @export
 #'
 #' @examples
@@ -80,11 +89,11 @@ contr.increasing <- function(n,levels=NULL)
 
 #' contr.anova()
 #'
-#' orthogonal helmert contrast scaled to estimate differences between conditions
+#' orthogonal helmert contrast scaled to estimate differences between conditions. Use in make_design.
 #'
-#' @param n
+#' @param n an integer. the number of items for which to create the contrast
 #'
-#' @return
+#' @return a contrast matrix.
 #' @export
 #'
 #' @examples
@@ -175,10 +184,56 @@ add_accumulators <- function(data,matchfun=NULL,simulate=FALSE,type="RACE", Fcov
   }
 }
 
+design_model_custom_ll <- function(data, design, model, prior){
+  if (!is.factor(data$subjects)) {
+    data$subjects <- factor(data$subjects)
+    warning("subjects column was converted to a factor")
+  }
+  dadm <- data
+  attr(dadm, "prior") <- prior
+  attr(dadm, "model") <- function(){
+    return(list(log_likelihood = model))
+  }
+  attr(dadm,"sampled_p_names") <- attr(design, "sampled_p_names")
+  attr(dadm, "custom_ll") <- TRUE
+  return(dadm)
 
+}
+
+
+#' Combines a data frame with a design and (optionally) a user-specified prior
+#'
+#' Performs a series to checks to make sure data frame and design match and
+#' (by default) augments the data frame by adding accumulator factors and
+#' compresses the result for efficient likelihood calculation.
+#'
+#'
+#' @param data  data frame
+#' @param design matching design
+#' @param model if model not an attribute of design can be supplied here
+#' @param prior list specifying prior (default NULL uses default prior)
+#' @param add_acc default TRUE creates and 'augmented' data frame, which
+#' replicates and stacks the supplied data frame for each accumulator and
+#' adds factors to represent accumulators: lR = latent response, with a level
+#' for each response (R) represented by the accumulator and lM = latent match,
+#' a logical indicating if the accumulator represents the correct response as
+#' specified by the design's matchfun.
+#' @param rt_resolution maximum resolution of rt, NULL = no rounding
+#' @param verbose if true reports compression outcome
+#' @param compress default TRUE only keeps unique rows in terms of all
+#' parameter design matrices R, lR and rt (at given resolution)
+#' @param rt_check checks if any truncation and censoring specified in the design
+#' are respected.
+#'
+#' @return a (possibly) augmented and compressed data frame with attributes
+#' specifying the design, pror and how to decompress ready supporting likelihood
+#' computation
+#' @export
+#'
+#' @examples
 design_model <- function(data,design,model=NULL,prior = NULL,
-                         add_acc=TRUE,rt_resolution=0.02,verbose=TRUE,compress=TRUE,rt_check=TRUE)
-  # Combines data frame with a design and model
+                         add_acc=TRUE,rt_resolution=0.02,verbose=TRUE,
+                         compress=TRUE,rt_check=TRUE)
   # Flist is a list of formula objects, one for each p_type
   # da is augmented data (from add_accumulators), must have all of the factors
   #   and covariates that are used in formulas
@@ -188,12 +243,6 @@ design_model <- function(data,design,model=NULL,prior = NULL,
   #   ptypes defines the parameter types for which designs must be specified
   #   transform if a function acting on p_vector before mapping
   #   Ntransform is a function acting on the output of map_p
-  # rt_resolution specifies maximum resolution of rt, NULL = no rounding
-# Compress only keeps unique rows in terms of all parameters design matrices
-#  R, lR and rt (at given resolution). Must always be used in estimation,
-#  only FALSE in internal use by sampled_p_vector and make data.
-# If supplied adds in prior specification
-# Note p_names only contains non-constant parameters names
 {
     compress_dadm <- function(da,designs,Fcov,Ffun)
     # out keeps only unique rows in terms of all parameters design matrices
@@ -445,17 +494,6 @@ design_model <- function(data,design,model=NULL,prior = NULL,
 }
 
 
-#' make_dm()
-#'
-#' @param form
-#' @param da
-#' @param Clist
-#' @param Fcovariates
-#'
-#' @return
-#' @export
-#'
-#' @examples
 make_dm <- function(form,da,Clist=NULL,Fcovariates=NULL)
   # Makes a design matrix based on formula form from augmented data frame da
 {
@@ -581,66 +619,71 @@ dm_list <- function(dadm)
                         levels(dadm$subjects))
   for (i in levels(dadm$subjects)) {
     isin <- dadm$subjects==i         # dadm
-    isin1 <- s_expand==i             # da
-    isin2 <- attr(dadm,"s_data")==i  # data
     dl[[i]] <- dadm[isin,]
     dl[[i]]$subjects <- factor(as.character(dl[[i]]$subjects))
+    if(is.null(attr(dadm, "custom_ll"))){
+      isin1 <- s_expand==i             # da
+      isin2 <- attr(dadm,"s_data")==i  # data
 
-    attr(dl[[i]],"model") <- model
-    attr(dl[[i]],"p_names") <- p_names
-    attr(dl[[i]],"sampled_p_names") <- sampled_p_names
-    attr(dl[[i]],"designs") <- sub_design(designs,isin)
-    attr(dl[[i]],"expand") <- expand[isin1]-min(expand[isin1]) + 1
-    attr(dl[[i]],"s_expand") <- NULL
 
-    attr(dl[[i]],"ok_dadm_winner") <- ok_dadm_winner[isin]
-    attr(dl[[i]],"ok_dadm_looser") <- ok_dadm_looser[isin]
+      attr(dl[[i]],"model") <- model
+      attr(dl[[i]],"p_names") <- p_names
+      attr(dl[[i]],"sampled_p_names") <- sampled_p_names
+      attr(dl[[i]],"designs") <- sub_design(designs,isin)
+      attr(dl[[i]],"expand") <- expand[isin1]-min(expand[isin1]) + 1
+      attr(dl[[i]],"s_expand") <- NULL
 
-    attr(dl[[i]],"ok_da_winner") <- ok_da_winner[isin1]
-    attr(dl[[i]],"ok_da_looser") <- ok_da_looser[isin1]
+      attr(dl[[i]],"ok_dadm_winner") <- ok_dadm_winner[isin]
+      attr(dl[[i]],"ok_dadm_looser") <- ok_dadm_looser[isin]
 
-    attr(dl[[i]],"unique_nort") <- unique_nort[isin]
-    attr(dl[[i]],"unique_nortR") <- unique_nortR[isin]
+      attr(dl[[i]],"ok_da_winner") <- ok_da_winner[isin1]
+      attr(dl[[i]],"ok_da_looser") <- ok_da_looser[isin1]
 
-    isinlR1 <- slR1==i
-    if (!is.null(expand_nort)){
-      attr(dl[[i]],"expand_nort") <-  expand_nort[isinlR1]- min( expand_nort[isinlR1]) + 1
-    }
+      attr(dl[[i]],"unique_nort") <- unique_nort[isin]
+      attr(dl[[i]],"unique_nortR") <- unique_nortR[isin]
 
-    if (!is.null(expand_nortR)){
-      attr(dl[[i]],"expand_nortR") <- expand_nortR[isinlR1]-min(expand_nortR[isinlR1]) + 1
-    }
+      isinlR1 <- slR1==i
+      if (!is.null(expand_nort)){
+        attr(dl[[i]],"expand_nort") <-  expand_nort[isinlR1]- min( expand_nort[isinlR1]) + 1
+      }
 
-    attr(dl[[i]],"ok_trials") <- ok_trials[isin2]
-    if (!is.null(expand_winner)){
-      attr(dl[[i]],"expand_winner") <- expand_winner[isin2]-min(expand_winner[isin2]) + 1
-    }
+      if (!is.null(expand_nortR)){
+        attr(dl[[i]],"expand_nortR") <- expand_nortR[isinlR1]-min(expand_nortR[isinlR1]) + 1
+      }
 
-    if (!is.null(attr(dadm,"expand_uc"))){
-      attr(dl[[i]],"expand_uc") <- as.numeric(factor(expand_uc[isin2]))
-    }
-    if (!is.null(attr(dadm,"expand_lc"))){
-      attr(dl[[i]],"expand_lc") <- as.numeric(factor(expand_lc[isin2]))
-    }
+      attr(dl[[i]],"ok_trials") <- ok_trials[isin2]
+      if (!is.null(expand_winner)){
+        attr(dl[[i]],"expand_winner") <- expand_winner[isin2]-min(expand_winner[isin2]) + 1
+      }
 
-    if (!is.null(attr(dadm,"LT"))){
-      attr(dl[[i]],"LT") <- attr(dadm,"LT")[names(attr(dadm,"LT"))==i]
-    }
-    if (!is.null(attr(dadm,"UT"))){
-      attr(dl[[i]],"UT") <- attr(dadm,"UT")[names(attr(dadm,"UT"))==i]
-    }
-    if (!is.null(attr(dadm,"LC"))){
-      attr(dl[[i]],"LC") <- attr(dadm,"LC")[names(attr(dadm,"LC"))==i]
-    }
-    if (!is.null(attr(dadm,"UC"))){
-      attr(dl[[i]],"UC") <- attr(dadm,"UC")[names(attr(dadm,"UC"))==i]
-    }
+      if (!is.null(attr(dadm,"expand_uc"))){
+        attr(dl[[i]],"expand_uc") <- as.numeric(factor(expand_uc[isin2]))
+      }
+      if (!is.null(attr(dadm,"expand_lc"))){
+        attr(dl[[i]],"expand_lc") <- as.numeric(factor(expand_lc[isin2]))
+      }
 
-    # adapt models
-    if (!is.null(adapt)){
-      attr(dl[[i]],"adapt") <- stats::setNames(list(adapt[[i]],adapt$design),c(i,"design"))
+      if (!is.null(attr(dadm,"LT"))){
+        attr(dl[[i]],"LT") <- attr(dadm,"LT")[names(attr(dadm,"LT"))==i]
+      }
+      if (!is.null(attr(dadm,"UT"))){
+        attr(dl[[i]],"UT") <- attr(dadm,"UT")[names(attr(dadm,"UT"))==i]
+      }
+      if (!is.null(attr(dadm,"LC"))){
+        attr(dl[[i]],"LC") <- attr(dadm,"LC")[names(attr(dadm,"LC"))==i]
+      }
+      if (!is.null(attr(dadm,"UC"))){
+        attr(dl[[i]],"UC") <- attr(dadm,"UC")[names(attr(dadm,"UC"))==i]
+      }
+
+      # adapt models
+      if (!is.null(adapt)){
+        attr(dl[[i]],"adapt") <- stats::setNames(list(adapt[[i]],adapt$design),c(i,"design"))
+      }
     }
   }
+
+
   return(dl)
 }
 

@@ -8,6 +8,7 @@ run_sample(
   samplers,
   iter = 1000,
   max_gd = 1.1,
+  mean_gd,
   min_es = 0,
   p_accept = 0.8,
   step_size = 100,
@@ -19,7 +20,7 @@ run_sample(
   cores_per_chain = 1,
   cores_for_chains = length(samplers),
   max_trys = 50,
-  useC = FALSE
+  useC = useC
 )
 }
 \arguments{
@@ -29,13 +30,17 @@ run_sample(
 
 \item{max_gd}{A double. The maximum gelman diagnostic convergence allowed. Will stop if below this number.}
 
+\item{mean_gd}{A double. The mean gelman diagnostic convergence allowed. Will stop if below this number.}
+
 \item{min_es}{An integer. The minimal effective size required.}
 
 \item{p_accept}{A double. The target acceptance probability of the MCMC process. This will fine tune the width of the search space. Default = .8}
 
 \item{step_size}{An integer. After each of these steps, the requirements will be checked if they are met and proposal distributions will be updated. Default = 100.}
 
-\item{verbose}{Logical. Whether to print sampling related messages}
+\item{verbose}{Logical. Whether to print emc related messages}
+
+\item{verboseProgress}{Logical. Whether to print sampling related messages}
 
 \item{fileName}{A string. If specified will autosave samplers at this location.}
 

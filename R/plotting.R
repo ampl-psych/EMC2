@@ -1,6 +1,23 @@
+
+#' Plot MCMC chains
+#'
+#' @param pmwg_mcmc A list of samplers or samplers converted to mcmc objects.
+#' @param layout A vector or matrix specifying the layout as in par(mfrow = layout).
+#' @param subject A string or integer which you can specify to only plot chains of that subject.
+#' @param ylim The y limits of the chain plot.
+#' @param selection a string. Specifies which chains you want to plot.
+#' @param filter a string. Specifies which stage you want to plot.
+#' @param thin an integer. Specify if you want to thin the chains by a factor n.
+#' @param subfilter an integer or vector. If integer it will exclude up until that integer. If vector it will include everything in that range.
+#' @param plot_acf bool. If TRUE will also plot autocorrelation for the chain specified in acf_chain.
+#' @param acf_chain an integer. For which chain to plot the acf, if plot_acf = TRUE.
+#' @return
+#' @export
+#'
+#' @examples
 plot_chains <- function(pmwg_mcmc,layout=NA,subject=NA,ylim=NULL,
                         selection="alpha",filter="sample",thin=1,subfilter=0,
-                        plot_acf=FALSE,acf_chain=1, verbose=TRUE) # ,use_par=NA
+                        plot_acf=FALSE,acf_chain=1) # ,use_par=NA
   # Plots chains  (if alpha, LL or epsilon can do individual subject, all by default)
 {
   if (!(inherits(pmwg_mcmc,  c("mcmc","mcmc.list")))) {
@@ -48,6 +65,7 @@ plot_chains <- function(pmwg_mcmc,layout=NA,subject=NA,ylim=NULL,
   }
 }
 
+
 plot_acfs <- function(samples,layout=NULL,subject=1,
                       selection="alpha",filter="sample",subfilter=0)
   # Plots acf for all chains
@@ -62,12 +80,32 @@ plot_acfs <- function(samples,layout=NULL,subject=1,
   for (i in 1:length(samples)) {
     if (selection=="alpha") {
       plot_chains(samples[[i]],selection=selection,filter=filter,subfilter=subfilter,
-                  layout=layout,plot_acf=TRUE,acf_chain=i,verbose=FALSE,subject=subject)
+                  layout=layout,plot_acf=TRUE,acf_chain=i,subject=subject)
     } else plot_chains(samples[[i]],selection=selection,filter=filter,subfilter=subfilter,
-                       layout=layout,plot_acf=TRUE,acf_chain=i,verbose=FALSE)
+                       layout=layout,plot_acf=TRUE,acf_chain=i)
   }
 }
 
+#' Title
+#'
+#' @param tabs
+#' @param layout
+#' @param do_ci
+#' @param ci_col
+#' @param cap
+#' @param do_rmse
+#' @param rmse_pos
+#' @param rmse_digits
+#' @param pearson_digits
+#' @param do_coverage
+#' @param coverage_pos
+#' @param coverage_digits
+#' @param spearman_digits
+#'
+#' @return
+#' @export
+#'
+#' @examples
 plot_alpha_recovery <- function(tabs,layout=c(2,3),
                                 do_ci = TRUE,ci_col="grey",cap=.05,
                                 do_rmse=FALSE,rmse_pos="topleft",
@@ -122,13 +160,34 @@ plot_alpha_recovery <- function(tabs,layout=c(2,3),
   invisible(list(RMSE = rmse,COVERAGE = coverage,PEARSON=pearson,SPEARMAN=spearman))
 }
 
+#' Plot defective densities for each subject and cell.
+#'
+#' Each panel contains a set of densities (i.e., densities for each possible
+#' possible response) that are defective (i.e., have areas potentially less
+#' than 1, where for all responses the area sums to 1).
+#'
+#' @param data data frame with at least subjects (subjects factor) R (response factor)
+#' and rt (response time) columns,and optionally other factor columns with any name except
+#' subjects, R, rt or trials.
+#' @param subject string selecting a subject (default NULL = all).
+#' @param factors character vector of factor names in design (default NULL = all).
+#' @param layout 2-vector specifying par(mfrow) or par(mfcol) (default NULL use current).
+#' @param mfcol boolean, default TRUE use mfcol else mfrow.
+#' @param xlim x-axis limit for all cells (default NULL = scale per cell).
+#' @param bw number or string bandwidth for density (default "nrd0").
+#' @param adjust density function bandwidth adjust parameter.
+#' @param correct_fun function scoring accuracy using columns in data.
+#' @param rt legend function position string for mean RT (default "top)
+#' @param accuracy legend function position string for accuracy (default "topright")
+#'
+#' @return Invisibly if correct_fun specified a subject accuracy vector
+#' @export
+#'
+#' @examples
 plot_defective_density <- function(data,subject=NULL,factors=NULL,
                                    layout=NULL,mfcol=TRUE,
                                    xlim=NULL,bw = "nrd0",adjust=1,
                                    correct_fun=NULL,rt="top",accuracy="topright")
-  # plots defective densities for each subject and cell in the full design (or
-  # a particular subject and factors if specified) if correct_fun specified
-  # returns a vector of subject accuracy.
 {
   if (!is.null(subject)) {
     dat <- data[data$subjects==subject,]
@@ -188,13 +247,39 @@ plot_defective_density <- function(data,subject=NULL,factors=NULL,
 # show_chains=FALSE;do_plot=TRUE;subject=NA;add_means=FALSE;
 # pars=NULL;probs=c(.025,.5,.975);bw = "nrd0";adjust = 1
 # subject=1; filter="burn"; subfilter=300
+#' Title
+#'
+#' @param pmwg_mcmc
+#' @param layout
+#' @param selection
+#' @param filter
+#' @param thin
+#' @param subfilter
+#' @param mapped
+#' @param plot_prior
+#' @param n_prior
+#' @param xlim
+#' @param ylim
+#' @param show_chains
+#' @param do_plot
+#' @param subject
+#' @param add_means
+#' @param pars
+#' @param probs
+#' @param bw
+#' @param adjust
+#'
+#' @return
+#' @export
+#'
+#' @examples
 plot_density <- function(pmwg_mcmc,layout=c(2,3),
                          selection="alpha",filter="sample",thin=1,subfilter=0,mapped=FALSE,
                          plot_prior=TRUE,n_prior=1e3,xlim=NULL,ylim=NULL,
                          show_chains=FALSE,do_plot=TRUE,subject=NA,add_means=FALSE,
                          pars=NULL,probs=c(.025,.5,.975),bw = "nrd0", adjust = 1)
   # Plots density (if alpha can do individual subject, all by default)
-  # If show_chains superimposes destinies for each chain on same plot
+  # If show_chains superimposes densities for each chain on same plot
   # invisibly returns tables of true and 95% CIs (for all chains combined
   # no matter what show_chains is)
 {
@@ -369,6 +454,37 @@ plot_density <- function(pmwg_mcmc,layout=c(2,3),
   }
 }
 
+#' Title
+#'
+#' @param data
+#' @param pp
+#' @param subject
+#' @param factors
+#' @param stat
+#' @param stat_name
+#' @param ci
+#' @param do_plot
+#' @param xlim
+#' @param ylim
+#' @param layout
+#' @param mfcol
+#' @param probs
+#' @param data_lwd
+#' @param fit_lwd
+#' @param qp_cex
+#' @param q_points
+#' @param pqp_cex
+#' @param lpos
+#' @param signalFactor
+#' @param zROC
+#' @param qfun
+#' @param lim
+#' @param rocfit_cex
+#'
+#' @return
+#' @export
+#'
+#' @examples
 plot_fit <- function(data,pp,subject=NULL,factors=NULL,
                      stat=NULL,stat_name="",
                      ci=c(.025,.5,.975),do_plot=TRUE,
@@ -550,6 +666,36 @@ plot_fit <- function(data,pp,subject=NULL,factors=NULL,
 }
 
 
+#' Title
+#'
+#' @param data
+#' @param pp
+#' @param factors
+#' @param stat
+#' @param stat_name
+#' @param ci
+#' @param do_plot
+#' @param xlim
+#' @param ylim
+#' @param layout
+#' @param mfcol
+#' @param probs
+#' @param data_lwd
+#' @param fit_lwd
+#' @param qp_cex
+#' @param q_points
+#' @param pqp_cex
+#' @param lpos
+#' @param signalFactor
+#' @param zROC
+#' @param qfun
+#' @param lim
+#' @param rocfit_cex
+#'
+#' @return
+#' @export
+#'
+#' @examples
 plot_fits <- function(data,pp,factors=NULL,
                       stat=NULL,stat_name="",ci=c(.025,.5,.975),do_plot=TRUE,
                       xlim=NULL,ylim=NULL,
@@ -565,6 +711,18 @@ plot_fits <- function(data,pp,factors=NULL,
              signalFactor,zROC=qfun,lim,rocfit_cex)
 }
 
+#' Title
+#'
+#' @param data
+#' @param zROC
+#' @param qfun
+#' @param main
+#' @param lim
+#'
+#' @return
+#' @export
+#'
+#' @examples
 plot_roc <- function(data,zROC=FALSE,qfun=NULL,main="",lim=NULL)
 
 {
@@ -658,6 +816,21 @@ plot_trials <- function(data,pp=NULL,subject=NULL,factors=NULL,Fcovariates=NULL,
 #                       filter="sample";subfilter=0
 #                       layout=c(3,4);width=NULL;height=NULL
 # subfilter=2000
+#' Title
+#'
+#' @param samples
+#' @param pdf_name
+#' @param interactive
+#' @param filter
+#' @param subfilter
+#' @param layout
+#' @param width
+#' @param height
+#'
+#' @return
+#' @export
+#'
+#' @examples
 check_run <- function(samples,pdf_name="check_run.pdf",interactive=TRUE,
                       filter="sample",subfilter=0,
                       layout=c(3,4),width=NULL,height=NULL) {

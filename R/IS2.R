@@ -68,7 +68,7 @@ get_logp=function(prop_theta,stepsize_particles, max_particles, mu_tilde,var_til
   var_opt_sub <- 1/n_subjects
 
   # for each subject, get N IS samples (particles) and find log weight of each
-  lw_subs <- numeric(n_subjects)
+  lw_subs <- matrix(0, nrow = n_subjects, ncol = max_particles)
   for (j in 1:n_subjects){
     var_z_sub <- 999 # just a place holder > var_opt_sub
     n_total <- 0
@@ -91,10 +91,10 @@ get_logp=function(prop_theta,stepsize_particles, max_particles, mu_tilde,var_til
       var_z_sub = sum(exp(2*(lw-max_lw)))/(sum(exp(lw-max_lw)))^2-1/n_total
     }
     weight <- exp(lw-max_lw)
-    lw_subs[j] <- max_lw+log(mean(weight))
+    lw_subs[j, 1:length(weight)] <- max_lw+log((weight))
   }
   # sum the logp and return
-  return(sum(lw_subs))
+  return(lw_subs)
 }
 
 compute_lw_num=function(i, prop_theta,stepsize_particles, max_particles, mu_tilde,var_tilde,info){
