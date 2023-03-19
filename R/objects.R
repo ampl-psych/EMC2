@@ -19,7 +19,9 @@ filter_obj <- function(obj, idx){
   if(is.null(dims)) return(obj)
   if(length(dims) == 2){
     if(nrow(obj) == ncol(obj)){
-      if(abs(sum(rowSums(obj/max(obj)) - colSums(obj/max(obj)))) < .1) return(obj)
+      if(nrow(obj) > 1){
+        if(abs(sum(rowSums(obj/max(obj)) - colSums(obj/max(obj)))) < .1) return(obj)
+      }
     }
   }
   obj <- obj[slice.index(obj, length(dims)) %in% idx]
