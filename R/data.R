@@ -150,6 +150,9 @@ make_data <- function(p_vector,design,model=NULL,trials=NULL,data=NULL,expand=1,
       if (mapped_p) return(data)
       adapt <- attr(data,"adapt")
       data <- data[data$lR==levels(data$lR)[1],!(names(data) %in% c("lR","lM"))]
+
+      if('Qvalues' %in% names(attributes(pars))) attr(data, 'Qvalues') <- attr(pars, 'Qvalues')
+      if('predictionErrors' %in% names(attributes(pars))) attr(data, 'predictionErrors') <- attr(pars, 'predictionErrors')
       attr(data,"adapt") <- adapt
       return(data)
     }
