@@ -2,8 +2,8 @@ rm(list = ls())
 library(devtools)
 # Rcpp only works as fast with install like this unfortunately, if this throws errors, restarting Rstudio worked for me
 # devtools::install("~/Documents/UVA/2022/EMC2")
-load_all()
 # load_all()
+library(EMC2)
 load("test_files/PNAS.RData")
 
 dat <- data[,c("s","E","S","R","RT")]
@@ -28,21 +28,33 @@ design_RDM <- make_design(
 
 
 # Test single subject
-dat_single <- dat[which(dat$subjects %in% (unique(dat$subjects)[1])),]
+dat_single <- dat[which(dat$subjects %in% (unique(dat$subjects)[1:10])),]
 dat_single <- droplevels(dat_single)
 
 # first speed test:
-samplers <- make_samplers(dat_single, design_RDM, type = "single", n_chains = 1)
+samplers <- make_samplers(dat_single, design_RDM)
 # first let's run init separately
-load_all()
-debug(run_stage)
-samplers <- run_samplers(samplers, stage = "preburn", iter = 1000, cores_per_chain =1, useC = T)
+samplers <- run_emc(samplers, cores_per_chain =5, cores_for_chains = 3, useC = T, verbose = T)
 
+samplers <- run_IS2(samplers, IS_samples = 1000, max_particles = 1000, n_cores = 15)
+#
+# IS_samples <- attr(samplers, "IS_samples")
+# group_sample1 <- IS_samples$sub_and_group
+#
+# log_ratios <- -1 * group_sample1
+# r_eff <- relative_eff(exp(-log_ratios))
+# psis_result <- psis(log_ratios[1,,], r_eff = r_eff)
+#
+# group_sample <- group_sample1[,1:500,]
+# group_sample1[group_sample1 < -5000] <- -5000
+# group_sample1[group_sample1 > 5000] <- 5000
+
+library(loo)
 
 # Note that the useC argument is a bit deceptive. It uses the C dists in any case, but if TRUE will also use the C log_likelihood_race
 microbenchmark::microbenchmark(
-  run_samplers(samplers, stage = "preburn", iter = 25),
-  run_samplers(samplers, stage = "preburn", iter = 25, useC = T), times = 10
+  run_IS2(samplers, filter = "burn", IS_samples = 10, max_particles = 1000, n_cores = 10),
+  run_IS2(samplers, filter = "burn", IS_samples = 10, max_particles = 1000, n_cores = 10, useC = F), times = 20
 ) # Literally twice as fast!
 
 # Then compare

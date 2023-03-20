@@ -114,11 +114,13 @@ NumericVector drdm_c(NumericVector rts, NumericMatrix pars, LogicalVector idx){
   //v = 0, B = 1, A = 2, t0 = 3, s = 4
   int n = sum(idx);
   NumericVector out(n);
-  for(int i = 0; i < n; i++){
+  int k = 0;
+  for(int i = 0; i < rts.length(); i++){
     if(idx[i] == TRUE){
       if((rts[i] - pars(i,3) > 0) & (pars(i,3) > 0.05) & ((pars(i,2) > 1e-6) | (pars(i,2) == 0))){
-        out[i] = digt(rts[i] - pars(i,3), pars(i,1)/pars(i,4) + .5 * pars(i,2)/pars(i,4), pars(i,0)/pars(i,4), .5*pars(i,2)/pars(i,4));
+        out[k] = digt(rts[i] - pars(i,3), pars(i,1)/pars(i,4) + .5 * pars(i,2)/pars(i,4), pars(i,0)/pars(i,4), .5*pars(i,2)/pars(i,4));
       }
+      k++;
     }
   }
 
@@ -129,11 +131,13 @@ NumericVector prdm_c(NumericVector rts, NumericMatrix pars, LogicalVector idx){
   //v = 0, B = 1, A = 2, t0 = 3, s = 4
   int n = sum(idx);
   NumericVector out(n);
-  for(int i = 0; i < n; i++){
+  int k = 0;
+  for(int i = 0; i < rts.length(); i++){
     if(idx[i] == TRUE){
       if((rts[i] - pars(i,3) > 0) & (pars(i,3) > 0.05) & ((pars(i,2) > 1e-6) | (pars(i,2) == 0))){
-        out[i] = pigt(rts[i] - pars(i,3), pars(i,1)/pars(i,4) + .5 * pars(i,2)/pars(i,4), pars(i,0)/pars(i,4), .5*pars(i,2)/pars(i,4));
+        out[k] = pigt(rts[i] - pars(i,3), pars(i,1)/pars(i,4) + .5 * pars(i,2)/pars(i,4), pars(i,0)/pars(i,4), .5*pars(i,2)/pars(i,4));
       }
+      k++;
     }
   }
 

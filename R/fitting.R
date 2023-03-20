@@ -626,9 +626,9 @@ extractDadms <- function(dadms, names = 1:length(dadms)){
 #'
 #' @examples
 run_IS2 <- function(samplers, filter = "sample", subfilter = 0, IS_samples = 1000,
-                    stepsize_particles = 500, max_particles = 5000, n_cores = 1, df = 5){
+                    stepsize_particles = 500, max_particles = 5000, n_cores = 1, df = 5, useC = TRUE){
   samples_merged <- merge_samples(samplers)
-  IS_samples <- IS2(samples_merged, filter, subfilter = subfilter, IS_samples, stepsize_particles, max_particles, n_cores, df)
+  IS_samples <- IS2(samples_merged, filter, subfilter = subfilter, IS_samples, stepsize_particles, max_particles, n_cores, df, useC)
   attr(samplers, "IS_samples") <- IS_samples
   return(samplers)
 }

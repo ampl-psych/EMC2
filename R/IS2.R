@@ -2,7 +2,7 @@
 ## set up environment and packages
 
 
-IS2 <- function(samples, filter = "sample", subfilter = 0, IS_samples = 1000, stepsize_particles = 500, max_particles = 5000, n_cores = 1, df = 5){
+IS2 <- function(samples, filter = "sample", subfilter = 0, IS_samples = 1000, stepsize_particles = 500, max_particles = 5000, n_cores = 1, df = 5, useC = TRUE){
   ###### set up variables #####
   info <- add_info_base(samples)
   idx <- which(samples$samples$stage == filter)
@@ -27,22 +27,30 @@ IS2 <- function(samples, filter = "sample", subfilter = 0, IS_samples = 1000, st
                        mu_tilde=all_pars$mu_tilde,
                        var_tilde = all_pars$var_tilde,
                        info = all_pars$info,
+                       useC = useC,
                        mc.cores = n_cores)
+  # sub_and_group <- simplify2array(lapply(logw_num, FUN = function(x) return(x$sub_and_group)))
+  # prior_and_jac <- sapply(logw_num, FUN = function(x) return(x$prior_and_jac))
+  #
+  # logw_den <- mvtnorm::dmvt(prop_theta, delta=muX, sigma=varX,df=df, log = TRUE)
+  # # finished <- unlist(logw_num) - logw_den
+  # # max.lw <- max(finished)
+  # # mean.centred.lw <- mean(exp(finished-max.lw)) #takes off the max and gets mean (avoids infs)
+  # # lw <- log(mean.centred.lw)+max.lw #puts max back on to get the lw
+  # return(list(sub_and_group = sub_and_group, prior_and_jac = sub_and_group, logw_den = logw_den))
   logw_den <- mvtnorm::dmvt(prop_theta, delta=muX, sigma=varX,df=df, log = TRUE)
 
   finished <- unlist(logw_num) - logw_den
-  # max.lw <- max(finished)
-  # mean.centred.lw <- mean(exp(finished-max.lw)) #takes off the max and gets mean (avoids infs)
-  # lw <- log(mean.centred.lw)+max.lw #puts max back on to get the lw
   return(finished)
+
 }
 
-get_sub_weights <- function(stepsize_particles, condMean, condVar, prop_theta, info, sub){
-  wmix = c(.05, .95)
-  n1=stats::rbinom(n=1,size=stepsize_particles,prob=wmix)
-  if (n1<2) n1=2
-  if (n1>(stepsize_particles-2)) n1=stepsize_particles-2 ## These just avoid degenerate arrays.
-  n2=stepsize_particles-n1
+get_sub_weights <- function(stepsize_particles, condMean, condVar, prop_theta, info, sub, useC){
+  wmix <- .95
+  n1 <- stats::rbinom(n=1,size=stepsize_particles,prob=wmix)
+  if (n1<2) n1 <- 2
+  if (n1>(stepsize_particles-2)) n1 <- stepsize_particles-2 ## These just avoid degenerate arrays.
+  n2 <- stepsize_particles-n1
   data <- info$data
   particles1 <- mvtnorm::rmvnorm(n1, condMean,condVar)
   # Group level
@@ -52,7 +60,7 @@ get_sub_weights <- function(stepsize_particles, condMean, condVar, prop_theta, i
   # names for ll function to work
   colnames(particles) <- info$par_names
   # do lba log likelihood with given parameters for each subject, gets density of particle from ll func
-  lw_first <- apply(particles, 1, info$ll_func, dadm = data[[sub]])
+  lw_first <- calc_ll_manager(particles, dadm = data[[sub]], info$ll_func, useC = useC)
   # below gets second part of equation 5 numerator ie density under prop_theta
   lw_second <- apply(particles, 1, info$variant_funs$group_dist_IS2, prop_theta, FALSE, NULL, info)
   # below is the denominator - ie mix of density under conditional and density under pro_theta
@@ -62,13 +70,13 @@ get_sub_weights <- function(stepsize_particles, condMean, condVar, prop_theta, i
   return(lw)
 }
 
-get_logp=function(prop_theta,stepsize_particles, max_particles, mu_tilde,var_tilde, info){
+get_logp=function(prop_theta,stepsize_particles, max_particles, mu_tilde,var_tilde, info, useC){
   # Unload for legibility
   n_subjects <- info$n_subjects
   var_opt_sub <- 1/n_subjects
 
   # for each subject, get N IS samples (particles) and find log weight of each
-  lw_subs <- matrix(0, nrow = n_subjects, ncol = max_particles)
+  lw_subs <- numeric(n_subjects)
   for (j in 1:n_subjects){
     var_z_sub <- 999 # just a place holder > var_opt_sub
     n_total <- 0
@@ -83,7 +91,7 @@ get_logp=function(prop_theta,stepsize_particles, max_particles, mu_tilde,var_til
       n_total <- n_total + stepsize_particles
       lw_tmp <- get_sub_weights(stepsize_particles = stepsize_particles, condMean = conditional$condMean,
                                 condVar = conditional$condVar, prop_theta = prop_theta,
-                                info = info, sub = j)
+                                info = info, sub = j, useC = useC)
 
       # lw <- -weights(psis(-lw, log = F)) # default args are log=TRUE, normalize=TRUE
       lw <- c(lw, lw_tmp)
@@ -91,14 +99,18 @@ get_logp=function(prop_theta,stepsize_particles, max_particles, mu_tilde,var_til
       var_z_sub = sum(exp(2*(lw-max_lw)))/(sum(exp(lw-max_lw)))^2-1/n_total
     }
     weight <- exp(lw-max_lw)
-    lw_subs[j, 1:length(weight)] <- max_lw+log((weight))
+    # lw_subs[j, 1:length(weight)] <- max_lw+log((weight))
+    lw_subs[j] <- max_lw+log(mean(weight))
   }
   # sum the logp and return
   return(lw_subs)
 }
 
-compute_lw_num=function(i, prop_theta,stepsize_particles, max_particles, mu_tilde,var_tilde,info){
-  logp.out <- get_logp(prop_theta[i,], stepsize_particles, max_particles, mu_tilde, var_tilde, info)
+compute_lw_num=function(i, prop_theta,stepsize_particles, max_particles, mu_tilde,var_tilde,info, useC){
+  # sub_and_group <- get_logp(prop_theta[i,], stepsize_particles, max_particles, mu_tilde, var_tilde, info, useC)
+  # prior_and_jac <- info$variant_funs$prior_dist_IS2(parameters = prop_theta[i,], info)
+  # return(list(sub_and_group = sub_and_group, prior_and_jac = prior_and_jac))
+  logp.out <- get_logp(prop_theta[i,], stepsize_particles, max_particles, mu_tilde, var_tilde, info, useC)
   logw_num <- logp.out+info$variant_funs$prior_dist_IS2(parameters = prop_theta[i,], info)
   return(logw_num)
 }

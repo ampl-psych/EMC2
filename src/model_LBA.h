@@ -93,11 +93,13 @@ NumericVector dlba_c(NumericVector rts, NumericMatrix pars, LogicalVector idx){
   //v = 0, sv = 1, B = 2, A = 3, t0 = 4
   int n = sum(idx);
   NumericVector out(n);
-  for(int i = 0; i < n; i++){
+  int k = 0;
+  for(int i = 0; i < rts.length(); i++){
     if(idx[i] == TRUE){
       if((rts[i] - pars(i,4) > 0) & (pars(i,2) >= 0) & (pars(i,4) > 0.05) & ((pars(i,3) > 1e-6) | (pars(i,3) == 0))){
-        out[i] = dlba_norm(rts[i] - pars(i,4), pars(i,3), pars(i,2) + pars(i,3), pars(i,0), pars(i,1), true, false);
+        out[k] = dlba_norm(rts[i] - pars(i,4), pars(i,3), pars(i,2) + pars(i,3), pars(i,0), pars(i,1), true, false);
       }
+      k++;
     }
   }
   return(out);
@@ -107,11 +109,13 @@ NumericVector plba_c(NumericVector rts, NumericMatrix pars, LogicalVector idx){
   //v = 0, sv = 1, B = 2, A = 3, t0 = 4
   int n = sum(idx);
   NumericVector out(n);
-  for(int i = 0; i < n; i++){
+  int k = 0;
+  for(int i = 0; i < rts.length(); i++){
     if(idx[i] == TRUE){
       if((rts[i] > 0) & (pars(i,2) >= 0) & (pars(i,4) > 0.05) & ((pars(i,3) > 1e-6) | (pars(i,3) == 0))){
-        out[i] = plba_norm(rts[i] - pars(i,4), pars(i,3), pars(i,2) + pars(i,3), pars(i,0), pars(i,1), true, false);
+        out[k] = plba_norm(rts[i] - pars(i,4), pars(i,3), pars(i,2) + pars(i,3), pars(i,0), pars(i,1), true, false);
       }
+      k++;
     }
   }
   return(out);

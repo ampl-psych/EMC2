@@ -25,11 +25,13 @@ NumericMatrix Ntransform_lnr(NumericMatrix x) {
 NumericVector plnr_c(NumericVector rts, NumericMatrix pars, LogicalVector idx){
   int n = sum(idx);
   NumericVector out(n);
-  for(int i = 0; i < n; i++){
+  int k = 0;
+  for(int i = 0; i < rts.length(); i++){
     if(idx[i] == TRUE){
       if(rts[i] - pars(i,2) > 0){
-        out[i] = R::plnorm(rts[i] - pars(i,2), pars(i, 0), pars(i, 1), TRUE, FALSE);
+        out[k] = R::plnorm(rts[i] - pars(i,2), pars(i, 0), pars(i, 1), TRUE, FALSE);
       }
+      k++;
     }
   }
 
@@ -39,11 +41,13 @@ NumericVector plnr_c(NumericVector rts, NumericMatrix pars, LogicalVector idx){
 NumericVector dlnr_c(NumericVector rts, NumericMatrix pars, LogicalVector idx){
   int n = sum(idx);
   NumericVector out(n);
-  for(int i = 0; i < n; i++){
+  int k = 0;
+  for(int i = 0; i < rts.length(); i++){
     if(idx[i] == TRUE){
       if(rts[i] - pars(i,2) > 0){
-        out[i] = R::dlnorm(rts[i] - pars(i,2), pars(i, 0), pars(i, 1), FALSE);
+        out[k] = R::dlnorm(rts[i] - pars(i,2), pars(i, 0), pars(i, 1), FALSE);
       }
+      k++;
     }
 
   }
