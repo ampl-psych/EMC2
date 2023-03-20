@@ -181,6 +181,22 @@ add_Ffunctions <- function(data,design)
     data <-  cbind.data.frame(data,Fdf[,ok,drop=FALSE])
 }
 
+#' Generate posterior predictives
+#'
+#' @param samples A list of samples from which you want to generate posterior predictives.
+#' @param hyper Boolean. Default is FALSE, if true simulates from the group level.
+#' @param n_post Integer. How many data sets do you want to generate from the posterior.
+#' @param expand Integer. Default is 1, exact same design for each subject. Larger values will replicate designs, so more trials per subject.
+#' @param filter Character. Choice of the stages 'pre-burn', 'burn', 'adapt', 'sample', default is 'sample'. From which stage do you want to take samples to generate new data with.
+#' @param subfilter Integer or numeric vector. If integer, will filter out the first x of samples, within your filter. If numeric vector will select those samples, within your filter.
+#' @param thin Integer. By how much do you want to thin the chains before simulating from them.
+#' @param n_cores Integer. Across how many cores do you want to parallelize.
+#' @param use_par Character. Can be mean, median or default random. Will take either random samples from the chain or as specified.
+#'
+#' @return A list of simulated data sets of length n_post.
+#' @export
+#'
+#' @examples
 post_predict <- function(samples,hyper=FALSE,n_post=100,expand=1,
                          filter="sample",subfilter=0,thin=1,n_cores=1,
                          use_par=c("random","mean","median")[1])

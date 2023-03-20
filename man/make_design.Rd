@@ -5,9 +5,9 @@
 \title{Binds together elements that make up a model design as a list}
 \usage{
 make_design(
-  Flist,
-  Ffactors,
-  Rlevels,
+  Flist = NULL,
+  Ffactors = NULL,
+  Rlevels = NULL,
   model,
   Clist = NULL,
   matchfun = NULL,
@@ -15,7 +15,8 @@ make_design(
   Fcovariates = NULL,
   Ffunctions = NULL,
   adapt = NULL,
-  report_p_vector = TRUE
+  report_p_vector = TRUE,
+  custom_p_vector = NULL
 )
 }
 \arguments{
@@ -45,6 +46,8 @@ Example: \code{function(d)d$S==d$lR}}
 \item{adapt}{For future compatibility. Ignore.}
 
 \item{report_p_vector}{TRUE (default) or FALSE. if TRUE, returns the vector of parameters to be estimated.}
+
+\item{custom_p_vector}{A character vector. If specified, a custom likelihood function can be supplied.}
 }
 \value{
 A design list.

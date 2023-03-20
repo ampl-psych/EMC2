@@ -451,6 +451,7 @@ run_adapt <- function(samplers, max_gd = NULL, mean_gd = NULL, min_es = 0, min_u
 #' @param cores_per_chain An integer. How many cores to use per chain. Parallelizes across participant calculations.
 #' @param cores_for_chains An integer. How many cores to use across chains. Default is the number of chains.
 #' @param max_trys An integer. How many times it will try to meet the finish conditions. Default is 50.
+#' @export
 #'
 #' @return A list of samplers
 run_sample <- function(samplers, iter = 1000, max_gd = 1.1, mean_gd, min_es = 0,
@@ -520,6 +521,7 @@ make_samplers <- function(data_list,design_list,model_list=NULL,
     prior_list <- list(prior_list)
   if (length(prior_list)!=length(data_list))
     prior_list <- rep(prior_list,length(data_list))
+
   dadm_list <- vector(mode="list",length=length(data_list))
   rt_resolution <- rep(rt_resolution,length.out=length(data_list))
   for (i in 1:length(dadm_list)) {
@@ -531,9 +533,15 @@ make_samplers <- function(data_list,design_list,model_list=NULL,
     #   if (!is.null(pars)) attr(data_list[[i]],"pars") <- pars
     # }
     # create a design model
-    dadm_list[[i]] <- design_model(data=data_list[[i]],design=design_list[[i]],
+    if(is.null(attr(design_list[[i]], "custom_ll"))){
+      dadm_list[[i]] <- design_model(data=data_list[[i]],design=design_list[[i]],
                                    model=model_list[[i]],rt_resolution=rt_resolution[i],prior=prior_list[[i]])
+    } else{
+      dadm_list[[i]] <- design_model_custom_ll(data = data_list[[i]], design = design_list[[i]],
+                                               model=model_list[[i]], prior=prior_list[[i]])
+    }
   }
+
   # if(!is.null(subject_covariates)) attr(dadm_list, "subject_covariates") <- subject_covariates
   variant_funs <- get_variant_funs(type = type)
   if (type %in% c("standard", "single", "diagonal")) {
