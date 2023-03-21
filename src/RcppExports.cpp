@@ -26,8 +26,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // calc_ll
-NumericVector calc_ll(NumericMatrix p_matrix, DataFrame data, NumericVector constants, List designs, const int n_trials, String type, CharacterVector p_types, LogicalVector winner, NumericVector expand, double min_ll);
-RcppExport SEXP _EMC2_calc_ll(SEXP p_matrixSEXP, SEXP dataSEXP, SEXP constantsSEXP, SEXP designsSEXP, SEXP n_trialsSEXP, SEXP typeSEXP, SEXP p_typesSEXP, SEXP winnerSEXP, SEXP expandSEXP, SEXP min_llSEXP) {
+NumericVector calc_ll(NumericMatrix p_matrix, DataFrame data, NumericVector constants, List designs, const int n_trials, String type, CharacterVector p_types, LogicalVector winner, NumericVector expand, double min_ll, List group_idx);
+RcppExport SEXP _EMC2_calc_ll(SEXP p_matrixSEXP, SEXP dataSEXP, SEXP constantsSEXP, SEXP designsSEXP, SEXP n_trialsSEXP, SEXP typeSEXP, SEXP p_typesSEXP, SEXP winnerSEXP, SEXP expandSEXP, SEXP min_llSEXP, SEXP group_idxSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -41,7 +41,24 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< LogicalVector >::type winner(winnerSEXP);
     Rcpp::traits::input_parameter< NumericVector >::type expand(expandSEXP);
     Rcpp::traits::input_parameter< double >::type min_ll(min_llSEXP);
-    rcpp_result_gen = Rcpp::wrap(calc_ll(p_matrix, data, constants, designs, n_trials, type, p_types, winner, expand, min_ll));
+    Rcpp::traits::input_parameter< List >::type group_idx(group_idxSEXP);
+    rcpp_result_gen = Rcpp::wrap(calc_ll(p_matrix, data, constants, designs, n_trials, type, p_types, winner, expand, min_ll, group_idx));
+    return rcpp_result_gen;
+END_RCPP
+}
+// d_DDM_c
+NumericVector d_DDM_c(NumericVector rts, NumericVector R, List group_idx, NumericMatrix pars, double precision, bool stop_on_error);
+RcppExport SEXP _EMC2_d_DDM_c(SEXP rtsSEXP, SEXP RSEXP, SEXP group_idxSEXP, SEXP parsSEXP, SEXP precisionSEXP, SEXP stop_on_errorSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type rts(rtsSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type R(RSEXP);
+    Rcpp::traits::input_parameter< List >::type group_idx(group_idxSEXP);
+    Rcpp::traits::input_parameter< NumericMatrix >::type pars(parsSEXP);
+    Rcpp::traits::input_parameter< double >::type precision(precisionSEXP);
+    Rcpp::traits::input_parameter< bool >::type stop_on_error(stop_on_errorSEXP);
+    rcpp_result_gen = Rcpp::wrap(d_DDM_c(rts, R, group_idx, pars, precision, stop_on_error));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -112,7 +129,8 @@ END_RCPP
 
 static const R_CallMethodDef CallEntries[] = {
     {"_EMC2_dmvnrm_arma_fast", (DL_FUNC) &_EMC2_dmvnrm_arma_fast, 4},
-    {"_EMC2_calc_ll", (DL_FUNC) &_EMC2_calc_ll, 10},
+    {"_EMC2_calc_ll", (DL_FUNC) &_EMC2_calc_ll, 11},
+    {"_EMC2_d_DDM_c", (DL_FUNC) &_EMC2_d_DDM_c, 6},
     {"_EMC2_dlba", (DL_FUNC) &_EMC2_dlba, 7},
     {"_EMC2_plba", (DL_FUNC) &_EMC2_plba, 7},
     {"_EMC2_dWald", (DL_FUNC) &_EMC2_dWald, 5},

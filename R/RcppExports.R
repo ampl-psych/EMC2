@@ -5,8 +5,12 @@ dmvnrm_arma_fast <- function(x, mean, sigma, logd = FALSE) {
     .Call(`_EMC2_dmvnrm_arma_fast`, x, mean, sigma, logd)
 }
 
-calc_ll <- function(p_matrix, data, constants, designs, n_trials, type, p_types, winner, expand, min_ll) {
-    .Call(`_EMC2_calc_ll`, p_matrix, data, constants, designs, n_trials, type, p_types, winner, expand, min_ll)
+calc_ll <- function(p_matrix, data, constants, designs, n_trials, type, p_types, winner, expand, min_ll, group_idx) {
+    .Call(`_EMC2_calc_ll`, p_matrix, data, constants, designs, n_trials, type, p_types, winner, expand, min_ll, group_idx)
+}
+
+d_DDM_c <- function(rts, R, group_idx, pars, precision = 3, stop_on_error = TRUE) {
+    .Call(`_EMC2_d_DDM_c`, rts, R, group_idx, pars, precision, stop_on_error)
 }
 
 dlba <- function(t, A, b, v, sv, posdrift = TRUE, robust = FALSE) {

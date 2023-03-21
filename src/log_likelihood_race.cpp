@@ -3,6 +3,7 @@
 #include "model_lnr.h"
 #include "model_LBA.h"
 #include "model_RDM.h"
+#include "model_DDM.h"
 using namespace Rcpp;
 
 
@@ -71,6 +72,22 @@ NumericMatrix get_pars(NumericVector p_vector, NumericVector constants,
   return(pars);
 }
 
+double c_log_likelihood_DDM(NumericMatrix pars, DataFrame data,
+                          const int n_trials, NumericVector expand,
+                          double min_ll, List group_idx){
+  const int n_out = expand.length();
+  NumericVector rts = data["rt"];
+  NumericVector R = data["R"];
+  NumericVector lls(n_trials);
+  NumericVector lls_exp(n_out);
+  lls = log(d_DDM_c(rts, R, group_idx, pars));
+  lls_exp = c_expand(lls, expand); // decompress
+  lls_exp[lls_exp < min_ll] = min_ll;
+  lls_exp[is_na(lls_exp)] = min_ll;
+  lls_exp[is_infinite(lls_exp)] = min_ll;
+  return(sum(lls_exp));
+}
+
 double c_log_likelihood_race(NumericMatrix pars, DataFrame data,
                              NumericVector (*dfun)(NumericVector, NumericMatrix, LogicalVector),
                              NumericVector (*pfun)(NumericVector, NumericMatrix, LogicalVector),
@@ -99,10 +116,14 @@ double c_log_likelihood_race(NumericMatrix pars, DataFrame data,
     } else{
       Rcout << "No 3 accs yet!";
     }
-    ll_out[is_na(ll_out) | ll_out < min_ll | is_infinite(ll_out)] = min_ll;
+    ll_out[ll_out < min_ll] = min_ll;
+    ll_out[is_na(ll_out)] = min_ll;
+    ll_out[is_infinite(ll_out)] = min_ll;
     return(sum(ll_out));
   } else{
-    lds_exp[lds_exp < min_ll| is_na(lds_exp) | is_infinite(lds_exp)] = min_ll;
+    lds_exp[lds_exp < min_ll] = min_ll;
+    lds_exp[is_na(lds_exp)] = min_ll;
+    lds_exp[is_infinite(lds_exp)] = min_ll;
     return(sum(lds_exp));
   }
 }
@@ -111,39 +132,49 @@ double c_log_likelihood_race(NumericMatrix pars, DataFrame data,
 NumericVector calc_ll(NumericMatrix p_matrix, DataFrame data, NumericVector constants,
                       List designs, const int n_trials, String type, CharacterVector p_types,
                       LogicalVector winner, NumericVector expand,
-                      double min_ll){
+                      double min_ll, List group_idx){
   CharacterVector p_names = colnames(p_matrix);
   const int n_particles = p_matrix.nrow();
   NumericVector lls(n_particles);
   NumericVector p_vector(p_matrix.ncol());
   NumericMatrix pars(n_trials, p_types.length());
   p_vector.names() = p_names;
-  // Love me some good old ugly but fast c++ pointers
-  NumericVector (*dfun)(NumericVector, NumericMatrix, LogicalVector);
-  NumericVector (*pfun)(NumericVector, NumericMatrix, LogicalVector);
-  NumericVector (*transform)(NumericVector);
-  NumericMatrix (*Ntransform)(NumericMatrix);
-  NumericMatrix (*Ttransform)(NumericMatrix);
-  if(type == "lbaB"){
-    dfun = dlba_c;
-    pfun = plba_c;
-    transform = transform_lba;
-    Ntransform = Ntransform_lba;
-  } else if(type == "rdmB"){
-    dfun = drdm_c;
-    pfun = prdm_c;
-    transform = transform_rdm;
-    Ntransform = Ntransform_rdm;
+  if(type == "DDM"){
+    for(int i = 0; i < n_particles; i++){
+      p_vector = p_matrix(i, _);
+      pars = get_pars(p_vector, constants, transform_DDM, Ntransform_DDM, p_types, designs, n_trials);
+
+      lls[i] = c_log_likelihood_DDM(pars, data, n_trials, expand, min_ll, group_idx);
+    }
   } else{
-    dfun = dlnr_c;
-    pfun = plnr_c;
-    transform = transform_lnr;
-    Ntransform = Ntransform_lnr;
-  }
-  for(int i = 0; i < n_particles; i++){
-    p_vector = p_matrix(i, _);
-    pars = get_pars(p_vector, constants, transform, Ntransform, p_types, designs, n_trials);
-    lls[i] = c_log_likelihood_race(pars, data, dfun, pfun, n_trials, winner, expand, min_ll);
+
+    // Love me some good old ugly but fast c++ pointers
+    NumericVector (*dfun)(NumericVector, NumericMatrix, LogicalVector);
+    NumericVector (*pfun)(NumericVector, NumericMatrix, LogicalVector);
+    NumericVector (*transform)(NumericVector);
+    NumericMatrix (*Ntransform)(NumericMatrix);
+    // NumericMatrix (*Ttransform)(NumericMatrix);
+    if(type == "lbaB"){
+      dfun = dlba_c;
+      pfun = plba_c;
+      transform = transform_lba;
+      Ntransform = Ntransform_lba;
+    } else if(type == "rdmB"){
+      dfun = drdm_c;
+      pfun = prdm_c;
+      transform = transform_rdm;
+      Ntransform = Ntransform_rdm;
+    } else{
+      dfun = dlnr_c;
+      pfun = plnr_c;
+      transform = transform_lnr;
+      Ntransform = Ntransform_lnr;
+    }
+    for(int i = 0; i < n_particles; i++){
+      p_vector = p_matrix(i, _);
+      pars = get_pars(p_vector, constants, transform, Ntransform, p_types, designs, n_trials);
+      lls[i] = c_log_likelihood_race(pars, data, dfun, pfun, n_trials, winner, expand, min_ll);
+    }
   }
   return(lls);
 }
