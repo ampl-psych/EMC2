@@ -309,35 +309,53 @@ NumericVector d_DDM_c (NumericVector rts, NumericVector R, List group_idx, Numer
     NumericVector total_idx = group_idx[k];
     int first_idx = total_idx[0] - 1;
     if((pars(first_idx,0) > 20 || pars(first_idx,1) > 10 || pars(first_idx,2) > 10 || pars(first_idx, 7) > .999 || pars(first_idx,4) > .2)){
+      Rcout << "first cond";
       continue;
-    } else if((pars(first_idx,2) != 0 && pars(first_idx,2) > 0.001)){
+    } else if((pars(first_idx,2) != 0 && pars(first_idx,2) < 0.001)){
+      Rcout << "second cond";
       continue;
-    } else if(pars(first_idx,7) != 0 && pars(first_idx,7) > 0.001){
+    } else if(pars(first_idx,7) != 0 && pars(first_idx,7) < 0.001){
+      Rcout << "third cond";
       continue;
     } else{
       // now we create a new vector with:  a/s, v/s, t0, d, sz/a, sv/s, st0, z/a
       pars_tmp[0] = pars(first_idx,1)/pars(first_idx,5); //a/s
       pars_tmp[1] = pars(first_idx,0)/pars(first_idx,5); //v/s
       pars_tmp[2] = pars(first_idx,3) + pars(first_idx,4)/2; //t0 = t0 + st0/2
-      pars_tmp[3] = (pars(first_idx,3) + pars(first_idx,4)/2) *(2*pars(first_idx,8)-1); //d = t0 + st0/2 * 2*DP -1
-      if(pars(first_idx,6) > (1 - pars(first_idx,6))){
+      pars_tmp[3] = pars(first_idx,3) *(2*pars(first_idx,8)-1); //d = t0 * 2*DP -1
+      if(pars(first_idx,6) < (1 - pars(first_idx,6))){
         pars_tmp[4] = 2*pars(first_idx,7) * pars(first_idx,6); //sz = 2*SZ * Z
       } else{
-        pars_tmp[4] = 2*pars(first_idx,7) *pars(first_idx,1) * (1 - pars(first_idx,6));
+        pars_tmp[4] = 2*pars(first_idx,7) * (1 - pars(first_idx,6));
       }
       pars_tmp[5] = pars(first_idx,2)/pars(first_idx,5); //sv/s
       pars_tmp[6] = pars(first_idx,4); // st0
       pars_tmp[7] = pars(first_idx,6); // z Note that for z and sz the EMC R code multiplies by a, but the R ddiffusion divides by a, so avoiding both
       g_Params = new Parameters (pars_tmp, precision);
+      Rcout << pars_tmp;
+      Rcout << "\n";
       if(R[first_idx] == 2){
         for (int i = 0; i < total_idx.length(); i++) {
+          Rcout << R[first_idx];
+          Rcout << "\t";
+
           int idx = total_idx[i] - 1;
+          Rcout << rts[idx];
+          Rcout << "\t";
           out[idx] =  g_plus(rts[idx]); //upper
+          Rcout << out[idx];
+          Rcout << "\n";
         }
       } else{
         for (int i = 0; i < total_idx.length(); i++) {
+          Rcout << R[first_idx];
+          Rcout << "\t";
           int idx = total_idx[i] -1;
+          Rcout << rts[idx];
+          Rcout << "\t";
           out[idx] = -g_minus(rts[idx]); //lower
+          Rcout << out[idx];
+          Rcout << "\n";
         }
       }
     }
