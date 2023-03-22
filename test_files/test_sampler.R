@@ -25,6 +25,7 @@ dat2 <- dat[which(dat$subjects %in% (unique(dat$subjects)[1:3])),]
 dat2 <- droplevels(dat2)
 
 samplers <- make_samplers(dat2, design_at0_full)
+# Note that the useC argument is a bit deceptive. It uses the C dists in any case, but if TRUE will also use the C log_likelihood_race across particles
 samplers_C <- auto_burn(samplers, useC = T, cores_for_chains = 3, cores_per_chain = 3, verbose = T)
 samplers <- auto_burn(samplers, useC = T, cores_for_chains = 3, cores_per_chain = 3, verbose = T)
 
