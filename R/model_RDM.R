@@ -201,7 +201,7 @@ dRDM <- function(rt,pars)
 {
   out <- numeric(length(rt))
   ok <- rt > pars[,"t0"] &
-        !pars[,"v"] < 0  # code handles rate zero case
+    !pars[,"v"] < 0  # code handles rate zero case
   if (any(dimnames(pars)[[2]]=="s")) # rescale
     pars[ok,c("A","B","v")] <- pars[ok,c("A","B","v")]/pars[ok,"s"]
   out[ok] <- dWald(rt[ok],v=pars[ok,"v"],B=pars[ok,"B"],A=pars[ok,"A"],t0=pars[ok,"t0"])
@@ -213,7 +213,7 @@ pRDM <- function(rt,pars)
 {
   out <- numeric(length(rt))
   ok <- rt > pars[,"t0"] &
-        !pars[,"v"] < 0  # code handles rate zero case
+    !pars[,"v"] < 0  # code handles rate zero case
   if (any(dimnames(pars)[[2]]=="s")) # rescale
     pars[ok,c("A","B","v")] <- pars[ok,c("A","B","v")]/pars[ok,"s"]
   out[ok] <- pWald(rt[ok],v=pars[ok,"v"],B=pars[ok,"B"],A=pars[ok,"A"],t0=pars[ok,"t0"])
@@ -305,6 +305,7 @@ rRDM <- function(lR,pars,p_types=c("v","B","A","t0"))
 rdmB <- function(){
   list(
     type="RACE",
+    c_name = "rdmB",
     p_types=c("v","B","A","t0","s"),
     # Transform to natural scale
     Ntransform=function(x) {

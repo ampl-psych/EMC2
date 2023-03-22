@@ -27,20 +27,16 @@ pmwgs <- function(dadm, variant_funs, pars = NULL, ll_func = NULL, prior = NULL,
 }
 
 init <- function(pmwgs, start_mu = NULL, start_var = NULL,
-                 verbose = FALSE, particles = 1000, n_cores = 1, epsilon = NULL) {
+                 verbose = FALSE, particles = 1000, n_cores = 1, epsilon = NULL,
+                 useC = FALSE) {
   # Gets starting points for the mcmc process
   # If no starting point for group mean just use zeros
   variant_funs <- attr(pmwgs, "variant_funs")
   startpoints <- variant_funs$get_startpoints(pmwgs, start_mu, start_var)
-  if(n_cores > 1){
-    proposals <- parallel::mclapply(X=1:pmwgs$n_subjects,FUN=start_proposals,
-                          parameters = startpoints, n_particles = particles,
-                          pmwgs = pmwgs, variant_funs = variant_funs,mc.cores = n_cores)
-  } else{
-    proposals <- lapply(X=1:pmwgs$n_subjects,FUN=start_proposals,
-                        parameters = startpoints, n_particles = particles,
-                        pmwgs = pmwgs, variant_funs = variant_funs)
-  }
+  proposals <- parallel::mclapply(X=1:pmwgs$n_subjects,FUN=start_proposals,
+                                  parameters = startpoints, n_particles = particles,
+                                  pmwgs = pmwgs, variant_funs = variant_funs,
+                                  useC = useC, mc.cores = n_cores)
   proposals <- array(unlist(proposals), dim = c(pmwgs$n_pars + 2, pmwgs$n_subjects))
 
   # Sample the mixture variables' initial values.
@@ -53,12 +49,13 @@ init <- function(pmwgs, start_mu = NULL, start_var = NULL,
 }
 
 
-start_proposals <- function(s, parameters, n_particles, pmwgs, variant_funs){
+start_proposals <- function(s, parameters, n_particles, pmwgs, variant_funs, useC){
   #Draw the first start point
   group_pars <- variant_funs$get_group_level(parameters, s)
   proposals <- particle_draws(n_particles, group_pars$mu, group_pars$var)
   colnames(proposals) <- rownames(pmwgs$samples$alpha) # preserve par names
-  lw <- apply(proposals,1,pmwgs$ll_func,dadm = pmwgs$data[[which(pmwgs$subjects == s)]])
+  lw <- calc_ll_manager(proposals, dadm = pmwgs$data[[which(pmwgs$subjects == s)]],
+                        ll_func = pmwgs$ll_func, useC = useC)
   weight <- exp(lw - max(lw))
   idx <- sample(x = n_particles, size = 1, prob = weight)
   return(list(proposal = proposals[idx,], ll = lw[idx], origin = 2))
@@ -73,13 +70,18 @@ run_stage <- function(pmwgs,
                       force_prev_epsilon = TRUE,
                       n_cores = 1,
                       epsilon = NULL,
-                      p_accept = NULL) {
+                      p_accept = NULL,
+                      useC) {
   # Set defaults for NULL values
   # Set necessary local variables
   # Set stable (fixed) new_sample argument for this run
   n_pars <- pmwgs$n_pars
   components <- attr(pmwgs$data, "components")
   shared_ll_idx <- attr(pmwgs$data, "shared_ll_idx")
+  if(stage == "sample"){
+    components <- rep(1, length(components))
+    shared_ll_idx <- rep(1, length(shared_ll_idx))
+  }
   # Display stage to screen
   if(verbose){
     msgs <- list(
@@ -128,7 +130,7 @@ run_stage <- function(pmwgs,
     proposals=mclapply(X=1:pmwgs$n_subjects,FUN = new_particle, data, particles, pars, eff_mu,
                        eff_var, mix, pmwgs$ll_func, epsilon, subjects, components,
                        prev_ll = pmwgs$samples$subj_ll[,j-1], stage, chains_cov,
-                       variant_funs, mc.cores =n_cores)
+                       variant_funs, useC, mc.cores =n_cores)
     proposals <- array(unlist(proposals), dim = c(pmwgs$n_pars + 2, pmwgs$n_subjects))
 
     #Fill samples
@@ -156,7 +158,8 @@ run_stage <- function(pmwgs,
 new_particle <- function (s, data, num_particles, parameters, eff_mu = NULL,
                           eff_var = NULL, mix_proportion = c(0.5, 0.5, 0),
                           likelihood_func = NULL, epsilon = NULL, subjects,
-                          components, prev_ll, stage, chains_cov, variant_funs)
+                          components, prev_ll, stage, chains_cov, variant_funs,
+                          useC)
 {
   start_par <- 1
   group_pars <- variant_funs$get_group_level(parameters, s)
@@ -197,9 +200,9 @@ new_particle <- function (s, data, num_particles, parameters, eff_mu = NULL,
 
     # Calculate likelihoods and other IS quantities
     if(components[length(components)] > 1){
-      lw <- apply(proposals[,idx], 1,  likelihood_func, dadm = data[[which(subjects == s)]], component = i)
+      lw <- calc_ll_manager(proposals[,idx], dadm = data[[which(subjects == s)]], likelihood_func, component = i, useC = useC)
     } else{
-      lw <- apply(proposals[,idx], 1,  likelihood_func, dadm = data[[which(subjects == s)]])
+      lw <- calc_ll_manager(proposals[,idx], dadm = data[[which(subjects == s)]], likelihood_func, useC = useC)
     }
     lw_total <- lw + prev_ll[s] - lw[1] # Bit inefficient but safes code, makes sure lls from other components are included
     lp <- mvtnorm::dmvnorm(x = proposals, mean = group_mu, sigma = group_var, log = TRUE)
@@ -314,7 +317,9 @@ extend_obj <- function(obj, n_extend){
   if(is.null(old_dim) | n_dimensions == 1) return(obj)
   if(n_dimensions == 2){
     if(nrow(obj) == ncol(obj)){
-      if(abs(sum(rowSums(obj/max(obj)) - colSums(obj/max(obj)))) < .1) return(obj)
+      if(nrow(obj) > 1){
+        if(mean(abs(rowSums(obj/max(obj))) - abs(colSums(obj/max(obj)))) < .1) return(obj)
+      }
     }
   }
   new_dim <- c(rep(0, (n_dimensions -1)), n_extend)
@@ -439,7 +444,7 @@ get_variant_funs <- function(type = "standard") {
       get_all_pars_IS2 = get_all_pars_blocked,
       prior_dist_IS2 = prior_dist_blocked,
       group_dist_IS2 = group_dist_blocked
-  )
+    )
   } else if(type == "diagonal"){
     list_fun <- list(# store functions
       sample_store = sample_store_standard,
@@ -454,8 +459,55 @@ get_variant_funs <- function(type = "standard") {
       prior_dist_IS2 = prior_dist_diag,
       group_dist_IS2 = group_dist_diag
     )
+  }  else if(type == "lm"){
+    list_fun <- list(# store functions
+      sample_store = sample_store_lm,
+      add_info = add_info_lm,
+      get_startpoints = get_startpoints_lm,
+      get_group_level = get_group_level_lm,
+      fill_samples = fill_samples_lm,
+      gibbs_step = gibbs_step_lm,
+      filtered_samples = filtered_samples_lm,
+      get_conditionals = get_conditionals_lm,
+      get_all_pars_IS2 = get_all_pars_lm,
+      prior_dist_IS2 = prior_dist_lm,
+      group_dist_IS2 = group_dist_lm
+    )
   }
-  list_fun$type = type
   return(list_fun)
+}
+
+calc_ll_manager <- function(proposals, dadm, useC, ll_func, component = NULL){
+  if(!is.data.frame(dadm)){
+    lls <- log_likelihood_joint(proposals, dadm, component, useC)
+  } else{
+    c_name <- attr(dadm,"model")()$c_name
+    if(is.null(c_name) | !useC){ # use the R implementation
+      lls <- apply(proposals,1, ll_func,dadm = dadm)
+    } else{
+      p_types <- attr(dadm,"model")()$p_types
+      designs <- list()
+      for(p in p_types){
+        designs[[p]] <- attr(dadm,"designs")[[p]][attr(attr(dadm,"designs")[[p]],"expand"),,drop=FALSE]
+      }
+      constants <- attr(dadm, "constants")
+      if(is.null(constants)) constants <- NA
+      n_trials = nrow(dadm)
+      if(c_name == "DDM"){
+        levels(dadm$R) <- c(0,1)
+        pars <- get_pars(proposals[1,],dadm)
+        pars <- cbind(pars, dadm$R)
+        parameter_char <- apply(pars, 1, paste0, collapse = "\t")
+        parameter_factor <- factor(parameter_char, levels = unique(parameter_char))
+        parameter_indices <- split(seq_len(nrow(pars)), f = parameter_factor)
+        names(parameter_indices) <- 1:length(parameter_indices)
+      } else{
+        parameter_indices <- list()
+      }
+      lls <- calc_ll(proposals, dadm, constants = constants, n_trials = n_trials, designs = designs, type = c_name, p_types = p_types,
+                     min_ll = log(1e-10), winner = dadm$winner, expand = attr(dadm, "expand"), group_idx = parameter_indices)
+    }
+  }
+  return(lls)
 }
 
