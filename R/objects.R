@@ -20,7 +20,7 @@ filter_obj <- function(obj, idx){
   if(length(dims) == 2){
     if(nrow(obj) == ncol(obj)){
       if(nrow(obj) > 1){
-        if(abs(sum(rowSums(obj/max(obj)) - colSums(obj/max(obj)))) < .1) return(obj)
+        if(mean(abs(rowSums(obj/max(obj))) - abs(colSums(obj/max(obj)))) < .1) return(obj)
       }
     }
   }
@@ -338,7 +338,7 @@ parameters_data_frame <- function(samples,filter="sample",thin=1,subfilter=0,
   out
 }
 
-get_sigma <- function(samps,filter="samples",thin=1,subfilter=0)
+get_sigma <- function(samps,filter="sample",thin=1,subfilter=0)
   # Get sigma matrix samples
 {
   shorten <- function(x,r,d) {

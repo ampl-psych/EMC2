@@ -316,9 +316,9 @@ extend_obj <- function(obj, n_extend){
   n_dimensions <- length(old_dim)
   if(is.null(old_dim) | n_dimensions == 1) return(obj)
   if(n_dimensions == 2){
-    if(nrow(obj) > 1){
-      if(nrow(obj) == ncol(obj)){
-        if(abs(sum(rowSums(obj/max(obj)) - colSums(obj/max(obj)))) < .1) return(obj)
+    if(nrow(obj) == ncol(obj)){
+      if(nrow(obj) > 1){
+        if(mean(abs(rowSums(obj/max(obj))) - abs(colSums(obj/max(obj)))) < .1) return(obj)
       }
     }
   }
