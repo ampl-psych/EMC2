@@ -106,10 +106,10 @@ run_samplers <- function(samplers, stage, iter = NULL, max_gd = NULL, mean_gd = 
                          cores_for_chains = length(samplers), max_trys = 50, useC = FALSE){
   if (verbose) message(paste0("Running ", stage, " stage"))
   attributes <- get_attributes(samplers)
-  progress <- check_progress(samplers, stage, iter, max_gd, mean_gd, min_es, min_unique, max_trys, step_size, cores_per_chain, verbose)
-  samplers <- progress$samplers
   total_iters_stage <- chain_n(samplers)[,stage][1]
   iter <- iter + total_iters_stage
+  progress <- check_progress(samplers, stage, iter, max_gd, mean_gd, min_es, min_unique, max_trys, step_size, cores_per_chain, verbose)
+  samplers <- progress$samplers
   while(!progress$done){
     if(!is.numeric(progress$step_size) | progress$step_size < 1) warning("Something wrong with the stepsize again, Niek's to blame")
     samplers <- add_proposals(samplers, stage, cores_per_chain)
@@ -486,19 +486,34 @@ run_sample <- function(samplers, iter = 1000, max_gd = 1.1, mean_gd, min_es = 0,
 #' @export
 #'
 #' @examples
+#'
 make_samplers <- function(data_list,design_list,model_list=NULL,
                           type=c("standard","diagonal","blocked","factor","single")[1],
                           n_chains=3,rt_resolution=0.02,
                           prior_list = NULL,
                           par_groups=NULL,
-                          n_factors=NULL,constraintMat = NULL)
+                          n_factors=NULL,constraintMat = NULL, formula = NULL)
 
 {
-  if (!(type %in% c("standard","diagonal","blocked","factor","single")))
+  if (!(type %in% c("standard","diagonal","blocked","factor","single", "lm")))
     stop("type must be one of: standard,diagonal,blocked,factor,factorRegression,single")
   if (is(data_list, "data.frame")) data_list <- list(data_list)
   # Sort subject together and add unique trial within subject integer
   # create overarching data list with one list per subject
+  if(type == "lm"){
+    if(length(data_list) > 1) stop("no joint models for lm yet")
+    vars <- c()
+    for(form in formula){
+      vars <- c(vars, split_form(form)$dep)
+    }
+    tmp <- data_list[[1]]
+    aggr_data <- tmp[cumsum(table(tmp$subjects)),c("subjects", unique(vars))]
+    for(i in 1:ncol(aggr_data)){
+      if(colnames(aggr_data)[i] != "subjects" & is.factor(aggr_data[,i])){
+        aggr_data[,i] <- factor(aggr_data[,i], levels = unique(aggr_data[,i]))
+      }
+    }
+  }
   data_list <- lapply(data_list,function(d){
     if (!is.factor(d$subjects)) d$subjects <- factor(d$subjects)
     d <- d[order(d$subjects),]
@@ -547,6 +562,8 @@ make_samplers <- function(data_list,design_list,model_list=NULL,
   } else if (type == "blocked") {
     if (is.null(par_groups)) stop("Must specify par_groups for blocked type")
     out <- pmwgs(dadm_list,par_groups=par_groups, variant_funs)
+  } else if (type == "lm") {
+    out <- pmwgs(dadm_list,variant_funs, formula = formula, aggr_data = aggr_data)
   }
   # replicate chains
   dadm_lists <- rep(list(out),n_chains)

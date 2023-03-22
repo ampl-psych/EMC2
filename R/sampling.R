@@ -459,6 +459,20 @@ get_variant_funs <- function(type = "standard") {
       prior_dist_IS2 = prior_dist_diag,
       group_dist_IS2 = group_dist_diag
     )
+  }  else if(type == "lm"){
+    list_fun <- list(# store functions
+      sample_store = sample_store_lm,
+      add_info = add_info_lm,
+      get_startpoints = get_startpoints_lm,
+      get_group_level = get_group_level_lm,
+      fill_samples = fill_samples_lm,
+      gibbs_step = gibbs_step_lm,
+      filtered_samples = filtered_samples_lm,
+      get_conditionals = get_conditionals_lm,
+      get_all_pars_IS2 = get_all_pars_lm,
+      prior_dist_IS2 = prior_dist_lm,
+      group_dist_IS2 = group_dist_lm
+    )
   }
   return(list_fun)
 }
