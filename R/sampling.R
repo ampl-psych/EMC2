@@ -473,6 +473,20 @@ get_variant_funs <- function(type = "standard") {
       prior_dist_IS2 = prior_dist_lm,
       group_dist_IS2 = group_dist_lm
     )
+  }else if(type == "infnt_factor"){
+    list_fun <- list(# store functions
+      sample_store = sample_store_infnt_factor,
+      add_info = add_info_infnt_factor,
+      get_startpoints = get_startpoints_infnt_factor,
+      get_group_level = get_group_level_standard,
+      fill_samples = fill_samples_infnt_factor,
+      gibbs_step = gibbs_step_infnt_factor,
+      filtered_samples = filtered_samples_infnt_factor,
+      get_conditionals = get_conditionals_infnt_factor,
+      get_all_pars_IS2 = get_all_pars_infnt_factor,
+      prior_dist_IS2 = prior_dist_infnt_factor,
+      group_dist_IS2 = group_dist_infnt_factor
+    )
   }
   return(list_fun)
 }
