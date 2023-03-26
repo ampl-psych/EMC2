@@ -488,7 +488,7 @@ run_sample <- function(samplers, iter = 1000, max_gd = 1.1, mean_gd, min_es = 0,
 #' @examples
 #'
 make_samplers <- function(data_list,design_list,model_list=NULL,
-                          type=c("standard","diagonal","blocked","factor","single")[1],
+                          type=c("standard","diagonal","blocked","factor","single", "lm", "infnt_factor")[1],
                           n_chains=3,rt_resolution=0.02,
                           prior_list = NULL,
                           par_groups=NULL,
@@ -557,7 +557,7 @@ make_samplers <- function(data_list,design_list,model_list=NULL,
 
   # if(!is.null(subject_covariates)) attr(dadm_list, "subject_covariates") <- subject_covariates
   variant_funs <- get_variant_funs(type = type)
-  if (type %in% c("standard", "single", "diagonal")) {
+  if (type %in% c("standard", "single", "diagonal", "infnt_factor")) {
     out <- pmwgs(dadm_list, variant_funs)
   } else if (type == "blocked") {
     if (is.null(par_groups)) stop("Must specify par_groups for blocked type")
