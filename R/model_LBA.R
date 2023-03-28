@@ -101,6 +101,7 @@ dLBA <- function (rt, pars, posdrift = TRUE, robust = FALSE)
 {
   dt <- rt - pars[,"t0"]
   ok <- (dt>0) & (pars[,"b"] >= pars[,"A"])
+  ok[is.na(ok)] <- FALSE
   out <- numeric(length(dt))
   out[ok] <- dlba(t = dt[ok], A = pars[ok,"A"], b = pars[ok,"b"],
                          v = pars[ok,"v"], sv = pars[ok,"sv"],
@@ -115,6 +116,7 @@ pLBA <- function (rt, pars, posdrift = TRUE, robust = FALSE)
 {
   dt <- rt - pars[,"t0"]
   ok <- (dt>0) & (pars[,"b"] >= pars[,"A"])
+  ok[is.na(ok)] <- FALSE
   out <- numeric(length(dt))
   out[ok] <- plba(t = dt[ok], A = pars[ok,"A"], b = pars[ok,"b"],
                          v = pars[ok,"v"], sv = pars[ok,"sv"],
@@ -132,9 +134,9 @@ rLBA <- function(lR,pars,p_types=c("v","sv","b","A","t0"),posdrift = TRUE)
 {
   if (!all(p_types %in% dimnames(pars)[[2]]))
     stop("pars must have columns ",paste(p_types,collapse = " "))
-  dt <- matrix((pars[,"b"]-pars[,"A"]*runif(dim(pars)[1]))/
+  dt <- suppressWarnings(matrix((pars[,"b"]-pars[,"A"]*runif(dim(pars)[1]))/
                  msm::rtnorm(dim(pars)[1],pars[,"v"],pars[,"sv"],ifelse(posdrift,0,-Inf)),
-               nrow=length(levels(lR)))
+               nrow=length(levels(lR))))
   R <- apply(dt,2,which.min)
   pick <- cbind(R,1:dim(dt)[2]) # Matrix to pick winner
   # Any t0 difference with lR due to response production time (no effect on race)
