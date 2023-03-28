@@ -17,8 +17,8 @@
 #' Example: `function(d)d$S==d$lR`
 #'
 #' @param constants A named vector. Sets constants. Any parameter named by `sampled_p_vector` can be set constant.
-#' @param Fcovariates Covariate factors. Covariate measures which may be included in the model and/or mapped to factors.
-#' @param Ffunctions Factor Functions. Functions to specify specific parameterisations, or functions of parameters.
+#' @param Fcovariates Character vector of names of trial by trial covariates present in data.
+#' @param Ffunctions Names list of functions that create new factors based on columns in the data and the lR and lM factors.
 #' @param adapt For future compatibility. Ignore.
 #' @param report_p_vector TRUE (default) or FALSE. if TRUE, returns the vector of parameters to be estimated.
 #' @param custom_p_vector A character vector. If specified, a custom likelihood function can be supplied.
@@ -161,7 +161,7 @@ add_accumulators <- function(data,matchfun=NULL,simulate=FALSE,type="RACE", Fcov
       datar$lM <- factor(lM)
     }
   } else datar <- cbind(data,lR=factor(rep(levels(data$R)[1],dim(data)[1]),
-                                       levels=levels(data$R)),lM=factor(rep(TRUE,dim(data)[1]))) # For DDM
+                        levels=levels(data$R)),lM=factor(rep(TRUE,dim(data)[1]))) # For DDM
   row.names(datar) <- NULL
   if (simulate) datar$rt <- NA else {
     datar$winner <- datar$lR==datar$R
@@ -200,6 +200,9 @@ design_model_custom_ll <- function(data, design, model, prior){
 
 }
 
+
+# model=NULL;prior = NULL;add_acc=TRUE;rt_resolution=0.02;verbose=TRUE;
+# compress=TRUE;rt_check=TRUE
 
 #' Combines a data frame with a design and (optionally) a user-specified prior
 #'
@@ -244,7 +247,8 @@ design_model <- function(data,design,model=NULL,prior = NULL,
   #   transform if a function acting on p_vector before mapping
   #   Ntransform is a function acting on the output of map_p
 {
-    compress_dadm <- function(da,designs,Fcov,Ffun)
+
+  compress_dadm <- function(da,designs,Fcov,Ffun)
     # out keeps only unique rows in terms of all parameters design matrices
     # R, lR and rt (at given resolution) from full data set
   {
@@ -400,7 +404,6 @@ design_model <- function(data,design,model=NULL,prior = NULL,
     newF <- stats::setNames(data.frame(design$Ffunctions[[i]](da)),i)
     da <- cbind.data.frame(da,newF)
   }
-
 
   # # NOT SURE THIS IS NEEDED, BUT CANT HURT
   # # Add dummy content for covariates in sampled_p_vector calls
