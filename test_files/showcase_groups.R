@@ -32,7 +32,7 @@ design_lbaB <- make_design(
   model=lbaB)
 
 samplers_inter_group <- make_samplers(dat, design_lbaB, type = "lm",
-                                      formula = list(v_lMTRUE ~ group, v_typeLD ~ group, v_lMTRUE:typeLD ~ group))
+  formula = list(v_lMTRUE ~ group, v_typeLD ~ group, v_lMTRUE:typeLD ~ group))
 samplers_inter_group <- run_emc(samplers_inter_group, cores_per_chain = 5, verbose = T)
 save(samplers_inter_group, file = "inter_group.RData")
 
