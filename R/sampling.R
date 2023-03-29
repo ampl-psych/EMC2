@@ -315,7 +315,7 @@ extend_obj <- function(obj, n_extend){
   if(n_dimensions == 2){
     if(nrow(obj) == ncol(obj)){
       if(nrow(obj) > 1){
-        if(abs(sum(rowSums(obj/max(obj)) - colSums(obj/max(obj)))) < .1) return(obj)
+        if(mean(abs(abs(rowSums(obj/max(obj))) - abs(colSums(obj/max(obj))))) < .01) return(obj)
       }
     }
   }

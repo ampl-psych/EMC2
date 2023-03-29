@@ -106,10 +106,10 @@ run_samplers <- function(samplers, stage, iter = NULL, max_gd = NULL, mean_gd = 
                          cores_for_chains = length(samplers), max_trys = 50){
   if (verbose) message(paste0("Running ", stage, " stage"))
   attributes <- get_attributes(samplers)
-  progress <- check_progress(samplers, stage, iter, max_gd, mean_gd, min_es, min_unique, max_trys, step_size, cores_per_chain, verbose)
-  samplers <- progress$samplers
   total_iters_stage <- chain_n(samplers)[,stage][1]
   iter <- iter + total_iters_stage
+  progress <- check_progress(samplers, stage, iter, max_gd, mean_gd, min_es, min_unique, max_trys, step_size, cores_per_chain, verbose)
+  samplers <- progress$samplers
   while(!progress$done){
     if(!is.numeric(progress$step_size) | progress$step_size < 1) warning("Something wrong with the stepsize again, Niek's to blame")
     samplers <- add_proposals(samplers, stage, cores_per_chain)
@@ -454,7 +454,7 @@ run_adapt <- function(samplers, max_gd = NULL, mean_gd = NULL, min_es = 0, min_u
 #' @export
 #'
 #' @return A list of samplers
-run_sample <- function(samplers, iter = 1000, max_gd = 1.1, mean_gd, min_es = 0,
+run_sample <- function(samplers, iter = 1000, max_gd = 1.1, mean_gd = NULL, min_es = 0,
                        p_accept = .8, step_size = 100, verbose = FALSE, verboseProgress = FALSE,
                        fileName = NULL,
                        particles = NULL, particle_factor = 50, cores_per_chain = 1,
