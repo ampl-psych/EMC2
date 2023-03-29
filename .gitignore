@@ -1,2 +1,5 @@
 .Rproj.user
 .Rhistory
+# get rid of binaries
+*.so
+*.o
