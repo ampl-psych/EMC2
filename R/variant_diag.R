@@ -22,7 +22,7 @@ get_startpoints_diag <- function(pmwgs, start_mu, start_var){
   return(list(tmu = start_mu, tvar = start_var, tvinv = MASS::ginv(start_var), a_half = start_a_half))
 }
 
-get_conditionals_diag <- function(s, samples, n_pars){
+get_conditionals_diag <- function(s, samples, n_pars, iteration = NULL){
   iteration <- samples$iteration
   pts2_unwound <- log(apply(samples$theta_var,3,diag))
   all_samples <- rbind(samples$alpha[, s,],samples$theta_mu,pts2_unwound)

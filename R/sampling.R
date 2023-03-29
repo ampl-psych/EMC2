@@ -216,7 +216,12 @@ new_particle <- function (s, data, num_particles, parameters, eff_mu = NULL,
     lm <- log(mix_proportion[1] * exp(lp) + (mix_proportion[2] * prop_density) + (mix_proportion[3] * eff_density))
     # Calculate weights and center
     l <- lw_total + lp - lm
+
     weights <- exp(l - max(l))
+    if(any(is.na(weights))){
+      save(proposals, lm, l, lw, lp, prop_density, weights)
+      browser()
+    }
     # Do MH step and return everything
     idx_ll <- sample(x = num_particles+1, size = 1, prob = weights)
     origin <- min(which(idx_ll <= cumuNumbers))

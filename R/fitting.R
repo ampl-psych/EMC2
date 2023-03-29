@@ -453,7 +453,7 @@ run_adapt <- function(samplers, max_gd = NULL, mean_gd = NULL, min_es = 0, min_u
 #' @export
 #'
 #' @return A list of samplers
-run_sample <- function(samplers, iter = 1000, max_gd = 1.1, mean_gd, min_es = 0,
+run_sample <- function(samplers, iter = 1000, max_gd = 1.1, mean_gd = NULL, min_es = 0,
                        p_accept = .8, step_size = 100, verbose = FALSE, verboseProgress = FALSE,
                        fileName = NULL,
                        particles = NULL, particle_factor = 50, cores_per_chain = 1,
@@ -495,8 +495,8 @@ make_samplers <- function(data_list,design_list,model_list=NULL,
                           n_factors=NULL,constraintMat = NULL, formula = NULL)
 
 {
-  if (!(type %in% c("standard","diagonal","blocked","factor","single", "lm")))
-    stop("type must be one of: standard,diagonal,blocked,factor,factorRegression,single")
+  if (!(type %in% c("standard","diagonal","blocked","factor","single", "lm", "infnt_factor")))
+    stop("type must be one of: standard,diagonal,blocked,factor,infnt_factor", "lm","single")
   if (is(data_list, "data.frame")) data_list <- list(data_list)
   # Sort subject together and add unique trial within subject integer
   # create overarching data list with one list per subject

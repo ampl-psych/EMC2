@@ -4,39 +4,115 @@ library(devtools)
 # devtools::install("~/Documents/UVA/2022/EMC2")
 # load_all()
 library(EMC2)
-load("test_files/PNAS.RData")
+library(statmod)
+library(corrplot)
+library(factor.switching)
+library(colorspace)
 
-dat <- data[,c("s","E","S","R","RT")]
-names(dat)[c(1,5)] <- c("subjects","rt")
-levels(dat$R) <- levels(dat$S)
+n_pars <- 50
+n_subjects <- 30
+n_trials <- 100
+qs <- n_pars:1
+qs[as.logical(qs %% 2)] <- -qs[as.logical(qs %% 2)]
+covmat <- toeplitz(qs/n_pars)
 
-# Average rate = intercept, and rate d = difference (match-mismatch) contrast
-ADmat <- matrix(c(-1/2,1/2),ncol=1,dimnames=list(NULL,"d"))
-ADmat
+is_zero <- sample(1:sum(lower.tri(covmat)), n_pars * n_pars /5)
+# covmat[lower.tri(covmat)][is_zero] <- rnorm(n_pars * n_pars /5, sd = .2)
+covmat[lower.tri(covmat)] <- covmat[lower.tri(covmat)]/1.5
+covmat[upper.tri(covmat)] <- t(covmat)[upper.tri(covmat)]
+corrplot(covmat)
 
-Emat <- matrix(c(0,-1,0,0,0,-1),nrow=3)
-dimnames(Emat) <- list(NULL,c("a-n","a-s"))
-Emat
+data <- mvtnorm::rmvnorm(n_subjects, mean = seq(-5, 5, length.out = n_pars), sigma =  covmat)
 
-design_RDM <- make_design(
-  Ffactors=list(subjects=levels(dat$subjects),S=levels(dat$S),E=levels(dat$E)),
-  Rlevels=levels(dat$R),matchfun=function(d)d$S==d$lR,
-  Clist=list(lM=ADmat,lR=ADmat,S=ADmat,E=Emat),
-  Flist=list(v~lM,s~1,B~E,A~1,t0~1),
-  constants=c(s=log(1)),
-  model=rdmB)
+# t1 <- sum(mvtnorm::dmvnorm(new_df[,1:n_pars], mean = seq(-5, 5, length.out = n_pars), sigma = diag(n_pars), log = T))
+# t2 <- sum(dnorm(t(as.matrix(new_df[,1:n_pars])), mean = seq(-5, 5, length.out = n_pars), sd = 1, log = T))
 
+new_df <- data.frame()
+for(i in 1:nrow(data)){
+  tmp <- data.frame(mvtnorm::rmvnorm(n_trials, data[i,], diag(n_pars)))
+  tmp$subjects <- i
+  new_df <- rbind(new_df, tmp)
+}
 
-# Test single subject
-dat_single <- dat[which(dat$subjects %in% (unique(dat$subjects)[1:10])),]
-dat_single <- droplevels(dat_single)
+custom_ll <- function(dadm, pars){
+  sum(dnorm(t(as.matrix(dadm[,1:length(pars)])), mean = pars, sd = 1, log = T))
+}
+
+design_normal <- make_design(model = custom_ll, custom_p_vector = paste0("X", 1:n_pars))
 
 # first speed test:
-samplers <- make_samplers(dat_single, design_RDM)
-# first let's run init separately
-samplers <- run_emc(samplers, cores_per_chain =5, cores_for_chains = 3, useC = T, verbose = T)
+samplers <- make_samplers(new_df, design_normal)
+samplers <- run_emc(samplers, cores_per_chain =4, cores_for_chains = 3, useC = F, verbose = T)
 
-samplers <- run_IS2(samplers, IS_samples = 1000, max_particles = 1000, n_cores = 15)
+samplers_infnt <- make_samplers(new_df, design_normal, type = "infnt_factor")
+samplers_infnt <- run_emc(samplers_infnt, cores_per_chain =4, cores_for_chains = 3, useC = F, verbose = T)
+
+samplers_diag <- make_samplers(new_df, design_normal, type = "diagonal")
+samplers_diag <- run_sample(samplers_diag, cores_per_chain =4, cores_for_chains = 3, useC = F, verbose = T)
+
+
+
+# first let's run init separately
+
+library(factor.switching)
+library(EMC2)
+library(corrplot)
+samples_fa <- merge_samples(samplers_infnt)
+samples_std <- merge_samples(samplers)
+samples_diag <- merge_samples(samplers_diag)
+
+alpha_diag <- samples_diag$samples$alpha[,,samples_diag$samples$stage == "sample"]
+cor_diag <- array(0, dim = c(samples_diag$n_pars, samples_diag$n_pars, dim(alpha_diag)[3]))
+for(i in 1:dim(alpha_diag)[3]){
+  cor_diag[,,i] <- cor(t(alpha_diag[,,i]))
+}
+corrs_with_numbers(samples_std, do_corr = T)
+corrs_with_numbers(samples_fa, do_corr = T)
+corrs_with_numbers(corrs = cor_diag, do_corr = T)
+
+corrplot(covmat[1:10, 1:10], addCoef.col ="black", number.cex = .75, tl.col = "black")
+
+loadings <- samples_fa$samples$theta_lambda[,1:5,samples_fa$samples$stage == "sample"]
+
+samples_fa_sml <- samples_fa
+samples_fa_sml$samples$theta_lambda <- samples_fa_sml$samples$theta_lambda[,1:2,]
+for(i in 1:dim(samples_fa_sml$samples$theta_var)[3]){
+  samples_fa_sml$samples$theta_var[,,i] <- samples_fa_sml$samples$theta_lambda[,,i] %*% t(samples_fa_sml$samples$theta_lambda[,,i]) + diag(1/samples_fa$samples$theta_sig_err_inv[,i])
+}
+
+corrs_with_numbers(samples_fa_sml)
+
+max_factors <- 7
+
+# align loadings ----------------------------------------------------------
+samples <- samples_fa
+idx <- which(samples$samples$stage == "sample")
+idx <- idx[-c(1:200)]
+
+loadings_recov <- aperm(samples$samples$theta_lambda[,1:max_factors,idx], c(2,1,3))
+lambda_mcmc <- t(matrix(loadings_recov, prod(dim(loadings_recov)[1:2]), dim(loadings_recov)[3]))
+expanded <- expand.grid(1:max_factors, 1:samples$n_pars)
+colnames(lambda_mcmc) <- paste0("LambdaV", expanded[,2], "_", expanded[,1])
+
+
+library(factor.switching)
+res <- rsp_exact(lambda_mcmc)
+
+plot(res)
+probs <- .95
+factors_out <- c(which(credible.region(res$lambda_reordered_mcmc, probs = probs)[[1]][1,] > 0),
+                 which(credible.region(res$lambda_reordered_mcmc, probs = probs)[[1]][2,] < 0))
+factors_out <- unique(as.numeric(sub("^[^_]*_", "", names(factors_out))))
+factors_out
+
+lambda_fixed <- array(0, dim = c(nrow(loadings), max_factors, length(idx)))
+for(i in 1:length(idx)){lambda_fixed[,,i] <- t(matrix(t(res$lambda_reordered_mcmc)[,i], nrow = max_factors, byrow = F))}
+
+samples_fixed <- samples_fa
+samples_fixed$samples$theta_lambda[,,samples_fixed$samples$stage == "sample"] <- lambda_fixed
+
+debug(corrs_with_numbers)
+corrs_with_numbers(loadings = lambda_fixed)
 #
 # IS_samples <- attr(samplers, "IS_samples")
 # group_sample1 <- IS_samples$sub_and_group
