@@ -1,3 +1,18 @@
+# Flist = NULL;Ffactors = NULL;Rlevels = NULL;
+# Clist=NULL;matchfun=NULL;constants=NULL;Fcovariates=NULL;Ffunctions=NULL
+# adapt=NULL;report_p_vector=TRUE;custom_p_vector = NULL
+#
+# Ffactors=list(subjects=1,S=c("left","right","PMleft","PMright"))
+#   Rlevels=c("left","right","PM")
+#   Clist=list(lR=lRmat)
+#   Ffunctions=list(PM=function(d)factor(substr(as.character(d$S),1,2)=="PM"),
+#                   lPM=function(d)factor(d$lR=="PM"),
+#                   lL=function(d)factor(d$lR=="left"),
+#                   NACC=function(d){ifelse(substr(as.character(d$S),1,2)=="PM",3,2)})
+#   Flist=list(v~lR+0,B~PM+lPM+lL,A~1,t0~1,sv~1)
+#   constants=c(sv=0)
+# model=lbaB
+
 #' Binds together elements that make up a model design as a list
 #'
 #' This function returns a list with the model design.
@@ -30,6 +45,7 @@
 make_design <- function(Flist = NULL,Ffactors = NULL,Rlevels = NULL,model,
                         Clist=NULL,matchfun=NULL,constants=NULL,Fcovariates=NULL,Ffunctions=NULL,
                         adapt=NULL,report_p_vector=TRUE, custom_p_vector = NULL){
+
   if(!is.null(custom_p_vector)){
     design <- list(Flist = Flist, model = model, Ffactors = Ffactors)
     attr(design, "sampled_p_names") <-custom_p_vector
@@ -111,7 +127,7 @@ contr.anova <- function(n) {
 #'
 #' @param design a list of the design made with make_design.
 #' @param model a model list. Default is the model specified in the design list.
-#' @param doMap logical. If TRUE will
+#' @param doMap logical. If TRUE will map the sampled p_vector
 #'
 #' @return
 #' @export
@@ -203,7 +219,6 @@ design_model_custom_ll <- function(data, design, model, prior){
 
 # model=NULL;prior = NULL;add_acc=TRUE;rt_resolution=0.02;verbose=TRUE;
 # compress=TRUE;rt_check=TRUE
-
 #' Combines a data frame with a design and (optionally) a user-specified prior
 #'
 #' Performs a series to checks to make sure data frame and design match and
@@ -424,17 +439,18 @@ design_model <- function(data,design,model=NULL,prior = NULL,
   if (!is.list(design$Clist)) stop("Clist must be a list")
   if (!is.list(design$Clist[[1]])[1]) # same contrasts for all p_types
     design$Clist <- stats::setNames(lapply(1:length(model()$p_types),
-                                    function(x)design$Clist),model()$p_types) else {
-                                      missing_p_types <- model()$p_types[!(model()$p_types %in% names(design$Clist))]
-                                      if (length(missing_p_types)>0) {
-                                        nok <- length(design$Clist)
-                                        for (i in 1:length(missing_p_types)) {
-                                          design$Clist[[missing_p_types[i]]] <- list(stats::contr.treatment)
-                                          names(design$Clist)[nok+i] <- missing_p_types[i]
-                                        }
-                                      }
-                                    }
-  if(model()$type != "MRI") for (i in model()$p_types) attr(design$Flist[[i]],"Clist") <- design$Clist[[i]]
+      function(x)design$Clist),model()$p_types) else {
+        missing_p_types <- model()$p_types[!(model()$p_types %in% names(design$Clist))]
+        if (length(missing_p_types)>0) {
+          nok <- length(design$Clist)
+          for (i in 1:length(missing_p_types)) {
+            design$Clist[[missing_p_types[i]]] <- list(stats::contr.treatment)
+            names(design$Clist)[nok+i] <- missing_p_types[i]
+          }
+        }
+      }
+  if(model()$type != "MRI") for (i in model()$p_types)
+    attr(design$Flist[[i]],"Clist") <- design$Clist[[i]]
   out <- lapply(design$Flist,make_dm,da=da,Fcovariates=design$Fcovariates)
   if (!is.null(rt_resolution) & !is.null(da$rt)) da$rt <- round(da$rt/rt_resolution)*rt_resolution
   if (compress) dadm <- compress_dadm(da,designs=out,
@@ -532,6 +548,23 @@ make_dm <- function(form,da,Clist=NULL,Fcovariates=NULL)
       }
   }
   out <- stats::model.matrix(form,da)
+  if (!any(attr(out,"assign")==0)) { # No intercept models mishandled, fix
+    Fchar <- as.character(form)
+    Fchar[3] <- unlist(strsplit(Fchar[3]," - 1"))
+    Fchar[3] <- paste(unlist(strsplit(Fchar[3],"0 + ",fixed=TRUE)),collapse="")
+    Fchar[3] <- unlist(strsplit(Fchar[3]," + 0",fixed=TRUE))
+    Fchar[3] <- paste(unlist(strsplit(Fchar[3],"-1 + ",fixed=TRUE)),collapse="")
+    fattr <- attributes(form)
+    form <- formula(paste(Fchar[2],Fchar[1],Fchar[3]))
+    attributes(form) <- fattr
+    newout <- stats::model.matrix(form,da)
+    out <- newout[,-1]
+    oattr <- attributes(newout)
+    oattr$dim[2] <- oattr$dim[2]-1
+    oattr$dimnames[[2]] <- oattr$dimnames[[2]][-1]
+    oattr$assign <- oattr$assign[-1]
+    attributes(out) <- oattr
+  }
   if (dim(out)[2]==1) dimnames(out)[[2]] <- as.character(pnam) else {
     if (attr(stats::terms(form),"intercept")!=0) {
       cnams <- paste(pnam,dimnames(out)[[2]][-1],sep="_")
