@@ -11,20 +11,6 @@ Rcpp::Rostream<true>&  Rcpp::Rcout = Rcpp::Rcpp_cout_get();
 Rcpp::Rostream<false>& Rcpp::Rcerr = Rcpp::Rcpp_cerr_get();
 #endif
 
-// dmvnrm_arma_fast
-arma::vec dmvnrm_arma_fast(arma::mat const& x, arma::rowvec const& mean, arma::mat const& sigma, bool const logd);
-RcppExport SEXP _EMC2_dmvnrm_arma_fast(SEXP xSEXP, SEXP meanSEXP, SEXP sigmaSEXP, SEXP logdSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< arma::mat const& >::type x(xSEXP);
-    Rcpp::traits::input_parameter< arma::rowvec const& >::type mean(meanSEXP);
-    Rcpp::traits::input_parameter< arma::mat const& >::type sigma(sigmaSEXP);
-    Rcpp::traits::input_parameter< bool const >::type logd(logdSEXP);
-    rcpp_result_gen = Rcpp::wrap(dmvnrm_arma_fast(x, mean, sigma, logd));
-    return rcpp_result_gen;
-END_RCPP
-}
 // calc_ll
 NumericVector calc_ll(NumericMatrix p_matrix, DataFrame data, NumericVector constants, List designs, const int n_trials, String type, CharacterVector p_types, LogicalVector winner, NumericVector expand, double min_ll, List group_idx);
 RcppExport SEXP _EMC2_calc_ll(SEXP p_matrixSEXP, SEXP dataSEXP, SEXP constantsSEXP, SEXP designsSEXP, SEXP n_trialsSEXP, SEXP typeSEXP, SEXP p_typesSEXP, SEXP winnerSEXP, SEXP expandSEXP, SEXP min_llSEXP, SEXP group_idxSEXP) {
@@ -128,7 +114,6 @@ END_RCPP
 }
 
 static const R_CallMethodDef CallEntries[] = {
-    {"_EMC2_dmvnrm_arma_fast", (DL_FUNC) &_EMC2_dmvnrm_arma_fast, 4},
     {"_EMC2_calc_ll", (DL_FUNC) &_EMC2_calc_ll, 11},
     {"_EMC2_d_DDM_c", (DL_FUNC) &_EMC2_d_DDM_c, 6},
     {"_EMC2_dlba", (DL_FUNC) &_EMC2_dlba, 7},

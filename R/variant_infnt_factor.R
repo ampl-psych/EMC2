@@ -178,21 +178,22 @@ last_sample_infnt_factor <- function(store) {
   )
 }
 
-get_conditionals_infnt_factor <- function(s, samples, n_pars, iteration = NULL){
+get_conditionals_infnt_factor <- function(s, samples, n_pars, iteration = NULL, idx = NULL){
   iteration <- ifelse(is.null(iteration), samples$iteration, iteration)
-  sig_err <- log(samples$theta_sig_err_inv)
+  if(is.null(idx)) idx <- 1:n_pars
+  sig_err <- log(samples$theta_sig_err_inv)[idx]
   eta <- matrix(samples$theta_eta[s,,], nrow = samples$n_factors)
-  lambda <- apply(samples$theta_lambda, 3, as.numeric, samples$n_factors)
-  theta_mu <- samples$theta_mu
-  all_samples <- rbind(samples$alpha[, s,],theta_mu, eta, sig_err, lambda)
+  lambda <- apply(samples$theta_lambda[idx,,], 3, as.numeric, samples$n_factors)
+  theta_mu <- samples$theta_mu[idx,]
+  all_samples <- rbind(samples$alpha[idx, s,],theta_mu, eta, sig_err, lambda)
   mu_tilde <- rowMeans(all_samples)
   var_tilde <- cov(t(all_samples))
   condmvn <- condMVN(mean = mu_tilde, sigma = var_tilde,
                      dependent.ind = 1:n_pars, given.ind = (n_pars + 1):length(mu_tilde),
-                     X.given = c(theta_mu[,iteration],
+                     X.given = c(theta_mu[idx,iteration],
                                  samples$theta_eta[s,,iteration],
-                                 log(samples$theta_sig_err_inv[, iteration]),
-                                 as.numeric(samples$theta_lambda[,, iteration])))
+                                 log(samples$theta_sig_err_inv[idx, iteration]),
+                                 as.numeric(samples$theta_lambda[idx,, iteration])))
   return(list(eff_mu = condmvn$condMean, eff_var = condmvn$condVar))
 }
 

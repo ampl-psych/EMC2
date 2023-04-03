@@ -2,15 +2,15 @@ rm(list = ls())
 library(devtools)
 # Rcpp only works as fast with install like this unfortunately, if this throws errors, restarting Rstudio worked for me
 # devtools::install("~/Documents/UVA/2022/EMC2")
-# load_all()
-library(EMC2)
+load_all()
+# library(EMC2)
 library(statmod)
 library(corrplot)
 library(factor.switching)
 library(colorspace)
 
-n_pars <- 50
-n_subjects <- 30
+n_pars <- 6
+n_subjects <- 15
 n_trials <- 100
 qs <- n_pars:1
 qs[as.logical(qs %% 2)] <- -qs[as.logical(qs %% 2)]
@@ -22,16 +22,20 @@ covmat[lower.tri(covmat)] <- covmat[lower.tri(covmat)]/1.5
 covmat[upper.tri(covmat)] <- t(covmat)[upper.tri(covmat)]
 corrplot(covmat)
 
-data <- mvtnorm::rmvnorm(n_subjects, mean = seq(-5, 5, length.out = n_pars), sigma =  covmat)
-
-# t1 <- sum(mvtnorm::dmvnorm(new_df[,1:n_pars], mean = seq(-5, 5, length.out = n_pars), sigma = diag(n_pars), log = T))
-# t2 <- sum(dnorm(t(as.matrix(new_df[,1:n_pars])), mean = seq(-5, 5, length.out = n_pars), sd = 1, log = T))
-
-new_df <- data.frame()
-for(i in 1:nrow(data)){
-  tmp <- data.frame(mvtnorm::rmvnorm(n_trials, data[i,], diag(n_pars)))
+data1 <- mvtnorm::rmvnorm(n_subjects, mean = seq(-5, 5, length.out = n_pars), sigma =  covmat)
+new_df1 <- data.frame()
+for(i in 1:nrow(data1)){
+  tmp <- data.frame(mvtnorm::rmvnorm(n_trials, data1[i,], diag(n_pars)))
   tmp$subjects <- i
-  new_df <- rbind(new_df, tmp)
+  new_df1 <- rbind(new_df1, tmp)
+}
+
+data2 <- mvtnorm::rmvnorm(n_subjects, mean = seq(-5, 5, length.out = n_pars), sigma =  covmat)
+new_df2 <- data.frame()
+for(i in 1:nrow(data2)){
+  tmp <- data.frame(mvtnorm::rmvnorm(n_trials, data2[i,], diag(n_pars)))
+  tmp$subjects <- i
+  new_df2 <- rbind(new_df2, tmp)
 }
 
 custom_ll <- function(dadm, pars){
@@ -41,8 +45,15 @@ custom_ll <- function(dadm, pars){
 design_normal <- make_design(model = custom_ll, custom_p_vector = paste0("X", 1:n_pars))
 
 # first speed test:
-samplers <- make_samplers(new_df, design_normal)
-samplers <- run_emc(samplers, cores_per_chain =4, cores_for_chains = 3, useC = F, verbose = T)
+samplers <- make_samplers(list(new_df1, new_df2), list(design_normal, design_normal))
+debug(EMC2:::new_particle)
+
+samplers <- run_samplers(samplers, stage = "preburn", iter = 100, cores_per_chain =10, cores_for_chains =1, useC = F, verbose = T, verboseProgress = T)
+
+
+samplers <- auto_burn(samplers, cores_per_chain =10, cores_for_chains =1, useC = F, verbose = T, verboseProgress = T)
+adapted <- run_adapt(samplers, cores_per_chain =1, cores_for_chains = 1, useC = F, verbose = T, min_unique = 50)
+
 
 samplers_infnt <- make_samplers(new_df, design_normal, type = "infnt_factor")
 samplers_infnt <- run_emc(samplers_infnt, cores_per_chain =4, cores_for_chains = 3, useC = F, verbose = T)

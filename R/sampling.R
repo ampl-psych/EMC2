@@ -205,23 +205,22 @@ new_particle <- function (s, data, num_particles, parameters, eff_mu = NULL,
       lw <- calc_ll_manager(proposals[,idx], dadm = data[[which(subjects == s)]], likelihood_func, useC = useC)
     }
     lw_total <- lw + prev_ll[s] - lw[1] # Bit inefficient but safes code, makes sure lls from other components are included
-    lp <- dmvnrm_arma_fast(x = proposals, mean = group_mu, sigma = group_var, logd = TRUE)
-    prop_density <- dmvnrm_arma_fast(x = proposals, mean = subj_mu, sigma = var_subj)
+    lp <- mvtnorm::dmvnorm(x = proposals, mean = group_mu, sigma = group_var, log = TRUE)
+    prop_density <- mvtnorm::dmvnorm(x = proposals, mean = subj_mu, sigma = var_subj)
     if (mix_proportion[3] == 0) {
       eff_density <- 0
     }
     else {
-      eff_density <- dmvnrm_arma_fast(x = proposals, mean = eff_mu_sub, sigma = eff_var_curr)
+      eff_density <- mvtnorm::dmvnorm(x = proposals, mean = eff_mu_sub, sigma = eff_var_curr)
     }
     lm <- log(mix_proportion[1] * exp(lp) + (mix_proportion[2] * prop_density) + (mix_proportion[3] * eff_density))
+    infnt_idx <- is.infinite(lm)
+    if(any(infnt_idx)) print("hey")
+
+    lm[infnt_idx] <- min(lm[!infnt_idx])
     # Calculate weights and center
     l <- lw_total + lp - lm
-
     weights <- exp(l - max(l))
-    if(any(is.na(weights))){
-      save(proposals, lm, l, lw, lp, prop_density, weights)
-      browser()
-    }
     # Do MH step and return everything
     idx_ll <- sample(x = num_particles+1, size = 1, prob = weights)
     origin <- min(which(idx_ll <= cumuNumbers))
@@ -478,20 +477,6 @@ get_variant_funs <- function(type = "standard") {
       prior_dist_IS2 = prior_dist_lm,
       group_dist_IS2 = group_dist_lm
     )
-  }else if(type == "infnt_factor"){
-    list_fun <- list(# store functions
-      sample_store = sample_store_infnt_factor,
-      add_info = add_info_infnt_factor,
-      get_startpoints = get_startpoints_infnt_factor,
-      get_group_level = get_group_level_standard,
-      fill_samples = fill_samples_infnt_factor,
-      gibbs_step = gibbs_step_infnt_factor,
-      filtered_samples = filtered_samples_infnt_factor,
-      get_conditionals = get_conditionals_infnt_factor,
-      get_all_pars_IS2 = get_all_pars_infnt_factor,
-      prior_dist_IS2 = prior_dist_infnt_factor,
-      group_dist_IS2 = group_dist_infnt_factor
-    )
   }
   return(list_fun)
 }
@@ -529,4 +514,3 @@ calc_ll_manager <- function(proposals, dadm, useC, ll_func, component = NULL){
   }
   return(lls)
 }
-

@@ -243,16 +243,26 @@ create_eff_proposals <- function(samplers, n_cores){
   samples_merged <- merge_samples(samplers)
   test_samples <- extract_samples(samples_merged, stage = c("adapt", "sample"), max_n_sample = 1000)
   variant_funs <- attr(samplers[[1]], "variant_funs")
+  components <- attr(samplers[[1]]$data, "components")
   for(i in 1:length(samplers)){
     iteration = round(test_samples$iteration * i/length(samplers))
-    conditionals <- parallel::mclapply(X = 1:samplers[[1]]$n_subjects,
-                                       FUN = variant_funs$get_conditionals,samples = test_samples,
-                                       samplers[[1]]$n_pars, iteration =  iteration,
-                                       mc.cores = n_cores)
-    conditionals <- array(unlist(conditionals), dim = c(samplers[[1]]$n_pars,
-                                                        samplers[[1]]$n_pars + 1, samplers[[1]]$n_subjects))
-    attr(samplers[[i]], "eff_mu") <- conditionals[,1,] #First column is the means
-    attr(samplers[[i]], "eff_var") <- conditionals[,2:(samplers[[1]]$n_pars+1),] #Other columns are the variances
+    n_pars <- samplers[[1]]$n_pars
+    n_subjects <- samplers[[1]]$n_subjects
+    eff_mu <- matrix(0, nrow = n_pars, ncol = n_subjects)
+    eff_var <- array(0, dim = c(n_pars, n_pars, n_subjects))
+    for(comp in unique(components)){
+      idx <- comp == components
+      conditionals <- parallel::mclapply(X = 1:n_subjects,
+                                         FUN = variant_funs$get_conditionals,samples = test_samples,
+                                         n_pars = sum(idx), iteration =  iteration, idx = idx,
+                                         mc.cores = n_cores)
+      conditionals <- array(unlist(conditionals), dim = c(n_pars, n_pars + 1, n_subjects))
+      eff_mu[idx,] <- conditionals[,1,]
+      eff_var[idx,idx,] <- conditionals[,2:(sum(idx)+1),]
+    }
+
+    attr(samplers[[i]], "eff_mu") <- eff_mu
+    attr(samplers[[i]], "eff_var") <- eff_var
   }
   return(samplers)
 }
@@ -268,18 +278,14 @@ create_cov_proposals <- function(samplers, samples_idx = NULL){
     idx_subtract <- min(250, samplers[[1]]$samples$idx/2)
     samples_idx <- round(samplers[[1]]$samples$idx - idx_subtract):samplers[[1]]$samples$idx
   }
-  preburned <- !is.null(attr(samplers[[1]], "chains_cov"))
+  components <- attr(samplers[[1]]$data, "components")
+  block_idx <- block_variance_idx(components)
+  # preburned <- !is.null(attr(samplers[[1]], "chains_cov"))
   for(j in 1:n_chains){
     chains_cov <- array(NA_real_, dim = c(n_pars, n_pars, n_subjects))
     for(sub in 1:n_subjects){
       mean_covs <- get_covs(samplers[[j]], samples_idx, sub)
-      # curr_sum <- sum(abs(mean_covs))
-      # if(preburned){
-      #   prev_sum <- sum(abs(attr(samplers[[j]], "chains_cov")[,,sub]))
-      # } else{
-      #   prev_sum <- curr_sum
-      # }
-      # mean_covs <- mean_covs/(curr_sum/prev_sum)
+      mean_covs[block_idx] <- 0
       if(is.negative.semi.definite(mean_covs)){
         chains_cov[,,sub] <- attr(samplers[[j]], "chains_cov")[,,sub]
       } else{
@@ -320,6 +326,7 @@ test_adapted <- function(sampler, test_samples, min_unique, n_cores_conditional 
   n_unique_sub <- lapply(lapply(first_par_list, unique), length)
   n_pars <- sampler$n_pars
   variant_funs <- attr(sampler, "variant_funs")
+  components <- attr(sampler$data, "components")
 
   if (all(n_unique_sub > min_unique)) {
     if(verbose){
@@ -327,8 +334,11 @@ test_adapted <- function(sampler, test_samples, min_unique, n_cores_conditional 
       message("Testing proposal distribution creation")
     }
     attempt <- tryCatch({
-      parallel::mclapply(X = 1:sampler$n_subjects,FUN = variant_funs$get_conditionals,samples = test_samples,
-                         n_pars, mc.cores = n_cores_conditional)
+        for(comp in unique(components)){
+          idx <- comp == components
+          parallel::mclapply(X = 1:sampler$n_subjects,FUN = variant_funs$get_conditionals,samples = test_samples,
+                         n_pars = sum(idx), idx = idx, mc.cores = n_cores_conditional)
+        }
     },error=function(e) e, warning=function(w) w)
     if (any(class(attempt) %in% c("warning", "error", "try-error"))) {
       if(verbose){
