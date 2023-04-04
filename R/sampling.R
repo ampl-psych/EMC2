@@ -78,7 +78,7 @@ run_stage <- function(pmwgs,
   n_pars <- pmwgs$n_pars
   components <- attr(pmwgs$data, "components")
   shared_ll_idx <- attr(pmwgs$data, "shared_ll_idx")
-  block_idx <- block_variance_idx(shared_ll_idx)
+  block_idx <- block_variance_idx(components)
   # if(stage == "sample"){
   #   components <- rep(1, length(components))
   #   shared_ll_idx <- rep(1, length(shared_ll_idx))
@@ -172,13 +172,13 @@ new_particle <- function (s, data, num_particles, parameters, eff_mu = NULL,
   subj_mu <- parameters$alpha[,s]
   eff_mu_sub <- eff_mu[,s]
   num_particles <- num_particles[s]
-  group_var_subj <- group_var
-  if(length(unq_components) > 1){
-    group_var_subj[block_idx] <- 0
-  }
 
   if(stage != "sample"){
     eff_mu_sub <- subj_mu
+    group_var_subj <- group_var
+    if(length(unq_components) > 1){
+      group_var_subj[block_idx] <- 0
+    }
   }
   out_lls <- numeric(length(unq_components))
   for(i in unq_components){

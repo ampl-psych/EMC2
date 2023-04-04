@@ -9,8 +9,8 @@ library(corrplot)
 library(factor.switching)
 library(colorspace)
 
-n_pars <- 10
-n_subjects <- 40
+n_pars <- 6
+n_subjects <- 20
 n_trials <- 100
 qs <- n_pars:1
 qs[as.logical(qs %% 2)] <- -qs[as.logical(qs %% 2)]
@@ -47,10 +47,14 @@ design_normal <- make_design(model = custom_ll, custom_p_vector = paste0("X", 1:
 
 # first speed test:
 samplers <- make_samplers(list(new_df1, new_df2), list(design_normal, design_normal))
-samplers <- run_samplers(samplers, stage = "preburn", iter = 150, cores_per_chain =10, cores_for_chains =1, useC = F, verbose = T, verboseProgress = T)
-samplers <- run_samplers(samplers, stage = "burn", max_gd = 1.2, cores_per_chain =4, cores_for_chains =3, useC = F, verbose = T, verboseProgress = T)
-
-
+samplers <- run_samplers(samplers, stage = "preburn", iter = 100, cores_per_chain =10, cores_for_chains =1, verbose = T, verboseProgress = T,
+                         n_blocks = 2)
+samplers <- run_samplers(samplers, stage = "burn", max_gd = 1.2, cores_per_chain =4, cores_for_chains =3, verbose = T, verboseProgress = T,
+                         n_blocks = 2)
+samplers <- run_samplers(samplers, stage = "adapt", max_gd = 1.2, cores_per_chain =4, cores_for_chains =3, verbose = T, verboseProgress = T,
+                         n_blocks = 2)
+samplers <- run_samplers(samplers, stage = "sample", max_gd = 1.2, cores_per_chain =4, cores_for_chains =3, verbose = T, verboseProgress = T,
+                         n_blocks = 2)
 samplers <- run_emc(samplers, cores_per_chain =1, cores_for_chains = 1, verbose = T)
 
 

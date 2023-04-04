@@ -99,7 +99,7 @@ run_emc <- function(samplers, stage = NULL, iter = 1000, max_gd = 1.1, mean_gd =
 #' @export
 #'
 #' @examples
-run_samplers <- function(samplers, stage, iter = NULL, max_gd = NULL, mean_gd = NULL, min_es = 0, min_unique = 750,
+run_samplers <- function(samplers, stage, iter = NULL, max_gd = NULL, mean_gd = NULL, min_es = 0, min_unique = 600,
                          p_accept = .8, step_size = 100, verbose = FALSE, verboseProgress = FALSE,
                          fileName = NULL,
                          particles = NULL, particle_factor = 50, cores_per_chain = 1,
@@ -145,12 +145,11 @@ run_stages <- function(sampler, stage = "preburn", iter=0, verbose = TRUE, verbo
   return(sampler)
 }
 
-add_proposals <- function(samplers, stage, n_cores){
+add_proposals <- function(samplers, stage, n_cores, n_blocks){
   if(stage != "preburn"){
     samplers <- create_cov_proposals(samplers)
-    blocking <- TRUE
-    if(blocking){
-      components <- sub_blocking(samplers)
+    if(!is.null(n_blocks)){
+      components <- sub_blocking(samplers, n_blocks)
       for(i in 1:length(samplers)){
         attr(samplers[[i]]$data, "components") <- components
       }
@@ -274,7 +273,7 @@ create_eff_proposals <- function(samplers, n_cores){
   return(samplers)
 }
 
-sub_blocking <- function(samplers){
+sub_blocking <- function(samplers, n_blocks){
   covs <- lapply(samplers, FUN = function(x){return(attr(x, "chains_cov"))})
   out <- array(0, dim = dim(covs[[1]][,,1]))
   for(i in 1:length(covs)){
@@ -290,7 +289,7 @@ sub_blocking <- function(samplers){
     idx <- ll == shared_ll_idx
     distance <-as.dist(1- abs(out[idx, idx]/out[1,1]))
     clusts <- hclust(distance)
-    sub_comps <- min_comp + cutree(clusts, k = max(round(sum(idx)/5), 1)) # This could go wrong if one group has just one member
+    sub_comps <- min_comp + cutree(clusts, k = n_blocks) # This could go wrong if one group has just one member
     min_comp <- max(sub_comps)
     components <- c(components, sub_comps)
   }
@@ -308,7 +307,7 @@ create_cov_proposals <- function(samplers, samples_idx = NULL){
     idx_subtract <- min(250, samplers[[1]]$samples$idx/2)
     samples_idx <- round(samplers[[1]]$samples$idx - idx_subtract):samplers[[1]]$samples$idx
   }
-  components <- attr(samplers[[1]]$data, "shared_ll_idx")
+  components <- attr(samplers[[1]]$data, "components")
   block_idx <- block_variance_idx(components)
   for(j in 1:n_chains){
     chains_cov <- array(NA_real_, dim = c(n_pars, n_pars, n_subjects))
