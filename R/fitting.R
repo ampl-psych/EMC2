@@ -29,7 +29,7 @@
 run_emc <- function(samplers, stage = NULL, iter = 1000, max_gd = 1.1, mean_gd = 1.1, min_es = 0, min_unique = 600, preburn = 150,
                     p_accept = .8, step_size = 100, verbose = FALSE, verboseProgress = FALSE, fileName = NULL,
                     particles = NULL, particle_factor = 50, cores_per_chain = 1,
-                    cores_for_chains = length(samplers), max_trys = 50, useC = FALSE){
+                    cores_for_chains = length(samplers), max_trys = 50, useC = FALSE, n_blocks = NULL){
   if (is.character(samplers)) {
     samplers <- fix_fileName(samplers)
     if(is.null(fileName)) fileName <- samplers
@@ -46,28 +46,28 @@ run_emc <- function(samplers, stage = NULL, iter = 1000, max_gd = 1.1, mean_gd =
                              step_size = step_size,  verbose = verbose, verboseProgress = verboseProgress,
                              fileName = fileName,
                              particles = particles, particle_factor =  particle_factor,
-                             cores_per_chain = cores_per_chain, max_trys = max_trys, useC = useC)
+                             cores_per_chain = cores_per_chain, max_trys = max_trys, useC = useC, n_blocks = n_blocks)
   }
   if(any(stage %in% c("preburn", "burn"))){
     samplers <-  run_samplers(samplers, stage = "burn", mean_gd = mean_gd, cores_for_chains = cores_for_chains, p_accept = p_accept,
                               step_size = step_size,  verbose = verbose, verboseProgress = verboseProgress,
                               fileName = fileName,
                               particles = particles, particle_factor =  particle_factor,
-                              cores_per_chain = cores_per_chain, max_trys = max_trys, useC = useC)
+                              cores_per_chain = cores_per_chain, max_trys = max_trys, useC = useC, n_blocks = n_blocks)
   }
   if(any(stage %in% c("preburn", "burn", "adapt"))){
     samplers <-  run_samplers(samplers, stage = "adapt", min_unique = min_unique, cores_for_chains = cores_for_chains, p_accept = p_accept,
                               step_size = step_size,  verbose = verbose, verboseProgress = verboseProgress,
                               fileName = fileName,
                               particles = particles, particle_factor =  particle_factor,
-                              cores_per_chain = cores_per_chain, max_trys = max_trys, useC = useC)
+                              cores_per_chain = cores_per_chain, max_trys = max_trys, useC = useC, n_blocks = n_blocks)
   }
   if(any(stage %in% c("preburn", "burn", "adapt", "sample")) ){
     samplers <-  run_samplers(samplers, stage = "sample", iter = iter, max_gd = max_gd, cores_for_chains = cores_for_chains, p_accept = p_accept,
                               step_size = step_size,  verbose = verbose, verboseProgress = verboseProgress,
                               fileName = fileName,
                               particles = particles, particle_factor = particle_factor,
-                              cores_per_chain = cores_per_chain, max_trys = max_trys, useC = useC)
+                              cores_per_chain = cores_per_chain, max_trys = max_trys, useC = useC, n_blocks = n_blocks)
   }
   return(samplers)
 }
@@ -103,7 +103,7 @@ run_samplers <- function(samplers, stage, iter = NULL, max_gd = NULL, mean_gd = 
                          p_accept = .8, step_size = 100, verbose = FALSE, verboseProgress = FALSE,
                          fileName = NULL,
                          particles = NULL, particle_factor = 50, cores_per_chain = 1,
-                         cores_for_chains = length(samplers), max_trys = 50, useC = FALSE){
+                         cores_for_chains = length(samplers), max_trys = 50, useC = FALSE, n_blocks = NULL){
   if (verbose) message(paste0("Running ", stage, " stage"))
   attributes <- get_attributes(samplers)
   total_iters_stage <- chain_n(samplers)[,stage][1]
@@ -112,7 +112,7 @@ run_samplers <- function(samplers, stage, iter = NULL, max_gd = NULL, mean_gd = 
   samplers <- progress$samplers
   while(!progress$done){
     if(!is.numeric(progress$step_size) | progress$step_size < 1) warning("Something wrong with the stepsize again, Niek's to blame")
-    samplers <- add_proposals(samplers, stage, cores_per_chain)
+    samplers <- add_proposals(samplers, stage, cores_per_chain, n_blocks)
     samplers <- parallel::mclapply(samplers,run_stages, stage = stage, iter= progress$step_size,
                                    verbose=verbose,  verboseProgress = verboseProgress,
                                    particles=particles,particle_factor=particle_factor,
@@ -130,7 +130,7 @@ run_samplers <- function(samplers, stage, iter = NULL, max_gd = NULL, mean_gd = 
 }
 
 run_stages <- function(sampler, stage = "preburn", iter=0, verbose = TRUE, verboseProgress = TRUE,
-                       particles=NULL,particle_factor=50, p_accept= NULL, n_cores=1, useC)
+                       particles=NULL,particle_factor=50, p_accept= NULL, n_cores=1, useC = FALSE)
 {
 
   if (is.null(particles))
@@ -148,6 +148,13 @@ run_stages <- function(sampler, stage = "preburn", iter=0, verbose = TRUE, verbo
 add_proposals <- function(samplers, stage, n_cores){
   if(stage != "preburn"){
     samplers <- create_cov_proposals(samplers)
+    blocking <- TRUE
+    if(blocking){
+      components <- sub_blocking(samplers)
+      for(i in 1:length(samplers)){
+        attr(samplers[[i]]$data, "components") <- components
+      }
+    }
   }
   if(stage == "sample"){
     samplers <- create_eff_proposals(samplers, n_cores)
@@ -256,7 +263,7 @@ create_eff_proposals <- function(samplers, n_cores){
                                          FUN = variant_funs$get_conditionals,samples = test_samples,
                                          n_pars = sum(idx), iteration =  iteration, idx = idx,
                                          mc.cores = n_cores)
-      conditionals <- array(unlist(conditionals), dim = c(n_pars, n_pars + 1, n_subjects))
+      conditionals <- array(unlist(conditionals), dim = c(sum(idx), sum(idx) + 1, n_subjects))
       eff_mu[idx,] <- conditionals[,1,]
       eff_var[idx,idx,] <- conditionals[,2:(sum(idx)+1),]
     }
@@ -265,6 +272,29 @@ create_eff_proposals <- function(samplers, n_cores){
     attr(samplers[[i]], "eff_var") <- eff_var
   }
   return(samplers)
+}
+
+sub_blocking <- function(samplers){
+  covs <- lapply(samplers, FUN = function(x){return(attr(x, "chains_cov"))})
+  out <- array(0, dim = dim(covs[[1]][,,1]))
+  for(i in 1:length(covs)){
+    cov_tmp <- covs[[1]]
+    for(j in 1:dim(cov_tmp)[3]){
+      out <- out + cov2cor(cov_tmp[,,j])
+    }
+  }
+  shared_ll_idx <- attr(samplers[[1]]$data, "shared_ll_idx")
+  min_comp <- 0
+  components <- c()
+  for(ll in unique(shared_ll_idx)){
+    idx <- ll == shared_ll_idx
+    distance <-as.dist(1- abs(out[idx, idx]/out[1,1]))
+    clusts <- hclust(distance)
+    sub_comps <- min_comp + cutree(clusts, k = max(round(sum(idx)/5), 1)) # This could go wrong if one group has just one member
+    min_comp <- max(sub_comps)
+    components <- c(components, sub_comps)
+  }
+  return(components)
 }
 
 create_cov_proposals <- function(samplers, samples_idx = NULL){
@@ -278,9 +308,8 @@ create_cov_proposals <- function(samplers, samples_idx = NULL){
     idx_subtract <- min(250, samplers[[1]]$samples$idx/2)
     samples_idx <- round(samplers[[1]]$samples$idx - idx_subtract):samplers[[1]]$samples$idx
   }
-  components <- attr(samplers[[1]]$data, "components")
+  components <- attr(samplers[[1]]$data, "shared_ll_idx")
   block_idx <- block_variance_idx(components)
-  # preburned <- !is.null(attr(samplers[[1]], "chains_cov"))
   for(j in 1:n_chains){
     chains_cov <- array(NA_real_, dim = c(n_pars, n_pars, n_subjects))
     for(sub in 1:n_subjects){
@@ -391,17 +420,17 @@ auto_burn <- function(samplers, max_gd = NULL, mean_gd = 1.1, min_es = 0, prebur
                       p_accept = .8, step_size = 100, verbose = FALSE, verboseProgress = FALSE,
                       fileName = NULL,
                       particles = NULL, particle_factor = 50, cores_per_chain = 1,
-                      cores_for_chains = length(samplers), max_trys = 50, useC = useC){
+                      cores_for_chains = length(samplers), max_trys = 50, useC = FALSE, n_blocks = NULL){
   samplers <- run_samplers(samplers, stage = "preburn", iter = preburn, cores_for_chains = cores_for_chains, p_accept = p_accept,
                            step_size = step_size,  verbose = verbose, verboseProgress = verboseProgress,
                            fileName = fileName,
                            particles = particles, particle_factor =  particle_factor,
-                           cores_per_chain = cores_per_chain, max_trys = max_trys, useC = useC)
+                           cores_per_chain = cores_per_chain, max_trys = max_trys, useC = useC, n_blocks = n_blocks)
   samplers <-  run_samplers(samplers, stage = "burn", max_gd = max_gd, mean_gd = mean_gd, min_es = min_es, cores_for_chains = cores_for_chains, p_accept = p_accept,
                             step_size = step_size,  verbose = verbose, verboseProgress = verboseProgress,
                             fileName = fileName,
                             particles = particles, particle_factor =  particle_factor,
-                            cores_per_chain = cores_per_chain, max_trys = max_trys, useC = useC)
+                            cores_per_chain = cores_per_chain, max_trys = max_trys, useC = useC, n_blocks = n_blocks)
   return(samplers)
 }
 #' Runs adapt stage for samplers.
@@ -432,13 +461,13 @@ run_adapt <- function(samplers, max_gd = NULL, mean_gd = NULL, min_es = 0, min_u
                       p_accept = .8, step_size = 100, verbose = FALSE, verboseProgress = FALSE,
                       fileName = NULL,
                       particles = NULL, particle_factor = 50, cores_per_chain = 1,
-                      cores_for_chains = length(samplers), max_trys = 50, useC = useC){
+                      cores_for_chains = length(samplers), max_trys = 50, useC = FALSE, n_blocks = NULL){
   samplers <- run_samplers(samplers, stage = "adapt",  max_gd = max_gd, mean_gd = mean_gd, min_es = min_es, min_unique = min_unique,
                            cores_for_chains = cores_for_chains, p_accept = p_accept,
                            step_size = step_size,  verbose = verbose, verboseProgress = verboseProgress,
                            fileName = fileName,
                            particles = particles, particle_factor =  particle_factor,
-                           cores_per_chain = cores_per_chain, max_trys = max_trys, useC = useC)
+                           cores_per_chain = cores_per_chain, max_trys = max_trys, useC = useC, n_blocks = n_blocks)
   return(samplers)
 }
 #' Runs sample stage for samplers.
@@ -467,12 +496,12 @@ run_sample <- function(samplers, iter = 1000, max_gd = 1.1, mean_gd = NULL, min_
                        p_accept = .8, step_size = 100, verbose = FALSE, verboseProgress = FALSE,
                        fileName = NULL,
                        particles = NULL, particle_factor = 50, cores_per_chain = 1,
-                       cores_for_chains = length(samplers), max_trys = 50, useC = useC){
+                       cores_for_chains = length(samplers), max_trys = 50, useC = FALSE, n_blocks = NULL){
   samplers <- run_samplers(samplers, stage = "sample", iter = iter, max_gd = max_gd, mean_gd = mean_gd, min_es = min_es, cores_for_chains = cores_for_chains, p_accept = p_accept,
                            step_size = step_size,  verbose = verbose, verboseProgress = verboseProgress,
                            fileName = fileName,
                            particles = particles, particle_factor =  particle_factor,
-                           cores_per_chain = cores_per_chain, max_trys = max_trys, useC = useC)
+                           cores_per_chain = cores_per_chain, max_trys = max_trys, useC = useC, n_blocks = n_blocks)
   return(samplers)
 }
 

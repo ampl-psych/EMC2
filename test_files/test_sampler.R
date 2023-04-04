@@ -9,8 +9,8 @@ library(corrplot)
 library(factor.switching)
 library(colorspace)
 
-n_pars <- 6
-n_subjects <- 15
+n_pars <- 10
+n_subjects <- 40
 n_trials <- 100
 qs <- n_pars:1
 qs[as.logical(qs %% 2)] <- -qs[as.logical(qs %% 2)]
@@ -24,8 +24,9 @@ corrplot(covmat)
 
 data1 <- mvtnorm::rmvnorm(n_subjects, mean = seq(-5, 5, length.out = n_pars), sigma =  covmat)
 new_df1 <- data.frame()
+cov_person <- MCMCpack::riwish(1.5*n_pars, diag(n_pars))
 for(i in 1:nrow(data1)){
-  tmp <- data.frame(mvtnorm::rmvnorm(n_trials, data1[i,], diag(n_pars)))
+  tmp <- data.frame(mvtnorm::rmvnorm(n_trials, data1[i,], cov_person))
   tmp$subjects <- i
   new_df1 <- rbind(new_df1, tmp)
 }
@@ -33,7 +34,7 @@ for(i in 1:nrow(data1)){
 data2 <- mvtnorm::rmvnorm(n_subjects, mean = seq(-5, 5, length.out = n_pars), sigma =  covmat)
 new_df2 <- data.frame()
 for(i in 1:nrow(data2)){
-  tmp <- data.frame(mvtnorm::rmvnorm(n_trials, data2[i,], diag(n_pars)))
+  tmp <- data.frame(mvtnorm::rmvnorm(n_trials, data2[i,], cov_person))
   tmp$subjects <- i
   new_df2 <- rbind(new_df2, tmp)
 }
@@ -46,14 +47,21 @@ design_normal <- make_design(model = custom_ll, custom_p_vector = paste0("X", 1:
 
 # first speed test:
 samplers <- make_samplers(list(new_df1, new_df2), list(design_normal, design_normal))
-debug(EMC2:::new_particle)
+samplers <- run_samplers(samplers, stage = "preburn", iter = 150, cores_per_chain =10, cores_for_chains =1, useC = F, verbose = T, verboseProgress = T)
+samplers <- run_samplers(samplers, stage = "burn", max_gd = 1.2, cores_per_chain =4, cores_for_chains =3, useC = F, verbose = T, verboseProgress = T)
 
-samplers <- run_samplers(samplers, stage = "preburn", iter = 100, cores_per_chain =10, cores_for_chains =1, useC = F, verbose = T, verboseProgress = T)
+
+samplers <- run_emc(samplers, cores_per_chain =1, cores_for_chains = 1, verbose = T)
+
+
+samplers <- run_samplers(samplers, stage = "preburn", iter = 200, cores_per_chain =10, cores_for_chains =1, useC = F, verbose = T, verboseProgress = T)
 
 
 samplers <- auto_burn(samplers, cores_per_chain =10, cores_for_chains =1, useC = F, verbose = T, verboseProgress = T)
-adapted <- run_adapt(samplers, cores_per_chain =1, cores_for_chains = 1, useC = F, verbose = T, min_unique = 50)
-
+adapted <- run_adapt(samplers, cores_per_chain =3, cores_for_chains = 3, useC = F, verbose = T, min_unique = 50)
+debug(create_eff_proposals)
+debug(new_particle)
+sampled <- run_sample(adapted, cores_per_chain = 1, cores_for_chains = 3, useC = F, verbose = T, verboseProgress = T)
 
 samplers_infnt <- make_samplers(new_df, design_normal, type = "infnt_factor")
 samplers_infnt <- run_emc(samplers_infnt, cores_per_chain =4, cores_for_chains = 3, useC = F, verbose = T)

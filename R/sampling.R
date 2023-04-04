@@ -78,10 +78,11 @@ run_stage <- function(pmwgs,
   n_pars <- pmwgs$n_pars
   components <- attr(pmwgs$data, "components")
   shared_ll_idx <- attr(pmwgs$data, "shared_ll_idx")
-  if(stage == "sample"){
-    components <- rep(1, length(components))
-    shared_ll_idx <- rep(1, length(shared_ll_idx))
-  }
+  block_idx <- block_variance_idx(shared_ll_idx)
+  # if(stage == "sample"){
+  #   components <- rep(1, length(components))
+  #   shared_ll_idx <- rep(1, length(shared_ll_idx))
+  # }
   # Display stage to screen
   if(verbose){
     msgs <- list(
@@ -130,7 +131,7 @@ run_stage <- function(pmwgs,
     proposals=mclapply(X=1:pmwgs$n_subjects,FUN = new_particle, data, particles, pars, eff_mu,
                        eff_var, mix, pmwgs$ll_func, epsilon, subjects, components,
                        prev_ll = pmwgs$samples$subj_ll[,j-1], stage, chains_cov,
-                       variant_funs, useC, mc.cores =n_cores)
+                       variant_funs, useC, block_idx, shared_ll_idx, mc.cores =n_cores)
     proposals <- array(unlist(proposals), dim = c(pmwgs$n_pars + 2, pmwgs$n_subjects))
 
     #Fill samples
@@ -159,7 +160,7 @@ new_particle <- function (s, data, num_particles, parameters, eff_mu = NULL,
                           eff_var = NULL, mix_proportion = c(0.5, 0.5, 0),
                           likelihood_func = NULL, epsilon = NULL, subjects,
                           components, prev_ll, stage, chains_cov, variant_funs,
-                          useC)
+                          useC, block_idx, shared_ll_idx)
 {
   start_par <- 1
   group_pars <- variant_funs$get_group_level(parameters, s)
@@ -171,13 +172,19 @@ new_particle <- function (s, data, num_particles, parameters, eff_mu = NULL,
   subj_mu <- parameters$alpha[,s]
   eff_mu_sub <- eff_mu[,s]
   num_particles <- num_particles[s]
+  group_var_subj <- group_var
+  if(length(unq_components) > 1){
+    group_var_subj[block_idx] <- 0
+  }
+
   if(stage != "sample"){
     eff_mu_sub <- subj_mu
   }
+  out_lls <- numeric(length(unq_components))
   for(i in unq_components){
     if(stage != "sample"){
       eff_var_curr <- chains_cov[,,s] * epsilon[s,i]^2
-      var_subj <- group_var *  epsilon[s,i]^2
+      var_subj <- group_var_subj *  epsilon[s,i]^2
     } else{
       eff_var_curr <- eff_var[,,s]
       var_subj <- chains_cov[,,s] *  epsilon[s,i]^2
@@ -198,13 +205,18 @@ new_particle <- function (s, data, num_particles, parameters, eff_mu = NULL,
     colnames(proposals) <- names(subj_mu)
     proposals[2:(num_particles+1),idx] <- rbind(pop_particles, ind_particles, eff_particles)
 
-    # Calculate likelihoods and other IS quantities
+    # Normally we assume that a component contains all the parameters to estimate the individual likelihood of a joint model
+    # Sometimes we may also want to block within a model if it has very high dimensionality
+    shared_idx <- shared_ll_idx[idx][1]
+    is_shared <- shared_idx == shared_ll_idx
+
+    # Calculate likelihoods
     if(components[length(components)] > 1){
-      lw <- calc_ll_manager(proposals[,idx], dadm = data[[which(subjects == s)]], likelihood_func, component = i, useC = useC)
+      lw <- calc_ll_manager(proposals[,is_shared], dadm = data[[which(subjects == s)]], likelihood_func, component = shared_idx, useC = useC)
     } else{
-      lw <- calc_ll_manager(proposals[,idx], dadm = data[[which(subjects == s)]], likelihood_func, useC = useC)
+      lw <- calc_ll_manager(proposals[,is_shared], dadm = data[[which(subjects == s)]], likelihood_func, useC = useC)
     }
-    lw_total <- lw + prev_ll[s] - lw[1] # Bit inefficient but safes code, makes sure lls from other components are included
+    lw_total <- lw + prev_ll[s] - lw[1] # make sure lls from other components are included
     lp <- mvtnorm::dmvnorm(x = proposals, mean = group_mu, sigma = group_var, log = TRUE)
     prop_density <- mvtnorm::dmvnorm(x = proposals, mean = subj_mu, sigma = var_subj)
     if (mix_proportion[3] == 0) {
@@ -215,8 +227,6 @@ new_particle <- function (s, data, num_particles, parameters, eff_mu = NULL,
     }
     lm <- log(mix_proportion[1] * exp(lp) + (mix_proportion[2] * prop_density) + (mix_proportion[3] * eff_density))
     infnt_idx <- is.infinite(lm)
-    if(any(infnt_idx)) print("hey")
-
     lm[infnt_idx] <- min(lm[!infnt_idx])
     # Calculate weights and center
     l <- lw_total + lp - lm
@@ -224,12 +234,12 @@ new_particle <- function (s, data, num_particles, parameters, eff_mu = NULL,
     # Do MH step and return everything
     idx_ll <- sample(x = num_particles+1, size = 1, prob = weights)
     origin <- min(which(idx_ll <= cumuNumbers))
-    if(is.infinite(origin)) browser()
-    ll <- ll + lw[idx_ll]
+    # ll <- ll + lw[idx_ll]
+    out_lls[i] <- lw_total[idx_ll]
     proposal_out[idx] <- proposals[idx_ll,idx]
     start_par <- components[i] + 1
   } # Note that origin only contains last components origin, just used by devs anyway
-  return(list(proposal = proposal_out, ll = ll, origin = origin))
+  return(list(proposal = proposal_out, ll = mean(out_lls), origin = origin))
 }
 
 
@@ -345,6 +355,15 @@ sample_store_base <- function(data, par_names, iters = 1, stage = "init") {
   )
 }
 
+block_variance_idx <- function(components){
+  vars_out <- matrix(0, length(components), length(components))
+  for(i in unique(components)){
+    idx <- i == components
+    vars_out[idx,idx] <- NA
+  }
+  return(vars_out == 0)
+}
+
 fill_samples_base <- function(samples, group_level, proposals, epsilon, j = 1, n_pars){
   # Fill samples both group level and random effects
   samples$theta_mu[, j] <- group_level$tmu
@@ -352,6 +371,8 @@ fill_samples_base <- function(samples, group_level, proposals, epsilon, j = 1, n
   if(!is.null(proposals)) samples <- fill_samples_RE(samples, proposals, epsilon,j, n_pars)
   return(samples)
 }
+
+
 
 fill_samples_RE <- function(samples, proposals, epsilon, j = 1, n_pars, ...){
   # Only for random effects, separated because group level sometimes differs.
