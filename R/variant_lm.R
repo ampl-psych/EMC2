@@ -209,7 +209,7 @@ get_conditionals_lm <- function(s, samples, n_pars, iteration = NULL, idx = NULL
   var_tilde <- cov(t(all_samples))
   condmvn <- condMVN(mean = mu_tilde, sigma = var_tilde,
                      dependent.ind = 1:n_pars, given.ind = (n_pars + 1):length(mu_tilde),
-                     X.given = c(theta_mu[idx,iteration],
+                     X.given = c(samples$theta_mu[idx,iteration],
                                  log(diag(samples$theta_var[idx,idx,iteration])),
                                  theta_theta[,iteration]))
   return(list(eff_mu = condmvn$condMean, eff_var = condmvn$condVar))

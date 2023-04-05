@@ -190,7 +190,7 @@ get_conditionals_infnt_factor <- function(s, samples, n_pars, iteration = NULL, 
   var_tilde <- cov(t(all_samples))
   condmvn <- condMVN(mean = mu_tilde, sigma = var_tilde,
                      dependent.ind = 1:n_pars, given.ind = (n_pars + 1):length(mu_tilde),
-                     X.given = c(theta_mu[idx,iteration],
+                     X.given = c(samples$theta_mu[idx,iteration],
                                  samples$theta_eta[s,,iteration],
                                  log(samples$theta_sig_err_inv[idx, iteration]),
                                  as.numeric(samples$theta_lambda[idx,, iteration])))
