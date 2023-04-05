@@ -181,7 +181,7 @@ last_sample_infnt_factor <- function(store) {
 get_conditionals_infnt_factor <- function(s, samples, n_pars, iteration = NULL, idx = NULL){
   iteration <- ifelse(is.null(iteration), samples$iteration, iteration)
   if(is.null(idx)) idx <- 1:n_pars
-  sig_err <- log(samples$theta_sig_err_inv)[idx]
+  sig_err <- log(samples$theta_sig_err_inv[idx])
   eta <- matrix(samples$theta_eta[s,,], nrow = samples$n_factors)
   lambda <- apply(samples$theta_lambda[idx,,], 3, as.numeric, samples$n_factors)
   theta_mu <- samples$theta_mu[idx,]

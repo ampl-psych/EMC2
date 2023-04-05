@@ -1,7 +1,7 @@
 rm(list = ls())
 library(devtools)
 # Rcpp only works as fast with install like this unfortunately, if this throws errors, restarting Rstudio worked for me
-# devtools::install("~/Documents/UVA/2022/EMC2")
+devtools::install("~/Documents/UVA/2022/EMC2")
 load_all()
 # library(EMC2)
 library(statmod)
