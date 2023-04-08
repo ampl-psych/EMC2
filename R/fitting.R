@@ -147,7 +147,7 @@ run_stages <- function(sampler, stage = "preburn", iter=0, verbose = TRUE, verbo
 
 add_proposals <- function(samplers, stage, n_cores, n_blocks){
   if(stage != "preburn"){
-    samplers <- create_cov_proposals(samplers)
+    samplers <- create_cov_proposals(samplers, do_block = stage == "sample")
     if(!is.null(n_blocks)){
       components <- sub_blocking(samplers, n_blocks)
       for(i in 1:length(samplers)){
@@ -296,7 +296,7 @@ sub_blocking <- function(samplers, n_blocks){
   return(components)
 }
 
-create_cov_proposals <- function(samplers, samples_idx = NULL){
+create_cov_proposals <- function(samplers, samples_idx = NULL, do_block = TRUE){
   get_covs <- function(sampler, samples_idx, sub){
     return(var(t(sampler$samples$alpha[,sub, samples_idx])))
   }
@@ -313,7 +313,7 @@ create_cov_proposals <- function(samplers, samples_idx = NULL){
     chains_cov <- array(NA_real_, dim = c(n_pars, n_pars, n_subjects))
     for(sub in 1:n_subjects){
       mean_covs <- get_covs(samplers[[j]], samples_idx, sub)
-      mean_covs[block_idx] <- 0
+      if(do_block) mean_covs[block_idx] <- 0
       if(is.negative.semi.definite(mean_covs)){
         chains_cov[,,sub] <- attr(samplers[[j]], "chains_cov")[,,sub]
       } else{
