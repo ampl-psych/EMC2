@@ -147,7 +147,7 @@ run_stages <- function(sampler, stage = "preburn", iter=0, verbose = TRUE, verbo
 
 add_proposals <- function(samplers, stage, n_cores, n_blocks){
   if(stage != "preburn"){
-    samplers <- create_cov_proposals(samplers, do_block = stage == "sample")
+    samplers <- create_cov_proposals(samplers, do_block = stage != "sample")
     if(!is.null(n_blocks)){
       components <- sub_blocking(samplers, n_blocks)
       for(i in 1:length(samplers)){
