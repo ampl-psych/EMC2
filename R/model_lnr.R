@@ -41,6 +41,7 @@ rLNR <- function(lR,pars,p_types=c("m","s","t0")){
 lnrMS <- function() {
   list(
     type="RACE",
+    c_name = "lnrMS",
     p_types=c("m","s","t0"),
     Ntransform=function(x) {
       # Transform to natural scale
