@@ -22,15 +22,16 @@ get_startpoints_diag <- function(pmwgs, start_mu, start_var){
   return(list(tmu = start_mu, tvar = start_var, tvinv = MASS::ginv(start_var), a_half = start_a_half))
 }
 
-get_conditionals_diag <- function(s, samples, n_pars){
-  iteration <- samples$iteration
-  pts2_unwound <- log(apply(samples$theta_var,3,diag))
-  all_samples <- rbind(samples$alpha[, s,],samples$theta_mu,pts2_unwound)
+get_conditionals_diag <- function(s, samples, n_pars, iteration = NULL, idx = NULL){
+  iteration <- ifelse(is.null(iteration), samples$iteration, iteration)
+  if(is.null(idx)) idx <- 1:n_pars
+  pts2_unwound <- log(apply(samples$theta_var[idx,idx,],3,diag))
+  all_samples <- rbind(samples$alpha[idx,s,],samples$theta_mu[idx,],pts2_unwound)
   mu_tilde <- rowMeans(all_samples)
   var_tilde <- var(t(all_samples))
   condmvn <- condMVN(mean = mu_tilde, sigma = var_tilde,
                      dependent.ind = 1:n_pars, given.ind = (n_pars + 1):length(mu_tilde),
-                     X.given = c(samples$theta_mu[,iteration], log(diag(samples$theta_var[,,iteration]))))
+                     X.given = c(samples$theta_mu[idx,iteration], log(diag(samples$theta_var[idx,idx,iteration]))))
   return(list(eff_mu = condmvn$condMean, eff_var = condmvn$condVar))
 }
 

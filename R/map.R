@@ -33,6 +33,14 @@ get_map <- function(samples,add_design=TRUE) {
   out
 }
 
+pmat <- function(p_vector,design)
+  # puts vector form of p_vector into matrix form
+{
+  ss <- design$Ffactors$subjects
+  matrix(rep(p_vector,each=length(ss)),nrow=length(ss),
+         dimnames=list(ss,names(p_vector)))
+}
+
 
 
 mapped_name_list <- function(design,model,save_design=FALSE)
@@ -219,4 +227,6 @@ map_mcmc <- function(mcmc,design,model, include_constants = TRUE)
   out
 }
 
-
+add_constants_mcmc <- function(p,constants){
+  return(mcmc(add_constants(p,constants)))
+}

@@ -52,6 +52,7 @@ pDDM <- function(rt,R,pars,precision=3)
 ddmTZD <- function(){
   list(
     type="DDM",
+    c_name = "DDM",
     p_types=c("v","a","sv","t0","st0","s","Z","SZ","DP"),
     # The "TZD" parameterization defined relative to the "rtdists" package is:
     # natural scale

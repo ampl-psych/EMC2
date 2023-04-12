@@ -345,7 +345,7 @@ parameters_data_frame <- function(samples,filter="sample",thin=1,subfilter=0,
   out
 }
 
-get_sigma <- function(samps,filter="samples",thin=1,subfilter=0)
+get_sigma <- function(samps,filter="sample",thin=1,subfilter=0)
   # Get sigma matrix samples
 {
   shorten <- function(x,r,d) {
