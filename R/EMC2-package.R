@@ -26,6 +26,7 @@
 #' @importFrom mvtnorm rmvnorm
 #' @importFrom parallel mclapply
 #' @importFrom pracma linspace
+#' @importFrom pracma pinv
 #' @importFrom Rcpp sourceCpp
 #' @importFrom stats acf
 #' @importFrom stats cor

@@ -8,7 +8,7 @@ log_likelihood_race <- function(p_vector,dadm,min_ll=log(1e-10))
 
     lds <- numeric(dim(dadm)[1]) # log pdf (winner) or survivor (losers)
     lds[dadm$winner] <- log(attr(dadm,"model")()$dfun(rt=dadm$rt[dadm$winner],
-                                                    pars=pars[dadm$winner,]))
+                                                      pars=pars[dadm$winner,]))
     n_acc <- length(levels(dadm$R))
     if (n_acc>1) lds[!dadm$winner] <- log(1-attr(dadm,"model")()$pfun(rt=dadm$rt[!dadm$winner],pars=pars[!dadm$winner,]))
     lds[is.na(lds) | !ok] <- min_ll
@@ -33,8 +33,9 @@ log_likelihood_ddm <- function(p_vector,dadm,min_ll=log(1e-10))
 {
   pars <- get_pars(p_vector,dadm)
   like <- numeric(dim(dadm)[1])
-  if (any(attr(pars,"ok"))) like[attr(pars,"ok")] <-
-    attr(dadm,"model")()$dfun(dadm$rt[attr(pars,"ok")],dadm$R[attr(pars,"ok")],pars[attr(pars,"ok"),,drop=FALSE])
+  if (any(attr(pars,"ok")))
+    like[attr(pars,"ok")] <- attr(dadm,"model")()$dfun(dadm$rt[attr(pars,"ok")],dadm$R[attr(pars,"ok")],
+                                                       pars[attr(pars,"ok"),,drop=FALSE])
   like[attr(pars,"ok")][is.na(like[attr(pars,"ok")])] <- 0
   sum(pmax(min_ll,log(like[attr(dadm,"expand")])))
 }
@@ -76,9 +77,19 @@ log_likelihood_sdt <- function(p_vector,dadm,lb=-Inf,min_ll=log(1e-10))
   sum(pmax(min_ll,ll))
 }
 
-log_likelihood_joint <- function(pars, dadms, component = NULL)
-{
-  parPreFixs <- unique(gsub("[|].*", "", names(pars)))
+#' Title
+#'
+#' @param proposals
+#' @param dadms
+#' @param component
+#' @param useC
+#'
+#' @return
+#' @export
+#'
+#' @examples
+log_likelihood_joint <- function(proposals, dadms, component = NULL, useC){
+  parPreFixs <- unique(gsub("[|].*", "", colnames(proposals)))
   i <- 0
   total_ll <- 0
   if(!is.null(component)) dadms <- dadms[component]
@@ -86,12 +97,10 @@ log_likelihood_joint <- function(pars, dadms, component = NULL)
     if(is.data.frame(dadm)){
       i <- i + 1
       parPrefix <- parPreFixs[i]
-      currentPars <- pars[grep(paste0(parPrefix, "|"), names(pars), fixed = T)]
-      names(currentPars) <- gsub(".*[|]", "", names(currentPars))
-      total_ll <- total_ll +  attr(dadm, "model")()$log_likelihood(currentPars, dadm)
+      currentPars <- proposals[,grep(paste0(parPrefix, "|"), colnames(proposals), fixed = T)]
+      colnames(currentPars) <- gsub(".*[|]", "", colnames(currentPars))
+      total_ll <- total_ll +  calc_ll_manager(currentPars, dadm, useC, attr(dadm, "model")()$log_likelihood)
     }
   }
   return(total_ll)
 }
-
-
