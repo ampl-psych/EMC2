@@ -104,8 +104,7 @@ gibbs_step_infnt_factor <- function(sampler, alpha){
 
   # Pre-compute
   tauh <- cumprod(delta) # global shrinkage coefficients
-  Plam <- matvec(psi, tauh) # precision of loadings rows
-
+  Plam <- psi %*% diag(tauh)
 
   #Update mu
   mu_sig <- 1/(n_subjects * sig_err_inv + prior$theta_mu_invar)
@@ -116,7 +115,7 @@ gibbs_step_infnt_factor <- function(sampler, alpha){
   alphatilde <- sweep(alpha_t, 2, mu)
 
   # Update eta
-  Lmsg <- vecmat(sig_err_inv, lambda)
+  Lmsg <- diag(sig_err_inv) %*% lambda
   Veta1 = diag(max_factors) + t(Lmsg)%*% lambda
   T_mat <- chol(Veta1)
   qrT <- qr(T_mat)
