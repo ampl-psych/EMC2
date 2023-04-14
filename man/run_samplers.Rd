@@ -11,7 +11,7 @@ run_samplers(
   max_gd = NULL,
   mean_gd = NULL,
   min_es = 0,
-  min_unique = 750,
+  min_unique = 600,
   p_accept = 0.8,
   step_size = 100,
   verbose = FALSE,
@@ -22,7 +22,8 @@ run_samplers(
   cores_per_chain = 1,
   cores_for_chains = length(samplers),
   max_trys = 50,
-  useC = FALSE
+  useC = FALSE,
+  n_blocks = NULL
 )
 }
 \arguments{
