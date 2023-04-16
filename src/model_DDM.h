@@ -316,7 +316,7 @@ NumericVector d_DDM_c (NumericVector rts, NumericVector R, List group_idx, Numer
       continue;
     } else{
       // now we create a new vector with:  a/s, v/s, t0, d, sz/a, sv/s, st0, z/a
-      pars_tmp[0] = pars(first_idx,1) + 0.25/pars(first_idx,5); //a/s
+      pars_tmp[0] = pars(first_idx,1)/pars(first_idx,5); //a/s
       pars_tmp[1] = pars(first_idx,0)/pars(first_idx,5); //v/s
       pars_tmp[2] = pars(first_idx,3) + pars(first_idx,4)/2; //t0 = t0 + st0/2
       pars_tmp[3] = pars(first_idx,3) *(2*pars(first_idx,8)-1); //d = t0 * 2*DP -1
