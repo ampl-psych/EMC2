@@ -1,9 +1,8 @@
 rm(list=ls())
-devtools::load_all()
-source("emc/emc.R")
-source("models/RACE/LBA/lbaB.R")
+# devtools::install()
+library(EMC2)
 
-print(load("Data/PNAS.RData"))
+print(load("test_files/PNAS.RData"))
 dat <- data[,c("s","E","S","R","RT")]
 names(dat)[c(1,5)] <- c("subjects","rt")
 levels(dat$R) <- levels(dat$S)
@@ -29,4 +28,7 @@ design_B <- make_design(
   constants=c(sv=log(1)),
   model=lbaB)
 
-run_em
+
+samplers <- make_samplers(dat, design_B)
+
+samplers <- run_emc(samplers, cores_per_chain = 3, verbose = T, iter = 250)
