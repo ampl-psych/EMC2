@@ -122,6 +122,9 @@ run_samplers <- function(samplers, stage, iter = NULL, max_gd = NULL, mean_gd = 
     samplers <- progress$samplers
     if(!is.null(fileName)){
       fileName <- fix_fileName(fileName)
+      attr(samplers,"data_list") <- attributes$data_list
+      attr(samplers,"design_list") <- attributes$design_list
+      attr(samplers,"model_list") <- attributes$model_list
       save(samplers, file = fileName)
     }
   }
