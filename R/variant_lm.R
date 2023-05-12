@@ -76,14 +76,15 @@ get_effect_types <- function(form, m_matrix, is_factor){
   return(effect_types)
 }
 
-sample_store_lm <- function(data, par_names, iters = 1, stage = "init", integrate = T, ...) {
+sample_store_lm <- function(data, par_names, iters = 1, stage = "init", integrate = T, is_nuisance, ...) {
   args <- list(...)
   effects <- get_effects(args$aggr_data, args$formula)
   n_effects <- length(effects$effect_mapping)
   subject_ids <- unique(data$subjects)
-  n_pars <- length(par_names)
   n_subjects <- length(subject_ids)
   base_samples <- sample_store_base(data, par_names, iters, stage)
+  par_names <- par_names[!is_nuisance]
+  n_pars <- length(par_names)
   samples <- list(
     theta_mu = array(NA_real_,dim = c(n_pars, iters), dimnames = list(par_names, NULL)),
     theta_var = array(NA_real_,dim = c(n_pars, n_pars, iters),dimnames = list(par_names, par_names, NULL)),

@@ -1,21 +1,53 @@
 add_info_blocked <- function(sampler, prior = NULL, ...){
   # blocked specific attributes
+  n_pars <- sum(!(sampler$nuisance | sampler$grouped))
   par_groups <- list(...)$par_groups
   sampler$par_groups <- par_groups
   sampler$n_par_groups <- length(unique(par_groups))
+  sampler$prior <- get_prior(prior, sampler$par_names[!(sampler$nuisance | sampler$grouped)])
+  return(sampler)
+}
+
+
+get_prior_blocked <- function(prior = NULL, par_names, plot = F, plot_all_pars = F){
+  n_pars <- length(par_names)
   # Checking and default priors
-  if (is.null(prior)) {
-    prior <- list(theta_mu_mean = rep(0, sampler$n_pars), theta_mu_var = diag(rep(1, sampler$n_pars)))
+  if(is.null(prior)){
+    prior <- list()
+  }
+  if (is.null(prior$theta_mu_mean)) {
+    prior$theta_mu_mean <- rep(0, n_pars)
+  }
+  if(is.null(prior$theta_mu_var)){
+    prior$theta_mu_var <- diag(rep(1, n_pars))
+  }
+  if(is.null(prior$v)){
+    prior$v <- 2
+  }
+  if(is.null(prior$A)){
+    prior$A <- rep(1, n_pars)
   }
   # Things I save rather than re-compute inside the loops.
   prior$theta_mu_invar <- ginv(prior$theta_mu_var) #Inverse of the matrix
-
-  #Hyper parameters
-  attr(sampler, "v_half") <- 2
-  attr(sampler, "A_half") <- 1
-  sampler$prior <- prior
-  return(sampler)
+  if(plot){
+    par(mfrow = c(3,3))
+    N <- 1e6
+    titles_mean <- paste0("prior mean - ", par_names)
+    titles_variance <- paste0("prior variance - ", par_names)
+    data_variance <- rnorm(N, prior$theta_mu_mean[i], prior$theta_mu_var[i,i])
+    for(i in 1:n_pars){
+      data_mean <- rnorm(N, prior$theta_mu_mean[i], prior$theta_mu_var[i,i])
+      hist(data_mean, prob = T, main = titles_mean[i])
+      lines(density(data_mean))
+    }
+    for(i in 1:n_pars){
+      hist(data_var[i,i], prob = T, main = titles_variance[i])
+      lines(density(data_var[i,i]))
+    }
+  }
+  return(prior)
 }
+
 
 get_startpoints_blocked <- function(pmwgs, start_mu, start_var){
   if (is.null(start_mu)) start_mu <- rmvnorm(1, mean = pmwgs$prior$theta_mu_mean, sigma = pmwgs$prior$theta_mu_var)
@@ -37,13 +69,12 @@ gibbs_step_blocked <- function(sampler, alpha){
   # Gibbs step for group means, with full covariance matrix estimation
   # tmu = theta_mu, tvar = theta_var
   last <- last_sample_standard(sampler$samples)
-  hyper <- attributes(sampler)
   prior <- sampler$prior
-
+  n_pars_total <- sampler$n_pars-sum(sampler$nuisance) - sum(sampler$grouped)
   tmu_out <- numeric()
   a_half_out <- numeric()
-  tvar_out <- matrix(0, nrow = sampler$n_pars, ncol = sampler$n_pars)
-  tvinv_out <- matrix(0, nrow = sampler$n_pars, ncol = sampler$n_pars)
+  tvar_out <- matrix(0, nrow = n_pars_total, ncol = n_pars_total)
+  tvinv_out <- matrix(0, nrow = n_pars_total, ncol = n_pars_total)
   idx <- 0
   for(group in 1:sampler$n_par_groups){
     group_idx <- sampler$par_groups == group
@@ -58,23 +89,23 @@ gibbs_step_blocked <- function(sampler, alpha){
       # New values for group var
       theta_temp <- alpha[group_idx,] - tmu
       cov_temp <- (theta_temp) %*% (t(theta_temp))
-      B_half <- 2 * hyper$v_half * diag(1 / last$a_half[group_idx]) + cov_temp # nolint
-      tvar <- riwish(hyper$v_half + n_pars - 1 + sampler$n_subjects, B_half) # New sample for group variance
+      B_half <- 2 * prior$v * diag(1 / last$a_half[group_idx]) + cov_temp # nolint
+      tvar <- riwish(prior$v + n_pars - 1 + sampler$n_subjects, B_half) # New sample for group variance
       tvinv <- ginv(tvar)
 
       # Sample new mixing weights.
-      a_half <- 1 / rgamma(n = n_pars,shape = (hyper$v_half + n_pars) / 2,
-                           rate = hyper$v_half * diag(tvinv) + 1/(hyper$A_half^2))
+      a_half <- 1 / rgamma(n = n_pars,shape = (prior$v + n_pars) / 2,
+                           rate = prior$v * diag(tvinv) + 1/(prior$v^2))
     } else{
       var_mu = 1.0 / (sampler$n_subjects * last$tvinv[group_idx] + prior$theta_mu_invar[group_idx, group_idx])
       mean_mu = var_mu * (sum(alpha[group_idx,]) * last$tvinv[group_idx] + prior$theta_mu_invar[group_idx, group_idx] * prior$theta_mu_mean[group_idx])
       tmu <- rnorm(n_pars, mean_mu, sd = sqrt(var_mu))
-      tvinv = rgamma(n=n_pars, shape=hyper$v_half/2 + sampler$n_subjects/2, rate=hyper$v_half/last$a_half +
+      tvinv = rgamma(n=n_pars, shape=prior$v/2 + sampler$n_subjects/2, rate=prior$v/last$a_half +
                        rowSums( (alpha-tmu)^2 ) / 2)
       tvar = 1/tvinv
       #Contrary to standard pmwg I use shape, rate for IG()
-      a_half <- 1 / rgamma(n = n_pars, shape = (hyper$v_half + n_pars) / 2,
-                           rate = hyper$v_half * tvinv + 1/(hyper$A_half^2))
+      a_half <- 1 / rgamma(n = n_pars, shape = (prior$v + n_pars) / 2,
+                           rate = prior$v * tvinv + 1/(prior$v^2))
     }
 
     tmu_out <- c(tmu_out, tmu)
@@ -95,13 +126,13 @@ get_conditionals_blocked <- function(s, samples, n_pars, iteration = NULL, idx =
   if(is.null(idx)) idx <- 1:n_pars
   pts2_unwound <- apply(samples$theta_var[idx,idx,],3,unwind)
   index <- rowMeans(pts2_unwound == 0) == 0 #remove all 0 elements
-  pts2_unwound <- pts2_unwound[index]
+  pts2_unwound <- pts2_unwound[index,]
   all_samples <- rbind(samples$alpha[idx,s,],samples$theta_mu[idx,],pts2_unwound)
   mu_tilde <- rowMeans(all_samples)
   var_tilde <- var(t(all_samples))
   condmvn <- condMVN(mean = mu_tilde, sigma = var_tilde,
                      dependent.ind = 1:n_pars, given.ind = (n_pars + 1):length(mu_tilde),
-                     X.given = c(samples$theta_mu[idx,iteration], unwind(samples$theta_var[idx,idx,iteration])))
+                     X.given = c(samples$theta_mu[idx,iteration], unwind(samples$theta_var[idx,idx,iteration])[index]))
   return(list(eff_mu = condmvn$condMean, eff_var = condmvn$condVar))
 }
 

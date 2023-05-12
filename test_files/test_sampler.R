@@ -1,6 +1,5 @@
 rm(list=ls())
-# devtools::install()
-library(EMC2)
+devtools::load_all()
 
 print(load("test_files/PNAS.RData"))
 dat <- data[,c("s","E","S","R","RT")]
@@ -29,6 +28,20 @@ design_B <- make_design(
   model=lbaB)
 
 
-samplers <- make_samplers(dat, design_B)
+samplers <- make_samplers(dat, design_B, nuisance = c(6,7), grouped_pars = 5)
 
-samplers <- run_emc(samplers, cores_per_chain = 3, verbose = T, iter = 250)
+debug(run_stage)
+samplers <- run_adapt(samplers, cores_per_chain = 5, cores_for_chains = 1, verbose = T, min_unique = 100)
+debug(create_eff_proposals)
+samplers <- run_sample(samplers, cores_per_chain = 5, cores_for_chains = 1, verbose = T)
+
+
+devtools::load_all()
+debug(test_adapted)
+samplers <- run_adapt(samplers, cores_per_chain = 8, cores_for_chains = 1, verbose = T, min_unique = 40, step_size = 50)
+debug(create_eff_proposals)
+samplers <- run_sample(samplers, cores_per_chain = 8, cores_for_chains = 1, verbose = T, iter = 200)
+
+debug(merge_samples)
+samples <- merge_samples(samplers)
+
