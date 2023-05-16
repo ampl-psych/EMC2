@@ -28,20 +28,35 @@ design_B <- make_design(
   model=lbaB)
 
 
-samplers <- make_samplers(dat, design_B, nuisance = c(6,7), grouped_pars = 5)
+prior <- list(
+  theta_mu_mean = 1:5,
+  theta_mu_var = diag(c(5:1))
+) # This way we're using default priors for the nuisance parameters
 
-debug(run_stage)
-samplers <- run_adapt(samplers, cores_per_chain = 5, cores_for_chains = 1, verbose = T, min_unique = 100)
-debug(create_eff_proposals)
-samplers <- run_sample(samplers, cores_per_chain = 5, cores_for_chains = 1, verbose = T)
+# Nuisance non hyper = non hierarchically estimated parameters
+samplers <- make_samplers(dat, design_B, nuisance_non_hyper = c(6,7), prior = prior)
+samplers <- run_emc(samplers, cores_per_chain = 5, cores_for_chains = 1, verbose = T)
 
+# nuisance = hierarchically estimated parameters, but no covariances or other relationships estimated
+# grouped pars = pars estimated the same across participants.
+samplers <- make_samplers(dat, design_B, nuisance = c(6,7), grouped_pars = 5, type = "infnt_factor")
 
-devtools::load_all()
-debug(test_adapted)
-samplers <- run_adapt(samplers, cores_per_chain = 8, cores_for_chains = 1, verbose = T, min_unique = 40, step_size = 50)
-debug(create_eff_proposals)
-samplers <- run_sample(samplers, cores_per_chain = 8, cores_for_chains = 1, verbose = T, iter = 200)
+# we could also specify a prior for these:
+prior <- list(
+  theta_mu_mean = 1:4,
+  theta_mu_var = c(4:1), # Type infinite factor requires a vector of variances not a matrix. I'll make better docs about this.
+  prior_nuis = list(
+    theta_mu_mean = 1:2,
+    theta_mu_var = rep(1,2)
+  ),
+  prior_grouped = list(
+    theta_mu_mean = .5,
+    prior_var = .3
+  )
+)
+samplers <- make_samplers(dat, design_B, nuisance = c(6,7), grouped_pars = 5, type = "infnt_factor",
+                          prior = prior)
 
-debug(merge_samples)
-samples <- merge_samples(samplers)
+samplers <- run_emc(samplers, cores_per_chain = 5, cores_for_chains = 1, verbose = T)
+
 

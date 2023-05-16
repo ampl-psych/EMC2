@@ -12,9 +12,11 @@ pmwgs <- function(dadm, variant_funs, pars = NULL, ll_func = NULL, prior = NULL,
   if(!is.null(grouped_pars)){
     is_grouped <- is.element(seq_len(length(pars)), grouped_pars)
     group_pars <- array(NA_real_, dim = c(sum(is_grouped),1), dimnames = list(pars[is_grouped], NULL))
+    epsilon_grouped <- .5
   } else{
     is_grouped <- rep(F, length(pars))
     group_pars <- NULL
+    epsilon_grouped <- NULL
   }
 
   if(!is.null(nuisance_non_hyper)){
@@ -44,6 +46,8 @@ pmwgs <- function(dadm, variant_funs, pars = NULL, ll_func = NULL, prior = NULL,
   samples <- variant_funs$sample_store(dadm, pars, is_nuisance = is_nuisance,
                                        is_grouped = is_grouped, ...)
   samples$grouped_pars <- group_pars
+  samples$epsilon_grouped <- epsilon_grouped
+
   sampler <- list(
     data = dadm_list,
     par_names = pars,
@@ -59,7 +63,7 @@ pmwgs <- function(dadm, variant_funs, pars = NULL, ll_func = NULL, prior = NULL,
   )
   class(sampler) <- "pmwgs"
   sampler <- variant_funs$add_info(sampler, prior, ...)
-  sampler$prior$prior_grouped <- get_prior_single(sampler$prior$prior_grouped,
+  sampler$prior$prior_grouped <- get_prior_single(prior$prior_grouped,
                                                   n_pars = sum(is_grouped),
                                                   par_names = rownames(group_pars))
   attr(sampler, "variant_funs") <- variant_funs
@@ -205,6 +209,7 @@ run_stage <- function(pmwgs,
   }
   grouped <- pmwgs$grouped
   if(any(grouped)){
+    epsilon_grouped <- pmwgs$samples$epsilon_grouped
     mix_grouped <- c(0.1, 0.9, 0)
     particles_grouped <- round(sqrt(nrow(pmwgs$samples$grouped_pars))*40)
   }
@@ -232,10 +237,11 @@ run_stage <- function(pmwgs,
     }
     if(any(grouped)){
       grouped_pars <- new_particle_group(pmwgs$data, particles_grouped, pmwgs$prior$prior_grouped,
-                                         chains_cov_grouped, mix_grouped,
+                                         chains_cov_grouped, mix_grouped, epsilon_grouped,
                                          pmwgs$samples$grouped_pars[,j-1] , pars_comb$alpha, pmwgs$par_names,
                                          pmwgs$ll_func, pmwgs$grouped, stage, variant_funs, pmwgs$subjects, n_cores)
       pmwgs$samples$grouped_pars[,j] <- grouped_pars
+      pmwgs$samples$epsilon_grouped <- epsilon_grouped
     } else{
       grouped_pars <- NULL
     }
@@ -260,9 +266,12 @@ run_stage <- function(pmwgs,
           acc <-  pmwgs$samples$alpha[max(which(idx)),,j] != pmwgs$samples$alpha[max(which(idx)),,(j-1)]
           epsilon[,component] <-update.epsilon(epsilon[,component]^2, acc, p_accept, j, sum(idx), alphaStar)
         }
+        if(any(grouped)){
+          acc <-  pmwgs$samples$grouped_pars[1,j] !=  pmwgs$samples$grouped_pars[1,(j-1)]
+          epsilon_grouped <-update.epsilon(epsilon_grouped^2, acc, p_accept, j, sum(grouped), alphaStar)
+        }
       }
     }
-
   }
   if (verboseProgress) close(pb)
   attr(pmwgs, "epsilon") <- epsilon
@@ -270,7 +279,7 @@ run_stage <- function(pmwgs,
 }
 
 new_particle_group <- function(data, num_particles, prior,
-                               chains_cov, mix_proportion = c(.1, .9),
+                               chains_cov, mix_proportion = c(.1, .9), epsilon_grouped,
                                prev_mu, alpha, par_names, likelihood_func = NULL,
                                is_grouped, stage,
                                variant_funs, subjects, n_cores){
@@ -279,6 +288,7 @@ new_particle_group <- function(data, num_particles, prior,
   if(stage == "preburn"){
     chains_cov <- prior_var
   }
+  chains_cov <- chains_cov * epsilon_grouped^2
   particle_numbers <- numbers_from_proportion(mix_proportion, num_particles)
   prior_particles <- particle_draws(particle_numbers[1], prior_mu, prior_var)
   ind_particles <- particle_draws(particle_numbers[2], prev_mu, chains_cov)

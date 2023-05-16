@@ -452,21 +452,21 @@ design_model <- function(data,design,model=NULL,prior = NULL,
   # Pick out constants
   sampled_p_names <- p_names[!(p_names %in% names(design$constants))]
 
-  if(!is.null(prior)){
-    if(length(prior$theta_mu_mean) != length(sampled_p_names))
-      stop("prior mu should be same length as estimated parameters (p_vector)")
-    if(!is.matrix(prior$theta_mu_var)){
-      if(length(prior$theta_mu_var) != length(sampled_p_names))
-        stop("prior theta should be same length as estimated parameters (p_vector)")
-    } else {
-      if(nrow(prior$theta_mu_var) != length(sampled_p_names))
-        stop("prior theta should have same number of rows as estimated parameters (p_vector)")
-      if(ncol(prior$theta_mu_var) != length(sampled_p_names))
-        stop("prior theta should have same number of columns as estimated parameters (p_vector)")
-      if(ncol(prior$theta_mu_var) != nrow(prior$theta_mu_var))
-        stop("prior theta should have same number of columns as rows")
-    }
-  }
+  # if(!is.null(prior)){
+  #   if(length(prior$theta_mu_mean) != length(sampled_p_names))
+  #     stop("prior mu should be same length as estimated parameters (p_vector)")
+  #   if(!is.matrix(prior$theta_mu_var)){
+  #     if(length(prior$theta_mu_var) != length(sampled_p_names))
+  #       stop("prior theta should be same length as estimated parameters (p_vector)")
+  #   } else {
+  #     if(nrow(prior$theta_mu_var) != length(sampled_p_names))
+  #       stop("prior theta should have same number of rows as estimated parameters (p_vector)")
+  #     if(ncol(prior$theta_mu_var) != length(sampled_p_names))
+  #       stop("prior theta should have same number of columns as estimated parameters (p_vector)")
+  #     if(ncol(prior$theta_mu_var) != nrow(prior$theta_mu_var))
+  #       stop("prior theta should have same number of columns as rows")
+  #   }
+  # }
   attr(dadm, "prior") <- prior
   attr(dadm,"p_names") <- p_names
   attr(dadm,"model") <- model

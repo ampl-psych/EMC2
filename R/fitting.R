@@ -39,7 +39,7 @@ run_emc <- function(samplers, stage = NULL, iter = 1000, max_gd = 1.1, mean_gd =
     nstage <- colSums(chain_n(samplers))
     if (nstage["preburn"]==0) stage <- "preburn" else
       if (nstage["sample"]>0) stage <- "sample" else
-       stage <- names(nstage)[which(nstage==0)[1]-1]
+       stage <- names(nstage)[which(nstage==0)[1] - 1]
     }
   if(stage == "preburn"){
     samplers <- run_samplers(samplers, stage = "preburn", iter = preburn, cores_for_chains = cores_for_chains, p_accept = p_accept,
