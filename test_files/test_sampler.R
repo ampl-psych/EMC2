@@ -1,6 +1,7 @@
 rm(list=ls())
 devtools::load_all()
 
+
 print(load("test_files/PNAS.RData"))
 dat <- data[,c("s","E","S","R","RT")]
 names(dat)[c(1,5)] <- c("subjects","rt")
@@ -22,7 +23,6 @@ Emat
 design_B <- make_design(
   Ffactors=list(subjects=levels(dat$subjects),S=levels(dat$S),E=levels(dat$E)),
   Rlevels=levels(dat$R),matchfun=function(d)d$S==d$lR,
-  Clist=list(lM=ADmat,lR=ADmat,S=ADmat,E=Emat),
   Flist=list(v~lM,sv~1,B~E,A~1,t0~1),
   constants=c(sv=log(1)),
   model=lbaB)
