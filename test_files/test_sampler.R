@@ -35,7 +35,7 @@ prior <- list(
 
 # Nuisance non hyper = non hierarchically estimated parameters
 samplers <- make_samplers(dat, design_B, nuisance_non_hyper = c(6,7), prior = prior)
-samplers <- run_emc(samplers, cores_per_chain = 5, cores_for_chains = 1, verbose = T)
+# samplers <- run_emc(samplers, cores_per_chain = 5, cores_for_chains = 1, verbose = T)
 
 # nuisance = hierarchically estimated parameters, but no covariances or other relationships estimated
 # grouped pars = pars estimated the same across participants.
@@ -57,6 +57,6 @@ prior <- list(
 samplers <- make_samplers(dat, design_B, nuisance = c(6,7), grouped_pars = 5, type = "infnt_factor",
                           prior = prior)
 
-samplers <- run_emc(samplers, cores_per_chain = 5, cores_for_chains = 1, verbose = T)
+samplers <- run_emc(samplers, cores_per_chain = 4, cores_for_chains = 3, verbose = T, iter = 500)
 
 

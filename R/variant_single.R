@@ -4,7 +4,7 @@ add_info_single <- function(sampler, prior = NULL, ...){
   return(sampler)
 }
 
-get_prior_single <- function(prior = NULL, n_pars = NULL, par_names = NULL, plot = F, plot_all_pars = F){
+get_prior_single <- function(prior = NULL, n_pars = NULL, par_names = NULL, sample = F, N = 1e5, type = "mu"){
   if(is.null(prior)){
     prior <- list()
   }
@@ -14,14 +14,11 @@ get_prior_single <- function(prior = NULL, n_pars = NULL, par_names = NULL, plot
   if(is.null(prior$theta_mu_var)){
     prior$theta_mu_var <- diag(rep(1, n_pars))
   }
-  if(plot){
-    par(mfrow = c(3,3))
-    N <- 1e6
-    titles <- paste0("prior - ", par_names)
-    for(i in 1:n_pars){
-      data <- rnorm(N, prior$theta_mu_mean[i], prior$theta_mu_var[i,i])
-      hist(data, prob = T, main = titles[i])
-      lines(density(data))
+  if(sample){
+    if(type != "mu") stop("for variant single, the prior is only on the mean of the parameters")
+    samples <- mvtnorm::rmvnorm(N, prior$theta_mu_mean, prior$theta_mu_var)
+    if(!is.null(par_names)){
+      colnames(samples) <- par_names
     }
   }
   return(prior)

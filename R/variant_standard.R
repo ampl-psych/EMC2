@@ -16,7 +16,11 @@ sample_store_standard <- function(data, par_names, iters = 1, stage = "init", in
 }
 
 add_info_standard <- function(sampler, prior = NULL, ...){
-  n_pars <- sum(!(sampler$nuisance | sampler$grouped))
+  sampler$prior <- get_prior_standard(prior, sum(!(sampler$nuisance | sampler$grouped)))
+  return(sampler)
+}
+
+get_prior_standard <- function(prior = NULL, n_pars = NULL, par_names = NULL, sample = F, N = 1e5, type = "mu"){
   # Checking and default priors
   if(is.null(prior)){
     prior <- list()
@@ -35,8 +39,32 @@ add_info_standard <- function(sampler, prior = NULL, ...){
   }
   # Things I save rather than re-compute inside the loops.
   prior$theta_mu_invar <- ginv(prior$theta_mu_var) #Inverse of the matrix
-  sampler$prior <- prior
-  return(sampler)
+  if(sample){
+    if(!type %in% c("mu", "variance", "covariance", "correlation")){
+      stop("for variant standard, you can only specify the prior on the mean, variance, covariance or the correlation of the parameters")
+    }
+    if(type == "mu"){
+      samples <- mvtnorm::rmvnorm(N, mean = prior$theta_mu_mean,
+                              sigma = prior$theta_mu_var)
+      colnames(prior$samples) <- par_names
+      return(samples)
+    } else {
+      var <- array(NA_real_, dim = c(n_pars, n_pars, N),
+                   dimnames = list(par_names, par_names, NULL))
+      for(i in 1:N){
+        a_half <- 1 / rgamma(n = n_pars,shape = 1/2,
+                             rate = 1/(prior$A^2))
+        var[,,i] <- riwish(prior$v + n_pars - 1, 2 * prior$v * diag(1 / a_half))
+      }
+      if (type == "variance") return(t(apply(var,3,diag)))
+      if (type == "correlation"){
+        var <- array(apply(var,3,cov2cor),dim=dim(var),dimnames=dimnames(var))
+      }
+      lt <- lower.tri(var[,,1])
+      return(t(apply(var,3,function(x){x[lt]})))
+    }
+  }
+  return(prior)
 }
 
 get_startpoints_standard <- function(pmwgs, start_mu, start_var){
