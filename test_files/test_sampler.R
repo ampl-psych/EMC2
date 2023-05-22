@@ -59,4 +59,18 @@ samplers <- make_samplers(dat, design_B, nuisance = c(6,7), grouped_pars = 5, ty
 
 samplers <- run_emc(samplers, cores_per_chain = 4, cores_for_chains = 3, verbose = T, iter = 500)
 
+plot_chains(samplers, selection = "mu")
+
+plot_acfs(samplers)
+
+test <- plot_density(samplers)
+test <- plot_density(samplers, selection = "mu")
+check_run(samplers, interactive = F)
+
+pp <- post_predict(samplers, n_cores = 12)
+
+plot_fit(dat, pp)
+
+plot_defective_density(dat)
+
 

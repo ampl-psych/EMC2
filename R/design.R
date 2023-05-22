@@ -191,8 +191,9 @@ design_model_custom_ll <- function(data, design, model, prior){
   }
   dadm <- data
   attr(dadm, "prior") <- prior
+  model_input <- model
   attr(dadm, "model") <- function(){
-    return(list(log_likelihood = model))
+    return(list(log_likelihood = model_input))
   }
   attr(dadm,"sampled_p_names") <- attr(design, "sampled_p_names")
   attr(dadm, "custom_ll") <- TRUE

@@ -9,7 +9,7 @@ add_info_blocked <- function(sampler, prior = NULL, ...){
 }
 
 
-get_prior_blocked <- function(prior = NULL, par_names, plot = F, plot_all_pars = F){
+get_prior_blocked <- function(prior = NULL, n_pars = NULL, par_names = NULL, sample = F, N = 1e6){
   n_pars <- length(par_names)
   # Checking and default priors
   if(is.null(prior)){
@@ -29,22 +29,7 @@ get_prior_blocked <- function(prior = NULL, par_names, plot = F, plot_all_pars =
   }
   # Things I save rather than re-compute inside the loops.
   prior$theta_mu_invar <- ginv(prior$theta_mu_var) #Inverse of the matrix
-  if(plot){
-    par(mfrow = c(3,3))
-    N <- 1e6
-    titles_mean <- paste0("prior mean - ", par_names)
-    titles_variance <- paste0("prior variance - ", par_names)
-    data_variance <- rnorm(N, prior$theta_mu_mean[i], prior$theta_mu_var[i,i])
-    for(i in 1:n_pars){
-      data_mean <- rnorm(N, prior$theta_mu_mean[i], prior$theta_mu_var[i,i])
-      hist(data_mean, prob = T, main = titles_mean[i])
-      lines(density(data_mean))
-    }
-    for(i in 1:n_pars){
-      hist(data_var[i,i], prob = T, main = titles_variance[i])
-      lines(density(data_var[i,i]))
-    }
-  }
+
   return(prior)
 }
 

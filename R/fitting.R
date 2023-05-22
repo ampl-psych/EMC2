@@ -37,10 +37,16 @@ run_emc <- function(samplers, stage = NULL, iter = 1000, max_gd = 1.1, mean_gd =
   }
   if(is.null(stage)){
     nstage <- colSums(chain_n(samplers))
-    if (nstage["preburn"]==0) stage <- "preburn" else
-      if (nstage["sample"]>0) stage <- "sample" else
-       stage <- names(nstage)[which(nstage==0)[1] - 1]
+    if (nstage["preburn"]==0) {
+      stage <- "preburn"
+    } else{
+      if (nstage["sample"]>0){
+        stage <- "sample"
+      } else{
+        stage <- names(nstage)[which(nstage==0)[1] - 1]
+      }
     }
+  }
   if(stage == "preburn"){
     samplers <- run_samplers(samplers, stage = "preburn", iter = preburn, cores_for_chains = cores_for_chains, p_accept = p_accept,
                              step_size = step_size,  verbose = verbose, verboseProgress = verboseProgress,
@@ -48,6 +54,7 @@ run_emc <- function(samplers, stage = NULL, iter = 1000, max_gd = 1.1, mean_gd =
                              particles = particles, particle_factor =  particle_factor,
                              cores_per_chain = cores_per_chain, max_trys = max_trys, n_blocks = n_blocks)
   }
+
   if(any(stage %in% c("preburn", "burn"))){
     samplers <-  run_samplers(samplers, stage = "burn", mean_gd = mean_gd, cores_for_chains = cores_for_chains, p_accept = p_accept,
                               step_size = step_size,  verbose = verbose, verboseProgress = verboseProgress,

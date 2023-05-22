@@ -9,6 +9,9 @@ pmwgs <- function(dadm, variant_funs, pars = NULL, ll_func = NULL, prior = NULL,
   dadm_list <-dadm$dadm_list
   # Storage for the samples.
   subjects <- sort(as.numeric(unique(dadm$subjects)))
+  if(!is.numeric(nuisance)) nuisance <- which(pars == nuisance)
+  if(!is.numeric(nuisance_non_hyper)) nuisance_non_hyper <- which(pars == nuisance_non_hyper)
+
   if(!is.null(grouped_pars)){
     is_grouped <- is.element(seq_len(length(pars)), grouped_pars)
     group_pars <- array(NA_real_, dim = c(sum(is_grouped),1), dimnames = list(pars[is_grouped], NULL))
@@ -764,8 +767,18 @@ merge_group_level <- function(tmu, tmu_nuis, tvar, tvar_nuis, is_nuisance){
 
 run_hyper <- function(type, data, prior = NULL, iter = 5000, ...){
   args <- list(...)
-  data_input <- data[,colnames(data)!= "subjects"]
-  pars <- colnames(data_input)
+  if(length(dim(data)) == 3){
+    data_input <- data
+    data <- as.data.frame(t(data_input[,,1]))
+    data$subjects <- 1:nrow(data)
+    iter <- dim(data_input)[3]
+    is_mcmc <- T
+    pars <- rownames(data_input)
+  } else{
+    data_input <- data[,colnames(data)!= "subjects"]
+    is_mcmc <- F
+    pars <- colnames(data_input)
+  }
   variant_funs <- get_variant_funs(type)
   samples <- variant_funs$sample_store(data = data ,par_names = pars, is_nuisance = rep(F, length(pars)), integrate = F, is_grouped =
                                          rep(F, length(pars)), ...)
@@ -789,7 +802,11 @@ run_hyper <- function(type, data, prior = NULL, iter = 5000, ...){
   sampler$samples$idx <- 1
   sampler <- extend_sampler(sampler, iter-1, "sample")
   for(i in 2:iter){
-    pars <- variant_funs$gibbs_step(sampler, t(data_input))
+    if(is_mcmc){
+      pars <- variant_funs$gibbs_step(sampler, data_input[,,i])
+    } else{
+      pars <- variant_funs$gibbs_step(sampler, t(data_input))
+    }
     sampler$samples$idx <- i
     sampler$samples <- variant_funs$fill_samples(samples = sampler$samples, group_level = pars, proposals = NULL,
                                                  epsilon = NA, j = i, n_pars = sampler$n_pars)
