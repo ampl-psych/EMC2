@@ -28,21 +28,28 @@ IS2 <- function(samples, filter = "sample", subfilter = 0, IS_samples = 1000, st
                        var_tilde = all_pars$var_tilde,
                        info = all_pars$info,
                        mc.cores = n_cores)
+  # sub_and_group <- simplify2array(lapply(logw_num, FUN = function(x) return(x$sub_and_group)))
+  # prior_and_jac <- sapply(logw_num, FUN = function(x) return(x$prior_and_jac))
+  #
+  # logw_den <- mvtnorm::dmvt(prop_theta, delta=muX, sigma=varX,df=df, log = TRUE)
+  # # finished <- unlist(logw_num) - logw_den
+  # # max.lw <- max(finished)
+  # # mean.centred.lw <- mean(exp(finished-max.lw)) #takes off the max and gets mean (avoids infs)
+  # # lw <- log(mean.centred.lw)+max.lw #puts max back on to get the lw
+  # return(list(sub_and_group = sub_and_group, prior_and_jac = sub_and_group, logw_den = logw_den))
   logw_den <- mvtnorm::dmvt(prop_theta, delta=muX, sigma=varX,df=df, log = TRUE)
 
   finished <- unlist(logw_num) - logw_den
-  # max.lw <- max(finished)
-  # mean.centred.lw <- mean(exp(finished-max.lw)) #takes off the max and gets mean (avoids infs)
-  # lw <- log(mean.centred.lw)+max.lw #puts max back on to get the lw
   return(finished)
+
 }
 
 get_sub_weights <- function(stepsize_particles, condMean, condVar, prop_theta, info, sub){
-  wmix = c(.05, .95)
-  n1=stats::rbinom(n=1,size=stepsize_particles,prob=wmix)
-  if (n1<2) n1=2
-  if (n1>(stepsize_particles-2)) n1=stepsize_particles-2 ## These just avoid degenerate arrays.
-  n2=stepsize_particles-n1
+  wmix <- .95
+  n1 <- stats::rbinom(n=1,size=stepsize_particles,prob=wmix)
+  if (n1<2) n1 <- 2
+  if (n1>(stepsize_particles-2)) n1 <- stepsize_particles-2 ## These just avoid degenerate arrays.
+  n2 <- stepsize_particles-n1
   data <- info$data
   particles1 <- mvtnorm::rmvnorm(n1, condMean,condVar)
   # Group level
@@ -52,7 +59,7 @@ get_sub_weights <- function(stepsize_particles, condMean, condVar, prop_theta, i
   # names for ll function to work
   colnames(particles) <- info$par_names
   # do lba log likelihood with given parameters for each subject, gets density of particle from ll func
-  lw_first <- apply(particles, 1, info$ll_func, dadm = data[[sub]])
+  lw_first <- calc_ll_manager(particles, dadm = data[[sub]], info$ll_func)
   # below gets second part of equation 5 numerator ie density under prop_theta
   lw_second <- apply(particles, 1, info$variant_funs$group_dist_IS2, prop_theta, FALSE, NULL, info)
   # below is the denominator - ie mix of density under conditional and density under pro_theta
@@ -91,13 +98,17 @@ get_logp=function(prop_theta,stepsize_particles, max_particles, mu_tilde,var_til
       var_z_sub = sum(exp(2*(lw-max_lw)))/(sum(exp(lw-max_lw)))^2-1/n_total
     }
     weight <- exp(lw-max_lw)
+    # lw_subs[j, 1:length(weight)] <- max_lw+log((weight))
     lw_subs[j] <- max_lw+log(mean(weight))
   }
   # sum the logp and return
-  return(sum(lw_subs))
+  return(lw_subs)
 }
 
 compute_lw_num=function(i, prop_theta,stepsize_particles, max_particles, mu_tilde,var_tilde,info){
+  # sub_and_group <- get_logp(prop_theta[i,], stepsize_particles, max_particles, mu_tilde, var_tilde, info)
+  # prior_and_jac <- info$variant_funs$prior_dist_IS2(parameters = prop_theta[i,], info)
+  # return(list(sub_and_group = sub_and_group, prior_and_jac = prior_and_jac))
   logp.out <- get_logp(prop_theta[i,], stepsize_particles, max_particles, mu_tilde, var_tilde, info)
   logw_num <- logp.out+info$variant_funs$prior_dist_IS2(parameters = prop_theta[i,], info)
   return(logw_num)

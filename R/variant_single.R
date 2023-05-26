@@ -1,10 +1,27 @@
 add_info_single <- function(sampler, prior = NULL, ...){
   # Checking and default priors
-  if (is.null(prior)) {
-    prior <- list(theta_mu_mean = rep(0, sampler$n_pars), theta_mu_var = diag(rep(1, sampler$n_pars)))
-  }
-  sampler$prior <- prior
+  sampler$prior <- get_prior_single(prior, sampler$n_pars)
   return(sampler)
+}
+
+get_prior_single <- function(prior = NULL, n_pars = NULL, par_names = NULL, sample = F, N = 1e5, type = "mu"){
+  if(is.null(prior)){
+    prior <- list()
+  }
+  if (is.null(prior$theta_mu_mean)) {
+    prior$theta_mu_mean <- rep(0, n_pars)
+  }
+  if(is.null(prior$theta_mu_var)){
+    prior$theta_mu_var <- diag(rep(1, n_pars))
+  }
+  if(sample){
+    if(type != "mu") stop("for variant single, the prior is only on the mean of the parameters")
+    samples <- mvtnorm::rmvnorm(N, prior$theta_mu_mean, prior$theta_mu_var)
+    if(!is.null(par_names)){
+      colnames(samples) <- par_names
+    }
+  }
+  return(prior)
 }
 
 get_startpoints_single <- function(pmwgs, start_mu, start_var){
@@ -22,17 +39,27 @@ get_group_level_single <- function(parameters, s){
 }
 
 gibbs_step_single <- function(sampler, alpha){
-  alpha_out <- matrix(alpha, nrow = sampler$n_pars, ncol = sampler$n_subjects)
-  rownames(alpha_out) <- sampler$par_names
+  n_pars <- sampler$n_pars-sum(sampler$nuisance) - sum(sampler$grouped)
+  alpha_out <- matrix(alpha, nrow = n_pars, ncol = sampler$n_subjects)
+  rownames(alpha_out) <- sampler$par_names[!(sampler$nuisance | sampler$grouped)]
   return(list(tmu = sampler$prior$theta_mu_mean,tvar = sampler$prior$theta_mu_var,alpha = alpha_out))
 }
 
-get_conditionals_single <- function(s, samples, n_pars, iteration = NULL){
-  stop("no adaptation/sample stage for single subject estimation")
+get_conditionals_single <- function(s, samples, n_pars, iteration = NULL, idx = NULL){
+  iters <- dim(samples$alpha)[3]
+  iter_idx <- sample(1:iters, min(iters, 250))
+  if(is.null(idx)) idx <- 1:n_pars
+  all_samples <- samples$alpha[idx,s,iter_idx]
+  mu_tilde <- rowMeans(all_samples)
+  var_tilde <- var(t(all_samples))
+  return(list(eff_mu = mu_tilde, eff_var = var_tilde))
 }
 
 filtered_samples_single <- function(sampler, filter){
-  stop("no adaptation/sample stage for single subject estimation")
+  out <- list(
+    alpha = sampler$samples$alpha[, , filter],
+    iteration = length(filter)
+  )
 }
 
 get_all_pars_single <- function(samples, idx, info){

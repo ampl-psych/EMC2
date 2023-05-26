@@ -1,5 +1,6 @@
 .Rproj.user
+*.Rhistory
 .Rhistory
-# no binaries
+.RData
 *.so
 *.o

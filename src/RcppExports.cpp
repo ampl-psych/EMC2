@@ -10,6 +10,43 @@ Rcpp::Rostream<true>&  Rcpp::Rcout = Rcpp::Rcpp_cout_get();
 Rcpp::Rostream<false>& Rcpp::Rcerr = Rcpp::Rcpp_cerr_get();
 #endif
 
+// calc_ll
+NumericVector calc_ll(NumericMatrix p_matrix, DataFrame data, NumericVector constants, List designs, const int n_trials, String type, CharacterVector p_types, LogicalVector winner, NumericVector expand, double min_ll, List group_idx);
+RcppExport SEXP _EMC2_calc_ll(SEXP p_matrixSEXP, SEXP dataSEXP, SEXP constantsSEXP, SEXP designsSEXP, SEXP n_trialsSEXP, SEXP typeSEXP, SEXP p_typesSEXP, SEXP winnerSEXP, SEXP expandSEXP, SEXP min_llSEXP, SEXP group_idxSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericMatrix >::type p_matrix(p_matrixSEXP);
+    Rcpp::traits::input_parameter< DataFrame >::type data(dataSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type constants(constantsSEXP);
+    Rcpp::traits::input_parameter< List >::type designs(designsSEXP);
+    Rcpp::traits::input_parameter< const int >::type n_trials(n_trialsSEXP);
+    Rcpp::traits::input_parameter< String >::type type(typeSEXP);
+    Rcpp::traits::input_parameter< CharacterVector >::type p_types(p_typesSEXP);
+    Rcpp::traits::input_parameter< LogicalVector >::type winner(winnerSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type expand(expandSEXP);
+    Rcpp::traits::input_parameter< double >::type min_ll(min_llSEXP);
+    Rcpp::traits::input_parameter< List >::type group_idx(group_idxSEXP);
+    rcpp_result_gen = Rcpp::wrap(calc_ll(p_matrix, data, constants, designs, n_trials, type, p_types, winner, expand, min_ll, group_idx));
+    return rcpp_result_gen;
+END_RCPP
+}
+// d_DDM_c
+NumericVector d_DDM_c(NumericVector rts, NumericVector R, List group_idx, NumericMatrix pars, double precision, bool stop_on_error);
+RcppExport SEXP _EMC2_d_DDM_c(SEXP rtsSEXP, SEXP RSEXP, SEXP group_idxSEXP, SEXP parsSEXP, SEXP precisionSEXP, SEXP stop_on_errorSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type rts(rtsSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type R(RSEXP);
+    Rcpp::traits::input_parameter< List >::type group_idx(group_idxSEXP);
+    Rcpp::traits::input_parameter< NumericMatrix >::type pars(parsSEXP);
+    Rcpp::traits::input_parameter< double >::type precision(precisionSEXP);
+    Rcpp::traits::input_parameter< bool >::type stop_on_error(stop_on_errorSEXP);
+    rcpp_result_gen = Rcpp::wrap(d_DDM_c(rts, R, group_idx, pars, precision, stop_on_error));
+    return rcpp_result_gen;
+END_RCPP
+}
 // dlba
 NumericVector dlba(NumericVector t, NumericVector A, NumericVector b, NumericVector v, NumericVector sv, bool posdrift, bool robust);
 RcppExport SEXP _EMC2_dlba(SEXP tSEXP, SEXP ASEXP, SEXP bSEXP, SEXP vSEXP, SEXP svSEXP, SEXP posdriftSEXP, SEXP robustSEXP) {
@@ -41,62 +78,6 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< bool >::type posdrift(posdriftSEXP);
     Rcpp::traits::input_parameter< bool >::type robust(robustSEXP);
     rcpp_result_gen = Rcpp::wrap(plba(t, A, b, v, sv, posdrift, robust));
-    return rcpp_result_gen;
-END_RCPP
-}
-// pigt0
-double pigt0(double t, double k, double l);
-RcppExport SEXP _EMC2_pigt0(SEXP tSEXP, SEXP kSEXP, SEXP lSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< double >::type t(tSEXP);
-    Rcpp::traits::input_parameter< double >::type k(kSEXP);
-    Rcpp::traits::input_parameter< double >::type l(lSEXP);
-    rcpp_result_gen = Rcpp::wrap(pigt0(t, k, l));
-    return rcpp_result_gen;
-END_RCPP
-}
-// digt0
-double digt0(double t, double k, double l);
-RcppExport SEXP _EMC2_digt0(SEXP tSEXP, SEXP kSEXP, SEXP lSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< double >::type t(tSEXP);
-    Rcpp::traits::input_parameter< double >::type k(kSEXP);
-    Rcpp::traits::input_parameter< double >::type l(lSEXP);
-    rcpp_result_gen = Rcpp::wrap(digt0(t, k, l));
-    return rcpp_result_gen;
-END_RCPP
-}
-// pigt
-double pigt(double t, double k, double l, double a, double threshold);
-RcppExport SEXP _EMC2_pigt(SEXP tSEXP, SEXP kSEXP, SEXP lSEXP, SEXP aSEXP, SEXP thresholdSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< double >::type t(tSEXP);
-    Rcpp::traits::input_parameter< double >::type k(kSEXP);
-    Rcpp::traits::input_parameter< double >::type l(lSEXP);
-    Rcpp::traits::input_parameter< double >::type a(aSEXP);
-    Rcpp::traits::input_parameter< double >::type threshold(thresholdSEXP);
-    rcpp_result_gen = Rcpp::wrap(pigt(t, k, l, a, threshold));
-    return rcpp_result_gen;
-END_RCPP
-}
-// digt
-double digt(double t, double k, double l, double a, double threshold);
-RcppExport SEXP _EMC2_digt(SEXP tSEXP, SEXP kSEXP, SEXP lSEXP, SEXP aSEXP, SEXP thresholdSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< double >::type t(tSEXP);
-    Rcpp::traits::input_parameter< double >::type k(kSEXP);
-    Rcpp::traits::input_parameter< double >::type l(lSEXP);
-    Rcpp::traits::input_parameter< double >::type a(aSEXP);
-    Rcpp::traits::input_parameter< double >::type threshold(thresholdSEXP);
-    rcpp_result_gen = Rcpp::wrap(digt(t, k, l, a, threshold));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -132,12 +113,10 @@ END_RCPP
 }
 
 static const R_CallMethodDef CallEntries[] = {
+    {"_EMC2_calc_ll", (DL_FUNC) &_EMC2_calc_ll, 11},
+    {"_EMC2_d_DDM_c", (DL_FUNC) &_EMC2_d_DDM_c, 6},
     {"_EMC2_dlba", (DL_FUNC) &_EMC2_dlba, 7},
     {"_EMC2_plba", (DL_FUNC) &_EMC2_plba, 7},
-    {"_EMC2_pigt0", (DL_FUNC) &_EMC2_pigt0, 3},
-    {"_EMC2_digt0", (DL_FUNC) &_EMC2_digt0, 3},
-    {"_EMC2_pigt", (DL_FUNC) &_EMC2_pigt, 5},
-    {"_EMC2_digt", (DL_FUNC) &_EMC2_digt, 5},
     {"_EMC2_dWald", (DL_FUNC) &_EMC2_dWald, 5},
     {"_EMC2_pWald", (DL_FUNC) &_EMC2_pWald, 5},
     {NULL, NULL, 0}

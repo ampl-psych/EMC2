@@ -1,15 +1,13 @@
 rm(list=ls())
-library(devtools)
-load_all()
+devtools::load_all()
 
-load("~/Documents/UVA/2022/EMC_test/PNAS.RData")
 
+print(load("test_files/PNAS.RData"))
 dat <- data[,c("s","E","S","R","RT")]
-dat$response <- dat$R
-dat$response[dat$response == "right"] <- "upper"
-dat$response[dat$response == "left"] <- 'lower'
 names(dat)[c(1,5)] <- c("subjects","rt")
 levels(dat$R) <- levels(dat$S)
+head(dat)
+# NB: This data has been truncated at 0.25s and 1.5s
 
 # Average rate = intercept, and rate d = difference (match-mismatch) contrast
 ADmat <- matrix(c(-1/2,1/2),ncol=1,dimnames=list(NULL,"d"))
@@ -19,47 +17,60 @@ Emat <- matrix(c(0,-1,0,0,0,-1),nrow=3)
 dimnames(Emat) <- list(NULL,c("a-n","a-s"))
 Emat
 
-ll_func <- function(pars, dadm){
-  out <- rtdists::ddiffusion(dadm, a = exp(pars["a"]), t0 = exp(pars["t0"]),
-                      v = pars["v"])
-  bad <- (out<1e-10)|(!is.finite(out))
-  out[bad] <- 1e-10
-  return(sum(log(pmax(out, 1e-10))))
-}
-
-design_B <- make_design(custom_p_vector = c("a", "t0", "v"), model=ll_func)
-
-
-# Test single subject
-dat_single <- dat[which(dat$subjects %in% (unique(dat$subjects)[1:4])),]
-dat_single <- droplevels(dat_single)
-
-samplers <- make_samplers(dat_single, design_B, type = "standard", n_chains = 3)
-samplers <- auto_burn(samplers, verbose = T, cores_per_chain = 4, cores_for_chains = 3)
-
-samplersC_merg <- merge_samples(samplers)
-samplersR_merg <- merge_samples(samplers)
-# microbenchmark::microbenchmark(
-#   samplers <- run_samplers(samplers, stage = "preburn", iter = 50, verbose = T, cores_per_chain = 1, cores_for_chains = 1),
-#   times = 15
-# )
+# Here we fit a series of models
+# We'll first build several plausible models and then do model selection
+# Only B affected by E
+design_B <- make_design(
+  Ffactors=list(subjects=levels(dat$subjects),S=levels(dat$S),E=levels(dat$E)),
+  Rlevels=levels(dat$R),matchfun=function(d)d$S==d$lR,
+  Flist=list(v~lM,sv~1,B~E,A~1,t0~1),
+  constants=c(sv=log(1)),
+  model=lbaB)
 
 
-library(ggplot2)
-library(cowplot)
+prior <- list(
+  theta_mu_mean = 1:5,
+  theta_mu_var = diag(c(5:1))
+) # This way we're using default priors for the nuisance parameters
 
-N <- 1500
-plots <- list()
-for(i in 1:nrow(samplersR_merg$samples$alpha)){
-  R <- samplersR_merg$samples$alpha[i,1,( samplersR_merg$samples$idx - N):  samplersR_merg$samples$idx]
-  C <- samplersC_merg$samples$alpha[i,1,( samplersC_merg$samples$idx - N):  samplersC_merg$samples$idx]
-  df <- data.frame(par_val = c(R, C), group = rep(c("R", "C"), each = N + 1))
-  ggp <- ggplot(df, aes(x = par_val, colour = group, fill = group)) +
-    geom_density(alpha = .1) + ggtitle(samplersR_merg$par_names[i]) + theme_bw()
-  plots[[i]] <- ggp
-}
-plot_grid(plots[[1]], plots[[2]])
-plot_grid(plots[[3]], plots[[4]])
-plot_grid(plots[[5]], plots[[6]])
-plot_grid(plots[[7]])
+# Nuisance non hyper = non hierarchically estimated parameters
+samplers <- make_samplers(dat, design_B, nuisance_non_hyper = c(6,7), prior = prior)
+# samplers <- run_emc(samplers, cores_per_chain = 5, cores_for_chains = 1, verbose = T)
+
+# nuisance = hierarchically estimated parameters, but no covariances or other relationships estimated
+# grouped pars = pars estimated the same across participants.
+samplers <- make_samplers(dat, design_B, nuisance = c(6,7), grouped_pars = 5, type = "infnt_factor")
+
+# we could also specify a prior for these:
+prior <- list(
+  theta_mu_mean = 1:4,
+  theta_mu_var = c(4:1), # Type infinite factor requires a vector of variances not a matrix. I'll make better docs about this.
+  prior_nuis = list(
+    theta_mu_mean = 1:2,
+    theta_mu_var = rep(1,2)
+  ),
+  prior_grouped = list(
+    theta_mu_mean = .5,
+    prior_var = .3
+  )
+)
+samplers <- make_samplers(dat, design_B, nuisance = c(6,7), grouped_pars = 5, type = "infnt_factor",
+                          prior = prior)
+
+samplers <- run_emc(samplers, cores_per_chain = 4, cores_for_chains = 3, verbose = T, iter = 500)
+
+plot_chains(samplers, selection = "mu")
+
+plot_acfs(samplers)
+
+test <- plot_density(samplers)
+test <- plot_density(samplers, selection = "mu")
+check_run(samplers, interactive = F)
+
+pp <- post_predict(samplers, n_cores = 12)
+
+plot_fit(dat, pp)
+
+plot_defective_density(dat)
+
 
