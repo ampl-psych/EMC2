@@ -9,8 +9,8 @@ pmwgs <- function(dadm, variant_funs, pars = NULL, ll_func = NULL, prior = NULL,
   dadm_list <-dadm$dadm_list
   # Storage for the samples.
   subjects <- sort(as.numeric(unique(dadm$subjects)))
-  if(!is.numeric(nuisance)) nuisance <- which(pars == nuisance)
-  if(!is.numeric(nuisance_non_hyper)) nuisance_non_hyper <- which(pars == nuisance_non_hyper)
+  if(!is.null(nuisance) & !is.numeric(nuisance)) nuisance <- which(pars == nuisance)
+  if(!is.null(nuisance_non_hyper) & !is.numeric(nuisance_non_hyper)) nuisance_non_hyper <- which(pars == nuisance_non_hyper)
 
   if(!is.null(grouped_pars)){
     is_grouped <- is.element(seq_len(length(pars)), grouped_pars)
