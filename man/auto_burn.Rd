@@ -20,7 +20,8 @@ auto_burn(
   cores_per_chain = 1,
   cores_for_chains = length(samplers),
   max_trys = 50,
-  useC = useC
+  useC = FALSE,
+  n_blocks = NULL
 )
 }
 \arguments{

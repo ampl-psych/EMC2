@@ -660,8 +660,8 @@ extractDadms <- function(dadms, names = 1:length(dadms)){
   }
   # subject_covariates_ok <- unlist(lapply(subject_covariates, FUN = function(x) length(x) == length(subjects)))
   # if(!is.null(subject_covariates_ok)) if(any(!subject_covariates_ok)) stop("subject_covariates must be as long as the number of subjects")
-  attr(dadm_list, "components") <- components
-  attr(dadm_list, "shared_ll_idx") <- components
+  attr(dadm_list, "components") <- rep(1, length(pars)) #components
+  attr(dadm_list, "shared_ll_idx") <- rep(1, length(pars)) #components
   return(list(ll_func = ll_func, pars = pars, prior = prior,
               dadm_list = dadm_list, subjects = subjects))
 }

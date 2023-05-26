@@ -138,24 +138,57 @@ make_data <- function(p_vector,design,model=NULL,trials=NULL,data=NULL,expand=1,
       add_accumulators(data,design$matchfun,simulate=TRUE,type=model()$type,Fcovariates=design$Fcovariates),
       design,model,add_acc=FALSE,compress=FALSE,verbose=FALSE,
       rt_check=FALSE)
+
+    if(!is.null(design$adapt)) {
+      # if there's an adapt component, there's two ways of simulating: either trial by trial or in one go.
+      # trial by trial is preferred in RL designs because it simulates feedback on every trial;
+      # in one go (simply uses npars) is faster
+      if(!is.null(design$adapt$simulateByTrial)) {
+        if(design$adapt$simulateByTrial) {
+          ## assumes this is FALSE. No Ttransform here!
+          pars <- model()$Ntransform(map_p(
+            model()$transform(add_constants(p_vector,design$constants)),data
+          ))
+
+          if (expand>1) {
+            expand <- 1
+            warning("Expand does not work with this type of model")
+          }
+
+          data <- adapt_data(data,design,model,pars,mapped_p=mapped_p,add_response = TRUE)
+          if (mapped_p) return(data)
+          adapt <- attr(data,"adapt")
+          data <- data[data$lR==levels(data$lR)[1],!(names(data) %in% c("lR","lM"))]
+
+          if('Qvalues' %in% names(attributes(pars))) attr(data, 'Qvalues') <- attr(pars, 'Qvalues')
+          if('predictionErrors' %in% names(attributes(pars))) attr(data, 'predictionErrors') <- attr(pars, 'predictionErrors')
+          attr(data,"adapt") <- adapt
+          return(data)
+        }
+      }
+    }
+
+    # Either no adapt or adapt+no simulate by trial: use normal npars and continue as normal
     pars <- model()$Ttransform(model()$Ntransform(map_p(
       model()$transform(add_constants(p_vector,design$constants)),data
     )),data)
-    if (!is.null(design$adapt)) {
-      if (expand>1) {
-        expand <- 1
-        warning("Expand does not work with this type of model")
-      }
-      data <- adapt_data(data,design,model,pars,mapped_p=mapped_p,add_response = TRUE)
-      if (mapped_p) return(data)
-      adapt <- attr(data,"adapt")
-      data <- data[data$lR==levels(data$lR)[1],!(names(data) %in% c("lR","lM"))]
 
-      if('Qvalues' %in% names(attributes(pars))) attr(data, 'Qvalues') <- attr(pars, 'Qvalues')
-      if('predictionErrors' %in% names(attributes(pars))) attr(data, 'predictionErrors') <- attr(pars, 'predictionErrors')
-      attr(data,"adapt") <- adapt
-      return(data)
-    }
+    # if (!is.null(design$adapt)) {
+    #   if (expand>1) {
+    #     expand <- 1
+    #     warning("Expand does not work with this type of model")
+    #   }
+    #
+    #   data <- adapt_data(data,design,model,pars,mapped_p=mapped_p,add_response = TRUE)
+    #   if (mapped_p) return(data)
+    #   adapt <- attr(data,"adapt")
+    #   data <- data[data$lR==levels(data$lR)[1],!(names(data) %in% c("lR","lM"))]
+    #
+    #   if('Qvalues' %in% names(attributes(pars))) attr(data, 'Qvalues') <- attr(pars, 'Qvalues')
+    #   if('predictionErrors' %in% names(attributes(pars))) attr(data, 'predictionErrors') <- attr(pars, 'predictionErrors')
+    #   attr(data,"adapt") <- adapt
+    #   return(data)
+    # }
     if (mapped_p) return(cbind(data[,!(names(data) %in% c("R","rt"))],pars))
     if (expand==1)
       Rrt <- model()$rfun(data$lR,pars) else

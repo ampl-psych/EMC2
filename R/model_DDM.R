@@ -13,7 +13,7 @@ rDDM <- function(lR,pars,precision=3,ok=NULL)
   out <- data.frame(response=bad,rt=bad)
   out[ok,2:1] <- rtdists::rdiffusion(length(lR[ok]), a = pars[ok,"a"], v = pars[ok,"v"], t0 = pars[ok,"t0"],
                             z = pars[ok,"z"], d = pars[ok,"d"], sz = pars[ok,"sz"], sv = pars[ok,"sv"],
-                            st0 = pars[ok,"st0"], s = pars[ok,"s"])
+                            st0 = pars[ok,"st0"], s = pars[ok,"s"], precision = precision)
   # cbind.data.frame(R=factor(out[,"response"],levels=c("lower","upper"),labels=levels(lR)),rt=out[,"rt"])
   cbind.data.frame(R=factor(out[,"response"],levels=1:2,labels=levels(lR)),rt=out[,"rt"])
 }
@@ -29,7 +29,7 @@ dDDM <- function(rt,R,pars,precision=3)
   levels(R) <- c("lower","upper")
   rtdists::ddiffusion(rt,response=as.character(R),
              a = pars[,"a"], v = pars[,"v"], t0 = pars[,"t0"], z = pars[,"z"],d = pars[,"d"],
-             sz = pars[,"sz"], sv = pars[,"sv"],st0 = pars[,"st0"], s = pars[,"s"])
+             sz = pars[,"sz"], sv = pars[,"sv"],st0 = pars[,"st0"], s = pars[,"s"], precision=precision)
 }
 
 
@@ -40,7 +40,7 @@ pDDM <- function(rt,R,pars,precision=3)
   levels(R) <- c("lower","upper")
   rtdists::pdiffusion(rt,response=as.character(R),
              a = pars[,"a"], v = pars[,"v"], t0 = pars[,"t0"], z = pars[,"z"],d = pars[,"d"],
-             sz = pars[,"sz"], sv = pars[,"sv"],st0 = pars[,"st0"], s = pars[,"s"])
+             sz = pars[,"sz"], sv = pars[,"sv"],st0 = pars[,"st0"], s = pars[,"s"], precision = precision)
 }
 
 #' Title
@@ -164,4 +164,179 @@ ddmTZDt0natural <- function(){
     }
   )
 
+}
+
+
+### dynamic
+#' Title
+#'
+#' @return
+#' @export
+#'
+#' @examples
+ddmTZDdynamic <- function(){
+  list(
+    type="DDM",
+    c_name = "DDM",
+    p_types=c("v","a","sv","t0","st0","s","Z","SZ","DP", "alpha1", "weight1", "q01", "alpha2", "weight2", "q02", "alpha3", "weight3", "q03"),
+    # The "TZD" parameterization defined relative to the "rtdists" package is:
+    # natural scale
+    #   v = rtdists rate v (positive favors upper)
+    # log scale
+    #   t0 > 0: lower bound of non-decision time
+    #   st0 > 0: rtdists width of non-decision time distribution
+    #   a > 0: rtdists upper threshold, a
+    #   sv > 0: rtdists v standard deviation sv
+    #   s > 0: rtdists moment-to-moment standard deviation, s
+    # probit scale
+    #   0 < Z < 1: rtdists start point z = Z*a
+    #   0 < SZ < 1: rtdists start-point variability, sz = 2*SZ*min(c(a*Z,a*(1-Z))
+    #   0 < DP < 1: rtdists d = t0(upper)-t0(lower) = (2*DP-1)*t0  #
+    #
+    # Transform to natural scale
+    Ntransform=function(x) {
+      islog <- dimnames(x)[[2]] %in% c("a","sv","t0","st0","s")
+      isprobit <- dimnames(x)[[2]] %in% c("Z","SZ","DP", "alpha1", "alpha2", "alpha3", "q01", "q02", "q03", 'weight3')
+      x[,islog] <- exp(x[,islog])
+      x[,isprobit] <- pnorm(x[,isprobit])
+      x
+    },
+    # Trial dependent parameter transform
+    Ttransform = function(pars,dadm) {
+      ## update
+      parsList <- setNames(vector(mode="list",
+                                  length=length(levels(dadm$subjects))),
+                                  levels(dadm$subjects))
+
+      for (i in levels(dadm$subjects)) {
+        npars <- update_pars(i,pars,dadm)
+        parsList[[i]] <- npars
+      }
+
+      pars <- do.call(rbind,parsList)
+
+      # continue old code
+      pars <- cbind(pars,z=pars[,"a"]*pars[,"Z"],
+                    sz = 2*pars[,"SZ"]*pars[,"a"]*apply(cbind(pars[,"Z"],1-pars[,"Z"]),1,min))
+      pars <- cbind(pars, d = pars[,"t0"]*(2*pars[,"DP"]-1))
+
+      attr(pars,"ok") <-
+        !( abs(pars[,"v"])> 20 | pars[,"a"]> 10 | pars[,"sv"]> 10 | pars[,"SZ"]> .999 | pars[,"st0"]>.2)
+      if (pars[1,"sv"] !=0) attr(pars,"ok") <- attr(pars,"ok") & pars[,"sv"] > .001
+      if (pars[1,"SZ"] !=0) attr(pars,"ok") <- attr(pars,"ok") & pars[,"SZ"] > .001
+      pars
+    },
+    # p_vector transform, sets s as a scaling parameter
+    transform = function(p) p,
+    # Random function
+    rfun=function(lR,pars) {
+      ok <- !( abs(pars[,"v"])> 20 | pars[,"a"]> 10 | pars[,"sv"]> 10 | pars[,"SZ"]> .999 | pars[,"st0"]>.2)
+      if (pars[1,"sv"] !=0) attr(pars,"ok") <- attr(pars,"ok") & pars[,"sv"] > .001
+      if (pars[1,"SZ"] !=0) attr(pars,"ok") <- attr(pars,"ok") & pars[,"SZ"] > .001
+      rDDM(lR,pars,precision=2.5,ok)
+    },
+    # Density function (PDF)
+    dfun=function(rt,R,pars) dDDM(rt,R,pars,precision=2.5),
+    # Probability function (CDF)
+    pfun=function(rt,R,pars) pDDM(rt,R,pars,precision=2.5),
+    log_likelihood=function(p_vector,dadm,min_ll=log(1e-10)){
+      log_likelihood_ddm(p_vector=p_vector, dadm = dadm, min_ll = min_ll)
+    }
+  )
+}
+
+
+### dynamic with cosines
+#' Title
+#'
+#' @return
+#' @export
+#'
+#' @examples
+ddmTZDdynamicdct <- function(){
+  list(
+    type="DDM",
+    c_name = "DDM",
+    p_types=c("v","a","sv","t0","st0","s","Z","SZ","DP",
+              "alpha1", "weight1", "q01",
+              "alpha2", "weight2", "q02",
+              "alpha3", "weight3", "q03",
+              paste0(rep('wcos', 64), 1:64)),   # up to 64 cosines for now
+   # The "TZD" parameterization defined relative to the "rtdists" package is:
+    # natural scale
+    #   v = rtdists rate v (positive favors upper)
+    # log scale
+    #   t0 > 0: lower bound of non-decision time
+    #   st0 > 0: rtdists width of non-decision time distribution
+    #   a > 0: rtdists upper threshold, a
+    #   sv > 0: rtdists v standard deviation sv
+    #   s > 0: rtdists moment-to-moment standard deviation, s
+   # probit scale
+    #   0 < Z < 1: rtdists start point z = Z*a
+    #   0 < SZ < 1: rtdists start-point variability, sz = 2*SZ*min(c(a*Z,a*(1-Z))
+    #   0 < DP < 1: rtdists d = t0(upper)-t0(lower) = (2*DP-1)*t0  #
+    #
+    # Transform to natural scale
+   Ntransform=function(x) {
+      islog <- dimnames(x)[[2]] %in% c("a","sv","t0","st0","s")
+      isprobit <- dimnames(x)[[2]] %in% c("Z","SZ","DP", "alpha1", "alpha2", "alpha3", "q01", "q02", "q03", 'weight3')
+      x[,islog] <- exp(x[,islog])
+      x[,isprobit] <- pnorm(x[,isprobit])
+      x
+   },
+    # Trial dependent parameter transform
+    Ttransform = function(pars,dadm) {
+      ## update
+      parsList <- setNames(vector(mode="list",
+                                  length=length(levels(dadm$subjects))),
+                           levels(dadm$subjects))
+
+      for (i in levels(dadm$subjects)) {
+        ## cosines here
+        npars <- pars[dadm$subjects==i,]
+        da <- dadm[dadm$subjects==i,]
+        cdt <- attr(da, 'adapt')[[i]]$cdt
+        index <- attr(da, 'adapt')[[i]]$index
+
+        nwcos <- sum(grepl('wcos', colnames(npars)))
+        ncdt <- ncol(cdt)
+        if(nwcos > ncdt) cdt <- cbind(cdt, matrix(1, nrow=nrow(cdt), ncol=nwcos-ncdt))
+        drift <- cdt[index,] %*% npars[1,grepl('wcos', colnames(npars))] * sign(npars[,'v']) ## USE SIGN FOR FLIPPING HERE
+        pars[,'v'] <- pars[,'v'] + drift
+
+        # other trial-by-trial updates
+        npars <- update_pars(i,pars,dadm)
+        parsList[[i]] <- npars
+      }
+
+      pars <- do.call(rbind,parsList)
+
+      # continue old code
+      pars <- cbind(pars,z=pars[,"a"]*pars[,"Z"],
+                    sz = 2*pars[,"SZ"]*pars[,"a"]*apply(cbind(pars[,"Z"],1-pars[,"Z"]),1,min))
+      pars <- cbind(pars, d = pars[,"t0"]*(2*pars[,"DP"]-1))
+
+      attr(pars,"ok") <-
+        !( abs(pars[,"v"])> 20 | pars[,"a"]> 10 | pars[,"sv"]> 10 | pars[,"SZ"]> .999 | pars[,"st0"]>.2)
+      if (pars[1,"sv"] !=0) attr(pars,"ok") <- attr(pars,"ok") & pars[,"sv"] > .001
+      if (pars[1,"SZ"] !=0) attr(pars,"ok") <- attr(pars,"ok") & pars[,"SZ"] > .001
+      pars
+    },
+    # p_vector transform, sets s as a scaling parameter
+    transform = function(p) p,
+    # Random function
+    rfun=function(lR,pars) {
+      ok <- !( abs(pars[,"v"])> 20 | pars[,"a"]> 10 | pars[,"sv"]> 10 | pars[,"SZ"]> .999 | pars[,"st0"]>.2)
+      if (pars[1,"sv"] !=0) attr(pars,"ok") <- attr(pars,"ok") & pars[,"sv"] > .001
+      if (pars[1,"SZ"] !=0) attr(pars,"ok") <- attr(pars,"ok") & pars[,"SZ"] > .001
+      rDDM(lR,pars,precision=2.5,ok)
+    },
+    # Density function (PDF)
+    dfun=function(rt,R,pars) dDDM(rt,R,pars,precision=2.5),
+    # Probability function (CDF)
+    pfun=function(rt,R,pars) pDDM(rt,R,pars,precision=2.5),
+    log_likelihood=function(p_vector,dadm,min_ll=log(1e-10)){
+      log_likelihood_ddm(p_vector=p_vector, dadm = dadm, min_ll = min_ll)
+    }
+  )
 }

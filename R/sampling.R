@@ -1079,13 +1079,28 @@ get_variant_funs <- function(type = "standard") {
   return(list_fun)
 }
 
-calc_ll_manager <- function(proposals, dadm, useC, ll_func, component = NULL){
+#m.apply <- function(x, ...) "attributes<-"(apply(x, ...), attributes(x))
+#m.apply(proposals, 1, ll_func, dadm=dadm)
+
+calc_ll_manager <- function(proposals, dadm, useC, ll_func, component = NULL, ...){
   if(!is.data.frame(dadm)){
     lls <- log_likelihood_joint(proposals, dadm, component, useC)
   } else{
     c_name <- attr(dadm,"model")()$c_name
     if(is.null(c_name) | !useC){ # use the R implementation
-      lls <- apply(proposals,1, ll_func,dadm = dadm)
+      dots <- list(...)
+      if('hasPEs' %in% names(dots)) {
+        lls <- apply(proposals, 1, ll_func, dadm=dadm, simplify=FALSE)
+        PEs <- sapply(lls, attr, 'predictionErrors')
+        lls <- unlist(lls)
+        attr(lls, 'predictionErrors') <- PEs
+      } else if('predictionErrors' %in% names(dots)) {
+        lls <- sapply(1:nrow(proposals), function(x) {
+          ll_func(proposals[x,], dadm=dadm, predictionErrors=dots$predictionErrors[,x])
+        })
+      } else {
+        lls <- apply(proposals, 1, ll_func, dadm = dadm, ...)
+      }
     } else{
       p_types <- attr(dadm,"model")()$p_types
       designs <- list()

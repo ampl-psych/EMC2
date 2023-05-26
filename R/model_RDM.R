@@ -433,7 +433,7 @@ rdmRLARD <- function(){list(
       parsList[[i]] <- npars
       if('learn' %in% names(attributes(npars))) {
         Qlist[[i]] <- attr(npars, 'learn')$adaptedValues
-        PElist[[i]] <- attr(npars, 'learn')$predictionErrors
+        PElist[[i]] <- apply(attr(npars, 'learn')$predictionErrors, 1, sum, na.rm=TRUE)
       }
     }
     pars <- do.call(rbind,parsList)
@@ -441,7 +441,7 @@ rdmRLARD <- function(){list(
       attr(pars, 'predictionErrors') <- do.call(rbind, PElist)
       attr(pars, 'Qvalues') <- do.call(rbind, Qlist)
     }
-    attr(pars,"ok") <- (pars[,"t0"] > .05) & ((pars[,"A"] > 1e-6) | pars[,"A"] == 0)
+    attr(pars,"ok") <- (pars[,"t0"] > .05) & ((pars[,"A"] > 1e-6) | pars[,"A"] == 0) & (pars[,'v0']>0.01)
     pars
   },
   # p_vector transform
@@ -578,6 +578,110 @@ rdmRLARDvkf <- function(){list(
       parsList[[i]] <- update_pars(i,pars,dadm)
     pars <- do.call(rbind,parsList)
     attr(pars,"ok") <- (pars[,"t0"] > .05) & ((pars[,"A"] > 1e-6) | pars[,"A"] == 0)
+    pars
+  },
+  # p_vector transform
+  transform = function(x) x,
+  # Random function for racing accumulators
+  rfun=function(lR,pars) rRDM(lR,pars),
+  # Density function (PDF) for single accumulator
+  dfun=function(rt,pars) dRDM(rt,pars),
+  # Probability function (CDF) for single accumulator
+  pfun=function(rt,pars) pRDM(rt,pars),
+  # Race likelihood combining pfun and dfun
+  log_likelihood=function(p_vector,dadm,min_ll=log(1e-10))
+    log_likelihood_race(p_vector=p_vector, dadm = dadm, min_ll = min_ll)
+)
+}
+
+
+
+### SM: RDM dynamic
+# RDM_B parameterization with s=1 scaling (B = b-A done in rdm.R)
+# Added q0 parameter for initial rates in RL version. Note that this is the *SAME* code as RLARD except for the p_types :-/ that should be easier!
+#' RL-RD with RDM as model
+#'
+#' @return
+#' @export
+#'
+#' @examples
+rdmDynamic <- function() {list(
+  type="RACE",
+  p_types=c("v","B","A","t0","s",
+            "alpha1", "alpha2", "alpha3",
+            "q01", "q02", "q03",
+            "weight1", "weight2", "weight3"),
+
+  Ntransform=function(x) {
+    # Transform to natural scale
+    probit_scale <- c('alpha1', "alpha2", "alpha3", "q01", "q02", "q03")
+    logit_scale = c("v", "B", "A", "t0", "s")
+    ## weights on normal scale?
+    x[,dimnames(x)[[2]] %in% logit_scale] <- exp(x[,dimnames(x)[[2]] %in% logit_scale])
+    x[,dimnames(x)[[2]] %in% probit_scale] <- pnorm(x[,dimnames(x)[[2]] %in% probit_scale])
+    x
+  },
+  # Trial dependent parameter transform
+  Ttransform = function(pars,dadm) {
+    parsList <- setNames(vector(mode="list",length=length(levels(dadm$subjects))),
+                         levels(dadm$subjects))
+    for (i in levels(dadm$subjects))
+      parsList[[i]] <- update_pars(i,pars,dadm)
+    pars <- do.call(rbind,parsList)
+    attr(pars,"ok") <- (pars[,"t0"] > .05) & ((pars[,"A"] > 1e-6) | pars[,"A"] == 0) # & (pars[,'v'] > 1e-6) & (pars[,'v'] < 1e3) & (pars[,'B'] > .1) & (pars[,'alpha'] < 1)
+    pars
+  },
+  # p_vector transform
+  transform = function(x) x,
+  # Random function for racing accumulators
+  rfun=function(lR,pars) rRDM(lR,pars),
+  # Density function (PDF) for single accumulator
+  dfun=function(rt,pars) dRDM(rt,pars),
+  # Probability function (CDF) for single accumulator
+  pfun=function(rt,pars) pRDM(rt,pars),
+  # Race likelihood combining pfun and dfun
+  log_likelihood=function(p_vector,dadm,min_ll=log(1e-10))
+    log_likelihood_race(p_vector=p_vector, dadm = dadm, min_ll = min_ll)
+)
+}
+
+
+### SM: RDM dynamic2
+# RDM_B parameterization with s=1 scaling (B = b-A done in rdm.R)
+# Added q0 parameter for initial rates in RL version. Note that this is the *SAME* code as RLARD except for the p_types :-/ that should be easier!
+#' RL-RD with RDM as model
+#'
+#' @return
+#' @export
+#'
+#' @examples
+rdmDynamic2 <- function() {list(
+  type="RACE",
+  p_types=c("v","B","A","t0","s", "alphamin",
+            "alpha1", "alpha2", "alpha3",
+            "q01", "q02", "q03",
+            "weight1", "weight2", "weight3"),
+
+  Ntransform=function(x) {
+    # Transform to natural scale
+    probit_scale <- c('alpha1', "alpha2", "alpha3", "q01", "q02", "q03")
+    logit_scale = c("v", "B", "A", "t0", "s")
+    ## weights on normal scale?
+    x[,dimnames(x)[[2]] %in% logit_scale] <- exp(x[,dimnames(x)[[2]] %in% logit_scale])
+    x[,dimnames(x)[[2]] %in% probit_scale] <- pnorm(x[,dimnames(x)[[2]] %in% probit_scale])
+
+    # scale alpha1 to set range [alphamin, 1]
+    x[,dimnames(x)[[2]] == 'alpha1'] <- x[,dimnames(x)[[2]] == 'alpha1']*(1-x[,dimnames(x)[[2]] == 'alphamin']) + x[,dimnames(x)[[2]] == 'alphamin']
+    x
+  },
+  # Trial dependent parameter transform
+  Ttransform = function(pars,dadm) {
+    parsList <- setNames(vector(mode="list",length=length(levels(dadm$subjects))),
+                         levels(dadm$subjects))
+    for (i in levels(dadm$subjects))
+      parsList[[i]] <- update_pars(i,pars,dadm)
+    pars <- do.call(rbind,parsList)
+    attr(pars,"ok") <- (pars[,"t0"] > .05) & ((pars[,"A"] > 1e-6) | pars[,"A"] == 0) # & (pars[,'v'] > 1e-6) & (pars[,'v'] < 1e3) & (pars[,'B'] > .1) & (pars[,'alpha'] < 1)
     pars
   },
   # p_vector transform
