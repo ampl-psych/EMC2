@@ -125,6 +125,10 @@ augment = function(s,da,design)
   }
 }
 
+adapt.c.emc <- function(...){
+  return(NA)
+}
+
 # ARCHITECTURE OF FOLLOWING FUNCTION WILL NEED UPDATING FOR MULTIPLE ADAPT TYPES
 # s="10";npars=pars;da=data; rfun=model$rfun;return_learning=FALSE;mapped_p=FALSE
 update_pars = function(s,npars,da,rfun=NULL,return_learning=FALSE,mapped_p=FALSE,

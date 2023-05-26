@@ -1,9 +1,11 @@
 
-sample_store_standard <- function(data, par_names, iters = 1, stage = "init", integrate = T, ...) {
+sample_store_standard <- function(data, par_names, iters = 1, stage = "init", integrate = T, is_nuisance, is_grouped,...) {
   subject_ids <- unique(data$subjects)
-  n_pars <- length(par_names)
   n_subjects <- length(subject_ids)
-  base_samples <- sample_store_base(data, par_names, iters, stage)
+  base_samples <- sample_store_base(data, par_names[!is_grouped], iters, stage)
+  par_names <- par_names[!is_nuisance & !is_grouped]
+  n_pars <- length(par_names)
+
   samples <- list(
     theta_mu = array(NA_real_,dim = c(n_pars, iters), dimnames = list(par_names, NULL)),
     theta_var = array(NA_real_,dim = c(n_pars, n_pars, iters),dimnames = list(par_names, par_names, NULL)),
@@ -14,25 +16,63 @@ sample_store_standard <- function(data, par_names, iters = 1, stage = "init", in
 }
 
 add_info_standard <- function(sampler, prior = NULL, ...){
-  # Checking and default priors
-  if (is.null(prior)) {
-    prior <- list(theta_mu_mean = rep(0, sampler$n_pars), theta_mu_var = diag(rep(1, sampler$n_pars)))
-  }
-  # Things I save rather than re-compute inside the loops.
-  prior$theta_mu_invar <- ginv(prior$theta_mu_var) #Inverse of the matrix
-
-  #Hyper parameters
-  attr(sampler, "v_half") <- 2
-  attr(sampler, "A_half") <- 1
-  sampler$prior <- prior
+  sampler$prior <- get_prior_standard(prior, sum(!(sampler$nuisance | sampler$grouped)))
   return(sampler)
 }
 
+get_prior_standard <- function(prior = NULL, n_pars = NULL, par_names = NULL, sample = F, N = 1e5, type = "mu"){
+  # Checking and default priors
+  if(is.null(prior)){
+    prior <- list()
+  }
+  if (is.null(prior$theta_mu_mean)) {
+    prior$theta_mu_mean <- rep(0, n_pars)
+  }
+  if(is.null(prior$theta_mu_var)){
+    prior$theta_mu_var <- diag(rep(1, n_pars))
+  }
+  if(is.null(prior$v)){
+    prior$v <- 2
+  }
+  if(is.null(prior$A)){
+    prior$A <- rep(1, n_pars)
+  }
+  # Things I save rather than re-compute inside the loops.
+  prior$theta_mu_invar <- ginv(prior$theta_mu_var) #Inverse of the matrix
+  if(sample){
+    if(!type %in% c("mu", "variance", "covariance", "correlation")){
+      stop("for variant standard, you can only specify the prior on the mean, variance, covariance or the correlation of the parameters")
+    }
+    if(type == "mu"){
+      samples <- mvtnorm::rmvnorm(N, mean = prior$theta_mu_mean,
+                              sigma = prior$theta_mu_var)
+      colnames(prior$samples) <- par_names
+      return(samples)
+    } else {
+      var <- array(NA_real_, dim = c(n_pars, n_pars, N),
+                   dimnames = list(par_names, par_names, NULL))
+      for(i in 1:N){
+        a_half <- 1 / rgamma(n = n_pars,shape = 1/2,
+                             rate = 1/(prior$A^2))
+        var[,,i] <- riwish(prior$v + n_pars - 1, 2 * prior$v * diag(1 / a_half))
+      }
+      if (type == "variance") return(t(apply(var,3,diag)))
+      if (type == "correlation"){
+        var <- array(apply(var,3,cov2cor),dim=dim(var),dimnames=dimnames(var))
+      }
+      lt <- lower.tri(var[,,1])
+      return(t(apply(var,3,function(x){x[lt]})))
+    }
+  }
+  return(prior)
+}
+
 get_startpoints_standard <- function(pmwgs, start_mu, start_var){
+  n_pars <- sum(!(pmwgs$nuisance | pmwgs$grouped))
   if (is.null(start_mu)) start_mu <- rmvnorm(1, mean = pmwgs$prior$theta_mu_mean, sigma = pmwgs$prior$theta_mu_var)
   # If no starting point for group var just sample some
-  if (is.null(start_var)) start_var <- riwish(pmwgs$n_pars * 3,diag(pmwgs$n_pars))
-  start_a_half <- 1 / rgamma(n = pmwgs$n_pars, shape = 2, rate = 1)
+  if (is.null(start_var)) start_var <- riwish(n_pars * 3,diag(n_pars))
+  start_a_half <- 1 / rgamma(n = n_pars, shape = 2, rate = 1)
   return(list(tmu = start_mu, tvar = start_var, tvinv = ginv(start_var), a_half = start_a_half))
 }
 
@@ -56,35 +96,27 @@ gibbs_step_standard <- function(sampler, alpha){
   # Gibbs step for group means, with full covariance matrix estimation
   # tmu = theta_mu, tvar = theta_var
   last <- last_sample_standard(sampler$samples)
-  hyper <- attributes(sampler)
   prior <- sampler$prior
 
+  n_pars <- sampler$n_pars-sum(sampler$nuisance) - sum(sampler$grouped)
   # Here mu is group mean, so we are getting mean and variance
   var_mu <- ginv(sampler$n_subjects * last$tvinv + prior$theta_mu_invar)
   mean_mu <- as.vector(var_mu %*% (last$tvinv %*% apply(alpha, 1, sum) +
                                      prior$theta_mu_invar %*% prior$theta_mu_mean))
   chol_var_mu <- t(chol(var_mu)) # t() because I want lower triangle.
   tmu <- rmvnorm(1, mean_mu, chol_var_mu %*% t(chol_var_mu))[1, ]
-  names(tmu) <- sampler$par_names
+  names(tmu) <- sampler$par_names[!(sampler$nuisance | sampler$grouped)]
 
   # New values for group var
   theta_temp <- alpha - tmu
   cov_temp <- (theta_temp) %*% (t(theta_temp))
-  if(!is.null(hyper$std_df)){
-    B_half <- hyper$std_scale * diag(1, nrow = sampler$n_pars) + cov_temp # nolint
-    tvar <- riwish(hyper$std_df + sampler$n_subjects, B_half) # New sample for group variance
-    tvinv <- ginv(tvar)
-    # Sample new mixing weights.
-    a_half <- NULL
-  } else{
-    B_half <- 2 * hyper$v_half * diag(1 / last$a_half) + cov_temp # nolint
-    tvar <- riwish(hyper$v_half + sampler$n_pars - 1 + sampler$n_subjects, B_half) # New sample for group variance
-    tvinv <- ginv(tvar)
+  B_half <- 2 * prior$v * diag(1 / last$a_half) + cov_temp # nolint
+  tvar <- riwish(prior$v + n_pars - 1 + sampler$n_subjects, B_half) # New sample for group variance
+  tvinv <- ginv(tvar)
 
-    # Sample new mixing weights.
-    a_half <- 1 / rgamma(n = sampler$n_pars,shape = (hyper$v_half + sampler$n_pars) / 2,
-                         rate = hyper$v_half * diag(tvinv) + 1/(hyper$A_half^2))
-  }
+  # Sample new mixing weights.
+  a_half <- 1 / rgamma(n = n_pars,shape = (prior$v + n_pars) / 2,
+                       rate = prior$v * diag(tvinv) + 1/(prior$A^2))
   return(list(tmu = tmu,tvar = tvar,tvinv = tvinv,a_half = a_half,alpha = alpha))
 }
 
@@ -116,7 +148,7 @@ last_sample_standard <- function(store) {
   )
 }
 
-filtered_samples_standard <- function(sampler, filter){
+filtered_samples_standard <- function(sampler, filter, ...){
   out <- list(
     theta_mu = sampler$samples$theta_mu[, filter],
     theta_var = sampler$samples$theta_var[, , filter],
@@ -221,14 +253,13 @@ group_dist_standard <- function(random_effect = NULL, parameters, sample = FALSE
 prior_dist_standard <- function(parameters, info){
   n_randeffect <- info$n_randeffect
   prior <- info$prior
-  hyper <- info$hyper
   param.theta.mu <- parameters[1:n_randeffect]
   param.theta.sig.unwound <- parameters[(n_randeffect+1):(length(parameters)-n_randeffect)]
   param.theta.sig2 <- unwind_IS2(param.theta.sig.unwound, reverse = TRUE)
   param.a <- exp(parameters[((length(parameters)-n_randeffect)+1):(length(parameters))])
   log_prior_mu=dmvnorm(param.theta.mu, mean = prior$theta_mu_mean, sigma = prior$theta_mu_var, log =TRUE)
-  log_prior_sigma = log(robust_diwish(param.theta.sig2, v=hyper$v_half+ n_randeffect-1, S = 2*hyper$v_half*diag(1/param.a)))
-  log_prior_a = sum(logdinvGamma(param.a,shape = 1/2,rate=1/(hyper$A_half^2)))
+  log_prior_sigma = log(robust_diwish(param.theta.sig2, v=prior$v+ n_randeffect-1, S = 2*prior$v*diag(1/param.a)))
+  log_prior_a = sum(logdinvGamma(param.a,shape = 1/2,rate=1/(prior$A^2)))
   # These are Jacobian corrections for the transformations on these
   logw_den2 <- -sum(log(param.a))
   logw_den3 <- -(log(2^n_randeffect)+sum((n_randeffect:1+1)*log(diag(param.theta.sig2))))
