@@ -45,7 +45,6 @@
 make_design <- function(Flist = NULL,Ffactors = NULL,Rlevels = NULL,model,
                         Clist=NULL,matchfun=NULL,constants=NULL,Fcovariates=NULL,Ffunctions=NULL,
                         adapt=NULL,report_p_vector=TRUE, custom_p_vector = NULL){
-
   if(!is.null(custom_p_vector)){
     design <- list(Flist = Flist, model = model, Ffactors = Ffactors)
     attr(design, "sampled_p_names") <-custom_p_vector
@@ -207,8 +206,9 @@ design_model_custom_ll <- function(data, design, model, prior){
   }
   dadm <- data
   attr(dadm, "prior") <- prior
+  model_input <- model
   attr(dadm, "model") <- function(){
-    return(list(log_likelihood = model))
+    return(list(log_likelihood = model_input))
   }
   attr(dadm,"sampled_p_names") <- attr(design, "sampled_p_names")
   attr(dadm, "custom_ll") <- TRUE
@@ -217,8 +217,6 @@ design_model_custom_ll <- function(data, design, model, prior){
 }
 
 
-# model=NULL;prior = NULL;add_acc=TRUE;rt_resolution=0.02;verbose=TRUE;
-# compress=TRUE;rt_check=TRUE
 #' Combines a data frame with a design and (optionally) a user-specified prior
 #'
 #' Performs a series to checks to make sure data frame and design match and
@@ -471,21 +469,21 @@ design_model <- function(data,design,model=NULL,prior = NULL,
   # Pick out constants
   sampled_p_names <- p_names[!(p_names %in% names(design$constants))]
 
-  if(!is.null(prior)){
-    if(length(prior$theta_mu_mean) != length(sampled_p_names))
-      stop("prior mu should be same length as estimated parameters (p_vector)")
-    if(!is.matrix(prior$theta_mu_var)){
-      if(length(prior$theta_mu_var) != length(sampled_p_names))
-        stop("prior theta should be same length as estimated parameters (p_vector)")
-    } else {
-      if(nrow(prior$theta_mu_var) != length(sampled_p_names))
-        stop("prior theta should have same number of rows as estimated parameters (p_vector)")
-      if(ncol(prior$theta_mu_var) != length(sampled_p_names))
-        stop("prior theta should have same number of columns as estimated parameters (p_vector)")
-      if(ncol(prior$theta_mu_var) != nrow(prior$theta_mu_var))
-        stop("prior theta should have same number of columns as rows")
-    }
-  }
+  # if(!is.null(prior)){
+  #   if(length(prior$theta_mu_mean) != length(sampled_p_names))
+  #     stop("prior mu should be same length as estimated parameters (p_vector)")
+  #   if(!is.matrix(prior$theta_mu_var)){
+  #     if(length(prior$theta_mu_var) != length(sampled_p_names))
+  #       stop("prior theta should be same length as estimated parameters (p_vector)")
+  #   } else {
+  #     if(nrow(prior$theta_mu_var) != length(sampled_p_names))
+  #       stop("prior theta should have same number of rows as estimated parameters (p_vector)")
+  #     if(ncol(prior$theta_mu_var) != length(sampled_p_names))
+  #       stop("prior theta should have same number of columns as estimated parameters (p_vector)")
+  #     if(ncol(prior$theta_mu_var) != nrow(prior$theta_mu_var))
+  #       stop("prior theta should have same number of columns as rows")
+  #   }
+  # }
   attr(dadm, "prior") <- prior
   attr(dadm,"p_names") <- p_names
   attr(dadm,"model") <- model
@@ -503,12 +501,12 @@ design_model <- function(data,design,model=NULL,prior = NULL,
   }
   attr(dadm,"ok_trials") <- is.finite(data$rt)
   attr(dadm,"s_data") <- data$subjects
-  if (!is.null(design$adapt)) {
-    attr(dadm,"adapt") <- stats::setNames(
-      lapply(levels(dadm$subjects),augment,da=dadm,design=design),
-      levels(dadm$subjects))
-    attr(dadm,"adapt")$design <- design$adapt
-  }
+  # if (!is.null(design$adapt)) {
+  #   attr(dadm,"adapt") <- stats::setNames(
+  #     lapply(levels(dadm$subjects),augment,da=dadm,design=design),
+  #     levels(dadm$subjects))
+  #   attr(dadm,"adapt")$design <- design$adapt
+  # }
   dadm
 }
 

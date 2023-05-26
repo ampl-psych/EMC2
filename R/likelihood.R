@@ -3,31 +3,27 @@ log_likelihood_race <- function(p_vector,dadm,min_ll=log(1e-10))
 {
 
   pars <- get_pars(p_vector,dadm)
-  if (any(names(dadm)=="NACC")) # Some accumulators not present
-    pars[as.numeric(dadm$lR)>dadm$NACC,] <- NA
-
   if (is.null(attr(pars,"ok")))
     ok <- !logical(dim(pars)[1]) else ok <- attr(pars,"ok")
 
-  lds <- numeric(dim(dadm)[1]) # log pdf (winner) or survivor (losers)
-  lds[dadm$winner] <- log(attr(dadm,"model")()$dfun(rt=dadm$rt[dadm$winner],
-                                                    pars=pars[dadm$winner,]))
-  n_acc <- length(levels(dadm$R))
-  if (n_acc>1) lds[!dadm$winner] <-
-    log(1-attr(dadm,"model")()$pfun(rt=dadm$rt[!dadm$winner],pars=pars[!dadm$winner,]))
-  lds[is.na(lds) | !ok] <- min_ll
-  lds <- lds[attr(dadm,"expand")] # decompress
-  if (n_acc>1) {
-    winner <- dadm$winner[attr(dadm,"expand")]
-    ll <- lds[winner]
-    if (n_acc==2) {
-      ll <- ll + lds[!winner]
-    } else {
-      ll <- ll + apply(matrix(lds[!winner],nrow=n_acc-1),2,sum)
-    }
-    ll[is.na(ll)] <- min_ll
-    return(sum(pmax(min_ll,ll)))
-  } else return(sum(pmax(min_ll,lds)))
+    lds <- numeric(dim(dadm)[1]) # log pdf (winner) or survivor (losers)
+    lds[dadm$winner] <- log(attr(dadm,"model")()$dfun(rt=dadm$rt[dadm$winner],
+                                                      pars=pars[dadm$winner,]))
+    n_acc <- length(levels(dadm$R))
+    if (n_acc>1) lds[!dadm$winner] <- log(1-attr(dadm,"model")()$pfun(rt=dadm$rt[!dadm$winner],pars=pars[!dadm$winner,]))
+    lds[is.na(lds) | !ok] <- min_ll
+    lds <- lds[attr(dadm,"expand")] # decompress
+    if (n_acc>1) {
+      winner <- dadm$winner[attr(dadm,"expand")]
+      ll <- lds[winner]
+      if (n_acc==2) {
+        ll <- ll + lds[!winner]
+      } else {
+        ll <- ll + apply(matrix(lds[!winner],nrow=n_acc-1),2,sum)
+      }
+      ll[is.na(ll)] <- min_ll
+      return(sum(pmax(min_ll,ll)))
+    } else return(sum(pmax(min_ll,lds)))
 }
 
 
@@ -86,13 +82,12 @@ log_likelihood_sdt <- function(p_vector,dadm,lb=-Inf,min_ll=log(1e-10))
 #' @param proposals
 #' @param dadms
 #' @param component
-#' @param useC
 #'
 #' @return
 #' @export
 #'
 #' @examples
-log_likelihood_joint <- function(proposals, dadms, component = NULL, useC){
+log_likelihood_joint <- function(proposals, dadms, component = NULL){
   parPreFixs <- unique(gsub("[|].*", "", colnames(proposals)))
   i <- 0
   total_ll <- 0
@@ -103,7 +98,7 @@ log_likelihood_joint <- function(proposals, dadms, component = NULL, useC){
       parPrefix <- parPreFixs[i]
       currentPars <- proposals[,grep(paste0(parPrefix, "|"), colnames(proposals), fixed = T)]
       colnames(currentPars) <- gsub(".*[|]", "", colnames(currentPars))
-      total_ll <- total_ll +  calc_ll_manager(currentPars, dadm, useC, attr(dadm, "model")()$log_likelihood)
+      total_ll <- total_ll +  calc_ll_manager(currentPars, dadm, attr(dadm, "model")()$log_likelihood)
     }
   }
   return(total_ll)

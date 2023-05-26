@@ -2,7 +2,7 @@
 ## set up environment and packages
 
 
-IS2 <- function(samples, filter = "sample", subfilter = 0, IS_samples = 1000, stepsize_particles = 500, max_particles = 5000, n_cores = 1, df = 5, useC = TRUE){
+IS2 <- function(samples, filter = "sample", subfilter = 0, IS_samples = 1000, stepsize_particles = 500, max_particles = 5000, n_cores = 1, df = 5){
   ###### set up variables #####
   info <- add_info_base(samples)
   idx <- which(samples$samples$stage == filter)
@@ -27,7 +27,6 @@ IS2 <- function(samples, filter = "sample", subfilter = 0, IS_samples = 1000, st
                        mu_tilde=all_pars$mu_tilde,
                        var_tilde = all_pars$var_tilde,
                        info = all_pars$info,
-                       useC = useC,
                        mc.cores = n_cores)
   # sub_and_group <- simplify2array(lapply(logw_num, FUN = function(x) return(x$sub_and_group)))
   # prior_and_jac <- sapply(logw_num, FUN = function(x) return(x$prior_and_jac))
@@ -45,7 +44,7 @@ IS2 <- function(samples, filter = "sample", subfilter = 0, IS_samples = 1000, st
 
 }
 
-get_sub_weights <- function(stepsize_particles, condMean, condVar, prop_theta, info, sub, useC){
+get_sub_weights <- function(stepsize_particles, condMean, condVar, prop_theta, info, sub){
   wmix <- .95
   n1 <- stats::rbinom(n=1,size=stepsize_particles,prob=wmix)
   if (n1<2) n1 <- 2
@@ -60,7 +59,7 @@ get_sub_weights <- function(stepsize_particles, condMean, condVar, prop_theta, i
   # names for ll function to work
   colnames(particles) <- info$par_names
   # do lba log likelihood with given parameters for each subject, gets density of particle from ll func
-  lw_first <- calc_ll_manager(particles, dadm = data[[sub]], info$ll_func, useC = useC)
+  lw_first <- calc_ll_manager(particles, dadm = data[[sub]], info$ll_func)
   # below gets second part of equation 5 numerator ie density under prop_theta
   lw_second <- apply(particles, 1, info$variant_funs$group_dist_IS2, prop_theta, FALSE, NULL, info)
   # below is the denominator - ie mix of density under conditional and density under pro_theta
@@ -70,7 +69,7 @@ get_sub_weights <- function(stepsize_particles, condMean, condVar, prop_theta, i
   return(lw)
 }
 
-get_logp=function(prop_theta,stepsize_particles, max_particles, mu_tilde,var_tilde, info, useC){
+get_logp=function(prop_theta,stepsize_particles, max_particles, mu_tilde,var_tilde, info){
   # Unload for legibility
   n_subjects <- info$n_subjects
   var_opt_sub <- 1/n_subjects
@@ -91,7 +90,7 @@ get_logp=function(prop_theta,stepsize_particles, max_particles, mu_tilde,var_til
       n_total <- n_total + stepsize_particles
       lw_tmp <- get_sub_weights(stepsize_particles = stepsize_particles, condMean = conditional$condMean,
                                 condVar = conditional$condVar, prop_theta = prop_theta,
-                                info = info, sub = j, useC = useC)
+                                info = info, sub = j)
 
       # lw <- -weights(psis(-lw, log = F)) # default args are log=TRUE, normalize=TRUE
       lw <- c(lw, lw_tmp)
@@ -106,11 +105,11 @@ get_logp=function(prop_theta,stepsize_particles, max_particles, mu_tilde,var_til
   return(lw_subs)
 }
 
-compute_lw_num=function(i, prop_theta,stepsize_particles, max_particles, mu_tilde,var_tilde,info, useC){
-  # sub_and_group <- get_logp(prop_theta[i,], stepsize_particles, max_particles, mu_tilde, var_tilde, info, useC)
+compute_lw_num=function(i, prop_theta,stepsize_particles, max_particles, mu_tilde,var_tilde,info){
+  # sub_and_group <- get_logp(prop_theta[i,], stepsize_particles, max_particles, mu_tilde, var_tilde, info)
   # prior_and_jac <- info$variant_funs$prior_dist_IS2(parameters = prop_theta[i,], info)
   # return(list(sub_and_group = sub_and_group, prior_and_jac = prior_and_jac))
-  logp.out <- get_logp(prop_theta[i,], stepsize_particles, max_particles, mu_tilde, var_tilde, info, useC)
+  logp.out <- get_logp(prop_theta[i,], stepsize_particles, max_particles, mu_tilde, var_tilde, info)
   logw_num <- logp.out+info$variant_funs$prior_dist_IS2(parameters = prop_theta[i,], info)
   return(logw_num)
 }

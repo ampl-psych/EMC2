@@ -6,6 +6,7 @@ thin_pmwg <- function(pmwg,thin=10)
   if (!is(pmwg, "pmwgs")) stop("Not a pmwgs object")
   if (thin >= pmwg$samples$idx) stop("Thin value to large\n")
   nmc_thin <- seq(thin,pmwg$samples$idx,by=thin)
+  if(any(pmwg$nuisance)) pmwg$sampler_nuis$samples <- base::rapply(pmwg$sampler_nuis$samples, f = function(x) filter_obj(x, nmc_thin), how = "replace")
   pmwg$samples <- base::rapply(pmwg$samples, f = function(x) filter_obj(x, nmc_thin), how = "replace")
   pmwg$samples$stage <- pmwg$samples$stage[nmc_thin]
   pmwg$samples$idx <- length(nmc_thin)
@@ -90,6 +91,10 @@ remove_iterations <- function(pmwg,select,remove=TRUE,last_select=FALSE,filter=N
   ok <- 1:pmwg$samples$idx %in% select
   if (remove) ok <- !ok
   filter_idx <- which(ok)
+  if(any(pmwg$nuisance)) {
+    pmwg$sampler_nuis$samples <- base::rapply(pmwg$sampler_nuis$samples, f = function(x) filter_obj(x, filter_idx), how = "replace")
+    pmwg$sampler_nuis$samples$idx <- sum(ok)
+  }
   pmwg$samples <- base::rapply(pmwg$samples, f = function(x) filter_obj(x, filter_idx), how = "replace")
   pmwg$samples$stage <- pmwg$samples$stage[ok]
   pmwg$samples$idx <- sum(ok)
@@ -114,6 +119,12 @@ merge_samples <- function(samplers){
   sampled_objects <- setNames(do.call(mapply, c(abind, lapply(sampled_objects, '[', keys))), keys)
   sampled_objects$idx <- sum(sampled_objects$idx)
   out_samples$samples <- sampled_objects
+  if(any(out_samples$nuisance)){
+    sampled_objects <- lapply(samplers, FUN = function(x) return(x$sampler_nuis$samples))
+    keys <- unique(unlist(lapply(sampled_objects, names)))
+    sampled_objects <- setNames(do.call(mapply, c(abind, lapply(sampled_objects, '[', keys))), keys)
+    out_samples$sampler_nuis$samples <- sampled_objects
+  }
   return(out_samples)
 }
 
@@ -291,11 +302,26 @@ chain_n <- function(samplers)
 extract_samples <- function(sampler, stage = c("adapt", "sample"), max_n_sample = NULL) {
   variant_funs <- attr(sampler, "variant_funs")
   samples <- sampler$samples
-  full_filter <- which(samples$stage %in% stage & seq_along(samples$stage) <= samples$idx)
-  if(!is.null(max_n_sample) & "sample" %in% stage & length(full_filter) > max_n_sample){
-    full_filter <- sample(full_filter, max_n_sample)
+
+  if("sample" %in% stage & !is.null(max_n_sample)){
+    sample_filter <- which(samples$stage %in% "sample" & seq_along(samples$stage) <= samples$idx)
+    adapt_filter <- which(samples$stage %in% "adapt" & seq_along(samples$stage) <= samples$idx)
+    if(length(sample_filter) > max_n_sample){
+      sample_filter <- sample(sample_filter, max_n_sample)
+    }
+    full_filter <- c(adapt_filter, sample_filter)
+  } else{
+    full_filter <- which(samples$stage %in% stage & seq_along(samples$stage) <= samples$idx)
   }
-  out <- variant_funs$filtered_samples(sampler, full_filter)
+  if(any(sampler$nuisance)){
+    nuisance <- sampler$nuisance[!sampler$grouped]
+    sampler$sampler_nuis$samples$alpha <- sampler$samples$alpha[nuisance,,]
+    sampler$samples$alpha <- sampler$samples$alpha[!nuisance,,]
+    out <- variant_funs$filtered_samples(sampler, full_filter)
+    out$nuisance <- get_variant_funs("diagonal")$filtered_samples(sampler$sampler_nuis, full_filter)
+  } else{
+    out <- variant_funs$filtered_samples(sampler, full_filter)
+  }
   return(out)
 }
 
