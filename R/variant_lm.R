@@ -10,11 +10,7 @@ add_info_lm <- function(sampler, prior = NULL, ...){
   }
   # Things I save rather than re-compute inside the loops.
   prior$theta_mu_invar <- 1/prior$theta_mu_var #Inverse of the prior
-<<<<<<< HEAD
-  
-=======
 
->>>>>>> upstream/main
   #Hyper parameters
   attr(sampler, "a_g") <- 1/2
   attr(sampler, "b_g") <- 1/2
@@ -57,11 +53,7 @@ get_effects <- function(aggr_data, formula){
     effect_mapping <- c(effect_mapping, rep(vars$ind, length(groups)))
     effect_types <- c(effect_types, get_effect_types(form, m_matrix, vars$dep %in% factor_vars))
   }
-<<<<<<< HEAD
-  return(list(effect_grouping = effect_grouping[-1], effect_mapping = effect_mapping, 
-=======
   return(list(effect_grouping = effect_grouping[-1], effect_mapping = effect_mapping,
->>>>>>> upstream/main
               effect_types = effect_types, dms = dms))
 }
 
@@ -84,25 +76,15 @@ get_effect_types <- function(form, m_matrix, is_factor){
   return(effect_types)
 }
 
-<<<<<<< HEAD
-sample_store_lm <- function(data, par_names, iters = 1, stage = "init", integrate = T, ...) {
-=======
 sample_store_lm <- function(data, par_names, iters = 1, stage = "init", integrate = T, is_nuisance, ...) {
->>>>>>> upstream/main
   args <- list(...)
   effects <- get_effects(args$aggr_data, args$formula)
   n_effects <- length(effects$effect_mapping)
   subject_ids <- unique(data$subjects)
-<<<<<<< HEAD
-  n_pars <- length(par_names)
-  n_subjects <- length(subject_ids)
-  base_samples <- sample_store_base(data, par_names, iters, stage)
-=======
   n_subjects <- length(subject_ids)
   base_samples <- sample_store_base(data, par_names, iters, stage)
   par_names <- par_names[!is_nuisance]
   n_pars <- length(par_names)
->>>>>>> upstream/main
   samples <- list(
     theta_mu = array(NA_real_,dim = c(n_pars, iters), dimnames = list(par_names, NULL)),
     theta_var = array(NA_real_,dim = c(n_pars, n_pars, iters),dimnames = list(par_names, par_names, NULL)),
@@ -121,11 +103,7 @@ get_startpoints_lm <- function(pmwgs, start_mu, start_var){
   start_theta <- rnorm(pmwgs$n_effects)
   start_g <- rep(1, pmwgs$n_effects)
   sub_mu <- matrix(rep(start_mu, pmwgs$n_subjects), ncol = pmwgs$n_subjects)
-<<<<<<< HEAD
-  return(list(tmu = start_mu, tvar = start_var, theta = start_theta, 
-=======
   return(list(tmu = start_mu, tvar = start_var, theta = start_theta,
->>>>>>> upstream/main
               g = start_g, g_untr = start_g, sub_mu = sub_mu))
 }
 
@@ -141,11 +119,7 @@ gibbs_step_lm <- function(sampler, alpha){
   last <- last_sample_lm(sampler$samples)
   hyper <- attributes(sampler)
   prior <- sampler$prior
-<<<<<<< HEAD
-  
-=======
 
->>>>>>> upstream/main
   mu <- last$mu
   sigma2 <- diag(last$var)
   theta <- last$theta
@@ -156,11 +130,7 @@ gibbs_step_lm <- function(sampler, alpha){
     y <- alpha[i,]
     X <- hyper$dms[[rownames(alpha)[i]]]
     idx <- attr(sampler, "effect_mapping") == rownames(alpha)[i]
-<<<<<<< HEAD
-    
-=======
 
->>>>>>> upstream/main
     if(is.null(X)){
       Xtheta <- 0
       theta_g_theta <- 0
@@ -172,30 +142,18 @@ gibbs_step_lm <- function(sampler, alpha){
     mu_sigma2 <- 1/(sampler$n_subjects/sigma2[i] + 1/prior$theta_mu_var[i])
     mu_mu <- mu_sigma2*((sum(y) - Xtheta)/sigma2[i] + prior$theta_mu_mean[i]/prior$theta_mu_var[i])
     mu[i] <- rnorm(1, mu_mu, sqrt(mu_sigma2))
-<<<<<<< HEAD
-    
-=======
 
->>>>>>> upstream/main
     # sigma
     sigma_shape <- hyper$a_0 + sampler$n_subjects/2 + sum(idx)/2 #sum(idx) = number of effects for this parameter
     sigma_rate <- hyper$b_0 + (sum((y - mu[i] - Xtheta)^2) +theta_g_theta)/2
     sigma2[i] <- 1/rgamma(1, sigma_shape, sigma_rate)
-<<<<<<< HEAD
-    
-=======
 
->>>>>>> upstream/main
     if(!is.null(X)){
       # Theta
       theta_var <- solve(t(X) %*% X + diag(1/g[idx], nrow = sum(idx)))
       theta_mu <- theta_var %*% t(t(y) %*% X - t(rep(mu[i], sampler$n_subjects)) %*% X)
       theta[idx] <- as.vector(mvtnorm::rmvnorm(1, theta_mu, theta_var))
-<<<<<<< HEAD
-      
-=======
 
->>>>>>> upstream/main
       # G
       effect_groups <- attr(sampler, "effect_grouping")
       effect_types <- attr(sampler, "effect_types")
@@ -241,31 +199,19 @@ get_group_level_lm <- function(parameters, s){
   return(list(mu = mu, var = var))
 }
 
-<<<<<<< HEAD
-get_conditionals_lm <- function(s, samples, n_pars, iteration = NULL){
-  iteration <- ifelse(is.null(iteration), samples$iteration, iteration)
-  theta_var <-log(apply(samples$theta_var,3,diag))
-  theta_mu <- samples$theta_mu
-=======
 get_conditionals_lm <- function(s, samples, n_pars, iteration = NULL, idx = NULL){
   iteration <- ifelse(is.null(iteration), samples$iteration, iteration)
   if(is.null(idx)) idx <- 1:n_pars
   theta_var <-log(apply(samples$theta_var[idx,idx,],3,diag))
   theta_mu <- samples$theta_mu[idx]
->>>>>>> upstream/main
   theta_theta <- samples$theta_theta
   all_samples <- rbind(samples$alpha[, s,],theta_mu, theta_var, theta_theta)
   mu_tilde <- rowMeans(all_samples)
   var_tilde <- cov(t(all_samples))
   condmvn <- condMVN(mean = mu_tilde, sigma = var_tilde,
                      dependent.ind = 1:n_pars, given.ind = (n_pars + 1):length(mu_tilde),
-<<<<<<< HEAD
-                     X.given = c(theta_mu[,iteration],
-                                 log(diag(samples$theta_var[,,iteration])),
-=======
                      X.given = c(samples$theta_mu[idx,iteration],
                                  log(diag(samples$theta_var[idx,idx,iteration])),
->>>>>>> upstream/main
                                  theta_theta[,iteration]))
   return(list(eff_mu = condmvn$condMean, eff_var = condmvn$condVar))
 }
@@ -306,17 +252,10 @@ get_all_pars_lm <- function(samples, idx, info){
   n_iter <- length(samples$samples$stage[idx])
   info$n_effects <- samples$n_effects
   info$effect_mapping <- attr(samples, "effect_mapping")
-<<<<<<< HEAD
-  info$effect_grouping <- attr(samples, "effect_grouping") 
-  info$effect_types <- attr(samples, "effect_types") 
-  info$dms <- attr(samples, "dms")
-  
-=======
   info$effect_grouping <- attr(samples, "effect_grouping")
   info$effect_types <- attr(samples, "effect_types")
   info$dms <- attr(samples, "dms")
 
->>>>>>> upstream/main
   # Extract relevant objects
   alpha <- samples$samples$alpha[,,idx]
   theta_mu <- samples$samples$theta_mu[,idx]
@@ -332,11 +271,7 @@ get_all_pars_lm <- function(samples, idx, info){
   all_samples=array(dim=c(n_subjects,n_params,n_iter))
   mu_tilde=array(dim = c(n_subjects,n_params))
   var_tilde=array(dim = c(n_subjects,n_params,n_params))
-<<<<<<< HEAD
-  
-=======
 
->>>>>>> upstream/main
   for (j in 1:n_subjects){
     all_samples[j,,] = rbind(alpha[,j,],theta_mu[,],theta_theta[,],theta_var.unwound[,])
     # calculate the mean for re, mu and sigma
@@ -344,23 +279,14 @@ get_all_pars_lm <- function(samples, idx, info){
     # calculate the covariance matrix for random effects, mu and sigma
     var_tilde[j,,] = cov(t(all_samples[j,,]))
   }
-<<<<<<< HEAD
-  
-=======
 
->>>>>>> upstream/main
   for(i in 1:n_subjects){ #RJI_change: this bit makes sure that the sigma tilde is pos def
     if(!corpcor::is.positive.definite(var_tilde[i,,], tol=1e-8)){
       var_tilde[i,,]<-corpcor::make.positive.definite(var_tilde[i,,], tol=1e-6)
     }
   }
-<<<<<<< HEAD
-  
-  X <- cbind(t(theta_mu),t(theta_theta),t(theta_g), t(theta_var.unwound)) 
-=======
 
   X <- cbind(t(theta_mu),t(theta_theta),t(theta_g), t(theta_var.unwound))
->>>>>>> upstream/main
   info$n_params <- n_params
   info$given.ind <- (info$n_randeffect+1):n_params
   info$X.given_ind <- 1:length(info$given.ind)
@@ -381,11 +307,7 @@ group_dist_lm = function(random_effect = NULL, parameters, sample = FALSE, n_sam
   }
   param.var <- parameters[(length(parameters) - n_randeffect + 1):length(parameters)]
   if (sample){
-<<<<<<< HEAD
-    return(matrix(rnorm(n_samples*length(param.theta_mu), param.theta_mu, sqrt(exp(param.var))), 
-=======
     return(matrix(rnorm(n_samples*length(param.theta_mu), param.theta_mu, sqrt(exp(param.var))),
->>>>>>> upstream/main
                   ncol = length(param.theta_mu),byrow = T))
   }
   else{
@@ -394,11 +316,7 @@ group_dist_lm = function(random_effect = NULL, parameters, sample = FALSE, n_sam
   }
 }
 
-<<<<<<< HEAD
-prior_dist_lm = function(parameters, info){ 
-=======
 prior_dist_lm = function(parameters, info){
->>>>>>> upstream/main
   n_randeffect <- info$n_randeffect
   n_effects <- info$n_effects
   prior <- info$prior
@@ -409,15 +327,9 @@ prior_dist_lm = function(parameters, info){
     param.theta_theta <- exp(parameters[(n_randeffect+1):(n_randeffect + n_effects)])
     param.theta_g <- exp(parameters[(n_randeffect+n_effects+1):(n_randeffect + n_effects + max(info$effect_grouping))])
   }
-<<<<<<< HEAD
-  
-  param.theta_var <- exp(parameters[(length(parameters) - n_randeffect + 1):length(parameters)])
-  
-=======
 
   param.theta_var <- exp(parameters[(length(parameters) - n_randeffect + 1):length(parameters)])
 
->>>>>>> upstream/main
   names(param.theta_var) <- info$par_names
   log_prior_mu <- sum(dnorm(param.theta_mu, mean = prior$theta_mu_mean, sd = sqrt(prior$theta_mu_var), log =TRUE))
   log_prior_var <- sum(logdinvGamma(param.theta_var, shape = hyper$a_0, rate = hyper$b_0))
@@ -446,11 +358,7 @@ prior_dist_lm = function(parameters, info){
   jac_g <- jac_g_factor + jac_g_regr
   jac_var <- -sum(log(param.theta_var)) # Jacobian determinant of transformation of log of the var
   # Jacobians are actually part of the denominator (dnorm(prop_theta)) since transformations of the data (rather than parameters),
-<<<<<<< HEAD
-  # warrant a jacobian added. But we add the jacobians here for ease of calculations. 
-=======
   # warrant a jacobian added. But we add the jacobians here for ease of calculations.
->>>>>>> upstream/main
   return(log_prior_mu + log_prior_var + log_prior_theta + log_prior_g - jac_var - jac_g)
 }
 
@@ -460,4 +368,3 @@ split_form <- function(formula) {
   response <- attr(tt, "response") # index of response var
   return(list(dep = vars[-response], ind = vars[response]))
 }
-
