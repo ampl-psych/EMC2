@@ -150,9 +150,9 @@ last_sample_standard <- function(store) {
 
 filtered_samples_standard <- function(sampler, filter, ...){
   out <- list(
-    theta_mu = sampler$samples$theta_mu[, filter],
-    theta_var = sampler$samples$theta_var[, , filter],
-    alpha = sampler$samples$alpha[, , filter],
+    theta_mu = sampler$samples$theta_mu[, filter, drop = F],
+    theta_var = sampler$samples$theta_var[, , filter, drop = F],
+    alpha = sampler$samples$alpha[, , filter, drop = F],
     iteration = length(filter)
   )
 }

@@ -27,7 +27,7 @@ get_startpoints_diag <- function(pmwgs, start_mu, start_var){
   n_pars <- sum(!(pmwgs$nuisance | pmwgs$grouped))
   if (is.null(start_mu)) start_mu <- rnorm(n_pars, mean = pmwgs$prior$theta_mu_mean, sd = sqrt(pmwgs$prior$theta_mu_var))
   # If no starting point for group var just sample some
-  if (is.null(start_var)) start_var <- diag(1/rgamma(n_pars, 10, 5)) #Bit stupid maybe as startpoint
+  if (is.null(start_var)) start_var <- diag(1/rgamma(n_pars, 10, 5), n_pars) #Bit stupid maybe as startpoint
   start_a_half <- 1 / rgamma(n = n_pars, shape = 2, rate = 1)
   return(list(tmu = start_mu, tvar = start_var, tvinv = MASS::ginv(start_var), a_half = start_a_half))
 }
@@ -35,13 +35,18 @@ get_startpoints_diag <- function(pmwgs, start_mu, start_var){
 get_conditionals_diag <- function(s, samples, n_pars, iteration = NULL, idx = NULL){
   iteration <- ifelse(is.null(iteration), samples$iteration, iteration)
   if(is.null(idx)) idx <- 1:n_pars
-  pts2_unwound <- log(apply(samples$theta_var[idx,idx,],3,diag))
+  pts2_unwound <- log(apply(samples$theta_var[idx,idx,, drop = F],3,diag))
   all_samples <- rbind(samples$alpha[idx,s,],samples$theta_mu[idx,],pts2_unwound)
   mu_tilde <- rowMeans(all_samples)
   var_tilde <- var(t(all_samples))
+  if(n_pars == 1){
+    X.given <- c(samples$theta_mu[idx,iteration], log(samples$theta_var[idx,idx,iteration]))
+  } else{
+    X.given <- c(samples$theta_mu[idx,iteration], log(diag(samples$theta_var[idx,idx,iteration])))
+  }
   condmvn <- condMVN(mean = mu_tilde, sigma = var_tilde,
                      dependent.ind = 1:n_pars, given.ind = (n_pars + 1):length(mu_tilde),
-                     X.given = c(samples$theta_mu[idx,iteration], log(diag(samples$theta_var[idx,idx,iteration]))))
+                     X.given = X.given)
   return(list(eff_mu = condmvn$condMean, eff_var = condmvn$condVar))
 }
 
@@ -54,6 +59,7 @@ gibbs_step_diag <- function(sampler, alpha){
   prior <- sampler$prior
   last$tvinv <- diag(last$tvinv)
   n_pars <- sum(!(sampler$nuisance | sampler$grouped))
+  alpha <- as.matrix(alpha)
   #Mu
   var_mu = 1.0 / (sampler$n_subjects * last$tvinv + prior$theta_mu_invar)
   mean_mu = var_mu * ((apply(alpha, 1, sum) * last$tvinv + prior$theta_mu_mean * prior$theta_mu_invar))
@@ -74,7 +80,7 @@ gibbs_step_diag <- function(sampler, alpha){
   #Contrary to standard pmwg I use shape, rate for IG()
   a_half <- 1 / rgamma(n = n_pars, shape = (prior$v + n_pars) / 2,
                        rate = prior$v * tvinv + 1/(prior$A^2))
-  return(list(tmu = tmu, tvar = diag(tvar), tvinv = diag(tvinv), a_half = a_half, alpha = alpha))
+  return(list(tmu = tmu, tvar = diag(tvar, n_pars), tvinv = diag(tvinv, n_pars), a_half = a_half, alpha = alpha))
 }
 
 

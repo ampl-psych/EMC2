@@ -54,13 +54,15 @@ prior <- list(
     prior_var = .3
   )
 )
-debug(pmwgs)
-samplers <- make_samplers(dat, design_B, nuisance = c(6,7), grouped_pars = 5, type = "infnt_factor",
-                          prior = prior)
+samplers <- make_samplers(dat, design_B, nuisance_non_hyper = c("B", "t0"), grouped_pars = "v", type = "infnt_factor")
 
-samplers <- run_emc(samplers, cores_per_chain = 1, cores_for_chains = 1, verbose = T, iter = 500)
+devtools::load_all()
+debug(run_stage)
+samplers <- auto_burn(samplers, cores_per_chain = 4, cores_for_chains = 3, verbose = T)
+debug(test_adapted)
+samplers <- run_adapt(samplers, cores_per_chain = 4, verbose = T, min_unique = 100)
 
-plot_chains(samplers, selection = "mu")
+plot_chains(samplers, filter = "burn")
 
 plot_acfs(samplers)
 
