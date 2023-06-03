@@ -546,23 +546,23 @@ make_dm <- function(form,da,Clist=NULL,Fcovariates=NULL)
       }
   }
   out <- stats::model.matrix(form,da)
-  if (!any(attr(out,"assign")==0)) { # No intercept models mishandled, fix
-    Fchar <- as.character(form)
-    Fchar[3] <- unlist(strsplit(Fchar[3]," - 1"))
-    Fchar[3] <- paste(unlist(strsplit(Fchar[3],"0 + ",fixed=TRUE)),collapse="")
-    Fchar[3] <- unlist(strsplit(Fchar[3]," + 0",fixed=TRUE))
-    Fchar[3] <- paste(unlist(strsplit(Fchar[3],"-1 + ",fixed=TRUE)),collapse="")
-    fattr <- attributes(form)
-    form <- formula(paste(Fchar[2],Fchar[1],Fchar[3]))
-    attributes(form) <- fattr
-    newout <- stats::model.matrix(form,da)
-    out <- newout[,-1]
-    oattr <- attributes(newout)
-    oattr$dim[2] <- oattr$dim[2]-1
-    oattr$dimnames[[2]] <- oattr$dimnames[[2]][-1]
-    oattr$assign <- oattr$assign[-1]
-    attributes(out) <- oattr
-  }
+  # if (!any(attr(out,"assign")==0)) { # No intercept models mishandled, fix
+  #   Fchar <- as.character(form)
+  #   Fchar[3] <- unlist(strsplit(Fchar[3]," - 1"))
+  #   Fchar[3] <- paste(unlist(strsplit(Fchar[3],"0 + ",fixed=TRUE)),collapse="")
+  #   Fchar[3] <- unlist(strsplit(Fchar[3]," + 0",fixed=TRUE))
+  #   Fchar[3] <- paste(unlist(strsplit(Fchar[3],"-1 + ",fixed=TRUE)),collapse="")
+  #   fattr <- attributes(form)
+  #   form <- formula(paste(Fchar[2],Fchar[1],Fchar[3]))
+  #   attributes(form) <- fattr
+  #   newout <- stats::model.matrix(form,da)
+  #   out <- newout[,-1]
+  #   oattr <- attributes(newout)
+  #   oattr$dim[2] <- oattr$dim[2]-1
+  #   oattr$dimnames[[2]] <- oattr$dimnames[[2]][-1]
+  #   oattr$assign <- oattr$assign[-1]
+  #   attributes(out) <- oattr
+  # }
   if (dim(out)[2]==1) dimnames(out)[[2]] <- as.character(pnam) else {
     if (attr(stats::terms(form),"intercept")!=0) {
       cnams <- paste(pnam,dimnames(out)[[2]][-1],sep="_")
