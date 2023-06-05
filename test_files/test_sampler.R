@@ -1,5 +1,5 @@
 rm(list=ls())
-devtools::load_all("~/Documents/UVA/2022/EMC2/")
+devtools::install("~/Documents/UVA/2022/EMC2/")
 
 print(load("test_files/PNAS.RData"))
 dat <- data[,c("s","E","S","R","RT")]
@@ -43,6 +43,7 @@ debug(test_adapted)
 samplers <- run_adapt(samplers, cores_for_chains = 3, cores_per_chain = 2, verbose = T, min_unique = 50)
 samplers <- run_sample(samplers, cores_for_chains = 3, cores_per_chain = 2, verbose = T)
 # samplers <- run_emc(samplers, cores_per_chain = 5, cores_for_chains = 1, verbose = T)
+?run_sample
 
 # nuisance = hierarchically estimated parameters, but no covariances or other relationships estimated
 # grouped pars = pars estimated the same across participants.

@@ -18,7 +18,7 @@ run_samplers(
   verboseProgress = FALSE,
   fileName = NULL,
   particles = NULL,
-  particle_factor = 50,
+  particle_factor = 40,
   cores_per_chain = 1,
   cores_for_chains = length(samplers),
   max_trys = 50,

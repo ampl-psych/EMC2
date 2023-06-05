@@ -2,10 +2,27 @@
 % Please edit documentation in R/model_DDM.R
 \name{ddmTZD}
 \alias{ddmTZD}
-\title{Title}
+\title{The Diffusion Decision Model}
 \usage{
 ddmTZD()
 }
+\value{
+A model list with all the necessary functions to sample
+}
 \description{
-Title
+The Diffusion Decision Model, proposes that decisions between two alternatives are determined based on one accumulator.
+This accumulator drifts to an upper threshold or a lower threshold. The first threshold it reaches determines the choice made.
+The time taken to reach the threshold drives the response time. For details see \verb{Ratcliff & McKoon, 2008}.
+}
+\details{
+The core parameters of the DDM are the drift rate \code{v}, the boundary separation \code{a},
+within trial variation in drift rate \code{s}, bias to either threshold \code{Z}, and non-decision time \code{t0}.
+Frequently \code{sv} is fixed to 1 to satisfy scaling constraints.
+Furthermore, we can estimate between trial variation in drift rate \code{sv}, non-decision time \code{st0}, and bias \code{SZ}. Note that computing for these parameters is slower.
+Lastly \code{DP} comprises the difference in non-decision time for each response option.
+
+We sample \verb{a, t0, sv, st0, s} on the log scale because these parameters should be strictly positive
+We sample \verb{Z, SZ and DP} on the probit scale because they should be strictly between 0 and 1.
+Here \code{Z} is estimated as the ratio of bias to one boundary, where 0 is complete bias to lower boundary and 1 complete bias to upper boundary
+\code{DP} is estimated as a ratio of lower/higher \code{t0} relative to the \verb{t0 parameter}
 }
