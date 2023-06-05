@@ -80,7 +80,7 @@ init <- function(pmwgs, start_mu = NULL, start_var = NULL,
   # If no starting point for group mean just use zeros
   variant_funs <- attr(pmwgs, "variant_funs")
   startpoints <-startpoints_comb <- variant_funs$get_startpoints(pmwgs, start_mu, start_var)
-  if(is.null(epsilon)) epsilon <- rep(set_epsilon(pmwgs$n_pars, verbose), pmwgs$n_subjects)
+  if(is.null(epsilon)) epsilon <- rep(set_epsilon(pmwgs$n_pars), pmwgs$n_subjects)
   if(length(epsilon) == 1) epsilon <- rep(epsilon, pmwgs$n_subjects)
   if(any(pmwgs$nuisance)){
     type <- pmwgs$sampler_nuis$type
@@ -172,15 +172,6 @@ run_stage <- function(pmwgs,
   #   shared_ll_idx <- rep(1, length(shared_ll_idx))
   # }
   # Display stage to screen
-  if(verbose){
-    msgs <- list(
-      preburn = "Phase 0: Pre-burn \n",
-      burn = "Phase 1: Burn in\n",
-      adapt = "Phase 2: Adaptation\n",
-      sample = "Phase 3: Sampling\n"
-    )
-    cat(msgs[[stage]])
-  }
 
   alphaStar=-qnorm(p_accept/2) #Idk about this one
   n0=round(5/(p_accept*(1-p_accept))) #Also not questioning this math for now
@@ -196,7 +187,7 @@ run_stage <- function(pmwgs,
   eff_var <- attr(pmwgs, "eff_var")
   chains_cov <- attr(pmwgs, "chains_cov")
   chains_cov_grouped <- attr(pmwgs, "chains_cov_grouped")
-  mix <- set_mix(stage, verbose)
+  mix <- set_mix(stage)
   if (verboseProgress) {
     pb <- accept_progress_bar(min = 0, max = iter)
   }
@@ -468,19 +459,7 @@ fix_epsilon <- function(pmwgs, epsilon, force_prev_epsilon, components){
   return(epsilon)
 }
 
-set_mix <- function(stage, verbose) {
-  if (stage %in% c("burn", "adapt")) {
-    mix <- c(0.15, 0.15, 0.7)
-  } else if(stage == "sample"){
-    mix <- c(0.1, 0.3, 0.6)
-  } else{
-    mix <- c(0.5, 0.5, 0)
-  }
-  if(verbose) message(sprintf("mix has been set to c(%s) based on the stage being run",  paste(mix, collapse = ", ")))
-  return(mix)
-}
-
-set_epsilon <- function(n_pars, verbose = TRUE) {
+set_epsilon <- function(n_pars) {
   if (n_pars > 15) {
     epsilon <- 0.1
   } else if (n_pars > 10) {
@@ -488,7 +467,6 @@ set_epsilon <- function(n_pars, verbose = TRUE) {
   } else {
     epsilon <- 0.5
   }
-  if(verbose) message(sprintf("Epsilon has been set to %.1f based on number of parameters",epsilon))
   return(epsilon)
 }
 
@@ -564,7 +542,7 @@ fill_samples_RE <- function(samples, proposals, epsilon, j = 1, n_pars, ...){
   return(samples)
 }
 
-set_mix <- function(stage, verbose) {
+set_mix <- function(stage) {
   if (stage %in% c("burn", "adapt")) {
     mix <- c(0.15, 0.15, 0.7)
   } else if(stage == "sample"){
@@ -572,7 +550,6 @@ set_mix <- function(stage, verbose) {
   } else{ #Preburn stage
     mix <- c(0.5, 0.5, 0)
   }
-  if(verbose) message(sprintf("mix has been set to c(%s) based on the stage being run",  paste(mix, collapse = ", ")))
   return(mix)
 }
 

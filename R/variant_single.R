@@ -57,7 +57,7 @@ get_conditionals_single <- function(s, samples, n_pars, iteration = NULL, idx = 
 
 filtered_samples_single <- function(sampler, filter){
   out <- list(
-    alpha = sampler$samples$alpha[, , filter],
+    alpha = sampler$samples$alpha[, , filter, drop = F],
     iteration = length(filter)
   )
 }
