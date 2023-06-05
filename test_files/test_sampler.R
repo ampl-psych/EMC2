@@ -1,5 +1,5 @@
 rm(list=ls())
-library(EMC2)
+devtools::load_all("~/Documents/UVA/2022/EMC2/")
 
 print(load("test_files/PNAS.RData"))
 dat <- data[,c("s","E","S","R","RT")]
@@ -32,13 +32,15 @@ prior <- list(
   theta_mu_var = diag(c(5:1))
 ) # This way we're using default priors for the nuisance parameters
 
-dat2 <- dat[dat$subjects == unique(dat$subjects)[1:2],]
+dat2 <- dat[dat$subjects %in% unique(dat$subjects)[1:4],]
+dat2$subjects <- droplevels(dat2$subjects)
 
 # Nuisance non hyper = non hierarchically estimated parameters
-samplers <- make_samplers(dat2, design_B, type = "single")
+samplers <- make_samplers(dat2, design_B, type = "standard")
 samplers <- auto_burn(samplers, verbose = T, cores_for_chains = 3, cores_per_chain = 2)
 
-samplers <- run_adapt(samplers, cores_for_chains = 3, cores_per_chain = 2, verbose = T)
+debug(test_adapted)
+samplers <- run_adapt(samplers, cores_for_chains = 3, cores_per_chain = 2, verbose = T, min_unique = 50)
 samplers <- run_sample(samplers, cores_for_chains = 3, cores_per_chain = 2, verbose = T)
 # samplers <- run_emc(samplers, cores_per_chain = 5, cores_for_chains = 1, verbose = T)
 

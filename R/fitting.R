@@ -391,19 +391,17 @@ test_adapted <- function(sampler, test_samples, min_unique, n_cores_conditional 
   # Function used by run_adapt to check whether we can create the conditional.
 
   # Only need to check uniqueness for one parameter
-  first_par <- test_samples$alpha[1, , ]
+  first_par <- as.matrix(test_samples$alpha[1, , ])
+  if(ncol(first_par) == 1) first_par <- t(first_par)
   # Split the matrix into a list of vectors by subject
-  # Needed for the case where every sample is unique for all subjects
-  first_par_list <- split(first_par, seq(NROW(first_par)))
-  # Get unique pars (new accepted particles) and check length for
   # all subjects is greater than unq_vals
-  n_unique_sub <- lapply(lapply(first_par_list, unique), length)
+  n_unique_sub <- apply(first_par, 1, FUN = function(x) return(length(unique(x))))
   n_pars <- sampler$n_pars
   variant_funs <- attr(sampler, "variant_funs")
   grouped <- sampler$grouped
   components <- attr(sampler$data, "components")[!grouped]
   nuisance <- sampler$nuisance[!grouped]
-  if (all(n_unique_sub > min_unique)) {
+  if (length(n_unique_sub) != 0 & all(n_unique_sub > min_unique)) {
     if(verbose){
       message("Enough unique values detected: ", min_unique)
       message("Testing proposal distribution creation")
