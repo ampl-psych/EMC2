@@ -304,6 +304,10 @@ plot_density <- function(pmwg_mcmc,layout=c(2,3),
     } else density(ps,bw=bw,adjust=adjust)
   }
 
+  if (length(pmwg_mcmc[[1]]$data)==1) {
+    subject <- names(pmwg_mcmc[[1]]$data)
+    plot_prior <- FALSE
+  }
   if (show_chains & plot_prior)
     warning("Prior plots not implemented for show_chains=TRUE")
   if (!is.na(subject) & plot_prior) {
