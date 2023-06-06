@@ -159,8 +159,33 @@ iat_pmwg <- function(pmwg_mcmc,
 # filter="sample";selection="mu";subfilter=0
 #
 # x=sPNAS_a;x_name="t0"; mapped=TRUE
-p_test <- function(x,x_name,x_fun=NULL,
-                   y=NULL,y_name=x_name,y_fun=NULL,
+#' Title
+#'
+#' @param x
+#' @param x_name
+#' @param x_fun
+#' @param y
+#' @param y_name
+#' @param y_fun
+#' @param mapped
+#' @param x_subject
+#' @param y_subject
+#' @param mu
+#' @param alternative
+#' @param probs
+#' @param digits
+#' @param p_digits
+#' @param print_table
+#' @param filter
+#' @param selection
+#' @param subfilter
+#'
+#' @return
+#' @export
+#'
+#' @examples
+p_test <- function(x,x_name=NULL,x_fun=NULL,fun_name="fun",
+                   y=NULL,y_name=NULL,y_fun=NULL,
                    mapped=FALSE,
                    x_subject=NULL,y_subject=NULL,
                    mu=0,alternative = c("less", "greater")[1],
@@ -170,7 +195,6 @@ p_test <- function(x,x_name,x_fun=NULL,
 {
 
   get_effect <- function(x,p_name=NULL,fun=NULL)
-    # Effect, must always be on mapped scale if lc_mat supplied.
   {
     x <- do.call(rbind,x)
     if (!is.null(fun)) return(apply(x,1,fun))
@@ -180,10 +204,15 @@ p_test <- function(x,x_name,x_fun=NULL,
 
   if (mapped & !(selection %in% c("mu","alpha")))
     stop("Can only analyze mapped mu or alpha parameters")
+  if (is.null(x_name) & is.null(x_fun))
+    stop("x_name or x_fun must be supplied")
+  if (is.null(y_fun) && is.null(y_name)) y_name <- x_name
+  if (is.null(y_fun) && !is.null(x_fun)) y_fun <- x_fun
 
   # Process x
   if (!is(x[[1]], "pmwgs")) stop("x must be a list of pmwgs objects")
-  x <- as_mcmc.list(x,selection=selection,filter=filter,
+  if (length(x[[1]]$data)==1) selection <- "alpha"
+  x <- EMC2:::as_mcmc.list(x,selection=selection,filter=filter,
                     subfilter=subfilter,mapped=mapped)
   # Individual subject analysis
   if (selection != "alpha") x_subject <- NULL else
@@ -194,10 +223,17 @@ p_test <- function(x,x_name,x_fun=NULL,
     x <- x[[x_subject]]
   }
   # Check test is valid
-  if (is.null(x_fun) && !(x_name %in% dimnames(x[[1]])[[2]]) )
+  if (is.null(x_fun) && !all(x_name %in% dimnames(x[[1]])[[2]]) )
     stop("x_name not present in samples")
+  if (length(x_name)>2)
+    stop("x_name must be length 1 or 2")
   # Get x effect
   x <- get_effect(x,x_name,x_fun)
+  if (length(x_name)>1) {
+    x <- -apply(x,1,diff)
+    x_name <- paste(x_name,collapse="-")
+  }
+  if (is.null(x_name)) x_name <- fun_name
   if (is.null(y)) {
     p <- mean(x<mu)
     if (alternative=="greater") p <- 1-p
@@ -206,7 +242,7 @@ p_test <- function(x,x_name,x_fun=NULL,
     dimnames(tab)[[2]] <- c(x_name,"mu")
   } else {
     if (!is(y[[1]], "pmwgs")) stop("y must be a list of pmwgs objects")
-    y <- as_mcmc.list(y,selection=selection,filter=filter,
+    y <- EMC2:::as_mcmc.list(y,selection=selection,filter=filter,
                       subfilter=subfilter,mapped=mapped)
     # Individual subject analysis
     if (selection != "alpha") y_subject <- NULL else
@@ -216,15 +252,22 @@ p_test <- function(x,x_name,x_fun=NULL,
       message("Testing y subject ",y_subject)
       y <- y[[y_subject]]
     }
-    if (is.null(y_fun) && !(y_name %in% dimnames(y[[1]])[[2]]) )
+    if (is.null(y_fun) && !all(y_name %in% dimnames(y[[1]])[[2]]) )
       stop("y_name not present in samples")
+    if (length(y_name)>2)
+      stop("y_name must be length 1 or 2")
     y <- get_effect(y,y_name,y_fun)
+    if (length(y_name)>1) {
+      y <- -apply(y,1,diff)
+      y_name <- paste(y_name,collapse="-")
+    }
     if (length(x)>length(y)) x <- x[1:length(y)] else y <- y[1:length(x)]
     d <- x-y
     p <- mean(d<0)
     if (alternative=="greater") p <- 1-p
     tab <- cbind(quantile(x,probs),quantile(y,probs),quantile(d,probs))
     attr(tab,alternative) <- p
+    if (is.null(y_name)) y_name <- fun_name
     if (x_name==y_name)
       dimnames(tab)[[2]] <- c(paste(x_name,c(x_subject,y_subject),sep="_"),
                               paste(x_subject,y_subject,sep="-")) else
@@ -239,6 +282,23 @@ p_test <- function(x,x_name,x_fun=NULL,
   invisible(tab)
 }
 
+# x_name=NULL;
+# # x_name = c("a_accuracy","a_speed")
+# # x_fun=NULL;
+# fun <- function(x){mean(x[c("a_accuracy","a_speed")])}
+# x_fun=fun; fun_name="Av"
+# x=sampled; y=sampled1
+#                    y_name=x_name;y_fun=NULL;
+#                    mapped=TRUE
+#                    x_subject=NULL;y_subject=NULL;
+#                    mu=0;alternative = c("less", "greater")[1]
+#                    probs = c(0.025,.5,.975);digits=2;p_digits=3;print_table=TRUE
+#                    filter="sample";selection="mu";subfilter=0
+# CIv_l_r <- function(x) {
+#   c(CIv_l_r = (x["v_left_incongruent"] - x["v_left_congruent"]) -
+#   (x["v_right_congruent"] - x["v_right_incongruent"]))
+# }
+# x_fun <- CIv_l_r
 
 # ptype="mean"
 # selection="mu";Flist=NULL;Clist=NULL
