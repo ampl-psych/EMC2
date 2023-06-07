@@ -203,7 +203,7 @@ check_progress <- function (samplers, stage, iter, max_gd, mean_gd, min_es, min_
   trys_done <- ifelse(is.null(max_trys), FALSE, trys >= max_trys)
   if (trys_done) {
     warning("Max trys reached. If this happens in burn-in while trying to get
-            gelman diagnostics < 1.2, you might have a particularly hard model.
+            gelman diagnostics small enough, you might have a particularly hard model.
             Make sure your model is well specified. If so, you can run adapt and
             sample, if run for long enough, sample usually converges eventually.")
   }
