@@ -312,7 +312,21 @@ p_test <- function(x,x_name=NULL,x_fun=NULL,fun_name="fun",
 
 # filter="sample";subfilter=0;use_best_fit=FALSE;print_summary=FALSE;digits=0
 # filter="sample"
-pmwg_IC <- function(samplers,filter="sample",subfilter=0,use_best_fit=TRUE,
+#' Title
+#'
+#' @param samplers
+#' @param filter
+#' @param subfilter
+#' @param use_best_fit
+#' @param print_summary
+#' @param digits
+#' @param subject
+#'
+#' @return
+#' @export
+#'
+#' @examples
+IC <- function(samplers,filter="sample",subfilter=0,use_best_fit=TRUE,
                     print_summary=TRUE,digits=0,subject=NULL)
   # Gets DIC, BPIC, effective parameters, mean deviance, and deviance of mean
 {
@@ -369,6 +383,21 @@ pmwg_IC <- function(samplers,filter="sample",subfilter=0,use_best_fit=TRUE,
 
 
 
+#' Title
+#'
+#' @param sList
+#' @param filter
+#' @param subfilter
+#' @param use_best_fit
+#' @param print_summary
+#' @param digits
+#' @param digits_p
+#' @param subject
+#'
+#' @return
+#' @export
+#'
+#' @examples
 compare_IC <- function(sList,filter="sample",subfilter=0,use_best_fit=TRUE,
                        print_summary=TRUE,digits=0,digits_p=3,subject=NULL) {
 
@@ -385,7 +414,7 @@ compare_IC <- function(sList,filter="sample",subfilter=0,use_best_fit=TRUE,
   if ( !is.list(subfilter) || length(subfilter)!=length(sList) )
     stop("If not a single digit, subfilter must be a list of the same length as sList")
   ICs <- setNames(vector(mode="list",length=length(sList)),names(sList))
-  for (i in 1:length(ICs)) ICs[[i]] <- pmwg_IC(sList[[i]],filter=filter,
+  for (i in 1:length(ICs)) ICs[[i]] <- IC(sList[[i]],filter=filter,
                                                subfilter=subfilter[[i]],use_best_fit=use_best_fit,subject=subject,print_summary=FALSE)
   ICs <- data.frame(do.call(rbind,ICs))
   DICp <- getp(ICs$DIC)

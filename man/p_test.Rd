@@ -6,10 +6,11 @@
 \usage{
 p_test(
   x,
-  x_name,
+  x_name = NULL,
   x_fun = NULL,
+  fun_name = "fun",
   y = NULL,
-  y_name = x_name,
+  y_name = NULL,
   y_fun = NULL,
   mapped = FALSE,
   x_subject = NULL,
