@@ -490,7 +490,7 @@ plot_density <- function(pmwg_mcmc,layout=c(2,3),
 #'
 #' @examples
 plot_fit <- function(data,pp,subject=NULL,factors=NULL,
-                     stat=NULL,stat_name="",
+                     stat=NULL,stat_name="",adjust=1,
                      ci=c(.025,.5,.975),do_plot=TRUE,
                      xlim=NULL,ylim=NULL,
                      layout=NULL,mfcol=TRUE,
@@ -535,7 +535,7 @@ plot_fit <- function(data,pp,subject=NULL,factors=NULL,
         ppi <- pp[pp_cells==i,]
         pred <- sapply(postn,function(x){stat(ppi[ppi$postn==x,])})
         if (do_plot) {
-          dens <- density(pred)
+          dens <- density(pred,adjust=adjust)
           if (!is.null(xlim)) xlimi <- xlim else
             xlimi <- c(pmin(obs,min(dens$x)),pmax(obs,max(dens$x)))
           plot(dens,main=i,xlab=stat_name,xlim=xlimi)
@@ -591,7 +591,7 @@ plot_fit <- function(data,pp,subject=NULL,factors=NULL,
         ppi <- pp[pp_cells==i,]
         pred <- sapply(postn,function(x){stat(ppi[ppi$postn==x,])})
         if (do_plot) {
-          dens <- density(pred)
+          dens <- density(pred,adjust=adjust)
           if (!is.null(xlim)) xlimi <- xlim else
             xlimi <- c(pmin(obs,min(dens$x)),pmax(obs,max(dens$x)))
           plot(dens,main=i,xlab=stat_name,xlim=xlimi)
