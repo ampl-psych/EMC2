@@ -26,9 +26,7 @@ design_B <- make_design(
   model=lbaB)
 
 devtools::load_all()
-
-prior <- get_prior_single(design = design_B, sample = T)
-debug(plot_prior)
+prior <- get_prior_single(design = design_B)
 plot_prior(prior)
 
 prior <- list(

@@ -1,10 +1,32 @@
 add_info_single <- function(sampler, prior = NULL, ...){
   # Checking and default priors
-  sampler$prior <- get_prior_single(prior, sampler$n_pars)
+  sampler$prior <- get_prior_single(prior, sampler$n_pars, sample = F)
   return(sampler)
 }
 
-get_prior_single <- function(prior = NULL, n_pars = NULL, par_names = NULL, sample = F, N = 1e5, type = "alpha", design = NULL){
+#' Prior specification for single subject sampling.
+#'
+#' With this type of sampling, we assume that one, or multiple, subjects are estimated without any hierarchical link.
+#' We need to specify a prior for each parameter. For now, the package assumes a multivariate normal prior on each parameter.
+#' Thus you need to specify prior$theta_mu_mean a vector with an entry for each parameter. Furthermore you need a prior covariance matrix prior$theta_mu_var.
+#' Default is: prior <- list(theta_mu_mean = rep(0, n_pars), theta_mu_var = diag(rep(0, n_pars)))
+#'
+#' Specific constraints, such as parameter x needs to be larger than 0, are enforced through transformations performed by the models.
+#' Thus you need to be mindful that even though the prior might be normally distributed, the transformed prior might look very differently.
+#' Set `sample = TRUE` and pass your design object to `design` to sample from the prior. You can then plot the samples using `plot_prior`
+#'
+#' @param prior A list of the prior containing the mean (theta_mu_mean) and variance (theta_mu_var).
+#' @param n_pars Argument used by the sampler, best left NULL. In user case inferred from the design
+#' @param sample Whether to sample from the prior. Default is TRUE
+#' @param N How many samples to draw from the prior
+#' @param type String specifying on what you want the prior. For single subject only "alpha" is a valid option.
+#' @param design The design obtained from `make_design`
+#'
+#' @return A list of samples from the prior
+#' @export
+#'
+#' @examples
+get_prior_single <- function(prior = NULL, n_pars = NULL, sample = T, N = 1e5, type = "alpha", design = NULL){
   if(is.null(prior)){
     prior <- list()
   }
@@ -20,9 +42,6 @@ get_prior_single <- function(prior = NULL, n_pars = NULL, par_names = NULL, samp
   if(sample){
     if(type != "alpha") stop("for variant single, only mu can be specified")
     samples <- mvtnorm::rmvnorm(N, prior$theta_mu_mean, prior$theta_mu_var)
-    if(!is.null(par_names)){
-      colnames(samples) <- par_names
-    }
     if(!is.null(design)){
       colnames(samples) <- names(attr(design, "p_vector"))
       samples[,colnames(samples) %in% design$model()$p_types] <- design$model()$Ntransform(samples[,colnames(samples) %in% design$model()$p_types])

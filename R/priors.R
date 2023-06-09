@@ -36,9 +36,18 @@ prior_samples <- function(samps,type=c("mu","variance","covariance","correlation
   }
 }
 
-plot_prior <- function(prior){
-  types <- names(prior)
-  if(any(types == "alpha")){
+#' Convenience function to plot from the prior
+#'
+#' @param prior A list of prior samples
+#' @param type Optional. Otherwised inferred from the prior samples
+#'
+#' @return NULL. Makes a plot of the prior samples
+#' @export
+#'
+#' @examples
+plot_prior <- function(prior, type = NULL){
+  if(is.null(type)) type <- names(prior)
+  for(typ in type){
     samples <- prior[["alpha"]]
     par(mfrow = c(3,3))
     par_names <- colnames(samples)
@@ -49,7 +58,7 @@ plot_prior <- function(prior){
         quants <- quantile(abs(samples[,i]), probs = 0.995)
       }
       filtered <- samples[,i][abs(samples[,i]) < quants]
-      hist(filtered, breaks = 50, main = par_names[i], prob = T, xlab = "alpha", cex.lab = 1.25, cex.main = 1.5)
+      hist(filtered, breaks = 50, main = par_names[i], prob = T, xlab = type, cex.lab = 1.25, cex.main = 1.5)
       lines(density(filtered), col = "red")
     }
   }
