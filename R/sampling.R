@@ -98,6 +98,8 @@ init <- function(pmwgs, start_mu = NULL, start_var = NULL,
   if(any(pmwgs$grouped)){
     grouped_pars <- mvtnorm::rmvnorm(particles, pmwgs$prior$prior_grouped$theta_mu_mean,
                             pmwgs$prior$prior_grouped$theta_mu_var)
+  } else{
+    grouped_pars <- NULL
   }
   proposals <- parallel::mclapply(X=1:pmwgs$n_subjects,FUN=start_proposals,
                                   parameters = startpoints_comb, n_particles = particles,

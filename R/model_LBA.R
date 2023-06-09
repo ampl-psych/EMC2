@@ -146,8 +146,16 @@ rLBA <- function(lR,pars,p_types=c("v","sv","b","A","t0"),posdrift = TRUE)
   cbind.data.frame(R=R,rt=rt)
 }
 
-# lba_B parameterization
-#' Title
+#' The Linear Ballistic Accumulator (LBA) model
+#'
+#' The Linear Ballistic Accumulator, proposes that for each choice alternative, ballistic accumulators race towards a common bound.
+#' The first accumulator to reach the bound determines the choice made. The time taken to reach the threshold determines the response times. For details see `Brown & Heathcote, 2008`
+#'
+#' The core parameters of the LBA are the drift rate `v`, the response threshold `B`,
+#' between trial variation in drift rate `sv`, between trial variation in startpoint of the drift rate `A`, and non-decision time `t0`.
+#' Frequently `sv` is fixed to 1 to satisfy scaling constraints.
+#'
+#' Here we use the b = B + A parameterization, which ensures that the response threshold is always higher than the between trial variation in start point of the drift rate.
 #'
 #' @return
 #' @export
