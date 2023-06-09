@@ -4,9 +4,12 @@ add_info_single <- function(sampler, prior = NULL, ...){
   return(sampler)
 }
 
-get_prior_single <- function(prior = NULL, n_pars = NULL, par_names = NULL, sample = F, N = 1e5, type = "mu"){
+get_prior_single <- function(prior = NULL, n_pars = NULL, par_names = NULL, sample = F, N = 1e5, type = "alpha", design = NULL){
   if(is.null(prior)){
     prior <- list()
+  }
+  if(!is.null(design)){
+    n_pars <- length(attr(design, "p_vector"))
   }
   if (is.null(prior$theta_mu_mean)) {
     prior$theta_mu_mean <- rep(0, n_pars)
@@ -15,11 +18,16 @@ get_prior_single <- function(prior = NULL, n_pars = NULL, par_names = NULL, samp
     prior$theta_mu_var <- diag(rep(1, n_pars))
   }
   if(sample){
-    if(type != "mu") stop("for variant single, the prior is only on the mean of the parameters")
+    if(type != "alpha") stop("for variant single, only mu can be specified")
     samples <- mvtnorm::rmvnorm(N, prior$theta_mu_mean, prior$theta_mu_var)
     if(!is.null(par_names)){
       colnames(samples) <- par_names
     }
+    if(!is.null(design)){
+      colnames(samples) <- names(attr(design, "p_vector"))
+      samples[,colnames(samples) %in% design$model()$p_types] <- design$model()$Ntransform(samples[,colnames(samples) %in% design$model()$p_types])
+    }
+    return(list(alpha = samples))
   }
   return(prior)
 }

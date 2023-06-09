@@ -36,6 +36,24 @@ prior_samples <- function(samps,type=c("mu","variance","covariance","correlation
   }
 }
 
+plot_prior <- function(prior){
+  types <- names(prior)
+  if(any(types == "alpha")){
+    samples <- prior[["alpha"]]
+    par(mfrow = c(3,3))
+    par_names <- colnames(samples)
+    for(i in 1:ncol(samples)){
+      if(!any(samples[,i] < 0) || !any(samples[,i] > 0)){
+        quants <- quantile(abs(samples[,i]), probs = 0.95)
+      } else{
+        quants <- quantile(abs(samples[,i]), probs = 0.995)
+      }
+      filtered <- samples[,i][abs(samples[,i]) < quants]
+      hist(filtered, breaks = 50, main = par_names[i], prob = T, xlab = "alpha", cex.lab = 1.25, cex.main = 1.5)
+      lines(density(filtered), col = "red")
+    }
+  }
+}
 
 get_prior_samples <- function(samples,selection,filter,thin,subfilter,n_prior)
   # get matrix of prior samples for different parameter types

@@ -1,6 +1,5 @@
 rm(list=ls())
-devtools::install("~/Documents/UVA/2022/EMC2/")
-
+devtools::load_all()
 print(load("test_files/PNAS.RData"))
 dat <- data[,c("s","E","S","R","RT")]
 names(dat)[c(1,5)] <- c("subjects","rt")
@@ -26,6 +25,11 @@ design_B <- make_design(
   constants=c(sv=log(1)),
   model=lbaB)
 
+devtools::load_all()
+
+prior <- get_prior_single(design = design_B, sample = T)
+debug(plot_prior)
+plot_prior(prior)
 
 prior <- list(
   theta_mu_mean = 1:5,
