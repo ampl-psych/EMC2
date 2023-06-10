@@ -25,7 +25,6 @@ design_B <- make_design(
   constants=c(sv=log(1)),
   model=lbaB)
 
-devtools::load_all()
 prior <- get_prior_single(design = design_B)
 plot_prior(prior)
 

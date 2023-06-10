@@ -68,8 +68,7 @@ pmwgs <- function(dadm, variant_funs, pars = NULL, ll_func = NULL, prior = NULL,
   class(sampler) <- "pmwgs"
   sampler <- variant_funs$add_info(sampler, prior, ...)
   sampler$prior$prior_grouped <- get_prior_single(prior$prior_grouped,
-                                                  n_pars = sum(is_grouped),
-                                                  par_names = rownames(group_pars))
+                                                  n_pars = sum(is_grouped), sample = F)
   attr(sampler, "variant_funs") <- variant_funs
   return(sampler)
 }
