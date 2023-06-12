@@ -415,7 +415,7 @@ compare_IC <- function(sList,filter="sample",subfilter=0,use_best_fit=TRUE,
     stop("If not a single digit, subfilter must be a list of the same length as sList")
   ICs <- setNames(vector(mode="list",length=length(sList)),names(sList))
   for (i in 1:length(ICs)) ICs[[i]] <- IC(sList[[i]],filter=filter,
-                                               subfilter=subfilter[[i]],use_best_fit=use_best_fit,subject=subject,print_summary=FALSE)
+    subfilter=subfilter[[i]],use_best_fit=use_best_fit,subject=subject,print_summary=FALSE)
   ICs <- data.frame(do.call(rbind,ICs))
   DICp <- getp(ICs$DIC)
   BPICp <- getp(ICs$BPIC)
@@ -424,7 +424,7 @@ compare_IC <- function(sList,filter="sample",subfilter=0,use_best_fit=TRUE,
     tmp <- out
     tmp$wDIC <- round(tmp$wDIC,digits_p)
     tmp$wBPIC <- round(tmp$wBPIC,digits_p)
-    tmp[,-c(2,4)] <- round(tmp[,-c(2,4)])
+    tmp[,-c(2,4)] <- round(tmp[,-c(2,4)],digits=digits)
     print(tmp)
   }
   invisible(out)
