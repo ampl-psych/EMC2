@@ -485,12 +485,12 @@ design_model <- function(data,design,model=NULL,prior = NULL,
   }
   attr(dadm,"ok_trials") <- is.finite(data$rt)
   attr(dadm,"s_data") <- data$subjects
-  # if (!is.null(design$adapt)) {
-  #   attr(dadm,"adapt") <- stats::setNames(
-  #     lapply(levels(dadm$subjects),augment,da=dadm,design=design),
-  #     levels(dadm$subjects))
-  #   attr(dadm,"adapt")$design <- design$adapt
-  # }
+  if (!is.null(design$adapt)) {
+    attr(dadm,"adapt") <- stats::setNames(
+      lapply(levels(dadm$subjects),augment,da=dadm,design=design),
+      levels(dadm$subjects))
+    attr(dadm,"adapt")$design <- design$adapt
+  }
   dadm
 }
 
