@@ -85,9 +85,11 @@ get_prior_samples <- function(samples,selection,filter,thin,subfilter,n_prior)
     colnames(psamples) <- colnames(theta_mu)
     return(psamples)
   } else {
-    if (attr(samps, "variant_funs")$type != "standard") {
-      warnings("Prior plot not yet implemented for this type")
-      return(NULL)
-    } else return(prior_samples(samps,selection,n_prior))
+    # # NIEK this is broken
+    # if (attr(samps, "variant_funs")$type != "standard") {
+    #   warnings("Prior plot not yet implemented for this type")
+    #   return(NULL)
+    # } else
+    return(prior_samples(samps,selection,n_prior))
   }
 }

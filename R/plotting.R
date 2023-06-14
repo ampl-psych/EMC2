@@ -274,10 +274,10 @@ plot_defective_density <- function(data,subject=NULL,factors=NULL,
 #'
 #' @examples
 plot_density <- function(pmwg_mcmc,layout=c(2,3),
-                         selection="alpha",filter="sample",thin=1,subfilter=0,mapped=FALSE,
-                         plot_prior=TRUE,n_prior=1e3,xlim=NULL,ylim=NULL,
-                         show_chains=FALSE,do_plot=TRUE,subject=NA,add_means=FALSE,
-                         pars=NULL,probs=c(.025,.5,.975),bw = "nrd0", adjust = 1)
+  selection="alpha",filter="sample",thin=1,subfilter=0,mapped=FALSE,
+  plot_prior=TRUE,n_prior=1e3,xlim=NULL,ylim=NULL,
+  show_chains=FALSE,do_plot=TRUE,subject=NA,add_means=FALSE,
+  pars=NULL,probs=c(.025,.5,.975),bw = "nrd0", adjust = 1)
   # Plots density (if alpha can do individual subject, all by default)
   # If show_chains superimposes densities for each chain on same plot
   # invisibly returns tables of true and 95% CIs (for all chains combined
