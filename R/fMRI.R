@@ -1,4 +1,19 @@
 ## fmri functions
+quick_convolve <- function(regressor, modulator, hkernel, frame_times) {
+  ## minimizes overhead for quick convolution; useful when called from within a likelihood function (speed-up ~20 ms per run)
+  regressor$regressor[regressor$regressor==1] <- regressor$regressor[regressor$regressor==1]*modulator
+
+  conv_reg = NULL
+  for(i in 1:ncol(hkernel)) {      # reverse kernel -- numpy implementation differs from R
+    conv_reg = cbind(conv_reg, convolve(regressor$regressor, rev(hkernel[,i]), type='o')[1:length(regressor$regressor)])
+  }
+
+  computed_regressors = EMC2:::resample_regressor_(conv_reg, regressor$hr_frame_times, frame_times)
+  computed_regressors = EMC2:::orthogonalize_(computed_regressors)
+  return(computed_regressors)
+}
+
+
 searchsorted <- function(x, insert) {
   ## SM, based on https://numpy.org/doc/stable/reference/generated/numpy.searchsorted.html
   return(findInterval(insert,x, left.open = TRUE)+1)
@@ -238,7 +253,7 @@ convolve_regressors_ <- function(events, hrf_model, frame_times, fir_delays=c(0)
   duration = events$duration
   modulation = events$modulation
 
-  for(condition in unique(trial_type)) {
+  for(condition in sort(unique(trial_type))) {
     condition_mask = (trial_type == condition)
     exp_condition = cbind(onset[condition_mask],
                           duration[condition_mask],
@@ -277,7 +292,7 @@ make_fmri_design_matrix <- function(frame_times, events=NULL, hrf_model='glover'
                                     add_regs=NULL,
                                     add_reg_names=NULL,
                                     min_onset=-24,
-                                    oversampling=50) {
+                                    oversampling=50, add_intercept=TRUE) {
   names = c()
   matrix = NULL
 
@@ -295,6 +310,7 @@ make_fmri_design_matrix <- function(frame_times, events=NULL, hrf_model='glover'
   }
   df <- data.frame(matrix, row.names=frame_times)
   colnames(df) <- names
+  if(add_intercept) df$intercept <- 1
   return(df)
 }
 

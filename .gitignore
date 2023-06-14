@@ -2,6 +2,5 @@
 *.Rhistory
 .Rhistory
 .RData
-# get rid of binaries
 *.so
 *.o

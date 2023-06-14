@@ -26,10 +26,10 @@ Imports:
     methods,
     msm,
     mvtnorm,
+    pracma,
     parallel,
     stats,
     Matrix,
     Rcpp
 LinkingTo: 
-    Rcpp,
-    RcppArmadillo
+    Rcpp

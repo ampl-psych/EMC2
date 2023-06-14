@@ -15,7 +15,8 @@ make_fmri_design_matrix(
   add_regs = NULL,
   add_reg_names = NULL,
   min_onset = -24,
-  oversampling = 50
+  oversampling = 50,
+  add_intercept = TRUE
 )
 }
 \description{

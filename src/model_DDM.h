@@ -327,17 +327,21 @@ NumericVector d_DDM_c (NumericVector rts, NumericVector R, List group_idx, Numer
       }
       pars_tmp[5] = pars(first_idx,2)/pars(first_idx,5); //sv/s
       pars_tmp[6] = pars(first_idx,4); // st0
-      pars_tmp[7] = pars(first_idx,6); // z Note that for z and sz the EMC R code multiplies by a, but the R ddiffusion divides by a, so avoiding both
+      pars_tmp[7] = pars(first_idx,6);
+      // z Note that for z and sz the EMC R code multiplies by a, but the R ddiffusion divides by a, so avoiding both
       g_Params = new Parameters (pars_tmp, precision);
-      if(R[first_idx] == 2){
-        for (int i = 0; i < total_idx.length(); i++) {
-          int idx = total_idx[i] - 1;
-          out[idx] =  g_plus(rts[idx]); //upper
-        }
-      } else{
-        for (int i = 0; i < total_idx.length(); i++) {
-          int idx = total_idx[i] -1;
-          out[idx] = -g_minus(rts[idx]); //lower
+      bool is_bad = is_true(any(is_infinite(pars_tmp) == TRUE));
+      if(!is_bad){
+        if(R[first_idx] == 2){
+          for (int i = 0; i < total_idx.length(); i++) {
+            int idx = total_idx[i] - 1;
+            out[idx] =  g_plus(rts[idx]); //upper
+          }
+        } else{
+          for (int i = 0; i < total_idx.length(); i++) {
+            int idx = total_idx[i] -1;
+            out[idx] = -g_minus(rts[idx]); //lower
+          }
         }
       }
     }

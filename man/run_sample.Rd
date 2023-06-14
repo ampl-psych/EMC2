@@ -8,7 +8,7 @@ run_sample(
   samplers,
   iter = 1000,
   max_gd = 1.1,
-  mean_gd,
+  mean_gd = NULL,
   min_es = 0,
   p_accept = 0.8,
   step_size = 100,
@@ -16,11 +16,11 @@ run_sample(
   verboseProgress = FALSE,
   fileName = NULL,
   particles = NULL,
-  particle_factor = 50,
+  particle_factor = 40,
   cores_per_chain = 1,
   cores_for_chains = length(samplers),
   max_trys = 50,
-  useC = useC
+  n_blocks = NULL
 )
 }
 \arguments{

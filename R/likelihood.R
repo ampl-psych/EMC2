@@ -82,13 +82,12 @@ log_likelihood_sdt <- function(p_vector,dadm,lb=-Inf,min_ll=log(1e-10))
 #' @param proposals
 #' @param dadms
 #' @param component
-#' @param useC
 #'
 #' @return
 #' @export
 #'
 #' @examples
-log_likelihood_joint <- function(proposals, dadms, component = NULL, useC){
+log_likelihood_joint <- function(proposals, dadms, component = NULL){
   parPreFixs <- unique(gsub("[|].*", "", colnames(proposals)))
   i <- 0
   total_ll <- 0
@@ -99,7 +98,7 @@ log_likelihood_joint <- function(proposals, dadms, component = NULL, useC){
       parPrefix <- parPreFixs[i]
       currentPars <- proposals[,grep(paste0(parPrefix, "|"), colnames(proposals), fixed = T)]
       colnames(currentPars) <- gsub(".*[|]", "", colnames(currentPars))
-      total_ll <- total_ll +  calc_ll_manager(currentPars, dadm, useC, attr(dadm, "model")()$log_likelihood)
+      total_ll <- total_ll +  calc_ll_manager(currentPars, dadm, attr(dadm, "model")()$log_likelihood)
     }
   }
   return(total_ll)
