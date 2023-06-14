@@ -1,37 +1,52 @@
 
 add_info_diag <- function(sampler, prior = NULL, ...){
+  n_pars <- sum(!(sampler$nuisance | sampler$grouped))
   # Checking and default priors
-  if (is.null(prior)) {
-    prior <- list(theta_mu_mean = rep(0, sampler$n_pars), theta_mu_var = rep(1, sampler$n_pars))
+  if(is.null(prior)){
+    prior <- list()
+  }
+  if (is.null(prior$theta_mu_mean)) {
+    prior$theta_mu_mean <- rep(0, n_pars)
+  }
+  if(is.null(prior$theta_mu_var)){
+    prior$theta_mu_var <- rep(1, n_pars)
+  }
+  if(is.null(prior$v)){
+    prior$v <- 2
+  }
+  if(is.null(prior$A)){
+    prior$A <- rep(1, n_pars)
   }
   # Things I save rather than re-compute inside the loops.
   prior$theta_mu_invar <- 1/prior$theta_mu_var #Inverse of the prior
-
-  #Hyper parameters
-  attr(sampler, "v_half") <- 2
-  attr(sampler, "A_half") <- 1
   sampler$prior <- prior
   return(sampler)
 }
 
 get_startpoints_diag <- function(pmwgs, start_mu, start_var){
-  if (is.null(start_mu)) start_mu <- rnorm(pmwgs$n_pars, mean = pmwgs$prior$theta_mu_mean, sd = sqrt(pmwgs$prior$theta_mu_var))
+  n_pars <- sum(!(pmwgs$nuisance | pmwgs$grouped))
+  if (is.null(start_mu)) start_mu <- rnorm(n_pars, mean = pmwgs$prior$theta_mu_mean, sd = sqrt(pmwgs$prior$theta_mu_var))
   # If no starting point for group var just sample some
-  if (is.null(start_var)) start_var <- diag(1/rgamma(pmwgs$n_pars, 10, 5)) #Bit stupid maybe as startpoint
-  start_a_half <- 1 / rgamma(n = pmwgs$n_pars, shape = 2, rate = 1)
+  if (is.null(start_var)) start_var <- diag(1/rgamma(n_pars, 10, 5), n_pars) #Bit stupid maybe as startpoint
+  start_a_half <- 1 / rgamma(n = n_pars, shape = 2, rate = 1)
   return(list(tmu = start_mu, tvar = start_var, tvinv = MASS::ginv(start_var), a_half = start_a_half))
 }
 
 get_conditionals_diag <- function(s, samples, n_pars, iteration = NULL, idx = NULL){
   iteration <- ifelse(is.null(iteration), samples$iteration, iteration)
   if(is.null(idx)) idx <- 1:n_pars
-  pts2_unwound <- log(apply(samples$theta_var[idx,idx,],3,diag))
+  pts2_unwound <- log(apply(samples$theta_var[idx,idx,, drop = F],3,diag))
   all_samples <- rbind(samples$alpha[idx,s,],samples$theta_mu[idx,],pts2_unwound)
   mu_tilde <- rowMeans(all_samples)
   var_tilde <- var(t(all_samples))
+  if(n_pars == 1){
+    X.given <- c(samples$theta_mu[idx,iteration], log(samples$theta_var[idx,idx,iteration]))
+  } else{
+    X.given <- c(samples$theta_mu[idx,iteration], log(diag(samples$theta_var[idx,idx,iteration])))
+  }
   condmvn <- condMVN(mean = mu_tilde, sigma = var_tilde,
                      dependent.ind = 1:n_pars, given.ind = (n_pars + 1):length(mu_tilde),
-                     X.given = c(samples$theta_mu[idx,iteration], log(diag(samples$theta_var[idx,idx,iteration]))))
+                     X.given = X.given)
   return(list(eff_mu = condmvn$condMean, eff_var = condmvn$condVar))
 }
 
@@ -43,29 +58,29 @@ gibbs_step_diag <- function(sampler, alpha){
   hyper <- attributes(sampler)
   prior <- sampler$prior
   last$tvinv <- diag(last$tvinv)
-
+  n_pars <- sum(!(sampler$nuisance | sampler$grouped))
+  alpha <- as.matrix(alpha)
   #Mu
   var_mu = 1.0 / (sampler$n_subjects * last$tvinv + prior$theta_mu_invar)
   mean_mu = var_mu * ((apply(alpha, 1, sum) * last$tvinv + prior$theta_mu_mean * prior$theta_mu_invar))
-  tmu <- rnorm(sampler$n_pars, mean_mu, sd = sqrt(var_mu))
-  names(tmu) <- sampler$par_names
+  tmu <- rnorm(n_pars, mean_mu, sd = sqrt(var_mu))
+  names(tmu) <- sampler$par_names[!(sampler$nuisance | sampler$grouped)]
 
-  if(!is.null(hyper$std_shape)){
-    # InvGamma alternative (probably inferior) prior
-    shape = hyper$std_shape + sampler$n_subjects / 2
-    rate = hyper$std_rate + rowSums( (alpha-tmu)^2 ) / 2
-    tvinv = rgamma(n=sampler$n_pars, shape=shape, rate=rate)
-    tvar = 1/tvinv
-    a_half <- NULL
-  } else {
-    tvinv = rgamma(n=sampler$n_pars, shape=hyper$v_half/2 + sampler$n_subjects/2, rate=hyper$v_half/last$a_half +
-                     rowSums( (alpha-tmu)^2 ) / 2)
-    tvar = 1/tvinv
-    #Contrary to standard pmwg I use shape, rate for IG()
-    a_half <- 1 / rgamma(n = sampler$n_pars, shape = (hyper$v_half + sampler$n_pars) / 2,
-                         rate = hyper$v_half * tvinv + 1/(hyper$A_half^2))
-  }
-  return(list(tmu = tmu, tvar = diag(tvar), tvinv = diag(tvinv), a_half = a_half, alpha = alpha))
+  # if(!is.null(hyper$std_shape)){
+  #   # InvGamma alternative (probably inferior) prior
+  #   shape = hyper$std_shape + sampler$n_subjects / 2
+  #   rate = hyper$std_rate + rowSums( (alpha-tmu)^2 ) / 2
+  #   tvinv = rgamma(n=sampler$n_pars, shape=shape, rate=rate)
+  #   tvar = 1/tvinv
+  #   a_half <- NULL
+  # } else {
+  tvinv = rgamma(n=n_pars, shape=prior$v/2 + sampler$n_subjects/2, rate=prior$v/last$a_half +
+                   rowSums( (alpha-tmu)^2 ) / 2)
+  tvar = 1/tvinv
+  #Contrary to standard pmwg I use shape, rate for IG()
+  a_half <- 1 / rgamma(n = n_pars, shape = (prior$v + n_pars) / 2,
+                       rate = prior$v * tvinv + 1/(prior$A^2))
+  return(list(tmu = tmu, tvar = diag(tvar, n_pars), tvinv = diag(tvinv, n_pars), a_half = a_half, alpha = alpha))
 }
 
 
@@ -105,8 +120,8 @@ prior_dist_diag = function(parameters, info){
   param.theta.sig2 <- unwind_diag_IS2(param.theta.sig.unwound, reverse = TRUE, diag = FALSE)
   param.a <- exp(parameters[((length(parameters)-n_randeffect)+1):(length(parameters))])
   log_prior_mu=mvtnorm::dmvnorm(param.theta.mu, mean = prior$theta_mu_mean, sigma = prior$theta_mu_var, log =TRUE)
-  log_prior_sigma = sum(logdinvGamma(param.theta.sig2, shape = hyper$v_half/2, rate = hyper$v_half/param.a))
-  log_prior_a = sum(logdinvGamma(param.a,shape = 1/2,rate=1/(hyper$A_half^2)))
+  log_prior_sigma = sum(logdinvGamma(param.theta.sig2, shape = prior$v/2, rate = prior$v/param.a))
+  log_prior_a = sum(logdinvGamma(param.a,shape = 1/2,rate=1/(prior$A^2)))
   # These are Jacobian corrections for the transformations on these
   logw_den2 <- -sum(log(param.a))
   logw_den3 <- -sum(log(param.theta.sig2))

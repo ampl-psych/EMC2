@@ -1,29 +1,43 @@
 add_info_infnt_factor <- function(sampler, prior = NULL, ...){
   # Checking and default priors
   args <- list(...)
-  max_factors <- args$max_factors
+  max_factors <- args$n_factors
   if(is.null(max_factors)) max_factors <- 10
-  n_pars <- sampler$n_pars
-  if (is.null(prior)) {
-    prior <- list(theta_mu_mean = rep(0, n_pars),
-                  theta_mu_var = rep(1, n_pars))
+  n_pars <- sum(!(sampler$nuisance | sampler$grouped))
+
+  if(is.null(prior)){
+    prior <- list()
+  }
+  if(is.null(prior$theta_mu_mean)){
+    prior$theta_mu_mean <- rep(0, n_pars)
+  }
+  if(is.null(prior$theta_mu_var)){
+    prior$theta_mu_var <- rep(1, n_pars)
+  }
+  if(is.null(prior$as)){
+    prior$as <- 5
+  }
+  if(is.null(prior$bs)){
+    prior$bs <- 1
+  }
+  if(is.null(prior$df)){
+    prior$df <- 10
+  }
+  if(is.null(prior$ad1)){
+    prior$ad1 <- 3
+  }
+  if(is.null(prior$bd1)){
+    prior$bd1 <- 1.7
+  }
+  if(is.null(prior$ad2)){
+    prior$ad2 <- 3.5
+  }
+  if(is.null(prior$bd2)){
+    prior$bd2 <- 2
   }
   # Things I save rather than re-compute inside the loops.
   # Things I save rather than re-compute inside the loops.
   prior$theta_mu_invar <- 1/prior$theta_mu_var
-
-  #Hyper parameters
-  # for residual precision
-  attr(sampler, "as") <- 1
-  attr(sampler, "bs") <- .3
-  # for t_{ij}
-  attr(sampler, "df") <- 3
-  # for delta_1, ad1 must be > 2
-  attr(sampler, "ad1") <- 2.1
-  attr(sampler, "bd1") <- 1
-  # for delta_h, h >=2, ad2 must be > 3
-  attr(sampler, "ad2") <- 3.1
-  attr(sampler, "bd2") <- 2
 
   attr(sampler, "max_factors") <- max_factors
 
@@ -31,13 +45,15 @@ add_info_infnt_factor <- function(sampler, prior = NULL, ...){
   return(sampler)
 }
 
-sample_store_infnt_factor <- function(data, par_names, iters = 1, stage = "init", integrate = T, ...) {
-  n_factors <- list(...)$max_factors
+sample_store_infnt_factor <- function(data, par_names, iters = 1, stage = "init", integrate = T, is_nuisance,
+                                      is_grouped, ...) {
+  n_factors <- list(...)$n_factors
   if(is.null(n_factors)) n_factors <- 10
   subject_ids <- unique(data$subjects)
-  n_pars <- length(par_names)
   n_subjects <- length(subject_ids)
-  base_samples <- sample_store_base(data, par_names, iters, stage)
+  base_samples <- sample_store_base(data, par_names[!is_grouped], iters, stage)
+  par_names <- par_names[!is_nuisance & !is_grouped]
+  n_pars <- length(par_names)
   samples <- list(
     theta_mu = array(NA_real_,dim = c(n_pars, iters), dimnames = list(par_names, NULL)),
     theta_var = array(NA_real_,dim = c(n_pars, n_pars, iters),dimnames = list(par_names, par_names, NULL)),
@@ -52,21 +68,23 @@ sample_store_infnt_factor <- function(data, par_names, iters = 1, stage = "init"
 }
 
 get_startpoints_infnt_factor<- function(pmwgs, start_mu, start_var){
-  if (is.null(start_mu)) start_mu <- rnorm(pmwgs$n_pars, sd = 1)
+  n_pars <- sum(!(pmwgs$nuisance | pmwgs$grouped))
+  prior <- pmwgs$prior
+  if (is.null(start_mu)) start_mu <- rnorm(n_pars, prior$theta_mu_mean, sd = sqrt(prior$theta_mu_var))
   # If no starting point for group var just sample some
-  if (is.null(start_var)) start_var <- riwish(pmwgs$n_pars * 3,diag(pmwgs$n_pars))
+  if (is.null(start_var)) start_var <- riwish(n_pars * 3,diag(n_pars))
 
   hyper <- attributes(pmwgs)
 
-  start_sig_err_inv <- rgamma(pmwgs$n_pars, shape = hyper$as, rate = hyper$bs)
-  start_lambda <- matrix(0, nrow = pmwgs$n_pars, ncol = hyper$max_factors)
+  start_sig_err_inv <- rgamma(n_pars, shape = prior$as, rate = prior$bs)
+  start_lambda <- matrix(0, nrow = n_pars, ncol = hyper$max_factors)
   start_eta <- matrix(0, nrow = pmwgs$n_subjects, ncol = hyper$max_factors)
-  start_psi <- matrix(rgamma(pmwgs$n_pars * hyper$max_factors,
-                             shape = hyper$df / 2, rate = hyper$df/2),
-                      pmwgs$n_pars, hyper$max_factors) # Local shrinkage
-  start_delta <- rgamma(hyper$max_factors, shape=c(hyper$ad1,
-                                                   rep(hyper$ad2, hyper$max_factors-1)),
-                        scale=c(hyper$bd1, rep(hyper$bd2, hyper$max_factors-1))) # Global shrinkage
+  start_psi <- matrix(rgamma(n_pars * hyper$max_factors,
+                             shape = prior$df / 2, rate = prior$df/2),
+                      n_pars, hyper$max_factors) # Local shrinkage
+  start_delta <- rgamma(hyper$max_factors, shape=c(prior$ad1,
+                                                   rep(prior$ad2, hyper$max_factors-1)),
+                        scale=c(prior$bd1, rep(prior$bd2, hyper$max_factors-1))) # Global shrinkage
   return(list(tmu = start_mu, tvar = start_var, lambda = start_lambda,
               sig_err_inv = start_sig_err_inv, psi = start_psi,
               eta = start_eta, delta = start_delta))
@@ -92,7 +110,7 @@ gibbs_step_infnt_factor <- function(sampler, alpha){
   # extract previous values (for ease of reading)
   alpha_t <- t(alpha)
   n_subjects <- sampler$n_subjects
-  n_pars <- sampler$n_pars
+  n_pars <- sampler$n_pars - sum(sampler$nuisance) - sum(sampler$grouped)
   max_factors <- hyper$max_factors
 
   eta <- matrix(last$eta, n_subjects, max_factors)
@@ -104,9 +122,7 @@ gibbs_step_infnt_factor <- function(sampler, alpha){
 
   # Pre-compute
   tauh <- cumprod(delta) # global shrinkage coefficients
-  Plam <- matvec(psi, tauh) # precision of loadings rows
-
-
+  Plam <- psi %*% diag(tauh, nrow = max_factors) # precision of loadings rows
   #Update mu
   mu_sig <- 1/(n_subjects * sig_err_inv + prior$theta_mu_invar)
   mu_mu <- mu_sig * (sig_err_inv * colSums(alpha_t - eta %*% t(lambda)) + prior$theta_mu_invar * prior$theta_mu_mean)
@@ -116,8 +132,8 @@ gibbs_step_infnt_factor <- function(sampler, alpha){
   alphatilde <- sweep(alpha_t, 2, mu)
 
   # Update eta
-  Lmsg <- vecmat(sig_err_inv, lambda)
-  Veta1 = diag(max_factors) + t(Lmsg)%*% lambda
+  Lmsg <- diag(sig_err_inv) %*% lambda
+  Veta1 = diag(1, nrow = max_factors) + t(Lmsg)%*% lambda
   T_mat <- chol(Veta1)
   qrT <- qr(T_mat)
   R <- qr.R(qrT)
@@ -129,7 +145,7 @@ gibbs_step_infnt_factor <- function(sampler, alpha){
   # Update lambda
   eta2 <- crossprod(eta)
   for(j in 1:n_pars){
-    Qlam <- diag(Plam[j,]) + sig_err_inv[j] * eta2
+    Qlam <- diag(Plam[j,], nrow = max_factors) + sig_err_inv[j] * eta2
     blam <- sig_err_inv[j] * (t(eta) %*% alphatilde[,j])
     Llam <- t(chol(Qlam))
     zlam <- rnorm(max_factors)
@@ -141,24 +157,27 @@ gibbs_step_infnt_factor <- function(sampler, alpha){
 
   # Update psi_jh
   for(h in 1:max_factors){
-    psi[,h] <- rgamma(n_pars, shape = (hyper$df + 1)/2, rate = (hyper$df + tauh[h] * lambda[,h]^2) / 2)
+    psi[,h] <- rgamma(n_pars, shape = (prior$df + 1)/2, rate = (prior$df + tauh[h] * lambda[,h]^2) / 2)
   }
 
   # Update delta & tau
   mat <- psi * lambda^2
-  ad <- hyper$ad1 + 0.5 * n_pars * max_factors
-  bd <- hyper$bd1 + 0.5 * (1 / delta[1])  * sum(tauh * colSums(mat))
+  ad <- prior$ad1 + 0.5 * n_pars * max_factors
+  bd <- prior$bd1 + 0.5 * (1 / delta[1])  * sum(tauh * colSums(mat))
   delta[1] <- rgamma(1, shape = ad, rate = bd)
   tauh <- cumprod(delta)
 
-  for(h in 2:max_factors) {
-    ad <- hyper$ad2 + 0.5 * n_pars * (max_factors - h + 1)
-    bd <- hyper$bd2 + 0.5 * (1 / delta[h]) * sum(tauh[h:max_factors] * colSums(as.matrix(mat[, h:max_factors])))
-    delta[h] <- rgamma(1, shape = ad, rate = bd)
+  if(max_factors > 1){
+    for(h in 2:max_factors) {
+      ad <- prior$ad2 + 0.5 * n_pars * (max_factors - h + 1)
+      bd <- prior$bd2 + 0.5 * (1 / delta[h]) * sum(tauh[h:max_factors] * colSums(as.matrix(mat[, h:max_factors])))
+      delta[h] <- rgamma(1, shape = ad, rate = bd)
+    }
   }
 
+
   # Update sig_err
-  sig_err_inv <- rgamma(n_pars ,shape = hyper$as + .5*n_subjects, rate = hyper$bs +
+  sig_err_inv <- rgamma(n_pars ,shape = prior$as + .5*n_subjects, rate = prior$bs +
                           .5*colSums((alphatilde - eta %*% t(lambda))^2))
 
   # Give back
@@ -183,7 +202,7 @@ get_conditionals_infnt_factor <- function(s, samples, n_pars, iteration = NULL, 
   if(is.null(idx)) idx <- 1:n_pars
   sig_err <- log(samples$theta_sig_err_inv[idx,])
   eta <- matrix(samples$theta_eta[s,,], nrow = samples$n_factors)
-  lambda <- apply(samples$theta_lambda[idx,,], 3, as.numeric, samples$n_factors)
+  lambda <- apply(samples$theta_lambda[idx,,, drop = F], 3, as.numeric, samples$n_factors)
   theta_mu <- samples$theta_mu[idx,]
   all_samples <- rbind(samples$alpha[idx, s,],theta_mu, eta, sig_err, lambda)
   mu_tilde <- rowMeans(all_samples)

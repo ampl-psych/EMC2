@@ -12,7 +12,10 @@ make_samplers(
     "infnt_factor")[1],
   n_chains = 3,
   rt_resolution = 0.02,
-  prior_list = NULL,
+  prior = NULL,
+  nuisance = NULL,
+  nuisance_non_hyper = NULL,
+  grouped_pars = NULL,
   par_groups = NULL,
   n_factors = NULL,
   constraintMat = NULL,
@@ -32,7 +35,7 @@ make_samplers(
 
 \item{rt_resolution}{A double. Used for compression, rts will be binned based on this resolution.}
 
-\item{prior_list}{A list of priors for the group level. Prior distributions should match the type argument.}
+\item{nuisance}{A integer vector. Parameters on this location of the vector of parameters are treated as nuisance parameters and not included in group-level covariance (only variance).}
 
 \item{par_groups}{A vector. Only to be specified with type blocked \code{c(1,1,1,2,2)} means first three parameters first block, last two parameters in the second block}
 
@@ -40,6 +43,8 @@ make_samplers(
 
 \item{constraintMat}{A matrix of rows equal to the number of estimated parameters, and columns equal to the number of factors, only to be specified with type factor.
 If null will use default settings as specified in Innes et al. 2022}
+
+\item{prior_list}{A list of priors for the group level. Prior distributions should match the type argument.}
 }
 \value{
 a list of samplers
