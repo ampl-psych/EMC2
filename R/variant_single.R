@@ -90,16 +90,43 @@ filtered_samples_single <- function(sampler, filter){
 }
 
 get_all_pars_single <- function(samples, idx, info){
-  stop("no IS2 for single subject estimation yet")
+  n_subjects <- samples$n_subjects
+  n_iter = length(samples$samples$stage[idx])
+  # Exctract relevant objects
+  alpha <- samples$samples$alpha[,,idx, drop = F]
+  # Set up
+  n_params<- samples$n_pars
+  mu_tilde=array(dim = c(n_subjects,n_params))
+  var_tilde=array(dim = c(n_subjects,n_params,n_params))
+  for (j in 1:n_subjects){
+    # calculate the mean for re, mu and sigma
+    mu_tilde[j,] <- rowMeans(alpha[,j,])
+    # calculate the covariance matrix for random effects, mu and sigma
+    var_tilde[j,,] <- cov(t(alpha[,j,]))
+  }
+
+  for(i in 1:n_subjects){ #RJI_change: this bit makes sure that the sigma tilde is pos def
+    if(!corpcor::is.positive.definite(var_tilde[i,,], tol=1e-8)){
+      var_tilde[i,,]<-corpcor::make.positive.definite(var_tilde[i,,], tol=1e-6)
+    }
+  }
+  info$n_params <- n_params
+  return(list(mu_tilde = mu_tilde, var_tilde = var_tilde, info = info))
 }
 
 group_dist_single <- function(random_effect = NULL, parameters, sample = FALSE, n_samples = NULL, info){
-  stop("no IS2 for single subject estimation yet")
-
+  # This is for the single case actually the prior distribution.
+  if (sample){
+    return(rmvnorm(n_samples, info$prior$theta_mu_mean, info$prior$theta_mu_var))
+  }else{
+    logw_second<-max(-5000*info$n_randeffect, dmvnorm(random_effect, info$prior$theta_mu_mean,info$prior$theta_mu_var,log=TRUE))
+    return(logw_second)
+  }
 }
 
 prior_dist_single <- function(parameters, info){
-  stop("no IS2 for single subject estimation yet")
-
+  # This is quite confusing, but now the actual prior dist is the group dist.
+  # Just here for compatability with the other types.
+  return(0)
 }
 
