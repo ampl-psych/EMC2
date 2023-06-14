@@ -893,6 +893,87 @@ check_run <- function(samples,pdf_name="check_run.pdf",interactive=TRUE,
 }
 
 
+# filter="sample";thin=1;subfilter=0;mapped=FALSE
+# selection=c("alpha","mu","variance","covariance","correlation")[1]; stat=NULL
+# collapse.subjects=TRUE;scale.subjects=TRUE;use=NA;do_plot=TRUE
+#' Title
+#'
+#' @param samples
+#' @param filter
+#' @param thin
+#' @param subfilter
+#' @param mapped
+#' @param selection
+#' @param stat
+#' @param scale.subjects
+#' @param use
+#' @param do_plot
+#' @param maxp
+#'
+#' @return
+#' @export
+#'
+#' @examples
+pairs_posterior <- function(samples,filter="sample",thin=1,subfilter=0,mapped=FALSE,
+  selection=c("alpha","mu","variance","covariance","correlation")[1],stat=NULL,
+  scale.subjects=TRUE,use=NA,do_plot=TRUE,maxp=500)
+{
+
+  panel.hist <- function(x, ...)
+  {
+    usr <- par("usr"); on.exit(par(usr))
+    par(usr = c(usr[1:2], 0, 1.5) )
+    h <- hist(x, plot = FALSE)
+    breaks <- h$breaks; nB <- length(breaks)
+    y <- h$counts; y <- y/max(y)
+    rect(breaks[-nB], 0, breaks[-1], y, col = "cyan", ...)
+  }
+
+  ## put correlations on the upper panels,
+  panel.cor <- function(x, y, prefix = "", ...)
+  {
+    usr <- par("usr"); on.exit(par(usr))
+    par(usr = c(0, 1, 0, 1))
+    r <- round(cor(x, y),3)
+    txt <- format(c(r, 0.123456789), digits = 3)[1]
+    txt <- paste0(prefix, txt)
+    text(0.5, 0.5, txt, cex = 2)
+  }
+
+  do_scale <- function(df) {
+    for (i in levels(df[,1])) {
+      isin <- df[,1]==i
+      df[isin,2] <- (df[isin,2]-mean(df[isin,2]))/sd(df[isin,2])
+    }
+    df[,2]
+  }
+
+  pmat <- parameters_data_frame(samples,filter=filter,thin=thin,subfilter=subfilter,
+    mapped=mapped,stat=stat,selection=selection)
+  if (!any(is.na(use))) {
+    if (is.numeric(stat)) {
+      if (any(stat<1) || any(stat>dim(pmat))) stop("stat outside parameter range")
+      stat <- names(pmat)[stat]
+    }
+    if (!all(stat %in% names(pmat))) stop("stat has a name not in parameters")
+    if (length(use)==1) stop("must select more than one parameter")
+    pmat <- pmat[,use]
+  }
+  if (selection=="alpha") {
+    if (length(levels(pmat$subjects))>1 && scale.subjects)
+      for (i in names(pmat)) pmat[,i] <- do_scale(pmat[,c("subjects",i)])
+    pmat <- pmat[,-1]
+  }
+  if (dim(pmat)[1]>maxp) pmat <- pmat[sample(dim(pmat)[1],maxp),]
+  if (do_plot) suppressWarnings(
+    pairs(pmat,diag.panel = panel.hist,upper.panel = panel.cor))
+    rs <- cor(pmat)
+  r.names <- outer(dimnames(rs)[[1]],dimnames(rs)[[2]],paste,sep="~")[upper.tri(rs)]
+  rs <- rs[upper.tri(rs)]
+  names(rs) <- r.names
+  invisible(rs)
+}
+
 profile_pmwg <- function(pname,p,p_min,p_max,dadm,n_point=100,main="",cores=1)
 
 {

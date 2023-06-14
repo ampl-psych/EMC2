@@ -45,11 +45,12 @@ prior_samples <- function(samps,type=c("mu","variance","covariance","correlation
 #' @export
 #'
 #' @examples
-plot_prior <- function(prior, type = NULL){
+plot_prior <- function(prior, type = NULL,add_density=FALSE,adjust=1,breaks=50,
+                       layout=c(3,3)){
   if(is.null(type)) type <- names(prior)
   for(typ in type){
     samples <- prior[["alpha"]]
-    par(mfrow = c(3,3))
+    par(mfrow = layout)
     par_names <- colnames(samples)
     for(i in 1:ncol(samples)){
       if(!any(samples[,i] < 0) || !any(samples[,i] > 0)){
@@ -58,8 +59,9 @@ plot_prior <- function(prior, type = NULL){
         quants <- quantile(abs(samples[,i]), probs = 0.995)
       }
       filtered <- samples[,i][abs(samples[,i]) < quants]
-      hist(filtered, breaks = 50, main = par_names[i], prob = T, xlab = type, cex.lab = 1.25, cex.main = 1.5)
-      lines(density(filtered), col = "red")
+      hist(filtered, breaks = breaks, main = par_names[i], prob = TRUE,
+           xlab = type, cex.lab = 1.25, cex.main = 1.5)
+      if (add_density) lines(density(filtered,adjust=adjust), col = "red")
     }
   }
 }
