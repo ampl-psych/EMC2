@@ -711,6 +711,62 @@ get_variant_funs <- function(type = "standard") {
   return(list_fun)
 }
 
+
+# calc_ll_manager <- function(proposals, dadm, ll_func, component = NULL, ...){
+#   if(!is.data.frame(dadm)){
+#     lls <- log_likelihood_joint(proposals, dadm, component)
+#   } else{
+#     c_name <- attr(dadm,"model")()$c_name
+#     if(is.null(c_name)){ # use the R implementation
+#       #### SM ADDITIONS
+#       dots <- list(...)
+#       if('predictionErrors' %in% names(dots)) {
+#         lls <- vector(mode='numeric', length=nrow(proposals))
+#         for(p in 1:nrow(proposals)) {
+#           lls[p] <- ll_func(proposals[p,], dadm, predictionErrors=dots$predictionErrors[,p])
+#         }
+#         # lls <- apply(proposals,1, ll_func, dadm = dadm, predictionErrors = dots$predictionErrors)
+#       } else if('hasPEs' %in% names(dots)) {
+#         PEs <- matrix(NA, ncol=nrow(proposals), nrow=length(unique(dadm$trials)))
+#         lls <- vector(mode='numeric', length=nrow(proposals))
+#         for(p in 1:nrow(proposals)) {
+#           this_ll <- ll_func(proposals[p,], dadm)
+#           lls[p] <- this_ll
+#           PEs[,p] <- attr(this_ll, 'predictionErrors')
+#         }
+#         attr(lls, 'predictionErrors') <- PEs
+#       } else {
+#         #### END SM ADDITIONS
+#         lls <- apply(proposals,1, ll_func, dadm = dadm)
+#       }
+#
+#     } else{
+#       p_types <- attr(dadm,"model")()$p_types
+#       designs <- list()
+#       for(p in p_types){
+#         designs[[p]] <- attr(dadm,"designs")[[p]][attr(attr(dadm,"designs")[[p]],"expand"),,drop=FALSE]
+#       }
+#       constants <- attr(dadm, "constants")
+#       if(is.null(constants)) constants <- NA
+#       n_trials = nrow(dadm)
+#       if(c_name == "DDM"){
+#         levels(dadm$R) <- c(0,1)
+#         pars <- get_pars(proposals[1,],dadm)
+#         pars <- cbind(pars, dadm$R)
+#         parameter_char <- apply(pars, 1, paste0, collapse = "\t")
+#         parameter_factor <- factor(parameter_char, levels = unique(parameter_char))
+#         parameter_indices <- split(seq_len(nrow(pars)), f = parameter_factor)
+#         names(parameter_indices) <- 1:length(parameter_indices)
+#       } else{
+#         parameter_indices <- list()
+#       }
+#       lls <- calc_ll(proposals, dadm, constants = constants, n_trials = n_trials, designs = designs, type = c_name, p_types = p_types,
+#                      min_ll = log(1e-10), winner = dadm$winner, expand = attr(dadm, "expand"), group_idx = parameter_indices)
+#     }
+#   }
+#   return(lls)
+# }
+
 calc_ll_manager <- function(proposals, dadm, ll_func, component = NULL){
   if(!is.data.frame(dadm)){
     lls <- log_likelihood_joint(proposals, dadm, component)
