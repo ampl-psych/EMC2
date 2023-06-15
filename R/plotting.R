@@ -851,7 +851,7 @@ check_run <- function(samples,pdf_name="check_run.pdf",interactive=TRUE,
                         print_summary = FALSE,thin=thin),2))
     cat("\nIntegrated autocorrelation time\n")
     iat_pmwg(samples,selection="mu",filter=filter,subfilter=subfilter,thin=thin)
-    cat("\nEffectvie Size\n")
+    cat("\nEffective Size\n")
     es_pmwg(samples,selection="mu",filter=filter,subfilter=subfilter,thin=thin)
     plot_chains(samples,selection="mu",layout=layout,filter=filter,
                 subfilter=subfilter,thin=thin)
@@ -862,7 +862,7 @@ check_run <- function(samples,pdf_name="check_run.pdf",interactive=TRUE,
                         subfilter=subfilter,print_summary = FALSE),2))
     cat("\nIntegrated autocorrelation time\n")
     iat_pmwg(samples,selection="variance",filter=filter,subfilter=subfilter,thin=thin)
-    cat("\nEffectvie Size\n")
+    cat("\nEffective Size\n")
     round(es_pmwg(samples,selection="variance",filter=filter,subfilter=subfilter,thin=thin))
     plot_chains(samples,selection="variance",layout=layout,filter=filter,
                 subfilter=subfilter,thin=thin)
@@ -875,7 +875,7 @@ check_run <- function(samples,pdf_name="check_run.pdf",interactive=TRUE,
     cat("\nIntegrated autocorrelation time\n")
     iat_pmwg(samples,selection="correlation",filter=filter,subfilter=subfilter,thin=thin)
     if (interactive) readline("Enter for next correlation check")
-    cat("\nEffectvie Size\n")
+    cat("\nEffective Size\n")
     round(es_pmwg(samples,selection="correlation",filter=filter,subfilter=subfilter,thin=thin))
     plot_chains(samples,selection="correlation",layout=layout,ylim=c(-1,1),filter=filter,
                 subfilter=subfilter,thin=thin)
@@ -888,14 +888,14 @@ check_run <- function(samples,pdf_name="check_run.pdf",interactive=TRUE,
   cat("\nIntegrated autocorrelation time\n")
   iat_pmwg(samples,selection="alpha",filter=filter,subfilter=subfilter,thin=thin)
   if (any(names(samples[[1]]$samples)=="theta_mu")) {
-    cat("\nEffectvie Size (minimum)\n")
+    cat("\nEffective Size (minimum)\n")
     round(es_pmwg(samples,selection="alpha",summary_alpha=min,filter=filter,
                   subfilter=subfilter,thin=thin))
     cat("\nEffectvie Size (mean)\n")
     round(es_pmwg(samples,selection="alpha",summary_alpha=mean,filter=filter,
                   subfilter=subfilter,thin=thin))
   } else {
-    cat("\nEffectvie Size\n")
+    cat("\nEffective Size\n")
     round(es_pmwg(samples,selection="alpha",summary_alpha=mean,filter=filter,
                   subfilter=subfilter,thin=thin))
   }
