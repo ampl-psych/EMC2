@@ -26,7 +26,7 @@ add_info_single <- function(sampler, prior = NULL, ...){
 #' @export
 #'
 #' @examples
-get_prior_single <- function(prior = NULL, n_pars = NULL, sample = T, N = 1e5, type = "alpha", design = NULL){
+get_prior_single <- function(prior = NULL, n_pars = NULL, sample = T, N = 1e5, type = "mu", design = NULL){
   if(is.null(prior)){
     prior <- list()
   }
@@ -40,7 +40,7 @@ get_prior_single <- function(prior = NULL, n_pars = NULL, sample = T, N = 1e5, t
     prior$theta_mu_var <- diag(rep(1, n_pars))
   }
   if(sample){
-    if(type != "alpha") stop("for variant single, only mu can be specified")
+    if(type != "mu") stop("for variant single, only mu can be specified")
     samples <- mvtnorm::rmvnorm(N, prior$theta_mu_mean, prior$theta_mu_var)
     if(!is.null(design)){
       colnames(samples) <- names(attr(design, "p_vector"))

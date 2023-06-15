@@ -2,9 +2,14 @@ prior_samples_alpha <- function(theta_mu,theta_var,n=1e3)
   # samples from prior for alpha implied by hyper model
   # (mixture over hyper posterior samples)
 {
-  t(sapply(sample.int(dim(theta_mu)[2],n,TRUE),function(x){
-    mvtnorm::rmvnorm(1,theta_mu[x,],theta_var[,,x])
-  }))
+  if(is.null(dim(theta_mu))){
+    out <- mvtnorm::rmvnorm(n,theta_mu,theta_var)
+  } else{
+    out <- t(sapply(sample.int(dim(theta_mu)[2],n,TRUE),function(x){
+      mvtnorm::rmvnorm(1,theta_mu[x,],theta_var[,,x])
+    }))
+  }
+  return(out)
 }
 
 
@@ -71,23 +76,33 @@ get_prior_samples <- function(samples,selection,filter,thin,subfilter,n_prior)
 {
   if (inherits(samples, "pmwgs")) samps <- samples else samps <- samples[[1]]
   if (selection=="alpha") {
-    if (inherits(samples, "pmwgs")) {
-      theta_mu <- as_Mcmc(samples,selection="mu",filter=filter,
-                          thin=thin,subfilter=subfilter)
-      theta_var <- get_sigma(samples,filter=filter,
-                             thin=thin,subfilter=subfilter)
-    } else {
-      theta_mu <- do.call(rbind,as_mcmc.list(samples,selection="mu",
-                                             filter=filter,thin=thin,subfilter=subfilter))
-      theta_var <-   abind(lapply(samples,get_sigma,filter=filter,thin=thin,subfilter=subfilter))
+    if(!is.null(samples[[1]]$samples$theta_mu)){
+      if (inherits(samples, "pmwgs")) {
+        theta_mu <- as_Mcmc(samples,selection="mu",filter=filter,
+                            thin=thin,subfilter=subfilter)
+        theta_var <- get_sigma(samples,filter=filter,
+                               thin=thin,subfilter=subfilter)
+      } else {
+        theta_mu <- do.call(rbind,as_mcmc.list(samples,selection="mu",
+                                               filter=filter,thin=thin,subfilter=subfilter))
+        theta_var <-   abind(lapply(samples,get_sigma,filter=filter,thin=thin,subfilter=subfilter))
+      }
+      psamples <- prior_samples_alpha(theta_mu,theta_var,n_prior)
+      colnames(psamples) <- colnames(theta_mu)
+    } else{
+      theta_mu <- samples[[1]]$prior$theta_mu_mean
+      theta_var <- samples[[1]]$prior$theta_mu_var
+      psamples <- prior_samples_alpha(theta_mu,theta_var,n_prior)
+      colnames(psamples) <- samples[[1]]$par_names
     }
-    psamples <- prior_samples_alpha(theta_mu,theta_var,n_prior)
-    colnames(psamples) <- colnames(theta_mu)
+
+
     return(psamples)
   } else {
-    if (attr(samps, "variant_funs")$type != "standard") {
-      warnings("Prior plot not yet implemented for this type")
-      return(NULL)
-    } else return(prior_samples(samps,selection,n_prior))
+    variant_funs <- attr(samples[[1]], "variant_funs")
+    design <- list(model = attr(samples[[1]]$data[[1]], "model"))
+    attr(design, "p_vector") <- samplers[[1]]$samples$alpha[,1,1] # just need the names in the right format
+    psamples <- variant_funs$get_prior(design = design, N = n_prior, prior = samples[[1]]$prior, type = selection, map = FALSE)[[1]]
+    return(psamples)
   }
 }

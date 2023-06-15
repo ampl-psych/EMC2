@@ -20,10 +20,14 @@ add_info_standard <- function(sampler, prior = NULL, ...){
   return(sampler)
 }
 
-get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = T, N = 1e5, type = "mu"){
+get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = T, N = 1e5, type = "mu", design = NULL,
+                               map = TRUE){
   # Checking and default priors
   if(is.null(prior)){
     prior <- list()
+  }
+  if(!is.null(design)){
+    n_pars <- length(attr(design, "p_vector"))
   }
   if (is.null(prior$theta_mu_mean)) {
     prior$theta_mu_mean <- rep(0, n_pars)
@@ -49,9 +53,12 @@ get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = T, N = 1e5,
                               sigma = prior$theta_mu_var)
       if(!is.null(design)){
         colnames(samples) <- par_names <- names(attr(design, "p_vector"))
-        samples[,colnames(samples) %in% design$model()$p_types] <- design$model()$Ntransform(samples[,colnames(samples) %in% design$model()$p_types])
+        if(map){
+          samples[,colnames(samples) %in% design$model()$p_types] <- design$model()$Ntransform(samples[,colnames(samples) %in% design$model()$p_types])
+        }
       }
       out$mu <- samples
+      return(out)
     } else {
       var <- array(NA_real_, dim = c(n_pars, n_pars, N))
       for(i in 1:N){
@@ -64,11 +71,10 @@ get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = T, N = 1e5,
       if (type == "correlation"){
         corrs <- array(apply(var,3,cov2cor),dim=dim(var),dimnames=dimnames(var))
         out$correlation <- t(apply(corrs,3,function(x){x[lt]}))
-        if(!is.null(design)){
-          colnames(samples) <- names(attr(design, "p_vector"))
-        }
       }
-      out$covariance <- t(apply(var,3,function(x){x[lt]}))
+      if(type == "covariance"){
+        out$covariance <- t(apply(var,3,function(x){x[lt]}))
+      }
       return(out)
     }
   }

@@ -589,6 +589,7 @@ get_variant_funs <- function(type = "standard") {
   if(type == "standard") {
     list_fun <- list(# store functions
       sample_store = sample_store_standard,
+      get_prior = get_prior_standard,
       add_info = add_info_standard,
       get_startpoints = get_startpoints_standard,
       get_group_level = get_group_level_standard,
@@ -603,6 +604,7 @@ get_variant_funs <- function(type = "standard") {
   } else if(type == "single"){
     list_fun <- list(# store functions
       sample_store = sample_store_base,
+      get_prior = get_prior_single,
       add_info = add_info_single,
       get_startpoints = get_startpoints_single,
       get_group_level = get_group_level_single,
@@ -618,6 +620,7 @@ get_variant_funs <- function(type = "standard") {
     list_fun <- list(# store functions
       sample_store = sample_store_standard,
       add_info = add_info_blocked,
+      get_prior = get_prior_blocked,
       get_startpoints = get_startpoints_blocked,
       get_group_level = get_group_level_standard,
       fill_samples = fill_samples_standard,

@@ -33,14 +33,17 @@ prior <- list(
   theta_mu_var = diag(c(5:1))
 ) # This way we're using default priors for the nuisance parameters
 
-dat2 <- dat[dat$subjects %in% unique(dat$subjects)[1:2],]
+dat2 <- dat[dat$subjects %in% unique(dat$subjects)[1:4],]
 dat2$subjects <- droplevels(dat2$subjects)
 
 # Nuisance non hyper = non hierarchically estimated parameters
 devtools::load_all()
 
-samplers <- make_samplers(dat2, design_B, type = "single")
-samplers <- auto_burn(samplers, verbose = T, cores_for_chains = 3, cores_per_chain = 2)
+samplers <- make_samplers(dat2, design_B, type = "standard")
+samplers <- auto_burn(samplers, verbose = T, cores_for_chains = 3, cores_per_chain = 4)
+
+undebug(plot_density)
+test <- plot_density(samplers, filter = "burn", selection = "correlation")
 
 debug(IS2)
 samplers <- run_IS2(samplers, filter = "burn")
