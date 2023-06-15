@@ -10,6 +10,7 @@ check_run(
   interactive = TRUE,
   filter = "sample",
   subfilter = 0,
+  thin = 1,
   layout = c(3, 4),
   width = NULL,
   height = NULL

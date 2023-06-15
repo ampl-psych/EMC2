@@ -13,33 +13,33 @@ prior_samples_alpha <- function(theta_mu,theta_var,n=1e3)
 }
 
 
-prior_samples <- function(samps,type=c("mu","variance","covariance","correlation","sigma")[1],n=1e4)
-  # Samples from prior for standard at hyper levels for three types,
-  # or for single at subject level (in which case type="mu")
-{
-  if (type=="mu") {
-    out <- mvtnorm::rmvnorm(n, mean = samps$prior$theta_mu_mean,
-                            sigma = samps$prior$theta_mu_var)
-    dimnames(out)[[2]] <- samps$par_names
-    return(out)
-  } else {
-    var <- array(NA_real_, dim = c(samps$n_pars, samps$n_pars, n),
-                 dimnames = list(samps$par_names, samps$par_names, NULL))
-    # Can't specify n in riwish?
-    hyper <- attributes(samps)
-    for(i in 1:n){
-      a_half <- 1 / rgamma(n = samps$n_pars,shape = 1/2,
-                           rate = 1/(hyper$A_half^2))
-      var[,,i] <- riwish(hyper$v_half + samps$n_pars - 1, 2 * hyper$v_half * diag(1 / a_half))
-    }
-    if (type=="sigma") return(var)
-    if (type=="variance") return(t(apply(var,3,diag)))
-    if (type=="correlation")
-      var <- array(apply(var,3,cov2cor),dim=dim(var),dimnames=dimnames(var))
-    lt <- lower.tri(var[,,1])
-    return(t(apply(var,3,function(x){x[lt]})))
-  }
-}
+# prior_samples <- function(samps,type=c("mu","variance","covariance","correlation","sigma")[1],n=1e4)
+#   # Samples from prior for standard at hyper levels for three types,
+#   # or for single at subject level (in which case type="mu")
+# {
+#   if (type=="mu") {
+#     out <- mvtnorm::rmvnorm(n, mean = samps$prior$theta_mu_mean,
+#                             sigma = samps$prior$theta_mu_var)
+#     dimnames(out)[[2]] <- samps$par_names
+#     return(out)
+#   } else {
+#     var <- array(NA_real_, dim = c(samps$n_pars, samps$n_pars, n),
+#                  dimnames = list(samps$par_names, samps$par_names, NULL))
+#     # Can't specify n in riwish?
+#     hyper <- attributes(samps)
+#     for(i in 1:n){
+#       a_half <- 1 / rgamma(n = samps$n_pars,shape = 1/2,
+#                            rate = 1/(hyper$A_half^2))
+#       var[,,i] <- riwish(hyper$v_half + samps$n_pars - 1, 2 * hyper$v_half * diag(1 / a_half))
+#     }
+#     if (type=="sigma") return(var)
+#     if (type=="variance") return(t(apply(var,3,diag)))
+#     if (type=="correlation")
+#       var <- array(apply(var,3,cov2cor),dim=dim(var),dimnames=dimnames(var))
+#     lt <- lower.tri(var[,,1])
+#     return(t(apply(var,3,function(x){x[lt]})))
+#   }
+# }
 
 #' Convenience function to plot from the prior
 #'
@@ -95,8 +95,6 @@ get_prior_samples <- function(samples,selection,filter,thin,subfilter,n_prior)
       psamples <- prior_samples_alpha(theta_mu,theta_var,n_prior)
       colnames(psamples) <- samples[[1]]$par_names
     }
-
-
     return(psamples)
   } else {
     variant_funs <- attr(samples[[1]], "variant_funs")
