@@ -827,6 +827,7 @@ plot_trials <- function(data,pp=NULL,subject=NULL,factors=NULL,Fcovariates=NULL,
 #' @param interactive
 #' @param filter
 #' @param subfilter
+#' @param thin
 #' @param layout
 #' @param width
 #' @param height
@@ -836,58 +837,70 @@ plot_trials <- function(data,pp=NULL,subject=NULL,factors=NULL,Fcovariates=NULL,
 #'
 #' @examples
 check_run <- function(samples,pdf_name="check_run.pdf",interactive=TRUE,
-                      filter="sample",subfilter=0,
+                      filter="sample",subfilter=0,thin=1,
                       layout=c(3,4),width=NULL,height=NULL) {
   print(chain_n(samples))
   pdf(pdf_name,width=width,height=height)
-  plot_chains(samples,selection="LL",layout=layout,filter=filter,subfilter=subfilter)
+  plot_chains(samples,selection="LL",layout=layout,filter=filter,
+              subfilter=subfilter,thin=thin)
   if (any(names(samples[[1]]$samples)=="theta_mu")) {
   if (interactive) readline("Enter for mu check")
     cat("\n\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!! MU !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n")
     cat("\nR-hat\n")
-    print(round(gd_pmwg(samples,selection="mu",filter=filter,subfilter=subfilter,print_summary = FALSE),2))
+    print(round(gd_pmwg(samples,selection="mu",filter=filter,subfilter=subfilter,
+                        print_summary = FALSE,thin=thin),2))
     cat("\nIntegrated autocorrelation time\n")
-    iat_pmwg(samples,selection="mu",filter=filter,subfilter=subfilter)
+    iat_pmwg(samples,selection="mu",filter=filter,subfilter=subfilter,thin=thin)
     cat("\nEffectvie Size\n")
-    es_pmwg(samples,selection="mu",filter=filter,subfilter=subfilter)
-    plot_chains(samples,selection="mu",layout=layout,filter=filter,subfilter=subfilter)
+    es_pmwg(samples,selection="mu",filter=filter,subfilter=subfilter,thin=thin)
+    plot_chains(samples,selection="mu",layout=layout,filter=filter,
+                subfilter=subfilter,thin=thin)
     if (interactive) readline("Enter for variance check")
     cat("\n\n!!!!!!!!!!!!!!!!!!!!!!!!!! VARIANCE !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n")
     cat("\nR-hat\n")
-    print(round(gd_pmwg(samples,selection="variance",filter=filter,subfilter=subfilter,print_summary = FALSE),2))
+    print(round(gd_pmwg(samples,selection="variance",filter=filter,thin=thin,
+                        subfilter=subfilter,print_summary = FALSE),2))
     cat("\nIntegrated autocorrelation time\n")
-    iat_pmwg(samples,selection="variance",filter=filter,subfilter=subfilter)
+    iat_pmwg(samples,selection="variance",filter=filter,subfilter=subfilter,thin=thin)
     cat("\nEffectvie Size\n")
-    round(es_pmwg(samples,selection="variance",filter=filter,subfilter=subfilter))
-    plot_chains(samples,selection="variance",layout=layout,filter=filter,subfilter=subfilter)
+    round(es_pmwg(samples,selection="variance",filter=filter,subfilter=subfilter,thin=thin))
+    plot_chains(samples,selection="variance",layout=layout,filter=filter,
+                subfilter=subfilter,thin=thin)
     if (interactive) readline("Enter for correlation check")
     cat("\n\n!!!!!!!!!!!!!!!!!!!!!!!!! CORRELATION !!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n")
     cat("\nR-hat\n")
-    print(round(gd_pmwg(samples,selection="correlation",filter=filter,subfilter=subfilter,print_summary = FALSE),2))
+    print(round(gd_pmwg(samples,selection="correlation",filter=filter,subfilter=subfilter,
+                        print_summary = FALSE,thin=thin),2))
     if (interactive) readline("Enter for next correlation check")
     cat("\nIntegrated autocorrelation time\n")
-    iat_pmwg(samples,selection="correlation",filter=filter,subfilter=subfilter)
+    iat_pmwg(samples,selection="correlation",filter=filter,subfilter=subfilter,thin=thin)
     if (interactive) readline("Enter for next correlation check")
     cat("\nEffectvie Size\n")
-    round(es_pmwg(samples,selection="correlation",filter=filter,subfilter=subfilter))
-    plot_chains(samples,selection="correlation",layout=layout,ylim=c(-1,1),filter=filter,subfilter=subfilter)
+    round(es_pmwg(samples,selection="correlation",filter=filter,subfilter=subfilter,thin=thin))
+    plot_chains(samples,selection="correlation",layout=layout,ylim=c(-1,1),filter=filter,
+                subfilter=subfilter,thin=thin)
     if (interactive) readline("Enter for alpha check")
   }
   cat("\n\n!!!!!!!!!!!!!!!!!!!!!!!!!!!! ALPHA !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n")
   cat("\nR-hat\n")
-  print(round(gd_pmwg(samples,selection="alpha",filter=filter,subfilter=subfilter,print_summary = FALSE),2))
+  print(round(gd_pmwg(samples,selection="alpha",filter=filter,subfilter=subfilter,
+                      print_summary = FALSE,thin=thin),2))
   cat("\nIntegrated autocorrelation time\n")
-  iat_pmwg(samples,selection="alpha",filter=filter,subfilter=subfilter)
+  iat_pmwg(samples,selection="alpha",filter=filter,subfilter=subfilter,thin=thin)
   if (any(names(samples[[1]]$samples)=="theta_mu")) {
     cat("\nEffectvie Size (minimum)\n")
-    round(es_pmwg(samples,selection="alpha",summary_alpha=min,filter=filter,subfilter=subfilter))
+    round(es_pmwg(samples,selection="alpha",summary_alpha=min,filter=filter,
+                  subfilter=subfilter,thin=thin))
     cat("\nEffectvie Size (mean)\n")
-    round(es_pmwg(samples,selection="alpha",summary_alpha=mean,filter=filter,subfilter=subfilter))
+    round(es_pmwg(samples,selection="alpha",summary_alpha=mean,filter=filter,
+                  subfilter=subfilter,thin=thin))
   } else {
     cat("\nEffectvie Size\n")
-    round(es_pmwg(samples,selection="alpha",summary_alpha=mean,filter=filter,subfilter=subfilter))
+    round(es_pmwg(samples,selection="alpha",summary_alpha=mean,filter=filter,
+                  subfilter=subfilter,thin=thin))
   }
-  plot_chains(samples,selection="alpha",layout=layout,filter=filter,subfilter=subfilter)
+  plot_chains(samples,selection="alpha",layout=layout,filter=filter,
+              subfilter=subfilter,thin=thin)
   dev.off()
   message("\n\nGraphical checks available in ",pdf_name)
 }
