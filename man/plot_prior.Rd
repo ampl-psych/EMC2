@@ -10,13 +10,16 @@ plot_prior(
   add_density = FALSE,
   adjust = 1,
   breaks = 50,
-  layout = c(3, 3)
+  layout = c(3, 3),
+  upper = NULL
 )
 }
 \arguments{
 \item{prior}{A list of prior samples}
 
-\item{type}{Optional. Otherwised inferred from the prior samples}
+\item{type}{Optional. Otherwise inferred from the prior samples}
+
+\item{upper}{}
 }
 \value{
 NULL. Makes a plot of the prior samples

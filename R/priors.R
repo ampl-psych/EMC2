@@ -44,24 +44,31 @@ prior_samples_alpha <- function(theta_mu,theta_var,n=1e3)
 #' Convenience function to plot from the prior
 #'
 #' @param prior A list of prior samples
-#' @param type Optional. Otherwised inferred from the prior samples
+#' @param type Optional. Otherwise inferred from the prior samples
+#' @param add_density
+#' @param adjust
+#' @param breaks
+#' @param layout
+#' @param upper
 #'
 #' @return NULL. Makes a plot of the prior samples
 #' @export
 #'
 #' @examples
 plot_prior <- function(prior, type = NULL,add_density=FALSE,adjust=1,breaks=50,
-                       layout=c(3,3)){
+                       layout=c(3,3),upper=NULL){
   if(is.null(type)) type <- names(prior)
   for(typ in type){
     samples <- prior[["alpha"]]
     par(mfrow = layout)
     par_names <- colnames(samples)
+    uppers <- setNames(rep(.999,length(par_names)),par_names)
+    if (!is.null(upper)) uppers[names(upper)] <- upper
     for(i in 1:ncol(samples)){
       if(!any(samples[,i] < 0) || !any(samples[,i] > 0)){
-        quants <- quantile(abs(samples[,i]), probs = 0.95)
+        quants <- quantile(abs(samples[,i]), probs = uppers[i])
       } else{
-        quants <- quantile(abs(samples[,i]), probs = 0.995)
+        quants <- quantile(abs(samples[,i]), probs = uppers[i])
       }
       filtered <- samples[,i][abs(samples[,i]) < quants]
       hist(filtered, breaks = breaks, main = par_names[i], prob = TRUE,
