@@ -523,9 +523,11 @@ make_dm <- function(form,da,Clist=NULL,Fcovariates=NULL)
     nl <- length(levs)
     if (class(Clist[[i]])[1]=="function")
       stats::contrasts(da[[i]]) <- do.call(Clist[[i]],list(n=levs)) else {
-        if (!is.matrix(Clist[[i]]) || dim(Clist[[i]])[1]!=nl)
-          stop("Clist for",i,"not a",nl,"x",nl-1,"matrix")
-        dimnames(Clist[[i]])[[1]] <- levs
+        if (!is.matrix(Clist[[i]]) || dim(Clist[[i]])[1]!=nl) {
+          if (all(levs %in% row.names(Clist[[i]]))) # design with missing cells
+            Clist[[i]] <- Clist[[i]][levs,] else
+            stop("Clist for ",i," not a ",nl," row matrix")
+        } else dimnames(Clist[[i]])[[1]] <- levs
         stats::contrasts(da[[i]],how.many=dim(Clist[[i]])[2]) <- Clist[[i]]
       }
   }

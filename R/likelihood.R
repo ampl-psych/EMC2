@@ -3,6 +3,10 @@ log_likelihood_race <- function(p_vector,dadm,min_ll=log(1e-10))
 {
 
   pars <- get_pars(p_vector,dadm)
+
+  if (any(names(dadm)=="NACC")) # Some accumulators not present
+    pars[as.numeric(dadm$lR)>dadm$NACC,] <- NA
+
   if (is.null(attr(pars,"ok")))
     ok <- !logical(dim(pars)[1]) else ok <- attr(pars,"ok")
 
