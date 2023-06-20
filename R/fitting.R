@@ -120,7 +120,7 @@ run_samplers <- function(samplers, stage, iter = NULL, max_gd = NULL, mean_gd = 
   while(!progress$done){
     if(!is.numeric(progress$step_size) | progress$step_size < 1) warning("Something wrong with the stepsize again, Niek's to blame")
     samplers <- add_proposals(samplers, stage, cores_per_chain, n_blocks)
-    samplers <- parallel::mclapply(samplers,run_stages, stage = stage, iter= progress$step_size,
+    samplers <- auto_mclapply(samplers,run_stages, stage = stage, iter= progress$step_size,
                                    verbose=verbose,  verboseProgress = verboseProgress,
                                    particles=particles,particle_factor=particle_factor,
                                    p_accept=p_accept, n_cores=cores_per_chain, mc.cores = cores_for_chains)
@@ -202,7 +202,10 @@ check_progress <- function (samplers, stage, iter, max_gd, mean_gd, min_es, min_
   }
   trys_done <- ifelse(is.null(max_trys), FALSE, trys >= max_trys)
   if (trys_done) {
-    warning("Max trys reached. If this happens in burn-in while trying to get gelman diagnostics < 1.2, you might have a particularly hard model. Make sure your model is well specified. If so, you can run adapt and sample, if run for long enough, sample usually converges eventually.")
+    warning("Max trys reached. If this happens in burn-in while trying to get
+            gelman diagnostics small enough, you might have a particularly hard model.
+            Make sure your model is well specified. If so, you can run adapt and
+            sample, if run for long enough, sample usually converges eventually.")
   }
   if (stage == "adapt") {
     samples_merged <- merge_samples(samplers)
@@ -271,11 +274,11 @@ create_eff_proposals <- function(samplers, n_cores){
       nuis_idx <- nuisance[idx]
       if(any(nuis_idx)){
         type <- samples_merged$sampler_nuis$type
-        conditionals <- parallel::mclapply(X = 1:n_subjects,
+        conditionals <- auto_mclapply(X = 1:n_subjects,
                                            FUN = variant_funs$get_conditionals,samples = test_samples,
                                            n_pars = sum(idx[!nuis_idx]), iteration =  iteration, idx = idx[!nuis_idx],
                                            mc.cores = n_cores)
-        conditionals_nuis <- parallel::mclapply(X = 1:n_subjects,
+        conditionals_nuis <- auto_mclapply(X = 1:n_subjects,
                                            FUN = get_variant_funs(type)$get_conditionals,samples = test_samples$nuisance,
                                            n_pars = sum(idx[nuis_idx]), iteration =  iteration, idx = idx[nuis_idx],
                                            mc.cores = n_cores)
@@ -286,7 +289,7 @@ create_eff_proposals <- function(samplers, n_cores){
         eff_mu[idx & nuis_idx,] <- conditionals_nuis[,1,]
         eff_var[idx & nuis_idx,idx & nuis_idx,] <- conditionals_nuis[,2:(sum(idx[nuis_idx])+1),]
       } else{
-        conditionals <- parallel::mclapply(X = 1:n_subjects,
+        conditionals <- auto_mclapply(X = 1:n_subjects,
                                            FUN = variant_funs$get_conditionals,samples = test_samples,
                                            n_pars = sum(idx), iteration =  iteration, idx = idx,
                                            mc.cores = n_cores)
@@ -412,12 +415,12 @@ test_adapted <- function(sampler, test_samples, min_unique, n_cores_conditional 
           nuis_idx <- nuisance[idx]
           if(any(nuis_idx)){
             type <- sampler$sampler_nuis$type
-            parallel::mclapply(X = 1:sampler$n_subjects,
+            auto_mclapply(X = 1:sampler$n_subjects,
                                FUN = get_variant_funs(type)$get_conditionals,samples = test_samples$nuisance,
                                n_pars = sum(idx[nuisance]), idx = idx[nuis_idx],
                                mc.cores = n_cores_conditional)
           }
-          parallel::mclapply(X = 1:sampler$n_subjects,FUN = variant_funs$get_conditionals,samples = test_samples,
+          auto_mclapply(X = 1:sampler$n_subjects,FUN = variant_funs$get_conditionals,samples = test_samples,
                          n_pars = sum(idx[!nuis_idx]), idx = idx[!nuis_idx], mc.cores = n_cores_conditional)
         }
     },error=function(e) e, warning=function(w) w)
@@ -744,4 +747,16 @@ run_IS2 <- function(samplers, filter = "sample", subfilter = 0, IS_samples = 100
   IS_samples <- IS2(samples_merged, filter, subfilter = subfilter, IS_samples, stepsize_particles, max_particles, n_cores, df)
   attr(samplers, "IS_samples") <- IS_samples
   return(samplers)
+}
+
+
+auto_mclapply <- function(X, FUN, mc.cores, ...){
+  if(Sys.info()[1] == "Windows"){
+    cluster <- parallel::makeCluster(mc.cores)
+    list_out <- parallel::parLapply(cl = cluster, X,FUN, ...)
+    parallel::stopCluster(cluster)
+  } else{
+    list_out <- parallel::mclapply(X, FUN, mc.cores = mc.cores, ...)
+  }
+  return(list_out)
 }

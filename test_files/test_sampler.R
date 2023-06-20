@@ -1,6 +1,5 @@
 rm(list=ls())
-devtools::install("~/Documents/UVA/2022/EMC2/")
-
+devtools::load_all()
 print(load("test_files/PNAS.RData"))
 dat <- data[,c("s","E","S","R","RT")]
 names(dat)[c(1,5)] <- c("subjects","rt")
@@ -26,6 +25,8 @@ design_B <- make_design(
   constants=c(sv=log(1)),
   model=lbaB)
 
+prior <- get_prior_single(design = design_B)
+plot_prior(prior)
 
 prior <- list(
   theta_mu_mean = 1:5,
@@ -36,8 +37,17 @@ dat2 <- dat[dat$subjects %in% unique(dat$subjects)[1:4],]
 dat2$subjects <- droplevels(dat2$subjects)
 
 # Nuisance non hyper = non hierarchically estimated parameters
+devtools::load_all()
+
 samplers <- make_samplers(dat2, design_B, type = "standard")
-samplers <- auto_burn(samplers, verbose = T, cores_for_chains = 3, cores_per_chain = 2)
+samplers <- auto_burn(samplers, verbose = T, cores_for_chains = 3, cores_per_chain = 4)
+
+undebug(plot_density)
+test <- plot_density(samplers, filter = "burn", selection = "correlation")
+
+debug(IS2)
+samplers <- run_IS2(samplers, filter = "burn")
+
 
 debug(test_adapted)
 samplers <- run_adapt(samplers, cores_for_chains = 3, cores_per_chain = 2, verbose = T, min_unique = 50)

@@ -16,14 +16,18 @@ sample_store_standard <- function(data, par_names, iters = 1, stage = "init", in
 }
 
 add_info_standard <- function(sampler, prior = NULL, ...){
-  sampler$prior <- get_prior_standard(prior, sum(!(sampler$nuisance | sampler$grouped)))
+  sampler$prior <- get_prior_standard(prior, sum(!(sampler$nuisance | sampler$grouped)), sample = F)
   return(sampler)
 }
 
-get_prior_standard <- function(prior = NULL, n_pars = NULL, par_names = NULL, sample = F, N = 1e5, type = "mu"){
+get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = T, N = 1e5, type = "mu", design = NULL,
+                               map = TRUE){
   # Checking and default priors
   if(is.null(prior)){
     prior <- list()
+  }
+  if(!is.null(design)){
+    n_pars <- length(attr(design, "p_vector"))
   }
   if (is.null(prior$theta_mu_mean)) {
     prior$theta_mu_mean <- rep(0, n_pars)
@@ -40,28 +44,38 @@ get_prior_standard <- function(prior = NULL, n_pars = NULL, par_names = NULL, sa
   # Things I save rather than re-compute inside the loops.
   prior$theta_mu_invar <- ginv(prior$theta_mu_var) #Inverse of the matrix
   if(sample){
+    out <- list()
     if(!type %in% c("mu", "variance", "covariance", "correlation")){
       stop("for variant standard, you can only specify the prior on the mean, variance, covariance or the correlation of the parameters")
     }
     if(type == "mu"){
       samples <- mvtnorm::rmvnorm(N, mean = prior$theta_mu_mean,
                               sigma = prior$theta_mu_var)
-      colnames(prior$samples) <- par_names
-      return(samples)
+      if(!is.null(design)){
+        colnames(samples) <- par_names <- names(attr(design, "p_vector"))
+        if(map){
+          samples[,colnames(samples) %in% design$model()$p_types] <- design$model()$Ntransform(samples[,colnames(samples) %in% design$model()$p_types])
+        }
+      }
+      out$mu <- samples
+      return(out)
     } else {
-      var <- array(NA_real_, dim = c(n_pars, n_pars, N),
-                   dimnames = list(par_names, par_names, NULL))
+      var <- array(NA_real_, dim = c(n_pars, n_pars, N))
       for(i in 1:N){
         a_half <- 1 / rgamma(n = n_pars,shape = 1/2,
                              rate = 1/(prior$A^2))
         var[,,i] <- riwish(prior$v + n_pars - 1, 2 * prior$v * diag(1 / a_half))
       }
-      if (type == "variance") return(t(apply(var,3,diag)))
-      if (type == "correlation"){
-        var <- array(apply(var,3,cov2cor),dim=dim(var),dimnames=dimnames(var))
-      }
+      if (type == "variance") out$variance <- t(apply(var,3,diag))
       lt <- lower.tri(var[,,1])
-      return(t(apply(var,3,function(x){x[lt]})))
+      if (type == "correlation"){
+        corrs <- array(apply(var,3,cov2cor),dim=dim(var),dimnames=dimnames(var))
+        out$correlation <- t(apply(corrs,3,function(x){x[lt]}))
+      }
+      if(type == "covariance"){
+        out$covariance <- t(apply(var,3,function(x){x[lt]}))
+      }
+      return(out)
     }
   }
   return(prior)

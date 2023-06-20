@@ -11,6 +11,7 @@ plot_fit(
   factors = NULL,
   stat = NULL,
   stat_name = "",
+  adjust = 1,
   ci = c(0.025, 0.5, 0.975),
   do_plot = TRUE,
   xlim = NULL,

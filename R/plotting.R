@@ -274,10 +274,10 @@ plot_defective_density <- function(data,subject=NULL,factors=NULL,
 #'
 #' @examples
 plot_density <- function(pmwg_mcmc,layout=c(2,3),
-                         selection="alpha",filter="sample",thin=1,subfilter=0,mapped=FALSE,
-                         plot_prior=TRUE,n_prior=1e3,xlim=NULL,ylim=NULL,
-                         show_chains=FALSE,do_plot=TRUE,subject=NA,add_means=FALSE,
-                         pars=NULL,probs=c(.025,.5,.975),bw = "nrd0", adjust = 1)
+  selection="alpha",filter="sample",thin=1,subfilter=0,mapped=FALSE,
+  plot_prior=TRUE,n_prior=1e3,xlim=NULL,ylim=NULL,
+  show_chains=FALSE,do_plot=TRUE,subject=NA,add_means=FALSE,
+  pars=NULL,probs=c(.025,.5,.975),bw = "nrd0", adjust = 1)
   # Plots density (if alpha can do individual subject, all by default)
   # If show_chains superimposes densities for each chain on same plot
   # invisibly returns tables of true and 95% CIs (for all chains combined
@@ -303,13 +303,8 @@ plot_density <- function(pmwg_mcmc,layout=c(2,3),
       dens
     } else density(ps,bw=bw,adjust=adjust)
   }
-
   if (show_chains & plot_prior)
     warning("Prior plots not implemented for show_chains=TRUE")
-  if (!is.na(subject) & plot_prior) {
-    warning("Can't plot prior for single subject.")
-    plot_prior <- FALSE
-  }
   if (!(inherits(pmwg_mcmc, c("mcmc","mcmc.list")))) {
     if (plot_prior) {
       psamples <- get_prior_samples(pmwg_mcmc,selection,filter,thin,subfilter,n_prior)
@@ -486,7 +481,7 @@ plot_density <- function(pmwg_mcmc,layout=c(2,3),
 #'
 #' @examples
 plot_fit <- function(data,pp,subject=NULL,factors=NULL,
-                     stat=NULL,stat_name="",
+                     stat=NULL,stat_name="",adjust=1,
                      ci=c(.025,.5,.975),do_plot=TRUE,
                      xlim=NULL,ylim=NULL,
                      layout=NULL,mfcol=TRUE,
@@ -531,7 +526,7 @@ plot_fit <- function(data,pp,subject=NULL,factors=NULL,
         ppi <- pp[pp_cells==i,]
         pred <- sapply(postn,function(x){stat(ppi[ppi$postn==x,])})
         if (do_plot) {
-          dens <- density(pred)
+          dens <- density(pred,adjust=adjust)
           if (!is.null(xlim)) xlimi <- xlim else
             xlimi <- c(pmin(obs,min(dens$x)),pmax(obs,max(dens$x)))
           plot(dens,main=i,xlab=stat_name,xlim=xlimi)
@@ -587,7 +582,7 @@ plot_fit <- function(data,pp,subject=NULL,factors=NULL,
         ppi <- pp[pp_cells==i,]
         pred <- sapply(postn,function(x){stat(ppi[ppi$postn==x,])})
         if (do_plot) {
-          dens <- density(pred)
+          dens <- density(pred,adjust=adjust)
           if (!is.null(xlim)) xlimi <- xlim else
             xlimi <- c(pmin(obs,min(dens$x)),pmax(obs,max(dens$x)))
           plot(dens,main=i,xlab=stat_name,xlim=xlimi)
@@ -823,6 +818,7 @@ plot_trials <- function(data,pp=NULL,subject=NULL,factors=NULL,Fcovariates=NULL,
 #' @param interactive
 #' @param filter
 #' @param subfilter
+#' @param thin
 #' @param layout
 #' @param width
 #' @param height
@@ -832,53 +828,154 @@ plot_trials <- function(data,pp=NULL,subject=NULL,factors=NULL,Fcovariates=NULL,
 #'
 #' @examples
 check_run <- function(samples,pdf_name="check_run.pdf",interactive=TRUE,
-                      filter="sample",subfilter=0,
+                      filter="sample",subfilter=0,thin=1,
                       layout=c(3,4),width=NULL,height=NULL) {
   print(chain_n(samples))
   pdf(pdf_name,width=width,height=height)
-  plot_chains(samples,selection="LL",layout=layout,filter=filter,subfilter=subfilter)
+  plot_chains(samples,selection="LL",layout=layout,filter=filter,
+              subfilter=subfilter,thin=thin)
+  if (any(names(samples[[1]]$samples)=="theta_mu")) {
   if (interactive) readline("Enter for mu check")
-  cat("\n\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!! MU !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n")
-  cat("\nR-hat\n")
-  print(round(gd_pmwg(samples,selection="mu",filter=filter,subfilter=subfilter,print_summary = FALSE),2))
-  cat("\nIntegrated autocorrelation time\n")
-  iat_pmwg(samples,selection="mu",filter=filter,subfilter=subfilter)
-  cat("\nEffectvie Size\n")
-  es_pmwg(samples,selection="mu",filter=filter,subfilter=subfilter)
-  plot_chains(samples,selection="mu",layout=layout,filter=filter,subfilter=subfilter)
-  if (interactive) readline("Enter for variance check")
-  cat("\n\n!!!!!!!!!!!!!!!!!!!!!!!!!! VARIANCE !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n")
-  cat("\nR-hat\n")
-  print(round(gd_pmwg(samples,selection="variance",filter=filter,subfilter=subfilter,print_summary = FALSE),2))
-  cat("\nIntegrated autocorrelation time\n")
-  iat_pmwg(samples,selection="variance",filter=filter,subfilter=subfilter)
-  cat("\nEffectvie Size\n")
-  round(es_pmwg(samples,selection="variance",filter=filter,subfilter=subfilter))
-  plot_chains(samples,selection="variance",layout=layout,filter=filter,subfilter=subfilter)
-  if (interactive) readline("Enter for correlation check")
-  cat("\n\n!!!!!!!!!!!!!!!!!!!!!!!!! CORRELATION !!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n")
-  cat("\nR-hat\n")
-  print(round(gd_pmwg(samples,selection="correlation",filter=filter,subfilter=subfilter,print_summary = FALSE),2))
-  if (interactive) readline("Enter for next correlation check")
-  cat("\nIntegrated autocorrelation time\n")
-  iat_pmwg(samples,selection="correlation",filter=filter,subfilter=subfilter)
-  if (interactive) readline("Enter for next correlation check")
-  cat("\nEffectvie Size\n")
-  round(es_pmwg(samples,selection="correlation",filter=filter,subfilter=subfilter))
-  plot_chains(samples,selection="correlation",layout=layout,ylim=c(-1,1),filter=filter,subfilter=subfilter)
-  if (interactive) readline("Enter for alpha check")
+    cat("\n\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!! MU !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n")
+    cat("\nR-hat\n")
+    print(round(gd_pmwg(samples,selection="mu",filter=filter,subfilter=subfilter,
+                        print_summary = FALSE,thin=thin),2))
+    cat("\nIntegrated autocorrelation time\n")
+    iat_pmwg(samples,selection="mu",filter=filter,subfilter=subfilter,thin=thin)
+    cat("\nEffective Size\n")
+    es_pmwg(samples,selection="mu",filter=filter,subfilter=subfilter,thin=thin)
+    plot_chains(samples,selection="mu",layout=layout,filter=filter,
+                subfilter=subfilter,thin=thin)
+    if (interactive) readline("Enter for variance check")
+    cat("\n\n!!!!!!!!!!!!!!!!!!!!!!!!!! VARIANCE !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n")
+    cat("\nR-hat\n")
+    print(round(gd_pmwg(samples,selection="variance",filter=filter,thin=thin,
+                        subfilter=subfilter,print_summary = FALSE),2))
+    cat("\nIntegrated autocorrelation time\n")
+    iat_pmwg(samples,selection="variance",filter=filter,subfilter=subfilter,thin=thin)
+    cat("\nEffective Size\n")
+    round(es_pmwg(samples,selection="variance",filter=filter,subfilter=subfilter,thin=thin))
+    plot_chains(samples,selection="variance",layout=layout,filter=filter,
+                subfilter=subfilter,thin=thin)
+    if (interactive) readline("Enter for correlation check")
+    cat("\n\n!!!!!!!!!!!!!!!!!!!!!!!!! CORRELATION !!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n")
+    cat("\nR-hat\n")
+    print(round(gd_pmwg(samples,selection="correlation",filter=filter,subfilter=subfilter,
+                        print_summary = FALSE,thin=thin),2))
+    if (interactive) readline("Enter for next correlation check")
+    cat("\nIntegrated autocorrelation time\n")
+    iat_pmwg(samples,selection="correlation",filter=filter,subfilter=subfilter,thin=thin)
+    if (interactive) readline("Enter for next correlation check")
+    cat("\nEffective Size\n")
+    round(es_pmwg(samples,selection="correlation",filter=filter,subfilter=subfilter,thin=thin))
+    plot_chains(samples,selection="correlation",layout=layout,ylim=c(-1,1),filter=filter,
+                subfilter=subfilter,thin=thin)
+    if (interactive) readline("Enter for alpha check")
+  }
   cat("\n\n!!!!!!!!!!!!!!!!!!!!!!!!!!!! ALPHA !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n")
   cat("\nR-hat\n")
-  print(round(gd_pmwg(samples,selection="alpha",filter=filter,subfilter=subfilter,print_summary = FALSE),2))
+  print(round(gd_pmwg(samples,selection="alpha",filter=filter,subfilter=subfilter,
+                      print_summary = FALSE,thin=thin),2))
   cat("\nIntegrated autocorrelation time\n")
-  iat_pmwg(samples,selection="alpha",filter=filter,subfilter=subfilter)
-  cat("\nEffectvie Size (minimum)\n")
-  round(es_pmwg(samples,selection="alpha",summary_alpha=min,filter=filter,subfilter=subfilter))
-  cat("\nEffectvie Size (mean)\n")
-  round(es_pmwg(samples,selection="alpha",summary_alpha=mean,filter=filter,subfilter=subfilter))
-  plot_chains(samples,selection="alpha",layout=layout,filter=filter,subfilter=subfilter)
+  iat_pmwg(samples,selection="alpha",filter=filter,subfilter=subfilter,thin=thin)
+  if (any(names(samples[[1]]$samples)=="theta_mu")) {
+    cat("\nEffective Size (minimum)\n")
+    round(es_pmwg(samples,selection="alpha",summary_alpha=min,filter=filter,
+                  subfilter=subfilter,thin=thin))
+    cat("\nEffectvie Size (mean)\n")
+    round(es_pmwg(samples,selection="alpha",summary_alpha=mean,filter=filter,
+                  subfilter=subfilter,thin=thin))
+  } else {
+    cat("\nEffective Size\n")
+    round(es_pmwg(samples,selection="alpha",summary_alpha=mean,filter=filter,
+                  subfilter=subfilter,thin=thin))
+  }
+  plot_chains(samples,selection="alpha",layout=layout,filter=filter,
+              subfilter=subfilter,thin=thin)
   dev.off()
   message("\n\nGraphical checks available in ",pdf_name)
+}
+
+
+# filter="sample";thin=1;subfilter=0;mapped=FALSE
+# selection=c("alpha","mu","variance","covariance","correlation")[1]; stat=NULL
+# collapse.subjects=TRUE;scale.subjects=TRUE;use=NA;do_plot=TRUE
+#' Title
+#'
+#' @param samples
+#' @param filter
+#' @param thin
+#' @param subfilter
+#' @param mapped
+#' @param selection
+#' @param stat
+#' @param scale.subjects
+#' @param use
+#' @param do_plot
+#' @param maxp
+#'
+#' @return
+#' @export
+#'
+#' @examples
+pairs_posterior <- function(samples,filter="sample",thin=1,subfilter=0,mapped=FALSE,
+  selection=c("alpha","mu","variance","covariance","correlation")[1],stat=NULL,
+  scale.subjects=TRUE,use=NA,do_plot=TRUE,maxp=500)
+{
+
+  panel.hist <- function(x, ...)
+  {
+    usr <- par("usr"); on.exit(par(usr))
+    par(usr = c(usr[1:2], 0, 1.5) )
+    h <- hist(x, plot = FALSE)
+    breaks <- h$breaks; nB <- length(breaks)
+    y <- h$counts; y <- y/max(y)
+    rect(breaks[-nB], 0, breaks[-1], y, col = "cyan", ...)
+  }
+
+  ## put correlations on the upper panels,
+  panel.cor <- function(x, y, prefix = "", ...)
+  {
+    usr <- par("usr"); on.exit(par(usr))
+    par(usr = c(0, 1, 0, 1))
+    r <- round(cor(x, y),3)
+    txt <- format(c(r, 0.123456789), digits = 3)[1]
+    txt <- paste0(prefix, txt)
+    text(0.5, 0.5, txt, cex = 2)
+  }
+
+  do_scale <- function(df) {
+    for (i in levels(df[,1])) {
+      isin <- df[,1]==i
+      df[isin,2] <- (df[isin,2]-mean(df[isin,2]))/sd(df[isin,2])
+    }
+    df[,2]
+  }
+
+  pmat <- parameters_data_frame(samples,filter=filter,thin=thin,subfilter=subfilter,
+    mapped=mapped,stat=stat,selection=selection)
+  if (!any(is.na(use))) {
+    if (is.numeric(stat)) {
+      if (any(stat<1) || any(stat>dim(pmat))) stop("stat outside parameter range")
+      stat <- names(pmat)[stat]
+    }
+    if (!all(stat %in% names(pmat))) stop("stat has a name not in parameters")
+    if (length(use)==1) stop("must select more than one parameter")
+    pmat <- pmat[,use]
+  }
+  if (selection=="alpha") {
+    if (length(levels(pmat$subjects))>1 && scale.subjects)
+      for (i in names(pmat)) pmat[,i] <- do_scale(pmat[,c("subjects",i)])
+    pmat <- pmat[,-1]
+  }
+  if (dim(pmat)[1]>maxp) pmat <- pmat[sample(dim(pmat)[1],maxp),]
+  if (do_plot) suppressWarnings(
+    pairs(pmat,diag.panel = panel.hist,upper.panel = panel.cor))
+    rs <- cor(pmat)
+  r.names <- outer(dimnames(rs)[[1]],dimnames(rs)[[2]],paste,sep="~")[upper.tri(rs)]
+  rs <- rs[upper.tri(rs)]
+  names(rs) <- r.names
+  invisible(rs)
 }
 
 profile_pmwg <- function(pname,p,p_min,p_max,dadm,n_point=100,main="",cores=1)

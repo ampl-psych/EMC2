@@ -10,15 +10,17 @@ IS2 <- function(samples, filter = "sample", subfilter = 0, IS_samples = 1000, st
     if(subfilter > 0) idx <- idx[-c(1:subfilter)]
   } else idx <- idx[subfilter]
   all_pars <- info$variant_funs$get_all_pars_IS2(samples, idx, info)
-  muX<-apply(all_pars$X,2,mean)
-  varX<-stats::cov(all_pars$X)
+  if(!is.null(all_pars$X)){
+    muX<-apply(all_pars$X,2,mean)
+    varX<-stats::cov(all_pars$X)
+  } else{
+    muX<-info$prior$theta_mu_mean
+    varX<-info$prior$theta_mu_var
+  }
+  prop_theta <- mvtnorm::rmvt(IS_samples,sigma = varX, df=df, delta=muX)
 
-  prop_theta=mvtnorm::rmvt(IS_samples,sigma = varX, df=df, delta=muX)
-  # out <- numeric(nrow(prop_theta))
-  # for(i in 1:nrow(prop_theta)){
-  #   out[i] <- variant_funs$prior_dist(parameters = prop_theta[i,], all_pars$info)
-  # }
-  #do the sampling
+
+
   logw_num <- parallel::mclapply(X=1:IS_samples,
                        FUN = compute_lw_num,
                        prop_theta = prop_theta,

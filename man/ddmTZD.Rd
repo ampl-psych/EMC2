@@ -17,7 +17,7 @@ The time taken to reach the threshold drives the response time. For details see 
 \details{
 The core parameters of the DDM are the drift rate \code{v}, the boundary separation \code{a},
 within trial variation in drift rate \code{s}, bias to either threshold \code{Z}, and non-decision time \code{t0}.
-Frequently \code{sv} is fixed to 1 to satisfy scaling constraints.
+Frequently \code{s} is fixed to 1 to satisfy scaling constraints.
 Furthermore, we can estimate between trial variation in drift rate \code{sv}, non-decision time \code{st0}, and bias \code{SZ}. Note that computing for these parameters is slower.
 Lastly \code{DP} comprises the difference in non-decision time for each response option.
 

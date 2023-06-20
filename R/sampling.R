@@ -68,8 +68,7 @@ pmwgs <- function(dadm, variant_funs, pars = NULL, ll_func = NULL, prior = NULL,
   class(sampler) <- "pmwgs"
   sampler <- variant_funs$add_info(sampler, prior, ...)
   sampler$prior$prior_grouped <- get_prior_single(prior$prior_grouped,
-                                                  n_pars = sum(is_grouped),
-                                                  par_names = rownames(group_pars))
+                                                  n_pars = sum(is_grouped), sample = F)
   attr(sampler, "variant_funs") <- variant_funs
   return(sampler)
 }
@@ -98,6 +97,8 @@ init <- function(pmwgs, start_mu = NULL, start_var = NULL,
   if(any(pmwgs$grouped)){
     grouped_pars <- mvtnorm::rmvnorm(particles, pmwgs$prior$prior_grouped$theta_mu_mean,
                             pmwgs$prior$prior_grouped$theta_mu_var)
+  } else{
+    grouped_pars <- NULL
   }
   proposals <- parallel::mclapply(X=1:pmwgs$n_subjects,FUN=start_proposals,
                                   parameters = startpoints_comb, n_particles = particles,
@@ -588,6 +589,7 @@ get_variant_funs <- function(type = "standard") {
   if(type == "standard") {
     list_fun <- list(# store functions
       sample_store = sample_store_standard,
+      get_prior = get_prior_standard,
       add_info = add_info_standard,
       get_startpoints = get_startpoints_standard,
       get_group_level = get_group_level_standard,
@@ -602,6 +604,7 @@ get_variant_funs <- function(type = "standard") {
   } else if(type == "single"){
     list_fun <- list(# store functions
       sample_store = sample_store_base,
+      get_prior = get_prior_single,
       add_info = add_info_single,
       get_startpoints = get_startpoints_single,
       get_group_level = get_group_level_single,
@@ -617,6 +620,7 @@ get_variant_funs <- function(type = "standard") {
     list_fun <- list(# store functions
       sample_store = sample_store_standard,
       add_info = add_info_blocked,
+      get_prior = get_prior_blocked,
       get_startpoints = get_startpoints_blocked,
       get_group_level = get_group_level_standard,
       fill_samples = fill_samples_standard,

@@ -2,10 +2,18 @@
 % Please edit documentation in R/model_RDM.R
 \name{rdmB}
 \alias{rdmB}
-\title{Title}
+\title{The Racing Diffusion Model (RDM)}
 \usage{
 rdmB()
 }
 \description{
-Title
+The Racing Diffusion Model, also known as the Racing Wald Model, proposes that for each choice alternative, noisy accumulators race towards a common bound.
+The first accumulator to reach the bound determines the choice made. The time taken to reach the threshold determines the response times. For details see \verb{Tillman, Van Zandt & Logan, 2020}
+}
+\details{
+The core parameters of the RDM are the drift rate \code{v}, the response threshold \code{B},
+within trial variation in drift rate \code{s}, between trial variation in startpoint of the drift rate \code{A}, and non-decision time \code{t0}.
+Frequently \code{s} is fixed to 1 to satisfy scaling constraints.
+
+Here we use the b = B + A parameterization, which ensures that the response threshold is always higher than the between trial variation in start point of the drift rate.
 }

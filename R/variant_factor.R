@@ -77,7 +77,7 @@ add_info_factor <- function(sampler, prior = NULL, ...){
 }
 
 get_startpoints_factor<- function(pmwgs, start_mu, start_var){
-  n_pars <- sum(!(pmwgs$nuisance | pmgws$grouped))
+  n_pars <- sum(!(pmwgs$nuisance | pmwgs$grouped))
   if (is.null(start_mu)) start_mu <- rnorm(pmwgs$prior$theta_mu_mean, sd = sqrt(pmwgs$prior$theta_mu_var))
   # If no starting point for group var just sample some
   if (is.null(start_var)) start_var <- riwish(n_pars * 3,diag(n_pars))

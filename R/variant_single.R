@@ -1,12 +1,37 @@
 add_info_single <- function(sampler, prior = NULL, ...){
   # Checking and default priors
-  sampler$prior <- get_prior_single(prior, sampler$n_pars)
+  sampler$prior <- get_prior_single(prior, sampler$n_pars, sample = F)
   return(sampler)
 }
 
-get_prior_single <- function(prior = NULL, n_pars = NULL, par_names = NULL, sample = F, N = 1e5, type = "mu"){
+#' Prior specification for single subject sampling.
+#'
+#' With this type of sampling, we assume that one, or multiple, subjects are estimated without any hierarchical link.
+#' We need to specify a prior for each parameter. For now, the package assumes a multivariate normal prior on each parameter.
+#' Thus you need to specify prior$theta_mu_mean a vector with an entry for each parameter. Furthermore you need a prior covariance matrix prior$theta_mu_var.
+#' Default is: prior <- list(theta_mu_mean = rep(0, n_pars), theta_mu_var = diag(rep(0, n_pars)))
+#'
+#' Specific constraints, such as parameter x needs to be larger than 0, are enforced through transformations performed by the models.
+#' Thus you need to be mindful that even though the prior might be normally distributed, the transformed prior might look very differently.
+#' Set `sample = TRUE` and pass your design object to `design` to sample from the prior. You can then plot the samples using `plot_prior`
+#'
+#' @param prior A list of the prior containing the mean (theta_mu_mean) and variance (theta_mu_var).
+#' @param n_pars Argument used by the sampler, best left NULL. In user case inferred from the design
+#' @param sample Whether to sample from the prior. Default is TRUE
+#' @param N How many samples to draw from the prior
+#' @param type String specifying on what you want the prior. For single subject only "alpha" is a valid option.
+#' @param design The design obtained from `make_design`
+#'
+#' @return A list of samples from the prior
+#' @export
+#'
+#' @examples
+get_prior_single <- function(prior = NULL, n_pars = NULL, sample = T, N = 1e5, type = "mu", design = NULL){
   if(is.null(prior)){
     prior <- list()
+  }
+  if(!is.null(design)){
+    n_pars <- length(attr(design, "p_vector"))
   }
   if (is.null(prior$theta_mu_mean)) {
     prior$theta_mu_mean <- rep(0, n_pars)
@@ -15,11 +40,13 @@ get_prior_single <- function(prior = NULL, n_pars = NULL, par_names = NULL, samp
     prior$theta_mu_var <- diag(rep(1, n_pars))
   }
   if(sample){
-    if(type != "mu") stop("for variant single, the prior is only on the mean of the parameters")
+    if(type != "mu") stop("for variant single, only mu can be specified")
     samples <- mvtnorm::rmvnorm(N, prior$theta_mu_mean, prior$theta_mu_var)
-    if(!is.null(par_names)){
-      colnames(samples) <- par_names
+    if(!is.null(design)){
+      colnames(samples) <- names(attr(design, "p_vector"))
+      samples[,colnames(samples) %in% design$model()$p_types] <- design$model()$Ntransform(samples[,colnames(samples) %in% design$model()$p_types])
     }
+    return(list(alpha = samples))
   }
   return(prior)
 }
@@ -63,16 +90,43 @@ filtered_samples_single <- function(sampler, filter){
 }
 
 get_all_pars_single <- function(samples, idx, info){
-  stop("no IS2 for single subject estimation yet")
+  n_subjects <- samples$n_subjects
+  n_iter = length(samples$samples$stage[idx])
+  # Exctract relevant objects
+  alpha <- samples$samples$alpha[,,idx, drop = F]
+  # Set up
+  n_params<- samples$n_pars
+  mu_tilde=array(dim = c(n_subjects,n_params))
+  var_tilde=array(dim = c(n_subjects,n_params,n_params))
+  for (j in 1:n_subjects){
+    # calculate the mean for re, mu and sigma
+    mu_tilde[j,] <- rowMeans(alpha[,j,])
+    # calculate the covariance matrix for random effects, mu and sigma
+    var_tilde[j,,] <- cov(t(alpha[,j,]))
+  }
+
+  for(i in 1:n_subjects){ #RJI_change: this bit makes sure that the sigma tilde is pos def
+    if(!corpcor::is.positive.definite(var_tilde[i,,], tol=1e-8)){
+      var_tilde[i,,]<-corpcor::make.positive.definite(var_tilde[i,,], tol=1e-6)
+    }
+  }
+  info$n_params <- n_params
+  return(list(mu_tilde = mu_tilde, var_tilde = var_tilde, info = info))
 }
 
 group_dist_single <- function(random_effect = NULL, parameters, sample = FALSE, n_samples = NULL, info){
-  stop("no IS2 for single subject estimation yet")
-
+  # This is for the single case actually the prior distribution.
+  if (sample){
+    return(rmvnorm(n_samples, info$prior$theta_mu_mean, info$prior$theta_mu_var))
+  }else{
+    logw_second<-max(-5000*info$n_randeffect, dmvnorm(random_effect, info$prior$theta_mu_mean,info$prior$theta_mu_var,log=TRUE))
+    return(logw_second)
+  }
 }
 
 prior_dist_single <- function(parameters, info){
-  stop("no IS2 for single subject estimation yet")
-
+  # This is quite confusing, but now the actual prior dist is the group dist.
+  # Just here for compatability with the other types.
+  return(0)
 }
 

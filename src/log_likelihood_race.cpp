@@ -114,7 +114,10 @@ double c_log_likelihood_race(NumericMatrix pars, DataFrame data,
       NumericVector lds_los = lds_exp[!winner_exp];
       ll_out = ll_out + lds_los;
     } else{
-      Rcout << "No 3 accs yet!";
+      NumericVector lds_los = lds_exp[!winner_exp];
+      for(int z = 0; z < ll_out.length(); z++){
+        ll_out[z] = ll_out[z] + sum(lds_los[seq( z * (n_acc -1), (z+1) * (n_acc -1) -1)]);
+      }
     }
     ll_out[ll_out < min_ll] = min_ll;
     ll_out[is_na(ll_out)] = min_ll;
