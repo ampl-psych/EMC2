@@ -99,6 +99,15 @@ double c_log_likelihood_race(NumericMatrix pars, DataFrame data,
   CharacterVector R = data["R"];
   NumericVector lds_exp(n_out);
   const int n_acc = unique(R).length();
+  if(sum(contains(data.names(), "NACC")) == 1){
+    NumericVector lR = data["lR"];
+    NumericVector NACC = data["NACC"];
+    for(int x = 0; x < pars.nrow(); x++){
+      if(lR[x] > NACC[x]){
+        pars(x,0) = NA_REAL;
+      }
+    }
+  }
   NumericVector win = log(dfun(rts, pars, winner)); //first for compressed
   lds[winner] = win;
   if(n_acc > 1){
