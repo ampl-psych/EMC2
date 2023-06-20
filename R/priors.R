@@ -106,7 +106,7 @@ get_prior_samples <- function(samples,selection,filter,thin,subfilter,n_prior)
   } else {
     variant_funs <- attr(samples[[1]], "variant_funs")
     design <- list(model = attr(samples[[1]]$data[[1]], "model"))
-    attr(design, "p_vector") <- samplers[[1]]$samples$alpha[,1,1] # just need the names in the right format
+    attr(design, "p_vector") <- samples[[1]]$samples$alpha[,1,1] # just need the names in the right format
     psamples <- variant_funs$get_prior(design = design, N = n_prior, prior = samples[[1]]$prior, type = selection, map = FALSE)[[1]]
     return(psamples)
   }
