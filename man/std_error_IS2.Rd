@@ -6,9 +6,6 @@
 \usage{
 std_error_IS2(IS_samples, n_bootstrap = 50000)
 }
-\arguments{
-\item{n_bootstrap}{}
-}
 \description{
 Title
 }

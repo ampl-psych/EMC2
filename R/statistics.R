@@ -1,12 +1,4 @@
 #' Title
-#'
-#' @param IS_samples
-#' @param n_bootstrap
-#'
-#' @return
-#' @export
-#'
-#' @examples
 std_error_IS2 <- function(IS_samples, n_bootstrap = 50000){
   log_marglik_boot= array(dim = n_bootstrap)
   for (i in 1:n_bootstrap){
