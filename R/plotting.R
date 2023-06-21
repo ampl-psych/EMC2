@@ -628,18 +628,20 @@ plot_fit <- function(data,pp,subject=NULL,factors=NULL,
         # R <- sort(unique(dati$R))
         pR <- table(dati$R)/dim(dati)[1]
         pqs <- pq <- qs <- setNames(vector(mode="list",length=length(R)),R)
+        ppR <- pR; ppR[1:length(pR)] <- 0
         for (j in R) if (length(dati$rt[dati$R==j])>=length(q_points)) {
+          isj <- ppi$R==j
           qs[[j]] <- quantile(dati$rt[dati$R==j],probs=probs)
-          pq[[j]] <- quantile(ppi$rt[ppi$R==j],probs=probs)
-          pqs[[j]] <- tapply(ppi$rt[ppi$R==j],ppi$postn[ppi$R==j],
-                             quantile,probs=probs[pok])
+          pq[[j]] <- quantile(ppi$rt[isj],probs=probs)
+          pqs[[j]] <- tapply(ppi$rt[isj],ppi$postn[isj],quantile,probs=probs[pok])
+          ppR[j] <- mean(isj)
         } else qs[[j]] <- pq[[j]] <- pqs[[j]] <- NA
         if ( !any(is.na(pq[[1]])) ) {
-          plot(pq[[1]],probs*pR[1],xlim=xlim,ylim=ylim,main=i,xlab="RT",type="l",
+          plot(pq[[1]],probs*ppR[1],xlim=xlim,ylim=ylim,main=i,xlab="RT",type="l",
                lwd=fit_lwd,ylab="p(R)",lty=1)
           tmp=lapply(pqs[[1]],function(x){
-            points(x,probs[pok]*pR[1],col="grey",pch=16,cex=pqp_cex)})
-          points(pq[[1]][pok],probs[pok]*pR[1],cex=pqp_cex*3,pch=16,col="grey")
+            points(x,probs[pok]*ppR[1],col="grey",pch=16,cex=pqp_cex)})
+          points(pq[[1]][pok],probs[pok]*ppR[1],cex=pqp_cex*3,pch=16,col="grey")
           lines(qs[[1]],probs*pR[1],lwd=data_lwd,lty=1)
           points(qs[[1]][pok],probs[pok]*pR[1],cex=qp_cex,pch=16)
           do_plot=FALSE
@@ -647,13 +649,13 @@ plot_fit <- function(data,pp,subject=NULL,factors=NULL,
         if (length(qs)>1) {
           for (j in 2:length(qs)) if (!any(is.na(pq[[j]]))) {
             if (do_plot) {
-              plot(pq[[j]],probs*pR[j],xlim=xlim,ylim=ylim,main=i,xlab="RT",type="l",
+              plot(pq[[j]],probs*ppR[j],xlim=xlim,ylim=ylim,main=i,xlab="RT",type="l",
                    lwd=fit_lwd,ylab="p(R)",lty=j)
               do_plot <- FALSE
-            } else lines(pq[[j]],probs*pR[j],lwd=fit_lwd,lty=j)
+            } else lines(pq[[j]],probs*ppR[j],lwd=fit_lwd,lty=j)
             tmp=lapply(pqs[[j]],function(x){
-              points(x,probs[pok]*pR[j],col="grey",pch=16,cex=pqp_cex)})
-            points(pq[[j]][pok],probs[pok]*pR[j],cex=pqp_cex*3,pch=16,col="grey")
+              points(x,probs[pok]*ppR[j],col="grey",pch=16,cex=pqp_cex)})
+            points(pq[[j]][pok],probs[pok]*ppR[j],cex=pqp_cex*3,pch=16,col="grey")
             lines(qs[[j]],probs*pR[j],lwd=data_lwd,lty=j)
             points(qs[[j]][pok],probs[pok]*pR[j],cex=qp_cex,pch=16)
           }
