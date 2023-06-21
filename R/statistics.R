@@ -406,16 +406,14 @@ compare_IC <- function(sList,filter="sample",subfilter=0,use_best_fit=TRUE,
     exp(IC)/sum(exp(IC))
   }
 
-  if (length(subfilter)==1) {
-    tmp <- vector(mode="list",length(sList))
-    for (i in 1:length(sList)) tmp[[i]] <- subfilter
-    subfilter=tmp
-  }
-  if ( !is.list(subfilter) || length(subfilter)!=length(sList) )
-    stop("If not a single digit, subfilter must be a list of the same length as sList")
+  if (is.numeric(subfilter)) defaultsf <- subfilter[1] else defaultsf <- 0
+  sflist <- as.list(setNames(rep(defaultsf,length(sList)),names(sList)))
+  if (is.list(subfilter)) for (i in names(subfilter))
+    if (i %in% names(sflist)) sflist[[i]] <- subfilter[[i]]
+
   ICs <- setNames(vector(mode="list",length=length(sList)),names(sList))
   for (i in 1:length(ICs)) ICs[[i]] <- IC(sList[[i]],filter=filter,
-    subfilter=subfilter[[i]],use_best_fit=use_best_fit,subject=subject,print_summary=FALSE)
+    subfilter=sflist[[i]],use_best_fit=use_best_fit,subject=subject,print_summary=FALSE)
   ICs <- data.frame(do.call(rbind,ICs))
   DICp <- getp(ICs$DIC)
   BPICp <- getp(ICs$BPIC)
