@@ -303,6 +303,10 @@ plot_density <- function(pmwg_mcmc,layout=c(2,3),
       dens
     } else density(ps,bw=bw,adjust=adjust)
   }
+
+  if (mapped & !(selection %in% c("mu","alpha")))
+    stop("mapped only available for mu and alpha")
+
   if (show_chains & plot_prior)
     warning("Prior plots not implemented for show_chains=TRUE")
   if (!(inherits(pmwg_mcmc, c("mcmc","mcmc.list")))) {
