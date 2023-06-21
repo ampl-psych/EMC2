@@ -216,7 +216,8 @@ p_test <- function(x,x_name=NULL,x_fun=NULL,fun_name="fun",
                     subfilter=subfilter,mapped=mapped)
   # Individual subject analysis
   if (selection != "alpha") x_subject <- NULL else
-    if (is.null(x_subject)) x_subject <- names(x)[1]
+    if (is.null(x_subject)) x_subject <- names(x)[1] else
+      if (is.numeric(x_subject)) x_subject <- names(x)[x_subject]
   if (!is.null(x_subject)) {
     if (!(x_subject %in% names(x))) stop("Subject x_subject not in x")
     message("Testing x subject ",x_subject)
@@ -246,7 +247,8 @@ p_test <- function(x,x_name=NULL,x_fun=NULL,fun_name="fun",
                       subfilter=subfilter,mapped=mapped)
     # Individual subject analysis
     if (selection != "alpha") y_subject <- NULL else
-      if (is.null(y_subject)) y_subject <- names(y)[1]
+      if (is.null(y_subject)) y_subject <- names(y)[1] else
+      if (is.numeric(y_subject)) y_subject <- names(y)[y_subject]
     if (!is.null(y_subject)) {
       if (!(y_subject %in% names(y))) stop("Subject y_subject not in y")
       message("Testing y subject ",y_subject)
