@@ -455,6 +455,17 @@ compare_ICs <- function(sList,filter="sample",subfilter=0,use_best_fit=TRUE,
 }
 
 
+#' Title
+#'
+#' @param mll
+#' @param nboot
+#' @param digits
+#' @param print_summary
+#'
+#' @return
+#' @export
+#'
+#' @examples
 compare_MLL <- function(mll,nboot=100000,digits=2,print_summary=TRUE)
   # mll is a list of vectors of marginal log-likelihoods for a set of models
   # picks a vector of mlls for each model in the list randomly with replacement
