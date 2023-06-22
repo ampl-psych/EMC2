@@ -50,13 +50,14 @@ prior_samples_alpha <- function(theta_mu,theta_var,n=1e3)
 #' @param breaks
 #' @param layout
 #' @param upper
+#' @param xlim
 #'
 #' @return NULL. Makes a plot of the prior samples
 #' @export
 #'
 #' @examples
 plot_prior <- function(prior, type = NULL,add_density=FALSE,adjust=1,breaks=50,
-                       layout=c(3,3),upper=NULL){
+                       layout=c(3,3),upper=NULL,xlim=NULL){
   if(is.null(type)) type <- names(prior)
   for(typ in type){
     samples <- prior[["alpha"]]
@@ -64,6 +65,8 @@ plot_prior <- function(prior, type = NULL,add_density=FALSE,adjust=1,breaks=50,
     par_names <- colnames(samples)
     uppers <- setNames(rep(.999,length(par_names)),par_names)
     if (!is.null(upper)) uppers[names(upper)] <- upper
+    xlims <- setNames(vector(mode="list",length=length(par_names)),par_names)
+    if (!is.null(xlim)) xlims[names(xlim)] <- xlim
     for(i in 1:ncol(samples)){
       if(!any(samples[,i] < 0) || !any(samples[,i] > 0)){
         quants <- quantile(abs(samples[,i]), probs = uppers[i])
@@ -72,7 +75,7 @@ plot_prior <- function(prior, type = NULL,add_density=FALSE,adjust=1,breaks=50,
       }
       filtered <- samples[,i][abs(samples[,i]) < quants]
       hist(filtered, breaks = breaks, main = par_names[i], prob = TRUE,
-           xlab = type, cex.lab = 1.25, cex.main = 1.5)
+           xlab = type, cex.lab = 1.25, cex.main = 1.5,xlim=xlim[[i]])
       if (add_density) lines(density(filtered,adjust=adjust), col = "red")
     }
   }
