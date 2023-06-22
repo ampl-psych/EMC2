@@ -74,8 +74,11 @@ plot_prior <- function(prior, type = NULL,add_density=FALSE,adjust=1,breaks=50,
         quants <- quantile(abs(samples[,i]), probs = uppers[i])
       }
       filtered <- samples[,i][abs(samples[,i]) < quants]
-      hist(filtered, breaks = breaks, main = par_names[i], prob = TRUE,
-           xlab = type, cex.lab = 1.25, cex.main = 1.5,xlim=xlim[[i]])
+      if (is.null(xlims[[i]]))
+          hist(filtered, breaks = breaks, main = par_names[i], prob = TRUE,
+           xlab = type, cex.lab = 1.25, cex.main = 1.5) else
+          hist(filtered, breaks = breaks, main = par_names[i], prob = TRUE,
+           xlab = type, cex.lab = 1.25, cex.main = 1.5,xlim=xlims[[i]])
       if (add_density) lines(density(filtered,adjust=adjust), col = "red")
     }
   }
