@@ -33,15 +33,15 @@ IS2 <- function(samples, filter = "sample", subfilter = 0, IS_samples = 1000, st
   # sub_and_group <- simplify2array(lapply(logw_num, FUN = function(x) return(x$sub_and_group)))
   # prior_and_jac <- sapply(logw_num, FUN = function(x) return(x$prior_and_jac))
   #
-  # logw_den <- mvtnorm::dmvt(prop_theta, delta=muX, sigma=varX,df=df, log = TRUE)
-  # # finished <- unlist(logw_num) - logw_den
-  # # max.lw <- max(finished)
-  # # mean.centred.lw <- mean(exp(finished-max.lw)) #takes off the max and gets mean (avoids infs)
-  # # lw <- log(mean.centred.lw)+max.lw #puts max back on to get the lw
-  # return(list(sub_and_group = sub_and_group, prior_and_jac = sub_and_group, logw_den = logw_den))
   logw_den <- mvtnorm::dmvt(prop_theta, delta=muX, sigma=varX,df=df, log = TRUE)
-
   finished <- unlist(logw_num) - logw_den
+  max.lw <- max(finished)
+  centred.lw <- exp(finished-max.lw) #takes off the max and gets mean (avoids infs)
+  lw <- log(centred.lw)+max.lw #puts max back on to get the lw
+  # return(list(sub_and_group = sub_and_group, prior_and_jac = sub_and_group, logw_den = logw_den))
+  # logw_den <- mvtnorm::dmvt(prop_theta, delta=muX, sigma=varX,df=df, log = TRUE)
+  #
+  # finished <- unlist(logw_num) - logw_den
   return(finished)
 
 }
@@ -104,7 +104,7 @@ get_logp=function(prop_theta,stepsize_particles, max_particles, mu_tilde,var_til
     lw_subs[j] <- max_lw+log(mean(weight))
   }
   # sum the logp and return
-  return(lw_subs)
+  return(sum(lw_subs))
 }
 
 compute_lw_num=function(i, prop_theta,stepsize_particles, max_particles, mu_tilde,var_tilde,info){
