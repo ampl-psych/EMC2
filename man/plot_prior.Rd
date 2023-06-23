@@ -11,7 +11,8 @@ plot_prior(
   adjust = 1,
   breaks = 50,
   layout = c(3, 3),
-  upper = NULL
+  upper = NULL,
+  xlim = NULL
 )
 }
 \arguments{
@@ -19,7 +20,7 @@ plot_prior(
 
 \item{type}{Optional. Otherwise inferred from the prior samples}
 
-\item{upper}{}
+\item{xlim}{}
 }
 \value{
 NULL. Makes a plot of the prior samples

@@ -1,3 +1,4 @@
+#' Title
 std_error_IS2 <- function(IS_samples, n_bootstrap = 50000){
   log_marglik_boot= array(dim = n_bootstrap)
   for (i in 1:n_bootstrap){
@@ -216,7 +217,8 @@ p_test <- function(x,x_name=NULL,x_fun=NULL,fun_name="fun",
                     subfilter=subfilter,mapped=mapped)
   # Individual subject analysis
   if (selection != "alpha") x_subject <- NULL else
-    if (is.null(x_subject)) x_subject <- names(x)[1]
+    if (is.null(x_subject)) x_subject <- names(x)[1] else
+      if (is.numeric(x_subject)) x_subject <- names(x)[x_subject]
   if (!is.null(x_subject)) {
     if (!(x_subject %in% names(x))) stop("Subject x_subject not in x")
     message("Testing x subject ",x_subject)
@@ -246,7 +248,8 @@ p_test <- function(x,x_name=NULL,x_fun=NULL,fun_name="fun",
                       subfilter=subfilter,mapped=mapped)
     # Individual subject analysis
     if (selection != "alpha") y_subject <- NULL else
-      if (is.null(y_subject)) y_subject <- names(y)[1]
+      if (is.null(y_subject)) y_subject <- names(y)[1] else
+      if (is.numeric(y_subject)) y_subject <- names(y)[y_subject]
     if (!is.null(y_subject)) {
       if (!(y_subject %in% names(y))) stop("Subject y_subject not in y")
       message("Testing y subject ",y_subject)
@@ -406,16 +409,14 @@ compare_IC <- function(sList,filter="sample",subfilter=0,use_best_fit=TRUE,
     exp(IC)/sum(exp(IC))
   }
 
-  if (length(subfilter)==1) {
-    tmp <- vector(mode="list",length(sList))
-    for (i in 1:length(sList)) tmp[[i]] <- subfilter
-    subfilter=tmp
-  }
-  if ( !is.list(subfilter) || length(subfilter)!=length(sList) )
-    stop("If not a single digit, subfilter must be a list of the same length as sList")
+  if (is.numeric(subfilter)) defaultsf <- subfilter[1] else defaultsf <- 0
+  sflist <- as.list(setNames(rep(defaultsf,length(sList)),names(sList)))
+  if (is.list(subfilter)) for (i in names(subfilter))
+    if (i %in% names(sflist)) sflist[[i]] <- subfilter[[i]]
+
   ICs <- setNames(vector(mode="list",length=length(sList)),names(sList))
   for (i in 1:length(ICs)) ICs[[i]] <- IC(sList[[i]],filter=filter,
-    subfilter=subfilter[[i]],use_best_fit=use_best_fit,subject=subject,print_summary=FALSE)
+    subfilter=sflist[[i]],use_best_fit=use_best_fit,subject=subject,print_summary=FALSE)
   ICs <- data.frame(do.call(rbind,ICs))
   DICp <- getp(ICs$DIC)
   BPICp <- getp(ICs$BPIC)
@@ -433,17 +434,10 @@ compare_IC <- function(sList,filter="sample",subfilter=0,use_best_fit=TRUE,
 compare_ICs <- function(sList,filter="sample",subfilter=0,use_best_fit=TRUE,
                         print_summary=TRUE,digits=3,subject=NULL) {
 
-  if (length(subfilter)==1) {
-    tmp <- vector(mode="list",length(sList))
-    for (i in 1:length(sList)) tmp[[i]] <- subfilter
-    subfilter=tmp
-  }
-  if ( !is.list(subfilter) || length(subfilter)!=length(sList) )
-    stop("If not a single digit, subfilter must be a list of the same length as sList")
   subjects <- names(sList[[1]][[1]]$data)
   out <- setNames(vector(mode="list",length=length(subjects)),subjects)
   for (i in subjects) out[[i]] <- compare_IC(sList,subject=i,
-                                             filter=filter,subfilter=subfilter,use_best_fit=use_best_fit,print_summary=FALSE)
+    filter=filter,subfilter=subfilter,use_best_fit=use_best_fit,print_summary=FALSE)
   if (print_summary) {
     wDIC <- lapply(out,function(x)x["wDIC"])
     wBPIC <- lapply(out,function(x)x["wBPIC"])
@@ -461,6 +455,17 @@ compare_ICs <- function(sList,filter="sample",subfilter=0,use_best_fit=TRUE,
 }
 
 
+#' Title
+#'
+#' @param mll
+#' @param nboot
+#' @param digits
+#' @param print_summary
+#'
+#' @return
+#' @export
+#'
+#' @examples
 compare_MLL <- function(mll,nboot=100000,digits=2,print_summary=TRUE)
   # mll is a list of vectors of marginal log-likelihoods for a set of models
   # picks a vector of mlls for each model in the list randomly with replacement
