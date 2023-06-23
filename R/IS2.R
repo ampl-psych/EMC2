@@ -2,8 +2,7 @@
 ## set up environment and packages
 
 
-IS2 <- function(samples, filter = "sample", subfilter = 0, IS_samples = 1000,
-                stepsize_particles = 500, max_particles = 5000, n_cores = 1, df = 5){
+IS2 <- function(samples, filter = "sample", subfilter = 0, IS_samples = 1000, stepsize_particles = 500, max_particles = 5000, n_cores = 1, df = 5){
   ###### set up variables #####
   info <- add_info_base(samples)
   idx <- which(samples$samples$stage == filter)
