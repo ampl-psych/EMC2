@@ -43,10 +43,10 @@ samplers <- make_samplers(dat2, design_B, type = "standard")
 samplers <- run_emc(samplers, verbose = T, cores_for_chains = 3, cores_per_chain = 4)
 
 debug(IS2)
-samplers <- run_IS2(samplers, IS_samples = 1000, n_cores = 14)
+samplers <- run_IS2(samplers, IS_samples = 50, n_cores = 14)
 
 undebug(plot_density)
-test <- plot_density(samplers, filter = "burn", selection = "correlation")
+test <- plot_density(samplers, selection = "mu")
 
 debug(IS2)
 samplers <- run_IS2(samplers, filter = "burn")
