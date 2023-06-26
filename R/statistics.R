@@ -480,7 +480,8 @@ compare_MLL <- function(mll,nboot=100000,digits=2,print_summary=TRUE)
   }
 
   out <- sort(apply(apply(do.call(rbind,lapply(mll,function(x){
-    x[sample(length(x),nboot,replace=TRUE)]})),2,pmp),1,mean),decreasing=TRUE)
+    attr(x,"IS_samples")[sample(length(attr(x,"IS_samples")),nboot,replace=TRUE)]
+  })),2,pmp),1,mean),decreasing=TRUE)
   print(round(out,digits))
   invisible(out)
 }
