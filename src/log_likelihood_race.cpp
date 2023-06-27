@@ -82,9 +82,10 @@ double c_log_likelihood_DDM(NumericMatrix pars, DataFrame data,
   NumericVector lls_exp(n_out);
   lls = log(d_DDM_c(rts, R, group_idx, pars));
   lls_exp = c_expand(lls, expand); // decompress
-  lls_exp[lls_exp < min_ll] = min_ll;
   lls_exp[is_na(lls_exp)] = min_ll;
   lls_exp[is_infinite(lls_exp)] = min_ll;
+  lls_exp[lls_exp < min_ll] = min_ll;
+
   return(sum(lls_exp));
 }
 
