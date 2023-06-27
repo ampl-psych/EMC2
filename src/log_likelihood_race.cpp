@@ -129,14 +129,14 @@ double c_log_likelihood_race(NumericMatrix pars, DataFrame data,
         ll_out[z] = ll_out[z] + sum(lds_los[seq( z * (n_acc -1), (z+1) * (n_acc -1) -1)]);
       }
     }
-    ll_out[ll_out < min_ll] = min_ll;
     ll_out[is_na(ll_out)] = min_ll;
     ll_out[is_infinite(ll_out)] = min_ll;
+    ll_out[ll_out < min_ll] = min_ll;
     return(sum(ll_out));
   } else{
-    lds_exp[lds_exp < min_ll] = min_ll;
     lds_exp[is_na(lds_exp)] = min_ll;
     lds_exp[is_infinite(lds_exp)] = min_ll;
+    lds_exp[lds_exp < min_ll] = min_ll;
     return(sum(lds_exp));
   }
 }
