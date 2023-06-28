@@ -21,7 +21,7 @@ IS2 <- function(samples, filter = "sample", subfilter = 0, IS_samples = 1000, st
 
 
 
-  logw_num <- parallel::mclapply(X=1:IS_samples,
+  logw_num <- auto_mclapply(X=1:IS_samples,
                        FUN = compute_lw_num,
                        prop_theta = prop_theta,
                        stepsize_particles = stepsize_particles,
