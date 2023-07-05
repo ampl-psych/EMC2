@@ -3,7 +3,7 @@
 #'
 #' @param pmwg_mcmc A list of samplers or samplers converted to mcmc objects.
 #' @param layout A vector or matrix specifying the layout as in par(mfrow = layout).
-#' @param subject A string or integer which you can specify to only plot chains of that subject.
+#' @param subject Integer or character vector, if selection = "alpha" picks out subject(s)
 #' @param ylim The y limits of the chain plot.
 #' @param selection a string. Specifies which chains you want to plot.
 #' @param filter a string. Specifies which stage you want to plot.
@@ -31,7 +31,9 @@ plot_chains <- function(pmwg_mcmc,layout=NA,subject=NA,ylim=NULL,
   no_layout <- is.null(layout)
   if (!auto.layout & !no_layout) par(mfrow=layout)
   if (attr(pmwg_mcmc,"selection")=="alpha") {
-    if (any(is.na(subject))) subject <- names(pmwg_mcmc)
+    snams <- names(pmwg_mcmc)
+    if (any(is.na(subject))) subject <- snams
+    if (is.numeric(subject)) subject <- snams[subject]
     if (!all(subject %in% names(pmwg_mcmc)))
       stop("Subject not present\n")
     for (i in subject) {
@@ -66,6 +68,21 @@ plot_chains <- function(pmwg_mcmc,layout=NA,subject=NA,ylim=NULL,
 }
 
 
+#' Calls plot_chains to plot auto-correlation functions for each parameter
+#'
+#' @param samples Single pmwgs object (in which case ACF for one chain is plotted)
+#' or list of pmwgs objects (in which case ACFs for each chain plotted)
+#' @param layout passed on to plot_chains
+#' @param subject integer or character vector, if selection = "alpha" picks out subjects(s)
+#' @param selection selection (mu, variance, correlation, alpha)
+#' @param filter which stage to plot (default "sample")
+#' @param subfilter an integer or vector. If integer it will exclude up until that integer.
+#' If vector it will include everything in that range.
+#'
+#' @return
+#' @export
+#'
+#' @examples
 plot_acfs <- function(samples,layout=NULL,subject=1,
                       selection="alpha",filter="sample",subfilter=0)
   # Plots acf for all chains
