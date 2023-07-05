@@ -984,7 +984,24 @@ pairs_posterior <- function(samples,filter="sample",thin=1,subfilter=0,mapped=FA
   invisible(rs)
 }
 
-profile_pmwg <- function(pname,p,p_min,p_max,dadm,n_point=100,main="",cores=1)
+#' Creates a likelihood profile plot from a dadm object (see design_model) by
+#' varying one model parameter while holding all others constant.
+#'
+#' @param pname Name of parameter to profile
+#' @param p Named vector of parameter values (typically created with sampled_p_vector)
+#' @param p_min Minimum value of profile range
+#' @param p_max Maximum value of profile range
+#' @param dadm Data augmented design and model (created by design_model)
+#' @param n_point Number of evenly spaced points at which to calculate likelihood
+#' @param main Plot title
+#' @param cores Number of likelihood points to calculate in parallel
+#'
+#' @return vector with value of p[pname], highest likelihood point and p[pname]
+#' minus the parameter values at that point
+#' @export
+#'
+#' @examples
+profile_plot <- function(pname,p,p_min,p_max,dadm,n_point=100,main="",cores=1)
 
 {
 
