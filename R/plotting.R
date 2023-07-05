@@ -5,12 +5,14 @@
 #' @param layout A vector or matrix specifying the layout as in par(mfrow = layout).
 #' @param subject Integer or character vector, if selection = "alpha" picks out subject(s)
 #' @param ylim The y limits of the chain plot.
-#' @param selection a string. Specifies which chains you want to plot.
-#' @param filter a string. Specifies which stage you want to plot.
-#' @param thin an integer. Specify if you want to thin the chains by a factor n.
-#' @param subfilter an integer or vector. If integer it will exclude up until that integer. If vector it will include everything in that range.
-#' @param plot_acf bool. If TRUE will also plot autocorrelation for the chain specified in acf_chain.
-#' @param acf_chain an integer. For which chain to plot the acf, if plot_acf = TRUE.
+#' @param selection A string. Specifies which chains you want to plot.
+#' @param filter A string. Specifies which stage you want to plot.
+#' @param thin An integer. Specify if you want to thin the chains by a factor n.
+#' @param subfilter An integer or vector. If integer it will exclude up until
+#' that integer. If vector it will include everything in that range.
+#' @param plot_acf Boolean (default FALSE). If TRUE will also plot autocorrelation
+#' for the chain specified in acf_chain.
+#' @param acf_chain Integer. For which chain to plot the acf, if plot_acf = TRUE.
 #' @return
 #' @export
 #'
@@ -72,11 +74,11 @@ plot_chains <- function(pmwg_mcmc,layout=NA,subject=NA,ylim=NULL,
 #'
 #' @param samples Single pmwgs object (in which case ACF for one chain is plotted)
 #' or list of pmwgs objects (in which case ACFs for each chain plotted)
-#' @param layout passed on to plot_chains
-#' @param subject integer or character vector, if selection = "alpha" picks out subjects(s)
-#' @param selection selection (mu, variance, correlation, alpha)
-#' @param filter which stage to plot (default "sample")
-#' @param subfilter an integer or vector. If integer it will exclude up until that integer.
+#' @param Layout passed on to plot_chains
+#' @param Subject integer or character vector, if selection = "alpha" picks out subjects(s)
+#' @param Selection selection (mu, variance, correlation, alpha)
+#' @param Filter which stage to plot (default "sample")
+#' @param Subfilter an integer or vector. If integer it will exclude up until that integer.
 #' If vector it will include everything in that range.
 #'
 #' @return
@@ -103,29 +105,33 @@ plot_acfs <- function(samples,layout=NULL,subject=1,
   }
 }
 
-#' Title
+#' Uses output from plot_density to plot true vs. estimated (median with CI) alpha
+#' parameters for each subject (plot density must be called with true values passed
+#' through the pars argument).
 #'
-#' @param tabs
-#' @param layout
-#' @param do_ci
-#' @param ci_col
-#' @param cap
-#' @param do_rmse
-#' @param rmse_pos
-#' @param rmse_digits
-#' @param pearson_digits
-#' @param do_coverage
-#' @param coverage_pos
-#' @param coverage_digits
-#' @param spearman_digits
+#' @param tabs Tables of actual and estimated alpha parameters (with CIs) from plot_density
+#' @param layout par(mfrow=layout) for parameters
+#' @param do_ci Boolean (Defualt TRUE). Add CIs to plot?
+#' @param ci_col Color of CI.
+#' @param cap Width of CI cap (passed to arrows)
+#' @param do_rmse Boolean (defualt FALSE) Add root-mean squared error to plot
+#' instead of default Pearson correlation
+#' @param r_pos Position of Pearson/RMSE (passed to legend)
+#' @param rmse_digits Digits for RMSE
+#' @param pearson_digits Digits for Pearson correlation
+#' @param do_coverage Boolean (defualt TRUE) add coverage percentage estimate (otherwise
+#' add Spearman correlation)
+#' @param coverage_pos Position of Coverage/Pearson (passed to legend)
+#' @param coverage_digits Digits for coverage
+#' @param spearman_digits Digits for Spearman correlation
 #'
-#' @return
+#' @return List with RMSE, coverage and Pearson and Spearman correlations.
 #' @export
 #'
 #' @examples
 plot_alpha_recovery <- function(tabs,layout=c(2,3),
                                 do_ci = TRUE,ci_col="grey",cap=.05,
-                                do_rmse=FALSE,rmse_pos="topleft",
+                                do_rmse=FALSE,r_pos="topleft",
                                 rmse_digits=3,pearson_digits=2,
                                 do_coverage=FALSE,coverage_pos="bottomright",
                                 coverage_digits=1,spearman_digits=2)
@@ -161,10 +167,10 @@ plot_alpha_recovery <- function(tabs,layout=c(2,3),
     }
     if (do_rmse) {
       rmse[p] <- sqrt(mean((xy[,"true"] - xy[,"50%"])^2))
-      legend(rmse_pos,paste("RMSE = ",round(rmse[p],rmse_digits)),bty="n")
+      legend(r_pos,paste("RMSE = ",round(rmse[p],rmse_digits)),bty="n")
     } else {
       pearson[p] <- cor(xy[,"true"],xy[,"50%"],method="pearson")
-      legend(rmse_pos,paste("r(pearson) = ",round(pearson[p],pearson_digits)),bty="n")
+      legend(r_pos,paste("r(pearson) = ",round(pearson[p],pearson_digits)),bty="n")
     }
     if (do_coverage) {
       coverage[p] = 100*mean((xy[,"97.5%"] > xy[,"true"])  & (xy[,"2.5%"] < xy[,"true"]))
