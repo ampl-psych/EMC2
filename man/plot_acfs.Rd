@@ -28,6 +28,9 @@ or list of pmwgs objects (in which case ACFs for each chain plotted)}
 \item{Subfilter}{an integer or vector. If integer it will exclude up until that integer.
 If vector it will include everything in that range.}
 }
+\value{
+None
+}
 \description{
 Calls plot_chains to plot auto-correlation functions for each parameter
 }

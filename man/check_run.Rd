@@ -38,6 +38,9 @@ If NA (defualt) use CODA defaults, if NULL use current.}
 
 \item{height}{PDF page height}
 }
+\value{
+None
+}
 \description{
 Runs a series of convergence checks, printing statistics to the console and
 saving plots to a pdf.

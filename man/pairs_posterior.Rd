@@ -41,6 +41,9 @@ otherwise sampled parameters}
 
 \item{maxp}{Integer for maximum number of iterations used (default 500).}
 }
+\value{
+None
+}
 \description{
 Plots matrix of parameter correlations (upper triangle) and corresponding
 scatterplots (lower triangle)

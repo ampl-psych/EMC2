@@ -5,7 +5,8 @@
 \title{Plots data and fit. If rt  available plots cdf, if not plots ROC. If stat
 argument (which calculates a statistics based on the data) is supplied
 instead fit is plotted as a density with a vertical line at the position of
-the data statistic.}
+the data statistic. If more than one subject is included data and fits are
+aggregated over subjects.}
 \usage{
 plot_fit(
   data,
@@ -41,8 +42,7 @@ and an rt column}
 
 \item{pp}{Posterior predictives created by post_predict}
 
-\item{subject}{Integer or string picking out a single subject unless
-NULL (default) where data and fits are aggregated.}
+\item{subject}{Integer or string picking out subject(s).}
 
 \item{factors}{Character vector of factors in data to display separately. If
 NULL (default) use names of all columns in data except "trials","R", and "rt".
@@ -96,5 +96,6 @@ If stat argument is provided a table of observed values and predicted quantiles
 Plots data and fit. If rt  available plots cdf, if not plots ROC. If stat
 argument (which calculates a statistics based on the data) is supplied
 instead fit is plotted as a density with a vertical line at the position of
-the data statistic.
+the data statistic. If more than one subject is included data and fits are
+aggregated over subjects.
 }

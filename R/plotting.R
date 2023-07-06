@@ -15,7 +15,7 @@
 #' @param plot_acf Boolean (default FALSE). If TRUE will also plot autocorrelation
 #' for the chain specified in acf_chain.
 #' @param acf_chain Integer. For which chain to plot the acf, if plot_acf = TRUE.
-#' @return
+#' @return None
 #' @export
 #'
 #' @examples
@@ -83,7 +83,7 @@ plot_chains <- function(pmwg_mcmc,layout=NA,subject=NA,ylim=NULL,
 #' @param Subfilter an integer or vector. If integer it will exclude up until that integer.
 #' If vector it will include everything in that range.
 #'
-#' @return
+#' @return None
 #' @export
 #'
 #' @examples
@@ -827,7 +827,7 @@ plot_trials <- function(data,pp=NULL,subject=NULL,factors=NULL,Fcovariates=NULL,
 #' @param width PDF page width
 #' @param height PDF page height
 #'
-#' @return
+#' @return None
 #' @export
 #'
 #' @examples
@@ -921,7 +921,7 @@ check_run <- function(samples,pdf_name="check_run.pdf",interactive=TRUE,
 #' @param do_plot Boolean, do plot
 #' @param maxp Integer for maximum number of iterations used (default 500).
 #'
-#' @return
+#' @return None
 #' @export
 #'
 #' @examples

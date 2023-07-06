@@ -42,6 +42,9 @@ for the chain specified in acf_chain.}
 
 \item{acf_chain}{Integer. For which chain to plot the acf, if plot_acf = TRUE.}
 }
+\value{
+None
+}
 \description{
 Plot MCMC chains
 }
