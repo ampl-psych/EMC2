@@ -17,11 +17,11 @@ plot_acfs(
 \item{samples}{Single pmwgs object (in which case ACF for one chain is plotted)
 or list of pmwgs objects (in which case ACFs for each chain plotted)}
 
-\item{Layout}{passed on to plot_chains}
+\item{Layout}{A 2-vector specifying the layout handled as in plot_chains}
 
 \item{Subject}{integer or character vector, if selection = "alpha" picks out subjects(s)}
 
-\item{Selection}{selection (mu, variance, correlation, alpha)}
+\item{Selection}{String designating parameter type (mu, variance, correlation, alpha = default)}
 
 \item{Filter}{which stage to plot (default "sample")}
 

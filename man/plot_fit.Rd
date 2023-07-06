@@ -2,7 +2,10 @@
 % Please edit documentation in R/plotting.R
 \name{plot_fit}
 \alias{plot_fit}
-\title{Title}
+\title{Plots data and fit. If rt  available plots cdf, if not plots ROC. If stat
+argument (which calculates a statistics based on the data) is supplied
+instead fit is plotted as a density with a vertical line at the position of
+the data statistic.}
 \usage{
 plot_fit(
   data,
@@ -27,14 +30,71 @@ plot_fit(
   lpos = "topleft",
   signalFactor = "S",
   zROC = FALSE,
-  qfun = NULL,
+  qfun = qnorm,
   lim = NULL,
   rocfit_cex = 0.5
 )
 }
 \arguments{
-\item{rocfit_cex}{}
+\item{data}{Data frame with subjects and R factors, and possibly other factors
+and an rt column}
+
+\item{pp}{Posterior predictives created by post_predict}
+
+\item{subject}{Integer or string picking out a single subject unless
+NULL (default) where data and fits are aggregated.}
+
+\item{factors}{Character vector of factors in data to display separately. If
+NULL (default) use names of all columns in data except "trials","R", and "rt".
+Omitted factors are aggregated over.}
+
+\item{stat}{A function that takes a the data and returns a single value.}
+
+\item{stat_name}{A string naming what the stat argument calculates.}
+
+\item{ci}{Credible interval and central tendency quantiles for return when
+stat argument is supplied (default c(.025,.5,.975))}
+
+\item{do_plot}{Boolean (default TRUE) for making a plot}
+
+\item{xlim}{x-axis plot limit, 2-vector (same for all) or matrix (one row for each paramter)}
+
+\item{ylim}{y-axis plot limit, 2-vector (same for all) or matrix (one row for each paramter)}
+
+\item{layout}{2-vector specifying par(mfrow) or par(mfcol) (default NULL use current).}
+
+\item{mfcol}{Boolean, default TRUE use mfcol else mfrow.}
+
+\item{probs}{Vector of probabilities at which to calculate cdf (default percentiles)}
+
+\item{data_lwd}{Integer line width for data in cdf (default = 2)}
+
+\item{fit_lwd}{Integer line widht for fit in cdf (default = 1)}
+
+\item{qp_cex}{cex for data quantile points in cdf}
+
+\item{q_points}{Quantile points to plot in cdf (default c(.1,.3,.5,.7,.9))}
+
+\item{pqp_cex}{cex for predicted quantile points in cdf}
+
+\item{lpos}{Legend position (see legend)}
+
+\item{signalFactor}{The name of the "signal" factor in an ROC.}
+
+\item{zROC}{Boolean, (default FALSE) to plot ROC on transformed scale.}
+
+\item{qfun}{Scale transform function for zROC (default qnorm)}
+
+\item{lim}{2-vector for x and y limit of ROC}
+
+\item{rocfit_cex}{cex for predicted ROC points (default = 0.5.}
+}
+\value{
+If stat argument is provided a table of observed values and predicted quantiles
 }
 \description{
-Title
+Plots data and fit. If rt  available plots cdf, if not plots ROC. If stat
+argument (which calculates a statistics based on the data) is supplied
+instead fit is plotted as a density with a vertical line at the position of
+the data statistic.
 }

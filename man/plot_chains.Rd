@@ -20,17 +20,19 @@ plot_chains(
 \arguments{
 \item{pmwg_mcmc}{A list of samplers or samplers converted to mcmc objects.}
 
-\item{layout}{A vector or matrix specifying the layout as in par(mfrow = layout).}
+\item{layout}{A vector specifying the layout as in par(mfrow = layout).
+If NA (defualt) use CODA defaults, if NULL use current.}
 
-\item{subject}{Integer or character vector, if selection = "alpha" picks out subject(s)}
+\item{subject}{Integer or character vector, if selection = "alpha" picks out subject(s)
+(defualt NA plot all)}
 
 \item{ylim}{The y limits of the chain plot.}
 
-\item{selection}{A string. Specifies which chains you want to plot.}
+\item{selection}{String designating parameter type (mu, variance, correlation, alpha = default)}
 
 \item{filter}{A string. Specifies which stage you want to plot.}
 
-\item{thin}{An integer. Specify if you want to thin the chains by a factor n.}
+\item{thin}{An integer. Keep only iterations that are a multiple of thin.}
 
 \item{subfilter}{An integer or vector. If integer it will exclude up until
 that integer. If vector it will include everything in that range.}

@@ -25,7 +25,7 @@ plot_alpha_recovery(
 \arguments{
 \item{tabs}{Tables of actual and estimated alpha parameters (with CIs) from plot_density}
 
-\item{layout}{par(mfrow=layout) for parameters}
+\item{layout}{A 2-vector specifying the layout as in par(mfrow = layout)}
 
 \item{do_ci}{Boolean (Defualt TRUE). Add CIs to plot?}
 
@@ -52,7 +52,7 @@ add Spearman correlation)}
 \item{spearman_digits}{Digits for Spearman correlation}
 }
 \value{
-List with RMSE, coverage and Pearson and Spearman correlations.
+Invisible list with RMSE, coverage and Pearson and Spearman correlations.
 }
 \description{
 Uses output from plot_density to plot true vs. estimated (median with CI) alpha
