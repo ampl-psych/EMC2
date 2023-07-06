@@ -96,7 +96,7 @@ plot_acfs <- function(samples,layout=NULL,subject=1,
     snams <- names(samples[[1]]$data)
     if (is.numeric(subject)) subject <- snams[subject]
     if (!all(subject %in% snams)) stop("Subject not present\n")
-    message("Plotting chains for subject ",subject)
+    message("Plotting chains for subject(s) ",paste(subject,collapse=" "))
   }
   for (i in 1:length(samples)) {
     if (selection=="alpha") {
@@ -523,9 +523,7 @@ plot_roc <- function(data,signalFactor="S",zROC=FALSE,qfun=NULL,main="",lim=NULL
 #' @param data Data frame with subjects and R factors, and possibly other factors
 #' and an rt column
 #' @param pp Posterior predictives created by post_predict
-#' @param subject Integer or string picking out subject(s). Default NULL causes
-#' all subjects to be aggregated, and if more than one subject picked out they
-#' are also aggregated.
+#' @param subject Integer or string picking out subject(s).
 #' @param factors Character vector of factors in data to display separately. If
 #' NULL (default) use names of all columns in data except "trials","R", and "rt".
 #' Omitted factors are aggregated over.
@@ -568,9 +566,9 @@ plot_fit <- function(data,pp,subject=NULL,factors=NULL,
   if (!is.null(subject)) {
     snams <- levels(data$subjects)
     if (is.numeric(subject)) subject <- snams[subject]
-    if (!(subject %in% snams)) stop("Subject(s) not present\n")
-    dat <- data[data$subjects %in% subject,]
-    pp <- pp[pp$subjects %in% subject,]
+    if (!all(subject %in% snams)) stop("Subject(s) not present\n")
+    dat <- droplevels(data[data$subjects %in% subject,])
+    pp <- droplevels(pp[pp$subjects %in% subject,])
     if (length(subject>1))
       fnams <- names(dat)[!(names(dat) %in% c("trials","R","rt"))] else
       fnams <- names(dat)[!(names(dat) %in% c("subjects","trials","R","rt"))]
@@ -738,58 +736,6 @@ plot_fit <- function(data,pp,subject=NULL,factors=NULL,
     }
   }
 }
-
-
-#' Convenience version of plot_fit that automatically applies it to each subject
-#' separately.
-#'
-#' @param data Data frame with subjects and R factors, and possibly other factors
-#' and an rt column
-#' @param pp Posterior predictives created by post_predict
-#' @param factors Character vector of factors in data to display separately. If
-#' NULL (default) use names of all columns in data except "trials","R", and "rt".
-#' Omitted factors are aggregated over.
-#' @param stat A function that takes a the data and returns a single value.
-#' @param stat_name A string naming what the stat argument calculates.
-#' @param do_plot Boolean (default TRUE) for making a plot
-#' @param xlim x-axis plot limit, 2-vector (same for all) or matrix (one row for each paramter)
-#' @param ylim y-axis plot limit, 2-vector (same for all) or matrix (one row for each paramter)
-#' @param layout 2-vector specifying par(mfrow) or par(mfcol) (default NULL use current).
-#' @param mfcol Boolean, default TRUE use mfcol else mfrow.
-#' @param probs Vector of probabilities at which to calculate cdf (default percentiles)
-#' @param data_lwd Integer line width for data in cdf (default = 2)
-#' @param fit_lwd Integer line width for fit in cdf (default = 1)
-#' @param qp_cex cex for data quantile points in cdf
-#' @param q_points Quantile points to plot in cdf (default c(.1,.3,.5,.7,.9))
-#' @param pqp_cex cex for predicted quantile points in cdf
-#' @param lpos Legend position (see legend)
-#' @param signalFactor The name of the "signal" factor in an ROC.
-#' @param zROC Boolean, (default FALSE) to plot ROC on transformed scale.
-#' @param qfun Scale transform function for zROC (default qnorm)
-#' @param lim 2-vector for x and y limit of ROC
-#' @param rocfit_cex cex for predicted ROC points.
-#'
-#' @return
-#' @export
-#'
-#' @examples
-plot_fits <- function(data,pp,factors=NULL,
-                      stat=NULL,stat_name="",do_plot=TRUE,
-                      xlim=NULL,ylim=NULL,
-                      layout=NULL,mfcol=TRUE,
-                      probs=c(1:99)/100,
-                      data_lwd=2,fit_lwd=1,qp_cex=1,
-                      q_points=c(.1,.3,.5,.7,.9),pqp_cex=.5,lpos="topleft",
-                      signalFactor="S",zROC=FALSE,qfun=NULL,lim=NULL,rocfit_cex=.5){
-  # as for plot_fits but does it per subject.
-  for (i in levels(data$subjects))
-    plot_fit(data,pp,subject=i,factors,stat,stat_name,ci=c(.025,.5,.975),
-             do_plot,xlim,ylim,layout,mfcol,
-             probs,data_lwd,fit_lwd,qp_cex,q_points,pqp_cex,lpos,
-             signalFactor,zROC=qfun,lim,rocfit_cex)
-}
-
-
 
 
 # subject=NULL;factors=NULL;
