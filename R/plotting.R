@@ -95,7 +95,7 @@ plot_acfs <- function(samples,layout=NULL,subject=1,
   if (selection=="alpha") {
     snams <- names(samples[[1]]$data)
     if (is.numeric(subject)) subject <- snams[subject]
-    if (!(subject %in% snams)) stop("Subject not present\n")
+    if (!all(subject %in% snams)) stop("Subject not present\n")
     message("Plotting chains for subject ",subject)
   }
   for (i in 1:length(samples)) {
@@ -217,7 +217,7 @@ plot_defective_density <- function(data,subject=NULL,factors=NULL,
   if (!is.null(subject)) {
     snams <- levels(data$subjects)
     if (is.numeric(subject)) subject <- snams[subject]
-    if (!(subject %in% snams)) stop("Subject not present\n")
+    if (!all(subject %in% snams)) stop("Subject not present\n")
     dat <- data[data$subjects==subject,]
     fnams <- names(dat)[!(names(dat) %in% c("subjects","trials","R","rt"))]
   } else {
@@ -517,13 +517,15 @@ plot_roc <- function(data,signalFactor="S",zROC=FALSE,qfun=NULL,main="",lim=NULL
 #' Plots data and fit. If rt  available plots cdf, if not plots ROC. If stat
 #' argument (which calculates a statistics based on the data) is supplied
 #' instead fit is plotted as a density with a vertical line at the position of
-#' the data statistic.
+#' the data statistic. If more than one subject is included data and fits are
+#' aggregated over subjects.
 #'
 #' @param data Data frame with subjects and R factors, and possibly other factors
 #' and an rt column
 #' @param pp Posterior predictives created by post_predict
-#' @param subject Integer or string picking out a single subject unless
-#' NULL (default) where data and fits are aggregated.
+#' @param subject Integer or string picking out subject(s). Default NULL causes
+#' all subjects to be aggregated, and if more than one subject picked out they
+#' are also aggregated.
 #' @param factors Character vector of factors in data to display separately. If
 #' NULL (default) use names of all columns in data except "trials","R", and "rt".
 #' Omitted factors are aggregated over.
@@ -565,11 +567,13 @@ plot_fit <- function(data,pp,subject=NULL,factors=NULL,
 {
   if (!is.null(subject)) {
     snams <- levels(data$subjects)
-    if (is.numeric(subject)) subject <- snams[subject[1]]
-    if (!(subject %in% snams))stop("Subject not present\n")
-    dat <- data[data$subjects==subject,]
-    pp <- pp[pp$subjects==subject,]
-    fnams <- names(dat)[!(names(dat) %in% c("subjects","trials","R","rt"))]
+    if (is.numeric(subject)) subject <- snams[subject]
+    if (!(subject %in% snams)) stop("Subject(s) not present\n")
+    dat <- data[data$subjects %in% subject,]
+    pp <- pp[pp$subjects %in% subject,]
+    if (length(subject>1))
+      fnams <- names(dat)[!(names(dat) %in% c("trials","R","rt"))] else
+      fnams <- names(dat)[!(names(dat) %in% c("subjects","trials","R","rt"))]
   } else {
     dat <- data
     fnams <- names(dat)[!(names(dat) %in% c("trials","R","rt"))]
@@ -801,10 +805,15 @@ plot_trials <- function(data,pp=NULL,subject=NULL,factors=NULL,Fcovariates=NULL,
     if (!any(names(pp)=="trials")) stop("posterior predictives must have trials column")
   } else OvsP <- FALSE
   if (!is.null(subject)) {
-    dat <- data[data$subjects==subject,]
+    snams <- levels(data$subjects)
+    if (is.numeric(subject)) subject <- snams[subject]
+    if (!all(subject %in% snams)) stop("Subject(s) not present\n")
+    dat <- data[data$subjects %in% subject,]
     dat$subjects <- factor(as.character(dat$subjects))
-    pp <- pp[pp$subjects==subject,]
-    fnams <- names(dat)[!(names(dat) %in% c("subjects","trials","R","rt",Fcovariates))]
+    pp <- pp[pp$subjects %in% subject,]
+    if (length(subject>1))
+      fnams <- names(dat)[!(names(dat) %in% c("trials","R","rt"))] else
+      fnams <- names(dat)[!(names(dat) %in% c("subjects","trials","R","rt"))]
   } else {
     dat <- data
     fnams <- names(dat)[!(names(dat) %in% c("trials","R","rt",Fcovariates))]
