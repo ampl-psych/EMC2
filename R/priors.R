@@ -41,7 +41,7 @@ prior_samples_alpha <- function(theta_mu,theta_var,n=1e3)
 #   }
 # }
 
-#' Convenience function to plot from the prior
+#' Plots prior distributions by simulation.
 #'
 #' @param prior A list of prior samples
 #' @param type Optional. Otherwise inferred from the prior samples
@@ -52,7 +52,7 @@ prior_samples_alpha <- function(theta_mu,theta_var,n=1e3)
 #' @param upper
 #' @param xlim
 #'
-#' @return NULL. Makes a plot of the prior samples
+#' @return NULL
 #' @export
 #'
 #' @examples
@@ -60,7 +60,7 @@ plot_prior <- function(prior, type = NULL,add_density=FALSE,adjust=1,breaks=50,
                        layout=c(3,3),upper=NULL,xlim=NULL){
   if(is.null(type)) type <- names(prior)
   for(typ in type){
-    samples <- prior[["alpha"]]
+    samples <- prior[[typ]]
     par(mfrow = layout)
     par_names <- colnames(samples)
     uppers <- setNames(rep(.999,length(par_names)),par_names)
