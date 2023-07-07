@@ -217,7 +217,7 @@ p_test <- function(x,x_name=NULL,x_fun=NULL,x_fun_name="fun",
   # Process x
   if (!is(x[[1]], "pmwgs")) stop("x must be a list of pmwgs objects")
   if (length(x[[1]]$data)==1) selection <- "alpha"
-  x <- EMC2:::as_mcmc.list(x,selection=selection,filter=filter,
+  x <- as_mcmc.list(x,selection=selection,filter=filter,
                     subfilter=subfilter,mapped=mapped)
   # Individual subject analysis
   if (selection != "alpha") x_subject <- NULL else
@@ -248,7 +248,7 @@ p_test <- function(x,x_name=NULL,x_fun=NULL,x_fun_name="fun",
     dimnames(tab)[[2]] <- c(x_name,"mu")
   } else {
     if (!is(y[[1]], "pmwgs")) stop("y must be a list of pmwgs objects")
-    y <- EMC2:::as_mcmc.list(y,selection=selection,filter=filter,
+    y <- as_mcmc.list(y,selection=selection,filter=filter,
                       subfilter=subfilter,mapped=mapped)
     # Individual subject analysis
     if (selection != "alpha") y_subject <- NULL else
