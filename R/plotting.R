@@ -70,21 +70,19 @@ plot_chains <- function(pmwg_mcmc,layout=NA,subject=NA,ylim=NULL,
   }
 }
 
-
 #' Calls plot_chains to plot auto-correlation functions for each parameter
 #'
 #' @param samples Single pmwgs object (in which case ACF for one chain is plotted)
 #' or list of pmwgs objects (in which case ACFs for each chain plotted)
-#' @param Layout A 2-vector specifying the layout handled as in plot_chains
-#' @param Subject integer or character vector, if selection = "alpha" picks out subjects(s)
-#' @param Selection String designating parameter type (mu, variance, correlation, alpha = default)
-#' @param Filter which stage to plot (default "sample")
-#' @param Subfilter an integer or vector. If integer it will exclude up until that integer.
+#' @param layout A 2-vector specifying the layout handled as in plot_chains
+#' @param subject integer or character vector, if selection = "alpha" picks out subjects(s)
+#' @param selection String designating parameter type (mu, variance, correlation, alpha = default)
+#' @param filter which stage to plot (default "sample")
+#' @param subfilter an integer or vector. If integer it will exclude up until that integer.
 #' If vector it will include everything in that range.
 #'
 #' @return None
 #' @export
-
 plot_acfs <- function(samples,layout=NULL,subject=1,
                       selection="alpha",filter="sample",subfilter=0)
   # Plots acf for all chains
@@ -543,6 +541,7 @@ plot_roc <- function(data,signalFactor="S",zROC=FALSE,qfun=NULL,main="",lim=NULL
 #' @param qfun Scale transform function for zROC (default qnorm)
 #' @param lim 2-vector for x and y limit of ROC
 #' @param rocfit_cex cex for predicted ROC points (default = 0.5.
+#' @param adjust Control of smoothing in density plots
 #'
 #' @return If stat argument is provided a table of observed values and predicted quantiles
 #' @export

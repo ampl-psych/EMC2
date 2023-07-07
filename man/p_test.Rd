@@ -9,10 +9,11 @@ p_test(
   x,
   x_name = NULL,
   x_fun = NULL,
-  fun_name = "fun",
+  x_fun_name = "fun",
   y = NULL,
   y_name = NULL,
   y_fun = NULL,
+  y_fun_name = "fun",
   mapped = FALSE,
   x_subject = NULL,
   y_subject = NULL,
@@ -35,12 +36,16 @@ p_test(
 \item{x_fun}{Function applied to each iteration's parameter vector to create
 variable to be tested.}
 
+\item{x_fun_name}{Name to give to quantity calculated by x_fun}
+
 \item{y}{A pmwgs object or list of these}
 
 \item{y_name}{Name of the parameter to be tested}
 
 \item{y_fun}{Function applied to each iteration's parameter vector to create
 variable to be tested.}
+
+\item{y_fun_name}{Name to give to quantity calculated by y_fun}
 
 \item{mapped}{Should samples be mapped before doing test.}
 

@@ -1,4 +1,3 @@
-#' Title
 std_error_IS2 <- function(IS_samples, n_bootstrap = 50000){
   log_marglik_boot= array(dim = n_bootstrap)
   for (i in 1:n_bootstrap){
@@ -183,13 +182,15 @@ iat_pmwg <- function(pmwg_mcmc,
 #' @param print_table Boolean (default TRUE) for printing results table
 #' @param selection String designating parameter type (mu, variance, correlation, alpha = default)
 #' @param filter A string. Specifies which stage you want to plot.
+#' @param x_fun_name Name to give to quantity calculated by x_fun
+#' @param y_fun_name Name to give to quantity calculated by y_fun
 #' @param subfilter An integer or vector. If integer it will exclude up until
 #'
 #' @return Invisible results table with no rounding.
 #' @export
 
-p_test <- function(x,x_name=NULL,x_fun=NULL,fun_name="fun",
-                   y=NULL,y_name=NULL,y_fun=NULL,
+p_test <- function(x,x_name=NULL,x_fun=NULL,x_fun_name="fun",
+                   y=NULL,y_name=NULL,y_fun=NULL,y_fun_name="fun",
                    mapped=FALSE,
                    x_subject=NULL,y_subject=NULL,
                    mu=0,alternative = c("less", "greater")[1],
@@ -238,7 +239,7 @@ p_test <- function(x,x_name=NULL,x_fun=NULL,fun_name="fun",
     x <- -apply(x,1,diff)
     x_name <- paste(x_name,collapse="-")
   }
-  if (is.null(x_name)) x_name <- fun_name
+  if (is.null(x_name)) x_name <- x_fun_name
   if (is.null(y)) {
     p <- mean(x<mu)
     if (alternative=="greater") p <- 1-p
@@ -273,7 +274,7 @@ p_test <- function(x,x_name=NULL,x_fun=NULL,fun_name="fun",
     if (alternative=="greater") p <- 1-p
     tab <- cbind(quantile(x,probs),quantile(y,probs),quantile(d,probs))
     attr(tab,alternative) <- p
-    if (is.null(y_name)) y_name <- fun_name
+    if (is.null(y_name)) y_name <- y_fun_name
     if (x_name==y_name)
       dimnames(tab)[[2]] <- c(paste(x_name,c(x_subject,y_subject),sep="_"),
                               paste(x_subject,y_subject,sep="-")) else

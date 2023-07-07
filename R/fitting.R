@@ -21,6 +21,7 @@
 #' @param cores_per_chain An integer. How many cores to use per chain. Parallelizes across participant calculations.
 #' @param cores_for_chains An integer. How many cores to use across chains. Default is the number of chains.
 #' @param max_trys An integer. How many times it will try to meet the finish conditions. Default is 50.
+#' @param n_blocks
 #'
 #' @return A list of samplers
 #' @export
@@ -83,6 +84,7 @@ run_emc <- function(samplers, stage = NULL, iter = 1000, max_gd = 1.1, mean_gd =
 #' Used by `run_emc`, `auto_burn`, `run_adapt` and `run_sample`.
 #' Will break if you skip a stage, the stages have to be run in order (preburn, burn, adapt, sample).
 #' Either iter, max_gd, min_es or min_unique has to be specified. Multiple conditions for finishing can be specified. Will finish if all conditions are met.
+#'
 #' @param samplers A list of samplers, could be in any stage, as long as they've been initialized with make_samplers
 #' @param stage A string. Indicates which stage is to be run, either preburn, burn, adapt or sample
 #' @param iter An integer. Indicates how many iterations to run,
@@ -100,6 +102,7 @@ run_emc <- function(samplers, stage = NULL, iter = 1000, max_gd = 1.1, mean_gd =
 #' @param cores_per_chain An integer. How many cores to use per chain. Parallelizes across participant calculations.
 #' @param cores_for_chains An integer. How many cores to use across chains. Default is the number of chains.
 #' @param max_trys An integer. How many times it will try to meet the finish conditions. Default is 50.
+#' @param n_blocks
 #'
 #' @return A list of samplers
 #' @export
@@ -505,6 +508,7 @@ auto_burn <- function(samplers, max_gd = NULL, mean_gd = 1.1, min_es = 0, prebur
 #' @param cores_per_chain An integer. How many cores to use per chain. Parallelizes across participant calculations.
 #' @param cores_for_chains An integer. How many cores to use across chains. Default is the number of chains.
 #' @param max_trys An integer. How many times it will try to meet the finish conditions. Default is 50.
+#' @param n_blocks
 #'
 #' @return A list of samplers.
 #' @export
@@ -513,7 +517,8 @@ run_adapt <- function(samplers, max_gd = NULL, mean_gd = NULL, min_es = 0, min_u
                       p_accept = .8, step_size = 100, verbose = FALSE, verboseProgress = FALSE,
                       fileName = NULL,
                       particles = NULL, particle_factor=40, cores_per_chain = 1,
-                      cores_for_chains = length(samplers), max_trys = 50, n_blocks = NULL){
+                      cores_for_chains = length(samplers), max_trys = 50, n_blocks = NULL)
+{
   samplers <- run_samplers(samplers, stage = "adapt",  max_gd = max_gd, mean_gd = mean_gd, min_es = min_es, min_unique = min_unique,
                            cores_for_chains = cores_for_chains, p_accept = p_accept,
                            step_size = step_size,  verbose = verbose, verboseProgress = verboseProgress,
@@ -540,7 +545,9 @@ run_adapt <- function(samplers, max_gd = NULL, mean_gd = NULL, min_es = 0, min_u
 #' @param particle_factor An integer. Particle factor multiplied by the square root of the number of sampled parameters will determine the number of particles used.
 #' @param cores_per_chain An integer. How many cores to use per chain. Parallelizes across participant calculations.
 #' @param cores_for_chains An integer. How many cores to use across chains. Default is the number of chains.
+#' @param n_blocks
 #' @param max_trys An integer. How many times it will try to meet the finish conditions. Default is 50.
+#'
 #' @export
 #'
 #' @return A list of samplers
@@ -548,7 +555,8 @@ run_sample <- function(samplers, iter = 1000, max_gd = 1.1, mean_gd = NULL, min_
                        p_accept = .8, step_size = 100, verbose = FALSE, verboseProgress = FALSE,
                        fileName = NULL,
                        particles = NULL, particle_factor=40, cores_per_chain = 1,
-                       cores_for_chains = length(samplers), max_trys = 50, n_blocks = NULL){
+                       cores_for_chains = length(samplers), max_trys = 50, n_blocks = NULL)
+{
   samplers <- run_samplers(samplers, stage = "sample", iter = iter, max_gd = max_gd, mean_gd = mean_gd, min_es = min_es, cores_for_chains = cores_for_chains, p_accept = p_accept,
                            step_size = step_size,  verbose = verbose, verboseProgress = verboseProgress,
                            fileName = fileName,
@@ -568,11 +576,15 @@ run_sample <- function(samplers, iter = 1000, max_gd = 1.1, mean_gd = NULL, min_
 #' @param n_chains An integer. Specifies the amount of mcmc chains to be run. Should be more than 1 to get gelman diagnostics.
 #' @param rt_resolution A double. Used for compression, rts will be binned based on this resolution.
 #' @param nuisance A integer vector. Parameters on this location of the vector of parameters are treated as nuisance parameters and not included in group-level covariance (only variance).
-#' @param prior_list A list of priors for the group level. Prior distributions should match the type argument.
 #' @param par_groups A vector. Only to be specified with type blocked `c(1,1,1,2,2)` means first three parameters first block, last two parameters in the second block
 #' @param n_factors An integer. Only to be specified with type factor.
 #' @param constraintMat A matrix of rows equal to the number of estimated parameters, and columns equal to the number of factors, only to be specified with type factor.
 #' If null will use default settings as specified in Innes et al. 2022
+#' @param prior A named list containing the prior mean (theta_mu_mean) and
+#' variance (theta_mu_var). Default prior created if NULL
+#' @param nuisance_non_hyper
+#' @param grouped_pars
+#' @param formula
 #'
 #' @return a list of samplers
 #' @export

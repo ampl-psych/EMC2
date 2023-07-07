@@ -52,6 +52,8 @@ Omitted factors are aggregated over.}
 
 \item{stat_name}{A string naming what the stat argument calculates.}
 
+\item{adjust}{Control of smoothing in density plots}
+
 \item{ci}{Credible interval and central tendency quantiles for return when
 stat argument is supplied (default c(.025,.5,.975))}
 

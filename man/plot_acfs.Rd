@@ -17,15 +17,15 @@ plot_acfs(
 \item{samples}{Single pmwgs object (in which case ACF for one chain is plotted)
 or list of pmwgs objects (in which case ACFs for each chain plotted)}
 
-\item{Layout}{A 2-vector specifying the layout handled as in plot_chains}
+\item{layout}{A 2-vector specifying the layout handled as in plot_chains}
 
-\item{Subject}{integer or character vector, if selection = "alpha" picks out subjects(s)}
+\item{subject}{integer or character vector, if selection = "alpha" picks out subjects(s)}
 
-\item{Selection}{String designating parameter type (mu, variance, correlation, alpha = default)}
+\item{selection}{String designating parameter type (mu, variance, correlation, alpha = default)}
 
-\item{Filter}{which stage to plot (default "sample")}
+\item{filter}{which stage to plot (default "sample")}
 
-\item{Subfilter}{an integer or vector. If integer it will exclude up until that integer.
+\item{subfilter}{an integer or vector. If integer it will exclude up until that integer.
 If vector it will include everything in that range.}
 }
 \value{
