@@ -52,6 +52,9 @@ each trial. Must have names specified in the design Fcovariates argument.}
 
 \item{return_Ffunctions}{if false covariates are not returned}
 }
+\value{
+None
+}
 \description{
 Simulates data based on design and parameter vector arguments using the
 random function for a model (usually a design attribute, but if not can be

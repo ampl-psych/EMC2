@@ -6,6 +6,9 @@
 \usage{
 rdmBt0natural()
 }
+\value{
+A list defining the cognitive model
+}
 \description{
 Title
 }

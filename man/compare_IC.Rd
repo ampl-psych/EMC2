@@ -2,7 +2,7 @@
 % Please edit documentation in R/statistics.R
 \name{compare_IC}
 \alias{compare_IC}
-\title{Title}
+\title{IC based model selection for a list of samples objects.}
 \usage{
 compare_IC(
   sList,
@@ -16,8 +16,28 @@ compare_IC(
 )
 }
 \arguments{
-\item{subject}{}
+\item{sList}{List of samples objects}
+
+\item{filter}{A string. Specifies which stage you want to plot.}
+
+\item{subfilter}{An integer or vector. If integer it will exclude up until}
+
+\item{use_best_fit}{Boolean, default TRUE use best of minD and Dmean in
+calculation otherwise always use Dmean}
+
+\item{print_summary}{Boolean (default TRUE) print table of results}
+
+\item{digits}{Integer, significant digits in printed table except model weights}
+
+\item{digits_p}{Integer, significant digits in printed table for model weights}
+
+\item{subject}{Integer or string selecting a single subject, default NULL
+returns sums over all subjects}
+}
+\value{
+Table of effective number of parameters, mean deviance, deviance of
+mean, DIC, BPIC, and associated weights.
 }
 \description{
-Title
+IC based model selection for a list of samples objects.
 }

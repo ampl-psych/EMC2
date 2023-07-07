@@ -341,7 +341,7 @@ p_names <- function(samples,mapped=FALSE,design=FALSE)
     sp
 }
 
-#' Title
+#' Converts a pmwgs object (or list of such) to a data frame.
 #'
 #' @param samples A list of samplers or samplers converted to mcmc objects.
 #' @param selection String designating parameter type (mu, variance, correlation, alpha = default)
@@ -354,10 +354,9 @@ p_names <- function(samples,mapped=FALSE,design=FALSE)
 #' @param include_constants Include parameters that are not sampled (i.e., constants)
 #' @param stat A function that is applied to each column of the data frame
 #'
-#' @return
+#' @return A data frame with one row for each sample (with a subjects column if selection = "alpha")
 #' @export
-#'
-#' @examples
+
 parameters_data_frame <- function(samples,filter="sample",thin=1,subfilter=0,
                                   mapped=FALSE,include_constants=FALSE,stat=NULL,
                                   selection=c("alpha","mu","variance","covariance","correlation","LL","epsilon")[2])

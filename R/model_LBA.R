@@ -159,10 +159,9 @@ rLBA <- function(lR,pars,p_types=c("v","sv","b","A","t0"),posdrift = TRUE)
 #'
 #' Here we use the b = B + A parameterization, which ensures that the response threshold is always higher than the between trial variation in start point of the drift rate.
 #'
-#' @return
+#' @return A list defining the cognitive model
 #' @export
-#'
-#' @examples
+
 lbaB <- function(){
   list(
     type="RACE",
@@ -197,10 +196,9 @@ lbaB <- function(){
 # lba_B parameterization
 #' Title
 #'
-#' @return
+#' @return A list defining the cognitive model
 #' @export
-#'
-#' @examples
+
 albaB <- function(){
   list(
     type="RACE",

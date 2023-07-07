@@ -2,7 +2,9 @@
 % Please edit documentation in R/statistics.R
 \name{IC}
 \alias{IC}
-\title{Title}
+\title{Calculate information criteria (DIC, BPIC), effective number of parameters and
+constituent posterior deviance (D) summaries (meanD = mean of D, Dmean = D
+for mean of posterior parameters and minD = minimum of D).}
 \usage{
 IC(
   samplers,
@@ -15,8 +17,27 @@ IC(
 )
 }
 \arguments{
-\item{subject}{}
+\item{samplers}{pmwgs object or list of these}
+
+\item{filter}{A string. Specifies which stage you want to plot.}
+
+\item{subfilter}{An integer or vector. If integer it will exclude up until}
+
+\item{use_best_fit}{Boolean, default TRUE use best of minD and Dmean in
+calculation otherwise always use Dmean}
+
+\item{print_summary}{Boolean (default TRUE) print table of results}
+
+\item{digits}{Integer, significant digits in printed table}
+
+\item{subject}{Integer or string selecting a single subject, default NULL
+returns sums over all subjects}
+}
+\value{
+Table of DIC, BPIC, EffectiveN, meanD, Dmean, and minD
 }
 \description{
-Title
+Calculate information criteria (DIC, BPIC), effective number of parameters and
+constituent posterior deviance (D) summaries (meanD = mean of D, Dmean = D
+for mean of posterior parameters and minD = minimum of D).
 }

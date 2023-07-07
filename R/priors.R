@@ -41,21 +41,20 @@ prior_samples_alpha <- function(theta_mu,theta_var,n=1e3)
 #   }
 # }
 
-#' Plots prior distributions by simulation.
+#' Plots prior distributions simulated by get_prior functions.
 #'
 #' @param prior A list of prior samples
-#' @param type Optional. Otherwise inferred from the prior samples
-#' @param add_density
-#' @param adjust
-#' @param breaks
-#' @param layout
-#' @param upper
-#' @param xlim
+#' @param type Select type of prior to plot (e.g., "alpha", "mu" etc.), defualt NULL plots all types present
+#' @param add_density Boolean (default FALSE) draw density over prior histograms
+#' @param adjust density smoothing adjustment (Default 1, see density)
+#' @param breaks Integer number of breaks in histograms
+#' @param layout par(mfrow) setting (default c(3,3))
+#' @param upper Vector with parameter names of upper quantile limit of values plotted (default 0.999)
+#' @param xlim List with parameter names of plot x limits
 #'
 #' @return NULL
 #' @export
-#'
-#' @examples
+
 plot_prior <- function(prior, type = NULL,add_density=FALSE,adjust=1,breaks=50,
                        layout=c(3,3),upper=NULL,xlim=NULL){
   if(is.null(type)) type <- names(prior)

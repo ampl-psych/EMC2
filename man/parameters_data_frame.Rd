@@ -2,7 +2,7 @@
 % Please edit documentation in R/objects.R
 \name{parameters_data_frame}
 \alias{parameters_data_frame}
-\title{Title}
+\title{Converts a pmwgs object (or list of such) to a data frame.}
 \usage{
 parameters_data_frame(
   samples,
@@ -35,6 +35,9 @@ otherwise sampled parameters}
 
 \item{selection}{String designating parameter type (mu, variance, correlation, alpha = default)}
 }
+\value{
+A data frame with one row for each sample (with a subjects column if selection = "alpha")
+}
 \description{
-Title
+Converts a pmwgs object (or list of such) to a data frame.
 }

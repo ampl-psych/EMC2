@@ -17,8 +17,7 @@
 #' @param acf_chain Integer. For which chain to plot the acf, if plot_acf = TRUE.
 #' @return None
 #' @export
-#'
-#' @examples
+
 plot_chains <- function(pmwg_mcmc,layout=NA,subject=NA,ylim=NULL,
                         selection="alpha",filter="sample",thin=1,subfilter=0,
                         plot_acf=FALSE,acf_chain=1) # ,use_par=NA
@@ -85,8 +84,7 @@ plot_chains <- function(pmwg_mcmc,layout=NA,subject=NA,ylim=NULL,
 #'
 #' @return None
 #' @export
-#'
-#' @examples
+
 plot_acfs <- function(samples,layout=NULL,subject=1,
                       selection="alpha",filter="sample",subfilter=0)
   # Plots acf for all chains
@@ -129,8 +127,7 @@ plot_acfs <- function(samples,layout=NULL,subject=1,
 #'
 #' @return Invisible list with RMSE, coverage and Pearson and Spearman correlations.
 #' @export
-#'
-#' @examples
+
 plot_alpha_recovery <- function(tabs,layout=c(2,3),
                                 do_ci = TRUE,ci_col="grey",cap=.05,
                                 do_rmse=FALSE,r_pos="topleft",
@@ -207,8 +204,7 @@ plot_alpha_recovery <- function(tabs,layout=c(2,3),
 #'
 #' @return Invisibly if correct_fun specified a subject accuracy vector
 #' @export
-#'
-#' @examples
+
 plot_defective_density <- function(data,subject=NULL,factors=NULL,
                                    layout=NULL,mfcol=FALSE,
                                    xlim=NULL,bw = "nrd0",adjust=1,
@@ -306,8 +302,7 @@ plot_defective_density <- function(data,subject=NULL,factors=NULL,
 #' @return Invisibly returns tables of true and 95% CIs (for all chains combined
   # no matter what show_chains is)
 #' @export
-#'
-#' @examples
+
 plot_density <- function(pmwg_mcmc,layout=c(2,3),
   selection="alpha",filter="sample",thin=1,subfilter=0,mapped=FALSE,
   plot_prior=TRUE,n_prior=1e3,xlim=NULL,ylim=NULL,
@@ -551,8 +546,7 @@ plot_roc <- function(data,signalFactor="S",zROC=FALSE,qfun=NULL,main="",lim=NULL
 #'
 #' @return If stat argument is provided a table of observed values and predicted quantiles
 #' @export
-#'
-#' @examples
+
 plot_fit <- function(data,pp,subject=NULL,factors=NULL,
                      stat=NULL,stat_name="",adjust=1,
                      ci=c(.025,.5,.975),do_plot=TRUE,
@@ -829,8 +823,7 @@ plot_trials <- function(data,pp=NULL,subject=NULL,factors=NULL,Fcovariates=NULL,
 #'
 #' @return None
 #' @export
-#'
-#' @examples
+
 check_run <- function(samples,pdf_name="check_run.pdf",interactive=TRUE,
                       filter="sample",subfilter=0,thin=1,
                       layout=c(3,4),width=NULL,height=NULL) {
@@ -923,8 +916,7 @@ check_run <- function(samples,pdf_name="check_run.pdf",interactive=TRUE,
 #'
 #' @return None
 #' @export
-#'
-#' @examples
+
 pairs_posterior <- function(samples,filter="sample",thin=1,subfilter=0,mapped=FALSE,
   selection=c("alpha","mu","variance","covariance","correlation")[1],
   scale.subjects=TRUE,use=NA,do_plot=TRUE,maxp=500)
@@ -1000,8 +992,7 @@ pairs_posterior <- function(samples,filter="sample",thin=1,subfilter=0,mapped=FA
 #' @return vector with value of p[pname], highest likelihood point and p[pname]
 #' minus the parameter values at that point
 #' @export
-#'
-#' @examples
+
 profile_plot <- function(pname,p,p_min,p_max,dadm,n_point=100,main="",cores=1)
 
 {

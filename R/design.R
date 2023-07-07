@@ -77,8 +77,7 @@ make_design <- function(Flist = NULL,Ffactors = NULL,Rlevels = NULL,model,
 #'
 #' @return a contrast matrix.
 #' @export
-#'
-#' @examples
+
 contr.increasing <- function(n,levels=NULL)
 {
   contr <- matrix(0,nrow=n,ncol=n-1,dimnames=list(NULL,2:n))
@@ -95,8 +94,7 @@ contr.increasing <- function(n,levels=NULL)
 #'
 #' @return a contrast matrix.
 #' @export
-#'
-#' @examples
+
 contr.anova <- function(n) {
   contr <- stats::contr.helmert(n)
   contr/rep(2*apply(abs(contr),2,max),each=dim(contr)[1])
@@ -113,10 +111,9 @@ contr.anova <- function(n) {
 #' @param model a model list. Default is the model specified in the design list.
 #' @param doMap logical. If TRUE will
 #'
-#' @return
+#' @return Named vector with mapping attributes.
 #' @export
-#'
-#' @examples
+
 sampled_p_vector <- function(design,model=NULL,doMap=TRUE)
   # Makes an empty p_vector corresponding to model.
 {
@@ -235,8 +232,7 @@ design_model_custom_ll <- function(data, design, model, prior){
 #' specifying the design, prior and how to decompress ready supporting likelihood
 #' computation
 #' @export
-#'
-#' @examples
+
 design_model <- function(data,design,model=NULL,prior = NULL,
                          add_acc=TRUE,rt_resolution=0.02,verbose=TRUE,
                          compress=TRUE,rt_check=TRUE)

@@ -61,8 +61,7 @@ pDDM <- function(rt,R,pars,precision=2.5)
 #' `DP` is estimated as a ratio of lower/higher `t0` relative to the `t0 parameter`
 #' @return A model list with all the necessary functions to sample
 #' @export
-#'
-#' @examples
+
 ddmTZD <- function(){
   list(
     type="DDM",

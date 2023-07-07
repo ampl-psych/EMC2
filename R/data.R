@@ -31,10 +31,9 @@
 #' each trial. Must have names specified in the design Fcovariates argument.
 #' @param return_Ffunctions if false covariates are not returned
 #'
-#' @return
+#' @return None
 #' @export
-#'
-#' @examples
+
 make_data <- function(p_vector,design,model=NULL,trials=NULL,data=NULL,expand=1,
                       mapped_p=FALSE,LT=NULL,UT=NULL,LC=NULL,UC=NULL,
                       Fcovariates=NULL,return_Ffunctions=FALSE)
@@ -195,8 +194,7 @@ add_Ffunctions <- function(data,design)
 #'
 #' @return A list of simulated data sets of length n_post.
 #' @export
-#'
-#' @examples
+
 post_predict <- function(samples,hyper=FALSE,n_post=100,expand=1,
                          filter="sample",subfilter=0,thin=1,n_cores=1,
                          use_par=c("random","mean","median")[1])
@@ -278,8 +276,7 @@ post_predict <- function(samples,hyper=FALSE,n_post=100,expand=1,
 #'
 #' @return A matrix of random effects.
 #' @export
-#'
-#' @examples
+
 make_random_effects <- function(design, group_means, n_subj, variance_proportion = .2, covariances = NULL){
   if(length(group_means) != length(sampled_p_vector(design))) stop("You must specify as many means as parameters in your design")
   if(is.null(covariances)) covariances <- diag(abs(group_means)*variance_proportion)

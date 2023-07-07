@@ -24,8 +24,7 @@
 #'
 #' @return A list of samplers
 #' @export
-#'
-#' @examples
+
 run_emc <- function(samplers, stage = NULL, iter = 1000, max_gd = 1.1, mean_gd = 1.1, min_es = 0, min_unique = 600, preburn = 150,
                     p_accept = .8, step_size = 100, verbose = FALSE, verboseProgress = FALSE, fileName = NULL,
                     particles = NULL, particle_factor=40, cores_per_chain = 1,
@@ -104,8 +103,7 @@ run_emc <- function(samplers, stage = NULL, iter = 1000, max_gd = 1.1, mean_gd =
 #'
 #' @return A list of samplers
 #' @export
-#'
-#' @examples
+
 run_samplers <- function(samplers, stage, iter = NULL, max_gd = NULL, mean_gd = NULL, min_es = 0, min_unique = 600,
                          p_accept = .8, step_size = 100, verbose = FALSE, verboseProgress = FALSE,
                          fileName = NULL,
@@ -470,8 +468,7 @@ loadRData <- function(fileName){
 #'
 #' @return A list of samplers
 #' @export
-#'
-#' @examples
+
 auto_burn <- function(samplers, max_gd = NULL, mean_gd = 1.1, min_es = 0, preburn = 150,
                       p_accept = .8, step_size = 100, verbose = FALSE, verboseProgress = FALSE,
                       fileName = NULL,
@@ -511,8 +508,7 @@ auto_burn <- function(samplers, max_gd = NULL, mean_gd = 1.1, min_es = 0, prebur
 #'
 #' @return A list of samplers.
 #' @export
-#'
-#' @examples
+
 run_adapt <- function(samplers, max_gd = NULL, mean_gd = NULL, min_es = 0, min_unique = 600,
                       p_accept = .8, step_size = 100, verbose = FALSE, verboseProgress = FALSE,
                       fileName = NULL,
@@ -580,9 +576,7 @@ run_sample <- function(samplers, iter = 1000, max_gd = 1.1, mean_gd = NULL, min_
 #'
 #' @return a list of samplers
 #' @export
-#'
-#' @examples
-#'
+
 make_samplers <- function(data_list,design_list,model_list=NULL,
                           type=c("standard","diagonal","blocked","factor","single", "lm", "infnt_factor")[1],
                           n_chains=3,rt_resolution=0.02,
@@ -739,8 +733,7 @@ extractDadms <- function(dadms, names = 1:length(dadms)){
 #'
 #' @return Samplers, with IS2 attribute
 #' @export
-#'
-#' @examples
+
 run_IS2 <- function(samplers, filter = "sample", subfilter = 0, IS_samples = 1000,
                     stepsize_particles = 500, max_particles = 5000, n_cores = 1, df = 5){
   samples_merged <- merge_samples(samplers)
