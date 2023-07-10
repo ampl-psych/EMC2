@@ -82,9 +82,10 @@ double c_log_likelihood_DDM(NumericMatrix pars, DataFrame data,
   NumericVector lls_exp(n_out);
   lls = log(d_DDM_c(rts, R, group_idx, pars));
   lls_exp = c_expand(lls, expand); // decompress
-  lls_exp[lls_exp < min_ll] = min_ll;
   lls_exp[is_na(lls_exp)] = min_ll;
   lls_exp[is_infinite(lls_exp)] = min_ll;
+  lls_exp[lls_exp < min_ll] = min_ll;
+
   return(sum(lls_exp));
 }
 
@@ -99,6 +100,15 @@ double c_log_likelihood_race(NumericMatrix pars, DataFrame data,
   CharacterVector R = data["R"];
   NumericVector lds_exp(n_out);
   const int n_acc = unique(R).length();
+  if(sum(contains(data.names(), "NACC")) == 1){
+    NumericVector lR = data["lR"];
+    NumericVector NACC = data["NACC"];
+    for(int x = 0; x < pars.nrow(); x++){
+      if(lR[x] > NACC[x]){
+        pars(x,0) = NA_REAL;
+      }
+    }
+  }
   NumericVector win = log(dfun(rts, pars, winner)); //first for compressed
   lds[winner] = win;
   if(n_acc > 1){
@@ -119,14 +129,14 @@ double c_log_likelihood_race(NumericMatrix pars, DataFrame data,
         ll_out[z] = ll_out[z] + sum(lds_los[seq( z * (n_acc -1), (z+1) * (n_acc -1) -1)]);
       }
     }
-    ll_out[ll_out < min_ll] = min_ll;
     ll_out[is_na(ll_out)] = min_ll;
     ll_out[is_infinite(ll_out)] = min_ll;
+    ll_out[ll_out < min_ll] = min_ll;
     return(sum(ll_out));
   } else{
-    lds_exp[lds_exp < min_ll] = min_ll;
     lds_exp[is_na(lds_exp)] = min_ll;
     lds_exp[is_infinite(lds_exp)] = min_ll;
+    lds_exp[lds_exp < min_ll] = min_ll;
     return(sum(lds_exp));
   }
 }

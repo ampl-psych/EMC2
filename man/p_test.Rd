@@ -2,16 +2,18 @@
 % Please edit documentation in R/statistics.R
 \name{p_test}
 \alias{p_test}
-\title{Title}
+\title{Posterior parameter tests, modeled after t.test, for a one sample test provide
+x and for two sample also provide y.}
 \usage{
 p_test(
   x,
   x_name = NULL,
   x_fun = NULL,
-  fun_name = "fun",
+  x_fun_name = "fun",
   y = NULL,
   y_name = NULL,
   y_fun = NULL,
+  y_fun_name = "fun",
   mapped = FALSE,
   x_subject = NULL,
   y_subject = NULL,
@@ -27,8 +29,53 @@ p_test(
 )
 }
 \arguments{
-\item{subfilter}{}
+\item{x}{A pmwgs object or list of these}
+
+\item{x_name}{Name of the parameter to be tested}
+
+\item{x_fun}{Function applied to each iteration's parameter vector to create
+variable to be tested.}
+
+\item{x_fun_name}{Name to give to quantity calculated by x_fun}
+
+\item{y}{A pmwgs object or list of these}
+
+\item{y_name}{Name of the parameter to be tested}
+
+\item{y_fun}{Function applied to each iteration's parameter vector to create
+variable to be tested.}
+
+\item{y_fun_name}{Name to give to quantity calculated by y_fun}
+
+\item{mapped}{Should samples be mapped before doing test.}
+
+\item{x_subject}{Integer or name selecting a subject}
+
+\item{y_subject}{Integer or name selecting a subject}
+
+\item{mu}{Null value for single sample test (default 0)}
+
+\item{alternative}{"less" or "greater" determining direction of test probability}
+
+\item{probs}{Vector defining credible interval and central tendency quatiles
+(default c(0.025,.5,.975))}
+
+\item{digits}{Integer, significant digits for estimates in printed results}
+
+\item{p_digits}{Integer, significant digits for probability in printed results}
+
+\item{print_table}{Boolean (default TRUE) for printing results table}
+
+\item{filter}{A string. Specifies which stage you want to plot.}
+
+\item{selection}{String designating parameter type (mu, variance, correlation, alpha = default)}
+
+\item{subfilter}{An integer or vector. If integer it will exclude up until}
+}
+\value{
+Invisible results table with no rounding.
 }
 \description{
-Title
+Posterior parameter tests, modeled after t.test, for a one sample test provide
+x and for two sample also provide y.
 }

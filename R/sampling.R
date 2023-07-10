@@ -169,8 +169,8 @@ run_stage <- function(pmwgs,
   components <- attr(pmwgs$data, "components")
   shared_ll_idx <- attr(pmwgs$data, "shared_ll_idx")
   # if(stage == "sample"){
-  #   components <- rep(1, length(components))
-  #   shared_ll_idx <- rep(1, length(shared_ll_idx))
+  components <- rep(1, length(components))
+  shared_ll_idx <- rep(1, length(shared_ll_idx))
   # }
   # Display stage to screen
 
@@ -313,12 +313,12 @@ new_particle <- function (s, data, num_particles, parameters, eff_mu = NULL,
                           block_idx, shared_ll_idx, grouped_pars, is_grouped,
                           par_names)
 {
-  if(stage == "sample"){
-    if(rbinom(1, size = 1, prob = .5) == 1){
-      components <- rep(1, length(components))
-      shared_ll_idx <- rep(1, length(components))
-    }
-  }
+  # if(stage == "sample"){
+  #   if(rbinom(1, size = 1, prob = .5) == 1){
+  #     components <- rep(1, length(components))
+  #     shared_ll_idx <- rep(1, length(components))
+  #   }
+  # }
   group_pars <- variant_funs$get_group_level(parameters, s)
   unq_components <- unique(components)
   proposal_out <- numeric(length(group_pars$mu))
@@ -376,13 +376,13 @@ new_particle <- function (s, data, num_particles, parameters, eff_mu = NULL,
       lw <- calc_ll_manager(ll_proposals[,is_shared], dadm = data[[which(subjects == s)]], likelihood_func)
     }
     lw_total <- lw + prev_ll[s] - lw[1] # make sure lls from other components are included
-    lp <- mvtnorm::dmvnorm(x = proposals, mean = group_mu, sigma = group_var, log = TRUE)
-    prop_density <- mvtnorm::dmvnorm(x = proposals, mean = subj_mu, sigma = var_subj)
+    lp <- mvtnorm::dmvnorm(x = proposals[,idx], mean = group_mu[idx], sigma = group_var[idx,idx], log = TRUE)
+    prop_density <- mvtnorm::dmvnorm(x = proposals[,idx], mean = subj_mu[idx], sigma = var_subj[idx,idx])
     if (mix_proportion[3] == 0) {
       eff_density <- 0
     }
     else {
-      eff_density <- mvtnorm::dmvnorm(x = proposals, mean = eff_mu_sub, sigma = eff_var_curr)
+      eff_density <- mvtnorm::dmvnorm(x = proposals[,idx], mean = eff_mu_sub[idx], sigma = eff_var_curr[idx,idx])
     }
     lm <- log(mix_proportion[1] * exp(lp) + (mix_proportion[2] * prop_density) + (mix_proportion[3] * eff_density))
     infnt_idx <- is.infinite(lm)

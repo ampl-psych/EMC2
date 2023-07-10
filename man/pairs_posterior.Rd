@@ -2,7 +2,8 @@
 % Please edit documentation in R/plotting.R
 \name{pairs_posterior}
 \alias{pairs_posterior}
-\title{Title}
+\title{Plots matrix of parameter correlations (upper triangle) and corresponding
+scatterplots (lower triangle)}
 \usage{
 pairs_posterior(
   samples,
@@ -11,7 +12,6 @@ pairs_posterior(
   subfilter = 0,
   mapped = FALSE,
   selection = c("alpha", "mu", "variance", "covariance", "correlation")[1],
-  stat = NULL,
   scale.subjects = TRUE,
   use = NA,
   do_plot = TRUE,
@@ -19,8 +19,32 @@ pairs_posterior(
 )
 }
 \arguments{
-\item{maxp}{}
+\item{samples}{List of pmwgs objects}
+
+\item{filter}{A string. Specifies which stage you want to plot.}
+
+\item{thin}{An integer. Keep only iterations that are a multiple of thin.}
+
+\item{subfilter}{An integer or vector. If integer it will exclude up until
+that integer. If vector it will include everything in that range.}
+
+\item{mapped}{Boolean (default FALSE) if TRUE plot parameters mapped to design
+otherwise sampled parameters}
+
+\item{selection}{String designating parameter type (mu, variance, correlation, alpha = default)}
+
+\item{scale.subjects}{Boolean (default TRUE) when plotting alphas standardize each participant}
+
+\item{use}{Integer or character vector specifying subset of parameters to use}
+
+\item{do_plot}{Boolean, do plot}
+
+\item{maxp}{Integer for maximum number of iterations used (default 500).}
+}
+\value{
+None
 }
 \description{
-Title
+Plots matrix of parameter correlations (upper triangle) and corresponding
+scatterplots (lower triangle)
 }

@@ -2,7 +2,8 @@
 % Please edit documentation in R/plotting.R
 \name{check_run}
 \alias{check_run}
-\title{Title}
+\title{Runs a series of convergence checks, printing statistics to the console and
+saving plots to a pdf.}
 \usage{
 check_run(
   samples,
@@ -17,8 +18,30 @@ check_run(
 )
 }
 \arguments{
-\item{height}{}
+\item{samples}{A list of samplers or samplers converted to mcmc objects.}
+
+\item{pdf_name}{The name of the plot save file}
+
+\item{interactive}{Pause console output between hierarchical parameter types}
+
+\item{filter}{Sampling stage to examine.}
+
+\item{subfilter}{An integer or vector. If integer it will exclude up until
+that integer. If vector it will include everything in that range.}
+
+\item{thin}{An integer. Keep only iterations that are a multiple of thin.}
+
+\item{layout}{A vector specifying the layout as in par(mfrow = layout).
+If NA (defualt) use CODA defaults, if NULL use current.}
+
+\item{width}{PDF page width}
+
+\item{height}{PDF page height}
+}
+\value{
+None
 }
 \description{
-Title
+Runs a series of convergence checks, printing statistics to the console and
+saving plots to a pdf.
 }

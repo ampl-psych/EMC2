@@ -6,6 +6,9 @@
 \usage{
 lnrMS()
 }
+\value{
+A list defining the cognitive model
+}
 \description{
 LNR mu and sigma parameterization
 }

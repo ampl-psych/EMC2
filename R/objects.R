@@ -341,6 +341,22 @@ p_names <- function(samples,mapped=FALSE,design=FALSE)
     sp
 }
 
+#' Converts a pmwgs object (or list of such) to a data frame.
+#'
+#' @param samples A list of samplers or samplers converted to mcmc objects.
+#' @param selection String designating parameter type (mu, variance, correlation, alpha = default)
+#' @param filter A string. Specifies which stage you want to plot.
+#' @param thin An integer. Keep only iterations that are a multiple of thin.
+#' @param subfilter An integer or vector. If integer it will exclude up until
+#' that integer. If vector it will include everything in that range.
+#' @param mapped Boolean (default FALSE) if TRUE plot parameters mapped to design
+#' otherwise sampled parameters
+#' @param include_constants Include parameters that are not sampled (i.e., constants)
+#' @param stat A function that is applied to each column of the data frame
+#'
+#' @return A data frame with one row for each sample (with a subjects column if selection = "alpha")
+#' @export
+
 parameters_data_frame <- function(samples,filter="sample",thin=1,subfilter=0,
                                   mapped=FALSE,include_constants=FALSE,stat=NULL,
                                   selection=c("alpha","mu","variance","covariance","correlation","LL","epsilon")[2])

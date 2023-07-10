@@ -2,7 +2,7 @@
 % Please edit documentation in R/priors.R
 \name{plot_prior}
 \alias{plot_prior}
-\title{Convenience function to plot from the prior}
+\title{Plots prior distributions simulated by get_prior functions.}
 \usage{
 plot_prior(
   prior,
@@ -11,19 +11,27 @@ plot_prior(
   adjust = 1,
   breaks = 50,
   layout = c(3, 3),
-  upper = NULL
+  upper = NULL,
+  xlim = NULL
 )
 }
 \arguments{
 \item{prior}{A list of prior samples}
 
-\item{type}{Optional. Otherwise inferred from the prior samples}
+\item{type}{Select type of prior to plot (e.g., "alpha", "mu" etc.), defualt NULL plots all types present}
 
-\item{upper}{}
-}
-\value{
-NULL. Makes a plot of the prior samples
+\item{add_density}{Boolean (default FALSE) draw density over prior histograms}
+
+\item{adjust}{density smoothing adjustment (Default 1, see density)}
+
+\item{breaks}{Integer number of breaks in histograms}
+
+\item{layout}{par(mfrow) setting (default c(3,3))}
+
+\item{upper}{Vector with parameter names of upper quantile limit of values plotted (default 0.999)}
+
+\item{xlim}{List with parameter names of plot x limits}
 }
 \description{
-Convenience function to plot from the prior
+Plots prior distributions simulated by get_prior functions.
 }

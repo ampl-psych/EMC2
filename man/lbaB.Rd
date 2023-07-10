@@ -6,6 +6,9 @@
 \usage{
 lbaB()
 }
+\value{
+A list defining the cognitive model
+}
 \description{
 The Linear Ballistic Accumulator, proposes that for each choice alternative, ballistic accumulators race towards a common bound.
 The first accumulator to reach the bound determines the choice made. The time taken to reach the threshold determines the response times. For details see \verb{Brown & Heathcote, 2008}

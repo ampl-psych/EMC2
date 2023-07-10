@@ -2,7 +2,7 @@
 % Please edit documentation in R/plotting.R
 \name{plot_density}
 \alias{plot_density}
-\title{Title}
+\title{Plots density for parameter estimates.}
 \usage{
 plot_density(
   pmwg_mcmc,
@@ -27,8 +27,52 @@ plot_density(
 )
 }
 \arguments{
-\item{adjust}{}
+\item{pmwg_mcmc}{A list of samplers or samplers converted to mcmc objects.}
+
+\item{layout}{A 2-vector specifying the layout as in par(mfrow = layout).
+If NA or NULL use current.}
+
+\item{selection}{String designating parameter type (mu, variance, correlation, alpha = default)}
+
+\item{filter}{A string. Specifies which stage you want to plot.}
+
+\item{thin}{An integer. Keep only iterations that are a multiple of thin.}
+
+\item{subfilter}{An integer or vector. If integer it will exclude up until
+that integer. If vector it will include everything in that range.}
+
+\item{mapped}{Boolean (default FALSE) if TRUE plot parameters mapped to design
+otherwise sampled parameters}
+
+\item{plot_prior}{Boolean. Add prior distribution to plot (in red)}
+
+\item{n_prior}{Number of samples to approximate prior (default = 1e3)}
+
+\item{xlim}{x-axis plot limit, 2-vector (same for all) or matrix (one row for each paramter)}
+
+\item{ylim}{y-axis plot limit, 2-vector (same for all) or matrix (one row for each paramter)}
+
+\item{show_chains}{Boolean (default FALSE) plot separate density for each chain.}
+
+\item{do_plot}{Boolean (default TRUE) do plot}
+
+\item{subject}{Integer or character vector, if selection = "alpha" picks out
+subject(s) (default NA plots all).}
+
+\item{add_means}{Boolean (default FALSE) add parameter means as an attirbute
+to return}
+
+\item{pars}{Named vector of true parameters.}
+
+\item{probs}{Vector (default c(.025,.5,.975)) for CI and central tendency of return}
+
+\item{bw}{Bandwidth for density plot (see density)}
+
+\item{adjust}{Adjustment for density plot (see density)}
+}
+\value{
+Invisibly returns tables of true and 95\% CIs (for all chains combined
 }
 \description{
-Title
+Plots density for parameter estimates.
 }

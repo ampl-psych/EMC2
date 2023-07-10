@@ -4,29 +4,30 @@ add_info_single <- function(sampler, prior = NULL, ...){
   return(sampler)
 }
 
-#' Prior specification for single subject sampling.
+#' Prior specification or prior sampling for single subject estimation.
 #'
-#' With this type of sampling, we assume that one, or multiple, subjects are estimated without any hierarchical link.
-#' We need to specify a prior for each parameter. For now, the package assumes a multivariate normal prior on each parameter.
-#' Thus you need to specify prior$theta_mu_mean a vector with an entry for each parameter. Furthermore you need a prior covariance matrix prior$theta_mu_var.
-#' Default is: prior <- list(theta_mu_mean = rep(0, n_pars), theta_mu_var = diag(rep(0, n_pars)))
+#' With this type of estimation, we assume that one, or multiple, subjects are
+#' estimated without any hierarchical constraint. We need to specify a prior
+#' with a multivariate normal from, by providing specifying prior$theta_mu_mean
+#' a vector with an entry for each parameter, and a prior covariance matrix
+#' prior$theta_mu_var, with default list(theta_mu_mean = rep(0, n_pars),
+#' theta_mu_var = diag(rep(0, n_pars))).
 #'
-#' Specific constraints, such as parameter x needs to be larger than 0, are enforced through transformations performed by the models.
-#' Thus you need to be mindful that even though the prior might be normally distributed, the transformed prior might look very differently.
-#' Set `sample = TRUE` and pass your design object to `design` to sample from the prior. You can then plot the samples using `plot_prior`
-#'
-#' @param prior A list of the prior containing the mean (theta_mu_mean) and variance (theta_mu_var).
+#' @param prior A named list containing the prior mean (theta_mu_mean) and
+#' variance (theta_mu_var). Default prior created if NULL
 #' @param n_pars Argument used by the sampler, best left NULL. In user case inferred from the design
 #' @param sample Whether to sample from the prior. Default is TRUE
-#' @param N How many samples to draw from the prior
-#' @param type String specifying on what you want the prior. For single subject only "alpha" is a valid option.
-#' @param design The design obtained from `make_design`
+#' @param map Boolean, default TRUE reverses malformation used by model to make
+#' sampled parameters unbounded
+#' @param N How many samples to draw from the prior, default 1e5
+#' @param design The design obtained from `make_design`, required when map = TRUE
+#' @param type  FIX ME
 #'
-#' @return A list of samples from the prior
+#' @return A list with single entry named "alpha" of samples from the prior (if sample = TRUE) or else a prior object
 #' @export
-#'
-#' @examples
-get_prior_single <- function(prior = NULL, n_pars = NULL, sample = T, N = 1e5, type = "mu", design = NULL){
+
+get_prior_single <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5,
+                             type = "mu", design = NULL, map = TRUE){
   if(is.null(prior)){
     prior <- list()
   }
@@ -44,8 +45,9 @@ get_prior_single <- function(prior = NULL, n_pars = NULL, sample = T, N = 1e5, t
     samples <- mvtnorm::rmvnorm(N, prior$theta_mu_mean, prior$theta_mu_var)
     if(!is.null(design)){
       colnames(samples) <- names(attr(design, "p_vector"))
-      samples[,colnames(samples) %in% design$model()$p_types] <- design$model()$Ntransform(samples[,colnames(samples) %in% design$model()$p_types])
-    }
+      if (map) samples[,colnames(samples) %in% design$model()$p_types] <-
+        design$model()$Ntransform(samples[,colnames(samples) %in% design$model()$p_types])
+    } else if (map) stop("Must specify design when map = TRUE")
     return(list(alpha = samples))
   }
   return(prior)

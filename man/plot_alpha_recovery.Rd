@@ -2,7 +2,9 @@
 % Please edit documentation in R/plotting.R
 \name{plot_alpha_recovery}
 \alias{plot_alpha_recovery}
-\title{Title}
+\title{Uses output from plot_density to plot true vs. estimated (median with CI) alpha
+parameters for each subject (plot density must be called with true values passed
+through the pars argument).}
 \usage{
 plot_alpha_recovery(
   tabs,
@@ -11,7 +13,7 @@ plot_alpha_recovery(
   ci_col = "grey",
   cap = 0.05,
   do_rmse = FALSE,
-  rmse_pos = "topleft",
+  r_pos = "topleft",
   rmse_digits = 3,
   pearson_digits = 2,
   do_coverage = FALSE,
@@ -21,8 +23,39 @@ plot_alpha_recovery(
 )
 }
 \arguments{
-\item{spearman_digits}{}
+\item{tabs}{Tables of actual and estimated alpha parameters (with CIs) from plot_density}
+
+\item{layout}{A 2-vector specifying the layout as in par(mfrow = layout)}
+
+\item{do_ci}{Boolean (Defualt TRUE). Add CIs to plot?}
+
+\item{ci_col}{Color of CI.}
+
+\item{cap}{Width of CI cap (passed to arrows)}
+
+\item{do_rmse}{Boolean (defualt FALSE) Add root-mean squared error to plot
+instead of default Pearson correlation}
+
+\item{r_pos}{Position of Pearson/RMSE (passed to legend)}
+
+\item{rmse_digits}{Digits for RMSE}
+
+\item{pearson_digits}{Digits for Pearson correlation}
+
+\item{do_coverage}{Boolean (defualt TRUE) add coverage percentage estimate (otherwise
+add Spearman correlation)}
+
+\item{coverage_pos}{Position of Coverage/Pearson (passed to legend)}
+
+\item{coverage_digits}{Digits for coverage}
+
+\item{spearman_digits}{Digits for Spearman correlation}
+}
+\value{
+Invisible list with RMSE, coverage and Pearson and Spearman correlations.
 }
 \description{
-Title
+Uses output from plot_density to plot true vs. estimated (median with CI) alpha
+parameters for each subject (plot density must be called with true values passed
+through the pars argument).
 }

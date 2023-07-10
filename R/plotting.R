@@ -2,19 +2,22 @@
 #' Plot MCMC chains
 #'
 #' @param pmwg_mcmc A list of samplers or samplers converted to mcmc objects.
-#' @param layout A vector or matrix specifying the layout as in par(mfrow = layout).
-#' @param subject A string or integer which you can specify to only plot chains of that subject.
+#' @param layout A vector specifying the layout as in par(mfrow = layout).
+#' If NA (defualt) use CODA defaults, if NULL use current.
+#' @param subject Integer or character vector, if selection = "alpha" picks out subject(s)
+#' (defualt NA plot all)
 #' @param ylim The y limits of the chain plot.
-#' @param selection a string. Specifies which chains you want to plot.
-#' @param filter a string. Specifies which stage you want to plot.
-#' @param thin an integer. Specify if you want to thin the chains by a factor n.
-#' @param subfilter an integer or vector. If integer it will exclude up until that integer. If vector it will include everything in that range.
-#' @param plot_acf bool. If TRUE will also plot autocorrelation for the chain specified in acf_chain.
-#' @param acf_chain an integer. For which chain to plot the acf, if plot_acf = TRUE.
-#' @return
+#' @param selection String designating parameter type (mu, variance, correlation, alpha = default)
+#' @param filter A string. Specifies which stage you want to plot.
+#' @param thin An integer. Keep only iterations that are a multiple of thin.
+#' @param subfilter An integer or vector. If integer it will exclude up until
+#' that integer. If vector it will include everything in that range.
+#' @param plot_acf Boolean (default FALSE). If TRUE will also plot autocorrelation
+#' for the chain specified in acf_chain.
+#' @param acf_chain Integer. For which chain to plot the acf, if plot_acf = TRUE.
+#' @return None
 #' @export
-#'
-#' @examples
+
 plot_chains <- function(pmwg_mcmc,layout=NA,subject=NA,ylim=NULL,
                         selection="alpha",filter="sample",thin=1,subfilter=0,
                         plot_acf=FALSE,acf_chain=1) # ,use_par=NA
@@ -31,7 +34,9 @@ plot_chains <- function(pmwg_mcmc,layout=NA,subject=NA,ylim=NULL,
   no_layout <- is.null(layout)
   if (!auto.layout & !no_layout) par(mfrow=layout)
   if (attr(pmwg_mcmc,"selection")=="alpha") {
-    if (any(is.na(subject))) subject <- names(pmwg_mcmc)
+    snams <- names(pmwg_mcmc)
+    if (any(is.na(subject))) subject <- snams
+    if (is.numeric(subject)) subject <- snams[subject]
     if (!all(subject %in% names(pmwg_mcmc)))
       stop("Subject not present\n")
     for (i in subject) {
@@ -65,7 +70,19 @@ plot_chains <- function(pmwg_mcmc,layout=NA,subject=NA,ylim=NULL,
   }
 }
 
-
+#' Calls plot_chains to plot auto-correlation functions for each parameter
+#'
+#' @param samples Single pmwgs object (in which case ACF for one chain is plotted)
+#' or list of pmwgs objects (in which case ACFs for each chain plotted)
+#' @param layout A 2-vector specifying the layout handled as in plot_chains
+#' @param subject integer or character vector, if selection = "alpha" picks out subjects(s)
+#' @param selection String designating parameter type (mu, variance, correlation, alpha = default)
+#' @param filter which stage to plot (default "sample")
+#' @param subfilter an integer or vector. If integer it will exclude up until that integer.
+#' If vector it will include everything in that range.
+#'
+#' @return None
+#' @export
 plot_acfs <- function(samples,layout=NULL,subject=1,
                       selection="alpha",filter="sample",subfilter=0)
   # Plots acf for all chains
@@ -74,8 +91,8 @@ plot_acfs <- function(samples,layout=NULL,subject=1,
   if (selection=="alpha") {
     snams <- names(samples[[1]]$data)
     if (is.numeric(subject)) subject <- snams[subject]
-    if (!(subject %in% snams)) stop("Subject not present\n")
-    message("Plotting chains for subject ",subject)
+    if (!all(subject %in% snams)) stop("Subject not present\n")
+    message("Plotting chains for subject(s) ",paste(subject,collapse=" "))
   }
   for (i in 1:length(samples)) {
     if (selection=="alpha") {
@@ -86,29 +103,32 @@ plot_acfs <- function(samples,layout=NULL,subject=1,
   }
 }
 
-#' Title
+#' Uses output from plot_density to plot true vs. estimated (median with CI) alpha
+#' parameters for each subject (plot density must be called with true values passed
+#' through the pars argument).
 #'
-#' @param tabs
-#' @param layout
-#' @param do_ci
-#' @param ci_col
-#' @param cap
-#' @param do_rmse
-#' @param rmse_pos
-#' @param rmse_digits
-#' @param pearson_digits
-#' @param do_coverage
-#' @param coverage_pos
-#' @param coverage_digits
-#' @param spearman_digits
+#' @param tabs Tables of actual and estimated alpha parameters (with CIs) from plot_density
+#' @param layout A 2-vector specifying the layout as in par(mfrow = layout)
+#' @param do_ci Boolean (Defualt TRUE). Add CIs to plot?
+#' @param ci_col Color of CI.
+#' @param cap Width of CI cap (passed to arrows)
+#' @param do_rmse Boolean (defualt FALSE) Add root-mean squared error to plot
+#' instead of default Pearson correlation
+#' @param r_pos Position of Pearson/RMSE (passed to legend)
+#' @param rmse_digits Digits for RMSE
+#' @param pearson_digits Digits for Pearson correlation
+#' @param do_coverage Boolean (defualt TRUE) add coverage percentage estimate (otherwise
+#' add Spearman correlation)
+#' @param coverage_pos Position of Coverage/Pearson (passed to legend)
+#' @param coverage_digits Digits for coverage
+#' @param spearman_digits Digits for Spearman correlation
 #'
-#' @return
+#' @return Invisible list with RMSE, coverage and Pearson and Spearman correlations.
 #' @export
-#'
-#' @examples
+
 plot_alpha_recovery <- function(tabs,layout=c(2,3),
                                 do_ci = TRUE,ci_col="grey",cap=.05,
-                                do_rmse=FALSE,rmse_pos="topleft",
+                                do_rmse=FALSE,r_pos="topleft",
                                 rmse_digits=3,pearson_digits=2,
                                 do_coverage=FALSE,coverage_pos="bottomright",
                                 coverage_digits=1,spearman_digits=2)
@@ -144,10 +164,10 @@ plot_alpha_recovery <- function(tabs,layout=c(2,3),
     }
     if (do_rmse) {
       rmse[p] <- sqrt(mean((xy[,"true"] - xy[,"50%"])^2))
-      legend(rmse_pos,paste("RMSE = ",round(rmse[p],rmse_digits)),bty="n")
+      legend(r_pos,paste("RMSE = ",round(rmse[p],rmse_digits)),bty="n")
     } else {
       pearson[p] <- cor(xy[,"true"],xy[,"50%"],method="pearson")
-      legend(rmse_pos,paste("r(pearson) = ",round(pearson[p],pearson_digits)),bty="n")
+      legend(r_pos,paste("r(pearson) = ",round(pearson[p],pearson_digits)),bty="n")
     }
     if (do_coverage) {
       coverage[p] = 100*mean((xy[,"97.5%"] > xy[,"true"])  & (xy[,"2.5%"] < xy[,"true"]))
@@ -169,10 +189,10 @@ plot_alpha_recovery <- function(tabs,layout=c(2,3),
 #' @param data data frame with at least subjects (subjects factor) R (response factor)
 #' and rt (response time) columns,and optionally other factor columns with any name except
 #' subjects, R, rt or trials.
-#' @param subject string selecting a subject (default NULL = all).
+#' @param subject Integer or string selecting a subject (default NULL = all).
 #' @param factors character vector of factor names in design (default NULL = all).
 #' @param layout 2-vector specifying par(mfrow) or par(mfcol) (default NULL use current).
-#' @param mfcol boolean, default TRUE use mfcol else mfrow.
+#' @param mfcol Boolean, default TRUE use mfcol else mfrow.
 #' @param xlim x-axis limit for all cells (default NULL = scale per cell).
 #' @param bw number or string bandwidth for density (default "nrd0").
 #' @param adjust density function bandwidth adjust parameter.
@@ -182,14 +202,16 @@ plot_alpha_recovery <- function(tabs,layout=c(2,3),
 #'
 #' @return Invisibly if correct_fun specified a subject accuracy vector
 #' @export
-#'
-#' @examples
+
 plot_defective_density <- function(data,subject=NULL,factors=NULL,
-                                   layout=NULL,mfcol=TRUE,
+                                   layout=NULL,mfcol=FALSE,
                                    xlim=NULL,bw = "nrd0",adjust=1,
                                    correct_fun=NULL,rt="top",accuracy="topright")
 {
   if (!is.null(subject)) {
+    snams <- levels(data$subjects)
+    if (is.numeric(subject)) subject <- snams[subject]
+    if (!all(subject %in% snams)) stop("Subject not present\n")
     dat <- data[data$subjects==subject,]
     fnams <- names(dat)[!(names(dat) %in% c("subjects","trials","R","rt"))]
   } else {
@@ -247,41 +269,46 @@ plot_defective_density <- function(data,subject=NULL,factors=NULL,
 # show_chains=FALSE;do_plot=TRUE;subject=NA;add_means=FALSE;
 # pars=NULL;probs=c(.025,.5,.975);bw = "nrd0";adjust = 1
 # subject=1; filter="burn"; subfilter=300
-#' Title
+
+#' Plots density for parameter estimates.
 #'
-#' @param pmwg_mcmc
-#' @param layout
-#' @param selection
-#' @param filter
-#' @param thin
-#' @param subfilter
-#' @param mapped
-#' @param plot_prior
-#' @param n_prior
-#' @param xlim
-#' @param ylim
-#' @param show_chains
-#' @param do_plot
-#' @param subject
-#' @param add_means
-#' @param pars
-#' @param probs
-#' @param bw
-#' @param adjust
+#' @param pmwg_mcmc A list of samplers or samplers converted to mcmc objects.
+#' @param layout A 2-vector specifying the layout as in par(mfrow = layout).
+#' If NA or NULL use current.
+#' @param selection String designating parameter type (mu, variance, correlation, alpha = default)
+#' @param filter A string. Specifies which stage you want to plot.
+#' @param thin An integer. Keep only iterations that are a multiple of thin.
+#' @param subfilter An integer or vector. If integer it will exclude up until
+#' that integer. If vector it will include everything in that range.
+#' @param mapped Boolean (default FALSE) if TRUE plot parameters mapped to design
+#' otherwise sampled parameters
+#' @param plot_prior Boolean. Add prior distribution to plot (in red)
+#' @param n_prior Number of samples to approximate prior (default = 1e3)
+#' @param xlim x-axis plot limit, 2-vector (same for all) or matrix (one row for each paramter)
+#' @param ylim y-axis plot limit, 2-vector (same for all) or matrix (one row for each paramter)
+#' @param show_chains Boolean (default FALSE) plot separate density for each chain.
+#' @param do_plot Boolean (default TRUE) do plot
+#' @param subject Integer or character vector, if selection = "alpha" picks out
+#' subject(s) (default NA plots all).
+#' @param add_means Boolean (default FALSE) add parameter means as an attirbute
+#' to return
+#' @param pars Named vector of true parameters.
+#' @param probs Vector (default c(.025,.5,.975)) for CI and central tendency of return
+#' @param bw Bandwidth for density plot (see density)
+#' @param adjust Adjustment for density plot (see density)
 #'
-#' @return
+#' @return Invisibly returns tables of true and 95% CIs (for all chains combined
+  # no matter what show_chains is)
 #' @export
-#'
-#' @examples
+
 plot_density <- function(pmwg_mcmc,layout=c(2,3),
   selection="alpha",filter="sample",thin=1,subfilter=0,mapped=FALSE,
   plot_prior=TRUE,n_prior=1e3,xlim=NULL,ylim=NULL,
   show_chains=FALSE,do_plot=TRUE,subject=NA,add_means=FALSE,
   pars=NULL,probs=c(.025,.5,.975),bw = "nrd0", adjust = 1)
-  # Plots density (if alpha can do individual subject, all by default)
+  #  (if alpha can do individual subject, all by default)
   # If show_chains superimposes densities for each chain on same plot
-  # invisibly returns tables of true and 95% CIs (for all chains combined
-  # no matter what show_chains is)
+  #
 {
 
   robust_density <- function(ps,r,bw,adjust,use_robust=FALSE)
@@ -303,6 +330,10 @@ plot_density <- function(pmwg_mcmc,layout=c(2,3),
       dens
     } else density(ps,bw=bw,adjust=adjust)
   }
+
+  if (mapped & !(selection %in% c("mu","alpha")))
+    stop("mapped only available for mu and alpha")
+
   if (show_chains & plot_prior)
     warning("Prior plots not implemented for show_chains=TRUE")
   if (!(inherits(pmwg_mcmc, c("mcmc","mcmc.list")))) {
@@ -331,8 +362,10 @@ plot_density <- function(pmwg_mcmc,layout=c(2,3),
   no_layout <- any(is.na(layout)) | is.null(layout)
   chains <- 0
   if (attr(pmwg_mcmc,"selection") == "alpha") {
-    if (any(is.na(subject))) subject <- names(pmwg_mcmc)
-    if (!all(subject %in% names(pmwg_mcmc)))
+    snams <- names(pmwg_mcmc)
+    if (any(is.na(subject))) subject <- snams
+    if (is.numeric(subject)) subject <- snams[subject]
+    if (!all(subject %in% snams))
       stop("Subject not present\n")
     if (!is.null(pars)) {
       if (!is.null(dim(pars))) pars <- t(pars) else {
@@ -449,37 +482,70 @@ plot_density <- function(pmwg_mcmc,layout=c(2,3),
   }
 }
 
-#' Title
+
+plot_roc <- function(data,signalFactor="S",zROC=FALSE,qfun=NULL,main="",lim=NULL)
+
+{
+  tab <- table(data$R,data[[signalFactor]])
+  ctab <- 1-apply(t(tab)/apply(tab,2,sum),1,cumsum)[-dim(tab)[1],] # p(Signal)
+  if (!zROC) {
+    if (!is.null(lim)) {xlim <- lim; ylim <- lim} else
+    {xlim <- c(0,1); ylim <- c(0,1)}
+    plot(ctab[,1],ctab[,2],xlab="p(FA)",ylab="p(H)",xlim=xlim,ylim=ylim,main=main)
+    lines(ctab[,1],ctab[,2])
+    abline(a=0,b=1,lty=3)
+  } else {
+    ctab <- qfun(ctab)
+    ctab <- ctab[apply(ctab,1,function(x){all(is.finite(x))}),]
+    if (is.null(lim)) lim <- c(min(ctab),max(ctab))
+    plot(ctab[,1],ctab[,2],main=main,
+         xlab="z(FA)",ylab="z(H)",xlim=lim,ylim=lim)
+    lines(ctab[,1],ctab[,2])
+    abline(a=0,b=1,lty=3)
+  }
+  invisible(ctab)
+}
+
+
+#' Plots data and fit. If rt  available plots cdf, if not plots ROC. If stat
+#' argument (which calculates a statistics based on the data) is supplied
+#' instead fit is plotted as a density with a vertical line at the position of
+#' the data statistic. If more than one subject is included data and fits are
+#' aggregated over subjects.
 #'
-#' @param data
-#' @param pp
-#' @param subject
-#' @param factors
-#' @param stat
-#' @param stat_name
-#' @param ci
-#' @param do_plot
-#' @param xlim
-#' @param ylim
-#' @param layout
-#' @param mfcol
-#' @param probs
-#' @param data_lwd
-#' @param fit_lwd
-#' @param qp_cex
-#' @param q_points
-#' @param pqp_cex
-#' @param lpos
-#' @param signalFactor
-#' @param zROC
-#' @param qfun
-#' @param lim
-#' @param rocfit_cex
+#' @param data Data frame with subjects and R factors, and possibly other factors
+#' and an rt column
+#' @param pp Posterior predictives created by post_predict
+#' @param subject Integer or string picking out subject(s).
+#' @param factors Character vector of factors in data to display separately. If
+#' NULL (default) use names of all columns in data except "trials","R", and "rt".
+#' Omitted factors are aggregated over.
+#' @param stat A function that takes a the data and returns a single value.
+#' @param stat_name A string naming what the stat argument calculates.
+#' @param ci Credible interval and central tendency quantiles for return when
+#' stat argument is supplied (default c(.025,.5,.975))
+#' @param do_plot Boolean (default TRUE) for making a plot
+#' @param xlim x-axis plot limit, 2-vector (same for all) or matrix (one row for each paramter)
+#' @param ylim y-axis plot limit, 2-vector (same for all) or matrix (one row for each paramter)
+#' @param layout 2-vector specifying par(mfrow) or par(mfcol) (default NULL use current).
+#' @param mfcol Boolean, default TRUE use mfcol else mfrow.
+#' @param probs Vector of probabilities at which to calculate cdf (default percentiles)
+#' @param data_lwd Integer line width for data in cdf (default = 2)
+#' @param fit_lwd Integer line widht for fit in cdf (default = 1)
+#' @param qp_cex cex for data quantile points in cdf
+#' @param q_points Quantile points to plot in cdf (default c(.1,.3,.5,.7,.9))
+#' @param pqp_cex cex for predicted quantile points in cdf
+#' @param lpos Legend position (see legend)
+#' @param signalFactor The name of the "signal" factor in an ROC.
+#' @param zROC Boolean, (default FALSE) to plot ROC on transformed scale.
+#' @param qfun Scale transform function for zROC (default qnorm)
+#' @param lim 2-vector for x and y limit of ROC
+#' @param rocfit_cex cex for predicted ROC points (default = 0.5.
+#' @param adjust Control of smoothing in density plots
 #'
-#' @return
+#' @return If stat argument is provided a table of observed values and predicted quantiles
 #' @export
-#'
-#' @examples
+
 plot_fit <- function(data,pp,subject=NULL,factors=NULL,
                      stat=NULL,stat_name="",adjust=1,
                      ci=c(.025,.5,.975),do_plot=TRUE,
@@ -488,15 +554,17 @@ plot_fit <- function(data,pp,subject=NULL,factors=NULL,
                      probs=c(1:99)/100,
                      data_lwd=2,fit_lwd=1,qp_cex=1,
                      q_points=c(.1,.3,.5,.7,.9),pqp_cex=.5,lpos="topleft",
-                     signalFactor="S",zROC=FALSE,qfun=NULL,lim=NULL,rocfit_cex=.5)
-  # Plots data and fit or if stat supplied returns a table of statistics.
-  # If rt available plots cdf, if not plots ROC (but if only 2 levels of
-  # response factor returns an accuracy table).
+                     signalFactor="S",zROC=FALSE,qfun=qnorm,lim=NULL,rocfit_cex=.5)
 {
   if (!is.null(subject)) {
-    dat <- data[data$subjects==subject,]
-    pp <- pp[pp$subjects==subject,]
-    fnams <- names(dat)[!(names(dat) %in% c("subjects","trials","R","rt"))]
+    snams <- levels(data$subjects)
+    if (is.numeric(subject)) subject <- snams[subject]
+    if (!all(subject %in% snams)) stop("Subject(s) not present\n")
+    dat <- droplevels(data[data$subjects %in% subject,])
+    pp <- droplevels(pp[pp$subjects %in% subject,])
+    if (length(subject>1))
+      fnams <- names(dat)[!(names(dat) %in% c("trials","R","rt"))] else
+      fnams <- names(dat)[!(names(dat) %in% c("subjects","trials","R","rt"))]
   } else {
     dat <- data
     fnams <- names(dat)[!(names(dat) %in% c("trials","R","rt"))]
@@ -552,7 +620,7 @@ plot_fit <- function(data,pp,subject=NULL,factors=NULL,
       postn <- unique(pp$postn)
       ucells <- sort(unique(cells))
       for (i in ucells) {
-        dpts <- plot_roc(dat[cells==i,],zROC=zROC,qfun=qfun,lim=lim,main=i)
+        dpts <- plot_roc(dat[cells==i,],zROC=zROC,qfun=qfun,lim=lim,main=i,signalFactor=signalFactor)
         tab <- table(pp[pp_cells==i,]$postn,pp[pp_cells==i,]$R,pp[pp_cells==i,][[signalFactor]])
         ctab <- apply(tab,1,function(x){list(1-apply(t(x)/apply(x,2,sum),1,cumsum)[-dim(x)[1],])})
         if (!zROC) lapply(ctab,function(x){
@@ -624,18 +692,20 @@ plot_fit <- function(data,pp,subject=NULL,factors=NULL,
         # R <- sort(unique(dati$R))
         pR <- table(dati$R)/dim(dati)[1]
         pqs <- pq <- qs <- setNames(vector(mode="list",length=length(R)),R)
+        ppR <- pR; ppR[1:length(pR)] <- 0
         for (j in R) if (length(dati$rt[dati$R==j])>=length(q_points)) {
+          isj <- ppi$R==j
           qs[[j]] <- quantile(dati$rt[dati$R==j],probs=probs)
-          pq[[j]] <- quantile(ppi$rt[ppi$R==j],probs=probs)
-          pqs[[j]] <- tapply(ppi$rt[ppi$R==j],ppi$postn[ppi$R==j],
-                             quantile,probs=probs[pok])
+          pq[[j]] <- quantile(ppi$rt[isj],probs=probs)
+          pqs[[j]] <- tapply(ppi$rt[isj],ppi$postn[isj],quantile,probs=probs[pok])
+          ppR[j] <- mean(isj)
         } else qs[[j]] <- pq[[j]] <- pqs[[j]] <- NA
         if ( !any(is.na(pq[[1]])) ) {
-          plot(pq[[1]],probs*pR[1],xlim=xlim,ylim=ylim,main=i,xlab="RT",type="l",
+          plot(pq[[1]],probs*ppR[1],xlim=xlim,ylim=ylim,main=i,xlab="RT",type="l",
                lwd=fit_lwd,ylab="p(R)",lty=1)
           tmp=lapply(pqs[[1]],function(x){
-            points(x,probs[pok]*pR[1],col="grey",pch=16,cex=pqp_cex)})
-          points(pq[[1]][pok],probs[pok]*pR[1],cex=pqp_cex*3,pch=16,col="grey")
+            points(x,probs[pok]*ppR[1],col="grey",pch=16,cex=pqp_cex)})
+          points(pq[[1]][pok],probs[pok]*ppR[1],cex=pqp_cex*3,pch=16,col="grey")
           lines(qs[[1]],probs*pR[1],lwd=data_lwd,lty=1)
           points(qs[[1]][pok],probs[pok]*pR[1],cex=qp_cex,pch=16)
           do_plot=FALSE
@@ -643,13 +713,13 @@ plot_fit <- function(data,pp,subject=NULL,factors=NULL,
         if (length(qs)>1) {
           for (j in 2:length(qs)) if (!any(is.na(pq[[j]]))) {
             if (do_plot) {
-              plot(pq[[j]],probs*pR[j],xlim=xlim,ylim=ylim,main=i,xlab="RT",type="l",
+              plot(pq[[j]],probs*ppR[j],xlim=xlim,ylim=ylim,main=i,xlab="RT",type="l",
                    lwd=fit_lwd,ylab="p(R)",lty=j)
               do_plot <- FALSE
-            } else lines(pq[[j]],probs*pR[j],lwd=fit_lwd,lty=j)
+            } else lines(pq[[j]],probs*ppR[j],lwd=fit_lwd,lty=j)
             tmp=lapply(pqs[[j]],function(x){
-              points(x,probs[pok]*pR[j],col="grey",pch=16,cex=pqp_cex)})
-            points(pq[[j]][pok],probs[pok]*pR[j],cex=pqp_cex*3,pch=16,col="grey")
+              points(x,probs[pok]*ppR[j],col="grey",pch=16,cex=pqp_cex)})
+            points(pq[[j]][pok],probs[pok]*ppR[j],cex=pqp_cex*3,pch=16,col="grey")
             lines(qs[[j]],probs*pR[j],lwd=data_lwd,lty=j)
             points(qs[[j]][pok],probs[pok]*pR[j],cex=qp_cex,pch=16)
           }
@@ -659,88 +729,6 @@ plot_fit <- function(data,pp,subject=NULL,factors=NULL,
     }
   }
 }
-
-
-#' Title
-#'
-#' @param data
-#' @param pp
-#' @param factors
-#' @param stat
-#' @param stat_name
-#' @param ci
-#' @param do_plot
-#' @param xlim
-#' @param ylim
-#' @param layout
-#' @param mfcol
-#' @param probs
-#' @param data_lwd
-#' @param fit_lwd
-#' @param qp_cex
-#' @param q_points
-#' @param pqp_cex
-#' @param lpos
-#' @param signalFactor
-#' @param zROC
-#' @param qfun
-#' @param lim
-#' @param rocfit_cex
-#'
-#' @return
-#' @export
-#'
-#' @examples
-plot_fits <- function(data,pp,factors=NULL,
-                      stat=NULL,stat_name="",ci=c(.025,.5,.975),do_plot=TRUE,
-                      xlim=NULL,ylim=NULL,
-                      layout=NULL,mfcol=TRUE,
-                      probs=c(1:99)/100,
-                      data_lwd=2,fit_lwd=1,qp_cex=1,
-                      q_points=c(.1,.3,.5,.7,.9),pqp_cex=.5,lpos="topleft",
-                      signalFactor="S",zROC=FALSE,qfun=NULL,lim=NULL,rocfit_cex=.5){
-  # as for plot_fits but does it per subject.
-  for (i in levels(data$subjects))
-    plot_fit(data,pp,subject=i,factors,stat,stat_name,ci,do_plot,xlim,ylim,layout,mfcol,
-             probs,data_lwd,fit_lwd,qp_cex,q_points,pqp_cex,lpos,
-             signalFactor,zROC=qfun,lim,rocfit_cex)
-}
-
-#' Title
-#'
-#' @param data
-#' @param zROC
-#' @param qfun
-#' @param main
-#' @param lim
-#'
-#' @return
-#' @export
-#'
-#' @examples
-plot_roc <- function(data,zROC=FALSE,qfun=NULL,main="",lim=NULL)
-
-{
-  tab <- table(data$R,data$S)
-  ctab <- 1-apply(t(tab)/apply(tab,2,sum),1,cumsum)[-dim(tab)[1],] # p(Signal)
-  if (!zROC) {
-    if (!is.null(lim)) {xlim <- lim; ylim <- lim} else
-    {xlim <- c(0,1); ylim <- c(0,1)}
-    plot(ctab[,1],ctab[,2],xlab="p(FA)",ylab="p(H)",xlim=xlim,ylim=ylim,main=main)
-    lines(ctab[,1],ctab[,2])
-    abline(a=0,b=1,lty=3)
-  } else {
-    ctab <- qfun(ctab)
-    ctab <- ctab[apply(ctab,1,function(x){all(is.finite(x))}),]
-    if (is.null(lim)) lim <- c(min(ctab),max(ctab))
-    plot(ctab[,1],ctab[,2],main=main,
-         xlab="z(FA)",ylab="z(H)",xlim=lim,ylim=lim)
-    lines(ctab[,1],ctab[,2])
-    abline(a=0,b=1,lty=3)
-  }
-  invisible(ctab)
-}
-
 
 
 # subject=NULL;factors=NULL;
@@ -756,10 +744,15 @@ plot_trials <- function(data,pp=NULL,subject=NULL,factors=NULL,Fcovariates=NULL,
     if (!any(names(pp)=="trials")) stop("posterior predictives must have trials column")
   } else OvsP <- FALSE
   if (!is.null(subject)) {
-    dat <- data[data$subjects==subject,]
+    snams <- levels(data$subjects)
+    if (is.numeric(subject)) subject <- snams[subject]
+    if (!all(subject %in% snams)) stop("Subject(s) not present\n")
+    dat <- data[data$subjects %in% subject,]
     dat$subjects <- factor(as.character(dat$subjects))
-    pp <- pp[pp$subjects==subject,]
-    fnams <- names(dat)[!(names(dat) %in% c("subjects","trials","R","rt",Fcovariates))]
+    pp <- pp[pp$subjects %in% subject,]
+    if (length(subject>1))
+      fnams <- names(dat)[!(names(dat) %in% c("trials","R","rt"))] else
+      fnams <- names(dat)[!(names(dat) %in% c("subjects","trials","R","rt"))]
   } else {
     dat <- data
     fnams <- names(dat)[!(names(dat) %in% c("trials","R","rt",Fcovariates))]
@@ -811,22 +804,25 @@ plot_trials <- function(data,pp=NULL,subject=NULL,factors=NULL,Fcovariates=NULL,
 #                       filter="sample";subfilter=0
 #                       layout=c(3,4);width=NULL;height=NULL
 # subfilter=2000
-#' Title
+
+#' Runs a series of convergence checks, printing statistics to the console and
+#' saving plots to a pdf.
 #'
-#' @param samples
-#' @param pdf_name
-#' @param interactive
-#' @param filter
-#' @param subfilter
-#' @param thin
-#' @param layout
-#' @param width
-#' @param height
+#' @param samples A list of samplers or samplers converted to mcmc objects.
+#' @param pdf_name The name of the plot save file
+#' @param interactive Pause console output between hierarchical parameter types
+#' @param filter Sampling stage to examine.
+#' @param subfilter An integer or vector. If integer it will exclude up until
+#' that integer. If vector it will include everything in that range.
+#' @param thin An integer. Keep only iterations that are a multiple of thin.
+#' @param layout A vector specifying the layout as in par(mfrow = layout).
+#' If NA (defualt) use CODA defaults, if NULL use current.
+#' @param width PDF page width
+#' @param height PDF page height
 #'
-#' @return
+#' @return None
 #' @export
-#'
-#' @examples
+
 check_run <- function(samples,pdf_name="check_run.pdf",interactive=TRUE,
                       filter="sample",subfilter=0,thin=1,
                       layout=c(3,4),width=NULL,height=NULL) {
@@ -900,26 +896,28 @@ check_run <- function(samples,pdf_name="check_run.pdf",interactive=TRUE,
 # filter="sample";thin=1;subfilter=0;mapped=FALSE
 # selection=c("alpha","mu","variance","covariance","correlation")[1]; stat=NULL
 # collapse.subjects=TRUE;scale.subjects=TRUE;use=NA;do_plot=TRUE
-#' Title
+
+#' Plots matrix of parameter correlations (upper triangle) and corresponding
+#' scatterplots (lower triangle)
 #'
-#' @param samples
-#' @param filter
-#' @param thin
-#' @param subfilter
-#' @param mapped
-#' @param selection
-#' @param stat
-#' @param scale.subjects
-#' @param use
-#' @param do_plot
-#' @param maxp
+#' @param samples List of pmwgs objects
+#' @param filter A string. Specifies which stage you want to plot.
+#' @param thin An integer. Keep only iterations that are a multiple of thin.
+#' @param subfilter An integer or vector. If integer it will exclude up until
+#' that integer. If vector it will include everything in that range.
+#' @param selection String designating parameter type (mu, variance, correlation, alpha = default)
+#' @param mapped Boolean (default FALSE) if TRUE plot parameters mapped to design
+#' otherwise sampled parameters
+#' @param scale.subjects Boolean (default TRUE) when plotting alphas standardize each participant
+#' @param use Integer or character vector specifying subset of parameters to use
+#' @param do_plot Boolean, do plot
+#' @param maxp Integer for maximum number of iterations used (default 500).
 #'
-#' @return
+#' @return None
 #' @export
-#'
-#' @examples
+
 pairs_posterior <- function(samples,filter="sample",thin=1,subfilter=0,mapped=FALSE,
-  selection=c("alpha","mu","variance","covariance","correlation")[1],stat=NULL,
+  selection=c("alpha","mu","variance","covariance","correlation")[1],
   scale.subjects=TRUE,use=NA,do_plot=TRUE,maxp=500)
 {
 
@@ -953,7 +951,7 @@ pairs_posterior <- function(samples,filter="sample",thin=1,subfilter=0,mapped=FA
   }
 
   pmat <- parameters_data_frame(samples,filter=filter,thin=thin,subfilter=subfilter,
-    mapped=mapped,stat=stat,selection=selection)
+    mapped=mapped,selection=selection)
   if (!any(is.na(use))) {
     if (is.numeric(stat)) {
       if (any(stat<1) || any(stat>dim(pmat))) stop("stat outside parameter range")
@@ -965,7 +963,7 @@ pairs_posterior <- function(samples,filter="sample",thin=1,subfilter=0,mapped=FA
   }
   if (selection=="alpha") {
     if (length(levels(pmat$subjects))>1 && scale.subjects)
-      for (i in names(pmat)) pmat[,i] <- do_scale(pmat[,c("subjects",i)])
+      for (i in names(pmat)[-1]) pmat[,i] <- do_scale(pmat[,c("subjects",i)])
     pmat <- pmat[,-1]
   }
   if (dim(pmat)[1]>maxp) pmat <- pmat[sample(dim(pmat)[1],maxp),]
@@ -978,7 +976,23 @@ pairs_posterior <- function(samples,filter="sample",thin=1,subfilter=0,mapped=FA
   invisible(rs)
 }
 
-profile_pmwg <- function(pname,p,p_min,p_max,dadm,n_point=100,main="",cores=1)
+#' Creates a likelihood profile plot from a dadm object (see design_model) by
+#' varying one model parameter while holding all others constant.
+#'
+#' @param pname Name of parameter to profile
+#' @param p Named vector of parameter values (typically created with sampled_p_vector)
+#' @param p_min Minimum value of profile range
+#' @param p_max Maximum value of profile range
+#' @param dadm Data augmented design and model (created by design_model)
+#' @param n_point Number of evenly spaced points at which to calculate likelihood
+#' @param main Plot title
+#' @param cores Number of likelihood points to calculate in parallel
+#'
+#' @return vector with value of p[pname], highest likelihood point and p[pname]
+#' minus the parameter values at that point
+#' @export
+
+profile_plot <- function(pname,p,p_min,p_max,dadm,n_point=100,main="",cores=1)
 
 {
 

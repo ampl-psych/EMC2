@@ -41,29 +41,31 @@ prior_samples_alpha <- function(theta_mu,theta_var,n=1e3)
 #   }
 # }
 
-#' Convenience function to plot from the prior
+#' Plots prior distributions simulated by get_prior functions.
 #'
 #' @param prior A list of prior samples
-#' @param type Optional. Otherwise inferred from the prior samples
-#' @param add_density
-#' @param adjust
-#' @param breaks
-#' @param layout
-#' @param upper
+#' @param type Select type of prior to plot (e.g., "alpha", "mu" etc.), defualt NULL plots all types present
+#' @param add_density Boolean (default FALSE) draw density over prior histograms
+#' @param adjust density smoothing adjustment (Default 1, see density)
+#' @param breaks Integer number of breaks in histograms
+#' @param layout par(mfrow) setting (default c(3,3))
+#' @param upper Vector with parameter names of upper quantile limit of values plotted (default 0.999)
+#' @param xlim List with parameter names of plot x limits
 #'
-#' @return NULL. Makes a plot of the prior samples
+#' @return NULL
 #' @export
-#'
-#' @examples
+
 plot_prior <- function(prior, type = NULL,add_density=FALSE,adjust=1,breaks=50,
-                       layout=c(3,3),upper=NULL){
+                       layout=c(3,3),upper=NULL,xlim=NULL){
   if(is.null(type)) type <- names(prior)
   for(typ in type){
-    samples <- prior[["alpha"]]
+    samples <- prior[[typ]]
     par(mfrow = layout)
     par_names <- colnames(samples)
     uppers <- setNames(rep(.999,length(par_names)),par_names)
     if (!is.null(upper)) uppers[names(upper)] <- upper
+    xlims <- setNames(vector(mode="list",length=length(par_names)),par_names)
+    if (!is.null(xlim)) xlims[names(xlim)] <- xlim
     for(i in 1:ncol(samples)){
       if(!any(samples[,i] < 0) || !any(samples[,i] > 0)){
         quants <- quantile(abs(samples[,i]), probs = uppers[i])
@@ -71,8 +73,11 @@ plot_prior <- function(prior, type = NULL,add_density=FALSE,adjust=1,breaks=50,
         quants <- quantile(abs(samples[,i]), probs = uppers[i])
       }
       filtered <- samples[,i][abs(samples[,i]) < quants]
-      hist(filtered, breaks = breaks, main = par_names[i], prob = TRUE,
-           xlab = type, cex.lab = 1.25, cex.main = 1.5)
+      if (is.null(xlims[[i]]))
+          hist(filtered, breaks = breaks, main = par_names[i], prob = TRUE,
+           xlab = type, cex.lab = 1.25, cex.main = 1.5) else
+          hist(filtered, breaks = breaks, main = par_names[i], prob = TRUE,
+           xlab = type, cex.lab = 1.25, cex.main = 1.5,xlim=xlims[[i]])
       if (add_density) lines(density(filtered,adjust=adjust), col = "red")
     }
   }
@@ -106,7 +111,7 @@ get_prior_samples <- function(samples,selection,filter,thin,subfilter,n_prior)
   } else {
     variant_funs <- attr(samples[[1]], "variant_funs")
     design <- list(model = attr(samples[[1]]$data[[1]], "model"))
-    attr(design, "p_vector") <- samplers[[1]]$samples$alpha[,1,1] # just need the names in the right format
+    attr(design, "p_vector") <- samples[[1]]$samples$alpha[,1,1] # just need the names in the right format
     psamples <- variant_funs$get_prior(design = design, N = n_prior, prior = samples[[1]]$prior, type = selection, map = FALSE)[[1]]
     return(psamples)
   }

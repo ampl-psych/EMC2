@@ -18,6 +18,9 @@ mapped_par(p_vector, design, model = NULL, digits = 3, remove_subjects = TRUE)
 
 \item{remove_subjects}{Default true removes subjects from output design}
 }
+\value{
+Matrix of factors and mapped parameter values
+}
 \description{
 Maps a parameter vector through a design to show parameter values for each
 design cell.

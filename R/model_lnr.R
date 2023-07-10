@@ -34,10 +34,9 @@ rLNR <- function(lR,pars,p_types=c("m","s","t0")){
 #'
 #' LNR mu and sigma parameterization
 #'
-#' @return
+#' @return A list defining the cognitive model
 #' @export
-#'
-#' @examples
+
 lnrMS <- function() {
   list(
     type="RACE",

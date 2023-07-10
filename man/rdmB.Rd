@@ -6,6 +6,9 @@
 \usage{
 rdmB()
 }
+\value{
+A list defining the cognitive model
+}
 \description{
 The Racing Diffusion Model, also known as the Racing Wald Model, proposes that for each choice alternative, noisy accumulators race towards a common bound.
 The first accumulator to reach the bound determines the choice made. The time taken to reach the threshold determines the response times. For details see \verb{Tillman, Van Zandt & Logan, 2020}

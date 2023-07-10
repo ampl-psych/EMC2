@@ -28,7 +28,7 @@ NumericVector plnr_c(NumericVector rts, NumericMatrix pars, LogicalVector idx){
   int k = 0;
   for(int i = 0; i < rts.length(); i++){
     if(idx[i] == TRUE){
-      if(rts[i] - pars(i,2) > 0){
+      if(!NumericVector::is_na(pars(i,0)) & (rts[i] - pars(i,2) > 0)){
         out[k] = R::plnorm(rts[i] - pars(i,2), pars(i, 0), pars(i, 1), TRUE, FALSE);
       }
       k++;
@@ -44,7 +44,7 @@ NumericVector dlnr_c(NumericVector rts, NumericMatrix pars, LogicalVector idx){
   int k = 0;
   for(int i = 0; i < rts.length(); i++){
     if(idx[i] == TRUE){
-      if(rts[i] - pars(i,2) > 0){
+      if(!NumericVector::is_na(pars(i,0)) & (rts[i] - pars(i,2) > 0)){
         out[k] = R::dlnorm(rts[i] - pars(i,2), pars(i, 0), pars(i, 1), FALSE);
       }
       k++;

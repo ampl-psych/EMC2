@@ -77,8 +77,7 @@ make_design <- function(Flist = NULL,Ffactors = NULL,Rlevels = NULL,model,
 #'
 #' @return a contrast matrix.
 #' @export
-#'
-#' @examples
+
 contr.increasing <- function(n,levels=NULL)
 {
   contr <- matrix(0,nrow=n,ncol=n-1,dimnames=list(NULL,2:n))
@@ -95,8 +94,7 @@ contr.increasing <- function(n,levels=NULL)
 #'
 #' @return a contrast matrix.
 #' @export
-#'
-#' @examples
+
 contr.anova <- function(n) {
   contr <- stats::contr.helmert(n)
   contr/rep(2*apply(abs(contr),2,max),each=dim(contr)[1])
@@ -113,10 +111,9 @@ contr.anova <- function(n) {
 #' @param model a model list. Default is the model specified in the design list.
 #' @param doMap logical. If TRUE will
 #'
-#' @return
+#' @return Named vector with mapping attributes.
 #' @export
-#'
-#' @examples
+
 sampled_p_vector <- function(design,model=NULL,doMap=TRUE)
   # Makes an empty p_vector corresponding to model.
 {
@@ -202,7 +199,12 @@ design_model_custom_ll <- function(data, design, model, prior){
 }
 
 
-#' Combines a data frame with a design and (optionally) a user-specified prior
+#' Combines a data frame with a design and (optionally) a user-specified prior,
+#' to create a data augmented design model ("dadm") object. Augmentation
+#' refers to replicating the data with one row for each accumulator.
+#'
+#' Usually called by make_samplers rather than directly by the user, except
+#' where a dadm is needed for use with profile_pmwg.
 #'
 #' Performs a series to checks to make sure data frame and design match and
 #' (by default) augments the data frame by adding accumulator factors and
@@ -222,16 +224,15 @@ design_model_custom_ll <- function(data, design, model, prior){
 #' @param rt_resolution maximum resolution of rt, NULL = no rounding
 #' @param verbose if true reports compression outcome
 #' @param compress default TRUE only keeps unique rows in terms of all
-#' parameter design matrices R, lR and rt (at given resolution)
+#' parameter design matrices R, lR and rt (at a given resolution)
 #' @param rt_check checks if any truncation and censoring specified in the design
 #' are respected.
 #'
 #' @return a (possibly) augmented and compressed data frame with attributes
-#' specifying the design, pror and how to decompress ready supporting likelihood
+#' specifying the design, prior and how to decompress ready supporting likelihood
 #' computation
 #' @export
-#'
-#' @examples
+
 design_model <- function(data,design,model=NULL,prior = NULL,
                          add_acc=TRUE,rt_resolution=0.02,verbose=TRUE,
                          compress=TRUE,rt_check=TRUE)

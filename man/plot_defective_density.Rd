@@ -9,7 +9,7 @@ plot_defective_density(
   subject = NULL,
   factors = NULL,
   layout = NULL,
-  mfcol = TRUE,
+  mfcol = FALSE,
   xlim = NULL,
   bw = "nrd0",
   adjust = 1,
@@ -23,13 +23,13 @@ plot_defective_density(
 and rt (response time) columns,and optionally other factor columns with any name except
 subjects, R, rt or trials.}
 
-\item{subject}{string selecting a subject (default NULL = all).}
+\item{subject}{Integer or string selecting a subject (default NULL = all).}
 
 \item{factors}{character vector of factor names in design (default NULL = all).}
 
 \item{layout}{2-vector specifying par(mfrow) or par(mfcol) (default NULL use current).}
 
-\item{mfcol}{boolean, default TRUE use mfcol else mfrow.}
+\item{mfcol}{Boolean, default TRUE use mfcol else mfrow.}
 
 \item{xlim}{x-axis limit for all cells (default NULL = scale per cell).}
 

@@ -20,7 +20,22 @@ add_info_standard <- function(sampler, prior = NULL, ...){
   return(sampler)
 }
 
-get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = T, N = 1e5, type = "mu", design = NULL,
+#' Prior specification or prior sampling for standard estimation.
+#'
+#' @param prior A named list containing the prior mean (theta_mu_mean) and
+#' variance (theta_mu_var). Default prior created if NULL
+#' @param n_pars Argument used by the sampler, best left NULL. In user case inferred from the design
+#' @param sample Whether to sample from the prior. Default is TRUE
+#' @param map Boolean, default TRUE reverses malformation used by model to make
+#' sampled parameters unbounded
+#' @param N How many samples to draw from the prior, default 1e5
+#' @param design The design obtained from `make_design`, required when map = TRUE
+#' @param type  FIX ME
+#'
+#' @return A list with a single entry "mu" of samples from the prior (if sample = TRUE) or else a prior object
+#' @export
+
+get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, type = "mu", design = NULL,
                                map = TRUE){
   # Checking and default priors
   if(is.null(prior)){
@@ -54,7 +69,8 @@ get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = T, N = 1e5,
       if(!is.null(design)){
         colnames(samples) <- par_names <- names(attr(design, "p_vector"))
         if(map){
-          samples[,colnames(samples) %in% design$model()$p_types] <- design$model()$Ntransform(samples[,colnames(samples) %in% design$model()$p_types])
+          samples[,colnames(samples) %in% design$model()$p_types] <-
+            design$model()$Ntransform(samples[,colnames(samples) %in% design$model()$p_types])
         }
       }
       out$mu <- samples

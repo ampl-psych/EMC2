@@ -159,33 +159,38 @@ iat_pmwg <- function(pmwg_mcmc,
 # filter="sample";selection="mu";subfilter=0
 #
 # x=sPNAS_a;x_name="t0"; mapped=TRUE
-#' Title
+#' Posterior parameter tests, modeled after t.test, for a one sample test provide
+#' x and for two sample also provide y.
 #'
-#' @param x
-#' @param x_name
-#' @param x_fun
-#' @param y
-#' @param y_name
-#' @param y_fun
-#' @param mapped
-#' @param x_subject
-#' @param y_subject
-#' @param mu
-#' @param alternative
-#' @param probs
-#' @param digits
-#' @param p_digits
-#' @param print_table
-#' @param filter
-#' @param selection
-#' @param subfilter
+#' @param x A pmwgs object or list of these
+#' @param x_name Name of the parameter to be tested
+#' @param x_fun Function applied to each iteration's parameter vector to create
+#' variable to be tested.
+#' @param y A pmwgs object or list of these
+#' @param y_name Name of the parameter to be tested
+#' @param y_fun Function applied to each iteration's parameter vector to create
+#' variable to be tested.
+#' @param mapped Should samples be mapped before doing test.
+#' @param x_subject Integer or name selecting a subject
+#' @param y_subject Integer or name selecting a subject
+#' @param mu Null value for single sample test (default 0)
+#' @param alternative "less" or "greater" determining direction of test probability
+#' @param probs Vector defining credible interval and central tendency quatiles
+#' (default c(0.025,.5,.975))
+#' @param digits Integer, significant digits for estimates in printed results
+#' @param p_digits Integer, significant digits for probability in printed results
+#' @param print_table Boolean (default TRUE) for printing results table
+#' @param selection String designating parameter type (mu, variance, correlation, alpha = default)
+#' @param filter A string. Specifies which stage you want to plot.
+#' @param x_fun_name Name to give to quantity calculated by x_fun
+#' @param y_fun_name Name to give to quantity calculated by y_fun
+#' @param subfilter An integer or vector. If integer it will exclude up until
 #'
-#' @return
+#' @return Invisible results table with no rounding.
 #' @export
-#'
-#' @examples
-p_test <- function(x,x_name=NULL,x_fun=NULL,fun_name="fun",
-                   y=NULL,y_name=NULL,y_fun=NULL,
+
+p_test <- function(x,x_name=NULL,x_fun=NULL,x_fun_name="fun",
+                   y=NULL,y_name=NULL,y_fun=NULL,y_fun_name="fun",
                    mapped=FALSE,
                    x_subject=NULL,y_subject=NULL,
                    mu=0,alternative = c("less", "greater")[1],
@@ -216,7 +221,8 @@ p_test <- function(x,x_name=NULL,x_fun=NULL,fun_name="fun",
                     subfilter=subfilter,mapped=mapped)
   # Individual subject analysis
   if (selection != "alpha") x_subject <- NULL else
-    if (is.null(x_subject)) x_subject <- names(x)[1]
+    if (is.null(x_subject)) x_subject <- names(x)[1] else
+      if (is.numeric(x_subject)) x_subject <- names(x)[x_subject]
   if (!is.null(x_subject)) {
     if (!(x_subject %in% names(x))) stop("Subject x_subject not in x")
     message("Testing x subject ",x_subject)
@@ -233,7 +239,7 @@ p_test <- function(x,x_name=NULL,x_fun=NULL,fun_name="fun",
     x <- -apply(x,1,diff)
     x_name <- paste(x_name,collapse="-")
   }
-  if (is.null(x_name)) x_name <- fun_name
+  if (is.null(x_name)) x_name <- x_fun_name
   if (is.null(y)) {
     p <- mean(x<mu)
     if (alternative=="greater") p <- 1-p
@@ -246,7 +252,8 @@ p_test <- function(x,x_name=NULL,x_fun=NULL,fun_name="fun",
                       subfilter=subfilter,mapped=mapped)
     # Individual subject analysis
     if (selection != "alpha") y_subject <- NULL else
-      if (is.null(y_subject)) y_subject <- names(y)[1]
+      if (is.null(y_subject)) y_subject <- names(y)[1] else
+      if (is.numeric(y_subject)) y_subject <- names(y)[y_subject]
     if (!is.null(y_subject)) {
       if (!(y_subject %in% names(y))) stop("Subject y_subject not in y")
       message("Testing y subject ",y_subject)
@@ -267,7 +274,7 @@ p_test <- function(x,x_name=NULL,x_fun=NULL,fun_name="fun",
     if (alternative=="greater") p <- 1-p
     tab <- cbind(quantile(x,probs),quantile(y,probs),quantile(d,probs))
     attr(tab,alternative) <- p
-    if (is.null(y_name)) y_name <- fun_name
+    if (is.null(y_name)) y_name <- y_fun_name
     if (x_name==y_name)
       dimnames(tab)[[2]] <- c(paste(x_name,c(x_subject,y_subject),sep="_"),
                               paste(x_subject,y_subject,sep="-")) else
@@ -312,20 +319,24 @@ p_test <- function(x,x_name=NULL,x_fun=NULL,fun_name="fun",
 
 # filter="sample";subfilter=0;use_best_fit=FALSE;print_summary=FALSE;digits=0
 # filter="sample"
-#' Title
+
+#' Calculate information criteria (DIC, BPIC), effective number of parameters and
+#' constituent posterior deviance (D) summaries (meanD = mean of D, Dmean = D
+#' for mean of posterior parameters and minD = minimum of D).
 #'
-#' @param samplers
-#' @param filter
-#' @param subfilter
-#' @param use_best_fit
-#' @param print_summary
-#' @param digits
-#' @param subject
+#' @param samplers pmwgs object or list of these
+#' @param filter A string. Specifies which stage you want to plot.
+#' @param subfilter An integer or vector. If integer it will exclude up until
+#' @param use_best_fit Boolean, default TRUE use best of minD and Dmean in
+#' calculation otherwise always use Dmean
+#' @param print_summary Boolean (default TRUE) print table of results
+#' @param digits Integer, significant digits in printed table
+#' @param subject Integer or string selecting a single subject, default NULL
+#' returns sums over all subjects
 #'
-#' @return
+#' @return Table of DIC, BPIC, EffectiveN, meanD, Dmean, and minD
 #' @export
-#'
-#' @examples
+
 IC <- function(samplers,filter="sample",subfilter=0,use_best_fit=TRUE,
                     print_summary=TRUE,digits=0,subject=NULL)
   # Gets DIC, BPIC, effective parameters, mean deviance, and deviance of mean
@@ -353,9 +364,9 @@ IC <- function(samplers,filter="sample",subfilter=0,use_best_fit=TRUE,
     if (use_best_fit) minDs <- pmin(minDs,Dmeans)
 
     if (!is.null(subject)) {
-      Dmeans <- Dmeans[subject]
-      mean_lls <- mean_lls[subject]
-      minDs <- minDs[subject]
+      Dmeans <- Dmeans[subject[1]]
+      mean_lls <- mean_lls[subject[1]]
+      minDs <- minDs[subject[1]]
     }
 
     # mean deviance(-2*ll of all data)
@@ -383,21 +394,23 @@ IC <- function(samplers,filter="sample",subfilter=0,use_best_fit=TRUE,
 
 
 
-#' Title
+#' IC based model selection for a list of samples objects.
 #'
-#' @param sList
-#' @param filter
-#' @param subfilter
-#' @param use_best_fit
-#' @param print_summary
-#' @param digits
-#' @param digits_p
-#' @param subject
+#' @param sList List of samples objects
+#' @param filter A string. Specifies which stage you want to plot.
+#' @param subfilter An integer or vector. If integer it will exclude up until
+#' @param use_best_fit Boolean, default TRUE use best of minD and Dmean in
+#' calculation otherwise always use Dmean
+#' @param print_summary Boolean (default TRUE) print table of results
+#' @param digits Integer, significant digits in printed table except model weights
+#' @param digits_p Integer, significant digits in printed table for model weights
+#' @param subject Integer or string selecting a single subject, default NULL
+#' returns sums over all subjects
 #'
-#' @return
+#' @return Table of effective number of parameters, mean deviance, deviance of
+#' mean, DIC, BPIC, and associated weights.
 #' @export
-#'
-#' @examples
+
 compare_IC <- function(sList,filter="sample",subfilter=0,use_best_fit=TRUE,
                        print_summary=TRUE,digits=0,digits_p=3,subject=NULL) {
 
@@ -406,16 +419,14 @@ compare_IC <- function(sList,filter="sample",subfilter=0,use_best_fit=TRUE,
     exp(IC)/sum(exp(IC))
   }
 
-  if (length(subfilter)==1) {
-    tmp <- vector(mode="list",length(sList))
-    for (i in 1:length(sList)) tmp[[i]] <- subfilter
-    subfilter=tmp
-  }
-  if ( !is.list(subfilter) || length(subfilter)!=length(sList) )
-    stop("If not a single digit, subfilter must be a list of the same length as sList")
+  if (is.numeric(subfilter)) defaultsf <- subfilter[1] else defaultsf <- 0
+  sflist <- as.list(setNames(rep(defaultsf,length(sList)),names(sList)))
+  if (is.list(subfilter)) for (i in names(subfilter))
+    if (i %in% names(sflist)) sflist[[i]] <- subfilter[[i]]
+
   ICs <- setNames(vector(mode="list",length=length(sList)),names(sList))
   for (i in 1:length(ICs)) ICs[[i]] <- IC(sList[[i]],filter=filter,
-    subfilter=subfilter[[i]],use_best_fit=use_best_fit,subject=subject,print_summary=FALSE)
+    subfilter=sflist[[i]],use_best_fit=use_best_fit,subject=subject,print_summary=FALSE)
   ICs <- data.frame(do.call(rbind,ICs))
   DICp <- getp(ICs$DIC)
   BPICp <- getp(ICs$BPIC)
@@ -430,20 +441,27 @@ compare_IC <- function(sList,filter="sample",subfilter=0,use_best_fit=TRUE,
   invisible(out)
 }
 
-compare_ICs <- function(sList,filter="sample",subfilter=0,use_best_fit=TRUE,
-                        print_summary=TRUE,digits=3,subject=NULL) {
+#' IC-based model weights for each participant in a list of samples objects
+#'
+#' @param sList List of samples objects
+#' @param filter A string. Specifies which stage you want to plot.
+#' @param subfilter An integer or vector. If integer it will exclude up until
+#' @param use_best_fit Boolean, default TRUE use best of minD and Dmean in
+#' calculation otherwise always use Dmean (see compare_IC)
+#' @param print_summary Boolean (default TRUE) print table of results
+#' @param digits Integer, significant digits in printed table
+#'
+#' @return List of tables for each subject of effective number of parameters,
+#' mean deviance, deviance of mean, DIC, BPIC, and associated weights.
+#' @export
 
-  if (length(subfilter)==1) {
-    tmp <- vector(mode="list",length(sList))
-    for (i in 1:length(sList)) tmp[[i]] <- subfilter
-    subfilter=tmp
-  }
-  if ( !is.list(subfilter) || length(subfilter)!=length(sList) )
-    stop("If not a single digit, subfilter must be a list of the same length as sList")
+compare_ICs <- function(sList,filter="sample",subfilter=0,use_best_fit=TRUE,
+                        print_summary=TRUE,digits=3) {
+
   subjects <- names(sList[[1]][[1]]$data)
   out <- setNames(vector(mode="list",length=length(subjects)),subjects)
   for (i in subjects) out[[i]] <- compare_IC(sList,subject=i,
-                                             filter=filter,subfilter=subfilter,use_best_fit=use_best_fit,print_summary=FALSE)
+    filter=filter,subfilter=subfilter,use_best_fit=use_best_fit,print_summary=FALSE)
   if (print_summary) {
     wDIC <- lapply(out,function(x)x["wDIC"])
     wBPIC <- lapply(out,function(x)x["wBPIC"])
@@ -461,11 +479,26 @@ compare_ICs <- function(sList,filter="sample",subfilter=0,use_best_fit=TRUE,
 }
 
 
-compare_MLL <- function(mll,nboot=100000,digits=2,print_summary=TRUE)
+#' Calculate a table of model probabilities based for a list of samples objects
+#' based on samples of marginal log-likelihood (MLL) added to these objects by
+#' run_IS2. Probabilities estimated by a bootstrap ath picks a vector of MLLs,
+#' one for each model in the list randomly with replacement nboot times,
+#' calculates model probabilities and averages
+#'
+#'
+#' @param mll List of samples objects with IS_samples attribute added by by run_IS2
+#' @param nboot Integer number of bootstrap samples, the default (1e5) usually
+#' gives stable results at 2 decimal places.
+#' @param print_summary Boolean (default TRUE) print table of results
+#' @param digits Integer, significant digits in printed table
+#'
+#' @return Vector of model proabilities with names from samples list.
+#' @export
+
+compare_MLL <- function(mll,nboot=1e5,digits=2,print_summary=TRUE)
   # mll is a list of vectors of marginal log-likelihoods for a set of models
   # picks a vector of mlls for each model in the list randomly with replacement
-  # nboot times, calculates model probabilities and averages, the default
-  # nboot seems good for stable results at 2 decimal places.
+  # nboot times, calculates model probabilities and averages.
 {
   pmp <- function(x)
     # posterior model probability for a vector of marginal log-likelihoods
@@ -475,7 +508,8 @@ compare_MLL <- function(mll,nboot=100000,digits=2,print_summary=TRUE)
   }
 
   out <- sort(apply(apply(do.call(rbind,lapply(mll,function(x){
-    x[sample(length(x),nboot,replace=TRUE)]})),2,pmp),1,mean),decreasing=TRUE)
+    attr(x,"IS_samples")[sample(length(attr(x,"IS_samples")),nboot,replace=TRUE)]
+  })),2,pmp),1,mean),decreasing=TRUE)
   print(round(out,digits))
   invisible(out)
 }

@@ -306,10 +306,9 @@ rRDM <- function(lR,pars,p_types=c("v","B","A","t0"))
 #'
 #' Here we use the b = B + A parameterization, which ensures that the response threshold is always higher than the between trial variation in start point of the drift rate.
 #'
-#' @return
+#' @return A list defining the cognitive model
 #' @export
-#'
-#' @examples
+
 rdmB <- function(){
   list(
     type="RACE",
@@ -343,10 +342,9 @@ rdmB <- function(){
 # RDM_B parameterization with s=1 scaling (B = b-A done in rdm.R)
 #' Title
 #'
-#' @return
+#' @return A list defining the cognitive model
 #' @export
-#'
-#' @examples
+
 rdmBt0natural <- function(){
   list(
     type="RACE",
