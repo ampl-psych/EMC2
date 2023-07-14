@@ -4,10 +4,10 @@
 \alias{log_likelihood_joint}
 \title{Title}
 \usage{
-log_likelihood_joint(proposals, dadms, component = NULL, useC)
+log_likelihood_joint(proposals, dadms, component = NULL)
 }
 \arguments{
-\item{useC}{}
+\item{component}{}
 }
 \description{
 Title

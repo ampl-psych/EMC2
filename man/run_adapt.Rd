@@ -16,11 +16,11 @@ run_adapt(
   verboseProgress = FALSE,
   fileName = NULL,
   particles = NULL,
-  particle_factor = 50,
+  particle_factor = 40,
   cores_per_chain = 1,
   cores_for_chains = length(samplers),
   max_trys = 50,
-  useC = useC
+  n_blocks = NULL
 )
 }
 \arguments{
@@ -53,6 +53,8 @@ run_adapt(
 \item{cores_for_chains}{An integer. How many cores to use across chains. Default is the number of chains.}
 
 \item{max_trys}{An integer. How many times it will try to meet the finish conditions. Default is 50.}
+
+\item{n_blocks}{}
 }
 \value{
 A list of samplers.

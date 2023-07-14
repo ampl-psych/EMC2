@@ -2,7 +2,9 @@
 % Please edit documentation in R/design.R
 \name{design_model}
 \alias{design_model}
-\title{Combines a data frame with a design and (optionally) a user-specified prior}
+\title{Combines a data frame with a design and (optionally) a user-specified prior,
+to create a data augmented design model ("dadm") object. Augmentation
+refers to replicating the data with one row for each accumulator.}
 \usage{
 design_model(
   data,
@@ -37,17 +39,21 @@ specified by the design's matchfun.}
 \item{verbose}{if true reports compression outcome}
 
 \item{compress}{default TRUE only keeps unique rows in terms of all
-parameter design matrices R, lR and rt (at given resolution)}
+parameter design matrices R, lR and rt (at a given resolution)}
 
 \item{rt_check}{checks if any truncation and censoring specified in the design
 are respected.}
 }
 \value{
 a (possibly) augmented and compressed data frame with attributes
-specifying the design, pror and how to decompress ready supporting likelihood
+specifying the design, prior and how to decompress ready supporting likelihood
 computation
 }
 \description{
+Usually called by make_samplers rather than directly by the user, except
+where a dadm is needed for use with profile_pmwg.
+}
+\details{
 Performs a series to checks to make sure data frame and design match and
 (by default) augments the data frame by adding accumulator factors and
 compresses the result for efficient likelihood calculation.

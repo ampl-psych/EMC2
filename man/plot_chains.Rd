@@ -20,23 +20,30 @@ plot_chains(
 \arguments{
 \item{pmwg_mcmc}{A list of samplers or samplers converted to mcmc objects.}
 
-\item{layout}{A vector or matrix specifying the layout as in par(mfrow = layout).}
+\item{layout}{A vector specifying the layout as in par(mfrow = layout).
+If NA (defualt) use CODA defaults, if NULL use current.}
 
-\item{subject}{A string or integer which you can specify to only plot chains of that subject.}
+\item{subject}{Integer or character vector, if selection = "alpha" picks out subject(s)
+(defualt NA plot all)}
 
 \item{ylim}{The y limits of the chain plot.}
 
-\item{selection}{a string. Specifies which chains you want to plot.}
+\item{selection}{String designating parameter type (mu, variance, correlation, alpha = default)}
 
-\item{filter}{a string. Specifies which stage you want to plot.}
+\item{filter}{A string. Specifies which stage you want to plot.}
 
-\item{thin}{an integer. Specify if you want to thin the chains by a factor n.}
+\item{thin}{An integer. Keep only iterations that are a multiple of thin.}
 
-\item{subfilter}{an integer or vector. If integer it will exclude up until that integer. If vector it will include everything in that range.}
+\item{subfilter}{An integer or vector. If integer it will exclude up until
+that integer. If vector it will include everything in that range.}
 
-\item{plot_acf}{bool. If TRUE will also plot autocorrelation for the chain specified in acf_chain.}
+\item{plot_acf}{Boolean (default FALSE). If TRUE will also plot autocorrelation
+for the chain specified in acf_chain.}
 
-\item{acf_chain}{an integer. For which chain to plot the acf, if plot_acf = TRUE.}
+\item{acf_chain}{Integer. For which chain to plot the acf, if plot_acf = TRUE.}
+}
+\value{
+None
 }
 \description{
 Plot MCMC chains

@@ -6,6 +6,9 @@
 \usage{
 albaB()
 }
+\value{
+A list defining the cognitive model
+}
 \description{
 Title
 }

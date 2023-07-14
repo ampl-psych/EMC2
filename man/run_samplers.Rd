@@ -11,18 +11,18 @@ run_samplers(
   max_gd = NULL,
   mean_gd = NULL,
   min_es = 0,
-  min_unique = 750,
+  min_unique = 600,
   p_accept = 0.8,
   step_size = 100,
   verbose = FALSE,
   verboseProgress = FALSE,
   fileName = NULL,
   particles = NULL,
-  particle_factor = 50,
+  particle_factor = 40,
   cores_per_chain = 1,
   cores_for_chains = length(samplers),
   max_trys = 50,
-  useC = FALSE
+  n_blocks = NULL
 )
 }
 \arguments{
@@ -59,6 +59,8 @@ run_samplers(
 \item{cores_for_chains}{An integer. How many cores to use across chains. Default is the number of chains.}
 
 \item{max_trys}{An integer. How many times it will try to meet the finish conditions. Default is 50.}
+
+\item{n_blocks}{}
 }
 \value{
 A list of samplers

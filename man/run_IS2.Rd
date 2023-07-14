@@ -12,8 +12,7 @@ run_IS2(
   stepsize_particles = 500,
   max_particles = 5000,
   n_cores = 1,
-  df = 5,
-  useC = TRUE
+  df = 5
 )
 }
 \arguments{
