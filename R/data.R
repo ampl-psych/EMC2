@@ -1,8 +1,3 @@
-# model=NULL;trials=NULL;data=NULL;expand=1;
-#                       mapped_p=FALSE;LT=NULL;UT=NULL;LC=NULL;UC=NULL;
-#                       Fcovariates=NULL;return_Ffunctions=FALSE
-# trials=2
-
 #' Simulates data
 #'
 #' Simulates data based on design and parameter vector arguments using the
@@ -36,10 +31,9 @@
 #' each trial. Must have names specified in the design Fcovariates argument.
 #' @param return_Ffunctions if false covariates are not returned
 #'
-#' @return
+#' @return None
 #' @export
-#'
-#' @examples
+
 make_data <- function(p_vector,design,model=NULL,trials=NULL,data=NULL,expand=1,
                       mapped_p=FALSE,LT=NULL,UT=NULL,LC=NULL,UC=NULL,
                       Fcovariates=NULL,return_Ffunctions=FALSE)
@@ -90,92 +84,91 @@ make_data <- function(p_vector,design,model=NULL,trials=NULL,data=NULL,expand=1,
 
   if (is.null(model)) if (is.null(design$model))
     stop("Must specify model as not in design") else model <- design$model
-  if (!is.matrix(p_vector)) p_vector <- make_pmat(p_vector,design)
-  if ( is.null(data) ) {
-    if (mapped_p) trials <- 1
-    if ( is.null(trials) )
-      stop("If data is not provided need to specify number of trials")
-    Ffactors=c(design$Ffactors,list(trials=1:trials))
-    data <- as.data.frame.table(array(dim=unlist(lapply(Ffactors,length)),
-                                      dimnames=Ffactors))
-    for (i in names(design$Ffactors))
-      data[[i]] <- factor(data[[i]],levels=design$Ffactors[[i]])
-    names(data)[dim(data)[2]] <- "R"
-    data$R <- factor(data$R,levels=design$Rlevels)
-    data$trials <- as.numeric(as.character(data$trials))
-    # if (!is.null(design$Ffunctions)) data <-
-    #   cbind.data.frame(data,data.frame(lapply(design$Ffunctions,function(f){f(data)})))
-    LT <- UT <- LC <- UC <- Rmissing <- NULL
-    # Add covariates
-    if (!is.null(design$Fcovariates)) {
-      if (!is.null(Fcovariates)) {
-        if (!(all(names(Fcovariates)  %in% design$Fcovariates)))
-          stop("All Fcovariates must be named in design$Fcovariates")
-        if (!is.data.frame(Fcovariates)) {
-          if (!all(unlist(lapply(Fcovariates,is.function))))
-            stop("Fcovariates must be either a data frame or list of functions")
-          nams <- names(Fcovariates)
-          Fcovariates <- do.call(cbind.data.frame,lapply(Fcovariates,function(x){x(data)}))
-          names(Fcovariates) <- nams
+    if (!is.matrix(p_vector)) p_vector <- make_pmat(p_vector,design)
+    if ( is.null(data) ) {
+      if (mapped_p) trials <- 1
+      if ( is.null(trials) )
+        stop("If data is not provided need to specify number of trials")
+      Ffactors=c(design$Ffactors,list(trials=1:trials))
+      data <- as.data.frame.table(array(dim=unlist(lapply(Ffactors,length)),
+                                        dimnames=Ffactors))
+      for (i in names(design$Ffactors))
+        data[[i]] <- factor(data[[i]],levels=design$Ffactors[[i]])
+      names(data)[dim(data)[2]] <- "R"
+      data$R <- factor(data$R,levels=design$Rlevels)
+      data$trials <- as.numeric(as.character(data$trials))
+      # if (!is.null(design$Ffunctions)) data <-
+      #   cbind.data.frame(data,data.frame(lapply(design$Ffunctions,function(f){f(data)})))
+      LT <- UT <- LC <- UC <- Rmissing <- NULL
+      # Add covariates
+      if (!is.null(design$Fcovariates)) {
+        if (!is.null(Fcovariates)) {
+          if (!(all(names(Fcovariates)  %in% design$Fcovariates)))
+            stop("All Fcovariates must be named in design$Fcovariates")
+          if (!is.data.frame(Fcovariates)) {
+            if (!all(unlist(lapply(Fcovariates,is.function))))
+              stop("Fcovariates must be either a data frame or list of functions")
+            nams <- names(Fcovariates)
+            Fcovariates <- do.call(cbind.data.frame,lapply(Fcovariates,function(x){x(data)}))
+            names(Fcovariates) <- nams
+          }
+          n <- dim(Fcovariates)[1]
+          if (!(n==dim(data)[1])) stop("Fcovariates must specify ",dim(data)[1]," values per covariate")
+          data <- cbind.data.frame(data,Fcovariates)
         }
-        n <- dim(Fcovariates)[1]
-        if (!(n==dim(data)[1])) stop("Fcovariates must specify ",dim(data)[1]," values per covariate")
-        data <- cbind.data.frame(data,Fcovariates)
+        empty_covariates <- design$Fcovariates[!(design$Fcovariates %in% names(Fcovariates))]
+        if (length(empty_covariates)>0) data[[empty_covariates]] <- 0
       }
-      empty_covariates <- design$Fcovariates[!(design$Fcovariates %in% names(Fcovariates))]
-      if (length(empty_covariates)>0) data[[empty_covariates]] <- 0
+    } else {
+      LT <- attr(data,"LT"); UT <- attr(data,"UT")
+      LC <- attr(data,"LC"); UC <- attr(data,"UC")
+      Rmissing <- any(is.na(data$R))
+      data <- add_trials(data[order(data$subjects),])
     }
-  } else {
-    LT <- attr(data,"LT"); UT <- attr(data,"UT")
-    LC <- attr(data,"LC"); UC <- attr(data,"UC")
-    Rmissing <- any(is.na(data$R))
-    data <- add_trials(data[order(data$subjects),])
-  }
-  if (!is.factor(data$subjects)) data$subjects <- factor(data$subjects)
-  if (!is.null(model)) {
-    if (!is.function(model)) stop("model arguement must  be a function")
-    if ( is.null(model()$p_types) ) stop("model()$p_types must be specified")
-    if ( is.null(model()$transform) ) stop("model()$transform must be specified")
-    if ( is.null(model()$Ntransform) ) stop("model()$Ntransform must be specified")
-    if ( is.null(model()$Ttransform) ) stop("model()$Ttransform must be specified")
-  }
-  data <- design_model(
-    add_accumulators(data,design$matchfun,simulate=TRUE,type=model()$type,
-                     Fcovariates=design$Fcovariates),
-    design,model,add_acc=FALSE,compress=FALSE,verbose=FALSE,rt_check=FALSE)
-  pars <- model()$Ttransform(model()$Ntransform(map_p(
-    model()$transform(add_constants(p_vector,design$constants)),data
-  )),data)
-
-  if (any(names(data)=="NACC")) # Some accumulators not present
-    pars[as.numeric(data$lR)>data$NACC,] <- NA
-
-  if (!is.null(design$adapt)) {
-    if (expand>1) {
-      expand <- 1
-      warning("Expand does not work with this type of model")
+    if (!is.factor(data$subjects)) data$subjects <- factor(data$subjects)
+    if (!is.null(model)) {
+      if (!is.function(model)) stop("model arguement must  be a function")
+      if ( is.null(model()$p_types) ) stop("model()$p_types must be specified")
+      if ( is.null(model()$transform) ) stop("model()$transform must be specified")
+      if ( is.null(model()$Ntransform) ) stop("model()$Ntransform must be specified")
+      if ( is.null(model()$Ttransform) ) stop("model()$Ttransform must be specified")
     }
-    data <- adapt_data(data,design,model,pars,mapped_p=mapped_p,add_response = TRUE)
-    if (mapped_p) return(data)
-    adapt <- attr(data,"adapt")
-    data <- data[data$lR==levels(data$lR)[1],!(names(data) %in% c("lR","lM"))]
-    attr(data,"adapt") <- adapt
-    return(data)
-  }
-  if (mapped_p) return(cbind(data[,!(names(data) %in% c("R","rt"))],pars))
-  if (expand==1)
-    Rrt <- model()$rfun(data$lR,pars) else
-    Rrt <- model()$rfun(rep(data$lR,expand),apply(pars,2,rep,times=expand))
-  if (expand>1) data <- cbind(rep=rep(1:expand,each=dim(data)[1]),
-                              data.frame(lapply(data,rep,times=expand)))
-  dropNames <- c("lR","lM")
-  if (!return_Ffunctions && !is.null(design$Ffunctions))
-    dropNames <- c(dropNames,names(design$Ffunctions) )
-  data <- data[data$lR==levels(data$lR)[1],!(names(data) %in% dropNames)]
-  for (i in dimnames(Rrt)[[2]]) data[[i]] <- Rrt[,i]
-  data <- missingFilter(data[,names(data)!="winner"],LT,UT,LC,UC,Rmissing)
-  attr(data,"p_vector") <- p_vector
-  data
+    data <- design_model(
+      add_accumulators(data,design$matchfun,simulate=TRUE,type=model()$type,Fcovariates=design$Fcovariates),
+      design,model,add_acc=FALSE,compress=FALSE,verbose=FALSE,
+      rt_check=FALSE)
+    pars <- model()$Ttransform(model()$Ntransform(map_p(
+      model()$transform(add_constants(p_vector,design$constants)),data
+    )),data)
+    if (!is.null(design$adapt)) {
+      if (expand>1) {
+        expand <- 1
+        warning("Expand does not work with this type of model")
+      }
+      data <- adapt_data(data,design,model,pars,mapped_p=mapped_p,add_response = TRUE)
+      if (mapped_p) return(data)
+      adapt <- attr(data,"adapt")
+      data <- data[data$lR==levels(data$lR)[1],!(names(data) %in% c("lR","lM"))]
+
+      if('Qvalues' %in% names(attributes(pars))) attr(data, 'Qvalues') <- attr(pars, 'Qvalues')
+      if('predictionErrors' %in% names(attributes(pars))) attr(data, 'predictionErrors') <- attr(pars, 'predictionErrors')
+      attr(data,"adapt") <- adapt
+      return(data)
+    }
+    if (mapped_p) return(cbind(data[,!(names(data) %in% c("R","rt"))],pars))
+    if (expand==1)
+      Rrt <- model()$rfun(data$lR,pars) else
+        Rrt <- model()$rfun(rep(data$lR,expand),apply(pars,2,rep,times=expand))
+    if (expand>1) data <- cbind(rep=rep(1:expand,each=dim(data)[1]),
+                                data.frame(lapply(data,rep,times=expand)))
+    dropNames <- c("lR","lM")
+    if (!return_Ffunctions && !is.null(design$Ffunctions))
+      dropNames <- c(dropNames,names(design$Ffunctions) )
+    data <- data[data$lR==levels(data$lR)[1],!(names(data) %in% dropNames)]
+    for (i in dimnames(Rrt)[[2]]) data[[i]] <- Rrt[,i]
+    data <- missingFilter(data[,names(data)!="winner"],LT,UT,LC,UC,Rmissing)
+    attr(data,"p_vector") <- p_vector;
+    data
 }
 
 add_Ffunctions <- function(data,design)
@@ -201,8 +194,7 @@ add_Ffunctions <- function(data,design)
 #'
 #' @return A list of simulated data sets of length n_post.
 #' @export
-#'
-#' @examples
+
 post_predict <- function(samples,hyper=FALSE,n_post=100,expand=1,
                          filter="sample",subfilter=0,thin=1,n_cores=1,
                          use_par=c("random","mean","median")[1])
@@ -284,8 +276,7 @@ post_predict <- function(samples,hyper=FALSE,n_post=100,expand=1,
 #'
 #' @return A matrix of random effects.
 #' @export
-#'
-#' @examples
+
 make_random_effects <- function(design, group_means, n_subj, variance_proportion = .2, covariances = NULL){
   if(length(group_means) != length(sampled_p_vector(design))) stop("You must specify as many means as parameters in your design")
   if(is.null(covariances)) covariances <- diag(abs(group_means)*variance_proportion)
