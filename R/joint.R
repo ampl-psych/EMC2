@@ -17,7 +17,7 @@ return_single_sampler <- function(joint_samples, i){
   single_samples$samples <- base::rapply(joint_samples$samples, f = function(x) fix_single_object(x, prefix, current_pars, replacement), how = "replace")
   single_samples$par_names <- replacement
   single_samples$data <- lapply(joint_samples$data, FUN = function(x) return(x[[i]]))
-  single_samples$ll_func <- attr(single_samples$data[[1]], "model")$log_likelihood
+  single_samples$ll_func <- attr(single_samples$data[[1]], "model")()$log_likelihood
   single_samples$prior$theta_mu_mean <- single_samples$prior$theta_mu_mean[idx]
   single_samples$prior$theta_mu_var <- single_samples$prior$theta_mu_var[idx, idx]
   return(single_samples)

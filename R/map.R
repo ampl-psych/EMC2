@@ -164,10 +164,9 @@ map_mcmc <- function(mcmc,design,model, include_constants = TRUE)
 #' @param digits For rounding outputs
 #' @param remove_subjects Default true removes subjects from output design
 #'
-#' @return
+#' @return Matrix of factors and mapped parameter values
 #' @export
-#'
-#' @examples
+
 mapped_par <- function(p_vector,design,model=NULL,
                        digits=3,remove_subjects=TRUE)
   # Show augmented data and corresponding mapped parameter

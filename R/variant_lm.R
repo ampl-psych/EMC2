@@ -368,3 +368,4 @@ split_form <- function(formula) {
   response <- attr(tt, "response") # index of response var
   return(list(dep = vars[-response], ind = vars[response]))
 }
+

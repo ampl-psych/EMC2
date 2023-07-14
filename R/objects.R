@@ -302,7 +302,7 @@ chain_n <- function(samplers)
 extract_samples <- function(sampler, stage = c("adapt", "sample"), max_n_sample = NULL) {
   variant_funs <- attr(sampler, "variant_funs")
   samples <- sampler$samples
-
+  type <- sampler$sampler_nuis$type
   if("sample" %in% stage & !is.null(max_n_sample)){
     sample_filter <- which(samples$stage %in% "sample" & seq_along(samples$stage) <= samples$idx)
     adapt_filter <- which(samples$stage %in% "adapt" & seq_along(samples$stage) <= samples$idx)
@@ -315,10 +315,10 @@ extract_samples <- function(sampler, stage = c("adapt", "sample"), max_n_sample 
   }
   if(any(sampler$nuisance)){
     nuisance <- sampler$nuisance[!sampler$grouped]
-    sampler$sampler_nuis$samples$alpha <- sampler$samples$alpha[nuisance,,]
+    sampler$sampler_nuis$samples$alpha <- sampler$samples$alpha[nuisance,,,drop = F]
     sampler$samples$alpha <- sampler$samples$alpha[!nuisance,,]
     out <- variant_funs$filtered_samples(sampler, full_filter)
-    out$nuisance <- get_variant_funs("diagonal")$filtered_samples(sampler$sampler_nuis, full_filter)
+    out$nuisance <- get_variant_funs(type)$filtered_samples(sampler$sampler_nuis, full_filter)
   } else{
     out <- variant_funs$filtered_samples(sampler, full_filter)
   }
@@ -340,6 +340,22 @@ p_names <- function(samples,mapped=FALSE,design=FALSE)
     for (i in names(sp)) sp[[i]] <- tmp[type==i]
     sp
 }
+
+#' Converts a pmwgs object (or list of such) to a data frame.
+#'
+#' @param samples A list of samplers or samplers converted to mcmc objects.
+#' @param selection String designating parameter type (mu, variance, correlation, alpha = default)
+#' @param filter A string. Specifies which stage you want to plot.
+#' @param thin An integer. Keep only iterations that are a multiple of thin.
+#' @param subfilter An integer or vector. If integer it will exclude up until
+#' that integer. If vector it will include everything in that range.
+#' @param mapped Boolean (default FALSE) if TRUE plot parameters mapped to design
+#' otherwise sampled parameters
+#' @param include_constants Include parameters that are not sampled (i.e., constants)
+#' @param stat A function that is applied to each column of the data frame
+#'
+#' @return A data frame with one row for each sample (with a subjects column if selection = "alpha")
+#' @export
 
 parameters_data_frame <- function(samples,filter="sample",thin=1,subfilter=0,
                                   mapped=FALSE,include_constants=FALSE,stat=NULL,

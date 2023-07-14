@@ -21,11 +21,11 @@
 #' @param cores_per_chain An integer. How many cores to use per chain. Parallelizes across participant calculations.
 #' @param cores_for_chains An integer. How many cores to use across chains. Default is the number of chains.
 #' @param max_trys An integer. How many times it will try to meet the finish conditions. Default is 50.
+#' @param n_blocks
 #'
 #' @return A list of samplers
 #' @export
-#'
-#' @examples
+
 run_emc <- function(samplers, stage = NULL, iter = 1000, max_gd = 1.1, mean_gd = 1.1, min_es = 0, min_unique = 600, preburn = 150,
                     p_accept = .8, step_size = 100, verbose = FALSE, verboseProgress = FALSE, fileName = NULL,
                     particles = NULL, particle_factor=40, cores_per_chain = 1,
@@ -84,6 +84,7 @@ run_emc <- function(samplers, stage = NULL, iter = 1000, max_gd = 1.1, mean_gd =
 #' Used by `run_emc`, `auto_burn`, `run_adapt` and `run_sample`.
 #' Will break if you skip a stage, the stages have to be run in order (preburn, burn, adapt, sample).
 #' Either iter, max_gd, min_es or min_unique has to be specified. Multiple conditions for finishing can be specified. Will finish if all conditions are met.
+#'
 #' @param samplers A list of samplers, could be in any stage, as long as they've been initialized with make_samplers
 #' @param stage A string. Indicates which stage is to be run, either preburn, burn, adapt or sample
 #' @param iter An integer. Indicates how many iterations to run,
@@ -101,11 +102,11 @@ run_emc <- function(samplers, stage = NULL, iter = 1000, max_gd = 1.1, mean_gd =
 #' @param cores_per_chain An integer. How many cores to use per chain. Parallelizes across participant calculations.
 #' @param cores_for_chains An integer. How many cores to use across chains. Default is the number of chains.
 #' @param max_trys An integer. How many times it will try to meet the finish conditions. Default is 50.
+#' @param n_blocks
 #'
 #' @return A list of samplers
 #' @export
-#'
-#' @examples
+
 run_samplers <- function(samplers, stage, iter = NULL, max_gd = NULL, mean_gd = NULL, min_es = 0, min_unique = 600,
                          p_accept = .8, step_size = 100, verbose = FALSE, verboseProgress = FALSE,
                          fileName = NULL,
@@ -120,7 +121,7 @@ run_samplers <- function(samplers, stage, iter = NULL, max_gd = NULL, mean_gd = 
   while(!progress$done){
     if(!is.numeric(progress$step_size) | progress$step_size < 1) warning("Something wrong with the stepsize again, Niek's to blame")
     samplers <- add_proposals(samplers, stage, cores_per_chain, n_blocks)
-    samplers <- parallel::mclapply(samplers,run_stages, stage = stage, iter= progress$step_size,
+    samplers <- auto_mclapply(samplers,run_stages, stage = stage, iter= progress$step_size,
                                    verbose=verbose,  verboseProgress = verboseProgress,
                                    particles=particles,particle_factor=particle_factor,
                                    p_accept=p_accept, n_cores=cores_per_chain, mc.cores = cores_for_chains)
@@ -202,7 +203,10 @@ check_progress <- function (samplers, stage, iter, max_gd, mean_gd, min_es, min_
   }
   trys_done <- ifelse(is.null(max_trys), FALSE, trys >= max_trys)
   if (trys_done) {
-    warning("Max trys reached. If this happens in burn-in while trying to get gelman diagnostics < 1.2, you might have a particularly hard model. Make sure your model is well specified. If so, you can run adapt and sample, if run for long enough, sample usually converges eventually.")
+    warning("Max trys reached. If this happens in burn-in while trying to get
+            gelman diagnostics small enough, you might have a particularly hard model.
+            Make sure your model is well specified. If so, you can run adapt and
+            sample, if run for long enough, sample usually converges eventually.")
   }
   if (stage == "adapt") {
     samples_merged <- merge_samples(samplers)
@@ -271,11 +275,11 @@ create_eff_proposals <- function(samplers, n_cores){
       nuis_idx <- nuisance[idx]
       if(any(nuis_idx)){
         type <- samples_merged$sampler_nuis$type
-        conditionals <- parallel::mclapply(X = 1:n_subjects,
+        conditionals <- auto_mclapply(X = 1:n_subjects,
                                            FUN = variant_funs$get_conditionals,samples = test_samples,
                                            n_pars = sum(idx[!nuis_idx]), iteration =  iteration, idx = idx[!nuis_idx],
                                            mc.cores = n_cores)
-        conditionals_nuis <- parallel::mclapply(X = 1:n_subjects,
+        conditionals_nuis <- auto_mclapply(X = 1:n_subjects,
                                            FUN = get_variant_funs(type)$get_conditionals,samples = test_samples$nuisance,
                                            n_pars = sum(idx[nuis_idx]), iteration =  iteration, idx = idx[nuis_idx],
                                            mc.cores = n_cores)
@@ -286,7 +290,7 @@ create_eff_proposals <- function(samplers, n_cores){
         eff_mu[idx & nuis_idx,] <- conditionals_nuis[,1,]
         eff_var[idx & nuis_idx,idx & nuis_idx,] <- conditionals_nuis[,2:(sum(idx[nuis_idx])+1),]
       } else{
-        conditionals <- parallel::mclapply(X = 1:n_subjects,
+        conditionals <- auto_mclapply(X = 1:n_subjects,
                                            FUN = variant_funs$get_conditionals,samples = test_samples,
                                            n_pars = sum(idx), iteration =  iteration, idx = idx,
                                            mc.cores = n_cores)
@@ -391,19 +395,17 @@ test_adapted <- function(sampler, test_samples, min_unique, n_cores_conditional 
   # Function used by run_adapt to check whether we can create the conditional.
 
   # Only need to check uniqueness for one parameter
-  first_par <- test_samples$alpha[1, , ]
+  first_par <- as.matrix(test_samples$alpha[1, , ])
+  if(ncol(first_par) == 1) first_par <- t(first_par)
   # Split the matrix into a list of vectors by subject
-  # Needed for the case where every sample is unique for all subjects
-  first_par_list <- split(first_par, seq(NROW(first_par)))
-  # Get unique pars (new accepted particles) and check length for
   # all subjects is greater than unq_vals
-  n_unique_sub <- lapply(lapply(first_par_list, unique), length)
+  n_unique_sub <- apply(first_par, 1, FUN = function(x) return(length(unique(x))))
   n_pars <- sampler$n_pars
   variant_funs <- attr(sampler, "variant_funs")
   grouped <- sampler$grouped
   components <- attr(sampler$data, "components")[!grouped]
   nuisance <- sampler$nuisance[!grouped]
-  if (all(n_unique_sub > min_unique)) {
+  if (length(n_unique_sub) != 0 & all(n_unique_sub > min_unique)) {
     if(verbose){
       message("Enough unique values detected: ", min_unique)
       message("Testing proposal distribution creation")
@@ -414,12 +416,12 @@ test_adapted <- function(sampler, test_samples, min_unique, n_cores_conditional 
           nuis_idx <- nuisance[idx]
           if(any(nuis_idx)){
             type <- sampler$sampler_nuis$type
-            parallel::mclapply(X = 1:sampler$n_subjects,
+            auto_mclapply(X = 1:sampler$n_subjects,
                                FUN = get_variant_funs(type)$get_conditionals,samples = test_samples$nuisance,
                                n_pars = sum(idx[nuisance]), idx = idx[nuis_idx],
                                mc.cores = n_cores_conditional)
           }
-          parallel::mclapply(X = 1:sampler$n_subjects,FUN = variant_funs$get_conditionals,samples = test_samples,
+          auto_mclapply(X = 1:sampler$n_subjects,FUN = variant_funs$get_conditionals,samples = test_samples,
                          n_pars = sum(idx[!nuis_idx]), idx = idx[!nuis_idx], mc.cores = n_cores_conditional)
         }
     },error=function(e) e, warning=function(w) w)
@@ -469,8 +471,7 @@ loadRData <- function(fileName){
 #'
 #' @return A list of samplers
 #' @export
-#'
-#' @examples
+
 auto_burn <- function(samplers, max_gd = NULL, mean_gd = 1.1, min_es = 0, preburn = 150,
                       p_accept = .8, step_size = 100, verbose = FALSE, verboseProgress = FALSE,
                       fileName = NULL,
@@ -507,16 +508,17 @@ auto_burn <- function(samplers, max_gd = NULL, mean_gd = 1.1, min_es = 0, prebur
 #' @param cores_per_chain An integer. How many cores to use per chain. Parallelizes across participant calculations.
 #' @param cores_for_chains An integer. How many cores to use across chains. Default is the number of chains.
 #' @param max_trys An integer. How many times it will try to meet the finish conditions. Default is 50.
+#' @param n_blocks
 #'
 #' @return A list of samplers.
 #' @export
-#'
-#' @examples
+
 run_adapt <- function(samplers, max_gd = NULL, mean_gd = NULL, min_es = 0, min_unique = 600,
                       p_accept = .8, step_size = 100, verbose = FALSE, verboseProgress = FALSE,
                       fileName = NULL,
                       particles = NULL, particle_factor=40, cores_per_chain = 1,
-                      cores_for_chains = length(samplers), max_trys = 50, n_blocks = NULL){
+                      cores_for_chains = length(samplers), max_trys = 50, n_blocks = NULL)
+{
   samplers <- run_samplers(samplers, stage = "adapt",  max_gd = max_gd, mean_gd = mean_gd, min_es = min_es, min_unique = min_unique,
                            cores_for_chains = cores_for_chains, p_accept = p_accept,
                            step_size = step_size,  verbose = verbose, verboseProgress = verboseProgress,
@@ -543,7 +545,9 @@ run_adapt <- function(samplers, max_gd = NULL, mean_gd = NULL, min_es = 0, min_u
 #' @param particle_factor An integer. Particle factor multiplied by the square root of the number of sampled parameters will determine the number of particles used.
 #' @param cores_per_chain An integer. How many cores to use per chain. Parallelizes across participant calculations.
 #' @param cores_for_chains An integer. How many cores to use across chains. Default is the number of chains.
+#' @param n_blocks
 #' @param max_trys An integer. How many times it will try to meet the finish conditions. Default is 50.
+#'
 #' @export
 #'
 #' @return A list of samplers
@@ -551,7 +555,8 @@ run_sample <- function(samplers, iter = 1000, max_gd = 1.1, mean_gd = NULL, min_
                        p_accept = .8, step_size = 100, verbose = FALSE, verboseProgress = FALSE,
                        fileName = NULL,
                        particles = NULL, particle_factor=40, cores_per_chain = 1,
-                       cores_for_chains = length(samplers), max_trys = 50, n_blocks = NULL){
+                       cores_for_chains = length(samplers), max_trys = 50, n_blocks = NULL)
+{
   samplers <- run_samplers(samplers, stage = "sample", iter = iter, max_gd = max_gd, mean_gd = mean_gd, min_es = min_es, cores_for_chains = cores_for_chains, p_accept = p_accept,
                            step_size = step_size,  verbose = verbose, verboseProgress = verboseProgress,
                            fileName = fileName,
@@ -571,17 +576,19 @@ run_sample <- function(samplers, iter = 1000, max_gd = 1.1, mean_gd = NULL, min_
 #' @param n_chains An integer. Specifies the amount of mcmc chains to be run. Should be more than 1 to get gelman diagnostics.
 #' @param rt_resolution A double. Used for compression, rts will be binned based on this resolution.
 #' @param nuisance A integer vector. Parameters on this location of the vector of parameters are treated as nuisance parameters and not included in group-level covariance (only variance).
-#' @param prior_list A list of priors for the group level. Prior distributions should match the type argument.
 #' @param par_groups A vector. Only to be specified with type blocked `c(1,1,1,2,2)` means first three parameters first block, last two parameters in the second block
 #' @param n_factors An integer. Only to be specified with type factor.
 #' @param constraintMat A matrix of rows equal to the number of estimated parameters, and columns equal to the number of factors, only to be specified with type factor.
 #' If null will use default settings as specified in Innes et al. 2022
+#' @param prior A named list containing the prior mean (theta_mu_mean) and
+#' variance (theta_mu_var). Default prior created if NULL
+#' @param nuisance_non_hyper
+#' @param grouped_pars
+#' @param formula
 #'
 #' @return a list of samplers
 #' @export
-#'
-#' @examples
-#'
+
 make_samplers <- function(data_list,design_list,model_list=NULL,
                           type=c("standard","diagonal","blocked","factor","single", "lm", "infnt_factor")[1],
                           n_chains=3,rt_resolution=0.02,
@@ -738,12 +745,23 @@ extractDadms <- function(dadms, names = 1:length(dadms)){
 #'
 #' @return Samplers, with IS2 attribute
 #' @export
-#'
-#' @examples
+
 run_IS2 <- function(samplers, filter = "sample", subfilter = 0, IS_samples = 1000,
                     stepsize_particles = 500, max_particles = 5000, n_cores = 1, df = 5){
   samples_merged <- merge_samples(samplers)
   IS_samples <- IS2(samples_merged, filter, subfilter = subfilter, IS_samples, stepsize_particles, max_particles, n_cores, df)
   attr(samplers, "IS_samples") <- IS_samples
   return(samplers)
+}
+
+
+auto_mclapply <- function(X, FUN, mc.cores, ...){
+  if(Sys.info()[1] == "Windows"){
+    cluster <- parallel::makeCluster(mc.cores)
+    list_out <- parallel::parLapply(cl = cluster, X,FUN, ...)
+    parallel::stopCluster(cluster)
+  } else{
+    list_out <- parallel::mclapply(X, FUN, mc.cores = mc.cores, ...)
+  }
+  return(list_out)
 }

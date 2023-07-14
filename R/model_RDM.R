@@ -295,13 +295,20 @@ rRDM <- function(lR,pars,p_types=c("v","B","A","t0"))
 }
 
 
-# RDM_B parameterization with s=1 scaling (B = b-A done in rdm.R)
-#' Title
+#' The Racing Diffusion Model (RDM)
 #'
-#' @return
+#' The Racing Diffusion Model, also known as the Racing Wald Model, proposes that for each choice alternative, noisy accumulators race towards a common bound.
+#' The first accumulator to reach the bound determines the choice made. The time taken to reach the threshold determines the response times. For details see `Tillman, Van Zandt & Logan, 2020`
+#'
+#' The core parameters of the RDM are the drift rate `v`, the response threshold `B`,
+#' within trial variation in drift rate `s`, between trial variation in startpoint of the drift rate `A`, and non-decision time `t0`.
+#' Frequently `s` is fixed to 1 to satisfy scaling constraints.
+#'
+#' Here we use the b = B + A parameterization, which ensures that the response threshold is always higher than the between trial variation in start point of the drift rate.
+#'
+#' @return A list defining the cognitive model
 #' @export
-#'
-#' @examples
+
 rdmB <- function(){
   list(
     type="RACE",
@@ -335,10 +342,9 @@ rdmB <- function(){
 # RDM_B parameterization with s=1 scaling (B = b-A done in rdm.R)
 #' Title
 #'
-#' @return
+#' @return A list defining the cognitive model
 #' @export
-#'
-#' @examples
+
 rdmBt0natural <- function(){
   list(
     type="RACE",

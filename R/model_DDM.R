@@ -1,4 +1,4 @@
-rDDM <- function(lR,pars,precision=3,ok=NULL)
+rDDM <- function(lR,pars,precision=2.5,ok=NULL)
   # lR is an empty latent response factor lR with one level for each boundary
   # pars is a matrix of parameter values named as in p_types
   # lower is mapped to first level of lR and upper to second
@@ -18,7 +18,7 @@ rDDM <- function(lR,pars,precision=3,ok=NULL)
   cbind.data.frame(R=factor(out[,"response"],levels=1:2,labels=levels(lR)),rt=out[,"rt"])
 }
 
-dDDM <- function(rt,R,pars,precision=3)
+dDDM <- function(rt,R,pars,precision=2.5)
   # DDM density for response factor R with rt
   # lower is mapped to first level of R and upper to second
   # test
@@ -33,7 +33,7 @@ dDDM <- function(rt,R,pars,precision=3)
 }
 
 
-pDDM <- function(rt,R,pars,precision=3)
+pDDM <- function(rt,R,pars,precision=2.5)
   # DDM cdf for response factor R with rt
   # lower is mapped to first level of R and upper to second
 {
@@ -43,12 +43,25 @@ pDDM <- function(rt,R,pars,precision=3)
              sz = pars[,"sz"], sv = pars[,"sv"],st0 = pars[,"st0"], s = pars[,"s"])
 }
 
-#' Title
+#' The Diffusion Decision Model
 #'
-#' @return
+#' The Diffusion Decision Model, proposes that decisions between two alternatives are determined based on one accumulator.
+#' This accumulator drifts to an upper threshold or a lower threshold. The first threshold it reaches determines the choice made.
+#' The time taken to reach the threshold drives the response time. For details see `Ratcliff & McKoon, 2008`.
+#'
+#' The core parameters of the DDM are the drift rate `v`, the boundary separation `a`,
+#' within trial variation in drift rate `s`, bias to either threshold `Z`, and non-decision time `t0`.
+#' Frequently `s` is fixed to 1 to satisfy scaling constraints.
+#' Furthermore, we can estimate between trial variation in drift rate `sv`, non-decision time `st0`, and bias `SZ`. Note that computing for these parameters is slower.
+#' Lastly `DP` comprises the difference in non-decision time for each response option.
+#'
+#' We sample `a, t0, sv, st0, s` on the log scale because these parameters should be strictly positive
+#' We sample `Z, SZ and DP` on the probit scale because they should be strictly between 0 and 1.
+#' Here `Z` is estimated as the ratio of bias to one boundary, where 0 is complete bias to lower boundary and 1 complete bias to upper boundary
+#' `DP` is estimated as a ratio of lower/higher `t0` relative to the `t0 parameter`
+#' @return A model list with all the necessary functions to sample
 #' @export
-#'
-#' @examples
+
 ddmTZD <- function(){
   list(
     type="DDM",
@@ -94,12 +107,12 @@ ddmTZD <- function(){
       ok <- !( abs(pars[,"v"])> 20 | pars[,"a"]> 10 | pars[,"sv"]> 10 | pars[,"SZ"]> .999 | pars[,"st0"]>.2)
       if (pars[1,"sv"] !=0) attr(pars,"ok") <- attr(pars,"ok") & pars[,"sv"] > .001
       if (pars[1,"SZ"] !=0) attr(pars,"ok") <- attr(pars,"ok") & pars[,"SZ"] > .001
-      rDDM(lR,pars,precision=3,ok)
+      rDDM(lR,pars,precision=2.5,ok)
     },
     # Density function (PDF)
-    dfun=function(rt,R,pars) dDDM(rt,R,pars,precision=3),
+    dfun=function(rt,R,pars) dDDM(rt,R,pars,precision=2.5),
     # Probability function (CDF)
-    pfun=function(rt,R,pars) pDDM(rt,R,pars,precision=3),
+    pfun=function(rt,R,pars) pDDM(rt,R,pars,precision=2.5),
     log_likelihood=function(p_vector,dadm,min_ll=log(1e-10)){
       log_likelihood_ddm(p_vector=p_vector, dadm = dadm, min_ll = min_ll)
     }
@@ -153,12 +166,12 @@ ddmTZDt0natural <- function(){
       ok <- !( abs(pars[,"v"])> 20 | pars[,"a"]> 10 | pars[,"sv"]> 10 | pars[,"SZ"]> .999 | pars[,"st0"]>.2)
       if (pars[1,"sv"] !=0) attr(pars,"ok") <- attr(pars,"ok") & pars[,"sv"] > .001
       if (pars[1,"SZ"] !=0) attr(pars,"ok") <- attr(pars,"ok") & pars[,"SZ"] > .001
-      rDDM(lR,pars,precision=3,ok)
+      rDDM(lR,pars,precision=2.5,ok)
     },
     # Density function (PDF)
-    dfun=function(rt,R,pars) dDDM(rt,R,pars,precision=3),
+    dfun=function(rt,R,pars) dDDM(rt,R,pars,precision=2.5),
     # Probability function (CDF)
-    pfun=function(rt,R,pars) pDDM(rt,R,pars,precision=3),
+    pfun=function(rt,R,pars) pDDM(rt,R,pars,precision=2.5),
     log_likelihood=function(p_vector,dadm,min_ll=log(1e-10)){
       log_likelihood_ddm(p_vector=p_vector, dadm = dadm, min_ll = min_ll)
     }

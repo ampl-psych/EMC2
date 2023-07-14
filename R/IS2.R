@@ -10,16 +10,18 @@ IS2 <- function(samples, filter = "sample", subfilter = 0, IS_samples = 1000, st
     if(subfilter > 0) idx <- idx[-c(1:subfilter)]
   } else idx <- idx[subfilter]
   all_pars <- info$variant_funs$get_all_pars_IS2(samples, idx, info)
-  muX<-apply(all_pars$X,2,mean)
-  varX<-stats::cov(all_pars$X)
+  if(!is.null(all_pars$X)){
+    muX<-apply(all_pars$X,2,mean)
+    varX<-stats::cov(all_pars$X)
+  } else{
+    muX<-info$prior$theta_mu_mean
+    varX<-info$prior$theta_mu_var
+  }
+  prop_theta <- mvtnorm::rmvt(IS_samples,sigma = varX, df=df, delta=muX)
 
-  prop_theta=mvtnorm::rmvt(IS_samples,sigma = varX, df=df, delta=muX)
-  # out <- numeric(nrow(prop_theta))
-  # for(i in 1:nrow(prop_theta)){
-  #   out[i] <- variant_funs$prior_dist(parameters = prop_theta[i,], all_pars$info)
-  # }
-  #do the sampling
-  logw_num <- parallel::mclapply(X=1:IS_samples,
+
+
+  logw_num <- auto_mclapply(X=1:IS_samples,
                        FUN = compute_lw_num,
                        prop_theta = prop_theta,
                        stepsize_particles = stepsize_particles,
@@ -31,15 +33,15 @@ IS2 <- function(samples, filter = "sample", subfilter = 0, IS_samples = 1000, st
   # sub_and_group <- simplify2array(lapply(logw_num, FUN = function(x) return(x$sub_and_group)))
   # prior_and_jac <- sapply(logw_num, FUN = function(x) return(x$prior_and_jac))
   #
-  # logw_den <- mvtnorm::dmvt(prop_theta, delta=muX, sigma=varX,df=df, log = TRUE)
-  # # finished <- unlist(logw_num) - logw_den
-  # # max.lw <- max(finished)
-  # # mean.centred.lw <- mean(exp(finished-max.lw)) #takes off the max and gets mean (avoids infs)
-  # # lw <- log(mean.centred.lw)+max.lw #puts max back on to get the lw
-  # return(list(sub_and_group = sub_and_group, prior_and_jac = sub_and_group, logw_den = logw_den))
   logw_den <- mvtnorm::dmvt(prop_theta, delta=muX, sigma=varX,df=df, log = TRUE)
-
   finished <- unlist(logw_num) - logw_den
+  max.lw <- max(finished)
+  centred.lw <- exp(finished-max.lw) #takes off the max and gets mean (avoids infs)
+  lw <- log(centred.lw)+max.lw #puts max back on to get the lw
+  # return(list(sub_and_group = sub_and_group, prior_and_jac = sub_and_group, logw_den = logw_den))
+  # logw_den <- mvtnorm::dmvt(prop_theta, delta=muX, sigma=varX,df=df, log = TRUE)
+  #
+  # finished <- unlist(logw_num) - logw_den
   return(finished)
 
 }
@@ -102,7 +104,7 @@ get_logp=function(prop_theta,stepsize_particles, max_particles, mu_tilde,var_til
     lw_subs[j] <- max_lw+log(mean(weight))
   }
   # sum the logp and return
-  return(lw_subs)
+  return(sum(lw_subs))
 }
 
 compute_lw_num=function(i, prop_theta,stepsize_particles, max_particles, mu_tilde,var_tilde,info){

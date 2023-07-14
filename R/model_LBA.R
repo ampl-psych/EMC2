@@ -134,9 +134,9 @@ rLBA <- function(lR,pars,p_types=c("v","sv","b","A","t0"),posdrift = TRUE)
 {
   if (!all(p_types %in% dimnames(pars)[[2]]))
     stop("pars must have columns ",paste(p_types,collapse = " "))
-  dt <- suppressWarnings(matrix((pars[,"b"]-pars[,"A"]*runif(dim(pars)[1]))/
+  dt <- matrix((pars[,"b"]-pars[,"A"]*runif(dim(pars)[1]))/
                  msm::rtnorm(dim(pars)[1],pars[,"v"],pars[,"sv"],ifelse(posdrift,0,-Inf)),
-               nrow=length(levels(lR))))
+               nrow=length(levels(lR)))
   R <- apply(dt,2,which.min)
   pick <- cbind(R,1:dim(dt)[2]) # Matrix to pick winner
   # Any t0 difference with lR due to response production time (no effect on race)
@@ -148,13 +148,20 @@ rLBA <- function(lR,pars,p_types=c("v","sv","b","A","t0"),posdrift = TRUE)
   cbind.data.frame(R=R,rt=rt)
 }
 
-# lba_B parameterization
-#' Title
+#' The Linear Ballistic Accumulator (LBA) model
 #'
-#' @return
+#' The Linear Ballistic Accumulator, proposes that for each choice alternative, ballistic accumulators race towards a common bound.
+#' The first accumulator to reach the bound determines the choice made. The time taken to reach the threshold determines the response times. For details see `Brown & Heathcote, 2008`
+#'
+#' The core parameters of the LBA are the drift rate `v`, the response threshold `B`,
+#' between trial variation in drift rate `sv`, between trial variation in startpoint of the drift rate `A`, and non-decision time `t0`.
+#' Frequently `sv` is fixed to 1 to satisfy scaling constraints.
+#'
+#' Here we use the b = B + A parameterization, which ensures that the response threshold is always higher than the between trial variation in start point of the drift rate.
+#'
+#' @return A list defining the cognitive model
 #' @export
-#'
-#' @examples
+
 lbaB <- function(){
   list(
     type="RACE",
@@ -189,10 +196,9 @@ lbaB <- function(){
 # lba_B parameterization
 #' Title
 #'
-#' @return
+#' @return A list defining the cognitive model
 #' @export
-#'
-#' @examples
+
 albaB <- function(){
   list(
     type="RACE",

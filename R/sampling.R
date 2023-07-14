@@ -9,8 +9,9 @@ pmwgs <- function(dadm, variant_funs, pars = NULL, ll_func = NULL, prior = NULL,
   dadm_list <-dadm$dadm_list
   # Storage for the samples.
   subjects <- sort(as.numeric(unique(dadm$subjects)))
-  if(!is.null(nuisance) & !is.numeric(nuisance)) nuisance <- which(pars == nuisance)
-  if(!is.null(nuisance_non_hyper) & !is.numeric(nuisance_non_hyper)) nuisance_non_hyper <- which(pars == nuisance_non_hyper)
+  if(!is.null(grouped_pars) & !is.numeric(grouped_pars)) grouped_pars <- which(pars %in% grouped_pars)
+  if(!is.null(nuisance) & !is.numeric(nuisance)) nuisance <- which(pars %in% nuisance)
+  if(!is.null(nuisance_non_hyper) & !is.numeric(nuisance_non_hyper)) nuisance_non_hyper <- which(pars %in% nuisance_non_hyper)
 
   if(!is.null(grouped_pars)){
     is_grouped <- is.element(seq_len(length(pars)), grouped_pars)
@@ -67,8 +68,7 @@ pmwgs <- function(dadm, variant_funs, pars = NULL, ll_func = NULL, prior = NULL,
   class(sampler) <- "pmwgs"
   sampler <- variant_funs$add_info(sampler, prior, ...)
   sampler$prior$prior_grouped <- get_prior_single(prior$prior_grouped,
-                                                  n_pars = sum(is_grouped),
-                                                  par_names = rownames(group_pars))
+                                                  n_pars = sum(is_grouped), sample = F)
   attr(sampler, "variant_funs") <- variant_funs
   return(sampler)
 }
@@ -79,7 +79,7 @@ init <- function(pmwgs, start_mu = NULL, start_var = NULL,
   # If no starting point for group mean just use zeros
   variant_funs <- attr(pmwgs, "variant_funs")
   startpoints <-startpoints_comb <- variant_funs$get_startpoints(pmwgs, start_mu, start_var)
-  if(is.null(epsilon)) epsilon <- rep(set_epsilon(pmwgs$n_pars, verbose), pmwgs$n_subjects)
+  if(is.null(epsilon)) epsilon <- rep(set_epsilon(pmwgs$n_pars), pmwgs$n_subjects)
   if(length(epsilon) == 1) epsilon <- rep(epsilon, pmwgs$n_subjects)
   if(any(pmwgs$nuisance)){
     type <- pmwgs$sampler_nuis$type
@@ -97,6 +97,8 @@ init <- function(pmwgs, start_mu = NULL, start_var = NULL,
   if(any(pmwgs$grouped)){
     grouped_pars <- mvtnorm::rmvnorm(particles, pmwgs$prior$prior_grouped$theta_mu_mean,
                             pmwgs$prior$prior_grouped$theta_mu_var)
+  } else{
+    grouped_pars <- NULL
   }
   proposals <- parallel::mclapply(X=1:pmwgs$n_subjects,FUN=start_proposals,
                                   parameters = startpoints_comb, n_particles = particles,
@@ -167,19 +169,10 @@ run_stage <- function(pmwgs,
   components <- attr(pmwgs$data, "components")
   shared_ll_idx <- attr(pmwgs$data, "shared_ll_idx")
   # if(stage == "sample"){
-  #   components <- rep(1, length(components))
-  #   shared_ll_idx <- rep(1, length(shared_ll_idx))
+  components <- rep(1, length(components))
+  shared_ll_idx <- rep(1, length(shared_ll_idx))
   # }
   # Display stage to screen
-  if(verbose){
-    msgs <- list(
-      preburn = "Phase 0: Pre-burn \n",
-      burn = "Phase 1: Burn in\n",
-      adapt = "Phase 2: Adaptation\n",
-      sample = "Phase 3: Sampling\n"
-    )
-    cat(msgs[[stage]])
-  }
 
   alphaStar=-qnorm(p_accept/2) #Idk about this one
   n0=round(5/(p_accept*(1-p_accept))) #Also not questioning this math for now
@@ -195,7 +188,7 @@ run_stage <- function(pmwgs,
   eff_var <- attr(pmwgs, "eff_var")
   chains_cov <- attr(pmwgs, "chains_cov")
   chains_cov_grouped <- attr(pmwgs, "chains_cov_grouped")
-  mix <- set_mix(stage, verbose)
+  mix <- set_mix(stage)
   if (verboseProgress) {
     pb <- accept_progress_bar(min = 0, max = iter)
   }
@@ -320,12 +313,12 @@ new_particle <- function (s, data, num_particles, parameters, eff_mu = NULL,
                           block_idx, shared_ll_idx, grouped_pars, is_grouped,
                           par_names)
 {
-  if(stage == "sample"){
-    if(rbinom(1, size = 1, prob = .5) == 1){
-      components <- rep(1, length(components))
-      shared_ll_idx <- rep(1, length(components))
-    }
-  }
+  # if(stage == "sample"){
+  #   if(rbinom(1, size = 1, prob = .5) == 1){
+  #     components <- rep(1, length(components))
+  #     shared_ll_idx <- rep(1, length(components))
+  #   }
+  # }
   group_pars <- variant_funs$get_group_level(parameters, s)
   unq_components <- unique(components)
   proposal_out <- numeric(length(group_pars$mu))
@@ -383,13 +376,13 @@ new_particle <- function (s, data, num_particles, parameters, eff_mu = NULL,
       lw <- calc_ll_manager(ll_proposals[,is_shared], dadm = data[[which(subjects == s)]], likelihood_func)
     }
     lw_total <- lw + prev_ll[s] - lw[1] # make sure lls from other components are included
-    lp <- mvtnorm::dmvnorm(x = proposals, mean = group_mu, sigma = group_var, log = TRUE)
-    prop_density <- mvtnorm::dmvnorm(x = proposals, mean = subj_mu, sigma = var_subj)
+    lp <- mvtnorm::dmvnorm(x = proposals[,idx], mean = group_mu[idx], sigma = group_var[idx,idx], log = TRUE)
+    prop_density <- mvtnorm::dmvnorm(x = proposals[,idx], mean = subj_mu[idx], sigma = var_subj[idx,idx])
     if (mix_proportion[3] == 0) {
       eff_density <- 0
     }
     else {
-      eff_density <- mvtnorm::dmvnorm(x = proposals, mean = eff_mu_sub, sigma = eff_var_curr)
+      eff_density <- mvtnorm::dmvnorm(x = proposals[,idx], mean = eff_mu_sub[idx], sigma = eff_var_curr[idx,idx])
     }
     lm <- log(mix_proportion[1] * exp(lp) + (mix_proportion[2] * prop_density) + (mix_proportion[3] * eff_density))
     infnt_idx <- is.infinite(lm)
@@ -467,19 +460,7 @@ fix_epsilon <- function(pmwgs, epsilon, force_prev_epsilon, components){
   return(epsilon)
 }
 
-set_mix <- function(stage, verbose) {
-  if (stage %in% c("burn", "adapt")) {
-    mix <- c(0.15, 0.15, 0.7)
-  } else if(stage == "sample"){
-    mix <- c(0.1, 0.3, 0.6)
-  } else{
-    mix <- c(0.5, 0.5, 0)
-  }
-  if(verbose) message(sprintf("mix has been set to c(%s) based on the stage being run",  paste(mix, collapse = ", ")))
-  return(mix)
-}
-
-set_epsilon <- function(n_pars, verbose = TRUE) {
+set_epsilon <- function(n_pars) {
   if (n_pars > 15) {
     epsilon <- 0.1
   } else if (n_pars > 10) {
@@ -487,7 +468,6 @@ set_epsilon <- function(n_pars, verbose = TRUE) {
   } else {
     epsilon <- 0.5
   }
-  if(verbose) message(sprintf("Epsilon has been set to %.1f based on number of parameters",epsilon))
   return(epsilon)
 }
 
@@ -563,7 +543,7 @@ fill_samples_RE <- function(samples, proposals, epsilon, j = 1, n_pars, ...){
   return(samples)
 }
 
-set_mix <- function(stage, verbose) {
+set_mix <- function(stage) {
   if (stage %in% c("burn", "adapt")) {
     mix <- c(0.15, 0.15, 0.7)
   } else if(stage == "sample"){
@@ -571,7 +551,6 @@ set_mix <- function(stage, verbose) {
   } else{ #Preburn stage
     mix <- c(0.5, 0.5, 0)
   }
-  if(verbose) message(sprintf("mix has been set to c(%s) based on the stage being run",  paste(mix, collapse = ", ")))
   return(mix)
 }
 
@@ -610,6 +589,7 @@ get_variant_funs <- function(type = "standard") {
   if(type == "standard") {
     list_fun <- list(# store functions
       sample_store = sample_store_standard,
+      get_prior = get_prior_standard,
       add_info = add_info_standard,
       get_startpoints = get_startpoints_standard,
       get_group_level = get_group_level_standard,
@@ -624,6 +604,7 @@ get_variant_funs <- function(type = "standard") {
   } else if(type == "single"){
     list_fun <- list(# store functions
       sample_store = sample_store_base,
+      get_prior = get_prior_single,
       add_info = add_info_single,
       get_startpoints = get_startpoints_single,
       get_group_level = get_group_level_single,
@@ -639,6 +620,7 @@ get_variant_funs <- function(type = "standard") {
     list_fun <- list(# store functions
       sample_store = sample_store_standard,
       add_info = add_info_blocked,
+      get_prior = get_prior_blocked,
       get_startpoints = get_startpoints_blocked,
       get_group_level = get_group_level_standard,
       fill_samples = fill_samples_standard,
