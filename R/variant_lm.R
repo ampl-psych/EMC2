@@ -1,12 +1,8 @@
-
-# PMwG --------------------------------------------------------------------
-
-
 add_info_lm <- function(sampler, prior = NULL, ...){
   args <- list(...)
   # Checking and default priors
-  if (is.null(prior)) { # deliberately high
-    prior <- list(theta_mu_mean = rep(0, sampler$n_pars), theta_mu_var = rep(100000, sampler$n_pars))
+  if (is.null(prior)) { #
+    prior <- list(theta_mu_mean = rep(0, sampler$n_pars), theta_mu_var = rep(1, sampler$n_pars))
   }
   # Things I save rather than re-compute inside the loops.
   prior$theta_mu_invar <- 1/prior$theta_mu_var #Inverse of the prior
@@ -14,8 +10,8 @@ add_info_lm <- function(sampler, prior = NULL, ...){
   #Hyper parameters
   attr(sampler, "a_g") <- 1/2
   attr(sampler, "b_g") <- 1/2
-  attr(sampler, "a_0") <- 0.001
-  attr(sampler, "b_0") <- 0.001
+  attr(sampler, "a_0") <- 5
+  attr(sampler, "b_0") <- 5
   attr(sampler, "formula") <- args$formula
   sampler$prior <- prior
   sampler$aggr_data <- args$aggr_data
@@ -188,7 +184,7 @@ last_sample_lm <- function(store) {
   list(
     mu = store$theta_mu[, store$idx],
     var = store$theta_var[,,store$idx],
-    theta = store$theta_theta[,store$idx],
+    theta = store$theta_theta[,store$idx, drop = F],
     g = store$theta_g[,store$idx]
   )
 }
@@ -203,16 +199,14 @@ get_conditionals_lm <- function(s, samples, n_pars, iteration = NULL, idx = NULL
   iteration <- ifelse(is.null(iteration), samples$iteration, iteration)
   if(is.null(idx)) idx <- 1:n_pars
   theta_var <-log(apply(samples$theta_var[idx,idx,],3,diag))
-  theta_mu <- samples$theta_mu[idx]
-  theta_theta <- samples$theta_theta
-  all_samples <- rbind(samples$alpha[, s,],theta_mu, theta_var, theta_theta)
+  all_samples <- rbind(samples$alpha[idx, s,],samples$theta_mu[idx,], theta_var, samples$theta_theta)
   mu_tilde <- rowMeans(all_samples)
   var_tilde <- cov(t(all_samples))
   condmvn <- condMVN(mean = mu_tilde, sigma = var_tilde,
                      dependent.ind = 1:n_pars, given.ind = (n_pars + 1):length(mu_tilde),
                      X.given = c(samples$theta_mu[idx,iteration],
                                  log(diag(samples$theta_var[idx,idx,iteration])),
-                                 theta_theta[,iteration]))
+                                 samples$theta_theta[,iteration]))
   return(list(eff_mu = condmvn$condMean, eff_var = condmvn$condVar))
 }
 
@@ -264,7 +258,7 @@ get_all_pars_lm <- function(samples, idx, info){
   theta_g <- log(samples$samples$theta_g[,idx, drop = F])
   theta_g_untr <- log(samples$samples$theta_g_untr[,idx, drop = F])
   theta_g[!info$effect_types,] <- theta_g_untr[!info$effect_types,]
-  theta_g <- theta_g[!duplicated(info$effect_grouping),]
+  theta_g[,] <- theta_g[!duplicated(info$effect_grouping),]
   theta_var.unwound <- log(apply(theta_var,3,diag))
   # Set up
   n_params<- nrow(alpha) + nrow(theta_mu) + nrow(theta_theta) + nrow(theta_var.unwound)
