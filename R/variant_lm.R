@@ -30,24 +30,26 @@ get_effects <- function(aggr_data, formula){
   effect_grouping <- c(0)
   effect_types <- numeric(0)
   dms <- list()
-  for(form in formula){
-    vars <- split_form(form)
-    # Find out which are factors and set contrasts
-    factor_vars <- names(Filter(is.factor, aggr_data[,vars$dep, drop = F]))
-    contrasts <- replicate(length(factor_vars), contr.bayes)
-    names(contrasts) <- factor_vars
-    # drop independent variable
-    newform <- update(form, NULL ~ .)
-    if(!is.null(factor_vars)){
-      m_matrix <- model.matrix(newform, aggr_data, contrasts.arg = contrasts)
-    } else{
-      m_matrix <- model.matrix(newform, aggr_data)
+  if(!is.null(formula)){
+    for(form in formula){
+      vars <- split_form(form)
+      # Find out which are factors and set contrasts
+      factor_vars <- names(Filter(is.factor, aggr_data[,vars$dep, drop = F]))
+      contrasts <- replicate(length(factor_vars), contr.bayes)
+      names(contrasts) <- factor_vars
+      # drop independent variable
+      newform <- update(form, NULL ~ .)
+      if(!is.null(factor_vars)){
+        m_matrix <- model.matrix(newform, aggr_data, contrasts.arg = contrasts)
+      } else{
+        m_matrix <- model.matrix(newform, aggr_data)
+      }
+      dms[[vars$ind]] <- m_matrix[,-1, drop =F]
+      groups <- attr(m_matrix, "assign")[-1]
+      effect_grouping <- c(effect_grouping, max(effect_grouping) + groups)
+      effect_mapping <- c(effect_mapping, rep(vars$ind, length(groups)))
+      effect_types <- c(effect_types, get_effect_types(form, m_matrix, vars$dep %in% factor_vars))
     }
-    dms[[vars$ind]] <- m_matrix[,-1, drop =F]
-    groups <- attr(m_matrix, "assign")[-1]
-    effect_grouping <- c(effect_grouping, max(effect_grouping) + groups)
-    effect_mapping <- c(effect_mapping, rep(vars$ind, length(groups)))
-    effect_types <- c(effect_types, get_effect_types(form, m_matrix, vars$dep %in% factor_vars))
   }
   return(list(effect_grouping = effect_grouping[-1], effect_mapping = effect_mapping,
               effect_types = effect_types, dms = dms))
