@@ -138,7 +138,7 @@ gibbs_step_lm <- function(sampler, alpha){
     }
     # mu
     mu_sigma2 <- 1/(sampler$n_subjects/sigma2[i] + 1/prior$theta_mu_var[i])
-    mu_mu <- mu_sigma2*((sum(y) - Xtheta)/sigma2[i] + prior$theta_mu_mean[i]/prior$theta_mu_var[i])
+    mu_mu <- mu_sigma2*((sum(y - Xtheta))/sigma2[i] + prior$theta_mu_mean[i]/prior$theta_mu_var[i])
     mu[i] <- rnorm(1, mu_mu, sqrt(mu_sigma2))
 
     # sigma
