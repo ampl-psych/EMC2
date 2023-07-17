@@ -320,7 +320,7 @@ prior_dist_lm = function(parameters, info){
   #Extract and when necessary transform back
   param.theta_mu <- parameters[1:n_randeffect]
   if(info$n_effects > 0){
-    param.theta_theta <- exp(parameters[(n_randeffect+1):(n_randeffect + n_effects)])
+    param.theta_theta <- parameters[(n_randeffect+1):(n_randeffect + n_effects)]
     param.theta_g <- exp(parameters[(n_randeffect+n_effects+1):(n_randeffect + n_effects + max(info$effect_grouping))])
   }
 
@@ -331,7 +331,7 @@ prior_dist_lm = function(parameters, info){
   log_prior_var <- sum(logdinvGamma(param.theta_var, shape = hyper$a_0, rate = hyper$b_0))
   if(info$n_effects > 0){
     log_prior_theta <- sum(dnorm(param.theta_theta, mean = 0, sd = sqrt(param.theta_g[info$effect_grouping]
-                                                                        *param.theta_var[info$effect_mapping])))
+                                                                        *param.theta_var[info$effect_mapping]), log = TRUE))
   } else{
     log_prior_theta <- 0
   }
@@ -342,11 +342,11 @@ prior_dist_lm = function(parameters, info){
   if(info$n_effects > 0){
     for(is_factor in unique(info$effect_types)){
       if(is_factor){
-        log_prior_g_factor <- sum(logdinvGamma(param.theta_g[info$effect_types], shape = 1/2, rate = hyper$b_g/2))
-        jac_g_factor <- -sum(log(param.theta_g[info$effect_types[!duplicated(info$effect_grouping)]]))
+        log_prior_g_factor <- log_prior_g_factor + sum(logdinvGamma(param.theta_g[info$effect_types], shape = 1/2, rate = hyper$b_g/2))
+        jac_g_factor <- jac_g_factor -sum(log(param.theta_g[info$effect_types[!duplicated(info$effect_grouping)]]))
       } else{
-        log_prior_g_regr <- sum(logdinvGamma(param.theta_g[!info$effect_types[!duplicated(info$effect_grouping)]], shape = 1/2, rate = (info$n_subjects*hyper$b_g)/2))
-        jac_g_factor <- -sum(log(param.theta_g[!info$effect_types[!duplicated(info$effect_grouping)]]))
+        log_prior_g_regr <- log_prior_g_regr + sum(logdinvGamma(param.theta_g[!info$effect_types[!duplicated(info$effect_grouping)]], shape = 1/2, rate = (info$n_subjects*hyper$b_g)/2))
+        jac_g_factor <- jac_g_regr -sum(log(param.theta_g[!info$effect_types[!duplicated(info$effect_grouping)]]))
       }
     }
   }
