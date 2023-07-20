@@ -23,7 +23,10 @@ plot_density(
   pars = NULL,
   probs = c(0.025, 0.5, 0.975),
   bw = "nrd0",
-  adjust = 1
+  adjust = 1,
+  do_contraction = TRUE,
+  lpos = "topright",
+  digits = 3
 )
 }
 \arguments{
@@ -69,9 +72,16 @@ to return}
 \item{bw}{Bandwidth for density plot (see density)}
 
 \item{adjust}{Adjustment for density plot (see density)}
+
+\item{do_contraction}{Print the prior to posterior contraction (1 - var(prior)/var(posterior))}
+
+\item{lpos}{Position of contraction in graph}
+
+\item{digits}{Rounding of contraction}
 }
 \value{
 Invisibly returns tables of true and 95\% CIs (for all chains combined
+no matter what show_chains is), if do_contraction with a "contraction" attribute.
 }
 \description{
 Plots density for parameter estimates.
