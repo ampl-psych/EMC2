@@ -103,6 +103,8 @@ plot_acfs <- function(samples,layout=NULL,subject=1,
   }
 }
 
+#' plot_alpha_recovery()
+#'
 #' Uses output from plot_density to plot true vs. estimated (median with CI) alpha
 #' parameters for each subject (plot density must be called with true values passed
 #' through the pars argument).
