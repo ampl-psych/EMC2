@@ -1,12 +1,8 @@
-
-# PMwG --------------------------------------------------------------------
-
-
 add_info_lm <- function(sampler, prior = NULL, ...){
   args <- list(...)
   # Checking and default priors
-  if (is.null(prior)) { # deliberately high
-    prior <- list(theta_mu_mean = rep(0, sampler$n_pars), theta_mu_var = rep(100000, sampler$n_pars))
+  if (is.null(prior)) { #
+    prior <- list(theta_mu_mean = rep(0, sampler$n_pars), theta_mu_var = rep(1, sampler$n_pars))
   }
   # Things I save rather than re-compute inside the loops.
   prior$theta_mu_invar <- 1/prior$theta_mu_var #Inverse of the prior
@@ -14,8 +10,8 @@ add_info_lm <- function(sampler, prior = NULL, ...){
   #Hyper parameters
   attr(sampler, "a_g") <- 1/2
   attr(sampler, "b_g") <- 1/2
-  attr(sampler, "a_0") <- 0.001
-  attr(sampler, "b_0") <- 0.001
+  attr(sampler, "a_0") <- 5
+  attr(sampler, "b_0") <- 5
   attr(sampler, "formula") <- args$formula
   sampler$prior <- prior
   sampler$aggr_data <- args$aggr_data
@@ -34,24 +30,26 @@ get_effects <- function(aggr_data, formula){
   effect_grouping <- c(0)
   effect_types <- numeric(0)
   dms <- list()
-  for(form in formula){
-    vars <- split_form(form)
-    # Find out which are factors and set contrasts
-    factor_vars <- names(Filter(is.factor, aggr_data[,vars$dep, drop = F]))
-    contrasts <- replicate(length(factor_vars), contr.bayes)
-    names(contrasts) <- factor_vars
-    # drop independent variable
-    newform <- update(form, NULL ~ .)
-    if(!is.null(factor_vars)){
-      m_matrix <- model.matrix(newform, aggr_data, contrasts.arg = contrasts)
-    } else{
-      m_matrix <- model.matrix(newform, aggr_data)
+  if(!is.null(formula)){
+    for(form in formula){
+      vars <- split_form(form)
+      # Find out which are factors and set contrasts
+      factor_vars <- names(Filter(is.factor, aggr_data[,vars$dep, drop = F]))
+      contrasts <- replicate(length(factor_vars), contr.bayes)
+      names(contrasts) <- factor_vars
+      # drop independent variable
+      newform <- update(form, NULL ~ .)
+      if(!is.null(factor_vars)){
+        m_matrix <- model.matrix(newform, aggr_data, contrasts.arg = contrasts)
+      } else{
+        m_matrix <- model.matrix(newform, aggr_data)
+      }
+      dms[[vars$ind]] <- m_matrix[,-1, drop =F]
+      groups <- attr(m_matrix, "assign")[-1]
+      effect_grouping <- c(effect_grouping, max(effect_grouping) + groups)
+      effect_mapping <- c(effect_mapping, rep(vars$ind, length(groups)))
+      effect_types <- c(effect_types, get_effect_types(form, m_matrix, vars$dep %in% factor_vars))
     }
-    dms[[vars$ind]] <- m_matrix[,-1, drop =F]
-    groups <- attr(m_matrix, "assign")[-1]
-    effect_grouping <- c(effect_grouping, max(effect_grouping) + groups)
-    effect_mapping <- c(effect_mapping, rep(vars$ind, length(groups)))
-    effect_types <- c(effect_types, get_effect_types(form, m_matrix, vars$dep %in% factor_vars))
   }
   return(list(effect_grouping = effect_grouping[-1], effect_mapping = effect_mapping,
               effect_types = effect_types, dms = dms))
@@ -140,7 +138,7 @@ gibbs_step_lm <- function(sampler, alpha){
     }
     # mu
     mu_sigma2 <- 1/(sampler$n_subjects/sigma2[i] + 1/prior$theta_mu_var[i])
-    mu_mu <- mu_sigma2*((sum(y) - Xtheta)/sigma2[i] + prior$theta_mu_mean[i]/prior$theta_mu_var[i])
+    mu_mu <- mu_sigma2*((sum(y - Xtheta))/sigma2[i] + prior$theta_mu_mean[i]/prior$theta_mu_var[i])
     mu[i] <- rnorm(1, mu_mu, sqrt(mu_sigma2))
 
     # sigma
@@ -188,7 +186,7 @@ last_sample_lm <- function(store) {
   list(
     mu = store$theta_mu[, store$idx],
     var = store$theta_var[,,store$idx],
-    theta = store$theta_theta[,store$idx],
+    theta = store$theta_theta[,store$idx, drop = F],
     g = store$theta_g[,store$idx]
   )
 }
@@ -203,16 +201,14 @@ get_conditionals_lm <- function(s, samples, n_pars, iteration = NULL, idx = NULL
   iteration <- ifelse(is.null(iteration), samples$iteration, iteration)
   if(is.null(idx)) idx <- 1:n_pars
   theta_var <-log(apply(samples$theta_var[idx,idx,],3,diag))
-  theta_mu <- samples$theta_mu[idx]
-  theta_theta <- samples$theta_theta
-  all_samples <- rbind(samples$alpha[, s,],theta_mu, theta_var, theta_theta)
+  all_samples <- rbind(samples$alpha[idx, s,],samples$theta_mu[idx,], theta_var, samples$theta_theta)
   mu_tilde <- rowMeans(all_samples)
   var_tilde <- cov(t(all_samples))
   condmvn <- condMVN(mean = mu_tilde, sigma = var_tilde,
                      dependent.ind = 1:n_pars, given.ind = (n_pars + 1):length(mu_tilde),
                      X.given = c(samples$theta_mu[idx,iteration],
                                  log(diag(samples$theta_var[idx,idx,iteration])),
-                                 theta_theta[,iteration]))
+                                 samples$theta_theta[,iteration]))
   return(list(eff_mu = condmvn$condMean, eff_var = condmvn$condVar))
 }
 
@@ -264,7 +260,7 @@ get_all_pars_lm <- function(samples, idx, info){
   theta_g <- log(samples$samples$theta_g[,idx, drop = F])
   theta_g_untr <- log(samples$samples$theta_g_untr[,idx, drop = F])
   theta_g[!info$effect_types,] <- theta_g_untr[!info$effect_types,]
-  theta_g <- theta_g[!duplicated(info$effect_grouping),]
+  theta_g[,] <- theta_g[!duplicated(info$effect_grouping),]
   theta_var.unwound <- log(apply(theta_var,3,diag))
   # Set up
   n_params<- nrow(alpha) + nrow(theta_mu) + nrow(theta_theta) + nrow(theta_var.unwound)
@@ -324,7 +320,7 @@ prior_dist_lm = function(parameters, info){
   #Extract and when necessary transform back
   param.theta_mu <- parameters[1:n_randeffect]
   if(info$n_effects > 0){
-    param.theta_theta <- exp(parameters[(n_randeffect+1):(n_randeffect + n_effects)])
+    param.theta_theta <- parameters[(n_randeffect+1):(n_randeffect + n_effects)]
     param.theta_g <- exp(parameters[(n_randeffect+n_effects+1):(n_randeffect + n_effects + max(info$effect_grouping))])
   }
 
@@ -335,7 +331,7 @@ prior_dist_lm = function(parameters, info){
   log_prior_var <- sum(logdinvGamma(param.theta_var, shape = hyper$a_0, rate = hyper$b_0))
   if(info$n_effects > 0){
     log_prior_theta <- sum(dnorm(param.theta_theta, mean = 0, sd = sqrt(param.theta_g[info$effect_grouping]
-                                                                        *param.theta_var[info$effect_mapping])))
+                                                                        *param.theta_var[info$effect_mapping]), log = TRUE))
   } else{
     log_prior_theta <- 0
   }
@@ -346,11 +342,11 @@ prior_dist_lm = function(parameters, info){
   if(info$n_effects > 0){
     for(is_factor in unique(info$effect_types)){
       if(is_factor){
-        log_prior_g_factor <- sum(logdinvGamma(param.theta_g[info$effect_types], shape = 1/2, rate = hyper$b_g/2))
-        jac_g_factor <- -sum(log(param.theta_g[info$effect_types[!duplicated(info$effect_grouping)]]))
+        log_prior_g_factor <- log_prior_g_factor + sum(logdinvGamma(param.theta_g[info$effect_types], shape = 1/2, rate = hyper$b_g/2))
+        jac_g_factor <- jac_g_factor -sum(log(param.theta_g[info$effect_types[!duplicated(info$effect_grouping)]]))
       } else{
-        log_prior_g_regr <- sum(logdinvGamma(param.theta_g[!info$effect_types[!duplicated(info$effect_grouping)]], shape = 1/2, rate = (info$n_subjects*hyper$b_g)/2))
-        jac_g_factor <- -sum(log(param.theta_g[!info$effect_types[!duplicated(info$effect_grouping)]]))
+        log_prior_g_regr <- log_prior_g_regr + sum(logdinvGamma(param.theta_g[!info$effect_types[!duplicated(info$effect_grouping)]], shape = 1/2, rate = (info$n_subjects*hyper$b_g)/2))
+        jac_g_factor <- jac_g_regr -sum(log(param.theta_g[!info$effect_types[!duplicated(info$effect_grouping)]]))
       }
     }
   }
