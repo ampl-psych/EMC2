@@ -22,14 +22,14 @@ IS2 <- function(samples, filter = "sample", subfilter = 0, IS_samples = 1000, st
 
 
   logw_num <- auto_mclapply(X=1:IS_samples,
-                       FUN = compute_lw_num,
-                       prop_theta = prop_theta,
-                       stepsize_particles = stepsize_particles,
-                       max_particles = max_particles,
-                       mu_tilde=all_pars$mu_tilde,
-                       var_tilde = all_pars$var_tilde,
-                       info = all_pars$info,
-                       mc.cores = n_cores)
+                            FUN = compute_lw_num,
+                            prop_theta = prop_theta,
+                            stepsize_particles = stepsize_particles,
+                            max_particles = max_particles,
+                            mu_tilde=all_pars$mu_tilde,
+                            var_tilde = all_pars$var_tilde,
+                            info = all_pars$info,
+                            mc.cores = n_cores)
   # sub_and_group <- simplify2array(lapply(logw_num, FUN = function(x) return(x$sub_and_group)))
   # prior_and_jac <- sapply(logw_num, FUN = function(x) return(x$prior_and_jac))
   #
@@ -55,8 +55,9 @@ get_sub_weights <- function(stepsize_particles, condMean, condVar, prop_theta, i
   data <- info$data
   particles1 <- mvtnorm::rmvnorm(n1, condMean,condVar)
   # Group level
+  info$sub <- sub # Needed for variant lm
   particles2 <- info$variant_funs$group_dist_IS2(n_samples=n2, parameters = prop_theta,
-                                        sample=TRUE, info = info)
+                                                 sample=TRUE, info = info)
   particles <- rbind(particles1,particles2)
   # names for ll function to work
   colnames(particles) <- info$par_names
