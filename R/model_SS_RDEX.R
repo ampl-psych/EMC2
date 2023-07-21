@@ -67,7 +67,7 @@ rRDEX <- function(lR,pars,staircase0,stairstep,stairmin,stairmax,
     isfixed <- gostopruns & !is.na(SSD[!isgf])
     if (any(isfixed)) { # Run fixed trials
       dt[1,isfixed] <- dt[1,isfixed] + SSD[!isgf][isfixed]
-      r <- apply(dt[,isfixed],2,which.min)
+      r <- apply(dt[,isfixed,drop=FALSE],2,which.min)
       R[!isgf][isfixed] <- levels(lR)[r]
       pick <- cbind(r,c(1:dim(dt)[2])[isfixed]) # Matrix to pick winner
       rt[!isgf][isfixed] <- dt[pick]
