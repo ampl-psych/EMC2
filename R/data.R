@@ -8,11 +8,13 @@
 #' null the data frame creation defaults are used) with number of trials per
 #' cell specified by the trials argument ... or if the data argument is non-null
 #' 2) using the design implicit in a data frame supplied, which allows creation
-#' # of unbalanced and other irregular designs, and replacing previous data with
+#' of unbalanced and other irregular designs, and replacing previous data with
 #' simulated data.
 #' Accuracy scored by design matchfun argument.
 #'
-#' @param p_vector parameter vector
+#' @param p_vector parameter vector used to simulate data, or a matrix with one
+#' row per subject (with corresponding row names) or a lsit of tables produced
+#' by plot_density (in which case posterior medians are used to simulate data)
 #' @param design design created by make_Design
 #' @param model usually an attribute of design but if not must be given here.
 #' @param trials number of trials per design cell
@@ -82,6 +84,8 @@ make_data <- function(p_vector,design,model=NULL,trials=NULL,data=NULL,expand=1,
     data
   }
 
+  if (is.list(p_vector))
+    p_vector <- do.call(rbind,lapply(p_vector,function(x)x[2,]))
   if (is.null(model)) if (is.null(design$model))
     stop("Must specify model as not in design") else model <- design$model
     if (!is.matrix(p_vector)) p_vector <- make_pmat(p_vector,design)

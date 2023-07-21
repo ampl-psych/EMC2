@@ -137,7 +137,10 @@ map_mcmc <- function(mcmc,design,model, include_constants = TRUE)
     if (is.null(vars)) {
       dimnames(plist[[i]])[2] <- names(plist)[i]}
     else {
-      dimnames(plist[[i]])[[2]] <- paste(vars[1],apply(mp[uniq,vars[-1],drop=FALSE],1,paste,collapse="_"),sep="_")
+      dn <- paste(vars[1],apply(mp[uniq,vars[-1],drop=FALSE],1,paste,collapse="_"),sep="_")
+      if (length(dn) != length(dimnames(plist[[i]])[[2]]))
+        stop("mapped cannot be used, likley becasue of mapping in the model file Ttransform")
+      dimnames(plist[[i]])[[2]] <- dn
     }
     if (dim(plist[[i]])[1]!=1){
       isConstant <- c(isConstant,apply(plist[[i]],2,function(x){all(x[1]==x[-1])}))
