@@ -21,7 +21,9 @@ make_data(
 )
 }
 \arguments{
-\item{p_vector}{parameter vector}
+\item{p_vector}{parameter vector used to simulate data, or a matrix with one
+row per subject (with corresponding row names) or a lsit of tables produced
+by plot_density (in which case posterior medians are used to simulate data)}
 
 \item{design}{design created by make_Design}
 
@@ -65,10 +67,8 @@ argument's formula list (Flist) and factor contrast list (Clist, if it is
 null the data frame creation defaults are used) with number of trials per
 cell specified by the trials argument ... or if the data argument is non-null
 \item using the design implicit in a data frame supplied, which allows creation
-}
-}
-\section{of unbalanced and other irregular designs, and replacing previous data with}{
+of unbalanced and other irregular designs, and replacing previous data with
 simulated data.
 Accuracy scored by design matchfun argument.
 }
-
+}

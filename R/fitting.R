@@ -611,16 +611,21 @@ make_samplers <- function(data_list,design_list,model_list=NULL,
   if(type == "lm"){
     if(length(data_list) > 1) stop("no joint models for lm yet")
     vars <- c()
-    for(form in formula){
-      vars <- c(vars, split_form(form)$dep)
-    }
-    tmp <- data_list[[1]]
-    aggr_data <- tmp[cumsum(table(tmp$subjects)),c("subjects", unique(vars))]
-    for(i in 1:ncol(aggr_data)){
-      if(colnames(aggr_data)[i] != "subjects" & is.factor(aggr_data[,i])){
-        aggr_data[,i] <- factor(aggr_data[,i], levels = unique(aggr_data[,i]))
+    if(!is.null(formula)){
+      for(form in formula){
+        vars <- c(vars, split_form(form)$dep)
       }
+      tmp <- data_list[[1]]
+      aggr_data <- tmp[cumsum(table(tmp$subjects)),c("subjects", unique(vars))]
+      for(i in 1:ncol(aggr_data)){
+        if(colnames(aggr_data)[i] != "subjects" & is.factor(aggr_data[,i])){
+          aggr_data[,i] <- factor(aggr_data[,i], levels = unique(aggr_data[,i]))
+        }
+      }
+    } else{
+      aggr_data <- NULL
     }
+
   }
   data_list <- lapply(data_list,function(d){
     if (!is.factor(d$subjects)) d$subjects <- factor(d$subjects)
