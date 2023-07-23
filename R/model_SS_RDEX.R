@@ -183,8 +183,8 @@ SSrdexB <- function() {
       if (any(names(dadm)=="SSD")) pars <- cbind(pars,SSD=dadm$SSD) else
                                    pars <- cbind(pars,SSD=rep(Inf,dim(pars)[1]))
       attr(pars,"ok") <- (pars[,"t0"] > .05) & ((pars[,"A"] > 1e-6) | pars[,"A"] == 0) &
+        (pars[,"tauS"] > 1e-3) & (pars[,"sigmaS"] > 1e-3) & (pars[,"muS"] > 1e-3) &
         (pars[,"tauS"] < 1) & (pars[,"sigmaS"] < 1) &
-        (pars[,"tauS"] > 1e-3) & (pars[,"sigmaS"] > 1e-3) &
         ((pars[,"tf"] > 1e-6) | pars[,"tf"] == 0) & ((pars[,"gf"] > 1e-6) | pars[,"gf"] == 0)
       pars
     },
