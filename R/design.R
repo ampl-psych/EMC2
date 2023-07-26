@@ -562,11 +562,13 @@ map_p <- function(p,dadm)
   pars <- matrix(nrow=dim(dadm)[1],ncol=length(attr(dadm,"model")()$p_types),
                  dimnames=list(NULL,attr(dadm,"model")()$p_types))
   for (i in attr(dadm,"model")()$p_types) {
-    if ( !is.matrix(p) )
-      pars[,i] <- (attr(dadm,"designs")[[i]][attr(attr(dadm,"designs")[[i]],"expand"),,drop=FALSE] %*%
-                     p[dimnames(attr(dadm,"designs")[[i]])[[2]]]) else
-                       pars[,i] <- apply(p[,dimnames(attr(dadm,"designs")[[i]])[[2]],drop=FALSE] *
-                                           attr(dadm,"designs")[[i]][attr(attr(dadm,"designs")[[i]],"expand"),,drop=FALSE],1,sum)
+    if ( !is.matrix(p) ) {
+      pm <- t(as.matrix(p[dimnames(attr(dadm,"designs")[[i]])[[2]]]))
+      pm <- pm[rep(1,dim(pars)[1]),]
+    } else pm <- p[,dimnames(attr(dadm,"designs")[[i]])[[2]],drop=FALSE]
+    tmp <- pm*attr(dadm,"designs")[[i]][attr(attr(dadm,"designs")[[i]],"expand"),,drop=FALSE]
+    tmp[is.nan(tmp)] <- 0 # 0 weight x Inf parameter fix
+    pars[,i] <- apply(tmp,1,sum)
   }
   pars
 }

@@ -296,16 +296,21 @@ plot_defective_density <- function(data,subject=NULL,factors=NULL,
 #' @param probs Vector (default c(.025,.5,.975)) for CI and central tendency of return
 #' @param bw Bandwidth for density plot (see density)
 #' @param adjust Adjustment for density plot (see density)
+#' @param do_contraction Print the prior to posterior contraction (1 - var(prior)/var(posterior))
+#' @param lpos Position of contraction in graph
+#' @param digits Rounding of contraction
 #'
 #' @return Invisibly returns tables of true and 95% CIs (for all chains combined
-  # no matter what show_chains is)
+#'no matter what show_chains is), if do_contraction with a "contraction" attribute.
+#'
 #' @export
 
 plot_density <- function(pmwg_mcmc,layout=c(2,3),
   selection="alpha",filter="sample",thin=1,subfilter=0,mapped=FALSE,
   plot_prior=TRUE,n_prior=1e3,xlim=NULL,ylim=NULL,
   show_chains=FALSE,do_plot=TRUE,subject=NA,add_means=FALSE,
-  pars=NULL,probs=c(.025,.5,.975),bw = "nrd0", adjust = 1)
+  pars=NULL,probs=c(.025,.5,.975),bw = "nrd0", adjust = 1,
+  do_contraction=TRUE,lpos="topright",digits=3)
   #  (if alpha can do individual subject, all by default)
   # If show_chains superimposes densities for each chain on same plot
   #
@@ -336,6 +341,9 @@ plot_density <- function(pmwg_mcmc,layout=c(2,3),
 
   if (show_chains & plot_prior)
     warning("Prior plots not implemented for show_chains=TRUE")
+
+  if (do_contraction & !plot_prior) do_contraction <- FALSE
+
   if (!(inherits(pmwg_mcmc, c("mcmc","mcmc.list")))) {
     if (plot_prior) {
       psamples <- get_prior_samples(pmwg_mcmc,selection,filter,thin,subfilter,n_prior)
@@ -384,9 +392,14 @@ plot_density <- function(pmwg_mcmc,layout=c(2,3),
     } else pmwg_mcmc_combined <- pmwg_mcmc
     tabs <- lapply(pmwg_mcmc_combined,function(x){apply(x,2,quantile,probs=probs)})
     # if (plot_prior) dimnames(psamples) <- list(NULL,colnames(pmwg_mcmc_combined[[1]]))
+    if (do_contraction)
+      contraction <- setNames(vector(mode="list",length=length(subject)),subject)
     for (i in subject) {
       if (do_plot) {
         if (!no_layout) par(mfrow=layout)
+        if (do_contraction)
+          contractioni <- setNames(numeric(length(colnames(pmwg_mcmc_combined[[i]]))),
+                                   colnames(pmwg_mcmc_combined[[i]]))
         for (j in colnames(pmwg_mcmc_combined[[i]])) {
           if (chains>0) {
             dens <- lapply(pmwg_mcmc[[i]],function(x){density(x[,j],bw=bw,adjust=adjust)})
@@ -415,15 +428,22 @@ plot_density <- function(pmwg_mcmc,layout=c(2,3),
             plot(dens,xlab=j,xlim=xlimi,ylim=ylimi,
                  main=paste0(attr(pmwg_mcmc,"selection")," s",i))
             if (plot_prior) lines(pdens,col="red")
+            if (do_contraction) {
+              contractioni[j] <- 1-(var(pmwg_mcmc[[i]][,j])/var(psamples[,j]))
+              legend(lpos,legend=round(contractioni[j],digits),bty="n",title="Contraction")
+            }
           }
           if (!is.null(pars)) abline(v=pars[j,i])
         }
       }
+      if (do_contraction) contraction[[i]] <- contractioni
       if (!is.null(pars)) tabs[[i]] <- rbind(true=pars[dimnames(tabs[[i]])[[2]],i],tabs[[i]])
     }
     tabs <- tabs[as.character(subject)]
     if (add_means)
       attr(tabs,"mean") <- lapply(pmwg_mcmc_combined,function(x){apply(x,2,mean)})
+    if (do_contraction & exists("contraction"))
+      attr(tabs,"contraction") <- do.call(rbind,contraction)
     invisible(tabs)
   } else {
     if (inherits(pmwg_mcmc, "mcmc.list")) {
@@ -451,6 +471,8 @@ plot_density <- function(pmwg_mcmc,layout=c(2,3),
     if (add_means) attr(tabs,"mean") <- apply(pmwg_mcmc_combined,2,mean)
     if (!no_layout) par(mfrow=layout)
     if (plot_prior) dimnames(psamples) <- list(NULL,colnames(pmwg_mcmc_combined))
+    if (do_contraction)
+      contraction <- setNames(numeric(length(colnames(pmwg_mcmc_combined))),colnames(pmwg_mcmc_combined))
     if (do_plot) for (j in colnames(pmwg_mcmc_combined)) {
       if (chains > 0) {
         dens <- lapply(pmwg_mcmc,function(x){density(x[,j],bw=bw,adjust=adjust)})
@@ -465,8 +487,7 @@ plot_density <- function(pmwg_mcmc,layout=c(2,3),
       } else {
         dens <- density(pmwg_mcmc[,j],bw=bw,adjust=adjust)
         if (plot_prior)  pdens <- robust_density(psamples[,j],range(pmwg_mcmc[,j]),
-                                                 bw=bw,adjust=adjust,
-                                                 use_robust=!(attr(pmwg_mcmc,"selection") %in% c("mu","correlation")))
+          bw=bw,adjust=adjust,use_robust=!(attr(pmwg_mcmc,"selection") %in% c("mu","correlation")))
         if (!is.null(xlim)) xlimi <- xlim else
           xlimi <- c(min(dens$x),max(dens$x))
         if (!is.null(ylim)) ylimi <- ylim else {
@@ -474,10 +495,17 @@ plot_density <- function(pmwg_mcmc,layout=c(2,3),
           if (plot_prior) ylimi[2] <- max(c(ylimi[2],pdens$y))
         }
         plot(dens,xlim=xlimi,ylim=ylimi,xlab=attr(pmwg_mcmc,"selection"),main=j)
-        if (plot_prior) lines(pdens,col="red")
+        if (plot_prior) {
+          lines(pdens,col="red")
+          if (do_contraction) {
+            contraction[j] <- 1-(var(pmwg_mcmc[,j])/var(psamples[,j]))
+            legend(lpos,legend=round(contraction[j],digits),bty="n",title="Contraction")
+          }
+        }
       }
       if (!is.null(pars)) abline(v=pars[j])
     }
+    if (do_contraction & exists("contraction")) attr(tabs,"contraction") <- contraction
     invisible(tabs)
   }
 }
