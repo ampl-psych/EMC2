@@ -63,7 +63,9 @@ plot_prior <- function(prior, type = NULL,add_density=FALSE,adjust=1,breaks=50,
     par(mfrow = layout)
     par_names <- colnames(samples)
     uppers <- setNames(rep(.999,length(par_names)),par_names)
-    if (!is.null(upper)) uppers[names(upper)] <- upper
+    if (!is.null(upper)) if (is.null(names(upper)))
+      uppers[1:length(uppers)] <- upper else
+      uppers[names(upper)] <- upper
     xlims <- setNames(vector(mode="list",length=length(par_names)),par_names)
     if (!is.null(xlim)) xlims[names(xlim)] <- xlim
     for(i in 1:ncol(samples)){
