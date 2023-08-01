@@ -171,15 +171,15 @@ map_mcmc <- function(mcmc,design,model, include_constants = TRUE)
 #' @export
 
 mapped_par <- function(p_vector,design,model=NULL,
-                       digits=3,remove_subjects=TRUE)
+                       digits=3,remove_subjects=TRUE,Fcovariates=NULL)
   # Show augmented data and corresponding mapped parameter
 {
   if (is.null(model)) if (is.null(design$model))
     stop("Must specify model as not in design") else model <- design$model
     if (remove_subjects) design$Ffactors$subjects <- design$Ffactors$subjects[1]
     if (!is.matrix(p_vector)) p_vector <- make_pmat(p_vector,design)
-    dadm <- design_model(make_data(p_vector,design,model,trials=1),design,model,
-                         rt_check=FALSE,compress=FALSE)
+    dadm <- design_model(make_data(p_vector,design,model,trials=1,Fcovariates=Fcovariates),
+                         design,model,rt_check=FALSE,compress=FALSE)
     ok <- !(names(dadm) %in% c("subjects","trials","R","rt","winner"))
     out <- cbind(dadm[,ok],round(get_pars(p_vector,dadm),digits))
     if (model()$type=="SDT")  out <- out[dadm$lR!=levels(dadm$lR)[length(levels(dadm$lR))],]
