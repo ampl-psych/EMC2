@@ -16,6 +16,7 @@ plot_density(
   n_prior = 1000,
   xlim = NULL,
   ylim = NULL,
+  prior_xlim = NULL,
   show_chains = FALSE,
   do_plot = TRUE,
   subject = NA,
@@ -54,6 +55,8 @@ otherwise sampled parameters}
 \item{xlim}{x-axis plot limit, 2-vector (same for all) or matrix (one row for each paramter)}
 
 \item{ylim}{y-axis plot limit, 2-vector (same for all) or matrix (one row for each paramter)}
+
+\item{prior_xlim}{A vector giving upper and lower quantiles of prior when choosing xlim.}
 
 \item{show_chains}{Boolean (default FALSE) plot separate density for each chain.}
 

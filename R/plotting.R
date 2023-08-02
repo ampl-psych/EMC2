@@ -286,6 +286,7 @@ plot_defective_density <- function(data,subject=NULL,factors=NULL,
 #' @param n_prior Number of samples to approximate prior (default = 1e3)
 #' @param xlim x-axis plot limit, 2-vector (same for all) or matrix (one row for each paramter)
 #' @param ylim y-axis plot limit, 2-vector (same for all) or matrix (one row for each paramter)
+#' @param prior_xlim A vector giving upper and lower quantiles of prior when choosing xlim.
 #' @param show_chains Boolean (default FALSE) plot separate density for each chain.
 #' @param do_plot Boolean (default TRUE) do plot
 #' @param subject Integer or character vector, if selection = "alpha" picks out
@@ -307,7 +308,7 @@ plot_defective_density <- function(data,subject=NULL,factors=NULL,
 
 plot_density <- function(pmwg_mcmc,layout=c(2,3),
   selection="alpha",filter="sample",thin=1,subfilter=0,mapped=FALSE,
-  plot_prior=TRUE,n_prior=1e3,xlim=NULL,ylim=NULL,
+  plot_prior=TRUE,n_prior=1e3,xlim=NULL,ylim=NULL,prior_xlim=NULL,
   show_chains=FALSE,do_plot=TRUE,subject=NA,add_means=FALSE,
   pars=NULL,probs=c(.025,.5,.975),bw = "nrd0", adjust = 1,
   do_contraction=TRUE,lpos="topright",digits=3)
@@ -418,7 +419,9 @@ plot_density <- function(pmwg_mcmc,layout=c(2,3),
             if (plot_prior) pdens <- density(psamples[,j],bw=bw,adjust=adjust)
             if (!is.null(xlim)) {
               if (!is.matrix(xlim)) xlimi <- xlim else xlimi <- xlim[j,]
-            } else xlimi <- c(min(dens$x),max(dens$x))
+            } else if (plot_prior & !is.null(prior_xlim))
+              xlimi <- c(quantile(pdens$x,probs=prior_xlim[1]),quantile(pdens$x,probs=prior_xlim[2])) else
+              xlimi <- c(min(dens$x),max(dens$x))
             if (!is.null(ylim)) {
               if (!is.matrix(ylim)) ylimi <- ylim else ylimi <- ylim[j,]
             } else {
@@ -488,7 +491,8 @@ plot_density <- function(pmwg_mcmc,layout=c(2,3),
         dens <- density(pmwg_mcmc[,j],bw=bw,adjust=adjust)
         if (plot_prior)  pdens <- robust_density(psamples[,j],range(pmwg_mcmc[,j]),
           bw=bw,adjust=adjust,use_robust=!(attr(pmwg_mcmc,"selection") %in% c("mu","correlation")))
-        if (!is.null(xlim)) xlimi <- xlim else
+        if (!is.null(xlim)) xlimi <- xlim else if (plot_prior & !is.null(prior_xlim))
+          xlimi <- c(quantile(pdens$x,probs=prior_xlim[1]),quantile(pdens$x,probs=prior_xlim[2])) else
           xlimi <- c(min(dens$x),max(dens$x))
         if (!is.null(ylim)) ylimi <- ylim else {
           ylimi <- c(0,max(dens$y))
