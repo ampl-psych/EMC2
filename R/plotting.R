@@ -396,6 +396,11 @@ plot_density <- function(pmwg_mcmc,layout=c(2,3),
     # if (plot_prior) dimnames(psamples) <- list(NULL,colnames(pmwg_mcmc_combined[[1]]))
     if (do_contraction)
       contraction <- setNames(vector(mode="list",length=length(subject)),subject)
+    tabs <- tabs[as.character(subject)]
+    if (add_means)
+      attr(tabs,"mean") <- lapply(pmwg_mcmc_combined,function(x){apply(x,2,mean)})
+    if (do_contraction & exists("contraction"))
+      attr(tabs,"contraction") <- do.call(rbind,contraction)
     for (i in subject) {
       if (do_plot) {
         if (!no_layout) par(mfrow=layout)
@@ -441,14 +446,8 @@ plot_density <- function(pmwg_mcmc,layout=c(2,3),
         }
         if (do_contraction) contraction[[i]] <- contractioni
       }
-
       if (!is.null(pars)) tabs[[i]] <- rbind(true=pars[dimnames(tabs[[i]])[[2]],i],tabs[[i]])
     }
-    tabs <- tabs[as.character(subject)]
-    if (add_means)
-      attr(tabs,"mean") <- lapply(pmwg_mcmc_combined,function(x){apply(x,2,mean)})
-    if (do_contraction & exists("contraction"))
-      attr(tabs,"contraction") <- do.call(rbind,contraction)
     invisible(tabs)
   } else {
     if (inherits(pmwg_mcmc, "mcmc.list")) {
@@ -558,6 +557,7 @@ plot_roc <- function(data,signalFactor="S",zROC=FALSE,qfun=NULL,main="",lim=NULL
 #' @param stat_name A string naming what the stat argument calculates.
 #' @param ci Credible interval and central tendency quantiles for return when
 #' stat argument is supplied (default c(.025,.5,.975))
+#' @param add_ci Add CI to stat plot as green bar on ordinate
 #' @param do_plot Boolean (default TRUE) for making a plot
 #' @param xlim x-axis plot limit, 2-vector (same for all) or matrix (one row for each paramter)
 #' @param ylim y-axis plot limit, 2-vector (same for all) or matrix (one row for each paramter)
@@ -581,7 +581,7 @@ plot_roc <- function(data,signalFactor="S",zROC=FALSE,qfun=NULL,main="",lim=NULL
 #' @export
 
 plot_fit <- function(data,pp,subject=NULL,factors=NULL,
-                     stat=NULL,stat_name="",adjust=1,
+                     stat=NULL,stat_name="",adjust=1,add_ci=TRUE,
                      ci=c(.025,.5,.975),do_plot=TRUE,
                      xlim=NULL,ylim=NULL,
                      layout=NULL,mfcol=TRUE,
@@ -683,14 +683,15 @@ plot_fit <- function(data,pp,subject=NULL,factors=NULL,
         obs <- stat(dat[cells==i,])
         ppi <- pp[pp_cells==i,]
         pred <- sapply(postn,function(x){stat(ppi[ppi$postn==x,])})
+        tab[i,] <- c(obs,quantile(pred,ci))
         if (do_plot) {
           dens <- density(pred,adjust=adjust)
           if (!is.null(xlim)) xlimi <- xlim else
             xlimi <- c(pmin(obs,min(dens$x)),pmax(obs,max(dens$x)))
           plot(dens,main=i,xlab=stat_name,xlim=xlimi)
           abline(v=obs)
+          if (add_ci) lines(x=c(tab[i,2],tab[i,4]),y=c(0,0),lwd=4,col="green")
         }
-        tab[i,] <- c(obs,quantile(pred,ci))
       }
       invisible(tab)
     } else { # cdf
