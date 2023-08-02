@@ -313,12 +313,6 @@ new_particle <- function (s, data, num_particles, parameters, eff_mu = NULL,
                           block_idx, shared_ll_idx, grouped_pars, is_grouped,
                           par_names)
 {
-  # if(stage == "sample"){
-  #   if(rbinom(1, size = 1, prob = .5) == 1){
-  #     components <- rep(1, length(components))
-  #     shared_ll_idx <- rep(1, length(components))
-  #   }
-  # }
   group_pars <- variant_funs$get_group_level(parameters, s)
   unq_components <- unique(components)
   proposal_out <- numeric(length(group_pars$mu))
@@ -331,15 +325,26 @@ new_particle <- function (s, data, num_particles, parameters, eff_mu = NULL,
   if(stage != "sample"){
     eff_mu_sub <- subj_mu
     group_var_subj <- group_var
-    if(length(unq_components) > 1){
-      group_var_subj[block_idx] <- 0
-    }
   }
   out_lls <- numeric(length(unq_components))
   for(i in unq_components){
     if(stage != "sample"){
+      # In preburn use to proposals:
+      # 1) person distribution with previous particle mean and scaled group variance
+      # 2) group mean and group variance
+      # In burn and sample add covariance proposals with
+      # 3) previous particle mean and scaled chain covariance
+      # In sample rather use:
+      # 1) Previous particle mean and now scaled covariance
+      # 2) Group mean and group variance (same as before)
+      # 3) Conditional mean and covariance
+      # Group distribution, with group mean and variance
       eff_var_curr <- chains_cov[,,s] * epsilon[s,i]^2
-      var_subj <- group_var_subj *  epsilon[s,i]^2
+      if(stage == "preburn"){
+        var_subj <- group_var_subj * epsilon[s,i]^2
+      } else{
+        var_subj <- group_var_subj *  mean(diag(eff_var_curr))/mean(diag(group_var_subj))
+      }
     } else{
       eff_var_curr <- eff_var[,,s]
       var_subj <- chains_cov[,,s] *  epsilon[s,i]^2
