@@ -30,11 +30,20 @@ rPROBIT <- function(lR,pars,p_types=c("mean","sd","threshold"),lt=-Inf)
   cbind.data.frame(R=R,rt=NA)
 }
 
-# Normal, natural mu and log(sigma), increasing threshold (first natural,
-# others on log scale) parameterization
+#' Gaussian Signal Detection Theory Model
+#'
+#' Discrete choice based on continuous Gaussian latent, with no rt. Model
+#' parameters are mean (unbounded) sd (log scale) and threshold, with a first
+#' value is  on the natural scale, and others for designs with with more than
+#' two responses are threshold increases on a log scale to enforce monotonic
+#' increase on the natural scale.
+#'
+#' @return A model list with all the necessary functions to sample
+#' @export
+
 probit <- function(){
   list(
-  type="SDT", # Discrete choice based on continuous latent, no RT
+  type="SDT",
   p_types=c("mean","sd","threshold"),
   # Transform to natural scale
   Ntransform=function(x) {

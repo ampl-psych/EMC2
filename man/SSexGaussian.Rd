@@ -6,6 +6,9 @@
 \usage{
 SSexGaussian()
 }
+\value{
+A model list with all the necessary functions to sample
+}
 \description{
 Title
 }

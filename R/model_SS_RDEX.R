@@ -160,10 +160,9 @@ pstopRDEX <- function(parstop,n_acc,
 #### Model list ----
 #' Title
 #'
-#' @return
+#' @return A model list with all the necessary functions to sample
 #' @export
-#'
-#' @examples
+
 SSrdexB <- function() {
     list(
     type="RACE",

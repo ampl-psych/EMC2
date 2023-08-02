@@ -5,7 +5,14 @@
 \title{Maps a parameter vector through a design to show parameter values for each
 design cell.}
 \usage{
-mapped_par(p_vector, design, model = NULL, digits = 3, remove_subjects = TRUE)
+mapped_par(
+  p_vector,
+  design,
+  model = NULL,
+  digits = 3,
+  remove_subjects = TRUE,
+  Fcovariates = NULL
+)
 }
 \arguments{
 \item{p_vector}{The parameter vector (must have form of sampled_p_vector(design)}

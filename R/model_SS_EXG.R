@@ -311,10 +311,9 @@ pstopEXG <- function(parstop,n_acc,
 #### Model list ----
 #' Title
 #'
-#' @return
+#' @return A model list with all the necessary functions to sample
 #' @export
-#'
-#' @examples
+
 SSexGaussian <- function() {
   list(
     type="RACE",
