@@ -15,7 +15,7 @@ run_emc(
   preburn = 150,
   p_accept = 0.8,
   step_size = 100,
-  verbose = FALSE,
+  verbose = TRUE,
   verboseProgress = FALSE,
   fileName = NULL,
   particles = NULL,
