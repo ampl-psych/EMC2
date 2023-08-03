@@ -168,7 +168,7 @@ log_likelihood_race_ss <- function(p_vector,dadm,min_ll=log(1e-10))
     lds[golooser] <- log(1-attr(dadm,"model")()$pfunG(rt=dadm$rt[golooser],pars=pars[golooser,,drop=FALSE]))
     lds[stoplooser] <- log(1-attr(dadm,"model")()$pfunS(rt=dadm$rt[stoplooser],pars=pars[stoplooser,,drop=FALSE]))
   }
-  lds[is.na(lds) | !ok] <- 0
+  lds[is.na(lds) | !ok] <- min_ll
   lds <- lds[attr(dadm,"expand")] # decompress
   winner <- dadm$winner[attr(dadm,"expand")]
   if (n_acc>1) {
