@@ -176,7 +176,7 @@ log_likelihood_race_ss <- function(p_vector,dadm,min_ll=log(1e-10))
     if (n_acc==2)
       ll <- ll + lds[!winner] else
         ll <- ll + apply(matrix(lds[!winner],nrow=n_acc-1),2,sum)
-    ll[is.na(ll)] <- 0
+    ll[is.na(ll)] <- min_ll
   } else ll <- lds
   like <- exp(ll)
 
