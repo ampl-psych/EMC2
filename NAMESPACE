@@ -2,6 +2,7 @@
 
 export(IC)
 export(SSexGaussian)
+export(SSrdexABCD)
 export(SSrdexB)
 export(add_constants)
 export(albaB)

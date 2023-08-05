@@ -206,6 +206,12 @@ SSrdexB <- function() {
   )
 }
 
+#' Title
+#'
+#' @return
+#' @export
+#'
+#' @examples
 SSrdexABCD <- function() {
     list(
     type="RACE",
