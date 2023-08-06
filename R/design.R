@@ -246,7 +246,7 @@ design_model <- function(data,design,model=NULL,prior = NULL,
   #   transform if a function acting on p_vector before mapping
   #   Ntransform is a function acting on the output of map_p
 {
-    compress_dadm <- function(da,designs,Fcov,Ffun)
+  compress_dadm <- function(da,designs,Fcov,Ffun)
     # out keeps only unique rows in terms of all parameters design matrices
     # R, lR and rt (at given resolution) from full data set
   {
@@ -339,6 +339,8 @@ design_model <- function(data,design,model=NULL,prior = NULL,
     data$subjects <- factor(data$subjects)
     warning("subjects column was converted to a factor")
   }
+
+  if (!any(names(data)=="trials")) data$trials <- 1:dim(data)[1]
 
   if (rt_check) {
     # Truncation
