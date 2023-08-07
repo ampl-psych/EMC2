@@ -56,8 +56,7 @@ otherwise sampled parameters}
 
 \item{ylim}{y-axis plot limit, 2-vector (same for all) or matrix (one row for each paramter)}
 
-\item{prior_xlim}{A vector giving upper and lower quantiles of prior when choosing xlim.
-If NULL (defualt) xlim based on posterior of not supplied.}
+\item{prior_xlim}{A vector giving upper and lower quantiles of prior when choosing xlim.}
 
 \item{show_chains}{Boolean (default FALSE) plot separate density for each chain.}
 

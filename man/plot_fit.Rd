@@ -16,7 +16,6 @@ plot_fit(
   stat = NULL,
   stat_name = "",
   adjust = 1,
-  add_ci = TRUE,
   ci = c(0.025, 0.5, 0.975),
   do_plot = TRUE,
   xlim = NULL,
@@ -54,8 +53,6 @@ Omitted factors are aggregated over.}
 \item{stat_name}{A string naming what the stat argument calculates.}
 
 \item{adjust}{Control of smoothing in density plots}
-
-\item{add_ci}{Add CI to stat plot as green bar on ordinate}
 
 \item{ci}{Credible interval and central tendency quantiles for return when
 stat argument is supplied (default c(.025,.5,.975))}
