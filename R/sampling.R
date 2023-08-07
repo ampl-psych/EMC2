@@ -88,15 +88,15 @@ init <- function(pmwgs, start_mu = NULL, start_var = NULL,
                                           startpoints$tvar, startpoints_nuis$tvar,
                                           pmwgs$nuisance[!pmwgs$grouped])
     pmwgs$sampler_nuis$samples <- get_variant_funs(type)$fill_samples(samples = pmwgs$sampler_nuis$samples,
-                                                                    group_level = startpoints_nuis,
-                                                                    epsilon = epsilon, j = 1,
-                                                                    proposals = NULL,
-                                                                    n_pars = pmwgs$n_pars)
+                                                                      group_level = startpoints_nuis,
+                                                                      epsilon = epsilon, j = 1,
+                                                                      proposals = NULL,
+                                                                      n_pars = pmwgs$n_pars)
     pmwgs$sampler_nuis$samples$idx <- 1
   }
   if(any(pmwgs$grouped)){
     grouped_pars <- mvtnorm::rmvnorm(particles, pmwgs$prior$prior_grouped$theta_mu_mean,
-                            pmwgs$prior$prior_grouped$theta_mu_var)
+                                     pmwgs$prior$prior_grouped$theta_mu_var)
   } else{
     grouped_pars <- NULL
   }
@@ -121,8 +121,8 @@ init <- function(pmwgs, start_mu = NULL, start_var = NULL,
 }
 
 start_proposals_group <- function(data, group_pars, alpha, par_names,
-                               likelihood_func, is_grouped,
-                               variant_funs, subjects, n_cores){
+                                  likelihood_func, is_grouped,
+                                  variant_funs, subjects, n_cores){
   num_particles <- nrow(group_pars)
   n_subjects <- length(subjects)
   proposals_list <- vector("list", n_subjects)
@@ -225,10 +225,10 @@ run_stage <- function(pmwgs,
       pars_comb <- merge_group_level(pars$tmu, pars_nuis$tmu, pars$tvar, pars_nuis$tvar, nuisance[!grouped])
       pars_comb$alpha <- pmwgs$samples$alpha[,,j-1]
       pmwgs$sampler_nuis$samples <- get_variant_funs(type)$fill_samples(samples = pmwgs$sampler_nuis$samples,
-                                                                                              group_level = pars_nuis,
-                                                                                              epsilon = epsilon, j = j,
-                                                                                              proposals = NULL,
-                                                                                              n_pars = n_pars)
+                                                                        group_level = pars_nuis,
+                                                                        epsilon = epsilon, j = j,
+                                                                        proposals = NULL,
+                                                                        n_pars = n_pars)
       pmwgs$sampler_nuis$samples$idx <- j
     }
     if(any(grouped)){
@@ -367,7 +367,7 @@ new_particle <- function (s, data, num_particles, parameters, eff_mu = NULL,
     ll_proposals <- proposals
     if(any(is_grouped)){
       ll_proposals <- update_proposals_grouped(proposals, grouped_pars, is_grouped,
-                                              par_names = par_names)
+                                               par_names = par_names)
     }
     # Normally we assume that a component contains all the parameters to estimate the individual likelihood of a joint model
     # Sometimes we may also want to block within a model if it has very high dimensionality
@@ -646,7 +646,7 @@ get_variant_funs <- function(type = "standard") {
       gibbs_step = gibbs_step_diag,
       filtered_samples = filtered_samples_standard,
       get_conditionals = get_conditionals_diag,
-      get_all_pars_IS2 = get_all_pars_standard,
+      get_all_pars_IS2 = get_all_pars_diag,
       prior_dist_IS2 = prior_dist_diag,
       group_dist_IS2 = group_dist_diag
     )

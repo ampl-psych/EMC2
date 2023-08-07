@@ -123,10 +123,23 @@ gibbs_step_infnt_factor <- function(sampler, alpha){
   # Pre-compute
   tauh <- cumprod(delta) # global shrinkage coefficients
   Plam <- psi %*% diag(tauh, nrow = max_factors) # precision of loadings rows
-  #Update mu
-  mu_sig <- 1/(n_subjects * sig_err_inv + prior$theta_mu_invar)
-  mu_mu <- mu_sig * (sig_err_inv * colSums(alpha_t - eta %*% t(lambda)) + prior$theta_mu_invar * prior$theta_mu_mean)
-  mu <- rmvnorm(1, mu_mu, diag(mu_sig))
+  # Update mu
+  for(i in 1:n_pars){
+    new_mu <- mu
+    new_mu[i] <- new_mu[i] + rnorm(1, 0, sd = .05)
+    ll_new <- sum(mvtnorm::dmvnorm(alpha_t, new_mu, lambda %*% t(lambda) + diag(1/sig_err_inv), log = T))
+    ll_old <- sum(mvtnorm::dmvnorm(alpha_t, mu, lambda %*% t(lambda) + diag(1/sig_err_inv), log = T))
+    ratio <- exp(ll_new - ll_old)
+    if(is.na(ratio)) ratio <- 0 #Could be dividing 0 by 0
+    #Then sometimes accept worse values
+    if (runif(1) < ratio){
+      #Accept!
+      mu[i] <- new_mu[i]
+    }
+  }
+  # mu_sig <- 1/(n_subjects * sig_err_inv + prior$theta_mu_invar)
+  # mu_mu <- mu_sig * (sig_err_inv * colSums(alpha_t - eta %*% t(lambda)) + prior$theta_mu_invar * prior$theta_mu_mean)
+  # mu <- rmvnorm(1, mu_mu, diag(mu_sig))
   colnames(mu) <- colnames(alpha_t)
   # calculate mean-centered observations
   alphatilde <- sweep(alpha_t, 2, mu)

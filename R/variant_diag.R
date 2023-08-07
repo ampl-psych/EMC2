@@ -98,6 +98,41 @@ unwind_diag_IS2 <- function(x,reverse=FALSE, diag = TRUE) {
   return(out)
 }
 
+get_all_pars_diag <- function(samples, idx, info){
+  n_subjects <- samples$n_subjects
+  n_iter = length(samples$samples$stage[idx])
+  # Exctract relevant objects
+  alpha <- samples$samples$alpha[,,idx]
+  theta_mu <- samples$samples$theta_mu[,idx]
+  theta_var <- samples$samples$theta_var[,,idx]
+  a_half <- log(samples$samples$a_half[,idx])
+  theta_var.unwound = log(apply(samples$samples$theta_var[,,idx],3,diag))
+  # Set up
+  n_params<- samples$n_pars+samples$n_pars+samples$n_pars
+  all_samples=array(dim=c(n_subjects,n_params,n_iter))
+  mu_tilde=array(dim = c(n_subjects,n_params))
+  var_tilde=array(dim = c(n_subjects,n_params,n_params))
+
+  for (j in 1:n_subjects){
+    all_samples[j,,] = rbind(alpha[,j,],theta_mu[,],theta_var.unwound[,])
+    # calculate the mean for re, mu and sigma
+    mu_tilde[j,] =apply(all_samples[j,,],1,mean)
+    # calculate the covariance matrix for random effects, mu and sigma
+    var_tilde[j,,] = cov(t(all_samples[j,,]))
+  }
+
+  for(i in 1:n_subjects){ #RJI_change: this bit makes sure that the sigma tilde is pos def
+    if(!corpcor::is.positive.definite(var_tilde[i,,], tol=1e-8)){
+      var_tilde[i,,]<-corpcor::make.positive.definite(var_tilde[i,,], tol=1e-6)
+    }
+  }
+  X <- cbind(t(theta_mu),t(theta_var.unwound),t(a_half))
+  info$n_params <- n_params
+  info$given.ind <- (info$n_randeffect+1):n_params
+  info$X.given_ind <- 1:(n_params-info$n_randeffect)
+  return(list(X = X, mu_tilde = mu_tilde, var_tilde = var_tilde, info = info))
+}
+
 group_dist_diag = function(random_effect = NULL, parameters, sample = FALSE, n_samples = NULL, info){
   n_randeffect <- info$n_randeffect
   param.theta.mu <- parameters[1:n_randeffect]
@@ -111,6 +146,7 @@ group_dist_diag = function(random_effect = NULL, parameters, sample = FALSE, n_s
   }
 }
 
+
 prior_dist_diag = function(parameters, info){
   n_randeffect <- info$n_randeffect
   prior <- info$prior
@@ -119,7 +155,7 @@ prior_dist_diag = function(parameters, info){
   param.theta.sig.unwound <- parameters[(n_randeffect+1):(length(parameters)-n_randeffect)]
   param.theta.sig2 <- unwind_diag_IS2(param.theta.sig.unwound, reverse = TRUE, diag = FALSE)
   param.a <- exp(parameters[((length(parameters)-n_randeffect)+1):(length(parameters))])
-  log_prior_mu=mvtnorm::dmvnorm(param.theta.mu, mean = prior$theta_mu_mean, sigma = prior$theta_mu_var, log =TRUE)
+  log_prior_mu=mvtnorm::dmvnorm(param.theta.mu, mean = prior$theta_mu_mean, sigma = diag(prior$theta_mu_var), log =TRUE)
   log_prior_sigma = sum(logdinvGamma(param.theta.sig2, shape = prior$v/2, rate = prior$v/param.a))
   log_prior_a = sum(logdinvGamma(param.a,shape = 1/2,rate=1/(prior$A^2)))
   # These are Jacobian corrections for the transformations on these
