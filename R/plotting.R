@@ -439,7 +439,7 @@ plot_density <- function(pmwg_mcmc,layout=c(2,3),
           if (!is.null(pars)) abline(v=pars[j,i])
         }
       }
-      if (do_contraction) contraction[[i]] <- contractioni
+      if (do_plot & do_contraction) contraction[[i]] <- contractioni
       if (!is.null(pars)) tabs[[i]] <- rbind(true=pars[dimnames(tabs[[i]])[[2]],i],tabs[[i]])
     }
     tabs <- tabs[as.character(subject)]
