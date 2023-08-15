@@ -45,8 +45,14 @@ get_prior_single <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5
     samples <- mvtnorm::rmvnorm(N, prior$theta_mu_mean, prior$theta_mu_var)
     if(!is.null(design)){
       colnames(samples) <- names(attr(design, "p_vector"))
-      if (map) samples[,colnames(samples) %in% design$model()$p_types] <-
-        design$model()$Ntransform(samples[,colnames(samples) %in% design$model()$p_types])
+      if (map) {
+        proot <- unlist(lapply(strsplit(colnames(samples),"_"),function(x)x[[1]]))
+        isin <- proot %in% design$model()$p_types
+        fullnames <- colnames(samples)[isin]
+        colnames(samples)[isin] <- proot
+        samples[,isin] <- design$model()$Ntransform(samples[,isin])
+        colnames(samples)[isin] <- fullnames
+      }
     } else if (map) stop("Must specify design when map = TRUE")
     return(list(alpha = samples))
   }
