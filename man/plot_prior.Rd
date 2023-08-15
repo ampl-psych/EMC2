@@ -2,7 +2,8 @@
 % Please edit documentation in R/priors.R
 \name{plot_prior}
 \alias{plot_prior}
-\title{Plots prior distributions simulated by get_prior functions.}
+\title{plot_prior
+Plots prior distributions simulated by get_prior functions.}
 \usage{
 plot_prior(
   prior,
@@ -12,13 +13,15 @@ plot_prior(
   breaks = 50,
   layout = c(3, 3),
   upper = NULL,
-  xlim = NULL
+  xlim = NULL,
+  mapped = TRUE,
+  design = NULL
 )
 }
 \arguments{
 \item{prior}{A list of prior samples}
 
-\item{type}{Select type of prior to plot (e.g., "alpha", "mu" etc.), defualt NULL plots all types present}
+\item{type}{Select type of prior to plot (e.g., "alpha", "mu" etc.), default NULL plots all types present}
 
 \item{add_density}{Boolean (default FALSE) draw density over prior histograms}
 
@@ -31,7 +34,12 @@ plot_prior(
 \item{upper}{Vector with parameter names of upper quantile limit of values plotted (default 0.999)}
 
 \item{xlim}{List with parameter names of plot x limits}
+
+\item{mapped}{Boolean (default TRUE) mapped mu and alpha to design on natural scale}
+
+\item{design}{Design corresponding to prior, must be supplied if mapped=TRUE}
 }
 \description{
+plot_prior
 Plots prior distributions simulated by get_prior functions.
 }
