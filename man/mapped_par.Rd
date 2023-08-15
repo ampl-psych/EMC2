@@ -24,8 +24,6 @@ mapped_par(
 \item{digits}{For rounding outputs}
 
 \item{remove_subjects}{Default true removes subjects from output design}
-
-\item{Fcovariates}{Covariates used in mapping (default NULL)}
 }
 \value{
 Matrix of factors and mapped parameter values

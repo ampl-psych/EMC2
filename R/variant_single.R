@@ -27,7 +27,7 @@ add_info_single <- function(sampler, prior = NULL, ...){
 #' @export
 
 get_prior_single <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5,
-                             type = "mu", design = NULL, map = TRUE){
+                             type = "mu", design = NULL, map = FALSE){
   if(is.null(prior)){
     prior <- list()
   }

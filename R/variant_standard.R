@@ -36,7 +36,7 @@ add_info_standard <- function(sampler, prior = NULL, ...){
 #' @export
 
 get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, type = "mu", design = NULL,
-                               map = TRUE){
+                               map = FALSE){
   # Checking and default priors
   if(is.null(prior)){
     prior <- list()

@@ -41,25 +41,33 @@ prior_samples_alpha <- function(theta_mu,theta_var,n=1e3)
 #   }
 # }
 
+#' plot_prior
 #' Plots prior distributions simulated by get_prior functions.
-#'
 #' @param prior A list of prior samples
-#' @param type Select type of prior to plot (e.g., "alpha", "mu" etc.), defualt NULL plots all types present
+#' @param type Select type of prior to plot (e.g., "alpha", "mu" etc.), default NULL plots all types present
 #' @param add_density Boolean (default FALSE) draw density over prior histograms
 #' @param adjust density smoothing adjustment (Default 1, see density)
 #' @param breaks Integer number of breaks in histograms
 #' @param layout par(mfrow) setting (default c(3,3))
 #' @param upper Vector with parameter names of upper quantile limit of values plotted (default 0.999)
 #' @param xlim List with parameter names of plot x limits
+#' @param mapped Boolean (default TRUE) mapped mu and alpha to design on natural scale
+#' @param design Design corresponding to prior, must be supplied if mapped=TRUE
 #'
 #' @return NULL
 #' @export
 
 plot_prior <- function(prior, type = NULL,add_density=FALSE,adjust=1,breaks=50,
-                       layout=c(3,3),upper=NULL,xlim=NULL){
+                       layout=c(3,3),upper=NULL,xlim=NULL,mapped=TRUE,design=NULL){
+
+
   if(is.null(type)) type <- names(prior)
-  for(typ in type){
+  for(typ in type) {
     samples <- prior[[typ]]
+    if (mapped & (typ %in% c("alpha","mu"))) {
+      if (is.null(design)) stop("Must provide design when mapped=TRUE")
+      samples <- map_mcmc(samples,design,design$model,include_constants=FALSE)
+    }
     par(mfrow = layout)
     par_names <- colnames(samples)
     uppers <- setNames(rep(.999,length(par_names)),par_names)
