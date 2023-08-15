@@ -35,7 +35,7 @@ get_prior_single <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5
     n_pars <- length(attr(design, "p_vector"))
   }
   if (is.null(prior$theta_mu_mean)) {
-    prior$theta_mu_mean <- rep(0, n_pars)
+    prior$theta_mu_mean <- setNames(rep(0, n_pars),names(attr(design, "p_vector")))
   }
   if(is.null(prior$theta_mu_var)){
     prior$theta_mu_var <- diag(rep(1, n_pars))
