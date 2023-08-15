@@ -14,7 +14,7 @@ plot_prior(
   layout = c(3, 3),
   upper = NULL,
   xlim = NULL,
-  map = TRUE,
+  mapped = TRUE,
   design = NULL
 )
 }
@@ -35,9 +35,9 @@ plot_prior(
 
 \item{xlim}{List with parameter names of plot x limits}
 
-\item{design}{Design corresponding to prior, must be supplied if mapped=TRUE}
-
 \item{mapped}{Boolean (default TRUE) mapped mu and alpha to design on natural scale}
+
+\item{design}{Design corresponding to prior, must be supplied if mapped=TRUE}
 }
 \description{
 plot_prior

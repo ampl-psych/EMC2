@@ -122,6 +122,12 @@ ddmTZD <- function(){
 
 
 
+#' Title
+#'
+#' @return
+#' @export
+#'
+#' @examples
 ddmTZDt0natural <- function(){
   list(
     type="DDM",
