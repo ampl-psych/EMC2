@@ -65,10 +65,11 @@ otherwise sampled parameters}
 \item{subject}{Integer or character vector, if selection = "alpha" picks out
 subject(s) (default NA plots all).}
 
-\item{add_means}{Boolean (default FALSE) add parameter means as an attirbute
+\item{add_means}{Boolean (default FALSE) add parameter means as an attribute
 to return}
 
-\item{pars}{Named vector of true parameters.}
+\item{pars}{Named vector or matrix of true parameters, or the output of
+plot_density, in which case the posterior medians are extracted.}
 
 \item{probs}{Vector (default c(.025,.5,.975)) for CI and central tendency of return}
 
