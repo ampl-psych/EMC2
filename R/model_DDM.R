@@ -150,14 +150,16 @@ ddmTZDt0natural <- function(){
                     sz = 2*pars[,"SZ"]*pars[,"a"]*apply(cbind(pars[,"Z"],1-pars[,"Z"]),1,min))
       pars <- cbind(pars, d = pars[,"t0"]*(2*pars[,"DP"]-1))
       attr(pars,"ok") <-
-        !( abs(pars[,"v"])> 20 | pars[,"a"]> 10 | pars[,"sv"]> 10 | pars[,"SZ"]> .999 | pars[,"st0"]>.2)
+        !( abs(pars[,"v"])> 20 | pars[,"a"]> 10 | pars[,"sv"]> 10 | pars[,"SZ"]> .999 |
+           pars[,"t0"] > .05 | pars[,"st0"]>.2)
       if (pars[1,"sv"] !=0) attr(pars,"ok") <- attr(pars,"ok") & pars[,"sv"] > .001
       if (pars[1,"SZ"] !=0) attr(pars,"ok") <- attr(pars,"ok") & pars[,"SZ"] > .001
       pars
     },
     # Random function
     rfun=function(lR,pars) {
-      ok <- !( abs(pars[,"v"])> 20 | pars[,"a"]> 10 | pars[,"sv"]> 10 | pars[,"SZ"]> .999 | pars[,"st0"]>.2)
+      ok <- !( abs(pars[,"v"])> 20 | pars[,"a"]> 10 | pars[,"sv"]> 10 | pars[,"SZ"]> .999 |
+                 pars[,"t0"] > .05 | pars[,"st0"]>.2)
       if (pars[1,"sv"] !=0) attr(pars,"ok") <- attr(pars,"ok") & pars[,"sv"] > .001
       if (pars[1,"SZ"] !=0) attr(pars,"ok") <- attr(pars,"ok") & pars[,"SZ"] > .001
       rDDM(lR,pars,precision=2.5,ok)
