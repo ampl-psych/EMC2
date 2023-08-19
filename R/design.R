@@ -131,7 +131,7 @@ sampled_p_vector <- function(design,model=NULL,doMap=TRUE)
 
   if (!is.null(design$Fcovariates)) {
     covs <- matrix(0,nrow=dim(data)[1],ncol=length(design$Fcovariates),
-                   dimnames=list(NULL,design$Fcovariates))
+                   dimnames=list(NULL,names(design$Fcovariates)))
     data <- cbind.data.frame(data,covs)
   }
   dadm <- design_model(
@@ -246,7 +246,7 @@ design_model <- function(data,design,model=NULL,prior = NULL,
   #   transform if a function acting on p_vector before mapping
   #   Ntransform is a function acting on the output of map_p
 {
-    compress_dadm <- function(da,designs,Fcov,Ffun)
+  compress_dadm <- function(da,designs,Fcov,Ffun)
     # out keeps only unique rows in terms of all parameters design matrices
     # R, lR and rt (at given resolution) from full data set
   {
@@ -255,7 +255,7 @@ design_model <- function(data,design,model=NULL,prior = NULL,
       apply(do.call(cbind,lapply(designs,function(x){
         apply(x[attr(x,"expand"),,drop=FALSE],1,paste,collapse="_")})
       ),1,paste,collapse="+"),da$subjects,da$R,da$lR,da$rt,sep="+")
-    if (!is.null(Fcov)) cells <- paste(cells,apply(da[,Fcov,drop=FALSE],1,paste,collapse="+"),sep="+")
+    if (!is.null(Fcov)) cells <- paste(cells,apply(da[,names(Fcov),drop=FALSE],1,paste,collapse="+"),sep="+")
     if (!is.null(Ffun)) cells <- paste(cells,apply(da[,Ffun,drop=FALSE],1,paste,collapse="+"),sep="+")
     contract <- !duplicated(cells)
     out <- da[contract,,drop=FALSE]
@@ -339,6 +339,8 @@ design_model <- function(data,design,model=NULL,prior = NULL,
     data$subjects <- factor(data$subjects)
     warning("subjects column was converted to a factor")
   }
+
+  if (!any(names(data)=="trials")) data$trials <- 1:dim(data)[1]
 
   if (rt_check) {
     # Truncation
@@ -444,7 +446,7 @@ design_model <- function(data,design,model=NULL,prior = NULL,
                                         attr(dadm,"expand") <- 1:dim(dadm)[1]
                                       }
   if (verbose & compress) message("Likelihood speedup factor: ",
-                                  round(dim(da)[1]/dim(dadm)[1],1)," (",dim(dadm)[1]," unique trials)")
+    round(dim(da)[1]/dim(dadm)[1],1)," (",dim(dadm[as.logical(dadm$lM),])[1]," unique trials)")
   p_names <-  unlist(lapply(out,function(x){dimnames(x)[[2]]}),use.names=FALSE)
 
   bad_constants <- names(design$constants)[!(names(design$constants) %in% p_names)]

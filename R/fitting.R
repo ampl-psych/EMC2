@@ -27,7 +27,7 @@
 #' @export
 
 run_emc <- function(samplers, stage = NULL, iter = 1000, max_gd = 1.1, mean_gd = 1.1, min_es = 0, min_unique = 600, preburn = 150,
-                    p_accept = .8, step_size = 100, verbose = FALSE, verboseProgress = FALSE, fileName = NULL,
+                    p_accept = .8, step_size = 100, verbose = TRUE, verboseProgress = FALSE, fileName = NULL,
                     particles = NULL, particle_factor=40, cores_per_chain = 1,
                     cores_for_chains = length(samplers), max_trys = 50, n_blocks = NULL){
   if (is.character(samplers)) {

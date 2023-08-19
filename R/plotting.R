@@ -111,15 +111,15 @@ plot_acfs <- function(samples,layout=NULL,subject=1,
 #'
 #' @param tabs Tables of actual and estimated alpha parameters (with CIs) from plot_density
 #' @param layout A 2-vector specifying the layout as in par(mfrow = layout)
-#' @param do_ci Boolean (Defualt TRUE). Add CIs to plot?
+#' @param do_ci Boolean (Default TRUE). Add CIs to plot?
 #' @param ci_col Color of CI.
 #' @param cap Width of CI cap (passed to arrows)
-#' @param do_rmse Boolean (defualt FALSE) Add root-mean squared error to plot
+#' @param do_rmse Boolean (default FALSE) Add root-mean squared error to plot
 #' instead of default Pearson correlation
 #' @param r_pos Position of Pearson/RMSE (passed to legend)
 #' @param rmse_digits Digits for RMSE
 #' @param pearson_digits Digits for Pearson correlation
-#' @param do_coverage Boolean (defualt TRUE) add coverage percentage estimate (otherwise
+#' @param do_coverage Boolean (default TRUE) add coverage percentage estimate (otherwise
 #' add Spearman correlation)
 #' @param coverage_pos Position of Coverage/Pearson (passed to legend)
 #' @param coverage_digits Digits for coverage
@@ -132,7 +132,7 @@ plot_alpha_recovery <- function(tabs,layout=c(2,3),
                                 do_ci = TRUE,ci_col="grey",cap=.05,
                                 do_rmse=FALSE,r_pos="topleft",
                                 rmse_digits=3,pearson_digits=2,
-                                do_coverage=FALSE,coverage_pos="bottomright",
+                                do_coverage=TRUE,coverage_pos="bottomright",
                                 coverage_digits=1,spearman_digits=2)
   # Takes tables output by plot_density with par and plots recovery
 {
@@ -288,13 +288,15 @@ plot_defective_density <- function(data,subject=NULL,factors=NULL,
 #' @param n_prior Number of samples to approximate prior (default = 1e3)
 #' @param xlim x-axis plot limit, 2-vector (same for all) or matrix (one row for each paramter)
 #' @param ylim y-axis plot limit, 2-vector (same for all) or matrix (one row for each paramter)
+#' @param prior_xlim A vector giving upper and lower quantiles of prior when choosing xlim.
 #' @param show_chains Boolean (default FALSE) plot separate density for each chain.
 #' @param do_plot Boolean (default TRUE) do plot
 #' @param subject Integer or character vector, if selection = "alpha" picks out
 #' subject(s) (default NA plots all).
-#' @param add_means Boolean (default FALSE) add parameter means as an attirbute
+#' @param add_means Boolean (default FALSE) add parameter means as an attribute
 #' to return
-#' @param pars Named vector of true parameters.
+#' @param pars Named vector or matrix of true parameters, or the output of
+#' plot_density, in which case the posterior medians are extracted.
 #' @param probs Vector (default c(.025,.5,.975)) for CI and central tendency of return
 #' @param bw Bandwidth for density plot (see density)
 #' @param adjust Adjustment for density plot (see density)
@@ -309,7 +311,7 @@ plot_defective_density <- function(data,subject=NULL,factors=NULL,
 
 plot_density <- function(pmwg_mcmc,layout=c(2,3),
   selection="alpha",filter="sample",thin=1,subfilter=0,mapped=FALSE,
-  plot_prior=TRUE,n_prior=1e3,xlim=NULL,ylim=NULL,
+  plot_prior=TRUE,n_prior=1e3,xlim=NULL,ylim=NULL,prior_xlim=NULL,
   show_chains=FALSE,do_plot=TRUE,subject=NA,add_means=FALSE,
   pars=NULL,probs=c(.025,.5,.975),bw = "nrd0", adjust = 1,
   do_contraction=TRUE,lpos="topright",digits=3)
@@ -345,6 +347,8 @@ plot_density <- function(pmwg_mcmc,layout=c(2,3),
     warning("Prior plots not implemented for show_chains=TRUE")
 
   if (do_contraction & !plot_prior) do_contraction <- FALSE
+
+  if (is.list(pars)) pars <- do.call(rbind,lapply(pars,function(x)x[2,]))
 
   if (!(inherits(pmwg_mcmc, c("mcmc","mcmc.list")))) {
     if (plot_prior) {
@@ -420,7 +424,9 @@ plot_density <- function(pmwg_mcmc,layout=c(2,3),
             if (plot_prior) pdens <- density(psamples[,j],bw=bw,adjust=adjust)
             if (!is.null(xlim)) {
               if (!is.matrix(xlim)) xlimi <- xlim else xlimi <- xlim[j,]
-            } else xlimi <- c(min(dens$x),max(dens$x))
+            } else if (plot_prior & !is.null(prior_xlim))
+              xlimi <- c(quantile(pdens$x,probs=prior_xlim[1]),quantile(pdens$x,probs=prior_xlim[2])) else
+              xlimi <- c(min(dens$x),max(dens$x))
             if (!is.null(ylim)) {
               if (!is.matrix(ylim)) ylimi <- ylim else ylimi <- ylim[j,]
             } else {
@@ -438,7 +444,7 @@ plot_density <- function(pmwg_mcmc,layout=c(2,3),
           if (!is.null(pars)) abline(v=pars[j,i])
         }
       }
-      if (do_contraction) contraction[[i]] <- contractioni
+      if (do_plot & do_contraction) contraction[[i]] <- contractioni
       if (!is.null(pars)) tabs[[i]] <- rbind(true=pars[dimnames(tabs[[i]])[[2]],i],tabs[[i]])
     }
     tabs <- tabs[as.character(subject)]
@@ -490,7 +496,8 @@ plot_density <- function(pmwg_mcmc,layout=c(2,3),
         dens <- density(pmwg_mcmc[,j],bw=bw,adjust=adjust)
         if (plot_prior)  pdens <- robust_density(psamples[,j],range(pmwg_mcmc[,j]),
           bw=bw,adjust=adjust,use_robust=!(attr(pmwg_mcmc,"selection") %in% c("mu","correlation")))
-        if (!is.null(xlim)) xlimi <- xlim else
+        if (!is.null(xlim)) xlimi <- xlim else if (plot_prior & !is.null(prior_xlim))
+          xlimi <- c(quantile(pdens$x,probs=prior_xlim[1]),quantile(pdens$x,probs=prior_xlim[2])) else
           xlimi <- c(min(dens$x),max(dens$x))
         if (!is.null(ylim)) ylimi <- ylim else {
           ylimi <- c(0,max(dens$y))

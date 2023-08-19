@@ -16,6 +16,7 @@ plot_density(
   n_prior = 1000,
   xlim = NULL,
   ylim = NULL,
+  prior_xlim = NULL,
   show_chains = FALSE,
   do_plot = TRUE,
   subject = NA,
@@ -55,6 +56,8 @@ otherwise sampled parameters}
 
 \item{ylim}{y-axis plot limit, 2-vector (same for all) or matrix (one row for each paramter)}
 
+\item{prior_xlim}{A vector giving upper and lower quantiles of prior when choosing xlim.}
+
 \item{show_chains}{Boolean (default FALSE) plot separate density for each chain.}
 
 \item{do_plot}{Boolean (default TRUE) do plot}
@@ -62,10 +65,11 @@ otherwise sampled parameters}
 \item{subject}{Integer or character vector, if selection = "alpha" picks out
 subject(s) (default NA plots all).}
 
-\item{add_means}{Boolean (default FALSE) add parameter means as an attirbute
+\item{add_means}{Boolean (default FALSE) add parameter means as an attribute
 to return}
 
-\item{pars}{Named vector of true parameters.}
+\item{pars}{Named vector or matrix of true parameters, or the output of
+plot_density, in which case the posterior medians are extracted.}
 
 \item{probs}{Vector (default c(.025,.5,.975)) for CI and central tendency of return}
 

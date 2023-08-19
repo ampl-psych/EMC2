@@ -311,6 +311,22 @@ group_dist_lm = function(random_effect = NULL, parameters, sample = FALSE, n_sam
     return(logw_second)
   }
 }
+group_dist_lm2 = function(random_effect = NULL, parameters, sample = FALSE, n_samples = NULL, info){
+  n_randeffect <- info$n_randeffect
+  par_names <- info$par_names
+  param.theta_mu <- parameters[1:n_randeffect]
+  param.theta_theta <- parameters[(n_randeffect + 1):(n_randeffect + info$n_effects)]
+  param.var <- parameters[(length(parameters) - n_randeffect + 1):length(parameters)]
+  if (sample){
+    return(matrix(rnorm(n_samples*length(param.theta_mu), param.theta_mu, sqrt(exp(param.var))),
+                  ncol = length(param.theta_mu),byrow = T))
+  }
+  else{
+    logw_second<-max(-5000*info$n_randeffect, sum(dnorm(t(random_effect), param.theta_mu, sqrt(exp(param.var)), log = T)))
+    return(logw_second)
+  }
+}
+
 
 prior_dist_lm = function(parameters, info){
   n_randeffect <- info$n_randeffect

@@ -27,7 +27,7 @@ add_info_single <- function(sampler, prior = NULL, ...){
 #' @export
 
 get_prior_single <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5,
-                             type = "mu", design = NULL, map = TRUE){
+                             type = "mu", design = NULL, map = FALSE){
   if(is.null(prior)){
     prior <- list()
   }
@@ -35,7 +35,7 @@ get_prior_single <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5
     n_pars <- length(attr(design, "p_vector"))
   }
   if (is.null(prior$theta_mu_mean)) {
-    prior$theta_mu_mean <- rep(0, n_pars)
+    prior$theta_mu_mean <- setNames(rep(0, n_pars),names(attr(design, "p_vector")))
   }
   if(is.null(prior$theta_mu_var)){
     prior$theta_mu_var <- diag(rep(1, n_pars))
@@ -43,11 +43,14 @@ get_prior_single <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5
   if(sample){
     if(type != "mu") stop("for variant single, only mu can be specified")
     samples <- mvtnorm::rmvnorm(N, prior$theta_mu_mean, prior$theta_mu_var)
-    if(!is.null(design)){
-      colnames(samples) <- names(attr(design, "p_vector"))
-      if (map) samples[,colnames(samples) %in% design$model()$p_types] <-
-        design$model()$Ntransform(samples[,colnames(samples) %in% design$model()$p_types])
-    } else if (map) stop("Must specify design when map = TRUE")
+    if (map) {
+      proot <- unlist(lapply(strsplit(colnames(samples),"_"),function(x)x[[1]]))
+      isin <- proot %in% design$model()$p_types
+      fullnames <- colnames(samples)[isin]
+      colnames(samples)[isin] <- proot
+      samples[,isin] <- design$model()$Ntransform(samples[,isin])
+      colnames(samples)[isin] <- fullnames
+    }
     return(list(alpha = samples))
   }
   return(prior)

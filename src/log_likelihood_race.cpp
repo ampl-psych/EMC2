@@ -30,7 +30,7 @@ LogicalVector c_bool_expand(LogicalVector x1, NumericVector expand){
 }
 
 NumericVector c_add_vectors(NumericVector x1, NumericVector x2){
-  if(x2[0] == NA_REAL){
+  if(is_na(x2)[0] ){
     return(x1);
   }
   NumericVector output(x1.size() + x2.size());

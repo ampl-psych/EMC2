@@ -107,7 +107,7 @@ make_data <- function(p_vector,design,model=NULL,trials=NULL,data=NULL,expand=1,
       # Add covariates
       if (!is.null(design$Fcovariates)) {
         if (!is.null(Fcovariates)) {
-          if (!(all(names(Fcovariates)  %in% design$Fcovariates)))
+          if (!(all(names(Fcovariates)  %in% names(design$Fcovariates))))
             stop("All Fcovariates must be named in design$Fcovariates")
           if (!is.data.frame(Fcovariates)) {
             if (!all(unlist(lapply(Fcovariates,is.function))))
@@ -120,8 +120,8 @@ make_data <- function(p_vector,design,model=NULL,trials=NULL,data=NULL,expand=1,
           if (!(n==dim(data)[1])) stop("Fcovariates must specify ",dim(data)[1]," values per covariate")
           data <- cbind.data.frame(data,Fcovariates)
         }
-        empty_covariates <- design$Fcovariates[!(design$Fcovariates %in% names(Fcovariates))]
-        if (length(empty_covariates)>0) data[[empty_covariates]] <- 0
+        empty_covariates <- names(design$Fcovariates)[!(names(design$Fcovariates) %in% names(data))]
+        if (length(empty_covariates)>0) data[,empty_covariates] <- 0
       }
     } else {
       LT <- attr(data,"LT"); UT <- attr(data,"UT")
@@ -174,6 +174,8 @@ make_data <- function(p_vector,design,model=NULL,trials=NULL,data=NULL,expand=1,
     attr(data,"p_vector") <- p_vector;
     data
 }
+
+
 
 add_Ffunctions <- function(data,design)
   # Adds columns created by Ffunctions (if not already there)

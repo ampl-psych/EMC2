@@ -11,7 +11,7 @@ get_prior_single(
   N = 1e+05,
   type = "mu",
   design = NULL,
-  map = TRUE
+  map = FALSE
 )
 }
 \arguments{
