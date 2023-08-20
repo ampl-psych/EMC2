@@ -2,7 +2,7 @@
 % Please edit documentation in R/plotting.R
 \name{plot_alpha_recovery}
 \alias{plot_alpha_recovery}
-\title{Uses output from plot_density to plot true vs. estimated (median with CI) alpha
+\title{Uses output from plot_pars to plot true vs. estimated (median with CI) alpha
 parameters for each subject (plot density must be called with true values passed
 through the pars argument).}
 \usage{
@@ -23,7 +23,7 @@ plot_alpha_recovery(
 )
 }
 \arguments{
-\item{tabs}{Tables of actual and estimated alpha parameters (with CIs) from plot_density}
+\item{tabs}{Tables of actual and estimated alpha parameters (with CIs) from plot_pars}
 
 \item{layout}{A 2-vector specifying the layout as in par(mfrow = layout)}
 
@@ -55,7 +55,7 @@ add Spearman correlation)}
 Invisible list with RMSE, coverage and Pearson and Spearman correlations.
 }
 \description{
-Uses output from plot_density to plot true vs. estimated (median with CI) alpha
+Uses output from plot_pars to plot true vs. estimated (median with CI) alpha
 parameters for each subject (plot density must be called with true values passed
 through the pars argument).
 }

@@ -3,43 +3,59 @@
 \name{plot_prior}
 \alias{plot_prior}
 \title{plot_prior
-Plots prior distributions simulated by get_prior functions.}
+Plots prior distributions by simulation}
 \usage{
 plot_prior(
   prior,
-  type = NULL,
-  add_density = FALSE,
-  adjust = 1,
+  design,
+  plotp = NULL,
+  type = c("standard", "single")[1],
+  selection = NULL,
+  mapped = TRUE,
+  data = NULL,
+  N = 1e+05,
+  nrep = 10,
   breaks = 50,
   layout = c(3, 3),
+  lower = NULL,
   upper = NULL,
-  xlim = NULL,
-  mapped = TRUE,
-  design = NULL
+  xlim = NA
 )
 }
 \arguments{
-\item{prior}{A list of prior samples}
+\item{prior}{A list of specifying prior means and covariance}
 
-\item{type}{Select type of prior to plot (e.g., "alpha", "mu" etc.), default NULL plots all types present}
+\item{design}{Design corresponding to prior}
 
-\item{add_density}{Boolean (default FALSE) draw density over prior histograms}
+\item{plotp}{Names of parameters to plot (default NULL plots all)}
 
-\item{adjust}{density smoothing adjustment (Default 1, see density)}
+\item{type}{Type of prior (standard or single)}
 
-\item{breaks}{Integer number of breaks in histograms}
+\item{selection}{Select level prior to plot (default "alpha" for single and "mu" for single)}
+
+\item{mapped}{boolean for mapping mu or alpha back to the design cells on the natural scale.}
+
+\item{data}{data frame, required when mapping involves priors}
+
+\item{N}{Number of prior samples if data not provided}
+
+\item{nrep}{Number of prior samples as multiple of numebr of rows in the data (minus any that violate "ok" constraint)}
+
+\item{breaks}{Histogram breaks parameter}
 
 \item{layout}{par(mfrow) setting (default c(3,3))}
 
-\item{upper}{Vector with parameter names of upper quantile limit of values plotted (default 0.999)}
+\item{lower}{Upper quantile limit of values plotted. Default NULL all plotted,
+integer same for all parameters, parameter named list parameter specific}
 
-\item{xlim}{List with parameter names of plot x limits}
-
-\item{mapped}{Boolean (default TRUE) mapped mu and alpha to design on natural scale}
-
-\item{design}{Design corresponding to prior, must be supplied if mapped=TRUE}
+\item{xlim}{List with parameter names of plot x limits or single pair same for all.
+Any names not in list or if (defualt) NA xlim set as min and max.}
+}
+\value{
+Invisible sampled columns of parameters as a data frame (covariate,
+version first column = cell names) or otherwise a matrix
 }
 \description{
 plot_prior
-Plots prior distributions simulated by get_prior functions.
+Plots prior distributions by simulation
 }
