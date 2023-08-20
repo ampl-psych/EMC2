@@ -6,7 +6,7 @@
 Plots prior distributions by simulation}
 \usage{
 plot_prior(
-  prior,
+  prior = NULL,
   design,
   plotp = NULL,
   type = c("standard", "single")[1],
@@ -23,7 +23,8 @@ plot_prior(
 )
 }
 \arguments{
-\item{prior}{A list of specifying prior means and covariance}
+\item{prior}{A list of specifying prior means and covariance, if NULL default
+prior (mean=0, varaince = 1, uncorrelaterd)}
 
 \item{design}{Design corresponding to prior}
 

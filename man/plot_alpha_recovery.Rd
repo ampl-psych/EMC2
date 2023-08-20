@@ -2,7 +2,8 @@
 % Please edit documentation in R/plotting.R
 \name{plot_alpha_recovery}
 \alias{plot_alpha_recovery}
-\title{Uses output from plot_pars to plot true vs. estimated (median with CI) alpha
+\title{plot_alpha_recovery
+Uses output from plot_pars to plot true vs. estimated (median with CI) alpha
 parameters for each subject (plot density must be called with true values passed
 through the pars argument).}
 \usage{
@@ -55,6 +56,7 @@ add Spearman correlation)}
 Invisible list with RMSE, coverage and Pearson and Spearman correlations.
 }
 \description{
+plot_alpha_recovery
 Uses output from plot_pars to plot true vs. estimated (median with CI) alpha
 parameters for each subject (plot density must be called with true values passed
 through the pars argument).
