@@ -126,12 +126,16 @@ pLBA <- function (rt, pars, posdrift = TRUE, robust = FALSE)
 #
 #### random
 
-rLBA <- function(lR,pars,p_types=c("v","sv","b","A","t0"),posdrift = TRUE)
+rLBA <- function(lR,pars,p_types=c("v","sv","b","A","t0"),posdrift = TRUE,
+                 ok=rep(TRUE,length(lR)))
   # lR is an empty latent response factor lR with one level for each accumulator.
   # pars is a matrix of corresponding parameter values named as in p_types
   # pars must be sorted so accumulators and parameter for each trial are in
   # contiguous rows.
 {
+  bad <- rep(NA, length(lR)/length(levels(lR)))
+  out <- data.frame(R = bad, rt = bad)
+  pars <- pars[ok,]
   if (!all(p_types %in% dimnames(pars)[[2]]))
     stop("pars must have columns ",paste(p_types,collapse = " "))
   dt <- matrix((pars[,"b"]-pars[,"A"]*runif(dim(pars)[1]))/
@@ -145,7 +149,11 @@ rLBA <- function(lR,pars,p_types=c("v","sv","b","A","t0"),posdrift = TRUE)
   bad <- !is.finite(rt)
   R[bad] <- NA
   rt[bad] <- NA
-  cbind.data.frame(R=R,rt=rt)
+  ok <- matrix(ok,nrow=length(levels(lR)))[1,]
+  out$R[ok] <- levels(lR)[R]
+  out$R <- factor(out$R,levels=levels(lR))
+  out$rt[ok] <- rt
+  out
 }
 
 #' The Linear Ballistic Accumulator (LBA) model
@@ -181,7 +189,10 @@ lbaB <- function(){
       pars
     },
     # Random function for racing accumulator
-    rfun=function(lR,pars) rLBA(lR,pars,posdrift=TRUE),
+    rfun=function(lR=NULL,pars) {
+      ok <- (pars[,"t0"] > .05) & ((pars[,"A"] > 1e-6) | pars[,"A"] == 0)
+      if (is.null(lR)) ok else rLBA(lR,pars,posdrift=TRUE,ok=ok)
+    },
     # Density function (PDF) for single accumulator
     dfun=function(rt,pars) dLBA(rt,pars,posdrift = TRUE, robust = FALSE),
     # Probability function (CDF) for single accumulator
@@ -219,7 +230,10 @@ albaB <- function(){
 
     },
     # Random function for racing accumulator
-    rfun=function(lR,pars) rLBA(lR,pars,posdrift=TRUE),
+    rfun=function(lR=NULL,pars) {
+      ok <- (pars[,"t0"] > .05) & ((pars[,"A"] > 1e-6) | pars[,"A"] == 0)
+      if (is.null(lR)) ok else rLBA(lR,pars,posdrift=TRUE,ok=ok)
+    },
     # Density function (PDF) for single accumulator
     dfun=function(rt,pars) dLBA(rt,pars,posdrift = TRUE, robust = FALSE),
     # Probability function (CDF) for single accumulator
@@ -249,7 +263,11 @@ albaB <- function(){
 #       pars
 #     },
 #     # Random function for racing accumulator
-#     rfun=function(lR,pars) rLBA(lR,pars,posdrift=TRUE),
+#     Random function for racing accumulator
+#     rfun=function(lR=NULL,pars) {
+#       ok <- (pars[,"t0"] > .05) & ((pars[,"A"] > 1e-6) | pars[,"A"] == 0)
+#       if (is.null(lR)) ok else rLBA(lR,pars,posdrift=TRUE)
+#     },
 #     # Density function (PDF) for single accumulator
 #     dfun=function(rt,pars) dLBA(rt,pars,posdrift = TRUE, robust = FALSE),
 #     # Probability function (CDF) for single accumulator

@@ -269,7 +269,7 @@ rWald <- function(n,B,v,A)
 }
 
 
-rRDM <- function(lR,pars,p_types=c("v","B","A","t0"),ok=NULL)
+rRDM <- function(lR,pars,p_types=c("v","B","A","t0"),ok=rep(TRUE,dim(pars)[1]))
   # lR is an empty latent response factor lR with one level for each accumulator.
   # pars is a matrix of corresponding parameter values named as in p_types
   # pars must be sorted so accumulators and parameter for each trial are in
@@ -278,24 +278,24 @@ rRDM <- function(lR,pars,p_types=c("v","B","A","t0"),ok=NULL)
   # test
   # pars=cbind(B=c(1,2),v=c(1,1),A=c(0,0),t0=c(.2,.2)); lR=factor(c(1,2))
 {
-
   if (!all(p_types %in% dimnames(pars)[[2]]))
     stop("pars must have columns ",paste(p_types,collapse = " "))
   if (any(dimnames(pars)[[2]]=="s")) # rescale
     pars[,c("A","B","v")] <- pars[,c("A","B","v")]/pars[,"s"]
   pars[,"B"][pars[,"B"]<0] <- 0 # Protection for negatives
   pars[,"A"][pars[,"A"]<0] <- 0
-  if (is.null(ok)) ok <- rep(TRUE, length(lR))
-  bad <- rep(NA, length(lR))
+  bad <- rep(NA, length(lR)/length(levels(lR)))
   out <- data.frame(R = bad, rt = bad)
-  dt <- matrix(rWald(sum(ok),B=pars[ok,"B"],v=pars[ok,"v"],A=pars[ok,"A"]),
+  pars <- pars[ok,]
+  dt <- matrix(rWald(sum(ok),B=pars[,"B"],v=pars[,"v"],A=pars[,"A"]),
                nrow=length(levels(lR)))
   R <- apply(dt,2,which.min)
   pick <- cbind(R,1:dim(dt)[2]) # Matrix to pick winner
   # Any t0 difference with lR due to response production time (no effect on race)
-  rt <- matrix(pars[ok,"t0"],nrow=length(levels(lR)))[pick] + dt[pick]
-  R <- factor(levels(lR)[R],levels=levels(lR))
-  out$R[ok] <- R
+  rt <- matrix(pars[,"t0"],nrow=length(levels(lR)))[pick] + dt[pick]
+  ok <- matrix(ok,nrow=length(levels(lR)))[1,]
+  out$R[ok] <- levels(lR)[R]
+  out$R <- factor(out$R,levels=levels(lR))
   out$rt[ok] <- rt
   out
 }
@@ -333,9 +333,9 @@ rdmB <- function(){
       pars
     },
     # Random function for racing accumulators
-    rfun=function(lR,pars) {
-      attr(pars,"ok") <- (pars[,"t0"] > .05) & ((pars[,"A"] > 1e-6) | pars[,"A"] == 0)
-      rRDM(lR,pars,ok)
+    rfun=function(lR=NULL,pars) {
+      ok <- (pars[,"t0"] > .05) & ((pars[,"A"] > 1e-6) | pars[,"A"] == 0)
+      if (is.null(lR)) ok else rRDM(lR,pars,ok=ok)
     },
     # Density function (PDF) for single accumulator
     dfun=function(rt,pars) dRDM(rt,pars),
@@ -371,9 +371,9 @@ rdmBt0natural <- function(){
       pars
     },
     # Random function for racing accumulators
-    rfun=function(lR,pars) {
-      attr(pars,"ok") <- (pars[,"t0"] > .05) & ((pars[,"A"] > 1e-6) | pars[,"A"] == 0)
-      rRDM(lR,pars,ok)
+    rfun=function(lR=NULL,pars) {
+      ok <- (pars[,"t0"] > .05) & ((pars[,"A"] > 1e-6) | pars[,"A"] == 0)
+      if (is.null(lR)) ok else rRDM(lR,pars,ok=ok)
     },
     # Density function (PDF) for single accumulator
     dfun=function(rt,pars) dRDM(rt,pars),

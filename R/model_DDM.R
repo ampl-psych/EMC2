@@ -1,4 +1,4 @@
-rDDM <- function(lR,pars,precision=2.5,ok=NULL)
+rDDM <- function(lR,pars,precision=2.5,ok=rep(TRUE,length(lR)))
   # lR is an empty latent response factor lR with one level for each boundary
   # pars is a matrix of parameter values named as in p_types
   # lower is mapped to first level of lR and upper to second
@@ -8,7 +8,6 @@ rDDM <- function(lR,pars,precision=2.5,ok=NULL)
   # lR <- factor(c("left","right"))
 
 {
-  if (is.null(ok)) ok <- rep(TRUE,length(lR))
   bad <- rep(NA,length(lR))
   out <- data.frame(response=bad,rt=bad)
   out[ok,2:1] <- rtdists::rdiffusion(length(lR[ok]), a = pars[ok,"a"], v = pars[ok,"v"], t0 = pars[ok,"t0"],
@@ -95,7 +94,8 @@ ddmTZD <- function(){
                     sz = 2*pars[,"SZ"]*pars[,"a"]*apply(cbind(pars[,"Z"],1-pars[,"Z"]),1,min))
       pars <- cbind(pars, d = pars[,"t0"]*(2*pars[,"DP"]-1))
       attr(pars,"ok") <-
-        !( abs(pars[,"v"])> 20 | pars[,"a"]> 10 | pars[,"sv"]> 10 | pars[,"SZ"]> .999 | pars[,"st0"]>.2)
+        !( abs(pars[,"v"])> 20 | pars[,"a"]> 10 | pars[,"sv"]> 10 | pars[,"SZ"]> .999 |
+             pars[,"t0"] < .05 | pars[,"st0"]>.2)
       if (pars[1,"sv"] !=0) attr(pars,"ok") <- attr(pars,"ok") & pars[,"sv"] > .001
       if (pars[1,"SZ"] !=0) attr(pars,"ok") <- attr(pars,"ok") & pars[,"SZ"] > .001
       pars
@@ -103,11 +103,12 @@ ddmTZD <- function(){
     # p_vector transform, sets s as a scaling parameter
     transform = function(p) p,
     # Random function
-    rfun=function(lR,pars) {
-      ok <- !( abs(pars[,"v"])> 20 | pars[,"a"]> 10 | pars[,"sv"]> 10 | pars[,"SZ"]> .999 | pars[,"st0"]>.2)
+    rfun=function(lR=NULL,pars) {
+      ok <- !( abs(pars[,"v"])> 20 | pars[,"a"]> 10 | pars[,"sv"]> 10 | pars[,"SZ"]> .999 |
+                 pars[,"st0"]>.2 | pars[,"t0"] < .05)
       if (pars[1,"sv"] !=0) attr(pars,"ok") <- attr(pars,"ok") & pars[,"sv"] > .001
       if (pars[1,"SZ"] !=0) attr(pars,"ok") <- attr(pars,"ok") & pars[,"SZ"] > .001
-      rDDM(lR,pars,precision=2.5,ok)
+      if (is.null(lR)) ok else rDDM(lR,pars,precision=2.5,ok)
     },
     # Density function (PDF)
     dfun=function(rt,R,pars) dDDM(rt,R,pars,precision=2.5),
@@ -151,18 +152,18 @@ ddmTZDt0natural <- function(){
       pars <- cbind(pars, d = pars[,"t0"]*(2*pars[,"DP"]-1))
       attr(pars,"ok") <-
         !( abs(pars[,"v"])> 20 | pars[,"a"]> 10 | pars[,"sv"]> 10 | pars[,"SZ"]> .999 |
-           pars[,"t0"] > .05 | pars[,"st0"]>.2)
+           pars[,"t0"] < .05 | pars[,"st0"]>.2)
       if (pars[1,"sv"] !=0) attr(pars,"ok") <- attr(pars,"ok") & pars[,"sv"] > .001
       if (pars[1,"SZ"] !=0) attr(pars,"ok") <- attr(pars,"ok") & pars[,"SZ"] > .001
       pars
     },
     # Random function
-    rfun=function(lR,pars) {
+    rfun=function(lR=NULL,pars) {
       ok <- !( abs(pars[,"v"])> 20 | pars[,"a"]> 10 | pars[,"sv"]> 10 | pars[,"SZ"]> .999 |
-                 pars[,"t0"] > .05 | pars[,"st0"]>.2)
+                 pars[,"t0"] < .05 | pars[,"st0"]>.2)
       if (pars[1,"sv"] !=0) attr(pars,"ok") <- attr(pars,"ok") & pars[,"sv"] > .001
       if (pars[1,"SZ"] !=0) attr(pars,"ok") <- attr(pars,"ok") & pars[,"SZ"] > .001
-      rDDM(lR,pars,precision=2.5,ok)
+      if (is.null(lR)) ok else rDDM(lR,pars,precision=2.5,ok)
     },
     # Density function (PDF)
     dfun=function(rt,R,pars) dDDM(rt,R,pars,precision=2.5),
