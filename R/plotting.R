@@ -103,21 +103,22 @@ plot_acfs <- function(samples,layout=NULL,subject=1,
   }
 }
 
-#' Uses output from plot_density to plot true vs. estimated (median with CI) alpha
+#' plot_alpha_recovery
+#' Uses output from plot_pars to plot true vs. estimated (median with CI) alpha
 #' parameters for each subject (plot density must be called with true values passed
 #' through the pars argument).
 #'
-#' @param tabs Tables of actual and estimated alpha parameters (with CIs) from plot_density
+#' @param tabs Tables of actual and estimated alpha parameters (with CIs) from plot_pars
 #' @param layout A 2-vector specifying the layout as in par(mfrow = layout)
-#' @param do_ci Boolean (Defualt TRUE). Add CIs to plot?
+#' @param do_ci Boolean (Default TRUE). Add CIs to plot?
 #' @param ci_col Color of CI.
 #' @param cap Width of CI cap (passed to arrows)
-#' @param do_rmse Boolean (defualt FALSE) Add root-mean squared error to plot
+#' @param do_rmse Boolean (default FALSE) Add root-mean squared error to plot
 #' instead of default Pearson correlation
 #' @param r_pos Position of Pearson/RMSE (passed to legend)
 #' @param rmse_digits Digits for RMSE
 #' @param pearson_digits Digits for Pearson correlation
-#' @param do_coverage Boolean (defualt TRUE) add coverage percentage estimate (otherwise
+#' @param do_coverage Boolean (default TRUE) add coverage percentage estimate (otherwise
 #' add Spearman correlation)
 #' @param coverage_pos Position of Coverage/Pearson (passed to legend)
 #' @param coverage_digits Digits for coverage
@@ -130,9 +131,9 @@ plot_alpha_recovery <- function(tabs,layout=c(2,3),
                                 do_ci = TRUE,ci_col="grey",cap=.05,
                                 do_rmse=FALSE,r_pos="topleft",
                                 rmse_digits=3,pearson_digits=2,
-                                do_coverage=FALSE,coverage_pos="bottomright",
+                                do_coverage=TRUE,coverage_pos="bottomright",
                                 coverage_digits=1,spearman_digits=2)
-  # Takes tables output by plot_density with par and plots recovery
+  # Takes tables output by plot_pars with par and plots recovery
 {
   par(mfrow=layout)
   pnams <- dimnames(tabs[[1]])[[2]]
@@ -291,9 +292,10 @@ plot_defective_density <- function(data,subject=NULL,factors=NULL,
 #' @param do_plot Boolean (default TRUE) do plot
 #' @param subject Integer or character vector, if selection = "alpha" picks out
 #' subject(s) (default NA plots all).
-#' @param add_means Boolean (default FALSE) add parameter means as an attirbute
+#' @param add_means Boolean (default FALSE) add parameter means as an attribute
 #' to return
-#' @param pars Named vector of true parameters.
+#' @param pars Named vector or matrix of true parameters, or the output of
+#' plot_pars, in which case the posterior medians are extracted.
 #' @param probs Vector (default c(.025,.5,.975)) for CI and central tendency of return
 #' @param bw Bandwidth for density plot (see density)
 #' @param adjust Adjustment for density plot (see density)
@@ -306,7 +308,7 @@ plot_defective_density <- function(data,subject=NULL,factors=NULL,
 #'
 #' @export
 
-plot_density <- function(pmwg_mcmc,layout=c(2,3),
+plot_pars <- function(pmwg_mcmc,layout=c(2,3),
   selection="alpha",filter="sample",thin=1,subfilter=0,mapped=FALSE,
   plot_prior=TRUE,n_prior=1e3,xlim=NULL,ylim=NULL,prior_xlim=NULL,
   show_chains=FALSE,do_plot=TRUE,subject=NA,add_means=FALSE,
@@ -344,6 +346,8 @@ plot_density <- function(pmwg_mcmc,layout=c(2,3),
     warning("Prior plots not implemented for show_chains=TRUE")
 
   if (do_contraction & !plot_prior) do_contraction <- FALSE
+
+  if (is.list(pars)) pars <- do.call(rbind,lapply(pars,function(x)x[2,]))
 
   if (!(inherits(pmwg_mcmc, c("mcmc","mcmc.list")))) {
     if (plot_prior) {
