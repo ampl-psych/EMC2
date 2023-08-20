@@ -1,21 +1,3 @@
-transformN=function(pars,bounds)
-  # Not presently used ...
-{
-
-  trans <- function(p,b) {
-    if (!any(is.na(b))) {       # logit
-      b[1] + plogis(p)*diff(b)
-    } else if (is.na(b[2])) {   # log
-      b[1] + exp(p)
-    } else if (is.na(b[1])) {   # reverse log
-      b[2] - exp(p)
-    } else p                    # no transform
-  }
-
-  for (i in dimnames(pars)[[2]]) pars[,i] <- trans(pars[,i],bounds[[i]])
-  pars
-}
-
 get_pars <- function(p_vector,dadm) {
   # Add constants, transform p_vector, map to design, transform mapped parameters
   # to the natural scale, and create trial-dependent parameters
@@ -167,6 +149,7 @@ map_mcmc <- function(mcmc,design,model, include_constants = TRUE)
   pmat <- do.call(cbind,plist)
   cnams <- dimnames(pmat)[[2]]
   dimnames(pmat)[[2]] <- get_p_types(cnams)
+  out <- model()$Ntransform(pmat)[,1:length(cnams)]
   dimnames(out)[[2]] <- cnams
   if(!include_constants) out <- out[,!isConstant]
   out <- as.mcmc(out)
