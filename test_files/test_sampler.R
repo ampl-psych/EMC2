@@ -25,8 +25,8 @@ design_B <- make_design(
   constants=c(sv=log(1)),
   model=lbaB)
 
-prior <- get_prior_single(design = design_B)
-plot_prior(prior)
+# prior <- get_prior_single(design = design_B)
+# plot_prior(prior)
 
 prior <- list(
   theta_mu_mean = 1:5,
@@ -38,7 +38,7 @@ dat2$subjects <- droplevels(dat2$subjects)
 
 # Nuisance non hyper = non hierarchically estimated parameters
 devtools::load_all()
-
+debug(design_model)
 samplers <- make_samplers(dat2, design_B, type = "standard")
 samplers <- run_emc(samplers, verbose = T, cores_for_chains = 3, cores_per_chain = 4)
 
