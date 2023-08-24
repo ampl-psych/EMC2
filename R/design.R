@@ -11,6 +11,8 @@
 #'
 #' @param Rlevels A character vector. Contains the response factor levels.
 #' @param model A function, Specifies the model type.
+#' @param ddata A data frame that is used to determine Ffactors, Rlevels and Fcovariates,
+#' in which case these arguments can be left NULL.
 #' @param Clist A list. Contrast list.
 #' @param matchfun A function. Specifies whether a response was correct or not.
 #'
@@ -27,7 +29,7 @@
 #' @export
 #'
 #'
-make_design <- function(Flist = NULL,Ffactors = NULL,Rlevels = NULL,model,
+make_design <- function(Flist = NULL,Ffactors = NULL,Rlevels = NULL,model,ddata=NULL,
                         Clist=NULL,matchfun=NULL,constants=NULL,Fcovariates=NULL,Ffunctions=NULL,
                         adapt=NULL,report_p_vector=TRUE, custom_p_vector = NULL){
   if(!is.null(custom_p_vector)){
@@ -36,7 +38,16 @@ make_design <- function(Flist = NULL,Ffactors = NULL,Rlevels = NULL,model,
     attr(design, "custom_ll") <- TRUE
     return(design)
   }
-  # Frees up memory again by creating new enclosing environements, courtesy of Steven
+  if (!is.null(ddata)) {
+    facs <- lapply(ddata,levels)
+    nfacs <- facs[unlist(lapply(facs,is.null))]
+    facs <- facs[!unlist(lapply(facs,is.null))]
+    Rlevels <- facs[["R"]]
+    Ffactors <- facs[names(facs)!="R"]
+    nfacs <- nfacs[names(nfacs) != "rt"]
+    if (length(nfacs)>0) Fcovariates <- nfacs
+  }
+  # Frees up memory again by creating new enclosing environments, courtesy of Steven
   if(!is.null(Ffunctions)){
     Ffunctions <- lapply(Ffunctions, function(f) {environment(f) <- new.env(parent=globalenv()); return(f)})
   }
