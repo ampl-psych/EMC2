@@ -36,8 +36,15 @@ make_design <- function(Flist = NULL,Ffactors = NULL,Rlevels = NULL,model,
     attr(design, "custom_ll") <- TRUE
     return(design)
   }
-
-
+  # Frees up memory again by creating new enclosing environements, courtesy of Steven
+  if(!is.null(Ffunctions)){
+    Ffunctions <- lapply(Ffunctions, function(f) {environment(f) <- new.env(parent=globalenv()); return(f)})
+  }
+  if(!is.null(Flist)) {
+    Flist <- lapply(Flist, function(f) {environment(f) <- new.env(parent=globalenv()); return(f)})
+  }
+  if(!is.null(model)) environment(model) <- new.env(parent=globalenv())
+  if(!is.null(matchfun)) environment(matchfun) <- new.env(parent=globalenv())
   if (model()$type=="SDT") {
     Clist[["lR"]] <- contr.increasing(length(Rlevels),Rlevels)
   }

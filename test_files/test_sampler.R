@@ -40,7 +40,7 @@ dat2$subjects <- droplevels(dat2$subjects)
 devtools::load_all()
 debug(design_model)
 samplers <- make_samplers(dat2, design_B, type = "standard")
-samplers <- run_emc(samplers, verbose = T, cores_for_chains = 3, cores_per_chain = 4)
+samplers <- run_emc(samplers, verbose = T, cores_for_chains = 4, cores_per_chain = 3)
 
 debug(IS2)
 samplers <- run_IS2(samplers, IS_samples = 50, n_cores = 14)

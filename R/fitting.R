@@ -118,13 +118,16 @@ run_samplers <- function(samplers, stage, iter = NULL, max_gd = NULL, mean_gd = 
   iter <- iter + total_iters_stage
   progress <- check_progress(samplers, stage, iter, max_gd, mean_gd, min_es, min_unique, max_trys, step_size, cores_per_chain, verbose)
   samplers <- progress$samplers
+  progress <- progress[!names(progress) == 'samplers'] # Frees up memory, courtesy of Steven
   while(!progress$done){
-    if(!is.numeric(progress$step_size) | progress$step_size < 1) warning("Something wrong with the stepsize again, Niek's to blame")
     samplers <- add_proposals(samplers, stage, cores_per_chain, n_blocks)
     samplers <- auto_mclapply(samplers,run_stages, stage = stage, iter= progress$step_size,
                                    verbose=verbose,  verboseProgress = verboseProgress,
                                    particles=particles,particle_factor=particle_factor,
                                    p_accept=p_accept, n_cores=cores_per_chain, mc.cores = cores_for_chains)
+    for(i in 2:length(samplers)){ # Frees up memory, courtesy of Steven
+      samplers[[i]]$data <- samplers[[1]]$data
+    }
     progress <- check_progress(samplers, stage, iter, max_gd, mean_gd, min_es, min_unique, max_trys, step_size, cores_per_chain,
                                verbose, progress)
     samplers <- progress$samplers
