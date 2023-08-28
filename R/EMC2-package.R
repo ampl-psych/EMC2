@@ -53,6 +53,8 @@
 #' @importFrom stats terms
 #' @importFrom stats update
 #' @importFrom stats var
+#' @importFrom graphics hist pairs rect text
+#' @importFrom stats dgamma
 #' @useDynLib EMC2, .registration = TRUE
 ## usethis namespace: end
 NULL
