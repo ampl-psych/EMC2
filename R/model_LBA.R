@@ -95,6 +95,18 @@
 # }
 #
 #
+
+#' dLBA
+#'
+#' @param rt
+#' @param pars
+#' @param posdrift
+#' @param robust
+#'
+#' @return
+#' @export
+#'
+#' @examples
 dLBA <- function (rt, pars, posdrift = TRUE, robust = FALSE)
   # posdrift = truncated positive normal rates
   # robust slower, deals with extreme rate values
@@ -110,6 +122,17 @@ dLBA <- function (rt, pars, posdrift = TRUE, robust = FALSE)
 }
 
 
+#' pLBA
+#'
+#' @param rt
+#' @param pars
+#' @param posdrift
+#' @param robust
+#'
+#' @return
+#' @export
+#'
+#' @examples
 pLBA <- function (rt, pars, posdrift = TRUE, robust = FALSE)
   # posdrift = truncated positive normal rates
   # robust slower, deals with extreme rate values
@@ -126,6 +149,18 @@ pLBA <- function (rt, pars, posdrift = TRUE, robust = FALSE)
 #
 #### random
 
+#' rLBA
+#'
+#' @param lR
+#' @param pars
+#' @param p_types
+#' @param posdrift
+#' @param ok
+#'
+#' @return
+#' @export
+#'
+#' @examples
 rLBA <- function(lR,pars,p_types=c("v","sv","b","A","t0"),posdrift = TRUE,
                  ok=rep(TRUE,length(lR)))
   # lR is an empty latent response factor lR with one level for each accumulator.
