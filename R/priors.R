@@ -63,7 +63,7 @@ get_prior_samples <- function(samples,selection,filter,thin,subfilter,n_prior)
 #' @param layout par(mfrow) setting (default c(3,3))
 #' @param lower Lower quantile limit of values plotted. Default NULL all plotted,
 #' integer same for all parameters, parameter named list parameter specific
-#' @param lower Upper quantile limit of values plotted. Default NULL all plotted,
+#' @param upper Upper quantile limit of values plotted. Default NULL all plotted,
 #' integer same for all parameters, parameter named list parameter specific
 #' @param xlim List with parameter names of plot x limits or single pair same for all.
 #' Any names not in list or if (defualt) NA xlim set as min and max.
