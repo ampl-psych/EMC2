@@ -46,7 +46,10 @@ prior (mean=0, varaince = 1, uncorrelaterd)}
 
 \item{layout}{par(mfrow) setting (default c(3,3))}
 
-\item{lower}{Upper quantile limit of values plotted. Default NULL all plotted,
+\item{lower}{Lower quantile limit of values plotted. Default NULL all plotted,
+integer same for all parameters, parameter named list parameter specific}
+
+\item{upper}{Upper quantile limit of values plotted. Default NULL all plotted,
 integer same for all parameters, parameter named list parameter specific}
 
 \item{xlim}{List with parameter names of plot x limits or single pair same for all.
