@@ -649,7 +649,6 @@ make_samplers <- function(data_list,design_list,model_list=NULL,
   rt_resolution <- rep(rt_resolution,length.out=length(data_list))
   for (i in 1:length(dadm_list)) {
     message("Processing data set ",i)
-
     # if (!is.null(design_list[[i]]$Ffunctions)) {
     #   pars <- attr(data_list[[i]],"pars")
     #   data_list[[i]] <- cbind.data.frame(data_list[[i]],data.frame(lapply(
@@ -686,7 +685,7 @@ make_samplers <- function(data_list,design_list,model_list=NULL,
     # create a design model
     if(is.null(attr(design_list[[i]], "custom_ll"))){
       dadm_list[[i]] <- design_model(data=data_list[[i]],design=design_list[[i]],
-        compres=compress,model=model_list[[i]],rt_resolution=rt_resolution[i])
+        compress=compress,model=model_list[[i]],rt_resolution=rt_resolution[i])
     } else{
       dadm_list[[i]] <- design_model_custom_ll(data = data_list[[i]],
         design = design_list[[i]],model=model_list[[i]], compress=compress)
