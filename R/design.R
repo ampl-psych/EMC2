@@ -276,7 +276,7 @@ design_model <- function(data,design,model=NULL,prior = NULL,
     # Make sure that if row is included for a trial so are other rows
     nacc <- length(unique(da$lR))
     if (nacc>1) cells <- paste0(rep(apply(matrix(cells,nrow=nacc),2,paste0,collapse="_"),
-                      each=nacc),rep(1:nacc,times=length(tmp)/nacc),sep="_")
+                      each=nacc),rep(1:nacc,times=length(cells)/nacc),sep="_")
     if (!is.null(Fcov))
       cells <- paste(cells,apply(da[,names(Fcov),drop=FALSE],1,paste,collapse="+"),sep="+")
     if (!is.null(Ffun))
@@ -471,7 +471,7 @@ design_model <- function(data,design,model=NULL,prior = NULL,
     stop("Constant(s) ",paste(bad_constants,collapse=" ")," not in design")
 
   # Pick out constants
-  sampled_p_names <- p_names[!(p_names %in% names(design$constants))]
+  sampled_p_names <- p_names[!names(p)]
 
   if(!is.null(prior)) {
     if(length(prior$theta_mu_mean) != length(sampled_p_names))
