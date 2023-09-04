@@ -1,3 +1,14 @@
+#' rDDM
+#'
+#' @param lR
+#' @param pars
+#' @param precision
+#' @param ok
+#'
+#' @return
+#' @export
+#'
+#' @examples
 rDDM <- function(lR,pars,precision=2.5,ok=rep(TRUE,length(lR)))
   # lR is an empty latent response factor lR with one level for each boundary
   # pars is a matrix of parameter values named as in p_types
@@ -17,6 +28,17 @@ rDDM <- function(lR,pars,precision=2.5,ok=rep(TRUE,length(lR)))
   cbind.data.frame(R=factor(out[,"response"],levels=1:2,labels=levels(lR)),rt=out[,"rt"])
 }
 
+#' dDDM
+#'
+#' @param rt
+#' @param R
+#' @param pars
+#' @param precision
+#'
+#' @return
+#' @export
+#'
+#' @examples
 dDDM <- function(rt,R,pars,precision=2.5)
   # DDM density for response factor R with rt
   # lower is mapped to first level of R and upper to second
@@ -32,6 +54,17 @@ dDDM <- function(rt,R,pars,precision=2.5)
 }
 
 
+#' pDDM
+#'
+#' @param rt
+#' @param R
+#' @param pars
+#' @param precision
+#'
+#' @return
+#' @export
+#'
+#' @examples
 pDDM <- function(rt,R,pars,precision=2.5)
   # DDM cdf for response factor R with rt
   # lower is mapped to first level of R and upper to second

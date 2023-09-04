@@ -1024,7 +1024,7 @@ pairs_posterior <- function(samples,filter="sample",thin=1,subfilter=0,mapped=FA
 #' @param main Plot title
 #' @param cores Number of likelihood points to calculate in parallel
 #'
-#' @return vector with value of p[pname], highest likelihood point and p[pname]
+#' @return vector with value of p(pname), highest likelihood point and p(pname)
 #' minus the parameter values at that point
 #' @export
 
