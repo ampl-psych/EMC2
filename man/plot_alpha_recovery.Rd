@@ -2,7 +2,8 @@
 % Please edit documentation in R/plotting.R
 \name{plot_alpha_recovery}
 \alias{plot_alpha_recovery}
-\title{Uses output from plot_density to plot true vs. estimated (median with CI) alpha
+\title{plot_alpha_recovery
+Uses output from plot_pars to plot true vs. estimated (median with CI) alpha
 parameters for each subject (plot density must be called with true values passed
 through the pars argument).}
 \usage{
@@ -16,24 +17,24 @@ plot_alpha_recovery(
   r_pos = "topleft",
   rmse_digits = 3,
   pearson_digits = 2,
-  do_coverage = FALSE,
+  do_coverage = TRUE,
   coverage_pos = "bottomright",
   coverage_digits = 1,
   spearman_digits = 2
 )
 }
 \arguments{
-\item{tabs}{Tables of actual and estimated alpha parameters (with CIs) from plot_density}
+\item{tabs}{Tables of actual and estimated alpha parameters (with CIs) from plot_pars}
 
 \item{layout}{A 2-vector specifying the layout as in par(mfrow = layout)}
 
-\item{do_ci}{Boolean (Defualt TRUE). Add CIs to plot?}
+\item{do_ci}{Boolean (Default TRUE). Add CIs to plot?}
 
 \item{ci_col}{Color of CI.}
 
 \item{cap}{Width of CI cap (passed to arrows)}
 
-\item{do_rmse}{Boolean (defualt FALSE) Add root-mean squared error to plot
+\item{do_rmse}{Boolean (default FALSE) Add root-mean squared error to plot
 instead of default Pearson correlation}
 
 \item{r_pos}{Position of Pearson/RMSE (passed to legend)}
@@ -42,7 +43,7 @@ instead of default Pearson correlation}
 
 \item{pearson_digits}{Digits for Pearson correlation}
 
-\item{do_coverage}{Boolean (defualt TRUE) add coverage percentage estimate (otherwise
+\item{do_coverage}{Boolean (default TRUE) add coverage percentage estimate (otherwise
 add Spearman correlation)}
 
 \item{coverage_pos}{Position of Coverage/Pearson (passed to legend)}
@@ -55,7 +56,8 @@ add Spearman correlation)}
 Invisible list with RMSE, coverage and Pearson and Spearman correlations.
 }
 \description{
-Uses output from plot_density to plot true vs. estimated (median with CI) alpha
+plot_alpha_recovery
+Uses output from plot_pars to plot true vs. estimated (median with CI) alpha
 parameters for each subject (plot density must be called with true values passed
 through the pars argument).
 }
