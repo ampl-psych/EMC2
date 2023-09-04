@@ -27,7 +27,7 @@
 #' @export
 
 run_emc <- function(samplers, stage = NULL, iter = 1000, max_gd = 1.1, mean_gd = 1.1, min_es = 0, min_unique = 600, preburn = 150,
-                    p_accept = .8, step_size = 100, verbose = TRUE, verboseProgress = FALSE, fileName = NULL,
+                    p_accept = .8, step_size = 100, verbose = FALSE, verboseProgress = FALSE, fileName = NULL,
                     particles = NULL, particle_factor=40, cores_per_chain = 1,
                     cores_for_chains = length(samplers), max_trys = 50, n_blocks = NULL){
   if (is.character(samplers)) {
@@ -118,16 +118,13 @@ run_samplers <- function(samplers, stage, iter = NULL, max_gd = NULL, mean_gd = 
   iter <- iter + total_iters_stage
   progress <- check_progress(samplers, stage, iter, max_gd, mean_gd, min_es, min_unique, max_trys, step_size, cores_per_chain, verbose)
   samplers <- progress$samplers
-  progress <- progress[!names(progress) == 'samplers'] # Frees up memory, courtesy of Steven
   while(!progress$done){
+    if(!is.numeric(progress$step_size) | progress$step_size < 1) warning("Something wrong with the stepsize again, Niek's to blame")
     samplers <- add_proposals(samplers, stage, cores_per_chain, n_blocks)
     samplers <- auto_mclapply(samplers,run_stages, stage = stage, iter= progress$step_size,
                                    verbose=verbose,  verboseProgress = verboseProgress,
                                    particles=particles,particle_factor=particle_factor,
                                    p_accept=p_accept, n_cores=cores_per_chain, mc.cores = cores_for_chains)
-    for(i in 2:length(samplers)){ # Frees up memory, courtesy of Steven
-      samplers[[i]]$data <- samplers[[1]]$data
-    }
     progress <- check_progress(samplers, stage, iter, max_gd, mean_gd, min_es, min_unique, max_trys, step_size, cores_per_chain,
                                verbose, progress)
     samplers <- progress$samplers
@@ -577,6 +574,7 @@ run_sample <- function(samplers, iter = 1000, max_gd = 1.1, mean_gd = NULL, min_
 #' @param model_list A model list, if empty will use the model specified in the design_list.
 #' @param type A string indicating whether to run a standard group-level, or blocked, diagonal, factor, or single.
 #' @param n_chains An integer. Specifies the amount of mcmc chains to be run. Should be more than 1 to get gelman diagnostics.
+#' @param compress Boolean, if true data compressed to speed likelihood calculation
 #' @param rt_resolution A double. Used for compression, rts will be binned based on this resolution.
 #' @param nuisance A integer vector. Parameters on this location of the vector of parameters are treated as nuisance parameters and not included in group-level covariance (only variance).
 #' @param par_groups A vector. Only to be specified with type blocked `c(1,1,1,2,2)` means first three parameters first block, last two parameters in the second block
@@ -594,7 +592,7 @@ run_sample <- function(samplers, iter = 1000, max_gd = 1.1, mean_gd = NULL, min_
 
 make_samplers <- function(data_list,design_list,model_list=NULL,
                           type=c("standard","diagonal","blocked","factor","single", "lm", "infnt_factor")[1],
-                          n_chains=3,rt_resolution=0.02,
+                          n_chains=3,compress=TRUE,rt_resolution=0.02,
                           prior = NULL, nuisance = NULL,
                           nuisance_non_hyper = NULL,
                           grouped_pars = NULL,
@@ -651,19 +649,47 @@ make_samplers <- function(data_list,design_list,model_list=NULL,
   rt_resolution <- rep(rt_resolution,length.out=length(data_list))
   for (i in 1:length(dadm_list)) {
     message("Processing data set ",i)
+
     # if (!is.null(design_list[[i]]$Ffunctions)) {
     #   pars <- attr(data_list[[i]],"pars")
     #   data_list[[i]] <- cbind.data.frame(data_list[[i]],data.frame(lapply(
     #     design_list[[i]]$Ffunctions,function(f){f(data_list[[i]])})))
     #   if (!is.null(pars)) attr(data_list[[i]],"pars") <- pars
     # }
+
+    sampled_p_names <- names(attr(design_list[[i]],"p_vector"))
+    if (is.null(names(prior$theta_mu_mean)))
+      names(prior$theta_mu_mean) <- sampled_p_names
+    if(length(prior$theta_mu_mean) != length(sampled_p_names))
+      stop("prior mu should be same length as estimated parameters (p_vector)")
+    if (!all(sort(names(prior$theta_mu_mean)) == sort(sampled_p_names)))
+      stop("theta_mu_mean names not the same as sampled paramter names")
+    # Make sure theta_mu_mean has same order as sampled parameters
+    pnams <- names(prior$theta_mu_mean)
+    prior$theta_mu_mean <- prior$theta_mu_mean[sampled_p_names]
+    if(!is.matrix(prior$theta_mu_var)) {
+      if(length(prior$theta_mu_var) != length(sampled_p_names))
+        stop("prior theta should be same length as estimated parameters (p_vector)")
+      # Make sure theta_mu_var has same order as sampled parameters
+      names(prior$theta_mu_var) <- pnams
+      prior$theta_mu_var <- prior$theta_mu_var[sampled_p_names]
+    } else {
+      if(nrow(prior$theta_mu_var) != length(sampled_p_names))
+        stop("prior theta should have same number of rows as estimated parameters (p_vector)")
+      if(ncol(prior$theta_mu_var) != length(sampled_p_names))
+        stop("prior theta should have same number of columns as estimated parameters (p_vector)")
+      # Make sure theta_mu_var has same order as sampled parameters
+      dimnames(prior$theta_mu_var) <- list(pnams,pnams)
+      prior$theta_mu_var <- prior$theta_mu_var[sampled_p_names,sampled_p_names]
+    }
+
     # create a design model
     if(is.null(attr(design_list[[i]], "custom_ll"))){
       dadm_list[[i]] <- design_model(data=data_list[[i]],design=design_list[[i]],
-                                   model=model_list[[i]],rt_resolution=rt_resolution[i],prior=prior)
+        compres=compress,model=model_list[[i]],rt_resolution=rt_resolution[i])
     } else{
-      dadm_list[[i]] <- design_model_custom_ll(data = data_list[[i]], design = design_list[[i]],
-                                               model=model_list[[i]], prior=prior)
+      dadm_list[[i]] <- design_model_custom_ll(data = data_list[[i]],
+        design = design_list[[i]],model=model_list[[i]], compress=compress)
     }
   }
 

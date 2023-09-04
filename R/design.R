@@ -199,13 +199,12 @@ add_accumulators <- function(data,matchfun=NULL,simulate=FALSE,type="RACE", Fcov
   }
 }
 
-design_model_custom_ll <- function(data, design, model, prior){
+design_model_custom_ll <- function(data, design, model){
   if (!is.factor(data$subjects)) {
     data$subjects <- factor(data$subjects)
     warning("subjects column was converted to a factor")
   }
   dadm <- data
-  attr(dadm, "prior") <- prior
   model_input <- model
   attr(dadm, "model") <- function(){
     return(list(log_likelihood = model_input))
@@ -217,8 +216,8 @@ design_model_custom_ll <- function(data, design, model, prior){
 }
 
 
-#' Combines a data frame with a design and (optionally) a user-specified prior,
-#' to create a data augmented design model ("dadm") object. Augmentation
+#' Combines a data frame with a design to create
+#' a data augmented design model ("dadm") object. Augmentation
 #' refers to replicating the data with one row for each accumulator.
 #'
 #' Usually called by make_samplers rather than directly by the user, except
@@ -232,7 +231,6 @@ design_model_custom_ll <- function(data, design, model, prior){
 #' @param data  data frame
 #' @param design matching design
 #' @param model if model not an attribute of design can be supplied here
-#' @param prior list specifying prior (default NULL uses default prior)
 #' @param add_acc default TRUE creates and 'augmented' data frame, which
 #' replicates and stacks the supplied data frame for each accumulator and
 #' adds factors to represent accumulators: lR = latent response, with a level
@@ -247,11 +245,11 @@ design_model_custom_ll <- function(data, design, model, prior){
 #' are respected.
 #'
 #' @return a (possibly) augmented and compressed data frame with attributes
-#' specifying the design, prior and how to decompress ready supporting likelihood
+#' specifying the design and how to decompress ready supporting likelihood
 #' computation
 #' @export
 
-design_model <- function(data,design,model=NULL,prior = NULL,
+design_model <- function(data,design,model=NULL,
                          add_acc=TRUE,rt_resolution=0.02,verbose=TRUE,
                          compress=TRUE,rt_check=TRUE)
   # Flist is a list of formula objects, one for each p_type
@@ -273,8 +271,14 @@ design_model <- function(data,design,model=NULL,prior = NULL,
       apply(do.call(cbind,lapply(designs,function(x){
         apply(x[attr(x,"expand"),,drop=FALSE],1,paste,collapse="_")})
       ),1,paste,collapse="+"),da$subjects,da$R,da$lR,da$rt,sep="+")
-    if (!is.null(Fcov)) cells <- paste(cells,apply(da[,names(Fcov),drop=FALSE],1,paste,collapse="+"),sep="+")
-    if (!is.null(Ffun)) cells <- paste(cells,apply(da[,Ffun,drop=FALSE],1,paste,collapse="+"),sep="+")
+    # Make sure that if row is included for a trial so are other rows
+    nacc <- length(unique(da$lR))
+    if (nacc>1) cells <- paste0(rep(apply(matrix(cells,nrow=nacc),2,paste0,collapse="_"),
+                      each=nacc),rep(1:nacc,times=length(cells)/nacc),sep="_")
+    if (!is.null(Fcov))
+      cells <- paste(cells,apply(da[,names(Fcov),drop=FALSE],1,paste,collapse="+"),sep="+")
+    if (!is.null(Ffun))
+      cells <- paste(cells,apply(da[,Ffun,drop=FALSE],1,paste,collapse="+"),sep="+")
     contract <- !duplicated(cells)
     out <- da[contract,,drop=FALSE]
     attr(out,"contract") <- contract
@@ -423,13 +427,6 @@ design_model <- function(data,design,model=NULL,prior = NULL,
     da <- cbind.data.frame(da,newF)
   }
 
-
-  # # NOT SURE THIS IS NEEDED, BUT CANT HURT
-  # # Add dummy content for covariates in sampled_p_vector calls
-  # da[!(names(da) %in% c("R","rt"))] <-
-  #   data.frame(lapply(da[!(names(da) %in% c("R","rt"))],function(x){
-  #     if (all(is.na(x))) rep(0,length(x)) else x}))
-
   if (is.null(model()$p_types) | is.null(model()$transform) |
       is.null(model()$Ntransform) | is.null(model()$Ttransform))
     stop("p_types, transform and Ntransform must be supplied")
@@ -474,35 +471,6 @@ design_model <- function(data,design,model=NULL,prior = NULL,
   # Pick out constants
   sampled_p_names <- p_names[!(p_names %in% names(design$constants))]
 
-  if(!is.null(prior)) {
-    if(length(prior$theta_mu_mean) != length(sampled_p_names))
-      stop("prior mu should be same length as estimated parameters (p_vector)")
-    if (is.null(names(prior$theta_mu_mean)))
-      stop("theta_mu_mean must have names")
-    if (!all(sort(names(prior$theta_mu_mean)) == sort(sampled_p_names)))
-      stop("theta_mu_mean names not the same as sampled paramter names")
-    # Make sure theta_mu_mean has same order as sampled parameters
-    pnams <- names(prior$theta_mu_mean)
-    prior$theta_mu_mean <- prior$theta_mu_mean[sampled_p_names]
-    if(!is.matrix(prior$theta_mu_var)) {
-      if(length(prior$theta_mu_var) != length(sampled_p_names))
-        stop("prior theta should be same length as estimated parameters (p_vector)")
-      # Make sure theta_mu_var has same order as sampled parameters
-      names(prior$theta_mu_var) <- pnams
-      prior$theta_mu_var <- prior$theta_mu_var[sampled_p_names]
-    } else {
-      if(nrow(prior$theta_mu_var) != length(sampled_p_names))
-        stop("prior theta should have same number of rows as estimated parameters (p_vector)")
-      if(ncol(prior$theta_mu_var) != length(sampled_p_names))
-        stop("prior theta should have same number of columns as estimated parameters (p_vector)")
-      # Make sure theta_mu_var has same order as sampled parameters
-      dimnames(prior$theta_mu_var) <- list(pnams,pnams)
-      prior$theta_mu_var <- prior$theta_mu_var[sampled_p_names,sampled_p_names]
-    }
-
-  }
-
-  attr(dadm, "prior") <- prior
   attr(dadm,"p_names") <- p_names
   attr(dadm,"model") <- model
   attr(dadm,"constants") <- design$constants
