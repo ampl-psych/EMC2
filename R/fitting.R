@@ -649,19 +649,47 @@ make_samplers <- function(data_list,design_list,model_list=NULL,
   rt_resolution <- rep(rt_resolution,length.out=length(data_list))
   for (i in 1:length(dadm_list)) {
     message("Processing data set ",i)
+
     # if (!is.null(design_list[[i]]$Ffunctions)) {
     #   pars <- attr(data_list[[i]],"pars")
     #   data_list[[i]] <- cbind.data.frame(data_list[[i]],data.frame(lapply(
     #     design_list[[i]]$Ffunctions,function(f){f(data_list[[i]])})))
     #   if (!is.null(pars)) attr(data_list[[i]],"pars") <- pars
     # }
+
+    sampled_p_names <- names(attr(design_list[[i]],"p_vector"))
+    if (is.null(names(prior$theta_mu_mean)))
+      names(prior$theta_mu_mean) <- sampled_p_names
+    if(length(prior$theta_mu_mean) != length(sampled_p_names))
+      stop("prior mu should be same length as estimated parameters (p_vector)")
+    if (!all(sort(names(prior$theta_mu_mean)) == sort(sampled_p_names)))
+      stop("theta_mu_mean names not the same as sampled paramter names")
+    # Make sure theta_mu_mean has same order as sampled parameters
+    pnams <- names(prior$theta_mu_mean)
+    prior$theta_mu_mean <- prior$theta_mu_mean[sampled_p_names]
+    if(!is.matrix(prior$theta_mu_var)) {
+      if(length(prior$theta_mu_var) != length(sampled_p_names))
+        stop("prior theta should be same length as estimated parameters (p_vector)")
+      # Make sure theta_mu_var has same order as sampled parameters
+      names(prior$theta_mu_var) <- pnams
+      prior$theta_mu_var <- prior$theta_mu_var[sampled_p_names]
+    } else {
+      if(nrow(prior$theta_mu_var) != length(sampled_p_names))
+        stop("prior theta should have same number of rows as estimated parameters (p_vector)")
+      if(ncol(prior$theta_mu_var) != length(sampled_p_names))
+        stop("prior theta should have same number of columns as estimated parameters (p_vector)")
+      # Make sure theta_mu_var has same order as sampled parameters
+      dimnames(prior$theta_mu_var) <- list(pnams,pnams)
+      prior$theta_mu_var <- prior$theta_mu_var[sampled_p_names,sampled_p_names]
+    }
+
     # create a design model
     if(is.null(attr(design_list[[i]], "custom_ll"))){
       dadm_list[[i]] <- design_model(data=data_list[[i]],design=design_list[[i]],
-        compres=compress,model=model_list[[i]],rt_resolution=rt_resolution[i],prior=prior)
+        compres=compress,model=model_list[[i]],rt_resolution=rt_resolution[i])
     } else{
       dadm_list[[i]] <- design_model_custom_ll(data = data_list[[i]],
-        design = design_list[[i]],model=model_list[[i]], prior=prior,compress=compress)
+        design = design_list[[i]],model=model_list[[i]], compress=compress)
     }
   }
 
