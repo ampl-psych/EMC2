@@ -273,8 +273,14 @@ design_model <- function(data,design,model=NULL,prior = NULL,
       apply(do.call(cbind,lapply(designs,function(x){
         apply(x[attr(x,"expand"),,drop=FALSE],1,paste,collapse="_")})
       ),1,paste,collapse="+"),da$subjects,da$R,da$lR,da$rt,sep="+")
-    if (!is.null(Fcov)) cells <- paste(cells,apply(da[,names(Fcov),drop=FALSE],1,paste,collapse="+"),sep="+")
-    if (!is.null(Ffun)) cells <- paste(cells,apply(da[,Ffun,drop=FALSE],1,paste,collapse="+"),sep="+")
+    # Make sure that if row is included for a trial so are other rows
+    nacc <- length(unique(da$lR))
+    if (nacc>1) cells <- paste0(rep(apply(matrix(cells,nrow=nacc),2,paste0,collapse="_"),
+                      each=nacc),rep(1:nacc,times=length(tmp)/nacc),sep="_")
+    if (!is.null(Fcov))
+      cells <- paste(cells,apply(da[,names(Fcov),drop=FALSE],1,paste,collapse="+"),sep="+")
+    if (!is.null(Ffun))
+      cells <- paste(cells,apply(da[,Ffun,drop=FALSE],1,paste,collapse="+"),sep="+")
     contract <- !duplicated(cells)
     out <- da[contract,,drop=FALSE]
     attr(out,"contract") <- contract
@@ -422,13 +428,6 @@ design_model <- function(data,design,model=NULL,prior = NULL,
     newF <- stats::setNames(data.frame(design$Ffunctions[[i]](da)),i)
     da <- cbind.data.frame(da,newF)
   }
-
-
-  # # NOT SURE THIS IS NEEDED, BUT CANT HURT
-  # # Add dummy content for covariates in sampled_p_vector calls
-  # da[!(names(da) %in% c("R","rt"))] <-
-  #   data.frame(lapply(da[!(names(da) %in% c("R","rt"))],function(x){
-  #     if (all(is.na(x))) rep(0,length(x)) else x}))
 
   if (is.null(model()$p_types) | is.null(model()$transform) |
       is.null(model()$Ntransform) | is.null(model()$Ttransform))
