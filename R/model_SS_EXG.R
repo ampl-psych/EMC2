@@ -347,8 +347,14 @@ SSexGaussian <- function() {
       # Stop probability integral
     sfun=function(pars,n_acc) pstopEXG(pars,n_acc),
     # Random function for SS race
-    rfun=function(lR,pars) rSSexGaussian(lR,pars,
-      staircase0=.2,stairstep=.05,stairmin=0,stairmax=Inf),
+    rfun=function(lR=NULL,pars) {
+      ok <- (pars[,"t0"] > .05) & ((pars[,"A"] > 1e-6) | pars[,"A"] == 0) &
+        (pars[,"tauS"] > 1e-3) & (pars[,"sigmaS"] > 1e-3) & (pars[,"muS"] > 1e-3) &
+        (pars[,"tauS"] < 1) & (pars[,"sigmaS"] < 1) &
+        ((pars[,"tf"] > 1e-6) | pars[,"tf"] == 0) & ((pars[,"gf"] > 1e-6) | pars[,"gf"] == 0)
+      if (is.null(lR)) ok else rSSexGaussian(lR,pars,ok=ok,
+      staircase0=.2,stairstep=.05,stairmin=0,stairmax=Inf)
+    },
     # Race likelihood combining pfun and dfun
     log_likelihood=function(p_vector,dadm,min_ll=log(1e-10))
       log_likelihood_race_ss(p_vector=p_vector, dadm = dadm, min_ll = min_ll)
