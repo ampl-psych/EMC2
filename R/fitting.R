@@ -574,6 +574,7 @@ run_sample <- function(samplers, iter = 1000, max_gd = 1.1, mean_gd = NULL, min_
 #' @param model_list A model list, if empty will use the model specified in the design_list.
 #' @param type A string indicating whether to run a standard group-level, or blocked, diagonal, factor, or single.
 #' @param n_chains An integer. Specifies the amount of mcmc chains to be run. Should be more than 1 to get gelman diagnostics.
+#' @param compress Boolean, if true data compressed to speed likelihood calculation
 #' @param rt_resolution A double. Used for compression, rts will be binned based on this resolution.
 #' @param nuisance A integer vector. Parameters on this location of the vector of parameters are treated as nuisance parameters and not included in group-level covariance (only variance).
 #' @param par_groups A vector. Only to be specified with type blocked `c(1,1,1,2,2)` means first three parameters first block, last two parameters in the second block
@@ -591,7 +592,7 @@ run_sample <- function(samplers, iter = 1000, max_gd = 1.1, mean_gd = NULL, min_
 
 make_samplers <- function(data_list,design_list,model_list=NULL,
                           type=c("standard","diagonal","blocked","factor","single", "lm", "infnt_factor")[1],
-                          n_chains=3,rt_resolution=0.02,
+                          n_chains=3,compress=TRUE,rt_resolution=0.02,
                           prior = NULL, nuisance = NULL,
                           nuisance_non_hyper = NULL,
                           grouped_pars = NULL,
@@ -657,10 +658,10 @@ make_samplers <- function(data_list,design_list,model_list=NULL,
     # create a design model
     if(is.null(attr(design_list[[i]], "custom_ll"))){
       dadm_list[[i]] <- design_model(data=data_list[[i]],design=design_list[[i]],
-                                   model=model_list[[i]],rt_resolution=rt_resolution[i],prior=prior)
+        compres=compress,model=model_list[[i]],rt_resolution=rt_resolution[i],prior=prior)
     } else{
-      dadm_list[[i]] <- design_model_custom_ll(data = data_list[[i]], design = design_list[[i]],
-                                               model=model_list[[i]], prior=prior)
+      dadm_list[[i]] <- design_model_custom_ll(data = data_list[[i]],
+        design = design_list[[i]],model=model_list[[i]], prior=prior,compress=compress)
     }
   }
 
