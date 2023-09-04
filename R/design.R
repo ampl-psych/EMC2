@@ -12,7 +12,9 @@
 #' @param Rlevels A character vector. Contains the response factor levels.
 #' @param model A function, Specifies the model type.
 #' @param ddata A data frame that is used to determine Ffactors, Rlevels and Fcovariates,
-#' in which case these arguments can be left NULL.
+#' in which case these arguments can be left NULL. Any numeric column except trials and
+#' rt are made into covariates, R factor column makes Rlevels, and remaining factor
+#' columns are used in Ffactors.
 #' @param Clist A list. Contrast list.
 #' @param matchfun A function. Specifies whether a response was correct or not.
 #'
@@ -44,7 +46,7 @@ make_design <- function(Flist = NULL,Ffactors = NULL,Rlevels = NULL,model,ddata=
     facs <- facs[!unlist(lapply(facs,is.null))]
     Rlevels <- facs[["R"]]
     Ffactors <- facs[names(facs)!="R"]
-    nfacs <- nfacs[names(nfacs) != "rt"]
+    nfacs <- nfacs[!(names(nfacs) %in% c("trials","rt"))]
     if (length(nfacs)>0) Fcovariates <- nfacs
   }
   # Frees up memory again by creating new enclosing environments, courtesy of Steven
@@ -266,13 +268,13 @@ design_model <- function(data,design,model=NULL,
     # out keeps only unique rows in terms of all parameters design matrices
     # R, lR and rt (at given resolution) from full data set
   {
+    nacc <- length(unique(da$lR))
     # contract output
     cells <- paste(
       apply(do.call(cbind,lapply(designs,function(x){
         apply(x[attr(x,"expand"),,drop=FALSE],1,paste,collapse="_")})
       ),1,paste,collapse="+"),da$subjects,da$R,da$lR,da$rt,sep="+")
     # Make sure that if row is included for a trial so are other rows
-    nacc <- length(unique(da$lR))
     if (nacc>1) cells <- paste0(rep(apply(matrix(cells,nrow=nacc),2,paste0,collapse="_"),
                       each=nacc),rep(1:nacc,times=length(cells)/nacc),sep="_")
     if (!is.null(Fcov))
@@ -290,23 +292,26 @@ design_model <- function(data,design,model=NULL,
       attr(x,"expand") <- attr(x,"expand")[contract]; x})
 
     # indices to use to contract further ignoring rt then expand back
-    cells_nort <- paste(apply(do.call(cbind,lapply(designs,function(x){
-      apply(x[attr(x,"expand"),,drop=FALSE],1,paste,collapse="_")})),1,paste,collapse="+"),
-      da$subjects,da$R,da$lR,sep="+")[contract]
+    cells_nort <- paste(
+      apply(do.call(cbind,lapply(designs,function(x){
+        apply(x[attr(x,"expand"),,drop=FALSE],1,paste,collapse="_")})
+      ),1,paste,collapse="+"),da$subjects,da$R,da$lR,sep="+")[contract]
     attr(out,"unique_nort") <- !duplicated(cells_nort)
+    # Only first level WHY????
     cells <- cells[da$lR==levels(da$lR)[1]]
     cells_nort <- cells_nort[out$lR==levels(out$lR)[1]]
     attr(out,"expand_nort") <- as.numeric(factor(cells_nort,
-                                                 levels=unique(cells_nort)))[as.numeric(factor(cells,levels=unique(cells)))]
+       levels=unique(cells_nort)))[as.numeric(factor(cells,levels=unique(cells)))]
 
     # indices to use to contract ignoring rt and response (R), then expand back
     cells_nortR <- paste(apply(do.call(cbind,lapply(designs,function(x){
       apply(x[attr(x,"expand"),,drop=FALSE],1,paste,collapse="_")})),1,paste,collapse="+"),
       da$subjects,da$lR,sep="+")[contract]
     attr(out,"unique_nortR") <- !duplicated(cells_nortR)
+    # Only first level WHY????
     cells_nortR <- cells_nortR[out$lR==levels(out$lR)[1]]
     attr(out,"expand_nortR") <- as.numeric(factor(cells_nortR,
-                                                  levels=unique(cells_nortR)))[as.numeric(factor(cells,levels=unique(cells)))]
+       levels=unique(cells_nortR)))[as.numeric(factor(cells,levels=unique(cells)))]
 
     # Lower censor
     if (!any(is.na(out$rt))) { # Not an choice only model
@@ -323,7 +328,6 @@ design_model <- function(data,design,model=NULL,
         attr(out,"expand_uc") <- ok[attr(out,"expand_winner")] + 1
       }
     }
-
     out
   }
 
