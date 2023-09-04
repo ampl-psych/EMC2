@@ -11,6 +11,8 @@
 #'
 #' @param Rlevels A character vector. Contains the response factor levels.
 #' @param model A function, Specifies the model type.
+#' @param ddata A data frame that is used to determine Ffactors, Rlevels and Fcovariates,
+#' in which case these arguments can be left NULL.
 #' @param Clist A list. Contrast list.
 #' @param matchfun A function. Specifies whether a response was correct or not.
 #'
@@ -27,7 +29,7 @@
 #' @export
 #'
 #'
-make_design <- function(Flist = NULL,Ffactors = NULL,Rlevels = NULL,model,
+make_design <- function(Flist = NULL,Ffactors = NULL,Rlevels = NULL,model,ddata=NULL,
                         Clist=NULL,matchfun=NULL,constants=NULL,Fcovariates=NULL,Ffunctions=NULL,
                         adapt=NULL,report_p_vector=TRUE, custom_p_vector = NULL){
   if(!is.null(custom_p_vector)){
@@ -36,8 +38,24 @@ make_design <- function(Flist = NULL,Ffactors = NULL,Rlevels = NULL,model,
     attr(design, "custom_ll") <- TRUE
     return(design)
   }
-
-
+  if (!is.null(ddata)) {
+    facs <- lapply(ddata,levels)
+    nfacs <- facs[unlist(lapply(facs,is.null))]
+    facs <- facs[!unlist(lapply(facs,is.null))]
+    Rlevels <- facs[["R"]]
+    Ffactors <- facs[names(facs)!="R"]
+    nfacs <- nfacs[names(nfacs) != "rt"]
+    if (length(nfacs)>0) Fcovariates <- nfacs
+  }
+  # Frees up memory again by creating new enclosing environments, courtesy of Steven
+  if(!is.null(Ffunctions)){
+    Ffunctions <- lapply(Ffunctions, function(f) {environment(f) <- new.env(parent=globalenv()); return(f)})
+  }
+  if(!is.null(Flist)) {
+    Flist <- lapply(Flist, function(f) {environment(f) <- new.env(parent=globalenv()); return(f)})
+  }
+  if(!is.null(model)) environment(model) <- new.env(parent=globalenv())
+  if(!is.null(matchfun)) environment(matchfun) <- new.env(parent=globalenv())
   if (model()$type=="SDT") {
     Clist[["lR"]] <- contr.increasing(length(Rlevels),Rlevels)
   }
@@ -456,21 +474,34 @@ design_model <- function(data,design,model=NULL,prior = NULL,
   # Pick out constants
   sampled_p_names <- p_names[!(p_names %in% names(design$constants))]
 
-  # if(!is.null(prior)){
-  #   if(length(prior$theta_mu_mean) != length(sampled_p_names))
-  #     stop("prior mu should be same length as estimated parameters (p_vector)")
-  #   if(!is.matrix(prior$theta_mu_var)){
-  #     if(length(prior$theta_mu_var) != length(sampled_p_names))
-  #       stop("prior theta should be same length as estimated parameters (p_vector)")
-  #   } else {
-  #     if(nrow(prior$theta_mu_var) != length(sampled_p_names))
-  #       stop("prior theta should have same number of rows as estimated parameters (p_vector)")
-  #     if(ncol(prior$theta_mu_var) != length(sampled_p_names))
-  #       stop("prior theta should have same number of columns as estimated parameters (p_vector)")
-  #     if(ncol(prior$theta_mu_var) != nrow(prior$theta_mu_var))
-  #       stop("prior theta should have same number of columns as rows")
-  #   }
-  # }
+  if(!is.null(prior)) {
+    if(length(prior$theta_mu_mean) != length(sampled_p_names))
+      stop("prior mu should be same length as estimated parameters (p_vector)")
+    if (is.null(names(prior$theta_mu_mean)))
+      stop("theta_mu_mean must have names")
+    if (!all(sort(names(prior$theta_mu_mean)) == sort(sampled_p_names)))
+      stop("theta_mu_mean names not the same as sampled paramter names")
+    # Make sure theta_mu_mean has same order as sampled parameters
+    pnams <- names(prior$theta_mu_mean)
+    prior$theta_mu_mean <- prior$theta_mu_mean[sampled_p_names]
+    if(!is.matrix(prior$theta_mu_var)) {
+      if(length(prior$theta_mu_var) != length(sampled_p_names))
+        stop("prior theta should be same length as estimated parameters (p_vector)")
+      # Make sure theta_mu_var has same order as sampled parameters
+      names(prior$theta_mu_var) <- pnams
+      prior$theta_mu_var <- prior$theta_mu_var[sampled_p_names]
+    } else {
+      if(nrow(prior$theta_mu_var) != length(sampled_p_names))
+        stop("prior theta should have same number of rows as estimated parameters (p_vector)")
+      if(ncol(prior$theta_mu_var) != length(sampled_p_names))
+        stop("prior theta should have same number of columns as estimated parameters (p_vector)")
+      # Make sure theta_mu_var has same order as sampled parameters
+      dimnames(prior$theta_mu_var) <- list(pnams,pnams)
+      prior$theta_mu_var <- prior$theta_mu_var[sampled_p_names,sampled_p_names]
+    }
+
+  }
+
   attr(dadm, "prior") <- prior
   attr(dadm,"p_names") <- p_names
   attr(dadm,"model") <- model
