@@ -29,8 +29,8 @@ design_B <- make_design(
 # plot_prior(prior)
 
 prior <- list(
-  theta_mu_mean = 1:5,
-  theta_mu_var = diag(c(5:1))
+  theta_mu_mean = 1:7,
+  theta_mu_var = diag(c(7:1))
 ) # This way we're using default priors for the nuisance parameters
 
 dat2 <- dat[dat$subjects %in% unique(dat$subjects)[1:4],]
@@ -38,8 +38,8 @@ dat2$subjects <- droplevels(dat2$subjects)
 
 # Nuisance non hyper = non hierarchically estimated parameters
 devtools::load_all()
-debug(design_model)
-samplers <- make_samplers(dat2, design_B, type = "standard")
+undebug(make_samplers)
+samplers <- make_samplers(dat2, design_B, type = "standard", prior = prior)
 samplers <- run_emc(samplers, verbose = T, cores_for_chains = 4, cores_per_chain = 3)
 
 debug(IS2)
