@@ -691,7 +691,7 @@ make_samplers <- function(data_list,design_list,model_list=NULL,
         compress=compress,model=model_list[[i]],rt_resolution=rt_resolution[i])
     } else{
       dadm_list[[i]] <- design_model_custom_ll(data = data_list[[i]],
-        design = design_list[[i]],model=model_list[[i]], compress=compress)
+        design = design_list[[i]],model=model_list[[i]])
     }
   }
 

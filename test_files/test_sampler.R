@@ -1,5 +1,4 @@
 rm(list=ls())
-devtools::load_all()
 print(load("test_files/PNAS.RData"))
 dat <- data[,c("s","E","S","R","RT")]
 names(dat)[c(1,5)] <- c("subjects","rt")
@@ -37,10 +36,9 @@ dat2 <- dat[dat$subjects %in% unique(dat$subjects)[1:4],]
 dat2$subjects <- droplevels(dat2$subjects)
 
 # Nuisance non hyper = non hierarchically estimated parameters
-devtools::load_all()
-undebug(make_samplers)
-samplers <- make_samplers(dat2, design_B, type = "standard", prior = prior)
-samplers <- run_emc(samplers, verbose = T, cores_for_chains = 4, cores_per_chain = 3)
+samplers <- make_samplers(dat2, design_B, type = "blocked", prior = prior, par_groups = 1:7)
+debug(EMC2:::start_proposals)
+samplers <- run_samplers(samplers, stage= "preburn", iter = 25, verbose = T, cores_for_chains = 1, cores_per_chain = 1)
 
 debug(IS2)
 samplers <- run_IS2(samplers, IS_samples = 50, n_cores = 14)

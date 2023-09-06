@@ -33,7 +33,9 @@ Also refrain from using "_" as factor names.}
 \item{model}{A function, Specifies the model type.}
 
 \item{ddata}{A data frame that is used to determine Ffactors, Rlevels and Fcovariates,
-in which case these arguments can be left NULL.}
+in which case these arguments can be left NULL. Any numeric column except trials and
+rt are made into covariates, R factor column makes Rlevels, and remaining factor
+columns are used in Ffactors.}
 
 \item{Clist}{A list. Contrast list.}
 

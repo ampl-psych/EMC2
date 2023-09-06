@@ -197,15 +197,6 @@
 #
 #
 
-#' dRDM
-#'
-#' @param rt
-#' @param pars
-#'
-#' @return
-#' @export
-#'
-#' @examples
 dRDM <- function(rt,pars)
   # density for single accumulator
 {
@@ -218,15 +209,7 @@ dRDM <- function(rt,pars)
   out
 }
 
-#' pRDM
-#'
-#' @param rt
-#' @param pars
-#'
-#' @return
-#' @export
-#'
-#' @examples
+
 pRDM <- function(rt,pars)
   # cumulative density for single accumulator
 {
@@ -287,18 +270,6 @@ rWald <- function(n,B,v,A)
   out
 }
 
-
-#' rRDM
-#'
-#' @param lR
-#' @param pars
-#' @param p_types
-#' @param ok
-#'
-#' @return
-#' @export
-#'
-#' @examples
 rRDM <- function(lR,pars,p_types=c("v","B","A","t0"),ok=rep(TRUE,dim(pars)[1]))
   # lR is an empty latent response factor lR with one level for each accumulator.
   # pars is a matrix of corresponding parameter values named as in p_types

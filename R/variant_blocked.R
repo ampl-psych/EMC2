@@ -1,10 +1,10 @@
-add_info_blocked <- function(sampler, prior = NULL, variant_funs, ...){
+add_info_blocked <- function(sampler, prior = NULL, ...){
   # blocked specific attributes
   n_pars <- sum(!(sampler$nuisance | sampler$grouped))
   par_groups <- list(...)$par_groups
   sampler$par_groups <- par_groups
   sampler$n_par_groups <- length(unique(par_groups))
-  sampler$prior <- variant_funs$get_prior(prior, sampler$par_names[!(sampler$nuisance | sampler$grouped)])
+  sampler$prior <- get_prior_blocked(prior, sampler$par_names[!(sampler$nuisance | sampler$grouped)])
   return(sampler)
 }
 
