@@ -4,7 +4,7 @@ add_info_blocked <- function(sampler, prior = NULL, ...){
   par_groups <- list(...)$par_groups
   sampler$par_groups <- par_groups
   sampler$n_par_groups <- length(unique(par_groups))
-  sampler$prior <- get_prior_blocked(prior, sampler$par_names[!(sampler$nuisance | sampler$grouped)])
+  sampler$prior <- get_prior_blocked(prior, sum(!(sampler$nuisance | sampler$grouped)), sample = F)
   return(sampler)
 }
 
