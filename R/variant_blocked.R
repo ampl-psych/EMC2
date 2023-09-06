@@ -10,7 +10,6 @@ add_info_blocked <- function(sampler, prior = NULL, ...){
 
 
 get_prior_blocked <- function(prior = NULL, n_pars = NULL, par_names = NULL, sample = F, N = 1e6){
-  n_pars <- length(par_names)
   # Checking and default priors
   if(is.null(prior)){
     prior <- list()
