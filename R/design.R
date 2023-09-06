@@ -465,7 +465,7 @@ design_model <- function(data,design,model=NULL,
                                         attr(dadm,"expand") <- 1:dim(dadm)[1]
                                       }
   if (verbose & compress) message("Likelihood speedup factor: ",
-    round(dim(da)[1]/dim(dadm)[1],1)," (",dim(dadm[as.logical(dadm$lM),])[1]," unique trials)")
+    round(dim(da)[1]/dim(dadm)[1],1)," (",dim(dadm)[1]/length(levels(dadm$lR))," unique trials)")
   p_names <-  unlist(lapply(out,function(x){dimnames(x)[[2]]}),use.names=FALSE)
 
   bad_constants <- names(design$constants)[!(names(design$constants) %in% p_names)]
