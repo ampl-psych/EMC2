@@ -181,8 +181,10 @@ add_accumulators <- function(data,matchfun=NULL,simulate=FALSE,type="RACE", Fcov
                                        levels=levels(data$R)),lM=factor(rep(TRUE,dim(data)[1]))) # For DDM
   row.names(datar) <- NULL
   if (simulate) datar$rt <- NA else {
-    datar$winner <- datar$lR==datar$R
-    datar$winner[is.na(datar$winner)] <- FALSE
+    R <- datar$R
+    R[is.na(R)] <- levels(datar$lR)[1]
+    datar$winner <- datar$lR==R
+    # datar$winner[is.na(datar$winner)] <- FALSE
   }
   # sort cells together
   if ("trials" %in% names(data)){
@@ -297,21 +299,35 @@ design_model <- function(data,design,model=NULL,
         apply(x[attr(x,"expand"),,drop=FALSE],1,paste,collapse="_")})
       ),1,paste,collapse="+"),da$subjects,da$R,da$lR,sep="+")[contract]
     attr(out,"unique_nort") <- !duplicated(cells_nort)
-    # Only first level WHY????
-    cells <- cells[da$lR==levels(da$lR)[1]]
-    cells_nort <- cells_nort[out$lR==levels(out$lR)[1]]
-    attr(out,"expand_nort") <- as.numeric(factor(cells_nort,
-       levels=unique(cells_nort)))[as.numeric(factor(cells,levels=unique(cells)))]
+    attr(out,"expand_nort") <- as.numeric(factor(cells_nort,levels=unique(cells_nort)))
+
+    # cells_nort <- paste(
+    #   apply(do.call(cbind,lapply(designs,function(x){
+    #     apply(x[attr(x,"expand"),,drop=FALSE],1,paste,collapse="_")})
+    #   ),1,paste,collapse="+"),da$subjects,da$R,da$lR,sep="+")[contract]
+    # attr(out,"unique_nort") <- !duplicated(cells_nort)
+    # # Only first level WHY????
+    # cells <- cells[da$lR==levels(da$lR)[1]]
+    # cells_nort <- cells_nort[out$lR==levels(out$lR)[1]]
+    # attr(out,"expand_nort") <- as.numeric(factor(cells_nort,
+    #    levels=unique(cells_nort)))[as.numeric(factor(cells,levels=unique(cells)))]
 
     # indices to use to contract ignoring rt and response (R), then expand back
     cells_nortR <- paste(apply(do.call(cbind,lapply(designs,function(x){
       apply(x[attr(x,"expand"),,drop=FALSE],1,paste,collapse="_")})),1,paste,collapse="+"),
       da$subjects,da$lR,sep="+")[contract]
     attr(out,"unique_nortR") <- !duplicated(cells_nortR)
-    # Only first level WHY????
-    cells_nortR <- cells_nortR[out$lR==levels(out$lR)[1]]
-    attr(out,"expand_nortR") <- as.numeric(factor(cells_nortR,
-       levels=unique(cells_nortR)))[as.numeric(factor(cells,levels=unique(cells)))]
+    attr(out,"expand_nortR") <- as.numeric(factor(cells_nortR,levels=unique(cells_nortR)))
+
+    # # indices to use to contract ignoring rt and response (R), then expand back
+    # cells_nortR <- paste(apply(do.call(cbind,lapply(designs,function(x){
+    #   apply(x[attr(x,"expand"),,drop=FALSE],1,paste,collapse="_")})),1,paste,collapse="+"),
+    #   da$subjects,da$lR,sep="+")[contract]
+    # attr(out,"unique_nortR") <- !duplicated(cells_nortR)
+    # # Only first level WHY????
+    # cells_nortR <- cells_nortR[out$lR==levels(out$lR)[1]]
+    # attr(out,"expand_nortR") <- as.numeric(factor(cells_nortR,
+    #    levels=unique(cells_nortR)))[as.numeric(factor(cells,levels=unique(cells)))]
 
     # Lower censor
     if (!any(is.na(out$rt))) { # Not an choice only model
@@ -406,13 +422,9 @@ design_model <- function(data,design,model=NULL,
       if (!is.null(attr(data,"LT")) && attr(data,"LT") > attr(data,"LC"))
         stop("Lower censor must be greater than lower truncation")
     }
-    if (!any(data$rt[!is.na(data$rt)]==-Inf) & !is.null(attr(data,"LC")))
-      attr(data,"LC") <- NULL else
-        if (any(data$rt[!is.na(data$rt)]==-Inf) & is.null(attr(data,"LC")))
+    if (any(data$rt[!is.na(data$rt)]==-Inf) & is.null(attr(data,"LC")))
           stop("Data must have an LC attribute if any rt = -Inf")
-    if (!any(data$rt[!is.na(data$rt)]==Inf) & !is.null(attr(data,"UC")))
-      attr(data,"LC") <- NULL else
-        if (any(data$rt[!is.na(data$rt)]==Inf) & is.null(attr(data,"UC")))
+    if (any(data$rt[!is.na(data$rt)]==Inf) & is.null(attr(data,"UC")))
           stop("Data must have an UC attribute if any rt = Inf")
     if (!is.null(attr(data,"UC"))) check_rt(attr(data,"UC"),data)
     if (!is.null(attr(data,"LC"))) check_rt(attr(data,"LC"),data,upper=FALSE)
@@ -655,11 +667,11 @@ dm_list <- function(dadm)
 
       isinlR1 <- slR1==i
       if (!is.null(expand_nort)){
-        attr(dl[[i]],"expand_nort") <-  expand_nort[isinlR1]- min( expand_nort[isinlR1]) + 1
+        attr(dl[[i]],"expand_nort") <-  expand_nort #[isinlR1]- min( expand_nort[isinlR1]) + 1
       }
 
       if (!is.null(expand_nortR)){
-        attr(dl[[i]],"expand_nortR") <- expand_nortR[isinlR1]-min(expand_nortR[isinlR1]) + 1
+        attr(dl[[i]],"expand_nortR") <- expand_nortR #[isinlR1]-min(expand_nortR[isinlR1]) + 1
       }
 
       attr(dl[[i]],"ok_trials") <- ok_trials[isin2]
