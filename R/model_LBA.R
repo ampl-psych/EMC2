@@ -113,7 +113,7 @@ dLBA <- function (rt, pars, posdrift = TRUE, robust = FALSE)
 {
   dt <- rt - pars[,"t0"]
   ok <- (dt>0) & (pars[,"b"] >= pars[,"A"])
-  ok[is.na(ok)] <- FALSE
+  ok[is.na(ok) | !is.finite(dt)] <- FALSE
   out <- numeric(length(dt))
   out[ok] <- dlba(t = dt[ok], A = pars[ok,"A"], b = pars[ok,"b"],
                          v = pars[ok,"v"], sv = pars[ok,"sv"],
@@ -139,7 +139,7 @@ pLBA <- function (rt, pars, posdrift = TRUE, robust = FALSE)
 {
   dt <- rt - pars[,"t0"]
   ok <- (dt>0) & (pars[,"b"] >= pars[,"A"])
-  ok[is.na(ok)] <- FALSE
+  ok[is.na(ok) | !is.finite(dt)] <- FALSE
   out <- numeric(length(dt))
   out[ok] <- plba(t = dt[ok], A = pars[ok,"A"], b = pars[ok,"b"],
                          v = pars[ok,"v"], sv = pars[ok,"sv"],
@@ -280,6 +280,12 @@ albaB <- function(){
   )}
 
 # Handles missing values
+#' Title
+#'
+#' @return
+#' @export
+#'
+#' @examples
 MlbaB <- function(){
   list(
     type="RACE",
