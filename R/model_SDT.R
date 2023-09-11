@@ -1,34 +1,11 @@
 
-#' pPROBIT
-#'
-#' @param lt
-#' @param ut
-#' @param pars
-#'
-#' @return
-#' @export
-#'
-#' @examples
 pPROBIT <- function(lt,ut,pars)
   # probability between lt and ut
 {
   pnorm(ut,mean=pars[,"mean"],sd=pars[,"sd"]) - pnorm(lt,mean=pars[,"mean"],sd=pars[,"sd"])
 }
 
-#### random
 
-
-#' rPROBIT
-#'
-#' @param lR
-#' @param pars
-#' @param p_types
-#' @param lt
-#'
-#' @return
-#' @export
-#'
-#' @examples
 rPROBIT <- function(lR,pars,p_types=c("mean","sd","threshold"),lt=-Inf)
   # lR is an empty latent response factor lR with one level for response.
   # pars is a matrix of corresponding parameter values named as in p_types
