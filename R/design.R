@@ -49,18 +49,18 @@ make_design <- function(Flist = NULL,Ffactors = NULL,Rlevels = NULL,model,ddata=
     nfacs <- nfacs[!(names(nfacs) %in% c("trials","rt"))]
     if (length(nfacs)>0) Fcovariates <- nfacs
   }
-  # Frees up memory again by creating new enclosing environments, courtesy of Steven
-  if(!is.null(Ffunctions)){
-    Ffunctions <- lapply(Ffunctions, function(f) {environment(f) <- new.env(parent=globalenv()); return(f)})
-  }
-  if(!is.null(Flist)) {
-    Flist <- lapply(Flist, function(f) {environment(f) <- new.env(parent=globalenv()); return(f)})
-  }
-  if(!is.null(model)) environment(model) <- new.env(parent=globalenv())
-  if(!is.null(matchfun)) environment(matchfun) <- new.env(parent=globalenv())
-  if (model()$type=="SDT") {
-    Clist[["lR"]] <- contr.increasing(length(Rlevels),Rlevels)
-  }
+  # # Frees up memory again by creating new enclosing environments, courtesy of Steven
+  # if(!is.null(Ffunctions)){
+  #   Ffunctions <- lapply(Ffunctions, function(f) {environment(f) <- new.env(parent=globalenv()); return(f)})
+  # }
+  # if(!is.null(Flist)) {
+  #   Flist <- lapply(Flist, function(f) {environment(f) <- new.env(parent=globalenv()); return(f)})
+  # }
+  # if(!is.null(model)) environment(model) <- new.env(parent=globalenv())
+  # if(!is.null(matchfun)) environment(matchfun) <- new.env(parent=globalenv())
+  # if (model()$type=="SDT") {
+  #   Clist[["lR"]] <- contr.increasing(length(Rlevels),Rlevels)
+  # }
 
   design <- list(Flist=Flist,Ffactors=Ffactors,Rlevels=Rlevels,
                  Clist=Clist,matchfun=matchfun,constants=constants,
