@@ -506,23 +506,10 @@ design_model <- function(data,design,model=NULL,
   }
   if (verbose & compress) message("Likelihood speedup factor: ",
   round(dim(da)[1]/dim(dadm)[1],1)," (",dim(dadm)[1]/length(levels(dadm$lR))," unique trials)")
-  p_names <-  unlist(lapply(out,function(x){dimnames(x)[[2]]}),use.names=FALSE)
 
-  bad_constants <- names(design$constants)[!(names(design$constants) %in% p_names)]
-  if (length(bad_constants) > 0)
-    stop("Constant(s) ",paste(bad_constants,collapse=" ")," not in design")
-
-  # Pick out constants
-  sampled_p_names <- p_names[!(p_names %in% names(design$constants))]
-
-  attr(dadm,"p_names") <- p_names
   attr(dadm,"model") <- model
   attr(dadm,"constants") <- design$constants
-  attr(dadm,"sampled_p_names") <- sampled_p_names
-  attr(dadm, "LT") <- attr(data,"LT")
-  attr(dadm, "UT") <- attr(data,"UT")
-  attr(dadm, "LC") <- attr(data,"LC")
-  attr(dadm, "UC") <- attr(data,"UC")
+
   if (add_acc) {
     attr(dadm, "ok_dadm_winner") <- is.finite(dadm$rt) & dadm$winner
     attr(dadm, "ok_dadm_looser") <- is.finite(dadm$rt) & !dadm$winner

@@ -149,7 +149,6 @@ source("test_files/sampling_lm.R")
 
 test <- make_samplers_lm(df, test)
 
-debug(run_samplers)
 run_emc(test)
 
 #
