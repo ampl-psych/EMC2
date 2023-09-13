@@ -36,9 +36,10 @@ dat2 <- dat[dat$subjects %in% unique(dat$subjects)[1:4],]
 dat2$subjects <- droplevels(dat2$subjects)
 
 # Nuisance non hyper = non hierarchically estimated parameters
+devtools::load_all()
 samplers <- make_samplers(dat2, design_B, type = "blocked", prior = prior, par_groups = 1:7)
-debug(EMC2:::start_proposals)
-samplers <- run_samplers(samplers, stage= "preburn", iter = 25, verbose = T, cores_for_chains = 1, cores_per_chain = 1)
+debug(EMC2:::init)
+samplers <- run_samplers(samplers, stage= "preburn", iter = 20, step_size = 10, max_gd = 1.1, verbose = T, cores_for_chains = 1, cores_per_chain = 1)
 
 debug(IS2)
 samplers <- run_IS2(samplers, IS_samples = 50, n_cores = 14)
