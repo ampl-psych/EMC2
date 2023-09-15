@@ -207,8 +207,6 @@ lbaB <- function(){
 #'
 #' @return A model list with all the necessary functions to sample
 #' @export
-#'
-#' @examples
 MlbaB <- function(){
   list(
     type="RACE",
