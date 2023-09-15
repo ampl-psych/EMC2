@@ -1,13 +1,3 @@
-#' Title
-#'
-#' @param p_vector
-#' @param dadm
-#' @param min_ll
-#'
-#' @return
-#' @export
-#'
-#' @examples
 log_likelihood_race <- function(p_vector,dadm,min_ll=log(1e-10))
   # Race model summed log likelihood
 {
@@ -42,16 +32,6 @@ log_likelihood_race <- function(p_vector,dadm,min_ll=log(1e-10))
 
 
 
-#' Title
-#'
-#' @param p_vector
-#' @param dadm
-#' @param min_ll
-#'
-#' @return
-#' @export
-#'
-#' @examples
 log_likelihood_ddm <- function(p_vector,dadm,min_ll=log(1e-10))
   # DDM summed log likelihood, with protection against numerical issues
 {
@@ -101,17 +81,6 @@ log_likelihood_sdt <- function(p_vector,dadm,lb=-Inf,min_ll=log(1e-10))
   sum(pmax(min_ll,ll))
 }
 
-#' Title
-#'
-#' @param proposals
-#' @param dadms
-#' @param component
-#'
-#' @return
-#' @export
-#'
-#' @examples
-#'
 log_likelihood_joint <- function(proposals, dadms, component = NULL){
   parPreFixs <- unique(gsub("[|].*", "", colnames(proposals)))
   i <- 0
