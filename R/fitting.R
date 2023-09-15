@@ -636,7 +636,16 @@ make_samplers <- function(data_list,design_list,model_list=NULL,
   data_list <- lapply(data_list,function(d){
     if (!is.factor(d$subjects)) d$subjects <- factor(d$subjects)
     d <- d[order(d$subjects),]
-    add_trials(d)
+    LC <- attr(d,"LC")
+    UC <- attr(d,"UC")
+    LT <- attr(d,"LT")
+    UT <- attr(d,"UT")
+    d <- add_trials(d)
+    attr(d,"LC") <- LC
+    attr(d,"UC") <- UC
+    attr(d,"LT") <- LT
+    attr(d,"UT") <- UT
+    d
   })
   if (!is.null(names(design_list)[1]) && names(design_list)[1]=="Flist")
     design_list <- list(design_list)
