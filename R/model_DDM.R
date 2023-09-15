@@ -123,12 +123,9 @@ ddmTZD <- function(){
 
 
 
-#' Title
+#' Diffusion decision model with t0 on the natural scale
 #'
-#' @return
-#' @export
-#'
-#' @examples
+#' @return A model list with all the necessary functions to sample
 ddmTZDt0natural <- function(){
   list(
     type="DDM",
