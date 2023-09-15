@@ -1,3 +1,13 @@
+#' Title
+#'
+#' @param p_vector
+#' @param dadm
+#' @param min_ll
+#'
+#' @return
+#' @export
+#'
+#' @examples
 log_likelihood_race <- function(p_vector,dadm,min_ll=log(1e-10))
   # Race model summed log likelihood
 {
@@ -32,6 +42,16 @@ log_likelihood_race <- function(p_vector,dadm,min_ll=log(1e-10))
 
 
 
+#' Title
+#'
+#' @param p_vector
+#' @param dadm
+#' @param min_ll
+#'
+#' @return
+#' @export
+#'
+#' @examples
 log_likelihood_ddm <- function(p_vector,dadm,min_ll=log(1e-10))
   # DDM summed log likelihood, with protection against numerical issues
 {
@@ -46,6 +66,17 @@ log_likelihood_ddm <- function(p_vector,dadm,min_ll=log(1e-10))
 
 #### sdt choice likelihoods ----
 
+#' Title
+#'
+#' @param p_vector
+#' @param dadm
+#' @param lb
+#' @param min_ll
+#'
+#' @return
+#' @export
+#'
+#' @examples
 log_likelihood_sdt <- function(p_vector,dadm,lb=-Inf,min_ll=log(1e-10))
   # probability of ordered discrete choices based on integrals of a continuous
   # distribution between thresholds, with fixed lower bound for first response

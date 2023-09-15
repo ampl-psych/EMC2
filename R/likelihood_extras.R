@@ -143,6 +143,16 @@
 # }
 
 
+#' Title
+#'
+#' @param p_vector
+#' @param dadm
+#' @param min_ll
+#'
+#' @return
+#' @export
+#'
+#' @examples
 log_likelihood_race_missing <- function(p_vector,dadm,min_ll=log(1e-10))
   # Race model summed log likelihood
 {
