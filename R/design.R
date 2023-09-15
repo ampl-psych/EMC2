@@ -639,13 +639,13 @@ dm_list <- function(dadm)
   expand_nort <- attr(dadm,"expand_nort")
   unique_nortR <- attr(dadm,"unique_nortR")
   expand_nortR <- attr(dadm,"expand_nortR")
-  ok_trials <- attr(dadm,"ok_trials")
-  ok_dadm_winner <- attr(dadm,"ok_dadm_winner")
-  ok_dadm_looser <- attr(dadm,"ok_dadm_looser")
-  ok_da_winner <- attr(dadm,"ok_da_winner")
-  ok_da_looser <- attr(dadm,"ok_da_looser")
-  expand_uc <- attr(dadm,"expand_uc")
-  expand_lc <- attr(dadm,"expand_lc")
+  # ok_trials <- attr(dadm,"ok_trials")
+  # ok_dadm_winner <- attr(dadm,"ok_dadm_winner")
+  # ok_dadm_looser <- attr(dadm,"ok_dadm_looser")
+  # ok_da_winner <- attr(dadm,"ok_da_winner")
+  # ok_da_looser <- attr(dadm,"ok_da_looser")
+  # expand_uc <- attr(dadm,"expand_uc")
+  # expand_lc <- attr(dadm,"expand_lc")
   adapt <- attr(dadm,"adapt")
 
   # winner on expanded dadm
@@ -660,8 +660,9 @@ dm_list <- function(dadm)
     dl[[i]] <- dadm[isin,]
     dl[[i]]$subjects <- factor(as.character(dl[[i]]$subjects))
     if(is.null(attr(dadm, "custom_ll"))){
+
       isin1 <- s_expand==i             # da
-      isin2 <- attr(dadm,"s_data")==i  # data
+      # isin2 <- attr(dadm,"s_data")==i  # data
 
 
       attr(dl[[i]],"model") <- model
@@ -671,35 +672,35 @@ dm_list <- function(dadm)
       attr(dl[[i]],"expand") <- expand[isin1]-min(expand[isin1]) + 1
       attr(dl[[i]],"s_expand") <- NULL
 
-      attr(dl[[i]],"ok_dadm_winner") <- ok_dadm_winner[isin]
-      attr(dl[[i]],"ok_dadm_looser") <- ok_dadm_looser[isin]
-
-      attr(dl[[i]],"ok_da_winner") <- ok_da_winner[isin1]
-      attr(dl[[i]],"ok_da_looser") <- ok_da_looser[isin1]
+      # attr(dl[[i]],"ok_dadm_winner") <- ok_dadm_winner[isin]
+      # attr(dl[[i]],"ok_dadm_looser") <- ok_dadm_looser[isin]
+      #
+      # attr(dl[[i]],"ok_da_winner") <- ok_da_winner[isin1]
+      # attr(dl[[i]],"ok_da_looser") <- ok_da_looser[isin1]
 
       attr(dl[[i]],"unique_nort") <- unique_nort[isin]
       attr(dl[[i]],"unique_nortR") <- unique_nortR[isin]
 
-      isinlR1 <- slR1==i
+      # isinlR1 <- slR1==i
+
       if (!is.null(expand_nort)){
-        attr(dl[[i]],"expand_nort") <-  expand_nort #[isinlR1]- min( expand_nort[isinlR1]) + 1
+        attr(dl[[i]],"expand_nort") <-  expand_nort[isin] - min(expand_nort[isin]) + 1
       }
-
       if (!is.null(expand_nortR)){
-        attr(dl[[i]],"expand_nortR") <- expand_nortR #[isinlR1]-min(expand_nortR[isinlR1]) + 1
+        attr(dl[[i]],"expand_nortR") <- expand_nortR[isin]-min(expand_nortR[isin]) + 1
       }
 
-      attr(dl[[i]],"ok_trials") <- ok_trials[isin2]
-      if (!is.null(expand_winner)){
-        attr(dl[[i]],"expand_winner") <- expand_winner[isin2]-min(expand_winner[isin2]) + 1
-      }
-
-      if (!is.null(attr(dadm,"expand_uc"))){
-        attr(dl[[i]],"expand_uc") <- as.numeric(factor(expand_uc[isin2]))
-      }
-      if (!is.null(attr(dadm,"expand_lc"))){
-        attr(dl[[i]],"expand_lc") <- as.numeric(factor(expand_lc[isin2]))
-      }
+      # attr(dl[[i]],"ok_trials") <- ok_trials[isin2]
+      # if (!is.null(expand_winner)){
+      #   attr(dl[[i]],"expand_winner") <- expand_winner[isin2]-min(expand_winner[isin2]) + 1
+      # }
+      #
+      # if (!is.null(attr(dadm,"expand_uc"))){
+      #   attr(dl[[i]],"expand_uc") <- as.numeric(factor(expand_uc[isin2]))
+      # }
+      # if (!is.null(attr(dadm,"expand_lc"))){
+      #   attr(dl[[i]],"expand_lc") <- as.numeric(factor(expand_lc[isin2]))
+      # }
 
       if (!is.null(attr(dadm,"LT"))){
         attr(dl[[i]],"LT") <- attr(dadm,"LT")[names(attr(dadm,"LT"))==i]
@@ -724,6 +725,7 @@ dm_list <- function(dadm)
 
   return(dl)
 }
+
 
 
 
