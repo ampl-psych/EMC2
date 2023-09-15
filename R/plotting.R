@@ -295,7 +295,9 @@ plot_defective_density <- function(data,subject=NULL,factors=NULL,
 #' @param add_means Boolean (default FALSE) add parameter means as an attribute
 #' to return
 #' @param pars Named vector or matrix of true parameters, or the output of
-#' plot_pars, in which case the posterior medians are extracted.
+#' plot_pars, in which case the posterior medians are extracted. If supplied with
+#' no xlim the plot will be adjusted to include the parameter values, which are
+#' plotted as vertical lines.
 #' @param probs Vector (default c(.025,.5,.975)) for CI and central tendency of return
 #' @param bw Bandwidth for density plot (see density)
 #' @param adjust Adjustment for density plot (see density)
@@ -307,7 +309,6 @@ plot_defective_density <- function(data,subject=NULL,factors=NULL,
 #'no matter what show_chains is), if do_contraction with a "contraction" attribute.
 #'
 #' @export
-
 plot_pars <- function(pmwg_mcmc,layout=c(2,3),
   selection="alpha",filter="sample",thin=1,subfilter=0,mapped=FALSE,
   plot_prior=TRUE,n_prior=1e3,xlim=NULL,ylim=NULL,prior_xlim=NULL,
@@ -410,8 +411,12 @@ plot_pars <- function(pmwg_mcmc,layout=c(2,3),
             dens <- lapply(pmwg_mcmc[[i]],function(x){density(x[,j],bw=bw,adjust=adjust)})
             if (!is.null(xlim)) {
               if (!is.matrix(xlim)) xlimi <- xlim else xlimi <- xlim[j,]
-            } else xlimi <- c(min(unlist(lapply(dens,function(x){min(x$x)}))),
+            } else {
+              xlimi <- c(min(unlist(lapply(dens,function(x){min(x$x)}))),
                               max(unlist(lapply(dens,function(x){max(x$x)}))))
+              if (!is.null(pars)) xlimi <- c(min(c(pars[j,i]-abs(pars[j,i])/10,xlimi[1])),
+                                             max(c(pars[j,i]+abs(pars[j,i])/10,xlimi[2])))
+            }
             if (!is.null(ylim)) {
               if (!is.matrix(ylim)) ylimi <- ylim else ylimi <- ylim[j,]
             } else ylimi <- c(0,max(unlist(lapply(dens,function(x){max(x$y)}))))
@@ -423,9 +428,14 @@ plot_pars <- function(pmwg_mcmc,layout=c(2,3),
             if (plot_prior) pdens <- density(psamples[,j],bw=bw,adjust=adjust)
             if (!is.null(xlim)) {
               if (!is.matrix(xlim)) xlimi <- xlim else xlimi <- xlim[j,]
-            } else if (plot_prior & !is.null(prior_xlim))
-              xlimi <- c(quantile(pdens$x,probs=prior_xlim[1]),quantile(pdens$x,probs=prior_xlim[2])) else
+            } else if (plot_prior & !is.null(prior_xlim)) {
+              xlimi <- c(quantile(pdens$x,probs=prior_xlim[1]),
+                         quantile(pdens$x,probs=prior_xlim[2]))
+            } else {
               xlimi <- c(min(dens$x),max(dens$x))
+              if (!is.null(pars)) xlimi <- c(min(c(pars[j,i]-abs(pars[j,i])/10,xlimi[1])),
+                                             max(c(pars[j,i]+abs(pars[j,i])/10,xlimi[2])))
+            }
             if (!is.null(ylim)) {
               if (!is.matrix(ylim)) ylimi <- ylim else ylimi <- ylim[j,]
             } else {
@@ -483,9 +493,12 @@ plot_pars <- function(pmwg_mcmc,layout=c(2,3),
     if (do_plot) for (j in colnames(pmwg_mcmc_combined)) {
       if (chains > 0) {
         dens <- lapply(pmwg_mcmc,function(x){density(x[,j],bw=bw,adjust=adjust)})
-        if (!is.null(xlim)) xlimi <- xlim else
+        if (!is.null(xlim)) xlimi <- xlim else {
           xlimi <- c(min(unlist(lapply(dens,function(x){min(x$x)}))),
                      max(unlist(lapply(dens,function(x){max(x$x)}))))
+          if (!is.null(pars)) xlimi <- c(min(c(pars[j,i]-abs(pars[j,i])/10,xlimi[1])),
+                                             max(c(pars[j,i]+abs(pars[j,i])/10,xlimi[2])))
+        }
         if (!is.null(ylim)) ylimi <- ylim else
           ylimi <- c(0,max(unlist(lapply(dens,function(x){max(x$y)}))))
         plot(dens[[1]],xlab=attr(pmwg_mcmc,"selection"),main=j,
@@ -496,8 +509,12 @@ plot_pars <- function(pmwg_mcmc,layout=c(2,3),
         if (plot_prior)  pdens <- robust_density(psamples[,j],range(pmwg_mcmc[,j]),
           bw=bw,adjust=adjust,use_robust=!(attr(pmwg_mcmc,"selection") %in% c("mu","correlation")))
         if (!is.null(xlim)) xlimi <- xlim else if (plot_prior & !is.null(prior_xlim))
-          xlimi <- c(quantile(pdens$x,probs=prior_xlim[1]),quantile(pdens$x,probs=prior_xlim[2])) else
-          xlimi <- c(min(dens$x),max(dens$x))
+          xlimi <- c(quantile(pdens$x,probs=prior_xlim[1]),
+                     quantile(pdens$x,probs=prior_xlim[2])) else {
+            xlimi <- c(min(dens$x),max(dens$x))
+            if (!is.null(pars)) xlimi <- c(min(c(pars[j,i]-abs(pars[j,i])/10,xlimi[1])),
+                                             max(c(pars[j,i]+abs(pars[j,i])/10,xlimi[2])))
+          }
         if (!is.null(ylim)) ylimi <- ylim else {
           ylimi <- c(0,max(dens$y))
           if (plot_prior) ylimi[2] <- max(c(ylimi[2],pdens$y))
