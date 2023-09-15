@@ -120,6 +120,31 @@ init <- function(pmwgs, start_mu = NULL, start_var = NULL,
   return(pmwgs)
 }
 
+#' Initialize chains
+#'
+#' Adds a set of set of start points to each chain samples from a multivariate
+#' normal
+#'
+#' @param samplers List of chains made by make_samplers
+#' @param start_mu Mean of multivariate normal
+#' @param start_var Variance covariance matrix of multivariate normal
+#' @param verbose Report progress
+#' @param particles Number of starting values
+#' @param n_cores Number of process cores to use
+#' @param epsilon
+#'
+#' @return
+#' @export
+#'
+#' @examples
+init_chains <- function(samplers, start_mu = NULL, start_var = NULL,
+                 verbose = FALSE, particles = 1000, n_cores = 1, epsilon = NULL)
+{
+  lapply(samplers,init,start_mu = start_mu, start_var = start_var,
+        verbose = verbose, particles = particles, n_cores = n_cores, epsilon = epsilon)
+}
+
+
 start_proposals_group <- function(data, group_pars, alpha, par_names,
                                likelihood_func, is_grouped,
                                variant_funs, subjects, n_cores){
