@@ -69,7 +69,9 @@ subject(s) (default NA plots all).}
 to return}
 
 \item{pars}{Named vector or matrix of true parameters, or the output of
-plot_pars, in which case the posterior medians are extracted.}
+plot_pars, in which case the posterior medians are extracted. If supplied with
+no xlim the plot will be adjusted to include the parameter values, which are
+plotted as vertical lines.}
 
 \item{probs}{Vector (default c(.025,.5,.975)) for CI and central tendency of return}
 

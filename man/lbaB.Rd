@@ -7,7 +7,7 @@
 lbaB()
 }
 \value{
-A list defining the cognitive model
+A model list with all the necessary functions to sample
 }
 \description{
 The Linear Ballistic Accumulator, proposes that for each choice alternative, ballistic accumulators race towards a common bound.

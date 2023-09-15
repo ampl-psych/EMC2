@@ -2,10 +2,13 @@
 % Please edit documentation in R/model_DDM.R
 \name{ddmTZDt0natural}
 \alias{ddmTZDt0natural}
-\title{Title}
+\title{Diffusion decision model with t0 on the natural scale}
 \usage{
 ddmTZDt0natural()
 }
+\value{
+A model list with all the necessary functions to sample
+}
 \description{
-Title
+Diffusion decision model with t0 on the natural scale
 }
