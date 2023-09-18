@@ -34,6 +34,7 @@
 make_design <- function(Flist = NULL,Ffactors = NULL,Rlevels = NULL,model,ddata=NULL,
                         Clist=NULL,matchfun=NULL,constants=NULL,Fcovariates=NULL,Ffunctions=NULL,
                         adapt=NULL,report_p_vector=TRUE, custom_p_vector = NULL){
+
   if(!is.null(custom_p_vector)){
     design <- list(Flist = Flist, model = model, Ffactors = Ffactors)
     attr(design, "sampled_p_names") <-custom_p_vector
@@ -49,22 +50,10 @@ make_design <- function(Flist = NULL,Ffactors = NULL,Rlevels = NULL,model,ddata=
     nfacs <- nfacs[!(names(nfacs) %in% c("trials","rt"))]
     if (length(nfacs)>0) Fcovariates <- nfacs
   }
-  # # Frees up memory again by creating new enclosing environments, courtesy of Steven
-  # if(!is.null(Ffunctions)){
-  #   Ffunctions <- lapply(Ffunctions, function(f) {environment(f) <- new.env(parent=globalenv()); return(f)})
-  # }
-  # if(!is.null(Flist)) {
-  #   Flist <- lapply(Flist, function(f) {environment(f) <- new.env(parent=globalenv()); return(f)})
-  # }
-  # if(!is.null(model)) environment(model) <- new.env(parent=globalenv())
-  # if(!is.null(matchfun)) environment(matchfun) <- new.env(parent=globalenv())
-  # if (model()$type=="SDT") {
-  #   Clist[["lR"]] <- contr.increasing(length(Rlevels),Rlevels)
-  # }
-
   design <- list(Flist=Flist,Ffactors=Ffactors,Rlevels=Rlevels,
                  Clist=Clist,matchfun=matchfun,constants=constants,
                  Fcovariates=Fcovariates,Ffunctions=Ffunctions,adapt=adapt,model=model)
+
   p_vector <- sampled_p_vector(design,design$model)
 
   if (model()$type=="SDT") {
@@ -78,6 +67,7 @@ make_design <- function(Flist = NULL,Ffactors = NULL,Rlevels = NULL,model,ddata=
     }
   }
   attr(design,"p_vector") <- p_vector
+
 
   if (report_p_vector) {
     print(p_vector)
@@ -165,26 +155,42 @@ sampled_p_vector <- function(design,model=NULL,doMap=TRUE)
 }
 
 
-add_accumulators <- function(data,matchfun=NULL,simulate=FALSE,type="RACE", Fcovariates=NULL) {
+add_accumulators <- function(data,matchfun=NULL,simulate=FALSE,type="RACE", Fcovariates=NULL)
+  # Adds accumulator factor
+{
+
   if (!is.factor(data$R)) stop("data must have a factor R")
   factors <- names(data)[!names(data) %in% c("R","rt","trials",Fcovariates)]
+  if (type=="DDM") {
+    datar <- cbind(data,lR=factor(rep(levels(data$R)[1],dim(data)[1]),
+      levels=levels(data$R)),lM=factor(rep(TRUE,dim(data)[1])))
+  }
   if (type %in% c("RACE","SDT")) {
     datar <- cbind(do.call(rbind,lapply(1:length(levels(data$R)),function(x){data})),
                    lR=factor(rep(levels(data$R),each=dim(data)[1]),levels=levels(data$R)))
+    if (!is.null(matchfun) & !all(is.na(datar$R))) {
+      lM <- matchfun(datar)
+      if (any(is.na(lM)) || !(is.logical(lM)))
+        stop("matchfun not scoring properly")
+      datar$lM <- factor(lM)
+    }
+  }
+  if (type %in% c("MT","TC")) {
+    datar <- cbind(do.call(rbind,lapply(1:2,function(x){data})),
+      lR=factor(rep(1:2,each=dim(data)[1]),levels=1:2))
     if (!is.null(matchfun)) {
       lM <- matchfun(datar)
       if (any(is.na(lM)) || !(is.logical(lM)))
         stop("matchfun not scoring properly")
       datar$lM <- factor(lM)
     }
-  } else datar <- cbind(data,lR=factor(rep(levels(data$R)[1],dim(data)[1]),
-                                       levels=levels(data$R)),lM=factor(rep(TRUE,dim(data)[1]))) # For DDM
+  }
   row.names(datar) <- NULL
   if (simulate) datar$rt <- NA else {
     R <- datar$R
     R[is.na(R)] <- levels(datar$lR)[1]
-    datar$winner <- datar$lR==R
-    # datar$winner[is.na(datar$winner)] <- FALSE
+    if (type %in% c("MT","TC")) datar$winner <- NA else
+      datar$winner <- datar$lR==R
   }
   # sort cells together
   if ("trials" %in% names(data)){
@@ -193,8 +199,7 @@ add_accumulators <- function(data,matchfun=NULL,simulate=FALSE,type="RACE", Fcov
     } else{
       datar[order(datar[,c(factors)], as.numeric(datar$trials),as.numeric(datar$lR)),]
     }
-  }
-  else{
+  } else {
     if(length(factors) > 1){
       datar[order(apply(datar[,c(factors)],1,paste,collapse="_"), as.numeric(datar$lR)),]
     } else{
@@ -448,10 +453,13 @@ design_model <- function(data,design,model=NULL,
     stop("p_types, transform and Ntransform must be supplied")
   if (!all(unlist(lapply(design$Flist,class))=="formula"))
     stop("Flist must contain formulas")
+
   nams <- unlist(lapply(design$Flist,function(x)as.character(stats::terms(x)[[2]])))
   names(design$Flist) <- nams
-  if (!all(sort(model()$p_types)==sort(nams)) & model()$type != "MRI")
+  if (!all(model()$p_types %in% nams) & model()$type != "MRI")
+  # if (!all(sort(model()$p_types)==sort(nams)) & model()$type != "MRI")
     stop("Flist must specify formulas for ",paste(model()$p_types,collapse = " "))
+
   if (is.null(design$Clist)) design$Clist=list(stats::contr.treatment)
   if (!is.list(design$Clist)) stop("Clist must be a list")
   if (!is.list(design$Clist[[1]])[1]) # same contrasts for all p_types
