@@ -131,17 +131,15 @@ init <- function(pmwgs, start_mu = NULL, start_var = NULL,
 #' @param verbose Report progress
 #' @param particles Number of starting values
 #' @param n_cores Number of process cores to use
-#' @param epsilon
 #'
-#' @return
+#' @return Samplers object with chains initialized
 #' @export
-#'
-#' @examples
+
 init_chains <- function(samplers, start_mu = NULL, start_var = NULL,
-                 verbose = FALSE, particles = 1000, n_cores = 1, epsilon = NULL)
+                 verbose = FALSE, particles = 1000, n_cores = 1)
 {
   lapply(samplers,init,start_mu = start_mu, start_var = start_var,
-        verbose = verbose, particles = particles, n_cores = n_cores, epsilon = epsilon)
+        verbose = verbose, particles = particles, n_cores = n_cores)
 }
 
 
