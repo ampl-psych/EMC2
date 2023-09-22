@@ -439,7 +439,7 @@ MlbaB <- function(){
     # Random function for racing accumulator
     rfun=function(lR=NULL,pars) {
       ok <- (pars[,"t0"] > .05) & ((pars[,"A"] > 1e-6) | pars[,"A"] == 0)
-      if (is.null(lR)) ok else rLBA_MTR(lR,pars,posdrift=TRUE)
+      if (is.null(lR)) ok else rLBA(lR,pars,posdrift=TRUE)
     },
     # Density function (PDF) for single accumulator
     dfun=function(rt,pars) dLBA(rt,pars,posdrift = TRUE, robust = FALSE),
