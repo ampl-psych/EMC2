@@ -56,6 +56,32 @@ make_design <- function(Flist = NULL,Ffactors = NULL,Rlevels = NULL,model,ddata=
 
   p_vector <- sampled_p_vector(design,design$model)
 
+  if (model()$type %in% c("MT","TC")) {
+    nt=length(Rlevels)
+    nr <- nt/2
+    dL <- matrix(nrow=nt,ncol=6)
+    if (model()$type == "TC") {
+      even <- array(c(1:nt),dim=c(2,nr))
+      odd <- as.vector(even[1,])
+      even <- as.vector(even[2,])
+      dL[odd,1] <- 1; dL[even,1] <- 2
+      dL[odd,2] <- (nr+1):2; dL[even,2] <- 2:(nr+1)
+      dL[odd,3] <- 2; dL[even,3] <- 1
+      dL[odd,4] <- 1:nr; dL[even,4] <- nr:1
+      dL[odd,5] <- 2; dL[even,5] <- 1
+      dL[odd,6] <- 2:(nr+1); dL[even,6] <- (nr+1):2
+    } else { # MT
+      dL[,1] <- c(rep(1,nr),rep(2,nr))
+      dL[,2] <- rep(nr+1,nt)
+      dL[,3] <- c(rep(2,nr),rep(1,nr))
+      dL[,4] <- c(1:nr,nr:1)
+      dL[,5] <- c(rep(2,nr),rep(1,nr))
+      dL[,6] <- c(2:(nr+1),(nr+1):2)
+    }
+    attr(design,"dL") <- dL
+  }
+
+
   if (model()$type=="SDT") {
     tnams <- dimnames(attr(p_vector,"map")$threshold)[[2]]
     max_threshold=paste0("lR",Rlevels[length(Rlevels)])
@@ -67,7 +93,6 @@ make_design <- function(Flist = NULL,Ffactors = NULL,Rlevels = NULL,model,ddata=
     }
   }
   attr(design,"p_vector") <- p_vector
-
 
   if (report_p_vector) {
     print(p_vector)
@@ -511,6 +536,7 @@ design_model <- function(data,design,model=NULL,
   }
   attr(dadm,"ok_trials") <- is.finite(data$rt)
   attr(dadm,"s_data") <- data$subjects
+  attr(dadm,"dL") <- attr(design,"dL")
   # if (!is.null(design$adapt)) {
   #   attr(dadm,"adapt") <- stats::setNames(
   #     lapply(levels(dadm$subjects),augment,da=dadm,design=design),
