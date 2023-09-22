@@ -29,6 +29,8 @@ Imports:
     parallel,
     stats,
     Matrix,
-    Rcpp
+    Rcpp,
+    tmvtnorm,
+    MomTrunc
 LinkingTo: 
     Rcpp
