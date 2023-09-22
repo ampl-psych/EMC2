@@ -281,6 +281,7 @@ log_likelihood_mt <- function(p_vector,dadm,min_ll=log(1e-10))
     like[i] <- n1PDF_MTR_1(rt=dadm$rt[i*2], pars = pmats[c(pick[1],pick[3]),i,],
       dl = tmats[pick[3],i,pick[4]], du = tmats[pick[5],i,pick[6]], b = tmats[pick[1],i,pick[2]])
   }
+  like[is.na(like) | is.nan(like)] <- 0
   return(sum(pmax(min_ll,log(like[attr(dadm,"expand_winner")]))))
 
 }
