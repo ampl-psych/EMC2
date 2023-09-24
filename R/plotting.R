@@ -454,7 +454,10 @@ plot_pars <- function(pmwg_mcmc,layout=c(2,3),
         }
       }
       if (do_plot & do_contraction) contraction[[i]] <- contractioni
-      if (!is.null(pars)) tabs[[i]] <- rbind(true=pars[dimnames(tabs[[i]])[[2]],i],tabs[[i]])
+      if (!is.null(pars)) {
+        tabs[[i]] <- rbind(true=pars[dimnames(tabs[[i]])[[2]],i],tabs[[i]])
+        tabs[[i]] <- rbind(tabs[[i]],Miss=tabs[[i]][3,]-tabs[[i]][1,])
+      }
     }
     tabs <- tabs[as.character(subject)]
     if (add_means)
@@ -485,6 +488,7 @@ plot_pars <- function(pmwg_mcmc,layout=c(2,3),
       names(pars) <- colnames(pmwg_mcmc_combined)
     }
     tabs <- rbind(true=pars,apply(pmwg_mcmc_combined,2,quantile,probs=probs))
+    tabs <- rbind(tabs,Miss=tabs[3,]-tabs[1,])
     if (add_means) attr(tabs,"mean") <- apply(pmwg_mcmc_combined,2,mean)
     if (!no_layout) par(mfrow=layout)
     if (plot_prior) dimnames(psamples) <- list(NULL,colnames(pmwg_mcmc_combined))
