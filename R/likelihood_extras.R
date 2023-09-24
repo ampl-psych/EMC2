@@ -278,12 +278,13 @@ log_likelihood_mt <- function(p_vector,dadm,min_ll=log(1e-10))
     i2 <- i*2
     # Get look up table for current rating (dadm$R[i2])
     pick <- attr(dadm,"dL")[as.numeric(dadm$R[i2]),]
-    like[i] <- n1PDF_MTR_1(rt=dadm$rt[i*2], pars = pmats[c(pick[1],pick[3]),i,],
-      dl = tmats[pick[3],i,pick[4]], du = tmats[pick[5],i,pick[6]], b = tmats[pick[1],i,pick[2]])
+    tmp <- try(EMC2:::n1PDF_MTR_1(rt=dadm$rt[i*2], pars = pmats[c(pick[1],pick[3]),i,],
+      dl = tmats[pick[3],i,pick[4]], du = tmats[pick[5],i,pick[6]], b = tmats[pick[1],i,pick[2]]),silent=TRUE)
+    if (inherits(tmp,"try-error")) like[i] <- 0 else like[i] <- tmp
   }
-  like[is.na(like) | is.nan(like)] <- 0
-  return(sum(pmax(min_ll,log(like[attr(dadm,"expand_winner")]))))
-
+  like <- log(like)
+  like[is.na(like) | is.nan(like) | like == Inf] <- 0
+  return(sum(pmax(min_ll,like[attr(dadm,"expand_winner")])))
 }
 
 
