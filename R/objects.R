@@ -132,7 +132,7 @@ merge_samples <- function(samplers){
 #### mcmc extraction ----
 
 as_Mcmc <- function(sampler,filter=stages,thin=1,subfilter=0,
-                    selection=c("alpha","mu","variance","covariance","correlation","LL","epsilon")[1])
+                    selection=c("alpha","mu","variance","covariance","correlation","LL","fixed", "random")[1])
   # replacement for pmwg package as_mccmc
   # allows for selection of subj_ll, and specifying selection as an integer
   # allows filter as single integer so can remove first filter samples
@@ -150,7 +150,7 @@ as_Mcmc <- function(sampler,filter=stages,thin=1,subfilter=0,
   if (!is(sampler, "pmwgs")) stop("sampler must be an pmwgs object\n")
   stages <- c("preburn", "burn", "adapt", "sample")
   if (is.numeric(filter) && length(filter==1)) filter <- filter:sampler$samples$idx
-  if (is.numeric(selection)) selection <- c("alpha","mu","variance","covariance","correlation","LL")[selection]
+  if (is.numeric(selection)) selection <- c("alpha","mu","variance","covariance","correlation","LL","fixed","random")[selection]
   if (selection %in% c("mu","variance","covariance","correlation") && all(is.na((sampler$samples$theta_mu)))){
     stop("Cannot select mu, variance, covariance or correlation for non-hierarchical model\n")
   }
@@ -159,7 +159,30 @@ as_Mcmc <- function(sampler,filter=stages,thin=1,subfilter=0,
   } else if (!all(filter %in% 1:sampler$samples$idx)) {
     stop("filter is not a vector of stage names, or integer vector of indices\n")
   }
-
+  if(selection == "fixed"){
+    fixed <- sampler$samples$fixed[, filter,drop=FALSE]
+    if (is.null(subfilter)){
+      fixed <- t(fixed)
+    }  else{
+      fixed <- t(shorten(fixed,subfilter,2))
+    }
+    if (thin > dim(fixed)[1]) stop("Thin to large\n")
+    out <- coda::mcmc(fixed[seq(thin,dim(fixed)[1],by=thin),,drop=FALSE])
+    attr(out,"selection") <- selection
+    return(out)
+  }
+  if(selection == "random"){
+    random <- sampler$samples$random[, filter,drop=FALSE]
+    if (is.null(subfilter)){
+      random <- t(random)
+    }  else{
+      random <- t(shorten(random,subfilter,2))
+    }
+    if (thin > dim(random)[1]) stop("Thin to large\n")
+    out <- coda::mcmc(random[seq(thin,dim(random)[1],by=thin),,drop=FALSE])
+    attr(out,"selection") <- selection
+    return(out)
+  }
   if (selection == "mu") {
     mu <- sampler$samples$theta_mu[, filter,drop=FALSE]
     if (is.null(subfilter)){
