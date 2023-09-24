@@ -193,10 +193,10 @@ add_accumulators <- function(data,matchfun=NULL,simulate=FALSE,type="RACE", Fcov
   if (type %in% c("RACE","SDT")) {
     datar <- cbind(do.call(rbind,lapply(1:length(levels(data$R)),function(x){data})),
                    lR=factor(rep(levels(data$R),each=dim(data)[1]),levels=levels(data$R)))
-    if (!is.null(matchfun) & !all(is.na(datar$R))) {
+    if (!is.null(matchfun)) {
       lM <- matchfun(datar)
-      if (any(is.na(lM)) || !(is.logical(lM)))
-        stop("matchfun not scoring properly")
+      # if (any(is.na(lM)) || !(is.logical(lM)))
+      #   stop("matchfun not scoring properly")
       datar$lM <- factor(lM)
     }
   }
