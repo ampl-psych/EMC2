@@ -277,6 +277,7 @@ plot_defective_density <- function(data,subject=NULL,factors=NULL,
 #' @param layout A 2-vector specifying the layout as in par(mfrow = layout).
 #' If NA or NULL use current.
 #' @param selection String designating parameter type (mu, variance, correlation, alpha = default)
+#' @param use_par Character vector of names of parameters to plot (default NULL = plot all)
 #' @param filter A string. Specifies which stage you want to plot.
 #' @param thin An integer. Keep only iterations that are a multiple of thin.
 #' @param subfilter An integer or vector. If integer it will exclude up until
@@ -309,7 +310,7 @@ plot_defective_density <- function(data,subject=NULL,factors=NULL,
 #'no matter what show_chains is), if do_contraction with a "contraction" attribute.
 #'
 #' @export
-plot_pars <- function(pmwg_mcmc,layout=c(2,3),
+plot_pars <- function(pmwg_mcmc,layout=c(2,3),use_par=NULL,
   selection="alpha",filter="sample",thin=1,subfilter=0,mapped=FALSE,
   plot_prior=TRUE,n_prior=1e3,xlim=NULL,ylim=NULL,prior_xlim=NULL,
   show_chains=FALSE,do_plot=TRUE,subject=NA,add_means=FALSE,
@@ -400,13 +401,18 @@ plot_pars <- function(pmwg_mcmc,layout=c(2,3),
     # if (plot_prior) dimnames(psamples) <- list(NULL,colnames(pmwg_mcmc_combined[[1]]))
     if (do_contraction)
       contraction <- setNames(vector(mode="list",length=length(subject)),subject)
+    if (!is.null(use_par)) {
+      ok <- colnames(pmwg_mcmc_combined[[1]]) %in% use_par
+      if (!any(ok)) stop("use_par did not specify parameters that are present")
+      tabs <- lapply(tabs,function(x) x[,ok,drop=FALSE])
+    } else ok <- rep(TRUE,length(colnames(pmwg_mcmc_combined[[1]])))
     for (i in subject) {
       if (do_plot) {
         if (!no_layout) par(mfrow=layout)
         if (do_contraction)
           contractioni <- setNames(numeric(length(colnames(pmwg_mcmc_combined[[i]]))),
                                    colnames(pmwg_mcmc_combined[[i]]))
-        for (j in colnames(pmwg_mcmc_combined[[i]])) {
+        for (j in  colnames(pmwg_mcmc_combined[[i]][ok]) ) {
           if (chains>0) {
             dens <- lapply(pmwg_mcmc[[i]],function(x){density(x[,j],bw=bw,adjust=adjust)})
             if (!is.null(xlim)) {
@@ -494,7 +500,12 @@ plot_pars <- function(pmwg_mcmc,layout=c(2,3),
     if (plot_prior) dimnames(psamples) <- list(NULL,colnames(pmwg_mcmc_combined))
     if (do_contraction)
       contraction <- setNames(numeric(length(colnames(pmwg_mcmc_combined))),colnames(pmwg_mcmc_combined))
-    if (do_plot) for (j in colnames(pmwg_mcmc_combined)) {
+    if (!is.null(use_par)) {
+      ok <- colnames(pmwg_mcmc_combined) %in% use_par
+      if (!any(ok)) stop("use_par did not specify parameters that are present")
+      tabs <- tabs[,ok,drop=FALSE]
+    } else ok <- rep(TRUE,length(colnames(pmwg_mcmc_combined)))
+    if (do_plot) for (j in colnames(pmwg_mcmc_combined)[ok] ) {
       if (chains > 0) {
         dens <- lapply(pmwg_mcmc,function(x){density(x[,j],bw=bw,adjust=adjust)})
         if (!is.null(xlim)) xlimi <- xlim else {
