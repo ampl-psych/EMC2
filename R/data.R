@@ -1,3 +1,50 @@
+#' make_missing
+#'
+#' Truncate or censor data. is.na(rt) not truncated or censored.
+#'
+#' @param data Data frame with rt and R columns
+#' @param LT lower truncation bound below which data are removed (scalar or subject named vector)
+#' @param UT upper truncation bound above which data are removed (scalar or subject named vector)
+#' @param LC lower censoring bound (scalar or subject named vector)
+#' @param UC upper censoring bound (scalar or subject named vector)
+#' @param LCresponse Boolean, default TRUE, if false set LC response to NA
+#' @param UCresponse Boolean, default TRUE, if false set UC response to NA
+#' @param LCdirection Boolean, default TRUE, set LC rt to -Inf, else to NA
+#' @param UCdirection Boolean, default TRUE, set LC rt to Inf, else to NA
+#'
+#' @return Truncated and censored data frame
+#' @export
+
+make_missing <- function(data,LT=-Inf,UT=Inf,LC=-Inf,UC=Inf,
+    LCresponse=TRUE,UCresponse=TRUE,LCdirection=TRUE,UCdirection=TRUE)
+{
+
+  censor <- function(data,L=-Inf,U=Inf,Ld=TRUE,Ud=TRUE,Lr=TRUE,Ur=TRUE)
+  {
+    if (Ld) Ld <- -Inf else Ld <- NA
+    if (Ud) Ud <- Inf else Ud <- NA
+    snams <- levels(data$subjects)
+    if (length(L)==1) L <- setNames(rep(L,length(snams)),snams)
+    if (length(U)==1) U <- setNames(rep(U,length(snams)),snams)
+    for (i in snams) {
+      pick <- data$subjects==i & data$rt < L[i]
+      pick[is.na(pick)] <- FALSE
+      data$rt[pick] <- Ld
+      if (!Lr) data$R[pick] <- NA
+      pick <- data$subjects==i & data$rt > U[i]
+      pick[is.na(pick)] <- FALSE
+      data$rt[pick] <- Ud
+      if (!Ur) data$R[pick] <- NA
+    }
+    data
+  }
+
+  pick <- data$rt>LT & data$rt<UT
+  pick[is.na(pick)] <- TRUE
+  censor(data[pick,],L=LC,U=UC,Lr=LCresponse,Ur=UCresponse,Ld=LCdirection,Ud=UCdirection)
+}
+
+
 #' Simulates data
 #'
 #' Simulates data based on design and parameter vector arguments using the
@@ -18,17 +65,25 @@
 #' @param design design created by make_Design
 #' @param model usually an attribute of design but if not must be given here.
 #' @param trials number of trials per design cell
-#' @param data A supplied that determines the design, with data sorted by subjects
-#' and a trials = 1:n trials/subject factor added (or overwriting any existing)
+#' @param data If supplied that determines the design, with data sorted by subjects
+#' and a trials = 1:n trials/subject factor added (or overwriting any existing).
+#' Truncation and censoring information also taken from data attributes and presence
+#' of -Inf/Inf and NA in rt column and NA in R column.
 #' @param expand replicates the design expand times
 #' @param mapped_p if true instead returns a data frame with one row per design
 #' cell and columns for each parameter specifying how they are mapped to the
 #' design cells.
-#' @param LT lower truncation bound below which data are removed
-#' @param UT upper truncation bound above which data are removed
-#' @param LC lower censoring bound below which data are turned into NA
-#' @param UC upper censoring bound above which data are turned into NA
-#' @param Fcovariates either a data frame of covariate valeus with the same
+#' @param LT lower truncation bound below which data are removed (scalar or subject named vector)
+#' @param UT upper truncation bound above which data are removed (scalar or subject named vector)
+#' @param LC lower censoring bound (scalar or subject named vector)
+#' @param UC upper censoring bound (scalar or subject named vector)
+#' @param LCresponse Boolean, default TRUE, if false set LC response to NA
+#' @param UCresponse Boolean, default TRUE, if false set UC response to NA
+#' @param LCdirection Boolean, default TRUE, set LC rt to -Inf, else to NA
+#' @param UCdirection Boolean, default TRUE, set LC rt to Inf, else to NA
+#' @param force_direction Boolean, take direction from argument not data (default FALSE)
+#' @param force_response Boolean, take response from argument not data (default FALSE)
+#' @param Fcovariates either a data frame of covariate values with the same
 #' number of rows as the data or a list of functions specifying covariates for
 #' each trial. Must have names specified in the design Fcovariates argument.
 #' @param return_Ffunctions if false covariates are not returned
@@ -37,52 +92,10 @@
 #' @export
 
 make_data <- function(p_vector,design,model=NULL,trials=NULL,data=NULL,expand=1,
-                      mapped_p=FALSE,LT=NULL,UT=NULL,LC=NULL,UC=NULL,
-                      Fcovariates=NULL,return_Ffunctions=FALSE)
+  mapped_p=FALSE,Fcovariates=NULL,return_Ffunctions=FALSE,LT=-Inf,UT=Inf,
+  LC=-Inf,UC=Inf,LCresponse=TRUE,UCresponse=TRUE,LCdirection=TRUE,UCdirection=TRUE,
+  force_direction=FALSE,force_response=FALSE)
 {
-
-  missingFilter <- function(data,LT,UT,LC,UC,Rmissing)
-  {
-
-    makeExclude <- function(data,L=NULL,U=NULL)
-    {
-
-      makeCrit <- function(data,bound) {
-        exclude <- factor(data$subjects)
-        levels(exclude) <- bound[levels(exclude)]
-        as.numeric(as.character(exclude))
-      }
-
-      if (!is.null(L)) {
-        if (length(L)==1) exclude <- data$rt < L else {
-          if (!all(sort(levels(data$subjects))==names(L)))
-            stop("Missing subjects")
-          exclude <- data$rt < makeCrit(exclude)
-        }
-      } else {
-        if (length(U)==1) exclude <- data$rt > U else {
-          if (!all(sort(levels(data$subjects))==names(U)))
-            stop("Missing subjects")
-          exclude <- data$rt > makeCrit(exclude)
-        }
-      }
-      exclude
-    }
-
-    if (!is.null(LT)) data <- data[!makeExclude(data,L=LT),]
-    if (!is.null(UT)) data <- data[!makeExclude(data,U=UT),]
-    if (!is.null(LT)) {
-      exclude <- makeExclude(data,L=LC)
-      data$rt[exclude] <- -Inf
-      if (Rmissing) data$R[exclude] <- NA
-    }
-    if (!is.null(UT)) {
-      exclude <- makeExclude(data,U=UC)
-      data$rt[exclude] <- -Inf
-      if (Rmissing) data$R[exclude] <- NA
-    }
-    data
-  }
 
   if (is.list(p_vector))
     p_vector <- do.call(rbind,lapply(p_vector,function(x)x[2,]))
@@ -101,9 +114,6 @@ make_data <- function(p_vector,design,model=NULL,trials=NULL,data=NULL,expand=1,
       names(data)[dim(data)[2]] <- "R"
       data$R <- factor(data$R,levels=design$Rlevels)
       data$trials <- as.numeric(as.character(data$trials))
-      # if (!is.null(design$Ffunctions)) data <-
-      #   cbind.data.frame(data,data.frame(lapply(design$Ffunctions,function(f){f(data)})))
-      LT <- UT <- LC <- UC <- Rmissing <- NULL
       # Add covariates
       if (!is.null(design$Fcovariates)) {
         if (!is.null(Fcovariates)) {
@@ -126,7 +136,23 @@ make_data <- function(p_vector,design,model=NULL,trials=NULL,data=NULL,expand=1,
     } else {
       LT <- attr(data,"LT"); UT <- attr(data,"UT")
       LC <- attr(data,"LC"); UC <- attr(data,"UC")
-      Rmissing <- any(is.na(data$R))
+      if (!force_direction) {
+        ok <- data$rt==-Inf; ok[is.na(ok)] <- FALSE
+        if (any(ok)) LCdirection=TRUE
+        ok <- data$rt==Inf; ok[is.na(ok)] <- FALSE
+        if (any(ok)) LCdirection=TRUE
+      }
+      if (force_response) {
+        if (any(is.na(data$rt) & is.na(data$R)) ) {
+          LCresponse <- FALSE
+          UCresponse <- FALSE
+        } else {
+          ok <- data$rt==-Inf; ok[is.na(ok)] <- FALSE
+          if (any(ok & is.na(data$R))) LCresponse <- FALSE
+          ok <- data$rt==Inf; ok[is.na(ok)] <- FALSE
+          if (any(OK & is.na(data$R))) UCresponse <- FALSE
+        }
+      }
       data <- add_trials(data[order(data$subjects),])
     }
     if (!is.factor(data$subjects)) data$subjects <- factor(data$subjects)
@@ -170,7 +196,8 @@ make_data <- function(p_vector,design,model=NULL,trials=NULL,data=NULL,expand=1,
       dropNames <- c(dropNames,names(design$Ffunctions) )
     data <- data[data$lR==levels(data$lR)[1],!(names(data) %in% dropNames)]
     for (i in dimnames(Rrt)[[2]]) data[[i]] <- Rrt[,i]
-    data <- missingFilter(data[,names(data)!="winner"],LT,UT,LC,UC,Rmissing)
+    data <- make_missing(data[,names(data)!="winner"],LT,UT,LC,UC,
+      LCresponse,UCresponse,LCdirection,UCdirection)
     attr(data,"p_vector") <- p_vector;
     data
 }
@@ -197,13 +224,21 @@ add_Ffunctions <- function(data,design)
 #' @param thin Integer. By how much do you want to thin the chains before simulating from them.
 #' @param n_cores Integer. Across how many cores do you want to parallelize.
 #' @param use_par Character. Can be mean, median or default random. Will take either random samples from the chain or as specified.
+#' @param force_direction Boolean, take direction from argument not samples (default FALSE)
+#' @param force_response Boolean, take response from argument not samples (default FALSE)
+#' @param LCresponse Boolean, default TRUE, if false set LC response to NA
+#' @param UCresponse Boolean, default TRUE, if false set UC response to NA
+#' @param LCdirection Boolean, default TRUE, set LC rt to -Inf, else to NA
+#' @param UCdirection Boolean, default TRUE, set LC rt to Inf, else to NA
 #'
 #' @return A list of simulated data sets of length n_post.
 #' @export
 
 post_predict <- function(samples,hyper=FALSE,n_post=100,expand=1,
                          filter="sample",subfilter=0,thin=1,n_cores=1,
-                         use_par=c("random","mean","median")[1])
+                         use_par=c("random","mean","median")[1],
+                         LCresponse=TRUE,UCresponse=TRUE,LCdirection=TRUE,UCdirection=TRUE,
+                         force_direction=FALSE,force_response=FALSE)
   # Post predictions for samples object, based on random samples or some
   # central tendency statistic.
   # n_post is number of parameter vectors used
@@ -212,6 +247,37 @@ post_predict <- function(samples,hyper=FALSE,n_post=100,expand=1,
   # hyper=FALSE draws from alphas (participant level)
   # hyper=TRUE draws from hyper
 {
+
+  simulate_missing <- function(data,samples,force_direction=FALSE,force_response=FALSE) {
+    snams <- names(samples[[1]]$data)
+    LT <- unlist(lapply(samples[[1]]$data,function(x)attr(x,"LT")),use.names = FALSE)
+    if (!is.null(LT)) LT <- setNames(LT,snams) else LT <- -Inf
+    UT <- unlist(lapply(samples[[1]]$data,function(x)attr(x,"UT")),use.names = FALSE)
+    if (!is.null(UT)) UT <- setNames(UT,snams) else UT <- Inf
+    LC <- unlist(lapply(samples[[1]]$data,function(x)attr(x,"LC")),use.names = FALSE)
+    if (!is.null(LC)) LC <- setNames(LC,snams) else LC <- -Inf
+    UC <- unlist(lapply(samples[[1]]$data,function(x)attr(x,"UC")),use.names = FALSE)
+    if (!is.null(UC)) UC <- setNames(UC,snams) else UC <- Inf
+    d <- do.call(rbind,samples[[1]]$data)
+    if (!force_direction) {
+      ok <- d$rt==-Inf; ok[is.na(ok)] <- FALSE
+      if (any(ok)) LCdirection=TRUE
+      ok <- d$rt==Inf; ok[is.na(ok)] <- FALSE
+      if (any(ok)) LCdirection=TRUE
+    }
+    if (force_response) {
+      if (any(is.na(d$rt) & is.na(d$R)) ) {
+        LCresponse <- FALSE
+        UCresponse <- FALSE
+      } else {
+        ok <- d$rt==-Inf; ok[is.na(ok)] <- FALSE
+        if (any(ok & is.na(d$R))) LCresponse <- FALSE
+        ok <- d$rt==Inf; ok[is.na(ok)] <- FALSE
+        if (any(OK & is.na(d$R))) UCresponse <- FALSE
+      }
+    }
+    make_missing(data,LT,UT,LC,UC,LCresponse,UCresponse,LCdirection,UCdirection)
+  }
 
   data <- attr(samples,"data_list")
   design <- attr(samples,"design_list")
@@ -269,7 +335,7 @@ post_predict <- function(samples,hyper=FALSE,n_post=100,expand=1,
     post_out[[j]] <- out
   }
   if(!jointModel) post_out <- post_out[[1]]
-  return(post_out)
+  return(simulate_missing(post_out,samples))
 }
 
 #' Make random effects.
