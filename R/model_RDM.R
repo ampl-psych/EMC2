@@ -395,11 +395,14 @@ rdmBt0natural <- function(){
 MrdmB <- function(){
   list(
     type="RACE",
-    p_types=c("v","B","A","t0","s"),
+    p_types=c("v","B","A","t0","s","pContaminant"),
     # Transform to natural scale
     Ntransform=function(x) {
       # transform parameters back to real line
-      exp(x)
+      doprobit <- dimnames(x)[[2]] == "pContaminant"
+      x[,doprobit] <- pnorm(x[,doprobit])
+      x[,!doprobit] <- exp(x[,!doprobit])
+      x
     },
     # p_vector transform
     transform = function(x) x,

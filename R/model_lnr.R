@@ -76,10 +76,13 @@ lnrMS <- function() {
 MlnrMS <- function(){
   list(
     type="RACE",
-    p_types=c("m","s","t0"),
+    p_types=c("m","s","t0","pContaminant"),
     Ntransform=function(x) {
       # Transform to natural scale
-      x[,dimnames(x)[[2]] != "m"] <- exp(x[,dimnames(x)[[2]] != "m"])
+      doexp <- !(dimnames(x)[[2]] %in% c("m","pContaminant"))
+      x[,doexp] <- exp(x[,doexp])
+      doprobit <- dimnames(x)[[2]] == "pContaminant"
+      x[,doprobit] <- pnorm(x[,doprobit])
       x
     },
     # p_vector transform scaling parameter by s=1 assumed in lnr.R

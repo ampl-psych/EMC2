@@ -49,9 +49,9 @@ post_predict(
 
 \item{UCdirection}{Boolean, default TRUE, set LC rt to Inf, else to NA}
 
-\item{force_direction}{Boolean, take direction from argument not samples (default FALSE)}
+\item{force_direction}{Boolean, take censor direction from argument not samples (default FALSE)}
 
-\item{force_response}{Boolean, take response from argument not samples (default FALSE)}
+\item{force_response}{Boolean, take censor response from argument not samples (default FALSE)}
 }
 \value{
 A list of simulated data sets of length n_post.

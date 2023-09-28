@@ -421,10 +421,13 @@ lbaB <- function(){
 MlbaB <- function(){
   list(
     type="RACE",
-    p_types=c("v","sv","B","A","t0"),
+    p_types=c("v","sv","B","A","t0","pContaminant"),
     Ntransform=function(x) {
       # Transform to natural scale
-      x[,dimnames(x)[[2]] != "v"] <- exp(x[,dimnames(x)[[2]] != "v"])
+      doexp <- !(dimnames(x)[[2]] %in% c("v","pContaminant"))
+      x[,doexp] <- exp(x[,doexp])
+      doprobit <- dimnames(x)[[2]] == "pContaminant"
+      x[,doprobit] <- pnorm(x[,doprobit])
       x
     },
     # p_vector transform
