@@ -134,8 +134,10 @@ make_data <- function(p_vector,design,model=NULL,trials=NULL,data=NULL,expand=1,
         if (length(empty_covariates)>0) data[,empty_covariates] <- 0
       }
     } else {
-      LT <- attr(data,"LT"); UT <- attr(data,"UT")
-      LC <- attr(data,"LC"); UC <- attr(data,"UC")
+      LT <- attr(data,"LT"); if (is.null(LT)) LT <- -Inf
+      UT <- attr(data,"UT"); if (is.null(UT)) UT <- Inf
+      LC <- attr(data,"LC"); if (is.null(LC)) LC <- -Inf
+      UC <- attr(data,"UC"); if (is.null(UC)) UC <- Inf
       if (!force_direction) {
         ok <- data$rt==-Inf; ok[is.na(ok)] <- FALSE
         if (any(ok)) LCdirection=TRUE
@@ -224,8 +226,8 @@ add_Ffunctions <- function(data,design)
 #' @param thin Integer. By how much do you want to thin the chains before simulating from them.
 #' @param n_cores Integer. Across how many cores do you want to parallelize.
 #' @param use_par Character. Can be mean, median or default random. Will take either random samples from the chain or as specified.
-#' @param force_direction Boolean, take direction from argument not samples (default FALSE)
-#' @param force_response Boolean, take response from argument not samples (default FALSE)
+#' @param force_direction Boolean, take censor direction from argument not samples (default FALSE)
+#' @param force_response Boolean, take censor response from argument not samples (default FALSE)
 #' @param LCresponse Boolean, default TRUE, if false set LC response to NA
 #' @param UCresponse Boolean, default TRUE, if false set UC response to NA
 #' @param LCdirection Boolean, default TRUE, set LC rt to -Inf, else to NA
@@ -247,37 +249,6 @@ post_predict <- function(samples,hyper=FALSE,n_post=100,expand=1,
   # hyper=FALSE draws from alphas (participant level)
   # hyper=TRUE draws from hyper
 {
-
-  simulate_missing <- function(data,samples,force_direction=FALSE,force_response=FALSE) {
-    snams <- names(samples[[1]]$data)
-    LT <- unlist(lapply(samples[[1]]$data,function(x)attr(x,"LT")),use.names = FALSE)
-    if (!is.null(LT)) LT <- setNames(LT,snams) else LT <- -Inf
-    UT <- unlist(lapply(samples[[1]]$data,function(x)attr(x,"UT")),use.names = FALSE)
-    if (!is.null(UT)) UT <- setNames(UT,snams) else UT <- Inf
-    LC <- unlist(lapply(samples[[1]]$data,function(x)attr(x,"LC")),use.names = FALSE)
-    if (!is.null(LC)) LC <- setNames(LC,snams) else LC <- -Inf
-    UC <- unlist(lapply(samples[[1]]$data,function(x)attr(x,"UC")),use.names = FALSE)
-    if (!is.null(UC)) UC <- setNames(UC,snams) else UC <- Inf
-    d <- do.call(rbind,samples[[1]]$data)
-    if (!force_direction) {
-      ok <- d$rt==-Inf; ok[is.na(ok)] <- FALSE
-      if (any(ok)) LCdirection=TRUE
-      ok <- d$rt==Inf; ok[is.na(ok)] <- FALSE
-      if (any(ok)) LCdirection=TRUE
-    }
-    if (force_response) {
-      if (any(is.na(d$rt) & is.na(d$R)) ) {
-        LCresponse <- FALSE
-        UCresponse <- FALSE
-      } else {
-        ok <- d$rt==-Inf; ok[is.na(ok)] <- FALSE
-        if (any(ok & is.na(d$R))) LCresponse <- FALSE
-        ok <- d$rt==Inf; ok[is.na(ok)] <- FALSE
-        if (any(OK & is.na(d$R))) UCresponse <- FALSE
-      }
-    }
-    make_missing(data,LT,UT,LC,UC,LCresponse,UCresponse,LCdirection,UCdirection)
-  }
 
   data <- attr(samples,"data_list")
   design <- attr(samples,"design_list")
@@ -319,12 +290,16 @@ post_predict <- function(samples,hyper=FALSE,n_post=100,expand=1,
       simDat <- vector(mode="list",length=n_post)
       for (i in 1:n_post) {
         cat(".")
-        simDat[[i]] <- make_data(pars[[i]],design=design[[j]],model=model[[j]],data=data[[j]],expand=expand)
+        simDat[[i]] <- make_data(pars[[i]],design=design[[j]],model=model[[j]],data=data[[j]],expand=expand,
+          force_direction = force_direction,force_response=force_response,
+          LCresponse=LCresponse,UCresponse=UCresponse,LCdirection=LCdirection,UCdirection=UCdirection)
       }
       cat("\n")
     } else {
       simDat <- mclapply(1:n_post,function(i){
-        make_data(pars[[i]],design=design[[j]],model=model[[j]],data=data[[j]],expand=expand)
+        make_data(pars[[i]],design=design[[j]],model=model[[j]],data=data[[j]],expand=expand,
+          force_direction = force_direction,force_response=force_response,
+          LCresponse=LCresponse,UCresponse=UCresponse,LCdirection=LCdirection,UCdirection=UCdirection)
       },mc.cores=n_cores)
     }
     if (!is.null(attr(simDat[[1]],"adapt"))) adapt <- attr(simDat[[1]],"adapt")
@@ -335,7 +310,8 @@ post_predict <- function(samples,hyper=FALSE,n_post=100,expand=1,
     post_out[[j]] <- out
   }
   if(!jointModel) post_out <- post_out[[1]]
-  return(simulate_missing(post_out,samples))
+  # return(simulate_missing(post_out,samples))
+  return(post_out)
 }
 
 #' Make random effects.
