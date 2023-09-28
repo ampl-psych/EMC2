@@ -579,7 +579,9 @@ plot_roc <- function(data,signalFactor="S",zROC=FALSE,qfun=NULL,main="",lim=NULL
 #' argument (which calculates a statistics based on the data) is supplied
 #' instead fit is plotted as a density with a vertical line at the position of
 #' the data statistic. If more than one subject is included data and fits are
-#' aggregated over subjects.
+#' aggregated over subjects. If data or fit contains NA in responses or rt, or
+#' is.infinite(rt) these are treating as missing and defective cdfs sum to the
+#' probability of non-missing.
 #'
 #' @param data Data frame with subjects and R factors, and possibly other factors
 #' and an rt column
@@ -613,7 +615,6 @@ plot_roc <- function(data,signalFactor="S",zROC=FALSE,qfun=NULL,main="",lim=NULL
 #'
 #' @return If stat argument is provided a table of observed values and predicted quantiles
 #' @export
-
 plot_fit <- function(data,pp,subject=NULL,factors=NULL,
                      stat=NULL,stat_name="",adjust=1,
                      ci=c(.025,.5,.975),do_plot=TRUE,
@@ -637,6 +638,10 @@ plot_fit <- function(data,pp,subject=NULL,factors=NULL,
     dat <- data
     fnams <- names(dat)[!(names(dat) %in% c("trials","R","rt"))]
   }
+
+  okd <- !is.na(dat$R) & is.finite(dat$rt)
+  okpp <- !is.na(pp$R) & is.finite(pp$rt)
+
   if (!is.null(factors)) {
     if (!all(factors %in% fnams))
       stop("factors must name factors in data")
@@ -735,42 +740,43 @@ plot_fit <- function(data,pp,subject=NULL,factors=NULL,
       if (is.null(xlim)) {
         xlim <- c(Inf,-Inf)
         for (i in sort(unique(cells))) {
-          dati <- dat[cells==i,]
-          ppi <- pp[pp_cells==i,]
-          pR <- table(dati$R)/dim(dati)[1]
+        dati <- dat[cells==i & okd,]
+          ppi <- pp[pp_cells==i & okpp,]
           pqs <- pq <- qs <- setNames(vector(mode="list",length=length(R)),R)
           for (j in R) if (length(dati$rt[dati$R==j])>=length(q_points)) {
             qs[[j]] <- quantile(dati$rt[dati$R==j],probs=probs)
             pq[[j]] <- quantile(ppi$rt[ppi$R==j],probs=probs)
             pqs[[j]] <- tapply(ppi$rt[ppi$R==j],ppi$postn[ppi$R==j],
-                               quantile,probs=probs[pok])
-          } else qs[[j]] <- pq[[j]] <- pqs[[j]] <- NA
-          rx <- cbind(do.call(rbind,lapply(qs,function(x){x[c(1,length(probs))]})),
-                      do.call(rbind,lapply(pq,function(x){x[c(1,length(probs))]})))
-          xlimi <- c(min(rx,na.rm=TRUE),max(rx,na.rm=TRUE))
-          if (!any(is.na(xlimi))) {
-            xlim[1] <- pmin(xlim[1],xlimi[1])
-            xlim[2] <- pmax(xlim[2],xlimi[2])
-          }
+                                 quantile,probs=probs[pok])
+            } else qs[[j]] <- pq[[j]] <- pqs[[j]] <- NA
+            rx <- cbind(do.call(rbind,lapply(qs,function(x){x[c(1,length(probs))]})),
+                        do.call(rbind,lapply(pq,function(x){x[c(1,length(probs))]})))
+            xlimi <- c(min(rx,na.rm=TRUE),max(rx,na.rm=TRUE))
+            if (!any(is.na(xlimi))) {
+              xlim[1] <- pmin(xlim[1],xlimi[1])
+              xlim[2] <- pmax(xlim[2],xlimi[2])
+            }
         }
       }
       for (i in sort(unique(cells))) {
         dati <- dat[cells==i,]
         ppi <- pp[pp_cells==i,]
-        # R <- sort(unique(dati$R))
-        pR <- table(dati$R)/dim(dati)[1]
+        okdi <- okd[cells==i]
+        okppi <- okpp[pp_cells==i]
+        pR <- tapply(okdi,dati$R,sum)/dim(dati)[1]
+        ppR <- tapply(okppi,ppi$R,sum)/dim(ppi)[1]
+        dati <- dati[okdi,]
+        ppi <- ppi[okppi,]
         pqs <- pq <- qs <- setNames(vector(mode="list",length=length(R)),R)
-        ppR <- pR; ppR[1:length(pR)] <- 0
         for (j in R) if (length(dati$rt[dati$R==j])>=length(q_points)) {
           isj <- ppi$R==j
           qs[[j]] <- quantile(dati$rt[dati$R==j],probs=probs)
           pq[[j]] <- quantile(ppi$rt[isj],probs=probs)
           pqs[[j]] <- tapply(ppi$rt[isj],ppi$postn[isj],quantile,probs=probs[pok])
-          ppR[j] <- mean(isj)
         } else qs[[j]] <- pq[[j]] <- pqs[[j]] <- NA
         if ( !any(is.na(pq[[1]])) ) {
           plot(pq[[1]],probs*ppR[1],xlim=xlim,ylim=ylim,main=i,xlab="RT",type="l",
-               lwd=fit_lwd,ylab="p(R)",lty=1)
+                lwd=fit_lwd,ylab="p(R)",lty=1)
           tmp=lapply(pqs[[1]],function(x){
             points(x,probs[pok]*ppR[1],col="grey",pch=16,cex=pqp_cex)})
           points(pq[[1]][pok],probs[pok]*ppR[1],cex=pqp_cex*3,pch=16,col="grey")
@@ -782,7 +788,7 @@ plot_fit <- function(data,pp,subject=NULL,factors=NULL,
           for (j in 2:length(qs)) if (!any(is.na(pq[[j]]))) {
             if (do_plot) {
               plot(pq[[j]],probs*ppR[j],xlim=xlim,ylim=ylim,main=i,xlab="RT",type="l",
-                   lwd=fit_lwd,ylab="p(R)",lty=j)
+                    lwd=fit_lwd,ylab="p(R)",lty=j)
               do_plot <- FALSE
             } else lines(pq[[j]],probs*ppR[j],lwd=fit_lwd,lty=j)
             tmp=lapply(pqs[[j]],function(x){
