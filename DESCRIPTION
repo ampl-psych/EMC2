@@ -31,5 +31,6 @@ Imports:
     Matrix,
     Rcpp,
     tmvtnorm,
+    MomTrunc
 LinkingTo: 
     Rcpp
