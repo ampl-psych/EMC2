@@ -414,7 +414,10 @@ lbaB <- function(){
 }
 
 
-#' lba_B Model accommodating missing values (truncation and censoring)
+#' Mlba_B
+#'
+#' LBA model accommodating missing values (truncation and censoring) and
+#' assuming positive rates (i.e., no intrinsic omissions)
 #'
 #' @return A model list with all the necessary functions to sample
 #' @export
@@ -448,6 +451,51 @@ MlbaB <- function(){
     dfun=function(rt,pars) dLBA(rt,pars,posdrift = TRUE, robust = FALSE),
     # Probability function (CDF) for single accumulator
     pfun=function(rt,pars) pLBA(rt,pars,posdrift = TRUE, robust = FALSE),
+    # Race likelihood combining pfun and dfun
+    log_likelihood=function(p_vector,dadm){
+      log_likelihood_race_missing(p_vector=p_vector, dadm = dadm, min_ll=log(1e-10))
+    }
+  )
+}
+
+#' MIlbaB
+#'
+#' LBA model accommodating missing values (truncation and censoring) and
+#' assuming unbounded rates (i.e., allows intrinsic omissions)
+#'
+#' @return
+#' @export A model list with all the necessary functions to sample
+
+MIlbaB <- function(){
+  list(
+    type="RACE",
+    p_types=c("v","sv","B","A","t0","pContaminant"),
+    Ntransform=function(x) {
+      # Transform to natural scale
+      doexp <- !(dimnames(x)[[2]] %in% c("v","pContaminant"))
+      x[,doexp] <- exp(x[,doexp])
+      doprobit <- dimnames(x)[[2]] == "pContaminant"
+      x[,doprobit] <- pnorm(x[,doprobit])
+      x
+    },
+    # p_vector transform
+    transform = function(p) p,
+    # Trial dependent parameter transform
+    Ttransform = function(pars,dadm) {
+      pars <- cbind(pars,b=pars[,"B"] + pars[,"A"])
+      attr(pars,"ok") <- (pars[,"t0"] > .05) & ((pars[,"A"] > 1e-6) | (pars[,"A"] == 0))
+      pars
+    },
+    # # Random function for racing accumulator
+    # Random function for racing accumulator
+    rfun=function(lR=NULL,pars) {
+      ok <- (pars[,"t0"] > .05) & ((pars[,"A"] > 1e-6) | pars[,"A"] == 0)
+      if (is.null(lR)) ok else rLBA(lR,pars,posdrift=FALSE)
+    },
+    # Density function (PDF) for single accumulator
+    dfun=function(rt,pars) dLBA(rt,pars,posdrift = FALSE, robust = FALSE),
+    # Probability function (CDF) for single accumulator
+    pfun=function(rt,pars) pLBA(rt,pars,posdrift = FALSE, robust = FALSE),
     # Race likelihood combining pfun and dfun
     log_likelihood=function(p_vector,dadm){
       log_likelihood_race_missing(p_vector=p_vector, dadm = dadm, min_ll=log(1e-10))
