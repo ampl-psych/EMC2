@@ -23,7 +23,8 @@ make_data(
   LCdirection = TRUE,
   UCdirection = TRUE,
   force_direction = FALSE,
-  force_response = FALSE
+  force_response = FALSE,
+  rtContaminantNA = FALSE
 )
 }
 \arguments{
@@ -73,6 +74,10 @@ each trial. Must have names specified in the design Fcovariates argument.}
 \item{force_direction}{Boolean, take direction from argument not data (default FALSE)}
 
 \item{force_response}{Boolean, take response from argument not data (default FALSE)}
+
+\item{rtContaminantNA}{Boolean, TRUE sets contaminant trial rt to NA, if FALSE
+(the default) direction is taken from data or LCdirection or UCdirection (NB
+if both of these are false an error occurs as then contamination is not identifiable).}
 }
 \value{
 None
