@@ -375,6 +375,7 @@ n1PDF_MTR_1 <- function(rt, pars,dl,du,b)
 #' Frequently `sv` is fixed to 1 to satisfy scaling constraints.
 #'
 #' Here we use the b = B + A parameterization, which ensures that the response threshold is always higher than the between trial variation in start point of the drift rate.
+#' Also, rates are sampled from normal distributions truncated to be always positive.
 #'
 #' @return A model list with all the necessary functions to sample
 #' @export
@@ -458,15 +459,14 @@ MlbaB <- function(){
   )
 }
 
-#' MIlbaB
+#' MUlbaB
 #'
 #' LBA model accommodating missing values (truncation and censoring) and
 #' assuming unbounded rates (i.e., allows intrinsic omissions)
 #'
-#' @return
-#' @export A model list with all the necessary functions to sample
-
-MIlbaB <- function(){
+#' @return A model list with all the necessary functions to sample
+#' @export
+MUlbaB <- function(){
   list(
     type="RACE",
     p_types=c("v","sv","B","A","t0","pContaminant"),
@@ -495,10 +495,10 @@ MIlbaB <- function(){
     # Density function (PDF) for single accumulator
     dfun=function(rt,pars) dLBA(rt,pars,posdrift = FALSE, robust = FALSE),
     # Probability function (CDF) for single accumulator
-    pfun=function(rt,pars) pLBA(rt,pars,posdrift = FALSE, robust = FALSE),
+    pfun=function(rt,pars) pLBA(rt,pars,robust = FALSE),
     # Race likelihood combining pfun and dfun
     log_likelihood=function(p_vector,dadm){
-      log_likelihood_race_missing(p_vector=p_vector, dadm = dadm, min_ll=log(1e-10))
+      log_likelihood_race_missing_LBAU(p_vector=p_vector, dadm = dadm, min_ll=log(1e-10))
     }
   )
 }
