@@ -412,7 +412,7 @@ plot_pars <- function(pmwg_mcmc,layout=c(2,3),use_par=NULL,
         if (do_contraction)
           contractioni <- setNames(numeric(length(colnames(pmwg_mcmc_combined[[i]]))),
                                    colnames(pmwg_mcmc_combined[[i]]))
-        for (j in  colnames(pmwg_mcmc_combined[[i]][ok]) ) {
+        for (j in  colnames(pmwg_mcmc_combined[[i]])[ok] ) {
           if (chains>0) {
             dens <- lapply(pmwg_mcmc[[i]],function(x){density(x[,j],bw=bw,adjust=adjust)})
             if (!is.null(xlim)) {
