@@ -46,7 +46,8 @@ NumericVector c_add_vectors(NumericVector x1, NumericVector x2){
 }
 
 // LL generic functions
-NumericMatrix map_p(NumericVector p_vector, CharacterVector p_types, List designs, int n_trials){
+// [[Rcpp::export]]
+NumericMatrix c_map_p(NumericVector p_vector, CharacterVector p_types, List designs, int n_trials){
   NumericMatrix pars(n_trials, p_types.length());
   for(int i = 0; i < p_types.length(); i++){
     NumericMatrix curr_design = designs[i];
@@ -67,7 +68,7 @@ NumericMatrix get_pars(NumericVector p_vector, NumericVector constants,
   NumericVector p_vector_updtd(clone(p_vector));
   p_vector_updtd = c_add_vectors(p_vector_updtd, constants);
   p_vector_updtd = transform(p_vector_updtd);
-  NumericMatrix pars = map_p(p_vector_updtd, p_types, designs, n_trials);
+  NumericMatrix pars = c_map_p(p_vector_updtd, p_types, designs, n_trials);
   pars = Ntransform(pars);
   return(pars);
 }

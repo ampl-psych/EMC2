@@ -11,6 +11,7 @@ make_samplers(
   type = c("standard", "diagonal", "blocked", "factor", "single", "lm",
     "infnt_factor")[1],
   n_chains = 3,
+  compress = TRUE,
   rt_resolution = 0.02,
   prior = NULL,
   nuisance = NULL,
@@ -32,6 +33,8 @@ make_samplers(
 \item{type}{A string indicating whether to run a standard group-level, or blocked, diagonal, factor, or single.}
 
 \item{n_chains}{An integer. Specifies the amount of mcmc chains to be run. Should be more than 1 to get gelman diagnostics.}
+
+\item{compress}{Boolean, if true data compressed to speed likelihood calculation}
 
 \item{rt_resolution}{A double. Used for compression, rts will be binned based on this resolution.}
 

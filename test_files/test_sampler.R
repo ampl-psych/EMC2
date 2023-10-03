@@ -1,5 +1,4 @@
 rm(list=ls())
-devtools::load_all()
 print(load("test_files/PNAS.RData"))
 dat <- data[,c("s","E","S","R","RT")]
 names(dat)[c(1,5)] <- c("subjects","rt")
@@ -25,12 +24,12 @@ design_B <- make_design(
   constants=c(sv=log(1)),
   model=lbaB)
 
-prior <- get_prior_single(design = design_B)
-plot_prior(prior)
+# prior <- get_prior_single(design = design_B)
+# plot_prior(prior)
 
 prior <- list(
-  theta_mu_mean = 1:5,
-  theta_mu_var = diag(c(5:1))
+  theta_mu_mean = 1:7,
+  theta_mu_var = diag(c(7:1))
 ) # This way we're using default priors for the nuisance parameters
 
 dat2 <- dat[dat$subjects %in% unique(dat$subjects)[1:4],]
@@ -38,9 +37,9 @@ dat2$subjects <- droplevels(dat2$subjects)
 
 # Nuisance non hyper = non hierarchically estimated parameters
 devtools::load_all()
-
-samplers <- make_samplers(dat2, design_B, type = "standard")
-samplers <- run_emc(samplers, verbose = T, cores_for_chains = 3, cores_per_chain = 4)
+samplers <- make_samplers(dat2, design_B, type = "blocked", prior = prior, par_groups = 1:7)
+debug(EMC2:::init)
+samplers <- run_samplers(samplers, stage= "preburn", iter = 20, step_size = 10, max_gd = 1.1, verbose = T, cores_for_chains = 1, cores_per_chain = 1)
 
 debug(IS2)
 samplers <- run_IS2(samplers, IS_samples = 50, n_cores = 14)

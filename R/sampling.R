@@ -88,15 +88,15 @@ init <- function(pmwgs, start_mu = NULL, start_var = NULL,
                                           startpoints$tvar, startpoints_nuis$tvar,
                                           pmwgs$nuisance[!pmwgs$grouped])
     pmwgs$sampler_nuis$samples <- get_variant_funs(type)$fill_samples(samples = pmwgs$sampler_nuis$samples,
-                                                                      group_level = startpoints_nuis,
-                                                                      epsilon = epsilon, j = 1,
-                                                                      proposals = NULL,
-                                                                      n_pars = pmwgs$n_pars)
+                                                                    group_level = startpoints_nuis,
+                                                                    epsilon = epsilon, j = 1,
+                                                                    proposals = NULL,
+                                                                    n_pars = pmwgs$n_pars)
     pmwgs$sampler_nuis$samples$idx <- 1
   }
   if(any(pmwgs$grouped)){
     grouped_pars <- mvtnorm::rmvnorm(particles, pmwgs$prior$prior_grouped$theta_mu_mean,
-                                     pmwgs$prior$prior_grouped$theta_mu_var)
+                            pmwgs$prior$prior_grouped$theta_mu_var)
   } else{
     grouped_pars <- NULL
   }
@@ -120,9 +120,34 @@ init <- function(pmwgs, start_mu = NULL, start_var = NULL,
   return(pmwgs)
 }
 
+#' Initialize chains
+#'
+#' Adds a set of set of start points to each chain samples from a multivariate
+#' normal
+#'
+#' @param samplers List of chains made by make_samplers
+#' @param start_mu Mean of multivariate normal
+#' @param start_var Variance covariance matrix of multivariate normal
+#' @param verbose Report progress
+#' @param particles Number of starting values
+#' @param n_cores Number of process cores to use
+#' @param epsilon
+#'
+#' @return
+#' @export
+#'
+#' @examples
+init_chains <- function(samplers, start_mu = NULL, start_var = NULL,
+                 verbose = FALSE, particles = 1000, n_cores = 1, epsilon = NULL)
+{
+  lapply(samplers,init,start_mu = start_mu, start_var = start_var,
+        verbose = verbose, particles = particles, n_cores = n_cores, epsilon = epsilon)
+}
+
+
 start_proposals_group <- function(data, group_pars, alpha, par_names,
-                                  likelihood_func, is_grouped,
-                                  variant_funs, subjects, n_cores){
+                               likelihood_func, is_grouped,
+                               variant_funs, subjects, n_cores){
   num_particles <- nrow(group_pars)
   n_subjects <- length(subjects)
   proposals_list <- vector("list", n_subjects)
@@ -225,10 +250,10 @@ run_stage <- function(pmwgs,
       pars_comb <- merge_group_level(pars$tmu, pars_nuis$tmu, pars$tvar, pars_nuis$tvar, nuisance[!grouped])
       pars_comb$alpha <- pmwgs$samples$alpha[,,j-1]
       pmwgs$sampler_nuis$samples <- get_variant_funs(type)$fill_samples(samples = pmwgs$sampler_nuis$samples,
-                                                                        group_level = pars_nuis,
-                                                                        epsilon = epsilon, j = j,
-                                                                        proposals = NULL,
-                                                                        n_pars = n_pars)
+                                                                                              group_level = pars_nuis,
+                                                                                              epsilon = epsilon, j = j,
+                                                                                              proposals = NULL,
+                                                                                              n_pars = n_pars)
       pmwgs$sampler_nuis$samples$idx <- j
     }
     if(any(grouped)){
@@ -313,6 +338,12 @@ new_particle <- function (s, data, num_particles, parameters, eff_mu = NULL,
                           block_idx, shared_ll_idx, grouped_pars, is_grouped,
                           par_names)
 {
+  # if(stage == "sample"){
+  #   if(rbinom(1, size = 1, prob = .5) == 1){
+  #     components <- rep(1, length(components))
+  #     shared_ll_idx <- rep(1, length(components))
+  #   }
+  # }
   group_pars <- variant_funs$get_group_level(parameters, s)
   unq_components <- unique(components)
   proposal_out <- numeric(length(group_pars$mu))
@@ -325,26 +356,15 @@ new_particle <- function (s, data, num_particles, parameters, eff_mu = NULL,
   if(stage != "sample"){
     eff_mu_sub <- subj_mu
     group_var_subj <- group_var
+    if(length(unq_components) > 1){
+      group_var_subj[block_idx] <- 0
+    }
   }
   out_lls <- numeric(length(unq_components))
   for(i in unq_components){
     if(stage != "sample"){
-      # In preburn use to proposals:
-      # 1) person distribution with previous particle mean and scaled group variance
-      # 2) group mean and group variance
-      # In burn and sample add covariance proposals with
-      # 3) previous particle mean and scaled chain covariance
-      # In sample rather use:
-      # 1) Previous particle mean and now scaled covariance
-      # 2) Group mean and group variance (same as before)
-      # 3) Conditional mean and covariance
-      # Group distribution, with group mean and variance
       eff_var_curr <- chains_cov[,,s] * epsilon[s,i]^2
-      if(stage == "preburn"){
-        var_subj <- group_var_subj * epsilon[s,i]^2
-      } else{
-        var_subj <- group_var_subj *  mean(diag(eff_var_curr))/mean(diag(group_var_subj))
-      }
+      var_subj <- group_var_subj *  epsilon[s,i]^2
     } else{
       eff_var_curr <- eff_var[,,s]
       var_subj <- chains_cov[,,s] *  epsilon[s,i]^2
@@ -367,7 +387,7 @@ new_particle <- function (s, data, num_particles, parameters, eff_mu = NULL,
     ll_proposals <- proposals
     if(any(is_grouped)){
       ll_proposals <- update_proposals_grouped(proposals, grouped_pars, is_grouped,
-                                               par_names = par_names)
+                                              par_names = par_names)
     }
     # Normally we assume that a component contains all the parameters to estimate the individual likelihood of a joint model
     # Sometimes we may also want to block within a model if it has very high dimensionality
@@ -646,7 +666,7 @@ get_variant_funs <- function(type = "standard") {
       gibbs_step = gibbs_step_diag,
       filtered_samples = filtered_samples_standard,
       get_conditionals = get_conditionals_diag,
-      get_all_pars_IS2 = get_all_pars_diag,
+      get_all_pars_IS2 = get_all_pars_standard,
       prior_dist_IS2 = prior_dist_diag,
       group_dist_IS2 = group_dist_diag
     )

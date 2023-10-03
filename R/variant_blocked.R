@@ -4,13 +4,12 @@ add_info_blocked <- function(sampler, prior = NULL, ...){
   par_groups <- list(...)$par_groups
   sampler$par_groups <- par_groups
   sampler$n_par_groups <- length(unique(par_groups))
-  sampler$prior <- get_prior(prior, sampler$par_names[!(sampler$nuisance | sampler$grouped)])
+  sampler$prior <- get_prior_blocked(prior, sum(!(sampler$nuisance | sampler$grouped)), sample = F)
   return(sampler)
 }
 
 
 get_prior_blocked <- function(prior = NULL, n_pars = NULL, par_names = NULL, sample = F, N = 1e6){
-  n_pars <- length(par_names)
   # Checking and default priors
   if(is.null(prior)){
     prior <- list()
@@ -82,8 +81,8 @@ gibbs_step_blocked <- function(sampler, alpha){
       a_half <- 1 / rgamma(n = n_pars,shape = (prior$v + n_pars) / 2,
                            rate = prior$v * diag(tvinv) + 1/(prior$v^2))
     } else{
-      var_mu = 1.0 / (sampler$n_subjects * last$tvinv[group_idx] + prior$theta_mu_invar[group_idx, group_idx])
-      mean_mu = var_mu * (sum(alpha[group_idx,]) * last$tvinv[group_idx] + prior$theta_mu_invar[group_idx, group_idx] * prior$theta_mu_mean[group_idx])
+      var_mu = 1.0 / (sampler$n_subjects * last$tvinv[group_idx, group_idx] + prior$theta_mu_invar[group_idx, group_idx])
+      mean_mu = var_mu * (sum(alpha[group_idx,]) * last$tvinv[group_idx, group_idx] + prior$theta_mu_invar[group_idx, group_idx] * prior$theta_mu_mean[group_idx])
       tmu <- rnorm(n_pars, mean_mu, sd = sqrt(var_mu))
       tvinv = rgamma(n=n_pars, shape=prior$v/2 + sampler$n_subjects/2, rate=prior$v/last$a_half +
                        rowSums( (alpha-tmu)^2 ) / 2)

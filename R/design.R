@@ -11,6 +11,10 @@
 #'
 #' @param Rlevels A character vector. Contains the response factor levels.
 #' @param model A function, Specifies the model type.
+#' @param ddata A data frame that is used to determine Ffactors, Rlevels and Fcovariates,
+#' in which case these arguments can be left NULL. Any numeric column except trials and
+#' rt are made into covariates, R factor column makes Rlevels, and remaining factor
+#' columns are used in Ffactors.
 #' @param Clist A list. Contrast list.
 #' @param matchfun A function. Specifies whether a response was correct or not.
 #'
@@ -27,25 +31,56 @@
 #' @export
 #'
 #'
-make_design <- function(Flist = NULL,Ffactors = NULL,Rlevels = NULL,model,
+make_design <- function(Flist = NULL,Ffactors = NULL,Rlevels = NULL,model,ddata=NULL,
                         Clist=NULL,matchfun=NULL,constants=NULL,Fcovariates=NULL,Ffunctions=NULL,
                         adapt=NULL,report_p_vector=TRUE, custom_p_vector = NULL){
+
   if(!is.null(custom_p_vector)){
     design <- list(Flist = Flist, model = model, Ffactors = Ffactors)
     attr(design, "sampled_p_names") <-custom_p_vector
     attr(design, "custom_ll") <- TRUE
     return(design)
   }
-
-
-  if (model()$type=="SDT") {
-    Clist[["lR"]] <- contr.increasing(length(Rlevels),Rlevels)
+  if (!is.null(ddata)) {
+    facs <- lapply(ddata,levels)
+    nfacs <- facs[unlist(lapply(facs,is.null))]
+    facs <- facs[!unlist(lapply(facs,is.null))]
+    Rlevels <- facs[["R"]]
+    Ffactors <- facs[names(facs)!="R"]
+    nfacs <- nfacs[!(names(nfacs) %in% c("trials","rt"))]
+    if (length(nfacs)>0) Fcovariates <- nfacs
   }
-
   design <- list(Flist=Flist,Ffactors=Ffactors,Rlevels=Rlevels,
                  Clist=Clist,matchfun=matchfun,constants=constants,
                  Fcovariates=Fcovariates,Ffunctions=Ffunctions,adapt=adapt,model=model)
+
   p_vector <- sampled_p_vector(design,design$model)
+
+  if (model()$type %in% c("MT","TC")) {
+    nt=length(Rlevels)
+    nr <- nt/2
+    dL <- matrix(nrow=nt,ncol=6)
+    if (model()$type == "TC") {
+      even <- array(c(1:nt),dim=c(2,nr))
+      odd <- as.vector(even[1,])
+      even <- as.vector(even[2,])
+      dL[odd,1] <- 1; dL[even,1] <- 2
+      dL[odd,2] <- (nr+1):2; dL[even,2] <- 2:(nr+1)
+      dL[odd,3] <- 2; dL[even,3] <- 1
+      dL[odd,4] <- 1:nr; dL[even,4] <- nr:1
+      dL[odd,5] <- 2; dL[even,5] <- 1
+      dL[odd,6] <- 2:(nr+1); dL[even,6] <- (nr+1):2
+    } else { # MT
+      dL[,1] <- c(rep(1,nr),rep(2,nr))
+      dL[,2] <- rep(nr+1,nt)
+      dL[,3] <- c(rep(2,nr),rep(1,nr))
+      dL[,4] <- c(1:nr,nr:1)
+      dL[,5] <- c(rep(2,nr),rep(1,nr))
+      dL[,6] <- c(2:(nr+1),(nr+1):2)
+    }
+    attr(design,"dL") <- dL
+  }
+
 
   if (model()$type=="SDT") {
     tnams <- dimnames(attr(p_vector,"map")$threshold)[[2]]
@@ -145,24 +180,42 @@ sampled_p_vector <- function(design,model=NULL,doMap=TRUE)
 }
 
 
-add_accumulators <- function(data,matchfun=NULL,simulate=FALSE,type="RACE", Fcovariates=NULL) {
+add_accumulators <- function(data,matchfun=NULL,simulate=FALSE,type="RACE", Fcovariates=NULL)
+  # Adds accumulator factor
+{
+
   if (!is.factor(data$R)) stop("data must have a factor R")
   factors <- names(data)[!names(data) %in% c("R","rt","trials",Fcovariates)]
+  if (type=="DDM") {
+    datar <- cbind(data,lR=factor(rep(levels(data$R)[1],dim(data)[1]),
+      levels=levels(data$R)),lM=factor(rep(TRUE,dim(data)[1])))
+  }
   if (type %in% c("RACE","SDT")) {
     datar <- cbind(do.call(rbind,lapply(1:length(levels(data$R)),function(x){data})),
                    lR=factor(rep(levels(data$R),each=dim(data)[1]),levels=levels(data$R)))
+    if (!is.null(matchfun)) {
+      lM <- matchfun(datar)
+      # if (any(is.na(lM)) || !(is.logical(lM)))
+      #   stop("matchfun not scoring properly")
+      datar$lM <- factor(lM)
+    }
+  }
+  if (type %in% c("MT","TC")) {
+    datar <- cbind(do.call(rbind,lapply(1:2,function(x){data})),
+      lR=factor(rep(1:2,each=dim(data)[1]),levels=1:2))
     if (!is.null(matchfun)) {
       lM <- matchfun(datar)
       if (any(is.na(lM)) || !(is.logical(lM)))
         stop("matchfun not scoring properly")
       datar$lM <- factor(lM)
     }
-  } else datar <- cbind(data,lR=factor(rep(levels(data$R)[1],dim(data)[1]),
-                                       levels=levels(data$R)),lM=factor(rep(TRUE,dim(data)[1]))) # For DDM
+  }
   row.names(datar) <- NULL
   if (simulate) datar$rt <- NA else {
-    datar$winner <- datar$lR==datar$R
-    datar$winner[is.na(datar$winner)] <- FALSE
+    R <- datar$R
+    R[is.na(R)] <- levels(datar$lR)[1]
+    if (type %in% c("MT","TC")) datar$winner <- NA else
+      datar$winner <- datar$lR==R
   }
   # sort cells together
   if ("trials" %in% names(data)){
@@ -171,8 +224,7 @@ add_accumulators <- function(data,matchfun=NULL,simulate=FALSE,type="RACE", Fcov
     } else{
       datar[order(datar[,c(factors)], as.numeric(datar$trials),as.numeric(datar$lR)),]
     }
-  }
-  else{
+  } else {
     if(length(factors) > 1){
       datar[order(apply(datar[,c(factors)],1,paste,collapse="_"), as.numeric(datar$lR)),]
     } else{
@@ -181,13 +233,12 @@ add_accumulators <- function(data,matchfun=NULL,simulate=FALSE,type="RACE", Fcov
   }
 }
 
-design_model_custom_ll <- function(data, design, model, prior){
+design_model_custom_ll <- function(data, design, model){
   if (!is.factor(data$subjects)) {
     data$subjects <- factor(data$subjects)
     warning("subjects column was converted to a factor")
   }
   dadm <- data
-  attr(dadm, "prior") <- prior
   model_input <- model
   attr(dadm, "model") <- function(){
     return(list(log_likelihood = model_input))
@@ -199,8 +250,8 @@ design_model_custom_ll <- function(data, design, model, prior){
 }
 
 
-#' Combines a data frame with a design and (optionally) a user-specified prior,
-#' to create a data augmented design model ("dadm") object. Augmentation
+#' Combines a data frame with a design to create
+#' a data augmented design model ("dadm") object. Augmentation
 #' refers to replicating the data with one row for each accumulator.
 #'
 #' Usually called by make_samplers rather than directly by the user, except
@@ -214,7 +265,6 @@ design_model_custom_ll <- function(data, design, model, prior){
 #' @param data  data frame
 #' @param design matching design
 #' @param model if model not an attribute of design can be supplied here
-#' @param prior list specifying prior (default NULL uses default prior)
 #' @param add_acc default TRUE creates and 'augmented' data frame, which
 #' replicates and stacks the supplied data frame for each accumulator and
 #' adds factors to represent accumulators: lR = latent response, with a level
@@ -229,11 +279,11 @@ design_model_custom_ll <- function(data, design, model, prior){
 #' are respected.
 #'
 #' @return a (possibly) augmented and compressed data frame with attributes
-#' specifying the design, prior and how to decompress ready supporting likelihood
+#' specifying the design and how to decompress ready supporting likelihood
 #' computation
 #' @export
 
-design_model <- function(data,design,model=NULL,prior = NULL,
+design_model <- function(data,design,model=NULL,
                          add_acc=TRUE,rt_resolution=0.02,verbose=TRUE,
                          compress=TRUE,rt_check=TRUE)
   # Flist is a list of formula objects, one for each p_type
@@ -250,13 +300,19 @@ design_model <- function(data,design,model=NULL,prior = NULL,
     # out keeps only unique rows in terms of all parameters design matrices
     # R, lR and rt (at given resolution) from full data set
   {
+    nacc <- length(unique(da$lR))
     # contract output
     cells <- paste(
       apply(do.call(cbind,lapply(designs,function(x){
         apply(x[attr(x,"expand"),,drop=FALSE],1,paste,collapse="_")})
       ),1,paste,collapse="+"),da$subjects,da$R,da$lR,da$rt,sep="+")
-    if (!is.null(Fcov)) cells <- paste(cells,apply(da[,names(Fcov),drop=FALSE],1,paste,collapse="+"),sep="+")
-    if (!is.null(Ffun)) cells <- paste(cells,apply(da[,Ffun,drop=FALSE],1,paste,collapse="+"),sep="+")
+    # Make sure that if row is included for a trial so are other rows
+    if (nacc>1) cells <- paste0(rep(apply(matrix(cells,nrow=nacc),2,paste0,collapse="_"),
+                      each=nacc),rep(1:nacc,times=length(cells)/nacc),sep="_")
+    if (!is.null(Fcov))
+      cells <- paste(cells,apply(da[,names(Fcov),drop=FALSE],1,paste,collapse="+"),sep="+")
+    if (!is.null(Ffun))
+      cells <- paste(cells,apply(da[,Ffun,drop=FALSE],1,paste,collapse="+"),sep="+")
     contract <- !duplicated(cells)
     out <- da[contract,,drop=FALSE]
     attr(out,"contract") <- contract
@@ -268,23 +324,40 @@ design_model <- function(data,design,model=NULL,prior = NULL,
       attr(x,"expand") <- attr(x,"expand")[contract]; x})
 
     # indices to use to contract further ignoring rt then expand back
-    cells_nort <- paste(apply(do.call(cbind,lapply(designs,function(x){
-      apply(x[attr(x,"expand"),,drop=FALSE],1,paste,collapse="_")})),1,paste,collapse="+"),
-      da$subjects,da$R,da$lR,sep="+")[contract]
+    cells_nort <- paste(
+      apply(do.call(cbind,lapply(designs,function(x){
+        apply(x[attr(x,"expand"),,drop=FALSE],1,paste,collapse="_")})
+      ),1,paste,collapse="+"),da$subjects,da$R,da$lR,sep="+")[contract]
     attr(out,"unique_nort") <- !duplicated(cells_nort)
-    cells <- cells[da$lR==levels(da$lR)[1]]
-    cells_nort <- cells_nort[out$lR==levels(out$lR)[1]]
-    attr(out,"expand_nort") <- as.numeric(factor(cells_nort,
-                                                 levels=unique(cells_nort)))[as.numeric(factor(cells,levels=unique(cells)))]
+    attr(out,"expand_nort") <- as.numeric(factor(cells_nort,levels=unique(cells_nort)))
+
+    # cells_nort <- paste(
+    #   apply(do.call(cbind,lapply(designs,function(x){
+    #     apply(x[attr(x,"expand"),,drop=FALSE],1,paste,collapse="_")})
+    #   ),1,paste,collapse="+"),da$subjects,da$R,da$lR,sep="+")[contract]
+    # attr(out,"unique_nort") <- !duplicated(cells_nort)
+    # # Only first level WHY????
+    # cells <- cells[da$lR==levels(da$lR)[1]]
+    # cells_nort <- cells_nort[out$lR==levels(out$lR)[1]]
+    # attr(out,"expand_nort") <- as.numeric(factor(cells_nort,
+    #    levels=unique(cells_nort)))[as.numeric(factor(cells,levels=unique(cells)))]
 
     # indices to use to contract ignoring rt and response (R), then expand back
     cells_nortR <- paste(apply(do.call(cbind,lapply(designs,function(x){
       apply(x[attr(x,"expand"),,drop=FALSE],1,paste,collapse="_")})),1,paste,collapse="+"),
       da$subjects,da$lR,sep="+")[contract]
     attr(out,"unique_nortR") <- !duplicated(cells_nortR)
-    cells_nortR <- cells_nortR[out$lR==levels(out$lR)[1]]
-    attr(out,"expand_nortR") <- as.numeric(factor(cells_nortR,
-                                                  levels=unique(cells_nortR)))[as.numeric(factor(cells,levels=unique(cells)))]
+    attr(out,"expand_nortR") <- as.numeric(factor(cells_nortR,levels=unique(cells_nortR)))
+
+    # # indices to use to contract ignoring rt and response (R), then expand back
+    # cells_nortR <- paste(apply(do.call(cbind,lapply(designs,function(x){
+    #   apply(x[attr(x,"expand"),,drop=FALSE],1,paste,collapse="_")})),1,paste,collapse="+"),
+    #   da$subjects,da$lR,sep="+")[contract]
+    # attr(out,"unique_nortR") <- !duplicated(cells_nortR)
+    # # Only first level WHY????
+    # cells_nortR <- cells_nortR[out$lR==levels(out$lR)[1]]
+    # attr(out,"expand_nortR") <- as.numeric(factor(cells_nortR,
+    #    levels=unique(cells_nortR)))[as.numeric(factor(cells,levels=unique(cells)))]
 
     # Lower censor
     if (!any(is.na(out$rt))) { # Not an choice only model
@@ -301,7 +374,6 @@ design_model <- function(data,design,model=NULL,prior = NULL,
         attr(out,"expand_uc") <- ok[attr(out,"expand_winner")] + 1
       }
     }
-
     out
   }
 
@@ -380,14 +452,10 @@ design_model <- function(data,design,model=NULL,prior = NULL,
       if (!is.null(attr(data,"LT")) && attr(data,"LT") > attr(data,"LC"))
         stop("Lower censor must be greater than lower truncation")
     }
-    if (!any(data$rt[!is.na(data$rt)]==-Inf) & !is.null(attr(data,"LC")))
-      attr(data,"LC") <- NULL else
-        if (any(data$rt[!is.na(data$rt)]==-Inf) & is.null(attr(data,"LC")))
+    if (any(data$rt[!is.na(data$rt)]==-Inf) & is.null(attr(data,"LC")))
           stop("Data must have an LC attribute if any rt = -Inf")
-    if (!any(data$rt[!is.na(data$rt)]==Inf) & !is.null(attr(data,"UC")))
-      attr(data,"LC") <- NULL else
-        if (any(data$rt[!is.na(data$rt)]==Inf) & is.null(attr(data,"UC")))
-          stop("Data must have an UC attribute if any rt = Inf")
+    if (any(data$rt[!is.na(data$rt)]==Inf) & is.null(attr(data,"UC")))
+          stop("Data must have a UC attribute if any rt = Inf")
     if (!is.null(attr(data,"UC"))) check_rt(attr(data,"UC"),data)
     if (!is.null(attr(data,"LC"))) check_rt(attr(data,"LC"),data,upper=FALSE)
     if (!is.null(attr(data,"UC")) & !is.null(attr(data,"LC"))) {
@@ -405,48 +473,74 @@ design_model <- function(data,design,model=NULL,prior = NULL,
     da <- cbind.data.frame(da,newF)
   }
 
-
-  # # NOT SURE THIS IS NEEDED, BUT CANT HURT
-  # # Add dummy content for covariates in sampled_p_vector calls
-  # da[!(names(da) %in% c("R","rt"))] <-
-  #   data.frame(lapply(da[!(names(da) %in% c("R","rt"))],function(x){
-  #     if (all(is.na(x))) rep(0,length(x)) else x}))
-
   if (is.null(model()$p_types) | is.null(model()$transform) |
       is.null(model()$Ntransform) | is.null(model()$Ttransform))
     stop("p_types, transform and Ntransform must be supplied")
   if (!all(unlist(lapply(design$Flist,class))=="formula"))
     stop("Flist must contain formulas")
+
   nams <- unlist(lapply(design$Flist,function(x)as.character(stats::terms(x)[[2]])))
   names(design$Flist) <- nams
-  if (!all(sort(model()$p_types)==sort(nams)) & model()$type != "MRI")
+  if (!all(model()$p_types %in% nams) & model()$type != "MRI")
+  # if (!all(sort(model()$p_types)==sort(nams)) & model()$type != "MRI")
     stop("Flist must specify formulas for ",paste(model()$p_types,collapse = " "))
-  if (is.null(design$Clist)) design$Clist=list(stats::contr.treatment)
-  if (!is.list(design$Clist)) stop("Clist must be a list")
-  if (!is.list(design$Clist[[1]])[1]) # same contrasts for all p_types
-    design$Clist <- stats::setNames(lapply(1:length(model()$p_types),
-                                    function(x)design$Clist),model()$p_types) else {
-                                      missing_p_types <- model()$p_types[!(model()$p_types %in% names(design$Clist))]
-                                      if (length(missing_p_types)>0) {
-                                        nok <- length(design$Clist)
-                                        for (i in 1:length(missing_p_types)) {
-                                          design$Clist[[missing_p_types[i]]] <- list(stats::contr.treatment)
-                                          names(design$Clist)[nok+i] <- missing_p_types[i]
-                                        }
-                                      }
-                                    }
-  if(model()$type != "MRI") for (i in model()$p_types) attr(design$Flist[[i]],"Clist") <- design$Clist[[i]]
-  out <- lapply(design$Flist,make_dm,da=da,Fcovariates=design$Fcovariates)
-  if (!is.null(rt_resolution) & !is.null(da$rt)) da$rt <- round(da$rt/rt_resolution)*rt_resolution
-  if (compress) dadm <- compress_dadm(da,designs=out,
-                                      Fcov=design$Fcovariates,Ffun=names(design$Ffunctions)) else {
-                                        dadm <- da
-                                        attr(dadm,"designs") <- out
-                                        attr(dadm,"s_expand") <- da$subjects
-                                        attr(dadm,"expand") <- 1:dim(dadm)[1]
-                                      }
+  if(is.null(design$DM_fixed)){ # LM type
+    nams <- unlist(lapply(design$Flist,function(x)as.character(stats::terms(x)[[2]])))
+    names(design$Flist) <- nams
+    if (!all(sort(model()$p_types)==sort(nams)) & model()$type != "MRI")
+      stop("Flist must specify formulas for ",paste(model()$p_types,collapse = " "))
+    if (is.null(design$Clist)) design$Clist=list(stats::contr.treatment)
+    if (!is.list(design$Clist)) stop("Clist must be a list")
+    if (!is.list(design$Clist[[1]])[1]) # same contrasts for all p_types
+      design$Clist <- stats::setNames(lapply(1:length(model()$p_types),
+                                             function(x)design$Clist),model()$p_types) else {
+                                               missing_p_types <- model()$p_types[!(model()$p_types %in% names(design$Clist))]
+                                               if (length(missing_p_types)>0) {
+                                                 nok <- length(design$Clist)
+                                                 for (i in 1:length(missing_p_types)) {
+                                                   design$Clist[[missing_p_types[i]]] <- list(stats::contr.treatment)
+                                                   names(design$Clist)[nok+i] <- missing_p_types[i]
+                                                 }
+                                               }
+                                             }
+    if(model()$type != "MRI") for (i in model()$p_types) attr(design$Flist[[i]],"Clist") <- design$Clist[[i]]
+    out <- lapply(design$Flist,make_dm,da=da,Fcovariates=design$Fcovariates)
+    if (!is.null(rt_resolution) & !is.null(da$rt)) da$rt <- round(da$rt/rt_resolution)*rt_resolution
+    if (compress) dadm <- compress_dadm(da,designs=out,
+                                        Fcov=design$Fcovariates,Ffun=names(design$Ffunctions)) else {
+                                          dadm <- da
+                                          attr(dadm,"designs") <- out
+                                          attr(dadm,"s_expand") <- da$subjects
+                                          attr(dadm,"expand") <- 1:dim(dadm)[1]
+    }
+    p_names <-  unlist(lapply(out,function(x){dimnames(x)[[2]]}),use.names=FALSE)
+
+    bad_constants <- names(design$constants)[!(names(design$constants) %in% p_names)]
+    if (length(bad_constants) > 0)
+      stop("Constant(s) ",paste(bad_constants,collapse=" ")," not in design")
+
+    # Pick out constants
+    sampled_p_names <- p_names[!(p_names %in% names(design$constants))]
+    attr(dadm,"p_names") <- p_names
+    attr(dadm,"sampled_p_names") <- sampled_p_names
+    attr(dadm, "LT") <- attr(data,"LT")
+    attr(dadm, "UT") <- attr(data,"UT")
+    attr(dadm, "LC") <- attr(data,"LC")
+    attr(dadm, "UC") <- attr(data,"UC")
+  } else{
+    if (!is.null(rt_resolution) & !is.null(da$rt)) da$rt <- round(da$rt/rt_resolution)*rt_resolution
+    design$DM_fixed <- lapply(design$DM_fixed, FUN = function(x) return(x[order_idx,,drop =F]))
+    design$DM_random <- lapply(design$DM_random, FUN = function(x) return(x[order_idx,, drop = F]))
+    dadm <- compress_dadm_lm(da, design$DM_fixed, design$DM_random, Fcov = design$Fcovariates)
+    attr(dadm, "DM_fixed") <- design$DM_fixed
+    attr(dadm, "DM_random") <- design$DM_random
+    attr(dadm, "g_fixed") <- attr(design, "g_fixed")
+    attr(dadm, "g_random") <- attr(design, "g_random")
+    attr(dadm, "constants") <- design$constants
+    attr(dadm, "per_subject")<- design$per_subject
+  }
   if (verbose & compress) message("Likelihood speedup factor: ",
-    round(dim(da)[1]/dim(dadm)[1],1)," (",dim(dadm[as.logical(dadm$lM),])[1]," unique trials)")
+    round(dim(da)[1]/dim(dadm)[1],1)," (",dim(dadm)[1]/length(levels(dadm$lR))," unique trials)")
   p_names <-  unlist(lapply(out,function(x){dimnames(x)[[2]]}),use.names=FALSE)
 
   bad_constants <- names(design$constants)[!(names(design$constants) %in% p_names)]
@@ -456,22 +550,6 @@ design_model <- function(data,design,model=NULL,prior = NULL,
   # Pick out constants
   sampled_p_names <- p_names[!(p_names %in% names(design$constants))]
 
-  # if(!is.null(prior)){
-  #   if(length(prior$theta_mu_mean) != length(sampled_p_names))
-  #     stop("prior mu should be same length as estimated parameters (p_vector)")
-  #   if(!is.matrix(prior$theta_mu_var)){
-  #     if(length(prior$theta_mu_var) != length(sampled_p_names))
-  #       stop("prior theta should be same length as estimated parameters (p_vector)")
-  #   } else {
-  #     if(nrow(prior$theta_mu_var) != length(sampled_p_names))
-  #       stop("prior theta should have same number of rows as estimated parameters (p_vector)")
-  #     if(ncol(prior$theta_mu_var) != length(sampled_p_names))
-  #       stop("prior theta should have same number of columns as estimated parameters (p_vector)")
-  #     if(ncol(prior$theta_mu_var) != nrow(prior$theta_mu_var))
-  #       stop("prior theta should have same number of columns as rows")
-  #   }
-  # }
-  attr(dadm, "prior") <- prior
   attr(dadm,"p_names") <- p_names
   attr(dadm,"model") <- model
   attr(dadm,"constants") <- design$constants
@@ -488,6 +566,7 @@ design_model <- function(data,design,model=NULL,prior = NULL,
   }
   attr(dadm,"ok_trials") <- is.finite(data$rt)
   attr(dadm,"s_data") <- data$subjects
+  attr(dadm,"dL") <- attr(design,"dL")
   # if (!is.null(design$adapt)) {
   #   attr(dadm,"adapt") <- stats::setNames(
   #     lapply(levels(dadm$subjects),augment,da=dadm,design=design),
@@ -609,13 +688,13 @@ dm_list <- function(dadm)
   expand_nort <- attr(dadm,"expand_nort")
   unique_nortR <- attr(dadm,"unique_nortR")
   expand_nortR <- attr(dadm,"expand_nortR")
-  ok_trials <- attr(dadm,"ok_trials")
-  ok_dadm_winner <- attr(dadm,"ok_dadm_winner")
-  ok_dadm_looser <- attr(dadm,"ok_dadm_looser")
-  ok_da_winner <- attr(dadm,"ok_da_winner")
-  ok_da_looser <- attr(dadm,"ok_da_looser")
-  expand_uc <- attr(dadm,"expand_uc")
-  expand_lc <- attr(dadm,"expand_lc")
+  # ok_trials <- attr(dadm,"ok_trials")
+  # ok_dadm_winner <- attr(dadm,"ok_dadm_winner")
+  # ok_dadm_looser <- attr(dadm,"ok_dadm_looser")
+  # ok_da_winner <- attr(dadm,"ok_da_winner")
+  # ok_da_looser <- attr(dadm,"ok_da_looser")
+  # expand_uc <- attr(dadm,"expand_uc")
+  # expand_lc <- attr(dadm,"expand_lc")
   adapt <- attr(dadm,"adapt")
 
   # winner on expanded dadm
@@ -630,8 +709,9 @@ dm_list <- function(dadm)
     dl[[i]] <- dadm[isin,]
     dl[[i]]$subjects <- factor(as.character(dl[[i]]$subjects))
     if(is.null(attr(dadm, "custom_ll"))){
+
       isin1 <- s_expand==i             # da
-      isin2 <- attr(dadm,"s_data")==i  # data
+      # isin2 <- attr(dadm,"s_data")==i  # data
 
 
       attr(dl[[i]],"model") <- model
@@ -641,35 +721,35 @@ dm_list <- function(dadm)
       attr(dl[[i]],"expand") <- expand[isin1]-min(expand[isin1]) + 1
       attr(dl[[i]],"s_expand") <- NULL
 
-      attr(dl[[i]],"ok_dadm_winner") <- ok_dadm_winner[isin]
-      attr(dl[[i]],"ok_dadm_looser") <- ok_dadm_looser[isin]
-
-      attr(dl[[i]],"ok_da_winner") <- ok_da_winner[isin1]
-      attr(dl[[i]],"ok_da_looser") <- ok_da_looser[isin1]
+      # attr(dl[[i]],"ok_dadm_winner") <- ok_dadm_winner[isin]
+      # attr(dl[[i]],"ok_dadm_looser") <- ok_dadm_looser[isin]
+      #
+      # attr(dl[[i]],"ok_da_winner") <- ok_da_winner[isin1]
+      # attr(dl[[i]],"ok_da_looser") <- ok_da_looser[isin1]
 
       attr(dl[[i]],"unique_nort") <- unique_nort[isin]
       attr(dl[[i]],"unique_nortR") <- unique_nortR[isin]
 
-      isinlR1 <- slR1==i
+      # isinlR1 <- slR1==i
+
       if (!is.null(expand_nort)){
-        attr(dl[[i]],"expand_nort") <-  expand_nort[isinlR1]- min( expand_nort[isinlR1]) + 1
+        attr(dl[[i]],"expand_nort") <-  expand_nort[isin] - min(expand_nort[isin]) + 1
       }
-
       if (!is.null(expand_nortR)){
-        attr(dl[[i]],"expand_nortR") <- expand_nortR[isinlR1]-min(expand_nortR[isinlR1]) + 1
+        attr(dl[[i]],"expand_nortR") <- expand_nortR[isin]-min(expand_nortR[isin]) + 1
       }
 
-      attr(dl[[i]],"ok_trials") <- ok_trials[isin2]
-      if (!is.null(expand_winner)){
-        attr(dl[[i]],"expand_winner") <- expand_winner[isin2]-min(expand_winner[isin2]) + 1
-      }
-
-      if (!is.null(attr(dadm,"expand_uc"))){
-        attr(dl[[i]],"expand_uc") <- as.numeric(factor(expand_uc[isin2]))
-      }
-      if (!is.null(attr(dadm,"expand_lc"))){
-        attr(dl[[i]],"expand_lc") <- as.numeric(factor(expand_lc[isin2]))
-      }
+      # attr(dl[[i]],"ok_trials") <- ok_trials[isin2]
+      # if (!is.null(expand_winner)){
+      #   attr(dl[[i]],"expand_winner") <- expand_winner[isin2]-min(expand_winner[isin2]) + 1
+      # }
+      #
+      # if (!is.null(attr(dadm,"expand_uc"))){
+      #   attr(dl[[i]],"expand_uc") <- as.numeric(factor(expand_uc[isin2]))
+      # }
+      # if (!is.null(attr(dadm,"expand_lc"))){
+      #   attr(dl[[i]],"expand_lc") <- as.numeric(factor(expand_lc[isin2]))
+      # }
 
       if (!is.null(attr(dadm,"LT"))){
         attr(dl[[i]],"LT") <- attr(dadm,"LT")[names(attr(dadm,"LT"))==i]

@@ -5,8 +5,6 @@ pPROBIT <- function(lt,ut,pars)
   pnorm(ut,mean=pars[,"mean"],sd=pars[,"sd"]) - pnorm(lt,mean=pars[,"mean"],sd=pars[,"sd"])
 }
 
-#### random
-
 
 rPROBIT <- function(lR,pars,p_types=c("mean","sd","threshold"),lt=-Inf)
   # lR is an empty latent response factor lR with one level for response.
@@ -69,7 +67,9 @@ probit <- function(){
     pars
   },
   # Random function for discrete choices
-  rfun=function(lR,pars) rPROBIT(lR,pars),
+  rfun=function(lR=NULL,pars) {
+    if (is.null(lR)) rep(TRUE,dim(pars)[1]) else rPROBIT(lR,pars)
+  },
   # probability of choice between lower and upper thresholds (lt & ut)
   pfun=function(lt,ut,pars) pPROBIT(lt,ut,pars),
   # quantile function, p = probability, used in making linear ROCs

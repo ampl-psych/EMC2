@@ -2,15 +2,14 @@
 % Please edit documentation in R/design.R
 \name{design_model}
 \alias{design_model}
-\title{Combines a data frame with a design and (optionally) a user-specified prior,
-to create a data augmented design model ("dadm") object. Augmentation
+\title{Combines a data frame with a design to create
+a data augmented design model ("dadm") object. Augmentation
 refers to replicating the data with one row for each accumulator.}
 \usage{
 design_model(
   data,
   design,
   model = NULL,
-  prior = NULL,
   add_acc = TRUE,
   rt_resolution = 0.02,
   verbose = TRUE,
@@ -24,8 +23,6 @@ design_model(
 \item{design}{matching design}
 
 \item{model}{if model not an attribute of design can be supplied here}
-
-\item{prior}{list specifying prior (default NULL uses default prior)}
 
 \item{add_acc}{default TRUE creates and 'augmented' data frame, which
 replicates and stacks the supplied data frame for each accumulator and
@@ -46,7 +43,7 @@ are respected.}
 }
 \value{
 a (possibly) augmented and compressed data frame with attributes
-specifying the design, prior and how to decompress ready supporting likelihood
+specifying the design and how to decompress ready supporting likelihood
 computation
 }
 \description{

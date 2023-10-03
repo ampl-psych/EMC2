@@ -25,7 +25,7 @@ profile_plot(pname, p, p_min, p_max, dadm, n_point = 100, main = "", cores = 1)
 \item{cores}{Number of likelihood points to calculate in parallel}
 }
 \value{
-vector with value of p\link{pname}, highest likelihood point and p\link{pname}
+vector with value of p(pname), highest likelihood point and p(pname)
 minus the parameter values at that point
 }
 \description{
