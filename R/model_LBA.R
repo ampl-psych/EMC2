@@ -125,6 +125,7 @@ pLBA <- function (rt, pars, posdrift = TRUE, robust = FALSE)
   out
 }
 
+
 rLBA <- function(lR,pars,p_types=c("v","sv","b","A","t0"),posdrift = TRUE,
                  ok=rep(TRUE,length(lR)))
   # lR is an empty latent response factor lR with one level for each accumulator.
@@ -140,20 +141,22 @@ rLBA <- function(lR,pars,p_types=c("v","sv","b","A","t0"),posdrift = TRUE,
   dt <- matrix((pars[,"b"]-pars[,"A"]*runif(dim(pars)[1]))/
                  msm::rtnorm(dim(pars)[1],pars[,"v"],pars[,"sv"],ifelse(posdrift,0,-Inf)),
                nrow=length(levels(lR)))
+  bad <- apply(dt,2,function(x){all(x<0)})
+  dt[dt<0] <- Inf
   R <- apply(dt,2,which.min)
   pick <- cbind(R,1:dim(dt)[2]) # Matrix to pick winner
   # Any t0 difference with lR due to response production time (no effect on race)
   rt <- matrix(pars[,"t0"],nrow=length(levels(lR)))[pick] + dt[pick]
   R <- factor(levels(lR)[R],levels=levels(lR))
-  bad <- !is.finite(rt)
   R[bad] <- NA
-  rt[bad] <- NA
+  rt[bad] <- Inf
   ok <- matrix(ok,nrow=length(levels(lR)))[1,]
   out$R[ok] <- levels(lR)[R]
   out$R <- factor(out$R,levels=levels(lR))
   out$rt[ok] <- rt
   out
 }
+
 
 #### Multiple threshold models ----
 
@@ -495,7 +498,7 @@ MUlbaB <- function(){
     # Density function (PDF) for single accumulator
     dfun=function(rt,pars) dLBA(rt,pars,posdrift = FALSE, robust = FALSE),
     # Probability function (CDF) for single accumulator
-    pfun=function(rt,pars) pLBA(rt,pars,robust = FALSE),
+    pfun=function(rt,pars) pLBA(rt,pars,posdrift = FALSE, robust = FALSE),
     # Race likelihood combining pfun and dfun
     log_likelihood=function(p_vector,dadm){
       log_likelihood_race_missing_LBAU(p_vector=p_vector, dadm = dadm, min_ll=log(1e-10))
