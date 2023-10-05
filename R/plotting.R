@@ -494,7 +494,7 @@ plot_pars <- function(pmwg_mcmc,layout=c(2,3),use_par=NULL,
       names(pars) <- colnames(pmwg_mcmc_combined)
     }
     tabs <- rbind(true=pars,apply(pmwg_mcmc_combined,2,quantile,probs=probs))
-    tabs <- rbind(tabs,Miss=tabs[3,]-tabs[1,])
+    if (!is.null(pars)) tabs <- rbind(tabs,Miss=tabs[3,]-tabs[1,])
     if (add_means) attr(tabs,"mean") <- apply(pmwg_mcmc_combined,2,mean)
     if (!no_layout) par(mfrow=layout)
     if (plot_prior) dimnames(psamples) <- list(NULL,colnames(pmwg_mcmc_combined))
