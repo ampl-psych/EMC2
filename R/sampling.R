@@ -136,10 +136,12 @@ init <- function(pmwgs, start_mu = NULL, start_var = NULL,
 #' @export
 
 init_chains <- function(samplers, start_mu = NULL, start_var = NULL,
-                 verbose = FALSE, particles = 1000, n_cores = 1)
+                 verbose = FALSE, particles = 1000,
+                 cores_per_chain=1,cores_for_chains = length(samplers))
 {
-  lapply(samplers,init,start_mu = start_mu, start_var = start_var,
-        verbose = verbose, particles = particles, n_cores = n_cores)
+  mclapply(samplers,init,start_mu = start_mu, start_var = start_var,
+           verbose = verbose, particles = particles,
+           n_cores = cores_per_chain, mc.cores=cores_for_chains)
 }
 
 
