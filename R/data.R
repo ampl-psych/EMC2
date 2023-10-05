@@ -325,14 +325,13 @@ post_predict <- function(samples,hyper=FALSE,n_post=100,expand=1,
       },mc.cores=n_cores)
     }
     if (!is.null(attr(simDat[[1]],"adapt"))) adapt <- attr(simDat[[1]],"adapt")
-    out <- cbind(postn=rep(1:n_post,each=dim(simDat[[1]])[1]),do.call(rbind,simDat))
+    out <- cbind(postn=rep(1:n_post,times=unlist(lapply(simDat,function(x)dim(x)[1]))),do.call(rbind,simDat))
     if (!is.null(attr(simDat[[1]],"adapt"))) attr(out,"adapt") <- adapt
     if (n_post==1) pars <- pars[[1]]
     attr(out,"pars") <- pars
     post_out[[j]] <- out
   }
   if(!jointModel) post_out <- post_out[[1]]
-  # return(simulate_missing(post_out,samples))
   return(post_out)
 }
 
