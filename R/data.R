@@ -9,19 +9,19 @@
 #' @param UC upper censoring bound (scalar or subject named vector)
 #' @param LCresponse Boolean, default TRUE, if false set LC response to NA
 #' @param UCresponse Boolean, default TRUE, if false set UC response to NA
-#' @param LCdirection Boolean, default TRUE, set LC rt to -Inf, else to NA
+#' @param LCdirection Boolean, default TRUE, set LC rt to 0, else to NA
 #' @param UCdirection Boolean, default TRUE, set LC rt to Inf, else to NA
 #'
 #' @return Truncated and censored data frame
 #' @export
 
-make_missing <- function(data,LT=-Inf,UT=Inf,LC=-Inf,UC=Inf,
+make_missing <- function(data,LT=0,UT=Inf,LC=0,UC=Inf,
     LCresponse=TRUE,UCresponse=TRUE,LCdirection=TRUE,UCdirection=TRUE)
 {
 
-  censor <- function(data,L=-Inf,U=Inf,Ld=TRUE,Ud=TRUE,Lr=TRUE,Ur=TRUE)
+  censor <- function(data,L=0,U=Inf,Ld=TRUE,Ud=TRUE,Lr=TRUE,Ur=TRUE)
   {
-    if (Ld) Ld <- -Inf else Ld <- NA
+    if (Ld) Ld <- 0 else Ld <- NA
     if (Ud) Ud <- Inf else Ud <- NA
     snams <- levels(data$subjects)
     if (length(L)==1) L <- setNames(rep(L,length(snams)),snams)
@@ -39,7 +39,7 @@ make_missing <- function(data,LT=-Inf,UT=Inf,LC=-Inf,UC=Inf,
     data
   }
 
-  pick <- data$rt>LT & data$rt<UT
+  pick <- is.infinite(data$rt) | (data$rt>LT & data$rt<UT)
   pick[is.na(pick)] <- TRUE
   out <- censor(data[pick,],L=LC,U=UC,Lr=LCresponse,Ur=UCresponse,Ld=LCdirection,Ud=UCdirection)
   attr(out,"LC") <- LC; attr(out,"UC") <- UC
@@ -70,7 +70,7 @@ make_missing <- function(data,LT=-Inf,UT=Inf,LC=-Inf,UC=Inf,
 #' @param data If supplied that determines the design, with data sorted by subjects
 #' and a trials = 1:n trials/subject factor added (or overwriting any existing).
 #' Truncation and censoring information also taken from data attributes and presence
-#' of -Inf/Inf and NA in rt column and NA in R column.
+#' of 0/Inf and NA in rt column and NA in R column.
 #' @param expand replicates the design expand times
 #' @param mapped_p if true instead returns a data frame with one row per design
 #' cell and columns for each parameter specifying how they are mapped to the
@@ -81,7 +81,7 @@ make_missing <- function(data,LT=-Inf,UT=Inf,LC=-Inf,UC=Inf,
 #' @param UC upper censoring bound (scalar or subject named vector)
 #' @param LCresponse Boolean, default TRUE, if false set LC response to NA
 #' @param UCresponse Boolean, default TRUE, if false set UC response to NA
-#' @param LCdirection Boolean, default TRUE, set LC rt to -Inf, else to NA
+#' @param LCdirection Boolean, default TRUE, set LC rt to 0, else to NA
 #' @param UCdirection Boolean, default TRUE, set LC rt to Inf, else to NA
 #' @param force_direction Boolean, take direction from argument not data (default FALSE)
 #' @param force_response Boolean, take response from argument not data (default FALSE)
@@ -97,8 +97,8 @@ make_missing <- function(data,LT=-Inf,UT=Inf,LC=-Inf,UC=Inf,
 #' @export
 
 make_data <- function(p_vector,design,model=NULL,trials=NULL,data=NULL,expand=1,
-  mapped_p=FALSE,Fcovariates=NULL,return_Ffunctions=FALSE,LT=-Inf,UT=Inf,
-  LC=-Inf,UC=Inf,LCresponse=TRUE,UCresponse=TRUE,LCdirection=TRUE,UCdirection=TRUE,
+  mapped_p=FALSE,Fcovariates=NULL,return_Ffunctions=FALSE,LT=0,UT=Inf,
+  LC=0,UC=Inf,LCresponse=TRUE,UCresponse=TRUE,LCdirection=TRUE,UCdirection=TRUE,
   force_direction=FALSE,force_response=FALSE,rtContaminantNA=FALSE)
 {
 
@@ -139,9 +139,9 @@ make_data <- function(p_vector,design,model=NULL,trials=NULL,data=NULL,expand=1,
       if (length(empty_covariates)>0) data[,empty_covariates] <- 0
     }
   } else {
-    LT <- attr(data,"LT"); if (is.null(LT)) LT <- -Inf
+    LT <- attr(data,"LT"); if (is.null(LT)) LT <- 0
     UT <- attr(data,"UT"); if (is.null(UT)) UT <- Inf
-    LC <- attr(data,"LC"); if (is.null(LC)) LC <- -Inf
+    LC <- attr(data,"LC"); if (is.null(LC)) LC <- 0
     UC <- attr(data,"UC"); if (is.null(UC)) UC <- Inf
     if (!force_direction) {
       ok <- data$rt==-Inf; ok[is.na(ok)] <- FALSE
@@ -252,7 +252,7 @@ add_Ffunctions <- function(data,design)
 #' @param force_response Boolean, take censor response from argument not samples (default FALSE)
 #' @param LCresponse Boolean, default TRUE, if false set LC response to NA
 #' @param UCresponse Boolean, default TRUE, if false set UC response to NA
-#' @param LCdirection Boolean, default TRUE, set LC rt to -Inf, else to NA
+#' @param LCdirection Boolean, default TRUE, set LC rt to 0, else to NA
 #' @param UCdirection Boolean, default TRUE, set LC rt to Inf, else to NA
 #'
 #' @return A list of simulated data sets of length n_post.
