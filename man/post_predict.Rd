@@ -45,7 +45,7 @@ post_predict(
 
 \item{UCresponse}{Boolean, default TRUE, if false set UC response to NA}
 
-\item{LCdirection}{Boolean, default TRUE, set LC rt to -Inf, else to NA}
+\item{LCdirection}{Boolean, default TRUE, set LC rt to 0, else to NA}
 
 \item{UCdirection}{Boolean, default TRUE, set LC rt to Inf, else to NA}
 

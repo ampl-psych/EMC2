@@ -14,9 +14,9 @@ make_data(
   mapped_p = FALSE,
   Fcovariates = NULL,
   return_Ffunctions = FALSE,
-  LT = -Inf,
+  LT = 0,
   UT = Inf,
-  LC = -Inf,
+  LC = 0,
   UC = Inf,
   LCresponse = TRUE,
   UCresponse = TRUE,
@@ -41,7 +41,7 @@ by plot_density (in which case posterior medians are used to simulate data)}
 \item{data}{If supplied that determines the design, with data sorted by subjects
 and a trials = 1:n trials/subject factor added (or overwriting any existing).
 Truncation and censoring information also taken from data attributes and presence
-of -Inf/Inf and NA in rt column and NA in R column.}
+of 0/Inf and NA in rt column and NA in R column.}
 
 \item{expand}{replicates the design expand times}
 
@@ -67,7 +67,7 @@ each trial. Must have names specified in the design Fcovariates argument.}
 
 \item{UCresponse}{Boolean, default TRUE, if false set UC response to NA}
 
-\item{LCdirection}{Boolean, default TRUE, set LC rt to -Inf, else to NA}
+\item{LCdirection}{Boolean, default TRUE, set LC rt to 0, else to NA}
 
 \item{UCdirection}{Boolean, default TRUE, set LC rt to Inf, else to NA}
 

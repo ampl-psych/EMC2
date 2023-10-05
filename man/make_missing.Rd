@@ -6,9 +6,9 @@
 \usage{
 make_missing(
   data,
-  LT = -Inf,
+  LT = 0,
   UT = Inf,
-  LC = -Inf,
+  LC = 0,
   UC = Inf,
   LCresponse = TRUE,
   UCresponse = TRUE,
@@ -31,7 +31,7 @@ make_missing(
 
 \item{UCresponse}{Boolean, default TRUE, if false set UC response to NA}
 
-\item{LCdirection}{Boolean, default TRUE, set LC rt to -Inf, else to NA}
+\item{LCdirection}{Boolean, default TRUE, set LC rt to 0, else to NA}
 
 \item{UCdirection}{Boolean, default TRUE, set LC rt to Inf, else to NA}
 }
