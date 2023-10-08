@@ -286,8 +286,8 @@ plot_defective_density <- function(data,subject=NULL,factors=NULL,
 #' otherwise sampled parameters
 #' @param plot_prior Boolean. Add prior distribution to plot (in red)
 #' @param n_prior Number of samples to approximate prior (default = 1e3)
-#' @param xlim x-axis plot limit, 2-vector (same for all) or matrix (one row for each paramter)
-#' @param ylim y-axis plot limit, 2-vector (same for all) or matrix (one row for each paramter)
+#' @param xlim x-axis plot limit, 2-vector (same for all) or matrix (one row for each parameter)
+#' @param ylim y-axis plot limit, 2-vector (same for all) or matrix (one row for each parameter)
 #' @param prior_xlim A vector giving upper and lower quantiles of prior when choosing xlim.
 #' @param show_chains Boolean (default FALSE) plot separate density for each chain.
 #' @param do_plot Boolean (default TRUE) do plot

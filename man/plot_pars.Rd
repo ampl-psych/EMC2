@@ -55,9 +55,9 @@ otherwise sampled parameters}
 
 \item{n_prior}{Number of samples to approximate prior (default = 1e3)}
 
-\item{xlim}{x-axis plot limit, 2-vector (same for all) or matrix (one row for each paramter)}
+\item{xlim}{x-axis plot limit, 2-vector (same for all) or matrix (one row for each parameter)}
 
-\item{ylim}{y-axis plot limit, 2-vector (same for all) or matrix (one row for each paramter)}
+\item{ylim}{y-axis plot limit, 2-vector (same for all) or matrix (one row for each parameter)}
 
 \item{prior_xlim}{A vector giving upper and lower quantiles of prior when choosing xlim.}
 

@@ -32,7 +32,7 @@ prior (mean=0, varaince = 1, uncorrelaterd)}
 
 \item{type}{Type of prior (standard or single)}
 
-\item{selection}{Select level prior to plot (default "alpha" for single and "mu" for single)}
+\item{selection}{Select level prior to plot (default "alpha" for single and "mu" for standard)}
 
 \item{mapped}{boolean for mapping mu or alpha back to the design cells on the natural scale.}
 
