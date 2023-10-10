@@ -50,9 +50,21 @@ gd_pmwg <- function(pmwg_mcmc,return_summary=FALSE,print_summary=TRUE,
   # multivariate as matrix unless !return_summary
 {
 
+  split_mcl <- function(mcl)
+    # Doubles chains by splitting into first and secon half
+  {
+    mcl2 <- mcl
+    half <- floor(unlist(lapply(mcl,nrow))/2)
+    for (i in 1:length(half)) {
+      mcl2[[i]] <- as.mcmc(mcl2[[i]][c((half[i]+1):(2*half[i])),])
+      mcl[[i]] <- as.mcmc(mcl[[i]][1:half[i],])
+    }
+    as.mcmc.list(c(mcl,mcl2))
+  }
+
   gelman_diag_robust <- function(mcl,autoburnin,transform)
   {
-    gd <- try(gelman.diag(mcl,autoburnin=autoburnin,transform=transform),silent=TRUE)
+    gd <- try(gelman.diag(split_mcl(mcl),autoburnin=autoburnin,transform=transform),silent=TRUE)
     if (is(gd, "try-error")) list(psrf=matrix(Inf),mpsrf=Inf) else gd
   }
 
