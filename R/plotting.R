@@ -880,7 +880,12 @@ plot_trials <- function(data,pp=NULL,subject=NULL,factors=NULL,Fcovariates=NULL,
 # subfilter=2000
 
 #' Runs a series of convergence checks, printing statistics to the console and
-#' saving plots to a pdf.
+#' saving plots to a pdf. Note that the R_hat (psrf and mpsrf, i.e., gelman_diag
+#' from the coda package) is calculated by doubling the number of chains by
+#' first splitting chains into first and second half so it also a test of
+#' stationarity. Efficiency of sampling is indicated by integrated autocorrelation
+#' time (from the LaplacesDemon package) and the effective numebr of samples
+#' (from coda).
 #'
 #' @param samples A list of samplers or samplers converted to mcmc objects.
 #' @param pdf_name The name of the plot save file

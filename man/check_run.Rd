@@ -3,7 +3,12 @@
 \name{check_run}
 \alias{check_run}
 \title{Runs a series of convergence checks, printing statistics to the console and
-saving plots to a pdf.}
+saving plots to a pdf. Note that the R_hat (psrf and mpsrf, i.e., gelman_diag
+from the coda package) is calculated by doubling the number of chains by
+first splitting chains into first and second half so it also a test of
+stationarity. Efficiency of sampling is indicated by integrated autocorrelation
+time (from the LaplacesDemon package) and the effective numebr of samples
+(from coda).}
 \usage{
 check_run(
   samples,
@@ -43,5 +48,10 @@ None
 }
 \description{
 Runs a series of convergence checks, printing statistics to the console and
-saving plots to a pdf.
+saving plots to a pdf. Note that the R_hat (psrf and mpsrf, i.e., gelman_diag
+from the coda package) is calculated by doubling the number of chains by
+first splitting chains into first and second half so it also a test of
+stationarity. Efficiency of sampling is indicated by integrated autocorrelation
+time (from the LaplacesDemon package) and the effective numebr of samples
+(from coda).
 }
