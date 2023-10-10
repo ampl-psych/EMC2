@@ -212,7 +212,7 @@ make_data <- function(p_vector,design,model=NULL,trials=NULL,data=NULL,expand=1,
       stop("Cannot have contamination and censoring with no direction and response")
     contam <- runif(length(pc)) < pc
     data[contam,"R"] <- NA
-    if ( is.finite(LC) | is.finite(UC) ) { # censoring
+    if ( LC!=0 | is.finite(UC) ) { # censoring
       if ( (LCdirection & UCdirection) &  !rtContaminantNA)
         stop("Cannot have contamination with a mixture of censor directions")
       if (rtContaminantNA & ((is.finite(LC) & !LCresponse & !LCdirection) |
