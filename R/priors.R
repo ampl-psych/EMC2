@@ -54,7 +54,7 @@ get_prior_samples <- function(samples,selection,filter,thin,subfilter,n_prior)
 #' @param design Design corresponding to prior
 #' @param plotp Names of parameters to plot (default NULL plots all)
 #' @param type Type of prior (standard or single)
-#' @param selection Select level prior to plot (default "alpha" for single and "mu" for single)
+#' @param selection Select level prior to plot (default "alpha" for single and "mu" for standard)
 #' @param mapped boolean for mapping mu or alpha back to the design cells on the natural scale.
 #' @param data data frame, required when mapping involves priors
 #' @param N Number of prior samples if data not provided
