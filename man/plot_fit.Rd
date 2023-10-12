@@ -6,7 +6,9 @@
 argument (which calculates a statistics based on the data) is supplied
 instead fit is plotted as a density with a vertical line at the position of
 the data statistic. If more than one subject is included data and fits are
-aggregated over subjects.}
+aggregated over subjects. If data or fit contains NA in responses or rt, or
+is.infinite(rt) these are treating as missing and defective cdfs sum to the
+probability of non-missing.}
 \usage{
 plot_fit(
   data,
@@ -99,5 +101,7 @@ Plots data and fit. If rt  available plots cdf, if not plots ROC. If stat
 argument (which calculates a statistics based on the data) is supplied
 instead fit is plotted as a density with a vertical line at the position of
 the data statistic. If more than one subject is included data and fits are
-aggregated over subjects.
+aggregated over subjects. If data or fit contains NA in responses or rt, or
+is.infinite(rt) these are treating as missing and defective cdfs sum to the
+probability of non-missing.
 }

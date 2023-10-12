@@ -13,7 +13,13 @@ post_predict(
   subfilter = 0,
   thin = 1,
   n_cores = 1,
-  use_par = c("random", "mean", "median")[1]
+  use_par = c("random", "mean", "median")[1],
+  LCresponse = TRUE,
+  UCresponse = TRUE,
+  LCdirection = TRUE,
+  UCdirection = TRUE,
+  force_direction = FALSE,
+  force_response = FALSE
 )
 }
 \arguments{
@@ -34,6 +40,18 @@ post_predict(
 \item{n_cores}{Integer. Across how many cores do you want to parallelize.}
 
 \item{use_par}{Character. Can be mean, median or default random. Will take either random samples from the chain or as specified.}
+
+\item{LCresponse}{Boolean, default TRUE, if false set LC response to NA}
+
+\item{UCresponse}{Boolean, default TRUE, if false set UC response to NA}
+
+\item{LCdirection}{Boolean, default TRUE, set LC rt to 0, else to NA}
+
+\item{UCdirection}{Boolean, default TRUE, set LC rt to Inf, else to NA}
+
+\item{force_direction}{Boolean, take censor direction from argument not samples (default FALSE)}
+
+\item{force_response}{Boolean, take censor response from argument not samples (default FALSE)}
 }
 \value{
 A list of simulated data sets of length n_post.
