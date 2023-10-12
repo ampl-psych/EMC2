@@ -10,7 +10,7 @@ my_integrate <- function(...,upper=Inf,big=10)
 
 
 log_likelihood_race_missing <- function(p_vector,dadm,min_ll=log(1e-10))
-  # Race model summed log likelihood
+  # Race model summed log likelihood for models allowing missing values
 {
 
   f <- function(t,p,dfun,pfun) {
@@ -288,7 +288,8 @@ log_likelihood_race_missing <- function(p_vector,dadm,min_ll=log(1e-10))
 
 
 log_likelihood_race_missing_LBAU <- function(p_vector,dadm,min_ll=log(1e-10))
-  # Race model summed log likelihood
+  # Race model summed log likelihood for an LBA allowing negative rates and
+  # missing values
 {
 
   f <- function(t,p,dfun,pfun) {
