@@ -467,7 +467,7 @@ compare_IC <- function(sList,filter="sample",subfilter=0,use_best_fit=TRUE,
 #' mean deviance, deviance of mean, DIC, BPIC, and associated weights.
 #' @export
 
-compare_ICs <- function(sList,filter="sample",subfilter=0,use_best_fit=TRUE,
+compare_IC_subject <- function(sList,filter="sample",subfilter=0,use_best_fit=TRUE,
                         print_summary=TRUE,digits=3) {
 
   subjects <- names(sList[[1]][[1]]$data)
