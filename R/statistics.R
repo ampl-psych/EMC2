@@ -64,7 +64,7 @@ gd_pmwg <- function(pmwg_mcmc,return_summary=FALSE,print_summary=TRUE,
 
   gelman_diag_robust <- function(mcl,autoburnin,transform)
   {
-    gd <- try(gelman.diag(split_mcl(mcl),autoburnin=autoburnin,transform=transform),silent=TRUE)
+    gd <- try(gelman.diag(mcl,autoburnin=autoburnin,transform=transform),silent=TRUE)
     if (is(gd, "try-error")) list(psrf=matrix(Inf),mpsrf=Inf) else gd
   }
 
