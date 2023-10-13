@@ -1,7 +1,6 @@
 #### Fitting automation
 #' Generic function to run samplers with default settings.
 #'
-#' Calls `auto_burn`, `run_adapt` and `run_sample` in order with default settings.
 #'
 #' @param samplers A list of samplers, or a fileName of where the samplers are stored.
 #' @param stage A string. Indicates which stage is to be run, either preburn, burn, adapt or sample. If unspecified will assume the next unrun stage.
@@ -21,7 +20,7 @@
 #' @param cores_per_chain An integer. How many cores to use per chain. Parallelizes across participant calculations.
 #' @param cores_for_chains An integer. How many cores to use across chains. Default is the number of chains.
 #' @param max_trys An integer. How many times it will try to meet the finish conditions. Default is 50.
-#' @param n_blocks
+#' @param n_blocks An integer. Will block the parameter chains such that they are updated in blocks. This can be helpful in extremely tough models with large number of parameters.
 #' @param omit_mpsrf When testing for convergence use only psrf (default FALSE uses mpsrf as well)
 #'
 #' @return A list of samplers
@@ -108,7 +107,7 @@ run_emc <- function(samplers, stage = NULL, iter = 1000, max_gd = 1.1, mean_gd =
 #' @param cores_per_chain An integer. How many cores to use per chain. Parallelizes across participant calculations.
 #' @param cores_for_chains An integer. How many cores to use across chains. Default is the number of chains.
 #' @param max_trys An integer. How many times it will try to meet the finish conditions. Default is 50.
-#' @param n_blocks
+#' @param n_blocks An integer. Will block the parameter chains such that they are updated in blocks. This can be helpful in extremely tough models with large number of parameters.
 #' @param omit_mpsrf When testing for convergence use only psrf (default FALSE uses mpsrf as well)
 #'
 #' @return A list of samplers
