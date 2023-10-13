@@ -59,11 +59,12 @@ gd_pmwg <- function(pmwg_mcmc,return_summary=FALSE,print_summary=TRUE,
       mcl2[[i]] <- as.mcmc(mcl2[[i]][c((half[i]+1):(2*half[i])),])
       mcl[[i]] <- as.mcmc(mcl[[i]][1:half[i],])
     }
-    as.mcmc.list(c(mcl,mcl2))
+    coda::as.mcmc.list(c(mcl,mcl2))
   }
 
   gelman_diag_robust <- function(mcl,autoburnin,transform)
   {
+    mcl <- split_mcl(mcl)
     gd <- try(gelman.diag(mcl,autoburnin=autoburnin,transform=transform),silent=TRUE)
     if (is(gd, "try-error")) list(psrf=matrix(Inf),mpsrf=Inf) else gd
   }
