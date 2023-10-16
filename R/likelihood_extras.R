@@ -392,7 +392,7 @@ log_likelihood_race_missing_LBAU <- function(p_vector,dadm,min_ll=log(1e-10))
       #   lds[tofix][i] <- log(pmax(0,pmin(tmp$value,1)))
       if (!inherits(tmp, "try-error") && suppressWarnings(!is.nan(log(tmp$value))))
         lds[tofix][i] <- pmax(0,pmin(tmp$value,1))
-      lds[tofix][i] <- log(lds[tofix][i] + prod(pnorm(0,mpars[,i,"v"],mpars[,i,"sv"])))
+      lds[tofix][i] <- log(lds[tofix][i] + (1-lds[tofix][i])*prod(pnorm(0,mpars[,i,"v"],mpars[,i,"sv"])))
     }
   }
   # No direction
@@ -481,7 +481,7 @@ log_likelihood_race_missing_LBAU <- function(p_vector,dadm,min_ll=log(1e-10))
           cf <- pr_pt(LT,UT,mpars[,i,][c(j,c(1:n_acc)[-j]),],dadm) else cf <- 1
         if (!is.na(cf)) p <- p + pc$value*cf
       }
-      lp <- log(p + prod(pnorm(0,mpars[,i,"v"],mpars[,i,"sv"])))
+      lp <- log(p + (1-p)*prod(pnorm(0,mpars[,i,"v"],mpars[,i,"sv"])))
       if (!is.nan(lp) & !is.na(lp)) lds[tofixslow][i] <- lp else lds[tofixslow][i] <- -Inf
     }
   } else tofixslow <- NA
