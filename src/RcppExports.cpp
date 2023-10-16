@@ -10,6 +10,20 @@ Rcpp::Rostream<true>&  Rcpp::Rcout = Rcpp::Rcpp_cout_get();
 Rcpp::Rostream<false>& Rcpp::Rcerr = Rcpp::Rcpp_cerr_get();
 #endif
 
+// c_map_p
+NumericMatrix c_map_p(NumericVector p_vector, CharacterVector p_types, List designs, int n_trials);
+RcppExport SEXP _EMC2_c_map_p(SEXP p_vectorSEXP, SEXP p_typesSEXP, SEXP designsSEXP, SEXP n_trialsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type p_vector(p_vectorSEXP);
+    Rcpp::traits::input_parameter< CharacterVector >::type p_types(p_typesSEXP);
+    Rcpp::traits::input_parameter< List >::type designs(designsSEXP);
+    Rcpp::traits::input_parameter< int >::type n_trials(n_trialsSEXP);
+    rcpp_result_gen = Rcpp::wrap(c_map_p(p_vector, p_types, designs, n_trials));
+    return rcpp_result_gen;
+END_RCPP
+}
 // calc_ll
 NumericVector calc_ll(NumericMatrix p_matrix, DataFrame data, NumericVector constants, List designs, const int n_trials, String type, CharacterVector p_types, LogicalVector winner, NumericVector expand, double min_ll, List group_idx);
 RcppExport SEXP _EMC2_calc_ll(SEXP p_matrixSEXP, SEXP dataSEXP, SEXP constantsSEXP, SEXP designsSEXP, SEXP n_trialsSEXP, SEXP typeSEXP, SEXP p_typesSEXP, SEXP winnerSEXP, SEXP expandSEXP, SEXP min_llSEXP, SEXP group_idxSEXP) {
@@ -329,6 +343,7 @@ END_RCPP
 }
 
 static const R_CallMethodDef CallEntries[] = {
+    {"_EMC2_c_map_p", (DL_FUNC) &_EMC2_c_map_p, 4},
     {"_EMC2_calc_ll", (DL_FUNC) &_EMC2_calc_ll, 11},
     {"_EMC2_d_DDM_c", (DL_FUNC) &_EMC2_d_DDM_c, 6},
     {"_EMC2_dlba", (DL_FUNC) &_EMC2_dlba, 7},
