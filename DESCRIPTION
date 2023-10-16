@@ -30,7 +30,6 @@ Imports:
     stats,
     Matrix,
     Rcpp,
-    tmvtnorm,
-    MomTrunc
+    tmvtnorm
 LinkingTo: 
     Rcpp
