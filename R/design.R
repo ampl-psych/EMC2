@@ -34,7 +34,6 @@
 make_design <- function(Flist = NULL,Ffactors = NULL,Rlevels = NULL,model,ddata=NULL,
                         Clist=NULL,matchfun=NULL,constants=NULL,Fcovariates=NULL,Ffunctions=NULL,
                         adapt=NULL,report_p_vector=TRUE, custom_p_vector = NULL){
-
   if(!is.null(custom_p_vector)){
     design <- list(Flist = Flist, model = model, Ffactors = Ffactors)
     attr(design, "sampled_p_names") <-custom_p_vector
@@ -50,10 +49,22 @@ make_design <- function(Flist = NULL,Ffactors = NULL,Rlevels = NULL,model,ddata=
     nfacs <- nfacs[!(names(nfacs) %in% c("trials","rt"))]
     if (length(nfacs)>0) Fcovariates <- nfacs
   }
+  # # Frees up memory again by creating new enclosing environments, courtesy of Steven
+  # if(!is.null(Ffunctions)){
+  #   Ffunctions <- lapply(Ffunctions, function(f) {environment(f) <- new.env(parent=globalenv()); return(f)})
+  # }
+  # if(!is.null(Flist)) {
+  #   Flist <- lapply(Flist, function(f) {environment(f) <- new.env(parent=globalenv()); return(f)})
+  # }
+  # if(!is.null(model)) environment(model) <- new.env(parent=globalenv())
+  # if(!is.null(matchfun)) environment(matchfun) <- new.env(parent=globalenv())
+  # if (model()$type=="SDT") {
+  #   Clist[["lR"]] <- contr.increasing(length(Rlevels),Rlevels)
+  # }
+
   design <- list(Flist=Flist,Ffactors=Ffactors,Rlevels=Rlevels,
                  Clist=Clist,matchfun=matchfun,constants=constants,
                  Fcovariates=Fcovariates,Ffunctions=Ffunctions,adapt=adapt,model=model)
-
   p_vector <- sampled_p_vector(design,design$model)
 
   if (model()$type %in% c("MT","TC")) {
@@ -81,7 +92,6 @@ make_design <- function(Flist = NULL,Ffactors = NULL,Rlevels = NULL,model,ddata=
     attr(design,"dL") <- dL
   }
 
-
   if (model()$type=="SDT") {
     tnams <- dimnames(attr(p_vector,"map")$threshold)[[2]]
     max_threshold=paste0("lR",Rlevels[length(Rlevels)])
@@ -95,7 +105,11 @@ make_design <- function(Flist = NULL,Ffactors = NULL,Rlevels = NULL,model,ddata=
   attr(design,"p_vector") <- p_vector
 
   if (report_p_vector) {
-    print(p_vector)
+    cat("\n Sampled Parameters: \n")
+    print(names(p_vector))
+    cat("\n Design Matrices: \n")
+    map_out <- sampled_p_vector(design,design$model, add_da = TRUE)
+    print(attr(map_out, "map"), row.names = FALSE)
   }
 
   return(design)
@@ -140,7 +154,7 @@ contr.anova <- function(n) {
 #' sampled_p_vector()
 #'
 #' Makes an empty p_vector corresponding to model.
-#' matchfun only needed in design if uses lM factor
+#' matchfun only needed in design if uses lM factorf
 #'
 #' @param design a list of the design made with make_design.
 #' @param model a model list. Default is the model specified in the design list.
@@ -149,7 +163,7 @@ contr.anova <- function(n) {
 #' @return Named vector with mapping attributes.
 #' @export
 
-sampled_p_vector <- function(design,model=NULL,doMap=TRUE)
+sampled_p_vector <- function(design,model=NULL,doMap=TRUE, add_da = FALSE)
   # Makes an empty p_vector corresponding to model.
 {
   if (is.null(model)) model <- design$model
@@ -171,7 +185,7 @@ sampled_p_vector <- function(design,model=NULL,doMap=TRUE)
   }
   dadm <- design_model(
     add_accumulators(data,matchfun=design$matchfun,type=model()$type,Fcovariates=design$Fcovariates),
-    design,model,add_acc=FALSE,verbose=FALSE,rt_check=FALSE,compress=FALSE)
+    design,model,add_acc=FALSE,verbose=FALSE,rt_check=FALSE,compress=FALSE, add_da = add_da)
   sampled_p_names <- attr(dadm,"sampled_p_names")
   out <- stats::setNames(numeric(length(sampled_p_names)),sampled_p_names)
   if (doMap) attr(out,"map") <-
@@ -180,13 +194,10 @@ sampled_p_vector <- function(design,model=NULL,doMap=TRUE)
 }
 
 
-add_accumulators <- function(data,matchfun=NULL,simulate=FALSE,type="RACE", Fcovariates=NULL)
-  # Adds accumulator factor
-{
-
+add_accumulators <- function(data,matchfun=NULL,simulate=FALSE,type="RACE", Fcovariates=NULL) {
   if (!is.factor(data$R)) stop("data must have a factor R")
   factors <- names(data)[!names(data) %in% c("R","rt","trials",Fcovariates)]
-  if (type=="DDM") {
+if (type=="DDM") {
     datar <- cbind(data,lR=factor(rep(levels(data$R)[1],dim(data)[1]),
       levels=levels(data$R)),lM=factor(rep(TRUE,dim(data)[1])))
   }
@@ -216,6 +227,7 @@ add_accumulators <- function(data,matchfun=NULL,simulate=FALSE,type="RACE", Fcov
     R[is.na(R)] <- levels(datar$lR)[1]
     if (type %in% c("MT","TC")) datar$winner <- NA else
       datar$winner <- datar$lR==R
+    # datar$winner[is.na(datar$winner)] <- FALSE
   }
   # sort cells together
   if ("trials" %in% names(data)){
@@ -224,7 +236,8 @@ add_accumulators <- function(data,matchfun=NULL,simulate=FALSE,type="RACE", Fcov
     } else{
       datar[order(datar[,c(factors)], as.numeric(datar$trials),as.numeric(datar$lR)),]
     }
-  } else {
+  }
+  else{
     if(length(factors) > 1){
       datar[order(apply(datar[,c(factors)],1,paste,collapse="_"), as.numeric(datar$lR)),]
     } else{
@@ -285,7 +298,7 @@ design_model_custom_ll <- function(data, design, model){
 
 design_model <- function(data,design,model=NULL,
                          add_acc=TRUE,rt_resolution=0.02,verbose=TRUE,
-                         compress=TRUE,rt_check=TRUE)
+                         compress=TRUE,rt_check=TRUE, add_da = FALSE)
   # Flist is a list of formula objects, one for each p_type
   # da is augmented data (from add_accumulators), must have all of the factors
   #   and covariates that are used in formulas
@@ -455,7 +468,7 @@ design_model <- function(data,design,model=NULL,
     if (any(data$rt[!is.na(data$rt)]==-Inf) & is.null(attr(data,"LC")))
           stop("Data must have an LC attribute if any rt = -Inf")
     if (any(data$rt[!is.na(data$rt)]==Inf) & is.null(attr(data,"UC")))
-          stop("Data must have a UC attribute if any rt = Inf")
+          stop("Data must have an UC attribute if any rt = Inf")
     if (!is.null(attr(data,"UC"))) check_rt(attr(data,"UC"),data)
     if (!is.null(attr(data,"LC"))) check_rt(attr(data,"LC"),data,upper=FALSE)
     if (!is.null(attr(data,"UC")) & !is.null(attr(data,"LC"))) {
@@ -466,7 +479,8 @@ design_model <- function(data,design,model=NULL,
 
   if (!add_acc) da <- data else
     da <- add_accumulators(data,design$matchfun,type=model()$type,Fcovariates=design$Fcovariates)
-  da <- da[order(da$subjects),] # fixes different sort in add_accumulators depending on subject type
+  order_idx <- order(da$subjects)
+  da <- da[order_idx,] # fixes different sort in add_accumulators depending on subject type
 
   if (!is.null(design$Ffunctions)) for (i in names(design$Ffunctions)) {
     newF <- stats::setNames(data.frame(design$Ffunctions[[i]](da)),i)
@@ -478,56 +492,68 @@ design_model <- function(data,design,model=NULL,
     stop("p_types, transform and Ntransform must be supplied")
   if (!all(unlist(lapply(design$Flist,class))=="formula"))
     stop("Flist must contain formulas")
+  if(is.null(design$DM_fixed)){ # LM type
+    nams <- unlist(lapply(design$Flist,function(x)as.character(stats::terms(x)[[2]])))
+    names(design$Flist) <- nams
+    if (!all(sort(model()$p_types)==sort(nams)) & model()$type != "MRI")
+      stop("Flist must specify formulas for ",paste(model()$p_types,collapse = " "))
+    if (is.null(design$Clist)) design$Clist=list(stats::contr.treatment)
+    if (!is.list(design$Clist)) stop("Clist must be a list")
+    if (!is.list(design$Clist[[1]])[1]) # same contrasts for all p_types
+      design$Clist <- stats::setNames(lapply(1:length(model()$p_types),
+                                             function(x)design$Clist),model()$p_types) else {
+                                               missing_p_types <- model()$p_types[!(model()$p_types %in% names(design$Clist))]
+                                               if (length(missing_p_types)>0) {
+                                                 nok <- length(design$Clist)
+                                                 for (i in 1:length(missing_p_types)) {
+                                                   design$Clist[[missing_p_types[i]]] <- list(stats::contr.treatment)
+                                                   names(design$Clist)[nok+i] <- missing_p_types[i]
+                                                 }
+                                               }
+                                             }
+    if(model()$type != "MRI") for (i in model()$p_types) attr(design$Flist[[i]],"Clist") <- design$Clist[[i]]
+    out <- lapply(design$Flist,make_dm,da=da,Fcovariates=design$Fcovariates, add_da = add_da)
+    if (!is.null(rt_resolution) & !is.null(da$rt)) da$rt <- round(da$rt/rt_resolution)*rt_resolution
+    if (compress) dadm <- compress_dadm(da,designs=out,
+                                        Fcov=design$Fcovariates,Ffun=names(design$Ffunctions)) else {
+                                          dadm <- da
+                                          attr(dadm,"designs") <- out
+                                          attr(dadm,"s_expand") <- da$subjects
+                                          attr(dadm,"expand") <- 1:dim(dadm)[1]
+    }
+    p_names <-  unlist(lapply(out,function(x){dimnames(x)[[2]]}),use.names=FALSE)
 
-  nams <- unlist(lapply(design$Flist,function(x)as.character(stats::terms(x)[[2]])))
-  names(design$Flist) <- nams
-  if (!all(model()$p_types %in% nams) & model()$type != "MRI")
-  # if (!all(sort(model()$p_types)==sort(nams)) & model()$type != "MRI")
-    stop("Flist must specify formulas for ",paste(model()$p_types,collapse = " "))
+    bad_constants <- names(design$constants)[!(names(design$constants) %in% p_names)]
+    if (length(bad_constants) > 0)
+      stop("Constant(s) ",paste(bad_constants,collapse=" ")," not in design")
 
-  if (is.null(design$Clist)) design$Clist=list(stats::contr.treatment)
-  if (!is.list(design$Clist)) stop("Clist must be a list")
-  if (!is.list(design$Clist[[1]])[1]) # same contrasts for all p_types
-    design$Clist <- stats::setNames(lapply(1:length(model()$p_types),
-                                    function(x)design$Clist),model()$p_types) else {
-                                      missing_p_types <- model()$p_types[!(model()$p_types %in% names(design$Clist))]
-                                      if (length(missing_p_types)>0) {
-                                        nok <- length(design$Clist)
-                                        for (i in 1:length(missing_p_types)) {
-                                          design$Clist[[missing_p_types[i]]] <- list(stats::contr.treatment)
-                                          names(design$Clist)[nok+i] <- missing_p_types[i]
-                                        }
-                                      }
-                                    }
-  if(model()$type != "MRI") for (i in model()$p_types) attr(design$Flist[[i]],"Clist") <- design$Clist[[i]]
-  out <- lapply(design$Flist,make_dm,da=da,Fcovariates=design$Fcovariates)
-  if (!is.null(rt_resolution) & !is.null(da$rt)) da$rt <- round(da$rt/rt_resolution)*rt_resolution
-  if (compress) dadm <- compress_dadm(da,designs=out,
-                                      Fcov=design$Fcovariates,Ffun=names(design$Ffunctions)) else {
-                                        dadm <- da
-                                        attr(dadm,"designs") <- out
-                                        attr(dadm,"s_expand") <- da$subjects
-                                        attr(dadm,"expand") <- 1:dim(dadm)[1]
-                                      }
+    # Pick out constants
+    sampled_p_names <- p_names[!(p_names %in% names(design$constants))]
+    attr(dadm,"p_names") <- p_names
+    attr(dadm,"sampled_p_names") <- sampled_p_names
+    attr(dadm, "LT") <- attr(data,"LT")
+    attr(dadm, "UT") <- attr(data,"UT")
+    attr(dadm, "LC") <- attr(data,"LC")
+    attr(dadm, "UC") <- attr(data,"UC")
+  } else{
+    if (!is.null(rt_resolution) & !is.null(da$rt)) da$rt <- round(da$rt/rt_resolution)*rt_resolution
+    design$DM_fixed <- lapply(design$DM_fixed, FUN = function(x) return(x[order_idx,,drop =F]))
+    design$DM_random <- lapply(design$DM_random, FUN = function(x) return(x[order_idx,, drop = F]))
+    dadm <- compress_dadm_lm(da, design$DM_fixed, design$DM_random, Fcov = design$Fcovariates)
+    attr(dadm, "g_fixed") <- attr(design, "g_fixed")
+    attr(dadm, "g_random") <- attr(design, "g_random")
+    attr(dadm, "p_vector_random") <- attr(design, "p_vector_random")
+    attr(dadm, "p_vector_fixed") <- attr(design, "p_vector_fixed")
+
+    attr(dadm, "constants") <- design$constants
+    attr(dadm, "per_subject")<- design$per_subject
+  }
   if (verbose & compress) message("Likelihood speedup factor: ",
-    round(dim(da)[1]/dim(dadm)[1],1)," (",dim(dadm)[1]/length(levels(dadm$lR))," unique trials)")
-  p_names <-  unlist(lapply(out,function(x){dimnames(x)[[2]]}),use.names=FALSE)
+  round(dim(da)[1]/dim(dadm)[1],1)," (",dim(dadm)[1]/length(levels(dadm$lR))," unique trials)")
 
-  bad_constants <- names(design$constants)[!(names(design$constants) %in% p_names)]
-  if (length(bad_constants) > 0)
-    stop("Constant(s) ",paste(bad_constants,collapse=" ")," not in design")
-
-  # Pick out constants
-  sampled_p_names <- p_names[!(p_names %in% names(design$constants))]
-
-  attr(dadm,"p_names") <- p_names
   attr(dadm,"model") <- model
   attr(dadm,"constants") <- design$constants
-  attr(dadm,"sampled_p_names") <- sampled_p_names
-  attr(dadm, "LT") <- attr(data,"LT")
-  attr(dadm, "UT") <- attr(data,"UT")
-  attr(dadm, "LC") <- attr(data,"LC")
-  attr(dadm, "UC") <- attr(data,"UC")
+
   if (add_acc) {
     attr(dadm, "ok_dadm_winner") <- is.finite(dadm$rt) & dadm$winner
     attr(dadm, "ok_dadm_looser") <- is.finite(dadm$rt) & !dadm$winner
@@ -547,11 +573,11 @@ design_model <- function(data,design,model=NULL,
 }
 
 
-make_dm <- function(form,da,Clist=NULL,Fcovariates=NULL)
+make_dm <- function(form,da,Clist=NULL,Fcovariates=NULL, add_da = FALSE)
   # Makes a design matrix based on formula form from augmented data frame da
 {
 
-  compress_dm <- function(dm)
+  compress_dm <- function(dm, da = NULL)
     # out keeps only unique rows, out[attr(out,"expand"),] gets back original.
   {
     cells <- apply(dm,1,paste,collapse="_")
@@ -559,6 +585,11 @@ make_dm <- function(form,da,Clist=NULL,Fcovariates=NULL)
     contr <- attr(dm,"contrasts")
     dups <- duplicated(cells)
     out <- dm[!dups,,drop=FALSE]
+    if(!is.null(da)){
+      if(nrow(da) != 0){
+        out <- cbind(da[!dups,colnames(da) != "subjects",drop=FALSE], out)
+      }
+    }
     attr(out,"expand") <- as.numeric(factor(cells,levels=unique(cells)))
     attr(out,"assign") <- ass
     attr(out,"contrasts") <- contr
@@ -590,7 +621,13 @@ make_dm <- function(form,da,Clist=NULL,Fcovariates=NULL)
       dimnames(out)[[2]] <- c(pnam,cnams)
     } else dimnames(out)[[2]] <- paste(pnam,dimnames(out)[[2]],sep="_")
   }
-  compress_dm(out)
+  if(add_da){
+    da <- da[,all.vars(form)[-1], drop = F]
+    out <- compress_dm(out, da)
+  } else{
+    out <- compress_dm(out)
+  }
+  return(out)
 }
 
 
@@ -744,6 +781,5 @@ dm_list <- function(dadm)
 
   return(dl)
 }
-
 
 
