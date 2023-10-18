@@ -33,7 +33,7 @@ plot_chains <- function(pmwg_mcmc,layout=NA,subject=NA,ylim=NULL,
   auto.layout <- any(is.na(layout))
   no_layout <- is.null(layout)
   if (!auto.layout & !no_layout) par(mfrow=layout)
-  if (attr(pmwg_mcmc,"selection")=="alpha") {
+  if (attr(pmwg_mcmc,"selection")=="alpha" || attr(pmwg_mcmc,"selection")=="random") {
     snams <- names(pmwg_mcmc)
     if (any(is.na(subject))) subject <- snams
     if (is.numeric(subject)) subject <- snams[subject]

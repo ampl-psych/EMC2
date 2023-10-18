@@ -157,7 +157,6 @@ NumericVector calc_ll(NumericMatrix p_matrix, DataFrame data, NumericVector cons
     for(int i = 0; i < n_particles; i++){
       p_vector = p_matrix(i, _);
       pars = get_pars(p_vector, constants, transform_DDM, Ntransform_DDM, p_types, designs, n_trials);
-
       lls[i] = c_log_likelihood_DDM(pars, data, n_trials, expand, min_ll, group_idx);
     }
   } else{

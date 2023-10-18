@@ -8,8 +8,8 @@ rowMultiply <- function(x, y){
   if (nrow(x) != nrow(y))
     stop("Unequal row numbers in row.multiply:", nrow(x),
          ", ", nrow(y))
-  K <- t(Matrix::KhatriRao(t(x), t(y))) # This is way quicker than the original BayesFactor way
-  colnames(K) = as.vector(t(outer(colnames(x), colnames(y),
+  K <- Matrix::t(Matrix::KhatriRao(Matrix::t(x), Matrix::t(y))) # This is way quicker than the original BayesFactor way
+  colnames(K) = as.vector(Matrix::t(outer(colnames(x), colnames(y),
                                   function(x, y) {
                                     paste(x, y, sep = "_")
                                   })))
@@ -37,12 +37,14 @@ contr.bayes <- function(n, contrasts = TRUE) {
 model.Matrix <- function(object, data, contrasts.arg = NULL, drop.unused.levels = FALSE,
                          xlev = NULL){
   # Creates a sparse design matrix
+  options(na.action='na.pass')
   m <- Matrix::sparse.model.matrix(object, data = data, contrasts.arg = contrasts.arg,
                                    drop.unused.levels = drop.unused.levels, xlev = xlev)
   new("dsparseModelMatrix", m, assign = attr(m, "assign"),
       contrasts = if (is.null(ctr <- attr(m, "contrasts")))
         list()
       else ctr)
+  m[is.na(m)] <- 0
   return(m)
 }
 
@@ -80,7 +82,7 @@ oneDM <- function (trm, data, dataTypes)
       oneDM(trm, data = data, dataTypes = dataTypes)
     }, data = data, dataTypes = dataTypes)
     X = Reduce(rowMultiply, x = Xs)
-    X <- X[,colSums(abs(X)) != 0, drop = F]
+    X <- X[,Matrix::colSums(abs(X)) != 0, drop = F]
     return(X)
   }
 }
@@ -192,6 +194,8 @@ compress_dadm_lm <- function(da,fixed_DM,random_DM, Fcov = NULL)
                                   each=nacc),rep(1:nacc,times=length(cells)/nacc),sep="_")
   contract <- !duplicated(cells)
   out <- da[contract,,drop=FALSE]
+  fixed_DM <- lapply(fixed_DM, FUN = function(x) x[contract,,drop = F])
+  random_DM <- lapply(random_DM, FUN = function(x) x[contract,,drop = F])
   attr(out,"contract") <- contract
   attr(out,"expand") <- as.numeric(factor(cells,levels=unique(cells)))
   lR1 <- da$lR==levels(da$lR)[[1]]
@@ -219,12 +223,16 @@ compress_dadm_lm <- function(da,fixed_DM,random_DM, Fcov = NULL)
   cells_nortR <- cells_nortR[out$lR==levels(out$lR)[1]]
   attr(out,"expand_nortR") <- as.numeric(factor(cells_nortR,
                                                 levels=unique(cells_nortR)))[as.numeric(factor(cells,levels=unique(cells)))]
+  attr(out, "DM_fixed") <- fixed_DM
+  attr(out, "DM_random") <- random_DM
   out
 }
 
-getGMap <- function(DM, use, data){
+getGMap <- function(DM, use, data, constants){
   names_fixed <- colnames(DM$fixed)
   names_random <- colnames(DM$random)
+  names_fixed <- names_fixed[!names_fixed %in% names(constants)]
+  names_random <- names_random[!names_random %in% names(constants)]
 
   names_fixed <- gsub('[[:digit:]]+', '', names_fixed)
   # names_random <- gsub('[[:digit:]]+', '', names_random)
@@ -275,6 +283,7 @@ oneG <- function(G){
 get_sub_idx <- function(s, par_names){
   seps <- strsplit(par_names, "_")
   idx <- unlist(lapply(seps, FUN = function(x) any(x == paste0("subjects", s))))
+  return(idx)
 }
 
 

@@ -80,7 +80,11 @@ make_design <- function(Flist = NULL,Ffactors = NULL,Rlevels = NULL,model,ddata=
   attr(design,"p_vector") <- p_vector
 
   if (report_p_vector) {
-    print(p_vector)
+    cat("\n Sampled Parameters: \n")
+    print(names(p_vector))
+    cat("\n Design Matrices: \n")
+    map_out <- sampled_p_vector(design,design$model, add_da = TRUE)
+    print(attr(map_out, "map"), row.names = FALSE)
   }
 
   return(design)
@@ -125,7 +129,7 @@ contr.anova <- function(n) {
 #' sampled_p_vector()
 #'
 #' Makes an empty p_vector corresponding to model.
-#' matchfun only needed in design if uses lM factor
+#' matchfun only needed in design if uses lM factorf
 #'
 #' @param design a list of the design made with make_design.
 #' @param model a model list. Default is the model specified in the design list.
@@ -134,7 +138,7 @@ contr.anova <- function(n) {
 #' @return Named vector with mapping attributes.
 #' @export
 
-sampled_p_vector <- function(design,model=NULL,doMap=TRUE)
+sampled_p_vector <- function(design,model=NULL,doMap=TRUE, add_da = FALSE)
   # Makes an empty p_vector corresponding to model.
 {
   if (is.null(model)) model <- design$model
@@ -156,7 +160,7 @@ sampled_p_vector <- function(design,model=NULL,doMap=TRUE)
   }
   dadm <- design_model(
     add_accumulators(data,matchfun=design$matchfun,type=model()$type,Fcovariates=design$Fcovariates),
-    design,model,add_acc=FALSE,verbose=FALSE,rt_check=FALSE,compress=FALSE)
+    design,model,add_acc=FALSE,verbose=FALSE,rt_check=FALSE,compress=FALSE, add_da = add_da)
   sampled_p_names <- attr(dadm,"sampled_p_names")
   out <- stats::setNames(numeric(length(sampled_p_names)),sampled_p_names)
   if (doMap) attr(out,"map") <-
@@ -255,7 +259,7 @@ design_model_custom_ll <- function(data, design, model){
 
 design_model <- function(data,design,model=NULL,
                          add_acc=TRUE,rt_resolution=0.02,verbose=TRUE,
-                         compress=TRUE,rt_check=TRUE)
+                         compress=TRUE,rt_check=TRUE, add_da = FALSE)
   # Flist is a list of formula objects, one for each p_type
   # da is augmented data (from add_accumulators), must have all of the factors
   #   and covariates that are used in formulas
@@ -469,7 +473,7 @@ design_model <- function(data,design,model=NULL,
                                                }
                                              }
     if(model()$type != "MRI") for (i in model()$p_types) attr(design$Flist[[i]],"Clist") <- design$Clist[[i]]
-    out <- lapply(design$Flist,make_dm,da=da,Fcovariates=design$Fcovariates)
+    out <- lapply(design$Flist,make_dm,da=da,Fcovariates=design$Fcovariates, add_da = add_da)
     if (!is.null(rt_resolution) & !is.null(da$rt)) da$rt <- round(da$rt/rt_resolution)*rt_resolution
     if (compress) dadm <- compress_dadm(da,designs=out,
                                         Fcov=design$Fcovariates,Ffun=names(design$Ffunctions)) else {
@@ -497,10 +501,11 @@ design_model <- function(data,design,model=NULL,
     design$DM_fixed <- lapply(design$DM_fixed, FUN = function(x) return(x[order_idx,,drop =F]))
     design$DM_random <- lapply(design$DM_random, FUN = function(x) return(x[order_idx,, drop = F]))
     dadm <- compress_dadm_lm(da, design$DM_fixed, design$DM_random, Fcov = design$Fcovariates)
-    attr(dadm, "DM_fixed") <- design$DM_fixed
-    attr(dadm, "DM_random") <- design$DM_random
     attr(dadm, "g_fixed") <- attr(design, "g_fixed")
     attr(dadm, "g_random") <- attr(design, "g_random")
+    attr(dadm, "p_vector_random") <- attr(design, "p_vector_random")
+    attr(dadm, "p_vector_fixed") <- attr(design, "p_vector_fixed")
+
     attr(dadm, "constants") <- design$constants
     attr(dadm, "per_subject")<- design$per_subject
   }
@@ -528,11 +533,11 @@ design_model <- function(data,design,model=NULL,
 }
 
 
-make_dm <- function(form,da,Clist=NULL,Fcovariates=NULL)
+make_dm <- function(form,da,Clist=NULL,Fcovariates=NULL, add_da = FALSE)
   # Makes a design matrix based on formula form from augmented data frame da
 {
 
-  compress_dm <- function(dm)
+  compress_dm <- function(dm, da = NULL)
     # out keeps only unique rows, out[attr(out,"expand"),] gets back original.
   {
     cells <- apply(dm,1,paste,collapse="_")
@@ -540,6 +545,11 @@ make_dm <- function(form,da,Clist=NULL,Fcovariates=NULL)
     contr <- attr(dm,"contrasts")
     dups <- duplicated(cells)
     out <- dm[!dups,,drop=FALSE]
+    if(!is.null(da)){
+      if(nrow(da) != 0){
+        out <- cbind(da[!dups,colnames(da) != "subjects",drop=FALSE], out)
+      }
+    }
     attr(out,"expand") <- as.numeric(factor(cells,levels=unique(cells)))
     attr(out,"assign") <- ass
     attr(out,"contrasts") <- contr
@@ -571,7 +581,13 @@ make_dm <- function(form,da,Clist=NULL,Fcovariates=NULL)
       dimnames(out)[[2]] <- c(pnam,cnams)
     } else dimnames(out)[[2]] <- paste(pnam,dimnames(out)[[2]],sep="_")
   }
-  compress_dm(out)
+  if(add_da){
+    da <- da[,all.vars(form)[-1], drop = F]
+    out <- compress_dm(out, da)
+  } else{
+    out <- compress_dm(out)
+  }
+  return(out)
 }
 
 

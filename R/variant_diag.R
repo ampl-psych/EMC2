@@ -65,20 +65,11 @@ gibbs_step_diag <- function(sampler, alpha){
   mean_mu = var_mu * ((apply(alpha, 1, sum) * last$tvinv + prior$theta_mu_mean * prior$theta_mu_invar))
   tmu <- rnorm(n_pars, mean_mu, sd = sqrt(var_mu))
   names(tmu) <- sampler$par_names[!(sampler$nuisance | sampler$grouped)]
-
-  # if(!is.null(hyper$std_shape)){
-  #   # InvGamma alternative (probably inferior) prior
-  #   shape = hyper$std_shape + sampler$n_subjects / 2
-  #   rate = hyper$std_rate + rowSums( (alpha-tmu)^2 ) / 2
-  #   tvinv = rgamma(n=sampler$n_pars, shape=shape, rate=rate)
-  #   tvar = 1/tvinv
-  #   a_half <- NULL
-  # } else {
   tvinv = rgamma(n=n_pars, shape=prior$v/2 + sampler$n_subjects/2, rate=prior$v/last$a_half +
                    rowSums( (alpha-tmu)^2 ) / 2)
   tvar = 1/tvinv
   #Contrary to standard pmwg I use shape, rate for IG()
-  a_half <- 1 / rgamma(n = n_pars, shape = (prior$v + n_pars) / 2,
+  a_half <- 1 / rgamma(n = n_pars, shape = (prior$v + 1) / 2,
                        rate = prior$v * tvinv + 1/(prior$A^2))
   return(list(tmu = tmu, tvar = diag(tvar, n_pars), tvinv = diag(tvinv, n_pars), a_half = a_half, alpha = alpha))
 }
@@ -163,3 +154,39 @@ prior_dist_diag = function(parameters, info){
   logw_den3 <- -sum(log(param.theta.sig2))
   return(log_prior_mu + log_prior_sigma + log_prior_a - logw_den3 - logw_den2)
 }
+
+
+# bridge_sampling ---------------------------------------------------------
+bridge_group_and_prior_and_jac_diag <- function(proposals_group, proposals_list, info){
+  prior <- info$prior
+  proposals <- do.call(cbind, proposals_list)
+  theta_mu <- proposals_group[,1:info$n_pars]
+  theta_var <- proposals_group[,(info$n_pars + 1):(2*info$n_pars)]
+  group_ll <- 0
+  for(i in 1:info$n_pars){
+    group_ll <- group_ll + dnorm(proposals[,info$par_names[i]], theta_mu[,i], sqrt(exp(theta_var[,i])), log = T)
+  }
+  prior_mu <- colSums(dnorm(t(theta_mu), mean = prior$theta_mu_mean, sd = sqrt(prior$theta_mu_var), log =T))
+  prior_var <- 0
+  for(i in 1:info$n_pars){
+    prior_var <- prior_var +  dhalft(sqrt(exp(theta_var[,i])), scale = prior$A, nu = prior$v, log = T)
+  }
+  jac_var <- rowSums(theta_var)
+  return(group_ll + prior_mu + prior_var + jac_var)
+}
+
+
+bridge_add_info_diag <- function(info, samples){
+  info$group_idx <- (samples$n_pars*samples$n_subjects + 1):(samples$n_pars*samples$n_subjects + 2*samples$n_pars)
+  return(info)
+}
+
+bridge_add_group_diag <- function(all_samples, samples, idx){
+  all_samples <- cbind(all_samples, t(samples$samples$theta_mu[,idx]))
+  all_samples <- cbind(all_samples, t(log(apply(samples$samples$theta_var[,,idx], 3, diag))))
+  return(all_samples)
+}
+
+
+
+

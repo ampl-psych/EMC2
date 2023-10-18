@@ -29,6 +29,7 @@ Imports:
     parallel,
     stats,
     Matrix,
-    Rcpp
+    Rcpp,
+    Brobdingnag
 LinkingTo: 
     Rcpp

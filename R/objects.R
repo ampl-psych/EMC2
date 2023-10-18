@@ -179,7 +179,14 @@ as_Mcmc <- function(sampler,filter=stages,thin=1,subfilter=0,
       random <- t(shorten(random,subfilter,2))
     }
     if (thin > dim(random)[1]) stop("Thin to large\n")
-    out <- coda::mcmc(random[seq(thin,dim(random)[1],by=thin),,drop=FALSE])
+    random <- random[seq(thin,dim(random)[1],by=thin),,drop=FALSE]
+    out <- stats::setNames(lapply(
+      sampler$subjects,
+      function(x) {
+        coda::mcmc(random[,get_sub_idx(x, sampler$pars_random),drop = F])
+      }
+    ), names(sampler$data))
+    attr(out,"selection") <- selection
     attr(out,"selection") <- selection
     return(out)
   }
@@ -286,7 +293,7 @@ as_mcmc.list <- function(samplers,
     } else warning("Can only include constants in alpha or mu")
   }
 
-  if (selection %in% c("alpha","LL")) {
+  if (selection %in% c("alpha","LL", "random")) {
     nChains <- length(mcmcList)
     ns <- length(samplers[[1]]$subjects)
     out <- vector(mode="list",length=ns)
@@ -343,7 +350,11 @@ extract_samples <- function(sampler, stage = c("adapt", "sample"), max_n_sample 
     out <- variant_funs$filtered_samples(sampler, full_filter)
     out$nuisance <- get_variant_funs(type)$filtered_samples(sampler$sampler_nuis, full_filter)
   } else{
-    out <- variant_funs$filtered_samples(sampler, full_filter)
+    if(!is.null(sampler$g_map_fixed)){
+      out <- filtered_samples_lm(sampler, full_filter)
+    } else{
+      out <- variant_funs$filtered_samples(sampler, full_filter)
+    }
   }
   return(out)
 }

@@ -1,28 +1,31 @@
-rm(list = ls())
-devtools::load_all()
-source("test_files/utils_lm.R")
-library(lme4)
-library(BayesFactor)
-n_subjects <- 6
-n_cond <- 3
-n_trials <- 100
-n_groups <- 2
+# rm(list = ls())
+# devtools::load_all()
+# source("test_files/utils_lm.R")
+# library(lme4)
+# library(BayesFactor)
+# n_subjects <- 6
+# n_cond <- 3
+# n_trials <- 50
+# n_groups <- 2
+#
+# subject <- rep(1:n_subjects, each = n_trials*n_cond)
+# cond <- rep(rep(1:n_cond, n_subjects), each = n_trials)
+#
+# df <- data.frame(subjects = subject, cond = cond)
+# for(i in 2:n_groups){
+#   new_df <- df
+#   new_df$subjects <- new_df$subjects +n_subjects
+#   df <- rbind(df, new_df)
+# }
+# df$group <- rep(1:n_groups, each = n_trials*n_cond*n_subjects)
+# df$subjects <- as.factor(df$subjects)
+# df$cond <- as.factor(df$cond)
+# df$group <- as.factor(df$group)
+# df$R <- as.factor(c(1,2))
+# df$S <- as.factor(c(1,2,1,2,1,2,2,1))
+# df$rt <- .1 + exp(rnorm(nrow(df), .2, .5))
+# hist(df$rt, breaks = 30)
 
-subject <- rep(1:n_subjects, each = n_trials*n_cond)
-cond <- rep(rep(1:n_cond, n_subjects), each = n_trials)
-rt <- rnorm(n_subjects * n_trials * n_cond, mean = cond*subject)
-
-df <- data.frame(subjects = subject, cond = cond, rt = rt)
-for(i in 2:n_groups){
-  new_df <- df
-  new_df$subjects <- new_df$subjects +n_subjects
-  df <- rbind(df, new_df)
-}
-df$group <- rep(1:n_groups, each = n_trials*n_cond*n_subjects)
-df$subjects <- as.factor(df$subjects)
-df$cond <- as.factor(df$cond)
-df$group <- as.factor(df$group)
-df$R <- as.factor(1)
 
 make_design_lm <- function(Flist,matchfun=NULL,constants=NULL,report_p_vector=TRUE, ddata = NULL, model){
   # This will reorder the data for computational purposes! The design matrices will be on the reordered data.
@@ -34,7 +37,7 @@ make_design_lm <- function(Flist,matchfun=NULL,constants=NULL,report_p_vector=TR
   df_covs <- df_covs[!df_covs]
   Fcovariates <- all_vars[!all_vars %in% c("subjects", "RT", "R") & all_vars %in% df_covs]
   if(length(Fcovariates == 0)) Fcovariates <- NULL
-  ddata <- add_accumulators(ddata, matchfun = matchfun, type = model()$type, Fcovariates = Fcovariates)
+  ddata <- EMC2:::add_accumulators(ddata, matchfun = matchfun, type = model()$type, Fcovariates = Fcovariates)
 
   # Set up placeholders
   DM_fixed <- vector("list", length(Flist))
@@ -61,7 +64,7 @@ make_design_lm <- function(Flist,matchfun=NULL,constants=NULL,report_p_vector=TR
       par_names_curr <- get_parNames(DM$fixed,DM$random, as.character(name))
       colnames(DM$fixed) <- par_names_curr$fixed
       colnames(DM$random) <- par_names_curr$random
-      g <- getGMap(DM, use, ddata)
+      g <- getGMap(DM, use, ddata, constants)
       DM_random[[name]] <- DM$random
       DM_fixed[[name]] <- DM$fixed
       g_random[[name]] <- g$random
@@ -74,9 +77,11 @@ make_design_lm <- function(Flist,matchfun=NULL,constants=NULL,report_p_vector=TR
       intercept <- as.matrix(rep(1, nrow(ddata)))
       colnames(intercept) <- as.character(name)
       DM_fixed[[name]] <- intercept
-      g_curr <- 1
-      names(g_curr) <- as.character(name)
-      g_fixed[[name]] <- g_curr
+      if(!as.character(name) %in% names(constants)){
+        g_curr <- 1
+        names(g_curr) <- as.character(name)
+        g_fixed[[name]] <- g_curr
+      }
     }
   }
   if (report_p_vector) {
@@ -101,10 +106,68 @@ make_design_lm <- function(Flist,matchfun=NULL,constants=NULL,report_p_vector=TR
 }
 
 
-form <- list(v~cond + (cond|group/subjects),sv~
-               1,B~1 + (1|group),A~1,t0~ cond + (cond|subjects))
+# form <- list(v~cond+lM + (1|subjects), B~cond+ (cond|subjects), A ~ 1,
+#             t0~ 1 + (1|group), sv ~ 1)
+#
+# design <- make_design_lm(form, ddata = df, model = lbaB, matchfun=function(d)d$S==d$lR,
+#                        constants = c(sv = 1))
 
-test <- make_design_lm(form, ddata = df, model = ddmTZD)
+# names_fixed <- attr(test, "p_vector_fixed")
+# names_random <- attr(test, "p_vector_random")
+#
+# REs <- rnorm(length(names_random), sd = .2)
+# names(REs) <- names_random
+# fixed <- c(1, .5, .3, 1, log(1.5), .2 , .1, log(.4), log(.2))
+# names(fixed) <- names_fixed
+# p_vector <- c(fixed, REs, test$constants)
+#
+# DM <- mapply(cbind, test$DM_fixed, test$DM_random)
+# pars <- matrix(0, nrow(DM[[1]]), length(DM))
+# colnames(pars) <- names(DM)
+# for(i in 1:length(DM)){
+#   pars[,i] <- as.vector(DM[[i]] %*% p_vector[names(p_vector) %in% colnames(DM[[i]])])
+# }
+filtered_samples_lm <- function(sampler, filter){
+  out <- list(
+    random = sampler$samples$random[,filter, drop = F],
+    fixed = sampler$samples$fixed[,filter, drop = F],
+    g_map_random = sampler$g_map_random,
+    g_fixed = sampler$samples$g_fixed[,filter, drop = F],
+    g_random = sampler$samples$g_random[,filter, drop = F],
+    iteration = length(filter)
+  )
+}
+
+get_conditionals_lm_between <- function(samples, iteration = NULL){
+  iteration <- ifelse(is.null(iteration), samples$iteration, iteration)
+  between_idx <- !grepl("subjects", rownames(samples$random))
+  g_random_idx <- unique(rownames(samples$g_random)[samples$g_map_random][between_idx])
+  all_samples <- rbind(samples$fixed, samples$random[between_idx,],samples$g_fixed, samples$g_random[g_random_idx,])
+  mu_tilde <- rowMeans(all_samples)
+  var_tilde <- stats::cov(t(all_samples))
+  n_pars <- nrow(samples$fixed) + sum(between_idx)
+  condmvn <- condMVN(mean = mu_tilde, sigma = var_tilde,
+                     dependent.ind = 1:n_pars, given.ind = (n_pars + 1):length(mu_tilde),
+                     X.given = c(samples$random[between_idx,iteration], samples$g_fixed[,iteration], samples$g_random[g_random_idx,iteration]))
+  return(list(eff_mu = condmvn$condMean, eff_var = condmvn$condVar))
+}
+
+get_conditionals_lm <- function(s, samples, iteration = NULL){
+  iteration <- ifelse(is.null(iteration), samples$iteration, iteration)
+  sub_idx <- get_sub_idx(s, rownames(samples$random))
+  within_idx <- grepl("subjects", rownames(samples$random))
+  g_random_idx <- unique(rownames(samples$g_random)[samples$g_map_random][within_idx])
+  all_samples <- rbind(samples$random[sub_idx,],samples$g_random[g_random_idx,])
+  mu_tilde <- rowMeans(all_samples)
+  var_tilde <- stats::cov(t(all_samples))
+  n_pars <- sum(sub_idx)
+  condmvn <- condMVN(mean = mu_tilde, sigma = var_tilde,
+                     dependent.ind = 1:n_pars, given.ind = (n_pars + 1):length(mu_tilde),
+                     X.given = samples$g_random[g_random_idx,iteration])
+  return(list(eff_mu = condmvn$condMean, eff_var = condmvn$condVar))
+}
+
+
 
 make_samplers_lm <- function(data_list,design_list, model_list =NULL,
                             n_chains=3,compress=TRUE,rt_resolution=0.02,
@@ -123,7 +186,11 @@ make_samplers_lm <- function(data_list,design_list, model_list =NULL,
     model_list <- list(model_list)
   if (length(model_list)!=length(data_list))
     model_list <- rep(model_list,length(data_list))
-
+  data_list <- lapply(data_list,function(d){
+    if (!is.factor(d$subjects)) d$subjects <- factor(d$subjects)
+    d <- d[order(d$subjects),]
+    EMC2:::add_trials(d)
+  })
   dadm_list <- vector(mode="list",length=length(data_list))
   rt_resolution <- rep(rt_resolution,length.out=length(data_list))
   for (i in 1:length(dadm_list)) {
@@ -145,11 +212,15 @@ make_samplers_lm <- function(data_list,design_list, model_list =NULL,
   attr(dadm_lists,"model_list") <- model_list
   return(dadm_lists)
 }
-source("test_files/sampling_lm.R")
-
-test <- make_samplers_lm(df, test)
-
-run_emc(test)
+# devtools::load_all()
+#
+#
+# samplers <- make_samplers_lm(df, design)
+# samplers <- run_samplers(samplers, stage = "preburn", cores_for_chains = 1, cores_per_chain = 14,iter = 100,
+#                          verbose = T)
+#
+# test <- auto_burn(samplers, cores_for_chains = 1, cores_per_chain = 14,
+#                          verbose = T)
 
 #
 # m1 <- lmer(form, data)

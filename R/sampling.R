@@ -129,8 +129,8 @@ start_proposals_group <- function(data, group_pars, alpha, par_names,
   for(i in 1:n_subjects){
     proposals_list[[i]] <- bind_alpha(group_pars, alpha[,i], num_particles, is_grouped, par_names)
   }
-  lws <- parallel::mclapply(1:n_subjects, calc_ll_for_group, proposals_list, data, likelihood_func, subjects, mc.cores = n_cores)
-  lw <- Reduce("+", lws)
+  lws <- parallel::mcmapply(calc_ll_for_group, proposals_list, data, MoreArgs = list(ll = likelihood_func), mc.cores = n_cores)
+  lw <- rowSums(lws)
   weight <- exp(lw - max(lw))
   idx <- sample(x = num_particles, size = 1, prob = weight)
   return(group_pars[idx,])
@@ -294,8 +294,8 @@ new_particle_group <- function(data, num_particles, prior,
   for(i in 1:n_subjects){
     proposals_list[[i]] <- bind_alpha(proposals, alpha[,i], num_particles + 1, is_grouped, par_names)
   }
-  lws <- parallel::mclapply(1:n_subjects, calc_ll_for_group, proposals_list, data, likelihood_func, subjects, mc.cores = n_cores)
-  lw <- Reduce("+", lws)
+  lws <- parallel::mcmapply(calc_ll_for_group, proposals_list, data, MoreArgs = list(ll = likelihood_func), mc.cores = n_cores)
+  lw <- rowSums(lws)
   lp <- mvtnorm::dmvnorm(x = proposals, mean = prior_mu, sigma = prior_var, log = TRUE)
   prop_density <- mvtnorm::dmvnorm(x = proposals, mean = prev_mu, sigma = chains_cov)
   lm <- log(mix_proportion[1] * exp(lp) + mix_proportion[2] * prop_density)
@@ -406,9 +406,10 @@ new_particle <- function (s, data, num_particles, parameters, eff_mu = NULL,
 }
 
 
-calc_ll_for_group <- function(s, proposals, data, ll, subjects){
-  lw <- calc_ll_manager(proposals[[s]], dadm = data[[which(subjects == s)]], ll)
+calc_ll_for_group <- function(proposals, data, ll){
+  lw <- EMC2:::calc_ll_manager(proposals, dadm = data, ll)
 }
+
 
 bind_alpha <- function(proposals, alpha, num_particles, is_grouped, par_names){
   tmp <- matrix(0, ncol = length(is_grouped), nrow = num_particles)
@@ -467,11 +468,11 @@ fix_epsilon <- function(pmwgs, epsilon, force_prev_epsilon, components){
 
 set_epsilon <- function(n_pars) {
   if (n_pars > 15) {
-    epsilon <- 0.1
-  } else if (n_pars > 10) {
-    epsilon <- 0.3
-  } else {
     epsilon <- 0.5
+  } else if (n_pars > 10) {
+    epsilon <- 1
+  } else {
+    epsilon <- 1.5
   }
   return(epsilon)
 }
@@ -604,7 +605,10 @@ get_variant_funs <- function(type = "standard") {
       get_conditionals = get_conditionals_standard,
       get_all_pars_IS2 = get_all_pars_standard,
       prior_dist_IS2 = prior_dist_standard,
-      group_dist_IS2 = group_dist_standard
+      group_dist_IS2 = group_dist_standard,
+      bridge_add_group = bridge_add_group_standard,
+      bridge_add_info = bridge_add_info_standard,
+      bridge_group_and_prior_and_jac = bridge_group_and_prior_and_jac_standard
     )
   } else if(type == "single"){
     list_fun <- list(# store functions
@@ -617,9 +621,9 @@ get_variant_funs <- function(type = "standard") {
       gibbs_step = gibbs_step_single,
       filtered_samples = filtered_samples_single,
       get_conditionals = get_conditionals_single,
-      get_all_pars_IS2 = get_all_pars_single,
-      prior_dist_IS2 = prior_dist_single,
-      group_dist_IS2 = group_dist_single
+      bridge_add_group = bridge_add_group_single,
+      bridge_add_info = bridge_add_info_single,
+      bridge_group_and_prior_and_jac = bridge_group_and_prior_and_jac_single
     )
   } else if(type == "blocked"){
     list_fun <- list(# store functions
@@ -648,7 +652,10 @@ get_variant_funs <- function(type = "standard") {
       get_conditionals = get_conditionals_diag,
       get_all_pars_IS2 = get_all_pars_diag,
       prior_dist_IS2 = prior_dist_diag,
-      group_dist_IS2 = group_dist_diag
+      group_dist_IS2 = group_dist_diag,
+      bridge_add_group = bridge_add_group_diag,
+      bridge_add_info = bridge_add_info_diag,
+      bridge_group_and_prior_and_jac = bridge_group_and_prior_and_jac_diag
     )
   } else if(type == "factor"){
     list_fun <- list(# store functions

@@ -197,7 +197,7 @@ get_group_level_lm <- function(parameters, s){
   return(list(mu = mu, var = var))
 }
 
-get_conditionals_lm <- function(s, samples, n_pars, iteration = NULL, idx = NULL){
+get_conditionals_es <- function(s, samples, n_pars, iteration = NULL, idx = NULL){
   iteration <- ifelse(is.null(iteration), samples$iteration, iteration)
   if(is.null(idx)) idx <- 1:n_pars
   theta_var <-log(apply(samples$theta_var[idx,idx,],3,diag))
@@ -212,7 +212,7 @@ get_conditionals_lm <- function(s, samples, n_pars, iteration = NULL, idx = NULL
   return(list(eff_mu = condmvn$condMean, eff_var = condmvn$condVar))
 }
 
-filtered_samples_lm <- function(sampler, filter){
+filtered_samples_es <- function(sampler, filter){
   out <- list(
     theta_mu = sampler$samples$theta_mu[, filter],
     theta_var = sampler$samples$theta_var[, , filter],
