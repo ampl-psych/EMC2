@@ -14,7 +14,8 @@ design_model(
   rt_resolution = 0.02,
   verbose = TRUE,
   compress = TRUE,
-  rt_check = TRUE
+  rt_check = TRUE,
+  add_da = FALSE
 )
 }
 \arguments{
