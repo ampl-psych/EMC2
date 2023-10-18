@@ -10,8 +10,8 @@ init_chains(
   start_var = NULL,
   verbose = FALSE,
   particles = 1000,
-  n_cores = 1,
-  epsilon = NULL
+  cores_per_chain = 1,
+  cores_for_chains = length(samplers)
 )
 }
 \arguments{
@@ -25,9 +25,9 @@ init_chains(
 
 \item{particles}{Number of starting values}
 
-\item{n_cores}{Number of process cores to use}
+\item{cores_per_chain}{Number of cores used per chain.}
 
-\item{epsilon}{}
+\item{cores_for_chains}{Number of cores used for chains.}
 }
 \description{
 Adds a set of set of start points to each chain samples from a multivariate
