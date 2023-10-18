@@ -35,7 +35,7 @@ get_prior_single <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5
     n_pars <- length(attr(design, "p_vector"))
   }
   if (is.null(prior$theta_mu_mean)) {
-    prior$theta_mu_mean <- rep(0, n_pars)
+    prior$theta_mu_mean <- setNames(rep(0, n_pars),names(attr(design, "p_vector")))
   }
   if(is.null(prior$theta_mu_var)){
     prior$theta_mu_var <- diag(rep(1, n_pars))
@@ -93,45 +93,65 @@ filtered_samples_single <- function(sampler, filter){
     iteration = length(filter)
   )
 }
+#
+# get_all_pars_single <- function(samples, idx, info){
+#   n_subjects <- samples$n_subjects
+#   n_iter = length(samples$samples$stage[idx])
+#   # Exctract relevant objects
+#   alpha <- samples$samples$alpha[,,idx, drop = F]
+#   # Set up
+#   n_params<- samples$n_pars
+#   mu_tilde=array(dim = c(n_subjects,n_params))
+#   var_tilde=array(dim = c(n_subjects,n_params,n_params))
+#   for (j in 1:n_subjects){
+#     # calculate the mean for re, mu and sigma
+#     mu_tilde[j,] <- rowMeans(alpha[,j,])
+#     # calculate the covariance matrix for random effects, mu and sigma
+#     var_tilde[j,,] <- cov(t(alpha[,j,]))
+#   }
+#
+#   for(i in 1:n_subjects){ #RJI_change: this bit makes sure that the sigma tilde is pos def
+#     if(!corpcor::is.positive.definite(var_tilde[i,,], tol=1e-8)){
+#       var_tilde[i,,]<-corpcor::make.positive.definite(var_tilde[i,,], tol=1e-6)
+#     }
+#   }
+#   info$n_params <- n_params
+#   return(list(mu_tilde = mu_tilde, var_tilde = var_tilde, info = info))
+# }
+#
+# group_dist_single <- function(random_effect = NULL, parameters, sample = FALSE, n_samples = NULL, info){
+#   # This is for the single case actually the prior distribution.
+#   if (sample){
+#     return(rmvnorm(n_samples, info$prior$theta_mu_mean, info$prior$theta_mu_var))
+#   }else{
+#     logw_second<-max(-5000*info$n_randeffect, dmvnorm(random_effect, info$prior$theta_mu_mean,info$prior$theta_mu_var,log=TRUE))
+#     return(logw_second)
+#   }
+# }
+#
+# prior_dist_single <- function(parameters, info){
+#   # This is quite confusing, but now the actual prior dist is the group dist.
+#   # Just here for compatability with the other types.
+#   return(0)
+# }
+#
 
-get_all_pars_single <- function(samples, idx, info){
-  n_subjects <- samples$n_subjects
-  n_iter = length(samples$samples$stage[idx])
-  # Exctract relevant objects
-  alpha <- samples$samples$alpha[,,idx, drop = F]
-  # Set up
-  n_params<- samples$n_pars
-  mu_tilde=array(dim = c(n_subjects,n_params))
-  var_tilde=array(dim = c(n_subjects,n_params,n_params))
-  for (j in 1:n_subjects){
-    # calculate the mean for re, mu and sigma
-    mu_tilde[j,] <- rowMeans(alpha[,j,])
-    # calculate the covariance matrix for random effects, mu and sigma
-    var_tilde[j,,] <- cov(t(alpha[,j,]))
-  }
+# bridge sampling ---------------------------------------------------------
 
-  for(i in 1:n_subjects){ #RJI_change: this bit makes sure that the sigma tilde is pos def
-    if(!corpcor::is.positive.definite(var_tilde[i,,], tol=1e-8)){
-      var_tilde[i,,]<-corpcor::make.positive.definite(var_tilde[i,,], tol=1e-6)
-    }
-  }
-  info$n_params <- n_params
-  return(list(mu_tilde = mu_tilde, var_tilde = var_tilde, info = info))
+bridge_add_group_single <- function(all_samples, samples, idx){
+  return(all_samples)
 }
 
-group_dist_single <- function(random_effect = NULL, parameters, sample = FALSE, n_samples = NULL, info){
-  # This is for the single case actually the prior distribution.
-  if (sample){
-    return(rmvnorm(n_samples, info$prior$theta_mu_mean, info$prior$theta_mu_var))
-  }else{
-    logw_second<-max(-5000*info$n_randeffect, dmvnorm(random_effect, info$prior$theta_mu_mean,info$prior$theta_mu_var,log=TRUE))
-    return(logw_second)
-  }
+bridge_add_info_single <- function(info, samples){
+  return(info)
 }
 
-prior_dist_single <- function(parameters, info){
-  # This is quite confusing, but now the actual prior dist is the group dist.
-  # Just here for compatability with the other types.
-  return(0)
+
+bridge_group_and_prior_and_jac_single <- function(proposals_group, proposals_list, info){
+  proposals <- do.call(rbind, proposals_list)
+  prior_mu <- dmvnorm(proposals, mean = info$prior$theta_mu_mean, sigma = info$prior$theta_mu_var, log =T)
+  n_iter <- nrow(proposals_list[[1]])
+  prior_mu <- matrix(prior_mu, ncol = info$n_subjects)
+  return(rowSums(prior_mu)) # Output is of length n_iter
 }
 

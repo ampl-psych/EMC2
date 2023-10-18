@@ -65,20 +65,11 @@ gibbs_step_diag <- function(sampler, alpha){
   mean_mu = var_mu * ((apply(alpha, 1, sum) * last$tvinv + prior$theta_mu_mean * prior$theta_mu_invar))
   tmu <- rnorm(n_pars, mean_mu, sd = sqrt(var_mu))
   names(tmu) <- sampler$par_names[!(sampler$nuisance | sampler$grouped)]
-
-  # if(!is.null(hyper$std_shape)){
-  #   # InvGamma alternative (probably inferior) prior
-  #   shape = hyper$std_shape + sampler$n_subjects / 2
-  #   rate = hyper$std_rate + rowSums( (alpha-tmu)^2 ) / 2
-  #   tvinv = rgamma(n=sampler$n_pars, shape=shape, rate=rate)
-  #   tvar = 1/tvinv
-  #   a_half <- NULL
-  # } else {
   tvinv = rgamma(n=n_pars, shape=prior$v/2 + sampler$n_subjects/2, rate=prior$v/last$a_half +
                    rowSums( (alpha-tmu)^2 ) / 2)
   tvar = 1/tvinv
   #Contrary to standard pmwg I use shape, rate for IG()
-  a_half <- 1 / rgamma(n = n_pars, shape = (prior$v + n_pars) / 2,
+  a_half <- 1 / rgamma(n = n_pars, shape = (prior$v + 1) / 2,
                        rate = prior$v * tvinv + 1/(prior$A^2))
   return(list(tmu = tmu, tvar = diag(tvar, n_pars), tvinv = diag(tvinv, n_pars), a_half = a_half, alpha = alpha))
 }
@@ -98,6 +89,41 @@ unwind_diag_IS2 <- function(x,reverse=FALSE, diag = TRUE) {
   return(out)
 }
 
+get_all_pars_diag <- function(samples, idx, info){
+  n_subjects <- samples$n_subjects
+  n_iter = length(samples$samples$stage[idx])
+  # Exctract relevant objects
+  alpha <- samples$samples$alpha[,,idx]
+  theta_mu <- samples$samples$theta_mu[,idx]
+  theta_var <- samples$samples$theta_var[,,idx]
+  a_half <- log(samples$samples$a_half[,idx])
+  theta_var.unwound = log(apply(samples$samples$theta_var[,,idx],3,diag))
+  # Set up
+  n_params<- samples$n_pars+samples$n_pars+samples$n_pars
+  all_samples=array(dim=c(n_subjects,n_params,n_iter))
+  mu_tilde=array(dim = c(n_subjects,n_params))
+  var_tilde=array(dim = c(n_subjects,n_params,n_params))
+
+  for (j in 1:n_subjects){
+    all_samples[j,,] = rbind(alpha[,j,],theta_mu[,],theta_var.unwound[,])
+    # calculate the mean for re, mu and sigma
+    mu_tilde[j,] =apply(all_samples[j,,],1,mean)
+    # calculate the covariance matrix for random effects, mu and sigma
+    var_tilde[j,,] = cov(t(all_samples[j,,]))
+  }
+
+  for(i in 1:n_subjects){ #RJI_change: this bit makes sure that the sigma tilde is pos def
+    if(!corpcor::is.positive.definite(var_tilde[i,,], tol=1e-8)){
+      var_tilde[i,,]<-corpcor::make.positive.definite(var_tilde[i,,], tol=1e-6)
+    }
+  }
+  X <- cbind(t(theta_mu),t(theta_var.unwound),t(a_half))
+  info$n_params <- n_params
+  info$given.ind <- (info$n_randeffect+1):n_params
+  info$X.given_ind <- 1:(n_params-info$n_randeffect)
+  return(list(X = X, mu_tilde = mu_tilde, var_tilde = var_tilde, info = info))
+}
+
 group_dist_diag = function(random_effect = NULL, parameters, sample = FALSE, n_samples = NULL, info){
   n_randeffect <- info$n_randeffect
   param.theta.mu <- parameters[1:n_randeffect]
@@ -111,6 +137,7 @@ group_dist_diag = function(random_effect = NULL, parameters, sample = FALSE, n_s
   }
 }
 
+
 prior_dist_diag = function(parameters, info){
   n_randeffect <- info$n_randeffect
   prior <- info$prior
@@ -119,7 +146,7 @@ prior_dist_diag = function(parameters, info){
   param.theta.sig.unwound <- parameters[(n_randeffect+1):(length(parameters)-n_randeffect)]
   param.theta.sig2 <- unwind_diag_IS2(param.theta.sig.unwound, reverse = TRUE, diag = FALSE)
   param.a <- exp(parameters[((length(parameters)-n_randeffect)+1):(length(parameters))])
-  log_prior_mu=mvtnorm::dmvnorm(param.theta.mu, mean = prior$theta_mu_mean, sigma = prior$theta_mu_var, log =TRUE)
+  log_prior_mu=mvtnorm::dmvnorm(param.theta.mu, mean = prior$theta_mu_mean, sigma = diag(prior$theta_mu_var), log =TRUE)
   log_prior_sigma = sum(logdinvGamma(param.theta.sig2, shape = prior$v/2, rate = prior$v/param.a))
   log_prior_a = sum(logdinvGamma(param.a,shape = 1/2,rate=1/(prior$A^2)))
   # These are Jacobian corrections for the transformations on these
@@ -127,3 +154,39 @@ prior_dist_diag = function(parameters, info){
   logw_den3 <- -sum(log(param.theta.sig2))
   return(log_prior_mu + log_prior_sigma + log_prior_a - logw_den3 - logw_den2)
 }
+
+
+# bridge_sampling ---------------------------------------------------------
+bridge_group_and_prior_and_jac_diag <- function(proposals_group, proposals_list, info){
+  prior <- info$prior
+  proposals <- do.call(cbind, proposals_list)
+  theta_mu <- proposals_group[,1:info$n_pars]
+  theta_var <- proposals_group[,(info$n_pars + 1):(2*info$n_pars)]
+  group_ll <- 0
+  for(i in 1:info$n_pars){
+    group_ll <- group_ll + dnorm(proposals[,info$par_names[i]], theta_mu[,i], sqrt(exp(theta_var[,i])), log = T)
+  }
+  prior_mu <- colSums(dnorm(t(theta_mu), mean = prior$theta_mu_mean, sd = sqrt(prior$theta_mu_var), log =T))
+  prior_var <- 0
+  for(i in 1:info$n_pars){
+    prior_var <- prior_var +  dhalft(sqrt(exp(theta_var[,i])), scale = prior$A, nu = prior$v, log = T)
+  }
+  jac_var <- rowSums(theta_var)
+  return(group_ll + prior_mu + prior_var + jac_var)
+}
+
+
+bridge_add_info_diag <- function(info, samples){
+  info$group_idx <- (samples$n_pars*samples$n_subjects + 1):(samples$n_pars*samples$n_subjects + 2*samples$n_pars)
+  return(info)
+}
+
+bridge_add_group_diag <- function(all_samples, samples, idx){
+  all_samples <- cbind(all_samples, t(samples$samples$theta_mu[,idx]))
+  all_samples <- cbind(all_samples, t(log(apply(samples$samples$theta_var[,,idx], 3, diag))))
+  return(all_samples)
+}
+
+
+
+
