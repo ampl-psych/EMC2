@@ -12,12 +12,19 @@ make_data(
   data = NULL,
   expand = 1,
   mapped_p = FALSE,
-  LT = NULL,
-  UT = NULL,
-  LC = NULL,
-  UC = NULL,
   Fcovariates = NULL,
-  return_Ffunctions = FALSE
+  return_Ffunctions = FALSE,
+  LT = 0,
+  UT = Inf,
+  LC = 0,
+  UC = Inf,
+  LCresponse = TRUE,
+  UCresponse = TRUE,
+  LCdirection = TRUE,
+  UCdirection = TRUE,
+  force_direction = FALSE,
+  force_response = FALSE,
+  rtContaminantNA = FALSE
 )
 }
 \arguments{
@@ -31,8 +38,10 @@ by plot_density (in which case posterior medians are used to simulate data)}
 
 \item{trials}{number of trials per design cell}
 
-\item{data}{A supplied that determines the design, with data sorted by subjects
-and a trials = 1:n trials/subject factor added (or overwriting any existing)}
+\item{data}{If supplied that determines the design, with data sorted by subjects
+and a trials = 1:n trials/subject factor added (or overwriting any existing).
+Truncation and censoring information also taken from data attributes and presence
+of 0/Inf and NA in rt column and NA in R column.}
 
 \item{expand}{replicates the design expand times}
 
@@ -40,19 +49,35 @@ and a trials = 1:n trials/subject factor added (or overwriting any existing)}
 cell and columns for each parameter specifying how they are mapped to the
 design cells.}
 
-\item{LT}{lower truncation bound below which data are removed}
-
-\item{UT}{upper truncation bound above which data are removed}
-
-\item{LC}{lower censoring bound below which data are turned into NA}
-
-\item{UC}{upper censoring bound above which data are turned into NA}
-
-\item{Fcovariates}{either a data frame of covariate valeus with the same
+\item{Fcovariates}{either a data frame of covariate values with the same
 number of rows as the data or a list of functions specifying covariates for
 each trial. Must have names specified in the design Fcovariates argument.}
 
 \item{return_Ffunctions}{if false covariates are not returned}
+
+\item{LT}{lower truncation bound below which data are removed (scalar or subject named vector)}
+
+\item{UT}{upper truncation bound above which data are removed (scalar or subject named vector)}
+
+\item{LC}{lower censoring bound (scalar or subject named vector)}
+
+\item{UC}{upper censoring bound (scalar or subject named vector)}
+
+\item{LCresponse}{Boolean, default TRUE, if false set LC response to NA}
+
+\item{UCresponse}{Boolean, default TRUE, if false set UC response to NA}
+
+\item{LCdirection}{Boolean, default TRUE, set LC rt to 0, else to NA}
+
+\item{UCdirection}{Boolean, default TRUE, set LC rt to Inf, else to NA}
+
+\item{force_direction}{Boolean, take direction from argument not data (default FALSE)}
+
+\item{force_response}{Boolean, take response from argument not data (default FALSE)}
+
+\item{rtContaminantNA}{Boolean, TRUE sets contaminant trial rt to NA, if FALSE
+(the default) direction is taken from data or LCdirection or UCdirection (NB
+if both of these are false an error occurs as then contamination is not identifiable).}
 }
 \value{
 None

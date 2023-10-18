@@ -7,7 +7,7 @@
 lbaB()
 }
 \value{
-A list defining the cognitive model
+A model list with all the necessary functions to sample
 }
 \description{
 The Linear Ballistic Accumulator, proposes that for each choice alternative, ballistic accumulators race towards a common bound.
@@ -19,4 +19,5 @@ between trial variation in drift rate \code{sv}, between trial variation in star
 Frequently \code{sv} is fixed to 1 to satisfy scaling constraints.
 
 Here we use the b = B + A parameterization, which ensures that the response threshold is always higher than the between trial variation in start point of the drift rate.
+Also, rates are sampled from normal distributions truncated to be always positive.
 }

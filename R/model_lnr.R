@@ -3,6 +3,7 @@ dLNR <- function(rt,pars){
   rt <- rt - pars[,"t0"]
   out <- numeric(length(rt))
   ok <- rt > 0
+  ok[is.na(ok) | is.infinite(rt)] <- FALSE
   out[ok] <- stats::dlnorm(rt[ok],meanlog=pars[ok,"m"],sdlog=pars[ok,"s"])
   out
 }
@@ -11,6 +12,7 @@ pLNR <- function(rt,pars){
   rt <- rt - pars[,"t0"]
   out <- numeric(length(rt))
   ok <- rt > 0
+  ok[is.na(ok) | is.infinite(rt)] <- FALSE
   out[ok] <- stats::plnorm(rt[ok],meanlog=pars[ok,"m"],sdlog=pars[ok,"s"])
   out
 
@@ -65,6 +67,8 @@ lnrMS <- function() {
       log_likelihood_race(p_vector=p_vector, dadm = dadm, min_ll = min_ll)
   )
 }
+
+
 
 
 

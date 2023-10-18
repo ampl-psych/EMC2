@@ -54,7 +54,7 @@ get_prior_samples <- function(samples,selection,filter,thin,subfilter,n_prior)
 #' @param design Design corresponding to prior
 #' @param plotp Names of parameters to plot (default NULL plots all)
 #' @param type Type of prior (standard or single)
-#' @param selection Select level prior to plot (default "alpha" for single and "mu" for single)
+#' @param selection Select level prior to plot (default "alpha" for single and "mu" for standard)
 #' @param mapped boolean for mapping mu or alpha back to the design cells on the natural scale.
 #' @param data data frame, required when mapping involves priors
 #' @param N Number of prior samples if data not provided
@@ -62,11 +62,11 @@ get_prior_samples <- function(samples,selection,filter,thin,subfilter,n_prior)
 #' @param breaks Histogram breaks parameter
 #' @param layout par(mfrow) setting (default c(3,3))
 #' @param lower Lower quantile limit of values plotted. Default NULL all plotted,
-#' integer same for all parameters, parameter named list parameter specific
+#' numeric same for all parameters, parameter named list parameter specific
 #' @param upper Upper quantile limit of values plotted. Default NULL all plotted,
-#' integer same for all parameters, parameter named list parameter specific
+#' numeric same for all parameters, parameter named list parameter specific
 #' @param xlim List with parameter names of plot x limits or single pair same for all.
-#' Any names not in list or if (defualt) NA xlim set as min and max.
+#' Any names not in list or if (default) NA xlim set as min and max.
 #'
 #' @return Invisible sampled columns of parameters as a data frame (covariate,
 #' version first column = cell names) or otherwise a matrix

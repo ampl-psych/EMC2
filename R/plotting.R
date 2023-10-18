@@ -277,6 +277,7 @@ plot_defective_density <- function(data,subject=NULL,factors=NULL,
 #' @param layout A 2-vector specifying the layout as in par(mfrow = layout).
 #' If NA or NULL use current.
 #' @param selection String designating parameter type (mu, variance, correlation, alpha = default)
+#' @param use_par Character vector of names of parameters to plot (default NULL = plot all)
 #' @param filter A string. Specifies which stage you want to plot.
 #' @param thin An integer. Keep only iterations that are a multiple of thin.
 #' @param subfilter An integer or vector. If integer it will exclude up until
@@ -285,8 +286,8 @@ plot_defective_density <- function(data,subject=NULL,factors=NULL,
 #' otherwise sampled parameters
 #' @param plot_prior Boolean. Add prior distribution to plot (in red)
 #' @param n_prior Number of samples to approximate prior (default = 1e3)
-#' @param xlim x-axis plot limit, 2-vector (same for all) or matrix (one row for each paramter)
-#' @param ylim y-axis plot limit, 2-vector (same for all) or matrix (one row for each paramter)
+#' @param xlim x-axis plot limit, 2-vector (same for all) or matrix (one row for each parameter)
+#' @param ylim y-axis plot limit, 2-vector (same for all) or matrix (one row for each parameter)
 #' @param prior_xlim A vector giving upper and lower quantiles of prior when choosing xlim.
 #' @param show_chains Boolean (default FALSE) plot separate density for each chain.
 #' @param do_plot Boolean (default TRUE) do plot
@@ -295,7 +296,9 @@ plot_defective_density <- function(data,subject=NULL,factors=NULL,
 #' @param add_means Boolean (default FALSE) add parameter means as an attribute
 #' to return
 #' @param pars Named vector or matrix of true parameters, or the output of
-#' plot_pars, in which case the posterior medians are extracted.
+#' plot_pars, in which case the posterior medians are extracted. If supplied with
+#' no xlim the plot will be adjusted to include the parameter values, which are
+#' plotted as vertical lines.
 #' @param probs Vector (default c(.025,.5,.975)) for CI and central tendency of return
 #' @param bw Bandwidth for density plot (see density)
 #' @param adjust Adjustment for density plot (see density)
@@ -307,8 +310,7 @@ plot_defective_density <- function(data,subject=NULL,factors=NULL,
 #'no matter what show_chains is), if do_contraction with a "contraction" attribute.
 #'
 #' @export
-
-plot_pars <- function(pmwg_mcmc,layout=c(2,3),
+plot_pars <- function(pmwg_mcmc,layout=c(2,3),use_par=NULL,
   selection="alpha",filter="sample",thin=1,subfilter=0,mapped=FALSE,
   plot_prior=TRUE,n_prior=1e3,xlim=NULL,ylim=NULL,prior_xlim=NULL,
   show_chains=FALSE,do_plot=TRUE,subject=NA,add_means=FALSE,
@@ -399,19 +401,28 @@ plot_pars <- function(pmwg_mcmc,layout=c(2,3),
     # if (plot_prior) dimnames(psamples) <- list(NULL,colnames(pmwg_mcmc_combined[[1]]))
     if (do_contraction)
       contraction <- setNames(vector(mode="list",length=length(subject)),subject)
+    if (!is.null(use_par)) {
+      ok <- colnames(pmwg_mcmc_combined[[1]]) %in% use_par
+      if (!any(ok)) stop("use_par did not specify parameters that are present")
+      tabs <- lapply(tabs,function(x) x[,ok,drop=FALSE])
+    } else ok <- rep(TRUE,length(colnames(pmwg_mcmc_combined[[1]])))
     for (i in subject) {
       if (do_plot) {
         if (!no_layout) par(mfrow=layout)
         if (do_contraction)
           contractioni <- setNames(numeric(length(colnames(pmwg_mcmc_combined[[i]]))),
                                    colnames(pmwg_mcmc_combined[[i]]))
-        for (j in colnames(pmwg_mcmc_combined[[i]])) {
+        for (j in  colnames(pmwg_mcmc_combined[[i]])[ok] ) {
           if (chains>0) {
             dens <- lapply(pmwg_mcmc[[i]],function(x){density(x[,j],bw=bw,adjust=adjust)})
             if (!is.null(xlim)) {
               if (!is.matrix(xlim)) xlimi <- xlim else xlimi <- xlim[j,]
-            } else xlimi <- c(min(unlist(lapply(dens,function(x){min(x$x)}))),
+            } else {
+              xlimi <- c(min(unlist(lapply(dens,function(x){min(x$x)}))),
                               max(unlist(lapply(dens,function(x){max(x$x)}))))
+              if (!is.null(pars)) xlimi <- c(min(c(pars[j,i]-abs(pars[j,i])/10,xlimi[1])),
+                                             max(c(pars[j,i]+abs(pars[j,i])/10,xlimi[2])))
+            }
             if (!is.null(ylim)) {
               if (!is.matrix(ylim)) ylimi <- ylim else ylimi <- ylim[j,]
             } else ylimi <- c(0,max(unlist(lapply(dens,function(x){max(x$y)}))))
@@ -423,9 +434,14 @@ plot_pars <- function(pmwg_mcmc,layout=c(2,3),
             if (plot_prior) pdens <- density(psamples[,j],bw=bw,adjust=adjust)
             if (!is.null(xlim)) {
               if (!is.matrix(xlim)) xlimi <- xlim else xlimi <- xlim[j,]
-            } else if (plot_prior & !is.null(prior_xlim))
-              xlimi <- c(quantile(pdens$x,probs=prior_xlim[1]),quantile(pdens$x,probs=prior_xlim[2])) else
+            } else if (plot_prior & !is.null(prior_xlim)) {
+              xlimi <- c(quantile(pdens$x,probs=prior_xlim[1]),
+                         quantile(pdens$x,probs=prior_xlim[2]))
+            } else {
               xlimi <- c(min(dens$x),max(dens$x))
+              if (!is.null(pars)) xlimi <- c(min(c(pars[j,i]-abs(pars[j,i])/10,xlimi[1])),
+                                             max(c(pars[j,i]+abs(pars[j,i])/10,xlimi[2])))
+            }
             if (!is.null(ylim)) {
               if (!is.matrix(ylim)) ylimi <- ylim else ylimi <- ylim[j,]
             } else {
@@ -444,7 +460,10 @@ plot_pars <- function(pmwg_mcmc,layout=c(2,3),
         }
       }
       if (do_plot & do_contraction) contraction[[i]] <- contractioni
-      if (!is.null(pars)) tabs[[i]] <- rbind(true=pars[dimnames(tabs[[i]])[[2]],i],tabs[[i]])
+      if (!is.null(pars)) {
+        tabs[[i]] <- rbind(true=pars[dimnames(tabs[[i]])[[2]],i],tabs[[i]])
+        tabs[[i]] <- rbind(tabs[[i]],Miss=tabs[[i]][3,]-tabs[[i]][1,])
+      }
     }
     tabs <- tabs[as.character(subject)]
     if (add_means)
@@ -475,17 +494,26 @@ plot_pars <- function(pmwg_mcmc,layout=c(2,3),
       names(pars) <- colnames(pmwg_mcmc_combined)
     }
     tabs <- rbind(true=pars,apply(pmwg_mcmc_combined,2,quantile,probs=probs))
+    if (!is.null(pars)) tabs <- rbind(tabs,Miss=tabs[3,]-tabs[1,])
     if (add_means) attr(tabs,"mean") <- apply(pmwg_mcmc_combined,2,mean)
     if (!no_layout) par(mfrow=layout)
     if (plot_prior) dimnames(psamples) <- list(NULL,colnames(pmwg_mcmc_combined))
     if (do_contraction)
       contraction <- setNames(numeric(length(colnames(pmwg_mcmc_combined))),colnames(pmwg_mcmc_combined))
-    if (do_plot) for (j in colnames(pmwg_mcmc_combined)) {
+    if (!is.null(use_par)) {
+      ok <- colnames(pmwg_mcmc_combined) %in% use_par
+      if (!any(ok)) stop("use_par did not specify parameters that are present")
+      tabs <- tabs[,ok,drop=FALSE]
+    } else ok <- rep(TRUE,length(colnames(pmwg_mcmc_combined)))
+    if (do_plot) for (j in colnames(pmwg_mcmc_combined)[ok] ) {
       if (chains > 0) {
         dens <- lapply(pmwg_mcmc,function(x){density(x[,j],bw=bw,adjust=adjust)})
-        if (!is.null(xlim)) xlimi <- xlim else
+        if (!is.null(xlim)) xlimi <- xlim else {
           xlimi <- c(min(unlist(lapply(dens,function(x){min(x$x)}))),
                      max(unlist(lapply(dens,function(x){max(x$x)}))))
+          if (!is.null(pars)) xlimi <- c(min(c(pars[j,i]-abs(pars[j,i])/10,xlimi[1])),
+                                             max(c(pars[j,i]+abs(pars[j,i])/10,xlimi[2])))
+        }
         if (!is.null(ylim)) ylimi <- ylim else
           ylimi <- c(0,max(unlist(lapply(dens,function(x){max(x$y)}))))
         plot(dens[[1]],xlab=attr(pmwg_mcmc,"selection"),main=j,
@@ -496,8 +524,12 @@ plot_pars <- function(pmwg_mcmc,layout=c(2,3),
         if (plot_prior)  pdens <- robust_density(psamples[,j],range(pmwg_mcmc[,j]),
           bw=bw,adjust=adjust,use_robust=!(attr(pmwg_mcmc,"selection") %in% c("mu","correlation")))
         if (!is.null(xlim)) xlimi <- xlim else if (plot_prior & !is.null(prior_xlim))
-          xlimi <- c(quantile(pdens$x,probs=prior_xlim[1]),quantile(pdens$x,probs=prior_xlim[2])) else
-          xlimi <- c(min(dens$x),max(dens$x))
+          xlimi <- c(quantile(pdens$x,probs=prior_xlim[1]),
+                     quantile(pdens$x,probs=prior_xlim[2])) else {
+            xlimi <- c(min(dens$x),max(dens$x))
+            if (!is.null(pars)) xlimi <- c(min(c(pars[j,i]-abs(pars[j,i])/10,xlimi[1])),
+                                             max(c(pars[j,i]+abs(pars[j,i])/10,xlimi[2])))
+          }
         if (!is.null(ylim)) ylimi <- ylim else {
           ylimi <- c(0,max(dens$y))
           if (plot_prior) ylimi[2] <- max(c(ylimi[2],pdens$y))
@@ -547,7 +579,9 @@ plot_roc <- function(data,signalFactor="S",zROC=FALSE,qfun=NULL,main="",lim=NULL
 #' argument (which calculates a statistics based on the data) is supplied
 #' instead fit is plotted as a density with a vertical line at the position of
 #' the data statistic. If more than one subject is included data and fits are
-#' aggregated over subjects.
+#' aggregated over subjects. If data or fit contains NA in responses or rt, or
+#' is.infinite(rt) these are treating as missing and defective cdfs sum to the
+#' probability of non-missing.
 #'
 #' @param data Data frame with subjects and R factors, and possibly other factors
 #' and an rt column
@@ -581,7 +615,6 @@ plot_roc <- function(data,signalFactor="S",zROC=FALSE,qfun=NULL,main="",lim=NULL
 #'
 #' @return If stat argument is provided a table of observed values and predicted quantiles
 #' @export
-
 plot_fit <- function(data,pp,subject=NULL,factors=NULL,
                      stat=NULL,stat_name="",adjust=1,
                      ci=c(.025,.5,.975),do_plot=TRUE,
@@ -605,6 +638,10 @@ plot_fit <- function(data,pp,subject=NULL,factors=NULL,
     dat <- data
     fnams <- names(dat)[!(names(dat) %in% c("trials","R","rt"))]
   }
+
+  okd <- !is.na(dat$R) & is.finite(dat$rt)
+  okpp <- !is.na(pp$R) & is.finite(pp$rt)
+
   if (!is.null(factors)) {
     if (!all(factors %in% fnams))
       stop("factors must name factors in data")
@@ -703,42 +740,43 @@ plot_fit <- function(data,pp,subject=NULL,factors=NULL,
       if (is.null(xlim)) {
         xlim <- c(Inf,-Inf)
         for (i in sort(unique(cells))) {
-          dati <- dat[cells==i,]
-          ppi <- pp[pp_cells==i,]
-          pR <- table(dati$R)/dim(dati)[1]
+        dati <- dat[cells==i & okd,]
+          ppi <- pp[pp_cells==i & okpp,]
           pqs <- pq <- qs <- setNames(vector(mode="list",length=length(R)),R)
           for (j in R) if (length(dati$rt[dati$R==j])>=length(q_points)) {
             qs[[j]] <- quantile(dati$rt[dati$R==j],probs=probs)
             pq[[j]] <- quantile(ppi$rt[ppi$R==j],probs=probs)
             pqs[[j]] <- tapply(ppi$rt[ppi$R==j],ppi$postn[ppi$R==j],
-                               quantile,probs=probs[pok])
-          } else qs[[j]] <- pq[[j]] <- pqs[[j]] <- NA
-          rx <- cbind(do.call(rbind,lapply(qs,function(x){x[c(1,length(probs))]})),
-                      do.call(rbind,lapply(pq,function(x){x[c(1,length(probs))]})))
-          xlimi <- c(min(rx,na.rm=TRUE),max(rx,na.rm=TRUE))
-          if (!any(is.na(xlimi))) {
-            xlim[1] <- pmin(xlim[1],xlimi[1])
-            xlim[2] <- pmax(xlim[2],xlimi[2])
-          }
+                                 quantile,probs=probs[pok])
+            } else qs[[j]] <- pq[[j]] <- pqs[[j]] <- NA
+            rx <- cbind(do.call(rbind,lapply(qs,function(x){x[c(1,length(probs))]})),
+                        do.call(rbind,lapply(pq,function(x){x[c(1,length(probs))]})))
+            xlimi <- c(min(rx,na.rm=TRUE),max(rx,na.rm=TRUE))
+            if (!any(is.na(xlimi))) {
+              xlim[1] <- pmin(xlim[1],xlimi[1])
+              xlim[2] <- pmax(xlim[2],xlimi[2])
+            }
         }
       }
       for (i in sort(unique(cells))) {
         dati <- dat[cells==i,]
         ppi <- pp[pp_cells==i,]
-        # R <- sort(unique(dati$R))
-        pR <- table(dati$R)/dim(dati)[1]
+        okdi <- okd[cells==i]
+        okppi <- okpp[pp_cells==i]
+        pR <- tapply(okdi,dati$R,sum)/dim(dati)[1]
+        ppR <- tapply(okppi,ppi$R,sum)/dim(ppi)[1]
+        dati <- dati[okdi,]
+        ppi <- ppi[okppi,]
         pqs <- pq <- qs <- setNames(vector(mode="list",length=length(R)),R)
-        ppR <- pR; ppR[1:length(pR)] <- 0
         for (j in R) if (length(dati$rt[dati$R==j])>=length(q_points)) {
           isj <- ppi$R==j
           qs[[j]] <- quantile(dati$rt[dati$R==j],probs=probs)
           pq[[j]] <- quantile(ppi$rt[isj],probs=probs)
           pqs[[j]] <- tapply(ppi$rt[isj],ppi$postn[isj],quantile,probs=probs[pok])
-          ppR[j] <- mean(isj)
         } else qs[[j]] <- pq[[j]] <- pqs[[j]] <- NA
         if ( !any(is.na(pq[[1]])) ) {
           plot(pq[[1]],probs*ppR[1],xlim=xlim,ylim=ylim,main=i,xlab="RT",type="l",
-               lwd=fit_lwd,ylab="p(R)",lty=1)
+                lwd=fit_lwd,ylab="p(R)",lty=1)
           tmp=lapply(pqs[[1]],function(x){
             points(x,probs[pok]*ppR[1],col="grey",pch=16,cex=pqp_cex)})
           points(pq[[1]][pok],probs[pok]*ppR[1],cex=pqp_cex*3,pch=16,col="grey")
@@ -750,7 +788,7 @@ plot_fit <- function(data,pp,subject=NULL,factors=NULL,
           for (j in 2:length(qs)) if (!any(is.na(pq[[j]]))) {
             if (do_plot) {
               plot(pq[[j]],probs*ppR[j],xlim=xlim,ylim=ylim,main=i,xlab="RT",type="l",
-                   lwd=fit_lwd,ylab="p(R)",lty=j)
+                    lwd=fit_lwd,ylab="p(R)",lty=j)
               do_plot <- FALSE
             } else lines(pq[[j]],probs*ppR[j],lwd=fit_lwd,lty=j)
             tmp=lapply(pqs[[j]],function(x){
@@ -842,7 +880,12 @@ plot_trials <- function(data,pp=NULL,subject=NULL,factors=NULL,Fcovariates=NULL,
 # subfilter=2000
 
 #' Runs a series of convergence checks, printing statistics to the console and
-#' saving plots to a pdf.
+#' saving plots to a pdf. Note that the R_hat (psrf and mpsrf, i.e., gelman_diag
+#' from the coda package) is calculated by doubling the number of chains by
+#' first splitting chains into first and second half so it also a test of
+#' stationarity. Efficiency of sampling is indicated by integrated autocorrelation
+#' time (from the LaplacesDemon package) and the effective numebr of samples
+#' (from coda).
 #'
 #' @param samples A list of samplers or samplers converted to mcmc objects.
 #' @param pdf_name The name of the plot save file

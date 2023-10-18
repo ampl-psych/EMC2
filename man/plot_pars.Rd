@@ -7,6 +7,7 @@
 plot_pars(
   pmwg_mcmc,
   layout = c(2, 3),
+  use_par = NULL,
   selection = "alpha",
   filter = "sample",
   thin = 1,
@@ -36,6 +37,8 @@ plot_pars(
 \item{layout}{A 2-vector specifying the layout as in par(mfrow = layout).
 If NA or NULL use current.}
 
+\item{use_par}{Character vector of names of parameters to plot (default NULL = plot all)}
+
 \item{selection}{String designating parameter type (mu, variance, correlation, alpha = default)}
 
 \item{filter}{A string. Specifies which stage you want to plot.}
@@ -52,9 +55,9 @@ otherwise sampled parameters}
 
 \item{n_prior}{Number of samples to approximate prior (default = 1e3)}
 
-\item{xlim}{x-axis plot limit, 2-vector (same for all) or matrix (one row for each paramter)}
+\item{xlim}{x-axis plot limit, 2-vector (same for all) or matrix (one row for each parameter)}
 
-\item{ylim}{y-axis plot limit, 2-vector (same for all) or matrix (one row for each paramter)}
+\item{ylim}{y-axis plot limit, 2-vector (same for all) or matrix (one row for each parameter)}
 
 \item{prior_xlim}{A vector giving upper and lower quantiles of prior when choosing xlim.}
 
@@ -69,7 +72,9 @@ subject(s) (default NA plots all).}
 to return}
 
 \item{pars}{Named vector or matrix of true parameters, or the output of
-plot_pars, in which case the posterior medians are extracted.}
+plot_pars, in which case the posterior medians are extracted. If supplied with
+no xlim the plot will be adjusted to include the parameter values, which are
+plotted as vertical lines.}
 
 \item{probs}{Vector (default c(.025,.5,.975)) for CI and central tendency of return}
 
