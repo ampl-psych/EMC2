@@ -129,21 +129,22 @@ init <- function(pmwgs, start_mu = NULL, start_var = NULL,
 #' @param start_mu Mean of multivariate normal
 #' @param start_var Variance covariance matrix of multivariate normal
 #' @param verbose Report progress
+#' @param cores_per_chain Number of cores used per chain.
+#' @param cores_for_chains Number of cores used for chains.
 #' @param particles Number of starting values
-#' @param n_cores Number of process cores to use
-#' @param epsilon
 #'
 #' @return
 #' @export
 #'
 #' @examples
 init_chains <- function(samplers, start_mu = NULL, start_var = NULL,
-                 verbose = FALSE, particles = 1000, n_cores = 1, epsilon = NULL)
+                 verbose = FALSE, particles = 1000,
+                 cores_per_chain=1,cores_for_chains = length(samplers))
 {
-  lapply(samplers,init,start_mu = start_mu, start_var = start_var,
-        verbose = verbose, particles = particles, n_cores = n_cores, epsilon = epsilon)
+  mclapply(samplers,init,start_mu = start_mu, start_var = start_var,
+           verbose = verbose, particles = particles,
+           n_cores = cores_per_chain, mc.cores=cores_for_chains)
 }
-
 
 start_proposals_group <- function(data, group_pars, alpha, par_names,
                                likelihood_func, is_grouped,
