@@ -86,7 +86,7 @@ gd_pmwg <- function(pmwg_mcmc,return_summary=FALSE,print_summary=TRUE,
       mcl2[[i]] <- as.mcmc(mcl2[[i]][c((half[i]+1):(2*half[i])),])
       mcl[[i]] <- as.mcmc(mcl[[i]][1:half[i],])
     }
-    coda::as.mcmc.list(c(mcl,mcl2))
+    as.mcmc.list(c(mcl,mcl2))
   }
 
   gelman_diag_robust <- function(mcl,autoburnin,transform)
@@ -483,7 +483,7 @@ compare_IC <- function(sList,filter="sample",subfilter=0,use_best_fit=TRUE,
                                            cores_for_props = cores_for_props, cores_per_prop = cores_per_prop)
     }
     modelProbability <- exp(MLLs - min(MLLs))/sum(exp(MLLs - min(MLLs)))
-    out <- cbind.data.frame(devBF = -2*MLLs, modelProbability = modelProbability, out)
+    out <- cbind.data.frame(MD = -2*MLLs, wMD = modelProbability, out)
   }
   if (print_summary) {
     tmp <- out
