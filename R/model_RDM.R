@@ -201,8 +201,8 @@ dRDM <- function(rt,pars)
   # density for single accumulator
 {
   out <- numeric(length(rt))
-  ok <- rt > pars[,"t0"] & !pars[,"v"] < 0  # code handles rate zero case
-  ok[is.na(rt) | is.infinite(rt)] <- FALSE
+  ok <- rt > pars[,"t0"] &
+    !pars[,"v"] < 0  # code handles rate zero case
   if (any(dimnames(pars)[[2]]=="s")) # rescale
     pars[ok,c("A","B","v")] <- pars[ok,c("A","B","v")]/pars[ok,"s"]
   out[ok] <- dWald(rt[ok],v=pars[ok,"v"],B=pars[ok,"B"],A=pars[ok,"A"],t0=pars[ok,"t0"])
@@ -214,8 +214,8 @@ pRDM <- function(rt,pars)
   # cumulative density for single accumulator
 {
   out <- numeric(length(rt))
-  ok <- rt > pars[,"t0"] & !pars[,"v"] < 0  # code handles rate zero case
-  ok[is.na(rt) | is.infinite(rt)] <- FALSE
+  ok <- rt > pars[,"t0"] &
+    !pars[,"v"] < 0  # code handles rate zero case
   if (any(dimnames(pars)[[2]]=="s")) # rescale
     pars[ok,c("A","B","v")] <- pars[ok,c("A","B","v")]/pars[ok,"s"]
   out[ok] <- pWald(rt[ok],v=pars[ok,"v"],B=pars[ok,"B"],A=pars[ok,"A"],t0=pars[ok,"t0"])
@@ -330,12 +330,14 @@ rdmB <- function(){
     transform = function(x) x,
     # Trial dependent parameter transform
     Ttransform = function(pars,dadm) {
-      attr(pars,"ok") <- (pars[,"t0"] > .05) & ((pars[,"A"] > 1e-6) | pars[,"A"] == 0)
+      attr(pars,"ok") <- (pars[,"t0"] > .05) & ((pars[,"A"] > 1e-6) | pars[,"A"] == 0) &
+        ((pars[,"v"] > 1e-3) | pars[,"v"] == 0)
       pars
     },
     # Random function for racing accumulators
     rfun=function(lR=NULL,pars) {
-      ok <- (pars[,"t0"] > .05) & ((pars[,"A"] > 1e-6) | pars[,"A"] == 0)
+      ok <- (pars[,"t0"] > .05) & ((pars[,"A"] > 1e-6) | pars[,"A"] == 0) &
+        ((pars[,"v"] > 1e-3) | pars[,"v"] == 0)
       if (is.null(lR)) ok else rRDM(lR,pars,ok=ok)
     },
     # Density function (PDF) for single accumulator
@@ -368,12 +370,14 @@ rdmBt0natural <- function(){
     transform = function(x) x,
     # Trial dependent parameter transform
     Ttransform = function(pars,dadm) {
-      attr(pars,"ok") <- (pars[,"t0"] > .05) & ((pars[,"A"] > 1e-6) | pars[,"A"] == 0)
+      attr(pars,"ok") <- (pars[,"t0"] > .05) & ((pars[,"A"] > 1e-6) | pars[,"A"] == 0) &
+        ((pars[,"v"] > 1e-3) | pars[,"v"] == 0)
       pars
     },
     # Random function for racing accumulators
     rfun=function(lR=NULL,pars) {
-      ok <- (pars[,"t0"] > .05) & ((pars[,"A"] > 1e-6) | pars[,"A"] == 0)
+      ok <- (pars[,"t0"] > .05) & ((pars[,"A"] > 1e-6) | pars[,"A"] == 0) &
+        ((pars[,"v"] > 1e-3) | pars[,"v"] == 0)
       if (is.null(lR)) ok else rRDM(lR,pars,ok=ok)
     },
     # Density function (PDF) for single accumulator
@@ -385,5 +389,4 @@ rdmBt0natural <- function(){
       log_likelihood_race(p_vector=p_vector, dadm = dadm, min_ll = min_ll)
   )
 }
-
 
