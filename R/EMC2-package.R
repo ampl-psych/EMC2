@@ -3,6 +3,7 @@
 
 ## usethis namespace: start
 #' @importFrom abind abind
+#' @importFrom Brobdingnag as.brob
 #' @importFrom coda as.mcmc
 #' @importFrom coda effectiveSize
 #' @importFrom coda gelman.diag
