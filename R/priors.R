@@ -179,69 +179,93 @@ plot_prior <- function(prior=NULL, design,plotp=NULL,
   }
 }
 
-# plot_prior <- function(prior, type = NULL,add_density=FALSE,adjust=1,breaks=50,
-#                        layout=c(3,3),upper=NULL,xlim=NULL,mapped=TRUE,design=NULL){
-#
-#
-#   if(is.null(type)) type <- names(prior)
-#   for(typ in type) {
-#     samples <- prior[[typ]]
-#     if (mapped & (typ %in% c("alpha","mu"))) {
-#       if (is.null(design)) stop("Must provide design when mapped=TRUE")
-#       samples <- map_mcmc(samples,design,design$model,include_constants=FALSE)
-#     }
-#     par(mfrow = layout)
-#     par_names <- colnames(samples)
-#     uppers <- setNames(rep(.999,length(par_names)),par_names)
-#     if (!is.null(upper)) if (is.null(names(upper)))
-#       uppers[1:length(uppers)] <- upper else
-#       uppers[names(upper)] <- upper
-#     xlims <- setNames(vector(mode="list",length=length(par_names)),par_names)
-#     if (!is.null(xlim)) xlims[names(xlim)] <- xlim
-#     for(i in 1:ncol(samples)){
-#       if(!any(samples[,i] < 0) || !any(samples[,i] > 0)){
-#         quants <- quantile(abs(samples[,i]), probs = uppers[i])
-#       } else{
-#         quants <- quantile(abs(samples[,i]), probs = uppers[i])
-#       }
-#       filtered <- samples[,i][abs(samples[,i]) < quants]
-#       if (is.null(xlims[[i]]))
-#           hist(filtered, breaks = breaks, main = par_names[i], prob = TRUE,
-#            xlab = type, cex.lab = 1.25, cex.main = 1.5) else
-#           hist(filtered, breaks = breaks, main = par_names[i], prob = TRUE,
-#            xlab = type, cex.lab = 1.25, cex.main = 1.5,xlim=xlims[[i]])
-#       if (add_density) lines(density(filtered,adjust=adjust), col = "red")
-#     }
-#   }
-# }
-#
-# prior_samples <- function(samps,type=c("mu","variance","covariance","correlation","sigma")[1],n=1e4)
-#   # Samples from prior for standard at hyper levels for three types,
-#   # or for single at subject level (in which case type="mu")
-# {
-#   if (type=="mu") {
-#     out <- mvtnorm::rmvnorm(n, mean = samps$prior$theta_mu_mean,
-#                             sigma = samps$prior$theta_mu_var)
-#     dimnames(out)[[2]] <- samps$par_names
-#     return(out)
-#   } else {
-#     var <- array(NA_real_, dim = c(samps$n_pars, samps$n_pars, n),
-#                  dimnames = list(samps$par_names, samps$par_names, NULL))
-#     # Can't specify n in riwish?
-#     hyper <- attributes(samps)
-#     for(i in 1:n){
-#       a_half <- 1 / rgamma(n = samps$n_pars,shape = 1/2,
-#                            rate = 1/(hyper$A_half^2))
-#       var[,,i] <- riwish(hyper$v_half + samps$n_pars - 1, 2 * hyper$v_half * diag(1 / a_half))
-#     }
-#     if (type=="sigma") return(var)
-#     if (type=="variance") return(t(apply(var,3,diag)))
-#     if (type=="correlation")
-#       var <- array(apply(var,3,cov2cor),dim=dim(var),dimnames=dimnames(var))
-#     lt <- lower.tri(var[,,1])
-#     return(t(apply(var,3,function(x){x[lt]})))
-#   }
-# }
+
+#' make_prior
+#'
+#' Makes priors for single and standard model (in the assuming no correlation)
+#' based an a design, by providing prior means (pmean) and standard deviations
+#' (psd), and possibly these values taken from another prior (supplied by the
+#' update argument), as long as those values have the same name as in the current
+#' design and are not specified in pmean and psd. Where a value is not supplied
+#' in arguments the user is prompted to enter numeric values (or functions that
+#' evaluate to numbers).
+#'
+#' @param design Design for which a prior is constructed
+#' @param pmean Named vector of prior means, or an unnamed scalar, which is then used for all.
+#' @param psd Named vector of prior standard deviations, , or an unnamed scalar, which is then used for all.
+#' @param update Another prior from which to copy meand and sds.
+#' @param verbose Boolean (default true) print values of prior to console (if
+#' update only new values).
+#' @param update_print When verbose print only new values (default TRUE)
+#'
+#' @return An EMC prior object
+#' @export
+make_prior <- function(design,pmean=NULL,psd=NULL,update=NULL,
+                       verbose=TRUE,update_print=TRUE)
+{
+  pm <- sampled_p_vector(design)
+  pm <- ps <- pm[1:length(pm)]
+  if (!is.null(pmean) && is.null(names(pmean))) {
+    pmean[1:length(pm)] <- pm
+    pmean <- setNames(pmean,names(pm))
+  }
+  if (!is.null(psd) && is.null(names(psd))) {
+    psd[1:length(ps)] <- psd
+    psd <- setNames(psd,names(ps))
+  }
+  if ( !is.null(update) ) {
+    pmu <- update$theta_mu_mean
+    psdu <- setNames(diag(update$theta_mu_var)^.5,names(pmu))
+    isin <- names(pmu)[names(pmu) %in% names(pm)]
+    if (length(isin)>0) {
+      addn <- isin[!(isin %in% names(pmean))]
+      pmean <- c(pmean,pmu[addn])
+      addn <- isin[!(isin %in% names(psd))]
+      psd <- c(psd,psdu[addn])
+    }
+  }
+  if (!all(names(pmean) %in% names(pm))) stop("pmean has names not in design")
+  if (!is.null(pmean)) pm[names(pmean)] <- pmean
+  todom <- !(names(pm) %in% names(pmean))
+  if (any(todom)) {
+    cat("Enter values for prior mean\n")
+    for (i in names(pm[todom])) {
+      repeat {
+        ans <- try(eval(parse(text=readline(paste0(i,": ")))),silent=TRUE)
+        if ( class(ans)=="try-error" || is.na(ans) ) {
+          cat("Must provide a numeric value\n")
+        } else {
+          pm[i] <- ans
+          break
+        }
+      }
+    }
+  }
+  if (!all(names(psd) %in% names(ps))) stop("psd has names not in design")
+  if (!is.null(ps)) ps[names(psd)] <- psd
+  todos <- !(names(ps) %in% names(psd))
+  if (any(todos)) {
+    cat("Enter values for prior standard deviation\n")
+    for (i in names(pm[todos])) {
+      repeat {
+        ans <- try(eval(parse(text=readline(paste0(i,": ")))),silent=TRUE)
+        if ( class(ans)=="try-error" || is.na(ans) ) {
+          cat("Must provide a numeric value\n")
+        } else {
+          ps[i] <- ans
+          break
+        }
+      }
+    }
+  } else if ( is.null(update) ) ps <- rep(1,length(ps))
+  if (verbose & (!update_print | (update_print & (!any(todom) | !any(todos))))) {
+    if (!(update_print & !any(todom))) cat("Prior means\n")
+    if (!update_print) print(pm) else if (any(todom)) print(pm[todom])
+    if (!(update_print & !any(todos))) cat("\nPrior standard deviations\n")
+    if (!update_print) print(ps) else if (any(todos)) print(ps[todos])
+  }
+  list(theta_mu_mean  = pm,theta_mu_var = diag(ps^2))
+}
 
 
 
