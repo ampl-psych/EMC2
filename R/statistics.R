@@ -83,10 +83,10 @@ gd_pmwg <- function(pmwg_mcmc,return_summary=FALSE,print_summary=TRUE,
     mcl2 <- mcl
     half <- floor(unlist(lapply(mcl,nrow))/2)
     for (i in 1:length(half)) {
-      mcl2[[i]] <- as.mcmc(mcl2[[i]][c((half[i]+1):(2*half[i])),])
-      mcl[[i]] <- as.mcmc(mcl[[i]][1:half[i],])
+      mcl2[[i]] <- coda::as.mcmc(mcl2[[i]][c((half[i]+1):(2*half[i])),])
+      mcl[[i]] <- coda::as.mcmc(mcl[[i]][1:half[i],])
     }
-    as.mcmc.list(c(mcl,mcl2))
+    coda::as.mcmc.list(c(mcl,mcl2))
   }
 
   gelman_diag_robust <- function(mcl,autoburnin,transform)
