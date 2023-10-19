@@ -258,11 +258,11 @@ make_prior <- function(design,pmean=NULL,psd=NULL,update=NULL,
       }
     }
   } else if ( is.null(update) ) ps <- rep(1,length(ps))
-  if (verbose) {
-    cat("Prior means\n")
-    if (update_print) print(pm[todom]) else print(pm)
-    cat("\nPrior standard deviations\n")
-    if (update_print) print(ps[todos]) else print(ps)
+  if (verbose & (!update_print | (update_print & (!any(todom) | !any(todos))))) {
+    if (!(update_print & !any(todom))) cat("Prior means\n")
+    if (!update_print) print(pm) else if (any(todom)) print(pm[todom])
+    if (!(update_print & !any(todos))) cat("\nPrior standard deviations\n")
+    if (!update_print) print(ps) else if (any(todos)) print(ps[todos])
   }
   list(theta_mu_mean  = pm,theta_mu_var = diag(ps^2))
 }
