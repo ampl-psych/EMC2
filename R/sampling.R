@@ -733,7 +733,7 @@ calc_ll_manager <- function(proposals, dadm, ll_func, component = NULL){
     if(is.null(c_name)){ # use the R implementation
       lls <- apply(proposals,1, ll_func,dadm = dadm)
     } else{
-      p_types <- attr(dadm,"model")()$p_types
+      p_types <- names(attr(dadm,"model")()$p_types)
       designs <- list()
       for(p in p_types){
         designs[[p]] <- attr(dadm,"designs")[[p]][attr(attr(dadm,"designs")[[p]],"expand"),,drop=FALSE]

@@ -70,7 +70,7 @@ get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1
         colnames(samples) <- par_names <- names(attr(design, "p_vector"))
         if(map){
           proot <- unlist(lapply(strsplit(colnames(samples),"_"),function(x)x[[1]]))
-          isin <- proot %in% design$model()$p_types
+          isin <- proot %in% names(design$model()$p_types)
           fullnames <- colnames(samples)[isin]
           colnames(samples)[isin] <- proot
           samples[,isin] <- design$model()$Ntransform(samples[,isin])

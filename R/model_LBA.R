@@ -175,12 +175,12 @@ rLBA <- function(lR,pars,p_types=c("v","sv","b","A","t0"),posdrift = TRUE,
 #' @return A model list with all the necessary functions to sample
 #' @export
 
-lbaB <- function(){
+LBA <- function(){
   list(
     type="RACE",
-    c_name = "lbaB",
+    c_name = "LBA",
     # p_vector transform, sets sv as a scaling parameter
-    p_types=c("v","sv","B","A","t0"),
+    p_types=c("v" = 0,"sv" = log(1),"B" = log(1),"A" = log(0),"t0" = log(0)),
     transform = function(p) p,
     # Transform to natural scale
     Ntransform=function(x) {

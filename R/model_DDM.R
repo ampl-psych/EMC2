@@ -61,11 +61,11 @@ pDDM <- function(rt,R,pars,precision=2.5)
 #' @return A model list with all the necessary functions to sample
 #' @export
 
-ddmTZD <- function(){
+DDM <- function(){
   list(
     type="DDM",
     c_name = "DDM",
-    p_types=c("v","a","sv","t0","st0","s","Z","SZ","DP"),
+    p_types=c("v" = 1,"a" = log(1),"sv" = log(1),"t0" = log(0),"st0" = log(0),"s" = log(1),"Z" = qnorm(0.5),"SZ" = qnorm(0),"DP" = qnorm(0.5)),
     # The "TZD" parameterization defined relative to the "rtdists" package is:
     # natural scale
     #   v = rtdists rate v (positive favors upper)
@@ -126,10 +126,10 @@ ddmTZD <- function(){
 #' Diffusion decision model with t0 on the natural scale
 #'
 #' @return A model list with all the necessary functions to sample
-ddmTZDt0natural <- function(){
+DDMt0natural <- function(){
   list(
     type="DDM",
-    p_types=c("v","a","sv","t0","st0","s","Z","SZ","DP"),
+    p_types=c("v" = 1,"a" = log(1),"sv" = log(1),"t0" = 0,"st0" = log(0),"s" = log(1),"Z" = qnorm(0.5),"SZ" = qnorm(0),"DP" = qnorm(0.5)),
     # Like "TZD" but t0 on natural scale and kept positive with ok so
     # t0 can be combined additively on natural scale
     Ntransform=function(x) {

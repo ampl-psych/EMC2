@@ -167,12 +167,12 @@ NumericVector calc_ll(NumericMatrix p_matrix, DataFrame data, NumericVector cons
     NumericVector (*transform)(NumericVector);
     NumericMatrix (*Ntransform)(NumericMatrix);
     // NumericMatrix (*Ttransform)(NumericMatrix);
-    if(type == "lbaB"){
+    if(type == "LBA"){
       dfun = dlba_c;
       pfun = plba_c;
       transform = transform_lba;
       Ntransform = Ntransform_lba;
-    } else if(type == "rdmB"){
+    } else if(type == "RDM"){
       dfun = drdm_c;
       pfun = prdm_c;
       transform = transform_rdm;

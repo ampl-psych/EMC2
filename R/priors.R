@@ -112,7 +112,7 @@ plot_prior <- function(prior=NULL, design,plotp=NULL,
     for (i in 1:dim(fnam)[2]) fnam[,i] <- paste0(dimnames(fnam)[[2]][i],fnam[,i])
     fnam <- apply(fnam,1,paste,collapse="_")
     par(mfrow=layout)
-    par_names <- unique(c(design$model()$p_types,plotp))
+    par_names <- unique(c(names(design$model()$p_types),plotp))
     par_names <- par_names[!(par_names %in% names(design$constants))]
     if (!is.null(plotp)) {
       if (!all(plotp %in% par_names)) stop("plotp not in prior")
