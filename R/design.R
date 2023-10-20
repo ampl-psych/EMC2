@@ -1,31 +1,45 @@
 #' Binds together elements that make up a model design as a list
 #'
-#' This function returns a list with the model design.
+#' This function returns a list with the specified model design.
 #'
-#' @param Flist A list. Contains the design formula of the type list(y ~ x).
-#' @param Ffactors A named list. Participant factor and all factors used in design formulas that are defined as factors in the data frame to be fit.
+#' @param Flist A list. Contains the design formula(s) in the
+#' format `list(y ~ x, a ~ z)`.
+#' @param Ffactors A named list containing all the factor variables that span
+#' the design cells and that should be taken into account by the model.
+#' The name `subjects` must be used to indicate the participant factor variable.
 #'
-#' Must use "subjects" as name for participant factor. For others don't use "trial", "R", "rt", "lR", or "lM".
-#' Also refrain from using "_" as factor names.
-#'
+#' Example: `list(subjects=levels(dat$subjects), condition=levels(dat$condition))`
 #'
 #' @param Rlevels A character vector. Contains the response factor levels.
-#' @param model A function, Specifies the model type.
-#' @param ddata A data frame that is used to determine Ffactors, Rlevels and Fcovariates,
-#' in which case these arguments can be left NULL. Any numeric column except trials and
-#' rt are made into covariates, R factor column makes Rlevels, and remaining factor
-#' columns are used in Ffactors.
-#' @param Clist A list. Contrast list.
-#' @param matchfun A function. Specifies whether a response was correct or not.
-#'
-#' Example: `function(d)d$S==d$lR`
-#'
-#' @param constants A named vector. Sets constants. Any parameter named by `sampled_p_vector` can be set constant.
-#' @param Fcovariates Covariate factors. Covariate measures which may be included in the model and/or mapped to factors.
-#' @param Ffunctions Factor Functions. Functions to specify specific parameterisations, or functions of parameters.
+#' Example: `c("right", "left")`
+#' @param model A function, specifies the model type.
+#' Choose from the drift diffusion model (`ddmTZD()`, `ddmTZDt0natural()`),
+#' the log-normal race model (`lnrMS()`), the linear ballistic model (`lbaB()`),
+#' the racing diffusion model (`rdmB()`, `rdmBt0natural()`), or define your own
+#' model functions.
+#' @param ddata A data frame. `ddata` can be used to automatically detect
+#'  `Ffactors`, `Rlevels` and `Fcovariates` in a dataset. The variable `R` needs
+#'  to be a factor variable indicating the response variable so that `Rlevels`
+#'  can be determined. Any numeric column except `trials` and `rt` are treated
+#'  as covariates, and all remaining factor variables are internally used
+#'  in `Ffactors`.
+#' @param Clist A named list specifying a design matrix. If none is supplied,
+#' dummy or treatment coding is used.
+#' Example for supplying a customized design matrix:
+#' `list(lM = matrix(c(-1/2,1/2),ncol=1,dimnames=list(NULL,"diff"))))`
+#' @param matchfun A function. Only needed for race models. Specifies whether a
+#' response was correct or not. Example: `function(d)d$S==d$lR`
+#' @param constants A named vector. Sets constants. Any parameter named
+#' by `sampled_p_vector` can be set constant.
+#' @param Fcovariates Covariate factors. Covariate measures which may be
+#' included in the model and/or mapped to factors.
+#' @param Ffunctions Factor Functions. Functions to specify specific
+#' parameterizations, or functions of parameters.
 #' @param adapt For future compatibility. Ignore.
-#' @param report_p_vector TRUE (default) or FALSE. if TRUE, returns the vector of parameters to be estimated.
-#' @param custom_p_vector A character vector. If specified, a custom likelihood function can be supplied.
+#' @param report_p_vector Boolean. If TRUE (default), it returns the vector of
+#' parameters to be estimated.
+#' @param custom_p_vector A character vector. If specified, a custom likelihood
+#' function can be supplied.
 #'
 #' @return A design list.
 #' @export
@@ -34,6 +48,15 @@
 make_design <- function(Flist = NULL,Ffactors = NULL,Rlevels = NULL,model,ddata=NULL,
                         Clist=NULL,matchfun=NULL,constants=NULL,Fcovariates=NULL,Ffunctions=NULL,
                         adapt=NULL,report_p_vector=TRUE, custom_p_vector = NULL){
+
+  if(any(names(Ffactors) %in% c("trial", "R", "rt", "lR", "lM"))){
+    stop("Please do not use any of the following names within Ffactors: trial, R, rt, lR, lM")
+  }
+
+  if(any(grepl("_", names(Ffactors)))){
+    stop("_ in variable names detected. Please refrain from using any underscores.")
+  }
+
   if(!is.null(custom_p_vector)){
     design <- list(Flist = Flist, model = model, Ffactors = Ffactors)
     attr(design, "sampled_p_names") <-custom_p_vector

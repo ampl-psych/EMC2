@@ -21,43 +21,59 @@ make_design(
 )
 }
 \arguments{
-\item{Flist}{A list. Contains the design formula of the type list(y ~ x).}
+\item{Flist}{A list. Contains the design formula(s) in the
+format \code{list(y ~ x, a ~ z)}.}
 
-\item{Ffactors}{A named list. Participant factor and all factors used in design formulas that are defined as factors in the data frame to be fit.
+\item{Ffactors}{A named list containing all the factor variables that span
+the design cells and that should be taken into account by the model.
+The name \code{subjects} must be used to indicate the participant factor variable.
 
-Must use "subjects" as name for participant factor. For others don't use "trial", "R", "rt", "lR", or "lM".
-Also refrain from using "_" as factor names.}
+Example: \code{list(subjects=levels(dat$subjects), condition=levels(dat$condition))}}
 
-\item{Rlevels}{A character vector. Contains the response factor levels.}
+\item{Rlevels}{A character vector. Contains the response factor levels.
+Example: \code{c("right", "left")}}
 
-\item{model}{A function, Specifies the model type.}
+\item{model}{A function, specifies the model type.
+Choose from the drift diffusion model (\code{ddmTZD()}, \code{ddmTZDt0natural()}),
+the log-normal race model (\code{lnrMS()}), the linear ballistic model (\code{lbaB()}),
+the racing diffusion model (\code{rdmB()}, \code{rdmBt0natural()}), or define your own
+model functions.}
 
-\item{ddata}{A data frame that is used to determine Ffactors, Rlevels and Fcovariates,
-in which case these arguments can be left NULL. Any numeric column except trials and
-rt are made into covariates, R factor column makes Rlevels, and remaining factor
-columns are used in Ffactors.}
+\item{ddata}{A data frame. \code{ddata} can be used to automatically detect
+\code{Ffactors}, \code{Rlevels} and \code{Fcovariates} in a dataset. The variable \code{R} needs
+to be a factor variable indicating the response variable so that \code{Rlevels}
+can be determined. Any numeric column except \code{trials} and \code{rt} are treated
+as covariates, and all remaining factor variables are internally used
+in \code{Ffactors}.}
 
-\item{Clist}{A list. Contrast list.}
+\item{Clist}{A named list specifying a design matrix. If none is supplied,
+dummy or treatment coding is used.
+Example for supplying a customized design matrix:
+\verb{list(lM = matrix(c(-1/2,1/2),ncol=1,dimnames=list(NULL,"diff"))))}}
 
-\item{matchfun}{A function. Specifies whether a response was correct or not.
+\item{matchfun}{A function. Only needed for race models. Specifies whether a
+response was correct or not. Example: \code{function(d)d$S==d$lR}}
 
-Example: \code{function(d)d$S==d$lR}}
+\item{constants}{A named vector. Sets constants. Any parameter named
+by \code{sampled_p_vector} can be set constant.}
 
-\item{constants}{A named vector. Sets constants. Any parameter named by \code{sampled_p_vector} can be set constant.}
+\item{Fcovariates}{Covariate factors. Covariate measures which may be
+included in the model and/or mapped to factors.}
 
-\item{Fcovariates}{Covariate factors. Covariate measures which may be included in the model and/or mapped to factors.}
-
-\item{Ffunctions}{Factor Functions. Functions to specify specific parameterisations, or functions of parameters.}
+\item{Ffunctions}{Factor Functions. Functions to specify specific
+parameterizations, or functions of parameters.}
 
 \item{adapt}{For future compatibility. Ignore.}
 
-\item{report_p_vector}{TRUE (default) or FALSE. if TRUE, returns the vector of parameters to be estimated.}
+\item{report_p_vector}{Boolean. If TRUE (default), it returns the vector of
+parameters to be estimated.}
 
-\item{custom_p_vector}{A character vector. If specified, a custom likelihood function can be supplied.}
+\item{custom_p_vector}{A character vector. If specified, a custom likelihood
+function can be supplied.}
 }
 \value{
 A design list.
 }
 \description{
-This function returns a list with the model design.
+This function returns a list with the specified model design.
 }
