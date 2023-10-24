@@ -490,7 +490,7 @@ compare_IC <- function(sList,filter="sample",subfilter=0,use_best_fit=TRUE,
     tmp$wDIC <- round(tmp$wDIC,digits_p)
     tmp$wBPIC <- round(tmp$wBPIC,digits_p)
     if(BayesFactor){
-      tmp$modelProbability <- round(tmp$modelProbability, digits_p)
+      tmp$modelProbability <- round(modelProbability, digits_p)
       tmp[,-c(2,4,6)] <- round(tmp[,-c(2,4,6)],digits=digits)
     } else{
       tmp[,-c(2,4)] <- round(tmp[,-c(2,4)],digits=digits)
