@@ -597,6 +597,35 @@ log_likelihood_mt <- function(p_vector,dadm,min_ll=log(1e-10))
 }
 
 
+log_likelihood_mt <- function(p_vector,dadm,min_ll=log(1e-10),n_cores=10)
+  # Multiple threshold (BE or TC) summed log likelihood
+  # attr(dadm,"dL")
+{
+
+  mt <- function(i,dadm,tmats) {
+    i2 <- i*2
+    # Get look up table for current rating (dadm$R[i2])
+    pick <- attr(dadm,"dL")[as.numeric(dadm$R[i2]),]
+    tmp <- try(n1PDF_MTR_1(rt=dadm$rt[i*2], pars = pmats[c(pick[1],pick[3]),i,],
+      dl = tmats[pick[3],i,pick[4]], du = tmats[pick[5],i,pick[6]],
+      b = tmats[pick[1],i,pick[2]]),silent=TRUE)
+    if (inherits(tmp,"try-error")) 0 else tmp
+  }
+
+  pars <- get_pars(p_vector,dadm)
+
+  Dnams <- dimnames(pars)[[2]][substr(dimnames(pars)[[2]],1,2)=="DT"]
+  tmats <- array(cbind(rep(0,dim(pars)[1]),pars[,c(Dnams,"b")]),dim=c(2,nrow(pars)/2,2+length(Dnams)),
+                dimnames=list(NULL,NULL,c("DT0",Dnams,"b")))
+  pnams <- dimnames(pars)[[2]][!(dimnames(pars)[[2]] %in% c(Dnams,"b"))]
+  pmats <- array(pars[,pnams],dim=c(2,nrow(pars)/2,length(pnams)),
+                dimnames=list(NULL,NULL,pnams))
+  nt <- dim(pmats)[2]
+  like <- log(unlist(mclapply(1:nt,mt,dadm=dadm,tmats=tmats,mc.cores=n_cores)))
+  like[is.na(like) | is.nan(like) | like == Inf] <- 0
+  return(sum(pmax(min_ll,like[attr(dadm,"expand_winner")])))
+}
+
 
 log_likelihood_race_ss <- function(p_vector,dadm,min_ll=log(1e-10))
   # Race model summed log likelihood, one accumulator (lR=="stop") is ExGaussian
