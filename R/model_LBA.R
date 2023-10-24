@@ -190,7 +190,8 @@ lbaB <- function(){
     # Trial dependent parameter transform
     Ttransform = function(pars,dadm) {
       pars <- cbind(pars,b=pars[,"B"] + pars[,"A"])
-      attr(pars,"ok") <- (pars[,"t0"] > .05) & ((pars[,"A"] > 1e-6) | pars[,"A"] == 0)
+      attr(pars,"ok") <- (pars[,"t0"] > .05) & ((pars[,"A"] > 1e-6) | pars[,"A"] == 0) &
+        (abs(pars[,"v"])<100) & ((pars[,"sv"] > 1e-3) | pars[,"sv"] == 0)
       pars
     },
     # Random function for racing accumulator
