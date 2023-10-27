@@ -591,8 +591,8 @@ log_likelihood_mt <- function(p_vector,dadm,min_ll=log(1e-10))
       dl = tmats[pick[3],i,pick[4]], du = tmats[pick[5],i,pick[6]], b = tmats[pick[1],i,pick[2]]),silent=TRUE)
     if (inherits(tmp,"try-error")) like[i] <- 0 else like[i] <- tmp
   }
-  like <- log(like)
-  like[is.na(like) | is.nan(like) | like == Inf] <- 0
+  ll <- log(ll)
+  ll[is.na(ll) | is.nan(ll) | ll == Inf] <- 0
   return(sum(pmax(min_ll,like[attr(dadm,"expand_winner")])))
 }
 
@@ -621,9 +621,9 @@ log_likelihood_mt <- function(p_vector,dadm,min_ll=log(1e-10),n_cores=10)
   pmats <- array(pars[,pnams],dim=c(2,nrow(pars)/2,length(pnams)),
                 dimnames=list(NULL,NULL,pnams))
   nt <- dim(pmats)[2]
-  like <- log(unlist(mclapply(1:nt,mt,dadm=dadm,tmats=tmats,mc.cores=n_cores)))
-  like[is.na(like) | is.nan(like) | like == Inf] <- 0
-  return(sum(pmax(min_ll,like[attr(dadm,"expand_winner")])))
+  ll <- log(unlist(mclapply(1:nt,mt,dadm=dadm,tmats=tmats,mc.cores=n_cores)))
+  ll[is.na(ll) | is.nan(ll) | ll == Inf] <- -Inf
+  return(sum(pmax(min_ll,ll[attr(dadm,"expand_winner")])))
 }
 
 
