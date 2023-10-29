@@ -70,6 +70,25 @@ es_pmwg <- function(pmwg_mcmc,selection="alpha",summary_alpha=mean,
 # autoburnin=FALSE;transform=TRUE
 # selection="alpha";filter="sample";thin=1;subfilter=NULL
 # pmwg_mcmc=sVat0;selection="mu";filter="sample"
+#' Title
+#'
+#' @param pmwg_mcmc
+#' @param return_summary
+#' @param print_summary
+#' @param digits_print
+#' @param sort_print
+#' @param autoburnin
+#' @param transform
+#' @param selection
+#' @param filter
+#' @param thin
+#' @param subfilter
+#' @param mapped
+#'
+#' @return
+#' @export
+#'
+#' @examples
 gd_pmwg <- function(pmwg_mcmc,return_summary=FALSE,print_summary=TRUE,
                     digits_print=2,sort_print=TRUE,autoburnin=FALSE,transform=TRUE,
                     selection="alpha",filter="sample",thin=1,subfilter=NULL,mapped=FALSE)
