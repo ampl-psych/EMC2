@@ -597,7 +597,7 @@ log_likelihood_mt <- function(p_vector,dadm,min_ll=log(1e-10))
 }
 
 
-log_likelihood_mt <- function(p_vector,dadm,min_ll=log(1e-10),n_cores=10)
+log_likelihood_mt <- function(p_vector,dadm,min_ll=log(1e-10),n_cores=5)
   # Multiple threshold (BE or TC) summed log likelihood
   # attr(dadm,"dL")
 {
