@@ -66,29 +66,6 @@ es_pmwg <- function(pmwg_mcmc,selection="alpha",summary_alpha=mean,
 }
 
 
-# return_summary=FALSE;print_summary=TRUE;digits_print=2;sort_print=TRUE;
-# autoburnin=FALSE;transform=TRUE
-# selection="alpha";filter="sample";thin=1;subfilter=NULL
-# pmwg_mcmc=sVat0;selection="mu";filter="sample"
-#' Title
-#'
-#' @param pmwg_mcmc
-#' @param return_summary
-#' @param print_summary
-#' @param digits_print
-#' @param sort_print
-#' @param autoburnin
-#' @param transform
-#' @param selection
-#' @param filter
-#' @param thin
-#' @param subfilter
-#' @param mapped
-#'
-#' @return
-#' @export
-#'
-#' @examples
 gd_pmwg <- function(pmwg_mcmc,return_summary=FALSE,print_summary=TRUE,
                     digits_print=2,sort_print=TRUE,autoburnin=FALSE,transform=TRUE,
                     selection="alpha",filter="sample",thin=1,subfilter=NULL,mapped=FALSE)
@@ -470,7 +447,7 @@ IC <- function(samplers,filter="sample",subfilter=0,use_best_fit=TRUE,
 #' returns sums over all subjects
 #'
 #' @return Table of effective number of parameters, mean deviance, deviance of
-#' mean, DIC, BPIC, and associated weights.
+#' mean, DIC, BPIC, Marginal Deviance (if BayesFactor=TRUE) and associated weights.
 #' @export
 
 compare_IC <- function(sList,filter="sample",subfilter=0,use_best_fit=TRUE,
@@ -509,7 +486,7 @@ compare_IC <- function(sList,filter="sample",subfilter=0,use_best_fit=TRUE,
     tmp$wDIC <- round(tmp$wDIC,digits_p)
     tmp$wBPIC <- round(tmp$wBPIC,digits_p)
     if(BayesFactor){
-      tmp$modelProbability <- round(modelProbability, digits_p)
+      tmp$wMD <- round(tmp$wMD, digits_p)
       tmp[,-c(2,4,6)] <- round(tmp[,-c(2,4,6)],digits=digits)
     } else{
       tmp[,-c(2,4)] <- round(tmp[,-c(2,4)],digits=digits)

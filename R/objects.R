@@ -1,17 +1,3 @@
-thin_pmwg <- function(pmwg,thin=10)
-  # removes samples from single pmwg object
-{
-  # mcmc creation functions allow thinning, but for cases where you want to
-  # reduce the size, this will thin the sample component of a pmwg object
-  if (!is(pmwg, "pmwgs")) stop("Not a pmwgs object")
-  if (thin >= pmwg$samples$idx) stop("Thin value to large\n")
-  nmc_thin <- seq(thin,pmwg$samples$idx,by=thin)
-  if(any(pmwg$nuisance)) pmwg$sampler_nuis$samples <- base::rapply(pmwg$sampler_nuis$samples, f = function(x) filter_obj(x, nmc_thin), how = "replace")
-  pmwg$samples <- base::rapply(pmwg$samples, f = function(x) filter_obj(x, nmc_thin), how = "replace")
-  pmwg$samples$stage <- pmwg$samples$stage[nmc_thin]
-  pmwg$samples$idx <- length(nmc_thin)
-  return(pmwg)
-}
 
 
 filter_obj <- function(obj, idx){
@@ -102,6 +88,8 @@ remove_iterations <- function(pmwg,select,remove=TRUE,last_select=FALSE,filter=N
 }
 
 
+
+
 #' Merge samples
 #'
 #' Merges samples from all chains together as one unlisted object
@@ -127,6 +115,7 @@ merge_samples <- function(samplers){
   }
   return(out_samples)
 }
+
 
 
 #### mcmc extraction ----
@@ -440,16 +429,23 @@ subject_names <- function(samples)
 }
 
 
-#' Title
-#'
-#' @param samplers A list of samplers.
-#' @param thin An integer. Indicates by how much to thin.
-#'
-#' @return A thinned list of samplers
-#' @export
+thin_pmwg <- function(pmwg,thin=10)
+  # thins all stages
+{
+  # mcmc creation functions allow thinning, but for cases where you want to
+  # reduce the size, this will thin the sample component of a pmwg object
+  if (!is(pmwg, "pmwgs")) stop("Not a pmwgs object")
+  if (thin >= pmwg$samples$idx) stop("Thin value to large\n")
+  nmc_thin <- seq(thin,pmwg$samples$idx,by=thin)
+  if(any(pmwg$nuisance)) pmwg$sampler_nuis$samples <- base::rapply(pmwg$sampler_nuis$samples, f = function(x) filter_obj(x, nmc_thin), how = "replace")
+  pmwg$samples <- base::rapply(pmwg$samples, f = function(x) filter_obj(x, nmc_thin), how = "replace")
+  pmwg$samples$stage <- pmwg$samples$stage[nmc_thin]
+  pmwg$samples$idx <- length(nmc_thin)
+  return(pmwg)
+}
 
 thin_chains <- function(samplers,thin=5)
-  # thins a set of chains
+  # thins a list of chains
 {
   data_list <- attr(samplers,"data_list")
   design_list <- attr(samplers,"design_list")
@@ -460,3 +456,71 @@ thin_chains <- function(samplers,thin=5)
   attr(samplers,"model_list") <- model_list
   samplers
 }
+
+
+gd_summary <- function(samplers,no_print=TRUE,digits=2) {
+  alpha <- gd_pmwg(samplers,selection="alpha")
+  alphai <- alpha; alpha <- alpha[,"mpsrf"]; alphai <- alphai[,dimnames(alphai)[[2]]!="mpsrf"]
+
+  mu <- gd_pmwg(samplers,selection="mu")
+  variance <- gd_pmwg(samplers,selection="variance")
+  correlation <- gd_pmwg(samplers,selection="correlation")
+  mui <- mu; mu <- mu["mpsrf"]; mui <- mui[names(mui)!="mpsrf"]
+  variancei <- variance; variance <- variance["mpsrf"]; variancei <- variancei[names(variancei)!="mpsrf"]
+  correlationi <- correlation; correlation <- correlation["mpsrf"]; correlationi <- correlationi[names(correlationi)!="mpsrf"]
+
+  if (!(no_print)) {
+    print(round(alphai,digits))
+    print(round(sort(alpha),digits))
+
+    print(round(sort(mui),digits))
+    print(round(sort(variancei),digits))
+    print(round(sort(correlationi),digits))
+    print(round(c(mu=mu,var=variance,corr=correlation),digits=digits))
+  }
+  invisible(list(psrf=list(alpha=alphai,mu=mui,variance=variancei,correlation=correlationi),
+                 mpsrf=list(alpha=alpha,mu=mu,variance=variance,correlation=correlation)))
+}
+
+
+#' reduce_samples
+#'
+#' Enables removal of initial iterations in sample stage and thinning.
+#'
+#' @param samplers A list of pmwg objects
+#' @param thin thinning interval
+#' @param remove integer specifiying initial number of samples to remove
+#'
+#' @return samplers object trimmed and thinned
+reduce_samples <- function(samplers,thin=1,remove=NULL) {
+
+  thin_pmwg <- function(pmwg,thin=10)
+    # removes samples from single pmwg object
+  {
+    # mcmc creation functions allow thinning, but for cases where you want to
+    # reduce the size, this will thin the pmwg object
+    if (!is(pmwg, "pmwgs")) stop("Not a pmwgs object")
+    n <- table(pmwg$samples$stage)
+    fn <- n[filter]
+    if (thin >= fn) stop("Thin value to large\n")
+    nmc_thin <- seq(thin,fn,by=thin)
+    offset <- sum(n[names(n) != "sample"])
+    nmc_thin <- c(1:offset,offset+nmc_thin)
+    if(any(pmwg$nuisance)) pmwg$sampler_nuis$samples <- base::rapply(pmwg$sampler_nuis$samples, f = function(x) filter_obj(x, nmc_thin), how = "replace")
+    pmwg$samples <- base::rapply(pmwg$samples, f = function(x) EMC2:::filter_obj(x, nmc_thin), how = "replace")
+    pmwg$samples$stage <- pmwg$samples$stage[nmc_thin]
+    pmwg$samples$idx <- length(nmc_thin)
+    return(pmwg)
+  }
+
+  if (!is.null(remove)) {
+    tmp <- attributes(samplers)
+    samplers <- lapply(samplers,EMC2:::remove_iterations,select=remove+1,filter="sample")
+    attributes(samplers) <- tmp
+  }
+  if (thin>1) for (i in 1:length(samplers)) {
+    samplers[[i]] <- thin_pmwg(samplers[[i]],thin=thin)
+  }
+  samplers
+}
+

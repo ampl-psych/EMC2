@@ -45,7 +45,7 @@ returns sums over all subjects}
 }
 \value{
 Table of effective number of parameters, mean deviance, deviance of
-mean, DIC, BPIC, and associated weights.
+mean, DIC, BPIC, Marginal Deviance (if BayesFactor=TRUE) and associated weights.
 }
 \description{
 IC based model selection for a list of samples objects.
