@@ -376,19 +376,23 @@ p_names <- function(samples,mapped=FALSE,design=FALSE)
 #' otherwise sampled parameters
 #' @param include_constants Include parameters that are not sampled (i.e., constants)
 #' @param stat A function that is applied to each column of the data frame
+#' @param subject_n Number of alpha iterations to retain for each subject (default NULL = all)
 #'
 #' @return A data frame with one row for each sample (with a subjects column if selection = "alpha")
 #' @export
 
-parameters_data_frame <- function(samples,filter="sample",thin=1,subfilter=0,
+parameters_data_frame <- function(samples,filter="sample",thin=1,subfilter=0,subject_n=NULL,
                                   mapped=FALSE,include_constants=FALSE,stat=NULL,
                                   selection=c("alpha","mu","variance","covariance","correlation","LL","epsilon")[2])
   # extracts and stacks chains into a matrix
 {
   out <- as_mcmc.list(samples,selection=selection,filter=filter,thin=thin,
                       subfilter=subfilter,mapped=mapped,include_constants=include_constants)
-  if (selection!="alpha") out <- as.data.frame(do.call(rbind,out)) else {
+  if (selection!="alpha") {
+    out <- as.data.frame(do.call(rbind,out))
+  } else {
     out <- lapply(out,function(x){do.call(rbind,x)})
+    if (!is.null(subject_n)) out <- lapply(out,function(x)x[1:subject_n,])
     subjects <- rep(names(out),lapply(out,function(x){dim(x)[1]}))
     out <- cbind.data.frame(subjects=factor(subjects,levels=names(out)),do.call(rbind,out))
   }
@@ -402,6 +406,7 @@ parameters_data_frame <- function(samples,filter="sample",thin=1,subfilter=0,
   }
   out
 }
+
 
 get_sigma <- function(samps,filter="sample",thin=1,subfilter=0)
   # Get sigma matrix samples
@@ -458,29 +463,6 @@ thin_chains <- function(samplers,thin=5)
 }
 
 
-gd_summary <- function(samplers,no_print=TRUE,digits=2) {
-  alpha <- gd_pmwg(samplers,selection="alpha")
-  alphai <- alpha; alpha <- alpha[,"mpsrf"]; alphai <- alphai[,dimnames(alphai)[[2]]!="mpsrf"]
-
-  mu <- gd_pmwg(samplers,selection="mu")
-  variance <- gd_pmwg(samplers,selection="variance")
-  correlation <- gd_pmwg(samplers,selection="correlation")
-  mui <- mu; mu <- mu["mpsrf"]; mui <- mui[names(mui)!="mpsrf"]
-  variancei <- variance; variance <- variance["mpsrf"]; variancei <- variancei[names(variancei)!="mpsrf"]
-  correlationi <- correlation; correlation <- correlation["mpsrf"]; correlationi <- correlationi[names(correlationi)!="mpsrf"]
-
-  if (!(no_print)) {
-    print(round(alphai,digits))
-    print(round(sort(alpha),digits))
-
-    print(round(sort(mui),digits))
-    print(round(sort(variancei),digits))
-    print(round(sort(correlationi),digits))
-    print(round(c(mu=mu,var=variance,corr=correlation),digits=digits))
-  }
-  invisible(list(psrf=list(alpha=alphai,mu=mui,variance=variancei,correlation=correlationi),
-                 mpsrf=list(alpha=alpha,mu=mu,variance=variance,correlation=correlation)))
-}
 
 
 #' reduce_samples
