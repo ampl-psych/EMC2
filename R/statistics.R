@@ -121,6 +121,54 @@ gd_pmwg <- function(pmwg_mcmc,return_summary=FALSE,print_summary=TRUE,
 }
 
 
+#' gd_summary
+#'
+#' Summarizes gelman_diag statistics for a samplers object, invisibly returning
+#' a list of two lists containing univarite (psrf) and multivariate (mpsrf)
+#' statistics.
+#'
+#' @param samplers Samples object with multiple chains
+#' @param no_print Boolean for printing
+#' @param digits
+#'
+#' @return List of two lists names psrf and mpsrf.
+#' @export
+gd_summary <- function(samplers,no_print=TRUE,digits=2) {
+
+  alpha <- gd_pmwg(samplers,selection="alpha",print_summary = FALSE)
+  alphai <- alpha; alpha <- alpha[,"mpsrf"]; alphai <- alphai[,dimnames(alphai)[[2]]!="mpsrf"]
+  hierarchical <- any(names(samplers[[1]]$samples)=="theta_mu")
+  if (hierarchical) {
+    mu <- gd_pmwg(samplers,selection="mu",print_summary = FALSE)
+    variance <- gd_pmwg(samplers,selection="variance",print_summary = FALSE)
+    correlation <- gd_pmwg(samplers,selection="correlation",print_summary = FALSE)
+    mui <- mu; mu <- mu["mpsrf"]; mui <- mui[names(mui)!="mpsrf"]
+    variancei <- variance; variance <- variance["mpsrf"]; variancei <- variancei[names(variancei)!="mpsrf"]
+    correlationi <- correlation; correlation <- correlation["mpsrf"]; correlationi <- correlationi[names(correlationi)!="mpsrf"]
+  }
+  if (!(no_print)) {
+    cat("ALPHA psrf\n")
+    print(round(alphai,digits))
+    cat("\nALPHA mpsrf\n")
+    print(round(sort(alpha),digits))
+    if (hierarchical) {
+      cat("\nMU psrf\n")
+      print(round(sort(mui),digits))
+      cat("\nVARIANCE psrf\n")
+      print(round(sort(variancei),digits))
+      cat("\nCORRELATION psrf\n")
+      print(round(sort(correlationi),digits))
+      cat("\nHyper mpsrf\n")
+      print(round(c(mu=mu,var=variance,corr=correlation),digits=digits))
+    }
+  }
+  if (hierarhcial)
+    invisible(list(psrf=list(alpha=alphai,mu=mui,variance=variancei,correlation=correlationi),
+                 mpsrf=list(alpha=alpha,mu=mu,variance=variance,correlation=correlation))) else
+    invisible(list(psrf=list(alpha=alphai), mpsrf=list(alpha=alpha)))
+}
+
+
 iat_pmwg <- function(pmwg_mcmc,
                      print_summary=TRUE,digits_print=2,sort_print=TRUE,summary_alpha=mean,
                      selection="alpha",filter="sample",thin=1,subfilter=NULL)
