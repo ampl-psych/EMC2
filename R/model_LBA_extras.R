@@ -232,14 +232,14 @@ MlbaB <- function(){
     Ttransform = function(pars,dadm) {
       pars <- cbind(pars,b=pars[,"B"] + pars[,"A"])
       attr(pars,"ok") <- (pars[,"t0"] > .05) & ((pars[,"A"] > 1e-6) | (pars[,"A"] == 0)) &
-        (abs(pars[,"v"])<100) & ((pars[,"sv"] > 1e-3) | pars[,"sv"] == 0)
+        (abs(pars[,"v"])<100) & ((pars[,"sv"] > 1e-3) | pars[,"sv"] == 0) & (pars[,"pContaminant"] > -4)
       pars
     },
     # # Random function for racing accumulator
     # Random function for racing accumulator
     rfun=function(lR=NULL,pars) {
       ok <- (pars[,"t0"] > .05) & ((pars[,"A"] > 1e-6) | pars[,"A"] == 0) &
-        (abs(pars[,"v"])<100) & ((pars[,"sv"] > 1e-3) | pars[,"sv"] == 0)
+        (abs(pars[,"v"])<100) & ((pars[,"sv"] > 1e-3) | pars[,"sv"] == 0) & (pars[,"pContaminant"] > -4)
       if (is.null(lR)) ok else rLBA(lR,pars,posdrift=TRUE)
     },
     # Density function (PDF) for single accumulator
