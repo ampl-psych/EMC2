@@ -91,8 +91,8 @@ double c_log_likelihood_DDM(NumericMatrix pars, DataFrame data,
 }
 
 double c_log_likelihood_race(NumericMatrix pars, DataFrame data,
-                             NumericVector (*dfun)(NumericVector, NumericMatrix, LogicalVector),
-                             NumericVector (*pfun)(NumericVector, NumericMatrix, LogicalVector),
+                             NumericVector (*dfun)(NumericVector, NumericMatrix, LogicalVector, double),
+                             NumericVector (*pfun)(NumericVector, NumericMatrix, LogicalVector, double),
                              const int n_trials, LogicalVector winner, NumericVector expand,
                              double min_ll){
   const int n_out = expand.length();
@@ -110,10 +110,12 @@ double c_log_likelihood_race(NumericMatrix pars, DataFrame data,
       }
     }
   }
-  NumericVector win = log(dfun(rts, pars, winner)); //first for compressed
+  NumericVector win = log(dfun(rts, pars, winner, exp(min_ll))); //first for compressed
   lds[winner] = win;
   if(n_acc > 1){
-    NumericVector loss = log(1- pfun(rts, pars, !winner)); //cdfs
+    NumericVector loss = log(1- pfun(rts, pars, !winner, exp(min_ll))); //cdfs
+    loss[is_na(loss)] = min_ll;
+    loss[loss == log(1 - exp(min_ll))] = min_ll;
     lds[!winner] = loss;
   }
   lds[is_na(lds)] = min_ll;
@@ -162,8 +164,8 @@ NumericVector calc_ll(NumericMatrix p_matrix, DataFrame data, NumericVector cons
   } else{
 
     // Love me some good old ugly but fast c++ pointers
-    NumericVector (*dfun)(NumericVector, NumericMatrix, LogicalVector);
-    NumericVector (*pfun)(NumericVector, NumericMatrix, LogicalVector);
+    NumericVector (*dfun)(NumericVector, NumericMatrix, LogicalVector, double);
+    NumericVector (*pfun)(NumericVector, NumericMatrix, LogicalVector, double);
     NumericVector (*transform)(NumericVector);
     NumericMatrix (*Ntransform)(NumericMatrix);
     // NumericMatrix (*Ttransform)(NumericMatrix);

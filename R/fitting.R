@@ -29,7 +29,7 @@
 run_emc <- function(samplers, stage = NULL, iter = 1000, max_gd = 1.1, mean_gd = 1.1, min_es = 0, min_unique = 600, preburn = 150,
                     p_accept = .8, step_size = 100, verbose = FALSE, verboseProgress = FALSE, fileName = NULL,
                     particles = NULL, particle_factor=40, cores_per_chain = 1,
-                    cores_for_chains = length(samplers), max_trys = 50, n_blocks = NULL,
+                    cores_for_chains = length(samplers), max_trys = 50, n_blocks = 1,
                     omit_mpsrf=FALSE,omit_mu=TRUE){
   if (is.character(samplers)) {
     samplers <- fix_fileName(samplers)
@@ -117,7 +117,7 @@ run_samplers <- function(samplers, stage, iter = NULL, max_gd = NULL, mean_gd = 
                          p_accept = .8, step_size = 100, verbose = FALSE, verboseProgress = FALSE,
                          fileName = NULL,
                          particles = NULL, particle_factor=40, cores_per_chain = 1,
-                         cores_for_chains = length(samplers), max_trys = 50, n_blocks = NULL,
+                         cores_for_chains = length(samplers), max_trys = 50, n_blocks = 1,
                          omit_mpsrf=FALSE,omit_mu=TRUE){
   if (verbose) message(paste0("Running ", stage, " stage"))
   attributes <- get_attributes(samplers)
@@ -125,11 +125,12 @@ run_samplers <- function(samplers, stage, iter = NULL, max_gd = NULL, mean_gd = 
   iter <- iter + total_iters_stage
   progress <- check_progress(samplers, stage, iter, max_gd, mean_gd, min_es,
     min_unique, max_trys, step_size, cores_per_chain, verbose,
-    omit_mpsrf=omit_mpsrf,omit_mu=omit_mu)
+    omit_mpsrf=omit_mpsrf,omit_mu=omit_mu, n_blocks = n_blocks)
   samplers <- progress$samplers
   progress <- progress[!names(progress) == 'samplers'] # Frees up memory, courtesy of Steven
   while(!progress$done){
     if(!is.numeric(progress$step_size) | progress$step_size < 1) warning("Something wrong with the stepsize again, Niek's to blame")
+    if(!is.null(progress$n_blocks)) n_blocks <- progress$n_blocks
     samplers <- add_proposals(samplers, stage, cores_per_chain, n_blocks)
     samplers <- auto_mclapply(samplers,run_stages, stage = stage, iter= progress$step_size,
                                    verbose=verbose,  verboseProgress = verboseProgress,
@@ -140,7 +141,7 @@ run_samplers <- function(samplers, stage, iter = NULL, max_gd = NULL, mean_gd = 
     }
     progress <- check_progress(samplers, stage, iter, max_gd, mean_gd, min_es,
       min_unique, max_trys, step_size, cores_per_chain,verbose, progress,
-      omit_mpsrf=omit_mpsrf,omit_mu=omit_mu)
+      omit_mpsrf=omit_mpsrf,omit_mu=omit_mu, n_blocks)
     samplers <- progress$samplers
     progress <- progress[!names(progress) == 'samplers'] # Frees up memory, courtesy of Steven
     if(!is.null(fileName)){
@@ -188,7 +189,7 @@ add_proposals <- function(samplers, stage, n_cores, n_blocks){
 
 check_progress <- function (samplers, stage, iter, max_gd, mean_gd, min_es, min_unique,
                             max_trys, step_size, n_cores, verbose, progress = NULL,
-                            omit_mpsrf=FALSE,omit_mu=TRUE)
+                            omit_mpsrf=FALSE,omit_mu=TRUE, n_blocks)
 {
   total_iters_stage <- chain_n(samplers)[, stage][1]
   if (is.null(progress)) {
@@ -202,7 +203,8 @@ check_progress <- function (samplers, stage, iter, max_gd, mean_gd, min_es, min_
       message(trys, ": Iterations ", stage, " = ", total_iters_stage)
   }
   gd <- check_gd(samplers, stage, max_gd, mean_gd, trys, verbose,
-                 omit_mpsrf=omit_mpsrf,omit_mu=omit_mu)
+                 omit_mpsrf=omit_mpsrf,omit_mu=omit_mu, iter = total_iters_stage,
+                 n_blocks)
   iter_done <- ifelse(is.null(iter) || length(iter) == 0, TRUE, total_iters_stage >= iter)
   if (min_es == 0) {
     es_done <- TRUE
@@ -240,11 +242,11 @@ check_progress <- function (samplers, stage, iter, max_gd, mean_gd, min_es, min_
     step_size <- min(step_size, abs(iter - total_iters_stage))[1]
   }
   return(list(samplers = gd$samplers, done = done, step_size = step_size,
-              trys = trys, iters_total = iters_total))
+              trys = trys, iters_total = iters_total, n_blocks = gd$n_blocks))
 }
 
 check_gd <- function(samplers, stage, max_gd, mean_gd, trys, verbose,
-                     omit_mpsrf=TRUE,omit_mu=TRUE)
+                     omit_mpsrf=TRUE,omit_mu=TRUE, iter, n_blocks = 1)
 {
 
   get_gds <- function(samplers,omit_mpsrf,omit_mu) {
@@ -282,12 +284,19 @@ check_gd <- function(samplers, stage, max_gd, mean_gd, trys, verbose,
     ok_mean_gd <- TRUE
   }
   ok_gd <- ok_max_gd & ok_mean_gd
-
+  n_blocks_old <- n_blocks
+  # if(iter > 1000 & stage == "sample" & !ok_gd) {
+  #   n_blocks <- floor(iter/1000) + 1
+  #   n_blocks <- max(n_blocks_old, n_blocks)
+  # }
   if(verbose) {
+    if(n_blocks_old != n_blocks) {
+      message(paste0("More than ", floor(iter/1000)*1000, " sample iterations past without convergence. Now block updating parameters with ", n_blocks, " blocks."))
+    }
     if (omit_mpsrf) type <- "psrf" else type <- "m/psrf"
     message("Mean ",type," = ",round(mean(gd),3),", Max alpha ",type," = ",round(max(gd),3))
   }
-  return(list(gd = gd, gd_done = ok_gd, samplers = samplers))
+  return(list(gd = gd, gd_done = ok_gd, samplers = samplers, n_blocks = n_blocks))
 }
 
 
@@ -333,7 +342,8 @@ create_eff_proposals <- function(samplers, n_cores){
       }
 
     }
-
+    eff_mu <- split(eff_mu, col(eff_mu))
+    eff_var <- apply(eff_var, 3, identity, simplify = F)
     attr(samplers[[i]], "eff_mu") <- eff_mu
     attr(samplers[[i]], "eff_var") <- eff_var
   }
@@ -342,11 +352,11 @@ create_eff_proposals <- function(samplers, n_cores){
 
 sub_blocking <- function(samplers, n_blocks){
   covs <- lapply(samplers, FUN = function(x){return(attr(x, "chains_cov"))})
-  out <- array(0, dim = dim(covs[[1]][,,1]))
+  out <- array(0, dim = dim(covs[[1]][[1]]))
   for(i in 1:length(covs)){
     cov_tmp <- covs[[1]]
-    for(j in 1:dim(cov_tmp)[3]){
-      out <- out + cov2cor(cov_tmp[,,j])
+    for(j in 1:length(cov_tmp)){
+      out <- out + cov2cor(cov_tmp[[1]])
     }
   }
   shared_ll_idx <- attr(samplers[[1]]$data, "shared_ll_idx")
@@ -403,6 +413,7 @@ create_cov_proposals <- function(samplers, samples_idx = NULL, do_block = TRUE){
 
       attr(samplers[[j]], "chains_cov_grouped") <- chains_cov_grouped
     }
+    chains_cov <- apply(chains_cov, 3, identity, simplify = F)
     attr(samplers[[j]], "chains_cov") <- chains_cov
   }
   return(samplers)
@@ -466,7 +477,7 @@ test_adapted <- function(sampler, test_samples, min_unique, n_cores_conditional 
       return(FALSE)
     }
     else {
-      if(verbose) message("Successfully adapted after ", test_samples$iteration, "iterations - stopping adaptation")
+      if(verbose) message("Successfully adapted - stopping adaptation")
       return(TRUE)
     }
   } else{
@@ -510,7 +521,7 @@ auto_burn <- function(samplers, max_gd = NULL, mean_gd = 1.1, min_es = 0, prebur
                       p_accept = .8, step_size = 100, verbose = FALSE, verboseProgress = FALSE,
                       fileName = NULL,
                       particles = NULL, particle_factor=40, cores_per_chain = 1,
-                      cores_for_chains = length(samplers), max_trys = 50, n_blocks = NULL,
+                      cores_for_chains = length(samplers), max_trys = 50, n_blocks = 1,
                       omit_mpsrf=FALSE,omit_mu=TRUE){
   samplers <- run_samplers(samplers, stage = "preburn", iter = preburn, cores_for_chains = cores_for_chains, p_accept = p_accept,
                            step_size = step_size,  verbose = verbose, verboseProgress = verboseProgress,
@@ -555,7 +566,7 @@ run_adapt <- function(samplers, max_gd = NULL, mean_gd = NULL, min_es = 0, min_u
                       p_accept = .8, step_size = 100, verbose = FALSE, verboseProgress = FALSE,
                       fileName = NULL,
                       particles = NULL, particle_factor=40, cores_per_chain = 1,
-                      cores_for_chains = length(samplers), max_trys = 50, n_blocks = NULL,
+                      cores_for_chains = length(samplers), max_trys = 50, n_blocks = 1,
                       omit_mpsrf=FALSE)
 {
   samplers <- run_samplers(samplers, stage = "adapt",  max_gd = max_gd, mean_gd = mean_gd, min_es = min_es, min_unique = min_unique,
@@ -595,7 +606,7 @@ run_sample <- function(samplers, iter = 1000, max_gd = 1.1, mean_gd = NULL, min_
                        p_accept = .8, step_size = 100, verbose = FALSE, verboseProgress = FALSE,
                        fileName = NULL,
                        particles = NULL, particle_factor=40, cores_per_chain = 1,
-                       cores_for_chains = length(samplers), max_trys = 50, n_blocks = NULL,
+                       cores_for_chains = length(samplers), max_trys = 50, n_blocks = 1,
                        omit_mpsrf=FALSE,omit_mu=TRUE)
 {
   samplers <- run_samplers(samplers, stage = "sample", iter = iter, max_gd = max_gd, mean_gd = mean_gd, min_es = min_es, cores_for_chains = cores_for_chains, p_accept = p_accept,
@@ -639,10 +650,11 @@ make_samplers <- function(data_list,design_list,model_list=NULL,
                           nuisance_non_hyper = NULL,
                           grouped_pars = NULL,
                           par_groups=NULL,
-                          n_factors=NULL,constraintMat = NULL, formula = NULL)
+                          n_factors=NULL,constraintMat = NULL, formula = NULL,
+                          Lambda_mat = NULL, B_mat = NULL, K_mat = NULL, G_mat = NULL, xy = NULL, xeta = NULL)
 
 {
-  if (!(type %in% c("standard","diagonal","blocked","factor","single", "lm", "infnt_factor")))
+  if (!(type %in% c("standard","diagonal","blocked","factor","single", "lm", "infnt_factor", "SEM")))
     stop("type must be one of: standard,diagonal,blocked,factor,infnt_factor", "lm","single")
 
   if(!is.null(nuisance) & !is.null(nuisance_non_hyper)){
@@ -763,6 +775,10 @@ make_samplers <- function(data_list,design_list,model_list=NULL,
   } else if (type == "factor") {
     if (is.null(n_factors)) stop("Must specify n_factors for factor type")
     out <- pmwgs(dadm_list,variant_funs, n_factors = n_factors, nuisance = nuisance,
+                 nuisance_non_hyper = nuisance_non_hyper, grouped_pars = grouped_pars)
+  } else if (type == "SEM"){
+    out <- pmwgs(dadm_list,variant_funs, Lambda_mat = Lambda_mat, B_mat = B_mat, K_mat = K_mat, G_mat = G_mat,
+                 xeta = xeta, xy = xy, nuisance = nuisance,
                  nuisance_non_hyper = nuisance_non_hyper, grouped_pars = grouped_pars)
   }
   # replicate chains

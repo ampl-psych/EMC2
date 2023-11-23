@@ -12,7 +12,7 @@ run_bridge_sampling(
   cores_for_props = 4,
   cores_per_prop = 1,
   both_splits = T,
-  maxiter = 500,
+  maxiter = 5000,
   r0 = 1e-05,
   tol1 = 1e-10,
   tol2 = 1e-06

@@ -1,13 +1,14 @@
-make_info <- function(samples, variant_funs){
+make_info <- function(samples, variant_funs, split_idx){
   info <- list(
     subjects = samples$subjects,
     par_names = samples$par_names,
     n_pars = samples$n_pars,
     n_subjects = samples$n_subjects,
     prior = samples$prior,
-    variant_funs = variant_funs
+    variant_funs = variant_funs,
+    ll_func = samples$ll_func
   )
-  info <- variant_funs$bridge_add_info(info, samples)
+  info <- variant_funs$bridge_add_info(info, samples, split_idx)
 
 }
 
@@ -103,10 +104,11 @@ run.iterative.scheme <- function(q11, q12, q21, q22, r0, tol,
 
     criterion_val <- switch(criterion, "r" = abs((r - rold)/r),
                             "logml" = abs((logml - logmlold)/logml))
+    if(is.na(criterion_val)) break
 
   }
 
-  if (i > maxiter) {
+  if (i > maxiter || is.na(criterion_val)) {
     logml <- NA
   }
 
@@ -117,14 +119,14 @@ run.iterative.scheme <- function(q11, q12, q21, q22, r0, tol,
 }
 
 
-bridge_sampling <- function(samples, n_eff, split_idx, cores_for_props = 1, cores_per_prop = 1, maxiter = 500,
-                            r0 = 1e-5, tol1 = 1e-10, tol2 = 1e-6){
+bridge_sampling <- function(samples, n_eff, split_idx, cores_for_props = 1, cores_per_prop = 1, maxiter = 5000,
+                            filter = "sample", r0 = 1e-5, tol1 = 1e-10, tol2 = 1e-6){
   variant_funs <- attr(samples, "variant_funs")
   data <- samples$data
-  info <- make_info(samples, variant_funs)
+  info <- make_info(samples, variant_funs, split_idx)
   n_pars <- samples$n_pars
   n_subjects <- samples$n_subjects
-  idx <- samples$samples$stage == "sample"
+  idx <- samples$samples$stage == filter
   all_samples <- matrix(NA_real_, nrow = sum(idx), ncol = n_pars * n_subjects)
   for(i in 1:n_subjects){
     all_samples[,((i-1)*n_pars + 1):(i*n_pars)] <- t(samples$samples$alpha[,i,idx])
@@ -137,27 +139,27 @@ bridge_sampling <- function(samples, n_eff, split_idx, cores_for_props = 1, core
   }
 
   m <- colMeans(samples_fit)
-  V <- as.matrix(Matrix::nearPD(cov(samples_fit))$mat)
+  V <- as.matrix(Matrix::nearPD(Rfast::cova(samples_fit))$mat)
   L <- t(chol(V))
-  gen_samples <- mvtnorm::rmvnorm(nrow(samples_fit), sigma = diag(ncol(samples_fit)))
+  gen_samples <- mvtnorm::rmvnorm(nrow(samples_fit), mean = rep(0, ncol(samples_fit)), sigma = diag(ncol(samples_fit)))
 
   q12 <- mvtnorm::dmvnorm((samples_iter - matrix(m, nrow = nrow(samples_iter),
                                                  ncol = length(m),
                                                  byrow = TRUE)) %*%
-                            t(solve(L)), sigma = diag(ncol(samples_iter)), log = TRUE)
-  q22 <- mvtnorm::dmvnorm(gen_samples, sigma = diag(ncol(samples_fit)), log = TRUE)
+                            t(solve(L)),  mean = rep(0, ncol(samples_iter)), sigma = diag(ncol(samples_iter)), log = TRUE)
+  q22 <- mvtnorm::dmvnorm(gen_samples, mean = rep(0, ncol(samples_fit)), sigma = diag(ncol(samples_fit)), log = TRUE)
   info <- make_info(samples, variant_funs)
   qList <- eval.unnormalized.posterior(samples_iter = samples_iter, gen_samples = gen_samples,
                                        data = data, m = m, L =L, info = info, cores_for_props = cores_for_props, cores_per_prop = cores_per_prop)
 
   q11 <- qList$q11
   q21 <- qList$q21
+  save(q11, q12, q22, q21, L, m, file = "Qs.RData")
   tmp <- run.iterative.scheme(q11 = q11, q12 = q12, q21 = q21,
                               q22 = q22, r0 = r0, tol = tol1,
                               L = L, silent = T,
                               maxiter = maxiter, neff = n_eff,
                               criterion = "r")
-
   if (is.na(tmp$logml)) {
     lr <- length(tmp$r_vals)
     # use geometric mean as starting value
@@ -193,14 +195,14 @@ bridge_sampling <- function(samples, n_eff, split_idx, cores_for_props = 1, core
 #' @return A vector of length repetitions which contains the Marginal Log Likelihood estimates per repetition
 #' @export
 #'
-run_bridge_sampling <- function(samplers, filter = "sample", subfilter = 0, repetitions = 1, cores_for_props = 4,  cores_per_prop = 1, both_splits = T, maxiter = 500,
+run_bridge_sampling <- function(samplers, filter = "sample", subfilter = 0, repetitions = 1, cores_for_props = 4,  cores_per_prop = 1, both_splits = T, maxiter = 5000,
                                 r0 = 1e-5, tol1 = 1e-10, tol2 = 1e-6){
 
   if(subfilter != 0){
     samplers <- lapply(samplers, remove_iterations, select = subfilter, filter = filter)
   }
   n_eff <- round(median(es_pmwg(as_mcmc.list(samplers, selection = "alpha",
-                                             filter = "sample"), print_summary = F))/2)
+                                             filter = filter), print_summary = F))/2)
   samples <- merge_samples(samplers)
   idx <- samples$samples$stage == filter
   mls <- numeric(repetitions)
@@ -208,19 +210,19 @@ run_bridge_sampling <- function(samplers, filter = "sample", subfilter = 0, repe
     if(both_splits){
       split1 <- seq(1, round(sum(idx)/2))
       s1 <- bridge_sampling(samples, n_eff, split1, cores_for_props = cores_for_props, cores_per_prop = cores_per_prop,
-                            maxiter = maxiter,
+                            maxiter = maxiter, filter = filter,
                             r0 = r0, tol1 = tol1, tol2 = tol2)
       split2 <- seq(round(sum(idx)/2 + 1) : sum(idx))
       s2 <- bridge_sampling(samples, n_eff, split2, cores_for_props = cores_for_props, cores_per_prop = cores_per_prop,
-                            maxiter = maxiter,
+                            maxiter = maxiter, filter = filter,
                             r0 = r0, tol1 = tol1, tol2 = tol2)
       if(abs(s1 - s2) > 1) warning("First split and second split marginal likelihood estimates are off by 1 log point. \n This usually means that your MCMC chains aren't completely stable yet. \n Consider running the MCMC chain longer if you need more precise estimates (e.g. when comparing different priors)")
       mls[i] <- mean(c(s1, s2))
     } else{
       split_idx <- seq(1, sum(idx), by = 2)
       mls[i] <- bridge_sampling(samples, n_eff, split_idx, cores_for_props = cores_for_props, cores_per_prop = cores_per_prop,
-                            maxiter = maxiter,
-                            r0 = r0, tol1 = tol1, tol2 = tol2)
+                                maxiter = maxiter, filter = filter,
+                                r0 = r0, tol1 = tol1, tol2 = tol2)
     }
   }
   return(mls)
