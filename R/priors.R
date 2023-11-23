@@ -50,7 +50,7 @@ get_prior_samples <- function(samples,selection,filter,thin,subfilter,n_prior)
 #' plot_prior
 #' Plots prior distributions by simulation
 #' @param prior A list of specifying prior means and covariance, if NULL default
-#' prior (mean=0, varaince = 1, uncorrelaterd)
+#' prior (mean=0, variance = 1, uncorrelated)
 #' @param design Design corresponding to prior
 #' @param plotp Names of parameters to plot (default NULL plots all)
 #' @param type Type of prior (standard or single)
@@ -80,11 +80,22 @@ plot_prior <- function(prior=NULL, design,plotp=NULL,
   if (is.null(selection)) {
     if (type=="standard") selection <- "mu"
     if (type=="single") selection <- "alpha"
+    if (type == "diagonal") selection <- "diagonal"
   }
-  if (mapped & !(selection %in% c("alpha","mu")))
-    stop("For selections other than mu and alpha set mapped = FALSE")
-  if (!(type %in% c("standard","single")))
-    stop("Only types standard and single implemented")
+  if(selection == "variance"){
+    upper = .95
+  }
+  if(selection == "covariance"){
+    upper = .95
+    lower = .05
+  }
+  if (mapped & !(selection %in% c("alpha","mu"))){
+    warning("For selections other than mu and alpha mapped must be FALSE, we set it to FALSE here")
+  }
+
+
+  if (!(type %in% c("standard","single", "diagonal")))
+    stop("Only types standard, diagonal and single implemented")
   if (type=="single" & selection !="alpha")
     stop("Can only select alpha for single")
   if (!is.null(data) & is.null(design))
@@ -93,16 +104,17 @@ plot_prior <- function(prior=NULL, design,plotp=NULL,
     stop("Must provide design when mapped=TRUE")
   if (type=="standard") gp <- get_prior_standard
   if (type=="single") gp <- get_prior_single
+  if (type=="diagonal") gp <- get_prior_diag
   if (mapped & !is.null(data)) { # Used for covariates
     message("Mapping prior based on data, use this option with covariates and Ttranform parameters")
-    pp <- gp(prior, design = design,N=dim(data)[1])[[selection]]
+    pp <- gp(prior, type = selection, design = design,N=dim(data)[1])[[selection]]
     row.names(pp) <- 1:dim(data)[1]
     design$Ffactors$subjects <- row.names(pp)
     data$subjects <- factor(1:dim(data)[1])
     mp <- make_data(pp,design,data=data,mapped_p=TRUE)
     mpok <- mp[design$model()$rfun(pars=mp),]
     if (nrep>1) for (i in 2:nrep) {
-      pp <- gp(prior, design = design,N=dim(data)[1])[[selection]]
+      pp <- gp(prior, type = selection, design = design,N=dim(data)[1])[[selection]]
       row.names(pp) <- 1:dim(data)[1]
       mp <- make_data(pp,design,data=data,mapped_p=TRUE)
       mpok <- rbind(mpok,mp[design$model()$rfun(pars=mp),])
@@ -141,12 +153,20 @@ plot_prior <- function(prior=NULL, design,plotp=NULL,
         filtered <- filtered[(filtered >= lower) & (filtered <= upper)]
         hist(filtered,prob = TRUE,
              main=i,xlab=pnam,xlim=xlims[[pnam]],breaks=breaks,
-             cex.lab = 1.25, cex.main = 1.5)
+             cex.lab = 1.25, cex.main = 1.5, xlab = selection)
       }
     }
     invisible(cbind.data.frame(fnam,mpok[,par_names,drop=FALSE]))
   } else {
-    samples <- gp(prior,design=design,N=N)[[selection]]
+
+    samples <- gp(prior, type = selection, design=design,N=N)[[selection]]
+    if(selection %in% c("covariance", "correlation")){
+      pnams <- names(attr(design, "p_vector"))
+      lt <- lower.tri(diag(length(pnams)))
+      pnams <- outer(pnams,pnams,paste,sep=".")[lt]
+      colnames(samples) <- pnams
+    }
+
     if (mapped)
       samples <- map_mcmc(samples,design,design$model,include_constants=FALSE)
     par(mfrow = layout)
@@ -171,9 +191,9 @@ plot_prior <- function(prior=NULL, design,plotp=NULL,
       filtered <- samples[,i][(samples[,i] >= lower) & (samples[,i] <= upper)]
       if (is.null(xlims[[i]]))
         hist(filtered, breaks = breaks, main = par_names[i], prob = TRUE,
-             xlab = type, cex.lab = 1.25, cex.main = 1.5) else
+             xlab = selection, cex.lab = 1.25, cex.main = 1.5) else
         hist(filtered, breaks = breaks, prob = TRUE,
-             xlab = par_names[i], cex.lab = 1.25, cex.main = 1.5,xlim=xlims[[i]])
+             xlab = selection, cex.lab = 1.25, cex.main = 1.5,xlim=xlims[[i]])
     }
     invisible(samples)
   }
@@ -182,7 +202,7 @@ plot_prior <- function(prior=NULL, design,plotp=NULL,
 
 #' make_prior
 #'
-#' Makes priors for single and standard model (in the assuming no correlation)
+#' Makes priors for single and standard model
 #' based an a design, by providing prior means (pmean) and standard deviations
 #' (psd), and possibly these values taken from another prior (supplied by the
 #' update argument), as long as those values have the same name as in the current

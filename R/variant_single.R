@@ -27,7 +27,7 @@ add_info_single <- function(sampler, prior = NULL, ...){
 #' @export
 
 get_prior_single <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5,
-                             type = "mu", design = NULL, map = FALSE){
+                             type = "alpha", design = NULL, map = FALSE){
   if(is.null(prior)){
     prior <- list()
   }
@@ -41,7 +41,7 @@ get_prior_single <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5
     prior$theta_mu_var <- diag(rep(1, n_pars))
   }
   if(sample){
-    if(type != "mu") stop("for variant single, only mu can be specified")
+    if(type != "alpha") stop("for variant single, only alpha can be specified")
     samples <- mvtnorm::rmvnorm(N, prior$theta_mu_mean, prior$theta_mu_var)
     if (map) {
       proot <- unlist(lapply(strsplit(colnames(samples),"_"),function(x)x[[1]]))
