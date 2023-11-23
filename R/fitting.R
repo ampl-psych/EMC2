@@ -293,6 +293,8 @@ check_gd <- function(samplers, stage, max_gd, mean_gd, trys, verbose,
     if(n_blocks_old != n_blocks) {
       message(paste0("More than ", floor(iter/1000)*1000, " sample iterations past without convergence. Now block updating parameters with ", n_blocks, " blocks."))
     }
+  }
+  if(verbose) {
     if (omit_mpsrf) type <- "psrf" else type <- "m/psrf"
     message("Mean ",type," = ",round(mean(gd),3),", Max alpha ",type," = ",round(max(gd),3))
   }
@@ -567,7 +569,7 @@ run_adapt <- function(samplers, max_gd = NULL, mean_gd = NULL, min_es = 0, min_u
                       fileName = NULL,
                       particles = NULL, particle_factor=40, cores_per_chain = 1,
                       cores_for_chains = length(samplers), max_trys = 50, n_blocks = 1,
-                      omit_mpsrf=FALSE)
+                      omit_mpsrf=FALSE,omit_mu = TRUE)
 {
   samplers <- run_samplers(samplers, stage = "adapt",  max_gd = max_gd, mean_gd = mean_gd, min_es = min_es, min_unique = min_unique,
                            cores_for_chains = cores_for_chains, p_accept = p_accept,

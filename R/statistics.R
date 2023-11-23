@@ -66,10 +66,6 @@ es_pmwg <- function(pmwg_mcmc,selection="alpha",summary_alpha=mean,
 }
 
 
-# return_summary=FALSE;print_summary=TRUE;digits_print=2;sort_print=TRUE;
-# autoburnin=FALSE;transform=TRUE
-# selection="alpha";filter="sample";thin=1;subfilter=NULL
-# pmwg_mcmc=sVat0;selection="mu";filter="sample"
 gd_pmwg <- function(pmwg_mcmc,return_summary=FALSE,print_summary=TRUE,
                     digits_print=2,sort_print=TRUE,autoburnin=FALSE,transform=TRUE,
                     selection="alpha",filter="sample",thin=1,subfilter=NULL,mapped=FALSE)
@@ -122,6 +118,54 @@ gd_pmwg <- function(pmwg_mcmc,return_summary=FALSE,print_summary=TRUE,
     cbind(do.call(rbind,lapply(gd,function(x){x[[1]][,1]})),
           mpsrf=unlist(lapply(gd,function(x){x[[2]]})))) else
             invisible(c(gd$psrf[,1],mpsrf=gd$mpsrf))
+}
+
+
+#' gd_summary
+#'
+#' Summarizes gelman_diag statistics for a samplers object, invisibly returning
+#' a list of two lists containing univarite (psrf) and multivariate (mpsrf)
+#' statistics.
+#'
+#' @param samplers Samples object with multiple chains
+#' @param no_print Boolean for printing
+#' @param digits
+#'
+#' @return List of two lists names psrf and mpsrf.
+#' @export
+gd_summary <- function(samplers,no_print=TRUE,digits=2) {
+
+  alpha <- gd_pmwg(samplers,selection="alpha",print_summary = FALSE)
+  alphai <- alpha; alpha <- alpha[,"mpsrf"]; alphai <- alphai[,dimnames(alphai)[[2]]!="mpsrf"]
+  hierarchical <- any(names(samplers[[1]]$samples)=="theta_mu")
+  if (hierarchical) {
+    mu <- gd_pmwg(samplers,selection="mu",print_summary = FALSE)
+    variance <- gd_pmwg(samplers,selection="variance",print_summary = FALSE)
+    correlation <- gd_pmwg(samplers,selection="correlation",print_summary = FALSE)
+    mui <- mu; mu <- mu["mpsrf"]; mui <- mui[names(mui)!="mpsrf"]
+    variancei <- variance; variance <- variance["mpsrf"]; variancei <- variancei[names(variancei)!="mpsrf"]
+    correlationi <- correlation; correlation <- correlation["mpsrf"]; correlationi <- correlationi[names(correlationi)!="mpsrf"]
+  }
+  if (!(no_print)) {
+    cat("ALPHA psrf\n")
+    print(round(alphai,digits))
+    cat("\nALPHA mpsrf\n")
+    print(round(sort(alpha),digits))
+    if (hierarchical) {
+      cat("\nMU psrf\n")
+      print(round(sort(mui),digits))
+      cat("\nVARIANCE psrf\n")
+      print(round(sort(variancei),digits))
+      cat("\nCORRELATION psrf\n")
+      print(round(sort(correlationi),digits))
+      cat("\nHyper mpsrf\n")
+      print(round(c(mu=mu,var=variance,corr=correlation),digits=digits))
+    }
+  }
+  if (hierarchical)
+    invisible(list(psrf=list(alpha=alphai,mu=mui,variance=variancei,correlation=correlationi),
+                   mpsrf=list(alpha=alpha,mu=mu,variance=variance,correlation=correlation))) else
+                     invisible(list(psrf=list(alpha=alphai), mpsrf=list(alpha=alpha)))
 }
 
 
@@ -293,7 +337,7 @@ p_test <- function(x,x_name=NULL,x_fun=NULL,x_fun_name="fun",
     # Individual subject analysis
     if (selection != "alpha") y_subject <- NULL else
       if (is.null(y_subject)) y_subject <- names(y)[1] else
-      if (is.numeric(y_subject)) y_subject <- names(y)[y_subject]
+        if (is.numeric(y_subject)) y_subject <- names(y)[y_subject]
     if (!is.null(y_subject)) {
       if (!(y_subject %in% names(y))) stop("Subject y_subject not in y")
       message("Testing y subject ",y_subject)
@@ -378,7 +422,7 @@ p_test <- function(x,x_name=NULL,x_fun=NULL,x_fun_name="fun",
 #' @export
 
 IC <- function(samplers,filter="sample",subfilter=0,use_best_fit=TRUE,
-                    print_summary=TRUE,digits=0,subject=NULL)
+               print_summary=TRUE,digits=0,subject=NULL)
   # Gets DIC, BPIC, effective parameters, mean deviance, and deviance of mean
 {
 
@@ -433,22 +477,17 @@ IC <- function(samplers,filter="sample",subfilter=0,use_best_fit=TRUE,
 }
 
 
-#' compare_IC
-#'
-#' Information Criteria and optionally Marginal-Deviance (MD) based model selection for a list of samples objects.
+
+#' IC based model selection for a list of samples objects.
 #'
 #' @param sList List of samples objects
 #' @param filter A string. Specifies which stage you want to plot.
 #' @param subfilter An integer or vector. If integer it will exclude up until
 #' @param use_best_fit Boolean, default TRUE use best of minD and Dmean in
 #' calculation otherwise always use Dmean
-#' @param MarginalDeviance Boolean, default FALSE. Include marginal deviances (MD) as
-#' estimated using WARP-III bridge sampling. Usually takes a minute per model added to calculate
-#' @param cores_for_props Integer, how many cores to use for MarginalDeviance calculation,
-#' here 4 is default for the 4 different proposal densities to evaluate, only 1, 2 and 4 are sensible.
-#' @param cores_per_prop Integer, how many cores to use for MarginalDeviance
-#' calculation if you have more than 4 cores available. Cores used will be
-#' cores_for_props * cores_per_prop, where prioritizing cores_for_props being 4 or 2 is fastest.
+#' @param BayesFactor Boolean, default FALSE. Include marginal likelihoods as estimated using WARP-III bridge sampling. Usually takes a minute per model added to calculate
+#' @param cores_for_props Integer, how many cores to use for BayesFactor calculation, here 4 is default for the 4 different proposal densities to evaluate, only 1, 2 and 4 are sensible.
+#' @param cores_per_prop Integer, how many cores to use for BayesFactor calculation if you have more than 4 cores available. Cores used will be cores_for_props * cores_per_prop, where prioritizing cores_for_props being 4 or 2 is fastest.
 #' @param print_summary Boolean (default TRUE) print table of results
 #' @param digits Integer, significant digits in printed table except model weights
 #' @param digits_p Integer, significant digits in printed table for model weights
@@ -456,11 +495,11 @@ IC <- function(samplers,filter="sample",subfilter=0,use_best_fit=TRUE,
 #' returns sums over all subjects
 #'
 #' @return Table of effective number of parameters, mean deviance, deviance of
-#' mean, DIC, BPIC, MD, and associated weights.
+#' mean, DIC, BPIC, Marginal Deviance (if BayesFactor=TRUE) and associated weights.
 #' @export
 
 compare_IC <- function(sList,filter="sample",subfilter=0,use_best_fit=TRUE,
-                       MarginalDeviance = FALSE, cores_for_props =4, cores_per_prop = 1,
+                       BayesFactor = FALSE, cores_for_props =4, cores_per_prop = 1,
                        print_summary=TRUE,digits=0,digits_p=3,subject=NULL) {
 
   getp <- function(IC) {
@@ -475,17 +514,17 @@ compare_IC <- function(sList,filter="sample",subfilter=0,use_best_fit=TRUE,
 
   ICs <- setNames(vector(mode="list",length=length(sList)),names(sList))
   for (i in 1:length(ICs)) ICs[[i]] <- IC(sList[[i]],filter=filter,
-    subfilter=sflist[[i]],use_best_fit=use_best_fit,subject=subject,print_summary=FALSE)
+                                          subfilter=sflist[[i]],use_best_fit=use_best_fit,subject=subject,print_summary=FALSE)
   ICs <- data.frame(do.call(rbind,ICs))
   DICp <- getp(ICs$DIC)
   BPICp <- getp(ICs$BPIC)
   out <- cbind.data.frame(DIC=ICs$DIC,wDIC=DICp,BPIC=ICs$BPIC,wBPIC=BPICp,ICs[,-c(1:2)])
 
-  if(MarginalDeviance){
+  if(BayesFactor){
     MLLs <- numeric(length(sList))
     for(i in 1:length(MLLs)){
       MLLs[i] <- run_bridge_sampling(sList[[i]], filter = filter, subfilter = sflist[[i]], both_splits = FALSE,
-                                           cores_for_props = cores_for_props, cores_per_prop = cores_per_prop)
+                                     cores_for_props = cores_for_props, cores_per_prop = cores_per_prop)
     }
     modelProbability <- exp(MLLs - min(MLLs))/sum(exp(MLLs - min(MLLs)))
     out <- cbind.data.frame(MD = -2*MLLs, wMD = modelProbability, out)
@@ -494,8 +533,8 @@ compare_IC <- function(sList,filter="sample",subfilter=0,use_best_fit=TRUE,
     tmp <- out
     tmp$wDIC <- round(tmp$wDIC,digits_p)
     tmp$wBPIC <- round(tmp$wBPIC,digits_p)
-    if(MarginalDeviance){
-      tmp$modelProbability <- round(modelProbability, digits_p)
+    if(BayesFactor){
+      tmp$wMD <- round(tmp$wMD, digits_p)
       tmp[,-c(2,4,6)] <- round(tmp[,-c(2,4,6)],digits=digits)
     } else{
       tmp[,-c(2,4)] <- round(tmp[,-c(2,4)],digits=digits)
@@ -518,73 +557,29 @@ compare_IC <- function(sList,filter="sample",subfilter=0,use_best_fit=TRUE,
 #' @return List of tables for each subject of effective number of parameters,
 #' mean deviance, deviance of mean, DIC, BPIC, and associated weights.
 #' @export
-compare_IC_subject <- function (sList, filter = "sample", subfilter = 0, use_best_fit = TRUE,
-    print_summary = TRUE, digits = 3)
-{
-    subjects <- names(sList[[1]][[1]]$data)
-    out <- setNames(vector(mode = "list", length = length(subjects)),
-        subjects)
-    for (i in subjects) out[[i]] <- compare_IC(sList, subject = i,
-        filter = filter, subfilter = subfilter, use_best_fit = use_best_fit,
-        print_summary = FALSE)
-    if (print_summary) {
-        wDIC <- lapply(out, function(x) x["wDIC"])
-        wBPIC <- lapply(out, function(x) x["wBPIC"])
-        pDIC <- do.call(rbind, lapply(wDIC, function(x) {
-            setNames(data.frame(t(x)), paste("wDIC", rownames(x),
-                sep = "_"))
-        }))
-        pBPIC <- do.call(rbind, lapply(wBPIC, function(x) {
-            setNames(data.frame(t(x)), paste("wBPIC", rownames(x),
-                sep = "_"))
-        }))
-        print(round(cbind(pDIC, pBPIC), digits))
-        mnams <- unlist(lapply(strsplit(dimnames(pDIC)[[2]],
-            "_"), function(x) {
-            x[[2]]
-        }))
-        cat("\nWinners\n")
-        print(rbind(DIC = table(mnams[apply(pDIC, 1, which.max)]),
-            BPIC = table(mnams[apply(pBPIC, 1, which.max)])))
-    }
-    invisible(out)
+
+compare_IC_subject <- function(sList,filter="sample",subfilter=0,use_best_fit=TRUE,
+                               print_summary=TRUE,digits=3) {
+
+  subjects <- names(sList[[1]][[1]]$data)
+  out <- setNames(vector(mode="list",length=length(subjects)),subjects)
+  for (i in subjects) out[[i]] <- compare_IC(sList,subject=i,
+                                             filter=filter,subfilter=subfilter,use_best_fit=use_best_fit,print_summary=FALSE)
+  if (print_summary) {
+    wDIC <- lapply(out,function(x)x["wDIC"])
+    wBPIC <- lapply(out,function(x)x["wBPIC"])
+    pDIC <- do.call(rbind,lapply(wDIC,function(x){
+      setNames(data.frame(t(x)),paste("wDIC",rownames(x),sep="_"))}))
+    pBPIC <- do.call(rbind,lapply(wBPIC,function(x){
+      setNames(data.frame(t(x)),paste("wBPIC",rownames(x),sep="_"))}))
+    print(round(cbind(pDIC,pBPIC),digits))
+    mnams <- unlist(lapply(strsplit(dimnames(pDIC)[[2]],"_"),function(x){x[[2]]}))
+    cat("\nWinners\n")
+    print(rbind(DIC=table(mnams[apply(pDIC,1,which.max)]),
+                BPIC=table(mnams[apply(pBPIC,1,which.max)])))
+  }
+  invisible(out)
 }
-# compare_IC_subject <- function(sList,filter="sample",subfilter=0,use_best_fit=TRUE,
-#                                MarginalDeviance = FALSE, cores_for_props =4, cores_per_prop = 1,
-#                         print_summary=TRUE,digits=3) {
-#
-#   subjects <- names(sList[[1]][[1]]$data)
-#   out <- setNames(vector(mode="list",length=length(subjects)),subjects)
-#   for (i in subjects) out[[i]] <- compare_IC(sList,subject=i,
-#     filter=filter,subfilter=subfilter,use_best_fit=use_best_fit,print_summary=FALSE,
-#     MarginalDeviance=MarginalDeviance,cores_for_props = cores_for_props, cores_per_prop=cores_per_prop)
-#   if (print_summary) {
-#     wDIC <- lapply(out,function(x)x["wDIC"])
-#     wBPIC <- lapply(out,function(x)x["wBPIC"])
-#     pDIC <- do.call(rbind,lapply(wDIC,function(x){
-#       setNames(data.frame(t(x)),paste("wDIC",rownames(x),sep="_"))}))
-#     pBPIC <- do.call(rbind,lapply(wBPIC,function(x){
-#       setNames(data.frame(t(x)),paste("wBPIC",rownames(x),sep="_"))}))
-#     mnams <- unlist(lapply(strsplit(dimnames(pDIC)[[2]],"_"),function(x){x[[2]]}))
-#     if (MarginalDeviance) {
-#       wMD <- lapply(out,function(x)x["wMD"])
-#       pMD <- do.call(rbind,lapply(wMD,function(x){
-#         setNames(data.frame(t(x)),paste("wMD",rownames(x),sep="_"))}))
-#       print(round(cbind(pMD,pDIC,pBPIC),digits))
-#       cat("\nWinners\n")
-#       print(rbind(MD=table(mnams[apply(pMD,1,which.max)]),
-#                   DIC=table(mnams[apply(pDIC,1,which.max)]),
-#                   BPIC=table(mnams[apply(pBPIC,1,which.max)])))
-#
-#     } else {
-#       print(round(cbind(pDIC,pBPIC),digits))
-#       cat("\nWinners\n")
-#       print(rbind(DIC=table(mnams[apply(pDIC,1,which.max)]),
-#                   BPIC=table(mnams[apply(pBPIC,1,which.max)])))
-#     }
-#   }
-#   invisible(out)
-# }
 
 
 #' Calculate a table of model probabilities based for a list of samples objects

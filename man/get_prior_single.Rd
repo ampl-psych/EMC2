@@ -9,7 +9,7 @@ get_prior_single(
   n_pars = NULL,
   sample = TRUE,
   N = 1e+05,
-  type = "mu",
+  type = "alpha",
   design = NULL,
   map = FALSE
 )

@@ -24,7 +24,7 @@ plot_prior(
 }
 \arguments{
 \item{prior}{A list of specifying prior means and covariance, if NULL default
-prior (mean=0, varaince = 1, uncorrelaterd)}
+prior (mean=0, variance = 1, uncorrelated)}
 
 \item{design}{Design corresponding to prior}
 

@@ -13,9 +13,9 @@
 #' @param Rlevels A character vector. Contains the response factor levels.
 #' Example: `c("right", "left")`
 #' @param model A function, specifies the model type.
-#' Choose from the drift diffusion model (`ddmTZD()`, `ddmTZDt0natural()`),
-#' the log-normal race model (`lnrMS()`), the linear ballistic model (`lbaB()`),
-#' the racing diffusion model (`rdmB()`, `rdmBt0natural()`), or define your own
+#' Choose from the drift diffusion model (`DDM()`, `DDMt0natural()`),
+#' the log-normal race model (`LNR()`), the linear ballistic model (`LBA()`),
+#' the racing diffusion model (`RDM()`, `RDMt0natural()`), or define your own
 #' model functions.
 #' @param ddata A data frame. `ddata` can be used to automatically detect
 #'  `Ffactors`, `Rlevels` and `Fcovariates` in a dataset. The variable `R` needs
@@ -98,6 +98,31 @@ make_design <- function(Flist = NULL,Ffactors = NULL,Rlevels = NULL,model,ddata=
                  Clist=Clist,matchfun=matchfun,constants=constants,
                  Fcovariates=Fcovariates,Ffunctions=Ffunctions,adapt=adapt,model=model)
   p_vector <- sampled_p_vector(design,design$model)
+
+  if (model()$type %in% c("MT","TC")) {
+    nt=length(Rlevels)
+    nr <- nt/2
+    dL <- matrix(nrow=nt,ncol=6)
+    if (model()$type == "TC") {
+      even <- array(c(1:nt),dim=c(2,nr))
+      odd <- as.vector(even[1,])
+      even <- as.vector(even[2,])
+      dL[odd,1] <- 1; dL[even,1] <- 2
+      dL[odd,2] <- (nr+1):2; dL[even,2] <- 2:(nr+1)
+      dL[odd,3] <- 2; dL[even,3] <- 1
+      dL[odd,4] <- 1:nr; dL[even,4] <- nr:1
+      dL[odd,5] <- 2; dL[even,5] <- 1
+      dL[odd,6] <- 2:(nr+1); dL[even,6] <- (nr+1):2
+    } else { # MT
+      dL[,1] <- c(rep(1,nr),rep(2,nr))
+      dL[,2] <- rep(nr+1,nt)
+      dL[,3] <- c(rep(2,nr),rep(1,nr))
+      dL[,4] <- c(1:nr,nr:1)
+      dL[,5] <- c(rep(2,nr),rep(1,nr))
+      dL[,6] <- c(2:(nr+1),(nr+1):2)
+    }
+    attr(design,"dL") <- dL
+  }
 
   if (model()$type=="SDT") {
     tnams <- dimnames(attr(p_vector,"map")$threshold)[[2]]
@@ -204,22 +229,37 @@ sampled_p_vector <- function(design,model=NULL,doMap=TRUE, add_da = FALSE)
 add_accumulators <- function(data,matchfun=NULL,simulate=FALSE,type="RACE", Fcovariates=NULL) {
   if (!is.factor(data$R)) stop("data must have a factor R")
   factors <- names(data)[!names(data) %in% c("R","rt","trials",Fcovariates)]
+if (type=="DDM") {
+    datar <- cbind(data,lR=factor(rep(levels(data$R)[1],dim(data)[1]),
+      levels=levels(data$R)),lM=factor(rep(TRUE,dim(data)[1])))
+  }
   if (type %in% c("RACE","SDT")) {
     datar <- cbind(do.call(rbind,lapply(1:length(levels(data$R)),function(x){data})),
                    lR=factor(rep(levels(data$R),each=dim(data)[1]),levels=levels(data$R)))
+    if (!is.null(matchfun)) {
+      lM <- matchfun(datar)
+      # if (any(is.na(lM)) || !(is.logical(lM)))
+      #   stop("matchfun not scoring properly")
+      datar$lM <- factor(lM)
+    }
+  }
+  if (type %in% c("MT","TC")) {
+    datar <- cbind(do.call(rbind,lapply(1:2,function(x){data})),
+      lR=factor(rep(1:2,each=dim(data)[1]),levels=1:2))
     if (!is.null(matchfun)) {
       lM <- matchfun(datar)
       if (any(is.na(lM)) || !(is.logical(lM)))
         stop("matchfun not scoring properly")
       datar$lM <- factor(lM)
     }
-  } else datar <- cbind(data,lR=factor(rep(levels(data$R)[1],dim(data)[1]),
-                                       levels=levels(data$R)),lM=factor(rep(TRUE,dim(data)[1]))) # For DDM
+  }
   row.names(datar) <- NULL
   if (simulate) datar$rt <- NA else {
     R <- datar$R
     R[is.na(R)] <- levels(datar$lR)[1]
-    datar$winner <- datar$lR==R
+
+    if (type %in% c("MT","TC")) datar$winner <- NA else
+      datar$winner <- datar$lR==R
     # datar$winner[is.na(datar$winner)] <- FALSE
   }
   # sort cells together
@@ -488,21 +528,21 @@ design_model <- function(data,design,model=NULL,
   if(is.null(design$DM_fixed)){ # LM type
     nams <- unlist(lapply(design$Flist,function(x)as.character(stats::terms(x)[[2]])))
     names(design$Flist) <- nams
-
     if (is.null(design$Clist)) design$Clist=list(stats::contr.treatment)
     if (!is.list(design$Clist)) stop("Clist must be a list")
     if (!is.list(design$Clist[[1]])[1]) # same contrasts for all p_types
       design$Clist <- stats::setNames(lapply(1:length(names(model()$p_types)),
-                                             function(x)design$Clist),names(model()$p_types)) else {
-                                               missing_p_types <- names(model()$p_types)[!(names(model()$p_types) %in% names(design$Clist))]
-                                               if (length(missing_p_types)>0) {
-                                                 nok <- length(design$Clist)
-                                                 for (i in 1:length(missing_p_types)) {
-                                                   design$Clist[[missing_p_types[i]]] <- list(stats::contr.treatment)
-                                                   names(design$Clist)[nok+i] <- missing_p_types[i]
-                                                 }
-                                               }
-                                             }
+                                             function(x)design$Clist),names(model()$p_types))
+    else {
+     missing_p_types <- names(model()$p_types)[!(names(model()$p_types) %in% names(design$Clist))]
+     if (length(missing_p_types)>0) {
+       nok <- length(design$Clist)
+       for (i in 1:length(missing_p_types)) {
+         design$Clist[[missing_p_types[i]]] <- list(stats::contr.treatment)
+         names(design$Clist)[nok+i] <- missing_p_types[i]
+       }
+     }
+   }
     if(model()$type != "MRI") for (i in names(model()$p_types)) attr(design$Flist[[i]],"Clist") <- design$Clist[[i]]
     out <- lapply(design$Flist,make_dm,da=da,Fcovariates=design$Fcovariates, add_da = add_da)
     if (!is.null(rt_resolution) & !is.null(da$rt)) da$rt <- round(da$rt/rt_resolution)*rt_resolution
@@ -531,7 +571,7 @@ design_model <- function(data,design,model=NULL,
     if (!is.null(rt_resolution) & !is.null(da$rt)) da$rt <- round(da$rt/rt_resolution)*rt_resolution
     design$DM_fixed <- lapply(design$DM_fixed, FUN = function(x) return(x[order_idx,,drop =F]))
     design$DM_random <- lapply(design$DM_random, FUN = function(x) return(x[order_idx,, drop = F]))
-    dadm <- compress_dadm_lm(da, design$DM_fixed, design$DM_random, Fcov = design$Fcovariates)
+    # dadm <- compress_dadm_lm(da, design$DM_fixed, design$DM_random, Fcov = design$Fcovariates)
     attr(dadm, "g_fixed") <- attr(design, "g_fixed")
     attr(dadm, "g_random") <- attr(design, "g_random")
     attr(dadm, "p_vector_random") <- attr(design, "p_vector_random")
@@ -554,6 +594,7 @@ design_model <- function(data,design,model=NULL,
   }
   attr(dadm,"ok_trials") <- is.finite(data$rt)
   attr(dadm,"s_data") <- data$subjects
+  attr(dadm,"dL") <- attr(design,"dL")
   # if (!is.null(design$adapt)) {
   #   attr(dadm,"adapt") <- stats::setNames(
   #     lapply(levels(dadm$subjects),augment,da=dadm,design=design),
@@ -686,13 +727,13 @@ dm_list <- function(dadm)
   expand_nort <- attr(dadm,"expand_nort")
   unique_nortR <- attr(dadm,"unique_nortR")
   expand_nortR <- attr(dadm,"expand_nortR")
-  ok_trials <- attr(dadm,"ok_trials")
-  ok_dadm_winner <- attr(dadm,"ok_dadm_winner")
-  ok_dadm_looser <- attr(dadm,"ok_dadm_looser")
-  ok_da_winner <- attr(dadm,"ok_da_winner")
-  ok_da_looser <- attr(dadm,"ok_da_looser")
-  expand_uc <- attr(dadm,"expand_uc")
-  expand_lc <- attr(dadm,"expand_lc")
+  # ok_trials <- attr(dadm,"ok_trials")
+  # ok_dadm_winner <- attr(dadm,"ok_dadm_winner")
+  # ok_dadm_looser <- attr(dadm,"ok_dadm_looser")
+  # ok_da_winner <- attr(dadm,"ok_da_winner")
+  # ok_da_looser <- attr(dadm,"ok_da_looser")
+  # expand_uc <- attr(dadm,"expand_uc")
+  # expand_lc <- attr(dadm,"expand_lc")
   adapt <- attr(dadm,"adapt")
 
   # winner on expanded dadm
@@ -707,8 +748,9 @@ dm_list <- function(dadm)
     dl[[i]] <- dadm[isin,]
     dl[[i]]$subjects <- factor(as.character(dl[[i]]$subjects))
     if(is.null(attr(dadm, "custom_ll"))){
+
       isin1 <- s_expand==i             # da
-      isin2 <- attr(dadm,"s_data")==i  # data
+      # isin2 <- attr(dadm,"s_data")==i  # data
 
 
       attr(dl[[i]],"model") <- model
@@ -718,35 +760,35 @@ dm_list <- function(dadm)
       attr(dl[[i]],"expand") <- expand[isin1]-min(expand[isin1]) + 1
       attr(dl[[i]],"s_expand") <- NULL
 
-      attr(dl[[i]],"ok_dadm_winner") <- ok_dadm_winner[isin]
-      attr(dl[[i]],"ok_dadm_looser") <- ok_dadm_looser[isin]
-
-      attr(dl[[i]],"ok_da_winner") <- ok_da_winner[isin1]
-      attr(dl[[i]],"ok_da_looser") <- ok_da_looser[isin1]
+      # attr(dl[[i]],"ok_dadm_winner") <- ok_dadm_winner[isin]
+      # attr(dl[[i]],"ok_dadm_looser") <- ok_dadm_looser[isin]
+      #
+      # attr(dl[[i]],"ok_da_winner") <- ok_da_winner[isin1]
+      # attr(dl[[i]],"ok_da_looser") <- ok_da_looser[isin1]
 
       attr(dl[[i]],"unique_nort") <- unique_nort[isin]
       attr(dl[[i]],"unique_nortR") <- unique_nortR[isin]
 
-      isinlR1 <- slR1==i
+      # isinlR1 <- slR1==i
+
       if (!is.null(expand_nort)){
-        attr(dl[[i]],"expand_nort") <-  expand_nort #[isinlR1]- min( expand_nort[isinlR1]) + 1
+        attr(dl[[i]],"expand_nort") <-  expand_nort[isin] - min(expand_nort[isin]) + 1
       }
-
       if (!is.null(expand_nortR)){
-        attr(dl[[i]],"expand_nortR") <- expand_nortR #[isinlR1]-min(expand_nortR[isinlR1]) + 1
+        attr(dl[[i]],"expand_nortR") <- expand_nortR[isin]-min(expand_nortR[isin]) + 1
       }
 
-      attr(dl[[i]],"ok_trials") <- ok_trials[isin2]
-      if (!is.null(expand_winner)){
-        attr(dl[[i]],"expand_winner") <- expand_winner[isin2]-min(expand_winner[isin2]) + 1
-      }
-
-      if (!is.null(attr(dadm,"expand_uc"))){
-        attr(dl[[i]],"expand_uc") <- as.numeric(factor(expand_uc[isin2]))
-      }
-      if (!is.null(attr(dadm,"expand_lc"))){
-        attr(dl[[i]],"expand_lc") <- as.numeric(factor(expand_lc[isin2]))
-      }
+      # attr(dl[[i]],"ok_trials") <- ok_trials[isin2]
+      # if (!is.null(expand_winner)){
+      #   attr(dl[[i]],"expand_winner") <- expand_winner[isin2]-min(expand_winner[isin2]) + 1
+      # }
+      #
+      # if (!is.null(attr(dadm,"expand_uc"))){
+      #   attr(dl[[i]],"expand_uc") <- as.numeric(factor(expand_uc[isin2]))
+      # }
+      # if (!is.null(attr(dadm,"expand_lc"))){
+      #   attr(dl[[i]],"expand_lc") <- as.numeric(factor(expand_lc[isin2]))
+      # }
 
       if (!is.null(attr(dadm,"LT"))){
         attr(dl[[i]],"LT") <- attr(dadm,"LT")[names(attr(dadm,"LT"))==i]
@@ -771,6 +813,5 @@ dm_list <- function(dadm)
 
   return(dl)
 }
-
 
 

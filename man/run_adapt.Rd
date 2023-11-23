@@ -20,8 +20,9 @@ run_adapt(
   cores_per_chain = 1,
   cores_for_chains = length(samplers),
   max_trys = 50,
-  n_blocks = NULL,
-  omit_mpsrf = FALSE
+  n_blocks = 1,
+  omit_mpsrf = FALSE,
+  omit_mu = TRUE
 )
 }
 \arguments{

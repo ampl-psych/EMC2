@@ -34,9 +34,9 @@ Example: \code{list(subjects=levels(dat$subjects), condition=levels(dat$conditio
 Example: \code{c("right", "left")}}
 
 \item{model}{A function, specifies the model type.
-Choose from the drift diffusion model (\code{ddmTZD()}, \code{ddmTZDt0natural()}),
-the log-normal race model (\code{lnrMS()}), the linear ballistic model (\code{lbaB()}),
-the racing diffusion model (\code{rdmB()}, \code{rdmBt0natural()}), or define your own
+Choose from the drift diffusion model (\code{DDM()}, \code{DDMt0natural()}),
+the log-normal race model (\code{LNR()}), the linear ballistic model (\code{LBA()}),
+the racing diffusion model (\code{RDM()}, \code{RDMt0natural()}), or define your own
 model functions.}
 
 \item{ddata}{A data frame. \code{ddata} can be used to automatically detect

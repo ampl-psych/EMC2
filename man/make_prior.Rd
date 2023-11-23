@@ -31,7 +31,7 @@ update only new values).}
 An EMC prior object
 }
 \description{
-Makes priors for single and standard model (in the assuming no correlation)
+Makes priors for single and standard model
 based an a design, by providing prior means (pmean) and standard deviations
 (psd), and possibly these values taken from another prior (supplied by the
 update argument), as long as those values have the same name as in the current

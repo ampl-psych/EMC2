@@ -2,14 +2,14 @@
 % Please edit documentation in R/statistics.R
 \name{compare_IC}
 \alias{compare_IC}
-\title{compare_IC}
+\title{IC based model selection for a list of samples objects.}
 \usage{
 compare_IC(
   sList,
   filter = "sample",
   subfilter = 0,
   use_best_fit = TRUE,
-  MarginalDeviance = FALSE,
+  BayesFactor = FALSE,
   cores_for_props = 4,
   cores_per_prop = 1,
   print_summary = TRUE,
@@ -28,15 +28,11 @@ compare_IC(
 \item{use_best_fit}{Boolean, default TRUE use best of minD and Dmean in
 calculation otherwise always use Dmean}
 
-\item{MarginalDeviance}{Boolean, default FALSE. Include marginal deviances (MD) as
-estimated using WARP-III bridge sampling. Usually takes a minute per model added to calculate}
+\item{BayesFactor}{Boolean, default FALSE. Include marginal likelihoods as estimated using WARP-III bridge sampling. Usually takes a minute per model added to calculate}
 
-\item{cores_for_props}{Integer, how many cores to use for MarginalDeviance calculation,
-here 4 is default for the 4 different proposal densities to evaluate, only 1, 2 and 4 are sensible.}
+\item{cores_for_props}{Integer, how many cores to use for BayesFactor calculation, here 4 is default for the 4 different proposal densities to evaluate, only 1, 2 and 4 are sensible.}
 
-\item{cores_per_prop}{Integer, how many cores to use for MarginalDeviance
-calculation if you have more than 4 cores available. Cores used will be
-cores_for_props * cores_per_prop, where prioritizing cores_for_props being 4 or 2 is fastest.}
+\item{cores_per_prop}{Integer, how many cores to use for BayesFactor calculation if you have more than 4 cores available. Cores used will be cores_for_props * cores_per_prop, where prioritizing cores_for_props being 4 or 2 is fastest.}
 
 \item{print_summary}{Boolean (default TRUE) print table of results}
 
@@ -49,8 +45,8 @@ returns sums over all subjects}
 }
 \value{
 Table of effective number of parameters, mean deviance, deviance of
-mean, DIC, BPIC, MD, and associated weights.
+mean, DIC, BPIC, Marginal Deviance (if BayesFactor=TRUE) and associated weights.
 }
 \description{
-Information Criteria and optionally Marginal-Deviance (MD) based model selection for a list of samples objects.
+IC based model selection for a list of samples objects.
 }

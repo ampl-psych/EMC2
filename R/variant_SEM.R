@@ -121,7 +121,7 @@ get_startpoints_SEM<- function(pmwgs, start_mu, start_var){
   start_B[B_mat != Inf] <- B_mat[B_mat != Inf]
   start_K[K_mat != Inf] <- K_mat[K_mat != Inf]
   start_G[G_mat != Inf] <- G_mat[G_mat != Inf]
-  sub_mu <- matrix(mu, nrow = pmwgs$n_subjects, ncol = n_pars, byrow = T)
+  sub_mu <- matrix(start_mu, nrow = pmwgs$n_subjects, ncol = n_pars, byrow = T)
   return(list(tmu = start_mu, tvar = start_var, lambda = start_lambda, B = start_B,
               K = start_K, G = start_G,
               epsilon_inv = start_epsilon_inv, delta_inv = start_delta_inv,

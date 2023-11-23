@@ -30,6 +30,7 @@
 #' @importFrom Rcpp sourceCpp
 #' @importFrom stats acf
 #' @importFrom stats as.dist
+#' @importFrom stats as.formula
 #' @importFrom stats cor
 #' @importFrom stats cov
 #' @importFrom stats cov2cor

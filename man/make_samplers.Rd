@@ -20,7 +20,13 @@ make_samplers(
   par_groups = NULL,
   n_factors = NULL,
   constraintMat = NULL,
-  formula = NULL
+  formula = NULL,
+  Lambda_mat = NULL,
+  B_mat = NULL,
+  K_mat = NULL,
+  G_mat = NULL,
+  xy = NULL,
+  xeta = NULL
 )
 }
 \arguments{

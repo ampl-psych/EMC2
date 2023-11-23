@@ -139,7 +139,7 @@ bridge_sampling <- function(samples, n_eff, split_idx, cores_for_props = 1, core
   }
 
   m <- colMeans(samples_fit)
-  V <- as.matrix(Matrix::nearPD(Rfast::cova(samples_fit))$mat)
+  V <- as.matrix(Matrix::nearPD(var(samples_fit))$mat)
   L <- t(chol(V))
   gen_samples <- mvtnorm::rmvnorm(nrow(samples_fit), mean = rep(0, ncol(samples_fit)), sigma = diag(ncol(samples_fit)))
 
@@ -154,7 +154,7 @@ bridge_sampling <- function(samples, n_eff, split_idx, cores_for_props = 1, core
 
   q11 <- qList$q11
   q21 <- qList$q21
-  save(q11, q12, q22, q21, L, m, file = "Qs.RData")
+  # save(q11, q12, q22, q21, L, m, file = "Qs.RData")
   tmp <- run.iterative.scheme(q11 = q11, q12 = q12, q21 = q21,
                               q22 = q22, r0 = r0, tol = tol1,
                               L = L, silent = T,
@@ -227,4 +227,3 @@ run_bridge_sampling <- function(samplers, filter = "sample", subfilter = 0, repe
   }
   return(mls)
 }
-

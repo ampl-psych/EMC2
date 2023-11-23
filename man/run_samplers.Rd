@@ -22,7 +22,7 @@ run_samplers(
   cores_per_chain = 1,
   cores_for_chains = length(samplers),
   max_trys = 50,
-  n_blocks = NULL,
+  n_blocks = 1,
   omit_mpsrf = FALSE,
   omit_mu = TRUE
 )

@@ -88,15 +88,15 @@ init <- function(pmwgs, start_mu = NULL, start_var = NULL,
                                           startpoints$tvar, startpoints_nuis$tvar,
                                           pmwgs$nuisance[!pmwgs$grouped])
     pmwgs$sampler_nuis$samples <- get_variant_funs(type)$fill_samples(samples = pmwgs$sampler_nuis$samples,
-                                                                    group_level = startpoints_nuis,
-                                                                    epsilon = epsilon, j = 1,
-                                                                    proposals = NULL,
-                                                                    n_pars = pmwgs$n_pars)
+                                                                      group_level = startpoints_nuis,
+                                                                      epsilon = epsilon, j = 1,
+                                                                      proposals = NULL,
+                                                                      n_pars = pmwgs$n_pars)
     pmwgs$sampler_nuis$samples$idx <- 1
   }
   if(any(pmwgs$grouped)){
     grouped_pars <- mvtnorm::rmvnorm(particles, pmwgs$prior$prior_grouped$theta_mu_mean,
-                            pmwgs$prior$prior_grouped$theta_mu_var)
+                                     pmwgs$prior$prior_grouped$theta_mu_var)
   } else{
     grouped_pars <- NULL
   }
@@ -138,8 +138,8 @@ init <- function(pmwgs, start_mu = NULL, start_var = NULL,
 #'
 #' @examples
 init_chains <- function(samplers, start_mu = NULL, start_var = NULL,
-                 verbose = FALSE, particles = 1000,
-                 cores_per_chain=1,cores_for_chains = length(samplers))
+                        verbose = FALSE, particles = 1000,
+                        cores_per_chain=1,cores_for_chains = length(samplers))
 {
   mclapply(samplers,init,start_mu = start_mu, start_var = start_var,
            verbose = verbose, particles = particles,
@@ -147,8 +147,8 @@ init_chains <- function(samplers, start_mu = NULL, start_var = NULL,
 }
 
 start_proposals_group <- function(data, group_pars, alpha, par_names,
-                               likelihood_func, is_grouped,
-                               variant_funs, subjects, n_cores){
+                                  likelihood_func, is_grouped,
+                                  variant_funs, subjects, n_cores){
   num_particles <- nrow(group_pars)
   n_subjects <- length(subjects)
   proposals_list <- vector("list", n_subjects)
@@ -250,10 +250,10 @@ run_stage <- function(pmwgs,
       pars_comb <- merge_group_level(pars$tmu, pars_nuis$tmu, pars$tvar, pars_nuis$tvar, nuisance[!grouped])
       pars_comb$alpha <- pmwgs$samples$alpha[,,j-1]
       pmwgs$sampler_nuis$samples <- get_variant_funs(type)$fill_samples(samples = pmwgs$sampler_nuis$samples,
-                                                                                              group_level = pars_nuis,
-                                                                                              epsilon = epsilon, j = j,
-                                                                                              proposals = NULL,
-                                                                                              n_pars = n_pars)
+                                                                        group_level = pars_nuis,
+                                                                        epsilon = epsilon, j = j,
+                                                                        proposals = NULL,
+                                                                        n_pars = n_pars)
       pmwgs$sampler_nuis$samples$idx <- j
     }
     if(any(grouped)){
@@ -269,10 +269,10 @@ run_stage <- function(pmwgs,
 
     # Particle step
     proposals <- parallel::mcmapply(new_particle, 1:pmwgs$n_subjects, data, particles, eff_mu, eff_var, chains_cov,
-                       pmwgs$samples$subj_ll[,j-1],
-                       MoreArgs = list(pars_comb, mix, pmwgs$ll_func, epsilon, components, stage,
-                                       variant_funs$get_group_level, block_idx, shared_ll_idx, grouped_pars, grouped),
-                       mc.cores =n_cores)
+                                    pmwgs$samples$subj_ll[,j-1],
+                                    MoreArgs = list(pars_comb, mix, pmwgs$ll_func, epsilon, components, stage,
+                                                    variant_funs$get_group_level, block_idx, shared_ll_idx, grouped_pars, grouped),
+                                    mc.cores =n_cores)
     proposals <- array(unlist(proposals), dim = c(pmwgs$n_pars - sum(grouped) + 2, pmwgs$n_subjects))
 
     #Fill samples
@@ -424,7 +424,7 @@ new_particle_group <- function(data, num_particles, prior,
 
 
 calc_ll_for_group <- function(proposals, data, ll){
-  lw <- EMC2:::calc_ll_manager(proposals, dadm = data, ll)
+  lw <- calc_ll_manager(proposals, dadm = data, ll)
 }
 
 
@@ -839,4 +839,3 @@ run_hyper <- function(type, data, prior = NULL, iter = 5000, ...){
   }
   return(sampler)
 }
-

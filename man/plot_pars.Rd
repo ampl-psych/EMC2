@@ -28,7 +28,8 @@ plot_pars(
   adjust = 1,
   do_contraction = TRUE,
   lpos = "topright",
-  digits = 3
+  digits = 3,
+  use_main = NULL
 )
 }
 \arguments{
@@ -87,6 +88,8 @@ plotted as vertical lines.}
 \item{lpos}{Position of contraction in graph}
 
 \item{digits}{Rounding of contraction}
+
+\item{use_main}{Character string for title to use. If NULL (defualt) auto generated.}
 }
 \value{
 Invisibly returns tables of true and 95\% CIs (for all chains combined

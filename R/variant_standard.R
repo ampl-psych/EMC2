@@ -86,7 +86,13 @@ get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1
                              rate = 1/(prior$A^2))
         var[,,i] <- riwish(prior$v + n_pars - 1, 2 * prior$v * diag(1 / a_half))
       }
-      if (type == "variance") out$variance <- t(apply(var,3,diag))
+      if (type == "variance") {
+        vars_only <- t(apply(var,3,diag))
+        if(!is.null(design)){
+          colnames(vars_only) <- names(attr(design, "p_vector"))
+        }
+        out$variance <- vars_only
+      }
       lt <- lower.tri(var[,,1])
       if (type == "correlation"){
         corrs <- array(apply(var,3,cov2cor),dim=dim(var),dimnames=dimnames(var))
