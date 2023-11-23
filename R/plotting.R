@@ -305,6 +305,7 @@ plot_defective_density <- function(data,subject=NULL,factors=NULL,
 #' @param do_contraction Print the prior to posterior contraction (1 - var(prior)/var(posterior))
 #' @param lpos Position of contraction in graph
 #' @param digits Rounding of contraction
+#' @param use_main Character string for title to use. If NULL (defualt) auto generated.
 #'
 #' @return Invisibly returns tables of true and 95% CIs (for all chains combined
 #'no matter what show_chains is), if do_contraction with a "contraction" attribute.
@@ -315,7 +316,8 @@ plot_pars <- function(pmwg_mcmc,layout=c(2,3),use_par=NULL,
   plot_prior=TRUE,n_prior=1e3,xlim=NULL,ylim=NULL,prior_xlim=NULL,
   show_chains=FALSE,do_plot=TRUE,subject=NA,add_means=FALSE,
   pars=NULL,probs=c(.025,.5,.975),bw = "nrd0", adjust = 1,
-  do_contraction=TRUE,lpos="topright",digits=3)
+  do_contraction=TRUE,lpos="topright",digits=3,
+  use_main=NULL)
   #  (if alpha can do individual subject, all by default)
   # If show_chains superimposes densities for each chain on same plot
   #
@@ -426,8 +428,9 @@ plot_pars <- function(pmwg_mcmc,layout=c(2,3),use_par=NULL,
             if (!is.null(ylim)) {
               if (!is.matrix(ylim)) ylimi <- ylim else ylimi <- ylim[j,]
             } else ylimi <- c(0,max(unlist(lapply(dens,function(x){max(x$y)}))))
-            plot(dens[[1]],xlab=j,main=paste0(attr(pmwg_mcmc,"selection")," s",i),
-                 col=1,xlim=xlimi,ylim=ylimi)
+            if (!is.null(use_main)) main <- use_main else
+              main <- paste0(attr(pmwg_mcmc,"selection")," s",i)
+            plot(dens[[1]],xlab=j,main=main,col=1,xlim=xlimi,ylim=ylimi)
             if (chains>1) for (k in 2:chains) lines(dens[[k]],col=k)
           } else {
             dens <- density(pmwg_mcmc[[i]][,j],bw=bw,adjust=adjust)
@@ -448,8 +451,9 @@ plot_pars <- function(pmwg_mcmc,layout=c(2,3),use_par=NULL,
               ylimi <- c(0,max(dens$y))
               if (plot_prior) ylimi[2] <- max(c(ylimi[2],pdens$y))
             }
-            plot(dens,xlab=j,xlim=xlimi,ylim=ylimi,
-                 main=paste0(attr(pmwg_mcmc,"selection")," s",i))
+            if (!is.null(use_main)) main <- use_main else
+              main <- paste0(attr(pmwg_mcmc,"selection")," s",i)
+            plot(dens,xlab=j,xlim=xlimi,ylim=ylimi,main=main)
             if (plot_prior) lines(pdens,col="red")
             if (do_contraction) {
               contractioni[j] <- 1-(var(pmwg_mcmc[[i]][,j])/var(psamples[,j]))
@@ -516,7 +520,8 @@ plot_pars <- function(pmwg_mcmc,layout=c(2,3),use_par=NULL,
         }
         if (!is.null(ylim)) ylimi <- ylim else
           ylimi <- c(0,max(unlist(lapply(dens,function(x){max(x$y)}))))
-        plot(dens[[1]],xlab=attr(pmwg_mcmc,"selection"),main=j,
+        if (!is.null(use_main)) main <- use_main else main <- j
+        plot(dens[[1]],xlab=attr(pmwg_mcmc,"selection"),main=main,
              col=1,xlim=xlimi,ylim=ylimi)
         if (chains>1) for (k in 2:chains) lines(dens[[k]],col=k)
       } else {
@@ -534,7 +539,8 @@ plot_pars <- function(pmwg_mcmc,layout=c(2,3),use_par=NULL,
           ylimi <- c(0,max(dens$y))
           if (plot_prior) ylimi[2] <- max(c(ylimi[2],pdens$y))
         }
-        plot(dens,xlim=xlimi,ylim=ylimi,xlab=attr(pmwg_mcmc,"selection"),main=j)
+        if (!is.null(use_main)) main <- use_main else main <- j
+        plot(dens,xlim=xlimi,ylim=ylimi,xlab=attr(pmwg_mcmc,"selection"),main=main)
         if (plot_prior) {
           lines(pdens,col="red")
           if (do_contraction) {
