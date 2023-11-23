@@ -201,8 +201,8 @@ dRDM <- function(rt,pars)
   # density for single accumulator
 {
   out <- numeric(length(rt))
-  ok <- rt > pars[,"t0"] &
-    !pars[,"v"] < 0  # code handles rate zero case
+  ok <- rt > pars[,"t0"] & !pars[,"v"] < 0  # code handles rate zero case
+  ok[is.na(ok)] <- FALSE
   if (any(dimnames(pars)[[2]]=="s")) # rescale
     pars[ok,c("A","B","v")] <- pars[ok,c("A","B","v")]/pars[ok,"s"]
   out[ok] <- dWald(rt[ok],v=pars[ok,"v"],B=pars[ok,"B"],A=pars[ok,"A"],t0=pars[ok,"t0"])
@@ -214,8 +214,8 @@ pRDM <- function(rt,pars)
   # cumulative density for single accumulator
 {
   out <- numeric(length(rt))
-  ok <- rt > pars[,"t0"] &
-    !pars[,"v"] < 0  # code handles rate zero case
+  ok <- rt > pars[,"t0"] & !pars[,"v"] < 0  # code handles rate zero case
+  ok[is.na(ok)] <- FALSE
   if (any(dimnames(pars)[[2]]=="s")) # rescale
     pars[ok,c("A","B","v")] <- pars[ok,c("A","B","v")]/pars[ok,"s"]
   out[ok] <- pWald(rt[ok],v=pars[ok,"v"],B=pars[ok,"B"],A=pars[ok,"A"],t0=pars[ok,"t0"])
