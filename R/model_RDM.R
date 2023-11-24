@@ -316,11 +316,11 @@ rRDM <- function(lR,pars,p_types=c("v","B","A","t0"),ok=rep(TRUE,dim(pars)[1]))
 #' @return A list defining the cognitive model
 #' @export
 
-rdmB <- function(){
+RDM <- function(){
   list(
     type="RACE",
-    c_name = "rdmB",
-    p_types=c("v","B","A","t0","s"),
+    c_name = "RDM",
+    p_types=c("v" = log(1),"B" = log(1),"A" = log(0),"t0" = log(0),"s" = log(1)),
     # Transform to natural scale
     Ntransform=function(x) {
       # transform parameters back to real line
@@ -357,10 +357,10 @@ rdmB <- function(){
 #' @return A list defining the cognitive model
 #' @export
 
-rdmBt0natural <- function(){
+RDMt0natural <- function(){
   list(
     type="RACE",
-    p_types=c("v","B","A","t0","s"),
+    p_types=c("v" = log(1),"B" = log(1),"A" = log(0),"t0" = 0,"s" = log(1)),
     # Transform to natural scale
     Ntransform=function(x) {
       x[,dimnames(x)[[2]]  != "t0"] <- exp(x[,dimnames(x)[[2]]  != "t0"])
