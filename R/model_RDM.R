@@ -201,8 +201,8 @@ dRDM <- function(rt,pars)
   # density for single accumulator
 {
   out <- numeric(length(rt))
-  ok <- rt > pars[,"t0"] &
-    !pars[,"v"] < 0  # code handles rate zero case
+  ok <- rt > pars[,"t0"] & !pars[,"v"] < 0  # code handles rate zero case
+  ok[is.na(ok)] <- FALSE
   if (any(dimnames(pars)[[2]]=="s")) # rescale
     pars[ok,c("A","B","v")] <- pars[ok,c("A","B","v")]/pars[ok,"s"]
   out[ok] <- dWald(rt[ok],v=pars[ok,"v"],B=pars[ok,"B"],A=pars[ok,"A"],t0=pars[ok,"t0"])
@@ -214,8 +214,8 @@ pRDM <- function(rt,pars)
   # cumulative density for single accumulator
 {
   out <- numeric(length(rt))
-  ok <- rt > pars[,"t0"] &
-    !pars[,"v"] < 0  # code handles rate zero case
+  ok <- rt > pars[,"t0"] & !pars[,"v"] < 0  # code handles rate zero case
+  ok[is.na(ok)] <- FALSE
   if (any(dimnames(pars)[[2]]=="s")) # rescale
     pars[ok,c("A","B","v")] <- pars[ok,c("A","B","v")]/pars[ok,"s"]
   out[ok] <- pWald(rt[ok],v=pars[ok,"v"],B=pars[ok,"B"],A=pars[ok,"A"],t0=pars[ok,"t0"])
@@ -316,11 +316,11 @@ rRDM <- function(lR,pars,p_types=c("v","B","A","t0"),ok=rep(TRUE,dim(pars)[1]))
 #' @return A list defining the cognitive model
 #' @export
 
-RDM <- function(){
+rdmB <- function(){
   list(
     type="RACE",
-    c_name = "RDM",
-    p_types=c("v" = log(1),"B" = log(1),"A" = log(0),"t0" = log(0),"s" = log(1)),
+    c_name = "rdmB",
+    p_types=c("v","B","A","t0","s"),
     # Transform to natural scale
     Ntransform=function(x) {
       # transform parameters back to real line
@@ -357,10 +357,10 @@ RDM <- function(){
 #' @return A list defining the cognitive model
 #' @export
 
-RDMt0natural <- function(){
+rdmBt0natural <- function(){
   list(
     type="RACE",
-    p_types=c("v" = log(1),"B" = log(1),"A" = log(0),"t0" = 0,"s" = log(1)),
+    p_types=c("v","B","A","t0","s"),
     # Transform to natural scale
     Ntransform=function(x) {
       x[,dimnames(x)[[2]]  != "t0"] <- exp(x[,dimnames(x)[[2]]  != "t0"])
@@ -389,4 +389,3 @@ RDMt0natural <- function(){
       log_likelihood_race(p_vector=p_vector, dadm = dadm, min_ll = min_ll)
   )
 }
-
