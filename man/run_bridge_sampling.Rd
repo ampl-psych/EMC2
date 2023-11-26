@@ -15,7 +15,8 @@ run_bridge_sampling(
   maxiter = 5000,
   r0 = 1e-05,
   tol1 = 1e-10,
-  tol2 = 1e-06
+  tol2 = 1e-06,
+  hyper_only = F
 )
 }
 \arguments{

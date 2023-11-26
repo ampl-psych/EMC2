@@ -60,7 +60,7 @@ get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1
   prior$theta_mu_invar <- ginv(prior$theta_mu_var) #Inverse of the matrix
   if(sample){
     out <- list()
-    if(!type %in% c("mu", "variance", "covariance", "correlation")){
+    if(!type %in% c("mu", "variance", "covariance", "correlation", "full_var")){
       stop("for variant standard, you can only specify the prior on the mean, variance, covariance or the correlation of the parameters")
     }
     if(type == "mu"){
@@ -100,6 +100,9 @@ get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1
       }
       if(type == "covariance"){
         out$covariance <- t(apply(var,3,function(x){x[lt]}))
+      }
+      if (type == "full_var"){
+        out$full_var <- t(apply(var, 3, c))
       }
       return(out)
     }

@@ -1,4 +1,4 @@
-make_info <- function(samples, variant_funs, split_idx){
+make_info <- function(samples, variant_funs){
   info <- list(
     subjects = samples$subjects,
     par_names = samples$par_names,
@@ -8,13 +8,14 @@ make_info <- function(samples, variant_funs, split_idx){
     variant_funs = variant_funs,
     ll_func = samples$ll_func
   )
-  info <- variant_funs$bridge_add_info(info, samples, split_idx)
+  info <- variant_funs$bridge_add_info(info, samples)
 
 }
 
 
 
-eval.unnormalized.posterior <- function(samples_iter, gen_samples, data, m, L, info, cores_for_props = 1, cores_per_prop = 1) {
+eval.unnormalized.posterior <- function(samples_iter, gen_samples, data, m, L, info, cores_for_props = 1, cores_per_prop = 1,
+                                        hyper_only = FALSE) {
 
   ### evaluate unnormalized posterior for posterior and generated samples
   n_post <- nrow(samples_iter)
@@ -28,7 +29,7 @@ eval.unnormalized.posterior <- function(samples_iter, gen_samples, data, m, L, i
     q21.a = m_min_gen,
     q21.b = m_plus_gen
   )
-  mls <- mclapply(samples_list, h.unnormalized.posterior, data = data, info = info, n_cores = cores_per_prop,
+  mls <- mclapply(samples_list, h.unnormalized.posterior, data = data, info = info, n_cores = cores_per_prop, hyper_only = hyper_only,
                   mc.cores = cores_for_props)
   q11 <- log(e^(mls$q11.a) + e^(mls$q11.b))
   q21 <- log(e^(mls$q21.a) + e^(mls$q21.b))
@@ -40,7 +41,7 @@ eval.unnormalized.posterior <- function(samples_iter, gen_samples, data, m, L, i
 # Q21 = samples + cov
 
 
-h.unnormalized.posterior <- function(proposals, data, info, n_cores) {
+h.unnormalized.posterior <- function(proposals, data, info, n_cores, hyper_only) {
   n_pars <- info$n_pars
   n_subjects <- info$n_subjects
   proposals_list <- vector("list", length = n_subjects)
@@ -49,8 +50,12 @@ h.unnormalized.posterior <- function(proposals, data, info, n_cores) {
     colnames(tmp) <- info$par_names
     proposals_list[[i]] <- tmp
   }
-  lws <- parallel::mcmapply(calc_ll_for_group, proposals_list, data, MoreArgs = list(ll = info$ll_func), mc.cores = n_cores)
-  lw <- rowSums(lws)
+  if(hyper_only){
+    lw <- 0
+  } else{
+    lws <- parallel::mcmapply(calc_ll_for_group, proposals_list, data, MoreArgs = list(ll = info$ll_func), mc.cores = n_cores)
+    lw <- rowSums(lws)
+  }
   proposals_group <- proposals[,info$group_idx]
   gr_pr_jac <- info$variant_funs$bridge_group_and_prior_and_jac(proposals_group, proposals_list, info)
   return(lw + gr_pr_jac)
@@ -120,10 +125,10 @@ run.iterative.scheme <- function(q11, q12, q21, q22, r0, tol,
 
 
 bridge_sampling <- function(samples, n_eff, split_idx, cores_for_props = 1, cores_per_prop = 1, maxiter = 5000,
-                            filter = "sample", r0 = 1e-5, tol1 = 1e-10, tol2 = 1e-6){
+                            filter = "sample", r0 = 1e-5, tol1 = 1e-10, tol2 = 1e-6, hyper_only = F){
   variant_funs <- attr(samples, "variant_funs")
   data <- samples$data
-  info <- make_info(samples, variant_funs, split_idx)
+  info <- make_info(samples, variant_funs)
   n_pars <- samples$n_pars
   n_subjects <- samples$n_subjects
   idx <- samples$samples$stage == filter
@@ -142,15 +147,20 @@ bridge_sampling <- function(samples, n_eff, split_idx, cores_for_props = 1, core
   V <- as.matrix(Matrix::nearPD(var(samples_fit))$mat)
   L <- t(chol(V))
   gen_samples <- mvtnorm::rmvnorm(nrow(samples_fit), mean = rep(0, ncol(samples_fit)), sigma = diag(ncol(samples_fit)))
+  q12_input <- (samples_iter - matrix(m, nrow = nrow(samples_iter),
+                                      ncol = length(m),
+                                      byrow = TRUE)) %*%t(solve(L))
+  if(hyper_only){
+    q12 <- mvtnorm::dmvnorm(q12_input[,info$group_idx],  mean = rep(0, length(info$group_idx)), sigma = diag(length(info$group_idx)), log = TRUE)
+    q22 <- mvtnorm::dmvnorm(gen_samples[,info$group_idx], mean = rep(0, length(info$group_idx)), sigma = diag(length(info$group_idx)), log = TRUE)
+  } else{
+    q12 <- mvtnorm::dmvnorm(q12_input,  mean = rep(0, ncol(samples_iter)), sigma = diag(ncol(samples_iter)), log = TRUE)
+    q22 <- mvtnorm::dmvnorm(gen_samples, mean = rep(0, ncol(samples_fit)), sigma = diag(ncol(samples_fit)), log = TRUE)
+  }
 
-  q12 <- mvtnorm::dmvnorm((samples_iter - matrix(m, nrow = nrow(samples_iter),
-                                                 ncol = length(m),
-                                                 byrow = TRUE)) %*%
-                            t(solve(L)),  mean = rep(0, ncol(samples_iter)), sigma = diag(ncol(samples_iter)), log = TRUE)
-  q22 <- mvtnorm::dmvnorm(gen_samples, mean = rep(0, ncol(samples_fit)), sigma = diag(ncol(samples_fit)), log = TRUE)
-  info <- make_info(samples, variant_funs)
   qList <- eval.unnormalized.posterior(samples_iter = samples_iter, gen_samples = gen_samples,
-                                       data = data, m = m, L =L, info = info, cores_for_props = cores_for_props, cores_per_prop = cores_per_prop)
+                                       data = data, m = m, L =L, info = info, cores_for_props = cores_for_props, cores_per_prop = cores_per_prop,
+                                       hyper_only = hyper_only)
 
   q11 <- qList$q11
   q21 <- qList$q21
@@ -196,7 +206,7 @@ bridge_sampling <- function(samples, n_eff, split_idx, cores_for_props = 1, core
 #' @export
 #'
 run_bridge_sampling <- function(samplers, filter = "sample", subfilter = 0, repetitions = 1, cores_for_props = 4,  cores_per_prop = 1, both_splits = T, maxiter = 5000,
-                                r0 = 1e-5, tol1 = 1e-10, tol2 = 1e-6){
+                                r0 = 1e-5, tol1 = 1e-10, tol2 = 1e-6, hyper_only = F){
 
   if(subfilter != 0){
     samplers <- lapply(samplers, remove_iterations, select = subfilter, filter = filter)
@@ -211,18 +221,18 @@ run_bridge_sampling <- function(samplers, filter = "sample", subfilter = 0, repe
       split1 <- seq(1, round(sum(idx)/2))
       s1 <- bridge_sampling(samples, n_eff, split1, cores_for_props = cores_for_props, cores_per_prop = cores_per_prop,
                             maxiter = maxiter, filter = filter,
-                            r0 = r0, tol1 = tol1, tol2 = tol2)
+                            r0 = r0, tol1 = tol1, tol2 = tol2, hyper_only = hyper_only)
       split2 <- seq(round(sum(idx)/2 + 1) : sum(idx))
       s2 <- bridge_sampling(samples, n_eff, split2, cores_for_props = cores_for_props, cores_per_prop = cores_per_prop,
                             maxiter = maxiter, filter = filter,
-                            r0 = r0, tol1 = tol1, tol2 = tol2)
+                            r0 = r0, tol1 = tol1, tol2 = tol2, hyper_only = hyper_only)
       if(abs(s1 - s2) > 1) warning("First split and second split marginal likelihood estimates are off by 1 log point. \n This usually means that your MCMC chains aren't completely stable yet. \n Consider running the MCMC chain longer if you need more precise estimates (e.g. when comparing different priors)")
       mls[i] <- mean(c(s1, s2))
     } else{
       split_idx <- seq(1, sum(idx), by = 2)
       mls[i] <- bridge_sampling(samples, n_eff, split_idx, cores_for_props = cores_for_props, cores_per_prop = cores_per_prop,
                                 maxiter = maxiter, filter = filter,
-                                r0 = r0, tol1 = tol1, tol2 = tol2)
+                                r0 = r0, tol1 = tol1, tol2 = tol2, hyper_only = hyper_only)
     }
   }
   return(mls)

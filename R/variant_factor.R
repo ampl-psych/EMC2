@@ -267,16 +267,15 @@ get_all_pars_factor <- function(samples, filter, info){
   return(list(X = X, mu_tilde = mu_tilde, var_tilde = var_tilde, info = info))
 }
 
-unwind_lambda <- function(lambda, constraintMat, n_factors = NULL, n_randeffect = NULL, reverse = F){
+unwind_lambda <- function(lambda, constraintMat, reverse = F){
   if(reverse){
-    out <- matrix(0, n_randeffect, n_factors)
+    out <- constraintMat
     out[constraintMat == Inf] <- lambda
   } else{
     out <- as.numeric(lambda[constraintMat == Inf])
   }
   return(out)
 }
-
 group_dist_factor = function(random_effect = NULL, parameters, sample = FALSE, n_samples = NULL, info){
   n_randeffect <- info$n_randeffect
   n_factors <- info$n_factors

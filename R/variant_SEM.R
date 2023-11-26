@@ -288,7 +288,7 @@ filtered_samples_SEM <- function(sampler, filter){
 
 
 # bridge_sampling ---------------------------------------------------------
-bridge_add_info_SEM <- function(info, samples, idx){
+bridge_add_info_SEM <- function(info, samples){
   info$Lambda_mat <- attr(samples, "Lambda_mat")
   info$B_mat <- attr(samples, "B_mat")
   info$K_mat <- attr(samples, "K_mat")
@@ -297,10 +297,11 @@ bridge_add_info_SEM <- function(info, samples, idx){
   info$n_cov_y <- samples$n_cov_y
   info$n_cov_eta <- samples$n_cov_eta
   info$xy <- samples$xy
+  info$xeta <- samples$xeta
   # How many free regressors do we have
   free_regrs <- sum(info$Lambda_mat == Inf) + sum(info$B_mat == Inf) + sum(info$K_mat == Inf) + sum(info$G_mat == Inf)
-  # Also group_level mean and residual parameter variances
-  other <- samples$n_pars + samples$n_pars
+  # Also group_level mean and residual parameter variances (and eta)
+  other <- samples$n_pars + samples$n_pars + samples$n_factors * samples$n_subjects
   # Now we split residual factor variances in structured and unstructured
   is_structured <- rowSums(info$B_mat == Inf) != 0
   # We only get one parameter for the structured and a cholesky decomp number of parameters for the unstructured
@@ -308,7 +309,7 @@ bridge_add_info_SEM <- function(info, samples, idx){
   info$is_structured <- is_structured
   info$group_idx <- (samples$n_pars*samples$n_subjects + 1):(samples$n_pars*samples$n_subjects + free_regrs + other)
   # add factor scores here, they're not a parameter with a prior on them and I treat them as such
-  info$eta <- samples$samples$eta[,,idx, drop = F]
+  # info$eta <- samples$samples$eta[,,idx, drop = F]
   return(info)
 }
 
@@ -326,6 +327,7 @@ bridge_add_group_SEM <- function(all_samples, samples, idx){
   all_samples <- cbind(all_samples, t(matrix(apply(samples$samples$G[,,idx,drop = F], 3, unwind_lambda, G_mat), ncol = nrow(all_samples))))
 
   all_samples <- cbind(all_samples, t(log(apply(samples$samples$epsilon_inv[,,idx], 3, diag))))
+  all_samples <- cbind(all_samples, t(apply(samples$samples$eta[,,idx], 3, c)))
   # For delta we split it in structured and unstructured parts of the covariance matrix
   # The unstructured parts get covariances and thus have to be decomposed with cholesky
   is_structured <- rowSums(B_mat == Inf) != 0
@@ -348,26 +350,26 @@ bridge_group_and_prior_and_jac_SEM <- function(proposals_group, proposals_list, 
   new_end <- prev_end + sum(info$Lambda_mat == Inf)
 
   # Regressors
-  lambda <- proposals_group[,(prev_end+1):new_end, drop = F]
+  if(prev_end != new_end) lambda <- proposals_group[,(prev_end+1):new_end, drop = F]
   prev_end <- new_end
   new_end <- prev_end + sum(info$B_mat == Inf)
-  B <- proposals_group[,(prev_end+1):new_end, drop = F]
+  if(prev_end != new_end) B <- proposals_group[,(prev_end+1):new_end, drop = F]
   prev_end <- new_end
   new_end <- prev_end + sum(info$K_mat == Inf)
-  K <- proposals_group[,(prev_end+1):new_end, drop = F]
+  if(prev_end != new_end) K <- proposals_group[,(prev_end+1):new_end, drop = F]
   prev_end <- new_end
   new_end <- prev_end +  sum(info$G_mat == Inf)
-  G <- proposals_group[,(prev_end+1):new_end, drop = F]
+  if(prev_end != new_end) G <- proposals_group[,(prev_end+1):new_end, drop = F]
 
   # Others
   prev_end <- new_end
   new_end <- prev_end + info$n_pars
   epsilon_inv <- proposals_group[,(prev_end+1):new_end, drop = F]
 
-  # prev_end <- new_end
-  # new_end <- prev_end + info$n_factors*info$n_subjects
-  # eta <- proposals_group[,(prev_end+1):new_end, drop = F]
-  #
+  prev_end <- new_end
+  new_end <- prev_end + info$n_factors*info$n_subjects
+  eta <- proposals_group[,(prev_end+1):new_end, drop = F]
+
   # Get the deltas separately
   prev_end <- new_end
   new_end <- prev_end + sum(info$is_structured)
@@ -379,31 +381,81 @@ bridge_group_and_prior_and_jac_SEM <- function(proposals_group, proposals_list, 
 
   n_iter <- nrow(theta_mu)
   sum_out <- numeric(n_iter)
+  delta_curr <- matrix(0, nrow = length(info$is_structured), ncol = length(info$is_structured))
+
   for(i in 1:n_iter){ # these unfortunately can't be vectorized
     # Put all our stuff back together
+    if(sum(info$Lambda_mat == Inf) > 0) {
+      lambda_curr <- unwind_lambda(lambda[i,], info$Lambda_mat, reverse = T)
+    } else{
+      lambda_curr <- info$Lambda_mat
+    }
     lambda_curr <- unwind_lambda(lambda[i,], info$Lambda_mat, reverse = T)
-    # B_curr <- unwind_lambda(B[i,], info$B_mat, reverse = T)
-    K_curr <- unwind_lambda(K[i,], info$K_mat,  reverse = T)
-    # G_curr <- unwind_lambda(G[i,], info$G_mat, reverse = T)
-    eta_curr <- info$eta[,,i]
-
+    if(sum(info$B_mat == Inf) > 0) {
+      B_curr <- unwind_lambda(B[i,], info$B_mat, reverse = T)
+    } else{
+      B_curr <- info$B_mat
+    }
+    if(sum(info$K_mat == Inf) > 0) {
+      K_curr <- unwind_lambda(K[i,], info$K_mat, reverse = T)
+    } else{
+      K_curr <- info$K_mat
+    }
+    if(sum(info$G_mat == Inf) > 0) {
+      G_curr <- unwind_lambda(G[i,], info$G_mat, reverse = T)
+    } else{
+      G_curr <- info$G_mat
+    }
+    # eta_curr <- info$eta[,,i]
+    eta_curr <- matrix(eta[i,], info$n_subjects, info$n_factors)
     proposals_curr <- matrix(proposals[i,], ncol = info$n_pars, byrow = T)
 
     group_means <- matrix(theta_mu[i,], nrow = info$n_subjects, ncol = info$n_pars, byrow = T) + info$xy %*% t(K_curr) + eta_curr %*% t(lambda_curr)
-    group_ll <- sum(dnorm(t(proposals_curr), t(group_means), exp(1/epsilon_inv[i,]), log = T))
+    var_curr <- sqrt(exp(1/epsilon_inv[i,]))
+    var_curr[var_curr < 0.001] <- 0.001
+    var_curr[var_curr > 100] <- 100
+    group_ll <- sum(dnorm(t(proposals_curr), t(group_means), var_curr, log = T))
 
     delta2_curr <- unwind_chol(delta_inv2[i,], reverse = T)
+    delta_curr[info$is_structured, info$is_structured] <- diag(exp(delta_inv1[i,]), sum(info$is_structured))
+    delta_curr[!info$is_structured, !info$is_structured] <- delta2_curr
+    delta_curr <- solve(delta_curr)
+    eta_means <- info$xeta %*% t(G_curr) + eta_curr %*% t(B_curr)
+    eta_ll <- 0
+    for(k in 1:nrow(eta_curr)){
+      eta_ll <- eta_ll + dmvnorm(eta_curr[k,], eta_means[k,], delta_curr, log = T)
+    }
+
+
+
     prior_delta1 <- sum(logdinvGamma(exp(delta_inv1[i,]), shape = prior$a_d, rate = prior$b_d))
-    prior_delta2 <- log(robust_diwish(delta2_curr, v=prior$a_d, S = diag(prior$b_d, sum(!info$is_structured))))
+    prior_delta2 <- log(robust_diwish(solve(delta2_curr), v=prior$a_d, S = diag(prior$b_d, sum(!info$is_structured))))
     prior_epsilon_inv <- sum(logdinvGamma(exp(epsilon_inv[i,]), shape = prior$a_e, rate = prior$b_e))
     jac_delta2 <- log(2^sum(!info$is_structured))+sum((sum(!info$is_structured) + 1)*log(diag(delta2_curr))) # Log of derivative of cholesky transformation
     sum_out[i] <- group_ll + prior_epsilon_inv + prior_delta1 + prior_delta2 + jac_delta2
+    if(is.infinite(sum_out[i])) browser()
   }
   prior_mu <- dmvnorm(theta_mu, mean = prior$theta_mu_mean, sigma = diag(prior$theta_mu_var), log =T)
-  prior_lambda <- dmvnorm(lambda, mean = rep(0, ncol(lambda)), sigma = diag(prior$lambda_var, ncol(lambda)), log = T)
-  prior_B <- dmvnorm(B, mean = rep(0, ncol(B)), sigma = diag(prior$B_var, ncol(B)), log = T)
-  prior_K <- dmvnorm(K, mean = rep(0, ncol(K)), sigma = diag(prior$lambda_var, ncol(K)), log = T)
-  prior_G <- dmvnorm(G, mean = rep(0, ncol(G)), sigma = diag(prior$B_var, ncol(G)), log = T)
+  if(sum(info$Lambda_mat == Inf) > 0){
+    prior_lambda <- dmvnorm(lambda, mean = rep(0, ncol(lambda)), sigma = diag(prior$lambda_var, ncol(lambda)), log = T)
+  } else{
+    prior_lambda <- 0
+  }
+  if(sum(info$B_mat == Inf) > 0){
+    prior_B <- dmvnorm(B, mean = rep(0, ncol(B)), sigma = diag(prior$B_var, ncol(B)), log = T)
+  } else{
+    prior_B <- 0
+  }
+  if(sum(info$K_mat == Inf) > 0){
+    prior_K <- dmvnorm(K, mean = rep(0, ncol(K)), sigma = diag(prior$lambda_var, ncol(K)), log = T)
+  } else{
+    prior_K <- 0
+  }
+  if(sum(info$G_mat == Inf) > 0){
+    prior_G <- dmvnorm(G, mean = rep(0, ncol(G)), sigma = diag(prior$B_var, ncol(G)), log = T)
+  } else{
+    prior_G <- 0
+  }
 
   jac_delta1 <- rowSums(delta_inv1)
   jac_epsilon_inv <- rowSums(epsilon_inv)

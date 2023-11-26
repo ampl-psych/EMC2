@@ -49,6 +49,7 @@ get_prior_diag <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, 
       out$mu <- samples
       return(out)
     } else {
+
       var <- array(NA_real_, dim = c(N, n_pars))
       for(i in 1:N){
         a_half <- 1 / rgamma(n = n_pars,shape = 1/2,
@@ -56,7 +57,11 @@ get_prior_diag <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, 
         var[i,] <- 1 / rgamma(n = n_pars, shape = prior$v/2, rate = prior$v/a_half)
       }
       colnames(var) <- names(attr(design, "p_vector"))
-      out$variance <- var
+      if (type == "full_var"){
+        out$full_var <- var
+      } else{
+        out$variance <- var
+      }
       return(out)
     }
   }

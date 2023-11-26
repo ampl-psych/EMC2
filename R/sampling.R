@@ -726,11 +726,14 @@ get_variant_funs <- function(type = "standard") {
       get_group_level = get_group_level_SEM,
       fill_samples = fill_samples_SEM,
       gibbs_step = gibbs_step_SEM,
-      filtered_samples = filtered_samples_infnt_factor,
-      get_conditionals = get_conditionals_infnt_factor,
+      filtered_samples = filtered_samples_SEM,
+      get_conditionals = get_conditionals_SEM,
       get_all_pars_IS2 = get_all_pars_infnt_factor,
       prior_dist_IS2 = prior_dist_infnt_factor,
-      group_dist_IS2 = group_dist_infnt_factor
+      group_dist_IS2 = group_dist_infnt_factor,
+      bridge_add_group = bridge_add_group_SEM,
+      bridge_add_info = bridge_add_info_SEM,
+      bridge_group_and_prior_and_jac = bridge_group_and_prior_and_jac_SEM
     )
   }
   return(list_fun)

@@ -78,10 +78,18 @@ plot_prior <- function(prior=NULL, design,plotp=NULL,
                        breaks=50,layout=c(3,3),lower=NULL,upper=NULL,xlim=NA)
 {
   if (is.null(selection)) {
-    if (type=="standard") selection <- "mu"
-    if (type=="single") selection <- "alpha"
-    if (type == "diagonal") selection <- "diagonal"
+    if (type=="single"){
+      selection <- "alpha"
+    } else{
+      selection <- "mu"
+    }
   }
+
+  if(selection == "alpha" & type !="single"){
+    lower = .05
+    upper = .95
+  }
+
   if(selection == "variance"){
     upper = .95
   }
@@ -91,6 +99,7 @@ plot_prior <- function(prior=NULL, design,plotp=NULL,
   }
   if (mapped & !(selection %in% c("alpha","mu"))){
     warning("For selections other than mu and alpha mapped must be FALSE, we set it to FALSE here")
+    mapped <- F
   }
 
 
@@ -107,14 +116,38 @@ plot_prior <- function(prior=NULL, design,plotp=NULL,
   if (type=="diagonal") gp <- get_prior_diag
   if (mapped & !is.null(data)) { # Used for covariates
     message("Mapping prior based on data, use this option with covariates and Ttranform parameters")
-    pp <- gp(prior, type = selection, design = design,N=dim(data)[1])[[selection]]
+    if(selection == "alpha" & type != "single"){
+      pp_mu <- gp(prior, type = "mu", design = design,N=dim(data)[1])$mu
+      pp_var <- gp(prior, type = "full_var", design = design,N=dim(data)[1])$full_var
+      n_pars <- ncol(pp_mu)
+      pp <- matrix(0, N, ncol(pp_mu))
+      for(i in 1:dim(data)[1]){
+        pp[i,] <- rmvnorm(1, pp_mu[i,], matrix(pp_var[i,], n_pars, n_pars))
+      }
+      colnames(pp) <- colnames(pp_mu)
+    } else{
+      pp <- gp(prior, type = selection, design = design,N=dim(data)[1])[[selection]]
+    }
+
     row.names(pp) <- 1:dim(data)[1]
     design$Ffactors$subjects <- row.names(pp)
     data$subjects <- factor(1:dim(data)[1])
     mp <- make_data(pp,design,data=data,mapped_p=TRUE)
     mpok <- mp[design$model()$rfun(pars=mp),]
     if (nrep>1) for (i in 2:nrep) {
-      pp <- gp(prior, type = selection, design = design,N=dim(data)[1])[[selection]]
+      if(selection == "alpha" & type != "single"){
+        pp_mu <- gp(prior, type = "mu", design = design,N=dim(data)[1])$mu
+        pp_var <- gp(prior, type = "full_var", design = design,N=dim(data)[1])$full_var
+        n_pars <- ncol(pp_mu)
+        pp <- matrix(0, N, ncol(pp_mu))
+        for(i in 1:dim(data)[1]){
+          pp[i,] <- rmvnorm(1, pp_mu[i,], matrix(pp_var[i,], n_pars, n_pars))
+        }
+        colnames(pp) <- colnames(pp_mu)
+      } else{
+        pp <- gp(prior, type = selection, design = design,N=dim(data)[1])[[selection]]
+      }
+
       row.names(pp) <- 1:dim(data)[1]
       mp <- make_data(pp,design,data=data,mapped_p=TRUE)
       mpok <- rbind(mpok,mp[design$model()$rfun(pars=mp),])
@@ -159,7 +192,19 @@ plot_prior <- function(prior=NULL, design,plotp=NULL,
     invisible(cbind.data.frame(fnam,mpok[,par_names,drop=FALSE]))
   } else {
 
-    samples <- gp(prior, type = selection, design=design,N=N)[[selection]]
+    if(selection == "alpha" & type != "single"){
+      pp_mu <- gp(prior, type = "mu", design = design,N=N)$mu
+      pp_var <- gp(prior, type = "full_var", design = design,N=N)$full_var
+      n_pars <- ncol(pp_mu)
+      samples <- matrix(0, N, ncol(pp_mu))
+      for(i in 1:N){
+        samples[i,] <- rmvnorm(1, pp_mu[i,], matrix(pp_var[i,], n_pars, n_pars))
+      }
+      colnames(samples) <- colnames(pp_mu)
+    } else{
+      samples <- gp(prior, type = selection, design = design,N=N)[[selection]]
+    }
+
     if(selection %in% c("covariance", "correlation")){
       pnams <- names(attr(design, "p_vector"))
       lt <- lower.tri(diag(length(pnams)))
