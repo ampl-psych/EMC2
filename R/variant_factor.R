@@ -193,7 +193,7 @@ get_conditionals_factor <- function(s, samples, n_pars, iteration = NULL, idx = 
   sig_err <- log(apply(samples$theta_sig_err_inv[idx,idx,],3,diag))
   psi <- log(apply(samples$theta_psi_inv,3,diag))
   eta <- matrix(samples$theta_eta[s,,], nrow = samples$n_factors)
-  lambda <- apply(samples$lambda_untransf[idx,,,drop = F], 3, unwind_lambda, samples$constraintMat, samples$n_factors)
+  lambda <- apply(samples$lambda_untransf[idx,,,drop = F], 3, unwind_lambda, samples$constraintMat)
   theta_mu <- samples$theta_mu[idx,]
   all_samples <- rbind(samples$alpha[idx, s,],theta_mu, eta, sig_err, psi, lambda)#, sig_err, psi, lambda)
   mu_tilde <- rowMeans(all_samples)
@@ -204,7 +204,7 @@ get_conditionals_factor <- function(s, samples, n_pars, iteration = NULL, idx = 
                                  samples$theta_eta[s,,iteration],
                                  log(diag(samples$theta_sig_err_inv[idx,idx, iteration])),
                                  log(apply(samples$theta_psi_inv[,,iteration, drop = F], 3, diag)),
-                                 unwind_lambda(samples$lambda_untransf[idx,, iteration], samples$constraintMat, samples$n_factors)))
+                                 unwind_lambda(samples$lambda_untransf[idx,, iteration], samples$constraintMat)))
   return(list(eff_mu = condmvn$condMean, eff_var = condmvn$condVar))
 }
 
@@ -283,7 +283,7 @@ group_dist_factor = function(random_effect = NULL, parameters, sample = FALSE, n
   param.sig_err_inv <- exp(parameters[(n_randeffect+1):(n_randeffect + n_randeffect)])
   param.psi_inv <- exp(parameters[(n_randeffect+n_randeffect+1):(n_randeffect + n_randeffect+ n_factors)])
   param.lambda.unwound <- parameters[(n_randeffect+n_randeffect+n_factors+1):length(parameters)]
-  param.lambda <- unwind_lambda(param.lambda.unwound, info$hyper$constraintMat, n_factors, n_randeffect, reverse = T)
+  param.lambda <- unwind_lambda(param.lambda.unwound, info$hyper$constraintMat, reverse = T)
   param.var <- param.lambda %*% diag(1/param.psi_inv, length(param.psi_inv)) %*% t(param.lambda) + diag(1/param.sig_err_inv)
   if (sample){
     return(mvtnorm::rmvnorm(n_samples, param.theta_mu, param.var))
