@@ -276,6 +276,9 @@ plot_prior <- function(prior=NULL, design,plotp=NULL,
 #' @param verbose Boolean (default true) print values of prior to console (if
 #' update only new values).
 #' @param update_print When verbose print only new values (default TRUE)
+#' @param type What type of model you plan on using, choice of standard, diagonal and single for this function
+#' @param pscale For hierarchical models, the prior on the scale of the variances
+#' @param df For hierarchical models, the prior on the degrees of freedom of the variances
 #'
 #' @return An EMC prior object
 #' @export
