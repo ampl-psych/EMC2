@@ -305,7 +305,7 @@ make_prior <- function(design,pmean=NULL,psd=NULL,update=NULL,
     pmu <- update$theta_mu_mean
     if(!type == "single"){
       pdfu <- update$v
-      pscaleu <- update$A
+      pscaleu <- update$a
       names(pscaleu) <- names(pmu)
       if(!is.null(pdfu) & is.null(df)){
         df <- pdfu
@@ -319,8 +319,8 @@ make_prior <- function(design,pmean=NULL,psd=NULL,update=NULL,
       addn <- isin[!(isin %in% names(psd))]
       psd <- c(psd,psdu[addn])
       if(!type == "single"){
-        addn <- isin[!(isin %in% names(pscaleu))]
-        pscale <- c(scale,pscaleu[addn])
+        addn <- isin[!(isin %in% names(pscale))]
+        pscale <- c(pscale,pscaleu[addn])
       }
     }
   }
