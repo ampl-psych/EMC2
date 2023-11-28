@@ -29,7 +29,7 @@ get_prior_diag <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, 
   prior$theta_mu_invar <- ginv(prior$theta_mu_var) #Inverse of the matrix
   if(sample){
     out <- list()
-    if(!type %in% c("mu", "variance")){
+    if(!type %in% c("mu", "variance", "full_var")){
       stop("for variant diagonal, you can only specify the prior on the mean or variance parameters")
     }
     if(type == "mu"){

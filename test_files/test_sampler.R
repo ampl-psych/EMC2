@@ -16,14 +16,13 @@ Emat <- matrix(c(0,-1,0,0,0,-1),nrow=3)
 dimnames(Emat) <- list(NULL,c("a-n","a-s"))
 Emat
 
-undebug(make_dm)
 design_B <- make_design(
   Ffactors=list(subjects=levels(dat$subjects),S=levels(dat$S),E=levels(dat$E)),
   Rlevels=levels(dat$R),matchfun=function(d)d$S==d$lR,
   Fcovariates = list(age = dat$age),
   Flist=list(v~age*E,sv~1,B~age,A~1,t0~1),
   constants=c(sv=log(1)),
-  model=lbaB)
+  model=LBA)
 
 p_vector <- sampled_p_vector(design_B)
 p_vector[1:length(p_vector)] <- abs(rnorm(length(p_vector)))

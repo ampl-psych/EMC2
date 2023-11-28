@@ -122,8 +122,12 @@ plot_prior <- function(prior=NULL, design,plotp=NULL,
       n_pars <- ncol(pp_mu)
       pp <- matrix(0, N, ncol(pp_mu))
       for(i in 1:dim(data)[1]){
-        pp[i,] <- rmvnorm(1, pp_mu[i,], matrix(pp_var[i,], n_pars, n_pars))
-      }
+        if(type == "diagonal"){
+          pp_var_curr <- diag(pp_var[i,])
+        } else{
+          pp_var_curr <- matrix(pp_var[i,], n_pars, n_pars)
+        }
+        pp[i,] <- rmvnorm(1, pp_mu[i,], pp_var_curr)      }
       colnames(pp) <- colnames(pp_mu)
     } else{
       pp <- gp(prior, type = selection, design = design,N=dim(data)[1])[[selection]]
@@ -141,7 +145,12 @@ plot_prior <- function(prior=NULL, design,plotp=NULL,
         n_pars <- ncol(pp_mu)
         pp <- matrix(0, N, ncol(pp_mu))
         for(i in 1:dim(data)[1]){
-          pp[i,] <- rmvnorm(1, pp_mu[i,], matrix(pp_var[i,], n_pars, n_pars))
+          if(type == "diagonal"){
+            pp_var_curr <- diag(pp_var[i,])
+          } else{
+            pp_var_curr <- matrix(pp_var[i,], n_pars, n_pars)
+          }
+          pp[i,] <- rmvnorm(1, pp_mu[i,], pp_var_curr)
         }
         colnames(pp) <- colnames(pp_mu)
       } else{
@@ -198,7 +207,12 @@ plot_prior <- function(prior=NULL, design,plotp=NULL,
       n_pars <- ncol(pp_mu)
       samples <- matrix(0, N, ncol(pp_mu))
       for(i in 1:N){
-        samples[i,] <- rmvnorm(1, pp_mu[i,], matrix(pp_var[i,], n_pars, n_pars))
+        if(type == "diagonal"){
+          pp_var_curr <- diag(pp_var[i,])
+        } else{
+          pp_var_curr <- matrix(pp_var[i,], n_pars, n_pars)
+        }
+        samples[i,] <- rmvnorm(1, pp_mu[i,], pp_var_curr)
       }
       colnames(samples) <- colnames(pp_mu)
     } else{
@@ -247,8 +261,8 @@ plot_prior <- function(prior=NULL, design,plotp=NULL,
 
 #' make_prior
 #'
-#' Makes priors for single and standard model
-#' based an a design, by providing prior means (pmean) and standard deviations
+#' Makes priors based on a design.
+#'  For hierarchical models you specify prior on mean of the group mean (pmean) and standard deviations
 #' (psd), and possibly these values taken from another prior (supplied by the
 #' update argument), as long as those values have the same name as in the current
 #' design and are not specified in pmean and psd. Where a value is not supplied
@@ -257,7 +271,7 @@ plot_prior <- function(prior=NULL, design,plotp=NULL,
 #'
 #' @param design Design for which a prior is constructed
 #' @param pmean Named vector of prior means, or an unnamed scalar, which is then used for all.
-#' @param psd Named vector of prior standard deviations, , or an unnamed scalar, which is then used for all.
+#' @param psd Named vector of prior standard deviations, or an unnamed scalar, which is then used for all.
 #' @param update Another prior from which to copy meand and sds.
 #' @param verbose Boolean (default true) print values of prior to console (if
 #' update only new values).
@@ -266,10 +280,11 @@ plot_prior <- function(prior=NULL, design,plotp=NULL,
 #' @return An EMC prior object
 #' @export
 make_prior <- function(design,pmean=NULL,psd=NULL,update=NULL,
-                       verbose=TRUE,update_print=TRUE)
+                       verbose=TRUE,update_print=TRUE, type = "standard",
+                       pscale = NULL, df = NULL)
 {
   pm <- sampled_p_vector(design)
-  pm <- ps <- pm[1:length(pm)]
+  pm <- ps <- psc <-  pm[1:length(pm)]
   if (!is.null(pmean) && is.null(names(pmean))) {
     pmean[1:length(pm)] <- pm
     pmean <- setNames(pmean,names(pm))
@@ -278,8 +293,21 @@ make_prior <- function(design,pmean=NULL,psd=NULL,update=NULL,
     psd[1:length(ps)] <- psd
     psd <- setNames(psd,names(ps))
   }
+  if (!is.null(pscale) && is.null(names(pscale))) {
+    pscale[1:length(psc)] <- pscale
+    pscale <- setNames(pscale,names(psc))
+  }
+
   if ( !is.null(update) ) {
     pmu <- update$theta_mu_mean
+    if(!type == "single"){
+      pdfu <- update$v
+      pscaleu <- update$A
+      names(pscaleu) <- names(pmu)
+      if(!is.null(pdfu) & is.null(df)){
+        df <- pdfu
+      }
+    }
     psdu <- setNames(diag(update$theta_mu_var)^.5,names(pmu))
     isin <- names(pmu)[names(pmu) %in% names(pm)]
     if (length(isin)>0) {
@@ -287,13 +315,21 @@ make_prior <- function(design,pmean=NULL,psd=NULL,update=NULL,
       pmean <- c(pmean,pmu[addn])
       addn <- isin[!(isin %in% names(psd))]
       psd <- c(psd,psdu[addn])
+      if(!type == "single"){
+        addn <- isin[!(isin %in% names(pscaleu))]
+        pscale <- c(scale,pscaleu[addn])
+      }
     }
   }
   if (!all(names(pmean) %in% names(pm))) stop("pmean has names not in design")
   if (!is.null(pmean)) pm[names(pmean)] <- pmean
   todom <- !(names(pm) %in% names(pmean))
   if (any(todom)) {
-    cat("Enter values for prior mean\n")
+    if(type == "single"){
+      cat("Enter values for prior mean\n")
+    } else{
+      cat("Enter values for prior mean of group-level mean\n")
+    }
     for (i in names(pm[todom])) {
       repeat {
         ans <- try(eval(parse(text=readline(paste0(i,": ")))),silent=TRUE)
@@ -310,7 +346,11 @@ make_prior <- function(design,pmean=NULL,psd=NULL,update=NULL,
   if (!is.null(ps)) ps[names(psd)] <- psd
   todos <- !(names(ps) %in% names(psd))
   if (any(todos)) {
-    cat("Enter values for prior standard deviation\n")
+    if(type == "single"){
+      cat("Enter values for prior standard deviation\n")
+    } else{
+      cat("Enter values for prior standard deviation of group-level mean\n")
+    }
     for (i in names(pm[todos])) {
       repeat {
         ans <- try(eval(parse(text=readline(paste0(i,": ")))),silent=TRUE)
@@ -323,13 +363,59 @@ make_prior <- function(design,pmean=NULL,psd=NULL,update=NULL,
       }
     }
   } else if ( is.null(update) ) ps <- rep(1,length(ps))
+  if(type != "single"){
+    todoscale <- !(names(psc) %in% names(pscale))
+    if (any(todoscale)) {
+      cat("Enter values for prior scale of group-level variance, larger values leads to broader variance, default is 1 \n")
+      for (i in names(pm[todos])) {
+        repeat {
+          ans <- try(eval(parse(text=readline(paste0(i,": ")))),silent=TRUE)
+          if (any(class(ans) %in% c("warning", "error", "try-error")) || is.na(ans) ) {
+            cat("Must provide a numeric value\n")
+          } else {
+            pscale[i] <- ans
+            break
+          }
+        }
+      }
+    } else if ( is.null(update) ) pscale <- rep(1,length(pscale))
+    if(is.null(df)){
+      if(type == "standard"){
+        cat("Enter value for prior degrees of freedom for group-level variance, same for all parameters, 2 leads to uniform priors on correlations \n")
+
+      } else{
+        cat("Enter value for prior degrees of freedom for group-level variance, same for all parameters")
+      }
+      repeat {
+        ans <- try(eval(parse(text=readline("df : "))),silent=TRUE)
+        if (any(class(ans) %in% c("warning", "error", "try-error")) || is.na(ans) ) {
+          cat("Must provide a numeric value\n")
+        } else {
+          df <- ans
+          break
+        }
+      }
+    }
+  }
+
+
   if (verbose & (!update_print | (update_print & (!any(todom) | !any(todos))))) {
     if (!(update_print & !any(todom))) cat("Prior means\n")
     if (!update_print) print(pm) else if (any(todom)) print(pm[todom])
     if (!(update_print & !any(todos))) cat("\nPrior standard deviations\n")
     if (!update_print) print(ps) else if (any(todos)) print(ps[todos])
+    if(type != "single"){
+      if (!(update_print & !any(todos))) cat("\nPrior scale on the variances\n")
+      if (!update_print) print(ps) else if (any(todoscale)) print(pscale[todoscale])
+    }
   }
-  list(theta_mu_mean  = pm,theta_mu_var = diag(ps^2))
+  if(type != "single"){
+    return(  list(theta_mu_mean  = pm,theta_mu_var = diag(ps^2),
+                  a = pscale, v = df))
+  } else{
+    list(theta_mu_mean  = pm,theta_mu_var = diag(ps^2))
+  }
+
 }
 
 
