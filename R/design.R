@@ -615,7 +615,11 @@ make_dm <- function(form,da,Clist=NULL,Fcovariates=NULL, add_da = FALSE)
     cells <- apply(dm,1,paste,collapse="_")
     ass <- attr(dm,"assign")
     contr <- attr(dm,"contrasts")
-    dups <- duplicated(cells)
+    if(!is.null(da)){
+      dups <- duplicated(paste0(cells, apply(da, 2, paste0)))
+    } else{
+      dups <- duplicated(cells)
+    }
     out <- dm[!dups,,drop=FALSE]
     if(!is.null(da)){
       if(nrow(da) != 0){
