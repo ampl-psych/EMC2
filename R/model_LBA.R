@@ -169,6 +169,8 @@ rLBA <- function(lR,pars,p_types=c("v","sv","b","A","t0"),posdrift = TRUE,
 #' between trial variation in drift rate `sv`, between trial variation in startpoint of the drift rate `A`, and non-decision time `t0`.
 #' Frequently `sv` is fixed to 1 to satisfy scaling constraints.
 #'
+#' All parameters are estimated on the log scale, except for the drift rate which is estimated on the real line.
+#'
 #' Here we use the b = B + A parameterization, which ensures that the response threshold is always higher than the between trial variation in start point of the drift rate.
 #' Also, rates are sampled from normal distributions truncated to be always positive.
 #'

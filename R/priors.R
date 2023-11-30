@@ -320,7 +320,7 @@ make_prior <- function(design,pmean=NULL,psd=NULL,update=NULL,
       psd <- c(psd,psdu[addn])
       if(!type == "single"){
         addn <- isin[!(isin %in% names(pscaleu))]
-        pscale <- c(scale,pscaleu[addn])
+        psc <- c(psc,pscaleu[addn])
       }
     }
   }
@@ -376,12 +376,12 @@ make_prior <- function(design,pmean=NULL,psd=NULL,update=NULL,
           if (any(class(ans) %in% c("warning", "error", "try-error")) || is.na(ans) ) {
             cat("Must provide a numeric value\n")
           } else {
-            pscale[i] <- ans
+            psc[i] <- ans
             break
           }
         }
       }
-    } else if ( is.null(update) ) pscale <- rep(1,length(pscale))
+    } else if ( is.null(update) ) psc <- rep(1,length(psc))
     if(is.null(df)){
       if(type == "standard"){
         cat("Enter value for prior degrees of freedom for group-level variance, same for all parameters, 2 leads to uniform priors on correlations \n")
@@ -414,7 +414,7 @@ make_prior <- function(design,pmean=NULL,psd=NULL,update=NULL,
   }
   if(type != "single"){
     return(  list(theta_mu_mean  = pm,theta_mu_var = diag(ps^2),
-                  a = pscale, v = df))
+                  A = psc, v = df))
   } else{
     list(theta_mu_mean  = pm,theta_mu_var = diag(ps^2))
   }
