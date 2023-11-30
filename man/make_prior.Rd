@@ -10,7 +10,10 @@ make_prior(
   psd = NULL,
   update = NULL,
   verbose = TRUE,
-  update_print = TRUE
+  update_print = TRUE,
+  type = "standard",
+  pscale = NULL,
+  df = NULL
 )
 }
 \arguments{
@@ -18,7 +21,7 @@ make_prior(
 
 \item{pmean}{Named vector of prior means, or an unnamed scalar, which is then used for all.}
 
-\item{psd}{Named vector of prior standard deviations, , or an unnamed scalar, which is then used for all.}
+\item{psd}{Named vector of prior standard deviations, or an unnamed scalar, which is then used for all.}
 
 \item{update}{Another prior from which to copy meand and sds.}
 
@@ -26,13 +29,19 @@ make_prior(
 update only new values).}
 
 \item{update_print}{When verbose print only new values (default TRUE)}
+
+\item{type}{What type of model you plan on using, choice of standard, diagonal and single for this function}
+
+\item{pscale}{For hierarchical models, the prior on the scale of the variances}
+
+\item{df}{For hierarchical models, the prior on the degrees of freedom of the variances}
 }
 \value{
 An EMC prior object
 }
 \description{
-Makes priors for single and standard model
-based an a design, by providing prior means (pmean) and standard deviations
+Makes priors based on a design.
+For hierarchical models you specify prior on mean of the group mean (pmean) and standard deviations
 (psd), and possibly these values taken from another prior (supplied by the
 update argument), as long as those values have the same name as in the current
 design and are not specified in pmean and psd. Where a value is not supplied

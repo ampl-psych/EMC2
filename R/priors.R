@@ -319,8 +319,8 @@ make_prior <- function(design,pmean=NULL,psd=NULL,update=NULL,
       addn <- isin[!(isin %in% names(psd))]
       psd <- c(psd,psdu[addn])
       if(!type == "single"){
-        addn <- isin[!(isin %in% names(pscaleu))]
-        psc <- c(psc,pscaleu[addn])
+        addn <- isin[!(isin %in% names(pscale))]
+        pscale <- c(pscale,pscaleu[addn])
       }
     }
   }
@@ -367,6 +367,7 @@ make_prior <- function(design,pmean=NULL,psd=NULL,update=NULL,
     }
   } else if ( is.null(update) ) ps <- rep(1,length(ps))
   if(type != "single"){
+    if (!is.null(psc)) psc[names(pscale)] <- pscale
     todoscale <- !(names(psc) %in% names(pscale))
     if (any(todoscale)) {
       cat("Enter values for prior scale of group-level variance, larger values leads to broader variance, default is 1 \n")
