@@ -51,7 +51,7 @@ pDDM <- function(rt,R,pars,precision=2.5)
 #' The core parameters of the DDM are the drift rate `v`, the boundary separation `a`,
 #' within trial variation in drift rate `s`, bias to either threshold `Z`, and non-decision time `t0`.
 #' Frequently `s` is fixed to 1 to satisfy scaling constraints.
-#' Furthermore, we can estimate between trial variation in drift rate `sv`, non-decision time `st0`, and bias `SZ`. Note that computing for these parameters is slower.
+#' Furthermore, we can estimate between trial variation in drift rate `sv`, non-decision time `st0`, and variability in bias `SZ`. Note that computing for these parameters is slower.
 #' Lastly `DP` comprises the difference in non-decision time for each response option.
 #'
 #' We sample `a, t0, sv, st0, s` on the log scale because these parameters should be strictly positive

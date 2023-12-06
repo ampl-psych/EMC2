@@ -5,26 +5,26 @@
 \title{Binds together elements that make up a model design as a list}
 \usage{
 make_design(
-  Flist = NULL,
-  Ffactors = NULL,
+  formula = NULL,
+  factors = NULL,
   Rlevels = NULL,
   model,
-  ddata = NULL,
-  Clist = NULL,
+  data = NULL,
+  contrasts = NULL,
   matchfun = NULL,
   constants = NULL,
-  Fcovariates = NULL,
-  Ffunctions = NULL,
+  covariates = NULL,
+  functions = NULL,
   adapt = NULL,
   report_p_vector = TRUE,
   custom_p_vector = NULL
 )
 }
 \arguments{
-\item{Flist}{A list. Contains the design formula(s) in the
+\item{formula}{A list. Contains the design formula(s) in the
 format \code{list(y ~ x, a ~ z)}.}
 
-\item{Ffactors}{A named list containing all the factor variables that span
+\item{factors}{A named list containing all the factor variables that span
 the design cells and that should be taken into account by the model.
 The name \code{subjects} must be used to indicate the participant factor variable.
 
@@ -39,14 +39,14 @@ the log-normal race model (\code{LNR()}), the linear ballistic model (\code{LBA(
 the racing diffusion model (\code{RDM()}, \code{RDMt0natural()}), or define your own
 model functions.}
 
-\item{ddata}{A data frame. \code{ddata} can be used to automatically detect
-\code{Ffactors}, \code{Rlevels} and \code{Fcovariates} in a dataset. The variable \code{R} needs
+\item{data}{A data frame. \code{data} can be used to automatically detect
+\code{factors}, \code{Rlevels} and \code{covariates} in a dataset. The variable \code{R} needs
 to be a factor variable indicating the response variable so that \code{Rlevels}
 can be determined. Any numeric column except \code{trials} and \code{rt} are treated
 as covariates, and all remaining factor variables are internally used
-in \code{Ffactors}.}
+in \code{factors}.}
 
-\item{Clist}{A named list specifying a design matrix. If none is supplied,
+\item{contrasts}{A named list specifying a design matrix. If none is supplied,
 dummy or treatment coding is used.
 Example for supplying a customized design matrix:
 \verb{list(lM = matrix(c(-1/2,1/2),ncol=1,dimnames=list(NULL,"diff"))))}}
@@ -57,10 +57,10 @@ response was correct or not. Example: \code{function(d)d$S==d$lR}}
 \item{constants}{A named vector. Sets constants. Any parameter named
 by \code{sampled_p_vector} can be set constant.}
 
-\item{Fcovariates}{Covariate factors. Covariate measures which may be
+\item{covariates}{Covariate factors. Covariate measures which may be
 included in the model and/or mapped to factors.}
 
-\item{Ffunctions}{Factor Functions. Functions to specify specific
+\item{functions}{Factor Functions. Functions to specify specific
 parameterizations, or functions of parameters.}
 
 \item{adapt}{For future compatibility. Ignore.}

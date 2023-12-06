@@ -21,9 +21,9 @@ make_prior(
 
 \item{pmean}{Named vector of prior means, or an unnamed scalar, which is then used for all.}
 
-\item{psd}{Named vector of prior standard deviations, or an unnamed scalar, which is then used for all.}
+\item{psd}{Named vector of prior standard deviations, or an unnamed scalar, which is then used for all. If NA, will assume 1 for all parameters}
 
-\item{update}{Another prior from which to copy meand and sds.}
+\item{update}{Another prior from which to copy values}
 
 \item{verbose}{Boolean (default true) print values of prior to console (if
 update only new values).}
@@ -32,9 +32,9 @@ update only new values).}
 
 \item{type}{What type of model you plan on using, choice of standard, diagonal and single for this function}
 
-\item{pscale}{For hierarchical models, the prior on the scale of the variances}
+\item{pscale}{For hierarchical models, the prior on the scale of the variances. If NA, will assume 1 for all parameters}
 
-\item{df}{For hierarchical models, the prior on the degrees of freedom of the variances}
+\item{df}{For hierarchical models, the prior on the degrees of freedom of the variances. If NA will assume 2 for all parameters}
 }
 \value{
 An EMC prior object

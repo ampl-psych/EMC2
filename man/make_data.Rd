@@ -88,7 +88,7 @@ random function for a model (usually a design attribute, but if not can be
 supplied separately) by one of two methods
 \enumerate{
 \item creating a fully crossed and balanced design specified by the design
-argument's formula list (Flist) and factor contrast list (Clist, if it is
+argument's formula list (formuula) and factor contrast list (contrasts), if it is
 null the data frame creation defaults are used) with number of trials per
 cell specified by the trials argument ... or if the data argument is non-null
 \item using the design implicit in a data frame supplied, which allows creation

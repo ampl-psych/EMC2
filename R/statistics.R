@@ -526,8 +526,9 @@ compare_IC <- function(sList,filter="sample",subfilter=0,use_best_fit=TRUE,
       MLLs[i] <- run_bridge_sampling(sList[[i]], filter = filter, subfilter = sflist[[i]], both_splits = FALSE,
                                      cores_for_props = cores_for_props, cores_per_prop = cores_per_prop)
     }
-    modelProbability <- exp(MLLs - min(MLLs))/sum(exp(MLLs - min(MLLs)))
-    out <- cbind.data.frame(MD = -2*MLLs, wMD = modelProbability, out)
+    MD <- -2*MLLs
+    modelProbability <- getp(MD)
+    out <- cbind.data.frame(MD = MD, wMD = modelProbability, out)
   }
   if (print_summary) {
     tmp <- out

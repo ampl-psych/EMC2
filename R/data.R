@@ -53,7 +53,7 @@ make_missing <- function(data,LT=0,UT=Inf,LC=0,UC=Inf,
 #' random function for a model (usually a design attribute, but if not can be
 #' supplied separately) by one of two methods
 #' 1) creating a fully crossed and balanced design specified by the design
-#' argument's formula list (Flist) and factor contrast list (Clist, if it is
+#' argument's formula list (formuula) and factor contrast list (contrasts), if it is
 #' null the data frame creation defaults are used) with number of trials per
 #' cell specified by the trials argument ... or if the data argument is non-null
 #' 2) using the design implicit in a data frame supplied, which allows creation
@@ -185,7 +185,7 @@ make_data <- function(p_vector,design,model=NULL,trials=NULL,data=NULL,expand=1,
       expand <- 1
       warning("Expand does not work with this type of model")
     }
-    data <- adapt_data(data,design,model,pars,mapped_p=mapped_p,add_response = TRUE)
+    # data <- adapt_data(data,design,model,pars,mapped_p=mapped_p,add_response = TRUE)
     if (mapped_p) return(data)
     adapt <- attr(data,"adapt")
     data <- data[data$lR==levels(data$lR)[1],!(names(data) %in% c("lR","lM"))]

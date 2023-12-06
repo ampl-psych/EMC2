@@ -2,9 +2,9 @@
 #'
 #' This function returns a list with the specified model design.
 #'
-#' @param Flist A list. Contains the design formula(s) in the
+#' @param formula A list. Contains the design formula(s) in the
 #' format `list(y ~ x, a ~ z)`.
-#' @param Ffactors A named list containing all the factor variables that span
+#' @param factors A named list containing all the factor variables that span
 #' the design cells and that should be taken into account by the model.
 #' The name `subjects` must be used to indicate the participant factor variable.
 #'
@@ -17,13 +17,13 @@
 #' the log-normal race model (`LNR()`), the linear ballistic model (`LBA()`),
 #' the racing diffusion model (`RDM()`, `RDMt0natural()`), or define your own
 #' model functions.
-#' @param ddata A data frame. `ddata` can be used to automatically detect
-#'  `Ffactors`, `Rlevels` and `Fcovariates` in a dataset. The variable `R` needs
+#' @param data A data frame. `data` can be used to automatically detect
+#'  `factors`, `Rlevels` and `covariates` in a dataset. The variable `R` needs
 #'  to be a factor variable indicating the response variable so that `Rlevels`
 #'  can be determined. Any numeric column except `trials` and `rt` are treated
 #'  as covariates, and all remaining factor variables are internally used
-#'  in `Ffactors`.
-#' @param Clist A named list specifying a design matrix. If none is supplied,
+#'  in `factors`.
+#' @param contrasts A named list specifying a design matrix. If none is supplied,
 #' dummy or treatment coding is used.
 #' Example for supplying a customized design matrix:
 #' `list(lM = matrix(c(-1/2,1/2),ncol=1,dimnames=list(NULL,"diff"))))`
@@ -31,9 +31,9 @@
 #' response was correct or not. Example: `function(d)d$S==d$lR`
 #' @param constants A named vector. Sets constants. Any parameter named
 #' by `sampled_p_vector` can be set constant.
-#' @param Fcovariates Covariate factors. Covariate measures which may be
+#' @param covariates Covariate factors. Covariate measures which may be
 #' included in the model and/or mapped to factors.
-#' @param Ffunctions Factor Functions. Functions to specify specific
+#' @param functions Factor Functions. Functions to specify specific
 #' parameterizations, or functions of parameters.
 #' @param adapt For future compatibility. Ignore.
 #' @param report_p_vector Boolean. If TRUE (default), it returns the vector of
@@ -45,32 +45,32 @@
 #' @export
 #'
 #'
-make_design <- function(Flist = NULL,Ffactors = NULL,Rlevels = NULL,model,ddata=NULL,
-                        Clist=NULL,matchfun=NULL,constants=NULL,Fcovariates=NULL,Ffunctions=NULL,
+make_design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
+                        contrasts=NULL,matchfun=NULL,constants=NULL,covariates=NULL,functions=NULL,
                         adapt=NULL,report_p_vector=TRUE, custom_p_vector = NULL){
 
-  if(any(names(Ffactors) %in% c("trial", "R", "rt", "lR", "lM"))){
+  if(any(names(factors) %in% c("trial", "R", "rt", "lR", "lM"))){
     stop("Please do not use any of the following names within Ffactors: trial, R, rt, lR, lM")
   }
 
-  if(any(grepl("_", names(Ffactors)))){
+  if(any(grepl("_", names(factors)))){
     stop("_ in variable names detected. Please refrain from using any underscores.")
   }
 
   if(!is.null(custom_p_vector)){
-    design <- list(Flist = Flist, model = model, Ffactors = Ffactors)
+    design <- list(Flist = formula, model = model, Ffactors = factors)
     attr(design, "sampled_p_names") <-custom_p_vector
     attr(design, "custom_ll") <- TRUE
     return(design)
   }
-  if (!is.null(ddata)) {
-    facs <- lapply(ddata,levels)
+  if (!is.null(data)) {
+    facs <- lapply(data,levels)
     nfacs <- facs[unlist(lapply(facs,is.null))]
     facs <- facs[!unlist(lapply(facs,is.null))]
     Rlevels <- facs[["R"]]
-    Ffactors <- facs[names(facs)!="R"]
+    factors <- facs[names(facs)!="R"]
     nfacs <- nfacs[!(names(nfacs) %in% c("trials","rt"))]
-    if (length(nfacs)>0) Fcovariates <- nfacs
+    if (length(nfacs)>0) covariates <- nfacs
   }
   # # Frees up memory again by creating new enclosing environments, courtesy of Steven
   # if(!is.null(Ffunctions)){
@@ -84,7 +84,7 @@ make_design <- function(Flist = NULL,Ffactors = NULL,Rlevels = NULL,model,ddata=
   # if (model()$type=="SDT") {
   #   Clist[["lR"]] <- contr.increasing(length(Rlevels),Rlevels)
   # }
-  nams <- unlist(lapply(Flist,function(x)as.character(stats::terms(x)[[2]])))
+  nams <- unlist(lapply(formula,function(x)as.character(stats::terms(x)[[2]])))
   if (!all(sort(names(model()$p_types)) %in% sort(nams)) & is.null(custom_p_vector)){
     p_types <- model()$p_types
     not_specified <- sort(names(p_types))[!sort(names(p_types)) %in% sort(nams)]
@@ -92,11 +92,11 @@ make_design <- function(Flist = NULL,Ffactors = NULL,Rlevels = NULL,model,ddata=
     additional_constants <- p_types[not_specified]
     names(additional_constants) <- not_specified
     constants <- c(constants, additional_constants)
-    for(add_constant in not_specified) Flist[[length(Flist)+ 1]] <- as.formula(paste0(add_constant, "~ 1"))
+    for(add_constant in not_specified) formula[[length(formula)+ 1]] <- as.formula(paste0(add_constant, "~ 1"))
   }
-  design <- list(Flist=Flist,Ffactors=Ffactors,Rlevels=Rlevels,
-                 Clist=Clist,matchfun=matchfun,constants=constants,
-                 Fcovariates=Fcovariates,Ffunctions=Ffunctions,adapt=adapt,model=model)
+  design <- list(Flist=formula,Ffactors=factors,Rlevels=Rlevels,
+                 Clist=contrasts,matchfun=matchfun,constants=constants,
+                 Fcovariates=covariates,Ffunctions=functions,adapt=adapt,model=model)
   p_vector <- sampled_p_vector(design,design$model)
 
   if (model()$type %in% c("MT","TC")) {

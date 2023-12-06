@@ -271,14 +271,14 @@ plot_prior <- function(prior=NULL, design,plotp=NULL,
 #'
 #' @param design Design for which a prior is constructed
 #' @param pmean Named vector of prior means, or an unnamed scalar, which is then used for all.
-#' @param psd Named vector of prior standard deviations, or an unnamed scalar, which is then used for all.
-#' @param update Another prior from which to copy meand and sds.
+#' @param psd Named vector of prior standard deviations, or an unnamed scalar, which is then used for all. If NA, will assume 1 for all parameters
+#' @param update Another prior from which to copy values
 #' @param verbose Boolean (default true) print values of prior to console (if
 #' update only new values).
 #' @param update_print When verbose print only new values (default TRUE)
 #' @param type What type of model you plan on using, choice of standard, diagonal and single for this function
-#' @param pscale For hierarchical models, the prior on the scale of the variances
-#' @param df For hierarchical models, the prior on the degrees of freedom of the variances
+#' @param pscale For hierarchical models, the prior on the scale of the variances. If NA, will assume 1 for all parameters
+#' @param df For hierarchical models, the prior on the degrees of freedom of the variances. If NA will assume 2 for all parameters
 #'
 #' @return An EMC prior object
 #' @export
@@ -300,6 +300,16 @@ make_prior <- function(design,pmean=NULL,psd=NULL,update=NULL,
     pscale[1:length(psc)] <- pscale
     pscale <- setNames(pscale,names(psc))
   }
+  if(is.na(psd)){
+    psd[1:length(ps)] <- 1
+    psd <- setNames(psd,names(ps))
+  }
+
+  if(is.na(pscale)){
+    pscale[1:length(psc)] <- 1
+    pscale <- setNames(pscale,names(psc))
+  }
+
 
   if ( !is.null(update) ) {
     pmu <- update$theta_mu_mean
