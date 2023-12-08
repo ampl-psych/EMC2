@@ -293,23 +293,23 @@ make_prior <- function(design,pmean=NULL,psd=NULL,update=NULL,
     pmean <- setNames(pmean,names(pm))
   }
   if (!is.null(psd) && is.null(names(psd))) {
-    psd[1:length(ps)] <- psd
-    psd <- setNames(psd,names(ps))
+    if(is.na(psd)){
+      psd[1:length(ps)] <- 1
+      psd <- setNames(psd,names(ps))
+    } else{
+      psd[1:length(ps)] <- psd
+      psd <- setNames(psd,names(ps))
+    }
   }
   if (!is.null(pscale) && is.null(names(pscale))) {
-    pscale[1:length(psc)] <- pscale
-    pscale <- setNames(pscale,names(psc))
+    if(is.na(pscale)){
+      pscale[1:length(psc)] <- 1
+      pscale <- setNames(pscale,names(psc))
+    } else{
+      pscale[1:length(psc)] <- pscale
+      pscale <- setNames(pscale,names(psc))
+    }
   }
-  if(is.na(psd)){
-    psd[1:length(ps)] <- 1
-    psd <- setNames(psd,names(ps))
-  }
-
-  if(is.na(pscale)){
-    pscale[1:length(psc)] <- 1
-    pscale <- setNames(pscale,names(psc))
-  }
-
 
   if ( !is.null(update) ) {
     pmu <- update$theta_mu_mean

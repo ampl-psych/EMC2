@@ -411,7 +411,7 @@ bridge_group_and_prior_and_jac_SEM <- function(proposals_group, proposals_list, 
     proposals_curr <- matrix(proposals[i,], ncol = info$n_pars, byrow = T)
 
     group_means <- matrix(theta_mu[i,], nrow = info$n_subjects, ncol = info$n_pars, byrow = T) + info$xy %*% t(K_curr) + eta_curr %*% t(lambda_curr)
-    var_curr <- sqrt(exp(1/epsilon_inv[i,]))
+    var_curr <- sqrt(1/exp(epsilon_inv[i,]))
     var_curr[var_curr < 0.001] <- 0.001
     var_curr[var_curr > 100] <- 100
     group_ll <- sum(dnorm(t(proposals_curr), t(group_means), var_curr, log = T))
