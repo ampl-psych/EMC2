@@ -65,7 +65,7 @@ DDM <- function(){
   list(
     type="DDM",
     c_name = "DDM",
-    p_types=c("v" = 1,"a" = log(1),"sv" = log(1),"t0" = log(0),"st0" = log(0),"s" = log(1),"Z" = qnorm(0.5),"SZ" = qnorm(0),"DP" = qnorm(0.5)),
+    p_types=c("v" = 1,"a" = log(1),"sv" = log(0),"t0" = log(0),"st0" = log(0),"s" = log(1),"Z" = qnorm(0.5),"SZ" = qnorm(0),"DP" = qnorm(0.5)),
     # The "TZD" parameterization defined relative to the "rtdists" package is:
     # natural scale
     #   v = rtdists rate v (positive favors upper)

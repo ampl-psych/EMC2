@@ -88,7 +88,7 @@ make_design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=
   if (!all(sort(names(model()$p_types)) %in% sort(nams)) & is.null(custom_p_vector)){
     p_types <- model()$p_types
     not_specified <- sort(names(p_types))[!sort(names(p_types)) %in% sort(nams)]
-    message(paste0("Parameter(s) ", paste0(not_specified, collapse = ", "), " not specified in Flist and assumed constant."))
+    message(paste0("Parameter(s) ", paste0(not_specified, collapse = ", "), " not specified in formula and assumed constant."))
     additional_constants <- p_types[not_specified]
     names(additional_constants) <- not_specified
     constants <- c(constants, additional_constants)
