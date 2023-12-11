@@ -1,27 +1,73 @@
 
 add_info_diag <- function(sampler, prior = NULL, ...){
-  n_pars <- sum(!(sampler$nuisance | sampler$grouped))
+  sampler$prior <- get_prior_diag(prior, sum(!(sampler$nuisance | sampler$grouped)), sample = F)
+  return(sampler)
+}
+
+get_prior_diag <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, type = "mu", design = NULL,
+                               map = FALSE){
   # Checking and default priors
   if(is.null(prior)){
     prior <- list()
+  }
+  if(!is.null(design)){
+    n_pars <- length(attr(design, "p_vector"))
   }
   if (is.null(prior$theta_mu_mean)) {
     prior$theta_mu_mean <- rep(0, n_pars)
   }
   if(is.null(prior$theta_mu_var)){
-    prior$theta_mu_var <- rep(1, n_pars)
+    prior$theta_mu_var <- diag(rep(1, n_pars))
   }
   if(is.null(prior$v)){
-    prior$v <- 2
+    prior$v <- rep(2, n_pars)
   }
   if(is.null(prior$A)){
     prior$A <- rep(1, n_pars)
   }
   # Things I save rather than re-compute inside the loops.
-  prior$theta_mu_invar <- 1/prior$theta_mu_var #Inverse of the prior
-  sampler$prior <- prior
-  return(sampler)
+  prior$theta_mu_invar <- ginv(prior$theta_mu_var) #Inverse of the matrix
+  if(sample){
+    out <- list()
+    if(!type %in% c("mu", "variance", "full_var")){
+      stop("for variant diagonal, you can only specify the prior on the mean or variance parameters")
+    }
+    if(type == "mu"){
+      samples <- mvtnorm::rmvnorm(N, mean = prior$theta_mu_mean,
+                                  sigma = prior$theta_mu_var)
+      if(!is.null(design)){
+        colnames(samples) <- par_names <- names(attr(design, "p_vector"))
+        if(map){
+          proot <- unlist(lapply(strsplit(colnames(samples),"_"),function(x)x[[1]]))
+          isin <- proot %in% names(design$model()$p_types)
+          fullnames <- colnames(samples)[isin]
+          colnames(samples)[isin] <- proot
+          samples[,isin] <- design$model()$Ntransform(samples[,isin])
+          colnames(samples)[isin] <- fullnames
+        }
+      }
+      out$mu <- samples
+      return(out)
+    } else {
+
+      var <- array(NA_real_, dim = c(N, n_pars))
+      for(i in 1:N){
+        a_half <- 1 / rgamma(n = n_pars,shape = 1/2,
+                             rate = 1/(prior$A^2))
+        var[i,] <- 1 / rgamma(n = n_pars, shape = prior$v/2, rate = prior$v/a_half)
+      }
+      colnames(var) <- names(attr(design, "p_vector"))
+      if (type == "full_var"){
+        out$full_var <- var
+      } else{
+        out$variance <- var
+      }
+      return(out)
+    }
+  }
+  return(prior)
 }
+
 
 get_startpoints_diag <- function(pmwgs, start_mu, start_var){
   n_pars <- sum(!(pmwgs$nuisance | pmwgs$grouped))
@@ -65,20 +111,11 @@ gibbs_step_diag <- function(sampler, alpha){
   mean_mu = var_mu * ((apply(alpha, 1, sum) * last$tvinv + prior$theta_mu_mean * prior$theta_mu_invar))
   tmu <- rnorm(n_pars, mean_mu, sd = sqrt(var_mu))
   names(tmu) <- sampler$par_names[!(sampler$nuisance | sampler$grouped)]
-
-  # if(!is.null(hyper$std_shape)){
-  #   # InvGamma alternative (probably inferior) prior
-  #   shape = hyper$std_shape + sampler$n_subjects / 2
-  #   rate = hyper$std_rate + rowSums( (alpha-tmu)^2 ) / 2
-  #   tvinv = rgamma(n=sampler$n_pars, shape=shape, rate=rate)
-  #   tvar = 1/tvinv
-  #   a_half <- NULL
-  # } else {
   tvinv = rgamma(n=n_pars, shape=prior$v/2 + sampler$n_subjects/2, rate=prior$v/last$a_half +
                    rowSums( (alpha-tmu)^2 ) / 2)
   tvar = 1/tvinv
   #Contrary to standard pmwg I use shape, rate for IG()
-  a_half <- 1 / rgamma(n = n_pars, shape = (prior$v + n_pars) / 2,
+  a_half <- 1 / rgamma(n = n_pars, shape = (prior$v + 1) / 2,
                        rate = prior$v * tvinv + 1/(prior$A^2))
   return(list(tmu = tmu, tvar = diag(tvar, n_pars), tvinv = diag(tvinv, n_pars), a_half = a_half, alpha = alpha))
 }
@@ -163,3 +200,39 @@ prior_dist_diag = function(parameters, info){
   logw_den3 <- -sum(log(param.theta.sig2))
   return(log_prior_mu + log_prior_sigma + log_prior_a - logw_den3 - logw_den2)
 }
+
+
+# bridge_sampling ---------------------------------------------------------
+bridge_group_and_prior_and_jac_diag <- function(proposals_group, proposals_list, info){
+  prior <- info$prior
+  proposals <- do.call(cbind, proposals_list)
+  theta_mu <- proposals_group[,1:info$n_pars]
+  theta_var <- proposals_group[,(info$n_pars + 1):(2*info$n_pars)]
+  group_ll <- 0
+  for(i in 1:info$n_pars){
+    group_ll <- group_ll + dnorm(proposals[,info$par_names[i]], theta_mu[,i], sqrt(exp(theta_var[,i])), log = T)
+  }
+  prior_mu <- colSums(dnorm(t(theta_mu), mean = prior$theta_mu_mean, sd = sqrt(prior$theta_mu_var), log =T))
+  prior_var <- 0
+  for(i in 1:info$n_pars){
+    prior_var <- prior_var +  dhalft(sqrt(exp(theta_var[,i])), scale = prior$A, nu = prior$v, log = T)
+  }
+  jac_var <- rowSums(theta_var)
+  return(group_ll + prior_mu + prior_var + jac_var)
+}
+
+
+bridge_add_info_diag <- function(info, samples){
+  info$group_idx <- (samples$n_pars*samples$n_subjects + 1):(samples$n_pars*samples$n_subjects + 2*samples$n_pars)
+  return(info)
+}
+
+bridge_add_group_diag <- function(all_samples, samples, idx){
+  all_samples <- cbind(all_samples, t(samples$samples$theta_mu[,idx]))
+  all_samples <- cbind(all_samples, t(log(apply(samples$samples$theta_var[,,idx], 3, diag))))
+  return(all_samples)
+}
+
+
+
+

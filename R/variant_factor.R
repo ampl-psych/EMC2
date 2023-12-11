@@ -50,15 +50,16 @@ add_info_factor <- function(sampler, prior = NULL, ...){
   if(is.null(prior$s2)){
     prior$s2 <- 1/2
   }
-
-  # Things I save rather than re-compute inside the loops.
+  prior$R_0 <- diag(n_factors)
+  prior$rho_0 <- 5
   # Things I save rather than re-compute inside the loops.
   prior$theta_mu_invar <- diag(1/prior$theta_mu_var)
   prior$theta_lambda_invar <-1/prior$theta_lambda_var
 
   if(is.null(constraintMat)){
-    constraintMat <- matrix(1, nrow = n_pars, ncol = n_factors)
-    # constraintMat[upper.tri(constraintMat, diag = T)] <- 0 #Now you can't fix one of the diagonal values to 0
+    constraintMat <- matrix(Inf, nrow = n_pars, ncol = n_factors)
+    diag(constraintMat) <- 1
+    constraintMat[upper.tri(constraintMat, diag = F)] <- 0 #Now you can't fix one of the diagonal values to 0
   }
 
   if(!is.null(args$signFix)){
@@ -66,7 +67,6 @@ add_info_factor <- function(sampler, prior = NULL, ...){
   } else{
     signFix <- F
   }
-  constraintMat <- constraintMat != 0 #For indexing
 
   attr(sampler, "signFix") <- signFix
   attr(sampler, "constraintMat") <- constraintMat
@@ -84,7 +84,8 @@ get_startpoints_factor<- function(pmwgs, start_mu, start_var){
   start_psi_inv <- diag(1, pmwgs$n_factors)
   start_sig_err_inv <- diag(1, n_pars)
   start_lambda <- matrix(0, nrow = n_pars, ncol = pmwgs$n_factors)
-  start_lambda[1:pmwgs$n_factors, 1:pmwgs$n_factors] <- diag(1, pmwgs$n_factors)
+  constraintMat <- attr(pmwgs, "constraintMat")
+  start_lambda[constraintMat != Inf] <- constraintMat[constraintMat != Inf]
   start_eta <- matrix(0, nrow = pmwgs$n_subjects, ncol = pmwgs$n_factors)
   return(list(tmu = start_mu, tvar = start_var, lambda = start_lambda, lambda_untransf = start_lambda,
               sig_err_inv = start_sig_err_inv, psi_inv = start_psi_inv,
@@ -115,6 +116,7 @@ gibbs_step_factor <- function(sampler, alpha){
   n_pars <- sampler$n_pars-sum(sampler$nuisance) - sum(sampler$grouped)
   n_factors <- sampler$n_factors
   constraintMat <- hyper$constraintMat
+  constraintMat <- constraintMat == Inf #For indexing
 
   eta <- matrix(last$eta, n_subjects, n_factors)
   psi_inv <- matrix(last$psi_inv, n_factors)
@@ -135,6 +137,13 @@ gibbs_step_factor <- function(sampler, alpha){
   eta_mu <- eta_sig %*% t(lambda) %*% sig_err_inv %*% t(alphatilde)
   eta[,] <- t(apply(eta_mu, 2, FUN = function(x){rmvnorm(1, x, eta_sig)}))
 
+  # for(p in 1:n_pars){
+  #   constraint <- constraintMat[p,] == Inf
+  #   for(j in 1:n_factors){
+  #     alphatilde[,p] <- alphatilde[,p] - lambda[p,j] * eta[,j] * (1-constraint[j])
+  #   }
+  # }
+
   #Update sig_err
   sig_err_inv <- diag(rgamma(n_pars,shape=(prior$nu+n_subjects)/2, rate=(prior$nu*prior$s2+ colSums((alphatilde - eta %*% t(lambda))^2))/2))
 
@@ -150,7 +159,8 @@ gibbs_step_factor <- function(sampler, alpha){
   }
 
   #Update psi_inv
-  psi_inv[,] <- diag(rgamma(n_factors ,shape=(prior$al+n_subjects)/2,rate=prior$bl+colSums(eta^2)/2), n_factors)
+  # psi_inv[,] <- diag(rgamma(n_factors ,shape=(prior$al+n_subjects)/2,rate=prior$bl+colSums(eta^2)/2), n_factors)
+  psi_inv <- diag(n_factors)#solve(riwish(n_subjects + prior$rho_0, t(eta) %*% eta + solve(prior$R_0)))
 
   lambda_orig <- lambda
   #If the diagonals of lambda aren't constrained to be 1, we should fix the signs
@@ -183,7 +193,7 @@ get_conditionals_factor <- function(s, samples, n_pars, iteration = NULL, idx = 
   sig_err <- log(apply(samples$theta_sig_err_inv[idx,idx,],3,diag))
   psi <- log(apply(samples$theta_psi_inv,3,diag))
   eta <- matrix(samples$theta_eta[s,,], nrow = samples$n_factors)
-  lambda <- apply(samples$lambda_untransf[idx,,,drop = F], 3, unwind_lambda, samples$constraintMat, samples$n_factors)
+  lambda <- apply(samples$lambda_untransf[idx,,,drop = F], 3, unwind_lambda, samples$constraintMat)
   theta_mu <- samples$theta_mu[idx,]
   all_samples <- rbind(samples$alpha[idx, s,],theta_mu, eta, sig_err, psi, lambda)#, sig_err, psi, lambda)
   mu_tilde <- rowMeans(all_samples)
@@ -194,7 +204,7 @@ get_conditionals_factor <- function(s, samples, n_pars, iteration = NULL, idx = 
                                  samples$theta_eta[s,,iteration],
                                  log(diag(samples$theta_sig_err_inv[idx,idx, iteration])),
                                  log(apply(samples$theta_psi_inv[,,iteration, drop = F], 3, diag)),
-                                 unwind_lambda(samples$lambda_untransf[idx,, iteration], samples$constraintMat, samples$n_factors)))
+                                 unwind_lambda(samples$lambda_untransf[idx,, iteration], samples$constraintMat)))
   return(list(eff_mu = condmvn$condMean, eff_var = condmvn$condVar))
 }
 
@@ -257,16 +267,15 @@ get_all_pars_factor <- function(samples, filter, info){
   return(list(X = X, mu_tilde = mu_tilde, var_tilde = var_tilde, info = info))
 }
 
-unwind_lambda <- function(lambda, constraintMat, n_factors = NULL, n_randeffect = NULL, reverse = F){
+unwind_lambda <- function(lambda, constraintMat, reverse = F){
   if(reverse){
-    out <- matrix(0, n_randeffect, n_factors)
-    out[constraintMat] <- lambda
+    out <- constraintMat
+    out[constraintMat == Inf] <- lambda
   } else{
-    out <- as.numeric(lambda[constraintMat])
+    out <- as.numeric(lambda[constraintMat == Inf])
   }
   return(out)
 }
-
 group_dist_factor = function(random_effect = NULL, parameters, sample = FALSE, n_samples = NULL, info){
   n_randeffect <- info$n_randeffect
   n_factors <- info$n_factors
@@ -274,7 +283,7 @@ group_dist_factor = function(random_effect = NULL, parameters, sample = FALSE, n
   param.sig_err_inv <- exp(parameters[(n_randeffect+1):(n_randeffect + n_randeffect)])
   param.psi_inv <- exp(parameters[(n_randeffect+n_randeffect+1):(n_randeffect + n_randeffect+ n_factors)])
   param.lambda.unwound <- parameters[(n_randeffect+n_randeffect+n_factors+1):length(parameters)]
-  param.lambda <- unwind_lambda(param.lambda.unwound, info$hyper$constraintMat, n_factors, n_randeffect, reverse = T)
+  param.lambda <- unwind_lambda(param.lambda.unwound, info$hyper$constraintMat, reverse = T)
   param.var <- param.lambda %*% diag(1/param.psi_inv, length(param.psi_inv)) %*% t(param.lambda) + diag(1/param.sig_err_inv)
   if (sample){
     return(mvtnorm::rmvnorm(n_samples, param.theta_mu, param.var))

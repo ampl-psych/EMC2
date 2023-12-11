@@ -88,7 +88,7 @@ gibbs_step_blocked <- function(sampler, alpha){
                        rowSums( (alpha-tmu)^2 ) / 2)
       tvar = 1/tvinv
       #Contrary to standard pmwg I use shape, rate for IG()
-      a_half <- 1 / rgamma(n = n_pars, shape = (prior$v + n_pars) / 2,
+      a_half <- 1 / rgamma(n = n_pars, shape = (prior$v + 1) / 2,
                            rate = prior$v * tvinv + 1/(prior$v^2))
     }
 

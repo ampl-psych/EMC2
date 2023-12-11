@@ -42,7 +42,7 @@ rPROBIT <- function(lR,pars,p_types=c("mean","sd","threshold"),lt=-Inf)
 probit <- function(){
   list(
   type="SDT",
-  p_types=c("mean","sd","threshold"),
+  p_types=c("mean" = 0,"sd" = log(1),"threshold" = 0),
   # Transform to natural scale
   Ntransform=function(x) {
     is_sd <- grepl("sd",dimnames(x)[[2]])

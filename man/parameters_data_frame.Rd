@@ -9,6 +9,7 @@ parameters_data_frame(
   filter = "sample",
   thin = 1,
   subfilter = 0,
+  subject_n = NULL,
   mapped = FALSE,
   include_constants = FALSE,
   stat = NULL,
@@ -25,6 +26,8 @@ parameters_data_frame(
 
 \item{subfilter}{An integer or vector. If integer it will exclude up until
 that integer. If vector it will include everything in that range.}
+
+\item{subject_n}{Number of alpha iterations to retain for each subject (default NULL = all)}
 
 \item{mapped}{Boolean (default FALSE) if TRUE plot parameters mapped to design
 otherwise sampled parameters}

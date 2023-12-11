@@ -3,6 +3,7 @@ dLNR <- function(rt,pars){
   rt <- rt - pars[,"t0"]
   out <- numeric(length(rt))
   ok <- rt > 0
+  ok[is.na(ok) | is.infinite(rt)] <- FALSE
   out[ok] <- stats::dlnorm(rt[ok],meanlog=pars[ok,"m"],sdlog=pars[ok,"s"])
   out
 }
@@ -11,6 +12,7 @@ pLNR <- function(rt,pars){
   rt <- rt - pars[,"t0"]
   out <- numeric(length(rt))
   ok <- rt > 0
+  ok[is.na(ok) | is.infinite(rt)] <- FALSE
   out[ok] <- stats::plnorm(rt[ok],meanlog=pars[ok,"m"],sdlog=pars[ok,"s"])
   out
 
@@ -37,11 +39,11 @@ rLNR <- function(lR,pars,p_types=c("m","s","t0")){
 #' @return A list defining the cognitive model
 #' @export
 
-lnrMS <- function() {
+LNR <- function() {
   list(
     type="RACE",
-    c_name = "lnrMS",
-    p_types=c("m","s","t0"),
+    c_name = "LNR",
+    p_types=c("m" = 1,"s" = log(1),"t0" = log(0)),
     Ntransform=function(x) {
       # Transform to natural scale
       x[,dimnames(x)[[2]] != "m"] <- exp(x[,dimnames(x)[[2]] != "m"])
@@ -65,6 +67,8 @@ lnrMS <- function() {
       log_likelihood_race(p_vector=p_vector, dadm = dadm, min_ll = min_ll)
   )
 }
+
+
 
 
 

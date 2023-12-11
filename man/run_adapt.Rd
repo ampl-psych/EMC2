@@ -16,11 +16,13 @@ run_adapt(
   verboseProgress = FALSE,
   fileName = NULL,
   particles = NULL,
-  particle_factor = 40,
+  particle_factor = 50,
   cores_per_chain = 1,
   cores_for_chains = length(samplers),
   max_trys = 50,
-  n_blocks = NULL
+  n_blocks = 1,
+  omit_mpsrf = TRUE,
+  omit_mu = TRUE
 )
 }
 \arguments{
@@ -54,7 +56,9 @@ run_adapt(
 
 \item{max_trys}{An integer. How many times it will try to meet the finish conditions. Default is 50.}
 
-\item{n_blocks}{}
+\item{n_blocks}{An integer. Will block the parameter chains such that they are updated in blocks. This can be helpful in extremely tough models with large number of parameters.}
+
+\item{omit_mpsrf}{When testing for convergence use only psrf (default FALSE uses mpsrf as well)}
 }
 \value{
 A list of samplers.

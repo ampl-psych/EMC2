@@ -6,7 +6,9 @@
 argument (which calculates a statistics based on the data) is supplied
 instead fit is plotted as a density with a vertical line at the position of
 the data statistic. If more than one subject is included data and fits are
-aggregated over subjects.}
+aggregated over subjects. If data or fit contains NA in responses or rt, or
+is.infinite(rt) these are treating as missing and defective cdfs sum to the
+probability of non-missing.}
 \usage{
 plot_fit(
   data,
@@ -20,6 +22,7 @@ plot_fit(
   do_plot = TRUE,
   xlim = NULL,
   ylim = NULL,
+  main = "",
   layout = NULL,
   mfcol = TRUE,
   probs = c(1:99)/100,
@@ -46,7 +49,7 @@ and an rt column}
 
 \item{factors}{Character vector of factors in data to display separately. If
 NULL (default) use names of all columns in data except "trials","R", and "rt".
-Omitted factors are aggregated over.}
+Omitted factors are aggregated over. If NA treats entire data set as a single cell.}
 
 \item{stat}{A function that takes a the data and returns a single value.}
 
@@ -62,6 +65,8 @@ stat argument is supplied (default c(.025,.5,.975))}
 \item{xlim}{x-axis plot limit, 2-vector (same for all) or matrix (one row for each paramter)}
 
 \item{ylim}{y-axis plot limit, 2-vector (same for all) or matrix (one row for each paramter)}
+
+\item{main}{Text title, pasted before cell name.}
 
 \item{layout}{2-vector specifying par(mfrow) or par(mfcol) (default NULL use current).}
 
@@ -99,5 +104,7 @@ Plots data and fit. If rt  available plots cdf, if not plots ROC. If stat
 argument (which calculates a statistics based on the data) is supplied
 instead fit is plotted as a density with a vertical line at the position of
 the data statistic. If more than one subject is included data and fits are
-aggregated over subjects.
+aggregated over subjects. If data or fit contains NA in responses or rt, or
+is.infinite(rt) these are treating as missing and defective cdfs sum to the
+probability of non-missing.
 }

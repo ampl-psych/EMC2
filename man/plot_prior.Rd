@@ -24,7 +24,7 @@ plot_prior(
 }
 \arguments{
 \item{prior}{A list of specifying prior means and covariance, if NULL default
-prior (mean=0, varaince = 1, uncorrelaterd)}
+prior (mean=0, variance = 1, uncorrelated)}
 
 \item{design}{Design corresponding to prior}
 
@@ -32,7 +32,7 @@ prior (mean=0, varaince = 1, uncorrelaterd)}
 
 \item{type}{Type of prior (standard or single)}
 
-\item{selection}{Select level prior to plot (default "alpha" for single and "mu" for single)}
+\item{selection}{Select level prior to plot (default "alpha" for single and "mu" for standard)}
 
 \item{mapped}{boolean for mapping mu or alpha back to the design cells on the natural scale.}
 
@@ -47,13 +47,13 @@ prior (mean=0, varaince = 1, uncorrelaterd)}
 \item{layout}{par(mfrow) setting (default c(3,3))}
 
 \item{lower}{Lower quantile limit of values plotted. Default NULL all plotted,
-integer same for all parameters, parameter named list parameter specific}
+numeric same for all parameters, parameter named list parameter specific}
 
 \item{upper}{Upper quantile limit of values plotted. Default NULL all plotted,
-integer same for all parameters, parameter named list parameter specific}
+numeric same for all parameters, parameter named list parameter specific}
 
 \item{xlim}{List with parameter names of plot x limits or single pair same for all.
-Any names not in list or if (defualt) NA xlim set as min and max.}
+Any names not in list or if (default) NA xlim set as min and max.}
 }
 \value{
 Invisible sampled columns of parameters as a data frame (covariate,

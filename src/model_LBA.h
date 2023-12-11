@@ -89,15 +89,19 @@ double dlba_norm(double t, double A,double b, double v, double sv,
   return pdf;
 }
 
-NumericVector dlba_c(NumericVector rts, NumericMatrix pars, LogicalVector idx){
+NumericVector dlba_c(NumericVector rts, NumericMatrix pars, LogicalVector idx, double min_ll){
   //v = 0, sv = 1, B = 2, A = 3, t0 = 4
   int n = sum(idx);
   NumericVector out(n);
   int k = 0;
   for(int i = 0; i < rts.length(); i++){
     if(idx[i] == TRUE){
-      if(!NumericVector::is_na(pars(i,0)) & (rts[i] - pars(i,4) > 0) & (pars(i,2) >= 0) & (pars(i,4) > 0.05) & ((pars(i,3) > 1e-6) | (pars(i,3) == 0))){
+      if(!NumericVector::is_na(pars(i,0)) & (rts[i] - pars(i,4) > 0) & (pars(i,2) >= 0) & (pars(i,4) > 0.05) &
+         ((pars(i,3) > 1e-6) | (pars(i,3) == 0)) &
+         ((pars(i,0) > -100) & (pars(i,0) < 100)) & ((pars(i,1) > 1e-3) | (pars(i,1) == 0)) ){
         out[k] = dlba_norm(rts[i] - pars(i,4), pars(i,3), pars(i,2) + pars(i,3), pars(i,0), pars(i,1), true, false);
+      } else{
+        out[k] = min_ll;
       }
       k++;
     }
@@ -105,15 +109,19 @@ NumericVector dlba_c(NumericVector rts, NumericMatrix pars, LogicalVector idx){
   return(out);
 }
 
-NumericVector plba_c(NumericVector rts, NumericMatrix pars, LogicalVector idx){
+NumericVector plba_c(NumericVector rts, NumericMatrix pars, LogicalVector idx, double min_ll){
   //v = 0, sv = 1, B = 2, A = 3, t0 = 4
   int n = sum(idx);
   NumericVector out(n);
   int k = 0;
   for(int i = 0; i < rts.length(); i++){
     if(idx[i] == TRUE){
-      if(!NumericVector::is_na(pars(i,0)) & (rts[i] > 0) & (pars(i,2) >= 0) & (pars(i,4) > 0.05) & ((pars(i,3) > 1e-6) | (pars(i,3) == 0))){
+      if(!NumericVector::is_na(pars(i,0)) & (rts[i] > 0) & (pars(i,2) >= 0) & (pars(i,4) > 0.05) &
+         ((pars(i,3) > 1e-6) | (pars(i,3) == 0)) &
+         ((pars(i,0) > -100) & (pars(i,0) < 100)) & ((pars(i,1) > 1e-3) | (pars(i,1) == 0)) ){
         out[k] = plba_norm(rts[i] - pars(i,4), pars(i,3), pars(i,2) + pars(i,3), pars(i,0), pars(i,1), true, false);
+      } else{
+        out[k] = min_ll;
       }
       k++;
     }

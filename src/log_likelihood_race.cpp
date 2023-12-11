@@ -91,8 +91,8 @@ double c_log_likelihood_DDM(NumericMatrix pars, DataFrame data,
 }
 
 double c_log_likelihood_race(NumericMatrix pars, DataFrame data,
-                             NumericVector (*dfun)(NumericVector, NumericMatrix, LogicalVector),
-                             NumericVector (*pfun)(NumericVector, NumericMatrix, LogicalVector),
+                             NumericVector (*dfun)(NumericVector, NumericMatrix, LogicalVector, double),
+                             NumericVector (*pfun)(NumericVector, NumericMatrix, LogicalVector, double),
                              const int n_trials, LogicalVector winner, NumericVector expand,
                              double min_ll){
   const int n_out = expand.length();
@@ -110,10 +110,12 @@ double c_log_likelihood_race(NumericMatrix pars, DataFrame data,
       }
     }
   }
-  NumericVector win = log(dfun(rts, pars, winner)); //first for compressed
+  NumericVector win = log(dfun(rts, pars, winner, exp(min_ll))); //first for compressed
   lds[winner] = win;
   if(n_acc > 1){
-    NumericVector loss = log(1- pfun(rts, pars, !winner)); //cdfs
+    NumericVector loss = log(1- pfun(rts, pars, !winner, exp(min_ll))); //cdfs
+    loss[is_na(loss)] = min_ll;
+    loss[loss == log(1 - exp(min_ll))] = min_ll;
     lds[!winner] = loss;
   }
   lds[is_na(lds)] = min_ll;
@@ -157,23 +159,22 @@ NumericVector calc_ll(NumericMatrix p_matrix, DataFrame data, NumericVector cons
     for(int i = 0; i < n_particles; i++){
       p_vector = p_matrix(i, _);
       pars = get_pars(p_vector, constants, transform_DDM, Ntransform_DDM, p_types, designs, n_trials);
-
       lls[i] = c_log_likelihood_DDM(pars, data, n_trials, expand, min_ll, group_idx);
     }
   } else{
 
     // Love me some good old ugly but fast c++ pointers
-    NumericVector (*dfun)(NumericVector, NumericMatrix, LogicalVector);
-    NumericVector (*pfun)(NumericVector, NumericMatrix, LogicalVector);
+    NumericVector (*dfun)(NumericVector, NumericMatrix, LogicalVector, double);
+    NumericVector (*pfun)(NumericVector, NumericMatrix, LogicalVector, double);
     NumericVector (*transform)(NumericVector);
     NumericMatrix (*Ntransform)(NumericMatrix);
     // NumericMatrix (*Ttransform)(NumericMatrix);
-    if(type == "lbaB"){
+    if(type == "LBA"){
       dfun = dlba_c;
       pfun = plba_c;
       transform = transform_lba;
       Ntransform = Ntransform_lba;
-    } else if(type == "rdmB"){
+    } else if(type == "RDM"){
       dfun = drdm_c;
       pfun = prdm_c;
       transform = transform_rdm;

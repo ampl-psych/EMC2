@@ -9,6 +9,9 @@ compare_IC(
   filter = "sample",
   subfilter = 0,
   use_best_fit = TRUE,
+  BayesFactor = FALSE,
+  cores_for_props = 4,
+  cores_per_prop = 1,
   print_summary = TRUE,
   digits = 0,
   digits_p = 3,
@@ -25,6 +28,12 @@ compare_IC(
 \item{use_best_fit}{Boolean, default TRUE use best of minD and Dmean in
 calculation otherwise always use Dmean}
 
+\item{BayesFactor}{Boolean, default FALSE. Include marginal likelihoods as estimated using WARP-III bridge sampling. Usually takes a minute per model added to calculate}
+
+\item{cores_for_props}{Integer, how many cores to use for BayesFactor calculation, here 4 is default for the 4 different proposal densities to evaluate, only 1, 2 and 4 are sensible.}
+
+\item{cores_per_prop}{Integer, how many cores to use for BayesFactor calculation if you have more than 4 cores available. Cores used will be cores_for_props * cores_per_prop, where prioritizing cores_for_props being 4 or 2 is fastest.}
+
 \item{print_summary}{Boolean (default TRUE) print table of results}
 
 \item{digits}{Integer, significant digits in printed table except model weights}
@@ -36,7 +45,7 @@ returns sums over all subjects}
 }
 \value{
 Table of effective number of parameters, mean deviance, deviance of
-mean, DIC, BPIC, and associated weights.
+mean, DIC, BPIC, Marginal Deviance (if BayesFactor=TRUE) and associated weights.
 }
 \description{
 IC based model selection for a list of samples objects.

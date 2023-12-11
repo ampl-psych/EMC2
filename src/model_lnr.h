@@ -22,7 +22,7 @@ NumericMatrix Ntransform_lnr(NumericMatrix x) {
   return(out);
 }
 
-NumericVector plnr_c(NumericVector rts, NumericMatrix pars, LogicalVector idx){
+NumericVector plnr_c(NumericVector rts, NumericMatrix pars, LogicalVector idx, double min_ll){
   int n = sum(idx);
   NumericVector out(n);
   int k = 0;
@@ -30,6 +30,8 @@ NumericVector plnr_c(NumericVector rts, NumericMatrix pars, LogicalVector idx){
     if(idx[i] == TRUE){
       if(!NumericVector::is_na(pars(i,0)) & (rts[i] - pars(i,2) > 0)){
         out[k] = R::plnorm(rts[i] - pars(i,2), pars(i, 0), pars(i, 1), TRUE, FALSE);
+      } else{
+        out[k] = min_ll;
       }
       k++;
     }
@@ -38,7 +40,7 @@ NumericVector plnr_c(NumericVector rts, NumericMatrix pars, LogicalVector idx){
   return(out);
 }
 
-NumericVector dlnr_c(NumericVector rts, NumericMatrix pars, LogicalVector idx){
+NumericVector dlnr_c(NumericVector rts, NumericMatrix pars, LogicalVector idx, double min_ll){
   int n = sum(idx);
   NumericVector out(n);
   int k = 0;
@@ -46,6 +48,8 @@ NumericVector dlnr_c(NumericVector rts, NumericMatrix pars, LogicalVector idx){
     if(idx[i] == TRUE){
       if(!NumericVector::is_na(pars(i,0)) & (rts[i] - pars(i,2) > 0)){
         out[k] = R::dlnorm(rts[i] - pars(i,2), pars(i, 0), pars(i, 1), FALSE);
+      } else{
+        out[k] = min_ll;
       }
       k++;
     }

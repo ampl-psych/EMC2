@@ -7,6 +7,7 @@
 plot_pars(
   pmwg_mcmc,
   layout = c(2, 3),
+  use_par = NULL,
   selection = "alpha",
   filter = "sample",
   thin = 1,
@@ -27,7 +28,8 @@ plot_pars(
   adjust = 1,
   do_contraction = TRUE,
   lpos = "topright",
-  digits = 3
+  digits = 3,
+  use_main = NULL
 )
 }
 \arguments{
@@ -35,6 +37,8 @@ plot_pars(
 
 \item{layout}{A 2-vector specifying the layout as in par(mfrow = layout).
 If NA or NULL use current.}
+
+\item{use_par}{Character vector of names of parameters to plot (default NULL = plot all)}
 
 \item{selection}{String designating parameter type (mu, variance, correlation, alpha = default)}
 
@@ -52,9 +56,9 @@ otherwise sampled parameters}
 
 \item{n_prior}{Number of samples to approximate prior (default = 1e3)}
 
-\item{xlim}{x-axis plot limit, 2-vector (same for all) or matrix (one row for each paramter)}
+\item{xlim}{x-axis plot limit, 2-vector (same for all) or matrix (one row for each parameter)}
 
-\item{ylim}{y-axis plot limit, 2-vector (same for all) or matrix (one row for each paramter)}
+\item{ylim}{y-axis plot limit, 2-vector (same for all) or matrix (one row for each parameter)}
 
 \item{prior_xlim}{A vector giving upper and lower quantiles of prior when choosing xlim.}
 
@@ -84,6 +88,8 @@ plotted as vertical lines.}
 \item{lpos}{Position of contraction in graph}
 
 \item{digits}{Rounding of contraction}
+
+\item{use_main}{Character string for title to use. If NULL (defualt) auto generated.}
 }
 \value{
 Invisibly returns tables of true and 95\% CIs (for all chains combined

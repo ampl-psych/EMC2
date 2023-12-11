@@ -15,25 +15,25 @@ add_info_infnt_factor <- function(sampler, prior = NULL, ...){
     prior$theta_mu_var <- rep(1, n_pars)
   }
   if(is.null(prior$as)){
-    prior$as <- 5
+    prior$as <- 5 # shape prior on the error variances
   }
   if(is.null(prior$bs)){
-    prior$bs <- 1
+    prior$bs <- 1 # rate prior on the error variances
   }
   if(is.null(prior$df)){
-    prior$df <- 10
+    prior$df <- 10 # Shape and rate prior on the global shrinkage
   }
   if(is.null(prior$ad1)){
-    prior$ad1 <- 3
+    prior$ad1 <- 3 # Shape prior on first column
   }
   if(is.null(prior$bd1)){
-    prior$bd1 <- 1.7
+    prior$bd1 <- 1.7 # Rate prior on first column
   }
   if(is.null(prior$ad2)){
-    prior$ad2 <- 3.5
+    prior$ad2 <- 3.5 # Multiplicative prior on shape subsequent columns
   }
   if(is.null(prior$bd2)){
-    prior$bd2 <- 2
+    prior$bd2 <- 2 # Multiplicative prior on rate of subsequent columns
   }
   # Things I save rather than re-compute inside the loops.
   # Things I save rather than re-compute inside the loops.
@@ -124,22 +124,22 @@ gibbs_step_infnt_factor <- function(sampler, alpha){
   tauh <- cumprod(delta) # global shrinkage coefficients
   Plam <- psi %*% diag(tauh, nrow = max_factors) # precision of loadings rows
   # Update mu
-  for(i in 1:n_pars){
-    new_mu <- mu
-    new_mu[i] <- new_mu[i] + rnorm(1, 0, sd = .05)
-    ll_new <- sum(mvtnorm::dmvnorm(alpha_t, new_mu, lambda %*% t(lambda) + diag(1/sig_err_inv), log = T))
-    ll_old <- sum(mvtnorm::dmvnorm(alpha_t, mu, lambda %*% t(lambda) + diag(1/sig_err_inv), log = T))
-    ratio <- exp(ll_new - ll_old)
-    if(is.na(ratio)) ratio <- 0 #Could be dividing 0 by 0
-    #Then sometimes accept worse values
-    if (runif(1) < ratio){
-      #Accept!
-      mu[i] <- new_mu[i]
-    }
-  }
-  # mu_sig <- 1/(n_subjects * sig_err_inv + prior$theta_mu_invar)
-  # mu_mu <- mu_sig * (sig_err_inv * colSums(alpha_t - eta %*% t(lambda)) + prior$theta_mu_invar * prior$theta_mu_mean)
-  # mu <- rmvnorm(1, mu_mu, diag(mu_sig))
+  # for(i in 1:n_pars){
+  #   new_mu <- mu
+  #   new_mu[i] <- new_mu[i] + rnorm(1, 0, sd = .05)
+  #   ll_new <- sum(mvtnorm::dmvnorm(alpha_t, new_mu, lambda %*% t(lambda) + diag(1/sig_err_inv), log = T))
+  #   ll_old <- sum(mvtnorm::dmvnorm(alpha_t, mu, lambda %*% t(lambda) + diag(1/sig_err_inv), log = T))
+  #   ratio <- exp(ll_new - ll_old)
+  #   if(is.na(ratio)) ratio <- 0 #Could be dividing 0 by 0
+  #   #Then sometimes accept worse values
+  #   if (runif(1) < ratio){
+  #     #Accept!
+  #     mu[i] <- new_mu[i]
+  #   }
+  # }
+  mu_sig <- 1/(n_subjects * sig_err_inv + prior$theta_mu_invar)
+  mu_mu <- mu_sig * (sig_err_inv * colSums(alpha_t - eta %*% t(lambda)) + prior$theta_mu_invar * prior$theta_mu_mean)
+  mu <- rmvnorm(1, mu_mu, diag(mu_sig))
   colnames(mu) <- colnames(alpha_t)
   # calculate mean-centered observations
   alphatilde <- sweep(alpha_t, 2, mu)

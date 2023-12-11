@@ -4,7 +4,7 @@
 \alias{sampled_p_vector}
 \title{sampled_p_vector()}
 \usage{
-sampled_p_vector(design, model = NULL, doMap = TRUE)
+sampled_p_vector(design, model = NULL, doMap = TRUE, add_da = FALSE)
 }
 \arguments{
 \item{design}{a list of the design made with make_design.}
@@ -18,5 +18,5 @@ Named vector with mapping attributes.
 }
 \description{
 Makes an empty p_vector corresponding to model.
-matchfun only needed in design if uses lM factor
+matchfun only needed in design if uses lM factorf
 }

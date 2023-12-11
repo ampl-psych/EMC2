@@ -1,17 +1,3 @@
-thin_pmwg <- function(pmwg,thin=10)
-  # removes samples from single pmwg object
-{
-  # mcmc creation functions allow thinning, but for cases where you want to
-  # reduce the size, this will thin the sample component of a pmwg object
-  if (!is(pmwg, "pmwgs")) stop("Not a pmwgs object")
-  if (thin >= pmwg$samples$idx) stop("Thin value to large\n")
-  nmc_thin <- seq(thin,pmwg$samples$idx,by=thin)
-  if(any(pmwg$nuisance)) pmwg$sampler_nuis$samples <- base::rapply(pmwg$sampler_nuis$samples, f = function(x) filter_obj(x, nmc_thin), how = "replace")
-  pmwg$samples <- base::rapply(pmwg$samples, f = function(x) filter_obj(x, nmc_thin), how = "replace")
-  pmwg$samples$stage <- pmwg$samples$stage[nmc_thin]
-  pmwg$samples$idx <- length(nmc_thin)
-  return(pmwg)
-}
 
 
 filter_obj <- function(obj, idx){
@@ -102,6 +88,8 @@ remove_iterations <- function(pmwg,select,remove=TRUE,last_select=FALSE,filter=N
 }
 
 
+
+
 #' Merge samples
 #'
 #' Merges samples from all chains together as one unlisted object
@@ -127,6 +115,7 @@ merge_samples <- function(samplers){
   }
   return(out_samples)
 }
+
 
 
 #### mcmc extraction ----
@@ -159,30 +148,37 @@ as_Mcmc <- function(sampler,filter=stages,thin=1,subfilter=0,
   } else if (!all(filter %in% 1:sampler$samples$idx)) {
     stop("filter is not a vector of stage names, or integer vector of indices\n")
   }
-  if(selection == "fixed"){
-    fixed <- sampler$samples$fixed[, filter,drop=FALSE]
-    if (is.null(subfilter)){
-      fixed <- t(fixed)
-    }  else{
-      fixed <- t(shorten(fixed,subfilter,2))
-    }
-    if (thin > dim(fixed)[1]) stop("Thin to large\n")
-    out <- coda::mcmc(fixed[seq(thin,dim(fixed)[1],by=thin),,drop=FALSE])
-    attr(out,"selection") <- selection
-    return(out)
-  }
-  if(selection == "random"){
-    random <- sampler$samples$random[, filter,drop=FALSE]
-    if (is.null(subfilter)){
-      random <- t(random)
-    }  else{
-      random <- t(shorten(random,subfilter,2))
-    }
-    if (thin > dim(random)[1]) stop("Thin to large\n")
-    out <- coda::mcmc(random[seq(thin,dim(random)[1],by=thin),,drop=FALSE])
-    attr(out,"selection") <- selection
-    return(out)
-  }
+  # if(selection == "fixed"){
+  #   fixed <- sampler$samples$fixed[, filter,drop=FALSE]
+  #   if (is.null(subfilter)){
+  #     fixed <- t(fixed)
+  #   }  else{
+  #     fixed <- t(shorten(fixed,subfilter,2))
+  #   }
+  #   if (thin > dim(fixed)[1]) stop("Thin to large\n")
+  #   out <- coda::mcmc(fixed[seq(thin,dim(fixed)[1],by=thin),,drop=FALSE])
+  #   attr(out,"selection") <- selection
+  #   return(out)
+  # }
+  # if(selection == "random"){
+  #   random <- sampler$samples$random[, filter,drop=FALSE]
+  #   if (is.null(subfilter)){
+  #     random <- t(random)
+  #   }  else{
+  #     random <- t(shorten(random,subfilter,2))
+  #   }
+  #   if (thin > dim(random)[1]) stop("Thin to large\n")
+  #   random <- random[seq(thin,dim(random)[1],by=thin),,drop=FALSE]
+  #   out <- stats::setNames(lapply(
+  #     sampler$subjects,
+  #     function(x) {
+  #       coda::mcmc(random[,get_sub_idx(x, sampler$pars_random),drop = F])
+  #     }
+  #   ), names(sampler$data))
+  #   attr(out,"selection") <- selection
+  #   attr(out,"selection") <- selection
+  #   return(out)
+  # }
   if (selection == "mu") {
     mu <- sampler$samples$theta_mu[, filter,drop=FALSE]
     if (is.null(subfilter)){
@@ -286,7 +282,7 @@ as_mcmc.list <- function(samplers,
     } else warning("Can only include constants in alpha or mu")
   }
 
-  if (selection %in% c("alpha","LL")) {
+  if (selection %in% c("alpha","LL", "random")) {
     nChains <- length(mcmcList)
     ns <- length(samplers[[1]]$subjects)
     out <- vector(mode="list",length=ns)
@@ -343,7 +339,11 @@ extract_samples <- function(sampler, stage = c("adapt", "sample"), max_n_sample 
     out <- variant_funs$filtered_samples(sampler, full_filter)
     out$nuisance <- get_variant_funs(type)$filtered_samples(sampler$sampler_nuis, full_filter)
   } else{
-    out <- variant_funs$filtered_samples(sampler, full_filter)
+    if(!is.null(sampler$g_map_fixed)){
+      out <- 1# filtered_samples_lm(sampler, full_filter)
+    } else{
+      out <- variant_funs$filtered_samples(sampler, full_filter)
+    }
   }
   return(out)
 }
@@ -376,19 +376,23 @@ p_names <- function(samples,mapped=FALSE,design=FALSE)
 #' otherwise sampled parameters
 #' @param include_constants Include parameters that are not sampled (i.e., constants)
 #' @param stat A function that is applied to each column of the data frame
+#' @param subject_n Number of alpha iterations to retain for each subject (default NULL = all)
 #'
 #' @return A data frame with one row for each sample (with a subjects column if selection = "alpha")
 #' @export
 
-parameters_data_frame <- function(samples,filter="sample",thin=1,subfilter=0,
+parameters_data_frame <- function(samples,filter="sample",thin=1,subfilter=0,subject_n=NULL,
                                   mapped=FALSE,include_constants=FALSE,stat=NULL,
                                   selection=c("alpha","mu","variance","covariance","correlation","LL","epsilon")[2])
   # extracts and stacks chains into a matrix
 {
   out <- as_mcmc.list(samples,selection=selection,filter=filter,thin=thin,
                       subfilter=subfilter,mapped=mapped,include_constants=include_constants)
-  if (selection!="alpha") out <- as.data.frame(do.call(rbind,out)) else {
+  if (selection!="alpha") {
+    out <- as.data.frame(do.call(rbind,out))
+  } else {
     out <- lapply(out,function(x){do.call(rbind,x)})
+    if (!is.null(subject_n)) out <- lapply(out,function(x)x[1:subject_n,])
     subjects <- rep(names(out),lapply(out,function(x){dim(x)[1]}))
     out <- cbind.data.frame(subjects=factor(subjects,levels=names(out)),do.call(rbind,out))
   }
@@ -402,6 +406,7 @@ parameters_data_frame <- function(samples,filter="sample",thin=1,subfilter=0,
   }
   out
 }
+
 
 get_sigma <- function(samps,filter="sample",thin=1,subfilter=0)
   # Get sigma matrix samples
@@ -429,16 +434,23 @@ subject_names <- function(samples)
 }
 
 
-#' Title
-#'
-#' @param samplers A list of samplers.
-#' @param thin An integer. Indicates by how much to thin.
-#'
-#' @return A thinned list of samplers
-#' @export
+thin_pmwg <- function(pmwg,thin=10)
+  # thins all stages
+{
+  # mcmc creation functions allow thinning, but for cases where you want to
+  # reduce the size, this will thin the sample component of a pmwg object
+  if (!is(pmwg, "pmwgs")) stop("Not a pmwgs object")
+  if (thin >= pmwg$samples$idx) stop("Thin value to large\n")
+  nmc_thin <- seq(thin,pmwg$samples$idx,by=thin)
+  if(any(pmwg$nuisance)) pmwg$sampler_nuis$samples <- base::rapply(pmwg$sampler_nuis$samples, f = function(x) filter_obj(x, nmc_thin), how = "replace")
+  pmwg$samples <- base::rapply(pmwg$samples, f = function(x) filter_obj(x, nmc_thin), how = "replace")
+  pmwg$samples$stage <- pmwg$samples$stage[nmc_thin]
+  pmwg$samples$idx <- length(nmc_thin)
+  return(pmwg)
+}
 
 thin_chains <- function(samplers,thin=5)
-  # thins a set of chains
+  # thins a list of chains
 {
   data_list <- attr(samplers,"data_list")
   design_list <- attr(samplers,"design_list")
@@ -449,3 +461,46 @@ thin_chains <- function(samplers,thin=5)
   attr(samplers,"model_list") <- model_list
   samplers
 }
+
+
+thin_pmwg <- function(pmwg,thin=10, filter)
+  # removes samples from single pmwg object
+{
+  # mcmc creation functions allow thinning, but for cases where you want to
+  # reduce the size, this will thin the pmwg object
+  if (!is(pmwg, "pmwgs")) stop("Not a pmwgs object")
+  n <- table(pmwg$samples$stage)
+  fn <- n[filter]
+  if (thin >= fn) stop("Thin value to large\n")
+  nmc_thin <- seq(thin,fn,by=thin)
+  offset <- sum(n[names(n) != "sample"])
+  nmc_thin <- c(1:offset,offset+nmc_thin)
+  if(any(pmwg$nuisance)) pmwg$sampler_nuis$samples <- base::rapply(pmwg$sampler_nuis$samples, f = function(x) filter_obj(x, nmc_thin), how = "replace")
+  pmwg$samples <- base::rapply(pmwg$samples, f = function(x) filter_obj(x, nmc_thin), how = "replace")
+  pmwg$samples$stage <- pmwg$samples$stage[nmc_thin]
+  pmwg$samples$idx <- length(nmc_thin)
+  return(pmwg)
+}
+
+
+#' reduce_samples
+#'
+#' Enables removal of initial iterations in sample stage and thinning.
+#'
+#' @param samplers A list of pmwg objects
+#' @param thin thinning interval
+#' @param remove integer specifiying initial number of samples to remove
+#'
+#' @return samplers object trimmed and thinned
+reduce_samples <- function(samplers,thin=1,remove=NULL) {
+  if (!is.null(remove)) {
+    tmp <- attributes(samplers)
+    samplers <- lapply(samplers,remove_iterations,select=remove+1,filter="sample")
+    attributes(samplers) <- tmp
+  }
+  if (thin>1) for (i in 1:length(samplers)) {
+    samplers[[i]] <- thin_pmwg(samplers[[i]],thin=thin, filter = "sample")
+  }
+  samplers
+}
+

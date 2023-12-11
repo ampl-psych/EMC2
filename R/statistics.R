@@ -7,6 +7,33 @@ std_error_IS2 <- function(IS_samples, n_bootstrap = 50000){
   return(sd(log_marglik_boot))
 }
 
+dhalft <- function (x, scale = 25, nu = 1, log = FALSE)
+{
+  x <- as.vector(x)
+  scale <- as.vector(scale)
+  nu <- as.vector(nu)
+  if (any(scale <= 0))
+    stop("The scale parameter must be positive.")
+  NN <- max(length(x), length(scale), length(nu))
+  x <- rep(x, len = NN)
+  scale <- rep(scale, len = NN)
+  nu <- rep(nu, len = NN)
+  dens <- log(2) - log(scale) + lgamma((nu + 1)/2) - lgamma(nu/2) -
+    0.5 * log(pi * nu) - (nu + 1)/2 * log(1 + (1/nu) * (x/scale) *
+                                            (x/scale))
+  if (log == FALSE)
+    dens <- exp(dens)
+  return(dens)
+}
+
+logdinvGamma <- function(x, shape, rate){
+  alpha <- shape
+  beta <- 1/rate
+  log.density <- alpha * log(beta) - lgamma(alpha) - (alpha +
+                                                        1) * log(x) - (beta/x)
+  return(pmax(log.density, -500)) #Roughly equal to 1e-22 on real scale
+}
+
 es_pmwg <- function(pmwg_mcmc,selection="alpha",summary_alpha=mean,
                     print_summary=TRUE,sort_print=TRUE,
                     filter="sample",thin=1,subfilter=NULL)
@@ -39,10 +66,6 @@ es_pmwg <- function(pmwg_mcmc,selection="alpha",summary_alpha=mean,
 }
 
 
-# return_summary=FALSE;print_summary=TRUE;digits_print=2;sort_print=TRUE;
-# autoburnin=FALSE;transform=TRUE
-# selection="alpha";filter="sample";thin=1;subfilter=NULL
-# pmwg_mcmc=sVat0;selection="mu";filter="sample"
 gd_pmwg <- function(pmwg_mcmc,return_summary=FALSE,print_summary=TRUE,
                     digits_print=2,sort_print=TRUE,autoburnin=FALSE,transform=TRUE,
                     selection="alpha",filter="sample",thin=1,subfilter=NULL,mapped=FALSE)
@@ -50,8 +73,21 @@ gd_pmwg <- function(pmwg_mcmc,return_summary=FALSE,print_summary=TRUE,
   # multivariate as matrix unless !return_summary
 {
 
+  split_mcl <- function(mcl)
+    # Doubles chains by splitting into first and secon half
+  {
+    mcl2 <- mcl
+    half <- floor(unlist(lapply(mcl,nrow))/2)
+    for (i in 1:length(half)) {
+      mcl2[[i]] <- coda::as.mcmc(mcl2[[i]][c((half[i]+1):(2*half[i])),])
+      mcl[[i]] <- coda::as.mcmc(mcl[[i]][1:half[i],])
+    }
+    coda::as.mcmc.list(c(mcl,mcl2))
+  }
+
   gelman_diag_robust <- function(mcl,autoburnin,transform)
   {
+    mcl <- split_mcl(mcl)
     gd <- try(gelman.diag(mcl,autoburnin=autoburnin,transform=transform),silent=TRUE)
     if (is(gd, "try-error")) list(psrf=matrix(Inf),mpsrf=Inf) else gd
   }
@@ -68,7 +104,7 @@ gd_pmwg <- function(pmwg_mcmc,return_summary=FALSE,print_summary=TRUE,
       pmwg_mcmc <- as_mcmc.list(pmwg_mcmc,selection=selection,filter=filter,
                                 thin=thin,subfilter=subfilter,mapped=mapped)
   }
-  if (selection=="alpha") {
+  if (selection=="alpha" || selection == "random") {
     gd <- lapply(pmwg_mcmc,gelman_diag_robust,autoburnin = autoburnin, transform = transform)
     out <- unlist(lapply(gd,function(x){x$mpsrf}))
   } else {
@@ -78,10 +114,58 @@ gd_pmwg <- function(pmwg_mcmc,return_summary=FALSE,print_summary=TRUE,
   if (return_summary) return(out)
   if (sort_print) out <- sort(out)
   if (print_summary) print(round(out,digits_print))
-  if (selection=="alpha") invisible(
+  if (selection=="alpha" || selection == "random") invisible(
     cbind(do.call(rbind,lapply(gd,function(x){x[[1]][,1]})),
           mpsrf=unlist(lapply(gd,function(x){x[[2]]})))) else
             invisible(c(gd$psrf[,1],mpsrf=gd$mpsrf))
+}
+
+
+#' gd_summary
+#'
+#' Summarizes gelman_diag statistics for a samplers object, invisibly returning
+#' a list of two lists containing univarite (psrf) and multivariate (mpsrf)
+#' statistics.
+#'
+#' @param samplers Samples object with multiple chains
+#' @param no_print Boolean for printing
+#' @param digits
+#'
+#' @return List of two lists names psrf and mpsrf.
+#' @export
+gd_summary <- function(samplers,no_print=TRUE,digits=2) {
+
+  alpha <- gd_pmwg(samplers,selection="alpha",print_summary = FALSE)
+  alphai <- alpha; alpha <- alpha[,"mpsrf"]; alphai <- alphai[,dimnames(alphai)[[2]]!="mpsrf"]
+  hierarchical <- any(names(samplers[[1]]$samples)=="theta_mu")
+  if (hierarchical) {
+    mu <- gd_pmwg(samplers,selection="mu",print_summary = FALSE)
+    variance <- gd_pmwg(samplers,selection="variance",print_summary = FALSE)
+    correlation <- gd_pmwg(samplers,selection="correlation",print_summary = FALSE)
+    mui <- mu; mu <- mu["mpsrf"]; mui <- mui[names(mui)!="mpsrf"]
+    variancei <- variance; variance <- variance["mpsrf"]; variancei <- variancei[names(variancei)!="mpsrf"]
+    correlationi <- correlation; correlation <- correlation["mpsrf"]; correlationi <- correlationi[names(correlationi)!="mpsrf"]
+  }
+  if (!(no_print)) {
+    cat("ALPHA psrf\n")
+    print(round(alphai,digits))
+    cat("\nALPHA mpsrf\n")
+    print(round(sort(alpha),digits))
+    if (hierarchical) {
+      cat("\nMU psrf\n")
+      print(round(sort(mui),digits))
+      cat("\nVARIANCE psrf\n")
+      print(round(sort(variancei),digits))
+      cat("\nCORRELATION psrf\n")
+      print(round(sort(correlationi),digits))
+      cat("\nHyper mpsrf\n")
+      print(round(c(mu=mu,var=variance,corr=correlation),digits=digits))
+    }
+  }
+  if (hierarchical)
+    invisible(list(psrf=list(alpha=alphai,mu=mui,variance=variancei,correlation=correlationi),
+                   mpsrf=list(alpha=alpha,mu=mu,variance=variance,correlation=correlation))) else
+                     invisible(list(psrf=list(alpha=alphai), mpsrf=list(alpha=alpha)))
 }
 
 
@@ -253,7 +337,7 @@ p_test <- function(x,x_name=NULL,x_fun=NULL,x_fun_name="fun",
     # Individual subject analysis
     if (selection != "alpha") y_subject <- NULL else
       if (is.null(y_subject)) y_subject <- names(y)[1] else
-      if (is.numeric(y_subject)) y_subject <- names(y)[y_subject]
+        if (is.numeric(y_subject)) y_subject <- names(y)[y_subject]
     if (!is.null(y_subject)) {
       if (!(y_subject %in% names(y))) stop("Subject y_subject not in y")
       message("Testing y subject ",y_subject)
@@ -338,7 +422,7 @@ p_test <- function(x,x_name=NULL,x_fun=NULL,x_fun_name="fun",
 #' @export
 
 IC <- function(samplers,filter="sample",subfilter=0,use_best_fit=TRUE,
-                    print_summary=TRUE,digits=0,subject=NULL)
+               print_summary=TRUE,digits=0,subject=NULL)
   # Gets DIC, BPIC, effective parameters, mean deviance, and deviance of mean
 {
 
@@ -401,6 +485,9 @@ IC <- function(samplers,filter="sample",subfilter=0,use_best_fit=TRUE,
 #' @param subfilter An integer or vector. If integer it will exclude up until
 #' @param use_best_fit Boolean, default TRUE use best of minD and Dmean in
 #' calculation otherwise always use Dmean
+#' @param BayesFactor Boolean, default FALSE. Include marginal likelihoods as estimated using WARP-III bridge sampling. Usually takes a minute per model added to calculate
+#' @param cores_for_props Integer, how many cores to use for BayesFactor calculation, here 4 is default for the 4 different proposal densities to evaluate, only 1, 2 and 4 are sensible.
+#' @param cores_per_prop Integer, how many cores to use for BayesFactor calculation if you have more than 4 cores available. Cores used will be cores_for_props * cores_per_prop, where prioritizing cores_for_props being 4 or 2 is fastest.
 #' @param print_summary Boolean (default TRUE) print table of results
 #' @param digits Integer, significant digits in printed table except model weights
 #' @param digits_p Integer, significant digits in printed table for model weights
@@ -408,10 +495,11 @@ IC <- function(samplers,filter="sample",subfilter=0,use_best_fit=TRUE,
 #' returns sums over all subjects
 #'
 #' @return Table of effective number of parameters, mean deviance, deviance of
-#' mean, DIC, BPIC, and associated weights.
+#' mean, DIC, BPIC, Marginal Deviance (if BayesFactor=TRUE) and associated weights.
 #' @export
 
 compare_IC <- function(sList,filter="sample",subfilter=0,use_best_fit=TRUE,
+                       BayesFactor = FALSE, cores_for_props =4, cores_per_prop = 1,
                        print_summary=TRUE,digits=0,digits_p=3,subject=NULL) {
 
   getp <- function(IC) {
@@ -426,16 +514,32 @@ compare_IC <- function(sList,filter="sample",subfilter=0,use_best_fit=TRUE,
 
   ICs <- setNames(vector(mode="list",length=length(sList)),names(sList))
   for (i in 1:length(ICs)) ICs[[i]] <- IC(sList[[i]],filter=filter,
-    subfilter=sflist[[i]],use_best_fit=use_best_fit,subject=subject,print_summary=FALSE)
+                                          subfilter=sflist[[i]],use_best_fit=use_best_fit,subject=subject,print_summary=FALSE)
   ICs <- data.frame(do.call(rbind,ICs))
   DICp <- getp(ICs$DIC)
   BPICp <- getp(ICs$BPIC)
   out <- cbind.data.frame(DIC=ICs$DIC,wDIC=DICp,BPIC=ICs$BPIC,wBPIC=BPICp,ICs[,-c(1:2)])
+
+  if(BayesFactor){
+    MLLs <- numeric(length(sList))
+    for(i in 1:length(MLLs)){
+      MLLs[i] <- run_bridge_sampling(sList[[i]], filter = filter, subfilter = sflist[[i]], both_splits = FALSE,
+                                     cores_for_props = cores_for_props, cores_per_prop = cores_per_prop)
+    }
+    MD <- -2*MLLs
+    modelProbability <- getp(MD)
+    out <- cbind.data.frame(MD = MD, wMD = modelProbability, out)
+  }
   if (print_summary) {
     tmp <- out
     tmp$wDIC <- round(tmp$wDIC,digits_p)
     tmp$wBPIC <- round(tmp$wBPIC,digits_p)
-    tmp[,-c(2,4)] <- round(tmp[,-c(2,4)],digits=digits)
+    if(BayesFactor){
+      tmp$wMD <- round(tmp$wMD, digits_p)
+      tmp[,-c(2,4,6)] <- round(tmp[,-c(2,4,6)],digits=digits)
+    } else{
+      tmp[,-c(2,4)] <- round(tmp[,-c(2,4)],digits=digits)
+    }
     print(tmp)
   }
   invisible(out)
@@ -455,13 +559,13 @@ compare_IC <- function(sList,filter="sample",subfilter=0,use_best_fit=TRUE,
 #' mean deviance, deviance of mean, DIC, BPIC, and associated weights.
 #' @export
 
-compare_ICs <- function(sList,filter="sample",subfilter=0,use_best_fit=TRUE,
-                        print_summary=TRUE,digits=3) {
+compare_IC_subject <- function(sList,filter="sample",subfilter=0,use_best_fit=TRUE,
+                               print_summary=TRUE,digits=3) {
 
   subjects <- names(sList[[1]][[1]]$data)
   out <- setNames(vector(mode="list",length=length(subjects)),subjects)
   for (i in subjects) out[[i]] <- compare_IC(sList,subject=i,
-    filter=filter,subfilter=subfilter,use_best_fit=use_best_fit,print_summary=FALSE)
+                                             filter=filter,subfilter=subfilter,use_best_fit=use_best_fit,print_summary=FALSE)
   if (print_summary) {
     wDIC <- lapply(out,function(x)x["wDIC"])
     wBPIC <- lapply(out,function(x)x["wBPIC"])

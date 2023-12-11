@@ -3,6 +3,7 @@
 
 ## usethis namespace: start
 #' @importFrom abind abind
+#' @importFrom Brobdingnag as.brob
 #' @importFrom coda as.mcmc
 #' @importFrom coda effectiveSize
 #' @importFrom coda gelman.diag
@@ -10,6 +11,7 @@
 #' @importFrom coda mcmc.list
 #' @importFrom graphics abline
 #' @importFrom graphics arrows
+#' @importFrom graphics hist pairs rect text
 #' @importFrom graphics legend
 #' @importFrom graphics lines
 #' @importFrom graphics par
@@ -28,12 +30,14 @@
 #' @importFrom Rcpp sourceCpp
 #' @importFrom stats acf
 #' @importFrom stats as.dist
+#' @importFrom stats as.formula
 #' @importFrom stats cor
 #' @importFrom stats cov
 #' @importFrom stats cov2cor
 #' @importFrom stats cutree
 #' @importFrom stats density
 #' @importFrom stats dexp
+#' @importFrom stats dgamma
 #' @importFrom stats dnorm
 #' @importFrom stats hclust
 #' @importFrom stats integrate
@@ -53,8 +57,6 @@
 #' @importFrom stats terms
 #' @importFrom stats update
 #' @importFrom stats var
-#' @importFrom graphics hist pairs rect text
-#' @importFrom stats dgamma
 #' @useDynLib EMC2, .registration = TRUE
 ## usethis namespace: end
 NULL

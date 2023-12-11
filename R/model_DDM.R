@@ -51,7 +51,7 @@ pDDM <- function(rt,R,pars,precision=2.5)
 #' The core parameters of the DDM are the drift rate `v`, the boundary separation `a`,
 #' within trial variation in drift rate `s`, bias to either threshold `Z`, and non-decision time `t0`.
 #' Frequently `s` is fixed to 1 to satisfy scaling constraints.
-#' Furthermore, we can estimate between trial variation in drift rate `sv`, non-decision time `st0`, and bias `SZ`. Note that computing for these parameters is slower.
+#' Furthermore, we can estimate between trial variation in drift rate `sv`, non-decision time `st0`, and variability in bias `SZ`. Note that computing for these parameters is slower.
 #' Lastly `DP` comprises the difference in non-decision time for each response option.
 #'
 #' We sample `a, t0, sv, st0, s` on the log scale because these parameters should be strictly positive
@@ -61,11 +61,11 @@ pDDM <- function(rt,R,pars,precision=2.5)
 #' @return A model list with all the necessary functions to sample
 #' @export
 
-ddmTZD <- function(){
+DDM <- function(){
   list(
     type="DDM",
     c_name = "DDM",
-    p_types=c("v","a","sv","t0","st0","s","Z","SZ","DP"),
+    p_types=c("v" = 1,"a" = log(1),"sv" = log(0),"t0" = log(0),"st0" = log(0),"s" = log(1),"Z" = qnorm(0.5),"SZ" = qnorm(0),"DP" = qnorm(0.5)),
     # The "TZD" parameterization defined relative to the "rtdists" package is:
     # natural scale
     #   v = rtdists rate v (positive favors upper)
@@ -126,10 +126,10 @@ ddmTZD <- function(){
 #' Diffusion decision model with t0 on the natural scale
 #'
 #' @return A model list with all the necessary functions to sample
-ddmTZDt0natural <- function(){
+DDMt0natural <- function(){
   list(
     type="DDM",
-    p_types=c("v","a","sv","t0","st0","s","Z","SZ","DP"),
+    p_types=c("v" = 1,"a" = log(1),"sv" = log(1),"t0" = 0,"st0" = log(0),"s" = log(1),"Z" = qnorm(0.5),"SZ" = qnorm(0),"DP" = qnorm(0.5)),
     # Like "TZD" but t0 on natural scale and kept positive with ok so
     # t0 can be combined additively on natural scale
     Ntransform=function(x) {

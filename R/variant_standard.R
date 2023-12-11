@@ -60,7 +60,7 @@ get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1
   prior$theta_mu_invar <- ginv(prior$theta_mu_var) #Inverse of the matrix
   if(sample){
     out <- list()
-    if(!type %in% c("mu", "variance", "covariance", "correlation")){
+    if(!type %in% c("mu", "variance", "covariance", "correlation", "full_var")){
       stop("for variant standard, you can only specify the prior on the mean, variance, covariance or the correlation of the parameters")
     }
     if(type == "mu"){
@@ -70,7 +70,7 @@ get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1
         colnames(samples) <- par_names <- names(attr(design, "p_vector"))
         if(map){
           proot <- unlist(lapply(strsplit(colnames(samples),"_"),function(x)x[[1]]))
-          isin <- proot %in% design$model()$p_types
+          isin <- proot %in% names(design$model()$p_types)
           fullnames <- colnames(samples)[isin]
           colnames(samples)[isin] <- proot
           samples[,isin] <- design$model()$Ntransform(samples[,isin])
@@ -86,7 +86,13 @@ get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1
                              rate = 1/(prior$A^2))
         var[,,i] <- riwish(prior$v + n_pars - 1, 2 * prior$v * diag(1 / a_half))
       }
-      if (type == "variance") out$variance <- t(apply(var,3,diag))
+      if (type == "variance") {
+        vars_only <- t(apply(var,3,diag))
+        if(!is.null(design)){
+          colnames(vars_only) <- names(attr(design, "p_vector"))
+        }
+        out$variance <- vars_only
+      }
       lt <- lower.tri(var[,,1])
       if (type == "correlation"){
         corrs <- array(apply(var,3,cov2cor),dim=dim(var),dimnames=dimnames(var))
@@ -94,6 +100,9 @@ get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1
       }
       if(type == "covariance"){
         out$covariance <- t(apply(var,3,function(x){x[lt]}))
+      }
+      if (type == "full_var"){
+        out$full_var <- t(apply(var, 3, c))
       }
       return(out)
     }
@@ -199,7 +208,7 @@ get_all_pars_standard <- function(samples, idx, info){
   theta_mu <- samples$samples$theta_mu[,idx]
   theta_var <- samples$samples$theta_var[,,idx]
   a_half <- log(samples$samples$a_half[,idx])
-  theta_var.unwound = apply(theta_var,3,unwind_IS2)
+  theta_var.unwound = apply(theta_var,3,unwind_chol)
   # Set up
   n_params<- samples$n_pars+nrow(theta_var.unwound)+samples$n_pars
   all_samples=array(dim=c(n_subjects,n_params,n_iter))
@@ -254,7 +263,7 @@ robust_diwish <- function (W, v, S) { #RJI_change: this function is to protect a
   return(exp(lpdf))
 }
 
-unwind_IS2 <- function(x,reverse=FALSE) {
+unwind_chol <- function(x,reverse=FALSE) {
 
   if (reverse) {
     n=sqrt(2*length(x)+0.25)-0.5 ## Dim of matrix.
@@ -275,7 +284,7 @@ group_dist_standard <- function(random_effect = NULL, parameters, sample = FALSE
   n_randeffect <- info$n_randeffect
   param.theta.mu <- parameters[1:n_randeffect]
   param.theta.sig.unwound <- parameters[(n_randeffect+1):(length(parameters)-n_randeffect)]
-  param.theta.sig2 <- unwind_IS2(param.theta.sig.unwound, reverse = TRUE)
+  param.theta.sig2 <- unwind_chol(param.theta.sig.unwound, reverse = TRUE)
   if (sample){
     return(rmvnorm(n_samples, param.theta.mu,param.theta.sig2))
   }else{
@@ -289,7 +298,7 @@ prior_dist_standard <- function(parameters, info){
   prior <- info$prior
   param.theta.mu <- parameters[1:n_randeffect]
   param.theta.sig.unwound <- parameters[(n_randeffect+1):(length(parameters)-n_randeffect)]
-  param.theta.sig2 <- unwind_IS2(param.theta.sig.unwound, reverse = TRUE)
+  param.theta.sig2 <- unwind_chol(param.theta.sig.unwound, reverse = TRUE)
   param.a <- exp(parameters[((length(parameters)-n_randeffect)+1):(length(parameters))])
   log_prior_mu=dmvnorm(param.theta.mu, mean = prior$theta_mu_mean, sigma = prior$theta_mu_var, log =TRUE)
   log_prior_sigma = log(robust_diwish(param.theta.sig2, v=prior$v+ n_randeffect-1, S = 2*prior$v*diag(1/param.a)))
@@ -300,10 +309,40 @@ prior_dist_standard <- function(parameters, info){
   return(log_prior_mu + log_prior_sigma + log_prior_a - logw_den3 - logw_den2)
 }
 
-logdinvGamma <- function(x, shape, rate){
-  alpha <- shape
-  beta <- 1/rate
-  log.density <- alpha * log(beta) - lgamma(alpha) - (alpha +
-                                                        1) * log(x) - (beta/x)
-  return(pmax(log.density, -50)) #Roughly equal to 1e-22 on real scale
+
+
+# bridge_sampling ---------------------------------------------------------
+bridge_add_group_standard <- function(all_samples, samples, idx){
+  all_samples <- cbind(all_samples, t(samples$samples$theta_mu[,idx]))
+  all_samples <- cbind(all_samples, t(log(samples$samples$a_half[,idx])))
+  all_samples <- cbind(all_samples, t(apply(samples$samples$theta_var[,,idx], 3, unwind_chol)))
+  return(all_samples)
+}
+
+bridge_add_info_standard <- function(info, samples){
+  info$group_idx <- (samples$n_pars*samples$n_subjects + 1):(samples$n_pars*samples$n_subjects + 2*samples$n_pars + (samples$n_pars * (samples$n_pars +1))/2)
+  return(info)
+}
+
+
+bridge_group_and_prior_and_jac_standard <- function(proposals_group, proposals_list, info){
+  prior <- info$prior
+  proposals <- do.call(cbind, proposals_list)
+  theta_mu <- proposals_group[,1:info$n_pars]
+  theta_a <- proposals_group[,(info$n_pars + 1):(2*info$n_pars)]
+  theta_var <- proposals_group[,(2*info$n_pars + 1):(2*info$n_pars + info$n_pars*(info$n_pars + 1)/2)]
+  n_iter <- nrow(theta_mu)
+  sum_out <- numeric(n_iter)
+  for(i in 1:n_iter){ # these unfortunately can't be vectorized
+    theta_var_curr <- unwind_chol(theta_var[i,], reverse = T)
+    proposals_curr <- matrix(proposals[i,], ncol = info$n_pars, byrow = T)
+    group_ll <- sum(dmvnorm(proposals_curr, theta_mu[i,], theta_var_curr, log = T))
+    prior_var <- log(robust_diwish(theta_var_curr, v=prior$v+ info$n_pars-1, S = 2*prior$v*diag(1/theta_a[i,])))
+    prior_a <- sum(logdinvGamma(exp(theta_a[i,]), shape = 1/2,rate=1/(prior$A^2)))
+    jac_var <- log(2^info$n_pars)+sum((info$n_pars + 1)*log(diag(theta_var_curr))) # Log of derivative of cholesky transformation
+    sum_out[i] <- group_ll + prior_var + prior_a + jac_var
+  }
+  prior_mu <- dmvnorm(theta_mu, mean = prior$theta_mu_mean, sigma = prior$theta_mu_var, log =T)
+  jac_a <- rowSums(theta_a)
+  return(sum_out + prior_mu + jac_a) # Output is of length nrow(proposals)
 }
