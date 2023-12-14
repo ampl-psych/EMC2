@@ -538,9 +538,9 @@ run_stage_lm <- function(pmwgs,
     names(hyper$var_random) <- pmwgs$pars_random
     hyper$mu_fixed[pmwgs$is_intercept] = pmwgs$prior$intercepts_mu
     input_random <- pmwgs$samples$random[,j-1]
-    if(stage != "sample"){
-      input_random[1:length(input_random)] <- 0
-    }
+    # if(stage != "sample"){
+    #   input_random[1:length(input_random)] <- 0
+    # }
     # Particle step
     proposals_between <- new_particle_between(particles_fixed, hyper, pmwgs$samples$fixed[,j-1],
                                               input_random, pmwgs$data, pmwgs$subjects,

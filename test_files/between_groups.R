@@ -40,9 +40,10 @@ form <- list(v~cond + (cond|subjects), a~1+ (1|subjects), t0 ~ 1 + (1|subjects),
              Z ~ 1 + (1|subjects), s ~1, DP ~ 1, SZ ~ 1, sv ~1, st0 ~ 1)
 
 # NAs in slope mean are treated as 0!!
-design <- make_design_lm(form, ddata = dat_coh, model = ddmTZD,
+design <- make_design_lm(form, ddata = dat_coh, model = DDM,
                        constants = c(sv = log(0), s = log(1), st0 = log(0), DP = qnorm(.5),
                                      SZ = qnorm(0), st0 = log(0)))
+
 samplers <- make_samplers_lm(dat_coh, design)
 # Things to do:
 # Check whether replacing NAs with 0 is alright for DMs
@@ -51,7 +52,7 @@ samplers <- make_samplers_lm(dat_coh, design)
 
 source("test_files/sampling_lm.R")
 
-
+debug(run_stage_lm)
 samplers <- auto_burn(samplers, verbose = T,cores_per_chain = 4)
 
 source("test_files/sampling_lm.R")
