@@ -323,6 +323,7 @@ make_prior <- function(design,pmean=NULL,psd=NULL,update=NULL,
   if (is.na(df)) df <- 2
 
   if ( !is.null(update) ) {
+    if(is(update[[1]], "pmwgs")) update <- update[[1]]$prior
     pmu <- update$theta_mu_mean
     if(!type == "single"){
       pdfu <- update$v
