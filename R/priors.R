@@ -313,7 +313,7 @@ make_prior <- function(design,pmean=NULL,psd=NULL,update=NULL,
   }
   if (!is.null(pscale) && is.null(names(pscale))) {
     if(is.na(pscale)){
-      pscale[1:length(psc)] <- 1
+      pscale[1:length(psc)] <- 0.3
       pscale <- setNames(pscale,names(psc))
     } else{
       pscale[1:length(psc)] <- pscale
