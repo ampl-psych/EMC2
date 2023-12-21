@@ -133,10 +133,8 @@ init <- function(pmwgs, start_mu = NULL, start_var = NULL,
 #' @param cores_for_chains Number of cores used for chains.
 #' @param particles Number of starting values
 #'
-#' @return
+#' @return A samplers object
 #' @export
-#'
-#' @examples
 init_chains <- function(samplers, start_mu = NULL, start_var = NULL,
                         verbose = FALSE, particles = 1000,
                         cores_per_chain=1,cores_for_chains = length(samplers))

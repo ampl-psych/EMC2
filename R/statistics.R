@@ -559,8 +559,6 @@ compare_IC <- function(sList,filter="sample",subfilter=0,use_best_fit=TRUE,
 #'
 #' @return The BayesFactor for the hypothesis against H0.
 #' @export
-#'
-#' @examples
 savage_dickey <- function(samplers, parameter = NULL, H0 = 0, filter = "sample", FUN = NULL){
   prior <- samplers[[1]]$prior
   if(is.null(FUN)){

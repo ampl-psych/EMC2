@@ -2,13 +2,16 @@
 % Please edit documentation in R/likelihood.R
 \name{log_likelihood_joint}
 \alias{log_likelihood_joint}
-\title{Title}
+\title{log_likelihood_joint}
 \usage{
 log_likelihood_joint(proposals, dadms, component = NULL)
 }
 \arguments{
 \item{component}{}
 }
+\value{
+summed log-likelihood
+}
 \description{
-Title
+log_likelihood_joint
 }
