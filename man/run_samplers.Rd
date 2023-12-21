@@ -21,7 +21,7 @@ run_samplers(
   particle_factor = 50,
   cores_per_chain = 1,
   cores_for_chains = length(samplers),
-  max_trys = 50,
+  max_trys = 20,
   n_blocks = 1,
   omit_mpsrf = TRUE,
   omit_mu = TRUE

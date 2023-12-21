@@ -19,7 +19,7 @@
 #' @param particle_factor An integer. Particle factor multiplied by the square root of the number of sampled parameters will determine the number of particles used.
 #' @param cores_per_chain An integer. How many cores to use per chain. Parallelizes across participant calculations.
 #' @param cores_for_chains An integer. How many cores to use across chains. Default is the number of chains.
-#' @param max_trys An integer. How many times it will try to meet the finish conditions. Default is 50.
+#' @param max_trys An integer. How many times it will try to meet the finish conditions. Default is 20.
 #' @param n_blocks An integer. Will block the parameter chains such that they are updated in blocks. This can be helpful in extremely tough models with large number of parameters.
 #' @param omit_mpsrf When testing for convergence use only psrf (default FALSE uses mpsrf as well)
 #'
@@ -29,7 +29,7 @@
 run_emc <- function(samplers, stage = NULL, iter = 1000, max_gd = 1.1, mean_gd = 1.1, min_es = 0, min_unique = 600, preburn = 150,
                     p_accept = .8, step_size = 100, verbose = FALSE, verboseProgress = FALSE, fileName = NULL,
                     particles = NULL, particle_factor=50, cores_per_chain = 1,
-                    cores_for_chains = length(samplers), max_trys = 50, n_blocks = 1,
+                    cores_for_chains = length(samplers), max_trys = 20, n_blocks = 1,
                     omit_mpsrf=TRUE,omit_mu=TRUE){
   if (is.character(samplers)) {
     samplers <- fix_fileName(samplers)
@@ -117,7 +117,7 @@ run_samplers <- function(samplers, stage, iter = NULL, max_gd = NULL, mean_gd = 
                          p_accept = .8, step_size = 100, verbose = FALSE, verboseProgress = FALSE,
                          fileName = NULL,
                          particles = NULL, particle_factor=50, cores_per_chain = 1,
-                         cores_for_chains = length(samplers), max_trys = 50, n_blocks = 1,
+                         cores_for_chains = length(samplers), max_trys = 20, n_blocks = 1,
                          omit_mpsrf=TRUE,omit_mu=TRUE){
   if (verbose) message(paste0("Running ", stage, " stage"))
   attributes <- get_attributes(samplers)
@@ -682,7 +682,7 @@ auto_burn <- function(samplers, max_gd = NULL, mean_gd = 1.1, min_es = 0, prebur
                       p_accept = .8, step_size = 100, verbose = FALSE, verboseProgress = FALSE,
                       fileName = NULL,
                       particles = NULL, particle_factor=50, cores_per_chain = 1,
-                      cores_for_chains = length(samplers), max_trys = 50, n_blocks = 1,
+                      cores_for_chains = length(samplers), max_trys = 20, n_blocks = 1,
                       omit_mpsrf=TRUE,omit_mu=TRUE){
   samplers <- run_samplers(samplers, stage = "preburn", iter = preburn, cores_for_chains = cores_for_chains, p_accept = p_accept,
                            step_size = step_size,  verbose = verbose, verboseProgress = verboseProgress,
@@ -716,7 +716,7 @@ auto_burn <- function(samplers, max_gd = NULL, mean_gd = 1.1, min_es = 0, prebur
 #' @param particle_factor An integer. Particle factor multiplied by the square root of the number of sampled parameters will determine the number of particles used.
 #' @param cores_per_chain An integer. How many cores to use per chain. Parallelizes across participant calculations.
 #' @param cores_for_chains An integer. How many cores to use across chains. Default is the number of chains.
-#' @param max_trys An integer. How many times it will try to meet the finish conditions. Default is 50.
+#' @param max_trys An integer. How many times it will try to meet the finish conditions. Default is 20.
 #' @param n_blocks An integer. Will block the parameter chains such that they are updated in blocks. This can be helpful in extremely tough models with large number of parameters.
 #' @param omit_mpsrf When testing for convergence use only psrf (default FALSE uses mpsrf as well)
 #'
@@ -727,7 +727,7 @@ run_adapt <- function(samplers, max_gd = NULL, mean_gd = NULL, min_es = 0, min_u
                       p_accept = .8, step_size = 100, verbose = FALSE, verboseProgress = FALSE,
                       fileName = NULL,
                       particles = NULL, particle_factor=50, cores_per_chain = 1,
-                      cores_for_chains = length(samplers), max_trys = 50, n_blocks = 1,
+                      cores_for_chains = length(samplers), max_trys = 20, n_blocks = 1,
                       omit_mpsrf=TRUE,omit_mu = TRUE)
 {
   samplers <- run_samplers(samplers, stage = "adapt",  max_gd = max_gd, mean_gd = mean_gd, min_es = min_es, min_unique = min_unique,
@@ -758,7 +758,7 @@ run_adapt <- function(samplers, max_gd = NULL, mean_gd = NULL, min_es = 0, min_u
 #' @param cores_per_chain An integer. How many cores to use per chain. Parallelizes across participant calculations.
 #' @param cores_for_chains An integer. How many cores to use across chains. Default is the number of chains.
 #' @param n_blocks An integer. Will block the parameter chains such that they are updated in blocks. This can be helpful in extremely tough models with large number of parameters.
-#' @param max_trys An integer. How many times it will try to meet the finish conditions. Default is 50.
+#' @param max_trys An integer. How many times it will try to meet the finish conditions. Default is 20.
 #'
 #' @export
 #'
@@ -767,7 +767,7 @@ run_sample <- function(samplers, iter = 1000, max_gd = 1.1, mean_gd = NULL, min_
                        p_accept = .8, step_size = 100, verbose = FALSE, verboseProgress = FALSE,
                        fileName = NULL,
                        particles = NULL, particle_factor=50, cores_per_chain = 1,
-                       cores_for_chains = length(samplers), max_trys = 50, n_blocks = 1,
+                       cores_for_chains = length(samplers), max_trys = 20, n_blocks = 1,
                        omit_mpsrf=TRUE,omit_mu=TRUE)
 {
   samplers <- run_samplers(samplers, stage = "sample", iter = iter, max_gd = max_gd, mean_gd = mean_gd, min_es = min_es, cores_for_chains = cores_for_chains, p_accept = p_accept,
