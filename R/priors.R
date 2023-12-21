@@ -262,32 +262,42 @@ plot_prior <- function(prior=NULL, design,plotp=NULL,
 #' make_prior
 #'
 #' Makes priors based on a design.
-#'  For hierarchical models you specify prior on mean of the group mean (pmean) and standard deviations
-#' (psd), and possibly these values taken from another prior (supplied by the
-#' update argument), as long as those values have the same name as in the current
-#' design and are not specified in pmean and psd. Where a value is not supplied
-#' in arguments the user is prompted to enter numeric values (or functions that
-#' evaluate to numbers).
+#' Specify prior on mean of the group mean (pmean) and standard deviation (psd),
+#' for the individual level for a "single" model and for the group level for
+#' hierarchical models. These values are entered manually by default but can be
+#' taken from another prior (given in the update argument) for values having
+#' the same name as in the current design and are not specified in pmean and psd.
+#' Where a value is not supplied in arguments the user is prompted to enter
+#' numeric values (or functions that evaluate to numbers). For hierarchical models
+#' the scale (pscale) and the  degrees of freedom (df) for the population variance
+#' covariance matrix can also be specified (by default unit values are assumed,
+#'  set these arguments to NULL to enter values manually).
 #'
 #' @param design Design for which a prior is constructed
 #' @param pmean Named vector of prior means, or an unnamed scalar, which is then used for all.
-#' @param psd Named vector of prior standard deviations, or an unnamed scalar, which is then used for all. If NA, will assume 1 for all parameters
+#' @param psd Named vector of prior standard deviations, or an unnamed scalar,
+#' which is then used for all. If NA, will assume 1 for all parameters
 #' @param update Another prior from which to copy values
 #' @param verbose Boolean (default true) print values of prior to console (if
 #' update only new values).
 #' @param update_print When verbose print only new values (default TRUE)
-#' @param type What type of model you plan on using, choice of standard, diagonal and single for this function
-#' @param pscale For hierarchical models, the prior on the scale of the variances. If NA, will assume 1 for all parameters
-#' @param df For hierarchical models, the prior on the degrees of freedom of the variances. If NA will assume 2 for all parameters
+#' @param type What type of model you plan on using, choice of standard, diagonal
+#' and single for this function
+#' @param pscale For hierarchical models, the prior on the scale of the variances.
+#' Default NA will assume 1 for all parameters
+#' @param df For hierarchical models, the prior on the degrees of freedom of the
+#' variances. Default NA will assume 2
 #'
 #' @return An EMC prior object
 #' @export
 make_prior <- function(design,pmean=NULL,psd=NULL,update=NULL,
                        verbose=TRUE,update_print=TRUE, type = "standard",
-                       pscale = NULL, df = NULL)
+                       pscale = NA, df = NA)
 {
   pm <- sampled_p_vector(design)
   pm <- ps <- psc <-  pm[1:length(pm)]
+
+  # Make sure names are correct and fill in defaults if NA
   if (!is.null(pmean) && is.null(names(pmean))) {
     pmean[1:length(pm)] <- pm
     pmean <- setNames(pmean,names(pm))
@@ -310,6 +320,7 @@ make_prior <- function(design,pmean=NULL,psd=NULL,update=NULL,
       pscale <- setNames(pscale,names(psc))
     }
   }
+  if (is.na(df)) df <- 2
 
   if ( !is.null(update) ) {
     pmu <- update$theta_mu_mean
@@ -337,7 +348,7 @@ make_prior <- function(design,pmean=NULL,psd=NULL,update=NULL,
   if (!all(names(pmean) %in% names(pm))) stop("pmean has names not in design")
   if (!is.null(pmean)) pm[names(pmean)] <- pmean
   todom <- !(names(pm) %in% names(pmean))
-  if (any(todom)) {
+  if ( any(todom) ) {
     if(type == "single"){
       cat("Enter values for prior mean\n")
     } else{
@@ -358,7 +369,7 @@ make_prior <- function(design,pmean=NULL,psd=NULL,update=NULL,
   if (!all(names(psd) %in% names(ps))) stop("psd has names not in design")
   if (!is.null(ps)) ps[names(psd)] <- psd
   todos <- !(names(ps) %in% names(psd))
-  if (any(todos)) {
+  if ( any(todos) ) {
     if(type == "single"){
       cat("Enter values for prior standard deviation\n")
     } else{
@@ -375,7 +386,7 @@ make_prior <- function(design,pmean=NULL,psd=NULL,update=NULL,
         }
       }
     }
-  } else if ( is.null(update) ) ps <- rep(1,length(ps))
+  }
   if(type != "single"){
     if (!is.null(psc)) psc[names(pscale)] <- pscale
     todoscale <- !(names(psc) %in% names(pscale))
@@ -392,8 +403,8 @@ make_prior <- function(design,pmean=NULL,psd=NULL,update=NULL,
           }
         }
       }
-    } else if ( is.null(update) ) psc <- rep(1,length(psc))
-    if(is.null(df)){
+    }
+    if ( is.null(df) ) {
       if(type == "standard"){
         cat("Enter value for prior degrees of freedom for group-level variance, same for all parameters, 2 leads to uniform priors on correlations \n")
 
@@ -411,7 +422,6 @@ make_prior <- function(design,pmean=NULL,psd=NULL,update=NULL,
       }
     }
   }
-
 
   if (verbose & (!update_print | (update_print & (!any(todom) | !any(todos))))) {
     if (!(update_print & !any(todom))) cat("Prior means\n")
