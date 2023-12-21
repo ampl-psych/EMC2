@@ -203,7 +203,7 @@ contr.anova <- function(n) {
 #' @return Named vector with mapping attributes.
 #' @export
 
-sampled_p_vector <- function(design,model=NULL,doMap=TRUE, add_da = FALSE)
+sampled_p_vector <- function(design,model=NULL,doMap=TRUE, add_da = FALSE, all_cells_dm = FALSE)
   # Makes an empty p_vector corresponding to model.
 {
   if (is.null(model)) model <- design$model
@@ -225,7 +225,8 @@ sampled_p_vector <- function(design,model=NULL,doMap=TRUE, add_da = FALSE)
   }
   dadm <- design_model(
     add_accumulators(data,matchfun=design$matchfun,type=model()$type,Fcovariates=design$Fcovariates),
-    design,model,add_acc=FALSE,verbose=FALSE,rt_check=FALSE,compress=FALSE, add_da = add_da)
+    design,model,add_acc=FALSE,verbose=FALSE,rt_check=FALSE,compress=FALSE, add_da = add_da,
+    all_cells_dm = all_cells_dm)
   sampled_p_names <- attr(dadm,"sampled_p_names")
   out <- stats::setNames(numeric(length(sampled_p_names)),sampled_p_names)
   if (doMap) attr(out,"map") <-
@@ -339,7 +340,7 @@ design_model_custom_ll <- function(data, design, model){
 
 design_model <- function(data,design,model=NULL,
                          add_acc=TRUE,rt_resolution=0.02,verbose=TRUE,
-                         compress=TRUE,rt_check=TRUE, add_da = FALSE)
+                         compress=TRUE,rt_check=TRUE, add_da = FALSE, all_cells_dm = FALSE)
   # Flist is a list of formula objects, one for each p_type
   # da is augmented data (from add_accumulators), must have all of the factors
   #   and covariates that are used in formulas
@@ -552,7 +553,7 @@ design_model <- function(data,design,model=NULL,
      }
    }
     if(model()$type != "MRI") for (i in names(model()$p_types)) attr(design$Flist[[i]],"Clist") <- design$Clist[[i]]
-    out <- lapply(design$Flist,make_dm,da=da,Fcovariates=design$Fcovariates, add_da = add_da)
+    out <- lapply(design$Flist,make_dm,da=da,Fcovariates=design$Fcovariates, add_da = add_da, all_cells_dm = all_cells_dm)
     if (!is.null(rt_resolution) & !is.null(da$rt)) da$rt <- round(da$rt/rt_resolution)*rt_resolution
     if (compress) dadm <- compress_dadm(da,designs=out,
                                         Fcov=design$Fcovariates,Ffun=names(design$Ffunctions)) else {
@@ -613,11 +614,11 @@ design_model <- function(data,design,model=NULL,
 }
 
 
-make_dm <- function(form,da,Clist=NULL,Fcovariates=NULL, add_da = FALSE)
+make_dm <- function(form,da,Clist=NULL,Fcovariates=NULL, add_da = FALSE, all_cells_dm = FALSE)
   # Makes a design matrix based on formula form from augmented data frame da
 {
 
-  compress_dm <- function(dm, da = NULL)
+  compress_dm <- function(dm, da = NULL, all_cells_dm = FALSE)
     # out keeps only unique rows, out[attr(out,"expand"),] gets back original.
   {
     cells <- apply(dm,1,paste,collapse="_")
@@ -629,7 +630,7 @@ make_dm <- function(form,da,Clist=NULL,Fcovariates=NULL, add_da = FALSE)
       dups <- duplicated(cells)
     }
     out <- dm[!dups,,drop=FALSE]
-    if(!is.null(da)){
+    if(!is.null(da) & !all_cells_dm){
       if(nrow(da) != 0){
         out <- cbind(da[!dups,colnames(da) != "subjects",drop=FALSE], out)
       }
@@ -667,7 +668,7 @@ make_dm <- function(form,da,Clist=NULL,Fcovariates=NULL, add_da = FALSE)
   }
   if(add_da){
     da <- da[,all.vars(form)[-1], drop = F]
-    out <- compress_dm(out, da)
+    out <- compress_dm(out, da, all_cells_dm)
   } else{
     out <- compress_dm(out)
   }
