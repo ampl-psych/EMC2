@@ -21,7 +21,7 @@ make_missing <- function(data,LT=0,UT=Inf,LC=0,UC=Inf,
 
   censor <- function(data,L=0,U=Inf,Ld=TRUE,Ud=TRUE,Lr=TRUE,Ur=TRUE)
   {
-    if (Ld) Ld <- 0 else Ld <- NA
+    if (Ld) Ld <- -Inf else Ld <- NA
     if (Ud) Ud <- Inf else Ud <- NA
     snams <- levels(data$subjects)
     if (length(L)==1) L <- setNames(rep(L,length(snams)),snams)
@@ -42,7 +42,10 @@ make_missing <- function(data,LT=0,UT=Inf,LC=0,UC=Inf,
   pick <- is.infinite(data$rt) | (data$rt>LT & data$rt<UT)
   pick[is.na(pick)] <- TRUE
   out <- censor(data[pick,],L=LC,U=UC,Lr=LCresponse,Ur=UCresponse,Ld=LCdirection,Ud=UCdirection)
-  attr(out,"LC") <- LC; attr(out,"UC") <- UC
+  if (LC != 0) attr(out,"LC") <- LC
+  if (UC != Inf) attr(out,"UC") <- UC
+  if (LT != 0) attr(out,"LT") <- LT
+  if (UT != Inf) attr(out,"UT") <- UT
   out
 }
 
@@ -197,9 +200,28 @@ make_data <- function(p_vector,design,model=NULL,trials=NULL,data=NULL,expand=1,
   if (mapped_p) return(cbind(data[,!(names(data) %in% c("R","rt"))],pars))
   if (expand==1)
     Rrt <- model()$rfun(data$lR,pars) else
-      Rrt <- model()$rfun(rep(data$lR,expand),apply(pars,2,rep,times=expand))
-  if (expand>1) data <- cbind(rep=rep(1:expand,each=dim(data)[1]),
-                              data.frame(lapply(data,rep,times=expand)))
+      Rrt <- model()$rfun(lR,)
+  if (expand>1) {
+    data <- cbind(rep=rep(1:expand,each=dim(data)[1]),
+                  data.frame(lapply(data,rep,times=expand)))
+    lR <- rep(data$lR,expand)
+    pars <- apply(pars,2,rep,times=expand)
+  } else lR <- data$lR
+  if (any(names(data)=="RACE")) {
+    Rrt <- matrix(ncol=2,nrow=dim(data)[1]/length(levels(data$lR)),
+                  dimnames=list(NULL,c("R","rt")))
+    RACE <- data[data$lR==levels(data$lR)[1],"RACE"]
+    ok <- as.numeric(data$lR) <= as.numeric(as.character(data$RACE))
+    for (i in levels(RACE)) {
+      pick <- data$RACE==i
+      lRi <- factor(data$lR[pick & ok])
+      Rrti <- model()$rfun(lRi,pars[pick & ok,])
+      Rrti$R <- as.numeric(as.character(Rrti$R))
+      Rrt[RACE==i,] <- as.matrix(Rrti)
+    }
+    Rrt <- data.frame(Rrt)
+    Rrt$R <- factor(Rrt$R)
+  } else Rrt <- model()$rfun(lR,pars)
   dropNames <- c("lR","lM")
   if (!return_Ffunctions && !is.null(design$Ffunctions))
     dropNames <- c(dropNames,names(design$Ffunctions) )
