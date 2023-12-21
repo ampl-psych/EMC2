@@ -303,7 +303,7 @@ make_prior <- function(design,pmean=NULL,psd=NULL,update=NULL,
     pmean <- setNames(pmean,names(pm))
   }
   if (!is.null(psd) && is.null(names(psd))) {
-    if(is.na(psd)){
+    if(any(is.na(psd))){
       psd[1:length(ps)] <- 1
       psd <- setNames(psd,names(ps))
     } else{
@@ -312,7 +312,7 @@ make_prior <- function(design,pmean=NULL,psd=NULL,update=NULL,
     }
   }
   if (!is.null(pscale) && is.null(names(pscale))) {
-    if(is.na(pscale)){
+    if(any(is.na(pscale))){
       pscale[1:length(psc)] <- 0.3
       pscale <- setNames(pscale,names(psc))
     } else{
