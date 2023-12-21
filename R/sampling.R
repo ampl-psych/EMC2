@@ -199,7 +199,7 @@ run_stage <- function(pmwgs,
   n0=round(5/(p_accept*(1-p_accept))) #Also not questioning this math for now
 
   epsilon <- fix_epsilon(pmwgs, epsilon, force_prev_epsilon, components)
-  if(length(particles == 1)){
+  if(length(particles) == 1){
     particles <- rep(particles, max(pmwgs$n_subjects, 2)) # kluge to keep it as a vector
   }
   # Build new sample storage

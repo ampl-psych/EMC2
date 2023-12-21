@@ -132,6 +132,9 @@ run_samplers <- function(samplers, stage, iter = NULL, max_gd = NULL, mean_gd = 
     if(!is.numeric(progress$step_size) | progress$step_size < 1) warning("Something wrong with the stepsize again, Niek's to blame")
     if(!is.null(progress$n_blocks)) n_blocks <- progress$n_blocks
     samplers <- add_proposals(samplers, stage, cores_per_chain, n_blocks)
+    if(!is.null(progress$gds_bad)){
+      particle_factor <- particle_factor + .2 * progress$gds_bad * particle_factor
+    }
     samplers <- auto_mclapply(samplers,run_stages, stage = stage, iter= progress$step_size,
                                    verbose=verbose,  verboseProgress = verboseProgress,
                                    particles=particles,particle_factor=particle_factor,
@@ -160,19 +163,41 @@ run_stages <- function(sampler, stage = "preburn", iter=0, verbose = TRUE, verbo
                        particles=NULL,particle_factor=50, p_accept= NULL, n_cores=1)
 {
 
-  if (is.null(particles))
+  if (is.null(particles)){
+    # if(!is.null(sampler$g_map_fixed)){
+    #   particles <- round(particle_factor*sqrt(length(sampler$pars_random)/sampler$n_subjects))
+    # } else{
+    #   particles <- round(particle_factor*sqrt(length(sampler$par_names)))
+    # }
     particles <- round(particle_factor*sqrt(length(sampler$par_names)))
+
+  }
   if (!sampler$init) {
+    # if(!is.null(sampler$g_map_fixed)){
+    #   sampler <- init_lm(sampler, n_cores = n_cores)
+    # } else{
+    #   sampler <- init(sampler, n_cores = n_cores)
+    # }
     sampler <- init(sampler, n_cores = n_cores)
   }
   if (iter == 0) return(sampler)
+  # if(!is.null(sampler$g_map_fixed)){
+  #   sampler <- run_stage_lm(sampler, stage = stage,iter = iter, particles = particles,
+  #                           n_cores = n_cores, p_accept = p_accept, verbose = verbose, verboseProgress = verboseProgress)
+  # } else{
+#     sampler <- run_stage(sampler, stage = stage,iter = iter, particles = particles,
+#                          n_cores = n_cores, p_accept = p_accept, verbose = verbose, verboseProgress = verboseProgress)
+# }
   sampler <- run_stage(sampler, stage = stage,iter = iter, particles = particles,
-                       n_cores = n_cores, p_accept = p_accept, verbose = verbose, verboseProgress = verboseProgress)
+                     n_cores = n_cores, p_accept = p_accept, verbose = verbose, verboseProgress = verboseProgress)
   return(sampler)
 }
 
 add_proposals <- function(samplers, stage, n_cores, n_blocks){
   if(stage != "preburn"){
+    # if(!is.null(samplers[[1]]$g_map_fixed)){
+    #   samplers <- create_cov_proposals_lm(samplers)
+    # } else{    }
     samplers <- create_cov_proposals(samplers, do_block = stage != "sample")
     if(!is.null(n_blocks)){
       components <- sub_blocking(samplers, n_blocks)
@@ -180,8 +205,12 @@ add_proposals <- function(samplers, stage, n_cores, n_blocks){
         attr(samplers[[i]]$data, "components") <- components
       }
     }
+
   }
   if(stage == "sample"){
+    # if(!is.null(samplers[[1]]$g_map_fixed)){
+    #   samplers <- create_eff_proposals_lm(samplers, n_cores)
+    # } else{    }
     samplers <- create_eff_proposals(samplers, n_cores)
   }
   return(samplers)
@@ -210,8 +239,15 @@ check_progress <- function (samplers, stage, iter, max_gd, mean_gd, min_es, min_
     es_done <- TRUE
   }
   else if (iters_total != 0) {
+    # if(!is.null(samplers[[1]]$g_map_fixed)){
+    #   curr_min_es <- min(es_pmwg(as_mcmc.list(samplers, selection = "random",
+    #                                           filter = stage), print_summary = F),
+    #                      es_pmwg(as_mcmc.list(samplers, selection = "fixed",
+    #                                           filter = stage), print_summary = F))
+    # } else{    # }
     curr_min_es <- min(es_pmwg(as_mcmc.list(samplers, selection = "alpha",
-                                            filter = stage), print_summary = F))
+                                              filter = stage), print_summary = F))
+
     if (verbose)
       message("Smallest effective size = ", round(curr_min_es))
     es_done <- ifelse(!samplers[[1]]$init, FALSE, curr_min_es >
@@ -231,8 +267,12 @@ check_progress <- function (samplers, stage, iter, max_gd, mean_gd, min_es, min_
     samples_merged <- merge_samples(samplers)
     test_samples <- extract_samples(samples_merged, stage = "adapt",
                                     samples_merged$samples$idx)
+    # if(!is.null(samplers[[1]]$g_map_fixed)){
+    #   adapted <- test_adapted_lm(samplers[[1]], test_samples, min_unique, n_cores, verbose)
+    # } else{    }
     adapted <- test_adapted(samplers[[1]], test_samples,
-                            min_unique, n_cores, verbose)
+                              min_unique, n_cores, verbose)
+
   }
   else {
     adapted <- TRUE
@@ -242,7 +282,8 @@ check_progress <- function (samplers, stage, iter, max_gd, mean_gd, min_es, min_
     step_size <- min(step_size, abs(iter - total_iters_stage))[1]
   }
   return(list(samplers = gd$samplers, done = done, step_size = step_size,
-              trys = trys, iters_total = iters_total, n_blocks = gd$n_blocks))
+              trys = trys, iters_total = iters_total, n_blocks = gd$n_blocks,
+              gds_bad = gd$gds_bad))
 }
 
 check_gd <- function(samplers, stage, max_gd, mean_gd, trys, verbose,
@@ -264,11 +305,38 @@ check_gd <- function(samplers, stage, max_gd, mean_gd, trys, verbose,
   if(is.null(max_gd) & is.null(mean_gd)) return(list(gd_done = TRUE, samplers = samplers))
   if(!samplers[[1]]$init | !stage %in% samplers[[1]]$samples$stage)
     return(list(gd_done = FALSE, samplers = samplers))
+  # if(!is.null(samplers[[1]]$g_map_fixed)){
+  #   gd_fixed <- gd_pmwg(as_mcmc.list(samplers,filter=stage, selection = "fixed"), return_summary = FALSE,print_summary = FALSE,filter=stage,mapped=FALSE, selection = "fixed")
+  #   gd_random <- gd_pmwg(as_mcmc.list(samplers,filter=stage, selection = "random"), return_summary = FALSE,print_summary = FALSE,filter=stage,mapped=FALSE, selection = "random")
+  #   if(omit_mpsrf){
+  #     gd_fixed <- gd_fixed[-length(gd_fixed)]
+  #     gd_random <- gd_random[,-ncol(gd_random)]
+  #   }
+  #   gd <- c(gd_fixed, gd_random)
+  # } else{  }
   gd <- get_gds(samplers,omit_mpsrf,omit_mu)
+
   n_remove <- round(chain_n(samplers)[,stage][1]/3)
   samplers_short <- try(lapply(samplers,remove_iterations,select=n_remove,filter=stage),silent=TRUE)
-  if (is(samplers_short,"try-error")) gd_short <- Inf else
+
+  if (is(samplers_short,"try-error")){
+    gd_short <- Inf
+  } else{
+    # if(!is.null(samplers[[1]]$g_map_fixed)){
+    #   gd_fixed_short <- gd_pmwg(as_mcmc.list(samplers_short,filter=stage, selection = "fixed"), return_summary = FALSE,
+    #                             print_summary = FALSE,filter=stage,mapped=FALSE, selection = "fixed")
+    #   gd_random_short <- gd_pmwg(as_mcmc.list(samplers_short,filter=stage, selection = "random"), return_summary = FALSE,
+    #                              print_summary = FALSE,filter=stage,mapped=FALSE, selection = "random")
+    #   if(omit_mpsrf){
+    #     gd_fixed <- gd_fixed[-length(gd_fixed)]
+    #     gd_random <- gd_random[,-ncol(gd_random)]
+    #   }
+    #   gd_short <- c(gd_fixed_short, gd_random_short)
+    # } else{
+    # }
     gd_short <- get_gds(samplers_short,omit_mpsrf,omit_mu)
+
+  }
   if (mean(gd_short) < mean(gd)) {
     gd <- gd_short
     samplers <- samplers_short
@@ -289,6 +357,16 @@ check_gd <- function(samplers, stage, max_gd, mean_gd, trys, verbose,
   #   n_blocks <- floor(iter/1000) + 1
   #   n_blocks <- max(n_blocks_old, n_blocks)
   # }
+  if(iter > 1000 & stage == "sample" & !ok_gd) {
+    gds <- gd_pmwg(samplers, selection = "alpha", print_summary = F)
+    if(!is.null(mean_gd)){
+      gds_bad <- (rowMeans(gds) > mean_gd)*iter/1000
+    } else{
+      gds_bad <- (apply(gds, 1, max) > max_gd)*iter/1000
+    }
+  } else{
+    gds_bad <- NULL
+  }
   if(verbose) {
     if(n_blocks_old != n_blocks) {
       message(paste0("More than ", floor(iter/1000)*1000, " sample iterations past without convergence. Now block updating parameters with ", n_blocks, " blocks."))
@@ -298,7 +376,7 @@ check_gd <- function(samplers, stage, max_gd, mean_gd, trys, verbose,
     if (omit_mpsrf) type <- "psrf" else type <- "m/psrf"
     message("Mean ",type," = ",round(mean(gd),3),", Max alpha ",type," = ",round(max(gd),3))
   }
-  return(list(gd = gd, gd_done = ok_gd, samplers = samplers, n_blocks = n_blocks))
+  return(list(gd = gd, gd_done = ok_gd, samplers = samplers, n_blocks = n_blocks, gds_bad = gds_bad))
 }
 
 
@@ -421,6 +499,56 @@ create_cov_proposals <- function(samplers, samples_idx = NULL, do_block = TRUE){
   return(samplers)
 }
 
+create_eff_proposals_lm <- function(samplers, n_cores){
+  samples_merged <- merge_samples(samplers)
+  test_samples <- extract_samples(samples_merged, stage = c("adapt", "sample"), max_n_sample = 1000)
+  for(i in 1:length(samplers)){
+    iteration = round(test_samples$iteration * i/length(samplers))
+    attr(samplers[[i]], "eff_props") <- auto_mclapply(X = samplers[[1]]$subjects,FUN = get_conditionals_lm,samples = test_samples, iteration = iteration,
+                                                      mc.cores = n_cores)
+    attr(samplers[[i]], "eff_props_between") <- get_conditionals_lm_between(samples = test_samples, iteration = iteration)
+  }
+  return(samplers)
+}
+
+create_cov_proposals_lm <- function(samplers, samples_idx = NULL){
+  get_covs <- function(sampler, samples_idx, par_idx){
+    return(var(t(sampler$samples$random[par_idx, samples_idx])))
+  }
+  n_subjects <- samplers[[1]]$n_subjects
+  n_chains <- length(samplers)
+
+  if(is.null(samples_idx)){
+    idx_subtract <- min(250, samplers[[1]]$samples$idx/2)
+    samples_idx <- round(samplers[[1]]$samples$idx - idx_subtract):samplers[[1]]$samples$idx
+  }
+  pars_per_subject <- lapply(samplers[[1]]$subjects, FUN = function(x, pars) pars[get_sub_idx(x, pars)], samplers[[1]]$pars_random)
+  between_idx <- !grepl("subjects", samplers[[1]]$pars_random)
+
+  chains_cov_sub <- vector("list", length = n_subjects)
+  for(j in 1:n_chains){
+    for(sub in 1:n_subjects){
+      mean_covs <- get_covs(samplers[[j]], samples_idx, par_idx = pars_per_subject[[sub]])
+      if(is.negative.semi.definite(mean_covs)){
+        chains_cov_sub[[sub]] <- attr(samplers[[j]], "chains_cov_sub")[[sub]]
+      } else{
+        chains_cov_sub[[sub]] <-  as.matrix(nearPD(mean_covs)$mat)
+      }
+    }
+    mean_covs_between <- var(t(rbind(samplers[[j]]$samples$fixed[, samples_idx],
+                                     samplers[[j]]$samples$random[between_idx,samples_idx])))
+    if(is.negative.semi.definite(mean_covs_between)){
+      mean_covs_between <- attr(samplers[[j]], "chains_cov_between")
+    } else{
+      mean_covs_between <-  as.matrix(nearPD(mean_covs_between)$mat)
+    }
+    attr(samplers[[j]], "chains_cov_sub") <- chains_cov_sub
+    attr(samplers[[j]], "chains_cov_between") <- mean_covs_between
+
+  }
+  return(samplers)
+}
+
 get_attributes <- function(samplers, attributes = NULL){
   if(is.null(attributes)) {
     return(list(  data_list = attr(samplers,"data_list"),
@@ -434,6 +562,37 @@ get_attributes <- function(samplers, attributes = NULL){
   }
 }
 
+test_adapted_lm <- function(samples, test_samples, min_unique, n_cores_conditional = 1,
+                            verbose = FALSE){
+  unq_per_sub <- sapply(samples$subjects, FUN = function(x, samples){
+    pars <- samples[get_sub_idx(x, rownames(samples)),]
+    return(length(unique(pars[1,])))}, test_samples$random)
+  if(all(unq_per_sub > min_unique)){
+    if(verbose){
+      message("Enough unique values detected: ", min_unique)
+      message("Testing proposal distribution creation")
+    }
+    attempt <- tryCatch({
+      auto_mclapply(X = samples$subjects,FUN = get_conditionals_lm,samples = test_samples,
+                    mc.cores = n_cores_conditional)
+      get_conditionals_lm_between(samples = test_samples)
+    },error=function(e) e, warning=function(w) w)
+    if (any(class(attempt) %in% c("warning", "error", "try-error"))) {
+      if(verbose){
+        message("Can't create efficient distribution yet")
+        message("Increasing required unique values and continuing adaptation")
+      }
+      return(FALSE)
+    }
+    else {
+      if(verbose) message("Successfully adapted after ", test_samples$iteration, "iterations - stopping adaptation")
+      return(TRUE)
+    }
+
+  } else{
+    return(FALSE)
+  }
+}
 
 test_adapted <- function(sampler, test_samples, min_unique, n_cores_conditional = 1,
                          verbose = FALSE)

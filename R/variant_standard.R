@@ -54,7 +54,7 @@ get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1
     prior$v <- 2
   }
   if(is.null(prior$A)){
-    prior$A <- rep(1, n_pars)
+    prior$A <- rep(.3, n_pars)
   }
   # Things I save rather than re-compute inside the loops.
   prior$theta_mu_invar <- ginv(prior$theta_mu_var) #Inverse of the matrix

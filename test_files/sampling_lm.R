@@ -327,10 +327,10 @@ new_particle_between <- function(n_particles, hyper,
   eff_mean <- eff_props$eff_mu
   eff_var <- eff_props$eff_var
 
-  if(stage != "sample"){
+  if(stage == "preburn"){
     eff_mean <- prev_mu
   }
-  if(stage != "sample"){
+  if(stage == "preburn"){
     eff_var_curr <- chains_cov * epsilon^2
     if(stage == "preburn"){
       ind_var <- diag(group_var) * epsilon^2
@@ -338,7 +338,7 @@ new_particle_between <- function(n_particles, hyper,
       ind_var <- diag(group_var) *  mean(diag(eff_var_curr))/mean(diag(group_var))
     }
   } else{
-    eff_var_curr <- eff_var
+    eff_var_curr <- eff_var * epsilon^2
     ind_var <- chains_cov *  epsilon^2
   }
   particle_numbers <- numbers_from_proportion(mix_proportion, n_particles)
@@ -472,7 +472,7 @@ run_stage_lm <- function(pmwgs,
                       particles = 100,
                       verbose = TRUE,
                       verboseProgress = TRUE,
-                      particles_fixed = round(particles/2),
+                      particles_fixed = round(particles*1.5),
                       n_cores = 1,
                       epsilon = NULL,
                       p_accept = NULL) {
@@ -538,9 +538,11 @@ run_stage_lm <- function(pmwgs,
     names(hyper$var_random) <- pmwgs$pars_random
     hyper$mu_fixed[pmwgs$is_intercept] = pmwgs$prior$intercepts_mu
     input_random <- pmwgs$samples$random[,j-1]
-    # if(stage != "sample"){
-    #   input_random[1:length(input_random)] <- 0
-    # }
+    if(stage == "preburn"){
+      input_random[1:length(input_random)] <- 0
+    } else{
+      eff_props_between <- create_eff_proposals_between(pmwgs$samples)
+    }
     # Particle step
     proposals_between <- new_particle_between(particles_fixed, hyper, pmwgs$samples$fixed[,j-1],
                                               input_random, pmwgs$data, pmwgs$subjects,
