@@ -148,37 +148,37 @@ as_Mcmc <- function(sampler,filter=stages,thin=1,subfilter=0,
   } else if (!all(filter %in% 1:sampler$samples$idx)) {
     stop("filter is not a vector of stage names, or integer vector of indices\n")
   }
-  # if(selection == "fixed"){
-  #   fixed <- sampler$samples$fixed[, filter,drop=FALSE]
-  #   if (is.null(subfilter)){
-  #     fixed <- t(fixed)
-  #   }  else{
-  #     fixed <- t(shorten(fixed,subfilter,2))
-  #   }
-  #   if (thin > dim(fixed)[1]) stop("Thin to large\n")
-  #   out <- coda::mcmc(fixed[seq(thin,dim(fixed)[1],by=thin),,drop=FALSE])
-  #   attr(out,"selection") <- selection
-  #   return(out)
-  # }
-  # if(selection == "random"){
-  #   random <- sampler$samples$random[, filter,drop=FALSE]
-  #   if (is.null(subfilter)){
-  #     random <- t(random)
-  #   }  else{
-  #     random <- t(shorten(random,subfilter,2))
-  #   }
-  #   if (thin > dim(random)[1]) stop("Thin to large\n")
-  #   random <- random[seq(thin,dim(random)[1],by=thin),,drop=FALSE]
-  #   out <- stats::setNames(lapply(
-  #     sampler$subjects,
-  #     function(x) {
-  #       coda::mcmc(random[,get_sub_idx(x, sampler$pars_random),drop = F])
-  #     }
-  #   ), names(sampler$data))
-  #   attr(out,"selection") <- selection
-  #   attr(out,"selection") <- selection
-  #   return(out)
-  # }
+  if(selection == "fixed"){
+    fixed <- sampler$samples$fixed[, filter,drop=FALSE]
+    if (is.null(subfilter)){
+      fixed <- t(fixed)
+    }  else{
+      fixed <- t(shorten(fixed,subfilter,2))
+    }
+    if (thin > dim(fixed)[1]) stop("Thin to large\n")
+    out <- coda::mcmc(fixed[seq(thin,dim(fixed)[1],by=thin),,drop=FALSE])
+    attr(out,"selection") <- selection
+    return(out)
+  }
+  if(selection == "random"){
+    random <- sampler$samples$random[, filter,drop=FALSE]
+    if (is.null(subfilter)){
+      random <- t(random)
+    }  else{
+      random <- t(shorten(random,subfilter,2))
+    }
+    if (thin > dim(random)[1]) stop("Thin to large\n")
+    random <- random[seq(thin,dim(random)[1],by=thin),,drop=FALSE]
+    out <- stats::setNames(lapply(
+      sampler$subjects,
+      function(x) {
+        coda::mcmc(random[,get_sub_idx(x, sampler$pars_random),drop = F])
+      }
+    ), names(sampler$data))
+    attr(out,"selection") <- selection
+    attr(out,"selection") <- selection
+    return(out)
+  }
   if (selection == "mu") {
     mu <- sampler$samples$theta_mu[, filter,drop=FALSE]
     if (is.null(subfilter)){
@@ -339,11 +339,11 @@ extract_samples <- function(sampler, stage = c("adapt", "sample"), max_n_sample 
     out <- variant_funs$filtered_samples(sampler, full_filter)
     out$nuisance <- get_variant_funs(type)$filtered_samples(sampler$sampler_nuis, full_filter)
   } else{
-    if(!is.null(sampler$g_map_fixed)){
-      out <- 1# filtered_samples_lm(sampler, full_filter)
-    } else{
-      out <- variant_funs$filtered_samples(sampler, full_filter)
-    }
+    # if(!is.null(sampler$g_map_fixed)){
+    #   out <- 1# filtered_samples_lm(sampler, full_filter)
+    # } else{    }
+    out <- variant_funs$filtered_samples(sampler, full_filter)
+
   }
   return(out)
 }

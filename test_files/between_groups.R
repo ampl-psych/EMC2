@@ -52,8 +52,24 @@ samplers <- make_samplers_lm(dat_coh, design)
 
 source("test_files/sampling_lm.R")
 
-debug(run_stage_lm)
-samplers <- auto_burn(samplers, verbose = T,cores_per_chain = 4)
+create_eff_proposals_between <- function(samples){
+  idx_subtract <- min(300, samples$idx/2)
+  idx <- round(samples$idx - idx_subtract):samples$idx
+  all_samples <- rbind(samples$fixed[,idx], samples$random[,idx])
+  mu_tilde <- rowMeans(all_samples)
+  var_tilde <- stats::cov(t(all_samples))
+  n_pars <- nrow(samples$fixed)
+  if(any(eigen(var_tilde, only.values = T)$values < 1e-08)){
+    return(list(eff_mu = mu_tilde[1:n_pars], eff_var = as.matrix(nearPD(var_tilde[1:n_pars, 1:n_pars])$mat)))
+  }
+  condmvn <- condMVN(mean = mu_tilde, sigma = var_tilde,
+                     dependent.ind = 1:n_pars, given.ind = (n_pars + 1):length(mu_tilde),
+                     X.given = c(samples$random[,samples$idx]))
+  return(list(eff_mu = condmvn$condMean, eff_var = condmvn$condVar))
+}
+
+debug(create_eff_proposals_between)
+samplers <- run_samplers(samplers, stage = "burn", verbose = T, cores_per_chain = 10, cores_for_chains = 1, fileName = "test_groups.RData", mean_gd = 1.1)
 
 source("test_files/sampling_lm.R")
 source("test_files/helps_lm.R")

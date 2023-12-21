@@ -23,7 +23,7 @@ get_prior_diag <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, 
     prior$v <- rep(2, n_pars)
   }
   if(is.null(prior$A)){
-    prior$A <- rep(1, n_pars)
+    prior$A <- rep(.3, n_pars)
   }
   # Things I save rather than re-compute inside the loops.
   prior$theta_mu_invar <- ginv(prior$theta_mu_var) #Inverse of the matrix

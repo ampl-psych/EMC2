@@ -545,6 +545,77 @@ compare_IC <- function(sList,filter="sample",subfilter=0,use_best_fit=TRUE,
   invisible(out)
 }
 
+#' The savage dickey ratio.
+
+#' Can be used to approximate the Bayes Factor for group level mean effects.
+#' Note this is different to `compare_IC` since it only considers the group level mean effect and not the whole model.
+#'
+#' @param samplers A list. A samplers object.
+#' @param parameter A string. A parameter which you want to compare to H0. Will not be used if a FUN is specified.
+#' @param H0 An integer. The H0 value which you want to compare to
+#' @param filter A string. Specifies which stage the samples are to be taken from "preburn", "burn", "adapt", or "sample"
+#' @param FUN A character string. Specifies an operation to perform with multiple parameters. All operations must be space separated.
+#' e.g. valid would be: "B - 0.5 * t0"
+#'
+#' @return The BayesFactor for the hypothesis against H0.
+#' @export
+#'
+#' @examples
+savage_dickey <- function(samplers, parameter = NULL, H0 = 0, filter = "sample", FUN = NULL){
+  prior <- samplers[[1]]$prior
+  if(is.null(FUN)){
+    if(!parameter %in% names(prior$theta_mu_mean)) stop("parameter must be in sampled parameters")
+    idx <- which(names(prior$theta_mu_mean) == parameter)
+    if(is.matrix(prior$theta_mu_var)) prior$theta_mu_var <- diag(prior$theta_mu_var)
+    p0 <- dnorm(H0, prior$theta_mu_mean[idx], sqrt(prior$theta_mu_var[idx]))
+    samples <- merge_samples(samplers)
+    samples <- samples$samples$theta_mu[idx,samples$samples$stage == filter]
+    min_bound <- min(min(samples), H0)
+    max_bound <- max(max(samples), H0)
+    diff <- max_bound - min_bound
+    post_dfun <- approxfun(density(samples, bw = "sj", from = min_bound - diff/2, to = max_bound + diff/2))
+    p1 <- post_dfun(H0)
+    return(p0/p1)
+  } else{
+    splits <- strsplit(FUN, split = " ")[[1]]
+    if(!is.matrix(prior$theta_mu_var)){
+      prior$theta_mu_var <- diag(prior$theta_mu_var)
+    }
+    psamples <- get_prior_standard(prior = prior)$mu
+    pnames <- names(prior$theta_mu_mean)
+    vars <- list()
+    for(k in 1:length(splits)){
+      idx <- splits[k] == pnames
+      if(any(idx)){
+        vars[[pnames[idx]]] <- psamples[,pnames[idx]]
+        splits[k] <- paste0("vars[['", pnames[idx], "']]")
+      }
+    }
+    attempt <- tryCatch({psamples <- eval(str2expression(paste0(splits, collapse = " ")))},error=function(e) e, warning=function(w) w)
+    if (any(class(attempt) %in% c("warning", "error", "try-error"))) {
+      stop("make sure spaces are added between the variables and all operators and that you spelled all variable names correctly")
+    }
+
+    samples <- merge_samples(samplers)
+    samples <- samples$samples$theta_mu[,samples$samples$stage == filter]
+    for(pname in names(vars)){
+      vars[[pname]] <- samples[pname,]
+    }
+    samples <- eval(str2expression(paste0(splits, collapse = " ")))
+
+    min_bound <- min(min(psamples), H0)
+    max_bound <- max(max(psamples), H0)
+    diff <- max_bound - min_bound
+    pdfun <-approxfun(density(psamples, bw = "sj", from = min_bound - diff/2, to = max_bound + diff/2))
+
+    min_bound <- min(min(samples), H0)
+    max_bound <- max(max(samples), H0)
+    diff <- max_bound - min_bound
+    post_dfun <-approxfun(density(samples, bw = "sj", from = min_bound - diff/2, to = max_bound + diff/2))
+    return(pdfun(H0)/post_dfun(H0))
+  }
+}
+
 #' IC-based model weights for each participant in a list of samples objects
 #'
 #' @param sList List of samples objects

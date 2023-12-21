@@ -161,6 +161,14 @@ make_design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=
 
 contr.increasing <- function(n,levels=NULL)
 {
+  if (length(n) <= 1L) {
+    if (is.numeric(n) && length(n) == 1L && n > 1L)
+      levels <- seq_len(n)
+    else stop("not enough degrees of freedom to define contrasts")
+  }
+  else levels <- n
+  levels <- as.character(levels)
+  n <- length(levels)
   contr <- matrix(0,nrow=n,ncol=n-1,dimnames=list(NULL,2:n))
   contr[lower.tri(contr)] <- 1
   if (!is.null(levels)) dimnames(contr)[[2]] <- levels[-1]
