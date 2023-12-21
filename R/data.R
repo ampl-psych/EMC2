@@ -198,9 +198,6 @@ make_data <- function(p_vector,design,model=NULL,trials=NULL,data=NULL,expand=1,
     return(data)
   }
   if (mapped_p) return(cbind(data[,!(names(data) %in% c("R","rt"))],pars))
-  if (expand==1)
-    Rrt <- model()$rfun(data$lR,pars) else
-      Rrt <- model()$rfun(lR,)
   if (expand>1) {
     data <- cbind(rep=rep(1:expand,each=dim(data)[1]),
                   data.frame(lapply(data,rep,times=expand)))
