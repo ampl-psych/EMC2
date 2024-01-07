@@ -132,6 +132,7 @@ mapped_par <- function(p_vector,design,model=NULL,
     ok <- !(names(dadm) %in% c("subjects","trials","R","rt","winner"))
     out <- cbind(dadm[,ok],round(get_pars(p_vector,dadm),digits))
     if (model()$type=="SDT")  out <- out[dadm$lR!=levels(dadm$lR)[length(levels(dadm$lR))],]
+    if (model()$type=="DDM")  out <- out[,!(names(out) %in% c("lR","lM"))]
     return(out)
 }
 
