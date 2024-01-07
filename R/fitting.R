@@ -21,16 +21,27 @@
 #' @param cores_for_chains An integer. How many cores to use across chains. Default is the number of chains.
 #' @param max_trys An integer. How many times it will try to meet the finish conditions. Default is 20.
 #' @param n_blocks An integer. Will block the parameter chains such that they are updated in blocks. This can be helpful in extremely tough models with large number of parameters.
-#' @param omit_mpsrf When testing for convergence use only psrf (default FALSE uses mpsrf as well)
+#' @param use_mpsrf When testing for convergence use only mpsrf as well as psrf (default FALSE).
+#' @param use_mu When testing for convergence use only mu (group mean, default FALSE).
+#' @param use_maxpsrf When testing for convergence use max rather than mean m/psrf
+#' @param use_alpha When testing for convergence use only alpha (individual) as well as alpha (default TRUE).
 #'
 #' @return A list of samplers
 #' @export
 
 run_emc <- function(samplers, stage = NULL, iter = 1000, max_gd = 1.1, mean_gd = 1.1, min_es = 0, min_unique = 600, preburn = 150,
-                    p_accept = .8, step_size = 100, verbose = FALSE, verboseProgress = FALSE, fileName = NULL,
+                    p_accept = .8, step_size = 100, verbose = TRUE, verboseProgress = FALSE, fileName = NULL,
                     particles = NULL, particle_factor=50, cores_per_chain = 1,
                     cores_for_chains = length(samplers), max_trys = 20, n_blocks = 1,
-                    omit_mpsrf=TRUE,omit_mu=TRUE){
+                    use_mpsrf=FALSE,use_mu=FALSE,use_alpha=TRUE,use_maxpsrf=TRUE){
+  if (!use_alpha & !use_mu) {
+    message("Must use one of alpha and mu to check convergence, using alpha")
+    use_alpha <- TRUE
+  }
+  omit_mpsrf <- !use_mpsrf
+  omit_mu <- !use_mu
+  omit_maxsrf <- !use_maxpsrf
+  omit_alpha <- !use_alpha
   if (is.character(samplers)) {
     samplers <- fix_fileName(samplers)
     if(is.null(fileName)) fileName <- samplers
@@ -54,7 +65,7 @@ run_emc <- function(samplers, stage = NULL, iter = 1000, max_gd = 1.1, mean_gd =
                              fileName = fileName,
                              particles = particles, particle_factor =  particle_factor,
                              cores_per_chain = cores_per_chain, max_trys = max_trys, n_blocks = n_blocks,
-                             omit_mpsrf=omit_mpsrf,omit_mu=omit_mu)
+                             omit_mpsrf=omit_mpsrf,omit_mu=omit_mu,omit_alpha=omit_alpha,omit_maxsrf=omit_maxsrf)
   }
 
   if(any(stage %in% c("preburn", "burn"))){
@@ -63,7 +74,7 @@ run_emc <- function(samplers, stage = NULL, iter = 1000, max_gd = 1.1, mean_gd =
                               fileName = fileName,
                               particles = particles, particle_factor =  particle_factor,
                               cores_per_chain = cores_per_chain, max_trys = max_trys, n_blocks = n_blocks,
-                              omit_mpsrf=omit_mpsrf,omit_mu=omit_mu)
+                              omit_mpsrf=omit_mpsrf,omit_mu=omit_mu,omit_alpha=omit_alpha,omit_maxsrf=omit_maxsrf)
   }
   if(any(stage %in% c("preburn", "burn", "adapt"))){
     samplers <-  run_samplers(samplers, stage = "adapt", min_unique = min_unique, cores_for_chains = cores_for_chains, p_accept = p_accept,
@@ -71,7 +82,7 @@ run_emc <- function(samplers, stage = NULL, iter = 1000, max_gd = 1.1, mean_gd =
                               fileName = fileName,
                               particles = particles, particle_factor =  particle_factor,
                               cores_per_chain = cores_per_chain, max_trys = max_trys, n_blocks = n_blocks,
-                              omit_mpsrf=omit_mpsrf,omit_mu=omit_mu)
+                              omit_mpsrf=omit_mpsrf,omit_mu=omit_mu,omit_alpha=omit_alpha,omit_maxsrf=omit_maxsrf)
   }
   if(any(stage %in% c("preburn", "burn", "adapt", "sample")) ){
     samplers <-  run_samplers(samplers, stage = "sample", iter = iter, max_gd = max_gd, cores_for_chains = cores_for_chains, p_accept = p_accept,
@@ -79,7 +90,7 @@ run_emc <- function(samplers, stage = NULL, iter = 1000, max_gd = 1.1, mean_gd =
                               fileName = fileName,
                               particles = particles, particle_factor = particle_factor,
                               cores_per_chain = cores_per_chain, max_trys = max_trys, n_blocks = n_blocks,
-                              omit_mpsrf=omit_mpsrf,omit_mu=omit_mu)
+                              omit_mpsrf=omit_mpsrf,omit_mu=omit_mu,omit_alpha=omit_alpha,omit_maxsrf=omit_maxsrf)
   }
   return(samplers)
 }
@@ -118,14 +129,14 @@ run_samplers <- function(samplers, stage, iter = NULL, max_gd = NULL, mean_gd = 
                          fileName = NULL,
                          particles = NULL, particle_factor=50, cores_per_chain = 1,
                          cores_for_chains = length(samplers), max_trys = 20, n_blocks = 1,
-                         omit_mpsrf=TRUE,omit_mu=TRUE){
+                         omit_mpsrf=TRUE,omit_mu=TRUE,omit_alpha=FALSE,omit_maxsrf=TRUE){
   if (verbose) message(paste0("Running ", stage, " stage"))
   attributes <- get_attributes(samplers)
   total_iters_stage <- chain_n(samplers)[,stage][1]
   iter <- iter + total_iters_stage
   progress <- check_progress(samplers, stage, iter, max_gd, mean_gd, min_es,
     min_unique, max_trys, step_size, cores_per_chain, verbose,
-    omit_mpsrf=omit_mpsrf,omit_mu=omit_mu, n_blocks = n_blocks)
+    omit_mpsrf=omit_mpsrf,omit_mu=omit_mu,omit_alpha=omit_alpha,omit_maxsrf=omit_maxsrf, n_blocks = n_blocks)
   samplers <- progress$samplers
   progress <- progress[!names(progress) == 'samplers'] # Frees up memory, courtesy of Steven
   while(!progress$done){
@@ -144,7 +155,7 @@ run_samplers <- function(samplers, stage, iter = NULL, max_gd = NULL, mean_gd = 
     }
     progress <- check_progress(samplers, stage, iter, max_gd, mean_gd, min_es,
       min_unique, max_trys, step_size, cores_per_chain,verbose, progress,
-      omit_mpsrf=omit_mpsrf,omit_mu=omit_mu, n_blocks)
+      omit_mpsrf=omit_mpsrf,omit_mu=omit_mu,omit_alpha=omit_alpha,omit_maxsrf=omit_maxsrf, n_blocks)
     samplers <- progress$samplers
     progress <- progress[!names(progress) == 'samplers'] # Frees up memory, courtesy of Steven
     if(!is.null(fileName)){
@@ -218,7 +229,7 @@ add_proposals <- function(samplers, stage, n_cores, n_blocks){
 
 check_progress <- function (samplers, stage, iter, max_gd, mean_gd, min_es, min_unique,
                             max_trys, step_size, n_cores, verbose, progress = NULL,
-                            omit_mpsrf=TRUE,omit_mu=TRUE, n_blocks)
+                            omit_mpsrf=TRUE,omit_mu=TRUE,omit_alpha=FALSE, omit_maxsrf=TRUE, n_blocks)
 {
   total_iters_stage <- chain_n(samplers)[, stage][1]
   if (is.null(progress)) {
@@ -232,7 +243,7 @@ check_progress <- function (samplers, stage, iter, max_gd, mean_gd, min_es, min_
       message(trys, ": Iterations ", stage, " = ", total_iters_stage)
   }
   gd <- check_gd(samplers, stage, max_gd, mean_gd, trys, verbose,
-                 omit_mpsrf=omit_mpsrf,omit_mu=omit_mu, iter = total_iters_stage,
+                 omit_mpsrf=omit_mpsrf,omit_mu=omit_mu,omit_alpha=omit_alpha,omit_maxsrf=omit_maxsrf,iter = total_iters_stage,
                  n_blocks)
   iter_done <- ifelse(is.null(iter) || length(iter) == 0, TRUE, total_iters_stage >= iter)
   if (min_es == 0) {
@@ -287,13 +298,15 @@ check_progress <- function (samplers, stage, iter, max_gd, mean_gd, min_es, min_
 }
 
 check_gd <- function(samplers, stage, max_gd, mean_gd, trys, verbose,
-                     omit_mpsrf=TRUE,omit_mu=TRUE, iter, n_blocks = 1)
+                     omit_mpsrf=TRUE,omit_mu=TRUE,omit_alpha=FALSE,omit_maxsrf=TRUE, iter, n_blocks = 1)
 {
 
-  get_gds <- function(samplers,omit_mpsrf,omit_mu) {
-    gd <- list(alpha=gd_pmwg(as_mcmc.list(samplers,filter=stage), return_summary = FALSE,
+  get_gds <- function(samplers,omit_mpsrf,omit_mu,omit_alpha) {
+    if (!omit_alpha) {
+      gd <- list(alpha=gd_pmwg(as_mcmc.list(samplers,filter=stage), return_summary = FALSE,
                 print_summary = FALSE,filter=stage,mapped=FALSE))
-    if (omit_mpsrf) gd$alpha <- gd$alpha[,dimnames(gd$alpha)[[2]]!="mpsrf"]
+      if (omit_mpsrf) gd$alpha <- gd$alpha[,dimnames(gd$alpha)[[2]]!="mpsrf"]
+    } else gd <- NULL
     if (!omit_mu) {
       gd <- c(gd,mu=gd_pmwg(as_mcmc.list(samplers,filter=stage,selection="mu"), return_summary = FALSE,
                 print_summary = FALSE,filter=stage,mapped=FALSE))
@@ -314,7 +327,7 @@ check_gd <- function(samplers, stage, max_gd, mean_gd, trys, verbose,
   #   }
   #   gd <- c(gd_fixed, gd_random)
   # } else{  }
-  gd <- get_gds(samplers,omit_mpsrf,omit_mu)
+  gd <- get_gds(samplers,omit_mpsrf,omit_mu,omit_alpha)
 
   n_remove <- round(chain_n(samplers)[,stage][1]/3)
   samplers_short <- try(lapply(samplers,remove_iterations,select=n_remove,filter=stage),silent=TRUE)
@@ -334,10 +347,10 @@ check_gd <- function(samplers, stage, max_gd, mean_gd, trys, verbose,
     #   gd_short <- c(gd_fixed_short, gd_random_short)
     # } else{
     # }
-    gd_short <- get_gds(samplers_short,omit_mpsrf,omit_mu)
+    gd_short <- get_gds(samplers_short,omit_mpsrf,omit_mu,omit_alpha)
 
   }
-  if (mean(gd_short) < mean(gd)) {
+  if (omit_maxsrf & (mean(gd_short) < mean(gd)) | (!omit_maxsrf & (max(gd_short) < max(gd)))) {
     gd <- gd_short
     samplers <- samplers_short
   }
@@ -351,14 +364,14 @@ check_gd <- function(samplers, stage, max_gd, mean_gd, trys, verbose,
   } else{
     ok_mean_gd <- TRUE
   }
-  ok_gd <- ok_max_gd & ok_mean_gd
+  ok_gd <- (omit_maxsrf & ok_mean_gd) | (!omit_maxsrf & ok_max_gd)
   n_blocks_old <- n_blocks
   # if(iter > 1000 & stage == "sample" & !ok_gd) {
   #   n_blocks <- floor(iter/1000) + 1
   #   n_blocks <- max(n_blocks_old, n_blocks)
   # }
   if(iter > 1000 & stage == "sample" & !ok_gd) {
-    gds <- gd_pmwg(samplers, selection = "alpha", print_summary = F)
+    gds <- gd_pmwg(samplers, selection = "alpha", print_summary = FALSE)
     if(!is.null(mean_gd)){
       gds_bad <- (rowMeans(gds) > mean_gd)*iter/1000
     } else{
@@ -374,7 +387,8 @@ check_gd <- function(samplers, stage, max_gd, mean_gd, trys, verbose,
   }
   if(verbose) {
     if (omit_mpsrf) type <- "psrf" else type <- "m/psrf"
-    message("Mean ",type," = ",round(mean(gd),3),", Max alpha ",type," = ",round(max(gd),3))
+    if (omit_maxsrf) message("Mean ",type," = ",round(mean(gd),3)) else
+                     message("Max ",type," = ",round(max(gd),3))
   }
   return(list(gd = gd, gd_done = ok_gd, samplers = samplers, n_blocks = n_blocks, gds_bad = gds_bad))
 }
@@ -683,19 +697,19 @@ auto_burn <- function(samplers, max_gd = NULL, mean_gd = 1.1, min_es = 0, prebur
                       fileName = NULL,
                       particles = NULL, particle_factor=50, cores_per_chain = 1,
                       cores_for_chains = length(samplers), max_trys = 20, n_blocks = 1,
-                      omit_mpsrf=TRUE,omit_mu=TRUE){
+                      omit_mpsrf=TRUE,omit_mu=TRUE,omit_alpha=FALSE,omit_maxsrf=TRUE){
   samplers <- run_samplers(samplers, stage = "preburn", iter = preburn, cores_for_chains = cores_for_chains, p_accept = p_accept,
                            step_size = step_size,  verbose = verbose, verboseProgress = verboseProgress,
                            fileName = fileName,
                            particles = particles, particle_factor =  particle_factor,
                            cores_per_chain = cores_per_chain, max_trys = max_trys, n_blocks = n_blocks,
-                           omit_mpsrf=omit_mpsrf,omit_mu=omit_mu)
+                           omit_mpsrf=omit_mpsrf,omit_mu=omit_mu,omit_alpha=omit_alpha,omit_maxsrf=omit_maxsrf)
   samplers <-  run_samplers(samplers, stage = "burn", max_gd = max_gd, mean_gd = mean_gd, min_es = min_es, cores_for_chains = cores_for_chains, p_accept = p_accept,
                             step_size = step_size,  verbose = verbose, verboseProgress = verboseProgress,
                             fileName = fileName,
                             particles = particles, particle_factor =  particle_factor,
                             cores_per_chain = cores_per_chain, max_trys = max_trys, n_blocks = n_blocks,
-                            omit_mpsrf=omit_mpsrf,omit_mu=omit_mu)
+                            omit_mpsrf=omit_mpsrf,omit_mu=omit_mu,omit_alpha=omit_alpha,omit_maxsrf=omit_maxsrf)
   return(samplers)
 }
 #' Runs adapt stage for samplers.
@@ -728,7 +742,7 @@ run_adapt <- function(samplers, max_gd = NULL, mean_gd = NULL, min_es = 0, min_u
                       fileName = NULL,
                       particles = NULL, particle_factor=50, cores_per_chain = 1,
                       cores_for_chains = length(samplers), max_trys = 20, n_blocks = 1,
-                      omit_mpsrf=TRUE,omit_mu = TRUE)
+                      omit_mpsrf=TRUE,omit_mu = TRUE,omit_alpha=FALSE,omit_maxsrf=TRUE)
 {
   samplers <- run_samplers(samplers, stage = "adapt",  max_gd = max_gd, mean_gd = mean_gd, min_es = min_es, min_unique = min_unique,
                            cores_for_chains = cores_for_chains, p_accept = p_accept,
@@ -736,7 +750,7 @@ run_adapt <- function(samplers, max_gd = NULL, mean_gd = NULL, min_es = 0, min_u
                            fileName = fileName,
                            particles = particles, particle_factor =  particle_factor,
                            cores_per_chain = cores_per_chain, max_trys = max_trys, n_blocks = n_blocks,
-                           omit_mpsrf=omit_mpsrf,omit_mu=omit_mu)
+                           omit_mpsrf=omit_mpsrf,omit_mu=omit_mu,omit_alpha=omit_alpha,omit_maxsrf=omit_maxsrf)
   return(samplers)
 }
 #' Runs sample stage for samplers.
@@ -768,14 +782,14 @@ run_sample <- function(samplers, iter = 1000, max_gd = 1.1, mean_gd = NULL, min_
                        fileName = NULL,
                        particles = NULL, particle_factor=50, cores_per_chain = 1,
                        cores_for_chains = length(samplers), max_trys = 20, n_blocks = 1,
-                       omit_mpsrf=TRUE,omit_mu=TRUE)
+                       omit_mpsrf=TRUE,omit_mu=TRUE,omit_alpha=FALSE,omit_maxsrf=TRUE)
 {
   samplers <- run_samplers(samplers, stage = "sample", iter = iter, max_gd = max_gd, mean_gd = mean_gd, min_es = min_es, cores_for_chains = cores_for_chains, p_accept = p_accept,
                            step_size = step_size,  verbose = verbose, verboseProgress = verboseProgress,
                            fileName = fileName,
                            particles = particles, particle_factor =  particle_factor,
                            cores_per_chain = cores_per_chain, max_trys = max_trys, n_blocks = n_blocks,
-                           omit_mpsrf=omit_mpsrf,omit_mu=omit_mu)
+                           omit_mpsrf=omit_mpsrf,omit_mu=omit_mu,omit_alpha=omit_alpha,omit_maxsrf=omit_maxsrf)
   return(samplers)
 }
 
