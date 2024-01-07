@@ -2,8 +2,7 @@
 % Please edit documentation in R/statistics.R
 \name{p_test}
 \alias{p_test}
-\title{Posterior parameter tests, modeled after t.test, for a one sample test provide
-x and for two sample also provide y.}
+\title{Posterior parameter tests}
 \usage{
 p_test(
   x,
@@ -76,6 +75,6 @@ variable to be tested.}
 Invisible results table with no rounding.
 }
 \description{
-Posterior parameter tests, modeled after t.test, for a one sample test provide
-x and for two sample also provide y.
+Modeled after t.test. For a one sample test provide x and for two sample
+also provide y.
 }

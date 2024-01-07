@@ -17,7 +17,7 @@ plot_pars(
   n_prior = 1000,
   xlim = NULL,
   ylim = NULL,
-  prior_xlim = NULL,
+  prior_xlim = c(0.05, 0.95),
   show_chains = FALSE,
   do_plot = TRUE,
   subject = NA,
@@ -60,7 +60,8 @@ otherwise sampled parameters}
 
 \item{ylim}{y-axis plot limit, 2-vector (same for all) or matrix (one row for each parameter)}
 
-\item{prior_xlim}{A vector giving upper and lower quantiles of prior when choosing xlim.}
+\item{prior_xlim}{A vector giving upper and lower quantiles of prior when choosing
+xlim if plot_prior is TRUE. If set to NULL xlim is used instead.}
 
 \item{show_chains}{Boolean (default FALSE) plot separate density for each chain.}
 

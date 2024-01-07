@@ -15,7 +15,8 @@ design_model(
   verbose = TRUE,
   compress = TRUE,
   rt_check = TRUE,
-  add_da = FALSE
+  add_da = FALSE,
+  all_cells_dm = FALSE
 )
 }
 \arguments{

@@ -98,8 +98,8 @@ plot_prior <- function(prior=NULL, design,plotp=NULL,
     lower = .05
   }
   if (mapped & !(selection %in% c("alpha","mu"))){
-    warning("For selections other than mu and alpha mapped must be FALSE, we set it to FALSE here")
-    mapped <- F
+    # warning("For selections other than mu and alpha mapped must be FALSE, we set it to FALSE here")
+    mapped <- FALSE
   }
 
 

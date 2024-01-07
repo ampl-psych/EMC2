@@ -21,7 +21,7 @@ gives stable results at 2 decimal places.}
 \item{print_summary}{Boolean (default TRUE) print table of results}
 }
 \value{
-Vector of model proabilities with names from samples list.
+Vector of model probabilities with names from samples list.
 }
 \description{
 Calculate a table of model probabilities based for a list of samples objects

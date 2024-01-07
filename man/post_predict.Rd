@@ -2,7 +2,7 @@
 % Please edit documentation in R/data.R
 \name{post_predict}
 \alias{post_predict}
-\title{Generate posterior predictives}
+\title{Generate posterior predictives based on subject (alpha) parameters}
 \usage{
 post_predict(
   samples,
@@ -57,5 +57,5 @@ post_predict(
 A list of simulated data sets of length n_post.
 }
 \description{
-Generate posterior predictives
+Generate posterior predictives based on subject (alpha) parameters
 }
