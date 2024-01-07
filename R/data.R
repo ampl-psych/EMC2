@@ -256,7 +256,7 @@ add_Ffunctions <- function(data,design)
     data <-  cbind.data.frame(data,Fdf[,ok,drop=FALSE])
 }
 
-#' Generate posterior predictives
+#' Generate posterior predictives based on subject (alpha) parameters
 #'
 #' @param samples A list of samples from which you want to generate posterior predictives.
 #' @param hyper Boolean. Default is FALSE, if true simulates from the group level.

@@ -2,19 +2,14 @@
 % Please edit documentation in R/plotting.R
 \name{plot_fit}
 \alias{plot_fit}
-\title{Plots data and fit. If rt  available plots cdf, if not plots ROC. If stat
-argument (which calculates a statistics based on the data) is supplied
-instead fit is plotted as a density with a vertical line at the position of
-the data statistic. If more than one subject is included data and fits are
-aggregated over subjects. If data or fit contains NA in responses or rt, or
-is.infinite(rt) these are treating as missing and defective cdfs sum to the
-probability of non-missing.}
+\title{Plots overlaying observed and fitted data.}
 \usage{
 plot_fit(
   data,
   pp,
   subject = NULL,
   factors = NULL,
+  functions = NULL,
   stat = NULL,
   stat_name = "",
   adjust = 1,
@@ -49,7 +44,11 @@ and an rt column}
 
 \item{factors}{Character vector of factors in data to display separately. If
 NULL (default) use names of all columns in data except "trials","R", and "rt".
-Omitted factors are aggregated over. If NA treats entire data set as a single cell.}
+Omitted factors are aggregated over. If NA treats entire data set as a single cell.
+Must be NA or NULL when using stat argument.}
+
+\item{functions}{A named list of functions that create new factors which cna then be
+used by the factors and stat arguments.}
 
 \item{stat}{A function that takes a the data and returns a single value.}
 
@@ -68,7 +67,8 @@ stat argument is supplied (default c(.025,.5,.975))}
 
 \item{main}{Text title, pasted before cell name.}
 
-\item{layout}{2-vector specifying par(mfrow) or par(mfcol) (default NULL use current).}
+\item{layout}{2-vector specifying par(mfrow) or par(mfcol) (default NULL use current,
+NA keeps par currently active).}
 
 \item{mfcol}{Boolean, default TRUE use mfcol else mfrow.}
 
@@ -100,11 +100,21 @@ stat argument is supplied (default c(.025,.5,.975))}
 If stat argument is provided a table of observed values and predicted quantiles
 }
 \description{
-Plots data and fit. If rt  available plots cdf, if not plots ROC. If stat
-argument (which calculates a statistics based on the data) is supplied
-instead fit is plotted as a density with a vertical line at the position of
-the data statistic. If more than one subject is included data and fits are
-aggregated over subjects. If data or fit contains NA in responses or rt, or
-is.infinite(rt) these are treating as missing and defective cdfs sum to the
-probability of non-missing.
+If rt  available plots Defective cumulative distributions
+functions (CDFs), if not plots ROC. If stat the argument (which calculates
+a statistics based on the data) is supplied fit is plotted as a density with
+a vertical line at the position of the data statistic. If more than one
+subject is included data and fits are aggregated over subjects. If data or
+fit contains NA in responses or rt, or is.infinite(rt) these are treating as
+missing and defective cdfs sum to the probability of non-missing.
 }
+\details{
+CDFs plot the probability of a response, p(R) as a function of response time
+(RT) for data (black lines and points at qpoints quantiles) and posterior-
+}
+\section{predictive simulations (grey lines and points). Large grey points show the}{
+average of replicate quantiles and small grey points percentiles for
+individual replicates, providing a representation of uncertainty in the model
+predictions.
+}
+

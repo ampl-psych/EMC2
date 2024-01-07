@@ -15,7 +15,7 @@ run_emc(
   preburn = 150,
   p_accept = 0.8,
   step_size = 100,
-  verbose = FALSE,
+  verbose = TRUE,
   verboseProgress = FALSE,
   fileName = NULL,
   particles = NULL,
@@ -24,8 +24,10 @@ run_emc(
   cores_for_chains = length(samplers),
   max_trys = 20,
   n_blocks = 1,
-  omit_mpsrf = TRUE,
-  omit_mu = TRUE
+  use_mpsrf = FALSE,
+  use_mu = FALSE,
+  use_alpha = TRUE,
+  use_maxpsrf = TRUE
 )
 }
 \arguments{
@@ -67,7 +69,13 @@ run_emc(
 
 \item{n_blocks}{An integer. Will block the parameter chains such that they are updated in blocks. This can be helpful in extremely tough models with large number of parameters.}
 
-\item{omit_mpsrf}{When testing for convergence use only psrf (default FALSE uses mpsrf as well)}
+\item{use_mpsrf}{When testing for convergence use only mpsrf as well as psrf (default FALSE).}
+
+\item{use_mu}{When testing for convergence use only mu (group mean, default FALSE).}
+
+\item{use_alpha}{When testing for convergence use only alpha (individual) as well as alpha (default TRUE).}
+
+\item{use_maxpsrf}{When testing for convergence use max rather than mean m/psrf}
 }
 \value{
 A list of samplers

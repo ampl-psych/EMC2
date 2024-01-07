@@ -22,7 +22,9 @@ auto_burn(
   max_trys = 20,
   n_blocks = 1,
   omit_mpsrf = TRUE,
-  omit_mu = TRUE
+  omit_mu = TRUE,
+  omit_alpha = FALSE,
+  omit_maxsrf = TRUE
 )
 }
 \arguments{

@@ -4,7 +4,8 @@
 \alias{savage_dickey}
 \title{The savage dickey ratio.
 Can be used to approximate the Bayes Factor for group level mean effects.
-Note this is different to \code{compare_IC} since it only considers the group level mean effect and not the whole model.}
+Note this is different to MD in \code{compare} since it only considers the group level
+mean effect and not the whole model.}
 \usage{
 savage_dickey(
   samplers,
@@ -32,5 +33,6 @@ The BayesFactor for the hypothesis against H0.
 \description{
 The savage dickey ratio.
 Can be used to approximate the Bayes Factor for group level mean effects.
-Note this is different to \code{compare_IC} since it only considers the group level mean effect and not the whole model.
+Note this is different to MD in \code{compare} since it only considers the group level
+mean effect and not the whole model.
 }
