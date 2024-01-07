@@ -185,6 +185,14 @@ contr.increasing <- function(n,levels=NULL)
 #' @export
 
 contr.anova <- function(n) {
+  if (length(n) <= 1L) {
+    if (is.numeric(n) && length(n) == 1L && n > 1L)
+      levels <- seq_len(n)
+    else stop("not enough degrees of freedom to define contrasts")
+  }
+  else levels <- n
+  levels <- as.character(levels)
+  n <- length(levels)
   contr <- stats::contr.helmert(n)
   contr/rep(2*apply(abs(contr),2,max),each=dim(contr)[1])
 }
