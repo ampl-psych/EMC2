@@ -76,6 +76,7 @@ gd_pmwg <- function(pmwg_mcmc,return_summary=FALSE,print_summary=TRUE,
   split_mcl <- function(mcl)
     # Doubles chains by splitting into first and secon half
   {
+    if (!is.list(mcl)) mcl <- list(mcl)
     mcl2 <- mcl
     half <- floor(unlist(lapply(mcl,nrow))/2)
     for (i in 1:length(half)) {
@@ -243,8 +244,11 @@ iat_pmwg <- function(pmwg_mcmc,
 # filter="sample";selection="mu";subfilter=0
 #
 # x=sPNAS_a;x_name="t0"; mapped=TRUE
-#' Posterior parameter tests, modeled after t.test, for a one sample test provide
-#' x and for two sample also provide y.
+
+#' Posterior parameter tests
+#'
+#' Modeled after t.test. For a one sample test provide x and for two sample
+#' also provide y.
 #'
 #' @param x A pmwgs object or list of these
 #' @param x_name Name of the parameter to be tested
@@ -485,7 +489,7 @@ IC <- function(samplers,filter="sample",subfilter=0,use_best_fit=TRUE,
 #' @param subfilter An integer or vector. If integer it will exclude up until
 #' @param use_best_fit Boolean, default TRUE use best of minD and Dmean in
 #' calculation otherwise always use Dmean
-#' @param BayesFactor Boolean, default FALSE. Include marginal likelihoods as estimated using WARP-III bridge sampling. Usually takes a minute per model added to calculate
+#' @param BayesFactor Boolean, default TRUE. Include marginal likelihoods as estimated using WARP-III bridge sampling. Usually takes a minute per model added to calculate
 #' @param cores_for_props Integer, how many cores to use for BayesFactor calculation, here 4 is default for the 4 different proposal densities to evaluate, only 1, 2 and 4 are sensible.
 #' @param cores_per_prop Integer, how many cores to use for BayesFactor calculation if you have more than 4 cores available. Cores used will be cores_for_props * cores_per_prop, where prioritizing cores_for_props being 4 or 2 is fastest.
 #' @param print_summary Boolean (default TRUE) print table of results
@@ -498,8 +502,8 @@ IC <- function(samplers,filter="sample",subfilter=0,use_best_fit=TRUE,
 #' mean, DIC, BPIC, Marginal Deviance (if BayesFactor=TRUE) and associated weights.
 #' @export
 
-compare_IC <- function(sList,filter="sample",subfilter=0,use_best_fit=TRUE,
-                       BayesFactor = FALSE, cores_for_props =4, cores_per_prop = 1,
+compare <- function(sList,filter="sample",subfilter=0,use_best_fit=TRUE,
+                       BayesFactor = TRUE, cores_for_props =4, cores_per_prop = 1,
                        print_summary=TRUE,digits=0,digits_p=3,subject=NULL) {
 
   getp <- function(IC) {
@@ -548,7 +552,8 @@ compare_IC <- function(sList,filter="sample",subfilter=0,use_best_fit=TRUE,
 #' The savage dickey ratio.
 
 #' Can be used to approximate the Bayes Factor for group level mean effects.
-#' Note this is different to `compare_IC` since it only considers the group level mean effect and not the whole model.
+#' Note this is different to MD in `compare` since it only considers the group level
+#' mean effect and not the whole model.
 #'
 #' @param samplers A list. A samplers object.
 #' @param parameter A string. A parameter which you want to compare to H0. Will not be used if a FUN is specified.
@@ -620,21 +625,22 @@ savage_dickey <- function(samplers, parameter = NULL, H0 = 0, filter = "sample",
 #' @param filter A string. Specifies which stage you want to plot.
 #' @param subfilter An integer or vector. If integer it will exclude up until
 #' @param use_best_fit Boolean, default TRUE use best of minD and Dmean in
-#' calculation otherwise always use Dmean (see compare_IC)
+#' calculation otherwise always use Dmean (see compare)
 #' @param print_summary Boolean (default TRUE) print table of results
 #' @param digits Integer, significant digits in printed table
+#' @param BayesFactor Boolean, default FALSE, calculate marginal likelihood.
 #'
 #' @return List of tables for each subject of effective number of parameters,
-#' mean deviance, deviance of mean, DIC, BPIC, and associated weights.
+#' mean deviance, deviance of mean, DIC, BPIC (and optionally MD), and associated weights.
 #' @export
 
-compare_IC_subject <- function(sList,filter="sample",subfilter=0,use_best_fit=TRUE,
-                               print_summary=TRUE,digits=3) {
+compare_subject <- function(sList,filter="sample",subfilter=0,use_best_fit=TRUE,
+                               print_summary=TRUE,digits=3,BayesFactor=FALSE) {
 
   subjects <- names(sList[[1]][[1]]$data)
   out <- setNames(vector(mode="list",length=length(subjects)),subjects)
-  for (i in subjects) out[[i]] <- compare_IC(sList,subject=i,
-                                             filter=filter,subfilter=subfilter,use_best_fit=use_best_fit,print_summary=FALSE)
+  for (i in subjects) out[[i]] <- compare(sList,subject=i,BayesFactor=BayesFactor,
+    filter=filter,subfilter=subfilter,use_best_fit=use_best_fit,print_summary=FALSE)
   if (print_summary) {
     wDIC <- lapply(out,function(x)x["wDIC"])
     wBPIC <- lapply(out,function(x)x["wBPIC"])
@@ -642,11 +648,23 @@ compare_IC_subject <- function(sList,filter="sample",subfilter=0,use_best_fit=TR
       setNames(data.frame(t(x)),paste("wDIC",rownames(x),sep="_"))}))
     pBPIC <- do.call(rbind,lapply(wBPIC,function(x){
       setNames(data.frame(t(x)),paste("wBPIC",rownames(x),sep="_"))}))
-    print(round(cbind(pDIC,pBPIC),digits))
-    mnams <- unlist(lapply(strsplit(dimnames(pDIC)[[2]],"_"),function(x){x[[2]]}))
-    cat("\nWinners\n")
-    print(rbind(DIC=table(mnams[apply(pDIC,1,which.max)]),
-                BPIC=table(mnams[apply(pBPIC,1,which.max)])))
+    if (BayesFactor) {
+      pMD <- do.call(rbind,lapply(wMD,function(x){
+      setNames(data.frame(t(x)),paste("wMD",rownames(x),sep="_"))}))
+      print(round(cbind(pDIC,pBPIC,pMD),digits))
+      mnams <- unlist(lapply(strsplit(dimnames(pDIC)[[2]],"_"),function(x){x[[2]]}))
+      cat("\nWinners\n")
+      print(rbind(DIC=table(mnams[apply(pDIC,1,which.max)]),
+                  BPIC=table(mnams[apply(pBPIC,1,which.max)]),
+                  MD=table(mnams[apply(pMD,1,which.max)])))
+
+    } else {
+      print(round(cbind(pDIC,pBPIC),digits))
+      mnams <- unlist(lapply(strsplit(dimnames(pDIC)[[2]],"_"),function(x){x[[2]]}))
+      cat("\nWinners\n")
+      print(rbind(DIC=table(mnams[apply(pDIC,1,which.max)]),
+                  BPIC=table(mnams[apply(pBPIC,1,which.max)])))
+    }
   }
   invisible(out)
 }
@@ -665,7 +683,7 @@ compare_IC_subject <- function(sList,filter="sample",subfilter=0,use_best_fit=TR
 #' @param print_summary Boolean (default TRUE) print table of results
 #' @param digits Integer, significant digits in printed table
 #'
-#' @return Vector of model proabilities with names from samples list.
+#' @return Vector of model probabilities with names from samples list.
 #' @export
 
 compare_MLL <- function(mll,nboot=1e5,digits=2,print_summary=TRUE)
