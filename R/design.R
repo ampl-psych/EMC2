@@ -31,10 +31,9 @@
 #' response was correct or not. Example: `function(d)d$S==d$lR`
 #' @param constants A named vector. Sets constants. Any parameter named
 #' by `sampled_p_vector` can be set constant.
-#' @param covariates Covariate factors. Covariate measures which may be
-#' included in the model and/or mapped to factors.
-#' @param functions Factor Functions. Functions to specify specific
-#' parameterizations, or functions of parameters.
+#' @param covariates Names of numeric covariates.
+#' @param functions List of functions to create new factors based on those in
+#' the factors argument. These new factors can then be used in formula.
 #' @param adapt For future compatibility. Ignore.
 #' @param report_p_vector Boolean. If TRUE (default), it returns the vector of
 #' parameters to be estimated.
@@ -187,10 +186,9 @@ contr.increasing <- function(n,levels=NULL)
 contr.anova <- function(n) {
   if (length(n) <= 1L) {
     if (is.numeric(n) && length(n) == 1L && n > 1L)
-      levels <- seq_len(n)
-    else stop("not enough degrees of freedom to define contrasts")
-  }
-  else levels <- n
+       levels <- seq_len(n) else
+         stop("not enough degrees of freedom to define contrasts")
+  } else levels <- n
   levels <- as.character(levels)
   n <- length(levels)
   contr <- stats::contr.helmert(n)
@@ -597,8 +595,10 @@ design_model <- function(data,design,model=NULL,
     attr(dadm, "constants") <- design$constants
     attr(dadm, "per_subject")<- design$per_subject
   }
+  if (model()$type=="DDM") nunique <- dim(dadm)[1] else
+    nunique <- dim(dadm)[1]/length(levels(dadm$lR))
   if (verbose & compress) message("Likelihood speedup factor: ",
-  round(dim(da)[1]/dim(dadm)[1],1)," (",dim(dadm)[1]/length(levels(dadm$lR))," unique trials)")
+  round(dim(da)[1]/dim(dadm)[1],1)," (",nunique," unique trials)")
 
   attr(dadm,"model") <- model
   attr(dadm,"constants") <- design$constants
