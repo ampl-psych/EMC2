@@ -339,11 +339,11 @@ extract_samples <- function(sampler, stage = c("adapt", "sample"), max_n_sample 
     out <- variant_funs$filtered_samples(sampler, full_filter)
     out$nuisance <- get_variant_funs(type)$filtered_samples(sampler$sampler_nuis, full_filter)
   } else{
-    # if(!is.null(sampler$g_map_fixed)){
-    #   out <- 1# filtered_samples_lm(sampler, full_filter)
-    # } else{    }
-    out <- variant_funs$filtered_samples(sampler, full_filter)
-
+    if(!is.null(sampler$g_map_fixed)){
+      out <- 1# filtered_samples_lm(sampler, full_filter)
+    } else{
+      out <- variant_funs$filtered_samples(sampler, full_filter)
+    }
   }
   return(out)
 }
