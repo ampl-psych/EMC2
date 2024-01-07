@@ -288,7 +288,8 @@ plot_defective_density <- function(data,subject=NULL,factors=NULL,
 #' @param n_prior Number of samples to approximate prior (default = 1e3)
 #' @param xlim x-axis plot limit, 2-vector (same for all) or matrix (one row for each parameter)
 #' @param ylim y-axis plot limit, 2-vector (same for all) or matrix (one row for each parameter)
-#' @param prior_xlim A vector giving upper and lower quantiles of prior when choosing xlim.
+#' @param prior_xlim A vector giving upper and lower quantiles of prior when choosing
+#' xlim if plot_prior is TRUE. If set to NULL xlim is used instead.
 #' @param show_chains Boolean (default FALSE) plot separate density for each chain.
 #' @param do_plot Boolean (default TRUE) do plot
 #' @param subject Integer or character vector, if selection = "alpha" picks out
@@ -313,7 +314,7 @@ plot_defective_density <- function(data,subject=NULL,factors=NULL,
 #' @export
 plot_pars <- function(pmwg_mcmc,layout=c(2,3),use_par=NULL,
                       selection="alpha",filter="sample",thin=1,subfilter=0,mapped=FALSE,
-                      plot_prior=TRUE,n_prior=1e3,xlim=NULL,ylim=NULL,prior_xlim=NULL,
+                      plot_prior=TRUE,n_prior=1e3,xlim=NULL,ylim=NULL,prior_xlim=c(.05,.95),
                       show_chains=FALSE,do_plot=TRUE,subject=NA,add_means=FALSE,
                       pars=NULL,probs=c(.025,.5,.975),bw = "nrd0", adjust = 1,
                       do_contraction=TRUE,lpos="topright",digits=3,
@@ -476,6 +477,7 @@ plot_pars <- function(pmwg_mcmc,layout=c(2,3),use_par=NULL,
       attr(tabs,"contraction") <- do.call(rbind,contraction)
     invisible(tabs)
   } else {
+    if (!is.na(subject)) warning("Selecting a subject has no effect on population parameters")
     if (inherits(pmwg_mcmc, "mcmc.list")) {
       selection <- attr(pmwg_mcmc,"selection")
       pmwg_mcmc_combined <- do.call(rbind,pmwg_mcmc)
@@ -581,13 +583,22 @@ plot_roc <- function(data,signalFactor="S",zROC=FALSE,qfun=NULL,main="",lim=NULL
 }
 
 
-#' Plots data and fit. If rt  available plots cdf, if not plots ROC. If stat
-#' argument (which calculates a statistics based on the data) is supplied
-#' instead fit is plotted as a density with a vertical line at the position of
-#' the data statistic. If more than one subject is included data and fits are
-#' aggregated over subjects. If data or fit contains NA in responses or rt, or
-#' is.infinite(rt) these are treating as missing and defective cdfs sum to the
-#' probability of non-missing.
+#' Plots overlaying observed and fitted data.
+#'
+#' If rt  available plots Defective cumulative distributions
+#' functions (CDFs), if not plots ROC. If stat the argument (which calculates
+#' a statistics based on the data) is supplied fit is plotted as a density with
+#' a vertical line at the position of the data statistic. If more than one
+#' subject is included data and fits are aggregated over subjects. If data or
+#' fit contains NA in responses or rt, or is.infinite(rt) these are treating as
+#' missing and defective cdfs sum to the probability of non-missing.
+#'
+#' CDFs plot the probability of a response, p(R) as a function of response time
+#' (RT) for data (black lines and points at qpoints quantiles) and posterior-
+#' # predictive simulations (grey lines and points). Large grey points show the
+#' average of replicate quantiles and small grey points percentiles for
+#' individual replicates, providing a representation of uncertainty in the model
+#' predictions.
 #'
 #' @param data Data frame with subjects and R factors, and possibly other factors
 #' and an rt column
@@ -596,6 +607,9 @@ plot_roc <- function(data,signalFactor="S",zROC=FALSE,qfun=NULL,main="",lim=NULL
 #' @param factors Character vector of factors in data to display separately. If
 #' NULL (default) use names of all columns in data except "trials","R", and "rt".
 #' Omitted factors are aggregated over. If NA treats entire data set as a single cell.
+#' Must be NA or NULL when using stat argument.
+#' @param functions A named list of functions that create new factors which cna then be
+#' used by the factors and stat arguments.
 #' @param stat A function that takes a the data and returns a single value.
 #' @param stat_name A string naming what the stat argument calculates.
 #' @param ci Credible interval and central tendency quantiles for return when
@@ -603,7 +617,8 @@ plot_roc <- function(data,signalFactor="S",zROC=FALSE,qfun=NULL,main="",lim=NULL
 #' @param do_plot Boolean (default TRUE) for making a plot
 #' @param xlim x-axis plot limit, 2-vector (same for all) or matrix (one row for each paramter)
 #' @param ylim y-axis plot limit, 2-vector (same for all) or matrix (one row for each paramter)
-#' @param layout 2-vector specifying par(mfrow) or par(mfcol) (default NULL use current).
+#' @param layout 2-vector specifying par(mfrow) or par(mfcol) (default NULL use current,
+#' NA keeps par currently active).
 #' @param mfcol Boolean, default TRUE use mfcol else mfrow.
 #' @param probs Vector of probabilities at which to calculate cdf (default percentiles)
 #' @param data_lwd Integer line width for data in cdf (default = 2)
@@ -622,7 +637,7 @@ plot_roc <- function(data,signalFactor="S",zROC=FALSE,qfun=NULL,main="",lim=NULL
 #'
 #' @return If stat argument is provided a table of observed values and predicted quantiles
 #' @export
-plot_fit <- function(data,pp,subject=NULL,factors=NULL,
+plot_fit <- function(data,pp,subject=NULL,factors=NULL,functions=NULL,
                      stat=NULL,stat_name="",adjust=1,
                      ci=c(.025,.5,.975),do_plot=TRUE,
                      xlim=NULL,ylim=NULL,main="",
@@ -632,6 +647,12 @@ plot_fit <- function(data,pp,subject=NULL,factors=NULL,
                      q_points=c(.1,.3,.5,.7,.9),pqp_cex=.5,lpos="topleft",
                      signalFactor="S",zROC=FALSE,qfun=qnorm,lim=NULL,rocfit_cex=.5)
 {
+  if (!is.null(stat) & (!all(is.na(factors))|is.null(factors))) {
+    if (is.null(factors)) factors <- NA else {
+      warning("factors must be NA or NULL when using stat, set to NA")
+      factors <- NA
+    }
+  }
   if (!is.null(subject)) {
     snams <- levels(data$subjects)
     if (is.numeric(subject)) subject <- snams[subject]
@@ -649,6 +670,14 @@ plot_fit <- function(data,pp,subject=NULL,factors=NULL,
   okd <- !is.na(dat$R) & is.finite(dat$rt)
   okpp <- !is.na(pp$R) & is.finite(pp$rt)
 
+  if (!is.null(functions)) for (i in 1:length(functions)) {
+    dat <- cbind.data.frame(functions[[i]](dat),dat)
+    names(dat)[1] <- names(functions)[i]
+    pp <- cbind.data.frame(functions[[i]](pp),pp)
+    names(pp)[1] <- names(functions)[i]
+    fnams <- c(names(functions)[i],fnams)
+  }
+
   if (!is.null(factors)) {
     if (any(is.na(factors))) fnams <- NA else {
       if (!all(factors %in% fnams))
@@ -656,7 +685,8 @@ plot_fit <- function(data,pp,subject=NULL,factors=NULL,
       fnams <- factors
     }
   }
-  if (!is.null(layout)) if (mfcol) par(mfcol=layout) else par(mfrow=layout)
+  if (!any(is.na(layout))) if (!is.null(layout))
+      if (mfcol) par(mfcol=layout) else par(mfrow=layout)
   if (all(is.na(data$rt))) {  # type=SDT
     if (length(levels(data$R))==2 & is.null(stat))
       stop("No plots for binary responses, use an accuracy function in stat arguement.")
@@ -931,13 +961,15 @@ plot_trials <- function(data,pp=NULL,subject=NULL,factors=NULL,Fcovariates=NULL,
 #                       layout=c(3,4);width=NULL;height=NULL
 # subfilter=2000
 
+#' Convergence checks for an EMC2 samplers object
+#'
 #' Runs a series of convergence checks, printing statistics to the console and
 #' saving plots to a pdf. Note that the R_hat (psrf and mpsrf, i.e., gelman_diag
 #' from the coda package) is calculated by doubling the number of chains by
 #' first splitting chains into first and second half so it also a test of
-#' stationarity. Efficiency of sampling is indicated by integrated autocorrelation
-#' time (from the LaplacesDemon package) and the effective numebr of samples
-#' (from coda).
+#' stationarity. Efficiency of sampling is (optionally) indicated by integrated
+#' autocorrelation time (from the LaplacesDemon package) and the effective
+#' number of samples (from coda).
 #'
 #' @param samples A list of samplers or samplers converted to mcmc objects.
 #' @param pdf_name The name of the plot save file
@@ -948,27 +980,33 @@ plot_trials <- function(data,pp=NULL,subject=NULL,factors=NULL,Fcovariates=NULL,
 #' @param thin An integer. Keep only iterations that are a multiple of thin.
 #' @param layout A vector specifying the layout as in par(mfrow = layout).
 #' If NA (defualt) use CODA defaults, if NULL use current.
-#' @param width PDF page width
-#' @param height PDF page height
+#' @param width PDF page width.
+#' @param height PDF page height.
+#' @param print_IAT Include a printout out of the Integrated Autocorrelation Time.
+#' @param subject For a hierarhical model a non-null value (integer or subject name)
+#' picks out results only for that subject.
 #'
 #' @return None
 #' @export
 
 check_run <- function(samples,pdf_name="check_run.pdf",interactive=TRUE,
-                      filter="sample",subfilter=0,thin=1,
+                      filter="sample",subfilter=0,thin=1,print_IAT=FALSE,subject=NULL,
                       layout=c(3,4),width=NULL,height=NULL) {
   print(chain_n(samples))
   pdf(pdf_name,width=width,height=height)
   plot_chains(samples,selection="LL",layout=layout,filter=filter,
               subfilter=subfilter,thin=thin)
-  if (any(names(samples[[1]]$samples)=="theta_mu")) {
+
+  if (is.null(subject) & any(names(samples[[1]]$samples)=="theta_mu")) {
     if (interactive) readline("Enter for mu check")
     cat("\n\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!! MU !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n")
     cat("\nR-hat\n")
     print(round(gd_pmwg(samples,selection="mu",filter=filter,subfilter=subfilter,
                         print_summary = FALSE,thin=thin),2))
-    cat("\nIntegrated autocorrelation time\n")
-    iat_pmwg(samples,selection="mu",filter=filter,subfilter=subfilter,thin=thin)
+    if (print_IAT) {
+      cat("\nIntegrated autocorrelation time\n")
+      iat_pmwg(samples,selection="mu",filter=filter,subfilter=subfilter,thin=thin)
+    }
     cat("\nEffective Size\n")
     es_pmwg(samples,selection="mu",filter=filter,subfilter=subfilter,thin=thin)
     plot_chains(samples,selection="mu",layout=layout,filter=filter,
@@ -978,8 +1016,10 @@ check_run <- function(samples,pdf_name="check_run.pdf",interactive=TRUE,
     cat("\nR-hat\n")
     print(round(gd_pmwg(samples,selection="variance",filter=filter,thin=thin,
                         subfilter=subfilter,print_summary = FALSE),2))
-    cat("\nIntegrated autocorrelation time\n")
-    iat_pmwg(samples,selection="variance",filter=filter,subfilter=subfilter,thin=thin)
+    if (print_IAT) {
+      cat("\nIntegrated autocorrelation time\n")
+      iat_pmwg(samples,selection="variance",filter=filter,subfilter=subfilter,thin=thin)
+    }
     cat("\nEffective Size\n")
     round(es_pmwg(samples,selection="variance",filter=filter,subfilter=subfilter,thin=thin))
     plot_chains(samples,selection="variance",layout=layout,filter=filter,
@@ -989,9 +1029,11 @@ check_run <- function(samples,pdf_name="check_run.pdf",interactive=TRUE,
     cat("\nR-hat\n")
     print(round(gd_pmwg(samples,selection="correlation",filter=filter,subfilter=subfilter,
                         print_summary = FALSE,thin=thin),2))
-    if (interactive) readline("Enter for next correlation check")
-    cat("\nIntegrated autocorrelation time\n")
-    iat_pmwg(samples,selection="correlation",filter=filter,subfilter=subfilter,thin=thin)
+    if (print_IAT) {
+      if (interactive) readline("Enter for next correlation check")
+      cat("\nIntegrated autocorrelation time\n")
+      iat_pmwg(samples,selection="correlation",filter=filter,subfilter=subfilter,thin=thin)
+    }
     if (interactive) readline("Enter for next correlation check")
     cat("\nEffective Size\n")
     round(es_pmwg(samples,selection="correlation",filter=filter,subfilter=subfilter,thin=thin))
@@ -1001,21 +1043,44 @@ check_run <- function(samples,pdf_name="check_run.pdf",interactive=TRUE,
   }
   cat("\n\n!!!!!!!!!!!!!!!!!!!!!!!!!!!! ALPHA !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n")
   cat("\nR-hat\n")
-  print(round(gd_pmwg(samples,selection="alpha",filter=filter,subfilter=subfilter,
-                      print_summary = FALSE,thin=thin),2))
-  cat("\nIntegrated autocorrelation time\n")
-  iat_pmwg(samples,selection="alpha",filter=filter,subfilter=subfilter,thin=thin)
+  gd <- gd_pmwg(samples,selection="alpha",filter=filter,subfilter=subfilter,
+                      print_summary = FALSE,thin=thin)
+  if (!is.null(subject)) {
+    if (is.numeric(subject)) {
+      if (subject>dim(gd)[1] | subject<1) stop("subject value not in range")
+      subject <- dimnames(gd)[[1]][round(subject)]
+    }
+    if (!(subject %in% dimnames(gd)[[1]])) stop("not a subject name")
+    ok <- rownames(gd) == subject
+  } else ok <- rep(TRUE,dim(gd)[1])
+  print(round(gd[ok,],2))
+  if (print_IAT) {
+    if (is.null(subject)) {
+      cat("\nMean Integrated autocorrelation time\n")
+      iat_pmwg(samples,selection="alpha",filter=filter,subfilter=subfilter,thin=thin)
+    } else {
+      cat("\nIntegrated autocorrelation time\n")
+      print(round(iat_pmwg(samples,selection="alpha",filter=filter,subfilter=subfilter,
+               thin=thin,summary_alpha=NULL,print_summary=FALSE)[ok,],2))
+    }
+  }
   if (any(names(samples[[1]]$samples)=="theta_mu")) {
-    cat("\nEffective Size (minimum)\n")
-    round(es_pmwg(samples,selection="alpha",summary_alpha=min,filter=filter,
-                  subfilter=subfilter,thin=thin))
-    cat("\nEffectvie Size (mean)\n")
-    round(es_pmwg(samples,selection="alpha",summary_alpha=mean,filter=filter,
-                  subfilter=subfilter,thin=thin))
+    if (is.null(subject)) {
+      cat("\nEffective Size (minimum)\n")
+      es_pmwg(samples,selection="alpha",summary_alpha=min,filter=filter,
+                    subfilter=subfilter,thin=thin)
+      cat("\nEffectvie Size (mean)\n")
+      es_pmwg(samples,selection="alpha",summary_alpha=mean,filter=filter,
+                  subfilter=subfilter,thin=thin)
+    } else {
+      cat("\nEffective Size\n")
+      print(round(es_pmwg(samples,selection="alpha",summary_alpha=NULL,filter=filter,
+                    print_summary=FALSE,subfilter=subfilter,thin=thin)[ok,]))
+    }
   } else {
     cat("\nEffective Size\n")
-    round(es_pmwg(samples,selection="alpha",summary_alpha=mean,filter=filter,
-                  subfilter=subfilter,thin=thin))
+    es_pmwg(samples,selection="alpha",summary_alpha=mean,filter=filter,
+                    subfilter=subfilter,thin=thin)
   }
   plot_chains(samples,selection="alpha",layout=layout,filter=filter,
               subfilter=subfilter,thin=thin)
