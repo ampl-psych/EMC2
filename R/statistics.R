@@ -377,37 +377,6 @@ p_test <- function(x,x_name=NULL,x_fun=NULL,x_fun_name="fun",
   invisible(tab)
 }
 
-# x_name=NULL;
-# # x_name = c("a_accuracy","a_speed")
-# # x_fun=NULL;
-# fun <- function(x){mean(x[c("a_accuracy","a_speed")])}
-# x_fun=fun; fun_name="Av"
-# x=sampled; y=sampled1
-#                    y_name=x_name;y_fun=NULL;
-#                    mapped=TRUE
-#                    x_subject=NULL;y_subject=NULL;
-#                    mu=0;alternative = c("less", "greater")[1]
-#                    probs = c(0.025,.5,.975);digits=2;p_digits=3;print_table=TRUE
-#                    filter="sample";selection="mu";subfilter=0
-# CIv_l_r <- function(x) {
-#   c(CIv_l_r = (x["v_left_incongruent"] - x["v_left_congruent"]) -
-#   (x["v_right_congruent"] - x["v_right_incongruent"]))
-# }
-# x_fun <- CIv_l_r
-
-# ptype="mean"
-# selection="mu";Flist=NULL;Clist=NULL
-# p_tests <- function(samples,ptype,selection="mu",Flist=NULL,Clist=NULL)
-#   # Performs multiple tests on mapped parameters
-# {
-#   if (!(selection %in% c("mu","alpha"))
-#     stop("Can only analyze mapped mu or alpha parameters")
-#
-# }
-
-# filter="sample";subfilter=0;use_best_fit=FALSE;print_summary=FALSE;digits=0
-# filter="sample"
-
 #' Calculate information criteria (DIC, BPIC), effective number of parameters and
 #' constituent posterior deviance (D) summaries (meanD = mean of D, Dmean = D
 #' for mean of posterior parameters and minD = minimum of D).
@@ -559,64 +528,52 @@ compare <- function(sList,filter="sample",subfilter=0,use_best_fit=TRUE,
 #' @param parameter A string. A parameter which you want to compare to H0. Will not be used if a FUN is specified.
 #' @param H0 An integer. The H0 value which you want to compare to
 #' @param filter A string. Specifies which stage the samples are to be taken from "preburn", "burn", "adapt", or "sample"
-#' @param FUN A character string. Specifies an operation to perform with multiple parameters. All operations must be space separated.
-#' e.g. valid would be: "B - 0.5 * t0"
+#' @param subfilter An integer or vector. If integer it will exclude up until
+#' @param FUN A function. Specifies an operation to be performed on the sampled or mapped parameters.
+#' @param mapped A boolean. Whether the BF should be calculated for parameters mapped back to the real design, only works with selection = 'mu'.
+#' @param selection A string. Default is mu. Whether to do the operation on the alpha, mu, covariance, variance, or correlations.
 #'
 #' @return The BayesFactor for the hypothesis against H0.
 #' @export
-savage_dickey <- function(samplers, parameter = NULL, H0 = 0, filter = "sample", FUN = NULL){
+savage_dickey <- function(samplers, parameter = NULL, H0 = 0, filter = "sample",
+                          subfilter = 0, fun = NULL, mapped =F, selection = "mu"){
+  if(selection == "alpha") stop("For savage-dickey ratio, selection cannot be alpha")
+  if(mapped & selection != "mu") stop("Mapped only works for mu")
   prior <- samplers[[1]]$prior
-  if(is.null(FUN)){
-    if(!parameter %in% names(prior$theta_mu_mean)) stop("parameter must be in sampled parameters")
-    idx <- which(names(prior$theta_mu_mean) == parameter)
-    if(is.matrix(prior$theta_mu_var)) prior$theta_mu_var <- diag(prior$theta_mu_var)
-    p0 <- dnorm(H0, prior$theta_mu_mean[idx], sqrt(prior$theta_mu_var[idx]))
-    samples <- merge_samples(samplers)
-    samples <- samples$samples$theta_mu[idx,samples$samples$stage == filter]
-    min_bound <- min(min(samples), H0)
-    max_bound <- max(max(samples), H0)
-    diff <- max_bound - min_bound
-    post_dfun <- approxfun(density(samples, bw = "sj", from = min_bound - diff/2, to = max_bound + diff/2))
-    p1 <- post_dfun(H0)
-    return(p0/p1)
-  } else{
-    splits <- strsplit(FUN, split = " ")[[1]]
-    if(!is.matrix(prior$theta_mu_var)){
-      prior$theta_mu_var <- diag(prior$theta_mu_var)
-    }
-    psamples <- get_prior_standard(prior = prior)$mu
-    pnames <- names(prior$theta_mu_mean)
-    vars <- list()
-    for(k in 1:length(splits)){
-      idx <- splits[k] == pnames
-      if(any(idx)){
-        vars[[pnames[idx]]] <- psamples[,pnames[idx]]
-        splits[k] <- paste0("vars[['", pnames[idx], "']]")
-      }
-    }
-    attempt <- tryCatch({psamples <- eval(str2expression(paste0(splits, collapse = " ")))},error=function(e) e, warning=function(w) w)
-    if (any(class(attempt) %in% c("warning", "error", "try-error"))) {
-      stop("make sure spaces are added between the variables and all operators and that you spelled all variable names correctly")
-    }
-
-    samples <- merge_samples(samplers)
-    samples <- samples$samples$theta_mu[,samples$samples$stage == filter]
-    for(pname in names(vars)){
-      vars[[pname]] <- samples[pname,]
-    }
-    samples <- eval(str2expression(paste0(splits, collapse = " ")))
-
-    min_bound <- min(min(psamples), H0)
-    max_bound <- max(max(psamples), H0)
-    diff <- max_bound - min_bound
-    pdfun <-approxfun(density(psamples, bw = "sj", from = min_bound - diff/2, to = max_bound + diff/2))
-
-    min_bound <- min(min(samples), H0)
-    max_bound <- max(max(samples), H0)
-    diff <- max_bound - min_bound
-    post_dfun <-approxfun(density(samples, bw = "sj", from = min_bound - diff/2, to = max_bound + diff/2))
-    return(pdfun(H0)/post_dfun(H0))
+  type <- attr(samplers[[1]], "variant_funs")$type
+  # type <- "standard"
+  if(type == "standard") gp <- get_prior_standard
+  if(type == "diagonal") gp <- get_prior_blocked
+  if(type == "single") gp <- get_prior_single
+  if(type == "blocked") gp <- get_prior_blocked
+  psamples <- gp(prior = prior, type = selection)[[selection]]
+  if(mapped){
+    design <- attr(samplers, "design_list")[[1]]
+    psamples <- map_mcmc(psamples, design, design$model,
+                        include_constants = FALSE)
   }
+
+  samples <- do.call(rbind, as_mcmc.list(samplers,selection=selection,filter=filter,
+                                         subfilter=subfilter,mapped=mapped))
+  if(is.null(fun)){
+    idx <- colnames(samples) == parameter
+    samples <- samples[,idx]
+    psamples <- psamples[,idx]
+  } else{
+    colnames(psamples) <- colnames(samples)
+    samples <- fun(as.data.frame(samples))
+    psamples <- fun(as.data.frame(psamples))
+  }
+  min_bound <- min(min(psamples), H0)
+  max_bound <- max(max(psamples), H0)
+  diff <- max_bound - min_bound
+  pdfun <-approxfun(density(psamples, bw = "sj", from = min_bound - diff/2, to = max_bound + diff/2))
+
+  min_bound <- min(min(samples), H0)
+  max_bound <- max(max(samples), H0)
+  diff <- max_bound - min_bound
+  post_dfun <-approxfun(density(samples, bw = "sj", from = min_bound - diff/2, to = max_bound + diff/2))
+  return(pdfun(H0)/post_dfun(H0))
 }
 
 #' IC-based model weights for each participant in a list of samples objects

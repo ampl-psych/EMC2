@@ -44,6 +44,9 @@ get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1
   if(!is.null(design)){
     n_pars <- length(attr(design, "p_vector"))
   }
+  if (!is.null(prior$theta_mu_mean)) {
+    n_pars <- length(prior$theta_mu_mean)
+  }
   if (is.null(prior$theta_mu_mean)) {
     prior$theta_mu_mean <- rep(0, n_pars)
   }

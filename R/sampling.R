@@ -734,6 +734,7 @@ get_variant_funs <- function(type = "standard") {
       bridge_group_and_prior_and_jac = bridge_group_and_prior_and_jac_SEM
     )
   }
+  list_fun$type <- "type"
   return(list_fun)
 }
 

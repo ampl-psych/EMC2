@@ -34,6 +34,9 @@ get_prior_single <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5
   if(!is.null(design)){
     n_pars <- length(attr(design, "p_vector"))
   }
+  if (!is.null(prior$theta_mu_mean)) {
+    n_pars <- length(prior$theta_mu_mean)
+  }
   if (is.null(prior$theta_mu_mean)) {
     prior$theta_mu_mean <- setNames(rep(0, n_pars),names(attr(design, "p_vector")))
   }
