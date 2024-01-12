@@ -7,11 +7,7 @@
 run_samplers(
   samplers,
   stage,
-  iter = NULL,
-  max_gd = NULL,
-  mean_gd = NULL,
-  min_es = 0,
-  min_unique = 600,
+  stop_criteria,
   p_accept = 0.8,
   step_size = 100,
   verbose = FALSE,
@@ -22,27 +18,13 @@ run_samplers(
   cores_per_chain = 1,
   cores_for_chains = length(samplers),
   max_trys = 20,
-  n_blocks = 1,
-  omit_mpsrf = TRUE,
-  omit_mu = TRUE,
-  omit_alpha = FALSE,
-  omit_maxsrf = TRUE
+  n_blocks = 1
 )
 }
 \arguments{
 \item{samplers}{A list of samplers, could be in any stage, as long as they've been initialized with make_samplers}
 
 \item{stage}{A string. Indicates which stage is to be run, either preburn, burn, adapt or sample}
-
-\item{iter}{An integer. Indicates how many iterations to run,}
-
-\item{max_gd}{A double. The maximum gelman diagnostic convergence allowed. Will stop if below this number.}
-
-\item{mean_gd}{A double. The mean gelman diagnostic convergence allowed. Will stop if below this number.}
-
-\item{min_es}{An integer. The minimal effective size required.}
-
-\item{min_unique}{An integer. The minimal number of samples required. Only works in adaptation.}
 
 \item{p_accept}{A double. The target acceptance probability of the MCMC process. This will fine tune the width of the search space. Default = .8}
 
@@ -65,8 +47,6 @@ run_samplers(
 \item{max_trys}{An integer. How many times it will try to meet the finish conditions. Default is 50.}
 
 \item{n_blocks}{An integer. Will block the parameter chains such that they are updated in blocks. This can be helpful in extremely tough models with large number of parameters.}
-
-\item{omit_mpsrf}{When testing for convergence use only psrf (default FALSE uses mpsrf as well)}
 }
 \value{
 A list of samplers
@@ -74,5 +54,4 @@ A list of samplers
 \description{
 Used by \code{run_emc}, \code{auto_burn}, \code{run_adapt} and \code{run_sample}.
 Will break if you skip a stage, the stages have to be run in order (preburn, burn, adapt, sample).
-Either iter, max_gd, min_es or min_unique has to be specified. Multiple conditions for finishing can be specified. Will finish if all conditions are met.
 }

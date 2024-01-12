@@ -7,9 +7,7 @@
 run_sample(
   samplers,
   iter = 1000,
-  max_gd = 1.1,
-  mean_gd = NULL,
-  min_es = 0,
+  stop_criteria = NULL,
   p_accept = 0.8,
   step_size = 100,
   verbose = FALSE,
@@ -20,23 +18,13 @@ run_sample(
   cores_per_chain = 1,
   cores_for_chains = length(samplers),
   max_trys = 20,
-  n_blocks = 1,
-  omit_mpsrf = TRUE,
-  omit_mu = TRUE,
-  omit_alpha = FALSE,
-  omit_maxsrf = TRUE
+  n_blocks = 1
 )
 }
 \arguments{
 \item{samplers}{A list of samplers, could be in any stage, as long as they've been initialized with make_samplers}
 
 \item{iter}{An integer. Indicates how many iterations to run,}
-
-\item{max_gd}{A double. The maximum gelman diagnostic convergence allowed. Will stop if below this number.}
-
-\item{mean_gd}{A double. The mean gelman diagnostic convergence allowed. Will stop if below this number.}
-
-\item{min_es}{An integer. The minimal effective size required.}
 
 \item{p_accept}{A double. The target acceptance probability of the MCMC process. This will fine tune the width of the search space. Default = .8}
 

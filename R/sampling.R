@@ -278,7 +278,7 @@ run_stage <- function(pmwgs,
                                                proposals = proposals, epsilon = rowMeans(epsilon), j = j, n_pars = sum(!pmwgs$grouped))
 
     # Update epsilon
-    if(!is.null(p_accept) & stage != "sample"){
+    if(!is.null(p_accept)){
       if(j > n0){
         for(component in unq_components){
           idx <- components[!grouped] == component

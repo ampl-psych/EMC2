@@ -10,8 +10,7 @@ compare_subject(
   subfilter = 0,
   use_best_fit = TRUE,
   print_summary = TRUE,
-  digits = 3,
-  BayesFactor = FALSE
+  digits = 3
 )
 }
 \arguments{
@@ -27,8 +26,6 @@ calculation otherwise always use Dmean (see compare)}
 \item{print_summary}{Boolean (default TRUE) print table of results}
 
 \item{digits}{Integer, significant digits in printed table}
-
-\item{BayesFactor}{Boolean, default FALSE, calculate marginal likelihood.}
 }
 \value{
 List of tables for each subject of effective number of parameters,

@@ -585,18 +585,17 @@ savage_dickey <- function(samplers, parameter = NULL, H0 = 0, filter = "sample",
 #' calculation otherwise always use Dmean (see compare)
 #' @param print_summary Boolean (default TRUE) print table of results
 #' @param digits Integer, significant digits in printed table
-#' @param BayesFactor Boolean, default FALSE, calculate marginal likelihood.
 #'
 #' @return List of tables for each subject of effective number of parameters,
 #' mean deviance, deviance of mean, DIC, BPIC (and optionally MD), and associated weights.
 #' @export
 
 compare_subject <- function(sList,filter="sample",subfilter=0,use_best_fit=TRUE,
-                               print_summary=TRUE,digits=3,BayesFactor=FALSE) {
+                               print_summary=TRUE,digits=3) {
 
   subjects <- names(sList[[1]][[1]]$data)
   out <- setNames(vector(mode="list",length=length(subjects)),subjects)
-  for (i in subjects) out[[i]] <- compare(sList,subject=i,BayesFactor=BayesFactor,
+  for (i in subjects) out[[i]] <- compare(sList,subject=i,BayesFactor=FALSE,
     filter=filter,subfilter=subfilter,use_best_fit=use_best_fit,print_summary=FALSE)
   if (print_summary) {
     wDIC <- lapply(out,function(x)x["wDIC"])
@@ -605,23 +604,23 @@ compare_subject <- function(sList,filter="sample",subfilter=0,use_best_fit=TRUE,
       setNames(data.frame(t(x)),paste("wDIC",rownames(x),sep="_"))}))
     pBPIC <- do.call(rbind,lapply(wBPIC,function(x){
       setNames(data.frame(t(x)),paste("wBPIC",rownames(x),sep="_"))}))
-    if (BayesFactor) {
-      pMD <- do.call(rbind,lapply(wMD,function(x){
-      setNames(data.frame(t(x)),paste("wMD",rownames(x),sep="_"))}))
-      print(round(cbind(pDIC,pBPIC,pMD),digits))
-      mnams <- unlist(lapply(strsplit(dimnames(pDIC)[[2]],"_"),function(x){x[[2]]}))
-      cat("\nWinners\n")
-      print(rbind(DIC=table(mnams[apply(pDIC,1,which.max)]),
-                  BPIC=table(mnams[apply(pBPIC,1,which.max)]),
-                  MD=table(mnams[apply(pMD,1,which.max)])))
-
-    } else {
+    # if (BayesFactor) {
+    #   pMD <- do.call(rbind,lapply(wMD,function(x){
+    #   setNames(data.frame(t(x)),paste("wMD",rownames(x),sep="_"))}))
+    #   print(round(cbind(pDIC,pBPIC,pMD),digits))
+    #   mnams <- unlist(lapply(strsplit(dimnames(pDIC)[[2]],"_"),function(x){x[[2]]}))
+    #   cat("\nWinners\n")
+    #   print(rbind(DIC=table(mnams[apply(pDIC,1,which.max)]),
+    #               BPIC=table(mnams[apply(pBPIC,1,which.max)]),
+    #               MD=table(mnams[apply(pMD,1,which.max)])))
+    #
+    # } else {
       print(round(cbind(pDIC,pBPIC),digits))
       mnams <- unlist(lapply(strsplit(dimnames(pDIC)[[2]],"_"),function(x){x[[2]]}))
       cat("\nWinners\n")
       print(rbind(DIC=table(mnams[apply(pDIC,1,which.max)]),
                   BPIC=table(mnams[apply(pBPIC,1,which.max)])))
-    }
+    # }
   }
   invisible(out)
 }

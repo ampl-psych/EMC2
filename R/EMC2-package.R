@@ -29,6 +29,7 @@
 #' @importFrom parallel mclapply
 #' @importFrom Rcpp sourceCpp
 #' @importFrom stats acf
+#' @importFrom stats approxfun
 #' @importFrom stats as.dist
 #' @importFrom stats as.formula
 #' @importFrom stats cor
