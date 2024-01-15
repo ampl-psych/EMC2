@@ -465,8 +465,8 @@ create_eff_proposals <- function(samplers, n_cores){
     eff_var <- apply(eff_var, 3, identity, simplify = F)
     attr(samplers[[i]], "eff_mu") <- eff_mu
     attr(samplers[[i]], "eff_var") <- eff_var
-    attr(samplers[[i]], "eff_alpha") <- eff_alpha
-    attr(samplers[[i]], "eff_tau") <- eff_tau
+    # attr(samplers[[i]], "eff_alpha") <- eff_alpha
+    # attr(samplers[[i]], "eff_tau") <- eff_tau
   }
   return(samplers)
 }
