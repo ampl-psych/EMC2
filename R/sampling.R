@@ -205,8 +205,12 @@ run_stage <- function(pmwgs,
   # create progress bar
   eff_mu <- attr(pmwgs, "eff_mu")
   eff_var <- attr(pmwgs, "eff_var")
+  # eff_alpha <- attr(pmwgs, "eff_alpha")
+  # eff_tau <- attr(pmwgs, "eff_tau")
   if(is.null(eff_mu)) eff_mu <- vector("list", pmwgs$n_subjects)
   if(is.null(eff_var)) eff_var <- vector("list", pmwgs$n_subjects)
+  # if(is.null(eff_alpha)) eff_alpha <- vector("list", pmwgs$n_subjects)
+  # if(is.null(eff_tau)) eff_tau <- vector("list", pmwgs$n_subjects)
   chains_cov <- attr(pmwgs, "chains_cov")
   if(is.null(chains_cov)) chains_cov <- vector("list", pmwgs$n_subjects)
 
@@ -266,7 +270,8 @@ run_stage <- function(pmwgs,
     }
 
     # Particle step
-    proposals <- parallel::mcmapply(new_particle, 1:pmwgs$n_subjects, data, particles, eff_mu, eff_var, chains_cov,
+    proposals <- parallel::mcmapply(new_particle, 1:pmwgs$n_subjects, data, particles, eff_mu, eff_var,
+                                    chains_cov,
                                     pmwgs$samples$subj_ll[,j-1],
                                     MoreArgs = list(pars_comb, mix, pmwgs$ll_func, epsilon, components, stage,
                                                     variant_funs$get_group_level, block_idx, shared_ll_idx, grouped_pars, grouped),
@@ -278,7 +283,7 @@ run_stage <- function(pmwgs,
                                                proposals = proposals, epsilon = rowMeans(epsilon), j = j, n_pars = sum(!pmwgs$grouped))
 
     # Update epsilon
-    if(!is.null(p_accept)){
+    if(!is.null(p_accept) & stage != "sample"){
       if(j > n0){
         for(component in unq_components){
           idx <- components[!grouped] == component
@@ -299,7 +304,8 @@ run_stage <- function(pmwgs,
 
 
 new_particle <- function (s, data, num_particles, eff_mu = NULL,
-                          eff_var = NULL, chains_cov, prev_ll,
+                          eff_var = NULL, eff_alpha = NULL,
+                          eff_tau = NULL, chains_cov, prev_ll,
                           parameters, mix_proportion = c(0.5, 0.5, 0),
                           likelihood_func = NULL, epsilon = NULL,
                           components, stage,  group_level_func,
@@ -341,7 +347,7 @@ new_particle <- function (s, data, num_particles, eff_mu = NULL,
     if(mix_proportion[3] == 0){
       eff_particles <- NULL
     } else{
-      eff_particles <- particle_draws(particle_numbers[3], eff_mu[idx], eff_var[idx, idx ])
+      eff_particles <- particle_draws(particle_numbers[3], eff_mu[idx], eff_var[idx, idx ])# eff_alpha, eff_tau)
     }
     # Rejoin new proposals with current MCMC values for other components
     proposals <- matrix(rep(subj_mu, num_particles + 1), nrow = num_particles + 1, byrow = T)
@@ -370,7 +376,12 @@ new_particle <- function (s, data, num_particles, eff_mu = NULL,
       eff_density <- 0
     }
     else {
-      eff_density <- mvtnorm::dmvnorm(x = proposals[,idx], mean = eff_mu[idx], sigma = eff_var[idx,idx])
+      #if(is.null(eff_alpha)){
+        eff_density <- mvtnorm::dmvnorm(x = proposals[,idx], mean = eff_mu[idx], sigma = eff_var[idx,idx])
+      # } else{
+      #   eff_density <- sn::dmsn(x = proposals[,idx], xi = eff_mu[idx], Omega = eff_var[idx,idx],
+      #                            alpha = eff_alpha, tau = eff_tau)
+      # }
     }
     lm <- log(mix_proportion[1] * exp(lp) + (mix_proportion[2] * prop_density) + (mix_proportion[3] * eff_density))
     infnt_idx <- is.infinite(lm)
@@ -457,11 +468,15 @@ numbers_from_proportion <- function(mix_proportion, num_particles = 1000) {
 }
 
 
-particle_draws <- function(n, mu, covar) {
+particle_draws <- function(n, mu, covar, alpha = NULL, tau= NULL) {
   if (n <= 0) {
     return(NULL)
   }
-  return(mvtnorm::rmvnorm(n, mu, covar))
+  if(is.null(alpha)){
+    return(mvtnorm::rmvnorm(n, mu, covar))
+  } else{
+    return(sn::rmsn(n, xi = mu, Omega = covar, alpha = alpha, tau = tau))
+  }
 }
 
 fix_epsilon <- function(pmwgs, epsilon, force_prev_epsilon, components){
@@ -734,7 +749,7 @@ get_variant_funs <- function(type = "standard") {
       bridge_group_and_prior_and_jac = bridge_group_and_prior_and_jac_SEM
     )
   }
-  list_fun$type <- "type"
+  list_fun$type <- type
   return(list_fun)
 }
 

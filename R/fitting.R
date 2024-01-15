@@ -148,12 +148,12 @@ run_samplers <- function(samplers, stage, stop_criteria,
   } else{
     iter <- stop_criteria[["iter"]]
   }
-  progress <- check_progress(samplers, stage, iter, stop_criteria, max_trys, step_size, cores_per_chain, verbose, n_blocks = n_blocks)
+  progress <- check_progress(samplers, stage, iter, stop_criteria, max_trys, step_size, cores_per_chain*cores_for_chains, verbose, n_blocks = n_blocks)
   samplers <- progress$samplers
   progress <- progress[!names(progress) == 'samplers'] # Frees up memory, courtesy of Steven
   while(!progress$done){
     if(!is.null(progress$n_blocks)) n_blocks <- progress$n_blocks
-    samplers <- add_proposals(samplers, stage, cores_per_chain, n_blocks)
+    samplers <- add_proposals(samplers, stage, cores_per_chain*cores_for_chains, n_blocks)
     if(!is.null(progress$gds_bad)){
       particle_factor <- particle_factor + .25 * progress$gds_bad * particle_factor
     }
@@ -164,7 +164,7 @@ run_samplers <- function(samplers, stage, stop_criteria,
     for(i in 2:length(samplers)){ # Frees up memory, courtesy of Steven
       samplers[[i]]$data <- samplers[[1]]$data
     }
-    progress <- check_progress(samplers, stage, iter, stop_criteria, max_trys, step_size, cores_per_chain,verbose, progress,n_blocks)
+    progress <- check_progress(samplers, stage, iter, stop_criteria, max_trys, step_size, cores_per_chain*cores_for_chains,verbose, progress,n_blocks)
     samplers <- progress$samplers
     progress <- progress[!names(progress) == 'samplers'] # Frees up memory, courtesy of Steven
     if(!is.null(fileName)){
@@ -456,10 +456,17 @@ create_eff_proposals <- function(samplers, n_cores){
       }
 
     }
+    # eff_mu <- lapply(conditionals, FUN = function(x) x$eff_mu)
+    # eff_var <- lapply(conditionals, FUN = function(x) x$eff_var)
+    # eff_alpha <- lapply(conditionals, FUN = function(x) x$eff_alpha)
+    # eff_tau <- lapply(conditionals, FUN = function(x) x$eff_tau)
+
     eff_mu <- split(eff_mu, col(eff_mu))
     eff_var <- apply(eff_var, 3, identity, simplify = F)
     attr(samplers[[i]], "eff_mu") <- eff_mu
     attr(samplers[[i]], "eff_var") <- eff_var
+    attr(samplers[[i]], "eff_alpha") <- eff_alpha
+    attr(samplers[[i]], "eff_tau") <- eff_tau
   }
   return(samplers)
 }

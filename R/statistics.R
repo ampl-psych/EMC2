@@ -561,8 +561,8 @@ savage_dickey <- function(samplers, parameter = NULL, H0 = 0, filter = "sample",
     psamples <- psamples[,idx]
   } else{
     colnames(psamples) <- colnames(samples)
-    samples <- fun(as.data.frame(samples))
-    psamples <- fun(as.data.frame(psamples))
+    samples <- apply(as.data.frame(samples), 1, fun)
+    psamples <- apply(as.data.frame(psamples), 1, fun)
   }
   min_bound <- min(min(psamples), H0)
   max_bound <- max(max(psamples), H0)
