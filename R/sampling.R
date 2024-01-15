@@ -304,8 +304,7 @@ run_stage <- function(pmwgs,
 
 
 new_particle <- function (s, data, num_particles, eff_mu = NULL,
-                          eff_var = NULL, eff_alpha = NULL,
-                          eff_tau = NULL, chains_cov, prev_ll,
+                          eff_var = NULL, chains_cov, prev_ll,
                           parameters, mix_proportion = c(0.5, 0.5, 0),
                           likelihood_func = NULL, epsilon = NULL,
                           components, stage,  group_level_func,
