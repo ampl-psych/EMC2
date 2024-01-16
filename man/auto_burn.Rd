@@ -46,6 +46,8 @@ auto_burn(
 \item{max_trys}{An integer. How many times it will try to meet the finish conditions. Default is 50.}
 
 \item{n_blocks}{An integer. Will block the parameter chains such that they are updated in blocks. This can be helpful in extremely tough models with large number of parameters.}
+
+\item{stop_criteria}{A list. Defines the stopping criteria and for which types of parameters these should hold. See run_emc}
 }
 \value{
 A list of samplers

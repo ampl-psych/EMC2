@@ -29,11 +29,11 @@ savage_dickey(
 
 \item{subfilter}{An integer or vector. If integer it will exclude up until}
 
+\item{fun}{A function. Specifies an operation to be performed on the sampled or mapped parameters.}
+
 \item{mapped}{A boolean. Whether the BF should be calculated for parameters mapped back to the real design, only works with selection = 'mu'.}
 
 \item{selection}{A string. Default is mu. Whether to do the operation on the alpha, mu, covariance, variance, or correlations.}
-
-\item{FUN}{A function. Specifies an operation to be performed on the sampled or mapped parameters.}
 }
 \value{
 The BayesFactor for the hypothesis against H0.

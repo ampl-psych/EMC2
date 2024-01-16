@@ -194,7 +194,7 @@ run_stage <- function(pmwgs,
   shared_ll_idx <- attr(pmwgs$data, "shared_ll_idx")
 
   alphaStar=-qnorm(p_accept/2) #Idk about this one
-  n0=round(5/(p_accept*(1-p_accept))) #Also not questioning this math for now
+  n0=round(5/(p_accept*(1-p_accept)))[1] #Also not questioning this math for now
 
   epsilon <- fix_epsilon(pmwgs, epsilon, force_prev_epsilon, components)
   if(length(particles) == 1){
@@ -283,7 +283,7 @@ run_stage <- function(pmwgs,
                                                proposals = proposals, epsilon = rowMeans(epsilon), j = j, n_pars = sum(!pmwgs$grouped))
 
     # Update epsilon
-    if(!is.null(p_accept) & stage != "sample"){
+    if(!is.null(p_accept)){
       if(j > n0){
         for(component in unq_components){
           idx <- components[!grouped] == component
@@ -322,6 +322,7 @@ new_particle <- function (s, data, num_particles, eff_mu = NULL,
   group_mu <- group_pars$mu
   group_var <- group_pars$var
   subj_mu <- parameters$alpha[,s]
+  eff_var_old <- eff_var
   if(stage != "sample"){
     eff_mu <- subj_mu
     group_var_subj <- group_var
@@ -335,6 +336,7 @@ new_particle <- function (s, data, num_particles, eff_mu = NULL,
       eff_var <- chains_cov * epsilon[s,i]^2
       var_subj <- group_var_subj *  epsilon[s,i]^2
     } else{
+      eff_var <- eff_var_old * epsilon[s,i]^2
       var_subj <- chains_cov *  epsilon[s,i]^2
     }
     idx <- components[!is_grouped] == i
@@ -473,9 +475,10 @@ particle_draws <- function(n, mu, covar, alpha = NULL, tau= NULL) {
   }
   if(is.null(alpha)){
     return(mvtnorm::rmvnorm(n, mu, covar))
-  } else{
-    return(sn::rmsn(n, xi = mu, Omega = covar, alpha = alpha, tau = tau))
   }
+  # else{
+  #   return(sn::rmsn(n, xi = mu, Omega = covar, alpha = alpha, tau = tau))
+  # }
 }
 
 fix_epsilon <- function(pmwgs, epsilon, force_prev_epsilon, components){

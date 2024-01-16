@@ -130,7 +130,7 @@ gd_pmwg <- function(pmwg_mcmc,return_summary=FALSE,print_summary=TRUE,
 #'
 #' @param samplers Samples object with multiple chains
 #' @param no_print Boolean for printing
-#' @param digits
+#' @param digits Integer, number of digits for printing
 #'
 #' @return List of two lists names psrf and mpsrf.
 #' @export
@@ -529,7 +529,7 @@ compare <- function(sList,filter="sample",subfilter=0,use_best_fit=TRUE,
 #' @param H0 An integer. The H0 value which you want to compare to
 #' @param filter A string. Specifies which stage the samples are to be taken from "preburn", "burn", "adapt", or "sample"
 #' @param subfilter An integer or vector. If integer it will exclude up until
-#' @param FUN A function. Specifies an operation to be performed on the sampled or mapped parameters.
+#' @param fun A function. Specifies an operation to be performed on the sampled or mapped parameters.
 #' @param mapped A boolean. Whether the BF should be calculated for parameters mapped back to the real design, only works with selection = 'mu'.
 #' @param selection A string. Default is mu. Whether to do the operation on the alpha, mu, covariance, variance, or correlations.
 #'

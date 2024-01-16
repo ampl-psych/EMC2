@@ -29,6 +29,10 @@ run_emc(
 
 \item{iter}{An integer. Indicates how many iterations to run sampling stage.}
 
+\item{stop_criteria}{A list. Defines the stopping criteria and for which types of parameters these should hold. Could either be a list of list with names of the stages,
+or a single list in which case its assumed to be for the sample stage. Example: stop_criteria = list(mean_gd = 1.1, max_gd = 1.5, selection = c('alpha', 'variance'), omit_mpsrf = TRUE).
+the iter argument overrides the iter given for the stop_criteria in the sample stage.}
+
 \item{p_accept}{A double. The target acceptance probability of the MCMC process. This will fine tune the width of the search space. Default = .8}
 
 \item{step_size}{An integer. After each of these steps, the requirements will be checked if they are met and proposal distributions will be updated. Default = 100.}

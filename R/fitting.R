@@ -16,6 +16,9 @@
 #' @param cores_for_chains An integer. How many cores to use across chains. Default is the number of chains.
 #' @param max_trys An integer. How many times it will try to meet the finish conditions. Default is 20.
 #' @param n_blocks An integer. Will block the parameter chains such that they are updated in blocks. This can be helpful in extremely tough models with large number of parameters.
+#' @param stop_criteria A list. Defines the stopping criteria and for which types of parameters these should hold. Could either be a list of list with names of the stages,
+#'  or a single list in which case its assumed to be for the sample stage. Example: stop_criteria = list(mean_gd = 1.1, max_gd = 1.5, selection = c('alpha', 'variance'), omit_mpsrf = TRUE).
+#'  the iter argument overrides the iter given for the stop_criteria in the sample stage.
 #'
 #' @return A list of samplers
 #' @export
@@ -108,6 +111,9 @@ get_stop_criteria <- function(stage, stop_criteria){
       stop_criteria$selection <- c("alpha", "mu")
     }
   }
+  if(!is.null(stop_criteria$max_gd) || !is.null(stop_criteria$mean_gd)){
+    if(is.null(stop_criteria$selection)) stop_criteria$selection <- c('alpha', 'mu')
+  }
   if(stage == "adapt" & is.null(stop_criteria$min_unique)) stop_criteria$min_unique <- 600
   if(stage != "adapt" & !is.null(stop_criteria$min_unique)) stop("min_unique only applicable for adapt stage, try min_es instead.")
   return(stop_criteria)
@@ -131,6 +137,7 @@ get_stop_criteria <- function(stage, stop_criteria){
 #' @param cores_for_chains An integer. How many cores to use across chains. Default is the number of chains.
 #' @param max_trys An integer. How many times it will try to meet the finish conditions. Default is 50.
 #' @param n_blocks An integer. Will block the parameter chains such that they are updated in blocks. This can be helpful in extremely tough models with large number of parameters.
+#' @param stop_criteria A list. Defines the stopping criteria and for which types of parameters these should hold. See run_emc.
 #'
 #' @return A list of samplers
 #' @export
@@ -151,16 +158,19 @@ run_samplers <- function(samplers, stage, stop_criteria,
   progress <- check_progress(samplers, stage, iter, stop_criteria, max_trys, step_size, cores_per_chain*cores_for_chains, verbose, n_blocks = n_blocks)
   samplers <- progress$samplers
   progress <- progress[!names(progress) == 'samplers'] # Frees up memory, courtesy of Steven
+  particle_factor_in <- particle_factor; p_accept_in <- p_accept
   while(!progress$done){
     if(!is.null(progress$n_blocks)) n_blocks <- progress$n_blocks
     samplers <- add_proposals(samplers, stage, cores_per_chain*cores_for_chains, n_blocks)
     if(!is.null(progress$gds_bad)){
-      particle_factor <- particle_factor + .25 * progress$gds_bad * particle_factor
+      particle_factor_in <- particle_factor_in + .05 * progress$gds_bad * particle_factor_in
+      p_accept_in <- pmax(0.4, p_accept - progress$gds_bad*.3)
+      particle_factor_in[!progress$gds_bad] <- particle_factor
     }
     samplers <- auto_mclapply(samplers,run_stages, stage = stage, iter= progress$step_size,
                                    verbose=verbose,  verboseProgress = verboseProgress,
-                                   particles=particles,particle_factor=particle_factor,
-                                   p_accept=p_accept, n_cores=cores_per_chain, mc.cores = cores_for_chains)
+                                   particles=particles,particle_factor=particle_factor_in,
+                                   p_accept=p_accept_in, n_cores=cores_per_chain, mc.cores = cores_for_chains)
     for(i in 2:length(samplers)){ # Frees up memory, courtesy of Steven
       samplers[[i]]$data <- samplers[[1]]$data
     }
@@ -347,31 +357,7 @@ check_gd <- function(samplers, stage, max_gd, mean_gd, omit_mpsrf, trys, verbose
   # } else{  }
   gd <- get_gds(samplers,omit_mpsrf,selection)
 
-  n_remove <- round(chain_n(samplers)[,stage][1]/3)
-  samplers_short <- try(lapply(samplers,remove_iterations,select=n_remove,filter=stage),silent=TRUE)
 
-  if (is(samplers_short,"try-error")){
-    gd_short <- Inf
-  } else{
-    # if(!is.null(samplers[[1]]$g_map_fixed)){
-    #   gd_fixed_short <- gd_pmwg(as_mcmc.list(samplers_short,filter=stage, selection = "fixed"), return_summary = FALSE,
-    #                             print_summary = FALSE,filter=stage,mapped=FALSE, selection = "fixed")
-    #   gd_random_short <- gd_pmwg(as_mcmc.list(samplers_short,filter=stage, selection = "random"), return_summary = FALSE,
-    #                              print_summary = FALSE,filter=stage,mapped=FALSE, selection = "random")
-    #   if(omit_mpsrf){
-    #     gd_fixed <- gd_fixed[-length(gd_fixed)]
-    #     gd_random <- gd_random[,-ncol(gd_random)]
-    #   }
-    #   gd_short <- c(gd_fixed_short, gd_random_short)
-    # } else{
-    # }
-    gd_short <- get_gds(samplers_short,omit_mpsrf,selection)
-
-  }
-  if (is.null(max_gd) & (mean(gd_short) < mean(gd)) | (!is.null(max_gd) & (max(gd_short) < max(gd)))) {
-    gd <- gd_short
-    samplers <- samplers_short
-  }
   if(!is.null(max_gd)){
     ok_max_gd <- ifelse(all(is.finite(gd)), all(gd < max_gd), FALSE)
   } else{
@@ -382,20 +368,60 @@ check_gd <- function(samplers, stage, max_gd, mean_gd, omit_mpsrf, trys, verbose
   } else{
     ok_mean_gd <- TRUE
   }
+
   ok_gd <- ok_mean_gd & ok_max_gd
+  if(!ok_gd) {
+    n_remove <- round(chain_n(samplers)[,stage][1]/3)
+    samplers_short <- try(lapply(samplers,remove_iterations,select=n_remove,filter=stage),silent=TRUE)
+    if (is(samplers_short,"try-error")){
+      gd_short <- Inf
+    } else{
+      # if(!is.null(samplers[[1]]$g_map_fixed)){
+      #   gd_fixed_short <- gd_pmwg(as_mcmc.list(samplers_short,filter=stage, selection = "fixed"), return_summary = FALSE,
+      #                             print_summary = FALSE,filter=stage,mapped=FALSE, selection = "fixed")
+      #   gd_random_short <- gd_pmwg(as_mcmc.list(samplers_short,filter=stage, selection = "random"), return_summary = FALSE,
+      #                              print_summary = FALSE,filter=stage,mapped=FALSE, selection = "random")
+      #   if(omit_mpsrf){
+      #     gd_fixed <- gd_fixed[-length(gd_fixed)]
+      #     gd_random <- gd_random[,-ncol(gd_random)]
+      #   }
+      #   gd_short <- c(gd_fixed_short, gd_random_short)
+      # } else{
+      # }
+      gd_short <- get_gds(samplers_short,omit_mpsrf,selection)
+
+    }
+    if (is.null(max_gd) & (mean(gd_short) < mean(gd)) | (!is.null(max_gd) & (max(gd_short) < max(gd)))) {
+      gd <- gd_short
+      samplers <- samplers_short
+    }
+    if(!is.null(max_gd)){
+      ok_max_gd <- ifelse(all(is.finite(gd)), all(gd < max_gd), FALSE)
+    } else{
+      ok_max_gd <- TRUE
+    }
+    if(!is.null(mean_gd)){
+      ok_mean_gd <- ifelse(all(is.finite(gd)), mean(gd) < mean_gd, FALSE)
+    } else{
+      ok_mean_gd <- TRUE
+    }
+    ok_gd <- ok_mean_gd & ok_max_gd
+  }
+
+
   n_blocks_old <- n_blocks
   # if(iter > 1000 & stage == "sample" & !ok_gd) {
   #   n_blocks <- floor(iter/1000) + 1
   #   n_blocks <- max(n_blocks_old, n_blocks)
   # }
-  if(iter > 1000 & stage == "sample" & !ok_gd & "alpha" %in% selection) {
+  if(stage == "sample" & !ok_gd & "alpha" %in% selection) {
 
     gds <- gd_pmwg(samplers, selection = "alpha", print_summary = FALSE)
     if(omit_mpsrf) gds <- gds[,-ncol(gds)]
     if(!is.null(mean_gd)){
-      gds_bad <- (rowMeans(gds) > mean_gd)*iter/1000
+      gds_bad <- (rowMeans(gds) > mean_gd)
     } else{
-      gds_bad <- (apply(gds, 1, max) > max_gd)*iter/1000
+      gds_bad <- (apply(gds, 1, max) > max_gd)
     }
   } else{
     gds_bad <- NULL
@@ -711,6 +737,7 @@ loadRData <- function(fileName){
 #' @param cores_for_chains An integer. How many cores to use across chains. Default is the number of chains.
 #' @param max_trys An integer. How many times it will try to meet the finish conditions. Default is 50.
 #' @param n_blocks An integer. Will block the parameter chains such that they are updated in blocks. This can be helpful in extremely tough models with large number of parameters.
+#' @param stop_criteria A list. Defines the stopping criteria and for which types of parameters these should hold. See run_emc
 #'
 #' @return A list of samplers
 #' @export
@@ -764,6 +791,7 @@ auto_burn <- function(samplers, preburn = 150,
 #' @param cores_for_chains An integer. How many cores to use across chains. Default is the number of chains.
 #' @param max_trys An integer. How many times it will try to meet the finish conditions. Default is 20.
 #' @param n_blocks An integer. Will block the parameter chains such that they are updated in blocks. This can be helpful in extremely tough models with large number of parameters.
+#' @param stop_criteria A list. Defines the stopping criteria and for which types of parameters these should hold. See run_emc.
 #'
 #' @return A list of samplers.
 #' @export
@@ -805,6 +833,7 @@ run_adapt <- function(samplers, stop_criteria = NULL,
 #' @param cores_for_chains An integer. How many cores to use across chains. Default is the number of chains.
 #' @param n_blocks An integer. Will block the parameter chains such that they are updated in blocks. This can be helpful in extremely tough models with large number of parameters.
 #' @param max_trys An integer. How many times it will try to meet the finish conditions. Default is 20.
+#' @param stop_criteria A list. Defines the stopping criteria and for which types of parameters these should hold. See run_emc.
 #'
 #' @export
 #'
@@ -839,16 +868,22 @@ run_sample <- function(samplers, iter = 1000, stop_criteria = NULL,
 #' @param n_chains An integer. Specifies the amount of mcmc chains to be run. Should be more than 1 to get gelman diagnostics.
 #' @param compress Boolean, if true data compressed to speed likelihood calculation
 #' @param rt_resolution A double. Used for compression, rts will be binned based on this resolution.
-#' @param nuisance A integer vector. Parameters on this location of the vector of parameters are treated as nuisance parameters and not included in group-level covariance (only variance).
+#' @param nuisance An integer vector. Parameters on this location of the vector of parameters are treated as nuisance parameters and not included in group-level covariance (only variance).
 #' @param par_groups A vector. Only to be specified with type blocked `c(1,1,1,2,2)` means first three parameters first block, last two parameters in the second block
 #' @param n_factors An integer. Only to be specified with type factor.
 #' @param constraintMat A matrix of rows equal to the number of estimated parameters, and columns equal to the number of factors, only to be specified with type factor.
 #' If null will use default settings as specified in Innes et al. 2022
 #' @param prior A named list containing the prior mean (theta_mu_mean) and
 #' variance (theta_mu_var). Default prior created if NULL
-#' @param nuisance_non_hyper
-#' @param grouped_pars
-#' @param formula
+#' @param nuisance_non_hyper An integer vector. Parameters on this location of the vector of parameters are treated as nuisance parameters and not included in group-level (only individual level sampling).
+#' @param grouped_pars An integer vector. Parameters on this location of the vector of parameters are treated as constant across sujects
+#' @param formula Ignore. For future compatibility
+#' @param Lambda_mat Ignore. For future compatibility
+#' @param B_mat Ignore. For future compatibility
+#' @param K_mat Ignore. For future compatibility
+#' @param G_mat Ignore. For future compatibility
+#' @param xy Ignore. For future compatibility
+#' @param xeta Ignore. For future compatibility
 #'
 #' @return a list of samplers
 #' @export

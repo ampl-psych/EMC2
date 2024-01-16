@@ -26,6 +26,8 @@ run_sample(
 
 \item{iter}{An integer. Indicates how many iterations to run,}
 
+\item{stop_criteria}{A list. Defines the stopping criteria and for which types of parameters these should hold. See run_emc.}
+
 \item{p_accept}{A double. The target acceptance probability of the MCMC process. This will fine tune the width of the search space. Default = .8}
 
 \item{step_size}{An integer. After each of these steps, the requirements will be checked if they are met and proposal distributions will be updated. Default = 100.}

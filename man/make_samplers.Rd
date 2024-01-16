@@ -47,7 +47,11 @@ make_samplers(
 \item{prior}{A named list containing the prior mean (theta_mu_mean) and
 variance (theta_mu_var). Default prior created if NULL}
 
-\item{nuisance}{A integer vector. Parameters on this location of the vector of parameters are treated as nuisance parameters and not included in group-level covariance (only variance).}
+\item{nuisance}{An integer vector. Parameters on this location of the vector of parameters are treated as nuisance parameters and not included in group-level covariance (only variance).}
+
+\item{nuisance_non_hyper}{An integer vector. Parameters on this location of the vector of parameters are treated as nuisance parameters and not included in group-level (only individual level sampling).}
+
+\item{grouped_pars}{An integer vector. Parameters on this location of the vector of parameters are treated as constant across sujects}
 
 \item{par_groups}{A vector. Only to be specified with type blocked \code{c(1,1,1,2,2)} means first three parameters first block, last two parameters in the second block}
 
@@ -56,7 +60,19 @@ variance (theta_mu_var). Default prior created if NULL}
 \item{constraintMat}{A matrix of rows equal to the number of estimated parameters, and columns equal to the number of factors, only to be specified with type factor.
 If null will use default settings as specified in Innes et al. 2022}
 
-\item{formula}{}
+\item{formula}{Ignore. For future compatibility}
+
+\item{Lambda_mat}{Ignore. For future compatibility}
+
+\item{B_mat}{Ignore. For future compatibility}
+
+\item{K_mat}{Ignore. For future compatibility}
+
+\item{G_mat}{Ignore. For future compatibility}
+
+\item{xy}{Ignore. For future compatibility}
+
+\item{xeta}{Ignore. For future compatibility}
 }
 \value{
 a list of samplers
