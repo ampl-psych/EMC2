@@ -115,6 +115,7 @@ add_constants_mcmc <- function(p,constants){
 #' @param model Optional model type (if not in design)
 #' @param digits For rounding outputs
 #' @param remove_subjects Default true removes subjects from output design
+#' @param Fcovariates Any covariates in the design
 #'
 #' @return Matrix of factors and mapped parameter values
 #' @export

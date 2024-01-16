@@ -18,6 +18,10 @@ sampled_p_vector(
 \item{model}{a model list. Default is the model specified in the design list.}
 
 \item{doMap}{logical. If TRUE will}
+
+\item{add_da}{Boolean. Whether to include the data in the output}
+
+\item{all_cells_dm}{Boolean. Whether to include all levels of a factor in the output, even when one is dropped in the design}
 }
 \value{
 Named vector with mapping attributes.

@@ -11,7 +11,7 @@ gd_summary(samplers, no_print = TRUE, digits = 2)
 
 \item{no_print}{Boolean for printing}
 
-\item{digits}{}
+\item{digits}{Integer, number of digits for printing}
 }
 \value{
 List of two lists names psrf and mpsrf.

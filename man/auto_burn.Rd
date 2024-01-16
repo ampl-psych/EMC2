@@ -6,9 +6,6 @@
 \usage{
 auto_burn(
   samplers,
-  max_gd = NULL,
-  mean_gd = 1.1,
-  min_es = 0,
   preburn = 150,
   p_accept = 0.8,
   step_size = 100,
@@ -20,21 +17,11 @@ auto_burn(
   cores_per_chain = 1,
   cores_for_chains = length(samplers),
   max_trys = 20,
-  n_blocks = 1,
-  omit_mpsrf = TRUE,
-  omit_mu = TRUE,
-  omit_alpha = FALSE,
-  omit_maxsrf = TRUE
+  n_blocks = 1
 )
 }
 \arguments{
 \item{samplers}{A list of samplers, could be in any stage, as long as they've been initialized with make_samplers}
-
-\item{max_gd}{A double. The maximum gelman diagnostic convergence allowed. Will stop if below this number.}
-
-\item{mean_gd}{A double. The mean gelman diagnostic convergence allowed. Will stop if below this number.}
-
-\item{min_es}{An integer. The minimal effective size required.}
 
 \item{preburn}{An integer. The number of iterations run for preburn stage.}
 
@@ -60,7 +47,7 @@ auto_burn(
 
 \item{n_blocks}{An integer. Will block the parameter chains such that they are updated in blocks. This can be helpful in extremely tough models with large number of parameters.}
 
-\item{omit_mpsrf}{When testing for convergence use only psrf (default FALSE uses mpsrf as well)}
+\item{stop_criteria}{A list. Defines the stopping criteria and for which types of parameters these should hold. See run_emc}
 }
 \value{
 A list of samplers

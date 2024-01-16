@@ -44,6 +44,9 @@ get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1
   if(!is.null(design)){
     n_pars <- length(attr(design, "p_vector"))
   }
+  if (!is.null(prior$theta_mu_mean)) {
+    n_pars <- length(prior$theta_mu_mean)
+  }
   if (is.null(prior$theta_mu_mean)) {
     prior$theta_mu_mean <- rep(0, n_pars)
   }
@@ -163,17 +166,86 @@ gibbs_step_standard <- function(sampler, alpha){
   return(list(tmu = tmu,tvar = tvar,tvinv = tvinv,a_half = a_half,alpha = alpha))
 }
 
+# conditionalSECdistr <- function (object, fixed.comp, fixed.values, name, drop = TRUE)
+# {
+#   family <- slot(object, "family")
+#   if (!(family %in% c("SN", "ESN")))
+#     stop("family must be either SN or ESN")
+#   dp <- slot(object, "dp")
+#   xi <- dp$xi
+#   Omega <- dp$Omega
+#   alpha <- dp$alpha
+#   tau <- if (family == "SN")
+#     0
+#   else dp$tau
+#   d <- length(alpha)
+#   fix <- fixed.comp
+#   h <- length(fix)
+#   if (any(fix != round(fix)) | !all(fix %in% 1:d) | h == d)
+#     stop("fixed.comp makes no sense")
+#   if (length(fixed.values) != h)
+#     stop("length(fixed.comp) != lenght(fixed.values)")
+#   compNames <- slot(object, "compNames")
+#   if (missing(name)) {
+#     basename <- if (object@name != "")
+#       object@name
+#     else deparse(substitute(object))
+#     name <- paste(basename, "|(", paste(compNames[fix], collapse = ","),
+#                   ")=(", paste(format(fixed.values), collapse = ","),
+#                   ")", sep = "")
+#   }
+#   else name <- as.character(name)[1]
+#   omega <- sqrt(diag(Omega))
+#   omega1 <- omega[fix]
+#   omega2 <- omega[-fix]
+#   R <- cov2cor(Omega)
+#   R11 <- R[fix, fix, drop = FALSE]
+#   R12 <- R[fix, -fix, drop = FALSE]
+#   R21 <- R[-fix, fix, drop = FALSE]
+#   R22 <- R[-fix, -fix, drop = FALSE]
+#   alpha1 <- matrix(alpha[fix], ncol = 1)
+#   alpha2 <- matrix(alpha[-fix], ncol = 1)
+#   iR11 <- mnormt::pd.solve(R11)
+#   R22.1 <- R22 - R21 %*% iR11 %*% R12
+#   a.sum <- as.vector(t(alpha2) %*% R22.1 %*% alpha2)
+#   alpha1_2 <- as.vector(alpha1 + iR11 %*% R12 %*% alpha2)/sqrt(1 +
+#                                                                  a.sum)
+#   tau2.1 <- (tau * sqrt(1 + sum(alpha1_2 * as.vector(iR11 %*%
+#                                                        alpha1_2))) + sum(alpha1_2 * (fixed.values - xi[fix])/omega1))
+#   O11 <- Omega[fix, fix, drop = FALSE]
+#   O12 <- Omega[fix, -fix, drop = FALSE]
+#   O21 <- Omega[-fix, fix, drop = FALSE]
+#   O22 <- Omega[-fix, -fix, drop = FALSE]
+#   iO11 <- (1/omega1) * iR11 * rep(1/omega1, each = h)
+#   reg <- O21 %*% iO11
+#   xi2.1 <- as.vector(xi[-fix] + reg %*% (fixed.values - xi[fix]))
+#   O22.1 <- O22 - reg %*% O12
+#   omega22.1 <- sqrt(diag(O22.1))
+#   alpha2.1 <- as.vector((omega22.1/omega2) * alpha2)
+#   dp2.1 <- list(xi = xi2.1, Omega = O22.1, alpha = alpha2.1,
+#                 tau = tau2.1)
+#   return(dp2.1)
+# }
+
 get_conditionals_standard <- function(s, samples, n_pars, iteration = NULL, idx = NULL){
   iteration <- ifelse(is.null(iteration), samples$iteration, iteration)
   if(is.null(idx)) idx <- 1:n_pars
   pts2_unwound <- apply(samples$theta_var[idx,idx,],3,unwind)
   all_samples <- rbind(samples$alpha[idx, s,],samples$theta_mu[idx,],pts2_unwound)
+  # moments <- msn.mle(y = t(all_samples))
+  # sndist <- makeSECdistr(dp=list(xi = moments$dp$beta, Omega = moments$dp$Omega, alpha = moments$dp$alpha), family="SN")
+  # condsn <- conditionalSECdistr(sndist, fixed.comp = (n_pars + 1):nrow(all_samples),
+  #                               fixed.values = c(samples$theta_mu[idx,iteration], unwind(samples$theta_var[idx,idx,iteration])))
+
   mu_tilde <- rowMeans(all_samples)
   var_tilde <- stats::cov(t(all_samples))
   condmvn <- condMVN(mean = mu_tilde, sigma = var_tilde,
                      dependent.ind = 1:n_pars, given.ind = (n_pars + 1):length(mu_tilde),
                      X.given = c(samples$theta_mu[idx,iteration], unwind(samples$theta_var[idx,idx,iteration])))
   return(list(eff_mu = condmvn$condMean, eff_var = condmvn$condVar))
+  #
+  # return(list(eff_mu = condsn$xi, eff_var = condsn$Omega
+  #             eff_alpha = condsn$alpha, eff_tau = condsn$tau))
 }
 
 unwind <- function(var_matrix, ...) {

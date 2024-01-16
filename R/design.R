@@ -205,6 +205,9 @@ contr.anova <- function(n) {
 #' @param design a list of the design made with make_design.
 #' @param model a model list. Default is the model specified in the design list.
 #' @param doMap logical. If TRUE will
+#' @param add_da Boolean. Whether to include the data in the output
+#' @param all_cells_dm Boolean. Whether to include all levels of a factor in the output, even when one is dropped in the design
+#'
 #'
 #' @return Named vector with mapping attributes.
 #' @export
@@ -338,6 +341,8 @@ design_model_custom_ll <- function(data, design, model){
 #' parameter design matrices R, lR and rt (at a given resolution)
 #' @param rt_check checks if any truncation and censoring specified in the design
 #' are respected.
+#' @param add_da Boolean. Whether to include the data in the output
+#' @param all_cells_dm Boolean. Whether to include all levels of a factor in the output, even when one is dropped in the design
 #'
 #' @return a (possibly) augmented and compressed data frame with attributes
 #' specifying the design and how to decompress ready supporting likelihood

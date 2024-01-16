@@ -82,14 +82,6 @@ log_likelihood_sdt <- function(p_vector,dadm,lb=-Inf,min_ll=log(1e-10))
   sum(pmax(min_ll,ll))
 }
 
-#' log_likelihood_joint
-#'
-#' @param proposals
-#' @param dadms
-#' @param component
-#'
-#' @return summed log-likelihood
-#' @export
 log_likelihood_joint <- function(proposals, dadms, component = NULL){
   parPreFixs <- unique(gsub("[|].*", "", colnames(proposals)))
   i <- 0
