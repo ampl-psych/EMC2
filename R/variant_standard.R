@@ -87,7 +87,13 @@ get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1
       for(i in 1:N){
         a_half <- 1 / rgamma(n = n_pars,shape = 1/2,
                              rate = 1/(prior$A^2))
-        var[,,i] <- riwish(prior$v + n_pars - 1, 2 * prior$v * diag(1 / a_half))
+        attempt <- tryCatch({
+          var[,,i] <- riwish(prior$v + n_pars - 1, 2 * prior$v * diag(1 / a_half))
+        },error=function(e) e, warning=function(w) w)
+        if (any(class(attempt) %in% c("warning", "error", "try-error"))) {
+          sample_idx <- sample(1:(i-1),1)
+          var[,,i] <- var[,,sample_idx]
+        }
       }
       if (type == "variance") {
         vars_only <- t(apply(var,3,diag))
