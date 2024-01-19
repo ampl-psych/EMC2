@@ -40,7 +40,7 @@ run_emc <- function(samplers, stage = NULL, iter = 1000, stop_criteria = NULL,
   }
 
   stop_criteria <- stop_criteria[stages_names]
-  stop_criteria <- mapply(get_stop_criteria, stages_names, stop_criteria)
+  stop_criteria <- mapply(get_stop_criteria, stages_names, stop_criteria, MoreArgs = list(type = attr(samplers[[1]], "variant_funs")$type))
   stop_criteria[["sample"]]$iter <- iter
   names(stop_criteria) <- stages_names
   if (is.character(samplers)) {
@@ -92,7 +92,7 @@ run_emc <- function(samplers, stage = NULL, iter = 1000, stop_criteria = NULL,
   return(samplers)
 }
 
-get_stop_criteria <- function(stage, stop_criteria){
+get_stop_criteria <- function(stage, stop_criteria, type){
   if(is.null(stop_criteria)){
     if(stage == "preburn"){
       stop_criteria$iter <- 150
@@ -100,7 +100,12 @@ get_stop_criteria <- function(stage, stop_criteria){
     if(stage == "burn"){
       stop_criteria$mean_gd <- 1.1
       stop_criteria$omit_mpsrf <- TRUE
-      stop_criteria$selection <- c("alpha", "mu")
+      if(type != "single"){
+        stop_criteria$selection <- c("alpha", "mu")
+      } else{
+        stop_criteria$selection <- c("alpha")
+      }
+
     }
     if(stage == "adapt"){
       stop_criteria$min_unique <- 600
@@ -108,7 +113,11 @@ get_stop_criteria <- function(stage, stop_criteria){
     if(stage == "sample"){
       stop_criteria$max_gd <- 1.1
       stop_criteria$omit_mpsrf <- TRUE
-      stop_criteria$selection <- c("alpha", "mu")
+      if(type != "single"){
+        stop_criteria$selection <- c("alpha", "mu")
+      } else{
+        stop_criteria$selection <- c("alpha")
+      }
     }
   }
   if(!is.null(stop_criteria$max_gd) || !is.null(stop_criteria$mean_gd)){
@@ -758,7 +767,7 @@ auto_burn <- function(samplers, preburn = 150,
     if(!stage_name %in% names(stop_criteria)) stop_criteria[stage_name] <- list(NULL)
   }
   stop_criteria <- stop_criteria[c("preburn", "burn")]
-  stop_criteria <- mapply(get_stop_criteria, c("preburn", "burn"), stop_criteria)
+  stop_criteria <- mapply(get_stop_criteria, c("preburn", "burn"), stop_criteria, MoreArgs = list(type = attr(samplers[[1]], "variant_funs")$type))
   stop_criteria[["preburn"]]$iter <- preburn
   names(stop_criteria) <- c("preburn", "burn")
 
@@ -806,7 +815,7 @@ run_adapt <- function(samplers, stop_criteria = NULL,
     stop_criteria <- list()
     stop_criteria[["adapt"]] <-list(NULL)
   }
-  stop_criteria <- get_stop_criteria("adapt", stop_criteria[["adapt"]])
+  stop_criteria <- get_stop_criteria("adapt", stop_criteria[["adapt"]], type = attr(samplers[[1]], "variant_funs")$type)
 
   samplers <- run_samplers(samplers, stage = "adapt",  stop_criteria = stop_criteria[[1]],
                            cores_for_chains = cores_for_chains, p_accept = p_accept,
@@ -847,7 +856,7 @@ run_sample <- function(samplers, iter = 1000, stop_criteria = NULL,
   if(is.null(stop_criteria)){
     stop_criteria <- list()
   }
-  stop_criteria <- get_stop_criteria("sample", stop_criteria)
+  stop_criteria <- get_stop_criteria("sample", stop_criteria, type = attr(samplers[[1]], "variant_funs")$type)
   stop_criteria[["sample"]] <-iter
   samplers <- run_samplers(samplers, stage = "sample", stop_criteria[[1]], cores_for_chains = cores_for_chains, p_accept = p_accept,
                            step_size = step_size,  verbose = verbose, verboseProgress = verboseProgress,
