@@ -1,6 +1,13 @@
 get_pars <- function(p_vector,dadm) {
   # Add constants, transform p_vector, map to design, transform mapped parameters
-  # to the natural scale, and create trial-dependent parameters
+  # to the natural scale, and create trial-dependent parameters. Ordinal
+  # parameters are first exponentiated.
+
+  if (!is.null(attr(dadm,"ordinal")))
+    if (is.matrix(p_vector))
+       p_vector[,attr(dadm,"ordinal")] <- exp(p_vector[,attr(dadm,"ordinal")]) else
+       p_vector[attr(dadm,"ordinal")] <- exp(p_vector[attr(dadm,"ordinal")])
+
   attr(dadm,"model")()$Ttransform(
     attr(dadm,"model")()$Ntransform(
       map_p(
@@ -116,12 +123,13 @@ add_constants_mcmc <- function(p,constants){
 #' @param digits For rounding outputs
 #' @param remove_subjects Default true removes subjects from output design
 #' @param Fcovariates Any covariates in the design
+#' @param remove_RACE Logical: remove rows with no accumulator
 #'
 #' @return Matrix of factors and mapped parameter values
 #' @export
 
 mapped_par <- function(p_vector,design,model=NULL,
-                       digits=3,remove_subjects=TRUE,Fcovariates=NULL)
+                       digits=3,remove_subjects=TRUE,Fcovariates=NULL,remove_RACE=TRUE)
   # Show augmented data and corresponding mapped parameter
 {
   if (is.null(model)) if (is.null(design$model))
@@ -134,8 +142,11 @@ mapped_par <- function(p_vector,design,model=NULL,
     out <- cbind(dadm[,ok],round(get_pars(p_vector,dadm),digits))
     if (model()$type=="SDT")  out <- out[dadm$lR!=levels(dadm$lR)[length(levels(dadm$lR))],]
     if (model()$type=="DDM")  out <- out[,!(names(out) %in% c("lR","lM"))]
+    if (any(names(out)=="RACE") && remove_RACE)
+      out <- out[as.numeric(out$lR) <= as.numeric(as.character(out$RACE)),,drop=FALSE]
     return(out)
 }
+
 
 # mcmc=mcmcList[[1]]; design=attr(samplers,"design_list")[[1]];model=attr(samplers,"model_list")[[1]]
 map_mcmc <- function(mcmc,design,model, include_constants = TRUE)
@@ -148,9 +159,13 @@ map_mcmc <- function(mcmc,design,model, include_constants = TRUE)
     unlist(lapply(strsplit(nams,"_"),function(x){x[[1]]}))
 
   if (!is.matrix(mcmc)) mcmc <- t(as.matrix(mcmc))
+
+  if (!is.null(attr(design,"ordinal")))
+    mcmc[,attr(design,"ordinal")] <- exp(mcmc[,attr(design,"ordinal")])
+
   map <- attr(sampled_p_vector(design, add_da = TRUE, all_cells_dm = TRUE),"map")
   constants <- design$constants
-  mp <- mapped_par(mcmc[1,],design)
+  mp <- mapped_par(mcmc[1,],design,remove_RACE=FALSE)
   pmat <- model()$transform(add_constants(mcmc,constants))
   plist <- lapply(map,doMap,pmat=pmat)
   if (model()$type=="SDT") {
