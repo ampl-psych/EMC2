@@ -550,11 +550,7 @@ create_cov_proposals <- function(samplers, samples_idx = NULL, do_block = TRUE){
       mean_covs <- get_covs(samplers[[j]], samples_idx, sub)
       if(do_block) mean_covs[block_idx] <- 0
       if(is.negative.semi.definite(mean_covs)){
-        if(is.null(attr(samplers[[j]], "chains_cov"))){
-          chains_cov[,,sub] <- diag(nrow(mean_covs))
-        } else{
-          chains_cov[,,sub] <- attr(samplers[[j]], "chains_cov")[,,sub]
-        }
+        chains_cov[,,sub] <- attr(samplers[[j]], "chains_cov")[[sub]]
       } else{
         chains_cov[,,sub] <-  as.matrix(nearPD(mean_covs)$mat)
       }
