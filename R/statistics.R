@@ -536,7 +536,8 @@ compare <- function(sList,filter="sample",subfilter=0,use_best_fit=TRUE,
 #' @return The BayesFactor for the hypothesis against H0.
 #' @export
 savage_dickey <- function(samplers, parameter = NULL, H0 = 0, filter = "sample",
-                          subfilter = 0, fun = NULL, mapped =F, selection = "mu"){
+                          subfilter = 0, fun = NULL, mapped =F, selection = "mu",
+                          do_plot = TRUE, xlim = NULL){
   if(selection == "alpha") stop("For savage-dickey ratio, selection cannot be alpha")
   if(mapped & selection != "mu") stop("Mapped only works for mu")
   prior <- samplers[[1]]$prior
@@ -567,12 +568,26 @@ savage_dickey <- function(samplers, parameter = NULL, H0 = 0, filter = "sample",
   min_bound <- min(min(psamples), H0)
   max_bound <- max(max(psamples), H0)
   diff <- max_bound - min_bound
-  pdfun <-approxfun(density(psamples, bw = "sj", from = min_bound - diff/2, to = max_bound + diff/2))
+  pdensity <- density(psamples, bw = "sj", from = min_bound - diff/2, to = max_bound + diff/2)
+  pdfun <-approxfun(pdensity)
 
   min_bound <- min(min(samples), H0)
   max_bound <- max(max(samples), H0)
   diff <- max_bound - min_bound
-  post_dfun <-approxfun(density(samples, bw = "sj", from = min_bound - diff/2, to = max_bound + diff/2))
+  post_density <- density(samples, bw = "sj", from = min_bound - diff/2, to = max_bound + diff/2)
+  post_dfun <-approxfun(post_density)
+  if(do_plot){
+    if(is.null(xlim)){
+      xmin <- min(quantile(samples, 0.025), quantile(psamples, 0.025))
+      xmax <- max(quantile(samples, 0.975), quantile(psamples, 0.975))
+      xlim <- c(xmin, xmax)
+    }
+    plot(post_density, xlim = xlim, lwd = 1.5, main = "Prior and posterior density")
+    lines(pdensity, col = "red", lwd = 1.5)
+    points(H0, post_dfun(H0), cex = 2)
+    points(H0, pdfun(H0), col = "red", cex = 2)
+    legend("topright", legend = c("posterior", "prior"), pch = c(1, 1), col = c("black", "red"))
+  }
   return(pdfun(H0)/post_dfun(H0))
 }
 
