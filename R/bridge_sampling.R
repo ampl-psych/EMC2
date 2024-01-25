@@ -185,7 +185,7 @@ bridge_sampling <- function(samples, n_eff, split_idx, cores_for_props = 1, core
   if(is.na(tmp$logml)){
     stop("Bridge sampling did not converge, usually this means you need to run_emc longer to get more samples")
   }
-
+  return(tmp$logml)
 }
 
 
