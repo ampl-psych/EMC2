@@ -178,6 +178,8 @@ make_data <- function(p_vector,design,model=NULL,trials=NULL,data=NULL,expand=1,
     add_accumulators(data,design$matchfun,simulate=TRUE,type=model()$type,Fcovariates=design$Fcovariates),
     design,model,add_acc=FALSE,compress=FALSE,verbose=FALSE,
     rt_check=FALSE)
+  if (!is.null(attr(design,"ordinal")))
+    p_vector[,attr(design,"ordinal")] <- exp(p_vector[,attr(design,"ordinal")])
   pars <- model()$Ttransform(model()$Ntransform(map_p(
     model()$transform(add_constants(p_vector,design$constants)),data
   )),data)
@@ -213,13 +215,13 @@ make_data <- function(p_vector,design,model=NULL,trials=NULL,data=NULL,expand=1,
       pick <- data$RACE==i
       lRi <- factor(data$lR[pick & ok])
       Rrti <- model()$rfun(lRi,pars[pick & ok,])
-      Rrti$R <- as.numeric(as.character(Rrti$R))
+      Rrti$R <- as.numeric(Rrti$R)
       Rrt[RACE==i,] <- as.matrix(Rrti)
     }
     Rrt <- data.frame(Rrt)
-    Rrt$R <- factor(Rrt$R)
+    Rrt$R <- factor(Rrt$R,labels=levels(lR))
   } else Rrt <- model()$rfun(lR,pars)
-  dropNames <- c("lR","lM")
+  dropNames <- c("lR","lM","lSmagnitude")
   if (!return_Ffunctions && !is.null(design$Ffunctions))
     dropNames <- c(dropNames,names(design$Ffunctions) )
   data <- data[data$lR==levels(data$lR)[1],!(names(data) %in% dropNames)]

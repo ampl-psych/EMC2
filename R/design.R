@@ -1,6 +1,6 @@
-#' Binds together elements that make up a model design as a list
+#' Make a design object
 #'
-#' This function returns a list with the specified model design.
+#' This function returns a list specifying the design for a model.
 #'
 #' @param formula A list. Contains the design formula(s) in the
 #' format `list(y ~ x, a ~ z)`.
@@ -46,7 +46,8 @@
 #'
 make_design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
                         contrasts=NULL,matchfun=NULL,constants=NULL,covariates=NULL,functions=NULL,
-                        adapt=NULL,report_p_vector=TRUE, custom_p_vector = NULL){
+                        adapt=NULL,report_p_vector=TRUE, custom_p_vector = NULL,
+                        ordinal=NULL){
 
   if(any(names(factors) %in% c("trial", "R", "rt", "lR", "lM"))){
     stop("Please do not use any of the following names within Ffactors: trial, R, rt, lR, lM")
@@ -134,6 +135,9 @@ make_design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=
     }
   }
   attr(design,"p_vector") <- p_vector
+  if (!is.null(ordinal)) if (!all(ordinal %in% names(p_vector)))
+    stop("ordinal argument has parameters names not in the model")
+
 
   if (report_p_vector) {
     cat("\n Sampled Parameters: \n")
@@ -143,13 +147,14 @@ make_design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=
     print(attr(map_out, "map"), row.names = FALSE)
   }
 
+  attr(design,"ordinal") <- ordinal
+
   return(design)
 }
 
 
-#' contr.increasing()
+#' Contrast to enforce increasing estimates
 #'
-#' special contrast for SDT threshold factor
 #' first = intercept, cumsum other (positive) levels to force non-decreasing
 #'
 #' @param n an integer. The number of items for which to create the contrast.
@@ -157,7 +162,6 @@ make_design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=
 #'
 #' @return a contrast matrix.
 #' @export
-
 contr.increasing <- function(n,levels=NULL)
 {
   if (length(n) <= 1L) {
@@ -172,6 +176,18 @@ contr.increasing <- function(n,levels=NULL)
   contr[lower.tri(contr)] <- 1
   if (!is.null(levels)) dimnames(contr)[[2]] <- levels[-1]
   contr
+}
+
+#' Contrast to enforce decreasing estimates
+#'
+#' @param n an integer. The number of items for which to create the contrast.
+#' @param levels Character vector. the factor levels which will be the colnames of the returning matrix.
+#'
+#' @return a contrast matrix.
+#' @export
+contr.decreasing <- function(n,levels=NULL) {
+  out <- contr.increasing(n,levels=levels)
+  out[dim(out)[1]:1,]
 }
 
 #' contr.anova()
@@ -252,13 +268,36 @@ if (type=="DDM") {
       levels=levels(data$R)),lM=factor(rep(TRUE,dim(data)[1])))
   }
   if (type %in% c("RACE","SDT")) {
-    datar <- cbind(do.call(rbind,lapply(1:length(levels(data$R)),function(x){data})),
+    nacc <- length(levels(data$R))
+    datar <- cbind(do.call(rbind,lapply(1:nacc,function(x){data})),
                    lR=factor(rep(levels(data$R),each=dim(data)[1]),levels=levels(data$R)))
+    datar <- datar[order(rep(1:dim(data)[1],nacc),datar$lR),]
     if (!is.null(matchfun)) {
       lM <- matchfun(datar)
       # if (any(is.na(lM)) || !(is.logical(lM)))
       #   stop("matchfun not scoring properly")
       datar$lM <- factor(lM)
+    }
+    # Advantage NAFC
+    nam <- unlist(lapply(strsplit(dimnames(datar)[[2]],"lS"),function(x)x[[1]]))
+    islS <- nam ==""
+    if (any(islS)) {
+      if (sum(islS) != length(levels(data$R)))
+        stop("The number of lS columns in the data must equal the length of Rlevels")
+      lR <- unlist(lapply(strsplit(dimnames(datar)[[2]],"lS"),function(x){
+        if (length(x)==2) x[[2]] else NULL}))
+      if (!all(lR %in% levels(data$R)))
+        stop("x  in lSx must be in Rlevels")
+      if (any(names(datar=="lSmagnitude")))
+        stop("Do not use lSmagnitude as a factor name")
+      lSmagnitude <- as.character(datar$lR)
+      for (i in levels(datar$lR)) {
+        isin <- datar$lR==i
+        lSmagnitude[isin] <- as.character(datar[isin,paste0("lS",i)])
+      }
+      factors <- factors[!(factors %in% dimnames(datar)[[2]][islS])]
+      # datar <- datar[,!islS]
+      datar$lSmagnitude <- as.numeric(lSmagnitude)
     }
   }
   if (type %in% c("MT","TC")) {
@@ -280,21 +319,22 @@ if (type=="DDM") {
       datar$winner <- datar$lR==R
     # datar$winner[is.na(datar$winner)] <- FALSE
   }
-  # sort cells together
-  if ("trials" %in% names(data)){
-    if(length(factors) > 1){
-      datar[order(apply(datar[,c(factors)],1,paste,collapse="_"), as.numeric(datar$trials),as.numeric(datar$lR)),]
-    } else{
-      datar[order(datar[,c(factors)], as.numeric(datar$trials),as.numeric(datar$lR)),]
-    }
-  }
-  else{
-    if(length(factors) > 1){
-      datar[order(apply(datar[,c(factors)],1,paste,collapse="_"), as.numeric(datar$lR)),]
-    } else{
-      datar[order(datar[,c(factors)], as.numeric(datar$lR)),]
-    }
-  }
+  # # sort cells together
+  # if ("trials" %in% names(data)){
+  #   if(length(factors) > 1){
+  #     datar[order(apply(datar[,c(factors)],1,paste,collapse="_"), as.numeric(datar$trials),as.numeric(datar$lR)),]
+  #   } else{
+  #     datar[order(datar[,c(factors)], as.numeric(datar$trials),as.numeric(datar$lR)),]
+  #   }
+  # }
+  # else{
+  #   if(length(factors) > 1){
+  #     datar[order(apply(datar[,c(factors)],1,paste,collapse="_"), as.numeric(datar$lR)),]
+  #   } else{
+  #     datar[order(datar[,c(factors)], as.numeric(datar$lR)),]
+  #   }
+  # }
+  datar
 }
 
 design_model_custom_ll <- function(data, design, model){
@@ -314,55 +354,7 @@ design_model_custom_ll <- function(data, design, model){
 }
 
 
-#' Combines a data frame with a design to create
-#' a data augmented design model ("dadm") object. Augmentation
-#' refers to replicating the data with one row for each accumulator.
-#'
-#' Usually called by make_samplers rather than directly by the user, except
-#' where a dadm is needed for use with profile_pmwg.
-#'
-#' Performs a series to checks to make sure data frame and design match and
-#' (by default) augments the data frame by adding accumulator factors and
-#' compresses the result for efficient likelihood calculation.
-#'
-#'
-#' @param data  data frame
-#' @param design matching design
-#' @param model if model not an attribute of design can be supplied here
-#' @param add_acc default TRUE creates and 'augmented' data frame, which
-#' replicates and stacks the supplied data frame for each accumulator and
-#' adds factors to represent accumulators: lR = latent response, with a level
-#' for each response (R) represented by the accumulator and lM = latent match,
-#' a logical indicating if the accumulator represents the correct response as
-#' specified by the design's matchfun.
-#' @param rt_resolution maximum resolution of rt, NULL = no rounding
-#' @param verbose if true reports compression outcome
-#' @param compress default TRUE only keeps unique rows in terms of all
-#' parameter design matrices R, lR and rt (at a given resolution)
-#' @param rt_check checks if any truncation and censoring specified in the design
-#' are respected.
-#' @param add_da Boolean. Whether to include the data in the output
-#' @param all_cells_dm Boolean. Whether to include all levels of a factor in the output, even when one is dropped in the design
-#'
-#' @return a (possibly) augmented and compressed data frame with attributes
-#' specifying the design and how to decompress ready supporting likelihood
-#' computation
-#' @export
-
-design_model <- function(data,design,model=NULL,
-                         add_acc=TRUE,rt_resolution=0.02,verbose=TRUE,
-                         compress=TRUE,rt_check=TRUE, add_da = FALSE, all_cells_dm = FALSE)
-  # Flist is a list of formula objects, one for each p_type
-  # da is augmented data (from add_accumulators), must have all of the factors
-  #   and covariates that are used in formulas
-  # Clist is a list of either a single unnamed contrast (as in the default)
-  #   lists, one for each model()$p_type (allowed to have some p_types missing).
-  # These elements of model define the paramaterization being used
-  #   ptypes defines the parameter types for which designs must be specified
-  #   transform if a function acting on p_vector before mapping
-  #   Ntransform is a function acting on the output of map_p
-{
-  compress_dadm <- function(da,designs,Fcov,Ffun)
+compress_dadm <- function(da,designs,Fcov,Ffun)
     # out keeps only unique rows in terms of all parameters design matrices
     # R, lR and rt (at given resolution) from full data set
   {
@@ -441,8 +433,57 @@ design_model <- function(data,design,model=NULL,
       }
     }
     out
-  }
+}
 
+
+#' Combines a data frame with a design to create
+#' a data augmented design model ("dadm") object. Augmentation
+#' refers to replicating the data with one row for each accumulator.
+#'
+#' Usually called by make_samplers rather than directly by the user, except
+#' where a dadm is needed for use with profile_pmwg.
+#'
+#' Performs a series to checks to make sure data frame and design match and
+#' (by default) augments the data frame by adding accumulator factors and
+#' compresses the result for efficient likelihood calculation.
+#'
+#'
+#' @param data  data frame
+#' @param design matching design
+#' @param model if model not an attribute of design can be supplied here
+#' @param add_acc default TRUE creates and 'augmented' data frame, which
+#' replicates and stacks the supplied data frame for each accumulator and
+#' adds factors to represent accumulators: lR = latent response, with a level
+#' for each response (R) represented by the accumulator and lM = latent match,
+#' a logical indicating if the accumulator represents the correct response as
+#' specified by the design's matchfun.
+#' @param rt_resolution maximum resolution of rt, NULL = no rounding
+#' @param verbose if true reports compression outcome
+#' @param compress default TRUE only keeps unique rows in terms of all
+#' parameter design matrices R, lR and rt (at a given resolution)
+#' @param rt_check checks if any truncation and censoring specified in the design
+#' are respected.
+#' @param add_da Boolean. Whether to include the data in the output
+#' @param all_cells_dm Boolean. Whether to include all levels of a factor in the output, even when one is dropped in the design
+#'
+#' @return a (possibly) augmented and compressed data frame with attributes
+#' specifying the design and how to decompress ready supporting likelihood
+#' computation
+#' @export
+
+design_model <- function(data,design,model=NULL,
+                         add_acc=TRUE,rt_resolution=0.02,verbose=TRUE,
+                         compress=TRUE,rt_check=TRUE, add_da = FALSE, all_cells_dm = FALSE)
+  # Flist is a list of formula objects, one for each p_type
+  # da is augmented data (from add_accumulators), must have all of the factors
+  #   and covariates that are used in formulas
+  # Clist is a list of either a single unnamed contrast (as in the default)
+  #   lists, one for each model()$p_type (allowed to have some p_types missing).
+  # These elements of model define the paramaterization being used
+  #   ptypes defines the parameter types for which designs must be specified
+  #   transform if a function acting on p_vector before mapping
+  #   Ntransform is a function acting on the output of map_p
+{
 
   check_rt <- function(b,d,upper=TRUE)
     # Check bounds respected if present
@@ -623,6 +664,8 @@ design_model <- function(data,design,model=NULL,
   #     levels(dadm$subjects))
   #   attr(dadm,"adapt")$design <- design$adapt
   # }
+  attr(dadm,"ordinal") <- attr(design,"ordinal")
+
   dadm
 }
 

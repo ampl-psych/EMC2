@@ -195,7 +195,7 @@ plot_prior <- function(prior=NULL, design,plotp=NULL,
         filtered <- filtered[(filtered >= lower) & (filtered <= upper)]
         hist(filtered,prob = TRUE,
              main=i,xlab=pnam,xlim=xlims[[pnam]],breaks=breaks,
-             cex.lab = 1.25, cex.main = 1.5, xlab = selection)
+             cex.lab = 1.25, cex.main = 1.5)
       }
     }
     invisible(cbind.data.frame(fnam,mpok[,par_names,drop=FALSE]))
