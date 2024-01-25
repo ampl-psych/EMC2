@@ -532,6 +532,8 @@ compare <- function(sList,filter="sample",subfilter=0,use_best_fit=TRUE,
 #' @param fun A function. Specifies an operation to be performed on the sampled or mapped parameters.
 #' @param mapped A boolean. Whether the BF should be calculated for parameters mapped back to the real design, only works with selection = 'mu'.
 #' @param selection A string. Default is mu. Whether to do the operation on the alpha, mu, covariance, variance, or correlations.
+#' @param do_plot Boolean. Whether to include a plot of the prior and posterior density. With circles at H0.
+#' @param xlim Vector, the xlimits for the plot.
 #'
 #' @return The BayesFactor for the hypothesis against H0.
 #' @export
