@@ -29,7 +29,7 @@ eval.unnormalized.posterior <- function(samples_iter, gen_samples, data, m, L, i
     q21.a = m_min_gen,
     q21.b = m_plus_gen
   )
-  mls <- mclapply(samples_list, h.unnormalized.posterior, data = data, info = info, n_cores = cores_per_prop, hyper_only = hyper_only,
+  mls <- auto_mclapply(samples_list, h.unnormalized.posterior, data = data, info = info, n_cores = cores_per_prop, hyper_only = hyper_only,
                   mc.cores = cores_for_props)
   q11 <- log(e^(mls$q11.a) + e^(mls$q11.b))
   q21 <- log(e^(mls$q21.a) + e^(mls$q21.b))
@@ -126,6 +126,7 @@ run.iterative.scheme <- function(q11, q12, q21, q22, r0, tol,
 
 bridge_sampling <- function(samples, n_eff, split_idx, cores_for_props = 1, cores_per_prop = 1, maxiter = 5000,
                             filter = "sample", r0 = 1e-5, tol1 = 1e-10, tol2 = 1e-6, hyper_only = F){
+  if(Sys.info()[1] == "Windows" & cores_per_prop > 1) stop("only cores_for_props can be set on Windows")
   variant_funs <- attr(samples, "variant_funs")
   data <- samples$data
   info <- make_info(samples, variant_funs)
