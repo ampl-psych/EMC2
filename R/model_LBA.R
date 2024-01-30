@@ -182,7 +182,7 @@ LBA <- function(){
     type="RACE",
     c_name = "LBA",
     # p_vector transform, sets sv as a scaling parameter
-    p_types=c("v" = 0,"sv" = log(1),"B" = log(1),"A" = log(0),"t0" = log(0)),
+    p_types=c("v" = 1,"sv" = log(1),"B" = log(1),"A" = log(0),"t0" = log(0)),
     transform = function(p) p,
     # Transform to natural scale
     Ntransform=function(x) {
