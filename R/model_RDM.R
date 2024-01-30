@@ -301,7 +301,6 @@ rRDM <- function(lR,pars,p_types=c("v","B","A","t0"),ok=rep(TRUE,dim(pars)[1]))
   out
 }
 
-
 #' The Racing Diffusion Model (RDM)
 #'
 #' The Racing Diffusion Model, also known as the Racing Wald Model, proposes that for each choice alternative, noisy accumulators race towards a common bound.
