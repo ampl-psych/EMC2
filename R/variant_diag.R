@@ -13,6 +13,9 @@ get_prior_diag <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, 
   if(!is.null(design)){
     n_pars <- length(attr(design, "p_vector"))
   }
+  if (!is.null(prior$theta_mu_mean)) {
+    n_pars <- length(prior$theta_mu_mean)
+  }
   if (is.null(prior$theta_mu_mean)) {
     prior$theta_mu_mean <- rep(0, n_pars)
   }
@@ -23,7 +26,7 @@ get_prior_diag <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, 
     prior$v <- rep(2, n_pars)
   }
   if(is.null(prior$A)){
-    prior$A <- rep(1, n_pars)
+    prior$A <- rep(.3, n_pars)
   }
   # Things I save rather than re-compute inside the loops.
   prior$theta_mu_invar <- ginv(prior$theta_mu_var) #Inverse of the matrix

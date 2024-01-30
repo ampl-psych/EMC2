@@ -4,7 +4,13 @@
 \alias{sampled_p_vector}
 \title{sampled_p_vector()}
 \usage{
-sampled_p_vector(design, model = NULL, doMap = TRUE, add_da = FALSE)
+sampled_p_vector(
+  design,
+  model = NULL,
+  doMap = TRUE,
+  add_da = FALSE,
+  all_cells_dm = FALSE
+)
 }
 \arguments{
 \item{design}{a list of the design made with make_design.}
@@ -12,6 +18,10 @@ sampled_p_vector(design, model = NULL, doMap = TRUE, add_da = FALSE)
 \item{model}{a model list. Default is the model specified in the design list.}
 
 \item{doMap}{logical. If TRUE will}
+
+\item{add_da}{Boolean. Whether to include the data in the output}
+
+\item{all_cells_dm}{Boolean. Whether to include all levels of a factor in the output, even when one is dropped in the design}
 }
 \value{
 Named vector with mapping attributes.

@@ -7,9 +7,7 @@
 run_sample(
   samplers,
   iter = 1000,
-  max_gd = 1.1,
-  mean_gd = NULL,
-  min_es = 0,
+  stop_criteria = NULL,
   p_accept = 0.8,
   step_size = 100,
   verbose = FALSE,
@@ -19,10 +17,8 @@ run_sample(
   particle_factor = 50,
   cores_per_chain = 1,
   cores_for_chains = length(samplers),
-  max_trys = 50,
-  n_blocks = 1,
-  omit_mpsrf = TRUE,
-  omit_mu = TRUE
+  max_trys = 20,
+  n_blocks = 1
 )
 }
 \arguments{
@@ -30,11 +26,7 @@ run_sample(
 
 \item{iter}{An integer. Indicates how many iterations to run,}
 
-\item{max_gd}{A double. The maximum gelman diagnostic convergence allowed. Will stop if below this number.}
-
-\item{mean_gd}{A double. The mean gelman diagnostic convergence allowed. Will stop if below this number.}
-
-\item{min_es}{An integer. The minimal effective size required.}
+\item{stop_criteria}{A list. Defines the stopping criteria and for which types of parameters these should hold. See run_emc.}
 
 \item{p_accept}{A double. The target acceptance probability of the MCMC process. This will fine tune the width of the search space. Default = .8}
 
@@ -54,7 +46,7 @@ run_sample(
 
 \item{cores_for_chains}{An integer. How many cores to use across chains. Default is the number of chains.}
 
-\item{max_trys}{An integer. How many times it will try to meet the finish conditions. Default is 50.}
+\item{max_trys}{An integer. How many times it will try to meet the finish conditions. Default is 20.}
 
 \item{n_blocks}{An integer. Will block the parameter chains such that they are updated in blocks. This can be helpful in extremely tough models with large number of parameters.}
 }

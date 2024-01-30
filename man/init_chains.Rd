@@ -29,6 +29,9 @@ init_chains(
 
 \item{cores_for_chains}{Number of cores used for chains.}
 }
+\value{
+A samplers object
+}
 \description{
 Adds a set of set of start points to each chain samples from a multivariate
 normal

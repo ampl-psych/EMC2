@@ -12,8 +12,8 @@ make_prior(
   verbose = TRUE,
   update_print = TRUE,
   type = "standard",
-  pscale = NULL,
-  df = NULL
+  pscale = NA,
+  df = NA
 )
 }
 \arguments{
@@ -21,7 +21,8 @@ make_prior(
 
 \item{pmean}{Named vector of prior means, or an unnamed scalar, which is then used for all.}
 
-\item{psd}{Named vector of prior standard deviations, or an unnamed scalar, which is then used for all. If NA, will assume 1 for all parameters}
+\item{psd}{Named vector of prior standard deviations, or an unnamed scalar,
+which is then used for all. If NA, will assume 1 for all parameters}
 
 \item{update}{Another prior from which to copy values}
 
@@ -30,21 +31,28 @@ update only new values).}
 
 \item{update_print}{When verbose print only new values (default TRUE)}
 
-\item{type}{What type of model you plan on using, choice of standard, diagonal and single for this function}
+\item{type}{What type of model you plan on using, choice of standard, diagonal
+and single for this function}
 
-\item{pscale}{For hierarchical models, the prior on the scale of the variances. If NA, will assume 1 for all parameters}
+\item{pscale}{For hierarchical models, the prior on the scale of the variances.
+Default NA will assume 1 for all parameters}
 
-\item{df}{For hierarchical models, the prior on the degrees of freedom of the variances. If NA will assume 2 for all parameters}
+\item{df}{For hierarchical models, the prior on the degrees of freedom of the
+variances. Default NA will assume 2}
 }
 \value{
 An EMC prior object
 }
 \description{
 Makes priors based on a design.
-For hierarchical models you specify prior on mean of the group mean (pmean) and standard deviations
-(psd), and possibly these values taken from another prior (supplied by the
-update argument), as long as those values have the same name as in the current
-design and are not specified in pmean and psd. Where a value is not supplied
-in arguments the user is prompted to enter numeric values (or functions that
-evaluate to numbers).
+Specify prior on mean of the group mean (pmean) and standard deviation (psd),
+for the individual level for a "single" model and for the group level for
+hierarchical models. These values are entered manually by default but can be
+taken from another prior (given in the update argument) for values having
+the same name as in the current design and are not specified in pmean and psd.
+Where a value is not supplied in arguments the user is prompted to enter
+numeric values (or functions that evaluate to numbers). For hierarchical models
+the scale (pscale) and the  degrees of freedom (df) for the population variance
+covariance matrix can also be specified (by default unit values are assumed,
+set these arguments to NULL to enter values manually).
 }

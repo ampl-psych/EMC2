@@ -1,11 +1,12 @@
+
 log_likelihood_race <- function(p_vector,dadm,min_ll=log(1e-10))
   # Race model summed log likelihood
 {
 
   pars <- get_pars(p_vector,dadm)
 
-  if (any(names(dadm)=="NACC")) # Some accumulators not present
-    pars[as.numeric(dadm$lR)>dadm$NACC,] <- NA
+  if (any(names(dadm)=="RACE")) # Some accumulators not present
+    pars[as.numeric(dadm$lR)>as.numeric(as.character(dadm$RACE)),] <- NA
 
   if (is.null(attr(pars,"ok")))
     ok <- !logical(dim(pars)[1]) else ok <- attr(pars,"ok")
@@ -81,16 +82,6 @@ log_likelihood_sdt <- function(p_vector,dadm,lb=-Inf,min_ll=log(1e-10))
   sum(pmax(min_ll,ll))
 }
 
-#' Title
-#'
-#' @param proposals
-#' @param dadms
-#' @param component
-#'
-#' @return
-#' @export
-#'
-#' @examples
 log_likelihood_joint <- function(proposals, dadms, component = NULL){
   parPreFixs <- unique(gsub("[|].*", "", colnames(proposals)))
   i <- 0

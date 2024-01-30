@@ -43,6 +43,8 @@ it will instead do a odd-even iterations split to get a more reasonable estimate
 \item{tol1}{Numeric. Hyperparameter in a post-processing scheme, best left at default}
 
 \item{tol2}{Numeric. Hyperparameter in a post-processing scheme, best left at default}
+
+\item{hyper_only}{Boolean. Experimental, to bridge sample only considering the group-level.}
 }
 \value{
 A vector of length repetitions which contains the Marginal Log Likelihood estimates per repetition

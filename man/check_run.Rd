@@ -2,13 +2,7 @@
 % Please edit documentation in R/plotting.R
 \name{check_run}
 \alias{check_run}
-\title{Runs a series of convergence checks, printing statistics to the console and
-saving plots to a pdf. Note that the R_hat (psrf and mpsrf, i.e., gelman_diag
-from the coda package) is calculated by doubling the number of chains by
-first splitting chains into first and second half so it also a test of
-stationarity. Efficiency of sampling is indicated by integrated autocorrelation
-time (from the LaplacesDemon package) and the effective numebr of samples
-(from coda).}
+\title{Convergence checks for an EMC2 samplers object}
 \usage{
 check_run(
   samples,
@@ -17,6 +11,8 @@ check_run(
   filter = "sample",
   subfilter = 0,
   thin = 1,
+  print_IAT = FALSE,
+  subject = NULL,
   layout = c(3, 4),
   width = NULL,
   height = NULL
@@ -36,12 +32,17 @@ that integer. If vector it will include everything in that range.}
 
 \item{thin}{An integer. Keep only iterations that are a multiple of thin.}
 
+\item{print_IAT}{Include a printout out of the Integrated Autocorrelation Time.}
+
+\item{subject}{For a hierarhical model a non-null value (integer or subject name)
+picks out results only for that subject.}
+
 \item{layout}{A vector specifying the layout as in par(mfrow = layout).
 If NA (defualt) use CODA defaults, if NULL use current.}
 
-\item{width}{PDF page width}
+\item{width}{PDF page width.}
 
-\item{height}{PDF page height}
+\item{height}{PDF page height.}
 }
 \value{
 None
@@ -51,7 +52,7 @@ Runs a series of convergence checks, printing statistics to the console and
 saving plots to a pdf. Note that the R_hat (psrf and mpsrf, i.e., gelman_diag
 from the coda package) is calculated by doubling the number of chains by
 first splitting chains into first and second half so it also a test of
-stationarity. Efficiency of sampling is indicated by integrated autocorrelation
-time (from the LaplacesDemon package) and the effective numebr of samples
-(from coda).
+stationarity. Efficiency of sampling is (optionally) indicated by integrated
+autocorrelation time (from the LaplacesDemon package) and the effective
+number of samples (from coda).
 }

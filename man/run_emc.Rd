@@ -8,24 +8,18 @@ run_emc(
   samplers,
   stage = NULL,
   iter = 1000,
-  max_gd = 1.1,
-  mean_gd = 1.1,
-  min_es = 0,
-  min_unique = 600,
-  preburn = 150,
+  stop_criteria = NULL,
   p_accept = 0.8,
   step_size = 100,
-  verbose = FALSE,
+  verbose = TRUE,
   verboseProgress = FALSE,
   fileName = NULL,
   particles = NULL,
   particle_factor = 50,
   cores_per_chain = 1,
   cores_for_chains = length(samplers),
-  max_trys = 50,
-  n_blocks = 1,
-  omit_mpsrf = TRUE,
-  omit_mu = TRUE
+  max_trys = 20,
+  n_blocks = 1
 )
 }
 \arguments{
@@ -35,15 +29,9 @@ run_emc(
 
 \item{iter}{An integer. Indicates how many iterations to run sampling stage.}
 
-\item{max_gd}{A double. The maximum gelman diagnostic convergence allowed. Will stop sample stage if below this number.}
-
-\item{mean_gd}{A double. The mean gelman diagnostic convergence allowed. Will stop burn-in if below this number.}
-
-\item{min_es}{An integer. The minimal effective size required to stop sampling.}
-
-\item{min_unique}{An integer. The minimal number of samples required. Only works in adaptation.}
-
-\item{preburn}{An integer. Specifies how many iterations to run preburn stage.}
+\item{stop_criteria}{A list. Defines the stopping criteria and for which types of parameters these should hold. Could either be a list of list with names of the stages,
+or a single list in which case its assumed to be for the sample stage. Example: stop_criteria = list(mean_gd = 1.1, max_gd = 1.5, selection = c('alpha', 'variance'), omit_mpsrf = TRUE).
+the iter argument overrides the iter given for the stop_criteria in the sample stage.}
 
 \item{p_accept}{A double. The target acceptance probability of the MCMC process. This will fine tune the width of the search space. Default = .8}
 
@@ -63,11 +51,9 @@ run_emc(
 
 \item{cores_for_chains}{An integer. How many cores to use across chains. Default is the number of chains.}
 
-\item{max_trys}{An integer. How many times it will try to meet the finish conditions. Default is 50.}
+\item{max_trys}{An integer. How many times it will try to meet the finish conditions. Default is 20.}
 
 \item{n_blocks}{An integer. Will block the parameter chains such that they are updated in blocks. This can be helpful in extremely tough models with large number of parameters.}
-
-\item{omit_mpsrf}{When testing for convergence use only psrf (default FALSE uses mpsrf as well)}
 }
 \value{
 A list of samplers

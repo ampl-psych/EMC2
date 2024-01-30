@@ -181,8 +181,10 @@ bridge_sampling <- function(samples, n_eff, split_idx, cores_for_props = 1, core
                                 criterion = "logml")
   }
 
-  tmp$logml
-
+  if(is.na(tmp$logml)){
+    stop("Bridge sampling did not converge, usually this means you need to run_emc longer to get more samples")
+  }
+  return(tmp$logml)
 }
 
 
@@ -201,6 +203,7 @@ bridge_sampling <- function(samples, n_eff, split_idx, cores_for_props = 1, core
 #' @param r0 Numeric. Hyperparameter in a post-processing scheme, best left at default
 #' @param tol1 Numeric. Hyperparameter in a post-processing scheme, best left at default
 #' @param tol2 Numeric. Hyperparameter in a post-processing scheme, best left at default
+#' @param hyper_only Boolean. Experimental, to bridge sample only considering the group-level.
 #'
 #' @return A vector of length repetitions which contains the Marginal Log Likelihood estimates per repetition
 #' @export

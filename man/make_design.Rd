@@ -57,11 +57,10 @@ response was correct or not. Example: \code{function(d)d$S==d$lR}}
 \item{constants}{A named vector. Sets constants. Any parameter named
 by \code{sampled_p_vector} can be set constant.}
 
-\item{covariates}{Covariate factors. Covariate measures which may be
-included in the model and/or mapped to factors.}
+\item{covariates}{Names of numeric covariates.}
 
-\item{functions}{Factor Functions. Functions to specify specific
-parameterizations, or functions of parameters.}
+\item{functions}{List of functions to create new factors based on those in
+the factors argument. These new factors can then be used in formula.}
 
 \item{adapt}{For future compatibility. Ignore.}
 

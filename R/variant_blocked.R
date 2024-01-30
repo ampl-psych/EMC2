@@ -17,6 +17,7 @@ get_prior_blocked <- function(prior = NULL, n_pars = NULL, par_names = NULL, sam
   if (is.null(prior$theta_mu_mean)) {
     prior$theta_mu_mean <- rep(0, n_pars)
   }
+
   if(is.null(prior$theta_mu_var)){
     prior$theta_mu_var <- diag(rep(1, n_pars))
   }

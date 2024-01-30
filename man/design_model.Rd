@@ -15,7 +15,8 @@ design_model(
   verbose = TRUE,
   compress = TRUE,
   rt_check = TRUE,
-  add_da = FALSE
+  add_da = FALSE,
+  all_cells_dm = FALSE
 )
 }
 \arguments{
@@ -41,6 +42,10 @@ parameter design matrices R, lR and rt (at a given resolution)}
 
 \item{rt_check}{checks if any truncation and censoring specified in the design
 are respected.}
+
+\item{add_da}{Boolean. Whether to include the data in the output}
+
+\item{all_cells_dm}{Boolean. Whether to include all levels of a factor in the output, even when one is dropped in the design}
 }
 \value{
 a (possibly) augmented and compressed data frame with attributes

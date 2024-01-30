@@ -148,18 +148,18 @@ as_Mcmc <- function(sampler,filter=stages,thin=1,subfilter=0,
   } else if (!all(filter %in% 1:sampler$samples$idx)) {
     stop("filter is not a vector of stage names, or integer vector of indices\n")
   }
-  # if(selection == "fixed"){
-  #   fixed <- sampler$samples$fixed[, filter,drop=FALSE]
-  #   if (is.null(subfilter)){
-  #     fixed <- t(fixed)
-  #   }  else{
-  #     fixed <- t(shorten(fixed,subfilter,2))
-  #   }
-  #   if (thin > dim(fixed)[1]) stop("Thin to large\n")
-  #   out <- coda::mcmc(fixed[seq(thin,dim(fixed)[1],by=thin),,drop=FALSE])
-  #   attr(out,"selection") <- selection
-  #   return(out)
-  # }
+  if(selection == "fixed"){
+    fixed <- sampler$samples$fixed[, filter,drop=FALSE]
+    if (is.null(subfilter)){
+      fixed <- t(fixed)
+    }  else{
+      fixed <- t(shorten(fixed,subfilter,2))
+    }
+    if (thin > dim(fixed)[1]) stop("Thin to large\n")
+    out <- coda::mcmc(fixed[seq(thin,dim(fixed)[1],by=thin),,drop=FALSE])
+    attr(out,"selection") <- selection
+    return(out)
+  }
   # if(selection == "random"){
   #   random <- sampler$samples$random[, filter,drop=FALSE]
   #   if (is.null(subfilter)){
