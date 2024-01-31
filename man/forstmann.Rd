@@ -7,12 +7,12 @@
 \format{
 A data frame with 15818 rows and 5 variables:
 \describe{
-\item{subject}{integer ID for each subject}
-\item{rt}{reaction time for each trial as a double}
-\item{condition}{Factor with 3 levels for Speed, Accuracy and
+\item{E}{Factor with 3 levels for Speed, Accuracy and
 Neutral}
-\item{stim}{Factor with 2 levels for Left and Right trials}
-\item{resp}{Factor with 2 levels for Left and Right responses}
+\item{R}{Factor with 2 levels for Left and Right responses}
+\item{S}{Factor with 2 levels for Left and Right trials}
+\item{rt}{reaction time for each trial as a double}
+\item{subjects}{integer ID for each subject}
 }
 }
 \source{

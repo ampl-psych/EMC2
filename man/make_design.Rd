@@ -70,6 +70,8 @@ parameters to be estimated.}
 
 \item{custom_p_vector}{A character vector. If specified, a custom likelihood
 function can be supplied.}
+
+\item{ordinal}{For future compatibility}
 }
 \value{
 A design list.

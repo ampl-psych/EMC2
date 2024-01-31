@@ -12,6 +12,7 @@ auto_burn(
   verbose = FALSE,
   verboseProgress = FALSE,
   fileName = NULL,
+  stop_criteria = NULL,
   particles = NULL,
   particle_factor = 50,
   cores_per_chain = 1,
@@ -35,6 +36,8 @@ auto_burn(
 
 \item{fileName}{A string. If specified will autosave samplers at this location.}
 
+\item{stop_criteria}{A list. Defines the stopping criteria and for which types of parameters these should hold. See run_emc}
+
 \item{particles}{An integer. How many particles to use, default is NULL and particle_factor is used. If specified will override particle_factor}
 
 \item{particle_factor}{An integer. Particle factor multiplied by the square root of the number of sampled parameters will determine the number of particles used.}
@@ -46,8 +49,6 @@ auto_burn(
 \item{max_trys}{An integer. How many times it will try to meet the finish conditions. Default is 50.}
 
 \item{n_blocks}{An integer. Will block the parameter chains such that they are updated in blocks. This can be helpful in extremely tough models with large number of parameters.}
-
-\item{stop_criteria}{A list. Defines the stopping criteria and for which types of parameters these should hold. See run_emc}
 }
 \value{
 A list of samplers
