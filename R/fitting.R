@@ -758,7 +758,7 @@ loadRData <- function(fileName){
 
 auto_burn <- function(samplers, preburn = 150,
                       p_accept = .8, step_size = 100, verbose = FALSE, verboseProgress = FALSE,
-                      fileName = NULL,
+                      fileName = NULL, stop_criteria = NULL,
                       particles = NULL, particle_factor=50, cores_per_chain = 1,
                       cores_for_chains = length(samplers), max_trys = 20, n_blocks = 1){
   if(!is.null(stop_criteria) & length(stop_criteria) == 1){

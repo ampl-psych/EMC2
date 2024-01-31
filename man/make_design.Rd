@@ -2,7 +2,7 @@
 % Please edit documentation in R/design.R
 \name{make_design}
 \alias{make_design}
-\title{Binds together elements that make up a model design as a list}
+\title{Make a design object}
 \usage{
 make_design(
   formula = NULL,
@@ -17,7 +17,8 @@ make_design(
   functions = NULL,
   adapt = NULL,
   report_p_vector = TRUE,
-  custom_p_vector = NULL
+  custom_p_vector = NULL,
+  ordinal = NULL
 )
 }
 \arguments{
@@ -74,5 +75,5 @@ function can be supplied.}
 A design list.
 }
 \description{
-This function returns a list with the specified model design.
+This function returns a list specifying the design for a model.
 }

@@ -534,6 +534,7 @@ compare <- function(sList,filter="sample",subfilter=0,use_best_fit=TRUE,
 #' @param selection A string. Default is mu. Whether to do the operation on the alpha, mu, covariance, variance, or correlations.
 #' @param do_plot Boolean. Whether to include a plot of the prior and posterior density. With circles at H0.
 #' @param xlim Vector, the xlimits for the plot.
+#' @param subject Character. If type = "single" and multiple subjects were ran in one model, this is required.
 #'
 #' @return The BayesFactor for the hypothesis against H0.
 #' @export

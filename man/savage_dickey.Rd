@@ -15,7 +15,10 @@ savage_dickey(
   subfilter = 0,
   fun = NULL,
   mapped = F,
-  selection = "mu"
+  selection = "mu",
+  do_plot = TRUE,
+  xlim = NULL,
+  subject = NULL
 )
 }
 \arguments{
@@ -34,6 +37,12 @@ savage_dickey(
 \item{mapped}{A boolean. Whether the BF should be calculated for parameters mapped back to the real design, only works with selection = 'mu'.}
 
 \item{selection}{A string. Default is mu. Whether to do the operation on the alpha, mu, covariance, variance, or correlations.}
+
+\item{do_plot}{Boolean. Whether to include a plot of the prior and posterior density. With circles at H0.}
+
+\item{xlim}{Vector, the xlimits for the plot.}
+
+\item{subject}{Character. If type = "single" and multiple subjects were ran in one model, this is required.}
 }
 \value{
 The BayesFactor for the hypothesis against H0.

@@ -11,7 +11,8 @@ mapped_par(
   model = NULL,
   digits = 3,
   remove_subjects = TRUE,
-  Fcovariates = NULL
+  Fcovariates = NULL,
+  remove_RACE = TRUE
 )
 }
 \arguments{
@@ -26,6 +27,8 @@ mapped_par(
 \item{remove_subjects}{Default true removes subjects from output design}
 
 \item{Fcovariates}{Any covariates in the design}
+
+\item{remove_RACE}{Logical: remove rows with no accumulator}
 }
 \value{
 Matrix of factors and mapped parameter values

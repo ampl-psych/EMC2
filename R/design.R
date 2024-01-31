@@ -39,6 +39,7 @@
 #' parameters to be estimated.
 #' @param custom_p_vector A character vector. If specified, a custom likelihood
 #' function can be supplied.
+#' @param ordinal For future compatibility
 #'
 #' @return A design list.
 #' @export
