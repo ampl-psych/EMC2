@@ -539,7 +539,7 @@ compare <- function(sList,filter="sample",subfilter=0,use_best_fit=TRUE,
 #' @export
 savage_dickey <- function(samplers, parameter = NULL, H0 = 0, filter = "sample",
                           subfilter = 0, fun = NULL, mapped =F, selection = "mu",
-                          do_plot = TRUE, xlim = NULL){
+                          do_plot = TRUE, xlim = NULL, subject = NULL){
   if(mapped & selection != "mu") stop("Mapped only works for mu")
   prior <- samplers[[1]]$prior
   type <- attr(samplers[[1]], "variant_funs")$type
@@ -556,8 +556,19 @@ savage_dickey <- function(samplers, parameter = NULL, H0 = 0, filter = "sample",
                         include_constants = FALSE)
   }
 
-  samples <- do.call(rbind, as_mcmc.list(samplers,selection=selection,filter=filter,
-                                         subfilter=subfilter,mapped=mapped))
+  samples <- as_mcmc.list(samplers,selection=selection,filter=filter,
+                                         subfilter=subfilter,mapped=mapped)
+  if(selection == "alpha"){
+    if(length(samples) > 1 & is.null(subject)){
+      stop("with non-hierarichal run with multiple subjects, you must specify which subject")
+    } else if (length(samples) == 1){
+      samples <- do.call(rbind, samples[[1]])
+    } else{
+      samples <- do.call(rbind, samples[[subject]])
+    }
+  } else{
+    samples <- do.call(rbind, samples)
+  }
   if(is.null(fun)){
     idx <- colnames(samples) == parameter
     samples <- samples[,idx]
