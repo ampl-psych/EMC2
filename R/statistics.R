@@ -540,10 +540,10 @@ compare <- function(sList,filter="sample",subfilter=0,use_best_fit=TRUE,
 savage_dickey <- function(samplers, parameter = NULL, H0 = 0, filter = "sample",
                           subfilter = 0, fun = NULL, mapped =F, selection = "mu",
                           do_plot = TRUE, xlim = NULL){
-  if(selection == "alpha") stop("For savage-dickey ratio, selection cannot be alpha")
   if(mapped & selection != "mu") stop("Mapped only works for mu")
   prior <- samplers[[1]]$prior
   type <- attr(samplers[[1]], "variant_funs")$type
+  if(selection == "alpha" & type != "single") stop("For savage-dickey ratio, selection cannot be alpha")
   # type <- "standard"
   if(type == "standard") gp <- get_prior_standard
   if(type == "diagonal") gp <- get_prior_blocked

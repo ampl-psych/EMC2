@@ -156,7 +156,7 @@ run_samplers <- function(samplers, stage, stop_criteria,
                          fileName = NULL,
                          particles = NULL, particle_factor=50, cores_per_chain = 1,
                          cores_for_chains = length(samplers), max_trys = 20, n_blocks = 1){
-  if(Sys.info()[1] == "Windows" & cores_per_prop > 1) stop("only cores_for_chains can be set on Windows")
+  if(Sys.info()[1] == "Windows" & cores_per_chain > 1) stop("only cores_for_chains can be set on Windows")
   if (verbose) message(paste0("Running ", stage, " stage"))
   attributes <- get_attributes(samplers)
   total_iters_stage <- chain_n(samplers)[,stage][1]
