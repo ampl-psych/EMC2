@@ -12,4 +12,4 @@ Alternatively you could download the tar.gz:
 https://github.com/ampl-psych/EMC2/archive/refs/heads/main.tar.gz
 
 And install it using:
-install.packages("emc2-main.tar.gz", repos = NULL, type = "source")
+install.packages("emc2-main.tar.gz", repos = NULL, type = "source",dependencies=TRUE)
