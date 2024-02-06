@@ -49,6 +49,7 @@ get_prior_samples <- function(samples,selection,filter,thin,subfilter,n_prior)
 
 #' plot_prior
 #' Plots prior distributions by simulation
+#'
 #' @param prior A list of specifying prior means and covariance, if NULL default
 #' prior (mean=0, variance = 1, uncorrelated)
 #' @param design Design corresponding to prior
@@ -67,6 +68,7 @@ get_prior_samples <- function(samples,selection,filter,thin,subfilter,n_prior)
 #' numeric same for all parameters, parameter named list parameter specific
 #' @param xlim List with parameter names of plot x limits or single pair same for all.
 #' Any names not in list or if (default) NA xlim set as min and max.
+#' @param n_factors Integer. For prior plotting of factor models
 #'
 #' @return Invisible sampled columns of parameters as a data frame (covariate,
 #' version first column = cell names) or otherwise a matrix
@@ -75,7 +77,8 @@ plot_prior <- function(prior=NULL, design,plotp=NULL,
                        type = c("standard","single")[1],selection = NULL,
                        mapped=TRUE,data=NULL,
                        N=1e5, nrep=10,
-                       breaks=50,layout=c(3,3),lower=NULL,upper=NULL,xlim=NA)
+                       breaks=50,layout=c(3,3),lower=NULL,upper=NULL,xlim=NA,
+                       n_factors = 10)
 {
   if (is.null(selection)) {
     if (type=="single"){
@@ -86,16 +89,16 @@ plot_prior <- function(prior=NULL, design,plotp=NULL,
   }
 
   if(selection == "alpha" & type !="single"){
-    lower = .05
-    upper = .95
+    if(is.null(lower))lower = .05
+    if(is.null(upper)) upper = .95
   }
 
   if(selection == "variance"){
-    upper = .95
+    if(is.null(upper)) upper = .95
   }
-  if(selection == "covariance"){
-    upper = .95
-    lower = .05
+  if(selection == "covariance" || selection == "loadings"){
+    if(is.null(lower))lower = .05
+    if(is.null(upper)) upper = .95
   }
   if (mapped & !(selection %in% c("alpha","mu"))){
     # warning("For selections other than mu and alpha mapped must be FALSE, we set it to FALSE here")
@@ -103,8 +106,8 @@ plot_prior <- function(prior=NULL, design,plotp=NULL,
   }
 
 
-  if (!(type %in% c("standard","single", "diagonal")))
-    stop("Only types standard, diagonal and single implemented")
+  if (!(type %in% c("standard","single", "diagonal", "infnt_factor")))
+    stop("Only types standard, diagonal, infnt_factor and single implemented")
   if (type=="single" & selection !="alpha")
     stop("Can only select alpha for single")
   if (!is.null(data) & is.null(design))
@@ -114,6 +117,7 @@ plot_prior <- function(prior=NULL, design,plotp=NULL,
   if (type=="standard") gp <- get_prior_standard
   if (type=="single") gp <- get_prior_single
   if (type=="diagonal") gp <- get_prior_diag
+  if (type=="infnt_factor") gp <- get_prior_infnt_factor
   if (mapped & !is.null(data)) { # Used for covariates
     message("Mapping prior based on data, use this option with covariates and Ttranform parameters")
     if(selection == "alpha" & type != "single"){

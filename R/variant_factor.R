@@ -159,8 +159,8 @@ gibbs_step_factor <- function(sampler, alpha){
   }
 
   #Update psi_inv
-  # psi_inv[,] <- diag(rgamma(n_factors ,shape=(prior$al+n_subjects)/2,rate=prior$bl+colSums(eta^2)/2), n_factors)
-  psi_inv <- diag(n_factors)#solve(riwish(n_subjects + prior$rho_0, t(eta) %*% eta + solve(prior$R_0)))
+  psi_inv[,] <- diag(rgamma(n_factors ,shape=(prior$al+n_subjects)/2,rate=prior$bl+colSums(eta^2)/2), n_factors)
+  # psi_inv <- diag(n_factors)#solve(riwish(n_subjects + prior$rho_0, t(eta) %*% eta + solve(prior$R_0)))
 
   lambda_orig <- lambda
   #If the diagonals of lambda aren't constrained to be 1, we should fix the signs
@@ -193,18 +193,18 @@ get_conditionals_factor <- function(s, samples, n_pars, iteration = NULL, idx = 
   sig_err <- log(apply(samples$theta_sig_err_inv[idx,idx,],3,diag))
   psi <- log(apply(samples$theta_psi_inv,3,diag))
   eta <- matrix(samples$theta_eta[s,,], nrow = samples$n_factors)
-  lambda <- apply(samples$lambda_untransf[idx,,,drop = F], 3, unwind_lambda, samples$constraintMat)
+  lambda <- apply(samples$lambda_untransf[idx,,,drop = F], 3, unwind_lambda, samples$constraintMat[idx,])
   theta_mu <- samples$theta_mu[idx,]
   all_samples <- rbind(samples$alpha[idx, s,],theta_mu, eta, sig_err, psi, lambda)#, sig_err, psi, lambda)
   mu_tilde <- rowMeans(all_samples)
   var_tilde <- cov(t(all_samples))
   condmvn <- condMVN(mean = mu_tilde, sigma = var_tilde,
                      dependent.ind = 1:n_pars, given.ind = (n_pars + 1):length(mu_tilde),
-                     X.given = c(theta_mu[idx,iteration],
+                     X.given = c(samples$theta_mu[idx,iteration],
                                  samples$theta_eta[s,,iteration],
                                  log(diag(samples$theta_sig_err_inv[idx,idx, iteration])),
                                  log(apply(samples$theta_psi_inv[,,iteration, drop = F], 3, diag)),
-                                 unwind_lambda(samples$lambda_untransf[idx,, iteration], samples$constraintMat)))
+                                 unwind_lambda(samples$lambda_untransf[idx,, iteration], samples$constraintMat[idx,])))
   return(list(eff_mu = condmvn$condMean, eff_var = condmvn$condVar))
 }
 

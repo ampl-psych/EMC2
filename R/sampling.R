@@ -373,6 +373,11 @@ new_particle <- function (s, data, num_particles, eff_mu = NULL,
     lw_total <- lw + prev_ll - lw[1] # make sure lls from other components are included
     lp <- mvtnorm::dmvnorm(x = proposals[,idx], mean = group_mu[idx], sigma = group_var[idx,idx], log = TRUE)
     prop_density <- mvtnorm::dmvnorm(x = proposals[,idx], mean = subj_mu[idx], sigma = var_subj[idx,idx])
+    if(length(unq_components) > 1){
+      prior_density <- mvtnorm::dmvnorm(x = proposals, mean = group_mu, sigma = group_var, log = TRUE)
+    } else{
+      prior_density <- lp
+    }
     if (mix_proportion[3] == 0) {
       eff_density <- 0
     }
@@ -388,15 +393,15 @@ new_particle <- function (s, data, num_particles, eff_mu = NULL,
     infnt_idx <- is.infinite(lm)
     lm[infnt_idx] <- min(lm[!infnt_idx])
     # Calculate weights and center
-    l <- lw_total + lp - lm
+    l <- lw_total + prior_density - lm
     weights <- exp(l - max(l))
     # Do MH step and return everything
     idx_ll <- sample(x = num_particles+1, size = 1, prob = weights)
     origin <- min(which(idx_ll <= cumuNumbers))
-    out_lls[i] <- lw_total[idx_ll]
+    out_lls[i] <- lw[idx_ll]
     proposal_out[idx] <- proposals[idx_ll,idx]
   } # Note that origin only contains last components origin, just used by devs anyway
-  return(list(proposal = proposal_out, ll = mean(out_lls), origin = origin))
+  return(list(proposal = proposal_out, ll = sum(out_lls), origin = origin))
 }
 
 new_particle_group <- function(data, num_particles, prior,

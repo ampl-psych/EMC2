@@ -3,10 +3,20 @@ add_info_infnt_factor <- function(sampler, prior = NULL, ...){
   args <- list(...)
   max_factors <- args$n_factors
   if(is.null(max_factors)) max_factors <- 10
-  n_pars <- sum(!(sampler$nuisance | sampler$grouped))
+  attr(sampler, "max_factors") <- max_factors
 
+  sampler$prior <- get_prior_infnt_factor(prior, sum(!(sampler$nuisance | sampler$grouped)), sample = F, n_factors = max_factors)
+  return(sampler)
+}
+
+get_prior_infnt_factor <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, type = "mu", design = NULL,
+                               map = FALSE, n_factors = 10){
+  # Checking and default priors
   if(is.null(prior)){
     prior <- list()
+  }
+  if(!is.null(design)){
+    n_pars <- length(attr(design, "p_vector"))
   }
   if(is.null(prior$theta_mu_mean)){
     prior$theta_mu_mean <- rep(0, n_pars)
@@ -15,35 +25,112 @@ add_info_infnt_factor <- function(sampler, prior = NULL, ...){
     prior$theta_mu_var <- rep(1, n_pars)
   }
   if(is.null(prior$as)){
-    prior$as <- 5 # shape prior on the error variances
+    prior$as <- 10 # shape prior on the error variances
   }
   if(is.null(prior$bs)){
-    prior$bs <- 1 # rate prior on the error variances
+    prior$bs <- .5 # rate prior on the error variances
   }
   if(is.null(prior$df)){
     prior$df <- 10 # Shape and rate prior on the global shrinkage
   }
   if(is.null(prior$ad1)){
-    prior$ad1 <- 3 # Shape prior on first column
+    prior$ad1 <- 8 # Shape prior on first column
   }
   if(is.null(prior$bd1)){
-    prior$bd1 <- 1.7 # Rate prior on first column
+    prior$bd1 <- 3 # Rate prior on first column
   }
   if(is.null(prior$ad2)){
-    prior$ad2 <- 3.5 # Multiplicative prior on shape subsequent columns
+    prior$ad2 <- 4 # Multiplicative prior on shape subsequent columns
   }
   if(is.null(prior$bd2)){
-    prior$bd2 <- 2 # Multiplicative prior on rate of subsequent columns
+    prior$bd2 <- 1.8 # Multiplicative prior on rate of subsequent columns
   }
   # Things I save rather than re-compute inside the loops.
-  # Things I save rather than re-compute inside the loops.
-  prior$theta_mu_invar <- 1/prior$theta_mu_var
-
-  attr(sampler, "max_factors") <- max_factors
-
-  sampler$prior <- prior
-  return(sampler)
+  prior$theta_mu_invar <- ginv(prior$theta_mu_var) #Inverse of the matrix
+  if(sample){
+    out <- list()
+    if(!type %in% c("mu", "variance", "covariance", "correlation", "full_var", "loadings")){
+      stop("for variant infnt_factor, you can only specify the prior on the mean, variance, covariance, loadings or the correlation of the parameters")
+    }
+    if(type == "mu"){
+      samples <- mvtnorm::rmvnorm(N, mean = prior$theta_mu_mean,
+                                  sigma = prior$theta_mu_var)
+      if(!is.null(design)){
+        colnames(samples) <- par_names <- names(attr(design, "p_vector"))
+        if(map){
+          proot <- unlist(lapply(strsplit(colnames(samples),"_"),function(x)x[[1]]))
+          isin <- proot %in% names(design$model()$p_types)
+          fullnames <- colnames(samples)[isin]
+          colnames(samples)[isin] <- proot
+          samples[,isin] <- design$model()$Ntransform(samples[,isin])
+          colnames(samples)[isin] <- fullnames
+        }
+      }
+      out$mu <- samples
+      return(out)
+    } else if(type == "loadings") {
+      lambda <- matrix(0, nrow = n_pars, ncol = n_factors)
+      lambda_out <- array(0, dim = c(n_pars, n_factors, N))
+      for(i in 1:N){
+        psi <- matrix(1/rgamma(n_factors*n_pars, prior$df/2, prior$df/2), nrow = n_pars, ncol = n_factors)
+        delta <- numeric(n_factors)
+        delta[1] <- 1/rgamma(1, prior$ad1, prior$bd1)
+        if(n_factors > 1){
+          delta[2:n_factors] <- 1/rgamma(n_factors -1, prior$ad2, prior$bd2)
+        }
+        tau <- cumprod(delta)
+        lambda <- matrix(0, nrow = n_pars, ncol = n_factors)
+        for(j in 1:n_factors){
+          lambda[,j] <- rnorm(n_pars, mean = 0, sd = psi[,j]*tau[j])
+        }
+        lambda_out[,,i] <- lambda
+      }
+      out$loadings = t(lambda_out[1,,])
+      colnames(out$loadings) <- paste0("Loadings column ", 1:n_factors)
+      return(out)
+    } else{
+      var <- array(NA_real_, dim = c(n_pars, n_pars, N))
+      for(i in 1:N){
+        psi <- matrix(1/rgamma(n_factors*n_pars, prior$df/2, prior$df/2), nrow = n_pars, ncol = n_factors)
+        delta <- numeric(n_factors)
+        delta[1] <- 1/rgamma(1, prior$ad1, prior$bd1)
+        if(n_factors > 1){
+          delta[2:n_factors] <- 1/rgamma(n_factors -1, prior$ad2, prior$bd2)
+        }
+        tau <- cumprod(delta)
+        sigma <- 1/rgamma(n_pars, prior$as, prior$bs)
+        lambda <- matrix(0, nrow = n_pars, ncol = n_factors)
+        for(j in 1:n_factors){
+          lambda[,j] <- rnorm(n_pars, mean = 0, sd = psi[,j]*tau[j])
+        }
+        cov_tmp <- lambda %*% t(lambda) + diag(sigma)
+        var[,,i] <- cov_tmp
+      }
+      if (type == "variance") {
+        vars_only <- t(apply(var,3,diag))
+        if(!is.null(design)){
+          colnames(vars_only) <- names(attr(design, "p_vector"))
+        }
+        out$variance <- vars_only
+      }
+      lt <- lower.tri(var[,,1])
+      if (type == "correlation"){
+        corrs <- array(apply(var,3,cov2cor),dim=dim(var),dimnames=dimnames(var))
+        out$correlation <- t(apply(corrs,3,function(x){x[lt]}))
+      }
+      if(type == "covariance"){
+        out$covariance <- t(apply(var,3,function(x){x[lt]}))
+      }
+      if (type == "full_var"){
+        out$full_var <- t(apply(var, 3, c))
+      }
+      return(out)
+    }
+  }
+  return(prior)
 }
+
+
 
 sample_store_infnt_factor <- function(data, par_names, iters = 1, stage = "init", integrate = T, is_nuisance,
                                       is_grouped, ...) {
@@ -179,14 +266,18 @@ gibbs_step_infnt_factor <- function(sampler, alpha){
   bd <- prior$bd1 + 0.5 * (1 / delta[1])  * sum(tauh * colSums(mat))
   delta[1] <- rgamma(1, shape = ad, rate = bd)
   tauh <- cumprod(delta)
-
-  if(max_factors > 1){
-    for(h in 2:max_factors) {
-      ad <- prior$ad2 + 0.5 * n_pars * (max_factors - h + 1)
-      bd <- prior$bd2 + 0.5 * (1 / delta[h]) * sum(tauh[h:max_factors] * colSums(as.matrix(mat[, h:max_factors])))
-      delta[h] <- rgamma(1, shape = ad, rate = bd)
+  if(!is.null(prior$ad2)){
+    if(max_factors > 1){
+      for(h in 2:max_factors) {
+        ad <- prior$ad2 + 0.5 * n_pars * (max_factors - h + 1)
+        bd <- prior$bd2 + 0.5 * (1 / delta[h]) * sum(tauh[h:max_factors] * colSums(as.matrix(mat[, h:max_factors])))
+        delta[h] <- rgamma(1, shape = ad, rate = bd)
+      }
     }
+  } else if(max_factors > 1){
+    delta[2:max_factors] <- 1
   }
+
 
 
   # Update sig_err
@@ -255,4 +346,3 @@ prior_dist_infnt_factor <- function(parameters, info){
   stop("no IS2 for infinite factor estimation yet")
 
 }
-
