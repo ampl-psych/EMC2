@@ -78,7 +78,7 @@ plot_prior <- function(prior=NULL, design,plotp=NULL,
                        mapped=TRUE,data=NULL,
                        N=1e5, nrep=10,
                        breaks=50,layout=c(3,3),lower=NULL,upper=NULL,xlim=NA,
-                       n_factors = 10)
+                       n_factors = NULL)
 {
   if (is.null(selection)) {
     if (type=="single"){
@@ -220,7 +220,11 @@ plot_prior <- function(prior=NULL, design,plotp=NULL,
       }
       colnames(samples) <- colnames(pp_mu)
     } else{
-      samples <- gp(prior, type = selection, design = design,N=N)[[selection]]
+      if(!is.null(n_factors)){
+        samples <- gp(prior, type = selection, design = design,N=N, n_factors = n_factors)[[selection]]
+      } else{
+        samples <- gp(prior, type = selection, design = design,N=N)[[selection]]
+      }
     }
 
     if(selection %in% c("covariance", "correlation")){

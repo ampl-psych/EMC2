@@ -10,7 +10,7 @@ add_info_infnt_factor <- function(sampler, prior = NULL, ...){
 }
 
 get_prior_infnt_factor <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, type = "mu", design = NULL,
-                               map = FALSE, n_factors = 10){
+                                   map = FALSE, n_factors = 10){
   # Checking and default priors
   if(is.null(prior)){
     prior <- list()
@@ -31,19 +31,19 @@ get_prior_infnt_factor <- function(prior = NULL, n_pars = NULL, sample = TRUE, N
     prior$bs <- .5 # rate prior on the error variances
   }
   if(is.null(prior$df)){
-    prior$df <- 10 # Shape and rate prior on the global shrinkage
+    prior$df <- 30 # Shape and rate prior on the global shrinkage
   }
   if(is.null(prior$ad1)){
-    prior$ad1 <- 8 # Shape prior on first column
+    prior$ad1 <- 3.5 # Shape prior on first column
   }
   if(is.null(prior$bd1)){
-    prior$bd1 <- 3 # Rate prior on first column
+    prior$bd1 <- 1.7 # Rate prior on first column
   }
   if(is.null(prior$ad2)){
-    prior$ad2 <- 4 # Multiplicative prior on shape subsequent columns
+    prior$ad2 <- 4.5 # Multiplicative prior on shape subsequent columns
   }
   if(is.null(prior$bd2)){
-    prior$bd2 <- 1.8 # Multiplicative prior on rate of subsequent columns
+    prior$bd2 <- 2.2 # Multiplicative prior on rate of subsequent columns
   }
   # Things I save rather than re-compute inside the loops.
   prior$theta_mu_invar <- 1/prior$theta_mu_var #Inverse of the matrix
@@ -54,7 +54,7 @@ get_prior_infnt_factor <- function(prior = NULL, n_pars = NULL, sample = TRUE, N
     }
     if(type == "mu"){
       samples <- mvtnorm::rmvnorm(N, mean = prior$theta_mu_mean,
-                                  sigma = prior$theta_mu_var)
+                                  sigma = diag(prior$theta_mu_var))
       if(!is.null(design)){
         colnames(samples) <- par_names <- names(attr(design, "p_vector"))
         if(map){
