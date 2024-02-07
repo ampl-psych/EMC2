@@ -262,6 +262,53 @@ plot_prior <- function(prior=NULL, design,plotp=NULL,
   }
 }
 
+check_prior <- function(prior, sampled_p_names){
+  if (is.null(names(prior$theta_mu_mean)))
+    names(prior$theta_mu_mean) <- sampled_p_names
+  if(length(prior$theta_mu_mean) != length(sampled_p_names))
+    stop("prior mu should be same length as estimated parameters (p_vector)")
+  if (!all(sort(names(prior$theta_mu_mean)) == sort(sampled_p_names)))
+    stop("theta_mu_mean names not the same as sampled paramter names")
+  # Make sure theta_mu_mean has same order as sampled parameters
+  pnams <- names(prior$theta_mu_mean)
+  prior$theta_mu_mean <- prior$theta_mu_mean[sampled_p_names]
+  if(!is.matrix(prior$theta_mu_var)) {
+    if(length(prior$theta_mu_var) != length(sampled_p_names))
+      stop("prior theta should be same length as estimated parameters (p_vector)")
+    # Make sure theta_mu_var has same order as sampled parameters
+    names(prior$theta_mu_var) <- pnams
+    prior$theta_mu_var <- prior$theta_mu_var[sampled_p_names]
+  } else {
+    if(nrow(prior$theta_mu_var) != length(sampled_p_names))
+      stop("prior theta should have same number of rows as estimated parameters (p_vector)")
+    if(ncol(prior$theta_mu_var) != length(sampled_p_names))
+      stop("prior theta should have same number of columns as estimated parameters (p_vector)")
+    # Make sure theta_mu_var has same order as sampled parameters
+    dimnames(prior$theta_mu_var) <- list(pnams,pnams)
+    prior$theta_mu_var <- prior$theta_mu_var[sampled_p_names,sampled_p_names]
+  }
+  return(prior)
+}
+
+merge_priors <- function(prior_list){
+  out <- prior_list[[1]]
+  if(length(prior_list) > 1){
+    out_names <- names(out)
+    for(j in 2:length(prior_list)){
+      for(hyper in out_names){
+        if(length(out[[hyper]]) > 1){
+          if(length(dim(out[[hyper]])) == 2){
+            out[[hyper]] <- adiag(out[[hyper]], prior_list[[j]][[hyper]])
+          } else{
+            out[[hyper]] <- c(out[[hyper]], prior_list[[j]][[hyper]])
+          }
+        }
+      }
+    }
+  }
+  return(out)
+}
+
 
 #' make_prior
 #'

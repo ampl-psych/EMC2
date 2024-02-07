@@ -905,7 +905,7 @@ run_sample <- function(samplers, iter = 1000, stop_criteria = NULL,
 make_samplers <- function(data_list,design_list,model_list=NULL,
                           type=c("standard","diagonal","blocked","factor","single", "lm", "infnt_factor")[1],
                           n_chains=3,compress=TRUE,rt_resolution=0.02,
-                          prior = NULL, nuisance = NULL,
+                          prior_list = NULL, nuisance = NULL,
                           nuisance_non_hyper = NULL,
                           grouped_pars = NULL,
                           par_groups=NULL,
@@ -920,6 +920,9 @@ make_samplers <- function(data_list,design_list,model_list=NULL,
     stop("You can only specify nuisance OR nuisance_non_hyper")
   }
   if (is(data_list, "data.frame")) data_list <- list(data_list)
+  if(!is.null(prior_list) & !is.null(prior_list$theta_mu_mean)){
+    prior_list <- list(prior_list)
+  }
   # Sort subject together and add unique trial within subject integer
   # create overarching data list with one list per subject
   if(type == "lm"){
@@ -979,34 +982,9 @@ make_samplers <- function(data_list,design_list,model_list=NULL,
     # }
 
     sampled_p_names <- names(attr(design_list[[i]],"p_vector"))
-    if(!is.null(prior)){
-      if (is.null(names(prior$theta_mu_mean)))
-        names(prior$theta_mu_mean) <- sampled_p_names
-      if(length(prior$theta_mu_mean) != length(sampled_p_names))
-        stop("prior mu should be same length as estimated parameters (p_vector)")
-      if (!all(sort(names(prior$theta_mu_mean)) == sort(sampled_p_names)))
-        stop("theta_mu_mean names not the same as sampled paramter names")
-      # Make sure theta_mu_mean has same order as sampled parameters
-      pnams <- names(prior$theta_mu_mean)
-      prior$theta_mu_mean <- prior$theta_mu_mean[sampled_p_names]
-      if(!is.matrix(prior$theta_mu_var)) {
-        if(length(prior$theta_mu_var) != length(sampled_p_names))
-          stop("prior theta should be same length as estimated parameters (p_vector)")
-        # Make sure theta_mu_var has same order as sampled parameters
-        names(prior$theta_mu_var) <- pnams
-        prior$theta_mu_var <- prior$theta_mu_var[sampled_p_names]
-      } else {
-        if(nrow(prior$theta_mu_var) != length(sampled_p_names))
-          stop("prior theta should have same number of rows as estimated parameters (p_vector)")
-        if(ncol(prior$theta_mu_var) != length(sampled_p_names))
-          stop("prior theta should have same number of columns as estimated parameters (p_vector)")
-        # Make sure theta_mu_var has same order as sampled parameters
-        dimnames(prior$theta_mu_var) <- list(pnams,pnams)
-        prior$theta_mu_var <- prior$theta_mu_var[sampled_p_names,sampled_p_names]
-      }
+    if(!is.null(prior_list[[i]])){
+      prior_list[[i]] <- check_prior(prior_list[[i]], sampled_p_names)
     }
-
-
     # create a design model
     if(is.null(attr(design_list[[i]], "custom_ll"))){
       dadm_list[[i]] <- design_model(data=data_list[[i]],design=design_list[[i]],
@@ -1016,6 +994,7 @@ make_samplers <- function(data_list,design_list,model_list=NULL,
         design = design_list[[i]],model=model_list[[i]])
     }
   }
+  prior <- merge_priors(prior_list)
 
   attr(dadm_list[[1]], "prior") <- prior
 

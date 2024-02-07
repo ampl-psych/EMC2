@@ -46,7 +46,7 @@ get_prior_infnt_factor <- function(prior = NULL, n_pars = NULL, sample = TRUE, N
     prior$bd2 <- 1.8 # Multiplicative prior on rate of subsequent columns
   }
   # Things I save rather than re-compute inside the loops.
-  prior$theta_mu_invar <- ginv(prior$theta_mu_var) #Inverse of the matrix
+  prior$theta_mu_invar <- 1/prior$theta_mu_var #Inverse of the matrix
   if(sample){
     out <- list()
     if(!type %in% c("mu", "variance", "covariance", "correlation", "full_var", "loadings")){
