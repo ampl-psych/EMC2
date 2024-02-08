@@ -25,7 +25,7 @@ get_prior_infnt_factor <- function(prior = NULL, n_pars = NULL, sample = TRUE, N
     prior$theta_mu_var <- rep(1, n_pars)
   }
   if(is.null(prior$as)){
-    prior$as <- 10 # shape prior on the error variances
+    prior$as <- 5 # shape prior on the error variances
   }
   if(is.null(prior$bs)){
     prior$bs <- .5 # rate prior on the error variances
