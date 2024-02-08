@@ -28,7 +28,7 @@ get_prior_infnt_factor <- function(prior = NULL, n_pars = NULL, sample = TRUE, N
     prior$as <- 5 # shape prior on the error variances
   }
   if(is.null(prior$bs)){
-    prior$bs <- .5 # rate prior on the error variances
+    prior$bs <- .7 # rate prior on the error variances
   }
   if(is.null(prior$df)){
     prior$df <- 30 # Shape and rate prior on the global shrinkage
