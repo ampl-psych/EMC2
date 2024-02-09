@@ -18,9 +18,24 @@ return_single_sampler <- function(joint_samples, i){
   single_samples$par_names <- replacement
   single_samples$data <- lapply(joint_samples$data, FUN = function(x) return(x[[i]]))
   single_samples$ll_func <- attr(single_samples$data[[1]], "model")()$log_likelihood
-  single_samples$prior$theta_mu_mean <- single_samples$prior$theta_mu_mean[idx]
-  single_samples$prior$theta_mu_var <- single_samples$prior$theta_mu_var[idx, idx]
+  single_samples$prior <- fix_single_prior(single_samples$prior, idx)
   return(single_samples)
+}
+
+fix_single_prior <- function(prior, idx){
+  out <- prior
+  prior_names <- names(prior)
+  for(name in prior_names){
+    obj <- prior[[name]]
+    if(length(obj) > 1){
+      if(length(dim(obj)) == 2){
+        out[[name]] <- obj[idx, idx]
+      } else{
+        out[[name]] <- obj[idx]
+      }
+    }
+  }
+  return(out)
 }
 
 
