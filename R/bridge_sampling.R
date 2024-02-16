@@ -123,6 +123,20 @@ run.iterative.scheme <- function(q11, q12, q21, q22, r0, tol,
 
 }
 
+#' get_BayesFactor
+#'
+#' returns the Bayes Factor for two models
+#'
+#' @param MLL1 Numeric. Marginal likelihood of model 1. Obtained with `run_bridge_sampling`
+#' @param MLL2 Numeric. Marginal likelihood of model 1
+#'
+#' @return The BayesFactor for model 1 over model 2
+#' @export
+#'
+get_BayesFactor <- function(MLL1, MLL2){
+  exp(MLL1 - MLL2)
+}
+
 
 bridge_sampling <- function(samples, n_eff, split_idx, cores_for_props = 1, cores_per_prop = 1, maxiter = 5000,
                             filter = "sample", r0 = 1e-5, tol1 = 1e-10, tol2 = 1e-6, hyper_only = F){

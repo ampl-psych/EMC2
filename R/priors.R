@@ -97,8 +97,8 @@ plot_prior <- function(prior=NULL, design,plotp=NULL,
     if(is.null(upper)) upper = .95
   }
   if(selection == "covariance" || selection == "loadings"){
-    if(is.null(lower))lower = .05
-    if(is.null(upper)) upper = .95
+    if(is.null(lower))lower = .02
+    if(is.null(upper)) upper = .98
   }
   if (mapped & !(selection %in% c("alpha","mu"))){
     # warning("For selections other than mu and alpha mapped must be FALSE, we set it to FALSE here")
@@ -106,8 +106,8 @@ plot_prior <- function(prior=NULL, design,plotp=NULL,
   }
 
 
-  if (!(type %in% c("standard","single", "diagonal", "infnt_factor")))
-    stop("Only types standard, diagonal, infnt_factor and single implemented")
+  if (!(type %in% c("standard","single", "diagonal", "factor", "infnt_factor")))
+    stop("Only types standard, diagonal, factor, infnt_factor and single implemented")
   if (type=="single" & selection !="alpha")
     stop("Can only select alpha for single")
   if (!is.null(data) & is.null(design))
@@ -118,6 +118,7 @@ plot_prior <- function(prior=NULL, design,plotp=NULL,
   if (type=="single") gp <- get_prior_single
   if (type=="diagonal") gp <- get_prior_diag
   if (type=="infnt_factor") gp <- get_prior_infnt_factor
+  if (type=="factor") gp <- get_prior_factor
   if (mapped & !is.null(data)) { # Used for covariates
     message("Mapping prior based on data, use this option with covariates and Ttranform parameters")
     if(selection == "alpha" & type != "single"){

@@ -13,7 +13,7 @@ make_samplers(
   n_chains = 3,
   compress = TRUE,
   rt_resolution = 0.02,
-  prior = NULL,
+  prior_list = NULL,
   nuisance = NULL,
   nuisance_non_hyper = NULL,
   grouped_pars = NULL,
@@ -44,8 +44,7 @@ make_samplers(
 
 \item{rt_resolution}{A double. Used for compression, rts will be binned based on this resolution.}
 
-\item{prior}{A named list containing the prior mean (theta_mu_mean) and
-variance (theta_mu_var). Default prior created if NULL}
+\item{prior_list}{A named list containing the prior. Default prior created if NULL}
 
 \item{nuisance}{An integer vector. Parameters on this location of the vector of parameters are treated as nuisance parameters and not included in group-level covariance (only variance).}
 

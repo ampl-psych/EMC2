@@ -9,6 +9,9 @@
 #' @importFrom coda gelman.diag
 #' @importFrom coda mcmc
 #' @importFrom coda mcmc.list
+#' @importFrom colorspace diverging_hcl
+#' @importFrom corrplot colorlegend
+#' @importFrom corrplot corrplot
 #' @importFrom graphics abline
 #' @importFrom graphics arrows
 #' @importFrom graphics hist pairs rect text
@@ -18,6 +21,7 @@
 #' @importFrom graphics points
 #' @importFrom grDevices dev.off
 #' @importFrom grDevices pdf
+#' @importFrom lpSolve lp.assign
 #' @importFrom magic adiag
 #' @importFrom MASS ginv
 #' @importFrom Matrix nearPD
@@ -27,6 +31,7 @@
 #' @importFrom mvtnorm dmvnorm
 #' @importFrom mvtnorm rmvnorm
 #' @importFrom parallel mclapply
+#' @importFrom psych fa.diagram
 #' @importFrom Rcpp sourceCpp
 #' @importFrom stats acf
 #' @importFrom stats approxfun
@@ -58,6 +63,8 @@
 #' @importFrom stats terms
 #' @importFrom stats update
 #' @importFrom stats var
+#' @importFrom stats varimax
+#' @importFrom utils combn
 #' @useDynLib EMC2, .registration = TRUE
 ## usethis namespace: end
 NULL
