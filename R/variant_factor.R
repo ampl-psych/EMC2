@@ -204,7 +204,7 @@ gibbs_step_factor <- function(sampler, alpha){
 
   #Update mu
   mu_sig <- solve(n_subjects * sig_err_inv + prior$theta_mu_invar)
-  mu_mu <- mu_sig %*% (sig_err_inv %*% colSums(alpha - eta %*% t(lambda)) + diag(prior$theta_mu_invar)%*% prior$theta_mu_mean)
+  mu_mu <- mu_sig %*% (sig_err_inv %*% colSums(alpha - eta %*% t(lambda)) + prior$theta_mu_invar %*% prior$theta_mu_mean)
   mu <- rmvnorm(1, mu_mu, mu_sig)
   colnames(mu) <- colnames(alpha)
   # calculate mean-centered observations
