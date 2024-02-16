@@ -19,7 +19,8 @@ plot_prior(
   layout = c(3, 3),
   lower = NULL,
   upper = NULL,
-  xlim = NA
+  xlim = NA,
+  n_factors = NULL
 )
 }
 \arguments{
@@ -54,6 +55,8 @@ numeric same for all parameters, parameter named list parameter specific}
 
 \item{xlim}{List with parameter names of plot x limits or single pair same for all.
 Any names not in list or if (default) NA xlim set as min and max.}
+
+\item{n_factors}{Integer. For prior plotting of factor models}
 }
 \value{
 Invisible sampled columns of parameters as a data frame (covariate,

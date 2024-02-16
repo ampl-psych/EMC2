@@ -887,8 +887,7 @@ run_sample <- function(samplers, iter = 1000, stop_criteria = NULL,
 #' @param n_factors An integer. Only to be specified with type factor.
 #' @param constraintMat A matrix of rows equal to the number of estimated parameters, and columns equal to the number of factors, only to be specified with type factor.
 #' If null will use default settings as specified in Innes et al. 2022
-#' @param prior A named list containing the prior mean (theta_mu_mean) and
-#' variance (theta_mu_var). Default prior created if NULL
+#' @param prior_list A named list containing the prior. Default prior created if NULL
 #' @param nuisance_non_hyper An integer vector. Parameters on this location of the vector of parameters are treated as nuisance parameters and not included in group-level (only individual level sampling).
 #' @param grouped_pars An integer vector. Parameters on this location of the vector of parameters are treated as constant across sujects
 #' @param formula Ignore. For future compatibility

@@ -699,14 +699,15 @@ get_variant_funs <- function(type = "standard") {
       sample_store = sample_store_factor,
       add_info = add_info_factor,
       get_startpoints = get_startpoints_factor,
+      get_prior = get_prior_factor,
       get_group_level = get_group_level_standard,
       fill_samples = fill_samples_factor,
       gibbs_step = gibbs_step_factor,
       filtered_samples = filtered_samples_factor,
       get_conditionals = get_conditionals_factor,
-      get_all_pars_IS2 = get_all_pars_factor,
-      prior_dist_IS2 = prior_dist_factor,
-      group_dist_IS2 = group_dist_factor
+      bridge_add_group = bridge_add_group_factor,
+      bridge_add_info = bridge_add_info_factor,
+      bridge_group_and_prior_and_jac = bridge_group_and_prior_and_jac_factor
     )
   } else if(type == "lm"){
     list_fun <- list(# store functions
@@ -728,6 +729,7 @@ get_variant_funs <- function(type = "standard") {
       sample_store = sample_store_infnt_factor,
       add_info = add_info_infnt_factor,
       get_startpoints = get_startpoints_infnt_factor,
+      get_prior = get_prior_factor,
       get_group_level = get_group_level_standard,
       fill_samples = fill_samples_infnt_factor,
       gibbs_step = gibbs_step_infnt_factor,

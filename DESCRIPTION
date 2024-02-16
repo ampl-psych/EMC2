@@ -30,7 +30,12 @@ Imports:
     stats,
     Matrix,
     Rcpp,
-    Brobdingnag
+    Brobdingnag,
+    corrplot,
+    colorspace,
+    psych,
+    utils,
+    lpSolve
 LinkingTo: 
     Rcpp
 Depends: 
