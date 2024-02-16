@@ -155,14 +155,14 @@ rearrange_loadings <- function(loadings){
 #' @param samplers A list of samplers from a hierarchical factor analysis model
 #' @param loadings Array of pars by factors by iters. Can also specify loadings instead of samplers
 #' @param sig_err_inv Array of pars by iters. Can also specify sig_err_inv instead of samplers
-#' @param stage Character. From which stage to take samples
+#' @param filter Character. From which stage to take samples
 #' @param merge_chains Return the loadings for each chain separately or merged together.
 #'
 #' @return standardized loadings
 #' @export
 #'
 standardize_loadings <- function(samplers, loadings = NULL, sig_err_inv = NULL,
-                                 stage = "sample", merge_chains = T){
+                                 filter = "sample", merge_chains = T){
   stdize_set <- function(samples, idx, loadings = NULL, sig_err_inv = NULL){
     if(is.null(loadings)) loadings <- samples$samples$theta_lambda[,,idx, drop = F]
     if(is.null(sig_err_inv)) sig_err_inv <- samples$samples$theta_sig_err_inv[,idx]
@@ -179,10 +179,10 @@ standardize_loadings <- function(samplers, loadings = NULL, sig_err_inv = NULL,
   if(is.null(loadings) || is.null(sig_err_inv)){
     if(merge_chains){
       samples <- merge_samples(samplers)
-      idx <- samples$samples$stage == "sample"
+      idx <- samples$samples$stage == filter
       out <- stdize_set(samples, idx, loadings, sig_err_inv)
     } else{
-      idx <- samplers[[1]]$samples$stage == "sample"
+      idx <- samplers[[1]]$samples$stage == filter
       out <- vector("list", length(samplers))
       for(i in 1:length(samplers)){
         out[[i]] <- stdize_set(samplers[[i]], idx, loadings[[i]], sig_err_inv[[i]])
@@ -201,7 +201,7 @@ standardize_loadings <- function(samplers, loadings = NULL, sig_err_inv = NULL,
 #' An adjusted version of the corrplot package `corrplot` tailored to EMC2 and the plotting of factor loadings or correlations.
 #'
 #' @param samplers A list of samplers
-#' @param stage Character. The stage from which to take the samples
+#' @param filter Character. The stage from which to take the samples
 #' @param loadings An array of loadings. Can be alternatively supplied if samplers is not supplied
 #' @param standardize Boolean. Whether to standardize the loadings only standardizes if loadings isn't supplied.
 #' @param corrs An array of correlations Can be alternatively supplied if samplers is not supplied
@@ -214,7 +214,7 @@ standardize_loadings <- function(samplers, loadings = NULL, sig_err_inv = NULL,
 #' @return NULL
 #' @export
 #'
-plot_relations <- function(samplers = NULL, stage, loadings = NULL, standardize = T, corrs = NULL, plot_cred = TRUE,
+plot_relations <- function(samplers = NULL, filter = "sample", loadings = NULL, standardize = T, corrs = NULL, plot_cred = TRUE,
                            plot_means = T, do_corr = F, only_cred = F,
                            nice_names = NULL){
   addCoef.col <- "black"
@@ -222,7 +222,7 @@ plot_relations <- function(samplers = NULL, stage, loadings = NULL, standardize 
   if(!is.null(samplers)) sampled <- merge_samples(samplers)
   if(do_corr || !is.null(corrs)){
     if(is.null(corrs)){
-      values <- sampled$samples$theta_var[,,sampled$samples$stage == stage, drop = F]
+      values <- sampled$samples$theta_var[,,sampled$samples$stage == filter, drop = F]
     } else{
       values <- corrs
     }
@@ -231,10 +231,10 @@ plot_relations <- function(samplers = NULL, stage, loadings = NULL, standardize 
     # Now we assume loadings
     if(is.null(loadings)){
       if(standardize){
-        loadings <- standardize_loadings(samplers, stage = stage)
+        loadings <- standardize_loadings(samplers, filter = filter)
       } else{
         samples <- merge_samples(samplers)
-        loadings <- samples$samples$theta_lambda[,,samples$samples$stage == stage]
+        loadings <- samples$samples$theta_lambda[,,samples$samples$stage == filter]
       }
     } else{
       values <- loadings
@@ -321,7 +321,7 @@ plot_relations <- function(samplers = NULL, stage, loadings = NULL, standardize 
 #' Makes a factor diagram plot. Heavily based on the fa.diagram function of the `psych` package.
 #'
 #' @param samplers A list of samplers
-#' @param stage Character. The stage from which to take the samples
+#' @param filter Character. The stage from which to take the samples
 #' @param loadings An array of loadings. Can be alternatively supplied if samplers is not supplied
 #' @param standardize Boolean. Whether to standardize the loadings
 #' @param simple Boolean. Whether the factor diagram should be simplified for visual clarity.
@@ -334,17 +334,17 @@ plot_relations <- function(samplers = NULL, stage, loadings = NULL, standardize 
 #' @return NULL
 #' @export
 #'
-make_factor_diagram <- function(samplers = NULL, stage = "sample",
+make_factor_diagram <- function(samplers = NULL, filter = "sample",
                                 loadings = NULL, standardize = T,
                                 simple = F, only_cred = F,
                                 cut = 0, nice_names = NULL,
                                 factor_names = NULL, sort = T){
   if(is.null(loadings)){
     if(standardize){
-      loadings <- standardize_loadings(samplers, stage = stage)
+      loadings <- standardize_loadings(samplers, filter = filter)
     } else{
       samples <- merge_samples(samplers)
-      loadings <- samples$samples$theta_lambda[,,samples$samples$stage == stage]
+      loadings <- samples$samples$theta_lambda[,,samples$samples$stage == filter]
     }
   }
   means <- apply(loadings, 1:2, mean)

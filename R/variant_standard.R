@@ -25,14 +25,14 @@ add_info_standard <- function(sampler, prior = NULL, ...){
 #' @param prior A named list containing the prior mean (theta_mu_mean) and
 #' variance (theta_mu_var). Default prior created if NULL
 #' @param n_pars Argument used by the sampler, best left NULL. In user case inferred from the design
-#' @param sample Whether to sample from the prior. Default is TRUE
+#' @param sample Whether to sample from the prior. Default is TRUE. If not returns a prior list
 #' @param map Boolean, default TRUE reverses malformation used by model to make
 #' sampled parameters unbounded
 #' @param N How many samples to draw from the prior, default 1e5
 #' @param design The design obtained from `make_design`, required when map = TRUE
-#' @param type  FIX ME
+#' @param type  character, options: "mu", "variance", "covariance" "full_var"
 #'
-#' @return A list with a single entry "mu" of samples from the prior (if sample = TRUE) or else a prior object
+#' @return A list with a single entry of type of samples from the prior (if sample = TRUE) or else a prior object
 #' @export
 
 get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, type = "mu", design = NULL,
