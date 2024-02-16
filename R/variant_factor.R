@@ -237,7 +237,7 @@ gibbs_step_factor <- function(sampler, alpha){
   }
 
   #Update psi_inv
-  psi_inv[,] <- diag(rgamma(n_factors ,shape=(prior$ap+n_subjects)/2,rate=prior$bp+colSums(eta^2)/2), n_factors)
+  psi_inv[,] <- diag(rgamma(n_factors ,shape=prior$ap+n_subjects/2,rate=prior$bp+colSums(eta^2)/2), n_factors)
   # psi_inv <- diag(n_factors)#solve(riwish(n_subjects + prior$rho_0, t(eta) %*% eta + solve(prior$R_0)))
 
   lambda_orig <- lambda
