@@ -223,7 +223,7 @@ gibbs_step_factor <- function(sampler, alpha){
   # }
 
   #Update sig_err
-  sig_err_inv <- diag(rgamma(n_pars,shape=prior$as+n_subjects/2, rate= prior$bs + colSums((alphatilde - eta %*% t(lambda))^2))/2)
+  sig_err_inv <- diag(rgamma(n_pars,shape=prior$as+n_subjects/2, rate= prior$bs + colSums((alphatilde - eta %*% t(lambda))^2)/2))
 
   #Update lambda
   for (j in 1:n_pars) {
