@@ -980,19 +980,21 @@ make_samplers <- function(data_list,design_list,model_list=NULL,
     #     design_list[[i]]$Ffunctions,function(f){f(data_list[[i]])})))
     #   if (!is.null(pars)) attr(data_list[[i]],"pars") <- pars
     # }
+    if(is.null(attr(design_list[[i]], "custom_ll"))){
+      dadm_list[[i]] <- design_model(data=data_list[[i]],design=design_list[[i]],
+                                     compress=compress,model=model_list[[i]],rt_resolution=rt_resolution[i])
+      sampled_p_names <- names(attr(design_list[[i]],"p_vector"))
+    } else{
+      dadm_list[[i]] <- design_model_custom_ll(data = data_list[[i]],
+                                               design = design_list[[i]],model=model_list[[i]])
+      sampled_p_names <- attr(design_list[[i]],"sampled_p_names")
+    }
 
-    sampled_p_names <- names(attr(design_list[[i]],"p_vector"))
     if(!is.null(prior_list[[i]])){
       prior_list[[i]] <- check_prior(prior_list[[i]], sampled_p_names)
     }
     # create a design model
-    if(is.null(attr(design_list[[i]], "custom_ll"))){
-      dadm_list[[i]] <- design_model(data=data_list[[i]],design=design_list[[i]],
-        compress=compress,model=model_list[[i]],rt_resolution=rt_resolution[i])
-    } else{
-      dadm_list[[i]] <- design_model_custom_ll(data = data_list[[i]],
-        design = design_list[[i]],model=model_list[[i]])
-    }
+
   }
   prior <- merge_priors(prior_list)
 
