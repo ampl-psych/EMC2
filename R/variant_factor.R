@@ -83,13 +83,13 @@ get_prior_factor <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5
     prior$ap <- 2
   }
   if(is.null(prior$bp)){
-    prior$bp <- .1
+    prior$bp <- .5
   }
   if(is.null(prior$as)){
     prior$as <- 2
   }
   if(is.null(prior$bs)){
-    prior$bs <- 1/2
+    prior$bs <- .1
   }
   # prior$R_0 <- diag(n_factors)
   # prior$rho_0 <- 5
