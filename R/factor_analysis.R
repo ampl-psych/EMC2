@@ -236,9 +236,8 @@ plot_relations <- function(samplers = NULL, filter = "sample", loadings = NULL, 
         samples <- merge_samples(samplers)
         loadings <- samples$samples$theta_lambda[,,samples$samples$stage == filter]
       }
-    } else{
-      values <- loadings
     }
+    values <- loadings
     means <- apply(values, 1:2, mean)
   }
 
