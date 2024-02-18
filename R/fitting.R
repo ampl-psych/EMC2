@@ -209,7 +209,8 @@ run_stages <- function(sampler, stage = "preburn", iter=0, verbose = TRUE, verbo
     # } else{
     #   particles <- round(particle_factor*sqrt(length(sampler$par_names)))
     # }
-    particles <- round(particle_factor*sqrt(length(sampler$par_names)))
+    max_pars <- max(table(attr(sampler[[1]], "components")))
+    particles <- round(particle_factor*sqrt(max_pars))
 
   }
   if (!sampler$init) {
