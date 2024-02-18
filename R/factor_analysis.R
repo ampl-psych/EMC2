@@ -330,6 +330,9 @@ plot_relations <- function(samplers = NULL, filter = "sample", loadings = NULL, 
 #' @param nice_names Character vector. Alternative names to give the parameters
 #' @param factor_names Character vector. Names to give the different factors
 #' @param sort Boolean. Whether to sort the paramaters before plotting for visual clarity.
+#' @param adj Integer. Adjust to adjust loading values positions in the diagram if illegible.
+#' @param main Character vector. Title of the plot
+#' @param cex Integer. Font size
 #'
 #' @return NULL
 #' @export
@@ -338,7 +341,8 @@ make_factor_diagram <- function(samplers = NULL, filter = "sample",
                                 loadings = NULL, standardize = T,
                                 simple = F, only_cred = F,
                                 cut = 0, nice_names = NULL,
-                                factor_names = NULL, sort = T){
+                                factor_names = NULL, sort = T,
+                                adj = 1, main = NULL, cex = NULL){
   if(is.null(loadings)){
     if(standardize){
       loadings <- standardize_loadings(samplers, filter = filter)
@@ -360,7 +364,8 @@ make_factor_diagram <- function(samplers = NULL, filter = "sample",
   if(!is.null(factor_names)){
     colnames(means) <- factor_names
   }
-  fa.diagram(means, cut = cut, simple = simple, sort = sort)
+  fa.diagram(means, cut = cut, simple = simple, sort = sort, adjust = adjust,
+             main = main, cex = cex)
 }
 
 
