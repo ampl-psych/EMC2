@@ -1015,7 +1015,8 @@ make_samplers <- function(data_list,design_list,model_list=NULL,
   } else if (type == "factor") {
     if (is.null(n_factors)) stop("Must specify n_factors for factor type")
     out <- pmwgs(dadm_list,variant_funs, n_factors = n_factors, nuisance = nuisance,
-                 nuisance_non_hyper = nuisance_non_hyper, grouped_pars = grouped_pars)
+                 nuisance_non_hyper = nuisance_non_hyper, grouped_pars = grouped_pars,
+                 constraintMat = constraintMat)
   } else if (type == "SEM"){
     out <- pmwgs(dadm_list,variant_funs, Lambda_mat = Lambda_mat, B_mat = B_mat, K_mat = K_mat, G_mat = G_mat,
                  xeta = xeta, xy = xy, nuisance = nuisance,
