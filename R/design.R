@@ -828,8 +828,15 @@ dm_list <- function(dadm)
       attr(dl[[i]],"sampled_p_names") <- sampled_p_names
       attr(dl[[i]],"designs") <- sub_design(designs,isin)
       attr(dl[[i]],"expand") <- expand[isin1]-min(expand[isin1]) + 1
-      attr(dl[[i]],"s_expand") <- NULL
-
+      attr(dl[[i]],"contract") <- NULL
+      attr(dl[[i]],"expand_winner") <- NULL
+      attr(dl[[i]],"ok_dadm_winner") <- NULL
+      attr(dl[[i]],"ok_dadm_looser") <- NULL
+      attr(dl[[i]],"ok_da_winner") <- NULL
+      attr(dl[[i]],"ok_da_looser") <- NULL
+      attr(dl[[i]],"ok_trials") <- NULL
+      attr(dl[[i]],"s_data") <- NULL
+      attr(dl[[i]],"prior") <- NULL
       # attr(dl[[i]],"ok_dadm_winner") <- ok_dadm_winner[isin]
       # attr(dl[[i]],"ok_dadm_looser") <- ok_dadm_looser[isin]
       #

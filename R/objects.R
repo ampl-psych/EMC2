@@ -318,7 +318,7 @@ chain_n <- function(samplers)
   }))
 }
 
-extract_samples <- function(sampler, stage = c("adapt", "sample"), max_n_sample = NULL) {
+extract_samples <- function(sampler, stage = c("adapt", "sample"), max_n_sample = NULL, n_chains) {
   variant_funs <- attr(sampler, "variant_funs")
   samples <- sampler$samples
   type <- sampler$sampler_nuis$type
@@ -326,9 +326,15 @@ extract_samples <- function(sampler, stage = c("adapt", "sample"), max_n_sample 
     sample_filter <- which(samples$stage %in% "sample" & seq_along(samples$stage) <= samples$idx)
     adapt_filter <- which(samples$stage %in% "adapt" & seq_along(samples$stage) <= samples$idx)
     if(length(sample_filter) > max_n_sample){
-      sample_filter <- sample(sample_filter, max_n_sample)
+      chain_idx <- seq(1, length(sample_filter), by = length(sample_filter)/3)
+      prob_filter <- sample_filter - rep(sample_filter[chain_idx], each = length(sample_filter)/3)
+      sample_filter <- sample(sample_filter, max_n_sample, prob = prob_filter/max(prob_filter))
     }
-    full_filter <- c(adapt_filter, sample_filter)
+    if(length(sample_filter) > length(adapt_filter)){
+      full_filter <- sample_filter
+    } else{
+      full_filter <- c(adapt_filter, sample_filter)
+    }
   } else{
     full_filter <- which(samples$stage %in% stage & seq_along(samples$stage) <= samples$idx)
   }

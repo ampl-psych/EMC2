@@ -453,7 +453,7 @@ check_gd <- function(samplers, stage, max_gd, mean_gd, omit_mpsrf, trys, verbose
 
 create_eff_proposals <- function(samplers, n_cores){
   samples_merged <- merge_samples(samplers)
-  test_samples <- extract_samples(samples_merged, stage = c("adapt", "sample"), max_n_sample = 1000)
+  test_samples <- extract_samples(samples_merged, stage = c("adapt", "sample"), max_n_sample = 750)
   variant_funs <- attr(samplers[[1]], "variant_funs")
   components <- attr(samplers[[1]]$data, "components")[!samplers[[1]]$grouped]
   for(i in 1:length(samplers)){
