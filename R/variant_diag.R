@@ -74,7 +74,7 @@ get_prior_diag <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, 
 
 get_startpoints_diag <- function(pmwgs, start_mu, start_var){
   n_pars <- sum(!(pmwgs$nuisance | pmwgs$grouped))
-  if (is.null(start_mu)) start_mu <- rnorm(n_pars, mean = pmwgs$prior$theta_mu_mean, sd = sqrt(pmwgs$prior$theta_mu_var))
+  if (is.null(start_mu)) start_mu <- rnorm(n_pars, mean = pmwgs$prior$theta_mu_mean, sd = sqrt(diag(pmwgs$prior$theta_mu_var)))
   # If no starting point for group var just sample some
   if (is.null(start_var)) start_var <- diag(1/rgamma(n_pars, 10, 5), n_pars) #Bit stupid maybe as startpoint
   start_a_half <- 1 / rgamma(n = n_pars, shape = 2, rate = 1)
@@ -110,8 +110,8 @@ gibbs_step_diag <- function(sampler, alpha){
   n_pars <- sum(!(sampler$nuisance | sampler$grouped))
   alpha <- as.matrix(alpha)
   #Mu
-  var_mu = 1.0 / (sampler$n_subjects * last$tvinv + prior$theta_mu_invar)
-  mean_mu = var_mu * ((apply(alpha, 1, sum) * last$tvinv + prior$theta_mu_mean * prior$theta_mu_invar))
+  var_mu = 1.0 / (sampler$n_subjects * last$tvinv + diag(prior$theta_mu_invar))
+  mean_mu = var_mu * ((apply(alpha, 1, sum) * last$tvinv + prior$theta_mu_mean * diag(prior$theta_mu_invar)))
   tmu <- rnorm(n_pars, mean_mu, sd = sqrt(var_mu))
   names(tmu) <- sampler$par_names[!(sampler$nuisance | sampler$grouped)]
   tvinv = rgamma(n=n_pars, shape=prior$v/2 + sampler$n_subjects/2, rate=prior$v/last$a_half +
@@ -195,7 +195,7 @@ prior_dist_diag = function(parameters, info){
   param.theta.sig.unwound <- parameters[(n_randeffect+1):(length(parameters)-n_randeffect)]
   param.theta.sig2 <- unwind_diag_IS2(param.theta.sig.unwound, reverse = TRUE, diag = FALSE)
   param.a <- exp(parameters[((length(parameters)-n_randeffect)+1):(length(parameters))])
-  log_prior_mu=mvtnorm::dmvnorm(param.theta.mu, mean = prior$theta_mu_mean, sigma = diag(prior$theta_mu_var), log =TRUE)
+  log_prior_mu=mvtnorm::dmvnorm(param.theta.mu, mean = prior$theta_mu_mean, sigma = prior$theta_mu_var, log =TRUE)
   log_prior_sigma = sum(logdinvGamma(param.theta.sig2, shape = prior$v/2, rate = prior$v/param.a))
   log_prior_a = sum(logdinvGamma(param.a,shape = 1/2,rate=1/(prior$A^2)))
   # These are Jacobian corrections for the transformations on these
@@ -215,7 +215,7 @@ bridge_group_and_prior_and_jac_diag <- function(proposals_group, proposals_list,
   for(i in 1:info$n_pars){
     group_ll <- group_ll + dnorm(proposals[,info$par_names[i]], theta_mu[,i], sqrt(exp(theta_var[,i])), log = T)
   }
-  prior_mu <- colSums(dnorm(t(theta_mu), mean = prior$theta_mu_mean, sd = sqrt(prior$theta_mu_var), log =T))
+  prior_mu <- colSums(dnorm(t(theta_mu), mean = prior$theta_mu_mean, sd = sqrt(diag(prior$theta_mu_var)), log =T))
   prior_var <- 0
   for(i in 1:info$n_pars){
     prior_var <- prior_var +  dhalft(sqrt(exp(theta_var[,i])), scale = prior$A, nu = prior$v, log = T)
