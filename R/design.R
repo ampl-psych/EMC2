@@ -836,6 +836,7 @@ dm_list <- function(dadm)
       attr(dl[[i]],"ok_da_looser") <- NULL
       attr(dl[[i]],"ok_trials") <- NULL
       attr(dl[[i]],"s_data") <- NULL
+      attr(dl[[i]],"s_expand") <- NULL
       attr(dl[[i]],"prior") <- NULL
       # attr(dl[[i]],"ok_dadm_winner") <- ok_dadm_winner[isin]
       # attr(dl[[i]],"ok_dadm_looser") <- ok_dadm_looser[isin]
