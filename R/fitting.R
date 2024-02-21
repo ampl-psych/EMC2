@@ -451,7 +451,7 @@ check_gd <- function(samplers, stage, max_gd, mean_gd, omit_mpsrf, trys, verbose
 }
 
 
-create_eff_proposals <- function(samplers, n_cores){
+create_eff_proposals_new <- function(samplers, n_cores){
   samples_merged <- merge_samples(samplers)
   test_samples <- extract_samples(samples_merged, stage = c("adapt", "sample"), max_n_sample = 750)
   variant_funs <- attr(samplers[[1]], "variant_funs")
@@ -469,13 +469,13 @@ create_eff_proposals <- function(samplers, n_cores){
       if(any(nuis_idx)){
         type <- samples_merged$sampler_nuis$type
         conditionals <- auto_mclapply(X = 1:n_subjects,
-                                           FUN = variant_funs$get_conditionals,samples = test_samples,
-                                           n_pars = sum(idx[!nuisance]), iteration =  iteration, idx = idx[!nuisance],
-                                           mc.cores = n_cores)
+                                             FUN = variant_funs$get_conditionals,samples = test_samples,
+                                             n_pars = sum(idx[!nuisance]), iteration =  iteration, idx = idx[!nuisance],
+                                             mc.cores = n_cores)
         conditionals_nuis <- auto_mclapply(X = 1:n_subjects,
-                                           FUN = get_variant_funs(type)$get_conditionals,samples = test_samples$nuisance,
-                                           n_pars = sum(idx[nuisance]), iteration =  iteration, idx = idx[nuisance],
-                                           mc.cores = n_cores)
+                                                  FUN = get_variant_funs(type)$get_conditionals,samples = test_samples$nuisance,
+                                                  n_pars = sum(idx[nuisance]), iteration =  iteration, idx = idx[nuisance],
+                                                  mc.cores = n_cores)
         conditionals <- array(unlist(conditionals), dim = c(sum(idx[!nuisance]), sum(idx[!nuisance]) + 1, n_subjects))
         conditionals_nuis <- array(unlist(conditionals_nuis), dim = c(sum(idx[nuisance]), sum(idx[nuisance]) + 1, n_subjects))
         eff_mu[idx & !nuisance,] <- conditionals[,1,]
@@ -484,12 +484,12 @@ create_eff_proposals <- function(samplers, n_cores){
         eff_var[idx & nuisance,idx & nuisance,] <- conditionals_nuis[,2:(sum(idx[nuisance])+1),]
       } else{
         conditionals <- auto_mclapply(X = 1:n_subjects,
-                                           FUN = variant_funs$get_conditionals,samples = test_samples,
-                                           n_pars = sum(idx[!nuisance]), iteration =  iteration, idx = idx[!nuisance],
-                                           mc.cores = n_cores)
+                                             FUN = variant_funs$get_conditionals,samples = test_samples,
+                                             n_pars = sum(idx[!nuisance]), iteration =  iteration, idx = idx[!nuisance],
+                                             mc.cores = n_cores)
         conditionals <- array(unlist(conditionals), dim = c(sum(idx[!nuisance]), sum(idx[!nuisance]) + 1, n_subjects))
-        eff_mu[idx[!nuisance],] <- conditionals[,1,]
-        eff_var[idx[!nuisance],idx[!nuisance],] <- conditionals[,2:(sum(idx[!nuisance])+1),]
+        eff_mu[idx & !nuisance,] <- conditionals[,1,]
+        eff_var[idx & !nuisance,idx & !nuisance,] <- conditionals[,2:(sum(idx[!nuisance])+1),]
       }
 
     }
@@ -507,6 +507,7 @@ create_eff_proposals <- function(samplers, n_cores){
   }
   return(samplers)
 }
+
 
 sub_blocking <- function(samplers, n_blocks){
   covs <- lapply(samplers, FUN = function(x){return(attr(x, "chains_cov"))})
