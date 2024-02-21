@@ -161,9 +161,9 @@ rearrange_loadings <- function(loadings){
 #' @return standardized loadings
 #' @export
 #'
-standardize_loadings <- function(samplers, loadings = NULL, sig_err_inv = NULL,
+standardize_loadings <- function(samplers = NULL, loadings = NULL, sig_err_inv = NULL,
                                  filter = "sample", merge_chains = T){
-  stdize_set <- function(samples, idx, loadings = NULL, sig_err_inv = NULL){
+  stdize_set <- function(samples = NULL, idx = NULL, loadings = NULL, sig_err_inv = NULL){
     if(is.null(loadings)) loadings <- samples$samples$theta_lambda[,,idx, drop = F]
     if(is.null(sig_err_inv)) sig_err_inv <- samples$samples$theta_sig_err_inv[,idx]
     new_loadings <- loadings
@@ -188,11 +188,12 @@ standardize_loadings <- function(samplers, loadings = NULL, sig_err_inv = NULL,
         out[[i]] <- stdize_set(samplers[[i]], idx, loadings[[i]], sig_err_inv[[i]])
       }
     }
+  } else{
+    out <- stdize_set(loadings = loadings, sig_err_inv = sig_err_inv)
   }
 
   return(out)
 }
-
 
 
 # plotting ----------------------------------------------------------------

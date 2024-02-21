@@ -485,11 +485,11 @@ create_eff_proposals <- function(samplers, n_cores){
       } else{
         conditionals <- auto_mclapply(X = 1:n_subjects,
                                            FUN = variant_funs$get_conditionals,samples = test_samples,
-                                           n_pars = sum(idx), iteration =  iteration, idx = idx,
+                                           n_pars = sum(idx[!nuisance]), iteration =  iteration, idx = idx[!nuisance],
                                            mc.cores = n_cores)
-        conditionals <- array(unlist(conditionals), dim = c(sum(idx), sum(idx) + 1, n_subjects))
-        eff_mu[idx,] <- conditionals[,1,]
-        eff_var[idx,idx,] <- conditionals[,2:(sum(idx)+1),]
+        conditionals <- array(unlist(conditionals), dim = c(sum(idx[!nuisance]), sum(idx[!nuisance]) + 1, n_subjects))
+        eff_mu[idx[!nuisance],] <- conditionals[,1,]
+        eff_var[idx[!nuisance],idx[!nuisance],] <- conditionals[,2:(sum(idx[!nuisance])+1),]
       }
 
     }
