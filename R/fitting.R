@@ -470,18 +470,18 @@ create_eff_proposals <- function(samplers, n_cores){
         type <- samples_merged$sampler_nuis$type
         conditionals <- auto_mclapply(X = 1:n_subjects,
                                            FUN = variant_funs$get_conditionals,samples = test_samples,
-                                           n_pars = sum(idx[!nuis_idx]), iteration =  iteration, idx = idx[!nuis_idx],
+                                           n_pars = sum(idx[!nuisance]), iteration =  iteration, idx = idx[!nuisance],
                                            mc.cores = n_cores)
         conditionals_nuis <- auto_mclapply(X = 1:n_subjects,
                                            FUN = get_variant_funs(type)$get_conditionals,samples = test_samples$nuisance,
-                                           n_pars = sum(idx[nuis_idx]), iteration =  iteration, idx = idx[nuis_idx],
+                                           n_pars = sum(idx[nuisance]), iteration =  iteration, idx = idx[nuisance],
                                            mc.cores = n_cores)
-        conditionals <- array(unlist(conditionals), dim = c(sum(idx[!nuis_idx]), sum(idx[!nuis_idx]) + 1, n_subjects))
-        conditionals_nuis <- array(unlist(conditionals_nuis), dim = c(sum(idx[nuis_idx]), sum(idx[nuis_idx]) + 1, n_subjects))
-        eff_mu[idx & !nuis_idx,] <- conditionals[,1,]
-        eff_var[idx & !nuis_idx, idx & !nuis_idx,] <- conditionals[,2:(sum(idx[!nuis_idx])+1),]
-        eff_mu[idx & nuis_idx,] <- conditionals_nuis[,1,]
-        eff_var[idx & nuis_idx,idx & nuis_idx,] <- conditionals_nuis[,2:(sum(idx[nuis_idx])+1),]
+        conditionals <- array(unlist(conditionals), dim = c(sum(idx[!nuisance]), sum(idx[!nuisance]) + 1, n_subjects))
+        conditionals_nuis <- array(unlist(conditionals_nuis), dim = c(sum(idx[nuisance]), sum(idx[nuisance]) + 1, n_subjects))
+        eff_mu[idx & !nuisance,] <- conditionals[,1,]
+        eff_var[idx & !nuisance, idx & !nuisance,] <- conditionals[,2:(sum(idx[!nuisance])+1),]
+        eff_mu[idx & nuisance,] <- conditionals_nuis[,1,]
+        eff_var[idx & nuisance,idx & nuisance,] <- conditionals_nuis[,2:(sum(idx[nuisance])+1),]
       } else{
         conditionals <- auto_mclapply(X = 1:n_subjects,
                                            FUN = variant_funs$get_conditionals,samples = test_samples,
@@ -705,11 +705,11 @@ test_adapted <- function(sampler, test_samples, min_unique, n_cores_conditional 
             type <- sampler$sampler_nuis$type
             auto_mclapply(X = 1:sampler$n_subjects,
                                FUN = get_variant_funs(type)$get_conditionals,samples = test_samples$nuisance,
-                               n_pars = sum(idx[nuisance]), idx = idx[nuis_idx],
+                               n_pars = sum(idx[nuisance]), idx = idx[nuisance],
                                mc.cores = n_cores_conditional)
           }
           auto_mclapply(X = 1:sampler$n_subjects,FUN = variant_funs$get_conditionals,samples = test_samples,
-                         n_pars = sum(idx[!nuis_idx]), idx = idx[!nuis_idx], mc.cores = n_cores_conditional)
+                         n_pars = sum(idx[!nuisance]), idx = idx[!nuisance], mc.cores = n_cores_conditional)
         }
     },error=function(e) e, warning=function(w) w)
     if (any(class(attempt) %in% c("warning", "error", "try-error"))) {

@@ -363,7 +363,7 @@ make_factor_diagram <- function(samplers = NULL, filter = "sample",
   if(!is.null(factor_names)){
     colnames(means) <- factor_names
   }
-  fa.diagram(means, cut = cut, simple = simple, sort = sort, adjust = adjust,
+  fa.diagram(means, cut = cut, simple = simple, sort = sort, adj = adj,
              main = main, cex = cex)
 }
 
