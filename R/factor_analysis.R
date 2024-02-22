@@ -67,7 +67,7 @@ rsp_mc <- function (lambda, maxIter = 100, threshold = 1e-06, verbose = TRUE,
   start_time <- Sys.time()
   while ((criterion == TRUE) & (totalIterations < maxIter)) {
     totalIterations <- totalIterations + 1
-    cat(paste0("* iteration: ", totalIterations), "\n")
+    if(verbose) cat(paste0("* iteration: ", totalIterations), "\n")
     lambda_hat_new <- 0 * lambda_hat
     sp_res <- parallel::mclapply(X = 1:mcmcIterations, FUN = sp_new, lambda_varimax, q, p, dim_all_c, all_c, lambda_hat,
                                  st, cost.matrix, perm, mc.cores = n_cores)
@@ -83,7 +83,7 @@ rsp_mc <- function (lambda, maxIter = 100, threshold = 1e-06, verbose = TRUE,
         criterion = FALSE
       }
     }
-    if (verbose == TRUE) {
+    if (verbose) {
       cat(paste0("   -----  objective function = ", round(objective,
                                                           3), " -----"), "\n")
       cat("\n")
