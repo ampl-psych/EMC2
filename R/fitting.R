@@ -196,6 +196,7 @@ run_samplers <- function(samplers, stage, stop_criteria,
     }
   }
   samplers <- get_attributes(samplers, attributes)
+  class(samplers) <- "emc"
   return(samplers)
 }
 
@@ -340,14 +341,7 @@ check_gd <- function(samplers, stage, max_gd, mean_gd, omit_mpsrf, trys, verbose
   get_gds <- function(samplers,omit_mpsrf, selection) {
     gd_out <- c()
     for(select in selection){
-      gd <- gd_pmwg(samplers, selection = select, return_summary = F, mapped = F, print_summary = F, filter = stage)
-      if(omit_mpsrf){
-        if(!is.null(dim(gd))){
-          gd <- gd[,colnames(gd)!="mpsrf"]
-        } else{
-          gd <- gd[names(gd) != "mpsrf"]
-        }
-      }
+      gd <- gd_pmwg(samplers, selection = select, return_summary = F, mapped = F, print_summary = F, filter = stage, omit_mpsrf = omit_mpsrf)
       gd_out <- c(gd_out, c(gd))
     }
     return(gd_out)
