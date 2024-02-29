@@ -1,6 +1,7 @@
 .Rproj.user
 *.Rhistory
 .Rhistory
+test.R
 .RData
 *.so
 *.o

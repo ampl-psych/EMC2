@@ -38,24 +38,4 @@ double c_log_likelihood_fMRI(NumericMatrix pars, DataFrame data, NumericMatrix d
   return(sum(out));
 }
 
-NumericVector dlnr_c(NumericVector rts, NumericMatrix pars, LogicalVector idx, double min_ll){
-  int n = sum(idx);
-  NumericVector out(n);
-  int k = 0;
-  for(int i = 0; i < rts.length(); i++){
-    if(idx[i] == TRUE){
-      if(!NumericVector::is_na(pars(i,0)) & (rts[i] - pars(i,2) > 0)){
-        out[k] = R::dlnorm(rts[i] - pars(i,2), pars(i, 0), pars(i, 1), FALSE);
-      } else{
-        out[k] = min_ll;
-      }
-      k++;
-    }
-
-  }
-
-  return(out);
-}
-
-
 #endif
