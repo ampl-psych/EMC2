@@ -6,7 +6,7 @@
 \usage{
 make_factor_diagram(
   samplers = NULL,
-  stage = "sample",
+  filter = "sample",
   loadings = NULL,
   standardize = T,
   simple = F,
@@ -14,13 +14,16 @@ make_factor_diagram(
   cut = 0,
   nice_names = NULL,
   factor_names = NULL,
-  sort = T
+  sort = T,
+  adj = 1,
+  main = NULL,
+  cex = NULL
 )
 }
 \arguments{
 \item{samplers}{A list of samplers}
 
-\item{stage}{Character. The stage from which to take the samples}
+\item{filter}{Character. The stage from which to take the samples}
 
 \item{loadings}{An array of loadings. Can be alternatively supplied if samplers is not supplied}
 
@@ -37,6 +40,12 @@ make_factor_diagram(
 \item{factor_names}{Character vector. Names to give the different factors}
 
 \item{sort}{Boolean. Whether to sort the paramaters before plotting for visual clarity.}
+
+\item{adj}{Integer. Adjust to adjust loading values positions in the diagram if illegible.}
+
+\item{main}{Character vector. Title of the plot}
+
+\item{cex}{Integer. Font size}
 }
 \description{
 Makes a factor diagram plot. Heavily based on the fa.diagram function of the \code{psych} package.
