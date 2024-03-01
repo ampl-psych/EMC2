@@ -1,12 +1,12 @@
 #' @export
-print.emc <- function(x, ...){
-  n_chain <- chain_n(x)
-  print(chain_n(x))
+print.emc <- function(object, ...){
+  n_chain <- chain_n(object)
+  print(chain_n(object))
   return(invisible(n_chain))
 }
 
 #' @export
-summary.emc <- function(x, ...){
+summary.emc <- function(object, ...){
   args <- list(...)
   filter <- ifelse(is.null(args$filter), "sample", args$filter)
   subfilter <- ifelse(is.null(args$subfilter), 0, args$subfilter)
@@ -23,8 +23,8 @@ summary.emc <- function(x, ...){
   out_list <- list()
   for(select in selection){
     par_df <- parameters_data_frame(x, filter = filter, subfilter = subfilter, selection = select)
-    Rhat <- gd_pmwg(x, filter = filter, subfilter = subfilter, selection = select, print_summary = F, omit_mpsrf = T)
-    ESS <- es_pmwg(x, filter = filter, subfilter = subfilter, selection = select, print_summary = F, summary_alpha = NULL)
+    Rhat <- gd_pmwg(object, filter = filter, subfilter = subfilter, selection = select, print_summary = F, omit_mpsrf = T)
+    ESS <- es_pmwg(object, filter = filter, subfilter = subfilter, selection = select, print_summary = F, summary_alpha = NULL)
     if(select == "alpha"){
       unq_subs <- as.character(unique(par_df$subjects))
       for(i in 1:length(unq_subs)){
@@ -51,7 +51,7 @@ summary.emc <- function(x, ...){
 
 
 #' @export
-plot.emc <- function(x, ...){
+plot.emc <- function(object, ...){
   args <- list(...)
   filter <- ifelse(is.null(args$filter), "sample", args$filter)
   subfilter <- ifelse(is.null(args$subfilter), 0, args$subfilter)
