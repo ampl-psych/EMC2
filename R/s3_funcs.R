@@ -65,15 +65,10 @@ plot.emc <- function(x, ...){
   } else{
     selection <- args$selection
   }
-  pmwg_mcmc <- x
+  input <- x
   for(select in selection){
-    if (!(inherits(pmwg_mcmc,  c("mcmc","mcmc.list")))) {
-      if (inherits(pmwg_mcmc, "pmwgs"))
-        pmwg_mcmc <- as_Mcmc(pmwg_mcmc,selection=select,filter=filter,
-                             thin=thin,subfilter=subfilter) else
-                               pmwg_mcmc <- as_mcmc.list(pmwg_mcmc,selection=select,filter=filter,
-                                                         thin=thin,subfilter=subfilter)
-    }
+    pmwg_mcmc <- as_mcmc.list(input,selection=select,filter=filter,
+                              thin=thin,subfilter=subfilter)
     auto.layout <- any(is.na(layout))
     no_layout <- is.null(layout)
     if (!auto.layout & !no_layout) par(mfrow=layout)
