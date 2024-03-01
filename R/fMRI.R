@@ -74,8 +74,8 @@ gamma_difference_hrf_ <- function(tr, oversampling=50, time_length=32., onset=0.
                                   delay=6, undershoot=16., dispersion=1.,
                                   u_dispersion=1., ratio=0.167) {
   dt = tr / oversampling
-  time_stamps = linspace(0, time_length,
-                         round(as.double(time_length) / dt))
+  time_stamps = seq(0, time_length,
+                         length.out = round(as.double(time_length) / dt))
   time_stamps = time_stamps - onset
 
   # define peak and undershoot gamma functions
@@ -143,9 +143,9 @@ sample_condition_ <- function(exp_condition, frame_times, oversampling=50,
   min_onset = as.double(min_onset)
   n_hr = ((n - 1) * 1. / (max(frame_times) - min(frame_times)) * (max(frame_times) * (1 + 1. / (n - 1)) - min(frame_times) - min_onset) * oversampling) + 1
 
-  hr_frame_times = linspace(min(frame_times) + min_onset,
+  hr_frame_times = seq(min(frame_times) + min_onset,
                             max(frame_times) * (1 + 1. / (n - 1)),
-                            round(n_hr))
+                            length.out = round(n_hr))
 
   # Get the condition information
   #onsets, durations, values = tuple(map(np.asanyarray, exp_condition))
@@ -248,13 +248,13 @@ convolve_regressors_ <- function(events, hrf_model, frame_times, fir_delays=c(0)
   regressor_matrix = NULL
 
   events = check_events(events)
-  trial_type = events$trial_type
+  regressor = events$regressor
   onset = events$onset
   duration = events$duration
   modulation = events$modulation
 
-  for(condition in sort(unique(trial_type))) {
-    condition_mask = (trial_type == condition)
+  for(condition in sort(unique(regressor))) {
+    condition_mask = (regressor == condition)
     exp_condition = cbind(onset[condition_mask],
                           duration[condition_mask],
                           modulation[condition_mask])
