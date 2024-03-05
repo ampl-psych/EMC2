@@ -5,10 +5,10 @@
 \title{Standardized factor loadings}
 \usage{
 standardize_loadings(
-  samplers,
+  samplers = NULL,
   loadings = NULL,
   sig_err_inv = NULL,
-  stage = "sample",
+  filter = "sample",
   merge_chains = T
 )
 }
@@ -19,7 +19,7 @@ standardize_loadings(
 
 \item{sig_err_inv}{Array of pars by iters. Can also specify sig_err_inv instead of samplers}
 
-\item{stage}{Character. From which stage to take samples}
+\item{filter}{Character. From which stage to take samples}
 
 \item{merge_chains}{Return the loadings for each chain separately or merged together.}
 }

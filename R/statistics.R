@@ -67,7 +67,7 @@ es_pmwg <- function(pmwg_mcmc,selection="alpha",summary_alpha=mean,
 
 
 gd_pmwg <- function(pmwg_mcmc,return_summary=FALSE,print_summary=TRUE,
-                    digits_print=2,sort_print=TRUE,autoburnin=FALSE,transform=TRUE,
+                    digits_print=2,sort_print=TRUE,autoburnin=FALSE,transform=TRUE, omit_mpsrf = TRUE,
                     selection="alpha",filter="sample",thin=1,subfilter=NULL,mapped=FALSE)
   # R hat, prints multivariate summary returns each participant unless +
   # multivariate as matrix unless !return_summary
@@ -86,11 +86,19 @@ gd_pmwg <- function(pmwg_mcmc,return_summary=FALSE,print_summary=TRUE,
     coda::as.mcmc.list(c(mcl,mcl2))
   }
 
-  gelman_diag_robust <- function(mcl,autoburnin,transform)
+  gelman_diag_robust <- function(mcl,autoburnin,transform, omit_mpsrf)
   {
     mcl <- split_mcl(mcl)
-    gd <- try(gelman.diag(mcl,autoburnin=autoburnin,transform=transform),silent=TRUE)
-    if (is(gd, "try-error")) list(psrf=matrix(Inf),mpsrf=Inf) else gd
+    gd <- try(gelman.diag(mcl,autoburnin=autoburnin,transform=transform, multivariate = !omit_mpsrf),silent=TRUE)
+    if (is(gd, "try-error")){
+      if(omit_mpsrf){
+        return(list(psrf=matrix(Inf)))
+      } else{
+        return(list(psrf=matrix(Inf),mpsrf=Inf))
+      }
+    } else{
+      return(gd)
+    }
   }
 
   if ( selection=="LL" ) stop("Rhat not appropriate for LL")
@@ -106,11 +114,19 @@ gd_pmwg <- function(pmwg_mcmc,return_summary=FALSE,print_summary=TRUE,
                                 thin=thin,subfilter=subfilter,mapped=mapped)
   }
   if (selection=="alpha" || selection == "random") {
-    gd <- lapply(pmwg_mcmc,gelman_diag_robust,autoburnin = autoburnin, transform = transform)
-    out <- unlist(lapply(gd,function(x){x$mpsrf}))
+    gd <- lapply(pmwg_mcmc,gelman_diag_robust,autoburnin = autoburnin, transform = transform, omit_mpsrf = omit_mpsrf)
+    if(omit_mpsrf){
+      out <- unlist(lapply(gd,function(x){max(x[[1]][,1])}))
+    } else{
+      out <- unlist(lapply(gd,function(x){x$mpsrf}))
+    }
   } else {
-    gd <- gelman_diag_robust(pmwg_mcmc,autoburnin = autoburnin, transform = transform)
-    out <- gd$mpsrf
+    gd <- gelman_diag_robust(pmwg_mcmc,autoburnin = autoburnin, transform = transform, omit_mpsrf = omit_mpsrf)
+    if(omit_mpsrf){
+      out <- max(gd[[1]][,1])
+    } else{
+      out <- gd$mpsrf
+    }
   }
   if (return_summary) return(out)
   if (sort_print) out <- sort(out)

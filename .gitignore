@@ -3,6 +3,7 @@
 .Rhistory
 test.R
 .RData
+test.R
 *.so
 *.o
 *.RData

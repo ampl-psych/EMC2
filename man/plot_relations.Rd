@@ -6,7 +6,7 @@
 \usage{
 plot_relations(
   samplers = NULL,
-  stage,
+  filter = "sample",
   loadings = NULL,
   standardize = T,
   corrs = NULL,
@@ -20,7 +20,7 @@ plot_relations(
 \arguments{
 \item{samplers}{A list of samplers}
 
-\item{stage}{Character. The stage from which to take the samples}
+\item{filter}{Character. The stage from which to take the samples}
 
 \item{loadings}{An array of loadings. Can be alternatively supplied if samplers is not supplied}
 
