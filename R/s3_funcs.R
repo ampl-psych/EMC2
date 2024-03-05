@@ -1,7 +1,7 @@
 #' @export
-print.emc <- function(object, ...){
-  n_chain <- chain_n(object)
-  print(chain_n(object))
+print.emc <- function(x, ...){
+  n_chain <- chain_n(x)
+  print(chain_n(x))
   return(invisible(n_chain))
 }
 
@@ -22,7 +22,7 @@ summary.emc <- function(object, ...){
   }
   out_list <- list()
   for(select in selection){
-    par_df <- parameters_data_frame(x, filter = filter, subfilter = subfilter, selection = select)
+    par_df <- parameters_data_frame(object, filter = filter, subfilter = subfilter, selection = select)
     Rhat <- gd_pmwg(object, filter = filter, subfilter = subfilter, selection = select, print_summary = F, omit_mpsrf = T)
     ESS <- es_pmwg(object, filter = filter, subfilter = subfilter, selection = select, print_summary = F, summary_alpha = NULL)
     if(select == "alpha"){
@@ -51,12 +51,11 @@ summary.emc <- function(object, ...){
 
 
 #' @export
-plot.emc <- function(object, ...){
+plot.emc <- function(x, ...){
   args <- list(...)
   filter <- ifelse(is.null(args$filter), "sample", args$filter)
   subfilter <- ifelse(is.null(args$subfilter), 0, args$subfilter)
   layout <- args$layout
-  plot_acf <- ifelse(is.null(args$plot_acf), FALSE, args$plot_acf)
   subject <- ifelse(is.null(args$subject), 1, args$subject)
   thin <- ifelse(is.null(args$thin), 1, args$thin)
   ylim <- args$ylim
@@ -69,9 +68,8 @@ plot.emc <- function(object, ...){
   for(select in selection){
     pmwg_mcmc <- as_mcmc.list(input,selection=select,filter=filter,
                               thin=thin,subfilter=subfilter)
-    auto.layout <- any(is.na(layout))
-    no_layout <- is.null(layout)
-    if (!auto.layout & !no_layout) par(mfrow=layout)
+    auto.layout <- is.null(layout)
+    if (!auto.layout) par(mfrow=layout)
     if (attr(pmwg_mcmc,"selection")=="alpha" || attr(pmwg_mcmc,"selection")=="random") {
       snams <- names(pmwg_mcmc)
       if(is.null(subject)) subject <- snams[1]
@@ -79,30 +77,20 @@ plot.emc <- function(object, ...){
       if (!all(subject %in% names(pmwg_mcmc)))
         stop("Subject not present\n")
       for (i in subject) {
-        if (!auto.layout & !no_layout) par(mfrow=layout)
-        if (plot_acf) for (j in dimnames(pmwg_mcmc[[i]])[[2]]) {
-          acf(pmwg_mcmc[[i]][,j],main=paste0("Chain ",acf_chain,": ","s",i,": ",j))
-        } else {
-          if (!auto.layout & !no_layout) par(mfrow=layout)
-          plot(pmwg_mcmc[[i]],auto.layout=auto.layout,density=TRUE,
-               xlab=paste0("Iterations ",i),ask=FALSE,trace=TRUE,
-               ylab=attr(pmwg_mcmc,"selection"),smooth=FALSE,ylim=ylim)
-        }
+        plot(pmwg_mcmc[[i]],auto.layout=auto.layout,density=TRUE,
+             xlab=paste0("Iterations ",i),ask=FALSE,trace=TRUE,
+             ylab=attr(pmwg_mcmc,"selection"),smooth=FALSE,ylim=ylim)
       }
     } else if (attr(pmwg_mcmc,"selection") %in% c("LL","epsilon")) {
       if (any(is.na(subject))) subject <- names(pmwg_mcmc)
       if (!all(subject %in% names(pmwg_mcmc)))
         stop("Subject not present\n")
       for (i in subject) {
-        if (plot_acf)
-          acf(pmwg_mcmc[[i]],main=paste0("Chain ",acf_chain,": ","LL ",i)) else
             plot(pmwg_mcmc[[i]],auto.layout=auto.layout,density=TRUE,
                  xlab=paste0("Iterations ",i),ask=FALSE,trace=TRUE,
                  ylab=attr(pmwg_mcmc,"selection"),smooth=FALSE,ylim=ylim)
       }
     } else {
-      if (plot_acf) for (j in dimnames(pmwg_mcmc)[[2]])
-        acf(pmwg_mcmc[,j],main=paste0("Chain ",acf_chain,": ",j)) else
           plot(pmwg_mcmc,auto.layout=auto.layout,density=TRUE,
                ask=FALSE,trace=TRUE,ylim=ylim,
                ylab=attr(pmwg_mcmc,"selection"),smooth=FALSE)
