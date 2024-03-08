@@ -1,12 +1,14 @@
-#' Make a design object
+#' Specify a design and model
 #'
-#' This function returns a list specifying the design for a model.
+#' This function combines information regarding the data, type of model, and
+#' the model specification.
 #'
-#' @param formula A list. Contains the design formula(s) in the
+#' @param formula A list. Contains the design formulae in the
 #' format `list(y ~ x, a ~ z)`.
 #' @param factors A named list containing all the factor variables that span
 #' the design cells and that should be taken into account by the model.
-#' The name `subjects` must be used to indicate the participant factor variable.
+#' The name `subjects` must be used to indicate the participant factor variable,
+#' also in the data.
 #'
 #' Example: `list(subjects=levels(dat$subjects), condition=levels(dat$condition))`
 #'
@@ -19,36 +21,47 @@
 #' model functions.
 #' @param data A data frame. `data` can be used to automatically detect
 #'  `factors`, `Rlevels` and `covariates` in a dataset. The variable `R` needs
-#'  to be a factor variable indicating the response variable so that `Rlevels`
-#'  can be determined. Any numeric column except `trials` and `rt` are treated
-#'  as covariates, and all remaining factor variables are internally used
-#'  in `factors`.
-#' @param contrasts A named list specifying a design matrix. If none is supplied,
-#' dummy or treatment coding is used.
+#'  to be a factor variable indicating the response variable. Any numeric column
+#'  except `trials` and `rt` are treated as covariates, and all remaining factor
+#'  variables are internally used in `factors`.
+#' @param contrasts Optional. A named list specifying a design matrix.
 #' Example for supplying a customized design matrix:
 #' `list(lM = matrix(c(-1/2,1/2),ncol=1,dimnames=list(NULL,"diff"))))`
 #' @param matchfun A function. Only needed for race models. Specifies whether a
-#' response was correct or not. Example: `function(d)d$S==d$lR`
-#' @param constants A named vector. Sets constants. Any parameter named
-#' by `sampled_p_vector` can be set constant.
+#' response was correct or not. Example: `function(d)d$S==d$lR` where lR refers
+#' to the latent response factor.
+#' @param constants A named vector that sets constants. Any parameter in
+#' `sampled_p_vector` can be set constant.
 #' @param covariates Names of numeric covariates.
 #' @param functions List of functions to create new factors based on those in
 #' the factors argument. These new factors can then be used in formula.
-#' @param adapt For future compatibility. Ignore.
 #' @param report_p_vector Boolean. If TRUE (default), it returns the vector of
 #' parameters to be estimated.
 #' @param custom_p_vector A character vector. If specified, a custom likelihood
 #' function can be supplied.
-#' @param ordinal For future compatibility
 #'
 #' @return A design list.
 #' @export
 #'
 #'
 make_design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
-                        contrasts=NULL,matchfun=NULL,constants=NULL,covariates=NULL,functions=NULL,
-                        adapt=NULL,report_p_vector=TRUE, custom_p_vector = NULL,
-                        ordinal=NULL){
+                        contrasts=NULL,matchfun=NULL,constants=NULL,covariates=NULL,
+                        functions=NULL,report_p_vector=TRUE, custom_p_vector = NULL,
+                        ...){
+
+  optionals <- list(...)
+
+  if(!is.null(optionals$adapt)){
+    adapt <- optionals$adapt
+  } else {
+    adapt <- NULL
+  }
+
+  if(!is.null(optionals$ordinal)){
+    ordinal <- optionals$ordinal
+  } else {
+    ordinal <- NULL
+  }
 
   if(any(names(factors) %in% c("trial", "R", "rt", "lR", "lM"))){
     stop("Please do not use any of the following names within Ffactors: trial, R, rt, lR, lM")
@@ -85,7 +98,7 @@ make_design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=
   # if (model()$type=="SDT") {
   #   Clist[["lR"]] <- contr.increasing(length(Rlevels),Rlevels)
   # }
-  nams <- unlist(lapply(formula,function(x)as.character(stats::terms(x)[[2]])))
+  nams <- unlist(lapply(formula,function(x) as.character(stats::terms(x)[[2]])))
   if (!all(sort(names(model()$p_types)) %in% sort(nams)) & is.null(custom_p_vector)){
     p_types <- model()$p_types
     not_specified <- sort(names(p_types))[!sort(names(p_types)) %in% sort(nams)]

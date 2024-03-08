@@ -2,7 +2,7 @@
 % Please edit documentation in R/design.R
 \name{make_design}
 \alias{make_design}
-\title{Make a design object}
+\title{Specify a design and model}
 \usage{
 make_design(
   formula = NULL,
@@ -15,19 +15,19 @@ make_design(
   constants = NULL,
   covariates = NULL,
   functions = NULL,
-  adapt = NULL,
   report_p_vector = TRUE,
   custom_p_vector = NULL,
-  ordinal = NULL
+  ...
 )
 }
 \arguments{
-\item{formula}{A list. Contains the design formula(s) in the
+\item{formula}{A list. Contains the design formulae in the
 format \code{list(y ~ x, a ~ z)}.}
 
 \item{factors}{A named list containing all the factor variables that span
 the design cells and that should be taken into account by the model.
-The name \code{subjects} must be used to indicate the participant factor variable.
+The name \code{subjects} must be used to indicate the participant factor variable,
+also in the data.
 
 Example: \code{list(subjects=levels(dat$subjects), condition=levels(dat$condition))}}
 
@@ -42,40 +42,36 @@ model functions.}
 
 \item{data}{A data frame. \code{data} can be used to automatically detect
 \code{factors}, \code{Rlevels} and \code{covariates} in a dataset. The variable \code{R} needs
-to be a factor variable indicating the response variable so that \code{Rlevels}
-can be determined. Any numeric column except \code{trials} and \code{rt} are treated
-as covariates, and all remaining factor variables are internally used
-in \code{factors}.}
+to be a factor variable indicating the response variable. Any numeric column
+except \code{trials} and \code{rt} are treated as covariates, and all remaining factor
+variables are internally used in \code{factors}.}
 
-\item{contrasts}{A named list specifying a design matrix. If none is supplied,
-dummy or treatment coding is used.
+\item{contrasts}{Optional. A named list specifying a design matrix.
 Example for supplying a customized design matrix:
 \verb{list(lM = matrix(c(-1/2,1/2),ncol=1,dimnames=list(NULL,"diff"))))}}
 
 \item{matchfun}{A function. Only needed for race models. Specifies whether a
-response was correct or not. Example: \code{function(d)d$S==d$lR}}
+response was correct or not. Example: \code{function(d)d$S==d$lR} where lR refers
+to the latent response factor.}
 
-\item{constants}{A named vector. Sets constants. Any parameter named
-by \code{sampled_p_vector} can be set constant.}
+\item{constants}{A named vector that sets constants. Any parameter in
+\code{sampled_p_vector} can be set constant.}
 
 \item{covariates}{Names of numeric covariates.}
 
 \item{functions}{List of functions to create new factors based on those in
 the factors argument. These new factors can then be used in formula.}
 
-\item{adapt}{For future compatibility. Ignore.}
-
 \item{report_p_vector}{Boolean. If TRUE (default), it returns the vector of
 parameters to be estimated.}
 
 \item{custom_p_vector}{A character vector. If specified, a custom likelihood
 function can be supplied.}
-
-\item{ordinal}{For future compatibility}
 }
 \value{
 A design list.
 }
 \description{
-This function returns a list specifying the design for a model.
+This function combines information regarding the data, type of model, and
+the model specification.
 }
