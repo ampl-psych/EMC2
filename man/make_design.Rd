@@ -60,13 +60,15 @@ to the latent response factor.}
 \item{covariates}{Names of numeric covariates.}
 
 \item{functions}{List of functions to create new factors based on those in
-the factors argument. These new factors can then be used in formula.}
+the factors argument. These new factors can then be used in \code{formula}.}
 
 \item{report_p_vector}{Boolean. If TRUE (default), it returns the vector of
 parameters to be estimated.}
 
 \item{custom_p_vector}{A character vector. If specified, a custom likelihood
 function can be supplied.}
+
+\item{...}{Additional, optional arguments}
 }
 \value{
 A design list.
@@ -74,4 +76,26 @@ A design list.
 \description{
 This function combines information regarding the data, type of model, and
 the model specification.
+}
+\examples{
+
+# load example dataset
+dat <- forstmann
+
+# create a function that takes the latent response (lR) factor (d) and returns a logical
+# defining the correct response for each stimulus. Here the match is simply
+# such that the S factor equals the latent response factor
+matchfun <- function(d)d$S==d$lR
+
+# When working with lM and lR, it can be useful to design  an
+# "average and difference" contrast matrix. For binary responses, it has a
+# simple canonical form
+ADmat <- matrix(c(-1/2,1/2),ncol=1,dimnames=list(NULL,"diff"))
+
+# Create a design for a linear ballistic accumulator model (LBA) that allows
+# thresholds to be a function of E and lR. The final result is a 9 parameter model.
+design_LBABE <- make_design(data = dat,model=LBA,matchfun=matchfun,
+                            formula=list(v~lM,sv~lM,B~E+lR,A~1,t0~1),
+                            contrasts=list(v=list(lM=ADmat)),
+                            constants=c(sv=log(1)))
 }
