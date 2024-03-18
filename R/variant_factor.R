@@ -348,8 +348,8 @@ bridge_group_and_prior_and_jac_factor <- function(proposals_group, proposals_lis
     theta_var_curr <- lambda_curr %*% psi_curr %*% t(lambda_curr) + epsilon_curr
     proposals_curr <- matrix(proposals[i,], ncol = info$n_pars, byrow = T)
     group_ll <- sum(dmvnorm(proposals_curr, theta_mu[i,], theta_var_curr, log = T))
-    prior_epsilon <- sum(logdinvGamma(exp(theta_epsilon_inv[i,]), shape = prior$as, rate = prior$bs))
-    prior_psi <- sum(logdinvGamma(exp(theta_psi_inv[i,]), prior$ap, rate = prior$bp))
+    prior_epsilon <- sum(logdinvGamma(1/exp(theta_epsilon_inv[i,]), shape = prior$as, rate = prior$bs))
+    prior_psi <- sum(logdinvGamma(1/exp(theta_psi_inv[i,]), prior$ap, rate = prior$bp))
     sum_out[i] <- group_ll + prior_epsilon + prior_psi
   }
   prior_lambda <- dmvnorm(theta_lambda, mean = rep(0, ncol(theta_lambda)),
