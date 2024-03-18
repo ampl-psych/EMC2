@@ -30,12 +30,12 @@ add_info_standard <- function(sampler, prior = NULL, ...){
 #' sampled parameters unbounded
 #' @param N How many samples to draw from the prior, default 1e5
 #' @param design The design obtained from `make_design`, required when map = TRUE
-#' @param type  character, options: "mu", "variance", "covariance" "full_var"
+#' @param selection  character, options: "mu", "variance", "covariance" "full_var"
 #'
-#' @return A list with a single entry of type of samples from the prior (if sample = TRUE) or else a prior object
+#' @return A list with a single entry of selection of samples from the prior (if sample = TRUE) or else a prior object
 #' @export
 
-get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, type = "mu", design = NULL,
+get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, selection = "mu", design = NULL,
                                map = FALSE){
   # Checking and default priors
   if(is.null(prior)){
@@ -63,10 +63,10 @@ get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1
   prior$theta_mu_invar <- ginv(prior$theta_mu_var) #Inverse of the matrix
   if(sample){
     out <- list()
-    if(!type %in% c("mu", "variance", "covariance", "correlation", "full_var")){
+    if(!selection %in% c("mu", "variance", "covariance", "correlation", "full_var")){
       stop("for variant standard, you can only specify the prior on the mean, variance, covariance or the correlation of the parameters")
     }
-    if(type == "mu"){
+    if(selection == "mu"){
       samples <- mvtnorm::rmvnorm(N, mean = prior$theta_mu_mean,
                               sigma = prior$theta_mu_var)
       if(!is.null(design)){
@@ -95,7 +95,7 @@ get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1
           var[,,i] <- var[,,sample_idx]
         }
       }
-      if (type == "variance") {
+      if (selection == "variance") {
         vars_only <- t(apply(var,3,diag))
         if(!is.null(design)){
           colnames(vars_only) <- names(attr(design, "p_vector"))
@@ -103,14 +103,14 @@ get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1
         out$variance <- vars_only
       }
       lt <- lower.tri(var[,,1])
-      if (type == "correlation"){
+      if (selection == "correlation"){
         corrs <- array(apply(var,3,cov2cor),dim=dim(var),dimnames=dimnames(var))
         out$correlation <- t(apply(corrs,3,function(x){x[lt]}))
       }
-      if(type == "covariance"){
+      if(selection == "covariance"){
         out$covariance <- t(apply(var,3,function(x){x[lt]}))
       }
-      if (type == "full_var"){
+      if (selection == "full_var"){
         out$full_var <- t(apply(var, 3, c))
       }
       return(out)

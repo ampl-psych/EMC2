@@ -56,12 +56,12 @@ add_info_factor <- function(sampler, prior = NULL, ...){
 #' sampled parameters unbounded
 #' @param N How many samples to draw from the prior, default 1e5
 #' @param design The design obtained from `make_design`, required when map = TRUE
-#' @param type  character, options: "mu", "variance", "covariance" "full_var"
+#' @param selection  character, options: "mu", "variance", "covariance" "full_var"
 #' @param n_factors integer. The number of factors.
 #'
-#' @return A list with a single entry of type of samples from the prior (if sample = TRUE) or else a prior object
+#' @return A list with a single entry of selection of samples from the prior (if sample = TRUE) or else a prior object
 #' @export
-get_prior_factor <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, type = "mu", design = NULL,
+get_prior_factor <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, selection = "mu", design = NULL,
                              map = FALSE, n_factors = 5){
 
   if(is.null(prior)){
@@ -98,10 +98,10 @@ get_prior_factor <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5
   prior$theta_lambda_invar <-1/prior$theta_lambda_var
   if(sample){
     out <- list()
-    if(!type %in% c("mu", "variance", "covariance", "correlation", "full_var", "loadings")){
+    if(!selection %in% c("mu", "variance", "covariance", "correlation", "full_var", "loadings")){
       stop("for variant factor, you can only specify the prior on the mean, variance, covariance, loadings or the correlation of the parameters")
     }
-    if(type == "mu"){
+    if(selection == "mu"){
       samples <- mvtnorm::rmvnorm(N, mean = prior$theta_mu_mean,
                                   sigma = diag(prior$theta_mu_var))
       if(!is.null(design)){
@@ -117,7 +117,7 @@ get_prior_factor <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5
       }
       out$mu <- samples
       return(out)
-    } else if(type == "loadings") {
+    } else if(selection == "loadings") {
       out$loadings <- matrix(rnorm(N, mean = 0, sd = prior$theta_lambda_var^2), ncol = 1)
       colnames(out$loadings) <- "loadings"
       return(out)
@@ -130,7 +130,7 @@ get_prior_factor <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5
         cov_tmp <- lambda %*% diag(psi, n_factors) %*% t(lambda) + diag(sigma)
         var[,,i] <- cov_tmp
       }
-      if (type == "variance") {
+      if (selection == "variance") {
         vars_only <- t(apply(var,3,diag))
         if(!is.null(design)){
           colnames(vars_only) <- names(attr(design, "p_vector"))
@@ -138,14 +138,14 @@ get_prior_factor <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5
         out$variance <- vars_only
       }
       lt <- lower.tri(var[,,1])
-      if (type == "correlation"){
+      if (selection == "correlation"){
         corrs <- array(apply(var,3,cov2cor),dim=dim(var),dimnames=dimnames(var))
         out$correlation <- t(apply(corrs,3,function(x){x[lt]}))
       }
-      if(type == "covariance"){
+      if(selection == "covariance"){
         out$covariance <- t(apply(var,3,function(x){x[lt]}))
       }
-      if (type == "full_var"){
+      if (selection == "full_var"){
         out$full_var <- t(apply(var, 3, c))
       }
       return(out)

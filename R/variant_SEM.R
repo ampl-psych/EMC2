@@ -72,27 +72,30 @@ add_info_SEM <- function(sampler, prior = NULL, ...){
   return(sampler)
 }
 
+#' Prior specification or prior sampling for SEM estimation.
+#'
+#' @param prior A named list containing the prior mean on group-level mean (theta_mu_mean), variance of group-level mean (theta_mu_var),
+#' variance of the loadings and G (lambda_var), variance of the latent regressions and (B_var), shape and rate prior on the factor variances (a_p and b_p),
+#' and shape and rate prior on the residual variances (a_e and b_e)
+#' @param n_pars Argument used by the sampler, best left NULL. In user case inferred from the design
+#' @param sample Whether to sample from the prior. Default is TRUE. If not returns a prior list
+#' @param map Boolean, default TRUE reverses malformation used by model to make
+#' sampled parameters unbounded
+#' @param N How many samples to draw from the prior, default 1e5
+#' @param design The design obtained from `make_design`, required when map = TRUE
+#' @param type  character, options: "mu", "variance", "covariance" "full_var"
+#' @param Lambda_mat The loadings constraint matrix
+#' @param B_mat The latent regressions constraint matrix
+#' @param K_mat The regression on the parameters by the included covariates
+#' @param G_mat The regression on the latent factors by the included covariates
+#' @param x The included covariates
+#'
+#' @return A list with a single entry of type of samples from the prior (if sample = TRUE) or else a prior object
+#' @export
+#'
 get_prior_SEM <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, type = "mu", design = NULL,
-                                   map = FALSE, n_factors = 1, Lambda_mat = NULL, B_mat = NULL,
-                          K_mat = NULL, G_mat = NULL, n_cov_y = 0, n_cov_eta = 0){
-  if(is.null(Lambda_mat)){
-    Lambda_mat <- matrix(0, nrow = n_pars, ncol = n_factors)
-  }
-
-  if(is.null(B_mat)){
-    B_mat <- matrix(0, nrow = n_factors, ncol = n_factors)
-  }
-  if(is.null(K_mat)){
-    K_mat <- matrix(0, nrow = n_pars, ncol = n_cov_y)
-  }
-  if(is.null(G_mat)){
-    G_mat <- matrix(0, nrow = n_factors, ncol = n_cov_eta)
-  }
-
-  isFree_Lambda <- Lambda_mat == Inf #For indexing
-  isFree_B <- B_mat == Inf #For indexing
-  isFree_K <- K_mat == Inf
-  isFree_G <- G_mat == Inf
+                                   map = FALSE, Lambda_mat = NULL, B_mat = NULL,
+                          K_mat = NULL, G_mat = NULL, x = NULL){
 
   if(is.null(prior)){
     prior <- list()
@@ -125,97 +128,117 @@ get_prior_SEM <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, t
     prior$b_e <- .3
   }
   if(sample){
+    out <- list()
+    if(!type %in% c("mu", "variance", "covariance", "correlation", "full_var", "loadings")){
+      stop("for variant factor, you can only specify the prior on the mean, variance, covariance, loadings or the correlation of the parameters")
+    }
+    n_cov_y <- n_cov_eta <- ncol(x)
+    if(is.null(Lambda_mat)){
+      n_factors <- 0
+      Lambda_mat <- matrix(0, nrow = n_pars, ncol = n_factors)
+    } else{
+      n_factors <- ncol(Lambda_mat)
+    }
+    if(is.null(B_mat)){
+      B_mat <- matrix(0, nrow = n_factors, ncol = n_factors)
+    }
+    if(is.null(K_mat)){
+      K_mat <- matrix(0, nrow = n_pars, ncol = n_cov_y)
+    }
+    if(is.null(G_mat)){
+      G_mat <- matrix(0, nrow = n_factors, ncol = n_cov_eta)
+    }
+
     isFree_Lambda <- Lambda_mat == Inf #For indexing
     isFree_B <- B_mat == Inf #For indexing
     isFree_K <- K_mat == Inf
     isFree_G <- G_mat == Inf
+    x_mu <- colMeans(x)
+    x_var <- cov(x)
     is_structured <- rowSums(isFree_B) != 0
     means <- matrix(0, nrow = N, ncol = n_pars)
     vars <- array(NA_real_, dim = c(n_pars, n_pars, N))
     theta_mu <- mvtnorm::rmvnorm(N, mean = prior$theta_mu_mean,
                                  sigma = diag(prior$theta_mu_var))
+    lambda <- mvtnorm::rmvnorm(N, mean = rep(0, sum(isFree_Lambda)),
+                                 sigma = diag(prior$lambda_var, sum(isFree_Lambda)))
+    B <- mvtnorm::rmvnorm(N, mean = rep(0, sum(isFree_B)),
+                               sigma = diag(prior$B_var, sum(isFree_B)))
+    K <- mvtnorm::rmvnorm(N, mean = rep(0, sum(isFree_K)),
+                               sigma = diag(prior$lambda_var, sum(isFree_K)))
+    G <- mvtnorm::rmvnorm(N, mean = rep(0, sum(isFree_G)),
+                               sigma = diag(prior$B_var, sum(isFree_G)))
+
     delta_inv <- matrix(0, nrow = n_factors, ncol = n_factors)
     for(i in 1:N){
-
-      means[i,] <- theta_mu[,i] + lambda_curr %*% B_0_inv %*% G_curr %*% x_mu + K_curr %*% x_mu
-
+      lambda_curr <- unwind_lambda(lambda[i,], Lambda_mat, reverse = T)
+      if(sum(B_mat == Inf) > 0) {
+        B_curr <- unwind_lambda(B[i,], B_mat, reverse = T)
+      } else{
+        B_curr <- B_mat
+      }
+      if(sum(K_mat == Inf) > 0) {
+        K_curr <- unwind_lambda(K[i,], K_mat, reverse = T)
+      } else{
+        K_curr <- K_mat
+      }
+      if(sum(G_mat == Inf) > 0) {
+        G_curr <- unwind_lambda(G[i,], G_mat, reverse = T)
+      } else{
+        G_curr <- G_mat
+      }
+      # eta_curr <- info$eta[,,i]
+      B_0_inv <- solve(diag(n_factors) - B_curr)
+      means[i,] <- theta_mu[i,] + lambda_curr %*% B_0_inv %*% G_curr %*% x_mu + K_curr %*% x_mu
       if(any(is_structured)){
         delta_inv[is_structured,is_structured] <- diag(rgamma(sum(is_structured) ,shape=prior$a_d,rate=prior$b_d), sum(is_structured))
       }
       if(any(!is_structured)){
-        delta_inv[!is_structured, !is_structured] <- solve(riwish(n_subjects + prior$a_d, diag(prior$b_d, nrow = sum(!is_structured)) + eta_sq[!is_structured, !is_structured]))
+        delta_inv[!is_structured, !is_structured] <- solve(riwish(prior$a_d + sum(is_structured), diag(prior$b_d, nrow = sum(!is_structured))))
       }
-
-      sigma <- 1/rgamma(n_pars, prior$as, prior$bs)
-      psi <- 1/rgamma(n_factors, prior$ap, prior$bp)
-      lambda <- matrix(rnorm(n_pars*n_factors, sd = prior$theta_lambda_var^2), nrow = n_pars, ncol = n_factors)
-      cov_tmp <- lambda %*% diag(psi, n_factors) %*% t(lambda) + diag(sigma)
-      var[,,i] <- cov_tmp
+      epsilon_inv <- rgamma(n_pars, shape = prior$a_e, rate = prior$b_e)
+      vars[,,i] <- lambda_curr %*% B_0_inv %*% (G_curr %*% x_var %*% t(G_curr) + solve(delta_inv)) %*% t(B_0_inv) %*% t(lambda_curr) +
+        K_curr %*% x_var %*% t(K_curr) + diag(1/epsilon_inv)
     }
-    # eta_curr <- info$eta[,,i]
-    delta2_curr <- unwind_chol(delta_inv2[i,], reverse = T)
-    delta_curr[info$is_structured, info$is_structured] <- diag(exp(delta_inv1[i,]), sum(info$is_structured))
-    delta_curr[!info$is_structured, !info$is_structured] <- delta2_curr
-    B_0_inv <- solve(diag(info$n_factors) - B_curr)
-
-    group_mean <- c(theta_mu[i,] + lambda_curr %*% B_0_inv %*% G_curr %*% x_mu + K_curr %*% x_mu)
-    group_var <- lambda_curr %*% B_0_inv %*% (G_curr %*% x_var %*% t(G_curr) + solve(delta_curr)) %*% t(B_0_inv) %*% t(lambda_curr) +
-      K_curr %*% x_var %*% t(K_curr) + diag(1/exp(epsilon_inv[i,]))
-    group_ll <- sum(dmvnorm(proposals_curr, group_mean, group_var, log = T))
-    out <- list()
     if(!type %in% c("mu", "variance", "covariance", "correlation", "full_var", "loadings")){
       stop("for variant factor, you can only specify the prior on the mean, variance, covariance, loadings or the correlation of the parameters")
     }
     if(type == "mu"){
-      samples <- mvtnorm::rmvnorm(N, mean = prior$theta_mu_mean,
-                                  sigma = diag(prior$theta_mu_var))
       if(!is.null(design)){
-        colnames(samples) <- par_names <- names(attr(design, "p_vector"))
+        colnames(means) <- par_names <- names(attr(design, "p_vector"))
         if(map){
-          proot <- unlist(lapply(strsplit(colnames(samples),"_"),function(x)x[[1]]))
+          proot <- unlist(lapply(strsplit(colnames(means),"_"),function(x)x[[1]]))
           isin <- proot %in% names(design$model()$p_types)
-          fullnames <- colnames(samples)[isin]
-          colnames(samples)[isin] <- proot
-          samples[,isin] <- design$model()$Ntransform(samples[,isin])
-          colnames(samples)[isin] <- fullnames
+          fullnames <- colnames(means)[isin]
+          colnames(means)[isin] <- proot
+          means[,isin] <- design$model()$Ntransform(means[,isin])
+          colnames(means)[isin] <- fullnames
         }
       }
-      out$mu <- samples
-      return(out)
-    } else if(type == "loadings") {
-      out$loadings <- matrix(rnorm(N, mean = 0, sd = prior$theta_lambda_var^2), ncol = 1)
-      colnames(out$loadings) <- "loadings"
-      return(out)
-    } else{
-      var <- array(NA_real_, dim = c(n_pars, n_pars, N))
-      for(i in 1:N){
-        sigma <- 1/rgamma(n_pars, prior$as, prior$bs)
-        psi <- 1/rgamma(n_factors, prior$ap, prior$bp)
-        lambda <- matrix(rnorm(n_pars*n_factors, sd = prior$theta_lambda_var^2), nrow = n_pars, ncol = n_factors)
-        cov_tmp <- lambda %*% diag(psi, n_factors) %*% t(lambda) + diag(sigma)
-        var[,,i] <- cov_tmp
-      }
-      if (type == "variance") {
-        vars_only <- t(apply(var,3,diag))
-        if(!is.null(design)){
-          colnames(vars_only) <- names(attr(design, "p_vector"))
-        }
-        out$variance <- vars_only
-      }
-      lt <- lower.tri(var[,,1])
-      if (type == "correlation"){
-        corrs <- array(apply(var,3,cov2cor),dim=dim(var),dimnames=dimnames(var))
-        out$correlation <- t(apply(corrs,3,function(x){x[lt]}))
-      }
-      if(type == "covariance"){
-        out$covariance <- t(apply(var,3,function(x){x[lt]}))
-      }
-      if (type == "full_var"){
-        out$full_var <- t(apply(var, 3, c))
-      }
+      out$mu <- means
       return(out)
     }
+    if (type == "variance") {
+      vars_only <- t(apply(vars,3,diag))
+      if(!is.null(design)){
+        colnames(vars_only) <- names(attr(design, "p_vector"))
+      }
+      out$variance <- vars_only
+    }
+    lt <- lower.tri(vars[,,1])
+    if (type == "correlation"){
+      corrs <- array(apply(vars,3,cov2cor),dim=dim(vars),dimnames=dimnames(vars))
+      out$correlation <- t(apply(corrs,3,function(x){x[lt]}))
+    }
+    if(type == "covariance"){
+      out$covariance <- t(apply(vars,3,function(x){x[lt]}))
+    }
+    if (type == "full_var"){
+      out$full_var <- t(apply(vars, 3, c))
+    }
+    return(out)
   }
+  return(prior)
 }
 
 

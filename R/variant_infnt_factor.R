@@ -9,7 +9,7 @@ add_info_infnt_factor <- function(sampler, prior = NULL, ...){
   return(sampler)
 }
 
-get_prior_infnt_factor <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, type = "mu", design = NULL,
+get_prior_infnt_factor <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, selection = "mu", design = NULL,
                                    map = FALSE, n_factors = 10){
   # Checking and default priors
   if(is.null(prior)){
@@ -49,10 +49,10 @@ get_prior_infnt_factor <- function(prior = NULL, n_pars = NULL, sample = TRUE, N
   prior$theta_mu_invar <- 1/prior$theta_mu_var #Inverse of the matrix
   if(sample){
     out <- list()
-    if(!type %in% c("mu", "variance", "covariance", "correlation", "full_var", "loadings")){
+    if(!selection %in% c("mu", "variance", "covariance", "correlation", "full_var", "loadings")){
       stop("for variant infnt_factor, you can only specify the prior on the mean, variance, covariance, loadings or the correlation of the parameters")
     }
-    if(type == "mu"){
+    if(selection == "mu"){
       samples <- mvtnorm::rmvnorm(N, mean = prior$theta_mu_mean,
                                   sigma = diag(prior$theta_mu_var))
       if(!is.null(design)){
@@ -68,7 +68,7 @@ get_prior_infnt_factor <- function(prior = NULL, n_pars = NULL, sample = TRUE, N
       }
       out$mu <- samples
       return(out)
-    } else if(type == "loadings") {
+    } else if(selection == "loadings") {
       lambda <- matrix(0, nrow = n_pars, ncol = n_factors)
       lambda_out <- array(0, dim = c(n_pars, n_factors, N))
       for(i in 1:N){
@@ -106,7 +106,7 @@ get_prior_infnt_factor <- function(prior = NULL, n_pars = NULL, sample = TRUE, N
         cov_tmp <- lambda %*% t(lambda) + diag(sigma)
         var[,,i] <- cov_tmp
       }
-      if (type == "variance") {
+      if (selection == "variance") {
         vars_only <- t(apply(var,3,diag))
         if(!is.null(design)){
           colnames(vars_only) <- names(attr(design, "p_vector"))
@@ -114,14 +114,14 @@ get_prior_infnt_factor <- function(prior = NULL, n_pars = NULL, sample = TRUE, N
         out$variance <- vars_only
       }
       lt <- lower.tri(var[,,1])
-      if (type == "correlation"){
+      if (selection == "correlation"){
         corrs <- array(apply(var,3,cov2cor),dim=dim(var),dimnames=dimnames(var))
         out$correlation <- t(apply(corrs,3,function(x){x[lt]}))
       }
-      if(type == "covariance"){
+      if(selection == "covariance"){
         out$covariance <- t(apply(var,3,function(x){x[lt]}))
       }
-      if (type == "full_var"){
+      if (selection == "full_var"){
         out$full_var <- t(apply(var, 3, c))
       }
       return(out)

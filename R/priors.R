@@ -78,7 +78,7 @@ plot_prior <- function(prior=NULL, design,plotp=NULL,
                        mapped=TRUE,data=NULL,
                        N=1e5, nrep=10,
                        breaks=50,layout=c(3,3),lower=NULL,upper=NULL,xlim=NA,
-                       n_factors = NULL)
+                       n_factors = NULL, ...)
 {
   if (is.null(selection)) {
     if (type=="single"){

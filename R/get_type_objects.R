@@ -1,4 +1,4 @@
-get_objects <- function(type, selection, sample_prior = F, return_prior = T, design = NULL,
+get_objects <- function(type, selection, sample_prior = F, return_prior = T, design = NULL, sampler = NULL
                         prior = NULL, mapped = F){
   if(type == "standard"){
     return(get_objects_standard(type, selection, sample_prior, return_prior, design, prior, mapped))
@@ -20,5 +20,7 @@ get_objects_standard <- function(type, selection, sample_prior, return_prior, de
       )
     }
     return(prior)
+  } else{
+
   }
 }

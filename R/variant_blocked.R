@@ -29,7 +29,6 @@ get_prior_blocked <- function(prior = NULL, n_pars = NULL, par_names = NULL, sam
   }
   # Things I save rather than re-compute inside the loops.
   prior$theta_mu_invar <- ginv(prior$theta_mu_var) #Inverse of the matrix
-
   return(prior)
 }
 

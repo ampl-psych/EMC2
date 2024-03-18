@@ -4,7 +4,7 @@ add_info_diag <- function(sampler, prior = NULL, ...){
   return(sampler)
 }
 
-get_prior_diag <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, type = "mu", design = NULL,
+get_prior_diag <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, selection = "mu", design = NULL,
                                map = FALSE){
   # Checking and default priors
   if(is.null(prior)){
@@ -32,10 +32,10 @@ get_prior_diag <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, 
   prior$theta_mu_invar <- ginv(prior$theta_mu_var) #Inverse of the matrix
   if(sample){
     out <- list()
-    if(!type %in% c("mu", "variance", "full_var")){
+    if(!selection %in% c("mu", "variance", "full_var")){
       stop("for variant diagonal, you can only specify the prior on the mean or variance parameters")
     }
-    if(type == "mu"){
+    if(selection == "mu"){
       samples <- mvtnorm::rmvnorm(N, mean = prior$theta_mu_mean,
                                   sigma = prior$theta_mu_var)
       if(!is.null(design)){
@@ -60,7 +60,7 @@ get_prior_diag <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, 
         var[i,] <- 1 / rgamma(n = n_pars, shape = prior$v/2, rate = prior$v/a_half)
       }
       colnames(var) <- names(attr(design, "p_vector"))
-      if (type == "full_var"){
+      if (selection == "full_var"){
         out$full_var <- var
       } else{
         out$variance <- var

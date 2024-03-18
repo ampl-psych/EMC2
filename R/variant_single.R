@@ -21,13 +21,13 @@ add_info_single <- function(sampler, prior = NULL, ...){
 #' sampled parameters unbounded
 #' @param N How many samples to draw from the prior, default 1e5
 #' @param design The design obtained from `make_design`, required when map = TRUE
-#' @param type  FIX ME
+#' @param selection. Here only 'alpha' is allowed
 #'
 #' @return A list with single entry named "alpha" of samples from the prior (if sample = TRUE) or else a prior object
 #' @export
 
 get_prior_single <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5,
-                             type = "alpha", design = NULL, map = FALSE){
+                             selection = "alpha", design = NULL, map = FALSE){
   if(is.null(prior)){
     prior <- list()
   }
@@ -44,7 +44,7 @@ get_prior_single <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5
     prior$theta_mu_var <- diag(rep(1, n_pars))
   }
   if(sample){
-    if(type != "alpha") stop("for variant single, only alpha can be specified")
+    if(selection != "alpha") stop("for variant single, only alpha can be specified")
     samples <- mvtnorm::rmvnorm(N, prior$theta_mu_mean, prior$theta_mu_var)
     if (map) {
       proot <- unlist(lapply(strsplit(colnames(samples),"_"),function(x)x[[1]]))
