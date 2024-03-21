@@ -438,7 +438,7 @@ new_particle_group <- function(data, num_particles, prior,
   prop_density <- mvtnorm::dmvnorm(x = proposals, mean = prev_mu, sigma = chains_cov)
   lm <- log(mix_proportion[1] * exp(lp) + mix_proportion[2] * prop_density)
   prior_density <- lp + subj_prior
-  l <- lw + lp - lm
+  l <- lw + prior_density - lm
   weights <- exp(l - max(l))
   idx <- sample(x = num_particles + 1, size = 1, prob = weights)
   return(list(proposal = proposals[idx,], prior = lp[idx]/length(subjects)))
