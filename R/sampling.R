@@ -97,6 +97,7 @@ init <- function(pmwgs, start_mu = NULL, start_var = NULL,
   if(any(pmwgs$grouped)){
     grouped_pars <- mvtnorm::rmvnorm(particles, pmwgs$prior$prior_grouped$theta_mu_mean,
                                      pmwgs$prior$prior_grouped$theta_mu_var)
+    colnames(grouped_pars) <- pmwgs$par_names[pmwgs$grouped]
   } else{
     grouped_pars <- NULL
   }
@@ -167,7 +168,7 @@ start_proposals <- function(s, parameters, n_particles, pmwgs, variant_funs, gro
   colnames(proposals) <- rownames(pmwgs$samples$alpha) # preserve par names
   if(any(is_grouped)){
     proposals <- update_proposals_grouped(proposals, grouped_pars, is_grouped,
-                                          par_names = pmwgs$par_names)
+                                          par_names = colnames(proposals))
   }
   lw <- calc_ll_manager(proposals, dadm = pmwgs$data[[which(pmwgs$subjects == s)]],
                         ll_func = pmwgs$ll_func)
@@ -292,7 +293,7 @@ run_stage <- function(pmwgs,
         }
         if(any(grouped)){
           acc <-  pmwgs$samples$grouped_pars[1,j] !=  pmwgs$samples$grouped_pars[1,(j-1)]
-          epsilon_grouped <-update.epsilon(epsilon_grouped^2, acc, p_accept, j, sum(grouped), alphaStar)
+          epsilon_grouped <-update.epsilon(epsilon_grouped^2, acc, mean(p_accept), j, sum(grouped), mean(alphaStar))
         }
       }
     }
@@ -800,7 +801,8 @@ update_proposals_grouped <- function(proposals, grouped_pars, is_grouped, par_na
   proposals_full <- matrix(0, nrow = nrow(proposals), ncol = length(is_grouped))
   proposals_full[,!is_grouped] <- proposals
   proposals_full[,is_grouped] <- matrix(grouped_pars, ncol = length(grouped_pars), nrow = nrow(proposals), byrow = T)
-  colnames(proposals_full) <- par_names
+  colnames(proposals_full)[!is_grouped] <- par_names
+  colnames(proposals_full)[is_grouped] <- names(grouped_pars)
   return(proposals_full)
 }
 
