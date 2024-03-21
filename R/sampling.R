@@ -264,7 +264,7 @@ run_stage <- function(pmwgs,
                                          chains_cov_grouped, mix_grouped, epsilon_grouped,
                                          pmwgs$samples$grouped_pars[,j-1] , pars_comb$alpha, pmwgs$par_names,
                                          pmwgs$ll_func, pmwgs$grouped, stage, variant_funs, pmwgs$subjects, n_cores)
-      pmwgs$samples$grouped_pars[,j] <- grouped_pars
+      pmwgs$samples$grouped_pars[,j] <- grouped_pars$proposal
       pmwgs$samples$epsilon_grouped <- epsilon_grouped
     } else{
       grouped_pars <- NULL
@@ -275,7 +275,8 @@ run_stage <- function(pmwgs,
                                     chains_cov,
                                     pmwgs$samples$subj_ll[,j-1],
                                     MoreArgs = list(pars_comb, mix, pmwgs$ll_func, epsilon, components, stage,
-                                                    variant_funs$get_group_level, block_idx, shared_ll_idx, grouped_pars, grouped),
+                                                    variant_funs$get_group_level, block_idx, shared_ll_idx, grouped_pars$proposal, grouped,
+                                                    group_prior = grouped_pars$prior),
                                     mc.cores =n_cores)
     proposals <- array(unlist(proposals), dim = c(pmwgs$n_pars - sum(grouped) + 2, pmwgs$n_subjects))
 
@@ -309,7 +310,8 @@ new_particle <- function (s, data, num_particles, eff_mu = NULL,
                           parameters, mix_proportion = c(0.5, 0.5, 0),
                           likelihood_func = NULL, epsilon = NULL,
                           components, stage,  group_level_func,
-                          block_idx, shared_ll_idx, grouped_pars, is_grouped)
+                          block_idx, shared_ll_idx, grouped_pars, is_grouped,
+                          group_prior)
 {
   # if(stage == "sample"){
   #   if(rbinom(1, size = 1, prob = .5) == 1){
@@ -379,6 +381,10 @@ new_particle <- function (s, data, num_particles, eff_mu = NULL,
     } else{
       prior_density <- lp
     }
+    if(any(is_grouped)){
+      prior_density <- prior_density + group_prior
+    }
+
     if (mix_proportion[3] == 0) {
       eff_density <- 0
     }
@@ -433,7 +439,7 @@ new_particle_group <- function(data, num_particles, prior,
   l <- lw + lp - lm
   weights <- exp(l - max(l))
   idx <- sample(x = num_particles + 1, size = 1, prob = weights)
-  return(proposals[idx,])
+  return(list(proposal = proposals[idx,], prior = lp[idx]))
 }
 
 
