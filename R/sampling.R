@@ -260,10 +260,11 @@ run_stage <- function(pmwgs,
       pmwgs$sampler_nuis$samples$idx <- j
     }
     if(any(grouped)){
+      subj_prior <-sum(apply(pars_comb$alpha, 2, FUN = function(x) mvtnorm::dmvnorm(x, pars$tmu, sigma = pars$tvar, log = TRUE)))
       grouped_pars <- new_particle_group(pmwgs$data, particles_grouped, pmwgs$prior$prior_grouped,
                                          chains_cov_grouped, mix_grouped, epsilon_grouped,
                                          pmwgs$samples$grouped_pars[,j-1] , pars_comb$alpha, pmwgs$par_names,
-                                         pmwgs$ll_func, pmwgs$grouped, stage, variant_funs, pmwgs$subjects, n_cores)
+                                         pmwgs$ll_func, pmwgs$grouped, stage, variant_funs, pmwgs$subjects, subj_prior, n_cores)
       pmwgs$samples$grouped_pars[,j] <- grouped_pars$proposal
       pmwgs$samples$epsilon_grouped <- epsilon_grouped
     } else{
@@ -415,7 +416,7 @@ new_particle_group <- function(data, num_particles, prior,
                                chains_cov, mix_proportion = c(.1, .9), epsilon_grouped,
                                prev_mu, alpha, par_names, likelihood_func = NULL,
                                is_grouped, stage,
-                               variant_funs, subjects, n_cores){
+                               variant_funs, subjects, subj_prior, n_cores){
   prior_mu <- prior$theta_mu_mean
   prior_var <- prior$theta_mu_var
   if(stage == "preburn"){
@@ -436,10 +437,11 @@ new_particle_group <- function(data, num_particles, prior,
   lp <- mvtnorm::dmvnorm(x = proposals, mean = prior_mu, sigma = prior_var, log = TRUE)
   prop_density <- mvtnorm::dmvnorm(x = proposals, mean = prev_mu, sigma = chains_cov)
   lm <- log(mix_proportion[1] * exp(lp) + mix_proportion[2] * prop_density)
+  prior_density <- lp + subj_prior
   l <- lw + lp - lm
   weights <- exp(l - max(l))
   idx <- sample(x = num_particles + 1, size = 1, prob = weights)
-  return(list(proposal = proposals[idx,], prior = lp[idx]))
+  return(list(proposal = proposals[idx,], prior = lp[idx]/length(subjects)))
 }
 
 
