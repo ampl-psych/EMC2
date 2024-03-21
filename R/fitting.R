@@ -100,7 +100,9 @@ get_stop_criteria <- function(stage, stop_criteria, type){
     if(stage == "burn"){
       stop_criteria$mean_gd <- 1.1
       stop_criteria$omit_mpsrf <- TRUE
-      if(type != "single"){
+      if(type == "glm"){
+        stop_criteria$selection <- c("random", "fixed")
+      } else if(type != "single"){
         stop_criteria$selection <- c("alpha", "mu")
       } else{
         stop_criteria$selection <- c("alpha")
@@ -113,7 +115,9 @@ get_stop_criteria <- function(stage, stop_criteria, type){
     if(stage == "sample"){
       stop_criteria$max_gd <- 1.1
       stop_criteria$omit_mpsrf <- TRUE
-      if(type != "single"){
+      if(type == "glm"){
+        stop_criteria$selection <- c("random", "fixed")
+      } else if(type != "single"){
         stop_criteria$selection <- c("alpha", "mu")
       } else{
         stop_criteria$selection <- c("alpha")
@@ -121,7 +125,15 @@ get_stop_criteria <- function(stage, stop_criteria, type){
     }
   }
   if(!is.null(stop_criteria$max_gd) || !is.null(stop_criteria$mean_gd)){
-    if(is.null(stop_criteria$selection)) stop_criteria$selection <- c('alpha', 'mu')
+    if(is.null(stop_criteria$selection)) {
+      if(type == "glm"){
+        stop_criteria$selection <- c("random", "fixed")
+      } else if(type != "single"){
+        stop_criteria$selection <- c("alpha", "mu")
+      } else{
+        stop_criteria$selection <- c("alpha")
+      }
+    }
   }
   if(stage == "adapt" & is.null(stop_criteria$min_unique)) stop_criteria$min_unique <- 600
   if(stage != "adapt" & !is.null(stop_criteria$min_unique)) stop("min_unique only applicable for adapt stage, try min_es instead.")
@@ -205,55 +217,58 @@ run_stages <- function(sampler, stage = "preburn", iter=0, verbose = TRUE, verbo
 {
 
   if (is.null(particles)){
-    # if(!is.null(sampler$g_map_fixed)){
-    #   particles <- round(particle_factor*sqrt(length(sampler$pars_random)/sampler$n_subjects))
-    # } else{
-    #   particles <- round(particle_factor*sqrt(length(sampler$par_names)))
-    # }
-    max_pars <- max(table(attr(sampler[[1]], "components")))
-    particles <- round(particle_factor*sqrt(max_pars))
+    if(!is.null(sampler$g_map_fixed)){
+      particles <- round(particle_factor*sqrt(length(sampler$pars_random)/sampler$n_subjects))
+    } else{
+      particles <- round(particle_factor*sqrt(length(sampler$par_names)))
+    }
+    # max_pars <- max(table(attr(sampler[[1]], "components")))
+    # particles <- round(particle_factor*sqrt(max_pars))
 
   }
   if (!sampler$init) {
-    # if(!is.null(sampler$g_map_fixed)){
-    #   sampler <- init_lm(sampler, n_cores = n_cores)
-    # } else{
-    #   sampler <- init(sampler, n_cores = n_cores)
-    # }
-    sampler <- init(sampler, n_cores = n_cores)
+    if(!is.null(sampler$g_map_fixed)){
+      sampler <- init_lm(sampler, n_cores = n_cores)
+    } else{
+      sampler <- init(sampler, n_cores = n_cores)
+    }
+    # sampler <- init(sampler, n_cores = n_cores)
   }
   if (iter == 0) return(sampler)
-  # if(!is.null(sampler$g_map_fixed)){
-  #   sampler <- run_stage_lm(sampler, stage = stage,iter = iter, particles = particles,
-  #                           n_cores = n_cores, p_accept = p_accept, verbose = verbose, verboseProgress = verboseProgress)
-  # } else{
-#     sampler <- run_stage(sampler, stage = stage,iter = iter, particles = particles,
-#                          n_cores = n_cores, p_accept = p_accept, verbose = verbose, verboseProgress = verboseProgress)
-# }
-  sampler <- run_stage(sampler, stage = stage,iter = iter, particles = particles,
-                     n_cores = n_cores, p_accept = p_accept, verbose = verbose, verboseProgress = verboseProgress)
+  if(!is.null(sampler$g_map_fixed)){
+    sampler <- run_stage_lm(sampler, stage = stage,iter = iter, particles = particles,
+                            n_cores = n_cores, p_accept = p_accept, verbose = verbose, verboseProgress = verboseProgress)
+  } else{
+      sampler <- run_stage(sampler, stage = stage,iter = iter, particles = particles,
+                           n_cores = n_cores, p_accept = p_accept, verbose = verbose, verboseProgress = verboseProgress)
+  }
+  # sampler <- run_stage(sampler, stage = stage,iter = iter, particles = particles,
+  #                    n_cores = n_cores, p_accept = p_accept, verbose = verbose, verboseProgress = verboseProgress)
   return(sampler)
 }
 
 add_proposals <- function(samplers, stage, n_cores, n_blocks){
   if(stage != "preburn"){
-    # if(!is.null(samplers[[1]]$g_map_fixed)){
-    #   samplers <- create_cov_proposals_lm(samplers)
-    # } else{    }
-    samplers <- create_cov_proposals(samplers, do_block = stage != "sample")
-    if(!is.null(n_blocks)){
-      components <- sub_blocking(samplers, n_blocks)
-      for(i in 1:length(samplers)){
-        attr(samplers[[i]]$data, "components") <- components
-      }
+    if(!is.null(samplers[[1]]$g_map_fixed)){
+      samplers <- create_cov_proposals_lm(samplers)
+    } else{
+      samplers <- create_cov_proposals(samplers, do_block = stage != "sample")
     }
+    # if(!is.null(n_blocks)){
+    #   components <- sub_blocking(samplers, n_blocks)
+    #   for(i in 1:length(samplers)){
+    #     attr(samplers[[i]]$data, "components") <- components
+    #   }
+    # }
 
   }
   if(stage == "sample"){
-    # if(!is.null(samplers[[1]]$g_map_fixed)){
-    #   samplers <- create_eff_proposals_lm(samplers, n_cores)
-    # } else{    }
-    samplers <- create_eff_proposals(samplers, n_cores)
+    if(!is.null(samplers[[1]]$g_map_fixed)){
+      samplers <- create_eff_proposals_lm(samplers, n_cores)
+    } else{
+      samplers <- create_eff_proposals(samplers, n_cores)
+
+    }
   }
   return(samplers)
 }
@@ -576,55 +591,55 @@ create_cov_proposals <- function(samplers, samples_idx = NULL, do_block = TRUE){
   return(samplers)
 }
 
-# create_eff_proposals_lm <- function(samplers, n_cores){
-#   samples_merged <- merge_samples(samplers)
-#   test_samples <- extract_samples(samples_merged, stage = c("adapt", "sample"), max_n_sample = 1000)
-#   for(i in 1:length(samplers)){
-#     iteration = round(test_samples$iteration * i/length(samplers))
-#     attr(samplers[[i]], "eff_props") <- auto_mclapply(X = samplers[[1]]$subjects,FUN = get_conditionals_lm,samples = test_samples, iteration = iteration,
-#                                                       mc.cores = n_cores)
-#     attr(samplers[[i]], "eff_props_between") <- get_conditionals_lm_between(samples = test_samples, iteration = iteration)
-#   }
-#   return(samplers)
-# }
+create_eff_proposals_lm <- function(samplers, n_cores){
+  samples_merged <- merge_samples(samplers)
+  test_samples <- extract_samples(samples_merged, stage = c("adapt", "sample"), max_n_sample = 1000)
+  for(i in 1:length(samplers)){
+    iteration = round(test_samples$iteration * i/length(samplers))
+    attr(samplers[[i]], "eff_props") <- auto_mclapply(X = samplers[[1]]$subjects,FUN = get_conditionals_lm,samples = test_samples, iteration = iteration,
+                                                      mc.cores = n_cores)
+    attr(samplers[[i]], "eff_props_between") <- get_conditionals_lm_between(samples = test_samples, iteration = iteration)
+  }
+  return(samplers)
+}
 
-# create_cov_proposals_lm <- function(samplers, samples_idx = NULL){
-#   get_covs <- function(sampler, samples_idx, par_idx){
-#     return(var(t(sampler$samples$random[par_idx, samples_idx])))
-#   }
-#   n_subjects <- samplers[[1]]$n_subjects
-#   n_chains <- length(samplers)
-#
-#   if(is.null(samples_idx)){
-#     idx_subtract <- min(250, samplers[[1]]$samples$idx/2)
-#     samples_idx <- round(samplers[[1]]$samples$idx - idx_subtract):samplers[[1]]$samples$idx
-#   }
-#   pars_per_subject <- lapply(samplers[[1]]$subjects, FUN = function(x, pars) pars[get_sub_idx(x, pars)], samplers[[1]]$pars_random)
-#   between_idx <- !grepl("subjects", samplers[[1]]$pars_random)
-#
-#   chains_cov_sub <- vector("list", length = n_subjects)
-#   for(j in 1:n_chains){
-#     for(sub in 1:n_subjects){
-#       mean_covs <- get_covs(samplers[[j]], samples_idx, par_idx = pars_per_subject[[sub]])
-#       if(is.negative.semi.definite(mean_covs)){
-#         chains_cov_sub[[sub]] <- attr(samplers[[j]], "chains_cov_sub")[[sub]]
-#       } else{
-#         chains_cov_sub[[sub]] <-  as.matrix(nearPD(mean_covs)$mat)
-#       }
-#     }
-#     mean_covs_between <- var(t(rbind(samplers[[j]]$samples$fixed[, samples_idx],
-#                                      samplers[[j]]$samples$random[between_idx,samples_idx])))
-#     if(is.negative.semi.definite(mean_covs_between)){
-#       mean_covs_between <- attr(samplers[[j]], "chains_cov_between")
-#     } else{
-#       mean_covs_between <-  as.matrix(nearPD(mean_covs_between)$mat)
-#     }
-#     attr(samplers[[j]], "chains_cov_sub") <- chains_cov_sub
-#     attr(samplers[[j]], "chains_cov_between") <- mean_covs_between
-#
-#   }
-#   return(samplers)
-# }
+create_cov_proposals_lm <- function(samplers, samples_idx = NULL){
+  get_covs <- function(sampler, samples_idx, par_idx){
+    return(var(t(sampler$samples$random[par_idx, samples_idx])))
+  }
+  n_subjects <- samplers[[1]]$n_subjects
+  n_chains <- length(samplers)
+
+  if(is.null(samples_idx)){
+    idx_subtract <- min(250, samplers[[1]]$samples$idx/2)
+    samples_idx <- round(samplers[[1]]$samples$idx - idx_subtract):samplers[[1]]$samples$idx
+  }
+  pars_per_subject <- lapply(samplers[[1]]$subjects, FUN = function(x, pars) pars[get_sub_idx(x, pars)], samplers[[1]]$pars_random)
+  between_idx <- !grepl("subjects", samplers[[1]]$pars_random)
+
+  chains_cov_sub <- vector("list", length = n_subjects)
+  for(j in 1:n_chains){
+    for(sub in 1:n_subjects){
+      mean_covs <- get_covs(samplers[[j]], samples_idx, par_idx = pars_per_subject[[sub]])
+      if(is.negative.semi.definite(mean_covs)){
+        chains_cov_sub[[sub]] <- attr(samplers[[j]], "chains_cov_sub")[[sub]]
+      } else{
+        chains_cov_sub[[sub]] <-  as.matrix(nearPD(mean_covs)$mat)
+      }
+    }
+    mean_covs_between <- var(t(rbind(samplers[[j]]$samples$fixed[, samples_idx],
+                                     samplers[[j]]$samples$random[between_idx,samples_idx])))
+    if(is.negative.semi.definite(mean_covs_between)){
+      mean_covs_between <- attr(samplers[[j]], "chains_cov_between")
+    } else{
+      mean_covs_between <-  as.matrix(nearPD(mean_covs_between)$mat)
+    }
+    attr(samplers[[j]], "chains_cov_sub") <- chains_cov_sub
+    attr(samplers[[j]], "chains_cov_between") <- mean_covs_between
+
+  }
+  return(samplers)
+}
 
 get_attributes <- function(samplers, attributes = NULL){
   if(is.null(attributes)) {

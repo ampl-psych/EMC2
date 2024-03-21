@@ -63,8 +63,8 @@ pmwgs_lm <- function(dadm, pars = NULL, ll_func = NULL, prior = NULL, type, ...)
   prior <- attr(dadm[[1]], "prior")
   DM_fixed <- attr(dadm[[1]], "DM_fixed")
   DM_random <- attr(dadm[[1]], "DM_random")
-  g_fixed <- oneG(attr(dadm[[1]], "g_fixed"))
-  g_random <- oneG(attr(dadm[[1]], "g_random"))
+  g_fixed <- sort(oneG(attr(dadm[[1]], "g_fixed")))
+  g_random <- sort(oneG(attr(dadm[[1]], "g_random")))
   pars_fixed <- attr(dadm[[1]], "p_vector_fixed")
   pars_random <- attr(dadm[[1]], "p_vector_random")
   pars_between <- c(pars_fixed, pars_random[!grepl("subjects", pars_random)])
@@ -114,13 +114,13 @@ get_prior_lm <- function(prior, g_fixed, g_random, sample = F){
     prior$G_fixed_A <- rep(1, length(unique(g_fixed)))
   }
   if(is.null(prior$g_random_A)){
-    prior$G_random_A <- rep(1, length(unique(g_random)))
+    prior$G_random_A <- rep(.25, length(unique(g_random)))
   }
   if(is.null(prior$g_fixed_v)){
     prior$G_fixed_v <- 2
   }
   if(is.null(prior$g_random_v)){
-    prior$G_random_v <- 2
+    prior$G_random_v <- 5
   }
   return(prior)
 }
@@ -256,7 +256,7 @@ last_sample_lm <- function(sampler){
 get_par_sums_sq <- function(map, pars){
   out <- numeric(length(unique(map)))
   for(i in 1:length(unique(map))){
-    idx <- map == map[i]
+    idx <- map == unique(map)[i]
     out[i] <- sum(pars[idx]^2)
   }
   return(out)
@@ -265,7 +265,7 @@ get_par_sums_sq <- function(map, pars){
 get_n_obs <- function(map, pars){
   out <- numeric(length(unique(map)))
   for(i in 1:length(unique(map))){
-    out[i] <- sum(map == map[i])
+    out[i] <- sum(map == unique(map)[i])
   }
   return(out)
 }
@@ -323,14 +323,8 @@ new_particle_between <- function(n_particles, hyper,
   group_mean <- c(hyper$mu_fixed, hyper$mu_random[!within_idx])
   group_var <- c(hyper$var_fixed, hyper$var_random[!within_idx])
   prev_mu <- c(pars_fixed, pars_random[!within_idx])
-
-  eff_mean <- eff_props$eff_mu
-  eff_var <- eff_props$eff_var
-
-  if(stage == "preburn"){
+  if(stage != "sample"){
     eff_mean <- prev_mu
-  }
-  if(stage == "preburn"){
     eff_var_curr <- chains_cov * epsilon^2
     if(stage == "preburn"){
       ind_var <- diag(group_var) * epsilon^2
@@ -338,9 +332,25 @@ new_particle_between <- function(n_particles, hyper,
       ind_var <- diag(group_var) *  mean(diag(eff_var_curr))/mean(diag(group_var))
     }
   } else{
-    eff_var_curr <- eff_var * epsilon^2
+    eff_mean <- eff_props$eff_mu
+    eff_var_curr <- eff_props$eff_var
     ind_var <- chains_cov *  epsilon^2
   }
+
+  # if(stage == "preburn"){
+  #   eff_mean <- prev_mu
+  # }
+  # if(stage == "preburn"){
+  #   eff_var_curr <- chains_cov * epsilon^2
+  #   if(stage == "preburn"){
+  #     ind_var <- diag(group_var) * epsilon^2
+  #   } else{
+  #     ind_var <- diag(group_var) *  mean(diag(eff_var_curr))/mean(diag(group_var))
+  #   }
+  # } else{
+  #   eff_var_curr <- eff_var * epsilon^2
+  #   ind_var <- chains_cov *  epsilon^2
+  # }
   particle_numbers <- numbers_from_proportion(mix_proportion, n_particles)
   cumuNumbers <- cumsum(particle_numbers) + 1 # Include the particle from b4
   prior_particles <- particle_draws(particle_numbers[1], group_mean, diag(group_var))
@@ -364,17 +374,18 @@ new_particle_between <- function(n_particles, hyper,
   else {
     eff_density <- mvtnorm::dmvnorm(x = proposals, mean = eff_mean, sigma = eff_var_curr)
   }
+  prior_density <- lp + sum(dnorm(x = pars_random[within_idx], mean = hyper$mu_random[within_idx], sd = sqrt(hyper$var_random[within_idx]), log = T))
   lm <- log(mix_proportion[1] * exp(lp) + mix_proportion[2] * prop_density + (mix_proportion[3] * eff_density))
-  l <- lw + lp - lm
+  l <- lw + prior_density - lm
   weight <- exp(l - max(l))
   idx <- sample(x = n_particles+1, size = 1, prob = weight)
   origin <- min(which(idx <= cumuNumbers))
-  return(list(proposal = proposals[idx,], ll = lw[idx], origin = origin))
+  return(list(proposal = proposals[idx,], ll = lw[idx], origin = origin, prior = prior_density[idx]))
 }
 
 new_particle_within <- function(subj_mean, data, epsilon, chains_cov, eff_props, n_particles, hyper, pars_between, ll_func,
                                 components = rep(1, length(subj_mean)),stage,
-                                prev_ll, mix_proportion = c(.5, .5, 0)){
+                                prev_ll, prev_prior, mix_proportion = c(.5, .5, 0)){
   #Draw the first start point
   unq_components <- unique(components)
   group_mean <- hyper$mu_random[names(subj_mean)]
@@ -448,11 +459,12 @@ new_particle_within <- function(subj_mean, data, epsilon, chains_cov, eff_props,
     else {
       eff_density <- mvtnorm::dmvnorm(x = proposals[,idx], mean = eff_mean_sub[idx], sigma = eff_var_curr[idx,idx])
     }
+    prior_density <- lp + prev_prior - lp[1]
     lm <- log(mix_proportion[1] * exp(lp) + (mix_proportion[2] * prop_density) + (mix_proportion[3] * eff_density))
     infnt_idx <- is.infinite(lm)
     lm[infnt_idx] <- min(lm[!infnt_idx])
     # Calculate weights and center
-    l <- lw_total + lp - lm
+    l <- lw_total + prior_density - lm
     weights <- exp(l - max(l))
     # Do MH step and return everything
     idx_ll <- sample(x = n_particles+1, size = 1, prob = weights)
@@ -533,16 +545,15 @@ run_stage_lm <- function(pmwgs,
       mu_fixed = rep(0, length(pmwgs$g_map_fixed)),
       mu_random = rep(0, length(pmwgs$g_map_random))
     )
-
     names(hyper$mu_random) <- pmwgs$pars_random
     names(hyper$var_random) <- pmwgs$pars_random
     hyper$mu_fixed[pmwgs$is_intercept] = pmwgs$prior$intercepts_mu
     input_random <- pmwgs$samples$random[,j-1]
-    if(stage == "preburn"){
-      input_random[1:length(input_random)] <- 0
-    } else{
-      eff_props_between <- create_eff_proposals_between(pmwgs$samples)
-    }
+    # if(stage == "preburn"){
+    #   input_random[1:length(input_random)] <- 0
+    # } else{
+    #   eff_props_between <- create_eff_proposals_between(pmwgs$samples)
+    # }
     # Particle step
     proposals_between <- new_particle_between(particles_fixed, hyper, pmwgs$samples$fixed[,j-1],
                                               input_random, pmwgs$data, pmwgs$subjects,
@@ -552,7 +563,7 @@ run_stage_lm <- function(pmwgs,
     pars_per_subject <- lapply(pmwgs$subjects, FUN = function(x, pars) pars[get_sub_idx(x, names(pars))], pmwgs$samples$random[,j-1])
     proposals_within <- parallel::mcmapply(new_particle_within,pars_per_subject, pmwgs$data, pmwgs$samples$epsilon[-1,j-1], chains_cov_sub, eff_props,
                                            MoreArgs = list(hyper = hyper, n_particles = particles, pars_between = proposals_between$proposal,
-                                          ll_func = pmwgs$ll_func, stage = stage, prev_ll = pmwgs$samples$component_ll[1,j-1],
+                                          ll_func = pmwgs$ll_func, stage = stage, prev_ll = proposals_between$ll, prev_prior = proposals_between$prior,
                                           mix_proportion = mix), mc.cores = n_cores)
     proposals_within <- unpack_within_proposals(proposals_within)
 

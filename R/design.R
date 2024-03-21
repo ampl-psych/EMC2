@@ -633,7 +633,7 @@ design_model <- function(data,design,model=NULL,
     if (!is.null(rt_resolution) & !is.null(da$rt)) da$rt <- round(da$rt/rt_resolution)*rt_resolution
     design$DM_fixed <- lapply(design$DM_fixed, FUN = function(x) return(x[order_idx,,drop =F]))
     design$DM_random <- lapply(design$DM_random, FUN = function(x) return(x[order_idx,, drop = F]))
-    # dadm <- compress_dadm_lm(da, design$DM_fixed, design$DM_random, Fcov = design$Fcovariates)
+    dadm <- compress_dadm_lm(da, design$DM_fixed, design$DM_random, Fcov = design$Fcovariates)
     attr(dadm, "g_fixed") <- attr(design, "g_fixed")
     attr(dadm, "g_random") <- attr(design, "g_random")
     attr(dadm, "p_vector_random") <- attr(design, "p_vector_random")

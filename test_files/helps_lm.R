@@ -204,6 +204,7 @@ make_samplers_lm <- function(data_list,design_list, model_list =NULL,
   # if(!is.null(subject_covariates)) attr(dadm_list, "subject_covariates") <- subject_covariates
 
   out <- pmwgs_lm(dadm_list, type = "standard")
+  attr(out, "variant_funs") <- list(type = "glm")
   # replicate chains
   dadm_lists <- rep(list(out),n_chains)
   # For post predict

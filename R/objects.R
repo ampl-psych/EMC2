@@ -160,25 +160,25 @@ as_Mcmc <- function(sampler,filter=stages,thin=1,subfilter=0,
     attr(out,"selection") <- selection
     return(out)
   }
-  # if(selection == "random"){
-  #   random <- sampler$samples$random[, filter,drop=FALSE]
-  #   if (is.null(subfilter)){
-  #     random <- t(random)
-  #   }  else{
-  #     random <- t(shorten(random,subfilter,2))
-  #   }
-  #   if (thin > dim(random)[1]) stop("Thin to large\n")
-  #   random <- random[seq(thin,dim(random)[1],by=thin),,drop=FALSE]
-  #   out <- stats::setNames(lapply(
-  #     sampler$subjects,
-  #     function(x) {
-  #       coda::mcmc(random[,get_sub_idx(x, sampler$pars_random),drop = F])
-  #     }
-  #   ), names(sampler$data))
-  #   attr(out,"selection") <- selection
-  #   attr(out,"selection") <- selection
-  #   return(out)
-  # }
+  if(selection == "random"){
+    random <- sampler$samples$random[, filter,drop=FALSE]
+    if (is.null(subfilter)){
+      random <- t(random)
+    }  else{
+      random <- t(shorten(random,subfilter,2))
+    }
+    if (thin > dim(random)[1]) stop("Thin to large\n")
+    random <- random[seq(thin,dim(random)[1],by=thin),,drop=FALSE]
+    out <- stats::setNames(lapply(
+      sampler$subjects,
+      function(x) {
+        coda::mcmc(random[,get_sub_idx(x, sampler$pars_random),drop = F])
+      }
+    ), names(sampler$data))
+    attr(out,"selection") <- selection
+    attr(out,"selection") <- selection
+    return(out)
+  }
   if (selection == "mu") {
     mu <- sampler$samples$theta_mu[, filter,drop=FALSE]
     if (is.null(subfilter)){
@@ -231,7 +231,11 @@ as_Mcmc <- function(sampler,filter=stages,thin=1,subfilter=0,
     if (selection == "epsilon"){
       LL <- sampler$samples$epsilon[, filter,drop=FALSE]
     } else{
-      LL <- sampler$samples$subj_ll[, filter,drop=FALSE]
+      if(!is.null(sampler$samples$component_ll)){
+        LL <- sampler$samples$component_ll[, filter,drop=FALSE]
+      } else{
+        LL <- sampler$samples$subj_ll[, filter,drop=FALSE]
+      }
     }
     if (!is.null(subfilter)) LL <- shorten(LL,subfilter,2)
     if (thin > dim(LL)[2]) stop("Thin to large\n")

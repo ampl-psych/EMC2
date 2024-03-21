@@ -51,25 +51,50 @@ samplers <- make_samplers_lm(dat_coh, design)
 # Finding which are intercepts with 0 + in pmwgs$is_intercept
 
 source("test_files/sampling_lm.R")
+devtools::load_all()
 
-create_eff_proposals_between <- function(samples){
-  idx_subtract <- min(300, samples$idx/2)
-  idx <- round(samples$idx - idx_subtract):samples$idx
-  all_samples <- rbind(samples$fixed[,idx], samples$random[,idx])
-  mu_tilde <- rowMeans(all_samples)
-  var_tilde <- stats::cov(t(all_samples))
-  n_pars <- nrow(samples$fixed)
-  if(any(eigen(var_tilde, only.values = T)$values < 1e-08)){
-    return(list(eff_mu = mu_tilde[1:n_pars], eff_var = as.matrix(nearPD(var_tilde[1:n_pars, 1:n_pars])$mat)))
-  }
-  condmvn <- condMVN(mean = mu_tilde, sigma = var_tilde,
-                     dependent.ind = 1:n_pars, given.ind = (n_pars + 1):length(mu_tilde),
-                     X.given = c(samples$random[,samples$idx]))
-  return(list(eff_mu = condmvn$condMean, eff_var = condmvn$condVar))
+# debug(as_Mcmc)
+#
+# debug(get_stop_criteria)
+samplers <- run_emc(samplers, cores_per_chain = 4, cores_for_chains = 3, fileName = "test_lm2.RData", stop_criteria = list("burn" = list(mean_gd = 1.1)))
+
+plot_chains(samplers, selection = "random", filter = "burn")
+plot_chains(samplers, selection = "fixed", filter = "burn")
+debug(as_Mcmc)
+plot_chains(samplers, selection = "epsilon", filter = "burn")
+
+
+
+test <- gd_pmwg(samplers, selection = "fixed", filter = "burn")
+test_random <- gd_pmwg(samplers, selection = "random", filter = "burn")
+
+# Check mean centered -----------------------------------------------------
+samples <- merge_samples(samplers)
+dim(samples$samples$random)
+rowMeans(samples$samples$random)
+
+
+
+# check variance ----------------------------------------------------------
+N <- samplers[[1]]$samples$idx
+vars_emp <- matrix(0, N, 5)
+vars_gibbs <- t(samplers[[1]]$samples$g_random)
+for(i in 1:N){
+  tmp <- data.frame(vals = samplers[[1]]$samples$random[,i], map = samplers[[1]]$g_map_random)
+  vars_emp[i,] <- aggregate(vals ~ map, tmp, var)$vals
 }
 
-debug(create_eff_proposals_between)
-samplers <- run_samplers(samplers, stage = "burn", verbose = T, cores_per_chain = 10, cores_for_chains = 1, fileName = "test_groups.RData", mean_gd = 1.1)
+new <- vars_emp - vars_gibbs
+matplot(new[-c(1:150),-2], type = "l")
+
+
+
+
+
+plot_chains(samplers, selection = "fixed", filter = "preburn", subfilter = 50)
+
+
+attr(samplers[[1]], "variant_funs")
 
 source("test_files/sampling_lm.R")
 source("test_files/helps_lm.R")
@@ -78,10 +103,9 @@ source("test_files/utils_lm.R")
 samplers <- run_adapt(samplers, verbose = T, cores_per_chain = 4, cores_for_chains = 3, particle_factor = 30)
 samplers <- run_sample(samplers, verbose = T, cores_per_chain = 4, cores_for_chains = 3, iter = 700)
 
-plot_chains(samplers, selection = "random", filter = "sample", subfilter = 50)
-
-
 devtools::load_all()
+
+
 source("test_files/sampling_lm.R")
 source("test_files/helps_lm.R")
 source("test_files/utils_lm.R")
