@@ -749,7 +749,6 @@ loadRData <- function(fileName){
 #' @param stop_criteria A list. Defines the stopping criteria and for which types of parameters these should hold. See run_emc
 #'
 #' @return A list of samplers
-#' @export
 
 auto_burn <- function(samplers, preburn = 150,
                       p_accept = .8, step_size = 100, verbose = FALSE, verboseProgress = FALSE,
@@ -803,7 +802,6 @@ auto_burn <- function(samplers, preburn = 150,
 #' @param stop_criteria A list. Defines the stopping criteria and for which types of parameters these should hold. See run_emc.
 #'
 #' @return A list of samplers.
-#' @export
 
 run_adapt <- function(samplers, stop_criteria = NULL,
                       p_accept = .8, step_size = 100, verbose = FALSE, verboseProgress = FALSE,
@@ -843,10 +841,8 @@ run_adapt <- function(samplers, stop_criteria = NULL,
 #' @param n_blocks An integer. Will block the parameter chains such that they are updated in blocks. This can be helpful in extremely tough models with large number of parameters.
 #' @param max_trys An integer. How many times it will try to meet the finish conditions. Default is 20.
 #' @param stop_criteria A list. Defines the stopping criteria and for which types of parameters these should hold. See run_emc.
-#'
-#' @export
-#'
 #' @return A list of samplers
+
 run_sample <- function(samplers, iter = 1000, stop_criteria = NULL,
                        p_accept = .8, step_size = 100, verbose = FALSE, verboseProgress = FALSE,
                        fileName = NULL,
@@ -1084,7 +1080,6 @@ extractDadms <- function(dadms, names = 1:length(dadms)){
 #' @param df An integer. The degrees of freedom used in the t-distribution used as IS distribution for the group-level proposals.
 #'
 #' @return Samplers, with IS2 attribute
-#' @export
 
 run_IS2 <- function(samplers, filter = "sample", subfilter = 0, IS_samples = 1000,
                     stepsize_particles = 500, max_particles = 5000, n_cores = 1, df = 5){
