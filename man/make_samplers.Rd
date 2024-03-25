@@ -31,26 +31,26 @@ make_samplers(
 
 \item{n_chains}{An integer. Specifies the number of mcmc chains to be run (has to be more than 1 to compute \code{rhat}).}
 
-\item{compress}{A Boolean, if \code{TRUE} (i.e., the default), the data is compressed to speed up likelihood calculations}
+\item{compress}{A Boolean, if \code{TRUE} (i.e., the default), the data is compressed to speed up likelihood calculations.}
 
 \item{rt_resolution}{A double. Used for compression, response times will be binned based on this resolution.}
 
-\item{prior_list}{A named list containing the prior. Default prior created if NULL}
+\item{prior_list}{A named list containing the prior. Default prior created if NULL.}
 
-\item{grouped_pars}{An integer vector. Parameters on this location of the vector of parameters are treated as constant across sujects}
+\item{grouped_pars}{An integer vector. Parameters on this location of the vector of parameters are treated as constant across subjects}
 
 \item{par_groups}{A vector. Only to be specified with type blocked, e.g., \code{c(1,1,1,2,2)} means the covariances
 of the first three and of the last two parameters are estimated as two separate blocks.}
 
 \item{n_factors}{An integer. Only to be specified with type factor.}
 
-\item{constraintMat}{A matrix of rows equal to the number of estimated parameters, and columns equal to the number of factors, only to be specified with type factor.
-If null will use default settings as specified in Innes et al. 2022}
+\item{constraintMat}{A matrix of rows equal to the number of estimated parameters, and columns equal to the number of factors. Only to be specified with type factor.
+If \code{NULL}, default settings as specified in Innes et al. 2022 will be used.}
 
-\item{...}{Additional, optional arguments}
+\item{...}{Additional, optional arguments.}
 }
 \value{
-a list of samplers
+A list
 }
 \description{
 initializes the sampling process by combining the data, prior,

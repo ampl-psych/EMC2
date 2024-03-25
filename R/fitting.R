@@ -877,17 +877,17 @@ run_sample <- function(samplers, iter = 1000, stop_criteria = NULL,
 #' @param model A model list. If none is supplied, the model specified in `make_design()` is used.
 #' @param type A string indicating whether to run a `standard` group-level, `blocked`, `diagonal`, `factor`, or `single` (i.e., non-hierarchical) model.
 #' @param n_chains An integer. Specifies the number of mcmc chains to be run (has to be more than 1 to compute `rhat`).
-#' @param compress A Boolean, if `TRUE` (i.e., the default), the data is compressed to speed up likelihood calculations
+#' @param compress A Boolean, if `TRUE` (i.e., the default), the data is compressed to speed up likelihood calculations.
 #' @param rt_resolution A double. Used for compression, response times will be binned based on this resolution.
 #' @param par_groups A vector. Only to be specified with type blocked, e.g., `c(1,1,1,2,2)` means the covariances
 #' of the first three and of the last two parameters are estimated as two separate blocks.
 #' @param n_factors An integer. Only to be specified with type factor.
-#' @param constraintMat A matrix of rows equal to the number of estimated parameters, and columns equal to the number of factors, only to be specified with type factor.
-#' If null will use default settings as specified in Innes et al. 2022
-#' @param prior_list A named list containing the prior. Default prior created if NULL
-#' @param grouped_pars An integer vector. Parameters on this location of the vector of parameters are treated as constant across sujects
-#' @param ... Additional, optional arguments
-#' @return a list of samplers
+#' @param constraintMat A matrix of rows equal to the number of estimated parameters, and columns equal to the number of factors. Only to be specified with type factor.
+#' If `NULL`, default settings as specified in Innes et al. 2022 will be used.
+#' @param prior_list A named list containing the prior. Default prior created if NULL.
+#' @param grouped_pars An integer vector. Parameters on this location of the vector of parameters are treated as constant across subjects
+#' @param ... Additional, optional arguments.
+#' @return A list
 #' @export
 
 make_samplers <- function(data,design,model=NULL,
