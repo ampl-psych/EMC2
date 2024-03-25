@@ -879,15 +879,40 @@ run_sample <- function(samplers, iter = 1000, stop_criteria = NULL,
 #' @param n_chains An integer. Specifies the number of mcmc chains to be run (has to be more than 1 to compute `rhat`).
 #' @param compress A Boolean, if `TRUE` (i.e., the default), the data is compressed to speed up likelihood calculations.
 #' @param rt_resolution A double. Used for compression, response times will be binned based on this resolution.
-#' @param par_groups A vector. Only to be specified with type blocked, e.g., `c(1,1,1,2,2)` means the covariances
+#' @param par_groups A vector. Only to be specified with type `blocked`, e.g., `c(1,1,1,2,2)` means the covariances
 #' of the first three and of the last two parameters are estimated as two separate blocks.
-#' @param n_factors An integer. Only to be specified with type factor.
+#' @param n_factors An integer. Only to be specified with type `factor`.
 #' @param constraintMat A matrix of rows equal to the number of estimated parameters, and columns equal to the number of factors. Only to be specified with type factor.
 #' If `NULL`, default settings as specified in Innes et al. 2022 will be used.
-#' @param prior_list A named list containing the prior. Default prior created if NULL.
+#' @param prior_list A named list containing the prior. Default prior created if `NULL`. For the default priors, see `?get_prior_{type}`.
 #' @param grouped_pars An integer vector. Parameters on this location of the vector of parameters are treated as constant across subjects
 #' @param ... Additional, optional arguments.
 #' @return A list
+#' @examples dat <- forstmann
+#'
+#' # function that takes the lR factor (named diff in the following function) and
+#' # returns a logical defining the correct response for each stimulus. In this
+#' # case the match is simply such that the S factor equals the latent response factor.
+#' matchfun <- function(d)d$S==d$lR
+#'
+#' # design an "average and difference" contrast matrix
+#' ADmat <- matrix(c(-1/2,1/2),ncol=1,dimnames=list(NULL,"diff"))
+#'
+#' # specify design
+#' design_LBABE <- make_design(data = dat,model=LBA,matchfun=matchfun,
+#' formula=list(v~lM,sv~lM,B~E+lR,A~1,t0~1),
+#' contrasts=list(v=list(lM=ADmat)),constants=c(sv=log(1)))
+#'
+#' # specify priors
+#' pmean <- c(v=1,v_lMdiff=1,sv_lMTRUE=log(.5), B=log(.5),B_Eneutral=log(1.5),
+#'            B_Eaccuracy=log(2),B_lRright=0, A=log(0.25),t0=log(.2))
+#' psd <- c(v=1,v_lMdiff=0.5,sv_lMTRUE=.5,
+#'          B=0.3,B_Eneutral=0.3,B_Eaccuracy=0.3,B_lRright=0.3,A=0.4,t0=.5)
+#' prior_LBABE <- make_prior(design_LBABE, type = 'standard',pmean=pmean,psd=psd)
+#'
+#' # create samplers object
+#' LBABE <- make_samplers(dat,design_LBABE,type="standard",  prior=prior_LBABE)
+#'
 #' @export
 
 make_samplers <- function(data,design,model=NULL,
