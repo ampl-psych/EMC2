@@ -242,12 +242,13 @@ add_proposals <- function(samplers, stage, n_cores, n_blocks){
     # } else{    }
     samplers <- create_cov_proposals(samplers, do_block = stage != "sample")
     if(!is.null(n_blocks)){
-      components <- sub_blocking(samplers, n_blocks)
-      for(i in 1:length(samplers)){
-        attr(samplers[[i]]$data, "components") <- components
+      if(n_blocks > 1){
+        components <- sub_blocking(samplers, n_blocks)
+        for(i in 1:length(samplers)){
+          attr(samplers[[i]]$data, "components") <- components
+        }
       }
     }
-
   }
   if(stage == "sample"){
     # if(!is.null(samplers[[1]]$g_map_fixed)){
@@ -420,9 +421,7 @@ check_gd <- function(samplers, stage, max_gd, mean_gd, omit_mpsrf, trys, verbose
   #   n_blocks <- max(n_blocks_old, n_blocks)
   # }
   if(stage == "sample" & !ok_gd & "alpha" %in% selection) {
-
-    gds <- gd_pmwg(samplers, selection = "alpha", print_summary = FALSE)
-    if(omit_mpsrf) gds <- gds[,-ncol(gds)]
+    gds <- gd_pmwg(samplers, selection = 'alpha', return_summary = F, mapped = F, print_summary = F, filter = stage, omit_mpsrf = omit_mpsrf)
     if(!is.null(mean_gd)){
       gds_bad <- (rowMeans(gds) > mean_gd)
     } else{

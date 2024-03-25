@@ -97,6 +97,7 @@ init <- function(pmwgs, start_mu = NULL, start_var = NULL,
   if(any(pmwgs$grouped)){
     grouped_pars <- mvtnorm::rmvnorm(particles, pmwgs$prior$prior_grouped$theta_mu_mean,
                                      pmwgs$prior$prior_grouped$theta_mu_var)
+    colnames(grouped_pars) <- pmwgs$par_names[pmwgs$grouped]
   } else{
     grouped_pars <- NULL
   }
@@ -167,7 +168,7 @@ start_proposals <- function(s, parameters, n_particles, pmwgs, variant_funs, gro
   colnames(proposals) <- rownames(pmwgs$samples$alpha) # preserve par names
   if(any(is_grouped)){
     proposals <- update_proposals_grouped(proposals, grouped_pars, is_grouped,
-                                          par_names = pmwgs$par_names)
+                                          par_names = colnames(proposals))
   }
   lw <- calc_ll_manager(proposals, dadm = pmwgs$data[[which(pmwgs$subjects == s)]],
                         ll_func = pmwgs$ll_func)
@@ -259,11 +260,12 @@ run_stage <- function(pmwgs,
       pmwgs$sampler_nuis$samples$idx <- j
     }
     if(any(grouped)){
+      subj_prior <-sum(apply(pars_comb$alpha, 2, FUN = function(x) mvtnorm::dmvnorm(x, pars$tmu, sigma = pars$tvar, log = TRUE)))
       grouped_pars <- new_particle_group(pmwgs$data, particles_grouped, pmwgs$prior$prior_grouped,
                                          chains_cov_grouped, mix_grouped, epsilon_grouped,
                                          pmwgs$samples$grouped_pars[,j-1] , pars_comb$alpha, pmwgs$par_names,
-                                         pmwgs$ll_func, pmwgs$grouped, stage, variant_funs, pmwgs$subjects, n_cores)
-      pmwgs$samples$grouped_pars[,j] <- grouped_pars
+                                         pmwgs$ll_func, pmwgs$grouped, stage, variant_funs, pmwgs$subjects, subj_prior, n_cores)
+      pmwgs$samples$grouped_pars[,j] <- grouped_pars$proposal
       pmwgs$samples$epsilon_grouped <- epsilon_grouped
     } else{
       grouped_pars <- NULL
@@ -274,7 +276,8 @@ run_stage <- function(pmwgs,
                                     chains_cov,
                                     pmwgs$samples$subj_ll[,j-1],
                                     MoreArgs = list(pars_comb, mix, pmwgs$ll_func, epsilon, components, stage,
-                                                    variant_funs$get_group_level, block_idx, shared_ll_idx, grouped_pars, grouped),
+                                                    variant_funs$get_group_level, block_idx, shared_ll_idx, grouped_pars$proposal, grouped,
+                                                    group_prior = grouped_pars$prior),
                                     mc.cores =n_cores)
     proposals <- array(unlist(proposals), dim = c(pmwgs$n_pars - sum(grouped) + 2, pmwgs$n_subjects))
 
@@ -292,7 +295,7 @@ run_stage <- function(pmwgs,
         }
         if(any(grouped)){
           acc <-  pmwgs$samples$grouped_pars[1,j] !=  pmwgs$samples$grouped_pars[1,(j-1)]
-          epsilon_grouped <-update.epsilon(epsilon_grouped^2, acc, p_accept, j, sum(grouped), alphaStar)
+          epsilon_grouped <-update.epsilon(epsilon_grouped^2, acc, mean(p_accept), j, sum(grouped), mean(alphaStar))
         }
       }
     }
@@ -308,7 +311,8 @@ new_particle <- function (s, data, num_particles, eff_mu = NULL,
                           parameters, mix_proportion = c(0.5, 0.5, 0),
                           likelihood_func = NULL, epsilon = NULL,
                           components, stage,  group_level_func,
-                          block_idx, shared_ll_idx, grouped_pars, is_grouped)
+                          block_idx, shared_ll_idx, grouped_pars, is_grouped,
+                          group_prior)
 {
   # if(stage == "sample"){
   #   if(rbinom(1, size = 1, prob = .5) == 1){
@@ -378,6 +382,10 @@ new_particle <- function (s, data, num_particles, eff_mu = NULL,
     } else{
       prior_density <- lp
     }
+    if(any(is_grouped)){
+      prior_density <- prior_density + group_prior
+    }
+
     if (mix_proportion[3] == 0) {
       eff_density <- 0
     }
@@ -408,7 +416,7 @@ new_particle_group <- function(data, num_particles, prior,
                                chains_cov, mix_proportion = c(.1, .9), epsilon_grouped,
                                prev_mu, alpha, par_names, likelihood_func = NULL,
                                is_grouped, stage,
-                               variant_funs, subjects, n_cores){
+                               variant_funs, subjects, subj_prior, n_cores){
   prior_mu <- prior$theta_mu_mean
   prior_var <- prior$theta_mu_var
   if(stage == "preburn"){
@@ -429,10 +437,11 @@ new_particle_group <- function(data, num_particles, prior,
   lp <- mvtnorm::dmvnorm(x = proposals, mean = prior_mu, sigma = prior_var, log = TRUE)
   prop_density <- mvtnorm::dmvnorm(x = proposals, mean = prev_mu, sigma = chains_cov)
   lm <- log(mix_proportion[1] * exp(lp) + mix_proportion[2] * prop_density)
-  l <- lw + lp - lm
+  prior_density <- lp + subj_prior
+  l <- lw + prior_density - lm
   weights <- exp(l - max(l))
   idx <- sample(x = num_particles + 1, size = 1, prob = weights)
-  return(proposals[idx,])
+  return(list(proposal = proposals[idx,], prior = lp[idx]/length(subjects)))
 }
 
 
@@ -800,7 +809,8 @@ update_proposals_grouped <- function(proposals, grouped_pars, is_grouped, par_na
   proposals_full <- matrix(0, nrow = nrow(proposals), ncol = length(is_grouped))
   proposals_full[,!is_grouped] <- proposals
   proposals_full[,is_grouped] <- matrix(grouped_pars, ncol = length(grouped_pars), nrow = nrow(proposals), byrow = T)
-  colnames(proposals_full) <- par_names
+  colnames(proposals_full)[!is_grouped] <- par_names
+  colnames(proposals_full)[is_grouped] <- names(grouped_pars)
   return(proposals_full)
 }
 
