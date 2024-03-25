@@ -2,14 +2,13 @@
 % Please edit documentation in R/fitting.R
 \name{make_samplers}
 \alias{make_samplers}
-\title{Creates a sampler from data and design combined.}
+\title{\code{make_samplers()}}
 \usage{
 make_samplers(
-  data_list,
-  design_list,
-  model_list = NULL,
-  type = c("standard", "diagonal", "blocked", "factor", "single", "lm",
-    "infnt_factor")[1],
+  data,
+  design,
+  model = NULL,
+  type = "standard",
   n_chains = 3,
   compress = TRUE,
   rt_resolution = 0.02,
@@ -20,62 +19,46 @@ make_samplers(
   par_groups = NULL,
   n_factors = NULL,
   constraintMat = NULL,
-  formula = NULL,
-  Lambda_mat = NULL,
-  B_mat = NULL,
-  K_mat = NULL,
-  G_mat = NULL,
-  xy = NULL,
-  xeta = NULL
+  ...
 )
 }
 \arguments{
-\item{data_list}{A dataframe of data, or a list of a dataframe. Should have the column subjects as identifiers.}
+\item{data}{A data frame, or a list of data frames. Needs to have the variable \code{subjects} as participant identifier.}
 
-\item{design_list}{A list with a prespecified design made with make_design.}
+\item{design}{A list with a pre-specified design, the output of \code{make_design()}.}
 
-\item{model_list}{A model list, if empty will use the model specified in the design_list.}
+\item{model}{A model list. If none is supplied, the model specified in \code{make_design()} is used.}
 
-\item{type}{A string indicating whether to run a standard group-level, or blocked, diagonal, factor, or single.}
+\item{type}{A string indicating whether to run a \code{standard} group-level, \code{blocked}, \code{diagonal}, \code{factor}, or \code{single} (i.e., non-hierarchical) model.}
 
-\item{n_chains}{An integer. Specifies the amount of mcmc chains to be run. Should be more than 1 to get gelman diagnostics.}
+\item{n_chains}{An integer. Specifies the number of mcmc chains to be run (has to be more than 1 to compute \code{rhat}).}
 
-\item{compress}{Boolean, if true data compressed to speed likelihood calculation}
+\item{compress}{A Boolean, if \code{TRUE} (i.e., the default), the data is compressed to speed up likelihood calculations}
 
-\item{rt_resolution}{A double. Used for compression, rts will be binned based on this resolution.}
+\item{rt_resolution}{A double. Used for compression, response times will be binned based on this resolution.}
 
 \item{prior_list}{A named list containing the prior. Default prior created if NULL}
 
-\item{nuisance}{An integer vector. Parameters on this location of the vector of parameters are treated as nuisance parameters and not included in group-level covariance (only variance).}
+\item{nuisance}{A vector of integers. Parameters on this location of the vector of parameters are not included in the group-level covariance matrix. Only variances are estimated.}
 
 \item{nuisance_non_hyper}{An integer vector. Parameters on this location of the vector of parameters are treated as nuisance parameters and not included in group-level (only individual level sampling).}
 
 \item{grouped_pars}{An integer vector. Parameters on this location of the vector of parameters are treated as constant across sujects}
 
-\item{par_groups}{A vector. Only to be specified with type blocked \code{c(1,1,1,2,2)} means first three parameters first block, last two parameters in the second block}
+\item{par_groups}{A vector. Only to be specified with type blocked, e.g., \code{c(1,1,1,2,2)} means the covariances
+of the first three and of the last two parameters are estimated as two separate blocks.}
 
 \item{n_factors}{An integer. Only to be specified with type factor.}
 
 \item{constraintMat}{A matrix of rows equal to the number of estimated parameters, and columns equal to the number of factors, only to be specified with type factor.
 If null will use default settings as specified in Innes et al. 2022}
 
-\item{formula}{Ignore. For future compatibility}
-
-\item{Lambda_mat}{Ignore. For future compatibility}
-
-\item{B_mat}{Ignore. For future compatibility}
-
-\item{K_mat}{Ignore. For future compatibility}
-
-\item{G_mat}{Ignore. For future compatibility}
-
-\item{xy}{Ignore. For future compatibility}
-
-\item{xeta}{Ignore. For future compatibility}
+\item{...}{Additional, optional arguments}
 }
 \value{
 a list of samplers
 }
 \description{
-This function is used to initialize samplers using the data and the prespecified design.
+initializes the sampling process by combining the data, prior,
+and model specification into a \code{samplers} object that is needed in \code{run_emc()}.
 }

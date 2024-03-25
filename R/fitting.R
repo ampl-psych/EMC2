@@ -867,67 +867,74 @@ run_sample <- function(samplers, iter = 1000, stop_criteria = NULL,
   return(samplers)
 }
 
-#' Creates a sampler from data and design combined.
+#' `make_samplers()`
 #'
-#' This function is used to initialize samplers using the data and the prespecified design.
+#' initializes the sampling process by combining the data, prior,
+#' and model specification into a `samplers` object that is needed in `run_emc()`.
 #'
-#' @param data_list A dataframe of data, or a list of a dataframe. Should have the column subjects as identifiers.
-#' @param design_list A list with a prespecified design made with make_design.
-#' @param model_list A model list, if empty will use the model specified in the design_list.
-#' @param type A string indicating whether to run a standard group-level, or blocked, diagonal, factor, or single.
-#' @param n_chains An integer. Specifies the amount of mcmc chains to be run. Should be more than 1 to get gelman diagnostics.
-#' @param compress Boolean, if true data compressed to speed likelihood calculation
-#' @param rt_resolution A double. Used for compression, rts will be binned based on this resolution.
-#' @param nuisance An integer vector. Parameters on this location of the vector of parameters are treated as nuisance parameters and not included in group-level covariance (only variance).
-#' @param par_groups A vector. Only to be specified with type blocked `c(1,1,1,2,2)` means first three parameters first block, last two parameters in the second block
+#' @param data A data frame, or a list of data frames. Needs to have the variable `subjects` as participant identifier.
+#' @param design A list with a pre-specified design, the output of `make_design()`.
+#' @param model A model list. If none is supplied, the model specified in `make_design()` is used.
+#' @param type A string indicating whether to run a `standard` group-level, `blocked`, `diagonal`, `factor`, or `single` (i.e., non-hierarchical) model.
+#' @param n_chains An integer. Specifies the number of mcmc chains to be run (has to be more than 1 to compute `rhat`).
+#' @param compress A Boolean, if `TRUE` (i.e., the default), the data is compressed to speed up likelihood calculations
+#' @param rt_resolution A double. Used for compression, response times will be binned based on this resolution.
+#' @param nuisance A vector of integers. Parameters on this location of the vector of parameters are not included in the group-level covariance matrix. Only variances are estimated.
+#' @param par_groups A vector. Only to be specified with type blocked, e.g., `c(1,1,1,2,2)` means the covariances
+#' of the first three and of the last two parameters are estimated as two separate blocks.
 #' @param n_factors An integer. Only to be specified with type factor.
 #' @param constraintMat A matrix of rows equal to the number of estimated parameters, and columns equal to the number of factors, only to be specified with type factor.
 #' If null will use default settings as specified in Innes et al. 2022
 #' @param prior_list A named list containing the prior. Default prior created if NULL
 #' @param nuisance_non_hyper An integer vector. Parameters on this location of the vector of parameters are treated as nuisance parameters and not included in group-level (only individual level sampling).
 #' @param grouped_pars An integer vector. Parameters on this location of the vector of parameters are treated as constant across sujects
-#' @param formula Ignore. For future compatibility
-#' @param Lambda_mat Ignore. For future compatibility
-#' @param B_mat Ignore. For future compatibility
-#' @param K_mat Ignore. For future compatibility
-#' @param G_mat Ignore. For future compatibility
-#' @param xy Ignore. For future compatibility
-#' @param xeta Ignore. For future compatibility
-#'
+#' @param ... Additional, optional arguments
 #' @return a list of samplers
 #' @export
 
-make_samplers <- function(data_list,design_list,model_list=NULL,
-                          type=c("standard","diagonal","blocked","factor","single", "lm", "infnt_factor")[1],
+make_samplers <- function(data,design,model=NULL,
+                          type="standard",
                           n_chains=3,compress=TRUE,rt_resolution=0.02,
                           prior_list = NULL, nuisance = NULL,
                           nuisance_non_hyper = NULL,
                           grouped_pars = NULL,
                           par_groups=NULL,
-                          n_factors=NULL,constraintMat = NULL, formula = NULL,
-                          Lambda_mat = NULL, B_mat = NULL, K_mat = NULL, G_mat = NULL, xy = NULL, xeta = NULL)
+                          n_factors=NULL,constraintMat = NULL, ...){
 
-{
+  # arguments for future compatibility
+  formula <- NULL
+  Lambda_mat <- NULL
+  B_mat <- NULL
+  K_mat <- NULL
+  G_mat <- NULL
+  xy <- NULL
+  xeta <- NULL
+  # overwrite those that were supplied
+  optionals <- list(...)
+  for (name in names(optionals) ) {
+    assign(name, optionals[[name]])
+  }
+
   if (!(type %in% c("standard","diagonal","blocked","factor","single", "lm", "infnt_factor", "SEM")))
     stop("type must be one of: standard,diagonal,blocked,factor,infnt_factor", "lm","single")
 
   if(!is.null(nuisance) & !is.null(nuisance_non_hyper)){
     stop("You can only specify nuisance OR nuisance_non_hyper")
   }
-  if (is(data_list, "data.frame")) data_list <- list(data_list)
+  if (is(data, "data.frame")) data <- list(data)
   if(!is.null(prior_list) & !is.null(prior_list$theta_mu_mean)){
     prior_list <- list(prior_list)
   }
   # Sort subject together and add unique trial within subject integer
   # create overarching data list with one list per subject
   if(type == "lm"){
-    if(length(data_list) > 1) stop("no joint models for lm yet")
+    if(length(data) > 1) stop("no joint models for lm yet")
     vars <- c()
     if(!is.null(formula)){
       for(form in formula){
         vars <- c(vars, split_form(form)$dep)
       }
-      tmp <- data_list[[1]]
+      tmp <- data[[1]]
       aggr_data <- tmp[cumsum(table(tmp$subjects)),c("subjects", unique(vars))]
       for(i in 1:ncol(aggr_data)){
         if(colnames(aggr_data)[i] != "subjects" & is.factor(aggr_data[,i])){
@@ -939,7 +946,7 @@ make_samplers <- function(data_list,design_list,model_list=NULL,
     }
 
   }
-  data_list <- lapply(data_list,function(d){
+  data <- lapply(data,function(d){
     if (!is.factor(d$subjects)) d$subjects <- factor(d$subjects)
     d <- d[order(d$subjects),]
     LC <- attr(d,"LC")
@@ -953,36 +960,36 @@ make_samplers <- function(data_list,design_list,model_list=NULL,
     attr(d,"UT") <- UT
     d
   })
-  if (!is.null(names(design_list)[1]) && names(design_list)[1]=="Flist")
-    design_list <- list(design_list)
-  if (length(design_list)!=length(data_list))
-    design_list <- rep(design_list,length(data_list))
-  if (is.null(model_list)) model_list <- lapply(design_list,function(x){x$model})
-  if (any(unlist(lapply(model_list,is.null))))
-    stop("Must supply model_list if model is not in all design_list components")
-  if (!is.null(names(model_list)[1]) && names(model_list)[1]=="type")
-    model_list <- list(model_list)
-  if (length(model_list)!=length(data_list))
-    model_list <- rep(model_list,length(data_list))
+  if (!is.null(names(design)[1]) && names(design)[1]=="Flist")
+    design <- list(design)
+  if (length(design)!=length(data))
+    design <- rep(design,length(data))
+  if (is.null(model)) model <- lapply(design,function(x){x$model})
+  if (any(unlist(lapply(model,is.null))))
+    stop("Must supply model if model is not in all design components")
+  if (!is.null(names(model)[1]) && names(model)[1]=="type")
+    model <- list(model)
+  if (length(model)!=length(data))
+    model <- rep(model,length(data))
 
-  dadm_list <- vector(mode="list",length=length(data_list))
-  rt_resolution <- rep(rt_resolution,length.out=length(data_list))
+  dadm_list <- vector(mode="list",length=length(data))
+  rt_resolution <- rep(rt_resolution,length.out=length(data))
   for (i in 1:length(dadm_list)) {
     message("Processing data set ",i)
-    # if (!is.null(design_list[[i]]$Ffunctions)) {
-    #   pars <- attr(data_list[[i]],"pars")
-    #   data_list[[i]] <- cbind.data.frame(data_list[[i]],data.frame(lapply(
-    #     design_list[[i]]$Ffunctions,function(f){f(data_list[[i]])})))
-    #   if (!is.null(pars)) attr(data_list[[i]],"pars") <- pars
+    # if (!is.null(design[[i]]$Ffunctions)) {
+    #   pars <- attr(data[[i]],"pars")
+    #   data[[i]] <- cbind.data.frame(data[[i]],data.frame(lapply(
+    #     design[[i]]$Ffunctions,function(f){f(data[[i]])})))
+    #   if (!is.null(pars)) attr(data[[i]],"pars") <- pars
     # }
-    if(is.null(attr(design_list[[i]], "custom_ll"))){
-      dadm_list[[i]] <- design_model(data=data_list[[i]],design=design_list[[i]],
-                                     compress=compress,model=model_list[[i]],rt_resolution=rt_resolution[i])
-      sampled_p_names <- names(attr(design_list[[i]],"p_vector"))
+    if(is.null(attr(design[[i]], "custom_ll"))){
+      dadm_list[[i]] <- design_model(data=data[[i]],design=design[[i]],
+                                     compress=compress,model=model[[i]],rt_resolution=rt_resolution[i])
+      sampled_p_names <- names(attr(design[[i]],"p_vector"))
     } else{
-      dadm_list[[i]] <- design_model_custom_ll(data = data_list[[i]],
-                                               design = design_list[[i]],model=model_list[[i]])
-      sampled_p_names <- attr(design_list[[i]],"sampled_p_names")
+      dadm_list[[i]] <- design_model_custom_ll(data = data[[i]],
+                                               design = design[[i]],model=model[[i]])
+      sampled_p_names <- attr(design[[i]],"sampled_p_names")
     }
 
     if(!is.null(prior_list[[i]])){
@@ -1020,9 +1027,9 @@ make_samplers <- function(data_list,design_list,model_list=NULL,
   # replicate chains
   dadm_lists <- rep(list(out),n_chains)
   # For post predict
-  attr(dadm_lists,"data_list") <- data_list
-  attr(dadm_lists,"design_list") <- design_list
-  attr(dadm_lists,"model_list") <- model_list
+  attr(dadm_lists,"data_list") <- data
+  attr(dadm_lists,"design_list") <- design
+  attr(dadm_lists,"model_list") <- model
   return(dadm_lists)
 }
 
