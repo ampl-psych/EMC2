@@ -916,7 +916,7 @@ make_samplers <- function(data,design,model=NULL,
   }
 
   if (!(type %in% c("standard","diagonal","blocked","factor","single", "lm", "infnt_factor", "SEM")))
-    stop("type must be one of: standard,diagonal,blocked,factor,infnt_factor", "lm","single")
+    stop("type must be one of: standard,diagonal,blocked,factor,infnt_factor, lm, single")
 
   if(!is.null(nuisance) & !is.null(nuisance_non_hyper)){
     stop("You can only specify nuisance OR nuisance_non_hyper")
