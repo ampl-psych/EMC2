@@ -13,8 +13,6 @@ make_samplers(
   compress = TRUE,
   rt_resolution = 0.02,
   prior_list = NULL,
-  nuisance = NULL,
-  nuisance_non_hyper = NULL,
   grouped_pars = NULL,
   par_groups = NULL,
   n_factors = NULL,
@@ -38,10 +36,6 @@ make_samplers(
 \item{rt_resolution}{A double. Used for compression, response times will be binned based on this resolution.}
 
 \item{prior_list}{A named list containing the prior. Default prior created if NULL}
-
-\item{nuisance}{A vector of integers. Parameters on this location of the vector of parameters are not included in the group-level covariance matrix. Only variances are estimated.}
-
-\item{nuisance_non_hyper}{An integer vector. Parameters on this location of the vector of parameters are treated as nuisance parameters and not included in group-level (only individual level sampling).}
 
 \item{grouped_pars}{An integer vector. Parameters on this location of the vector of parameters are treated as constant across sujects}
 

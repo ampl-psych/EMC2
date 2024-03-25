@@ -879,14 +879,12 @@ run_sample <- function(samplers, iter = 1000, stop_criteria = NULL,
 #' @param n_chains An integer. Specifies the number of mcmc chains to be run (has to be more than 1 to compute `rhat`).
 #' @param compress A Boolean, if `TRUE` (i.e., the default), the data is compressed to speed up likelihood calculations
 #' @param rt_resolution A double. Used for compression, response times will be binned based on this resolution.
-#' @param nuisance A vector of integers. Parameters on this location of the vector of parameters are not included in the group-level covariance matrix. Only variances are estimated.
 #' @param par_groups A vector. Only to be specified with type blocked, e.g., `c(1,1,1,2,2)` means the covariances
 #' of the first three and of the last two parameters are estimated as two separate blocks.
 #' @param n_factors An integer. Only to be specified with type factor.
 #' @param constraintMat A matrix of rows equal to the number of estimated parameters, and columns equal to the number of factors, only to be specified with type factor.
 #' If null will use default settings as specified in Innes et al. 2022
 #' @param prior_list A named list containing the prior. Default prior created if NULL
-#' @param nuisance_non_hyper An integer vector. Parameters on this location of the vector of parameters are treated as nuisance parameters and not included in group-level (only individual level sampling).
 #' @param grouped_pars An integer vector. Parameters on this location of the vector of parameters are treated as constant across sujects
 #' @param ... Additional, optional arguments
 #' @return a list of samplers
@@ -895,8 +893,7 @@ run_sample <- function(samplers, iter = 1000, stop_criteria = NULL,
 make_samplers <- function(data,design,model=NULL,
                           type="standard",
                           n_chains=3,compress=TRUE,rt_resolution=0.02,
-                          prior_list = NULL, nuisance = NULL,
-                          nuisance_non_hyper = NULL,
+                          prior_list = NULL,
                           grouped_pars = NULL,
                           par_groups=NULL,
                           n_factors=NULL,constraintMat = NULL, ...){
@@ -909,6 +906,8 @@ make_samplers <- function(data,design,model=NULL,
   G_mat <- NULL
   xy <- NULL
   xeta <- NULL
+  nuisance <- NULL
+  nuisance_non_hyper <- NULL
   # overwrite those that were supplied
   optionals <- list(...)
   for (name in names(optionals) ) {
