@@ -2,10 +2,7 @@
 % Please edit documentation in R/statistics.R
 \name{savage_dickey}
 \alias{savage_dickey}
-\title{The savage dickey ratio.
-Can be used to approximate the Bayes Factor for group level mean effects.
-Note this is different to MD in \code{compare} since it only considers the group level
-mean effect and not the whole model.}
+\title{The savage dickey ratio.}
 \usage{
 savage_dickey(
   samplers,
@@ -30,7 +27,7 @@ savage_dickey(
 
 \item{filter}{A string. Specifies which stage the samples are to be taken from "preburn", "burn", "adapt", or "sample"}
 
-\item{subfilter}{An integer or vector. If integer it will exclude up until}
+\item{subfilter}{An integer or vector. If integer it will exclude up until that integer.}
 
 \item{fun}{A function. Specifies an operation to be performed on the sampled or mapped parameters.}
 
@@ -48,8 +45,19 @@ savage_dickey(
 The BayesFactor for the hypothesis against H0.
 }
 \description{
-The savage dickey ratio.
 Can be used to approximate the Bayes Factor for group level mean effects.
 Note this is different to MD in \code{compare} since it only considers the group level
-mean effect and not the whole model.
+mean effect and not the whole model. For details see: Wagenmakers, Lodewyckx, Kuriyal, & Grasman (2010).
+}
+\examples{
+\dontrun{
+# Here the samplers object has an effect parameter (e.g. B_Eneutral),
+# that maps onto a certain hypothesis.
+# The hypothesis here is that B_Eneutral is different from zero.
+# We can test whether there's a group-level effect of Eneutral on B:
+savage_dickey(samplers, parameter = "B_Eneutral")
+# Alternatively we can also test whether two parameters from each other
+Bdiff <- function(p)diff(p[c("B_Eneutral","B_Eaccuracy")])
+savage_dickey(samplers,fun=Bdiff)
+}
 }

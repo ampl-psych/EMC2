@@ -2,7 +2,7 @@
 % Please edit documentation in R/statistics.R
 \name{compare}
 \alias{compare}
-\title{IC based model selection for a list of samples objects.}
+\title{Information criteria and marginal likelihoods}
 \usage{
 compare(
   sList,
@@ -15,24 +15,24 @@ compare(
   print_summary = TRUE,
   digits = 0,
   digits_p = 3,
-  subject = NULL
+  ...
 )
 }
 \arguments{
 \item{sList}{List of samples objects}
 
-\item{filter}{A string. Specifies which stage you want to plot.}
+\item{filter}{A string. Specifies which stage the samples are to be taken from "preburn", "burn", "adapt", or "sample"}
 
-\item{subfilter}{An integer or vector. If integer it will exclude up until}
+\item{subfilter}{An integer or vector. If integer it will exclude up until the integer within the filter.}
 
-\item{use_best_fit}{Boolean, default TRUE use best of minD and Dmean in
-calculation otherwise always use Dmean}
+\item{use_best_fit}{Boolean, default TRUE use best of minimal likelihood and mean likelihood in
+calculation otherwise always use mean likelihood.}
 
 \item{BayesFactor}{Boolean, default TRUE. Include marginal likelihoods as estimated using WARP-III bridge sampling. Usually takes a minute per model added to calculate}
 
 \item{cores_for_props}{Integer, how many cores to use for BayesFactor calculation, here 4 is default for the 4 different proposal densities to evaluate, only 1, 2 and 4 are sensible.}
 
-\item{cores_per_prop}{Integer, how many cores to use for BayesFactor calculation if you have more than 4 cores available. Cores used will be cores_for_props * cores_per_prop, where prioritizing cores_for_props being 4 or 2 is fastest.}
+\item{cores_per_prop}{Integer, how many cores to use for BayesFactor calculation if you have more than 4 cores available. Cores used will be cores_for_props * cores_per_prop. Best to prioritize cores_for_props being 4 or 2}
 
 \item{print_summary}{Boolean (default TRUE) print table of results}
 
@@ -40,13 +40,23 @@ calculation otherwise always use Dmean}
 
 \item{digits_p}{Integer, significant digits in printed table for model weights}
 
-\item{subject}{Integer or string selecting a single subject, default NULL
-returns sums over all subjects}
+\item{...}{Additional, optional arguments}
 }
 \value{
-Table of effective number of parameters, mean deviance, deviance of
+Matrix of effective number of parameters, mean deviance, deviance of
 mean, DIC, BPIC, Marginal Deviance (if BayesFactor=TRUE) and associated weights.
 }
 \description{
-IC based model selection for a list of samples objects.
+Returns the BPIC/DIC or marginal deviance (-2*marginal likelihood) for a list of samples objects.
+}
+\examples{
+\dontrun{
+# Define a samplers list of two (or more different models)
+# Here the full model is a list of samplers with the hypothesized effect
+# The null model is a list of samplers without the hypothesized effect
+sList <- list(full_model, null_model)
+# By default emc uses 4 cores to parallelize marginal likelihood estimation across proposals
+# So cores_per_prop = 3 results in 12 cores used.
+compare(sList, cores_per_prop = 3)
+}
 }
