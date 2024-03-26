@@ -48,23 +48,23 @@ var(a + b)
 
 attr(dadm, "designs")
 
-contr.bayes <- function(n, contrasts = TRUE) {
-  # This makes a balanced contrasts that assigns equal weight to a fixed effect factor
-  if (length(n) <= 1L) {
-    if (is.numeric(n) && length(n) == 1L && n > 1L)
-      TRUE
-    else stop("not enough degrees of freedom to define contrasts")
-  } else n <- length(n)
-  cont <- diag(n)
-  if (contrasts) {
-    a <- n
-    I_a <- diag(a)
-    J_a <- matrix(1, nrow = a, ncol = a)
-    Sigma_a <- I_a - J_a/a
-    cont <- eigen(Sigma_a)$vectors[,seq_len(a-1), drop = FALSE]
-  }
-  cont
-}
+# contr.bayes <- function(n, contrasts = TRUE) {
+#   # This makes a balanced contrasts that assigns equal weight to a fixed effect factor
+#   if (length(n) <= 1L) {
+#     if (is.numeric(n) && length(n) == 1L && n > 1L)
+#       TRUE
+#     else stop("not enough degrees of freedom to define contrasts")
+#   } else n <- length(n)
+#   cont <- diag(n)
+#   if (contrasts) {
+#     a <- n
+#     I_a <- diag(a)
+#     J_a <- matrix(1, nrow = a, ncol = a)
+#     Sigma_a <- I_a - J_a/a
+#     cont <- eigen(Sigma_a)$vectors[,seq_len(a-1), drop = FALSE]
+#   }
+#   cont
+# }
 
 stats::model.matrix(v ~ E, dadm, contrasts.arg = list(E = contr.equalprior))
 
