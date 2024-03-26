@@ -5,7 +5,7 @@ load("~/Documents/UVA/2023/BetweenSubsApplications/Manning2022/Manning2022.RData
 
 data <- data[as.numeric(data$subjects) %% 2 != 0,]
 
-source("test_files/sampling_lm.R")
+source("test_files/sampling_lm2.R")
 source("test_files/helps_lm.R")
 source("test_files/utils_lm.R")
 
@@ -36,8 +36,8 @@ for(sub in unique(dat_coh$subjects)){
   dat_coh$slope_mean[idx] <- mean_sub
   dat_coh$slope_diff[idx] <- diff_sub
 }
-form <- list(v~cond + (cond|subjects), a~1+ (1|subjects), t0 ~ 1 + (1|subjects),
-             Z ~ 1 + (1|subjects), s ~1, DP ~ 1, SZ ~ 1, sv ~1, st0 ~ 1)
+form <- list(v~cond + (cond|subjects), a~1, t0 ~ 1,
+             Z ~ 1, s ~1, DP ~ 1, SZ ~ 1, sv ~1, st0 ~ 1)
 
 # NAs in slope mean are treated as 0!!
 design <- make_design_lm(form, ddata = dat_coh, model = DDM,
@@ -50,17 +50,11 @@ samplers <- make_samplers_lm(dat_coh, design)
 # Check the adding of between variables out of the random variables in get_conditionals (happens with nesting)!!!!
 # Finding which are intercepts with 0 + in pmwgs$is_intercept
 
-source("test_files/sampling_lm.R")
-devtools::load_all()
+source("test_files/sampling_lm2.R")
+samplers <- run_emc(samplers, cores_per_chain = 4, cores_for_chains = 3, fileName = "test_lm3.RData", stop_criteria = list("burn" = list(mean_gd = 1.01)))
 
-# debug(as_Mcmc)
-#
-# debug(get_stop_criteria)
-samplers <- run_emc(samplers, cores_per_chain = 4, cores_for_chains = 3, fileName = "test_lm2.RData", stop_criteria = list("burn" = list(mean_gd = 1.1)))
-
-plot_chains(samplers, selection = "random", filter = "burn")
+plot_chains(samplers, selection = "random", filter = c("preburn"))
 plot_chains(samplers, selection = "fixed", filter = "burn")
-debug(as_Mcmc)
 plot_chains(samplers, selection = "epsilon", filter = "burn")
 
 
