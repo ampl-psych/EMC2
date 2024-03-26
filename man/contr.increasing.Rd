@@ -4,16 +4,21 @@
 \alias{contr.increasing}
 \title{Contrast to enforce increasing estimates}
 \usage{
-contr.increasing(n, levels = NULL)
+contr.increasing(n)
 }
 \arguments{
 \item{n}{an integer. The number of items for which to create the contrast.}
-
-\item{levels}{Character vector. the factor levels which will be the colnames of the returning matrix.}
 }
 \value{
 a contrast matrix.
 }
 \description{
-first = intercept, cumsum other (positive) levels to force non-decreasing
+Each level will be estimated additively from the previous level
+}
+\examples{
+{
+design_DDMaE <- make_design(data = forstmann,model=DDM, contrasts = list(E = contr.increasing),
+formula =list(v~S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
+constants=c(s=log(1)))
+}
 }
