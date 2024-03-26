@@ -304,11 +304,19 @@ as_mcmc.list <- function(samplers,
   return(out)
 }
 
-#' Returns the number of samples per chain per stage
+#' chain_n()
 #'
-#' @param samplers A list of samplers, could be in any stage
+#' Returns a matrix with the number of samples per chain for each stage that is present
+#' in the sampling object (i.e., `preburn`, `burn`, `adapt`,
+#' `sample`). The number of rows of the matrix reflects the number of chains
+#' and the number of columns the number of sampling stages.
 #'
-#' @return A table of iterations per stage per chain
+#' @param samplers A list, the output of `run_emc()`.
+#'
+#' @return A matrix
+#' @examples \dontrun{
+#' chain_n(samplers)
+#' }
 #' @export
 
 chain_n <- function(samplers)
