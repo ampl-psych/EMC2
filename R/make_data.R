@@ -13,7 +13,6 @@
 #' @param UCdirection Boolean, default TRUE, set LC rt to Inf, else to NA
 #'
 #' @return Truncated and censored data frame
-#' @export
 
 make_missing <- function(data,LT=0,UT=Inf,LC=0,UC=Inf,
     LCresponse=TRUE,UCresponse=TRUE,LCdirection=TRUE,UCdirection=TRUE)
