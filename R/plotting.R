@@ -963,30 +963,38 @@ plot_trials <- function(data,pp=NULL,subject=NULL,factors=NULL,Fcovariates=NULL,
 
 #' Convergence checks for an EMC2 samplers object
 #'
-#' Runs a series of convergence checks, printing statistics to the console and
-#' saving plots to a pdf. Note that the R_hat (psrf and mpsrf, i.e., gelman_diag
-#' from the coda package) is calculated by doubling the number of chains by
-#' first splitting chains into first and second half so it also a test of
-#' stationarity. Efficiency of sampling is (optionally) indicated by integrated
-#' autocorrelation time (from the LaplacesDemon package) and the effective
-#' number of samples (from coda).
+#' Runs a series of convergence checks, prints statistics to the console, and
+#' saves traceplots to a PDF file.
+#'
+#' Note that the `Rhat` is calculated by doubling the number of chains by
+#' first splitting chains into first and second half, so it also a test of
+#' stationarity.
+#'
+#' Efficiency of sampling is (optionally) indicated by integrated
+#' autocorrelation time (from the `LaplacesDemon` R package) and by the effective
+#' number of samples (from the `coda` R package).
 #'
 #' @param samples A list of samplers or samplers converted to mcmc objects.
-#' @param pdf_name The name of the plot save file
-#' @param interactive Pause console output between hierarchical parameter types
-#' @param filter Sampling stage to examine.
-#' @param subfilter An integer or vector. If integer it will exclude up until
-#' that integer. If vector it will include everything in that range.
-#' @param thin An integer. Keep only iterations that are a multiple of thin.
-#' @param layout A vector specifying the layout as in par(mfrow = layout).
-#' If NA (defualt) use CODA defaults, if NULL use current.
-#' @param width PDF page width.
-#' @param height PDF page height.
-#' @param print_IAT Include a printout out of the Integrated Autocorrelation Time.
-#' @param subject For a hierarhical model a non-null value (integer or subject name)
-#' picks out results only for that subject.
-#'
-#' @return None
+#' @param pdf_name A character string, indicating the path to and name of the PDF file.
+#' @param interactive A Boolean, defaults to `TRUE`. Indicates whether console output between
+#' hierarchical parameter types should be paused or not.
+#' @param filter A character string, indicating the sampling stage to examine.
+#' Can be `preburn`, `burn`, `adapt`, or `sample`.
+#' @param subfilter An integer or vector. If an integer is supplied, iterations up until
+#' that integer are examined. If a vector is supplied, everything in that range is examined.
+#' @param thin An integer. Keeps only iterations that are a multiple of thin.
+#' @param layout A vector specifying the layout as in `par(mfrow = layout)`.
+#' If `NA` (i.e., the default), it uses `coda` defaults, if it is `NULL`, it uses
+#' the current layout.
+#' @param width PDF page width in inches.
+#' @param height PDF page height in inches.
+#' @param print_IAT Include a print out of the Integrated Autocorrelation Time.
+#' @param subject An integer or character string denoting a particular subject.
+#' Creates convergence diagnostics only for that subject within a hierarchical model.
+#' @return A PDF written to `pdf_name`.
+#' @examples \dontrun{
+#' check_run(samplers)
+#' }
 #' @export
 
 check_run <- function(samples,pdf_name="check_run.pdf",interactive=TRUE,
@@ -1069,7 +1077,7 @@ check_run <- function(samples,pdf_name="check_run.pdf",interactive=TRUE,
       cat("\nEffective Size (minimum)\n")
       es_pmwg(samples,selection="alpha",summary_alpha=min,filter=filter,
                     subfilter=subfilter,thin=thin)
-      cat("\nEffectvie Size (mean)\n")
+      cat("\nEffective Size (mean)\n")
       es_pmwg(samples,selection="alpha",summary_alpha=mean,filter=filter,
                   subfilter=subfilter,thin=thin)
     } else {

@@ -21,38 +21,50 @@ check_run(
 \arguments{
 \item{samples}{A list of samplers or samplers converted to mcmc objects.}
 
-\item{pdf_name}{The name of the plot save file}
+\item{pdf_name}{A character string, indicating the path to and name of the PDF file.}
 
-\item{interactive}{Pause console output between hierarchical parameter types}
+\item{interactive}{A Boolean, defaults to \code{TRUE}. Indicates whether console output between
+hierarchical parameter types should be paused or not.}
 
-\item{filter}{Sampling stage to examine.}
+\item{filter}{A character string, indicating the sampling stage to examine.
+Can be \code{preburn}, \code{burn}, \code{adapt}, or \code{sample}.}
 
-\item{subfilter}{An integer or vector. If integer it will exclude up until
-that integer. If vector it will include everything in that range.}
+\item{subfilter}{An integer or vector. If an integer is supplied, iterations up until
+that integer are examined. If a vector is supplied, everything in that range is examined.}
 
-\item{thin}{An integer. Keep only iterations that are a multiple of thin.}
+\item{thin}{An integer. Keeps only iterations that are a multiple of thin.}
 
-\item{print_IAT}{Include a printout out of the Integrated Autocorrelation Time.}
+\item{print_IAT}{Include a print out of the Integrated Autocorrelation Time.}
 
-\item{subject}{For a hierarhical model a non-null value (integer or subject name)
-picks out results only for that subject.}
+\item{subject}{An integer or character string denoting a particular subject.
+Creates convergence diagnostics only for that subject within a hierarchical model.}
 
-\item{layout}{A vector specifying the layout as in par(mfrow = layout).
-If NA (defualt) use CODA defaults, if NULL use current.}
+\item{layout}{A vector specifying the layout as in \code{par(mfrow = layout)}.
+If \code{NA} (i.e., the default), it uses \code{coda} defaults, if it is \code{NULL}, it uses
+the current layout.}
 
-\item{width}{PDF page width.}
+\item{width}{PDF page width in inches.}
 
-\item{height}{PDF page height.}
+\item{height}{PDF page height in inches.}
 }
 \value{
-None
+A PDF written to \code{pdf_name}.
 }
 \description{
-Runs a series of convergence checks, printing statistics to the console and
-saving plots to a pdf. Note that the R_hat (psrf and mpsrf, i.e., gelman_diag
-from the coda package) is calculated by doubling the number of chains by
-first splitting chains into first and second half so it also a test of
-stationarity. Efficiency of sampling is (optionally) indicated by integrated
-autocorrelation time (from the LaplacesDemon package) and the effective
-number of samples (from coda).
+Runs a series of convergence checks, prints statistics to the console, and
+saves traceplots to a PDF file.
+}
+\details{
+Note that the \code{Rhat} is calculated by doubling the number of chains by
+first splitting chains into first and second half, so it also a test of
+stationarity.
+
+Efficiency of sampling is (optionally) indicated by integrated
+autocorrelation time (from the \code{LaplacesDemon} R package) and by the effective
+number of samples (from the \code{coda} R package).
+}
+\examples{
+\dontrun{
+check_run(samplers)
+}
 }
