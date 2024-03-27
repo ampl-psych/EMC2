@@ -92,11 +92,15 @@ remove_iterations <- function(pmwg,select,remove=TRUE,last_select=FALSE,filter=N
 
 #' Merge samples
 #'
-#' Merges samples from all chains together as one unlisted object
+#' Merges samples from all chains as one unlisted object.
 #'
-#' @param samplers A list of samplers
+#' Note that all sampling stages are included in the merged output,
+#' including iterations from the `preburn`, `burn`, and `adapt` stages.
+#' `merge_samples(samplers)$samples$stage` shows the corresponding sampling stages.
 #'
-#' @return an unlisted sampler with all chains merged
+#' @param samplers A samplers object, commonly the output of `run_emc()`
+#'
+#' @return An unlisted samplers object with all chains merged
 #' @export
 #'
 merge_samples <- function(samplers){
