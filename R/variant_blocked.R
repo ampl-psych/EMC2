@@ -9,15 +9,54 @@ add_info_blocked <- function(sampler, prior = NULL, ...){
 }
 
 
-get_prior_blocked <- function(prior = NULL, n_pars = NULL, par_names = NULL, sample = F, N = 1e6){
+#' Prior specification or prior sampling for blocked estimation.
+#'
+#' Works analogous to `get_prior_standard`. Blocks of the covariance matrix to estimate are only considered in sampling.
+#' For details see Huang and Wand, 2013.
+#' To get the default prior for a created design: get_prior_diag(design = design, sample = FALSE)
+#'
+#' @param prior A named list that can contain the prior mean (theta_mu_mean) and
+#' variance (theta_mu_var) on the group-level mean, or the scale (A), or degrees of freedom (df)
+#' for the group-level variance-covariance matrix.
+#' Default prior created for NULL entries.
+#' @param n_pars Often inferred from the design, but if design = NULL will be used to determine size of prior.
+#' @param sample Whether to sample from the prior or to simply return the prior. Default is TRUE,
+#' @param map Boolean, default TRUE reverses malformation used by model to make
+#' sampled parameters unbounded
+#' @param N How many samples to draw from the prior, default 1e5
+#' @param design The design obtained from `make_design`, required when map = TRUE
+#' @param type  character. If sample = TRUE, what prior to sample from. Options: "mu", "variance", "covariance" "full_var", "alpha".
+#'
+#' @return A list with a single entry of type of samples from the prior (if sample = TRUE) or else a prior object
+#' @examples \dontrun{
+#' # First define a design for the model
+#' design_DDMaE <- make_design(data = forstmann,model=DDM,
+#'                            formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
+#'                            constants=c(s=log(1)))
+#' # Now get the default prior
+#' prior <- get_prior_blocked(design = design_DDMaE, sample = FALSE)
+#' # We can change values in the default prior or use make_prior
+#' # Then we can get samples from this prior e.g.
+#' samples <- get_prior_blocked(prior = prior, design = design_DDMaE,
+#'   sample = TRUE, type = "mu")
+#' }
+#' @export
+
+get_prior_blocked <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, type = "mu", design = NULL,
+                               map = FALSE){
   # Checking and default priors
   if(is.null(prior)){
     prior <- list()
   }
+  if(!is.null(design)){
+    n_pars <- length(attr(design, "p_vector"))
+  }
+  if (!is.null(prior$theta_mu_mean)) {
+    n_pars <- length(prior$theta_mu_mean)
+  }
   if (is.null(prior$theta_mu_mean)) {
     prior$theta_mu_mean <- rep(0, n_pars)
   }
-
   if(is.null(prior$theta_mu_var)){
     prior$theta_mu_var <- diag(rep(1, n_pars))
   }
@@ -25,11 +64,65 @@ get_prior_blocked <- function(prior = NULL, n_pars = NULL, par_names = NULL, sam
     prior$v <- 2
   }
   if(is.null(prior$A)){
-    prior$A <- rep(1, n_pars)
+    prior$A <- rep(.3, n_pars)
   }
   # Things I save rather than re-compute inside the loops.
   prior$theta_mu_invar <- ginv(prior$theta_mu_var) #Inverse of the matrix
-
+  if(sample){
+    out <- list()
+    if(!type %in% c("mu", "variance", "covariance", "correlation", "full_var")){
+      stop("for variant standard, you can only specify the prior on the mean, variance, covariance or the correlation of the parameters")
+    }
+    if(type == "mu"){
+      samples <- mvtnorm::rmvnorm(N, mean = prior$theta_mu_mean,
+                                  sigma = prior$theta_mu_var)
+      if(!is.null(design)){
+        colnames(samples) <- par_names <- names(attr(design, "p_vector"))
+        if(map){
+          proot <- unlist(lapply(strsplit(colnames(samples),"_"),function(x)x[[1]]))
+          isin <- proot %in% names(design$model()$p_types)
+          fullnames <- colnames(samples)[isin]
+          colnames(samples)[isin] <- proot
+          samples[,isin] <- design$model()$Ntransform(samples[,isin])
+          colnames(samples)[isin] <- fullnames
+        }
+      }
+      out$mu <- samples
+      return(out)
+    } else {
+      var <- array(NA_real_, dim = c(n_pars, n_pars, N))
+      for(i in 1:N){
+        a_half <- 1 / rgamma(n = n_pars,shape = 1/2,
+                             rate = 1/(prior$A^2))
+        attempt <- tryCatch({
+          var[,,i] <- riwish(prior$v + n_pars - 1, 2 * prior$v * diag(1 / a_half))
+        },error=function(e) e, warning=function(w) w)
+        if (any(class(attempt) %in% c("warning", "error", "try-error"))) {
+          sample_idx <- sample(1:(i-1),1)
+          var[,,i] <- var[,,sample_idx]
+        }
+      }
+      if (type == "variance") {
+        vars_only <- t(apply(var,3,diag))
+        if(!is.null(design)){
+          colnames(vars_only) <- names(attr(design, "p_vector"))
+        }
+        out$variance <- vars_only
+      }
+      lt <- lower.tri(var[,,1])
+      if (type == "correlation"){
+        corrs <- array(apply(var,3,cov2cor),dim=dim(var),dimnames=dimnames(var))
+        out$correlation <- t(apply(corrs,3,function(x){x[lt]}))
+      }
+      if(type == "covariance"){
+        out$covariance <- t(apply(var,3,function(x){x[lt]}))
+      }
+      if (type == "full_var"){
+        out$full_var <- t(apply(var, 3, c))
+      }
+      return(out)
+    }
+  }
   return(prior)
 }
 

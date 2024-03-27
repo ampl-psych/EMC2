@@ -16,16 +16,19 @@ get_prior_factor(
 )
 }
 \arguments{
-\item{prior}{A named list containing the prior mean (theta_mu_mean) and
-variance (theta_mu_var). Default prior created if NULL}
+\item{prior}{A named list that can contain the prior mean (theta_mu_mean) and
+variance (theta_mu_var) on the group-level mean; the variance of the loadings (theta_lambda_var);
+shape and rate of the factor variances (ap and bp) and shape and rate of the residual variances
+(as and bs). Default prior created for NULL entries.}
 
-\item{n_pars}{Argument used by the sampler, best left NULL. In user case inferred from the design}
+\item{n_pars}{Often inferred from the design, but if design = NULL will be used to determine size of prior.}
 
-\item{sample}{Whether to sample from the prior. Default is TRUE. If not returns a prior list}
+\item{sample}{Whether to sample from the prior or to simply return the prior. Default is TRUE,}
 
 \item{N}{How many samples to draw from the prior, default 1e5}
 
-\item{type}{character, options: "mu", "variance", "covariance" "full_var"}
+\item{type}{character. If sample = TRUE, what prior to sample from. Options:
+"mu", "variance", "covariance" "full_var", "alpha", "loadings".}
 
 \item{design}{The design obtained from \code{make_design}, required when map = TRUE}
 
@@ -38,5 +41,20 @@ sampled parameters unbounded}
 A list with a single entry of type of samples from the prior (if sample = TRUE) or else a prior object
 }
 \description{
-Prior specification or prior sampling for factor estimation.
+For details see Ghosh and Dunson, 2009 or Stevenson et al., 2024.
+To get the default prior for a created design: get_prior_factor(design = design, sample = FALSE)
+}
+\examples{
+\dontrun{
+# First define a design for the model
+design_DDMaE <- make_design(data = forstmann,model=DDM,
+                           formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
+                           constants=c(s=log(1)))
+# Now get the default prior
+prior <- get_prior_factor(design = design_DDMaE, sample = FALSE)
+# We can change values in the default prior or use make_prior
+# Then we can get samples from this prior e.g.
+samples <- get_prior_factor(prior = prior, design = design_DDMaE,
+  sample = TRUE, type = "mu", n_factors = 3)
+}
 }

@@ -16,7 +16,7 @@ get_prior_single(
 }
 \arguments{
 \item{prior}{A named list containing the prior mean (theta_mu_mean) and
-variance (theta_mu_var). Default prior created if NULL}
+variance (theta_mu_var). Default prior created for either that is NULL.}
 
 \item{n_pars}{Argument used by the sampler, best left NULL. In user case inferred from the design}
 
@@ -24,7 +24,7 @@ variance (theta_mu_var). Default prior created if NULL}
 
 \item{N}{How many samples to draw from the prior, default 1e5}
 
-\item{type}{FIX ME}
+\item{type}{character. If sample = TRUE, what prior to sample from. Options: "alpha".}
 
 \item{design}{The design obtained from \code{make_design}, required when map = TRUE}
 
@@ -39,6 +39,19 @@ With this type of estimation, we assume that one, or multiple, subjects are
 estimated without any hierarchical constraint. We need to specify a prior
 with a multivariate normal from, by providing specifying prior$theta_mu_mean
 a vector with an entry for each parameter, and a prior covariance matrix
-prior$theta_mu_var, with default list(theta_mu_mean = rep(0, n_pars),
-theta_mu_var = diag(rep(0, n_pars))).
+prior$theta_mu_var.
+}
+\examples{
+\dontrun{
+# First define a design for the model
+design_DDMaE <- make_design(data = forstmann,model=DDM,
+                           formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
+                           constants=c(s=log(1)))
+# Now get the default prior
+prior <- get_prior_single(design = design_DDMaE, sample = FALSE)
+# We can change values in the default prior or use make_prior
+# Then we can get samples from this prior e.g.
+samples <- get_prior_single(prior = prior, design = design_DDMaE,
+  sample = TRUE, type = "alpha")
+}
 }

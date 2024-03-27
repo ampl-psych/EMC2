@@ -10,20 +10,31 @@ add_info_single <- function(sampler, prior = NULL, ...){
 #' estimated without any hierarchical constraint. We need to specify a prior
 #' with a multivariate normal from, by providing specifying prior$theta_mu_mean
 #' a vector with an entry for each parameter, and a prior covariance matrix
-#' prior$theta_mu_var, with default list(theta_mu_mean = rep(0, n_pars),
-#' theta_mu_var = diag(rep(0, n_pars))).
+#' prior$theta_mu_var.
 #'
 #' @param prior A named list containing the prior mean (theta_mu_mean) and
-#' variance (theta_mu_var). Default prior created if NULL
+#' variance (theta_mu_var). Default prior created for either that is NULL.
 #' @param n_pars Argument used by the sampler, best left NULL. In user case inferred from the design
 #' @param sample Whether to sample from the prior. Default is TRUE
 #' @param map Boolean, default TRUE reverses malformation used by model to make
 #' sampled parameters unbounded
 #' @param N How many samples to draw from the prior, default 1e5
 #' @param design The design obtained from `make_design`, required when map = TRUE
-#' @param type  FIX ME
+#' @param type  character. If sample = TRUE, what prior to sample from. Options: "alpha".
 #'
 #' @return A list with single entry named "alpha" of samples from the prior (if sample = TRUE) or else a prior object
+#' @examples \dontrun{
+#' # First define a design for the model
+#' design_DDMaE <- make_design(data = forstmann,model=DDM,
+#'                            formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
+#'                            constants=c(s=log(1)))
+#' # Now get the default prior
+#' prior <- get_prior_single(design = design_DDMaE, sample = FALSE)
+#' # We can change values in the default prior or use make_prior
+#' # Then we can get samples from this prior e.g.
+#' samples <- get_prior_single(prior = prior, design = design_DDMaE,
+#'   sample = TRUE, type = "alpha")
+#' }
 #' @export
 
 get_prior_single <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5,

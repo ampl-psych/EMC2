@@ -47,19 +47,23 @@ get_prior_samples <- function(samples,selection,filter,thin,subfilter,n_prior)
 }
 
 
-#' plot_prior
-#' Plots prior distributions by simulation
+#' Prior plotting
 #'
-#' @param prior A list of specifying prior means and covariance, if NULL default
-#' prior (mean=0, variance = 1, uncorrelated)
+#' Plots the prior for a model by simulating from the user specified prior distributions.
+#'
+#' To get the default prior for a type run: get_prior_{type}(design = design, sample = F).
+#' E.g.: get_prior_diagonal(design = design, sample = F)
+#'
+#' @param prior A list of specifying prior for the chosen type.
 #' @param design Design corresponding to prior
 #' @param plotp Names of parameters to plot (default NULL plots all)
-#' @param type Type of prior (standard or single)
+#' @param type Type of prior (standard, diagonal, single, blocked or factor).
+#' For blocked, the blocked parameters are still plotted in the covariance matrix.
 #' @param selection Select level prior to plot (default "alpha" for single and "mu" for standard)
 #' @param mapped boolean for mapping mu or alpha back to the design cells on the natural scale.
 #' @param data data frame, required when mapping involves priors
 #' @param N Number of prior samples if data not provided
-#' @param nrep Number of prior samples as multiple of numebr of rows in the data (minus any that violate "ok" constraint)
+#' @param nrep Number of prior samples as multiple of number of rows in the data if given.
 #' @param breaks Histogram breaks parameter
 #' @param layout par(mfrow) setting (default c(3,3))
 #' @param lower Lower quantile limit of values plotted. Default NULL all plotted,
@@ -68,17 +72,37 @@ get_prior_samples <- function(samples,selection,filter,thin,subfilter,n_prior)
 #' numeric same for all parameters, parameter named list parameter specific
 #' @param xlim List with parameter names of plot x limits or single pair same for all.
 #' Any names not in list or if (default) NA xlim set as min and max.
-#' @param n_factors Integer. For prior plotting of factor models
+#' @param ... For additional arguments
 #'
-#' @return Invisible sampled columns of parameters as a data frame (covariate,
-#' version first column = cell names) or otherwise a matrix
+#' @return Invisible of the prior samples
+#' @examples \dontrun{
+#' # First define a design for the model
+#' design_DDMaE <- make_design(data = forstmann,model=DDM,
+#'                            formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
+#'                            constants=c(s=log(1)))
+#' # Then set up a prior using make_prior
+#' p_vector=c(v_Sleft=-2,v_Sright=2,a=log(1),a_Eneutral=log(1.5),a_Eaccuracy=log(2),
+#' t0=log(.2),Z=qnorm(.5),sv=log(.5),SZ=qnorm(.5))
+#' psd <- c(v_Sleft=1,v_Sright=1,a=.3,a_Eneutral=.3,a_Eaccuracy=.3,
+#' t0=.4,Z=1,sv=.4,SZ=1)
+#' # Here we left the variance prior at default
+#' prior_DDMaE <- make_prior(design_DDMaE,pmean=p_vector,psd=psd)
+#' # Now we can plot all sorts of (implied) priors
+#' plot_prior(prior_DDMaE, design_DDMaE, selection = "mu")
+#' plot_prior(prior_DDMaE, design_DDMaE, selection = "mu", mapped = FALSE)
+#' plot_prior(prior_DDMaE, design_DDMaE, selection = "variance")
+#' plot_prior(prior_DDMaE, design_DDMaE, selection = "covariance")
+#' plot_prior(prior_DDMaE, design_DDMaE, selection = "correlation")
+#' # We can also plot the implied prior on the participant level effects.
+#' plot_prior(prior_DDMaE, design_DDMaE, selection = "alpha")
+#' }
 #' @export
 plot_prior <- function(prior=NULL, design,plotp=NULL,
-                       type = c("standard","single")[1],selection = NULL,
+                       type = c("standard","single", "diagonal", "blocked", "factor")[1],selection = NULL,
                        mapped=TRUE,data=NULL,
                        N=1e5, nrep=10,
                        breaks=50,layout=c(3,3),lower=NULL,upper=NULL,xlim=NA,
-                       n_factors = NULL)
+                       ...)
 {
   if (is.null(selection)) {
     if (type=="single"){
@@ -122,8 +146,8 @@ plot_prior <- function(prior=NULL, design,plotp=NULL,
   if (mapped & !is.null(data)) { # Used for covariates
     message("Mapping prior based on data, use this option with covariates and Ttranform parameters")
     if(selection == "alpha" & type != "single"){
-      pp_mu <- gp(prior, type = "mu", design = design,N=dim(data)[1])$mu
-      pp_var <- gp(prior, type = "full_var", design = design,N=dim(data)[1])$full_var
+      pp_mu <- gp(prior, type = "mu", design = design,N=dim(data)[1], ...)$mu
+      pp_var <- gp(prior, type = "full_var", design = design,N=dim(data)[1], ...)$full_var
       n_pars <- ncol(pp_mu)
       pp <- matrix(0, N, ncol(pp_mu))
       for(i in 1:dim(data)[1]){
@@ -135,7 +159,7 @@ plot_prior <- function(prior=NULL, design,plotp=NULL,
         pp[i,] <- rmvnorm(1, pp_mu[i,], pp_var_curr)      }
       colnames(pp) <- colnames(pp_mu)
     } else{
-      pp <- gp(prior, type = selection, design = design,N=dim(data)[1])[[selection]]
+      pp <- gp(prior, type = selection, design = design,N=dim(data)[1], ...)[[selection]]
     }
 
     row.names(pp) <- 1:dim(data)[1]
@@ -145,8 +169,8 @@ plot_prior <- function(prior=NULL, design,plotp=NULL,
     mpok <- mp[design$model()$rfun(pars=mp),]
     if (nrep>1) for (i in 2:nrep) {
       if(selection == "alpha" & type != "single"){
-        pp_mu <- gp(prior, type = "mu", design = design,N=dim(data)[1])$mu
-        pp_var <- gp(prior, type = "full_var", design = design,N=dim(data)[1])$full_var
+        pp_mu <- gp(prior, type = "mu", design = design,N=dim(data)[1], ...)$mu
+        pp_var <- gp(prior, type = "full_var", design = design,N=dim(data)[1], ...)$full_var
         n_pars <- ncol(pp_mu)
         pp <- matrix(0, N, ncol(pp_mu))
         for(i in 1:dim(data)[1]){
@@ -159,7 +183,7 @@ plot_prior <- function(prior=NULL, design,plotp=NULL,
         }
         colnames(pp) <- colnames(pp_mu)
       } else{
-        pp <- gp(prior, type = selection, design = design,N=dim(data)[1])[[selection]]
+        pp <- gp(prior, type = selection, design = design,N=dim(data)[1], ...)[[selection]]
       }
 
       row.names(pp) <- 1:dim(data)[1]
@@ -207,8 +231,8 @@ plot_prior <- function(prior=NULL, design,plotp=NULL,
   } else {
 
     if(selection == "alpha" & type != "single"){
-      pp_mu <- gp(prior, type = "mu", design = design,N=N)$mu
-      pp_var <- gp(prior, type = "full_var", design = design,N=N)$full_var
+      pp_mu <- gp(prior, type = "mu", design = design,N=N, ...)$mu
+      pp_var <- gp(prior, type = "full_var", design = design,N=N, ...)$full_var
       n_pars <- ncol(pp_mu)
       samples <- matrix(0, N, ncol(pp_mu))
       for(i in 1:N){
@@ -221,11 +245,7 @@ plot_prior <- function(prior=NULL, design,plotp=NULL,
       }
       colnames(samples) <- colnames(pp_mu)
     } else{
-      if(!is.null(n_factors)){
-        samples <- gp(prior, type = selection, design = design,N=N, n_factors = n_factors)[[selection]]
-      } else{
-        samples <- gp(prior, type = selection, design = design,N=N)[[selection]]
-      }
+      samples <- gp(prior, type = selection, design = design,N=N, ...)[[selection]]
     }
 
     if(selection %in% c("covariance", "correlation")){
@@ -315,19 +335,21 @@ merge_priors <- function(prior_list){
 }
 
 
-#' make_prior
+#' Prior specification
 #'
-#' Makes priors based on a design.
 #' Specify prior on mean of the group mean (pmean) and standard deviation (psd),
 #' for the individual level for a "single" model and for the group level for
 #' hierarchical models. These values are entered manually by default but can be
-#' taken from another prior (given in the update argument) for values having
-#' the same name as in the current design and are not specified in pmean and psd.
+#' taken from another prior (given in the update argument).
+#'
 #' Where a value is not supplied in arguments the user is prompted to enter
 #' numeric values (or functions that evaluate to numbers). For hierarchical models
 #' the scale (pscale) and the  degrees of freedom (df) for the population variance
-#' covariance matrix can also be specified (by default unit values are assumed,
-#'  set these arguments to NULL to enter values manually).
+#' covariance matrix can also be specified. Set these arguments to NULL to
+#'  enter values manually through prompts.
+#'
+#' To get the default prior for a type run: get_prior_{type}(design = design, sample = F)
+#' E.g.: get_prior_diagonal(design = design, sample = F)
 #'
 #' @param design Design for which a prior is constructed
 #' @param pmean Named vector of prior means, or an unnamed scalar, which is then used for all.
@@ -336,15 +358,39 @@ merge_priors <- function(prior_list){
 #' @param update Another prior from which to copy values
 #' @param verbose Boolean (default true) print values of prior to console (if
 #' update only new values).
-#' @param update_print When verbose print only new values (default TRUE)
-#' @param type What type of model you plan on using, choice of standard, diagonal
+#' @param update_print When verbose, print only new values (default TRUE)
+#' @param type What type of model you plan on using, choice of standard, diagonal, blocked
 #' and single for this function
 #' @param pscale For hierarchical models, the prior on the scale of the variances.
 #' Default NA will assume 1 for all parameters
 #' @param df For hierarchical models, the prior on the degrees of freedom of the
 #' variances. Default NA will assume 2
 #'
-#' @return An EMC prior object
+#' @return An EMC prior list object
+#' @examples \dontrun{
+#' # First define a design for the model
+#' design_DDMaE <- make_design(data = forstmann,model=DDM,
+#'                            formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
+#'                            constants=c(s=log(1)))
+#' # Then set up a prior using make_prior
+#' p_vector=c(v_Sleft=-2,v_Sright=2,a=log(1),a_Eneutral=log(1.5),a_Eaccuracy=log(2),
+#' t0=log(.2),Z=qnorm(.5),sv=log(.5),SZ=qnorm(.5))
+#' psd <- c(v_Sleft=1,v_Sright=1,a=.3,a_Eneutral=.3,a_Eaccuracy=.3,
+#' t0=.4,Z=1,sv=.4,SZ=1)
+#' # Here we left the variance prior at default
+#' prior_DDMaE <- make_prior(design_DDMaE,pmean=p_vector,psd=psd)
+#' # Also add a group-level variance prior:
+#' pscale <- c(v_Sleft=.6,v_Sright=.6,a=.3,a_Eneutral=.3,a_Eaccuracy=.3,
+#' t0=.2,Z=.5,sv=.4,SZ=.3)
+#' psd <- .4
+#' prior_DDMaE <- make_prior(design_DDMaE,pmean=p_vector,psd=psd, pscale = pscale, psd = psd)
+#' # If we specify a new design
+#' design_DDMat0E <- make_design(data = forstmann,model=DDM,
+#'                            formula =list(v~0+S,a~E, t0~E, s~1, Z~1, sv~1, SZ~1),
+#'                            constants=c(s=log(1)))
+#' # We can easily update the prior
+#' prior_DDMat0E <- make_prior(design_DDMat0E, update = prior_DDMaE)
+#' }
 #' @export
 make_prior <- function(design,pmean=NULL,psd=NULL,update=NULL,
                        verbose=TRUE,update_print=TRUE, type = "standard",
