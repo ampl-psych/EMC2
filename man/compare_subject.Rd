@@ -44,6 +44,6 @@ sList <- list(full_model, null_model)
 # So cores_per_prop = 3 results in 12 cores used.
 compare_subject(sList, cores_per_prop = 3)
 # prints a set of weights for each model for the different participants
-# And returns the exact DIC and BPIC for each participant for each model.
+# And returns the DIC and BPIC for each participant for each model.
 }
 }
