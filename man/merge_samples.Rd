@@ -7,11 +7,16 @@
 merge_samples(samplers)
 }
 \arguments{
-\item{samplers}{A list of samplers}
+\item{samplers}{A samplers object, commonly the output of \code{run_emc()}}
 }
 \value{
-an unlisted sampler with all chains merged
+An unlisted samplers object with all chains merged
 }
 \description{
-Merges samples from all chains together as one unlisted object
+Merges samples from all chains as one unlisted object.
+}
+\details{
+Note that all sampling stages are included in the merged output,
+including iterations from the \code{preburn}, \code{burn}, and \code{adapt} stages.
+\code{merge_samples(samplers)$samples$stage} shows the corresponding sampling stages.
 }
