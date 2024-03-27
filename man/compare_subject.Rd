@@ -2,7 +2,7 @@
 % Please edit documentation in R/statistics.R
 \name{compare_subject}
 \alias{compare_subject}
-\title{IC-based model weights for each participant in a list of samples objects}
+\title{Information criteria for each participant}
 \usage{
 compare_subject(
   sList,
@@ -16,21 +16,34 @@ compare_subject(
 \arguments{
 \item{sList}{List of samples objects}
 
-\item{filter}{A string. Specifies which stage you want to plot.}
+\item{filter}{A string. Specifies which stage the samples are to be taken from "preburn", "burn", "adapt", or "sample"}
 
 \item{subfilter}{An integer or vector. If integer it will exclude up until}
 
-\item{use_best_fit}{Boolean, default TRUE use best of minD and Dmean in
-calculation otherwise always use Dmean (see compare)}
+\item{use_best_fit}{Boolean, default TRUE use best of minimal likelihood and mean likelihood in
+calculation otherwise always use mean likelihood.}
 
 \item{print_summary}{Boolean (default TRUE) print table of results}
 
 \item{digits}{Integer, significant digits in printed table}
 }
 \value{
-List of tables for each subject of effective number of parameters,
-mean deviance, deviance of mean, DIC, BPIC (and optionally MD), and associated weights.
+List of matrices for each subject of effective number of parameters,
+mean deviance, deviance of mean, DIC, BPIC and associated weights.
 }
 \description{
-IC-based model weights for each participant in a list of samples objects
+Returns the BPIC/DIC based model weights for each participant in a list of samples objects
+}
+\examples{
+\dontrun{
+# Define a samplers list of two (or more different models)
+# Here the full model is a list of samplers with the hypothesized effect
+# The null model is a list of samplers without the hypothesized effect
+sList <- list(full_model, null_model)
+# By default emc uses 4 cores to parallelize marginal likelihood estimation across proposals
+# So cores_per_prop = 3 results in 12 cores used.
+compare_subject(sList, cores_per_prop = 3)
+# prints a set of weights for each model for the different participants
+# And returns the exact DIC and BPIC for each participant for each model.
+}
 }

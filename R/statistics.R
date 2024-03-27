@@ -523,7 +523,7 @@ get_BayesFactor <- function(MLL1, MLL2){
 compare <- function(sList,filter="sample",subfilter=0,use_best_fit=TRUE,
                     BayesFactor = TRUE, cores_for_props =4, cores_per_prop = 1,
                     print_summary=TRUE,digits=0,digits_p=3, ...) {
-
+  if(is(sList, "emc")) sList <- list(sList)
   getp <- function(IC) {
     IC <- -(IC - min(IC))/2
     exp(IC)/sum(exp(IC))
@@ -665,23 +665,35 @@ savage_dickey <- function(samplers, parameter = NULL, H0 = 0, filter = "sample",
   return(pdfun(H0)/post_dfun(H0))
 }
 
-#' IC-based model weights for each participant in a list of samples objects
+#' Information criteria for each participant
+#'
+#' Returns the BPIC/DIC based model weights for each participant in a list of samples objects
 #'
 #' @param sList List of samples objects
-#' @param filter A string. Specifies which stage you want to plot.
+#' @param filter A string. Specifies which stage the samples are to be taken from "preburn", "burn", "adapt", or "sample"
 #' @param subfilter An integer or vector. If integer it will exclude up until
-#' @param use_best_fit Boolean, default TRUE use best of minD and Dmean in
-#' calculation otherwise always use Dmean (see compare)
+#' @param use_best_fit Boolean, default TRUE use best of minimal likelihood and mean likelihood in
+#' calculation otherwise always use mean likelihood.
 #' @param print_summary Boolean (default TRUE) print table of results
 #' @param digits Integer, significant digits in printed table
 #'
-#' @return List of tables for each subject of effective number of parameters,
-#' mean deviance, deviance of mean, DIC, BPIC (and optionally MD), and associated weights.
+#' @return List of matrices for each subject of effective number of parameters,
+#' mean deviance, deviance of mean, DIC, BPIC and associated weights.
+#' @examples \dontrun{
+#' # Define a samplers list of two (or more different models)
+#' # Here the full model is a list of samplers with the hypothesized effect
+#' # The null model is a list of samplers without the hypothesized effect
+#' sList <- list(full_model, null_model)
+#' # By default emc uses 4 cores to parallelize marginal likelihood estimation across proposals
+#' # So cores_per_prop = 3 results in 12 cores used.
+#' compare_subject(sList, cores_per_prop = 3)
+#' # prints a set of weights for each model for the different participants
+#' # And returns the DIC and BPIC for each participant for each model.
+#' }
 #' @export
-
 compare_subject <- function(sList,filter="sample",subfilter=0,use_best_fit=TRUE,
                             print_summary=TRUE,digits=3) {
-
+  if(is(sList, "emc")) sList <- list(sList)
   subjects <- names(sList[[1]][[1]]$data)
   out <- setNames(vector(mode="list",length=length(subjects)),subjects)
   for (i in subjects) out[[i]] <- compare(sList,subject=i,BayesFactor=FALSE,
