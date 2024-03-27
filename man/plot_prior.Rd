@@ -2,14 +2,13 @@
 % Please edit documentation in R/priors.R
 \name{plot_prior}
 \alias{plot_prior}
-\title{plot_prior
-Plots prior distributions by simulation}
+\title{Prior plotting}
 \usage{
 plot_prior(
   prior = NULL,
   design,
   plotp = NULL,
-  type = c("standard", "single")[1],
+  type = c("standard", "single", "diagonal", "blocked", "factor")[1],
   selection = NULL,
   mapped = TRUE,
   data = NULL,
@@ -20,18 +19,18 @@ plot_prior(
   lower = NULL,
   upper = NULL,
   xlim = NA,
-  n_factors = NULL
+  ...
 )
 }
 \arguments{
-\item{prior}{A list of specifying prior means and covariance, if NULL default
-prior (mean=0, variance = 1, uncorrelated)}
+\item{prior}{A list of specifying prior for the chosen type.}
 
 \item{design}{Design corresponding to prior}
 
 \item{plotp}{Names of parameters to plot (default NULL plots all)}
 
-\item{type}{Type of prior (standard or single)}
+\item{type}{Type of prior (standard, diagonal, single, blocked or factor).
+For blocked, the blocked parameters are still plotted in the covariance matrix.}
 
 \item{selection}{Select level prior to plot (default "alpha" for single and "mu" for standard)}
 
@@ -41,7 +40,7 @@ prior (mean=0, variance = 1, uncorrelated)}
 
 \item{N}{Number of prior samples if data not provided}
 
-\item{nrep}{Number of prior samples as multiple of numebr of rows in the data (minus any that violate "ok" constraint)}
+\item{nrep}{Number of prior samples as multiple of number of rows in the data if given.}
 
 \item{breaks}{Histogram breaks parameter}
 
@@ -56,13 +55,38 @@ numeric same for all parameters, parameter named list parameter specific}
 \item{xlim}{List with parameter names of plot x limits or single pair same for all.
 Any names not in list or if (default) NA xlim set as min and max.}
 
-\item{n_factors}{Integer. For prior plotting of factor models}
+\item{...}{For additional arguments}
 }
 \value{
-Invisible sampled columns of parameters as a data frame (covariate,
-version first column = cell names) or otherwise a matrix
+Invisible of the prior samples
 }
 \description{
-plot_prior
-Plots prior distributions by simulation
+Plots the prior for a model by simulating from the user specified prior distributions.
+}
+\details{
+To get the default prior for a type run: get_prior_{type}(design = design, sample = F).
+E.g.: get_prior_diagonal(design = design, sample = F)
+}
+\examples{
+\dontrun{
+# First define a design for the model
+design_DDMaE <- make_design(data = forstmann,model=DDM,
+                           formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
+                           constants=c(s=log(1)))
+# Then set up a prior using make_prior
+p_vector=c(v_Sleft=-2,v_Sright=2,a=log(1),a_Eneutral=log(1.5),a_Eaccuracy=log(2),
+t0=log(.2),Z=qnorm(.5),sv=log(.5),SZ=qnorm(.5))
+psd <- c(v_Sleft=1,v_Sright=1,a=.3,a_Eneutral=.3,a_Eaccuracy=.3,
+t0=.4,Z=1,sv=.4,SZ=1)
+# Here we left the variance prior at default
+prior_DDMaE <- make_prior(design_DDMaE,pmean=p_vector,psd=psd)
+# Now we can plot all sorts of (implied) priors
+plot_prior(prior_DDMaE, design_DDMaE, selection = "mu")
+plot_prior(prior_DDMaE, design_DDMaE, selection = "mu", mapped = FALSE)
+plot_prior(prior_DDMaE, design_DDMaE, selection = "variance")
+plot_prior(prior_DDMaE, design_DDMaE, selection = "covariance")
+plot_prior(prior_DDMaE, design_DDMaE, selection = "correlation")
+# We can also plot the implied prior on the participant level effects.
+plot_prior(prior_DDMaE, design_DDMaE, selection = "alpha")
+}
 }
