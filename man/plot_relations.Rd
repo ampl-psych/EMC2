@@ -24,7 +24,7 @@ plot_relations(
 
 \item{loadings}{An array of loadings. Can be alternatively supplied if samplers is not supplied}
 
-\item{standardize}{Boolean. Whether to standardize the loadings only standardizes if loadings isn't supplied.}
+\item{standardize}{Boolean. Whether to standardize the loadings. Only standardizes if loadings isn't supplied.}
 
 \item{corrs}{An array of correlations Can be alternatively supplied if samplers is not supplied}
 
@@ -36,8 +36,17 @@ plot_relations(
 
 \item{only_cred}{Boolean. Whether to only plot credible values}
 
-\item{nice_names}{Boolean. Nice names to give the parameters}
+\item{nice_names}{Boolean. Alternative names to give the parameters}
 }
 \description{
 An adjusted version of the corrplot package \code{corrplot} tailored to EMC2 and the plotting of factor loadings or correlations.
+}
+\examples{
+\dontrun{
+# For a given set of hierarchical factor model samples we can make a
+# loadings matrix plot.
+plot_relations(samplers, only_cred = TRUE, plot_cred = TRUE)
+# We can also plot the correlations, this works for any model that included correlations
+plot_relations(samplers, do_corr = T, plot_means = T, only_cred = T)
+}
 }

@@ -150,7 +150,8 @@ rearrange_loadings <- function(loadings){
 #' Standardized factor loadings
 #'
 #' Returns a set of standardized factor loadings.
-#' Standardization with residual error as well as described in Stevenson et al. 2024.
+#' The standardization considers the residual error as well
+#' as described in Stevenson, Heathcote, Forstmann & Matzke, 2024.
 #'
 #' @param samplers A list of samplers from a hierarchical factor analysis model
 #' @param loadings Array of pars by factors by iters. Can also specify loadings instead of samplers
@@ -159,6 +160,12 @@ rearrange_loadings <- function(loadings){
 #' @param merge_chains Return the loadings for each chain separately or merged together.
 #'
 #' @return standardized loadings
+#' @examples \dontrun{
+#' # For a given set of hierarchical factor model samples we can standardize the loadings
+#' standardize_loadings(samplers)
+#' # By default merges across chains, but we could also get a list of standardized loadings
+#' standardize_loadings(samplers, merge_chains = FALSE)
+#' }
 #' @export
 #'
 standardize_loadings <- function(samplers = NULL, loadings = NULL, sig_err_inv = NULL,
@@ -204,15 +211,22 @@ standardize_loadings <- function(samplers = NULL, loadings = NULL, sig_err_inv =
 #' @param samplers A list of samplers
 #' @param filter Character. The stage from which to take the samples
 #' @param loadings An array of loadings. Can be alternatively supplied if samplers is not supplied
-#' @param standardize Boolean. Whether to standardize the loadings only standardizes if loadings isn't supplied.
+#' @param standardize Boolean. Whether to standardize the loadings. Only standardizes if loadings isn't supplied.
 #' @param corrs An array of correlations Can be alternatively supplied if samplers is not supplied
 #' @param plot_cred Boolean. Whether to plot the credible intervals
 #' @param plot_means Boolean. Whether to plot the means
 #' @param do_corr Boolean. If samplers is suplied, whether to take the correlations rather than the loadings
 #' @param only_cred Boolean. Whether to only plot credible values
-#' @param nice_names Boolean. Nice names to give the parameters
+#' @param nice_names Boolean. Alternative names to give the parameters
 #'
 #' @return NULL
+#' @examples \dontrun{
+#' # For a given set of hierarchical factor model samples we can make a
+#' # loadings matrix plot.
+#' plot_relations(samplers, only_cred = TRUE, plot_cred = TRUE)
+#' # We can also plot the correlations, this works for any model that included correlations
+#' plot_relations(samplers, do_corr = T, plot_means = T, only_cred = T)
+#' }
 #' @export
 #'
 plot_relations <- function(samplers = NULL, filter = "sample", loadings = NULL, standardize = T, corrs = NULL, plot_cred = TRUE,
@@ -335,6 +349,12 @@ plot_relations <- function(samplers = NULL, filter = "sample", loadings = NULL, 
 #' @param cex Integer. Font size
 #'
 #' @return NULL
+#' @examples \dontrun{
+#' # For a given set of hierarchical factor model samples we can make a factor diagram
+#' make_factor_diagram(samplers, only_cred = T)
+#' # We can also specify nice names and adjust the loading positions
+#' make_factor_diagram(samplers, nice_names = paste0("V", 1:10), adj = 2)
+#' }
 #' @export
 #'
 make_factor_diagram <- function(samplers = NULL, filter = "sample",

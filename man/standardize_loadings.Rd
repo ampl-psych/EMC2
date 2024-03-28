@@ -28,5 +28,14 @@ standardized loadings
 }
 \description{
 Returns a set of standardized factor loadings.
-Standardization with residual error as well as described in Stevenson et al. 2024.
+The standardization considers the residual error as well
+as described in Stevenson, Heathcote, Forstmann & Matzke, 2024.
+}
+\examples{
+\dontrun{
+# For a given set of hierarchical factor model samples we can standardize the loadings
+standardize_loadings(samplers)
+# By default merges across chains, but we could also get a list of standardized loadings
+standardize_loadings(samplers, merge_chains = FALSE)
+}
 }
