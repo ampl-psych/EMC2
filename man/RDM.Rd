@@ -11,12 +11,45 @@ A list defining the cognitive model
 }
 \description{
 The Racing Diffusion Model, also known as the Racing Wald Model, proposes that for each choice alternative, noisy accumulators race towards a common bound.
-The first accumulator to reach the bound determines the choice made. The time taken to reach the threshold determines the response times. For details see \verb{Tillman, Van Zandt & Logan, 2020}
+The first accumulator to reach the bound determines the choice made. The time taken to reach the threshold determines the response times.
+For details see \verb{Tillman, Van Zandt & Logan, 2020}
 }
 \details{
 The core parameters of the RDM are the drift rate \code{v}, the response threshold \code{B},
 within trial variation in drift rate \code{s}, between trial variation in startpoint of the drift rate \code{A}, and non-decision time \code{t0}.
 Frequently \code{s} is fixed to 1 to satisfy scaling constraints.
-
+All parameters are estimated on the log scale, except for the drift rate which is estimated on the real line.
 Here we use the b = B + A parameterization, which ensures that the response threshold is always higher than the between trial variation in start point of the drift rate.
+}
+\examples{
+# As the RDM is a race model it has one accumulator representing each possible
+# response. EMC2 uses the Rlevels specification given to make_design to
+# automatically construct a factor representing the accumulators "lR" (the
+# latent response) with level names taken from Rlevels.
+# The lR factor is mainly used to allow for response bias, analogous to Z in the
+# DDM. For example, in the RDM, response thresholds are determined by the B
+# parameters, so B~lR allows for different thresholds for the accumulator
+# corresponding to left and right stimuli (e.g., a bias to respond left occurs
+# if the left threshold is less than the right threshold).
+# For race models you must provide the make_design argument "matchfun", a
+# function that takes the lR factor (defined in the augmented data (d) (see paper)
+# in the following function) and returns a logical defining the correct
+# in this case the match is simply such that the S factor equals the
+# latent response factor:
+matchfun=function(d)d$S==d$lR
+# matchfun is used to automatically create a latent match (lM) factor with
+# levels "FALSE" (i.e., the stimulus does not match the accumulator) and "TRUE"
+# (i.e., the stimulus does match the accumulator). This is added internally
+# and can also be used in model formula, typically for parameters related to
+# the rate of accumulation.
+# When working with lM it is useful to design  an "average and difference"
+# contrast matrix, which for binary responses has a simple canonical from:
+ADmat <- matrix(c(-1/2,1/2),ncol=1,dimnames=list(NULL,"d"))
+# We now construct our design, with v ~ lM and the contrast for lM the ADmat.
+design_RDMBE <- make_design(data = forstmann,model=RDM,matchfun=matchfun,
+formula=list(v~lM,s~lM,B~E+lR,A~1,t0~1),
+contrasts=list(v=list(lM=ADmat)),constants=c(s=log(1)))
+# For all parameters that aren't defined in the formula, default values are assumed.
+# These default values can be found in Appendix A of the EMC paper, or accessed using:
+RDM()$p_types
 }

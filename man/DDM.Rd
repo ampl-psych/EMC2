@@ -26,3 +26,12 @@ We sample \verb{Z, SZ and DP} on the probit scale because they should be strictl
 Here \code{Z} is estimated as the ratio of bias to one boundary, where 0 is complete bias to lower boundary and 1 complete bias to upper boundary
 \code{DP} is estimated as a ratio of lower/higher \code{t0} relative to the \verb{t0 parameter}
 }
+\examples{
+# The model is almost exclusively used in the make_design call
+design_DDMaE <- make_design(data = forstmann,model=DDM,
+                           formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
+                           constants=c(s=log(1)))
+# For all parameters that aren't defined in the formula, default values are assumed.
+# These default values can be found in Appendix A of the EMC paper, or accessed using:
+DDM()$p_types
+}

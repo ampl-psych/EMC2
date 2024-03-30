@@ -10,8 +10,9 @@ LBA()
 A model list with all the necessary functions to sample
 }
 \description{
-The Linear Ballistic Accumulator, proposes that for each choice alternative, ballistic accumulators race towards a common bound.
-The first accumulator to reach the bound determines the choice made. The time taken to reach the threshold determines the response times. For details see \verb{Brown & Heathcote, 2008}
+The LBA proposes that for each choice alternative, ballistic accumulators race towards a common bound.
+The first accumulator to reach the bound determines the choice made. The time taken to reach the threshold determines the response times.
+For details see \verb{Brown & Heathcote, 2008}
 }
 \details{
 The core parameters of the LBA are the drift rate \code{v}, the response threshold \code{B},
@@ -22,4 +23,36 @@ All parameters are estimated on the log scale, except for the drift rate which i
 
 Here we use the b = B + A parameterization, which ensures that the response threshold is always higher than the between trial variation in start point of the drift rate.
 Also, rates are sampled from normal distributions truncated to be always positive.
+}
+\examples{
+# As the LBA is a race model it has one accumulator representing each possible
+# response. EMC2 uses the Rlevels specification given to make_design to
+# automatically construct a factor representing the accumulators "lR" (the
+# latent response) with level names taken from Rlevels.
+# The lR factor is mainly used to allow for response bias, analogous to Z in the
+# DDM. For example, in the LBA, response thresholds are determined by the B
+# parameters, so B~lR allows for different thresholds for the accumulator
+# corresponding to left and right stimuli (e.g., a bias to respond left occurs
+# if the left threshold is less than the right threshold).
+# For race models you must provide the make_design argument "matchfun", a
+# function that takes the lR factor (defined in the augmented data (d) (see paper)
+# in the following function) and returns a logical defining the correct
+# in this case the match is simply such that the S factor equals the
+# latent response factor:
+matchfun=function(d)d$S==d$lR
+# matchfun is used to automatically create a latent match (lM) factor with
+# levels "FALSE" (i.e., the stimulus does not match the accumulator) and "TRUE"
+# (i.e., the stimulus does match the accumulator). This is added internally
+# and can also be used in model formula, typically for parameters related to
+# the rate of accumulation.
+# When working with lM it is useful to design  an "average and difference"
+# contrast matrix, which for binary responses has a simple canonical from:
+ADmat <- matrix(c(-1/2,1/2),ncol=1,dimnames=list(NULL,"d"))
+# We now construct our design, with v ~ lM and the contrast for lM the ADmat.
+design_LBABE <- make_design(data = forstmann,model=LBA,matchfun=matchfun,
+formula=list(v~lM,sv~lM,B~E+lR,A~1,t0~1),
+contrasts=list(v=list(lM=ADmat)),constants=c(sv=log(1)))
+# For all parameters that aren't defined in the formula, default values are assumed.
+# These default values can be found in Appendix A of the EMC paper, or accessed using:
+LBA()$p_types
 }
