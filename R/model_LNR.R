@@ -32,12 +32,45 @@ rLNR <- function(lR,pars,p_types=c("m","s","t0")){
 }
 
 
-#' lnrMS()
+#' The log-normal race (LNR) model
 #'
-#' LNR mu and sigma parameterization
+#' The LNR proposes a race between accumulators associated with each choice alternative.
+#' These accumulators have bounds, and the first accumulator to reach its bound determines the response time and response choice.
+#' The times at which accumulator reaches its bound is assumed to be lognormally distributed.
+#' For details see `Rouder et al., 2015`
 #'
-#' @return A list defining the cognitive model
+#' The parameters of the LNR are the scale `m`,  shape `s` and non-decision time `t0`.
+#' Unlike the other race models, no parameters need to be constrained for scaling purposes.
+#'
+#' Parameters `s` and `t0` are estimated on the log-scale.
+#'
+#' @return A model list with all the necessary functions to sample
+#' @examples
+#' # As the LNR is a race model it has one accumulator representing each possible
+#' # response. EMC2 uses the Rlevels specification given to make_design to
+#' # automatically construct a factor representing the accumulators "lR" (the
+#' # latent response) with level names taken from Rlevels.
+
+#' # matchfun is used to automatically create a latent match (lM) factor with
+#' # levels "FALSE" (i.e., the stimulus does not match the accumulator) and "TRUE"
+#' # (i.e., the stimulus does match the accumulator). This is added internally
+#' # and can also be used in model formula, typically for parameters related to
+#' # the rate of accumulation.
+
+#' # When working with lM it is useful to design  an "average and difference"
+#' # contrast matrix, which for binary responses has a simple canonical from:
+
+#' ADmat <- matrix(c(-1/2,1/2),ncol=1,dimnames=list(NULL,"d"))
+#' # We now construct our design, with v ~ lM and the contrast for lM the ADmat.
+#' design_LNRmE <- make_design(data = forstmann,model=LNR,matchfun=matchfun,
+#' formula=list(m~lM + E,s~1,t0~1),
+#' contrasts=list(m=list(lM=ADmat)))
+#' # For all parameters that aren't defined in the formula, default values are assumed.
+#' # These default values can be found in Appendix A of the EMC paper, or accessed using:
+#' LNR()$p_types
 #' @export
+#'
+
 
 LNR <- function() {
   list(
