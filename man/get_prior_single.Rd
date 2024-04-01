@@ -9,7 +9,7 @@ get_prior_single(
   n_pars = NULL,
   sample = TRUE,
   N = 1e+05,
-  type = "alpha",
+  selection = "alpha",
   design = NULL,
   map = FALSE
 )
@@ -24,12 +24,12 @@ variance (theta_mu_var). Default prior created if NULL}
 
 \item{N}{How many samples to draw from the prior, default 1e5}
 
-\item{type}{FIX ME}
-
 \item{design}{The design obtained from \code{make_design}, required when map = TRUE}
 
 \item{map}{Boolean, default TRUE reverses malformation used by model to make
 sampled parameters unbounded}
+
+\item{selection.}{Here only 'alpha' is allowed}
 }
 \value{
 A list with single entry named "alpha" of samples from the prior (if sample = TRUE) or else a prior object

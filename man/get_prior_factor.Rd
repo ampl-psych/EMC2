@@ -9,7 +9,7 @@ get_prior_factor(
   n_pars = NULL,
   sample = TRUE,
   N = 1e+05,
-  type = "mu",
+  selection = "mu",
   design = NULL,
   map = FALSE,
   n_factors = 5
@@ -25,7 +25,7 @@ variance (theta_mu_var). Default prior created if NULL}
 
 \item{N}{How many samples to draw from the prior, default 1e5}
 
-\item{type}{character, options: "mu", "variance", "covariance" "full_var"}
+\item{selection}{character, options: "mu", "variance", "covariance" "full_var"}
 
 \item{design}{The design obtained from \code{make_design}, required when map = TRUE}
 
@@ -35,7 +35,7 @@ sampled parameters unbounded}
 \item{n_factors}{integer. The number of factors.}
 }
 \value{
-A list with a single entry of type of samples from the prior (if sample = TRUE) or else a prior object
+A list with a single entry of selection of samples from the prior (if sample = TRUE) or else a prior object
 }
 \description{
 Prior specification or prior sampling for factor estimation.

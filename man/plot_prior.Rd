@@ -20,7 +20,8 @@ plot_prior(
   lower = NULL,
   upper = NULL,
   xlim = NA,
-  n_factors = NULL
+  n_factors = NULL,
+  ...
 )
 }
 \arguments{

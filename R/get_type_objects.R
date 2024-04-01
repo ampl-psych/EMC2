@@ -9,7 +9,7 @@ get_objects_standard <- function(type, selection, sample_prior, return_prior, de
                                  prior = NULL, mapped = F){
   if(return_prior){
     if(sample_prior){
-      prior <- get_prior_standard(prior = prior, design = design, selection = selection, mapped = mapped)[[1]]
+      prior <- get_prior_standard(prior = prior, design = design, selection = selection, map = mapped)[[1]]
     } else{
       prior <- get_prior_standard(design = design, sample = F)
       prior$descriptions <- list(

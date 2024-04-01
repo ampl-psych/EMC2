@@ -95,7 +95,7 @@ add_info_SEM <- function(sampler, prior = NULL, ...){
 #'
 get_prior_SEM <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, type = "mu", design = NULL,
                                    map = FALSE, Lambda_mat = NULL, B_mat = NULL,
-                          K_mat = NULL, G_mat = NULL, x = NULL){
+                          K_mat = NULL, G_mat = NULL, x = NULL, n_factors = n_factors){
 
   if(is.null(prior)){
     prior <- list()
