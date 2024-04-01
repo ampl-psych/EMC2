@@ -469,7 +469,7 @@ bridge_add_group_SEM <- function(all_samples, samples, idx){
   all_samples <- cbind(all_samples, t(matrix(apply(samples$samples$K[,,idx,drop = F], 3, unwind_lambda, K_mat), ncol = nrow(all_samples))))
   all_samples <- cbind(all_samples, t(matrix(apply(samples$samples$G[,,idx,drop = F], 3, unwind_lambda, G_mat), ncol = nrow(all_samples))))
 
-  all_samples <- cbind(all_samples, t(log(samples$samples$epsilon_inv[,idx])))
+  all_samples <- cbind(all_samples, t(log(matrix(apply(samples$samples$epsilon_inv[,,idx, drop = F], 3, diag), ncol = nrow(all_samples)))))
   # all_samples <- cbind(all_samples, t(apply(samples$samples$eta[,,idx], 3, c)))
   # For delta we split it in structured and unstructured parts of the covariance matrix
   # The unstructured parts get covariances and thus have to be decomposed with cholesky
