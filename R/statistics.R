@@ -288,7 +288,8 @@ iat_pmwg <- function(pmwg_mcmc,
 #' @param filter A string. Specifies which stage you want to plot.
 #' @param x_fun_name Name to give to quantity calculated by x_fun
 #' @param y_fun_name Name to give to quantity calculated by y_fun
-#' @param subfilter An integer or vector. If integer it will exclude up until
+#' @param subfilter An integer or vector. If it's an integer, iterations up until the value set by `subfilter` will be excluded.
+#' If a vector is supplied, only the iterations in the vector will be considered.
 #'
 #' @return Invisible results table with no rounding.
 #' @export
@@ -399,7 +400,8 @@ p_test <- function(x,x_name=NULL,x_fun=NULL,x_fun_name="fun",
 #'
 #' @param samplers pmwgs object or list of these
 #' @param filter A string. Specifies which stage you want to plot.
-#' @param subfilter An integer or vector. If integer it will exclude up until
+#' @param subfilter An integer or vector. If it's an integer, iterations up until the value set by `subfilter` will be excluded.
+#' If a vector is supplied, only the iterations in the vector will be considered.
 #' @param use_best_fit Boolean, default TRUE use best of minD and Dmean in
 #' calculation otherwise always use Dmean
 #' @param print_summary Boolean (default TRUE) print table of results
@@ -470,8 +472,8 @@ IC <- function(samplers,filter="sample",subfilter=0,use_best_fit=TRUE,
 #'
 #' returns the Bayes Factor for two models
 #'
-#' @param MLL1 Numeric. Marginal likelihood of model 1. Obtained with `run_bridge_sampling`
-#' @param MLL2 Numeric. Marginal likelihood of model 2.
+#' @param MLL1 Numeric. Marginal likelihood of model 1. Obtained with `run_bridge_sampling()`
+#' @param MLL2 Numeric. Marginal likelihood of model 2. Obtained with `run_bridge_sampling()`
 #'
 #' @return The BayesFactor for model 1 over model 2
 #' @examples \dontrun{
@@ -496,7 +498,8 @@ get_BayesFactor <- function(MLL1, MLL2){
 #'
 #' @param sList List of samples objects
 #' @param filter A string. Specifies which stage the samples are to be taken from `"preburn"`, `"burn"`, `"adapt"`, or `"sample"`
-#' @param subfilter An integer or vector. If an integer, it will exclude up until the integer within the filter.
+#' @param subfilter An integer or vector. If it's an integer, iterations up until the value set by `subfilter` will be excluded.
+#' If a vector is supplied, only the iterations in the vector will be considered.
 #' @param use_best_fit Boolean, defaults to `TRUE`, uses the minimal or mean likelihood (whichever is better) in the
 #' calculation, otherwise always uses the mean likelihood.
 #' @param BayesFactor Boolean, defaults to `TRUE`. Include marginal likelihoods as estimated using WARP-III bridge sampling.
@@ -569,25 +572,32 @@ compare <- function(sList,filter="sample",subfilter=0,use_best_fit=TRUE,
   invisible(out)
 }
 
-#' The savage dickey ratio.
+#' Savage dickey ratio computation
 #'
-#' Can be used to approximate the Bayes Factor for group level mean effects.
-#' Note this is different to MD in `compare` since it only considers the group level
-#' mean effect and not the whole model. For details see: Wagenmakers, Lodewyckx, Kuriyal, & Grasman (2010).
+#' Can be used to approximate the Bayes factor for group-level mean effects.
 #'
-#' @param samplers A list. A samplers object.
+#' Note this is different to the computation of the marginal deviance in `compare`
+#' since it only considers the group level mean effect and not the whole model.
+#' For details see: Wagenmakers, Lodewyckx, Kuriyal, & Grasman (2010).
+#'
+#' @param samplers A list, typically a `samplers`object, the output from `run_emc()`
 #' @param parameter A string. A parameter which you want to compare to H0. Will not be used if a FUN is specified.
 #' @param H0 An integer. The H0 value which you want to compare to
-#' @param filter A string. Specifies which stage the samples are to be taken from "preburn", "burn", "adapt", or "sample"
-#' @param subfilter An integer or vector. If integer it will exclude up until that integer.
+#' @param filter A string. Specifies which stage the samples are to be taken from
+#' `"preburn"`, `"burn"`, `"adapt"`, or `"sample"`
+#' @param subfilter An integer or vector. If it's an integer, iterations up until
+#' he value set by `subfilter` will be excluded. If a vector is supplied, only the
+#' iterations in the vector will be considered.
 #' @param fun A function. Specifies an operation to be performed on the sampled or mapped parameters.
-#' @param mapped A boolean. Whether the BF should be calculated for parameters mapped back to the real design, only works with selection = 'mu'.
-#' @param selection A string. Default is mu. Whether to do the operation on the alpha, mu, covariance, variance, or correlations.
+#' @param mapped A boolean. Whether the Bayes factor should be calculated for
+#' parameters mapped back to the real design, only works with selection = 'mu'.
+#' @param selection A string. The default is `mu`. Whether to do the operation on
+#' the `alpha`, `mu`, `covariance`, `variance`, or `correlation` parameters.
 #' @param do_plot Boolean. Whether to include a plot of the prior and posterior density. With circles at H0.
-#' @param xlim Vector, the xlimits for the plot.
-#' @param subject Character. If type = "single" and multiple subjects were ran in one model, this is required.
+#' @param xlim Vector, the x-limits for the plot.
+#' @param subject Character. If `type = "single"` and multiple subjects were ran in one model, this is required.
 #'
-#' @return The BayesFactor for the hypothesis against H0.
+#' @return The Bayes factor for the hypothesis against H0.
 #' @examples \dontrun{
 #' # Here the samplers object has an effect parameter (e.g. B_Eneutral),
 #' # that maps onto a certain hypothesis.
@@ -671,11 +681,12 @@ savage_dickey <- function(samplers, parameter = NULL, H0 = 0, filter = "sample",
 #' Returns the BPIC/DIC based model weights for each participant in a list of samples objects
 #'
 #' @param sList List of samples objects
-#' @param filter A string. Specifies which stage the samples are to be taken from "preburn", "burn", "adapt", or "sample"
-#' @param subfilter An integer or vector. If integer it will exclude up until
-#' @param use_best_fit Boolean, default TRUE use best of minimal likelihood and mean likelihood in
-#' calculation otherwise always use mean likelihood.
-#' @param print_summary Boolean (default TRUE) print table of results
+#' @param filter A string. Specifies which stage the samples are to be taken from `"preburn"`, `"burn"`, `"adapt"`, or `"sample"`
+#' @param subfilter An integer or vector. If it's an integer, iterations up until the value set by `subfilter` will be excluded.
+#' If a vector is supplied, only the iterations in the vector will be considered.
+#' @param use_best_fit Boolean, defaults to `TRUE`, use minimal likelihood or mean likelihood
+#' (whichever is better) in the calculation, otherwise always uses the mean likelihood.
+#' @param print_summary Boolean (defaults to `TRUE`) print table of results
 #' @param digits Integer, significant digits in printed table
 #'
 #' @return List of matrices for each subject of effective number of parameters,

@@ -23,7 +23,8 @@ compare(
 
 \item{filter}{A string. Specifies which stage the samples are to be taken from \code{"preburn"}, \code{"burn"}, \code{"adapt"}, or \code{"sample"}}
 
-\item{subfilter}{An integer or vector. If an integer, it will exclude up until the integer within the filter.}
+\item{subfilter}{An integer or vector. If it's an integer, iterations up until the value set by \code{subfilter} will be excluded.
+If a vector is supplied, only the iterations in the vector will be considered.}
 
 \item{use_best_fit}{Boolean, defaults to \code{TRUE}, uses the minimal or mean likelihood (whichever is better) in the
 calculation, otherwise always uses the mean likelihood.}

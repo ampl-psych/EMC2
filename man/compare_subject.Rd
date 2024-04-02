@@ -16,14 +16,15 @@ compare_subject(
 \arguments{
 \item{sList}{List of samples objects}
 
-\item{filter}{A string. Specifies which stage the samples are to be taken from "preburn", "burn", "adapt", or "sample"}
+\item{filter}{A string. Specifies which stage the samples are to be taken from \code{"preburn"}, \code{"burn"}, \code{"adapt"}, or \code{"sample"}}
 
-\item{subfilter}{An integer or vector. If integer it will exclude up until}
+\item{subfilter}{An integer or vector. If it's an integer, iterations up until the value set by \code{subfilter} will be excluded.
+If a vector is supplied, only the iterations in the vector will be considered.}
 
-\item{use_best_fit}{Boolean, default TRUE use best of minimal likelihood and mean likelihood in
-calculation otherwise always use mean likelihood.}
+\item{use_best_fit}{Boolean, defaults to \code{TRUE}, use minimal likelihood or mean likelihood
+(whichever is better) in the calculation, otherwise always uses the mean likelihood.}
 
-\item{print_summary}{Boolean (default TRUE) print table of results}
+\item{print_summary}{Boolean (defaults to \code{TRUE}) print table of results}
 
 \item{digits}{Integer, significant digits in printed table}
 }

@@ -7,9 +7,9 @@
 get_BayesFactor(MLL1, MLL2)
 }
 \arguments{
-\item{MLL1}{Numeric. Marginal likelihood of model 1. Obtained with \code{run_bridge_sampling}}
+\item{MLL1}{Numeric. Marginal likelihood of model 1. Obtained with \code{run_bridge_sampling()}}
 
-\item{MLL2}{Numeric. Marginal likelihood of model 2.}
+\item{MLL2}{Numeric. Marginal likelihood of model 2. Obtained with \code{run_bridge_sampling()}}
 }
 \value{
 The BayesFactor for model 1 over model 2
