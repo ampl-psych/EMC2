@@ -13,7 +13,7 @@ contr.anova(n)
 A contrast matrix.
 }
 \description{
-Similar to contr.helmert, but then scaled to estimate differences between conditions. Use in make_design.
+Similar to \code{contr.helmert}, but then scaled to estimate differences between conditions. Use in \code{make_design()}.
 }
 \examples{
 {

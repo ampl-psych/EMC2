@@ -268,7 +268,7 @@ contr.decreasing <- function(n) {
 
 #' Anova style contrast matrix
 #'
-#' Similar to contr.helmert, but then scaled to estimate differences between conditions. Use in make_design.
+#' Similar to `contr.helmert`, but then scaled to estimate differences between conditions. Use in `make_design()`.
 #'
 #' @param n An integer. The number of items for which to create the contrast
 #'
