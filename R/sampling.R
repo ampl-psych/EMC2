@@ -123,12 +123,13 @@ init <- function(pmwgs, start_mu = NULL, start_var = NULL,
 
 #' Initialize chains
 #'
-#' Adds a set of set of start points to each chain. These startpoints are sampled from a user-defined multivariate
+#' Adds a set of start points to each chain. These start points are sampled from a user-defined multivariate
 #' normal across subjects.
 #'
-#' @param samplers List of chains made by make_samplers
+#' @param samplers List of chains made by `make_samplers()`
 #' @param start_mu Mean of multivariate normal used in proposal distribution
-#' @param start_var Variance covariance matrix of multivariate normal used in proposal distribution. Smaller values will lead to less deviation around the mean.
+#' @param start_var Variance covariance matrix of multivariate normal used in proposal distribution.
+#' Smaller values will lead to less deviation around the mean.
 #' @param cores_per_chain Number of cores used per chain.
 #' @param cores_for_chains Number of cores used for chains.
 #' @param particles Number of starting values

@@ -14,11 +14,12 @@ init_chains(
 )
 }
 \arguments{
-\item{samplers}{List of chains made by make_samplers}
+\item{samplers}{List of chains made by \code{make_samplers()}}
 
 \item{start_mu}{Mean of multivariate normal used in proposal distribution}
 
-\item{start_var}{Variance covariance matrix of multivariate normal used in proposal distribution. Smaller values will lead to less deviation around the mean.}
+\item{start_var}{Variance covariance matrix of multivariate normal used in proposal distribution.
+Smaller values will lead to less deviation around the mean.}
 
 \item{particles}{Number of starting values}
 
@@ -30,7 +31,7 @@ init_chains(
 A samplers object
 }
 \description{
-Adds a set of set of start points to each chain. These startpoints are sampled from a user-defined multivariate
+Adds a set of start points to each chain. These start points are sampled from a user-defined multivariate
 normal across subjects.
 }
 \examples{
