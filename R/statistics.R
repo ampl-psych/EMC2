@@ -408,7 +408,6 @@ p_test <- function(x,x_name=NULL,x_fun=NULL,x_fun_name="fun",
 #' returns sums over all subjects
 #'
 #' @return Table of DIC, BPIC, EffectiveN, meanD, Dmean, and minD
-#' @export
 
 IC <- function(samplers,filter="sample",subfilter=0,use_best_fit=TRUE,
                print_summary=TRUE,digits=0,subject=NULL)
@@ -685,7 +684,6 @@ compare_subject <- function(sList,filter="sample",subfilter=0,use_best_fit=TRUE,
 #' @param digits Integer, significant digits in printed table
 #'
 #' @return Vector of model probabilities with names from samples list.
-#' @export
 
 compare_MLL <- function(mll,nboot=1e5,digits=2,print_summary=TRUE)
   # mll is a list of vectors of marginal log-likelihoods for a set of models
