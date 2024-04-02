@@ -17,47 +17,47 @@ make_prior(
 )
 }
 \arguments{
-\item{design}{Design for which a prior is constructed}
+\item{design}{Design for which a prior is constructed, typically the output of \code{make_design()}}
 
 \item{pmean}{Named vector of prior means, or an unnamed scalar, which is then used for all.}
 
 \item{psd}{Named vector of prior standard deviations, or an unnamed scalar,
-which is then used for all. If NA, will assume 1 for all parameters}
+which is then used for all. If \code{NA}, will assume 1 for all parameters}
 
 \item{update}{Another prior from which to copy values}
 
-\item{verbose}{Boolean (default true) print values of prior to console (if
-update only new values).}
+\item{verbose}{Boolean, defaults to \code{TRUE}, print prior specification to console (if
+\code{update}, only new values).}
 
-\item{update_print}{When verbose, print only new values (default TRUE)}
+\item{update_print}{When verbose, print only new values (defaults to \code{TRUE})}
 
-\item{type}{What type of model you plan on using, choice of standard, diagonal, blocked
-and single for this function}
+\item{type}{What type of model you plan on using, choice of \code{standard}, \code{diagonal}, \code{blocked}
+and \code{single} for this function}
 
 \item{pscale}{For hierarchical models, the prior on the scale of the variances.
-Default NA will assume 1 for all parameters}
+The default \code{NA} will assume 1 for all parameters}
 
 \item{df}{For hierarchical models, the prior on the degrees of freedom of the
-variances. Default NA will assume 2}
+variances. The default \code{NA} will assume 2}
 }
 \value{
 An EMC prior list object
 }
 \description{
-Specify prior on mean of the group mean (pmean) and standard deviation (psd),
-for the individual level for a "single" model and for the group level for
+Specify priors on mean of the group mean (\code{pmean}) and standard deviation (\code{psd}),
+for the individual level for a \code{single} model and for the group level for
 hierarchical models. These values are entered manually by default but can be
-taken from another prior (given in the update argument).
+recycled from another prior (given in the \code{update} argument).
 }
 \details{
-Where a value is not supplied in arguments the user is prompted to enter
+Where a value is not supplied, the user is prompted to enter
 numeric values (or functions that evaluate to numbers). For hierarchical models
-the scale (pscale) and the  degrees of freedom (df) for the population variance
-covariance matrix can also be specified. Set these arguments to NULL to
+the scale (\code{pscale}) and the  degrees of freedom (\code{df}) for the population variance
+covariance matrix can also be specified. Set these arguments to \code{NULL} to
 enter values manually through prompts.
 
-To get the default prior for a type run: get_prior_{type}(design = design, sample = F)
-E.g.: get_prior_diagonal(design = design, sample = F)
+To get the default prior for a type, run: \verb{get_prior_\{type\}(design = design, sample = F)}
+E.g.: \code{get_prior_diagonal(design = design, sample = F)}
 }
 \examples{
 \dontrun{

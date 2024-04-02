@@ -23,37 +23,38 @@ plot_prior(
 )
 }
 \arguments{
-\item{prior}{A list of specifying prior for the chosen type.}
+\item{prior}{A list specifying the priors for the chosen type.}
 
-\item{design}{Design corresponding to prior}
+\item{design}{Model design corresponding to the prior}
 
-\item{plotp}{Names of parameters to plot (default NULL plots all)}
+\item{plotp}{Names of parameters to plot (the default \code{NULL} plots all parameters)}
 
-\item{type}{Type of prior (standard, diagonal, single, blocked or factor).
-For blocked, the blocked parameters are still plotted in the covariance matrix.}
+\item{type}{Type of prior (\code{standard}, \code{diagonal}, \code{single}, \code{blocked} or \code{factor}).
+For \code{blocked}, the blocked parameters are still plotted in the covariance matrix.}
 
-\item{selection}{Select level prior to plot (default "alpha" for single and "mu" for standard)}
+\item{selection}{Selects which parameter groups to plot (default \code{"alpha"}
+for single and \code{"mu"} for standard)}
 
-\item{mapped}{boolean for mapping mu or alpha back to the design cells on the natural scale.}
+\item{mapped}{Boolean for mapping \code{mu} or \code{alpha} back to the design cells on the natural scale.}
 
-\item{data}{data frame, required when mapping involves priors}
+\item{data}{Data frame, required when the mapping involves priors}
 
 \item{N}{Number of prior samples if data not provided}
 
-\item{nrep}{Number of prior samples as multiple of number of rows in the data if given.}
+\item{nrep}{Number of prior samples as multiple of the number of rows in the data frame.}
 
-\item{breaks}{Histogram breaks parameter}
+\item{breaks}{breaks parameter for the histogram}
 
-\item{layout}{par(mfrow) setting (default c(3,3))}
+\item{layout}{\code{par(mfrow)} setting (the default is \code{c(3,3)})}
 
-\item{lower}{Lower quantile limit of values plotted. Default NULL all plotted,
-numeric same for all parameters, parameter named list parameter specific}
+\item{lower}{Defaults to \code{NULL}. Lower quantile limit of values plotted. If numeric, the same is used for all parameters,
+alternatively, a (parameter) named list with individual quantile limits can be supplied.}
 
-\item{upper}{Upper quantile limit of values plotted. Default NULL all plotted,
-numeric same for all parameters, parameter named list parameter specific}
+\item{upper}{Defaults to \code{NULL}. Lower quantile limit of values plotted. If numeric, the same is used for all parameters,
+alternatively, a (parameter) named list with individual quantile limits can be supplied.}
 
-\item{xlim}{List with parameter names of plot x limits or single pair same for all.
-Any names not in list or if (default) NA xlim set as min and max.}
+\item{xlim}{A list with parameter names of x-axis limits or a single pair if the
+same limits should be used for all parameters. Any names not in list or if (default) \code{NA}, \code{xlim} the minimum and maximum are set.}
 
 \item{...}{For additional arguments}
 }
@@ -64,8 +65,8 @@ Invisible of the prior samples
 Plots the prior for a model by simulating from the user specified prior distributions.
 }
 \details{
-To get the default prior for a type run: get_prior_{type}(design = design, sample = F).
-E.g.: get_prior_diagonal(design = design, sample = F)
+To get the default prior for a type run: \verb{get_prior_\{type\}(design = design, sample = F)}.
+E.g.: \code{get_prior_diagonal(design = design, sample = F)}
 }
 \examples{
 \dontrun{

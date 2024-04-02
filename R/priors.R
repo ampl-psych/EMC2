@@ -51,27 +51,28 @@ get_prior_samples <- function(samples,selection,filter,thin,subfilter,n_prior)
 #'
 #' Plots the prior for a model by simulating from the user specified prior distributions.
 #'
-#' To get the default prior for a type run: get_prior_{type}(design = design, sample = F).
-#' E.g.: get_prior_diagonal(design = design, sample = F)
+#' To get the default prior for a type run: `get_prior_{type}(design = design, sample = F)`.
+#' E.g.: `get_prior_diagonal(design = design, sample = F)`
 #'
-#' @param prior A list of specifying prior for the chosen type.
-#' @param design Design corresponding to prior
-#' @param plotp Names of parameters to plot (default NULL plots all)
-#' @param type Type of prior (standard, diagonal, single, blocked or factor).
-#' For blocked, the blocked parameters are still plotted in the covariance matrix.
-#' @param selection Select level prior to plot (default "alpha" for single and "mu" for standard)
-#' @param mapped boolean for mapping mu or alpha back to the design cells on the natural scale.
-#' @param data data frame, required when mapping involves priors
+#' @param prior A list specifying the priors for the chosen type.
+#' @param design Model design corresponding to the prior
+#' @param plotp Names of parameters to plot (the default `NULL` plots all parameters)
+#' @param type Type of prior (`standard`, `diagonal`, `single`, `blocked` or `factor`).
+#' For `blocked`, the blocked parameters are still plotted in the covariance matrix.
+#' @param selection Selects which parameter groups to plot (default `"alpha"`
+#' for single and `"mu"` for standard)
+#' @param mapped Boolean for mapping `mu` or `alpha` back to the design cells on the natural scale.
+#' @param data Data frame, required when the mapping involves priors
 #' @param N Number of prior samples if data not provided
-#' @param nrep Number of prior samples as multiple of number of rows in the data if given.
-#' @param breaks Histogram breaks parameter
-#' @param layout par(mfrow) setting (default c(3,3))
-#' @param lower Lower quantile limit of values plotted. Default NULL all plotted,
-#' numeric same for all parameters, parameter named list parameter specific
-#' @param upper Upper quantile limit of values plotted. Default NULL all plotted,
-#' numeric same for all parameters, parameter named list parameter specific
-#' @param xlim List with parameter names of plot x limits or single pair same for all.
-#' Any names not in list or if (default) NA xlim set as min and max.
+#' @param nrep Number of prior samples as multiple of the number of rows in the data frame.
+#' @param breaks breaks parameter for the histogram
+#' @param layout `par(mfrow)` setting (the default is `c(3,3)`)
+#' @param lower Defaults to `NULL`. Lower quantile limit of values plotted. If numeric, the same is used for all parameters,
+#' alternatively, a (parameter) named list with individual quantile limits can be supplied.
+#' @param upper Defaults to `NULL`. Lower quantile limit of values plotted. If numeric, the same is used for all parameters,
+#' alternatively, a (parameter) named list with individual quantile limits can be supplied.
+#' @param xlim A list with parameter names of x-axis limits or a single pair if the
+#' same limits should be used for all parameters. Any names not in list or if (default) `NA`, `xlim` the minimum and maximum are set.
 #' @param ... For additional arguments
 #'
 #' @return Invisible of the prior samples
@@ -337,34 +338,34 @@ merge_priors <- function(prior_list){
 
 #' Prior specification
 #'
-#' Specify prior on mean of the group mean (pmean) and standard deviation (psd),
-#' for the individual level for a "single" model and for the group level for
+#' Specify priors on mean of the group mean (`pmean`) and standard deviation (`psd`),
+#' for the individual level for a `single` model and for the group level for
 #' hierarchical models. These values are entered manually by default but can be
-#' taken from another prior (given in the update argument).
+#' recycled from another prior (given in the `update` argument).
 #'
-#' Where a value is not supplied in arguments the user is prompted to enter
+#' Where a value is not supplied, the user is prompted to enter
 #' numeric values (or functions that evaluate to numbers). For hierarchical models
-#' the scale (pscale) and the  degrees of freedom (df) for the population variance
-#' covariance matrix can also be specified. Set these arguments to NULL to
+#' the scale (`pscale`) and the  degrees of freedom (`df`) for the population variance
+#' covariance matrix can also be specified. Set these arguments to `NULL` to
 #'  enter values manually through prompts.
 #'
-#' To get the default prior for a type run: get_prior_{type}(design = design, sample = F)
-#' E.g.: get_prior_diagonal(design = design, sample = F)
+#' To get the default prior for a type, run: `get_prior_{type}(design = design, sample = F)`
+#' E.g.: `get_prior_diagonal(design = design, sample = F)`
 #'
-#' @param design Design for which a prior is constructed
+#' @param design Design for which a prior is constructed, typically the output of `make_design()`
 #' @param pmean Named vector of prior means, or an unnamed scalar, which is then used for all.
 #' @param psd Named vector of prior standard deviations, or an unnamed scalar,
-#' which is then used for all. If NA, will assume 1 for all parameters
+#' which is then used for all. If `NA`, will assume 1 for all parameters
 #' @param update Another prior from which to copy values
-#' @param verbose Boolean (default true) print values of prior to console (if
-#' update only new values).
-#' @param update_print When verbose, print only new values (default TRUE)
-#' @param type What type of model you plan on using, choice of standard, diagonal, blocked
-#' and single for this function
+#' @param verbose Boolean, defaults to `TRUE`, print prior specification to console (if
+#' `update`, only new values).
+#' @param update_print When verbose, print only new values (defaults to `TRUE`)
+#' @param type What type of model you plan on using, choice of `standard`, `diagonal`, `blocked`
+#' and `single` for this function
 #' @param pscale For hierarchical models, the prior on the scale of the variances.
-#' Default NA will assume 1 for all parameters
+#' The default `NA` will assume 1 for all parameters
 #' @param df For hierarchical models, the prior on the degrees of freedom of the
-#' variances. Default NA will assume 2
+#' variances. The default `NA` will assume 2
 #'
 #' @return An EMC prior list object
 #' @examples \dontrun{
