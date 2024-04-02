@@ -21,20 +21,21 @@ compare(
 \arguments{
 \item{sList}{List of samples objects}
 
-\item{filter}{A string. Specifies which stage the samples are to be taken from "preburn", "burn", "adapt", or "sample"}
+\item{filter}{A string. Specifies which stage the samples are to be taken from \code{"preburn"}, \code{"burn"}, \code{"adapt"}, or \code{"sample"}}
 
-\item{subfilter}{An integer or vector. If integer it will exclude up until the integer within the filter.}
+\item{subfilter}{An integer or vector. If an integer, it will exclude up until the integer within the filter.}
 
-\item{use_best_fit}{Boolean, default TRUE use best of minimal likelihood and mean likelihood in
-calculation otherwise always use mean likelihood.}
+\item{use_best_fit}{Boolean, defaults to \code{TRUE}, uses the minimal or mean likelihood (whichever is better) in the
+calculation, otherwise always uses the mean likelihood.}
 
-\item{BayesFactor}{Boolean, default TRUE. Include marginal likelihoods as estimated using WARP-III bridge sampling. Usually takes a minute per model added to calculate}
+\item{BayesFactor}{Boolean, defaults to \code{TRUE}. Include marginal likelihoods as estimated using WARP-III bridge sampling.
+Usually takes a minute per model added to calculate}
 
-\item{cores_for_props}{Integer, how many cores to use for BayesFactor calculation, here 4 is default for the 4 different proposal densities to evaluate, only 1, 2 and 4 are sensible.}
+\item{cores_for_props}{Integer, how many cores to use for the Bayes factor calculation, here 4 is the default for the 4 different proposal densities to evaluate, only 1, 2 and 4 are sensible.}
 
-\item{cores_per_prop}{Integer, how many cores to use for BayesFactor calculation if you have more than 4 cores available. Cores used will be cores_for_props * cores_per_prop. Best to prioritize cores_for_props being 4 or 2}
+\item{cores_per_prop}{Integer, how many cores to use for the Bayes factor calculation if you have more than 4 cores available. Cores used will be cores_for_props * cores_per_prop. Best to prioritize cores_for_props being 4 or 2}
 
-\item{print_summary}{Boolean (default TRUE) print table of results}
+\item{print_summary}{Boolean (default \code{TRUE}), print table of results}
 
 \item{digits}{Integer, significant digits in printed table except model weights}
 
@@ -44,7 +45,7 @@ calculation otherwise always use mean likelihood.}
 }
 \value{
 Matrix of effective number of parameters, mean deviance, deviance of
-mean, DIC, BPIC, Marginal Deviance (if BayesFactor=TRUE) and associated weights.
+mean, DIC, BPIC, Marginal Deviance (if \code{BayesFactor=TRUE}) and associated weights.
 }
 \description{
 Returns the BPIC/DIC or marginal deviance (-2*marginal likelihood) for a list of samples objects.

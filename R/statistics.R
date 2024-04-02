@@ -495,20 +495,21 @@ get_BayesFactor <- function(MLL1, MLL2){
 #' Returns the BPIC/DIC or marginal deviance (-2*marginal likelihood) for a list of samples objects.
 #'
 #' @param sList List of samples objects
-#' @param filter A string. Specifies which stage the samples are to be taken from "preburn", "burn", "adapt", or "sample"
-#' @param subfilter An integer or vector. If integer it will exclude up until the integer within the filter.
-#' @param use_best_fit Boolean, default TRUE use best of minimal likelihood and mean likelihood in
-#' calculation otherwise always use mean likelihood.
-#' @param BayesFactor Boolean, default TRUE. Include marginal likelihoods as estimated using WARP-III bridge sampling. Usually takes a minute per model added to calculate
-#' @param cores_for_props Integer, how many cores to use for BayesFactor calculation, here 4 is default for the 4 different proposal densities to evaluate, only 1, 2 and 4 are sensible.
-#' @param cores_per_prop Integer, how many cores to use for BayesFactor calculation if you have more than 4 cores available. Cores used will be cores_for_props * cores_per_prop. Best to prioritize cores_for_props being 4 or 2
-#' @param print_summary Boolean (default TRUE) print table of results
+#' @param filter A string. Specifies which stage the samples are to be taken from `"preburn"`, `"burn"`, `"adapt"`, or `"sample"`
+#' @param subfilter An integer or vector. If an integer, it will exclude up until the integer within the filter.
+#' @param use_best_fit Boolean, defaults to `TRUE`, uses the minimal or mean likelihood (whichever is better) in the
+#' calculation, otherwise always uses the mean likelihood.
+#' @param BayesFactor Boolean, defaults to `TRUE`. Include marginal likelihoods as estimated using WARP-III bridge sampling.
+#' Usually takes a minute per model added to calculate
+#' @param cores_for_props Integer, how many cores to use for the Bayes factor calculation, here 4 is the default for the 4 different proposal densities to evaluate, only 1, 2 and 4 are sensible.
+#' @param cores_per_prop Integer, how many cores to use for the Bayes factor calculation if you have more than 4 cores available. Cores used will be cores_for_props * cores_per_prop. Best to prioritize cores_for_props being 4 or 2
+#' @param print_summary Boolean (default `TRUE`), print table of results
 #' @param digits Integer, significant digits in printed table except model weights
 #' @param digits_p Integer, significant digits in printed table for model weights
 #' @param ... Additional, optional arguments
 #'
 #' @return Matrix of effective number of parameters, mean deviance, deviance of
-#' mean, DIC, BPIC, Marginal Deviance (if BayesFactor=TRUE) and associated weights.
+#' mean, DIC, BPIC, Marginal Deviance (if `BayesFactor=TRUE`) and associated weights.
 #' @examples \dontrun{
 #' # Define a samplers list of two (or more different models)
 #' # Here the full model is a list of samplers with the hypothesized effect
