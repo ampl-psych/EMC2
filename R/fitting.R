@@ -928,6 +928,7 @@ make_samplers <- function(data,design,model=NULL,
   xeta <- NULL
   nuisance <- NULL
   nuisance_non_hyper <- NULL
+  person_covariates <- NULL
   # overwrite those that were supplied
   optionals <- list(...)
   for (name in names(optionals) ) {
@@ -1025,7 +1026,8 @@ make_samplers <- function(data,design,model=NULL,
   variant_funs <- get_variant_funs(type = type)
   if (type %in% c("standard", "single", "diagonal", "infnt_factor")) {
     out <- pmwgs(dadm_list, variant_funs, nuisance = nuisance, nuisance_non_hyper =
-                   nuisance_non_hyper, grouped_pars = grouped_pars, n_factors = n_factors)
+                   nuisance_non_hyper, grouped_pars = grouped_pars, n_factors = n_factors,
+                 person_covariates = person_covariates)
   } else if (type == "blocked") {
     if (is.null(par_groups)) stop("Must specify par_groups for blocked type")
     out <- pmwgs(dadm_list,par_groups=par_groups, variant_funs, nuisance = nuisance,
@@ -1061,7 +1063,9 @@ fix_fileName <- function(x){
   }
 }
 
+get_person_covariates <- function(dadms, person_covariates){
 
+}
 
 extractDadms <- function(dadms, names = 1:length(dadms)){
   N_models <- length(dadms)

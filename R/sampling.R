@@ -1,8 +1,9 @@
-
 pmwgs <- function(dadm, variant_funs, pars = NULL, ll_func = NULL, prior = NULL,
-                  nuisance = NULL, nuisance_non_hyper = NULL, grouped_pars = NULL, ...) {
+                  nuisance = NULL, nuisance_non_hyper = NULL, grouped_pars = NULL,
+                  person_covariates = NULL, ...) {
   if(is.data.frame(dadm)) dadm <- list(dadm)
   dadm <- extractDadms(dadm)
+  if(is.null(person_covariates)) get_person_covariates(dadm, person_covariates)
   if(is.null(pars)) pars <- dadm$pars
   if(is.null(ll_func)) ll_func <- dadm$ll_func
   if(is.null(prior)) prior <- dadm$prior
