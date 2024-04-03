@@ -46,20 +46,48 @@ add_info_factor <- function(sampler, prior = NULL, ...){
 }
 
 
-#' Prior specification or prior sampling for factor estimation.
+#' Prior specification and prior sampling for factor estimation
 #'
-#' @param prior A named list containing the prior mean (theta_mu_mean) and
-#' variance (theta_mu_var). Default prior created if NULL
-#' @param n_pars Argument used by the sampler, best left NULL. In user case inferred from the design
-#' @param sample Whether to sample from the prior. Default is TRUE. If not returns a prior list
-#' @param map Boolean, default TRUE reverses malformation used by model to make
-#' sampled parameters unbounded
-#' @param N How many samples to draw from the prior, default 1e5
-#' @param design The design obtained from `make_design`, required when map = TRUE
-#' @param type  character, options: "mu", "variance", "covariance" "full_var"
-#' @param n_factors integer. The number of factors.
+#' To get the default priors for a given design: `get_prior_factor(design = design, sample = FALSE)`
 #'
-#' @return A list with a single entry of type of samples from the prior (if sample = TRUE) or else a prior object
+#' For details see Ghosh, J., & Dunson, D. B. (2009).
+#' Default prior distributions and efficient posterior computation in Bayesian factor analysis.
+#' *Journal of Computational and Graphical Statistics*, 18, 306-320. or
+#' Stevenson, N., Innes, R. J., Gronau, Q. F., Miletic, S., Heathcote, A., PhD,
+#' Forstmann, B., & Brown, S. (2024). Using group level factor models to resolve
+#' high dimensionality in model-based sampling. https://doi.org/10.31234/osf.io/pn3wv
+#'
+#' @param prior A named list that can contain the prior mean (`theta_mu_mean`) and
+#' variance (`theta_mu_var`) on the group-level mean; the variance of the loadings (`theta_lambda_var`);
+#' shape and rate of the factor variances (`ap` and `bp`) and shape and rate of the residual variances
+#' (`as` and `bs`). For `NULL` entries, the default prior is is used.
+#' @param n_pars Often inferred from the design, but if `design = NULL`, `n_pars`
+#' will be used to determine the size of prior.
+#' @param sample Whether to sample from the prior or to simply return the prior. Default is TRUE,
+#' @param map Boolean, defaults to `TRUE`. If `sample = TRUE`, the implied prior is sampled.
+#' This includes back-transformations for naturally bounded parameters such as
+#' the non-decision time and an inverse mapping from the design matrix back to the
+#' cells of the design. If `FALSE`, the transformed, unmapped, parameters are used.
+#' Note that `map` does not affect the prior used in the sampling process.
+#' @param N How many samples to draw from the prior, the default is 1e5
+#' @param design The design obtained from `make_design()`, required when `map = TRUE`
+#' @param type  Character. If `sample = TRUE`, what priors to sample from. Options:
+#' `"mu"`, `"variance"`, `"covariance"`, `"full_var"`, `"alpha"`, `"loadings"`.
+#' @param n_factors Integer. The number of factors.
+#'
+#' @return A list with a single entry of type of samples from the prior (if `sample = TRUE`) or else a prior object
+#' @examples \dontrun{
+#' # First define a design for the model
+#' design_DDMaE <- make_design(data = forstmann,model=DDM,
+#'                            formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
+#'                            constants=c(s=log(1)))
+#' # Now get the default prior
+#' prior <- get_prior_factor(design = design_DDMaE, sample = FALSE)
+#' # We can change values in the default prior or use make_prior
+#' # Then we can get samples from this prior e.g.
+#' samples <- get_prior_factor(prior = prior, design = design_DDMaE,
+#'   sample = TRUE, type = "mu", n_factors = 3)
+#' }
 #' @export
 get_prior_factor <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, type = "mu", design = NULL,
                              map = FALSE, n_factors = 5){
