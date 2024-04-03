@@ -2,7 +2,7 @@
 % Please edit documentation in R/variant_blocked.R
 \name{get_prior_blocked}
 \alias{get_prior_blocked}
-\title{Prior specification or prior sampling for blocked estimation.}
+\title{Prior specification or prior sampling for blocked estimation}
 \usage{
 get_prior_blocked(
   prior = NULL,
@@ -15,14 +15,15 @@ get_prior_blocked(
 )
 }
 \arguments{
-\item{prior}{A named list that can contain the prior mean (theta_mu_mean) and
-variance (theta_mu_var) on the group-level mean, or the scale (A), or degrees of freedom (df)
-for the group-level variance-covariance matrix.
-Default prior created for NULL entries.}
+\item{prior}{A named list that can contain the prior mean (\code{theta_mu_mean}) and
+variance (\code{theta_mu_var}) on the group-level mean, or the scale (\code{A}), or degrees of freedom (\code{df})
+for the group-level variance-covariance matrix. For \code{NULL} entries, the default prior is created}
 
-\item{n_pars}{Often inferred from the design, but if design = NULL will be used to determine size of prior.}
+\item{n_pars}{Often inferred from the design, but if \code{design = NULL}, \code{n_pars}
+will be used to determine the size of prior.}
 
-\item{sample}{Whether to sample from the prior or to simply return the prior. Default is TRUE,}
+\item{sample}{Boolean, defaults to \code{TRUE}, sample from the prior or simply
+return the prior specifications?}
 
 \item{N}{How many samples to draw from the prior, default 1e5}
 
@@ -30,16 +31,23 @@ Default prior created for NULL entries.}
 
 \item{design}{The design obtained from \code{make_design}, required when map = TRUE}
 
-\item{map}{Boolean, default TRUE reverses malformation used by model to make
-sampled parameters unbounded}
+\item{map}{Boolean, defaults to \code{TRUE}. If \code{sample = TRUE}, the implied prior is sampled.
+This includes back-transformations for naturally bounded parameters such as
+the non-decision time and an inverse mapping from the design matrix back to the
+cells of the design. If \code{FALSE}, the transformed, unmapped, parameters are used.
+Note that \code{map} does not affect the prior used in the sampling process.}
 }
 \value{
 A list with a single entry of type of samples from the prior (if sample = TRUE) or else a prior object
 }
 \description{
-Works analogous to \code{get_prior_standard}. Blocks of the covariance matrix to estimate are only considered in sampling.
-For details see Huang and Wand, 2013.
-To get the default prior for a created design: get_prior_diag(design = design, sample = FALSE)
+Works analogous to \code{get_prior_standard}. Blocks of the covariance matrix to estimate
+are only considered in sampling. To get the default prior for a created design:
+\code{get_prior_diag(design = design, sample = FALSE)}
+}
+\details{
+For details see Huang, A., & Wand, M. P. (2013). Simple marginally noninformative
+prior distributions for covariance matrices. \emph{Bayesian Analysis}, 8, 439-452. https://doi.org/10.1214/13-BA815
 }
 \examples{
 \dontrun{
