@@ -8,7 +8,7 @@ plot_prior(
   prior = NULL,
   design,
   plotp = NULL,
-  type = c("standard", "single", "diagonal", "blocked", "factor")[1],
+  type = "standard",
   selection = NULL,
   mapped = TRUE,
   data = NULL,
@@ -65,7 +65,7 @@ Invisible of the prior samples
 Plots the prior for a model by simulating from the user specified prior distributions.
 }
 \details{
-To get the default prior for a type run: \verb{get_prior_\{type\}(design = design, sample = F)}.
+To get the default prior for a type, run: \verb{get_prior_\{type\}(design = design, sample = F)}.
 E.g.: \code{get_prior_diagonal(design = design, sample = F)}
 }
 \examples{
