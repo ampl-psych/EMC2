@@ -288,7 +288,8 @@ iat_pmwg <- function(pmwg_mcmc,
 #' @param filter A string. Specifies which stage you want to plot.
 #' @param x_fun_name Name to give to quantity calculated by x_fun
 #' @param y_fun_name Name to give to quantity calculated by y_fun
-#' @param subfilter An integer or vector. If integer it will exclude up until
+#' @param subfilter An integer or vector. If it's an integer, iterations up until the value set by `subfilter` will be excluded.
+#' If a vector is supplied, only the iterations in the vector will be considered.
 #'
 #' @return Invisible results table with no rounding.
 #' @export
@@ -399,7 +400,8 @@ p_test <- function(x,x_name=NULL,x_fun=NULL,x_fun_name="fun",
 #'
 #' @param samplers pmwgs object or list of these
 #' @param filter A string. Specifies which stage you want to plot.
-#' @param subfilter An integer or vector. If integer it will exclude up until
+#' @param subfilter An integer or vector. If it's an integer, iterations up until the value set by `subfilter` will be excluded.
+#' If a vector is supplied, only the iterations in the vector will be considered.
 #' @param use_best_fit Boolean, default TRUE use best of minD and Dmean in
 #' calculation otherwise always use Dmean
 #' @param print_summary Boolean (default TRUE) print table of results
@@ -465,35 +467,71 @@ IC <- function(samplers,filter="sample",subfilter=0,use_best_fit=TRUE,
 }
 
 
+#' Bayes Factors
+#'
+#' returns the Bayes Factor for two models
+#'
+#' @param MLL1 Numeric. Marginal likelihood of model 1. Obtained with `run_bridge_sampling()`
+#' @param MLL2 Numeric. Marginal likelihood of model 2. Obtained with `run_bridge_sampling()`
+#'
+#' @return The BayesFactor for model 1 over model 2
+#' @examples \dontrun{
+#' # First get the marginal likelihood for two_models
+#' # Here the full model is a list of samplers with the hypothesized effect
+#' # The null model is a list of samplers without the hypothesized effect
+#' MLL_full <- run_bridge_sampling(full_model, cores_per_prop = 3)
+#' MLL_null <- run_bridge_sampling(null_model, cores_per_prop = 3)
+#' # Now we can calculate their Bayes factor
+#' get_BayesFactor(MLL_full, MLL_null)
+#' }
+#' @export
+get_BayesFactor <- function(MLL1, MLL2){
+  exp(MLL1 - MLL2)
+}
 
-#' IC based model selection for a list of samples objects.
+
+
+#' Information criteria and marginal likelihoods
+#'
+#' Returns the BPIC/DIC or marginal deviance (-2*marginal likelihood) for a list of samples objects.
 #'
 #' @param sList List of samples objects
-#' @param filter A string. Specifies which stage you want to plot.
-#' @param subfilter An integer or vector. If integer it will exclude up until
-#' @param use_best_fit Boolean, default TRUE use best of minD and Dmean in
-#' calculation otherwise always use Dmean
-#' @param BayesFactor Boolean, default TRUE. Include marginal likelihoods as estimated using WARP-III bridge sampling. Usually takes a minute per model added to calculate
-#' @param cores_for_props Integer, how many cores to use for BayesFactor calculation, here 4 is default for the 4 different proposal densities to evaluate, only 1, 2 and 4 are sensible.
-#' @param cores_per_prop Integer, how many cores to use for BayesFactor calculation if you have more than 4 cores available. Cores used will be cores_for_props * cores_per_prop, where prioritizing cores_for_props being 4 or 2 is fastest.
-#' @param print_summary Boolean (default TRUE) print table of results
-#' @param digits Integer, significant digits in printed table except model weights
+#' @param filter A string. Specifies which stage the samples are to be taken from `"preburn"`, `"burn"`, `"adapt"`, or `"sample"`
+#' @param subfilter An integer or vector. If it's an integer, iterations up until the value set by `subfilter` will be excluded.
+#' If a vector is supplied, only the iterations in the vector will be considered.
+#' @param use_best_fit Boolean, defaults to `TRUE`, uses the minimal or mean likelihood (whichever is better) in the
+#' calculation, otherwise always uses the mean likelihood.
+#' @param BayesFactor Boolean, defaults to `TRUE`. Include marginal likelihoods as estimated using WARP-III bridge sampling.
+#' Usually takes a minute per model added to calculate
+#' @param cores_for_props Integer, how many cores to use for the Bayes factor calculation, here 4 is the default for the 4 different proposal densities to evaluate, only 1, 2 and 4 are sensible.
+#' @param cores_per_prop Integer, how many cores to use for the Bayes factor calculation if you have more than 4 cores available. Cores used will be cores_for_props * cores_per_prop. Best to prioritize cores_for_props being 4 or 2
+#' @param print_summary Boolean (default `TRUE`), print table of results
+#' @param digits Integer, significant digits in printed table for information criteria
 #' @param digits_p Integer, significant digits in printed table for model weights
-#' @param subject Integer or string selecting a single subject, default NULL
-#' returns sums over all subjects
+#' @param ... Additional, optional arguments
 #'
-#' @return Table of effective number of parameters, mean deviance, deviance of
-#' mean, DIC, BPIC, Marginal Deviance (if BayesFactor=TRUE) and associated weights.
+#' @return Matrix of effective number of parameters, mean deviance, deviance of
+#' mean, DIC, BPIC, Marginal Deviance (if `BayesFactor=TRUE`) and associated weights.
+#' @examples \dontrun{
+#' # Define a samplers list of two (or more different models)
+#' # Here the full model is a list of samplers with the hypothesized effect
+#' # The null model is a list of samplers without the hypothesized effect
+#' sList <- list(full_model, null_model)
+#' # By default emc uses 4 cores to parallelize marginal likelihood estimation across proposals
+#' # So cores_per_prop = 3 results in 12 cores used.
+#' compare(sList, cores_per_prop = 3)
+#' }
 #' @export
 
 compare <- function(sList,filter="sample",subfilter=0,use_best_fit=TRUE,
-                       BayesFactor = TRUE, cores_for_props =4, cores_per_prop = 1,
-                       print_summary=TRUE,digits=0,digits_p=3,subject=NULL) {
-
+                    BayesFactor = TRUE, cores_for_props =4, cores_per_prop = 1,
+                    print_summary=TRUE,digits=0,digits_p=3, ...) {
+  if(is(sList, "emc")) sList <- list(sList)
   getp <- function(IC) {
     IC <- -(IC - min(IC))/2
     exp(IC)/sum(exp(IC))
   }
+  if(!is.null(list(...)$subject)) subject <- list(...)$subject
 
   if (is.numeric(subfilter)) defaultsf <- subfilter[1] else defaultsf <- 0
   sflist <- as.list(setNames(rep(defaultsf,length(sList)),names(sList)))
@@ -502,7 +540,7 @@ compare <- function(sList,filter="sample",subfilter=0,use_best_fit=TRUE,
 
   ICs <- setNames(vector(mode="list",length=length(sList)),names(sList))
   for (i in 1:length(ICs)) ICs[[i]] <- IC(sList[[i]],filter=filter,
-                                          subfilter=sflist[[i]],use_best_fit=use_best_fit,subject=subject,print_summary=FALSE)
+                                          subfilter=sflist[[i]],use_best_fit=use_best_fit,subject=NULL,print_summary=FALSE)
   ICs <- data.frame(do.call(rbind,ICs))
   DICp <- getp(ICs$DIC)
   BPICp <- getp(ICs$BPIC)
@@ -533,25 +571,42 @@ compare <- function(sList,filter="sample",subfilter=0,use_best_fit=TRUE,
   invisible(out)
 }
 
-#' The savage dickey ratio.
-
-#' Can be used to approximate the Bayes Factor for group level mean effects.
-#' Note this is different to MD in `compare` since it only considers the group level
-#' mean effect and not the whole model.
+#' Savage dickey ratio computation
 #'
-#' @param samplers A list. A samplers object.
+#' Can be used to approximate the Bayes factor for group-level mean effects.
+#'
+#' Note this is different to the computation of the marginal deviance in `compare`
+#' since it only considers the group level mean effect and not the whole model.
+#' For details see: Wagenmakers, Lodewyckx, Kuriyal, & Grasman (2010).
+#'
+#' @param samplers A list, typically a `samplers`object, the output from `run_emc()`
 #' @param parameter A string. A parameter which you want to compare to H0. Will not be used if a FUN is specified.
 #' @param H0 An integer. The H0 value which you want to compare to
-#' @param filter A string. Specifies which stage the samples are to be taken from "preburn", "burn", "adapt", or "sample"
-#' @param subfilter An integer or vector. If integer it will exclude up until
+#' @param filter A string. Specifies which stage the samples are to be taken from
+#' `"preburn"`, `"burn"`, `"adapt"`, or `"sample"`
+#' @param subfilter An integer or vector. If it's an integer, iterations up until
+#' he value set by `subfilter` will be excluded. If a vector is supplied, only the
+#' iterations in the vector will be considered.
 #' @param fun A function. Specifies an operation to be performed on the sampled or mapped parameters.
-#' @param mapped A boolean. Whether the BF should be calculated for parameters mapped back to the real design, only works with selection = 'mu'.
-#' @param selection A string. Default is mu. Whether to do the operation on the alpha, mu, covariance, variance, or correlations.
+#' @param mapped A boolean. Whether the Bayes factor should be calculated for
+#' parameters mapped back to the real design, only works with selection = 'mu'.
+#' @param selection A string. The default is `mu`. Whether to do the operation on
+#' the `alpha`, `mu`, `covariance`, `variance`, or `correlation` parameters.
 #' @param do_plot Boolean. Whether to include a plot of the prior and posterior density. With circles at H0.
-#' @param xlim Vector, the xlimits for the plot.
-#' @param subject Character. If type = "single" and multiple subjects were ran in one model, this is required.
+#' @param xlim Vector, the x-limits for the plot.
+#' @param subject Character. If `type = "single"` and multiple subjects were ran in one model, this is required.
 #'
-#' @return The BayesFactor for the hypothesis against H0.
+#' @return The Bayes factor for the hypothesis against H0.
+#' @examples \dontrun{
+#' # Here the samplers object has an effect parameter (e.g. B_Eneutral),
+#' # that maps onto a certain hypothesis.
+#' # The hypothesis here is that B_Eneutral is different from zero.
+#' # We can test whether there's a group-level effect of Eneutral on B:
+#' savage_dickey(samplers, parameter = "B_Eneutral")
+#' # Alternatively we can also test whether two parameters from each other
+#' Bdiff <- function(p)diff(p[c("B_Eneutral","B_Eaccuracy")])
+#' savage_dickey(samplers,fun=Bdiff)
+#' }
 #' @export
 savage_dickey <- function(samplers, parameter = NULL, H0 = 0, filter = "sample",
                           subfilter = 0, fun = NULL, mapped =F, selection = "mu",
@@ -569,11 +624,11 @@ savage_dickey <- function(samplers, parameter = NULL, H0 = 0, filter = "sample",
   if(mapped){
     design <- attr(samplers, "design_list")[[1]]
     psamples <- map_mcmc(psamples, design, design$model,
-                        include_constants = FALSE)
+                         include_constants = FALSE)
   }
 
   samples <- as_mcmc.list(samplers,selection=selection,filter=filter,
-                                         subfilter=subfilter,mapped=mapped)
+                          subfilter=subfilter,mapped=mapped)
   if(selection == "alpha"){
     if(length(samples) > 1 & is.null(subject)){
       stop("with non-hierarichal run with multiple subjects, you must specify which subject")
@@ -620,27 +675,40 @@ savage_dickey <- function(samplers, parameter = NULL, H0 = 0, filter = "sample",
   return(pdfun(H0)/post_dfun(H0))
 }
 
-#' IC-based model weights for each participant in a list of samples objects
+#' Information criteria for each participant
+#'
+#' Returns the BPIC/DIC based model weights for each participant in a list of samples objects
 #'
 #' @param sList List of samples objects
-#' @param filter A string. Specifies which stage you want to plot.
-#' @param subfilter An integer or vector. If integer it will exclude up until
-#' @param use_best_fit Boolean, default TRUE use best of minD and Dmean in
-#' calculation otherwise always use Dmean (see compare)
-#' @param print_summary Boolean (default TRUE) print table of results
+#' @param filter A string. Specifies which stage the samples are to be taken from `"preburn"`, `"burn"`, `"adapt"`, or `"sample"`
+#' @param subfilter An integer or vector. If it's an integer, iterations up until the value set by `subfilter` will be excluded.
+#' If a vector is supplied, only the iterations in the vector will be considered.
+#' @param use_best_fit Boolean, defaults to `TRUE`, use minimal likelihood or mean likelihood
+#' (whichever is better) in the calculation, otherwise always uses the mean likelihood.
+#' @param print_summary Boolean (defaults to `TRUE`) print table of results
 #' @param digits Integer, significant digits in printed table
 #'
-#' @return List of tables for each subject of effective number of parameters,
-#' mean deviance, deviance of mean, DIC, BPIC (and optionally MD), and associated weights.
+#' @return List of matrices for each subject of effective number of parameters,
+#' mean deviance, deviance of mean, DIC, BPIC and associated weights.
+#' @examples \dontrun{
+#' # Define a samplers list of two (or more different models)
+#' # Here the full model is a list of samplers with the hypothesized effect
+#' # The null model is a list of samplers without the hypothesized effect
+#' sList <- list(full_model, null_model)
+#' # By default emc uses 4 cores to parallelize marginal likelihood estimation across proposals
+#' # So cores_per_prop = 3 results in 12 cores used.
+#' compare_subject(sList, cores_per_prop = 3)
+#' # prints a set of weights for each model for the different participants
+#' # And returns the DIC and BPIC for each participant for each model.
+#' }
 #' @export
-
 compare_subject <- function(sList,filter="sample",subfilter=0,use_best_fit=TRUE,
-                               print_summary=TRUE,digits=3) {
-
+                            print_summary=TRUE,digits=3) {
+  if(is(sList, "emc")) sList <- list(sList)
   subjects <- names(sList[[1]][[1]]$data)
   out <- setNames(vector(mode="list",length=length(subjects)),subjects)
   for (i in subjects) out[[i]] <- compare(sList,subject=i,BayesFactor=FALSE,
-    filter=filter,subfilter=subfilter,use_best_fit=use_best_fit,print_summary=FALSE)
+                                          filter=filter,subfilter=subfilter,use_best_fit=use_best_fit,print_summary=FALSE)
   if (print_summary) {
     wDIC <- lapply(out,function(x)x["wDIC"])
     wBPIC <- lapply(out,function(x)x["wBPIC"])
@@ -659,11 +727,11 @@ compare_subject <- function(sList,filter="sample",subfilter=0,use_best_fit=TRUE,
     #               MD=table(mnams[apply(pMD,1,which.max)])))
     #
     # } else {
-      print(round(cbind(pDIC,pBPIC),digits))
-      mnams <- unlist(lapply(strsplit(dimnames(pDIC)[[2]],"_"),function(x){x[[2]]}))
-      cat("\nWinners\n")
-      print(rbind(DIC=table(mnams[apply(pDIC,1,which.max)]),
-                  BPIC=table(mnams[apply(pBPIC,1,which.max)])))
+    print(round(cbind(pDIC,pBPIC),digits))
+    mnams <- unlist(lapply(strsplit(dimnames(pDIC)[[2]],"_"),function(x){x[[2]]}))
+    cat("\nWinners\n")
+    print(rbind(DIC=table(mnams[apply(pDIC,1,which.max)]),
+                BPIC=table(mnams[apply(pBPIC,1,which.max)])))
     # }
   }
   invisible(out)
