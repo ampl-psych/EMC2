@@ -16,16 +16,16 @@ init_chains(
 \arguments{
 \item{samplers}{List of chains made by \code{make_samplers()}}
 
-\item{start_mu}{Mean of multivariate normal used in proposal distribution}
+\item{start_mu}{A vector. Mean of multivariate normal used in proposal distribution}
 
-\item{start_var}{Variance covariance matrix of multivariate normal used in proposal distribution.
+\item{start_var}{A matrix. Variance covariance matrix of multivariate normal used in proposal distribution.
 Smaller values will lead to less deviation around the mean.}
 
-\item{particles}{Number of starting values}
+\item{particles}{An integer. Number of starting values}
 
-\item{cores_per_chain}{Number of cores used per chain.}
+\item{cores_per_chain}{An integer. How many cores to use per chain. Parallelizes across participant calculations.}
 
-\item{cores_for_chains}{Number of cores used for chains.}
+\item{cores_for_chains}{An integer. How many cores to use to parallelize across chains. Default is the number of chains.}
 }
 \value{
 A samplers object
