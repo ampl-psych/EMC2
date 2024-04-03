@@ -38,7 +38,7 @@ Usually takes a minute per model added to calculate}
 
 \item{print_summary}{Boolean (default \code{TRUE}), print table of results}
 
-\item{digits}{Integer, significant digits in printed table except model weights}
+\item{digits}{Integer, significant digits in printed table for information criteria}
 
 \item{digits_p}{Integer, significant digits in printed table for model weights}
 
