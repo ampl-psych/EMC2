@@ -507,7 +507,7 @@ get_BayesFactor <- function(MLL1, MLL2){
 #' @param cores_for_props Integer, how many cores to use for the Bayes factor calculation, here 4 is the default for the 4 different proposal densities to evaluate, only 1, 2 and 4 are sensible.
 #' @param cores_per_prop Integer, how many cores to use for the Bayes factor calculation if you have more than 4 cores available. Cores used will be cores_for_props * cores_per_prop. Best to prioritize cores_for_props being 4 or 2
 #' @param print_summary Boolean (default `TRUE`), print table of results
-#' @param digits Integer, significant digits in printed table except model weights
+#' @param digits Integer, significant digits in printed table for information criteria
 #' @param digits_p Integer, significant digits in printed table for model weights
 #' @param ... Additional, optional arguments
 #'
