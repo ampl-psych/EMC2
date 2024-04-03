@@ -127,12 +127,12 @@ init <- function(pmwgs, start_mu = NULL, start_var = NULL,
 #' normal across subjects.
 #'
 #' @param samplers List of chains made by `make_samplers()`
-#' @param start_mu Mean of multivariate normal used in proposal distribution
-#' @param start_var Variance covariance matrix of multivariate normal used in proposal distribution.
+#' @param start_mu A vector. Mean of multivariate normal used in proposal distribution
+#' @param start_var A matrix. Variance covariance matrix of multivariate normal used in proposal distribution.
 #' Smaller values will lead to less deviation around the mean.
-#' @param cores_per_chain Number of cores used per chain.
-#' @param cores_for_chains Number of cores used for chains.
-#' @param particles Number of starting values
+#' @param cores_per_chain An integer. How many cores to use per chain. Parallelizes across participant calculations.
+#' @param cores_for_chains An integer. How many cores to use to parallelize across chains. Default is the number of chains.
+#' @param particles An integer. Number of starting values
 #'
 #' @return A samplers object
 #' @examples \dontrun{
