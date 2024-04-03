@@ -63,12 +63,7 @@ get_prior_single <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5
     if(type != "alpha") stop("for variant single, only alpha can be specified")
     samples <- mvtnorm::rmvnorm(N, prior$theta_mu_mean, prior$theta_mu_var)
     if (map) {
-      proot <- unlist(lapply(strsplit(colnames(samples),"_"),function(x)x[[1]]))
-      isin <- proot %in% names(design$model()$p_types)
-      fullnames <- colnames(samples)[isin]
-      colnames(samples)[isin] <- proot
-      samples[,isin] <- design$model()$Ntransform(samples[,isin])
-      colnames(samples)[isin] <- fullnames
+      samples <- map_mcmc(samples,design,design$model,include_constants=FALSE)
     }
     return(list(alpha = samples))
   }
