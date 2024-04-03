@@ -4,23 +4,30 @@ add_info_diag <- function(sampler, prior = NULL, ...){
   return(sampler)
 }
 
-#' Prior specification or prior sampling for diagonal estimation.
+#' Prior specification or prior sampling for diagonal estimation
 #'
-#' For details see Huang and Wand, 2013.
-#' To get the default prior for a created design: get_prior_diag(design = design, sample = FALSE)
+#' To get the default prior for a created design: `get_prior_diag(design = design, sample = FALSE)`
 #'
-#' @param prior A named list that can contain the prior mean (theta_mu_mean) and
-#' variance (theta_mu_var) on the group-level mean, or the scale (A), or degrees of freedom (df) for the group-level variance.
-#' Default prior created for NULL entries.
-#' @param n_pars Often inferred from the design, but if design = NULL will be used to determine size of prior.
-#' @param sample Whether to sample from the prior or to simply return the prior. Default is TRUE,
-#' @param map Boolean, default TRUE reverses malformation used by model to make
-#' sampled parameters unbounded
-#' @param N How many samples to draw from the prior, default 1e5
-#' @param design The design obtained from `make_design`, required when map = TRUE
-#' @param type  character. If sample = TRUE, what prior to sample from. Options: "mu", "variance", "alpha".
+#' For details see Huang, A., & Wand, M. P. (2013). Simple marginally noninformative
+#' prior distributions for covariance matrices. *Bayesian Analysis*, 8, 439-452. https://doi.org/10.1214/13-BA815
 #'
-#' @return A list with a single entry of type of samples from the prior (if sample = TRUE) or else a prior object
+#' @param prior A named list that can contain the prior mean (`theta_mu_mean`) and
+#' variance (`theta_mu_var`) on the group-level mean, or the scale (`A`), or degrees of freedom (`df`) for the group-level variance.
+#' For `NULL` entries, the default prior is created
+#' @param n_pars Often inferred from the design, but if `design = NULL`, `n_pars`
+#' will be used to determine the size of prior.
+#' @param sample Boolean, defaults to `TRUE`, sample from the prior or simply
+#' return the prior specifications?
+#' @param map Boolean, defaults to `TRUE`. If `sample = TRUE`, the implied prior is sampled.
+#' This includes back-transformations for naturally bounded parameters such as
+#' the non-decision time and an inverse mapping from the design matrix back to the
+#' cells of the design. If `FALSE`, the transformed, unmapped, parameters are used.
+#' Note that `map` does not affect the prior used in the sampling process.
+#' @param N How many samples to draw from the prior, the default is 1e5
+#' @param design The design obtained from `make_design`, required when `map = TRUE`
+#' @param type  Character. If `sample = TRUE`, what prior to sample from.  Options: `"mu"`, `"variance"`, `"alpha"`.
+#'
+#' @return A list with a single entry of type of samples from the prior (if `sample = TRUE`) or else a prior object
 #' @examples \dontrun{
 #' # First define a design for the model
 #' design_DDMaE <- make_design(data = forstmann,model=DDM,
