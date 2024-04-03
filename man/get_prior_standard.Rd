@@ -37,8 +37,11 @@ sampled parameters unbounded}
 A list with a single entry of type of samples from the prior (if sample = TRUE) or else a prior object
 }
 \description{
-For details see Huang and Wand, 2013.
 To get the default prior for a created design: get_prior_standard(design = design, sample = FALSE)
+}
+\details{
+For details see Huang, A., & Wand, M. P. (2013). Simple marginally noninformative
+prior distributions for covariance matrices. \emph{Bayesian Analysis}, 8, 439-452. https://doi.org/10.1214/13-BA815
 }
 \examples{
 \dontrun{
