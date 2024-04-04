@@ -210,6 +210,7 @@ contr.bayes <- function(n) {
   }
   else levels <- n
   levels <- as.character(levels)
+  n <- length(levels)
   cont <- diag(n)
   a <- n
   I_a <- diag(a)
