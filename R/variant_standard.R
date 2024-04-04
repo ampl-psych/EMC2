@@ -95,12 +95,7 @@ get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1
       if(!is.null(design)){
         colnames(samples) <- par_names <- names(attr(design, "p_vector"))
         if(map){
-          proot <- unlist(lapply(strsplit(colnames(samples),"_"),function(x)x[[1]]))
-          isin <- proot %in% names(design$model()$p_types)
-          fullnames <- colnames(samples)[isin]
-          colnames(samples)[isin] <- proot
-          samples[,isin] <- design$model()$Ntransform(samples[,isin])
-          colnames(samples)[isin] <- fullnames
+          samples <- map_mcmc(samples,design,design$model,include_constants=FALSE)
         }
       }
       out$mu <- samples
