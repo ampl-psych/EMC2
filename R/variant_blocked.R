@@ -17,9 +17,11 @@ add_info_blocked <- function(sampler, prior = NULL, ...){
 #'
 #' For details see Huang, A., & Wand, M. P. (2013). Simple marginally noninformative
 #' prior distributions for covariance matrices. *Bayesian Analysis*, 8, 439-452. https://doi.org/10.1214/13-BA815
+#' Note that prior$theta_mu_invar (the inverse of the prior covariance matrix on the group-level mean) is returned,
+#' which is only used for computational efficiency
 #'
 #' @param prior A named list that can contain the prior mean (`theta_mu_mean`) and
-#' variance (`theta_mu_var`) on the group-level mean, or the scale (`A`), or degrees of freedom (`df`)
+#' variance (`theta_mu_var`) on the group-level mean, or the scale (`A`), or degrees of freedom (`v`)
 #' for the group-level variance-covariance matrix. For `NULL` entries, the default prior is created
 #' @param n_pars Often inferred from the design, but if `design = NULL`, `n_pars`
 #' will be used to determine the size of prior.
