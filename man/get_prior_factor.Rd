@@ -53,7 +53,10 @@ Default prior distributions and efficient posterior computation in Bayesian fact
 \emph{Journal of Computational and Graphical Statistics}, 18, 306-320. or
 Stevenson, N., Innes, R. J., Gronau, Q. F., Miletic, S., Heathcote, A., PhD,
 Forstmann, B., & Brown, S. (2024). Using group level factor models to resolve
-high dimensionality in model-based sampling. https://doi.org/10.31234/osf.io/pn3wv
+high dimensionality in model-based sampling. https://doi.org/10.31234/osf.io/pn3wv.
+
+Note that if \code{sample = FALSE}, prior$theta_mu_invar (the inverse of the prior covariance matrix on the group-level mean) is returned,
+which is only used for computational efficiency
 }
 \examples{
 \dontrun{

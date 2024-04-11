@@ -55,8 +55,9 @@ add_info_factor <- function(sampler, prior = NULL, ...){
 #' *Journal of Computational and Graphical Statistics*, 18, 306-320. or
 #' Stevenson, N., Innes, R. J., Gronau, Q. F., Miletic, S., Heathcote, A., PhD,
 #' Forstmann, B., & Brown, S. (2024). Using group level factor models to resolve
-#' high dimensionality in model-based sampling. https://doi.org/10.31234/osf.io/pn3wv
-#' Note that prior$theta_mu_invar (the inverse of the prior covariance matrix on the group-level mean) is returned,
+#' high dimensionality in model-based sampling. https://doi.org/10.31234/osf.io/pn3wv.
+#'
+#' Note that if `sample = FALSE`, prior$theta_mu_invar (the inverse of the prior covariance matrix on the group-level mean) is returned,
 #' which is only used for computational efficiency
 #'
 #' @param prior A named list that can contain the prior mean (`theta_mu_mean`) and

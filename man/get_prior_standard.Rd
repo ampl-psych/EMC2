@@ -16,7 +16,7 @@ get_prior_standard(
 }
 \arguments{
 \item{prior}{A named list that can contain the prior mean (\code{theta_mu_mean}) and
-variance (\code{theta_mu_var}) on the group-level mean, or the scale (\code{A}), or degrees of freedom (\code{df})
+variance (\code{theta_mu_var}) on the group-level mean, or the scale (\code{A}), or degrees of freedom (\code{v})
 for the group-level variance-covariance matrix. For \code{NULL} entries, a default prior gets created.}
 
 \item{n_pars}{Often inferred from the design, but if \code{design = NULL}, \code{n_pars}
@@ -45,7 +45,10 @@ To get the default prior for a created design: get_prior_standard(design = desig
 }
 \details{
 For details see Huang, A., & Wand, M. P. (2013). Simple marginally noninformative
-prior distributions for covariance matrices. \emph{Bayesian Analysis}, 8, 439-452. https://doi.org/10.1214/13-BA815
+prior distributions for covariance matrices. \emph{Bayesian Analysis}, 8, 439-452. https://doi.org/10.1214/13-BA815.
+
+Note that if \code{sample = FALSE}, prior$theta_mu_invar (the inverse of the prior covariance matrix on the group-level mean) is returned,
+which is only used for computational efficiency
 }
 \examples{
 \dontrun{

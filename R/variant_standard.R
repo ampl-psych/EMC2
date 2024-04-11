@@ -25,8 +25,9 @@ add_info_standard <- function(sampler, prior = NULL, ...){
 #' To get the default prior for a created design: get_prior_standard(design = design, sample = FALSE)
 #'
 #' For details see Huang, A., & Wand, M. P. (2013). Simple marginally noninformative
-#' prior distributions for covariance matrices. *Bayesian Analysis*, 8, 439-452. https://doi.org/10.1214/13-BA815
-#' Note that prior$theta_mu_invar (the inverse of the prior covariance matrix on the group-level mean) is returned,
+#' prior distributions for covariance matrices. *Bayesian Analysis*, 8, 439-452. https://doi.org/10.1214/13-BA815.
+#'
+#' Note that if `sample = FALSE`, prior$theta_mu_invar (the inverse of the prior covariance matrix on the group-level mean) is returned,
 #' which is only used for computational efficiency
 #'
 #' @param prior A named list that can contain the prior mean (`theta_mu_mean`) and
