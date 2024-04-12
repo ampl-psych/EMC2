@@ -160,22 +160,35 @@ rLBA <- function(lR,pars,p_types=c("v","sv","b","A","t0"),posdrift = TRUE,
 
 #### Model functions ----
 
-#' The Linear Ballistic Accumulator (LBA) model
+#' The Linear Ballistic Accumulator model
 #'
-#' The LBA proposes that for each choice alternative, ballistic accumulators race towards a common bound.
-#' The first accumulator to reach the bound determines the choice made. The time taken to reach the threshold determines the response times.
-#' For details see `Brown & Heathcote, 2008`
+#' Model file to estimate the Linear Ballistic Accumulator (LBA) in EMC2.
+#' It is almost exclusively used in `make_design()`.
 #'
-#' The core parameters of the LBA are the drift rate `v`, the response threshold `B`,
-#' between trial variation in drift rate `sv`, between trial variation in startpoint of the drift rate `A`, and non-decision time `t0`.
-#' Frequently `sv` is fixed to 1 to satisfy scaling constraints.
+#' @details
+#'
+#' The default values can also be accessed with `LBA()$p_types`.
+#'
+#' | Parameter | Transform | Natural scale | Default   | Mapping                    | Interpretation                                            |
+#' |-----------|-----------|---------------|-----------|----------------------------|-----------------------------------------------------------|
+#' | *v*       | -         | \[-Inf, Inf\] | 1         |                            | Mean evidence-accumulation rate                                              |
+#' | *A*       | log       | \[0, Inf\]    | log(0)    |                            | Between-trial variation (range) in start point                     |
+#' | *B*       | log       | \[0, Inf\]    | log(1)    | b = B+A                  | Distance from $A$ to $b$ (response threshold)                                       |
+#' | *t0*      | log       | \[0, Inf\]    | log(0)    |                            | Non-decision time                                         |
+#' | *sv*      | log       | \[0, Inf\]    | log(1)    |                            | Between-trial variation in evidence-accumulation rate                      |
+#'
 #'
 #' All parameters are estimated on the log scale, except for the drift rate which is estimated on the real line.
 #'
-#' Here we use the b = B + A parameterization, which ensures that the response threshold is always higher than the between trial variation in start point of the drift rate.
-#' Also, rates are sampled from normal distributions truncated to be always positive.
+#' Conventionally, `sv` is fixed to 1 to satisfy scaling constraints.
 #'
-#' @return A model list with all the necessary functions to sample
+#' The b = B + A parameterization ensures that the response threshold is always higher than the between trial variation in start point of the drift rate.
+#' Also, rates are sampled from truncated normal distributions to be always positive.
+#'
+#' Brown, S. D., & Heathcote, A. (2008). The simplest complete model of choice response time: Linear ballistic accumulation.
+#' *Cognitive Psychology, 57*(3), 153-178. https://doi.org/10.1016/j.cogpsych.2007.12.002
+#'
+#' @return A model list with all the necessary functions for EMC2 to sample
 #' @examples
 #' # As the LBA is a race model it has one accumulator representing each possible
 #' # response. EMC2 uses the Rlevels specification given to make_design to

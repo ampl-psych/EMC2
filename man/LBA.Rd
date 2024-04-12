@@ -2,27 +2,37 @@
 % Please edit documentation in R/model_LBA.R
 \name{LBA}
 \alias{LBA}
-\title{The Linear Ballistic Accumulator (LBA) model}
+\title{The Linear Ballistic Accumulator model}
 \usage{
 LBA()
 }
 \value{
-A model list with all the necessary functions to sample
+A model list with all the necessary functions for EMC2 to sample
 }
 \description{
-The LBA proposes that for each choice alternative, ballistic accumulators race towards a common bound.
-The first accumulator to reach the bound determines the choice made. The time taken to reach the threshold determines the response times.
-For details see \verb{Brown & Heathcote, 2008}
+Model file to estimate the Linear Ballistic Accumulator (LBA) in EMC2.
+It is almost exclusively used in \code{make_design()}.
 }
 \details{
-The core parameters of the LBA are the drift rate \code{v}, the response threshold \code{B},
-between trial variation in drift rate \code{sv}, between trial variation in startpoint of the drift rate \code{A}, and non-decision time \code{t0}.
-Frequently \code{sv} is fixed to 1 to satisfy scaling constraints.
+The default values can also be accessed with \code{LBA()$p_types}.\tabular{llllll}{
+   Parameter \tab Transform \tab Natural scale \tab Default \tab Mapping \tab Interpretation \cr
+   \emph{v} \tab - \tab [-Inf, Inf] \tab 1 \tab  \tab Mean evidence-accumulation rate \cr
+   \emph{A} \tab log \tab [0, Inf] \tab log(0) \tab  \tab Between-trial variation (range) in start point \cr
+   \emph{B} \tab log \tab [0, Inf] \tab log(1) \tab b = B+A \tab Distance from $A$ to $b$ (response threshold) \cr
+   \emph{t0} \tab log \tab [0, Inf] \tab log(0) \tab  \tab Non-decision time \cr
+   \emph{sv} \tab log \tab [0, Inf] \tab log(1) \tab  \tab Between-trial variation in evidence-accumulation rate \cr
+}
+
 
 All parameters are estimated on the log scale, except for the drift rate which is estimated on the real line.
 
-Here we use the b = B + A parameterization, which ensures that the response threshold is always higher than the between trial variation in start point of the drift rate.
-Also, rates are sampled from normal distributions truncated to be always positive.
+Conventionally, \code{sv} is fixed to 1 to satisfy scaling constraints.
+
+The b = B + A parameterization ensures that the response threshold is always higher than the between trial variation in start point of the drift rate.
+Also, rates are sampled from truncated normal distributions to be always positive.
+
+Brown, S. D., & Heathcote, A. (2008). The simplest complete model of choice response time: Linear ballistic accumulation.
+\emph{Cognitive Psychology, 57}(3), 153-178. https://doi.org/10.1016/j.cogpsych.2007.12.002
 }
 \examples{
 # As the LBA is a race model it has one accumulator representing each possible

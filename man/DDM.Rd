@@ -34,6 +34,8 @@ The default values can also be accessed with \code{DDM()$p_types}.\tabular{lllll
 \code{Z} is estimated as the ratio of bias to one boundary where 0.5 means no bias.
 \code{DP} comprises the difference in non-decision time for each response option.
 
+Conventionally, \code{sv} is fixed to 1 to satisfy scaling constraints.
+
 See Ratcliff, R., & McKoon, G. (2008).
 The diffusion decision model: theory and data for two-choice decision tasks.
 \emph{Neural computation, 20}(4), 873-922. doi: 10.1162/neco.2008.12-06-420.
