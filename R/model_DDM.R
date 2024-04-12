@@ -59,7 +59,7 @@ pDDM <- function(rt,R,pars,precision=2.5)
 #' | *a*       | log       | \[0, Inf\]        | log(1)    |                            | Boundary separation                                       |
 #' | *t0*      | log       | \[0, Inf\]        | log(0)    |                            | Non-decision time                                         |
 #' | *s*       | log       | \[0, Inf\]        | log(1)    |                            | Within-trial standard deviation of drift rate            |
-#' | *Z*       | probit    | \[0, 1\]        | qnorm(0.5)| *z* = *Z*x*a*                  | Relative start point (bias)                              |
+#' | *Z*       | probit    | \[0, 1\]        | qnorm(0.5)| *z* = *Z* x *a*                  | Relative start point (bias)                              |
 #' | *SZ*      | probit    | \[0, 1\]        | qnorm(0)  | *sz* = 2 x *SZ* x min(*a* x *Z*, *a* x (1-*Z*)) | Relative between-trial variation in start point       |
 #' | *sv*      | log       | \[0, Inf\]        | log(0)    |                            | Between-trial standard deviation of drift rate           |
 #' | *st0*     | log       | \[0, Inf\]        | log(0)    |                            | Between-trial variation (range) in non-decision time    |

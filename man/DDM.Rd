@@ -20,7 +20,7 @@ The default values can also be accessed with \code{DDM()$p_types}.\tabular{lllll
    \emph{a} \tab log \tab [0, Inf] \tab log(1) \tab  \tab Boundary separation \cr
    \emph{t0} \tab log \tab [0, Inf] \tab log(0) \tab  \tab Non-decision time \cr
    \emph{s} \tab log \tab [0, Inf] \tab log(1) \tab  \tab Within-trial standard deviation of drift rate \cr
-   \emph{Z} \tab probit \tab [0, 1] \tab qnorm(0.5) \tab \emph{z} = \emph{Z}x\emph{a} \tab Relative start point (bias) \cr
+   \emph{Z} \tab probit \tab [0, 1] \tab qnorm(0.5) \tab \emph{z} = \emph{Z} x \emph{a} \tab Relative start point (bias) \cr
    \emph{SZ} \tab probit \tab [0, 1] \tab qnorm(0) \tab \emph{sz} = 2 x \emph{SZ} x min(\emph{a} x \emph{Z}, \emph{a} x (1-\emph{Z})) \tab Relative between-trial variation in start point \cr
    \emph{sv} \tab log \tab [0, Inf] \tab log(0) \tab  \tab Between-trial standard deviation of drift rate \cr
    \emph{st0} \tab log \tab [0, Inf] \tab log(0) \tab  \tab Between-trial variation (range) in non-decision time \cr
