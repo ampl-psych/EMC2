@@ -14,7 +14,7 @@ Model file to estimate the Diffusion Decision Model (DDM) in EMC2. It is
 almost exclusively used in \code{make_design()}.
 }
 \details{
-\tabular{llllll}{
+The default values can also be accessed with \code{DDM()$p_types}.\tabular{llllll}{
    Parameter \tab Transform \tab Natural scale \tab Default \tab Mapping \tab Interpretation \cr
    \emph{v} \tab - \tab [-Inf, Inf] \tab 1 \tab  \tab Mean evidence-accumulation rate (drift rate) \cr
    \emph{a} \tab log \tab [0, Inf] \tab log(1) \tab  \tab Boundary separation \cr
@@ -33,8 +33,6 @@ almost exclusively used in \code{make_design()}.
 
 \code{Z} is estimated as the ratio of bias to one boundary where 0.5 means no bias.
 \code{DP} comprises the difference in non-decision time for each response option.
-
-The default values can be accessed with \code{DDM()$p_types}.
 
 See Ratcliff, R., & McKoon, G. (2008).
 The diffusion decision model: theory and data for two-choice decision tasks.

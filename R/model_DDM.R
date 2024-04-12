@@ -50,6 +50,9 @@ pDDM <- function(rt,R,pars,precision=2.5)
 #'
 #'
 #' @details
+#'
+#' The default values can also be accessed with `DDM()$p_types`.
+#'
 #' | Parameter | Transform | Natural scale | Default   | Mapping                    | Interpretation                                            |
 #' |-----------|-----------|---------------|-----------|----------------------------|-----------------------------------------------------------|
 #' | *v*       | -         | \[-Inf, Inf\]     | 1         |                            | Mean evidence-accumulation rate (drift rate)              |
@@ -68,7 +71,6 @@ pDDM <- function(rt,R,pars,precision=2.5)
 #' `Z` is estimated as the ratio of bias to one boundary where 0.5 means no bias.
 #' `DP` comprises the difference in non-decision time for each response option.
 #'
-#' The default values can be accessed with `DDM()$p_types`.
 #'
 #' See Ratcliff, R., & McKoon, G. (2008).
 #' The diffusion decision model: theory and data for two-choice decision tasks.
