@@ -307,12 +307,6 @@ check_progress <- function (samplers, stage, iter, stop_criteria,
     es_done <- FALSE
   }
   trys_done <- ifelse(is.null(max_trys), FALSE, trys >= max_trys)
-  if (trys_done & iter_done) {
-    warning("Max trys reached. If this happens in burn-in while trying to get
-            gelman diagnostics small enough, you might have a particularly hard model.
-            Make sure your model is well specified. If so, you can run adapt and
-            sample, if run for long enough, sample usually converges eventually.")
-  }
   if (stage == "adapt") {
     samples_merged <- merge_samples(samplers)
     test_samples <- extract_samples(samples_merged, stage = "adapt",
@@ -330,6 +324,14 @@ check_progress <- function (samplers, stage, iter, stop_criteria,
   done <- (es_done & iter_done & gd$gd_done & adapted) | (trys_done & iter_done)
   if(es_done & gd$gd_done & adapted & !iter_done){
     step_size <- min(step_size, abs(iter - total_iters_stage))[1]
+  }
+  if (trys_done & iter_done) {
+    if(!(es_done & gd$gd_done & adapted)){
+      warning("Max tries reached. If this happens in burn-in while trying to get
+            gelman diagnostics small enough, you might have a particularly hard model.
+            Make sure your model is well specified. If so, you can run adapt and
+            sample, if run for long enough, sample usually converges eventually.")
+    }
   }
   return(list(samplers = gd$samplers, done = done, step_size = step_size,
               trys = trys, iters_total = iters_total, n_blocks = gd$n_blocks,
