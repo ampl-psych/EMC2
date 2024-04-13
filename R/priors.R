@@ -499,5 +499,8 @@ make_prior <- function(design,pmean=NULL,psd=NULL,update=NULL,
 
 }
 
-
+make_prior_new <- function(design, type = "standard", update = NULL){
+  prior <- get_objects(design = design, type = type)
+  return(prior$prior)
+}
 
