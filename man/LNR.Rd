@@ -18,9 +18,9 @@ Model files are almost exclusively used in \code{make_design()}.
 Default values are used for all parameters that are not explicitly listed in the \code{formula}
 argument of \code{make_design()}.They can also be accessed with \code{LNR()$p_types}.\tabular{llllll}{
    \strong{Parameter} \tab \strong{Transform} \tab \strong{Natural scale} \tab \strong{Default} \tab \strong{Mapping} \tab \strong{Interpretation} \cr
-   \emph{m} \tab - \tab \link{-Inf, Inf} \tab 1 \tab  \tab Scale parameter \cr
-   \emph{s} \tab log \tab \link{0, Inf} \tab log(1) \tab  \tab Shape parameter \cr
-   \emph{t0} \tab log \tab \link{0, Inf} \tab log(0) \tab  \tab Non-decision time \cr
+   \emph{m} \tab - \tab [-Inf, Inf] \tab 1 \tab  \tab Scale parameter \cr
+   \emph{s} \tab log \tab [0, Inf] \tab log(1) \tab  \tab Shape parameter \cr
+   \emph{t0} \tab log \tab [0, Inf] \tab log(0) \tab  \tab Non-decision time \cr
 }
 
 

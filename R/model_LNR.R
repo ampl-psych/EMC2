@@ -46,9 +46,9 @@ rLNR <- function(lR,pars,p_types=c("m","s","t0")){
 #'
 #' | **Parameter** | **Transform** | **Natural scale** | **Default**   | **Mapping**                    | **Interpretation**            |
 #'  |-----------|-----------|---------------|-----------|----------------------------|---------------------------|
-#'  | *m*       | -         | [-Inf, Inf]   | 1         |                            | Scale parameter           |
-#'  | *s*       | log       | [0, Inf]      | log(1)    |                            | Shape parameter           |
-#'  | *t0*      | log       | [0, Inf]      | log(0)    |                            | Non-decision time         |
+#'  | *m*       | -         | \[-Inf, Inf\]   | 1         |                            | Scale parameter           |
+#'  | *s*       | log       | \[0, Inf\]      | log(1)    |                            | Shape parameter           |
+#'  | *t0*      | log       | \[0, Inf\]      | log(0)    |                            | Non-decision time         |
 #'
 #' Because the LNR is a race model, it has one accumulator per response option.
 #' EMC2 automatically constructs a factor representing the accumulators `lR` (i.e., the
