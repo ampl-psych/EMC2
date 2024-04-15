@@ -31,7 +31,7 @@ argument of \code{make_design()}.They can also be accessed with \code{DDM()$p_ty
 
 
 \code{a}, \code{t0}, \code{sv}, \code{st0}, \code{s} are sampled on the log scale because these parameters are strictly positive,
-\code{Z} \code{SZ} and \code{DP} are sampled on the probit scale because they should be strictly between 0 and 1.
+\code{Z}, \code{SZ} and \code{DP} are sampled on the probit scale because they should be strictly between 0 and 1.
 
 \code{Z} is estimated as the ratio of bias to one boundary where 0.5 means no bias.
 \code{DP} comprises the difference in non-decision time for each response option.

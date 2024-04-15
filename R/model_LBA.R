@@ -164,6 +164,7 @@ rLBA <- function(lR,pars,p_types=c("v","sv","b","A","t0"),posdrift = TRUE,
 #'
 #' Model file to estimate the Linear Ballistic Accumulator (LBA) in EMC2.
 #'
+#' Model files are almost exclusively used in `make_design()`.
 #'
 #' @details
 #'
@@ -174,7 +175,7 @@ rLBA <- function(lR,pars,p_types=c("v","sv","b","A","t0"),posdrift = TRUE,
 #' |-----------|-----------|---------------|-----------|----------------------------|-----------------------------------------------------------|
 #' | *v*       | -         | \[-Inf, Inf\] | 1         |                            | Mean evidence-accumulation rate                                              |
 #' | *A*       | log       | \[0, Inf\]    | log(0)    |                            | Between-trial variation (range) in start point                     |
-#' | *B*       | log       | \[0, Inf\]    | log(1)    | *b* = *B*+*A*                  | Distance from $A$ to $b$ (response threshold)                                       |
+#' | *B*       | log       | \[0, Inf\]    | log(1)    | *b* = *B*+*A*              | Distance from *A* to *b* (response threshold)                                       |
 #' | *t0*      | log       | \[0, Inf\]    | log(0)    |                            | Non-decision time                                         |
 #' | *sv*      | log       | \[0, Inf\]    | log(1)    |                            | Between-trial variation in evidence-accumulation rate                      |
 #'
@@ -184,19 +185,17 @@ rLBA <- function(lR,pars,p_types=c("v","sv","b","A","t0"),posdrift = TRUE,
 #' Conventionally, `sv` is fixed to 1 to satisfy scaling constraints.
 #'
 #' The b = B + A parameterization ensures that the response threshold is always higher than the between trial variation in start point of the drift rate.
-#' Also, rates are sampled from truncated normal distributions to be always positive.
 #'
 #' Because the LBA is a race model, it has one accumulator per response option.
-#' EMC2 uses the `Rlevels` specification given to `make_design()` to
-#' automatically construct a factor representing the accumulators `lR` (i.e., the
-#' latent response) with level names taken from `Rlevels`.
+#' EMC2 automatically constructs a factor representing the accumulators `lR` (i.e., the
+#' latent response) with level names taken from the `R` column in the data.
 #'
 #' The `lR` factor is mainly used to allow for response bias, analogous to `Z` in the
 #' DDM. For example, in the LBA, response thresholds are determined by the *B*
 #' parameters, so `B~lR` allows for different thresholds for the accumulator
 #' corresponding to left and right stimuli (e.g., a bias to respond left occurs
 #' if the left threshold is less than the right threshold).
-#' For race models, the `make_design()` argument `matchfun` must be provided, a
+#' For race models, the `make_design()` argument `matchfun` can be provided, a
 #' function that takes the `lR` factor (defined in the augmented data (d)
 #' in the following function) and returns a logical defining the correct response.
 #' In the example below, the match is simply such that the `S` factor equals the
@@ -216,13 +215,14 @@ rLBA <- function(lR,pars,p_types=c("v","sv","b","A","t0"),posdrift = TRUE,
 #' # contrast matrix, which for binary responses has a simple canonical from:
 
 #' ADmat <- matrix(c(-1/2,1/2),ncol=1,dimnames=list(NULL,"d"))
+#' # We also define a match function for lM
+#' matchfun=function(d)d$S==d$lR
 #' # We now construct our design, with v ~ lM and the contrast for lM the ADmat.
 #' design_LBABE <- make_design(data = forstmann,model=LBA,matchfun=matchfun,
 #' formula=list(v~lM,sv~lM,B~E+lR,A~1,t0~1),
 #' contrasts=list(v=list(lM=ADmat)),constants=c(sv=log(1)))
-#' # For all parameters that aren't defined in the formula, default values are assumed.
-#' # These default values can be found in Appendix A of the EMC paper, or accessed using:
-#' LBA()$p_types
+#' # For all parameters that are not defined in the formula, default values are assumed
+#' # (see Table above).
 #' @export
 #'
 

@@ -67,7 +67,7 @@ pDDM <- function(rt,R,pars,precision=2.5)
 #' | *DP*      | probit    | \[0, 1\]        | qnorm(0.5)| *dp* = *t0* x (2 x *DP* -1)     | Relative difference in non-decision time between responses |
 #'
 #' `a`, `t0`, `sv`, `st0`, `s` are sampled on the log scale because these parameters are strictly positive,
-#' `Z` `SZ` and `DP` are sampled on the probit scale because they should be strictly between 0 and 1.
+#' `Z`, `SZ` and `DP` are sampled on the probit scale because they should be strictly between 0 and 1.
 #'
 #' `Z` is estimated as the ratio of bias to one boundary where 0.5 means no bias.
 #' `DP` comprises the difference in non-decision time for each response option.

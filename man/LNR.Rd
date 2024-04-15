@@ -24,12 +24,11 @@ argument of \code{make_design()}.They can also be accessed with \code{LNR()$p_ty
 }
 
 
-Because the LNR is a race model, it has one accumulator representing each possible
-response. EMC2 uses the \code{Rlevels} specification given to \code{make_design()} to
-automatically construct a factor representing the accumulators "\code{lR}" (the
-latent response) with level names taken from \code{Rlevels}.
+Because the LNR is a race model, it has one accumulator per response option.
+EMC2 automatically constructs a factor representing the accumulators \code{lR} (i.e., the
+latent response) with level names taken from the \code{R} column in the data.
 
-In \code{make_design()}, \code{matchfun} is used to automatically create a latent match
+In \code{make_design()}, \code{matchfun} can be used to automatically create a latent match
 (\code{lM}) factor with levels \code{FALSE} (i.e., the stimulus does not match the accumulator)
 and \code{TRUE} (i.e., the stimulus does match the accumulator). This is added internally
 and can also be used in the model formula, typically for parameters related to
@@ -44,11 +43,12 @@ https://doi.org/10.1007/s11336-013-9396-3
 # When working with lM it is useful to design  an "average and difference"
 # contrast matrix, which for binary responses has a simple canonical from:
 ADmat <- matrix(c(-1/2,1/2),ncol=1,dimnames=list(NULL,"d"))
+# We also define a match function for lM
+matchfun=function(d)d$S==d$lR
 # We now construct our design, with v ~ lM and the contrast for lM the ADmat.
 design_LNRmE <- make_design(data = forstmann,model=LNR,matchfun=matchfun,
 formula=list(m~lM + E,s~1,t0~1),
 contrasts=list(m=list(lM=ADmat)))
-# For all parameters that aren't defined in the formula, default values are assumed.
-# These default values can be found in Appendix A of the EMC paper, or accessed using:
-LNR()$p_types
+# For all parameters that are not defined in the formula, default values are assumed
+# (see Table above).
 }
