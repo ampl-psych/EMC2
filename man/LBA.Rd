@@ -30,7 +30,7 @@ All parameters are estimated on the log scale, except for the drift rate which i
 
 Conventionally, \code{sv} is fixed to 1 to satisfy scaling constraints.
 
-The b = B + A parameterization ensures that the response threshold is always higher than the between trial variation in start point of the drift rate.
+The \emph{b} = \emph{B} + \emph{A} parameterization ensures that the response threshold is always higher than the between trial variation in start point of the drift rate.
 
 Because the LBA is a race model, it has one accumulator per response option.
 EMC2 automatically constructs a factor representing the accumulators \code{lR} (i.e., the
