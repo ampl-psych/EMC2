@@ -2,41 +2,51 @@
 % Please edit documentation in R/model_LNR.R
 \name{LNR}
 \alias{LNR}
-\title{The log-normal race (LNR) model}
+\title{The Log-Normal Race Model}
 \usage{
 LNR()
 }
 \value{
-A model list with all the necessary functions to sample
+A model list with all the necessary functions for EMC2 to sample
 }
 \description{
-The LNR proposes a race between accumulators associated with each choice alternative.
-These accumulators have bounds, and the first accumulator to reach its bound determines the response time and response choice.
-The times at which accumulator reaches its bound is assumed to be lognormally distributed
-For details see \verb{Rouder et al., 2015}
+Model file to estimate the Log-Normal Race Model (LNR) in EMC2.
 }
 \details{
-The parameters of the LNR are the scale \code{m},  shape \code{s} and non-decision time \code{t0}.
-Unlike the other race models, no parameters need to be constrained for scaling purposes.
+Model files are almost exclusively used in \code{make_design()}.
 
-Parameters \code{s} and \code{t0} are estimated on the log-scale.
+Default values are used for all parameters that are not explicitly listed in the \code{formula}
+argument of \code{make_design()}.They can also be accessed with \code{LNR()$p_types}.\tabular{llllll}{
+   \strong{Parameter} \tab \strong{Transform} \tab \strong{Natural scale} \tab \strong{Default} \tab \strong{Mapping} \tab \strong{Interpretation} \cr
+   \emph{m} \tab - \tab \link{-Inf, Inf} \tab 1 \tab  \tab Scale parameter \cr
+   \emph{s} \tab log \tab \link{0, Inf} \tab log(1) \tab  \tab Shape parameter \cr
+   \emph{t0} \tab log \tab \link{0, Inf} \tab log(0) \tab  \tab Non-decision time \cr
+}
+
+
+Because the LNR is a race model, it has one accumulator representing each possible
+response. EMC2 uses the \code{Rlevels} specification given to \code{make_design()} to
+automatically construct a factor representing the accumulators "\code{lR}" (the
+latent response) with level names taken from \code{Rlevels}.
+
+In \code{make_design()}, \code{matchfun} is used to automatically create a latent match
+(\code{lM}) factor with levels \code{FALSE} (i.e., the stimulus does not match the accumulator)
+and \code{TRUE} (i.e., the stimulus does match the accumulator). This is added internally
+and can also be used in the model formula, typically for parameters related to
+the rate of accumulation (see the example below).
+
+Rouder, J. N., Province, J. M., Morey, R. D., Gomez, P., & Heathcote, A. (2015).
+The lognormal race: A cognitive-process model of choice and latency with
+desirable psychometric properties. \emph{Psychometrika, 80}, 491-513.
+https://doi.org/10.1007/s11336-013-9396-3
 }
 \examples{
-# As the LNR is a race model it has one accumulator representing each possible
-# response. EMC2 uses the Rlevels specification given to make_design to
-# automatically construct a factor representing the accumulators "lR" (the
-# latent response) with level names taken from Rlevels.
-# matchfun is used to automatically create a latent match (lM) factor with
-# levels "FALSE" (i.e., the stimulus does not match the accumulator) and "TRUE"
-# (i.e., the stimulus does match the accumulator). This is added internally
-# and can also be used in model formula, typically for parameters related to
-# the rate of accumulation.
 # When working with lM it is useful to design  an "average and difference"
 # contrast matrix, which for binary responses has a simple canonical from:
 ADmat <- matrix(c(-1/2,1/2),ncol=1,dimnames=list(NULL,"d"))
 # We now construct our design, with v ~ lM and the contrast for lM the ADmat.
 design_LNRmE <- make_design(data = forstmann,model=LNR,matchfun=matchfun,
-formula=list(m~lM,s~1,t0~1),
+formula=list(m~lM + E,s~1,t0~1),
 contrasts=list(m=list(lM=ADmat)))
 # For all parameters that aren't defined in the formula, default values are assumed.
 # These default values can be found in Appendix A of the EMC paper, or accessed using:

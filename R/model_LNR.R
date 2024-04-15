@@ -32,34 +32,44 @@ rLNR <- function(lR,pars,p_types=c("m","s","t0")){
 }
 
 
-#' The log-normal race (LNR) model
+#' The Log-Normal Race Model
 #'
-#' The LNR proposes a race between accumulators associated with each choice alternative.
-#' These accumulators have bounds, and the first accumulator to reach its bound determines the response time and response choice.
-#' The times at which accumulator reaches its bound is assumed to be lognormally distributed.
-#' For details see `Rouder et al., 2015`
+#' Model file to estimate the Log-Normal Race Model (LNR) in EMC2.
 #'
-#' The parameters of the LNR are the scale `m`,  shape `s` and non-decision time `t0`.
-#' Unlike the other race models, no parameters need to be constrained for scaling purposes.
+#' Model files are almost exclusively used in `make_design()`.
 #'
-#' Parameters `s` and `t0` are estimated on the log-scale.
 #'
-#' @return A model list with all the necessary functions to sample
+#' @details
+#'
+#' Default values are used for all parameters that are not explicitly listed in the `formula`
+#' argument of `make_design()`.They can also be accessed with `LNR()$p_types`.
+#'
+#' | **Parameter** | **Transform** | **Natural scale** | **Default**   | **Mapping**                    | **Interpretation**            |
+#'  |-----------|-----------|---------------|-----------|----------------------------|---------------------------|
+#'  | *m*       | -         | [-Inf, Inf]   | 1         |                            | Scale parameter           |
+#'  | *s*       | log       | [0, Inf]      | log(1)    |                            | Shape parameter           |
+#'  | *t0*      | log       | [0, Inf]      | log(0)    |                            | Non-decision time         |
+#'
+#' Because the LNR is a race model, it has one accumulator representing each possible
+#' response. EMC2 uses the `Rlevels` specification given to `make_design()` to
+#' automatically construct a factor representing the accumulators "`lR`" (the
+#' latent response) with level names taken from `Rlevels`.
+#'
+#' In `make_design()`, `matchfun` is used to automatically create a latent match
+#' (`lM`) factor with levels `FALSE` (i.e., the stimulus does not match the accumulator)
+#' and `TRUE` (i.e., the stimulus does match the accumulator). This is added internally
+#' and can also be used in the model formula, typically for parameters related to
+#' the rate of accumulation (see the example below).
+#'
+#' Rouder, J. N., Province, J. M., Morey, R. D., Gomez, P., & Heathcote, A. (2015).
+#' The lognormal race: A cognitive-process model of choice and latency with
+#' desirable psychometric properties. *Psychometrika, 80*, 491-513.
+#' https://doi.org/10.1007/s11336-013-9396-3
+#'
+#' @return A model list with all the necessary functions for EMC2 to sample
 #' @examples
-#' # As the LNR is a race model it has one accumulator representing each possible
-#' # response. EMC2 uses the Rlevels specification given to make_design to
-#' # automatically construct a factor representing the accumulators "lR" (the
-#' # latent response) with level names taken from Rlevels.
-
-#' # matchfun is used to automatically create a latent match (lM) factor with
-#' # levels "FALSE" (i.e., the stimulus does not match the accumulator) and "TRUE"
-#' # (i.e., the stimulus does match the accumulator). This is added internally
-#' # and can also be used in model formula, typically for parameters related to
-#' # the rate of accumulation.
-
 #' # When working with lM it is useful to design  an "average and difference"
 #' # contrast matrix, which for binary responses has a simple canonical from:
-
 #' ADmat <- matrix(c(-1/2,1/2),ncol=1,dimnames=list(NULL,"d"))
 #' # We now construct our design, with v ~ lM and the contrast for lM the ADmat.
 #' design_LNRmE <- make_design(data = forstmann,model=LNR,matchfun=matchfun,
