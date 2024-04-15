@@ -2,10 +2,7 @@
 % Please edit documentation in R/statistics.R
 \name{savage_dickey}
 \alias{savage_dickey}
-\title{The savage dickey ratio.
-Can be used to approximate the Bayes Factor for group level mean effects.
-Note this is different to MD in \code{compare} since it only considers the group level
-mean effect and not the whole model.}
+\title{Savage dickey ratio computation}
 \usage{
 savage_dickey(
   samplers,
@@ -22,34 +19,53 @@ savage_dickey(
 )
 }
 \arguments{
-\item{samplers}{A list. A samplers object.}
+\item{samplers}{A list, typically a \code{samplers}object, the output from \code{run_emc()}}
 
 \item{parameter}{A string. A parameter which you want to compare to H0. Will not be used if a FUN is specified.}
 
 \item{H0}{An integer. The H0 value which you want to compare to}
 
-\item{filter}{A string. Specifies which stage the samples are to be taken from "preburn", "burn", "adapt", or "sample"}
+\item{filter}{A string. Specifies which stage the samples are to be taken from
+\code{"preburn"}, \code{"burn"}, \code{"adapt"}, or \code{"sample"}}
 
-\item{subfilter}{An integer or vector. If integer it will exclude up until}
+\item{subfilter}{An integer or vector. If it's an integer, iterations up until
+he value set by \code{subfilter} will be excluded. If a vector is supplied, only the
+iterations in the vector will be considered.}
 
 \item{fun}{A function. Specifies an operation to be performed on the sampled or mapped parameters.}
 
-\item{mapped}{A boolean. Whether the BF should be calculated for parameters mapped back to the real design, only works with selection = 'mu'.}
+\item{mapped}{A boolean. Whether the Bayes factor should be calculated for
+parameters mapped back to the real design, only works with selection = 'mu'.}
 
-\item{selection}{A string. Default is mu. Whether to do the operation on the alpha, mu, covariance, variance, or correlations.}
+\item{selection}{A string. The default is \code{mu}. Whether to do the operation on
+the \code{alpha}, \code{mu}, \code{covariance}, \code{variance}, or \code{correlation} parameters.}
 
 \item{do_plot}{Boolean. Whether to include a plot of the prior and posterior density. With circles at H0.}
 
-\item{xlim}{Vector, the xlimits for the plot.}
+\item{xlim}{Vector, the x-limits for the plot.}
 
-\item{subject}{Character. If type = "single" and multiple subjects were ran in one model, this is required.}
+\item{subject}{Character. If \code{type = "single"} and multiple subjects were ran in one model, this is required.}
 }
 \value{
-The BayesFactor for the hypothesis against H0.
+The Bayes factor for the hypothesis against H0.
 }
 \description{
-The savage dickey ratio.
-Can be used to approximate the Bayes Factor for group level mean effects.
-Note this is different to MD in \code{compare} since it only considers the group level
-mean effect and not the whole model.
+Can be used to approximate the Bayes factor for group-level mean effects.
+}
+\details{
+Note this is different to the computation of the marginal deviance in \code{compare}
+since it only considers the group level mean effect and not the whole model.
+For details see: Wagenmakers, Lodewyckx, Kuriyal, & Grasman (2010).
+}
+\examples{
+\dontrun{
+# Here the samplers object has an effect parameter (e.g. B_Eneutral),
+# that maps onto a certain hypothesis.
+# The hypothesis here is that B_Eneutral is different from zero.
+# We can test whether there's a group-level effect of Eneutral on B:
+savage_dickey(samplers, parameter = "B_Eneutral")
+# Alternatively we can also test whether two parameters from each other
+Bdiff <- function(p)diff(p[c("B_Eneutral","B_Eaccuracy")])
+savage_dickey(samplers,fun=Bdiff)
+}
 }

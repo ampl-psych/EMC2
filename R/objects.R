@@ -92,11 +92,15 @@ remove_iterations <- function(pmwg,select,remove=TRUE,last_select=FALSE,filter=N
 
 #' Merge samples
 #'
-#' Merges samples from all chains together as one unlisted object
+#' Merges samples from all chains as one unlisted object.
 #'
-#' @param samplers A list of samplers
+#' Note that all sampling stages are included in the merged output,
+#' including iterations from the `preburn`, `burn`, and `adapt` stages.
+#' `merge_samples(samplers)$samples$stage` shows the corresponding sampling stages.
 #'
-#' @return an unlisted sampler with all chains merged
+#' @param samplers A samplers object, commonly the output of `run_emc()`
+#'
+#' @return An unlisted samplers object with all chains merged
 #' @export
 #'
 merge_samples <- function(samplers){
@@ -304,11 +308,19 @@ as_mcmc.list <- function(samplers,
   return(out)
 }
 
-#' Returns the number of samples per chain per stage
+#' chain_n()
 #'
-#' @param samplers A list of samplers, could be in any stage
+#' Returns a matrix with the number of samples per chain for each stage that is present
+#' in the sampling object (i.e., `preburn`, `burn`, `adapt`,
+#' `sample`). The number of rows of the matrix reflects the number of chains
+#' and the number of columns the number of sampling stages.
 #'
-#' @return A table of iterations per stage per chain
+#' @param samplers A list, the output of `run_emc()`.
+#'
+#' @return A matrix
+#' @examples \dontrun{
+#' chain_n(samplers)
+#' }
 #' @export
 
 chain_n <- function(samplers)

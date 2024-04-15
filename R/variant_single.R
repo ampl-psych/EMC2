@@ -4,26 +4,42 @@ add_info_single <- function(sampler, prior = NULL, ...){
   return(sampler)
 }
 
-#' Prior specification or prior sampling for single subject estimation.
+#' Prior specification or prior sampling for single subject estimation
 #'
-#' With this type of estimation, we assume that one, or multiple, subjects are
-#' estimated without any hierarchical constraint. We need to specify a prior
-#' with a multivariate normal from, by providing specifying prior$theta_mu_mean
-#' a vector with an entry for each parameter, and a prior covariance matrix
-#' prior$theta_mu_var, with default list(theta_mu_mean = rep(0, n_pars),
-#' theta_mu_var = diag(rep(0, n_pars))).
+#' With this type of estimation, one or multiple subjects are
+#' estimated independently, without any hierarchical constraint.
 #'
-#' @param prior A named list containing the prior mean (theta_mu_mean) and
-#' variance (theta_mu_var). Default prior created if NULL
-#' @param n_pars Argument used by the sampler, best left NULL. In user case inferred from the design
-#' @param sample Whether to sample from the prior. Default is TRUE
-#' @param map Boolean, default TRUE reverses malformation used by model to make
-#' sampled parameters unbounded
-#' @param N How many samples to draw from the prior, default 1e5
-#' @param design The design obtained from `make_design`, required when map = TRUE
-#' @param type  FIX ME
+#' To specify a (multivariate normal) prior, `prior$theta_mu_mean` and `prior$theta_mu_var` an entry
+#' is needed for each parameter.
 #'
-#' @return A list with single entry named "alpha" of samples from the prior (if sample = TRUE) or else a prior object
+#'
+#' @param prior A named list containing the prior mean (`theta_mu_mean`) and
+#' variance (`theta_mu_var`). If `NULL`, the default prior is used.
+#' @param n_pars Often inferred from the design, but if `design = NULL`, `n_pars`
+#' will be used to determine the size of prior.
+#' @param sample Boolean, defaults to `TRUE`, sample from the prior or simply
+#' return the prior specifications?
+#' @param map Boolean, defaults to `TRUE`. If `sample = TRUE`, the implied prior is sampled.
+#' This includes back-transformations for naturally bounded parameters such as
+#' the non-decision time and an inverse mapping from the design matrix back to the
+#' cells of the design. If `FALSE`, the transformed, unmapped, parameters are used.
+#' Note that `map` does not affect the prior used in the sampling process.
+#' @param N How many samples to draw from the prior, the default is 1e5
+#' @param design The design obtained from `make_design()`, required when `map = TRUE`
+#' @param type  Character. If `sample = TRUE`, what prior to sample from. Options: `"alpha"`.
+#' @return A list with a single entry named `"alpha"` and samples from the prior (if `sample = TRUE`) or else a prior object
+#' @examples \dontrun{
+#' # First define a design for the model
+#' design_DDMaE <- make_design(data = forstmann,model=DDM,
+#'                            formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
+#'                            constants=c(s=log(1)))
+#' # Now get the default prior
+#' prior <- get_prior_single(design = design_DDMaE, sample = FALSE)
+#' # We can change values in the default prior or use make_prior
+#' # Then we can get samples from this prior e.g.
+#' samples <- get_prior_single(prior = prior, design = design_DDMaE,
+#'   sample = TRUE, type = "alpha")
+#' }
 #' @export
 
 get_prior_single <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5,
@@ -47,12 +63,7 @@ get_prior_single <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5
     if(type != "alpha") stop("for variant single, only alpha can be specified")
     samples <- mvtnorm::rmvnorm(N, prior$theta_mu_mean, prior$theta_mu_var)
     if (map) {
-      proot <- unlist(lapply(strsplit(colnames(samples),"_"),function(x)x[[1]]))
-      isin <- proot %in% names(design$model()$p_types)
-      fullnames <- colnames(samples)[isin]
-      colnames(samples)[isin] <- proot
-      samples[,isin] <- design$model()$Ntransform(samples[,isin])
-      colnames(samples)[isin] <- fullnames
+      samples <- map_mcmc(samples,design,design$model,include_constants=FALSE)
     }
     return(list(alpha = samples))
   }
