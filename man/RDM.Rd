@@ -2,7 +2,7 @@
 % Please edit documentation in R/model_RDM.R
 \name{RDM}
 \alias{RDM}
-\title{The Racing Diffusion Model (RDM)}
+\title{The Racing Diffusion Model}
 \usage{
 RDM()
 }
@@ -10,38 +10,54 @@ RDM()
 A list defining the cognitive model
 }
 \description{
-The Racing Diffusion Model, also known as the Racing Wald Model, proposes that for each choice alternative, noisy accumulators race towards a common bound.
-The first accumulator to reach the bound determines the choice made. The time taken to reach the threshold determines the response times.
-For details see \verb{Tillman, Van Zandt & Logan, 2020}
+Model file to estimate the Racing Diffusion Model (RDM), also known as the Racing Wald Model.
 }
 \details{
-The core parameters of the RDM are the drift rate \code{v}, the response threshold \code{B},
-within trial variation in drift rate \code{s}, between trial variation in startpoint of the drift rate \code{A}, and non-decision time \code{t0}.
-Frequently \code{s} is fixed to 1 to satisfy scaling constraints.
-All parameters are estimated on the log scale, except for the drift rate which is estimated on the real line.
-Here we use the b = B + A parameterization, which ensures that the response threshold is always higher than the between trial variation in start point of the drift rate.
+Default values are used for all parameters that are not explicitly listed in the \code{formula}
+argument of \code{make_design()}.They can also be accessed with \code{RDM()$p_types}.\tabular{llllll}{
+   \strong{Parameter} \tab \strong{Transform} \tab \strong{Natural scale} \tab \strong{Default} \tab \strong{Mapping} \tab \strong{Interpretation} \cr
+   \emph{v} \tab log \tab [0, Inf] \tab log(1) \tab  \tab Evidence-accumulation rate (drift rate) \cr
+   \emph{A} \tab log \tab [0, Inf] \tab log(0) \tab  \tab Between-trial variation (range) in start point \cr
+   \emph{B} \tab log \tab [0, Inf] \tab log(1) \tab \emph{b} = \emph{B} + \emph{A} \tab Distance from \emph{A} to \emph{b} (response threshold) \cr
+   \emph{t0} \tab log \tab [0, Inf] \tab log(0) \tab  \tab Non-decision time \cr
+   \emph{sv} \tab log \tab [0, Inf] \tab log(1) \tab  \tab Within-trial standard deviation of drift rate \cr
+}
+
+
+All parameters are estimated on the log scale.
+
+The parameterization \emph{b} = \emph{B} + \emph{A} ensures that the response threshold is
+always higher than the between trial variation in start point.
+
+Conventionally, \code{s} is fixed to 1 to satisfy scaling constraints.
+
+Because the RDM is a race model, it has one accumulator per response option.
+EMC2 uses the \code{Rlevels} specification given to \code{make_design()} to
+automatically construct a factor representing the accumulators \code{lR} (i.e., the
+latent response) with level names taken from \code{Rlevels}.
+
+The \code{lR} factor is mainly used to allow for response bias, analogous to \emph{Z} in the
+DDM. For example, in the RDM, response thresholds are determined by the \emph{B}
+parameters, so \code{B~lR} allows for different thresholds for the accumulator
+corresponding to "left" and "right" stimuli, for example, (e.g., a bias to respond left occurs
+if the left threshold is less than the right threshold).
+
+For race models in general, the argument \code{matchfun} must be provided in \code{make_design()}.
+One needs to supply a function that takes the \code{lR} factor (defined in the augmented data (d)
+in the following function) and returns a logical defining the correct
+response. In the example below, this is simply whether the \code{S} factor equals the
+latent response factor: \code{matchfun=function(d)d$S==d$lR}. Using \code{matchfun} a latent match factor (\code{lM}) with
+levels \code{FALSE} (i.e., the stimulus does not match the accumulator) and \code{TRUE}
+(i.e., the stimulus does match the accumulator). This is added internally
+and can also be used in model formula, typically for parameters related to
+the rate of accumulation.
+
+Tillman, G., Van Zandt, T., & Logan, G. D. (2020). Sequential sampling models
+without random between-trial variability: The racing diffusion model of speeded
+decision making. \emph{Psychonomic Bulletin & Review, 27}(5), 911-936.
+https://doi.org/10.3758/s13423-020-01719-6
 }
 \examples{
-# As the RDM is a race model it has one accumulator representing each possible
-# response. EMC2 uses the Rlevels specification given to make_design to
-# automatically construct a factor representing the accumulators "lR" (the
-# latent response) with level names taken from Rlevels.
-# The lR factor is mainly used to allow for response bias, analogous to Z in the
-# DDM. For example, in the RDM, response thresholds are determined by the B
-# parameters, so B~lR allows for different thresholds for the accumulator
-# corresponding to left and right stimuli (e.g., a bias to respond left occurs
-# if the left threshold is less than the right threshold).
-# For race models you must provide the make_design argument "matchfun", a
-# function that takes the lR factor (defined in the augmented data (d) (see paper)
-# in the following function) and returns a logical defining the correct
-# in this case the match is simply such that the S factor equals the
-# latent response factor:
-matchfun=function(d)d$S==d$lR
-# matchfun is used to automatically create a latent match (lM) factor with
-# levels "FALSE" (i.e., the stimulus does not match the accumulator) and "TRUE"
-# (i.e., the stimulus does match the accumulator). This is added internally
-# and can also be used in model formula, typically for parameters related to
-# the rate of accumulation.
 # When working with lM it is useful to design  an "average and difference"
 # contrast matrix, which for binary responses has a simple canonical from:
 ADmat <- matrix(c(-1/2,1/2),ncol=1,dimnames=list(NULL,"d"))
