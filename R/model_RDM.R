@@ -405,12 +405,6 @@ RDM <- function(){
 }
 
 
-# RDM_B parameterization with s=1 scaling (B = b-A done in rdm.R)
-#' Title
-#'
-#' @return A list defining the cognitive model
-#' @export
-
 RDMt0natural <- function(){
   list(
     type="RACE",
