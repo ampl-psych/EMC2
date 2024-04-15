@@ -501,6 +501,48 @@ make_prior <- function(design,pmean=NULL,psd=NULL,update=NULL,
 
 make_prior_new <- function(design, type = "standard", update = NULL){
   prior <- get_objects(design = design, type = type)
+  for(pri in names(prior$prior)){
+    if(pri %in% names(prior$descriptions)){
+      cat(paste0("Specify ", prior$descriptions[[pri]]," \n"))
+      if(!is.null(dim(prior$prior[[pri]]))){
+        tmp <- diag(prior$prior[[pri]])
+      } else{
+        tmp <- prior$prior[[pri]]
+      }
+      cat("Press enter to fill remaining with default value (", tmp[1], ")")
+      filled <- F
+      for(i in 1:length(tmp)){
+        if(!filled){
+          name <- names(tmp)[i]
+          if(is.null(name)){
+            name <- pri
+          }
+          repeat {
+            ans <- try(eval(parse(text=readline(paste0(name,": ")))),silent=TRUE)
+            if(!is.null(ans)){
+              if (any(class(ans) %in% c("warning", "error", "try-error")) || is.na(ans) || !is.numeric(ans)) {
+                cat("Must provide a numeric value\n")
+              } else {
+                tmp[i] <- ans
+                break
+              }
+            } else{
+              filled <- TRUE
+              break
+            }
+          }
+        }
+
+      }
+      if(!is.null(dim(prior$prior[[pri]]))){
+        prior$prior[[pri]][,] <- diag(tmp)
+
+      } else{
+        prior$prior[[pri]] <- tmp
+      }
+    }
+
+  }
   return(prior$prior)
 }
 

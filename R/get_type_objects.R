@@ -5,8 +5,24 @@ get_objects <- function(type, selection = NULL, sample_prior = F, return_prior =
   }
 }
 
-add_prior_names <- function(prior, design)
+add_prior_names <- function(prior, design){
   pnames <- names(sampled_p_vector(design))
+  for(pri in names(prior)){
+    if(is.null(dim(prior[[pri]]))){
+      if(length(pnames) == length(prior[[pri]])){
+        names(prior[[pri]]) <- pnames
+      }
+    } else{
+      if(length(pnames) == nrow(prior[[pri]])){
+        rownames(prior[[pri]]) <- pnames
+      }
+      if(length(pnames) == ncol(prior[[pri]])){
+        colnames(prior[[pri]]) <- pnames
+      }
+    }
+  }
+  return(prior)
+}
 
 get_objects_standard <- function(type, selection, sample_prior, return_prior, design = NULL,
                                  prior = NULL, mapped = F, ...){
