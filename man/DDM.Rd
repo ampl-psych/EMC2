@@ -10,12 +10,14 @@ DDM()
 A model list with all the necessary functions for EMC2 to sample
 }
 \description{
-Model file to estimate the Diffusion Decision Model (DDM) in EMC2. It is
-almost exclusively used in \code{make_design()}.
+Model file to estimate the Diffusion Decision Model (DDM) in EMC2.
 }
 \details{
-The default values can also be accessed with \code{DDM()$p_types}.\tabular{llllll}{
-   Parameter \tab Transform \tab Natural scale \tab Default \tab Mapping \tab Interpretation \cr
+Model files are almost exclusively used in \code{make_design()}.
+
+Default values are used for all parameters that are not explicitly listed in the \code{formula}
+argument of \code{make_design()}.They can also be accessed with \code{DDM()$p_types}.\tabular{llllll}{
+   \strong{Parameter} \tab \strong{Transform} \tab \strong{Natural scale} \tab \strong{Default} \tab \strong{Mapping} \tab \strong{Interpretation} \cr
    \emph{v} \tab - \tab [-Inf, Inf] \tab 1 \tab  \tab Mean evidence-accumulation rate (drift rate) \cr
    \emph{a} \tab log \tab [0, Inf] \tab log(1) \tab  \tab Boundary separation \cr
    \emph{t0} \tab log \tab [0, Inf] \tab log(0) \tab  \tab Non-decision time \cr
@@ -38,13 +40,13 @@ Conventionally, \code{sv} is fixed to 1 to satisfy scaling constraints.
 
 See Ratcliff, R., & McKoon, G. (2008).
 The diffusion decision model: theory and data for two-choice decision tasks.
-\emph{Neural computation, 20}(4), 873-922. doi: 10.1162/neco.2008.12-06-420.
+\emph{Neural computation, 20}(4), 873-922. doi:10.1162/neco.2008.12-06-420.
 }
 \examples{
 design_DDMaE <- make_design(data = forstmann,model=DDM,
                            formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
                            constants=c(s=log(1)))
-# For all parameters that aren't defined in the formula, default values are assumed
+# For all parameters that are not defined in the formula, default values are assumed
 # (see Table above).
 
 }

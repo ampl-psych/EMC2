@@ -45,15 +45,16 @@ pDDM <- function(rt,R,pars,precision=2.5)
 
 #' The Diffusion Decision Model
 #'
-#' Model file to estimate the Diffusion Decision Model (DDM) in EMC2. It is
-#' almost exclusively used in `make_design()`.
+#' Model file to estimate the Diffusion Decision Model (DDM) in EMC2.
 #'
+#' Model files are almost exclusively used in `make_design()`.
 #'
 #' @details
 #'
-#' The default values can also be accessed with `DDM()$p_types`.
+#' Default values are used for all parameters that are not explicitly listed in the `formula`
+#' argument of `make_design()`.They can also be accessed with `DDM()$p_types`.
 #'
-#' | Parameter | Transform | Natural scale | Default   | Mapping                    | Interpretation                                            |
+#' | **Parameter** | **Transform** | **Natural scale** | **Default**   | **Mapping**                    | **Interpretation**                                            |
 #' |-----------|-----------|---------------|-----------|----------------------------|-----------------------------------------------------------|
 #' | *v*       | -         | \[-Inf, Inf\]     | 1         |                            | Mean evidence-accumulation rate (drift rate)              |
 #' | *a*       | log       | \[0, Inf\]        | log(1)    |                            | Boundary separation                                       |
@@ -75,14 +76,14 @@ pDDM <- function(rt,R,pars,precision=2.5)
 #'
 #' See Ratcliff, R., & McKoon, G. (2008).
 #' The diffusion decision model: theory and data for two-choice decision tasks.
-#' *Neural computation, 20*(4), 873-922. doi: 10.1162/neco.2008.12-06-420.
+#' *Neural computation, 20*(4), 873-922. doi:10.1162/neco.2008.12-06-420.
 #'
 #' @return A model list with all the necessary functions for EMC2 to sample
 #' @examples
 #' design_DDMaE <- make_design(data = forstmann,model=DDM,
 #'                            formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
 #'                            constants=c(s=log(1)))
-#' # For all parameters that aren't defined in the formula, default values are assumed
+#' # For all parameters that are not defined in the formula, default values are assumed
 #' # (see Table above).
 #'
 #' @export
