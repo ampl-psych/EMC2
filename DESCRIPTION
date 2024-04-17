@@ -1,10 +1,25 @@
 Package: EMC2
-Title: What the Package Does (One Line, Title Case)
-Version: 0.0.0.9000
+Title: Bayesian cognitive models of choice
+Version: 1.0.0
 Authors@R: 
-    person("First", "Last", , "first.last@example.com", role = c("aut", "cre"),
-           comment = c(ORCID = "YOUR-ORCID-ID"))
-Description: What the package does (one paragraph).
+    c(person("Niek", "Stevenson", email = "niek.stevenson@gmail.com", 
+           role = c("aut", "cre")),
+      person("Michelle", "Donzallaz", 
+           role = c("aut")),
+      person("Andrew", "Heathcote", 
+           role = c("aut")))
+Description: Fit Bayesian (hierarchical) cognitive models
+    using a linear modeling language interface. The DDM, LBA, RDM, LNR and
+    SDT model are supported, and the user can also specify their own likelihood
+    function. Additionally, the user can choose for non-hierarchical
+    estimation, as well as a diagonal, blocked or full multivariate normal
+    group-level distribution to test individual differences. Prior specification 
+    is facilitated through methods that visualize the (implied) prior. 
+    A wide range of plotting functions assist in assessing model convergence and
+    posterior inference. Models can be easily evaluated using functions
+    that plot posterior predictions or using relative model comparison metrics 
+    such as information criteria or Bayes factors. 
+    References: Stevenson et al. (2024) <doi.org/10.31234/osf.io/2e4dq>.
 License: MIT + file LICENSE
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
