@@ -499,50 +499,68 @@ make_prior <- function(design,pmean=NULL,psd=NULL,update=NULL,
 
 }
 
-make_prior_new <- function(design, type = "standard", update = NULL){
+make_prior_new <- function(design, type = "standard", update = NULL, ...){
   prior <- get_objects(design = design, type = type)
-  for(pri in names(prior$prior)){
-    if(pri %in% names(prior$descriptions)){
-      cat(paste0("Specify ", prior$descriptions[[pri]]," \n"))
-      if(!is.null(dim(prior$prior[[pri]]))){
-        tmp <- diag(prior$prior[[pri]])
-      } else{
-        tmp <- prior$prior[[pri]]
-      }
-      cat("Press enter to fill remaining with default value (", tmp[1], ")")
-      filled <- F
-      for(i in 1:length(tmp)){
-        if(!filled){
-          name <- names(tmp)[i]
-          if(is.null(name)){
-            name <- pri
+  args <- list(...)
+  for(pri in names(prior$prior)){ # Loop over different objects in prior
+    if(pri %in% names(prior$descriptions)){ # This excluded prior$theta_mu_invar
+      if(pri %in% names(args)){ # Already specified in ellipsis, so fill in
+        input <- args[[pri]]
+        if(length(input) == nrow(prior$prior[[pri]])){
+          input <- diag(input)
+        }
+        if(!is.null(dim(prior$prior[[pri]]))){
+          if(!identical(dim(input),dim(prior$prior[[pri]]))){
+            stop("make sure your prior matches the design and the type of model. See ?get_prior_{type}")
           }
-          repeat {
-            ans <- try(eval(parse(text=readline(paste0(name,": ")))),silent=TRUE)
-            if(!is.null(ans)){
-              if (any(class(ans) %in% c("warning", "error", "try-error")) || is.na(ans) || !is.numeric(ans)) {
-                cat("Must provide a numeric value\n")
-              } else {
-                tmp[i] <- ans
-                break
-              }
-            } else{
-              filled <- TRUE
-              break
-            }
+        } else{
+          if(length(input) != length(prior$prior[[pri]])){
+            stop("make sure your prior matches the design and the type of model. See ?get_prior_{type}")
           }
         }
+        prior$prior[[pri]] <- input
+      } else{ # Ask the user to manually specify
+        cat(paste0("Specify ", prior$descriptions[[pri]]," \n"))
+        if(!is.null(dim(prior$prior[[pri]]))){
+          tmp <- diag(prior$prior[[pri]])
+        } else{
+          tmp <- prior$prior[[pri]]
+        }
+        cat("Press enter to fill remaining with default value (", tmp[1], ")")
+        filled <- F
+        for(i in 1:length(tmp)){ # Loop over the length of the prior object
+          if(!filled){
+            name <- names(tmp)[i]
+            if(is.null(name)){
+              name <- pri
+            }
+            repeat {
+              ans <- try(eval(parse(text=readline(paste0(name,": ")))),silent=TRUE)
+              if(!is.null(ans)){
+                if (any(class(ans) %in% c("warning", "error", "try-error")) || is.na(ans) || !is.numeric(ans)) {
+                  cat("Must provide a numeric value\n")
+                } else {
+                  tmp[i] <- ans
+                  break
+                }
+              } else{
+                filled <- TRUE
+                break
+              }
+            }
+          }
 
-      }
-      if(!is.null(dim(prior$prior[[pri]]))){
-        prior$prior[[pri]][,] <- diag(tmp)
+        }
+        if(!is.null(dim(prior$prior[[pri]]))){
+          prior$prior[[pri]][,] <- diag(tmp)
 
-      } else{
-        prior$prior[[pri]] <- tmp
+        } else{
+          prior$prior[[pri]] <- tmp
+        }
       }
     }
-
   }
+  # Fix that invar is the same as var..
   return(prior$prior)
 }
 
