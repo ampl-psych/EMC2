@@ -3,24 +3,28 @@
 #'
 #'
 #' @param samplers A list of samplers, or a fileName of where the samplers are stored.
-#' @param stage A string. Indicates which stage is to be run, either preburn, burn, adapt or sample. If unspecified will assume the next unrun stage.
-#' @param iter An integer. Indicates how many iterations to run sampling stage.
-#' @param p_accept A double. The target acceptance probability of the MCMC process. This will fine tune the width of the search space. Default = .8
-#' @param step_size An integer. After each of these steps, the requirements will be checked if they are met and proposal distributions will be updated. Default = 100.
-#' @param verbose Logical. Whether to print emc related messages
-#' @param verboseProgress Logical. Whether to print sampling related messages
+#' @param stage A string. Indicates which stage to run, either ``preburn``, ``burn``, ``adapt`` or ``sample``.
+#' If unspecified will run the next stage of the samplers object.
+#' @param iter An integer. Indicates how many iterations to run the sampling stage.
+#' @param p_accept A double. The target acceptance probability of the MCMC process. This will fine-tune the width of the search space to obtain the desired acceptance probability. Default = .8
+#' @param step_size An integer. After each step, the stopping requirements as specified by ``stop_criteria`` will be checked if they are met and proposal distributions will be updated. Default = 100.
+#' @param verbose Logical. Whether to print process updates
+#' @param verboseProgress Logical. Whether to print messages between each step that inform you are how close you are to meeting the ``stop_criteria``.
 #' @param fileName A string. If specified will autosave samplers at this location.
-#' @param particles An integer. How many particles to use, default is NULL and particle_factor is used. If specified will override particle_factor
-#' @param particle_factor An integer. Particle factor multiplied by the square root of the number of sampled parameters will determine the number of particles used.
+#' @param particles An integer. How many particles to use, default is NULL and ``particle_factor`` is used. If specified will override ``particle_factor``.
+#' @param particle_factor An integer. ``particle_factor`` multiplied by the square root of the number of sampled parameters will determine the number of particles used.
 #' @param cores_per_chain An integer. How many cores to use per chain. Parallelizes across participant calculations.
-#' @param cores_for_chains An integer. How many cores to use across chains. Default is the number of chains.
-#' @param max_trys An integer. How many times it will try to meet the finish conditions. Default is 20.
+#' @param cores_for_chains An integer. How many cores to use across chains. Default is the number of chains. The final number of cores used is equal to cores_per_chain * cores_for_chains.
+#' @param max_trys An integer. How many times it will try to meet the finish conditions as specified by ``stop_criteria``. Default is 20.
 #' @param n_blocks An integer. Will block the parameter chains such that they are updated in blocks. This can be helpful in extremely tough models with large number of parameters.
-#' @param stop_criteria A list. Defines the stopping criteria and for which types of parameters these should hold. Could either be a list of list with names of the stages,
-#'  or a single list in which case its assumed to be for the sample stage. Example: stop_criteria = list(mean_gd = 1.1, max_gd = 1.5, selection = c('alpha', 'variance'), omit_mpsrf = TRUE).
-#'  the iter argument overrides the iter given for the stop_criteria in the sample stage.
+#' @param stop_criteria A list. Defines the stopping criteria and for which types of parameters these should hold. Details in the examples
 #'
 #' @return A list of samplers
+#' @examples
+#' # Could either be a list of list with names of the stages,
+#' # or a single list in which case its assumed to be for the sample stage. Example: stop_criteria = list(mean_gd = 1.1, max_gd = 1.5, selection = c('alpha', 'variance'), omit_mpsrf = TRUE).
+#' # the iter argument overrides the iter given for the stop_criteria in the sample stage.
+#'
 #' @export
 
 run_emc <- function(samplers, stage = NULL, iter = 1000, stop_criteria = NULL,
@@ -178,9 +182,9 @@ run_samplers <- function(samplers, stage, stop_criteria,
       particle_factor_in[!progress$gds_bad] <- particle_factor
     }
     samplers <- auto_mclapply(samplers,run_stages, stage = stage, iter= progress$step_size,
-                                   verbose=verbose,  verboseProgress = verboseProgress,
-                                   particles=particles,particle_factor=particle_factor_in,
-                                   p_accept=p_accept_in, n_cores=cores_per_chain, mc.cores = cores_for_chains)
+                              verbose=verbose,  verboseProgress = verboseProgress,
+                              particles=particles,particle_factor=particle_factor_in,
+                              p_accept=p_accept_in, n_cores=cores_per_chain, mc.cores = cores_for_chains)
     for(i in 2:length(samplers)){ # Frees up memory, courtesy of Steven
       samplers[[i]]$data <- samplers[[1]]$data
     }
@@ -227,11 +231,11 @@ run_stages <- function(sampler, stage = "preburn", iter=0, verbose = TRUE, verbo
   #   sampler <- run_stage_lm(sampler, stage = stage,iter = iter, particles = particles,
   #                           n_cores = n_cores, p_accept = p_accept, verbose = verbose, verboseProgress = verboseProgress)
   # } else{
-#     sampler <- run_stage(sampler, stage = stage,iter = iter, particles = particles,
-#                          n_cores = n_cores, p_accept = p_accept, verbose = verbose, verboseProgress = verboseProgress)
-# }
+  #     sampler <- run_stage(sampler, stage = stage,iter = iter, particles = particles,
+  #                          n_cores = n_cores, p_accept = p_accept, verbose = verbose, verboseProgress = verboseProgress)
+  # }
   sampler <- run_stage(sampler, stage = stage,iter = iter, particles = particles,
-                     n_cores = n_cores, p_accept = p_accept, verbose = verbose, verboseProgress = verboseProgress)
+                       n_cores = n_cores, p_accept = p_accept, verbose = verbose, verboseProgress = verboseProgress)
   return(sampler)
 }
 
@@ -296,7 +300,7 @@ check_progress <- function (samplers, stage, iter, stop_criteria,
       # } else{    # }
 
       curr_min_es <- min(c(es_pmwg(as_mcmc.list(samplers, selection = select,
-                                              filter = stage), print_summary = F), curr_min_es))
+                                                filter = stage), print_summary = F), curr_min_es))
     }
     if (verbose)
       message("Smallest effective size = ", round(curr_min_es))
@@ -315,7 +319,7 @@ check_progress <- function (samplers, stage, iter, stop_criteria,
     #   adapted <- test_adapted_lm(samplers[[1]], test_samples, min_unique, n_cores, verbose)
     # } else{    }
     adapted <- test_adapted(samplers[[1]], test_samples,
-                              min_unique, n_cores, verbose)
+                            min_unique, n_cores, verbose)
 
   }
   else {
@@ -440,7 +444,7 @@ check_gd <- function(samplers, stage, max_gd, mean_gd, omit_mpsrf, trys, verbose
   if(verbose) {
     if (omit_mpsrf) type <- "psrf" else type <- "m/psrf"
     if (!is.null(mean_gd)) message("Mean ",type," = ",round(mean(gd),3)) else
-    if (!is.null(max_gd)) message("Max ",type," = ",round(max(gd),3))
+      if (!is.null(max_gd)) message("Max ",type," = ",round(max(gd),3))
   }
   return(list(gd = gd, gd_done = ok_gd, samplers = samplers, n_blocks = n_blocks, gds_bad = gds_bad))
 }
@@ -464,13 +468,13 @@ create_eff_proposals <- function(samplers, n_cores){
       if(any(nuis_idx)){
         type <- samples_merged$sampler_nuis$type
         conditionals <- auto_mclapply(X = 1:n_subjects,
-                                             FUN = variant_funs$get_conditionals,samples = test_samples,
-                                             n_pars = sum(idx[!nuisance]), iteration =  iteration, idx = idx[!nuisance],
-                                             mc.cores = n_cores)
+                                      FUN = variant_funs$get_conditionals,samples = test_samples,
+                                      n_pars = sum(idx[!nuisance]), iteration =  iteration, idx = idx[!nuisance],
+                                      mc.cores = n_cores)
         conditionals_nuis <- auto_mclapply(X = 1:n_subjects,
-                                                  FUN = get_variant_funs(type)$get_conditionals,samples = test_samples$nuisance,
-                                                  n_pars = sum(idx[nuisance]), iteration =  iteration, idx = idx[nuisance],
-                                                  mc.cores = n_cores)
+                                           FUN = get_variant_funs(type)$get_conditionals,samples = test_samples$nuisance,
+                                           n_pars = sum(idx[nuisance]), iteration =  iteration, idx = idx[nuisance],
+                                           mc.cores = n_cores)
         conditionals <- array(unlist(conditionals), dim = c(sum(idx[!nuisance]), sum(idx[!nuisance]) + 1, n_subjects))
         conditionals_nuis <- array(unlist(conditionals_nuis), dim = c(sum(idx[nuisance]), sum(idx[nuisance]) + 1, n_subjects))
         eff_mu[idx & !nuisance,] <- conditionals[,1,]
@@ -479,9 +483,9 @@ create_eff_proposals <- function(samplers, n_cores){
         eff_var[idx & nuisance,idx & nuisance,] <- conditionals_nuis[,2:(sum(idx[nuisance])+1),]
       } else{
         conditionals <- auto_mclapply(X = 1:n_subjects,
-                                             FUN = variant_funs$get_conditionals,samples = test_samples,
-                                             n_pars = sum(idx[!nuisance]), iteration =  iteration, idx = idx[!nuisance],
-                                             mc.cores = n_cores)
+                                      FUN = variant_funs$get_conditionals,samples = test_samples,
+                                      n_pars = sum(idx[!nuisance]), iteration =  iteration, idx = idx[!nuisance],
+                                      mc.cores = n_cores)
         conditionals <- array(unlist(conditionals), dim = c(sum(idx[!nuisance]), sum(idx[!nuisance]) + 1, n_subjects))
         eff_mu[idx & !nuisance,] <- conditionals[,1,]
         eff_var[idx & !nuisance,idx & !nuisance,] <- conditionals[,2:(sum(idx[!nuisance])+1),]
@@ -694,19 +698,19 @@ test_adapted <- function(sampler, test_samples, min_unique, n_cores_conditional 
       message("Testing proposal distribution creation")
     }
     attempt <- tryCatch({
-        for(comp in unique(components)){
-          idx <- comp == components
-          nuis_idx <- nuisance[idx]
-          if(any(nuis_idx)){
-            type <- sampler$sampler_nuis$type
-            auto_mclapply(X = 1:sampler$n_subjects,
-                               FUN = get_variant_funs(type)$get_conditionals,samples = test_samples$nuisance,
-                               n_pars = sum(idx[nuisance]), idx = idx[nuisance],
-                               mc.cores = n_cores_conditional)
-          }
-          auto_mclapply(X = 1:sampler$n_subjects,FUN = variant_funs$get_conditionals,samples = test_samples,
-                         n_pars = sum(idx[!nuisance]), idx = idx[!nuisance], mc.cores = n_cores_conditional)
+      for(comp in unique(components)){
+        idx <- comp == components
+        nuis_idx <- nuisance[idx]
+        if(any(nuis_idx)){
+          type <- sampler$sampler_nuis$type
+          auto_mclapply(X = 1:sampler$n_subjects,
+                        FUN = get_variant_funs(type)$get_conditionals,samples = test_samples$nuisance,
+                        n_pars = sum(idx[nuisance]), idx = idx[nuisance],
+                        mc.cores = n_cores_conditional)
         }
+        auto_mclapply(X = 1:sampler$n_subjects,FUN = variant_funs$get_conditionals,samples = test_samples,
+                      n_pars = sum(idx[!nuisance]), idx = idx[!nuisance], mc.cores = n_cores_conditional)
+      }
     },error=function(e) e, warning=function(w) w)
     if (any(class(attempt) %in% c("warning", "error", "try-error"))) {
       if(verbose){
