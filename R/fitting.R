@@ -192,6 +192,7 @@ run_samplers <- function(samplers, stage, stop_criteria,
       attr(samplers,"data_list") <- attributes$data_list
       attr(samplers,"design_list") <- attributes$design_list
       attr(samplers,"model_list") <- attributes$model_list
+      class(samplers) <- "emc"
       save(samplers, file = fileName)
     }
   }
@@ -310,7 +311,7 @@ check_progress <- function (samplers, stage, iter, stop_criteria,
   if (stage == "adapt") {
     samples_merged <- merge_samples(samplers)
     test_samples <- extract_samples(samples_merged, stage = "adapt",
-                                    samples_merged$samples$idx)
+                                    samples_merged$samples$idx, length(samplers))
     # if(!is.null(samplers[[1]]$g_map_fixed)){
     #   adapted <- test_adapted_lm(samplers[[1]], test_samples, min_unique, n_cores, verbose)
     # } else{    }
@@ -448,7 +449,7 @@ check_gd <- function(samplers, stage, max_gd, mean_gd, omit_mpsrf, trys, verbose
 
 create_eff_proposals <- function(samplers, n_cores){
   samples_merged <- merge_samples(samplers)
-  test_samples <- extract_samples(samples_merged, stage = c("adapt", "sample"), max_n_sample = 750)
+  test_samples <- extract_samples(samples_merged, stage = c("adapt", "sample"), max_n_sample = 750, length(samplers))
   variant_funs <- attr(samplers[[1]], "variant_funs")
   components <- attr(samplers[[1]]$data, "components")[!samplers[[1]]$grouped]
   for(i in 1:length(samplers)){
