@@ -27,11 +27,13 @@ print.emc <- function(x, ...){
 #' Can be `preburn`, `burn`, `adapt`, or `sample`.
 #' @param subfilter An integer or vector, defaults to 0. See below
 #' for more details.
+#' @param digits An integer specifying rounding of output.
 #' @param ... Further optional arguments.
+#'
 #' @return A list of summary output.
 #' @export
 summary.emc <- function(object, selection = c("mu", "variance", "correlation"), probs = c(0.025, .5, 0.975),
-                        filter = "sample", subfilter = 0, ...){
+                        filter = "sample", subfilter = 0, digits = 3, ...){
   args <- list(...)
   for (name in names(args) ) {
     assign(name, args[[name]])
@@ -55,14 +57,14 @@ summary.emc <- function(object, selection = c("mu", "variance", "correlation"), 
         out_list[[unq_subs[i]]] <- combined
         if(i == 1){
           cat("\n", unq_subs[i], "\n")
-          print(combined)
+          print(round(combined,digits))
         }
       }
     } else{
       quants <- t(apply(par_df, 2, quantile, probs))
       combined <- cbind(quants, Rhat, ESS)
       cat("\n", select, "\n")
-      print(combined)
+      print(round(combined,digits))
       out_list[[select]] <- combined
     }
   }
