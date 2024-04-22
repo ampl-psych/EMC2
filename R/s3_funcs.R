@@ -27,7 +27,9 @@ print.emc <- function(x, ...){
 #' Can be `preburn`, `burn`, `adapt`, or `sample`.
 #' @param subfilter An integer or vector, defaults to 0. See below
 #' for more details.
+#' @param digits An integer specifying rounding of output.
 #' @param ... Further optional arguments.
+#'
 #' @return A list of summary output.
 #' @export
 summary.emc <- function(object, selection = c("mu", "variance", "correlation"), probs = c(0.025, .5, 0.975),
