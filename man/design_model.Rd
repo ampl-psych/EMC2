@@ -54,7 +54,7 @@ computation
 }
 \description{
 Usually called by make_samplers rather than directly by the user, except
-where a dadm is needed for use with profile_pmwg.
+where a dadm is needed for use with \code{profile_plot}.
 }
 \details{
 Performs a series to checks to make sure data frame and design match and

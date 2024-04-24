@@ -298,7 +298,7 @@ contr.anova <- function(n) {
 #' Get the sampled parameters from a design
 #'
 #' Makes a vector with zeroes, with names and length corresponding to the
-#' number of sampled parameters in the cognitive model.
+#' sampled parameters of the design.
 #'
 #' @param design a list of the design made with make_design.
 #' @param model a model list. Defaults to the model specified in the design list.
@@ -533,7 +533,7 @@ compress_dadm <- function(da,designs,Fcov,Ffun)
 #' refers to replicating the data with one row for each accumulator.
 #'
 #' Usually called by make_samplers rather than directly by the user, except
-#' where a dadm is needed for use with profile_pmwg.
+#' where a dadm is needed for use with ``profile_plot``.
 #'
 #' Performs a series to checks to make sure data frame and design match and
 #' (by default) augments the data frame by adding accumulator factors and

@@ -30,7 +30,7 @@ Named vector.
 }
 \description{
 Makes a vector with zeroes, with names and length corresponding to the
-number of sampled parameters in the cognitive model.
+sampled parameters of the design.
 }
 \examples{
 # First define a design
