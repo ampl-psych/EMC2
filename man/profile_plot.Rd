@@ -2,10 +2,20 @@
 % Please edit documentation in R/plotting.R
 \name{profile_plot}
 \alias{profile_plot}
-\title{Creates a likelihood profile plot from a dadm object (see design_model) by
+\title{Creates a likelihood profile plot from a design and the experimental data by
 varying one model parameter while holding all others constant.}
 \usage{
-profile_plot(pname, p, p_min, p_max, dadm, n_point = 100, main = "", cores = 1)
+profile_plot(
+  pname,
+  p,
+  p_min,
+  p_max,
+  data,
+  design,
+  n_point = 100,
+  main = "",
+  cores = 1
+)
 }
 \arguments{
 \item{pname}{Name of parameter to profile}
@@ -16,7 +26,9 @@ profile_plot(pname, p, p_min, p_max, dadm, n_point = 100, main = "", cores = 1)
 
 \item{p_max}{Maximum value of profile range}
 
-\item{dadm}{Data augmented design and model (created by design_model)}
+\item{data}{A dataframe. Experimental data used, needed for the design mapping}
+
+\item{design}{A design list. Created using \code{make_design}.}
 
 \item{n_point}{Number of evenly spaced points at which to calculate likelihood}
 
@@ -29,6 +41,6 @@ vector with value of p(pname), highest likelihood point and p(pname)
 minus the parameter values at that point
 }
 \description{
-Creates a likelihood profile plot from a dadm object (see design_model) by
+Creates a likelihood profile plot from a design and the experimental data by
 varying one model parameter while holding all others constant.
 }
