@@ -527,42 +527,6 @@ compress_dadm <- function(da,designs,Fcov,Ffun)
     out
 }
 
-
-#' Combines a data frame with a design to create
-#' a data augmented design model ("dadm") object. Augmentation
-#' refers to replicating the data with one row for each accumulator.
-#'
-#' Usually called by make_samplers rather than directly by the user, except
-#' where a dadm is needed for use with ``profile_plot``.
-#'
-#' Performs a series to checks to make sure data frame and design match and
-#' (by default) augments the data frame by adding accumulator factors and
-#' compresses the result for efficient likelihood calculation.
-#'
-#'
-#' @param data  data frame
-#' @param design matching design
-#' @param model if model not an attribute of design can be supplied here
-#' @param add_acc default TRUE creates and 'augmented' data frame, which
-#' replicates and stacks the supplied data frame for each accumulator and
-#' adds factors to represent accumulators: lR = latent response, with a level
-#' for each response (R) represented by the accumulator and lM = latent match,
-#' a logical indicating if the accumulator represents the correct response as
-#' specified by the design's matchfun.
-#' @param rt_resolution maximum resolution of rt, NULL = no rounding
-#' @param verbose if true reports compression outcome
-#' @param compress default TRUE only keeps unique rows in terms of all
-#' parameter design matrices R, lR and rt (at a given resolution)
-#' @param rt_check checks if any truncation and censoring specified in the design
-#' are respected.
-#' @param add_da Boolean. Whether to include the data in the output
-#' @param all_cells_dm Boolean. Whether to include all levels of a factor in the output, even when one is dropped in the design
-#'
-#' @return a (possibly) augmented and compressed data frame with attributes
-#' specifying the design and how to decompress ready supporting likelihood
-#' computation
-#' @export
-
 design_model <- function(data,design,model=NULL,
                          add_acc=TRUE,rt_resolution=0.02,verbose=TRUE,
                          compress=TRUE,rt_check=TRUE, add_da = FALSE, all_cells_dm = FALSE)

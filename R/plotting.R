@@ -1180,26 +1180,27 @@ pairs_posterior <- function(samples,filter="sample",thin=1,subfilter=0,mapped=FA
   invisible(rs)
 }
 
-#' Creates a likelihood profile plot from a dadm object (see design_model) by
+#' Creates a likelihood profile plot from a design and the experimental data by
 #' varying one model parameter while holding all others constant.
 #'
 #' @param pname Name of parameter to profile
 #' @param p Named vector of parameter values (typically created with sampled_p_vector)
 #' @param p_min Minimum value of profile range
 #' @param p_max Maximum value of profile range
-#' @param dadm Data augmented design and model (created by design_model)
 #' @param n_point Number of evenly spaced points at which to calculate likelihood
 #' @param main Plot title
 #' @param cores Number of likelihood points to calculate in parallel
+#' @param data A dataframe. Experimental data used, needed for the design mapping
+#' @param design A design list. Created using ``make_design``.
 #'
 #' @return vector with value of p(pname), highest likelihood point and p(pname)
 #' minus the parameter values at that point
 #' @export
 
-profile_plot <- function(pname,p,p_min,p_max,dadm,n_point=100,main="",cores=1)
+profile_plot <- function(pname,p,p_min,p_max,data, design, n_point=100,main="",cores=1)
 
 {
-
+  dadm <- design_model(data, design)
   lfun <- function(i,x,p,pname,dadm) {
     p[pname] <- x[i]
     attr(dadm,"model")()$log_likelihood(p,dadm)
