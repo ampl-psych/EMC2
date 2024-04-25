@@ -166,7 +166,6 @@ rearrange_loadings <- function(loadings){
 #' # By default merges across chains, but we could also get a list of standardized loadings
 #' standardize_loadings(samplers, merge_chains = FALSE)
 #' }
-#' @export
 #'
 standardize_loadings <- function(samplers = NULL, loadings = NULL, sig_err_inv = NULL,
                                  filter = "sample", merge_chains = T){
@@ -355,7 +354,6 @@ plot_relations <- function(samplers = NULL, filter = "sample", loadings = NULL, 
 #' # We can also specify nice names and adjust the loading positions
 #' make_factor_diagram(samplers, nice_names = paste0("V", 1:10), adj = 2)
 #' }
-#' @export
 #'
 make_factor_diagram <- function(samplers = NULL, filter = "sample",
                                 loadings = NULL, standardize = T,

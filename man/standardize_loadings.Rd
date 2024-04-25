@@ -38,4 +38,5 @@ standardize_loadings(samplers)
 # By default merges across chains, but we could also get a list of standardized loadings
 standardize_loadings(samplers, merge_chains = FALSE)
 }
+
 }

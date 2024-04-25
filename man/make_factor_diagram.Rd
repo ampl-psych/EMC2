@@ -57,4 +57,5 @@ make_factor_diagram(samplers, only_cred = T)
 # We can also specify nice names and adjust the loading positions
 make_factor_diagram(samplers, nice_names = paste0("V", 1:10), adj = 2)
 }
+
 }
