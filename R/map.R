@@ -94,7 +94,6 @@ make_pmat <- function(p_vector,design)
 #' @param constants a named vector of constants
 #'
 #' @return a matrix or vector, depending on input, with the varying parameters and constants combined.
-#' @export
 #'
 add_constants <- function(p,constants)
 {

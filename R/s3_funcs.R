@@ -5,21 +5,43 @@ print.emc <- function(x, ...){
   return(invisible(n_chain))
 }
 
+#' Summary statistics for EMC2 samplers objects
+#'
+#' Computes quantiles, `Rhat` and `ESS` for selected model parameters.
+#'
+#' Note that if `selection = alpha` is used, summary statistics are computed
+#' at the individual level. Only the first subject's summary output is printed
+#' to the console but summary statistics for all subjects are returned by the
+#' function.
+#'
+#' If `subfilter` is set to an integer other than 0 (i.e., the default), all iterations
+#' up to that integer are ignored. If a vector is supplied, only those iterations
+#' are considered.
+#'
+#' @param object An object of class `emc`
+#' @param selection A character string indicating the parameter group.
+#' Defaults to `mu`, `variance`, and `correlation`. Other options are `covariance`, and `alpha`
+#' (i.e., individual-level parameters). See below for more information.
+#' @param probs The quantiles to be computed. Defaults to the the 2.5%, 50% and 97.5% quantiles.
+#' @param filter A character string indicating the sampling stage to be summarized.
+#' Can be `preburn`, `burn`, `adapt`, or `sample`.
+#' @param subfilter An integer or vector, defaults to 0. See below
+#' for more details.
+#' @param digits An integer specifying rounding of output.
+#' @param ... Further optional arguments.
+#'
+#' @return A list of summary output.
 #' @export
-summary.emc <- function(object, ...){
+summary.emc <- function(object, selection = c("mu", "variance", "correlation"), probs = c(0.025, .5, 0.975),
+                        filter = "sample", subfilter = 0, digits = 3, ...){
   args <- list(...)
-  filter <- ifelse(is.null(args$filter), "sample", args$filter)
-  subfilter <- ifelse(is.null(args$subfilter), 0, args$subfilter)
-  if(is.null(args$selection)){
-    selection <- "mu"
-  } else{
-    selection <- args$selection
+  for (name in names(args) ) {
+    assign(name, args[[name]])
   }
-  if(is.null(args$probs)){
-    probs <- c(0.025, .5, 0.975)
-  } else{
-    probs <- args$probs
+  if(attr(object[[1]], "variant_funs")$type == "single"){
+    selection <- "alpha"
   }
+
   out_list <- list()
   for(select in selection){
     par_df <- parameters_data_frame(object, filter = filter, subfilter = subfilter, selection = select)
@@ -35,14 +57,14 @@ summary.emc <- function(object, ...){
         out_list[[unq_subs[i]]] <- combined
         if(i == 1){
           cat("\n", unq_subs[i], "\n")
-          print(combined)
+          print(round(combined,digits))
         }
       }
     } else{
       quants <- t(apply(par_df, 2, quantile, probs))
       combined <- cbind(quants, Rhat, ESS)
       cat("\n", select, "\n")
-      print(combined)
+      print(round(combined,digits))
       out_list[[select]] <- combined
     }
   }
@@ -50,21 +72,38 @@ summary.emc <- function(object, ...){
 }
 
 
+#' Plot function for EMC2 samplers objects
+#'
+#' Plots posterior densities and traceplots for EMC2 model parameters.
+#'
+#' Note that if `subfilter` is set to an integer other than 0 (i.e., the default), all iterations
+#' up to that integer are ignored. If a vector is supplied, only those iterations
+#' are considered.
+#'
+#' @param x An object of class `emc`
+#' @param filter A character string indicating the sampling stage to be summarized.
+#' Can be `preburn`, `burn`, `adapt`, or `sample`.
+#' @param selection A character string indicating the parameter group.
+#' Defaults to `mu`, `variance`, and `correlation`. Other options are `covariance`, and `alpha`
+#' (i.e., individual-level parameters).
+#' @param subfilter An integer or vector, defaults to 0. See below for more details.
+#' @param subject An integer or character vector. Plot samples selected subjects.
+#' @param thin An integer, only consider samples that are a multiple of `thin`.
+#' @param ... Further optional arguments.
 #' @export
-plot.emc <- function(x, ...){
+plot.emc <- function(x, filter = "sample", selection = c("mu", "variance", "correlation"),
+                     subfilter = 0, subject = NULL, thin = 1,  ...){
+
+  layout <- NULL
+  ylim <- NULL
   args <- list(...)
-  filter <- ifelse(is.null(args$filter), "sample", args$filter)
-  subfilter <- ifelse(is.null(args$subfilter), 0, args$subfilter)
-  layout <- args$layout
-  subject <- ifelse(is.null(args$subject), 1, args$subject)
-  thin <- ifelse(is.null(args$thin), 1, args$thin)
-  ylim <- args$ylim
-  if(is.null(args$selection)){
-    selection <- "mu"
-  } else{
-    selection <- args$selection
+  for (name in names(args) ) {
+    assign(name, args[[name]])
   }
+
+  subject <- ifelse(is.null(subject), 1, subject)
   input <- x
+
   for(select in selection){
     pmwg_mcmc <- as_mcmc.list(input,selection=select,filter=filter,
                               thin=thin,subfilter=subfilter)

@@ -188,17 +188,53 @@ make_design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=
   return(design)
 }
 
+#' Contrast to enforce equal prior variance on each level
+#'
+#' Typical contrasts impose different levels of marginal prior variance for the different levels.
+#' This contrast can be used to ensure that each level has equal marginal priors (Rouder, Morey, Speckman, & Province; 2012).
+#'
+#' @param n An integer. The number of items for which to create the contrast
+#'
+#' @return A contrast matrix.
+#' @export
+#' @examples{
+#' design_DDMaE <- make_design(data = forstmann,model=DDM, contrasts = list(E = contr.bayes),
+#' formula =list(v~S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
+#' constants=c(s=log(1)))
+#' }
+contr.bayes <- function(n) {
+  if (length(n) <= 1L) {
+    if (is.numeric(n) && length(n) == 1L && n > 1L)
+      levels <- seq_len(n)
+    else stop("not enough degrees of freedom to define contrasts")
+  }
+  else levels <- n
+  levels <- as.character(levels)
+  n <- length(levels)
+  cont <- diag(n)
+  a <- n
+  I_a <- diag(a)
+  J_a <- matrix(1, nrow = a, ncol = a)
+  Sigma_a <- I_a - J_a/a
+  cont <- eigen(Sigma_a)$vectors[,seq_len(a-1), drop = FALSE]
+  return(cont)
+}
+
 
 #' Contrast to enforce increasing estimates
 #'
-#' first = intercept, cumsum other (positive) levels to force non-decreasing
+#' Each level will be estimated additively from the previous level
 #'
 #' @param n an integer. The number of items for which to create the contrast.
-#' @param levels Character vector. the factor levels which will be the colnames of the returning matrix.
 #'
 #' @return a contrast matrix.
 #' @export
-contr.increasing <- function(n,levels=NULL)
+#' @examples{
+#' design_DDMaE <- make_design(data = forstmann,model=DDM, contrasts = list(E = contr.increasing),
+#' formula =list(v~S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
+#' constants=c(s=log(1)))
+#' }
+contr.increasing <- function(n)
 {
   if (length(n) <= 1L) {
     if (is.numeric(n) && length(n) == 1L && n > 1L)
@@ -210,30 +246,40 @@ contr.increasing <- function(n,levels=NULL)
   n <- length(levels)
   contr <- matrix(0,nrow=n,ncol=n-1,dimnames=list(NULL,2:n))
   contr[lower.tri(contr)] <- 1
-  if (!is.null(levels)) dimnames(contr)[[2]] <- levels[-1]
   contr
 }
 
 #' Contrast to enforce decreasing estimates
 #'
+#' Each level will be estimated as a reduction from the previous level
+#'
 #' @param n an integer. The number of items for which to create the contrast.
-#' @param levels Character vector. the factor levels which will be the colnames of the returning matrix.
 #'
 #' @return a contrast matrix.
 #' @export
-contr.decreasing <- function(n,levels=NULL) {
-  out <- contr.increasing(n,levels=levels)
+#' @examples{
+#' design_DDMaE <- make_design(data = forstmann,model=DDM, contrasts = list(E = contr.decreasing),
+#' formula =list(v~S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
+#' constants=c(s=log(1)))
+#' }
+contr.decreasing <- function(n) {
+  out <- contr.increasing(n)
   out[dim(out)[1]:1,]
 }
 
-#' contr.anova()
+#' Anova style contrast matrix
 #'
-#' orthogonal helmert contrast scaled to estimate differences between conditions. Use in make_design.
+#' Similar to `contr.helmert`, but then scaled to estimate differences between conditions. Use in `make_design()`.
 #'
-#' @param n an integer. the number of items for which to create the contrast
+#' @param n An integer. The number of items for which to create the contrast
 #'
-#' @return a contrast matrix.
+#' @return A contrast matrix.
 #' @export
+#' @examples{
+#' design_DDMaE <- make_design(data = forstmann,model=DDM, contrasts = list(E = contr.anova),
+#' formula =list(v~S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
+#' constants=c(s=log(1)))
+#' }
 
 contr.anova <- function(n) {
   if (length(n) <= 1L) {

@@ -2,7 +2,7 @@
 % Please edit documentation in R/priors.R
 \name{make_prior}
 \alias{make_prior}
-\title{make_prior}
+\title{Prior specification}
 \usage{
 make_prior(
   design,
@@ -17,42 +17,71 @@ make_prior(
 )
 }
 \arguments{
-\item{design}{Design for which a prior is constructed}
+\item{design}{Design for which a prior is constructed, typically the output of \code{make_design()}}
 
 \item{pmean}{Named vector of prior means, or an unnamed scalar, which is then used for all.}
 
 \item{psd}{Named vector of prior standard deviations, or an unnamed scalar,
-which is then used for all. If NA, will assume 1 for all parameters}
+which is then used for all. If \code{NA}, will assume 1 for all parameters}
 
 \item{update}{Another prior from which to copy values}
 
-\item{verbose}{Boolean (default true) print values of prior to console (if
-update only new values).}
+\item{verbose}{Boolean, defaults to \code{TRUE}, print prior specification to console (if
+\code{update}, only new values).}
 
-\item{update_print}{When verbose print only new values (default TRUE)}
+\item{update_print}{When verbose, print only new values (defaults to \code{TRUE})}
 
-\item{type}{What type of model you plan on using, choice of standard, diagonal
-and single for this function}
+\item{type}{What type of model you plan on using, choice of \code{standard}, \code{diagonal}, \code{blocked}
+and \code{single} for this function}
 
 \item{pscale}{For hierarchical models, the prior on the scale of the variances.
-Default NA will assume 1 for all parameters}
+The default \code{NA} will assume 1 for all parameters}
 
 \item{df}{For hierarchical models, the prior on the degrees of freedom of the
-variances. Default NA will assume 2}
+variances. The default \code{NA} will assume 2}
 }
 \value{
-An EMC prior object
+An EMC prior list object
 }
 \description{
-Makes priors based on a design.
-Specify prior on mean of the group mean (pmean) and standard deviation (psd),
-for the individual level for a "single" model and for the group level for
+Specify priors on mean of the group mean (\code{pmean}) and standard deviation (\code{psd}),
+for the individual level for a \code{single} model and for the group level for
 hierarchical models. These values are entered manually by default but can be
-taken from another prior (given in the update argument) for values having
-the same name as in the current design and are not specified in pmean and psd.
-Where a value is not supplied in arguments the user is prompted to enter
+recycled from another prior (given in the \code{update} argument).
+}
+\details{
+Where a value is not supplied, the user is prompted to enter
 numeric values (or functions that evaluate to numbers). For hierarchical models
-the scale (pscale) and the  degrees of freedom (df) for the population variance
-covariance matrix can also be specified (by default unit values are assumed,
-set these arguments to NULL to enter values manually).
+the scale (\code{pscale}) and the  degrees of freedom (\code{df}) for the population variance
+covariance matrix can also be specified. Set these arguments to \code{NULL} to
+enter values manually through prompts.
+
+To get the default prior for a type, run: \verb{get_prior_\{type\}(design = design, sample = F)}
+E.g.: \code{get_prior_diagonal(design = design, sample = F)}
+}
+\examples{
+\dontrun{
+# First define a design for the model
+design_DDMaE <- make_design(data = forstmann,model=DDM,
+                           formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
+                           constants=c(s=log(1)))
+# Then set up a prior using make_prior
+p_vector=c(v_Sleft=-2,v_Sright=2,a=log(1),a_Eneutral=log(1.5),a_Eaccuracy=log(2),
+t0=log(.2),Z=qnorm(.5),sv=log(.5),SZ=qnorm(.5))
+psd <- c(v_Sleft=1,v_Sright=1,a=.3,a_Eneutral=.3,a_Eaccuracy=.3,
+t0=.4,Z=1,sv=.4,SZ=1)
+# Here we left the variance prior at default
+prior_DDMaE <- make_prior(design_DDMaE,pmean=p_vector,psd=psd)
+# Also add a group-level variance prior:
+pscale <- c(v_Sleft=.6,v_Sright=.6,a=.3,a_Eneutral=.3,a_Eaccuracy=.3,
+t0=.2,Z=.5,sv=.4,SZ=.3)
+psd <- .4
+prior_DDMaE <- make_prior(design_DDMaE,pmean=p_vector,psd=psd, pscale = pscale, psd = psd)
+# If we specify a new design
+design_DDMat0E <- make_design(data = forstmann,model=DDM,
+                           formula =list(v~0+S,a~E, t0~E, s~1, Z~1, sv~1, SZ~1),
+                           constants=c(s=log(1)))
+# We can easily update the prior
+prior_DDMat0E <- make_prior(design_DDMat0E, update = prior_DDMaE)
+}
 }
