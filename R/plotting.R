@@ -657,13 +657,13 @@ plot_fit <- function(data,pp,subject=NULL,factors=NULL,functions=NULL,
     snams <- levels(data$subjects)
     if (is.numeric(subject)) subject <- snams[subject]
     if (!all(subject %in% snams)) stop("Subject(s) not present\n")
-    dat <- droplevels(data[data$subjects %in% subject,])
+    dat <- as.data.frame(droplevels(data[data$subjects %in% subject,]))
     pp <- droplevels(pp[pp$subjects %in% subject,])
     if (length(subject>1))
       fnams <- names(dat)[!(names(dat) %in% c("trials","R","rt"))] else
         fnams <- names(dat)[!(names(dat) %in% c("subjects","trials","R","rt"))]
   } else {
-    dat <- data
+    dat <- as.data.frame(data)
     fnams <- names(dat)[!(names(dat) %in% c("trials","R","rt"))]
   }
 
