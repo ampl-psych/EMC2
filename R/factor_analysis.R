@@ -215,6 +215,7 @@ standardize_loadings <- function(samplers = NULL, loadings = NULL, sig_err_inv =
 #' @param plot_means Boolean. Whether to plot the means or not
 #' @param only_cred Boolean. Whether to only plot credible values
 #' @param nice_names Character string. Alternative names to give the parameters
+#' @param ... Optional additional arguments
 #'
 #' @return NULL
 #' @examples \dontrun{

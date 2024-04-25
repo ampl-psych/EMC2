@@ -27,6 +27,8 @@ the sampling stage \code{sample}.}
 \item{only_cred}{Boolean. Whether to only plot credible values}
 
 \item{nice_names}{Character string. Alternative names to give the parameters}
+
+\item{...}{Optional additional arguments}
 }
 \description{
 An adjusted version of the \code{corrplot} package function \code{corrplot()} tailored
