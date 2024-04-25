@@ -205,7 +205,8 @@ standardize_loadings <- function(samplers = NULL, loadings = NULL, sig_err_inv =
 # plotting ----------------------------------------------------------------
 #' Plot relations
 #'
-#' An adjusted version of the corrplot package `corrplot` tailored to EMC2 and the plotting of factor loadings or correlations.
+#' An adjusted version of the `corrplot` package function `corrplot()` tailored
+#' to `EMC2` and the plotting of correlations.
 #'
 #' @param samplers A list of samplers
 #' @param filter Character. The stage from which to take the samples
@@ -228,9 +229,20 @@ standardize_loadings <- function(samplers = NULL, loadings = NULL, sig_err_inv =
 #' }
 #' @export
 #'
-plot_relations <- function(samplers = NULL, filter = "sample", loadings = NULL, standardize = T, corrs = NULL, plot_cred = TRUE,
+plot_relations <- function(samplers = NULL, filter = "sample", corrs = NULL, plot_cred = TRUE,
                            plot_means = T, do_corr = F, only_cred = F,
-                           nice_names = NULL){
+                           nice_names = NULL, ...){
+
+  # for future factor model compatibility
+  loadings <- NULL
+  standardize <- TRUE
+
+  # overwrite those that were supplied
+  optionals <- list(...)
+  for (name in names(optionals) ) {
+    assign(name, optionals[[name]])
+  }
+
   addCoef.col <- "black"
   if(!plot_means) addCoef.col <- NULL
   if(!is.null(samplers)) sampled <- merge_samples(samplers)

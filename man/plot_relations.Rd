@@ -7,24 +7,19 @@
 plot_relations(
   samplers = NULL,
   filter = "sample",
-  loadings = NULL,
-  standardize = T,
   corrs = NULL,
   plot_cred = TRUE,
   plot_means = T,
   do_corr = F,
   only_cred = F,
-  nice_names = NULL
+  nice_names = NULL,
+  ...
 )
 }
 \arguments{
 \item{samplers}{A list of samplers}
 
 \item{filter}{Character. The stage from which to take the samples}
-
-\item{loadings}{An array of loadings. Can be alternatively supplied if samplers is not supplied}
-
-\item{standardize}{Boolean. Whether to standardize the loadings. Only standardizes if loadings isn't supplied.}
 
 \item{corrs}{An array of correlations Can be alternatively supplied if samplers is not supplied}
 
@@ -37,9 +32,14 @@ plot_relations(
 \item{only_cred}{Boolean. Whether to only plot credible values}
 
 \item{nice_names}{Boolean. Alternative names to give the parameters}
+
+\item{loadings}{An array of loadings. Can be alternatively supplied if samplers is not supplied}
+
+\item{standardize}{Boolean. Whether to standardize the loadings. Only standardizes if loadings isn't supplied.}
 }
 \description{
-An adjusted version of the corrplot package \code{corrplot} tailored to EMC2 and the plotting of factor loadings or correlations.
+An adjusted version of the \code{corrplot} package function \code{corrplot()} tailored
+to \code{EMC2} and the plotting of correlations.
 }
 \examples{
 \dontrun{
