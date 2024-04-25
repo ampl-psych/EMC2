@@ -1,72 +1,92 @@
 
 #' Plot MCMC chains
 #'
-#' @param pmwg_mcmc A list of samplers or samplers converted to mcmc objects.
+#' Plots the trace plots of the MCMC chains on top of each other to visualize convergence
+#' and chain stability.
+#'
+#' @param samplers A list of samplers.
 #' @param layout A vector specifying the layout as in par(mfrow = layout).
-#' If NA (defualt) use CODA defaults, if NULL use current.
-#' @param subject Integer or character vector, if selection = "alpha" picks out subject(s)
-#' (defualt NA plot all)
-#' @param ylim The y limits of the chain plot.
-#' @param selection String designating parameter type (mu, variance, correlation, alpha = default)
-#' @param filter A string. Specifies which stage you want to plot.
-#' @param thin An integer. Keep only iterations that are a multiple of thin.
+#' If NA (default) will use CODA defaults (unless if ``plot_acf = TRUE``), if NULL use current.
+#' @param subject Integer or character vector. Only applicable if selection = "alpha". Will plot only these subject(s).
+#' NA (default) will plot all.
+#' @param ylim A vector. The y limits of the chain plot.
+#' @param selection String. Which parameter type to plot ("alpha", "mu", "variance", "covariance", "correlation").
+#' "LL" will plot the log-likelihood chains.
+#' @param filter A string. Specifies from which stage you want to plot the MCMC chains ("preburn", "burn", "adapt", "sample")                        .
+#' @param thin An integer. Will keep only iterations of the MCMC chains that are a multiple of ``thin``.
 #' @param subfilter An integer or vector. If integer it will exclude up until
 #' that integer. If vector it will include everything in that range.
-#' @param plot_acf Boolean (default FALSE). If TRUE will also plot autocorrelation
-#' for the chain specified in acf_chain.
-#' @param acf_chain Integer. For which chain to plot the acf, if plot_acf = TRUE.
+#' @param plot_acf Boolean. If TRUE will plot autocorrelation
+#' for the first MCMC chain (of the default three chains).
 #' @return None
+#' @examples \dontrun{
+#' # For a set of samplers run using ``run_emc``:
+#' plot_chains(samplers)
+#' # Or for the second subject:
+#' plot_chains(samplers, subject = 2)
+#'
+#' # Can also plot the autocorrelation of for example group-level mean:
+#' plot_chains(samplers, selection = "mu", plot_acf = TRUE)
+#' }
 #' @export
 
-plot_chains <- function(pmwg_mcmc,layout=NA,subject=NA,ylim=NULL,
+plot_chains <- function(samplers,layout=NA,subject=NA,ylim=NULL,
                         selection="alpha",filter="sample",thin=1,subfilter=0,
                         plot_acf=FALSE,acf_chain=1) # ,use_par=NA
   # Plots chains  (if alpha, LL or epsilon can do individual subject, all by default)
 {
-  if (!(inherits(pmwg_mcmc,  c("mcmc","mcmc.list")))) {
-    if (inherits(pmwg_mcmc, "pmwgs"))
-      pmwg_mcmc <- as_Mcmc(pmwg_mcmc,selection=selection,filter=filter,
+  MCMC_samples <- samplers
+  if (!(inherits(MCMC_samples,  c("mcmc","mcmc.list")))) {
+    if (inherits(MCMC_samples, "pmwgs"))
+      MCMC_samples <- as_Mcmc(MCMC_samples,selection=selection,filter=filter,
                            thin=thin,subfilter=subfilter) else
-                             pmwg_mcmc <- as_mcmc.list(pmwg_mcmc,selection=selection,filter=filter,
+                             MCMC_samples <- as_mcmc.list(MCMC_samples,selection=selection,filter=filter,
                                                        thin=thin,subfilter=subfilter)
   }
   auto.layout <- any(is.na(layout))
   no_layout <- is.null(layout)
   if (!auto.layout & !no_layout) par(mfrow=layout)
-  if (attr(pmwg_mcmc,"selection")=="alpha" || attr(pmwg_mcmc,"selection")=="random") {
-    snams <- names(pmwg_mcmc)
+  if (attr(MCMC_samples,"selection")=="alpha" || attr(MCMC_samples,"selection")=="random") {
+    snams <- names(MCMC_samples)
     if (any(is.na(subject))) subject <- snams
     if (is.numeric(subject)) subject <- snams[subject]
-    if (!all(subject %in% names(pmwg_mcmc)))
+    if (!all(subject %in% names(MCMC_samples)))
       stop("Subject not present\n")
     for (i in subject) {
       if (!auto.layout & !no_layout) par(mfrow=layout)
-      if (plot_acf) for (j in dimnames(pmwg_mcmc[[i]])[[2]]) {
-        acf(pmwg_mcmc[[i]][,j],main=paste0("Chain ",acf_chain,": ","s",i,": ",j))
+      if (plot_acf){
+        for (j in colnames(MCMC_samples[[i]][[1]])){
+          acf(MCMC_samples[[i]][[1]][,j],main=paste0("Chain ",acf_chain,": ","s",i,": ",j))
+        }
       } else {
-        if (!auto.layout & !no_layout) par(mfrow=layout)
-        plot(pmwg_mcmc[[i]],auto.layout=auto.layout,density=FALSE,
+        plot(MCMC_samples[[i]],auto.layout=auto.layout,density=FALSE,
              xlab=paste0("Iterations ",i),ask=FALSE,trace=TRUE,
-             ylab=attr(pmwg_mcmc,"selection"),smooth=FALSE,ylim=ylim)
+             ylab=attr(MCMC_samples,"selection"),smooth=FALSE,ylim=ylim)
       }
     }
-  } else if (attr(pmwg_mcmc,"selection") %in% c("LL","epsilon")) {
-    if (any(is.na(subject))) subject <- names(pmwg_mcmc)
-    if (!all(subject %in% names(pmwg_mcmc)))
+  } else if (attr(MCMC_samples,"selection") %in% c("LL","epsilon")) {
+    if (any(is.na(subject))) subject <- names(MCMC_samples)
+    if (!all(subject %in% names(MCMC_samples)))
       stop("Subject not present\n")
     for (i in subject) {
-      if (plot_acf)
-        acf(pmwg_mcmc[[i]],main=paste0("Chain ",acf_chain,": ","LL ",i)) else
-          plot(pmwg_mcmc[[i]],auto.layout=auto.layout,density=FALSE,
-               xlab=paste0("Iterations ",i),ask=FALSE,trace=TRUE,
-               ylab=attr(pmwg_mcmc,"selection"),smooth=FALSE,ylim=ylim)
+      if (plot_acf){
+        acf(MCMC_samples[[i]][[1]],main=paste0("Chain ",acf_chain,": ","LL ",i))
+      } else{
+        plot(MCMC_samples[[i]],auto.layout=auto.layout,density=FALSE,
+             xlab=paste0("Iterations ",i),ask=FALSE,trace=TRUE,
+             ylab=attr(MCMC_samples,"selection"),smooth=FALSE,ylim=ylim)
+      }
     }
   } else {
-    if (plot_acf) for (j in dimnames(pmwg_mcmc)[[2]])
-      acf(pmwg_mcmc[,j],main=paste0("Chain ",acf_chain,": ",j)) else
-        plot(pmwg_mcmc,auto.layout=auto.layout,density=FALSE,
-             ask=FALSE,trace=TRUE,ylim=ylim,
-             ylab=attr(pmwg_mcmc,"selection"),smooth=FALSE)
+    if (plot_acf) {
+      for (j in colnames(MCMC_samples[[1]])){
+        acf(MCMC_samples[[1]][,j],main=paste0("Chain ",acf_chain,": ",j))
+      }
+    } else {
+      plot(MCMC_samples,auto.layout=auto.layout,density=FALSE,
+           ask=FALSE,trace=TRUE,ylim=ylim,
+           ylab=attr(MCMC_samples,"selection"),smooth=FALSE)
+    }
   }
 }
 
@@ -603,7 +623,7 @@ plot_roc <- function(data,signalFactor="S",zROC=FALSE,qfun=NULL,main="",lim=NULL
 #' @param data Data frame with subjects and R factors, and possibly other factors
 #' and an rt column
 #' @param pp Posterior predictives created by post_predict
-#' @param subject Integer or string picking out subject(s).
+#' @param subject Integer or string picking out subject(s) to plot.
 #' @param factors Character vector of factors in data to display separately. If
 #' NULL (default) use names of all columns in data except "trials","R", and "rt".
 #' Omitted factors are aggregated over. If NA treats entire data set as a single cell.
@@ -887,10 +907,6 @@ plot_fit <- function(data,pp,subject=NULL,factors=NULL,functions=NULL,
 }
 
 
-# subject=NULL;factors=NULL;
-# pp=pprdm_B_MT; data=attr(rdm_B_MT,"data_list")[[1]]; Fcovariates="MT", layout=c(2,3)
-# pp=pp_MT; data=attr(ddm_a_MT,"data_list")[[1]]; Fcovariates="MT"; layout=c(2,3)
-# pp=pp_st0; data=attr(ddm_a_st0,"data_list")[[1]]; Fcovariates="MT"; layout=c(2,3)
 plot_trials <- function(data,pp=NULL,subject=NULL,factors=NULL,Fcovariates=NULL,
                         layout=NULL,mfcol=TRUE)
   # Plots rt as a function of trials, returns correlation with average predicted
@@ -955,11 +971,6 @@ plot_trials <- function(data,pp=NULL,subject=NULL,factors=NULL,Fcovariates=NULL,
 
 
 
-
-# pdf_name="check_run.pdf";interactive=TRUE;
-#                       filter="sample";subfilter=0
-#                       layout=c(3,4);width=NULL;height=NULL
-# subfilter=2000
 
 #' Convergence checks for an EMC2 samplers object
 #'
@@ -1096,10 +1107,6 @@ check_run <- function(samples,pdf_name="check_run.pdf",interactive=TRUE,
   message("\n\nGraphical checks available in ",pdf_name)
 }
 
-
-# filter="sample";thin=1;subfilter=0;mapped=FALSE
-# selection=c("alpha","mu","variance","covariance","correlation")[1]; stat=NULL
-# collapse.subjects=TRUE;scale.subjects=TRUE;use=NA;do_plot=TRUE
 
 #' Plots matrix of parameter correlations (upper triangle) and corresponding
 #' scatterplots (lower triangle)
