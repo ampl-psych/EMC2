@@ -211,7 +211,6 @@ standardize_loadings <- function(samplers = NULL, loadings = NULL, sig_err_inv =
 #' @param samplers An EMC2 samplers object, commonly the output of `run_emc()`.
 #' @param filter Character. The stage from which to take the samples, defaults to
 #' the sampling stage `sample`.
-#' @param corrs An array of correlations. Can be supplied alternatively if samplers is not supplied
 #' @param plot_cred Boolean. Whether to plot the credible intervals or not
 #' @param plot_means Boolean. Whether to plot the means or not
 #' @param only_cred Boolean. Whether to only plot credible values
