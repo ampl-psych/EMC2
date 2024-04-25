@@ -9,7 +9,6 @@ plot_defective_density(
   subject = NULL,
   factors = NULL,
   layout = NULL,
-  mfcol = FALSE,
   xlim = NULL,
   bw = "nrd0",
   adjust = 1,
@@ -19,35 +18,47 @@ plot_defective_density(
 )
 }
 \arguments{
-\item{data}{data frame with at least subjects (subjects factor) R (response factor)
-and rt (response time) columns,and optionally other factor columns with any name except
-subjects, R, rt or trials.}
+\item{data}{A dataframe. The experimental data in EMC format with at least the subjects factor,
+R (response factor) and rt (response time) columns,
+and optionally other factor columns of the design.}
 
-\item{subject}{Integer or string selecting a subject (default NULL = all).}
+\item{subject}{Integer or string selecting a subject from the data. If specified will only plot that subject
+(default NULL = all).}
 
-\item{factors}{character vector of factor names in design (default NULL = all).}
+\item{factors}{character vector of factor names in design to aggregated across (default NULL = all).}
 
-\item{layout}{2-vector specifying par(mfrow) or par(mfcol) (default NULL use current).}
-
-\item{mfcol}{Boolean, default TRUE use mfcol else mfrow.}
+\item{layout}{2-vector specifying par(mfrow), default NULL uses current layout.}
 
 \item{xlim}{x-axis limit for all cells (default NULL = scale per cell).}
 
-\item{bw}{number or string bandwidth for density (default "nrd0").}
+\item{bw}{number or string bandwidth for density (default "nrd0"). See \code{?density}.}
 
-\item{adjust}{density function bandwidth adjust parameter.}
+\item{adjust}{density function bandwidth adjust parameter. See \code{?density}.}
 
-\item{correct_fun}{function scoring accuracy using columns in data.}
+\item{correct_fun}{If specified will calculate the accuracy for each subject using the supplied function and
+invisibly return an accuracy vector for each subject.}
 
 \item{rt}{legend function position string for mean RT (default "top)}
 
 \item{accuracy}{legend function position string for accuracy (default "topright")}
 }
 \value{
-Invisibly if correct_fun specified a subject accuracy vector
+If correct_fun is specified, will invisibly return a subject accuracy vector
 }
 \description{
-Each panel contains a set of densities (i.e., densities for each possible
-possible response) that are defective (i.e., have areas potentially less
-than 1, where for all responses the area sums to 1).
+Each panel contains a set of densities for each possible response.
+These densities are defective; their areas are relative to their response's proportion.
+Across all responses the area sums to 1.
+}
+\examples{
+# First for each subject and the factor combination in the design:
+plot_defective_density(forstmann)
+# Now collapsing across subjects:
+plot_defective_density(forstmann, factors = c("S", "E"))
+# If your data is response coded it always makes sense to include the "S" factor
+# because EMC will plot the "R" factor automatically. This way you can see how often
+"S" matches "R".
+# We can also return each subject's accuracy using a custom function:
+print(plot_defective_density(forstmann, correct_fun = function(d) d$R == d$S))
+
 }

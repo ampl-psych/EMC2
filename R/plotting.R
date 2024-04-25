@@ -90,19 +90,6 @@ plot_chains <- function(samplers,layout=NA,subject=NA,ylim=NULL,
   }
 }
 
-#' Calls plot_chains to plot auto-correlation functions for each parameter
-#'
-#' @param samples Single pmwgs object (in which case ACF for one chain is plotted)
-#' or list of pmwgs objects (in which case ACFs for each chain plotted)
-#' @param layout A 2-vector specifying the layout handled as in plot_chains
-#' @param subject integer or character vector, if selection = "alpha" picks out subjects(s)
-#' @param selection String designating parameter type (mu, variance, correlation, alpha = default)
-#' @param filter which stage to plot (default "sample")
-#' @param subfilter an integer or vector. If integer it will exclude up until that integer.
-#' If vector it will include everything in that range.
-#'
-#' @return None
-#' @export
 plot_acfs <- function(samples,layout=NULL,subject=1,
                       selection="alpha",filter="sample",subfilter=0)
   # Plots acf for all chains
@@ -203,29 +190,41 @@ plot_alpha_recovery <- function(tabs,layout=c(2,3),
 
 #' Plot defective densities for each subject and cell.
 #'
-#' Each panel contains a set of densities (i.e., densities for each possible
-#' possible response) that are defective (i.e., have areas potentially less
-#' than 1, where for all responses the area sums to 1).
+#' Each panel contains a set of densities for each possible response.
+#' These densities are defective; their areas are relative to their response's proportion.
+#' Across all responses the area sums to 1.
 #'
-#' @param data data frame with at least subjects (subjects factor) R (response factor)
-#' and rt (response time) columns,and optionally other factor columns with any name except
-#' subjects, R, rt or trials.
-#' @param subject Integer or string selecting a subject (default NULL = all).
-#' @param factors character vector of factor names in design (default NULL = all).
-#' @param layout 2-vector specifying par(mfrow) or par(mfcol) (default NULL use current).
-#' @param mfcol Boolean, default TRUE use mfcol else mfrow.
+#' @param data A dataframe. The experimental data in EMC format with at least the subjects factor,
+#'  R (response factor) and rt (response time) columns,
+#' and optionally other factor columns of the design.
+#' @param subject Integer or string selecting a subject from the data. If specified will only plot that subject
+#' (default NULL = all).
+#' @param factors character vector of factor names in design to aggregated across (default NULL = all).
+#' @param layout 2-vector specifying par(mfrow), default NULL uses current layout.
 #' @param xlim x-axis limit for all cells (default NULL = scale per cell).
-#' @param bw number or string bandwidth for density (default "nrd0").
-#' @param adjust density function bandwidth adjust parameter.
-#' @param correct_fun function scoring accuracy using columns in data.
+#' @param bw number or string bandwidth for density (default "nrd0"). See ``?density``.
+#' @param adjust density function bandwidth adjust parameter. See ``?density``.
+#' @param correct_fun If specified will calculate the accuracy for each subject using the supplied function and
+#' invisibly return an accuracy vector for each subject.
 #' @param rt legend function position string for mean RT (default "top)
 #' @param accuracy legend function position string for accuracy (default "topright")
 #'
-#' @return Invisibly if correct_fun specified a subject accuracy vector
+#' @return If correct_fun is specified, will invisibly return a subject accuracy vector
+#' @examples
+#' # First for each subject and the factor combination in the design:
+#' plot_defective_density(forstmann)
+#' # Now collapsing across subjects:
+#' plot_defective_density(forstmann, factors = c("S", "E"))
+#' # If your data is response coded it always makes sense to include the "S" factor
+#' # because EMC will plot the "R" factor automatically. This way you can see how often
+#' "S" matches "R".
+#' # We can also return each subject's accuracy using a custom function:
+#' print(plot_defective_density(forstmann, correct_fun = function(d) d$R == d$S))
+#'
 #' @export
 
 plot_defective_density <- function(data,subject=NULL,factors=NULL,
-                                   layout=NULL,mfcol=FALSE,
+                                   layout=NULL,
                                    xlim=NULL,bw = "nrd0",adjust=1,
                                    correct_fun=NULL,rt="top",accuracy="topright")
 {
@@ -254,7 +253,7 @@ plot_defective_density <- function(data,subject=NULL,factors=NULL,
   for (i in fnams) cells[,i] <- paste(i,cells[,i],sep="=")
   cells <- apply(cells,1,paste,collapse=" ")
   if (!is.null(layout))
-    if (mfcol) par(mfcol=layout) else par(mfrow=layout)
+    par(mfrow=layout)
   R <- levels(dat$R)
   for (i in sort(unique(cells))) {
     pR <- table(alldat$R[cellsall==i])/dim(alldat[cellsall==i,])[1]
