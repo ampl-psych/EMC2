@@ -46,7 +46,7 @@ invisibly return an accuracy vector for each subject.}
 If correct_fun is specified, will invisibly return a subject accuracy vector
 }
 \description{
-Each panel contains a set of densities for each possible response.
+Plots multiple panels that contain a set of densities for each response option in the data.
 These densities are defective; their areas are relative to their response's proportion.
 Across all responses the area sums to 1.
 }
@@ -57,7 +57,7 @@ plot_defective_density(forstmann)
 plot_defective_density(forstmann, factors = c("S", "E"))
 # If your data is response coded it always makes sense to include the "S" factor
 # because EMC will plot the "R" factor automatically. This way you can see how often
-"S" matches "R".
+# "S" matches "R".
 # We can also return each subject's accuracy using a custom function:
 print(plot_defective_density(forstmann, correct_fun = function(d) d$R == d$S))
 
