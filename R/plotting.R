@@ -6,7 +6,7 @@
 #'
 #' @param samplers A list of samplers.
 #' @param layout A vector specifying the layout as in par(mfrow = layout).
-#' If NA (default) will use CODA defaults (unless if ``plot_acf = TRUE``), if NULL use current.
+#' If NA (default) will use CODA defaults (unless ``plot_acf = TRUE``), if NULL use current.
 #' @param subject Integer or character vector. Only applicable if selection = "alpha". Will plot only these subject(s).
 #' NA (default) will plot all.
 #' @param ylim A vector. The y limits of the chain plot.
@@ -20,12 +20,12 @@
 #' for the first MCMC chain (of the default three chains).
 #' @return None
 #' @examples \dontrun{
-#' # For a set of samplers run using ``run_emc``:
+#' # For a set of samplers run using run_emc:
 #' plot_chains(samplers)
 #' # Or for the second subject:
 #' plot_chains(samplers, subject = 2)
 #'
-#' # Can also plot the autocorrelation of for example group-level mean:
+#' # Can also plot the autocorrelation of for example the group-level mean:
 #' plot_chains(samplers, selection = "mu", plot_acf = TRUE)
 #' }
 #' @export

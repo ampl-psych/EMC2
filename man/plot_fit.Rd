@@ -40,7 +40,7 @@ and an rt column}
 
 \item{pp}{Posterior predictives created by post_predict}
 
-\item{subject}{Integer or string picking out subject(s).}
+\item{subject}{Integer or string picking out subject(s) to plot.}
 
 \item{factors}{Character vector of factors in data to display separately. If
 NULL (default) use names of all columns in data except "trials","R", and "rt".

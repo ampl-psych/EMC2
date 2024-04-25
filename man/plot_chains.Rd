@@ -5,7 +5,7 @@
 \title{Plot MCMC chains}
 \usage{
 plot_chains(
-  pmwg_mcmc,
+  samplers,
   layout = NA,
   subject = NA,
   ylim = NULL,
@@ -18,33 +18,44 @@ plot_chains(
 )
 }
 \arguments{
-\item{pmwg_mcmc}{A list of samplers or samplers converted to mcmc objects.}
+\item{samplers}{A list of samplers.}
 
 \item{layout}{A vector specifying the layout as in par(mfrow = layout).
-If NA (defualt) use CODA defaults, if NULL use current.}
+If NA (default) will use CODA defaults (unless \code{plot_acf = TRUE}), if NULL use current.}
 
-\item{subject}{Integer or character vector, if selection = "alpha" picks out subject(s)
-(defualt NA plot all)}
+\item{subject}{Integer or character vector. Only applicable if selection = "alpha". Will plot only these subject(s).
+NA (default) will plot all.}
 
-\item{ylim}{The y limits of the chain plot.}
+\item{ylim}{A vector. The y limits of the chain plot.}
 
-\item{selection}{String designating parameter type (mu, variance, correlation, alpha = default)}
+\item{selection}{String. Which parameter type to plot ("alpha", "mu", "variance", "covariance", "correlation").
+"LL" will plot the log-likelihood chains.}
 
-\item{filter}{A string. Specifies which stage you want to plot.}
+\item{filter}{A string. Specifies from which stage you want to plot the MCMC chains ("preburn", "burn", "adapt", "sample")                        .}
 
-\item{thin}{An integer. Keep only iterations that are a multiple of thin.}
+\item{thin}{An integer. Will keep only iterations of the MCMC chains that are a multiple of \code{thin}.}
 
 \item{subfilter}{An integer or vector. If integer it will exclude up until
 that integer. If vector it will include everything in that range.}
 
-\item{plot_acf}{Boolean (default FALSE). If TRUE will also plot autocorrelation
-for the chain specified in acf_chain.}
-
-\item{acf_chain}{Integer. For which chain to plot the acf, if plot_acf = TRUE.}
+\item{plot_acf}{Boolean. If TRUE will plot autocorrelation
+for the first MCMC chain (of the default three chains).}
 }
 \value{
 None
 }
 \description{
-Plot MCMC chains
+Plots the trace plots of the MCMC chains on top of each other to visualize convergence
+and chain stability.
+}
+\examples{
+\dontrun{
+# For a set of samplers run using run_emc:
+plot_chains(samplers)
+# Or for the second subject:
+plot_chains(samplers, subject = 2)
+
+# Can also plot the autocorrelation of for example the group-level mean:
+plot_chains(samplers, selection = "mu", plot_acf = TRUE)
+}
 }
