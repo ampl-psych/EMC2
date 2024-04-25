@@ -608,66 +608,71 @@ plot_roc <- function(data,signalFactor="S",zROC=FALSE,qfun=NULL,main="",lim=NULL
   invisible(ctab)
 }
 
-
 #' Plots overlaying observed and fitted data.
 #'
-#' If rt  available plots Defective cumulative distributions
-#' functions (CDFs), if not plots ROC. If stat the argument (which calculates
-#' a statistics based on the data) is supplied fit is plotted as a density with
-#' a vertical line at the position of the data statistic. If more than one
-#' subject is included data and fits are aggregated over subjects. If data or
-#' fit contains NA in responses or rt, or is.infinite(rt) these are treating as
-#' missing and defective cdfs sum to the probability of non-missing.
-#'
+#' If rt  available plots defective cumulative distributions
+#' functions (CDFs), if not plots region under curve (ROC).
 #' CDFs plot the probability of a response, p(R) as a function of response time
 #' (RT) for data (black lines and points at qpoints quantiles) and posterior-
-#' # predictive simulations (grey lines and points). Large grey points show the
+#' predictive simulations (grey lines and points). Large grey points show the
 #' average of replicate quantiles and small grey points percentiles for
 #' individual replicates, providing a representation of uncertainty in the model
 #' predictions.
 #'
-#' @param data Data frame with subjects and R factors, and possibly other factors
-#' and an rt column
-#' @param pp Posterior predictives created by post_predict
-#' @param subject Integer or string picking out subject(s) to plot.
+#' If the stat argument (which calculates
+#' a statistic based on the data) is supplied fit is plotted as a density with
+#' a vertical line at the position of the data statistic. If more than one
+#' subject is included data and fits are aggregated over subjects. If data or
+#' fit contains NA in responses or rt, or is.infinite(rt) these are treated as
+#' missing and defective cdfs sum to the probability of non-missing.
+#'
+
+#'
+#' @param data A dataframe. The experimental data in EMC format with at least the subjects factor,
+#' R (response factor) and rt (response time) columns,
+#' and optionally other factor columns of the design.
+#' @param pp Posterior predictives created by ``post_predict``
+#' @param subject Integer or string selecting a subject from the data. If specified will only plot that subject
+#' (default NULL = all).
 #' @param factors Character vector of factors in data to display separately. If
 #' NULL (default) use names of all columns in data except "trials","R", and "rt".
 #' Omitted factors are aggregated over. If NA treats entire data set as a single cell.
 #' Must be NA or NULL when using stat argument.
-#' @param functions A named list of functions that create new factors which cna then be
+#' @param functions A named list of functions that create new factors which can then be
 #' used by the factors and stat arguments.
 #' @param stat A function that takes a the data and returns a single value.
 #' @param stat_name A string naming what the stat argument calculates.
-#' @param ci Credible interval and central tendency quantiles for return when
-#' stat argument is supplied (default c(.025,.5,.975))
-#' @param do_plot Boolean (default TRUE) for making a plot
-#' @param xlim x-axis plot limit, 2-vector (same for all) or matrix (one row for each paramter)
-#' @param ylim y-axis plot limit, 2-vector (same for all) or matrix (one row for each paramter)
-#' @param layout 2-vector specifying par(mfrow) or par(mfcol) (default NULL use current,
-#' NA keeps par currently active).
-#' @param mfcol Boolean, default TRUE use mfcol else mfrow.
-#' @param probs Vector of probabilities at which to calculate cdf (default percentiles)
-#' @param data_lwd Integer line width for data in cdf (default = 2)
-#' @param fit_lwd Integer line widht for fit in cdf (default = 1)
-#' @param qp_cex cex for data quantile points in cdf
-#' @param q_points Quantile points to plot in cdf (default c(.1,.3,.5,.7,.9))
-#' @param pqp_cex cex for predicted quantile points in cdf
-#' @param lpos Legend position (see legend)
+#' @param quants A vector. Quantiles to return when
+#' stat argument is supplied.
+#' @param do_plot Boolean. Set to ``FALSE`` to only return the quantiles and omit the plots.
+#' @param xlim x-axis plot limit. If a vector is supplied will use the same axes for all.
+#  Alternatively a matrix can be supplied with one row for each parameter.
+#' @param ylim y-axis plot limit. If a vector is supplied will use the same axes for all.
+#  Alternatively a matrix can be supplied with one row for each parameter.
+#' @param layout A vector specifying the layout as in par(mfrow = layout).
+#' If NA or NULL use current.
+#' @param probs Vector of probabilities at which to calculate cdf
+#' @param data_lwd Integer. Line width for data in cdf
+#' @param fit_lwd Integer. Line width for posterior predictives in cdf
+#' @param qp_cex Numeric. Cex for data quantile points in cdf
+#' @param q_points Vector. Quantile points to plot in cdf
+#' @param pqp_cex Numeric. Cex for predicted quantile points in cdf
+#' @param lpos Character. Legend position, see ``?legend``.
 #' @param signalFactor The name of the "signal" factor in an ROC.
-#' @param zROC Boolean, (default FALSE) to plot ROC on transformed scale.
-#' @param qfun Scale transform function for zROC (default qnorm)
-#' @param lim 2-vector for x and y limit of ROC
-#' @param rocfit_cex cex for predicted ROC points (default = 0.5.
-#' @param adjust Control of smoothing in density plots
+#' @param zROC Boolean. Wheter to plot ROC on transformed scale.
+#' @param qfun A function. Scale transform function for zROC (default qnorm)
+#' @param lim Vector. Limits for x and y limit of ROC
+#' @param rocfit_cex Numeric. Cex for predicted ROC points
+#' @param adjust Numeric. Density function bandwidth adjust parameter. See ``?density`
 #' @param main Text title, pasted before cell name.
 #'
 #' @return If stat argument is provided a table of observed values and predicted quantiles
 #' @export
 plot_fit <- function(data,pp,subject=NULL,factors=NULL,functions=NULL,
                      stat=NULL,stat_name="",adjust=1,
-                     ci=c(.025,.5,.975),do_plot=TRUE,
+                     quants=c(.025,.5,.975),do_plot=TRUE,
                      xlim=NULL,ylim=NULL,main="",
-                     layout=NULL,mfcol=TRUE,
+                     layout=NULL,
                      probs=c(1:99)/100,
                      data_lwd=2,fit_lwd=1,qp_cex=1,
                      q_points=c(.1,.3,.5,.7,.9),pqp_cex=.5,lpos="topleft",
@@ -712,7 +717,7 @@ plot_fit <- function(data,pp,subject=NULL,factors=NULL,functions=NULL,
     }
   }
   if (!any(is.na(layout))) if (!is.null(layout))
-      if (mfcol) par(mfcol=layout) else par(mfrow=layout)
+      par(mfrow=layout)
   if (all(is.na(data$rt))) {  # type=SDT
     if (length(levels(data$R))==2 & is.null(stat))
       stop("No plots for binary responses, use an accuracy function in stat arguement.")
@@ -728,18 +733,18 @@ plot_fit <- function(data,pp,subject=NULL,factors=NULL,functions=NULL,
         ucells <- sort(unique(cells))
       } else ucells <- ""
       tab <- matrix(nrow=length(ucells),ncol=4,
-                    dimnames=list(ucells,c("Observed",names(quantile(1:5,ci)))))
+                    dimnames=list(ucells,c("Observed",names(quantile(1:5,quants)))))
       for (i in ucells) {
         if (i=="") {
           obs <- stat(dat)
           ppi <- pp
           pred <- sapply(postn,function(x){stat(ppi[ppi$postn==x,])})
-          tab[1,] <- c(obs,quantile(pred,ci))
+          tab[1,] <- c(obs,quantile(pred,quants))
         } else {
           obs <- stat(dat[cells==i,])
           ppi <- pp[pp_cells==i,]
           pred <- sapply(postn,function(x){stat(ppi[ppi$postn==x,])})
-          tab[i,] <- c(obs,quantile(pred,ci))
+          tab[i,] <- c(obs,quantile(pred,quants))
         }
         if (do_plot) {
           dens <- density(pred,adjust=adjust)
@@ -803,20 +808,20 @@ plot_fit <- function(data,pp,subject=NULL,factors=NULL,functions=NULL,
       postn <- unique(pp$postn)
       if (any(is.na(fnams))) ucells <- "" else ucells <- sort(unique(cells))
       tab <- matrix(nrow=length(ucells),ncol=4,
-                    dimnames=list(ucells,c("Observed",names(quantile(1:5,ci)))))
+                    dimnames=list(ucells,c("Observed",names(quantile(1:5,quants)))))
       for (i in ucells) {
         if (i=="") {
           dati <- dat
           ppi <- pp
           obs <- stat(dati)
           pred <- sapply(postn,function(x){stat(ppi[ppi$postn==x,])})
-          tab[1,] <- c(obs,quantile(pred,ci))
+          tab[1,] <- c(obs,quantile(pred,quants))
         } else {
           dati <- dat[cells==i,]
           ppi <- pp[pp_cells==i,]
           obs <- stat(dati)
           pred <- sapply(postn,function(x){stat(ppi[ppi$postn==x,])})
-          tab[i,] <- c(obs,quantile(pred,ci))
+          tab[i,] <- c(obs,quantile(pred,quants))
         }
         if (do_plot) {
           dens <- density(pred,adjust=adjust)

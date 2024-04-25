@@ -13,13 +13,12 @@ plot_fit(
   stat = NULL,
   stat_name = "",
   adjust = 1,
-  ci = c(0.025, 0.5, 0.975),
+  quants = c(0.025, 0.5, 0.975),
   do_plot = TRUE,
   xlim = NULL,
   ylim = NULL,
   main = "",
   layout = NULL,
-  mfcol = TRUE,
   probs = c(1:99)/100,
   data_lwd = 2,
   fit_lwd = 1,
@@ -35,86 +34,85 @@ plot_fit(
 )
 }
 \arguments{
-\item{data}{Data frame with subjects and R factors, and possibly other factors
-and an rt column}
+\item{data}{A dataframe. The experimental data in EMC format with at least the subjects factor,
+R (response factor) and rt (response time) columns,
+and optionally other factor columns of the design.}
 
-\item{pp}{Posterior predictives created by post_predict}
+\item{pp}{Posterior predictives created by \code{post_predict}}
 
-\item{subject}{Integer or string picking out subject(s) to plot.}
+\item{subject}{Integer or string selecting a subject from the data. If specified will only plot that subject
+(default NULL = all).}
 
 \item{factors}{Character vector of factors in data to display separately. If
 NULL (default) use names of all columns in data except "trials","R", and "rt".
 Omitted factors are aggregated over. If NA treats entire data set as a single cell.
 Must be NA or NULL when using stat argument.}
 
-\item{functions}{A named list of functions that create new factors which cna then be
+\item{functions}{A named list of functions that create new factors which can then be
 used by the factors and stat arguments.}
 
 \item{stat}{A function that takes a the data and returns a single value.}
 
 \item{stat_name}{A string naming what the stat argument calculates.}
 
-\item{adjust}{Control of smoothing in density plots}
+\item{adjust}{Numeric. Density function bandwidth adjust parameter. See ``?density`}
 
-\item{ci}{Credible interval and central tendency quantiles for return when
-stat argument is supplied (default c(.025,.5,.975))}
+\item{quants}{A vector. Quantiles to return when
+stat argument is supplied.}
 
-\item{do_plot}{Boolean (default TRUE) for making a plot}
+\item{do_plot}{Boolean. Set to \code{FALSE} to only return the quantiles and omit the plots.}
 
-\item{xlim}{x-axis plot limit, 2-vector (same for all) or matrix (one row for each paramter)}
+\item{xlim}{x-axis plot limit. If a vector is supplied will use the same axes for all.}
 
-\item{ylim}{y-axis plot limit, 2-vector (same for all) or matrix (one row for each paramter)}
+\item{ylim}{y-axis plot limit. If a vector is supplied will use the same axes for all.}
 
 \item{main}{Text title, pasted before cell name.}
 
-\item{layout}{2-vector specifying par(mfrow) or par(mfcol) (default NULL use current,
-NA keeps par currently active).}
+\item{layout}{A vector specifying the layout as in par(mfrow = layout).
+If NA or NULL use current.}
 
-\item{mfcol}{Boolean, default TRUE use mfcol else mfrow.}
+\item{probs}{Vector of probabilities at which to calculate cdf}
 
-\item{probs}{Vector of probabilities at which to calculate cdf (default percentiles)}
+\item{data_lwd}{Integer. Line width for data in cdf}
 
-\item{data_lwd}{Integer line width for data in cdf (default = 2)}
+\item{fit_lwd}{Integer. Line width for posterior predictives in cdf}
 
-\item{fit_lwd}{Integer line widht for fit in cdf (default = 1)}
+\item{qp_cex}{Numeric. Cex for data quantile points in cdf}
 
-\item{qp_cex}{cex for data quantile points in cdf}
+\item{q_points}{Vector. Quantile points to plot in cdf}
 
-\item{q_points}{Quantile points to plot in cdf (default c(.1,.3,.5,.7,.9))}
+\item{pqp_cex}{Numeric. Cex for predicted quantile points in cdf}
 
-\item{pqp_cex}{cex for predicted quantile points in cdf}
-
-\item{lpos}{Legend position (see legend)}
+\item{lpos}{Character. Legend position, see \code{?legend}.}
 
 \item{signalFactor}{The name of the "signal" factor in an ROC.}
 
-\item{zROC}{Boolean, (default FALSE) to plot ROC on transformed scale.}
+\item{zROC}{Boolean. Wheter to plot ROC on transformed scale.}
 
-\item{qfun}{Scale transform function for zROC (default qnorm)}
+\item{qfun}{A function. Scale transform function for zROC (default qnorm)}
 
-\item{lim}{2-vector for x and y limit of ROC}
+\item{lim}{Vector. Limits for x and y limit of ROC}
 
-\item{rocfit_cex}{cex for predicted ROC points (default = 0.5.}
+\item{rocfit_cex}{Numeric. Cex for predicted ROC points}
 }
 \value{
 If stat argument is provided a table of observed values and predicted quantiles
 }
 \description{
-If rt  available plots Defective cumulative distributions
-functions (CDFs), if not plots ROC. If stat the argument (which calculates
-a statistics based on the data) is supplied fit is plotted as a density with
-a vertical line at the position of the data statistic. If more than one
-subject is included data and fits are aggregated over subjects. If data or
-fit contains NA in responses or rt, or is.infinite(rt) these are treating as
-missing and defective cdfs sum to the probability of non-missing.
-}
-\details{
+If rt  available plots defective cumulative distributions
+functions (CDFs), if not plots region under curve (ROC).
 CDFs plot the probability of a response, p(R) as a function of response time
 (RT) for data (black lines and points at qpoints quantiles) and posterior-
-}
-\section{predictive simulations (grey lines and points). Large grey points show the}{
+predictive simulations (grey lines and points). Large grey points show the
 average of replicate quantiles and small grey points percentiles for
 individual replicates, providing a representation of uncertainty in the model
 predictions.
 }
-
+\details{
+If the stat argument (which calculates
+a statistic based on the data) is supplied fit is plotted as a density with
+a vertical line at the position of the data statistic. If more than one
+subject is included data and fits are aggregated over subjects. If data or
+fit contains NA in responses or rt, or is.infinite(rt) these are treated as
+missing and defective cdfs sum to the probability of non-missing.
+}
