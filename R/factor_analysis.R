@@ -208,16 +208,14 @@ standardize_loadings <- function(samplers = NULL, loadings = NULL, sig_err_inv =
 #' An adjusted version of the `corrplot` package function `corrplot()` tailored
 #' to `EMC2` and the plotting of correlations.
 #'
-#' @param samplers A list of samplers
-#' @param filter Character. The stage from which to take the samples
-#' @param loadings An array of loadings. Can be alternatively supplied if samplers is not supplied
-#' @param standardize Boolean. Whether to standardize the loadings. Only standardizes if loadings isn't supplied.
-#' @param corrs An array of correlations Can be alternatively supplied if samplers is not supplied
-#' @param plot_cred Boolean. Whether to plot the credible intervals
-#' @param plot_means Boolean. Whether to plot the means
-#' @param do_corr Boolean. If samplers is suplied, whether to take the correlations rather than the loadings
+#' @param samplers An EMC2 samplers object, commonly the output of `run_emc()`.
+#' @param filter Character. The stage from which to take the samples, defaults to
+#' the sampling stage `sample`.
+#' @param corrs An array of correlations. Can be supplied alternatively if samplers is not supplied
+#' @param plot_cred Boolean. Whether to plot the credible intervals or not
+#' @param plot_means Boolean. Whether to plot the means or not
 #' @param only_cred Boolean. Whether to only plot credible values
-#' @param nice_names Boolean. Alternative names to give the parameters
+#' @param nice_names Character string. Alternative names to give the parameters
 #'
 #' @return NULL
 #' @examples \dontrun{
@@ -229,15 +227,16 @@ standardize_loadings <- function(samplers = NULL, loadings = NULL, sig_err_inv =
 #' }
 #' @export
 #'
-plot_relations <- function(samplers = NULL, filter = "sample", corrs = NULL, plot_cred = TRUE,
-                           plot_means = T, do_corr = F, only_cred = F,
-                           nice_names = NULL, ...){
+plot_relations <- function(samplers = NULL, filter = "sample",  plot_cred = TRUE,
+                           plot_means = TRUE, only_cred = FALSE, nice_names = NULL, ...){
 
   # for future factor model compatibility
   loadings <- NULL
   standardize <- TRUE
+  do_corr <- TRUE
+  corrs <- NULL
 
-  # overwrite those that were supplied
+  # overwrite the optionals that were supplied
   optionals <- list(...)
   for (name in names(optionals) ) {
     assign(name, optionals[[name]])

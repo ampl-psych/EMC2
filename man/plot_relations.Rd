@@ -7,35 +7,28 @@
 plot_relations(
   samplers = NULL,
   filter = "sample",
-  corrs = NULL,
   plot_cred = TRUE,
-  plot_means = T,
-  do_corr = F,
-  only_cred = F,
+  plot_means = TRUE,
+  only_cred = FALSE,
   nice_names = NULL,
   ...
 )
 }
 \arguments{
-\item{samplers}{A list of samplers}
+\item{samplers}{An EMC2 samplers object, commonly the output of \code{run_emc()}.}
 
-\item{filter}{Character. The stage from which to take the samples}
+\item{filter}{Character. The stage from which to take the samples, defaults to
+the sampling stage \code{sample}.}
 
-\item{corrs}{An array of correlations Can be alternatively supplied if samplers is not supplied}
+\item{plot_cred}{Boolean. Whether to plot the credible intervals or not}
 
-\item{plot_cred}{Boolean. Whether to plot the credible intervals}
-
-\item{plot_means}{Boolean. Whether to plot the means}
-
-\item{do_corr}{Boolean. If samplers is suplied, whether to take the correlations rather than the loadings}
+\item{plot_means}{Boolean. Whether to plot the means or not}
 
 \item{only_cred}{Boolean. Whether to only plot credible values}
 
-\item{nice_names}{Boolean. Alternative names to give the parameters}
+\item{nice_names}{Character string. Alternative names to give the parameters}
 
-\item{loadings}{An array of loadings. Can be alternatively supplied if samplers is not supplied}
-
-\item{standardize}{Boolean. Whether to standardize the loadings. Only standardizes if loadings isn't supplied.}
+\item{corrs}{An array of correlations. Can be supplied alternatively if samplers is not supplied}
 }
 \description{
 An adjusted version of the \code{corrplot} package function \code{corrplot()} tailored
