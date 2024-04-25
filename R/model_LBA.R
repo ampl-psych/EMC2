@@ -135,18 +135,20 @@ rLBA <- function(lR,pars,p_types=c("v","sv","b","A","t0"),posdrift = TRUE,
 {
   bad <- rep(NA, length(lR)/length(levels(lR)))
   out <- data.frame(R = bad, rt = bad)
+  nr <- length(levels(lR))
+  dt <- matrix(Inf,nrow=nr,ncol=nrow(pars)/nr)
+  t0 <- pars[,"t0"]
   pars <- pars[ok,]
   if (!all(p_types %in% dimnames(pars)[[2]]))
     stop("pars must have columns ",paste(p_types,collapse = " "))
-  dt <- matrix((pars[,"b"]-pars[,"A"]*runif(dim(pars)[1]))/
-                 msm::rtnorm(dim(pars)[1],pars[,"v"],pars[,"sv"],ifelse(posdrift,0,-Inf)),
-               nrow=length(levels(lR)))
-  bad <- apply(dt,2,function(x){all(x<0)})
+  dt[ok] <- (pars[,"b"]-pars[,"A"]*runif(dim(pars)[1]))/
+    msm::rtnorm(dim(pars)[1],pars[,"v"],pars[,"sv"],ifelse(posdrift,0,-Inf))
   dt[dt<0] <- Inf
+  bad <- apply(dt,2,function(x){all(is.infinite(x))})
   R <- apply(dt,2,which.min)
   pick <- cbind(R,1:dim(dt)[2]) # Matrix to pick winner
   # Any t0 difference with lR due to response production time (no effect on race)
-  rt <- matrix(pars[,"t0"],nrow=length(levels(lR)))[pick] + dt[pick]
+  rt <- matrix(t0,nrow=nr)[pick] + dt[pick]
   R <- factor(levels(lR)[R],levels=levels(lR))
   R[bad] <- NA
   rt[bad] <- Inf
@@ -156,8 +158,6 @@ rLBA <- function(lR,pars,p_types=c("v","sv","b","A","t0"),posdrift = TRUE,
   out$rt[ok] <- rt
   out
 }
-
-
 #### Model functions ----
 
 #' The Linear Ballistic Accumulator model
