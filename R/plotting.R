@@ -31,7 +31,7 @@
 #' @export
 
 plot_chains <- function(samplers,layout=NA,subject=NA,ylim=NULL,
-                        selection="alpha",filter="sample",thin=1,subfilter=0,
+                        selection="mu",filter="sample",thin=1,subfilter=0,
                         plot_acf=FALSE,acf_chain=1) # ,use_par=NA
   # Plots chains  (if alpha, LL or epsilon can do individual subject, all by default)
 {
@@ -200,12 +200,12 @@ plot_alpha_recovery <- function(tabs,layout=c(2,3),
 #' @param subject Integer or string selecting a subject from the data. If specified will only plot that subject
 #' (default NULL = all).
 #' @param factors character vector of factor names in design to aggregated across (default NULL = all).
-#' @param layout 2-vector specifying par(mfrow), default NULL uses current layout.
+#' @param layout vector specifying plot window layout: par(mfrow = layout), default NULL uses current plot window layout.
 #' @param xlim x-axis limit for all cells (default NULL = scale per cell).
 #' @param bw number or string bandwidth for density (default "nrd0"). See ``?density``.
-#' @param adjust density function bandwidth adjust parameter. See ``?density``.
+#' @param adjust Numeric. Density function bandwidth adjust parameter. See ``?density``.
 #' @param correct_fun If specified will calculate the accuracy for each subject using the supplied function and
-#' invisibly return an accuracy vector for each subject.
+#' invisibly returns an accuracy vector for each subject.
 #' @param rt legend function position string for mean RT (default "top)
 #' @param accuracy legend function position string for accuracy (default "topright")
 #'
@@ -284,63 +284,60 @@ plot_defective_density <- function(data,subject=NULL,factors=NULL,
 }
 
 
-# layout=c(2,3);selection="alpha";filter="sample";thin=1;subfilter=0;mapped=FALSE
-# plot_prior=TRUE;n_prior=1e3;xlim=NULL;ylim=NULL;
-# show_chains=FALSE;do_plot=TRUE;subject=NA;add_means=FALSE;
-# pars=NULL;probs=c(.025,.5,.975);bw = "nrd0";adjust = 1
-# subject=1; filter="burn"; subfilter=300
 
-#' Plots density for parameter estimates.
+#' Plots density for parameters.
 #'
-#' @param pmwg_mcmc A list of samplers or samplers converted to mcmc objects.
-#' @param layout A 2-vector specifying the layout as in par(mfrow = layout).
-#' If NA or NULL use current.
-#' @param selection String designating parameter type (mu, variance, correlation, alpha = default)
+#' Plots the posterior and prior density for selected parameters of a model.
+#'
+#' @param samplers A list of samplers.
+#' @param layout A vector specifying the layout as in par(mfrow = layout).
+#' If NA or NULL use current plot layout.
+#' @param selection A string. Which parameter type to plot ("alpha", "mu", "variance", "covariance", "correlation").
 #' @param use_par Character vector of names of parameters to plot (default NULL = plot all)
-#' @param filter A string. Specifies which stage you want to plot.
-#' @param thin An integer. Keep only iterations that are a multiple of thin.
+#' @param filter A string. Specifies from which stage you want to plot the densities ("preburn", "burn", "adapt", "sample")
+#' @param thin An integer. Will keep only iterations of the MCMC chains that are a multiple of ``thin``.
 #' @param subfilter An integer or vector. If integer it will exclude up until
 #' that integer. If vector it will include everything in that range.
-#' @param mapped Boolean (default FALSE) if TRUE plot parameters mapped to design
-#' otherwise sampled parameters
-#' @param plot_prior Boolean. Add prior distribution to plot (in red)
-#' @param n_prior Number of samples to approximate prior (default = 1e3)
-#' @param xlim x-axis plot limit, 2-vector (same for all) or matrix (one row for each parameter)
-#' @param ylim y-axis plot limit, 2-vector (same for all) or matrix (one row for each parameter)
+#' @param mapped Boolean. If TRUE plots the parameters mapped back to experimental design
+#' otherwise plots the sampled parameters.
+#' @param plot_prior Boolean. Overlay prior density in the plot (in red)
+#' @param xlim x-axis plot limit. If a vector is supplied will use the same axes for all.
+#  Alternatively a matrix can be supplied with one row for each parameter.
+#' @param ylim y-axis plot limit. If a vector is supplied will use the same axes for all.
+#  Alternatively a matrix can be supplied with one row for each parameter.
 #' @param prior_xlim A vector giving upper and lower quantiles of prior when choosing
-#' xlim if plot_prior is TRUE. If set to NULL xlim is used instead.
+#' xlim if ``plot_prior = TRUE``. If set to NULL xlim is used instead.
 #' @param show_chains Boolean (default FALSE) plot separate density for each chain.
-#' @param do_plot Boolean (default TRUE) do plot
-#' @param subject Integer or character vector, if selection = "alpha" picks out
-#' subject(s) (default NA plots all).
-#' @param add_means Boolean (default FALSE) add parameter means as an attribute
-#' to return
-#' @param pars Named vector or matrix of true parameters, or the output of
-#' plot_pars, in which case the posterior medians are extracted. If supplied with
-#' no xlim the plot will be adjusted to include the parameter values, which are
-#' plotted as vertical lines.
-#' @param probs Vector (default c(.025,.5,.975)) for CI and central tendency of return
-#' @param bw Bandwidth for density plot (see density)
-#' @param adjust Adjustment for density plot (see density)
-#' @param do_contraction Print the prior to posterior contraction (1 - var(prior)/var(posterior))
-#' @param lpos Position of contraction in graph
-#' @param digits Rounding of contraction
-#' @param use_main Character string for title to use. If NULL (defualt) auto generated.
+#' @param do_plot Boolean. Set to ``FALSE`` to only return the parameter credible intervals and omit the plots.
+#' @param subject Integer or character vector. Only applicable if ``selection = "alpha"``. Will plot only these subject(s).
+#' NA (default) will plot all.
+#' @param add_means Boolean. Whether to add parameter means as an attribute
+#' to return invisibly
+#' @param pars Named vector or matrix of known/simulated parameters, or the output of
+#' plot_pars, in which case the posterior medians are extracted. If xlim is not supplied,
+#  the plot will be adjusted to include the parameter values, which are plotted as vertical lines.
+#' @param probs Vector. The quantiles of the selected parameters to return invisibly.
+#' @param bw number or string bandwidth for density (default "nrd0"). See ``?density``.
+#' @param adjust Numeric. Adjustment for density plot. See ``?density``
+#' @param lpos Character. Position of the contraction in the plot
+#' @param digits Integer. Rounding of contraction
 #'
-#' @return Invisibly returns tables of true and 95% CIs (for all chains combined
-#'no matter what show_chains is), if do_contraction with a "contraction" attribute.
-#'
+#' @return invisibly return quantiles for the selected parameters
+#' @examples \dontrun{
+#' # For a set of samplers plot prior and posterior densities:
+#' plot_pars(samplers)
+#' # Or just get the quantiles and omit the plot
+#' quants <- plot_pars(samplers, selection = "variance", do_plot = FALSE)
+#' print(quants)
+#' }
 #' @export
-plot_pars <- function(pmwg_mcmc,layout=c(2,3),use_par=NULL,
-                      selection="alpha",filter="sample",thin=1,subfilter=0,mapped=FALSE,
-                      plot_prior=TRUE,n_prior=1e3,xlim=NULL,ylim=NULL,prior_xlim=c(.05,.95),
+plot_pars <- function(samplers,layout=c(2,3),use_par=NULL,
+                      selection="mu",filter="sample",thin=1,subfilter=0,mapped=FALSE,
+                      plot_prior=TRUE,xlim=NULL,ylim=NULL,prior_xlim=c(.1,.9),
                       show_chains=FALSE,do_plot=TRUE,subject=NA,add_means=FALSE,
                       pars=NULL,probs=c(.025,.5,.975),bw = "nrd0", adjust = 1,
-                      do_contraction=TRUE,lpos="topright",digits=3,
-                      use_main=NULL)
-  #  (if alpha can do individual subject, all by default)
-  # If show_chains superimposes densities for each chain on same plot
-  #
+                      lpos="topright",digits=3)
+
 {
 
   robust_density <- function(ps,r,bw,adjust,use_robust=FALSE)
@@ -362,13 +359,14 @@ plot_pars <- function(pmwg_mcmc,layout=c(2,3),use_par=NULL,
       dens
     } else density(ps,bw=bw,adjust=adjust)
   }
-
+  n_prior <- 1e3
+  pmwg_mcmc <- samplers
   if (mapped & !(selection %in% c("mu","alpha")))
     stop("mapped only available for mu and alpha")
 
   if (show_chains & plot_prior)
     warning("Prior plots not implemented for show_chains=TRUE")
-
+  do_contraction <- TRUE
   if (do_contraction & !plot_prior) do_contraction <- FALSE
 
   if (is.list(pars)) pars <- do.call(rbind,lapply(pars,function(x)x[2,]))
@@ -398,6 +396,8 @@ plot_pars <- function(pmwg_mcmc,layout=c(2,3),use_par=NULL,
     stop("No density plots for LL\n")
   no_layout <- any(is.na(layout)) | is.null(layout)
   chains <- 0
+
+
   if (attr(pmwg_mcmc,"selection") == "alpha") {
     snams <- names(pmwg_mcmc)
     if (any(is.na(subject))) subject <- snams
@@ -448,8 +448,7 @@ plot_pars <- function(pmwg_mcmc,layout=c(2,3),use_par=NULL,
             if (!is.null(ylim)) {
               if (!is.matrix(ylim)) ylimi <- ylim else ylimi <- ylim[j,]
             } else ylimi <- c(0,max(unlist(lapply(dens,function(x){max(x$y)}))))
-            if (!is.null(use_main)) main <- use_main else
-              main <- paste0(attr(pmwg_mcmc,"selection")," s",i)
+            main <- paste0(attr(pmwg_mcmc,"selection")," s",i)
             plot(dens[[1]],xlab=j,main=main,col=1,xlim=xlimi,ylim=ylimi)
             if (chains>1) for (k in 2:chains) lines(dens[[k]],col=k)
           } else {
@@ -471,8 +470,7 @@ plot_pars <- function(pmwg_mcmc,layout=c(2,3),use_par=NULL,
               ylimi <- c(0,max(dens$y))
               if (plot_prior) ylimi[2] <- max(c(ylimi[2],pdens$y))
             }
-            if (!is.null(use_main)) main <- use_main else
-              main <- paste0(attr(pmwg_mcmc,"selection")," s",i)
+            main <- paste0(attr(pmwg_mcmc,"selection")," s",i)
             plot(dens,xlab=j,xlim=xlimi,ylim=ylimi,main=main)
             if (plot_prior) lines(pdens,col="red")
             if (do_contraction) {
@@ -504,6 +502,11 @@ plot_pars <- function(pmwg_mcmc,layout=c(2,3),use_par=NULL,
       if (show_chains) chains <- length(pmwg_mcmc) else
         pmwg_mcmc <- pmwg_mcmc_combined
     } else pmwg_mcmc_combined <- pmwg_mcmc
+    if(!is.null(use_par)){
+      ok <- colnames(pmwg_mcmc_combined) %in% use_par
+      if (!any(ok)) stop("use_par did not specify parameters that are present")
+    }
+
     if (!is.null(pars)) {
       if ( !is.vector(pars) ) {
         if (attr(pmwg_mcmc,"selection") == "mu")
@@ -514,9 +517,15 @@ plot_pars <- function(pmwg_mcmc,layout=c(2,3),use_par=NULL,
           pars <- diag(pars) else
             pars <- pars[lower.tri(pars)]
       }
-      if (length(pars) != dim(pmwg_mcmc_combined)[2])
-        stop("pars is wrong length")
-      names(pars) <- colnames(pmwg_mcmc_combined)
+      if(is.null(use_par)){
+        if (length(pars) != dim(pmwg_mcmc_combined)[2])
+          stop("pars is wrong length")
+        names(pars) <- colnames(pmwg_mcmc_combined)
+      } else{
+        if (length(pars) != length(use_par))
+          stop("pars is wrong length")
+        names(pars) <- use_par
+      }
     }
     tabs <- rbind(true=pars,apply(pmwg_mcmc_combined,2,quantile,probs=probs))
     if (!is.null(pars)) tabs <- rbind(tabs,Miss=tabs[3,]-tabs[1,])
@@ -526,8 +535,6 @@ plot_pars <- function(pmwg_mcmc,layout=c(2,3),use_par=NULL,
     if (do_contraction)
       contraction <- setNames(numeric(length(colnames(pmwg_mcmc_combined))),colnames(pmwg_mcmc_combined))
     if (!is.null(use_par)) {
-      ok <- colnames(pmwg_mcmc_combined) %in% use_par
-      if (!any(ok)) stop("use_par did not specify parameters that are present")
       tabs <- tabs[,ok,drop=FALSE]
     } else ok <- rep(TRUE,length(colnames(pmwg_mcmc_combined)))
     if (do_plot) for (j in colnames(pmwg_mcmc_combined)[ok] ) {
@@ -541,7 +548,7 @@ plot_pars <- function(pmwg_mcmc,layout=c(2,3),use_par=NULL,
         }
         if (!is.null(ylim)) ylimi <- ylim else
           ylimi <- c(0,max(unlist(lapply(dens,function(x){max(x$y)}))))
-        if (!is.null(use_main)) main <- use_main else main <- j
+        main <- j
         plot(dens[[1]],xlab=attr(pmwg_mcmc,"selection"),main=main,
              col=1,xlim=xlimi,ylim=ylimi)
         if (chains>1) for (k in 2:chains) lines(dens[[k]],col=k)
@@ -560,7 +567,7 @@ plot_pars <- function(pmwg_mcmc,layout=c(2,3),use_par=NULL,
           ylimi <- c(0,max(dens$y))
           if (plot_prior) ylimi[2] <- max(c(ylimi[2],pdens$y))
         }
-        if (!is.null(use_main)) main <- use_main else main <- j
+        main <- j
         plot(dens,xlim=xlimi,ylim=ylimi,xlab=attr(pmwg_mcmc,"selection"),main=main)
         if (plot_prior) {
           lines(pdens,col="red")

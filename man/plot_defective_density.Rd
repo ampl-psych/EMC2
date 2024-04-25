@@ -27,16 +27,16 @@ and optionally other factor columns of the design.}
 
 \item{factors}{character vector of factor names in design to aggregated across (default NULL = all).}
 
-\item{layout}{2-vector specifying par(mfrow), default NULL uses current layout.}
+\item{layout}{vector specifying plot window layout: par(mfrow = layout), default NULL uses current plot window layout.}
 
 \item{xlim}{x-axis limit for all cells (default NULL = scale per cell).}
 
 \item{bw}{number or string bandwidth for density (default "nrd0"). See \code{?density}.}
 
-\item{adjust}{density function bandwidth adjust parameter. See \code{?density}.}
+\item{adjust}{Numeric. Density function bandwidth adjust parameter. See \code{?density}.}
 
 \item{correct_fun}{If specified will calculate the accuracy for each subject using the supplied function and
-invisibly return an accuracy vector for each subject.}
+invisibly returns an accuracy vector for each subject.}
 
 \item{rt}{legend function position string for mean RT (default "top)}
 

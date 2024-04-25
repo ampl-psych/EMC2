@@ -9,7 +9,7 @@ plot_chains(
   layout = NA,
   subject = NA,
   ylim = NULL,
-  selection = "alpha",
+  selection = "mu",
   filter = "sample",
   thin = 1,
   subfilter = 0,
