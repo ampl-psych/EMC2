@@ -29,7 +29,9 @@ or a list of tables produced by \code{plot_pars}
 \item{expand}{Integer. Replicates the \code{data} (if supplied) expand times to increase number of trials per cell.}
 
 \item{mapped_p}{If true instead returns a data frame with one row per design
-cell and columns for each parameter specifying how they are mapped to the
+cell and columns for each parameter specifying how they are mapped to the}
+
+\item{...}{Additional optional arguments
 design cells.}
 }
 \value{
@@ -57,8 +59,8 @@ design_DDMaE <- make_design(data = forstmann,model=DDM,
 p_vector=c(v_Sleft=-2,v_Sright=2,a=log(1),a_Eneutral=log(1.5),a_Eaccuracy=log(2),
           t0=log(.2),Z=qnorm(.5),sv=log(.5),SZ=qnorm(.5))
 # Now we can simulate data
-make_data(p_vector, design_DDMaE, n_trials = 30)
+data <- make_data(p_vector, design_DDMaE, n_trials = 30)
 
 # We can also simulate data based on the Forstmann data
-make_data(p_vector, design_DDMaE, data = forstmann)
+data <- make_data(p_vector, design_DDMaE, data = forstmann)
 }

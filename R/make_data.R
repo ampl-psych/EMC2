@@ -70,8 +70,8 @@ make_missing <- function(data,LT=0,UT=Inf,LC=0,UC=Inf,
 #' @param expand Integer. Replicates the ``data`` (if supplied) expand times to increase number of trials per cell.
 #' @param mapped_p If true instead returns a data frame with one row per design
 #' cell and columns for each parameter specifying how they are mapped to the
+#' @param ... Additional optional arguments
 #' design cells.
-
 #' @return A dataframe with simulated data
 #' @examples
 #' # First create a design
@@ -82,10 +82,10 @@ make_missing <- function(data,LT=0,UT=Inf,LC=0,UC=Inf,
 #' p_vector=c(v_Sleft=-2,v_Sright=2,a=log(1),a_Eneutral=log(1.5),a_Eaccuracy=log(2),
 #'           t0=log(.2),Z=qnorm(.5),sv=log(.5),SZ=qnorm(.5))
 #' # Now we can simulate data
-#' make_data(p_vector, design_DDMaE, n_trials = 30)
+#' data <- make_data(p_vector, design_DDMaE, n_trials = 30)
 #'
 #' # We can also simulate data based on the Forstmann data
-#' make_data(p_vector, design_DDMaE, data = forstmann)
+#' data <- make_data(p_vector, design_DDMaE, data = forstmann)
 #' @export
 
 make_data <- function(p_vector,design,n_trials=NULL,data=NULL,expand=1,
@@ -401,7 +401,8 @@ post_predict <- function(samples,hyper=FALSE,n_post=100,expand=1,
 #' subj_pars <- make_random_effects(design_DDMaE, group_means, n_subj = 5)
 #'
 #' # We can also define a covariance matrix to simulate from
-#' subj_pars <- make_random_effects(design_DDMaE, group_means, n_subj = 5, covariances = diag(.1, length(group_means)))
+#' subj_pars <- make_random_effects(design_DDMaE, group_means, n_subj = 5,
+#'              covariances = diag(.1, length(group_means)))
 #'
 #' # The subject level parameters can be used to generate data
 #' make_data(subj_pars, design_DDMaE, n_trials = 10)
