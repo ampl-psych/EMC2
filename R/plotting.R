@@ -12,7 +12,7 @@
 #' @param ylim A vector. The y limits of the chain plot.
 #' @param selection String. Which parameter type to plot ("alpha", "mu", "variance", "covariance", "correlation").
 #' "LL" will plot the log-likelihood chains.
-#' @param filter A string. Specifies from which stage you want to plot the MCMC chains ("preburn", "burn", "adapt", "sample")                        .
+#' @param filter A string. Specifies from which stage you want to plot the MCMC chains ("preburn", "burn", "adapt", "sample")
 #' @param thin An integer. Will keep only iterations of the MCMC chains that are a multiple of ``thin``.
 #' @param subfilter An integer or vector. If integer it will exclude up until
 #' that integer. If vector it will include everything in that range.
