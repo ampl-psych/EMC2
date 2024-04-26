@@ -257,32 +257,30 @@ add_Ffunctions <- function(data,design)
     data <-  cbind.data.frame(data,Fdf[,ok,drop=FALSE])
 }
 
-#' Generate posterior predictives based on subject (alpha) parameters
+#' Generate posterior predictives.
 #'
-#' @param samples A list of samples from which you want to generate posterior predictives.
-#' @param hyper Boolean. Default is FALSE, if true simulates from the group level.
+#' Generates ``n_post`` data sets based on posterior parameter estimates
+#'
+#' @param samplers A list of samples from which you want to generate posterior predictives.
+#' @param hyper Boolean. Default is FALSE, if true simulates from the group level instead of subject-level parameters. Only makes sense when aggregating across subjects
 #' @param n_post Integer. How many data sets do you want to generate from the posterior.
-#' @param expand Integer. Default is 1, exact same design for each subject. Larger values will replicate designs, so more trials per subject.
-#' @param filter Character. Choice of the stages 'pre-burn', 'burn', 'adapt', 'sample', default is 'sample'. From which stage do you want to take samples to generate new data with.
+#' @param filter Character. Choice of the stages 'preburn', 'burn', 'adapt', 'sample', default is 'sample'. From which stage do you want to take samples to generate new data with.
 #' @param subfilter Integer or numeric vector. If integer, will filter out the first x of samples, within your filter. If numeric vector will select those samples, within your filter.
-#' @param thin Integer. By how much do you want to thin the chains before simulating from them.
-#' @param n_cores Integer. Across how many cores do you want to parallelize.
-#' @param use_par Character. Can be mean, median or default random. Will take either random samples from the chain or as specified.
-#' @param force_direction Boolean, take censor direction from argument not samples (default FALSE)
-#' @param force_response Boolean, take censor response from argument not samples (default FALSE)
-#' @param LCresponse Boolean, default TRUE, if false set LC response to NA
-#' @param UCresponse Boolean, default TRUE, if false set UC response to NA
-#' @param LCdirection Boolean, default TRUE, set LC rt to 0, else to NA
-#' @param UCdirection Boolean, default TRUE, set LC rt to Inf, else to NA
-#'
+#' @param thin Integer. By how much do you want to thin the chains before simulating from them. Will keep 1/thin samples.
+#' @param n_cores Integer. Across how many cores do you want to parallellize.
+#' @param stat Character. Can be mean, median or default random. Will take either random samples from the chain or use the mean or median of the parameter estimates.
+#' @param ... Optional additional arguments
 #' @return A list of simulated data sets of length n_post.
+#' @examples \dontrun{
+#' # based on a set of samplers ran by run_emc we can generate posterior predictives
+#' post_predict(samplers, n_cores = 8)
+#' }
 #' @export
 
-post_predict <- function(samples,hyper=FALSE,n_post=100,expand=1,
+
+post_predict <- function(samplers,hyper=FALSE,n_post=100,
                          filter="sample",subfilter=0,thin=1,n_cores=1,
-                         use_par=c("random","mean","median")[1],
-                         LCresponse=TRUE,UCresponse=TRUE,LCdirection=TRUE,UCdirection=TRUE,
-                         force_direction=FALSE,force_response=FALSE)
+                         stat=c("random","mean","median")[1], ...)
   # Post predictions for samples object, based on random samples or some
   # central tendency statistic.
   # n_post is number of parameter vectors used
@@ -291,38 +289,51 @@ post_predict <- function(samples,hyper=FALSE,n_post=100,expand=1,
   # hyper=FALSE draws from alphas (participant level)
   # hyper=TRUE draws from hyper
 {
+  # #' @param force_direction Boolean, take censor direction from argument not samples (default FALSE)
+  # #' @param force_response Boolean, take censor response from argument not samples (default FALSE)
+  # #' @param LCresponse Boolean, default TRUE, if false set LC response to NA
+  # #' @param UCresponse Boolean, default TRUE, if false set UC response to NA
+  # #' @param LCdirection Boolean, default TRUE, set LC rt to 0, else to NA
+  # #' @param UCdirection Boolean, default TRUE, set LC rt to Inf, else to NA
+  # #' @param expand Integer. Default is 1, exact same design for each subject. Larger values will replicate designs, so more trials per subject.
 
-  data <- attr(samples,"data_list")
-  design <- attr(samples,"design_list")
-  model <- attr(samples,"model_list")
+  LCresponse<-TRUE; UCresponse<-TRUE; LCdirection<-TRUE; UCdirection<-TRUE
+  force_direction <- FALSE; force_response <- FALSE;expand <- 1
+  optionals <- list(...)
+  for (name in names(optionals) ) {
+    assign(name, optionals[[name]])
+  }
+  data <- attr(samplers,"data_list")
+  design <- attr(samplers,"design_list")
+  model <- attr(samplers,"model_list")
   if(length(data) > 1){
     jointModel <- TRUE
-    all_samples <- samples
+    all_samples <- samplers
   } else{
     jointModel <- FALSE
   }
   post_out <- vector("list", length = length(data))
   for(j in 1:length(data)){
-    if(jointModel) samples <- single_out_joint(all_samples, j)
+    if(jointModel) samplers <- single_out_joint(all_samples, j)
     subjects <- levels(data[[j]]$subjects)
 
     if (hyper) {
       pars <- vector(mode="list",length=n_post)
       for (i in 1:n_post) {
-        pars[[i]] <- get_prior_samples(samples,selection="alpha",
+        pars[[i]] <- get_prior_samples(samplers,selection="alpha",
                                        filter=filter,thin=thin,subfilter=subfilter,n_prior=length(subjects))
         row.names(pars[[i]]) <- subjects
       }
     } else {
-      samps <- lapply(as_mcmc.list(samples,selection="alpha",
+      samps <- lapply(as_mcmc.list(samplers,selection="alpha",
                                    filter=filter,subfilter=subfilter,thin=thin),function(x){do.call(rbind,x)})
-      if (use_par != "random") {
-        p <- do.call(rbind,lapply(samps,function(x){apply(x,2,use_par)}))
+      if (stat != "random") {
+        p <- do.call(rbind,lapply(samps,function(x){apply(x,2,stat)}))
         row.names(p) <- subjects
       }
       pars <- vector(mode="list",length=n_post)
       for (i in 1:n_post) {
-        if (use_par != "random") pars[[i]] <- p else {
+        if (stat != "random") pars[[i]] <- p else {
           pars[[i]] <- do.call(rbind,lapply(samps,function(x){x[sample(1:dim(x)[1],1),]}))
           row.names(pars[[i]]) <- subjects
         }

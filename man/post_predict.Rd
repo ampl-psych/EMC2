@@ -2,60 +2,48 @@
 % Please edit documentation in R/make_data.R
 \name{post_predict}
 \alias{post_predict}
-\title{Generate posterior predictives based on subject (alpha) parameters}
+\title{Generate posterior predictives.}
 \usage{
 post_predict(
-  samples,
+  samplers,
   hyper = FALSE,
   n_post = 100,
-  expand = 1,
   filter = "sample",
   subfilter = 0,
   thin = 1,
   n_cores = 1,
-  use_par = c("random", "mean", "median")[1],
-  LCresponse = TRUE,
-  UCresponse = TRUE,
-  LCdirection = TRUE,
-  UCdirection = TRUE,
-  force_direction = FALSE,
-  force_response = FALSE
+  stat = c("random", "mean", "median")[1],
+  ...
 )
 }
 \arguments{
-\item{samples}{A list of samples from which you want to generate posterior predictives.}
+\item{samplers}{A list of samples from which you want to generate posterior predictives.}
 
-\item{hyper}{Boolean. Default is FALSE, if true simulates from the group level.}
+\item{hyper}{Boolean. Default is FALSE, if true simulates from the group level instead of subject-level parameters. Only makes sense when aggregating across subjects}
 
 \item{n_post}{Integer. How many data sets do you want to generate from the posterior.}
 
-\item{expand}{Integer. Default is 1, exact same design for each subject. Larger values will replicate designs, so more trials per subject.}
-
-\item{filter}{Character. Choice of the stages 'pre-burn', 'burn', 'adapt', 'sample', default is 'sample'. From which stage do you want to take samples to generate new data with.}
+\item{filter}{Character. Choice of the stages 'preburn', 'burn', 'adapt', 'sample', default is 'sample'. From which stage do you want to take samples to generate new data with.}
 
 \item{subfilter}{Integer or numeric vector. If integer, will filter out the first x of samples, within your filter. If numeric vector will select those samples, within your filter.}
 
-\item{thin}{Integer. By how much do you want to thin the chains before simulating from them.}
+\item{thin}{Integer. By how much do you want to thin the chains before simulating from them. Will keep 1/thin samples.}
 
-\item{n_cores}{Integer. Across how many cores do you want to parallelize.}
+\item{n_cores}{Integer. Across how many cores do you want to parallellize.}
 
-\item{use_par}{Character. Can be mean, median or default random. Will take either random samples from the chain or as specified.}
+\item{stat}{Character. Can be mean, median or default random. Will take either random samples from the chain or use the mean or median of the parameter estimates.}
 
-\item{LCresponse}{Boolean, default TRUE, if false set LC response to NA}
-
-\item{UCresponse}{Boolean, default TRUE, if false set UC response to NA}
-
-\item{LCdirection}{Boolean, default TRUE, set LC rt to 0, else to NA}
-
-\item{UCdirection}{Boolean, default TRUE, set LC rt to Inf, else to NA}
-
-\item{force_direction}{Boolean, take censor direction from argument not samples (default FALSE)}
-
-\item{force_response}{Boolean, take censor response from argument not samples (default FALSE)}
+\item{...}{Optional additional arguments}
 }
 \value{
 A list of simulated data sets of length n_post.
 }
 \description{
-Generate posterior predictives based on subject (alpha) parameters
+Generates \code{n_post} data sets based on posterior parameter estimates
+}
+\examples{
+\dontrun{
+# based on a set of samplers ran by run_emc we can generate posterior predictives
+post_predict(samplers, n_cores = 8)
+}
 }
