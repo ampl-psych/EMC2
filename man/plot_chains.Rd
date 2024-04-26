@@ -13,8 +13,7 @@ plot_chains(
   filter = "sample",
   thin = 1,
   subfilter = 0,
-  plot_acf = FALSE,
-  acf_chain = 1
+  plot_acf = FALSE
 )
 }
 \arguments{

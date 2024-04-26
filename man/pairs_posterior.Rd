@@ -2,49 +2,57 @@
 % Please edit documentation in R/plotting.R
 \name{pairs_posterior}
 \alias{pairs_posterior}
-\title{Plots matrix of parameter correlations (upper triangle) and corresponding
-scatterplots (lower triangle)}
+\title{Plot sloppiness}
 \usage{
 pairs_posterior(
-  samples,
+  samplers,
   filter = "sample",
   thin = 1,
   subfilter = 0,
   mapped = FALSE,
   selection = c("alpha", "mu", "variance", "covariance", "correlation")[1],
   scale.subjects = TRUE,
-  use = NA,
+  use_par = NULL,
   do_plot = TRUE,
   maxp = 500
 )
 }
 \arguments{
-\item{samples}{List of pmwgs objects}
+\item{samplers}{List of samplers}
 
 \item{filter}{A string. Specifies which stage you want to plot.}
 
 \item{thin}{An integer. Keep only iterations that are a multiple of thin.}
 
-\item{subfilter}{An integer or vector. If integer it will exclude up until
-that integer. If vector it will include everything in that range.}
+\item{subfilter}{Integer or numeric vector. If integer, will filter out the first x of samples,
+within your filter. If numeric vector will select those samples, within your filter.}
 
-\item{mapped}{Boolean (default FALSE) if TRUE plot parameters mapped to design
-otherwise sampled parameters}
+\item{mapped}{Boolean. If \code{TRUE} plots the parameters mapped back to the factor levels of the design,
+otherwise plots the sampled parameters}
 
-\item{selection}{String designating parameter type (mu, variance, correlation, alpha = default)}
+\item{selection}{String designating parameter type, e.g. "alpha" or "mu".}
 
-\item{scale.subjects}{Boolean (default TRUE) when plotting alphas standardize each participant}
+\item{scale.subjects}{Boolean. To standardize each participant with \code{selection = "alpha"}}
 
-\item{use}{Integer or character vector specifying subset of parameters to use}
+\item{use_par}{Character vector of names of parameters to plot (default \code{NULL} plots all)}
 
-\item{do_plot}{Boolean, do plot}
+\item{do_plot}{Boolean. Whether to plot the pairs plot if \code{FALSE} will only return the correlations}
 
 \item{maxp}{Integer for maximum number of iterations used (default 500).}
 }
 \value{
-None
+Invisibly returns a matrix with the correlations between the parameters.
 }
 \description{
-Plots matrix of parameter correlations (upper triangle) and corresponding
+Plots within-chain parameter correlations (upper triangle) and corresponding
 scatterplots (lower triangle)
+}
+\examples{
+\dontrun{
+# Plot the sloppiness for the individual-level subjects
+pairs_posterior(samplers, selection = "alpha")
+
+# We can also choose group-level parameters and subsets of the parameter space
+pairs_posterior(samplers, use = c("v", "B", "t0"), selection = "variance")
+}
 }

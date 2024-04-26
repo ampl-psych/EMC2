@@ -32,7 +32,7 @@
 
 plot_chains <- function(samplers,layout=NA,subject=NA,ylim=NULL,
                         selection="mu",filter="sample",thin=1,subfilter=0,
-                        plot_acf=FALSE,acf_chain=1) # ,use_par=NA
+                        plot_acf=FALSE) # ,use_par=NA
   # Plots chains  (if alpha, LL or epsilon can do individual subject, all by default)
 {
   MCMC_samples <- samplers
@@ -1119,28 +1119,36 @@ check_run <- function(samples,pdf_name="check_run.pdf",interactive=TRUE,
 }
 
 
-#' Plots matrix of parameter correlations (upper triangle) and corresponding
+#' Plot sloppiness
+#'
+#' Plots within-chain parameter correlations (upper triangle) and corresponding
 #' scatterplots (lower triangle)
 #'
-#' @param samples List of pmwgs objects
+#' @param samplers List of samplers
 #' @param filter A string. Specifies which stage you want to plot.
 #' @param thin An integer. Keep only iterations that are a multiple of thin.
-#' @param subfilter An integer or vector. If integer it will exclude up until
-#' that integer. If vector it will include everything in that range.
-#' @param selection String designating parameter type (mu, variance, correlation, alpha = default)
-#' @param mapped Boolean (default FALSE) if TRUE plot parameters mapped to design
-#' otherwise sampled parameters
-#' @param scale.subjects Boolean (default TRUE) when plotting alphas standardize each participant
-#' @param use Integer or character vector specifying subset of parameters to use
-#' @param do_plot Boolean, do plot
+#' @param subfilter Integer or numeric vector. If integer, will filter out the first x of samples,
+#' within your filter. If numeric vector will select those samples, within your filter.
+#' @param selection String designating parameter type, e.g. "alpha" or "mu".
+#' @param mapped Boolean. If ``TRUE`` plots the parameters mapped back to the factor levels of the design,
+#' otherwise plots the sampled parameters
+#' @param scale.subjects Boolean. To standardize each participant with ``selection = "alpha"``
+#' @param use_par Character vector of names of parameters to plot (default ``NULL`` plots all)
+#' @param do_plot Boolean. Whether to plot the pairs plot if ``FALSE`` will only return the correlations
 #' @param maxp Integer for maximum number of iterations used (default 500).
+#' @return Invisibly returns a matrix with the correlations between the parameters.
+#' @examples \dontrun{
+#' # Plot the sloppiness for the individual-level subjects
+#' pairs_posterior(samplers, selection = "alpha")
 #'
-#' @return None
+#' # We can also choose group-level parameters and subsets of the parameter space
+#' pairs_posterior(samplers, use = c("v", "B", "t0"), selection = "variance")
+#' }
 #' @export
 
-pairs_posterior <- function(samples,filter="sample",thin=1,subfilter=0,mapped=FALSE,
+pairs_posterior <- function(samplers,filter="sample",thin=1,subfilter=0,mapped=FALSE,
                             selection=c("alpha","mu","variance","covariance","correlation")[1],
-                            scale.subjects=TRUE,use=NA,do_plot=TRUE,maxp=500)
+                            scale.subjects=TRUE,use_par=NULL,do_plot=TRUE,maxp=500)
 {
 
   panel.hist <- function(x, ...)
@@ -1172,18 +1180,18 @@ pairs_posterior <- function(samples,filter="sample",thin=1,subfilter=0,mapped=FA
     df[,2]
   }
 
-  pmat <- parameters_data_frame(samples,filter=filter,thin=thin,subfilter=subfilter,
+  pmat <- parameters_data_frame(samplers,filter=filter,thin=thin,subfilter=subfilter,
                                 mapped=mapped,selection=selection)
-  if (!any(is.na(use))) {
-    if (is.numeric(use)) {
-      if (any(use<1) || any(use>dim(pmat))) stop("stat outside parameter range")
-      use <- names(pmat)[use]
+  if (!is.null(use_par)) {
+    if (is.numeric(use_par)) {
+      if (any(use_par<1) || any(use_par>dim(pmat))) stop("use_par outside parameter range")
+      use_par <- names(pmat)[use_par]
     }
-    if (!all(use %in% names(pmat))) stop("stat has a name not in parameters")
-    if (length(use)==1) stop("must select more than one parameter")
-    pmat <- pmat[,use]
+    if (!all(use_par %in% names(pmat))) stop("use_par has a name not in parameters")
+    if (length(use_par)==1) stop("must select more than one parameter")
+    pmat <- pmat[,use_par]
   }
-  if (selection=="alpha") {
+  if (selection=="alpha" & is.null(use_par)) {
     if (length(levels(pmat$subjects))>1 && scale.subjects)
       for (i in names(pmat)[-1]) pmat[,i] <- do_scale(pmat[,c("subjects",i)])
     pmat <- pmat[,-1]
