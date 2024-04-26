@@ -219,11 +219,11 @@ standardize_loadings <- function(samplers = NULL, loadings = NULL, sig_err_inv =
 #'
 #' @return NULL
 #' @examples \dontrun{
-#' # For a given set of hierarchical factor model samples we can make a
-#' # loadings matrix plot.
+#' # For a given set of hierarchical model samples we can make a
+#' # correlation matrix plot.
 #' plot_relations(samplers, only_cred = TRUE, plot_cred = TRUE)
-#' # We can also plot the correlations, this works for any model that included correlations
-#' plot_relations(samplers, do_corr = T, plot_means = T, only_cred = T)
+#' # We can also only plot the credible correlations
+#' plot_relations(samplers, plot_means = TRUE, only_cred = TRUE)
 #' }
 #' @export
 #'
