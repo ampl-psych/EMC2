@@ -30,7 +30,7 @@ p_test(
 \arguments{
 \item{x}{A samplers list}
 
-\item{x_name}{Name of the parameter to be tested for x}
+\item{x_name}{String. Name of the parameter to be tested for x}
 
 \item{x_fun}{Function applied to the MCMC chains to create
 variable to be tested.}
@@ -39,14 +39,14 @@ variable to be tested.}
 
 \item{y}{A second samplers list}
 
-\item{y_name}{Name of the parameter to be tested for y}
+\item{y_name}{String. Name of the parameter to be tested for y}
 
 \item{y_fun}{Function applied to the MCMC chains to create
 variable to be tested.}
 
 \item{y_fun_name}{Name to give to quantity calculated by y_fun}
 
-\item{mapped}{Should samples be mapped back to the design before doing test.}
+\item{mapped}{Boolean. Should samples be mapped back to the design before doing test.}
 
 \item{x_subject}{Integer or name selecting a subject}
 
