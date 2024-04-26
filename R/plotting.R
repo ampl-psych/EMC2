@@ -1175,11 +1175,11 @@ pairs_posterior <- function(samples,filter="sample",thin=1,subfilter=0,mapped=FA
   pmat <- parameters_data_frame(samples,filter=filter,thin=thin,subfilter=subfilter,
                                 mapped=mapped,selection=selection)
   if (!any(is.na(use))) {
-    if (is.numeric(stat)) {
-      if (any(stat<1) || any(stat>dim(pmat))) stop("stat outside parameter range")
-      stat <- names(pmat)[stat]
+    if (is.numeric(use)) {
+      if (any(use<1) || any(use>dim(pmat))) stop("stat outside parameter range")
+      use <- names(pmat)[use]
     }
-    if (!all(stat %in% names(pmat))) stop("stat has a name not in parameters")
+    if (!all(use %in% names(pmat))) stop("stat has a name not in parameters")
     if (length(use)==1) stop("must select more than one parameter")
     pmat <- pmat[,use]
   }
