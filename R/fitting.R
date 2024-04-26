@@ -1,26 +1,25 @@
 #### Fitting automation
-#' Model estimation in EMC2.
+#' Model estimation in EMC2
 #'
-#' General purpose function to estimate models specified in EMC2 using ``make_samplers``.
+#' General purpose function to estimate models specified in EMC2.
 #'
 #' @details
 #'
-#' The most advanced setting is the ``stop_criteria``.
-#' ``stop_criteria`` This either be a list of lists with names of the stages,
-#' or a single list in which case its assumed to be for the "sample" stage (see examples).
+#' ``stop_criteria`` is either a list of lists with names of the stages,
+#' or a single list in which case its assumed to be for the sample `stage` (see examples).
 #' The potential stop criteria to be set are:
 #'
 #' ``selection`` (character vector): For which parameters the ``stop_criteria`` should hold
 #'
-#' ``mean_gd`` (numeric): The mean gelman-rubin diagnostic across all parameters in the selection
+#' ``mean_gd`` (numeric): The mean Gelman-Rubin diagnostic across all parameters in the selection
 #'
-#' ``max_gd`` (numeric): The max gelman-rubin diagnostic across all parameters in the selection
+#' ``max_gd`` (numeric): The max Gelman-Rubin diagnostic across all parameters in the selection
 #'
 #' ``min_unique`` (integer): The minimum number of unique samples in the MCMC chains across all parameters in the selection
 #'
 #' ``min_es`` (integer): The minimum number of effective samples across all parameters in the selection
 #'
-#' ``omit_mpsrf`` (boolean): Whether to include the multivariate point-scale reduction factor in the gelman-rubin diagnostic. Default is ``FALSE``.
+#' ``omit_mpsrf`` (Boolean): Whether to include the multivariate point-scale reduction factor in the Gelman-Rubin diagnostic. Default is ``FALSE``.
 #'
 #' ``iter`` (integer): The number of MCMC samples to collect.
 #'
@@ -35,23 +34,35 @@
 #' EMC2: An R Package for cognitive models of choice. doi.org/10.31234/osf.io/2e4dq
 #'
 #'
-#' @param samplers A list of samplers created with ``make_samplers``, or a fileName of where the samplers are stored.
+#' @param samplers An EMC2 samplers object created with ``make_samplers``,
+#' or a path to where the samplers object is stored.
 #' @param stage A string. Indicates which stage to start the run from, either ``preburn``, ``burn``, ``adapt`` or ``sample``.
-#' If unspecified will run the next stage to be run in the samplers object.
-#' @param iter An integer. Indicates how many iterations to run the sampling stage.
-#' @param p_accept A double. The target acceptance probability of the MCMC process. This will fine-tune the width of the search space to obtain the desired acceptance probability. Default = .8
-#' @param step_size An integer. After each step, the stopping requirements as specified by ``stop_criteria`` will be checked and proposal distributions will be updated. Default = 100.
-#' @param verbose Logical. Whether to print messages between each step that inform you how close you are to meeting the ``stop_criteria``.
-#' @param verboseProgress Logical. Whether to print a progress bar within each step. Will print one progress bar for each chain and only if ``cores_for_chains = 1``.
-#' @param fileName A string. If specified will autosave samplers at this location on every iteration.
-#' @param particles An integer. How many particles to use, default is NULL and ``particle_factor`` is used instead. If specified will override ``particle_factor``.
-#' @param particle_factor An integer. ``particle_factor`` multiplied by the square root of the number of sampled parameters will determine the number of particles used.
-#' @param cores_per_chain An integer. How many cores to use per chain. Parallelizes across participant calculations. Only available on Linux or Mac machines.
-#' For Windows, only parallelization across chains (``cores_for_chains``) is available.
-#' @param cores_for_chains An integer. How many cores to use across chains. Default is the number of chains. the total number of cores used is equal to ``cores_per_chain`` * ``cores_for_chains``.
-#' @param max_tries An integer. How many times it will try to meet the finish conditions as specified by ``stop_criteria``. Default is 20. ``max_tries`` is ignored if the asked number of iterations isn't met yet.
-#' @param n_blocks An integer. Will block the parameter chains such that they are updated in blocks. This can be helpful in extremely tough models with large number of parameters.
-#' @param stop_criteria A list. Defines the stopping criteria and for which types of parameters these should hold. See the details and examples section.
+#' If unspecified, it will run the subsequent stage (if there is one).
+#' @param iter An integer. Indicates how many iterations to run in the sampling stage.
+#' @param p_accept A double. The target acceptance probability of the MCMC process.
+#' This fine-tunes the width of the search space to obtain the desired acceptance probability. Defaults to .8
+#' @param step_size An integer. After each step, the stopping requirements as specified
+#' by ``stop_criteria`` are checked and proposal distributions are updated. Defaults to 100.
+#' @param verbose Logical. Whether to print messages between each step with the current status regarding the ``stop_criteria``.
+#' @param verboseProgress Logical. Whether to print a progress bar within each step or not.
+#' Will print one progress bar for each chain and only if ``cores_for_chains = 1``.
+#' @param fileName A string. If specified, will auto-save samplers object at this location on every iteration.
+#' @param particles An integer. How many particles to use, default is `NULL` and
+#' ``particle_factor`` is used instead. If specified, ``particle_factor`` is overwritten.
+#' @param particle_factor An integer. ``particle_factor`` multiplied by the square
+#' root of the number of sampled parameters determines the number of particles used.
+#' @param cores_per_chain An integer. How many cores to use per chain. Parallelizes across
+#' participant calculations. Only available on Linux or Mac OS. For Windows, only
+#' parallelization across chains (``cores_for_chains``) is available.
+#' @param cores_for_chains An integer. How many cores to use across chains.
+#' Defaults to the number of chains. The total number of cores used is equal to ``cores_per_chain`` * ``cores_for_chains``.
+#' @param max_tries An integer. How many times should it try to meet the finish
+#' conditions as specified by ``stop_criteria``? Defaults to 20. ``max_tries`` is
+#' ignored if the required number of iterations has not been reached yet.
+#' @param n_blocks An integer. Number of blocks. Will block the parameter chains such that they are
+#' updated in blocks. This can be helpful in extremely tough models with a large number of parameters.
+#' @param stop_criteria A list. Defines the stopping criteria and for which types
+#' of parameters these should hold. See the details and examples section.
 #'
 #' @return A list of samplers
 #' @examples \dontrun{
