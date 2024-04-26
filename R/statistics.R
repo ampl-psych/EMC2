@@ -260,14 +260,14 @@ iat_pmwg <- function(pmwg_mcmc,
 #' were well chosen.
 #'
 #' @param x A samplers list
-#' @param x_name Name of the parameter to be tested for x
+#' @param x_name String. Name of the parameter to be tested for x
 #' @param x_fun Function applied to the MCMC chains to create
 #' variable to be tested.
 #' @param y A second samplers list
-#' @param y_name Name of the parameter to be tested for y
+#' @param y_name String. Name of the parameter to be tested for y
 #' @param y_fun Function applied to the MCMC chains to create
 #' variable to be tested.
-#' @param mapped Should samples be mapped back to the design before doing test.
+#' @param mapped Boolean. Should samples be mapped back to the design before doing test.
 #' @param x_subject Integer or name selecting a subject
 #' @param y_subject Integer or name selecting a subject
 #' @param mu Numeric. Null value for single sample test if y is not supplied (default 0)

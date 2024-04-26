@@ -77,4 +77,17 @@ Invisible results table with no rounding.
 \description{
 Modeled after t.test, returns the credible interval of the parameter or test.
 For a one sample test provide x and for two sample also provide y.
+For comparisons within one model we recommend using savage_dickey if the priors
+were well chosen.
+}
+\examples{
+\dontrun{
+# Run a credible interval test (Bayesian ''t-test'')
+p_test(samplers, x_name = "v")
+# We can also compare between two sets of samplers
+p_test(x = samplers1, x_name = "v", y = samplers2, y_name = "v")
+
+# Or provide custom functions
+p_test(x = samplers, x_fun = function(d) d["B_Eaccuracy"] - d["B_Eneutral"])
+}
 }
