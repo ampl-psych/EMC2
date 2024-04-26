@@ -28,36 +28,35 @@ p_test(
 )
 }
 \arguments{
-\item{x}{A pmwgs object or list of these}
+\item{x}{A samplers list}
 
-\item{x_name}{Name of the parameter to be tested}
+\item{x_name}{Name of the parameter to be tested for x}
 
-\item{x_fun}{Function applied to each iteration's parameter vector to create
+\item{x_fun}{Function applied to the MCMC chains to create
 variable to be tested.}
 
 \item{x_fun_name}{Name to give to quantity calculated by x_fun}
 
-\item{y}{A pmwgs object or list of these}
+\item{y}{A second samplers list}
 
-\item{y_name}{Name of the parameter to be tested}
+\item{y_name}{Name of the parameter to be tested for y}
 
-\item{y_fun}{Function applied to each iteration's parameter vector to create
+\item{y_fun}{Function applied to the MCMC chains to create
 variable to be tested.}
 
 \item{y_fun_name}{Name to give to quantity calculated by y_fun}
 
-\item{mapped}{Should samples be mapped before doing test.}
+\item{mapped}{Should samples be mapped back to the design before doing test.}
 
 \item{x_subject}{Integer or name selecting a subject}
 
 \item{y_subject}{Integer or name selecting a subject}
 
-\item{mu}{Null value for single sample test (default 0)}
+\item{mu}{Numeric. Null value for single sample test if y is not supplied (default 0)}
 
 \item{alternative}{"less" or "greater" determining direction of test probability}
 
-\item{probs}{Vector defining credible interval and central tendency quatiles
-(default c(0.025,.5,.975))}
+\item{probs}{Vector defining quantiles to return.}
 
 \item{digits}{Integer, significant digits for estimates in printed results}
 
@@ -65,9 +64,9 @@ variable to be tested.}
 
 \item{print_table}{Boolean (default TRUE) for printing results table}
 
-\item{filter}{A string. Specifies which stage you want to plot.}
+\item{filter}{A string. Specifies from which stage you want to take the samples.}
 
-\item{selection}{String designating parameter type (mu, variance, correlation, alpha = default)}
+\item{selection}{String designating parameter type (e.g. "alpha" or "covariance")}
 
 \item{subfilter}{An integer or vector. If it's an integer, iterations up until the value set by \code{subfilter} will be excluded.
 If a vector is supplied, only the iterations in the vector will be considered.}
@@ -76,6 +75,6 @@ If a vector is supplied, only the iterations in the vector will be considered.}
 Invisible results table with no rounding.
 }
 \description{
-Modeled after t.test. For a one sample test provide x and for two sample
-also provide y.
+Modeled after t.test, returns the credible interval of the parameter or test.
+For a one sample test provide x and for two sample also provide y.
 }
