@@ -2,12 +2,11 @@
 % Please edit documentation in R/plotting.R
 \name{profile_plot}
 \alias{profile_plot}
-\title{Creates a likelihood profile plot from a design and the experimental data by
-varying one model parameter while holding all others constant.}
+\title{Likelihood profile plots}
 \usage{
 profile_plot(
   pname,
-  p,
+  p_vector,
   p_min,
   p_max,
   data,
@@ -18,29 +17,41 @@ profile_plot(
 )
 }
 \arguments{
-\item{pname}{Name of parameter to profile}
+\item{pname}{String. Name of parameter to profile}
 
-\item{p}{Named vector of parameter values (typically created with sampled_p_vector)}
+\item{p_vector}{Named vector of parameter values (typically created with \code{sampled_p_vector(design)})}
 
-\item{p_min}{Minimum value of profile range}
+\item{p_min}{Numeric. Minimum value of profile range}
 
-\item{p_max}{Maximum value of profile range}
+\item{p_max}{Numeric. Maximum of profile range}
 
 \item{data}{A dataframe. Experimental data used, needed for the design mapping}
 
 \item{design}{A design list. Created using \code{make_design}.}
 
-\item{n_point}{Number of evenly spaced points at which to calculate likelihood}
+\item{n_point}{Integer. Number of evenly spaced points at which to calculate likelihood}
 
 \item{main}{Plot title}
 
 \item{cores}{Number of likelihood points to calculate in parallel}
 }
 \value{
-vector with value of p(pname), highest likelihood point and p(pname)
-minus the parameter values at that point
+Vector with highest likelihood point, input and mismatch between true and highest point
 }
 \description{
 Creates a likelihood profile plot from a design and the experimental data by
 varying one model parameter while holding all others constant.
+}
+\examples{
+# First create a design
+design_DDMaE <- make_design(data = forstmann,model=DDM,
+                formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
+                constants=c(s=log(1)))
+# Then create a p_vector:
+p_vector=c(v_Sleft=-2,v_Sright=2,a=log(1),a_Eneutral=log(1.5),a_Eaccuracy=log(2),
+          t0=log(.2),Z=qnorm(.5),sv=log(.5),SZ=qnorm(.5))
+# Make a profile plot for the boundary separation parameter
+profile_plot(pname = "a", p_vector = p_vector, p_min = -1, p_max = 1,
+            data = forstmann, design = design_DDMaE, n_point = 10)
+
 }
