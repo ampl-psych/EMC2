@@ -56,7 +56,7 @@ plot_chains <- function(samplers,layout=NA,subject=NA,ylim=NULL,
       if (!auto.layout & !no_layout) par(mfrow=layout)
       if (plot_acf){
         for (j in colnames(MCMC_samples[[i]][[1]])){
-          acf(MCMC_samples[[i]][[1]][,j],main=paste0("Chain ",acf_chain,": ","s",i,": ",j))
+          acf(MCMC_samples[[i]][[1]][,j],main=paste0("Chain ",1,": ","s",i,": ",j))
         }
       } else {
         plot(MCMC_samples[[i]],auto.layout=auto.layout,density=FALSE,
@@ -70,7 +70,7 @@ plot_chains <- function(samplers,layout=NA,subject=NA,ylim=NULL,
       stop("Subject not present\n")
     for (i in subject) {
       if (plot_acf){
-        acf(MCMC_samples[[i]][[1]],main=paste0("Chain ",acf_chain,": ","LL ",i))
+        acf(MCMC_samples[[i]][[1]],main=paste0("Chain ",1,": ","LL ",i))
       } else{
         plot(MCMC_samples[[i]],auto.layout=auto.layout,density=FALSE,
              xlab=paste0("Iterations ",i),ask=FALSE,trace=TRUE,
@@ -80,7 +80,7 @@ plot_chains <- function(samplers,layout=NA,subject=NA,ylim=NULL,
   } else {
     if (plot_acf) {
       for (j in colnames(MCMC_samples[[1]])){
-        acf(MCMC_samples[[1]][,j],main=paste0("Chain ",acf_chain,": ",j))
+        acf(MCMC_samples[[1]][,j],main=paste0("Chain ",1,": ",j))
       }
     } else {
       plot(MCMC_samples,auto.layout=auto.layout,density=FALSE,
@@ -104,9 +104,9 @@ plot_acfs <- function(samples,layout=NULL,subject=1,
   for (i in 1:length(samples)) {
     if (selection=="alpha") {
       plot_chains(samples[[i]],selection=selection,filter=filter,subfilter=subfilter,
-                  layout=layout,plot_acf=TRUE,acf_chain=i,subject=subject)
+                  layout=layout,plot_acf=TRUE,subject=subject)
     } else plot_chains(samples[[i]],selection=selection,filter=filter,subfilter=subfilter,
-                       layout=layout,plot_acf=TRUE,acf_chain=i)
+                       layout=layout,plot_acf=TRUE)
   }
 }
 
