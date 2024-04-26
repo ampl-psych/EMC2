@@ -49,71 +49,94 @@ make_missing <- function(data,LT=0,UT=Inf,LC=0,UC=Inf,
 }
 
 
-#' Simulates data
+#' Simulate data
 #'
-#' Simulates data based on design and parameter vector arguments using the
-#' random function for a model (usually a design attribute, but if not can be
-#' supplied separately) by one of two methods
-#' 1) creating a fully crossed and balanced design specified by the design
-#' argument's formula list (formuula) and factor contrast list (contrasts), if it is
-#' null the data frame creation defaults are used) with number of trials per
-#' cell specified by the trials argument ... or if the data argument is non-null
-#' 2) using the design implicit in a data frame supplied, which allows creation
+#' Simulates data based on design and a p_vector by one of two methods:
+#' 1) Creating a fully crossed and balanced design specified by the design,
+#' with number of trials per cell specified by the n_trials argument
+#' 2) Using the design of a data frame supplied, which allows creation
 #' of unbalanced and other irregular designs, and replacing previous data with
 #' simulated data.
-#' Accuracy scored by design matchfun argument.
 #'
-#' @param p_vector parameter vector used to simulate data, or a matrix with one
-#' row per subject (with corresponding row names) or a lsit of tables produced
-#' by plot_density (in which case posterior medians are used to simulate data)
-#' @param design design created by make_Design
-#' @param model usually an attribute of design but if not must be given here.
-#' @param trials number of trials per design cell
-#' @param data If supplied that determines the design, with data sorted by subjects
-#' and a trials = 1:n trials/subject factor added (or overwriting any existing).
-#' Truncation and censoring information also taken from data attributes and presence
-#' of 0/Inf and NA in rt column and NA in R column.
-#' @param expand replicates the design expand times
-#' @param mapped_p if true instead returns a data frame with one row per design
+#' To create data for multiple subjects see ``?make_random_effects``.
+#'
+#' @param p_vector parameter vector used to simulate data.
+#' Can also be a matrix with one row per subject (with corresponding row names)
+#' or a list of tables produced by ``plot_pars``
+#' (in which case posterior medians are used to simulate data)
+#' @param design Design list created by ``make_design``
+#' @param n_trials Integer. If ``data`` is not supplied, number of trials to create per design cell
+#' @param data Dataframe. If supplied, the factors are taken from the data. Determines the number of trials per level of the design factors and can thus allow for unbalanced designs
+#' @param expand Integer. Replicates the ``data`` (if supplied) expand times to increase number of trials per cell.
+#' @param mapped_p If true instead returns a data frame with one row per design
 #' cell and columns for each parameter specifying how they are mapped to the
 #' design cells.
-#' @param LT lower truncation bound below which data are removed (scalar or subject named vector)
-#' @param UT upper truncation bound above which data are removed (scalar or subject named vector)
-#' @param LC lower censoring bound (scalar or subject named vector)
-#' @param UC upper censoring bound (scalar or subject named vector)
-#' @param LCresponse Boolean, default TRUE, if false set LC response to NA
-#' @param UCresponse Boolean, default TRUE, if false set UC response to NA
-#' @param LCdirection Boolean, default TRUE, set LC rt to 0, else to NA
-#' @param UCdirection Boolean, default TRUE, set LC rt to Inf, else to NA
-#' @param force_direction Boolean, take direction from argument not data (default FALSE)
-#' @param force_response Boolean, take response from argument not data (default FALSE)
-#' @param rtContaminantNA Boolean, TRUE sets contaminant trial rt to NA, if FALSE
-#' (the default) direction is taken from data or LCdirection or UCdirection (NB
-#' if both of these are false an error occurs as then contamination is not identifiable).
-#' @param Fcovariates either a data frame of covariate values with the same
-#' number of rows as the data or a list of functions specifying covariates for
-#' each trial. Must have names specified in the design Fcovariates argument.
-#' @param return_Ffunctions if false covariates are not returned
+
+#' @return A dataframe with simulated data
+#' @examples
+#' # First create a design
+#' design_DDMaE <- make_design(data = forstmann,model=DDM,
+#'                            formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
+#'                            constants=c(s=log(1)))
+#' # Then create a p_vector:
+#' p_vector=c(v_Sleft=-2,v_Sright=2,a=log(1),a_Eneutral=log(1.5),a_Eaccuracy=log(2),
+#'           t0=log(.2),Z=qnorm(.5),sv=log(.5),SZ=qnorm(.5))
+#' # Now we can simulate data
+#' make_data(p_vector, design_DDMaE, n_trials = 30)
 #'
-#' @return None
+#' # We can also simulate data based on the Forstmann data
+#' make_data(p_vector, design_DDMaE, data = forstmann)
 #' @export
 
-make_data <- function(p_vector,design,model=NULL,trials=NULL,data=NULL,expand=1,
-  mapped_p=FALSE,Fcovariates=NULL,return_Ffunctions=FALSE,LT=0,UT=Inf,
-  LC=0,UC=Inf,LCresponse=TRUE,UCresponse=TRUE,LCdirection=TRUE,UCdirection=TRUE,
-  force_direction=FALSE,force_response=FALSE,rtContaminantNA=FALSE)
+make_data <- function(p_vector,design,n_trials=NULL,data=NULL,expand=1,
+  mapped_p=FALSE, ...)
 {
+  # #' @param LT lower truncation bound below which data are removed (scalar or subject named vector)
+  # #' @param UT upper truncation bound above which data are removed (scalar or subject named vector)
+  # #' @param LC lower censoring bound (scalar or subject named vector)
+  # #' @param UC upper censoring bound (scalar or subject named vector)
+  # #' @param LCresponse Boolean, default TRUE, if false set LC response to NA
+  # #' @param UCresponse Boolean, default TRUE, if false set UC response to NA
+  # #' @param LCdirection Boolean, default TRUE, set LC rt to 0, else to NA
+  # #' @param UCdirection Boolean, default TRUE, set LC rt to Inf, else to NA
+  # #' @param force_direction Boolean, take direction from argument not data (default FALSE)
+  # #' @param force_response Boolean, take response from argument not data (default FALSE)
+  # #' @param rtContaminantNA Boolean, TRUE sets contaminant trial rt to NA, if FALSE
+  # #' (the default) direction is taken from data or LCdirection or UCdirection (NB
+  # #' if both of these are false an error occurs as then contamination is not identifiable).
+  # #' @param return_Ffunctions if false covariates are not returned
+
+  # #' @param Fcovariates either a data frame of covariate values with the same
+  # #' number of rows as the data or a list of functions specifying covariates for
+  # #' each trial. Must have names specified in the design Fcovariates argument.
+  LT<-0
+  UT<-Inf
+  LC<-0
+  UC<-Inf
+  LCresponse<-TRUE
+  UCresponse<-TRUE
+  LCdirection<-TRUE
+  UCdirection<-TRUE
+  force_direction<-FALSE
+  force_response<-FALSE
+  rtContaminantNA<-FALSE
+  return_Ffunctions <- FALSE
+  Fcovariates=NULL
+  optionals <- list(...)
+  for (name in names(optionals) ) {
+    assign(name, optionals[[name]])
+  }
 
   if (is.list(p_vector))
     p_vector <- do.call(rbind,lapply(p_vector,function(x)x[2,]))
-  if (is.null(model)) if (is.null(design$model))
-    stop("Must specify model as not in design") else model <- design$model
+  model <- design$model
   if (!is.matrix(p_vector)) p_vector <- make_pmat(p_vector,design)
   if ( is.null(data) ) {
-    if (mapped_p) trials <- 1
-    if ( is.null(trials) )
+    design$Ffactors$subjects <- rownames(p_vector)
+    if (mapped_p) n_trials <- 1
+    if ( is.null(n_trials) )
       stop("If data is not provided need to specify number of trials")
-    Ffactors=c(design$Ffactors,list(trials=1:trials))
+    Ffactors=c(design$Ffactors,list(trials=1:n_trials))
     data <- as.data.frame.table(array(dim=unlist(lapply(Ffactors,length)),
                                         dimnames=Ffactors))
     for (i in names(design$Ffactors))
@@ -332,14 +355,14 @@ post_predict <- function(samples,hyper=FALSE,n_post=100,expand=1,
       simDat <- vector(mode="list",length=n_post)
       for (i in 1:n_post) {
         cat(".")
-        simDat[[i]] <- make_data(pars[[i]],design=design[[j]],model=model[[j]],data=data[[j]],expand=expand,
+        simDat[[i]] <- make_data(pars[[i]],design=design[[j]],data=data[[j]],expand=expand,
           force_direction = force_direction,force_response=force_response,
           LCresponse=LCresponse,UCresponse=UCresponse,LCdirection=LCdirection,UCdirection=UCdirection)
       }
       cat("\n")
     } else {
       simDat <- mclapply(1:n_post,function(i){
-        make_data(pars[[i]],design=design[[j]],model=model[[j]],data=data[[j]],expand=expand,
+        make_data(pars[[i]],design=design[[j]],data=data[[j]],expand=expand,
           force_direction = force_direction,force_response=force_response,
           LCresponse=LCresponse,UCresponse=UCresponse,LCdirection=LCdirection,UCdirection=UCdirection)
       },mc.cores=n_cores)
@@ -357,13 +380,31 @@ post_predict <- function(samples,hyper=FALSE,n_post=100,expand=1,
 
 #' Make random effects.
 #'
+#' Function to generate subject-level parameters in a format required by ``make_data``
+#'
 #' @param design A design list. The design as specified by `make_design`
 #' @param group_means A numeric vector. The group level means for each parameter, in the same order as `sampled_p_vector(design)`
-#' @param n_subj An integer. The number of random effects to create.
-#' @param variance_proportion A double. Optional. If covariances aren't specified, the variances will be created by multiplying the means by this number. The covariances will be 0.
+#' @param n_subj An integer. The number of subjects to generate parameters for.
+#' @param variance_proportion A double. Optional. If ``covariances`` aren't specified, the variances will be created by multiplying the means by this number. The covariances will be 0.
 #' @param covariances A covariance matrix. Optional. Specify the intended covariance matrix.
 #'
-#' @return A matrix of random effects.
+#' @return A matrix of subject-level parameters.
+#' @examples
+#' # First create a design
+#' design_DDMaE <- make_design(data = forstmann,model=DDM,
+#'                             formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
+#'                             constants=c(s=log(1)))
+#' # Then create a group-level means vector:
+#' group_means =c(v_Sleft=-2,v_Sright=2,a=log(1),a_Eneutral=log(1.5),a_Eaccuracy=log(2),
+#'                t0=log(.2),Z=qnorm(.5),sv=log(.5),SZ=qnorm(.5))
+#' # Now we can create subject-level parameters
+#' subj_pars <- make_random_effects(design_DDMaE, group_means, n_subj = 5)
+#'
+#' # We can also define a covariance matrix to simulate from
+#' subj_pars <- make_random_effects(design_DDMaE, group_means, n_subj = 5, covariances = diag(.1, length(group_means)))
+#'
+#' # The subject level parameters can be used to generate data
+#' make_data(subj_pars, design_DDMaE, n_trials = 10)
 #' @export
 
 make_random_effects <- function(design, group_means, n_subj, variance_proportion = .2, covariances = NULL){

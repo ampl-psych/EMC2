@@ -22,7 +22,7 @@ get_design <- function(samples)
   design <- attr(samples,"design_list")[[1]]
   model <- attr(samples, "model_list")[[1]]
   design$Ffactors$subjects <- design$Ffactors$subjects[1]
-  dadm <- design_model(make_data(sampled_p_vector(design,model),design,model,trials=1),design,model,
+  dadm <- design_model(make_data(sampled_p_vector(design,model),design,n_trials=1),design,model,
                        rt_check=FALSE,compress=FALSE)
   dadm[,!(names(dadm) %in% c("subjects","trials","R","rt","winner"))]
 }
@@ -135,8 +135,8 @@ mapped_par <- function(p_vector,design,model=NULL,
     stop("Must specify model as not in design") else model <- design$model
     if (remove_subjects) design$Ffactors$subjects <- design$Ffactors$subjects[1]
     if (!is.matrix(p_vector)) p_vector <- make_pmat(p_vector,design)
-    dadm <- design_model(make_data(p_vector,design,model,trials=1,Fcovariates=Fcovariates),
-                         design,model,rt_check=FALSE,compress=FALSE)
+    dadm <- design_model(make_data(p_vector,design,n_trials=1,Fcovariates=Fcovariates),
+                         design,rt_check=FALSE,compress=FALSE)
     ok <- !(names(dadm) %in% c("subjects","trials","R","rt","winner"))
     out <- cbind(dadm[,ok],round(get_pars(p_vector,dadm),digits))
     if (model()$type=="SDT")  out <- out[dadm$lR!=levels(dadm$lR)[length(levels(dadm$lR))],]
