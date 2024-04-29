@@ -44,10 +44,10 @@ of the posterior distribution to get an accurate estimate of the marginal likeli
 The marginal likelihood can be used for computing Bayes factors and posterior model probabilities.
 }
 \details{
-Bridge sampling generally requires many more posterior samples than usual. If not enough
-posterior samples were collected using \code{run_emc()}, bridge sampling tends to be unstable.
-It is recommended to run \code{run_bridge_sampling()} several times and to examine
-how stable the results are.
+If not enough posterior samples were collected using \code{run_emc()},
+bridge sampling can be unstable. It is recommended to run
+\code{run_bridge_sampling()} several times with the \code{repetitions} argument
+and to examine how stable the results are.
 
 It can be difficult to converge bridge sampling for exceptionally large models,
 because of a large number of subjects (> 100) and/or cognitive model parameters.

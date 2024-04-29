@@ -195,10 +195,10 @@ bridge_sampling <- function(samples, n_eff, split_idx, cores_for_props = 1, core
 #' The marginal likelihood can be used for computing Bayes factors and posterior model probabilities.
 #'
 #'
-#' Bridge sampling generally requires many more posterior samples than usual. If not enough
-#' posterior samples were collected using `run_emc()`, bridge sampling tends to be unstable.
-#' It is recommended to run `run_bridge_sampling()` several times and to examine
-#' how stable the results are.
+#' If not enough posterior samples were collected using `run_emc()`,
+#' bridge sampling can be unstable. It is recommended to run
+#' `run_bridge_sampling()` several times with the ``repetitions`` argument
+#'  and to examine how stable the results are.
 #'
 #' It can be difficult to converge bridge sampling for exceptionally large models,
 #' because of a large number of subjects (> 100) and/or cognitive model parameters.
