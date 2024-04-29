@@ -232,7 +232,7 @@ get_stop_criteria <- function(stage, stop_criteria, type){
 #' conditions as specified by stop_criteria? Defaults to 20. max_tries is ignored if the required number of iterations has not been reached yet.
 #' @param n_blocks An integer. Number of blocks. Will block the parameter chains such that they are updated in blocks. This can be helpful in extremely tough models with a large number of parameters.
 #' @param stop_criteria A list. Defines the stopping criteria and for which types of parameters these should hold. See ``?run_emc``.
-#'
+#' @export
 #' @return A list of samplers
 #' @examples \dontrun{
 #' # First define a design
@@ -246,7 +246,6 @@ get_stop_criteria <- function(stage, stop_criteria, type){
 #' # for MCMC 200 iterations
 #' samplers <- run_samplers(samplers, stage = "preburn", stop_criteria = list(iter = 200))
 #'}
-#' @export
 
 run_samplers <- function(samplers, stage, stop_criteria,
                          p_accept = .8, step_size = 100, verbose = FALSE, verboseProgress = FALSE,
