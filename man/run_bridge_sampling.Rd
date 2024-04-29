@@ -52,9 +52,21 @@ and to examine how stable the results are.
 It can be difficult to converge bridge sampling for exceptionally large models,
 because of a large number of subjects (> 100) and/or cognitive model parameters.
 
-See: Gronau, Q. F., Heathcote, A., & Matzke, D. (2020). Computing Bayes factors
+For a practical introduction:
+
+Gronau, Q. F., Heathcote, A., & Matzke, D. (2020). Computing Bayes factors
 for evidence-accumulation models using Warp-III bridge sampling.
 \emph{Behavior research methods}, 52(2), 918-937. doi.org/10.3758/s13428-019-01290-6
+
+For mathematical background:
+
+Meng, X.-L., & Wong, W. H. (1996). Simulating ratios of normalizing
+constants via a simple identity: A theoretical exploration. \emph{Statistica Sinica},
+6, 831-860. http://www3.stat.sinica.edu.tw/statistica/j6n4/j6n43/j6n43.htm
+
+Meng, X.-L., & Schilling, S. (2002). Warp bridge sampling.
+\emph{Journal of Computational and Graphical Statistics},
+11(3), 552-586. doi.org/10.1198/106186002457
 }
 \examples{
 \dontrun{
