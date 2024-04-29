@@ -212,19 +212,25 @@ get_stop_criteria <- function(stage, stop_criteria, type){
 #' More details can be found in the ``run_emc`` help files (``?run_emc``).
 #'
 #' @param samplers A list of samplers, could be in any stage, as long as they've been initialized with make_samplers
-#' @param stage A string. Indicates which stage is to be run, either preburn, burn, adapt or sample
-#' @param p_accept A double. The target acceptance probability of the MCMC process. This will fine-tune the width of the search space to obtain the desired acceptance probability. Default = .8
-#' @param step_size An integer. After each step, the stopping requirements as specified by ``stop_criteria`` will be checked if they are met and proposal distributions will be updated. Default = 100.
-#' @param verbose Logical. Whether to print messages between each step that inform you how close you are to meeting the ``stop_criteria``.
-#' @param verboseProgress Logical. Whether to print a progress bar for each step size. Will print one progress bar for each chain and only if ``cores_for_chains = 1``.
+#' @param stage A string. Indicates which stage is to be run, either `preburn`, `burn`, `adapt` or `sample`
+#' @param p_accept A double. The target acceptance probability of the MCMC process.
+#' This fine-tunes the width of the search space to obtain the desired acceptance probability. Defaults to .8
+#' @param step_size An integer. After each step, the stopping requirements as
+#' specified by `stop_criteria` are checked and proposal distributions are updated. Defaults to 100.
+#' @param verbose Logical. Whether to print messages between each step with the current status regarding the stop_criteria.
+#' @param verboseProgress Logical. Whether to print a progress bar within each step or not. Will print one progress bar for each chain and only if cores_for_chains = 1.
 #' @param fileName A string. If specified will autosave samplers at this location on every iteration.
-#' @param particles An integer. How many particles to use, default is NULL and ``particle_factor`` is used instead. If specified will override ``particle_factor``.
-#' @param particle_factor An integer. ``particle_factor`` multiplied by the square root of the number of sampled parameters will determine the number of particles used.
-#' @param cores_per_chain An integer. How many cores to use per chain. Parallelizes across participant calculations. Only available on Linux or Mac machines.
+#' @param particles An integer. How many particles to use, default is `NULL` and ``particle_factor`` is used instead.
+#' If specified will override ``particle_factor``.
+#' @param particle_factor An integer. `particle_factor` multiplied by the square root of the number of sampled parameters determines the number of particles used.
+#' @param cores_per_chain An integer. How many cores to use per chain.
+#' Parallelizes across participant calculations. Only available on Linux or Mac OS.
 #' For Windows, only parallelization across chains (``cores_for_chains``) is available.
-#' @param cores_for_chains An integer. How many cores to use across chains. Default is the number of chains. the total number of cores used is equal to ``cores_per_chain`` * ``cores_for_chains``.
-#' @param max_tries An integer. How many times it will try to meet the finish conditions as specified by ``stop_criteria``. Default is 20. ``max_tries`` is ignored if the asked number of iterations isn't met yet.
-#' @param n_blocks An integer. Will block the parameter chains such that they are updated in blocks. This can be helpful in extremely tough models with large number of parameters.
+#' @param cores_for_chains An integer. How many cores to use across chains.
+#' Defaults to the number of chains. the total number of cores used is equal to ``cores_per_chain`` * ``cores_for_chains``.
+#' @param max_tries An integer. How many times should it try to meet the finish
+#' conditions as specified by stop_criteria? Defaults to 20. max_tries is ignored if the required number of iterations has not been reached yet.
+#' @param n_blocks An integer. Number of blocks. Will block the parameter chains such that they are updated in blocks. This can be helpful in extremely tough models with a large number of parameters.
 #' @param stop_criteria A list. Defines the stopping criteria and for which types of parameters these should hold. See ``?run_emc``.
 #'
 #' @return A list of samplers

@@ -24,32 +24,38 @@ run_samplers(
 \arguments{
 \item{samplers}{A list of samplers, could be in any stage, as long as they've been initialized with make_samplers}
 
-\item{stage}{A string. Indicates which stage is to be run, either preburn, burn, adapt or sample}
+\item{stage}{A string. Indicates which stage is to be run, either \code{preburn}, \code{burn}, \code{adapt} or \code{sample}}
 
 \item{stop_criteria}{A list. Defines the stopping criteria and for which types of parameters these should hold. See \code{?run_emc}.}
 
-\item{p_accept}{A double. The target acceptance probability of the MCMC process. This will fine-tune the width of the search space to obtain the desired acceptance probability. Default = .8}
+\item{p_accept}{A double. The target acceptance probability of the MCMC process.
+This fine-tunes the width of the search space to obtain the desired acceptance probability. Defaults to .8}
 
-\item{step_size}{An integer. After each step, the stopping requirements as specified by \code{stop_criteria} will be checked if they are met and proposal distributions will be updated. Default = 100.}
+\item{step_size}{An integer. After each step, the stopping requirements as
+specified by \code{stop_criteria} are checked and proposal distributions are updated. Defaults to 100.}
 
-\item{verbose}{Logical. Whether to print messages between each step that inform you how close you are to meeting the \code{stop_criteria}.}
+\item{verbose}{Logical. Whether to print messages between each step with the current status regarding the stop_criteria.}
 
-\item{verboseProgress}{Logical. Whether to print a progress bar for each step size. Will print one progress bar for each chain and only if \code{cores_for_chains = 1}.}
+\item{verboseProgress}{Logical. Whether to print a progress bar within each step or not. Will print one progress bar for each chain and only if cores_for_chains = 1.}
 
 \item{fileName}{A string. If specified will autosave samplers at this location on every iteration.}
 
-\item{particles}{An integer. How many particles to use, default is NULL and \code{particle_factor} is used instead. If specified will override \code{particle_factor}.}
+\item{particles}{An integer. How many particles to use, default is \code{NULL} and \code{particle_factor} is used instead.
+If specified will override \code{particle_factor}.}
 
-\item{particle_factor}{An integer. \code{particle_factor} multiplied by the square root of the number of sampled parameters will determine the number of particles used.}
+\item{particle_factor}{An integer. \code{particle_factor} multiplied by the square root of the number of sampled parameters determines the number of particles used.}
 
-\item{cores_per_chain}{An integer. How many cores to use per chain. Parallelizes across participant calculations. Only available on Linux or Mac machines.
+\item{cores_per_chain}{An integer. How many cores to use per chain.
+Parallelizes across participant calculations. Only available on Linux or Mac OS.
 For Windows, only parallelization across chains (\code{cores_for_chains}) is available.}
 
-\item{cores_for_chains}{An integer. How many cores to use across chains. Default is the number of chains. the total number of cores used is equal to \code{cores_per_chain} * \code{cores_for_chains}.}
+\item{cores_for_chains}{An integer. How many cores to use across chains.
+Defaults to the number of chains. the total number of cores used is equal to \code{cores_per_chain} * \code{cores_for_chains}.}
 
-\item{max_tries}{An integer. How many times it will try to meet the finish conditions as specified by \code{stop_criteria}. Default is 20. \code{max_tries} is ignored if the asked number of iterations isn't met yet.}
+\item{max_tries}{An integer. How many times should it try to meet the finish
+conditions as specified by stop_criteria? Defaults to 20. max_tries is ignored if the required number of iterations has not been reached yet.}
 
-\item{n_blocks}{An integer. Will block the parameter chains such that they are updated in blocks. This can be helpful in extremely tough models with large number of parameters.}
+\item{n_blocks}{An integer. Number of blocks. Will block the parameter chains such that they are updated in blocks. This can be helpful in extremely tough models with a large number of parameters.}
 }
 \value{
 A list of samplers
