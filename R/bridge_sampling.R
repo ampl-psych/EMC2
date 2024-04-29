@@ -191,19 +191,25 @@ bridge_sampling <- function(samples, n_eff, split_idx, cores_for_props = 1, core
 #' Estimating Marginal likelihoods using WARP-III bridge sampling
 #'
 #' Uses bridge sampling that matches a proposal distribution to the first three moments
-#' of the posterior distribution to get an accurate estimate of the marginal-likelihood.
-#' For details see:
-#' Gronau, Q. F., Heathcote, A., & Matzke, D. (2020). Computing Bayes factors
+#' of the posterior distribution to get an accurate estimate of the marginal likelihood.
+#' The marginal likelihood can be used for computing Bayes factors and posterior model probabilities.
+#'
+#'
+#' Bridge sampling generally requires many more posterior samples than usual. If not enough
+#' posterior samples were collected using `run_emc()`, bridge sampling tends to be unstable.
+#' It is recommended to run `run_bridge_sampling()` several times and to examine
+#' how stable the results are.
+#'
+#' It can be difficult to converge bridge sampling for exceptionally large models,
+#' because of a large number of subjects (> 100) and/or cognitive model parameters.
+#'
+#' See: Gronau, Q. F., Heathcote, A., & Matzke, D. (2020). Computing Bayes factors
 #' for evidence-accumulation models using Warp-III bridge sampling.
 #' *Behavior research methods*, 52(2), 918-937. doi.org/10.3758/s13428-019-01290-6
 #'
-#' If bridge sampling did not converge, this usually means you will have to collect more iterations using ``run_emc``.
-#' It can become difficult to converge bridge sampling for exceptionally large models,
-#' because of large number of subjects (> 100) and/or cognitive model parameters.
-#'
-#' @param samplers A samplers list with a set of converged samples
-#' @param filter A character indicating which stage to use, default is "sample"
-#' @param subfilter An integer or vector. If integer it will exclude up until
+#' @param samplers An emc samplers object with a set of converged samples
+#' @param filter A character indicating which stage to use, defaults to `sample`
+#' @param subfilter An integer or vector. If integer, it will exclude up until
 #' that integer. If vector it will include everything in that range.
 #' @param repetitions An integer. How many times to repeat the bridge sampling scheme. Can help get an estimate of stability of the estimate.
 #' @param cores_for_props Integer. Warp-III evaluates the posterior over 4 different proposal densities. If you have the CPU, 4 cores will do this in parallel, 2 is also already helpful.

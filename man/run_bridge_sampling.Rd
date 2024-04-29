@@ -16,11 +16,11 @@ run_bridge_sampling(
 )
 }
 \arguments{
-\item{samplers}{A samplers list with a set of converged samples}
+\item{samplers}{An emc samplers object with a set of converged samples}
 
-\item{filter}{A character indicating which stage to use, default is "sample"}
+\item{filter}{A character indicating which stage to use, defaults to \code{sample}}
 
-\item{subfilter}{An integer or vector. If integer it will exclude up until
+\item{subfilter}{An integer or vector. If integer, it will exclude up until
 that integer. If vector it will include everything in that range.}
 
 \item{repetitions}{An integer. How many times to repeat the bridge sampling scheme. Can help get an estimate of stability of the estimate.}
@@ -40,16 +40,21 @@ A vector of length repetitions which contains the marginal log likelihood estima
 }
 \description{
 Uses bridge sampling that matches a proposal distribution to the first three moments
-of the posterior distribution to get an accurate estimate of the marginal-likelihood.
-For details see:
-Gronau, Q. F., Heathcote, A., & Matzke, D. (2020). Computing Bayes factors
-for evidence-accumulation models using Warp-III bridge sampling.
-\emph{Behavior research methods}, 52(2), 918-937. doi.org/10.3758/s13428-019-01290-6
+of the posterior distribution to get an accurate estimate of the marginal likelihood.
+The marginal likelihood can be used for computing Bayes factors and posterior model probabilities.
 }
 \details{
-If bridge sampling did not converge, this usually means you will have to collect more iterations using \code{run_emc}.
-It can become difficult to converge bridge sampling for exceptionally large models,
-because of large number of subjects (> 100) and/or cognitive model parameters.
+Bridge sampling generally requires many more posterior samples than usual. If not enough
+posterior samples were collected using \code{run_emc()}, bridge sampling tends to be unstable.
+It is recommended to run \code{run_bridge_sampling()} several times and to examine
+how stable the results are.
+
+It can be difficult to converge bridge sampling for exceptionally large models,
+because of a large number of subjects (> 100) and/or cognitive model parameters.
+
+See: Gronau, Q. F., Heathcote, A., & Matzke, D. (2020). Computing Bayes factors
+for evidence-accumulation models using Warp-III bridge sampling.
+\emph{Behavior research methods}, 52(2), 918-937. doi.org/10.3758/s13428-019-01290-6
 }
 \examples{
 \dontrun{
