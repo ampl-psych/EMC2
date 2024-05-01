@@ -115,19 +115,19 @@ add_constants_mcmc <- function(p,constants){
 
 #' Parameter mapping back to the design factors
 #'
-#' Maps a user defined parameter vector that corresponds to the sampled parameters
-#' of the cognitive model (can be created using ``sampled_p_vector(design)``), back to the
-#' experimental design. This can be useful to show what a specified linear model
-#' predicts about the experimental factors.
+#' Maps a parameter vector that corresponds to sampled parameters
+#' of the cognitive model back to the experimental design. The parameter vector
+#' can be created using ``sampled_p_vector()``. The returned matrix shows whether/how parameters
+#' differ across the experimental factors.
 #'
-#' @param p_vector A parameter vector. Must be in form of ``sampled_p_vector(design)``
+#' @param p_vector A parameter vector. Must be in the form of ``sampled_p_vector(design)``
 #' @param design A design list. Created ``by make_design``
 #' @param model Optional model type (if not already specified in ``design``)
-#' @param digits Integer. Will round the outputted parameter values to this many decimals
+#' @param digits Integer. Will round the output parameter values to this many decimals
 #' @param ... optional arguments
 #' @param remove_subjects Boolean. Whether to include subjects as a factor in the design
 #'
-#' @return Matrix with a column for each factor in the design and for each ``p_type`` of the model.
+#' @return Matrix with a column for each factor in the design and for each model parameter (``p_type``).
 #' @examples
 #' # First define a design:
 #' design_DDMaE <- make_design(data = forstmann,model=DDM,

@@ -14,26 +14,26 @@ mapped_par(
 )
 }
 \arguments{
-\item{p_vector}{A parameter vector. Must be in form of \code{sampled_p_vector(design)}}
+\item{p_vector}{A parameter vector. Must be in the form of \code{sampled_p_vector(design)}}
 
 \item{design}{A design list. Created \verb{by make_design}}
 
 \item{model}{Optional model type (if not already specified in \code{design})}
 
-\item{digits}{Integer. Will round the outputted parameter values to this many decimals}
+\item{digits}{Integer. Will round the output parameter values to this many decimals}
 
 \item{remove_subjects}{Boolean. Whether to include subjects as a factor in the design}
 
 \item{...}{optional arguments}
 }
 \value{
-Matrix with a column for each factor in the design and for each \code{p_type} of the model.
+Matrix with a column for each factor in the design and for each model parameter (\code{p_type}).
 }
 \description{
-Maps a user defined parameter vector that corresponds to the sampled parameters
-of the cognitive model (can be created using \code{sampled_p_vector(design)}), back to the
-experimental design. This can be useful to show what a specified linear model
-predicts about the experimental factors.
+Maps a parameter vector that corresponds to sampled parameters
+of the cognitive model back to the experimental design. The parameter vector
+can be created using \code{sampled_p_vector()}. The returned matrix shows whether/how parameters
+differ across the experimental factors.
 }
 \examples{
 # First define a design:
