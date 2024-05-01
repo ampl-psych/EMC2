@@ -2,7 +2,7 @@
 % Please edit documentation in R/design.R
 \name{sampled_p_vector}
 \alias{sampled_p_vector}
-\title{Get the sampled parameters from a design}
+\title{Get model parameters from a design}
 \usage{
 sampled_p_vector(
   design,
@@ -13,11 +13,11 @@ sampled_p_vector(
 )
 }
 \arguments{
-\item{design}{a list of the design made with make_design.}
+\item{design}{a list of the design made with \code{make_design()}.}
 
 \item{model}{a model list. Defaults to the model specified in the design list.}
 
-\item{doMap}{logical. If TRUE will also include an attribute "map"
+\item{doMap}{logical. If \code{TRUE} will also include an attribute \code{map}
 with the design matrices that perform the mapping back to the design}
 
 \item{add_da}{Boolean. Whether to include the relevant data columns in the map attribute}
@@ -30,7 +30,7 @@ Named vector.
 }
 \description{
 Makes a vector with zeroes, with names and length corresponding to the
-sampled parameters of the design.
+model parameters of the design.
 }
 \examples{
 # First define a design

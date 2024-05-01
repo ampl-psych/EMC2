@@ -295,14 +295,14 @@ contr.anova <- function(n) {
 
 
 
-#' Get the sampled parameters from a design
+#' Get model parameters from a design
 #'
 #' Makes a vector with zeroes, with names and length corresponding to the
-#' sampled parameters of the design.
+#' model parameters of the design.
 #'
-#' @param design a list of the design made with make_design.
+#' @param design a list of the design made with `make_design()`.
 #' @param model a model list. Defaults to the model specified in the design list.
-#' @param doMap logical. If TRUE will also include an attribute "map"
+#' @param doMap logical. If `TRUE` will also include an attribute `map`
 #' with the design matrices that perform the mapping back to the design
 #' @param add_da Boolean. Whether to include the relevant data columns in the map attribute
 #' @param all_cells_dm Boolean. Whether to include all levels of a factor in the mapping attribute,
