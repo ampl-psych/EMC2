@@ -257,16 +257,20 @@ add_Ffunctions <- function(data,design)
     data <-  cbind.data.frame(data,Fdf[,ok,drop=FALSE])
 }
 
-#' Generate posterior predictives.
+#' Generate posterior predictives
 #'
-#' Generates ``n_post`` data sets based on posterior parameter estimates
+#' Simulate ``n_post`` data sets from the posterior predictive distribution.
 #'
-#' @param samplers A list of samples from which you want to generate posterior predictives.
-#' @param hyper Boolean. Default is FALSE, if true simulates from the group level instead of subject-level parameters. Only makes sense when aggregating across subjects
-#' @param n_post Integer. How many data sets do you want to generate from the posterior.
-#' @param filter Character. Choice of the stages 'preburn', 'burn', 'adapt', 'sample', default is 'sample'. From which stage do you want to take samples to generate new data with.
-#' @param subfilter Integer or numeric vector. If integer, will filter out the first x of samples, within your filter. If numeric vector will select those samples, within your filter.
-#' @param thin Integer. By how much do you want to thin the chains before simulating from them. Will keep 1/thin samples.
+#' @param samplers An EMC2 samplers object from which posterior predictives should
+#' be generated
+#' @param hyper Boolean. Defaults to `FALSE`. If `TRUE`, simulates from the group-level
+#' instead of the subject-level parameters. Only makes sense when aggregating across subjects
+#' @param n_post Integer. Number of generated datasets
+#' @param filter Character. From which sampling stage should the samples be taken?
+#' Choice of the stages `preburn`, `burn`, `adapt`, `sample`, defaults to `sample`.
+#' @param subfilter Integer or numeric vector. If integer, will filter out the
+#' first x of samples, within the filter. If numeric vector, will select the samples within the filter
+#' @param thin Integer. By how much should the chains be thinned before simulating from them? Will keep 1/thin samples.
 #' @param n_cores Integer. Across how many cores do you want to parallellize.
 #' @param stat Character. Can be mean, median or default random. Will take either random samples from the chain or use the mean or median of the parameter estimates.
 #' @param ... Optional additional arguments
