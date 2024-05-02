@@ -241,7 +241,7 @@ plot_relations <- function(samplers = NULL, filter = "sample",  plot_cred = TRUE
   for (name in names(optionals) ) {
     assign(name, optionals[[name]])
   }
-
+  if(!is.null(loadings)) do_corr <- F
   addCoef.col <- "black"
   if(!plot_means) addCoef.col <- NULL
   if(!is.null(samplers)) sampled <- merge_samples(samplers)
