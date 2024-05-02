@@ -19,7 +19,7 @@ make_random_effects(
 
 \item{n_subj}{An integer. The number of subjects to generate parameters for.}
 
-\item{variance_proportion}{A double. Optional. If \code{covariances} aren't specified, the variances will be created by multiplying the means by this number. The covariances will be 0.}
+\item{variance_proportion}{A double. Optional. If \code{covariances} are not specified, the variances will be created by multiplying the means by this number. The covariances will be 0.}
 
 \item{covariances}{A covariance matrix. Optional. Specify the intended covariance matrix.}
 }

@@ -395,7 +395,7 @@ post_predict <- function(samples,hyper=FALSE,n_post=100,expand=1,
 #' @param design A design list. The design as specified by `make_design()`
 #' @param group_means A numeric vector. The group level means for each parameter, in the same order as `sampled_p_vector(design)`
 #' @param n_subj An integer. The number of subjects to generate parameters for.
-#' @param variance_proportion A double. Optional. If ``covariances`` aren't specified, the variances will be created by multiplying the means by this number. The covariances will be 0.
+#' @param variance_proportion A double. Optional. If ``covariances`` are not specified, the variances will be created by multiplying the means by this number. The covariances will be 0.
 #' @param covariances A covariance matrix. Optional. Specify the intended covariance matrix.
 #'
 #' @return A matrix of subject-level parameters.
