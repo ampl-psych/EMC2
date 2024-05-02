@@ -51,12 +51,12 @@ make_missing <- function(data,LT=0,UT=Inf,LC=0,UC=Inf,
 
 #' Simulate data
 #'
-#' Simulates data based on design and a p_vector by one of two methods:
+#' Simulates data based on a model design and a parameter vector (`p_vector`) by one of two methods:
 #' 1) Creating a fully crossed and balanced design specified by the design,
-#' with number of trials per cell specified by the n_trials argument
+#' with number of trials per cell specified by the `n_trials` argument
 #' 2) Using the design of a data frame supplied, which allows creation
 #' of unbalanced and other irregular designs, and replacing previous data with
-#' simulated data.
+#' simulated data
 #'
 #' To create data for multiple subjects see ``?make_random_effects``.
 #'
@@ -64,22 +64,22 @@ make_missing <- function(data,LT=0,UT=Inf,LC=0,UC=Inf,
 #' Can also be a matrix with one row per subject (with corresponding row names)
 #' or a list of tables produced by ``plot_pars``
 #' (in which case posterior medians are used to simulate data)
-#' @param design Design list created by ``make_design``
+#' @param design Design list created by ``make_design()``
 #' @param n_trials Integer. If ``data`` is not supplied, number of trials to create per design cell
-#' @param data Dataframe. If supplied, the factors are taken from the data. Determines the number of trials per level of the design factors and can thus allow for unbalanced designs
+#' @param data Data frame. If supplied, the factors are taken from the data. Determines the number of trials per level of the design factors and can thus allow for unbalanced designs
 #' @param expand Integer. Replicates the ``data`` (if supplied) expand times to increase number of trials per cell.
-#' @param mapped_p If true instead returns a data frame with one row per design
+#' @param mapped_p If `TRUE` instead returns a data frame with one row per design
 #' cell and columns for each parameter specifying how they are mapped to the
 #' @param ... Additional optional arguments
 #' design cells.
-#' @return A dataframe with simulated data
+#' @return A data frame with simulated data
 #' @examples
 #' # First create a design
 #' design_DDMaE <- make_design(data = forstmann,model=DDM,
 #'                            formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
 #'                            constants=c(s=log(1)))
 #' # Then create a p_vector:
-#' p_vector=c(v_Sleft=-2,v_Sright=2,a=log(1),a_Eneutral=log(1.5),a_Eaccuracy=log(2),
+#' p_vector <- c(v_Sleft=-2,v_Sright=2,a=log(1),a_Eneutral=log(1.5),a_Eaccuracy=log(2),
 #'           t0=log(.2),Z=qnorm(.5),sv=log(.5),SZ=qnorm(.5))
 #' # Now we can simulate data
 #' data <- make_data(p_vector, design_DDMaE, n_trials = 30)
@@ -378,11 +378,11 @@ post_predict <- function(samples,hyper=FALSE,n_post=100,expand=1,
   return(post_out)
 }
 
-#' Make random effects.
+#' Make random effects
 #'
-#' Function to generate subject-level parameters in a format required by ``make_data``
+#' Simulates subject-level parameters in the format required by ``make_data()``.
 #'
-#' @param design A design list. The design as specified by `make_design`
+#' @param design A design list. The design as specified by `make_design()`
 #' @param group_means A numeric vector. The group level means for each parameter, in the same order as `sampled_p_vector(design)`
 #' @param n_subj An integer. The number of subjects to generate parameters for.
 #' @param variance_proportion A double. Optional. If ``covariances`` aren't specified, the variances will be created by multiplying the means by this number. The covariances will be 0.

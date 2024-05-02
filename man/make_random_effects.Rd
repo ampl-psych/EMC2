@@ -2,7 +2,7 @@
 % Please edit documentation in R/make_data.R
 \name{make_random_effects}
 \alias{make_random_effects}
-\title{Make random effects.}
+\title{Make random effects}
 \usage{
 make_random_effects(
   design,
@@ -13,7 +13,7 @@ make_random_effects(
 )
 }
 \arguments{
-\item{design}{A design list. The design as specified by \code{make_design}}
+\item{design}{A design list. The design as specified by \code{make_design()}}
 
 \item{group_means}{A numeric vector. The group level means for each parameter, in the same order as \code{sampled_p_vector(design)}}
 
@@ -27,7 +27,7 @@ make_random_effects(
 A matrix of subject-level parameters.
 }
 \description{
-Function to generate subject-level parameters in a format required by \code{make_data}
+Simulates subject-level parameters in the format required by \code{make_data()}.
 }
 \examples{
 # First create a design

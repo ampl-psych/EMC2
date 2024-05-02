@@ -20,31 +20,31 @@ Can also be a matrix with one row per subject (with corresponding row names)
 or a list of tables produced by \code{plot_pars}
 (in which case posterior medians are used to simulate data)}
 
-\item{design}{Design list created by \code{make_design}}
+\item{design}{Design list created by \code{make_design()}}
 
 \item{n_trials}{Integer. If \code{data} is not supplied, number of trials to create per design cell}
 
-\item{data}{Dataframe. If supplied, the factors are taken from the data. Determines the number of trials per level of the design factors and can thus allow for unbalanced designs}
+\item{data}{Data frame. If supplied, the factors are taken from the data. Determines the number of trials per level of the design factors and can thus allow for unbalanced designs}
 
 \item{expand}{Integer. Replicates the \code{data} (if supplied) expand times to increase number of trials per cell.}
 
-\item{mapped_p}{If true instead returns a data frame with one row per design
+\item{mapped_p}{If \code{TRUE} instead returns a data frame with one row per design
 cell and columns for each parameter specifying how they are mapped to the}
 
 \item{...}{Additional optional arguments
 design cells.}
 }
 \value{
-A dataframe with simulated data
+A data frame with simulated data
 }
 \description{
-Simulates data based on design and a p_vector by one of two methods:
+Simulates data based on a model design and a parameter vector (\code{p_vector}) by one of two methods:
 \enumerate{
 \item Creating a fully crossed and balanced design specified by the design,
-with number of trials per cell specified by the n_trials argument
+with number of trials per cell specified by the \code{n_trials} argument
 \item Using the design of a data frame supplied, which allows creation
 of unbalanced and other irregular designs, and replacing previous data with
-simulated data.
+simulated data
 }
 }
 \details{
@@ -56,7 +56,7 @@ design_DDMaE <- make_design(data = forstmann,model=DDM,
                            formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
                            constants=c(s=log(1)))
 # Then create a p_vector:
-p_vector=c(v_Sleft=-2,v_Sright=2,a=log(1),a_Eneutral=log(1.5),a_Eaccuracy=log(2),
+p_vector <- c(v_Sleft=-2,v_Sright=2,a=log(1),a_Eneutral=log(1.5),a_Eaccuracy=log(2),
           t0=log(.2),Z=qnorm(.5),sv=log(.5),SZ=qnorm(.5))
 # Now we can simulate data
 data <- make_data(p_vector, design_DDMaE, n_trials = 30)
