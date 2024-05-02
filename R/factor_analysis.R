@@ -206,12 +206,12 @@ standardize_loadings <- function(samplers = NULL, loadings = NULL, sig_err_inv =
 #' Plot relations
 #'
 #' An adjusted version of the `corrplot` package function `corrplot()` tailored
-#' to `EMC2` and the plotting of correlations.
+#' to `EMC2` and the plotting of estimated correlations.
 #'
 #' @param samplers An EMC2 samplers object, commonly the output of `run_emc()`.
 #' @param filter Character. The stage from which to take the samples, defaults to
 #' the sampling stage `sample`.
-#' @param plot_cred Boolean. Whether to plot the credible intervals or not
+#' @param plot_cred Boolean. Whether to plot the 95 percent credible intervals or not
 #' @param plot_means Boolean. Whether to plot the means or not
 #' @param only_cred Boolean. Whether to only plot credible values
 #' @param nice_names Character string. Alternative names to give the parameters
@@ -219,11 +219,11 @@ standardize_loadings <- function(samplers = NULL, loadings = NULL, sig_err_inv =
 #'
 #' @return NULL
 #' @examples \dontrun{
-#' # For a given set of hierarchical factor model samples we can make a
-#' # loadings matrix plot.
+#' # For a given set of hierarchical model samples we can make a
+#' # correlation matrix plot.
 #' plot_relations(samplers, only_cred = TRUE, plot_cred = TRUE)
-#' # We can also plot the correlations, this works for any model that included correlations
-#' plot_relations(samplers, do_corr = T, plot_means = T, only_cred = T)
+#' # We can also only plot the correlations where the credible interval does not include zero
+#' plot_relations(samplers, plot_means = TRUE, only_cred = TRUE)
 #' }
 #' @export
 #'
