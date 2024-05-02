@@ -48,19 +48,29 @@ simulated data
 }
 }
 \details{
-To create data for multiple subjects see \code{?make_random_effects}.
+To create data for multiple subjects see \code{?make_random_effects()}.
 }
 \examples{
 # First create a design
-design_DDMaE <- make_design(data = forstmann,model=DDM,
-                           formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
-                           constants=c(s=log(1)))
+design_DDMaE <- make_design(factors = list(S = c("left", "right"),
+                                           E = c("SPD", "ACC"),
+                                           subjects = 1:30),
+                            Rlevels = c("left", "right"), model = DDM,
+                            formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
+                            constants=c(s=log(1)))
 # Then create a p_vector:
-p_vector <- c(v_Sleft=-2,v_Sright=2,a=log(1),a_Eneutral=log(1.5),a_Eaccuracy=log(2),
-          t0=log(.2),Z=qnorm(.5),sv=log(.5),SZ=qnorm(.5))
+p_vector <- c(v_Sleft=-2,v_Sright=2,a=log(1),a_EACC=log(2), t0=log(.2),
+              Z=qnorm(.5),sv=log(.5),SZ=qnorm(.5))
+
 # Now we can simulate data
 data <- make_data(p_vector, design_DDMaE, n_trials = 30)
 
-# We can also simulate data based on the Forstmann data
+# We can also simulate data based on a specific dataset
+design_DDMaE <- make_design(data = forstmann,model=DDM,
+                            formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
+                            constants=c(s=log(1)))
+p_vector <- c(v_Sleft=-2,v_Sright=2,a=log(1),a_Eneutral=log(1.5),a_Eaccuracy=log(2),
+              t0=log(.2),Z=qnorm(.5),sv=log(.5),SZ=qnorm(.5))
+
 data <- make_data(p_vector, design_DDMaE, data = forstmann)
 }
