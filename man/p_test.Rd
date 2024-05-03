@@ -28,33 +28,33 @@ p_test(
 )
 }
 \arguments{
-\item{x}{A samplers list}
+\item{x}{An EMC2 samplers object}
 
-\item{x_name}{String. Name of the parameter to be tested for x}
+\item{x_name}{A character string. Name of the parameter to be tested for \code{x}}
 
 \item{x_fun}{Function applied to the MCMC chains to create
 variable to be tested.}
 
-\item{x_fun_name}{Name to give to quantity calculated by x_fun}
+\item{x_fun_name}{Name to give to quantity calculated by \code{x_fun}}
 
-\item{y}{A second samplers list}
+\item{y}{A second EMC2 samplers object}
 
-\item{y_name}{String. Name of the parameter to be tested for y}
+\item{y_name}{A character string. Name of the parameter to be tested for \code{y}}
 
 \item{y_fun}{Function applied to the MCMC chains to create
 variable to be tested.}
 
-\item{y_fun_name}{Name to give to quantity calculated by y_fun}
+\item{y_fun_name}{Name to give to quantity calculated by \code{y_fun}}
 
-\item{mapped}{Boolean. Should samples be mapped back to the design before doing test.}
+\item{mapped}{Boolean. Should the samples be mapped back to the design before doing the test?}
 
 \item{x_subject}{Integer or name selecting a subject}
 
 \item{y_subject}{Integer or name selecting a subject}
 
-\item{mu}{Numeric. Null value for single sample test if y is not supplied (default 0)}
+\item{mu}{Numeric. \code{NULL} value for single sample test if \code{y} is not supplied (default 0)}
 
-\item{alternative}{"less" or "greater" determining direction of test probability}
+\item{alternative}{\code{less} or \code{greater} determining direction of test probability}
 
 \item{probs}{Vector defining quantiles to return.}
 
@@ -62,11 +62,11 @@ variable to be tested.}
 
 \item{p_digits}{Integer, significant digits for probability in printed results}
 
-\item{print_table}{Boolean (default TRUE) for printing results table}
+\item{print_table}{Boolean (defaults to \code{TRUE}) for printing results table}
 
-\item{filter}{A string. Specifies from which stage you want to take the samples.}
+\item{filter}{A character string. Specifies from which stage the samples should be taken.}
 
-\item{selection}{String designating parameter type (e.g. "alpha" or "covariance")}
+\item{selection}{A character string designating parameter type (e.g. \code{alpha} or \code{covariance})}
 
 \item{subfilter}{An integer or vector. If it's an integer, iterations up until the value set by \code{subfilter} will be excluded.
 If a vector is supplied, only the iterations in the vector will be considered.}
@@ -75,9 +75,9 @@ If a vector is supplied, only the iterations in the vector will be considered.}
 Invisible results table with no rounding.
 }
 \description{
-Modeled after t.test, returns the credible interval of the parameter or test.
-For a one sample test provide x and for two sample also provide y.
-For comparisons within one model we recommend using savage_dickey if the priors
+Modeled after \code{t.test}, returns the credible interval of the parameter or test.
+For a one sample test provide \code{x} and for two sample also provide \code{y}.
+Note that fo comparisons within one model, we recommend using \code{savage_dickey()} if the priors
 were well chosen.
 }
 \examples{

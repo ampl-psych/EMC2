@@ -254,32 +254,32 @@ iat_pmwg <- function(pmwg_mcmc,
 
 #' Posterior parameter tests
 #'
-#' Modeled after t.test, returns the credible interval of the parameter or test.
-#' For a one sample test provide x and for two sample also provide y.
-#' For comparisons within one model we recommend using savage_dickey if the priors
+#' Modeled after `t.test`, returns the credible interval of the parameter or test.
+#' For a one sample test provide `x` and for two sample also provide `y`.
+#' Note that fo comparisons within one model, we recommend using `savage_dickey()` if the priors
 #' were well chosen.
 #'
-#' @param x A samplers list
-#' @param x_name String. Name of the parameter to be tested for x
+#' @param x An EMC2 samplers object
+#' @param x_name A character string. Name of the parameter to be tested for `x`
 #' @param x_fun Function applied to the MCMC chains to create
 #' variable to be tested.
-#' @param y A second samplers list
-#' @param y_name String. Name of the parameter to be tested for y
+#' @param y A second EMC2 samplers object
+#' @param y_name A character string. Name of the parameter to be tested for `y`
 #' @param y_fun Function applied to the MCMC chains to create
 #' variable to be tested.
-#' @param mapped Boolean. Should samples be mapped back to the design before doing test.
+#' @param mapped Boolean. Should the samples be mapped back to the design before doing the test?
 #' @param x_subject Integer or name selecting a subject
 #' @param y_subject Integer or name selecting a subject
-#' @param mu Numeric. Null value for single sample test if y is not supplied (default 0)
-#' @param alternative "less" or "greater" determining direction of test probability
+#' @param mu Numeric. `NULL` value for single sample test if `y` is not supplied (default 0)
+#' @param alternative `less` or `greater` determining direction of test probability
 #' @param probs Vector defining quantiles to return.
 #' @param digits Integer, significant digits for estimates in printed results
 #' @param p_digits Integer, significant digits for probability in printed results
-#' @param print_table Boolean (default TRUE) for printing results table
-#' @param selection String designating parameter type (e.g. "alpha" or "covariance")
-#' @param filter A string. Specifies from which stage you want to take the samples.
-#' @param x_fun_name Name to give to quantity calculated by x_fun
-#' @param y_fun_name Name to give to quantity calculated by y_fun
+#' @param print_table Boolean (defaults to `TRUE`) for printing results table
+#' @param selection A character string designating parameter type (e.g. `alpha` or `covariance`)
+#' @param filter A character string. Specifies from which stage the samples should be taken.
+#' @param x_fun_name Name to give to quantity calculated by `x_fun`
+#' @param y_fun_name Name to give to quantity calculated by `y_fun`
 #' @param subfilter An integer or vector. If it's an integer, iterations up until the value set by `subfilter` will be excluded.
 #' If a vector is supplied, only the iterations in the vector will be considered.
 #' @examples \dontrun{
