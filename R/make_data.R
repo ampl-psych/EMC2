@@ -263,18 +263,20 @@ add_Ffunctions <- function(data,design)
 #'
 #' @param samplers An EMC2 samplers object from which posterior predictives should
 #' be generated
-#' @param hyper Boolean. Defaults to `FALSE`. If `TRUE`, simulates from the group-level
-#' instead of the subject-level parameters. Only makes sense when aggregating across subjects
+#' @param hyper Boolean. Defaults to `FALSE`. If `TRUE`, simulates from the group-level (`hyper`)
+#' parameters instead of the subject-level parameters.
 #' @param n_post Integer. Number of generated datasets
 #' @param filter Character. From which sampling stage should the samples be taken?
-#' Choice of the stages `preburn`, `burn`, `adapt`, `sample`, defaults to `sample`.
+#' Defaults to `sample`. Choice of the stages `preburn`, `burn`, `adapt`, `sample`
 #' @param subfilter Integer or numeric vector. If integer, will filter out the
-#' first x of samples, within the filter. If numeric vector, will select the samples within the filter
+#' supplied number of samples, within `filter`. If a numeric vector is supplied,
+#' the supplied range is selected within `filter`
 #' @param thin Integer. By how much should the chains be thinned before simulating from them? Will keep 1/thin samples.
-#' @param n_cores Integer. Across how many cores do you want to parallellize.
-#' @param stat Character. Can be mean, median or default random. Will take either random samples from the chain or use the mean or median of the parameter estimates.
+#' @param n_cores Integer. Number of cores across which there should be parallellized
+#' @param stat Character. Can be `mean`, `median` or `random` (i.e., the default).
+#' Will take either random samples from the chain(s) or use the mean or median of the parameter estimates.
 #' @param ... Optional additional arguments
-#' @return A list of simulated data sets of length n_post.
+#' @return A list of simulated data sets of length `n_post`
 #' @examples \dontrun{
 #' # based on a set of samplers ran by run_emc we can generate posterior predictives
 #' post_predict(samplers, n_cores = 8)

@@ -2,7 +2,7 @@
 % Please edit documentation in R/make_data.R
 \name{post_predict}
 \alias{post_predict}
-\title{Generate posterior predictives.}
+\title{Generate posterior predictives}
 \usage{
 post_predict(
   samplers,
@@ -17,29 +17,35 @@ post_predict(
 )
 }
 \arguments{
-\item{samplers}{A list of samples from which you want to generate posterior predictives.}
+\item{samplers}{An EMC2 samplers object from which posterior predictives should
+be generated}
 
-\item{hyper}{Boolean. Default is FALSE, if true simulates from the group level instead of subject-level parameters. Only makes sense when aggregating across subjects}
+\item{hyper}{Boolean. Defaults to \code{FALSE}. If \code{TRUE}, simulates from the group-level (\code{hyper})
+parameters instead of the subject-level parameters.}
 
-\item{n_post}{Integer. How many data sets do you want to generate from the posterior.}
+\item{n_post}{Integer. Number of generated datasets}
 
-\item{filter}{Character. Choice of the stages 'preburn', 'burn', 'adapt', 'sample', default is 'sample'. From which stage do you want to take samples to generate new data with.}
+\item{filter}{Character. From which sampling stage should the samples be taken?
+Defaults to \code{sample}. Choice of the stages \code{preburn}, \code{burn}, \code{adapt}, \code{sample}}
 
-\item{subfilter}{Integer or numeric vector. If integer, will filter out the first x of samples, within your filter. If numeric vector will select those samples, within your filter.}
+\item{subfilter}{Integer or numeric vector. If integer, will filter out the
+supplied number of samples, within \code{filter}. If a numeric vector is supplied,
+the supplied range is selected within \code{filter}}
 
-\item{thin}{Integer. By how much do you want to thin the chains before simulating from them. Will keep 1/thin samples.}
+\item{thin}{Integer. By how much should the chains be thinned before simulating from them? Will keep 1/thin samples.}
 
-\item{n_cores}{Integer. Across how many cores do you want to parallellize.}
+\item{n_cores}{Integer. Number of cores across which there should be parallellized}
 
-\item{stat}{Character. Can be mean, median or default random. Will take either random samples from the chain or use the mean or median of the parameter estimates.}
+\item{stat}{Character. Can be \code{mean}, \code{median} or \code{random} (i.e., the default).
+Will take either random samples from the chain(s) or use the mean or median of the parameter estimates.}
 
 \item{...}{Optional additional arguments}
 }
 \value{
-A list of simulated data sets of length n_post.
+A list of simulated data sets of length \code{n_post}
 }
 \description{
-Generates \code{n_post} data sets based on posterior parameter estimates
+Simulate \code{n_post} data sets from the posterior predictive distribution.
 }
 \examples{
 \dontrun{
