@@ -49,7 +49,7 @@ that integer. If vector it will include everything in that range.}
 \item{mapped}{Boolean. If TRUE plots the parameters mapped back to experimental design
 otherwise plots the sampled parameters.}
 
-\item{plot_prior}{Boolean. Overlay prior density in the plot (in red)}
+\item{plot_prior}{Boolean. If \code{TRUE} will overlay prior density in the plot (in red)}
 
 \item{xlim}{x-axis plot limit. If a vector is supplied will use the same axes for all.}
 
@@ -58,7 +58,7 @@ otherwise plots the sampled parameters.}
 \item{prior_xlim}{A vector giving upper and lower quantiles of prior when choosing
 xlim if \code{plot_prior = TRUE}. If set to NULL xlim is used instead.}
 
-\item{show_chains}{Boolean (default FALSE) plot separate density for each chain.}
+\item{show_chains}{Boolean (default FALSE) plots a separate density for each chain.}
 
 \item{do_plot}{Boolean. Set to \code{FALSE} to only return the parameter credible intervals and omit the plots.}
 
@@ -69,7 +69,7 @@ NA (default) will plot all.}
 to return invisibly}
 
 \item{pars}{Named vector or matrix of known/simulated parameters, or the output of
-plot_pars, in which case the posterior medians are extracted. If xlim is not supplied,}
+\code{plot_pars}, in which case the posterior medians are extracted. If xlim is not supplied,}
 
 \item{probs}{Vector. The quantiles of the selected parameters to return invisibly.}
 

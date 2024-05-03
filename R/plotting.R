@@ -9,7 +9,7 @@
 #' If NA (default) will use CODA defaults (unless ``plot_acf = TRUE``), if NULL use current.
 #' @param subject Integer or character vector. Only applicable if selection = "alpha". Will plot only these subject(s).
 #' NA (default) will plot all.
-#' @param ylim A vector. The y limits of the chain plot.
+#' @param ylim A vector. The y-limits of the chain plot.
 #' @param selection String. Which parameter type to plot ("alpha", "mu", "variance", "covariance", "correlation").
 #' "LL" will plot the log-likelihood chains.
 #' @param filter A string. Specifies from which stage you want to plot the MCMC chains ("preburn", "burn", "adapt", "sample")
@@ -300,21 +300,21 @@ plot_defective_density <- function(data,subject=NULL,factors=NULL,
 #' that integer. If vector it will include everything in that range.
 #' @param mapped Boolean. If TRUE plots the parameters mapped back to experimental design
 #' otherwise plots the sampled parameters.
-#' @param plot_prior Boolean. Overlay prior density in the plot (in red)
+#' @param plot_prior Boolean. If ``TRUE`` will overlay prior density in the plot (in red)
 #' @param xlim x-axis plot limit. If a vector is supplied will use the same axes for all.
 #  Alternatively a matrix can be supplied with one row for each parameter.
 #' @param ylim y-axis plot limit. If a vector is supplied will use the same axes for all.
 #  Alternatively a matrix can be supplied with one row for each parameter.
 #' @param prior_xlim A vector giving upper and lower quantiles of prior when choosing
 #' xlim if ``plot_prior = TRUE``. If set to NULL xlim is used instead.
-#' @param show_chains Boolean (default FALSE) plot separate density for each chain.
+#' @param show_chains Boolean (default FALSE) plots a separate density for each chain.
 #' @param do_plot Boolean. Set to ``FALSE`` to only return the parameter credible intervals and omit the plots.
 #' @param subject Integer or character vector. Only applicable if ``selection = "alpha"``. Will plot only these subject(s).
 #' NA (default) will plot all.
 #' @param add_means Boolean. Whether to add parameter means as an attribute
 #' to return invisibly
 #' @param pars Named vector or matrix of known/simulated parameters, or the output of
-#' plot_pars, in which case the posterior medians are extracted. If xlim is not supplied,
+#' ``plot_pars``, in which case the posterior medians are extracted. If xlim is not supplied,
 #  the plot will be adjusted to include the parameter values, which are plotted as vertical lines.
 #' @param probs Vector. The quantiles of the selected parameters to return invisibly.
 #' @param bw number or string bandwidth for density (default "nrd0"). See ``?density``.
@@ -608,93 +608,56 @@ plot_roc <- function(data,signalFactor="S",zROC=FALSE,qfun=NULL,main="",lim=NULL
   invisible(ctab)
 }
 
-#' Plots overlaying observed and fitted data.
+#' Plots choice data with no response times
 #'
-#' If rt  available plots defective cumulative distributions
-#' functions (CDFs), if not plots region under curve (ROC).
-#' CDFs plot the probability of a response, p(R) as a function of response time
-#' (RT) for data (black lines and points at qpoints quantiles) and posterior-
-#' predictive simulations (grey lines and points). Large grey points show the
-#' average of replicate quantiles and small grey points percentiles for
-#' individual replicates, providing a representation of uncertainty in the model
-#' predictions.
-#'
-#' If the stat argument (which calculates
-#' a statistic based on the data) is supplied fit is plotted as a density with
-#' a vertical line at the position of the data statistic. If more than one
-#' subject is included data and fits are aggregated over subjects. If data or
-#' fit contains NA in responses or rt, or is.infinite(rt) these are treated as
-#' missing and defective cdfs sum to the probability of non-missing.
-#'
-
-#'
-#' @param data A dataframe. The experimental data in EMC format with at least the subjects factor,
-#' R (response factor) and rt (response time) columns,
-#' and optionally other factor columns of the design.
-#' @param pp Posterior predictives created by ``post_predict``
-#' @param subject Integer or string selecting a subject from the data. If specified will only plot that subject
-#' (default NULL = all).
+#' @param data Data frame with subjects and R factors, and possibly other factors
+#' and an rt column
+#' @param pp Posterior predictives created by post_predict
+#' @param subject Integer or string picking out subject(s).
 #' @param factors Character vector of factors in data to display separately. If
 #' NULL (default) use names of all columns in data except "trials","R", and "rt".
 #' Omitted factors are aggregated over. If NA treats entire data set as a single cell.
-#' Must be NA or NULL when using stat argument.
-#' @param functions A named list of functions that create new factors which can then be
+#' If stat is used default is changed to NA.
+#' @param functions A named list of functions that create new factors which cna then be
 #' used by the factors and stat arguments.
 #' @param stat A function that takes a the data and returns a single value.
 #' @param stat_name A string naming what the stat argument calculates.
-#' @param quants A vector. Quantiles to return when
-#' stat argument is supplied.
-#' @param do_plot Boolean. Set to ``FALSE`` to only return the quantiles and omit the plots.
-#' @param xlim x-axis plot limit. If a vector is supplied will use the same axes for all.
-#  Alternatively a matrix can be supplied with one row for each parameter.
-#' @param ylim y-axis plot limit. If a vector is supplied will use the same axes for all.
-#  Alternatively a matrix can be supplied with one row for each parameter.
-#' @param layout A vector specifying the layout as in par(mfrow = layout).
-#' If NA or NULL use current.
-#' @param probs Vector of probabilities at which to calculate cdf
-#' @param data_lwd Integer. Line width for data in cdf
-#' @param fit_lwd Integer. Line width for posterior predictives in cdf
-#' @param qp_cex Numeric. Cex for data quantile points in cdf
-#' @param q_points Vector. Quantile points to plot in cdf
-#' @param pqp_cex Numeric. Cex for predicted quantile points in cdf
-#' @param lpos Character. Legend position, see ``?legend``.
-#' @param signalFactor The name of the "signal" factor in an ROC.
-#' @param zROC Boolean. Wheter to plot ROC on transformed scale.
-#' @param qfun A function. Scale transform function for zROC (default qnorm)
-#' @param lim Vector. Limits for x and y limit of ROC
-#' @param rocfit_cex Numeric. Cex for predicted ROC points
-#' @param adjust Numeric. Density function bandwidth adjust parameter. See ``?density`
+#' @param adjust Control of smoothing in density plots
+#' @param ci Credible interval and central tendency quantiles for return when
+#' stat argument is supplied (default c(.025,.5,.975))
+#' @param do_plot Boolean (default TRUE) for making a plot
+#' @param xlim x-axis plot limit, 2-vector (same for all) or matrix (one row for each paramter)
+#' @param ylim y-axis plot limit, 2-vector (same for all) or matrix (one row for each paramter)
 #' @param main Text title, pasted before cell name.
+#' @param layout 2-vector specifying par(mfrow) or par(mfcol) (default NULL use current,
+#' NA keeps par currently active).
+#' @param mfcol Boolean, default TRUE use mfcol else mfrow.
+#' @param signalFactor Character name of factor for the signal
+#' @param zROC Logical, plot Z transformed ROC (default FALSE )
+#' @param qfun Type of "Z" transform (default probit)
+#' @param lim x = y limit for ROC plots
+#' @param rocfit_cex Size of points in ROC plot (default 0.5)
 #'
-#' @return If stat argument is provided a table of observed values and predicted quantiles
-#' @export
-plot_fit <- function(data,pp,subject=NULL,factors=NULL,functions=NULL,
-                     stat=NULL,stat_name="",adjust=1,
-                     quants=c(.025,.5,.975),do_plot=TRUE,
-                     xlim=NULL,ylim=NULL,main="",
-                     layout=NULL,
-                     probs=c(1:99)/100,
-                     data_lwd=2,fit_lwd=1,qp_cex=1,
-                     q_points=c(.1,.3,.5,.7,.9),pqp_cex=.5,lpos="topleft",
-                     signalFactor="S",zROC=FALSE,qfun=qnorm,lim=NULL,rocfit_cex=.5)
+#' @return If stat argument is provided a matrix of observed values and predicted quantiles
+plot_fit_choice <- function(data,pp,subject=NULL,factors=NULL,functions=NULL,
+                            stat=NULL,stat_name="",adjust=1,
+                            ci=c(.025,.5,.975),do_plot=TRUE,
+                            xlim=NULL,ylim=NULL,main="",
+                            layout=NULL,mfcol=TRUE,
+                            signalFactor="S",zROC=FALSE,qfun=qnorm,lim=NULL,rocfit_cex=.5)
 {
-  if (!is.null(stat) & (!all(is.na(factors))|is.null(factors))) {
-    if (is.null(factors)) factors <- NA else {
-      warning("factors must be NA or NULL when using stat, set to NA")
-      factors <- NA
-    }
-  }
+  if (!is.null(stat) & is.null(factors)) factors <- NA
   if (!is.null(subject)) {
     snams <- levels(data$subjects)
     if (is.numeric(subject)) subject <- snams[subject]
     if (!all(subject %in% snams)) stop("Subject(s) not present\n")
-    dat <- as.data.frame(droplevels(data[data$subjects %in% subject,]))
+    dat <- droplevels(data[data$subjects %in% subject,])
     pp <- droplevels(pp[pp$subjects %in% subject,])
     if (length(subject>1))
       fnams <- names(dat)[!(names(dat) %in% c("trials","R","rt"))] else
         fnams <- names(dat)[!(names(dat) %in% c("subjects","trials","R","rt"))]
   } else {
-    dat <- as.data.frame(data)
+    dat <- data
     fnams <- names(dat)[!(names(dat) %in% c("trials","R","rt"))]
   }
 
@@ -717,85 +680,13 @@ plot_fit <- function(data,pp,subject=NULL,factors=NULL,functions=NULL,
     }
   }
   if (!any(is.na(layout))) if (!is.null(layout))
-      par(mfrow=layout)
-  if (all(is.na(data$rt))) {  # type=SDT
-    if (length(levels(data$R))==2 & is.null(stat))
-      stop("No plots for binary responses, use an accuracy function in stat arguement.")
-    if (!is.null(stat)) { # statistic
-      if (!any(is.na(fnams))) {
-        cells <- dat[,fnams,drop=FALSE]
-        for (i in fnams) cells[,i] <- paste(i,cells[,i],sep="=")
-        cells <- apply(cells,1,paste,collapse=" ")
-        pp_cells <- pp[,fnams,drop=FALSE]
-        for (i in fnams) pp_cells[,i] <- paste(i,pp_cells[,i],sep="=")
-        pp_cells <- apply(pp_cells,1,paste,collapse=" ")
-        postn <- unique(pp$postn)
-        ucells <- sort(unique(cells))
-      } else ucells <- ""
-      tab <- matrix(nrow=length(ucells),ncol=4,
-                    dimnames=list(ucells,c("Observed",names(quantile(1:5,quants)))))
-      for (i in ucells) {
-        if (i=="") {
-          obs <- stat(dat)
-          ppi <- pp
-          pred <- sapply(postn,function(x){stat(ppi[ppi$postn==x,])})
-          tab[1,] <- c(obs,quantile(pred,quants))
-        } else {
-          obs <- stat(dat[cells==i,])
-          ppi <- pp[pp_cells==i,]
-          pred <- sapply(postn,function(x){stat(ppi[ppi$postn==x,])})
-          tab[i,] <- c(obs,quantile(pred,quants))
-        }
-        if (do_plot) {
-          dens <- density(pred,adjust=adjust)
-          if (!is.null(xlim)) xlimi <- xlim else
-            xlimi <- c(pmin(obs,min(dens$x)),pmax(obs,max(dens$x)))
-          plot(dens,main=paste(main,i),xlab=stat_name,xlim=xlimi)
-          abline(v=obs)
-        }
+    if (mfcol) par(mfcol=layout) else par(mfrow=layout)
 
-      }
-      invisible(tab)
-    } else {
-      if (!any(fnams==signalFactor))
-        stop("Data does not have a column specified in the signalFactor argument: ",signalFactor)
-      if (length(levels(data[[signalFactor]]))!=2)
-        stop("signalFactor must have exactly two levels for an ROC plot")
-      if (zROC & is.null(qfun))
-        stop("Must supply qfun for zROC")
-      fnams <- fnams[fnams != signalFactor]
-      if (!any(is.na(fnams))) {
-        cells <- dat[,fnams,drop=FALSE]
-        for (i in fnams) cells[,i] <- paste(i,cells[,i],sep="=")
-        cells <- apply(cells,1,paste,collapse=" ")
-        pp_cells <- pp[,fnams,drop=FALSE]
-        for (i in fnams) pp_cells[,i] <- paste(i,pp_cells[,i],sep="=")
-        pp_cells <- apply(pp_cells,1,paste,collapse=" ")
-        ucells <- sort(unique(cells))
-      } else ucells <- ""
-      postn <- unique(pp$postn)
-      for (i in ucells) {
-        if (i=="") {
-          dati <- dat
-          ppi <- pp
-        } else {
-          dati <- dat[cells==i,]
-          ppi <- pp[pp_cells==i,]
-        }
-        dpts <- plot_roc(dati,zROC=zROC,qfun=qfun,lim=lim,main=paste(main,i),signalFactor=signalFactor)
-        tab <- table(ppi$postn,ppi$R,ppi[[signalFactor]])
-        ctab <- apply(tab,1,function(x){list(1-apply(t(x)/apply(x,2,sum),1,cumsum)[-dim(x)[1],])})
-        if (!zROC) lapply(ctab,function(x){
-          points(x[[1]][,1],x[[1]][,2],col="grey",pch=16,cex=rocfit_cex)
-        }) else ctab <- lapply(ctab,function(x){
-          x[[1]] <- qnorm(x[[1]])
-          points(x[[1]][row.names(dpts),1],x[[1]][row.names(dpts),2],col="grey",pch=16,cex=rocfit_cex)
-        })
-        points(dpts[,1],dpts[,2])
-        lines(dpts[,1],dpts[,2])
-      }
-    }
-  } else {
+  if (!all(is.na(data$rt))) stop("Use plot_fit for rt data")
+
+  if (length(levels(data$R))==2 & is.null(stat))
+    stop("No plots for binary responses, use an accuracy function in stat arguement.")
+  if (!is.null(stat)) { # statistic
     if (!any(is.na(fnams))) {
       cells <- dat[,fnams,drop=FALSE]
       for (i in fnams) cells[,i] <- paste(i,cells[,i],sep="=")
@@ -803,116 +694,304 @@ plot_fit <- function(data,pp,subject=NULL,factors=NULL,functions=NULL,
       pp_cells <- pp[,fnams,drop=FALSE]
       for (i in fnams) pp_cells[,i] <- paste(i,pp_cells[,i],sep="=")
       pp_cells <- apply(pp_cells,1,paste,collapse=" ")
-    }
-    if (!is.null(stat)) { # statistic
       postn <- unique(pp$postn)
-      if (any(is.na(fnams))) ucells <- "" else ucells <- sort(unique(cells))
-      tab <- matrix(nrow=length(ucells),ncol=4,
-                    dimnames=list(ucells,c("Observed",names(quantile(1:5,quants)))))
-      for (i in ucells) {
-        if (i=="") {
-          dati <- dat
-          ppi <- pp
-          obs <- stat(dati)
-          pred <- sapply(postn,function(x){stat(ppi[ppi$postn==x,])})
-          tab[1,] <- c(obs,quantile(pred,quants))
-        } else {
-          dati <- dat[cells==i,]
-          ppi <- pp[pp_cells==i,]
-          obs <- stat(dati)
-          pred <- sapply(postn,function(x){stat(ppi[ppi$postn==x,])})
-          tab[i,] <- c(obs,quantile(pred,quants))
-        }
-        if (do_plot) {
-          dens <- density(pred,adjust=adjust)
-          if (!is.null(xlim)) xlimi <- xlim else
-            xlimi <- c(pmin(obs,min(dens$x)),pmax(obs,max(dens$x)))
-          plot(dens,main=paste(main,i),xlab=stat_name,xlim=xlimi)
-          abline(v=obs)
-        }
+      ucells <- sort(unique(cells))
+    } else {
+      ucells <- ""
+      postn <- unique(pp$postn)
+    }
+    tab <- matrix(nrow=length(ucells),ncol=4,
+                  dimnames=list(ucells,c("Observed",names(quantile(1:5,ci)))))
+    for (i in ucells) {
+      if (i=="") {
+        obs <- stat(dat)
+        ppi <- pp
+        pred <- sapply(postn,function(x){stat(ppi[ppi$postn==x,])})
+        tab[1,] <- c(obs,quantile(pred,ci))
+      } else {
+        obs <- stat(dat[cells==i,])
+        ppi <- pp[pp_cells==i,]
+        pred <- sapply(postn,function(x){stat(ppi[ppi$postn==x,])})
+        tab[i,] <- c(obs,quantile(pred,ci))
       }
-      invisible(tab)
-    } else { # cdf
-      if (any(is.na(fnams))) cells <- ""
-      pok <- probs %in% q_points
-      R <- levels(dat$R)
-      if (is.null(ylim)) ylim <- c(0,1)
-      # set common xlim
-      if (is.null(xlim)) {
-        xlim <- c(Inf,-Inf)
-        for (i in sort(unique(cells))) {
-          if (i=="") {
-            dati <- dat
-            ppi <- pp
-          } else {
-            dati <- dat[cells==i & okd,]
-            ppi <- pp[pp_cells==i & okpp,]
-          }
-          pqs <- pq <- qs <- setNames(vector(mode="list",length=length(R)),R)
-          for (j in R) if (length(dati$rt[dati$R==j])>=length(q_points)) {
-            qs[[j]] <- quantile(dati$rt[dati$R==j],probs=probs)
-            pq[[j]] <- quantile(ppi$rt[ppi$R==j],probs=probs)
-            pqs[[j]] <- tapply(ppi$rt[ppi$R==j],ppi$postn[ppi$R==j],
-                               quantile,probs=probs[pok])
-          } else qs[[j]] <- pq[[j]] <- pqs[[j]] <- NA
-          rx <- cbind(do.call(rbind,lapply(qs,function(x){x[c(1,length(probs))]})),
-                      do.call(rbind,lapply(pq,function(x){x[c(1,length(probs))]})))
-          xlimi <- c(min(rx,na.rm=TRUE),max(rx,na.rm=TRUE))
-          if (!any(is.na(xlimi))) {
-            xlim[1] <- pmin(xlim[1],xlimi[1])
-            xlim[2] <- pmax(xlim[2],xlimi[2])
-          }
-        }
+      if (do_plot) {
+        dens <- density(pred,adjust=adjust)
+        if (!is.null(xlim)) xlimi <- xlim else
+          xlimi <- c(pmin(obs,min(dens$x)),pmax(obs,max(dens$x)))
+        plot(dens,main=paste(main,i),xlab=stat_name,xlim=xlimi)
+        abline(v=obs)
       }
+
+    }
+    invisible(tab)
+  } else {
+    if (!any(fnams==signalFactor))
+      stop("Data does not have a column specified in the signalFactor argument: ",signalFactor)
+    if (length(levels(data[[signalFactor]]))!=2)
+      stop("signalFactor must have exactly two levels for an ROC plot")
+    if (zROC & is.null(qfun))
+      stop("Must supply qfun for zROC")
+    fnams <- fnams[fnams != signalFactor]
+    if (!any(is.na(fnams))) {
+      cells <- dat[,fnams,drop=FALSE]
+      for (i in fnams) cells[,i] <- paste(i,cells[,i],sep="=")
+      cells <- apply(cells,1,paste,collapse=" ")
+      pp_cells <- pp[,fnams,drop=FALSE]
+      for (i in fnams) pp_cells[,i] <- paste(i,pp_cells[,i],sep="=")
+      pp_cells <- apply(pp_cells,1,paste,collapse=" ")
+      ucells <- sort(unique(cells))
+    } else ucells <- ""
+    postn <- unique(pp$postn)
+    for (i in ucells) {
+      if (i=="") {
+        dati <- dat
+        ppi <- pp
+      } else {
+        dati <- dat[cells==i,]
+        ppi <- pp[pp_cells==i,]
+      }
+      dpts <- plot_roc(dati,zROC=zROC,qfun=qfun,lim=lim,main=paste(main,i),signalFactor=signalFactor)
+      tab <- table(ppi$postn,ppi$R,ppi[[signalFactor]])
+      ctab <- apply(tab,1,function(x){list(1-apply(t(x)/apply(x,2,sum),1,cumsum)[-dim(x)[1],])})
+      if (!zROC) lapply(ctab,function(x){
+        points(x[[1]][,1],x[[1]][,2],col="grey",pch=16,cex=rocfit_cex)
+      }) else ctab <- lapply(ctab,function(x){
+        x[[1]] <- qnorm(x[[1]])
+        points(x[[1]][row.names(dpts),1],x[[1]][row.names(dpts),2],col="grey",pch=16,cex=rocfit_cex)
+      })
+      points(dpts[,1],dpts[,2])
+      lines(dpts[,1],dpts[,2])
+    }
+  }
+}
+
+
+#' Plots overlaying observed and fitted data.
+#'
+#' Plot the cumulative density function: the probability of a response,
+#' p(R) as a function of response time (RT) for the experimental data and posterior
+#' predictive simulations.
+#'
+#' The data is plotted in black. Large grey points show the average quantiles across posterior predictives.
+#' Small grey points each represent the predicted quantile of an individual replicate,
+#' providing a representation of uncertainty in the model predictions.
+#'
+#' If the stat argument is supplied (which calculates a statistic based on the data),
+#' the posterior predictives are plotted as a density over the different replicates.
+#' A vertical line is plotted at the value of that statistic for the experimental data.
+#'
+#' If more than one subject is included, the data and fits are aggregated across subjects by default.
+
+#' @param data A dataframe. The experimental data in EMC format with at least the subjects factor,
+#' R (response factor) and rt (response time) columns,
+#' and optionally other factor columns of the design.
+#' @param pp A dataframe. Posterior predictives created by ``post_predict``
+#' @param subject Integer or string selecting a subject from the data. If specified will only plot that subject.
+#' NULL (the default) will plot all subjects.
+#' @param factors Character vector of factors in data to display separately. If
+#' NULL (default) use names of all columns in data except "trials","R", and "rt".
+#' Omitted factors are aggregated over. If NA treats entire data set as a single cell.
+#' Must be NA or NULL when using stat argument.
+#' @param functions A named list of functions that create new factors which can then be
+#' used by the factors and stat arguments.
+#' @param stat A function that takes the data/the posterior predictives and returns a single value.
+#' For the posterior predictives it will use a single value per replicate, which are then plotted as a density.
+#' @param stat_name A string naming what the stat argument calculates, used in labeling the x-axis of the plot.
+#' @param adjust Numeric. Density function bandwidth adjust parameter. See ``?density`
+#' @param quants A vector. Quantiles of the posterior predictives to return when stat argument is supplied.
+#' @param do_plot Boolean. Set to ``FALSE`` to only return the quantiles and omit the plots.
+#' @param xlim A numeric vector. x-axis plot limit.
+#' @param ylim A numeric vector. y-axis plot limit.
+#' @param layout A vector specifying the layout as in par(mfrow = layout).
+#' If NA or NULL uses current plot window layout.
+#' @param mfcol Boolean.  If ``TRUE`` uses par(mfrow = layout), otherwise uses par(mfcol = layout)
+#' @param probs Vector of probabilities at which to calculate cumulative density function
+#' @param data_lwd Integer. Line width for data
+#' @param fit_lwd Integer. Line width for posterior predictives
+#' @param q_points Vector. Quantile points to plot
+#' @param qp_cex Numeric. Cex for data quantile points
+#' @param pqp_cex Numeric. Cex for predicted quantile points
+#' @param lpos Character. Legend position, see ``?legend``.
+#' @param main Character. Pasted before the plot title, especially useful when specifying a stat argument.
+#' @return If stat argument is provided a vector of observed values and predicted quantiles
+#' @examples \dontrun{
+#' # First generate posterior predictives based on a samplers object run with run_emc
+#' pp <- post_predict(samplers, n_cores = 4)
+#' # Then we can visualize the model fit
+#' plot_fit(forstmann, pp, factors = c("S", "E"), layout = c(2,3))
+#'
+#' # We can also visualize specific statistics on the posterior predictives
+#' # This function calculates the difference in rt between two S levels.
+#' # It takes the data (or the posterior predictives) as an argument
+#' drt <- function(data) diff(tapply(data$rt,data[,c("S")],mean))
+#' plot_fit(forstmann, pp, stat=drt,stat_name="Rt difference",
+#'          main=("Left vs Right"))
+#' }
+#' @export
+plot_fit <- function(data,pp,subject=NULL,factors=NULL,functions=NULL,
+                     stat=NULL,stat_name="",adjust=1,
+                     quants=c(.025,.5,.975),do_plot=TRUE,
+                     xlim=NULL,ylim=NULL,
+                     layout=NULL,mfcol=FALSE,
+                     probs=c(1:99)/100,
+                     data_lwd=2,fit_lwd=1,
+                     q_points=c(.1,.3,.5,.7,.9),
+                     qp_cex=1,pqp_cex=.5,lpos="topleft", main = "")
+{
+  if (!is.null(stat) & is.null(factors)) factors <- NA
+  if (!is.null(subject)) {
+    snams <- levels(data$subjects)
+    if (is.numeric(subject)) subject <- snams[subject]
+    if (!all(subject %in% snams)) stop("Subject(s) not present\n")
+    dat <- droplevels(data[data$subjects %in% subject,])
+    pp <- droplevels(pp[pp$subjects %in% subject,])
+    if (length(subject>1))
+      fnams <- names(dat)[!(names(dat) %in% c("trials","R","rt"))] else
+        fnams <- names(dat)[!(names(dat) %in% c("subjects","trials","R","rt"))]
+  } else {
+    dat <- data
+    fnams <- names(dat)[!(names(dat) %in% c("trials","R","rt"))]
+  }
+
+  okd <- !is.na(dat$R) & is.finite(dat$rt)
+  okpp <- !is.na(pp$R) & is.finite(pp$rt)
+
+  if (!is.null(functions)) for (i in 1:length(functions)) {
+    dat <- cbind.data.frame(functions[[i]](dat),dat)
+    names(dat)[1] <- names(functions)[i]
+    pp <- cbind.data.frame(functions[[i]](pp),pp)
+    names(pp)[1] <- names(functions)[i]
+    fnams <- c(names(functions)[i],fnams)
+  }
+
+  if (!is.null(factors)) {
+    if (any(is.na(factors))) fnams <- NA else {
+      if (!all(factors %in% fnams))
+        stop("factors must name factors in data")
+      fnams <- factors
+    }
+  }
+  if (!any(is.na(layout))) if (!is.null(layout))
+    if (mfcol) par(mfcol=layout) else par(mfrow=layout)
+
+  if (all(is.na(data$rt))) stop("Use plot_fit_choice if no rt data")
+
+  if (!any(is.na(fnams))) {
+    cells <- dat[,fnams,drop=FALSE]
+    for (i in fnams) cells[,i] <- paste(i,cells[,i],sep="=")
+    cells <- apply(cells,1,paste,collapse=" ")
+    pp_cells <- pp[,fnams,drop=FALSE]
+    for (i in fnams) pp_cells[,i] <- paste(i,pp_cells[,i],sep="=")
+    pp_cells <- apply(pp_cells,1,paste,collapse=" ")
+  }
+  if (!is.null(stat)) { # statistic
+    postn <- unique(pp$postn)
+    if (any(is.na(fnams))) ucells <- "" else ucells <- sort(unique(cells))
+    tab <- matrix(nrow=length(ucells),ncol=4,
+                  dimnames=list(ucells,c("Observed",names(quantile(1:5,quants)))))
+    for (i in ucells) {
+      if (i=="") {
+        dati <- dat
+        ppi <- pp
+        obs <- stat(dati)
+        pred <- sapply(postn,function(x){stat(ppi[ppi$postn==x,])})
+        tab[1,] <- c(obs,quantile(pred,quants))
+      } else {
+        dati <- dat[cells==i,]
+        ppi <- pp[pp_cells==i,]
+        obs <- stat(dati)
+        pred <- sapply(postn,function(x){stat(ppi[ppi$postn==x,])})
+        tab[i,] <- c(obs,quantile(pred,quants))
+      }
+      if (do_plot) {
+        dens <- density(pred,adjust=adjust)
+        if (!is.null(xlim)) xlimi <- xlim else
+          xlimi <- c(pmin(obs,min(dens$x)),pmax(obs,max(dens$x)))
+        plot(dens,main=paste(main,i),xlab=stat_name,xlim=xlimi)
+        abline(v=obs)
+      }
+    }
+    invisible(tab)
+  } else { # cdf
+    if (any(is.na(fnams))) cells <- ""
+    pok <- probs %in% q_points
+    R <- levels(dat$R)
+    if (is.null(ylim)) ylim <- c(0,1)
+    # set common xlim
+    if (is.null(xlim)) {
+      xlim <- c(Inf,-Inf)
       for (i in sort(unique(cells))) {
         if (i=="") {
           dati <- dat
           ppi <- pp
-          okdi <- okd
-          okppi <- okpp
         } else {
-          dati <- dat[cells==i,]
-          ppi <- pp[pp_cells==i,]
-          okdi <- okd[cells==i]
-          okppi <- okpp[pp_cells==i]
+          dati <- dat[cells==i & okd,]
+          ppi <- pp[pp_cells==i & okpp,]
         }
-        pR <- tapply(okdi,dati$R,sum)/dim(dati)[1]
-        ppR <- tapply(okppi,ppi$R,sum)/dim(ppi)[1]
-        dati <- dati[okdi,]
-        ppi <- ppi[okppi,]
         pqs <- pq <- qs <- setNames(vector(mode="list",length=length(R)),R)
         for (j in R) if (length(dati$rt[dati$R==j])>=length(q_points)) {
-          isj <- ppi$R==j
           qs[[j]] <- quantile(dati$rt[dati$R==j],probs=probs)
-          pq[[j]] <- quantile(ppi$rt[isj],probs=probs)
-          pqs[[j]] <- tapply(ppi$rt[isj],ppi$postn[isj],quantile,probs=probs[pok])
+          pq[[j]] <- quantile(ppi$rt[ppi$R==j],probs=probs)
+          pqs[[j]] <- tapply(ppi$rt[ppi$R==j],ppi$postn[ppi$R==j],
+                             quantile,probs=probs[pok])
         } else qs[[j]] <- pq[[j]] <- pqs[[j]] <- NA
-        if ( !any(is.na(pq[[1]])) ) {
-          plot(pq[[1]],probs*ppR[1],xlim=xlim,ylim=ylim,main=paste(main,i),xlab="RT",type="l",
-               lwd=fit_lwd,ylab="p(R)",lty=1)
-          tmp=lapply(pqs[[1]],function(x){
-            points(x,probs[pok]*ppR[1],col="grey",pch=16,cex=pqp_cex)})
-          points(pq[[1]][pok],probs[pok]*ppR[1],cex=pqp_cex*3,pch=16,col="grey")
-          lines(qs[[1]],probs*pR[1],lwd=data_lwd,lty=1)
-          points(qs[[1]][pok],probs[pok]*pR[1],cex=qp_cex,pch=16)
-          do_plot=FALSE
-        } else do_plot=TRUE
-        if (length(qs)>1) {
-          for (j in 2:length(qs)) if (!any(is.na(pq[[j]]))) {
-            if (do_plot) {
-              plot(pq[[j]],probs*ppR[j],xlim=xlim,ylim=ylim,main=paste(main,i),xlab="RT",type="l",
-                   lwd=fit_lwd,ylab="p(R)",lty=j)
-              do_plot <- FALSE
-            } else lines(pq[[j]],probs*ppR[j],lwd=fit_lwd,lty=j)
-            tmp=lapply(pqs[[j]],function(x){
-              points(x,probs[pok]*ppR[j],col="grey",pch=16,cex=pqp_cex)})
-            points(pq[[j]][pok],probs[pok]*ppR[j],cex=pqp_cex*3,pch=16,col="grey")
-            lines(qs[[j]],probs*pR[j],lwd=data_lwd,lty=j)
-            points(qs[[j]][pok],probs[pok]*pR[j],cex=qp_cex,pch=16)
-          }
+        rx <- cbind(do.call(rbind,lapply(qs,function(x){x[c(1,length(probs))]})),
+                    do.call(rbind,lapply(pq,function(x){x[c(1,length(probs))]})))
+        xlimi <- c(min(rx,na.rm=TRUE),max(rx,na.rm=TRUE))
+        if (!any(is.na(xlimi))) {
+          xlim[1] <- pmin(xlim[1],xlimi[1])
+          xlim[2] <- pmax(xlim[2],xlimi[2])
         }
-        legend(lpos,as.character(R),lty=1:length(R),bty="n",title="Response")
       }
+    }
+    for (i in sort(unique(cells))) {
+      if (i=="") {
+        dati <- dat
+        ppi <- pp
+        okdi <- okd
+        okppi <- okpp
+      } else {
+        dati <- dat[cells==i,]
+        ppi <- pp[pp_cells==i,]
+        okdi <- okd[cells==i]
+        okppi <- okpp[pp_cells==i]
+      }
+      pR <- tapply(okdi,dati$R,sum)/dim(dati)[1]
+      ppR <- tapply(okppi,ppi$R,sum)/dim(ppi)[1]
+      dati <- dati[okdi,]
+      ppi <- ppi[okppi,]
+      pqs <- pq <- qs <- setNames(vector(mode="list",length=length(R)),R)
+      for (j in R) if (length(dati$rt[dati$R==j])>=length(q_points)) {
+        isj <- ppi$R==j
+        qs[[j]] <- quantile(dati$rt[dati$R==j],probs=probs)
+        pq[[j]] <- quantile(ppi$rt[isj],probs=probs)
+        pqs[[j]] <- tapply(ppi$rt[isj],ppi$postn[isj],quantile,probs=probs[pok])
+      } else qs[[j]] <- pq[[j]] <- pqs[[j]] <- NA
+      if ( !any(is.na(pq[[1]])) ) {
+        plot(pq[[1]],probs*ppR[1],xlim=xlim,ylim=ylim,main=paste(main,i),xlab="RT",type="l",
+             lwd=fit_lwd,ylab="p(R)",lty=1)
+        tmp=lapply(pqs[[1]],function(x){
+          points(x,probs[pok]*ppR[1],col="grey",pch=16,cex=pqp_cex)})
+        points(pq[[1]][pok],probs[pok]*ppR[1],cex=pqp_cex*3,pch=16,col="grey")
+        lines(qs[[1]],probs*pR[1],lwd=data_lwd,lty=1)
+        points(qs[[1]][pok],probs[pok]*pR[1],cex=qp_cex,pch=16)
+        do_plot=FALSE
+      } else do_plot=TRUE
+      if (length(qs)>1) {
+        for (j in 2:length(qs)) if (!any(is.na(pq[[j]]))) {
+          if (do_plot) {
+            plot(pq[[j]],probs*ppR[j],xlim=xlim,ylim=ylim,main=paste(main,i),xlab="RT",type="l",
+                 lwd=fit_lwd,ylab="p(R)",lty=j)
+            do_plot <- FALSE
+          } else lines(pq[[j]],probs*ppR[j],lwd=fit_lwd,lty=j)
+          tmp=lapply(pqs[[j]],function(x){
+            points(x,probs[pok]*ppR[j],col="grey",pch=16,cex=pqp_cex)})
+          points(pq[[j]][pok],probs[pok]*ppR[j],cex=pqp_cex*3,pch=16,col="grey")
+          lines(qs[[j]],probs*pR[j],lwd=data_lwd,lty=j)
+          points(qs[[j]][pok],probs[pok]*pR[j],cex=qp_cex,pch=16)
+        }
+      }
+      legend(lpos,as.character(R),lty=1:length(R),bty="n",title="Response")
     }
   }
 }

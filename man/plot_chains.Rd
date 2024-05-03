@@ -25,12 +25,12 @@ If NA (default) will use CODA defaults (unless \code{plot_acf = TRUE}), if NULL 
 \item{subject}{Integer or character vector. Only applicable if selection = "alpha". Will plot only these subject(s).
 NA (default) will plot all.}
 
-\item{ylim}{A vector. The y limits of the chain plot.}
+\item{ylim}{A vector. The y-limits of the chain plot.}
 
 \item{selection}{String. Which parameter type to plot ("alpha", "mu", "variance", "covariance", "correlation").
 "LL" will plot the log-likelihood chains.}
 
-\item{filter}{A string. Specifies from which stage you want to plot the MCMC chains ("preburn", "burn", "adapt", "sample")                        .}
+\item{filter}{A string. Specifies from which stage you want to plot the MCMC chains ("preburn", "burn", "adapt", "sample")}
 
 \item{thin}{An integer. Will keep only iterations of the MCMC chains that are a multiple of \code{thin}.}
 
