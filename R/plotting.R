@@ -214,6 +214,7 @@ plot_defective_density <- function(data,subject=NULL,factors=NULL,
     if (is.numeric(subject)) subject <- snams[subject]
     if (!all(subject %in% snams)) stop("Subject not present\n")
     dat <- data[data$subjects==subject,]
+    dat$subjects <- droplevels(dat$subjects)
     fnams <- names(dat)[!(names(dat) %in% c("subjects","trials","R","rt"))]
   } else {
     dat <- data
