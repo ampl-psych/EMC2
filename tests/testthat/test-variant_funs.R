@@ -25,20 +25,22 @@ RNGkind("L'Ecuyer-CMRG")
 set.seed(123)
 # Run the models for the different variants
 # Only preburn, so bit risky since adapt could fail
+N <- 50
+
 LNR_factor <- init_chains(LNR_factor, cores_per_chain = 2, cores_for_chains = 2, particles = 10)
-LNR_factor <- run_samplers(LNR_factor, cores_per_chain = 2, cores_for_chains = 2, stop_criteria = list(iter = 50), stage = "preburn")
+LNR_factor <- run_samplers(LNR_factor, cores_per_chain = 2, cores_for_chains = 2, stop_criteria = list(iter = N), stage = "preburn")
 
 LNR_diag <- init_chains(LNR_diag, cores_per_chain = 2, cores_for_chains = 2, particles = 10)
-LNR_diag <- run_samplers(LNR_diag, cores_per_chain = 2, cores_for_chains = 2, stop_criteria = list(iter = 50), stage = "preburn")
+LNR_diag <- run_samplers(LNR_diag, cores_per_chain = 2, cores_for_chains = 2, stop_criteria = list(iter = N), stage = "preburn")
 
 LNR_blocked <- init_chains(LNR_blocked, cores_per_chain = 2, cores_for_chains = 2, particles = 10)
-LNR_blocked <- run_samplers(LNR_blocked, cores_per_chain = 2, cores_for_chains = 2, stop_criteria = list(iter = 50), stage = "preburn")
+LNR_blocked <- run_samplers(LNR_blocked, cores_per_chain = 2, cores_for_chains = 2, stop_criteria = list(iter = N), stage = "preburn")
 
 LNR_single <- init_chains(LNR_single, cores_per_chain = 2, cores_for_chains = 2, particles = 10)
-LNR_single <- run_samplers(LNR_single, cores_per_chain = 2, cores_for_chains = 2, stop_criteria = list(iter = 50), stage = "preburn")
+LNR_single <- run_samplers(LNR_single, cores_per_chain = 2, cores_for_chains = 2, stop_criteria = list(iter = N), stage = "preburn")
 
 
-idx <- 51
+idx <- N + 1
 
 # Future tests could also look at bridge sampling?
 test_that("run_factor", {
@@ -86,8 +88,12 @@ test_that("run_single", {
   )
 })
 
-# Blocked doesn't have bridge sampling yet
-compare(list(single = LNR_single, diag = LNR_diag, factor = LNR_factor), filter = "preburn")
+test_that("run_bridge", {
+  expect_snapshot( # Blocked doesn't have bridge sampling yet
+    compare(list(single = LNR_single, diag = LNR_diag, factor = LNR_factor), filter = "preburn")
+  )
+})
+
 
 
 

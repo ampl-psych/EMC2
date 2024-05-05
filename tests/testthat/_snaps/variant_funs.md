@@ -110,3 +110,14 @@
       s     -0.2610040  0.38310109
       t0    -1.4550129 -1.20733178
 
+# run_bridge
+
+    Code
+      compare(list(single = LNR_single, diag = LNR_diag, factor = LNR_factor),
+      filter = "preburn")
+    Output
+               MD   wMD  DIC wDIC BPIC wBPIC EffectiveN meanD Dmean minD
+      single  512 0.000 2448    0 3568     0       1120  1329   363  209
+      diag   -372 0.996 -364    1 -257     1        107  -471    14 -579
+      factor -361 0.004 1563    0 2628     0       1065   498  -500 -568
+
