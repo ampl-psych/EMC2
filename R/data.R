@@ -24,3 +24,59 @@
 #' }
 #' @source \url{https://www.pnas.org/content/105/45/17538}
 "forstmann"
+
+#' A samplers object of an LNR model of the Forstmann dataset using the first three subjects
+#'
+#' An emc object with a limited number of samples and subjects of the Forstmann dataset.
+#' The object is a nested list of lenght three, each list containing the MCMC samples
+#' of the respective chain. The MCMC samples are stored in the samples element.
+#'
+#'
+#' @section Samples Element:
+#'
+#' The samples element of a emc object contains the different types of samples
+#' estimated by EMC2. These include the three main types of samples
+#' \code{theta_mu}, \code{theta_var} and \code{alpha} as well as a number of
+#' other items which are detailed here.
+#' \describe{
+#'   \item{theta_mu}{samples used for estimating the model parameters (group
+#'     level), an array of size (n_pars x n_samples)}
+#'   \item{theta_var}{samples used for estimating the parameter covariance
+#'     matrix, an array of size (n_pars x n_pars x n_samples)}
+#'   \item{alpha}{samples used for estimating the subject random effects, an
+#'     array of size (n_pars x n_subjects x n_samples)}
+#'   \item{stage}{A vector containing what PMwG stage each sample was drawn in}
+#'   \item{subj_ll}{The winning particles log-likelihood for each subject and
+#'     sample}
+#'   \item{a_half}{Mixing weights used during the Gibbs step when creating a
+#'     new sample for the covariance matrix}
+#'   \item{last_theta_var_inv}{The inverse of the last samples covariance
+#'     matrix}
+#'   \item{idx}{The index of the last sample drawn}
+#'   \item{epsilon}{The scaling parameter of the proposal distributions for each subject array of size (n_subjects x n_samples)}
+#'   \item{origin}{From which propoosal distribution the accepted samples in the MCMC chain came,
+#'   an array of size (n_subjects x n_samples)}
+#' }
+#'
+#' @format An emc object. An emc opbject is a list with a
+#' specific structure and elements, as outlined below.
+#' \describe{
+#'   \item{data}{A list of dataframes, one for each subject included}
+#'   \item{par_names}{A character vector containing the model parameter names}
+#'   \item{n_pars}{The number of parameters in the model}
+#'   \item{n_subjects}{The number of unique subject ID's in the data}
+#'   \item{subjects}{A vector containing the unique subject ID's}
+#'   \item{prior}{A list that holds the prior for \code{theta_mu} (the model
+#'     parameters). Contains the mean (\code{theta_mu_mean}), covariance matrix
+#'     (\code{theta_mu_var}), degrees of freedom (\code{v}), and scale (\code{A})
+#'     and inverse covariance matrix (\code{theta_mu_invar})}
+#'   \item{ll_func}{The log likelihood function used by pmwg for model
+#'     estimation}
+#'   \item{samples}{A list with defined structure containing the samples, see
+#'     the Samples Element section for more detail}
+#'   \item{grouped}{Which parameters are grouped across subjects, in this case none}
+#'   \item{sampler_nuis}{A sampler list for nuisance parameters (in this case there are none),
+#'   similarly structured to the overall samplers list of one of the MCMC chains.}
+#' }
+#' @source \url{https://www.pnas.org/content/105/45/17538}
+"samplers_LNR"
