@@ -158,7 +158,7 @@ init_chains <- function(samplers, start_mu = NULL, start_var = NULL, particles =
                         cores_per_chain=1,cores_for_chains = length(samplers))
 {
   attributes <- get_attributes(samplers)
-  mclapply(samplers,init,start_mu = start_mu, start_var = start_var,
+  samplers <- mclapply(samplers,init,start_mu = start_mu, start_var = start_var,
            verbose = FALSE, particles = particles,
            n_cores = cores_per_chain, mc.cores=cores_for_chains)
   samplers <- get_attributes(samplers, attributes)
