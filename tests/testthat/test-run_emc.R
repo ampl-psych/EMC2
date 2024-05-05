@@ -12,7 +12,7 @@ design_LNR <- make_design(data = dat,model=LNR,matchfun=matchfun,
                             formula=list(m~lM,s~1,t0~1),
                             contrasts=list(m=list(lM=ADmat)))
 
-LNR_s <- make_samplers(dat, design_LNR, rt_resolution = 0.02, n_chains = 2)
+LNR_s <- make_samplers(dat, design_LNR, rt_resolution = 0.05, n_chains = 2)
 
 RNGkind("L'Ecuyer-CMRG")
 set.seed(123)
