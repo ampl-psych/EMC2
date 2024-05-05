@@ -1,7 +1,7 @@
 # model estimation
 
     Code
-      init_chains(LNR_s, particles = 10, cores_for_chains = 1)[[1]]$samples
+      init_chains(LNR_s, particles = 10, cores_for_chains = 4)[[1]]$samples
     Output
       $theta_mu
                         [,1]
@@ -158,7 +158,7 @@
 ---
 
     Code
-      init_chains(LBA_s, particles = 10, cores_for_chains = 1)[[1]]$samples
+      init_chains(LBA_s, particles = 10, cores_for_chains = 4)[[1]]$samples
     Output
       $theta_mu
                          [,1]
@@ -352,7 +352,7 @@
 ---
 
     Code
-      init_chains(RDM_s, particles = 10, cores_for_chains = 1)[[1]]$samples
+      init_chains(RDM_s, particles = 10, cores_for_chains = 4)[[1]]$samples
     Output
       $theta_mu
                         [,1]
@@ -546,7 +546,7 @@
 ---
 
     Code
-      init_chains(DDM_s, particles = 10, cores_for_chains = 1)[[1]]$samples
+      init_chains(DDM_s, particles = 10, cores_for_chains = 4)[[1]]$samples
     Output
       $theta_mu
                         [,1]
