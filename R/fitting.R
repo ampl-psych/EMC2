@@ -117,7 +117,7 @@ run_emc <- function(samplers, stage = NULL, iter = 1000, stop_criteria = NULL,
 
   stop_criteria <- stop_criteria[stages_names]
   stop_criteria <- mapply(get_stop_criteria, stages_names, stop_criteria, MoreArgs = list(type = attr(samplers[[1]], "variant_funs")$type))
-  stop_criteria[["sample"]]$iter <- iter
+  if(is.null(stop_criteria[["sample"]]$iter)) stop_criteria[["sample"]]$iter <- iter
   names(stop_criteria) <- stages_names
   if (is.character(samplers)) {
     samplers <- fix_fileName(samplers)
