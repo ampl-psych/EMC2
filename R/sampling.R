@@ -157,9 +157,12 @@ init <- function(pmwgs, start_mu = NULL, start_var = NULL,
 init_chains <- function(samplers, start_mu = NULL, start_var = NULL, particles = 1000,
                         cores_per_chain=1,cores_for_chains = length(samplers))
 {
+  attributes <- get_attributes(samplers)
   mclapply(samplers,init,start_mu = start_mu, start_var = start_var,
            verbose = FALSE, particles = particles,
            n_cores = cores_per_chain, mc.cores=cores_for_chains)
+  samplers <- get_attributes(samplers, attributes)
+  return(samplers)
 }
 
 start_proposals_group <- function(data, group_pars, alpha, par_names,
