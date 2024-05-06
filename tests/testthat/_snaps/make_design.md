@@ -1,7 +1,7 @@
 # make_design
 
     Code
-      str(design, give.attr = FALSE)
+      str(design_data, give.attr = FALSE)
     Output
       List of 10
        $ Flist      :List of 5
@@ -24,6 +24,28 @@
         ..$ CO: NULL
        $ Ffunctions :List of 1
         ..$ E2:function (d)  
+       $ adapt      : NULL
+       $ model      :function ()  
+
+---
+
+    Code
+      str(design_custom, give.attr = FALSE)
+    Output
+      List of 10
+       $ Flist      :List of 3
+        ..$ :Class 'formula'  language m ~ 0 + S
+        ..$ :Class 'formula'  language s ~ 1
+        ..$ :Class 'formula'  language t0 ~ 1
+       $ Ffactors   :List of 2
+        ..$ S       : chr [1:2] "left" "right"
+        ..$ subjects: int [1:3] 1 2 3
+       $ Rlevels    : chr [1:2] "left" "right"
+       $ Clist      : NULL
+       $ matchfun   : NULL
+       $ constants  : Named num 0
+       $ Fcovariates: NULL
+       $ Ffunctions : NULL
        $ adapt      : NULL
        $ model      :function ()  
 
