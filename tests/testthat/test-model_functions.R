@@ -47,14 +47,14 @@ make_data(p_DDM, design_DDM, trials = 10)
 test_that("LNR", {
   RNGkind("L'Ecuyer-CMRG")
   set.seed(123)
-  expect_snapshot(init_chains(LNR_s, particles = 10, cores_per_chain = 4)[[1]]$samples)
+  expect_snapshot(init_chains(LNR_s, particles = 10, cores_per_chain = 1)[[1]]$samples)
   expect_snapshot(make_data(p_LNR, design_LNR, trials = 10))
 })
 
 test_that("LBA", {
   RNGkind("L'Ecuyer-CMRG")
   set.seed(123)
-  expect_snapshot(init_chains(LBA_s, particles = 10, cores_per_chain = 4)[[1]]$samples)
+  expect_snapshot(init_chains(LBA_s, particles = 10, cores_per_chain = 1)[[1]]$samples)
   expect_snapshot(make_data(p_LBA, design_LBA, trials = 10))
 })
 
@@ -62,7 +62,7 @@ test_that("LBA", {
 test_that("RDM", {
   RNGkind("L'Ecuyer-CMRG")
   set.seed(123)
-  expect_snapshot(init_chains(RDM_s, particles = 10, cores_per_chain = 4)[[1]]$samples)
+  expect_snapshot(init_chains(RDM_s, particles = 10, cores_per_chain = 1)[[1]]$samples)
   expect_snapshot(make_data(p_RDM, design_RDM, trials = 10))
 })
 
@@ -70,6 +70,6 @@ test_that("RDM", {
 test_that("DDM", {
   RNGkind("L'Ecuyer-CMRG")
   set.seed(123)
-  expect_snapshot(init_chains(DDM_s, particles = 10, cores_per_chain = 4)[[1]]$samples)
+  expect_snapshot(init_chains(DDM_s, particles = 10, cores_per_chain = 1)[[1]]$samples)
   expect_snapshot(make_data(p_DDM, design_DDM, trials = 10))
 })

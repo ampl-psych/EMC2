@@ -114,7 +114,7 @@
 
     Code
       compare(list(single = LNR_single, diag = LNR_diag, factor = LNR_factor),
-      filter = "preburn")
+      filter = "preburn", cores_for_props = 1)
     Output
                MD   wMD  DIC wDIC BPIC wBPIC EffectiveN meanD Dmean minD
       single  512 0.000 2448    0 3568     0       1120  1329   363  209

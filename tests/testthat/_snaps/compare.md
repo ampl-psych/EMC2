@@ -1,7 +1,7 @@
 # compare
 
     Code
-      compare(list(samplers_LNR))
+      compare(list(samplers_LNR), cores_for_props = 1)
     Output
         MD wMD  DIC wDIC BPIC wBPIC EffectiveN meanD Dmean minD
       1 27   1 -619    1 -603     1         16  -635  -646 -650

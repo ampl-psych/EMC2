@@ -3,7 +3,7 @@ set.seed(123)
 
 test_that("compare", {
   expect_snapshot(
-    compare(list(samplers_LNR))
+    compare(list(samplers_LNR), cores_for_props = 1)
   )
 })
 
