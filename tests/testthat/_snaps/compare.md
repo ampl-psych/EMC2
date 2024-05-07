@@ -9,9 +9,9 @@
 # savage-dickey
 
     Code
-      savage_dickey(samplers_LNR, parameter = "m", do_plot = F)
+      savage_dickey(samplers_LNR, parameter = "m", do_plot = F, H0 = -1)
     Output
-      [1] 4.093353e+15
+      [1] 0.03657688
 
 ---
 
@@ -19,5 +19,5 @@
       savage_dickey(samplers_LNR, fun = function(d) d["m"] - d["m_lMd"], H0 = -0.5,
       do_plot = F)
     Output
-      [1] 0.09737299
+      [1] 0.09922073
 
