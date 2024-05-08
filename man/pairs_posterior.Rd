@@ -2,7 +2,7 @@
 % Please edit documentation in R/plotting.R
 \name{pairs_posterior}
 \alias{pairs_posterior}
-\title{Plot sloppiness}
+\title{Plot within-chain correlations}
 \usage{
 pairs_posterior(
   samplers,
@@ -18,27 +18,31 @@ pairs_posterior(
 )
 }
 \arguments{
-\item{samplers}{List of samplers}
+\item{samplers}{An EMC2 samplers object}
 
-\item{filter}{A string. Specifies which stage you want to plot.}
+\item{filter}{A character. Specifies which sampling stage should be plotted.
+Defaults to the sampling stage \code{sample}.}
 
-\item{thin}{An integer. Keep only iterations that are a multiple of thin.}
+\item{thin}{An integer. Only iterations that are a multiple of \code{thin} are kept.}
 
-\item{subfilter}{Integer or numeric vector. If integer, will filter out the first x of samples,
-within your filter. If numeric vector will select those samples, within your filter.}
+\item{subfilter}{Integer or numeric vector. If an integer is supplied, the first x samples
+within the sampling stage \code{filter} are kept. If a vector is supplied, the samples
+within the range are kept.}
 
-\item{mapped}{Boolean. If \code{TRUE} plots the parameters mapped back to the factor levels of the design,
-otherwise plots the sampled parameters}
+\item{mapped}{Boolean. If \code{TRUE}, plots the parameters as mapped back to the factor levels of the design,
+if \code{FALSE}, the sampled parameters are plotted}
 
-\item{selection}{String designating parameter type, e.g. "alpha" or "mu".}
+\item{selection}{String indicating the parameter type. Can be \code{alpha}, \code{mu},
+\code{variance}, \code{covariance}, or \code{correlation}.}
 
 \item{scale.subjects}{Boolean. To standardize each participant with \code{selection = "alpha"}}
 
-\item{use_par}{Character vector of names of parameters to plot (default \code{NULL} plots all)}
+\item{use_par}{Character vector of names of parameters to plot (default \code{NULL} plots everything)}
 
-\item{do_plot}{Boolean. Whether to plot the pairs plot if \code{FALSE} will only return the correlations}
+\item{do_plot}{Boolean. Whether to plot the pairs plot, if \code{FALSE}, only the correlations
+are returned.}
 
-\item{maxp}{Integer for maximum number of iterations used (default 500).}
+\item{maxp}{Integer for maximum number of iterations used (defaults to 500).}
 }
 \value{
 Invisibly returns a matrix with the correlations between the parameters.

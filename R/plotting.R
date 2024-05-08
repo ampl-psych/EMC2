@@ -1198,23 +1198,27 @@ check_run <- function(samples,pdf_name="check_run.pdf",interactive=TRUE,
 }
 
 
-#' Plot sloppiness
+#' Plot within-chain correlations
 #'
 #' Plots within-chain parameter correlations (upper triangle) and corresponding
 #' scatterplots (lower triangle)
 #'
-#' @param samplers List of samplers
-#' @param filter A string. Specifies which stage you want to plot.
-#' @param thin An integer. Keep only iterations that are a multiple of thin.
-#' @param subfilter Integer or numeric vector. If integer, will filter out the first x of samples,
-#' within your filter. If numeric vector will select those samples, within your filter.
-#' @param selection String designating parameter type, e.g. "alpha" or "mu".
-#' @param mapped Boolean. If ``TRUE`` plots the parameters mapped back to the factor levels of the design,
-#' otherwise plots the sampled parameters
+#' @param samplers An EMC2 samplers object
+#' @param filter A character. Specifies which sampling stage should be plotted.
+#' Defaults to the sampling stage `sample`.
+#' @param thin An integer. Only iterations that are a multiple of `thin` are kept.
+#' @param subfilter Integer or numeric vector. If an integer is supplied, the first x samples
+#' within the sampling stage `filter` are kept. If a vector is supplied, the samples
+#' within the range are kept.
+#' @param selection String indicating the parameter type. Can be `alpha`, `mu`,
+#' `variance`, `covariance`, or `correlation`.
+#' @param mapped Boolean. If ``TRUE``, plots the parameters as mapped back to the factor levels of the design,
+#' if `FALSE`, the sampled parameters are plotted
 #' @param scale.subjects Boolean. To standardize each participant with ``selection = "alpha"``
-#' @param use_par Character vector of names of parameters to plot (default ``NULL`` plots all)
-#' @param do_plot Boolean. Whether to plot the pairs plot if ``FALSE`` will only return the correlations
-#' @param maxp Integer for maximum number of iterations used (default 500).
+#' @param use_par Character vector of names of parameters to plot (default ``NULL`` plots everything)
+#' @param do_plot Boolean. Whether to plot the pairs plot, if ``FALSE``, only the correlations
+#' are returned.
+#' @param maxp Integer for maximum number of iterations used (defaults to 500).
 #' @return Invisibly returns a matrix with the correlations between the parameters.
 #' @examples \dontrun{
 #' # Plot the sloppiness for the individual-level subjects
