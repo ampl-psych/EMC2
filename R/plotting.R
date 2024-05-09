@@ -1,23 +1,25 @@
 
 #' Plot MCMC chains
 #'
-#' Plots the trace plots of the MCMC chains on top of each other to visualize convergence
+#' Plots the trace plots of the MCMC chains on top of each other. Visualizes convergence
 #' and chain stability.
 #'
-#' @param samplers A list of samplers.
-#' @param layout A vector specifying the layout as in par(mfrow = layout).
-#' If NA (default) will use CODA defaults (unless ``plot_acf = TRUE``), if NULL use current.
-#' @param subject Integer or character vector. Only applicable if selection = "alpha". Will plot only these subject(s).
-#' NA (default) will plot all.
+#' @param samplers An EMC2 samplers object
+#' @param layout A vector specifying the layout as in `par(mfrow = layout)`.
+#' If `NA`, (i.e., the default) the `coda` defaults are used (unless ``plot_acf = TRUE``),
+#' if `NULL` the current plot layout is used.
+#' @param subject Integer or character vector. Only applicable if `selection = "alpha"`. Will plot only these subject(s).
+#' `NA` (i.e., the default) will plot all individuals.
 #' @param ylim A vector. The y-limits of the chain plot.
-#' @param selection String. Which parameter type to plot ("alpha", "mu", "variance", "covariance", "correlation").
-#' "LL" will plot the log-likelihood chains.
-#' @param filter A string. Specifies from which stage you want to plot the MCMC chains ("preburn", "burn", "adapt", "sample")
+#' @param selection A Character string. Indicates which parameter type to plot (`alpha`, `mu`, `variance`, `covariance`, `correlation`).
+#' `LL` will plot the log-likelihood chains.
+#' @param filter A string. Specifies from which stage you want to plot the MCMC chains (`preburn`, `burn`, `adapt`, `sample`)
 #' @param thin An integer. Will keep only iterations of the MCMC chains that are a multiple of ``thin``.
-#' @param subfilter An integer or vector. If integer it will exclude up until
-#' that integer. If vector it will include everything in that range.
-#' @param plot_acf Boolean. If TRUE will plot autocorrelation
-#' for the first MCMC chain (of the default three chains).
+#' @param subfilter Integer or numeric vector. If an integer is supplied, iterations
+#' up until that integer within the sampling stage `filter` are kept. If a vector is supplied, the iterations
+#' within the range are kept.
+#' @param plot_acf Boolean. If `TRUE`, the autocorrelation of the first chain is plotted
+#' (of the -- per default -- three chains).
 #' @return None
 #' @examples \dontrun{
 #' # For a set of samplers run using run_emc:
@@ -116,7 +118,7 @@ plot_acfs <- function(samples,layout=NULL,subject=1,
 #' through the pars argument).
 #'
 #' @param tabs Tables of actual and estimated alpha parameters (with CIs) from plot_pars
-#' @param layout A 2-vector specifying the layout as in par(mfrow = layout)
+#' @param layout A 2-vector specifying the layout as in `par(mfrow = layout)`
 #' @param do_ci Boolean (Default TRUE). Add CIs to plot?
 #' @param ci_col Color of CI.
 #' @param cap Width of CI cap (passed to arrows)
@@ -188,37 +190,39 @@ plot_alpha_recovery <- function(tabs,layout=c(2,3),
   invisible(list(RMSE = rmse,COVERAGE = coverage,PEARSON=pearson,SPEARMAN=spearman))
 }
 
-#' Plot defective densities for each subject and cell.
+#' Plot defective densities for each subject and cell
 #'
-#' Plots multiple panels that contain a set of densities for each response option in the data.
-#' These densities are defective; their areas are relative to their response's proportion.
-#' Across all responses the area sums to 1.
+#' Plots panels that contain a set of densities for each response option in the data.
+#' These densities are defective; their areas are relative to the respective
+#' response proportion. Across all responses, the area sums to 1.
 #'
-#' @param data A dataframe. The experimental data in EMC format with at least the subjects factor,
-#'  R (response factor) and rt (response time) columns,
-#' and optionally other factor columns of the design.
-#' @param subject Integer or string selecting a subject from the data. If specified will only plot that subject
-#' (default NULL = all).
-#' @param factors character vector of factor names in design to aggregated across (default NULL = all).
-#' @param layout vector specifying plot window layout: par(mfrow = layout), default NULL uses current plot window layout.
+#' @param data A data frame. The experimental data in EMC2 format with at least `subject` (i.e., the
+#' subject factor), `R` (i.e., the response factor) and `rt` (i.e., response time) variable.
+#' Additional factor variables of the design are optional.
+#' @param subject An integer or character string selecting a subject from the data.
+#' If specified, only that subject is plotted. Per default (i.e., `NULL`), all subjects
+#' are plotted.
+#' @param factors A character vector of the factor names in the design to aggregate across
+#' Defaults to all (i.e., `NULL`).
+#' @param layout A vector specifying the layout as in `par(mfrow = layout)`.
+#' The default `NULL` uses the current layout.
 #' @param xlim x-axis limit for all cells (default NULL = scale per cell).
-#' @param bw number or string bandwidth for density (default "nrd0"). See ``?density``.
-#' @param adjust Numeric. Density function bandwidth adjust parameter. See ``?density``.
-#' @param correct_fun If specified will calculate the accuracy for each subject using the supplied function and
-#' invisibly returns an accuracy vector for each subject.
-#' @param rt legend function position string for mean RT (default "top)
-#' @param accuracy legend function position string for accuracy (default "topright")
-#'
-#' @return If correct_fun is specified, will invisibly return a subject accuracy vector
+#' @param bw number or string bandwidth for density (defaults to `nrd0`). See ``?density()``.
+#' @param adjust Numeric. Density function bandwidth adjustment parameter. See ``?density()``.
+#' @param correct_fun If specified, the accuracy for each subject is calculated, using the supplied function and
+#' an accuracy vector for each subject is returned invisibly.
+#' @param rt legend function position character string for the mean response time (defaults to `top`)
+#' @param accuracy legend function position character string for accuracy (defaults to `topright`)
+#' @return If `correct_fun` is specified, a subject accuracy vector is returned invisibly
 #' @examples
 #' # First for each subject and the factor combination in the design:
 #' plot_defective_density(forstmann)
 #' # Now collapsing across subjects:
 #' plot_defective_density(forstmann, factors = c("S", "E"))
-#' # If your data is response coded it always makes sense to include the "S" factor
-#' # because EMC will plot the "R" factor automatically. This way you can see how often
-#' # "S" matches "R".
-#' # We can also return each subject's accuracy using a custom function:
+#' # If the data is response coded, it generally makes sense to include the "S" factor
+#' # because EMC2 will plot the "R" factor automatically. This way, choice accuracy can
+#' # be examined
+#' # Each subject's accuracy can be returned using a custom function:
 #' print(plot_defective_density(forstmann, correct_fun = function(d) d$R == d$S))
 #'
 #' @export
@@ -285,43 +289,45 @@ plot_defective_density <- function(data,subject=NULL,factors=NULL,
 
 
 
-#' Plots density for parameters.
+#' Plots density for parameters
 #'
 #' Plots the posterior and prior density for selected parameters of a model.
 #'
-#' @param samplers A list of samplers.
-#' @param layout A vector specifying the layout as in par(mfrow = layout).
-#' If NA or NULL use current plot layout.
-#' @param selection A string. Which parameter type to plot ("alpha", "mu", "variance", "covariance", "correlation").
-#' @param use_par Character vector of names of parameters to plot (default NULL = plot all)
-#' @param filter A string. Specifies from which stage you want to plot the densities ("preburn", "burn", "adapt", "sample")
+#' @param samplers An EMC2 samplers object.
+#' @param layout A vector specifying the layout as in `par(mfrow = layout)`.
+#' If `NA` or `NULL`, the current plot layout is used.
+#' @param selection A Character string. Indicates which parameter type to plot
+#' (`alpha`, `mu`, `variance`, `covariance`, or `correlation`).
+#' @param use_par Character vector of names of parameters to plot. The default `NULL`
+#' plots all
+#' @param filter A string. Specifies from which stage you want to plot the densities (`preburn`, `burn`, `adapt`, `sample`)
 #' @param thin An integer. Will keep only iterations of the MCMC chains that are a multiple of ``thin``.
-#' @param subfilter An integer or vector. If integer it will exclude up until
-#' that integer. If vector it will include everything in that range.
-#' @param mapped Boolean. If TRUE plots the parameters mapped back to experimental design
+#' @param subfilter Integer or numeric vector. If an integer is supplied, iterations
+#' up until that integer within the sampling stage `filter` are kept. If a vector is supplied, the iterations
+#' within the range are kept.
+#' @param mapped Boolean. If `TRUE`, plots the parameters mapped back to experimental design
 #' otherwise plots the sampled parameters.
 #' @param plot_prior Boolean. If ``TRUE`` will overlay prior density in the plot (in red)
-#' @param xlim x-axis plot limit. If a vector is supplied will use the same axes for all.
+#' @param xlim x-axis plot limit. If a vector is supplied, will use the same axes for all.
 #  Alternatively a matrix can be supplied with one row for each parameter.
-#' @param ylim y-axis plot limit. If a vector is supplied will use the same axes for all.
+#' @param ylim y-axis plot limit. If a vector is supplied, will use the same axes for all.
 #  Alternatively a matrix can be supplied with one row for each parameter.
-#' @param prior_xlim A vector giving upper and lower quantiles of prior when choosing
-#' xlim if ``plot_prior = TRUE``. If set to NULL xlim is used instead.
-#' @param show_chains Boolean (default FALSE) plots a separate density for each chain.
+#' @param prior_xlim A vector giving upper and lower quantiles of the prior when choosing
+#' xlim if ``plot_prior = TRUE``. If set to `NULL`, xlim is used instead.
+#' @param show_chains Boolean (defaults to `FALSE`) plots a separate density for each chain.
 #' @param do_plot Boolean. Set to ``FALSE`` to only return the parameter credible intervals and omit the plots.
 #' @param subject Integer or character vector. Only applicable if ``selection = "alpha"``. Will plot only these subject(s).
-#' NA (default) will plot all.
+#' `NA` (default) will plot all.
 #' @param add_means Boolean. Whether to add parameter means as an attribute
 #' to return invisibly
 #' @param pars Named vector or matrix of known/simulated parameters, or the output of
-#' ``plot_pars``, in which case the posterior medians are extracted. If xlim is not supplied,
+#' ``plot_pars``, in which case the posterior medians are extracted. If `xlim` is not supplied,
 #  the plot will be adjusted to include the parameter values, which are plotted as vertical lines.
 #' @param probs Vector. The quantiles of the selected parameters to return invisibly.
-#' @param bw number or string bandwidth for density (default "nrd0"). See ``?density``.
-#' @param adjust Numeric. Adjustment for density plot. See ``?density``
+#' @param bw number or string bandwidth for density (default `nrd0`). See ``?density()``.
+#' @param adjust Numeric. Density function bandwidth adjustment parameter. See ``?density()``.
 #' @param lpos Character. Position of the contraction in the plot
 #' @param digits Integer. Rounding of contraction
-#'
 #' @return invisibly return quantiles for the selected parameters
 #' @examples \dontrun{
 #' # For a set of samplers plot prior and posterior densities:
@@ -608,37 +614,42 @@ plot_roc <- function(data,signalFactor="S",zROC=FALSE,qfun=NULL,main="",lim=NULL
   invisible(ctab)
 }
 
-#' Plots choice data with no response times
+#' Plots choice data
 #'
-#' @param data Data frame with subjects and R factors, and possibly other factors
-#' and an rt column
-#' @param pp Posterior predictives created by post_predict
+#' Plots choice data with no response times.
+#'
+#' @param data A data frame. The experimental data in EMC2 format with at least `subject` (i.e., the
+#' subject factor), `R` (i.e., the response factor) and `rt` (i.e., response time) variable.
+#' Additional factor variables of the design are optional.
+#' @param pp Posterior predictives created by `post_predict()`
 #' @param subject Integer or string picking out subject(s).
 #' @param factors Character vector of factors in data to display separately. If
-#' NULL (default) use names of all columns in data except "trials","R", and "rt".
-#' Omitted factors are aggregated over. If NA treats entire data set as a single cell.
-#' If stat is used default is changed to NA.
-#' @param functions A named list of functions that create new factors which cna then be
-#' used by the factors and stat arguments.
+#' `NULL` (i.e., the default), use names of all columns in data except `trials`,`R`, and `rt`.
+#' Omitted factors are aggregated over. If `NA`, treats entire data set as a single cell.
+#' If `stat` is used, the default is changed to `NA`.
+#' @param functions A named list of functions that create new factors which can then be
+#' used by the `factors` and `stat` arguments.
 #' @param stat A function that takes a the data and returns a single value.
-#' @param stat_name A string naming what the stat argument calculates.
+#' @param stat_name A string naming what the `stat` argument calculates.
 #' @param adjust Control of smoothing in density plots
 #' @param ci Credible interval and central tendency quantiles for return when
-#' stat argument is supplied (default c(.025,.5,.975))
-#' @param do_plot Boolean (default TRUE) for making a plot
+#' stat argument is supplied (defaults to the 2.5\\%, the 50\\% and the 97.5\\%
+#' quantiles)
+#' @param do_plot Boolean (defaults to `TRUE`) whether a plot should be created or not
 #' @param xlim x-axis plot limit, 2-vector (same for all) or matrix (one row for each paramter)
 #' @param ylim y-axis plot limit, 2-vector (same for all) or matrix (one row for each paramter)
 #' @param main Text title, pasted before cell name.
-#' @param layout 2-vector specifying par(mfrow) or par(mfcol) (default NULL use current,
-#' NA keeps par currently active).
-#' @param mfcol Boolean, default TRUE use mfcol else mfrow.
+#' @param layout 2-vector specifying `par(mfrow)` or `par(mfcol)`. The default `NULL` uses current,
+#' `NA` keeps `par` currently active.
+#' @param mfcol Boolean for `layout` settings, the default `TRUE` uses `mfcol`, else `mfrow`.
 #' @param signalFactor Character name of factor for the signal
-#' @param zROC Logical, plot Z transformed ROC (default FALSE )
-#' @param qfun Type of "Z" transform (default probit)
-#' @param lim x = y limit for ROC plots
+#' @param zROC Boolean, plot Z transformed ROC (defaults to `FALSE`)
+#' @param qfun Type of Z transform (defaults to probit)
+#' @param lim `x` = `y` limit for ROC plots
 #' @param rocfit_cex Size of points in ROC plot (default 0.5)
 #'
 #' @return If stat argument is provided a matrix of observed values and predicted quantiles
+#' is returned
 plot_fit_choice <- function(data,pp,subject=NULL,factors=NULL,functions=NULL,
                             stat=NULL,stat_name="",adjust=1,
                             ci=c(.025,.5,.975),do_plot=TRUE,
@@ -766,14 +777,15 @@ plot_fit_choice <- function(data,pp,subject=NULL,factors=NULL,functions=NULL,
 }
 
 
-#' Plots overlaying observed and fitted data.
+#' Posterior predictive checks
 #'
-#' Plot the cumulative density function: the probability of a response,
-#' p(R) as a function of response time (RT) for the experimental data and posterior
+#' Plot (defective) cumulative density functions of the observed data and data from the
+#' posterior predictive distribution: the probability of a response,
+#' p(R) as a function of response time for the experimental data and posterior
 #' predictive simulations.
 #'
-#' The data is plotted in black. Large grey points show the average quantiles across posterior predictives.
-#' Small grey points each represent the predicted quantile of an individual replicate,
+#' The data is plotted in black. Large grey points show the average quantiles across the posterior predictives.
+#' The small grey points represent the predicted quantile of an individual replicate,
 #' providing a representation of uncertainty in the model predictions.
 #'
 #' If the stat argument is supplied (which calculates a statistic based on the data),
@@ -781,13 +793,15 @@ plot_fit_choice <- function(data,pp,subject=NULL,factors=NULL,functions=NULL,
 #' A vertical line is plotted at the value of that statistic for the experimental data.
 #'
 #' If more than one subject is included, the data and fits are aggregated across subjects by default.
+#'
+#' Also see `?plot_defective_density()` for more details.
 
-#' @param data A dataframe. The experimental data in EMC format with at least the subjects factor,
-#' R (response factor) and rt (response time) columns,
-#' and optionally other factor columns of the design.
-#' @param pp A dataframe. Posterior predictives created by ``post_predict``
-#' @param subject Integer or string selecting a subject from the data. If specified will only plot that subject.
-#' NULL (the default) will plot all subjects.
+#' @param data A data frame. The experimental data in EMC2 format with at least `subject` (i.e., the
+#' subject factor), `R` (i.e., the response factor) and `rt` (i.e., response time) variable.
+#' Additional factor variables of the design are optional.
+#' @param pp A data frame. Posterior predictives created by ``post_predict()``
+#' @param subject Integer or string selecting a subject from the data. If specified only that subject
+#' is plotted. `NULL` (i.e., the default), will plot all subjects.
 #' @param factors Character vector of factors in data to display separately. If
 #' NULL (default) use names of all columns in data except "trials","R", and "rt".
 #' Omitted factors are aggregated over. If NA treats entire data set as a single cell.
@@ -802,8 +816,8 @@ plot_fit_choice <- function(data,pp,subject=NULL,factors=NULL,functions=NULL,
 #' @param do_plot Boolean. Set to ``FALSE`` to only return the quantiles and omit the plots.
 #' @param xlim A numeric vector. x-axis plot limit.
 #' @param ylim A numeric vector. y-axis plot limit.
-#' @param layout A vector specifying the layout as in par(mfrow = layout).
-#' If NA or NULL uses current plot window layout.
+#' @param layout A vector specifying the layout as in `par(mfrow = layout)`.
+#' If `NA` or `NULL` uses current plot window layout.
 #' @param mfcol Boolean.  If ``TRUE`` uses par(mfrow = layout), otherwise uses par(mfcol = layout)
 #' @param probs Vector of probabilities at which to calculate cumulative density function
 #' @param data_lwd Integer. Line width for data
@@ -811,16 +825,17 @@ plot_fit_choice <- function(data,pp,subject=NULL,factors=NULL,functions=NULL,
 #' @param q_points Vector. Quantile points to plot
 #' @param qp_cex Numeric. Cex for data quantile points
 #' @param pqp_cex Numeric. Cex for predicted quantile points
-#' @param lpos Character. Legend position, see ``?legend``.
+#' @param lpos Character. Legend position, see ``?legend()``.
 #' @param main Character. Pasted before the plot title, especially useful when specifying a stat argument.
-#' @return If stat argument is provided a vector of observed values and predicted quantiles
+#' @return If stat argument is provided, a vector of observed values and predicted quantiles
+#' is returned
 #' @examples \dontrun{
 #' # First generate posterior predictives based on a samplers object run with run_emc
 #' pp <- post_predict(samplers, n_cores = 4)
-#' # Then we can visualize the model fit
+#' # Then visualize the model fit
 #' plot_fit(forstmann, pp, factors = c("S", "E"), layout = c(2,3))
 #'
-#' # We can also visualize specific statistics on the posterior predictives
+#' # Specific statistics on the posterior predictives can also be specified
 #' # This function calculates the difference in rt between two S levels.
 #' # It takes the data (or the posterior predictives) as an argument
 #' drt <- function(data) diff(tapply(data$rt,data[,c("S")],mean))
@@ -1207,11 +1222,11 @@ check_run <- function(samples,pdf_name="check_run.pdf",interactive=TRUE,
 #' @param filter A character. Specifies which sampling stage should be plotted.
 #' Defaults to the sampling stage `sample`.
 #' @param thin An integer. Only iterations that are a multiple of `thin` are kept.
-#' @param subfilter Integer or numeric vector. If an integer is supplied, the first x samples
-#' within the sampling stage `filter` are kept. If a vector is supplied, the samples
+#' @param subfilter Integer or numeric vector. If an integer is supplied, iterations
+#' up until that integer within the sampling stage `filter` are kept. If a vector is supplied, the iterations
 #' within the range are kept.
-#' @param selection String indicating the parameter type. Can be `alpha`, `mu`,
-#' `variance`, `covariance`, or `correlation`.
+#' @param selection A Character string. Indicates which parameter type to plot (`alpha`, `mu`, `variance`, `covariance`, `correlation`).
+#' `LL` will plot the log-likelihood chains.
 #' @param mapped Boolean. If ``TRUE``, plots the parameters as mapped back to the factor levels of the design,
 #' if `FALSE`, the sampled parameters are plotted
 #' @param scale.subjects Boolean. To standardize each participant with ``selection = "alpha"``
