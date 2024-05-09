@@ -2,7 +2,7 @@
 % Please edit documentation in R/plotting.R
 \name{plot_defective_density}
 \alias{plot_defective_density}
-\title{Plot defective densities for each subject and cell.}
+\title{Plot defective densities for each subject and cell}
 \usage{
 plot_defective_density(
   data,
@@ -18,47 +18,50 @@ plot_defective_density(
 )
 }
 \arguments{
-\item{data}{A dataframe. The experimental data in EMC format with at least the subjects factor,
-R (response factor) and rt (response time) columns,
-and optionally other factor columns of the design.}
+\item{data}{A data frame. The experimental data in EMC2 format with at least \code{subject} (i.e., the
+subject factor), \code{R} (i.e., the response factor) and \code{rt} (i.e., response time) variable.
+Additional factor variables of the design are optional.}
 
-\item{subject}{Integer or string selecting a subject from the data. If specified will only plot that subject
-(default NULL = all).}
+\item{subject}{An integer or character string selecting a subject from the data.
+If specified, only that subject is plotted. Per default (i.e., \code{NULL}), all subjects
+are plotted.}
 
-\item{factors}{character vector of factor names in design to aggregated across (default NULL = all).}
+\item{factors}{A character vector of the factor names in the design to aggregate across
+Defaults to all (i.e., \code{NULL}).}
 
-\item{layout}{vector specifying plot window layout: par(mfrow = layout), default NULL uses current plot window layout.}
+\item{layout}{A vector specifying the layout as in \code{par(mfrow = layout)}.
+The default \code{NULL} uses the current layout.}
 
 \item{xlim}{x-axis limit for all cells (default NULL = scale per cell).}
 
-\item{bw}{number or string bandwidth for density (default "nrd0"). See \code{?density}.}
+\item{bw}{number or string bandwidth for density (defaults to \code{nrd0}). See \code{?density()}.}
 
-\item{adjust}{Numeric. Density function bandwidth adjust parameter. See \code{?density}.}
+\item{adjust}{Numeric. Density function bandwidth adjustment parameter. See \code{?density()}.}
 
-\item{correct_fun}{If specified will calculate the accuracy for each subject using the supplied function and
-invisibly returns an accuracy vector for each subject.}
+\item{correct_fun}{If specified, the accuracy for each subject is calculated, using the supplied function and
+an accuracy vector for each subject is returned invisibly.}
 
-\item{rt}{legend function position string for mean RT (default "top)}
+\item{rt}{legend function position character string for the mean response time (defaults to \code{top})}
 
-\item{accuracy}{legend function position string for accuracy (default "topright")}
+\item{accuracy}{legend function position character string for accuracy (defaults to \code{topright})}
 }
 \value{
-If correct_fun is specified, will invisibly return a subject accuracy vector
+If \code{correct_fun} is specified, a subject accuracy vector is returned invisibly
 }
 \description{
-Plots multiple panels that contain a set of densities for each response option in the data.
-These densities are defective; their areas are relative to their response's proportion.
-Across all responses the area sums to 1.
+Plots panels that contain a set of densities for each response option in the data.
+These densities are defective; their areas are relative to the respective
+response proportion. Across all responses, the area sums to 1.
 }
 \examples{
 # First for each subject and the factor combination in the design:
 plot_defective_density(forstmann)
 # Now collapsing across subjects:
 plot_defective_density(forstmann, factors = c("S", "E"))
-# If your data is response coded it always makes sense to include the "S" factor
-# because EMC will plot the "R" factor automatically. This way you can see how often
-# "S" matches "R".
-# We can also return each subject's accuracy using a custom function:
+# If the data is response coded, it generally makes sense to include the "S" factor
+# because EMC2 will plot the "R" factor automatically. This way, choice accuracy can
+# be examined
+# Each subject's accuracy can be returned using a custom function:
 print(plot_defective_density(forstmann, correct_fun = function(d) d$R == d$S))
 
 }

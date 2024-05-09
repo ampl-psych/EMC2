@@ -2,7 +2,7 @@
 % Please edit documentation in R/plotting.R
 \name{plot_pars}
 \alias{plot_pars}
-\title{Plots density for parameters.}
+\title{Plots density for parameters}
 \usage{
 plot_pars(
   samplers,
@@ -30,52 +30,55 @@ plot_pars(
 )
 }
 \arguments{
-\item{samplers}{A list of samplers.}
+\item{samplers}{An EMC2 samplers object.}
 
-\item{layout}{A vector specifying the layout as in par(mfrow = layout).
-If NA or NULL use current plot layout.}
+\item{layout}{A vector specifying the layout as in \code{par(mfrow = layout)}.
+If \code{NA} or \code{NULL}, the current plot layout is used.}
 
-\item{use_par}{Character vector of names of parameters to plot (default NULL = plot all)}
+\item{use_par}{Character vector of names of parameters to plot. The default \code{NULL}
+plots all}
 
-\item{selection}{A string. Which parameter type to plot ("alpha", "mu", "variance", "covariance", "correlation").}
+\item{selection}{A Character string. Indicates which parameter type to plot
+(\code{alpha}, \code{mu}, \code{variance}, \code{covariance}, or \code{correlation}).}
 
-\item{filter}{A string. Specifies from which stage you want to plot the densities ("preburn", "burn", "adapt", "sample")}
+\item{filter}{A string. Specifies from which stage you want to plot the densities (\code{preburn}, \code{burn}, \code{adapt}, \code{sample})}
 
 \item{thin}{An integer. Will keep only iterations of the MCMC chains that are a multiple of \code{thin}.}
 
-\item{subfilter}{An integer or vector. If integer it will exclude up until
-that integer. If vector it will include everything in that range.}
+\item{subfilter}{Integer or numeric vector. If an integer is supplied, iterations
+up until that integer within the sampling stage \code{filter} are kept. If a vector is supplied, the iterations
+within the range are kept.}
 
-\item{mapped}{Boolean. If TRUE plots the parameters mapped back to experimental design
+\item{mapped}{Boolean. If \code{TRUE}, plots the parameters mapped back to experimental design
 otherwise plots the sampled parameters.}
 
 \item{plot_prior}{Boolean. If \code{TRUE} will overlay prior density in the plot (in red)}
 
-\item{xlim}{x-axis plot limit. If a vector is supplied will use the same axes for all.}
+\item{xlim}{x-axis plot limit. If a vector is supplied, will use the same axes for all.}
 
-\item{ylim}{y-axis plot limit. If a vector is supplied will use the same axes for all.}
+\item{ylim}{y-axis plot limit. If a vector is supplied, will use the same axes for all.}
 
-\item{prior_xlim}{A vector giving upper and lower quantiles of prior when choosing
-xlim if \code{plot_prior = TRUE}. If set to NULL xlim is used instead.}
+\item{prior_xlim}{A vector giving upper and lower quantiles of the prior when choosing
+xlim if \code{plot_prior = TRUE}. If set to \code{NULL}, xlim is used instead.}
 
-\item{show_chains}{Boolean (default FALSE) plots a separate density for each chain.}
+\item{show_chains}{Boolean (defaults to \code{FALSE}) plots a separate density for each chain.}
 
 \item{do_plot}{Boolean. Set to \code{FALSE} to only return the parameter credible intervals and omit the plots.}
 
 \item{subject}{Integer or character vector. Only applicable if \code{selection = "alpha"}. Will plot only these subject(s).
-NA (default) will plot all.}
+\code{NA} (default) will plot all.}
 
 \item{add_means}{Boolean. Whether to add parameter means as an attribute
 to return invisibly}
 
 \item{pars}{Named vector or matrix of known/simulated parameters, or the output of
-\code{plot_pars}, in which case the posterior medians are extracted. If xlim is not supplied,}
+\code{plot_pars}, in which case the posterior medians are extracted. If \code{xlim} is not supplied,}
 
 \item{probs}{Vector. The quantiles of the selected parameters to return invisibly.}
 
-\item{bw}{number or string bandwidth for density (default "nrd0"). See \code{?density}.}
+\item{bw}{number or string bandwidth for density (default \code{nrd0}). See \code{?density()}.}
 
-\item{adjust}{Numeric. Adjustment for density plot. See \code{?density}}
+\item{adjust}{Numeric. Density function bandwidth adjustment parameter. See \code{?density()}.}
 
 \item{lpos}{Character. Position of the contraction in the plot}
 

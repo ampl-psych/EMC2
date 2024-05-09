@@ -25,15 +25,15 @@ Defaults to the sampling stage \code{sample}.}
 
 \item{thin}{An integer. Only iterations that are a multiple of \code{thin} are kept.}
 
-\item{subfilter}{Integer or numeric vector. If an integer is supplied, the first x samples
-within the sampling stage \code{filter} are kept. If a vector is supplied, the samples
+\item{subfilter}{Integer or numeric vector. If an integer is supplied, iterations
+up until that integer within the sampling stage \code{filter} are kept. If a vector is supplied, the iterations
 within the range are kept.}
 
 \item{mapped}{Boolean. If \code{TRUE}, plots the parameters as mapped back to the factor levels of the design,
 if \code{FALSE}, the sampled parameters are plotted}
 
-\item{selection}{String indicating the parameter type. Can be \code{alpha}, \code{mu},
-\code{variance}, \code{covariance}, or \code{correlation}.}
+\item{selection}{A Character string. Indicates which parameter type to plot (\code{alpha}, \code{mu}, \code{variance}, \code{covariance}, \code{correlation}).
+\code{LL} will plot the log-likelihood chains.}
 
 \item{scale.subjects}{Boolean. To standardize each participant with \code{selection = "alpha"}}
 

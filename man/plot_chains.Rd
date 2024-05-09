@@ -17,34 +17,36 @@ plot_chains(
 )
 }
 \arguments{
-\item{samplers}{A list of samplers.}
+\item{samplers}{An EMC2 samplers object}
 
-\item{layout}{A vector specifying the layout as in par(mfrow = layout).
-If NA (default) will use CODA defaults (unless \code{plot_acf = TRUE}), if NULL use current.}
+\item{layout}{A vector specifying the layout as in \code{par(mfrow = layout)}.
+If \code{NA}, (i.e., the default) the \code{coda} defaults are used (unless \code{plot_acf = TRUE}),
+if \code{NULL} the current plot layout is used.}
 
-\item{subject}{Integer or character vector. Only applicable if selection = "alpha". Will plot only these subject(s).
-NA (default) will plot all.}
+\item{subject}{Integer or character vector. Only applicable if \code{selection = "alpha"}. Will plot only these subject(s).
+\code{NA} (i.e., the default) will plot all individuals.}
 
 \item{ylim}{A vector. The y-limits of the chain plot.}
 
-\item{selection}{String. Which parameter type to plot ("alpha", "mu", "variance", "covariance", "correlation").
-"LL" will plot the log-likelihood chains.}
+\item{selection}{A Character string. Indicates which parameter type to plot (\code{alpha}, \code{mu}, \code{variance}, \code{covariance}, \code{correlation}).
+\code{LL} will plot the log-likelihood chains.}
 
-\item{filter}{A string. Specifies from which stage you want to plot the MCMC chains ("preburn", "burn", "adapt", "sample")}
+\item{filter}{A string. Specifies from which stage you want to plot the MCMC chains (\code{preburn}, \code{burn}, \code{adapt}, \code{sample})}
 
 \item{thin}{An integer. Will keep only iterations of the MCMC chains that are a multiple of \code{thin}.}
 
-\item{subfilter}{An integer or vector. If integer it will exclude up until
-that integer. If vector it will include everything in that range.}
+\item{subfilter}{Integer or numeric vector. If an integer is supplied, iterations
+up until that integer within the sampling stage \code{filter} are kept. If a vector is supplied, the iterations
+within the range are kept.}
 
-\item{plot_acf}{Boolean. If TRUE will plot autocorrelation
-for the first MCMC chain (of the default three chains).}
+\item{plot_acf}{Boolean. If \code{TRUE}, the autocorrelation of the first chain is plotted
+(of the -- per default -- three chains).}
 }
 \value{
 None
 }
 \description{
-Plots the trace plots of the MCMC chains on top of each other to visualize convergence
+Plots the trace plots of the MCMC chains on top of each other. Visualizes convergence
 and chain stability.
 }
 \examples{

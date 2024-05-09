@@ -2,7 +2,7 @@
 % Please edit documentation in R/plotting.R
 \name{plot_fit}
 \alias{plot_fit}
-\title{Plots overlaying observed and fitted data.}
+\title{Posterior predictive checks}
 \usage{
 plot_fit(
   data,
@@ -30,14 +30,14 @@ plot_fit(
 )
 }
 \arguments{
-\item{data}{A dataframe. The experimental data in EMC format with at least the subjects factor,
-R (response factor) and rt (response time) columns,
-and optionally other factor columns of the design.}
+\item{data}{A data frame. The experimental data in EMC2 format with at least \code{subject} (i.e., the
+subject factor), \code{R} (i.e., the response factor) and \code{rt} (i.e., response time) variable.
+Additional factor variables of the design are optional.}
 
-\item{pp}{A dataframe. Posterior predictives created by \code{post_predict}}
+\item{pp}{A data frame. Posterior predictives created by \code{post_predict()}}
 
-\item{subject}{Integer or string selecting a subject from the data. If specified will only plot that subject.
-NULL (the default) will plot all subjects.}
+\item{subject}{Integer or string selecting a subject from the data. If specified only that subject
+is plotted. \code{NULL} (i.e., the default), will plot all subjects.}
 
 \item{factors}{Character vector of factors in data to display separately. If
 NULL (default) use names of all columns in data except "trials","R", and "rt".
@@ -62,8 +62,8 @@ For the posterior predictives it will use a single value per replicate, which ar
 
 \item{ylim}{A numeric vector. y-axis plot limit.}
 
-\item{layout}{A vector specifying the layout as in par(mfrow = layout).
-If NA or NULL uses current plot window layout.}
+\item{layout}{A vector specifying the layout as in \code{par(mfrow = layout)}.
+If \code{NA} or \code{NULL} uses current plot window layout.}
 
 \item{mfcol}{Boolean.  If \code{TRUE} uses par(mfrow = layout), otherwise uses par(mfcol = layout)}
 
@@ -79,21 +79,23 @@ If NA or NULL uses current plot window layout.}
 
 \item{pqp_cex}{Numeric. Cex for predicted quantile points}
 
-\item{lpos}{Character. Legend position, see \code{?legend}.}
+\item{lpos}{Character. Legend position, see \code{?legend()}.}
 
 \item{main}{Character. Pasted before the plot title, especially useful when specifying a stat argument.}
 }
 \value{
-If stat argument is provided a vector of observed values and predicted quantiles
+If stat argument is provided, a vector of observed values and predicted quantiles
+is returned
 }
 \description{
-Plot the cumulative density function: the probability of a response,
-p(R) as a function of response time (RT) for the experimental data and posterior
+Plot (defective) cumulative density functions of the observed data and data from the
+posterior predictive distribution: the probability of a response,
+p(R) as a function of response time for the experimental data and posterior
 predictive simulations.
 }
 \details{
-The data is plotted in black. Large grey points show the average quantiles across posterior predictives.
-Small grey points each represent the predicted quantile of an individual replicate,
+The data is plotted in black. Large grey points show the average quantiles across the posterior predictives.
+The small grey points represent the predicted quantile of an individual replicate,
 providing a representation of uncertainty in the model predictions.
 
 If the stat argument is supplied (which calculates a statistic based on the data),
@@ -101,15 +103,17 @@ the posterior predictives are plotted as a density over the different replicates
 A vertical line is plotted at the value of that statistic for the experimental data.
 
 If more than one subject is included, the data and fits are aggregated across subjects by default.
+
+Also see \code{?plot_defective_density()} for more details.
 }
 \examples{
 \dontrun{
 # First generate posterior predictives based on a samplers object run with run_emc
 pp <- post_predict(samplers, n_cores = 4)
-# Then we can visualize the model fit
+# Then visualize the model fit
 plot_fit(forstmann, pp, factors = c("S", "E"), layout = c(2,3))
 
-# We can also visualize specific statistics on the posterior predictives
+# Specific statistics on the posterior predictives can also be specified
 # This function calculates the difference in rt between two S levels.
 # It takes the data (or the posterior predictives) as an argument
 drt <- function(data) diff(tapply(data$rt,data[,c("S")],mean))
