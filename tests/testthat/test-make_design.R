@@ -7,6 +7,7 @@ design_data <- make_design(data = data.frame(forstmann, CO = 1:nrow(forstmann)),
               E2 = function(d) factor(d$E!="speed",labels=c("speed","nonspeed"))
             ))
 
+
 design_custom <- make_design(factors = list(S = c("left", "right"),
                                          subjects = 1:3),
                           Rlevels = c("left", "right"), model = LNR,
