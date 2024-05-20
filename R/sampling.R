@@ -97,6 +97,7 @@ init <- function(pmwgs, start_mu = NULL, start_var = NULL,
   if(any(pmwgs$grouped)){
     grouped_pars <- mvtnorm::rmvnorm(particles, pmwgs$prior$prior_grouped$theta_mu_mean,
                                      pmwgs$prior$prior_grouped$theta_mu_var)
+    colnames(grouped_pars) <- pmwgs$par_names[pmwgs$grouped]
   } else{
     grouped_pars <- NULL
   }
@@ -122,26 +123,46 @@ init <- function(pmwgs, start_mu = NULL, start_var = NULL,
 
 #' Initialize chains
 #'
-#' Adds a set of set of start points to each chain samples from a multivariate
-#' normal
+#' Adds a set of start points to each chain. These start points are sampled from a user-defined multivariate
+#' normal across subjects.
 #'
-#' @param samplers List of chains made by make_samplers
-#' @param start_mu Mean of multivariate normal
-#' @param start_var Variance covariance matrix of multivariate normal
-#' @param verbose Report progress
-#' @param cores_per_chain Number of cores used per chain.
-#' @param cores_for_chains Number of cores used for chains.
-#' @param particles Number of starting values
+#' @param samplers List of chains made by `make_samplers()`
+#' @param start_mu A vector. Mean of multivariate normal used in proposal distribution
+#' @param start_var A matrix. Variance covariance matrix of multivariate normal used in proposal distribution.
+#' Smaller values will lead to less deviation around the mean.
+#' @param cores_per_chain An integer. How many cores to use per chain. Parallelizes across participant calculations.
+#' @param cores_for_chains An integer. How many cores to use to parallelize across chains. Default is the number of chains.
+#' @param particles An integer. Number of starting values
 #'
 #' @return A samplers object
+#' @examples \dontrun{
+#' # Make a design and a samplers object
+#' design_DDMaE <- make_design(data = forstmann,model=DDM,
+#'                            formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
+#'                            constants=c(s=log(1)))
+#'
+#' DDMaE <- make_samplers(forstmann, design_DDMaE)
+#' # set up our mean starting points (same used across subjects).
+#' mu <- c(v_Sleft=-2,v_Sright=2,a=log(1),a_Eneutral=log(1.5),a_Eaccuracy=log(2),
+#'        t0=log(.2),Z=qnorm(.5),sv=log(.5),SZ=qnorm(.5))
+#' # Small variances to simulate start points from a tight range
+#' var <- diag(0.05, length(mu))
+#' # Initialize chains, 4 cores per chain, and parallelizing across our 3 chains as well
+#' # so 4*3 cores used.
+#' DDMaE <- init_chains(DDMaE, start_mu = p_vector, start_var = var, cores_per_chain = 4)
+#' # Afterwards we can just use run_emc
+#' DDMaE <- run_emc(DDMaE, cores_per_chain = 4)
+#' }
 #' @export
-init_chains <- function(samplers, start_mu = NULL, start_var = NULL,
-                        verbose = FALSE, particles = 1000,
+init_chains <- function(samplers, start_mu = NULL, start_var = NULL, particles = 1000,
                         cores_per_chain=1,cores_for_chains = length(samplers))
 {
-  mclapply(samplers,init,start_mu = start_mu, start_var = start_var,
-           verbose = verbose, particles = particles,
+  attributes <- get_attributes(samplers)
+  samplers <- mclapply(samplers,init,start_mu = start_mu, start_var = start_var,
+           verbose = FALSE, particles = particles,
            n_cores = cores_per_chain, mc.cores=cores_for_chains)
+  samplers <- get_attributes(samplers, attributes)
+  return(samplers)
 }
 
 start_proposals_group <- function(data, group_pars, alpha, par_names,
@@ -167,7 +188,7 @@ start_proposals <- function(s, parameters, n_particles, pmwgs, variant_funs, gro
   colnames(proposals) <- rownames(pmwgs$samples$alpha) # preserve par names
   if(any(is_grouped)){
     proposals <- update_proposals_grouped(proposals, grouped_pars, is_grouped,
-                                          par_names = pmwgs$par_names)
+                                          par_names = colnames(proposals))
   }
   lw <- calc_ll_manager(proposals, dadm = pmwgs$data[[which(pmwgs$subjects == s)]],
                         ll_func = pmwgs$ll_func)
@@ -259,11 +280,12 @@ run_stage <- function(pmwgs,
       pmwgs$sampler_nuis$samples$idx <- j
     }
     if(any(grouped)){
+      subj_prior <-sum(apply(pars_comb$alpha, 2, FUN = function(x) mvtnorm::dmvnorm(x, pars$tmu, sigma = pars$tvar, log = TRUE)))
       grouped_pars <- new_particle_group(pmwgs$data, particles_grouped, pmwgs$prior$prior_grouped,
                                          chains_cov_grouped, mix_grouped, epsilon_grouped,
                                          pmwgs$samples$grouped_pars[,j-1] , pars_comb$alpha, pmwgs$par_names,
-                                         pmwgs$ll_func, pmwgs$grouped, stage, variant_funs, pmwgs$subjects, n_cores)
-      pmwgs$samples$grouped_pars[,j] <- grouped_pars
+                                         pmwgs$ll_func, pmwgs$grouped, stage, variant_funs, pmwgs$subjects, subj_prior, n_cores)
+      pmwgs$samples$grouped_pars[,j] <- grouped_pars$proposal
       pmwgs$samples$epsilon_grouped <- epsilon_grouped
     } else{
       grouped_pars <- NULL
@@ -274,7 +296,8 @@ run_stage <- function(pmwgs,
                                     chains_cov,
                                     pmwgs$samples$subj_ll[,j-1],
                                     MoreArgs = list(pars_comb, mix, pmwgs$ll_func, epsilon, components, stage,
-                                                    variant_funs$get_group_level, block_idx, shared_ll_idx, grouped_pars, grouped),
+                                                    variant_funs$get_group_level, block_idx, shared_ll_idx, grouped_pars$proposal, grouped,
+                                                    group_prior = grouped_pars$prior),
                                     mc.cores =n_cores)
     proposals <- array(unlist(proposals), dim = c(pmwgs$n_pars - sum(grouped) + 2, pmwgs$n_subjects))
 
@@ -292,7 +315,7 @@ run_stage <- function(pmwgs,
         }
         if(any(grouped)){
           acc <-  pmwgs$samples$grouped_pars[1,j] !=  pmwgs$samples$grouped_pars[1,(j-1)]
-          epsilon_grouped <-update.epsilon(epsilon_grouped^2, acc, p_accept, j, sum(grouped), alphaStar)
+          epsilon_grouped <-update.epsilon(epsilon_grouped^2, acc, mean(p_accept), j, sum(grouped), mean(alphaStar))
         }
       }
     }
@@ -308,7 +331,8 @@ new_particle <- function (s, data, num_particles, eff_mu = NULL,
                           parameters, mix_proportion = c(0.5, 0.5, 0),
                           likelihood_func = NULL, epsilon = NULL,
                           components, stage,  group_level_func,
-                          block_idx, shared_ll_idx, grouped_pars, is_grouped)
+                          block_idx, shared_ll_idx, grouped_pars, is_grouped,
+                          group_prior)
 {
   # if(stage == "sample"){
   #   if(rbinom(1, size = 1, prob = .5) == 1){
@@ -378,12 +402,16 @@ new_particle <- function (s, data, num_particles, eff_mu = NULL,
     } else{
       prior_density <- lp
     }
+    if(any(is_grouped)){
+      prior_density <- prior_density + group_prior
+    }
+
     if (mix_proportion[3] == 0) {
       eff_density <- 0
     }
     else {
       #if(is.null(eff_alpha)){
-        eff_density <- mvtnorm::dmvnorm(x = proposals[,idx], mean = eff_mu[idx], sigma = eff_var[idx,idx])
+      eff_density <- mvtnorm::dmvnorm(x = proposals[,idx], mean = eff_mu[idx], sigma = eff_var[idx,idx])
       # } else{
       #   eff_density <- sn::dmsn(x = proposals[,idx], xi = eff_mu[idx], Omega = eff_var[idx,idx],
       #                            alpha = eff_alpha, tau = eff_tau)
@@ -408,7 +436,7 @@ new_particle_group <- function(data, num_particles, prior,
                                chains_cov, mix_proportion = c(.1, .9), epsilon_grouped,
                                prev_mu, alpha, par_names, likelihood_func = NULL,
                                is_grouped, stage,
-                               variant_funs, subjects, n_cores){
+                               variant_funs, subjects, subj_prior, n_cores){
   prior_mu <- prior$theta_mu_mean
   prior_var <- prior$theta_mu_var
   if(stage == "preburn"){
@@ -429,10 +457,11 @@ new_particle_group <- function(data, num_particles, prior,
   lp <- mvtnorm::dmvnorm(x = proposals, mean = prior_mu, sigma = prior_var, log = TRUE)
   prop_density <- mvtnorm::dmvnorm(x = proposals, mean = prev_mu, sigma = chains_cov)
   lm <- log(mix_proportion[1] * exp(lp) + mix_proportion[2] * prop_density)
-  l <- lw + lp - lm
+  prior_density <- lp + subj_prior
+  l <- lw + prior_density - lm
   weights <- exp(l - max(l))
   idx <- sample(x = num_particles + 1, size = 1, prob = weights)
-  return(proposals[idx,])
+  return(list(proposal = proposals[idx,], prior = lp[idx]/length(subjects)))
 }
 
 
@@ -800,7 +829,8 @@ update_proposals_grouped <- function(proposals, grouped_pars, is_grouped, par_na
   proposals_full <- matrix(0, nrow = nrow(proposals), ncol = length(is_grouped))
   proposals_full[,!is_grouped] <- proposals
   proposals_full[,is_grouped] <- matrix(grouped_pars, ncol = length(grouped_pars), nrow = nrow(proposals), byrow = T)
-  colnames(proposals_full) <- par_names
+  colnames(proposals_full)[!is_grouped] <- par_names
+  colnames(proposals_full)[is_grouped] <- names(grouped_pars)
   return(proposals_full)
 }
 

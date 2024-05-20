@@ -16,7 +16,8 @@ get_prior_SEM(
   B_mat = NULL,
   K_mat = NULL,
   G_mat = NULL,
-  x = NULL
+  x = NULL,
+  n_factors = n_factors
 )
 }
 \arguments{

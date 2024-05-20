@@ -69,7 +69,8 @@ variable to be tested.}
 
 \item{selection}{String designating parameter type (mu, variance, correlation, alpha = default)}
 
-\item{subfilter}{An integer or vector. If integer it will exclude up until}
+\item{subfilter}{An integer or vector. If it's an integer, iterations up until the value set by \code{subfilter} will be excluded.
+If a vector is supplied, only the iterations in the vector will be considered.}
 }
 \value{
 Invisible results table with no rounding.
