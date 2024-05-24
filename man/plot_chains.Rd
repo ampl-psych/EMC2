@@ -5,46 +5,58 @@
 \title{Plot MCMC chains}
 \usage{
 plot_chains(
-  pmwg_mcmc,
+  samplers,
   layout = NA,
   subject = NA,
   ylim = NULL,
-  selection = "alpha",
+  selection = "mu",
   filter = "sample",
   thin = 1,
   subfilter = 0,
-  plot_acf = FALSE,
-  acf_chain = 1
+  plot_acf = FALSE
 )
 }
 \arguments{
-\item{pmwg_mcmc}{A list of samplers or samplers converted to mcmc objects.}
+\item{samplers}{An EMC2 samplers object}
 
-\item{layout}{A vector specifying the layout as in par(mfrow = layout).
-If NA (defualt) use CODA defaults, if NULL use current.}
+\item{layout}{A vector specifying the layout as in \code{par(mfrow = layout)}.
+If \code{NA}, (i.e., the default) the \code{coda} defaults are used (unless \code{plot_acf = TRUE}),
+if \code{NULL} the current plot layout is used.}
 
-\item{subject}{Integer or character vector, if selection = "alpha" picks out subject(s)
-(defualt NA plot all)}
+\item{subject}{Integer or character vector. Only applicable if \code{selection = "alpha"}. Will plot only these subject(s).
+\code{NA} (i.e., the default) will plot all individuals.}
 
-\item{ylim}{The y limits of the chain plot.}
+\item{ylim}{A vector. The y-limits of the chain plot.}
 
-\item{selection}{String designating parameter type (mu, variance, correlation, alpha = default)}
+\item{selection}{A Character string. Indicates which parameter type to plot (\code{alpha}, \code{mu}, \code{variance}, \code{covariance}, \code{correlation}).
+\code{LL} will plot the log-likelihood chains.}
 
-\item{filter}{A string. Specifies which stage you want to plot.}
+\item{filter}{A string. Specifies from which stage you want to plot the MCMC chains (\code{preburn}, \code{burn}, \code{adapt}, \code{sample})}
 
-\item{thin}{An integer. Keep only iterations that are a multiple of thin.}
+\item{thin}{An integer. Will keep only iterations of the MCMC chains that are a multiple of \code{thin}.}
 
-\item{subfilter}{An integer or vector. If integer it will exclude up until
-that integer. If vector it will include everything in that range.}
+\item{subfilter}{Integer or numeric vector. If an integer is supplied, iterations
+up until that integer within the sampling stage \code{filter} are kept. If a vector is supplied, the iterations
+within the range are kept.}
 
-\item{plot_acf}{Boolean (default FALSE). If TRUE will also plot autocorrelation
-for the chain specified in acf_chain.}
-
-\item{acf_chain}{Integer. For which chain to plot the acf, if plot_acf = TRUE.}
+\item{plot_acf}{Boolean. If \code{TRUE}, the autocorrelation of the first chain is plotted
+(of the -- per default -- three chains).}
 }
 \value{
 None
 }
 \description{
-Plot MCMC chains
+Plots the trace plots of the MCMC chains on top of each other. Visualizes convergence
+and chain stability.
+}
+\examples{
+\dontrun{
+# For a set of samplers run using run_emc:
+plot_chains(samplers)
+# Or for the second subject:
+plot_chains(samplers, subject = 2)
+
+# Can also plot the autocorrelation of for example the group-level mean:
+plot_chains(samplers, selection = "mu", plot_acf = TRUE)
+}
 }
