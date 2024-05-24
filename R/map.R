@@ -22,7 +22,7 @@ get_design <- function(samples)
   design <- attr(samples,"design_list")[[1]]
   model <- attr(samples, "model_list")[[1]]
   design$Ffactors$subjects <- design$Ffactors$subjects[1]
-  dadm <- design_model(make_data(sampled_p_vector(design,model),design,model,trials=1),design,model,
+  dadm <- design_model(make_data(sampled_p_vector(design,model),design,n_trials=1),design,model,
                        rt_check=FALSE,compress=FALSE)
   dadm[,!(names(dadm) %in% c("subjects","trials","R","rt","winner"))]
 }
@@ -113,37 +113,57 @@ add_constants_mcmc <- function(p,constants){
   return(mcmc(add_constants(p,constants)))
 }
 
-#' Maps a parameter vector through a design to show parameter values for each
-#' design cell.
+#' Parameter mapping back to the design factors
 #'
-#' @param p_vector The parameter vector (must have form of sampled_p_vector(design)
-#' @param design The design (created by make_design)
-#' @param model Optional model type (if not in design)
-#' @param digits For rounding outputs
-#' @param remove_subjects Default true removes subjects from output design
-#' @param Fcovariates Any covariates in the design
-#' @param remove_RACE Logical: remove rows with no accumulator
+#' Maps a parameter vector that corresponds to sampled parameters
+#' of the cognitive model back to the experimental design. The parameter vector
+#' can be created using ``sampled_p_vector()``. The returned matrix shows whether/how parameters
+#' differ across the experimental factors.
 #'
-#' @return Matrix of factors and mapped parameter values
+#' @param p_vector A parameter vector. Must be in the form of ``sampled_p_vector(design)``
+#' @param design A design list. Created ``by make_design``
+#' @param model Optional model type (if not already specified in ``design``)
+#' @param digits Integer. Will round the output parameter values to this many decimals
+#' @param ... optional arguments
+#' @param remove_subjects Boolean. Whether to include subjects as a factor in the design
+#'
+#' @return Matrix with a column for each factor in the design and for each model parameter type (``p_type``).
+#' @examples
+#' # First define a design:
+#' design_DDMaE <- make_design(data = forstmann,model=DDM,
+#'                            formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
+#'                            constants=c(s=log(1)))
+#' # Then create a p_vector:
+#' p_vector=c(v_Sleft=-2,v_Sright=2,a=log(1),a_Eneutral=log(1.5),a_Eaccuracy=log(2),
+#'           t0=log(.2),Z=qnorm(.5),sv=log(.5),SZ=qnorm(.5))
+#' # This will map the parameters of the p_vector back to the design
+#' mapped_par(p_vector,design_DDMaE)
+#'
 #' @export
 
 mapped_par <- function(p_vector,design,model=NULL,
-                       digits=3,remove_subjects=TRUE,Fcovariates=NULL,remove_RACE=TRUE)
+                       digits=3,remove_subjects=TRUE, ...)
   # Show augmented data and corresponding mapped parameter
 {
+  remove_RACE <- TRUE
+  optionals <- list(...)
+  for (name in names(optionals) ) {
+    assign(name, optionals[[name]])
+  }
+  Fcovariates <- design$Fcovariates
   if (is.null(model)) if (is.null(design$model))
-    stop("Must specify model as not in design") else model <- design$model
-    if (remove_subjects) design$Ffactors$subjects <- design$Ffactors$subjects[1]
-    if (!is.matrix(p_vector)) p_vector <- make_pmat(p_vector,design)
-    dadm <- design_model(make_data(p_vector,design,model,trials=1,Fcovariates=Fcovariates),
-                         design,model,rt_check=FALSE,compress=FALSE)
-    ok <- !(names(dadm) %in% c("subjects","trials","R","rt","winner"))
-    out <- cbind(dadm[,ok],round(get_pars(p_vector,dadm),digits))
-    if (model()$type=="SDT")  out <- out[dadm$lR!=levels(dadm$lR)[length(levels(dadm$lR))],]
-    if (model()$type=="DDM")  out <- out[,!(names(out) %in% c("lR","lM"))]
-    if (any(names(out)=="RACE") && remove_RACE)
-      out <- out[as.numeric(out$lR) <= as.numeric(as.character(out$RACE)),,drop=FALSE]
-    return(out)
+  stop("Must specify model as not in design") else model <- design$model
+  if (remove_subjects) design$Ffactors$subjects <- design$Ffactors$subjects[1]
+  if (!is.matrix(p_vector)) p_vector <- make_pmat(p_vector,design)
+  dadm <- design_model(make_data(p_vector,design,n_trials=1,Fcovariates=Fcovariates),
+                       design,model,rt_check=FALSE,compress=FALSE)
+  ok <- !(names(dadm) %in% c("subjects","trials","R","rt","winner"))
+  out <- cbind(dadm[,ok],round(get_pars(p_vector,dadm),digits))
+  if (model()$type=="SDT")  out <- out[dadm$lR!=levels(dadm$lR)[length(levels(dadm$lR))],]
+  if (model()$type=="DDM")  out <- out[,!(names(out) %in% c("lR","lM"))]
+  if (any(names(out)=="RACE") && remove_RACE)
+    out <- out[as.numeric(out$lR) <= as.numeric(as.character(out$RACE)),,drop=FALSE]
+  return(out)
 }
 
 
