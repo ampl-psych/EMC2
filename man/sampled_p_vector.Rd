@@ -2,7 +2,7 @@
 % Please edit documentation in R/design.R
 \name{sampled_p_vector}
 \alias{sampled_p_vector}
-\title{sampled_p_vector()}
+\title{Get model parameters from a design}
 \usage{
 sampled_p_vector(
   design,
@@ -13,20 +13,31 @@ sampled_p_vector(
 )
 }
 \arguments{
-\item{design}{a list of the design made with make_design.}
+\item{design}{a list of the design made with \code{make_design()}.}
 
-\item{model}{a model list. Default is the model specified in the design list.}
+\item{model}{a model list. Defaults to the model specified in the design list.}
 
-\item{doMap}{logical. If TRUE will}
+\item{doMap}{logical. If \code{TRUE} will also include an attribute \code{map}
+with the design matrices that perform the mapping back to the design}
 
-\item{add_da}{Boolean. Whether to include the data in the output}
+\item{add_da}{Boolean. Whether to include the relevant data columns in the map attribute}
 
-\item{all_cells_dm}{Boolean. Whether to include all levels of a factor in the output, even when one is dropped in the design}
+\item{all_cells_dm}{Boolean. Whether to include all levels of a factor in the mapping attribute,
+even when one is dropped in the design}
 }
 \value{
-Named vector with mapping attributes.
+Named vector.
 }
 \description{
-Makes an empty p_vector corresponding to model.
-matchfun only needed in design if uses lM factorf
+Makes a vector with zeroes, with names and length corresponding to the
+model parameters of the design.
+}
+\examples{
+# First define a design
+design_DDMaE <- make_design(data = forstmann,model=DDM,
+                           formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
+                           constants=c(s=log(1)))
+# Then for this design get which cognitive model parameters are sampled:
+sampled_p_vector(design_DDMaE)
+
 }
