@@ -27,7 +27,7 @@ mapped_par(
 \item{...}{optional arguments}
 }
 \value{
-Matrix with a column for each factor in the design and for each model parameter (\code{p_type}).
+Matrix with a column for each factor in the design and for each model parameter type (\code{p_type}).
 }
 \description{
 Maps a parameter vector that corresponds to sampled parameters

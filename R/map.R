@@ -127,7 +127,7 @@ add_constants_mcmc <- function(p,constants){
 #' @param ... optional arguments
 #' @param remove_subjects Boolean. Whether to include subjects as a factor in the design
 #'
-#' @return Matrix with a column for each factor in the design and for each model parameter (``p_type``).
+#' @return Matrix with a column for each factor in the design and for each model parameter type (``p_type``).
 #' @examples
 #' # First define a design:
 #' design_DDMaE <- make_design(data = forstmann,model=DDM,
