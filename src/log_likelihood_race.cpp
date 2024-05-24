@@ -147,59 +147,59 @@ double c_log_likelihood_race(NumericMatrix pars, DataFrame data,
 
 // [[Rcpp::export]]
 NumericVector calc_ll(NumericMatrix p_matrix, DataFrame data, NumericVector constants,
-                      List designs, const int n_trials, String type, CharacterVector p_types,
-                      LogicalVector winner, NumericVector expand,
+                      List designs, String type, CharacterVector p_types,
                       double min_ll, List group_idx){
-  CharacterVector p_names = colnames(p_matrix);
   const int n_particles = p_matrix.nrow();
+  const int n_trials = data.nrow();
   NumericVector lls(n_particles);
   NumericVector p_vector(p_matrix.ncol());
-  NumericMatrix pars(n_trials, p_types.length());
-  p_vector.names() = p_names;
-  if(type == "fMRI"){
+  if(type == "MRI"){
     for(int i = 0; i < n_particles; i++){
       p_vector = p_matrix(i, _);
-      NumericMatrix designMatrix = data.attr("desigMatrix");
-      pars = get_pars(p_vector, constants, transform_fMRI, Ntransform_fMRI, p_types, designs, n_trials);
-      lls[i] = c_log_likelihood_fMRI(pars, data, designMatrix, min_ll);
-    }
-  }
-
-
-  if(type == "DDM"){
-    for(int i = 0; i < n_particles; i++){
-      p_vector = p_matrix(i, _);
-      pars = get_pars(p_vector, constants, transform_DDM, Ntransform_DDM, p_types, designs, n_trials);
-      lls[i] = c_log_likelihood_DDM(pars, data, n_trials, expand, min_ll, group_idx);
+      NumericMatrix designMatrix = data.attr("design_matrix_mri");
+      // pars = get_pars(p_vector, constants, transform_fMRI, Ntransform_fMRI, p_types, designs, n_trials);
+      lls[i] = c_log_likelihood_fMRI(p_vector, data, designMatrix, min_ll);
     }
   } else{
-
-    // Love me some good old ugly but fast c++ pointers
-    NumericVector (*dfun)(NumericVector, NumericMatrix, LogicalVector, double);
-    NumericVector (*pfun)(NumericVector, NumericMatrix, LogicalVector, double);
-    NumericVector (*transform)(NumericVector);
-    NumericMatrix (*Ntransform)(NumericMatrix);
-    // NumericMatrix (*Ttransform)(NumericMatrix);
-    if(type == "LBA"){
-      dfun = dlba_c;
-      pfun = plba_c;
-      transform = transform_lba;
-      Ntransform = Ntransform_lba;
-    } else if(type == "RDM"){
-      dfun = drdm_c;
-      pfun = prdm_c;
-      transform = transform_rdm;
-      Ntransform = Ntransform_rdm;
+    CharacterVector p_names = colnames(p_matrix);
+    NumericMatrix pars(n_trials, p_types.length());
+    p_vector.names() = p_names;
+    NumericVector expand = data.attr("expand");
+    if(type == "DDM"){
+      for(int i = 0; i < n_particles; i++){
+        p_vector = p_matrix(i, _);
+        pars = get_pars(p_vector, constants, transform_DDM, Ntransform_DDM, p_types, designs, n_trials);
+        lls[i] = c_log_likelihood_DDM(pars, data, n_trials, expand, min_ll, group_idx);
+      }
     } else{
-      dfun = dlnr_c;
-      pfun = plnr_c;
-      transform = transform_lnr;
-      Ntransform = Ntransform_lnr;
-    }
-    for(int i = 0; i < n_particles; i++){
-      p_vector = p_matrix(i, _);
-      pars = get_pars(p_vector, constants, transform, Ntransform, p_types, designs, n_trials);
-      lls[i] = c_log_likelihood_race(pars, data, dfun, pfun, n_trials, winner, expand, min_ll);
+      LogicalVector winner = data["winner"];
+      // Love me some good old ugly but fast c++ pointers
+      NumericVector (*dfun)(NumericVector, NumericMatrix, LogicalVector, double);
+      NumericVector (*pfun)(NumericVector, NumericMatrix, LogicalVector, double);
+      NumericVector (*transform)(NumericVector);
+      NumericMatrix (*Ntransform)(NumericMatrix);
+      // NumericMatrix (*Ttransform)(NumericMatrix);
+      if(type == "LBA"){
+        dfun = dlba_c;
+        pfun = plba_c;
+        transform = transform_lba;
+        Ntransform = Ntransform_lba;
+      } else if(type == "RDM"){
+        dfun = drdm_c;
+        pfun = prdm_c;
+        transform = transform_rdm;
+        Ntransform = Ntransform_rdm;
+      } else{
+        dfun = dlnr_c;
+        pfun = plnr_c;
+        transform = transform_lnr;
+        Ntransform = Ntransform_lnr;
+      }
+      for(int i = 0; i < n_particles; i++){
+        p_vector = p_matrix(i, _);
+        pars = get_pars(p_vector, constants, transform, Ntransform, p_types, designs, n_trials);
+        lls[i] = c_log_likelihood_race(pars, data, dfun, pfun, n_trials, winner, expand, min_ll);
+      }
     }
   }
   return(lls);

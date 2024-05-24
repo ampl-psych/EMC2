@@ -1,7 +1,7 @@
 .Rproj.user
 *.Rhistory
 .Rhistory
-test.R
+test_fMRI.R
 .RData
 test.R
 *.so

@@ -13,6 +13,118 @@ quick_convolve <- function(regressor, modulator, hkernel, frame_times) {
   return(computed_regressors)
 }
 
+make_fmri_design_matrix_wrap <- function(timeseries, events, factors, contrasts){
+  if(!is.data.frame(events)) events <- do.call(rbind, events)
+  subject <- timeseries$subjects[1]
+  runs <- unique(timeseries$run)
+  events <- events[events$trial_type %in% unlist(factors),]
+  events$factor <- events$trial_type
+  events$modulation <- 1
+  events$regressor <- events$trial_type
+  out <- data.frame
+  for(fact in names(factors)){
+    idx <- events$trial_type %in% factors[[fact]]
+    events$factor[idx] <- fact
+    tmp <- events[idx,]
+    dm <- contrasts[[fact]]
+    tmp2 <- do.call(rbind, rep(list(tmp), ncol(dm)))
+    tmp2 <- tmp2[order(tmp2$onset),]
+    for(type in unique(tmp2$trial_type)){
+      tmp2$modulation[tmp2$trial_type == type] <- dm[rownames(dm) == type]
+      tmp2$regressor[tmp2$trial_type == type] <- colnames(dm)
+    }
+    tmp2 <- tmp2[!tmp2$modulation == 0,]
+    events <- events[!idx,]
+    events <- rbind(events, tmp2)
+  }
+  events <- events[order(events$onset),]
+  runs <- unique(timeseries$run)
+  dms <- vector(mode='list', length=length(runs))
+  for(run in runs) {
+    dms[[run]] <- make_fmri_design_matrix(timeseries[timeseries$run==run, 'time'],
+                                          events=events[events$run == run,],
+                                          hrf_model='glover + derivative', add_intercept=FALSE)
+  }
+  dm <- do.call(rbind, dms)
+  dm$subjects <- subject
+  return(dm)
+}
+
+make_design_fmri <- function(data,
+                             events,
+                             model,
+                             factors,
+                             contrasts,
+                             hrf_model='glover + derivative',
+                             add_intercept=FALSE,
+                             ...) {
+
+  design_matrix <- make_fmri_design_matrix_wrap(data, events, factors, contrasts)
+
+  data_names <- colnames(data)[!colnames(data) %in% c('subjects', 'run', 'time')]
+
+  # First create the design matrix
+
+  # generate parameter names
+  if(!is.null(design_matrix)) {
+    par_names <- colnames(design_matrix)[colnames(design_matrix) != "subjects"]
+  } else {
+    par_names <- c()
+  }
+  if(!is.null(list(...)$par_regressors)) {
+    if(hrf_model == 'glover + derivative') {
+      par_names_from_events <- unique(events$trial_type)  # events contains all events
+      par_names <- c(par_names, paste(rep(par_names_from_events, each=2), c('', '_derivative'), sep=''))
+    } else if(hrf_model == 'glover') {
+      par_names_from_events <- unique(events$trial_type)  # events contains all events
+      par_names <- c(par_names, par_names_from_events)
+    }
+  }
+  if(!('intercept' %in% par_names) & add_intercept) {
+    par_names <- c(par_names, 'intercept')
+  }
+
+  if(!is.null(list(...)$par_regressors)) events_list <- split(list(...)$par_regressors, f=list(...)$par_regressors$subjects)
+
+  dms_list <- split(design_matrix, f=design_matrix$subjects)
+  model <- model()
+  if(!is.null(list(...)$par_regressors)) {
+    model$list(...)$par_regressors <- lapply(events_list, FUN = function(x){
+      y <- x[,colnames(x) != "subjects"]
+      y
+    })
+  }
+
+
+  dots <- list(...)
+  if('hkernel' %in% names(dots)) {
+    model$hkernel <- dots$hkernel
+  }
+  if('regressors' %in% names(dots)) {
+    model$regressors <- dots$regressors
+    model$fast_convolve <- TRUE
+  }
+
+
+  df_par_names <- expand.grid(c(par_names, "sd"), data_names)
+  par_names <- paste0(df_par_names[,2], "_", df_par_names[,1])
+
+  n_pars <- length(par_names)
+  Flist <- vector("list", n_pars)
+  for(i in 1:n_pars){
+    Flist[[i]] <- as.formula(paste0(par_names[i], "~1"))
+  }
+  model_function <- function() {return(model)}
+  design <- list(Flist = Flist, model = model_function)
+  attr(design, "design_matrix") <- lapply(dms_list, FUN=function(x) {
+    y <- x[,colnames(x) != 'subjects']
+    data.matrix(y)
+  })
+  attr(design, "p_vector") <- par_names
+  return(design)
+}
+
+
 
 searchsorted <- function(x, insert) {
   ## SM, based on https://numpy.org/doc/stable/reference/generated/numpy.searchsorted.html
@@ -28,7 +140,7 @@ orthogonalize_ <- function(X) {
   }
 
   for(i in 2:dim(X)[2]) {
-    preds = (X[,i] %*% X[,1:(i-1)]) %*% pinv(as.matrix(X[,1:(i-1)]))
+    preds = (X[,i] %*% X[,1:(i-1)]) %*% ginv(as.matrix(X[,1:(i-1)]))
     X[,i] = X[,i]-preds
   }
   return(X)
@@ -312,6 +424,88 @@ make_fmri_design_matrix <- function(frame_times, events=NULL, hrf_model='glover'
   colnames(df) <- names
   if(add_intercept) df$intercept <- 1
   return(df)
+}
+
+normal <- function(){
+  return(
+    list(
+      type="MRI",
+      c_name = "MRI",
+      p_types=c("sd" = log(1)), #This is a bit hacky for now
+      # Transform to natural scale
+      Ntransform=function(x) {
+
+        if(is.null(dim(x))) {
+          is_sd <- grepl("_sd", names(x))
+          x[is_sd] <- exp(x[is_sd])+.001
+        } else {
+          is_sd <- grepl("_sd", dimnames(x)[[2]])
+          x[,is_sd] <- exp(x[,is_sd])+.001
+        }
+        return(x)
+      },
+      # Trial dependent parameter transform
+      Ttransform = function(pars,dadm=NULL)
+      {
+        pars
+      },
+      # p_vector transform
+      transform = function(x) x,
+      # Random function for racing accumulators
+      rfun=function(lR,pars) rNORMAL(lR,pars),
+      # Density function (PDF) for single accumulator
+      dfun=function(rt,pars) dNORMAL(rt,pars),
+      # Probability function (CDF) for single accumulator
+      pfun=function(rt,pars) pNORMAL(rt,pars),
+      # Race likelihood combining pfun and dfun
+      log_likelihood=function(p_vector, dadm, predictionErrors=NULL, min_ll=log(1e-10), X2=NULL){
+        # data
+        y <- as.matrix(dadm[,!colnames(dadm) %in% c("subjects", 'run', 'time', "trials")])
+
+        # first part of the design matrix is already generated, and fixed across parameters
+        X <- attr(dadm, 'design_matrix_mri')
+
+        #         if(!is.null(predictionErrors)) {
+        #           events <- attr(dadm, "model")()$events[[as.character(dadm$subjects[1])]]
+        #           events <- merge(events, predictionErrors, on='trial_nr')
+        #           events$modulation <- (events$predictionErrors - mean(events$predictionErrors)) / sd(events$predictionErrors)
+        #           runs <- unique(events$run)
+        #           X2 <- as.matrix(do.call(rbind, lapply(runs, function(x) {
+        #             make_fmri_design_matrix(frame_times=dadm[dadm$run==x,'time'],
+        #                                     events=events[events$run==x,],
+        #                                     hrf_model = 'glover + derivative',
+        #                                     add_intercept=FALSE, oversampling = 5)
+        #           })))
+        #
+        #           # combine 'fixed' and modulation parts of the DM
+        #           X <- cbind(X, X2)
+        #         }
+
+        # transform parameters
+        p_vector <- normal()$Ntransform(p_vector)
+        X <- cbind(X, X2)
+
+        # grab the right parameters
+        is_sd <- grepl("sd", names(p_vector))
+        sigma <- p_vector[is_sd]
+        betas <- p_vector[!is_sd]
+        betas <- matrix(betas, ncol = length(sigma))
+
+        # get rid of intercept
+        y_hat <- X %*% betas
+        y_hat <- y_hat - mean(y_hat)
+
+        ## SM style
+        if(ncol(betas > 1)) {
+          total_sum <- sum(pmax(dnorm(as.matrix(y), mean = y_hat, sd = rep(sigma, each=nrow(X)), log = T)))
+        } else {
+          total_sum <- sum(pmax(dnorm(y, mean = y_hat, sd = sigma, log = T), min_ll))
+        }
+
+        return(total_sum)
+      }
+    )
+  )
 }
 
 
