@@ -1310,34 +1310,48 @@ pairs_posterior <- function(samplers,filter="sample",thin=1,subfilter=0,mapped=F
   invisible(rs)
 }
 
-#' Creates a likelihood profile plot from a dadm object (see design_model) by
+#' Likelihood profile plots
+#'
+#' Creates a likelihood profile plot from a design and the experimental data by
 #' varying one model parameter while holding all others constant.
 #'
-#' @param pname Name of parameter to profile
-#' @param p Named vector of parameter values (typically created with sampled_p_vector)
-#' @param p_min Minimum value of profile range
-#' @param p_max Maximum value of profile range
-#' @param dadm Data augmented design and model (created by design_model)
-#' @param n_point Number of evenly spaced points at which to calculate likelihood
+#' @param pname String. Name of parameter to profile
+#' @param p_vector Named vector of parameter values (typically created with ``sampled_p_vector(design)``)
+#' @param p_min Numeric. Minimum value of profile range
+#' @param p_max Numeric. Maximum of profile range
+#' @param n_point Integer. Number of evenly spaced points at which to calculate likelihood
 #' @param main Plot title
 #' @param cores Number of likelihood points to calculate in parallel
+#' @param data A dataframe. Experimental data used, needed for the design mapping
+#' @param design A design list. Created using ``make_design``.
 #'
-#' @return vector with value of p(pname), highest likelihood point and p(pname)
-#' minus the parameter values at that point
+#' @return Vector with highest likelihood point, input and mismatch between true and highest point
+#' @examples
+#' # First create a design
+#' design_DDMaE <- make_design(data = forstmann,model=DDM,
+#'                 formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
+#'                 constants=c(s=log(1)))
+#' # Then create a p_vector:
+#' p_vector=c(v_Sleft=-2,v_Sright=2,a=log(1),a_Eneutral=log(1.5),a_Eaccuracy=log(2),
+#'           t0=log(.2),Z=qnorm(.5),sv=log(.5),SZ=qnorm(.5))
+#' # Make a profile plot for the boundary separation parameter
+#' profile_plot(pname = "a", p_vector = p_vector, p_min = -1, p_max = 1,
+#'             data = forstmann, design = design_DDMaE, n_point = 10)
+#'
 #' @export
 
-profile_plot <- function(pname,p,p_min,p_max,dadm,n_point=100,main="",cores=1)
+profile_plot <- function(pname,p_vector,p_min,p_max,data, design, n_point=100,main="",cores=1)
 
 {
-
-  lfun <- function(i,x,p,pname,dadm) {
-    p[pname] <- x[i]
-    attr(dadm,"model")()$log_likelihood(p,dadm)
+  dadm <- design_model(data, design, verbose = FALSE)
+  lfun <- function(i,x,p_vector,pname,dadm) {
+    p_vector[pname] <- x[i]
+    attr(dadm,"model")()$log_likelihood(p_vector,dadm)
   }
 
   x <- seq(p_min,p_max,length.out=n_point)
-  ll <- unlist(mclapply(1:n_point,lfun,dadm=dadm,x=x,p=p,pname=pname,mc.cores = cores))
+  ll <- unlist(mclapply(1:n_point,lfun,dadm=dadm,x=x,p_vector=p_vector,pname=pname,mc.cores = cores))
   plot(x,ll,type="l",xlab=pname,ylab="LL",main=main)
-  abline(v=p[pname])
-  c(true=p[pname],max=x[which.max(ll)],miss=p[pname]-x[which.max(ll)])
+  abline(v=p_vector[pname])
+  c(true=p_vector[pname],max=x[which.max(ll)],miss=p_vector[pname]-x[which.max(ll)])
 }

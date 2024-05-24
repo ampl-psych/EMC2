@@ -2,8 +2,7 @@
 % Please edit documentation in R/map.R
 \name{mapped_par}
 \alias{mapped_par}
-\title{Maps a parameter vector through a design to show parameter values for each
-design cell.}
+\title{Parameter mapping back to the design factors}
 \usage{
 mapped_par(
   p_vector,
@@ -11,29 +10,40 @@ mapped_par(
   model = NULL,
   digits = 3,
   remove_subjects = TRUE,
-  Fcovariates = NULL,
-  remove_RACE = TRUE
+  ...
 )
 }
 \arguments{
-\item{p_vector}{The parameter vector (must have form of sampled_p_vector(design)}
+\item{p_vector}{A parameter vector. Must be in the form of \code{sampled_p_vector(design)}}
 
-\item{design}{The design (created by make_design)}
+\item{design}{A design list. Created \verb{by make_design}}
 
-\item{model}{Optional model type (if not in design)}
+\item{model}{Optional model type (if not already specified in \code{design})}
 
-\item{digits}{For rounding outputs}
+\item{digits}{Integer. Will round the output parameter values to this many decimals}
 
-\item{remove_subjects}{Default true removes subjects from output design}
+\item{remove_subjects}{Boolean. Whether to include subjects as a factor in the design}
 
-\item{Fcovariates}{Any covariates in the design}
-
-\item{remove_RACE}{Logical: remove rows with no accumulator}
+\item{...}{optional arguments}
 }
 \value{
-Matrix of factors and mapped parameter values
+Matrix with a column for each factor in the design and for each model parameter type (\code{p_type}).
 }
 \description{
-Maps a parameter vector through a design to show parameter values for each
-design cell.
+Maps a parameter vector that corresponds to sampled parameters
+of the cognitive model back to the experimental design. The parameter vector
+can be created using \code{sampled_p_vector()}. The returned matrix shows whether/how parameters
+differ across the experimental factors.
+}
+\examples{
+# First define a design:
+design_DDMaE <- make_design(data = forstmann,model=DDM,
+                           formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
+                           constants=c(s=log(1)))
+# Then create a p_vector:
+p_vector=c(v_Sleft=-2,v_Sright=2,a=log(1),a_Eneutral=log(1.5),a_Eaccuracy=log(2),
+          t0=log(.2),Z=qnorm(.5),sv=log(.5),SZ=qnorm(.5))
+# This will map the parameters of the p_vector back to the design
+mapped_par(p_vector,design_DDMaE)
+
 }

@@ -28,46 +28,45 @@ p_test(
 )
 }
 \arguments{
-\item{x}{A pmwgs object or list of these}
+\item{x}{An EMC2 samplers object}
 
-\item{x_name}{Name of the parameter to be tested}
+\item{x_name}{A character string. Name of the parameter to be tested for \code{x}}
 
-\item{x_fun}{Function applied to each iteration's parameter vector to create
+\item{x_fun}{Function applied to the MCMC chains to create
 variable to be tested.}
 
-\item{x_fun_name}{Name to give to quantity calculated by x_fun}
+\item{x_fun_name}{Name to give to quantity calculated by \code{x_fun}}
 
-\item{y}{A pmwgs object or list of these}
+\item{y}{A second EMC2 samplers object}
 
-\item{y_name}{Name of the parameter to be tested}
+\item{y_name}{A character string. Name of the parameter to be tested for \code{y}}
 
-\item{y_fun}{Function applied to each iteration's parameter vector to create
+\item{y_fun}{Function applied to the MCMC chains to create
 variable to be tested.}
 
-\item{y_fun_name}{Name to give to quantity calculated by y_fun}
+\item{y_fun_name}{Name to give to quantity calculated by \code{y_fun}}
 
-\item{mapped}{Should samples be mapped before doing test.}
+\item{mapped}{Boolean. Should the samples be mapped back to the design before doing the test?}
 
 \item{x_subject}{Integer or name selecting a subject}
 
 \item{y_subject}{Integer or name selecting a subject}
 
-\item{mu}{Null value for single sample test (default 0)}
+\item{mu}{Numeric. \code{NULL} value for single sample test if \code{y} is not supplied (default 0)}
 
-\item{alternative}{"less" or "greater" determining direction of test probability}
+\item{alternative}{\code{less} or \code{greater} determining direction of test probability}
 
-\item{probs}{Vector defining credible interval and central tendency quatiles
-(default c(0.025,.5,.975))}
+\item{probs}{Vector defining quantiles to return.}
 
 \item{digits}{Integer, significant digits for estimates in printed results}
 
 \item{p_digits}{Integer, significant digits for probability in printed results}
 
-\item{print_table}{Boolean (default TRUE) for printing results table}
+\item{print_table}{Boolean (defaults to \code{TRUE}) for printing results table}
 
-\item{filter}{A string. Specifies which stage you want to plot.}
+\item{filter}{A character string. Specifies from which stage the samples should be taken.}
 
-\item{selection}{String designating parameter type (mu, variance, correlation, alpha = default)}
+\item{selection}{A character string designating parameter type (e.g. \code{alpha} or \code{covariance})}
 
 \item{subfilter}{An integer or vector. If it's an integer, iterations up until the value set by \code{subfilter} will be excluded.
 If a vector is supplied, only the iterations in the vector will be considered.}
@@ -76,6 +75,21 @@ If a vector is supplied, only the iterations in the vector will be considered.}
 Invisible results table with no rounding.
 }
 \description{
-Modeled after t.test. For a one sample test provide x and for two sample
-also provide y.
+Modeled after \code{t.test}, returns the credible interval of the parameter or test
+and what proportion of the posterior distribution (or the difference in posterior distributions
+in case of a two sample test) overlaps with mu.
+For a one sample test provide \code{x} and for two sample also provide \code{y}.
+Note that fo comparisons within one model, we recommend using \code{savage_dickey()} if the priors
+were well chosen.
+}
+\examples{
+\dontrun{
+# Run a credible interval test (Bayesian ''t-test'')
+p_test(samplers, x_name = "v")
+# We can also compare between two sets of samplers
+p_test(x = samplers1, x_name = "v", y = samplers2, y_name = "v")
+
+# Or provide custom functions
+p_test(x = samplers, x_fun = function(d) d["B_Eaccuracy"] - d["B_Eneutral"])
+}
 }
