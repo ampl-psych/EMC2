@@ -32,7 +32,7 @@ Defaults to all (i.e., \code{NULL}).}
 \item{layout}{A vector specifying the layout as in \code{par(mfrow = layout)}.
 The default \code{NULL} uses the current layout.}
 
-\item{xlim}{x-axis limit for all cells (default NULL = scale per cell).}
+\item{xlim}{x-axis limit for all cells (default NULL will scale each plot such that the xlimits encompass the densities).}
 
 \item{bw}{number or string bandwidth for density (defaults to \code{nrd0}). See \code{?density()}.}
 
