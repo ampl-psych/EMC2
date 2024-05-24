@@ -254,7 +254,9 @@ iat_pmwg <- function(pmwg_mcmc,
 
 #' Posterior parameter tests
 #'
-#' Modeled after `t.test`, returns the credible interval of the parameter or test.
+#' Modeled after `t.test`, returns the credible interval of the parameter or test
+#' and what proportion of the posterior distribution (or the difference in posterior distributions
+#' in case of a two sample test) overlaps with mu.
 #' For a one sample test provide `x` and for two sample also provide `y`.
 #' Note that fo comparisons within one model, we recommend using `savage_dickey()` if the priors
 #' were well chosen.

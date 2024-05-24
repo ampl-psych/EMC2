@@ -75,7 +75,9 @@ If a vector is supplied, only the iterations in the vector will be considered.}
 Invisible results table with no rounding.
 }
 \description{
-Modeled after \code{t.test}, returns the credible interval of the parameter or test.
+Modeled after \code{t.test}, returns the credible interval of the parameter or test
+and what proportion of the posterior distribution (or the difference in posterior distributions
+in case of a two sample test) overlaps with mu.
 For a one sample test provide \code{x} and for two sample also provide \code{y}.
 Note that fo comparisons within one model, we recommend using \code{savage_dickey()} if the priors
 were well chosen.
