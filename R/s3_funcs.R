@@ -103,7 +103,7 @@ plot.emc <- function(x, filter = "sample", selection = c("mu", "variance", "corr
 
   subject <- ifelse(is.null(subject), 1, subject)
   input <- x
-
+  if(attr(x[[1]], "variant_funs")$type == "single") selection <- "alpha"
   for(select in selection){
     pmwg_mcmc <- as_mcmc.list(input,selection=select,filter=filter,
                               thin=thin,subfilter=subfilter)
