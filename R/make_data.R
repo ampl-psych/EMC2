@@ -259,7 +259,7 @@ add_Ffunctions <- function(data,design)
 
 #' Generate posterior predictives
 #'
-#' Simulate ``n_post`` data sets from the posterior predictive distribution.
+#' Simulate ``n_post`` data sets using the posterior parameter estimates
 #'
 #' @param samplers An EMC2 samplers object from which posterior predictives should
 #' be generated

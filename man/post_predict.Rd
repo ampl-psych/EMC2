@@ -45,7 +45,7 @@ Will take either random samples from the chain(s) or use the mean or median of t
 A list of simulated data sets of length \code{n_post}
 }
 \description{
-Simulate \code{n_post} data sets from the posterior predictive distribution.
+Simulate \code{n_post} data sets using the posterior parameter estimates
 }
 \examples{
 \dontrun{
