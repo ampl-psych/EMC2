@@ -1,32 +1,108 @@
 #### Fitting automation
-#' Generic function to run samplers with default settings.
+#' Model estimation in EMC2
+#'
+#' General purpose function to estimate models specified in EMC2.
+#'
+#' @details
+#'
+#' ``stop_criteria`` is either a list of lists with names of the stages,
+#' or a single list in which case its assumed to be for the sample `stage` (see examples).
+#' The potential stop criteria to be set are:
+#'
+#' ``selection`` (character vector): For which parameters the ``stop_criteria`` should hold
+#'
+#' ``mean_gd`` (numeric): The mean Gelman-Rubin diagnostic across all parameters in the selection
+#'
+#' ``max_gd`` (numeric): The max Gelman-Rubin diagnostic across all parameters in the selection
+#'
+#' ``min_unique`` (integer): The minimum number of unique samples in the MCMC chains across all parameters in the selection
+#'
+#' ``min_es`` (integer): The minimum number of effective samples across all parameters in the selection
+#'
+#' ``omit_mpsrf`` (Boolean): Whether to include the multivariate point-scale reduction factor in the Gelman-Rubin diagnostic. Default is ``FALSE``.
+#'
+#' ``iter`` (integer): The number of MCMC samples to collect.
+#'
+#' The estimation is performed using particle-metropolis within-Gibbs sampling.
+#' For sampling details see:
+#'
+#' Gunawan, D., Hawkins, G. E., Tran, M.-N., Kohn, R., & Brown, S. (2020).
+#' New estimation approaches for the hierarchical linear ballistic accumulator model.
+#' *Journal of Mathematical Psychology* ,96, 102368. doi.org/10.1016/j.jmp.2020.102368
+#'
+#' Stevenson, N., Donzallaz, M. C., Innes, R. J., Forstmann, B., Matzke, D., & Heathcote, A. (2024).
+#' EMC2: An R Package for cognitive models of choice. doi.org/10.31234/osf.io/2e4dq
 #'
 #'
-#' @param samplers A list of samplers, or a fileName of where the samplers are stored.
-#' @param stage A string. Indicates which stage is to be run, either preburn, burn, adapt or sample. If unspecified will assume the next unrun stage.
-#' @param iter An integer. Indicates how many iterations to run sampling stage.
-#' @param p_accept A double. The target acceptance probability of the MCMC process. This will fine tune the width of the search space. Default = .8
-#' @param step_size An integer. After each of these steps, the requirements will be checked if they are met and proposal distributions will be updated. Default = 100.
-#' @param verbose Logical. Whether to print emc related messages
-#' @param verboseProgress Logical. Whether to print sampling related messages
-#' @param fileName A string. If specified will autosave samplers at this location.
-#' @param particles An integer. How many particles to use, default is NULL and particle_factor is used. If specified will override particle_factor
-#' @param particle_factor An integer. Particle factor multiplied by the square root of the number of sampled parameters will determine the number of particles used.
-#' @param cores_per_chain An integer. How many cores to use per chain. Parallelizes across participant calculations.
-#' @param cores_for_chains An integer. How many cores to use across chains. Default is the number of chains.
-#' @param max_trys An integer. How many times it will try to meet the finish conditions. Default is 20.
-#' @param n_blocks An integer. Will block the parameter chains such that they are updated in blocks. This can be helpful in extremely tough models with large number of parameters.
-#' @param stop_criteria A list. Defines the stopping criteria and for which types of parameters these should hold. Could either be a list of list with names of the stages,
-#'  or a single list in which case its assumed to be for the sample stage. Example: stop_criteria = list(mean_gd = 1.1, max_gd = 1.5, selection = c('alpha', 'variance'), omit_mpsrf = TRUE).
-#'  the iter argument overrides the iter given for the stop_criteria in the sample stage.
+#' @param samplers An EMC2 samplers object created with ``make_samplers``,
+#' or a path to where the samplers object is stored.
+#' @param stage A string. Indicates which stage to start the run from, either ``preburn``, ``burn``, ``adapt`` or ``sample``.
+#' If unspecified, it will run the subsequent stage (if there is one).
+#' @param iter An integer. Indicates how many iterations to run in the sampling stage.
+#' @param p_accept A double. The target acceptance probability of the MCMC process.
+#' This fine-tunes the width of the search space to obtain the desired acceptance probability. Defaults to .8
+#' @param step_size An integer. After each step, the stopping requirements as specified
+#' by ``stop_criteria`` are checked and proposal distributions are updated. Defaults to 100.
+#' @param verbose Logical. Whether to print messages between each step with the current status regarding the ``stop_criteria``.
+#' @param verboseProgress Logical. Whether to print a progress bar within each step or not.
+#' Will print one progress bar for each chain and only if ``cores_for_chains = 1``.
+#' @param fileName A string. If specified, will auto-save samplers object at this location on every iteration.
+#' @param particles An integer. How many particles to use, default is `NULL` and
+#' ``particle_factor`` is used instead. If specified, ``particle_factor`` is overwritten.
+#' @param particle_factor An integer. ``particle_factor`` multiplied by the square
+#' root of the number of sampled parameters determines the number of particles used.
+#' @param cores_per_chain An integer. How many cores to use per chain. Parallelizes across
+#' participant calculations. Only available on Linux or Mac OS. For Windows, only
+#' parallelization across chains (``cores_for_chains``) is available.
+#' @param cores_for_chains An integer. How many cores to use across chains.
+#' Defaults to the number of chains. The total number of cores used is equal to ``cores_per_chain`` * ``cores_for_chains``.
+#' @param max_tries An integer. How many times should it try to meet the finish
+#' conditions as specified by ``stop_criteria``? Defaults to 20. ``max_tries`` is
+#' ignored if the required number of iterations has not been reached yet.
+#' @param n_blocks An integer. Number of blocks. Will block the parameter chains such that they are
+#' updated in blocks. This can be helpful in extremely tough models with a large number of parameters.
+#' @param stop_criteria A list. Defines the stopping criteria and for which types
+#' of parameters these should hold. See the details and examples section.
 #'
 #' @return A list of samplers
+#' @examples \dontrun{
+#' # First define a design
+#' design_DDMaE <- make_design(data = forstmann,model=DDM,
+#'                            formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
+#'                            constants=c(s=log(1)))
+#' # Then make the samplers, we've omitted a prior here for brevity so default priors will be used.
+#' samplers <- make_samplers(forstmann, design)
+#'
+#' # With the samplers object we can start sampling by simply calling run_emc
+#' samplers <- run_emc(samplers, fileName = "intermediate_save_location.RData")
+#'
+#' # For particularly hard models it pays off to increase the ``particle_factor``
+#' # and, although to a lesser extent, lower ``p_accept``.
+#' samplers <- run_emc(samplers, particle_factor = 100, p_accept = .6)
+#'
+#' # Example of how to use the stop_criteria:
+#' samplers <- run_emc(samplers, stop_criteria = list(mean_gd = 1.1, max_gd = 1.5,
+#'             selection = c('alpha', 'variance'), omit_mpsrf = TRUE, min_es = 1000).
+#' # In this case the stop_criteria are set for the sample stage, which will be
+#' # run until the mean_gd < 1.1, the max_gd < 1.5 (omitting the multivariate psrf)
+#' # and the effective sample size > 1000,
+#' # for both the individual-subject parameters ("alpha")
+#' # and the group-level variance parameters.
+#'
+#' # For the unspecified stages in the ``stop_criteria`` the default values
+#' # are assumed which are found in Stevenson et al. 2024 <doi.org/10.31234/osf.io/2e4dq>
+#'
+#' # Alternatively, you can also specify the stop_criteria for specific stages by creating a
+#' # list of lists:
+#' samplers <- run_emc(samplers, stop_criteria = list("burn" = list(mean_gd = 1.1, max_gd = 1.5,
+#'             selection = c('alpha')), "adapt" = list(min_unique = 300)))
+#'}
 #' @export
 
 run_emc <- function(samplers, stage = NULL, iter = 1000, stop_criteria = NULL,
                     p_accept = .8, step_size = 100, verbose = TRUE, verboseProgress = FALSE, fileName = NULL,
                     particles = NULL, particle_factor=50, cores_per_chain = 1,
-                    cores_for_chains = length(samplers), max_trys = 20, n_blocks = 1){
+                    cores_for_chains = length(samplers), max_tries = 20, n_blocks = 1){
   if(!is.null(stop_criteria) & length(stop_criteria) == 1){
     stop_criteria[["sample"]] <- stop_criteria
   }
@@ -41,7 +117,7 @@ run_emc <- function(samplers, stage = NULL, iter = 1000, stop_criteria = NULL,
 
   stop_criteria <- stop_criteria[stages_names]
   stop_criteria <- mapply(get_stop_criteria, stages_names, stop_criteria, MoreArgs = list(type = attr(samplers[[1]], "variant_funs")$type))
-  stop_criteria[["sample"]]$iter <- iter
+  if(is.null(stop_criteria[["sample"]]$iter)) stop_criteria[["sample"]]$iter <- iter
   names(stop_criteria) <- stages_names
   if (is.character(samplers)) {
     samplers <- fix_fileName(samplers)
@@ -65,7 +141,7 @@ run_emc <- function(samplers, stage = NULL, iter = 1000, stop_criteria = NULL,
                              step_size = step_size,  verbose = verbose, verboseProgress = verboseProgress,
                              fileName = fileName,
                              particles = particles, particle_factor =  particle_factor,
-                             cores_per_chain = cores_per_chain, max_trys = max_trys, n_blocks = n_blocks)
+                             cores_per_chain = cores_per_chain, max_tries = max_tries, n_blocks = n_blocks)
   }
 
   if(any(stage %in% c("preburn", "burn"))){
@@ -73,21 +149,21 @@ run_emc <- function(samplers, stage = NULL, iter = 1000, stop_criteria = NULL,
                               step_size = step_size,  verbose = verbose, verboseProgress = verboseProgress,
                               fileName = fileName,
                               particles = particles, particle_factor =  particle_factor,
-                              cores_per_chain = cores_per_chain, max_trys = max_trys, n_blocks = n_blocks)
+                              cores_per_chain = cores_per_chain, max_tries = max_tries, n_blocks = n_blocks)
   }
   if(any(stage %in% c("preburn", "burn", "adapt"))){
     samplers <-  run_samplers(samplers, stage = "adapt", stop_criteria[['adapt']],cores_for_chains = cores_for_chains, p_accept = p_accept,
                               step_size = step_size,  verbose = verbose, verboseProgress = verboseProgress,
                               fileName = fileName,
                               particles = particles, particle_factor =  particle_factor,
-                              cores_per_chain = cores_per_chain, max_trys = max_trys, n_blocks = n_blocks)
+                              cores_per_chain = cores_per_chain, max_tries = max_tries, n_blocks = n_blocks)
   }
   if(any(stage %in% c("preburn", "burn", "adapt", "sample")) ){
     samplers <-  run_samplers(samplers, stage = "sample",stop_criteria[['sample']],cores_for_chains = cores_for_chains, p_accept = p_accept,
                               step_size = step_size,  verbose = verbose, verboseProgress = verboseProgress,
                               fileName = fileName,
                               particles = particles, particle_factor = particle_factor,
-                              cores_per_chain = cores_per_chain, max_trys = max_trys, n_blocks = n_blocks)
+                              cores_per_chain = cores_per_chain, max_tries = max_tries, n_blocks = n_blocks)
   }
   return(samplers)
 }
@@ -128,34 +204,54 @@ get_stop_criteria <- function(stage, stop_criteria, type){
   return(stop_criteria)
 }
 
-#' Generic function to run samplers for any stage and any requirements.
+#' Custom function for more controlled model estimation
 #'
-#' Used by `run_emc`, `auto_burn`, `run_adapt` and `run_sample`.
-#' Will break if you skip a stage, the stages have to be run in order (preburn, burn, adapt, sample).
+#' Although typically users will rely on ``run_emc``, this function can be used for more fine-tuned specification of estimation needs.
+#' The function will throw an error if a stage is skipped,
+#' the stages have to be run in order ("preburn", "burn", "adapt", "sample").
+#' More details can be found in the ``run_emc`` help files (``?run_emc``).
 #'
 #' @param samplers A list of samplers, could be in any stage, as long as they've been initialized with make_samplers
-#' @param stage A string. Indicates which stage is to be run, either preburn, burn, adapt or sample
-#' @param p_accept A double. The target acceptance probability of the MCMC process. This will fine tune the width of the search space. Default = .8
-#' @param step_size An integer. After each of these steps, the requirements will be checked if they are met and proposal distributions will be updated. Default = 100.
-#' @param verbose Logical. Whether to print emc related messages
-#' @param verboseProgress Logical. Whether to print sampling related messages
-#' @param fileName A string. If specified will autosave samplers at this location.
-#' @param particles An integer. How many particles to use, default is NULL and particle_factor is used. If specified will override particle_factor
-#' @param particle_factor An integer. Particle factor multiplied by the square root of the number of sampled parameters will determine the number of particles used.
-#' @param cores_per_chain An integer. How many cores to use per chain. Parallelizes across participant calculations.
-#' @param cores_for_chains An integer. How many cores to use across chains. Default is the number of chains.
-#' @param max_trys An integer. How many times it will try to meet the finish conditions. Default is 50.
-#' @param n_blocks An integer. Will block the parameter chains such that they are updated in blocks. This can be helpful in extremely tough models with large number of parameters.
-#' @param stop_criteria A list. Defines the stopping criteria and for which types of parameters these should hold. See run_emc.
-#'
-#' @return A list of samplers
+#' @param stage A string. Indicates which stage is to be run, either `preburn`, `burn`, `adapt` or `sample`
+#' @param p_accept A double. The target acceptance probability of the MCMC process.
+#' This fine-tunes the width of the search space to obtain the desired acceptance probability. Defaults to .8
+#' @param step_size An integer. After each step, the stopping requirements as
+#' specified by `stop_criteria` are checked and proposal distributions are updated. Defaults to 100.
+#' @param verbose Logical. Whether to print messages between each step with the current status regarding the stop_criteria.
+#' @param verboseProgress Logical. Whether to print a progress bar within each step or not. Will print one progress bar for each chain and only if cores_for_chains = 1.
+#' @param fileName A string. If specified will autosave samplers at this location on every iteration.
+#' @param particles An integer. How many particles to use, default is `NULL` and ``particle_factor`` is used instead.
+#' If specified will override ``particle_factor``.
+#' @param particle_factor An integer. `particle_factor` multiplied by the square root of the number of sampled parameters determines the number of particles used.
+#' @param cores_per_chain An integer. How many cores to use per chain.
+#' Parallelizes across participant calculations. Only available on Linux or Mac OS.
+#' For Windows, only parallelization across chains (``cores_for_chains``) is available.
+#' @param cores_for_chains An integer. How many cores to use across chains.
+#' Defaults to the number of chains. the total number of cores used is equal to ``cores_per_chain`` * ``cores_for_chains``.
+#' @param max_tries An integer. How many times should it try to meet the finish
+#' conditions as specified by stop_criteria? Defaults to 20. max_tries is ignored if the required number of iterations has not been reached yet.
+#' @param n_blocks An integer. Number of blocks. Will block the parameter chains such that they are updated in blocks. This can be helpful in extremely tough models with a large number of parameters.
+#' @param stop_criteria A list. Defines the stopping criteria and for which types of parameters these should hold. See ``?run_emc``.
 #' @export
+#' @return A list of samplers
+#' @examples \dontrun{
+#' # First define a design
+#' design_DDMaE <- make_design(data = forstmann,model=DDM,
+#'                            formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
+#'                            constants=c(s=log(1)))
+#' # Then make the samplers, we've omitted a prior here for brevity so default priors will be used.
+#' samplers <- make_samplers(forstmann, design)
+#'
+#' # Now for example we can specify that we only want to run the "preburn" phase
+#' # for MCMC 200 iterations
+#' samplers <- run_samplers(samplers, stage = "preburn", stop_criteria = list(iter = 200))
+#'}
 
 run_samplers <- function(samplers, stage, stop_criteria,
                          p_accept = .8, step_size = 100, verbose = FALSE, verboseProgress = FALSE,
                          fileName = NULL,
                          particles = NULL, particle_factor=50, cores_per_chain = 1,
-                         cores_for_chains = length(samplers), max_trys = 20, n_blocks = 1){
+                         cores_for_chains = length(samplers), max_tries = 20, n_blocks = 1){
   if(Sys.info()[1] == "Windows" & cores_per_chain > 1) stop("only cores_for_chains can be set on Windows")
   if (verbose) message(paste0("Running ", stage, " stage"))
   attributes <- get_attributes(samplers)
@@ -165,7 +261,7 @@ run_samplers <- function(samplers, stage, stop_criteria,
   } else{
     iter <- stop_criteria[["iter"]]
   }
-  progress <- check_progress(samplers, stage, iter, stop_criteria, max_trys, step_size, cores_per_chain*cores_for_chains, verbose, n_blocks = n_blocks)
+  progress <- check_progress(samplers, stage, iter, stop_criteria, max_tries, step_size, cores_per_chain*cores_for_chains, verbose, n_blocks = n_blocks)
   samplers <- progress$samplers
   progress <- progress[!names(progress) == 'samplers'] # Frees up memory, courtesy of Steven
   particle_factor_in <- particle_factor; p_accept_in <- p_accept
@@ -178,13 +274,13 @@ run_samplers <- function(samplers, stage, stop_criteria,
       particle_factor_in[!progress$gds_bad] <- particle_factor
     }
     samplers <- auto_mclapply(samplers,run_stages, stage = stage, iter= progress$step_size,
-                                   verbose=verbose,  verboseProgress = verboseProgress,
-                                   particles=particles,particle_factor=particle_factor_in,
-                                   p_accept=p_accept_in, n_cores=cores_per_chain, mc.cores = cores_for_chains)
+                              verbose=verbose,  verboseProgress = verboseProgress,
+                              particles=particles,particle_factor=particle_factor_in,
+                              p_accept=p_accept_in, n_cores=cores_per_chain, mc.cores = cores_for_chains)
     for(i in 2:length(samplers)){ # Frees up memory, courtesy of Steven
       samplers[[i]]$data <- samplers[[1]]$data
     }
-    progress <- check_progress(samplers, stage, iter, stop_criteria, max_trys, step_size, cores_per_chain*cores_for_chains,verbose, progress,n_blocks)
+    progress <- check_progress(samplers, stage, iter, stop_criteria, max_tries, step_size, cores_per_chain*cores_for_chains,verbose, progress,n_blocks)
     samplers <- progress$samplers
     progress <- progress[!names(progress) == 'samplers'] # Frees up memory, courtesy of Steven
     if(!is.null(fileName)){
@@ -192,6 +288,7 @@ run_samplers <- function(samplers, stage, stop_criteria,
       attr(samplers,"data_list") <- attributes$data_list
       attr(samplers,"design_list") <- attributes$design_list
       attr(samplers,"model_list") <- attributes$model_list
+      class(samplers) <- "emc"
       save(samplers, file = fileName)
     }
   }
@@ -227,11 +324,11 @@ run_stages <- function(sampler, stage = "preburn", iter=0, verbose = TRUE, verbo
   #   sampler <- run_stage_lm(sampler, stage = stage,iter = iter, particles = particles,
   #                           n_cores = n_cores, p_accept = p_accept, verbose = verbose, verboseProgress = verboseProgress)
   # } else{
-#     sampler <- run_stage(sampler, stage = stage,iter = iter, particles = particles,
-#                          n_cores = n_cores, p_accept = p_accept, verbose = verbose, verboseProgress = verboseProgress)
-# }
+  #     sampler <- run_stage(sampler, stage = stage,iter = iter, particles = particles,
+  #                          n_cores = n_cores, p_accept = p_accept, verbose = verbose, verboseProgress = verboseProgress)
+  # }
   sampler <- run_stage(sampler, stage = stage,iter = iter, particles = particles,
-                     n_cores = n_cores, p_accept = p_accept, verbose = verbose, verboseProgress = verboseProgress)
+                       n_cores = n_cores, p_accept = p_accept, verbose = verbose, verboseProgress = verboseProgress)
   return(sampler)
 }
 
@@ -260,7 +357,7 @@ add_proposals <- function(samplers, stage, n_cores, n_blocks){
 }
 
 check_progress <- function (samplers, stage, iter, stop_criteria,
-                            max_trys, step_size, n_cores, verbose, progress = NULL,
+                            max_tries, step_size, n_cores, verbose, progress = NULL,
                             n_blocks)
 {
   min_es <- stop_criteria$min_es
@@ -296,7 +393,7 @@ check_progress <- function (samplers, stage, iter, stop_criteria,
       # } else{    # }
 
       curr_min_es <- min(c(es_pmwg(as_mcmc.list(samplers, selection = select,
-                                              filter = stage), print_summary = F), curr_min_es))
+                                                filter = stage), print_summary = F), curr_min_es))
     }
     if (verbose)
       message("Smallest effective size = ", round(curr_min_es))
@@ -306,16 +403,16 @@ check_progress <- function (samplers, stage, iter, stop_criteria,
   else {
     es_done <- FALSE
   }
-  trys_done <- ifelse(is.null(max_trys), FALSE, trys >= max_trys)
+  trys_done <- ifelse(is.null(max_tries), FALSE, trys >= max_tries)
   if (stage == "adapt") {
     samples_merged <- merge_samples(samplers)
     test_samples <- extract_samples(samples_merged, stage = "adapt",
-                                    samples_merged$samples$idx)
+                                    samples_merged$samples$idx, n_chains = length(samplers))
     # if(!is.null(samplers[[1]]$g_map_fixed)){
     #   adapted <- test_adapted_lm(samplers[[1]], test_samples, min_unique, n_cores, verbose)
     # } else{    }
     adapted <- test_adapted(samplers[[1]], test_samples,
-                              min_unique, n_cores, verbose)
+                            min_unique, n_cores, verbose)
 
   }
   else {
@@ -440,7 +537,7 @@ check_gd <- function(samplers, stage, max_gd, mean_gd, omit_mpsrf, trys, verbose
   if(verbose) {
     if (omit_mpsrf) type <- "psrf" else type <- "m/psrf"
     if (!is.null(mean_gd)) message("Mean ",type," = ",round(mean(gd),3)) else
-    if (!is.null(max_gd)) message("Max ",type," = ",round(max(gd),3))
+      if (!is.null(max_gd)) message("Max ",type," = ",round(max(gd),3))
   }
   return(list(gd = gd, gd_done = ok_gd, samplers = samplers, n_blocks = n_blocks, gds_bad = gds_bad))
 }
@@ -448,7 +545,7 @@ check_gd <- function(samplers, stage, max_gd, mean_gd, omit_mpsrf, trys, verbose
 
 create_eff_proposals <- function(samplers, n_cores){
   samples_merged <- merge_samples(samplers)
-  test_samples <- extract_samples(samples_merged, stage = c("adapt", "sample"), max_n_sample = 750)
+  test_samples <- extract_samples(samples_merged, stage = c("adapt", "sample"), max_n_sample = 750, n_chains = length(samplers))
   variant_funs <- attr(samplers[[1]], "variant_funs")
   components <- attr(samplers[[1]]$data, "components")[!samplers[[1]]$grouped]
   for(i in 1:length(samplers)){
@@ -464,13 +561,13 @@ create_eff_proposals <- function(samplers, n_cores){
       if(any(nuis_idx)){
         type <- samples_merged$sampler_nuis$type
         conditionals <- auto_mclapply(X = 1:n_subjects,
-                                             FUN = variant_funs$get_conditionals,samples = test_samples,
-                                             n_pars = sum(idx[!nuisance]), iteration =  iteration, idx = idx[!nuisance],
-                                             mc.cores = n_cores)
+                                      FUN = variant_funs$get_conditionals,samples = test_samples,
+                                      n_pars = sum(idx[!nuisance]), iteration =  iteration, idx = idx[!nuisance],
+                                      mc.cores = n_cores)
         conditionals_nuis <- auto_mclapply(X = 1:n_subjects,
-                                                  FUN = get_variant_funs(type)$get_conditionals,samples = test_samples$nuisance,
-                                                  n_pars = sum(idx[nuisance]), iteration =  iteration, idx = idx[nuisance],
-                                                  mc.cores = n_cores)
+                                           FUN = get_variant_funs(type)$get_conditionals,samples = test_samples$nuisance,
+                                           n_pars = sum(idx[nuisance]), iteration =  iteration, idx = idx[nuisance],
+                                           mc.cores = n_cores)
         conditionals <- array(unlist(conditionals), dim = c(sum(idx[!nuisance]), sum(idx[!nuisance]) + 1, n_subjects))
         conditionals_nuis <- array(unlist(conditionals_nuis), dim = c(sum(idx[nuisance]), sum(idx[nuisance]) + 1, n_subjects))
         eff_mu[idx & !nuisance,] <- conditionals[,1,]
@@ -479,9 +576,9 @@ create_eff_proposals <- function(samplers, n_cores){
         eff_var[idx & nuisance,idx & nuisance,] <- conditionals_nuis[,2:(sum(idx[nuisance])+1),]
       } else{
         conditionals <- auto_mclapply(X = 1:n_subjects,
-                                             FUN = variant_funs$get_conditionals,samples = test_samples,
-                                             n_pars = sum(idx[!nuisance]), iteration =  iteration, idx = idx[!nuisance],
-                                             mc.cores = n_cores)
+                                      FUN = variant_funs$get_conditionals,samples = test_samples,
+                                      n_pars = sum(idx[!nuisance]), iteration =  iteration, idx = idx[!nuisance],
+                                      mc.cores = n_cores)
         conditionals <- array(unlist(conditionals), dim = c(sum(idx[!nuisance]), sum(idx[!nuisance]) + 1, n_subjects))
         eff_mu[idx & !nuisance,] <- conditionals[,1,]
         eff_var[idx & !nuisance,idx & !nuisance,] <- conditionals[,2:(sum(idx[!nuisance])+1),]
@@ -694,19 +791,19 @@ test_adapted <- function(sampler, test_samples, min_unique, n_cores_conditional 
       message("Testing proposal distribution creation")
     }
     attempt <- tryCatch({
-        for(comp in unique(components)){
-          idx <- comp == components
-          nuis_idx <- nuisance[idx]
-          if(any(nuis_idx)){
-            type <- sampler$sampler_nuis$type
-            auto_mclapply(X = 1:sampler$n_subjects,
-                               FUN = get_variant_funs(type)$get_conditionals,samples = test_samples$nuisance,
-                               n_pars = sum(idx[nuisance]), idx = idx[nuisance],
-                               mc.cores = n_cores_conditional)
-          }
-          auto_mclapply(X = 1:sampler$n_subjects,FUN = variant_funs$get_conditionals,samples = test_samples,
-                         n_pars = sum(idx[!nuisance]), idx = idx[!nuisance], mc.cores = n_cores_conditional)
+      for(comp in unique(components)){
+        idx <- comp == components
+        nuis_idx <- nuisance[idx]
+        if(any(nuis_idx)){
+          type <- sampler$sampler_nuis$type
+          auto_mclapply(X = 1:sampler$n_subjects,
+                        FUN = get_variant_funs(type)$get_conditionals,samples = test_samples$nuisance,
+                        n_pars = sum(idx[nuisance]), idx = idx[nuisance],
+                        mc.cores = n_cores_conditional)
         }
+        auto_mclapply(X = 1:sampler$n_subjects,FUN = variant_funs$get_conditionals,samples = test_samples,
+                      n_pars = sum(idx[!nuisance]), idx = idx[!nuisance], mc.cores = n_cores_conditional)
+      }
     },error=function(e) e, warning=function(w) w)
     if (any(class(attempt) %in% c("warning", "error", "try-error"))) {
       if(verbose){
@@ -746,7 +843,7 @@ loadRData <- function(fileName){
 #' @param particle_factor An integer. Particle factor multiplied by the square root of the number of sampled parameters will determine the number of particles used.
 #' @param cores_per_chain An integer. How many cores to use per chain. Parallelizes across participant calculations.
 #' @param cores_for_chains An integer. How many cores to use across chains. Default is the number of chains.
-#' @param max_trys An integer. How many times it will try to meet the finish conditions. Default is 50.
+#' @param max_tries An integer. How many times it will try to meet the finish conditions. Default is 50.
 #' @param n_blocks An integer. Will block the parameter chains such that they are updated in blocks. This can be helpful in extremely tough models with large number of parameters.
 #' @param stop_criteria A list. Defines the stopping criteria and for which types of parameters these should hold. See run_emc
 #'
@@ -756,7 +853,7 @@ auto_burn <- function(samplers, preburn = 150,
                       p_accept = .8, step_size = 100, verbose = FALSE, verboseProgress = FALSE,
                       fileName = NULL, stop_criteria = NULL,
                       particles = NULL, particle_factor=50, cores_per_chain = 1,
-                      cores_for_chains = length(samplers), max_trys = 20, n_blocks = 1){
+                      cores_for_chains = length(samplers), max_tries = 20, n_blocks = 1){
   if(!is.null(stop_criteria) & length(stop_criteria) == 1){
     stop_criteria[["burn"]] <- stop_criteria
   }
@@ -777,12 +874,12 @@ auto_burn <- function(samplers, preburn = 150,
                            step_size = step_size,  verbose = verbose, verboseProgress = verboseProgress,
                            fileName = fileName,
                            particles = particles, particle_factor =  particle_factor,
-                           cores_per_chain = cores_per_chain, max_trys = max_trys, n_blocks = n_blocks)
+                           cores_per_chain = cores_per_chain, max_tries = max_tries, n_blocks = n_blocks)
   samplers <-  run_samplers(samplers, stage = "burn",  stop_criteria = stop_criteria[["preburn"]], cores_for_chains = cores_for_chains, p_accept = p_accept,
                             step_size = step_size,  verbose = verbose, verboseProgress = verboseProgress,
                             fileName = fileName,
                             particles = particles, particle_factor =  particle_factor,
-                            cores_per_chain = cores_per_chain, max_trys = max_trys, n_blocks = n_blocks)
+                            cores_per_chain = cores_per_chain, max_tries = max_tries, n_blocks = n_blocks)
   return(samplers)
 }
 #' Runs adapt stage for samplers.
@@ -799,7 +896,7 @@ auto_burn <- function(samplers, preburn = 150,
 #' @param particle_factor An integer. Particle factor multiplied by the square root of the number of sampled parameters will determine the number of particles used.
 #' @param cores_per_chain An integer. How many cores to use per chain. Parallelizes across participant calculations.
 #' @param cores_for_chains An integer. How many cores to use across chains. Default is the number of chains.
-#' @param max_trys An integer. How many times it will try to meet the finish conditions. Default is 20.
+#' @param max_tries An integer. How many times it will try to meet the finish conditions. Default is 20.
 #' @param n_blocks An integer. Will block the parameter chains such that they are updated in blocks. This can be helpful in extremely tough models with large number of parameters.
 #' @param stop_criteria A list. Defines the stopping criteria and for which types of parameters these should hold. See run_emc.
 #'
@@ -809,7 +906,7 @@ run_adapt <- function(samplers, stop_criteria = NULL,
                       p_accept = .8, step_size = 100, verbose = FALSE, verboseProgress = FALSE,
                       fileName = NULL,
                       particles = NULL, particle_factor=50, cores_per_chain = 1,
-                      cores_for_chains = length(samplers), max_trys = 20, n_blocks = 1)
+                      cores_for_chains = length(samplers), max_tries = 20, n_blocks = 1)
 {
   if(is.null(stop_criteria)){
     stop_criteria <- list()
@@ -822,7 +919,7 @@ run_adapt <- function(samplers, stop_criteria = NULL,
                            step_size = step_size,  verbose = verbose, verboseProgress = verboseProgress,
                            fileName = fileName,
                            particles = particles, particle_factor =  particle_factor,
-                           cores_per_chain = cores_per_chain, max_trys = max_trys, n_blocks = n_blocks)
+                           cores_per_chain = cores_per_chain, max_tries = max_tries, n_blocks = n_blocks)
   return(samplers)
 }
 #' Runs sample stage for samplers.
@@ -841,7 +938,7 @@ run_adapt <- function(samplers, stop_criteria = NULL,
 #' @param cores_per_chain An integer. How many cores to use per chain. Parallelizes across participant calculations.
 #' @param cores_for_chains An integer. How many cores to use across chains. Default is the number of chains.
 #' @param n_blocks An integer. Will block the parameter chains such that they are updated in blocks. This can be helpful in extremely tough models with large number of parameters.
-#' @param max_trys An integer. How many times it will try to meet the finish conditions. Default is 20.
+#' @param max_tries An integer. How many times it will try to meet the finish conditions. Default is 20.
 #' @param stop_criteria A list. Defines the stopping criteria and for which types of parameters these should hold. See run_emc.
 #' @return A list of samplers
 
@@ -849,7 +946,7 @@ run_sample <- function(samplers, iter = 1000, stop_criteria = NULL,
                        p_accept = .8, step_size = 100, verbose = FALSE, verboseProgress = FALSE,
                        fileName = NULL,
                        particles = NULL, particle_factor=50, cores_per_chain = 1,
-                       cores_for_chains = length(samplers), max_trys = 20, n_blocks = 1)
+                       cores_for_chains = length(samplers), max_tries = 20, n_blocks = 1)
 {
   if(is.null(stop_criteria)){
     stop_criteria <- list()
@@ -860,7 +957,7 @@ run_sample <- function(samplers, iter = 1000, stop_criteria = NULL,
                            step_size = step_size,  verbose = verbose, verboseProgress = verboseProgress,
                            fileName = fileName,
                            particles = particles, particle_factor =  particle_factor,
-                           cores_per_chain = cores_per_chain, max_trys = max_trys, n_blocks = n_blocks)
+                           cores_per_chain = cores_per_chain, max_tries = max_tries, n_blocks = n_blocks)
   return(samplers)
 }
 

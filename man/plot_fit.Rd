@@ -2,7 +2,7 @@
 % Please edit documentation in R/plotting.R
 \name{plot_fit}
 \alias{plot_fit}
-\title{Plots overlaying observed and fitted data.}
+\title{Posterior predictive checks}
 \usage{
 plot_fit(
   data,
@@ -13,108 +13,111 @@ plot_fit(
   stat = NULL,
   stat_name = "",
   adjust = 1,
-  ci = c(0.025, 0.5, 0.975),
+  quants = c(0.025, 0.5, 0.975),
   do_plot = TRUE,
   xlim = NULL,
   ylim = NULL,
-  main = "",
   layout = NULL,
-  mfcol = TRUE,
+  mfcol = FALSE,
   probs = c(1:99)/100,
   data_lwd = 2,
   fit_lwd = 1,
-  qp_cex = 1,
   q_points = c(0.1, 0.3, 0.5, 0.7, 0.9),
+  qp_cex = 1,
   pqp_cex = 0.5,
   lpos = "topleft",
-  signalFactor = "S",
-  zROC = FALSE,
-  qfun = qnorm,
-  lim = NULL,
-  rocfit_cex = 0.5
+  main = ""
 )
 }
 \arguments{
-\item{data}{Data frame with subjects and R factors, and possibly other factors
-and an rt column}
+\item{data}{A data frame. The experimental data in EMC2 format with at least \code{subject} (i.e., the
+subject factor), \code{R} (i.e., the response factor) and \code{rt} (i.e., response time) variable.
+Additional factor variables of the design are optional.}
 
-\item{pp}{Posterior predictives created by post_predict}
+\item{pp}{A data frame. Posterior predictives created by \code{post_predict()}}
 
-\item{subject}{Integer or string picking out subject(s).}
+\item{subject}{Integer or string selecting a subject from the data. If specified only that subject
+is plotted. \code{NULL} (i.e., the default), will plot all subjects.}
 
 \item{factors}{Character vector of factors in data to display separately. If
 NULL (default) use names of all columns in data except "trials","R", and "rt".
 Omitted factors are aggregated over. If NA treats entire data set as a single cell.
 Must be NA or NULL when using stat argument.}
 
-\item{functions}{A named list of functions that create new factors which cna then be
+\item{functions}{A named list of functions that create new factors which can then be
 used by the factors and stat arguments.}
 
-\item{stat}{A function that takes a the data and returns a single value.}
+\item{stat}{A function that takes the data/the posterior predictives and returns a single value.
+For the posterior predictives it will use a single value per replicate, which are then plotted as a density.}
 
-\item{stat_name}{A string naming what the stat argument calculates.}
+\item{stat_name}{A string naming what the stat argument calculates, used in labeling the x-axis of the plot.}
 
-\item{adjust}{Control of smoothing in density plots}
+\item{adjust}{Numeric. Density function bandwidth adjust parameter. See ``?density`}
 
-\item{ci}{Credible interval and central tendency quantiles for return when
-stat argument is supplied (default c(.025,.5,.975))}
+\item{quants}{A vector. Quantiles of the posterior predictives to return when stat argument is supplied.}
 
-\item{do_plot}{Boolean (default TRUE) for making a plot}
+\item{do_plot}{Boolean. Set to \code{FALSE} to only return the quantiles and omit the plots.}
 
-\item{xlim}{x-axis plot limit, 2-vector (same for all) or matrix (one row for each paramter)}
+\item{xlim}{A numeric vector. x-axis plot limit.}
 
-\item{ylim}{y-axis plot limit, 2-vector (same for all) or matrix (one row for each paramter)}
+\item{ylim}{A numeric vector. y-axis plot limit.}
 
-\item{main}{Text title, pasted before cell name.}
+\item{layout}{A vector specifying the layout as in \code{par(mfrow = layout)}.
+If \code{NA} or \code{NULL} uses current plot window layout.}
 
-\item{layout}{2-vector specifying par(mfrow) or par(mfcol) (default NULL use current,
-NA keeps par currently active).}
+\item{mfcol}{Boolean.  If \code{TRUE} uses par(mfrow = layout), otherwise uses par(mfcol = layout)}
 
-\item{mfcol}{Boolean, default TRUE use mfcol else mfrow.}
+\item{probs}{Vector of probabilities at which to calculate cumulative density function}
 
-\item{probs}{Vector of probabilities at which to calculate cdf (default percentiles)}
+\item{data_lwd}{Integer. Line width for data}
 
-\item{data_lwd}{Integer line width for data in cdf (default = 2)}
+\item{fit_lwd}{Integer. Line width for posterior predictives}
 
-\item{fit_lwd}{Integer line widht for fit in cdf (default = 1)}
+\item{q_points}{Vector. Quantile points to plot}
 
-\item{qp_cex}{cex for data quantile points in cdf}
+\item{qp_cex}{Numeric. Cex for data quantile points}
 
-\item{q_points}{Quantile points to plot in cdf (default c(.1,.3,.5,.7,.9))}
+\item{pqp_cex}{Numeric. Cex for predicted quantile points}
 
-\item{pqp_cex}{cex for predicted quantile points in cdf}
+\item{lpos}{Character. Legend position, see \code{?legend()}.}
 
-\item{lpos}{Legend position (see legend)}
-
-\item{signalFactor}{The name of the "signal" factor in an ROC.}
-
-\item{zROC}{Boolean, (default FALSE) to plot ROC on transformed scale.}
-
-\item{qfun}{Scale transform function for zROC (default qnorm)}
-
-\item{lim}{2-vector for x and y limit of ROC}
-
-\item{rocfit_cex}{cex for predicted ROC points (default = 0.5.}
+\item{main}{Character. Pasted before the plot title, especially useful when specifying a stat argument.}
 }
 \value{
-If stat argument is provided a table of observed values and predicted quantiles
+If stat argument is provided, a vector of observed values and predicted quantiles
+is returned
 }
 \description{
-If rt  available plots Defective cumulative distributions
-functions (CDFs), if not plots ROC. If stat the argument (which calculates
-a statistics based on the data) is supplied fit is plotted as a density with
-a vertical line at the position of the data statistic. If more than one
-subject is included data and fits are aggregated over subjects. If data or
-fit contains NA in responses or rt, or is.infinite(rt) these are treating as
-missing and defective cdfs sum to the probability of non-missing.
+Plot (defective) cumulative density functions of the observed data and data from the
+posterior predictive distribution: the probability of a response,
+p(R) as a function of response time for the experimental data and posterior
+predictive simulations.
 }
 \details{
-CDFs plot the probability of a response, p(R) as a function of response time
-(RT) for data (black lines and points at qpoints quantiles) and posterior-
-}
-\section{predictive simulations (grey lines and points). Large grey points show the}{
-average of replicate quantiles and small grey points percentiles for
-individual replicates, providing a representation of uncertainty in the model
-predictions.
-}
+The data is plotted in black. Large grey points show the average quantiles across the posterior predictives.
+The small grey points represent the predicted quantile of an individual replicate,
+providing a representation of uncertainty in the model predictions.
 
+If the stat argument is supplied (which calculates a statistic based on the data),
+the posterior predictives are plotted as a density over the different replicates.
+A vertical line is plotted at the value of that statistic for the experimental data.
+
+If more than one subject is included, the data and fits are aggregated across subjects by default.
+
+Also see \code{?plot_defective_density()} for more details.
+}
+\examples{
+\dontrun{
+# First generate posterior predictives based on a samplers object run with run_emc
+pp <- post_predict(samplers, n_cores = 4)
+# Then visualize the model fit
+plot_fit(forstmann, pp, factors = c("S", "E"), layout = c(2,3))
+
+# Specific statistics on the posterior predictives can also be specified
+# This function calculates the difference in rt between two S levels.
+# It takes the data (or the posterior predictives) as an argument
+drt <- function(data) diff(tapply(data$rt,data[,c("S")],mean))
+plot_fit(forstmann, pp, stat=drt,stat_name="Rt difference",
+         main=("Left vs Right"))
+}
+}

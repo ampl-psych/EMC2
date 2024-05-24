@@ -274,7 +274,7 @@ rRDM <- function(lR,pars,p_types=c("v","B","A","t0"),ok=rep(TRUE,dim(pars)[1]))
   # lR is an empty latent response factor lR with one level for each accumulator.
   # pars is a matrix of corresponding parameter values named as in p_types
   # pars must be sorted so accumulators and parameter for each trial are in
-  # contiguous rows. "s" parameter will be used but can be omotted
+  # contiguous rows. "s" parameter will be used but can be ommitted
   #
   # test
   # pars=cbind(B=c(1,2),v=c(1,1),A=c(0,0),t0=c(.2,.2)); lR=factor(c(1,2))
@@ -287,17 +287,18 @@ rRDM <- function(lR,pars,p_types=c("v","B","A","t0"),ok=rep(TRUE,dim(pars)[1]))
   pars[,"A"][pars[,"A"]<0] <- 0
   bad <- rep(NA, length(lR)/length(levels(lR)))
   out <- data.frame(R = bad, rt = bad)
+  nr <- length(levels(lR))
+  dt <- matrix(Inf,nrow=nr,ncol=nrow(pars)/nr)
+  t0 <- pars[,"t0"]
   pars <- pars[ok,]
-  dt <- matrix(rWald(sum(ok),B=pars[,"B"],v=pars[,"v"],A=pars[,"A"]),
-               nrow=length(levels(lR)))
+  dt[ok] <- rWald(sum(ok),B=pars[,"B"],v=pars[,"v"],A=pars[,"A"])
   R <- apply(dt,2,which.min)
   pick <- cbind(R,1:dim(dt)[2]) # Matrix to pick winner
   # Any t0 difference with lR due to response production time (no effect on race)
-  rt <- matrix(pars[,"t0"],nrow=length(levels(lR)))[pick] + dt[pick]
-  ok <- matrix(ok,nrow=length(levels(lR)))[1,]
-  out$R[ok] <- levels(lR)[R]
+  rt <- matrix(t0,nrow=nr)[pick] + dt[pick]
+  out$R <- levels(lR)[R]
   out$R <- factor(out$R,levels=levels(lR))
-  out$rt[ok] <- rt
+  out$rt <- rt
   out
 }
 

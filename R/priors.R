@@ -69,7 +69,7 @@ get_prior_samples <- function(samples,selection,filter,thin,subfilter,n_prior)
 #' @param layout `par(mfrow)` setting (the default is `c(3,3)`)
 #' @param lower Defaults to `NULL`. Lower quantile limit of values plotted. If numeric, the same is used for all parameters,
 #' alternatively, a (parameter) named list with individual quantile limits can be supplied.
-#' @param upper Defaults to `NULL`. Lower quantile limit of values plotted. If numeric, the same is used for all parameters,
+#' @param upper Defaults to `NULL`. Upper quantile limit of values plotted. If numeric, the same is used for all parameters,
 #' alternatively, a (parameter) named list with individual quantile limits can be supplied.
 #' @param xlim A list with parameter names of x-axis limits or a single pair if the
 #' same limits should be used for all parameters. Any names not in list or if (default) `NA`, `xlim` the minimum and maximum are set.
@@ -427,6 +427,7 @@ make_prior <- function(design,pmean=NULL,psd=NULL,update=NULL,
 
   if ( !is.null(update) ) {
     if(is(update[[1]], "pmwgs")) update <- update[[1]]$prior
+    if (is.null(update$v)) type <- "single"
     pmu <- update$theta_mu_mean
     if(!type == "single"){
       pdfu <- update$v

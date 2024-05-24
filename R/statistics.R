@@ -149,7 +149,6 @@ gd_pmwg <- function(pmwg_mcmc,return_summary=FALSE,print_summary=TRUE,
 #' @param digits Integer, number of digits for printing
 #'
 #' @return List of two lists names psrf and mpsrf.
-#' @export
 gd_summary <- function(samplers,no_print=TRUE,digits=2) {
 
   alpha <- gd_pmwg(samplers,selection="alpha",print_summary = FALSE)

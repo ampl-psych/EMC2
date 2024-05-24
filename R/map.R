@@ -22,7 +22,7 @@ get_design <- function(samples)
   design <- attr(samples,"design_list")[[1]]
   model <- attr(samples, "model_list")[[1]]
   design$Ffactors$subjects <- design$Ffactors$subjects[1]
-  dadm <- design_model(make_data(sampled_p_vector(design,model),design,model,trials=1),design,model,
+  dadm <- design_model(make_data(sampled_p_vector(design,model),design,n_trials=1),design,model,
                        rt_check=FALSE,compress=FALSE)
   dadm[,!(names(dadm) %in% c("subjects","trials","R","rt","winner"))]
 }

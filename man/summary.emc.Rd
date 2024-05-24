@@ -10,6 +10,7 @@
   probs = c(0.025, 0.5, 0.975),
   filter = "sample",
   subfilter = 0,
+  digits = 3,
   ...
 )
 }
@@ -27,6 +28,8 @@ Can be \code{preburn}, \code{burn}, \code{adapt}, or \code{sample}.}
 
 \item{subfilter}{An integer or vector, defaults to 0. See below
 for more details.}
+
+\item{digits}{An integer specifying rounding of output.}
 
 \item{...}{Further optional arguments.}
 }

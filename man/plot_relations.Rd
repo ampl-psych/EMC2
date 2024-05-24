@@ -7,37 +7,39 @@
 plot_relations(
   samplers = NULL,
   filter = "sample",
-  loadings = NULL,
-  standardize = T,
-  corrs = NULL,
   plot_cred = TRUE,
-  plot_means = T,
-  do_corr = F,
-  only_cred = F,
-  nice_names = NULL
+  plot_means = TRUE,
+  only_cred = FALSE,
+  nice_names = NULL,
+  ...
 )
 }
 \arguments{
-\item{samplers}{A list of samplers}
+\item{samplers}{An EMC2 samplers object, commonly the output of \code{run_emc()}.}
 
-\item{filter}{Character. The stage from which to take the samples}
+\item{filter}{Character. The stage from which to take the samples, defaults to
+the sampling stage \code{sample}.}
 
-\item{loadings}{An array of loadings. Can be alternatively supplied if samplers is not supplied}
+\item{plot_cred}{Boolean. Whether to plot the 95 percent credible intervals or not}
 
-\item{standardize}{Boolean. Whether to standardize the loadings only standardizes if loadings isn't supplied.}
-
-\item{corrs}{An array of correlations Can be alternatively supplied if samplers is not supplied}
-
-\item{plot_cred}{Boolean. Whether to plot the credible intervals}
-
-\item{plot_means}{Boolean. Whether to plot the means}
-
-\item{do_corr}{Boolean. If samplers is suplied, whether to take the correlations rather than the loadings}
+\item{plot_means}{Boolean. Whether to plot the means or not}
 
 \item{only_cred}{Boolean. Whether to only plot credible values}
 
-\item{nice_names}{Boolean. Nice names to give the parameters}
+\item{nice_names}{Character string. Alternative names to give the parameters}
+
+\item{...}{Optional additional arguments}
 }
 \description{
-An adjusted version of the corrplot package \code{corrplot} tailored to EMC2 and the plotting of factor loadings or correlations.
+An adjusted version of the \code{corrplot} package function \code{corrplot()} tailored
+to \code{EMC2} and the plotting of estimated correlations.
+}
+\examples{
+\dontrun{
+# For a given set of hierarchical model samples we can make a
+# correlation matrix plot.
+plot_relations(samplers, only_cred = TRUE, plot_cred = TRUE)
+# We can also only plot the correlations where the credible interval does not include zero
+plot_relations(samplers, plot_means = TRUE, only_cred = TRUE)
+}
 }

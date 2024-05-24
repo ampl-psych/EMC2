@@ -2,22 +2,21 @@
 % Please edit documentation in R/plotting.R
 \name{plot_pars}
 \alias{plot_pars}
-\title{Plots density for parameter estimates.}
+\title{Plots density for parameters}
 \usage{
 plot_pars(
-  pmwg_mcmc,
+  samplers,
   layout = c(2, 3),
   use_par = NULL,
-  selection = "alpha",
+  selection = "mu",
   filter = "sample",
   thin = 1,
   subfilter = 0,
   mapped = FALSE,
   plot_prior = TRUE,
-  n_prior = 1000,
   xlim = NULL,
   ylim = NULL,
-  prior_xlim = c(0.05, 0.95),
+  prior_xlim = c(0.1, 0.9),
   show_chains = FALSE,
   do_plot = TRUE,
   subject = NA,
@@ -26,76 +25,77 @@ plot_pars(
   probs = c(0.025, 0.5, 0.975),
   bw = "nrd0",
   adjust = 1,
-  do_contraction = TRUE,
   lpos = "topright",
-  digits = 3,
-  use_main = NULL
+  digits = 3
 )
 }
 \arguments{
-\item{pmwg_mcmc}{A list of samplers or samplers converted to mcmc objects.}
+\item{samplers}{An EMC2 samplers object.}
 
-\item{layout}{A 2-vector specifying the layout as in par(mfrow = layout).
-If NA or NULL use current.}
+\item{layout}{A vector specifying the layout as in \code{par(mfrow = layout)}.
+If \code{NA} or \code{NULL}, the current plot layout is used.}
 
-\item{use_par}{Character vector of names of parameters to plot (default NULL = plot all)}
+\item{use_par}{Character vector of names of parameters to plot. The default \code{NULL}
+plots all}
 
-\item{selection}{String designating parameter type (mu, variance, correlation, alpha = default)}
+\item{selection}{A Character string. Indicates which parameter type to plot
+(\code{alpha}, \code{mu}, \code{variance}, \code{covariance}, or \code{correlation}).}
 
-\item{filter}{A string. Specifies which stage you want to plot.}
+\item{filter}{A string. Specifies from which stage you want to plot the densities (\code{preburn}, \code{burn}, \code{adapt}, \code{sample})}
 
-\item{thin}{An integer. Keep only iterations that are a multiple of thin.}
+\item{thin}{An integer. Will keep only iterations of the MCMC chains that are a multiple of \code{thin}.}
 
-\item{subfilter}{An integer or vector. If integer it will exclude up until
-that integer. If vector it will include everything in that range.}
+\item{subfilter}{Integer or numeric vector. If an integer is supplied, iterations
+up until that integer within the sampling stage \code{filter} are kept. If a vector is supplied, the iterations
+within the range are kept.}
 
-\item{mapped}{Boolean (default FALSE) if TRUE plot parameters mapped to design
-otherwise sampled parameters}
+\item{mapped}{Boolean. If \code{TRUE}, plots the parameters mapped back to experimental design
+otherwise plots the sampled parameters.}
 
-\item{plot_prior}{Boolean. Add prior distribution to plot (in red)}
+\item{plot_prior}{Boolean. If \code{TRUE} will overlay prior density in the plot (in red)}
 
-\item{n_prior}{Number of samples to approximate prior (default = 1e3)}
+\item{xlim}{x-axis plot limit. If a vector is supplied, will use the same axes for all.}
 
-\item{xlim}{x-axis plot limit, 2-vector (same for all) or matrix (one row for each parameter)}
+\item{ylim}{y-axis plot limit. If a vector is supplied, will use the same axes for all.}
 
-\item{ylim}{y-axis plot limit, 2-vector (same for all) or matrix (one row for each parameter)}
+\item{prior_xlim}{A vector giving upper and lower quantiles of the prior when choosing
+xlim if \code{plot_prior = TRUE}. If set to \code{NULL}, xlim is used instead.}
 
-\item{prior_xlim}{A vector giving upper and lower quantiles of prior when choosing
-xlim if plot_prior is TRUE. If set to NULL xlim is used instead.}
+\item{show_chains}{Boolean (defaults to \code{FALSE}) plots a separate density for each chain.}
 
-\item{show_chains}{Boolean (default FALSE) plot separate density for each chain.}
+\item{do_plot}{Boolean. Set to \code{FALSE} to only return the parameter credible intervals and omit the plots.}
 
-\item{do_plot}{Boolean (default TRUE) do plot}
+\item{subject}{Integer or character vector. Only applicable if \code{selection = "alpha"}. Will plot only these subject(s).
+\code{NA} (default) will plot all.}
 
-\item{subject}{Integer or character vector, if selection = "alpha" picks out
-subject(s) (default NA plots all).}
+\item{add_means}{Boolean. Whether to add parameter means as an attribute
+to return invisibly}
 
-\item{add_means}{Boolean (default FALSE) add parameter means as an attribute
-to return}
+\item{pars}{Named vector or matrix of known/simulated parameters, or the output of
+\code{plot_pars}, in which case the posterior medians are extracted. If \code{xlim} is not supplied,}
 
-\item{pars}{Named vector or matrix of true parameters, or the output of
-plot_pars, in which case the posterior medians are extracted. If supplied with
-no xlim the plot will be adjusted to include the parameter values, which are
-plotted as vertical lines.}
+\item{probs}{Vector. The quantiles of the selected parameters to return invisibly.}
 
-\item{probs}{Vector (default c(.025,.5,.975)) for CI and central tendency of return}
+\item{bw}{number or string bandwidth for density (default \code{nrd0}). See \code{?density()}.}
 
-\item{bw}{Bandwidth for density plot (see density)}
+\item{adjust}{Numeric. Density function bandwidth adjustment parameter. See \code{?density()}.}
 
-\item{adjust}{Adjustment for density plot (see density)}
+\item{lpos}{Character. Position of the contraction in the plot}
 
-\item{do_contraction}{Print the prior to posterior contraction (1 - var(prior)/var(posterior))}
-
-\item{lpos}{Position of contraction in graph}
-
-\item{digits}{Rounding of contraction}
-
-\item{use_main}{Character string for title to use. If NULL (defualt) auto generated.}
+\item{digits}{Integer. Rounding of contraction}
 }
 \value{
-Invisibly returns tables of true and 95\% CIs (for all chains combined
-no matter what show_chains is), if do_contraction with a "contraction" attribute.
+invisibly return quantiles for the selected parameters
 }
 \description{
-Plots density for parameter estimates.
+Plots the posterior and prior density for selected parameters of a model.
+}
+\examples{
+\dontrun{
+# For a set of samplers plot prior and posterior densities:
+plot_pars(samplers)
+# Or just get the quantiles and omit the plot
+quants <- plot_pars(samplers, selection = "variance", do_plot = FALSE)
+print(quants)
+}
 }
