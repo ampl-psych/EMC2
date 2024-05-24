@@ -1216,7 +1216,10 @@ check_run <- function(samples,pdf_name="check_run.pdf",interactive=TRUE,
 #' Plot within-chain correlations
 #'
 #' Plots within-chain parameter correlations (upper triangle) and corresponding
-#' scatterplots (lower triangle)
+#' scatterplots (lower triangle) to visualize parameter sloppiness.
+#'
+#' If ``selection = alpha`` the parameter chains are concatenated across participants,
+#' (after standardizing if ``scale.subjects = TRUE``) and then correlated.
 #'
 #' @param samplers An EMC2 samplers object
 #' @param filter A character. Specifies which sampling stage should be plotted.
@@ -1229,11 +1232,13 @@ check_run <- function(samples,pdf_name="check_run.pdf",interactive=TRUE,
 #' `LL` will plot the log-likelihood chains.
 #' @param mapped Boolean. If ``TRUE``, plots the parameters as mapped back to the factor levels of the design,
 #' if `FALSE`, the sampled parameters are plotted
-#' @param scale.subjects Boolean. To standardize each participant with ``selection = "alpha"``
+#' @param scale.subjects Boolean. To standardize each participant with ``selection = "alpha"``,
+#'  by subtracting the mean and divding by the standard deviation. This ensures the plot has every participant on the same scale.
 #' @param use_par Character vector of names of parameters to plot (default ``NULL`` plots everything)
 #' @param do_plot Boolean. Whether to plot the pairs plot, if ``FALSE``, only the correlations
 #' are returned.
 #' @param maxp Integer for maximum number of iterations used (defaults to 500).
+#' If number of samples in stage or selection exceeds maxp, a random subset will be taken of size maxp.
 #' @return Invisibly returns a matrix with the correlations between the parameters.
 #' @examples \dontrun{
 #' # Plot the sloppiness for the individual-level subjects
