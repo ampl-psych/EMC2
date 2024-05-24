@@ -206,7 +206,7 @@ plot_alpha_recovery <- function(tabs,layout=c(2,3),
 #' Defaults to all (i.e., `NULL`).
 #' @param layout A vector specifying the layout as in `par(mfrow = layout)`.
 #' The default `NULL` uses the current layout.
-#' @param xlim x-axis limit for all cells (default NULL = scale per cell).
+#' @param xlim x-axis limit for all cells (default NULL will scale each plot such that the xlimits encompass the densities).
 #' @param bw number or string bandwidth for density (defaults to `nrd0`). See ``?density()``.
 #' @param adjust Numeric. Density function bandwidth adjustment parameter. See ``?density()``.
 #' @param correct_fun If specified, the accuracy for each subject is calculated, using the supplied function and
