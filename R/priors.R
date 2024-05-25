@@ -147,8 +147,8 @@ plot_prior <- function(prior=NULL, design,plotp=NULL,
   if (mapped & !is.null(data)) { # Used for covariates
     message("Mapping prior based on data, use this option with covariates and Ttranform parameters")
     if(selection == "alpha" & type != "single"){
-      pp_mu <- gp(prior, type = "mu", design = design,N=dim(data)[1], ...)$mu
-      pp_var <- gp(prior, type = "full_var", design = design,N=dim(data)[1], ...)$full_var
+      pp_mu <- gp(prior, selection = "mu", design = design,N=dim(data)[1], ...)$mu
+      pp_var <- gp(prior, selection = "full_var", design = design,N=dim(data)[1], ...)$full_var
       n_pars <- ncol(pp_mu)
       pp <- matrix(0, N, ncol(pp_mu))
       for(i in 1:dim(data)[1]){
@@ -160,7 +160,7 @@ plot_prior <- function(prior=NULL, design,plotp=NULL,
         pp[i,] <- rmvnorm(1, pp_mu[i,], pp_var_curr)      }
       colnames(pp) <- colnames(pp_mu)
     } else{
-      pp <- gp(prior, type = selection, design = design,N=dim(data)[1], ...)[[selection]]
+      pp <- gp(prior, selection = selection, design = design,N=dim(data)[1], ...)[[selection]]
     }
 
     row.names(pp) <- 1:dim(data)[1]
@@ -170,8 +170,8 @@ plot_prior <- function(prior=NULL, design,plotp=NULL,
     mpok <- mp[design$model()$rfun(pars=mp),]
     if (nrep>1) for (i in 2:nrep) {
       if(selection == "alpha" & type != "single"){
-        pp_mu <- gp(prior, type = "mu", design = design,N=dim(data)[1], ...)$mu
-        pp_var <- gp(prior, type = "full_var", design = design,N=dim(data)[1], ...)$full_var
+        pp_mu <- gp(prior, selection = "mu", design = design,N=dim(data)[1], ...)$mu
+        pp_var <- gp(prior, selection = "full_var", design = design,N=dim(data)[1], ...)$full_var
         n_pars <- ncol(pp_mu)
         pp <- matrix(0, N, ncol(pp_mu))
         for(i in 1:dim(data)[1]){
@@ -184,7 +184,7 @@ plot_prior <- function(prior=NULL, design,plotp=NULL,
         }
         colnames(pp) <- colnames(pp_mu)
       } else{
-        pp <- gp(prior, type = selection, design = design,N=dim(data)[1], ...)[[selection]]
+        pp <- gp(prior, selection = selection, design = design,N=dim(data)[1], ...)[[selection]]
       }
 
       row.names(pp) <- 1:dim(data)[1]
@@ -232,8 +232,8 @@ plot_prior <- function(prior=NULL, design,plotp=NULL,
   } else {
 
     if(selection == "alpha" & type != "single"){
-      pp_mu <- gp(prior, type = "mu", design = design,N=N, ...)$mu
-      pp_var <- gp(prior, type = "full_var", design = design,N=N, ...)$full_var
+      pp_mu <- gp(prior, selection = "mu", design = design,N=N, ...)$mu
+      pp_var <- gp(prior, selection = "full_var", design = design,N=N, ...)$full_var
       n_pars <- ncol(pp_mu)
       samples <- matrix(0, N, ncol(pp_mu))
       for(i in 1:N){
@@ -246,7 +246,7 @@ plot_prior <- function(prior=NULL, design,plotp=NULL,
       }
       colnames(samples) <- colnames(pp_mu)
     } else{
-      samples <- gp(prior, type = selection, design = design,N=N, ...)[[selection]]
+      samples <- gp(prior, selection = selection, design = design,N=N, ...)[[selection]]
     }
 
     if(selection %in% c("covariance", "correlation")){
@@ -544,71 +544,159 @@ make_prior <- function(design,pmean=NULL,psd=NULL,update=NULL,
   } else{
     list(theta_mu_mean  = pm,theta_mu_var = diag(ps^2))
   }
-
 }
+# if(length(input) == nrow(prior$prior[[pri]])){
+#   input <- diag(input)
+# }
+# if(!identical(dim(input),dim(prior$prior[[pri]]))){
+#   stop("make sure your prior matches the design and the type of model. See ?get_prior_{type}")
+# }
+# } else{
+# if(length(input) != length(prior$prior[[pri]])){
+#   stop("make sure your prior matches the design and the type of model. See ?get_prior_{type}")
+# }
 
-make_prior_new <- function(design, type = "standard", update = NULL, ...){
+make_prior_new <- function(design, type = "standard", update = NULL,
+                           fill_default = FALSE, ...){
+  if(!is.null(update)) type <- attr(prior, "type")
   prior <- get_objects(design = design, type = type)
   args <- list(...)
-  for(pri in names(prior$prior)){ # Loop over different objects in prior
-    if(pri %in% names(prior$descriptions)){ # This excluded prior$theta_mu_invar
-      if(pri %in% names(args)){ # Already specified in ellipsis, so fill in
-        input <- args[[pri]]
-        if(length(input) == nrow(prior$prior[[pri]])){
-          input <- diag(input)
-        }
-        if(!is.null(dim(prior$prior[[pri]]))){
-          if(!identical(dim(input),dim(prior$prior[[pri]]))){
-            stop("make sure your prior matches the design and the type of model. See ?get_prior_{type}")
-          }
+  if(!is.null(args$pmean)) args$theta_mu_mean <- args$pmean
+  if(!is.null(args$psd)) args$theta_mu_var <- args$psd^2
+  if(!is.null(update)){
+    for(name in names(update)){
+      if(is.null(args[[name]])){
+        args[[name]] <- update[[name]]
+      } else{
+        # First make sure we only take diagonals
+        if(!is.null(dim(update[[name]]))){
+          upd <- diag(update[[name]])
         } else{
-          if(length(input) != length(prior$prior[[pri]])){
-            stop("make sure your prior matches the design and the type of model. See ?get_prior_{type}")
+          upd <- update[[name]]
+        }
+        # now fill in
+        args_names <- names(args[[name]])
+        upd_names <- names(upd)
+        for(i in 1:length(upd)){
+          if(upd_names[i] %in% args_names){
+            args[[name]][args_names == upd_names[i]] <- upd[i]
           }
-        }
-        prior$prior[[pri]] <- input
-      } else{ # Ask the user to manually specify
-        cat(paste0("Specify ", prior$descriptions[[pri]]," \n"))
-        if(!is.null(dim(prior$prior[[pri]]))){
-          tmp <- diag(prior$prior[[pri]])
-        } else{
-          tmp <- prior$prior[[pri]]
-        }
-        cat("Press enter to fill remaining with default value (", tmp[1], ")")
-        filled <- F
-        for(i in 1:length(tmp)){ # Loop over the length of the prior object
-          if(!filled){
-            name <- names(tmp)[i]
-            if(is.null(name)){
-              name <- pri
-            }
-            repeat {
-              ans <- try(eval(parse(text=readline(paste0(name,": ")))),silent=TRUE)
-              if(!is.null(ans)){
-                if (any(class(ans) %in% c("warning", "error", "try-error")) || is.na(ans) || !is.numeric(ans)) {
-                  cat("Must provide a numeric value\n")
-                } else {
-                  tmp[i] <- ans
-                  break
-                }
-              } else{
-                filled <- TRUE
-                break
-              }
-            }
-          }
-
-        }
-        if(!is.null(dim(prior$prior[[pri]]))){
-          prior$prior[[pri]][,] <- diag(tmp)
-
-        } else{
-          prior$prior[[pri]] <- tmp
         }
       }
     }
   }
-  # Fix that invar is the same as var..
+  for(pri in names(prior$prior)){ # Loop over different objects in prior
+    if(pri %in% names(prior$descriptions)){ # This excluded prior$theta_mu_invar
+      if(pri %in% names(args)){ # Already specified in ellipsis, so fill in
+        input <- args[[pri]]
+        if(!is.null(dim(prior$prior[[pri]]))){
+          to_check <- diag(prior$prior[[pri]])
+          to_do <- !(names(to_check) %in% names(input))
+          to_check[!to_do] <- input
+          prior$prior[[pri]][,] <- diag(to_check)
+
+        } else{
+          to_check <- prior$prior[[pri]]
+          to_do <- !(names(to_check) %in% names(input))
+          to_check[!to_do] <- input
+          prior$prior[[pri]] <- to_check
+        }
+      } else{
+        if(!is.null(dim(prior$prior[[pri]]))){
+          to_do <- rep(T, nrow(prior$prior[[pri]]))
+        } else{
+          to_do <- rep(T, length(prior$prior[[pri]]))
+        }
+      }
+      # Ask the user to manually specify
+      if(any(to_do)){
+        tmp <- ask_user_prior(prior, pri, to_do, fill_default)
+        if(!is.null(dim(prior$prior[[pri]]))){
+          input <- diag(prior$prior[[pri]][,])
+          input[to_do] <- tmp
+          prior$prior[[pri]][,] <- diag(input)
+        } else{
+          prior$prior[[pri]][to_do] <- tmp
+        }
+      }
+    }
+  }
+  prior <- get_objects(design = design, type = type, prior = prior$prior)
   return(prior$prior)
 }
+
+ask_user_prior <- function(prior, cur_idx, to_do, fill_default){
+  if(!is.null(dim(prior$prior[[cur_idx]]))){
+    tmp <- diag(prior$prior[[cur_idx]])[to_do]
+  } else{
+    tmp <- prior$prior[[cur_idx]][to_do]
+  }
+  if(!fill_default){
+    cat(paste0("Specify ", prior$descriptions[[cur_idx]]," \n"))
+    if(length(tmp) == 1){
+      cat("Press enter to use default value (", tmp[1], ")")
+    } else{
+      cat("Press enter to fill all remaining with default value (", tmp[1], ")")
+    }
+    filled <- F
+    for(i in 1:length(tmp)){ # Loop over the length of the prior object
+      if(!filled){
+        name <- ifelse(length(to_do) == 1, "", names(tmp)[i])
+        repeat {
+          ans <- try(eval(parse(text=readline(paste0(name,": ")))),silent=TRUE)
+          if(!is.null(ans)){
+            if (any(class(ans) %in% c("warning", "error", "try-error")) || is.na(ans) || !is.numeric(ans)) {
+              cat("Must provide a numeric value\n")
+            } else {
+              tmp[i] <- ans
+              break
+            }
+          } else{
+            filled <- TRUE
+            break
+          }
+        }
+      }
+    }
+  }
+  return(tmp)
+}
+
+
+plot_prior_new <- function(prior, design, selection = "mu",
+                           mapped = TRUE, layout = c(3,3),
+                           N = 1e5){
+  type <- attr(prior, "type")
+  if (mapped & !(selection %in% c("alpha","mu"))){
+    mapped <- FALSE
+  }
+  if(selection == "alpha" & type != "single"){
+    pp_mu <- get_objects(design = design, type = type, sample_prior = T,
+                         selection = "mu", mapped = mapped, N = N)
+    pp_var <- get_objects(design = design, type = type, sample_prior = T,
+                          selection = "full_var", mapped = mapped, N = N)
+    n_pars <- ncol(pp_mu)
+    samples <- matrix(0, N, ncol(pp_mu))
+    for(i in 1:N){
+      if(type == "diagonal"){
+        pp_var_curr <- diag(pp_var[i,])
+      } else{
+        pp_var_curr <- matrix(pp_var[i,], n_pars, n_pars)
+      }
+      samples[i,] <- rmvnorm(1, pp_mu[i,], pp_var_curr)
+    }
+    colnames(samples) <- colnames(pp_mu)
+  } else{
+    samples <-  get_objects(design = design, type = type, sample_prior = T,
+                            selection = selection, mapped = mapped, N = N)
+  }
+
+  par(mfrow = layout)
+  for(i in 1:ncol(samples)){
+    robust_hist(samples[,i], breaks = 50, prob = TRUE, xlab = selection,
+                main = colnames(samples)[i],
+                cex.lab = 1.25, cex.main = 1.5)
+  }
+}
+
 

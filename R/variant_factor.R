@@ -117,20 +117,21 @@ get_prior_factor <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5
     prior$bp <- .5
   }
   if(is.null(prior$as)){
-    prior$as <- 2
+    prior$as <- rep(2, n_pars)
   }
   if(is.null(prior$bs)){
-    prior$bs <- .1
+    prior$bs <- rep(.1, n_pars)
   }
   # prior$R_0 <- diag(n_factors)
   # prior$rho_0 <- 5
   # Things I save rather than re-compute inside the loops.
   prior$theta_mu_invar <- diag(1/prior$theta_mu_var)
   prior$theta_lambda_invar <-1/prior$theta_lambda_var
+  attr(prior, "type") <- "factor"
   if(sample){
     out <- list()
-    if(!selection %in% c("mu", "variance", "covariance", "correlation", "full_var", "loadings")){
-      stop("for variant factor, you can only specify the prior on the mean, variance, covariance, loadings or the correlation of the parameters")
+    if(!selection %in% c("mu", "variance", "covariance", "correlation", "full_var", "loadings", "residuals")){
+      stop("for variant factor, you can only specify the prior on the mean, variance, covariance, loadings, residuals, or the correlation of the parameters")
     }
     if(selection == "mu"){
       samples <- mvtnorm::rmvnorm(N, mean = prior$theta_mu_mean,
@@ -146,6 +147,12 @@ get_prior_factor <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5
     } else if(selection == "loadings") {
       out$loadings <- matrix(rnorm(N, mean = 0, sd = prior$theta_lambda_var^2), ncol = 1)
       colnames(out$loadings) <- "loadings"
+      return(out)
+    } else if(selection == "residuals"){
+      residuals <- matrix(1/rgamma(n_pars*N, shape = prior$as, rate = prior$bs),
+                          ncol = n_pars, byrow = T)
+      colnames(residuals) <- names(attr(design, "p_vector"))
+      out$residuals <- residuals
       return(out)
     } else{
       var <- array(NA_real_, dim = c(n_pars, n_pars, N))
@@ -164,12 +171,19 @@ get_prior_factor <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5
         out$variance <- vars_only
       }
       lt <- lower.tri(var[,,1])
+      if(selection %in% c("covariance", "correlation")){
+        pnams <- names(attr(design, "p_vector"))
+        lt <- lower.tri(diag(length(pnams)))
+        pnams <- outer(pnams,pnams,paste,sep=".")[lt]
+      }
       if (selection == "correlation"){
         corrs <- array(apply(var,3,cov2cor),dim=dim(var),dimnames=dimnames(var))
         out$correlation <- t(apply(corrs,3,function(x){x[lt]}))
+        colnames(out$correlation) <- pnams
       }
       if(selection == "covariance"){
         out$covariance <- t(apply(var,3,function(x){x[lt]}))
+        colnames(out$covariance) <- pnams
       }
       if (selection == "full_var"){
         out$full_var <- t(apply(var, 3, c))

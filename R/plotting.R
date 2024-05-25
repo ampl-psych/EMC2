@@ -288,6 +288,38 @@ plot_defective_density <- function(data,subject=NULL,factors=NULL,
     invisible(tapply(correct_fun(dat),dat$subjects,mean))
 }
 
+robust_hist <- function(ps, breaks = 50, cutoff = 0.002, main = "",
+                        cex.lab = 1, cex.main = 1.5, prob = TRUE,
+                        xlab = ""){
+  for(i in 1:log10(length(ps))){
+    cuts <- cut(ps, breaks = breaks)
+    tab_cuts <- table(cuts)
+    good_cuts <- tab_cuts/length(ps) > cutoff
+    ps <- ps[cuts %in% names(good_cuts)[good_cuts]]
+  }
+  hist(ps, breaks = breaks, main = main, cex.lab = cex.lab, cex.main = cex.main,
+       prob = prob, xlab = xlab)
+}
+
+robust_density <- function(ps,r,bw,adjust,use_robust=FALSE)
+  # density estimate over range r (to avoid outlier influence, used
+  # here for hyper co/variance which can have long tails)
+{
+  if (use_robust) {
+    # isin <- ps>r[1]*.9 & ps < r[2]*1.1
+    isin <- ps> 0 & ps < r[2]*1.1
+    p <- mean(isin)
+    psc <- ps[isin]
+    if (length(psc)<10) {
+      dens <- density(ps)
+      dens$y[1:length(dens$y)] <- 0
+    } else {
+      dens <- density(psc,bw=bw,adjust=adjust)
+      dens$y <- p*dens$y
+    }
+    dens
+  } else density(ps,bw=bw,adjust=adjust)
+}
 
 
 #' Plots density for parameters
@@ -346,26 +378,6 @@ plot_pars <- function(samplers,layout=c(2,3),use_par=NULL,
                       lpos="topright",digits=3)
 
 {
-
-  robust_density <- function(ps,r,bw,adjust,use_robust=FALSE)
-    # density estimate over range r (to avoid outlier influence, used
-    # here for hyper co/variance which can have long tails)
-  {
-    if (use_robust) {
-      # isin <- ps>r[1]*.9 & ps < r[2]*1.1
-      isin <- ps> 0 & ps < r[2]*1.1
-      p <- mean(isin)
-      psc <- ps[isin]
-      if (length(psc)<10) {
-        dens <- density(ps)
-        dens$y[1:length(dens$y)] <- 0
-      } else {
-        dens <- density(psc,bw=bw,adjust=adjust)
-        dens$y <- p*dens$y
-      }
-      dens
-    } else density(ps,bw=bw,adjust=adjust)
-  }
   n_prior <- 1e3
   pmwg_mcmc <- samplers
   if (mapped & !(selection %in% c("mu","alpha")))
@@ -1355,3 +1367,68 @@ profile_plot <- function(pname,p_vector,p_min,p_max,data, design, n_point=100,ma
   abline(v=p_vector[pname])
   c(true=p_vector[pname],max=x[which.max(ll)],miss=p_vector[pname]-x[which.max(ll)])
 }
+
+
+plot_chains_new <- function(samplers,layout=NA,subject=NA,ylim=NULL,
+                        selection="mu",filter="sample",thin=1,subfilter=0,
+                        plot_acf=FALSE) # ,use_par=NA
+  # Plots chains  (if alpha, LL or epsilon can do individual subject, all by default)
+{
+  MCMC_samples <- samplers
+  MCMC_samples <- as_mcmc_new(MCMC_samples, selection = selection, filter = filter,
+                              thin = thin, subfilter = subfilter)
+  # if (!(inherits(MCMC_samples,  c("mcmc","mcmc.list")))) {
+  #   if (inherits(MCMC_samples, "pmwgs"))
+  #     MCMC_samples <- as_Mcmc(MCMC_samples,selection=selection,filter=filter,
+  #                             thin=thin,subfilter=subfilter) else
+  #                               MCMC_samples <- as_mcmc.list(MCMC_samples,selection=selection,filter=filter,
+  #                                                            thin=thin,subfilter=subfilter)
+  # }
+  auto.layout <- any(is.na(layout))
+  no_layout <- is.null(layout)
+  if (!auto.layout & !no_layout) par(mfrow=layout)
+  if (attr(MCMC_samples,"selection")=="alpha" || attr(MCMC_samples,"selection")=="random") {
+    snams <- names(MCMC_samples)
+    if (any(is.na(subject))) subject <- snams
+    if (is.numeric(subject)) subject <- snams[subject]
+    if (!all(subject %in% names(MCMC_samples)))
+      stop("Subject not present\n")
+    for (i in subject) {
+      if (!auto.layout & !no_layout) par(mfrow=layout)
+      if (plot_acf){
+        for (j in colnames(MCMC_samples[[i]][[1]])){
+          acf(MCMC_samples[[i]][[1]][,j],main=paste0("Chain ",1,": ","s",i,": ",j))
+        }
+      } else {
+        plot(MCMC_samples[[i]],auto.layout=auto.layout,density=FALSE,
+             xlab=paste0("Iterations ",i),ask=FALSE,trace=TRUE,
+             ylab=attr(MCMC_samples,"selection"),smooth=FALSE,ylim=ylim)
+      }
+    }
+  } else if (attr(MCMC_samples,"selection") %in% c("LL","epsilon")) {
+    if (any(is.na(subject))) subject <- names(MCMC_samples)
+    if (!all(subject %in% names(MCMC_samples)))
+      stop("Subject not present\n")
+    for (i in subject) {
+      if (plot_acf){
+        acf(MCMC_samples[[i]][[1]],main=paste0("Chain ",1,": ","LL ",i))
+      } else{
+        plot(MCMC_samples[[i]],auto.layout=auto.layout,density=FALSE,
+             xlab=paste0("Iterations ",i),ask=FALSE,trace=TRUE,
+             ylab=attr(MCMC_samples,"selection"),smooth=FALSE,ylim=ylim)
+      }
+    }
+  } else {
+    if (plot_acf) {
+      for (j in colnames(MCMC_samples[[1]])){
+        acf(MCMC_samples[[1]][,j],main=paste0("Chain ",1,": ",j))
+      }
+    } else {
+      plot(MCMC_samples,auto.layout=auto.layout,density=FALSE,
+           ask=FALSE,trace=TRUE,ylim=ylim,
+           ylab=attr(MCMC_samples,"selection"),smooth=FALSE)
+    }
+  }
+}
+
+

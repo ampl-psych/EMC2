@@ -126,7 +126,7 @@ merge_samples <- function(samplers){
 
 as_Mcmc <- function(sampler,filter=stages,thin=1,subfilter=0,
                     selection=c("alpha","mu","variance","covariance","correlation","LL","fixed", "random")[1])
-  # replacement for pmwg package as_mccmc
+  # replacement for pmwg package as_mcmc
   # allows for selection of subj_ll, and specifying selection as an integer
   # allows filter as single integer so can remove first filter samples
   # adds ability to thin and to subfilter (i.e., remove trials after removing
@@ -521,4 +521,92 @@ reduce_samples <- function(samplers,thin=1,remove=NULL) {
   }
   samplers
 }
+
+
+shorten <- function(x,r,d) {
+  if (!is.numeric(r)) stop("subfilter must be numeric\n")
+  if (length(r)==1) r <- (r+1):dim(x)[d]
+  if (min(r)<1 || max(r)>dim(x)[d]) stop("subfilter out of range\n")
+  if (d==2) x[,r,drop=FALSE] else x[,,r,drop=FALSE]
+}
+
+as_mcmc_new <- function(sampler,filter="sample",thin=1,subfilter=0,
+                    selection= "mu")
+{
+  # filter <- which(sampler$samples$stage %in% filter)
+  samples <- get_objects(type = attr(sampler[[1]], "variant_funs")$type, sampler = sampler,
+                         selection = selection)
+#
+#
+#   out <- coda::mcmc(fixed[seq(thin,dim(fixed)[1],by=thin),,drop=FALSE])
+#     attr(out,"selection") <- selection
+#     return(out)
+#   }
+#   if (selection == "mu") {
+#     mu <- sampler$samples$theta_mu[, filter,drop=FALSE]
+#     if (is.null(subfilter)){
+#       mu <- t(mu)
+#     }  else{
+#       mu <- t(shorten(mu,subfilter,2))
+#     }
+#     if (thin > dim(mu)[1]) stop("Thin to large\n")
+#     out <- coda::mcmc(mu[seq(thin,dim(mu)[1],by=thin),,drop=FALSE])
+#     attr(out,"selection") <- selection
+#     return(out)
+#   } else if (selection %in% c("variance","covariance","correlation")) {
+#     tvar <- sampler$samples$theta_var[, , filter,drop=FALSE]
+#     if (selection=="correlation")
+#       tvar <- array(apply(tvar,3,stats::cov2cor),dim=dim(tvar),dimnames=dimnames(tvar))
+#     if (selection %in% c("covariance","correlation")) {
+#       lt <- lower.tri(tvar[,,1])
+#       pnams <- dimnames(tvar)[[1]]
+#       pnams <- outer(pnams,pnams,paste,sep=".")[lt]
+#       tvar <- apply(tvar,3,function(x){x[lt]})
+#       dimnames(tvar)[[1]] <- pnams
+#       if (all(tvar==0))
+#         stop("All covariances/correlations zero, model assumes independence.")
+#     } else {
+#       tvar <- apply(tvar,3,diag)
+#     }
+#     if (is.null(subfilter)){
+#       tvar <- t(tvar)
+#     } else{
+#       tvar <- t(shorten(tvar,subfilter,2))
+#     }
+#     if (thin > dim(tvar)[1]) stop("Thin to large\n")
+#     out <- coda::mcmc(tvar[seq(thin,dim(tvar)[1],by=thin),,drop=FALSE])
+#     attr(out,"selection") <- selection
+#     return(out)
+#   } else if (selection == "alpha") {
+#     alpha <- sampler$samples$alpha[, , filter,drop=FALSE]
+#     if (!is.null(subfilter)) alpha <- shorten(alpha,subfilter,3)
+#     if (thin > dim(alpha)[3]) stop("Thin to large\n")
+#     alpha <- alpha[,,seq(thin,dim(alpha)[3],by=thin),drop=FALSE]
+#     out <- stats::setNames(lapply(
+#       seq(dim(alpha)[2]),
+#       function(x) {
+#         coda::mcmc(t(alpha[, x, ]))
+#       }
+#     ), names(sampler$data))
+#     attr(out,"selection") <- selection
+#     return(out)
+#   } else if (selection %in% c("LL","epsilon")) {
+#     if (selection == "epsilon"){
+#       LL <- sampler$samples$epsilon[, filter,drop=FALSE]
+#     } else{
+#       LL <- sampler$samples$subj_ll[, filter,drop=FALSE]
+#     }
+#     if (!is.null(subfilter)) LL <- shorten(LL,subfilter,2)
+#     if (thin > dim(LL)[2]) stop("Thin to large\n")
+#     out <- setNames(lapply(
+#       data.frame(t(LL[,seq(thin,dim(LL)[2],by=thin),drop=FALSE])),coda::mcmc),
+#       names(sampler$data))
+#     attr(out,"selection") <- selection
+#     return(out)
+#   }
+#   stop("Argument `selection` should be one of mu, variance, covariance, correlation, alpha, LL, or epsilon\n")
+}
+
+
+
 

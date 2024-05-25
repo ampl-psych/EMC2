@@ -59,6 +59,7 @@ get_prior_single <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5
   if(is.null(prior$theta_mu_var)){
     prior$theta_mu_var <- diag(rep(1, n_pars))
   }
+  attr(prior, "type") <- "single"
   if(sample){
     if(selection != "alpha") stop("for variant single, only alpha can be specified")
     samples <- mvtnorm::rmvnorm(N, prior$theta_mu_mean, prior$theta_mu_var)

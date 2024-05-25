@@ -25,10 +25,10 @@ get_prior_infnt_factor <- function(prior = NULL, n_pars = NULL, sample = TRUE, N
     prior$theta_mu_var <- rep(1, n_pars)
   }
   if(is.null(prior$as)){
-    prior$as <- 5 # shape prior on the error variances
+    prior$as <- rep(5, n_pars) # shape prior on the error variances
   }
   if(is.null(prior$bs)){
-    prior$bs <- .3 # rate prior on the error variances
+    prior$bs <- rep(.3, n_pars) # rate prior on the error variances
   }
   if(is.null(prior$df)){
     prior$df <- 30 # Shape and rate prior on the global shrinkage
@@ -47,10 +47,11 @@ get_prior_infnt_factor <- function(prior = NULL, n_pars = NULL, sample = TRUE, N
   }
   # Things I save rather than re-compute inside the loops.
   prior$theta_mu_invar <- 1/prior$theta_mu_var #Inverse of the matrix
+  attr(prior, "type") <- "infnt_factor"
   if(sample){
     out <- list()
-    if(!selection %in% c("mu", "variance", "covariance", "correlation", "full_var", "loadings")){
-      stop("for variant infnt_factor, you can only specify the prior on the mean, variance, covariance, loadings or the correlation of the parameters")
+    if(!selection %in% c("mu", "variance", "covariance", "correlation", "full_var", "loadings", "residuals")){
+      stop("for variant infnt_factor, you can only specify the prior on the mean, variance, covariance, loadings, residuals, or the correlation of the parameters")
     }
     if(selection == "mu"){
       samples <- mvtnorm::rmvnorm(N, mean = prior$theta_mu_mean,
@@ -67,6 +68,12 @@ get_prior_infnt_factor <- function(prior = NULL, n_pars = NULL, sample = TRUE, N
         }
       }
       out$mu <- samples
+      return(out)
+    } else if(selection == "residuals"){
+      residuals <- matrix(1/rgamma(n_pars*N, shape = prior$as, rate = prior$bs),
+             ncol = n_pars, byrow = T)
+      colnames(residuals) <- names(attr(design, "p_vector"))
+      out$residuals <- residuals
       return(out)
     } else if(selection == "loadings") {
       lambda <- matrix(0, nrow = n_pars, ncol = n_factors)
@@ -114,12 +121,19 @@ get_prior_infnt_factor <- function(prior = NULL, n_pars = NULL, sample = TRUE, N
         out$variance <- vars_only
       }
       lt <- lower.tri(var[,,1])
+      if(selection %in% c("covariance", "correlation")){
+        pnams <- names(attr(design, "p_vector"))
+        lt <- lower.tri(diag(length(pnams)))
+        pnams <- outer(pnams,pnams,paste,sep=".")[lt]
+      }
       if (selection == "correlation"){
         corrs <- array(apply(var,3,cov2cor),dim=dim(var),dimnames=dimnames(var))
         out$correlation <- t(apply(corrs,3,function(x){x[lt]}))
+        colnames(out$correlation) <- pnams
       }
       if(selection == "covariance"){
         out$covariance <- t(apply(var,3,function(x){x[lt]}))
+        colnames(out$covariance) <- pnams
       }
       if (selection == "full_var"){
         out$full_var <- t(apply(var, 3, c))

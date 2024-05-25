@@ -71,6 +71,7 @@ get_prior_diag <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, 
   }
   # Things I save rather than re-compute inside the loops.
   prior$theta_mu_invar <- ginv(prior$theta_mu_var) #Inverse of the matrix
+  attr(prior, "type") <- "diagonal"
   if(sample){
     out <- list()
     if(!selection %in% c("mu", "variance", "full_var")){

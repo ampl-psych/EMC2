@@ -87,6 +87,7 @@ get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1
   }
   # Things I save rather than re-compute inside the loops.
   prior$theta_mu_invar <- ginv(prior$theta_mu_var) #Inverse of the matrix
+  attr(prior, "type") <- "standard"
   if(sample){
     out <- list()
     if(!selection %in% c("mu", "variance", "covariance", "correlation", "full_var")){
@@ -124,13 +125,22 @@ get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1
         out$variance <- vars_only
       }
       lt <- lower.tri(var[,,1])
+      if(selection %in% c("covariance", "correlation")){
+        pnams <- names(attr(design, "p_vector"))
+        lt <- lower.tri(diag(length(pnams)))
+        pnams <- outer(pnams,pnams,paste,sep=".")[lt]
+      }
       if (selection == "correlation"){
         corrs <- array(apply(var,3,cov2cor),dim=dim(var),dimnames=dimnames(var))
         out$correlation <- t(apply(corrs,3,function(x){x[lt]}))
+        colnames(out$correlation) <- pnams
       }
       if(selection == "covariance"){
         out$covariance <- t(apply(var,3,function(x){x[lt]}))
+        colnames(out$covariance) <- pnams
       }
+
+
       if (selection == "full_var"){
         out$full_var <- t(apply(var, 3, c))
       }
