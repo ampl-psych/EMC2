@@ -86,7 +86,7 @@
 ---
 
     Code
-      make_data(p_LNR, design_LNR, trials = 10)
+      make_data(p_LNR, design_LNR, n_trials = 10)
     Output
           subjects        E     S trials     R        rt
       1       as1t    speed  left      1 right 0.6621568
@@ -326,7 +326,7 @@
 ---
 
     Code
-      make_data(p_LBA, design_LBA, trials = 10)
+      make_data(p_LBA, design_LBA, n_trials = 10)
     Output
           subjects        E     S trials     R        rt
       1       as1t    speed  left      1 right  3.030501
@@ -566,7 +566,7 @@
 ---
 
     Code
-      make_data(p_RDM, design_RDM, trials = 10)
+      make_data(p_RDM, design_RDM, n_trials = 10)
     Output
           subjects        E     S trials     R        rt
       1       as1t    speed  left      1  left 0.9280160
@@ -806,7 +806,7 @@
 ---
 
     Code
-      make_data(p_DDM, design_DDM, trials = 10)
+      make_data(p_DDM, design_DDM, n_trials = 10)
     Output
           subjects        E     S trials     R        rt
       1       as1t    speed  left      1  left 0.4051153
