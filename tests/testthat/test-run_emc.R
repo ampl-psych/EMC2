@@ -16,7 +16,7 @@ LNR_s <- make_samplers(dat, design_LNR, rt_resolution = 0.05, n_chains = 2)
 
 RNGkind("L'Ecuyer-CMRG")
 set.seed(123)
-LNR_s <- run_emc(LNR_s, cores_for_chains = 2, stop_criteria = list(
+LNR_s <- run_emc(LNR_s, cores_for_chains = 1, stop_criteria = list(
   preburn = list(iter = 100), adapt = list(min_unique = 100),
   sample = list(iter = 25)), verbose = FALSE)
 idx <- LNR_s[[1]]$samples$idx
