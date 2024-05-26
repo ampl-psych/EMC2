@@ -42,7 +42,7 @@ LBA_s <- make_samplers(dat, design_LBA, compress = F, n_chains = 1)
 RDM_s <- make_samplers(dat, design_RDM, compress = F, n_chains = 1)
 DDM_s <- make_samplers(dat, design_DDM, compress = F, n_chains = 1)
 
-make_data(p_DDM, design_DDM, trials = 10)
+make_data(p_DDM, design_DDM, n_trials = 10)
 
 test_that("LNR", {
   RNGkind("L'Ecuyer-CMRG")
