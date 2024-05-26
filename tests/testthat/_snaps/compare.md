@@ -9,15 +9,15 @@
 # savage-dickey
 
     Code
-      savage_dickey(samplers_LNR, parameter = "m", do_plot = F, H0 = -1)
+      round(savage_dickey(samplers_LNR, parameter = "m", do_plot = F, H0 = -1), 3)
     Output
-      [1] 0.03657688
+      [1] 0.037
 
 ---
 
     Code
-      savage_dickey(samplers_LNR, fun = function(d) d["m"] - d["m_lMd"], H0 = -0.5,
-      do_plot = F)
+      round(savage_dickey(samplers_LNR, fun = function(d) d["m"] - d["m_lMd"], H0 = -
+      0.5, do_plot = F), 3)
     Output
-      [1] 0.09922073
+      [1] 0.099
 

@@ -27,17 +27,17 @@ set.seed(123)
 # Only preburn, so bit risky since adapt could fail
 N <- 50
 
-LNR_factor <- init_chains(LNR_factor, cores_per_chain = 2, cores_for_chains = 2, particles = 10)
-LNR_factor <- run_samplers(LNR_factor, cores_per_chain = 2, cores_for_chains = 2, stop_criteria = list(iter = N), stage = "preburn")
+LNR_factor <- init_chains(LNR_factor, cores_for_chains = 2, particles = 10)
+LNR_factor <- run_samplers(LNR_factor, cores_for_chains = 2, stop_criteria = list(iter = N), stage = "preburn")
 
-LNR_diag <- init_chains(LNR_diag, cores_per_chain = 2, cores_for_chains = 2, particles = 10)
-LNR_diag <- run_samplers(LNR_diag, cores_per_chain = 2, cores_for_chains = 2, stop_criteria = list(iter = N), stage = "preburn")
+LNR_diag <- init_chains(LNR_diag, cores_for_chains = 2, particles = 10)
+LNR_diag <- run_samplers(LNR_diag, cores_for_chains = 2, stop_criteria = list(iter = N), stage = "preburn")
 
-LNR_blocked <- init_chains(LNR_blocked, cores_per_chain = 2, cores_for_chains = 2, particles = 10)
-LNR_blocked <- run_samplers(LNR_blocked, cores_per_chain = 2, cores_for_chains = 2, stop_criteria = list(iter = N), stage = "preburn")
+LNR_blocked <- init_chains(LNR_blocked, cores_for_chains = 2, particles = 10)
+LNR_blocked <- run_samplers(LNR_blocked, cores_for_chains = 2, stop_criteria = list(iter = N), stage = "preburn")
 
-LNR_single <- init_chains(LNR_single, cores_per_chain = 2, cores_for_chains = 2, particles = 10)
-LNR_single <- run_samplers(LNR_single, cores_per_chain = 2, cores_for_chains = 2, stop_criteria = list(iter = N), stage = "preburn")
+LNR_single <- init_chains(LNR_single, cores_for_chains = 2, particles = 10)
+LNR_single <- run_samplers(LNR_single, cores_for_chains = 2, stop_criteria = list(iter = N), stage = "preburn")
 
 
 idx <- N + 1
