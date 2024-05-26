@@ -26,6 +26,31 @@ dhalft <- function (x, scale = 25, nu = 1, log = FALSE)
   return(dens)
 }
 
+### Taken from MCMCpack rwish
+rwish <- function(v, S){
+  if (!is.matrix(S))
+    S <- matrix(S)
+  if (nrow(S) != ncol(S)) {
+    stop(message = "S not square in rwish().\n")
+  }
+  if (v < nrow(S)) {
+    stop(message = "v is less than the dimension of S in rwish().\n")
+  }
+  p <- nrow(S)
+  CC <- chol(S)
+  Z <- matrix(0, p, p)
+  diag(Z) <- sqrt(rchisq(p, v:(v - p + 1)))
+  if (p > 1) {
+    pseq <- 1:(p - 1)
+    Z[rep(p * pseq, pseq) + unlist(lapply(pseq, seq))] <- rnorm(p * (p - 1)/2)
+  }
+  return(crossprod(Z %*% CC))
+}
+### Taken from MCMCpack riwish
+riwish <- function(v, S){
+  return(solve(rwish(v, solve(S))))
+}
+
 logdinvGamma <- function(x, shape, rate){
   alpha <- shape
   beta <- 1/rate
