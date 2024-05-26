@@ -44,52 +44,53 @@ idx <- N + 1
 
 test_that("run_factor", {
   expect_snapshot(
-    LNR_factor[[1]]$samples$theta_lambda[,,idx]
+    LNR_factor[[1]]$samples$theta_lambda[,,idx], variant = Sys.info()[1]
   )
   expect_snapshot(
-    LNR_factor[[1]]$samples$alpha[,,idx]
+    LNR_factor[[1]]$samples$alpha[,,idx], variant = Sys.info()[1]
   )
   expect_snapshot(
-    LNR_factor[[1]]$samples$theta_mu[,idx]
+    LNR_factor[[1]]$samples$theta_mu[,idx],variant = Sys.info()[1]
   )
   expect_snapshot(
-    LNR_factor[[1]]$samples$theta_var[,,idx]
+    LNR_factor[[1]]$samples$theta_var[,,idx], variant = Sys.info()[1]
   )
 })
 
 test_that("run_diag", {
   expect_snapshot(
-    LNR_diag[[1]]$samples$alpha[,,idx]
+    LNR_diag[[1]]$samples$alpha[,,idx], variant = Sys.info()[1]
   )
   expect_snapshot(
-    LNR_diag[[1]]$samples$theta_mu[,idx]
+    LNR_diag[[1]]$samples$theta_mu[,idx], variant = Sys.info()[1]
   )
   expect_snapshot(
-    LNR_diag[[1]]$samples$theta_var[,,idx]
+    LNR_diag[[1]]$samples$theta_var[,,idx], variant = Sys.info()[1]
   )
 })
 
 test_that("run_blocked", {
   expect_snapshot(
-    LNR_blocked[[1]]$samples$alpha[,,idx]
+    LNR_blocked[[1]]$samples$alpha[,,idx], variant = Sys.info()[1]
   )
   expect_snapshot(
-    LNR_blocked[[1]]$samples$theta_mu[,idx]
+    LNR_blocked[[1]]$samples$theta_mu[,idx], variant = Sys.info()[1]
   )
   expect_snapshot(
-    LNR_blocked[[1]]$samples$theta_var[,,idx]
+    LNR_blocked[[1]]$samples$theta_var[,,idx], variant = Sys.info()[1]
   )
 })
 
 test_that("run_single", {
   expect_snapshot(
-    LNR_single[[1]]$samples$alpha[,,idx]
+    LNR_single[[1]]$samples$alpha[,,idx], variant = Sys.info()[1]
   )
 })
 
 test_that("run_bridge", {
   expect_snapshot( # Blocked doesn't have bridge sampling yet
-    compare(list(single = LNR_single, diag = LNR_diag, factor = LNR_factor), filter = "preburn", cores_for_props = 1)
+    compare(list(single = LNR_single, diag = LNR_diag, factor = LNR_factor), filter = "preburn", cores_for_props = 1),
+    variant = Sys.info()[1]
   )
 })
 

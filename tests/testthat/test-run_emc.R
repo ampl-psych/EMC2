@@ -23,12 +23,12 @@ idx <- LNR_s[[1]]$samples$idx
 
 test_that("run_emc", {
   expect_snapshot(
-    LNR_s[[1]]$samples$theta_mu[,idx]
+    LNR_s[[1]]$samples$theta_mu[,idx], variant = Sys.info()[1]
   )
   expect_snapshot(
-    LNR_s[[1]]$samples$alpha[,,idx]
+    LNR_s[[1]]$samples$alpha[,,idx], variant = Sys.info()[1]
   )
   expect_snapshot(
-    LNR_s[[1]]$samples$theta_var[,,idx]
+    LNR_s[[1]]$samples$theta_var[,,idx], variant = Sys.info()[1]
   )
 })
