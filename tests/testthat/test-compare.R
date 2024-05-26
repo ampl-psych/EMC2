@@ -9,8 +9,8 @@ test_that("compare", {
 
 test_that("savage-dickey", {
   expect_snapshot(
-    savage_dickey(samplers_LNR, parameter = "m", do_plot = F, H0 = -1))
+    round(savage_dickey(samplers_LNR, parameter = "m", do_plot = F, H0 = -1), 3))
   expect_snapshot(
-    savage_dickey(samplers_LNR, fun = function(d) d["m"] - d["m_lMd"],
-                  H0 = -0.5, do_plot = F))
+    round(savage_dickey(samplers_LNR, fun = function(d) d["m"] - d["m_lMd"],
+                  H0 = -0.5, do_plot = F), 3))
 })

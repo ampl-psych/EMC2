@@ -27,70 +27,70 @@ set.seed(123)
 # Only preburn, so bit risky since adapt could fail
 N <- 50
 
-LNR_factor <- init_chains(LNR_factor, cores_per_chain = 2, cores_for_chains = 2, particles = 10)
-LNR_factor <- run_samplers(LNR_factor, cores_per_chain = 2, cores_for_chains = 2, stop_criteria = list(iter = N), stage = "preburn")
+LNR_factor <- init_chains(LNR_factor, cores_for_chains = 1, particles = 10)
+LNR_factor <- run_samplers(LNR_factor, cores_for_chains = 1, stop_criteria = list(iter = N), stage = "preburn")
 
-LNR_diag <- init_chains(LNR_diag, cores_per_chain = 2, cores_for_chains = 2, particles = 10)
-LNR_diag <- run_samplers(LNR_diag, cores_per_chain = 2, cores_for_chains = 2, stop_criteria = list(iter = N), stage = "preburn")
+LNR_diag <- init_chains(LNR_diag, cores_for_chains = 1, particles = 10)
+LNR_diag <- run_samplers(LNR_diag, cores_for_chains = 1, stop_criteria = list(iter = N), stage = "preburn")
 
-LNR_blocked <- init_chains(LNR_blocked, cores_per_chain = 2, cores_for_chains = 2, particles = 10)
-LNR_blocked <- run_samplers(LNR_blocked, cores_per_chain = 2, cores_for_chains = 2, stop_criteria = list(iter = N), stage = "preburn")
+LNR_blocked <- init_chains(LNR_blocked, cores_for_chains = 1, particles = 10)
+LNR_blocked <- run_samplers(LNR_blocked, cores_for_chains = 1, stop_criteria = list(iter = N), stage = "preburn")
 
-LNR_single <- init_chains(LNR_single, cores_per_chain = 2, cores_for_chains = 2, particles = 10)
-LNR_single <- run_samplers(LNR_single, cores_per_chain = 2, cores_for_chains = 2, stop_criteria = list(iter = N), stage = "preburn")
+LNR_single <- init_chains(LNR_single, cores_for_chains = 1, particles = 10)
+LNR_single <- run_samplers(LNR_single, cores_for_chains = 1, stop_criteria = list(iter = N), stage = "preburn")
 
 
 idx <- N + 1
 
-# Future tests could also look at bridge sampling?
 test_that("run_factor", {
   expect_snapshot(
-    LNR_factor[[1]]$samples$theta_lambda[,,idx]
+    LNR_factor[[1]]$samples$theta_lambda[,,idx], variant = Sys.info()[1]
   )
   expect_snapshot(
-    LNR_factor[[1]]$samples$alpha[,,idx]
+    LNR_factor[[1]]$samples$alpha[,,idx], variant = Sys.info()[1]
   )
   expect_snapshot(
-    LNR_factor[[1]]$samples$theta_mu[,idx]
+    LNR_factor[[1]]$samples$theta_mu[,idx],variant = Sys.info()[1]
   )
   expect_snapshot(
-    LNR_factor[[1]]$samples$theta_var[,,idx]
+    LNR_factor[[1]]$samples$theta_var[,,idx], variant = Sys.info()[1]
   )
 })
 
 test_that("run_diag", {
   expect_snapshot(
-    LNR_diag[[1]]$samples$alpha[,,idx]
+    LNR_diag[[1]]$samples$alpha[,,idx], variant = Sys.info()[1]
   )
   expect_snapshot(
-    LNR_diag[[1]]$samples$theta_mu[,idx]
+    LNR_diag[[1]]$samples$theta_mu[,idx], variant = Sys.info()[1]
   )
   expect_snapshot(
-    LNR_diag[[1]]$samples$theta_var[,,idx]
+    LNR_diag[[1]]$samples$theta_var[,,idx], variant = Sys.info()[1]
   )
 })
 
 test_that("run_blocked", {
   expect_snapshot(
-    LNR_blocked[[1]]$samples$alpha[,,idx]
+    LNR_blocked[[1]]$samples$alpha[,,idx], variant = Sys.info()[1]
   )
   expect_snapshot(
-    LNR_blocked[[1]]$samples$theta_mu[,idx]
+    LNR_blocked[[1]]$samples$theta_mu[,idx], variant = Sys.info()[1]
   )
   expect_snapshot(
-    LNR_blocked[[1]]$samples$theta_var[,,idx]
+    LNR_blocked[[1]]$samples$theta_var[,,idx], variant = Sys.info()[1]
   )
 })
 
 test_that("run_single", {
   expect_snapshot(
-    LNR_single[[1]]$samples$alpha[,,idx]
+    LNR_single[[1]]$samples$alpha[,,idx], variant = Sys.info()[1]
   )
 })
 
 test_that("run_bridge", {
   expect_snapshot( # Blocked doesn't have bridge sampling yet
-    compare(list(single = LNR_single, diag = LNR_diag, factor = LNR_factor), filter = "preburn", cores_for_props = 1)
+    compare(list(single = LNR_single, diag = LNR_diag, factor = LNR_factor), filter = "preburn", cores_for_props = 1),
+    variant = Sys.info()[1]
   )
 })
 

@@ -56,7 +56,7 @@
 <text transform='translate(12.96,280.80) rotate(-90)' text-anchor='middle' style='font-size: 12.00px; font-family: sans;' textLength='40.02px' lengthAdjust='spacingAndGlyphs'>Density</text>
 </g>
 <g clip-path='url(#cpNTkuMDR8Njg5Ljc2fDU5LjA0fDUwMi41Ng==)'>
-<line x1='59.04' y1='486.60' x2='689.76' y2='486.60' style='stroke-width: 0.075; stroke: #BEBEBE;' />
+<line x1='59.04' y1='486.60' x2='689.76' y2='486.60' style='stroke-width: 0.19; stroke: #BEBEBE;' />
 <line x1='464.53' y1='502.56' x2='464.53' y2='59.04' style='stroke-width: 0.75;' />
 </g>
 </svg>
