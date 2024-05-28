@@ -24,6 +24,7 @@ NumericMatrix Ntransform_fMRI(NumericMatrix x) {
 
 double c_log_likelihood_fMRI(NumericVector pars, DataFrame data, NumericMatrix designMatrix, double min_ll){
   int n = data.nrow();
+  NumericVector data_use = data["Str"];
   NumericVector y_hat(n);
   NumericVector out(n);
   int n_regr = designMatrix.ncol() - 1;
@@ -35,13 +36,13 @@ double c_log_likelihood_fMRI(NumericVector pars, DataFrame data, NumericMatrix d
   double tmp2;
   double tmp3;
   for(int j = 0; j < n; j ++){
-    tmp = data[j];
-    // tmp2 = y_hat[j] - mean_y_hat;
-    tmp3 = exp(pars[n_regr + 1]);
-    // Rcout << tmp;
-    // Rcout << tmp2;
-    Rcout << tmp3;
-    // out[j] = R::dnorm4(data[j], y_hat[j] - mean_y_hat, exp(pars[n_regr + 1]), true);
+    // tmp = data[j];
+    // // tmp2 = y_hat[j] - mean_y_hat;
+    // tmp3 = exp(pars[n_regr + 1]);
+    // // Rcout << tmp;
+    // // Rcout << tmp2;
+    // Rcout << tmp3;
+    out[j] = R::dnorm4(data_use[j], y_hat[j] - mean_y_hat, exp(pars[n_regr + 1]) + 0.001, true);
   }
   out[out < min_ll] = min_ll;
   return(sum(out));
