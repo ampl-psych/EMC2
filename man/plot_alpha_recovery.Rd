@@ -2,10 +2,7 @@
 % Please edit documentation in R/plotting.R
 \name{plot_alpha_recovery}
 \alias{plot_alpha_recovery}
-\title{plot_alpha_recovery
-Uses output from plot_pars to plot true vs. estimated (median with CI) alpha
-parameters for each subject (plot density must be called with true values passed
-through the pars argument).}
+\title{Plots recovery of subject-level parameters}
 \usage{
 plot_alpha_recovery(
   tabs,
@@ -26,16 +23,16 @@ plot_alpha_recovery(
 \arguments{
 \item{tabs}{Tables of actual and estimated alpha parameters (with CIs) from plot_pars}
 
-\item{layout}{A 2-vector specifying the layout as in \code{par(mfrow = layout)}}
+\item{layout}{A vector specifying the layout as in \code{par(mfrow = layout)}}
 
-\item{do_ci}{Boolean (Default TRUE). Add CIs to plot?}
+\item{do_ci}{Boolean (Default TRUE). Add credible intervals to plot?}
 
 \item{ci_col}{Color of CI.}
 
 \item{cap}{Width of CI cap (passed to arrows)}
 
-\item{do_rmse}{Boolean (default FALSE) Add root-mean squared error to plot
-instead of default Pearson correlation}
+\item{do_rmse}{Boolean. If \code{TRUE} will add root-mean squared error to plot.
+If \code{FALSE} will instead plot the Pearson correlation}
 
 \item{r_pos}{Position of Pearson/RMSE (passed to legend)}
 
@@ -56,8 +53,6 @@ add Spearman correlation)}
 Invisible list with RMSE, coverage and Pearson and Spearman correlations.
 }
 \description{
-plot_alpha_recovery
-Uses output from plot_pars to plot true vs. estimated (median with CI) alpha
-parameters for each subject (plot density must be called with true values passed
-through the pars argument).
+Uses output from \code{plot_pars} to plot true vs. estimated (median with CI)
+parameters for each subject.
 }

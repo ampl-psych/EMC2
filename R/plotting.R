@@ -112,18 +112,18 @@ plot_acfs <- function(samples,layout=NULL,subject=1,
   }
 }
 
-#' plot_alpha_recovery
-#' Uses output from plot_pars to plot true vs. estimated (median with CI) alpha
-#' parameters for each subject (plot density must be called with true values passed
-#' through the pars argument).
+#' Plots recovery of subject-level parameters
+#'
+#' Uses output from ``plot_pars`` to plot true vs. estimated (median with CI)
+#' parameters for each subject.
 #'
 #' @param tabs Tables of actual and estimated alpha parameters (with CIs) from plot_pars
-#' @param layout A 2-vector specifying the layout as in `par(mfrow = layout)`
-#' @param do_ci Boolean (Default TRUE). Add CIs to plot?
+#' @param layout A vector specifying the layout as in `par(mfrow = layout)`
+#' @param do_ci Boolean (Default TRUE). Add credible intervals to plot?
 #' @param ci_col Color of CI.
 #' @param cap Width of CI cap (passed to arrows)
-#' @param do_rmse Boolean (default FALSE) Add root-mean squared error to plot
-#' instead of default Pearson correlation
+#' @param do_rmse Boolean. If ``TRUE`` will add root-mean squared error to plot.
+#' If ``FALSE`` will instead plot the Pearson correlation
 #' @param r_pos Position of Pearson/RMSE (passed to legend)
 #' @param rmse_digits Digits for RMSE
 #' @param pearson_digits Digits for Pearson correlation
@@ -323,7 +323,7 @@ plot_defective_density <- function(data,subject=NULL,factors=NULL,
 #' to return invisibly
 #' @param pars Named vector or matrix of known/simulated parameters, or the output of
 #' ``plot_pars``, in which case the posterior medians are extracted. If `xlim` is not supplied,
-#  the plot will be adjusted to include the parameter values, which are plotted as vertical lines.
+#' the plot will be adjusted to include the parameter values, which are plotted as vertical lines.
 #' @param probs Vector. The quantiles of the selected parameters to return invisibly.
 #' @param bw number or string bandwidth for density (default `nrd0`). See ``?density()``.
 #' @param adjust Numeric. Density function bandwidth adjustment parameter. See ``?density()``.
