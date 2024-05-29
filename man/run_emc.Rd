@@ -78,7 +78,7 @@ General purpose function to estimate models specified in EMC2.
 or a single list in which case its assumed to be for the sample \code{stage} (see examples).
 The potential stop criteria to be set are:
 
-\code{selection} (character vector): For which parameter types (e.g. \code{covariance} or \code{alpha}) the \code{stop_criteria} should hold
+\code{selection} (character vector): For which parameter types (e.g. "covariance" or "alpha") the \code{stop_criteria} should hold
 
 \code{mean_gd} (numeric): The mean Gelman-Rubin diagnostic across all parameters in the selection
 
