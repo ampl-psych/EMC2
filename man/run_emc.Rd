@@ -78,7 +78,7 @@ General purpose function to estimate models specified in EMC2.
 or a single list in which case its assumed to be for the sample \code{stage} (see examples).
 The potential stop criteria to be set are:
 
-\code{selection} (character vector): For which parameters the \code{stop_criteria} should hold
+\code{selection} (character vector): For which parameter types (e.g. \code{covariance} or \code{alpha}) the \code{stop_criteria} should hold
 
 \code{mean_gd} (numeric): The mean Gelman-Rubin diagnostic across all parameters in the selection
 
@@ -91,6 +91,8 @@ The potential stop criteria to be set are:
 \code{omit_mpsrf} (Boolean): Whether to include the multivariate point-scale reduction factor in the Gelman-Rubin diagnostic. Default is \code{FALSE}.
 
 \code{iter} (integer): The number of MCMC samples to collect.
+
+The default stop_criteria for each stage can be accessed using \code{get_stop_criteria(stage)}.
 
 The estimation is performed using particle-metropolis within-Gibbs sampling.
 For sampling details see:
