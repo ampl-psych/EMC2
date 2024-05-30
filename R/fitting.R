@@ -170,7 +170,11 @@ run_emc <- function(samplers, stage = NULL, iter = 1000, stop_criteria = NULL,
   return(samplers)
 }
 
-#' Set or return the stop criteria associated with a stage
+#' See or return stop criteria
+#'
+#' See or return the stop criteria associated with a sampling stage.
+#'
+#' For an overview of the different criteria see `?run_emc()`
 #'
 #' @param stage A string. Indicates which stage to get the stop_criteria for either ``preburn``, ``burn``, ``adapt`` or ``sample``.
 #' @param stop_criteria A list with stopping criteria. If `NULL` will fill defaults. If already partially specified will fill the rest with defaults.

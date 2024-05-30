@@ -2,7 +2,7 @@
 % Please edit documentation in R/fitting.R
 \name{get_stop_criteria}
 \alias{get_stop_criteria}
-\title{Set or return the stop criteria associated with a stage}
+\title{See or return stop criteria}
 \usage{
 get_stop_criteria(stage = "sample", stop_criteria = NULL, type = "standard")
 }
@@ -19,7 +19,10 @@ The stopping criteria vary between hierarchical and non-hierarchical models (\co
 A list with stopping criteria associated with the stage
 }
 \description{
-Set or return the stop criteria associated with a stage
+See or return the stop criteria associated with a sampling stage.
+}
+\details{
+For an overview of the different criteria see \code{?run_emc()}
 }
 \examples{
 # To see the stop criteria for e.g. the adapt phase
