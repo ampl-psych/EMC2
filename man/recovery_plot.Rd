@@ -18,39 +18,41 @@ recovery_plot(
 )
 }
 \arguments{
-\item{tabs}{Tables of actual and estimated parameters (with CIs) from plot_pars}
+\item{tabs}{A list of matrices containing true and estimated parameters (with CIs), output from \code{plot_pars()}}
 
-\item{layout}{A vector specifying the layout as in \code{par(mfrow = layout)}}
+\item{layout}{A vector specifying the layout as in \code{par(mfrow = layout())}}
 
-\item{do_ci}{Boolean. Add credible intervals to plot?}
+\item{do_ci}{A Boolean. Add CIs to the plot or not? Defaults to \code{TRUE}.}
 
-\item{ci_col}{String. Color of credible interval}
+\item{ci_col}{A character string. Color code of credible interval.}
 
-\item{cap}{Numeric. Width of credible interval cap (passed to \code{arrows})}
+\item{cap}{Numeric. Width of the credible interval caps (passed to \code{arrows()})}
 
-\item{correlation}{String. \code{pearson} or \code{spearman}. Which correlation included in the plot}
+\item{correlation}{String. \code{pearson} or \code{spearman}. Which correlation type should be computed
+and included in the plot?}
 
-\item{cor_pos}{String. Position of the correlation (passed to \code{legend})}
+\item{cor_pos}{Character string. Position of the correlation (passed to \code{legend()})}
 
-\item{stat}{String. \code{coverage} or \code{rmse}. Which statistic included in the plot}
+\item{stat}{Character string. 95 percent \code{coverage} or \code{rmse}. Which statistic
+should be included in the plot?}
 
-\item{stat_pos}{String. Position of the stat (passed to \code{legend})}
+\item{stat_pos}{Character string. Position of \code{stat} within the plot (passed to \code{legend()})}
 
-\item{digits}{Integer. Number of digits included in the plot for the correlation and stat.}
+\item{digits}{Integer. Number of digits included in the plot for the correlation and \code{stat}.}
 }
 \value{
-Invisible list with RMSE, coverage and Pearson and Spearman correlations.
+Invisible list with RMSE, coverage, and Pearson and Spearman correlations.
 }
 \description{
-Uses output from \code{plot_pars} to plot generating vs. estimated (median with CI)
-parameters for a simulation study.
+Uses output from \code{plot_pars} to plot generating vs. estimated (median with credible
+interval; CI) parameters to look at parameter recovery.
 }
 \examples{
-# Make up some values that resemble our posteriors
+# Make up some values that resemble posterior samples
 # Normally this would be true values that were used to simulate the data
 pmat <- matrix(rnorm(12, mean = c(-1, -.6, -.4, -1.5), sd = .01), ncol = 4, byrow = TRUE)
-# This matrix needs to have the appropriate names
-# Conventionally this would be created before make data with true values
+# The matrix needs to have the appropriate names
+# Conventionally this would be created before one makes data with true values
 colnames(pmat) <- c("m", "m_lMd", "s", "t0")
 rownames(pmat) <- c("as1t", "bd6t", "bl1t")
 # First use plot_pars

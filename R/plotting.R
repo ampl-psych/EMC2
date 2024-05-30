@@ -114,27 +114,29 @@ plot_acfs <- function(samples,layout=NULL,subject=1,
 
 #' Plots recovery of parameters
 #'
-#' Uses output from ``plot_pars`` to plot generating vs. estimated (median with CI)
-#' parameters for a simulation study.
+#' Uses output from ``plot_pars`` to plot generating vs. estimated (median with credible
+#' interval; CI) parameters to look at parameter recovery.
 #'
-#' @param tabs Tables of actual and estimated parameters (with CIs) from plot_pars
-#' @param layout A vector specifying the layout as in `par(mfrow = layout)`
-#' @param do_ci Boolean. Add credible intervals to plot?
-#' @param ci_col String. Color of credible interval
-#' @param cap Numeric. Width of credible interval cap (passed to ``arrows``)
-#' @param correlation String. ``pearson`` or ``spearman``. Which correlation included in the plot
-#' @param cor_pos String. Position of the correlation (passed to ``legend``)
-#' @param stat String. ``coverage`` or ``rmse``. Which statistic included in the plot
-#' @param stat_pos String. Position of the stat (passed to ``legend``)
-#' @param digits Integer. Number of digits included in the plot for the correlation and stat.
+#' @param tabs A list of matrices containing true and estimated parameters (with CIs), output from `plot_pars()`
+#' @param layout A vector specifying the layout as in `par(mfrow = layout())`
+#' @param do_ci A Boolean. Add CIs to the plot or not? Defaults to `TRUE`.
+#' @param ci_col A character string. Color code of credible interval.
+#' @param cap Numeric. Width of the credible interval caps (passed to ``arrows()``)
+#' @param correlation String. ``pearson`` or ``spearman``. Which correlation type should be computed
+#' and included in the plot?
+#' @param cor_pos Character string. Position of the correlation (passed to ``legend()``)
+#' @param stat Character string. 95 percent ``coverage`` or ``rmse``. Which statistic
+#' should be included in the plot?
+#' @param stat_pos Character string. Position of `stat` within the plot (passed to ``legend()``)
+#' @param digits Integer. Number of digits included in the plot for the correlation and `stat`.
 #'
-#' @return Invisible list with RMSE, coverage and Pearson and Spearman correlations.
+#' @return Invisible list with RMSE, coverage, and Pearson and Spearman correlations.
 #' @examples
-#' # Make up some values that resemble our posteriors
+#' # Make up some values that resemble posterior samples
 #' # Normally this would be true values that were used to simulate the data
 #' pmat <- matrix(rnorm(12, mean = c(-1, -.6, -.4, -1.5), sd = .01), ncol = 4, byrow = TRUE)
-#' # This matrix needs to have the appropriate names
-#' # Conventionally this would be created before make data with true values
+#' # The matrix needs to have the appropriate names
+#' # Conventionally this would be created before one makes data with true values
 #' colnames(pmat) <- c("m", "m_lMd", "s", "t0")
 #' rownames(pmat) <- c("as1t", "bd6t", "bl1t")
 #' # First use plot_pars
