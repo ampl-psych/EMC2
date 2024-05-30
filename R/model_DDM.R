@@ -42,24 +42,52 @@ pDDM <- function(rt,R,pars,precision=2.5)
              sz = pars[,"sz"], sv = pars[,"sv"],st0 = pars[,"st0"], s = pars[,"s"])
 }
 
+
 #' The Diffusion Decision Model
 #'
-#' The Diffusion Decision Model, proposes that decisions between two alternatives are determined based on one accumulator.
-#' This accumulator drifts to an upper threshold or a lower threshold. The first threshold it reaches determines the choice made.
-#' The time taken to reach the threshold drives the response time. For details see `Ratcliff & McKoon, 2008`.
+#' Model file to estimate the Diffusion Decision Model (DDM) in EMC2.
 #'
-#' The core parameters of the DDM are the drift rate `v`, the boundary separation `a`,
-#' within trial variation in drift rate `s`, bias to either threshold `Z`, and non-decision time `t0`.
-#' Frequently `s` is fixed to 1 to satisfy scaling constraints.
-#' Furthermore, we can estimate between trial variation in drift rate `sv`, non-decision time `st0`, and variability in bias `SZ`. Note that computing for these parameters is slower.
-#' Lastly `DP` comprises the difference in non-decision time for each response option.
+#' Model files are almost exclusively used in `make_design()`.
 #'
-#' We sample `a, t0, sv, st0, s` on the log scale because these parameters should be strictly positive
-#' We sample `Z, SZ and DP` on the probit scale because they should be strictly between 0 and 1.
-#' Here `Z` is estimated as the ratio of bias to one boundary, where 0 is complete bias to lower boundary and 1 complete bias to upper boundary
-#' `DP` is estimated as a ratio of lower/higher `t0` relative to the `t0 parameter`
-#' @return A model list with all the necessary functions to sample
+#' @details
+#'
+#' Default values are used for all parameters that are not explicitly listed in the `formula`
+#' argument of `make_design()`.They can also be accessed with `DDM()$p_types`.
+#'
+#' | **Parameter** | **Transform** | **Natural scale** | **Default**   | **Mapping**                    | **Interpretation**                                            |
+#' |-----------|-----------|---------------|-----------|----------------------------|-----------------------------------------------------------|
+#' | *v*       | -         | \[-Inf, Inf\]     | 1         |                            | Mean evidence-accumulation rate (drift rate)              |
+#' | *a*       | log       | \[0, Inf\]        | log(1)    |                            | Boundary separation                                       |
+#' | *t0*      | log       | \[0, Inf\]        | log(0)    |                            | Non-decision time                                         |
+#' | *s*       | log       | \[0, Inf\]        | log(1)    |                            | Within-trial standard deviation of drift rate            |
+#' | *Z*       | probit    | \[0, 1\]        | qnorm(0.5)| *z* = *Z* x *a*                  | Relative start point (bias)                              |
+#' | *SZ*      | probit    | \[0, 1\]        | qnorm(0)  | *sz* = 2 x *SZ* x min(*a* x *Z*, *a* x (1-*Z*)) | Relative between-trial variation in start point       |
+#' | *sv*      | log       | \[0, Inf\]        | log(0)    |                            | Between-trial standard deviation of drift rate           |
+#' | *st0*     | log       | \[0, Inf\]        | log(0)    |                            | Between-trial variation (range) in non-decision time    |
+#' | *DP*      | probit    | \[0, 1\]        | qnorm(0.5)| *dp* = *t0* x (2 x *DP* -1)     | Relative difference in non-decision time between responses |
+#'
+#' `a`, `t0`, `sv`, `st0`, `s` are sampled on the log scale because these parameters are strictly positive,
+#' `Z`, `SZ` and `DP` are sampled on the probit scale because they should be strictly between 0 and 1.
+#'
+#' `Z` is estimated as the ratio of bias to one boundary where 0.5 means no bias.
+#' `DP` comprises the difference in non-decision time for each response option.
+#'
+#' Conventionally, `sv` is fixed to 1 to satisfy scaling constraints.
+#'
+#' See Ratcliff, R., & McKoon, G. (2008).
+#' The diffusion decision model: theory and data for two-choice decision tasks.
+#' *Neural computation, 20*(4), 873-922. doi:10.1162/neco.2008.12-06-420.
+#'
+#' @return A model list with all the necessary functions for EMC2 to sample
+#' @examples
+#' design_DDMaE <- make_design(data = forstmann,model=DDM,
+#'                            formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
+#'                            constants=c(s=log(1)))
+#' # For all parameters that are not defined in the formula, default values are assumed
+#' # (see Table above).
+#'
 #' @export
+#'
 
 DDM <- function(){
   list(

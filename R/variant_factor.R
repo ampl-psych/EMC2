@@ -11,8 +11,8 @@ sample_store_factor <- function(data, par_names, iters = 1, stage = "init", inte
     theta_var = array(NA_real_,dim = c(n_pars, n_pars, iters),dimnames = list(par_names, par_names, NULL)),
     theta_lambda = array(NA_real_,dim = c(n_pars, n_factors, iters),dimnames = list(par_names, NULL, NULL)),
     lambda_untransf = array(NA_real_,dim = c(n_pars, n_factors, iters),dimnames = list(par_names, NULL, NULL)),
-    theta_sig_err_inv = array(NA_real_,dim = c(n_pars, n_pars, iters),dimnames = list(par_names, par_names, NULL)),
-    theta_psi_inv = array(NA_real_, dim = c(n_factors, n_factors, iters), dimnames = list(NULL, NULL, NULL)),
+    theta_sig_err_inv = array(NA_real_,dim = c(n_pars, iters),dimnames = list(par_names, NULL)),
+    theta_psi_inv = array(NA_real_, dim = c(n_factors, iters), dimnames = list(NULL, NULL)),
     theta_eta = array(NA_real_, dim = c(n_subjects, n_factors, iters), dimnames = list(subject_ids, NULL, NULL))
   )
   if(integrate) samples <- c(samples, base_samples)
@@ -26,42 +26,11 @@ add_info_factor <- function(sampler, prior = NULL, ...){
   n_factors <- args$n_factors
   constraintMat <- args$constraintMat
   n_pars <- sum(!(sampler$nuisance | sampler$grouped))
-  if(is.null(prior)){
-    prior <- list()
-  }
-  if (is.null(prior$theta_mu_mean)) {
-    prior$theta_mu_mean <- rep(0, n_pars)
-  }
-  if(is.null(prior$theta_mu_var)){
-    prior$theta_mu_var <- rep(1, n_pars)
-  }
-  if(is.null(prior$theta_lambda_var)){
-    prior$theta_lambda_var <- 1
-  }
-  if(is.null(prior$a)){
-    prior$al <- 1
-  }
-  if(is.null(prior$b)){
-    prior$bl <- 1/2
-  }
-  if(is.null(prior$nu)){
-    prior$nu <- 2
-  }
-  if(is.null(prior$s2)){
-    prior$s2 <- 1/2
-  }
-  prior$R_0 <- diag(n_factors)
-  prior$rho_0 <- 5
-  # Things I save rather than re-compute inside the loops.
-  prior$theta_mu_invar <- diag(1/prior$theta_mu_var)
-  prior$theta_lambda_invar <-1/prior$theta_lambda_var
-
   if(is.null(constraintMat)){
     constraintMat <- matrix(Inf, nrow = n_pars, ncol = n_factors)
     diag(constraintMat) <- 1
-    constraintMat[upper.tri(constraintMat, diag = F)] <- 0 #Now you can't fix one of the diagonal values to 0
+    constraintMat[upper.tri(constraintMat, diag = F)] <- 0
   }
-
   if(!is.null(args$signFix)){
     signFix <- args$signFix
   } else{
@@ -71,9 +40,144 @@ add_info_factor <- function(sampler, prior = NULL, ...){
   attr(sampler, "signFix") <- signFix
   attr(sampler, "constraintMat") <- constraintMat
 
-  sampler$prior <- prior
+  sampler$prior <- get_prior_factor(prior, sum(!(sampler$nuisance | sampler$grouped)), sample = F, n_factors = n_factors)
   sampler$n_factors <- n_factors
   return(sampler)
+}
+
+
+#' Prior specification and prior sampling for factor estimation
+#'
+#' To get the default priors for a given design: `get_prior_factor(design = design, sample = FALSE)`
+#'
+#' For details see Ghosh, J., & Dunson, D. B. (2009).
+#' Default prior distributions and efficient posterior computation in Bayesian factor analysis.
+#' *Journal of Computational and Graphical Statistics*, 18, 306-320. or
+#' Stevenson, N., Innes, R. J., Gronau, Q. F., Miletic, S., Heathcote, A., PhD,
+#' Forstmann, B., & Brown, S. (2024). Using group level factor models to resolve
+#' high dimensionality in model-based sampling. https://doi.org/10.31234/osf.io/pn3wv.
+#'
+#' Note that if `sample = FALSE`, prior$theta_mu_invar (the inverse of the prior covariance matrix on the group-level mean) is returned,
+#' which is only used for computational efficiency
+#'
+#' @param prior A named list that can contain the prior mean (`theta_mu_mean`) and
+#' variance (`theta_mu_var`) on the group-level mean; the variance of the loadings (`theta_lambda_var`);
+#' shape and rate of the factor variances (`ap` and `bp`) and shape and rate of the residual variances
+#' (`as` and `bs`). For `NULL` entries, the default prior is is used.
+#' @param n_pars Often inferred from the design, but if `design = NULL`, `n_pars`
+#' will be used to determine the size of prior.
+#' @param sample Whether to sample from the prior or to simply return the prior. Default is TRUE,
+#' @param map Boolean, defaults to `TRUE`. If `sample = TRUE`, the implied prior is sampled.
+#' This includes back-transformations for naturally bounded parameters such as
+#' the non-decision time and an inverse mapping from the design matrix back to the
+#' cells of the design. If `FALSE`, the transformed, unmapped, parameters are used.
+#' Note that `map` does not affect the prior used in the sampling process.
+#' @param N How many samples to draw from the prior, the default is 1e5
+#' @param design The design obtained from `make_design()`, required when `map = TRUE`
+#' @param type  Character. If `sample = TRUE`, what priors to sample from. Options:
+#' `"mu"`, `"variance"`, `"covariance"`, `"full_var"`, `"alpha"`, `"loadings"`.
+#' @param n_factors Integer. The number of factors.
+#'
+#' @return A list with a single entry of type of samples from the prior (if `sample = TRUE`) or else a prior object
+#' @examples \dontrun{
+#' # First define a design for the model
+#' design_DDMaE <- make_design(data = forstmann,model=DDM,
+#'                            formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
+#'                            constants=c(s=log(1)))
+#' # Now get the default prior
+#' prior <- get_prior_factor(design = design_DDMaE, sample = FALSE)
+#' # We can change values in the default prior or use make_prior
+#' # Then we can get samples from this prior e.g.
+#' samples <- get_prior_factor(prior = prior, design = design_DDMaE,
+#'   sample = TRUE, type = "mu", n_factors = 3)
+#' }
+#' @export
+get_prior_factor <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, type = "mu", design = NULL,
+                             map = FALSE, n_factors = 5){
+
+  if(is.null(prior)){
+    prior <- list()
+  }
+  if(!is.null(design)){
+    n_pars <- length(attr(design, "p_vector"))
+  }
+  if (is.null(prior$theta_mu_mean)) {
+    prior$theta_mu_mean <- rep(0, n_pars)
+  }
+  if(is.null(prior$theta_mu_var)){
+    prior$theta_mu_var <- rep(1, n_pars)
+  }
+  if(is.null(prior$theta_lambda_var)){
+    prior$theta_lambda_var <- .7
+  }
+  if(is.null(prior$ap)){
+    prior$ap <- 2
+  }
+  if(is.null(prior$bp)){
+    prior$bp <- .5
+  }
+  if(is.null(prior$as)){
+    prior$as <- 2
+  }
+  if(is.null(prior$bs)){
+    prior$bs <- .1
+  }
+  # prior$R_0 <- diag(n_factors)
+  # prior$rho_0 <- 5
+  # Things I save rather than re-compute inside the loops.
+  prior$theta_mu_invar <- diag(1/prior$theta_mu_var)
+  prior$theta_lambda_invar <-1/prior$theta_lambda_var
+  if(sample){
+    out <- list()
+    if(!type %in% c("mu", "variance", "covariance", "correlation", "full_var", "loadings")){
+      stop("for variant factor, you can only specify the prior on the mean, variance, covariance, loadings or the correlation of the parameters")
+    }
+    if(type == "mu"){
+      samples <- mvtnorm::rmvnorm(N, mean = prior$theta_mu_mean,
+                                  sigma = diag(prior$theta_mu_var))
+      if(!is.null(design)){
+        colnames(samples) <- par_names <- names(attr(design, "p_vector"))
+        if(map){
+          samples <- map_mcmc(samples,design,design$model,include_constants=FALSE)
+        }
+      }
+      out$mu <- samples
+      return(out)
+    } else if(type == "loadings") {
+      out$loadings <- matrix(rnorm(N, mean = 0, sd = prior$theta_lambda_var^2), ncol = 1)
+      colnames(out$loadings) <- "loadings"
+      return(out)
+    } else{
+      var <- array(NA_real_, dim = c(n_pars, n_pars, N))
+      for(i in 1:N){
+        sigma <- 1/rgamma(n_pars, prior$as, prior$bs)
+        psi <- 1/rgamma(n_factors, prior$ap, prior$bp)
+        lambda <- matrix(rnorm(n_pars*n_factors, sd = prior$theta_lambda_var^2), nrow = n_pars, ncol = n_factors)
+        cov_tmp <- lambda %*% diag(psi, n_factors) %*% t(lambda) + diag(sigma)
+        var[,,i] <- cov_tmp
+      }
+      if (type == "variance") {
+        vars_only <- t(apply(var,3,diag))
+        if(!is.null(design)){
+          colnames(vars_only) <- names(attr(design, "p_vector"))
+        }
+        out$variance <- vars_only
+      }
+      lt <- lower.tri(var[,,1])
+      if (type == "correlation"){
+        corrs <- array(apply(var,3,cov2cor),dim=dim(var),dimnames=dimnames(var))
+        out$correlation <- t(apply(corrs,3,function(x){x[lt]}))
+      }
+      if(type == "covariance"){
+        out$covariance <- t(apply(var,3,function(x){x[lt]}))
+      }
+      if (type == "full_var"){
+        out$full_var <- t(apply(var, 3, c))
+      }
+      return(out)
+    }
+  }
+  return(prior)
 }
 
 get_startpoints_factor<- function(pmwgs, start_mu, start_var){
@@ -81,8 +185,8 @@ get_startpoints_factor<- function(pmwgs, start_mu, start_var){
   if (is.null(start_mu)) start_mu <- rnorm(pmwgs$prior$theta_mu_mean, sd = sqrt(pmwgs$prior$theta_mu_var))
   # If no starting point for group var just sample some
   if (is.null(start_var)) start_var <- riwish(n_pars * 3,diag(n_pars))
-  start_psi_inv <- diag(1, pmwgs$n_factors)
-  start_sig_err_inv <- diag(1, n_pars)
+  start_psi_inv <- rep(1, pmwgs$n_factors)
+  start_sig_err_inv <- rep(1, n_pars)
   start_lambda <- matrix(0, nrow = n_pars, ncol = pmwgs$n_factors)
   constraintMat <- attr(pmwgs, "constraintMat")
   start_lambda[constraintMat != Inf] <- constraintMat[constraintMat != Inf]
@@ -95,8 +199,8 @@ get_startpoints_factor<- function(pmwgs, start_mu, start_var){
 fill_samples_factor <- function(samples, group_level, proposals, epsilon, j = 1, n_pars){
   samples$theta_lambda[,,j] <- group_level$lambda
   samples$lambda_untransf[,,j] <- group_level$lambda_untransf
-  samples$theta_sig_err_inv[,,j] <- group_level$sig_err_inv
-  samples$theta_psi_inv[,,j] <- group_level$psi_inv
+  samples$theta_sig_err_inv[,j] <- group_level$sig_err_inv
+  samples$theta_psi_inv[,j] <- group_level$psi_inv
   samples$theta_eta[,,j] <- group_level$eta
   samples <- fill_samples_base(samples, group_level, proposals, epsilon, j = j, n_pars)
   return(samples)
@@ -119,14 +223,14 @@ gibbs_step_factor <- function(sampler, alpha){
   constraintMat <- constraintMat == Inf #For indexing
 
   eta <- matrix(last$eta, n_subjects, n_factors)
-  psi_inv <- matrix(last$psi_inv, n_factors)
-  sig_err_inv <- last$sig_err_inv
+  psi_inv <- diag(last$psi_inv, n_factors)
+  sig_err_inv <- diag(last$sig_err_inv)
   lambda <- matrix(last$lambda, n_pars, n_factors)
   mu <- last$mu
 
   #Update mu
   mu_sig <- solve(n_subjects * sig_err_inv + prior$theta_mu_invar)
-  mu_mu <- mu_sig %*% (sig_err_inv %*% colSums(alpha - eta %*% t(lambda)) + prior$theta_mu_invar%*% prior$theta_mu_mean)
+  mu_mu <- mu_sig %*% (sig_err_inv %*% colSums(alpha - eta %*% t(lambda)) + prior$theta_mu_invar %*% prior$theta_mu_mean)
   mu <- rmvnorm(1, mu_mu, mu_sig)
   colnames(mu) <- colnames(alpha)
   # calculate mean-centered observations
@@ -145,7 +249,7 @@ gibbs_step_factor <- function(sampler, alpha){
   # }
 
   #Update sig_err
-  sig_err_inv <- diag(rgamma(n_pars,shape=(prior$nu+n_subjects)/2, rate=(prior$nu*prior$s2+ colSums((alphatilde - eta %*% t(lambda))^2))/2))
+  sig_err_inv <- diag(rgamma(n_pars,shape=prior$as+n_subjects/2, rate= prior$bs + colSums((alphatilde - eta %*% t(lambda))^2)/2))
 
   #Update lambda
   for (j in 1:n_pars) {
@@ -159,7 +263,7 @@ gibbs_step_factor <- function(sampler, alpha){
   }
 
   #Update psi_inv
-  psi_inv[,] <- diag(rgamma(n_factors ,shape=(prior$al+n_subjects)/2,rate=prior$bl+colSums(eta^2)/2), n_factors)
+  psi_inv[,] <- diag(rgamma(n_factors ,shape=prior$ap+n_subjects/2,rate=prior$bp+colSums(eta^2)/2), n_factors)
   # psi_inv <- diag(n_factors)#solve(riwish(n_subjects + prior$rho_0, t(eta) %*% eta + solve(prior$R_0)))
 
   lambda_orig <- lambda
@@ -174,7 +278,7 @@ gibbs_step_factor <- function(sampler, alpha){
   var <- lambda_orig %*% solve(psi_inv) %*% t(lambda_orig) + diag(1/diag((sig_err_inv)))
   lambda_orig <- lambda_orig %*% matrix(diag(sqrt(1/diag(psi_inv)), n_factors), nrow = n_factors)
   return(list(tmu = mu, tvar = var, lambda_untransf = lambda, lambda = lambda_orig, eta = eta,
-              sig_err_inv = sig_err_inv, psi_inv = psi_inv, alpha = t(alpha)))
+              sig_err_inv = diag(sig_err_inv), psi_inv = diag(psi_inv), alpha = t(alpha)))
 }
 
 last_sample_factor <- function(store) {
@@ -182,16 +286,16 @@ last_sample_factor <- function(store) {
     mu = store$theta_mu[, store$idx],
     eta = store$theta_eta[,,store$idx],
     lambda = store$lambda_untransf[,,store$idx],
-    psi_inv = store$theta_psi_inv[,,store$idx],
-    sig_err_inv = store$theta_sig_err_inv[,,store$idx]
+    psi_inv = store$theta_psi_inv[,store$idx],
+    sig_err_inv = store$theta_sig_err_inv[,store$idx]
   )
 }
 
 get_conditionals_factor <- function(s, samples, n_pars, iteration = NULL, idx = NULL){
   iteration <- ifelse(is.null(iteration), samples$iteration, iteration)
   if(is.null(idx)) idx <- 1:n_pars
-  sig_err <- log(apply(samples$theta_sig_err_inv[idx,idx,],3,diag))
-  psi <- log(apply(samples$theta_psi_inv,3,diag))
+  sig_err <- log(samples$theta_sig_err_inv[idx,])
+  psi <- log(samples$theta_psi_inv)
   eta <- matrix(samples$theta_eta[s,,], nrow = samples$n_factors)
   lambda <- apply(samples$lambda_untransf[idx,,,drop = F], 3, unwind_lambda, samples$constraintMat[idx,])
   theta_mu <- samples$theta_mu[idx,]
@@ -202,8 +306,8 @@ get_conditionals_factor <- function(s, samples, n_pars, iteration = NULL, idx = 
                      dependent.ind = 1:n_pars, given.ind = (n_pars + 1):length(mu_tilde),
                      X.given = c(samples$theta_mu[idx,iteration],
                                  samples$theta_eta[s,,iteration],
-                                 log(diag(samples$theta_sig_err_inv[idx,idx, iteration])),
-                                 log(apply(samples$theta_psi_inv[,,iteration, drop = F], 3, diag)),
+                                 log(samples$theta_sig_err_inv[idx, iteration]),
+                                 log(samples$theta_psi_inv[,iteration, drop = F]),
                                  unwind_lambda(samples$lambda_untransf[idx,, iteration], samples$constraintMat[idx,])))
   return(list(eff_mu = condmvn$condMean, eff_var = condmvn$condVar))
 }
@@ -212,8 +316,8 @@ filtered_samples_factor <- function(sampler, filter){
   out <- list(
     theta_mu = sampler$samples$theta_mu[, filter],
     lambda_untransf = sampler$samples$lambda_untransf[, , filter, drop = F],
-    theta_psi_inv = sampler$samples$theta_psi_inv[, , filter, drop = F],
-    theta_sig_err_inv = sampler$samples$theta_sig_err_inv[, , filter],
+    theta_psi_inv = sampler$samples$theta_psi_inv[, filter, drop = F],
+    theta_sig_err_inv = sampler$samples$theta_sig_err_inv[, filter],
     theta_eta = sampler$samples$theta_eta[, , filter, drop = F],
     theta_var = sampler$samples$theta_var[,,filter],
     alpha = sampler$samples$alpha[, , filter],
@@ -222,51 +326,6 @@ filtered_samples_factor <- function(sampler, filter){
     iteration = length(filter)
   )
 }
-get_all_pars_factor <- function(samples, filter, info){
-  n_subjects <- samples$n_subjects
-  n_iter = length(samples$samples$stage[samples$samples$stage== filter])
-  # Extract relevant objects
-  alpha <- samples$samples$alpha[,,samples$samples$stage== filter]
-  theta_mu <- samples$samples$theta_mu[,samples$samples$stage== filter]
-  lambda <- samples$samples$lambda_untransf[,,samples$samples$stage==filter, drop = F]
-  psi_inv <- samples$samples$theta_psi_inv[,,samples$samples$stage==filter, drop = F]
-  sig_err_inv <- samples$samples$theta_sig_err_inv[,,samples$samples$stage==filter]
-
-  constraintMat <- info$hyper$constraintMat
-  n_factors <- samples$n_factors
-
-  lambda.unwound <- apply(lambda,3,unwind_lambda, constraintMat)
-  sig_err_inv.diag <- log(apply(sig_err_inv, 3, diag))
-  psi_inv.diag <- matrix(log(apply(psi_inv, 3, diag)), nrow = n_factors)
-
-  # Set up
-  n_params<- nrow(alpha) + nrow(theta_mu) + nrow(sig_err_inv.diag) + nrow(psi_inv.diag) + nrow(lambda.unwound)
-  all_samples=array(dim=c(n_subjects,n_params,n_iter))
-  mu_tilde=array(dim = c(n_subjects,n_params))
-  var_tilde=array(dim = c(n_subjects,n_params,n_params))
-
-  for (j in 1:n_subjects){
-    all_samples[j,,] = rbind(alpha[,j,],theta_mu[,],sig_err_inv.diag[,],psi_inv.diag[,],lambda.unwound[,])
-    # calculate the mean for re, mu and sigma
-    mu_tilde[j,] =apply(all_samples[j,,],1,mean)
-    # calculate the covariance matrix for random effects, mu and sigma
-    var_tilde[j,,] = cov(t(all_samples[j,,]))
-  }
-
-  for(i in 1:n_subjects){ #RJI_change: this bit makes sure that the sigma tilde is pos def
-    if(!corpcor::is.positive.definite(var_tilde[i,,], tol=1e-8)){
-      var_tilde[i,,]<-corpcor::make.positive.definite(var_tilde[i,,], tol=1e-6)
-    }
-  }
-
-  X <- cbind(t(theta_mu),t(sig_err_inv.diag),t(psi_inv.diag), t(lambda.unwound))
-  info$n_params <- n_params
-  info$n_factors <- n_factors
-  info$given.ind <- (info$n_randeffect+1):n_params
-  info$X.given_ind <- 1:length(info$given.ind)
-  return(list(X = X, mu_tilde = mu_tilde, var_tilde = var_tilde, info = info))
-}
-
 unwind_lambda <- function(lambda, constraintMat, reverse = F){
   if(reverse){
     out <- constraintMat
@@ -276,42 +335,141 @@ unwind_lambda <- function(lambda, constraintMat, reverse = F){
   }
   return(out)
 }
-group_dist_factor = function(random_effect = NULL, parameters, sample = FALSE, n_samples = NULL, info){
-  n_randeffect <- info$n_randeffect
-  n_factors <- info$n_factors
-  param.theta_mu <- parameters[1:n_randeffect]
-  param.sig_err_inv <- exp(parameters[(n_randeffect+1):(n_randeffect + n_randeffect)])
-  param.psi_inv <- exp(parameters[(n_randeffect+n_randeffect+1):(n_randeffect + n_randeffect+ n_factors)])
-  param.lambda.unwound <- parameters[(n_randeffect+n_randeffect+n_factors+1):length(parameters)]
-  param.lambda <- unwind_lambda(param.lambda.unwound, info$hyper$constraintMat, reverse = T)
-  param.var <- param.lambda %*% diag(1/param.psi_inv, length(param.psi_inv)) %*% t(param.lambda) + diag(1/param.sig_err_inv)
-  if (sample){
-    return(mvtnorm::rmvnorm(n_samples, param.theta_mu, param.var))
-  }else{
-    logw_second<-max(-5000*info$n_randeffect, mvtnorm::dmvnorm(random_effect, param.theta_mu,param.var,log=TRUE))
-    return(logw_second)
-  }
+
+# bridge_sampling ---------------------------------------------------------
+
+bridge_add_info_factor <- function(info, samples){
+  info$n_factors <- samples$n_factors
+  info$constraintMat <- attr(samples, "constraintMat")
+  # Free loadings + group-level mean + factor variances + residual variances
+  # note not factor scores, since we use the marginal model as adviced by Merkle et al. 2023
+  info$group_idx <- (samples$n_pars*samples$n_subjects + 1):(samples$n_pars*samples$n_subjects + sum(info$constraintMat == Inf) + samples$n_pars + samples$n_factors + samples$n_pars)
+  return(info)
 }
 
-prior_dist_factor = function(parameters, info){
-  n_randeffect <- info$n_randeffect
-  n_factors <- info$n_factors
+bridge_add_group_factor <- function(all_samples, samples, idx){
+  constraintMat <- attr(samples, "constraintMat")
+  all_samples <- cbind(all_samples, t(samples$samples$theta_mu[,idx]))
+  all_samples <- cbind(all_samples, t(matrix(apply(samples$samples$lambda_untransf[,,idx,drop = F], 3, unwind_lambda, constraintMat), ncol = nrow(all_samples))))
+  all_samples <- cbind(all_samples, t(log(samples$samples$theta_sig_err_inv[,idx])))
+  all_samples <- cbind(all_samples, t(log(samples$samples$theta_psi_inv[,idx, drop = F])))
+  return(all_samples)
+}
+
+bridge_group_and_prior_and_jac_factor <- function(proposals_group, proposals_list, info){
   prior <- info$prior
-  hyper <- info$hyper
-  #Extract and when necessary transform back
-  param.theta_mu <- parameters[1:n_randeffect]
-  param.sig_err_inv <- exp(parameters[(n_randeffect+1):(n_randeffect + n_randeffect)])
-  param.psi_inv <- exp(parameters[(n_randeffect+n_randeffect+1):(n_randeffect + n_randeffect+ n_factors)])
-  param.lambda.unwound <- parameters[(n_randeffect+n_randeffect+n_factors+1):length(parameters)]
+  proposals <- do.call(cbind, proposals_list)
+  theta_mu <- proposals_group[,1:info$n_pars]
+  theta_lambda <- proposals_group[,(info$n_pars +1):(info$n_pars + sum(info$constraintMat == Inf))]
+  theta_epsilon_inv <- proposals_group[,(1 + info$n_pars + sum(info$constraintMat == Inf)): (info$n_pars + sum(info$constraintMat == Inf) + info$n_pars)]
+  theta_psi_inv <- proposals_group[,(1 + info$n_pars + sum(info$constraintMat == Inf) + info$n_pars):
+                                     (info$n_pars + sum(info$constraintMat == Inf) + info$n_pars + info$n_factors), drop = F]
 
-  log_prior_mu=sum(dnorm(param.theta_mu, mean = prior$theta_mu_mean, sd = sqrt(prior$theta_mu_var), log =TRUE))
-  log_prior_sig_err_inv = sum(pmax(-1000, dgamma(param.sig_err_inv, shape = prior$nu/2, rate = (prior$s2*prior$nu)/2, log=TRUE)))
-  log_prior_psi_inv = sum(pmax(-1000, dgamma(param.psi_inv, shape = prior$al, rate = prior$bl, log=TRUE)))
-  log_prior_lambda=sum(dnorm(param.lambda.unwound, mean = 0, sd = sqrt(prior$theta_lambda_var), log =TRUE))
-
-  jac_sig_err_inv <- -sum(log(param.sig_err_inv)) # Jacobian determinant of transformation of log of the sig_err_inv
-  jac_psi_inv <- -sum(log(param.psi_inv)) # Jacobian determinant of transformation of log of the psi_inv
-  # Jacobians are actually part of the denominator (dnorm(prop_theta)) since transformations of the data (rather than parameters),
-  # warrant a jacobian added. But we add the jacobians here for ease of calculations.
-  return(log_prior_mu + log_prior_sig_err_inv + log_prior_psi_inv + log_prior_lambda - jac_psi_inv - jac_sig_err_inv)
+  n_iter <- nrow(theta_mu)
+  sum_out <- numeric(n_iter)
+  for(i in 1:n_iter){ # these unfortunately can't be vectorized
+    lambda_curr <- unwind_lambda(theta_lambda[i,], info$constraintMat, reverse = T)
+    epsilon_curr <- diag(1/exp(theta_epsilon_inv[i,]))
+    psi_curr <- diag(1/exp(theta_psi_inv[i,]), info$n_factors)
+    theta_var_curr <- lambda_curr %*% psi_curr %*% t(lambda_curr) + epsilon_curr
+    proposals_curr <- matrix(proposals[i,], ncol = info$n_pars, byrow = T)
+    group_ll <- sum(dmvnorm(proposals_curr, theta_mu[i,], theta_var_curr, log = T))
+    prior_epsilon <- sum(logdinvGamma(exp(theta_epsilon_inv[i,]), shape = prior$as, rate = prior$bs))
+    prior_psi <- sum(logdinvGamma(exp(theta_psi_inv[i,]), prior$ap, rate = prior$bp))
+    sum_out[i] <- group_ll + prior_epsilon + prior_psi
+  }
+  prior_lambda <- dmvnorm(theta_lambda, mean = rep(0, ncol(theta_lambda)),
+                          sigma = diag(prior$theta_lambda_var, ncol(theta_lambda)), log = T)
+  prior_mu <- dmvnorm(theta_mu, mean = prior$theta_mu_mean, sigma = diag(prior$theta_mu_var), log =T)
+  jac_psi <- rowSums(theta_epsilon_inv)
+  jac_epsilon <- rowSums(theta_psi_inv)
+  return(sum_out + prior_mu + prior_lambda + jac_psi + jac_epsilon) # Output is of length nrow(proposals)
 }
+
+
+
+# get_all_pars_factor <- function(samples, filter, info){
+#   n_subjects <- samples$n_subjects
+#   n_iter = length(samples$samples$stage[samples$samples$stage== filter])
+#   # Extract relevant objects
+#   alpha <- samples$samples$alpha[,,samples$samples$stage== filter]
+#   theta_mu <- samples$samples$theta_mu[,samples$samples$stage== filter]
+#   lambda <- samples$samples$lambda_untransf[,,samples$samples$stage==filter, drop = F]
+#   psi_inv <- samples$samples$theta_psi_inv[,,samples$samples$stage==filter, drop = F]
+#   sig_err_inv <- samples$samples$theta_sig_err_inv[,,samples$samples$stage==filter]
+#
+#   constraintMat <- info$hyper$constraintMat
+#   n_factors <- samples$n_factors
+#
+#   lambda.unwound <- apply(lambda,3,unwind_lambda, constraintMat)
+#   sig_err_inv.diag <- log(apply(sig_err_inv, 3, diag))
+#   psi_inv.diag <- matrix(log(apply(psi_inv, 3, diag)), nrow = n_factors)
+#
+#   # Set up
+#   n_params<- nrow(alpha) + nrow(theta_mu) + nrow(sig_err_inv.diag) + nrow(psi_inv.diag) + nrow(lambda.unwound)
+#   all_samples=array(dim=c(n_subjects,n_params,n_iter))
+#   mu_tilde=array(dim = c(n_subjects,n_params))
+#   var_tilde=array(dim = c(n_subjects,n_params,n_params))
+#
+#   for (j in 1:n_subjects){
+#     all_samples[j,,] = rbind(alpha[,j,],theta_mu[,],sig_err_inv.diag[,],psi_inv.diag[,],lambda.unwound[,])
+#     # calculate the mean for re, mu and sigma
+#     mu_tilde[j,] =apply(all_samples[j,,],1,mean)
+#     # calculate the covariance matrix for random effects, mu and sigma
+#     var_tilde[j,,] = cov(t(all_samples[j,,]))
+#   }
+#
+#   for(i in 1:n_subjects){ #RJI_change: this bit makes sure that the sigma tilde is pos def
+#     if(!corpcor::is.positive.definite(var_tilde[i,,], tol=1e-8)){
+#       var_tilde[i,,]<-corpcor::make.positive.definite(var_tilde[i,,], tol=1e-6)
+#     }
+#   }
+#
+#   X <- cbind(t(theta_mu),t(sig_err_inv.diag),t(psi_inv.diag), t(lambda.unwound))
+#   info$n_params <- n_params
+#   info$n_factors <- n_factors
+#   info$given.ind <- (info$n_randeffect+1):n_params
+#   info$X.given_ind <- 1:length(info$given.ind)
+#   return(list(X = X, mu_tilde = mu_tilde, var_tilde = var_tilde, info = info))
+# }
+#
+
+# group_dist_factor = function(random_effect = NULL, parameters, sample = FALSE, n_samples = NULL, info){
+#   n_randeffect <- info$n_randeffect
+#   n_factors <- info$n_factors
+#   param.theta_mu <- parameters[1:n_randeffect]
+#   param.sig_err_inv <- exp(parameters[(n_randeffect+1):(n_randeffect + n_randeffect)])
+#   param.psi_inv <- exp(parameters[(n_randeffect+n_randeffect+1):(n_randeffect + n_randeffect+ n_factors)])
+#   param.lambda.unwound <- parameters[(n_randeffect+n_randeffect+n_factors+1):length(parameters)]
+#   param.lambda <- unwind_lambda(param.lambda.unwound, info$hyper$constraintMat, reverse = T)
+#   param.var <- param.lambda %*% diag(1/param.psi_inv, length(param.psi_inv)) %*% t(param.lambda) + diag(1/param.sig_err_inv)
+#   if (sample){
+#     return(mvtnorm::rmvnorm(n_samples, param.theta_mu, param.var))
+#   }else{
+#     logw_second<-max(-5000*info$n_randeffect, mvtnorm::dmvnorm(random_effect, param.theta_mu,param.var,log=TRUE))
+#     return(logw_second)
+#   }
+# }
+#
+# prior_dist_factor = function(parameters, info){
+#   n_randeffect <- info$n_randeffect
+#   n_factors <- info$n_factors
+#   prior <- info$prior
+#   hyper <- info$hyper
+#   #Extract and when necessary transform back
+#   param.theta_mu <- parameters[1:n_randeffect]
+#   param.sig_err_inv <- exp(parameters[(n_randeffect+1):(n_randeffect + n_randeffect)])
+#   param.psi_inv <- exp(parameters[(n_randeffect+n_randeffect+1):(n_randeffect + n_randeffect+ n_factors)])
+#   param.lambda.unwound <- parameters[(n_randeffect+n_randeffect+n_factors+1):length(parameters)]
+#
+#   log_prior_mu=sum(dnorm(param.theta_mu, mean = prior$theta_mu_mean, sd = sqrt(prior$theta_mu_var), log =TRUE))
+#   log_prior_sig_err_inv = sum(pmax(-1000, dgamma(param.sig_err_inv, shape = prior$nu/2, rate = (prior$s2*prior$nu)/2, log=TRUE)))
+#   log_prior_psi_inv = sum(pmax(-1000, dgamma(param.psi_inv, shape = prior$ap, rate = prior$bp, log=TRUE)))
+#   log_prior_lambda=sum(dnorm(param.lambda.unwound, mean = 0, sd = sqrt(prior$theta_lambda_var), log =TRUE))
+#
+#   jac_sig_err_inv <- -sum(log(param.sig_err_inv)) # Jacobian determinant of transformation of log of the sig_err_inv
+#   jac_psi_inv <- -sum(log(param.psi_inv)) # Jacobian determinant of transformation of log of the psi_inv
+#   # Jacobians are actually part of the denominator (dnorm(prop_theta)) since transformations of the data (rather than parameters),
+#   # warrant a jacobian added. But we add the jacobians here for ease of calculations.
+#   return(log_prior_mu + log_prior_sig_err_inv + log_prior_psi_inv + log_prior_lambda - jac_psi_inv - jac_sig_err_inv)
+# }

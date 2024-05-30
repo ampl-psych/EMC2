@@ -7,22 +7,46 @@
 DDM()
 }
 \value{
-A model list with all the necessary functions to sample
+A model list with all the necessary functions for EMC2 to sample
 }
 \description{
-The Diffusion Decision Model, proposes that decisions between two alternatives are determined based on one accumulator.
-This accumulator drifts to an upper threshold or a lower threshold. The first threshold it reaches determines the choice made.
-The time taken to reach the threshold drives the response time. For details see \verb{Ratcliff & McKoon, 2008}.
+Model file to estimate the Diffusion Decision Model (DDM) in EMC2.
 }
 \details{
-The core parameters of the DDM are the drift rate \code{v}, the boundary separation \code{a},
-within trial variation in drift rate \code{s}, bias to either threshold \code{Z}, and non-decision time \code{t0}.
-Frequently \code{s} is fixed to 1 to satisfy scaling constraints.
-Furthermore, we can estimate between trial variation in drift rate \code{sv}, non-decision time \code{st0}, and variability in bias \code{SZ}. Note that computing for these parameters is slower.
-Lastly \code{DP} comprises the difference in non-decision time for each response option.
+Model files are almost exclusively used in \code{make_design()}.
 
-We sample \verb{a, t0, sv, st0, s} on the log scale because these parameters should be strictly positive
-We sample \verb{Z, SZ and DP} on the probit scale because they should be strictly between 0 and 1.
-Here \code{Z} is estimated as the ratio of bias to one boundary, where 0 is complete bias to lower boundary and 1 complete bias to upper boundary
-\code{DP} is estimated as a ratio of lower/higher \code{t0} relative to the \verb{t0 parameter}
+Default values are used for all parameters that are not explicitly listed in the \code{formula}
+argument of \code{make_design()}.They can also be accessed with \code{DDM()$p_types}.\tabular{llllll}{
+   \strong{Parameter} \tab \strong{Transform} \tab \strong{Natural scale} \tab \strong{Default} \tab \strong{Mapping} \tab \strong{Interpretation} \cr
+   \emph{v} \tab - \tab [-Inf, Inf] \tab 1 \tab  \tab Mean evidence-accumulation rate (drift rate) \cr
+   \emph{a} \tab log \tab [0, Inf] \tab log(1) \tab  \tab Boundary separation \cr
+   \emph{t0} \tab log \tab [0, Inf] \tab log(0) \tab  \tab Non-decision time \cr
+   \emph{s} \tab log \tab [0, Inf] \tab log(1) \tab  \tab Within-trial standard deviation of drift rate \cr
+   \emph{Z} \tab probit \tab [0, 1] \tab qnorm(0.5) \tab \emph{z} = \emph{Z} x \emph{a} \tab Relative start point (bias) \cr
+   \emph{SZ} \tab probit \tab [0, 1] \tab qnorm(0) \tab \emph{sz} = 2 x \emph{SZ} x min(\emph{a} x \emph{Z}, \emph{a} x (1-\emph{Z})) \tab Relative between-trial variation in start point \cr
+   \emph{sv} \tab log \tab [0, Inf] \tab log(0) \tab  \tab Between-trial standard deviation of drift rate \cr
+   \emph{st0} \tab log \tab [0, Inf] \tab log(0) \tab  \tab Between-trial variation (range) in non-decision time \cr
+   \emph{DP} \tab probit \tab [0, 1] \tab qnorm(0.5) \tab \emph{dp} = \emph{t0} x (2 x \emph{DP} -1) \tab Relative difference in non-decision time between responses \cr
+}
+
+
+\code{a}, \code{t0}, \code{sv}, \code{st0}, \code{s} are sampled on the log scale because these parameters are strictly positive,
+\code{Z}, \code{SZ} and \code{DP} are sampled on the probit scale because they should be strictly between 0 and 1.
+
+\code{Z} is estimated as the ratio of bias to one boundary where 0.5 means no bias.
+\code{DP} comprises the difference in non-decision time for each response option.
+
+Conventionally, \code{sv} is fixed to 1 to satisfy scaling constraints.
+
+See Ratcliff, R., & McKoon, G. (2008).
+The diffusion decision model: theory and data for two-choice decision tasks.
+\emph{Neural computation, 20}(4), 873-922. doi:10.1162/neco.2008.12-06-420.
+}
+\examples{
+design_DDMaE <- make_design(data = forstmann,model=DDM,
+                           formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
+                           constants=c(s=log(1)))
+# For all parameters that are not defined in the formula, default values are assumed
+# (see Table above).
+
 }

@@ -21,7 +21,8 @@ IC(
 
 \item{filter}{A string. Specifies which stage you want to plot.}
 
-\item{subfilter}{An integer or vector. If integer it will exclude up until}
+\item{subfilter}{An integer or vector. If it's an integer, iterations up until the value set by \code{subfilter} will be excluded.
+If a vector is supplied, only the iterations in the vector will be considered.}
 
 \item{use_best_fit}{Boolean, default TRUE use best of minD and Dmean in
 calculation otherwise always use Dmean}

@@ -37,7 +37,6 @@ rPROBIT <- function(lR,pars,p_types=c("mean","sd","threshold"),lt=-Inf)
 #' increase on the natural scale.
 #'
 #' @return A model list with all the necessary functions to sample
-#' @export
 
 probit <- function(){
   list(

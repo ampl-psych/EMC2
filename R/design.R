@@ -1,12 +1,14 @@
-#' Make a design object
+#' Specify a design and model
 #'
-#' This function returns a list specifying the design for a model.
+#' This function combines information regarding the data, type of model, and
+#' the model specification.
 #'
-#' @param formula A list. Contains the design formula(s) in the
+#' @param formula A list. Contains the design formulae in the
 #' format `list(y ~ x, a ~ z)`.
 #' @param factors A named list containing all the factor variables that span
 #' the design cells and that should be taken into account by the model.
-#' The name `subjects` must be used to indicate the participant factor variable.
+#' The name `subjects` must be used to indicate the participant factor variable,
+#' also in the data.
 #'
 #' Example: `list(subjects=levels(dat$subjects), condition=levels(dat$condition))`
 #'
@@ -19,36 +21,69 @@
 #' model functions.
 #' @param data A data frame. `data` can be used to automatically detect
 #'  `factors`, `Rlevels` and `covariates` in a dataset. The variable `R` needs
-#'  to be a factor variable indicating the response variable so that `Rlevels`
-#'  can be determined. Any numeric column except `trials` and `rt` are treated
-#'  as covariates, and all remaining factor variables are internally used
-#'  in `factors`.
-#' @param contrasts A named list specifying a design matrix. If none is supplied,
-#' dummy or treatment coding is used.
+#'  to be a factor variable indicating the response variable. Any numeric column
+#'  except `trials` and `rt` are treated as covariates, and all remaining factor
+#'  variables are internally used in `factors`.
+#' @param contrasts Optional. A named list specifying a design matrix.
 #' Example for supplying a customized design matrix:
 #' `list(lM = matrix(c(-1/2,1/2),ncol=1,dimnames=list(NULL,"diff"))))`
 #' @param matchfun A function. Only needed for race models. Specifies whether a
-#' response was correct or not. Example: `function(d)d$S==d$lR`
-#' @param constants A named vector. Sets constants. Any parameter named
-#' by `sampled_p_vector` can be set constant.
+#' response was correct or not. Example: `function(d)d$S==d$lR` where lR refers
+#' to the latent response factor.
+#' @param constants A named vector that sets constants. Any parameter in
+#' `sampled_p_vector` can be set constant.
 #' @param covariates Names of numeric covariates.
 #' @param functions List of functions to create new factors based on those in
-#' the factors argument. These new factors can then be used in formula.
-#' @param adapt For future compatibility. Ignore.
+#' the factors argument. These new factors can then be used in `formula`.
 #' @param report_p_vector Boolean. If TRUE (default), it returns the vector of
 #' parameters to be estimated.
 #' @param custom_p_vector A character vector. If specified, a custom likelihood
 #' function can be supplied.
-#' @param ordinal For future compatibility
+#' @param ... Additional, optional arguments
 #'
 #' @return A design list.
+#' @examples
+#'
+#' # load example dataset
+#' dat <- forstmann
+#'
+#' # create a function that takes the latent response (lR) factor (d) and returns a logical
+#' # defining the correct response for each stimulus. Here the match is simply
+#' # such that the S factor equals the latent response factor
+#' matchfun <- function(d)d$S==d$lR
+#'
+#' # When working with lM and lR, it can be useful to design  an
+#' # "average and difference" contrast matrix. For binary responses, it has a
+#' # simple canonical form
+#' ADmat <- matrix(c(-1/2,1/2),ncol=1,dimnames=list(NULL,"diff"))
+#'
+#' # Create a design for a linear ballistic accumulator model (LBA) that allows
+#' # thresholds to be a function of E and lR. The final result is a 9 parameter model.
+#' design_LBABE <- make_design(data = dat,model=LBA,matchfun=matchfun,
+#'                             formula=list(v~lM,sv~lM,B~E+lR,A~1,t0~1),
+#'                             contrasts=list(v=list(lM=ADmat)),
+#'                             constants=c(sv=log(1)))
 #' @export
 #'
 #'
 make_design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
-                        contrasts=NULL,matchfun=NULL,constants=NULL,covariates=NULL,functions=NULL,
-                        adapt=NULL,report_p_vector=TRUE, custom_p_vector = NULL,
-                        ordinal=NULL){
+                        contrasts=NULL,matchfun=NULL,constants=NULL,covariates=NULL,
+                        functions=NULL,report_p_vector=TRUE, custom_p_vector = NULL,
+                        ...){
+
+  optionals <- list(...)
+
+  if(!is.null(optionals$adapt)){
+    adapt <- optionals$adapt
+  } else {
+    adapt <- NULL
+  }
+
+  if(!is.null(optionals$ordinal)){
+    ordinal <- optionals$ordinal
+  } else {
+    ordinal <- NULL
+  }
 
   if(any(names(factors) %in% c("trial", "R", "rt", "lR", "lM"))){
     stop("Please do not use any of the following names within Ffactors: trial, R, rt, lR, lM")
@@ -85,7 +120,7 @@ make_design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=
   # if (model()$type=="SDT") {
   #   Clist[["lR"]] <- contr.increasing(length(Rlevels),Rlevels)
   # }
-  nams <- unlist(lapply(formula,function(x)as.character(stats::terms(x)[[2]])))
+  nams <- unlist(lapply(formula,function(x) as.character(stats::terms(x)[[2]])))
   if (!all(sort(names(model()$p_types)) %in% sort(nams)) & is.null(custom_p_vector)){
     p_types <- model()$p_types
     not_specified <- sort(names(p_types))[!sort(names(p_types)) %in% sort(nams)]
@@ -153,17 +188,53 @@ make_design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=
   return(design)
 }
 
+#' Contrast to enforce equal prior variance on each level
+#'
+#' Typical contrasts impose different levels of marginal prior variance for the different levels.
+#' This contrast can be used to ensure that each level has equal marginal priors (Rouder, Morey, Speckman, & Province; 2012).
+#'
+#' @param n An integer. The number of items for which to create the contrast
+#'
+#' @return A contrast matrix.
+#' @export
+#' @examples{
+#' design_DDMaE <- make_design(data = forstmann,model=DDM, contrasts = list(E = contr.bayes),
+#' formula =list(v~S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
+#' constants=c(s=log(1)))
+#' }
+contr.bayes <- function(n) {
+  if (length(n) <= 1L) {
+    if (is.numeric(n) && length(n) == 1L && n > 1L)
+      levels <- seq_len(n)
+    else stop("not enough degrees of freedom to define contrasts")
+  }
+  else levels <- n
+  levels <- as.character(levels)
+  n <- length(levels)
+  cont <- diag(n)
+  a <- n
+  I_a <- diag(a)
+  J_a <- matrix(1, nrow = a, ncol = a)
+  Sigma_a <- I_a - J_a/a
+  cont <- eigen(Sigma_a)$vectors[,seq_len(a-1), drop = FALSE]
+  return(cont)
+}
+
 
 #' Contrast to enforce increasing estimates
 #'
-#' first = intercept, cumsum other (positive) levels to force non-decreasing
+#' Each level will be estimated additively from the previous level
 #'
 #' @param n an integer. The number of items for which to create the contrast.
-#' @param levels Character vector. the factor levels which will be the colnames of the returning matrix.
 #'
 #' @return a contrast matrix.
 #' @export
-contr.increasing <- function(n,levels=NULL)
+#' @examples{
+#' design_DDMaE <- make_design(data = forstmann,model=DDM, contrasts = list(E = contr.increasing),
+#' formula =list(v~S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
+#' constants=c(s=log(1)))
+#' }
+contr.increasing <- function(n)
 {
   if (length(n) <= 1L) {
     if (is.numeric(n) && length(n) == 1L && n > 1L)
@@ -175,30 +246,40 @@ contr.increasing <- function(n,levels=NULL)
   n <- length(levels)
   contr <- matrix(0,nrow=n,ncol=n-1,dimnames=list(NULL,2:n))
   contr[lower.tri(contr)] <- 1
-  if (!is.null(levels)) dimnames(contr)[[2]] <- levels[-1]
   contr
 }
 
 #' Contrast to enforce decreasing estimates
 #'
+#' Each level will be estimated as a reduction from the previous level
+#'
 #' @param n an integer. The number of items for which to create the contrast.
-#' @param levels Character vector. the factor levels which will be the colnames of the returning matrix.
 #'
 #' @return a contrast matrix.
 #' @export
-contr.decreasing <- function(n,levels=NULL) {
-  out <- contr.increasing(n,levels=levels)
+#' @examples{
+#' design_DDMaE <- make_design(data = forstmann,model=DDM, contrasts = list(E = contr.decreasing),
+#' formula =list(v~S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
+#' constants=c(s=log(1)))
+#' }
+contr.decreasing <- function(n) {
+  out <- contr.increasing(n)
   out[dim(out)[1]:1,]
 }
 
-#' contr.anova()
+#' Anova style contrast matrix
 #'
-#' orthogonal helmert contrast scaled to estimate differences between conditions. Use in make_design.
+#' Similar to `contr.helmert`, but then scaled to estimate differences between conditions. Use in `make_design()`.
 #'
-#' @param n an integer. the number of items for which to create the contrast
+#' @param n An integer. The number of items for which to create the contrast
 #'
-#' @return a contrast matrix.
+#' @return A contrast matrix.
 #' @export
+#' @examples{
+#' design_DDMaE <- make_design(data = forstmann,model=DDM, contrasts = list(E = contr.anova),
+#' formula =list(v~S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
+#' constants=c(s=log(1)))
+#' }
 
 contr.anova <- function(n) {
   if (length(n) <= 1L) {
@@ -214,19 +295,29 @@ contr.anova <- function(n) {
 
 
 
-#' sampled_p_vector()
+#' Get model parameters from a design
 #'
-#' Makes an empty p_vector corresponding to model.
-#' matchfun only needed in design if uses lM factorf
+#' Makes a vector with zeroes, with names and length corresponding to the
+#' model parameters of the design.
 #'
-#' @param design a list of the design made with make_design.
-#' @param model a model list. Default is the model specified in the design list.
-#' @param doMap logical. If TRUE will
-#' @param add_da Boolean. Whether to include the data in the output
-#' @param all_cells_dm Boolean. Whether to include all levels of a factor in the output, even when one is dropped in the design
+#' @param design a list of the design made with `make_design()`.
+#' @param model a model list. Defaults to the model specified in the design list.
+#' @param doMap logical. If `TRUE` will also include an attribute `map`
+#' with the design matrices that perform the mapping back to the design
+#' @param add_da Boolean. Whether to include the relevant data columns in the map attribute
+#' @param all_cells_dm Boolean. Whether to include all levels of a factor in the mapping attribute,
+#' even when one is dropped in the design
 #'
 #'
-#' @return Named vector with mapping attributes.
+#' @return Named vector.
+#' @examples
+#' # First define a design
+#' design_DDMaE <- make_design(data = forstmann,model=DDM,
+#'                            formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
+#'                            constants=c(s=log(1)))
+#' # Then for this design get which cognitive model parameters are sampled:
+#' sampled_p_vector(design_DDMaE)
+#'
 #' @export
 
 sampled_p_vector <- function(design,model=NULL,doMap=TRUE, add_da = FALSE, all_cells_dm = FALSE)
@@ -366,12 +457,14 @@ compress_dadm <- function(da,designs,Fcov,Ffun)
         apply(x[attr(x,"expand"),,drop=FALSE],1,paste,collapse="_")})
       ),1,paste,collapse="+"),da$subjects,da$R,da$lR,da$rt,sep="+")
     # Make sure that if row is included for a trial so are other rows
-    if (nacc>1) cells <- paste0(rep(apply(matrix(cells,nrow=nacc),2,paste0,collapse="_"),
-                      each=nacc),rep(1:nacc,times=length(cells)/nacc),sep="_")
     if (!is.null(Fcov))
       cells <- paste(cells,apply(da[,names(Fcov),drop=FALSE],1,paste,collapse="+"),sep="+")
     if (!is.null(Ffun))
       cells <- paste(cells,apply(da[,Ffun,drop=FALSE],1,paste,collapse="+"),sep="+")
+
+    if (nacc>1) cells <- paste0(rep(apply(matrix(cells,nrow=nacc),2,paste0,collapse="_"),
+                                    each=nacc),rep(1:nacc,times=length(cells)/nacc),sep="_")
+
     contract <- !duplicated(cells)
     out <- da[contract,,drop=FALSE]
     attr(out,"contract") <- contract
@@ -435,42 +528,6 @@ compress_dadm <- function(da,designs,Fcov,Ffun)
     }
     out
 }
-
-
-#' Combines a data frame with a design to create
-#' a data augmented design model ("dadm") object. Augmentation
-#' refers to replicating the data with one row for each accumulator.
-#'
-#' Usually called by make_samplers rather than directly by the user, except
-#' where a dadm is needed for use with profile_pmwg.
-#'
-#' Performs a series to checks to make sure data frame and design match and
-#' (by default) augments the data frame by adding accumulator factors and
-#' compresses the result for efficient likelihood calculation.
-#'
-#'
-#' @param data  data frame
-#' @param design matching design
-#' @param model if model not an attribute of design can be supplied here
-#' @param add_acc default TRUE creates and 'augmented' data frame, which
-#' replicates and stacks the supplied data frame for each accumulator and
-#' adds factors to represent accumulators: lR = latent response, with a level
-#' for each response (R) represented by the accumulator and lM = latent match,
-#' a logical indicating if the accumulator represents the correct response as
-#' specified by the design's matchfun.
-#' @param rt_resolution maximum resolution of rt, NULL = no rounding
-#' @param verbose if true reports compression outcome
-#' @param compress default TRUE only keeps unique rows in terms of all
-#' parameter design matrices R, lR and rt (at a given resolution)
-#' @param rt_check checks if any truncation and censoring specified in the design
-#' are respected.
-#' @param add_da Boolean. Whether to include the data in the output
-#' @param all_cells_dm Boolean. Whether to include all levels of a factor in the output, even when one is dropped in the design
-#'
-#' @return a (possibly) augmented and compressed data frame with attributes
-#' specifying the design and how to decompress ready supporting likelihood
-#' computation
-#' @export
 
 design_model <- function(data,design,model=NULL,
                          add_acc=TRUE,rt_resolution=0.02,verbose=TRUE,
@@ -828,8 +885,16 @@ dm_list <- function(dadm)
       attr(dl[[i]],"sampled_p_names") <- sampled_p_names
       attr(dl[[i]],"designs") <- sub_design(designs,isin)
       attr(dl[[i]],"expand") <- expand[isin1]-min(expand[isin1]) + 1
+      attr(dl[[i]],"contract") <- NULL
+      attr(dl[[i]],"expand_winner") <- NULL
+      attr(dl[[i]],"ok_dadm_winner") <- NULL
+      attr(dl[[i]],"ok_dadm_looser") <- NULL
+      attr(dl[[i]],"ok_da_winner") <- NULL
+      attr(dl[[i]],"ok_da_looser") <- NULL
+      attr(dl[[i]],"ok_trials") <- NULL
+      attr(dl[[i]],"s_data") <- NULL
       attr(dl[[i]],"s_expand") <- NULL
-
+      attr(dl[[i]],"prior") <- NULL
       # attr(dl[[i]],"ok_dadm_winner") <- ok_dadm_winner[isin]
       # attr(dl[[i]],"ok_dadm_looser") <- ok_dadm_looser[isin]
       #

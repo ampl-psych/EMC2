@@ -2,16 +2,23 @@
 % Please edit documentation in R/design.R
 \name{contr.anova}
 \alias{contr.anova}
-\title{contr.anova()}
+\title{Anova style contrast matrix}
 \usage{
 contr.anova(n)
 }
 \arguments{
-\item{n}{an integer. the number of items for which to create the contrast}
+\item{n}{An integer. The number of items for which to create the contrast}
 }
 \value{
-a contrast matrix.
+A contrast matrix.
 }
 \description{
-orthogonal helmert contrast scaled to estimate differences between conditions. Use in make_design.
+Similar to \code{contr.helmert}, but then scaled to estimate differences between conditions. Use in \code{make_design()}.
+}
+\examples{
+{
+design_DDMaE <- make_design(data = forstmann,model=DDM, contrasts = list(E = contr.anova),
+formula =list(v~S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
+constants=c(s=log(1)))
+}
 }

@@ -274,7 +274,7 @@ rRDM <- function(lR,pars,p_types=c("v","B","A","t0"),ok=rep(TRUE,dim(pars)[1]))
   # lR is an empty latent response factor lR with one level for each accumulator.
   # pars is a matrix of corresponding parameter values named as in p_types
   # pars must be sorted so accumulators and parameter for each trial are in
-  # contiguous rows. "s" parameter will be used but can be omotted
+  # contiguous rows. "s" parameter will be used but can be ommitted
   #
   # test
   # pars=cbind(B=c(1,2),v=c(1,1),A=c(0,0),t0=c(.2,.2)); lR=factor(c(1,2))
@@ -287,32 +287,88 @@ rRDM <- function(lR,pars,p_types=c("v","B","A","t0"),ok=rep(TRUE,dim(pars)[1]))
   pars[,"A"][pars[,"A"]<0] <- 0
   bad <- rep(NA, length(lR)/length(levels(lR)))
   out <- data.frame(R = bad, rt = bad)
+  nr <- length(levels(lR))
+  dt <- matrix(Inf,nrow=nr,ncol=nrow(pars)/nr)
+  t0 <- pars[,"t0"]
   pars <- pars[ok,]
-  dt <- matrix(rWald(sum(ok),B=pars[,"B"],v=pars[,"v"],A=pars[,"A"]),
-               nrow=length(levels(lR)))
+  dt[ok] <- rWald(sum(ok),B=pars[,"B"],v=pars[,"v"],A=pars[,"A"])
   R <- apply(dt,2,which.min)
   pick <- cbind(R,1:dim(dt)[2]) # Matrix to pick winner
   # Any t0 difference with lR due to response production time (no effect on race)
-  rt <- matrix(pars[,"t0"],nrow=length(levels(lR)))[pick] + dt[pick]
-  ok <- matrix(ok,nrow=length(levels(lR)))[1,]
-  out$R[ok] <- levels(lR)[R]
+  rt <- matrix(t0,nrow=nr)[pick] + dt[pick]
+  out$R <- levels(lR)[R]
   out$R <- factor(out$R,levels=levels(lR))
-  out$rt[ok] <- rt
+  out$rt <- rt
   out
 }
 
-#' The Racing Diffusion Model (RDM)
+#' The Racing Diffusion Model
 #'
-#' The Racing Diffusion Model, also known as the Racing Wald Model, proposes that for each choice alternative, noisy accumulators race towards a common bound.
-#' The first accumulator to reach the bound determines the choice made. The time taken to reach the threshold determines the response times. For details see `Tillman, Van Zandt & Logan, 2020`
+#' Model file to estimate the Racing Diffusion Model (RDM), also known as the Racing Wald Model.
 #'
-#' The core parameters of the RDM are the drift rate `v`, the response threshold `B`,
-#' within trial variation in drift rate `s`, between trial variation in startpoint of the drift rate `A`, and non-decision time `t0`.
-#' Frequently `s` is fixed to 1 to satisfy scaling constraints.
+#' Model files are almost exclusively used in `make_design()`.
 #'
-#' Here we use the b = B + A parameterization, which ensures that the response threshold is always higher than the between trial variation in start point of the drift rate.
+#' @details
+#'
+#' Default values are used for all parameters that are not explicitly listed in the `formula`
+#' argument of `make_design()`.They can also be accessed with `RDM()$p_types`.
+#'
+#' | **Parameter** | **Transform** | **Natural scale** | **Default**   | **Mapping**          | **Interpretation**                                                |
+#' |-----------|-----------|---------------|-----------|------------------|---------------------------------------------------------------|
+#' | *v*       | log       | \[0, Inf\]      | log(1)    |                  | Evidence-accumulation rate (drift rate)                        |
+#' | *A*       | log       | \[0, Inf\]      | log(0)    |                  | Between-trial variation (range) in start point                 |
+#' | *B*       | log       | \[0, Inf\]      | log(1)    | *b* = *B* + *A*      | Distance from *A* to *b* (response threshold)                  |
+#' | *t0*      | log       | \[0, Inf\]      | log(0)    |                  | Non-decision time                                             |
+#' | *sv*      | log       | \[0, Inf\]      | log(1)    |                  | Within-trial standard deviation of drift rate                 |
+#'
+#'
+#' All parameters are estimated on the log scale.
+#'
+#' The parameterization *b* = *B* + *A* ensures that the response threshold is
+#' always higher than the between trial variation in start point.
+#'
+#' Conventionally, `s` is fixed to 1 to satisfy scaling constraints.
+#'
+#' Because the RDM is a race model, it has one accumulator per response option.
+#' EMC2 automatically constructs a factor representing the accumulators `lR` (i.e., the
+#' latent response) with level names taken from the `R` column in the data.
+#'
+#' The `lR` factor is mainly used to allow for response bias, analogous to *Z* in the
+#' DDM. For example, in the RDM, response thresholds are determined by the *B*
+#' parameters, so `B~lR` allows for different thresholds for the accumulator
+#' corresponding to "left" and "right" stimuli, for example, (e.g., a bias to respond left occurs
+#' if the left threshold is less than the right threshold).
+#'
+#' For race models in general, the argument `matchfun` can be provided in `make_design()`.
+#' One needs to supply a function that takes the `lR` factor (defined in the augmented data (d)
+#' in the following function) and returns a logical defining the correct
+#' response. In the example below, this is simply whether the `S` factor equals the
+#' latent response factor: `matchfun=function(d)d$S==d$lR`. Using `matchfun` a latent match factor (`lM`) with
+#' levels `FALSE` (i.e., the stimulus does not match the accumulator) and `TRUE`
+#' (i.e., the stimulus does match the accumulator). This is added internally
+#' and can also be used in model formula, typically for parameters related to
+#' the rate of accumulation.
+#'
+#' Tillman, G., Van Zandt, T., & Logan, G. D. (2020). Sequential sampling models
+#' without random between-trial variability: The racing diffusion model of speeded
+#' decision making. *Psychonomic Bulletin & Review, 27*(5), 911-936.
+#' https://doi.org/10.3758/s13423-020-01719-6
 #'
 #' @return A list defining the cognitive model
+#' @examples
+
+#' # When working with lM it is useful to design  an "average and difference"
+#' # contrast matrix, which for binary responses has a simple canonical from:
+
+#' ADmat <- matrix(c(-1/2,1/2),ncol=1,dimnames=list(NULL,"d"))
+#' # We also define a match function for lM
+#' matchfun=function(d)d$S==d$lR
+#' # We now construct our design, with v ~ lM and the contrast for lM the ADmat.
+#' design_RDMBE <- make_design(data = forstmann,model=RDM,matchfun=matchfun,
+#' formula=list(v~lM,s~lM,B~E+lR,A~1,t0~1),
+#' contrasts=list(v=list(lM=ADmat)),constants=c(s=log(1)))
+#' # For all parameters that are not defined in the formula, default values are assumed
+#' # (see Table above).
 #' @export
 
 RDM <- function(){
@@ -349,12 +405,6 @@ RDM <- function(){
   )
 }
 
-
-# RDM_B parameterization with s=1 scaling (B = b-A done in rdm.R)
-#' Title
-#'
-#' @return A list defining the cognitive model
-#' @export
 
 RDMt0natural <- function(){
   list(

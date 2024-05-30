@@ -2,14 +2,13 @@
 % Please edit documentation in R/plotting.R
 \name{plot_defective_density}
 \alias{plot_defective_density}
-\title{Plot defective densities for each subject and cell.}
+\title{Plot defective densities for each subject and cell}
 \usage{
 plot_defective_density(
   data,
   subject = NULL,
   factors = NULL,
   layout = NULL,
-  mfcol = FALSE,
   xlim = NULL,
   bw = "nrd0",
   adjust = 1,
@@ -19,35 +18,50 @@ plot_defective_density(
 )
 }
 \arguments{
-\item{data}{data frame with at least subjects (subjects factor) R (response factor)
-and rt (response time) columns,and optionally other factor columns with any name except
-subjects, R, rt or trials.}
+\item{data}{A data frame. The experimental data in EMC2 format with at least \code{subject} (i.e., the
+subject factor), \code{R} (i.e., the response factor) and \code{rt} (i.e., response time) variable.
+Additional factor variables of the design are optional.}
 
-\item{subject}{Integer or string selecting a subject (default NULL = all).}
+\item{subject}{An integer or character string selecting a subject from the data.
+If specified, only that subject is plotted. Per default (i.e., \code{NULL}), all subjects
+are plotted.}
 
-\item{factors}{character vector of factor names in design (default NULL = all).}
+\item{factors}{A character vector of the factor names in the design to aggregate across
+Defaults to all (i.e., \code{NULL}).}
 
-\item{layout}{2-vector specifying par(mfrow) or par(mfcol) (default NULL use current).}
+\item{layout}{A vector specifying the layout as in \code{par(mfrow = layout)}.
+The default \code{NULL} uses the current layout.}
 
-\item{mfcol}{Boolean, default TRUE use mfcol else mfrow.}
+\item{xlim}{x-axis limit for all cells (default NULL will scale each plot such that the xlimits encompass the densities).}
 
-\item{xlim}{x-axis limit for all cells (default NULL = scale per cell).}
+\item{bw}{number or string bandwidth for density (defaults to \code{nrd0}). See \code{?density()}.}
 
-\item{bw}{number or string bandwidth for density (default "nrd0").}
+\item{adjust}{Numeric. Density function bandwidth adjustment parameter. See \code{?density()}.}
 
-\item{adjust}{density function bandwidth adjust parameter.}
+\item{correct_fun}{If specified, the accuracy for each subject is calculated, using the supplied function and
+an accuracy vector for each subject is returned invisibly.}
 
-\item{correct_fun}{function scoring accuracy using columns in data.}
+\item{rt}{legend function position character string for the mean response time (defaults to \code{top})}
 
-\item{rt}{legend function position string for mean RT (default "top)}
-
-\item{accuracy}{legend function position string for accuracy (default "topright")}
+\item{accuracy}{legend function position character string for accuracy (defaults to \code{topright})}
 }
 \value{
-Invisibly if correct_fun specified a subject accuracy vector
+If \code{correct_fun} is specified, a subject accuracy vector is returned invisibly
 }
 \description{
-Each panel contains a set of densities (i.e., densities for each possible
-possible response) that are defective (i.e., have areas potentially less
-than 1, where for all responses the area sums to 1).
+Plots panels that contain a set of densities for each response option in the data.
+These densities are defective; their areas are relative to the respective
+response proportion. Across all responses, the area sums to 1.
+}
+\examples{
+# First for each subject and the factor combination in the design:
+plot_defective_density(forstmann)
+# Now collapsing across subjects:
+plot_defective_density(forstmann, factors = c("S", "E"))
+# If the data is response coded, it generally makes sense to include the "S" factor
+# because EMC2 will plot the "R" factor automatically. This way, choice accuracy can
+# be examined
+# Each subject's accuracy can be returned using a custom function:
+print(plot_defective_density(forstmann, correct_fun = function(d) d$R == d$S))
+
 }

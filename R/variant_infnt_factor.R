@@ -28,7 +28,7 @@ get_prior_infnt_factor <- function(prior = NULL, n_pars = NULL, sample = TRUE, N
     prior$as <- 5 # shape prior on the error variances
   }
   if(is.null(prior$bs)){
-    prior$bs <- .7 # rate prior on the error variances
+    prior$bs <- .3 # rate prior on the error variances
   }
   if(is.null(prior$df)){
     prior$df <- 30 # Shape and rate prior on the global shrinkage
@@ -40,7 +40,7 @@ get_prior_infnt_factor <- function(prior = NULL, n_pars = NULL, sample = TRUE, N
     prior$bd1 <- 1.7 # Rate prior on first column
   }
   if(is.null(prior$ad2)){
-    prior$ad2 <- 4.5 # Multiplicative prior on shape subsequent columns
+    prior$ad2 <- 6 # Multiplicative prior on shape subsequent columns
   }
   if(is.null(prior$bd2)){
     prior$bd2 <- 2.2 # Multiplicative prior on rate of subsequent columns
