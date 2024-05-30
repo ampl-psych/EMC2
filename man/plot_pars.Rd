@@ -72,7 +72,8 @@ xlim if \code{plot_prior = TRUE}. If set to \code{NULL}, xlim is used instead.}
 to return invisibly}
 
 \item{pars}{Named vector or matrix of known/simulated parameters, or the output of
-\code{plot_pars}, in which case the posterior medians are extracted. If \code{xlim} is not supplied,}
+\code{plot_pars}, in which case the posterior medians are extracted. If \code{xlim} is not supplied,
+the plot will be adjusted to include the parameter values, which are plotted as vertical lines.}
 
 \item{probs}{Vector. The quantiles of the selected parameters to return invisibly.}
 

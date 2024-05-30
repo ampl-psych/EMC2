@@ -112,56 +112,67 @@ plot_acfs <- function(samples,layout=NULL,subject=1,
   }
 }
 
-#' plot_alpha_recovery
-#' Uses output from plot_pars to plot true vs. estimated (median with CI) alpha
-#' parameters for each subject (plot density must be called with true values passed
-#' through the pars argument).
+#' Plots recovery of parameters
 #'
-#' @param tabs Tables of actual and estimated alpha parameters (with CIs) from plot_pars
-#' @param layout A 2-vector specifying the layout as in `par(mfrow = layout)`
-#' @param do_ci Boolean (Default TRUE). Add CIs to plot?
-#' @param ci_col Color of CI.
-#' @param cap Width of CI cap (passed to arrows)
-#' @param do_rmse Boolean (default FALSE) Add root-mean squared error to plot
-#' instead of default Pearson correlation
-#' @param r_pos Position of Pearson/RMSE (passed to legend)
-#' @param rmse_digits Digits for RMSE
-#' @param pearson_digits Digits for Pearson correlation
-#' @param do_coverage Boolean (default TRUE) add coverage percentage estimate (otherwise
-#' add Spearman correlation)
-#' @param coverage_pos Position of Coverage/Pearson (passed to legend)
-#' @param coverage_digits Digits for coverage
-#' @param spearman_digits Digits for Spearman correlation
+#' Uses output from ``plot_pars`` to plot generating vs. estimated (median with credible
+#' interval; CI) parameters to look at parameter recovery.
 #'
-#' @return Invisible list with RMSE, coverage and Pearson and Spearman correlations.
+#' @param tabs A list of matrices containing true and estimated parameters (with CIs), output from `plot_pars()`
+#' @param layout A vector specifying the layout as in `par(mfrow = layout())`
+#' @param do_ci A Boolean. Add CIs to the plot or not? Defaults to `TRUE`.
+#' @param ci_col A character string. Color code of credible interval.
+#' @param cap Numeric. Width of the credible interval caps (passed to ``arrows()``)
+#' @param correlation String. ``pearson`` or ``spearman``. Which correlation type should be computed
+#' and included in the plot?
+#' @param cor_pos Character string. Position of the correlation (passed to ``legend()``)
+#' @param stat Character string. 95 percent ``coverage`` or ``rmse``. Which statistic
+#' should be included in the plot?
+#' @param stat_pos Character string. Position of `stat` within the plot (passed to ``legend()``)
+#' @param digits Integer. Number of digits included in the plot for the correlation and `stat`.
+#'
+#' @return Invisible list with RMSE, coverage, and Pearson and Spearman correlations.
+#' @examples
+#' # Make up some values that resemble posterior samples
+#' # Normally this would be true values that were used to simulate the data
+#' pmat <- matrix(rnorm(12, mean = c(-1, -.6, -.4, -1.5), sd = .01), ncol = 4, byrow = TRUE)
+#' # The matrix needs to have the appropriate names
+#' # Conventionally this would be created before one makes data with true values
+#' colnames(pmat) <- c("m", "m_lMd", "s", "t0")
+#' rownames(pmat) <- c("as1t", "bd6t", "bl1t")
+#' # First use plot_pars
+#' recovered_alpha <- plot_pars(samplers_LNR, selection = "alpha", pars = pmat, do_plot = FALSE)
+#' # Now use the output to make the recovery plots
+#' recovery_plot(recovered_alpha, correlation = "pearson", stat = "rmse")
+#'
+#' # Similarly we can plot other group-level parameters
+#' recovered_mu <- plot_pars(samplers_LNR, selection = "mu", pars = pmat[1,], do_plot = FALSE)
+#' recovery_plot(recovered_mu, correlation = "spearman", stat = "coverage")
 #' @export
 
-plot_alpha_recovery <- function(tabs,layout=c(2,3),
+recovery_plot <- function(tabs,layout=c(2,3),
                                 do_ci = TRUE,ci_col="grey",cap=.05,
-                                do_rmse=FALSE,r_pos="topleft",
-                                rmse_digits=3,pearson_digits=2,
-                                do_coverage=TRUE,coverage_pos="bottomright",
-                                coverage_digits=1,spearman_digits=2)
+                                correlation = "pearson",
+                                cor_pos="topleft",
+                                stat = "coverage",
+                                stat_pos="bottomright",
+                                digits = 3)
   # Takes tables output by plot_pars with par and plots recovery
 {
-  par(mfrow=layout)
-  pnams <- dimnames(tabs[[1]])[[2]]
-  if (!do_rmse) {
-    rmse <- NULL
-    pearson <- setNames(numeric(length(pnams)),pnams)
-  } else {
-    pearson <- NULL
-    rmse <- setNames(numeric(length(pnams)),pnams)
+  if(!is.list(tabs)){
+    par(mfrow = c(1,1))
+    pnams <- attr(tabs, "selection")
+  } else{
+    par(mfrow=layout)
+    pnams <- dimnames(tabs[[1]])[[2]]
   }
-  if (do_coverage) {
-    coverage <- NULL
-    spearman <- setNames(numeric(length(pnams)),pnams)
-  } else {
-    spearman=NULL
-    coverage <- setNames(numeric(length(pnams)),pnams)
-  }
+  pearson <- spearman <- rmse <- coverage <- setNames(numeric(length(pnams)),pnams)
+
   for (p in pnams) {
-    xy <- do.call(rbind,lapply(tabs,function(x){x[,p]}))
+    if(!is.list(tabs)){
+      xy <- t(tabs)
+    } else{
+      xy <- do.call(rbind,lapply(tabs,function(x){x[,p]}))
+    }
     ylim <- c(min(xy),max(xy))
     plot(xy[,"true"],xy[,"50%"],ylim=ylim,xlim=ylim,main=p,
          xlab="Generating",ylab="Estimated")
@@ -172,19 +183,19 @@ plot_alpha_recovery <- function(tabs,layout=c(2,3),
       arrows(xy[i,"true"],xy[i,"50%"],xy[i,"true"],xy[i,"2.5%"],
              col=ci_col,angle=90,length=cap)
     }
-    if (do_rmse) {
-      rmse[p] <- sqrt(mean((xy[,"true"] - xy[,"50%"])^2))
-      legend(r_pos,paste("RMSE = ",round(rmse[p],rmse_digits)),bty="n")
-    } else {
-      pearson[p] <- cor(xy[,"true"],xy[,"50%"],method="pearson")
-      legend(r_pos,paste("r(pearson) = ",round(pearson[p],pearson_digits)),bty="n")
+    pearson[p] <- cor(xy[,"true"],xy[,"50%"],method="pearson")
+    spearman[p] <- cor(xy[,"true"],xy[,"50%"],method="pearson")
+    rmse[p] <- sqrt(mean((xy[,"true"] - xy[,"50%"])^2))
+    coverage[p] = 100*mean((xy[,"97.5%"] > xy[,"true"])  & (xy[,"2.5%"] < xy[,"true"]))
+    if(correlation == "pearson"){
+      legend(cor_pos,paste("r(pearson) = ",round(pearson[p],digits)),bty="n")
+    } else if(correlation == "spearman"){
+      legend(cor_pos,paste("r(spearman) = ",round(spearman[p],digits)),bty="n")
     }
-    if (do_coverage) {
-      coverage[p] = 100*mean((xy[,"97.5%"] > xy[,"true"])  & (xy[,"2.5%"] < xy[,"true"]))
-      legend(coverage_pos,paste("95% Coverage = ",round(coverage[p],coverage_digits)),bty="n")
-    } else {
-      spearman[p] <- cor(xy[,"true"],xy[,"50%"],method="spearman")
-      legend(coverage_pos,paste("r(spearman) = ",round(spearman[p],spearman_digits)),bty="n")
+    if (stat == "rmse") {
+      legend(stat_pos,paste("RMSE = ",round(rmse[p],digits)),bty="n")
+    } else if(stat == "coverage") {
+      legend(stat_pos,paste("95% Coverage = ",round(coverage[p],digits)),bty="n")
     }
   }
   invisible(list(RMSE = rmse,COVERAGE = coverage,PEARSON=pearson,SPEARMAN=spearman))
@@ -323,7 +334,7 @@ plot_defective_density <- function(data,subject=NULL,factors=NULL,
 #' to return invisibly
 #' @param pars Named vector or matrix of known/simulated parameters, or the output of
 #' ``plot_pars``, in which case the posterior medians are extracted. If `xlim` is not supplied,
-#  the plot will be adjusted to include the parameter values, which are plotted as vertical lines.
+#' the plot will be adjusted to include the parameter values, which are plotted as vertical lines.
 #' @param probs Vector. The quantiles of the selected parameters to return invisibly.
 #' @param bw number or string bandwidth for density (default `nrd0`). See ``?density()``.
 #' @param adjust Numeric. Density function bandwidth adjustment parameter. See ``?density()``.
@@ -587,6 +598,7 @@ plot_pars <- function(samplers,layout=c(2,3),use_par=NULL,
       if (!is.null(pars)) abline(v=pars[j])
     }
     if (do_contraction & exists("contraction")) attr(tabs,"contraction") <- contraction
+    attr(tabs, "selection") <- selection
     invisible(tabs)
   }
 }
