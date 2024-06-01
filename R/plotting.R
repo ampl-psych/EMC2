@@ -310,9 +310,11 @@ plot_defective_density <- function(data,subject=NULL,factors=NULL,
 #' otherwise plots the sampled parameters.
 #' @param plot_prior Boolean. If ``TRUE`` will overlay prior density in the plot (in red)
 #' @param xlim x-axis plot limit. If a vector is supplied, will use the same axes for all.
-#  Alternatively a matrix can be supplied with one row for each parameter.
+#  Alternatively a matrix can be supplied with one row for each parameter. Default is
+#' taken from the x limits of the density estimate of the posterior.
 #' @param ylim y-axis plot limit. If a vector is supplied, will use the same axes for all.
-#  Alternatively a matrix can be supplied with one row for each parameter.
+#  Alternatively a matrix can be supplied with one row for each parameter. Default is from
+#' zero to the maximum of the density estimate of the posterior.
 #' @param prior_xlim A vector giving upper and lower quantiles of the prior when choosing
 #' xlim if ``plot_prior = TRUE``. If set to `NULL`, xlim is used instead.
 #' @param show_chains Boolean (defaults to `FALSE`) plots a separate density for each chain.
