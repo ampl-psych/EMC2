@@ -608,7 +608,7 @@ compare <- function(sList,filter="sample",subfilter=0,use_best_fit=TRUE,
 #'
 #' @param samplers A list, typically a `samplers`object, the output from `run_emc()`
 #' @param parameter A string. A parameter which you want to compare to H0. Will not be used if a FUN is specified.
-#' @param H0 An integer. The H0 value which you want to compare to
+#' @param H0 Numeric. The H0 value which you want to compare to
 #' @param filter A string. Specifies which stage the samples are to be taken from
 #' `"preburn"`, `"burn"`, `"adapt"`, or `"sample"`
 #' @param subfilter An integer or vector. If it's an integer, iterations up until
