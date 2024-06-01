@@ -101,7 +101,7 @@ es_pmwg <- function(pmwg_mcmc,selection="alpha",summary_alpha=mean,
 #' @param return_min return is min(es) for hierarchical
 #'
 #' @export
-es_summary <- function(samplers,no_print=FALSE,return_min=FALSE,digits=2=0) {
+es_summary <- function(samplers,no_print=FALSE,return_min=FALSE,digits=2) {
 
   alpha <- es_pmwg(samplers,selection="alpha",print_summary = FALSE)
   hierarchical <- any(names(samplers[[1]]$samples)=="theta_mu")
