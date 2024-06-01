@@ -4,7 +4,7 @@
 \alias{gd_summary}
 \title{gd_summary}
 \usage{
-gd_summary(samplers, no_print = TRUE, return_max = FALSE, digits = 2)
+gd_summary(samplers, no_print = FALSE, return_max = FALSE, digits = 2)
 }
 \arguments{
 \item{samplers}{Samples object with multiple chains}

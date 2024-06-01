@@ -4,7 +4,7 @@
 \alias{es_summary}
 \title{es_summary}
 \usage{
-es_summary(samplers, no_print = TRUE, return_min = FALSE, digits = 2)
+es_summary(samplers, no_print = FALSE, return_min = FALSE, digits = 2)
 }
 \arguments{
 \item{samplers}{Samples object with multiple chains}
