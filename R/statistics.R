@@ -90,6 +90,49 @@ es_pmwg <- function(pmwg_mcmc,selection="alpha",summary_alpha=mean,
   }
 }
 
+#' es_summary
+#'
+#' Summarizes effective size statistics for a samplers object, invisibly
+#' returning as a list
+#'
+#' @param samplers Samples object with multiple chains
+#' @param no_print Boolean for printing
+#' @param digits Integer, number of digits for printing
+#' @param return_max return is min(es) for hierarchical
+#'
+#' @export
+es_summary <- function(samplers,no_print=TRUE,return_min=FALSE,digits=2) {
+
+  alpha <- es_pmwg(samplers,selection="alpha",print_summary = FALSE)
+  hierarchical <- any(names(samplers[[1]]$samples)=="theta_mu")
+  if (hierarchical) {
+    mu <- es_pmwg(samplers,selection="mu",print_summary = FALSE)
+    variance <- es_pmwg(samplers,selection="variance",print_summary = FALSE)
+    correlation <- es_pmwg(samplers,selection="correlation",print_summary = FALSE)
+  }
+  if (!(no_print)) {
+    cat("ALPHA\n")
+    print(round(alpha,digits))
+    if (hierarchical) {
+      cat("\nMU\n")
+      print(round(sort(mu),digits))
+      cat("\nVARIANCE\n")
+      print(round(sort(variance),digits))
+      cat("\nCORRELATION\n")
+      print(round(sort(correlation),digits))
+    }
+  }
+  if (hierarchical) {
+    out <- list(alpha=alpha,mu=mu,variance=variance,correlation=correlation)
+    if (return_min) {
+      out <- unlist(lapply(out,min))
+    }
+  } else {
+    out <- alpha
+  }
+  invisible(out)
+}
+
 
 gd_pmwg <- function(pmwg_mcmc,return_summary=FALSE,print_summary=TRUE,
                     digits_print=2,sort_print=TRUE,autoburnin=FALSE,transform=TRUE, omit_mpsrf = TRUE,
