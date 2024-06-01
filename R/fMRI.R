@@ -484,17 +484,17 @@ normal <- function(){
         # transform parameters
         p_vector <- normal()$Ntransform(p_vector)
         X <- cbind(X, X2)
-
         # grab the right parameters
         is_sd <- grepl("sd", names(p_vector))
         sigma <- p_vector[is_sd]
         betas <- p_vector[!is_sd]
+        print(length(betas))
         betas <- matrix(betas, ncol = length(sigma))
 
         # get rid of intercept
         y_hat <- X %*% betas
         y_hat <- y_hat - mean(y_hat)
-
+        print(sigma)
         ## SM style
         if(ncol(betas > 1)) {
           total_sum <- sum(pmax(dnorm(as.matrix(y), mean = y_hat, sd = rep(sigma, each=nrow(X)), log = T)))
