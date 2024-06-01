@@ -101,7 +101,7 @@ es_pmwg <- function(pmwg_mcmc,selection="alpha",summary_alpha=mean,
 #' @param return_min return is min(es) for hierarchical
 #'
 #' @export
-es_summary <- function(samplers,no_print=TRUE,return_min=FALSE,digits=2) {
+es_summary <- function(samplers,no_print=FALSE,return_min=FALSE,digits=2=0) {
 
   alpha <- es_pmwg(samplers,selection="alpha",print_summary = FALSE)
   hierarchical <- any(names(samplers[[1]]$samples)=="theta_mu")
@@ -218,7 +218,7 @@ gd_pmwg <- function(pmwg_mcmc,return_summary=FALSE,print_summary=TRUE,
 #' @param return_max return is max(gd) for hierarchical
 #'
 #' @export
-gd_summary <- function(samplers,no_print=TRUE,return_max=FALSE,digits=2) {
+gd_summary <- function(samplers,no_print=FALSE,return_max=FALSE,digits=2) {
 
   alpha <- gd_pmwg(samplers,selection="alpha",print_summary = FALSE,omit_mpsrf = FALSE)
   alphai <- alpha; alpha <- alpha[,"mpsrf"]; alphai <- alphai[,dimnames(alphai)[[2]]!="mpsrf"]
