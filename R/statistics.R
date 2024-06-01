@@ -174,15 +174,16 @@ gd_pmwg <- function(pmwg_mcmc,return_summary=FALSE,print_summary=TRUE,
 #' @param digits Integer, number of digits for printing
 #'
 #' @return List of two lists names psrf and mpsrf.
+#' @export
 gd_summary <- function(samplers,no_print=TRUE,digits=2) {
 
-  alpha <- gd_pmwg(samplers,selection="alpha",print_summary = FALSE)
+  alpha <- gd_pmwg(samplers,selection="alpha",print_summary = FALSE,omit_mpsrf = FALSE)
   alphai <- alpha; alpha <- alpha[,"mpsrf"]; alphai <- alphai[,dimnames(alphai)[[2]]!="mpsrf"]
   hierarchical <- any(names(samplers[[1]]$samples)=="theta_mu")
   if (hierarchical) {
-    mu <- gd_pmwg(samplers,selection="mu",print_summary = FALSE)
-    variance <- gd_pmwg(samplers,selection="variance",print_summary = FALSE)
-    correlation <- gd_pmwg(samplers,selection="correlation",print_summary = FALSE)
+    mu <- gd_pmwg(samplers,selection="mu",print_summary = FALSE,omit_mpsrf = FALSE)
+    variance <- gd_pmwg(samplers,selection="variance",print_summary = FALSE,omit_mpsrf = FALSE)
+    correlation <- gd_pmwg(samplers,selection="correlation",print_summary = FALSE,omit_mpsrf = FALSE)
     mui <- mu; mu <- mu["mpsrf"]; mui <- mui[names(mui)!="mpsrf"]
     variancei <- variance; variance <- variance["mpsrf"]; variancei <- variancei[names(variancei)!="mpsrf"]
     correlationi <- correlation; correlation <- correlation["mpsrf"]; correlationi <- correlationi[names(correlationi)!="mpsrf"]
