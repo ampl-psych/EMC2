@@ -98,7 +98,7 @@ es_pmwg <- function(pmwg_mcmc,selection="alpha",summary_alpha=mean,
 #' @param samplers Samples object with multiple chains
 #' @param no_print Boolean for printing
 #' @param digits Integer, number of digits for printing
-#' @param return_max return is min(es) for hierarchical
+#' @param return_min return is min(es) for hierarchical
 #'
 #' @export
 es_summary <- function(samplers,no_print=TRUE,return_min=FALSE,digits=2) {

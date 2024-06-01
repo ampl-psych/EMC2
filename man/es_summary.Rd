@@ -11,9 +11,9 @@ es_summary(samplers, no_print = TRUE, return_min = FALSE, digits = 2)
 
 \item{no_print}{Boolean for printing}
 
-\item{digits}{Integer, number of digits for printing}
+\item{return_min}{return is min(es) for hierarchical}
 
-\item{return_max}{return is min(es) for hierarchical}
+\item{digits}{Integer, number of digits for printing}
 }
 \description{
 Summarizes effective size statistics for a samplers object, invisibly
