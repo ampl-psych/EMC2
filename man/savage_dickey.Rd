@@ -23,7 +23,7 @@ savage_dickey(
 
 \item{parameter}{A string. A parameter which you want to compare to H0. Will not be used if a FUN is specified.}
 
-\item{H0}{An integer. The H0 value which you want to compare to}
+\item{H0}{Numeric. The H0 value which you want to compare to}
 
 \item{filter}{A string. Specifies which stage the samples are to be taken from
 \code{"preburn"}, \code{"burn"}, \code{"adapt"}, or \code{"sample"}}

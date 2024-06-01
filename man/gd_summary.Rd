@@ -4,17 +4,16 @@
 \alias{gd_summary}
 \title{gd_summary}
 \usage{
-gd_summary(samplers, no_print = TRUE, digits = 2)
+gd_summary(samplers, no_print = TRUE, return_max = FALSE, digits = 2)
 }
 \arguments{
 \item{samplers}{Samples object with multiple chains}
 
 \item{no_print}{Boolean for printing}
 
+\item{return_max}{return is max(gd) for hierarchical}
+
 \item{digits}{Integer, number of digits for printing}
-}
-\value{
-List of two lists names psrf and mpsrf.
 }
 \description{
 Summarizes gelman_diag statistics for a samplers object, invisibly returning

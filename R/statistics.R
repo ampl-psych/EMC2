@@ -172,10 +172,10 @@ gd_pmwg <- function(pmwg_mcmc,return_summary=FALSE,print_summary=TRUE,
 #' @param samplers Samples object with multiple chains
 #' @param no_print Boolean for printing
 #' @param digits Integer, number of digits for printing
+#' @param return_max return is max(gd) for hierarchical
 #'
-#' @return List of two lists names psrf and mpsrf.
 #' @export
-gd_summary <- function(samplers,no_print=TRUE,digits=2) {
+gd_summary <- function(samplers,no_print=TRUE,return_max=FALSE,digits=2) {
 
   alpha <- gd_pmwg(samplers,selection="alpha",print_summary = FALSE,omit_mpsrf = FALSE)
   alphai <- alpha; alpha <- alpha[,"mpsrf"]; alphai <- alphai[,dimnames(alphai)[[2]]!="mpsrf"]
@@ -204,10 +204,19 @@ gd_summary <- function(samplers,no_print=TRUE,digits=2) {
       print(round(c(mu=mu,var=variance,corr=correlation),digits=digits))
     }
   }
-  if (hierarchical)
-    invisible(list(psrf=list(alpha=alphai,mu=mui,variance=variancei,correlation=correlationi),
-                   mpsrf=list(alpha=alpha,mu=mu,variance=variance,correlation=correlation))) else
-                     invisible(list(psrf=list(alpha=alphai), mpsrf=list(alpha=alpha)))
+  if (hierarchical) {
+    out <- list(psrf=list(alpha=alphai,mu=mui,variance=variancei,correlation=correlationi),
+                   mpsrf=list(alpha=alpha,mu=mu,variance=variance,correlation=correlation))
+    if (return_max) {
+      mpsrf=c(out$mpsrf$mu,out$mpsrf$variancex$mpsrf$correlation,out$mpsrf[[1]])
+      names(mpsrf)[1:3] <- c("mu","variance","correlation")
+      out <- list(psrf=c(unlist(lapply(out$psrf[-1],max)),apply(out$psrf[[1]],2,max)),
+                  mpsrf=mpsrf)
+    }
+  } else {
+    out <- list(psrf=list(alpha=alphai), mpsrf=list(alpha=alpha))
+  }
+  invisible(out)
 }
 
 
