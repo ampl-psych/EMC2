@@ -54,9 +54,11 @@ otherwise plots the sampled parameters.}
 
 \item{plot_prior}{Boolean. If \code{TRUE} will overlay prior density in the plot (in red)}
 
-\item{xlim}{x-axis plot limit. If a vector is supplied, will use the same axes for all.}
+\item{xlim}{x-axis plot limit. If a vector is supplied, will use the same axes for all.
+taken from the x limits of the density estimate of the posterior.}
 
-\item{ylim}{y-axis plot limit. If a vector is supplied, will use the same axes for all.}
+\item{ylim}{y-axis plot limit. If a vector is supplied, will use the same axes for all.
+zero to the maximum of the density estimate of the posterior.}
 
 \item{prior_xlim}{A vector giving upper and lower quantiles of the prior when choosing
 xlim if \code{plot_prior = TRUE}. If set to \code{NULL}, xlim is used instead.}
