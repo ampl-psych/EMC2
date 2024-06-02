@@ -32,16 +32,6 @@ get_stage <- function(pmwg,stage="burn")
 }
 
 
-#' remove iterations
-#'
-#' @param pmwg  A samplers object
-#' @param select If scalar remove 1:select, if a vector remove those iterations
-#' @param remove logical, default TRUE, if remove=FALSE instead keeps these iterations
-#' @param last_select default FALSE, if TRUE apply select from last iteration
-#' @param filter stage from which to remove samples, default "sample", if NULL
-#' remove absolute iteration number
-#'
-#' @return samplers object
 remove_iterations <- function(pmwg,select,remove=TRUE,last_select=FALSE,filter=NULL)
 {
   if (!is(pmwg, "pmwgs")) stop("Not a pmwgs object")
@@ -95,6 +85,93 @@ remove_iterations <- function(pmwg,select,remove=TRUE,last_select=FALSE,filter=N
 }
 
 
+keep_iterations <- function(pmwg,keep,keep_last=FALSE,
+                              filter="sample",only_filter=TRUE)
+{
+  if (!is(pmwg, "pmwgs")) stop("Not a pmwgs object")
+  if (length(keep)==1) {
+    if (is.null(filter)) {
+      if (!keep_last)
+        keep <- 1:keep else
+          keep <- (pmwg$samples$idx-keep+1):pmwg$samples$idx
+    } else {
+      n <- table(pmwg$samples$stage)
+      if (filter == "preburn"){
+        if (keep>n["preburn"]) stop("Removing more than available in preburn")
+        if (!keep_last)
+          keep <- 1:keep else
+            keep <- c(1,(n["preburn"]-keep+2):n["preburn"])
+          if (only_filter) keep <- c(keep,(1+n["preburn"]):sum(n)) else
+            keep <- 1+keep
+      }
+      else if (filter=="burn") {
+        if (keep>n["burn"]) stop("Removing more than available in burn")
+        nbefore <- 1 + n["preburn"]
+        if (!keep_last)
+          keep <- 1:keep else
+            keep <- (n["burn"]-keep+1):n["burn"]
+         if (!only_filter)
+          keep <- 1 + keep +  n["preburn"] else
+            keep <- c(1:nbefore,nbefore+keep,(1+nbefore+n["burn"]):sum(n))
+      } else if (filter=="adapt") {
+        if (keep>n["adapt"]) stop("Removing more than available in adapt")
+        nbefore <- 1 + n["preburn"] + n["burn"]
+        if (!keep_last)
+          keep <- 1:keep else
+            keep <- (n["adapt"]-keep+1):n["adapt"]
+        if (!only_filter)
+          keep <- 1 + keep + n["preburn"] + n["burn"] else
+            keep <- c(1:nbefore,nbefore+keep,(1+nbefore+n["adapt"]):sum(n))
+      } else if (filter=="sample") {
+        if (keep>n["sample"]) stop("Removing more than available in sample")
+        nbefore <- 1 + n["preburn"] + n["burn"] + n["adapt"]
+        if (!keep_last)
+          keep <- 1:keep else
+            keep <- (n["sample"]-keep+1):n["sample"]
+          if (!only_filter)
+            keep <- nbefore + keep  else
+              keep <- c(1:nbefore,nbefore+keep)
+      }
+    }
+  }
+  if (any(keep>pmwg$samples$idx))
+    stop("keep specifies iterations not present")
+  if (any(duplicated(keep))) stop("duplicated keep indices!")
+  ok <- 1:pmwg$samples$idx %in% keep
+  filter_idx <- which(ok)
+  if(any(pmwg$nuisance)) {
+    pmwg$sampler_nuis$samples <-
+      base::rapply(pmwg$sampler_nuis$samples, f = function(x) filter_obj(x, filter_idx), how = "replace")
+    pmwg$sampler_nuis$samples$idx <- sum(ok)
+  }
+  pmwg$samples <- base::rapply(pmwg$samples, f = function(x) filter_obj(x, filter_idx), how = "replace")
+  pmwg$samples$stage <- pmwg$samples$stage[ok]
+  pmwg$samples$idx <- sum(ok)
+  pmwg
+}
+
+
+#' select
+#'
+#' Selects iterations of an emc object to keep.
+#'
+#' @param pmwgs An emc object
+#' @param keep If scalar select 1:keep, if a vector select those iterations
+#' @param keep_last default FALSE, if TRUE apply keep from last iteration
+#' @param filter the stage from which to select samples, default "sample",
+#' if NULL select on absolute iteration number (including "init" which is iteration 1)
+#' @param only_keep_filter logical default TRUE, keep samples only from
+#' filter stage, empty all other stages, if FALSE apply selection only to stage
+#' specified in filter, keep all other staged (ignored if filter=NULL).
+#'
+#' @return An emc object
+select <- function(pmwgs,keep,keep_last=FALSE,
+                   filter="sample",only_keep_filter=TRUE) {
+  for (i in 1:length(pmwgs))
+    pmwgs[[i]] <- keep_iterations(pmwgs[[i]],keep=keep,
+      keep_last = keep_last,filter=filter,only_filter=!only_keep_filter)
+  pmwgs
+}
 
 
 #' Merge samples
