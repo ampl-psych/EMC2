@@ -32,10 +32,17 @@ get_stage <- function(pmwg,stage="burn")
 }
 
 
+#' remove iterations
+#'
+#' @param pmwg  A samplers object
+#' @param select If scalar remove 1:select, if a vector remove those iterations
+#' @param remove logical, default TRUE, if remove=FALSE instead keeps these iterations
+#' @param last_select default FALSE, if TRUE apply select from last iteration
+#' @param filter stage from which to remove samples, default "sample", if NULL
+#' remove absolute iteration number
+#'
+#' @return samplers object
 remove_iterations <- function(pmwg,select,remove=TRUE,last_select=FALSE,filter=NULL)
-  # Removes samples up to scalar remove or in remove vector
-  # if remove=FALSE instead keeps these iterations
-  # if last_select applies scalar select from last iteration
 {
   if (!is(pmwg, "pmwgs")) stop("Not a pmwgs object")
   if (length(select)==1) {
