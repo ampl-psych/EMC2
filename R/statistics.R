@@ -90,7 +90,7 @@ es_pmwg <- function(pmwg_mcmc,selection="alpha",summary_alpha=mean,
   }
 }
 
-#' es_summary
+#' es
 #'
 #' Summarizes effective size statistics for a samplers object, invisibly
 #' returning as a list
@@ -101,7 +101,7 @@ es_pmwg <- function(pmwg_mcmc,selection="alpha",summary_alpha=mean,
 #' @param return_min return is min(es) for hierarchical
 #'
 #' @export
-es_summary <- function(samplers,no_print=FALSE,return_min=FALSE,digits=2) {
+es <- function(samplers,no_print=FALSE,return_min=FALSE,digits=0) {
 
   alpha <- es_pmwg(samplers,selection="alpha",print_summary = FALSE)
   hierarchical <- any(names(samplers[[1]]$samples)=="theta_mu")
@@ -206,7 +206,7 @@ gd_pmwg <- function(pmwg_mcmc,return_summary=FALSE,print_summary=TRUE,
 }
 
 
-#' gd_summary
+#' gd
 #'
 #' Summarizes gelman_diag statistics for a samplers object, invisibly returning
 #' a list of two lists containing univarite (psrf) and multivariate (mpsrf)
@@ -218,7 +218,7 @@ gd_pmwg <- function(pmwg_mcmc,return_summary=FALSE,print_summary=TRUE,
 #' @param return_max return is max(gd) for hierarchical
 #'
 #' @export
-gd_summary <- function(samplers,no_print=FALSE,return_max=FALSE,digits=2) {
+gd <- function(samplers,no_print=FALSE,return_max=FALSE,digits=2) {
 
   alpha <- gd_pmwg(samplers,selection="alpha",print_summary = FALSE,omit_mpsrf = FALSE)
   alphai <- alpha; alpha <- alpha[,"mpsrf"]; alphai <- alphai[,dimnames(alphai)[[2]]!="mpsrf"]
@@ -324,6 +324,49 @@ iat_pmwg <- function(pmwg_mcmc,
     } else out <- get_IAT(pmwg_mcmc)
   if (sort_print & !(selection == "alpha" & is.null(summary_alpha))) out <- sort(out)
   if (print_summary) print(round(out,digits_print))
+  invisible(out)
+}
+
+#' iat
+#'
+#' Summarizes integrated autocorrelation time statistics for a samplers object,
+#' invisibly returning as a list
+#'
+#' @param samplers Samples object with multiple chains
+#' @param no_print Boolean for printing
+#' @param digits Integer, number of digits for printing
+#' @param return_max return is max(iat) for hierarchical
+#'
+#' @export
+iat <- function(samplers,no_print=FALSE,return_max=FALSE,digits=2) {
+
+  alpha <- iat_pmwg(samplers,selection="alpha",print_summary = FALSE)
+  hierarchical <- any(names(samplers[[1]]$samples)=="theta_mu")
+  if (hierarchical) {
+    mu <- iat_pmwg(samplers,selection="mu",print_summary = FALSE)
+    variance <- iat_pmwg(samplers,selection="variance",print_summary = FALSE)
+    correlation <- iat_pmwg(samplers,selection="correlation",print_summary = FALSE)
+  }
+  if (!(no_print)) {
+    cat("ALPHA\n")
+    print(round(alpha,digits))
+    if (hierarchical) {
+      cat("\nMU\n")
+      print(round(sort(mu),digits))
+      cat("\nVARIANCE\n")
+      print(round(sort(variance),digits))
+      cat("\nCORRELATION\n")
+      print(round(sort(correlation),digits))
+    }
+  }
+  if (hierarchical) {
+    out <- list(alpha=alpha,mu=mu,variance=variance,correlation=correlation)
+    if (return_max) {
+      out <- unlist(lapply(out,max))
+    }
+  } else {
+    out <- alpha
+  }
   invisible(out)
 }
 
