@@ -32,7 +32,6 @@ double c_log_likelihood_fMRI(NumericVector pars, DataFrame data, NumericMatrix d
     y_hat = y_hat + designMatrix(_, i) * pars[i];
   }
   double mean_y_hat = mean(y_hat);
-  Rcout << exp(pars[n_regr]) + 0.001;
   for(int j = 0; j < n; j ++){
     out[j] = R::dnorm4(data_use[j], y_hat[j] - mean_y_hat, exp(pars[n_regr]) + 0.001, true);
   }
