@@ -99,8 +99,6 @@ es_pmwg <- function(pmwg_mcmc,selection="alpha",summary_alpha=mean,
 #' @param no_print Boolean for printing
 #' @param digits Integer, number of digits for printing
 #' @param return_min return is min(es) for hierarchical
-#'
-#' @export
 es <- function(samplers,no_print=FALSE,return_min=FALSE,digits=0) {
 
   alpha <- es_pmwg(samplers,selection="alpha",print_summary = FALSE)
@@ -216,8 +214,6 @@ gd_pmwg <- function(pmwg_mcmc,return_summary=FALSE,print_summary=TRUE,
 #' @param no_print Boolean for printing
 #' @param digits Integer, number of digits for printing
 #' @param return_max return is max(gd) for hierarchical
-#'
-#' @export
 gd <- function(samplers,no_print=FALSE,return_max=FALSE,digits=2) {
 
   alpha <- gd_pmwg(samplers,selection="alpha",print_summary = FALSE,omit_mpsrf = FALSE)
@@ -336,8 +332,6 @@ iat_pmwg <- function(pmwg_mcmc,
 #' @param no_print Boolean for printing
 #' @param digits Integer, number of digits for printing
 #' @param return_max return is max(iat) for hierarchical
-#'
-#' @export
 iat <- function(samplers,no_print=FALSE,return_max=FALSE,digits=2) {
 
   alpha <- iat_pmwg(samplers,selection="alpha",print_summary = FALSE)
