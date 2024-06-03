@@ -189,6 +189,19 @@ subset <- function(pmwgs,keep=NA,thin=NA,keep_last=FALSE,
 }
 
 
+#' get data
+#'
+#' Extracts data from an emc object
+#'
+#' @param pmwgs an emc object
+#'
+#' @return a data frame
+get_data <- function(pmwgs) {
+  dat <- do.call(rbind,pmwgs[[1]]$data)
+  row.names(dat) <- NULL
+  dat <- dat[,!(colnames(dat) %in% c("trials","lR","lM","winner"))]
+}
+
 #' Merge samples
 #'
 #' Merges samples from all chains as one unlisted object.
