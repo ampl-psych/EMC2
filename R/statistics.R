@@ -90,16 +90,16 @@ es_pmwg <- function(pmwg_mcmc,selection="alpha",summary_alpha=mean,
   }
 }
 
-#' es
+#' ess
 #'
-#' Summarizes effective size statistics for a samplers object, invisibly
+#' Summarizes effective sample size statistics for a samplers object, invisibly
 #' returning as a list
 #'
 #' @param samplers Samples object with multiple chains
 #' @param no_print Boolean for printing
 #' @param digits Integer, number of digits for printing
 #' @param return_min return is min(es) for hierarchical
-es <- function(samplers,no_print=FALSE,return_min=FALSE,digits=0) {
+ess <- function(samplers,no_print=FALSE,return_min=FALSE,digits=0) {
 
   alpha <- es_pmwg(samplers,selection="alpha",print_summary = FALSE)
   hierarchical <- any(names(samplers[[1]]$samples)=="theta_mu")
@@ -204,7 +204,7 @@ gd_pmwg <- function(pmwg_mcmc,return_summary=FALSE,print_summary=TRUE,
 }
 
 
-#' gd
+#' rhat
 #'
 #' Summarizes gelman_diag statistics for a samplers object, invisibly returning
 #' a list of two lists containing univarite (psrf) and multivariate (mpsrf)
@@ -214,7 +214,7 @@ gd_pmwg <- function(pmwg_mcmc,return_summary=FALSE,print_summary=TRUE,
 #' @param no_print Boolean for printing
 #' @param digits Integer, number of digits for printing
 #' @param return_max return is max(gd) for hierarchical
-gd <- function(samplers,no_print=FALSE,return_max=FALSE,digits=2) {
+rhat <- function(samplers,no_print=FALSE,return_max=FALSE,digits=2) {
 
   alpha <- gd_pmwg(samplers,selection="alpha",print_summary = FALSE,omit_mpsrf = FALSE)
   alphai <- alpha; alpha <- alpha[,"mpsrf"]; alphai <- alphai[,dimnames(alphai)[[2]]!="mpsrf"]
