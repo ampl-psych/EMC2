@@ -403,10 +403,11 @@ make_fmri_design_matrix <- function(frame_times, events=NULL, hrf_model='glover'
                                     fir_delays=c(0),
                                     add_regs=NULL,
                                     add_reg_names=NULL,
+                                    ROIs,
                                     min_onset=-24,
                                     oversampling=50, add_intercept=TRUE) {
-  names = c()
-  matrix = NULL
+  names_out <- c()
+  matrix_out <- NULL
 
   # step 1: events-related regressors
   if(!is.null(events)) {
@@ -416,12 +417,12 @@ make_fmri_design_matrix <- function(frame_times, events=NULL, hrf_model='glover'
       out = convolve_regressors_(
         events, hrf_model, frame_times, fir_delays, min_onset,
         oversampling)
-      matrix = out[[1]]
-      names = out[[2]]
+      matrix_out <- out[[1]]
+      names_out <- out[[2]]
     }
   }
-  df <- data.frame(matrix, row.names=frame_times)
-  colnames(df) <- names
+  df <- data.frame(matrix_out, row.names=frame_times)
+  colnames(df) <- names_out
   if(add_intercept) df$intercept <- 1
   return(df)
 }
