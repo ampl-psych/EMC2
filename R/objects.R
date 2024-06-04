@@ -197,9 +197,10 @@ subset <- function(pmwgs,keep=NA,thin=NA,keep_last=FALSE,
 #'
 #' @return a data frame
 get_data <- function(pmwgs) {
-  dat <- do.call(rbind,pmwgs[[1]]$data)
+  dat <- do.call(rbind,lapply(pmwgs[[1]]$data,\(x) x[attr(x,"expand"),]))
   row.names(dat) <- NULL
   dat <- dat[,!(colnames(dat) %in% c("trials","lR","lM","winner"))]
+  dat
 }
 
 #' Merge samples
