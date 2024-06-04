@@ -234,7 +234,7 @@ LBA <- function(){
     p_types=c("v" = 1,"sv" = log(1),"B" = log(1),"A" = log(0),"t0" = log(0)),
     transform = function(p) p,
     # Transform to natural scale
-    Ntransform=function(x) {
+    Ntransform=function(x,use=NULL) {
       x[,dimnames(x)[[2]] != "v"] <- exp(x[,dimnames(x)[[2]] != "v"])
       x
     },

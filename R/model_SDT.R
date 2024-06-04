@@ -43,7 +43,7 @@ probit <- function(){
   type="SDT",
   p_types=c("mean" = 0,"sd" = log(1),"threshold" = 0),
   # Transform to natural scale
-  Ntransform=function(x) {
+  Ntransform=function(x,use=NULL) {
     is_sd <- grepl("sd",dimnames(x)[[2]])
     x[,is_sd] <- exp(x[,is_sd])
     x

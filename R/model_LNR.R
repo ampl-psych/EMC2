@@ -90,7 +90,7 @@ LNR <- function() {
     type="RACE",
     c_name = "LNR",
     p_types=c("m" = 1,"s" = log(1),"t0" = log(0)),
-    Ntransform=function(x) {
+    Ntransform=function(x,use=NULL) {
       # Transform to natural scale
       x[,dimnames(x)[[2]] != "m"] <- exp(x[,dimnames(x)[[2]] != "m"])
       x
