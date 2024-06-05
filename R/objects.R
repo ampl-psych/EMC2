@@ -153,7 +153,7 @@ keep_iterations <- function(pmwg,keep,keep_last=FALSE,
 }
 
 
-#' select
+#' subset
 #'
 #' Selects iterations of an emc object to keep.
 #'

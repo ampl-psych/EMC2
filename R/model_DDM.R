@@ -160,7 +160,7 @@ DDMt0natural <- function(){
     p_types=c("v" = 1,"a" = log(1),"sv" = log(1),"t0" = 0,"st0" = log(0),"s" = log(1),"Z" = qnorm(0.5),"SZ" = qnorm(0),"DP" = qnorm(0.5)),
     # Like "TZD" but t0 on natural scale and kept positive with ok so
     # t0 can be combined additively on natural scale
-    Ntransform=function(x) {
+    Ntransform=function(x,use=NULL) {
       islog <- dimnames(x)[[2]] %in% c("a","sv","st0","s")
       isprobit <- dimnames(x)[[2]] %in% c("Z","SZ","DP")
       x[,islog] <- exp(x[,islog])

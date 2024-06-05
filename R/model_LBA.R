@@ -151,11 +151,10 @@ rLBA <- function(lR,pars,p_types=c("v","sv","b","A","t0"),posdrift = TRUE,
   rt <- matrix(t0,nrow=nr)[pick] + dt[pick]
   R <- factor(levels(lR)[R],levels=levels(lR))
   R[bad] <- NA
-  rt[bad] <- Inf
   ok <- matrix(ok,nrow=length(levels(lR)))[1,]
-  out$R[ok] <- levels(lR)[R]
+  out$R[!bad] <- levels(lR)[R[!bad]]
   out$R <- factor(out$R,levels=levels(lR))
-  out$rt[ok] <- rt
+  out$rt <- rt
   out
 }
 #### Model functions ----
@@ -234,7 +233,7 @@ LBA <- function(){
     p_types=c("v" = 1,"sv" = log(1),"B" = log(1),"A" = log(0),"t0" = log(0)),
     transform = function(p) p,
     # Transform to natural scale
-    Ntransform=function(x) {
+    Ntransform=function(x,use=NULL) {
       x[,dimnames(x)[[2]] != "v"] <- exp(x[,dimnames(x)[[2]] != "v"])
       x
     },

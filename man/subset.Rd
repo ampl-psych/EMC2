@@ -2,7 +2,7 @@
 % Please edit documentation in R/objects.R
 \name{subset}
 \alias{subset}
-\title{select}
+\title{subset}
 \usage{
 subset(
   pmwgs,
