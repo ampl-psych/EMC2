@@ -274,7 +274,7 @@ rRDM <- function(lR,pars,p_types=c("v","B","A","t0"),ok=rep(TRUE,dim(pars)[1]))
   # lR is an empty latent response factor lR with one level for each accumulator.
   # pars is a matrix of corresponding parameter values named as in p_types
   # pars must be sorted so accumulators and parameter for each trial are in
-  # contiguous rows. "s" parameter will be used but can be ommitted
+  # contiguous rows. "s" parameter will be used but can be omitted
   #
   # test
   # pars=cbind(B=c(1,2),v=c(1,1),A=c(0,0),t0=c(.2,.2)); lR=factor(c(1,2))
@@ -296,7 +296,8 @@ rRDM <- function(lR,pars,p_types=c("v","B","A","t0"),ok=rep(TRUE,dim(pars)[1]))
   pick <- cbind(R,1:dim(dt)[2]) # Matrix to pick winner
   # Any t0 difference with lR due to response production time (no effect on race)
   rt <- matrix(t0,nrow=nr)[pick] + dt[pick]
-  out$R <- levels(lR)[R]
+  bad <- apply(dt,2,function(x){all(is.infinite(x))})
+  out$R[!bad] <- levels(lR)[R[!bad]]
   out$R <- factor(out$R,levels=levels(lR))
   out$rt <- rt
   out

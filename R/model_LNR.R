@@ -31,6 +31,7 @@ rLNR <- function(lR,pars,p_types=c("m","s","t0"),ok=rep(TRUE,dim(pars)[1])){
   # Any t0 difference with lR due to response production time (no effect on race)
   rt <- matrix(t0,nrow=nr)[pick] + dt[pick]
   R <- factor(levels(lR)[R],levels=levels(lR))
+  R[apply(dt,2,function(x){all(is.infinite(x))})] <- NA
   cbind.data.frame(R=R,rt=rt)
 }
 
@@ -98,11 +99,15 @@ LNR <- function() {
     # p_vector transform scaling parameter by s=1 assumed in lnr.R
     transform = function(x) x,
     # Trial dependent parameter transform
-    Ttransform = function(pars,dadm) pars,
+    Ttransform = function(pars,dadm) {
+      attr(pars,"ok") <- (pars[,"t0"] > .05) & (pars[,"s"] > 0)
+      pars
+    },
     # Random function for racing accumulators
     rfun=function(lR=NULL,pars) {
-      if (is.null(lR)) return(rep(TRUE,dim(pars)[1]))
-      rLNR(lR,pars)
+      ok <- (pars[,"t0"] > .05) & (pars[,"s"] > 0)
+      if (is.null(lR)) return(ok)
+      rLNR(lR,pars,ok=ok)
     },
     # Density function (PDF) for single accumulator
     dfun=function(rt,pars) dLNR(rt,pars),

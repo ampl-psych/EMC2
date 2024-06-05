@@ -151,11 +151,10 @@ rLBA <- function(lR,pars,p_types=c("v","sv","b","A","t0"),posdrift = TRUE,
   rt <- matrix(t0,nrow=nr)[pick] + dt[pick]
   R <- factor(levels(lR)[R],levels=levels(lR))
   R[bad] <- NA
-  rt[bad] <- Inf
   ok <- matrix(ok,nrow=length(levels(lR)))[1,]
-  out$R[ok] <- levels(lR)[R]
+  out$R[!bad] <- levels(lR)[R[!bad]]
   out$R <- factor(out$R,levels=levels(lR))
-  out$rt[ok] <- rt
+  out$rt <- rt
   out
 }
 #### Model functions ----
