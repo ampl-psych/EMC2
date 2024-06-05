@@ -73,6 +73,7 @@ get_prior_samples <- function(samples,selection,filter,thin,subfilter,n_prior)
 #' alternatively, a (parameter) named list with individual quantile limits can be supplied.
 #' @param xlim A list with parameter names of x-axis limits or a single pair if the
 #' same limits should be used for all parameters. Any names not in list or if (default) `NA`, `xlim` the minimum and maximum are set.
+#' @param do_plot logical, default TRUE shows the plot, FALSE no plot but samples still returned invisibly.
 #' @param ... For additional arguments
 #'
 #' @return Invisible of the prior samples
@@ -103,6 +104,7 @@ plot_prior <- function(prior=NULL, design,plotp=NULL,
                        mapped=TRUE,data=NULL,
                        N=1e5, nrep=10,
                        breaks=50,layout=c(3,3),lower=NULL,upper=NULL,xlim=NA,
+                       do_plot= TRUE,
                        ...)
 {
   if (is.null(selection)) {
@@ -213,7 +215,7 @@ plot_prior <- function(prior=NULL, design,plotp=NULL,
     xlims <- setNames(vector(mode="list",length=length(par_names)),par_names)
     if (is.list(xlim)) for (i in names(xlim)) xlims[[i]] <- xlim[[i]] else
       if (!all(is.na(xlim))) for (i in names(xlim)) xlims[[i]] <- xlim
-    for (pnam in par_names) {
+    if (do_plot) for (pnam in par_names) {
       lower <- quantile(mpok[,pnam], probs = lowers[[pnam]])
       upper <- quantile(mpok[,pnam], probs = uppers[[pnam]])
       if (is.null(xlims[[pnam]])) {
@@ -274,7 +276,7 @@ plot_prior <- function(prior=NULL, design,plotp=NULL,
         lowers[names(lower)] <- lower
     xlims <- setNames(vector(mode="list",length=length(par_names)),par_names)
     if (!is.null(xlim)) xlims[names(xlim)] <- xlim
-    for(i in 1:ncol(samples)){
+    if (do_plot) for(i in 1:ncol(samples)){
       lower <- quantile(quantile(samples[,i], probs = lowers[i]))
       upper <- quantile(quantile(samples[,i], probs = uppers[i]))
       filtered <- samples[,i][(samples[,i] >= lower) & (samples[,i] <= upper)]

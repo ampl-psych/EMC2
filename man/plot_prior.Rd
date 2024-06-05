@@ -19,6 +19,7 @@ plot_prior(
   lower = NULL,
   upper = NULL,
   xlim = NA,
+  do_plot = TRUE,
   ...
 )
 }
@@ -55,6 +56,8 @@ alternatively, a (parameter) named list with individual quantile limits can be s
 
 \item{xlim}{A list with parameter names of x-axis limits or a single pair if the
 same limits should be used for all parameters. Any names not in list or if (default) \code{NA}, \code{xlim} the minimum and maximum are set.}
+
+\item{do_plot}{logical, default TRUE shows the plot, FALSE no plot but samples still returned invisibly.}
 
 \item{...}{For additional arguments}
 }

@@ -49,6 +49,77 @@ make_missing <- function(data,LT=0,UT=Inf,LC=0,UC=Inf,
 }
 
 
+make_dadm_N <- function(pmwgs,N)
+  # Makes a dadm for N subjects from emc object
+{
+  dadm <- pmwgs[[1]]$data[[1]]
+  for (i in names(attr(dadm, "model")()$p_types)) {
+    attr(attr(dadm, "designs")[[i]], "expand") <- rep(1,N)
+  }
+  dattr <- attributes(dadm)
+  dattr$row.names <- 1:N
+  dadm <- dadm[rep(1,N),]
+  attributes(dadm) <- dattr
+  levels(dadm$subjects) <- 1:N
+  dadm$subjects <- 1:N
+  dadm
+}
+
+
+#' hyper prediction
+#'
+#' creates data sets by sampling from the posterior of an emc object
+#'
+#' @param pmwgs and emc object
+#' @param N number of participants
+#' @param n_trials number of trials per cell
+#' @param return_pars return pars instead of simulated data
+#' @param use_prior logical, default FALSE, if TRUE sample from prior
+#' @param max_trys mmaximum trys to get valid parameters (in lots of N)
+#'
+#' @return simulated data or a parameter matrix
+hyper_prediction <- function(pmwgs,N=1,n_trials=100,
+                             return_pars=FALSE,use_prior=FALSE,max_trys=100) {
+  design <- attr(pmwgs,"design_list")[[1]]
+  prior <- pmwgs[[1]]$prior
+  if (!use_prior) {
+    prior$theta_mu_mean <- plot_pars(pmwgs,do_plot = FALSE, selection = "mu")[2,]
+    diag(prior$theta_mu_var) <- plot_pars(pmwgs,do_plot = FALSE, selection = "variance")[2,]
+    cov <- plot_pars(pmwgs,do_plot = FALSE, selection = "covariance")[2,]
+    prior$theta_mu_var[lower.tri(prior$theta_mu_var)] <- cov
+    tmp <- t(prior$theta_mu_var)
+    tmp[lower.tri(prior$theta_mu_var)] <- cov
+    prior$theta_mu_var <- tmp
+  }
+  out <- NULL
+  trys <- 1
+  repeat {
+    if (is.null(out)) {
+      out <- as.matrix(plot_prior(prior,design,selection="alpha",N=N,do_plot=FALSE,mapped=FALSE))
+      row.names(out) <- 1:N
+      dadmN <- make_dadm_N(pmwgs,N)
+      ok <- attr(get_pars(out,dadmN),"ok")
+      nfail <- sum(!ok)
+      if (all(ok)) break else Ni <- sum(!ok)
+    } else {
+      out[!ok,] <-
+        as.matrix(plot_prior(prior,design,selection="alpha",N=Ni,do_plot=FALSE,mapped=FALSE))
+      dadmN <- make_dadm_N(pmwgs,Ni)
+      oki <- attr(get_pars(out[!ok,,drop=FALSE],dadmN),"ok")
+      nfail <- nfail + sum(!oki)
+      ok[!ok] <- oki
+      if (all(ok)) break else Ni <- sum(!oki)
+      trys <- trys + 1
+      if (trys > max_trys) break
+    }
+  }
+  if (trys>max_trys) stop("Gave up after ",max_trys," attempts to get ",N," good parameter sets.")
+  if (nfail>0) message("Parameter generation failed ",nfail," times to get ",N," paraemter sets.")
+  if (return_pars) return(out)
+  make_data(out,design,n_trials=n_trials)
+}
+
+
 #' Simulate data
 #'
 #' Simulates data based on a model design and a parameter vector (`p_vector`) by one of two methods:
