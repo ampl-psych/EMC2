@@ -170,7 +170,7 @@ run_emc <- function(samplers, stage = NULL, iter = 1000, stop_criteria = NULL,
   return(samplers)
 }
 
-#' Set or return the stop criteria associated with a stage
+#' See the stop criteria associated with a stage
 #'
 #' @param stage A string. Indicates which stage to get the stop_criteria for either ``preburn``, ``burn``, ``adapt`` or ``sample``.
 #' @param stop_criteria A list with stopping criteria. If `NULL` will fill defaults. If already partially specified will fill the rest with defaults.
@@ -198,7 +198,7 @@ get_stop_criteria <- function(stage = "sample", stop_criteria = NULL, type = 'st
       stop_criteria$mean_gd <- 1.1
       stop_criteria$omit_mpsrf <- TRUE
       if(type != "single"){
-        stop_criteria$selection <- c("alpha", "mu")
+        stop_criteria$selection <- c("alpha", "mu", "variance")
       } else{
         stop_criteria$selection <- c("alpha")
       }
@@ -211,14 +211,18 @@ get_stop_criteria <- function(stage = "sample", stop_criteria = NULL, type = 'st
       stop_criteria$max_gd <- 1.1
       stop_criteria$omit_mpsrf <- TRUE
       if(type != "single"){
-        stop_criteria$selection <- c("alpha", "mu")
+        stop_criteria$selection <- c("alpha", "mu", "variance")
       } else{
         stop_criteria$selection <- c("alpha")
       }
     }
   }
   if(!is.null(stop_criteria$max_gd) || !is.null(stop_criteria$mean_gd)){
-    if(is.null(stop_criteria$selection)) stop_criteria$selection <- c('alpha', 'mu')
+    if(type != "single"){
+      if(is.null(stop_criteria$selection)) stop_criteria$selection <- c('alpha', 'mu', "variance")
+    } else{
+      if(is.null(stop_criteria$selection)) stop_criteria$selection <- c('alpha')
+    }
   }
   if(stage == "adapt" & is.null(stop_criteria$min_unique)) stop_criteria$min_unique <- 600
   if(stage != "adapt" & !is.null(stop_criteria$min_unique)) stop("min_unique only applicable for adapt stage, try min_es instead.")
