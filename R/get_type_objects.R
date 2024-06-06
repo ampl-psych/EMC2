@@ -2,32 +2,33 @@ get_objects <- function(type, selection = NULL, sample_prior = F, design = NULL,
                         prior = NULL, mapped = F, N = 1e5, ...){
   return_prior <- ifelse(is.null(sampler), TRUE, FALSE)
   if(type == "standard"){
-    return(get_objects_standard(type, selection, sample_prior, return_prior, design, prior, mapped, N = N,
-                                sampler, ...))
+    out <- get_objects_standard(type, selection, sample_prior, return_prior, design, prior, mapped, N = N,
+                                sampler, ...)
   }
   else if(type == "single"){
-    return(get_objects_single(type, selection, sample_prior, return_prior, design, prior, mapped, N = N,
-                                sampler, ...))
+    out <- get_objects_single(type, selection, sample_prior, return_prior, design, prior, mapped, N = N,
+                                sampler, ...)
   }
   else if(type == "diagonal"){
-    return(get_objects_diag(type, selection, sample_prior, return_prior, design, prior, mapped, N = N,
-                              sampler, ...))
+    out <- get_objects_diag(type, selection, sample_prior, return_prior, design, prior, mapped, N = N,
+                              sampler, ...)
   }
   else if(type == "blocked"){
-    return(get_objects_blocked(type, selection, sample_prior, return_prior, design, prior, mapped, N = N,
-                            sampler, ...))
+    out <- get_objects_blocked(type, selection, sample_prior, return_prior, design, prior, mapped, N = N,
+                            sampler, ...)
   }
   else if(type == "infnt_factor"){
-    return(get_objects_infnt_factor(type, selection, sample_prior, return_prior, design, prior, mapped, N = N,
-                               sampler, ...))
+    out <- get_objects_infnt_factor(type, selection, sample_prior, return_prior, design, prior, mapped, N = N,
+                               sampler, ...)
   }
   else if(type == "factor"){
-    return(get_objects_factor(type, selection, sample_prior, return_prior, design, prior, mapped, N = N,
-                                    sampler, ...))
+    out <- get_objects_factor(type, selection, sample_prior, return_prior, design, prior, mapped, N = N,
+                                    sampler,...)
   }
   else{
     stop("make sure type is supported!")
   }
+  return(out)
 }
 
 add_prior_names <- function(prior, design){
@@ -50,7 +51,7 @@ add_prior_names <- function(prior, design){
 }
 
 get_objects_diag <- function(type, selection, sample_prior, return_prior, design = NULL,
-                                 prior = NULL, mapped = F, N = 1e5, sampler = NULL, ...){
+                                 prior = NULL, mapped = F, N = 1e5, sampler = NULL,...){
   acc_selection <- c("mu", "variance", "alpha", "full_var")
   if(return_prior){
     if(sample_prior){
@@ -93,6 +94,22 @@ get_objects_standard <- function(type, selection, sample_prior, return_prior, de
   } else{
     if(selection == "mu"){
       return(lapply(sampler, FUN = function(x) return(x$samples$theta_mu)))
+    } else if(selection == "alpha"){
+      return(lapply(sampler, FUN = function(x) return(x$samples$alpha)))
+    } else if(selection == "covariance"){
+      return(lapply(sampler, FUN = function(x){
+        out <- x$samples$theta_var
+        for(i in 1:dim(out)[3]){
+          diag(out[,,i]) <- 0
+        }
+        return(out)
+      }))
+    } else if(selection == "variance"){
+      return(lapply(sampler, FUN = function(x){
+        out <- x$samples$theta_var
+        out <- apply(out,3,diag)
+        return(out)
+      }))
     }
 
   }
@@ -100,7 +117,7 @@ get_objects_standard <- function(type, selection, sample_prior, return_prior, de
 
 
 get_objects_blocked <- function(type, selection, sample_prior, return_prior, design = NULL,
-                                 prior = NULL, mapped = F, N = 1e5, sampler = NULL, ...){
+                                 prior = NULL, mapped = F, N = 1e5, sampler = NULL,...){
   acc_selection <- c("mu", "variance", "covariance", "correlation", "alpha", "full_var")
   if(return_prior){
     if(sample_prior){
@@ -124,7 +141,7 @@ get_objects_blocked <- function(type, selection, sample_prior, return_prior, des
 
 
 get_objects_single <- function(type, selection, sample_prior, return_prior, design = NULL,
-                                 prior = NULL, mapped = F, N = 1e5, sampler = NULL, ...){
+                                 prior = NULL, mapped = F, N = 1e5, sampler = NULL,...){
   acc_selection <- "alpha"
   if(return_prior){
     if(sample_prior){

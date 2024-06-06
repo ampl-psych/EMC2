@@ -290,15 +290,20 @@ plot_defective_density <- function(data,subject=NULL,factors=NULL,
 
 robust_hist <- function(ps, breaks = 50, cutoff = 0.002, main = "",
                         cex.lab = 1, cex.main = 1.5, prob = TRUE,
-                        xlab = ""){
+                        xlab = "", do_plot = TRUE){
   for(i in 1:log10(length(ps))){
     cuts <- cut(ps, breaks = breaks)
     tab_cuts <- table(cuts)
     good_cuts <- tab_cuts/length(ps) > cutoff
     ps <- ps[cuts %in% names(good_cuts)[good_cuts]]
   }
-  hist(ps, breaks = breaks, main = main, cex.lab = cex.lab, cex.main = cex.main,
-       prob = prob, xlab = xlab)
+  if(do_plot){
+    hist(ps, breaks = breaks, main = main, cex.lab = cex.lab, cex.main = cex.main,
+         prob = prob, xlab = xlab)
+  } else{
+    return(ps)
+  }
+
 }
 
 robust_density <- function(ps,r,bw,adjust,use_robust=FALSE)
@@ -1369,64 +1374,98 @@ profile_plot <- function(pname,p_vector,p_min,p_max,data, design, n_point=100,ma
 }
 
 
-plot_chains_new <- function(samplers,layout=NA,subject=NA,ylim=NULL,
+
+# plot_pars_new <- function(samplers, layout = NA)
+
+plot_chains_new <- function(samplers,layout=NA,subject=NULL,ylim=NULL,
                         selection="mu",filter="sample",thin=1,subfilter=0,
-                        plot_acf=FALSE) # ,use_par=NA
-  # Plots chains  (if alpha, LL or epsilon can do individual subject, all by default)
+                        plot_acf=FALSE, by_subject = FALSE, use_par = NULL)
 {
-  MCMC_samples <- samplers
-  MCMC_samples <- as_mcmc_new(MCMC_samples, selection = selection, filter = filter,
-                              thin = thin, subfilter = subfilter)
-  # if (!(inherits(MCMC_samples,  c("mcmc","mcmc.list")))) {
-  #   if (inherits(MCMC_samples, "pmwgs"))
-  #     MCMC_samples <- as_Mcmc(MCMC_samples,selection=selection,filter=filter,
-  #                             thin=thin,subfilter=subfilter) else
-  #                               MCMC_samples <- as_mcmc.list(MCMC_samples,selection=selection,filter=filter,
-  #                                                            thin=thin,subfilter=subfilter)
-  # }
+  if(!is.null(subject) & length(subject) == 1) by_subject <- TRUE
+  MCMC_samples <- as_mcmc_new(samplers, selection = selection, filter = filter,
+                              thin = thin, subfilter = subfilter, by_subject = by_subject,
+                              subject = subject, use_par = use_par, flatten = FALSE)
   auto.layout <- any(is.na(layout))
-  no_layout <- is.null(layout)
-  if (!auto.layout & !no_layout) par(mfrow=layout)
-  if (attr(MCMC_samples,"selection")=="alpha" || attr(MCMC_samples,"selection")=="random") {
-    snams <- names(MCMC_samples)
-    if (any(is.na(subject))) subject <- snams
-    if (is.numeric(subject)) subject <- snams[subject]
-    if (!all(subject %in% names(MCMC_samples)))
-      stop("Subject not present\n")
-    for (i in subject) {
-      if (!auto.layout & !no_layout) par(mfrow=layout)
-      if (plot_acf){
-        for (j in colnames(MCMC_samples[[i]][[1]])){
-          acf(MCMC_samples[[i]][[1]][,j],main=paste0("Chain ",1,": ","s",i,": ",j))
-        }
-      } else {
-        plot(MCMC_samples[[i]],auto.layout=auto.layout,density=FALSE,
-             xlab=paste0("Iterations ",i),ask=FALSE,trace=TRUE,
-             ylab=attr(MCMC_samples,"selection"),smooth=FALSE,ylim=ylim)
-      }
+  if (!auto.layout) par(mfrow=layout)
+  for(i in 1:length(MCMC_samples)){
+    if(i == 1 & auto.layout){
+      mfrow <- coda:::set.mfrow(Nchains = length(MCMC_samples[[1]]), Nparms = ncol(MCMC_samples[[1]][[1]]),
+                         nplots = 1)
+      oldpar <- par(mfrow = mfrow)
+    } else if(auto.layout){
+      oldpar <- par(mfrow = mfrow)
     }
-  } else if (attr(MCMC_samples,"selection") %in% c("LL","epsilon")) {
-    if (any(is.na(subject))) subject <- names(MCMC_samples)
-    if (!all(subject %in% names(MCMC_samples)))
-      stop("Subject not present\n")
-    for (i in subject) {
-      if (plot_acf){
-        acf(MCMC_samples[[i]][[1]],main=paste0("Chain ",1,": ","LL ",i))
-      } else{
-        plot(MCMC_samples[[i]],auto.layout=auto.layout,density=FALSE,
-             xlab=paste0("Iterations ",i),ask=FALSE,trace=TRUE,
-             ylab=attr(MCMC_samples,"selection"),smooth=FALSE,ylim=ylim)
-      }
-    }
-  } else {
-    if (plot_acf) {
-      for (j in colnames(MCMC_samples[[1]])){
-        acf(MCMC_samples[[1]][,j],main=paste0("Chain ",1,": ",j))
+    if (plot_acf){
+      for (j in colnames(MCMC_samples[[i]][[1]])){
+        acf(MCMC_samples[[i]][[1]][,j],main=paste0("Chain ",1,": ",j), ylab = names(MCMC_samples)[[i]])
       }
     } else {
-      plot(MCMC_samples,auto.layout=auto.layout,density=FALSE,
-           ask=FALSE,trace=TRUE,ylim=ylim,
-           ylab=attr(MCMC_samples,"selection"),smooth=FALSE)
+      plot(MCMC_samples[[i]],auto.layout=FALSE,density=FALSE,
+           xlab="Iterations",ask=FALSE,trace=TRUE,
+           ylab=names(MCMC_samples)[[i]],smooth=FALSE,ylim=ylim)
+    }
+  }
+}
+
+
+
+plot_pars_new <- function(samplers,layout=NA,subject=NULL,ylim=NULL,
+                            selection="mu",filter="sample",thin=1,subfilter=0,
+                            plot_acf=FALSE, by_subject = FALSE, use_par = NULL,
+                          show_chains = FALSE, plot_prior = TRUE,
+                          use_prior_lim = TRUE)
+{
+  if(!is.null(subject) & length(subject) == 1) by_subject <- TRUE
+  MCMC_samples <- as_mcmc_new(samplers, selection = selection, filter = filter,
+                              thin = thin, subfilter = subfilter, by_subject = by_subject,
+                              subject = subject, use_par = use_par, flatten = FALSE)
+  auto.layout <- any(is.na(layout))
+  if (!auto.layout) par(mfrow=layout)
+  for(i in 1:length(MCMC_samples)){
+    if(i == 1 & auto.layout){
+      mfrow <- coda:::set.mfrow(Nchains = length(MCMC_samples[[1]]), Nparms = ncol(MCMC_samples[[1]][[1]]),
+                                nplots = 1)
+      oldpar <- par(mfrow = mfrow)
+    } else if(auto.layout){
+      oldpar <- par(mfrow = mfrow)
+    }
+    merged <- do.call(rbind, MCMC_samples[[i]]) # Need for contraction calculation
+    if(!show_chains){
+      MCMC_samples[[i]] <- list(merged)
+    }
+    if(plot_prior){
+      # Add prior as last element of the list
+      psamples <-  get_objects(design = attr(samplers,"design_list")[[1]],
+                              type = attr(samplers[[1]], "variant_funs")$type, sample_prior = T,
+                              selection = selection, mapped = FALSE, N = 1e4)
+      psamples <- apply(psamples, 2, robust_hist, do_plot = FALSE)
+      psamples <- do.call(cbind, lapply(psamples, sample, size = min(unlist(lapply(psamples, length)))))
+      MCMC_samples[[i]][[length(MCMC_samples[[i]]) + 1]] <-psamples
+    }
+    for(l in 1:ncol(MCMC_samples[[i]][[1]])){
+      lim_denses <- denses <- lapply(MCMC_samples[[i]], function(x) density(x[,l]))
+      if(!use_prior_lim){
+        lim_denses[[length(lim_denses)]] <- NULL
+      }
+      xlim <- lapply(lim_denses, function(x) return(c(min(x$x), max(x$x))))
+      ylim <- lapply(lim_denses, function(x) return(c(min(x$y), max(x$y))))
+
+      for(k in 1:length(MCMC_samples[[i]])){
+        if(k == 1){
+          plot(denses[[k]], xlim = c(min(unlist(xlim)), max(unlist(xlim))),
+               ylim = c(min(unlist(ylim)), max(unlist(ylim))),
+               ylab = "Density", xlab = names(MCMC_samples)[[i]],
+               main = colnames(MCMC_samples[[i]][[k]])[l])
+        } else if(plot_prior & k == length(MCMC_samples[[i]])){
+          lines(denses[[k]], col = "red")
+        } else{
+          lines(denses[[k]], col = 1)
+        }
+      }
+      if(plot_prior){
+        contraction <- 1-(var(merged[,l])/var(psamples[,l]))
+        legend("topright",legend=round(contraction,3),bty="n",title="Contraction")
+      }
     }
   }
 }

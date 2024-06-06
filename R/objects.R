@@ -530,81 +530,141 @@ shorten <- function(x,r,d) {
   if (d==2) x[,r,drop=FALSE] else x[,,r,drop=FALSE]
 }
 
+filter_emc <- function(samples, thin){
+  return(samples)
+}
+
+
+# filter for constants or duplicates
+filter_const_and_dup <- function(samples, remove_dup = TRUE){
+  # We only need the first list entry to calculate the idx
+  x <- samples[[1]]
+  if(length(dim(x)) == 2){
+    is_constant <- apply(x[,1:(min(50, ncol(x)))], 1, sd) == 0
+    is_duplicate <- duplicated(rowSums(x[,1:(min(50, ncol(x)))]))
+    if(remove_dup){
+      filter <- is_duplicate | is_constant
+    } else{
+      filter <- is_constant
+    }
+    samples <- lapply(samples, function(x) x[!filter,,drop = F])
+  } else{
+    is_constant <- apply(x[,,1:(min(50, ncol(x))), drop = F], 1:2, sd) == 0
+    all_sums <- c(apply(x[,,1:(min(50, ncol(x))), drop = F], 1:2, sum))
+    is_duplicate <- duplicated(round(all_sums/mean(all_sums), 4))
+    if(remove_dup){
+      filter <- is_duplicate | is_constant
+    } else{
+      filter <- is_constant
+    }
+    samples <- lapply(samples, FUN = function(x){
+      out <- x
+      for(i in 1:dim(out)[3]){
+        tmp <- out[,,i, drop = F]
+        tmp[filter] <- NA
+        out[,,i] <- tmp
+      }
+      return(out)
+    })
+  }
+
+  return(samples)
+}
+
+# Two horrible functions that generalize very well though!
+make_3dim_mcmc <- function(x, split){
+  samples <- lapply(x, FUN = function(y){
+    lapply(split_along_dim(y, split), FUN = function(z){
+      idx <- !is.na(z[,1])
+      coda::mcmc(t(z[idx,, drop = F]))
+    })
+  })
+  out <- setNames(lapply(1:length(samples[[1]]), function(i) coda::as.mcmc.list(
+    lapply(samples, function(m) m[[i]]))),  names(samples[[1]]))
+  out <- lapply(out, function(x){
+    if(ncol(x[[1]]) == 0) return(NULL) else return(x)
+  })
+  out[sapply(out, is.null)] <- NULL
+  return(out)
+}
+
+# Function to split array a into list along any dimension n
+split_along_dim <- function(a, n){
+  setNames(lapply(split(a, arrayInd(seq_along(a), dim(a))[, n]),
+                  array, dim = dim(a)[-n], dimnames(a)[-n]),
+           dimnames(a)[[n]])
+}
+
+
+
+filter_sub_and_par <- function(obj, sub, sub_names, par, par_names){
+  if(length(dim(obj)) > 2){
+    is_sub_idx <- sapply(dimnames(obj), FUN = function(x) identical(x, sub_names))
+    if(any(is_sub_idx)){
+      if(is_sub_idx[2]){ # Second dimension has subject names
+        if(is.character(sub)){
+          obj <- obj[,sub_names %in% sub,,drop = F]
+        }
+        if(is.numeric(sub)){
+          obj <- obj[,sub,,drop = F]
+        }
+      } else{ # Must be the first dimension
+        if(is.character(sub)){
+          obj <- obj[sub_names %in% sub,,,drop = F]
+        }
+        if(is.numeric(sub)){
+          obj <- obj[sub,,,drop = F]
+        }
+      }
+    }
+    if(!is.null(par)){
+      if(any(colnames(obj) %in% par)){
+        obj <- obj[,colnames(obj) %in% par,,drop = F]
+      } else if(any(rownames(obj) %in% par)){
+        obj <- obj[rownames(obj) %in% par,,,drop = F]
+      }
+    }
+  }
+  return(obj)
+}
+
+
+
 as_mcmc_new <- function(sampler,filter="sample",thin=1,subfilter=0,
-                    selection= "mu")
+                    selection= "mu", by_subject = FALSE,
+                    subject = NULL, flatten = FALSE, remove_dup = TRUE,
+                    use_par = NULL)
 {
   # filter <- which(sampler$samples$stage %in% filter)
   samples <- get_objects(type = attr(sampler[[1]], "variant_funs")$type, sampler = sampler,
-                         selection = selection)
-#
-#
-#   out <- coda::mcmc(fixed[seq(thin,dim(fixed)[1],by=thin),,drop=FALSE])
-#     attr(out,"selection") <- selection
-#     return(out)
-#   }
-#   if (selection == "mu") {
-#     mu <- sampler$samples$theta_mu[, filter,drop=FALSE]
-#     if (is.null(subfilter)){
-#       mu <- t(mu)
-#     }  else{
-#       mu <- t(shorten(mu,subfilter,2))
-#     }
-#     if (thin > dim(mu)[1]) stop("Thin to large\n")
-#     out <- coda::mcmc(mu[seq(thin,dim(mu)[1],by=thin),,drop=FALSE])
-#     attr(out,"selection") <- selection
-#     return(out)
-#   } else if (selection %in% c("variance","covariance","correlation")) {
-#     tvar <- sampler$samples$theta_var[, , filter,drop=FALSE]
-#     if (selection=="correlation")
-#       tvar <- array(apply(tvar,3,stats::cov2cor),dim=dim(tvar),dimnames=dimnames(tvar))
-#     if (selection %in% c("covariance","correlation")) {
-#       lt <- lower.tri(tvar[,,1])
-#       pnams <- dimnames(tvar)[[1]]
-#       pnams <- outer(pnams,pnams,paste,sep=".")[lt]
-#       tvar <- apply(tvar,3,function(x){x[lt]})
-#       dimnames(tvar)[[1]] <- pnams
-#       if (all(tvar==0))
-#         stop("All covariances/correlations zero, model assumes independence.")
-#     } else {
-#       tvar <- apply(tvar,3,diag)
-#     }
-#     if (is.null(subfilter)){
-#       tvar <- t(tvar)
-#     } else{
-#       tvar <- t(shorten(tvar,subfilter,2))
-#     }
-#     if (thin > dim(tvar)[1]) stop("Thin to large\n")
-#     out <- coda::mcmc(tvar[seq(thin,dim(tvar)[1],by=thin),,drop=FALSE])
-#     attr(out,"selection") <- selection
-#     return(out)
-#   } else if (selection == "alpha") {
-#     alpha <- sampler$samples$alpha[, , filter,drop=FALSE]
-#     if (!is.null(subfilter)) alpha <- shorten(alpha,subfilter,3)
-#     if (thin > dim(alpha)[3]) stop("Thin to large\n")
-#     alpha <- alpha[,,seq(thin,dim(alpha)[3],by=thin),drop=FALSE]
-#     out <- stats::setNames(lapply(
-#       seq(dim(alpha)[2]),
-#       function(x) {
-#         coda::mcmc(t(alpha[, x, ]))
-#       }
-#     ), names(sampler$data))
-#     attr(out,"selection") <- selection
-#     return(out)
-#   } else if (selection %in% c("LL","epsilon")) {
-#     if (selection == "epsilon"){
-#       LL <- sampler$samples$epsilon[, filter,drop=FALSE]
-#     } else{
-#       LL <- sampler$samples$subj_ll[, filter,drop=FALSE]
-#     }
-#     if (!is.null(subfilter)) LL <- shorten(LL,subfilter,2)
-#     if (thin > dim(LL)[2]) stop("Thin to large\n")
-#     out <- setNames(lapply(
-#       data.frame(t(LL[,seq(thin,dim(LL)[2],by=thin),drop=FALSE])),coda::mcmc),
-#       names(sampler$data))
-#     attr(out,"selection") <- selection
-#     return(out)
-#   }
-#   stop("Argument `selection` should be one of mu, variance, covariance, correlation, alpha, LL, or epsilon\n")
+                         selection = selection, subject = subject)
+  if(length(dim(samples[[1]])) > 2 & flatten){
+    pnams <- c(outer(rownames(samples[[1]]), colnames(samples[[1]]), paste, sep = "."))
+    samples <- lapply(samples, function(x) out <- apply(x,3,function(y){c(y)}))
+    samples <- lapply(samples, function(x) {rownames(x) <- pnams; return(x)})
+  }
+
+  samples <- filter_const_and_dup(samples, remove_dup)
+  subnames <- names(sampler[[1]]$data)
+  parnames <- sampler[[1]]$par_names
+  samples <- lapply(samples, filter_sub_and_par, subject, subnames, use_par, parnames)
+
+
+  if(length(dim(samples[[1]])) > 2){
+    is_sub_idx <- sapply(dimnames(samples[[1]]), FUN = function(x) any(x %in% subnames))
+    if(any(is_sub_idx) & by_subject){
+      samples <- make_3dim_mcmc(samples, which(is_sub_idx))
+    } else if(any(is_sub_idx)){
+      samples <- make_3dim_mcmc(samples, which(!is_sub_idx)[1])
+    } else{
+      samples <- make_3dim_mcmc(samples, 2)
+    }
+  } else{
+    samples <- lapply(samples, filter_emc, thin = thin)
+    samples <- list(coda::as.mcmc.list(lapply(samples, FUN = function(x) coda::mcmc(t(x)))))
+    names(samples) <- selection
+  }
+  return(samples)
 }
 
 

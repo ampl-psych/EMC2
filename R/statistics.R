@@ -91,41 +91,41 @@ es_pmwg <- function(pmwg_mcmc,selection="alpha",summary_alpha=mean,
 }
 
 
+split_mcl <- function(mcl)
+  # Doubles chains by splitting into first and secon half
+{
+  if (!is.list(mcl)) mcl <- list(mcl)
+  mcl2 <- mcl
+  half <- floor(unlist(lapply(mcl,nrow))/2)
+  for (i in 1:length(half)) {
+    mcl2[[i]] <- coda::as.mcmc(mcl2[[i]][c((half[i]+1):(2*half[i])),])
+    mcl[[i]] <- coda::as.mcmc(mcl[[i]][1:half[i],])
+  }
+  coda::as.mcmc.list(c(mcl,mcl2))
+}
+
+gelman_diag_robust <- function(mcl,autoburnin = FALSE,transform = TRUE, omit_mpsrf = TRUE)
+{
+  mcl <- split_mcl(mcl)
+  gd <- try(gelman.diag(mcl,autoburnin=autoburnin,transform=transform, multivariate = !omit_mpsrf),silent=TRUE)
+  gd_out <- gd[[1]][,1] # Remove CI
+  if (is(gd, "try-error")){
+    if(omit_mpsrf){
+      return(list(psrf=matrix(Inf)))
+    } else{
+      return(list(psrf=matrix(Inf),mpsrf=Inf))
+    }
+  } else{
+    return(gd_out)
+  }
+}
+
 gd_pmwg <- function(pmwg_mcmc,return_summary=FALSE,print_summary=TRUE,
                     digits_print=2,sort_print=TRUE,autoburnin=FALSE,transform=TRUE, omit_mpsrf = TRUE,
                     selection="alpha",filter="sample",thin=1,subfilter=NULL,mapped=FALSE)
   # R hat, prints multivariate summary returns each participant unless +
   # multivariate as matrix unless !return_summary
 {
-
-  split_mcl <- function(mcl)
-    # Doubles chains by splitting into first and secon half
-  {
-    if (!is.list(mcl)) mcl <- list(mcl)
-    mcl2 <- mcl
-    half <- floor(unlist(lapply(mcl,nrow))/2)
-    for (i in 1:length(half)) {
-      mcl2[[i]] <- coda::as.mcmc(mcl2[[i]][c((half[i]+1):(2*half[i])),])
-      mcl[[i]] <- coda::as.mcmc(mcl[[i]][1:half[i],])
-    }
-    coda::as.mcmc.list(c(mcl,mcl2))
-  }
-
-  gelman_diag_robust <- function(mcl,autoburnin,transform, omit_mpsrf)
-  {
-    mcl <- split_mcl(mcl)
-    gd <- try(gelman.diag(mcl,autoburnin=autoburnin,transform=transform, multivariate = !omit_mpsrf),silent=TRUE)
-    if (is(gd, "try-error")){
-      if(omit_mpsrf){
-        return(list(psrf=matrix(Inf)))
-      } else{
-        return(list(psrf=matrix(Inf),mpsrf=Inf))
-      }
-    } else{
-      return(gd)
-    }
-  }
-
   if ( selection=="LL" ) stop("Rhat not appropriate for LL")
   if (class(pmwg_mcmc[[1]]) %in% c("mcmc","mcmc.list")) {
     if (mapped) warning("Cannot transform to natural scale unless samples list provided")
@@ -827,3 +827,81 @@ condMVN <- function (mean, sigma, dependent.ind, given.ind, X.given, check.sigma
   cVar <- B - CDinv %*% t(C)
   list(condMean = cMu, condVar = cVar)
 }
+
+
+make_nice_summary <- function(object, stat = "max"){
+  row_names <- names(object)
+  col_names <- unique(unlist(lapply(object, names)))
+  if(all(row_names %in% col_names)){
+    col_names <- row_names
+  }
+  out_mat <- matrix(NA, nrow = length(row_names), ncol = length(col_names))
+  for(i in 1:length(object)){
+    idx <- col_names %in% names(object[[i]])
+    out_mat[i,idx] <- object[[i]]
+  }
+  row_stat <- apply(out_mat, 1, FUN = get(stat), na.rm = T)
+  out_mat <- cbind(out_mat, row_stat)
+
+  if(nrow(out_mat) > 1){
+    col_stat <- apply(out_mat, 2, FUN = get(stat), na.rm = T)
+    out_mat <- rbind(out_mat, c(col_stat))
+    rownames(out_mat) <- c(row_names, stat)
+  } else{
+    rownames(out_mat) <- row_names
+  }
+  colnames(out_mat) <- c(col_names, stat)
+
+  return(out_mat)
+}
+
+
+get_summary_stat <- function(samplers, fun, subject=NULL,
+                             selection="mu",filter="sample",thin=1,subfilter=0,
+                             by_subject = TRUE, stat = "min", ...){
+  MCMC_samples <- as_mcmc_new(samplers, selection = selection, filter = filter,
+                              thin = thin, subfilter = subfilter, by_subject = by_subject,
+                              subject = subject, flatten = FALSE, remove_dup = FALSE)
+  out <- vector("list", length = length(MCMC_samples))
+  for(i in 1:length(MCMC_samples)){
+    # cat("\n", names(MCMC_samples)[[i]], "\n")
+    out[[i]] <- fun(MCMC_samples[[i]], ...)
+  }
+  names(out) <- names(MCMC_samples)
+  out <- make_nice_summary(out)
+  return(out)
+}
+
+gd_summary_new <- function(samplers,subject=NULL,
+                           selection="mu",filter="sample",thin=1,subfilter=0,
+                           omit_mpsrf = TRUE, by_subject = TRUE, stat = "min"){
+  out <- get_summary_stat(samplers, gelman_diag_robust, subject, selection, filter, thin, subfilter,
+                          by_subject, stat)
+  return(out)
+}
+
+es_summary_new <- function(samplers,subject=NULL,
+                           selection="mu",filter="sample",thin=1,subfilter=0,
+                           by_subject = TRUE, stat = "min"){
+  out <- get_summary_stat(samplers, effectiveSize, subject, selection, filter, thin, subfilter,
+                          by_subject, stat)
+  return(out)
+}
+
+
+# gd_summary_new <- function(samplers,subject=NULL,
+#                            selection="mu",filter="sample",thin=1,subfilter=0,
+#                            omit_mpsrf = TRUE, by_subject = TRUE, stat = "max"){
+#   MCMC_samples <- as_mcmc_new(samplers, selection = selection, filter = filter,
+#                               thin = thin, subfilter = subfilter, by_subject = by_subject,
+#                               subject = subject, flatten = FALSE, remove_dup = FALSE)
+#   gds_out <- vector("list", length = length(MCMC_samples))
+#   for(i in 1:length(MCMC_samples)){
+#     # cat("\n", names(MCMC_samples)[[i]], "\n")
+#     gds_out[[i]] <- gelman_diag_robust(MCMC_samples[[i]])
+#   }
+#   names(gds_out) <- names(MCMC_samples)
+#   gds_out <- make_nice_summary(gds_out)
+#   return(gds_out)
+# }
+
