@@ -9,7 +9,7 @@
 #' or a single list in which case its assumed to be for the sample `stage` (see examples).
 #' The potential stop criteria to be set are:
 #'
-#' ``selection`` (character vector): For which parameters the ``stop_criteria`` should hold
+#' ``selection`` (character vector): For which parameter types (e.g. "covariance" or "alpha") the ``stop_criteria`` should hold
 #'
 #' ``mean_gd`` (numeric): The mean Gelman-Rubin diagnostic across all parameters in the selection
 #'
@@ -22,6 +22,8 @@
 #' ``omit_mpsrf`` (Boolean): Whether to include the multivariate point-scale reduction factor in the Gelman-Rubin diagnostic. Default is ``FALSE``.
 #'
 #' ``iter`` (integer): The number of MCMC samples to collect.
+#'
+#' The default stop_criteria for each stage can be accessed using `get_stop_criteria(stage)`.
 #'
 #' The estimation is performed using particle-metropolis within-Gibbs sampling.
 #' For sampling details see:
@@ -168,7 +170,28 @@ run_emc <- function(samplers, stage = NULL, iter = 1000, stop_criteria = NULL,
   return(samplers)
 }
 
-get_stop_criteria <- function(stage, stop_criteria, type){
+#' See or return the stop criteria associated with a sampling stage.
+#'
+#' For an overview of the different criteria see `?run_emc()`
+#'
+#' @param stage A string. Indicates which stage to get the stop_criteria for either ``preburn``, ``burn``, ``adapt`` or ``sample``.
+#' @param stop_criteria A list with stopping criteria. If `NULL` will fill defaults. If already partially specified will fill the rest with defaults.
+#' Also see the details and examples section of ``run_emc``.
+#' @param type A string indicating whether to run a `standard` group-level, `blocked`, `diagonal`, `factor`, or `single` (i.e., non-hierarchical) model.
+#' The stopping criteria vary between hierarchical and non-hierarchical models (`type = single`)
+#'
+#' @return A list with stopping criteria associated with the stage
+#' @export
+#'
+#' @examples
+#' # To see the stop criteria for e.g. the adapt phase
+#' get_stop_criteria("adapt")
+#' # Or for all stages:
+#' stages <- c("preburn", "burn", "adapt", "sample")
+#' stop_criteria <- lapply(stages, get_stop_criteria)
+#' names(stop_criteria) <- stages
+#'
+get_stop_criteria <- function(stage = "sample", stop_criteria = NULL, type = 'standard'){
   if(is.null(stop_criteria)){
     if(stage == "preburn"){
       stop_criteria$iter <- 150
@@ -177,7 +200,7 @@ get_stop_criteria <- function(stage, stop_criteria, type){
       stop_criteria$mean_gd <- 1.1
       stop_criteria$omit_mpsrf <- TRUE
       if(type != "single"){
-        stop_criteria$selection <- c("alpha", "mu")
+        stop_criteria$selection <- c("alpha", "mu", "variance")
       } else{
         stop_criteria$selection <- c("alpha")
       }
@@ -190,14 +213,18 @@ get_stop_criteria <- function(stage, stop_criteria, type){
       stop_criteria$max_gd <- 1.1
       stop_criteria$omit_mpsrf <- TRUE
       if(type != "single"){
-        stop_criteria$selection <- c("alpha", "mu")
+        stop_criteria$selection <- c("alpha", "mu", "variance")
       } else{
         stop_criteria$selection <- c("alpha")
       }
     }
   }
   if(!is.null(stop_criteria$max_gd) || !is.null(stop_criteria$mean_gd)){
-    if(is.null(stop_criteria$selection)) stop_criteria$selection <- c('alpha', 'mu')
+    if(type != "single"){
+      if(is.null(stop_criteria$selection)) stop_criteria$selection <- c('alpha', 'mu', "variance")
+    } else{
+      if(is.null(stop_criteria$selection)) stop_criteria$selection <- c('alpha')
+    }
   }
   if(stage == "adapt" & is.null(stop_criteria$min_unique)) stop_criteria$min_unique <- 600
   if(stage != "adapt" & !is.null(stop_criteria$min_unique)) stop("min_unique only applicable for adapt stage, try min_es instead.")
