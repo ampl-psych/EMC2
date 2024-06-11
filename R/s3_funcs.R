@@ -1,8 +1,17 @@
 #' @export
 print.emc <- function(x, ...){
   n_chain <- chain_n(x)
+  cat("Iterations : \n")
   print(chain_n(x))
-  return(invisible(n_chain))
+  sub_names <- names(x[[1]]$data)
+  cat("\n")
+  cat("Subjects : \n")
+  print(sub_names)
+  par_names <- x[[1]]$par_names
+  cat("\n")
+  cat("Parameters : \n")
+  print(par_names)
+  return(invisible(list(iterations = n_chain, subjects = sub_names, parameters = par_names)))
 }
 
 #' Summary statistics for EMC2 samplers objects
