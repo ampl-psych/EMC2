@@ -179,46 +179,61 @@ map_mcmc <- function(mcmc,design,include_constants = TRUE)
     unlist(lapply(strsplit(nams,"_"),function(x){x[[1]]}))
 
   map <- attr(sampled_p_vector(design, add_da = TRUE, all_cells_dm = TRUE),"map")
+
   constants <- design$constants
-  mp <- mapped_par(mcmc[,1],design,remove_RACE=FALSE)
-  if (!is.matrix(mcmc)) mcmc <- t(as.matrix(mcmc))
+  if (!is.matrix(mcmc) & !is.array(mcmc)) mcmc <- t(as.matrix(mcmc))
   if (!is.null(attr(design,"ordinal")))
     mcmc[,attr(design,"ordinal")] <- exp(mcmc[,attr(design,"ordinal")])
 
   if(length(dim(mcmc)) == 2){
     is_matrix <- TRUE
-    mcmc <- array(mcmc, dim = c(nrow(mcmc), ncol(mcmc), 1))
+    mcmc_array <- array(mcmc, dim = c(nrow(mcmc), ncol(mcmc), 1))
+    rownames(mcmc_array) <- rownames(mcmc)
+    colnames(mcmc_array) <- colnames(mcmc)
+  } else{
+    mcmc_array <- mcmc
+    is_matrix <- FALSE
   }
-  for(i in 1:dim(mcmc)[3]){
-    mcmc <- t(mcmc)
-  }
+  mp <- mapped_par(mcmc_array[,1,1],design,remove_RACE=FALSE)
 
-  pmat <- model()$transform(add_constants(mcmc,constants))
-  plist <- lapply(map,doMap,pmat=pmat)
-  if (model()$type=="SDT") {
-    ht <- apply(map$threshold[,grepl("lR",dimnames(map$threshold)[[2]]),drop=FALSE],1,sum)
-    plist$threshold <- plist$threshold[,ht!=max(ht),drop=FALSE]
-  }
-  # Give mapped variables names and flag constant
-  isConstant <- NULL
-  for (i in 1:length(plist)) {
-    vars <- row.names(attr(terms(design$Flist[[i]]),"factors"))
-    uniq <- !duplicated(apply(mp[,vars],1,paste,collapse="_"))
-    if (is.null(vars)) dimnames(plist[[i]])[2] <- names(plist)[i] else {
-      dimnames(plist[[i]])[[2]] <-
-        paste(vars[1],apply(mp[uniq,vars[-1],drop=FALSE],1,paste,collapse="_"),sep="_")
+  for(k in 1:dim(mcmc_array)[3]){
+    mcmc <- t(mcmc_array[,,k])
+    pmat <- model()$transform(add_constants(mcmc,constants))
+    plist <- lapply(map,doMap,pmat=pmat)
+    if (model()$type=="SDT") {
+      ht <- apply(map$threshold[,grepl("lR",dimnames(map$threshold)[[2]]),drop=FALSE],1,sum)
+      plist$threshold <- plist$threshold[,ht!=max(ht),drop=FALSE]
     }
-    if (dim(plist[[i]])[1]!=1) isConstant <- c(isConstant,
-                                               apply(plist[[i]],2,function(x){all(x[1]==x[-1])}))
+    # Give mapped variables names and flag constant
+    isConstant <- NULL
+    for (i in 1:length(plist)) {
+      vars <- row.names(attr(terms(design$Flist[[i]]),"factors"))
+      uniq <- !duplicated(apply(mp[,vars],1,paste,collapse="_"))
+      if (is.null(vars)) dimnames(plist[[i]])[2] <- names(plist)[i] else {
+        dimnames(plist[[i]])[[2]] <-
+          paste(vars[1],apply(mp[uniq,vars[-1],drop=FALSE],1,paste,collapse="_"),sep="_")
+      }
+      if (dim(plist[[i]])[1]!=1) isConstant <- c(isConstant,
+                                                 apply(plist[[i]],2,function(x){all(x[1]==x[-1])}))
+    }
+    pmat <- do.call(cbind,plist)
+    cnams <- colnames(pmat)
+    colnames(pmat) <- get_p_types(cnams)
+    tmp <- model()$Ntransform(pmat)[,1:length(cnams)]
+    colnames(tmp) <- cnams
+    if(!include_constants) tmp <- tmp[,!isConstant]
+    if(k == 1){
+      out <- array(0, dim = c(ncol(tmp), ncol(mcmc_array), dim(mcmc_array)[3]))
+      rownames(out) <- colnames(tmp)
+      colnames(out) <- colnames(mcmc_array)
+    }
+    out[,,k] <- t(tmp)
   }
-  pmat <- do.call(cbind,plist)
-  cnams <- colnames(pmat)
-  colnames(pmat) <- get_p_types(cnams)
-  out <- model()$Ntransform(pmat)[,1:length(cnams)]
-  colnames(out) <- cnams
-  if(!include_constants) out <- out[,!isConstant]
+  if(is_matrix){
+    out <- out[,,1]
+  }
   attr(out,"isConstant") <- isConstant
-  return(t(out))
+  return(out)
 }
 
 

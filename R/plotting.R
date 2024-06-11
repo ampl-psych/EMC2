@@ -1412,14 +1412,14 @@ plot_chains_new <- function(samplers,layout=NA,subject=NULL,ylim=NULL,
 # psamples_lim <- do.call(cbind, lapply(psamples_lim, sample, size = min(unlist(lapply(psamples_lim, length)))))
 # MCMC_psamples <-
 
-plot_pars_new <- function(samplers,layout=NA,subject=NULL,ylim=NULL,
+plot_pars_new <- function(samplers,layout=NA,subject=NULL,ylim=NULL, map = FALSE,
                             selection="mu",filter="sample",thin=1,subfilter=NULL,
                             plot_acf=FALSE, by_subject = FALSE, use_par = NULL,
                           show_chains = FALSE, plot_prior = TRUE,
                           use_prior_lim = TRUE, flatten = FALSE)
 {
   if(!is.null(subject) & length(subject) == 1) by_subject <- TRUE
-  MCMC_samples <- as_mcmc_new(samplers, selection = selection, filter = filter,
+  MCMC_samples <- as_mcmc_new(samplers, selection = selection, filter = filter, map = map,
                               thin = thin, subfilter = subfilter, by_subject = by_subject,
                               subject = subject, use_par = use_par, flatten = flatten)
   auto.layout <- any(is.na(layout))
@@ -1428,10 +1428,11 @@ plot_pars_new <- function(samplers,layout=NA,subject=NULL,ylim=NULL,
     psamples <-  get_objects(design = attr(samplers,"design_list")[[1]],
                              type = attr(samplers[[1]], "variant_funs")$type, sample_prior = T,
                              selection = selection, mapped = FALSE, N = 1e4)
-    pMCMC_samples <- as_mcmc_new(psamples, selection = selection,
+    pMCMC_samples <- as_mcmc_new(psamples, selection = selection, map = map,
                             use_par = use_par, flatten = flatten,
                             type = attr(samplers[[1]], "variant_funs")$type)
   }
+  if(length(pMCMC_samples) != length(MCMC_samples)) pMCMC_samples <- rep(pMCMC_samples, length(MCMC_samples))
   if (!auto.layout) par(mfrow=layout)
   for(i in 1:length(MCMC_samples)){
     if(i == 1 & auto.layout){

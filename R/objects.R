@@ -682,7 +682,7 @@ filter_sub_and_par <- function(obj, sub, sub_names, par){
 
 
 
-as_mcmc_new <- function(sampler,filter="sample",thin=1,subfilter=0,map = TRUE,
+as_mcmc_new <- function(sampler,filter="sample",thin=1,subfilter=0,map = FALSE,
                         length.out = NULL, selection= "mu", by_subject = FALSE,
                     subject = NULL, flatten = FALSE, remove_dup = FALSE,
                     use_par = NULL, type = NULL)
@@ -694,13 +694,7 @@ as_mcmc_new <- function(sampler,filter="sample",thin=1,subfilter=0,map = TRUE,
                          selection = selection, subject = subject)
 
   if(map){
-    if(selection == "mu"){
-      samples <- lapply(samples, map_mcmc, attr(sampler,"design_list")[[1]], include_constants = FALSE)
-    } else{
-      samples <- lapply(samples, function(x){
-        apply(x, 2, function(y) list(t(map_mcmc(y, attr(sampler,"design_list")[[1]], include_constants = FALSE))))
-      })
-    }
+    samples <- lapply(samples, map_mcmc, attr(sampler,"design_list")[[1]], include_constants = FALSE)
   }
   if(flatten) remove_dup <- TRUE
   if(length(dim(samples[[1]])) > 2 & flatten){
@@ -714,9 +708,9 @@ as_mcmc_new <- function(sampler,filter="sample",thin=1,subfilter=0,map = TRUE,
   }
 
   samples <- filter_const_and_dup(samples, remove_dup)
-  if(!is.null(subject)){
-     subnames <- names(sampler[[1]]$data)
-  } else {subnames <- NULL}
+  # if(!is.null(subject)){
+   subnames <- names(sampler[[1]]$data)
+  # } else {subnames <- NULL}
   samples <- lapply(samples, filter_sub_and_par, subject, subnames, use_par)
   samples <- lapply(samples, filter_emc, thin, length.out, subfilter)
   if(length(dim(samples[[1]])) > 2){

@@ -68,9 +68,9 @@ plot_chains(samplers_LNR, selection = "mu", subfilter = 1:40)
 
 
 devtools::load_all()
-debug(map_mcmc)
-plot_pars_new(samplers_LNR, selection = "mu", show_chains = FALSE, use_par = "m_TRUE",
-              plot_prior = T, use_prior_lim = F, flatten = FALSE)
+debug(as_mcmc_new)
+plot_pars_new(samplers_LNR, selection = "alpha", show_chains = FALSE, by_subject = T,
+              plot_prior = T, use_prior_lim = F, flatten = FALSE, subject = 1:2, map = TRUE)
 
 MCMC <- as_mcmc_new(samplers_LNR, selection = "covariance", use_par = c("s.m"), flatten = TRUE)
 
