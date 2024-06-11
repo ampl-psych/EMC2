@@ -60,9 +60,7 @@ add_info_standard <- function(sampler, prior = NULL, ...){
 #'   sample = TRUE, type = "mu")
 #' }
 #' @export
-
-get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, selection = "mu", design = NULL,
-                               map = FALSE){
+get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, selection = "mu", design = NULL){
   # Checking and default priors
   if(is.null(prior)){
     prior <- list()
@@ -88,67 +86,137 @@ get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1
   # Things I save rather than re-compute inside the loops.
   prior$theta_mu_invar <- ginv(prior$theta_mu_var) #Inverse of the matrix
   attr(prior, "type") <- "standard"
+  out <- prior
   if(sample){
-    out <- list()
-    if(!selection %in% c("mu", "variance", "covariance", "correlation", "full_var")){
-      stop("for variant standard, you can only specify the prior on the mean, variance, covariance or the correlation of the parameters")
-    }
-    if(selection == "mu"){
-      samples <- mvtnorm::rmvnorm(N, mean = prior$theta_mu_mean,
-                              sigma = prior$theta_mu_var)
-      if(!is.null(design)){
-        colnames(samples) <- par_names <- names(attr(design, "p_vector"))
-        if(map){
-          samples <- map_mcmc(samples,design,design$model,include_constants=FALSE)
-        }
+    par_names <- names(attr(design, "p_vector"))
+    samples <- list()
+    if(selection %in% c("mu", "alpha")){
+      mu <- t(mvtnorm::rmvnorm(N, mean = prior$theta_mu_mean,
+                             sigma = prior$theta_mu_var))
+      if(selection %in% c("mu")){
+        rownames(mu) <- par_names
+        samples$theta_mu <- mu
       }
-      out$mu <- samples
-      return(out)
-    } else {
-      var <- array(NA_real_, dim = c(n_pars, n_pars, N))
+    }
+    if(selection %in% c("variance", "covariance", "correlation", "sigma", "alpha")) {
+      vars <- array(NA_real_, dim = c(n_pars, n_pars, N))
+      colnames(vars) <- rownames(vars) <- par_names
       for(i in 1:N){
         a_half <- 1 / rgamma(n = n_pars,shape = 1/2,
                              rate = 1/(prior$A^2))
         attempt <- tryCatch({
-          var[,,i] <- riwish(prior$v + n_pars - 1, 2 * prior$v * diag(1 / a_half))
+          vars[,,i] <- riwish(prior$v + n_pars - 1, 2 * prior$v * diag(1 / a_half))
         },error=function(e) e, warning=function(w) w)
         if (any(class(attempt) %in% c("warning", "error", "try-error"))) {
           sample_idx <- sample(1:(i-1),1)
-          var[,,i] <- var[,,sample_idx]
+          vars[,,i] <- vars[,,sample_idx]
         }
       }
-      if (selection == "variance") {
-        vars_only <- t(apply(var,3,diag))
-        if(!is.null(design)){
-          colnames(vars_only) <- names(attr(design, "p_vector"))
-        }
-        out$variance <- vars_only
-      }
-      lt <- lower.tri(var[,,1])
-      if(selection %in% c("covariance", "correlation")){
-        pnams <- names(attr(design, "p_vector"))
-        lt <- lower.tri(diag(length(pnams)))
-        pnams <- outer(pnams,pnams,paste,sep=".")[lt]
-      }
-      if (selection == "correlation"){
-        corrs <- array(apply(var,3,cov2cor),dim=dim(var),dimnames=dimnames(var))
-        out$correlation <- t(apply(corrs,3,function(x){x[lt]}))
-        colnames(out$correlation) <- pnams
-      }
-      if(selection == "covariance"){
-        out$covariance <- t(apply(var,3,function(x){x[lt]}))
-        colnames(out$covariance) <- pnams
-      }
-
-
-      if (selection == "full_var"){
-        out$full_var <- t(apply(var, 3, c))
-      }
-      return(out)
+      samples$theta_var <- vars
     }
+    if(selection %in% "alpha"){
+      alpha <- array(NA_real_, dim = c(1, n_pars, N))
+      for(i in 1:N){
+        alpha[,,i] <- rmvnorm(1, mu[,i], vars[,,i])
+      }
+      colnames(alpha) <- par_names
+      samples$alpha <- alpha
+    }
+    out <- samples
   }
-  return(prior)
+  return(out)
 }
+
+
+
+
+# get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, selection = "mu", design = NULL,
+#                                map = FALSE){
+#   # Checking and default priors
+#   if(is.null(prior)){
+#     prior <- list()
+#   }
+#   if(!is.null(design)){
+#     n_pars <- length(attr(design, "p_vector"))
+#   }
+#   if (!is.null(prior$theta_mu_mean)) {
+#     n_pars <- length(prior$theta_mu_mean)
+#   }
+#   if (is.null(prior$theta_mu_mean)) {
+#     prior$theta_mu_mean <- rep(0, n_pars)
+#   }
+#   if(is.null(prior$theta_mu_var)){
+#     prior$theta_mu_var <- diag(rep(1, n_pars))
+#   }
+#   if(is.null(prior$v)){
+#     prior$v <- 2
+#   }
+#   if(is.null(prior$A)){
+#     prior$A <- rep(.3, n_pars)
+#   }
+#   # Things I save rather than re-compute inside the loops.
+#   prior$theta_mu_invar <- ginv(prior$theta_mu_var) #Inverse of the matrix
+#   attr(prior, "type") <- "standard"
+#   if(sample){
+#     samples <- list()
+#     if(!selection %in% c("mu", "variance", "covariance", "correlation", "full_var")){
+#       stop("for variant standard, you can only specify the prior on the mean, variance, covariance or the correlation of the parameters")
+#     }
+#     if(selection == "mu"){
+#       mu <- mvtnorm::rmvnorm(N, mean = prior$theta_mu_mean,
+#                               sigma = prior$theta_mu_var)
+#       # if(!is.null(design)){
+#       #   colnames(samples) <- par_names <- names(attr(design, "p_vector"))
+#       #   if(map){
+#       #     samples <- map_mcmc(samples,design,design$model,include_constants=FALSE)
+#       #   }
+#       # }
+#       samples$mu <- samples
+#     } else {
+#       var <- array(NA_real_, dim = c(n_pars, n_pars, N))
+#       for(i in 1:N){
+#         a_half <- 1 / rgamma(n = n_pars,shape = 1/2,
+#                              rate = 1/(prior$A^2))
+#         attempt <- tryCatch({
+#           var[,,i] <- riwish(prior$v + n_pars - 1, 2 * prior$v * diag(1 / a_half))
+#         },error=function(e) e, warning=function(w) w)
+#         if (any(class(attempt) %in% c("warning", "error", "try-error"))) {
+#           sample_idx <- sample(1:(i-1),1)
+#           var[,,i] <- var[,,sample_idx]
+#         }
+#       }
+#       # if (selection == "variance") {
+#       #   vars_only <- t(apply(var,3,diag))
+#       #   if(!is.null(design)){
+#       #     colnames(vars_only) <- names(attr(design, "p_vector"))
+#       #   }
+#       #   out$variance <- vars_only
+#       # }
+#       # lt <- lower.tri(var[,,1])
+#       # if(selection %in% c("covariance", "correlation")){
+#       #   pnams <- names(attr(design, "p_vector"))
+#       #   lt <- lower.tri(diag(length(pnams)))
+#       #   pnams <- outer(pnams,pnams,paste,sep=".")[lt]
+#       # }
+#       # if (selection == "correlation"){
+#       #   corrs <- array(apply(var,3,cov2cor),dim=dim(var),dimnames=dimnames(var))
+#       #   out$correlation <- t(apply(corrs,3,function(x){x[lt]}))
+#       #   colnames(out$correlation) <- pnams
+#       # }
+#       # if(selection == "covariance"){
+#       #   out$covariance <- t(apply(var,3,function(x){x[lt]}))
+#       #   colnames(out$covariance) <- pnams
+#       # }
+#       #
+#       #
+#       # if (selection == "full_var"){
+#       #   out$full_var <- t(apply(var, 3, c))
+#       # }
+#       # return(out)
+#     }
+#   }
+#   return(prior)
+# }
 
 get_startpoints_standard <- function(pmwgs, start_mu, start_var){
   n_pars <- sum(!(pmwgs$nuisance | pmwgs$grouped))

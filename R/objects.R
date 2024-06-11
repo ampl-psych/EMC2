@@ -530,7 +530,37 @@ shorten <- function(x,r,d) {
   if (d==2) x[,r,drop=FALSE] else x[,,r,drop=FALSE]
 }
 
-filter_emc <- function(samples, thin){
+filter_emc <- function(samples, thin = 1, length.out = NULL, subfilter = NULL){
+  max_dim <- max(dim(samples))
+  if(!is.null(subfilter)){
+    if(length(subfilter) == 1){
+      if(subfilter > max_dim) stop("Subfilter larger than available iterations")
+      keep <- subfilter:max_dim
+    } else{
+      if(length(subfilter) > max_dim) stop("Subfilter larger than available iterations")
+      keep <- subfilter
+    }
+    if(length(dim(samples)) > 2){
+      samples <- samples[,,keep, drop = F]
+    } else{
+      samples <- samples[,keep, drop = F]
+    }
+  }
+
+  max_dim <- max(dim(samples))
+  if(!is.null(length.out)){
+    keep <- round(seq(1, max_dim, length.out = length.out))
+  } else if(thin > 1){
+    keep <- seq(1, max_dim, by = thin)
+  }
+  if(thin > 1 || !is.null(length.out)){
+    if(length(dim(samples)) > 2){
+      samples <- samples[,,keep, drop = F]
+    } else{
+      samples <- samples[,keep, drop = F]
+    }
+  }
+
   return(samples)
 }
 
@@ -597,7 +627,19 @@ split_along_dim <- function(a, n){
 
 
 
-filter_sub_and_par <- function(obj, sub, sub_names, par, par_names){
+filter_sub_and_par <- function(obj, sub, sub_names, par){
+  par_names <- c(colnames(obj), rownames(obj))
+  if(is.character(sub)){
+    if(any(!(sub %in% sub_names))){
+      stop("Make sure you specify the subject names correctly")
+    }
+  }
+  if(!is.null(par)){
+    if(any(!(par %in% par_names))){
+      stop("Make sure you specify the parameter names correctly")
+    }
+  }
+
   if(length(dim(obj)) > 2){
     is_sub_idx <- sapply(dimnames(obj), FUN = function(x) identical(x, sub_names))
     if(any(is_sub_idx)){
@@ -624,32 +666,59 @@ filter_sub_and_par <- function(obj, sub, sub_names, par, par_names){
         obj <- obj[rownames(obj) %in% par,,,drop = F]
       }
     }
+  } else{
+    if(is.character(sub)){
+      obj <- obj[sub_names %in% sub,, drop = F]
+    }
+    if(is.numeric(sub)){
+      obj <- obj[sub,,drop = F]
+    }
+    if(!is.null(par)){
+      obj <- obj[rownames(obj) %in% par,,drop = F]
+    }
   }
   return(obj)
 }
 
 
 
-as_mcmc_new <- function(sampler,filter="sample",thin=1,subfilter=0,
-                    selection= "mu", by_subject = FALSE,
-                    subject = NULL, flatten = FALSE, remove_dup = TRUE,
-                    use_par = NULL)
+as_mcmc_new <- function(sampler,filter="sample",thin=1,subfilter=0,map = TRUE,
+                        length.out = NULL, selection= "mu", by_subject = FALSE,
+                    subject = NULL, flatten = FALSE, remove_dup = FALSE,
+                    use_par = NULL, type = NULL)
 {
   # filter <- which(sampler$samples$stage %in% filter)
-  samples <- get_objects(type = attr(sampler[[1]], "variant_funs")$type, sampler = sampler,
+  if(!(selection %in% c("mu", "alpha"))) map <- FALSE
+  if(is.null(type)) type <- attr(sampler[[1]], "variant_funs")$type
+  samples <- get_objects(type = type, sampler = sampler,
                          selection = selection, subject = subject)
+
+  if(map){
+    if(selection == "mu"){
+      samples <- lapply(samples, map_mcmc, attr(sampler,"design_list")[[1]], include_constants = FALSE)
+    } else{
+      samples <- lapply(samples, function(x){
+        apply(x, 2, function(y) list(t(map_mcmc(y, attr(sampler,"design_list")[[1]], include_constants = FALSE))))
+      })
+    }
+  }
+  if(flatten) remove_dup <- TRUE
   if(length(dim(samples[[1]])) > 2 & flatten){
-    pnams <- c(outer(rownames(samples[[1]]), colnames(samples[[1]]), paste, sep = "."))
+    if(is.null(rownames(samples[[1]]))){
+      pnams <- colnames(samples[[1]])
+    } else{
+      pnams <- c(outer(rownames(samples[[1]]), colnames(samples[[1]]), paste, sep = "."))
+    }
     samples <- lapply(samples, function(x) out <- apply(x,3,function(y){c(y)}))
     samples <- lapply(samples, function(x) {rownames(x) <- pnams; return(x)})
   }
 
   samples <- filter_const_and_dup(samples, remove_dup)
-  subnames <- names(sampler[[1]]$data)
-  parnames <- sampler[[1]]$par_names
-  samples <- lapply(samples, filter_sub_and_par, subject, subnames, use_par, parnames)
-
-
+  if(!is.null(subject)){
+     subnames <- names(sampler[[1]]$data)
+  } else {subnames <- NULL}
+  samples <- lapply(samples, filter_sub_and_par, subject, subnames, use_par)
+  samples <- lapply(samples, filter_emc, thin, length.out, subfilter)
   if(length(dim(samples[[1]])) > 2){
     is_sub_idx <- sapply(dimnames(samples[[1]]), FUN = function(x) any(x %in% subnames))
     if(any(is_sub_idx) & by_subject){
@@ -660,10 +729,10 @@ as_mcmc_new <- function(sampler,filter="sample",thin=1,subfilter=0,
       samples <- make_3dim_mcmc(samples, 2)
     }
   } else{
-    samples <- lapply(samples, filter_emc, thin = thin)
     samples <- list(coda::as.mcmc.list(lapply(samples, FUN = function(x) coda::mcmc(t(x)))))
     names(samples) <- selection
   }
+
   return(samples)
 }
 

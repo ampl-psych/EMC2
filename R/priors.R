@@ -664,38 +664,35 @@ ask_user_prior <- function(prior, cur_idx, to_do, fill_default){
 
 
 plot_prior_new <- function(prior, design, selection = "mu",
-                           mapped = TRUE, layout = c(3,3),
-                           N = 1e5){
+                           mapped = TRUE, layout = NA,
+                           N = 1e5, flatten = FALSE, use_par = NULL){
   type <- attr(prior, "type")
   if (mapped & !(selection %in% c("alpha","mu"))){
     mapped <- FALSE
   }
-  if(selection == "alpha" & type != "single"){
-    pp_mu <- get_objects(design = design, type = type, sample_prior = T,
-                         selection = "mu", mapped = mapped, N = N)
-    pp_var <- get_objects(design = design, type = type, sample_prior = T,
-                          selection = "full_var", mapped = mapped, N = N)
-    n_pars <- ncol(pp_mu)
-    samples <- matrix(0, N, ncol(pp_mu))
-    for(i in 1:N){
-      if(type == "diagonal"){
-        pp_var_curr <- diag(pp_var[i,])
-      } else{
-        pp_var_curr <- matrix(pp_var[i,], n_pars, n_pars)
-      }
-      samples[i,] <- rmvnorm(1, pp_mu[i,], pp_var_curr)
+  if(selection == "alpha") flatten <- TRUE
+  samplers <-  get_objects(design = design, type = type, sample_prior = T,
+                          selection = selection, mapped = mapped, N = N)
+  MCMC_samples <- as_mcmc_new(samplers, selection = selection,
+                              use_par = use_par, flatten = flatten,
+                              type = type)
+  auto.layout <- any(is.na(layout))
+  if (!auto.layout) par(mfrow=layout)
+  for(i in 1:length(MCMC_samples)){
+    if(i == 1 & auto.layout){
+      mfrow <- coda:::set.mfrow(Nchains = length(MCMC_samples[[1]]), Nparms = ncol(MCMC_samples[[1]][[1]]),
+                                nplots = 1)
+      oldpar <- par(mfrow = mfrow)
+    } else if(auto.layout){
+      oldpar <- par(mfrow = mfrow)
     }
-    colnames(samples) <- colnames(pp_mu)
-  } else{
-    samples <-  get_objects(design = design, type = type, sample_prior = T,
-                            selection = selection, mapped = mapped, N = N)
-  }
+    for(j in 1:ncol(MCMC_samples[[i]][[1]])){
 
-  par(mfrow = layout)
-  for(i in 1:ncol(samples)){
-    robust_hist(samples[,i], breaks = 50, prob = TRUE, xlab = selection,
-                main = colnames(samples)[i],
-                cex.lab = 1.25, cex.main = 1.5)
+      robust_hist(MCMC_samples[[i]][[1]][,j], breaks = 50, prob = TRUE,
+                  ylab = "Density", xlab = names(MCMC_samples)[[i]],
+                  main = colnames(MCMC_samples[[i]][[1]])[j],
+                  cex.lab = 1.25, cex.main = 1.5)
+    }
   }
 }
 

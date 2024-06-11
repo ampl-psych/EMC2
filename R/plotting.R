@@ -290,7 +290,7 @@ plot_defective_density <- function(data,subject=NULL,factors=NULL,
 
 robust_hist <- function(ps, breaks = 50, cutoff = 0.002, main = "",
                         cex.lab = 1, cex.main = 1.5, prob = TRUE,
-                        xlab = "", do_plot = TRUE){
+                        xlab = "", do_plot = TRUE, ...){
   for(i in 1:log10(length(ps))){
     cuts <- cut(ps, breaks = breaks)
     tab_cuts <- table(cuts)
@@ -299,7 +299,7 @@ robust_hist <- function(ps, breaks = 50, cutoff = 0.002, main = "",
   }
   if(do_plot){
     hist(ps, breaks = breaks, main = main, cex.lab = cex.lab, cex.main = cex.main,
-         prob = prob, xlab = xlab)
+         prob = prob, xlab = xlab, ...)
   } else{
     return(ps)
   }
@@ -1378,13 +1378,14 @@ profile_plot <- function(pname,p_vector,p_min,p_max,data, design, n_point=100,ma
 # plot_pars_new <- function(samplers, layout = NA)
 
 plot_chains_new <- function(samplers,layout=NA,subject=NULL,ylim=NULL,
-                        selection="mu",filter="sample",thin=1,subfilter=0,
-                        plot_acf=FALSE, by_subject = FALSE, use_par = NULL)
+                        selection="mu",filter="sample",thin=1,subfilter=NULL,
+                        plot_acf=FALSE, by_subject = FALSE, use_par = NULL,
+                        flatten = FALSE)
 {
   if(!is.null(subject) & length(subject) == 1) by_subject <- TRUE
   MCMC_samples <- as_mcmc_new(samplers, selection = selection, filter = filter,
                               thin = thin, subfilter = subfilter, by_subject = by_subject,
-                              subject = subject, use_par = use_par, flatten = FALSE)
+                              subject = subject, use_par = use_par, flatten = flatten)
   auto.layout <- any(is.na(layout))
   if (!auto.layout) par(mfrow=layout)
   for(i in 1:length(MCMC_samples)){
@@ -1407,19 +1408,30 @@ plot_chains_new <- function(samplers,layout=NA,subject=NULL,ylim=NULL,
   }
 }
 
-
+# psamples_lim <- apply(psamples[[1]][[1]][[1]], 2, robust_hist, do_plot = FALSE)
+# psamples_lim <- do.call(cbind, lapply(psamples_lim, sample, size = min(unlist(lapply(psamples_lim, length)))))
+# MCMC_psamples <-
 
 plot_pars_new <- function(samplers,layout=NA,subject=NULL,ylim=NULL,
-                            selection="mu",filter="sample",thin=1,subfilter=0,
+                            selection="mu",filter="sample",thin=1,subfilter=NULL,
                             plot_acf=FALSE, by_subject = FALSE, use_par = NULL,
                           show_chains = FALSE, plot_prior = TRUE,
-                          use_prior_lim = TRUE)
+                          use_prior_lim = TRUE, flatten = FALSE)
 {
   if(!is.null(subject) & length(subject) == 1) by_subject <- TRUE
   MCMC_samples <- as_mcmc_new(samplers, selection = selection, filter = filter,
                               thin = thin, subfilter = subfilter, by_subject = by_subject,
-                              subject = subject, use_par = use_par, flatten = FALSE)
+                              subject = subject, use_par = use_par, flatten = flatten)
   auto.layout <- any(is.na(layout))
+  if(plot_prior){
+    # Add prior as last element of the list
+    psamples <-  get_objects(design = attr(samplers,"design_list")[[1]],
+                             type = attr(samplers[[1]], "variant_funs")$type, sample_prior = T,
+                             selection = selection, mapped = FALSE, N = 1e4)
+    pMCMC_samples <- as_mcmc_new(psamples, selection = selection,
+                            use_par = use_par, flatten = flatten,
+                            type = attr(samplers[[1]], "variant_funs")$type)
+  }
   if (!auto.layout) par(mfrow=layout)
   for(i in 1:length(MCMC_samples)){
     if(i == 1 & auto.layout){
@@ -1433,37 +1445,34 @@ plot_pars_new <- function(samplers,layout=NA,subject=NULL,ylim=NULL,
     if(!show_chains){
       MCMC_samples[[i]] <- list(merged)
     }
-    if(plot_prior){
-      # Add prior as last element of the list
-      psamples <-  get_objects(design = attr(samplers,"design_list")[[1]],
-                              type = attr(samplers[[1]], "variant_funs")$type, sample_prior = T,
-                              selection = selection, mapped = FALSE, N = 1e4)
-      psamples <- apply(psamples, 2, robust_hist, do_plot = FALSE)
-      psamples <- do.call(cbind, lapply(psamples, sample, size = min(unlist(lapply(psamples, length)))))
-      MCMC_samples[[i]][[length(MCMC_samples[[i]]) + 1]] <-psamples
-    }
     for(l in 1:ncol(MCMC_samples[[i]][[1]])){
-      lim_denses <- denses <- lapply(MCMC_samples[[i]], function(x) density(x[,l]))
-      if(!use_prior_lim){
-        lim_denses[[length(lim_denses)]] <- NULL
+      denses <- lapply(MCMC_samples[[i]], function(x) density(x[,l]))
+      xlim <- lapply(MCMC_samples[[i]], function(x) return(c(min(x[,l]), max(x[,l]))))
+      ylim <- lapply(denses, function(x) return(c(min(x$y), max(x$y))))
+      xlim <- c(min(unlist(xlim)), max(unlist(xlim)))
+      ylim <- c(min(unlist(ylim)), max(unlist(ylim)))
+      if(plot_prior){
+        p_curr <- robust_hist(pMCMC_samples[[i]][[1]][,l], do_plot = F)
+        pdenses <- density(p_curr)
+        if(use_prior_lim){
+          xlim <- c(min(xlim[1], min(p_curr)), max(xlim[2], max(p_curr)))
+          ylim <- c(min(ylim[1], min(pdenses$y)), max(ylim[2], max(pdenses$y)))
+        }
       }
-      xlim <- lapply(lim_denses, function(x) return(c(min(x$x), max(x$x))))
-      ylim <- lapply(lim_denses, function(x) return(c(min(x$y), max(x$y))))
 
       for(k in 1:length(MCMC_samples[[i]])){
         if(k == 1){
-          plot(denses[[k]], xlim = c(min(unlist(xlim)), max(unlist(xlim))),
-               ylim = c(min(unlist(ylim)), max(unlist(ylim))),
+          plot(denses[[k]], xlim = xlim,
+               ylim = ylim,
                ylab = "Density", xlab = names(MCMC_samples)[[i]],
                main = colnames(MCMC_samples[[i]][[k]])[l])
-        } else if(plot_prior & k == length(MCMC_samples[[i]])){
-          lines(denses[[k]], col = "red")
         } else{
           lines(denses[[k]], col = 1)
         }
       }
       if(plot_prior){
-        contraction <- 1-(var(merged[,l])/var(psamples[,l]))
+        lines(pdenses, col = "red")
+        contraction <- 1-(var(merged[,l])/var(pMCMC_samples[[i]][[1]][,l]))
         legend("topright",legend=round(contraction,3),bty="n",title="Contraction")
       }
     }
