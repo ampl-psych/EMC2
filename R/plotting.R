@@ -1377,7 +1377,7 @@ profile_plot <- function(pname,p_vector,p_min,p_max,data, design, n_point=100,ma
 
 # plot_pars_new <- function(samplers, layout = NA)
 
-plot_chains_new <- function(samplers,layout=NA,subject=NULL,ylim=NULL,
+plot_chains_new <- function(samplers,layout=NA,subject=NULL,ylim=NULL, map = FALSE,
                         selection="mu",filter="sample",thin=1,subfilter=NULL,
                         plot_acf=FALSE, by_subject = FALSE, use_par = NULL,
                         flatten = FALSE)
@@ -1385,7 +1385,8 @@ plot_chains_new <- function(samplers,layout=NA,subject=NULL,ylim=NULL,
   if(!is.null(subject) & length(subject) == 1) by_subject <- TRUE
   MCMC_samples <- as_mcmc_new(samplers, selection = selection, filter = filter,
                               thin = thin, subfilter = subfilter, by_subject = by_subject,
-                              subject = subject, use_par = use_par, flatten = flatten)
+                              subject = subject, use_par = use_par, flatten = flatten,
+                              map = map)
   auto.layout <- any(is.na(layout))
   if (!auto.layout) par(mfrow=layout)
   for(i in 1:length(MCMC_samples)){

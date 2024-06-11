@@ -60,7 +60,7 @@ es_summary_new(samplers_LNR, selection = "alpha", stat = "mean")
 devtools::load_all()
 debug(get_objects_standard)
 plot_pars_new(samplers_LNR, selection = "covariance", show_chains = TRUE, by_subject = FALSE, plot_prior = TRUE,
-              use_prior_lim = TRUE)
+              use_prior_lim = TRUE, use_par = "m")
 
 
 plot_chains(samplers_LNR, selection = "mu", subfilter = 1:40)
@@ -69,13 +69,13 @@ plot_chains(samplers_LNR, selection = "mu", subfilter = 1:40)
 
 devtools::load_all()
 debug(as_mcmc_new)
-plot_pars_new(samplers_LNR, selection = "alpha", show_chains = FALSE, by_subject = T,
-              plot_prior = T, use_prior_lim = F, flatten = FALSE, subject = 1:2, map = TRUE)
+plot_pars_new(samplers_LNR, selection = "alpha", show_chains = FALSE, by_subject = T, use_par = "s",
+              plot_prior = T, use_prior_lim = F, flatten = FALSE, subject = 1, map = TRUE)
 
 MCMC <- as_mcmc_new(samplers_LNR, selection = "covariance", use_par = c("s.m"), flatten = TRUE)
 
 debug(filter_emc)
-plot_chains_new(samplers_LNR, selection = "mu",flatten = TRUE,
+plot_chains_new(samplers_LNR, selection = "mu",flatten = TRUE, map = F,
                 subfilter = seq(1, 40, by = 2))
 
 debug(plot_pars_new)
