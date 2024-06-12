@@ -433,10 +433,26 @@ bridge_group_and_prior_and_jac_standard <- function(proposals_group, proposals_l
 # for IC ------------------------------------------------------------------
 
 group_level_IC_standard <- function(samplers, filter="sample",subfilter=0){
-  alpha <- as_mcmc_new(samplers, selection = "alpha", filter = filter, subfilter = subfilter)
-  theta_mu <- as_mcmc_new(samplers, selection = "mu", filter = filter, subfilter = subfilter)
-  theta_var <- as_mcmc_new(samplers, selection = "sigma", filter = filter, subfilter = subfilter)
+  alpha <- as_mcmc_new(samplers, selection = "alpha", filter = filter, subfilter = subfilter,
+                       return_mcmc = FALSE, merge_chains = TRUE)
+  theta_mu <- as_mcmc_new(samplers, selection = "mu", filter = filter, subfilter = subfilter,
+                          return_mcmc = FALSE, merge_chains = TRUE)
+  theta_var <- as_mcmc_new(samplers, selection = "sigma", filter = filter, subfilter = subfilter,
+                           return_mcmc = FALSE, merge_chains = TRUE)
+  mean_alpha <- apply(alpha, 1:2, mean)
+  mean_mu <- rowMeans(theta_mu)
+  mean_var <- apply(theta_var, 1:2, mean)
 
-
+  N <- ncol(theta_mu)
+  lls <- numeric(N)
+  for(i in 1:N){
+    lls[i] <- sum(dmvnorm(t(alpha[,,i]), theta_mu[,i], theta_var[,,i], log = T))
+  }
+  minD <- -2*max(lls)
+  mean_ll <- mean(lls)
+  mean_pars_ll <-  dmvnorm(t(mean_alpha), mean_mu, mean_var)
+  Dmean <- -2*mean_pars_ll
+  return(list(mean_ll = mean_ll, Dmean = Dmean,
+              minD = minD))
 }
 

@@ -74,7 +74,7 @@ get_objects_diag <- function(type, selection, sample_prior, return_prior, design
 
 get_objects_standard <- function(type, selection, sample_prior, return_prior, design = NULL,
                                  prior = NULL, filter = 'sample', N = 1e5, sampler = NULL, ...){
-  acc_selection <- c("mu", "variance", "covariance", "correlation", "alpha", "sigma")
+  acc_selection <- c("mu", "variance", "covariance", "correlation", "alpha", "sigma", "LL")
   if(return_prior & !sample_prior){
     prior$prior <- get_prior_standard(design = design, sample = F, prior = prior)
     prior$descriptions <- list(
@@ -96,6 +96,9 @@ get_objects_standard <- function(type, selection, sample_prior, return_prior, de
       idx <- 1:max(dim(sampler[[1]][[1]][[1]]))
     } else{
       idx <- which(sampler[[1]]$samples$stage %in% filter)
+    }
+    if(selection == "LL"){
+      return(lapply(sampler, FUN = function(x) return(x$samples$subj_ll[,idx])))
     }
     if(selection == "mu"){
       return(lapply(sampler, FUN = function(x) return(x$samples$theta_mu[,idx])))

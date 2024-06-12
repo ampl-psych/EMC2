@@ -441,55 +441,53 @@ IC <- function(samplers,filter="sample",subfilter=0,use_best_fit=TRUE,
                print_summary=TRUE,digits=0,subject=NULL)
   # Gets DIC, BPIC, effective parameters, mean deviance, and deviance of mean
 {
+# Mean log-likelihood for each subject
+  ll <- as_mcmc_new(samplers, filter = filter, subfilter = subfilter, selection = "LL")
+  minDs <- -2*unlist(lapply(ll,function(x){max(unlist(x))}))
+  mean_lls <- unlist(lapply(ll,function(x){mean(unlist(x))}))
+  alpha <- as_mcmc_new(samplers,selection="alpha",filter=filter,subfilter=subfilter, by_subject = TRUE)
+  mean_pars <- lapply(alpha,function(x){apply(do.call(rbind,x),2,mean)})
+  # log-likelihood for each subject using their mean parameter vector
+  ll_func <- attr(samplers,"design_list")[[1]]$model()$log_likelihood
+  data <- samplers[[1]]$data
+  mean_pars_lls <- setNames(numeric(length(mean_pars)),names(mean_pars))
+  for (sub in names(mean_pars))
+    mean_pars_lls[sub] <- ll_func(mean_pars[[sub]],dadm = data[[sub]])
+  Dmeans <- -2*mean_pars_lls
 
+  if (!is.null(subject)) {
+    Dmeans <- Dmeans[subject[1]]
+    mean_lls <- mean_lls[subject[1]]
+    minDs <- minDs[subject[1]]
+  } else{
+    group_stats <- group_level_IC_standard(samplers, filter=filter,subfilter=subfilter)
+    mean_lls <- c(mean_lls, group_stats$mean_ll)
+    minDs <- c(minDs, group_stats$minD)
+    Dmeans <- c(Dmeans, group_stats$Dmean)
+  }
+  if (use_best_fit) minDs <- pmin(minDs,Dmeans)
 
-  # Mean log-likelihood for each subject
-  if (is(samplers, "pmwgs"))
-    ll <- as_Mcmc(samplers,selection="LL",filter=filter,subfilter=subfilter) else
-      ll <- as_mcmc.list(samplers,selection="LL",filter=filter,subfilter=subfilter)
-    minDs <- -2*unlist(lapply(ll,function(x){max(unlist(x))}))
-    mean_lls <- unlist(lapply(ll,function(x){mean(unlist(x))}))
+  # mean deviance(-2*ll of all data)
+  mD <- sum(-2 * mean_lls)
+  # Deviance of mean
+  Dmean <- sum(Dmeans)
+  # mimimum Deviance
+  minD <- sum(minDs)
 
-    if (is(samplers, "pmwgs"))
-      alpha <- as_Mcmc(samplers,selection="alpha",filter=filter,subfilter=subfilter) else
-        alpha <- as_mcmc.list(samplers,selection="alpha",filter=filter,subfilter=subfilter)
-    mean_pars <- lapply(alpha,function(x){apply(do.call(rbind,x),2,mean)})
-    # log-likelihood for each subject using their mean parameter vector
-    ll_func <- attr(samplers,"design_list")[[1]]$model()$log_likelihood
-    data <- samplers[[1]]$data
-    mean_pars_lls <- setNames(numeric(length(mean_pars)),names(mean_pars))
-    for (sub in names(mean_pars))
-      mean_pars_lls[sub] <- ll_func(mean_pars[[sub]],dadm = data[[sub]])
-    Dmeans <- -2*mean_pars_lls
-    if (use_best_fit) minDs <- pmin(minDs,Dmeans)
+  # Use deviance of mean as best fit or use actual best fit
+  if (!use_best_fit) Dm <- Dmean else Dm <- minD
 
-    if (!is.null(subject)) {
-      Dmeans <- Dmeans[subject[1]]
-      mean_lls <- mean_lls[subject[1]]
-      minDs <- minDs[subject[1]]
-    }
-
-    # mean deviance(-2*ll of all data)
-    mD <- sum(-2 * mean_lls)
-    # Deviance of mean
-    Dmean <- sum(Dmeans)
-    # mimimum Deviance
-    minD <- sum(minDs)
-
-    # Use deviance of mean as best fit or use actual best fit
-    if (!use_best_fit) Dm <- Dmean else Dm <- minD
-
-    # effective number of parameters
-    pD <- mD - Dm
-    # DIC = mean deviance + effective number of parameters
-    DIC <- mD + pD
-    # BPIC = mean deviance + 2*effective number of parameters
-    # Note this is the "easy" BPIC, instead of the complex 2007 one
-    BPIC <- mD + 2*pD
-    out <- c(DIC = DIC, BPIC = BPIC, EffectiveN = pD,meanD=mD,Dmean=Dmean,minD=minD)
-    names(out) <- c("DIC","BPIC","EffectiveN","meanD","Dmean","minD")
-    if (print_summary) print(round(out,digits))
-    invisible(out)
+  # effective number of parameters
+  pD <- mD - Dm
+  # DIC = mean deviance + effective number of parameters
+  DIC <- mD + pD
+  # BPIC = mean deviance + 2*effective number of parameters
+  # Note this is the "easy" BPIC, instead of the complex 2007 one
+  BPIC <- mD + 2*pD
+  out <- c(DIC = DIC, BPIC = BPIC, EffectiveN = pD,meanD=mD,Dmean=Dmean,minD=minD)
+  names(out) <- c("DIC","BPIC","EffectiveN","meanD","Dmean","minD")
+  if (print_summary) print(round(out,digits))
+  invisible(out)
 }
 
 

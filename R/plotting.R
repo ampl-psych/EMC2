@@ -1425,15 +1425,14 @@ plot_pars_new <- function(samplers,layout=NA,subject=NULL,ylim=NULL, map = FALSE
                               subject = subject, use_par = use_par, flatten = flatten)
   auto.layout <- any(is.na(layout))
   if(plot_prior){
-    # Add prior as last element of the list
     psamples <-  get_objects(design = attr(samplers,"design_list")[[1]],
                              type = attr(samplers[[1]], "variant_funs")$type, sample_prior = T,
                              selection = selection, mapped = FALSE, N = 1e4)
     pMCMC_samples <- as_mcmc_new(psamples, selection = selection, map = map,
                             use_par = use_par, flatten = flatten,
                             type = attr(samplers[[1]], "variant_funs")$type)
+    if(length(pMCMC_samples) != length(MCMC_samples)) pMCMC_samples <- rep(pMCMC_samples, length(MCMC_samples))
   }
-  if(length(pMCMC_samples) != length(MCMC_samples)) pMCMC_samples <- rep(pMCMC_samples, length(MCMC_samples))
   if (!auto.layout) par(mfrow=layout)
   for(i in 1:length(MCMC_samples)){
     if(i == 1 & auto.layout){
@@ -1464,8 +1463,7 @@ plot_pars_new <- function(samplers,layout=NA,subject=NULL,ylim=NULL, map = FALSE
 
       for(k in 1:length(MCMC_samples[[i]])){
         if(k == 1){
-          plot(denses[[k]], xlim = xlim,
-               ylim = ylim,
+          plot(denses[[k]], xlim = xlim, ylim = ylim,
                ylab = "Density", xlab = names(MCMC_samples)[[i]],
                main = colnames(MCMC_samples[[i]][[k]])[l])
         } else{

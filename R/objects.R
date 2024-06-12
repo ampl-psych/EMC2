@@ -684,7 +684,7 @@ filter_sub_and_par <- function(obj, sub, sub_names, par){
 
 as_mcmc_new <- function(sampler,filter="sample",thin=1,subfilter=0,map = FALSE,
                         length.out = NULL, selection= "mu", by_subject = FALSE,
-                        return_mcmc = TRUE,
+                        return_mcmc = TRUE, merge_chains = FALSE,
                     subject = NULL, flatten = FALSE, remove_dup = FALSE,
                     use_par = NULL, type = NULL, include_constants = FALSE)
 {
@@ -714,6 +714,14 @@ as_mcmc_new <- function(sampler,filter="sample",thin=1,subfilter=0,map = FALSE,
   # } else {subnames <- NULL}
   samples <- lapply(samples, filter_sub_and_par, subject, subnames, use_par)
   samples <- lapply(samples, filter_emc, thin, length.out, subfilter)
+  if(merge_chains){
+    if(length(dim(samples[[1]])) == 2){
+      samples <- do.call(cbind, samples)
+    } else{
+      samples <- do.call(abind, samples)
+    }
+    if(return_mcmc) samples <- list(samples)
+  }
   if(!return_mcmc) return(samples)
   if(length(dim(samples[[1]])) > 2){
     is_sub_idx <- sapply(dimnames(samples[[1]]), FUN = function(x) any(x %in% subnames))

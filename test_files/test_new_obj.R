@@ -53,6 +53,12 @@ mapped_par(p_vector,design_DDMaE)
 debug(make_nice_summary)
 
 devtools::load_all()
+debug(as_mcmc_new)
+plot_chains_new(samplers_LNR, selection = "LL")
+
+debug(plot_pars_new)
+plot_pars_new(samplers_LNR, plot_prior = F, selection = "LL")
+
 debug(gd_summary_new)
 gd_summary_new(samplers_LNR, selection = "covariance")
 
@@ -63,6 +69,7 @@ test <- es_summary_new(samplers_LNR, selection = "alpha", stat = "mean", stat_on
 # Check add_constants
 # Fix post_predict with hyper
 # Fix aesthetic functions that call es or gd
+# Email Michael, change schedule
 devtools::load_all()
 debug(get_objects_standard)
 plot_pars_new(samplers_LNR, selection = "covariance", show_chains = TRUE, by_subject = FALSE, plot_prior = TRUE,
