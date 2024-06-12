@@ -443,8 +443,8 @@ IC <- function(samplers,filter="sample",subfilter=0,use_best_fit=TRUE,
 {
 # Mean log-likelihood for each subject
   ll <- as_mcmc_new(samplers, filter = filter, subfilter = subfilter, selection = "LL", merge_chains = TRUE)
-  minDs <- -2*unlist(lapply(ll,function(x){max(unlist(x))}))
-  mean_lls <- unlist(lapply(ll,function(x){mean(unlist(x))}))
+  minDs <- -2*apply(ll[[1]][[1]], 2, min)
+  mean_lls <- apply(ll[[1]][[1]], 2, mean)
   alpha <- as_mcmc_new(samplers,selection="alpha",filter=filter,subfilter=subfilter, by_subject = TRUE, merge_chains = TRUE)
   mean_pars <- lapply(alpha,function(x){apply(do.call(rbind,x),2,mean)})
   # log-likelihood for each subject using their mean parameter vector
@@ -459,11 +459,6 @@ IC <- function(samplers,filter="sample",subfilter=0,use_best_fit=TRUE,
     Dmeans <- Dmeans[subject[1]]
     mean_lls <- mean_lls[subject[1]]
     minDs <- minDs[subject[1]]
-  } else{
-    group_stats <- group_level_IC_standard(samplers, filter=filter,subfilter=subfilter)
-    mean_lls <- c(mean_lls, group_stats$mean_ll)
-    minDs <- c(minDs, group_stats$minD)
-    Dmeans <- c(Dmeans, group_stats$Dmean)
   }
   if (use_best_fit) minDs <- pmin(minDs,Dmeans)
 
