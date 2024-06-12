@@ -442,10 +442,10 @@ IC <- function(samplers,filter="sample",subfilter=0,use_best_fit=TRUE,
   # Gets DIC, BPIC, effective parameters, mean deviance, and deviance of mean
 {
 # Mean log-likelihood for each subject
-  ll <- as_mcmc_new(samplers, filter = filter, subfilter = subfilter, selection = "LL")
+  ll <- as_mcmc_new(samplers, filter = filter, subfilter = subfilter, selection = "LL", merge_chains = TRUE)
   minDs <- -2*unlist(lapply(ll,function(x){max(unlist(x))}))
   mean_lls <- unlist(lapply(ll,function(x){mean(unlist(x))}))
-  alpha <- as_mcmc_new(samplers,selection="alpha",filter=filter,subfilter=subfilter, by_subject = TRUE)
+  alpha <- as_mcmc_new(samplers,selection="alpha",filter=filter,subfilter=subfilter, by_subject = TRUE, merge_chains = TRUE)
   mean_pars <- lapply(alpha,function(x){apply(do.call(rbind,x),2,mean)})
   # log-likelihood for each subject using their mean parameter vector
   ll_func <- attr(samplers,"design_list")[[1]]$model()$log_likelihood
