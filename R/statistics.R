@@ -459,6 +459,11 @@ IC <- function(samplers,filter="sample",subfilter=0,use_best_fit=TRUE,
     Dmeans <- Dmeans[subject[1]]
     mean_lls <- mean_lls[subject[1]]
     minDs <- minDs[subject[1]]
+  } else{
+    group_stats <- group_level_IC_standard(samplers, filter=filter,subfilter=subfilter)
+    mean_lls <- c(mean_lls, group_stats$mean_ll)
+    minDs <- c(minDs, group_stats$minD)
+    Dmeans <- c(Dmeans, group_stats$Dmean)
   }
   if (use_best_fit) minDs <- pmin(minDs,Dmeans)
 

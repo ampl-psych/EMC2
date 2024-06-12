@@ -450,7 +450,7 @@ group_level_IC_standard <- function(samplers, filter="sample",subfilter=0){
   }
   minD <- -2*max(lls)
   mean_ll <- mean(lls)
-  mean_pars_ll <-  dmvnorm(t(mean_alpha), mean_mu, mean_var)
+  mean_pars_ll <-  sum(dmvnorm(t(mean_alpha), mean_mu, mean_var), log = TRUE)
   Dmean <- -2*mean_pars_ll
   return(list(mean_ll = mean_ll, Dmean = Dmean,
               minD = minD))
