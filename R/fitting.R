@@ -385,15 +385,8 @@ check_progress <- function (samplers, stage, iter, stop_criteria,
   else if (iters_total != 0) {
     curr_min_es <- Inf
     for(select in selection){
-      # if(!is.null(samplers[[1]]$g_map_fixed)){
-      #   curr_min_es <- min(es_pmwg(as_mcmc.list(samplers, selection = "random",
-      #                                           filter = stage), print_summary = F),
-      #                      es_pmwg(as_mcmc.list(samplers, selection = "fixed",
-      #                                           filter = stage), print_summary = F))
-      # } else{    # }
-
-      curr_min_es <- min(c(es_pmwg(as_mcmc.list(samplers, selection = select,
-                                                filter = stage), print_summary = F), curr_min_es))
+      curr_min_es <- min(c(es_summary_new(samplers, selection = select, stat = "min",
+                                                filter = stage, stat_only = TRUE), curr_min_es))
     }
     if (verbose)
       message("Smallest effective size = ", round(curr_min_es))

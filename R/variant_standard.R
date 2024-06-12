@@ -36,11 +36,6 @@ add_info_standard <- function(sampler, prior = NULL, ...){
 #' @param n_pars Often inferred from the design, but if `design = NULL`, `n_pars`
 #' will be used to determine the size of prior.
 #' @param sample Boolean, defaults to `TRUE`, sample from the prior or simply return the prior specifications?
-#' @param map Boolean, defaults to `TRUE`. If `sample = TRUE`, the implied prior is sampled.
-#' This includes back-transformations for naturally bounded parameters such as
-#' the non-decision time and an inverse mapping from the design matrix back to the
-#' cells of the design. If `FALSE`, the transformed, unmapped, parameters are used.
-#' Note that `map` does not affect the prior used in the sampling process.
 #' @param N How many samples to draw from the prior, the default is 1e5
 #' @param design The design obtained from `make_design()`, required when `map = TRUE`
 #' @param selection Character. If `sample = TRUE`, what prior to sample from. Options:
@@ -126,97 +121,6 @@ get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1
   }
   return(out)
 }
-
-
-
-
-# get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, selection = "mu", design = NULL,
-#                                map = FALSE){
-#   # Checking and default priors
-#   if(is.null(prior)){
-#     prior <- list()
-#   }
-#   if(!is.null(design)){
-#     n_pars <- length(attr(design, "p_vector"))
-#   }
-#   if (!is.null(prior$theta_mu_mean)) {
-#     n_pars <- length(prior$theta_mu_mean)
-#   }
-#   if (is.null(prior$theta_mu_mean)) {
-#     prior$theta_mu_mean <- rep(0, n_pars)
-#   }
-#   if(is.null(prior$theta_mu_var)){
-#     prior$theta_mu_var <- diag(rep(1, n_pars))
-#   }
-#   if(is.null(prior$v)){
-#     prior$v <- 2
-#   }
-#   if(is.null(prior$A)){
-#     prior$A <- rep(.3, n_pars)
-#   }
-#   # Things I save rather than re-compute inside the loops.
-#   prior$theta_mu_invar <- ginv(prior$theta_mu_var) #Inverse of the matrix
-#   attr(prior, "type") <- "standard"
-#   if(sample){
-#     samples <- list()
-#     if(!selection %in% c("mu", "variance", "covariance", "correlation", "full_var")){
-#       stop("for variant standard, you can only specify the prior on the mean, variance, covariance or the correlation of the parameters")
-#     }
-#     if(selection == "mu"){
-#       mu <- mvtnorm::rmvnorm(N, mean = prior$theta_mu_mean,
-#                               sigma = prior$theta_mu_var)
-#       # if(!is.null(design)){
-#       #   colnames(samples) <- par_names <- names(attr(design, "p_vector"))
-#       #   if(map){
-#       #     samples <- map_mcmc(samples,design,design$model,include_constants=FALSE)
-#       #   }
-#       # }
-#       samples$mu <- samples
-#     } else {
-#       var <- array(NA_real_, dim = c(n_pars, n_pars, N))
-#       for(i in 1:N){
-#         a_half <- 1 / rgamma(n = n_pars,shape = 1/2,
-#                              rate = 1/(prior$A^2))
-#         attempt <- tryCatch({
-#           var[,,i] <- riwish(prior$v + n_pars - 1, 2 * prior$v * diag(1 / a_half))
-#         },error=function(e) e, warning=function(w) w)
-#         if (any(class(attempt) %in% c("warning", "error", "try-error"))) {
-#           sample_idx <- sample(1:(i-1),1)
-#           var[,,i] <- var[,,sample_idx]
-#         }
-#       }
-#       # if (selection == "variance") {
-#       #   vars_only <- t(apply(var,3,diag))
-#       #   if(!is.null(design)){
-#       #     colnames(vars_only) <- names(attr(design, "p_vector"))
-#       #   }
-#       #   out$variance <- vars_only
-#       # }
-#       # lt <- lower.tri(var[,,1])
-#       # if(selection %in% c("covariance", "correlation")){
-#       #   pnams <- names(attr(design, "p_vector"))
-#       #   lt <- lower.tri(diag(length(pnams)))
-#       #   pnams <- outer(pnams,pnams,paste,sep=".")[lt]
-#       # }
-#       # if (selection == "correlation"){
-#       #   corrs <- array(apply(var,3,cov2cor),dim=dim(var),dimnames=dimnames(var))
-#       #   out$correlation <- t(apply(corrs,3,function(x){x[lt]}))
-#       #   colnames(out$correlation) <- pnams
-#       # }
-#       # if(selection == "covariance"){
-#       #   out$covariance <- t(apply(var,3,function(x){x[lt]}))
-#       #   colnames(out$covariance) <- pnams
-#       # }
-#       #
-#       #
-#       # if (selection == "full_var"){
-#       #   out$full_var <- t(apply(var, 3, c))
-#       # }
-#       # return(out)
-#     }
-#   }
-#   return(prior)
-# }
 
 get_startpoints_standard <- function(pmwgs, start_mu, start_var){
   n_pars <- sum(!(pmwgs$nuisance | pmwgs$grouped))
@@ -523,3 +427,16 @@ bridge_group_and_prior_and_jac_standard <- function(proposals_group, proposals_l
   jac_a <- rowSums(theta_a)
   return(sum_out + prior_mu + jac_a) # Output is of length nrow(proposals)
 }
+
+
+
+# for IC ------------------------------------------------------------------
+
+group_level_IC_standard <- function(samplers, filter="sample",subfilter=0){
+  alpha <- as_mcmc_new(samplers, selection = "alpha", filter = filter, subfilter = subfilter)
+  theta_mu <- as_mcmc_new(samplers, selection = "mu", filter = filter, subfilter = subfilter)
+  theta_var <- as_mcmc_new(samplers, selection = "sigma", filter = filter, subfilter = subfilter)
+
+
+}
+

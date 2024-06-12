@@ -52,11 +52,17 @@ mapped_par(p_vector,design_DDMaE)
 
 debug(make_nice_summary)
 
+devtools::load_all()
 debug(gd_summary_new)
 gd_summary_new(samplers_LNR, selection = "covariance")
-es_summary_new(samplers_LNR, selection = "alpha", stat = "mean")
 
-# To do fix prior sampling issue
+undebug(make_nice_summary)
+test <- es_summary_new(samplers_LNR, selection = "alpha", stat = "mean", stat_only = F)
+
+# To do:
+# Check add_constants
+# Fix post_predict with hyper
+# Fix aesthetic functions that call es or gd
 devtools::load_all()
 debug(get_objects_standard)
 plot_pars_new(samplers_LNR, selection = "covariance", show_chains = TRUE, by_subject = FALSE, plot_prior = TRUE,

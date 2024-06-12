@@ -32,85 +32,85 @@
 #' }
 #' @export
 
-plot_chains <- function(samplers,layout=NA,subject=NA,ylim=NULL,
-                        selection="mu",filter="sample",thin=1,subfilter=0,
-                        plot_acf=FALSE) # ,use_par=NA
-  # Plots chains  (if alpha, LL or epsilon can do individual subject, all by default)
-{
-  MCMC_samples <- samplers
-  if (!(inherits(MCMC_samples,  c("mcmc","mcmc.list")))) {
-    if (inherits(MCMC_samples, "pmwgs"))
-      MCMC_samples <- as_Mcmc(MCMC_samples,selection=selection,filter=filter,
-                           thin=thin,subfilter=subfilter) else
-                             MCMC_samples <- as_mcmc.list(MCMC_samples,selection=selection,filter=filter,
-                                                       thin=thin,subfilter=subfilter)
-  }
-  auto.layout <- any(is.na(layout))
-  no_layout <- is.null(layout)
-  if (!auto.layout & !no_layout) par(mfrow=layout)
-  if (attr(MCMC_samples,"selection")=="alpha" || attr(MCMC_samples,"selection")=="random") {
-    snams <- names(MCMC_samples)
-    if (any(is.na(subject))) subject <- snams
-    if (is.numeric(subject)) subject <- snams[subject]
-    if (!all(subject %in% names(MCMC_samples)))
-      stop("Subject not present\n")
-    for (i in subject) {
-      if (!auto.layout & !no_layout) par(mfrow=layout)
-      if (plot_acf){
-        for (j in colnames(MCMC_samples[[i]][[1]])){
-          acf(MCMC_samples[[i]][[1]][,j],main=paste0("Chain ",1,": ","s",i,": ",j))
-        }
-      } else {
-        plot(MCMC_samples[[i]],auto.layout=auto.layout,density=FALSE,
-             xlab=paste0("Iterations ",i),ask=FALSE,trace=TRUE,
-             ylab=attr(MCMC_samples,"selection"),smooth=FALSE,ylim=ylim)
-      }
-    }
-  } else if (attr(MCMC_samples,"selection") %in% c("LL","epsilon")) {
-    if (any(is.na(subject))) subject <- names(MCMC_samples)
-    if (!all(subject %in% names(MCMC_samples)))
-      stop("Subject not present\n")
-    for (i in subject) {
-      if (plot_acf){
-        acf(MCMC_samples[[i]][[1]],main=paste0("Chain ",1,": ","LL ",i))
-      } else{
-        plot(MCMC_samples[[i]],auto.layout=auto.layout,density=FALSE,
-             xlab=paste0("Iterations ",i),ask=FALSE,trace=TRUE,
-             ylab=attr(MCMC_samples,"selection"),smooth=FALSE,ylim=ylim)
-      }
-    }
-  } else {
-    if (plot_acf) {
-      for (j in colnames(MCMC_samples[[1]])){
-        acf(MCMC_samples[[1]][,j],main=paste0("Chain ",1,": ",j))
-      }
-    } else {
-      plot(MCMC_samples,auto.layout=auto.layout,density=FALSE,
-           ask=FALSE,trace=TRUE,ylim=ylim,
-           ylab=attr(MCMC_samples,"selection"),smooth=FALSE)
-    }
-  }
-}
-
-plot_acfs <- function(samples,layout=NULL,subject=1,
-                      selection="alpha",filter="sample",subfilter=0)
-  # Plots acf for all chains
-{
-  if (is(samples, "pmwgs")) samples <- list(samples)
-  if (selection=="alpha") {
-    snams <- names(samples[[1]]$data)
-    if (is.numeric(subject)) subject <- snams[subject]
-    if (!all(subject %in% snams)) stop("Subject not present\n")
-    message("Plotting chains for subject(s) ",paste(subject,collapse=" "))
-  }
-  for (i in 1:length(samples)) {
-    if (selection=="alpha") {
-      plot_chains(samples[[i]],selection=selection,filter=filter,subfilter=subfilter,
-                  layout=layout,plot_acf=TRUE,subject=subject)
-    } else plot_chains(samples[[i]],selection=selection,filter=filter,subfilter=subfilter,
-                       layout=layout,plot_acf=TRUE)
-  }
-}
+# plot_chains <- function(samplers,layout=NA,subject=NA,ylim=NULL,
+#                         selection="mu",filter="sample",thin=1,subfilter=0,
+#                         plot_acf=FALSE) # ,use_par=NA
+#   # Plots chains  (if alpha, LL or epsilon can do individual subject, all by default)
+# {
+#   MCMC_samples <- samplers
+#   if (!(inherits(MCMC_samples,  c("mcmc","mcmc.list")))) {
+#     if (inherits(MCMC_samples, "pmwgs"))
+#       MCMC_samples <- as_Mcmc(MCMC_samples,selection=selection,filter=filter,
+#                            thin=thin,subfilter=subfilter) else
+#                              MCMC_samples <- as_mcmc.list(MCMC_samples,selection=selection,filter=filter,
+#                                                        thin=thin,subfilter=subfilter)
+#   }
+#   auto.layout <- any(is.na(layout))
+#   no_layout <- is.null(layout)
+#   if (!auto.layout & !no_layout) par(mfrow=layout)
+#   if (attr(MCMC_samples,"selection")=="alpha" || attr(MCMC_samples,"selection")=="random") {
+#     snams <- names(MCMC_samples)
+#     if (any(is.na(subject))) subject <- snams
+#     if (is.numeric(subject)) subject <- snams[subject]
+#     if (!all(subject %in% names(MCMC_samples)))
+#       stop("Subject not present\n")
+#     for (i in subject) {
+#       if (!auto.layout & !no_layout) par(mfrow=layout)
+#       if (plot_acf){
+#         for (j in colnames(MCMC_samples[[i]][[1]])){
+#           acf(MCMC_samples[[i]][[1]][,j],main=paste0("Chain ",1,": ","s",i,": ",j))
+#         }
+#       } else {
+#         plot(MCMC_samples[[i]],auto.layout=auto.layout,density=FALSE,
+#              xlab=paste0("Iterations ",i),ask=FALSE,trace=TRUE,
+#              ylab=attr(MCMC_samples,"selection"),smooth=FALSE,ylim=ylim)
+#       }
+#     }
+#   } else if (attr(MCMC_samples,"selection") %in% c("LL","epsilon")) {
+#     if (any(is.na(subject))) subject <- names(MCMC_samples)
+#     if (!all(subject %in% names(MCMC_samples)))
+#       stop("Subject not present\n")
+#     for (i in subject) {
+#       if (plot_acf){
+#         acf(MCMC_samples[[i]][[1]],main=paste0("Chain ",1,": ","LL ",i))
+#       } else{
+#         plot(MCMC_samples[[i]],auto.layout=auto.layout,density=FALSE,
+#              xlab=paste0("Iterations ",i),ask=FALSE,trace=TRUE,
+#              ylab=attr(MCMC_samples,"selection"),smooth=FALSE,ylim=ylim)
+#       }
+#     }
+#   } else {
+#     if (plot_acf) {
+#       for (j in colnames(MCMC_samples[[1]])){
+#         acf(MCMC_samples[[1]][,j],main=paste0("Chain ",1,": ",j))
+#       }
+#     } else {
+#       plot(MCMC_samples,auto.layout=auto.layout,density=FALSE,
+#            ask=FALSE,trace=TRUE,ylim=ylim,
+#            ylab=attr(MCMC_samples,"selection"),smooth=FALSE)
+#     }
+#   }
+# }
+#
+# plot_acfs <- function(samples,layout=NULL,subject=1,
+#                       selection="alpha",filter="sample",subfilter=0)
+#   # Plots acf for all chains
+# {
+#   if (is(samples, "pmwgs")) samples <- list(samples)
+#   if (selection=="alpha") {
+#     snams <- names(samples[[1]]$data)
+#     if (is.numeric(subject)) subject <- snams[subject]
+#     if (!all(subject %in% snams)) stop("Subject not present\n")
+#     message("Plotting chains for subject(s) ",paste(subject,collapse=" "))
+#   }
+#   for (i in 1:length(samples)) {
+#     if (selection=="alpha") {
+#       plot_chains(samples[[i]],selection=selection,filter=filter,subfilter=subfilter,
+#                   layout=layout,plot_acf=TRUE,subject=subject)
+#     } else plot_chains(samples[[i]],selection=selection,filter=filter,subfilter=subfilter,
+#                        layout=layout,plot_acf=TRUE)
+#   }
+# }
 
 #' plot_alpha_recovery
 #' Uses output from plot_pars to plot true vs. estimated (median with CI) alpha
@@ -375,238 +375,238 @@ robust_density <- function(ps,r,bw,adjust,use_robust=FALSE)
 #' print(quants)
 #' }
 #' @export
-plot_pars <- function(samplers,layout=c(2,3),use_par=NULL,
-                      selection="mu",filter="sample",thin=1,subfilter=0,mapped=FALSE,
-                      plot_prior=TRUE,xlim=NULL,ylim=NULL,prior_xlim=c(.1,.9),
-                      show_chains=FALSE,do_plot=TRUE,subject=NA,add_means=FALSE,
-                      pars=NULL,probs=c(.025,.5,.975),bw = "nrd0", adjust = 1,
-                      lpos="topright",digits=3)
-
-{
-  n_prior <- 1e3
-  pmwg_mcmc <- samplers
-  if (mapped & !(selection %in% c("mu","alpha")))
-    stop("mapped only available for mu and alpha")
-
-  if (show_chains & plot_prior)
-    warning("Prior plots not implemented for show_chains=TRUE")
-  do_contraction <- TRUE
-  if (do_contraction & !plot_prior) do_contraction <- FALSE
-
-  if (is.list(pars)) pars <- do.call(rbind,lapply(pars,function(x)x[2,]))
-
-  if (!(inherits(pmwg_mcmc, c("mcmc","mcmc.list")))) {
-    if (plot_prior) {
-      psamples <- get_prior_samples(pmwg_mcmc,selection,filter,thin,subfilter,n_prior)
-      if (mapped) psamples <- map_mcmc(psamples,design=attr(pmwg_mcmc,"design_list")[[1]],
-                                       model=attr(pmwg_mcmc,"model_list")[[1]])
-      if (!is.null(attr(psamples,"isConstant")))
-        psamples <- psamples[,!attr(psamples,"isConstant"),drop=FALSE]
-    }
-    if (inherits(pmwg_mcmc, "pmwgs")){
-      pmwg_mcmc <- as_Mcmc(pmwg_mcmc, selection=selection,filter=filter,thin=thin,subfilter=subfilter)
-    } else {
-      if (mapped & !is.null(pars)) {
-        pars <- map_mcmc(pars,design=attr(pmwg_mcmc,"design_list")[[1]],
-                         model=attr(pmwg_mcmc,"model_list")[[1]])
-        if (!is.null(attr(pars,"isConstant")))
-          pars <- pars[,!attr(pars,"isConstant"),drop=FALSE]
-      }
-      pmwg_mcmc <- as_mcmc.list(pmwg_mcmc,selection=selection,filter=filter,
-                                thin=thin,subfilter=subfilter,mapped=mapped)
-    }
-  } else plot_prior <- FALSE
-  if (attr(pmwg_mcmc,"selection")=="LL")
-    stop("No density plots for LL\n")
-  no_layout <- any(is.na(layout)) | is.null(layout)
-  chains <- 0
-
-
-  if (attr(pmwg_mcmc,"selection") == "alpha") {
-    snams <- names(pmwg_mcmc)
-    if (any(is.na(subject))) subject <- snams
-    if (is.numeric(subject)) subject <- snams[subject]
-    if (!all(subject %in% snams))
-      stop("Subject not present\n")
-    if (!is.null(pars)) {
-      if (!is.null(dim(pars))) pars <- t(pars) else {
-        if (length(subject)!=1) reps <- length(subject) else reps <- 1
-        pars <- matrix(rep(pars,each=reps),ncol=1,dimnames=list(names(pars),subject) )
-      }
-    }
-    if (!is.null(pars) && !is.matrix(pars))
-      stop("pars must be a matrix for alpha")
-    if (inherits(pmwg_mcmc[[1]], "mcmc.list")) {
-      selection <- attr(pmwg_mcmc,"selection")
-      pmwg_mcmc_combined <- lapply(pmwg_mcmc,function(x){do.call(rbind,x)})
-      attr(pmwg_mcmc_combined,"selection") <- selection
-      if (show_chains) chains <- length(pmwg_mcmc[[1]]) else
-        pmwg_mcmc <- pmwg_mcmc_combined
-    } else pmwg_mcmc_combined <- pmwg_mcmc
-    tabs <- lapply(pmwg_mcmc_combined,function(x){apply(x,2,quantile,probs=probs)})
-    # if (plot_prior) dimnames(psamples) <- list(NULL,colnames(pmwg_mcmc_combined[[1]]))
-    if (do_contraction)
-      contraction <- setNames(vector(mode="list",length=length(subject)),subject)
-    if (!is.null(use_par)) {
-      ok <- colnames(pmwg_mcmc_combined[[1]]) %in% use_par
-      if (!any(ok)) stop("use_par did not specify parameters that are present")
-      tabs <- lapply(tabs,function(x) x[,ok,drop=FALSE])
-    } else ok <- rep(TRUE,length(colnames(pmwg_mcmc_combined[[1]])))
-    for (i in subject) {
-      if (do_plot) {
-        if (!no_layout) par(mfrow=layout)
-        if (do_contraction)
-          contractioni <- setNames(numeric(length(colnames(pmwg_mcmc_combined[[i]]))),
-                                   colnames(pmwg_mcmc_combined[[i]]))
-        for (j in  colnames(pmwg_mcmc_combined[[i]])[ok] ) {
-          if (chains>0) {
-            dens <- lapply(pmwg_mcmc[[i]],function(x){density(x[,j],bw=bw,adjust=adjust)})
-            if (!is.null(xlim)) {
-              if (!is.matrix(xlim)) xlimi <- xlim else xlimi <- xlim[j,]
-            } else {
-              xlimi <- c(min(unlist(lapply(dens,function(x){min(x$x)}))),
-                         max(unlist(lapply(dens,function(x){max(x$x)}))))
-              if (!is.null(pars)) xlimi <- c(min(c(pars[j,i]-abs(pars[j,i])/10,xlimi[1])),
-                                             max(c(pars[j,i]+abs(pars[j,i])/10,xlimi[2])))
-            }
-            if (!is.null(ylim)) {
-              if (!is.matrix(ylim)) ylimi <- ylim else ylimi <- ylim[j,]
-            } else ylimi <- c(0,max(unlist(lapply(dens,function(x){max(x$y)}))))
-            main <- paste0(attr(pmwg_mcmc,"selection")," s",i)
-            plot(dens[[1]],xlab=j,main=main,col=1,xlim=xlimi,ylim=ylimi)
-            if (chains>1) for (k in 2:chains) lines(dens[[k]],col=k)
-          } else {
-            dens <- density(pmwg_mcmc[[i]][,j],bw=bw,adjust=adjust)
-            if (plot_prior) pdens <- density(psamples[,j],bw=bw,adjust=adjust)
-            if (!is.null(xlim)) {
-              if (!is.matrix(xlim)) xlimi <- xlim else xlimi <- xlim[j,]
-            } else if (plot_prior & !is.null(prior_xlim)) {
-              xlimi <- c(quantile(pdens$x,probs=prior_xlim[1]),
-                         quantile(pdens$x,probs=prior_xlim[2]))
-            } else {
-              xlimi <- c(min(dens$x),max(dens$x))
-              if (!is.null(pars)) xlimi <- c(min(c(pars[j,i]-abs(pars[j,i])/10,xlimi[1])),
-                                             max(c(pars[j,i]+abs(pars[j,i])/10,xlimi[2])))
-            }
-            if (!is.null(ylim)) {
-              if (!is.matrix(ylim)) ylimi <- ylim else ylimi <- ylim[j,]
-            } else {
-              ylimi <- c(0,max(dens$y))
-              if (plot_prior) ylimi[2] <- max(c(ylimi[2],pdens$y))
-            }
-            main <- paste0(attr(pmwg_mcmc,"selection")," s",i)
-            plot(dens,xlab=j,xlim=xlimi,ylim=ylimi,main=main)
-            if (plot_prior) lines(pdens,col="red")
-            if (do_contraction) {
-              contractioni[j] <- 1-(var(pmwg_mcmc[[i]][,j])/var(psamples[,j]))
-              legend(lpos,legend=round(contractioni[j],digits),bty="n",title="Contraction")
-            }
-          }
-          if (!is.null(pars)) abline(v=pars[j,i])
-        }
-      }
-      if (do_plot & do_contraction) contraction[[i]] <- contractioni
-      if (!is.null(pars)) {
-        tabs[[i]] <- rbind(true=pars[dimnames(tabs[[i]])[[2]],i],tabs[[i]])
-        tabs[[i]] <- rbind(tabs[[i]],Miss=tabs[[i]][3,]-tabs[[i]][1,])
-      }
-    }
-    tabs <- tabs[as.character(subject)]
-    if (add_means)
-      attr(tabs,"mean") <- lapply(pmwg_mcmc_combined,function(x){apply(x,2,mean)})
-    if (do_contraction & exists("contraction"))
-      attr(tabs,"contraction") <- do.call(rbind,contraction)
-    invisible(tabs)
-  } else {
-    if (!is.na(subject)) warning("Selecting a subject has no effect on population parameters")
-    if (inherits(pmwg_mcmc, "mcmc.list")) {
-      selection <- attr(pmwg_mcmc,"selection")
-      pmwg_mcmc_combined <- do.call(rbind,pmwg_mcmc)
-      attr(pmwg_mcmc_combined,"selection") <- selection
-      if (show_chains) chains <- length(pmwg_mcmc) else
-        pmwg_mcmc <- pmwg_mcmc_combined
-    } else pmwg_mcmc_combined <- pmwg_mcmc
-    if(!is.null(use_par)){
-      ok <- colnames(pmwg_mcmc_combined) %in% use_par
-      if (!any(ok)) stop("use_par did not specify parameters that are present")
-    }
-
-    if (!is.null(pars)) {
-      if ( !is.vector(pars) ) {
-        if (attr(pmwg_mcmc,"selection") == "mu")
-          stop("pars must be a vector for mu")
-        if (!is.matrix(pars))
-          stop("pars must be a vector or matrix")
-        if (attr(pmwg_mcmc,"selection") == "variance")
-          pars <- diag(pars) else
-            pars <- pars[lower.tri(pars)]
-      }
-      if(is.null(use_par)){
-        if (length(pars) != dim(pmwg_mcmc_combined)[2])
-          stop("pars is wrong length")
-        names(pars) <- colnames(pmwg_mcmc_combined)
-      } else{
-        if (length(pars) != length(use_par))
-          stop("pars is wrong length")
-        names(pars) <- use_par
-      }
-    }
-    tabs <- rbind(true=pars,apply(pmwg_mcmc_combined,2,quantile,probs=probs))
-    if (!is.null(pars)) tabs <- rbind(tabs,Miss=tabs[3,]-tabs[1,])
-    if (add_means) attr(tabs,"mean") <- apply(pmwg_mcmc_combined,2,mean)
-    if (!no_layout) par(mfrow=layout)
-    if (plot_prior) dimnames(psamples) <- list(NULL,colnames(pmwg_mcmc_combined))
-    if (do_contraction)
-      contraction <- setNames(numeric(length(colnames(pmwg_mcmc_combined))),colnames(pmwg_mcmc_combined))
-    if (!is.null(use_par)) {
-      tabs <- tabs[,ok,drop=FALSE]
-    } else ok <- rep(TRUE,length(colnames(pmwg_mcmc_combined)))
-    if (do_plot) for (j in colnames(pmwg_mcmc_combined)[ok] ) {
-      if (chains > 0) {
-        dens <- lapply(pmwg_mcmc,function(x){density(x[,j],bw=bw,adjust=adjust)})
-        if (!is.null(xlim)) xlimi <- xlim else {
-          xlimi <- c(min(unlist(lapply(dens,function(x){min(x$x)}))),
-                     max(unlist(lapply(dens,function(x){max(x$x)}))))
-          if (!is.null(pars)) xlimi <- c(min(c(pars[j,i]-abs(pars[j,i])/10,xlimi[1])),
-                                         max(c(pars[j,i]+abs(pars[j,i])/10,xlimi[2])))
-        }
-        if (!is.null(ylim)) ylimi <- ylim else
-          ylimi <- c(0,max(unlist(lapply(dens,function(x){max(x$y)}))))
-        main <- j
-        plot(dens[[1]],xlab=attr(pmwg_mcmc,"selection"),main=main,
-             col=1,xlim=xlimi,ylim=ylimi)
-        if (chains>1) for (k in 2:chains) lines(dens[[k]],col=k)
-      } else {
-        dens <- density(pmwg_mcmc[,j],bw=bw,adjust=adjust)
-        if (plot_prior)  pdens <- robust_density(psamples[,j],range(pmwg_mcmc[,j]),
-                                                 bw=bw,adjust=adjust,use_robust=!(attr(pmwg_mcmc,"selection") %in% c("mu","correlation")))
-        if (!is.null(xlim)) xlimi <- xlim else if (plot_prior & !is.null(prior_xlim))
-          xlimi <- c(quantile(pdens$x,probs=prior_xlim[1]),
-                     quantile(pdens$x,probs=prior_xlim[2])) else {
-                       xlimi <- c(min(dens$x),max(dens$x))
-                       if (!is.null(pars)) xlimi <- c(min(c(pars[j,i]-abs(pars[j,i])/10,xlimi[1])),
-                                                      max(c(pars[j,i]+abs(pars[j,i])/10,xlimi[2])))
-                     }
-        if (!is.null(ylim)) ylimi <- ylim else {
-          ylimi <- c(0,max(dens$y))
-          if (plot_prior) ylimi[2] <- max(c(ylimi[2],pdens$y))
-        }
-        main <- j
-        plot(dens,xlim=xlimi,ylim=ylimi,xlab=attr(pmwg_mcmc,"selection"),main=main)
-        if (plot_prior) {
-          lines(pdens,col="red")
-          if (do_contraction) {
-            contraction[j] <- 1-(var(pmwg_mcmc[,j])/var(psamples[,j]))
-            legend(lpos,legend=round(contraction[j],digits),bty="n",title="Contraction")
-          }
-        }
-      }
-      if (!is.null(pars)) abline(v=pars[j])
-    }
-    if (do_contraction & exists("contraction")) attr(tabs,"contraction") <- contraction
-    invisible(tabs)
-  }
-}
+# plot_pars <- function(samplers,layout=c(2,3),use_par=NULL,
+#                       selection="mu",filter="sample",thin=1,subfilter=0,mapped=FALSE,
+#                       plot_prior=TRUE,xlim=NULL,ylim=NULL,prior_xlim=c(.1,.9),
+#                       show_chains=FALSE,do_plot=TRUE,subject=NA,add_means=FALSE,
+#                       pars=NULL,probs=c(.025,.5,.975),bw = "nrd0", adjust = 1,
+#                       lpos="topright",digits=3)
+#
+# {
+#   n_prior <- 1e3
+#   pmwg_mcmc <- samplers
+#   if (mapped & !(selection %in% c("mu","alpha")))
+#     stop("mapped only available for mu and alpha")
+#
+#   if (show_chains & plot_prior)
+#     warning("Prior plots not implemented for show_chains=TRUE")
+#   do_contraction <- TRUE
+#   if (do_contraction & !plot_prior) do_contraction <- FALSE
+#
+#   if (is.list(pars)) pars <- do.call(rbind,lapply(pars,function(x)x[2,]))
+#
+#   if (!(inherits(pmwg_mcmc, c("mcmc","mcmc.list")))) {
+#     if (plot_prior) {
+#       psamples <- get_prior_samples(pmwg_mcmc,selection,filter,thin,subfilter,n_prior)
+#       if (mapped) psamples <- map_mcmc(psamples,design=attr(pmwg_mcmc,"design_list")[[1]],
+#                                        model=attr(pmwg_mcmc,"model_list")[[1]])
+#       if (!is.null(attr(psamples,"isConstant")))
+#         psamples <- psamples[,!attr(psamples,"isConstant"),drop=FALSE]
+#     }
+#     if (inherits(pmwg_mcmc, "pmwgs")){
+#       pmwg_mcmc <- as_Mcmc(pmwg_mcmc, selection=selection,filter=filter,thin=thin,subfilter=subfilter)
+#     } else {
+#       if (mapped & !is.null(pars)) {
+#         pars <- map_mcmc(pars,design=attr(pmwg_mcmc,"design_list")[[1]],
+#                          model=attr(pmwg_mcmc,"model_list")[[1]])
+#         if (!is.null(attr(pars,"isConstant")))
+#           pars <- pars[,!attr(pars,"isConstant"),drop=FALSE]
+#       }
+#       pmwg_mcmc <- as_mcmc.list(pmwg_mcmc,selection=selection,filter=filter,
+#                                 thin=thin,subfilter=subfilter,mapped=mapped)
+#     }
+#   } else plot_prior <- FALSE
+#   if (attr(pmwg_mcmc,"selection")=="LL")
+#     stop("No density plots for LL\n")
+#   no_layout <- any(is.na(layout)) | is.null(layout)
+#   chains <- 0
+#
+#
+#   if (attr(pmwg_mcmc,"selection") == "alpha") {
+#     snams <- names(pmwg_mcmc)
+#     if (any(is.na(subject))) subject <- snams
+#     if (is.numeric(subject)) subject <- snams[subject]
+#     if (!all(subject %in% snams))
+#       stop("Subject not present\n")
+#     if (!is.null(pars)) {
+#       if (!is.null(dim(pars))) pars <- t(pars) else {
+#         if (length(subject)!=1) reps <- length(subject) else reps <- 1
+#         pars <- matrix(rep(pars,each=reps),ncol=1,dimnames=list(names(pars),subject) )
+#       }
+#     }
+#     if (!is.null(pars) && !is.matrix(pars))
+#       stop("pars must be a matrix for alpha")
+#     if (inherits(pmwg_mcmc[[1]], "mcmc.list")) {
+#       selection <- attr(pmwg_mcmc,"selection")
+#       pmwg_mcmc_combined <- lapply(pmwg_mcmc,function(x){do.call(rbind,x)})
+#       attr(pmwg_mcmc_combined,"selection") <- selection
+#       if (show_chains) chains <- length(pmwg_mcmc[[1]]) else
+#         pmwg_mcmc <- pmwg_mcmc_combined
+#     } else pmwg_mcmc_combined <- pmwg_mcmc
+#     tabs <- lapply(pmwg_mcmc_combined,function(x){apply(x,2,quantile,probs=probs)})
+#     # if (plot_prior) dimnames(psamples) <- list(NULL,colnames(pmwg_mcmc_combined[[1]]))
+#     if (do_contraction)
+#       contraction <- setNames(vector(mode="list",length=length(subject)),subject)
+#     if (!is.null(use_par)) {
+#       ok <- colnames(pmwg_mcmc_combined[[1]]) %in% use_par
+#       if (!any(ok)) stop("use_par did not specify parameters that are present")
+#       tabs <- lapply(tabs,function(x) x[,ok,drop=FALSE])
+#     } else ok <- rep(TRUE,length(colnames(pmwg_mcmc_combined[[1]])))
+#     for (i in subject) {
+#       if (do_plot) {
+#         if (!no_layout) par(mfrow=layout)
+#         if (do_contraction)
+#           contractioni <- setNames(numeric(length(colnames(pmwg_mcmc_combined[[i]]))),
+#                                    colnames(pmwg_mcmc_combined[[i]]))
+#         for (j in  colnames(pmwg_mcmc_combined[[i]])[ok] ) {
+#           if (chains>0) {
+#             dens <- lapply(pmwg_mcmc[[i]],function(x){density(x[,j],bw=bw,adjust=adjust)})
+#             if (!is.null(xlim)) {
+#               if (!is.matrix(xlim)) xlimi <- xlim else xlimi <- xlim[j,]
+#             } else {
+#               xlimi <- c(min(unlist(lapply(dens,function(x){min(x$x)}))),
+#                          max(unlist(lapply(dens,function(x){max(x$x)}))))
+#               if (!is.null(pars)) xlimi <- c(min(c(pars[j,i]-abs(pars[j,i])/10,xlimi[1])),
+#                                              max(c(pars[j,i]+abs(pars[j,i])/10,xlimi[2])))
+#             }
+#             if (!is.null(ylim)) {
+#               if (!is.matrix(ylim)) ylimi <- ylim else ylimi <- ylim[j,]
+#             } else ylimi <- c(0,max(unlist(lapply(dens,function(x){max(x$y)}))))
+#             main <- paste0(attr(pmwg_mcmc,"selection")," s",i)
+#             plot(dens[[1]],xlab=j,main=main,col=1,xlim=xlimi,ylim=ylimi)
+#             if (chains>1) for (k in 2:chains) lines(dens[[k]],col=k)
+#           } else {
+#             dens <- density(pmwg_mcmc[[i]][,j],bw=bw,adjust=adjust)
+#             if (plot_prior) pdens <- density(psamples[,j],bw=bw,adjust=adjust)
+#             if (!is.null(xlim)) {
+#               if (!is.matrix(xlim)) xlimi <- xlim else xlimi <- xlim[j,]
+#             } else if (plot_prior & !is.null(prior_xlim)) {
+#               xlimi <- c(quantile(pdens$x,probs=prior_xlim[1]),
+#                          quantile(pdens$x,probs=prior_xlim[2]))
+#             } else {
+#               xlimi <- c(min(dens$x),max(dens$x))
+#               if (!is.null(pars)) xlimi <- c(min(c(pars[j,i]-abs(pars[j,i])/10,xlimi[1])),
+#                                              max(c(pars[j,i]+abs(pars[j,i])/10,xlimi[2])))
+#             }
+#             if (!is.null(ylim)) {
+#               if (!is.matrix(ylim)) ylimi <- ylim else ylimi <- ylim[j,]
+#             } else {
+#               ylimi <- c(0,max(dens$y))
+#               if (plot_prior) ylimi[2] <- max(c(ylimi[2],pdens$y))
+#             }
+#             main <- paste0(attr(pmwg_mcmc,"selection")," s",i)
+#             plot(dens,xlab=j,xlim=xlimi,ylim=ylimi,main=main)
+#             if (plot_prior) lines(pdens,col="red")
+#             if (do_contraction) {
+#               contractioni[j] <- 1-(var(pmwg_mcmc[[i]][,j])/var(psamples[,j]))
+#               legend(lpos,legend=round(contractioni[j],digits),bty="n",title="Contraction")
+#             }
+#           }
+#           if (!is.null(pars)) abline(v=pars[j,i])
+#         }
+#       }
+#       if (do_plot & do_contraction) contraction[[i]] <- contractioni
+#       if (!is.null(pars)) {
+#         tabs[[i]] <- rbind(true=pars[dimnames(tabs[[i]])[[2]],i],tabs[[i]])
+#         tabs[[i]] <- rbind(tabs[[i]],Miss=tabs[[i]][3,]-tabs[[i]][1,])
+#       }
+#     }
+#     tabs <- tabs[as.character(subject)]
+#     if (add_means)
+#       attr(tabs,"mean") <- lapply(pmwg_mcmc_combined,function(x){apply(x,2,mean)})
+#     if (do_contraction & exists("contraction"))
+#       attr(tabs,"contraction") <- do.call(rbind,contraction)
+#     invisible(tabs)
+#   } else {
+#     if (!is.na(subject)) warning("Selecting a subject has no effect on population parameters")
+#     if (inherits(pmwg_mcmc, "mcmc.list")) {
+#       selection <- attr(pmwg_mcmc,"selection")
+#       pmwg_mcmc_combined <- do.call(rbind,pmwg_mcmc)
+#       attr(pmwg_mcmc_combined,"selection") <- selection
+#       if (show_chains) chains <- length(pmwg_mcmc) else
+#         pmwg_mcmc <- pmwg_mcmc_combined
+#     } else pmwg_mcmc_combined <- pmwg_mcmc
+#     if(!is.null(use_par)){
+#       ok <- colnames(pmwg_mcmc_combined) %in% use_par
+#       if (!any(ok)) stop("use_par did not specify parameters that are present")
+#     }
+#
+#     if (!is.null(pars)) {
+#       if ( !is.vector(pars) ) {
+#         if (attr(pmwg_mcmc,"selection") == "mu")
+#           stop("pars must be a vector for mu")
+#         if (!is.matrix(pars))
+#           stop("pars must be a vector or matrix")
+#         if (attr(pmwg_mcmc,"selection") == "variance")
+#           pars <- diag(pars) else
+#             pars <- pars[lower.tri(pars)]
+#       }
+#       if(is.null(use_par)){
+#         if (length(pars) != dim(pmwg_mcmc_combined)[2])
+#           stop("pars is wrong length")
+#         names(pars) <- colnames(pmwg_mcmc_combined)
+#       } else{
+#         if (length(pars) != length(use_par))
+#           stop("pars is wrong length")
+#         names(pars) <- use_par
+#       }
+#     }
+#     tabs <- rbind(true=pars,apply(pmwg_mcmc_combined,2,quantile,probs=probs))
+#     if (!is.null(pars)) tabs <- rbind(tabs,Miss=tabs[3,]-tabs[1,])
+#     if (add_means) attr(tabs,"mean") <- apply(pmwg_mcmc_combined,2,mean)
+#     if (!no_layout) par(mfrow=layout)
+#     if (plot_prior) dimnames(psamples) <- list(NULL,colnames(pmwg_mcmc_combined))
+#     if (do_contraction)
+#       contraction <- setNames(numeric(length(colnames(pmwg_mcmc_combined))),colnames(pmwg_mcmc_combined))
+#     if (!is.null(use_par)) {
+#       tabs <- tabs[,ok,drop=FALSE]
+#     } else ok <- rep(TRUE,length(colnames(pmwg_mcmc_combined)))
+#     if (do_plot) for (j in colnames(pmwg_mcmc_combined)[ok] ) {
+#       if (chains > 0) {
+#         dens <- lapply(pmwg_mcmc,function(x){density(x[,j],bw=bw,adjust=adjust)})
+#         if (!is.null(xlim)) xlimi <- xlim else {
+#           xlimi <- c(min(unlist(lapply(dens,function(x){min(x$x)}))),
+#                      max(unlist(lapply(dens,function(x){max(x$x)}))))
+#           if (!is.null(pars)) xlimi <- c(min(c(pars[j,i]-abs(pars[j,i])/10,xlimi[1])),
+#                                          max(c(pars[j,i]+abs(pars[j,i])/10,xlimi[2])))
+#         }
+#         if (!is.null(ylim)) ylimi <- ylim else
+#           ylimi <- c(0,max(unlist(lapply(dens,function(x){max(x$y)}))))
+#         main <- j
+#         plot(dens[[1]],xlab=attr(pmwg_mcmc,"selection"),main=main,
+#              col=1,xlim=xlimi,ylim=ylimi)
+#         if (chains>1) for (k in 2:chains) lines(dens[[k]],col=k)
+#       } else {
+#         dens <- density(pmwg_mcmc[,j],bw=bw,adjust=adjust)
+#         if (plot_prior)  pdens <- robust_density(psamples[,j],range(pmwg_mcmc[,j]),
+#                                                  bw=bw,adjust=adjust,use_robust=!(attr(pmwg_mcmc,"selection") %in% c("mu","correlation")))
+#         if (!is.null(xlim)) xlimi <- xlim else if (plot_prior & !is.null(prior_xlim))
+#           xlimi <- c(quantile(pdens$x,probs=prior_xlim[1]),
+#                      quantile(pdens$x,probs=prior_xlim[2])) else {
+#                        xlimi <- c(min(dens$x),max(dens$x))
+#                        if (!is.null(pars)) xlimi <- c(min(c(pars[j,i]-abs(pars[j,i])/10,xlimi[1])),
+#                                                       max(c(pars[j,i]+abs(pars[j,i])/10,xlimi[2])))
+#                      }
+#         if (!is.null(ylim)) ylimi <- ylim else {
+#           ylimi <- c(0,max(dens$y))
+#           if (plot_prior) ylimi[2] <- max(c(ylimi[2],pdens$y))
+#         }
+#         main <- j
+#         plot(dens,xlim=xlimi,ylim=ylimi,xlab=attr(pmwg_mcmc,"selection"),main=main)
+#         if (plot_prior) {
+#           lines(pdens,col="red")
+#           if (do_contraction) {
+#             contraction[j] <- 1-(var(pmwg_mcmc[,j])/var(psamples[,j]))
+#             legend(lpos,legend=round(contraction[j],digits),bty="n",title="Contraction")
+#           }
+#         }
+#       }
+#       if (!is.null(pars)) abline(v=pars[j])
+#     }
+#     if (do_contraction & exists("contraction")) attr(tabs,"contraction") <- contraction
+#     invisible(tabs)
+#   }
+# }
 
 
 plot_roc <- function(data,signalFactor="S",zROC=FALSE,qfun=NULL,main="",lim=NULL)

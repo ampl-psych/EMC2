@@ -12,39 +12,39 @@ prior_samples_alpha <- function(theta_mu,theta_var,n=1e3)
   return(out)
 }
 
-get_prior_samples <- function(samples,selection,filter,thin,subfilter,n_prior)
-  # get matrix of prior samples for different parameter types
-{
-  if (inherits(samples, "pmwgs")) samps <- samples else samps <- samples[[1]]
-  if (selection=="alpha") {
-    if(!is.null(samples[[1]]$samples$theta_mu)){
-      if (inherits(samples, "pmwgs")) {
-        theta_mu <- as_Mcmc(samples,selection="mu",filter=filter,
-                            thin=thin,subfilter=subfilter)
-        theta_var <- get_sigma(samples,filter=filter,
-                               thin=thin,subfilter=subfilter)
-      } else {
-        theta_mu <- do.call(rbind,as_mcmc.list(samples,selection="mu",
-                                               filter=filter,thin=thin,subfilter=subfilter))
-        theta_var <-   abind(lapply(samples,get_sigma,filter=filter,thin=thin,subfilter=subfilter))
-      }
-      psamples <- prior_samples_alpha(theta_mu,theta_var,n_prior)
-      colnames(psamples) <- colnames(theta_mu)
-    } else{
-      theta_mu <- samples[[1]]$prior$theta_mu_mean
-      theta_var <- samples[[1]]$prior$theta_mu_var
-      psamples <- prior_samples_alpha(theta_mu,theta_var,n_prior)
-      colnames(psamples) <- samples[[1]]$par_names
-    }
-    return(psamples)
-  } else {
-    variant_funs <- attr(samples[[1]], "variant_funs")
-    design <- list(model = attr(samples[[1]]$data[[1]], "model"))
-    attr(design, "p_vector") <- samples[[1]]$samples$alpha[,1,1] # just need the names in the right format
-    psamples <- variant_funs$get_prior(design = design, N = n_prior, prior = samples[[1]]$prior, type = selection, map = FALSE)[[1]]
-    return(psamples)
-  }
-}
+# get_prior_samples <- function(samples,selection,filter,thin,subfilter,n_prior)
+#   # get matrix of prior samples for different parameter types
+# {
+#   if (inherits(samples, "pmwgs")) samps <- samples else samps <- samples[[1]]
+#   if (selection=="alpha") {
+#     if(!is.null(samples[[1]]$samples$theta_mu)){
+#       if (inherits(samples, "pmwgs")) {
+#         theta_mu <- as_Mcmc(samples,selection="mu",filter=filter,
+#                             thin=thin,subfilter=subfilter)
+#         theta_var <- get_sigma(samples,filter=filter,
+#                                thin=thin,subfilter=subfilter)
+#       } else {
+#         theta_mu <- do.call(rbind,as_mcmc.list(samples,selection="mu",
+#                                                filter=filter,thin=thin,subfilter=subfilter))
+#         theta_var <-   abind(lapply(samples,get_sigma,filter=filter,thin=thin,subfilter=subfilter))
+#       }
+#       psamples <- prior_samples_alpha(theta_mu,theta_var,n_prior)
+#       colnames(psamples) <- colnames(theta_mu)
+#     } else{
+#       theta_mu <- samples[[1]]$prior$theta_mu_mean
+#       theta_var <- samples[[1]]$prior$theta_mu_var
+#       psamples <- prior_samples_alpha(theta_mu,theta_var,n_prior)
+#       colnames(psamples) <- samples[[1]]$par_names
+#     }
+#     return(psamples)
+#   } else {
+#     variant_funs <- attr(samples[[1]], "variant_funs")
+#     design <- list(model = attr(samples[[1]]$data[[1]], "model"))
+#     attr(design, "p_vector") <- samples[[1]]$samples$alpha[,1,1] # just need the names in the right format
+#     psamples <- variant_funs$get_prior(design = design, N = n_prior, prior = samples[[1]]$prior, type = selection, map = FALSE)[[1]]
+#     return(psamples)
+#   }
+# }
 
 
 #' Prior plotting

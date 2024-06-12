@@ -59,36 +59,36 @@ logdinvGamma <- function(x, shape, rate){
   return(pmax(log.density, -500)) #Roughly equal to 1e-22 on real scale
 }
 
-es_pmwg <- function(pmwg_mcmc,selection="alpha",summary_alpha=mean,
-                    print_summary=TRUE,sort_print=TRUE,
-                    filter="sample",thin=1,subfilter=NULL)
-  # Effective size
-{
-  if (!(class(pmwg_mcmc[[1]]) %in% c("mcmc","mcmc.list"))) {
-    if (is(pmwg_mcmc, "pmwgs")){
-      pmwg_mcmc <- as_Mcmc(pmwg_mcmc,selection=selection,filter=filter,
-                           thin=thin,subfilter=subfilter)
-    }
-    else{
-      pmwg_mcmc <- as_mcmc.list(pmwg_mcmc,selection=selection,filter=filter,
-                                thin=thin,subfilter=subfilter)
-    }
-  }
-  if (attr(pmwg_mcmc,"selection")=="LL")
-    stop("Effective size not sensible for LL\n")
-  out <- do.call(rbind,lapply(pmwg_mcmc,effectiveSize))
-  if (attr(pmwg_mcmc,"selection")=="alpha") {
-    if (!is.null(summary_alpha)) out <- apply(out,2,summary_alpha)
-    if (print_summary) if (sort_print) print(round(sort(out))) else
-      print(round(out))
-    invisible(out)
-  } else {
-    out <- apply(out,2,sum)
-    if (print_summary) if (sort_print) print(round(sort(out))) else
-      print(round(out))
-    invisible(out)
-  }
-}
+# es_pmwg <- function(pmwg_mcmc,selection="alpha",summary_alpha=mean,
+#                     print_summary=TRUE,sort_print=TRUE,
+#                     filter="sample",thin=1,subfilter=NULL)
+#   # Effective size
+# {
+#   if (!(class(pmwg_mcmc[[1]]) %in% c("mcmc","mcmc.list"))) {
+#     if (is(pmwg_mcmc, "pmwgs")){
+#       pmwg_mcmc <- as_Mcmc(pmwg_mcmc,selection=selection,filter=filter,
+#                            thin=thin,subfilter=subfilter)
+#     }
+#     else{
+#       pmwg_mcmc <- as_mcmc.list(pmwg_mcmc,selection=selection,filter=filter,
+#                                 thin=thin,subfilter=subfilter)
+#     }
+#   }
+#   if (attr(pmwg_mcmc,"selection")=="LL")
+#     stop("Effective size not sensible for LL\n")
+#   out <- do.call(rbind,lapply(pmwg_mcmc,effectiveSize))
+#   if (attr(pmwg_mcmc,"selection")=="alpha") {
+#     if (!is.null(summary_alpha)) out <- apply(out,2,summary_alpha)
+#     if (print_summary) if (sort_print) print(round(sort(out))) else
+#       print(round(out))
+#     invisible(out)
+#   } else {
+#     out <- apply(out,2,sum)
+#     if (print_summary) if (sort_print) print(round(sort(out))) else
+#       print(round(out))
+#     invisible(out)
+#   }
+# }
 
 
 split_mcl <- function(mcl)
@@ -829,7 +829,7 @@ condMVN <- function (mean, sigma, dependent.ind, given.ind, X.given, check.sigma
 }
 
 
-make_nice_summary <- function(object, stat = "max"){
+make_nice_summary <- function(object, stat = "max", stat_only = FALSE){
   row_names <- names(object)
   col_names <- unique(unlist(lapply(object, names)))
   if(all(row_names %in% col_names)){
@@ -845,20 +845,23 @@ make_nice_summary <- function(object, stat = "max"){
 
   if(nrow(out_mat) > 1){
     col_stat <- apply(out_mat, 2, FUN = get(stat), na.rm = T)
+    col_stat[length(col_stat)] <- get(stat)(unlist(object))
     out_mat <- rbind(out_mat, c(col_stat))
     rownames(out_mat) <- c(row_names, stat)
   } else{
     rownames(out_mat) <- row_names
   }
   colnames(out_mat) <- c(col_names, stat)
-
+  if(stat_only){
+    out_mat <- out_mat[nrow(out_mat), ncol(out_mat)]
+  }
   return(out_mat)
 }
 
 
 get_summary_stat <- function(samplers, fun, subject=NULL,
                              selection="mu",filter="sample",thin=1,subfilter=0,
-                             by_subject = TRUE, stat = "min", ...){
+                             by_subject = TRUE, stat = "min", stat_only = FALSE, ...){
   MCMC_samples <- as_mcmc_new(samplers, selection = selection, filter = filter,
                               thin = thin, subfilter = subfilter, by_subject = by_subject,
                               subject = subject, flatten = FALSE, remove_dup = FALSE)
@@ -868,7 +871,7 @@ get_summary_stat <- function(samplers, fun, subject=NULL,
     out[[i]] <- fun(MCMC_samples[[i]], ...)
   }
   names(out) <- names(MCMC_samples)
-  out <- make_nice_summary(out)
+  out <- make_nice_summary(out, stat, stat_only)
   return(out)
 }
 
@@ -882,9 +885,9 @@ gd_summary_new <- function(samplers,subject=NULL,
 
 es_summary_new <- function(samplers,subject=NULL,
                            selection="mu",filter="sample",thin=1,subfilter=0,
-                           by_subject = TRUE, stat = "min"){
+                           by_subject = TRUE, stat = "min", stat_only = FALSE){
   out <- get_summary_stat(samplers, effectiveSize, subject, selection, filter, thin, subfilter,
-                          by_subject, stat)
+                          by_subject, stat, stat_only)
   return(out)
 }
 

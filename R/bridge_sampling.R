@@ -256,8 +256,7 @@ run_bridge_sampling <- function(samplers, filter = "sample", subfilter = 0, repe
   if(subfilter != 0){
     samplers <- lapply(samplers, remove_iterations, select = subfilter, filter = filter)
   }
-  n_eff <- round(median(es_pmwg(as_mcmc.list(samplers, selection = "alpha",
-                                             filter = filter), print_summary = F))/2)
+  n_eff <- round(es_summary_new(samplers, selection = "alpha", stat = "median", stat_only = TRUE)/2)
   samples <- merge_samples(samplers)
   idx <- samples$samples$stage == filter
   mls <- numeric(repetitions)

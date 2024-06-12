@@ -102,46 +102,11 @@ summary.emc <- function(object, selection = c("mu", "variance", "correlation"), 
 #' @export
 plot.emc <- function(x, filter = "sample", selection = c("mu", "variance", "correlation"),
                      subfilter = 0, subject = NULL, thin = 1,  ...){
-
-  layout <- NULL
-  ylim <- NULL
-  args <- list(...)
-  for (name in names(args) ) {
-    assign(name, args[[name]])
+  if(attr(x[[1]], "variant_funs")$type == "single"){
+    selection <- "alpha"
   }
-
-  subject <- ifelse(is.null(subject), 1, subject)
-  input <- x
-  if(attr(x[[1]], "variant_funs")$type == "single") selection <- "alpha"
   for(select in selection){
-    pmwg_mcmc <- as_mcmc.list(input,selection=select,filter=filter,
-                              thin=thin,subfilter=subfilter)
-    auto.layout <- is.null(layout)
-    if (!auto.layout) par(mfrow=layout)
-    if (attr(pmwg_mcmc,"selection")=="alpha" || attr(pmwg_mcmc,"selection")=="random") {
-      snams <- names(pmwg_mcmc)
-      if(is.null(subject)) subject <- snams[1]
-      if (is.numeric(subject)) subject <- snams[subject]
-      if (!all(subject %in% names(pmwg_mcmc)))
-        stop("Subject not present\n")
-      for (i in subject) {
-        plot(pmwg_mcmc[[i]],auto.layout=auto.layout,density=TRUE,
-             xlab=paste0("Iterations ",i),ask=FALSE,trace=TRUE,
-             ylab=attr(pmwg_mcmc,"selection"),smooth=FALSE,ylim=ylim)
-      }
-    } else if (attr(pmwg_mcmc,"selection") %in% c("LL","epsilon")) {
-      if (any(is.na(subject))) subject <- names(pmwg_mcmc)
-      if (!all(subject %in% names(pmwg_mcmc)))
-        stop("Subject not present\n")
-      for (i in subject) {
-            plot(pmwg_mcmc[[i]],auto.layout=auto.layout,density=TRUE,
-                 xlab=paste0("Iterations ",i),ask=FALSE,trace=TRUE,
-                 ylab=attr(pmwg_mcmc,"selection"),smooth=FALSE,ylim=ylim)
-      }
-    } else {
-          plot(pmwg_mcmc,auto.layout=auto.layout,density=TRUE,
-               ask=FALSE,trace=TRUE,ylim=ylim,
-               ylab=attr(pmwg_mcmc,"selection"),smooth=FALSE)
-    }
+    plot_chains_new(x, filter = filter, selection = select, subfilter = subfilter,
+                    subject = subject, thin = thin, ...)
   }
 }
