@@ -20,7 +20,7 @@ Description: Fit Bayesian (hierarchical) cognitive models
     A wide range of plotting functions assist in assessing model convergence and
     posterior inference. Models can be easily evaluated using functions
     that plot posterior predictions or using relative model comparison metrics 
-    such as information criteria or Bayes factors. 
+    such as information criteria or Bayes factors.    
     References: Stevenson et al. (2024) <doi.org/10.31234/osf.io/2e4dq>.
 License: MIT + file LICENSE
 Encoding: UTF-8

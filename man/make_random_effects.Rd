@@ -2,7 +2,7 @@
 % Please edit documentation in R/make_data.R
 \name{make_random_effects}
 \alias{make_random_effects}
-\title{Make random effects.}
+\title{Make random effects}
 \usage{
 make_random_effects(
   design,
@@ -13,19 +13,37 @@ make_random_effects(
 )
 }
 \arguments{
-\item{design}{A design list. The design as specified by \code{make_design}}
+\item{design}{A design list. The design as specified by \code{make_design()}}
 
 \item{group_means}{A numeric vector. The group level means for each parameter, in the same order as \code{sampled_p_vector(design)}}
 
-\item{n_subj}{An integer. The number of random effects to create.}
+\item{n_subj}{An integer. The number of subjects to generate parameters for.}
 
-\item{variance_proportion}{A double. Optional. If covariances aren't specified, the variances will be created by multiplying the means by this number. The covariances will be 0.}
+\item{variance_proportion}{A double. Optional. If \code{covariances} are not specified, the variances will be created by multiplying the means by this number. The covariances will be 0.}
 
 \item{covariances}{A covariance matrix. Optional. Specify the intended covariance matrix.}
 }
 \value{
-A matrix of random effects.
+A matrix of subject-level parameters.
 }
 \description{
-Make random effects.
+Simulates subject-level parameters in the format required by \code{make_data()}.
+}
+\examples{
+# First create a design
+design_DDMaE <- make_design(data = forstmann,model=DDM,
+                            formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
+                            constants=c(s=log(1)))
+# Then create a group-level means vector:
+group_means =c(v_Sleft=-2,v_Sright=2,a=log(1),a_Eneutral=log(1.5),a_Eaccuracy=log(2),
+               t0=log(.2),Z=qnorm(.5),sv=log(.5),SZ=qnorm(.5))
+# Now we can create subject-level parameters
+subj_pars <- make_random_effects(design_DDMaE, group_means, n_subj = 5)
+
+# We can also define a covariance matrix to simulate from
+subj_pars <- make_random_effects(design_DDMaE, group_means, n_subj = 5,
+             covariances = diag(.1, length(group_means)))
+
+# The subject level parameters can be used to generate data
+make_data(subj_pars, design_DDMaE, n_trials = 10)
 }

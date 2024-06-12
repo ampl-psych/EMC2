@@ -174,7 +174,6 @@ gd_pmwg <- function(pmwg_mcmc,return_summary=FALSE,print_summary=TRUE,
 #' @param digits Integer, number of digits for printing
 #'
 #' @return List of two lists names psrf and mpsrf.
-#' @export
 gd_summary <- function(samplers,no_print=TRUE,digits=2) {
 
   alpha <- gd_pmwg(samplers,selection="alpha",print_summary = FALSE)
@@ -277,45 +276,47 @@ iat_pmwg <- function(pmwg_mcmc,
 
 #### Posterior parameter tests ----
 
-
-# x_fun=NULL;y=NULL;y_name=x_name;y_fun=NULL;
-# mapped=FALSE;x_subject=NULL;y_subject=NULL;
-# mu=0;alternative = c("less", "greater")[1];
-# probs = c(0.025,.5,.975);digits=2;p_digits=3;print_table=TRUE;
-# filter="sample";selection="mu";subfilter=0
-#
-# x=sPNAS_a;x_name="t0"; mapped=TRUE
-
 #' Posterior parameter tests
 #'
-#' Modeled after t.test. For a one sample test provide x and for two sample
-#' also provide y.
+#' Modeled after `t.test`, returns the credible interval of the parameter or test
+#' and what proportion of the posterior distribution (or the difference in posterior distributions
+#' in case of a two sample test) overlaps with mu.
+#' For a one sample test provide `x` and for two sample also provide `y`.
+#' Note that fo comparisons within one model, we recommend using `savage_dickey()` if the priors
+#' were well chosen.
 #'
-#' @param x A pmwgs object or list of these
-#' @param x_name Name of the parameter to be tested
-#' @param x_fun Function applied to each iteration's parameter vector to create
+#' @param x An EMC2 samplers object
+#' @param x_name A character string. Name of the parameter to be tested for `x`
+#' @param x_fun Function applied to the MCMC chains to create
 #' variable to be tested.
-#' @param y A pmwgs object or list of these
-#' @param y_name Name of the parameter to be tested
-#' @param y_fun Function applied to each iteration's parameter vector to create
+#' @param y A second EMC2 samplers object
+#' @param y_name A character string. Name of the parameter to be tested for `y`
+#' @param y_fun Function applied to the MCMC chains to create
 #' variable to be tested.
-#' @param mapped Should samples be mapped before doing test.
+#' @param mapped Boolean. Should the samples be mapped back to the design before doing the test?
 #' @param x_subject Integer or name selecting a subject
 #' @param y_subject Integer or name selecting a subject
-#' @param mu Null value for single sample test (default 0)
-#' @param alternative "less" or "greater" determining direction of test probability
-#' @param probs Vector defining credible interval and central tendency quatiles
-#' (default c(0.025,.5,.975))
+#' @param mu Numeric. `NULL` value for single sample test if `y` is not supplied (default 0)
+#' @param alternative `less` or `greater` determining direction of test probability
+#' @param probs Vector defining quantiles to return.
 #' @param digits Integer, significant digits for estimates in printed results
 #' @param p_digits Integer, significant digits for probability in printed results
-#' @param print_table Boolean (default TRUE) for printing results table
-#' @param selection String designating parameter type (mu, variance, correlation, alpha = default)
-#' @param filter A string. Specifies which stage you want to plot.
-#' @param x_fun_name Name to give to quantity calculated by x_fun
-#' @param y_fun_name Name to give to quantity calculated by y_fun
+#' @param print_table Boolean (defaults to `TRUE`) for printing results table
+#' @param selection A character string designating parameter type (e.g. `alpha` or `covariance`)
+#' @param filter A character string. Specifies from which stage the samples should be taken.
+#' @param x_fun_name Name to give to quantity calculated by `x_fun`
+#' @param y_fun_name Name to give to quantity calculated by `y_fun`
 #' @param subfilter An integer or vector. If it's an integer, iterations up until the value set by `subfilter` will be excluded.
 #' If a vector is supplied, only the iterations in the vector will be considered.
+#' @examples \dontrun{
+#' # Run a credible interval test (Bayesian ''t-test'')
+#' p_test(samplers, x_name = "v")
+#' # We can also compare between two sets of samplers
+#' p_test(x = samplers1, x_name = "v", y = samplers2, y_name = "v")
 #'
+#' # Or provide custom functions
+#' p_test(x = samplers, x_fun = function(d) d["B_Eaccuracy"] - d["B_Eneutral"])
+#' }
 #' @return Invisible results table with no rounding.
 #' @export
 
@@ -606,7 +607,7 @@ compare <- function(sList,filter="sample",subfilter=0,use_best_fit=TRUE,
 #'
 #' @param samplers A list, typically a `samplers`object, the output from `run_emc()`
 #' @param parameter A string. A parameter which you want to compare to H0. Will not be used if a FUN is specified.
-#' @param H0 An integer. The H0 value which you want to compare to
+#' @param H0 Numeric. The H0 value which you want to compare to
 #' @param filter A string. Specifies which stage the samples are to be taken from
 #' `"preburn"`, `"burn"`, `"adapt"`, or `"sample"`
 #' @param subfilter An integer or vector. If it's an integer, iterations up until

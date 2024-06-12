@@ -26,7 +26,7 @@ plot_alpha_recovery(
 \arguments{
 \item{tabs}{Tables of actual and estimated alpha parameters (with CIs) from plot_pars}
 
-\item{layout}{A 2-vector specifying the layout as in par(mfrow = layout)}
+\item{layout}{A 2-vector specifying the layout as in \code{par(mfrow = layout)}}
 
 \item{do_ci}{Boolean (Default TRUE). Add CIs to plot?}
 

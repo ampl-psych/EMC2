@@ -50,7 +50,7 @@ for single and \code{"mu"} for standard)}
 \item{lower}{Defaults to \code{NULL}. Lower quantile limit of values plotted. If numeric, the same is used for all parameters,
 alternatively, a (parameter) named list with individual quantile limits can be supplied.}
 
-\item{upper}{Defaults to \code{NULL}. Lower quantile limit of values plotted. If numeric, the same is used for all parameters,
+\item{upper}{Defaults to \code{NULL}. Upper quantile limit of values plotted. If numeric, the same is used for all parameters,
 alternatively, a (parameter) named list with individual quantile limits can be supplied.}
 
 \item{xlim}{A list with parameter names of x-axis limits or a single pair if the
