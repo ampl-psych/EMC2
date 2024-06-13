@@ -71,9 +71,9 @@ test <- es_summary_new(samplers_LNR, selection = "alpha", stat = "mean", stat_on
 # Fix aesthetic functions that call es or gd
 # Email Michael, change schedule
 devtools::load_all()
-debug(get_objects_standard)
-plot_pars_new(samplers_LNR, selection = "covariance", show_chains = TRUE, by_subject = FALSE, plot_prior = TRUE,
-              use_prior_lim = TRUE, use_par = "m")
+debug(plot_pars_new)
+plot_pars_new(samplers_LNR, selection = "alpha", show_chains = TRUE, by_subject = FALSE, plot_prior = TRUE,
+              use_prior_lim = TRUE, use_par = c("m", "s"))
 
 
 plot_chains(samplers_LNR, selection = "mu", subfilter = 1:40)

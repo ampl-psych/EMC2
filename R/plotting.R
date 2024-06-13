@@ -1429,7 +1429,7 @@ plot_pars_new <- function(samplers,layout=NA,subject=NULL,ylim=NULL, map = FALSE
                              type = attr(samplers[[1]], "variant_funs")$type, sample_prior = T,
                              selection = selection, mapped = FALSE, N = 1e4)
     pMCMC_samples <- as_mcmc_new(psamples, selection = selection, map = map,
-                            use_par = use_par, flatten = flatten,
+                            use_par = use_par, flatten = flatten, by_subject = by_subject,
                             type = attr(samplers[[1]], "variant_funs")$type)
     if(length(pMCMC_samples) != length(MCMC_samples)) pMCMC_samples <- rep(pMCMC_samples, length(MCMC_samples))
   }
@@ -1453,7 +1453,10 @@ plot_pars_new <- function(samplers,layout=NA,subject=NULL,ylim=NULL, map = FALSE
       xlim <- c(min(unlist(xlim)), max(unlist(xlim)))
       ylim <- c(min(unlist(ylim)), max(unlist(ylim)))
       if(plot_prior){
-        p_curr <- robust_hist(pMCMC_samples[[i]][[1]][,l], do_plot = F)
+        if(ncol(pMCMC_samples[[i]][[1]]) != ncol(MCMC_samples[[i]][[1]])){
+          p_idx <- 1
+        } else{p_idx <- l}
+        p_curr <- robust_hist(pMCMC_samples[[i]][[1]][,p_idx], do_plot = F)
         pdenses <- density(p_curr)
         if(use_prior_lim){
           xlim <- c(min(xlim[1], min(p_curr)), max(xlim[2], max(p_curr)))
@@ -1472,7 +1475,7 @@ plot_pars_new <- function(samplers,layout=NA,subject=NULL,ylim=NULL, map = FALSE
       }
       if(plot_prior){
         lines(pdenses, col = "red")
-        contraction <- 1-(var(merged[,l])/var(pMCMC_samples[[i]][[1]][,l]))
+        contraction <- 1-(var(merged[,l])/var(pMCMC_samples[[i]][[1]][,p_idx]))
         legend("topright",legend=round(contraction,3),bty="n",title="Contraction")
       }
     }
