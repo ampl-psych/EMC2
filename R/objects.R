@@ -709,11 +709,12 @@ as_mcmc_new <- function(sampler,filter="sample",thin=1,subfilter=0,map = FALSE,
   }
 
   samples <- filter_const_and_dup(samples, remove_dup)
-  # if(!is.null(subject)){
-   subnames <- names(sampler[[1]]$data)
-  # } else {subnames <- NULL}
+
+  subnames <- names(sampler[[1]]$data)
+
   samples <- lapply(samples, filter_sub_and_par, subject, subnames, use_par)
   samples <- lapply(samples, filter_emc, thin, length.out, subfilter)
+  if(is.null(attr(sampler[[1]], "variant_funs")$type)) subnames <- "alpha"
   if(merge_chains){
     if(length(dim(samples[[1]])) == 2){
       samples <- do.call(cbind, samples)

@@ -888,21 +888,3 @@ es_summary_new <- function(samplers,subject=NULL,
                           by_subject, stat, stat_only)
   return(out)
 }
-
-
-# gd_summary_new <- function(samplers,subject=NULL,
-#                            selection="mu",filter="sample",thin=1,subfilter=0,
-#                            omit_mpsrf = TRUE, by_subject = TRUE, stat = "max"){
-#   MCMC_samples <- as_mcmc_new(samplers, selection = selection, filter = filter,
-#                               thin = thin, subfilter = subfilter, by_subject = by_subject,
-#                               subject = subject, flatten = FALSE, remove_dup = FALSE)
-#   gds_out <- vector("list", length = length(MCMC_samples))
-#   for(i in 1:length(MCMC_samples)){
-#     # cat("\n", names(MCMC_samples)[[i]], "\n")
-#     gds_out[[i]] <- gelman_diag_robust(MCMC_samples[[i]])
-#   }
-#   names(gds_out) <- names(MCMC_samples)
-#   gds_out <- make_nice_summary(gds_out)
-#   return(gds_out)
-# }
-

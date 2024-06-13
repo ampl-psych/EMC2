@@ -115,6 +115,7 @@ get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1
         alpha[,,i] <- rmvnorm(1, mu[,i], vars[,,i])
       }
       colnames(alpha) <- par_names
+      rownames(alpha) <- "alpha"
       samples$alpha <- alpha
     }
     out <- samples

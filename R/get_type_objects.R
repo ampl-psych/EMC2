@@ -72,6 +72,38 @@ get_objects_diag <- function(type, selection, sample_prior, return_prior, design
   }
 }
 
+get_base <- function(sampler, idx, selection){
+  if(selection == "alpha"){
+    return(lapply(sampler, FUN = function(x) return(x$samples$alpha[,,idx, drop = F])))
+  } else if(selection == "LL"){
+    return(lapply(sampler, FUN = function(x) return(x$samples$subj_ll[,idx, drop = F])))
+  } else if(selection == "mu"){
+    return(lapply(sampler, FUN = function(x) return(x$samples$theta_mu[,idx, drop = F])))
+  } else if(selection == "covariance"){
+    return(lapply(sampler, FUN = function(x){
+      out <- x$samples$theta_var[,,idx, drop = F]
+      for(i in 1:dim(out)[3]){
+        diag(out[,,i]) <- 0
+      }
+      return(out)
+    }))
+  } else if(selection == "variance"){
+    return(lapply(sampler, FUN = function(x){
+      out <- x$samples$theta_var[,,idx, drop = F]
+      out <- apply(out,3,diag)
+      return(out)
+    }))
+  }
+  else if(selection == "sigma"){
+    return(lapply(sampler, FUN = function(x) return(x$samples$theta_var[,,idx, drop = F])))
+  }
+  else if(selection == "correlation"){
+    return(lapply(sampler, FUN = function(x) return(
+      array(apply(x$samples$theta_var[,,idx],3,cov2cor),dim=dim(x$samples$theta_var[,,idx, drop = F]),
+            dimnames=dimnames(x$samples$theta_var)))))
+  }
+}
+
 get_objects_standard <- function(type, selection, sample_prior, return_prior, design = NULL,
                                  prior = NULL, filter = 'sample', N = 1e5, sampler = NULL, ...){
   acc_selection <- c("mu", "variance", "covariance", "correlation", "alpha", "sigma", "LL")
@@ -97,36 +129,7 @@ get_objects_standard <- function(type, selection, sample_prior, return_prior, de
     } else{
       idx <- which(sampler[[1]]$samples$stage %in% filter)
     }
-    if(selection == "LL"){
-      return(lapply(sampler, FUN = function(x) return(x$samples$subj_ll[,idx])))
-    }
-    if(selection == "mu"){
-      return(lapply(sampler, FUN = function(x) return(x$samples$theta_mu[,idx])))
-    } else if(selection == "alpha"){
-      return(lapply(sampler, FUN = function(x) return(x$samples$alpha[,,idx])))
-    } else if(selection == "covariance"){
-      return(lapply(sampler, FUN = function(x){
-        out <- x$samples$theta_var[,,idx]
-        for(i in 1:dim(out)[3]){
-          diag(out[,,i]) <- 0
-        }
-        return(out)
-      }))
-    } else if(selection == "variance"){
-      return(lapply(sampler, FUN = function(x){
-        out <- x$samples$theta_var[,,idx]
-        out <- apply(out,3,diag)
-        return(out)
-      }))
-    }
-    else if(selection == "sigma"){
-      return(lapply(sampler, FUN = function(x) return(x$samples$theta_var[,,idx])))
-    }
-    else if(selection == "correlation"){
-      return(lapply(sampler, FUN = function(x) return(
-        array(apply(x$samples$theta_var[,,idx],3,cov2cor),dim=dim(x$samples$theta_var[,,idx]),
-              dimnames=dimnames(x$samples$theta_var)))))
-    }
+    return(get_base(sampler, idx, selection))
   }
 }
 
