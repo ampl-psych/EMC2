@@ -187,17 +187,16 @@ map_mcmc <- function(mcmc,design,include_constants = TRUE)
 
   if(length(dim(mcmc)) == 2){
     is_matrix <- TRUE
-    mcmc_array <- array(mcmc, dim = c(nrow(mcmc), ncol(mcmc), 1))
+    mcmc_array <- array(mcmc, dim = c(nrow(mcmc), 1, ncol(mcmc)))
     rownames(mcmc_array) <- rownames(mcmc)
-    colnames(mcmc_array) <- colnames(mcmc)
   } else{
     mcmc_array <- mcmc
     is_matrix <- FALSE
   }
   mp <- mapped_par(mcmc_array[,1,1],design,remove_RACE=FALSE)
 
-  for(k in 1:dim(mcmc_array)[3]){
-    mcmc <- t(mcmc_array[,,k])
+  for(k in 1:ncol(mcmc_array)){
+    mcmc <- t(mcmc_array[,k,])
     pmat <- model()$transform(add_constants(mcmc,constants))
     plist <- lapply(map,doMap,pmat=pmat)
     if (model()$type=="SDT") {
@@ -213,24 +212,24 @@ map_mcmc <- function(mcmc,design,include_constants = TRUE)
         dimnames(plist[[i]])[[2]] <-
           paste(vars[1],apply(mp[uniq,vars[-1],drop=FALSE],1,paste,collapse="_"),sep="_")
       }
-      if (dim(plist[[i]])[1]!=1) isConstant <- c(isConstant,
+      if (is.matrix(plist[[i]])) isConstant <- c(isConstant,
                                                  apply(plist[[i]],2,function(x){all(x[1]==x[-1])}))
     }
     pmat <- do.call(cbind,plist)
     cnams <- colnames(pmat)
     colnames(pmat) <- get_p_types(cnams)
-    tmp <- model()$Ntransform(pmat)[,1:length(cnams)]
-    colnames(tmp) <- cnams
-    if(!include_constants) tmp <- tmp[,!isConstant]
+    pmat[,] <- model()$Ntransform(pmat)[,1:length(cnams)]
+    colnames(pmat) <- cnams
+    if(!include_constants) pmat <- pmat[,!isConstant, drop = F]
     if(k == 1){
-      out <- array(0, dim = c(ncol(tmp), ncol(mcmc_array), dim(mcmc_array)[3]))
-      rownames(out) <- colnames(tmp)
+      out <- array(0, dim = c(ncol(pmat), ncol(mcmc_array), dim(mcmc_array)[3]))
+      rownames(out) <- colnames(pmat)
       colnames(out) <- colnames(mcmc_array)
     }
-    out[,,k] <- t(tmp)
+    out[,k,] <- t(pmat)
   }
   if(is_matrix){
-    out <- out[,,1]
+    out <- out[,1,]
   }
   attr(out,"isConstant") <- isConstant
   return(out)
