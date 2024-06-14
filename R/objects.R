@@ -625,8 +625,6 @@ split_along_dim <- function(a, n){
            dimnames(a)[[n]])
 }
 
-
-
 filter_sub_and_par <- function(obj, sub, sub_names, par){
   par_names <- c(colnames(obj), rownames(obj))
   if(is.character(sub)){
@@ -667,11 +665,13 @@ filter_sub_and_par <- function(obj, sub, sub_names, par){
       }
     }
   } else{
-    if(is.character(sub)){
-      obj <- obj[sub_names %in% sub,, drop = F]
-    }
-    if(is.numeric(sub)){
-      obj <- obj[sub,,drop = F]
+    if(all(rownames(obj) %in% sub_names)){
+      if(is.character(sub)){
+        obj <- obj[sub_names %in% sub,, drop = F]
+      }
+      if(is.numeric(sub)){
+        obj <- obj[sub,,drop = F]
+      }
     }
     if(!is.null(par)){
       obj <- obj[rownames(obj) %in% par,,drop = F]
@@ -698,6 +698,10 @@ as_mcmc_new <- function(sampler,filter="sample",thin=1,subfilter=0,map = FALSE,
     samples <- lapply(samples, map_mcmc, attr(sampler,"design_list")[[1]], include_constants = include_constants)
   }
   if(flatten) remove_dup <- TRUE
+
+  subnames <- names(sampler[[1]]$data)
+  if(selection == "alpha") flatten = FALSE
+
   if(length(dim(samples[[1]])) > 2 & flatten){
     if(is.null(rownames(samples[[1]]))){
       pnams <- colnames(samples[[1]])
@@ -707,9 +711,7 @@ as_mcmc_new <- function(sampler,filter="sample",thin=1,subfilter=0,map = FALSE,
     samples <- lapply(samples, function(x) out <- apply(x,3,function(y){c(y)}))
     samples <- lapply(samples, function(x) {rownames(x) <- pnams; return(x)})
   }
-
   samples <- filter_const_and_dup(samples, remove_dup)
-
   subnames <- names(sampler[[1]]$data)
 
   samples <- lapply(samples, filter_sub_and_par, subject, subnames, use_par)

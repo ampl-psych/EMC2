@@ -110,12 +110,12 @@ get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1
       samples$theta_var <- vars
     }
     if(selection %in% "alpha"){
-      alpha <- array(NA_real_, dim = c(1, n_pars, N))
+      alpha <- array(NA_real_, dim = c(n_pars, 1, N))
       for(i in 1:N){
-        alpha[,,i] <- rmvnorm(1, mu[,i], vars[,,i])
+        alpha[,,i] <- t(rmvnorm(1, mu[,i], vars[,,i]))
       }
-      colnames(alpha) <- par_names
-      rownames(alpha) <- "alpha"
+      rownames(alpha) <- par_names
+      colnames(alpha) <- "alpha"
       samples$alpha <- alpha
     }
     out <- samples
