@@ -53,28 +53,20 @@ summary.emc <- function(object, selection = c("mu", "variance", "correlation"), 
 
   out_list <- list()
   for(select in selection){
-    par_df <- parameters_data_frame(object, filter = filter, subfilter = subfilter, selection = select)
-    Rhat <- gd_pmwg(object, filter = filter, subfilter = subfilter, selection = select, print_summary = F, omit_mpsrf = T)
-    ESS <- es_pmwg(object, filter = filter, subfilter = subfilter, selection = select, print_summary = F, summary_alpha = NULL)
-    if(select == "alpha"){
-      unq_subs <- as.character(unique(par_df$subjects))
-      for(i in 1:length(unq_subs)){
-        tmp_df <- par_df[par_df$subjects == unq_subs[i],-1]
-        quants <- t(apply(tmp_df, 2, quantile, probs))
-        combined <- cbind(quants, Rhat[i,], ESS[i,])
-        colnames(combined)[c(4,5)] <- c("Rhat", "ESS")
-        out_list[[unq_subs[i]]] <- combined
-        if(i == 1){
-          cat("\n", unq_subs[i], "\n")
-          print(round(combined,digits))
-        }
+    quants <- posterior_summary_new(object, selection = select, probs = probs, filter = filter, subfilter = subfilter, ...)
+    ESS <- es_summary_new(object, selection = select, filter = filter, subfilter = subfilter, stat = NULL, ...)
+    gds <- gd_summary_new(object, selection = select, filter = filter, subfilter = subfilter, stat = NULL, ...)
+    out <- vector("list", length(ESS))
+    for(name in names(ESS)){
+      combined <- cbind(quants[[name]], gds[[name]], ESS[[name]])
+      colnames(combined)[c(ncol(combined)-1, ncol(combined))] <- c("Rhat", "ESS")
+      if(length(ESS) > 1){
+        cat("\n", paste0(select, " ", name), "\n")
+      } else{
+        cat("\n", name, "\n")
       }
-    } else{
-      quants <- t(apply(par_df, 2, quantile, probs))
-      combined <- cbind(quants, Rhat, ESS)
-      cat("\n", select, "\n")
-      print(round(combined,digits))
-      out_list[[select]] <- combined
+      print(round(combined, digits))
+      out_list <- append(out_list, combined)
     }
   }
   return(invisible(out_list))
