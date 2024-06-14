@@ -1417,7 +1417,7 @@ plot_pars_new <- function(samplers,layout=NA,subject=NULL,ylim=NULL, map = FALSE
                             selection="mu",filter="sample",thin=1,subfilter=NULL,
                             plot_acf=FALSE, by_subject = FALSE, use_par = NULL,
                           show_chains = FALSE, plot_prior = TRUE,
-                          use_prior_lim = TRUE, flatten = FALSE)
+                          use_prior_lim = TRUE, flatten = FALSE, lpos = "topright")
 {
   if(!is.null(subject) & length(subject) == 1) by_subject <- TRUE
   MCMC_samples <- as_mcmc_new(samplers, selection = selection, filter = filter, map = map,
@@ -1427,7 +1427,7 @@ plot_pars_new <- function(samplers,layout=NA,subject=NULL,ylim=NULL, map = FALSE
   if(plot_prior){
     psamples <-  get_objects(design = attr(samplers,"design_list")[[1]],
                              type = attr(samplers[[1]], "variant_funs")$type, sample_prior = T,
-                             selection = selection, mapped = FALSE, N = 1e4)
+                             selection = selection, N = 1e4)
     pMCMC_samples <- as_mcmc_new(psamples, selection = selection, map = map,
                             use_par = use_par, flatten = flatten, by_subject = by_subject,
                             type = attr(samplers[[1]], "variant_funs")$type)
@@ -1476,10 +1476,8 @@ plot_pars_new <- function(samplers,layout=NA,subject=NULL,ylim=NULL, map = FALSE
       if(plot_prior){
         lines(pdenses, col = "red")
         contraction <- 1-(var(merged[,l])/var(pMCMC_samples[[i]][[1]][,p_idx]))
-        legend("topright",legend=round(contraction,3),bty="n",title="Contraction")
+        legend(lpos,legend=round(contraction,3),bty="n",title="Contraction")
       }
     }
   }
 }
-
-
