@@ -642,7 +642,7 @@ savage_dickey <- function(samplers, parameter = NULL, H0 = 0, filter = "sample",
                           do_plot = TRUE, xlim = NULL, subject = NULL){
   type <- attr(samplers[[1]], "variant_funs")$type
 
-  # if(selection == "alpha" & type != "single") stop("For savage-dickey ratio, selection cannot be alpha")
+  if(selection == "alpha" & type != "single") stop("For savage-dickey ratio, selection cannot be alpha")
 
   if(mapped & selection %in% c("mu", "alpha")) stop("Mapped only works for mu or alpha")
   prior <- samplers[[1]]$prior
@@ -657,14 +657,14 @@ savage_dickey <- function(samplers, parameter = NULL, H0 = 0, filter = "sample",
   samples <- as_mcmc_new(samplers, selection = selection, map = mapped, merge_chains = TRUE, return_mcmc = FALSE,
                                flatten = flatten, by_subject = TRUE, subject = subject,
                                thin = thin, subfilter = subfilter, filter = filter)
-
-  if(ncol(samples) > 1 & !is.null(subject)){
-    stop("with non-hierarichal run with multiple subjects, you must specify which subject")
-  } else {
-    samples <- samples[,1,]
-    psamples <- psamples[,1,]
+  if(type == "single"){
+    if(ncol(samples) > 1 & !is.null(subject)){
+      stop("with non-hierarichal run with multiple subjects, you must specify which subject")
+    } else {
+      samples <- samples[,1,]
+      psamples <- psamples[,1,]
+    }
   }
-
   if(is.null(fun)){
     idx <- rownames(samples) == parameter
     samples <- samples[idx,]

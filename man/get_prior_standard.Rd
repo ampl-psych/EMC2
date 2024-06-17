@@ -10,8 +10,7 @@ get_prior_standard(
   sample = TRUE,
   N = 1e+05,
   selection = "mu",
-  design = NULL,
-  map = FALSE
+  design = NULL
 )
 }
 \arguments{
@@ -30,12 +29,6 @@ will be used to determine the size of prior.}
 \code{"mu"}, \code{"variance"}, \code{"covariance"} \code{"full_var"}, \code{"alpha"}.}
 
 \item{design}{The design obtained from \code{make_design()}, required when \code{map = TRUE}}
-
-\item{map}{Boolean, defaults to \code{TRUE}. If \code{sample = TRUE}, the implied prior is sampled.
-This includes back-transformations for naturally bounded parameters such as
-the non-decision time and an inverse mapping from the design matrix back to the
-cells of the design. If \code{FALSE}, the transformed, unmapped, parameters are used.
-Note that \code{map} does not affect the prior used in the sampling process.}
 }
 \value{
 A list with a single entry of type of samples from the prior (if sample = TRUE) or else a prior object

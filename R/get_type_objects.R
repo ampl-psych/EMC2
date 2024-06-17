@@ -70,11 +70,7 @@ get_objects_diag <- function(type, selection, sample_prior, return_prior, design
       attr(sampler, "design_list") <- list(design)
       return(sampler)
     }
-    if(is.null(sampler[[1]]$samples$stage)){
-      idx <- 1:max(dim(sampler[[1]][[1]][[1]]))
-    } else{
-      idx <- which(sampler[[1]]$samples$stage %in% filter)
-    }
+    idx <- get_idx(sampler, filter)
     return(get_base(sampler, idx, selection))
   }
 }
@@ -96,18 +92,31 @@ get_objects_standard <- function(type, selection, sample_prior, return_prior, de
   } else{
     if(!selection %in% acc_selection) stop(paste0("selection must be in : ", paste(acc_selection, collapse = ", ")))
     if(sample_prior){
-      sampler <- list(list(samples = get_prior_standard(prior = prior, design = design, selection = selection,N = N)))
+      if(selection == "alpha" & !is.null(sampler)){
+        mu <- as_mcmc_new(sampler, selection = "mu", filter = filter, map = FALSE, return_mcmc = FALSE, merge_chains = TRUE, ...)
+        var <- as_mcmc_new(sampler, selection = "sigma", filter = filter, map = FALSE, return_mcmc = FALSE, merge_chains = TRUE, ...)
+        sub_names <- names(sampler[[1]]$data)
+        sampler <- list(list(samples =  list(alpha = get_alphas(mu, var, sub_names))))
+      } else{
+        sampler <- list(list(samples = get_prior_standard(prior = prior, design = design, selection = selection,N = N)))
+      }
       attr(sampler, "design_list") <- list(design)
       return(sampler)
     }
-    if(is.null(sampler[[1]]$samples$stage)){
-      idx <- 1:max(dim(sampler[[1]][[1]][[1]]))
-    } else{
-      idx <- which(sampler[[1]]$samples$stage %in% filter)
-    }
+    idx <- get_idx(sampler, filter)
     return(get_base(sampler, idx, selection))
   }
 }
+get_idx <- function(sampler, filter){
+  if(is.null(sampler[[1]]$samples$stage)){
+    idx <- 1:max(dim(sampler[[1]][[1]][[1]]))
+  } else{
+    idx <- which(sampler[[1]]$samples$stage %in% filter)
+  }
+  if(length(idx) == 0) stop("Make sure there are already samples of the selected stage")
+  return(idx)
+}
+
 
 
 get_objects_blocked <- function(type, selection, sample_prior, return_prior, design = NULL,
@@ -130,11 +139,7 @@ get_objects_blocked <- function(type, selection, sample_prior, return_prior, des
       attr(sampler, "design_list") <- list(design)
       return(sampler)
     }
-    if(is.null(sampler[[1]]$samples$stage)){
-      idx <- 1:max(dim(sampler[[1]][[1]][[1]]))
-    } else{
-      idx <- which(sampler[[1]]$samples$stage %in% filter)
-    }
+    idx <- get_idx(sampler, filter)
     return(get_base(sampler, idx, selection))
   }
 }
@@ -159,11 +164,7 @@ get_objects_single <- function(type, selection, sample_prior, return_prior, desi
       attr(sampler, "design_list") <- list(design)
       return(sampler)
     }
-    if(is.null(sampler[[1]]$samples$stage)){
-      idx <- 1:max(dim(sampler[[1]][[1]][[1]]))
-    } else{
-      idx <- which(sampler[[1]]$samples$stage %in% filter)
-    }
+    idx <- get_idx(sampler, filter)
     return(get_base(sampler, idx, selection))
   }
 }
@@ -191,11 +192,7 @@ get_objects_factor <- function(type, selection, sample_prior, return_prior, desi
       attr(sampler, "design_list") <- list(design)
       return(sampler)
     }
-    if(is.null(sampler[[1]]$samples$stage)){
-      idx <- 1:max(dim(sampler[[1]][[1]][[1]]))
-    } else{
-      idx <- which(sampler[[1]]$samples$stage %in% filter)
-    }
+    idx <- get_idx(sampler, filter)
     if(selection == "loadings"){
       return(lapply(sampler, FUN = function(x) return(x$samples$theta_lambda[,,idx])))
     }
@@ -233,11 +230,7 @@ get_objects_infnt_factor <- function(type, selection, sample_prior, return_prior
       attr(sampler, "design_list") <- list(design)
       return(sampler)
     }
-    if(is.null(sampler[[1]]$samples$stage)){
-      idx <- 1:max(dim(sampler[[1]][[1]][[1]]))
-    } else{
-      idx <- which(sampler[[1]]$samples$stage %in% filter)
-    }
+    idx <- get_idx(sampler, filter)
     if(selection == "loadings"){
       return(lapply(sampler, FUN = function(x) return(x$samples$theta_lambda[,,idx])))
     }
@@ -279,6 +272,19 @@ get_base <- function(sampler, idx, selection){
       array(apply(x$samples$theta_var[,,idx],3,cov2cor),dim=dim(x$samples$theta_var[,,idx, drop = F]),
             dimnames=dimnames(x$samples$theta_var)))))
   }
+}
+
+
+get_alphas <- function(mu, var, sub_names){
+  N <- ncol(mu)
+  n_pars <- nrow(mu)
+  alpha <- array(NA_real_, dim = c(n_pars, length(sub_names), N))
+  for(i in 1:N){
+    alpha[,,i] <- t(rmvnorm(1, mu[,i], var[,,i]))
+  }
+  rownames(alpha) <- rownames(mu)
+  colnames(alpha) <- sub_names
+  return(alpha)
 }
 
 

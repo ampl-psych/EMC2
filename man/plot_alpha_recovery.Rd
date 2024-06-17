@@ -2,10 +2,7 @@
 % Please edit documentation in R/plotting.R
 \name{plot_alpha_recovery}
 \alias{plot_alpha_recovery}
-\title{plot_alpha_recovery
-Uses output from plot_pars to plot true vs. estimated (median with CI) alpha
-parameters for each subject (plot density must be called with true values passed
-through the pars argument).}
+\title{Plot MCMC chains}
 \usage{
 plot_alpha_recovery(
   tabs,
@@ -51,13 +48,50 @@ add Spearman correlation)}
 \item{coverage_digits}{Digits for coverage}
 
 \item{spearman_digits}{Digits for Spearman correlation}
+
+\item{samplers}{An EMC2 samplers object}
+
+\item{subject}{Integer or character vector. Only applicable if \code{selection = "alpha"}. Will plot only these subject(s).
+\code{NA} (i.e., the default) will plot all individuals.}
+
+\item{ylim}{A vector. The y-limits of the chain plot.}
+
+\item{selection}{A Character string. Indicates which parameter type to plot (\code{alpha}, \code{mu}, \code{variance}, \code{covariance}, \code{correlation}).
+\code{LL} will plot the log-likelihood chains.}
+
+\item{filter}{A string. Specifies from which stage you want to plot the MCMC chains (\code{preburn}, \code{burn}, \code{adapt}, \code{sample})}
+
+\item{thin}{An integer. Will keep only iterations of the MCMC chains that are a multiple of \code{thin}.}
+
+\item{subfilter}{Integer or numeric vector. If an integer is supplied, iterations
+up until that integer within the sampling stage \code{filter} are kept. If a vector is supplied, the iterations
+within the range are kept.}
+
+\item{plot_acf}{Boolean. If \code{TRUE}, the autocorrelation of the first chain is plotted
+(of the -- per default -- three chains).}
 }
 \value{
+None
+
 Invisible list with RMSE, coverage and Pearson and Spearman correlations.
 }
 \description{
+Plots the trace plots of the MCMC chains on top of each other. Visualizes convergence
+and chain stability.
+}
+\examples{
+\dontrun{
+# For a set of samplers run using run_emc:
+plot_chains(samplers)
+# Or for the second subject:
+plot_chains(samplers, subject = 2)
+
+# Can also plot the autocorrelation of for example the group-level mean:
+plot_chains(samplers, selection = "mu", plot_acf = TRUE)
+}
 plot_alpha_recovery
 Uses output from plot_pars to plot true vs. estimated (median with CI) alpha
 parameters for each subject (plot density must be called with true values passed
 through the pars argument).
+
 }

@@ -691,7 +691,7 @@ as_mcmc_new <- function(sampler,filter="sample",thin=1,subfilter=0,map = FALSE,
   # filter <- which(sampler$samples$stage %in% filter)
   if(!(selection %in% c("mu", "alpha"))) map <- FALSE
   if(is.null(type)) type <- attr(sampler[[1]], "variant_funs")$type
-  samples <- get_objects(type = type, sampler = sampler,
+  samples <- get_objects(type = type, sampler = sampler, filter = filter,
                          selection = selection, subject = subject)
 
   if(map){

@@ -30,7 +30,6 @@
 #' # Can also plot the autocorrelation of for example the group-level mean:
 #' plot_chains(samplers, selection = "mu", plot_acf = TRUE)
 #' }
-#' @export
 
 # plot_chains <- function(samplers,layout=NA,subject=NA,ylim=NULL,
 #                         selection="mu",filter="sample",thin=1,subfilter=0,
@@ -291,6 +290,7 @@ plot_defective_density <- function(data,subject=NULL,factors=NULL,
 robust_hist <- function(ps, breaks = 50, cutoff = 0.002, main = "",
                         cex.lab = 1, cex.main = 1.5, prob = TRUE,
                         xlab = "", do_plot = TRUE, ...){
+  ps <- ps[abs(ps) < 1000]
   for(i in 1:log10(length(ps))){
     cuts <- cut(ps, breaks = breaks)
     tab_cuts <- table(cuts)
@@ -374,7 +374,6 @@ robust_density <- function(ps,r,bw,adjust,use_robust=FALSE)
 #' quants <- plot_pars(samplers, selection = "variance", do_plot = FALSE)
 #' print(quants)
 #' }
-#' @export
 # plot_pars <- function(samplers,layout=c(2,3),use_par=NULL,
 #                       selection="mu",filter="sample",thin=1,subfilter=0,mapped=FALSE,
 #                       plot_prior=TRUE,xlim=NULL,ylim=NULL,prior_xlim=c(.1,.9),
@@ -1425,38 +1424,43 @@ plot_pars_new <- function(samplers,layout=NA,subject=NULL,ylim=NULL, map = FALSE
                               subject = subject, use_par = use_par, flatten = flatten)
   auto.layout <- any(is.na(layout))
   if(plot_prior){
-    psamples <-  get_objects(design = attr(samplers,"design_list")[[1]],
+    psamples <-  get_objects(sampler = samplers, design = attr(samplers,"design_list")[[1]],
                              type = attr(samplers[[1]], "variant_funs")$type, sample_prior = T,
-                             selection = selection, N = 1e4)
+                             selection = selection, N = 1e4, thin = thin, subfilter = subfilter)
     pMCMC_samples <- as_mcmc_new(psamples, selection = selection, map = map,
                             use_par = use_par, flatten = flatten, by_subject = by_subject,
                             type = attr(samplers[[1]], "variant_funs")$type)
     if(length(pMCMC_samples) != length(MCMC_samples)) pMCMC_samples <- rep(pMCMC_samples, length(MCMC_samples))
   }
+
+  n_objects <- length(MCMC_samples)
   if (!auto.layout) par(mfrow=layout)
-  for(i in 1:length(MCMC_samples)){
+  for(i in 1:n_objects){
+    cur_mcmc <- MCMC_samples[[i]]
+    merged <- do.call(rbind, cur_mcmc) # Need for contraction calculation
+    if(!show_chains) cur_mcmc <- list(merged)
+    n_chains <- length(cur_mcmc)
+    n_pars <- ncol(merged)
     if(i == 1 & auto.layout){
-      mfrow <- coda:::set.mfrow(Nchains = length(MCMC_samples[[1]]), Nparms = ncol(MCMC_samples[[1]][[1]]),
-                                nplots = 1)
+      mfrow <- coda:::set.mfrow(Nchains = n_chains, Nparms = n_pars,nplots = 1)
       oldpar <- par(mfrow = mfrow)
     } else if(auto.layout){
       oldpar <- par(mfrow = mfrow)
     }
-    merged <- do.call(rbind, MCMC_samples[[i]]) # Need for contraction calculation
-    if(!show_chains){
-      MCMC_samples[[i]] <- list(merged)
-    }
-    for(l in 1:ncol(MCMC_samples[[i]][[1]])){
-      denses <- lapply(MCMC_samples[[i]], function(x) density(x[,l]))
-      xlim <- lapply(MCMC_samples[[i]], function(x) return(c(min(x[,l]), max(x[,l]))))
+
+    for(l in 1:n_pars){
+      denses <- lapply(cur_mcmc, function(x) density(x[,l]))
+      xlim <- lapply(cur_mcmc, function(x) return(c(min(x[,l]), max(x[,l]))))
       ylim <- lapply(denses, function(x) return(c(min(x$y), max(x$y))))
       xlim <- c(min(unlist(xlim)), max(unlist(xlim)))
       ylim <- c(min(unlist(ylim)), max(unlist(ylim)))
       if(plot_prior){
-        if(ncol(pMCMC_samples[[i]][[1]]) != ncol(MCMC_samples[[i]][[1]])){
+        if(ncol(pMCMC_samples[[i]][[1]]) != n_pars){
           p_idx <- 1
         } else{p_idx <- l}
-        p_curr <- robust_hist(pMCMC_samples[[i]][[1]][,p_idx], do_plot = F)
+        if(selection == "alpha"){
+          p_curr <- robust_hist(pMCMC_samples[[i]][[1]][,p_idx], do_plot = F)
+        } else{ p_curr <-  pMCMC_samples[[i]][[1]][,p_idx]}
         pdenses <- density(p_curr)
         if(use_prior_lim){
           xlim <- c(min(xlim[1], min(p_curr)), max(xlim[2], max(p_curr)))
@@ -1464,14 +1468,11 @@ plot_pars_new <- function(samplers,layout=NA,subject=NULL,ylim=NULL, map = FALSE
         }
       }
 
-      for(k in 1:length(MCMC_samples[[i]])){
+      for(k in 1:n_chains){
         if(k == 1){
-          plot(denses[[k]], xlim = xlim, ylim = ylim,
-               ylab = "Density", xlab = names(MCMC_samples)[[i]],
-               main = colnames(MCMC_samples[[i]][[k]])[l])
-        } else{
-          lines(denses[[k]], col = 1)
-        }
+          plot(denses[[k]], xlim = xlim, ylim = ylim, ylab = "Density", xlab = names(MCMC_samples)[[i]],
+               main = colnames(cur_mcmc[[k]])[l])
+        } else{lines(denses[[k]], col = 1)}
       }
       if(plot_prior){
         lines(pdenses, col = "red")
@@ -1481,3 +1482,26 @@ plot_pars_new <- function(samplers,layout=NA,subject=NULL,ylim=NULL, map = FALSE
     }
   }
 }
+
+# samples,pdf_name="check_run.pdf",interactive=TRUE,
+# filter="sample",subfilter=0,thin=1,print_IAT=FALSE,subject=NULL,
+# layout=c(3,4),width=NULL,height=NULL)
+check_run_new <- function(samplers, selection, digits = 3, ...){
+  for(select in selection){
+    ESS <- es_summary_new(samplers, ...)
+    gds <- gd_summary_new(samplers, ...)
+    out <- vector("list", length(ESS))
+    for(name in names(ESS)){
+      combined <- cbind(gds[[name]], ESS[[name]])
+      colnames(combined) <- c("Rhat", "ESS")
+      if(length(ESS) > 1){
+        cat("\n", paste0(select, " ", name), "\n")
+      } else{
+        cat("\n", name, "\n")
+      }
+      print(round(t(combined), digits))
+      out_list <- append(out_list, combined)
+    }
+  }
+}
+

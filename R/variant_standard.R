@@ -88,8 +88,8 @@ get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1
     if(selection %in% c("mu", "alpha")){
       mu <- t(mvtnorm::rmvnorm(N, mean = prior$theta_mu_mean,
                              sigma = prior$theta_mu_var))
+      rownames(mu) <- par_names
       if(selection %in% c("mu")){
-        rownames(mu) <- par_names
         samples$theta_mu <- mu
       }
     }
@@ -107,16 +107,10 @@ get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1
           vars[,,i] <- vars[,,sample_idx]
         }
       }
-      samples$theta_var <- vars
+      if(selection != "alpha") samples$theta_var <- vars
     }
     if(selection %in% "alpha"){
-      alpha <- array(NA_real_, dim = c(n_pars, 1, N))
-      for(i in 1:N){
-        alpha[,,i] <- t(rmvnorm(1, mu[,i], vars[,,i]))
-      }
-      rownames(alpha) <- par_names
-      colnames(alpha) <- "alpha"
-      samples$alpha <- alpha
+      samples$alpha <- get_alphas(mu, vars, "alpha")
     }
     out <- samples
   }

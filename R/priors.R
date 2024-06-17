@@ -672,10 +672,10 @@ plot_prior_new <- function(prior, design, selection = "mu",
   }
   if(selection == "alpha") flatten <- TRUE
   samplers <-  get_objects(design = design, type = type, sample_prior = T,
-                          selection = selection, mapped = mapped, N = N)
-  MCMC_samples <- as_mcmc_new(samplers, selection = selection,
+                          selection = selection, N = N)
+  MCMC_samples <- as_mcmc_new(samplers, selection = selection, map = mapped,
                               use_par = use_par, flatten = flatten,
-                              type = type)
+                              type = type, by_subject = TRUE)
   auto.layout <- any(is.na(layout))
   if (!auto.layout) par(mfrow=layout)
   for(i in 1:length(MCMC_samples)){

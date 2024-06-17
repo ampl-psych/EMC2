@@ -10,6 +10,7 @@ savage_dickey(
   H0 = 0,
   filter = "sample",
   subfilter = 0,
+  thin = 1,
   fun = NULL,
   mapped = F,
   selection = "mu",
