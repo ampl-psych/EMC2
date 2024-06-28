@@ -120,7 +120,7 @@ samplers <- run_emc(samplers, particle_factor = 100, p_accept = .6)
 
 # Example of how to use the stop_criteria:
 samplers <- run_emc(samplers, stop_criteria = list(mean_gd = 1.1, max_gd = 1.5,
-            selection = c('alpha', 'variance'), omit_mpsrf = TRUE, min_es = 1000).
+            selection = c('alpha', 'sigma2'), omit_mpsrf = TRUE, min_es = 1000).
 # In this case the stop_criteria are set for the sample stage, which will be
 # run until the mean_gd < 1.1, the max_gd < 1.5 (omitting the multivariate psrf)
 # and the effective sample size > 1000,

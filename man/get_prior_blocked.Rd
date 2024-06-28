@@ -11,7 +11,8 @@ get_prior_blocked(
   N = 1e+05,
   selection = "mu",
   design = NULL,
-  map = FALSE
+  map = FALSE,
+  par_groups = NULL
 )
 }
 \arguments{

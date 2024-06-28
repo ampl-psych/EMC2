@@ -56,40 +56,7 @@ logdinvGamma <- function(x, shape, rate){
   beta <- 1/rate
   log.density <- alpha * log(beta) - lgamma(alpha) - (alpha +
                                                         1) * log(x) - (beta/x)
-  return(pmax(log.density, -500)) #Roughly equal to 1e-22 on real scale
 }
-
-# es_pmwg <- function(pmwg_mcmc,selection="alpha",summary_alpha=mean,
-#                     print_summary=TRUE,sort_print=TRUE,
-#                     filter="sample",thin=1,subfilter=NULL)
-#   # Effective size
-# {
-#   if (!(class(pmwg_mcmc[[1]]) %in% c("mcmc","mcmc.list"))) {
-#     if (is(pmwg_mcmc, "pmwgs")){
-#       pmwg_mcmc <- as_Mcmc(pmwg_mcmc,selection=selection,filter=filter,
-#                            thin=thin,subfilter=subfilter)
-#     }
-#     else{
-#       pmwg_mcmc <- as_mcmc.list(pmwg_mcmc,selection=selection,filter=filter,
-#                                 thin=thin,subfilter=subfilter)
-#     }
-#   }
-#   if (attr(pmwg_mcmc,"selection")=="LL")
-#     stop("Effective size not sensible for LL\n")
-#   out <- do.call(rbind,lapply(pmwg_mcmc,effectiveSize))
-#   if (attr(pmwg_mcmc,"selection")=="alpha") {
-#     if (!is.null(summary_alpha)) out <- apply(out,2,summary_alpha)
-#     if (print_summary) if (sort_print) print(round(sort(out))) else
-#       print(round(out))
-#     invisible(out)
-#   } else {
-#     out <- apply(out,2,sum)
-#     if (print_summary) if (sort_print) print(round(sort(out))) else
-#       print(round(out))
-#     invisible(out)
-#   }
-# }
-
 
 split_mcl <- function(mcl)
   # Doubles chains by splitting into first and secon half
@@ -124,96 +91,6 @@ gelman_diag_robust <- function(mcl,autoburnin = FALSE,transform = TRUE, omit_mps
     return(gd_out)
   }
 }
-
-gd_pmwg <- function(pmwg_mcmc,return_summary=FALSE,print_summary=TRUE,
-                    digits_print=2,sort_print=TRUE,autoburnin=FALSE,transform=TRUE, omit_mpsrf = TRUE,
-                    selection="alpha",filter="sample",thin=1,subfilter=NULL,mapped=FALSE)
-  # R hat, prints multivariate summary returns each participant unless +
-  # multivariate as matrix unless !return_summary
-{
-  if ( selection=="LL" ) stop("Rhat not appropriate for LL")
-  if (class(pmwg_mcmc[[1]]) %in% c("mcmc","mcmc.list")) {
-    if (mapped) warning("Cannot transform to natural scale unless samples list provided")
-  } else {
-    if (is(pmwg_mcmc, "pmwgs")) {
-      if (mapped) warning("Cannot transform to natural scale unless samples list provided")
-      pmwg_mcmc <- as_Mcmc(pmwg_mcmc,selection=selection,filter=filter,
-                           thin=thin,subfilter=subfilter)
-    } else
-      pmwg_mcmc <- as_mcmc.list(pmwg_mcmc,selection=selection,filter=filter,
-                                thin=thin,subfilter=subfilter,mapped=mapped)
-  }
-  if (selection=="alpha" || selection == "random") {
-    gd <- lapply(pmwg_mcmc,gelman_diag_robust,autoburnin = autoburnin, transform = transform, omit_mpsrf = omit_mpsrf)
-    if(omit_mpsrf){
-      out <- unlist(lapply(gd,function(x){max(x[[1]][,1])}))
-    } else{
-      out <- unlist(lapply(gd,function(x){x$mpsrf}))
-    }
-  } else {
-    gd <- gelman_diag_robust(pmwg_mcmc,autoburnin = autoburnin, transform = transform, omit_mpsrf = omit_mpsrf)
-    if(omit_mpsrf){
-      out <- max(gd[[1]][,1])
-    } else{
-      out <- gd$mpsrf
-    }
-  }
-  if (return_summary) return(out)
-  if (sort_print) out <- sort(out)
-  if (print_summary) print(round(out,digits_print))
-  if (selection=="alpha" || selection == "random") invisible(
-    cbind(do.call(rbind,lapply(gd,function(x){x[[1]][,1]})),
-          mpsrf=unlist(lapply(gd,function(x){x[[2]]})))) else
-            invisible(c(gd$psrf[,1],mpsrf=gd$mpsrf))
-}
-
-
-#' gd_summary
-#'
-#' Summarizes gelman_diag statistics for a samplers object, invisibly returning
-#' a list of two lists containing univarite (psrf) and multivariate (mpsrf)
-#' statistics.
-#'
-#' @param samplers Samples object with multiple chains
-#' @param no_print Boolean for printing
-#' @param digits Integer, number of digits for printing
-#'
-#' @return List of two lists names psrf and mpsrf.
-gd_summary <- function(samplers,no_print=TRUE,digits=2) {
-
-  alpha <- gd_pmwg(samplers,selection="alpha",print_summary = FALSE)
-  alphai <- alpha; alpha <- alpha[,"mpsrf"]; alphai <- alphai[,dimnames(alphai)[[2]]!="mpsrf"]
-  hierarchical <- any(names(samplers[[1]]$samples)=="theta_mu")
-  if (hierarchical) {
-    mu <- gd_pmwg(samplers,selection="mu",print_summary = FALSE)
-    variance <- gd_pmwg(samplers,selection="variance",print_summary = FALSE)
-    correlation <- gd_pmwg(samplers,selection="correlation",print_summary = FALSE)
-    mui <- mu; mu <- mu["mpsrf"]; mui <- mui[names(mui)!="mpsrf"]
-    variancei <- variance; variance <- variance["mpsrf"]; variancei <- variancei[names(variancei)!="mpsrf"]
-    correlationi <- correlation; correlation <- correlation["mpsrf"]; correlationi <- correlationi[names(correlationi)!="mpsrf"]
-  }
-  if (!(no_print)) {
-    cat("ALPHA psrf\n")
-    print(round(alphai,digits))
-    cat("\nALPHA mpsrf\n")
-    print(round(sort(alpha),digits))
-    if (hierarchical) {
-      cat("\nMU psrf\n")
-      print(round(sort(mui),digits))
-      cat("\nVARIANCE psrf\n")
-      print(round(sort(variancei),digits))
-      cat("\nCORRELATION psrf\n")
-      print(round(sort(correlationi),digits))
-      cat("\nHyper mpsrf\n")
-      print(round(c(mu=mu,var=variance,corr=correlation),digits=digits))
-    }
-  }
-  if (hierarchical)
-    invisible(list(psrf=list(alpha=alphai,mu=mui,variance=variancei,correlation=correlationi),
-                   mpsrf=list(alpha=alpha,mu=mu,variance=variance,correlation=correlation))) else
-                     invisible(list(psrf=list(alpha=alphai), mpsrf=list(alpha=alpha)))
-}
-
 
 iat_pmwg <- function(pmwg_mcmc,
                      print_summary=TRUE,digits_print=2,sort_print=TRUE,summary_alpha=mean,
@@ -637,14 +514,12 @@ compare <- function(sList,filter="sample",subfilter=0,use_best_fit=TRUE,
 #' savage_dickey(samplers,fun=Bdiff)
 #' }
 #' @export
-savage_dickey <- function(samplers, parameter = NULL, H0 = 0, filter = "sample",
-                          subfilter = 0, thin = 1, fun = NULL, mapped =F, selection = "mu",
-                          do_plot = TRUE, xlim = NULL, subject = NULL){
+savage_dickey <- function(samplers, parameter = NULL, H0 = 0, fun = NULL,selection = "mu",
+                          do_plot = TRUE, use_prior_lim = TRUE, prior_plot_args = list(), ...){
+  dots <- list(...)
   type <- attr(samplers[[1]], "variant_funs")$type
 
   if(selection == "alpha" & type != "single") stop("For savage-dickey ratio, selection cannot be alpha")
-
-  if(mapped & selection %in% c("mu", "alpha")) stop("Mapped only works for mu or alpha")
   prior <- samplers[[1]]$prior
   flatten <- ifelse(selection == "alpha", FALSE, TRUE)
 
@@ -652,13 +527,13 @@ savage_dickey <- function(samplers, parameter = NULL, H0 = 0, filter = "sample",
   psamples <-  get_objects(design = attr(samplers,"design_list")[[1]],
                            type = attr(samplers[[1]], "variant_funs")$type, sample_prior = T,
                            selection = selection, N = 1e4)
-  psamples <- as_mcmc_new(psamples, selection = selection, map = mapped, merge_chains = TRUE, return_mcmc = FALSE,
-                               flatten = flatten, by_subject = TRUE, type = type)
-  samples <- as_mcmc_new(samplers, selection = selection, map = mapped, merge_chains = TRUE, return_mcmc = FALSE,
-                               flatten = flatten, by_subject = TRUE, subject = subject,
-                               thin = thin, subfilter = subfilter, filter = filter)
+  psamples <- do.call(as_mcmc_new, c(list(psamples, selection = selection, merge_chains = TRUE, return_mcmc = FALSE, by_subject = TRUE,
+                                          type = attr(samplers[[1]], "variant_funs")$type),
+                                     fix_dots(dots, as_mcmc_new, exclude = c("thin", "subfilter"))))
+  samples <- do.call(as_mcmc_new, c(list(samplers, selection = selection, merge_chains = TRUE, return_mcmc = FALSE, by_subject = TRUE),
+                                    fix_dots(dots, as_mcmc_new)))
   if(type == "single"){
-    if(ncol(samples) > 1 & !is.null(subject)){
+    if(ncol(samples) > 1 & !is.null(dots$subject)){
       stop("with non-hierarichal run with multiple subjects, you must specify which subject")
     } else {
       samples <- samples[,1,]
@@ -685,16 +560,21 @@ savage_dickey <- function(samplers, parameter = NULL, H0 = 0, filter = "sample",
   post_density <- density(samples, bw = "sj", from = min_bound - diff/2, to = max_bound + diff/2)
   post_dfun <-approxfun(post_density)
   if(do_plot){
-    if(is.null(xlim)){
-      xmin <- min(quantile(samples, 0.025), quantile(psamples, 0.025))
-      xmax <- max(quantile(samples, 0.975), quantile(psamples, 0.975))
-      xlim <- c(xmin, xmax)
+    if(is.null(dots$xlim)){
+      if(use_prior_lim){
+        dots$xlim <- range(c(quantile(samples, c(0.025, 0.975)),
+                             quantile(psamples, c(0.025, 0.975)), H0 + .01, H0 - .01))
+      } else{
+        dots$xlim <- range(c(quantile(samples, c(0.025, 0.975)), H0 + .01, H0 - .01))
+      }
     }
-    plot(post_density, xlim = xlim, lwd = 1.5, main = "Prior and posterior density")
-    lines(pdensity, col = "red", lwd = 1.5)
-    points(H0, post_dfun(H0), cex = 2)
-    points(H0, pdfun(H0), col = "red", cex = 2)
-    legend("topright", legend = c("posterior", "prior"), pch = c(1, 1), col = c("black", "red"))
+    prior_plot_args <- add_defaults(prior_plot_args, cex = 2, col = "red", lwd = 1.5)
+    dots <- add_defaults(dots, cex = 2, col = "black", lwd = 1.5, main = "Prior and posterior density")
+    do.call(plot, c(list(post_density), fix_dots_plot(dots)))
+    do.call(lines, c(list(pdensity), fix_dots_plot(prior_plot_args)))
+    do.call(points, c(list(H0 , post_dfun(H0)), fix_dots_plot(dots)))
+    do.call(points, c(list(H0, pdfun(H0)), fix_dots_plot(prior_plot_args)))
+    legend("topright", legend = c("posterior", "prior"), pch = c(1, 1), col = c(dots$col, prior_plot_args$col))
   }
   return(pdfun(H0)/post_dfun(H0))
 }
@@ -858,48 +738,48 @@ make_nice_summary <- function(object, stat = "max", stat_only = FALSE, stat_name
 }
 
 
-get_summary_stat <- function(samplers, fun, subject=NULL, map = FALSE,
-                             selection="mu",filter="sample",thin=1,subfilter=0,
-                             by_subject = TRUE, stat = NULL, stat_only = FALSE,
-                             stat_name = NULL, ...){
-  MCMC_samples <- as_mcmc_new(samplers, selection = selection, filter = filter, map = map,
-                              thin = thin, subfilter = subfilter, by_subject = by_subject,
-                              subject = subject, flatten = FALSE, remove_dup = FALSE)
+get_summary_stat <- function(samplers, selection = "mu", fun, stat = NULL,
+                             stat_only = FALSE, stat_name = NULL, digits = 3, ...){
+  dots <- list(...)
+  MCMC_samples <- do.call(as_mcmc_new, c(list(sampler = samplers, selection = selection), fix_dots(dots, as_mcmc_new)))
   out <- vector("list", length = length(MCMC_samples))
   for(i in 1:length(MCMC_samples)){
     # cat("\n", names(MCMC_samples)[[i]], "\n")
     if(length(fun) > 1){
       outputs <- list()
       for(j in 1:length(fun)){
-        outputs[[j]] <- fun[[j]](MCMC_samples[[i]], ...)
+        outputs[[j]] <- do.call(fun[[j]], c(list(MCMC_samples[[i]]), fix_dots(dots, fun[[j]])))
       }
       out[[i]] <- do.call(cbind, outputs)
+      if(!is.null(stat_name)){
+        if(ncol(out[[i]]) != length(stat_name)) stop("make sure stat_name is the same length as function output")
+        colnames(out[[i]]) <- stat_name
+      }
     } else{
-      out[[i]] <- fun(MCMC_samples[[i]], ...)
-    }
-    if(!is.null(stat_name)){
-      if(ncol(out[[i]]) != length(stat_name)) stop("make sure stat_name is the same length as function output")
-      colnames(out[[i]]) <- stat_name
+      out[[i]] <- do.call(fun, c(list(MCMC_samples[[i]]), fix_dots(dots, fun)))#fun(MCMC_samples[[i]], ...)
     }
   }
   names(out) <- names(MCMC_samples)
-  if(length(fun) == 1 & !is.matrix(out[[i]]) & !is.null(stat)) out <- make_nice_summary(out, stat, stat_only, stat_name)
+  if(length(fun) == 1 & !is.matrix(out[[i]]) & !is.null(stat)){
+    out <- make_nice_summary(out, stat, stat_only, stat_name)
+    out <- round(out, digits)
+  } else{
+    out <- lapply(out, round, digits)
+  }
   return(out)
 }
 
-gd_summary_new <- function(samplers,subject=NULL, map = FALSE, omit_mpsrf = TRUE,
-                           selection="mu",filter="sample",thin=1,subfilter=0,
-                           by_subject = TRUE, stat = "max", stat_only = FALSE){
-  out <- get_summary_stat(samplers, gelman_diag_robust, subject, map, selection, filter, thin, subfilter,
-                          by_subject, stat, stat_only, omit_mpsrf = omit_mpsrf)
+gd_summary_new <- function(samplers,selection="mu", omit_mpsrf = TRUE,
+                           stat = "max", stat_only = FALSE, digits = 3, ...){
+  out <- get_summary_stat(samplers, selection, gelman_diag_robust, stat = stat,
+                          stat_only = stat_only, digits = digits, omit_mpsrf = omit_mpsrf, ...)
   return(out)
 }
 
-es_summary_new <- function(samplers,subject=NULL, map = FALSE,
-                           selection="mu",filter="sample",thin=1,subfilter=0,
-                           by_subject = TRUE, stat = "min", stat_only = FALSE){
-  out <- get_summary_stat(samplers, effectiveSize, subject, map, selection, filter, thin, subfilter,
-                          by_subject, stat, stat_only)
+es_summary_new <- function(samplers,selection="mu", stat = "min", stat_only = FALSE,
+                           digits = 3, ...){
+  out <- get_summary_stat(samplers, selection, effectiveSize,
+                          stat = stat, stat_only = stat_only, digits = digits, ...)
   return(out)
 }
 
@@ -909,11 +789,10 @@ get_posterior_quantiles <- function(x, probs = c(0.025, .5, .975)){
 }
 
 
-posterior_summary_new <- function(samplers,subject=NULL, map = FALSE, probs = c(0.025, .5, .975),
-                           selection="mu",filter="sample",thin=1,subfilter=0,
-                           by_subject = TRUE){
-  out <- get_summary_stat(samplers, get_posterior_quantiles, subject, map, selection, filter, thin, subfilter,
-                          by_subject,probs = probs)
+posterior_summary_new <- function(samplers, selection="mu", probs = c(0.025, .5, .975),
+                                  digits = 3, ...){
+  out <- get_summary_stat(samplers, selection, get_posterior_quantiles,
+                          probs = probs, digits = digits, ...)
   return(out)
 }
 

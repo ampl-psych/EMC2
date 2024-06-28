@@ -53,7 +53,7 @@ add_info_blocked <- function(sampler, prior = NULL, ...){
 #' @export
 
 get_prior_blocked <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, selection = "mu", design = NULL,
-                               map = FALSE){
+                               map = FALSE, par_groups = NULL){
   # Checking and default priors
   if(is.null(prior)){
     prior <- list()
@@ -77,69 +77,46 @@ get_prior_blocked <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e
     prior$A <- rep(.3, n_pars)
   }
   attr(prior, "type") <- "blocked"
-
-  # Things I save rather than re-compute inside the loops.
-  prior$theta_mu_invar <- ginv(prior$theta_mu_var) #Inverse of the matrix
+  out <- prior
   if(sample){
-    out <- list()
-    if(!selection %in% c("mu", "variance", "covariance", "correlation", "full_var")){
-      stop("for variant standard, you can only specify the prior on the mean, variance, covariance or the correlation of the parameters")
-    }
-    if(selection == "mu"){
-      samples <- mvtnorm::rmvnorm(N, mean = prior$theta_mu_mean,
-                                  sigma = prior$theta_mu_var)
-      if(!is.null(design)){
-        colnames(samples) <- par_names <- names(attr(design, "p_vector"))
-        if(map){
-          samples <- map_mcmc(samples,design,design$model,include_constants=FALSE)
-        }
+    par_names <- names(attr(design, "p_vector"))
+    samples <- list()
+    if(selection %in% c("mu", "alpha")){
+      mu <- t(mvtnorm::rmvnorm(N, mean = prior$theta_mu_mean,
+                               sigma = prior$theta_mu_var))
+      rownames(mu) <- par_names
+      if(selection %in% c("mu")){
+        samples$theta_mu <- mu
       }
-      out$mu <- samples
-      return(out)
-    } else {
-      var <- array(NA_real_, dim = c(n_pars, n_pars, N))
+    }
+    if(selection %in% c("sigma2", "covariance", "correlation", "Sigma", "alpha")) {
+      vars <- array(NA_real_, dim = c(n_pars, n_pars, N))
+      colnames(vars) <- rownames(vars) <- par_names
       for(i in 1:N){
         a_half <- 1 / rgamma(n = n_pars,shape = 1/2,
                              rate = 1/(prior$A^2))
         attempt <- tryCatch({
-          var[,,i] <- riwish(prior$v + n_pars - 1, 2 * prior$v * diag(1 / a_half))
+          vars[,,i] <- riwish(prior$v + n_pars - 1, 2 * prior$v * diag(1 / a_half))
         },error=function(e) e, warning=function(w) w)
         if (any(class(attempt) %in% c("warning", "error", "try-error"))) {
           sample_idx <- sample(1:(i-1),1)
-          var[,,i] <- var[,,sample_idx]
+          vars[,,i] <- vars[,,sample_idx]
         }
       }
-      if (selection == "variance") {
-        vars_only <- t(apply(var,3,diag))
-        if(!is.null(design)){
-          colnames(vars_only) <- names(attr(design, "p_vector"))
+      if(!is.null(par_groups)){
+        for(i in 1:length(unique(par_groups))){
+          ERROR
         }
-        out$variance <- vars_only
       }
-      lt <- lower.tri(var[,,1])
-      if(selection %in% c("covariance", "correlation")){
-        pnams <- names(attr(design, "p_vector"))
-        lt <- lower.tri(diag(length(pnams)))
-        pnams <- outer(pnams,pnams,paste,sep=".")[lt]
-      }
-      if (selection == "correlation"){
-        corrs <- array(apply(var,3,cov2cor),dim=dim(var),dimnames=dimnames(var))
-        out$correlation <- t(apply(corrs,3,function(x){x[lt]}))
-        colnames(out$correlation) <- pnams
-      }
-      if(selection == "covariance"){
-        out$covariance <- t(apply(var,3,function(x){x[lt]}))
-        colnames(out$covariance) <- pnams
-      }
-      if (selection == "full_var"){
-        out$full_var <- t(apply(var, 3, c))
-      }
-      return(out)
+      if(selection != "alpha") samples$theta_var <- vars
     }
+    if(selection %in% "alpha"){
+      samples$alpha <- get_alphas(mu, vars, "alpha")
+    }
+    out <- samples
   }
-  return(prior)
+  return(out)
 }
-
 
 get_startpoints_blocked <- function(pmwgs, start_mu, start_var){
   if (is.null(start_mu)) start_mu <- rmvnorm(1, mean = pmwgs$prior$theta_mu_mean, sigma = pmwgs$prior$theta_mu_var)

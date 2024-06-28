@@ -113,7 +113,7 @@ get_prior_infnt_factor <- function(prior = NULL, n_pars = NULL, sample = TRUE, N
         cov_tmp <- lambda %*% t(lambda) + diag(sigma)
         var[,,i] <- cov_tmp
       }
-      if (selection == "variance") {
+      if (selection == "sigma2") {
         vars_only <- t(apply(var,3,diag))
         if(!is.null(design)){
           colnames(vars_only) <- names(attr(design, "p_vector"))

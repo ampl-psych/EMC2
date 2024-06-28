@@ -126,12 +126,12 @@ debug(as_mcmc_new)
 
 MCMC <- as_mcmc_new(samplers_LNR, selection = "covariance", use_par = c("s.m"), flatten = TRUE)
 
-debug(filter_emc)
-plot_chains_new(samplers_LNR, selection = "mu",flatten = TRUE, map = F,
-                subfilter = seq(1, 40, by = 2))
 
 devtools::load_all()
-debug(get_objects_standard)
+debug(plot_chains_new)
+plot_chains_new(samplers_LNR, selection = "alpha",flatten = FALSE, map = F, thin = 2, by_subject = FALSE, plot_acf = TRUE, ylab = "test")
+
+devtools::load_all()
 plot_pars_new(samplers_LNR, selection = "alpha", show_chains = FALSE)
 plot_chains(samplers_LNR, selection = "mu")
 

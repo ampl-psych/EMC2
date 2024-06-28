@@ -5,19 +5,23 @@
 \title{Likelihood profile plots}
 \usage{
 profile_plot(
-  pname,
-  p_vector,
-  p_min,
-  p_max,
   data,
   design,
+  p_vector,
+  layout = NA,
+  p_min = NULL,
+  p_max = NULL,
   n_point = 100,
   main = "",
-  cores = 1
+  n_cores = 1,
+  true_plot_args = list(),
+  ...
 )
 }
 \arguments{
-\item{pname}{String. Name of parameter to profile}
+\item{data}{A dataframe. Experimental data used, needed for the design mapping}
+
+\item{design}{A design list. Created using \code{make_design}.}
 
 \item{p_vector}{Named vector of parameter values (typically created with \code{sampled_p_vector(design)})}
 
@@ -25,13 +29,11 @@ profile_plot(
 
 \item{p_max}{Numeric. Maximum of profile range}
 
-\item{data}{A dataframe. Experimental data used, needed for the design mapping}
-
-\item{design}{A design list. Created using \code{make_design}.}
-
 \item{n_point}{Integer. Number of evenly spaced points at which to calculate likelihood}
 
 \item{main}{Plot title}
+
+\item{pname}{String. Name of parameter to profile}
 
 \item{cores}{Number of likelihood points to calculate in parallel}
 }

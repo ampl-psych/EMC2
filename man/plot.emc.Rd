@@ -4,15 +4,7 @@
 \alias{plot.emc}
 \title{Plot function for EMC2 samplers objects}
 \usage{
-\method{plot}{emc}(
-  x,
-  filter = "sample",
-  selection = c("mu", "variance", "correlation"),
-  subfilter = 0,
-  subject = NULL,
-  thin = 1,
-  ...
-)
+\method{plot}{emc}(x, filter = "sample", selection = c("mu", "sigma2", "alpha"), ...)
 }
 \arguments{
 \item{x}{An object of class \code{emc}}
@@ -21,16 +13,15 @@
 Can be \code{preburn}, \code{burn}, \code{adapt}, or \code{sample}.}
 
 \item{selection}{A character string indicating the parameter group.
-Defaults to \code{mu}, \code{variance}, and \code{correlation}. Other options are \code{covariance}, and \code{alpha}
-(i.e., individual-level parameters).}
+Defaults to \code{mu}, \code{sigma2}, and \code{alpha}.}
+
+\item{...}{Further optional arguments.}
 
 \item{subfilter}{An integer or vector, defaults to 0. See below for more details.}
 
 \item{subject}{An integer or character vector. Plot samples selected subjects.}
 
 \item{thin}{An integer, only consider samples that are a multiple of \code{thin}.}
-
-\item{...}{Further optional arguments.}
 }
 \description{
 Plots posterior densities and traceplots for EMC2 model parameters.

@@ -20,7 +20,7 @@ plot_roc(
 If \code{NA} or \code{NULL}, the current plot layout is used.}
 
 \item{selection}{A Character string. Indicates which parameter type to plot
-(\code{alpha}, \code{mu}, \code{variance}, \code{covariance}, or \code{correlation}).}
+(e.g., \code{alpha}, \code{mu}, \code{covariance}, or \code{correlation}).}
 
 \item{use_par}{Character vector of names of parameters to plot. The default \code{NULL}
 plots all}
@@ -79,7 +79,7 @@ Plots the posterior and prior density for selected parameters of a model.
 # For a set of samplers plot prior and posterior densities:
 plot_pars(samplers)
 # Or just get the quantiles and omit the plot
-quants <- plot_pars(samplers, selection = "variance", do_plot = FALSE)
+quants <- plot_pars(samplers, selection = "sigma2", do_plot = FALSE)
 print(quants)
 }
 }

@@ -12,40 +12,6 @@ prior_samples_alpha <- function(theta_mu,theta_var,n=1e3)
   return(out)
 }
 
-# get_prior_samples <- function(samples,selection,filter,thin,subfilter,n_prior)
-#   # get matrix of prior samples for different parameter types
-# {
-#   if (inherits(samples, "pmwgs")) samps <- samples else samps <- samples[[1]]
-#   if (selection=="alpha") {
-#     if(!is.null(samples[[1]]$samples$theta_mu)){
-#       if (inherits(samples, "pmwgs")) {
-#         theta_mu <- as_Mcmc(samples,selection="mu",filter=filter,
-#                             thin=thin,subfilter=subfilter)
-#         theta_var <- get_sigma(samples,filter=filter,
-#                                thin=thin,subfilter=subfilter)
-#       } else {
-#         theta_mu <- do.call(rbind,as_mcmc.list(samples,selection="mu",
-#                                                filter=filter,thin=thin,subfilter=subfilter))
-#         theta_var <-   abind(lapply(samples,get_sigma,filter=filter,thin=thin,subfilter=subfilter))
-#       }
-#       psamples <- prior_samples_alpha(theta_mu,theta_var,n_prior)
-#       colnames(psamples) <- colnames(theta_mu)
-#     } else{
-#       theta_mu <- samples[[1]]$prior$theta_mu_mean
-#       theta_var <- samples[[1]]$prior$theta_mu_var
-#       psamples <- prior_samples_alpha(theta_mu,theta_var,n_prior)
-#       colnames(psamples) <- samples[[1]]$par_names
-#     }
-#     return(psamples)
-#   } else {
-#     variant_funs <- attr(samples[[1]], "variant_funs")
-#     design <- list(model = attr(samples[[1]]$data[[1]], "model"))
-#     attr(design, "p_vector") <- samples[[1]]$samples$alpha[,1,1] # just need the names in the right format
-#     psamples <- variant_funs$get_prior(design = design, N = n_prior, prior = samples[[1]]$prior, type = selection, map = FALSE)[[1]]
-#     return(psamples)
-#   }
-# }
-
 
 #' Prior plotting
 #'
@@ -118,7 +84,7 @@ plot_prior <- function(prior=NULL, design,plotp=NULL,
     if(is.null(upper)) upper = .95
   }
 
-  if(selection == "variance"){
+  if(selection == "sigma2"){
     if(is.null(upper)) upper = .95
   }
   if(selection == "covariance" || selection == "loadings"){
@@ -397,172 +363,25 @@ make_prior <- function(design,pmean=NULL,psd=NULL,update=NULL,
                        verbose=TRUE,update_print=TRUE, type = "standard",
                        pscale = NA, df = NA)
 {
-  pm <- sampled_p_vector(design)
-  pm <- ps <- psc <-  pm[1:length(pm)]
-
-  # Make sure names are correct and fill in defaults if NA
-  if (!is.null(pmean) && is.null(names(pmean))) {
-    pmean[1:length(pm)] <- pm
-    pmean <- setNames(pmean,names(pm))
-  }
-  if (!is.null(psd) && is.null(names(psd))) {
-    if(any(is.na(psd))){
-      psd[1:length(ps)] <- 1
-      psd <- setNames(psd,names(ps))
-    } else{
-      psd[1:length(ps)] <- psd
-      psd <- setNames(psd,names(ps))
-    }
-  }
-  if (!is.null(pscale) && is.null(names(pscale))) {
-    if(any(is.na(pscale))){
-      pscale[1:length(psc)] <- 0.3
-      pscale <- setNames(pscale,names(psc))
-    } else{
-      pscale[1:length(psc)] <- pscale
-      pscale <- setNames(pscale,names(psc))
-    }
-  }
-  if (is.na(df)) df <- 2
-
-  if ( !is.null(update) ) {
-    if(is(update[[1]], "pmwgs")) update <- update[[1]]$prior
-    if (is.null(update$v)) type <- "single"
-    pmu <- update$theta_mu_mean
-    if(!type == "single"){
-      pdfu <- update$v
-      pscaleu <- update$A
-      names(pscaleu) <- names(pmu)
-      if(!is.null(pdfu) & is.null(df)){
-        df <- pdfu
-      }
-    }
-    psdu <- setNames(diag(update$theta_mu_var)^.5,names(pmu))
-    isin <- names(pmu)[names(pmu) %in% names(pm)]
-    if (length(isin)>0) {
-      addn <- isin[!(isin %in% names(pmean))]
-      pmean <- c(pmean,pmu[addn])
-      addn <- isin[!(isin %in% names(psd))]
-      psd <- c(psd,psdu[addn])
-      if(!type == "single"){
-        addn <- isin[!(isin %in% names(pscale))]
-        pscale <- c(pscale,pscaleu[addn])
-      }
-    }
-  }
-  if (!all(names(pmean) %in% names(pm))) stop("pmean has names not in design")
-  if (!is.null(pmean)) pm[names(pmean)] <- pmean
-  todom <- !(names(pm) %in% names(pmean))
-  if ( any(todom) ) {
-    if(type == "single"){
-      cat("Enter values for prior mean\n")
-    } else{
-      cat("Enter values for prior mean of group-level mean\n")
-    }
-    for (i in names(pm[todom])) {
-      repeat {
-        ans <- try(eval(parse(text=readline(paste0(i,": ")))),silent=TRUE)
-        if (any(class(ans) %in% c("warning", "error", "try-error")) || is.na(ans) ) {
-          cat("Must provide a numeric value\n")
-        } else {
-          pm[i] <- ans
-          break
-        }
-      }
-    }
-  }
-  if (!all(names(psd) %in% names(ps))) stop("psd has names not in design")
-  if (!is.null(ps)) ps[names(psd)] <- psd
-  todos <- !(names(ps) %in% names(psd))
-  if ( any(todos) ) {
-    if(type == "single"){
-      cat("Enter values for prior standard deviation\n")
-    } else{
-      cat("Enter values for prior standard deviation of group-level mean\n")
-    }
-    for (i in names(pm[todos])) {
-      repeat {
-        ans <- try(eval(parse(text=readline(paste0(i,": ")))),silent=TRUE)
-        if (any(class(ans) %in% c("warning", "error", "try-error")) || is.na(ans) ) {
-          cat("Must provide a numeric value\n")
-        } else {
-          ps[i] <- ans
-          break
-        }
-      }
-    }
-  }
-  if(type != "single"){
-    if (!is.null(psc)) psc[names(pscale)] <- pscale
-    todoscale <- !(names(psc) %in% names(pscale))
-    if (any(todoscale)) {
-      cat("Enter values for prior scale of group-level variance, larger values leads to broader variance, default is 1 \n")
-      for (i in names(pm[todos])) {
-        repeat {
-          ans <- try(eval(parse(text=readline(paste0(i,": ")))),silent=TRUE)
-          if (any(class(ans) %in% c("warning", "error", "try-error")) || is.na(ans) ) {
-            cat("Must provide a numeric value\n")
-          } else {
-            psc[i] <- ans
-            break
-          }
-        }
-      }
-    }
-    if ( is.null(df) ) {
-      if(type == "standard"){
-        cat("Enter value for prior degrees of freedom for group-level variance, same for all parameters, 2 leads to uniform priors on correlations \n")
-
-      } else{
-        cat("Enter value for prior degrees of freedom for group-level variance, same for all parameters")
-      }
-      repeat {
-        ans <- try(eval(parse(text=readline("df : "))),silent=TRUE)
-        if (any(class(ans) %in% c("warning", "error", "try-error")) || is.na(ans) ) {
-          cat("Must provide a numeric value\n")
-        } else {
-          df <- ans
-          break
-        }
-      }
-    }
-  }
-
-  if (verbose & (!update_print | (update_print & (!any(todom) | !any(todos))))) {
-    if (!(update_print & !any(todom))) cat("Prior means\n")
-    if (!update_print) print(pm) else if (any(todom)) print(pm[todom])
-    if (!(update_print & !any(todos))) cat("\nPrior standard deviations\n")
-    if (!update_print) print(ps) else if (any(todos)) print(ps[todos])
-    if(type != "single"){
-      if (!(update_print & !any(todos))) cat("\nPrior scale on the variances\n")
-      if (!update_print) print(ps) else if (any(todoscale)) print(pscale[todoscale])
-    }
-  }
-  if(type != "single"){
-    return(  list(theta_mu_mean  = pm,theta_mu_var = diag(ps^2),
-                  A = psc, v = df))
-  } else{
-    list(theta_mu_mean  = pm,theta_mu_var = diag(ps^2))
-  }
 }
-# if(length(input) == nrow(prior$prior[[pri]])){
-#   input <- diag(input)
-# }
-# if(!identical(dim(input),dim(prior$prior[[pri]]))){
-#   stop("make sure your prior matches the design and the type of model. See ?get_prior_{type}")
-# }
-# } else{
-# if(length(input) != length(prior$prior[[pri]])){
-#   stop("make sure your prior matches the design and the type of model. See ?get_prior_{type}")
-# }
 
 make_prior_new <- function(design, type = "standard", update = NULL,
-                           fill_default = FALSE, ...){
+                           no_default = TRUE, ...){
   if(!is.null(update)) type <- attr(prior, "type")
   prior <- get_objects(design = design, type = type)
   args <- list(...)
-  if(!is.null(args$pmean)) args$theta_mu_mean <- args$pmean
-  if(!is.null(args$psd)) args$theta_mu_var <- args$psd^2
+
+  if(is.character(no_default)){
+    no_default <- rep(F, length(prior$prior))
+    no_default <- T
+  }
+
+  if(!is.null(args$mean)){
+    args$theta_mu_mean <- args$mean
+  }
+  if(!is.null(args$sd)){
+    args$theta_mu_var <- args$sd^2
+  }
   if(!is.null(update)){
     for(name in names(update)){
       if(is.null(args[[name]])){
@@ -610,7 +429,7 @@ make_prior_new <- function(design, type = "standard", update = NULL,
       }
       # Ask the user to manually specify
       if(any(to_do)){
-        tmp <- ask_user_prior(prior, pri, to_do, fill_default)
+        tmp <- ask_user_prior(prior, pri, to_do, !no_default)
         if(!is.null(dim(prior$prior[[pri]]))){
           input <- diag(prior$prior[[pri]][,])
           input[to_do] <- tmp
@@ -638,23 +457,19 @@ ask_user_prior <- function(prior, cur_idx, to_do, fill_default){
     } else{
       cat("Press enter to fill all remaining with default value (", tmp[1], ")")
     }
-    filled <- F
     for(i in 1:length(tmp)){ # Loop over the length of the prior object
-      if(!filled){
-        name <- ifelse(length(to_do) == 1, "", names(tmp)[i])
-        repeat {
-          ans <- try(eval(parse(text=readline(paste0(name,": ")))),silent=TRUE)
-          if(!is.null(ans)){
-            if (any(class(ans) %in% c("warning", "error", "try-error")) || is.na(ans) || !is.numeric(ans)) {
-              cat("Must provide a numeric value\n")
-            } else {
-              tmp[i] <- ans
-              break
-            }
-          } else{
-            filled <- TRUE
+      name <- ifelse(length(to_do) == 1, "", names(tmp)[i])
+      repeat {
+        ans <- try(eval(parse(text=readline(paste0(name,": ")))),silent=TRUE)
+        if(!is.null(ans)){
+          if (any(class(ans) %in% c("warning", "error", "try-error")) || is.na(ans) || !is.numeric(ans)) {
+            cat("Must provide a numeric value\n")
+          } else {
+            tmp[i] <- ans
             break
           }
+        } else{
+          break
         }
       }
     }
@@ -667,11 +482,12 @@ plot_prior_new <- function(prior, design, selection = "mu",
                            mapped = TRUE, layout = NA,
                            N = 1e5, flatten = FALSE, use_par = NULL){
   type <- attr(prior, "type")
+  if(type == "single") selection <- "alpha"
   if (mapped & !(selection %in% c("alpha","mu"))){
     mapped <- FALSE
   }
   if(selection == "alpha") flatten <- TRUE
-  samplers <-  get_objects(design = design, type = type, sample_prior = T,
+  samplers <-  get_objects(design = design, prior = prior, type = type, sample_prior = T,
                           selection = selection, N = N)
   MCMC_samples <- as_mcmc_new(samplers, selection = selection, map = mapped,
                               use_par = use_par, flatten = flatten,

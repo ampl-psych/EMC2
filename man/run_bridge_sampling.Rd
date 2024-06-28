@@ -7,7 +7,7 @@
 run_bridge_sampling(
   samplers,
   filter = "sample",
-  subfilter = 0,
+  subfilter = NULL,
   repetitions = 1,
   cores_for_props = 4,
   cores_per_prop = 1,

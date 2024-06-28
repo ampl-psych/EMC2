@@ -74,8 +74,7 @@ add_info_factor <- function(sampler, prior = NULL, ...){
 #' Note that `map` does not affect the prior used in the sampling process.
 #' @param N How many samples to draw from the prior, the default is 1e5
 #' @param design The design obtained from `make_design()`, required when `map = TRUE`
-#' @param selection  Character. If `sample = TRUE`, what priors to sample from. Options:
-#' `"mu"`, `"variance"`, `"covariance"`, `"full_var"`, `"alpha"`, `"loadings"`.
+#' @param selection  Character. If `sample = TRUE`, what priors to sample from.
 #' @param n_factors Integer. The number of factors.
 #'
 #' @return A list with a single entry of type of samples from the prior (if `sample = TRUE`) or else a prior object
@@ -129,22 +128,20 @@ get_prior_factor <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5
   prior$theta_lambda_invar <-1/prior$theta_lambda_var
   attr(prior, "type") <- "factor"
   if(sample){
-    out <- list()
-    if(!selection %in% c("mu", "variance", "covariance", "correlation", "full_var", "loadings", "residuals")){
+    samples <- list()
+    par_names <- names(attr(design, "p_vector"))
+    if(!selection %in% c("mu", "sigma2", "covariance", "alpha", "correlation", "full_var", "loadings", "residuals")){
       stop("for variant factor, you can only specify the prior on the mean, variance, covariance, loadings, residuals, or the correlation of the parameters")
     }
-    if(selection == "mu"){
-      samples <- mvtnorm::rmvnorm(N, mean = prior$theta_mu_mean,
-                                  sigma = diag(prior$theta_mu_var))
-      if(!is.null(design)){
-        colnames(samples) <- par_names <- names(attr(design, "p_vector"))
-        if(map){
-          samples <- map_mcmc(samples,design,design$model,include_constants=FALSE)
-        }
+    if(selection %in% c("mu", "alpha")){
+      mu <- t(mvtnorm::rmvnorm(N, mean = prior$theta_mu_mean,
+                               sigma = diag(prior$theta_mu_var)))
+      rownames(mu) <- par_names
+      if(selection %in% c("mu")){
+        samples$theta_mu <- mu
       }
-      out$mu <- samples
-      return(out)
-    } else if(selection == "loadings") {
+    }
+    if(selection %in% "loadings") {
       out$loadings <- matrix(rnorm(N, mean = 0, sd = prior$theta_lambda_var^2), ncol = 1)
       colnames(out$loadings) <- "loadings"
       return(out)
@@ -163,7 +160,7 @@ get_prior_factor <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5
         cov_tmp <- lambda %*% diag(psi, n_factors) %*% t(lambda) + diag(sigma)
         var[,,i] <- cov_tmp
       }
-      if (selection == "variance") {
+      if (selection == "sigma2") {
         vars_only <- t(apply(var,3,diag))
         if(!is.null(design)){
           colnames(vars_only) <- names(attr(design, "p_vector"))

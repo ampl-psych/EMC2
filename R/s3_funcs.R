@@ -28,8 +28,8 @@ print.emc <- function(x, ...){
 #' are considered.
 #'
 #' @param object An object of class `emc`
-#' @param selection A character string indicating the parameter group.
-#' Defaults to `mu`, `variance`, and `correlation`. Other options are `covariance`, and `alpha`
+#' @param selection A character string indicating the parameter type
+#' Defaults to `mu`, `sigma2`, and `alpha`.
 #' (i.e., individual-level parameters). See below for more information.
 #' @param probs The quantiles to be computed. Defaults to the the 2.5%, 50% and 97.5% quantiles.
 #' @param filter A character string indicating the sampling stage to be summarized.
@@ -41,8 +41,8 @@ print.emc <- function(x, ...){
 #'
 #' @return A list of summary output.
 #' @export
-summary.emc <- function(object, selection = c("mu", "variance", "correlation"), probs = c(0.025, .5, 0.975),
-                        filter = "sample", subfilter = 0, digits = 3, ...){
+summary.emc <- function(object, selection = c("mu", "sigma2", "alpha"), probs = c(0.025, .5, 0.975),
+                        digits = 3, ...){
   args <- list(...)
   for (name in names(args) ) {
     assign(name, args[[name]])
@@ -50,24 +50,21 @@ summary.emc <- function(object, selection = c("mu", "variance", "correlation"), 
   if(attr(object[[1]], "variant_funs")$type == "single"){
     selection <- "alpha"
   }
-
   out_list <- list()
   for(select in selection){
-    quants <- posterior_summary_new(object, selection = select, probs = probs, filter = filter, subfilter = subfilter, ...)
-    ESS <- es_summary_new(object, selection = select, filter = filter, subfilter = subfilter, stat = NULL, ...)
-    gds <- gd_summary_new(object, selection = select, filter = filter, subfilter = subfilter, stat = NULL, ...)
-    out <- vector("list", length(ESS))
-    for(name in names(ESS)){
-      combined <- cbind(quants[[name]], gds[[name]], ESS[[name]])
-      colnames(combined)[c(ncol(combined)-1, ncol(combined))] <- c("Rhat", "ESS")
-      if(length(ESS) > 1){
-        cat("\n", paste0(select, " ", name), "\n")
+    stats <- get_summary_stat(object, fun = c(get_posterior_quantiles, gelman_diag_robust, effectiveSize), probs = probs,
+                     stat_name = c(paste0(probs*100, "%"), "Rhat", "ESS"), selection = select, ...)
+    for(i in 1:length(stats)){
+      if(length(stats) > 1){
+        cat("\n", paste0(select, " ", names(stats)[i]), "\n")
       } else{
-        cat("\n", name, "\n")
+        cat("\n", names(stats)[i], "\n")
       }
-      print(round(combined, digits))
-      out_list <- append(out_list, combined)
+      stat <- round(stats[[i]], digits)
+      stat[,ncol(stat)] <- round(stat[,ncol(stat)])
+      print(stat)
     }
+    out_list[[select]] <- stat
   }
   return(invisible(out_list))
 }
@@ -85,15 +82,13 @@ summary.emc <- function(object, selection = c("mu", "variance", "correlation"), 
 #' @param filter A character string indicating the sampling stage to be summarized.
 #' Can be `preburn`, `burn`, `adapt`, or `sample`.
 #' @param selection A character string indicating the parameter group.
-#' Defaults to `mu`, `variance`, and `correlation`. Other options are `covariance`, and `alpha`
-#' (i.e., individual-level parameters).
+#' Defaults to `mu`, `sigma2`, and `alpha`.
 #' @param subfilter An integer or vector, defaults to 0. See below for more details.
 #' @param subject An integer or character vector. Plot samples selected subjects.
 #' @param thin An integer, only consider samples that are a multiple of `thin`.
 #' @param ... Further optional arguments.
 #' @export
-plot.emc <- function(x, filter = "sample", selection = c("mu", "variance", "correlation"),
-                     subfilter = 0, subject = NULL, thin = 1,  ...){
+plot.emc <- function(x, filter = "sample", selection = c("mu", "sigma2", "alpha"), ...){
   if(attr(x[[1]], "variant_funs")$type == "single"){
     selection <- "alpha"
   }

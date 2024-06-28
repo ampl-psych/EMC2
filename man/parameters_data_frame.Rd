@@ -4,21 +4,14 @@
 \alias{parameters_data_frame}
 \title{Converts a pmwgs object (or list of such) to a data frame.}
 \usage{
-parameters_data_frame(
-  samples,
-  filter = "sample",
-  thin = 1,
-  subfilter = 0,
-  subject_n = NULL,
-  mapped = FALSE,
-  include_constants = FALSE,
-  stat = NULL,
-  selection = c("alpha", "mu", "variance", "covariance", "correlation", "LL",
-    "epsilon")[2]
-)
+parameters_data_frame(samples, selection = "mu", N = 1000, stat = NULL, ...)
 }
 \arguments{
 \item{samples}{A list of samplers or samplers converted to mcmc objects.}
+
+\item{selection}{String designating parameter type (e.g. mu, sigma2, correlation, alpha)}
+
+\item{stat}{A function that is applied to each column of the data frame}
 
 \item{filter}{A string. Specifies which stage you want to plot.}
 
@@ -27,16 +20,12 @@ parameters_data_frame(
 \item{subfilter}{An integer or vector. If integer it will exclude up until
 that integer. If vector it will include everything in that range.}
 
-\item{subject_n}{Number of alpha iterations to retain for each subject (default NULL = all)}
-
 \item{mapped}{Boolean (default FALSE) if TRUE plot parameters mapped to design
 otherwise sampled parameters}
 
 \item{include_constants}{Include parameters that are not sampled (i.e., constants)}
 
-\item{stat}{A function that is applied to each column of the data frame}
-
-\item{selection}{String designating parameter type (mu, variance, correlation, alpha = default)}
+\item{subject_n}{Number of alpha iterations to retain for each subject (default NULL = all)}
 }
 \value{
 A data frame with one row for each sample (with a subjects column if selection = "alpha")

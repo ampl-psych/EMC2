@@ -11,7 +11,7 @@
 #' @param subject Integer or character vector. Only applicable if `selection = "alpha"`. Will plot only these subject(s).
 #' `NA` (i.e., the default) will plot all individuals.
 #' @param ylim A vector. The y-limits of the chain plot.
-#' @param selection A Character string. Indicates which parameter type to plot (`alpha`, `mu`, `variance`, `covariance`, `correlation`).
+#' @param selection A Character string. Indicates which parameter type to plot (e.g., `alpha`, `mu`, `sigma2`, `correlation`).
 #' `LL` will plot the log-likelihood chains.
 #' @param filter A string. Specifies from which stage you want to plot the MCMC chains (`preburn`, `burn`, `adapt`, `sample`)
 #' @param thin An integer. Will keep only iterations of the MCMC chains that are a multiple of ``thin``.
@@ -111,79 +111,92 @@
 #   }
 # }
 
-#' plot_alpha_recovery
-#' Uses output from plot_pars to plot true vs. estimated (median with CI) alpha
-#' parameters for each subject (plot density must be called with true values passed
-#' through the pars argument).
+#' Plots recovery of parameters
 #'
-#' @param tabs Tables of actual and estimated alpha parameters (with CIs) from plot_pars
-#' @param layout A 2-vector specifying the layout as in `par(mfrow = layout)`
-#' @param do_ci Boolean (Default TRUE). Add CIs to plot?
-#' @param ci_col Color of CI.
-#' @param cap Width of CI cap (passed to arrows)
-#' @param do_rmse Boolean (default FALSE) Add root-mean squared error to plot
-#' instead of default Pearson correlation
-#' @param r_pos Position of Pearson/RMSE (passed to legend)
-#' @param rmse_digits Digits for RMSE
-#' @param pearson_digits Digits for Pearson correlation
-#' @param do_coverage Boolean (default TRUE) add coverage percentage estimate (otherwise
-#' add Spearman correlation)
-#' @param coverage_pos Position of Coverage/Pearson (passed to legend)
-#' @param coverage_digits Digits for coverage
-#' @param spearman_digits Digits for Spearman correlation
+#' Uses output from ``plot_pars`` to plot generating vs. estimated (median with credible
+#' interval; CI) parameters to look at parameter recovery.
 #'
-#' @return Invisible list with RMSE, coverage and Pearson and Spearman correlations.
+#' @param tabs A list of matrices containing true and estimated parameters (with CIs), output from `plot_pars()`
+#' @param layout A vector specifying the layout as in `par(mfrow = layout())`
+#' @param do_CI A Boolean. Add CIs to the plot or not? Defaults to `TRUE`.
+#' @param ci_col A character string. Color code of credible interval.
+#' @param cap Numeric. Width of the credible interval caps (passed to ``arrows()``)
+#' @param correlation String. ``pearson`` or ``spearman``. Which correlation type should be computed
+#' and included in the plot?
+#' @param cor_pos Character string. Position of the correlation (passed to ``legend()``)
+#' @param stat Character string. 95 percent ``coverage`` or ``rmse``. Which statistic
+#' should be included in the plot?
+#' @param stat_pos Character string. Position of `stat` within the plot (passed to ``legend()``)
+#' @param digits Integer. Number of digits included in the plot for the correlation and `stat`.
+#'
+#' @return Invisible list with RMSE, coverage, and Pearson and Spearman correlations.
+#' @examples
+#' # Make up some values that resemble posterior samples
+#' # Normally this would be true values that were used to simulate the data
+#' pmat <- matrix(rnorm(12, mean = c(-1, -.6, -.4, -1.5), sd = .01), ncol = 4, byrow = TRUE)
+#' # The matrix needs to have the appropriate names
+#' # Conventionally this would be created before one makes data with true values
+#' colnames(pmat) <- c("m", "m_lMd", "s", "t0")
+#' rownames(pmat) <- c("as1t", "bd6t", "bl1t")
+#' # First use plot_pars
+#' recovered_alpha <- plot_pars(samplers_LNR, selection = "alpha", pars = pmat, do_plot = FALSE)
+#' # Now use the output to make the recovery plots
+#' recovery_plot(recovered_alpha, correlation = "pearson", stat = "rmse")
+#'
+#' # Similarly we can plot other group-level parameters
+#' recovered_mu <- plot_pars(samplers_LNR, selection = "mu", pars = pmat[1,], do_plot = FALSE)
+#' recovery_plot(recovered_mu, correlation = "spearman", stat = "coverage")
 #' @export
 
-plot_alpha_recovery <- function(tabs,layout=c(2,3),
-                                do_ci = TRUE,ci_col="grey",cap=.05,
-                                do_rmse=FALSE,r_pos="topleft",
-                                rmse_digits=3,pearson_digits=2,
-                                do_coverage=TRUE,coverage_pos="bottomright",
-                                coverage_digits=1,spearman_digits=2)
-  # Takes tables output by plot_pars with par and plots recovery
+recovery_plot <- function(samplers, true_pars, layout=c(2,3),
+                          do_CI = TRUE,ci_col="grey",cap=.05,
+                          correlation = "pearson",
+                          cor_pos="topleft",
+                          stat = "coverage",
+                          stat_pos="bottomright",
+                          digits = 3)
+  # Idea: take any samplers object make it into MCMC
+  # Plot points + ci for both if true_pars is a set of samplers
+  # Otherwise plot only recovered as CI.
 {
-  par(mfrow=layout)
-  pnams <- dimnames(tabs[[1]])[[2]]
-  if (!do_rmse) {
-    rmse <- NULL
-    pearson <- setNames(numeric(length(pnams)),pnams)
-  } else {
-    pearson <- NULL
-    rmse <- setNames(numeric(length(pnams)),pnams)
+  if(!is.list(tabs)){
+    par(mfrow = c(1,1))
+    pnams <- attr(tabs, "selection")
+  } else{
+    par(mfrow=layout)
+    pnams <- dimnames(tabs[[1]])[[2]]
   }
-  if (do_coverage) {
-    coverage <- NULL
-    spearman <- setNames(numeric(length(pnams)),pnams)
-  } else {
-    spearman=NULL
-    coverage <- setNames(numeric(length(pnams)),pnams)
-  }
+  pearson <- spearman <- rmse <- coverage <- setNames(numeric(length(pnams)),pnams)
+
   for (p in pnams) {
-    xy <- do.call(rbind,lapply(tabs,function(x){x[,p]}))
+    if(!is.list(tabs)){
+      xy <- t(tabs)
+    } else{
+      xy <- do.call(rbind,lapply(tabs,function(x){x[,p]}))
+    }
     ylim <- c(min(xy),max(xy))
     plot(xy[,"true"],xy[,"50%"],ylim=ylim,xlim=ylim,main=p,
          xlab="Generating",ylab="Estimated")
     abline(a=0,b=1,lty=3)
-    if (do_ci) for (i in 1:dim(xy)[1]) {
+    if (do_CI) for (i in 1:dim(xy)[1]) {
       arrows(xy[i,"true"],xy[i,"50%"],xy[i,"true"],xy[i,"97.5%"],
              col=ci_col,angle=90,length=cap)
       arrows(xy[i,"true"],xy[i,"50%"],xy[i,"true"],xy[i,"2.5%"],
              col=ci_col,angle=90,length=cap)
     }
-    if (do_rmse) {
-      rmse[p] <- sqrt(mean((xy[,"true"] - xy[,"50%"])^2))
-      legend(r_pos,paste("RMSE = ",round(rmse[p],rmse_digits)),bty="n")
-    } else {
-      pearson[p] <- cor(xy[,"true"],xy[,"50%"],method="pearson")
-      legend(r_pos,paste("r(pearson) = ",round(pearson[p],pearson_digits)),bty="n")
+    pearson[p] <- cor(xy[,"true"],xy[,"50%"],method="pearson")
+    spearman[p] <- cor(xy[,"true"],xy[,"50%"],method="pearson")
+    rmse[p] <- sqrt(mean((xy[,"true"] - xy[,"50%"])^2))
+    coverage[p] = 100*mean((xy[,"97.5%"] > xy[,"true"])  & (xy[,"2.5%"] < xy[,"true"]))
+    if(correlation == "pearson"){
+      legend(cor_pos,paste("r(pearson) = ",round(pearson[p],digits)),bty="n")
+    } else if(correlation == "spearman"){
+      legend(cor_pos,paste("r(spearman) = ",round(spearman[p],digits)),bty="n")
     }
-    if (do_coverage) {
-      coverage[p] = 100*mean((xy[,"97.5%"] > xy[,"true"])  & (xy[,"2.5%"] < xy[,"true"]))
-      legend(coverage_pos,paste("95% Coverage = ",round(coverage[p],coverage_digits)),bty="n")
-    } else {
-      spearman[p] <- cor(xy[,"true"],xy[,"50%"],method="spearman")
-      legend(coverage_pos,paste("r(spearman) = ",round(spearman[p],spearman_digits)),bty="n")
+    if (stat == "rmse") {
+      legend(stat_pos,paste("RMSE = ",round(rmse[p],digits)),bty="n")
+    } else if(stat == "coverage") {
+      legend(stat_pos,paste("95% Coverage = ",round(coverage[p],digits)),bty="n")
     }
   }
   invisible(list(RMSE = rmse,COVERAGE = coverage,PEARSON=pearson,SPEARMAN=spearman))
@@ -287,7 +300,7 @@ plot_defective_density <- function(data,subject=NULL,factors=NULL,
     invisible(tapply(correct_fun(dat),dat$subjects,mean))
 }
 
-robust_hist <- function(ps, breaks = 50, cutoff = 0.002, main = "",
+robust_hist <- function(ps, breaks = 50, cutoff = 0.0015, main = "",
                         cex.lab = 1, cex.main = 1.5, prob = TRUE,
                         xlab = "", do_plot = TRUE, ...){
   ps <- ps[abs(ps) < 1000]
@@ -335,7 +348,7 @@ robust_density <- function(ps,r,bw,adjust,use_robust=FALSE)
 #' @param layout A vector specifying the layout as in `par(mfrow = layout)`.
 #' If `NA` or `NULL`, the current plot layout is used.
 #' @param selection A Character string. Indicates which parameter type to plot
-#' (`alpha`, `mu`, `variance`, `covariance`, or `correlation`).
+#' (e.g., `alpha`, `mu`, `covariance`, or `correlation`).
 #' @param use_par Character vector of names of parameters to plot. The default `NULL`
 #' plots all
 #' @param filter A string. Specifies from which stage you want to plot the densities (`preburn`, `burn`, `adapt`, `sample`)
@@ -371,242 +384,9 @@ robust_density <- function(ps,r,bw,adjust,use_robust=FALSE)
 #' # For a set of samplers plot prior and posterior densities:
 #' plot_pars(samplers)
 #' # Or just get the quantiles and omit the plot
-#' quants <- plot_pars(samplers, selection = "variance", do_plot = FALSE)
+#' quants <- plot_pars(samplers, selection = "sigma2", do_plot = FALSE)
 #' print(quants)
 #' }
-# plot_pars <- function(samplers,layout=c(2,3),use_par=NULL,
-#                       selection="mu",filter="sample",thin=1,subfilter=0,mapped=FALSE,
-#                       plot_prior=TRUE,xlim=NULL,ylim=NULL,prior_xlim=c(.1,.9),
-#                       show_chains=FALSE,do_plot=TRUE,subject=NA,add_means=FALSE,
-#                       pars=NULL,probs=c(.025,.5,.975),bw = "nrd0", adjust = 1,
-#                       lpos="topright",digits=3)
-#
-# {
-#   n_prior <- 1e3
-#   pmwg_mcmc <- samplers
-#   if (mapped & !(selection %in% c("mu","alpha")))
-#     stop("mapped only available for mu and alpha")
-#
-#   if (show_chains & plot_prior)
-#     warning("Prior plots not implemented for show_chains=TRUE")
-#   do_contraction <- TRUE
-#   if (do_contraction & !plot_prior) do_contraction <- FALSE
-#
-#   if (is.list(pars)) pars <- do.call(rbind,lapply(pars,function(x)x[2,]))
-#
-#   if (!(inherits(pmwg_mcmc, c("mcmc","mcmc.list")))) {
-#     if (plot_prior) {
-#       psamples <- get_prior_samples(pmwg_mcmc,selection,filter,thin,subfilter,n_prior)
-#       if (mapped) psamples <- map_mcmc(psamples,design=attr(pmwg_mcmc,"design_list")[[1]],
-#                                        model=attr(pmwg_mcmc,"model_list")[[1]])
-#       if (!is.null(attr(psamples,"isConstant")))
-#         psamples <- psamples[,!attr(psamples,"isConstant"),drop=FALSE]
-#     }
-#     if (inherits(pmwg_mcmc, "pmwgs")){
-#       pmwg_mcmc <- as_Mcmc(pmwg_mcmc, selection=selection,filter=filter,thin=thin,subfilter=subfilter)
-#     } else {
-#       if (mapped & !is.null(pars)) {
-#         pars <- map_mcmc(pars,design=attr(pmwg_mcmc,"design_list")[[1]],
-#                          model=attr(pmwg_mcmc,"model_list")[[1]])
-#         if (!is.null(attr(pars,"isConstant")))
-#           pars <- pars[,!attr(pars,"isConstant"),drop=FALSE]
-#       }
-#       pmwg_mcmc <- as_mcmc.list(pmwg_mcmc,selection=selection,filter=filter,
-#                                 thin=thin,subfilter=subfilter,mapped=mapped)
-#     }
-#   } else plot_prior <- FALSE
-#   if (attr(pmwg_mcmc,"selection")=="LL")
-#     stop("No density plots for LL\n")
-#   no_layout <- any(is.na(layout)) | is.null(layout)
-#   chains <- 0
-#
-#
-#   if (attr(pmwg_mcmc,"selection") == "alpha") {
-#     snams <- names(pmwg_mcmc)
-#     if (any(is.na(subject))) subject <- snams
-#     if (is.numeric(subject)) subject <- snams[subject]
-#     if (!all(subject %in% snams))
-#       stop("Subject not present\n")
-#     if (!is.null(pars)) {
-#       if (!is.null(dim(pars))) pars <- t(pars) else {
-#         if (length(subject)!=1) reps <- length(subject) else reps <- 1
-#         pars <- matrix(rep(pars,each=reps),ncol=1,dimnames=list(names(pars),subject) )
-#       }
-#     }
-#     if (!is.null(pars) && !is.matrix(pars))
-#       stop("pars must be a matrix for alpha")
-#     if (inherits(pmwg_mcmc[[1]], "mcmc.list")) {
-#       selection <- attr(pmwg_mcmc,"selection")
-#       pmwg_mcmc_combined <- lapply(pmwg_mcmc,function(x){do.call(rbind,x)})
-#       attr(pmwg_mcmc_combined,"selection") <- selection
-#       if (show_chains) chains <- length(pmwg_mcmc[[1]]) else
-#         pmwg_mcmc <- pmwg_mcmc_combined
-#     } else pmwg_mcmc_combined <- pmwg_mcmc
-#     tabs <- lapply(pmwg_mcmc_combined,function(x){apply(x,2,quantile,probs=probs)})
-#     # if (plot_prior) dimnames(psamples) <- list(NULL,colnames(pmwg_mcmc_combined[[1]]))
-#     if (do_contraction)
-#       contraction <- setNames(vector(mode="list",length=length(subject)),subject)
-#     if (!is.null(use_par)) {
-#       ok <- colnames(pmwg_mcmc_combined[[1]]) %in% use_par
-#       if (!any(ok)) stop("use_par did not specify parameters that are present")
-#       tabs <- lapply(tabs,function(x) x[,ok,drop=FALSE])
-#     } else ok <- rep(TRUE,length(colnames(pmwg_mcmc_combined[[1]])))
-#     for (i in subject) {
-#       if (do_plot) {
-#         if (!no_layout) par(mfrow=layout)
-#         if (do_contraction)
-#           contractioni <- setNames(numeric(length(colnames(pmwg_mcmc_combined[[i]]))),
-#                                    colnames(pmwg_mcmc_combined[[i]]))
-#         for (j in  colnames(pmwg_mcmc_combined[[i]])[ok] ) {
-#           if (chains>0) {
-#             dens <- lapply(pmwg_mcmc[[i]],function(x){density(x[,j],bw=bw,adjust=adjust)})
-#             if (!is.null(xlim)) {
-#               if (!is.matrix(xlim)) xlimi <- xlim else xlimi <- xlim[j,]
-#             } else {
-#               xlimi <- c(min(unlist(lapply(dens,function(x){min(x$x)}))),
-#                          max(unlist(lapply(dens,function(x){max(x$x)}))))
-#               if (!is.null(pars)) xlimi <- c(min(c(pars[j,i]-abs(pars[j,i])/10,xlimi[1])),
-#                                              max(c(pars[j,i]+abs(pars[j,i])/10,xlimi[2])))
-#             }
-#             if (!is.null(ylim)) {
-#               if (!is.matrix(ylim)) ylimi <- ylim else ylimi <- ylim[j,]
-#             } else ylimi <- c(0,max(unlist(lapply(dens,function(x){max(x$y)}))))
-#             main <- paste0(attr(pmwg_mcmc,"selection")," s",i)
-#             plot(dens[[1]],xlab=j,main=main,col=1,xlim=xlimi,ylim=ylimi)
-#             if (chains>1) for (k in 2:chains) lines(dens[[k]],col=k)
-#           } else {
-#             dens <- density(pmwg_mcmc[[i]][,j],bw=bw,adjust=adjust)
-#             if (plot_prior) pdens <- density(psamples[,j],bw=bw,adjust=adjust)
-#             if (!is.null(xlim)) {
-#               if (!is.matrix(xlim)) xlimi <- xlim else xlimi <- xlim[j,]
-#             } else if (plot_prior & !is.null(prior_xlim)) {
-#               xlimi <- c(quantile(pdens$x,probs=prior_xlim[1]),
-#                          quantile(pdens$x,probs=prior_xlim[2]))
-#             } else {
-#               xlimi <- c(min(dens$x),max(dens$x))
-#               if (!is.null(pars)) xlimi <- c(min(c(pars[j,i]-abs(pars[j,i])/10,xlimi[1])),
-#                                              max(c(pars[j,i]+abs(pars[j,i])/10,xlimi[2])))
-#             }
-#             if (!is.null(ylim)) {
-#               if (!is.matrix(ylim)) ylimi <- ylim else ylimi <- ylim[j,]
-#             } else {
-#               ylimi <- c(0,max(dens$y))
-#               if (plot_prior) ylimi[2] <- max(c(ylimi[2],pdens$y))
-#             }
-#             main <- paste0(attr(pmwg_mcmc,"selection")," s",i)
-#             plot(dens,xlab=j,xlim=xlimi,ylim=ylimi,main=main)
-#             if (plot_prior) lines(pdens,col="red")
-#             if (do_contraction) {
-#               contractioni[j] <- 1-(var(pmwg_mcmc[[i]][,j])/var(psamples[,j]))
-#               legend(lpos,legend=round(contractioni[j],digits),bty="n",title="Contraction")
-#             }
-#           }
-#           if (!is.null(pars)) abline(v=pars[j,i])
-#         }
-#       }
-#       if (do_plot & do_contraction) contraction[[i]] <- contractioni
-#       if (!is.null(pars)) {
-#         tabs[[i]] <- rbind(true=pars[dimnames(tabs[[i]])[[2]],i],tabs[[i]])
-#         tabs[[i]] <- rbind(tabs[[i]],Miss=tabs[[i]][3,]-tabs[[i]][1,])
-#       }
-#     }
-#     tabs <- tabs[as.character(subject)]
-#     if (add_means)
-#       attr(tabs,"mean") <- lapply(pmwg_mcmc_combined,function(x){apply(x,2,mean)})
-#     if (do_contraction & exists("contraction"))
-#       attr(tabs,"contraction") <- do.call(rbind,contraction)
-#     invisible(tabs)
-#   } else {
-#     if (!is.na(subject)) warning("Selecting a subject has no effect on population parameters")
-#     if (inherits(pmwg_mcmc, "mcmc.list")) {
-#       selection <- attr(pmwg_mcmc,"selection")
-#       pmwg_mcmc_combined <- do.call(rbind,pmwg_mcmc)
-#       attr(pmwg_mcmc_combined,"selection") <- selection
-#       if (show_chains) chains <- length(pmwg_mcmc) else
-#         pmwg_mcmc <- pmwg_mcmc_combined
-#     } else pmwg_mcmc_combined <- pmwg_mcmc
-#     if(!is.null(use_par)){
-#       ok <- colnames(pmwg_mcmc_combined) %in% use_par
-#       if (!any(ok)) stop("use_par did not specify parameters that are present")
-#     }
-#
-#     if (!is.null(pars)) {
-#       if ( !is.vector(pars) ) {
-#         if (attr(pmwg_mcmc,"selection") == "mu")
-#           stop("pars must be a vector for mu")
-#         if (!is.matrix(pars))
-#           stop("pars must be a vector or matrix")
-#         if (attr(pmwg_mcmc,"selection") == "variance")
-#           pars <- diag(pars) else
-#             pars <- pars[lower.tri(pars)]
-#       }
-#       if(is.null(use_par)){
-#         if (length(pars) != dim(pmwg_mcmc_combined)[2])
-#           stop("pars is wrong length")
-#         names(pars) <- colnames(pmwg_mcmc_combined)
-#       } else{
-#         if (length(pars) != length(use_par))
-#           stop("pars is wrong length")
-#         names(pars) <- use_par
-#       }
-#     }
-#     tabs <- rbind(true=pars,apply(pmwg_mcmc_combined,2,quantile,probs=probs))
-#     if (!is.null(pars)) tabs <- rbind(tabs,Miss=tabs[3,]-tabs[1,])
-#     if (add_means) attr(tabs,"mean") <- apply(pmwg_mcmc_combined,2,mean)
-#     if (!no_layout) par(mfrow=layout)
-#     if (plot_prior) dimnames(psamples) <- list(NULL,colnames(pmwg_mcmc_combined))
-#     if (do_contraction)
-#       contraction <- setNames(numeric(length(colnames(pmwg_mcmc_combined))),colnames(pmwg_mcmc_combined))
-#     if (!is.null(use_par)) {
-#       tabs <- tabs[,ok,drop=FALSE]
-#     } else ok <- rep(TRUE,length(colnames(pmwg_mcmc_combined)))
-#     if (do_plot) for (j in colnames(pmwg_mcmc_combined)[ok] ) {
-#       if (chains > 0) {
-#         dens <- lapply(pmwg_mcmc,function(x){density(x[,j],bw=bw,adjust=adjust)})
-#         if (!is.null(xlim)) xlimi <- xlim else {
-#           xlimi <- c(min(unlist(lapply(dens,function(x){min(x$x)}))),
-#                      max(unlist(lapply(dens,function(x){max(x$x)}))))
-#           if (!is.null(pars)) xlimi <- c(min(c(pars[j,i]-abs(pars[j,i])/10,xlimi[1])),
-#                                          max(c(pars[j,i]+abs(pars[j,i])/10,xlimi[2])))
-#         }
-#         if (!is.null(ylim)) ylimi <- ylim else
-#           ylimi <- c(0,max(unlist(lapply(dens,function(x){max(x$y)}))))
-#         main <- j
-#         plot(dens[[1]],xlab=attr(pmwg_mcmc,"selection"),main=main,
-#              col=1,xlim=xlimi,ylim=ylimi)
-#         if (chains>1) for (k in 2:chains) lines(dens[[k]],col=k)
-#       } else {
-#         dens <- density(pmwg_mcmc[,j],bw=bw,adjust=adjust)
-#         if (plot_prior)  pdens <- robust_density(psamples[,j],range(pmwg_mcmc[,j]),
-#                                                  bw=bw,adjust=adjust,use_robust=!(attr(pmwg_mcmc,"selection") %in% c("mu","correlation")))
-#         if (!is.null(xlim)) xlimi <- xlim else if (plot_prior & !is.null(prior_xlim))
-#           xlimi <- c(quantile(pdens$x,probs=prior_xlim[1]),
-#                      quantile(pdens$x,probs=prior_xlim[2])) else {
-#                        xlimi <- c(min(dens$x),max(dens$x))
-#                        if (!is.null(pars)) xlimi <- c(min(c(pars[j,i]-abs(pars[j,i])/10,xlimi[1])),
-#                                                       max(c(pars[j,i]+abs(pars[j,i])/10,xlimi[2])))
-#                      }
-#         if (!is.null(ylim)) ylimi <- ylim else {
-#           ylimi <- c(0,max(dens$y))
-#           if (plot_prior) ylimi[2] <- max(c(ylimi[2],pdens$y))
-#         }
-#         main <- j
-#         plot(dens,xlim=xlimi,ylim=ylimi,xlab=attr(pmwg_mcmc,"selection"),main=main)
-#         if (plot_prior) {
-#           lines(pdens,col="red")
-#           if (do_contraction) {
-#             contraction[j] <- 1-(var(pmwg_mcmc[,j])/var(psamples[,j]))
-#             legend(lpos,legend=round(contraction[j],digits),bty="n",title="Contraction")
-#           }
-#         }
-#       }
-#       if (!is.null(pars)) abline(v=pars[j])
-#     }
-#     if (do_contraction & exists("contraction")) attr(tabs,"contraction") <- contraction
-#     invisible(tabs)
-#   }
-# }
-
 
 plot_roc <- function(data,signalFactor="S",zROC=FALSE,qfun=NULL,main="",lim=NULL)
 
@@ -1262,13 +1042,13 @@ check_run <- function(samples,pdf_name="check_run.pdf",interactive=TRUE,
 #' pairs_posterior(samplers, selection = "alpha")
 #'
 #' # We can also choose group-level parameters and subsets of the parameter space
-#' pairs_posterior(samplers, use = c("v", "B", "t0"), selection = "variance")
+#' pairs_posterior(samplers, use = c("v", "B", "t0"), selection = "sigma2")
 #' }
 #' @export
 
 pairs_posterior <- function(samplers,filter="sample",thin=1,subfilter=0,mapped=FALSE,
-                            selection=c("alpha","mu","variance","covariance","correlation")[1],
-                            scale.subjects=TRUE,use_par=NULL,do_plot=TRUE,maxp=500)
+                            selection="mu",
+                            scale.subjects=TRUE,use_par=NULL,do_plot=TRUE,maxp=500, ...)
 {
 
   panel.hist <- function(x, ...)
@@ -1301,7 +1081,7 @@ pairs_posterior <- function(samplers,filter="sample",thin=1,subfilter=0,mapped=F
   }
 
   pmat <- parameters_data_frame(samplers,filter=filter,thin=thin,subfilter=subfilter,
-                                mapped=mapped,selection=selection)
+                                mapped=mapped,selection=selection, ...)
   if (!is.null(use_par)) {
     if (is.numeric(use_par)) {
       if (any(use_par<1) || any(use_par>dim(pmat))) stop("use_par outside parameter range")
@@ -1356,152 +1136,351 @@ pairs_posterior <- function(samplers,filter="sample",thin=1,subfilter=0,mapped=F
 #'
 #' @export
 
-profile_plot <- function(pname,p_vector,p_min,p_max,data, design, n_point=100,main="",cores=1)
+profile_plot <- function(data, design, p_vector, layout = NA,
+                         p_min = NULL,p_max = NULL,
+                         n_point=100,main="",n_cores=1,
+                         true_plot_args = list(),
+                         ...)
 
 {
-  dadm <- design_model(data, design, verbose = FALSE)
+  dots <- list(...)
   lfun <- function(i,x,p_vector,pname,dadm) {
     p_vector[pname] <- x[i]
     attr(dadm,"model")()$log_likelihood(p_vector,dadm)
   }
-
-  x <- seq(p_min,p_max,length.out=n_point)
-  ll <- unlist(mclapply(1:n_point,lfun,dadm=dadm,x=x,p_vector=p_vector,pname=pname,mc.cores = cores))
-  plot(x,ll,type="l",xlab=pname,ylab="LL",main=main)
-  abline(v=p_vector[pname])
-  c(true=p_vector[pname],max=x[which.max(ll)],miss=p_vector[pname]-x[which.max(ll)])
+  if(!identical(names(p_min), names(p_max))) stop("p_min and p_max should be specified for the same parameters")
+  pars_to_use <- p_vector
+  if(!is.null(names(p_min))){
+    pars_to_use <- pars_to_use[names(pars_to_use) %in% names(p_min)]
+  } else{
+    if(!is.null(p_min)){
+      if(length(p_vector) != length(p_min) & length(p_min) != 1) stop("Without names you can either specify p_min/p_max for one parameter or for all parameters")
+    }
+  }
+  if(any(is.na(layout))){
+    par(mfrow = coda:::set.mfrow(Nchains = 1, Nparms = length(pars_to_use),
+                                 nplots = 1))
+  } else{par(mfrow=layout)}
+  if(is.null(dots$dadm)) dadm <- design_model(data, design, verbose = FALSE)
+  for(p in 1:length(pars_to_use)){
+    cur_name <- names(pars_to_use)[p]
+    cur_par <- pars_to_use[p]
+    if(!is.null(p_min) & !is.null(p_max)){
+      pmin_cur <- p_min[p]
+      pmax_cur <- p_max[p]
+    } else{
+      pmin_cur <- cur_par - .5
+      pmax_cur <- cur_par + .5
+    }
+    x <- seq(pmin_cur,pmax_cur,length.out=n_point)
+    ll <- unlist(mclapply(1:n_point,lfun,dadm=dadm,x=x,p_vector=p_vector,pname=cur_name,mc.cores = n_cores))
+    do.call(plot, c(list(x,ll), fix_dots_plot(add_defaults(dots, type="l",xlab=cur_name,ylab="LL",main=main))))
+    do.call(abline, c(list(v=cur_par), fix_dots_plot(add_defaults(true_plot_args, lty = 2))))
+  }
+  # c(true=p_vector[pname],max=x[which.max(ll)],miss=p_vector[pname]-x[which.max(ll)])
 }
 
-
-
-# plot_pars_new <- function(samplers, layout = NA)
-
-plot_chains_new <- function(samplers,layout=NA,subject=NULL,ylim=NULL, map = FALSE,
-                        selection="mu",filter="sample",thin=1,subfilter=NULL,
-                        plot_acf=FALSE, by_subject = FALSE, use_par = NULL,
-                        flatten = FALSE)
+plot_chains_new <- function(samplers, selection = "mu", layout=NA, plot_acf=FALSE, ...)
 {
-  if(!is.null(subject) & length(subject) == 1) by_subject <- TRUE
-  MCMC_samples <- as_mcmc_new(samplers, selection = selection, filter = filter,
-                              thin = thin, subfilter = subfilter, by_subject = by_subject,
-                              subject = subject, use_par = use_par, flatten = flatten,
-                              map = map)
-  auto.layout <- any(is.na(layout))
-  if (!auto.layout) par(mfrow=layout)
+  dots <- list(...)
+  if(plot_acf) dots <- add_defaults(dots, chain = 1)
+  MCMC_samples <- do.call(as_mcmc_new, c(list(samplers, selection = selection), fix_dots(dots, as_mcmc_new)))
+
   for(i in 1:length(MCMC_samples)){
-    if(i == 1 & auto.layout){
-      mfrow <- coda:::set.mfrow(Nchains = length(MCMC_samples[[1]]), Nparms = ncol(MCMC_samples[[1]][[1]]),
-                         nplots = 1)
-      oldpar <- par(mfrow = mfrow)
-    } else if(auto.layout){
-      oldpar <- par(mfrow = mfrow)
-    }
+    if(any(is.na(layout))){
+      par(mfrow = coda:::set.mfrow(Nchains = length(MCMC_samples[[1]]), Nparms = max(ncol(MCMC_samples[[1]][[1]]), length(MCMC_samples)),
+                                   nplots = 1))
+    } else{par(mfrow=layout)}
     if (plot_acf){
-      for (j in colnames(MCMC_samples[[i]][[1]])){
-        acf(MCMC_samples[[i]][[1]][,j],main=paste0("Chain ",1,": ",j), ylab = names(MCMC_samples)[[i]])
+      for(k in 1:length(MCMC_samples[[i]])){
+        for (j in colnames(MCMC_samples[[i]][[1]])){
+          cur_dots <- dots
+          x_name <- ifelse(length(MCMC_samples) == 1, names(MCMC_samples)[i], paste0(selection, ": ", names(MCMC_samples)[i]))
+          cur_dots <- add_defaults(cur_dots, ylab = "acf", main = paste0("Chain ",dots$chain[k],": ",j), xlab = x_name)
+          do.call(acf, c(list(MCMC_samples[[i]][[k]][,j]), fix_dots_plot(cur_dots)))
+        }
       }
+
     } else {
-      plot(MCMC_samples[[i]],auto.layout=FALSE,density=FALSE,
-           xlab="Iterations",ask=FALSE,trace=TRUE,
-           ylab=names(MCMC_samples)[[i]],smooth=FALSE,ylim=ylim)
+      cur_dots <- dots
+      x_name <- ifelse(length(MCMC_samples) == 1, names(MCMC_samples)[i], paste0(selection, ": ", names(MCMC_samples)[i]))
+      cur_dots <- add_defaults(cur_dots, xlab = x_name)
+      do.call(plot, c(list(MCMC_samples[[i]], auto.layout = FALSE, density = FALSE, ask = FALSE,smooth = FALSE),
+                      fix_dots_plot(cur_dots)))
     }
   }
 }
 
-# psamples_lim <- apply(psamples[[1]][[1]][[1]], 2, robust_hist, do_plot = FALSE)
-# psamples_lim <- do.call(cbind, lapply(psamples_lim, sample, size = min(unlist(lapply(psamples_lim, length)))))
-# MCMC_psamples <-
-
-plot_pars_new <- function(samplers,layout=NA,subject=NULL,ylim=NULL, map = FALSE,
-                            selection="mu",filter="sample",thin=1,subfilter=NULL,
-                            plot_acf=FALSE, by_subject = FALSE, use_par = NULL,
-                          show_chains = FALSE, plot_prior = TRUE,
-                          use_prior_lim = TRUE, flatten = FALSE, lpos = "topright")
+plot_pars_new <- function(samplers,layout=NA, selection="mu", show_chains = FALSE, plot_prior = TRUE, N = 1e4,
+                          use_prior_lim = !any(all_subjects), lpos = "topright", true_pars = NULL, all_subjects = FALSE,
+                          prior_plot_args = list(), true_plot_args = list(), ...)
 {
-  if(!is.null(subject) & length(subject) == 1) by_subject <- TRUE
-  MCMC_samples <- as_mcmc_new(samplers, selection = selection, filter = filter, map = map,
-                              thin = thin, subfilter = subfilter, by_subject = by_subject,
-                              subject = subject, use_par = use_par, flatten = flatten)
-  auto.layout <- any(is.na(layout))
+  dots <- list(...)
+  type <- attr(samplers[[1]], "variant_funs")$type
+  if(length(dots$subject) == 1) dots$by_subject <- TRUE
+  if(all_subjects){
+    dots$by_subject <- TRUE; show_chains <- TRUE; selection <- "alpha"
+    true_pars <- NULL
+    if(is.null(dots$lwd)) dots$lwd <- .3
+  }
+
+  MCMC_samples <- do.call(as_mcmc_new, c(list(samplers, selection = selection), fix_dots(dots, as_mcmc_new)))
+  if(all_subjects) {
+    MCMC_samples <- list(lapply(MCMC_samples, function(x) do.call(rbind, x)))
+    names(MCMC_samples) <- "test"
+  }
   if(plot_prior){
     psamples <-  get_objects(sampler = samplers, design = attr(samplers,"design_list")[[1]],
-                             type = attr(samplers[[1]], "variant_funs")$type, sample_prior = T,
-                             selection = selection, N = 1e4, thin = thin, subfilter = subfilter)
-    pMCMC_samples <- as_mcmc_new(psamples, selection = selection, map = map,
-                            use_par = use_par, flatten = flatten, by_subject = by_subject,
-                            type = attr(samplers[[1]], "variant_funs")$type)
+                             type = type, sample_prior = T,
+                             selection = selection, N = N)
+    pMCMC_samples <- do.call(as_mcmc_new, c(list(psamples, selection = selection, type = type),
+                                           fix_dots(dots, as_mcmc_new, exclude = c("thin", "subfilter", "chain", "subject"))))
     if(length(pMCMC_samples) != length(MCMC_samples)) pMCMC_samples <- rep(pMCMC_samples, length(MCMC_samples))
   }
 
+  true_MCMC_samples <- NULL
+  if(!is.null(true_pars)){
+    if(!is(true_pars, "emc")){
+      if(selection == "sigma2" & !is.matrix(true_pars)) true_pars <- diag(true_pars)
+      true_pars <- do.call(as_mcmc_new, c(list(samplers, selection = selection, type = type, true_pars = true_pars),
+                                          fix_dots(dots, as_mcmc_new, exclude = c("thin", "subfilter", "chain"))))
+    } else{
+      true_MCMC_samples <- do.call(as_mcmc_new, c(list(true_pars, selection = selection), fix_dots(dots, as_mcmc_new)))
+      true_pars <- NULL
+    }
+  }
+
+
   n_objects <- length(MCMC_samples)
-  if (!auto.layout) par(mfrow=layout)
+  contraction_list <- list()
   for(i in 1:n_objects){
     cur_mcmc <- MCMC_samples[[i]]
     merged <- do.call(rbind, cur_mcmc) # Need for contraction calculation
-    if(!show_chains) cur_mcmc <- list(merged)
+    if(!show_chains) {
+      cur_mcmc <- list(merged)
+      if(!is.null(true_MCMC_samples)) true_MCMC_samples[[i]] <- list(do.call(rbind, true_MCMC_samples[[i]]))
+    }
     n_chains <- length(cur_mcmc)
     n_pars <- ncol(merged)
-    if(i == 1 & auto.layout){
-      mfrow <- coda:::set.mfrow(Nchains = n_chains, Nparms = n_pars,nplots = 1)
-      oldpar <- par(mfrow = mfrow)
-    } else if(auto.layout){
-      oldpar <- par(mfrow = mfrow)
+    cur_contraction <- setNames(numeric(n_pars), colnames(merged))
+    if(any(is.na(layout))){
+      par(mfrow = coda:::set.mfrow(Nchains = n_chains, Nparms = n_pars, nplots = 1))
+    } else{
+      par(mfrow=layout)
     }
-
     for(l in 1:n_pars){
-      denses <- lapply(cur_mcmc, function(x) density(x[,l]))
-      xlim <- lapply(cur_mcmc, function(x) return(c(min(x[,l]), max(x[,l]))))
-      ylim <- lapply(denses, function(x) return(c(min(x$y), max(x$y))))
-      xlim <- c(min(unlist(xlim)), max(unlist(xlim)))
-      ylim <- c(min(unlist(ylim)), max(unlist(ylim)))
+      denses <- lapply(cur_mcmc, function(x) do.call(density, c(list(x[,l]), fix_dots(dots, density.default, consider_dots = FALSE))))
+      xlim <- range(c(sapply(cur_mcmc, function(x) return(range(x[,l]))), true_pars[[i]][[1]][,l]))
+      ylim <- range(sapply(denses, function(x) return(range(x$y))))
       if(plot_prior){
         if(ncol(pMCMC_samples[[i]][[1]]) != n_pars){
           p_idx <- 1
         } else{p_idx <- l}
-        if(selection == "alpha"){
+        if(selection != "alpha"){
           p_curr <- robust_hist(pMCMC_samples[[i]][[1]][,p_idx], do_plot = F)
         } else{ p_curr <-  pMCMC_samples[[i]][[1]][,p_idx]}
-        pdenses <- density(p_curr)
+        pdenses <- do.call(density, c(list(p_curr), fix_dots(dots, density.default, consider_dots = FALSE)))
         if(use_prior_lim){
-          xlim <- c(min(xlim[1], min(p_curr)), max(xlim[2], max(p_curr)))
-          ylim <- c(min(ylim[1], min(pdenses$y)), max(ylim[2], max(pdenses$y)))
+          xlim <- range(c(xlim, p_curr))
+          ylim <- range(c(ylim, pdenses$y))
         }
       }
-
+      if(!is.null(true_MCMC_samples)){
+        true_denses <- lapply(true_MCMC_samples[[i]], function(x) do.call(density, c(list(x[,l]), fix_dots(dots, density.default, consider_dots = FALSE))))
+        xlim <- range(c(sapply(true_MCMC_samples[[i]], function(x) return(range(x[,l]))), xlim))
+        ylim <- range(c(sapply(true_denses, function(x) return(range(x$y))), ylim))
+      }
       for(k in 1:n_chains){
+        x_name <- ifelse(n_objects == 1, names(MCMC_samples)[i], paste0(selection, ": ", names(MCMC_samples)[i]))
         if(k == 1){
-          plot(denses[[k]], xlim = xlim, ylim = ylim, ylab = "Density", xlab = names(MCMC_samples)[[i]],
-               main = colnames(cur_mcmc[[k]])[l])
-        } else{lines(denses[[k]], col = 1)}
+          cur_dots <- add_defaults(dots, xlim = xlim, ylim = ylim, ylab = "Density",
+                                   xlab = x_name, main = colnames(cur_mcmc[[k]])[l])
+          do.call(plot, c(list(denses[[k]]), fix_dots_plot(cur_dots)))
+        } else{
+          do.call(lines, c(list(denses[[k]]), fix_dots_plot(cur_dots)))
+        }
+        if(!is.null(true_MCMC_samples)){
+          cur_true_plot_args <- add_defaults(true_plot_args, col = "darkgreen")
+          do.call(lines, c(list(true_denses[[k]]), fix_dots_plot(cur_true_plot_args)))
+        }
       }
+      if(!is.null(true_pars)){
+        cur_true_plot_args <- add_defaults(true_plot_args, col = "darkgreen", lwd = 1.5, lty = 2)
+        do.call(abline, c(list(v = true_pars[[i]][[1]][,l]), fix_dots_plot(cur_true_plot_args)))
+      }
+      cur_contraction[l] <- 1-(var(merged[,l])/var(pMCMC_samples[[i]][[1]][,p_idx]))
       if(plot_prior){
-        lines(pdenses, col = "red")
-        contraction <- 1-(var(merged[,l])/var(pMCMC_samples[[i]][[1]][,p_idx]))
-        legend(lpos,legend=round(contraction,3),bty="n",title="Contraction")
+        cur_prior_plot_args <- add_defaults(prior_plot_args, col = "red")
+        do.call(lines, c(list(pdenses), fix_dots_plot(cur_prior_plot_args)))
+        if(!all_subjects) legend(lpos,legend=round(cur_contraction[l],3),bty="n",title="Contraction")
       }
     }
+    contraction_list[[x_name]] <- cur_contraction
   }
+  return(invisible(contraction_list))
 }
 
-# samples,pdf_name="check_run.pdf",interactive=TRUE,
-# filter="sample",subfilter=0,thin=1,print_IAT=FALSE,subject=NULL,
-# layout=c(3,4),width=NULL,height=NULL)
-check_run_new <- function(samplers, selection, digits = 3, ...){
-  for(select in selection){
-    ESS <- es_summary_new(samplers, ...)
-    gds <- gd_summary_new(samplers, ...)
-    out <- vector("list", length(ESS))
-    for(name in names(ESS)){
-      combined <- cbind(gds[[name]], ESS[[name]])
-      colnames(combined) <- c("Rhat", "ESS")
-      if(length(ESS) > 1){
-        cat("\n", paste0(select, " ", name), "\n")
-      } else{
-        cat("\n", name, "\n")
-      }
-      print(round(t(combined), digits))
-      out_list <- append(out_list, combined)
-    }
+check_run_new <- function(samplers, selection = c('mu', 'sigma2', 'alpha'), digits = 3,
+                          plot_worst = TRUE, ...){
+  dots <- list(...)
+  out_list <- list()
+  cat("Iterations:\n")
+  print(chain_n(samplers))
+  if(attr(samplers[[1]], "variant_funs")$type == "single") selection <- "alpha"
+  if(plot_worst){
+    mfrow <- coda:::set.mfrow(Nchains = length(samplers), Nparms = length(selection),nplots = 1)
+    oldpar <- par(mfrow = mfrow)
   }
+  for(select in selection){
+    dots$flatten <- ifelse(select == "alpha", FALSE, TRUE)
+    dots$by_subject <- TRUE
+    ESS <- do.call(es_summary_new, c(list(samplers, selection = select, stat= NULL), fix_dots(dots, es_summary_new)))
+    gds <- do.call(gd_summary_new, c(list(samplers, selection = select, stat= NULL), fix_dots(dots, gd_summary_new)))
+    out <- list()
+    max_gd <- -Inf
+    for(name in names(ESS)){
+      combined <- rbind(round(gds[[name]], digits), round(ESS[[name]]))
+      rownames(combined) <- c("Rhat", "ESS")
+      out[[name]] <- combined
+      if(max(gds[[name]]) > max_gd){
+        max_gd <- max(gds[[name]])
+        cur_max <- name
+        max_par <- names(gds[[name]])[which.max(gds[[name]])]
+      }
+    }
+    if(length(ESS) > 1){
+      cat("\n", paste0(select, " highest Rhat : ", cur_max), "\n")
+    } else{
+      cat("\n", cur_max, "\n")
+    }
+    print(out[[cur_max]])
+    if(plot_worst){
+      cur_dots <- dots
+      if(select == "alpha"){
+        cur_dots$subject <- cur_max
+        cur_dots$use_par <- max_par
+        cur_dots$by_subject <- TRUE
+        MCMCs <- do.call(as_mcmc_new, c(list(samplers, selection = select), fix_dots(cur_dots, as_mcmc_new)))
+        names(MCMCs) <- paste0("alpha : ", names(MCMCs))
+      } else{
+        cur_dots$use_par <- max_par
+        MCMCs <- do.call(as_mcmc_new, c(list(samplers, selection = select), fix_dots(cur_dots, as_mcmc_new)))
+      }
+      cur_dots <- add_defaults(cur_dots, xlab = names(MCMCs)[1], ylab = "Highest Rhat parameter")
+      do.call(plot, c(list(MCMCs[[1]], auto.layout = FALSE, density = FALSE, ask = FALSE,smooth = FALSE),
+                      fix_dots_plot(cur_dots)))
+      legend("topleft",legend=paste0("Rhat : ",round(max_gd,digits)), bty = "n")
+      legend("topright",legend=paste0("ESS : ", round(ESS[[cur_max]][max_par])), bty = "n")
+    }
+    out_list[[select]] <- out
+  }
+  return(invisible(out_list))
 }
+
+get_recovery_stats <- function(MCMC, true_MCMC, true_pars, CI){
+  quantiles = c(.5 - CI/2, .5, .5 + CI/2)
+  if(!is.null(true_MCMC)){
+    quants_true <- get_posterior_quantiles(true_MCMC, probs = quantiles)
+    true_pars <- quants_true[,"50%"]
+  }
+  quants <- get_posterior_quantiles(MCMC, probs = quantiles)
+  pearson <- cor(true_pars,quants[,"50%"],method="pearson")
+  spearman <- cor(true_pars,quants[,"50%"],method="spearman")
+  rmse <- sqrt(mean((true_pars - quants[,"50%"])^2))
+  coverage = 100*mean((quants[,3] > true_pars)  & (quants[,1] < true_pars))
+  if(is.null(true_MCMC)){
+    quants_true <- matrix(true_pars)
+    colnames(quants_true) <- "50%"
+  }
+  return(list(true = quants_true, recovered = quants,
+              pearson = pearson, spearman = spearman, rmse = rmse, coverage = coverage))
+}
+
+make_recov_summary <- function(stats){
+  out <- list()
+  rec <- stats$recovered
+  true <- stats$true
+  if(ncol(true) == 1){
+    miss <- rec[,"50%"] - true
+    out$quantiles <- cbind(rec, true, miss)
+    colnames(out$quantiles)[4:5] <- c("true", "miss")
+  } else{
+    out$recovered <- rec
+    out$true <- true
+    out$miss <- rec-true
+  }
+  out$stats <- setNames(c(stats$pearson, stats$spearman, stats$rmse, stats$coverage),
+                        c("pearson", "spearman", "rmse", "coverage"))
+  return(out)
+}
+
+plot_recovery <- function(samplers, true_pars,
+                          selection = "mu",
+                          layout=NA,
+                          do_CI = TRUE,
+                          correlation = "pearson",
+                          stat = "rmse",
+                          digits = 3,
+                          CI = .95, ci_plot_args = list(), ...)
+{
+  dots <- list(...)
+  type <- attr(samplers[[1]], "variant_funs")$type
+  if(length(dots$subject) == 1) dots$by_subject <- TRUE
+  dots$merge_chains <- TRUE
+  MCMC_samples <- do.call(as_mcmc_new, c(list(samplers, selection = selection), fix_dots(dots, as_mcmc_new)))
+  true_MCMC_samples <- NULL
+  if(!is(true_pars, "emc")){
+    if(selection == "sigma2" & !is.matrix(true_pars)) true_pars <- diag(true_pars)
+    true_pars <- do.call(as_mcmc_new, c(list(samplers, selection = selection, type = type, true_pars = true_pars),
+                                        fix_dots(dots, as_mcmc_new, exclude = c("thin", "subfilter"))))
+  } else{
+    true_MCMC_samples <- do.call(as_mcmc_new, c(list(true_pars, selection = selection), fix_dots(dots, as_mcmc_new)))
+    true_pars <- NULL
+  }
+  # pearson <- spearman <- rmse <- coverage <- setNames(numeric(length(MCMC_samples)),names(MCMC_samples))
+  stats_list <- list()
+  if(any(is.na(layout))){
+    par(mfrow = coda:::set.mfrow(Nchains = 1, Nparms = length(MCMC_samples),
+                                 nplots = 1))
+  } else{par(mfrow=layout)}
+  for(i in 1:length(MCMC_samples)){
+
+    cur_name <- names(MCMC_samples)[i]
+    stats <- get_recovery_stats(MCMC_samples[[i]], true_MCMC_samples[[i]],
+                                                          true_pars[[i]], CI)
+    ylim <- range(c(stats$true, stats$recovered))
+    main_name <- ifelse(length(MCMC_samples) == 1, cur_name, paste0(selection, ": ", cur_name))
+    cur_dots <- add_defaults(dots, main = main_name, ylim = ylim, xlim = ylim, xlab = "Generated", ylab = "Estimated")
+    do.call(plot, c(list(stats$true[,"50%"],stats$recovered[,"50%"]), fix_dots_plot(cur_dots)))
+    abline(a=0,b=1,lty=3)
+    if(do_CI){
+      cur_ci_plot_args <- add_defaults(ci_plot_args, col = "grey", angle = 90, length = .05)
+      do.call(arrows, c(list(stats$true[,"50%"],stats$recovered[,2],stats$true[,"50%"],stats$recovered[,3]),
+                        fix_dots_plot(cur_ci_plot_args)))
+      do.call(arrows, c(list(stats$true[,"50%"],stats$recovered[,2],stats$true[,"50%"],stats$recovered[,1]),
+                        fix_dots_plot(cur_ci_plot_args)))
+      if(is.null(true_pars)){
+        do.call(arrows, c(list(stats$true[,"50%"],stats$recovered[,2],stats$true[,3],stats$recovered[,2]),
+                          fix_dots_plot(cur_ci_plot_args)))
+        do.call(arrows, c(list(stats$true[,"50%"],stats$recovered[,2],stats$true[,1],stats$recovered[,2]),
+                          fix_dots_plot(cur_ci_plot_args)))
+      }
+    }
+    if(correlation == "pearson"){
+      legend("topleft",paste("r(pearson) = ",round(stats$pearson,digits)),bty="n")
+    } else if(correlation == "spearman"){
+      legend("topleft",paste("r(spearman) = ",round(stats$spearman,digits)),bty="n")
+    }
+    if (stat == "rmse") {
+      legend("bottomright",paste("RMSE = ",round(stats$rmse,digits)),bty="n")
+    } else if(stat == "coverage") {
+      legend("bottomright",paste("95% Coverage = ",round(stats$coverage,digits)),bty="n")
+    }
+    stats <- make_recov_summary(stats)
+    stats_list[[cur_name]] <- stats
+  }
+  return(invisible(stats_list))
+}
+
+
 

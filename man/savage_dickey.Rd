@@ -8,15 +8,12 @@ savage_dickey(
   samplers,
   parameter = NULL,
   H0 = 0,
-  filter = "sample",
-  subfilter = 0,
-  thin = 1,
   fun = NULL,
-  mapped = F,
   selection = "mu",
   do_plot = TRUE,
-  xlim = NULL,
-  subject = NULL
+  use_prior_lim = TRUE,
+  prior_plot_args = list(),
+  ...
 )
 }
 \arguments{
@@ -26,6 +23,13 @@ savage_dickey(
 
 \item{H0}{An integer. The H0 value which you want to compare to}
 
+\item{fun}{A function. Specifies an operation to be performed on the sampled or mapped parameters.}
+
+\item{selection}{A string. The default is \code{mu}. Whether to do the operation on
+the \code{alpha}, \code{mu}, \code{covariance}, \code{variance}, or \code{correlation} parameters.}
+
+\item{do_plot}{Boolean. Whether to include a plot of the prior and posterior density. With circles at H0.}
+
 \item{filter}{A string. Specifies which stage the samples are to be taken from
 \code{"preburn"}, \code{"burn"}, \code{"adapt"}, or \code{"sample"}}
 
@@ -33,15 +37,8 @@ savage_dickey(
 he value set by \code{subfilter} will be excluded. If a vector is supplied, only the
 iterations in the vector will be considered.}
 
-\item{fun}{A function. Specifies an operation to be performed on the sampled or mapped parameters.}
-
 \item{mapped}{A boolean. Whether the Bayes factor should be calculated for
 parameters mapped back to the real design, only works with selection = 'mu'.}
-
-\item{selection}{A string. The default is \code{mu}. Whether to do the operation on
-the \code{alpha}, \code{mu}, \code{covariance}, \code{variance}, or \code{correlation} parameters.}
-
-\item{do_plot}{Boolean. Whether to include a plot of the prior and posterior density. With circles at H0.}
 
 \item{xlim}{Vector, the x-limits for the plot.}
 

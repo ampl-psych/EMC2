@@ -82,7 +82,7 @@
 #'
 #' # Example of how to use the stop_criteria:
 #' samplers <- run_emc(samplers, stop_criteria = list(mean_gd = 1.1, max_gd = 1.5,
-#'             selection = c('alpha', 'variance'), omit_mpsrf = TRUE, min_es = 1000).
+#'             selection = c('alpha', 'sigma2'), omit_mpsrf = TRUE, min_es = 1000).
 #' # In this case the stop_criteria are set for the sample stage, which will be
 #' # run until the mean_gd < 1.1, the max_gd < 1.5 (omitting the multivariate psrf)
 #' # and the effective sample size > 1000,
@@ -460,11 +460,11 @@ check_gd <- function(samplers, stage, max_gd, mean_gd, omit_mpsrf, trys, verbose
   ok_gd <- ok_mean_gd & ok_max_gd
   if(!ok_gd) {
     n_remove <- round(chain_n(samplers)[,stage][1]/3)
-    samplers_short <- try(lapply(samplers,remove_iterations,select=n_remove,filter=stage),silent=TRUE)
+    samplers_short <- try(lapply(samplers,remove_iterations,subfilter=n_remove,filter=stage),silent=TRUE)
     if (is(samplers_short,"try-error")){
       gd_short <- Inf
     } else{
-      gd_short <- get_gds(samplers_short,omit_mpsrf,selection)
+      gd_short <- get_gds(samplers_short,omit_mpsrf,selection, stage)
 
     }
     if (is.null(max_gd) & (mean(gd_short) < mean(gd)) | (!is.null(max_gd) & (max(gd_short) < max(gd)))) {

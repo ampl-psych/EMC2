@@ -39,7 +39,7 @@ add_info_standard <- function(sampler, prior = NULL, ...){
 #' @param N How many samples to draw from the prior, the default is 1e5
 #' @param design The design obtained from `make_design()`, required when `map = TRUE`
 #' @param selection Character. If `sample = TRUE`, what prior to sample from. Options:
-#' `"mu"`, `"variance"`, `"covariance"` `"full_var"`, `"alpha"`.
+#' `"mu"`, `"sigma2"`, `"covariance"` `"Sigma"`, `"alpha"`.
 #'
 #' @return A list with a single entry of type of samples from the prior (if sample = TRUE) or else a prior object
 #' @examples \dontrun{
@@ -93,7 +93,7 @@ get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1
         samples$theta_mu <- mu
       }
     }
-    if(selection %in% c("variance", "covariance", "correlation", "sigma", "alpha")) {
+    if(selection %in% c("sigma2", "covariance", "correlation", "Sigma", "alpha")) {
       vars <- array(NA_real_, dim = c(n_pars, n_pars, N))
       colnames(vars) <- rownames(vars) <- par_names
       for(i in 1:N){

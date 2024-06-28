@@ -52,7 +52,7 @@ add_prior_names <- function(prior, design){
 
 get_objects_diag <- function(type, selection, sample_prior, return_prior, design = NULL,
                                  prior = NULL, filter = 'sample', N = 1e5, sampler = NULL,...){
-  acc_selection <- c("mu", "variance", "alpha", "LL")
+  acc_selection <- c("mu", "sigma2", "alpha", "LL")
   if(return_prior & !sample_prior){
     prior$prior <- get_prior_diag(design = design, sample = F, prior = prior)
     prior$descriptions <- list(
@@ -66,7 +66,14 @@ get_objects_diag <- function(type, selection, sample_prior, return_prior, design
   } else{
     if(!selection %in% acc_selection) stop(paste0("selection must be in : ", paste(acc_selection, collapse = ", ")))
     if(sample_prior){
-      sampler <- list(list(samples = get_prior_diag(prior = prior, design = design, selection = selection,N = N)))
+      if(selection == "alpha" & !is.null(sampler)){
+        mu <- as_mcmc_new(sampler, selection = "mu", filter = filter, map = FALSE, return_mcmc = FALSE, merge_chains = TRUE, ...)
+        var <- as_mcmc_new(sampler, selection = "Sigma", filter = filter, map = FALSE, return_mcmc = FALSE, merge_chains = TRUE, ...)
+        sub_names <- names(sampler[[1]]$data)
+        sampler <- list(list(samples =  list(alpha = get_alphas(mu, var, sub_names))))
+      } else{
+        sampler <- list(list(samples = get_prior_diag(prior = prior, design = design, selection = selection,N = N)))
+      }
       attr(sampler, "design_list") <- list(design)
       return(sampler)
     }
@@ -78,7 +85,7 @@ get_objects_diag <- function(type, selection, sample_prior, return_prior, design
 
 get_objects_standard <- function(type, selection, sample_prior, return_prior, design = NULL,
                                  prior = NULL, filter = 'sample', N = 1e5, sampler = NULL, ...){
-  acc_selection <- c("mu", "variance", "covariance", "correlation", "alpha", "sigma", "LL")
+  acc_selection <- c("mu", "sigma2", "covariance", "correlation", "alpha", "Sigma", "LL")
   if(return_prior & !sample_prior){
     prior$prior <- get_prior_standard(design = design, sample = F, prior = prior)
     prior$descriptions <- list(
@@ -94,7 +101,7 @@ get_objects_standard <- function(type, selection, sample_prior, return_prior, de
     if(sample_prior){
       if(selection == "alpha" & !is.null(sampler)){
         mu <- as_mcmc_new(sampler, selection = "mu", filter = filter, map = FALSE, return_mcmc = FALSE, merge_chains = TRUE, ...)
-        var <- as_mcmc_new(sampler, selection = "sigma", filter = filter, map = FALSE, return_mcmc = FALSE, merge_chains = TRUE, ...)
+        var <- as_mcmc_new(sampler, selection = "Sigma", filter = filter, map = FALSE, return_mcmc = FALSE, merge_chains = TRUE, ...)
         sub_names <- names(sampler[[1]]$data)
         sampler <- list(list(samples =  list(alpha = get_alphas(mu, var, sub_names))))
       } else{
@@ -107,9 +114,11 @@ get_objects_standard <- function(type, selection, sample_prior, return_prior, de
     return(get_base(sampler, idx, selection))
   }
 }
+
 get_idx <- function(sampler, filter){
   if(is.null(sampler[[1]]$samples$stage)){
-    idx <- 1:max(dim(sampler[[1]][[1]][[1]]))
+    dims <- dim(sampler[[1]][[1]][[1]])
+    idx <- 1:(dims[length(dims)])
   } else{
     idx <- which(sampler[[1]]$samples$stage %in% filter)
   }
@@ -121,7 +130,7 @@ get_idx <- function(sampler, filter){
 
 get_objects_blocked <- function(type, selection, sample_prior, return_prior, design = NULL,
                                  prior = NULL, filter = 'sample', N = 1e5, sampler = NULL,...){
-  acc_selection <- c("mu", "variance", "covariance", "correlation", "alpha", "sigma", "LL")
+  acc_selection <- c("mu", "sigma2", "covariance", "correlation", "alpha", "Sigma", "LL")
   if(return_prior & !sample_prior){
     prior$prior <- get_prior_blocked(design = design, sample = F, prior = prior, ...)
     prior$descriptions <- list(
@@ -149,7 +158,7 @@ get_objects_blocked <- function(type, selection, sample_prior, return_prior, des
 get_objects_single <- function(type, selection, sample_prior, return_prior, design = NULL,
                                  prior = NULL, filter = 'sample', N = 1e5, sampler = NULL,...){
   acc_selection <- c("alpha", "LL")
-  if(return_prior){
+  if(return_prior & !sample_prior){
     prior$prior <- get_prior_single(design = design, sample = F, prior = prior)
     prior$descriptions <- list(
       theta_mu_mean = "mean of the prior",
@@ -171,7 +180,7 @@ get_objects_single <- function(type, selection, sample_prior, return_prior, desi
 
 get_objects_factor <- function(type, selection, sample_prior, return_prior, design = NULL,
                                      prior = NULL, filter = 'sample', N = 1e5, sampler = NULL, ...){
-  acc_selection <- c("mu", "variance", "covariance", "correlation", "alpha", "sigma", "loadings", "residuals")
+  acc_selection <- c("mu", "sigma2", "covariance", "correlation", "alpha", "Sigma", "loadings", "residuals")
   if(return_prior){
     prior$prior <- get_prior_factor(design = design, sample = F, prior = prior, ...)
     prior$descriptions <- list(
@@ -207,7 +216,7 @@ get_objects_factor <- function(type, selection, sample_prior, return_prior, desi
 
 get_objects_infnt_factor <- function(type, selection, sample_prior, return_prior, design = NULL,
                                  prior = NULL, filter = 'sample', N = 1e5, sampler = NULL, ...){
-  acc_selection <- c("mu", "variance", "covariance", "correlation", "alpha", "sigma", "loadings", "residuals")
+  acc_selection <- c("mu", "sigma2", "covariance", "correlation", "alpha", "Sigma", "loadings", "residuals")
   if(return_prior){
     prior$prior <- get_prior_infnt_factor(design = design, sample = F, prior = prior, ...)
     prior$descriptions <- list(
@@ -257,14 +266,14 @@ get_base <- function(sampler, idx, selection){
       }
       return(out)
     }))
-  } else if(selection == "variance"){
+  } else if(selection == "sigma2"){
     return(lapply(sampler, FUN = function(x){
       out <- x$samples$theta_var[,,idx, drop = F]
       out <- apply(out,3,diag)
       return(out)
     }))
   }
-  else if(selection == "sigma"){
+  else if(selection == "Sigma"){
     return(lapply(sampler, FUN = function(x) return(x$samples$theta_var[,,idx, drop = F])))
   }
   else if(selection == "correlation"){

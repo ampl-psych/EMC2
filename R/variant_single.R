@@ -60,15 +60,16 @@ get_prior_single <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5
     prior$theta_mu_var <- diag(rep(1, n_pars))
   }
   attr(prior, "type") <- "single"
+  out <- prior
   if(sample){
+    out <- list()
+    par_names <- names(attr(design, "p_vector"))
     if(selection != "alpha") stop("for variant single, only alpha can be specified")
-    samples <- mvtnorm::rmvnorm(N, prior$theta_mu_mean, prior$theta_mu_var)
-    if (map) {
-      samples <- map_mcmc(samples,design,design$model,include_constants=FALSE)
-    }
-    return(list(alpha = samples))
+    out$alpha <- t(mvtnorm::rmvnorm(N, prior$theta_mu_mean, prior$theta_mu_var))
+    out$alpha <- array(out$alpha, dim = c(length(par_names), 1, N))
+    rownames(out$alpha) <- par_names
   }
-  return(prior)
+  return(out)
 }
 
 get_startpoints_single <- function(pmwgs, start_mu, start_var){

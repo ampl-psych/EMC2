@@ -26,7 +26,7 @@ will be used to determine the size of prior.}
 \item{N}{How many samples to draw from the prior, the default is 1e5}
 
 \item{selection}{Character. If \code{sample = TRUE}, what prior to sample from. Options:
-\code{"mu"}, \code{"variance"}, \code{"covariance"} \code{"full_var"}, \code{"alpha"}.}
+\code{"mu"}, \code{"sigma2"}, \code{"covariance"} \code{"Sigma"}, \code{"alpha"}.}
 
 \item{design}{The design obtained from \code{make_design()}, required when \code{map = TRUE}}
 }

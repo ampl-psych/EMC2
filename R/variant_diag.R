@@ -72,41 +72,70 @@ get_prior_diag <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, 
   # Things I save rather than re-compute inside the loops.
   prior$theta_mu_invar <- ginv(prior$theta_mu_var) #Inverse of the matrix
   attr(prior, "type") <- "diagonal"
+  out <- prior
   if(sample){
-    out <- list()
-    if(!selection %in% c("mu", "variance", "full_var")){
-      stop("for variant diagonal, you can only specify the prior on the mean or variance parameters")
-    }
-    if(selection == "mu"){
-      samples <- mvtnorm::rmvnorm(N, mean = prior$theta_mu_mean,
-                                  sigma = prior$theta_mu_var)
-      if(!is.null(design)){
-        colnames(samples) <- par_names <- names(attr(design, "p_vector"))
-        if(map){
-          samples <- map_mcmc(samples,design,design$model,include_constants=FALSE)
-        }
+    par_names <- names(attr(design, "p_vector"))
+    samples <- list()
+    if(selection %in% c("mu", "alpha")){
+      mu <- t(mvtnorm::rmvnorm(N, mean = prior$theta_mu_mean,
+                               sigma = prior$theta_mu_var))
+      rownames(mu) <- par_names
+      if(selection %in% c("mu")){
+        samples$theta_mu <- mu
       }
-      out$mu <- samples
-      return(out)
-    } else {
-
-      var <- array(NA_real_, dim = c(N, n_pars))
+    }
+    if(selection %in% c("sigma2", "covariance", "correlation", "Sigma", "alpha")) {
+      vars <- array(NA_real_, dim = c(n_pars, n_pars, N))
+      colnames(vars) <- rownames(vars) <- par_names
       for(i in 1:N){
         a_half <- 1 / rgamma(n = n_pars,shape = 1/2,
                              rate = 1/(prior$A^2))
-        var[i,] <- 1 / rgamma(n = n_pars, shape = prior$v/2, rate = prior$v/a_half)
+        vars[,,i] <- diag(1/ rgamma(n = n_pars, shape = prior$v/2, rate = prior$v/a_half))
       }
-      colnames(var) <- names(attr(design, "p_vector"))
-      if (selection == "full_var"){
-        out$full_var <- var
-      } else{
-        out$variance <- var
-      }
-      return(out)
+      if(selection != "alpha") samples$theta_var <- vars
     }
+    if(selection %in% "alpha"){
+      samples$alpha <- get_alphas(mu, vars, "alpha")
+    }
+    out <- samples
   }
-  return(prior)
+  return(out)
 }
+#   if(sample){
+#     out <- list()
+#     if(!selection %in% c("mu", "variance", "full_var")){
+#       stop("for variant diagonal, you can only specify the prior on the mean or variance parameters")
+#     }
+#     if(selection == "mu"){
+#       samples <- mvtnorm::rmvnorm(N, mean = prior$theta_mu_mean,
+#                                   sigma = prior$theta_mu_var)
+#       if(!is.null(design)){
+#         colnames(samples) <- par_names <- names(attr(design, "p_vector"))
+#         if(map){
+#           samples <- map_mcmc(samples,design,design$model,include_constants=FALSE)
+#         }
+#       }
+#       out$mu <- samples
+#       return(out)
+#     } else {
+#
+#       var <- array(NA_real_, dim = c(N, n_pars))
+#       for(i in 1:N){
+#         a_half <- 1 / rgamma(n = n_pars,shape = 1/2,
+#                              rate = 1/(prior$A^2))
+#         var[i,] <- 1 / rgamma(n = n_pars, shape = prior$v/2, rate = prior$v/a_half)
+#       }
+#       colnames(var) <- names(attr(design, "p_vector"))
+#       if (selection == "full_var"){
+#         out$full_var <- var
+#       } else{
+#         out$variance <- var
+#       }
+#       return(out)
+#     }
+#   }
+#   return(prior)
+# }
 
 
 get_startpoints_diag <- function(pmwgs, start_mu, start_var){

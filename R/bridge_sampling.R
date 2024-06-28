@@ -240,7 +240,7 @@ bridge_sampling <- function(samples, n_eff, split_idx, cores_for_props = 1, core
 #' }
 #' @export
 #'
-run_bridge_sampling <- function(samplers, filter = "sample", subfilter = 0, repetitions = 1, cores_for_props = 4,  cores_per_prop = 1, both_splits = T, ...){
+run_bridge_sampling <- function(samplers, filter = "sample", subfilter = NULL, repetitions = 1, cores_for_props = 4,  cores_per_prop = 1, both_splits = T, ...){
   # Hyper parameters and dev options
   maxiter <- 5000
   r0 <- 1e-5
@@ -252,10 +252,7 @@ run_bridge_sampling <- function(samplers, filter = "sample", subfilter = 0, repe
   for (name in names(optionals) ) {
     assign(name, optionals[[name]])
   }
-
-  if(subfilter != 0){
-    samplers <- lapply(samplers, remove_iterations, select = subfilter, filter = filter)
-  }
+  samplers <- lapply(samplers, remove_iterations, subfilter = subfilter, filter = filter)
   n_eff <- round(es_summary_new(samplers, selection = "alpha", stat = "median", stat_only = TRUE)/2)
   samples <- merge_samples(samplers)
   idx <- samples$samples$stage == filter
