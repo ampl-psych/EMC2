@@ -36,15 +36,10 @@ add_info_standard <- function(sampler, prior = NULL, ...){
 #' @param n_pars Often inferred from the design, but if `design = NULL`, `n_pars`
 #' will be used to determine the size of prior.
 #' @param sample Boolean, defaults to `TRUE`, sample from the prior or simply return the prior specifications?
-#' @param map Boolean, defaults to `TRUE`. If `sample = TRUE`, the implied prior is sampled.
-#' This includes back-transformations for naturally bounded parameters such as
-#' the non-decision time and an inverse mapping from the design matrix back to the
-#' cells of the design. If `FALSE`, the transformed, unmapped, parameters are used.
-#' Note that `map` does not affect the prior used in the sampling process.
 #' @param N How many samples to draw from the prior, the default is 1e5
 #' @param design The design obtained from `make_design()`, required when `map = TRUE`
-#' @param type Character. If `sample = TRUE`, what prior to sample from. Options:
-#' `"mu"`, `"variance"`, `"covariance"` `"full_var"`, `"alpha"`.
+#' @param selection Character. If `sample = TRUE`, what prior to sample from. Options:
+#' `"mu"`, `"sigma2"`, `"covariance"` `"Sigma"`, `"alpha"`.
 #'
 #' @return A list with a single entry of type of samples from the prior (if sample = TRUE) or else a prior object
 #' @examples \dontrun{
@@ -60,9 +55,7 @@ add_info_standard <- function(sampler, prior = NULL, ...){
 #'   sample = TRUE, type = "mu")
 #' }
 #' @export
-
-get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, type = "mu", design = NULL,
-                               map = FALSE){
+get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, selection = "mu", design = NULL){
   # Checking and default priors
   if(is.null(prior)){
     prior <- list()
@@ -87,57 +80,41 @@ get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1
   }
   # Things I save rather than re-compute inside the loops.
   prior$theta_mu_invar <- ginv(prior$theta_mu_var) #Inverse of the matrix
+  attr(prior, "type") <- "standard"
+  out <- prior
   if(sample){
-    out <- list()
-    if(!type %in% c("mu", "variance", "covariance", "correlation", "full_var")){
-      stop("for variant standard, you can only specify the prior on the mean, variance, covariance or the correlation of the parameters")
-    }
-    if(type == "mu"){
-      samples <- mvtnorm::rmvnorm(N, mean = prior$theta_mu_mean,
-                              sigma = prior$theta_mu_var)
-      if(!is.null(design)){
-        colnames(samples) <- par_names <- names(attr(design, "p_vector"))
-        if(map){
-          samples <- map_mcmc(samples,design,design$model,include_constants=FALSE)
-        }
+    par_names <- names(attr(design, "p_vector"))
+    samples <- list()
+    if(selection %in% c("mu", "alpha")){
+      mu <- t(mvtnorm::rmvnorm(N, mean = prior$theta_mu_mean,
+                             sigma = prior$theta_mu_var))
+      rownames(mu) <- par_names
+      if(selection %in% c("mu")){
+        samples$theta_mu <- mu
       }
-      out$mu <- samples
-      return(out)
-    } else {
-      var <- array(NA_real_, dim = c(n_pars, n_pars, N))
+    }
+    if(selection %in% c("sigma2", "covariance", "correlation", "Sigma", "alpha")) {
+      vars <- array(NA_real_, dim = c(n_pars, n_pars, N))
+      colnames(vars) <- rownames(vars) <- par_names
       for(i in 1:N){
         a_half <- 1 / rgamma(n = n_pars,shape = 1/2,
                              rate = 1/(prior$A^2))
         attempt <- tryCatch({
-          var[,,i] <- riwish(prior$v + n_pars - 1, 2 * prior$v * diag(1 / a_half))
+          vars[,,i] <- riwish(prior$v + n_pars - 1, 2 * prior$v * diag(1 / a_half))
         },error=function(e) e, warning=function(w) w)
         if (any(class(attempt) %in% c("warning", "error", "try-error"))) {
           sample_idx <- sample(1:(i-1),1)
-          var[,,i] <- var[,,sample_idx]
+          vars[,,i] <- vars[,,sample_idx]
         }
       }
-      if (type == "variance") {
-        vars_only <- t(apply(var,3,diag))
-        if(!is.null(design)){
-          colnames(vars_only) <- names(attr(design, "p_vector"))
-        }
-        out$variance <- vars_only
-      }
-      lt <- lower.tri(var[,,1])
-      if (type == "correlation"){
-        corrs <- array(apply(var,3,cov2cor),dim=dim(var),dimnames=dimnames(var))
-        out$correlation <- t(apply(corrs,3,function(x){x[lt]}))
-      }
-      if(type == "covariance"){
-        out$covariance <- t(apply(var,3,function(x){x[lt]}))
-      }
-      if (type == "full_var"){
-        out$full_var <- t(apply(var, 3, c))
-      }
-      return(out)
+      if(selection != "alpha") samples$theta_var <- vars
     }
+    if(selection %in% "alpha"){
+      samples$alpha <- get_alphas(mu, vars, "alpha")
+    }
+    out <- samples
   }
-  return(prior)
+  return(out)
 }
 
 get_startpoints_standard <- function(pmwgs, start_mu, start_var){
@@ -445,3 +422,32 @@ bridge_group_and_prior_and_jac_standard <- function(proposals_group, proposals_l
   jac_a <- rowSums(theta_a)
   return(sum_out + prior_mu + jac_a) # Output is of length nrow(proposals)
 }
+
+
+
+# for IC ------------------------------------------------------------------
+
+group_level_IC_standard <- function(samplers, filter="sample",subfilter=0){
+  alpha <- as_mcmc_new(samplers, selection = "alpha", filter = filter, subfilter = subfilter,
+                       return_mcmc = FALSE, merge_chains = TRUE)
+  theta_mu <- as_mcmc_new(samplers, selection = "mu", filter = filter, subfilter = subfilter,
+                          return_mcmc = FALSE, merge_chains = TRUE)
+  theta_var <- as_mcmc_new(samplers, selection = "sigma", filter = filter, subfilter = subfilter,
+                           return_mcmc = FALSE, merge_chains = TRUE)
+  mean_alpha <- apply(alpha, 1:2, mean)
+  mean_mu <- rowMeans(theta_mu)
+  mean_var <- apply(theta_var, 1:2, mean)
+
+  N <- ncol(theta_mu)
+  lls <- numeric(N)
+  for(i in 1:N){
+    lls[i] <- sum(dmvnorm(t(alpha[,,i]), theta_mu[,i], theta_var[,,i], log = T))
+  }
+  minD <- -2*max(lls)
+  mean_ll <- mean(lls)
+  mean_pars_ll <-  sum(dmvnorm(t(mean_alpha), mean_mu, mean_var), log = TRUE)
+  Dmean <- -2*mean_pars_ll
+  return(list(mean_ll = mean_ll, Dmean = Dmean,
+              minD = minD))
+}
+

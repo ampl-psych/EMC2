@@ -9,9 +9,10 @@ get_prior_blocked(
   n_pars = NULL,
   sample = TRUE,
   N = 1e+05,
-  type = "mu",
+  selection = "mu",
   design = NULL,
-  map = FALSE
+  map = FALSE,
+  par_groups = NULL
 )
 }
 \arguments{
@@ -27,8 +28,6 @@ return the prior specifications?}
 
 \item{N}{How many samples to draw from the prior, default 1e5}
 
-\item{type}{character. If sample = TRUE, what prior to sample from. Options: "mu", "variance", "covariance" "full_var", "alpha".}
-
 \item{design}{The design obtained from \code{make_design}, required when map = TRUE}
 
 \item{map}{Boolean, defaults to \code{TRUE}. If \code{sample = TRUE}, the implied prior is sampled.
@@ -36,6 +35,8 @@ This includes back-transformations for naturally bounded parameters such as
 the non-decision time and an inverse mapping from the design matrix back to the
 cells of the design. If \code{FALSE}, the transformed, unmapped, parameters are used.
 Note that \code{map} does not affect the prior used in the sampling process.}
+
+\item{type}{character. If sample = TRUE, what prior to sample from. Options: "mu", "variance", "covariance" "full_var", "alpha".}
 }
 \value{
 A list with a single entry of type of samples from the prior (if sample = TRUE) or else a prior object

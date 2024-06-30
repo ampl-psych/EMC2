@@ -9,7 +9,7 @@ get_prior_diag(
   n_pars = NULL,
   sample = TRUE,
   N = 1e+05,
-  type = "mu",
+  selection = "mu",
   design = NULL,
   map = FALSE
 )
@@ -27,7 +27,7 @@ return the prior specifications?}
 
 \item{N}{How many samples to draw from the prior, the default is 1e5}
 
-\item{type}{Character. If \code{sample = TRUE}, what prior to sample from.  Options: \code{"mu"}, \code{"variance"}, \code{"alpha"}.}
+\item{selection}{Character. If \code{sample = TRUE}, what prior to sample from.  Options: \code{"mu"}, \code{"variance"}, \code{"alpha"}.}
 
 \item{design}{The design obtained from \code{make_design}, required when \code{map = TRUE}}
 

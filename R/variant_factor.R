@@ -74,8 +74,7 @@ add_info_factor <- function(sampler, prior = NULL, ...){
 #' Note that `map` does not affect the prior used in the sampling process.
 #' @param N How many samples to draw from the prior, the default is 1e5
 #' @param design The design obtained from `make_design()`, required when `map = TRUE`
-#' @param type  Character. If `sample = TRUE`, what priors to sample from. Options:
-#' `"mu"`, `"variance"`, `"covariance"`, `"full_var"`, `"alpha"`, `"loadings"`.
+#' @param selection  Character. If `sample = TRUE`, what priors to sample from.
 #' @param n_factors Integer. The number of factors.
 #'
 #' @return A list with a single entry of type of samples from the prior (if `sample = TRUE`) or else a prior object
@@ -92,7 +91,7 @@ add_info_factor <- function(sampler, prior = NULL, ...){
 #'   sample = TRUE, type = "mu", n_factors = 3)
 #' }
 #' @export
-get_prior_factor <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, type = "mu", design = NULL,
+get_prior_factor <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, selection = "mu", design = NULL,
                              map = FALSE, n_factors = 5){
 
   if(is.null(prior)){
@@ -117,35 +116,40 @@ get_prior_factor <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5
     prior$bp <- .5
   }
   if(is.null(prior$as)){
-    prior$as <- 2
+    prior$as <- rep(2, n_pars)
   }
   if(is.null(prior$bs)){
-    prior$bs <- .1
+    prior$bs <- rep(.1, n_pars)
   }
   # prior$R_0 <- diag(n_factors)
   # prior$rho_0 <- 5
   # Things I save rather than re-compute inside the loops.
   prior$theta_mu_invar <- diag(1/prior$theta_mu_var)
   prior$theta_lambda_invar <-1/prior$theta_lambda_var
+  attr(prior, "type") <- "factor"
   if(sample){
-    out <- list()
-    if(!type %in% c("mu", "variance", "covariance", "correlation", "full_var", "loadings")){
-      stop("for variant factor, you can only specify the prior on the mean, variance, covariance, loadings or the correlation of the parameters")
+    samples <- list()
+    par_names <- names(attr(design, "p_vector"))
+    if(!selection %in% c("mu", "sigma2", "covariance", "alpha", "correlation", "full_var", "loadings", "residuals")){
+      stop("for variant factor, you can only specify the prior on the mean, variance, covariance, loadings, residuals, or the correlation of the parameters")
     }
-    if(type == "mu"){
-      samples <- mvtnorm::rmvnorm(N, mean = prior$theta_mu_mean,
-                                  sigma = diag(prior$theta_mu_var))
-      if(!is.null(design)){
-        colnames(samples) <- par_names <- names(attr(design, "p_vector"))
-        if(map){
-          samples <- map_mcmc(samples,design,design$model,include_constants=FALSE)
-        }
+    if(selection %in% c("mu", "alpha")){
+      mu <- t(mvtnorm::rmvnorm(N, mean = prior$theta_mu_mean,
+                               sigma = diag(prior$theta_mu_var)))
+      rownames(mu) <- par_names
+      if(selection %in% c("mu")){
+        samples$theta_mu <- mu
       }
-      out$mu <- samples
-      return(out)
-    } else if(type == "loadings") {
+    }
+    if(selection %in% "loadings") {
       out$loadings <- matrix(rnorm(N, mean = 0, sd = prior$theta_lambda_var^2), ncol = 1)
       colnames(out$loadings) <- "loadings"
+      return(out)
+    } else if(selection == "residuals"){
+      residuals <- matrix(1/rgamma(n_pars*N, shape = prior$as, rate = prior$bs),
+                          ncol = n_pars, byrow = T)
+      colnames(residuals) <- names(attr(design, "p_vector"))
+      out$residuals <- residuals
       return(out)
     } else{
       var <- array(NA_real_, dim = c(n_pars, n_pars, N))
@@ -156,7 +160,7 @@ get_prior_factor <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5
         cov_tmp <- lambda %*% diag(psi, n_factors) %*% t(lambda) + diag(sigma)
         var[,,i] <- cov_tmp
       }
-      if (type == "variance") {
+      if (selection == "sigma2") {
         vars_only <- t(apply(var,3,diag))
         if(!is.null(design)){
           colnames(vars_only) <- names(attr(design, "p_vector"))
@@ -164,14 +168,21 @@ get_prior_factor <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5
         out$variance <- vars_only
       }
       lt <- lower.tri(var[,,1])
-      if (type == "correlation"){
+      if(selection %in% c("covariance", "correlation")){
+        pnams <- names(attr(design, "p_vector"))
+        lt <- lower.tri(diag(length(pnams)))
+        pnams <- outer(pnams,pnams,paste,sep=".")[lt]
+      }
+      if (selection == "correlation"){
         corrs <- array(apply(var,3,cov2cor),dim=dim(var),dimnames=dimnames(var))
         out$correlation <- t(apply(corrs,3,function(x){x[lt]}))
+        colnames(out$correlation) <- pnams
       }
-      if(type == "covariance"){
+      if(selection == "covariance"){
         out$covariance <- t(apply(var,3,function(x){x[lt]}))
+        colnames(out$covariance) <- pnams
       }
-      if (type == "full_var"){
+      if (selection == "full_var"){
         out$full_var <- t(apply(var, 3, c))
       }
       return(out)
@@ -374,8 +385,8 @@ bridge_group_and_prior_and_jac_factor <- function(proposals_group, proposals_lis
     theta_var_curr <- lambda_curr %*% psi_curr %*% t(lambda_curr) + epsilon_curr
     proposals_curr <- matrix(proposals[i,], ncol = info$n_pars, byrow = T)
     group_ll <- sum(dmvnorm(proposals_curr, theta_mu[i,], theta_var_curr, log = T))
-    prior_epsilon <- sum(logdinvGamma(exp(theta_epsilon_inv[i,]), shape = prior$as, rate = prior$bs))
-    prior_psi <- sum(logdinvGamma(exp(theta_psi_inv[i,]), prior$ap, rate = prior$bp))
+    prior_epsilon <- sum(logdinvGamma(1/exp(theta_epsilon_inv[i,]), shape = prior$as, rate = prior$bs))
+    prior_psi <- sum(logdinvGamma(1/exp(theta_psi_inv[i,]), prior$ap, rate = prior$bp))
     sum_out[i] <- group_ll + prior_epsilon + prior_psi
   }
   prior_lambda <- dmvnorm(theta_lambda, mean = rep(0, ncol(theta_lambda)),

@@ -59,78 +59,66 @@ logdinvGamma <- function(x, shape, rate){
   return(pmax(log.density, -500)) #Roughly equal to 1e-22 on real scale
 }
 
-es_pmwg <- function(pmwg_mcmc,selection="alpha",summary_alpha=mean,
-                    print_summary=TRUE,sort_print=TRUE,
-                    filter="sample",thin=1,subfilter=NULL)
-  # Effective size
+# es_pmwg <- function(pmwg_mcmc,selection="alpha",summary_alpha=mean,
+#                     print_summary=TRUE,sort_print=TRUE,
+#                     filter="sample",thin=1,subfilter=NULL)
+#   # Effective size
+# {
+#   if (!(class(pmwg_mcmc[[1]]) %in% c("mcmc","mcmc.list"))) {
+#     if (is(pmwg_mcmc, "pmwgs")){
+#       pmwg_mcmc <- as_Mcmc(pmwg_mcmc,selection=selection,filter=filter,
+#                            thin=thin,subfilter=subfilter)
+#     }
+#     else{
+#       pmwg_mcmc <- as_mcmc.list(pmwg_mcmc,selection=selection,filter=filter,
+#                                 thin=thin,subfilter=subfilter)
+#     }
+#   }
+#   if (attr(pmwg_mcmc,"selection")=="LL")
+#     stop("Effective size not sensible for LL\n")
+#   out <- do.call(rbind,lapply(pmwg_mcmc,effectiveSize))
+#   if (attr(pmwg_mcmc,"selection")=="alpha") {
+#     if (!is.null(summary_alpha)) out <- apply(out,2,summary_alpha)
+#     if (print_summary) if (sort_print) print(round(sort(out))) else
+#       print(round(out))
+#     invisible(out)
+#   } else {
+#     out <- apply(out,2,sum)
+#     if (print_summary) if (sort_print) print(round(sort(out))) else
+#       print(round(out))
+#     invisible(out)
+#   }
+# }
+
+
+split_mcl <- function(mcl)
+  # Doubles chains by splitting into first and secon half
 {
-  if (!(class(pmwg_mcmc[[1]]) %in% c("mcmc","mcmc.list"))) {
-    if (is(pmwg_mcmc, "pmwgs")){
-      pmwg_mcmc <- as_Mcmc(pmwg_mcmc,selection=selection,filter=filter,
-                           thin=thin,subfilter=subfilter)
-    }
-    else{
-      pmwg_mcmc <- as_mcmc.list(pmwg_mcmc,selection=selection,filter=filter,
-                                thin=thin,subfilter=subfilter)
-    }
+  if (!is.list(mcl)) mcl <- list(mcl)
+  mcl2 <- mcl
+  half <- floor(unlist(lapply(mcl,nrow))/2)
+  for (i in 1:length(half)) {
+    mcl2[[i]] <- coda::as.mcmc(mcl2[[i]][c((half[i]+1):(2*half[i])),])
+    mcl[[i]] <- coda::as.mcmc(mcl[[i]][1:half[i],])
   }
-  if (attr(pmwg_mcmc,"selection")=="LL")
-    stop("Effective size not sensible for LL\n")
-  out <- do.call(rbind,lapply(pmwg_mcmc,effectiveSize))
-  if (attr(pmwg_mcmc,"selection")=="alpha") {
-    if (!is.null(summary_alpha)) out <- apply(out,2,summary_alpha)
-    if (print_summary) if (sort_print) print(round(sort(out))) else
-      print(round(out))
-    invisible(out)
-  } else {
-    out <- apply(out,2,sum)
-    if (print_summary) if (sort_print) print(round(sort(out))) else
-      print(round(out))
-    invisible(out)
-  }
+  coda::as.mcmc.list(c(mcl,mcl2))
 }
 
-#' ess
-#'
-#' Summarizes effective sample size statistics for a samplers object, invisibly
-#' returning as a list
-#'
-#' @param samplers Samples object with multiple chains
-#' @param no_print Boolean for printing
-#' @param digits Integer, number of digits for printing
-#' @param return_min return is min(es) for hierarchical
-ess <- function(samplers,no_print=FALSE,return_min=FALSE,digits=0) {
-
-  alpha <- es_pmwg(samplers,selection="alpha",print_summary = FALSE)
-  hierarchical <- any(names(samplers[[1]]$samples)=="theta_mu")
-  if (hierarchical) {
-    mu <- es_pmwg(samplers,selection="mu",print_summary = FALSE)
-    variance <- es_pmwg(samplers,selection="variance",print_summary = FALSE)
-    correlation <- es_pmwg(samplers,selection="correlation",print_summary = FALSE)
-  }
-  if (!(no_print)) {
-    cat("ALPHA\n")
-    print(round(alpha,digits))
-    if (hierarchical) {
-      cat("\nMU\n")
-      print(round(sort(mu),digits))
-      cat("\nVARIANCE\n")
-      print(round(sort(variance),digits))
-      cat("\nCORRELATION\n")
-      print(round(sort(correlation),digits))
+gelman_diag_robust <- function(mcl,autoburnin = FALSE,transform = TRUE, omit_mpsrf = TRUE)
+{
+  mcl <- split_mcl(mcl)
+  gd <- try(gelman.diag(mcl,autoburnin=autoburnin,transform=transform, multivariate = !omit_mpsrf),silent=TRUE)
+  gd_out <- gd[[1]][,1] # Remove CI
+  if (is(gd, "try-error")){
+    if(omit_mpsrf){
+      return(list(psrf=matrix(Inf)))
+    } else{
+      return(list(psrf=matrix(Inf),mpsrf=Inf))
     }
+  } else{
+    return(gd_out)
   }
-  if (hierarchical) {
-    out <- list(alpha=alpha,mu=mu,variance=variance,correlation=correlation)
-    if (return_min) {
-      out <- unlist(lapply(out,min))
-    }
-  } else {
-    out <- alpha
-  }
-  invisible(out)
 }
-
 
 gd_pmwg <- function(pmwg_mcmc,return_summary=FALSE,print_summary=TRUE,
                     digits_print=2,sort_print=TRUE,autoburnin=FALSE,transform=TRUE, omit_mpsrf = TRUE,
@@ -138,35 +126,6 @@ gd_pmwg <- function(pmwg_mcmc,return_summary=FALSE,print_summary=TRUE,
   # R hat, prints multivariate summary returns each participant unless +
   # multivariate as matrix unless !return_summary
 {
-
-  split_mcl <- function(mcl)
-    # Doubles chains by splitting into first and secon half
-  {
-    if (!is.list(mcl)) mcl <- list(mcl)
-    mcl2 <- mcl
-    half <- floor(unlist(lapply(mcl,nrow))/2)
-    for (i in 1:length(half)) {
-      mcl2[[i]] <- coda::as.mcmc(mcl2[[i]][c((half[i]+1):(2*half[i])),])
-      mcl[[i]] <- coda::as.mcmc(mcl[[i]][1:half[i],])
-    }
-    coda::as.mcmc.list(c(mcl,mcl2))
-  }
-
-  gelman_diag_robust <- function(mcl,autoburnin,transform, omit_mpsrf)
-  {
-    mcl <- split_mcl(mcl)
-    gd <- try(gelman.diag(mcl,autoburnin=autoburnin,transform=transform, multivariate = !omit_mpsrf),silent=TRUE)
-    if (is(gd, "try-error")){
-      if(omit_mpsrf){
-        return(list(psrf=matrix(Inf)))
-      } else{
-        return(list(psrf=matrix(Inf),mpsrf=Inf))
-      }
-    } else{
-      return(gd)
-    }
-  }
-
   if ( selection=="LL" ) stop("Rhat not appropriate for LL")
   if (class(pmwg_mcmc[[1]]) %in% c("mcmc","mcmc.list")) {
     if (mapped) warning("Cannot transform to natural scale unless samples list provided")
@@ -204,7 +163,7 @@ gd_pmwg <- function(pmwg_mcmc,return_summary=FALSE,print_summary=TRUE,
 }
 
 
-#' rhat
+#' gd_summary
 #'
 #' Summarizes gelman_diag statistics for a samplers object, invisibly returning
 #' a list of two lists containing univarite (psrf) and multivariate (mpsrf)
@@ -213,16 +172,17 @@ gd_pmwg <- function(pmwg_mcmc,return_summary=FALSE,print_summary=TRUE,
 #' @param samplers Samples object with multiple chains
 #' @param no_print Boolean for printing
 #' @param digits Integer, number of digits for printing
-#' @param return_max return is max(gd) for hierarchical
-rhat <- function(samplers,no_print=FALSE,return_max=FALSE,digits=2) {
+#'
+#' @return List of two lists names psrf and mpsrf.
+gd_summary <- function(samplers,no_print=TRUE,digits=2) {
 
-  alpha <- gd_pmwg(samplers,selection="alpha",print_summary = FALSE,omit_mpsrf = FALSE)
+  alpha <- gd_pmwg(samplers,selection="alpha",print_summary = FALSE)
   alphai <- alpha; alpha <- alpha[,"mpsrf"]; alphai <- alphai[,dimnames(alphai)[[2]]!="mpsrf"]
   hierarchical <- any(names(samplers[[1]]$samples)=="theta_mu")
   if (hierarchical) {
-    mu <- gd_pmwg(samplers,selection="mu",print_summary = FALSE,omit_mpsrf = FALSE)
-    variance <- gd_pmwg(samplers,selection="variance",print_summary = FALSE,omit_mpsrf = FALSE)
-    correlation <- gd_pmwg(samplers,selection="correlation",print_summary = FALSE,omit_mpsrf = FALSE)
+    mu <- gd_pmwg(samplers,selection="mu",print_summary = FALSE)
+    variance <- gd_pmwg(samplers,selection="variance",print_summary = FALSE)
+    correlation <- gd_pmwg(samplers,selection="correlation",print_summary = FALSE)
     mui <- mu; mu <- mu["mpsrf"]; mui <- mui[names(mui)!="mpsrf"]
     variancei <- variance; variance <- variance["mpsrf"]; variancei <- variancei[names(variancei)!="mpsrf"]
     correlationi <- correlation; correlation <- correlation["mpsrf"]; correlationi <- correlationi[names(correlationi)!="mpsrf"]
@@ -243,19 +203,10 @@ rhat <- function(samplers,no_print=FALSE,return_max=FALSE,digits=2) {
       print(round(c(mu=mu,var=variance,corr=correlation),digits=digits))
     }
   }
-  if (hierarchical) {
-    out <- list(psrf=list(alpha=alphai,mu=mui,variance=variancei,correlation=correlationi),
-                   mpsrf=list(alpha=alpha,mu=mu,variance=variance,correlation=correlation))
-    if (return_max) {
-      mpsrf=c(out$mpsrf$mu,out$mpsrf$variancex$mpsrf$correlation,out$mpsrf[[1]])
-      names(mpsrf)[1:3] <- c("mu","variance","correlation")
-      out <- list(psrf=c(unlist(lapply(out$psrf[-1],max)),apply(out$psrf[[1]],2,max)),
-                  mpsrf=mpsrf)
-    }
-  } else {
-    out <- list(psrf=list(alpha=alphai), mpsrf=list(alpha=alpha))
-  }
-  invisible(out)
+  if (hierarchical)
+    invisible(list(psrf=list(alpha=alphai,mu=mui,variance=variancei,correlation=correlationi),
+                   mpsrf=list(alpha=alpha,mu=mu,variance=variance,correlation=correlation))) else
+                     invisible(list(psrf=list(alpha=alphai), mpsrf=list(alpha=alpha)))
 }
 
 
@@ -320,47 +271,6 @@ iat_pmwg <- function(pmwg_mcmc,
     } else out <- get_IAT(pmwg_mcmc)
   if (sort_print & !(selection == "alpha" & is.null(summary_alpha))) out <- sort(out)
   if (print_summary) print(round(out,digits_print))
-  invisible(out)
-}
-
-#' iat
-#'
-#' Summarizes integrated autocorrelation time statistics for a samplers object,
-#' invisibly returning as a list
-#'
-#' @param samplers Samples object with multiple chains
-#' @param no_print Boolean for printing
-#' @param digits Integer, number of digits for printing
-#' @param return_max return is max(iat) for hierarchical
-iat <- function(samplers,no_print=FALSE,return_max=FALSE,digits=2) {
-
-  alpha <- iat_pmwg(samplers,selection="alpha",print_summary = FALSE)
-  hierarchical <- any(names(samplers[[1]]$samples)=="theta_mu")
-  if (hierarchical) {
-    mu <- iat_pmwg(samplers,selection="mu",print_summary = FALSE)
-    variance <- iat_pmwg(samplers,selection="variance",print_summary = FALSE)
-    correlation <- iat_pmwg(samplers,selection="correlation",print_summary = FALSE)
-  }
-  if (!(no_print)) {
-    cat("ALPHA\n")
-    print(round(alpha,digits))
-    if (hierarchical) {
-      cat("\nMU\n")
-      print(round(sort(mu),digits))
-      cat("\nVARIANCE\n")
-      print(round(sort(variance),digits))
-      cat("\nCORRELATION\n")
-      print(round(sort(correlation),digits))
-    }
-  }
-  if (hierarchical) {
-    out <- list(alpha=alpha,mu=mu,variance=variance,correlation=correlation)
-    if (return_max) {
-      out <- unlist(lapply(out,max))
-    }
-  } else {
-    out <- alpha
-  }
   invisible(out)
 }
 
@@ -531,55 +441,53 @@ IC <- function(samplers,filter="sample",subfilter=0,use_best_fit=TRUE,
                print_summary=TRUE,digits=0,subject=NULL)
   # Gets DIC, BPIC, effective parameters, mean deviance, and deviance of mean
 {
-
-
   # Mean log-likelihood for each subject
-  if (is(samplers, "pmwgs"))
-    ll <- as_Mcmc(samplers,selection="LL",filter=filter,subfilter=subfilter) else
-      ll <- as_mcmc.list(samplers,selection="LL",filter=filter,subfilter=subfilter)
-    minDs <- -2*unlist(lapply(ll,function(x){max(unlist(x))}))
-    mean_lls <- unlist(lapply(ll,function(x){mean(unlist(x))}))
+  ll <- as_mcmc_new(samplers, filter = filter, subfilter = subfilter, selection = "LL", merge_chains = TRUE)
+  minDs <- -2*apply(ll[[1]][[1]], 2, min)
+  mean_lls <- apply(ll[[1]][[1]], 2, mean)
+  alpha <- as_mcmc_new(samplers,selection="alpha",filter=filter,subfilter=subfilter, by_subject = TRUE, merge_chains = TRUE)
+  mean_pars <- lapply(alpha,function(x){apply(do.call(rbind,x),2,mean)})
+  # log-likelihood for each subject using their mean parameter vector
+  ll_func <- attr(samplers,"design_list")[[1]]$model()$log_likelihood
+  data <- samplers[[1]]$data
+  mean_pars_lls <- setNames(numeric(length(mean_pars)),names(mean_pars))
+  for (sub in names(mean_pars))
+    mean_pars_lls[sub] <- ll_func(mean_pars[[sub]],dadm = data[[sub]])
+  Dmeans <- -2*mean_pars_lls
 
-    if (is(samplers, "pmwgs"))
-      alpha <- as_Mcmc(samplers,selection="alpha",filter=filter,subfilter=subfilter) else
-        alpha <- as_mcmc.list(samplers,selection="alpha",filter=filter,subfilter=subfilter)
-    mean_pars <- lapply(alpha,function(x){apply(do.call(rbind,x),2,mean)})
-    # log-likelihood for each subject using their mean parameter vector
-    ll_func <- attr(samplers,"design_list")[[1]]$model()$log_likelihood
-    data <- samplers[[1]]$data
-    mean_pars_lls <- setNames(numeric(length(mean_pars)),names(mean_pars))
-    for (sub in names(mean_pars))
-      mean_pars_lls[sub] <- ll_func(mean_pars[[sub]],dadm = data[[sub]])
-    Dmeans <- -2*mean_pars_lls
-    if (use_best_fit) minDs <- pmin(minDs,Dmeans)
+  if (!is.null(subject)) {
+    Dmeans <- Dmeans[subject[1]]
+    mean_lls <- mean_lls[subject[1]]
+    minDs <- minDs[subject[1]]
+  } else{
+    group_stats <- group_level_IC_standard(samplers, filter=filter,subfilter=subfilter)
+    mean_lls <- c(mean_lls, group_stats$mean_ll)
+    minDs <- c(minDs, group_stats$minD)
+    Dmeans <- c(Dmeans, group_stats$Dmean)
+  }
+  if (use_best_fit) minDs <- pmin(minDs,Dmeans)
 
-    if (!is.null(subject)) {
-      Dmeans <- Dmeans[subject[1]]
-      mean_lls <- mean_lls[subject[1]]
-      minDs <- minDs[subject[1]]
-    }
+  # mean deviance(-2*ll of all data)
+  mD <- sum(-2 * mean_lls)
+  # Deviance of mean
+  Dmean <- sum(Dmeans)
+  # mimimum Deviance
+  minD <- sum(minDs)
 
-    # mean deviance(-2*ll of all data)
-    mD <- sum(-2 * mean_lls)
-    # Deviance of mean
-    Dmean <- sum(Dmeans)
-    # mimimum Deviance
-    minD <- sum(minDs)
+  # Use deviance of mean as best fit or use actual best fit
+  if (!use_best_fit) Dm <- Dmean else Dm <- minD
 
-    # Use deviance of mean as best fit or use actual best fit
-    if (!use_best_fit) Dm <- Dmean else Dm <- minD
-
-    # effective number of parameters
-    pD <- mD - Dm
-    # DIC = mean deviance + effective number of parameters
-    DIC <- mD + pD
-    # BPIC = mean deviance + 2*effective number of parameters
-    # Note this is the "easy" BPIC, instead of the complex 2007 one
-    BPIC <- mD + 2*pD
-    out <- c(DIC = DIC, BPIC = BPIC, EffectiveN = pD,meanD=mD,Dmean=Dmean,minD=minD)
-    names(out) <- c("DIC","BPIC","EffectiveN","meanD","Dmean","minD")
-    if (print_summary) print(round(out,digits))
-    invisible(out)
+  # effective number of parameters
+  pD <- mD - Dm
+  # DIC = mean deviance + effective number of parameters
+  DIC <- mD + pD
+  # BPIC = mean deviance + 2*effective number of parameters
+  # Note this is the "easy" BPIC, instead of the complex 2007 one
+  BPIC <- mD + 2*pD
+  out <- c(DIC = DIC, BPIC = BPIC, EffectiveN = pD,meanD=mD,Dmean=Dmean,minD=minD)
+  names(out) <- c("DIC","BPIC","EffectiveN","meanD","Dmean","minD")
+  if (print_summary) print(round(out,digits))
+  invisible(out)
 }
 
 
@@ -697,7 +605,7 @@ compare <- function(sList,filter="sample",subfilter=0,use_best_fit=TRUE,
 #'
 #' @param samplers A list, typically a `samplers`object, the output from `run_emc()`
 #' @param parameter A string. A parameter which you want to compare to H0. Will not be used if a FUN is specified.
-#' @param H0 Numeric. The H0 value which you want to compare to
+#' @param H0 An integer. The H0 value which you want to compare to
 #' @param filter A string. Specifies which stage the samples are to be taken from
 #' `"preburn"`, `"burn"`, `"adapt"`, or `"sample"`
 #' @param subfilter An integer or vector. If it's an integer, iterations up until
@@ -916,4 +824,67 @@ condMVN <- function (mean, sigma, dependent.ind, given.ind, X.given, check.sigma
   cMu <- c(mean[dependent.ind] + CDinv %*% (X.given - mean[given.ind]))
   cVar <- B - CDinv %*% t(C)
   list(condMean = cMu, condVar = cVar)
+}
+
+
+make_nice_summary <- function(object, stat = "max", stat_only = FALSE){
+  row_names <- names(object)
+  col_names <- unique(unlist(lapply(object, names)))
+  if(all(row_names %in% col_names)){
+    col_names <- row_names
+  }
+  out_mat <- matrix(NA, nrow = length(row_names), ncol = length(col_names))
+  for(i in 1:length(object)){
+    idx <- col_names %in% names(object[[i]])
+    out_mat[i,idx] <- object[[i]]
+  }
+  row_stat <- apply(out_mat, 1, FUN = get(stat), na.rm = T)
+  out_mat <- cbind(out_mat, row_stat)
+
+  if(nrow(out_mat) > 1){
+    col_stat <- apply(out_mat, 2, FUN = get(stat), na.rm = T)
+    col_stat[length(col_stat)] <- get(stat)(unlist(object))
+    out_mat <- rbind(out_mat, c(col_stat))
+    rownames(out_mat) <- c(row_names, stat)
+  } else{
+    rownames(out_mat) <- row_names
+  }
+  colnames(out_mat) <- c(col_names, stat)
+  if(stat_only){
+    out_mat <- out_mat[nrow(out_mat), ncol(out_mat)]
+  }
+  return(out_mat)
+}
+
+
+get_summary_stat <- function(samplers, fun, subject=NULL,
+                             selection="mu",filter="sample",thin=1,subfilter=0,
+                             by_subject = TRUE, stat = "min", stat_only = FALSE, ...){
+  MCMC_samples <- as_mcmc_new(samplers, selection = selection, filter = filter,
+                              thin = thin, subfilter = subfilter, by_subject = by_subject,
+                              subject = subject, flatten = FALSE, remove_dup = FALSE)
+  out <- vector("list", length = length(MCMC_samples))
+  for(i in 1:length(MCMC_samples)){
+    # cat("\n", names(MCMC_samples)[[i]], "\n")
+    out[[i]] <- fun(MCMC_samples[[i]], ...)
+  }
+  names(out) <- names(MCMC_samples)
+  out <- make_nice_summary(out, stat, stat_only)
+  return(out)
+}
+
+gd_summary_new <- function(samplers,subject=NULL,
+                           selection="mu",filter="sample",thin=1,subfilter=0,
+                           omit_mpsrf = TRUE, by_subject = TRUE, stat = "min"){
+  out <- get_summary_stat(samplers, gelman_diag_robust, subject, selection, filter, thin, subfilter,
+                          by_subject, stat)
+  return(out)
+}
+
+es_summary_new <- function(samplers,subject=NULL,
+                           selection="mu",filter="sample",thin=1,subfilter=0,
+                           by_subject = TRUE, stat = "min", stat_only = FALSE){
+  out <- get_summary_stat(samplers, effectiveSize, subject, selection, filter, thin, subfilter,
+                          by_subject, stat, stat_only)
+  return(out)
 }

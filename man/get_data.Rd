@@ -4,10 +4,10 @@
 \alias{get_data}
 \title{get data}
 \usage{
-get_data(pmwgs)
+get_data(samplers)
 }
 \arguments{
-\item{pmwgs}{an emc object}
+\item{samplers}{an emc object}
 }
 \value{
 a data frame

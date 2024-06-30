@@ -9,7 +9,7 @@ get_prior_single(
   n_pars = NULL,
   sample = TRUE,
   N = 1e+05,
-  type = "alpha",
+  selection = "alpha",
   design = NULL,
   map = FALSE
 )
@@ -26,7 +26,7 @@ return the prior specifications?}
 
 \item{N}{How many samples to draw from the prior, the default is 1e5}
 
-\item{type}{Character. If \code{sample = TRUE}, what prior to sample from. Options: \code{"alpha"}.}
+\item{selection}{Character. If \code{sample = TRUE}, what prior to sample from. Options: \code{"alpha"}.}
 
 \item{design}{The design obtained from \code{make_design()}, required when \code{map = TRUE}}
 

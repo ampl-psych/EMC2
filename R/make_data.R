@@ -60,18 +60,17 @@ make_missing <- function(data,LT=0,UT=Inf,LC=0,UC=Inf,
 #'
 #' To create data for multiple subjects see ``?make_random_effects()``.
 #'
-#' @param p_vector parameter vector used to simulate data.
+#' @param parameters parameter vector used to simulate data.
 #' Can also be a matrix with one row per subject (with corresponding row names)
-#' or a list of tables produced by ``plot_pars``
-#' (in which case posterior medians are used to simulate data)
+#' or an emc object with sampled parameters
+#' (in which case posterior medians of `alpha` are used to simulate data)
 #' @param design Design list created by ``make_design()``
 #' @param n_trials Integer. If ``data`` is not supplied, number of trials to create per design cell
 #' @param data Data frame. If supplied, the factors are taken from the data. Determines the number of trials per level of the design factors and can thus allow for unbalanced designs
 #' @param expand Integer. Replicates the ``data`` (if supplied) expand times to increase number of trials per cell.
 #' @param mapped_p If `TRUE` instead returns a data frame with one row per design
-#' cell and columns for each parameter specifying how they are mapped to the
+#' cell and columns for each parameter specifying how they are mapped to the design cells.
 #' @param ... Additional optional arguments
-#' design cells.
 #' @return A data frame with simulated data
 #' @examples
 #' # First create a design
@@ -82,23 +81,23 @@ make_missing <- function(data,LT=0,UT=Inf,LC=0,UC=Inf,
 #'                             formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
 #'                             constants=c(s=log(1)))
 #' # Then create a p_vector:
-#' p_vector <- c(v_Sleft=-2,v_Sright=2,a=log(1),a_EACC=log(2), t0=log(.2),
+#' parameters <- c(v_Sleft=-2,v_Sright=2,a=log(1),a_EACC=log(2), t0=log(.2),
 #'               Z=qnorm(.5),sv=log(.5),SZ=qnorm(.5))
 #'
 #' # Now we can simulate data
-#' data <- make_data(p_vector, design_DDMaE, n_trials = 30)
+#' data <- make_data(parameters, design_DDMaE, n_trials = 30)
 #'
 #' # We can also simulate data based on a specific dataset
 #' design_DDMaE <- make_design(data = forstmann,model=DDM,
 #'                             formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
 #'                             constants=c(s=log(1)))
-#' p_vector <- c(v_Sleft=-2,v_Sright=2,a=log(1),a_Eneutral=log(1.5),a_Eaccuracy=log(2),
+#' parameters <- c(v_Sleft=-2,v_Sright=2,a=log(1),a_Eneutral=log(1.5),a_Eaccuracy=log(2),
 #'               t0=log(.2),Z=qnorm(.5),sv=log(.5),SZ=qnorm(.5))
 #'
-#' data <- make_data(p_vector, design_DDMaE, data = forstmann)
+#' data <- make_data(parameters, design_DDMaE, data = forstmann)
 #' @export
 
-make_data <- function(p_vector,design,n_trials=NULL,data=NULL,expand=1,
+make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
   mapped_p=FALSE, ...)
 {
   # #' @param LT lower truncation bound below which data are removed (scalar or subject named vector)
@@ -136,13 +135,28 @@ make_data <- function(p_vector,design,n_trials=NULL,data=NULL,expand=1,
   for (name in names(optionals) ) {
     assign(name, optionals[[name]])
   }
+  if(is(parameters, "emc")){
+    if(is.null(design)) design <- attr(parameters, "design_list")[[1]]
+    if(is.null(data)) data <- get_data(parameters)
+    parameters <- do.call(rbind, posterior_summary_new(parameters, probs = 0.5, selection = "alpha", by_subject = TRUE))
+  }
 
-  if (is.list(p_vector))
-    p_vector <- do.call(rbind,lapply(p_vector,function(x)x[2,]))
+  sampled_p_names <- names(sampled_p_vector(design))
+  if(is.null(dim(parameters))){
+    if(is.null(names(parameters))) names(parameters) <- sampled_p_names
+  } else{
+    design$Ffactors$subjects <- design$Ffactors$subjects[1:nrow(parameters)]
+    if(!is.null(data)){
+      data<- data[data$subjects %in% design$Ffactors$subjects,]
+      data$subjects <- factor(data$subjects)
+    }
+    if(is.null(colnames(parameters))) colnames(parameters) <- sampled_p_names
+    if(is.null(rownames(parameters))) rownames(parameters) <- design$Ffactors$subjects
+  }
   model <- design$model
-  if (!is.matrix(p_vector)) p_vector <- make_pmat(p_vector,design)
+  if (!is.matrix(parameters)) parameters <- make_pmat(parameters,design)
   if ( is.null(data) ) {
-    design$Ffactors$subjects <- rownames(p_vector)
+    design$Ffactors$subjects <- rownames(parameters)
     if (mapped_p) n_trials <- 1
     if ( is.null(n_trials) )
       stop("If data is not provided need to specify number of trials")
@@ -200,7 +214,7 @@ make_data <- function(p_vector,design,n_trials=NULL,data=NULL,expand=1,
   }
   if (!is.factor(data$subjects)) data$subjects <- factor(data$subjects)
   if (!is.null(model)) {
-    if (!is.function(model)) stop("model arguement must  be a function")
+    if (!is.function(model)) stop("model argument must  be a function")
     if ( is.null(model()$p_types) ) stop("model()$p_types must be specified")
     if ( is.null(model()$transform) ) stop("model()$transform must be specified")
     if ( is.null(model()$Ntransform) ) stop("model()$Ntransform must be specified")
@@ -211,9 +225,9 @@ make_data <- function(p_vector,design,n_trials=NULL,data=NULL,expand=1,
     design,model,add_acc=FALSE,compress=FALSE,verbose=FALSE,
     rt_check=FALSE)
   if (!is.null(attr(design,"ordinal")))
-    p_vector[,attr(design,"ordinal")] <- exp(p_vector[,attr(design,"ordinal")])
+    parameters[,attr(design,"ordinal")] <- exp(parameters[,attr(design,"ordinal")])
   pars <- model()$Ttransform(model()$Ntransform(map_p(
-    model()$transform(add_constants(p_vector,design$constants)),data
+    model()$transform(add_constants(parameters,design$constants)),data
   )),data)
   if ( any(dimnames(pars)[[2]]=="pContaminant") && any(pars[,"pContaminant"]>0) )
     pc <- pars[data$lR==levels(data$lR)[1],"pContaminant"] else pc <- NULL
@@ -275,7 +289,7 @@ make_data <- function(p_vector,design,n_trials=NULL,data=NULL,expand=1,
         if (LCdirection) data[contam,"rt"] <- -Inf  else data[contam,"rt"] <- Inf
     } else data[contam,"rt"] <- NA
   }
-  attr(data,"p_vector") <- p_vector;
+  attr(data,"p_vector") <- parameters;
   data
 }
 

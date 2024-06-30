@@ -6,10 +6,8 @@
 \usage{
 \method{summary}{emc}(
   object,
-  selection = c("mu", "variance", "correlation"),
+  selection = c("mu", "sigma2", "alpha"),
   probs = c(0.025, 0.5, 0.975),
-  filter = "sample",
-  subfilter = 0,
   digits = 3,
   ...
 )
@@ -17,21 +15,21 @@
 \arguments{
 \item{object}{An object of class \code{emc}}
 
-\item{selection}{A character string indicating the parameter group.
-Defaults to \code{mu}, \code{variance}, and \code{correlation}. Other options are \code{covariance}, and \code{alpha}
+\item{selection}{A character string indicating the parameter type
+Defaults to \code{mu}, \code{sigma2}, and \code{alpha}.
 (i.e., individual-level parameters). See below for more information.}
 
 \item{probs}{The quantiles to be computed. Defaults to the the 2.5\%, 50\% and 97.5\% quantiles.}
+
+\item{digits}{An integer specifying rounding of output.}
+
+\item{...}{Further optional arguments.}
 
 \item{filter}{A character string indicating the sampling stage to be summarized.
 Can be \code{preburn}, \code{burn}, \code{adapt}, or \code{sample}.}
 
 \item{subfilter}{An integer or vector, defaults to 0. See below
 for more details.}
-
-\item{digits}{An integer specifying rounding of output.}
-
-\item{...}{Further optional arguments.}
 }
 \value{
 A list of summary output.

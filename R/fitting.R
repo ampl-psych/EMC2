@@ -82,7 +82,7 @@
 #'
 #' # Example of how to use the stop_criteria:
 #' samplers <- run_emc(samplers, stop_criteria = list(mean_gd = 1.1, max_gd = 1.5,
-#'             selection = c('alpha', 'variance'), omit_mpsrf = TRUE, min_es = 1000).
+#'             selection = c('alpha', 'sigma2'), omit_mpsrf = TRUE, min_es = 1000).
 #' # In this case the stop_criteria are set for the sample stage, which will be
 #' # run until the mean_gd < 1.1, the max_gd < 1.5 (omitting the multivariate psrf)
 #' # and the effective sample size > 1000,
@@ -385,15 +385,8 @@ check_progress <- function (samplers, stage, iter, stop_criteria,
   else if (iters_total != 0) {
     curr_min_es <- Inf
     for(select in selection){
-      # if(!is.null(samplers[[1]]$g_map_fixed)){
-      #   curr_min_es <- min(es_pmwg(as_mcmc.list(samplers, selection = "random",
-      #                                           filter = stage), print_summary = F),
-      #                      es_pmwg(as_mcmc.list(samplers, selection = "fixed",
-      #                                           filter = stage), print_summary = F))
-      # } else{    # }
-
-      curr_min_es <- min(c(es_pmwg(as_mcmc.list(samplers, selection = select,
-                                                filter = stage), print_summary = F), curr_min_es))
+      curr_min_es <- min(c(es_summary_new(samplers, selection = select,
+                                                filter = stage, stat_only = TRUE), curr_min_es))
     }
     if (verbose)
       message("Smallest effective size = ", round(curr_min_es))
@@ -438,10 +431,11 @@ check_progress <- function (samplers, stage, iter, stop_criteria,
 check_gd <- function(samplers, stage, max_gd, mean_gd, omit_mpsrf, trys, verbose,
                      selection, iter, n_blocks = 1)
 {
-  get_gds <- function(samplers,omit_mpsrf, selection) {
+  get_gds <- function(samplers,omit_mpsrf, selection, stage) {
     gd_out <- c()
     for(select in selection){
-      gd <- gd_pmwg(samplers, selection = select, return_summary = F, mapped = F, print_summary = F, filter = stage, omit_mpsrf = omit_mpsrf)
+      gd <- unlist(gd_summary_new(samplers, selection = select, filter = stage,
+                                  omit_mpsrf = omit_mpsrf, stat = NULL))
       gd_out <- c(gd_out, c(gd))
     }
     return(gd_out)
@@ -451,18 +445,7 @@ check_gd <- function(samplers, stage, max_gd, mean_gd, omit_mpsrf, trys, verbose
   if(!samplers[[1]]$init | !stage %in% samplers[[1]]$samples$stage)
     return(list(gd_done = FALSE, samplers = samplers))
   if(is.null(omit_mpsrf)) omit_mpsrf <- TRUE
-  # if(!is.null(samplers[[1]]$g_map_fixed)){
-  #   gd_fixed <- gd_pmwg(as_mcmc.list(samplers,filter=stage, selection = "fixed"), return_summary = FALSE,print_summary = FALSE,filter=stage,mapped=FALSE, selection = "fixed")
-  #   gd_random <- gd_pmwg(as_mcmc.list(samplers,filter=stage, selection = "random"), return_summary = FALSE,print_summary = FALSE,filter=stage,mapped=FALSE, selection = "random")
-  #   if(omit_mpsrf){
-  #     gd_fixed <- gd_fixed[-length(gd_fixed)]
-  #     gd_random <- gd_random[,-ncol(gd_random)]
-  #   }
-  #   gd <- c(gd_fixed, gd_random)
-  # } else{  }
-  gd <- get_gds(samplers,omit_mpsrf,selection)
-
-
+  gd <- get_gds(samplers,omit_mpsrf,selection, stage)
   if(!is.null(max_gd)){
     ok_max_gd <- ifelse(all(is.finite(gd)), all(gd < max_gd), FALSE)
   } else{
@@ -477,23 +460,11 @@ check_gd <- function(samplers, stage, max_gd, mean_gd, omit_mpsrf, trys, verbose
   ok_gd <- ok_mean_gd & ok_max_gd
   if(!ok_gd) {
     n_remove <- round(chain_n(samplers)[,stage][1]/3)
-    samplers_short <- try(lapply(samplers,remove_iterations,select=n_remove,filter=stage),silent=TRUE)
+    samplers_short <- try(lapply(samplers,remove_iterations,subfilter=n_remove,filter=stage),silent=TRUE)
     if (is(samplers_short,"try-error")){
       gd_short <- Inf
     } else{
-      # if(!is.null(samplers[[1]]$g_map_fixed)){
-      #   gd_fixed_short <- gd_pmwg(as_mcmc.list(samplers_short,filter=stage, selection = "fixed"), return_summary = FALSE,
-      #                             print_summary = FALSE,filter=stage,mapped=FALSE, selection = "fixed")
-      #   gd_random_short <- gd_pmwg(as_mcmc.list(samplers_short,filter=stage, selection = "random"), return_summary = FALSE,
-      #                              print_summary = FALSE,filter=stage,mapped=FALSE, selection = "random")
-      #   if(omit_mpsrf){
-      #     gd_fixed <- gd_fixed[-length(gd_fixed)]
-      #     gd_random <- gd_random[,-ncol(gd_random)]
-      #   }
-      #   gd_short <- c(gd_fixed_short, gd_random_short)
-      # } else{
-      # }
-      gd_short <- get_gds(samplers_short,omit_mpsrf,selection)
+      gd_short <- get_gds(samplers_short,omit_mpsrf,selection, stage)
 
     }
     if (is.null(max_gd) & (mean(gd_short) < mean(gd)) | (!is.null(max_gd) & (max(gd_short) < max(gd)))) {

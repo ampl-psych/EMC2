@@ -25,8 +25,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // calc_ll
-NumericVector calc_ll(NumericMatrix p_matrix, DataFrame data, NumericVector constants, List designs, const int n_trials, String type, CharacterVector p_types, LogicalVector winner, NumericVector expand, double min_ll, List group_idx);
-RcppExport SEXP _EMC2_calc_ll(SEXP p_matrixSEXP, SEXP dataSEXP, SEXP constantsSEXP, SEXP designsSEXP, SEXP n_trialsSEXP, SEXP typeSEXP, SEXP p_typesSEXP, SEXP winnerSEXP, SEXP expandSEXP, SEXP min_llSEXP, SEXP group_idxSEXP) {
+NumericVector calc_ll(NumericMatrix p_matrix, DataFrame data, NumericVector constants, List designs, String type, CharacterVector p_types, double min_ll, List group_idx);
+RcppExport SEXP _EMC2_calc_ll(SEXP p_matrixSEXP, SEXP dataSEXP, SEXP constantsSEXP, SEXP designsSEXP, SEXP typeSEXP, SEXP p_typesSEXP, SEXP min_llSEXP, SEXP group_idxSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -34,14 +34,11 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< DataFrame >::type data(dataSEXP);
     Rcpp::traits::input_parameter< NumericVector >::type constants(constantsSEXP);
     Rcpp::traits::input_parameter< List >::type designs(designsSEXP);
-    Rcpp::traits::input_parameter< const int >::type n_trials(n_trialsSEXP);
     Rcpp::traits::input_parameter< String >::type type(typeSEXP);
     Rcpp::traits::input_parameter< CharacterVector >::type p_types(p_typesSEXP);
-    Rcpp::traits::input_parameter< LogicalVector >::type winner(winnerSEXP);
-    Rcpp::traits::input_parameter< NumericVector >::type expand(expandSEXP);
     Rcpp::traits::input_parameter< double >::type min_ll(min_llSEXP);
     Rcpp::traits::input_parameter< List >::type group_idx(group_idxSEXP);
-    rcpp_result_gen = Rcpp::wrap(calc_ll(p_matrix, data, constants, designs, n_trials, type, p_types, winner, expand, min_ll, group_idx));
+    rcpp_result_gen = Rcpp::wrap(calc_ll(p_matrix, data, constants, designs, type, p_types, min_ll, group_idx));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -128,7 +125,7 @@ END_RCPP
 
 static const R_CallMethodDef CallEntries[] = {
     {"_EMC2_c_map_p", (DL_FUNC) &_EMC2_c_map_p, 4},
-    {"_EMC2_calc_ll", (DL_FUNC) &_EMC2_calc_ll, 11},
+    {"_EMC2_calc_ll", (DL_FUNC) &_EMC2_calc_ll, 8},
     {"_EMC2_d_DDM_c", (DL_FUNC) &_EMC2_d_DDM_c, 6},
     {"_EMC2_dlba", (DL_FUNC) &_EMC2_dlba, 7},
     {"_EMC2_plba", (DL_FUNC) &_EMC2_plba, 7},

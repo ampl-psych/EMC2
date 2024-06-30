@@ -26,7 +26,7 @@ add_info_single <- function(sampler, prior = NULL, ...){
 #' Note that `map` does not affect the prior used in the sampling process.
 #' @param N How many samples to draw from the prior, the default is 1e5
 #' @param design The design obtained from `make_design()`, required when `map = TRUE`
-#' @param type  Character. If `sample = TRUE`, what prior to sample from. Options: `"alpha"`.
+#' @param selection  Character. If `sample = TRUE`, what prior to sample from. Options: `"alpha"`.
 #' @return A list with a single entry named `"alpha"` and samples from the prior (if `sample = TRUE`) or else a prior object
 #' @examples \dontrun{
 #' # First define a design for the model
@@ -43,7 +43,7 @@ add_info_single <- function(sampler, prior = NULL, ...){
 #' @export
 
 get_prior_single <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5,
-                             type = "alpha", design = NULL, map = FALSE){
+                             selection = "alpha", design = NULL, map = FALSE){
   if(is.null(prior)){
     prior <- list()
   }
@@ -59,15 +59,17 @@ get_prior_single <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5
   if(is.null(prior$theta_mu_var)){
     prior$theta_mu_var <- diag(rep(1, n_pars))
   }
+  attr(prior, "type") <- "single"
+  out <- prior
   if(sample){
-    if(type != "alpha") stop("for variant single, only alpha can be specified")
-    samples <- mvtnorm::rmvnorm(N, prior$theta_mu_mean, prior$theta_mu_var)
-    if (map) {
-      samples <- map_mcmc(samples,design,design$model,include_constants=FALSE)
-    }
-    return(list(alpha = samples))
+    out <- list()
+    par_names <- names(attr(design, "p_vector"))
+    if(selection != "alpha") stop("for variant single, only alpha can be specified")
+    out$alpha <- t(mvtnorm::rmvnorm(N, prior$theta_mu_mean, prior$theta_mu_var))
+    out$alpha <- array(out$alpha, dim = c(length(par_names), 1, N))
+    rownames(out$alpha) <- par_names
   }
-  return(prior)
+  return(out)
 }
 
 get_startpoints_single <- function(pmwgs, start_mu, start_var){

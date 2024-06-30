@@ -9,7 +9,7 @@ get_prior_factor(
   n_pars = NULL,
   sample = TRUE,
   N = 1e+05,
-  type = "mu",
+  selection = "mu",
   design = NULL,
   map = FALSE,
   n_factors = 5
@@ -28,8 +28,7 @@ will be used to determine the size of prior.}
 
 \item{N}{How many samples to draw from the prior, the default is 1e5}
 
-\item{type}{Character. If \code{sample = TRUE}, what priors to sample from. Options:
-\code{"mu"}, \code{"variance"}, \code{"covariance"}, \code{"full_var"}, \code{"alpha"}, \code{"loadings"}.}
+\item{selection}{Character. If \code{sample = TRUE}, what priors to sample from.}
 
 \item{design}{The design obtained from \code{make_design()}, required when \code{map = TRUE}}
 

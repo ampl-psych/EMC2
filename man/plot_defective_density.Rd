@@ -2,7 +2,7 @@
 % Please edit documentation in R/plotting.R
 \name{plot_defective_density}
 \alias{plot_defective_density}
-\title{Plot defective densities for each subject and cell}
+\title{Plot MCMC chains}
 \usage{
 plot_defective_density(
   data,
@@ -44,16 +44,86 @@ an accuracy vector for each subject is returned invisibly.}
 \item{rt}{legend function position character string for the mean response time (defaults to \code{top})}
 
 \item{accuracy}{legend function position character string for accuracy (defaults to \code{topright})}
+
+\item{samplers}{An EMC2 samplers object}
+
+\item{ylim}{A vector. The y-limits of the chain plot.}
+
+\item{selection}{A Character string. Indicates which parameter type to plot (e.g., \code{alpha}, \code{mu}, \code{sigma2}, \code{correlation}).
+\code{LL} will plot the log-likelihood chains.}
+
+\item{filter}{A string. Specifies from which stage you want to plot the MCMC chains (\code{preburn}, \code{burn}, \code{adapt}, \code{sample})}
+
+\item{thin}{An integer. Will keep only iterations of the MCMC chains that are a multiple of \code{thin}.}
+
+\item{subfilter}{Integer or numeric vector. If an integer is supplied, iterations
+up until that integer within the sampling stage \code{filter} are kept. If a vector is supplied, the iterations
+within the range are kept.}
+
+\item{plot_acf}{Boolean. If \code{TRUE}, the autocorrelation of the first chain is plotted
+(of the -- per default -- three chains).}
+
+\item{tabs}{A list of matrices containing true and estimated parameters (with CIs), output from \code{plot_pars()}}
+
+\item{do_CI}{A Boolean. Add CIs to the plot or not? Defaults to \code{TRUE}.}
+
+\item{ci_col}{A character string. Color code of credible interval.}
+
+\item{cap}{Numeric. Width of the credible interval caps (passed to \code{arrows()})}
+
+\item{correlation}{String. \code{pearson} or \code{spearman}. Which correlation type should be computed
+and included in the plot?}
+
+\item{cor_pos}{Character string. Position of the correlation (passed to \code{legend()})}
+
+\item{stat}{Character string. 95 percent \code{coverage} or \code{rmse}. Which statistic
+should be included in the plot?}
+
+\item{stat_pos}{Character string. Position of \code{stat} within the plot (passed to \code{legend()})}
+
+\item{digits}{Integer. Number of digits included in the plot for the correlation and \code{stat}.}
 }
 \value{
+None
+
+Invisible list with RMSE, coverage, and Pearson and Spearman correlations.
+
 If \code{correct_fun} is specified, a subject accuracy vector is returned invisibly
 }
 \description{
-Plots panels that contain a set of densities for each response option in the data.
-These densities are defective; their areas are relative to the respective
-response proportion. Across all responses, the area sums to 1.
+Plots the trace plots of the MCMC chains on top of each other. Visualizes convergence
+and chain stability.
 }
 \examples{
+\dontrun{
+# For a set of samplers run using run_emc:
+plot_chains(samplers)
+# Or for the second subject:
+plot_chains(samplers, subject = 2)
+
+# Can also plot the autocorrelation of for example the group-level mean:
+plot_chains(samplers, selection = "mu", plot_acf = TRUE)
+}
+Plots recovery of parameters
+
+Uses output from ``plot_pars`` to plot generating vs. estimated (median with credible
+interval; CI) parameters to look at parameter recovery.
+
+# Make up some values that resemble posterior samples
+# Normally this would be true values that were used to simulate the data
+pmat <- matrix(rnorm(12, mean = c(-1, -.6, -.4, -1.5), sd = .01), ncol = 4, byrow = TRUE)
+# The matrix needs to have the appropriate names
+# Conventionally this would be created before one makes data with true values
+colnames(pmat) <- c("m", "m_lMd", "s", "t0")
+rownames(pmat) <- c("as1t", "bd6t", "bl1t")
+# First use plot_pars
+recovered_alpha <- plot_pars(samplers_LNR, selection = "alpha", pars = pmat, do_plot = FALSE)
+# Now use the output to make the recovery plots
+recovery_plot(recovered_alpha, correlation = "pearson", stat = "rmse")
+
+# Similarly we can plot other group-level parameters
+recovered_mu <- plot_pars(samplers_LNR, selection = "mu", pars = pmat[1,], do_plot = FALSE)
+recovery_plot(recovered_mu, correlation = "spearman", stat = "coverage")
 # First for each subject and the factor combination in the design:
 plot_defective_density(forstmann)
 # Now collapsing across subjects:

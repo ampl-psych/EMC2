@@ -10,11 +10,12 @@ pairs_posterior(
   thin = 1,
   subfilter = 0,
   mapped = FALSE,
-  selection = c("alpha", "mu", "variance", "covariance", "correlation")[1],
+  selection = "mu",
   scale.subjects = TRUE,
   use_par = NULL,
   do_plot = TRUE,
-  maxp = 500
+  maxp = 500,
+  ...
 )
 }
 \arguments{
@@ -63,6 +64,6 @@ If \code{selection = alpha} the parameter chains are concatenated across partici
 pairs_posterior(samplers, selection = "alpha")
 
 # We can also choose group-level parameters and subsets of the parameter space
-pairs_posterior(samplers, use = c("v", "B", "t0"), selection = "variance")
+pairs_posterior(samplers, use = c("v", "B", "t0"), selection = "sigma2")
 }
 }
