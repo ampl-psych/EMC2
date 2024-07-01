@@ -460,7 +460,7 @@ check_gd <- function(samplers, stage, max_gd, mean_gd, omit_mpsrf, trys, verbose
   ok_gd <- ok_mean_gd & ok_max_gd
   if(!ok_gd) {
     n_remove <- round(chain_n(samplers)[,stage][1]/3)
-    samplers_short <- try(lapply(samplers,remove_iterations,subfilter=n_remove,filter=stage),silent=TRUE)
+    samplers_short <- try(lapply(samplers,subset_emc,subfilter=n_remove,filter=stage),silent=TRUE)
     if (is(samplers_short,"try-error")){
       gd_short <- Inf
     } else{
@@ -491,7 +491,7 @@ check_gd <- function(samplers, stage, max_gd, mean_gd, omit_mpsrf, trys, verbose
   #   n_blocks <- max(n_blocks_old, n_blocks)
   # }
   if(stage == "sample" & !ok_gd & "alpha" %in% selection) {
-    gds <- gd_pmwg(samplers, selection = 'alpha', return_summary = F, mapped = F, print_summary = F, filter = stage, omit_mpsrf = omit_mpsrf)
+    gds <- get_gds(samplers_short,omit_mpsrf,selection = "alpha", stage)
     if(!is.null(mean_gd)){
       gds_bad <- (rowMeans(gds) > mean_gd)
     } else{

@@ -41,7 +41,7 @@ profile_plot(
 Vector with highest likelihood point, input and mismatch between true and highest point
 }
 \description{
-Creates a likelihood profile plot from a design and the experimental data by
+Creates likelihood profile plots from a design and the experimental data by
 varying one model parameter while holding all others constant.
 }
 \examples{

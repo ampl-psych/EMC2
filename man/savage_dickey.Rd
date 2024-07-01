@@ -8,14 +8,12 @@ savage_dickey(
   samplers,
   parameter = NULL,
   H0 = 0,
-  filter = "sample",
-  subfilter = 0,
   fun = NULL,
-  mapped = F,
   selection = "mu",
   do_plot = TRUE,
-  xlim = NULL,
-  subject = NULL
+  use_prior_lim = TRUE,
+  prior_plot_args = list(),
+  ...
 )
 }
 \arguments{
@@ -25,36 +23,31 @@ savage_dickey(
 
 \item{H0}{An integer. The H0 value which you want to compare to}
 
-\item{filter}{A string. Specifies which stage the samples are to be taken from
-\code{"preburn"}, \code{"burn"}, \code{"adapt"}, or \code{"sample"}}
-
-\item{subfilter}{An integer or vector. If it's an integer, iterations up until
-he value set by \code{subfilter} will be excluded. If a vector is supplied, only the
-iterations in the vector will be considered.}
-
 \item{fun}{A function. Specifies an operation to be performed on the sampled or mapped parameters.}
-
-\item{mapped}{A boolean. Whether the Bayes factor should be calculated for
-parameters mapped back to the real design, only works with selection = 'mu'.}
 
 \item{selection}{A string. The default is \code{mu}. Whether to do the operation on
 the \code{alpha}, \code{mu}, \code{covariance}, \code{variance}, or \code{correlation} parameters.}
 
-\item{do_plot}{Boolean. Whether to include a plot of the prior and posterior density. With circles at H0.}
+\item{do_plot}{Boolean. Whether to include a plot of the prior and posterior density. With prior and posterior circles at H0.}
 
-\item{xlim}{Vector, the x-limits for the plot.}
+\item{use_prior_lim}{Boolean. If \code{TRUE} will use xlimits based on prior density, otherwise based on posterior density.}
 
-\item{subject}{Character. If \code{type = "single"} and multiple subjects were ran in one model, this is required.}
+\item{prior_plot_args}{A list. Optional additional arguments to be passed to plot.default for the plotting of the prior (see \code{par()})}
+
+\item{...}{A list of optional arguments that can be passed to \code{as_mcmc_new}, \code{density}, or \code{plot.default} (see \code{par()})}
+
+\item{filter}{A string. Specifies which stage the samples are to be taken from
+\code{"preburn"}, \code{"burn"}, \code{"adapt"}, or \code{"sample"}}
 }
 \value{
 The Bayes factor for the hypothesis against H0.
 }
 \description{
-Can be used to approximate the Bayes factor for group-level mean effects.
+Can be used to approximate the Bayes factor for group-level parameter effects.
 }
 \details{
 Note this is different to the computation of the marginal deviance in \code{compare}
-since it only considers the group level mean effect and not the whole model.
+since it only considers the group level effect and not the whole model.
 For details see: Wagenmakers, Lodewyckx, Kuriyal, & Grasman (2010).
 }
 \examples{

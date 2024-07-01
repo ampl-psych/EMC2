@@ -15,13 +15,7 @@ Can be \code{preburn}, \code{burn}, \code{adapt}, or \code{sample}.}
 \item{selection}{A character string indicating the parameter group.
 Defaults to \code{mu}, \code{sigma2}, and \code{alpha}.}
 
-\item{...}{Further optional arguments.}
-
-\item{subfilter}{An integer or vector, defaults to 0. See below for more details.}
-
-\item{subject}{An integer or character vector. Plot samples selected subjects.}
-
-\item{thin}{An integer, only consider samples that are a multiple of \code{thin}.}
+\item{...}{Optional arguments that can be passed to \code{as_mcmc_new} or \code{plot.default} (see \code{par()})}
 }
 \description{
 Plots posterior densities and traceplots for EMC2 model parameters.

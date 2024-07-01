@@ -422,7 +422,7 @@ fix_dots <- function(dots, fun, exclude = "", consider_dots = TRUE){
 #' @param true_pars Set of `true_parameters` can be specified to apply flatten or use_par on a set of true parameters
 #' @param chain Integer. Which of the chain(s) to return
 #'
-#' @return
+#' @return An mcmc.list object of the selected parameter types with the specified manipulations
 #' @export
 #'
 #' @examples

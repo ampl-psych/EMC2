@@ -108,8 +108,8 @@ Also see \code{?plot_defective_density()} for more details.
 }
 \examples{
 \dontrun{
-# First generate posterior predictives based on a samplers object run with run_emc
-pp <- post_predict(samplers, n_cores = 4)
+# First generate posterior predictives based on an emc object run with run_emc
+pp <- post_predict(samplers_LNR, n_cores = 4)
 # Then visualize the model fit
 plot_fit(forstmann, pp, factors = c("S", "E"), layout = c(2,3))
 

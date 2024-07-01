@@ -76,6 +76,9 @@ EMC2. Can for example be used to filter/thin a parameter type
 (i.e, group-level means \code{mu}) and convert to an mcmc.list.
 }
 \examples{
-# E.g. get the group-level mean parameters mapped back to the desig
+# E.g. get the group-level mean parameters mapped back to the design
 as_mcmc_new(samplers_LNR, filter = "sample", map = TRUE, selection = "mu")
+
+# Or return the flattened correlation, with 10 iterations per chain
+as_mcmc_new(samplers_LNR, filter = "sample", selection = "correlation", flatten = TRUE, length.out = 10)
 }

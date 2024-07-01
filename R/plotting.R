@@ -12,15 +12,12 @@
 #' are plotted.
 #' @param factors A character vector of the factor names in the design to aggregate across
 #' Defaults to all (i.e., `NULL`).
-#' @param layout A vector specifying the layout as in `par(mfrow = layout)`.
-#' The default `NULL` uses the current layout.
-#' @param xlim x-axis limit for all cells (default NULL will scale each plot such that the xlimits encompass the densities).
-#' @param bw number or string bandwidth for density (defaults to `nrd0`). See ``?density()``.
-#' @param adjust Numeric. Density function bandwidth adjustment parameter. See ``?density()``.
+#' @param layout A vector indicating which layout to use as in par(mfrow = layout). If NA, will automatically generate an appropriate layout.
 #' @param correct_fun If specified, the accuracy for each subject is calculated, using the supplied function and
 #' an accuracy vector for each subject is returned invisibly.
 #' @param rt legend function position character string for the mean response time (defaults to `top`)
 #' @param accuracy legend function position character string for accuracy (defaults to `topright`)
+#' @param ... Optional arguments that can be passed to `as_mcmc_new`, `density`, or `plot.default` (see `par()`)
 #' @return If `correct_fun` is specified, a subject accuracy vector is returned invisibly
 #' @examples
 #' # First for each subject and the factor combination in the design:
@@ -36,10 +33,11 @@
 #' @export
 
 plot_defective_density <- function(data,subject=NULL,factors=NULL,
-                                   layout=NULL,
-                                   xlim=NULL,bw = "nrd0",adjust=1,
-                                   correct_fun=NULL,rt="top",accuracy="topright")
+                                   layout=NA, correct_fun=NULL,
+                                   rt="top",accuracy="topright",
+                                   ...)
 {
+  dots <- list(...)
   if (!is.null(subject)) {
     snams <- levels(data$subjects)
     if (is.numeric(subject)) subject <- snams[subject]
@@ -49,10 +47,10 @@ plot_defective_density <- function(data,subject=NULL,factors=NULL,
     fnams <- names(dat)[!(names(dat) %in% c("subjects","trials","R","rt"))]
   } else {
     dat <- data
-    fnams <- names(dat)[!(names(dat) %in% c("trials","R","rt"))]
+    fnams <- names(dat)[!(names(dat) %in% c("trials","R","rt", "subjects"))]
   }
   if (!is.null(factors)) {
-    if (!all(factors %in% fnams))
+    if (!all(factors %in% c(fnams, "subjects")))
       stop("factors must name factors in data")
     fnams <- factors
   }
@@ -65,23 +63,26 @@ plot_defective_density <- function(data,subject=NULL,factors=NULL,
   cells <- dat[,fnams,drop=FALSE]
   for (i in fnams) cells[,i] <- paste(i,cells[,i],sep="=")
   cells <- apply(cells,1,paste,collapse=" ")
-  if (!is.null(layout))
-    par(mfrow=layout)
   R <- levels(dat$R)
+  if(any(is.na(layout))){
+    par(mfrow = coda:::set.mfrow(Nchains = 1, Nparms = length(unique(cells)),
+                                 nplots = 1))
+  } else{par(mfrow=layout)}
   for (i in sort(unique(cells))) {
     pR <- table(alldat$R[cellsall==i])/dim(alldat[cellsall==i,])[1]
     dati <- dat[cells==i,]
     mrt <- tapply(dati$rt,dati$R,median)
     dens <- setNames(vector(mode="list",length=length(R)),R)
     for (j in R) if (length(dati$rt[dati$R==j])>1) {
-      dens[[j]] <- density(dati$rt[dati$R==j],bw=bw,adjust=adjust)
+      dens[[j]] <- do.call(density, c(list(dati$rt[dati$R==j]), fix_dots(dots, density.default, consider_dots = FALSE)))
       dens[[j]]$y <- dens[[j]]$y*pR[j]
     } else dens[[j]] <- NULL
     rx <- do.call(rbind,lapply(dens,function(x){range(x$x)}))
-    if (is.null(xlim)) xlimi <- c(min(rx[,1]),max(rx[,2])) else xlimi <- xlim
-    ylim <- c(0,max(unlist(lapply(dens,function(x){max(x$y)}))))
+    cur_dots <- add_defaults(dots, xlim = c(min(rx[,1]),max(rx[,2])),
+                             ylim = c(0,max(unlist(lapply(dens,function(x){max(x$y)})))),
+                             main = i, xlab = "RT")
     ltys <- c(1:length(mrt))[!is.na(mrt)]
-    plot(dens[[1]],xlim=xlimi,ylim=ylim,lty=ltys[1],main=i,xlab="RT")
+    do.call(plot, c(list(dens[[1]]), fix_dots_plot(cur_dots)))
     if (length(dens)>1) for (j in 2:length(dens))
       lines(dens[[j]],lty=ltys[j])
     if (!is.null(accuracy) && length(R) > 1) {
@@ -732,20 +733,19 @@ profile_plot <- function(data, design, p_vector, layout = NA,
 #' Plot MCMC chains
 #'
 #' Plots the trace plots of the MCMC chains on top of each other. Visualizes convergence
-#' and chain stability.
+#' and chain stability. Full range of samples manipulations described in `as_mcmc_new`.
 #'
 #' @param emc An emc object
 #' @param selection A Character string. Indicates which parameter type to plot (e.g., `alpha`, `mu`, `sigma2`, `correlation`).
 #' @param layout A vector indicating which layout to use as in par(mfrow = layout). If NA, will automatically generate an appropriate layout.
 #' @param plot_acf Boolean. If `FALSE` will make trace plots. If `TRUE` will plot the autocorrelation for a chain.
 #' By default plots acf for the first chain, but can be changed, by setting i.e. chain = 2; see `?as_mcmc_new`.
-#' @param ... A list of optional arguments that can be passed to `as_mcmc_new` or `plot.default` (see `par()`)
+#' @param ... Optional arguments that can be passed to `as_mcmc_new` or `plot.default` (see `par()`)
 #'
 #' @return A trace/acf plot of the selected MCMC chains
 #' @export
 #'
 #' @examples
-#' # Full range of possibilities described in as_mcmc_new.
 #' plot_chains(samplers_LNR)
 #' # Or trace plots for the second subject:
 #' plot_chains(samplers_LNR, subject = 2, selection = "alpha", plot_acf = TRUE)
@@ -787,6 +787,7 @@ plot_chains <- function(emc, selection = "mu", layout=NA, plot_acf=FALSE, ...)
 #' Plots density for parameters
 #'
 #' Plots the posterior and prior density for selected parameters of a model.
+#' Full range of samples manipulations described in `as_mcmc_new`.
 #'
 #' @param emc An emc object
 #' @param layout A vector indicating which layout to use as in par(mfrow = layout). If NA, will automatically generate an appropriate layout.
@@ -802,7 +803,7 @@ plot_chains <- function(emc, selection = "mu", layout=NA, plot_acf=FALSE, ...)
 #' @param all_subjects Boolean. Will plot the densities of all (selected) subjects overlaid with the group-level distribution
 #' @param prior_plot_args A list. Optional additional arguments to be passed to plot.default for the plotting of the prior density (see `par()`)
 #' @param true_plot_args A list. Optional additional arguments to be passed to plot.default for the plotting of the true parameters (see `par()`)
-#' @param ... A list of optional arguments that can be passed to `as_mcmc_new`, `density`, or `plot.default` (see `par()`)
+#' @param ... Optional arguments that can be passed to `as_mcmc_new`, `density`, or `plot.default` (see `par()`)
 #'
 #' @return An invisible return of the contraction statistics for the selected parameter type
 #' @export
@@ -936,12 +937,13 @@ plot_pars <- function(emc,layout=NA, selection="mu", show_chains = FALSE, plot_p
 #'
 #' Efficiency of sampling is indicated by the effective
 #' sample size (ESS) (from the `coda` R package).
+#' Full range of possible samples manipulations described in `as_mcmc_new`.
 #'
 #' @param emc An emc object
 #' @param selection A Character vector. Indicates which parameter types to check (e.g., `alpha`, `mu`, `sigma2`, `correlation`).
 #' @param digits Integer. How many digits to round the ESS and Rhat to in the plots
 #' @param plot_worst Boolean. If `TRUE` also plots the chain plots for the worst parameter
-#' @param ... A list of optional arguments that can be passed to `as_mcmc_new` or `plot.default` (see `par()`)
+#' @param ... Optional arguments that can be passed to `as_mcmc_new` or `plot.default` (see `par()`)
 #'
 #' @return a list with the statistics for the worst converged parameter per selection
 #' @export
@@ -1011,6 +1013,7 @@ get_recovery_stats <- function(MCMC, true_MCMC, true_pars, CI){
     quants_true <- get_posterior_quantiles(true_MCMC, probs = quantiles)
     true_pars <- quants_true[,"50%"]
   }
+  if(is.list(true_pars)) true_pars <- unlist(true_pars)
   quants <- get_posterior_quantiles(MCMC, probs = quantiles)
   pearson <- cor(true_pars,quants[,"50%"],method="pearson")
   spearman <- cor(true_pars,quants[,"50%"],method="spearman")
@@ -1042,7 +1045,10 @@ make_recov_summary <- function(stats){
   return(out)
 }
 
-#' Plots recovery of data generating parameters/samples
+#' Recovery plots
+#'
+#' Plots recovery of data generating parameters/samples.
+#' Full range of samples manipulations described in `as_mcmc_new`
 #'
 #' @param emc An emc object
 #' @param true_pars A vector of data-generating parameters or and emc object with data-generating samples
@@ -1054,7 +1060,7 @@ make_recov_summary <- function(stats){
 #' @param digits Integer. How many digits to round the statistic and correlation in the plot to
 #' @param CI Numeric. The size of the credible intervals. Default is .95 (95%).
 #' @param ci_plot_args A list. Optional additional arguments to be passed to plot.default for the plotting of the credible intervals (see `par()`)
-#' @param ... A list of optional arguments that can be passed to `as_mcmc_new` or `plot.default` (see `par()`)
+#' @param ... Optional arguments that can be passed to `as_mcmc_new` or `plot.default` (see `par()`)
 #'
 #' @return Invisible list with RMSE, coverage, and Pearson and Spearman correlations.
 #' @export
@@ -1067,7 +1073,8 @@ make_recov_summary <- function(stats){
 #'
 #' # Similarly we can plot other group-level parameters with a set of true samples
 #' true_samples <- samplers_LNR # Normally this would be data-generating samples
-#' recovery_plot(samplers_LNR, true_samples, correlation = "spearman", stat = "coverage", col = "red")
+#' plot_recovery(samplers_LNR, pmat, correlation = "pearson", stat = "rmse", selection = "alpha", cex = 1.5,
+#'               ci_plot_args = list(lty = 3, length = .2, lwd = 2, col = "brown"))
 plot_recovery <- function(emc, true_pars,
                           selection = "mu",
                           layout=NA,

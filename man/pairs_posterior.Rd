@@ -5,7 +5,7 @@
 \title{Plot within-chain correlations}
 \usage{
 pairs_posterior(
-  samplers,
+  emc,
   filter = "sample",
   thin = 1,
   subfilter = 0,
@@ -19,7 +19,7 @@ pairs_posterior(
 )
 }
 \arguments{
-\item{samplers}{An EMC2 samplers object}
+\item{emc}{An emc object}
 
 \item{filter}{A character. Specifies which sampling stage should be plotted.
 Defaults to the sampling stage \code{sample}.}
@@ -61,9 +61,9 @@ If \code{selection = alpha} the parameter chains are concatenated across partici
 \examples{
 \dontrun{
 # Plot the sloppiness for the individual-level subjects
-pairs_posterior(samplers, selection = "alpha")
+pairs_posterior(samplers_LNR, selection = "alpha")
 
 # We can also choose group-level parameters and subsets of the parameter space
-pairs_posterior(samplers, use = c("v", "B", "t0"), selection = "sigma2")
+pairs_posterior(samplers_LNR, use = c("v", "B", "t0"), selection = "sigma2")
 }
 }
