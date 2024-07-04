@@ -661,16 +661,18 @@ pairs_posterior <- function(emc,filter="sample",thin=1,subfilter=0,mapped=FALSE,
 #' Creates likelihood profile plots from a design and the experimental data by
 #' varying one model parameter while holding all others constant.
 #'
-#' @param pname String. Name of parameter to profile
-#' @param p_vector Named vector of parameter values (typically created with ``sampled_p_vector(design)``)
-#' @param p_min Numeric. Minimum value of profile range
-#' @param p_max Numeric. Maximum of profile range
-#' @param n_point Integer. Number of evenly spaced points at which to calculate likelihood
-#' @param main Plot title
-#' @param cores Number of likelihood points to calculate in parallel
 #' @param data A dataframe. Experimental data used, needed for the design mapping
 #' @param design A design list. Created using ``make_design``.
-#'
+#' @param p_vector Named vector of parameter values (typically created with ``sampled_p_vector(design)``)
+#' @param range Numeric. The max and min will be p_vector + range/2 and p_vector - range/2, unless specified in p_min or p_max.
+#' @param layout A vector indicating which layout to use as in par(mfrow = layout). If NA, will automatically generate an appropriate layout.
+#' @param p_min Named vector. If specified will instead use these values for minimum range of the selected parameters.
+#' @param p_max Named vector. If specified will instead use these values for maximum range of the selected parameters.
+#' @param use_par Character vector. If specified will only plot the profiles for the specified parameters.
+#' @param n_point Integer. Number of evenly spaced points at which to calculate likelihood
+#' @param n_cores Number of likelihood points evenly spaced between the minimum and maximum likelihood range.
+#' @param true_plot_args A list. Optional additional arguments that can be passed to plot.default for the plotting of the true vertical line.
+#' @param ... Optional additional arguments that can be passed to plot.default.
 #' @return Vector with highest likelihood point, input and mismatch between true and highest point
 #' @examples
 #' # First create a design
@@ -680,15 +682,15 @@ pairs_posterior <- function(emc,filter="sample",thin=1,subfilter=0,mapped=FALSE,
 #' # Then create a p_vector:
 #' p_vector=c(v_Sleft=-2,v_Sright=2,a=log(1),a_Eneutral=log(1.5),a_Eaccuracy=log(2),
 #'           t0=log(.2),Z=qnorm(.5),sv=log(.5),SZ=qnorm(.5))
-#' # Make a profile plot for the boundary separation parameter
-#' profile_plot(pname = "a", p_vector = p_vector, p_min = -1, p_max = 1,
+#' # Make a profile plot for some parameters. Specifying a custom range for t0.
+#' profile_plot(p_vector = p_vector, p_min = c(t0 = -1.55), p_max = c(t0 = -1.65), use_par = c("a", "t0", "SZ"),
 #'             data = forstmann, design = design_DDMaE, n_point = 10)
 #'
 #' @export
 
-profile_plot <- function(data, design, p_vector, layout = NA,
-                         p_min = NULL,p_max = NULL,
-                         n_point=100,main="",n_cores=1,
+profile_plot <- function(data, design, p_vector, range = .5, layout = NA,
+                         p_min = NULL,p_max = NULL, use_par = NULL,
+                         n_point=100,n_cores=1,
                          true_plot_args = list(),
                          ...)
 
@@ -699,35 +701,37 @@ profile_plot <- function(data, design, p_vector, layout = NA,
     attr(dadm,"model")()$log_likelihood(p_vector,dadm)
   }
   if(!identical(names(p_min), names(p_max))) stop("p_min and p_max should be specified for the same parameters")
-  pars_to_use <- p_vector
-  if(!is.null(names(p_min))){
-    pars_to_use <- pars_to_use[names(pars_to_use) %in% names(p_min)]
-  } else{
-    if(!is.null(p_min)){
-      if(length(p_vector) != length(p_min) & length(p_min) != 1) stop("Without names you can either specify p_min/p_max for one parameter or for all parameters")
-    }
-  }
+  if(!is.null(names(p_min)) & length(p_min) == length(use_par)) names(p_min) <- use_par
+  if(!is.null(names(p_max)) & length(p_max) == length(use_par)) names(p_max) <- use_par
+  if(is.null(use_par)) use_par <- names(p_vector)
   if(any(is.na(layout))){
-    par(mfrow = coda:::set.mfrow(Nchains = 1, Nparms = length(pars_to_use),
+    par(mfrow = coda:::set.mfrow(Nchains = 1, Nparms = length(use_par),
                                  nplots = 1))
   } else{par(mfrow=layout)}
   if(is.null(dots$dadm)) dadm <- design_model(data, design, verbose = FALSE)
-  for(p in 1:length(pars_to_use)){
-    cur_name <- names(pars_to_use)[p]
-    cur_par <- pars_to_use[p]
-    if(!is.null(p_min) & !is.null(p_max)){
-      pmin_cur <- p_min[p]
-      pmax_cur <- p_max[p]
-    } else{
-      pmin_cur <- cur_par - .5
-      pmax_cur <- cur_par + .5
+  out <- data.frame(true = rep(NA, length(use_par)), max = rep(NA, length(use_par)), miss = rep(NA, length(use_par)))
+  rownames(out) <- use_par
+  for(p in 1:length(p_vector)){
+    cur_name <- names(p_vector)[p]
+    if(cur_name %in% use_par){
+      cur_par <- p_vector[p]
+      if(!is.na(p_min[cur_name]) & !is.na(p_max[cur_name])){
+        pmin_cur <- p_min[cur_name]
+        pmax_cur <- p_max[cur_name]
+      } else{
+        pmin_cur <- cur_par - range/2
+        pmax_cur <- cur_par + range/2
+      }
+      x <- seq(pmin_cur,pmax_cur,length.out=n_point)
+      x <- c(x, cur_par)
+      x <- unique(sort(x))
+      ll <- unlist(mclapply(1:length(x),lfun,dadm=dadm,x=x,p_vector=p_vector,pname=cur_name,mc.cores = n_cores))
+      do.call(plot, c(list(x,ll), fix_dots_plot(add_defaults(dots, type="l",xlab=cur_name,ylab="LL"))))
+      do.call(abline, c(list(v=cur_par), fix_dots_plot(add_defaults(true_plot_args, lty = 2))))
+      out[cur_name,] <- c(p_vector[cur_name], x[which.max(ll)], p_vector[cur_name] - x[which.max(ll)])
     }
-    x <- seq(pmin_cur,pmax_cur,length.out=n_point)
-    ll <- unlist(mclapply(1:n_point,lfun,dadm=dadm,x=x,p_vector=p_vector,pname=cur_name,mc.cores = n_cores))
-    do.call(plot, c(list(x,ll), fix_dots_plot(add_defaults(dots, type="l",xlab=cur_name,ylab="LL",main=main))))
-    do.call(abline, c(list(v=cur_par), fix_dots_plot(add_defaults(true_plot_args, lty = 2))))
   }
-  # c(true=p_vector[pname],max=x[which.max(ll)],miss=p_vector[pname]-x[which.max(ll)])
+  return(out)
 }
 
 #' Plot MCMC chains
