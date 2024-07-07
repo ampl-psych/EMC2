@@ -16,7 +16,7 @@ mapped_par(
 \arguments{
 \item{p_vector}{A parameter vector. Must be in the form of \code{sampled_p_vector(design)}}
 
-\item{design}{A design list. Created \verb{by make_design}}
+\item{design}{A design list. Created by \code{design}}
 
 \item{model}{Optional model type (if not already specified in \code{design})}
 
@@ -37,7 +37,7 @@ differ across the experimental factors.
 }
 \examples{
 # First define a design:
-design_DDMaE <- make_design(data = forstmann,model=DDM,
+design_DDMaE <- design(data = forstmann,model=DDM,
                            formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
                            constants=c(s=log(1)))
 # Then create a p_vector:

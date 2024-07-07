@@ -6,8 +6,8 @@
 \usage{
 compare(
   sList,
-  filter = "sample",
-  subfilter = 0,
+  stage = "sample",
+  filter = NULL,
   use_best_fit = TRUE,
   BayesFactor = TRUE,
   cores_for_props = 4,
@@ -21,9 +21,9 @@ compare(
 \arguments{
 \item{sList}{List of samples objects}
 
-\item{filter}{A string. Specifies which stage the samples are to be taken from \code{"preburn"}, \code{"burn"}, \code{"adapt"}, or \code{"sample"}}
+\item{stage}{A string. Specifies which stage the samples are to be taken from \code{"preburn"}, \code{"burn"}, \code{"adapt"}, or \code{"sample"}}
 
-\item{subfilter}{An integer or vector. If it's an integer, iterations up until the value set by \code{subfilter} will be excluded.
+\item{filter}{An integer or vector. If it's an integer, iterations up until the value set by \code{filter} will be excluded.
 If a vector is supplied, only the iterations in the vector will be considered.}
 
 \item{use_best_fit}{Boolean, defaults to \code{TRUE}, uses the minimal or mean likelihood (whichever is better) in the
@@ -53,9 +53,9 @@ Returns the BPIC/DIC or marginal deviance (-2*marginal likelihood) for a list of
 }
 \examples{
 \dontrun{
-# Define a samplers list of two (or more different models)
-# Here the full model is a list of samplers with the hypothesized effect
-# The null model is a list of samplers without the hypothesized effect
+# Define a list of two (or more different models)
+# Here the full model is an emc object with the hypothesized effect
+# The null model is an emc object without the hypothesized effect
 sList <- list(full_model, null_model)
 # By default emc uses 4 cores to parallelize marginal likelihood estimation across proposals
 # So cores_per_prop = 3 results in 12 cores used.

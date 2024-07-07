@@ -2,26 +2,44 @@
 % Please edit documentation in R/s3_funcs.R
 \name{plot.emc}
 \alias{plot.emc}
-\title{Plot function for EMC2 samplers objects}
+\title{Plot function for emc objects}
 \usage{
-\method{plot}{emc}(x, filter = "sample", selection = c("mu", "sigma2", "alpha"), ...)
+\method{plot}{emc}(
+  x,
+  stage = "sample",
+  selection = c("mu", "sigma2", "alpha"),
+  layout = NA,
+  plot_acf = FALSE,
+  ...
+)
 }
 \arguments{
 \item{x}{An object of class \code{emc}}
 
-\item{filter}{A character string indicating the sampling stage to be summarized.
+\item{stage}{A character string indicating the sampling stage to be summarized.
 Can be \code{preburn}, \code{burn}, \code{adapt}, or \code{sample}.}
 
-\item{selection}{A character string indicating the parameter group.
+\item{selection}{A character vector indicating the parameter group(s).
 Defaults to \code{mu}, \code{sigma2}, and \code{alpha}.}
 
-\item{...}{Optional arguments that can be passed to \code{as_mcmc_new} or \code{plot.default} (see \code{par()})}
+\item{layout}{A vector indicating which layout to use as in par(mfrow = layout). If NA, will automatically generate an appropriate layout.}
+
+\item{plot_acf}{Boolean. If \code{FALSE} will make trace plots. If \code{TRUE} will plot the autocorrelation for a chain.
+By default plots acf for the first chain, but can be changed, by setting i.e. chain = 2; see \code{?get_pars}.}
+
+\item{...}{Optional arguments that can be passed to \code{get_pars} or \code{plot.default} (see \code{par()})}
+}
+\value{
+A trace/acf plot of the selected MCMC chains
 }
 \description{
-Plots posterior densities and traceplots for EMC2 model parameters.
+Makes trace plots for model parameters.
 }
-\details{
-Note that if \code{subfilter} is set to an integer other than 0 (i.e., the default), all iterations
-up to that integer are ignored. If a vector is supplied, only those iterations
-are considered.
+\examples{
+plot(samples_LNR)
+# Or trace autocorrelation for the second subject:
+plot(samples_LNR, subject = 2, selection = "alpha", plot_acf = TRUE)
+
+# Can also plot the trace of for example the group-level correlation:
+plot(samples_LNR, selection = "correlation", col = c("green", "purple", "orange"), lwd = 2)
 }

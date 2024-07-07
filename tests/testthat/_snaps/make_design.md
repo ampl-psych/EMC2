@@ -1,4 +1,4 @@
-# make_design
+# design
 
     Code
       str(design_data, give.attr = FALSE)

@@ -62,7 +62,7 @@ NumericMatrix c_map_p(NumericVector p_vector, CharacterVector p_types, List desi
   return(pars);
 }
 
-NumericMatrix get_pars(NumericVector p_vector, NumericVector constants,
+NumericMatrix get_pars_matrix(NumericVector p_vector, NumericVector constants,
                        NumericVector (*transform)(NumericVector),
                        NumericMatrix (*Ntransform)(NumericMatrix),
                        CharacterVector p_types, List designs, int n_trials){
@@ -157,7 +157,6 @@ NumericVector calc_ll(NumericMatrix p_matrix, DataFrame data, NumericVector cons
     for(int i = 0; i < n_particles; i++){
       p_vector = p_matrix(i, _);
       NumericMatrix designMatrix = data.attr("design_matrix_mri");
-      // pars = get_pars(p_vector, constants, transform_fMRI, Ntransform_fMRI, p_types, designs, n_trials);
       lls[i] = c_log_likelihood_fMRI(p_vector, data, designMatrix, min_ll);
     }
   } else{
@@ -168,7 +167,7 @@ NumericVector calc_ll(NumericMatrix p_matrix, DataFrame data, NumericVector cons
     if(type == "DDM"){
       for(int i = 0; i < n_particles; i++){
         p_vector = p_matrix(i, _);
-        pars = get_pars(p_vector, constants, transform_DDM, Ntransform_DDM, p_types, designs, n_trials);
+        pars = get_pars_matrix(p_vector, constants, transform_DDM, Ntransform_DDM, p_types, designs, n_trials);
         lls[i] = c_log_likelihood_DDM(pars, data, n_trials, expand, min_ll, group_idx);
       }
     } else{
@@ -197,7 +196,7 @@ NumericVector calc_ll(NumericMatrix p_matrix, DataFrame data, NumericVector cons
       }
       for(int i = 0; i < n_particles; i++){
         p_vector = p_matrix(i, _);
-        pars = get_pars(p_vector, constants, transform, Ntransform, p_types, designs, n_trials);
+        pars = get_pars_matrix(p_vector, constants, transform, Ntransform, p_types, designs, n_trials);
         lls[i] = c_log_likelihood_race(pars, data, dfun, pfun, n_trials, winner, expand, min_ll);
       }
     }

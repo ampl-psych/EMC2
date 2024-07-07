@@ -51,7 +51,7 @@ plot_prior(prior, design_DDMaE, selection = "correlation")
 mapped_par(p_vector,design_DDMaE)
 
 
-debug(as_mcmc_new)
+debug(get_pars)
 plot_chains_new(samplers_LNR, selection = "LL")
 
 debug(plot_pars_new)
@@ -63,12 +63,12 @@ posterior_summary_new(samplers_LNR, selection = "alpha")
 
 
 
-test <- es_summary_new(samplers_LNR, selection = "alpha", stat = "mean", stat_only = F)
+test <- ess_summary(samplers_LNR, selection = "alpha", stat = "mean", stat_only = F)
 
 
 
 debug(get_summary_stat)
-gd_summary_new(samplers_LNR, selection = "alpha", omit_mpsrf = T)
+gd_summary(samplers_LNR, selection = "alpha", omit_mpsrf = T)
 
 debug(get_summary_stat)
 
@@ -89,7 +89,7 @@ debug(make_nice_summary)
 
 # To do:
 # Check add_constants
-# Fix post_predict with hyper
+# Fix predict with hyper
 # Email Michael, change schedule
 # check run
 devtools::load_all()
@@ -101,11 +101,11 @@ debug(plot_pars_new)
 plot_pars_new(samplers_LNR, selection = "alpha", show_chains = TRUE, by_subject = FALSE, plot_prior = TRUE,
               use_prior_lim = TRUE, use_par = c("m", "s"))
 
-debug(as_mcmc_new)
+debug(get_pars)
 
 devtools::load_all()
-debug(as_mcmc_new)
-debug(as_mcmc_new)
+debug(get_pars)
+debug(get_pars)
 plot_pars_new(samplers_LNR, selection = "alpha", show_chains = TRUE, by_subject = T,
               plot_prior = T, use_prior_lim = T, subject = 1:2, map = TRUE,
               use_par = c('t0', 'm_TRUE'))
@@ -117,14 +117,14 @@ plot_pars_new(samplers_LNR, selection = "covariance", show_chains = TRUE,
 
 
 
-plot_chains(samplers_LNR, selection = "mu", subfilter = 1:40)
+plot_chains(samplers_LNR, selection = "mu", filter = 1:40)
 
 
 
 devtools::load_all()
-debug(as_mcmc_new)
+debug(get_pars)
 
-MCMC <- as_mcmc_new(samplers_LNR, selection = "covariance", use_par = c("s.m"), flatten = TRUE)
+MCMC <- get_pars(samplers_LNR, selection = "covariance", use_par = c("s.m"), flatten = TRUE)
 
 
 devtools::load_all()

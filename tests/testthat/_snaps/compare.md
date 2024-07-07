@@ -1,23 +1,23 @@
 # compare
 
     Code
-      compare(list(samplers_LNR), cores_for_props = 1)
+      compare(list(samples_LNR), cores_for_props = 1)
     Output
         MD wMD  DIC wDIC BPIC wBPIC EffectiveN meanD Dmean minD
-      1 27   1 -619    1 -603     1         16  -635  -646 -650
+      1 29   1 -612    1 -571     1         41  -653  -693 -694
 
 # savage-dickey
 
     Code
-      round(savage_dickey(samplers_LNR, parameter = "m", do_plot = F, H0 = -1), 3)
+      round(hypothesis(samples_LNR, parameter = "m", do_plot = F, H0 = -1), 2)
     Output
-      [1] 0.037
+      [1] 0.04
 
 ---
 
     Code
-      round(savage_dickey(samplers_LNR, fun = function(d) d["m"] - d["m_lMd"], H0 = -
-      0.5, do_plot = F), 3)
+      round(hypothesis(samples_LNR, fun = function(d) d["m"] - d["m_lMd"], H0 = -0.5,
+      do_plot = F), 2)
     Output
-      [1] 0.099
+      [1] 0.1
 

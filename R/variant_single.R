@@ -25,17 +25,17 @@ add_info_single <- function(sampler, prior = NULL, ...){
 #' cells of the design. If `FALSE`, the transformed, unmapped, parameters are used.
 #' Note that `map` does not affect the prior used in the sampling process.
 #' @param N How many samples to draw from the prior, the default is 1e5
-#' @param design The design obtained from `make_design()`, required when `map = TRUE`
+#' @param design The design obtained from `design()`, required when `map = TRUE`
 #' @param selection  Character. If `sample = TRUE`, what prior to sample from. Options: `"alpha"`.
 #' @return A list with a single entry named `"alpha"` and samples from the prior (if `sample = TRUE`) or else a prior object
 #' @examples \dontrun{
 #' # First define a design for the model
-#' design_DDMaE <- make_design(data = forstmann,model=DDM,
+#' design_DDMaE <- design(data = forstmann,model=DDM,
 #'                            formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
 #'                            constants=c(s=log(1)))
 #' # Now get the default prior
 #' prior <- get_prior_single(design = design_DDMaE, sample = FALSE)
-#' # We can change values in the default prior or use make_prior
+#' # We can change values in the default prior or use `prior`
 #' # Then we can get samples from this prior e.g.
 #' samples <- get_prior_single(prior = prior, design = design_DDMaE,
 #'   sample = TRUE, type = "alpha")
@@ -171,3 +171,7 @@ bridge_group_and_prior_and_jac_single <- function(proposals_group, proposals_lis
   return(rowSums(prior_mu)) # Output is of length n_iter
 }
 
+group__IC_single <- function(emc, stage="sample",filter=0){
+  return(list(mean_ll = NULL, Dmean = NULL,
+              minD = NULL))
+}

@@ -5,9 +5,9 @@
 \title{Estimating Marginal likelihoods using WARP-III bridge sampling}
 \usage{
 run_bridge_sampling(
-  samplers,
-  filter = "sample",
-  subfilter = NULL,
+  emc,
+  stage = "sample",
+  filter = NULL,
   repetitions = 1,
   cores_for_props = 4,
   cores_per_prop = 1,
@@ -16,11 +16,11 @@ run_bridge_sampling(
 )
 }
 \arguments{
-\item{samplers}{An emc samplers object with a set of converged samples}
+\item{emc}{An emc object with a set of converged samples}
 
-\item{filter}{A character indicating which stage to use, defaults to \code{sample}}
+\item{stage}{A character indicating which stage to use, defaults to \code{sample}}
 
-\item{subfilter}{An integer or vector. If integer, it will exclude up until
+\item{filter}{An integer or vector. If integer, it will exclude up until
 that integer. If vector it will include everything in that range.}
 
 \item{repetitions}{An integer. How many times to repeat the bridge sampling scheme. Can help get an estimate of stability of the estimate.}
@@ -44,7 +44,7 @@ of the posterior distribution to get an accurate estimate of the marginal likeli
 The marginal likelihood can be used for computing Bayes factors and posterior model probabilities.
 }
 \details{
-If not enough posterior samples were collected using \code{run_emc()},
+If not enough posterior samples were collected using \code{fit()},
 bridge sampling can be unstable. It is recommended to run
 \code{run_bridge_sampling()} several times with the \code{repetitions} argument
 and to examine how stable the results are.
@@ -70,9 +70,9 @@ Meng, X.-L., & Schilling, S. (2002). Warp bridge sampling.
 }
 \examples{
 \dontrun{
-# After `run_emc` has converged on a specific model
+# After `fit` has converged on a specific model
 # We can take those samples and calculate the marginal log-likelihood for them
-MLL <- run_bridge_sampling(samplers, cores_per_prop = 2)
+MLL <- run_bridge_sampling(list_of_emc, cores_per_prop = 2)
 # This will run on 2*4 cores (since 4 is the default for ``cores_for_props``)
 }
 }

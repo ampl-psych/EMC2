@@ -16,7 +16,7 @@ Emat <- matrix(c(0,-1,0,0,0,-1),nrow=3)
 dimnames(Emat) <- list(NULL,c("a-n","a-s"))
 Emat
 
-design_B <- make_design(
+design_B <- design(
   Ffactors=list(subjects=levels(dat$subjects),S=levels(dat$S),E=levels(dat$E)),
   Rlevels=levels(dat$R),matchfun=function(d)d$S==d$lR,
   Fcovariates = list(age = dat$age),
@@ -54,7 +54,7 @@ microbenchmark::microbenchmark(
 devtools::load_all()
 attr(samplers[[1]], "variant_funs") <- EMC2:::get_variant_funs("diagonal")
 debug(run_bridge_sampling)
-EMC2:::run_bridge_sampling(samplers, subfilter = 300)
+EMC2:::run_bridge_sampling(samplers, filter = 300)
 debug(compare_IC)
 test <- compare_IC(list(s1 = samplers_good, s2 = samplers), BayesFactor = T, cores_per_prop = 3)
 
@@ -116,7 +116,7 @@ test <- plot_density(samplers)
 test <- plot_density(samplers, selection = "mu")
 check_run(samplers, interactive = F)
 
-pp <- post_predict(samplers, n_cores = 12)
+pp <- predict(samplers, n_cores = 12)
 
 plot_fit(dat, pp)
 

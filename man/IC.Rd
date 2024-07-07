@@ -7,9 +7,9 @@ constituent posterior deviance (D) summaries (meanD = mean of D, Dmean = D
 for mean of posterior parameters and minD = minimum of D).}
 \usage{
 IC(
-  samplers,
-  filter = "sample",
-  subfilter = 0,
+  emc,
+  stage = "sample",
+  filter = 0,
   use_best_fit = TRUE,
   print_summary = TRUE,
   digits = 0,
@@ -17,11 +17,11 @@ IC(
 )
 }
 \arguments{
-\item{samplers}{pmwgs object or list of these}
+\item{emc}{emc object or list of these}
 
-\item{filter}{A string. Specifies which stage you want to plot.}
+\item{stage}{A string. Specifies which stage you want to plot.}
 
-\item{subfilter}{An integer or vector. If it's an integer, iterations up until the value set by \code{subfilter} will be excluded.
+\item{filter}{An integer or vector. If it's an integer, iterations up until the value set by \code{filter} will be excluded.
 If a vector is supplied, only the iterations in the vector will be considered.}
 
 \item{use_best_fit}{Boolean, default TRUE use best of minD and Dmean in

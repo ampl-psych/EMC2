@@ -8,17 +8,17 @@ matchfun=function(d)d$S==d$lR
 dat <- forstmann[forstmann$subjects %in% unique(forstmann$subjects)[1:2],]
 dat$subjects <- droplevels(dat$subjects)
 
-design_LNR <- make_design(data = dat,model=LNR,matchfun=matchfun,
+design_LNR <- design(data = dat,model=LNR,matchfun=matchfun,
                           formula=list(m~lM,s~1,t0~1),
                           contrasts=list(m=list(lM=ADmat)))
 
-# create samplers for the different types
-LNR_factor <- make_samplers(dat, design_LNR, rt_resolution = 0.05, n_chains = 2, type = "factor",
+# create emc objects for the different types
+LNR_factor <- make_emc(dat, design_LNR, rt_resolution = 0.05, n_chains = 2, type = "factor",
                        n_factors = 2)
-LNR_diag <- make_samplers(dat, design_LNR, rt_resolution = 0.05, n_chains = 2, type = "diagonal")
-LNR_blocked <- make_samplers(dat, design_LNR, rt_resolution = 0.05, n_chains = 2, type = "blocked",
+LNR_diag <- make_emc(dat, design_LNR, rt_resolution = 0.05, n_chains = 2, type = "diagonal")
+LNR_blocked <- make_emc(dat, design_LNR, rt_resolution = 0.05, n_chains = 2, type = "blocked",
                        par_groups = c(1,2,3,3))
-LNR_single <- make_samplers(dat, design_LNR, rt_resolution = 0.05, n_chains = 2, type = "single")
+LNR_single <- make_emc(dat, design_LNR, rt_resolution = 0.05, n_chains = 2, type = "single")
 
 # Set seed for mclapply
 RNGkind("L'Ecuyer-CMRG")
@@ -28,16 +28,16 @@ set.seed(123)
 N <- 50
 
 LNR_factor <- init_chains(LNR_factor, cores_for_chains = 1, particles = 10)
-LNR_factor <- run_samplers(LNR_factor, cores_for_chains = 1, stop_criteria = list(iter = N), stage = "preburn")
+LNR_factor <- run_emc(LNR_factor, cores_for_chains = 1, stop_criteria = list(iter = N), stage = "preburn")
 
 LNR_diag <- init_chains(LNR_diag, cores_for_chains = 1, particles = 10)
-LNR_diag <- run_samplers(LNR_diag, cores_for_chains = 1, stop_criteria = list(iter = N), stage = "preburn")
+LNR_diag <- run_emc(LNR_diag, cores_for_chains = 1, stop_criteria = list(iter = N), stage = "preburn")
 
 LNR_blocked <- init_chains(LNR_blocked, cores_for_chains = 1, particles = 10)
-LNR_blocked <- run_samplers(LNR_blocked, cores_for_chains = 1, stop_criteria = list(iter = N), stage = "preburn")
+LNR_blocked <- run_emc(LNR_blocked, cores_for_chains = 1, stop_criteria = list(iter = N), stage = "preburn")
 
 LNR_single <- init_chains(LNR_single, cores_for_chains = 1, particles = 10)
-LNR_single <- run_samplers(LNR_single, cores_for_chains = 1, stop_criteria = list(iter = N), stage = "preburn")
+LNR_single <- run_emc(LNR_single, cores_for_chains = 1, stop_criteria = list(iter = N), stage = "preburn")
 
 
 idx <- N + 1
@@ -89,7 +89,7 @@ test_that("run_single", {
 
 test_that("run_bridge", {
   expect_snapshot( # Blocked doesn't have bridge sampling yet
-    compare(list(single = LNR_single, diag = LNR_diag, factor = LNR_factor), filter = "preburn", cores_for_props = 1),
+    compare(list(single = LNR_single, diag = LNR_diag, factor = LNR_factor), stage = "preburn", cores_for_props = 1),
     variant = Sys.info()[1]
   )
 })

@@ -1,3 +1,83 @@
+#' Information criteria and marginal likelihoods
+#'
+#' Returns the BPIC/DIC or marginal deviance (-2*marginal likelihood) for a list of samples objects.
+#'
+#' @param sList List of samples objects
+#' @param stage A string. Specifies which stage the samples are to be taken from `"preburn"`, `"burn"`, `"adapt"`, or `"sample"`
+#' @param filter An integer or vector. If it's an integer, iterations up until the value set by `filter` will be excluded.
+#' If a vector is supplied, only the iterations in the vector will be considered.
+#' @param use_best_fit Boolean, defaults to `TRUE`, uses the minimal or mean likelihood (whichever is better) in the
+#' calculation, otherwise always uses the mean likelihood.
+#' @param BayesFactor Boolean, defaults to `TRUE`. Include marginal likelihoods as estimated using WARP-III bridge sampling.
+#' Usually takes a minute per model added to calculate
+#' @param cores_for_props Integer, how many cores to use for the Bayes factor calculation, here 4 is the default for the 4 different proposal densities to evaluate, only 1, 2 and 4 are sensible.
+#' @param cores_per_prop Integer, how many cores to use for the Bayes factor calculation if you have more than 4 cores available. Cores used will be cores_for_props * cores_per_prop. Best to prioritize cores_for_props being 4 or 2
+#' @param print_summary Boolean (default `TRUE`), print table of results
+#' @param digits Integer, significant digits in printed table for information criteria
+#' @param digits_p Integer, significant digits in printed table for model weights
+#' @param ... Additional, optional arguments
+#'
+#' @return Matrix of effective number of parameters, mean deviance, deviance of
+#' mean, DIC, BPIC, Marginal Deviance (if `BayesFactor=TRUE`) and associated weights.
+#' @examples \dontrun{
+#' # Define a list of two (or more different models)
+#' # Here the full model is an emc object with the hypothesized effect
+#' # The null model is an emc object without the hypothesized effect
+#' sList <- list(full_model, null_model)
+#' # By default emc uses 4 cores to parallelize marginal likelihood estimation across proposals
+#' # So cores_per_prop = 3 results in 12 cores used.
+#' compare(sList, cores_per_prop = 3)
+#' }
+#' @export
+
+compare <- function(sList,stage="sample",filter=NULL,use_best_fit=TRUE,
+                        BayesFactor = TRUE, cores_for_props =4, cores_per_prop = 1,
+                        print_summary=TRUE,digits=0,digits_p=3, ...) {
+  if(is(sList, "emc")) sList <- list(sList)
+  getp <- function(IC) {
+    IC <- -(IC - min(IC))/2
+    exp(IC)/sum(exp(IC))
+  }
+  if(!is.null(list(...)$subject)) subject <- list(...)$subject
+
+  if (is.numeric(filter)) defaultsf <- filter[1] else defaultsf <- 0
+  sflist <- as.list(setNames(rep(defaultsf,length(sList)),names(sList)))
+  if (is.list(filter)) for (i in names(filter))
+    if (i %in% names(sflist)) sflist[[i]] <- filter[[i]]
+
+  ICs <- setNames(vector(mode="list",length=length(sList)),names(sList))
+  for (i in 1:length(ICs)) ICs[[i]] <- IC(sList[[i]],stage=stage,
+                                          filter=sflist[[i]],use_best_fit=use_best_fit,subject=NULL,print_summary=FALSE)
+  ICs <- data.frame(do.call(rbind,ICs))
+  DICp <- getp(ICs$DIC)
+  BPICp <- getp(ICs$BPIC)
+  out <- cbind.data.frame(DIC=ICs$DIC,wDIC=DICp,BPIC=ICs$BPIC,wBPIC=BPICp,ICs[,-c(1:2)])
+
+  if(BayesFactor){
+    MLLs <- numeric(length(sList))
+    for(i in 1:length(MLLs)){
+      MLLs[i] <- run_bridge_sampling(sList[[i]], stage = stage, filter = sflist[[i]], both_splits = FALSE,
+                                     cores_for_props = cores_for_props, cores_per_prop = cores_per_prop)
+    }
+    MD <- -2*MLLs
+    modelProbability <- getp(MD)
+    out <- cbind.data.frame(MD = MD, wMD = modelProbability, out)
+  }
+  if (print_summary) {
+    tmp <- out
+    tmp$wDIC <- round(tmp$wDIC,digits_p)
+    tmp$wBPIC <- round(tmp$wBPIC,digits_p)
+    if(BayesFactor){
+      tmp$wMD <- round(tmp$wMD, digits_p)
+      tmp[,-c(2,4,6)] <- round(tmp[,-c(2,4,6)],digits=digits)
+    } else{
+      tmp[,-c(2,4)] <- round(tmp[,-c(2,4)],digits=digits)
+    }
+    print(tmp)
+  }
+  invisible(out)
+}
+
 std_error_IS2 <- function(IS_samples, n_bootstrap = 50000){
   log_marglik_boot= array(dim = n_bootstrap)
   for (i in 1:n_bootstrap){
@@ -91,224 +171,14 @@ gelman_diag_robust <- function(mcl,autoburnin = FALSE,transform = TRUE, omit_mps
     return(gd_out)
   }
 }
-#
-# iat_pmwg <- function(pmwg_mcmc,
-#                      print_summary=TRUE,digits_print=2,sort_print=TRUE,summary_alpha=mean,
-#                      selection="alpha",filter="sample",thin=1,subfilter=NULL)
-#   # Integrated autocorrelation time, prints multivariate summary returns each participant unless +
-#   # multivariate as matrix unless !return_summary
-# {
-#
-#   IAT <- function (x,verbose=FALSE)
-#     # From LaplacesDemon
-#   {
-#     dt <- x
-#     n <- length(x)
-#     mu <- mean(dt)
-#     s2 <- var(dt)
-#     maxlag <- max(3, floor(n/2))
-#     Ga <- rep(0, 2)
-#     Ga[1] <- s2
-#     lg <- 1
-#     Ga[1] <- Ga[1] + sum((dt[1:(n - lg)] - mu) * (dt[(lg + 1):n] - mu))/n
-#     m <- 1
-#     lg <- 2 * m
-#     Ga[2] <- sum((dt[1:(n - lg)] - mu) * (dt[(lg + 1):n] - mu))/n
-#     lg <- 2 * m + 1
-#     Ga[2] <- Ga[2] + sum((dt[1:(n - lg)] - mu) * (dt[(lg + 1):n] - mu))/n
-#     IAT <- Ga[1]/s2
-#     while ((Ga[2] > 0) & (Ga[2] < Ga[1])) {
-#       m <- m + 1
-#       if (2 * m + 1 > maxlag) {
-#         if (verbose) cat("Not enough data, maxlag=", maxlag, "\n")
-#         break
-#       }
-#       Ga[1] <- Ga[2]
-#       lg <- 2 * m
-#       Ga[2] <- sum((dt[1:(n - lg)] - mu) * (dt[(lg + 1):n] - mu))/n
-#       lg <- 2 * m + 1
-#       Ga[2] <- Ga[2] + sum((dt[1:(n - lg)] - mu) * (dt[(lg + 1):n] - mu))/n
-#       IAT <- IAT + Ga[1]/s2
-#     }
-#     IAT <- -1 + 2 * IAT
-#     return(IAT)
-#   }
-#
-#   get_IAT <- function(mcs) {
-#     if (!is(mcs, "mcmc.list")) apply(mcs,2,IAT) else
-#       apply(do.call(rbind,lapply(mcs,function(x){apply(x,2,IAT)})),2,mean)
-#   }
-#
-#   if (!(class(pmwg_mcmc[[1]]) %in% c("mcmc","mcmc.list"))) {
-#     if (is(pmwg_mcmc, "pmwgs"))
-#       pmwg_mcmc <- as_Mcmc(pmwg_mcmc,selection=selection,filter=filter,
-#                            thin=thin,subfilter=subfilter) else
-#                              pmwg_mcmc <- as_mcmc.list(pmwg_mcmc,selection=selection,filter=filter,
-#                                                        thin=thin,subfilter=subfilter)
-#   }
-#   if ( selection=="LL" ) stop("IAT not appropriate for LL") else
-#     if (selection=="alpha") {
-#       out <- do.call(rbind,lapply(pmwg_mcmc,get_IAT) )
-#       if (!is.null(summary_alpha)) out <- apply(out,2,summary_alpha)
-#     } else out <- get_IAT(pmwg_mcmc)
-#   if (sort_print & !(selection == "alpha" & is.null(summary_alpha))) out <- sort(out)
-#   if (print_summary) print(round(out,digits_print))
-#   invisible(out)
-# }
-
-#### Posterior parameter tests ----
-
-#' Posterior parameter tests
-#'
-#' Modeled after `t.test`, returns the credible interval of the parameter or test
-#' and what proportion of the posterior distribution (or the difference in posterior distributions
-#' in case of a two sample test) overlaps with mu.
-#' For a one sample test provide `x` and for two sample also provide `y`.
-#' Note that fo comparisons within one model, we recommend using `savage_dickey()` if the priors
-#' were well chosen.
-#'
-#' @param x An EMC2 samplers object
-#' @param x_name A character string. Name of the parameter to be tested for `x`
-#' @param x_fun Function applied to the MCMC chains to create
-#' variable to be tested.
-#' @param y A second EMC2 samplers object
-#' @param y_name A character string. Name of the parameter to be tested for `y`
-#' @param y_fun Function applied to the MCMC chains to create
-#' variable to be tested.
-#' @param mapped Boolean. Should the samples be mapped back to the design before doing the test?
-#' @param x_subject Integer or name selecting a subject
-#' @param y_subject Integer or name selecting a subject
-#' @param mu Numeric. `NULL` value for single sample test if `y` is not supplied (default 0)
-#' @param alternative `less` or `greater` determining direction of test probability
-#' @param probs Vector defining quantiles to return.
-#' @param digits Integer, significant digits for estimates in printed results
-#' @param p_digits Integer, significant digits for probability in printed results
-#' @param print_table Boolean (defaults to `TRUE`) for printing results table
-#' @param selection A character string designating parameter type (e.g. `alpha` or `covariance`)
-#' @param filter A character string. Specifies from which stage the samples should be taken.
-#' @param x_fun_name Name to give to quantity calculated by `x_fun`
-#' @param y_fun_name Name to give to quantity calculated by `y_fun`
-#' @param subfilter An integer or vector. If it's an integer, iterations up until the value set by `subfilter` will be excluded.
-#' If a vector is supplied, only the iterations in the vector will be considered.
-#' @examples \dontrun{
-#' # Run a credible interval test (Bayesian ''t-test'')
-#' p_test(samplers, x_name = "v")
-#' # We can also compare between two sets of samplers
-#' p_test(x = samplers1, x_name = "v", y = samplers2, y_name = "v")
-#'
-#' # Or provide custom functions
-#' p_test(x = samplers, x_fun = function(d) d["B_Eaccuracy"] - d["B_Eneutral"])
-#' }
-#' @return Invisible results table with no rounding.
-#' @export
-
-p_test <- function(x,x_name=NULL,x_fun=NULL,x_fun_name="fun",
-                   y=NULL,y_name=NULL,y_fun=NULL,y_fun_name="fun",
-                   mapped=FALSE,
-                   x_subject=NULL,y_subject=NULL,
-                   mu=0,alternative = c("less", "greater")[1],
-                   probs = c(0.025,.5,.975),digits=2,p_digits=3,print_table=TRUE,
-                   filter="sample",selection="mu",subfilter=0)
-
-{
-
-  get_effect <- function(x,p_name=NULL,fun=NULL)
-  {
-    x <- do.call(rbind,x)
-    if (!is.null(fun)) return(apply(x,1,fun))
-    x[,p_name]
-  }
-
-
-  if (mapped & !(selection %in% c("mu","alpha")))
-    stop("Can only analyze mapped mu or alpha parameters")
-  if (is.null(x_name) & is.null(x_fun))
-    stop("x_name or x_fun must be supplied")
-  if (is.null(y_fun) && is.null(y_name)) y_name <- x_name
-  if (is.null(y_fun) && !is.null(x_fun)) y_fun <- x_fun
-
-  # Process x
-  if (!is(x[[1]], "pmwgs")) stop("x must be a list of pmwgs objects")
-  if (length(x[[1]]$data)==1) selection <- "alpha"
-  x <- as_mcmc.list(x,selection=selection,filter=filter,
-                    subfilter=subfilter,mapped=mapped)
-  # Individual subject analysis
-  if (selection != "alpha") x_subject <- NULL else
-    if (is.null(x_subject)) x_subject <- names(x)[1] else
-      if (is.numeric(x_subject)) x_subject <- names(x)[x_subject]
-  if (!is.null(x_subject)) {
-    if (!(x_subject %in% names(x))) stop("Subject x_subject not in x")
-    message("Testing x subject ",x_subject)
-    x <- x[[x_subject]]
-  }
-  # Check test is valid
-  if (is.null(x_fun) && !all(x_name %in% dimnames(x[[1]])[[2]]) )
-    stop("x_name not present in samples")
-  if (length(x_name)>2)
-    stop("x_name must be length 1 or 2")
-  # Get x effect
-  x <- get_effect(x,x_name,x_fun)
-  if (length(x_name)>1) {
-    x <- -apply(x,1,diff)
-    x_name <- paste(x_name,collapse="-")
-  }
-  if (is.null(x_name)) x_name <- x_fun_name
-  if (is.null(y)) {
-    p <- mean(x<mu)
-    if (alternative=="greater") p <- 1-p
-    tab <- cbind(quantile(x,probs),c(NA,mu,NA))
-    attr(tab,alternative) <- p
-    dimnames(tab)[[2]] <- c(x_name,"mu")
-  } else {
-    if (!is(y[[1]], "pmwgs")) stop("y must be a list of pmwgs objects")
-    y <- as_mcmc.list(y,selection=selection,filter=filter,
-                      subfilter=subfilter,mapped=mapped)
-    # Individual subject analysis
-    if (selection != "alpha") y_subject <- NULL else
-      if (is.null(y_subject)) y_subject <- names(y)[1] else
-        if (is.numeric(y_subject)) y_subject <- names(y)[y_subject]
-    if (!is.null(y_subject)) {
-      if (!(y_subject %in% names(y))) stop("Subject y_subject not in y")
-      message("Testing y subject ",y_subject)
-      y <- y[[y_subject]]
-    }
-    if (is.null(y_fun) && !all(y_name %in% dimnames(y[[1]])[[2]]) )
-      stop("y_name not present in samples")
-    if (length(y_name)>2)
-      stop("y_name must be length 1 or 2")
-    y <- get_effect(y,y_name,y_fun)
-    if (length(y_name)>1) {
-      y <- -apply(y,1,diff)
-      y_name <- paste(y_name,collapse="-")
-    }
-    if (length(x)>length(y)) x <- x[1:length(y)] else y <- y[1:length(x)]
-    d <- x-y
-    p <- mean(d<0)
-    if (alternative=="greater") p <- 1-p
-    tab <- cbind(quantile(x,probs),quantile(y,probs),quantile(d,probs))
-    attr(tab,alternative) <- p
-    if (is.null(y_name)) y_name <- y_fun_name
-    if (x_name==y_name)
-      dimnames(tab)[[2]] <- c(paste(x_name,c(x_subject,y_subject),sep="_"),
-                              paste(x_subject,y_subject,sep="-")) else
-                                dimnames(tab)[[2]] <- c(x_name,y_name,paste(x_name,y_name,sep="-"))
-  }
-  if (print_table) {
-    ptab <- tab
-    ptab <- round(ptab,digits)
-    attr(ptab,alternative) <- round(attr(ptab,alternative),p_digits)
-    print(ptab)
-  }
-  invisible(tab)
-}
 
 #' Calculate information criteria (DIC, BPIC), effective number of parameters and
 #' constituent posterior deviance (D) summaries (meanD = mean of D, Dmean = D
 #' for mean of posterior parameters and minD = minimum of D).
 #'
-#' @param samplers pmwgs object or list of these
-#' @param filter A string. Specifies which stage you want to plot.
-#' @param subfilter An integer or vector. If it's an integer, iterations up until the value set by `subfilter` will be excluded.
+#' @param emc emc object or list of these
+#' @param stage A string. Specifies which stage you want to plot.
+#' @param filter An integer or vector. If it's an integer, iterations up until the value set by `filter` will be excluded.
 #' If a vector is supplied, only the iterations in the vector will be considered.
 #' @param use_best_fit Boolean, default TRUE use best of minD and Dmean in
 #' calculation otherwise always use Dmean
@@ -319,19 +189,19 @@ p_test <- function(x,x_name=NULL,x_fun=NULL,x_fun_name="fun",
 #'
 #' @return Table of DIC, BPIC, EffectiveN, meanD, Dmean, and minD
 
-IC <- function(samplers,filter="sample",subfilter=0,use_best_fit=TRUE,
+IC <- function(emc,stage="sample",filter=0,use_best_fit=TRUE,
                print_summary=TRUE,digits=0,subject=NULL)
   # Gets DIC, BPIC, effective parameters, mean deviance, and deviance of mean
 {
   # Mean log-likelihood for each subject
-  ll <- as_mcmc_new(samplers, filter = filter, subfilter = subfilter, selection = "LL", merge_chains = TRUE)
+  ll <- get_pars(emc, stage = stage, filter = filter, selection = "LL", merge_chains = TRUE)
   minDs <- -2*apply(ll[[1]][[1]], 2, min)
   mean_lls <- apply(ll[[1]][[1]], 2, mean)
-  alpha <- as_mcmc_new(samplers,selection="alpha",filter=filter,subfilter=subfilter, by_subject = TRUE, merge_chains = TRUE)
+  alpha <- get_pars(emc,selection="alpha",stage=stage,filter=filter, by_subject = TRUE, merge_chains = TRUE)
   mean_pars <- lapply(alpha,function(x){apply(do.call(rbind,x),2,mean)})
   # log-likelihood for each subject using their mean parameter vector
-  ll_func <- attr(samplers,"design_list")[[1]]$model()$log_likelihood
-  data <- samplers[[1]]$data
+  ll_func <- attr(emc,"design_list")[[1]]$model()$log_likelihood
+  data <- emc[[1]]$data
   mean_pars_lls <- setNames(numeric(length(mean_pars)),names(mean_pars))
   for (sub in names(mean_pars))
     mean_pars_lls[sub] <- ll_func(mean_pars[[sub]],dadm = data[[sub]])
@@ -342,7 +212,7 @@ IC <- function(samplers,filter="sample",subfilter=0,use_best_fit=TRUE,
     mean_lls <- mean_lls[subject[1]]
     minDs <- minDs[subject[1]]
   } else{
-    group_stats <- group_level_IC_standard(samplers, filter=filter,subfilter=subfilter)
+    group_stats <- attr(emc[[1]], "variant_funs")$group_IC(emc, stage=stage,filter=filter)
     mean_lls <- c(mean_lls, group_stats$mean_ll)
     minDs <- c(minDs, group_stats$minD)
     Dmeans <- c(Dmeans, group_stats$Dmean)
@@ -383,8 +253,8 @@ IC <- function(samplers,filter="sample",subfilter=0,use_best_fit=TRUE,
 #' @return The BayesFactor for model 1 over model 2
 #' @examples \dontrun{
 #' # First get the marginal likelihood for two_models
-#' # Here the full model is a list of samplers with the hypothesized effect
-#' # The null model is a list of samplers without the hypothesized effect
+#' # Here the full model is an emc object with the hypothesized effect
+#' # The null model is an emc object without the hypothesized effect
 #' MLL_full <- run_bridge_sampling(full_model, cores_per_prop = 3)
 #' MLL_null <- run_bridge_sampling(null_model, cores_per_prop = 3)
 #' # Now we can calculate their Bayes factor
@@ -395,192 +265,13 @@ get_BayesFactor <- function(MLL1, MLL2){
   exp(MLL1 - MLL2)
 }
 
-
-
-#' Information criteria and marginal likelihoods
-#'
-#' Returns the BPIC/DIC or marginal deviance (-2*marginal likelihood) for a list of samples objects.
-#'
-#' @param sList List of samples objects
-#' @param filter A string. Specifies which stage the samples are to be taken from `"preburn"`, `"burn"`, `"adapt"`, or `"sample"`
-#' @param subfilter An integer or vector. If it's an integer, iterations up until the value set by `subfilter` will be excluded.
-#' If a vector is supplied, only the iterations in the vector will be considered.
-#' @param use_best_fit Boolean, defaults to `TRUE`, uses the minimal or mean likelihood (whichever is better) in the
-#' calculation, otherwise always uses the mean likelihood.
-#' @param BayesFactor Boolean, defaults to `TRUE`. Include marginal likelihoods as estimated using WARP-III bridge sampling.
-#' Usually takes a minute per model added to calculate
-#' @param cores_for_props Integer, how many cores to use for the Bayes factor calculation, here 4 is the default for the 4 different proposal densities to evaluate, only 1, 2 and 4 are sensible.
-#' @param cores_per_prop Integer, how many cores to use for the Bayes factor calculation if you have more than 4 cores available. Cores used will be cores_for_props * cores_per_prop. Best to prioritize cores_for_props being 4 or 2
-#' @param print_summary Boolean (default `TRUE`), print table of results
-#' @param digits Integer, significant digits in printed table for information criteria
-#' @param digits_p Integer, significant digits in printed table for model weights
-#' @param ... Additional, optional arguments
-#'
-#' @return Matrix of effective number of parameters, mean deviance, deviance of
-#' mean, DIC, BPIC, Marginal Deviance (if `BayesFactor=TRUE`) and associated weights.
-#' @examples \dontrun{
-#' # Define a samplers list of two (or more different models)
-#' # Here the full model is a list of samplers with the hypothesized effect
-#' # The null model is a list of samplers without the hypothesized effect
-#' sList <- list(full_model, null_model)
-#' # By default emc uses 4 cores to parallelize marginal likelihood estimation across proposals
-#' # So cores_per_prop = 3 results in 12 cores used.
-#' compare(sList, cores_per_prop = 3)
-#' }
-#' @export
-
-compare <- function(sList,filter="sample",subfilter=0,use_best_fit=TRUE,
-                    BayesFactor = TRUE, cores_for_props =4, cores_per_prop = 1,
-                    print_summary=TRUE,digits=0,digits_p=3, ...) {
-  if(is(sList, "emc")) sList <- list(sList)
-  getp <- function(IC) {
-    IC <- -(IC - min(IC))/2
-    exp(IC)/sum(exp(IC))
-  }
-  if(!is.null(list(...)$subject)) subject <- list(...)$subject
-
-  if (is.numeric(subfilter)) defaultsf <- subfilter[1] else defaultsf <- 0
-  sflist <- as.list(setNames(rep(defaultsf,length(sList)),names(sList)))
-  if (is.list(subfilter)) for (i in names(subfilter))
-    if (i %in% names(sflist)) sflist[[i]] <- subfilter[[i]]
-
-  ICs <- setNames(vector(mode="list",length=length(sList)),names(sList))
-  for (i in 1:length(ICs)) ICs[[i]] <- IC(sList[[i]],filter=filter,
-                                          subfilter=sflist[[i]],use_best_fit=use_best_fit,subject=NULL,print_summary=FALSE)
-  ICs <- data.frame(do.call(rbind,ICs))
-  DICp <- getp(ICs$DIC)
-  BPICp <- getp(ICs$BPIC)
-  out <- cbind.data.frame(DIC=ICs$DIC,wDIC=DICp,BPIC=ICs$BPIC,wBPIC=BPICp,ICs[,-c(1:2)])
-
-  if(BayesFactor){
-    MLLs <- numeric(length(sList))
-    for(i in 1:length(MLLs)){
-      MLLs[i] <- run_bridge_sampling(sList[[i]], filter = filter, subfilter = sflist[[i]], both_splits = FALSE,
-                                     cores_for_props = cores_for_props, cores_per_prop = cores_per_prop)
-    }
-    MD <- -2*MLLs
-    modelProbability <- getp(MD)
-    out <- cbind.data.frame(MD = MD, wMD = modelProbability, out)
-  }
-  if (print_summary) {
-    tmp <- out
-    tmp$wDIC <- round(tmp$wDIC,digits_p)
-    tmp$wBPIC <- round(tmp$wBPIC,digits_p)
-    if(BayesFactor){
-      tmp$wMD <- round(tmp$wMD, digits_p)
-      tmp[,-c(2,4,6)] <- round(tmp[,-c(2,4,6)],digits=digits)
-    } else{
-      tmp[,-c(2,4)] <- round(tmp[,-c(2,4)],digits=digits)
-    }
-    print(tmp)
-  }
-  invisible(out)
-}
-
-#' Savage dickey ratio computation
-#'
-#' Can be used to approximate the Bayes factor for group-level parameter effects.
-#'
-#' Note this is different to the computation of the marginal deviance in `compare`
-#' since it only considers the group level effect and not the whole model.
-#' For details see: Wagenmakers, Lodewyckx, Kuriyal, & Grasman (2010).
-#'
-#' @param samplers A list, typically a `samplers`object, the output from `run_emc()`
-#' @param parameter A string. A parameter which you want to compare to H0. Will not be used if a FUN is specified.
-#' @param H0 An integer. The H0 value which you want to compare to
-#' @param filter A string. Specifies which stage the samples are to be taken from
-#' `"preburn"`, `"burn"`, `"adapt"`, or `"sample"`
-#' @param fun A function. Specifies an operation to be performed on the sampled or mapped parameters.
-#' @param selection A string. The default is `mu`. Whether to do the operation on
-#' the `alpha`, `mu`, `covariance`, `variance`, or `correlation` parameters.
-#' @param do_plot Boolean. Whether to include a plot of the prior and posterior density. With prior and posterior circles at H0.
-#' @param use_prior_lim Boolean. If `TRUE` will use xlimits based on prior density, otherwise based on posterior density.
-#' @param prior_plot_args A list. Optional additional arguments to be passed to plot.default for the plotting of the prior (see `par()`)
-#' @param ... A list of optional arguments that can be passed to `as_mcmc_new`, `density`, or `plot.default` (see `par()`)
-#' @return The Bayes factor for the hypothesis against H0.
-#' @examples \dontrun{
-#' # Here the samplers object has an effect parameter (e.g. B_Eneutral),
-#' # that maps onto a certain hypothesis.
-#' # The hypothesis here is that B_Eneutral is different from zero.
-#' # We can test whether there's a group-level effect of Eneutral on B:
-#' savage_dickey(samplers, parameter = "B_Eneutral")
-#' # Alternatively we can also test whether two parameters from each other
-#' Bdiff <- function(p)diff(p[c("B_Eneutral","B_Eaccuracy")])
-#' savage_dickey(samplers,fun=Bdiff)
-#' }
-#' @export
-savage_dickey <- function(samplers, parameter = NULL, H0 = 0, fun = NULL,selection = "mu",
-                          do_plot = TRUE, use_prior_lim = TRUE, prior_plot_args = list(), ...){
-  dots <- list(...)
-  type <- attr(samplers[[1]], "variant_funs")$type
-
-  if(selection == "alpha" & type != "single") stop("For savage-dickey ratio, selection cannot be alpha")
-  prior <- samplers[[1]]$prior
-  flatten <- ifelse(selection == "alpha", FALSE, TRUE)
-
-
-  psamples <-  get_objects(design = attr(samplers,"design_list")[[1]],
-                           type = attr(samplers[[1]], "variant_funs")$type, sample_prior = T,
-                           selection = selection, N = 1e4)
-  psamples <- do.call(as_mcmc_new, c(list(psamples, selection = selection, merge_chains = TRUE, return_mcmc = FALSE, by_subject = TRUE,
-                                          type = attr(samplers[[1]], "variant_funs")$type),
-                                     fix_dots(dots, as_mcmc_new, exclude = c("thin", "subfilter"))))
-  samples <- do.call(as_mcmc_new, c(list(samplers, selection = selection, merge_chains = TRUE, return_mcmc = FALSE, by_subject = TRUE),
-                                    fix_dots(dots, as_mcmc_new)))
-  if(type == "single"){
-    if(ncol(samples) > 1 & !is.null(dots$subject)){
-      stop("with non-hierarichal run with multiple subjects, you must specify which subject")
-    } else {
-      samples <- samples[,1,]
-      psamples <- psamples[,1,]
-    }
-  }
-  if(is.null(fun)){
-    idx <- rownames(samples) == parameter
-    samples <- samples[idx,]
-    psamples <- psamples[idx,]
-  } else{
-    samples <- apply(as.data.frame(samples), 2, fun)
-    psamples <- apply(as.data.frame(psamples), 2, fun)
-  }
-  min_bound <- min(min(psamples), H0)
-  max_bound <- max(max(psamples), H0)
-  diff <- max_bound - min_bound
-  pdensity <- density(psamples, bw = "sj", from = min_bound - diff/2, to = max_bound + diff/2)
-  pdfun <-approxfun(pdensity)
-
-  min_bound <- min(min(samples), H0)
-  max_bound <- max(max(samples), H0)
-  diff <- max_bound - min_bound
-  post_density <- density(samples, bw = "sj", from = min_bound - diff/2, to = max_bound + diff/2)
-  post_dfun <-approxfun(post_density)
-  if(do_plot){
-    if(is.null(dots$xlim)){
-      if(use_prior_lim){
-        dots$xlim <- range(c(quantile(samples, c(0.025, 0.975)),
-                             quantile(psamples, c(0.025, 0.975)), H0 + .01, H0 - .01))
-      } else{
-        dots$xlim <- range(c(quantile(samples, c(0.025, 0.975)), H0 + .01, H0 - .01))
-      }
-    }
-    prior_plot_args <- add_defaults(prior_plot_args, cex = 2, col = "red", lwd = 1.5)
-    dots <- add_defaults(dots, cex = 2, col = "black", lwd = 1.5, main = "Prior and posterior density")
-    do.call(plot, c(list(post_density), fix_dots_plot(dots)))
-    do.call(lines, c(list(pdensity), fix_dots_plot(prior_plot_args)))
-    do.call(points, c(list(H0 , post_dfun(H0)), fix_dots_plot(dots)))
-    do.call(points, c(list(H0, pdfun(H0)), fix_dots_plot(prior_plot_args)))
-    legend("topright", legend = c("posterior", "prior"), pch = c(1, 1), col = c(dots$col, prior_plot_args$col))
-  }
-  return(pdfun(H0)/post_dfun(H0))
-}
-
 #' Information criteria for each participant
 #'
 #' Returns the BPIC/DIC based model weights for each participant in a list of samples objects
 #'
 #' @param sList List of samples objects
-#' @param filter A string. Specifies which stage the samples are to be taken from `"preburn"`, `"burn"`, `"adapt"`, or `"sample"`
-#' @param subfilter An integer or vector. If it's an integer, iterations up until the value set by `subfilter` will be excluded.
+#' @param stage A string. Specifies which stage the samples are to be taken from `"preburn"`, `"burn"`, `"adapt"`, or `"sample"`
+#' @param filter An integer or vector. If it's an integer, iterations up until the value set by `filter` will be excluded.
 #' If a vector is supplied, only the iterations in the vector will be considered.
 #' @param use_best_fit Boolean, defaults to `TRUE`, use minimal likelihood or mean likelihood
 #' (whichever is better) in the calculation, otherwise always uses the mean likelihood.
@@ -590,9 +281,9 @@ savage_dickey <- function(samplers, parameter = NULL, H0 = 0, fun = NULL,selecti
 #' @return List of matrices for each subject of effective number of parameters,
 #' mean deviance, deviance of mean, DIC, BPIC and associated weights.
 #' @examples \dontrun{
-#' # Define a samplers list of two (or more different models)
-#' # Here the full model is a list of samplers with the hypothesized effect
-#' # The null model is a list of samplers without the hypothesized effect
+#' # Define a emc list of two (or more different models)
+#' # Here the full model is an emc object with the hypothesized effect
+#' # The null model is an emc object without the hypothesized effect
 #' sList <- list(full_model, null_model)
 #' # By default emc uses 4 cores to parallelize marginal likelihood estimation across proposals
 #' # So cores_per_prop = 3 results in 12 cores used.
@@ -601,13 +292,13 @@ savage_dickey <- function(samplers, parameter = NULL, H0 = 0, fun = NULL,selecti
 #' # And returns the DIC and BPIC for each participant for each model.
 #' }
 #' @export
-compare_subject <- function(sList,filter="sample",subfilter=0,use_best_fit=TRUE,
+compare_subject <- function(sList,stage="sample",filter=0,use_best_fit=TRUE,
                             print_summary=TRUE,digits=3) {
   if(is(sList, "emc")) sList <- list(sList)
   subjects <- names(sList[[1]][[1]]$data)
   out <- setNames(vector(mode="list",length=length(subjects)),subjects)
   for (i in subjects) out[[i]] <- compare(sList,subject=i,BayesFactor=FALSE,
-                                          filter=filter,subfilter=subfilter,use_best_fit=use_best_fit,print_summary=FALSE)
+                                          stage=stage,filter=filter,use_best_fit=use_best_fit,print_summary=FALSE)
   if (print_summary) {
     wDIC <- lapply(out,function(x)x["wDIC"])
     wBPIC <- lapply(out,function(x)x["wBPIC"])
@@ -733,10 +424,10 @@ make_nice_summary <- function(object, stat = "max", stat_only = FALSE, stat_name
 }
 
 
-get_summary_stat <- function(samplers, selection = "mu", fun, stat = NULL,
+get_summary_stat <- function(emc, selection = "mu", fun, stat = NULL,
                              stat_only = FALSE, stat_name = NULL, digits = 3, ...){
   dots <- list(...)
-  MCMC_samples <- do.call(as_mcmc_new, c(list(sampler = samplers, selection = selection), fix_dots(dots, as_mcmc_new)))
+  MCMC_samples <- do.call(get_pars, c(list(emc = emc, selection = selection), fix_dots(dots, get_pars)))
   out <- vector("list", length = length(MCMC_samples))
   for(i in 1:length(MCMC_samples)){
     # cat("\n", names(MCMC_samples)[[i]], "\n")
@@ -765,91 +456,10 @@ get_summary_stat <- function(samplers, selection = "mu", fun, stat = NULL,
 }
 
 
-
-#' Gelman-Rubin statistic
-#'
-#' Returns the Gelman-Rubin diagnostics (otherwise known as the R-hat) of the selected parameter type;
-#' i.e. the ratio of between to within MCMC chain variance.
-#'
-#' See: Gelman, A and Rubin, DB (1992)
-#' Inference from iterative simulation using multiple sequences, *Statistical Science*, 7, 457-511.
-#'
-#' Full range of possible samples manipulations described in `as_mcmc_new`.
-#'
-#' @param emc An emc object
-#' @param selection A Character vector. Indicates which parameter types to check (e.g., `alpha`, `mu`, `sigma2`, `correlation`).
-#' @param omit_mpsrf Boolean. If `TRUE` also returns the multivariate point scale reduction factor (see `?coda::gelman.diag`).
-#' @param stat A string. Should correspond to a function that can be applied to a vector,
-#' which will be performed on the vector/rows or columns of the matrix of the parameters
-#' @param stat_only Boolean. If `TRUE` will only return the result of the applied stat function,
-#' otherwise returns both the stat result and the R-hat of all parameters.
-#' @param digits Integer. How many digits to round the R-hat to in the output.
-#' @param ... Optional additional arguments that can be passed to `as_mcmc_new`
-#'
-#' @return A matrix or vector of R-hat values for the selected parameter type.
-#' @export
-#'
-#' @examples
-#' gd_summary_new(samplers_LNR, selection = "correlation", stat = "mean", flatten = TRUE)
-gd_summary_new <- function(emc,selection="mu", omit_mpsrf = TRUE,
-                           stat = "max", stat_only = FALSE, digits = 3, ...){
-  out <- get_summary_stat(emc, selection, gelman_diag_robust, stat = stat,
-                          stat_only = stat_only, digits = digits, omit_mpsrf = omit_mpsrf, ...)
-  return(out)
-}
-
-#' Effective sample size
-#'
-#' Returns the effective sample size (ESS) of the selected parameter type.
-#' Full range of possible samples manipulations described in `as_mcmc_new`.
-#'
-#' @param emc An emc object
-#' @param selection A Character vector. Indicates which parameter types to check (e.g., `alpha`, `mu`, `sigma2`, `correlation`).
-#' @param stat A string. Should correspond to a function that can be applied to a vector,
-#' which will be performed on the vector/rows or columns of the matrix of the parameters
-#' @param stat_only Boolean. If `TRUE` will only return the result of the applied stat function,
-#' otherwise returns both the stat result and the ESS of all parameters.
-#' @param digits Integer. How many digits to round the ESS to in the output.
-#' @param ... Optional additional arguments that can be passed to `as_mcmc_new`
-#'
-#' @return A matrix or vector of ESS values for the selected parameter type.
-#' @export
-#'
-#' @examples
-#' es_summary_new(samplers_LNR, selection = "alpha")
-es_summary_new <- function(emc,selection="mu", stat = "min", stat_only = FALSE,
-                           digits = 1, ...){
-  out <- get_summary_stat(emc, selection, effectiveSize,
-                          stat = stat, stat_only = stat_only, digits = digits, ...)
-  return(out)
-}
-
 get_posterior_quantiles <- function(x, probs = c(0.025, .5, .975)){
   summ <- summary(x, probs)
   return(summ$quantiles)
 }
 
-#' Posterior quantiles
-#'
-#' Returns the quantiles of the selected parameter type.
-#' Full range of possible samples manipulations described in `as_mcmc_new`.
-#'
-#' @param emc An emc object
-#' @param selection A Character vector. Indicates which parameter types to check (e.g., `alpha`, `mu`, `sigma2`, `correlation`).
-#' @param probs A vector. Indicates which quantiles to return from the posterior.
-#' @param digits Integer. How many digits to round the quantiles to in the output.
-#' @param ... Optional additional arguments that can be passed to `as_mcmc_new`
-#'
-#' @return A list of posterior quantiles for each parameter group in the selected parameter type.
-#' @export
-#'
-#' @examples
-#' posterior_summary_new(samplers_LNR)
-posterior_summary_new <- function(emc, selection="mu", probs = c(0.025, .5, .975),
-                                  digits = 3, ...){
-  out <- get_summary_stat(emc, selection, get_posterior_quantiles,
-                          probs = probs, digits = digits, ...)
-  return(out)
-}
 
 

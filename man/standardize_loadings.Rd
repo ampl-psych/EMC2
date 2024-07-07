@@ -5,21 +5,21 @@
 \title{Standardized factor loadings}
 \usage{
 standardize_loadings(
-  samplers = NULL,
+  emc = NULL,
   loadings = NULL,
   sig_err_inv = NULL,
-  filter = "sample",
+  stage = "sample",
   merge_chains = T
 )
 }
 \arguments{
-\item{samplers}{A list of samplers from a hierarchical factor analysis model}
+\item{emc}{An emc object with samples from a hierarchical factor analysis model}
 
-\item{loadings}{Array of pars by factors by iters. Can also specify loadings instead of samplers}
+\item{loadings}{Array of pars by factors by iters. Can also specify loadings instead of emc}
 
-\item{sig_err_inv}{Array of pars by iters. Can also specify sig_err_inv instead of samplers}
+\item{sig_err_inv}{Array of pars by iters. Can also specify sig_err_inv instead of emc}
 
-\item{filter}{Character. From which stage to take samples}
+\item{stage}{Character. From which stage to take samples}
 
 \item{merge_chains}{Return the loadings for each chain separately or merged together.}
 }
@@ -34,9 +34,9 @@ as described in Stevenson, Heathcote, Forstmann & Matzke, 2024.
 \examples{
 \dontrun{
 # For a given set of hierarchical factor model samples we can standardize the loadings
-standardize_loadings(samplers)
+standardize_loadings(emc)
 # By default merges across chains, but we could also get a list of standardized loadings
-standardize_loadings(samplers, merge_chains = FALSE)
+standardize_loadings(emc, merge_chains = FALSE)
 }
 
 }

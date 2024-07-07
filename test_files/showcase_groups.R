@@ -84,6 +84,6 @@ samplers_1mainB_group <- run_IS2(samplers_1mainB_group, IS_samples = 500, max_pa
 save(samplers_1mainB_group, file = "1main_Bgroup.RData")
 
 
-pp <- post_predict(samplers)
+pp <- predict(samplers)
 plot_fit(dat, pp, signalFactor = "target", factors = c("group", "target"), layout = c(2,3))
 

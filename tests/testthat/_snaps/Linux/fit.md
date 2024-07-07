@@ -1,4 +1,4 @@
-# run_emc
+# fit
 
     Code
       LNR_s[[1]]$samples$theta_mu[, idx]

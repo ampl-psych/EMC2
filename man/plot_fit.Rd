@@ -34,7 +34,7 @@ plot_fit(
 subject factor), \code{R} (i.e., the response factor) and \code{rt} (i.e., response time) variable.
 Additional factor variables of the design are optional.}
 
-\item{pp}{A data frame. Posterior predictives created by \code{post_predict()}}
+\item{pp}{A data frame. Posterior predictives created by \code{predict()}}
 
 \item{subject}{Integer or string selecting a subject from the data. If specified only that subject
 is plotted. \code{NULL} (i.e., the default), will plot all subjects.}
@@ -109,7 +109,7 @@ Also see \code{?plot_defective_density()} for more details.
 \examples{
 \dontrun{
 # First generate posterior predictives based on an emc object run with run_emc
-pp <- post_predict(samplers_LNR, n_cores = 4)
+pp <- predict(samples_LNR, n_cores = 4)
 # Then visualize the model fit
 plot_fit(forstmann, pp, factors = c("S", "E"), layout = c(2,3))
 

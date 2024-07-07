@@ -3,7 +3,7 @@
     Code
       LNR_factor[[1]]$samples$theta_lambda[, , idx]
     Output
-                    [,1]       [,2]
+                      F1         F2
       m      0.361174688  0.0000000
       m_lMd -0.444228520  0.5179415
       s     -0.295217709 -0.2682314
@@ -113,11 +113,11 @@
 # run_bridge
 
     Code
-      compare(list(single = LNR_single, diag = LNR_diag, factor = LNR_factor),
-      filter = "preburn", cores_for_props = 1)
+      compare(list(single = LNR_single, diag = LNR_diag, factor = LNR_factor), stage = "preburn",
+      cores_for_props = 1)
     Output
                MD wMD  DIC wDIC BPIC wBPIC EffectiveN meanD Dmean minD
-      single -305   0  107    0  435     0        328  -220  -379 -548
-      diag   -477   1 -361    1 -252     1        108  -469  -571 -578
-      factor -453   0 -128    0   91     0        219  -347  -562 -565
+      single -312   0  -62    0   97     0        159  -220  -379 -379
+      diag   -477   1 -353    1 -234     1        119  -472  -575 -592
+      factor  365   0 -110    0  117     0        227  -337  -564 -564
 

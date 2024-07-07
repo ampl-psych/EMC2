@@ -5,8 +5,8 @@
 \title{Plot relations}
 \usage{
 plot_relations(
-  samplers = NULL,
-  filter = "sample",
+  emc = NULL,
+  stage = "sample",
   plot_cred = TRUE,
   plot_means = TRUE,
   only_cred = FALSE,
@@ -15,9 +15,9 @@ plot_relations(
 )
 }
 \arguments{
-\item{samplers}{An EMC2 samplers object, commonly the output of \code{run_emc()}.}
+\item{emc}{An EMC2 object, commonly the output of \code{run_emc()}.}
 
-\item{filter}{Character. The stage from which to take the samples, defaults to
+\item{stage}{Character. The stage from which to take the samples, defaults to
 the sampling stage \code{sample}.}
 
 \item{plot_cred}{Boolean. Whether to plot the 95 percent credible intervals or not}
@@ -38,8 +38,8 @@ to \code{EMC2} and the plotting of estimated correlations.
 \dontrun{
 # For a given set of hierarchical model samples we can make a
 # correlation matrix plot.
-plot_relations(samplers, only_cred = TRUE, plot_cred = TRUE)
+plot_relations(emc, only_cred = TRUE, plot_cred = TRUE)
 # We can also only plot the correlations where the credible interval does not include zero
-plot_relations(samplers, plot_means = TRUE, only_cred = TRUE)
+plot_relations(emc, plot_means = TRUE, only_cred = TRUE)
 }
 }

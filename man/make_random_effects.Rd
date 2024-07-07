@@ -13,7 +13,7 @@ make_random_effects(
 )
 }
 \arguments{
-\item{design}{A design list. The design as specified by \code{make_design()}}
+\item{design}{A design list. The design as specified by \code{design()}}
 
 \item{group_means}{A numeric vector. The group level means for each parameter, in the same order as \code{sampled_p_vector(design)}}
 
@@ -31,7 +31,7 @@ Simulates subject-level parameters in the format required by \code{make_data()}.
 }
 \examples{
 # First create a design
-design_DDMaE <- make_design(data = forstmann,model=DDM,
+design_DDMaE <- design(data = forstmann,model=DDM,
                             formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
                             constants=c(s=log(1)))
 # Then create a group-level means vector:

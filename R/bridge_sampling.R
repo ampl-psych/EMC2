@@ -124,14 +124,14 @@ run.iterative.scheme <- function(q11, q12, q21, q22, r0, tol,
 }
 
 bridge_sampling <- function(samples, n_eff, split_idx, cores_for_props = 1, cores_per_prop = 1, maxiter = 5000,
-                            filter = "sample", r0 = 1e-5, tol1 = 1e-10, tol2 = 1e-6, hyper_only = F){
+                            stage = "sample", r0 = 1e-5, tol1 = 1e-10, tol2 = 1e-6, hyper_only = F){
   if(Sys.info()[1] == "Windows" & cores_per_prop > 1) stop("only cores_for_props can be set on Windows")
   variant_funs <- attr(samples, "variant_funs")
   data <- samples$data
   info <- make_info(samples, variant_funs)
   n_pars <- samples$n_pars
   n_subjects <- samples$n_subjects
-  idx <- samples$samples$stage == filter
+  idx <- samples$samples$stage == stage
   all_samples <- matrix(NA_real_, nrow = sum(idx), ncol = n_pars * n_subjects)
   for(i in 1:n_subjects){
     all_samples[,((i-1)*n_pars + 1):(i*n_pars)] <- t(samples$samples$alpha[,i,idx])
@@ -182,7 +182,7 @@ bridge_sampling <- function(samples, n_eff, split_idx, cores_for_props = 1, core
   }
 
   if(is.na(tmp$logml)){
-    stop("Bridge sampling did not converge, usually this means you need to run_emc longer to get more samples")
+    stop("Bridge sampling did not converge, usually this means you need to fit longer to get more samples")
   }
   return(tmp$logml)
 }
@@ -195,7 +195,7 @@ bridge_sampling <- function(samples, n_eff, split_idx, cores_for_props = 1, core
 #' The marginal likelihood can be used for computing Bayes factors and posterior model probabilities.
 #'
 #'
-#' If not enough posterior samples were collected using `run_emc()`,
+#' If not enough posterior samples were collected using `fit()`,
 #' bridge sampling can be unstable. It is recommended to run
 #' `run_bridge_sampling()` several times with the ``repetitions`` argument
 #'  and to examine how stable the results are.
@@ -219,9 +219,9 @@ bridge_sampling <- function(samples, n_eff, split_idx, cores_for_props = 1, core
 #' *Journal of Computational and Graphical Statistics*,
 #' 11(3), 552-586. doi.org/10.1198/106186002457
 #'
-#' @param samplers An emc samplers object with a set of converged samples
-#' @param filter A character indicating which stage to use, defaults to `sample`
-#' @param subfilter An integer or vector. If integer, it will exclude up until
+#' @param emc An emc object with a set of converged samples
+#' @param stage A character indicating which stage to use, defaults to `sample`
+#' @param filter An integer or vector. If integer, it will exclude up until
 #' that integer. If vector it will include everything in that range.
 #' @param repetitions An integer. How many times to repeat the bridge sampling scheme. Can help get an estimate of stability of the estimate.
 #' @param cores_for_props Integer. Warp-III evaluates the posterior over 4 different proposal densities. If you have the CPU, 4 cores will do this in parallel, 2 is also already helpful.
@@ -233,14 +233,14 @@ bridge_sampling <- function(samples, n_eff, split_idx, cores_for_props = 1, core
 #'
 #' @return A vector of length repetitions which contains the marginal log likelihood estimates per repetition
 #' @examples \dontrun{
-#' # After `run_emc` has converged on a specific model
+#' # After `fit` has converged on a specific model
 #' # We can take those samples and calculate the marginal log-likelihood for them
-#' MLL <- run_bridge_sampling(samplers, cores_per_prop = 2)
+#' MLL <- run_bridge_sampling(list_of_emc, cores_per_prop = 2)
 #' # This will run on 2*4 cores (since 4 is the default for ``cores_for_props``)
 #' }
 #' @export
 #'
-run_bridge_sampling <- function(samplers, filter = "sample", subfilter = NULL, repetitions = 1, cores_for_props = 4,  cores_per_prop = 1, both_splits = T, ...){
+run_bridge_sampling <- function(emc, stage = "sample", filter = NULL, repetitions = 1, cores_for_props = 4,  cores_per_prop = 1, both_splits = T, ...){
   # Hyper parameters and dev options
   maxiter <- 5000
   r0 <- 1e-5
@@ -252,27 +252,27 @@ run_bridge_sampling <- function(samplers, filter = "sample", subfilter = NULL, r
   for (name in names(optionals) ) {
     assign(name, optionals[[name]])
   }
-  samplers <- lapply(samplers, remove_iterations, subfilter = subfilter, filter = filter)
-  n_eff <- round(es_summary_new(samplers, selection = "alpha", stat = "median", stat_only = TRUE)/2)
-  samples <- merge_samples(samplers)
-  idx <- samples$samples$stage == filter
+  emc <-subset(emc, filter = filter, stage = stage)
+  n_eff <- round(ess_summary(emc, selection = "alpha", stat = "median", stat_only = TRUE, stage = stage, filter = filter)/2)
+  samples <- merge_chains(emc)
+  idx <- samples$samples$stage == stage
   mls <- numeric(repetitions)
   for(i in 1:repetitions){
     if(both_splits){
       split1 <- seq(1, round(sum(idx)/2))
       s1 <- bridge_sampling(samples, n_eff, split1, cores_for_props = cores_for_props, cores_per_prop = cores_per_prop,
-                            maxiter = maxiter, filter = filter,
+                            maxiter = maxiter, stage = stage,
                             r0 = r0, tol1 = tol1, tol2 = tol2, hyper_only = hyper_only)
       split2 <- seq(round(sum(idx)/2 + 1) : sum(idx))
       s2 <- bridge_sampling(samples, n_eff, split2, cores_for_props = cores_for_props, cores_per_prop = cores_per_prop,
-                            maxiter = maxiter, filter = filter,
+                            maxiter = maxiter, stage = stage,
                             r0 = r0, tol1 = tol1, tol2 = tol2, hyper_only = hyper_only)
       if(abs(s1 - s2) > 1) warning("First split and second split marginal likelihood estimates are off by 1 log point. \n This usually means that your MCMC chains aren't completely stable yet. \n Consider running the MCMC chain longer if you need more precise estimates (e.g. when comparing different priors)")
       mls[i] <- mean(c(s1, s2))
     } else{
       split_idx <- seq(1, sum(idx), by = 2)
       mls[i] <- bridge_sampling(samples, n_eff, split_idx, cores_for_props = cores_for_props, cores_per_prop = cores_per_prop,
-                                maxiter = maxiter, filter = filter,
+                                maxiter = maxiter, stage = stage,
                                 r0 = r0, tol1 = tol1, tol2 = tol2, hyper_only = hyper_only)
     }
   }

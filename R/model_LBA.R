@@ -164,12 +164,12 @@ rLBA <- function(lR,pars,p_types=c("v","sv","b","A","t0"),posdrift = TRUE,
 #'
 #' Model file to estimate the Linear Ballistic Accumulator (LBA) in EMC2.
 #'
-#' Model files are almost exclusively used in `make_design()`.
+#' Model files are almost exclusively used in `design()`.
 #'
 #' @details
 #'
 #' Default values are used for all parameters that are not explicitly listed in the `formula`
-#' argument of `make_design()`.They can also be accessed with `LBA()$p_types`.
+#' argument of `design()`.They can also be accessed with `LBA()$p_types`.
 #'
 #' | **Parameter** | **Transform** | **Natural scale** | **Default**   | **Mapping**                    | **Interpretation**                                            |
 #' |-----------|-----------|---------------|-----------|----------------------------|-----------------------------------------------------------|
@@ -195,7 +195,7 @@ rLBA <- function(lR,pars,p_types=c("v","sv","b","A","t0"),posdrift = TRUE,
 #' parameters, so `B~lR` allows for different thresholds for the accumulator
 #' corresponding to left and right stimuli (e.g., a bias to respond left occurs
 #' if the left threshold is less than the right threshold).
-#' For race models, the `make_design()` argument `matchfun` can be provided, a
+#' For race models, the `design()` argument `matchfun` can be provided, a
 #' function that takes the `lR` factor (defined in the augmented data (d)
 #' in the following function) and returns a logical defining the correct response.
 #' In the example below, the match is simply such that the `S` factor equals the
@@ -218,9 +218,9 @@ rLBA <- function(lR,pars,p_types=c("v","sv","b","A","t0"),posdrift = TRUE,
 #' # We also define a match function for lM
 #' matchfun=function(d)d$S==d$lR
 #' # We now construct our design, with v ~ lM and the contrast for lM the ADmat.
-#' design_LBABE <- make_design(data = forstmann,model=LBA,matchfun=matchfun,
-#' formula=list(v~lM,sv~lM,B~E+lR,A~1,t0~1),
-#' contrasts=list(v=list(lM=ADmat)),constants=c(sv=log(1)))
+#' design_LBABE <- design(data = forstmann,model=LBA,matchfun=matchfun,
+#'                        formula=list(v~lM,sv~lM,B~E+lR,A~1,t0~1),
+#'                        contrasts=list(v=list(lM=ADmat)),constants=c(sv=log(1)))
 #' # For all parameters that are not defined in the formula, default values are assumed
 #' # (see Table above).
 #' @export

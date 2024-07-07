@@ -82,7 +82,8 @@ add_info_SEM <- function(sampler, prior = NULL, ...){
 #' @param map Boolean, default TRUE reverses malformation used by model to make
 #' sampled parameters unbounded
 #' @param N How many samples to draw from the prior, default 1e5
-#' @param design The design obtained from `make_design`, required when map = TRUE
+#' @param n_factors how many factors to estimate
+#' @param design The design obtained from `design`, required when map = TRUE
 #' @param type  character, options: "mu", "variance", "covariance" "full_var"
 #' @param Lambda_mat The loadings constraint matrix
 #' @param B_mat The latent regressions constraint matrix
@@ -95,7 +96,7 @@ add_info_SEM <- function(sampler, prior = NULL, ...){
 #'
 get_prior_SEM <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, type = "mu", design = NULL,
                                    map = FALSE, Lambda_mat = NULL, B_mat = NULL,
-                          K_mat = NULL, G_mat = NULL, x = NULL, n_factors = n_factors){
+                          K_mat = NULL, G_mat = NULL, x = NULL, n_factors = 5){
 
   if(is.null(prior)){
     prior <- list()

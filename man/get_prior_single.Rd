@@ -28,7 +28,7 @@ return the prior specifications?}
 
 \item{selection}{Character. If \code{sample = TRUE}, what prior to sample from. Options: \code{"alpha"}.}
 
-\item{design}{The design obtained from \code{make_design()}, required when \code{map = TRUE}}
+\item{design}{The design obtained from \code{design()}, required when \code{map = TRUE}}
 
 \item{map}{Boolean, defaults to \code{TRUE}. If \code{sample = TRUE}, the implied prior is sampled.
 This includes back-transformations for naturally bounded parameters such as
@@ -50,12 +50,12 @@ is needed for each parameter.
 \examples{
 \dontrun{
 # First define a design for the model
-design_DDMaE <- make_design(data = forstmann,model=DDM,
+design_DDMaE <- design(data = forstmann,model=DDM,
                            formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
                            constants=c(s=log(1)))
 # Now get the default prior
 prior <- get_prior_single(design = design_DDMaE, sample = FALSE)
-# We can change values in the default prior or use make_prior
+# We can change values in the default prior or use `prior`
 # Then we can get samples from this prior e.g.
 samples <- get_prior_single(prior = prior, design = design_DDMaE,
   sample = TRUE, type = "alpha")

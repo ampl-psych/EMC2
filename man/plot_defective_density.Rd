@@ -10,7 +10,7 @@ plot_defective_density(
   factors = NULL,
   layout = NA,
   correct_fun = NULL,
-  rt = "top",
+  rt_pos = "top",
   accuracy = "topright",
   ...
 )
@@ -32,11 +32,11 @@ Defaults to all (i.e., \code{NULL}).}
 \item{correct_fun}{If specified, the accuracy for each subject is calculated, using the supplied function and
 an accuracy vector for each subject is returned invisibly.}
 
-\item{rt}{legend function position character string for the mean response time (defaults to \code{top})}
+\item{rt_pos}{legend function position character string for the mean response time (defaults to \code{top})}
 
 \item{accuracy}{legend function position character string for accuracy (defaults to \code{topright})}
 
-\item{...}{Optional arguments that can be passed to \code{as_mcmc_new}, \code{density}, or \code{plot.default} (see \code{par()})}
+\item{...}{Optional arguments that can be passed to \code{get_pars}, \code{density}, or \code{plot.default} (see \code{par()})}
 }
 \value{
 If \code{correct_fun} is specified, a subject accuracy vector is returned invisibly

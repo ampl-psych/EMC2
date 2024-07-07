@@ -4,22 +4,21 @@
 \alias{chain_n}
 \title{chain_n()}
 \usage{
-chain_n(samplers)
+chain_n(emc)
 }
 \arguments{
-\item{samplers}{A list, the output of \code{run_emc()}.}
+\item{emc}{A list, the output of \code{fit()}.}
 }
 \value{
 A matrix
 }
 \description{
 Returns a matrix with the number of samples per chain for each stage that is present
-in the sampling object (i.e., \code{preburn}, \code{burn}, \code{adapt},
+in the emc object (i.e., \code{preburn}, \code{burn}, \code{adapt},
 \code{sample}). The number of rows of the matrix reflects the number of chains
 and the number of columns the number of sampling stages.
 }
 \examples{
-\dontrun{
-chain_n(samplers)
-}
+chain_n(samples_LNR)
+
 }

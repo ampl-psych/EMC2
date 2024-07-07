@@ -17,7 +17,7 @@ get_prior_SEM(
   K_mat = NULL,
   G_mat = NULL,
   x = NULL,
-  n_factors = n_factors
+  n_factors = 5
 )
 }
 \arguments{
@@ -33,7 +33,7 @@ and shape and rate prior on the residual variances (a_e and b_e)}
 
 \item{type}{character, options: "mu", "variance", "covariance" "full_var"}
 
-\item{design}{The design obtained from \code{make_design}, required when map = TRUE}
+\item{design}{The design obtained from \code{design}, required when map = TRUE}
 
 \item{map}{Boolean, default TRUE reverses malformation used by model to make
 sampled parameters unbounded}
@@ -47,6 +47,8 @@ sampled parameters unbounded}
 \item{G_mat}{The regression on the latent factors by the included covariates}
 
 \item{x}{The included covariates}
+
+\item{n_factors}{how many factors to estimate}
 }
 \value{
 A list with a single entry of type of samples from the prior (if sample = TRUE) or else a prior object

@@ -306,12 +306,12 @@ rRDM <- function(lR,pars,p_types=c("v","B","A","t0"),ok=rep(TRUE,dim(pars)[1]))
 #'
 #' Model file to estimate the Racing Diffusion Model (RDM), also known as the Racing Wald Model.
 #'
-#' Model files are almost exclusively used in `make_design()`.
+#' Model files are almost exclusively used in `design()`.
 #'
 #' @details
 #'
 #' Default values are used for all parameters that are not explicitly listed in the `formula`
-#' argument of `make_design()`.They can also be accessed with `RDM()$p_types`.
+#' argument of `design()`.They can also be accessed with `RDM()$p_types`.
 #'
 #' | **Parameter** | **Transform** | **Natural scale** | **Default**   | **Mapping**          | **Interpretation**                                                |
 #' |-----------|-----------|---------------|-----------|------------------|---------------------------------------------------------------|
@@ -339,7 +339,7 @@ rRDM <- function(lR,pars,p_types=c("v","B","A","t0"),ok=rep(TRUE,dim(pars)[1]))
 #' corresponding to "left" and "right" stimuli, for example, (e.g., a bias to respond left occurs
 #' if the left threshold is less than the right threshold).
 #'
-#' For race models in general, the argument `matchfun` can be provided in `make_design()`.
+#' For race models in general, the argument `matchfun` can be provided in `design()`.
 #' One needs to supply a function that takes the `lR` factor (defined in the augmented data (d)
 #' in the following function) and returns a logical defining the correct
 #' response. In the example below, this is simply whether the `S` factor equals the
@@ -364,9 +364,9 @@ rRDM <- function(lR,pars,p_types=c("v","B","A","t0"),ok=rep(TRUE,dim(pars)[1]))
 #' # We also define a match function for lM
 #' matchfun=function(d)d$S==d$lR
 #' # We now construct our design, with v ~ lM and the contrast for lM the ADmat.
-#' design_RDMBE <- make_design(data = forstmann,model=RDM,matchfun=matchfun,
-#' formula=list(v~lM,s~lM,B~E+lR,A~1,t0~1),
-#' contrasts=list(v=list(lM=ADmat)),constants=c(s=log(1)))
+#' design_RDMBE <- design(data = forstmann,model=RDM,matchfun=matchfun,
+#'                        formula=list(v~lM,s~lM,B~E+lR,A~1,t0~1),
+#'                        contrasts=list(v=list(lM=ADmat)),constants=c(s=log(1)))
 #' # For all parameters that are not defined in the formula, default values are assumed
 #' # (see Table above).
 #' @export

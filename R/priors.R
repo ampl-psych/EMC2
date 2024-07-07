@@ -1,257 +1,130 @@
-prior_samples_alpha <- function(theta_mu,theta_var,n=1e3)
-  # samples from prior for alpha implied by hyper model
-  # (mixture over hyper posterior samples)
-{
-  if(is.null(dim(theta_mu))){
-    out <- mvtnorm::rmvnorm(n,theta_mu,theta_var)
-  } else{
-    out <- t(sapply(sample.int(dim(theta_mu)[2],n,TRUE),function(x){
-      mvtnorm::rmvnorm(1,theta_mu[x,],theta_var[,,x])
-    }))
-  }
-  return(out)
-}
-
-
-#' Prior plotting
+#' Prior specification
 #'
-#' Plots the prior for a model by simulating from the user specified prior distributions.
+#' Specify priors for the chosen model. These values are entered manually by default but can be
+#' recycled from another prior (given in the `update` argument).
 #'
-#' To get the default prior for a type, run: `get_prior_{type}(design = design, sample = F)`.
+#' Where a value is not supplied, the user is prompted to enter
+#' numeric values (or functions that evaluate to numbers).
+#'
+#' To get the default prior for a type, run: `get_prior_{type}(design = design, sample = F)`
+#'
 #' E.g.: `get_prior_diagonal(design = design, sample = F)`
 #'
-#' @param prior A list specifying the priors for the chosen type.
-#' @param design Model design corresponding to the prior
-#' @param plotp Names of parameters to plot (the default `NULL` plots all parameters)
-#' @param type Type of prior (`standard`, `diagonal`, `single`, `blocked` or `factor`).
-#' For `blocked`, the blocked parameters are still plotted in the covariance matrix.
-#' @param selection Selects which parameter groups to plot (default `"alpha"`
-#' for single and `"mu"` for standard)
-#' @param mapped Boolean for mapping `mu` or `alpha` back to the design cells on the natural scale.
-#' @param data Data frame, required when the mapping involves priors
-#' @param N Number of prior samples if data not provided
-#' @param nrep Number of prior samples as multiple of the number of rows in the data frame.
-#' @param breaks breaks parameter for the histogram
-#' @param layout `par(mfrow)` setting (the default is `c(3,3)`)
-#' @param lower Defaults to `NULL`. Lower quantile limit of values plotted. If numeric, the same is used for all parameters,
-#' alternatively, a (parameter) named list with individual quantile limits can be supplied.
-#' @param upper Defaults to `NULL`. Upper quantile limit of values plotted. If numeric, the same is used for all parameters,
-#' alternatively, a (parameter) named list with individual quantile limits can be supplied.
-#' @param xlim A list with parameter names of x-axis limits or a single pair if the
-#' same limits should be used for all parameters. Any names not in list or if (default) `NA`, `xlim` the minimum and maximum are set.
-#' @param ... For additional arguments
-#'
-#' @return Invisible of the prior samples
+#' @param design Design list for which a prior is constructed, typically the output of `design()`
+#' @param update Prior list from which to copy values
+#' @param type Character. What type of group-level model you plan on using i.e. `diagonal`
+#' @param ask Character. For which parameter types to ask for prior specification, i.e. `Sigma`, `mu` or `loadings` for factor models
+#' @param fill_default Boolean, If `TRUE` will fill all non-specified parameters, and parameters outside of `ask`, to default values
+#' @param ... Either values to prefill, i.e. `theta_mu_mean = c(1:6)`, or additional arguments such as `n_factors = 2`
+#' @return A prior list object
 #' @examples \dontrun{
 #' # First define a design for the model
-#' design_DDMaE <- make_design(data = forstmann,model=DDM,
+#' design_DDMaE <- design(data = forstmann,model=DDM,
 #'                            formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
 #'                            constants=c(s=log(1)))
-#' # Then set up a prior using make_prior
+#' # Then set up a prior using prior
 #' p_vector=c(v_Sleft=-2,v_Sright=2,a=log(1),a_Eneutral=log(1.5),a_Eaccuracy=log(2),
-#' t0=log(.2),Z=qnorm(.5),sv=log(.5),SZ=qnorm(.5))
+#'                      t0=log(.2),Z=qnorm(.5),sv=log(.5),SZ=qnorm(.5))
 #' psd <- c(v_Sleft=1,v_Sright=1,a=.3,a_Eneutral=.3,a_Eaccuracy=.3,
-#' t0=.4,Z=1,sv=.4,SZ=1)
+#'                      t0=.4,Z=1,sv=.4,SZ=1)
 #' # Here we left the variance prior at default
-#' prior_DDMaE <- make_prior(design_DDMaE,pmean=p_vector,psd=psd)
-#' # Now we can plot all sorts of (implied) priors
-#' plot_prior(prior_DDMaE, design_DDMaE, selection = "mu")
-#' plot_prior(prior_DDMaE, design_DDMaE, selection = "mu", mapped = FALSE)
-#' plot_prior(prior_DDMaE, design_DDMaE, selection = "variance")
-#' plot_prior(prior_DDMaE, design_DDMaE, selection = "covariance")
-#' plot_prior(prior_DDMaE, design_DDMaE, selection = "correlation")
-#' # We can also plot the implied prior on the participant level effects.
-#' plot_prior(prior_DDMaE, design_DDMaE, selection = "alpha")
+#' prior_DDMaE <- prior(design_DDMaE,mu_mean=p_vector,mu_sd=psd)
+#' # Also add a group-level variance prior:
+#' pscale <- c(v_Sleft=.6,v_Sright=.6,a=.3,a_Eneutral=.3,a_Eaccuracy=.3,
+#'                              t0=.2,Z=.5,sv=.4,SZ=.3)
+#' df <- .4
+#' prior_DDMaE <- prior(design_DDMaE,mu_mean=p_vector,mu_sd=psd, A = pscale, df = df)
+#' # If we specify a new design
+#' design_DDMat0E <- design(data = forstmann,model=DDM,
+#'                            formula =list(v~0+S,a~E, t0~E, s~1, Z~1, sv~1, SZ~1),
+#'                            constants=c(s=log(1)))
+#' # We can easily update the prior
+#' prior_DDMat0E <- prior(design_DDMat0E, update = prior_DDMaE)
 #' }
 #' @export
-plot_prior <- function(prior=NULL, design,plotp=NULL,
-                       type = "standard",selection = NULL,
-                       mapped=TRUE,data=NULL,
-                       N=1e5, nrep=10,
-                       breaks=50,layout=c(3,3),lower=NULL,upper=NULL,xlim=NA,
-                       ...)
-{
-  if (is.null(selection)) {
-    if (type=="single"){
-      selection <- "alpha"
-    } else{
-      selection <- "mu"
-    }
+prior <- function(design, type = "standard", update = NULL,
+                      ask = NULL, fill_default = TRUE, ...){
+  if(!is.null(update)) type <- attr(prior, "type")
+  prior <- get_objects(design = design, type = type)
+  args <- list(...)
+  if(!is.null(args$mu_mean)){
+    args$theta_mu_mean <- args$mu_mean
+    if(is.null(names(args$theta_mu_mean))) names(args$theta_mu_mean) <- names(prior$prior$theta_mu_mean)
   }
-
-  if(selection == "alpha" & type !="single"){
-    if(is.null(lower))lower = .05
-    if(is.null(upper)) upper = .95
+  if(!is.null(args$mu_sd)){
+    args$theta_mu_var <- args$mu_sd^2
+    if(is.null(names(args$theta_mu_var))) names(args$theta_mu_var) <- names(prior$prior$theta_mu_mean)
   }
-
-  if(selection == "sigma2"){
-    if(is.null(upper)) upper = .95
-  }
-  if(selection == "covariance" || selection == "loadings"){
-    if(is.null(lower))lower = .02
-    if(is.null(upper)) upper = .98
-  }
-  if (mapped & !(selection %in% c("alpha","mu"))){
-    # warning("For selections other than mu and alpha mapped must be FALSE, we set it to FALSE here")
-    mapped <- FALSE
-  }
-
-
-  if (!(type %in% c("standard","single", "diagonal", "factor", "infnt_factor")))
-    stop("Only types standard, diagonal, factor, infnt_factor and single implemented")
-  if (type=="single" & selection !="alpha")
-    stop("Can only select alpha for single")
-  if (!is.null(data) & is.null(design))
-    stop("Must design when data provided")
-  if (mapped & is.null(design))
-    stop("Must provide design when mapped=TRUE")
-  if (type=="standard") gp <- get_prior_standard
-  if (type=="single") gp <- get_prior_single
-  if (type=="diagonal") gp <- get_prior_diag
-  if (type=="infnt_factor") gp <- get_prior_infnt_factor
-  if (type=="factor") gp <- get_prior_factor
-  if (mapped & !is.null(data)) { # Used for covariates
-    message("Mapping prior based on data, use this option with covariates and Ttranform parameters")
-    if(selection == "alpha" & type != "single"){
-      pp_mu <- gp(prior, selection = "mu", design = design,N=dim(data)[1], ...)$mu
-      pp_var <- gp(prior, selection = "full_var", design = design,N=dim(data)[1], ...)$full_var
-      n_pars <- ncol(pp_mu)
-      pp <- matrix(0, N, ncol(pp_mu))
-      for(i in 1:dim(data)[1]){
-        if(type == "diagonal"){
-          pp_var_curr <- diag(pp_var[i,])
-        } else{
-          pp_var_curr <- matrix(pp_var[i,], n_pars, n_pars)
-        }
-        pp[i,] <- rmvnorm(1, pp_mu[i,], pp_var_curr)      }
-      colnames(pp) <- colnames(pp_mu)
-    } else{
-      pp <- gp(prior, selection = selection, design = design,N=dim(data)[1], ...)[[selection]]
-    }
-
-    row.names(pp) <- 1:dim(data)[1]
-    design$Ffactors$subjects <- row.names(pp)
-    data$subjects <- factor(1:dim(data)[1])
-    mp <- make_data(pp,design,data=data,mapped_p=TRUE)
-    mpok <- mp[design$model()$rfun(pars=mp),]
-    if (nrep>1) for (i in 2:nrep) {
-      if(selection == "alpha" & type != "single"){
-        pp_mu <- gp(prior, selection = "mu", design = design,N=dim(data)[1], ...)$mu
-        pp_var <- gp(prior, selection = "full_var", design = design,N=dim(data)[1], ...)$full_var
-        n_pars <- ncol(pp_mu)
-        pp <- matrix(0, N, ncol(pp_mu))
-        for(i in 1:dim(data)[1]){
-          if(type == "diagonal"){
-            pp_var_curr <- diag(pp_var[i,])
-          } else{
-            pp_var_curr <- matrix(pp_var[i,], n_pars, n_pars)
-          }
-          pp[i,] <- rmvnorm(1, pp_mu[i,], pp_var_curr)
-        }
-        colnames(pp) <- colnames(pp_mu)
+  if(!is.null(update)){
+    for(name in names(update)){
+      if(is.null(args[[name]])){
+        args[[name]] <- update[[name]]
       } else{
-        pp <- gp(prior, selection = selection, design = design,N=dim(data)[1], ...)[[selection]]
-      }
-
-      row.names(pp) <- 1:dim(data)[1]
-      mp <- make_data(pp,design,data=data,mapped_p=TRUE)
-      mpok <- rbind(mpok,mp[design$model()$rfun(pars=mp),])
-    }
-    facs <- names(design$Ffactors)
-    fnam <- apply(mpok[,facs[facs!="subjects"]],2,as.character)
-    for (i in 1:dim(fnam)[2]) fnam[,i] <- paste0(dimnames(fnam)[[2]][i],fnam[,i])
-    fnam <- apply(fnam,1,paste,collapse="_")
-    par(mfrow=layout)
-    par_names <- unique(c(design$model()$p_types,plotp))
-    par_names <- par_names[!(par_names %in% names(design$constants))]
-    if (!is.null(plotp)) {
-      if (!all(plotp %in% par_names)) stop("plotp not in prior")
-      par_names <- par_names[par_names %in% plotp]
-    }
-    lowers <- setNames(rep(0,length(par_names)),par_names)
-    uppers <- setNames(rep(1,length(par_names)),par_names)
-    if (!is.null(upper)) if (is.null(names(upper)))
-      uppers[1:length(uppers)] <- upper else
-        uppers[names(upper)] <- upper
-    if (!is.null(lower)) if (is.null(names(lower)))
-      lowers[1:length(lowers)] <- lower else
-        lowers[names(lower)] <- lower
-    xlims <- setNames(vector(mode="list",length=length(par_names)),par_names)
-    if (is.list(xlim)) for (i in names(xlim)) xlims[[i]] <- xlim[[i]] else
-      if (!all(is.na(xlim))) for (i in names(xlim)) xlims[[i]] <- xlim
-    for (pnam in par_names) {
-      lower <- quantile(mpok[,pnam], probs = lowers[[pnam]])
-      upper <- quantile(mpok[,pnam], probs = uppers[[pnam]])
-      if (is.null(xlims[[pnam]])) {
-        tmp <- mpok[,pnam][(mpok[,pnam] >= lower) & (mpok[,pnam] <= upper)]
-        xlims[[pnam]] <- c(min(tmp),max(tmp))
-      }
-      for (i in sort(unique(fnam))) {
-        filtered <- mpok[fnam==i,pnam]
-        filtered <- filtered[(filtered >= lower) & (filtered <= upper)]
-        hist(filtered,prob = TRUE,
-             main=i,xlab=pnam,xlim=xlims[[pnam]],breaks=breaks,
-             cex.lab = 1.25, cex.main = 1.5)
-      }
-    }
-    invisible(cbind.data.frame(fnam,mpok[,par_names,drop=FALSE]))
-  } else {
-
-    if(selection == "alpha" & type != "single"){
-      pp_mu <- gp(prior, selection = "mu", design = design,N=N, ...)$mu
-      pp_var <- gp(prior, selection = "full_var", design = design,N=N, ...)$full_var
-      n_pars <- ncol(pp_mu)
-      samples <- matrix(0, N, ncol(pp_mu))
-      for(i in 1:N){
-        if(type == "diagonal"){
-          pp_var_curr <- diag(pp_var[i,])
+        # First make sure we only take diagonals
+        if(!is.null(dim(update[[name]]))){
+          upd <- diag(update[[name]])
         } else{
-          pp_var_curr <- matrix(pp_var[i,], n_pars, n_pars)
+          upd <- update[[name]]
         }
-        samples[i,] <- rmvnorm(1, pp_mu[i,], pp_var_curr)
+        # now fill in
+        args_names <- names(args[[name]])
+        upd_names <- names(upd)
+        for(i in 1:length(upd)){
+          if(upd_names[i] %in% args_names){
+            args[[name]][args_names == upd_names[i]] <- upd[i]
+          }
+        }
       }
-      colnames(samples) <- colnames(pp_mu)
-    } else{
-      samples <- gp(prior, selection = selection, design = design,N=N, ...)[[selection]]
     }
-
-    if(selection %in% c("covariance", "correlation")){
-      pnams <- names(attr(design, "p_vector"))
-      lt <- lower.tri(diag(length(pnams)))
-      pnams <- outer(pnams,pnams,paste,sep=".")[lt]
-      colnames(samples) <- pnams
-    }
-
-    if (mapped)
-      samples <- map_mcmc(samples,design,design$model,include_constants=FALSE)
-    par(mfrow = layout)
-    par_names <- colnames(samples)
-    if (!is.null(plotp)) {
-      if (!all(plotp %in% par_names)) stop("plotp not in prior")
-      par_names <- par_names[par_names %in% plotp]
-    }
-    lowers <- setNames(rep(0,length(par_names)),par_names)
-    uppers <- setNames(rep(1,length(par_names)),par_names)
-    if (!is.null(upper)) if (is.null(names(upper)))
-      uppers[1:length(uppers)] <- upper else
-        uppers[names(upper)] <- upper
-    if (!is.null(lower)) if (is.null(names(lower)))
-      lowers[1:length(lowers)] <- lower else
-        lowers[names(lower)] <- lower
-    xlims <- setNames(vector(mode="list",length=length(par_names)),par_names)
-    if (!is.null(xlim)) xlims[names(xlim)] <- xlim
-    for(i in 1:ncol(samples)){
-      lower <- quantile(quantile(samples[,i], probs = lowers[i]))
-      upper <- quantile(quantile(samples[,i], probs = uppers[i]))
-      filtered <- samples[,i][(samples[,i] >= lower) & (samples[,i] <= upper)]
-      if (is.null(xlims[[i]]))
-        hist(filtered, breaks = breaks, main = par_names[i], prob = TRUE,
-             xlab = selection, cex.lab = 1.25, cex.main = 1.5) else
-               hist(filtered, breaks = breaks, prob = TRUE,
-                    xlab = selection, cex.lab = 1.25, cex.main = 1.5,xlim=xlims[[i]])
-    }
-    invisible(samples)
   }
+  for(group in names(prior$groups)){
+    if(is.null(ask) & !fill_default){
+      group_to_do <- TRUE
+    } else{
+      group_to_do <- group %in% ask
+    }
+    if(group_to_do) cat(paste0(prior$group_descriptions[[group]], "\n \n"))
+    for(pri in prior$groups[[group]]){
+      if(pri %in% names(prior$descriptions)){ # This excluded prior$theta_mu_invar
+        if(pri %in% names(args)){ # Already specified in ellipsis, so fill in
+          input <- args[[pri]]
+          if(!is.null(dim(prior$prior[[pri]]))){
+            to_check <- diag(prior$prior[[pri]])
+            if(length(input) == length(to_check)) names(input) <- names(to_check)
+            to_do <- !(names(to_check) %in% names(input))
+            to_check[!to_do] <- input
+            prior$prior[[pri]][,] <- diag(to_check)
+
+          } else{
+            to_check <- prior$prior[[pri]]
+            if(length(input) == length(to_check)) names(input) <- names(to_check)
+            to_do <- !(names(to_check) %in% names(input))
+            to_check[!to_do] <- input
+            prior$prior[[pri]] <- to_check
+          }
+        } else{
+          if(!is.null(dim(prior$prior[[pri]]))){
+            to_do <- rep(T, nrow(prior$prior[[pri]]))
+          } else{
+            to_do <- rep(T, length(prior$prior[[pri]]))
+          }
+        }
+        # Ask the user to manually specify
+        if(any(to_do)){
+          tmp <- ask_user_prior(prior, pri, to_do, fill_default, group_to_do)
+          if(!is.null(dim(prior$prior[[pri]]))){
+            input <- diag(prior$prior[[pri]][,])
+            input[to_do] <- tmp
+            prior$prior[[pri]][,] <- diag(input)
+          } else{
+            prior$prior[[pri]][to_do] <- tmp
+          }
+        }
+      }
+    }
+  }
+  prior <- get_objects(design = design, type = type, prior = prior$prior)
+  return(prior$prior)
 }
 
 check_prior <- function(prior, sampled_p_names){
@@ -302,160 +175,18 @@ merge_priors <- function(prior_list){
 }
 
 
-#' Prior specification
-#'
-#' Specify priors on mean of the group mean (`pmean`) and standard deviation (`psd`),
-#' for the individual level for a `single` model and for the group level for
-#' hierarchical models. These values are entered manually by default but can be
-#' recycled from another prior (given in the `update` argument).
-#'
-#' Where a value is not supplied, the user is prompted to enter
-#' numeric values (or functions that evaluate to numbers). For hierarchical models
-#' the scale (`pscale`) and the  degrees of freedom (`df`) for the population variance
-#' covariance matrix can also be specified. Set these arguments to `NULL` to
-#'  enter values manually through prompts.
-#'
-#' To get the default prior for a type, run: `get_prior_{type}(design = design, sample = F)`
-#' E.g.: `get_prior_diagonal(design = design, sample = F)`
-#'
-#' @param design Design for which a prior is constructed, typically the output of `make_design()`
-#' @param pmean Named vector of prior means, or an unnamed scalar, which is then used for all.
-#' @param psd Named vector of prior standard deviations, or an unnamed scalar,
-#' which is then used for all. If `NA`, will assume 1 for all parameters
-#' @param update Another prior from which to copy values
-#' @param verbose Boolean, defaults to `TRUE`, print prior specification to console (if
-#' `update`, only new values).
-#' @param update_print When verbose, print only new values (defaults to `TRUE`)
-#' @param type What type of model you plan on using, choice of `standard`, `diagonal`, `blocked`
-#' and `single` for this function
-#' @param pscale For hierarchical models, the prior on the scale of the variances.
-#' The default `NA` will assume 1 for all parameters
-#' @param df For hierarchical models, the prior on the degrees of freedom of the
-#' variances. The default `NA` will assume 2
-#'
-#' @return An EMC prior list object
-#' @examples \dontrun{
-#' # First define a design for the model
-#' design_DDMaE <- make_design(data = forstmann,model=DDM,
-#'                            formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
-#'                            constants=c(s=log(1)))
-#' # Then set up a prior using make_prior
-#' p_vector=c(v_Sleft=-2,v_Sright=2,a=log(1),a_Eneutral=log(1.5),a_Eaccuracy=log(2),
-#' t0=log(.2),Z=qnorm(.5),sv=log(.5),SZ=qnorm(.5))
-#' psd <- c(v_Sleft=1,v_Sright=1,a=.3,a_Eneutral=.3,a_Eaccuracy=.3,
-#' t0=.4,Z=1,sv=.4,SZ=1)
-#' # Here we left the variance prior at default
-#' prior_DDMaE <- make_prior(design_DDMaE,pmean=p_vector,psd=psd)
-#' # Also add a group-level variance prior:
-#' pscale <- c(v_Sleft=.6,v_Sright=.6,a=.3,a_Eneutral=.3,a_Eaccuracy=.3,
-#' t0=.2,Z=.5,sv=.4,SZ=.3)
-#' psd <- .4
-#' prior_DDMaE <- make_prior(design_DDMaE,pmean=p_vector,psd=psd, pscale = pscale, psd = psd)
-#' # If we specify a new design
-#' design_DDMat0E <- make_design(data = forstmann,model=DDM,
-#'                            formula =list(v~0+S,a~E, t0~E, s~1, Z~1, sv~1, SZ~1),
-#'                            constants=c(s=log(1)))
-#' # We can easily update the prior
-#' prior_DDMat0E <- make_prior(design_DDMat0E, update = prior_DDMaE)
-#' }
-#' @export
-make_prior <- function(design,pmean=NULL,psd=NULL,update=NULL,
-                       verbose=TRUE,update_print=TRUE, type = "standard",
-                       pscale = NA, df = NA)
-{
-}
-
-make_prior_new <- function(design, type = "standard", update = NULL,
-                           no_default = TRUE, ...){
-  if(!is.null(update)) type <- attr(prior, "type")
-  prior <- get_objects(design = design, type = type)
-  args <- list(...)
-
-  if(is.character(no_default)){
-    no_default <- rep(F, length(prior$prior))
-    no_default <- T
-  }
-
-  if(!is.null(args$mean)){
-    args$theta_mu_mean <- args$mean
-  }
-  if(!is.null(args$sd)){
-    args$theta_mu_var <- args$sd^2
-  }
-  if(!is.null(update)){
-    for(name in names(update)){
-      if(is.null(args[[name]])){
-        args[[name]] <- update[[name]]
-      } else{
-        # First make sure we only take diagonals
-        if(!is.null(dim(update[[name]]))){
-          upd <- diag(update[[name]])
-        } else{
-          upd <- update[[name]]
-        }
-        # now fill in
-        args_names <- names(args[[name]])
-        upd_names <- names(upd)
-        for(i in 1:length(upd)){
-          if(upd_names[i] %in% args_names){
-            args[[name]][args_names == upd_names[i]] <- upd[i]
-          }
-        }
-      }
-    }
-  }
-  for(pri in names(prior$prior)){ # Loop over different objects in prior
-    if(pri %in% names(prior$descriptions)){ # This excluded prior$theta_mu_invar
-      if(pri %in% names(args)){ # Already specified in ellipsis, so fill in
-        input <- args[[pri]]
-        if(!is.null(dim(prior$prior[[pri]]))){
-          to_check <- diag(prior$prior[[pri]])
-          to_do <- !(names(to_check) %in% names(input))
-          to_check[!to_do] <- input
-          prior$prior[[pri]][,] <- diag(to_check)
-
-        } else{
-          to_check <- prior$prior[[pri]]
-          to_do <- !(names(to_check) %in% names(input))
-          to_check[!to_do] <- input
-          prior$prior[[pri]] <- to_check
-        }
-      } else{
-        if(!is.null(dim(prior$prior[[pri]]))){
-          to_do <- rep(T, nrow(prior$prior[[pri]]))
-        } else{
-          to_do <- rep(T, length(prior$prior[[pri]]))
-        }
-      }
-      # Ask the user to manually specify
-      if(any(to_do)){
-        tmp <- ask_user_prior(prior, pri, to_do, !no_default)
-        if(!is.null(dim(prior$prior[[pri]]))){
-          input <- diag(prior$prior[[pri]][,])
-          input[to_do] <- tmp
-          prior$prior[[pri]][,] <- diag(input)
-        } else{
-          prior$prior[[pri]][to_do] <- tmp
-        }
-      }
-    }
-  }
-  prior <- get_objects(design = design, type = type, prior = prior$prior)
-  return(prior$prior)
-}
-
-ask_user_prior <- function(prior, cur_idx, to_do, fill_default){
+ask_user_prior <- function(prior, cur_idx, to_do, fill_default, group_to_do){
   if(!is.null(dim(prior$prior[[cur_idx]]))){
     tmp <- diag(prior$prior[[cur_idx]])[to_do]
   } else{
     tmp <- prior$prior[[cur_idx]][to_do]
   }
-  if(!fill_default){
+  if(!fill_default || group_to_do){
     cat(paste0("Specify ", prior$descriptions[[cur_idx]]," \n"))
     if(length(tmp) == 1){
       cat("Press enter to use default value (", tmp[1], ")")
     } else{
-      cat("Press enter to fill all remaining with default value (", tmp[1], ")")
+      cat("Press enter to fill with default value (", tmp[1], ")")
     }
     for(i in 1:length(tmp)){ # Loop over the length of the prior object
       name <- ifelse(length(to_do) == 1, "", names(tmp)[i])
@@ -478,38 +209,57 @@ ask_user_prior <- function(prior, cur_idx, to_do, fill_default){
 }
 
 
-plot_prior_new <- function(prior, design, selection = "mu",
-                           mapped = TRUE, layout = NA,
-                           N = 1e5, flatten = FALSE, use_par = NULL){
+
+#' Title
+#'
+#' @param prior A prior list created with `prior`
+#' @param design A design list created with `design`
+#' @inheritParams plot_pars
+#' @param ... Optional arguments that can be passed to get_pars, histogram, plot.default (see par()),
+#' or arguments required for the types of models e.g. n_factors for type = "factor"
+#' @return An mcmc.list object with prior samples of the selected type
+#' @export
+#'
+#' @examples
+#' # First define a design for the model
+#' design_DDMaE <- design(data = forstmann,model=DDM,
+#'                            formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
+#'                            constants=c(s=log(1)))
+#' # Then set up a prior using make_prior
+#' p_vector=c(v_Sleft=-2,v_Sright=2,a=log(1),a_Eneutral=log(1.5),a_Eaccuracy=log(2),
+#'           t0=log(.2),Z=qnorm(.5),sv=log(.5),SZ=qnorm(.5))
+#' psd <- c(v_Sleft=1,v_Sright=1,a=.3,a_Eneutral=.3,a_Eaccuracy=.3,
+#'           t0=.4,Z=1,sv=.4,SZ=1)
+#' # Here we left the variance prior at default
+#' prior_DDMaE <- prior(design_DDMaE,mu_mean=p_vector,mu_sd=psd)
+#' # Now we can plot all sorts of (implied) priors
+#' plot_prior(prior_DDMaE, design_DDMaE, selection = "mu")
+#' plot_prior(prior_DDMaE, design_DDMaE, selection = "mu", mapped = FALSE)
+#' # We can also plot the implied prior on the participant level effects.
+#' plot_prior(prior_DDMaE, design_DDMaE, selection = "alpha", col = "green", N = 1e4)
+plot_prior <- function(prior, design, selection = "mu",
+                           layout = NA, N = 5e4, ...){
+  dots <- add_defaults(list(...), breaks = 30, cut_off = 0.0015, prob = TRUE, by_subject = TRUE)
   type <- attr(prior, "type")
   if(type == "single") selection <- "alpha"
-  if (mapped & !(selection %in% c("alpha","mu"))){
-    mapped <- FALSE
-  }
-  if(selection == "alpha") flatten <- TRUE
-  samplers <-  get_objects(design = design, prior = prior, type = type, sample_prior = T,
-                          selection = selection, N = N)
-  MCMC_samples <- as_mcmc_new(samplers, selection = selection, map = mapped,
-                              use_par = use_par, flatten = flatten,
-                              type = type, by_subject = TRUE)
-  auto.layout <- any(is.na(layout))
-  if (!auto.layout) par(mfrow=layout)
+  samples <-  get_objects(design = design, prior = prior, type = type, sample_prior = T,
+                          selection = selection, N = N, ...)
+  MCMC_samples <- do.call(get_pars, c(list(samples, selection = selection, type = type), fix_dots(dots, get_pars)))
   for(i in 1:length(MCMC_samples)){
-    if(i == 1 & auto.layout){
-      mfrow <- coda:::set.mfrow(Nchains = length(MCMC_samples[[1]]), Nparms = ncol(MCMC_samples[[1]][[1]]),
-                                nplots = 1)
-      oldpar <- par(mfrow = mfrow)
-    } else if(auto.layout){
-      oldpar <- par(mfrow = mfrow)
+    if(any(is.na(layout))){
+      par(mfrow = coda_setmfrow(Nchains = length(MCMC_samples[[1]]),
+                                   Nparms = ncol(MCMC_samples[[1]][[1]]), nplots = 1))
+    } else{
+      par(mfrow=layout)
     }
     for(j in 1:ncol(MCMC_samples[[i]][[1]])){
-
-      robust_hist(MCMC_samples[[i]][[1]][,j], breaks = 50, prob = TRUE,
-                  ylab = "Density", xlab = names(MCMC_samples)[[i]],
-                  main = colnames(MCMC_samples[[i]][[1]])[j],
-                  cex.lab = 1.25, cex.main = 1.5)
+      do.call(robust_hist, c(list(MCMC_samples[[i]][[1]][,j], dots$breaks, dots$cut_off, dots$prob),
+                             fix_dots_plot(add_defaults(dots, ylab = "Density", xlab = names(MCMC_samples)[[i]],
+                                           main = colnames(MCMC_samples[[i]][[1]])[j],
+                                           cex.lab = 1.25, cex.main = 1.5))))
     }
   }
+  return(invisible(MCMC_samples))
 }
 
 

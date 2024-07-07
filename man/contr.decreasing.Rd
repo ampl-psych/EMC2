@@ -17,7 +17,7 @@ Each level will be estimated as a reduction from the previous level
 }
 \examples{
 {
-design_DDMaE <- make_design(data = forstmann,model=DDM, contrasts = list(E = contr.decreasing),
+design_DDMaE <- design(data = forstmann,model=DDM, contrasts = list(E = contr.decreasing),
 formula =list(v~S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
 constants=c(s=log(1)))
 }

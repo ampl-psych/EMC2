@@ -2,12 +2,12 @@
 % Please edit documentation in R/fitting.R
 \name{run_IS2}
 \alias{run_IS2}
-\title{Runs IS2 from Tran et al. 2021 on a list of samplers}
+\title{Runs IS2 from Tran et al. 2021 on a list of emc}
 \usage{
 run_IS2(
-  samplers,
-  filter = "sample",
-  subfilter = 0,
+  emc,
+  stage = "sample",
+  filter = 0,
   IS_samples = 1000,
   stepsize_particles = 500,
   max_particles = 5000,
@@ -16,11 +16,11 @@ run_IS2(
 )
 }
 \arguments{
-\item{samplers}{A list of samplers}
+\item{emc}{A list of emc}
 
-\item{filter}{A string. Indicates which stage to take samples from}
+\item{stage}{A string. Indicates which stage to take samples from}
 
-\item{subfilter}{An integer or vector. If integer specifies how many samples to remove from within that stage. If vector used as index for samples to keep.}
+\item{filter}{An integer or vector. If integer specifies how many samples to remove from within that stage. If vector used as index for samples to keep.}
 
 \item{IS_samples}{An integer. Specifies how many IS2 samples to collect}
 
@@ -33,8 +33,8 @@ run_IS2(
 \item{df}{An integer. The degrees of freedom used in the t-distribution used as IS distribution for the group-level proposals.}
 }
 \value{
-Samplers, with IS2 attribute
+emc, with IS2 attribute
 }
 \description{
-Runs IS2 on a list of samplers, only works for types standard, factor and diagonal yet.
+Runs IS2 on a list of emc, only works for types standard, factor and diagonal yet.
 }

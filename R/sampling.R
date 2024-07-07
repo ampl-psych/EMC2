@@ -126,7 +126,7 @@ init <- function(pmwgs, start_mu = NULL, start_var = NULL,
 #' Adds a set of start points to each chain. These start points are sampled from a user-defined multivariate
 #' normal across subjects.
 #'
-#' @param samplers List of chains made by `make_samplers()`
+#' @param emc An emc object made by `make_emc()`
 #' @param start_mu A vector. Mean of multivariate normal used in proposal distribution
 #' @param start_var A matrix. Variance covariance matrix of multivariate normal used in proposal distribution.
 #' Smaller values will lead to less deviation around the mean.
@@ -134,14 +134,14 @@ init <- function(pmwgs, start_mu = NULL, start_var = NULL,
 #' @param cores_for_chains An integer. How many cores to use to parallelize across chains. Default is the number of chains.
 #' @param particles An integer. Number of starting values
 #'
-#' @return A samplers object
+#' @return An emc object
 #' @examples \dontrun{
-#' # Make a design and a samplers object
-#' design_DDMaE <- make_design(data = forstmann,model=DDM,
+#' # Make a design and an emc object
+#' design_DDMaE <- design(data = forstmann,model=DDM,
 #'                            formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
 #'                            constants=c(s=log(1)))
 #'
-#' DDMaE <- make_samplers(forstmann, design_DDMaE)
+#' DDMaE <- make_emc(forstmann, design_DDMaE)
 #' # set up our mean starting points (same used across subjects).
 #' mu <- c(v_Sleft=-2,v_Sright=2,a=log(1),a_Eneutral=log(1.5),a_Eaccuracy=log(2),
 #'        t0=log(.2),Z=qnorm(.5),sv=log(.5),SZ=qnorm(.5))
@@ -150,19 +150,20 @@ init <- function(pmwgs, start_mu = NULL, start_var = NULL,
 #' # Initialize chains, 4 cores per chain, and parallelizing across our 3 chains as well
 #' # so 4*3 cores used.
 #' DDMaE <- init_chains(DDMaE, start_mu = p_vector, start_var = var, cores_per_chain = 4)
-#' # Afterwards we can just use run_emc
-#' DDMaE <- run_emc(DDMaE, cores_per_chain = 4)
+#' # Afterwards we can just use fit
+#' DDMaE <- fit(DDMaE, cores_per_chain = 4)
 #' }
 #' @export
-init_chains <- function(samplers, start_mu = NULL, start_var = NULL, particles = 1000,
-                        cores_per_chain=1,cores_for_chains = length(samplers))
+init_chains <- function(emc, start_mu = NULL, start_var = NULL, particles = 1000,
+                        cores_per_chain=1,cores_for_chains = length(emc))
 {
-  attributes <- get_attributes(samplers)
-  samplers <- mclapply(samplers,init,start_mu = start_mu, start_var = start_var,
+  attributes <- get_attributes(emc)
+  emc <- mclapply(emc,init,start_mu = start_mu, start_var = start_var,
            verbose = FALSE, particles = particles,
            n_cores = cores_per_chain, mc.cores=cores_for_chains)
-  samplers <- get_attributes(samplers, attributes)
-  return(samplers)
+  emc <- get_attributes(emc, attributes)
+  class(emc) <- "emc"
+  return(emc)
 }
 
 start_proposals_group <- function(data, group_pars, alpha, par_names,
@@ -311,11 +312,11 @@ run_stage <- function(pmwgs,
         for(component in unq_components){
           idx <- components[!grouped] == component
           acc <-  pmwgs$samples$alpha[max(which(idx)),,j] != pmwgs$samples$alpha[max(which(idx)),,(j-1)]
-          epsilon[,component] <-update.epsilon(epsilon[,component]^2, acc, p_accept, j, sum(idx), alphaStar)
+          epsilon[,component] <-update_epsilon(epsilon[,component]^2, acc, p_accept, j, sum(idx), alphaStar)
         }
         if(any(grouped)){
           acc <-  pmwgs$samples$grouped_pars[1,j] !=  pmwgs$samples$grouped_pars[1,(j-1)]
-          epsilon_grouped <-update.epsilon(epsilon_grouped^2, acc, mean(p_accept), j, sum(grouped), mean(alphaStar))
+          epsilon_grouped <-update_epsilon(epsilon_grouped^2, acc, mean(p_accept), j, sum(grouped), mean(alphaStar))
         }
       }
     }
@@ -483,7 +484,7 @@ bind_alpha <- function(proposals, alpha, num_particles, is_grouped, par_names){
 # Utility functions for sampling below ------------------------------------
 
 
-update.epsilon<- function(epsilon2, acc, p, i, d, alpha) {
+update_epsilon<- function(epsilon2, acc, p, i, d, alpha) {
   c <- ((1-1/d)*sqrt(2*pi)*exp(alpha^2/2)/(2*alpha) + 1/(d*p*(1-p)))
   Theta <- log(sqrt(epsilon2))
   Theta <- Theta+c*(acc-p)/max(200, i/d)
@@ -667,6 +668,7 @@ get_variant_funs <- function(type = "standard") {
       get_group_level = get_group_level_standard,
       fill_samples = fill_samples_standard,
       gibbs_step = gibbs_step_standard,
+      group_IC = group__IC_standard,
       filtered_samples = filtered_samples_standard,
       get_conditionals = get_conditionals_standard,
       get_all_pars_IS2 = get_all_pars_standard,
@@ -685,6 +687,7 @@ get_variant_funs <- function(type = "standard") {
       get_group_level = get_group_level_single,
       fill_samples = fill_samples_RE,
       gibbs_step = gibbs_step_single,
+      group_IC = group__IC_single,
       filtered_samples = filtered_samples_single,
       get_conditionals = get_conditionals_single,
       bridge_add_group = bridge_add_group_single,
@@ -700,6 +703,7 @@ get_variant_funs <- function(type = "standard") {
       get_group_level = get_group_level_standard,
       fill_samples = fill_samples_standard,
       gibbs_step = gibbs_step_blocked,
+      group_IC = group__IC_standard,
       filtered_samples = filtered_samples_standard,
       get_conditionals = get_conditionals_blocked,
       get_all_pars_IS2 = get_all_pars_blocked,
@@ -714,6 +718,7 @@ get_variant_funs <- function(type = "standard") {
       get_group_level = get_group_level_standard,
       fill_samples = fill_samples_standard,
       gibbs_step = gibbs_step_diag,
+      group_IC = group__IC_standard,
       filtered_samples = filtered_samples_standard,
       get_conditionals = get_conditionals_diag,
       get_all_pars_IS2 = get_all_pars_standard,
@@ -732,6 +737,7 @@ get_variant_funs <- function(type = "standard") {
       get_group_level = get_group_level_standard,
       fill_samples = fill_samples_factor,
       gibbs_step = gibbs_step_factor,
+      group_IC = group__IC_standard,
       filtered_samples = filtered_samples_factor,
       get_conditionals = get_conditionals_factor,
       bridge_add_group = bridge_add_group_factor,
@@ -746,6 +752,7 @@ get_variant_funs <- function(type = "standard") {
       get_group_level = get_group_level_lm,
       fill_samples = fill_samples_lm,
       gibbs_step = gibbs_step_lm,
+      group_IC = group__IC_standard,
       filtered_samples = filtered_samples_lm,
       get_conditionals = get_conditionals_lm,
       get_all_pars_IS2 = get_all_pars_lm,
@@ -762,6 +769,7 @@ get_variant_funs <- function(type = "standard") {
       get_group_level = get_group_level_standard,
       fill_samples = fill_samples_infnt_factor,
       gibbs_step = gibbs_step_infnt_factor,
+      group_IC = group__IC_standard,
       filtered_samples = filtered_samples_infnt_factor,
       get_conditionals = get_conditionals_infnt_factor,
       get_all_pars_IS2 = get_all_pars_infnt_factor,
@@ -777,6 +785,7 @@ get_variant_funs <- function(type = "standard") {
       get_group_level = get_group_level_SEM,
       fill_samples = fill_samples_SEM,
       gibbs_step = gibbs_step_SEM,
+      group_IC = group__IC_standard,
       filtered_samples = filtered_samples_SEM,
       get_conditionals = get_conditionals_SEM,
       get_all_pars_IS2 = get_all_pars_infnt_factor,
@@ -808,7 +817,7 @@ calc_ll_manager <- function(proposals, dadm, ll_func, component = NULL){
       if(is.null(constants)) constants <- NA
       if(c_name == "DDM"){
         levels(dadm$R) <- c(0,1)
-        pars <- get_pars(proposals[1,],dadm)
+        pars <- get_pars_matrix(proposals[1,],dadm)
         pars <- cbind(pars, dadm$R)
         parameter_char <- apply(pars, 1, paste0, collapse = "\t")
         parameter_factor <- factor(parameter_char, levels = unique(parameter_char))
@@ -894,3 +903,8 @@ run_hyper <- function(type, data, prior = NULL, iter = 5000, ...){
   }
   return(sampler)
 }
+
+
+
+
+

@@ -1,3 +1,4 @@
+
 #' Specify a design and model
 #'
 #' This function combines information regarding the data, type of model, and
@@ -59,17 +60,17 @@
 #'
 #' # Create a design for a linear ballistic accumulator model (LBA) that allows
 #' # thresholds to be a function of E and lR. The final result is a 9 parameter model.
-#' design_LBABE <- make_design(data = dat,model=LBA,matchfun=matchfun,
+#' design_LBABE <- design(data = dat,model=LBA,matchfun=matchfun,
 #'                             formula=list(v~lM,sv~lM,B~E+lR,A~1,t0~1),
 #'                             contrasts=list(v=list(lM=ADmat)),
 #'                             constants=c(sv=log(1)))
 #' @export
 #'
 #'
-make_design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
-                        contrasts=NULL,matchfun=NULL,constants=NULL,covariates=NULL,
-                        functions=NULL,report_p_vector=TRUE, custom_p_vector = NULL,
-                        ...){
+design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
+                       contrasts=NULL,matchfun=NULL,constants=NULL,covariates=NULL,
+                       functions=NULL,report_p_vector=TRUE, custom_p_vector = NULL,
+                       ...){
 
   optionals <- list(...)
 
@@ -108,18 +109,6 @@ make_design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=
     nfacs <- nfacs[!(names(nfacs) %in% c("trials","rt"))]
     if (length(nfacs)>0) covariates <- nfacs
   }
-  # # Frees up memory again by creating new enclosing environments, courtesy of Steven
-  # if(!is.null(Ffunctions)){
-  #   Ffunctions <- lapply(Ffunctions, function(f) {environment(f) <- new.env(parent=globalenv()); return(f)})
-  # }
-  # if(!is.null(Flist)) {
-  #   Flist <- lapply(Flist, function(f) {environment(f) <- new.env(parent=globalenv()); return(f)})
-  # }
-  # if(!is.null(model)) environment(model) <- new.env(parent=globalenv())
-  # if(!is.null(matchfun)) environment(matchfun) <- new.env(parent=globalenv())
-  # if (model()$type=="SDT") {
-  #   Clist[["lR"]] <- contr.increasing(length(Rlevels),Rlevels)
-  # }
   nams <- unlist(lapply(formula,function(x) as.character(stats::terms(x)[[2]])))
   if (!all(sort(names(model()$p_types)) %in% sort(nams)) & is.null(custom_p_vector)){
     p_types <- model()$p_types
@@ -134,39 +123,13 @@ make_design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=
                  Clist=contrasts,matchfun=matchfun,constants=constants,
                  Fcovariates=covariates,Ffunctions=functions,adapt=adapt,model=model)
   p_vector <- sampled_p_vector(design,design$model)
-
-  if (model()$type %in% c("MT","TC")) {
-    nt=length(Rlevels)
-    nr <- nt/2
-    dL <- matrix(nrow=nt,ncol=6)
-    if (model()$type == "TC") {
-      even <- array(c(1:nt),dim=c(2,nr))
-      odd <- as.vector(even[1,])
-      even <- as.vector(even[2,])
-      dL[odd,1] <- 1; dL[even,1] <- 2
-      dL[odd,2] <- (nr+1):2; dL[even,2] <- 2:(nr+1)
-      dL[odd,3] <- 2; dL[even,3] <- 1
-      dL[odd,4] <- 1:nr; dL[even,4] <- nr:1
-      dL[odd,5] <- 2; dL[even,5] <- 1
-      dL[odd,6] <- 2:(nr+1); dL[even,6] <- (nr+1):2
-    } else { # MT
-      dL[,1] <- c(rep(1,nr),rep(2,nr))
-      dL[,2] <- rep(nr+1,nt)
-      dL[,3] <- c(rep(2,nr),rep(1,nr))
-      dL[,4] <- c(1:nr,nr:1)
-      dL[,5] <- c(rep(2,nr),rep(1,nr))
-      dL[,6] <- c(2:(nr+1),(nr+1):2)
-    }
-    attr(design,"dL") <- dL
-  }
-
   if (model()$type=="SDT") {
     tnams <- dimnames(attr(p_vector,"map")$threshold)[[2]]
     max_threshold=paste0("lR",Rlevels[length(Rlevels)])
     tnams <- tnams[grepl(max_threshold,tnams)]
     if (!any(tnams %in% names(constants))) {
       design$constants <- stats::setNames(c(constants,rep(log(1e100),length(tnams))),
-                                   c(names(constants),tnams))
+                                          c(names(constants),tnams))
       p_vector <- sampled_p_vector(design,design$model)
     }
   }
@@ -188,6 +151,7 @@ make_design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=
   return(design)
 }
 
+
 #' Contrast to enforce equal prior variance on each level
 #'
 #' Typical contrasts impose different levels of marginal prior variance for the different levels.
@@ -198,7 +162,7 @@ make_design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=
 #' @return A contrast matrix.
 #' @export
 #' @examples{
-#' design_DDMaE <- make_design(data = forstmann,model=DDM, contrasts = list(E = contr.bayes),
+#' design_DDMaE <- design(data = forstmann,model=DDM, contrasts = list(E = contr.bayes),
 #' formula =list(v~S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
 #' constants=c(s=log(1)))
 #' }
@@ -230,7 +194,7 @@ contr.bayes <- function(n) {
 #' @return a contrast matrix.
 #' @export
 #' @examples{
-#' design_DDMaE <- make_design(data = forstmann,model=DDM, contrasts = list(E = contr.increasing),
+#' design_DDMaE <- design(data = forstmann,model=DDM, contrasts = list(E = contr.increasing),
 #' formula =list(v~S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
 #' constants=c(s=log(1)))
 #' }
@@ -258,7 +222,7 @@ contr.increasing <- function(n)
 #' @return a contrast matrix.
 #' @export
 #' @examples{
-#' design_DDMaE <- make_design(data = forstmann,model=DDM, contrasts = list(E = contr.decreasing),
+#' design_DDMaE <- design(data = forstmann,model=DDM, contrasts = list(E = contr.decreasing),
 #' formula =list(v~S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
 #' constants=c(s=log(1)))
 #' }
@@ -269,14 +233,14 @@ contr.decreasing <- function(n) {
 
 #' Anova style contrast matrix
 #'
-#' Similar to `contr.helmert`, but then scaled to estimate differences between conditions. Use in `make_design()`.
+#' Similar to `contr.helmert`, but then scaled to estimate differences between conditions. Use in `design()`.
 #'
 #' @param n An integer. The number of items for which to create the contrast
 #'
 #' @return A contrast matrix.
 #' @export
 #' @examples{
-#' design_DDMaE <- make_design(data = forstmann,model=DDM, contrasts = list(E = contr.anova),
+#' design_DDMaE <- design(data = forstmann,model=DDM, contrasts = list(E = contr.anova),
 #' formula =list(v~S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
 #' constants=c(s=log(1)))
 #' }
@@ -300,7 +264,7 @@ contr.anova <- function(n) {
 #' Makes a vector with zeroes, with names and length corresponding to the
 #' model parameters of the design.
 #'
-#' @param design a list of the design made with `make_design()`.
+#' @param design a list of the design made with `design()`.
 #' @param model a model list. Defaults to the model specified in the design list.
 #' @param doMap logical. If `TRUE` will also include an attribute `map`
 #' with the design matrices that perform the mapping back to the design
@@ -312,7 +276,7 @@ contr.anova <- function(n) {
 #' @return Named vector.
 #' @examples
 #' # First define a design
-#' design_DDMaE <- make_design(data = forstmann,model=DDM,
+#' design_DDMaE <- design(data = forstmann,model=DDM,
 #'                            formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
 #'                            constants=c(s=log(1)))
 #' # Then for this design get which cognitive model parameters are sampled:
@@ -825,7 +789,7 @@ map_p <- function(p,dadm)
 
 # data generation
 
-# Used in make_data and make_samplers
+# Used in make_data and make_emc
 add_trials <- function(dat)
   # Add trials column, 1:n for each subject
 {

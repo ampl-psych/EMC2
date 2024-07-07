@@ -78,7 +78,7 @@ source("test_files/utils_lm.R")
 samplers <- run_adapt(samplers, verbose = T, cores_per_chain = 4, cores_for_chains = 3, particle_factor = 30)
 samplers <- run_sample(samplers, verbose = T, cores_per_chain = 4, cores_for_chains = 3, iter = 700)
 
-plot_chains(samplers, selection = "random", filter = "sample", subfilter = 50)
+plot_chains(samplers, selection = "random", filter = "sample", filter = 50)
 
 
 devtools::load_all()

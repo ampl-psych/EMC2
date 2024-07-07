@@ -2,92 +2,45 @@
 % Please edit documentation in R/priors.R
 \name{plot_prior}
 \alias{plot_prior}
-\title{Prior plotting}
+\title{Title}
 \usage{
-plot_prior(
-  prior = NULL,
-  design,
-  plotp = NULL,
-  type = "standard",
-  selection = NULL,
-  mapped = TRUE,
-  data = NULL,
-  N = 1e+05,
-  nrep = 10,
-  breaks = 50,
-  layout = c(3, 3),
-  lower = NULL,
-  upper = NULL,
-  xlim = NA,
-  ...
-)
+plot_prior(prior, design, selection = "mu", layout = NA, N = 50000, ...)
 }
 \arguments{
-\item{prior}{A list specifying the priors for the chosen type.}
+\item{prior}{A prior list created with \code{prior}}
 
-\item{design}{Model design corresponding to the prior}
+\item{design}{A design list created with \code{design}}
 
-\item{plotp}{Names of parameters to plot (the default \code{NULL} plots all parameters)}
+\item{selection}{A Character string. Indicates which parameter type to use (e.g., \code{alpha}, \code{mu}, \code{sigma2}, \code{correlation}).}
 
-\item{type}{Type of prior (\code{standard}, \code{diagonal}, \code{single}, \code{blocked} or \code{factor}).
-For \code{blocked}, the blocked parameters are still plotted in the covariance matrix.}
+\item{layout}{A vector indicating which layout to use as in par(mfrow = layout). If NA, will automatically generate an appropriate layout.}
 
-\item{selection}{Selects which parameter groups to plot (default \code{"alpha"}
-for single and \code{"mu"} for standard)}
+\item{N}{Integer. How many prior samples to draw}
 
-\item{mapped}{Boolean for mapping \code{mu} or \code{alpha} back to the design cells on the natural scale.}
-
-\item{data}{Data frame, required when the mapping involves priors}
-
-\item{N}{Number of prior samples if data not provided}
-
-\item{nrep}{Number of prior samples as multiple of the number of rows in the data frame.}
-
-\item{breaks}{breaks parameter for the histogram}
-
-\item{layout}{\code{par(mfrow)} setting (the default is \code{c(3,3)})}
-
-\item{lower}{Defaults to \code{NULL}. Lower quantile limit of values plotted. If numeric, the same is used for all parameters,
-alternatively, a (parameter) named list with individual quantile limits can be supplied.}
-
-\item{upper}{Defaults to \code{NULL}. Upper quantile limit of values plotted. If numeric, the same is used for all parameters,
-alternatively, a (parameter) named list with individual quantile limits can be supplied.}
-
-\item{xlim}{A list with parameter names of x-axis limits or a single pair if the
-same limits should be used for all parameters. Any names not in list or if (default) \code{NA}, \code{xlim} the minimum and maximum are set.}
-
-\item{...}{For additional arguments}
+\item{...}{Optional arguments that can be passed to get_pars, histogram, plot.default (see par()),
+or arguments required for the types of models e.g. n_factors for type = "factor"}
 }
 \value{
-Invisible of the prior samples
+An mcmc.list object with prior samples of the selected type
 }
 \description{
-Plots the prior for a model by simulating from the user specified prior distributions.
-}
-\details{
-To get the default prior for a type, run: \verb{get_prior_\{type\}(design = design, sample = F)}.
-E.g.: \code{get_prior_diagonal(design = design, sample = F)}
+Title
 }
 \examples{
-\dontrun{
 # First define a design for the model
-design_DDMaE <- make_design(data = forstmann,model=DDM,
+design_DDMaE <- design(data = forstmann,model=DDM,
                            formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
                            constants=c(s=log(1)))
 # Then set up a prior using make_prior
 p_vector=c(v_Sleft=-2,v_Sright=2,a=log(1),a_Eneutral=log(1.5),a_Eaccuracy=log(2),
-t0=log(.2),Z=qnorm(.5),sv=log(.5),SZ=qnorm(.5))
+          t0=log(.2),Z=qnorm(.5),sv=log(.5),SZ=qnorm(.5))
 psd <- c(v_Sleft=1,v_Sright=1,a=.3,a_Eneutral=.3,a_Eaccuracy=.3,
-t0=.4,Z=1,sv=.4,SZ=1)
+          t0=.4,Z=1,sv=.4,SZ=1)
 # Here we left the variance prior at default
-prior_DDMaE <- make_prior(design_DDMaE,pmean=p_vector,psd=psd)
+prior_DDMaE <- prior(design_DDMaE,mu_mean=p_vector,mu_sd=psd)
 # Now we can plot all sorts of (implied) priors
 plot_prior(prior_DDMaE, design_DDMaE, selection = "mu")
 plot_prior(prior_DDMaE, design_DDMaE, selection = "mu", mapped = FALSE)
-plot_prior(prior_DDMaE, design_DDMaE, selection = "variance")
-plot_prior(prior_DDMaE, design_DDMaE, selection = "covariance")
-plot_prior(prior_DDMaE, design_DDMaE, selection = "correlation")
 # We can also plot the implied prior on the participant level effects.
-plot_prior(prior_DDMaE, design_DDMaE, selection = "alpha")
-}
+plot_prior(prior_DDMaE, design_DDMaE, selection = "alpha", col = "green", N = 1e4)
 }

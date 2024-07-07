@@ -27,8 +27,8 @@ add_info_standard <- function(sampler, prior = NULL, ...){
 #' For details see Huang, A., & Wand, M. P. (2013). Simple marginally noninformative
 #' prior distributions for covariance matrices. *Bayesian Analysis*, 8, 439-452. https://doi.org/10.1214/13-BA815.
 #'
-#' Note that if `sample = FALSE`, prior$theta_mu_invar (the inverse of the prior covariance matrix on the group-level mean) is returned,
-#' which is only used for computational efficiency
+#' Note that if `sample = FALSE`, prior$theta_mu_invar (the inverse of the prior covariance matrix on the group-level mean)
+#' is also returned, which is only used for computational efficiency
 #'
 #' @param prior A named list that can contain the prior mean (`theta_mu_mean`) and
 #' variance (`theta_mu_var`) on the group-level mean, or the scale (`A`), or degrees of freedom (`v`)
@@ -37,19 +37,19 @@ add_info_standard <- function(sampler, prior = NULL, ...){
 #' will be used to determine the size of prior.
 #' @param sample Boolean, defaults to `TRUE`, sample from the prior or simply return the prior specifications?
 #' @param N How many samples to draw from the prior, the default is 1e5
-#' @param design The design obtained from `make_design()`, required when `map = TRUE`
+#' @param design The design obtained from `design()`, required when `map = TRUE`
 #' @param selection Character. If `sample = TRUE`, what prior to sample from. Options:
-#' `"mu"`, `"sigma2"`, `"covariance"` `"Sigma"`, `"alpha"`.
+#' `"mu"`, `"sigma2"`, `"covariance"` `"Sigma"`, `"alpha", "correlation"`.
 #'
 #' @return A list with a single entry of type of samples from the prior (if sample = TRUE) or else a prior object
 #' @examples \dontrun{
 #' # First define a design for the model
-#' design_DDMaE <- make_design(data = forstmann,model=DDM,
+#' design_DDMaE <- design(data = forstmann,model=DDM,
 #'                            formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
 #'                            constants=c(s=log(1)))
 #' # Now get the default prior
 #' prior <- get_prior_standard(design = design_DDMaE, sample = FALSE)
-#' # We can change values in the default prior or use make_prior
+#' # We can change values in the default prior or use `prior`
 #' # Then we can get samples from this prior e.g.
 #' samples <- get_prior_standard(prior = prior, design = design_DDMaE,
 #'   sample = TRUE, type = "mu")
@@ -427,13 +427,13 @@ bridge_group_and_prior_and_jac_standard <- function(proposals_group, proposals_l
 
 # for IC ------------------------------------------------------------------
 
-group_level_IC_standard <- function(samplers, filter="sample",subfilter=0){
-  alpha <- as_mcmc_new(samplers, selection = "alpha", filter = filter, subfilter = subfilter,
+group__IC_standard <- function(emc, stage="sample",filter=NULL){
+  alpha <- get_pars(emc, selection = "alpha", stage = stage, filter = filter,
                        return_mcmc = FALSE, merge_chains = TRUE)
-  theta_mu <- as_mcmc_new(samplers, selection = "mu", filter = filter, subfilter = subfilter,
+  theta_mu <- get_pars(emc, selection = "mu", stage = stage, filter = filter,
                           return_mcmc = FALSE, merge_chains = TRUE)
-  theta_var <- as_mcmc_new(samplers, selection = "sigma", filter = filter, subfilter = subfilter,
-                           return_mcmc = FALSE, merge_chains = TRUE)
+  theta_var <- get_pars(emc, selection = "Sigma", stage = stage, filter = filter,
+                           return_mcmc = FALSE, merge_chains = TRUE, remove_constants = F)
   mean_alpha <- apply(alpha, 1:2, mean)
   mean_mu <- rowMeans(theta_mu)
   mean_var <- apply(theta_var, 1:2, mean)

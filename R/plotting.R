@@ -15,9 +15,9 @@
 #' @param layout A vector indicating which layout to use as in par(mfrow = layout). If NA, will automatically generate an appropriate layout.
 #' @param correct_fun If specified, the accuracy for each subject is calculated, using the supplied function and
 #' an accuracy vector for each subject is returned invisibly.
-#' @param rt legend function position character string for the mean response time (defaults to `top`)
+#' @param rt_pos legend function position character string for the mean response time (defaults to `top`)
 #' @param accuracy legend function position character string for accuracy (defaults to `topright`)
-#' @param ... Optional arguments that can be passed to `as_mcmc_new`, `density`, or `plot.default` (see `par()`)
+#' @param ... Optional arguments that can be passed to `get_pars`, `density`, or `plot.default` (see `par()`)
 #' @return If `correct_fun` is specified, a subject accuracy vector is returned invisibly
 #' @examples
 #' # First for each subject and the factor combination in the design:
@@ -34,7 +34,7 @@
 
 plot_defective_density <- function(data,subject=NULL,factors=NULL,
                                    layout=NA, correct_fun=NULL,
-                                   rt="top",accuracy="topright",
+                                   rt_pos="top",accuracy="topright",
                                    ...)
 {
   dots <- list(...)
@@ -65,7 +65,7 @@ plot_defective_density <- function(data,subject=NULL,factors=NULL,
   cells <- apply(cells,1,paste,collapse=" ")
   R <- levels(dat$R)
   if(any(is.na(layout))){
-    par(mfrow = coda:::set.mfrow(Nchains = 1, Nparms = length(unique(cells)),
+    par(mfrow = coda_setmfrow(Nchains = 1, Nparms = length(unique(cells)),
                                  nplots = 1))
   } else{par(mfrow=layout)}
   for (i in sort(unique(cells))) {
@@ -90,16 +90,14 @@ plot_defective_density <- function(data,subject=NULL,factors=NULL,
       ltys[is.na(mrt)] <- NA
       legend(accuracy,paste(names(pR),round(pR,2),sep="="),lty=ltys,bty="n",title="p(R)")
     }
-    if (!is.null(rt))
-      legend(rt,paste(names(pR),round(mrt,3),sep="="),bty="n",title="Med(RT)")
+    if (!is.null(rt_pos))
+      legend(rt_pos,paste(names(pR),round(mrt,3),sep="="),bty="n",title="Med(RT)")
   }
   if (!is.null(correct_fun))
     invisible(tapply(correct_fun(dat),dat$subjects,mean))
 }
 
-robust_hist <- function(ps, breaks = 50, cutoff = 0.0015, main = "",
-                        cex.lab = 1, cex.main = 1.5, prob = TRUE,
-                        xlab = "", do_plot = TRUE, ...){
+robust_hist <- function(ps, breaks = 50, cutoff = 0.0015, do_plot = TRUE, ...){
   ps <- ps[abs(ps) < 1000]
   for(i in 1:log10(length(ps))){
     cuts <- cut(ps, breaks = breaks)
@@ -108,8 +106,7 @@ robust_hist <- function(ps, breaks = 50, cutoff = 0.0015, main = "",
     ps <- ps[cuts %in% names(good_cuts)[good_cuts]]
   }
   if(do_plot){
-    hist(ps, breaks = breaks, main = main, cex.lab = cex.lab, cex.main = cex.main,
-         prob = prob, xlab = xlab, ...)
+    hist(ps, breaks = breaks, ...)
   } else{
     return(ps)
   }
@@ -166,7 +163,7 @@ plot_roc <- function(data,signalFactor="S",zROC=FALSE,qfun=NULL,main="",lim=NULL
 #' @param data A data frame. The experimental data in EMC2 format with at least `subject` (i.e., the
 #' subject factor), `R` (i.e., the response factor) and `rt` (i.e., response time) variable.
 #' Additional factor variables of the design are optional.
-#' @param pp Posterior predictives created by `post_predict()`
+#' @param pp Posterior predictives created by `predict()`
 #' @param subject Integer or string picking out subject(s).
 #' @param factors Character vector of factors in data to display separately. If
 #' `NULL` (i.e., the default), use names of all columns in data except `trials`,`R`, and `rt`.
@@ -344,7 +341,7 @@ plot_fit_choice <- function(data,pp,subject=NULL,factors=NULL,functions=NULL,
 #' @param data A data frame. The experimental data in EMC2 format with at least `subject` (i.e., the
 #' subject factor), `R` (i.e., the response factor) and `rt` (i.e., response time) variable.
 #' Additional factor variables of the design are optional.
-#' @param pp A data frame. Posterior predictives created by ``post_predict()``
+#' @param pp A data frame. Posterior predictives created by ``predict()``
 #' @param subject Integer or string selecting a subject from the data. If specified only that subject
 #' is plotted. `NULL` (i.e., the default), will plot all subjects.
 #' @param factors Character vector of factors in data to display separately. If
@@ -376,7 +373,7 @@ plot_fit_choice <- function(data,pp,subject=NULL,factors=NULL,functions=NULL,
 #' is returned
 #' @examples \dontrun{
 #' # First generate posterior predictives based on an emc object run with run_emc
-#' pp <- post_predict(samplers_LNR, n_cores = 4)
+#' pp <- predict(samples_LNR, n_cores = 4)
 #' # Then visualize the model fit
 #' plot_fit(forstmann, pp, factors = c("S", "E"), layout = c(2,3))
 #'
@@ -566,39 +563,30 @@ plot_fit <- function(data,pp,subject=NULL,factors=NULL,functions=NULL,
 #' scatterplots (lower triangle) to visualize parameter sloppiness.
 #'
 #' If ``selection = alpha`` the parameter chains are concatenated across participants,
-#' (after standardizing if ``scale.subjects = TRUE``) and then correlated.
+#' (after standardizing if ``scale_subjects = TRUE``) and then correlated.
 #'
 #' @param emc An emc object
-#' @param filter A character. Specifies which sampling stage should be plotted.
-#' Defaults to the sampling stage `sample`.
-#' @param thin An integer. Only iterations that are a multiple of `thin` are kept.
-#' @param subfilter Integer or numeric vector. If an integer is supplied, iterations
-#' up until that integer within the sampling stage `filter` are kept. If a vector is supplied, the iterations
-#' within the range are kept.
-#' @param selection A Character string. Indicates which parameter type to plot (`alpha`, `mu`, `variance`, `covariance`, `correlation`).
-#' `LL` will plot the log-likelihood chains.
-#' @param mapped Boolean. If ``TRUE``, plots the parameters as mapped back to the factor levels of the design,
-#' if `FALSE`, the sampled parameters are plotted
-#' @param scale.subjects Boolean. To standardize each participant with ``selection = "alpha"``,
+#' @param selection A Character string. Indicates which parameter type to
+#' plot (`alpha`, `mu`, `variance`, `covariance`, `correlation`).
+#' @param scale_subjects Boolean. To standardize each participant with ``selection = "alpha"``,
 #'  by subtracting the mean and divding by the standard deviation. This ensures the plot has every participant on the same scale.
-#' @param use_par Character vector of names of parameters to plot (default ``NULL`` plots everything)
 #' @param do_plot Boolean. Whether to plot the pairs plot, if ``FALSE``, only the correlations
 #' are returned.
-#' @param maxp Integer for maximum number of iterations used (defaults to 500).
-#' If number of samples in stage or selection exceeds maxp, a random subset will be taken of size maxp.
+#' @param N Integer for maximum number of iterations used (defaults to 500).
+#' If number of samples in stage or selection exceeds N, a random subset will be taken of size N
+#' @param ... Optional arguments that can be passed to `get_pars`
 #' @return Invisibly returns a matrix with the correlations between the parameters.
 #' @examples \dontrun{
 #' # Plot the sloppiness for the individual-level subjects
-#' pairs_posterior(samplers_LNR, selection = "alpha")
+#' pairs_posterior(samples_LNR, selection = "alpha")
 #'
 #' # We can also choose group-level parameters and subsets of the parameter space
-#' pairs_posterior(samplers_LNR, use = c("v", "B", "t0"), selection = "sigma2")
+#' pairs_posterior(samples_LNR, use_par = c("v", "B", "t0"), selection = "sigma2")
 #' }
 #' @export
 
-pairs_posterior <- function(emc,filter="sample",thin=1,subfilter=0,mapped=FALSE,
-                            selection="mu",
-                            scale.subjects=TRUE,use_par=NULL,do_plot=TRUE,maxp=500, ...)
+pairs_posterior <- function(emc, selection="alpha", scale_subjects=TRUE,
+                            do_plot=TRUE,N=500, ...)
 {
 
   panel.hist <- function(x, ...)
@@ -629,24 +617,15 @@ pairs_posterior <- function(emc,filter="sample",thin=1,subfilter=0,mapped=FALSE,
     }
     df[,2]
   }
-
-  pmat <- parameters_data_frame(emc,filter=filter,thin=thin,subfilter=subfilter,
-                                mapped=mapped,selection=selection, ...)
-  if (!is.null(use_par)) {
-    if (is.numeric(use_par)) {
-      if (any(use_par<1) || any(use_par>dim(pmat))) stop("use_par outside parameter range")
-      use_par <- names(pmat)[use_par]
-    }
-    if (!all(use_par %in% names(pmat))) stop("use_par has a name not in parameters")
-    if (length(use_par)==1) stop("must select more than one parameter")
-    pmat <- pmat[,use_par]
-  }
-  if (selection=="alpha" & is.null(use_par)) {
-    if (length(levels(pmat$subjects))>1 && scale.subjects)
+  dots <- add_defaults(list(...), stage = "sample")
+  use_par <- dots$use_par
+  N <- min(chain_n(emc)[,dots$stage], N)
+  pmat <- do.call(parameters, c(list(emc,selection=selection, N=N), fix_dots(dots, get_pars)))
+  if (selection=="alpha") {
+    if (length(levels(pmat$subjects))>1 && scale_subjects)
       for (i in names(pmat)[-1]) pmat[,i] <- do_scale(pmat[,c("subjects",i)])
     pmat <- pmat[,-1]
   }
-  if (dim(pmat)[1]>maxp) pmat <- pmat[sample(dim(pmat)[1],maxp),]
   if (do_plot) suppressWarnings(
     pairs(pmat,diag.panel = panel.hist,upper.panel = panel.cor))
   rs <- cor(pmat)
@@ -662,7 +641,7 @@ pairs_posterior <- function(emc,filter="sample",thin=1,subfilter=0,mapped=FALSE,
 #' varying one model parameter while holding all others constant.
 #'
 #' @param data A dataframe. Experimental data used, needed for the design mapping
-#' @param design A design list. Created using ``make_design``.
+#' @param design A design list. Created using ``design``.
 #' @param p_vector Named vector of parameter values (typically created with ``sampled_p_vector(design)``)
 #' @param range Numeric. The max and min will be p_vector + range/2 and p_vector - range/2, unless specified in p_min or p_max.
 #' @param layout A vector indicating which layout to use as in par(mfrow = layout). If NA, will automatically generate an appropriate layout.
@@ -676,14 +655,15 @@ pairs_posterior <- function(emc,filter="sample",thin=1,subfilter=0,mapped=FALSE,
 #' @return Vector with highest likelihood point, input and mismatch between true and highest point
 #' @examples
 #' # First create a design
-#' design_DDMaE <- make_design(data = forstmann,model=DDM,
+#' design_DDMaE <- design(data = forstmann,model=DDM,
 #'                 formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
 #'                 constants=c(s=log(1)))
 #' # Then create a p_vector:
 #' p_vector=c(v_Sleft=-2,v_Sright=2,a=log(1),a_Eneutral=log(1.5),a_Eaccuracy=log(2),
 #'           t0=log(.2),Z=qnorm(.5),sv=log(.5),SZ=qnorm(.5))
 #' # Make a profile plot for some parameters. Specifying a custom range for t0.
-#' profile_plot(p_vector = p_vector, p_min = c(t0 = -1.55), p_max = c(t0 = -1.65), use_par = c("a", "t0", "SZ"),
+#' profile_plot(p_vector = p_vector, p_min = c(t0 = -1.55),
+#'             p_max = c(t0 = -1.65), use_par = c("a", "t0", "SZ"),
 #'             data = forstmann, design = design_DDMaE, n_point = 10)
 #'
 #' @export
@@ -705,7 +685,7 @@ profile_plot <- function(data, design, p_vector, range = .5, layout = NA,
   if(!is.null(names(p_max)) & length(p_max) == length(use_par)) names(p_max) <- use_par
   if(is.null(use_par)) use_par <- names(p_vector)
   if(any(is.na(layout))){
-    par(mfrow = coda:::set.mfrow(Nchains = 1, Nparms = length(use_par),
+    par(mfrow = coda_setmfrow(Nchains = 1, Nparms = length(use_par),
                                  nplots = 1))
   } else{par(mfrow=layout)}
   if(is.null(dots$dadm)) dadm <- design_model(data, design, verbose = FALSE)
@@ -737,35 +717,25 @@ profile_plot <- function(data, design, p_vector, range = .5, layout = NA,
 #' Plot MCMC chains
 #'
 #' Plots the trace plots of the MCMC chains on top of each other. Visualizes convergence
-#' and chain stability. Full range of samples manipulations described in `as_mcmc_new`.
+#' and chain stability. Full range of samples manipulations described in `get_pars`.
 #'
 #' @param emc An emc object
 #' @param selection A Character string. Indicates which parameter type to plot (e.g., `alpha`, `mu`, `sigma2`, `correlation`).
 #' @param layout A vector indicating which layout to use as in par(mfrow = layout). If NA, will automatically generate an appropriate layout.
 #' @param plot_acf Boolean. If `FALSE` will make trace plots. If `TRUE` will plot the autocorrelation for a chain.
-#' By default plots acf for the first chain, but can be changed, by setting i.e. chain = 2; see `?as_mcmc_new`.
-#' @param ... Optional arguments that can be passed to `as_mcmc_new` or `plot.default` (see `par()`)
+#' By default plots acf for the first chain, but can be changed, by setting i.e. chain = 2; see `?get_pars`.
+#' @param ... Optional arguments that can be passed to `get_pars` or `plot.default` (see `par()`)
 #'
 #' @return A trace/acf plot of the selected MCMC chains
-#' @export
-#'
-#' @examples
-#' plot_chains(samplers_LNR)
-#' # Or trace plots for the second subject:
-#' plot_chains(samplers_LNR, subject = 2, selection = "alpha", plot_acf = TRUE)
-#'
-#' # Can also plot the trace of for example the group-level correlation:
-#' plot_chains(emc, selection = "correlation", plot_acf = TRUE, colors = c("green", "purple", "orange"), lwd = 2)
-
 plot_chains <- function(emc, selection = "mu", layout=NA, plot_acf=FALSE, ...)
 {
   dots <- list(...)
   if(plot_acf) dots <- add_defaults(dots, chain = 1)
-  MCMC_samples <- do.call(as_mcmc_new, c(list(emc, selection = selection), fix_dots(dots, as_mcmc_new)))
+  MCMC_samples <- do.call(get_pars, c(list(emc, selection = selection), fix_dots(dots, get_pars)))
 
   for(i in 1:length(MCMC_samples)){
     if(any(is.na(layout))){
-      par(mfrow = coda:::set.mfrow(Nchains = length(MCMC_samples[[1]]), Nparms = max(ncol(MCMC_samples[[1]][[1]]), length(MCMC_samples)),
+      par(mfrow = coda_setmfrow(Nchains = length(MCMC_samples[[1]]), Nparms = max(ncol(MCMC_samples[[1]][[1]]), length(MCMC_samples)),
                                    nplots = 1))
     } else{par(mfrow=layout)}
     if (plot_acf){
@@ -791,11 +761,11 @@ plot_chains <- function(emc, selection = "mu", layout=NA, plot_acf=FALSE, ...)
 #' Plots density for parameters
 #'
 #' Plots the posterior and prior density for selected parameters of a model.
-#' Full range of samples manipulations described in `as_mcmc_new`.
+#' Full range of samples manipulations described in `get_pars`.
 #'
 #' @param emc An emc object
 #' @param layout A vector indicating which layout to use as in par(mfrow = layout). If NA, will automatically generate an appropriate layout.
-#' @param selection A Character string. Indicates which parameter type to plot (e.g., `alpha`, `mu`, `sigma2`, `correlation`).
+#' @param selection A Character string. Indicates which parameter type to use (e.g., `alpha`, `mu`, `sigma2`, `correlation`).
 #' @param show_chains Boolean (defaults to `FALSE`) plots a separate density for each chain.
 #' @param plot_prior Boolean. If ``TRUE`` will overlay prior density in the plot (default in red)
 #' @param N Integer. How many prior samples to draw
@@ -807,19 +777,19 @@ plot_chains <- function(emc, selection = "mu", layout=NA, plot_acf=FALSE, ...)
 #' @param all_subjects Boolean. Will plot the densities of all (selected) subjects overlaid with the group-level distribution
 #' @param prior_plot_args A list. Optional additional arguments to be passed to plot.default for the plotting of the prior density (see `par()`)
 #' @param true_plot_args A list. Optional additional arguments to be passed to plot.default for the plotting of the true parameters (see `par()`)
-#' @param ... Optional arguments that can be passed to `as_mcmc_new`, `density`, or `plot.default` (see `par()`)
+#' @param ... Optional arguments that can be passed to `get_pars`, `density`, or `plot.default` (see `par()`)
 #'
 #' @return An invisible return of the contraction statistics for the selected parameter type
 #' @export
 #'
 #' @examples
-#' # Full range of possibilities described in as_mcmc_new
-#' plot_pars(samplers_LNR)
+#' # Full range of possibilities described in get_pars
+#' plot_pars(samples_LNR)
 #' # Or plot all subjects
-#' plot_pars(samplers_LNR, all_subjects = TRUE, col = 'purple')
+#' plot_pars(samples_LNR, all_subjects = TRUE, col = 'purple')
 #' # Or plot recovery
-#' true_emc <- samplers_LNR # This would normally be the data-generating samples
-#' plot_pars(samplers_LNR, true_pars = true_emc, true_plot_args = list(col = 'blue'), adjust = 2)
+#' true_emc <- samples_LNR # This would normally be the data-generating samples
+#' plot_pars(samples_LNR, true_pars = true_emc, true_plot_args = list(col = 'blue'), adjust = 2)
 plot_pars <- function(emc,layout=NA, selection="mu", show_chains = FALSE, plot_prior = TRUE, N = 1e4,
                           use_prior_lim = !all_subjects, lpos = "topright", true_pars = NULL, all_subjects = FALSE,
                           prior_plot_args = list(), true_plot_args = list(), ...)
@@ -833,7 +803,7 @@ plot_pars <- function(emc,layout=NA, selection="mu", show_chains = FALSE, plot_p
     if(is.null(dots$lwd)) dots$lwd <- .3
   }
 
-  MCMC_samples <- do.call(as_mcmc_new, c(list(emc, selection = selection), fix_dots(dots, as_mcmc_new)))
+  MCMC_samples <- do.call(get_pars, c(list(emc, selection = selection), fix_dots(dots, get_pars)))
   if(all_subjects) {
     MCMC_samples <- list(lapply(MCMC_samples, function(x) do.call(rbind, x)))
     names(MCMC_samples) <- "test"
@@ -842,8 +812,8 @@ plot_pars <- function(emc,layout=NA, selection="mu", show_chains = FALSE, plot_p
     psamples <-  get_objects(sampler = emc, design = attr(emc,"design_list")[[1]],
                              type = type, sample_prior = T,
                              selection = selection, N = N)
-    pMCMC_samples <- do.call(as_mcmc_new, c(list(psamples, selection = selection, type = type),
-                                           fix_dots(dots, as_mcmc_new, exclude = c("thin", "subfilter", "chain", "subject"))))
+    pMCMC_samples <- do.call(get_pars, c(list(psamples, selection = selection, type = type),
+                                           fix_dots(dots, get_pars, exclude = c("thin", "filter", "chain", "subject"))))
     if(length(pMCMC_samples) != length(MCMC_samples)) pMCMC_samples <- rep(pMCMC_samples, length(MCMC_samples))
   }
 
@@ -851,10 +821,10 @@ plot_pars <- function(emc,layout=NA, selection="mu", show_chains = FALSE, plot_p
   if(!is.null(true_pars)){
     if(!is(true_pars, "emc")){
       if(selection == "sigma2" & !is.matrix(true_pars)) true_pars <- diag(true_pars)
-      true_pars <- do.call(as_mcmc_new, c(list(emc, selection = selection, type = type, true_pars = true_pars),
-                                          fix_dots(dots, as_mcmc_new, exclude = c("thin", "subfilter", "chain"))))
+      true_pars <- do.call(get_pars, c(list(emc, selection = selection, type = type, true_pars = true_pars),
+                                          fix_dots(dots, get_pars, exclude = c("thin", "filter", "chain"))))
     } else{
-      true_MCMC_samples <- do.call(as_mcmc_new, c(list(true_pars, selection = selection), fix_dots(dots, as_mcmc_new)))
+      true_MCMC_samples <- do.call(get_pars, c(list(true_pars, selection = selection), fix_dots(dots, get_pars)))
       true_pars <- NULL
     }
   }
@@ -873,7 +843,7 @@ plot_pars <- function(emc,layout=NA, selection="mu", show_chains = FALSE, plot_p
     n_pars <- ncol(merged)
     cur_contraction <- setNames(numeric(n_pars), colnames(merged))
     if(any(is.na(layout))){
-      par(mfrow = coda:::set.mfrow(Nchains = n_chains, Nparms = n_pars, nplots = 1))
+      par(mfrow = coda_setmfrow(Nchains = n_chains, Nparms = n_pars, nplots = 1))
     } else{
       par(mfrow=layout)
     }
@@ -929,88 +899,6 @@ plot_pars <- function(emc,layout=NA, selection="mu", show_chains = FALSE, plot_p
   return(invisible(contraction_list))
 }
 
-
-#' Convergence checks for an emc object
-#'
-#' Runs a series of convergence checks, prints statistics to the console, and
-#' makes traceplots of the worst converged parameter per selection.
-#'
-#' Note that the `Rhat` is calculated by doubling the number of chains by
-#' first splitting chains into first and second half, so it also a test of
-#' stationarity.
-#'
-#' Efficiency of sampling is indicated by the effective
-#' sample size (ESS) (from the `coda` R package).
-#' Full range of possible samples manipulations described in `as_mcmc_new`.
-#'
-#' @param emc An emc object
-#' @param selection A Character vector. Indicates which parameter types to check (e.g., `alpha`, `mu`, `sigma2`, `correlation`).
-#' @param digits Integer. How many digits to round the ESS and Rhat to in the plots
-#' @param plot_worst Boolean. If `TRUE` also plots the chain plots for the worst parameter
-#' @param ... Optional arguments that can be passed to `as_mcmc_new` or `plot.default` (see `par()`)
-#'
-#' @return a list with the statistics for the worst converged parameter per selection
-#' @export
-#' @examples
-#' check_run(samplers_LNR)
-#'
-check_run <- function(emc, selection = c('mu', 'sigma2', 'alpha'), digits = 3,
-                          plot_worst = TRUE, ...){
-  dots <- list(...)
-  out_list <- list()
-  cat("Iterations:\n")
-  print(chain_n(emc))
-  if(attr(emc[[1]], "variant_funs")$type == "single") selection <- "alpha"
-  if(plot_worst){
-    mfrow <- coda:::set.mfrow(Nchains = length(emc), Nparms = length(selection),nplots = 1)
-    oldpar <- par(mfrow = mfrow)
-  }
-  for(select in selection){
-    dots$flatten <- ifelse(select == "alpha", FALSE, TRUE)
-    dots$by_subject <- TRUE
-    ESS <- do.call(es_summary_new, c(list(emc, selection = select, stat= NULL), fix_dots(dots, es_summary_new)))
-    gds <- do.call(gd_summary_new, c(list(emc, selection = select, stat= NULL), fix_dots(dots, gd_summary_new)))
-    out <- list()
-    max_gd <- -Inf
-    for(name in names(ESS)){
-      combined <- rbind(round(gds[[name]], digits), round(ESS[[name]]))
-      rownames(combined) <- c("Rhat", "ESS")
-      out[[name]] <- combined
-      if(max(gds[[name]]) > max_gd){
-        max_gd <- max(gds[[name]])
-        cur_max <- name
-        max_par <- names(gds[[name]])[which.max(gds[[name]])]
-      }
-    }
-    if(length(ESS) > 1){
-      cat("\n", paste0(select, " highest Rhat : ", cur_max), "\n")
-    } else{
-      cat("\n", cur_max, "\n")
-    }
-    print(out[[cur_max]])
-    if(plot_worst){
-      cur_dots <- dots
-      if(select == "alpha"){
-        cur_dots$subject <- cur_max
-        cur_dots$use_par <- max_par
-        cur_dots$by_subject <- TRUE
-        MCMCs <- do.call(as_mcmc_new, c(list(emc, selection = select), fix_dots(cur_dots, as_mcmc_new)))
-        names(MCMCs) <- paste0("alpha : ", names(MCMCs))
-      } else{
-        cur_dots$use_par <- max_par
-        MCMCs <- do.call(as_mcmc_new, c(list(emc, selection = select), fix_dots(cur_dots, as_mcmc_new)))
-      }
-      cur_dots <- add_defaults(cur_dots, xlab = names(MCMCs)[1], ylab = "Highest Rhat parameter")
-      do.call(plot, c(list(MCMCs[[1]], auto.layout = FALSE, density = FALSE, ask = FALSE,smooth = FALSE),
-                      fix_dots_plot(cur_dots)))
-      legend("topleft",legend=paste0("Rhat : ",round(max_gd,digits)), bty = "n")
-      legend("topright",legend=paste0("ESS : ", round(ESS[[cur_max]][max_par])), bty = "n")
-    }
-    out_list[[select]] <- out
-  }
-  return(invisible(out_list))
-}
-
 get_recovery_stats <- function(MCMC, true_MCMC, true_pars, CI){
   quantiles = c(.5 - CI/2, .5, .5 + CI/2)
   if(!is.null(true_MCMC)){
@@ -1049,103 +937,43 @@ make_recov_summary <- function(stats){
   return(out)
 }
 
-#' Recovery plots
-#'
-#' Plots recovery of data generating parameters/samples.
-#' Full range of samples manipulations described in `as_mcmc_new`
-#'
-#' @param emc An emc object
-#' @param true_pars A vector of data-generating parameters or and emc object with data-generating samples
-#' @param selection A Character vector. Indicates which parameter types to plot (e.g., `alpha`, `mu`, `sigma2`, `correlation`).
-#' @param layout A vector indicating which layout to use as in par(mfrow = layout). If NA, will automatically generate an appropriate layout.
-#' @param do_CI Boolean. If `TRUE` will also include bars representing the credible intervals
-#' @param correlation Character. Which correlation to include in the plot. Options are either `pearson` or `spearman`
-#' @param stat Character. Which statistic to include in the plot. Options are either `rmse` or `coverage`
-#' @param digits Integer. How many digits to round the statistic and correlation in the plot to
-#' @param CI Numeric. The size of the credible intervals. Default is .95 (95%).
-#' @param ci_plot_args A list. Optional additional arguments to be passed to plot.default for the plotting of the credible intervals (see `par()`)
-#' @param ... Optional arguments that can be passed to `as_mcmc_new` or `plot.default` (see `par()`)
-#'
-#' @return Invisible list with RMSE, coverage, and Pearson and Spearman correlations.
-#' @export
-#' @examples
-#' # Make up some values that resemble posterior samples
-#' # Normally this would be true values that were used to simulate the data
-#' pmat <- matrix(rnorm(12, mean = c(-1, -.6, -.4, -1.5), sd = .01), ncol = 4, byrow = TRUE)
-#' # Conventionally this would be created before one makes data with true values
-#' plot_recovery(samplers_LNR, pmat, correlation = "pearson", stat = "rmse")
-#'
-#' # Similarly we can plot other group-level parameters with a set of true samples
-#' true_samples <- samplers_LNR # Normally this would be data-generating samples
-#' plot_recovery(samplers_LNR, pmat, correlation = "pearson", stat = "rmse", selection = "alpha", cex = 1.5,
-#'               ci_plot_args = list(lty = 3, length = .2, lwd = 2, col = "brown"))
-plot_recovery <- function(emc, true_pars,
-                          selection = "mu",
-                          layout=NA,
-                          do_CI = TRUE,
-                          correlation = "pearson",
-                          stat = "rmse",
-                          digits = 3,
-                          CI = .95, ci_plot_args = list(), ...)
+
+
+coda_setmfrow <- function (Nchains = 1, Nparms = 1, nplots = 1, sepplot = FALSE)
 {
-  dots <- list(...)
-  type <- attr(emc[[1]], "variant_funs")$type
-  if(length(dots$subject) == 1) dots$by_subject <- TRUE
-  dots$merge_chains <- TRUE
-  MCMC_samples <- do.call(as_mcmc_new, c(list(emc, selection = selection), fix_dots(dots, as_mcmc_new)))
-  true_MCMC_samples <- NULL
-  if(!is(true_pars, "emc")){
-    if(selection == "sigma2" & !is.matrix(true_pars)) true_pars <- diag(true_pars)
-    true_pars <- do.call(as_mcmc_new, c(list(emc, selection = selection, type = type, true_pars = true_pars),
-                                        fix_dots(dots, as_mcmc_new, exclude = c("thin", "subfilter"))))
-  } else{
-    true_MCMC_samples <- do.call(as_mcmc_new, c(list(true_pars, selection = selection), fix_dots(dots, as_mcmc_new)))
-    true_pars <- NULL
+  mfrow <- if (sepplot && Nchains > 1 && nplots == 1) {
+    if (Nchains == 2) {
+      switch(min(Nparms, 5), c(1, 2), c(2, 2), c(3, 2),
+             c(4, 2), c(3, 2))
+    }
+    else if (Nchains == 3) {
+      switch(min(Nparms, 5), c(2, 2), c(2, 3), c(3, 3),
+             c(2, 3), c(3, 3))
+    }
+    else if (Nchains == 4) {
+      if (Nparms == 1)
+        c(2, 2)
+      else c(4, 2)
+    }
+    else if (any(Nchains == c(5, 6, 10, 11, 12)))
+      c(3, 2)
+    else if (any(Nchains == c(7, 8, 9)) || Nchains >= 13)
+      c(3, 3)
   }
-  # pearson <- spearman <- rmse <- coverage <- setNames(numeric(length(MCMC_samples)),names(MCMC_samples))
-  stats_list <- list()
-  if(any(is.na(layout))){
-    par(mfrow = coda:::set.mfrow(Nchains = 1, Nparms = length(MCMC_samples),
-                                 nplots = 1))
-  } else{par(mfrow=layout)}
-  for(i in 1:length(MCMC_samples)){
-
-    cur_name <- names(MCMC_samples)[i]
-    stats <- get_recovery_stats(MCMC_samples[[i]], true_MCMC_samples[[i]],
-                                                          true_pars[[i]], CI)
-    ylim <- range(c(stats$true, stats$recovered))
-    main_name <- ifelse(length(MCMC_samples) == 1, cur_name, paste0(selection, ": ", cur_name))
-    cur_dots <- add_defaults(dots, main = main_name, ylim = ylim, xlim = ylim, xlab = "Generated", ylab = "Estimated")
-    do.call(plot, c(list(stats$true[,"50%"],stats$recovered[,"50%"]), fix_dots_plot(cur_dots)))
-    abline(a=0,b=1,lty=3)
-    if(do_CI){
-      cur_ci_plot_args <- add_defaults(ci_plot_args, col = "grey", angle = 90, length = .05)
-      do.call(arrows, c(list(stats$true[,"50%"],stats$recovered[,2],stats$true[,"50%"],stats$recovered[,3]),
-                        fix_dots_plot(cur_ci_plot_args)))
-      do.call(arrows, c(list(stats$true[,"50%"],stats$recovered[,2],stats$true[,"50%"],stats$recovered[,1]),
-                        fix_dots_plot(cur_ci_plot_args)))
-      if(is.null(true_pars)){
-        do.call(arrows, c(list(stats$true[,"50%"],stats$recovered[,2],stats$true[,3],stats$recovered[,2]),
-                          fix_dots_plot(cur_ci_plot_args)))
-        do.call(arrows, c(list(stats$true[,"50%"],stats$recovered[,2],stats$true[,1],stats$recovered[,2]),
-                          fix_dots_plot(cur_ci_plot_args)))
-      }
+  else {
+    if (nplots == 1) {
+      mfrow <- switch(min(Nparms, 13), c(1, 1), c(1, 2),
+                      c(2, 2), c(2, 2), c(3, 2), c(3, 2), c(3, 3),
+                      c(3, 3), c(3, 3), c(3, 2), c(3, 2), c(3, 2),
+                      c(3, 3))
     }
-    if(correlation == "pearson"){
-      legend("topleft",paste("r(pearson) = ",round(stats$pearson,digits)),bty="n")
-    } else if(correlation == "spearman"){
-      legend("topleft",paste("r(spearman) = ",round(stats$spearman,digits)),bty="n")
+    else {
+      mfrow <- switch(min(Nparms, 13), c(1, 2), c(2, 2),
+                      c(3, 2), c(4, 2), c(3, 2), c(3, 2), c(4, 2),
+                      c(4, 2), c(4, 2), c(3, 2), c(3, 2), c(3, 2),
+                      c(4, 2))
     }
-    if (stat == "rmse") {
-      legend("bottomright",paste("RMSE = ",round(stats$rmse,digits)),bty="n")
-    } else if(stat == "coverage") {
-      legend("bottomright",paste("95% Coverage = ",round(stats$coverage,digits)),bty="n")
-    }
-    stats <- make_recov_summary(stats)
-    stats_list[[cur_name]] <- stats
   }
-  return(invisible(stats_list))
+  return(mfrow)
 }
-
-
 

@@ -39,13 +39,13 @@ rLNR <- function(lR,pars,p_types=c("m","s","t0"),ok=rep(TRUE,dim(pars)[1])){
 #'
 #' Model file to estimate the Log-Normal Race Model (LNR) in EMC2.
 #'
-#' Model files are almost exclusively used in `make_design()`.
+#' Model files are almost exclusively used in `design()`.
 #'
 #'
 #' @details
 #'
 #' Default values are used for all parameters that are not explicitly listed in the `formula`
-#' argument of `make_design()`.They can also be accessed with `LNR()$p_types`.
+#' argument of `design()`.They can also be accessed with `LNR()$p_types`.
 #'
 #' | **Parameter** | **Transform** | **Natural scale** | **Default**   | **Mapping**                    | **Interpretation**            |
 #'  |-----------|-----------|---------------|-----------|----------------------------|---------------------------|
@@ -57,7 +57,7 @@ rLNR <- function(lR,pars,p_types=c("m","s","t0"),ok=rep(TRUE,dim(pars)[1])){
 #' EMC2 automatically constructs a factor representing the accumulators `lR` (i.e., the
 #' latent response) with level names taken from the `R` column in the data.
 #'
-#' In `make_design()`, `matchfun` can be used to automatically create a latent match
+#' In `design()`, `matchfun` can be used to automatically create a latent match
 #' (`lM`) factor with levels `FALSE` (i.e., the stimulus does not match the accumulator)
 #' and `TRUE` (i.e., the stimulus does match the accumulator). This is added internally
 #' and can also be used in the model formula, typically for parameters related to
@@ -76,9 +76,9 @@ rLNR <- function(lR,pars,p_types=c("m","s","t0"),ok=rep(TRUE,dim(pars)[1])){
 #' # We also define a match function for lM
 #' matchfun=function(d)d$S==d$lR
 #' # We now construct our design, with v ~ lM and the contrast for lM the ADmat.
-#' design_LNRmE <- make_design(data = forstmann,model=LNR,matchfun=matchfun,
-#' formula=list(m~lM + E,s~1,t0~1),
-#' contrasts=list(m=list(lM=ADmat)))
+#' design_LNRmE <- design(data = forstmann,model=LNR,matchfun=matchfun,
+#'                        formula=list(m~lM + E,s~1,t0~1),
+#'                        contrasts=list(m=list(lM=ADmat)))
 #' # For all parameters that are not defined in the formula, default values are assumed
 #' # (see Table above).
 #' @export

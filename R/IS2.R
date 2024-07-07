@@ -2,13 +2,13 @@
 ## set up environment and packages
 
 
-IS2 <- function(samples, filter = "sample", subfilter = 0, IS_samples = 1000, stepsize_particles = 500, max_particles = 5000, n_cores = 1, df = 5){
+IS2 <- function(samples, stage = "sample", filter = 0, IS_samples = 1000, stepsize_particles = 500, max_particles = 5000, n_cores = 1, df = 5){
   ###### set up variables #####
   info <- add_info_base(samples)
-  idx <- which(samples$samples$stage == filter)
-  if (length(subfilter)==1) {
-    if(subfilter > 0) idx <- idx[-c(1:subfilter)]
-  } else idx <- idx[subfilter]
+  idx <- which(samples$samples$stage == stage)
+  if (length(filter)==1) {
+    if(filter > 0) idx <- idx[-c(1:filter)]
+  } else idx <- idx[filter]
   all_pars <- info$variant_funs$get_all_pars_IS2(samples, idx, info)
   if(!is.null(all_pars$X)){
     muX<-apply(all_pars$X,2,mean)

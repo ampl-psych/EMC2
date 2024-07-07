@@ -5,8 +5,8 @@
 \title{Factor diagram plot}
 \usage{
 make_factor_diagram(
-  samplers = NULL,
-  filter = "sample",
+  emc = NULL,
+  stage = "sample",
   loadings = NULL,
   standardize = T,
   simple = F,
@@ -21,11 +21,11 @@ make_factor_diagram(
 )
 }
 \arguments{
-\item{samplers}{A list of samplers}
+\item{emc}{An emc object}
 
-\item{filter}{Character. The stage from which to take the samples}
+\item{stage}{Character. The stage from which to take the samples}
 
-\item{loadings}{An array of loadings. Can be alternatively supplied if samplers is not supplied}
+\item{loadings}{An array of loadings. Can be alternatively supplied if emc is not supplied}
 
 \item{standardize}{Boolean. Whether to standardize the loadings}
 
@@ -53,9 +53,9 @@ Makes a factor diagram plot. Heavily based on the fa.diagram function of the \co
 \examples{
 \dontrun{
 # For a given set of hierarchical factor model samples we can make a factor diagram
-make_factor_diagram(samplers, only_cred = T)
+make_factor_diagram(emc, only_cred = T)
 # We can also specify nice names and adjust the loading positions
-make_factor_diagram(samplers, nice_names = paste0("V", 1:10), adj = 2)
+make_factor_diagram(emc, nice_names = paste0("V", 1:10), adj = 2)
 }
 
 }

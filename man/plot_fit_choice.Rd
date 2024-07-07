@@ -32,7 +32,7 @@ plot_fit_choice(
 subject factor), \code{R} (i.e., the response factor) and \code{rt} (i.e., response time) variable.
 Additional factor variables of the design are optional.}
 
-\item{pp}{Posterior predictives created by \code{post_predict()}}
+\item{pp}{Posterior predictives created by \code{predict()}}
 
 \item{subject}{Integer or string picking out subject(s).}
 

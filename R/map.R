@@ -1,4 +1,4 @@
-get_pars <- function(p_vector,dadm) {
+get_pars_matrix <- function(p_vector,dadm) {
   # Add constants, transform p_vector, map to design, transform mapped parameters
   # to the natural scale, and create trial-dependent parameters. Ordinal
   # parameters are first exponentiated.
@@ -20,7 +20,7 @@ get_design <- function(samples)
   # prints out design from samples object
 {
   design <- attr(samples,"design_list")[[1]]
-  model <- attr(samples, "model_list")[[1]]
+  model <- design$model
   design$Ffactors$subjects <- design$Ffactors$subjects[1]
   dadm <- design_model(make_data(sampled_p_vector(design,model),design,n_trials=1),design,model,
                        rt_check=FALSE,compress=FALSE)
@@ -34,7 +34,8 @@ get_design_matrix <- function(samples){
 get_map <- function(samples,add_design=TRUE) {
   out <- attr(attr(attr(samples,"design_list")[[1]],"p_vector"),"map")
   if (add_design) {
-    mnl <- mapped_name_list(attr(samples,"design_list")[[1]],attr(samples,"model_list")[[1]],TRUE)
+    design <- attr(samples,"design_list")[[1]]
+    mnl <- mapped_name_list(design, design$model,TRUE)
     for (i in names(out)) out[[i]] <- cbind(mnl[[i]],out[[i]])
   }
   out
@@ -121,7 +122,7 @@ add_constants_mcmc <- function(p,constants){
 #' differ across the experimental factors.
 #'
 #' @param p_vector A parameter vector. Must be in the form of ``sampled_p_vector(design)``
-#' @param design A design list. Created ``by make_design``
+#' @param design A design list. Created by ``design``
 #' @param model Optional model type (if not already specified in ``design``)
 #' @param digits Integer. Will round the output parameter values to this many decimals
 #' @param ... optional arguments
@@ -130,7 +131,7 @@ add_constants_mcmc <- function(p,constants){
 #' @return Matrix with a column for each factor in the design and for each model parameter type (``p_type``).
 #' @examples
 #' # First define a design:
-#' design_DDMaE <- make_design(data = forstmann,model=DDM,
+#' design_DDMaE <- design(data = forstmann,model=DDM,
 #'                            formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
 #'                            constants=c(s=log(1)))
 #' # Then create a p_vector:
@@ -158,7 +159,7 @@ mapped_par <- function(p_vector,design,model=NULL,
   dadm <- design_model(make_data(p_vector,design,n_trials=1,Fcovariates=Fcovariates),
                        design,model,rt_check=FALSE,compress=FALSE)
   ok <- !(names(dadm) %in% c("subjects","trials","R","rt","winner"))
-  out <- cbind(dadm[,ok],round(get_pars(p_vector,dadm),digits))
+  out <- cbind(dadm[,ok],round(get_pars_matrix(p_vector,dadm),digits))
   if (model()$type=="SDT")  out <- out[dadm$lR!=levels(dadm$lR)[length(levels(dadm$lR))],]
   if (model()$type=="DDM")  out <- out[,!(names(out) %in% c("lR","lM"))]
   if (any(names(out)=="RACE") && remove_RACE)
@@ -167,7 +168,6 @@ mapped_par <- function(p_vector,design,model=NULL,
 }
 
 
-# mcmc=mcmcList[[1]]; design=attr(samplers,"design_list")[[1]];model=attr(samplers,"model_list")[[1]]
 map_mcmc <- function(mcmc,design,include_constants = TRUE)
   # Maps vector or matrix (usually mcmc object) of sampled parameters to native
   # model parameterization.

@@ -14,22 +14,14 @@ plot_chains(emc, selection = "mu", layout = NA, plot_acf = FALSE, ...)
 \item{layout}{A vector indicating which layout to use as in par(mfrow = layout). If NA, will automatically generate an appropriate layout.}
 
 \item{plot_acf}{Boolean. If \code{FALSE} will make trace plots. If \code{TRUE} will plot the autocorrelation for a chain.
-By default plots acf for the first chain, but can be changed, by setting i.e. chain = 2; see \code{?as_mcmc_new}.}
+By default plots acf for the first chain, but can be changed, by setting i.e. chain = 2; see \code{?get_pars}.}
 
-\item{...}{Optional arguments that can be passed to \code{as_mcmc_new} or \code{plot.default} (see \code{par()})}
+\item{...}{Optional arguments that can be passed to \code{get_pars} or \code{plot.default} (see \code{par()})}
 }
 \value{
 A trace/acf plot of the selected MCMC chains
 }
 \description{
 Plots the trace plots of the MCMC chains on top of each other. Visualizes convergence
-and chain stability. Full range of samples manipulations described in \code{as_mcmc_new}.
-}
-\examples{
-plot_chains(samplers_LNR)
-# Or trace plots for the second subject:
-plot_chains(samplers_LNR, subject = 2, selection = "alpha", plot_acf = TRUE)
-
-# Can also plot the trace of for example the group-level correlation:
-plot_chains(emc, selection = "correlation", plot_acf = TRUE, colors = c("green", "purple", "orange"), lwd = 2)
+and chain stability. Full range of samples manipulations described in \code{get_pars}.
 }

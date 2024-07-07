@@ -25,7 +25,7 @@ plot_pars(
 
 \item{layout}{A vector indicating which layout to use as in par(mfrow = layout). If NA, will automatically generate an appropriate layout.}
 
-\item{selection}{A Character string. Indicates which parameter type to plot (e.g., \code{alpha}, \code{mu}, \code{sigma2}, \code{correlation}).}
+\item{selection}{A Character string. Indicates which parameter type to use (e.g., \code{alpha}, \code{mu}, \code{sigma2}, \code{correlation}).}
 
 \item{show_chains}{Boolean (defaults to \code{FALSE}) plots a separate density for each chain.}
 
@@ -47,21 +47,21 @@ If an emc object will plot the densities of the object as well, assumed to be th
 
 \item{true_plot_args}{A list. Optional additional arguments to be passed to plot.default for the plotting of the true parameters (see \code{par()})}
 
-\item{...}{Optional arguments that can be passed to \code{as_mcmc_new}, \code{density}, or \code{plot.default} (see \code{par()})}
+\item{...}{Optional arguments that can be passed to \code{get_pars}, \code{density}, or \code{plot.default} (see \code{par()})}
 }
 \value{
 An invisible return of the contraction statistics for the selected parameter type
 }
 \description{
 Plots the posterior and prior density for selected parameters of a model.
-Full range of samples manipulations described in \code{as_mcmc_new}.
+Full range of samples manipulations described in \code{get_pars}.
 }
 \examples{
-# Full range of possibilities described in as_mcmc_new
-plot_pars(samplers_LNR)
+# Full range of possibilities described in get_pars
+plot_pars(samples_LNR)
 # Or plot all subjects
-plot_pars(samplers_LNR, all_subjects = TRUE, col = 'purple')
+plot_pars(samples_LNR, all_subjects = TRUE, col = 'purple')
 # Or plot recovery
-true_emc <- samplers_LNR # This would normally be the data-generating samples
-plot_pars(samplers_LNR, true_pars = true_emc, true_plot_args = list(col = 'blue'), adjust = 2)
+true_emc <- samples_LNR # This would normally be the data-generating samples
+plot_pars(samples_LNR, true_pars = true_emc, true_plot_args = list(col = 'blue'), adjust = 2)
 }

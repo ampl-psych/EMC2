@@ -13,10 +13,10 @@ A list defining the cognitive model
 Model file to estimate the Racing Diffusion Model (RDM), also known as the Racing Wald Model.
 }
 \details{
-Model files are almost exclusively used in \code{make_design()}.
+Model files are almost exclusively used in \code{design()}.
 
 Default values are used for all parameters that are not explicitly listed in the \code{formula}
-argument of \code{make_design()}.They can also be accessed with \code{RDM()$p_types}.\tabular{llllll}{
+argument of \code{design()}.They can also be accessed with \code{RDM()$p_types}.\tabular{llllll}{
    \strong{Parameter} \tab \strong{Transform} \tab \strong{Natural scale} \tab \strong{Default} \tab \strong{Mapping} \tab \strong{Interpretation} \cr
    \emph{v} \tab log \tab [0, Inf] \tab log(1) \tab  \tab Evidence-accumulation rate (drift rate) \cr
    \emph{A} \tab log \tab [0, Inf] \tab log(0) \tab  \tab Between-trial variation (range) in start point \cr
@@ -43,7 +43,7 @@ parameters, so \code{B~lR} allows for different thresholds for the accumulator
 corresponding to "left" and "right" stimuli, for example, (e.g., a bias to respond left occurs
 if the left threshold is less than the right threshold).
 
-For race models in general, the argument \code{matchfun} can be provided in \code{make_design()}.
+For race models in general, the argument \code{matchfun} can be provided in \code{design()}.
 One needs to supply a function that takes the \code{lR} factor (defined in the augmented data (d)
 in the following function) and returns a logical defining the correct
 response. In the example below, this is simply whether the \code{S} factor equals the
@@ -65,9 +65,9 @@ ADmat <- matrix(c(-1/2,1/2),ncol=1,dimnames=list(NULL,"d"))
 # We also define a match function for lM
 matchfun=function(d)d$S==d$lR
 # We now construct our design, with v ~ lM and the contrast for lM the ADmat.
-design_RDMBE <- make_design(data = forstmann,model=RDM,matchfun=matchfun,
-formula=list(v~lM,s~lM,B~E+lR,A~1,t0~1),
-contrasts=list(v=list(lM=ADmat)),constants=c(s=log(1)))
+design_RDMBE <- design(data = forstmann,model=RDM,matchfun=matchfun,
+                       formula=list(v~lM,s~lM,B~E+lR,A~1,t0~1),
+                       contrasts=list(v=list(lM=ADmat)),constants=c(s=log(1)))
 # For all parameters that are not defined in the formula, default values are assumed
 # (see Table above).
 }

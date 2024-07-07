@@ -153,22 +153,22 @@ rearrange_loadings <- function(loadings){
 #' The standardization considers the residual error as well
 #' as described in Stevenson, Heathcote, Forstmann & Matzke, 2024.
 #'
-#' @param samplers A list of samplers from a hierarchical factor analysis model
-#' @param loadings Array of pars by factors by iters. Can also specify loadings instead of samplers
-#' @param sig_err_inv Array of pars by iters. Can also specify sig_err_inv instead of samplers
-#' @param filter Character. From which stage to take samples
+#' @param emc An emc object with samples from a hierarchical factor analysis model
+#' @param loadings Array of pars by factors by iters. Can also specify loadings instead of emc
+#' @param sig_err_inv Array of pars by iters. Can also specify sig_err_inv instead of emc
+#' @param stage Character. From which stage to take samples
 #' @param merge_chains Return the loadings for each chain separately or merged together.
 #'
 #' @return standardized loadings
 #' @examples \dontrun{
 #' # For a given set of hierarchical factor model samples we can standardize the loadings
-#' standardize_loadings(samplers)
+#' standardize_loadings(emc)
 #' # By default merges across chains, but we could also get a list of standardized loadings
-#' standardize_loadings(samplers, merge_chains = FALSE)
+#' standardize_loadings(emc, merge_chains = FALSE)
 #' }
 #'
-standardize_loadings <- function(samplers = NULL, loadings = NULL, sig_err_inv = NULL,
-                                 filter = "sample", merge_chains = T){
+standardize_loadings <- function(emc = NULL, loadings = NULL, sig_err_inv = NULL,
+                                 stage = "sample", merge_chains = T){
   stdize_set <- function(samples = NULL, idx = NULL, loadings = NULL, sig_err_inv = NULL){
     if(is.null(loadings)) loadings <- samples$samples$theta_lambda[,,idx, drop = F]
     if(is.null(sig_err_inv)) sig_err_inv <- samples$samples$theta_sig_err_inv[,idx]
@@ -184,14 +184,14 @@ standardize_loadings <- function(samplers = NULL, loadings = NULL, sig_err_inv =
 
   if(is.null(loadings) || is.null(sig_err_inv)){
     if(merge_chains){
-      samples <- merge_samples(samplers)
-      idx <- samples$samples$stage == filter
+      samples <- merge_chains(emc)
+      idx <- samples$samples$stage == stage
       out <- stdize_set(samples, idx, loadings, sig_err_inv)
     } else{
-      idx <- samplers[[1]]$samples$stage == filter
-      out <- vector("list", length(samplers))
-      for(i in 1:length(samplers)){
-        out[[i]] <- stdize_set(samplers[[i]], idx, loadings[[i]], sig_err_inv[[i]])
+      idx <- emc[[1]]$samples$stage == stage
+      out <- vector("list", length(emc))
+      for(i in 1:length(emc)){
+        out[[i]] <- stdize_set(emc[[i]], idx, loadings[[i]], sig_err_inv[[i]])
       }
     }
   } else{
@@ -208,8 +208,8 @@ standardize_loadings <- function(samplers = NULL, loadings = NULL, sig_err_inv =
 #' An adjusted version of the `corrplot` package function `corrplot()` tailored
 #' to `EMC2` and the plotting of estimated correlations.
 #'
-#' @param samplers An EMC2 samplers object, commonly the output of `run_emc()`.
-#' @param filter Character. The stage from which to take the samples, defaults to
+#' @param emc An EMC2 object, commonly the output of `run_emc()`.
+#' @param stage Character. The stage from which to take the samples, defaults to
 #' the sampling stage `sample`.
 #' @param plot_cred Boolean. Whether to plot the 95 percent credible intervals or not
 #' @param plot_means Boolean. Whether to plot the means or not
@@ -221,13 +221,13 @@ standardize_loadings <- function(samplers = NULL, loadings = NULL, sig_err_inv =
 #' @examples \dontrun{
 #' # For a given set of hierarchical model samples we can make a
 #' # correlation matrix plot.
-#' plot_relations(samplers, only_cred = TRUE, plot_cred = TRUE)
+#' plot_relations(emc, only_cred = TRUE, plot_cred = TRUE)
 #' # We can also only plot the correlations where the credible interval does not include zero
-#' plot_relations(samplers, plot_means = TRUE, only_cred = TRUE)
+#' plot_relations(emc, plot_means = TRUE, only_cred = TRUE)
 #' }
 #' @export
 #'
-plot_relations <- function(samplers = NULL, filter = "sample",  plot_cred = TRUE,
+plot_relations <- function(emc = NULL, stage = "sample",  plot_cred = TRUE,
                            plot_means = TRUE, only_cred = FALSE, nice_names = NULL, ...){
 
   # for future factor model compatibility
@@ -244,10 +244,10 @@ plot_relations <- function(samplers = NULL, filter = "sample",  plot_cred = TRUE
   if(!is.null(loadings)) do_corr <- F
   addCoef.col <- "black"
   if(!plot_means) addCoef.col <- NULL
-  if(!is.null(samplers)) sampled <- merge_samples(samplers)
+  if(!is.null(emc)) sampled <- merge_chains(emc)
   if(do_corr || !is.null(corrs)){
     if(is.null(corrs)){
-      values <- sampled$samples$theta_var[,,sampled$samples$stage == filter, drop = F]
+      values <- sampled$samples$theta_var[,,sampled$samples$stage == stage, drop = F]
     } else{
       values <- corrs
     }
@@ -256,10 +256,10 @@ plot_relations <- function(samplers = NULL, filter = "sample",  plot_cred = TRUE
     # Now we assume loadings
     if(is.null(loadings)){
       if(standardize){
-        loadings <- standardize_loadings(samplers, filter = filter)
+        loadings <- standardize_loadings(emc, stage = stage)
       } else{
-        samples <- merge_samples(samplers)
-        loadings <- samples$samples$theta_lambda[,,samples$samples$stage == filter]
+        samples <- merge_chains(emc)
+        loadings <- samples$samples$theta_lambda[,,samples$samples$stage == stage]
       }
     }
     values <- loadings
@@ -344,9 +344,9 @@ plot_relations <- function(samplers = NULL, filter = "sample",  plot_cred = TRUE
 #'
 #' Makes a factor diagram plot. Heavily based on the fa.diagram function of the `psych` package.
 #'
-#' @param samplers A list of samplers
-#' @param filter Character. The stage from which to take the samples
-#' @param loadings An array of loadings. Can be alternatively supplied if samplers is not supplied
+#' @param emc An emc object
+#' @param stage Character. The stage from which to take the samples
+#' @param loadings An array of loadings. Can be alternatively supplied if emc is not supplied
 #' @param standardize Boolean. Whether to standardize the loadings
 #' @param simple Boolean. Whether the factor diagram should be simplified for visual clarity.
 #' @param only_cred Boolean. Whether to only plot the credible loadings
@@ -361,12 +361,12 @@ plot_relations <- function(samplers = NULL, filter = "sample",  plot_cred = TRUE
 #' @return NULL
 #' @examples \dontrun{
 #' # For a given set of hierarchical factor model samples we can make a factor diagram
-#' make_factor_diagram(samplers, only_cred = T)
+#' make_factor_diagram(emc, only_cred = T)
 #' # We can also specify nice names and adjust the loading positions
-#' make_factor_diagram(samplers, nice_names = paste0("V", 1:10), adj = 2)
+#' make_factor_diagram(emc, nice_names = paste0("V", 1:10), adj = 2)
 #' }
 #'
-make_factor_diagram <- function(samplers = NULL, filter = "sample",
+make_factor_diagram <- function(emc = NULL, stage = "sample",
                                 loadings = NULL, standardize = T,
                                 simple = F, only_cred = F,
                                 cut = 0, nice_names = NULL,
@@ -374,10 +374,10 @@ make_factor_diagram <- function(samplers = NULL, filter = "sample",
                                 adj = 1, main = NULL, cex = NULL){
   if(is.null(loadings)){
     if(standardize){
-      loadings <- standardize_loadings(samplers, filter = filter)
+      loadings <- standardize_loadings(emc, stage = stage)
     } else{
-      samples <- merge_samples(samplers)
-      loadings <- samples$samples$theta_lambda[,,samples$samples$stage == filter]
+      samples <- merge_chains(emc)
+      loadings <- samples$samples$theta_lambda[,,samples$samples$stage == stage]
     }
   }
   means <- apply(loadings, 1:2, mean)

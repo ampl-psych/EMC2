@@ -20,8 +20,8 @@ returns the Bayes Factor for two models
 \examples{
 \dontrun{
 # First get the marginal likelihood for two_models
-# Here the full model is a list of samplers with the hypothesized effect
-# The null model is a list of samplers without the hypothesized effect
+# Here the full model is an emc object with the hypothesized effect
+# The null model is an emc object without the hypothesized effect
 MLL_full <- run_bridge_sampling(full_model, cores_per_prop = 3)
 MLL_null <- run_bridge_sampling(null_model, cores_per_prop = 3)
 # Now we can calculate their Bayes factor

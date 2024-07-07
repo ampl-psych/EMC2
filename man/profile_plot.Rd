@@ -8,11 +8,12 @@ profile_plot(
   data,
   design,
   p_vector,
+  range = 0.5,
   layout = NA,
   p_min = NULL,
   p_max = NULL,
+  use_par = NULL,
   n_point = 100,
-  main = "",
   n_cores = 1,
   true_plot_args = list(),
   ...
@@ -21,21 +22,27 @@ profile_plot(
 \arguments{
 \item{data}{A dataframe. Experimental data used, needed for the design mapping}
 
-\item{design}{A design list. Created using \code{make_design}.}
+\item{design}{A design list. Created using \code{design}.}
 
 \item{p_vector}{Named vector of parameter values (typically created with \code{sampled_p_vector(design)})}
 
-\item{p_min}{Numeric. Minimum value of profile range}
+\item{range}{Numeric. The max and min will be p_vector + range/2 and p_vector - range/2, unless specified in p_min or p_max.}
 
-\item{p_max}{Numeric. Maximum of profile range}
+\item{layout}{A vector indicating which layout to use as in par(mfrow = layout). If NA, will automatically generate an appropriate layout.}
+
+\item{p_min}{Named vector. If specified will instead use these values for minimum range of the selected parameters.}
+
+\item{p_max}{Named vector. If specified will instead use these values for maximum range of the selected parameters.}
+
+\item{use_par}{Character vector. If specified will only plot the profiles for the specified parameters.}
 
 \item{n_point}{Integer. Number of evenly spaced points at which to calculate likelihood}
 
-\item{main}{Plot title}
+\item{n_cores}{Number of likelihood points evenly spaced between the minimum and maximum likelihood range.}
 
-\item{pname}{String. Name of parameter to profile}
+\item{true_plot_args}{A list. Optional additional arguments that can be passed to plot.default for the plotting of the true vertical line.}
 
-\item{cores}{Number of likelihood points to calculate in parallel}
+\item{...}{Optional additional arguments that can be passed to plot.default.}
 }
 \value{
 Vector with highest likelihood point, input and mismatch between true and highest point
@@ -46,14 +53,15 @@ varying one model parameter while holding all others constant.
 }
 \examples{
 # First create a design
-design_DDMaE <- make_design(data = forstmann,model=DDM,
+design_DDMaE <- design(data = forstmann,model=DDM,
                 formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
                 constants=c(s=log(1)))
 # Then create a p_vector:
 p_vector=c(v_Sleft=-2,v_Sright=2,a=log(1),a_Eneutral=log(1.5),a_Eaccuracy=log(2),
           t0=log(.2),Z=qnorm(.5),sv=log(.5),SZ=qnorm(.5))
-# Make a profile plot for the boundary separation parameter
-profile_plot(pname = "a", p_vector = p_vector, p_min = -1, p_max = 1,
+# Make a profile plot for some parameters. Specifying a custom range for t0.
+profile_plot(p_vector = p_vector, p_min = c(t0 = -1.55),
+            p_max = c(t0 = -1.65), use_par = c("a", "t0", "SZ"),
             data = forstmann, design = design_DDMaE, n_point = 10)
 
 }

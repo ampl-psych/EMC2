@@ -64,8 +64,8 @@ get_unq_names <- function(pars){
   return(pars)
 }
 
-plot_factors <- c("E")
-vary_factor <- c("lM")
+plot_factors <- c("lM")
+vary_factor <- c("E")
 cells <- get_cells(dadm, plot_factors)
 parcells <- get_cells(pars, plot_factors)
 ucells <- unique(cells)
@@ -129,21 +129,20 @@ make_lba_plot_helper <- function(data, pars, factors, main, fList = NULL){
     lines(denses[[i]], lwd = 3, col = adjustcolor(get_cols(cols, dens_free, i, names_dens[i])))
     polygon(denses[[i]], col = adjustcolor(get_cols(cols, dens_free, i, names_dens[i]), alpha.f = alpha))
   }
-  if(sum(free_v) != 1) legend("left", legend = names(vs[free_v]), lty = 1, lwd = 3, col = cols[names(vs[free_v])],
-         cex = 1, bty = "n")
+  if(sum(free_v) != 1){
+    legend(-.1, min(bs) - min(bs)/10, legend = names(vs[free_v]), title = "v", lty = 1, lwd = 3, col = cols[names(vs[free_v])],
+         cex = 1, bty = "n", inset = c(0, .05), title.cex = 1.25, title.adj = .2)
+  } else{
+    text(rt*.6 - min(bs)/50, (rt-t0)*.6*vs[1] + min(bs)/50, "v", cex = 1.5, srt = get_drift_angle(t0, rt, 0, min(bs) - .05))
+  }
+  text(t0/2, min(bs)/10, "t0", cex = 1.5)
   if(sum(free_b) != 1 & !identical(names(bs)[free_b], names(vs)[free_v])){
-    legend("bottomright", legend = names(bs[free_b]), lty = 1, lwd = 3, col = cols[names(bs[free_b])],
-                                               cex = 1, bty = "n", inset = c(.05, .05))
+    legend("bottomright", legend = names(bs[free_b]), title = "b", lty = 1, lwd = 3, col = cols[names(bs[free_b])],
+                                               cex = 1, bty = "n", inset = c(.05, .05), title.adj = .2, title.cex = 1.5)
   }
   title(xlab="RT", line=0, cex.lab = 1.5)
 }
-
-
-# debug(get_unq_names)
-
-# debug(make_lba_plot_helper)
-# par(mfrow = c(2,2))
-# make_lba_plot_helper(dadm, pars, c("lM", "lR"), main = "test")
+# undebug(make_lba_plot_helper)
 
 par(mfrow = c(1,2))
 for (i in sort(ucells)) {
@@ -151,8 +150,6 @@ for (i in sort(ucells)) {
   tmp_pars <- pars[parcells == i,]
   make_lba_plot_helper(tmp_data, tmp_pars, vary_factor, main = i)
 }
-
-# undebug(make_lba_plot_helper)
 
 
 #

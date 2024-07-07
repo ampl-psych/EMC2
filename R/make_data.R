@@ -64,7 +64,7 @@ make_missing <- function(data,LT=0,UT=Inf,LC=0,UC=Inf,
 #' Can also be a matrix with one row per subject (with corresponding row names)
 #' or an emc object with sampled parameters
 #' (in which case posterior medians of `alpha` are used to simulate data)
-#' @param design Design list created by ``make_design()``
+#' @param design Design list created by ``design()``
 #' @param n_trials Integer. If ``data`` is not supplied, number of trials to create per design cell
 #' @param data Data frame. If supplied, the factors are taken from the data. Determines the number of trials per level of the design factors and can thus allow for unbalanced designs
 #' @param expand Integer. Replicates the ``data`` (if supplied) expand times to increase number of trials per cell.
@@ -74,7 +74,7 @@ make_missing <- function(data,LT=0,UT=Inf,LC=0,UC=Inf,
 #' @return A data frame with simulated data
 #' @examples
 #' # First create a design
-#' design_DDMaE <- make_design(factors = list(S = c("left", "right"),
+#' design_DDMaE <- design(factors = list(S = c("left", "right"),
 #'                                            E = c("SPD", "ACC"),
 #'                                            subjects = 1:30),
 #'                             Rlevels = c("left", "right"), model = DDM,
@@ -88,7 +88,7 @@ make_missing <- function(data,LT=0,UT=Inf,LC=0,UC=Inf,
 #' data <- make_data(parameters, design_DDMaE, n_trials = 30)
 #'
 #' # We can also simulate data based on a specific dataset
-#' design_DDMaE <- make_design(data = forstmann,model=DDM,
+#' design_DDMaE <- design(data = forstmann,model=DDM,
 #'                             formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
 #'                             constants=c(s=log(1)))
 #' parameters <- c(v_Sleft=-2,v_Sright=2,a=log(1),a_Eneutral=log(1.5),a_Eaccuracy=log(2),
@@ -138,7 +138,7 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
   if(is(parameters, "emc")){
     if(is.null(design)) design <- attr(parameters, "design_list")[[1]]
     if(is.null(data)) data <- get_data(parameters)
-    parameters <- do.call(rbind, posterior_summary_new(parameters, probs = 0.5, selection = "alpha", by_subject = TRUE))
+    parameters <- do.call(rbind, posterior_summary(parameters, probs = 0.5, selection = "alpha", by_subject = TRUE))
   }
 
   sampled_p_names <- names(sampled_p_vector(design))
@@ -304,126 +304,11 @@ add_Ffunctions <- function(data,design)
     data <-  cbind.data.frame(data,Fdf[,ok,drop=FALSE])
 }
 
-#' Generate posterior predictives
-#'
-#' Simulate ``n_post`` data sets using the posterior parameter estimates
-#'
-#' @param samplers An EMC2 samplers object from which posterior predictives should
-#' be generated
-#' @param hyper Boolean. Defaults to `FALSE`. If `TRUE`, simulates from the group-level (`hyper`)
-#' parameters instead of the subject-level parameters.
-#' @param n_post Integer. Number of generated datasets
-#' @param filter Character. From which sampling stage should the samples be taken?
-#' Defaults to `sample`. Choice of the stages `preburn`, `burn`, `adapt`, `sample`
-#' @param subfilter Integer or numeric vector. If integer, will filter out the
-#' supplied number of samples, within `filter`. If a numeric vector is supplied,
-#' the supplied range is selected within `filter`
-#' @param thin Integer. By how much should the chains be thinned before simulating from them? Will keep 1/thin samples.
-#' @param n_cores Integer. Number of cores across which there should be parallellized
-#' @param stat Character. Can be `mean`, `median` or `random` (i.e., the default).
-#' Will take either random samples from the chain(s) or use the mean or median of the parameter estimates.
-#' @param ... Optional additional arguments
-#' @return A list of simulated data sets of length `n_post`
-#' @examples \dontrun{
-#' # based on a set of samplers ran by run_emc we can generate posterior predictives
-#' post_predict(samplers, n_cores = 8)
-#' }
-#' @export
-
-
-post_predict <- function(samplers,hyper=FALSE,n_post=100,
-                         filter="sample",subfilter=0,thin=1,n_cores=1,
-                         stat=c("random","mean","median")[1], ...)
-  # Post predictions for samples object, based on random samples or some
-  # central tendency statistic.
-  # n_post is number of parameter vectors used
-  # expand=1 gives exact data design, larger values replicate whole design
-  # filter/subfilter/thin as for as_mcmc.list
-  # hyper=FALSE draws from alphas (participant level)
-  # hyper=TRUE draws from hyper
-{
-  # #' @param force_direction Boolean, take censor direction from argument not samples (default FALSE)
-  # #' @param force_response Boolean, take censor response from argument not samples (default FALSE)
-  # #' @param LCresponse Boolean, default TRUE, if false set LC response to NA
-  # #' @param UCresponse Boolean, default TRUE, if false set UC response to NA
-  # #' @param LCdirection Boolean, default TRUE, set LC rt to 0, else to NA
-  # #' @param UCdirection Boolean, default TRUE, set LC rt to Inf, else to NA
-  # #' @param expand Integer. Default is 1, exact same design for each subject. Larger values will replicate designs, so more trials per subject.
-
-  LCresponse<-TRUE; UCresponse<-TRUE; LCdirection<-TRUE; UCdirection<-TRUE
-  force_direction <- FALSE; force_response <- FALSE;expand <- 1
-  optionals <- list(...)
-  for (name in names(optionals) ) {
-    assign(name, optionals[[name]])
-  }
-  data <- attr(samplers,"data_list")
-  design <- attr(samplers,"design_list")
-  model <- attr(samplers,"model_list")
-  if(length(data) > 1){
-    jointModel <- TRUE
-    all_samples <- samplers
-  } else{
-    jointModel <- FALSE
-  }
-  post_out <- vector("list", length = length(data))
-  for(j in 1:length(data)){
-    if(jointModel) samplers <- single_out_joint(all_samples, j)
-    subjects <- levels(data[[j]]$subjects)
-
-    if (hyper) {
-      pars <- vector(mode="list",length=n_post)
-      for (i in 1:n_post) {
-        pars[[i]] <- get_prior_samples(samplers,selection="alpha",
-                                       filter=filter,thin=thin,subfilter=subfilter,n_prior=length(subjects))
-        row.names(pars[[i]]) <- subjects
-      }
-    } else {
-      samps <- lapply(as_mcmc.list(samplers,selection="alpha",
-                                   filter=filter,subfilter=subfilter,thin=thin),function(x){do.call(rbind,x)})
-      if (stat != "random") {
-        p <- do.call(rbind,lapply(samps,function(x){apply(x,2,stat)}))
-        row.names(p) <- subjects
-      }
-      pars <- vector(mode="list",length=n_post)
-      for (i in 1:n_post) {
-        if (stat != "random") pars[[i]] <- p else {
-          pars[[i]] <- do.call(rbind,lapply(samps,function(x){x[sample(1:dim(x)[1],1),]}))
-          row.names(pars[[i]]) <- subjects
-        }
-      }
-    }
-    if (n_cores==1) {
-      simDat <- vector(mode="list",length=n_post)
-      for (i in 1:n_post) {
-        cat(".")
-        simDat[[i]] <- make_data(pars[[i]],design=design[[j]],data=data[[j]],expand=expand,
-          force_direction = force_direction,force_response=force_response,
-          LCresponse=LCresponse,UCresponse=UCresponse,LCdirection=LCdirection,UCdirection=UCdirection)
-      }
-      cat("\n")
-    } else {
-      simDat <- mclapply(1:n_post,function(i){
-        make_data(pars[[i]],design=design[[j]],data=data[[j]],expand=expand,
-          force_direction = force_direction,force_response=force_response,
-          LCresponse=LCresponse,UCresponse=UCresponse,LCdirection=LCdirection,UCdirection=UCdirection)
-      },mc.cores=n_cores)
-    }
-    if (!is.null(attr(simDat[[1]],"adapt"))) adapt <- attr(simDat[[1]],"adapt")
-    out <- cbind(postn=rep(1:n_post,times=unlist(lapply(simDat,function(x)dim(x)[1]))),do.call(rbind,simDat))
-    if (!is.null(attr(simDat[[1]],"adapt"))) attr(out,"adapt") <- adapt
-    if (n_post==1) pars <- pars[[1]]
-    attr(out,"pars") <- pars
-    post_out[[j]] <- out
-  }
-  if(!jointModel) post_out <- post_out[[1]]
-  return(post_out)
-}
-
 #' Make random effects
 #'
 #' Simulates subject-level parameters in the format required by ``make_data()``.
 #'
-#' @param design A design list. The design as specified by `make_design()`
+#' @param design A design list. The design as specified by `design()`
 #' @param group_means A numeric vector. The group level means for each parameter, in the same order as `sampled_p_vector(design)`
 #' @param n_subj An integer. The number of subjects to generate parameters for.
 #' @param variance_proportion A double. Optional. If ``covariances`` are not specified, the variances will be created by multiplying the means by this number. The covariances will be 0.
@@ -432,7 +317,7 @@ post_predict <- function(samplers,hyper=FALSE,n_post=100,
 #' @return A matrix of subject-level parameters.
 #' @examples
 #' # First create a design
-#' design_DDMaE <- make_design(data = forstmann,model=DDM,
+#' design_DDMaE <- design(data = forstmann,model=DDM,
 #'                             formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
 #'                             constants=c(s=log(1)))
 #' # Then create a group-level means vector:

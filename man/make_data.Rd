@@ -20,7 +20,7 @@ Can also be a matrix with one row per subject (with corresponding row names)
 or an emc object with sampled parameters
 (in which case posterior medians of \code{alpha} are used to simulate data)}
 
-\item{design}{Design list created by \code{make_design()}}
+\item{design}{Design list created by \code{design()}}
 
 \item{n_trials}{Integer. If \code{data} is not supplied, number of trials to create per design cell}
 
@@ -51,7 +51,7 @@ To create data for multiple subjects see \code{?make_random_effects()}.
 }
 \examples{
 # First create a design
-design_DDMaE <- make_design(factors = list(S = c("left", "right"),
+design_DDMaE <- design(factors = list(S = c("left", "right"),
                                            E = c("SPD", "ACC"),
                                            subjects = 1:30),
                             Rlevels = c("left", "right"), model = DDM,
@@ -65,7 +65,7 @@ parameters <- c(v_Sleft=-2,v_Sright=2,a=log(1),a_EACC=log(2), t0=log(.2),
 data <- make_data(parameters, design_DDMaE, n_trials = 30)
 
 # We can also simulate data based on a specific dataset
-design_DDMaE <- make_design(data = forstmann,model=DDM,
+design_DDMaE <- design(data = forstmann,model=DDM,
                             formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
                             constants=c(s=log(1)))
 parameters <- c(v_Sleft=-2,v_Sright=2,a=log(1),a_Eneutral=log(1.5),a_Eaccuracy=log(2),

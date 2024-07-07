@@ -13,11 +13,11 @@ contr.anova(n)
 A contrast matrix.
 }
 \description{
-Similar to \code{contr.helmert}, but then scaled to estimate differences between conditions. Use in \code{make_design()}.
+Similar to \code{contr.helmert}, but then scaled to estimate differences between conditions. Use in \code{design()}.
 }
 \examples{
 {
-design_DDMaE <- make_design(data = forstmann,model=DDM, contrasts = list(E = contr.anova),
+design_DDMaE <- design(data = forstmann,model=DDM, contrasts = list(E = contr.anova),
 formula =list(v~S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
 constants=c(s=log(1)))
 }

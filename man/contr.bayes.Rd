@@ -18,7 +18,7 @@ This contrast can be used to ensure that each level has equal marginal priors (R
 }
 \examples{
 {
-design_DDMaE <- make_design(data = forstmann,model=DDM, contrasts = list(E = contr.bayes),
+design_DDMaE <- design(data = forstmann,model=DDM, contrasts = list(E = contr.bayes),
 formula =list(v~S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
 constants=c(s=log(1)))
 }

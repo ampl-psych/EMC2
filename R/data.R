@@ -25,7 +25,7 @@
 #' @source \url{https://www.pnas.org/content/105/45/17538}
 "forstmann"
 
-#' A samplers object of an LNR model of the Forstmann dataset using the first three subjects
+#' An emc object of an LNR model of the Forstmann dataset using the first three subjects
 #'
 #' An emc object with a limited number of samples and subjects of the Forstmann dataset.
 #' The object is a nested list of lenght three, each list containing the MCMC samples
@@ -58,7 +58,7 @@
 #'   an array of size (n_subjects x n_samples)}
 #' }
 #'
-#' @format An emc object. An emc opbject is a list with a
+#' @format An emc object. An emc object is a list with a
 #' specific structure and elements, as outlined below.
 #' \describe{
 #'   \item{data}{A list of dataframes, one for each subject included}
@@ -76,7 +76,7 @@
 #'     the Samples Element section for more detail}
 #'   \item{grouped}{Which parameters are grouped across subjects, in this case none}
 #'   \item{sampler_nuis}{A sampler list for nuisance parameters (in this case there are none),
-#'   similarly structured to the overall samplers list of one of the MCMC chains.}
+#'   similarly structured to the overall samples list of one of the MCMC chains.}
 #' }
 #' @source \url{https://www.pnas.org/content/105/45/17538}
-"samplers_LNR"
+"samples_LNR"

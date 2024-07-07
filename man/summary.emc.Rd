@@ -2,7 +2,7 @@
 % Please edit documentation in R/s3_funcs.R
 \name{summary.emc}
 \alias{summary.emc}
-\title{Summary statistics for EMC2 samplers objects}
+\title{Summary statistics for emc objects}
 \usage{
 \method{summary}{emc}(
   object,
@@ -22,7 +22,7 @@ Defaults to \code{mu}, \code{sigma2}, and \code{alpha}. See below for more infor
 
 \item{digits}{An integer specifying rounding of output.}
 
-\item{...}{Optional arguments that can be passed to \code{as_mcmc_new}}
+\item{...}{Optional arguments that can be passed to \code{get_pars}}
 }
 \value{
 A list of summary output.
