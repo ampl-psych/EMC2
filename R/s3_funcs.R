@@ -715,13 +715,13 @@ hypothesis <- function(emc, ...){
 #' @export
 credible.emc <- function(emc,x_name=NULL,x_fun=NULL,x_fun_name="fun", selection = "mu",
                    y=NULL,y_name=NULL,y_fun=NULL,y_fun_name="fun",
-                   mapped=FALSE,
                    x_subject=NULL,y_subject=NULL,
                    mu=0,alternative = c("less", "greater")[1],
                    probs = c(0.025,.5,.975),digits=2,p_digits=3,print_table=TRUE,
                    ...)
 
 {
+  x <- emc
   dots <- list(...)
   get_effect <- function(x,p_name=NULL,fun=NULL)
   {
@@ -729,10 +729,6 @@ credible.emc <- function(emc,x_name=NULL,x_fun=NULL,x_fun_name="fun", selection 
     if (!is.null(fun)) return(apply(x,1,fun))
     x[,p_name]
   }
-
-
-  if (mapped & !(selection %in% c("mu","alpha")))
-    stop("Can only analyze mapped mu or alpha parameters")
   if (is.null(x_name) & is.null(x_fun))
     stop("x_name or x_fun must be supplied")
   if (is.null(y_fun) && is.null(y_name)) y_name <- x_name
@@ -741,8 +737,8 @@ credible.emc <- function(emc,x_name=NULL,x_fun=NULL,x_fun_name="fun", selection 
   # Process x
   if (!is(x[[1]], "pmwgs")) stop("x must be a list of pmwgs objects")
   if (length(x[[1]]$data)==1) selection <- "alpha"
-  dots$merge_chains <- TRUE
-  x <- do.call(get_pars, c(list(x,selection=selection),
+
+  x <- do.call(get_pars, c(list(x,selection=selection, merge_chains = TRUE, by_subject = TRUE),
                               fix_dots(add_defaults(dots, subject = x_subject), get_pars)))[[1]]
   # Individual subject analysis
   if (selection != "alpha") x_subject <- NULL else
@@ -773,7 +769,7 @@ credible.emc <- function(emc,x_name=NULL,x_fun=NULL,x_fun_name="fun", selection 
     dimnames(tab)[[2]] <- c(x_name,"mu")
   } else {
     if (!is(y[[1]], "pmwgs")) stop("y must be a list of pmwgs objects")
-    y <- do.call(get_pars, c(list(y,selection=selection),
+    y <- do.call(get_pars, c(list(y,selection=selection, merge_chains = TRUE, by_subject = TRUE),
                                 fix_dots(add_defaults(dots, subject = y_subject), get_pars)))[[1]]
     # Individual subject analysis
     if (selection != "alpha") y_subject <- NULL else
@@ -831,7 +827,6 @@ credible.emc <- function(emc,x_name=NULL,x_fun=NULL,x_fun_name="fun", selection 
 #' @param y_name A character string. Name of the parameter to be tested for `y`
 #' @param y_fun Function applied to the MCMC chains to create
 #' variable to be tested.
-#' @param mapped Boolean. Should the samples be mapped back to the design before doing the test?
 #' @param x_subject Integer or name selecting a subject
 #' @param y_subject Integer or name selecting a subject
 #' @param mu Numeric. `NULL` value for single sample test if `y` is not supplied (default 0)
