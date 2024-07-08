@@ -66,7 +66,7 @@ plot_defective_density <- function(data,subject=NULL,factors=NULL,
   R <- levels(dat$R)
   if(any(is.na(layout))){
     par(mfrow = coda_setmfrow(Nchains = 1, Nparms = length(unique(cells)),
-                                 nplots = 1))
+                              nplots = 1))
   } else{par(mfrow=layout)}
   for (i in sort(unique(cells))) {
     pR <- table(alldat$R[cellsall==i])/dim(alldat[cellsall==i,])[1]
@@ -168,6 +168,7 @@ plot_roc <- function(data,signalFactor="S",zROC=FALSE,qfun=NULL,main="",lim=NULL
 #' @param factors Character vector of factors in data to display separately. If
 #' `NULL` (i.e., the default), use names of all columns in data except `trials`,`R`, and `rt`.
 #' Omitted factors are aggregated over. If `NA`, treats entire data set as a single cell.
+#' If `stat` is used, the default is changed to `NA`.
 #' @param functions A named list of functions that create new factors which can then be
 #' used by the `factors` and `stat` arguments.
 #' @param stat A function that takes a the data and returns a single value.
@@ -198,6 +199,7 @@ plot_fit_choice <- function(data,pp,subject=NULL,factors=NULL,functions=NULL,
                             layout=NULL,mfcol=TRUE,
                             signalFactor="S",zROC=FALSE,qfun=qnorm,lim=NULL,rocfit_cex=.5)
 {
+  if (!is.null(stat) & is.null(factors)) factors <- NA
   if (!is.null(subject)) {
     snams <- levels(data$subjects)
     if (is.numeric(subject)) subject <- snams[subject]
@@ -345,6 +347,7 @@ plot_fit_choice <- function(data,pp,subject=NULL,factors=NULL,functions=NULL,
 #' @param factors Character vector of factors in data to display separately. If
 #' NULL (default) use names of all columns in data except "trials","R", and "rt".
 #' Omitted factors are aggregated over. If NA treats entire data set as a single cell.
+#' Must be NA or NULL when using stat argument.
 #' @param functions A named list of functions that create new factors which can then be
 #' used by the factors and stat arguments.
 #' @param stat A function that takes the data/the posterior predictives and returns a single value.
@@ -392,6 +395,7 @@ plot_fit <- function(data,pp,subject=NULL,factors=NULL,functions=NULL,
                      q_points=c(.1,.3,.5,.7,.9),
                      qp_cex=1,pqp_cex=.5,lpos="topleft", main = "")
 {
+  if (!is.null(stat) & is.null(factors)) factors <- NA
   if (!is.null(subject)) {
     snams <- levels(data$subjects)
     if (is.numeric(subject)) subject <- snams[subject]
@@ -682,7 +686,7 @@ profile_plot <- function(data, design, p_vector, range = .5, layout = NA,
   if(is.null(use_par)) use_par <- names(p_vector)
   if(any(is.na(layout))){
     par(mfrow = coda_setmfrow(Nchains = 1, Nparms = length(use_par),
-                                 nplots = 1))
+                              nplots = 1))
   } else{par(mfrow=layout)}
   if(is.null(dots$dadm)) dadm <- design_model(data, design, verbose = FALSE)
   out <- data.frame(true = rep(NA, length(use_par)), max = rep(NA, length(use_par)), miss = rep(NA, length(use_par)))
@@ -732,7 +736,7 @@ plot_chains <- function(emc, selection = "mu", layout=NA, plot_acf=FALSE, ...)
   for(i in 1:length(MCMC_samples)){
     if(any(is.na(layout))){
       par(mfrow = coda_setmfrow(Nchains = length(MCMC_samples[[1]]), Nparms = max(ncol(MCMC_samples[[1]][[1]]), length(MCMC_samples)),
-                                   nplots = 1))
+                                nplots = 1))
     } else{par(mfrow=layout)}
     if (plot_acf){
       for(k in 1:length(MCMC_samples[[i]])){
@@ -787,8 +791,8 @@ plot_chains <- function(emc, selection = "mu", layout=NA, plot_acf=FALSE, ...)
 #' true_emc <- samples_LNR # This would normally be the data-generating samples
 #' plot_pars(samples_LNR, true_pars = true_emc, true_plot_args = list(col = 'blue'), adjust = 2)
 plot_pars <- function(emc,layout=NA, selection="mu", show_chains = FALSE, plot_prior = TRUE, N = 1e4,
-                          use_prior_lim = !all_subjects, lpos = "topright", true_pars = NULL, all_subjects = FALSE,
-                          prior_plot_args = list(), true_plot_args = list(), ...)
+                      use_prior_lim = !all_subjects, lpos = "topright", true_pars = NULL, all_subjects = FALSE,
+                      prior_plot_args = list(), true_plot_args = list(), ...)
 {
   dots <- list(...)
   type <- attr(emc[[1]], "variant_funs")$type
@@ -809,7 +813,7 @@ plot_pars <- function(emc,layout=NA, selection="mu", show_chains = FALSE, plot_p
                              type = type, sample_prior = T,
                              selection = selection, N = N)
     pMCMC_samples <- do.call(get_pars, c(list(psamples, selection = selection, type = type),
-                                           fix_dots(dots, get_pars, exclude = c("thin", "filter", "chain", "subject"))))
+                                         fix_dots(dots, get_pars, exclude = c("thin", "filter", "chain", "subject"))))
     if(length(pMCMC_samples) != length(MCMC_samples)) pMCMC_samples <- rep(pMCMC_samples, length(MCMC_samples))
   }
 
@@ -818,7 +822,7 @@ plot_pars <- function(emc,layout=NA, selection="mu", show_chains = FALSE, plot_p
     if(!is(true_pars, "emc")){
       if(selection == "sigma2" & !is.matrix(true_pars)) true_pars <- diag(true_pars)
       true_pars <- do.call(get_pars, c(list(emc, selection = selection, type = type, true_pars = true_pars),
-                                          fix_dots(dots, get_pars, exclude = c("thin", "filter", "chain"))))
+                                       fix_dots(dots, get_pars, exclude = c("thin", "filter", "chain"))))
     } else{
       true_MCMC_samples <- do.call(get_pars, c(list(true_pars, selection = selection), fix_dots(dots, get_pars)))
       true_pars <- NULL
@@ -972,4 +976,3 @@ coda_setmfrow <- function (Nchains = 1, Nparms = 1, nplots = 1, sepplot = FALSE)
   }
   return(mfrow)
 }
-
