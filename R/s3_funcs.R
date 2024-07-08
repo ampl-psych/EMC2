@@ -713,7 +713,7 @@ hypothesis <- function(emc, ...){
 
 #' @rdname credible
 #' @export
-credible.emc <- function(emc,x_name=NULL,x_fun=NULL,x_fun_name="fun", selection = "mu",
+credible.emc <- function(x,x_name=NULL,x_fun=NULL,x_fun_name="fun", selection = "mu",
                    y=NULL,y_name=NULL,y_fun=NULL,y_fun_name="fun",
                    x_subject=NULL,y_subject=NULL,
                    mu=0,alternative = c("less", "greater")[1],
@@ -721,8 +721,8 @@ credible.emc <- function(emc,x_name=NULL,x_fun=NULL,x_fun_name="fun", selection 
                    ...)
 
 {
-  x <- emc
-  dots <- list(...)
+
+  dots <- add_defaults(list(...), flatten = TRUE)
   get_effect <- function(x,p_name=NULL,fun=NULL)
   {
     x <- do.call(rbind,x)
@@ -737,18 +737,12 @@ credible.emc <- function(emc,x_name=NULL,x_fun=NULL,x_fun_name="fun", selection 
   # Process x
   if (!is(x[[1]], "pmwgs")) stop("x must be a list of pmwgs objects")
   if (length(x[[1]]$data)==1) selection <- "alpha"
-
+  if(is.numeric(x_subject)) x_subject <- names(x[[1]]$data)[x_subject]
   x <- do.call(get_pars, c(list(x,selection=selection, merge_chains = TRUE, by_subject = TRUE),
                               fix_dots(add_defaults(dots, subject = x_subject), get_pars)))[[1]]
+
+
   # Individual subject analysis
-  if (selection != "alpha") x_subject <- NULL else
-    if (is.null(x_subject)) x_subject <- names(x)[1] else
-      if (is.numeric(x_subject)) x_subject <- names(x)[x_subject]
-  if (!is.null(x_subject)) {
-    if (!(x_subject %in% names(x))) stop("Subject x_subject not in x")
-    message("Testing x subject ",x_subject)
-    x <- x[[x_subject]]
-  }
   # Check test is valid
   if (is.null(x_fun) && !all(x_name %in% dimnames(x[[1]])[[2]]) )
     stop("x_name not present in samples")
@@ -768,18 +762,11 @@ credible.emc <- function(emc,x_name=NULL,x_fun=NULL,x_fun_name="fun", selection 
     attr(tab,alternative) <- p
     dimnames(tab)[[2]] <- c(x_name,"mu")
   } else {
+    if(is.numeric(y_subject)) y_subject <- names(y[[1]]$data)[y_subject]
+
     if (!is(y[[1]], "pmwgs")) stop("y must be a list of pmwgs objects")
     y <- do.call(get_pars, c(list(y,selection=selection, merge_chains = TRUE, by_subject = TRUE),
                                 fix_dots(add_defaults(dots, subject = y_subject), get_pars)))[[1]]
-    # Individual subject analysis
-    if (selection != "alpha") y_subject <- NULL else
-      if (is.null(y_subject)) y_subject <- names(y)[1] else
-        if (is.numeric(y_subject)) y_subject <- names(y)[y_subject]
-    if (!is.null(y_subject)) {
-      if (!(y_subject %in% names(y))) stop("Subject y_subject not in y")
-      message("Testing y subject ",y_subject)
-      y <- y[[y_subject]]
-    }
     if (is.null(y_fun) && !all(y_name %in% dimnames(y[[1]])[[2]]) )
       stop("y_name not present in samples")
     if (length(y_name)>2)
@@ -796,10 +783,13 @@ credible.emc <- function(emc,x_name=NULL,x_fun=NULL,x_fun_name="fun", selection 
     tab <- cbind(quantile(x,probs),quantile(y,probs),quantile(d,probs))
     attr(tab,alternative) <- p
     if (is.null(y_name)) y_name <- y_fun_name
-    if (x_name==y_name)
-      dimnames(tab)[[2]] <- c(paste(x_name,c(x_subject,y_subject),sep="_"),
-                              paste(x_subject,y_subject,sep="-")) else
-                                dimnames(tab)[[2]] <- c(x_name,y_name,paste(x_name,y_name,sep="-"))
+    if (x_name==y_name){
+      colnames(tab) <- c(paste(x_name,c(x_subject,y_subject),sep="_"),
+                              paste(x_subject,y_subject,sep="-"))
+    } else{
+      colnames(tab) <- c(x_name,y_name,paste(x_name,y_name,sep="-"))
+    }
+
   }
   if (print_table) {
     ptab <- tab
@@ -819,7 +809,7 @@ credible.emc <- function(emc,x_name=NULL,x_fun=NULL,x_fun_name="fun", selection 
 #' Note that for comparisons within one model, we recommend using `hypothesis()` if the priors
 #' were well chosen.
 #'
-#' @param emc An emc object
+#' @param x An emc object
 #' @param x_name A character string. Name of the parameter to be tested for `x`
 #' @param x_fun Function applied to the MCMC chains to create
 #' variable to be tested.
@@ -850,7 +840,7 @@ credible.emc <- function(emc,x_name=NULL,x_fun=NULL,x_fun_name="fun", selection 
 #' }
 #' @return Invisible results table with no rounding.
 #' @export
-credible <- function(emc, ...){
+credible <- function(x, ...){
   UseMethod("credible")
 }
 

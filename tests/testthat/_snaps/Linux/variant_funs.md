@@ -118,6 +118,6 @@
     Output
                MD wMD  DIC wDIC BPIC wBPIC EffectiveN meanD Dmean minD
       single -312   0  -62    0   97     0        159  -220  -379 -379
-      diag   -477   1 -353    1 -234     1        119  -472  -575 -592
-      factor  365   0 -110    0  117     0        227  -337  -564 -564
+      diag   -477   1 -353    1 -234     1        119  -472  -568 -592
+      factor  365   0 -112    0  114     0        225  -337  -551 -563
 

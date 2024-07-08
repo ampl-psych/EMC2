@@ -319,7 +319,7 @@ check_gd <- function(emc, stage, max_gd, mean_gd, omit_mpsrf, trys, verbose,
   #   n_blocks <- max(n_blocks_old, n_blocks)
   # }
   if(stage == "sample" & !ok_gd & "alpha" %in% selection) {
-    gds <- get_gds(samplers_short,omit_mpsrf,selection = "alpha", stage)
+    gds <- get_gds(emc,omit_mpsrf,selection = "alpha", stage)
     if(!is.null(mean_gd)){
       gds_bad <- (rowMeans(gds) > mean_gd)
     } else{

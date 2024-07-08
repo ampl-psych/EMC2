@@ -6,7 +6,7 @@
 \title{Posterior credible interval tests}
 \usage{
 \method{credible}{emc}(
-  emc,
+  x,
   x_name = NULL,
   x_fun = NULL,
   x_fun_name = "fun",
@@ -26,10 +26,10 @@
   ...
 )
 
-credible(emc, ...)
+credible(x, ...)
 }
 \arguments{
-\item{emc}{An emc object}
+\item{x}{An emc object}
 
 \item{x_name}{A character string. Name of the parameter to be tested for \code{x}}
 
