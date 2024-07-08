@@ -10,6 +10,7 @@
   stage = NULL,
   iter = 1000,
   stop_criteria = NULL,
+  report_time = TRUE,
   p_accept = 0.8,
   step_size = 100,
   verbose = TRUE,

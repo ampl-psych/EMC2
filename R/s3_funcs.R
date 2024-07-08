@@ -324,11 +324,14 @@ parameters <- function(emc, ...){
 #' @rdname fit
 #' @export
 
-fit.emc <- function(emc, stage = NULL, iter = 1000, stop_criteria = NULL,
+fit.emc <- function(emc, stage = NULL, iter = 1000, stop_criteria = NULL,report_time=TRUE,
                     p_accept = .8, step_size = 100, verbose = TRUE, verboseProgress = FALSE, fileName = NULL,
                     particles = NULL, particle_factor=50, cores_per_chain = 1,
                     cores_for_chains = length(emc), max_tries = 20, n_blocks = 1,
                     ...){
+
+  if (report_time) start_time <- Sys.time()
+
   if(!is.null(stop_criteria) & length(stop_criteria) == 1){
     stop_criteria[["sample"]] <- stop_criteria
   }
@@ -391,6 +394,7 @@ fit.emc <- function(emc, stage = NULL, iter = 1000, stop_criteria = NULL,
                               particles = particles, particle_factor = particle_factor,
                               cores_per_chain = cores_per_chain, max_tries = max_tries, n_blocks = n_blocks)
   }
+  if (report_time) print(Sys.time()-start_time)
   return(emc)
 }
 

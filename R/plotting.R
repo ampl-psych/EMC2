@@ -168,7 +168,6 @@ plot_roc <- function(data,signalFactor="S",zROC=FALSE,qfun=NULL,main="",lim=NULL
 #' @param factors Character vector of factors in data to display separately. If
 #' `NULL` (i.e., the default), use names of all columns in data except `trials`,`R`, and `rt`.
 #' Omitted factors are aggregated over. If `NA`, treats entire data set as a single cell.
-#' If `stat` is used, the default is changed to `NA`.
 #' @param functions A named list of functions that create new factors which can then be
 #' used by the `factors` and `stat` arguments.
 #' @param stat A function that takes a the data and returns a single value.
@@ -199,7 +198,6 @@ plot_fit_choice <- function(data,pp,subject=NULL,factors=NULL,functions=NULL,
                             layout=NULL,mfcol=TRUE,
                             signalFactor="S",zROC=FALSE,qfun=qnorm,lim=NULL,rocfit_cex=.5)
 {
-  if (!is.null(stat) & is.null(factors)) factors <- NA
   if (!is.null(subject)) {
     snams <- levels(data$subjects)
     if (is.numeric(subject)) subject <- snams[subject]
@@ -347,7 +345,6 @@ plot_fit_choice <- function(data,pp,subject=NULL,factors=NULL,functions=NULL,
 #' @param factors Character vector of factors in data to display separately. If
 #' NULL (default) use names of all columns in data except "trials","R", and "rt".
 #' Omitted factors are aggregated over. If NA treats entire data set as a single cell.
-#' Must be NA or NULL when using stat argument.
 #' @param functions A named list of functions that create new factors which can then be
 #' used by the factors and stat arguments.
 #' @param stat A function that takes the data/the posterior predictives and returns a single value.
@@ -395,7 +392,6 @@ plot_fit <- function(data,pp,subject=NULL,factors=NULL,functions=NULL,
                      q_points=c(.1,.3,.5,.7,.9),
                      qp_cex=1,pqp_cex=.5,lpos="topleft", main = "")
 {
-  if (!is.null(stat) & is.null(factors)) factors <- NA
   if (!is.null(subject)) {
     snams <- levels(data$subjects)
     if (is.numeric(subject)) subject <- snams[subject]
