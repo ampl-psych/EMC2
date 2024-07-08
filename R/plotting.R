@@ -651,6 +651,7 @@ pairs_posterior <- function(emc, selection="alpha", scale_subjects=TRUE,
 #' @param n_point Integer. Number of evenly spaced points at which to calculate likelihood
 #' @param n_cores Number of likelihood points evenly spaced between the minimum and maximum likelihood range.
 #' @param true_plot_args A list. Optional additional arguments that can be passed to plot.default for the plotting of the true vertical line.
+#' @param round. Integer. To how many digits will the output be rounded.
 #' @param ... Optional additional arguments that can be passed to plot.default.
 #' @return Vector with highest likelihood point, input and mismatch between true and highest point
 #' @examples
@@ -670,7 +671,7 @@ pairs_posterior <- function(emc, selection="alpha", scale_subjects=TRUE,
 
 profile_plot <- function(data, design, p_vector, range = .5, layout = NA,
                          p_min = NULL,p_max = NULL, use_par = NULL,
-                         n_point=100,n_cores=1,
+                         n_point=100,n_cores=1, round = 3,
                          true_plot_args = list(),
                          ...)
 
@@ -695,11 +696,18 @@ profile_plot <- function(data, design, p_vector, range = .5, layout = NA,
     cur_name <- names(p_vector)[p]
     if(cur_name %in% use_par){
       cur_par <- p_vector[p]
-      if(!is.na(p_min[cur_name]) & !is.na(p_max[cur_name])){
-        pmin_cur <- p_min[cur_name]
-        pmax_cur <- p_max[cur_name]
+      if(!is.null(p_min)){
+        if(!is.na(p_min[cur_name])){
+          pmin_cur <- p_min[cur_name]
+        }
       } else{
         pmin_cur <- cur_par - range/2
+      }
+      if(!is.null(p_max)){
+        if(!is.na(p_max[cur_name])){
+          pmax_cur <- p_max[cur_name]
+        }
+      } else{
         pmax_cur <- cur_par + range/2
       }
       x <- seq(pmin_cur,pmax_cur,length.out=n_point)
@@ -711,7 +719,7 @@ profile_plot <- function(data, design, p_vector, range = .5, layout = NA,
       out[cur_name,] <- c(p_vector[cur_name], x[which.max(ll)], p_vector[cur_name] - x[which.max(ll)])
     }
   }
-  return(out)
+  return(round(out, 3))
 }
 
 #' Plot MCMC chains
@@ -730,6 +738,7 @@ profile_plot <- function(data, design, p_vector, range = .5, layout = NA,
 plot_chains <- function(emc, selection = "mu", layout=NA, plot_acf=FALSE, ...)
 {
   dots <- list(...)
+  if(length(dots$subject) == 1 || emc[[1]]$n_subjects == 1) dots$by_subject <- TRUE
   if(plot_acf) dots <- add_defaults(dots, chain = 1)
   MCMC_samples <- do.call(get_pars, c(list(emc, selection = selection), fix_dots(dots, get_pars)))
 
@@ -796,7 +805,8 @@ plot_pars <- function(emc,layout=NA, selection="mu", show_chains = FALSE, plot_p
 {
   dots <- list(...)
   type <- attr(emc[[1]], "variant_funs")$type
-  if(length(dots$subject) == 1) dots$by_subject <- TRUE
+  if(length(dots$subject) == 1 || emc[[1]]$n_subjects == 1) dots$by_subject <- TRUE
+  if(type == "single" & !(selection %in% c("LL", "alpha"))) selection <- "alpha"
   if(all_subjects){
     dots$by_subject <- TRUE; show_chains <- TRUE; selection <- "alpha"
     true_pars <- NULL
@@ -806,7 +816,7 @@ plot_pars <- function(emc,layout=NA, selection="mu", show_chains = FALSE, plot_p
   MCMC_samples <- do.call(get_pars, c(list(emc, selection = selection), fix_dots(dots, get_pars)))
   if(all_subjects) {
     MCMC_samples <- list(lapply(MCMC_samples, function(x) do.call(rbind, x)))
-    names(MCMC_samples) <- "test"
+    names(MCMC_samples) <- "subjects"
   }
   if(plot_prior){
     psamples <-  get_objects(sampler = emc, design = attr(emc,"design_list")[[1]],

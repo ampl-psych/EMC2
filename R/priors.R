@@ -55,6 +55,15 @@ prior <- function(design, type = "standard", update = NULL,
     args$theta_mu_var <- args$mu_sd^2
     if(is.null(names(args$theta_mu_var))) names(args$theta_mu_var) <- names(prior$prior$theta_mu_mean)
   }
+  if(!is.null(args$pmean)){
+    args$theta_mu_mean <- args$pmean
+    if(is.null(names(args$theta_mu_mean))) names(args$theta_mu_mean) <- names(prior$prior$theta_mu_mean)
+  }
+  if(!is.null(args$psd)){
+    args$theta_mu_var <- args$psd^2
+    if(is.null(names(args$theta_mu_var))) names(args$theta_mu_var) <- names(prior$prior$theta_mu_mean)
+  }
+
   if(!is.null(update)){
     for(name in names(update)){
       if(is.null(args[[name]])){
@@ -239,13 +248,14 @@ ask_user_prior <- function(prior, cur_idx, to_do, fill_default, group_to_do){
 #' plot_prior(prior_DDMaE, design_DDMaE, selection = "alpha", col = "green", N = 1e4)
 plot_prior <- function(prior, design, selection = "mu",
                            layout = NA, N = 5e4, ...){
-  dots <- add_defaults(list(...), breaks = 30, cut_off = 0.0015, prob = TRUE, by_subject = TRUE)
+  dots <- add_defaults(list(...), breaks = 30, cut_off = 0.0015, prob = TRUE, by_subject = TRUE, map = TRUE)
   type <- attr(prior, "type")
   if(type == "single") selection <- "alpha"
   samples <-  get_objects(design = design, prior = prior, type = type, sample_prior = T,
                           selection = selection, N = N, ...)
   MCMC_samples <- do.call(get_pars, c(list(samples, selection = selection, type = type), fix_dots(dots, get_pars)))
   for(i in 1:length(MCMC_samples)){
+    xlab <- ifelse(is.null(names(MCMC_samples)[i]), selection, names(MCMC_samples)[i])
     if(any(is.na(layout))){
       par(mfrow = coda_setmfrow(Nchains = length(MCMC_samples[[1]]),
                                    Nparms = ncol(MCMC_samples[[1]][[1]]), nplots = 1))
@@ -254,7 +264,7 @@ plot_prior <- function(prior, design, selection = "mu",
     }
     for(j in 1:ncol(MCMC_samples[[i]][[1]])){
       do.call(robust_hist, c(list(MCMC_samples[[i]][[1]][,j], dots$breaks, dots$cut_off, dots$prob),
-                             fix_dots_plot(add_defaults(dots, ylab = "Density", xlab = names(MCMC_samples)[[i]],
+                             fix_dots_plot(add_defaults(dots, ylab = "Density", xlab = xlab,
                                            main = colnames(MCMC_samples[[i]][[1]])[j],
                                            cex.lab = 1.25, cex.main = 1.5))))
     }

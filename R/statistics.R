@@ -427,6 +427,7 @@ make_nice_summary <- function(object, stat = "max", stat_only = FALSE, stat_name
 get_summary_stat <- function(emc, selection = "mu", fun, stat = NULL,
                              stat_only = FALSE, stat_name = NULL, digits = 3, ...){
   dots <- list(...)
+  if(length(dots$subject) == 1 || emc[[1]]$n_subjects == 1) dots$by_subject <- TRUE
   MCMC_samples <- do.call(get_pars, c(list(emc = emc, selection = selection), fix_dots(dots, get_pars)))
   out <- vector("list", length = length(MCMC_samples))
   for(i in 1:length(MCMC_samples)){

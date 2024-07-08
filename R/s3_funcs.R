@@ -516,7 +516,7 @@ recovery.emc <- function(emc, true_pars,
 {
   dots <- list(...)
   type <- attr(emc[[1]], "variant_funs")$type
-  if(length(dots$subject) == 1) dots$by_subject <- TRUE
+  if(length(dots$subject) == 1 || emc[[1]]$n_subjects == 1) dots$by_subject <- TRUE
   dots$merge_chains <- TRUE
   MCMC_samples <- do.call(get_pars, c(list(emc, selection = selection), fix_dots(dots, get_pars)))
   true_MCMC_samples <- NULL

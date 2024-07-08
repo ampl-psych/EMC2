@@ -370,6 +370,7 @@ get_pars <- function(emc,selection= "mu", stage="sample",thin=1,filter=0,
 {
   if(!(selection %in% c("mu", "alpha"))) map <- FALSE
   if(is.null(type)) type <- attr(emc[[1]], "variant_funs")$type
+  if(type == "single" & !(selection %in% c("LL", "alpha"))) selection <- "alpha"
   samples <- get_objects(type = type, sampler = emc, stage = stage,
                          selection = selection)
 
