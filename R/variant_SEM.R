@@ -371,6 +371,8 @@ gibbs_step_SEM <- function(sampler, alpha){
     delta_inv[!is_structured, !is_structured] <- solve(riwish(n_subjects + prior$a_d, diag(prior$b_d, nrow = sum(!is_structured)) + eta_sq[!is_structured, !is_structured]))
   }
   # Put all our stuff back together
+  x_mu <- colMeans(xy)
+  x_var <- cov(xy)
   B_0_inv <- solve(diag(n_factors) - B)
   tmu <- c(mu + lambda %*% B_0_inv %*% G %*% x_mu + K %*% x_mu)
   var <- lambda %*% B_0_inv %*% (G %*% x_var %*% t(G) +
@@ -600,37 +602,37 @@ bridge_group_and_prior_and_jac_SEM <- function(proposals_group, proposals_list, 
   jac_epsilon_inv <- rowSums(epsilon_inv)
   return(sum_out + prior_mu + prior_lambda + prior_B + prior_K + prior_G + jac_delta1 + jac_epsilon_inv) # Output is of length nrow(proposals)
 }
-
-group_IC_SEM <- function(emc, stage = "sample", filter = NULL){
-  alpha <- get_pars(emc, selection = "alpha", stage = stage, filter = filter,
-                    return_mcmc = FALSE, merge_chains = TRUE)
-  mu <- get_pars(emc, selection = "mu", stage = stage, filter = filter,
-                 return_mcmc = FALSE, merge_chains = TRUE)
-  K <- get_pars(emc, selection = "K", stage = stage, filter = filter,
-                        return_mcmc = FALSE, merge_chains = TRUE, remove_constants = F)
-  B <- get_pars(emc, selection = "B", stage = stage, filter = filter,
-                return_mcmc = FALSE, merge_chains = TRUE, remove_constants = F)
-  G <- get_pars(emc, selection = "G", stage = stage, filter = filter,
-                return_mcmc = FALSE, merge_chains = TRUE, remove_constants = F)
-  loadings <- get_pars(emc, selection = "loadings", stage = stage, filter = filter,
-                return_mcmc = FALSE, merge_chains = TRUE, remove_constants = F)
-  theta_var <- get_pars(emc, selection = "Sigma", stage = stage, filter = filter,
-                   return_mcmc = FALSE, merge_chains = TRUE, remove_constants = F)
-  x_mu <- colMeans(emc[[1]]$xy)
-  x_var <- cov(emc[[1]]$xy)
-  N <- ncol(mu)
-  lls <- numeric(N)
-  for(i in 1:n_iter){
-    # Put all our stuff back together
-    B_0_inv <- solve(diag(emc[[1]]$n_factors) - B[,,i])
-    group_mean <- c(mu[,i] + loadings[,,i] %*% B_0_inv %*% G[,,i] %*% x_mu + K[,i] %*% x_mu)
-    lls[i] <- sum(dmvnorm(t(alpha[,,i]), group_mean, theta_var[,,i], log = T))
-  }
-  minD <- -2*max(lls)
-  mean_ll <- mean(lls)
-  mean_pars_ll <-  sum(dmvnorm(t(mean_alpha), mean_mu, mean_var), log = TRUE)
-  Dmean <- -2*mean_pars_ll
-}
+#
+# group_IC_SEM <- function(emc, stage = "sample", filter = NULL){
+#   alpha <- get_pars(emc, selection = "alpha", stage = stage, filter = filter,
+#                     return_mcmc = FALSE, merge_chains = TRUE)
+#   mu <- get_pars(emc, selection = "mu", stage = stage, filter = filter,
+#                  return_mcmc = FALSE, merge_chains = TRUE)
+#   K <- get_pars(emc, selection = "K", stage = stage, filter = filter,
+#                         return_mcmc = FALSE, merge_chains = TRUE, remove_constants = F)
+#   B <- get_pars(emc, selection = "B", stage = stage, filter = filter,
+#                 return_mcmc = FALSE, merge_chains = TRUE, remove_constants = F)
+#   G <- get_pars(emc, selection = "G", stage = stage, filter = filter,
+#                 return_mcmc = FALSE, merge_chains = TRUE, remove_constants = F)
+#   loadings <- get_pars(emc, selection = "loadings", stage = stage, filter = filter,
+#                 return_mcmc = FALSE, merge_chains = TRUE, remove_constants = F)
+#   theta_var <- get_pars(emc, selection = "Sigma", stage = stage, filter = filter,
+#                    return_mcmc = FALSE, merge_chains = TRUE, remove_constants = F)
+#   x_mu <- colMeans(emc[[1]]$xy)
+#   x_var <- cov(emc[[1]]$xy)
+#   N <- ncol(mu)
+#   lls <- numeric(N)
+#   for(i in 1:n_iter){
+#     # Put all our stuff back together
+#     B_0_inv <- solve(diag(emc[[1]]$n_factors) - B[,,i])
+#     group_mean <- c(mu[,i] + loadings[,,i] %*% B_0_inv %*% G[,,i] %*% x_mu + K[,i] %*% x_mu)
+#     lls[i] <- sum(dmvnorm(t(alpha[,,i]), group_mean, theta_var[,,i], log = T))
+#   }
+#   minD <- -2*max(lls)
+#   mean_ll <- mean(lls)
+#   mean_pars_ll <-  sum(dmvnorm(t(mean_alpha), mean_mu, mean_var), log = TRUE)
+#   Dmean <- -2*mean_pars_ll
+# }
 
 #
 #

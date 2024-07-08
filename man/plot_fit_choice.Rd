@@ -38,7 +38,8 @@ Additional factor variables of the design are optional.}
 
 \item{factors}{Character vector of factors in data to display separately. If
 \code{NULL} (i.e., the default), use names of all columns in data except \code{trials},\code{R}, and \code{rt}.
-Omitted factors are aggregated over. If \code{NA}, treats entire data set as a single cell.}
+Omitted factors are aggregated over. If \code{NA}, treats entire data set as a single cell.
+If \code{stat} is used, the default is changed to \code{NA}.}
 
 \item{functions}{A named list of functions that create new factors which can then be
 used by the \code{factors} and \code{stat} arguments.}

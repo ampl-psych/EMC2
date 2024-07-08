@@ -39,6 +39,8 @@ If unspecified, it will run the subsequent stage (if there is one).}
 \item{stop_criteria}{A list. Defines the stopping criteria and for which types
 of parameters these should hold. See the details and examples section.}
 
+\item{report_time}{Boolean. If \code{TRUE}, the time taken to run the MCMC chains till completion of the \code{stop_criteria} will be printed.}
+
 \item{p_accept}{A double. The target acceptance probability of the MCMC process.
 This fine-tunes the width of the search space to obtain the desired acceptance probability. Defaults to .8}
 
