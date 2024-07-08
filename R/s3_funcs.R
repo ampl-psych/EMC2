@@ -60,8 +60,8 @@ summary.emc <- function(object, selection = c("mu", "sigma2", "alpha"), probs = 
         }
         print(stat)
       }
+      out_list[[names(stats)[i]]] <- stat
     }
-    out_list[[select]] <- stat
   }
   return(invisible(out_list))
 }

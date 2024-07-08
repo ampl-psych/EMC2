@@ -816,14 +816,12 @@ plot_pars <- function(emc,layout=NA, selection="mu", show_chains = FALSE, plot_p
     MCMC_samples <- list(lapply(MCMC_samples, function(x) do.call(rbind, x)))
     names(MCMC_samples) <- "subjects"
   }
-  if(plot_prior){
-    psamples <-  get_objects(sampler = emc, design = attr(emc,"design_list")[[1]],
-                             type = type, sample_prior = T,
-                             selection = selection, N = N)
-    pMCMC_samples <- do.call(get_pars, c(list(psamples, selection = selection, type = type),
-                                         fix_dots(dots, get_pars, exclude = c("thin", "filter", "chain", "subject"))))
-    if(length(pMCMC_samples) != length(MCMC_samples)) pMCMC_samples <- rep(pMCMC_samples, length(MCMC_samples))
-  }
+  psamples <-  get_objects(sampler = emc, design = attr(emc,"design_list")[[1]],
+                           type = type, sample_prior = T,
+                           selection = selection, N = N)
+  pMCMC_samples <- do.call(get_pars, c(list(psamples, selection = selection, type = type),
+                                       fix_dots(dots, get_pars, exclude = c("thin", "filter", "chain", "subject"))))
+  if(length(pMCMC_samples) != length(MCMC_samples)) pMCMC_samples <- rep(pMCMC_samples, length(MCMC_samples))
 
   true_MCMC_samples <- NULL
   if(!is.null(true_pars)){
@@ -859,10 +857,10 @@ plot_pars <- function(emc,layout=NA, selection="mu", show_chains = FALSE, plot_p
       denses <- lapply(cur_mcmc, function(x) do.call(density, c(list(x[,l]), fix_dots(dots, density.default, consider_dots = FALSE))))
       xlim <- range(c(sapply(cur_mcmc, function(x) return(range(x[,l]))), true_pars[[i]][[1]][,l]))
       ylim <- range(sapply(denses, function(x) return(range(x$y))))
+      if(ncol(pMCMC_samples[[i]][[1]]) != n_pars){
+        p_idx <- 1
+      } else{p_idx <- l}
       if(plot_prior){
-        if(ncol(pMCMC_samples[[i]][[1]]) != n_pars){
-          p_idx <- 1
-        } else{p_idx <- l}
         if(selection != "alpha"){
           p_curr <- robust_hist(pMCMC_samples[[i]][[1]][,p_idx], do_plot = F)
         } else{ p_curr <-  pMCMC_samples[[i]][[1]][,p_idx]}
