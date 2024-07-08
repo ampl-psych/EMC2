@@ -15,7 +15,6 @@
   y_name = NULL,
   y_fun = NULL,
   y_fun_name = "fun",
-  mapped = FALSE,
   x_subject = NULL,
   y_subject = NULL,
   mu = 0,
@@ -49,8 +48,6 @@ variable to be tested.}
 variable to be tested.}
 
 \item{y_fun_name}{Name to give to quantity calculated by \code{y_fun}}
-
-\item{mapped}{Boolean. Should the samples be mapped back to the design before doing the test?}
 
 \item{x_subject}{Integer or name selecting a subject}
 

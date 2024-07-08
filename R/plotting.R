@@ -651,22 +651,22 @@ pairs_posterior <- function(emc, selection="alpha", scale_subjects=TRUE,
 #' @param n_point Integer. Number of evenly spaced points at which to calculate likelihood
 #' @param n_cores Number of likelihood points evenly spaced between the minimum and maximum likelihood range.
 #' @param true_plot_args A list. Optional additional arguments that can be passed to plot.default for the plotting of the true vertical line.
-#' @param round. Integer. To how many digits will the output be rounded.
+#' @param round Integer. To how many digits will the output be rounded.
 #' @param ... Optional additional arguments that can be passed to plot.default.
 #' @return Vector with highest likelihood point, input and mismatch between true and highest point
 #' @examples
 #' # First create a design
 #' design_DDMaE <- design(data = forstmann,model=DDM,
-#'                 formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
-#'                 constants=c(s=log(1)))
+#'                       formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
+#'                       constants=c(s=log(1)))
 #' # Then create a p_vector:
-#' p_vector=c(v_Sleft=-2,v_Sright=2,a=log(1),a_Eneutral=log(1.5),a_Eaccuracy=log(2),
-#'           t0=log(.2),Z=qnorm(.5),sv=log(.5),SZ=qnorm(.5))
+#' p_vector=c(v_Sleft=-2,v_Sright=2,a=log(.95),a_Eneutral=log(1.5),a_Eaccuracy=log(2),
+#'           t0=log(.25),Z=qnorm(.5),sv=log(.5),SZ=qnorm(.5))
 #' # Make a profile plot for some parameters. Specifying a custom range for t0.
-#' profile_plot(p_vector = p_vector, p_min = c(t0 = -1.55),
-#'             p_max = c(t0 = -1.65), use_par = c("a", "t0", "SZ"),
-#'             data = forstmann, design = design_DDMaE, n_point = 10)
-#'
+#' profile_plot(p_vector = p_vector, p_min = c(t0 = -1.35),
+#'              p_max = c(t0 = -1.45), use_par = c("a", "t0", "SZ"),
+#'              data = forstmann, design = design_DDMaE, n_point = 10)
+
 #' @export
 
 profile_plot <- function(data, design, p_vector, range = .5, layout = NA,
@@ -696,19 +696,17 @@ profile_plot <- function(data, design, p_vector, range = .5, layout = NA,
     cur_name <- names(p_vector)[p]
     if(cur_name %in% use_par){
       cur_par <- p_vector[p]
+      pmax_cur <- cur_par + range/2
+      pmin_cur <- cur_par - range/2
       if(!is.null(p_min)){
         if(!is.na(p_min[cur_name])){
           pmin_cur <- p_min[cur_name]
         }
-      } else{
-        pmin_cur <- cur_par - range/2
       }
       if(!is.null(p_max)){
         if(!is.na(p_max[cur_name])){
           pmax_cur <- p_max[cur_name]
         }
-      } else{
-        pmax_cur <- cur_par + range/2
       }
       x <- seq(pmin_cur,pmax_cur,length.out=n_point)
       x <- c(x, cur_par)

@@ -15,6 +15,7 @@ profile_plot(
   use_par = NULL,
   n_point = 100,
   n_cores = 1,
+  round = 3,
   true_plot_args = list(),
   ...
 )
@@ -40,6 +41,8 @@ profile_plot(
 
 \item{n_cores}{Number of likelihood points evenly spaced between the minimum and maximum likelihood range.}
 
+\item{round}{Integer. To how many digits will the output be rounded.}
+
 \item{true_plot_args}{A list. Optional additional arguments that can be passed to plot.default for the plotting of the true vertical line.}
 
 \item{...}{Optional additional arguments that can be passed to plot.default.}
@@ -54,14 +57,13 @@ varying one model parameter while holding all others constant.
 \examples{
 # First create a design
 design_DDMaE <- design(data = forstmann,model=DDM,
-                formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
-                constants=c(s=log(1)))
+                      formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
+                      constants=c(s=log(1)))
 # Then create a p_vector:
-p_vector=c(v_Sleft=-2,v_Sright=2,a=log(1),a_Eneutral=log(1.5),a_Eaccuracy=log(2),
-          t0=log(.2),Z=qnorm(.5),sv=log(.5),SZ=qnorm(.5))
+p_vector=c(v_Sleft=-2,v_Sright=2,a=log(.95),a_Eneutral=log(1.5),a_Eaccuracy=log(2),
+          t0=log(.25),Z=qnorm(.5),sv=log(.5),SZ=qnorm(.5))
 # Make a profile plot for some parameters. Specifying a custom range for t0.
-profile_plot(p_vector = p_vector, p_min = c(t0 = -1.55),
-            p_max = c(t0 = -1.65), use_par = c("a", "t0", "SZ"),
-            data = forstmann, design = design_DDMaE, n_point = 10)
-
+profile_plot(p_vector = p_vector, p_min = c(t0 = -1.35),
+             p_max = c(t0 = -1.45), use_par = c("a", "t0", "SZ"),
+             data = forstmann, design = design_DDMaE, n_point = 10)
 }

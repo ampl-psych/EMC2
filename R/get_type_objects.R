@@ -328,7 +328,7 @@ get_objects_infnt_factor <- function(type, selection, sample_prior, return_prior
 }
 
 
-get_objects_factor <- function(type, selection, sample_prior, return_prior, design = NULL,
+get_objects_SEM <- function(type, selection, sample_prior, return_prior, design = NULL,
                                prior = NULL, stage = 'sample', N = 1e5, sampler = NULL, ...){
   acc_selection <- c("mu", "sigma2", "covariance", "correlation", "alpha", "Sigma",
                      "loadings", "residuals", "LL", "K", "B", "G", "delta")
@@ -342,7 +342,7 @@ get_objects_factor <- function(type, selection, sample_prior, return_prior, desi
       a_d = "shape prior of inverse gamma/inverse wishart on factor variances",
       b_d = "rate prior of inverse gamma/inverse wishart on factor variances",
       a_e = "shape prior of inverse gamma on residuals",
-      b_e = "rate prior of inverse gamma on residuals",
+      b_e = "rate prior of inverse gamma on residuals"
     )
     prior$groups <- list(
       mu = c("theta_mu_mean", "theta_mu_var"),
