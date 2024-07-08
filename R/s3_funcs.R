@@ -462,6 +462,7 @@ fit.emc <- function(emc, stage = NULL, iter = 1000, stop_criteria = NULL,report_
 #' updated in blocks. This can be helpful in extremely tough models with a large number of parameters.
 #' @param stop_criteria A list. Defines the stopping criteria and for which types
 #' of parameters these should hold. See the details and examples section.
+#' @param report_time Boolean. If `TRUE`, the time taken to run the MCMC chains till completion of the `stop_criteria` will be printed.
 #' @param ... Additional optional arguments
 #' @return An emc object
 #' @examples \dontrun{
