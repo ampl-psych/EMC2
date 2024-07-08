@@ -41,8 +41,7 @@ is plotted. \code{NULL} (i.e., the default), will plot all subjects.}
 
 \item{factors}{Character vector of factors in data to display separately. If
 NULL (default) use names of all columns in data except "trials","R", and "rt".
-Omitted factors are aggregated over. If NA treats entire data set as a single cell.
-Must be NA or NULL when using stat argument.}
+Omitted factors are aggregated over. If NA treats entire data set as a single cell.}
 
 \item{functions}{A named list of functions that create new factors which can then be
 used by the factors and stat arguments.}
