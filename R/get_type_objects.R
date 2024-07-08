@@ -328,6 +328,65 @@ get_objects_infnt_factor <- function(type, selection, sample_prior, return_prior
 }
 
 
+get_objects_factor <- function(type, selection, sample_prior, return_prior, design = NULL,
+                               prior = NULL, stage = 'sample', N = 1e5, sampler = NULL, ...){
+  acc_selection <- c("mu", "sigma2", "covariance", "correlation", "alpha", "Sigma",
+                     "loadings", "residuals", "LL", "K", "B", "G", "delta")
+  if(return_prior & !sample_prior){
+    prior$prior <- do.call(get_prior_factor, c(list(design = design, sample = F, prior = prior), fix_dots(list(...), get_prior_factor)))
+    prior$descriptions <- list(
+      theta_mu_mean = "mean of the group-level mean prior",
+      theta_mu_var = "variance of the group-level mean prior",
+      theta_lambda_var = "variance of the factor loadings and K",
+      B_var = "variance of B and G",
+      a_d = "shape prior of inverse gamma/inverse wishart on factor variances",
+      b_d = "rate prior of inverse gamma/inverse wishart on factor variances",
+      a_e = "shape prior of inverse gamma on residuals",
+      b_e = "rate prior of inverse gamma on residuals",
+    )
+    prior$groups <- list(
+      mu = c("theta_mu_mean", "theta_mu_var"),
+      loadings = c("theta_lambda_var", "ap", "bp"),
+      B = c("theta_lambda_var"),
+      residuals = c("a_e", "b_e")
+    )
+    prior$group_descriptions <- list(
+      mu = "Group-level mean",
+      loadings = "Factor loadings",
+      B = "Latent loadings",
+      residuals = "Residual errors on the variances"
+    )
+    prior$prior <- add_prior_names(prior$prior, design)
+    return(prior)
+  } else{
+    if(!selection %in% acc_selection) stop(paste0("selection must be in : ", paste(acc_selection, collapse = ", ")))
+    if(sample_prior){
+      if(selection == "alpha" & !is.null(sampler)){
+        mu <- get_pars(sampler, selection = "mu", stage = stage, map = FALSE, return_mcmc = FALSE, merge_chains = TRUE, ...)
+        var <- get_pars(sampler, selection = "Sigma", stage = stage, map = FALSE, return_mcmc = FALSE, merge_chains = TRUE, ...)
+        sub_names <- names(sampler[[1]]$data)
+        sampler <- list(list(samples =  list(alpha = get_alphas(mu, var, sub_names))))
+      } else{
+        sampler <- list(list(samples = do.call(get_prior_factor,
+                                               c(list(prior = prior, design = design,
+                                                      selection = selection,N = N), fix_dots(list(...), get_prior_factor)))))
+      }
+      attr(sampler, "design_list") <- list(design)
+      return(sampler)
+    }
+    idx <- get_idx(sampler, stage)
+    if(selection == "loadings"){
+      return(lapply(sampler, FUN = function(x) return(x$samples$theta_lambda[,,idx])))
+    }
+    if(selection == "residuals"){
+      return(lapply(sampler, FUN = function(x) return(1/x$samples$sig_err_inv[,idx])))
+    }
+    return(get_base(sampler, idx, selection))
+  }
+}
+
+
+
 get_base <- function(sampler, idx, selection){
   if(selection == "alpha"){
     return(lapply(sampler, FUN = function(x) return(x$samples$alpha[,,idx, drop = F])))
