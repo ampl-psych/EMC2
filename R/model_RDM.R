@@ -385,6 +385,7 @@ RDM <- function(){
     transform = function(x) x,
     # Trial dependent parameter transform
     Ttransform = function(pars,dadm) {
+      pars <- cbind(pars,b=pars[,"B"] + pars[,"A"])
       attr(pars,"ok") <- (pars[,"t0"] > .05) & ((pars[,"A"] > 1e-6) | pars[,"A"] == 0) &
         ((pars[,"v"] > 1e-3) | pars[,"v"] == 0)
       pars
