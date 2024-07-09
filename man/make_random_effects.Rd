@@ -7,7 +7,7 @@
 make_random_effects(
   design,
   group_means,
-  n_subj,
+  n_subj = NULL,
   variance_proportion = 0.2,
   covariances = NULL
 )
@@ -17,7 +17,7 @@ make_random_effects(
 
 \item{group_means}{A numeric vector. The group level means for each parameter, in the same order as \code{sampled_p_vector(design)}}
 
-\item{n_subj}{An integer. The number of subjects to generate parameters for.}
+\item{n_subj}{An integer. The number of subjects to generate parameters for. If \code{NULL} will be inferred from design}
 
 \item{variance_proportion}{A double. Optional. If \code{covariances} are not specified, the variances will be created by multiplying the means by this number. The covariances will be 0.}
 

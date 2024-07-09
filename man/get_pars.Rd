@@ -11,6 +11,7 @@ get_pars(
   thin = 1,
   filter = 0,
   map = FALSE,
+  add_recalculated = FALSE,
   length.out = NULL,
   by_subject = FALSE,
   return_mcmc = TRUE,
@@ -42,6 +43,10 @@ within the range are kept.}
 the experimental design using the design matrices.
 Otherwise the sampled parameters are returned.
 Only works for \code{selection = mu} or \code{selection = alpha}.}
+
+\item{add_recalculated}{Boolean. If \code{TRUE} will also add recalculated parameters,
+such as b in the LBA (b = B + A; see \code{?LBA}), or z in the DDM z = Z*A (see \code{?DDM})
+only works when \code{map = TRUE}}
 
 \item{length.out}{Integer. Alternatively to thinning, you can also select a
 desired length of the MCMC chains, which will be thinned appropriately.}

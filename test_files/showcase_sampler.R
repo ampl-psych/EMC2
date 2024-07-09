@@ -81,6 +81,9 @@ plot(samples_LNR, selection = "correlation", use_par = c("m", "s"))
 plot(samples_LNR, selection = "correlation", use_par = c("s.m"), flatten = T)
 # and with map
 plot(samples_LNR, selection = "mu", map = T, use_par = "m_TRUE")
+
+plot(samples_LNR, selection = "mu", map = T, use_par = "m_TRUE", add_recalculated = TRUE)
+
 # type is only for other functions, and so is true_pars
 # chain we can use to only take some chains
 plot(samples_LNR, selection = "mu", chain = 1:2)

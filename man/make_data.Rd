@@ -11,6 +11,7 @@ make_data(
   data = NULL,
   expand = 1,
   mapped_p = FALSE,
+  hyper = FALSE,
   ...
 )
 }
@@ -30,6 +31,9 @@ or an emc object with sampled parameters
 
 \item{mapped_p}{If \code{TRUE} instead returns a data frame with one row per design
 cell and columns for each parameter specifying how they are mapped to the design cells.}
+
+\item{hyper}{If \code{TRUE} the supplied parameters must be a set of samples, from which the group-level will be used to generate subject level parameters.
+See also \code{make_random_effects} to generate subject-level parameters from a hyper distribution.}
 
 \item{...}{Additional optional arguments}
 }
