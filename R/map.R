@@ -167,16 +167,63 @@ mapped_par <- function(p_vector,design,model=NULL,
   return(out)
 }
 
+add_recalculated_pars <- function(pmat, model, cnams){
+  modifiers <- unlist(lapply(strsplit(cnams,"_"),function(x){paste0(x[-1], collapse = "_")}))
+  par_names <- colnames(pmat)
+  unq_pars <- unique(par_names)
+  par_table <- table(par_names)
+  counts <- lapply(par_table, function(x) return(1:x))
+  combn <- do.call(expand.grid, counts)
+  colnames(combn) <- names(par_table)
 
-map_mcmc <- function(mcmc,design,include_constants = TRUE)
+  out <- list()
+  modfs <- list()
+  for(r in 1:nrow(combn)){
+    pmat_in <- matrix(NA, nrow = nrow(pmat), ncol = length(unq_pars))
+    colnames(pmat_in) <- unq_pars
+    cur_modifiers <- setNames(numeric(length(unq_pars)), unq_pars)
+    for(par in unq_pars){
+      pmat_in[,par] <- pmat[,which(colnames(pmat) == par)[combn[r,par]]]
+      cur_modifiers[par] <- modifiers[which(colnames(pmat) == par)[combn[r,par]]]
+    }
+    added <- model()$Ttransform(pmat_in)
+    added <- added[, !(colnames(added) %in% colnames(pmat_in)), drop = F]
+    attr(added, "ok") <- NULL
+    out[[r]] <- added
+    modfs[[r]] <- cur_modifiers
+  }
+  m_out <- matrix(0, nrow = nrow(pmat), ncol = 0)
+  if(ncol(out[[1]]) == 0) return(NULL)
+  for(i in 1:ncol(out[[1]])){
+    cur_par <- lapply(out, function(x) x[,i, drop = F])
+    not_dups <- !duplicated(cur_par)
+    cur_combn <- combn[not_dups,]
+    pars_vary <- colnames(cur_combn)[colMeans(cur_combn) != 1]
+    to_add <- do.call(cbind, cur_par[not_dups])
+    cur_modfs <- modfs[not_dups]
+    fnams <- sapply(cur_modfs, function(x) paste0(unique(unlist(strsplit(x[pars_vary], split = "_"))), collapse = "_"))
+    colnames(to_add) <- paste0(colnames(to_add)[1], "_", fnams)
+    m_out <- cbind(m_out, to_add)
+  }
+  return(m_out)
+}
+
+map_mcmc <- function(mcmc,design,include_constants = TRUE, add_recalculated = FALSE)
   # Maps vector or matrix (usually mcmc object) of sampled parameters to native
   # model parameterization.
 {
   model <- design$model
   doMap <- function(mapi,pmat) t(mapi %*% t(pmat[,dimnames(mapi)[[2]],drop=FALSE]))
 
-  get_p_types <- function(nams)
-    unlist(lapply(strsplit(nams,"_"),function(x){x[[1]]}))
+  get_p_types <- function(nams, reverse = FALSE){
+    if(reverse){
+      out <- unlist(lapply(strsplit(nams,"_"),function(x){x[[-1]]}))
+    } else{
+      out <- unlist(lapply(strsplit(nams,"_"),function(x){x[[1]]}))
+    }
+    return(out)
+  }
+
 
   map <- attr(sampled_p_vector(design, add_da = TRUE, all_cells_dm = TRUE),"map")
 
@@ -204,23 +251,28 @@ map_mcmc <- function(mcmc,design,include_constants = TRUE)
       plist$threshold <- plist$threshold[,ht!=max(ht),drop=FALSE]
     }
     # Give mapped variables names and flag constant
-    isConstant <- NULL
     for (i in 1:length(plist)) {
       vars <- row.names(attr(terms(design$Flist[[i]]),"factors"))
       uniq <- !duplicated(apply(mp[,vars],1,paste,collapse="_"))
-      if (is.null(vars)) dimnames(plist[[i]])[2] <- names(plist)[i] else {
-        dimnames(plist[[i]])[[2]] <-
-          paste(vars[1],apply(mp[uniq,vars[-1],drop=FALSE],1,paste,collapse="_"),sep="_")
+      if (is.null(vars)) {
+        colnames(plist[[i]]) <- names(plist)[i]
+      }else {
+        colnames(plist[[i]]) <- paste(vars[1],apply(mp[uniq,vars[-1],drop=FALSE],1,paste,collapse="_"),sep="_")
       }
-      if (is.matrix(plist[[i]])) isConstant <- c(isConstant,
-                                                 apply(plist[[i]],2,function(x){all(x[1]==x[-1])}))
+      # if (is.matrix(plist[[i]])) isConstant <- c(isConstant, apply(plist[[i]],2,function(x){all(x[1]==x[-1])}))
     }
     pmat <- do.call(cbind,plist)
     cnams <- colnames(pmat)
     colnames(pmat) <- get_p_types(cnams)
     pmat[,] <- model()$Ntransform(pmat)[,1:length(cnams)]
+
+    if(add_recalculated) extras <- add_recalculated_pars(pmat, model, cnams)
     colnames(pmat) <- cnams
-    if(!include_constants) pmat <- pmat[,!isConstant, drop = F]
+    if(add_recalculated) pmat <- cbind(pmat, extras)
+    is_constant <- apply(pmat,2,function(x){all(x[1]==x[-1])})
+    if(!include_constants){
+      pmat <- pmat[,!is_constant, drop = F]
+    }
     if(k == 1){
       out <- array(0, dim = c(ncol(pmat), ncol(mcmc_array), dim(mcmc_array)[3]))
       rownames(out) <- colnames(pmat)
@@ -231,7 +283,7 @@ map_mcmc <- function(mcmc,design,include_constants = TRUE)
   if(is_matrix){
     out <- out[,1,]
   }
-  attr(out,"isConstant") <- isConstant
+  attr(out,"isConstant") <- is_constant
   return(out)
 }
 
