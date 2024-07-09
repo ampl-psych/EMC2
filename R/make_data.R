@@ -70,6 +70,8 @@ make_missing <- function(data,LT=0,UT=Inf,LC=0,UC=Inf,
 #' @param expand Integer. Replicates the ``data`` (if supplied) expand times to increase number of trials per cell.
 #' @param mapped_p If `TRUE` instead returns a data frame with one row per design
 #' cell and columns for each parameter specifying how they are mapped to the design cells.
+#' @param hyper If `TRUE` the supplied parameters must be a set of samples, from which the group-level will be used to generate subject level parameters.
+#' See also `make_random_effects` to generate subject-level parameters from a hyper distribution.
 #' @param ... Additional optional arguments
 #' @return A data frame with simulated data
 #' @examples
@@ -98,7 +100,7 @@ make_missing <- function(data,LT=0,UT=Inf,LC=0,UC=Inf,
 #' @export
 
 make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
-  mapped_p=FALSE, ...)
+  mapped_p=FALSE, hyper = FALSE, ...)
 {
   # #' @param LT lower truncation bound below which data are removed (scalar or subject named vector)
   # #' @param UT upper truncation bound above which data are removed (scalar or subject named vector)
@@ -138,7 +140,15 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
   if(is(parameters, "emc")){
     if(is.null(design)) design <- attr(parameters, "design_list")[[1]]
     if(is.null(data)) data <- get_data(parameters)
-    parameters <- do.call(rbind, posterior_summary(parameters, probs = 0.5, selection = "alpha", by_subject = TRUE))
+    if(!hyper){
+      parameters <- do.call(rbind, posterior_summary(parameters, probs = 0.5, selection = "alpha", by_subject = TRUE))
+    } else{
+      mu <- get_pars(parameters, selection = "mu", merge_chains = T, return_mcmc = F)
+      Sigma <- get_pars(parameters, selection = "Sigma", merge_chains = T, return_mcmc = F)
+      mu <- rowMeans(mu)
+      Sigma <- apply(Sigma, 1:2, mean)
+      parameters <- make_random_effects(design, group_means = mu, covariances = Sigma)
+    }
   }
 
   sampled_p_names <- names(sampled_p_vector(design))
@@ -310,7 +320,7 @@ add_Ffunctions <- function(data,design)
 #'
 #' @param design A design list. The design as specified by `design()`
 #' @param group_means A numeric vector. The group level means for each parameter, in the same order as `sampled_p_vector(design)`
-#' @param n_subj An integer. The number of subjects to generate parameters for.
+#' @param n_subj An integer. The number of subjects to generate parameters for. If `NULL` will be inferred from design
 #' @param variance_proportion A double. Optional. If ``covariances`` are not specified, the variances will be created by multiplying the means by this number. The covariances will be 0.
 #' @param covariances A covariance matrix. Optional. Specify the intended covariance matrix.
 #'
@@ -334,12 +344,18 @@ add_Ffunctions <- function(data,design)
 #' make_data(subj_pars, design_DDMaE, n_trials = 10)
 #' @export
 
-make_random_effects <- function(design, group_means, n_subj, variance_proportion = .2, covariances = NULL){
+make_random_effects <- function(design, group_means, n_subj = NULL, variance_proportion = .2, covariances = NULL){
+  if(is.null(n_subj)){
+    n_subj <- length(design$Ffactors$subjects)
+    subnames <- design$Ffactors$subjects
+  } else{
+    subnames <- as.character(1:n_subj)
+  }
   if(length(group_means) != length(sampled_p_vector(design))) stop("You must specify as many means as parameters in your design")
   if(is.null(covariances)) covariances <- diag(abs(group_means)*variance_proportion)
   random_effects <- mvtnorm::rmvnorm(n_subj,mean=group_means,sigma=covariances)
   colnames(random_effects) <- names(sampled_p_vector(design))
-  rownames(random_effects) <- as.character(1:n_subj)
+  rownames(random_effects) <- subnames
   return(random_effects)
 }
 
