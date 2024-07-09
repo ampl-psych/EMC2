@@ -386,10 +386,12 @@ get_pars <- function(emc,selection= "mu", stage="sample",thin=1,filter=0,
       samples[[1]][,1] <- true_pars
     }
   }
-
-  subnames <- names(emc[[1]]$data)
-  if(selection == "alpha") flatten = FALSE
-
+  if(selection == "alpha"){
+    flatten <- FALSE
+    subnames <- colnames(samples[[1]])
+  } else{
+    subnames <- names(emc[[1]]$data)
+  }
   if(length(dim(samples[[1]])) > 2 & flatten){
     if(is.null(rownames(samples[[1]]))){
       pnams <- colnames(samples[[1]])
@@ -400,7 +402,7 @@ get_pars <- function(emc,selection= "mu", stage="sample",thin=1,filter=0,
     samples <- lapply(samples, function(x) {rownames(x) <- pnams; return(x)})
   }
   samples <- filter_const_and_dup(samples, remove_dup, remove_constants)
-  subnames <- names(emc[[1]]$data)
+
 
   samples <- lapply(samples, filter_sub_and_par, subject, subnames, use_par)
   samples <- lapply(samples, filter_emc, thin, length.out, filter)
@@ -408,7 +410,7 @@ get_pars <- function(emc,selection= "mu", stage="sample",thin=1,filter=0,
     if(any(!(chain %in% 1:length(samples)))) stop("chain selection exceeds number of chains")
     samples <- samples[chain]
   }
-  if(is.null(attr(emc[[1]], "variant_funs")$type)) subnames <- "alpha"
+  # if(is.null(attr(emc[[1]], "variant_funs")$type)) subnames <- "alpha"
   if(merge_chains){
     if(length(dim(samples[[1]])) == 2){
       samples <- do.call(cbind, samples)
