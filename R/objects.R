@@ -335,6 +335,9 @@ fix_dots <- function(dots, fun, exclude = "", consider_dots = TRUE){
 #' the experimental design using the design matrices.
 #' Otherwise the sampled parameters are returned.
 #' Only works for `selection = mu` or `selection = alpha`.
+#' @param add_recalculated Boolean. If `TRUE` will also add recalculated parameters,
+#' such as b in the LBA (b = B + A; see `?LBA`), or z in the DDM z = Z*A (see `?DDM`)
+#' only works when `map = TRUE`
 #' @param by_subject Boolean. If `TRUE` for selections that include subject parameters (e.g. `alpha`),
 #' plot/stats are organized by subject, otherwise by parameter.
 #' @param return_mcmc Boolean. If `TRUE` returns an mcmc.list object, otherwise a matrix/array with the parameter type.
@@ -362,11 +365,11 @@ fix_dots <- function(dots, fun, exclude = "", consider_dots = TRUE){
 #' # Or return the flattened correlation, with 10 iterations per chain
 #' get_pars(samples_LNR, stage = "sample", selection = "correlation", flatten = TRUE, length.out = 10)
 get_pars <- function(emc,selection= "mu", stage="sample",thin=1,filter=0,
-                         map = FALSE, length.out = NULL, by_subject = FALSE,
-                         return_mcmc = TRUE, merge_chains = FALSE,
-                         subject = NULL, flatten = FALSE, remove_dup = FALSE,
-                         remove_constants = TRUE, use_par = NULL, type = NULL,
-                         true_pars = NULL, chain = NULL)
+                    map = FALSE, add_recalculated = FALSE, length.out = NULL,
+                    by_subject = FALSE, return_mcmc = TRUE, merge_chains = FALSE,
+                    subject = NULL, flatten = FALSE, remove_dup = FALSE,
+                    remove_constants = TRUE, use_par = NULL, type = NULL,
+                    true_pars = NULL, chain = NULL)
 {
   if(!(selection %in% c("mu", "alpha"))) map <- FALSE
   if(is.null(type)) type <- attr(emc[[1]], "variant_funs")$type
@@ -375,7 +378,8 @@ get_pars <- function(emc,selection= "mu", stage="sample",thin=1,filter=0,
                          selection = selection)
 
   if(map){
-    samples <- lapply(samples, map_mcmc, attr(emc,"design_list")[[1]], include_constants = FALSE)
+    samples <- lapply(samples, map_mcmc, attr(emc,"design_list")[[1]], include_constants = FALSE,
+                      add_recalculated = add_recalculated)
   }
   if(flatten) remove_dup <- TRUE
   if(!is.null(true_pars)){ # Kluge to make sure the right object dimensions/filtering is performed on simulated parameters
