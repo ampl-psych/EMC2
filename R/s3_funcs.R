@@ -355,8 +355,12 @@ fit.emc <- function(emc, stage = NULL, iter = 1000, stop_criteria = NULL,report_
   }
   if(is.null(stage)){
     nstage <- colSums(chain_n(emc))
-    has_ran <- nstage[nstage != 0]
-    stage <- names(has_ran)[length(has_ran)]
+    if(all(nstage == 0)){
+      stage <- "preburn"
+    } else{
+      has_ran <- nstage[nstage != 0]
+      stage <- names(has_ran)[length(has_ran)]
+    }
   }
   if(stage == "preburn"){
     emc <- run_emc(emc, stage = "preburn", stop_criteria[['preburn']], cores_for_chains = cores_for_chains, p_accept = p_accept,
