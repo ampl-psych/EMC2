@@ -211,7 +211,11 @@ plot_fit_choice <- function(data,pp,subject=NULL,factors=NULL,functions=NULL,
         fnams <- names(dat)[!(names(dat) %in% c("subjects","trials","R","rt"))]
   } else {
     dat <- data
-    fnams <- names(dat)[!(names(dat) %in% c("trials","R","rt"))]
+    if("subjects" %in% factors){
+      fnams <- names(dat)[!(names(dat) %in% c("trials","R","rt"))]
+    } else{
+      fnams <- names(dat)[!(names(dat) %in% c("subjects", "trials","R","rt"))]
+    }
   }
 
   okd <- !is.na(dat$R) & is.finite(dat$rt)
@@ -407,7 +411,11 @@ plot_fit <- function(data,pp,subject=NULL,factors=NULL,functions=NULL,
         fnams <- names(dat)[!(names(dat) %in% c("subjects","trials","R","rt"))]
   } else {
     dat <- data
-    fnams <- names(dat)[!(names(dat) %in% c("trials","R","rt"))]
+    if("subjects" %in% factors){
+      fnams <- names(dat)[!(names(dat) %in% c("trials","R","rt"))]
+    } else{
+      fnams <- names(dat)[!(names(dat) %in% c("subjects", "trials","R","rt"))]
+    }
   }
 
   okd <- !is.na(dat$R) & is.finite(dat$rt)
