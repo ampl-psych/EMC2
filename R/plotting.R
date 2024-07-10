@@ -728,51 +728,6 @@ profile_plot <- function(data, design, p_vector, range = .5, layout = NA,
   return(round(out, 3))
 }
 
-#' Plot MCMC chains
-#'
-#' Plots the trace plots of the MCMC chains on top of each other. Visualizes convergence
-#' and chain stability. Full range of samples manipulations described in `get_pars`.
-#'
-#' @param emc An emc object
-#' @param selection A Character string. Indicates which parameter type to plot (e.g., `alpha`, `mu`, `sigma2`, `correlation`).
-#' @param layout A vector indicating which layout to use as in par(mfrow = layout). If NA, will automatically generate an appropriate layout.
-#' @param plot_acf Boolean. If `FALSE` will make trace plots. If `TRUE` will plot the autocorrelation for a chain.
-#' By default plots acf for the first chain, but can be changed, by setting i.e. chain = 2; see `?get_pars`.
-#' @param ... Optional arguments that can be passed to `get_pars` or `plot.default` (see `par()`)
-#'
-#' @return A trace/acf plot of the selected MCMC chains
-plot_chains <- function(emc, selection = "mu", layout=NA, plot_acf=FALSE, ...)
-{
-  dots <- list(...)
-  if(length(dots$subject) == 1 || emc[[1]]$n_subjects == 1) dots$by_subject <- TRUE
-  if(plot_acf) dots <- add_defaults(dots, chain = 1)
-  MCMC_samples <- do.call(get_pars, c(list(emc, selection = selection), fix_dots(dots, get_pars)))
-
-  for(i in 1:length(MCMC_samples)){
-    if(any(is.na(layout))){
-      par(mfrow = coda_setmfrow(Nchains = length(MCMC_samples[[1]]), Nparms = max(ncol(MCMC_samples[[1]][[1]]), length(MCMC_samples)),
-                                nplots = 1))
-    } else{par(mfrow=layout)}
-    if (plot_acf){
-      for(k in 1:length(MCMC_samples[[i]])){
-        for (j in colnames(MCMC_samples[[i]][[1]])){
-          cur_dots <- dots
-          x_name <- ifelse(length(MCMC_samples) == 1, names(MCMC_samples)[i], paste0(selection, ": ", names(MCMC_samples)[i]))
-          cur_dots <- add_defaults(cur_dots, ylab = "acf", main = paste0("Chain ",dots$chain[k],": ",j), xlab = x_name)
-          do.call(acf, c(list(MCMC_samples[[i]][[k]][,j]), fix_dots_plot(cur_dots)))
-        }
-      }
-
-    } else {
-      cur_dots <- dots
-      x_name <- ifelse(length(MCMC_samples) == 1, names(MCMC_samples)[i], paste0(selection, ": ", names(MCMC_samples)[i]))
-      cur_dots <- add_defaults(cur_dots, xlab = x_name)
-      do.call(plot, c(list(MCMC_samples[[i]], auto.layout = FALSE, density = FALSE, ask = FALSE,smooth = FALSE),
-                      fix_dots_plot(cur_dots)))
-    }
-  }
-}
-
 #' Plots density for parameters
 #'
 #' Plots the posterior and prior density for selected parameters of a model.
@@ -950,6 +905,86 @@ make_recov_summary <- function(stats){
                         c("pearson", "spearman", "rmse", "coverage"))
   return(out)
 }
+
+
+#' Plot MCMC
+#'
+#' Uses the coda plot functions that are applied per chain
+#'
+#' @param emc An emc object
+#' @param selection A Character string. Indicates which parameter type to plot (e.g., `alpha`, `mu`, `sigma2`, `correlation`).
+#' @param fun A plot function that takes a vector/mcmc object as input, e.g. cumuplot, acf
+#' @param layout A vector indicating which layout to use as in par(mfrow = layout). If NA, will automatically generate an appropriate layout.
+#' @param plot_type type argument passed on to coda fun.
+#' @param ... Optional arguments that can be passed to `get_pars`,
+#' the chosen coda plot function, or `plot.default` (see `par()`)
+#'
+#' @return A coda plot
+plot_mcmc <- function(emc, selection = "mu", fun = 'cumuplot', layout=NA, chain = 1,
+                      plot_type = NULL, ...)
+{
+  dots <- list(...)
+  if(length(dots$subject) == 1 || emc[[1]]$n_subjects == 1) dots$by_subject <- TRUE
+  MCMC_samples <- do.call(get_pars, c(list(emc, selection = selection, chain = chain),
+                                      fix_dots(dots, get_pars)))
+
+  for(i in 1:length(MCMC_samples)){
+    for(k in 1:length(MCMC_samples[[i]])){
+      if(any(is.na(layout))){
+        par(mfrow = coda_setmfrow(Nchains = length(MCMC_samples[[1]]), Nparms = max(ncol(MCMC_samples[[1]][[1]]), length(MCMC_samples)),
+                                  nplots = 1))
+      } else{par(mfrow=layout)}
+      for(j in 1:ncol(MCMC_samples[[i]][[1]])){
+        cur_dots <- dots
+        x_name <- ifelse(length(MCMC_samples) == 1, names(MCMC_samples)[i], paste0(selection, ": ", names(MCMC_samples)[i]))
+        cur_dots <- add_defaults(cur_dots, ylab = paste0("Chain : ", chain[k]),
+                                 xlab = x_name, main = colnames(MCMC_samples[[i]][[1]])[j],
+                                 type = plot_type, auto.layout = F, ask = F)
+        # do.call(fun, c(list(MCMC_samples[[i]][[k]][,j], ask = F, auto.layout =F), fix_dots(cur_dots, get(fun))))
+        do.call(fun, c(list(MCMC_samples[[i]][[k]][,j]), fix_dots_plot(cur_dots),
+                       fix_dots(cur_dots, get(fun), consider_dots = F, exclude =
+                                  c(names(par()), names(formals(arrows)), names(formals(plot.default))))))
+      }
+
+
+    }
+  }
+}
+
+#' Plot MCMC.list
+#'
+#' Uses the coda plot functions that are applied across chain
+#'
+#' @param emc An emc object
+#' @param selection A Character string. Indicates which parameter type to plot (e.g., `alpha`, `mu`, `sigma2`, `correlation`).
+#' @param fun A coda plot function choice from
+#' @param layout A vector indicating which layout to use as in par(mfrow = layout). If NA, will automatically generate an appropriate layout.
+#' @param ... Optional arguments that can be passed to `get_pars`,
+#' the chosen coda plot function, or `plot.default` (see `par()`)
+#'
+#' @return A coda plot
+plot_mcmc_list <- function(emc, selection = "mu", fun = 'traceplot', layout=NA, ...)
+{
+  dots <- list(...)
+  if(length(dots$subject) == 1 || emc[[1]]$n_subjects == 1) dots$by_subject <- TRUE
+  MCMC_samples <- do.call(get_pars, c(list(emc, selection = selection), fix_dots(dots, get_pars)))
+
+  for(i in 1:length(MCMC_samples)){
+    if(any(is.na(layout))){
+      par(mfrow = coda_setmfrow(Nchains = length(MCMC_samples[[1]]), Nparms = max(ncol(MCMC_samples[[1]][[1]]), length(MCMC_samples)),
+                                nplots = 1))
+    } else{par(mfrow=layout)}
+    cur_dots <- dots
+    x_name <- ifelse(length(MCMC_samples) == 1, names(MCMC_samples)[i], paste0(selection, ": ", names(MCMC_samples)[i]))
+    cur_dots <- add_defaults(cur_dots, xlab = x_name)
+    do.call(fun, c(list(MCMC_samples[[i]]), fix_dots_plot(cur_dots),
+                        fix_dots(cur_dots, get(fun), consider_dots = F, exclude =
+                                   c(names(par()), names(formals(arrows)), names(formals(plot.default))))))
+  }
+}
+
+
+
 
 
 

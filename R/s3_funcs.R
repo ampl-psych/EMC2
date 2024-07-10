@@ -77,8 +77,6 @@ summary.emc <- function(object, selection = c("mu", "sigma2", "alpha"), probs = 
 #' @param selection A character vector indicating the parameter group(s).
 #' Defaults to `mu`, `sigma2`, and `alpha`.
 #' @param layout A vector indicating which layout to use as in par(mfrow = layout). If NA, will automatically generate an appropriate layout.
-#' @param plot_acf Boolean. If `FALSE` will make trace plots. If `TRUE` will plot the autocorrelation for a chain.
-#' By default plots acf for the first chain, but can be changed, by setting i.e. chain = 2; see `?get_pars`.
 #' @param ... Optional arguments that can be passed to `get_pars` or `plot.default` (see `par()`)
 #' @return A trace/acf plot of the selected MCMC chains
 #' @export
@@ -92,12 +90,12 @@ summary.emc <- function(object, selection = c("mu", "sigma2", "alpha"), probs = 
 #' plot(samples_LNR, selection = "correlation", col = c("green", "purple", "orange"), lwd = 2)
 
 plot.emc <- function(x, stage = "sample", selection = c("mu", "sigma2", "alpha"),
-                     layout=NA, plot_acf=FALSE, ...){
+                     layout=NA, ...){
   if(attr(x[[1]], "variant_funs")$type == "single"){
     selection <- "alpha"
   }
   for(select in selection){
-    plot_chains(x, stage = stage, selection = select, layout = layout, plot_acf = plot_acf, ...)
+    plot_mcmc_list(x, stage = stage, selection = select, layout = layout, ...)
   }
 }
 
