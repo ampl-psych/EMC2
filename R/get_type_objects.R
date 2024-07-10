@@ -330,8 +330,9 @@ get_objects_infnt_factor <- function(type, selection, sample_prior, return_prior
 
 get_objects_SEM <- function(type, selection, sample_prior, return_prior, design = NULL,
                                prior = NULL, stage = 'sample', N = 1e5, sampler = NULL, ...){
-  acc_selection <- c("mu", "sigma2", "covariance", "correlation", "alpha", "Sigma",
-                     "loadings", "residuals", "LL", "K", "B", "G", "delta")
+  acc_selection <- c("mu", "sigma2", "covariance", "alpha", "correlation", "Sigma", "loadings", "residuals",
+                     "factor-residuals", "regressors", "factor-regressors", "structural-regressors",
+                     "mu-implied", "LL")
   if(return_prior & !sample_prior){
     prior$prior <- do.call(get_prior_factor, c(list(design = design, sample = F, prior = prior), fix_dots(list(...), get_prior_factor)))
     prior$descriptions <- list(
