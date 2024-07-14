@@ -335,8 +335,8 @@ get_objects_infnt_factor <- function(type, selection, sample_prior, return_prior
 get_objects_SEM <- function(type, selection, sample_prior, return_prior, design = NULL,
                                prior = NULL, stage = 'sample', N = 1e5, sampler = NULL, ...){
   acc_selection <- c("mu", "sigma2", "covariance", "alpha", "correlation", "Sigma", "loadings", "residuals",
-                     "factor-residuals", "regressors", "factor-regressors", "structural-regressors",
-                     "mu-implied", "LL")
+                     "factor_residuals", "regressors", "factor_regressors", "structural_regressors",
+                     "mu_implied", "LL")
   if(return_prior & !sample_prior){
     prior$prior <- do.call(get_prior_SEM, c(list(design = design, sample = F, prior = prior), fix_dots(list(...), get_prior_SEM)))
     prior$descriptions <- list(
@@ -392,10 +392,56 @@ get_objects_SEM <- function(type, selection, sample_prior, return_prior, design 
       return(lapply(sampler, FUN = function(x) return(x$samples$theta_lambda[,,idx])))
     }
     if(selection == "residuals"){
-      return(lapply(sampler, FUN = function(x) return(1/x$samples$sig_err_inv[,idx])))
+      return(lapply(sampler, FUN = function(x){
+        resids <- x$samples$epsilon_inv[,,idx]
+        for(i in 1:dim(resids)[3]){
+          resids[,,i] <- solve(resids[,,i])
+        }
+        return(resids)
+      }))
+    }
+    if(selection == "factor_residuals"){
+      return(lapply(sampler, FUN = function(x){
+        resids <- x$samples$delta_inv[,,idx]
+        for(i in 1:dim(resids)[3]){
+          resids[,,i] <- solve(resids[,,i])
+        }
+        return(resids)
+      }))
+    }
+    if(selection == "loadings"){
+      return(lapply(sampler, FUN = function(x) return(x$samples$lambda[,,idx, drop = F])))
+    }
+    if(selection == "regressors"){
+      return(lapply(sampler, FUN = function(x) return(x$samples$K[,,idx, drop = F])))
+    }
+    if(selection == "factor_regressors"){
+      return(lapply(sampler, FUN = function(x) return(x$samples$G[,,idx, drop = F])))
+    }
+    if(selection == "structural_regressors"){
+      return(lapply(sampler, FUN = function(x) return(x$samples$B[,,idx, drop = F])))
+    }
+    if(selection == "mu_implied"){
+      return(lapply(sampler, FUN = get_mu_implied, idx))
     }
     return(get_base(sampler, idx, selection))
   }
+}
+
+get_mu_implied <- function(x, idx){
+  mu <- x$samples$theta_mu[,idx]
+  B <- x$samples$B[,,idx, drop = F]
+  G <- x$samples$G[,,idx, drop = F]
+  K <- x$samples$K[,,idx, drop = F]
+  loadings <- x$samples$lambda[,,idx, drop = F]
+  n_factors <- ncol(loadings)
+  x_mu <- colMeans(x$covariates)
+  for(i in 1:ncol(mu)){
+    B_0_inv <- solve(diag(n_factors) - as.matrix(B[,,i]))
+    mu[,i] <- as.matrix(mu[,i]) + as.matrix(loadings[,,i]) %*% B_0_inv %*% as.matrix(G[,,i]) %*% x_mu
+                + as.matrix(K[,,i]) %*% x_mu
+  }
+  return(mu)
 }
 
 

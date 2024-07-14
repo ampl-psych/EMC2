@@ -203,8 +203,13 @@ IC <- function(emc,stage="sample",filter=0,use_best_fit=TRUE,
   ll_func <- attr(emc,"design_list")[[1]]$model()$log_likelihood
   data <- emc[[1]]$data
   mean_pars_lls <- setNames(numeric(length(mean_pars)),names(mean_pars))
-  for (sub in names(mean_pars))
-    mean_pars_lls[sub] <- ll_func(mean_pars[[sub]],dadm = data[[sub]])
+  for (sub in names(mean_pars)){
+    if(!is.data.frame(emc[[1]]$data[[1]])){
+      mean_pars_lls[sub] <- log_likelihood_joint(t(mean_pars[[sub]]),dadm = data[[sub]])
+    } else{
+      mean_pars_lls[sub] <- ll_func(mean_pars[[sub]],dadm = data[[sub]])
+    }
+  }
   Dmeans <- -2*mean_pars_lls
 
   if (!is.null(subject)) {

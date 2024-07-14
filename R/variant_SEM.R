@@ -92,7 +92,7 @@ get_prior_SEM <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, s
                           covariates = NULL){
 
   n_factors <- ncol(Lambda_mat)
-  n_cov <- ncol(K)
+  n_cov <- ncol(K_mat)
   if(is.null(prior)){
     prior <- list()
   }
@@ -130,8 +130,8 @@ get_prior_SEM <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, s
     prior$b_e <- rep(.3, n_pars)
   }
   # acc_selection <- c("mu", "sigma2", "covariance", "alpha", "correlation", "Sigma", "loadings", "residuals",
-  #                    "factor-residuals", "regressors", "factor-regressors", "structural-regressors",
-  #                    "mu-implied", "LL")
+  #                    "factor_residuals", "regressors", "factor_regressors", "structural_regressors",
+  #                    "mu_implied", "LL")
   attr(prior, "type") <- "SEM"
   out <- prior
   if(sample){
@@ -143,7 +143,7 @@ get_prior_SEM <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, s
     factor_names <- paste0("F", 1:n_factors)
     samples <- list()
     par_names <- names(sampled_p_vector(design, doMap = F))
-    if(selection %in% c("mu", "alpha", "mu-implied")){
+    if(selection %in% c("mu", "alpha", "mu_implied")){
       mu <- t(mvtnorm::rmvnorm(N, mean = prior$theta_mu_mean,
                                sigma = diag(prior$theta_mu_var)))
       rownames(mu) <- par_names
@@ -151,7 +151,7 @@ get_prior_SEM <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, s
         samples$theta_mu <- mu
       }
     }
-    if(selection %in% c("regressors", "alpha", "mu-implied", "Sigma", "correlation", "covariance", "sigma2")){
+    if(selection %in% c("regressors", "alpha", "mu_implied", "Sigma", "correlation", "covariance", "sigma2")){
       K <- array(0, dim = c(n_pars, n_cov, N))
       for(i in 1:n_cov){
         K[,i,] <- t(mvtnorm::rmvnorm(N, sigma = diag(prior$K_var)))
@@ -163,7 +163,7 @@ get_prior_SEM <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, s
         samples$K <- K
       }
     }
-    if(selection %in% c("factor-regressors", "alpha", "mu-implied", "Sigma", "correlation", "covariance", "sigma2")){
+    if(selection %in% c("factor_regressors", "alpha", "mu_implied", "Sigma", "correlation", "covariance", "sigma2")){
       G <- array(0, dim = c(n_factors, n_cov, N))
       for(i in 1:n_cov){
         G[,i,] <- t(mvtnorm::rmvnorm(N, sigma = diag(prior$G_var)))
@@ -172,11 +172,11 @@ get_prior_SEM <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, s
 
       rownames(G) <- factor_names
       colnames(G) <- colnames(covariates)
-      if(selection %in% 'factor-regressors'){
+      if(selection %in% 'factor_regressors'){
         samples$G <- G
       }
     }
-    if(selection %in% c("structural-regressors", "alpha", "mu-implied", "Sigma", "correlation", "covariance", "sigma2")){
+    if(selection %in% c("structural_regressors", "alpha", "mu_implied", "Sigma", "correlation", "covariance", "sigma2")){
       B <- array(0, dim = c(n_factors, n_factors, N))
       for(i in 1:n_cov){
         B[,i,] <- t(mvtnorm::rmvnorm(N, sigma = diag(prior$B_var)))
@@ -184,11 +184,11 @@ get_prior_SEM <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, s
       B <- constrain_lambda(B, B_mat)
 
       rownames(B) <- colnames(B) <- factor_names
-      if(selection %in% 'structural-regressors'){
+      if(selection %in% 'structural_regressors'){
         samples$B <- B
       }
     }
-    if(selection %in% c("loadings", "alpha", "mu-implied", "Sigma", "correlation", "covariance", "sigma2")){
+    if(selection %in% c("loadings", "alpha", "mu_implied", "Sigma", "correlation", "covariance", "sigma2")){
       lambda <- array(0, dim = c(n_pars, n_factors, N))
       for(i in 1:n_factors){
         lambda[,i,] <- t(mvtnorm::rmvnorm(N, sigma = diag(prior$lambda_var)))
@@ -208,7 +208,7 @@ get_prior_SEM <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, s
         samples$epsilon_inv <- epsilon_inv
       }
     }
-    if(selection %in% c("factor-residuals", "alpha", "correlation", "Sigma", "covariance", "sigma2")) {
+    if(selection %in% c("factor_residuals", "alpha", "correlation", "Sigma", "covariance", "sigma2")) {
       delta_inv <- array(0, dim = c(n_factors, n_factors, N))
       for(i in 1:N){
         if(any(is_structured)){
@@ -219,11 +219,11 @@ get_prior_SEM <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, s
         }
       }
       rownames(delta_inv) <- colnames(delta_inv) <- factor_names
-      if(selection %in% "factor-residuals"){
+      if(selection %in% "factor_residuals"){
         samples$delta_inv <- delta_inv
       }
     }
-    if(selection %in% c("mu-implied", "alpha")) {
+    if(selection %in% c("mu_implied", "alpha")) {
       mu_implied <- mu
       for(i in 1:N){
         B_0_inv <- solve(diag(n_factors) - B)
@@ -439,6 +439,30 @@ filtered_samples_SEM <- function(sampler, filter){
     iteration = length(filter),
     Lambda_mat = attributes(sampler)$Lambda_mat
   )
+}
+
+group_IC_SEM <- function(emc, stage="sample",filter=NULL){
+  alpha <- get_pars(emc, selection = "alpha", stage = stage, filter = filter,
+                    return_mcmc = FALSE, merge_chains = TRUE)
+  theta_mu <- get_pars(emc, selection = "mu_implied", stage = stage, filter = filter,
+                       return_mcmc = FALSE, merge_chains = TRUE)
+  theta_var <- get_pars(emc, selection = "Sigma", stage = stage, filter = filter,
+                        return_mcmc = FALSE, merge_chains = TRUE, remove_constants = F)
+  mean_alpha <- apply(alpha, 1:2, mean)
+  mean_mu <- rowMeans(theta_mu)
+  mean_var <- apply(theta_var, 1:2, mean)
+
+  N <- ncol(theta_mu)
+  lls <- numeric(N)
+  for(i in 1:N){
+    lls[i] <- sum(dmvnorm(t(alpha[,,i]), theta_mu[,i], theta_var[,,i], log = T))
+  }
+  minD <- -2*max(lls)
+  mean_ll <- mean(lls)
+  mean_pars_ll <-  sum(dmvnorm(t(mean_alpha), mean_mu, mean_var, log = TRUE))
+  Dmean <- -2*mean_pars_ll
+  return(list(mean_ll = mean_ll, Dmean = Dmean,
+              minD = minD))
 }
 
 
