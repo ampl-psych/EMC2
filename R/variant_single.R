@@ -48,13 +48,13 @@ get_prior_single <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5
     prior <- list()
   }
   if(!is.null(design)){
-    n_pars <- length(attr(design, "p_vector"))
+    n_pars <- length(sampled_p_vector(design, doMap = F))
   }
   if (!is.null(prior$theta_mu_mean)) {
     n_pars <- length(prior$theta_mu_mean)
   }
   if (is.null(prior$theta_mu_mean)) {
-    prior$theta_mu_mean <- setNames(rep(0, n_pars),names(attr(design, "p_vector")))
+    prior$theta_mu_mean <- setNames(rep(0, n_pars),names(sampled_p_vector(design, doMap = F)))
   }
   if(is.null(prior$theta_mu_var)){
     prior$theta_mu_var <- diag(rep(1, n_pars))
@@ -63,7 +63,7 @@ get_prior_single <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5
   out <- prior
   if(sample){
     out <- list()
-    par_names <- names(attr(design, "p_vector"))
+    par_names <- names(sampled_p_vector(design, doMap = F))
     if(selection != "alpha") stop("for variant single, only alpha can be specified")
     out$alpha <- t(mvtnorm::rmvnorm(N, prior$theta_mu_mean, prior$theta_mu_var))
     out$alpha <- array(out$alpha, dim = c(length(par_names), 1, N))

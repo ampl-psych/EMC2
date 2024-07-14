@@ -2,14 +2,14 @@
 sample_store_SEM <- function(data, par_names, iters = 1, stage = "init", integrate = T, is_nuisance, is_grouped, ...) {
   args <- list(...)
   n_factors <- ncol(args$Lambda_mat)
-  x <- as.matrix(args$x)
-  n_cov <- ncol(x)
+  covariates <- as.matrix(args$covariates)
+  n_cov <- ncol(covariates)
   subject_ids <- unique(data$subjects)
   n_subjects <- length(subject_ids)
   base_samples <- sample_store_base(data, par_names[!is_grouped], iters, stage)
   par_names <- par_names[!is_nuisance & !is_grouped]
   n_pars <- length(par_names)
-  x_names <- colnames(x)
+  x_names <- colnames(covariates)
   factor_names <- paste0("F", 1:n_factors)
   samples <- list(
     theta_mu = array(NA_real_,dim = c(n_pars, iters), dimnames = list(par_names, NULL)),
@@ -35,8 +35,8 @@ add_info_SEM <- function(sampler, prior = NULL, ...){
   B_mat <- args$B_mat
   K_mat <- args$K_mat
   G_mat <- args$G_mat
-  x <- as.matrix(args$x)
-  n_cov <- ncol(x)
+  covariates <- as.matrix(args$covariates)
+  n_cov <- ncol(covariates)
   n_pars <- sum(!(sampler$nuisance | sampler$grouped))
   if(is.null(Lambda_mat)){
     Lambda_mat <- matrix(0, nrow = n_pars, ncol = n_factors)
@@ -56,11 +56,11 @@ add_info_SEM <- function(sampler, prior = NULL, ...){
   attr(sampler, "K_mat") <- K_mat
   attr(sampler, "G_mat") <- G_mat
 
-  sampler$x <- x
+  sampler$covariates <- covariates
   sampler$n_cov <- n_cov
   sampler$prior <- get_prior_SEM(prior, sum(!(sampler$nuisance | sampler$grouped)), sample = F,
                                  Lambda_mat = Lambda_mat, B_mat = B_mat, K_mat = K_mat, G_mat = G_mat,
-                                 x = x)
+                                 covariates = covariates)
   sampler$n_factors <- n_factors
   return(sampler)
 }
@@ -82,14 +82,14 @@ add_info_SEM <- function(sampler, prior = NULL, ...){
 #' @param B_mat The latent regressions constraint matrix
 #' @param K_mat The regression on the parameters by the included covariates
 #' @param G_mat The regression on the latent factors by the included covariates
-#' @param x The included covariates
+#' @param covariates The included covariates
 #'
 #' @return A list with a single entry of type of samples from the prior (if sample = TRUE) or else a prior object
 #' @export
 #'
-get_prior_SEM <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, type = "mu", design = NULL,
+get_prior_SEM <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, selection = "mu", design = NULL,
                           Lambda_mat = NULL, B_mat = NULL, K_mat = NULL, G_mat = NULL,
-                          x = NULL){
+                          covariates = NULL){
 
   n_factors <- ncol(Lambda_mat)
   n_cov <- ncol(K)
@@ -97,7 +97,7 @@ get_prior_SEM <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, t
     prior <- list()
   }
   if(!is.null(design)){
-    n_pars <- length(attr(design, "p_vector"))
+    n_pars <- length(sampled_p_vector(design, doMap = F))
   }
   if (is.null(prior$theta_mu_mean)) {
     prior$theta_mu_mean <- rep(0, n_pars)
@@ -106,22 +106,22 @@ get_prior_SEM <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, t
     prior$theta_mu_var <- rep(1, n_pars)
   }
   if(is.null(prior$lambda_var)){
-    prior$lambda_var <- rep(.7, n_factors)
+    prior$lambda_var <- rep(.7, n_pars)
   }
   if(is.null(prior$K_var)){
-    prior$K_var <- rep(.7, n_pars)
+    prior$K_var <- rep(1, n_pars)
   }
   if(is.null(prior$B_var)){
-    prior$B_var <- rep(.7, n_factors)
+    prior$B_var <- rep(.5, n_factors)
   }
   if(is.null(prior$G_var)){
-    prior$G_var <- rep(.7, n_pars)
+    prior$G_var <- rep(.5, n_factors)
   }
   if(is.null(prior$a_p)){
-    prior$a_d <- 2
+    prior$a_d <- 5
   }
   if(is.null(prior$b_p)){
-    prior$b_d <- .5
+    prior$b_d <- .3
   }
   if(is.null(prior$a_e)){
     prior$a_e <- rep(5, n_pars)
@@ -135,14 +135,14 @@ get_prior_SEM <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, t
   attr(prior, "type") <- "SEM"
   out <- prior
   if(sample){
-    x_mu <- colMeans(x)
-    x_var <- cov(x)
+    x_mu <- colMeans(covariates)
+    x_var <- cov(covariates)
     isFree_B <- B_mat == Inf #For indexing
     # Keeps track of which factors have a latent structure and which don't (thus can be estimated with a covariance)
     is_structured <- rowSums(isFree_B) != 0
     factor_names <- paste0("F", 1:n_factors)
     samples <- list()
-    par_names <- names(attr(design, "p_vector"))
+    par_names <- names(sampled_p_vector(design, doMap = F))
     if(selection %in% c("mu", "alpha", "mu-implied")){
       mu <- t(mvtnorm::rmvnorm(N, mean = prior$theta_mu_mean,
                                sigma = diag(prior$theta_mu_var)))
@@ -156,8 +156,9 @@ get_prior_SEM <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, t
       for(i in 1:n_cov){
         K[,i,] <- t(mvtnorm::rmvnorm(N, sigma = diag(prior$K_var)))
       }
+      K <- constrain_lambda(K, K_mat)
       rownames(K) <- par_names
-      colnames(K) <- colnames(x)
+      colnames(K) <- colnames(covariates)
       if(selection %in% 'regressors'){
         samples$K <- K
       }
@@ -167,8 +168,10 @@ get_prior_SEM <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, t
       for(i in 1:n_cov){
         G[,i,] <- t(mvtnorm::rmvnorm(N, sigma = diag(prior$G_var)))
       }
+      G <- constrain_lambda(G, G_mat)
+
       rownames(G) <- factor_names
-      colnames(G) <- colnames(x)
+      colnames(G) <- colnames(covariates)
       if(selection %in% 'factor-regressors'){
         samples$G <- G
       }
@@ -178,6 +181,8 @@ get_prior_SEM <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, t
       for(i in 1:n_cov){
         B[,i,] <- t(mvtnorm::rmvnorm(N, sigma = diag(prior$B_var)))
       }
+      B <- constrain_lambda(B, B_mat)
+
       rownames(B) <- colnames(B) <- factor_names
       if(selection %in% 'structural-regressors'){
         samples$B <- B
@@ -188,6 +193,7 @@ get_prior_SEM <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, t
       for(i in 1:n_factors){
         lambda[,i,] <- t(mvtnorm::rmvnorm(N, sigma = diag(prior$lambda_var)))
       }
+      lambda <- constrain_lambda(lambda, Lambda_mat)
       rownames(lambda) <- par_names
       colnames(lambda) <- factor_names
       if(selection %in% "loadings"){
@@ -206,14 +212,12 @@ get_prior_SEM <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, t
       delta_inv <- array(0, dim = c(n_factors, n_factors, N))
       for(i in 1:N){
         if(any(is_structured)){
-          delta_inv[is_structured,is_structured, N] <- diag(rgamma(sum(is_structured) ,shape=prior$a_d,rate=prior$b_d, sum(is_structured)))
+          delta_inv[is_structured,is_structured, i] <- diag(rgamma(sum(is_structured) ,shape=prior$a_d,rate=prior$b_d), sum(is_structured))
         }
         if(any(!is_structured)){
-          delta_inv[!is_structured, !is_structured, N] <- solve(riwish(prior$a_d, diag(prior$b_d)))
+          delta_inv[!is_structured, !is_structured, i] <- solve(riwish(prior$a_d + n_pars, diag(prior$b_d, sum(!is_structured))))
         }
       }
-      delta_inv <- t(matrix(rgamma(n_pars*N, shape = prior$a_e, rate = prior$b_e),
-                            ncol = n_pars, byrow = T))
       rownames(delta_inv) <- colnames(delta_inv) <- factor_names
       if(selection %in% "factor-residuals"){
         samples$delta_inv <- delta_inv
@@ -225,20 +229,21 @@ get_prior_SEM <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, t
         B_0_inv <- solve(diag(n_factors) - B)
         mu_implied[,i] <- c(mu[,i] + lambda[,,i] %*% B_0_inv %*% G[,,i] %*% x_mu + K[,,i] %*% x_mu)
       }
+      if(selection != "alpha") samples$mu_implied <- mu_implied
     }
     if(selection %in% c("sigma2", "covariance", "correlation", "Sigma", "alpha")) {
       vars <- array(NA_real_, dim = c(n_pars, n_pars, N))
       colnames(vars) <- rownames(vars) <- par_names
       for(i in 1:N){
-        B_0_inv <- solve(diag(n_factors) - B[,,i])
-        vars[,,i] <- lambda[,,i] %*% B_0_inv %*% (G[,,i] %*% x_var %*% t(G[,,i]) +
-                     solve(delta_inv[,,i])) %*% t(B_0_inv) %*% t(lambda[,,i]) +
-                     K[,,i] %*% x_var %*% t(K[,,i]) + diag(1/epsilon_inv[,i])
+        B_0_inv <- solve(diag(n_factors) - as.matrix(B[,,i]))
+        vars[,,i] <- as.matrix(lambda[,,i]) %*% B_0_inv %*% (as.matrix(G[,,i]) %*% x_var %*% t(as.matrix(G[,,i])) +
+                     solve(as.matrix(delta_inv[,,i]))) %*% t(B_0_inv) %*% t(as.matrix(lambda[,,i])) +
+                     as.matrix(K[,,i]) %*% x_var %*% t(as.matrix(K[,,i])) + diag(1/epsilon_inv[,i])
       }
       if(selection != "alpha") samples$theta_var <- vars
     }
     if(selection %in% "alpha"){
-      samples$alpha <- get_alphas(mu, vars, "alpha")
+      samples$alpha <- get_alphas(mu_implied, vars, "alpha")
     }
     out <- samples
   }
@@ -267,11 +272,10 @@ get_startpoints_SEM<- function(pmwgs, start_mu, start_var){
   start_B[B_mat != Inf] <- B_mat[B_mat != Inf]
   start_K[K_mat != Inf] <- K_mat[K_mat != Inf]
   start_G[G_mat != Inf] <- G_mat[G_mat != Inf]
-  sub_mu <- matrix(start_mu, nrow = pmwgs$n_subjects, ncol = n_pars, byrow = T)
   return(list(tmu = start_mu, tvar = start_var, lambda = start_lambda, B = start_B,
               K = start_K, G = start_G,
               epsilon_inv = start_epsilon_inv, delta_inv = start_delta_inv,
-              eta = start_eta, sub_mu = sub_mu))
+              eta = start_eta, sub_mu = start_mu))
 }
 
 fill_samples_SEM <- function(samples, group_level, proposals, epsilon, j = 1, n_pars){
@@ -298,11 +302,11 @@ gibbs_step_SEM <- function(sampler, alpha){
   n_pars <- sampler$n_pars-sum(sampler$nuisance) - sum(sampler$grouped)
   n_factors <- sampler$n_factors
   n_cov <- sampler$n_cov
-  x <- sampler$x
+  covariates <- sampler$covariates
 
   # Update regression matrices
   isFree_Lambda <- hyper$Lambda_mat == Inf #For indexing
-  isFree_B <- hyper$B_mat == Inf #For indexing
+  isFree_B <- hyper$B_mat == Inf
   isFree_K <- hyper$K_mat == Inf
   isFree_G <- hyper$G_mat == Inf
   # Keeps track of which factors have a latent structure and which don't (thus can be estimated with a covariance)
@@ -320,7 +324,7 @@ gibbs_step_SEM <- function(sampler, alpha){
   # Start of the Gibbs steps
   #Update mu
   mu_sig <- solve(n_subjects * epsilon_inv + diag(1/prior$theta_mu_var, nrow = n_pars))
-  mu_mu <- mu_sig %*% (epsilon_inv %*% colSums(y - x %*% t(K) - eta %*% t(lambda)) + diag(1/prior$theta_mu_var, nrow = n_pars)%*% prior$theta_mu_mean)
+  mu_mu <- mu_sig %*% (epsilon_inv %*% colSums(y - covariates %*% t(K) - eta %*% t(lambda)) + diag(1/prior$theta_mu_var, nrow = n_pars)%*% prior$theta_mu_mean)
   mu <- rmvnorm(1, mu_mu, mu_sig)
   colnames(mu) <- colnames(y)
   # calculate mean-centered observations
@@ -330,17 +334,18 @@ gibbs_step_SEM <- function(sampler, alpha){
   Psi0_inv <- solve(B0_inv %*% solve(delta_inv) %*% t(B0_inv))
   eta_sig <- solve(Psi0_inv + t(lambda) %*% epsilon_inv %*% lambda)
   for(i in 1:n_subjects){
-    eta[i,] <- rmvnorm(1, eta_sig%*% (t(lambda) %*% epsilon_inv %*% (ytilde[i,] - K %*% x[i,]) + Psi0_inv %*% B0_inv %*% (G %*% x[i,])), eta_sig)
+    eta[i,] <- rmvnorm(1, eta_sig%*% (t(lambda) %*% epsilon_inv %*% (ytilde[i,] - K %*% covariates[i,]) + Psi0_inv %*% B0_inv %*% (G %*% covariates[i,])), eta_sig)
   }
-  epsilon_inv <- diag(rgamma(n_pars,shape=prior$a_e+n_subjects/2, rate=prior$b_e + 0.5*colSums((ytilde - x %*% t(K) - eta %*% t(lambda))^2)))
+  epsilon_inv <- diag(rgamma(n_pars,shape=prior$a_e+n_subjects/2, rate=prior$b_e + 0.5*colSums((ytilde - covariates %*% t(K) - eta %*% t(lambda))^2)))
 
   # #Update lambda and K, these can be updated together since they are both regressions on y (technically mu as well, but we have a mean prior on that one)
   lambda_y <- cbind(K, lambda)
+  lambda_y_prior <- cbind(replicate(ncol(K), prior$K_var), replicate(ncol(lambda), prior$lambda_var))
   for (j in 1:n_pars) {
     isFree <- c(isFree_K[j,], isFree_Lambda[j,])
     if(any(isFree)){ #Don't do this if there are no free entries in lambda
-      etaS <- cbind(x, eta)[,isFree]
-      lambda_sig <- solve(epsilon_inv[j,j] * t(etaS) %*% etaS + solve(prior$lambda_var * diag(1,sum(isFree))))
+      etaS <- cbind(covariates, eta)[,isFree]
+      lambda_sig <- solve(epsilon_inv[j,j] * t(etaS) %*% etaS + diag(1/lambda_y_prior[isFree], sum(isFree)))
       lambda_mu <- (lambda_sig * epsilon_inv[j,j]) %*% (t(etaS) %*% ytilde[,j]) # assume 0 prior on mean
       lambda_y[j,isFree] <- rmvnorm(1,lambda_mu,lambda_sig)
     }
@@ -349,11 +354,12 @@ gibbs_step_SEM <- function(sampler, alpha){
   lambda <- lambda_y[,((n_cov + 1):ncol(lambda_y))]
   #Update B and G, these can also be updated together since they are both regressions on eta
   B_eta <- cbind(G, B)
+  B_prior <- cbind(replicate(ncol(G), prior$G_var), replicate(ncol(B), prior$B_var))
   for(p in 1:n_factors){
     isFree <- c(isFree_G[p,], isFree_B[p,])
     if(any(isFree)){
-      etaS <- cbind(x, eta)[,isFree]
-      B_sig <- solve(delta_inv[p,p] * t(etaS) %*% etaS + solve(prior$B_var * diag(1,sum(isFree))))
+      etaS <- cbind(covariates, eta)[,isFree]
+      B_sig <- solve(delta_inv[p,p] * t(etaS) %*% etaS + diag(1/B_prior[isFree], sum(isFree)))
       B_mu <- (B_sig * delta_inv[p,p]) %*% (t(etaS) %*% eta[,p])
       B_eta[p,isFree] <- rmvnorm(1,B_mu,B_sig)
     }
@@ -362,7 +368,7 @@ gibbs_step_SEM <- function(sampler, alpha){
   B <- B_eta[,((n_cov + 1):ncol(B_eta))]
 
   #Update delta_inv, using diagonal entries for structural factors and covariances between non-structural entries
-  eta_sq <- t(eta - eta %*% t(B) - x %*% t(G)) %*% (eta - eta %*% t(B) - x %*% t(G))
+  eta_sq <- t(eta - eta %*% t(B) - covariates %*% t(G)) %*% (eta - eta %*% t(B) - covariates %*% t(G))
   if(any(is_structured)){
     delta_inv[is_structured,is_structured] <- diag(rgamma(sum(is_structured) ,shape=prior$a_d+n_subjects/2,rate=prior$b_d+ 0.5*diag(eta_sq)[is_structured]), sum(is_structured))
   }
@@ -370,10 +376,10 @@ gibbs_step_SEM <- function(sampler, alpha){
     delta_inv[!is_structured, !is_structured] <- solve(riwish(n_subjects + prior$a_d, diag(prior$b_d, nrow = sum(!is_structured)) + eta_sq[!is_structured, !is_structured]))
   }
   # Put all our stuff back together
-  x_mu <- colMeans(x)
-  x_var <- cov(x)
+  x_mu <- colMeans(covariates)
+  x_var <- cov(covariates)
   B_0_inv <- solve(diag(n_factors) - B)
-  tmu <- c(mu + lambda %*% B_0_inv %*% G %*% x_mu + K %*% x_mu)
+  tmu <- c(t(mu) + lambda %*% B_0_inv %*% G %*% x_mu + K %*% x_mu)
   var <- lambda %*% B_0_inv %*% (G %*% x_var %*% t(G) +
                 solve(delta_inv)) %*% t(B_0_inv) %*% t(lambda) +
                 K %*% x_var %*% t(K) + solve(epsilon_inv)
@@ -444,7 +450,7 @@ bridge_add_info_SEM <- function(info, samples){
   info$G_mat <- attr(samples, "G_mat")
   info$n_factors <- samples$n_factors
   info$n_cov <- samples$n_cov
-  info$x <- samples$x
+  info$covariates <- samples$covariates
   # How many free regressors do we have
   free_regrs <- sum(info$Lambda_mat == Inf) + sum(info$B_mat == Inf) + sum(info$K_mat == Inf) + sum(info$G_mat == Inf)
   # Also group_level mean and residual parameter variances (and eta)
@@ -530,8 +536,8 @@ bridge_group_and_prior_and_jac_SEM <- function(proposals_group, proposals_list, 
   sum_out <- numeric(n_iter)
   delta_curr <- matrix(0, nrow = length(info$is_structured), ncol = length(info$is_structured))
 
-  x_mu <- colMeans(info$x)
-  x_var <- cov(info$x)
+  x_mu <- colMeans(info$covariates)
+  x_var <- cov(info$covariates)
   for(i in 1:n_iter){ # these unfortunately can't be vectorized
     # Put all our stuff back together
     if(sum(info$Lambda_mat == Inf) > 0) {
@@ -643,7 +649,7 @@ bridge_group_and_prior_and_jac_SEM <- function(proposals_group, proposals_list, 
 #   info$n_cov <- samples$n_cov
 #   info$n_cov <- samples$n_cov
 #   info$xy <- samples$xy
-#   info$x <- samples$x
+#   info$covariates <- samples$covariates
 #   # How many free regressors do we have
 #   free_regrs <- sum(info$Lambda_mat == Inf) + sum(info$B_mat == Inf) + sum(info$K_mat == Inf) + sum(info$G_mat == Inf)
 #   # Also group_level mean and residual parameter variances (and eta)

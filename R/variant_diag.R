@@ -36,7 +36,7 @@ get_prior_diag <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, 
     prior <- list()
   }
   if(!is.null(design)){
-    n_pars <- length(attr(design, "p_vector"))
+    n_pars <- length(sampled_p_vector(design, doMap = F))
   }
   if (!is.null(prior$theta_mu_mean)) {
     n_pars <- length(prior$theta_mu_mean)
@@ -58,7 +58,7 @@ get_prior_diag <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, 
   attr(prior, "type") <- "diagonal"
   out <- prior
   if(sample){
-    par_names <- names(attr(design, "p_vector"))
+    par_names <- names(sampled_p_vector(design, doMap = F))
     samples <- list()
     if(selection %in% c("mu", "alpha")){
       mu <- t(mvtnorm::rmvnorm(N, mean = prior$theta_mu_mean,
@@ -94,7 +94,7 @@ get_prior_diag <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, 
 #       samples <- mvtnorm::rmvnorm(N, mean = prior$theta_mu_mean,
 #                                   sigma = prior$theta_mu_var)
 #       if(!is.null(design)){
-#         colnames(samples) <- par_names <- names(attr(design, "p_vector"))
+#         colnames(samples) <- par_names <- names(sampled_p_vector(design, doMap = F))
 #         if(map){
 #           samples <- map_mcmc(samples,design,design$model,include_constants=FALSE)
 #         }
@@ -109,7 +109,7 @@ get_prior_diag <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, 
 #                              rate = 1/(prior$A^2))
 #         var[i,] <- 1 / rgamma(n = n_pars, shape = prior$v/2, rate = prior$v/a_half)
 #       }
-#       colnames(var) <- names(attr(design, "p_vector"))
+#       colnames(var) <- names(sampled_p_vector(design, doMap = F))
 #       if (selection == "full_var"){
 #         out$full_var <- var
 #       } else{

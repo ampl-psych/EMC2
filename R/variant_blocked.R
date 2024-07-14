@@ -45,7 +45,7 @@ get_prior_blocked <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e
     prior <- list()
   }
   if(!is.null(design)){
-    n_pars <- length(attr(design, "p_vector"))
+    n_pars <- length(sampled_p_vector(design, doMap = F))
   }
   if (!is.null(prior$theta_mu_mean)) {
     n_pars <- length(prior$theta_mu_mean)
@@ -66,7 +66,7 @@ get_prior_blocked <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e
   attr(prior, "type") <- "blocked"
   out <- prior
   if(sample){
-    par_names <- names(attr(design, "p_vector"))
+    par_names <- names(sampled_p_vector(design, doMap = F))
     samples <- list()
     if(selection %in% c("mu", "alpha")){
       mu <- t(mvtnorm::rmvnorm(N, mean = prior$theta_mu_mean,

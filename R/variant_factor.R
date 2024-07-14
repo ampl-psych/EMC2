@@ -93,7 +93,7 @@ get_prior_factor <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5
     prior <- list()
   }
   if(!is.null(design)){
-    n_pars <- length(attr(design, "p_vector"))
+    n_pars <- length(sampled_p_vector(design, doMap = F))
   }
   if (is.null(prior$theta_mu_mean)) {
     prior$theta_mu_mean <- rep(0, n_pars)
@@ -124,7 +124,7 @@ get_prior_factor <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5
   out <- prior
   if(sample){
     samples <- list()
-    par_names <- names(attr(design, "p_vector"))
+    par_names <- names(sampled_p_vector(design, doMap = F))
     if(!selection %in% c("mu", "sigma2", "covariance", "alpha", "correlation", "Sigma", "loadings", "residuals")){
       stop("for variant factor, you can only specify the prior on the mean, variance, covariance, loadings, residuals, or the correlation of the parameters")
     }
@@ -328,6 +328,15 @@ unwind_lambda <- function(lambda, constraintMat, reverse = F){
     out <- as.numeric(lambda[constraintMat == Inf])
   }
   return(out)
+}
+
+constrain_lambda <- function(lambda, constraintMat){
+  for(i in 1:dim(lambda)[3]){
+    tmp <- lambda[,,i]
+    tmp[constraintMat != Inf] <- 0
+    lambda[,,i] <- tmp
+  }
+  return(lambda)
 }
 
 # bridge_sampling ---------------------------------------------------------

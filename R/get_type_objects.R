@@ -25,6 +25,10 @@ get_objects <- function(type, selection = NULL, sample_prior = F, design = NULL,
     out <- get_objects_factor(type, selection, sample_prior, return_prior, design, prior, stage, N = N,
                                     sampler,...)
   }
+  else if(type == "SEM"){
+    out <- get_objects_SEM(type, selection, sample_prior, return_prior, design, prior, stage, N = N,
+                              sampler,...)
+  }
   else{
     stop("make sure type is supported!")
   }
@@ -334,12 +338,14 @@ get_objects_SEM <- function(type, selection, sample_prior, return_prior, design 
                      "factor-residuals", "regressors", "factor-regressors", "structural-regressors",
                      "mu-implied", "LL")
   if(return_prior & !sample_prior){
-    prior$prior <- do.call(get_prior_factor, c(list(design = design, sample = F, prior = prior), fix_dots(list(...), get_prior_factor)))
+    prior$prior <- do.call(get_prior_SEM, c(list(design = design, sample = F, prior = prior), fix_dots(list(...), get_prior_SEM)))
     prior$descriptions <- list(
       theta_mu_mean = "mean of the group-level mean prior",
       theta_mu_var = "variance of the group-level mean prior",
-      theta_lambda_var = "variance of the factor loadings and K",
-      B_var = "variance of B and G",
+      lambda_var = "variance of the factor loadings",
+      K_var = "variance of the parameter regressors",
+      G_var = "variance of the factor regressors",
+      B_var = "variance of structural regressors",
       a_d = "shape prior of inverse gamma/inverse wishart on factor variances",
       b_d = "rate prior of inverse gamma/inverse wishart on factor variances",
       a_e = "shape prior of inverse gamma on residuals",
@@ -347,15 +353,21 @@ get_objects_SEM <- function(type, selection, sample_prior, return_prior, design 
     )
     prior$groups <- list(
       mu = c("theta_mu_mean", "theta_mu_var"),
-      loadings = c("theta_lambda_var", "ap", "bp"),
-      B = c("theta_lambda_var"),
-      residuals = c("a_e", "b_e")
+      loadings = c("theta_lambda_var"),
+      residuals = c("a_e", "b_e"),
+      factor_residuals = c("a_d", "b_d"),
+      regressors = c("K_var"),
+      factor_regressors = c("G_var"),
+      structural_regressors = c("B_var")
     )
     prior$group_descriptions <- list(
-      mu = "Group-level mean",
-      loadings = "Factor loadings",
-      B = "Latent loadings",
-      residuals = "Residual errors on the variances"
+      mu = "group-level mean",
+      loadings = "factor variances",
+      residuals = "residuals on parameter variances",
+      factor_residuals = "residuals on factor variances",
+      regressors = "regressors on parameters",
+      factor_regressors = "regressors on factors",
+      structural_regressors = "structural regressors between factors"
     )
     prior$prior <- add_prior_names(prior$prior, design)
     return(prior)
@@ -368,9 +380,9 @@ get_objects_SEM <- function(type, selection, sample_prior, return_prior, design 
         sub_names <- names(sampler[[1]]$data)
         sampler <- list(list(samples =  list(alpha = get_alphas(mu, var, sub_names))))
       } else{
-        sampler <- list(list(samples = do.call(get_prior_factor,
+        sampler <- list(list(samples = do.call(get_prior_SEM,
                                                c(list(prior = prior, design = design,
-                                                      selection = selection,N = N), fix_dots(list(...), get_prior_factor)))))
+                                                      selection = selection,N = N), fix_dots(list(...), get_prior_SEM)))))
       }
       attr(sampler, "design_list") <- list(design)
       return(sampler)
