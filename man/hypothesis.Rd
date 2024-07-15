@@ -13,6 +13,7 @@
   selection = "mu",
   do_plot = TRUE,
   use_prior_lim = TRUE,
+  N = 10000,
   prior_plot_args = list(),
   ...
 )
@@ -33,6 +34,8 @@ hypothesis(emc, ...)
 \item{do_plot}{Boolean. If \code{FALSE} will omit the prior-posterior plot and only return the savage-dickey ratio.}
 
 \item{use_prior_lim}{Boolean. If \code{TRUE} will use xlimits based on prior density, otherwise based on posterior density.}
+
+\item{N}{Integer. How many prior samples to draw}
 
 \item{prior_plot_args}{A list. Optional additional arguments to be passed to plot.default for the plotting of the prior density (see \code{par()})}
 

@@ -610,7 +610,8 @@ recovery <- function(emc, ...){
 #' @rdname hypothesis
 #' @export
 hypothesis.emc <- function(emc, parameter = NULL, H0 = 0, fun = NULL,selection = "mu",
-                          do_plot = TRUE, use_prior_lim = TRUE, prior_plot_args = list(), ...){
+                          do_plot = TRUE, use_prior_lim = TRUE,
+                          N = 1e4, prior_plot_args = list(), ...){
   dots <- add_defaults(list(...), flatten = TRUE)
   type <- attr(emc[[1]], "variant_funs")$type
   if (length(emc[[1]]$data)==1) selection <- "alpha"
@@ -620,7 +621,7 @@ hypothesis.emc <- function(emc, parameter = NULL, H0 = 0, fun = NULL,selection =
 
   psamples <-  get_objects(design = attr(emc,"design_list")[[1]],
                            type = attr(emc[[1]], "variant_funs")$type, sample_prior = T,
-                           selection = selection, N = 1e4)
+                           selection = selection, N = N)
   psamples <- do.call(get_pars, c(list(psamples, selection = selection, merge_chains = TRUE, return_mcmc = FALSE, by_subject = TRUE,
                                           type = attr(emc[[1]], "variant_funs")$type),
                                      fix_dots(dots, get_pars, exclude = c("thin", "filter"))))
