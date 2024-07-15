@@ -611,12 +611,11 @@ recovery <- function(emc, ...){
 #' @export
 hypothesis.emc <- function(emc, parameter = NULL, H0 = 0, fun = NULL,selection = "mu",
                           do_plot = TRUE, use_prior_lim = TRUE, prior_plot_args = list(), ...){
-  dots <- list(...)
+  dots <- add_defaults(list(...), flatten = TRUE)
   type <- attr(emc[[1]], "variant_funs")$type
   if (length(emc[[1]]$data)==1) selection <- "alpha"
   if(selection == "alpha" & type != "single") stop("For savage-dickey ratio, selection cannot be alpha for hierarchical models")
   prior <- emc[[1]]$prior
-  flatten <- ifelse(selection == "alpha", FALSE, TRUE)
 
 
   psamples <-  get_objects(design = attr(emc,"design_list")[[1]],
@@ -646,13 +645,13 @@ hypothesis.emc <- function(emc, parameter = NULL, H0 = 0, fun = NULL,selection =
   min_bound <- min(min(psamples), H0)
   max_bound <- max(max(psamples), H0)
   diff <- max_bound - min_bound
-  pdensity <- density(psamples, bw = "sj", from = min_bound - diff/2, to = max_bound + diff/2)
+  pdensity <- density(psamples, from = min_bound - diff/2, to = max_bound + diff/2)
   pdfun <-approxfun(pdensity)
 
   min_bound <- min(min(samples), H0)
   max_bound <- max(max(samples), H0)
   diff <- max_bound - min_bound
-  post_density <- density(samples, bw = "sj", from = min_bound - diff/2, to = max_bound + diff/2)
+  post_density <- density(samples, from = min_bound - diff/2, to = max_bound + diff/2)
   post_dfun <-approxfun(post_density)
   if(do_plot){
     if(is.null(dots$xlim)){
@@ -844,16 +843,17 @@ credible <- function(x, ...){
 #' @inheritParams get_pars
 #' @param ... additional optional arguments
 #' @param x an emc object
+#' @param keep_stages Boolean. If `TRUE`, will not remove samples from unselected stages.
 #' @return A shortened emc object
 #' @export
 #'
 #' @examples
 #' subset(samples_LNR, length.out = 10)
-subset.emc <- function(x, stage = "sample", filter = NULL, thin = 1,
+subset.emc <- function(x, stage = "sample", filter = NULL, thin = 1, keep_stages = FALSE,
                        length.out = NULL, ...){
   design_list <- attr(x, "design_list")
   x <- lapply(x, remove_samples, stage = stage, filter = filter,
-                thin = thin, length.out = length.out)
+                thin = thin, length.out = length.out, keep_stages = keep_stages)
   attr(x, "design_list") <- design_list
   class(x) <- "emc"
   return(x)
