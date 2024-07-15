@@ -9,15 +9,13 @@ get_prior_SEM(
   n_pars = NULL,
   sample = TRUE,
   N = 1e+05,
-  type = "mu",
+  selection = "mu",
   design = NULL,
-  map = FALSE,
   Lambda_mat = NULL,
   B_mat = NULL,
   K_mat = NULL,
   G_mat = NULL,
-  x = NULL,
-  n_factors = 5
+  covariates = NULL
 )
 }
 \arguments{
@@ -31,12 +29,9 @@ and shape and rate prior on the residual variances (a_e and b_e)}
 
 \item{N}{How many samples to draw from the prior, default 1e5}
 
-\item{type}{character, options: "mu", "variance", "covariance" "full_var"}
+\item{selection}{Which parameter type to select e.g. \code{alpha}}
 
 \item{design}{The design obtained from \code{design}, required when map = TRUE}
-
-\item{map}{Boolean, default TRUE reverses malformation used by model to make
-sampled parameters unbounded}
 
 \item{Lambda_mat}{The loadings constraint matrix}
 
@@ -46,9 +41,7 @@ sampled parameters unbounded}
 
 \item{G_mat}{The regression on the latent factors by the included covariates}
 
-\item{x}{The included covariates}
-
-\item{n_factors}{how many factors to estimate}
+\item{covariates}{The included covariates}
 }
 \value{
 A list with a single entry of type of samples from the prior (if sample = TRUE) or else a prior object

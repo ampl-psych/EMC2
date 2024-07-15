@@ -84,7 +84,7 @@ summary.emc <- function(object, selection = c("mu", "sigma2", "alpha"), probs = 
 #' @examples
 #' plot(samples_LNR)
 #' # Or trace autocorrelation for the second subject:
-#' plot(samples_LNR, subject = 2, selection = "alpha", plot_acf = TRUE)
+#' plot(samples_LNR, subject = 2, selection = "alpha")
 #'
 #' # Can also plot the trace of for example the group-level correlation:
 #' plot(samples_LNR, selection = "correlation", col = c("green", "purple", "orange"), lwd = 2)

@@ -72,12 +72,9 @@ add_info_SEM <- function(sampler, prior = NULL, ...){
 #' and shape and rate prior on the residual variances (a_e and b_e)
 #' @param n_pars Argument used by the sampler, best left NULL. In user case inferred from the design
 #' @param sample Whether to sample from the prior. Default is TRUE. If not returns a prior list
-#' @param map Boolean, default TRUE reverses malformation used by model to make
-#' sampled parameters unbounded
 #' @param N How many samples to draw from the prior, default 1e5
-#' @param n_factors how many factors to estimate
+#' @param selection Which parameter type to select e.g. `alpha`
 #' @param design The design obtained from `design`, required when map = TRUE
-#' @param type  character, options: "mu", "variance", "covariance" "full_var"
 #' @param Lambda_mat The loadings constraint matrix
 #' @param B_mat The latent regressions constraint matrix
 #' @param K_mat The regression on the parameters by the included covariates

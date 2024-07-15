@@ -187,6 +187,7 @@ gelman_diag_robust <- function(mcl,autoburnin = FALSE,transform = TRUE, omit_mps
 #' @param digits Integer, significant digits in printed table
 #' @param subject Integer or string selecting a single subject, default NULL
 #' returns sums over all subjects
+#' @param group_only Boolean. If `TRUE` will calculate the IC for the group-level only
 #'
 #' @return Table of DIC, BPIC, EffectiveN, meanD, Dmean, and minD
 
@@ -207,7 +208,7 @@ IC <- function(emc,stage="sample",filter=0,use_best_fit=TRUE,
   mean_pars_lls <- setNames(numeric(length(mean_pars)),names(mean_pars))
   for (sub in names(mean_pars)){
     if(!is.data.frame(emc[[1]]$data[[1]])){
-      mean_pars_lls[sub] <- log_likelihood_joint(t(mean_pars[[sub]]),dadm = data[[sub]])
+      mean_pars_lls[sub] <- log_likelihood_joint(t(mean_pars[[sub]]),dadms = data[[sub]])
     } else{
       mean_pars_lls[sub] <- ll_func(mean_pars[[sub]],dadm = data[[sub]])
     }

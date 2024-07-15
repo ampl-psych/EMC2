@@ -9,7 +9,6 @@
   stage = "sample",
   selection = c("mu", "sigma2", "alpha"),
   layout = NA,
-  plot_acf = FALSE,
   ...
 )
 }
@@ -24,9 +23,6 @@ Defaults to \code{mu}, \code{sigma2}, and \code{alpha}.}
 
 \item{layout}{A vector indicating which layout to use as in par(mfrow = layout). If NA, will automatically generate an appropriate layout.}
 
-\item{plot_acf}{Boolean. If \code{FALSE} will make trace plots. If \code{TRUE} will plot the autocorrelation for a chain.
-By default plots acf for the first chain, but can be changed, by setting i.e. chain = 2; see \code{?get_pars}.}
-
 \item{...}{Optional arguments that can be passed to \code{get_pars} or \code{plot.default} (see \code{par()})}
 }
 \value{
@@ -38,7 +34,7 @@ Makes trace plots for model parameters.
 \examples{
 plot(samples_LNR)
 # Or trace autocorrelation for the second subject:
-plot(samples_LNR, subject = 2, selection = "alpha", plot_acf = TRUE)
+plot(samples_LNR, subject = 2, selection = "alpha")
 
 # Can also plot the trace of for example the group-level correlation:
 plot(samples_LNR, selection = "correlation", col = c("green", "purple", "orange"), lwd = 2)

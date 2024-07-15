@@ -916,6 +916,7 @@ make_recov_summary <- function(stats){
 #' @param fun A plot function that takes a vector/mcmc object as input, e.g. cumuplot, acf
 #' @param layout A vector indicating which layout to use as in par(mfrow = layout). If NA, will automatically generate an appropriate layout.
 #' @param plot_type type argument passed on to coda fun.
+#' @param chain Integer, which chain to include, if more than 1 will make separate plots per chain.
 #' @param ... Optional arguments that can be passed to `get_pars`,
 #' the chosen coda plot function, or `plot.default` (see `par()`)
 #'
