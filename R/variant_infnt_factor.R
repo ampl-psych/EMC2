@@ -16,7 +16,7 @@ get_prior_infnt_factor <- function(prior = NULL, n_pars = NULL, sample = TRUE, N
     prior <- list()
   }
   if(!is.null(design)){
-    n_pars <- length(attr(design, "p_vector"))
+    n_pars <- length(sampled_p_vector(design, doMap = F))
   }
   if(is.null(prior$theta_mu_mean)){
     prior$theta_mu_mean <- rep(0, n_pars)
@@ -57,7 +57,7 @@ get_prior_infnt_factor <- function(prior = NULL, n_pars = NULL, sample = TRUE, N
       samples <- mvtnorm::rmvnorm(N, mean = prior$theta_mu_mean,
                                   sigma = diag(prior$theta_mu_var))
       if(!is.null(design)){
-        colnames(samples) <- par_names <- names(attr(design, "p_vector"))
+        colnames(samples) <- par_names <- names(sampled_p_vector(design, doMap = F))
         if(map){
           proot <- unlist(lapply(strsplit(colnames(samples),"_"),function(x)x[[1]]))
           isin <- proot %in% names(design$model()$p_types)
@@ -72,7 +72,7 @@ get_prior_infnt_factor <- function(prior = NULL, n_pars = NULL, sample = TRUE, N
     } else if(selection == "residuals"){
       residuals <- matrix(1/rgamma(n_pars*N, shape = prior$as, rate = prior$bs),
              ncol = n_pars, byrow = T)
-      colnames(residuals) <- names(attr(design, "p_vector"))
+      colnames(residuals) <- names(sampled_p_vector(design, doMap = F))
       out$residuals <- residuals
       return(out)
     } else if(selection == "loadings") {
@@ -116,13 +116,13 @@ get_prior_infnt_factor <- function(prior = NULL, n_pars = NULL, sample = TRUE, N
       if (selection == "sigma2") {
         vars_only <- t(apply(var,3,diag))
         if(!is.null(design)){
-          colnames(vars_only) <- names(attr(design, "p_vector"))
+          colnames(vars_only) <- names(sampled_p_vector(design, doMap = F))
         }
         out$variance <- vars_only
       }
       lt <- lower.tri(var[,,1])
       if(selection %in% c("covariance", "correlation")){
-        pnams <- names(attr(design, "p_vector"))
+        pnams <- names(sampled_p_vector(design, doMap = F))
         lt <- lower.tri(diag(length(pnams)))
         pnams <- outer(pnams,pnams,paste,sep=".")[lt]
       }

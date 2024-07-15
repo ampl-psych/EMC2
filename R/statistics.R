@@ -44,10 +44,11 @@ compare <- function(sList,stage="sample",filter=NULL,use_best_fit=TRUE,
   sflist <- as.list(setNames(rep(defaultsf,length(sList)),names(sList)))
   if (is.list(filter)) for (i in names(filter))
     if (i %in% names(sflist)) sflist[[i]] <- filter[[i]]
-
+  dots <- add_defaults(list(...), group_only = FALSE)
   ICs <- setNames(vector(mode="list",length=length(sList)),names(sList))
   for (i in 1:length(ICs)) ICs[[i]] <- IC(sList[[i]],stage=stage,
-                                          filter=sflist[[i]],use_best_fit=use_best_fit,subject=NULL,print_summary=FALSE)
+                                          filter=sflist[[i]],use_best_fit=use_best_fit,subject=NULL,print_summary=FALSE,
+                                          group_only = dots$group_only)
   ICs <- data.frame(do.call(rbind,ICs))
   DICp <- getp(ICs$DIC)
   BPICp <- getp(ICs$BPIC)
@@ -186,11 +187,13 @@ gelman_diag_robust <- function(mcl,autoburnin = FALSE,transform = TRUE, omit_mps
 #' @param digits Integer, significant digits in printed table
 #' @param subject Integer or string selecting a single subject, default NULL
 #' returns sums over all subjects
+#' @param group_only Boolean. If `TRUE` will calculate the IC for the group-level only
 #'
 #' @return Table of DIC, BPIC, EffectiveN, meanD, Dmean, and minD
 
 IC <- function(emc,stage="sample",filter=0,use_best_fit=TRUE,
-               print_summary=TRUE,digits=0,subject=NULL)
+               print_summary=TRUE,digits=0,subject=NULL,
+               group_only = FALSE)
   # Gets DIC, BPIC, effective parameters, mean deviance, and deviance of mean
 {
   # Mean log-likelihood for each subject
@@ -203,8 +206,13 @@ IC <- function(emc,stage="sample",filter=0,use_best_fit=TRUE,
   ll_func <- attr(emc,"design_list")[[1]]$model()$log_likelihood
   data <- emc[[1]]$data
   mean_pars_lls <- setNames(numeric(length(mean_pars)),names(mean_pars))
-  for (sub in names(mean_pars))
-    mean_pars_lls[sub] <- ll_func(mean_pars[[sub]],dadm = data[[sub]])
+  for (sub in names(mean_pars)){
+    if(!is.data.frame(emc[[1]]$data[[1]])){
+      mean_pars_lls[sub] <- log_likelihood_joint(t(mean_pars[[sub]]),dadms = data[[sub]])
+    } else{
+      mean_pars_lls[sub] <- ll_func(mean_pars[[sub]],dadm = data[[sub]])
+    }
+  }
   Dmeans <- -2*mean_pars_lls
 
   if (!is.null(subject)) {
@@ -213,9 +221,15 @@ IC <- function(emc,stage="sample",filter=0,use_best_fit=TRUE,
     minDs <- minDs[subject[1]]
   } else{
     group_stats <- attr(emc[[1]], "variant_funs")$group_IC(emc, stage=stage,filter=filter)
-    mean_lls <- c(mean_lls, group_stats$mean_ll)
-    minDs <- c(minDs, group_stats$minD)
-    Dmeans <- c(Dmeans, group_stats$Dmean)
+    if(group_only){
+      mean_lls <- group_stats$mean_ll
+      minDs <- group_stats$minD
+      Dmeans <- group_stats$Dmean
+    } else{
+      mean_lls <- c(mean_lls, group_stats$mean_ll)
+      minDs <- c(minDs, group_stats$minD)
+      Dmeans <- c(Dmeans, group_stats$Dmean)
+    }
   }
   if (use_best_fit) minDs <- pmin(minDs,Dmeans)
 

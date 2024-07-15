@@ -13,7 +13,8 @@ IC(
   use_best_fit = TRUE,
   print_summary = TRUE,
   digits = 0,
-  subject = NULL
+  subject = NULL,
+  group_only = FALSE
 )
 }
 \arguments{
@@ -33,6 +34,8 @@ calculation otherwise always use Dmean}
 
 \item{subject}{Integer or string selecting a single subject, default NULL
 returns sums over all subjects}
+
+\item{group_only}{Boolean. If \code{TRUE} will calculate the IC for the group-level only}
 }
 \value{
 Table of DIC, BPIC, EffectiveN, meanD, Dmean, and minD

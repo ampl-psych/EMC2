@@ -287,32 +287,47 @@ contr.anova <- function(n) {
 sampled_p_vector <- function(design,model=NULL,doMap=TRUE, add_da = FALSE, all_cells_dm = FALSE)
   # Makes an empty p_vector corresponding to model.
 {
-  if (is.null(model)) model <- design$model
-  if (is.null(model)) stop("Must supply model as not in design")
-
-  Ffactors=c(design$Ffactors,list(R=design$Rlevels))
-  data <- as.data.frame.table(array(dim=unlist(lapply(Ffactors,length)),
-                                    dimnames=Ffactors))[,-(length(Ffactors)+1)]
-  for (i in names(design$Ffactors))
-    data[[i]] <- factor(data[[i]],levels=design$Ffactors[[i]])
-
-  # if (!is.null(design$Ffunctions))
-  #   data <- cbind.data.frame(data,data.frame(lapply(design$Ffunctions,function(f){f(data)})))
-
-  if (!is.null(design$Fcovariates)) {
-    covs <- matrix(0,nrow=dim(data)[1],ncol=length(design$Fcovariates),
-                   dimnames=list(NULL,names(design$Fcovariates)))
-    data <- cbind.data.frame(data,covs)
+  if(is.null(design)) return(NULL)
+  if(!is.null(design$Ffactors)){
+    design <- list(design)
   }
-  dadm <- design_model(
-    add_accumulators(data,matchfun=design$matchfun,type=model()$type,Fcovariates=design$Fcovariates),
-    design,model,add_acc=FALSE,verbose=FALSE,rt_check=FALSE,compress=FALSE, add_da = add_da,
-    all_cells_dm = all_cells_dm)
-  sampled_p_names <- attr(dadm,"sampled_p_names")
-  out <- stats::setNames(numeric(length(sampled_p_names)),sampled_p_names)
-  if (doMap) attr(out,"map") <-
-    lapply(attributes(dadm)$designs,function(x){x[,,drop=FALSE]})
-  out
+  out <- c()
+  map_list <- list()
+  for(j in 1:length(design)){
+    cur_design <- design[[j]]
+    if (is.null(model)) model <- cur_design$model
+    if (is.null(model)) stop("Must supply model as not in design")
+
+    Ffactors=c(cur_design$Ffactors,list(R=cur_design$Rlevels))
+    data <- as.data.frame.table(array(dim=unlist(lapply(Ffactors,length)),
+                                      dimnames=Ffactors))[,-(length(Ffactors)+1)]
+    for (i in names(cur_design$Ffactors))
+      data[[i]] <- factor(data[[i]],levels=cur_design$Ffactors[[i]])
+
+    # if (!is.null(design$Ffunctions))
+    #   data <- cbind.data.frame(data,data.frame(lapply(design$Ffunctions,function(f){f(data)})))
+
+    if (!is.null(cur_design$Fcovariates)) {
+      covs <- matrix(0,nrow=dim(data)[1],ncol=length(cur_design$Fcovariates),
+                     dimnames=list(NULL,names(cur_design$Fcovariates)))
+      data <- cbind.data.frame(data,covs)
+    }
+    dadm <- design_model(
+      add_accumulators(data,matchfun=cur_design$matchfun,type=model()$type,Fcovariates=cur_design$Fcovariates),
+      cur_design,model,add_acc=FALSE,verbose=FALSE,rt_check=FALSE,compress=FALSE, add_da = add_da,
+      all_cells_dm = all_cells_dm)
+    sampled_p_names <- attr(dadm,"sampled_p_names")
+    if(length(design) != 1){
+      map_list[[j]] <- lapply(attributes(dadm)$designs,function(x){x[,,drop=FALSE]})
+      sampled_p_names <- paste(j, sampled_p_names, sep = "|")
+    }
+    out <- c(out, stats::setNames(numeric(length(sampled_p_names)),sampled_p_names))
+    if(length(design) == 1){
+      if (doMap) attr(out,"map") <- lapply(attributes(dadm)$designs,function(x){x[,,drop=FALSE]})
+    }
+  }
+  if(length(design) != 1) attr(out, "map") <- map_list
+  return(out)
 }
 
 

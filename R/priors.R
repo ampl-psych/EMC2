@@ -45,7 +45,7 @@
 prior <- function(design, type = "standard", update = NULL,
                       ask = NULL, fill_default = TRUE, ...){
   if(!is.null(update)) type <- attr(prior, "type")
-  prior <- get_objects(design = design, type = type)
+  prior <- get_objects(design = design, type = type, ...)
   args <- list(...)
   if(!is.null(args$mu_mean)){
     args$theta_mu_mean <- args$mu_mean
@@ -132,7 +132,7 @@ prior <- function(design, type = "standard", update = NULL,
       }
     }
   }
-  prior <- get_objects(design = design, type = type, prior = prior$prior)
+  prior <- get_objects(design = design, type = type, prior = prior$prior, ...)
   return(prior$prior)
 }
 
@@ -249,6 +249,10 @@ ask_user_prior <- function(prior, cur_idx, to_do, fill_default, group_to_do){
 plot_prior <- function(prior, design, selection = "mu",
                            layout = NA, N = 5e4, ...){
   dots <- add_defaults(list(...), breaks = 30, cut_off = 0.0015, prob = TRUE, by_subject = TRUE, map = TRUE)
+  if(is.null(design$Ffactors)){
+    dots$map <- FALSE
+    warning("For joint models, map = TRUE is not yet implemented")
+  }
   type <- attr(prior, "type")
   if(type == "single") selection <- "alpha"
   samples <-  get_objects(design = design, prior = prior, type = type, sample_prior = T,

@@ -92,7 +92,7 @@ log_likelihood_joint <- function(proposals, dadms, component = NULL){
       i <- i + 1
       parPrefix <- parPreFixs[i]
       columns_to_use <- sapply(strsplit(colnames(proposals), "|", fixed = TRUE), function(x) x == parPrefix)[1,]
-      currentPars <- proposals[,columns_to_use]
+      currentPars <- proposals[,columns_to_use, drop = F]
       colnames(currentPars) <- gsub(".*[|]", "", colnames(currentPars))
       total_ll <- total_ll +  calc_ll_manager(currentPars, dadm, attr(dadm, "model")()$log_likelihood)
     }

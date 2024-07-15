@@ -781,8 +781,7 @@ make_emc <- function(data,design,model=NULL,
   B_mat <- NULL
   K_mat <- NULL
   G_mat <- NULL
-  xy <- NULL
-  xeta <- NULL
+  covariates <- NULL
   nuisance <- NULL
   nuisance_non_hyper <- NULL
   # overwrite those that were supplied
@@ -897,8 +896,7 @@ make_emc <- function(data,design,model=NULL,
                  constraintMat = constraintMat)
   } else if (type == "SEM"){
     out <- pmwgs(dadm_list,variant_funs, Lambda_mat = Lambda_mat, B_mat = B_mat, K_mat = K_mat, G_mat = G_mat,
-                 xeta = xeta, xy = xy, nuisance = nuisance,
-                 nuisance_non_hyper = nuisance_non_hyper, grouped_pars = grouped_pars)
+                 covariates = covariates, nuisance = nuisance, nuisance_non_hyper = nuisance_non_hyper, grouped_pars = grouped_pars)
   }
   # replicate chains
   dadm_lists <- rep(list(out),n_chains)
