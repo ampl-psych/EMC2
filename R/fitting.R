@@ -866,12 +866,12 @@ make_emc <- function(data,design,model=NULL,
                                                design = design[[i]],model=model[[i]])
       sampled_p_names <- attr(design[[i]],"sampled_p_names")
     }
-
-    if(!is.null(prior_list[[i]])){
-      prior_list[[i]] <- check_prior(prior_list[[i]], sampled_p_names)
+    if(length(prior_list) == length(data)){
+      if(!is.null(prior_list[[i]])){
+        prior_list[[i]] <- check_prior(prior_list[[i]], sampled_p_names)
+      }
     }
     # create a design model
-
   }
   prior <- merge_priors(prior_list)
 
