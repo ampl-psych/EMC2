@@ -19,7 +19,7 @@ filter_obj <- function(obj, idx){
 }
 
 remove_samples <- function(samples, stage = "sample", filter = NULL, thin = 1,
-                           length.out = NULL){
+                           length.out = NULL, keep_stages = FALSE){
   if(!any(samples$samples$stage %in% stage)) stop("No samples from the chosen stage are present")
   filter_idx <- which(samples$samples$stage %in% stage)
   max_dim <- max(filter_idx); min_dim <- min(filter_idx)
@@ -43,6 +43,7 @@ remove_samples <- function(samples, stage = "sample", filter = NULL, thin = 1,
     samples$sampler_nuis$samples <- base::rapply(samples$sampler_nuis$samples, f = function(x) filter_obj(x, filter_idx), how = "replace")
     samples$sampler_nuis$samples$idx <- length(filter_idx)
   }
+  if(keep_stages) filter_idx <- c(which(!(samples$samples$stage %in% stage)), filter_idx)
   samples$samples <- base::rapply(samples$samples, f = function(x) filter_obj(x, filter_idx), how = "replace")
   samples$samples$stage <- samples$samples$stage[filter_idx]
   samples$samples$idx <- length(filter_idx)
