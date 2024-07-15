@@ -288,7 +288,7 @@ check_gd <- function(emc, stage, max_gd, mean_gd, omit_mpsrf, trys, verbose,
   ok_gd <- ok_mean_gd & ok_max_gd
   if(!ok_gd) {
     n_remove <- round(chain_n(emc)[,stage][1]/3)
-    samplers_short <- subset.emc(emc, filter=n_remove,stage=stage)
+    samplers_short <- subset.emc(emc, filter=n_remove,stage=stage, keep_stages = TRUE)
     if (is(samplers_short,"try-error")){
       gd_short <- Inf
     } else{
