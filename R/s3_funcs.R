@@ -285,7 +285,7 @@ parameters.emc <- function(emc,selection = "mu", N = 1000, ...)
 {
   dots <- list(...)
   dots$merge_chains <- TRUE ; dots$return_mcmc <- FALSE
-  dots$flatten <- TRUE; dots$length.out <- N/3
+  dots$flatten <- TRUE; dots$length.out <- N/length(emc)
   out <- do.call(get_pars, c(list(emc,selection=selection), fix_dots(dots, get_pars)))
   if(selection == "alpha"){
     out <- aperm(out, c(3,1,2))
