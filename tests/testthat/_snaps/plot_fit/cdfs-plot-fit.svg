@@ -338,11 +338,11 @@
 <circle cx='79.83' cy='219.69' r='1.78' style='stroke-width: 0.75; stroke: none; fill: #000000;' />
 <circle cx='95.03' cy='214.73' r='1.78' style='stroke-width: 0.75; stroke: none; fill: #000000;' />
 <circle cx='109.26' cy='209.76' r='1.78' style='stroke-width: 0.75; stroke: none; fill: #000000;' />
-<line x1='46.09' y1='57.97' x2='60.35' y2='57.97' style='stroke-width: 0.75;' />
-<line x1='46.09' y1='67.48' x2='60.35' y2='67.48' style='stroke-width: 0.75; stroke-dasharray: 4.00,4.00;' />
-<text x='62.71' y='48.47' text-anchor='middle' style='font-size: 7.92px; font-family: sans;' textLength='35.67px' lengthAdjust='spacingAndGlyphs'>Response</text>
-<text x='67.48' y='60.70' style='font-size: 7.92px; font-family: sans;' textLength='10.56px' lengthAdjust='spacingAndGlyphs'>left</text>
-<text x='67.48' y='70.20' style='font-size: 7.92px; font-family: sans;' textLength='15.41px' lengthAdjust='spacingAndGlyphs'>right</text>
+<line x1='179.69' y1='139.25' x2='193.94' y2='139.25' style='stroke-width: 0.75;' />
+<line x1='179.69' y1='148.75' x2='193.94' y2='148.75' style='stroke-width: 0.75; stroke-dasharray: 4.00,4.00;' />
+<text x='196.30' y='129.74' text-anchor='middle' style='font-size: 7.92px; font-family: sans;' textLength='35.67px' lengthAdjust='spacingAndGlyphs'>Response</text>
+<text x='201.07' y='141.97' style='font-size: 7.92px; font-family: sans;' textLength='10.56px' lengthAdjust='spacingAndGlyphs'>left</text>
+<text x='201.07' y='151.48' style='font-size: 7.92px; font-family: sans;' textLength='15.41px' lengthAdjust='spacingAndGlyphs'>right</text>
 </g>
 <defs>
   <clipPath id='cpMjc4Ljk3fDQ2MC4wNHwzOC45N3wyMzkuNTM='>
@@ -663,11 +663,11 @@
 <circle cx='317.79' cy='218.65' r='1.78' style='stroke-width: 0.75; stroke: none; fill: #000000;' />
 <circle cx='324.64' cy='213.27' r='1.78' style='stroke-width: 0.75; stroke: none; fill: #000000;' />
 <circle cx='345.94' cy='207.88' r='1.78' style='stroke-width: 0.75; stroke: none; fill: #000000;' />
-<line x1='286.09' y1='57.97' x2='300.35' y2='57.97' style='stroke-width: 0.75;' />
-<line x1='286.09' y1='67.48' x2='300.35' y2='67.48' style='stroke-width: 0.75; stroke-dasharray: 4.00,4.00;' />
-<text x='302.71' y='48.47' text-anchor='middle' style='font-size: 7.92px; font-family: sans;' textLength='35.67px' lengthAdjust='spacingAndGlyphs'>Response</text>
-<text x='307.48' y='60.70' style='font-size: 7.92px; font-family: sans;' textLength='10.56px' lengthAdjust='spacingAndGlyphs'>left</text>
-<text x='307.48' y='70.20' style='font-size: 7.92px; font-family: sans;' textLength='15.41px' lengthAdjust='spacingAndGlyphs'>right</text>
+<line x1='419.69' y1='139.25' x2='433.94' y2='139.25' style='stroke-width: 0.75;' />
+<line x1='419.69' y1='148.75' x2='433.94' y2='148.75' style='stroke-width: 0.75; stroke-dasharray: 4.00,4.00;' />
+<text x='436.30' y='129.74' text-anchor='middle' style='font-size: 7.92px; font-family: sans;' textLength='35.67px' lengthAdjust='spacingAndGlyphs'>Response</text>
+<text x='441.07' y='141.97' style='font-size: 7.92px; font-family: sans;' textLength='10.56px' lengthAdjust='spacingAndGlyphs'>left</text>
+<text x='441.07' y='151.48' style='font-size: 7.92px; font-family: sans;' textLength='15.41px' lengthAdjust='spacingAndGlyphs'>right</text>
 </g>
 <defs>
   <clipPath id='cpNTE4Ljk3fDcwMC4wNHwzOC45N3wyMzkuNTM='>
@@ -988,11 +988,11 @@
 <circle cx='541.53' cy='209.60' r='1.78' style='stroke-width: 0.75; stroke: none; fill: #000000;' />
 <circle cx='546.15' cy='200.61' r='1.78' style='stroke-width: 0.75; stroke: none; fill: #000000;' />
 <circle cx='564.94' cy='191.61' r='1.78' style='stroke-width: 0.75; stroke: none; fill: #000000;' />
-<line x1='526.09' y1='57.97' x2='540.35' y2='57.97' style='stroke-width: 0.75;' />
-<line x1='526.09' y1='67.48' x2='540.35' y2='67.48' style='stroke-width: 0.75; stroke-dasharray: 4.00,4.00;' />
-<text x='542.71' y='48.47' text-anchor='middle' style='font-size: 7.92px; font-family: sans;' textLength='35.67px' lengthAdjust='spacingAndGlyphs'>Response</text>
-<text x='547.48' y='60.70' style='font-size: 7.92px; font-family: sans;' textLength='10.56px' lengthAdjust='spacingAndGlyphs'>left</text>
-<text x='547.48' y='70.20' style='font-size: 7.92px; font-family: sans;' textLength='15.41px' lengthAdjust='spacingAndGlyphs'>right</text>
+<line x1='659.69' y1='139.25' x2='673.94' y2='139.25' style='stroke-width: 0.75;' />
+<line x1='659.69' y1='148.75' x2='673.94' y2='148.75' style='stroke-width: 0.75; stroke-dasharray: 4.00,4.00;' />
+<text x='676.30' y='129.74' text-anchor='middle' style='font-size: 7.92px; font-family: sans;' textLength='35.67px' lengthAdjust='spacingAndGlyphs'>Response</text>
+<text x='681.07' y='141.97' style='font-size: 7.92px; font-family: sans;' textLength='10.56px' lengthAdjust='spacingAndGlyphs'>left</text>
+<text x='681.07' y='151.48' style='font-size: 7.92px; font-family: sans;' textLength='15.41px' lengthAdjust='spacingAndGlyphs'>right</text>
 </g>
 <defs>
   <clipPath id='cpMzguOTd8MjIwLjA0fDMyNi45N3w1MjcuNTM='>
@@ -1313,11 +1313,11 @@
 <circle cx='86.45' cy='441.43' r='1.78' style='stroke-width: 0.75; stroke: none; fill: #000000;' />
 <circle cx='98.99' cy='409.97' r='1.78' style='stroke-width: 0.75; stroke: none; fill: #000000;' />
 <circle cx='131.58' cy='378.50' r='1.78' style='stroke-width: 0.75; stroke: none; fill: #000000;' />
-<line x1='46.09' y1='345.97' x2='60.35' y2='345.97' style='stroke-width: 0.75;' />
-<line x1='46.09' y1='355.48' x2='60.35' y2='355.48' style='stroke-width: 0.75; stroke-dasharray: 4.00,4.00;' />
-<text x='62.71' y='336.47' text-anchor='middle' style='font-size: 7.92px; font-family: sans;' textLength='35.67px' lengthAdjust='spacingAndGlyphs'>Response</text>
-<text x='67.48' y='348.70' style='font-size: 7.92px; font-family: sans;' textLength='10.56px' lengthAdjust='spacingAndGlyphs'>left</text>
-<text x='67.48' y='358.20' style='font-size: 7.92px; font-family: sans;' textLength='15.41px' lengthAdjust='spacingAndGlyphs'>right</text>
+<line x1='179.69' y1='427.25' x2='193.94' y2='427.25' style='stroke-width: 0.75;' />
+<line x1='179.69' y1='436.75' x2='193.94' y2='436.75' style='stroke-width: 0.75; stroke-dasharray: 4.00,4.00;' />
+<text x='196.30' y='417.74' text-anchor='middle' style='font-size: 7.92px; font-family: sans;' textLength='35.67px' lengthAdjust='spacingAndGlyphs'>Response</text>
+<text x='201.07' y='429.97' style='font-size: 7.92px; font-family: sans;' textLength='10.56px' lengthAdjust='spacingAndGlyphs'>left</text>
+<text x='201.07' y='439.48' style='font-size: 7.92px; font-family: sans;' textLength='15.41px' lengthAdjust='spacingAndGlyphs'>right</text>
 </g>
 <defs>
   <clipPath id='cpMjc4Ljk3fDQ2MC4wNHwzMjYuOTd8NTI3LjUz'>
@@ -1638,11 +1638,11 @@
 <circle cx='323.25' cy='443.19' r='1.78' style='stroke-width: 0.75; stroke: none; fill: #000000;' />
 <circle cx='335.31' cy='412.43' r='1.78' style='stroke-width: 0.75; stroke: none; fill: #000000;' />
 <circle cx='360.24' cy='381.67' r='1.78' style='stroke-width: 0.75; stroke: none; fill: #000000;' />
-<line x1='286.09' y1='345.97' x2='300.35' y2='345.97' style='stroke-width: 0.75;' />
-<line x1='286.09' y1='355.48' x2='300.35' y2='355.48' style='stroke-width: 0.75; stroke-dasharray: 4.00,4.00;' />
-<text x='302.71' y='336.47' text-anchor='middle' style='font-size: 7.92px; font-family: sans;' textLength='35.67px' lengthAdjust='spacingAndGlyphs'>Response</text>
-<text x='307.48' y='348.70' style='font-size: 7.92px; font-family: sans;' textLength='10.56px' lengthAdjust='spacingAndGlyphs'>left</text>
-<text x='307.48' y='358.20' style='font-size: 7.92px; font-family: sans;' textLength='15.41px' lengthAdjust='spacingAndGlyphs'>right</text>
+<line x1='419.69' y1='427.25' x2='433.94' y2='427.25' style='stroke-width: 0.75;' />
+<line x1='419.69' y1='436.75' x2='433.94' y2='436.75' style='stroke-width: 0.75; stroke-dasharray: 4.00,4.00;' />
+<text x='436.30' y='417.74' text-anchor='middle' style='font-size: 7.92px; font-family: sans;' textLength='35.67px' lengthAdjust='spacingAndGlyphs'>Response</text>
+<text x='441.07' y='429.97' style='font-size: 7.92px; font-family: sans;' textLength='10.56px' lengthAdjust='spacingAndGlyphs'>left</text>
+<text x='441.07' y='439.48' style='font-size: 7.92px; font-family: sans;' textLength='15.41px' lengthAdjust='spacingAndGlyphs'>right</text>
 </g>
 <defs>
   <clipPath id='cpNTE4Ljk3fDcwMC4wNHwzMjYuOTd8NTI3LjUz'>
@@ -1963,10 +1963,10 @@
 <circle cx='548.72' cy='460.07' r='1.78' style='stroke-width: 0.75; stroke: none; fill: #000000;' />
 <circle cx='556.16' cy='436.06' r='1.78' style='stroke-width: 0.75; stroke: none; fill: #000000;' />
 <circle cx='574.45' cy='412.05' r='1.78' style='stroke-width: 0.75; stroke: none; fill: #000000;' />
-<line x1='526.09' y1='345.97' x2='540.35' y2='345.97' style='stroke-width: 0.75;' />
-<line x1='526.09' y1='355.48' x2='540.35' y2='355.48' style='stroke-width: 0.75; stroke-dasharray: 4.00,4.00;' />
-<text x='542.71' y='336.47' text-anchor='middle' style='font-size: 7.92px; font-family: sans;' textLength='35.67px' lengthAdjust='spacingAndGlyphs'>Response</text>
-<text x='547.48' y='348.70' style='font-size: 7.92px; font-family: sans;' textLength='10.56px' lengthAdjust='spacingAndGlyphs'>left</text>
-<text x='547.48' y='358.20' style='font-size: 7.92px; font-family: sans;' textLength='15.41px' lengthAdjust='spacingAndGlyphs'>right</text>
+<line x1='659.69' y1='427.25' x2='673.94' y2='427.25' style='stroke-width: 0.75;' />
+<line x1='659.69' y1='436.75' x2='673.94' y2='436.75' style='stroke-width: 0.75; stroke-dasharray: 4.00,4.00;' />
+<text x='676.30' y='417.74' text-anchor='middle' style='font-size: 7.92px; font-family: sans;' textLength='35.67px' lengthAdjust='spacingAndGlyphs'>Response</text>
+<text x='681.07' y='429.97' style='font-size: 7.92px; font-family: sans;' textLength='10.56px' lengthAdjust='spacingAndGlyphs'>left</text>
+<text x='681.07' y='439.48' style='font-size: 7.92px; font-family: sans;' textLength='15.41px' lengthAdjust='spacingAndGlyphs'>right</text>
 </g>
 </svg>

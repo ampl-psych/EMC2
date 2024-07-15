@@ -4,7 +4,15 @@
 \alias{plot_prior}
 \title{Title}
 \usage{
-plot_prior(prior, design, selection = "mu", layout = NA, N = 50000, ...)
+plot_prior(
+  prior,
+  design,
+  selection = "mu",
+  do_plot = TRUE,
+  layout = NA,
+  N = 50000,
+  ...
+)
 }
 \arguments{
 \item{prior}{A prior list created with \code{prior}}
@@ -12,6 +20,8 @@ plot_prior(prior, design, selection = "mu", layout = NA, N = 50000, ...)
 \item{design}{A design list created with \code{design}}
 
 \item{selection}{A Character string. Indicates which parameter type to use (e.g., \code{alpha}, \code{mu}, \code{sigma2}, \code{correlation}).}
+
+\item{do_plot}{Boolean. If \code{FALSE} will only return prior samples and omit plotting.}
 
 \item{layout}{A vector indicating which layout to use as in par(mfrow = layout). If NA, will automatically generate an appropriate layout.}
 

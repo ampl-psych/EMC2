@@ -25,7 +25,7 @@ plot_fit(
   q_points = c(0.1, 0.3, 0.5, 0.7, 0.9),
   qp_cex = 1,
   pqp_cex = 0.5,
-  lpos = "topleft",
+  lpos = "right",
   main = ""
 )
 }

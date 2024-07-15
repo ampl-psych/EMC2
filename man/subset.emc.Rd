@@ -4,7 +4,15 @@
 \alias{subset.emc}
 \title{Shorten an emc object}
 \usage{
-\method{subset}{emc}(x, stage = "sample", filter = NULL, thin = 1, length.out = NULL, ...)
+\method{subset}{emc}(
+  x,
+  stage = "sample",
+  filter = NULL,
+  thin = 1,
+  keep_stages = FALSE,
+  length.out = NULL,
+  ...
+)
 }
 \arguments{
 \item{x}{an emc object}
@@ -16,6 +24,8 @@ up until that integer are removed. If a vector is supplied, the iterations
 within the range are kept.}
 
 \item{thin}{An integer. By how much to thin the chains}
+
+\item{keep_stages}{Boolean. If \code{TRUE}, will not remove samples from unselected stages.}
 
 \item{length.out}{Integer. Alternatively to thinning, you can also select a
 desired length of the MCMC chains, which will be thinned appropriately.}
