@@ -347,8 +347,8 @@ gibbs_step_SEM <- function(sampler, alpha){
       lambda_y[j,isFree] <- rmvnorm(1,lambda_mu,lambda_sig)
     }
   }
-  K <- lambda_y[,1:n_cov]
-  lambda <- lambda_y[,((n_cov + 1):ncol(lambda_y))]
+  K <- lambda_y[,1:n_cov, drop = F]
+  lambda <- lambda_y[,((n_cov + 1):ncol(lambda_y)), drop = F]
   #Update B and G, these can also be updated together since they are both regressions on eta
   B_eta <- cbind(G, B)
   B_prior <- cbind(replicate(ncol(G), prior$G_var), replicate(ncol(B), prior$B_var))
@@ -361,8 +361,8 @@ gibbs_step_SEM <- function(sampler, alpha){
       B_eta[p,isFree] <- rmvnorm(1,B_mu,B_sig)
     }
   }
-  G <- B_eta[,1:n_cov]
-  B <- B_eta[,((n_cov + 1):ncol(B_eta))]
+  G <- B_eta[,1:n_cov, drop = F]
+  B <- B_eta[,((n_cov + 1):ncol(B_eta)), drop = F]
 
   #Update delta_inv, using diagonal entries for structural factors and covariances between non-structural entries
   eta_sq <- t(eta - eta %*% t(B) - covariates %*% t(G)) %*% (eta - eta %*% t(B) - covariates %*% t(G))
