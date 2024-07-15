@@ -613,8 +613,8 @@ hypothesis.emc <- function(emc, parameter = NULL, H0 = 0, fun = NULL,selection =
                           do_plot = TRUE, use_prior_lim = TRUE, prior_plot_args = list(), ...){
   dots <- list(...)
   type <- attr(emc[[1]], "variant_funs")$type
-
-  if(selection == "alpha" & type != "single") stop("For savage-dickey ratio, selection cannot be alpha")
+  if (length(emc[[1]]$data)==1) selection <- "alpha"
+  if(selection == "alpha" & type != "single") stop("For savage-dickey ratio, selection cannot be alpha for hierarchical models")
   prior <- emc[[1]]$prior
   flatten <- ifelse(selection == "alpha", FALSE, TRUE)
 
