@@ -441,7 +441,7 @@ filtered_samples_SEM <- function(sampler, filter){
   )
 }
 
-group__IC_SEM <- function(emc, stage="sample",filter=NULL){
+group__IC_SEM <- function(emc, stage="sample",filter=NULL, ...){
   alpha <- get_pars(emc, selection = "alpha", stage = stage, filter = filter,
                     return_mcmc = FALSE, merge_chains = TRUE)
   theta_mu <- get_pars(emc, selection = "mu_implied", stage = stage, filter = filter,
@@ -454,6 +454,13 @@ group__IC_SEM <- function(emc, stage="sample",filter=NULL){
 
   N <- ncol(theta_mu)
   lls <- numeric(N)
+  if(list(...)$for_WAIC){
+    lls <- matrix(NA, nrow = ncol(mean_alpha), ncol = N)
+    for(i in 1:N){
+      lls[,i] <- dmvnorm(t(alpha[,,i]), theta_mu[,i], theta_var[,,i], log = T)
+    }
+    return(lls)
+  }
   for(i in 1:N){
     lls[i] <- sum(dmvnorm(t(alpha[,,i]), theta_mu[,i], theta_var[,,i], log = T))
   }
