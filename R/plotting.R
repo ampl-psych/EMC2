@@ -397,7 +397,7 @@ plot_fit <- function(data,pp,subject=NULL,factors=NULL,functions=NULL,
                      probs=c(1:99)/100,
                      data_lwd=2,fit_lwd=1,
                      q_points=c(.1,.3,.5,.7,.9),
-                     qp_cex=1,pqp_cex=.5,lpos="topleft", main = "")
+                     qp_cex=1,pqp_cex=.5,lpos="right", main = "")
 {
   if (!is.null(stat) & is.null(factors)) factors <- NA
   if (!is.null(subject)) {
