@@ -441,7 +441,7 @@ filtered_samples_SEM <- function(sampler, filter){
   )
 }
 
-group_IC_SEM <- function(emc, stage="sample",filter=NULL){
+group__IC_SEM <- function(emc, stage="sample",filter=NULL){
   alpha <- get_pars(emc, selection = "alpha", stage = stage, filter = filter,
                     return_mcmc = FALSE, merge_chains = TRUE)
   theta_mu <- get_pars(emc, selection = "mu_implied", stage = stage, filter = filter,
