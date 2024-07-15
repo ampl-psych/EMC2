@@ -44,7 +44,9 @@
 #' @export
 prior <- function(design, type = "standard", update = NULL,
                       ask = NULL, fill_default = TRUE, ...){
-  if(!is.null(update)) type <- attr(prior, "type")
+  if(!is.null(update)){
+    type <- attr(update, "type")
+  }
   prior <- get_objects(design = design, type = type, ...)
   args <- list(...)
   if(!is.null(args$mu_mean)){
@@ -67,6 +69,11 @@ prior <- function(design, type = "standard", update = NULL,
   if(!is.null(update)){
     for(name in names(update)){
       if(is.null(args[[name]])){
+        if(!is.null(dim(update[[name]]))){
+          update[[name]] <- diag(update[[name]])
+        } else{
+          update[[name]] <- update[[name]]
+        }
         args[[name]] <- update[[name]]
       } else{
         # First make sure we only take diagonals
@@ -99,17 +106,30 @@ prior <- function(design, type = "standard", update = NULL,
           input <- args[[pri]]
           if(!is.null(dim(prior$prior[[pri]]))){
             to_check <- diag(prior$prior[[pri]])
-            if(length(input) == length(to_check)) names(input) <- names(to_check)
-            to_do <- !(names(to_check) %in% names(input))
-            to_check[!to_do] <- input
-            prior$prior[[pri]][,] <- diag(to_check)
-
+            if(length(input) == length(to_check) & is.null(names(input))){
+              prior$prior[[pri]] <- input
+              to_do <- rep(F, length(to_check))
+            } else if (length(input) == 1 & is.null(names(input))){
+              prior$prior[[pri]] <- rep(input, length(to_check))
+              to_do <- rep(F, length(to_check))
+            } else{
+              to_do <- !(names(to_check) %in% names(input))
+              to_check[!to_do] <- input
+              prior$prior[[pri]][,] <- diag(to_check)
+            }
           } else{
             to_check <- prior$prior[[pri]]
-            if(length(input) == length(to_check)) names(input) <- names(to_check)
-            to_do <- !(names(to_check) %in% names(input))
-            to_check[!to_do] <- input
-            prior$prior[[pri]] <- to_check
+            if(length(input) == length(to_check) & is.null(names(input))){
+              prior$prior[[pri]] <- input
+              to_do <- rep(F, length(to_check))
+            } else if (length(input) == 1 & is.null(names(input))){
+              prior$prior[[pri]] <- rep(input, length(to_check))
+              to_do <- rep(F, length(to_check))
+            } else{
+              to_do <- !(names(to_check) %in% names(input))
+              to_check[!to_do] <- input
+              prior$prior[[pri]] <- to_check
+            }
           }
         } else{
           if(!is.null(dim(prior$prior[[pri]]))){
