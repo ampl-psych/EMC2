@@ -371,6 +371,7 @@ get_pars <- function(emc,selection= "mu", stage="sample",thin=1,filter=0,
                     remove_constants = TRUE, use_par = NULL, type = NULL,
                     true_pars = NULL, chain = NULL)
 {
+  if(add_recalculated) map <- TRUE
   if(!(selection %in% c("mu", "alpha"))) map <- FALSE
   if(is.null(type)) type <- attr(emc[[1]], "variant_funs")$type
   if(type == "single" & !(selection %in% c("LL", "alpha"))) selection <- "alpha"
