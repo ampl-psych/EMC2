@@ -427,7 +427,7 @@ bridge_group_and_prior_and_jac_standard <- function(proposals_group, proposals_l
 
 # for IC ------------------------------------------------------------------
 
-group_IC_standard <- function(emc, stage="sample",filter=NULL){
+group__IC_standard <- function(emc, stage="sample",filter=NULL){
   alpha <- get_pars(emc, selection = "alpha", stage = stage, filter = filter,
                        return_mcmc = FALSE, merge_chains = TRUE)
   theta_mu <- get_pars(emc, selection = "mu", stage = stage, filter = filter,
