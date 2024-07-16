@@ -71,6 +71,7 @@ add_info_factor <- function(sampler, prior = NULL, ...){
 #' @param design The design obtained from `design()`, required when `map = TRUE`
 #' @param selection  Character. If `sample = TRUE`, what priors to sample from.
 #' @param n_factors Integer. The number of factors.
+#' @param Lambda_mat The loadings constraint matrix.
 #'
 #' @return A list with a single entry of type of samples from the prior (if `sample = TRUE`) or else a prior object
 #' @examples \dontrun{

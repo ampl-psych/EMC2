@@ -11,7 +11,8 @@ get_prior_factor(
   N = 1e+05,
   selection = "mu",
   design = NULL,
-  n_factors = 5
+  Lambda_mat = NULL,
+  n_factors = NULL
 )
 }
 \arguments{
@@ -30,6 +31,8 @@ will be used to determine the size of prior.}
 \item{selection}{Character. If \code{sample = TRUE}, what priors to sample from.}
 
 \item{design}{The design obtained from \code{design()}, required when \code{map = TRUE}}
+
+\item{Lambda_mat}{The loadings constraint matrix.}
 
 \item{n_factors}{Integer. The number of factors.}
 }

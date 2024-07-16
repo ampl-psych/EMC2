@@ -16,7 +16,6 @@ make_emc(
   grouped_pars = NULL,
   par_groups = NULL,
   n_factors = NULL,
-  constraintMat = NULL,
   ...
 )
 }
@@ -43,9 +42,6 @@ make_emc(
 of the first three and of the last two parameters are estimated as two separate blocks.}
 
 \item{n_factors}{An integer. Only to be specified with type \code{factor}.}
-
-\item{constraintMat}{A matrix of rows equal to the number of estimated parameters, and columns equal to the number of factors. Only to be specified with type factor.
-If \code{NULL}, default settings as specified in Innes et al. 2022 will be used.}
 
 \item{...}{Additional, optional arguments.}
 }
