@@ -621,7 +621,7 @@ hypothesis.emc <- function(emc, parameter = NULL, H0 = 0, fun = NULL,selection =
 
   psamples <-  get_objects(design = attr(emc,"design_list")[[1]],
                            type = attr(emc[[1]], "variant_funs")$type, sample_prior = T,
-                           selection = selection, N = N)
+                           selection = selection, N = N, sampler = emc)
   psamples <- do.call(get_pars, c(list(psamples, selection = selection, merge_chains = TRUE, return_mcmc = FALSE, by_subject = TRUE,
                                           type = attr(emc[[1]], "variant_funs")$type),
                                      fix_dots(dots, get_pars, exclude = c("thin", "filter"))))

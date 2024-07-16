@@ -175,7 +175,7 @@ get_prior_SEM <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, s
     }
     if(selection %in% c("structural_regressors", "alpha", "mu_implied", "Sigma", "correlation", "covariance", "sigma2")){
       B <- array(0, dim = c(n_factors, n_factors, N))
-      for(i in 1:n_cov){
+      for(i in 1:n_factors){
         B[,i,] <- t(mvtnorm::rmvnorm(N, sigma = diag(prior$B_var)))
       }
       B <- constrain_lambda(B, B_mat)

@@ -24,12 +24,12 @@ add_info_factor <- function(sampler, prior = NULL, ...){
   # Checking and default priors
   args <- list(...)
   n_factors <- args$n_factors
-  constraintMat <- args$constraintMat
+  Lambda_mat <- args$Lambda_mat
   n_pars <- sum(!(sampler$nuisance | sampler$grouped))
-  if(is.null(constraintMat)){
-    constraintMat <- matrix(Inf, nrow = n_pars, ncol = n_factors)
-    diag(constraintMat) <- 1
-    constraintMat[upper.tri(constraintMat, diag = F)] <- 0
+  if(is.null(Lambda_mat)){
+    Lambda_mat <- matrix(Inf, nrow = n_pars, ncol = n_factors)
+    diag(Lambda_mat) <- 1
+    Lambda_mat[upper.tri(Lambda_mat, diag = F)] <- 0
   }
   if(!is.null(args$signFix)){
     signFix <- args$signFix
@@ -38,7 +38,7 @@ add_info_factor <- function(sampler, prior = NULL, ...){
   }
 
   attr(sampler, "signFix") <- signFix
-  attr(sampler, "constraintMat") <- constraintMat
+  attr(sampler, "Lambda_mat") <- Lambda_mat
 
   sampler$prior <- get_prior_factor(prior, sum(!(sampler$nuisance | sampler$grouped)), sample = F, n_factors = n_factors)
   sampler$n_factors <- n_factors
@@ -87,13 +87,20 @@ add_info_factor <- function(sampler, prior = NULL, ...){
 #' }
 #' @export
 get_prior_factor <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, selection = "mu", design = NULL,
-                             n_factors = 5){
+                             Lambda_mat = NULL, n_factors = NULL){
+
 
   if(is.null(prior)){
     prior <- list()
   }
   if(!is.null(design)){
     n_pars <- length(sampled_p_vector(design, doMap = F))
+  }
+  if(is.null(n_factors)) n_factors <- ncol(Lambda_mat)
+  if(is.null(Lambda_mat)){
+    Lambda_mat <- matrix(Inf, nrow = n_pars, ncol = n_factors)
+    diag(Lambda_mat) <- 1
+    Lambda_mat[upper.tri(Lambda_mat, diag = F)] <- 0
   }
   if (is.null(prior$theta_mu_mean)) {
     prior$theta_mu_mean <- rep(0, n_pars)
@@ -141,6 +148,7 @@ get_prior_factor <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5
       for(i in 1:n_factors){
         lambda[,i,] <- t(mvtnorm::rmvnorm(N, sigma = diag(prior$theta_lambda_var)))
       }
+      lambda <- constrain_lambda(lambda, Lambda_mat)
       rownames(lambda) <- par_names
       colnames(lambda) <- paste0("F", 1:n_factors)
       if(selection %in% "loadings"){
@@ -182,8 +190,8 @@ get_startpoints_factor<- function(pmwgs, start_mu, start_var){
   start_psi_inv <- rep(1, pmwgs$n_factors)
   start_sig_err_inv <- rep(1, n_pars)
   start_lambda <- matrix(0, nrow = n_pars, ncol = pmwgs$n_factors)
-  constraintMat <- attr(pmwgs, "constraintMat")
-  start_lambda[constraintMat != Inf] <- constraintMat[constraintMat != Inf]
+  Lambda_mat <- attr(pmwgs, "Lambda_mat")
+  start_lambda[Lambda_mat != Inf] <- Lambda_mat[Lambda_mat != Inf]
   start_eta <- matrix(0, nrow = pmwgs$n_subjects, ncol = pmwgs$n_factors)
   return(list(tmu = start_mu, tvar = start_var, lambda = start_lambda, lambda_untransf = start_lambda,
               sig_err_inv = start_sig_err_inv, psi_inv = start_psi_inv,
@@ -213,8 +221,8 @@ gibbs_step_factor <- function(sampler, alpha){
   n_subjects <- sampler$n_subjects
   n_pars <- sampler$n_pars-sum(sampler$nuisance) - sum(sampler$grouped)
   n_factors <- sampler$n_factors
-  constraintMat <- hyper$constraintMat
-  constraintMat <- constraintMat == Inf #For indexing
+  Lambda_mat <- hyper$Lambda_mat
+  Lambda_mat <- Lambda_mat == Inf #For indexing
 
   eta <- matrix(last$eta, n_subjects, n_factors)
   psi_inv <- diag(last$psi_inv, n_factors)
@@ -236,7 +244,7 @@ gibbs_step_factor <- function(sampler, alpha){
   eta[,] <- t(apply(eta_mu, 2, FUN = function(x){rmvnorm(1, x, eta_sig)}))
 
   # for(p in 1:n_pars){
-  #   constraint <- constraintMat[p,] == Inf
+  #   constraint <- Lambda_mat[p,] == Inf
   #   for(j in 1:n_factors){
   #     alphatilde[,p] <- alphatilde[,p] - lambda[p,j] * eta[,j] * (1-constraint[j])
   #   }
@@ -247,7 +255,7 @@ gibbs_step_factor <- function(sampler, alpha){
 
   #Update lambda
   for (j in 1:n_pars) {
-    constraint <- constraintMat[j,] #T if item is not constraint (bit confusing tbh)
+    constraint <- Lambda_mat[j,] #T if item is not constraint (bit confusing tbh)
     if(any(constraint)){ #Don't do this if there are no free entries in lambda
       etaS <- eta[,constraint]
       lambda_sig <- solve(sig_err_inv[j,j] * t(etaS) %*% etaS + diag(prior$theta_lambda_invar[j], sum(constraint)))
@@ -291,7 +299,7 @@ get_conditionals_factor <- function(s, samples, n_pars, iteration = NULL, idx = 
   sig_err <- log(samples$theta_sig_err_inv[idx,])
   psi <- log(samples$theta_psi_inv)
   eta <- matrix(samples$theta_eta[s,,], nrow = samples$n_factors)
-  lambda <- apply(samples$lambda_untransf[idx,,,drop = F], 3, unwind_lambda, samples$constraintMat[idx,])
+  lambda <- apply(samples$lambda_untransf[idx,,,drop = F], 3, unwind_lambda, samples$Lambda_mat[idx,])
   theta_mu <- samples$theta_mu[idx,]
   all_samples <- rbind(samples$alpha[idx, s,],theta_mu, eta, sig_err, psi, lambda)#, sig_err, psi, lambda)
   mu_tilde <- rowMeans(all_samples)
@@ -302,7 +310,7 @@ get_conditionals_factor <- function(s, samples, n_pars, iteration = NULL, idx = 
                                  samples$theta_eta[s,,iteration],
                                  log(samples$theta_sig_err_inv[idx, iteration]),
                                  log(samples$theta_psi_inv[,iteration, drop = F]),
-                                 unwind_lambda(samples$lambda_untransf[idx,, iteration], samples$constraintMat[idx,])))
+                                 unwind_lambda(samples$lambda_untransf[idx,, iteration], samples$Lambda_mat[idx,])))
   return(list(eff_mu = condmvn$condMean, eff_var = condmvn$condVar))
 }
 
@@ -315,7 +323,7 @@ filtered_samples_factor <- function(sampler, filter){
     theta_eta = sampler$samples$theta_eta[, , filter, drop = F],
     theta_var = sampler$samples$theta_var[,,filter],
     alpha = sampler$samples$alpha[, , filter],
-    constraintMat = attributes(sampler)$constraintMat,
+    Lambda_mat = attributes(sampler)$Lambda_mat,
     n_factors = sampler$n_factors,
     iteration = length(filter)
   )
@@ -343,17 +351,17 @@ constrain_lambda <- function(lambda, constraintMat){
 
 bridge_add_info_factor <- function(info, samples){
   info$n_factors <- samples$n_factors
-  info$constraintMat <- attr(samples, "constraintMat")
+  info$Lambda_mat <- attr(samples, "Lambda_mat")
   # Free loadings + group-level mean + factor variances + residual variances
   # note not factor scores, since we use the marginal model as adviced by Merkle et al. 2023
-  info$group_idx <- (samples$n_pars*samples$n_subjects + 1):(samples$n_pars*samples$n_subjects + sum(info$constraintMat == Inf) + samples$n_pars + samples$n_factors + samples$n_pars)
+  info$group_idx <- (samples$n_pars*samples$n_subjects + 1):(samples$n_pars*samples$n_subjects + sum(info$Lambda_mat == Inf) + samples$n_pars + samples$n_factors + samples$n_pars)
   return(info)
 }
 
 bridge_add_group_factor <- function(all_samples, samples, idx){
-  constraintMat <- attr(samples, "constraintMat")
+  Lambda_mat <- attr(samples, "Lambda_mat")
   all_samples <- cbind(all_samples, t(samples$samples$theta_mu[,idx]))
-  all_samples <- cbind(all_samples, t(matrix(apply(samples$samples$lambda_untransf[,,idx,drop = F], 3, unwind_lambda, constraintMat), ncol = nrow(all_samples))))
+  all_samples <- cbind(all_samples, t(matrix(apply(samples$samples$lambda_untransf[,,idx,drop = F], 3, unwind_lambda, Lambda_mat), ncol = nrow(all_samples))))
   all_samples <- cbind(all_samples, t(log(samples$samples$theta_sig_err_inv[,idx])))
   all_samples <- cbind(all_samples, t(log(samples$samples$theta_psi_inv[,idx, drop = F])))
   return(all_samples)
@@ -363,15 +371,15 @@ bridge_group_and_prior_and_jac_factor <- function(proposals_group, proposals_lis
   prior <- info$prior
   proposals <- do.call(cbind, proposals_list)
   theta_mu <- proposals_group[,1:info$n_pars]
-  theta_lambda <- proposals_group[,(info$n_pars +1):(info$n_pars + sum(info$constraintMat == Inf))]
-  theta_epsilon_inv <- proposals_group[,(1 + info$n_pars + sum(info$constraintMat == Inf)): (info$n_pars + sum(info$constraintMat == Inf) + info$n_pars)]
-  theta_psi_inv <- proposals_group[,(1 + info$n_pars + sum(info$constraintMat == Inf) + info$n_pars):
-                                     (info$n_pars + sum(info$constraintMat == Inf) + info$n_pars + info$n_factors), drop = F]
+  theta_lambda <- proposals_group[,(info$n_pars +1):(info$n_pars + sum(info$Lambda_mat == Inf))]
+  theta_epsilon_inv <- proposals_group[,(1 + info$n_pars + sum(info$Lambda_mat == Inf)): (info$n_pars + sum(info$Lambda_mat == Inf) + info$n_pars)]
+  theta_psi_inv <- proposals_group[,(1 + info$n_pars + sum(info$Lambda_mat == Inf) + info$n_pars):
+                                     (info$n_pars + sum(info$Lambda_mat == Inf) + info$n_pars + info$n_factors), drop = F]
 
   n_iter <- nrow(theta_mu)
   sum_out <- numeric(n_iter)
   for(i in 1:n_iter){ # these unfortunately can't be vectorized
-    lambda_curr <- unwind_lambda(theta_lambda[i,], info$constraintMat, reverse = T)
+    lambda_curr <- unwind_lambda(theta_lambda[i,], info$Lambda_mat, reverse = T)
     epsilon_curr <- diag(1/exp(theta_epsilon_inv[i,]))
     psi_curr <- diag(1/exp(theta_psi_inv[i,]), info$n_factors)
     theta_var_curr <- lambda_curr %*% psi_curr %*% t(lambda_curr) + epsilon_curr
@@ -401,10 +409,10 @@ bridge_group_and_prior_and_jac_factor <- function(proposals_group, proposals_lis
 #   psi_inv <- samples$samples$theta_psi_inv[,,samples$samples$stage==filter, drop = F]
 #   sig_err_inv <- samples$samples$theta_sig_err_inv[,,samples$samples$stage==filter]
 #
-#   constraintMat <- info$hyper$constraintMat
+#   Lambda_mat <- info$hyper$Lambda_mat
 #   n_factors <- samples$n_factors
 #
-#   lambda.unwound <- apply(lambda,3,unwind_lambda, constraintMat)
+#   lambda.unwound <- apply(lambda,3,unwind_lambda, Lambda_mat)
 #   sig_err_inv.diag <- log(apply(sig_err_inv, 3, diag))
 #   psi_inv.diag <- matrix(log(apply(psi_inv, 3, diag)), nrow = n_factors)
 #
@@ -444,7 +452,7 @@ bridge_group_and_prior_and_jac_factor <- function(proposals_group, proposals_lis
 #   param.sig_err_inv <- exp(parameters[(n_randeffect+1):(n_randeffect + n_randeffect)])
 #   param.psi_inv <- exp(parameters[(n_randeffect+n_randeffect+1):(n_randeffect + n_randeffect+ n_factors)])
 #   param.lambda.unwound <- parameters[(n_randeffect+n_randeffect+n_factors+1):length(parameters)]
-#   param.lambda <- unwind_lambda(param.lambda.unwound, info$hyper$constraintMat, reverse = T)
+#   param.lambda <- unwind_lambda(param.lambda.unwound, info$hyper$Lambda_mat, reverse = T)
 #   param.var <- param.lambda %*% diag(1/param.psi_inv, length(param.psi_inv)) %*% t(param.lambda) + diag(1/param.sig_err_inv)
 #   if (sample){
 #     return(mvtnorm::rmvnorm(n_samples, param.theta_mu, param.var))

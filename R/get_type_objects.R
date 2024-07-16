@@ -256,9 +256,13 @@ get_objects_factor <- function(type, selection, sample_prior, return_prior, desi
         sub_names <- names(sampler[[1]]$data)
         sampler <- list(list(samples =  list(alpha = get_alphas(mu, var, sub_names))))
       } else{
+        dots <- list(...)
+        if(!is.null(sampler)){
+          dots <- add_defaults(dots, Lambda_mat = attr(sampler[[1]], "Lambda_mat"))
+        }
         sampler <- list(list(samples = do.call(get_prior_factor,
                                                c(list(prior = prior, design = design,
-                                                      selection = selection,N = N), fix_dots(list(...), get_prior_factor)))))
+                                                      selection = selection,N = N), fix_dots(dots, get_prior_factor)))))
       }
       attr(sampler, "design_list") <- list(design)
       return(sampler)
@@ -375,22 +379,25 @@ get_objects_SEM <- function(type, selection, sample_prior, return_prior, design 
     if(!selection %in% acc_selection) stop(paste0("selection must be in : ", paste(acc_selection, collapse = ", ")))
     if(sample_prior){
       if(selection == "alpha" & !is.null(sampler)){
-        mu <- get_pars(sampler, selection = "mu", stage = stage, map = FALSE, return_mcmc = FALSE, merge_chains = TRUE, ...)
+        mu <- get_pars(sampler, selection = "mu_implied", stage = stage, map = FALSE, return_mcmc = FALSE, merge_chains = TRUE, ...)
         var <- get_pars(sampler, selection = "Sigma", stage = stage, map = FALSE, return_mcmc = FALSE, merge_chains = TRUE, ...)
         sub_names <- names(sampler[[1]]$data)
         sampler <- list(list(samples =  list(alpha = get_alphas(mu, var, sub_names))))
       } else{
+        dots <- list(...)
+        if(!is.null(sampler)){
+          dots <- add_defaults(dots, K_mat = attr(sampler[[1]], "K_mat"), B_mat = attr(sampler[[1]], "B_mat"),
+                               covariates = sampler[[1]]$covariates,
+                               Lambda_mat = attr(sampler[[1]], "Lambda_mat"), G_mat = attr(sampler[[1]], "G_mat"))
+        }
         sampler <- list(list(samples = do.call(get_prior_SEM,
                                                c(list(prior = prior, design = design,
-                                                      selection = selection,N = N), fix_dots(list(...), get_prior_SEM)))))
+                                                      selection = selection,N = N), fix_dots(dots, get_prior_SEM)))))
       }
       attr(sampler, "design_list") <- list(design)
       return(sampler)
     }
     idx <- get_idx(sampler, stage)
-    if(selection == "loadings"){
-      return(lapply(sampler, FUN = function(x) return(x$samples$theta_lambda[,,idx])))
-    }
     if(selection == "residuals"){
       return(lapply(sampler, FUN = function(x){
         resids <- x$samples$epsilon_inv[,,idx]

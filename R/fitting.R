@@ -734,8 +734,6 @@ run_sample <- function(emc, iter = 1000, stop_criteria = NULL,
 #' @param par_groups A vector. Only to be specified with type `blocked`, e.g., `c(1,1,1,2,2)` means the covariances
 #' of the first three and of the last two parameters are estimated as two separate blocks.
 #' @param n_factors An integer. Only to be specified with type `factor`.
-#' @param constraintMat A matrix of rows equal to the number of estimated parameters, and columns equal to the number of factors. Only to be specified with type factor.
-#' If `NULL`, default settings as specified in Innes et al. 2022 will be used.
 #' @param prior_list A named list containing the prior. Default prior created if `NULL`. For the default priors, see `?get_prior_{type}`.
 #' @param grouped_pars An integer vector. Parameters on this location of the vector of parameters are treated as constant across subjects
 #' @param ... Additional, optional arguments.
@@ -773,7 +771,7 @@ make_emc <- function(data,design,model=NULL,
                           prior_list = NULL,
                           grouped_pars = NULL,
                           par_groups=NULL,
-                          n_factors=NULL,constraintMat = NULL, ...){
+                          n_factors=NULL, ...){
 
   # arguments for future compatibility
   formula <- NULL
@@ -893,7 +891,7 @@ make_emc <- function(data,design,model=NULL,
     if (is.null(n_factors)) stop("Must specify n_factors for factor type")
     out <- pmwgs(dadm_list,variant_funs, n_factors = n_factors, nuisance = nuisance,
                  nuisance_non_hyper = nuisance_non_hyper, grouped_pars = grouped_pars,
-                 constraintMat = constraintMat)
+                 Lambda_mat = Lambda_mat)
   } else if (type == "SEM"){
     out <- pmwgs(dadm_list,variant_funs, Lambda_mat = Lambda_mat, B_mat = B_mat, K_mat = K_mat, G_mat = G_mat,
                  covariates = covariates, nuisance = nuisance, nuisance_non_hyper = nuisance_non_hyper, grouped_pars = grouped_pars)
