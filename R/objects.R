@@ -387,7 +387,11 @@ get_pars <- function(emc,selection= "mu", stage="sample",thin=1,filter=0,
   if(!is.null(true_pars)){ # Kluge to make sure the right object dimensions/filtering is performed on simulated parameters
     samples <- samples[1]
     if(length(dim(samples[[1]])) > 2){
-      samples[[1]][,,1] <- true_pars
+      if(ncol(true_pars) == nrow(samples[[1]])){
+        samples[[1]][,,1] <- t(true_pars)
+      } else{
+        samples[[1]][,,1] <- true_pars
+      }
     } else{
       samples[[1]][,1] <- true_pars
     }
