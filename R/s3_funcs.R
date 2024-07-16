@@ -534,7 +534,11 @@ recovery.emc <- function(emc, true_pars,
     cur_name <- names(MCMC_samples)[i]
     stats <- get_recovery_stats(MCMC_samples[[i]], true_MCMC_samples[[i]],
                                 true_pars[[i]], CI)
-    ylim <- range(c(stats$true, stats$recovered))
+    if(do_CI){
+      ylim <- range(c(stats$true, stats$recovered))
+    } else{
+      ylim <- range(c(stats$true, stats$recovered[,"50%"]))
+    }
     main_name <- ifelse(length(MCMC_samples) == 1, cur_name, paste0(selection, ": ", cur_name))
     cur_dots <- add_defaults(dots, main = main_name, ylim = ylim, xlim = ylim, xlab = "Generated", ylab = "Estimated")
     do.call(plot, c(list(stats$true[,"50%"],stats$recovered[,"50%"]), fix_dots_plot(cur_dots)))
