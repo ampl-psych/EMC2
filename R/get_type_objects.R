@@ -178,9 +178,13 @@ get_objects_blocked <- function(type, selection, sample_prior, return_prior, des
         sub_names <- names(sampler[[1]]$data)
         sampler <- list(list(samples =  list(alpha = get_alphas(mu, var, sub_names))))
       } else{
+        dots <- list(...)
+        if(!is.null(sampler)){
+          dots <- add_defaults(dots, par_groups = sampler[[1]]$par_groups)
+        }
         sampler <- list(list(samples = do.call(get_prior_blocked,
                                                c(list(prior = prior, design = design,
-                                              selection = selection,N = N), fix_dots(list(...), get_prior_blocked)))))
+                                              selection = selection,N = N), fix_dots(dots, get_prior_blocked)))))
       }
       attr(sampler, "design_list") <- list(design)
       return(sampler)
