@@ -280,10 +280,15 @@ check <- function(emc, ...){
 
 #' @rdname parameters
 #' @export
-parameters.emc <- function(emc,selection = "mu", N = 1000, ...)
+parameters.emc <- function(emc,selection = "mu", N = NULL, ...)
   # extracts and stacks chains into a matrix
 {
   dots <- list(...)
+  if(is.null(N)){
+    nstage <- colSums(chain_n(emc))
+    has_ran <- nstage[nstage != 0]
+    N <- nstage[names(has_ran)[length(has_ran)]]
+  }
   dots$merge_chains <- TRUE ; dots$return_mcmc <- FALSE
   dots$flatten <- TRUE; dots$length.out <- N/length(emc)
   out <- do.call(get_pars, c(list(emc,selection=selection), fix_dots(dots, get_pars)))
@@ -310,7 +315,7 @@ parameters.emc <- function(emc,selection = "mu", N = 1000, ...)
 #'
 #' @param emc An emc object
 #' @param selection String designating parameter type (e.g. mu, sigma2, correlation, alpha)
-#' @param N Integer. How many samples to take from the posterior.
+#' @param N Integer. How many samples to take from the posterior. If `NULL` will return the full posterior
 #' @param ... Optional arguments that can be passed to `get_pars`
 #' @return A data frame with one row for each sample (with a subjects column if selection = "alpha")
 #' @export
