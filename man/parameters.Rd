@@ -5,7 +5,7 @@
 \alias{parameters}
 \title{Returns a parameter type from an emc object as a data frame.}
 \usage{
-\method{parameters}{emc}(emc, selection = "mu", N = 1000, ...)
+\method{parameters}{emc}(emc, selection = "mu", N = NULL, resample = FALSE, ...)
 
 parameters(emc, ...)
 }
@@ -14,7 +14,9 @@ parameters(emc, ...)
 
 \item{selection}{String designating parameter type (e.g. mu, sigma2, correlation, alpha)}
 
-\item{N}{Integer. How many samples to take from the posterior.}
+\item{N}{Integer. How many samples to take from the posterior. If \code{NULL} will return the full posterior}
+
+\item{resample}{Boolean. If \code{TRUE} will sample N samples from the posterior with replacement}
 
 \item{...}{Optional arguments that can be passed to \code{get_pars}}
 }
