@@ -436,8 +436,10 @@ compress_dadm <- function(da,designs,Fcov,Ffun)
         apply(x[attr(x,"expand"),,drop=FALSE],1,paste,collapse="_")})
       ),1,paste,collapse="+"),da$subjects,da$R,da$lR,da$rt,sep="+")
     # Make sure that if row is included for a trial so are other rows
-    if (!is.null(Fcov))
-      cells <- paste(cells,apply(da[,names(Fcov),drop=FALSE],1,paste,collapse="+"),sep="+")
+    if (!is.null(Fcov)) {
+      if (is.null(names(Fcov))) nFcov <- Fcov else nFcov <- names(Fcov)
+      cells <- paste(cells,apply(da[,nFcov,drop=FALSE],1,paste,collapse="+"),sep="+")
+    }
     if (!is.null(Ffun))
       cells <- paste(cells,apply(da[,Ffun,drop=FALSE],1,paste,collapse="+"),sep="+")
 
