@@ -266,6 +266,7 @@ check_gd <- function(emc, stage, max_gd, mean_gd, omit_mpsrf, trys, verbose,
                                   omit_mpsrf = omit_mpsrf, stat = NULL))
       gd_out <- c(gd_out, c(gd))
     }
+    gd_out[is.na(gd_out)] <- Inf
     return(gd_out)
   }
 
