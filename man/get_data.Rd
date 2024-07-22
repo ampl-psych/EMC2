@@ -22,3 +22,6 @@ Extracts data from an emc object
 emc adds columns and rows to a dataframe in order to facilitate efficient likelihood calculations.
 This function will return the data as provided originally.
 }
+\examples{
+get_data(samples_LNR)
+}
