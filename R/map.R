@@ -143,7 +143,8 @@ add_constants_mcmc <- function(p,constants){
 #' @export
 
 mapped_par <- function(p_vector,design,model=NULL,
-                       digits=3,remove_subjects=TRUE, ...)
+                       digits=3,remove_subjects=TRUE,
+                       covariates=NULL,...)
   # Show augmented data and corresponding mapped parameter
 {
   remove_RACE <- TRUE
@@ -151,7 +152,9 @@ mapped_par <- function(p_vector,design,model=NULL,
   for (name in names(optionals) ) {
     assign(name, optionals[[name]])
   }
-  Fcovariates <- design$Fcovariates
+  if (is.null(covariates))
+      Fcovariates <- design$Fcovariates else
+      Fcovariates <- covariates
   if (is.null(model)) if (is.null(design$model))
   stop("Must specify model as not in design") else model <- design$model
   if (remove_subjects) design$Ffactors$subjects <- design$Ffactors$subjects[1]
