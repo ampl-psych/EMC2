@@ -1,6 +1,14 @@
 
 sample_store_factor <- function(data, par_names, iters = 1, stage = "init", integrate = T, is_nuisance, is_grouped, ...) {
   n_factors <- list(...)$n_factors
+  Lambda_mat <- list(...)$Lambda_mat
+  if(is.null(n_factors)){
+    n_factors <- ncol(Lambda_mat)
+  }
+  f_names <- colnames(Lambda_mat)
+  if(is.null(f_names)){
+    f_names <- paste0("F", 1:n_factors)
+  }
   subject_ids <- unique(data$subjects)
   n_subjects <- length(subject_ids)
   base_samples <- sample_store_base(data, par_names[!is_grouped], iters, stage)
@@ -9,8 +17,8 @@ sample_store_factor <- function(data, par_names, iters = 1, stage = "init", inte
   samples <- list(
     theta_mu = array(NA_real_,dim = c(n_pars, iters), dimnames = list(par_names, NULL)),
     theta_var = array(NA_real_,dim = c(n_pars, n_pars, iters),dimnames = list(par_names, par_names, NULL)),
-    theta_lambda = array(NA_real_,dim = c(n_pars, n_factors, iters),dimnames = list(par_names, paste0("F", 1:n_factors), NULL)),
-    lambda_untransf = array(NA_real_,dim = c(n_pars, n_factors, iters),dimnames = list(par_names, paste0("F", 1:n_factors), NULL)),
+    theta_lambda = array(NA_real_,dim = c(n_pars, n_factors, iters),dimnames = list(par_names, f_names, NULL)),
+    lambda_untransf = array(NA_real_,dim = c(n_pars, n_factors, iters),dimnames = list(par_names, f_names, NULL)),
     theta_sig_err_inv = array(NA_real_,dim = c(n_pars, iters),dimnames = list(par_names, NULL)),
     theta_psi_inv = array(NA_real_, dim = c(n_factors, iters), dimnames = list(NULL, NULL)),
     theta_eta = array(NA_real_, dim = c(n_subjects, n_factors, iters), dimnames = list(subject_ids, NULL, NULL))
@@ -25,6 +33,7 @@ add_info_factor <- function(sampler, prior = NULL, ...){
   args <- list(...)
   n_factors <- args$n_factors
   Lambda_mat <- args$Lambda_mat
+  if(is.null(n_factors)) n_factors <- ncol(Lambda_mat)
   n_pars <- sum(!(sampler$nuisance | sampler$grouped))
   if(is.null(Lambda_mat)){
     Lambda_mat <- matrix(Inf, nrow = n_pars, ncol = n_factors)
