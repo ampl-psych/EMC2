@@ -734,7 +734,6 @@ run_sample <- function(emc, iter = 1000, stop_criteria = NULL,
 #' @param rt_resolution A double. Used for compression, response times will be binned based on this resolution.
 #' @param par_groups A vector. Only to be specified with type `blocked`, e.g., `c(1,1,1,2,2)` means the covariances
 #' of the first three and of the last two parameters are estimated as two separate blocks.
-#' @param n_factors An integer. Only to be specified with type `factor`.
 #' @param prior_list A named list containing the prior. Default prior created if `NULL`. For the default priors, see `?get_prior_{type}`.
 #' @param grouped_pars An integer vector. Parameters on this location of the vector of parameters are treated as constant across subjects
 #' @param ... Additional, optional arguments.

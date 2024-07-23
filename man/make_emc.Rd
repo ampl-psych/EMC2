@@ -15,7 +15,6 @@ make_emc(
   prior_list = NULL,
   grouped_pars = NULL,
   par_groups = NULL,
-  n_factors = NULL,
   ...
 )
 }
@@ -40,8 +39,6 @@ make_emc(
 
 \item{par_groups}{A vector. Only to be specified with type \code{blocked}, e.g., \code{c(1,1,1,2,2)} means the covariances
 of the first three and of the last two parameters are estimated as two separate blocks.}
-
-\item{n_factors}{An integer. Only to be specified with type \code{factor}.}
 
 \item{...}{Additional, optional arguments.}
 }
