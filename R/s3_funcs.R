@@ -348,11 +348,10 @@ fit.emc <- function(emc, stage = NULL, iter = 1000, stop_criteria = NULL,report_
                     ...){
 
   if (report_time) start_time <- Sys.time()
-
-  if(!is.null(stop_criteria) & length(stop_criteria) == 1){
+  stages_names <- c("preburn", "burn", "adapt", "sample")
+  if(!is.null(stop_criteria) & !any(names(stop_criteria) %in% stages_names)){
     stop_criteria[["sample"]] <- stop_criteria
   }
-  stages_names <- c("preburn", "burn", "adapt", "sample")
   if(is.null(stop_criteria)){
     stop_criteria <- vector("list", length = 4)
     names(stop_criteria) <- stages_names
