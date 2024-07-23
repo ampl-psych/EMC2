@@ -77,25 +77,25 @@ get_prior_blocked <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e
       }
     }
     if(selection %in% c("sigma2", "covariance", "correlation", "Sigma", "alpha")) {
-      vars_make <- vars <- array(NA_real_, dim = c(n_pars, n_pars, N))
+      vars <- array(NA_real_, dim = c(n_pars, n_pars, N))
       colnames(vars) <- rownames(vars) <- par_names
       for(i in 1:N){
         a_half <- 1 / rgamma(n = n_pars,shape = 1/2,
                              rate = 1/(prior$A^2))
         attempt <- tryCatch({
-          vars_make[,,i] <- riwish(prior$v + n_pars - 1, 2 * prior$v * diag(1 / a_half))
+          vars[,,i] <- riwish(prior$v + n_pars - 1, 2 * prior$v * diag(1 / a_half))
         },error=function(e) e, warning=function(w) w)
         if (any(class(attempt) %in% c("warning", "error", "try-error"))) {
           sample_idx <- sample(1:(i-1),1)
-          vars_make[,,i] <- vars_make[,,sample_idx]
+          vars[,,i] <- vars[,,sample_idx]
         }
       }
-      idx <- 0
+      constraintMat <- matrix(0, n_pars, n_pars)
       for(i in 1:length(unique(par_groups))){
-        n_pars <- sum(par_groups == i)
-        vars[(idx+1):(idx+n_pars), (idx+1):(idx+n_pars),] <- vars_make[(idx+1):(idx+n_pars), (idx+1):(idx+n_pars),]
-        idx <- idx + n_pars
+        idx <- par_groups == i
+        constraintMat[idx, idx] <- Inf
       }
+      vars <- constrain_lambda(vars, constraintMat)
       if(selection != "alpha") samples$theta_var <- vars
     }
     if(selection %in% "alpha"){
@@ -128,11 +128,10 @@ gibbs_step_blocked <- function(sampler, alpha){
   last <- last_sample_standard(sampler$samples)
   prior <- sampler$prior
   n_pars_total <- sampler$n_pars-sum(sampler$nuisance) - sum(sampler$grouped)
-  tmu_out <- numeric()
-  a_half_out <- numeric()
+  tmu_out <- numeric(n_pars_total)
+  a_half_out <- numeric(n_pars_total)
   tvar_out <- matrix(0, nrow = n_pars_total, ncol = n_pars_total)
   tvinv_out <- matrix(0, nrow = n_pars_total, ncol = n_pars_total)
-  idx <- 0
   for(group in 1:sampler$n_par_groups){
     group_idx <- sampler$par_groups == group
     n_pars <- sum(group_idx)
@@ -165,12 +164,11 @@ gibbs_step_blocked <- function(sampler, alpha){
                            rate = prior$v * tvinv + 1/(prior$v^2))
     }
 
-    tmu_out <- c(tmu_out, tmu)
-    a_half_out <- c(a_half_out, a_half)
+    tmu_out[group_idx] <- tmu
+    a_half_out[group_idx] <- a_half
 
-    tvar_out[(idx+1):(idx+n_pars), (idx+1):(idx+n_pars)] <- tvar
-    tvinv_out[(idx+1):(idx+n_pars), (idx+1):(idx+n_pars)] <- tvinv
-    idx <- idx + n_pars
+    tvar_out[group_idx, group_idx] <- tvar
+    tvinv_out[group_idx, group_idx] <- tvinv
   }
 
   names(tmu_out) <- sampler$par_names
