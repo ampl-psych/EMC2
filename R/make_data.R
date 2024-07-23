@@ -155,11 +155,11 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
   if(is.null(dim(parameters))){
     if(is.null(names(parameters))) names(parameters) <- sampled_p_names
   } else{
-    design$Ffactors$subjects <- design$Ffactors$subjects[1:nrow(parameters)]
-    if(!is.null(data)){
-      data<- data[data$subjects %in% design$Ffactors$subjects,]
-      data$subjects <- factor(data$subjects)
-    }
+    # design$Ffactors$subjects <- design$Ffactors$subjects[1:nrow(parameters)]
+    # if(!is.null(data)){
+    #   data<- data[data$subjects %in% design$Ffactors$subjects,]
+    #   data$subjects <- factor(data$subjects)
+    # }
     if(is.null(colnames(parameters))) colnames(parameters) <- sampled_p_names
     if(is.null(rownames(parameters))) rownames(parameters) <- design$Ffactors$subjects
   }
