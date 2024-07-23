@@ -25,6 +25,8 @@ mapped_par(
 
 \item{remove_subjects}{Boolean. Whether to include subjects as a factor in the design}
 
+\item{covariates}{Covariates specified in the design can be included here.}
+
 \item{...}{optional arguments}
 }
 \value{
