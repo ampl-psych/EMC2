@@ -260,7 +260,8 @@ map_mcmc <- function(mcmc,design,include_constants = TRUE, add_recalculated = FA
       if (is.null(vars)) {
         colnames(plist[[i]]) <- names(plist)[i]
       }else {
-        colnames(plist[[i]]) <- paste(vars[1],apply(mp[uniq,vars[-1],drop=FALSE],1,paste,collapse="_"),sep="_")
+        colnames(plist[[i]]) <- paste(vars[1], apply(matrix(do.call(cbind, Map(paste0, vars[-1], mp[uniq, vars[-1]])))
+                                                     ,1, paste0, collapse = "_"), sep = "_")
       }
       # if (is.matrix(plist[[i]])) isConstant <- c(isConstant, apply(plist[[i]],2,function(x){all(x[1]==x[-1])}))
     }
