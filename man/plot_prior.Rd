@@ -9,6 +9,7 @@ plot_prior(
   design,
   selection = "mu",
   do_plot = TRUE,
+  covariates = NULL,
   layout = NA,
   N = 50000,
   ...
@@ -22,6 +23,8 @@ plot_prior(
 \item{selection}{A Character string. Indicates which parameter type to use (e.g., \code{alpha}, \code{mu}, \code{sigma2}, \code{correlation}).}
 
 \item{do_plot}{Boolean. If \code{FALSE} will only return prior samples and omit plotting.}
+
+\item{covariates}{dataframe/functions as specified by the design}
 
 \item{layout}{A vector indicating which layout to use as in par(mfrow = layout). If NA, will automatically generate an appropriate layout.}
 

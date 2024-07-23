@@ -155,11 +155,11 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
   if(is.null(dim(parameters))){
     if(is.null(names(parameters))) names(parameters) <- sampled_p_names
   } else{
-    design$Ffactors$subjects <- design$Ffactors$subjects[1:nrow(parameters)]
-    if(!is.null(data)){
-      data<- data[data$subjects %in% design$Ffactors$subjects,]
-      data$subjects <- factor(data$subjects)
-    }
+    # design$Ffactors$subjects <- design$Ffactors$subjects[1:nrow(parameters)]
+    # if(!is.null(data)){
+    #   data<- data[data$subjects %in% design$Ffactors$subjects,]
+    #   data$subjects <- factor(data$subjects)
+    # }
     if(is.null(colnames(parameters))) colnames(parameters) <- sampled_p_names
     if(is.null(rownames(parameters))) rownames(parameters) <- design$Ffactors$subjects
   }
@@ -180,10 +180,10 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
     data$trials <- as.numeric(as.character(data$trials))
     # Add covariates
     if (!is.null(design$Fcovariates)) {
-      if (!is.null(Fcovariates)) {
+      if (!is.null(Fcovariates) & !all(unlist(lapply(Fcovariates,is.null)))) {
         if (!(all(names(Fcovariates)  %in% names(design$Fcovariates))))
           stop("All Fcovariates must be named in design$Fcovariates")
-        if (!is.data.frame(Fcovariates)) {
+        if (!is.data.frame(Fcovariates) ) {
           if (!all(unlist(lapply(Fcovariates,is.function))))
             stop("Fcovariates must be either a data frame or list of functions")
           nams <- names(Fcovariates)
@@ -191,7 +191,7 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
           names(Fcovariates) <- nams
         }
         n <- dim(Fcovariates)[1]
-        if (!(n==dim(data)[1])) stop("Fcovariates must specify ",dim(data)[1]," values per covariate")
+        if(n != nrow(data)) Fcovariates <- Fcovariates[sample(1:n, nrow(data), replace = TRUE),, drop = F]
         data <- cbind.data.frame(data,Fcovariates)
       }
       empty_covariates <- names(design$Fcovariates)[!(names(design$Fcovariates) %in% names(data))]

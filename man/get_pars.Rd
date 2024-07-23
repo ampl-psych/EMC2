@@ -23,7 +23,8 @@ get_pars(
   use_par = NULL,
   type = NULL,
   true_pars = NULL,
-  chain = NULL
+  chain = NULL,
+  covariates = NULL
 )
 }
 \arguments{
@@ -77,6 +78,8 @@ Does not apply for \code{selection = "alpha"}}
 \item{true_pars}{Set of \code{true_parameters} can be specified to apply flatten or use_par on a set of true parameters}
 
 \item{chain}{Integer. Which of the chain(s) to return}
+
+\item{covariates}{Only needed with \code{plot_prior} and covariates in the design}
 }
 \value{
 An mcmc.list object of the selected parameter types with the specified manipulations

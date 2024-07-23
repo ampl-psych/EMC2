@@ -127,7 +127,7 @@ add_constants_mcmc <- function(p,constants){
 #' @param digits Integer. Will round the output parameter values to this many decimals
 #' @param ... optional arguments
 #' @param remove_subjects Boolean. Whether to include subjects as a factor in the design
-#'
+#' @param covariates Covariates specified in the design can be included here.
 #' @return Matrix with a column for each factor in the design and for each model parameter type (``p_type``).
 #' @examples
 #' # First define a design:
@@ -143,7 +143,8 @@ add_constants_mcmc <- function(p,constants){
 #' @export
 
 mapped_par <- function(p_vector,design,model=NULL,
-                       digits=3,remove_subjects=TRUE, ...)
+                       digits=3,remove_subjects=TRUE,
+                       covariates=NULL,...)
   # Show augmented data and corresponding mapped parameter
 {
   remove_RACE <- TRUE
@@ -151,7 +152,9 @@ mapped_par <- function(p_vector,design,model=NULL,
   for (name in names(optionals) ) {
     assign(name, optionals[[name]])
   }
-  Fcovariates <- design$Fcovariates
+  if (is.null(covariates))
+      Fcovariates <- design$Fcovariates else
+      Fcovariates <- covariates
   if (is.null(model)) if (is.null(design$model))
   stop("Must specify model as not in design") else model <- design$model
   if (remove_subjects) design$Ffactors$subjects <- design$Ffactors$subjects[1]
@@ -208,12 +211,18 @@ add_recalculated_pars <- function(pmat, model, cnams){
   return(m_out)
 }
 
-map_mcmc <- function(mcmc,design,include_constants = TRUE, add_recalculated = FALSE)
+map_mcmc <- function(mcmc,design,include_constants = TRUE, add_recalculated = FALSE, covariates = NULL)
   # Maps vector or matrix (usually mcmc object) of sampled parameters to native
   # model parameterization.
 {
   model <- design$model
-  doMap <- function(mapi,pmat) t(mapi %*% t(pmat[,dimnames(mapi)[[2]],drop=FALSE]))
+  doMap <- function(mapi,pmat, covariates = NULL){
+    if(!is.null(covariates)){
+      if(nrow(covariates) != nrow(pmat)) covariates <- covariates[sample(1:nrow(covariates), nrow(pmat), replace = T),, drop = F]
+      pmat <- cbind(pmat, covariates)
+    }
+    t(mapi %*% t(pmat[,dimnames(mapi)[[2]],drop=FALSE]))
+  }
 
   get_p_types <- function(nams, reverse = FALSE){
     if(reverse){
@@ -240,12 +249,12 @@ map_mcmc <- function(mcmc,design,include_constants = TRUE, add_recalculated = FA
     mcmc_array <- mcmc
     is_matrix <- FALSE
   }
-  mp <- mapped_par(mcmc_array[,1,1],design,remove_RACE=FALSE)
+  mp <- mapped_par(mcmc_array[,1,1],design,remove_RACE=FALSE, covariates = covariates)
 
   for(k in 1:ncol(mcmc_array)){
     mcmc <- t(mcmc_array[,k,])
     pmat <- model()$transform(add_constants(mcmc,constants))
-    plist <- lapply(map,doMap,pmat=pmat)
+    plist <- lapply(map,doMap,pmat=pmat, covariates)
     if (model()$type=="SDT") {
       ht <- apply(map$threshold[,grepl("lR",dimnames(map$threshold)[[2]]),drop=FALSE],1,sum)
       plist$threshold <- plist$threshold[,ht!=max(ht),drop=FALSE]
@@ -253,12 +262,27 @@ map_mcmc <- function(mcmc,design,include_constants = TRUE, add_recalculated = FA
     # Give mapped variables names and flag constant
     for (i in 1:length(plist)) {
       vars <- row.names(attr(terms(design$Flist[[i]]),"factors"))
-      uniq <- !duplicated(apply(mp[,vars],1,paste,collapse="_"))
+      if(any(names(design$Fcovariates) %in% vars)){
+        cov_vars <- vars[(vars %in% names(design$Fcovariates))]
+        vars <- vars[!(vars %in% names(design$Fcovariates))]
+        has_cov <- TRUE
+      } else{
+        has_cov <- FALSE
+      }
+      uniq <- !duplicated(apply(mp[,vars, drop = F],1,paste,collapse="_"))
       if (is.null(vars)) {
         colnames(plist[[i]]) <- names(plist)[i]
       }else {
-        colnames(plist[[i]]) <- paste(vars[1],apply(mp[uniq,vars[-1],drop=FALSE],1,paste,collapse="_"),sep="_")
+        if(length(vars) == 1) colnames(plist[[i]]) <- vars
+        else if(length(vars) == 2){
+          colnames(plist[[i]]) <- paste(vars[1], apply(matrix(do.call(cbind, Map(paste0, vars[-1], mp[uniq, vars[-1]])))
+                                                       ,1, paste0, collapse = "_"), sep = "_")
+        } else{
+          colnames(plist[[i]]) <- paste(vars[1], apply(do.call(cbind, Map(paste0, vars[-1], mp[uniq, vars[-1]]))
+                                                       ,1, paste0, collapse = "_"), sep = "_")
+        }
       }
+      if(has_cov) colnames(plist[[i]]) <- paste(colnames(plist[[i]]), cov_vars, sep = "_")
       # if (is.matrix(plist[[i]])) isConstant <- c(isConstant, apply(plist[[i]],2,function(x){all(x[1]==x[-1])}))
     }
     pmat <- do.call(cbind,plist)

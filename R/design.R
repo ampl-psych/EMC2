@@ -308,7 +308,7 @@ sampled_p_vector <- function(design,model=NULL,doMap=TRUE, add_da = FALSE, all_c
     #   data <- cbind.data.frame(data,data.frame(lapply(design$Ffunctions,function(f){f(data)})))
 
     if (!is.null(cur_design$Fcovariates)) {
-      covs <- matrix(0,nrow=dim(data)[1],ncol=length(cur_design$Fcovariates),
+      covs <- matrix(1,nrow=dim(data)[1],ncol=length(cur_design$Fcovariates),
                      dimnames=list(NULL,names(cur_design$Fcovariates)))
       data <- cbind.data.frame(data,covs)
     }
