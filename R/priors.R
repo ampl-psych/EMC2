@@ -244,6 +244,7 @@ ask_user_prior <- function(prior, cur_idx, to_do, fill_default, group_to_do){
 #' @param prior A prior list created with `prior`
 #' @param design A design list created with `design`
 #' @param do_plot Boolean. If `FALSE` will only return prior samples and omit plotting.
+#' @param covariates dataframe/functions as specified by the design
 #' @inheritParams plot_pars
 #' @param ... Optional arguments that can be passed to get_pars, histogram, plot.default (see par()),
 #' or arguments required for the types of models e.g. n_factors for type = "factor"
@@ -267,7 +268,7 @@ ask_user_prior <- function(prior, cur_idx, to_do, fill_default, group_to_do){
 #' plot_prior(prior_DDMaE, design_DDMaE, selection = "mu", mapped = FALSE)
 #' # We can also plot the implied prior on the participant level effects.
 #' plot_prior(prior_DDMaE, design_DDMaE, selection = "alpha", col = "green", N = 1e4)
-plot_prior <- function(prior, design, selection = "mu", do_plot = TRUE,
+plot_prior <- function(prior, design, selection = "mu", do_plot = TRUE, covariates = NULL,
                            layout = NA, N = 5e4, ...){
   dots <- add_defaults(list(...), breaks = 30, cut_off = 0.0015, prob = TRUE, by_subject = TRUE, map = TRUE)
   if(is.null(design$Ffactors)){
@@ -278,7 +279,7 @@ plot_prior <- function(prior, design, selection = "mu", do_plot = TRUE,
   if(type == "single") selection <- "alpha"
   samples <-  get_objects(design = design, prior = prior, type = type, sample_prior = T,
                           selection = selection, N = N, ...)
-  MCMC_samples <- do.call(get_pars, c(list(samples, selection = selection, type = type), fix_dots(dots, get_pars)))
+  MCMC_samples <- do.call(get_pars, c(list(samples, selection = selection, type = type, covariates = covariates), fix_dots(dots, get_pars)))
   if(do_plot){
     for(i in 1:length(MCMC_samples)){
       xlab <- ifelse(is.null(names(MCMC_samples)[i]), selection, names(MCMC_samples)[i])

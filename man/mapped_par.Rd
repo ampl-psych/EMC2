@@ -10,6 +10,7 @@ mapped_par(
   model = NULL,
   digits = 3,
   remove_subjects = TRUE,
+  covariates = NULL,
   ...
 )
 }

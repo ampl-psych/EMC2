@@ -191,7 +191,7 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
           names(Fcovariates) <- nams
         }
         n <- dim(Fcovariates)[1]
-        if (!(n==dim(data)[1])) stop("Fcovariates must specify ",dim(data)[1]," values per covariate")
+        if(n != nrow(data)) Fcovariates <- Fcovariates[sample(1:n, nrow(data), replace = TRUE),, drop = F]
         data <- cbind.data.frame(data,Fcovariates)
       }
       empty_covariates <- names(design$Fcovariates)[!(names(design$Fcovariates) %in% names(data))]

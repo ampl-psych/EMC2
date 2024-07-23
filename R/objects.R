@@ -354,6 +354,7 @@ fix_dots <- function(dots, fun, exclude = "", consider_dots = TRUE){
 #' (i.e. these are collapsed when `flatten = TRUE` and use_par should also be collapsed names).
 #' @param type Character indicating the group-level model selected. Only necessary if sampler isn't specified.
 #' @param true_pars Set of `true_parameters` can be specified to apply flatten or use_par on a set of true parameters
+#' @param covariates Only needed with `plot_prior` and covariates in the design
 #' @param chain Integer. Which of the chain(s) to return
 #'
 #' @return An mcmc.list object of the selected parameter types with the specified manipulations
@@ -370,7 +371,7 @@ get_pars <- function(emc,selection= "mu", stage="sample",thin=1,filter=0,
                     by_subject = FALSE, return_mcmc = TRUE, merge_chains = FALSE,
                     subject = NULL, flatten = FALSE, remove_dup = FALSE,
                     remove_constants = TRUE, use_par = NULL, type = NULL,
-                    true_pars = NULL, chain = NULL)
+                    true_pars = NULL, chain = NULL, covariates = NULL)
 {
   if(add_recalculated) map <- TRUE
   if(!(selection %in% c("mu", "alpha"))) map <- FALSE
@@ -381,7 +382,7 @@ get_pars <- function(emc,selection= "mu", stage="sample",thin=1,filter=0,
 
   if(map){
     samples <- lapply(samples, map_mcmc, attr(emc,"design_list")[[1]], include_constants = FALSE,
-                      add_recalculated = add_recalculated)
+                      add_recalculated = add_recalculated, covariates = covariates)
   }
   if(flatten) remove_dup <- TRUE
   if(!is.null(true_pars)){ # Kluge to make sure the right object dimensions/filtering is performed on simulated parameters
