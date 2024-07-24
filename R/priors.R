@@ -78,16 +78,17 @@ prior <- function(design, type = "standard", update = NULL,
       } else{
         # First make sure we only take diagonals
         if(!is.null(dim(update[[name]]))){
+          args_names <- names(diag(prior$prior[[name]]))
           upd <- diag(update[[name]])
         } else{
+          args_names <- names(prior$prior[[name]])
           upd <- update[[name]]
         }
         # now fill in
-        args_names <- names(args[[name]])
         upd_names <- names(upd)
         for(i in 1:length(upd)){
           if(upd_names[i] %in% args_names){
-            args[[name]][args_names == upd_names[i]] <- upd[i]
+            args[[name]][upd_names[i]] <- upd[i]
           }
         }
       }
@@ -127,7 +128,7 @@ prior <- function(design, type = "standard", update = NULL,
               to_do <- rep(F, length(to_check))
             } else{
               to_do <- !(names(to_check) %in% names(input))
-              to_check[!to_do] <- input
+              to_check[!to_do] <- input[names(input) %in% names(to_check)]
               prior$prior[[pri]] <- to_check
             }
           }
