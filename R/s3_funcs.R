@@ -977,22 +977,23 @@ get_data.emc <- function(emc) {
   if(is.null(emc[[1]]$data[[1]]$subjects)){ # Joint model
     dat <- vector("list", length(emc[[1]]$data[[1]]))
     for(i in 1:length(dat)){
+      design <- attr(emc, "design_list")[[i]]
       tmp <- lapply(emc[[1]]$data,\(x) x[[i]][attr(x[[i]],"expand"),])
       tmp <- do.call(rbind, tmp)
       row.names(tmp) <- NULL
       tmp <- tmp[tmp$lR == levels(tmp$lR)[1],]
-      tmp <- tmp[,!(colnames(tmp) %in% c("trials","lR","lM","winner"))]
+      tmp <- tmp[,!(colnames(tmp) %in% c("trials","lR","lM", "winner", "SlR", "RACE", names(design$Ffunctions)))]
       dat[[i]] <- tmp
     }
   } else{
+    design <- attr(emc, "design_list")[[1]]
     dat <- do.call(rbind,lapply(emc[[1]]$data,\(x) x[attr(x,"expand"),]))
     row.names(dat) <- NULL
     dat <- dat[dat$lR == levels(dat$lR)[1],]
-    dat <- dat[,!(colnames(dat) %in% c("trials","lR","lM","winner"))]
+    dat <- dat[,!(colnames(dat) %in% c("trials","lR","lM","winner", "SlR", "RACE", names(design$Ffunctions)))]
   }
   return(dat)
 }
-
 #' Get data
 #'
 #' Extracts data from an emc object
