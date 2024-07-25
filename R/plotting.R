@@ -697,7 +697,11 @@ profile_plot <- function(data, design, p_vector, range = .5, layout = NA,
     par(mfrow = coda_setmfrow(Nchains = 1, Nparms = length(use_par),
                               nplots = 1))
   } else{par(mfrow=layout)}
-  if(is.null(dots$dadm)) dadm <- design_model(data, design, verbose = FALSE)
+  if(is.null(dots$dadm)){
+    dadm <- design_model(data, design, verbose = FALSE)
+  } else{
+    dadm <- dots$dadm
+  }
   out <- data.frame(true = rep(NA, length(use_par)), max = rep(NA, length(use_par)), miss = rep(NA, length(use_par)))
   rownames(out) <- use_par
   for(p in 1:length(p_vector)){
