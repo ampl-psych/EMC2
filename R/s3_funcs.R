@@ -534,7 +534,6 @@ recovery.emc <- function(emc, true_pars,
   MCMC_samples <- do.call(get_pars, c(list(emc, selection = selection), fix_dots(dots, get_pars)))
   true_MCMC_samples <- NULL
   if(!is(true_pars, "emc")){
-    if(selection == "sigma2" & !is.matrix(true_pars)) true_pars <- diag(true_pars)
     true_pars <- do.call(get_pars, c(list(emc, selection = selection, type = type, true_pars = true_pars),
                                         fix_dots(dots, get_pars, exclude = c("thin", "filter"))))
   } else{
