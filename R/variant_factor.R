@@ -160,7 +160,11 @@ get_prior_factor <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5
       }
       lambda <- constrain_lambda(lambda, Lambda_mat)
       rownames(lambda) <- par_names
-      colnames(lambda) <- paste0("F", 1:n_factors)
+      if(is.null(colnames(Lambda_mat))){
+        colnames(lambda) <- paste0("F", 1:n_factors)
+      } else{
+        colnames(lambda) <- colnames(Lambda_mat)
+      }
       if(selection %in% "loadings"){
         samples$theta_lambda <- lambda
       }
