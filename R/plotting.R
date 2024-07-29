@@ -785,7 +785,8 @@ plot_pars <- function(emc,layout=NA, selection="mu", show_chains = FALSE, plot_p
   }
   psamples <-  get_objects(sampler = emc, design = attr(emc,"design_list"),
                            type = type, sample_prior = T,
-                           selection = selection, N = N)
+                           selection = selection, N = N,
+                           prior = emc[[1]]$prior)
   pMCMC_samples <- do.call(get_pars, c(list(psamples, selection = selection, type = type),
                                        fix_dots(dots, get_pars, exclude = c("thin", "filter", "chain", "subject"))))
   if(length(pMCMC_samples) != length(MCMC_samples)) pMCMC_samples <- rep(pMCMC_samples, length(MCMC_samples))
