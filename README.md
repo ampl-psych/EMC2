@@ -1,7 +1,6 @@
 # EMC2: Extended Models of Choice 2:
 
 The `R` package `EMC2` provides tools to perform Bayesian hierarchical analyses of the following cognitive models: Diffusion Decision Model (DDM), Linear Ballistic Accumulator Model (LBA), Racing Diffusion Model (RDM), and Lognormal Racing Model (LNR). Specifically, the package provides functionality for specifying individual model designs, estimating the models, examining convergence as well as model fit through posterior prediction methods. It also includes various plotting functions and relative model comparison methods such as Bayes factors. In addition, users can specify their own likelihood function and perform non-hierarchical estimation. The package uses particle metropolis Markov chain Monte Carlo sampling. For hierarchical models, it uses efficient Gibbs sampling at the population level and supports a variety of covariance structures, extending the work of Gunawan and colleagues (2020).
-
 ## Installation
 
 To install the R package, and its dependencies you can use: 
