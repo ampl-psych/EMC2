@@ -66,22 +66,22 @@
 <rect x='480.72' y='175.52' width='130.13' height='130.13' style='stroke-width: 0.75; stroke: #BEBEBE;' />
 <rect x='480.72' y='305.65' width='130.13' height='130.13' style='stroke-width: 0.75; stroke: #BEBEBE;' />
 <rect x='480.72' y='435.78' width='130.13' height='130.13' style='stroke-width: 0.75; stroke: #BEBEBE;' />
-<text x='155.39' y='113.55' text-anchor='middle' style='font-size: 9.00px; font-weight: bold; font-family: sans;' textLength='5.01px' lengthAdjust='spacingAndGlyphs'>1</text>
-<text x='155.39' y='243.68' text-anchor='middle' style='font-size: 9.00px; font-weight: bold; font-family: sans;' textLength='17.52px' lengthAdjust='spacingAndGlyphs'>0.29</text>
+<text x='155.39' y='113.55' text-anchor='middle' style='font-size: 9.00px; font-weight: bold; font-family: sans;' textLength='20.02px' lengthAdjust='spacingAndGlyphs'> 1.00</text>
+<text x='155.39' y='243.68' text-anchor='middle' style='font-size: 9.00px; font-weight: bold; font-family: sans;' textLength='20.02px' lengthAdjust='spacingAndGlyphs'> 0.29</text>
 <text x='155.39' y='373.81' text-anchor='middle' style='font-size: 9.00px; font-weight: bold; font-family: sans;' textLength='20.51px' lengthAdjust='spacingAndGlyphs'>-0.36</text>
 <text x='155.39' y='503.95' text-anchor='middle' style='font-size: 9.00px; font-weight: bold; font-family: sans;' textLength='20.51px' lengthAdjust='spacingAndGlyphs'>-0.43</text>
-<text x='285.52' y='113.55' text-anchor='middle' style='font-size: 9.00px; font-weight: bold; font-family: sans;' textLength='17.52px' lengthAdjust='spacingAndGlyphs'>0.29</text>
-<text x='285.52' y='243.68' text-anchor='middle' style='font-size: 9.00px; font-weight: bold; font-family: sans;' textLength='5.01px' lengthAdjust='spacingAndGlyphs'>1</text>
+<text x='285.52' y='113.55' text-anchor='middle' style='font-size: 9.00px; font-weight: bold; font-family: sans;' textLength='20.02px' lengthAdjust='spacingAndGlyphs'> 0.29</text>
+<text x='285.52' y='243.68' text-anchor='middle' style='font-size: 9.00px; font-weight: bold; font-family: sans;' textLength='20.02px' lengthAdjust='spacingAndGlyphs'> 1.00</text>
 <text x='285.52' y='373.81' text-anchor='middle' style='font-size: 9.00px; font-weight: bold; font-family: sans;' textLength='20.51px' lengthAdjust='spacingAndGlyphs'>-0.48</text>
 <text x='285.52' y='503.95' text-anchor='middle' style='font-size: 9.00px; font-weight: bold; font-family: sans;' textLength='20.51px' lengthAdjust='spacingAndGlyphs'>-0.42</text>
 <text x='415.65' y='113.55' text-anchor='middle' style='font-size: 9.00px; font-weight: bold; font-family: sans;' textLength='20.51px' lengthAdjust='spacingAndGlyphs'>-0.36</text>
 <text x='415.65' y='243.68' text-anchor='middle' style='font-size: 9.00px; font-weight: bold; font-family: sans;' textLength='20.51px' lengthAdjust='spacingAndGlyphs'>-0.48</text>
-<text x='415.65' y='373.81' text-anchor='middle' style='font-size: 9.00px; font-weight: bold; font-family: sans;' textLength='5.01px' lengthAdjust='spacingAndGlyphs'>1</text>
-<text x='415.65' y='503.95' text-anchor='middle' style='font-size: 9.00px; font-weight: bold; font-family: sans;' textLength='17.52px' lengthAdjust='spacingAndGlyphs'>0.53</text>
+<text x='415.65' y='373.81' text-anchor='middle' style='font-size: 9.00px; font-weight: bold; font-family: sans;' textLength='20.02px' lengthAdjust='spacingAndGlyphs'> 1.00</text>
+<text x='415.65' y='503.95' text-anchor='middle' style='font-size: 9.00px; font-weight: bold; font-family: sans;' textLength='20.02px' lengthAdjust='spacingAndGlyphs'> 0.53</text>
 <text x='545.79' y='113.55' text-anchor='middle' style='font-size: 9.00px; font-weight: bold; font-family: sans;' textLength='20.51px' lengthAdjust='spacingAndGlyphs'>-0.43</text>
 <text x='545.79' y='243.68' text-anchor='middle' style='font-size: 9.00px; font-weight: bold; font-family: sans;' textLength='20.51px' lengthAdjust='spacingAndGlyphs'>-0.42</text>
-<text x='545.79' y='373.81' text-anchor='middle' style='font-size: 9.00px; font-weight: bold; font-family: sans;' textLength='17.52px' lengthAdjust='spacingAndGlyphs'>0.53</text>
-<text x='545.79' y='503.94' text-anchor='middle' style='font-size: 9.00px; font-weight: bold; font-family: sans;' textLength='5.01px' lengthAdjust='spacingAndGlyphs'>1</text>
+<text x='545.79' y='373.81' text-anchor='middle' style='font-size: 9.00px; font-weight: bold; font-family: sans;' textLength='20.02px' lengthAdjust='spacingAndGlyphs'> 0.53</text>
+<text x='545.79' y='503.95' text-anchor='middle' style='font-size: 9.00px; font-weight: bold; font-family: sans;' textLength='20.02px' lengthAdjust='spacingAndGlyphs'> 1.00</text>
 <rect x='618.66' y='563.31' width='15.23' height='2.60' style='stroke-width: 0.75; stroke: #67001F; fill: #67001F;' />
 <rect x='618.66' y='560.71' width='15.23' height='2.60' style='stroke-width: 0.75; stroke: #6A011F; fill: #6A011F;' />
 <rect x='618.66' y='558.11' width='15.23' height='2.60' style='stroke-width: 0.75; stroke: #6E0220; fill: #6E0220;' />
