@@ -16,7 +16,7 @@ Pictured below are the four phases of an `EMC2`cognitive model analysis with ass
 
 &nbsp; 
 
-<img width="800" alt="workflow-emc2" src="https://github.com/ampl-psych/EMC2/assets/55760001/e5f53547-c28b-4006-a302-f114d3291045">
+<img width="800" alt="workflow-emc2" src="https://github.com/user-attachments/assets/ed96de6c-17b9-47f5-9153-cd19cff47d34">
 
 &nbsp;
 
