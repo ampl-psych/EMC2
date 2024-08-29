@@ -83,18 +83,18 @@ add_info_factor <- function(sampler, prior = NULL, ...){
 #' @param Lambda_mat The loadings constraint matrix.
 #'
 #' @return A list with a single entry of type of samples from the prior (if `sample = TRUE`) or else a prior object
-#' @examples \dontrun{
+#' @examples
 #' # First define a design for the model
 #' design_DDMaE <- design(data = forstmann,model=DDM,
 #'                            formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
 #'                            constants=c(s=log(1)))
 #' # Now get the default prior
-#' prior <- get_prior_factor(design = design_DDMaE, sample = FALSE)
+#' prior <- get_prior_factor(design = design_DDMaE, sample = FALSE, n_factors = 3)
 #' # We can change values in the default prior or use `prior`
 #' # Then we can get samples from this prior e.g.
 #' samples <- get_prior_factor(prior = prior, design = design_DDMaE,
-#'   sample = TRUE, type = "mu", n_factors = 3)
-#' }
+#'   sample = TRUE, selection = "mu", n_factors = 3)
+#'
 #' @export
 get_prior_factor <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, selection = "mu", design = NULL,
                              Lambda_mat = NULL, n_factors = NULL){

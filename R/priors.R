@@ -17,7 +17,7 @@
 #' @param fill_default Boolean, If `TRUE` will fill all non-specified parameters, and parameters outside of `ask`, to default values
 #' @param ... Either values to prefill, i.e. `theta_mu_mean = c(1:6)`, or additional arguments such as `n_factors = 2`
 #' @return A prior list object
-#' @examples \dontrun{
+#' @examples
 #' # First define a design for the model
 #' design_DDMaE <- design(data = forstmann,model=DDM,
 #'                            formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
@@ -40,7 +40,6 @@
 #'                            constants=c(s=log(1)))
 #' # We can easily update the prior
 #' prior_DDMat0E <- prior(design_DDMat0E, update = prior_DDMaE)
-#' }
 #' @export
 prior <- function(design, type = "standard", update = NULL,
                       ask = NULL, fill_default = TRUE, ...){
@@ -256,7 +255,7 @@ ask_user_prior <- function(prior, cur_idx, to_do, fill_default, group_to_do){
 #' @return An mcmc.list object with prior samples of the selected type
 #' @export
 #'
-#' @examples
+#' @examples \dontrun{
 #' # First define a design for the model
 #' design_DDMaE <- design(data = forstmann,model=DDM,
 #'                            formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
@@ -273,6 +272,8 @@ ask_user_prior <- function(prior, cur_idx, to_do, fill_default, group_to_do){
 #' plot_prior(prior_DDMaE, design_DDMaE, selection = "mu", mapped = FALSE, N=1e3)
 #' # We can also plot the implied prior on the participant level effects.
 #' plot_prior(prior_DDMaE, design_DDMaE, selection = "alpha", col = "green", N = 1e3)
+#' }
+
 plot_prior <- function(prior, design, selection = "mu", do_plot = TRUE, covariates = NULL,
                            layout = NA, N = 5e4, ...){
   dots <- add_defaults(list(...), breaks = 30, cut_off = 0.0015, prob = TRUE, by_subject = TRUE, map = TRUE)

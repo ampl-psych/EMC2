@@ -589,7 +589,7 @@ plot_fit <- function(data,pp,subject=NULL,factors=NULL,functions=NULL,
 #' pairs_posterior(samples_LNR, selection = "alpha")
 #'
 #' # We can also choose group-level parameters and subsets of the parameter space
-#' pairs_posterior(samples_LNR, use_par = c("v", "B", "t0"), selection = "sigma2")
+#' pairs_posterior(samples_LNR, use_par = c("m", "t0"), selection = "sigma2")
 #' }
 #' @export
 
@@ -662,7 +662,7 @@ pairs_posterior <- function(emc, selection="alpha", scale_subjects=TRUE,
 #' @param round Integer. To how many digits will the output be rounded.
 #' @param ... Optional additional arguments that can be passed to plot.default.
 #' @return Vector with highest likelihood point, input and mismatch between true and highest point
-#' @examples
+#' @examples \dontrun{
 #' # First create a design
 #' design_DDMaE <- design(data = forstmann,model=DDM,
 #'                       formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
@@ -674,7 +674,7 @@ pairs_posterior <- function(emc, selection="alpha", scale_subjects=TRUE,
 #' profile_plot(p_vector = p_vector, p_min = c(t0 = -1.35),
 #'              p_max = c(t0 = -1.45), use_par = c("a", "t0", "SZ"),
 #'              data = forstmann, design = design_DDMaE, n_point = 10)
-
+#' }
 #' @export
 
 profile_plot <- function(data, design, p_vector, range = .5, layout = NA,

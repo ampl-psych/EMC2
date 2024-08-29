@@ -218,13 +218,13 @@ standardize_loadings <- function(emc = NULL, loadings = NULL, sig_err_inv = NULL
 #' @param ... Optional additional arguments
 #'
 #' @return NULL
-#' @examples \dontrun{
+#' @examples
 #' # For a given set of hierarchical model samples we can make a
 #' # correlation matrix plot.
-#' plot_relations(emc, only_cred = TRUE, plot_cred = TRUE)
+#' plot_relations(samples_LNR, only_cred = TRUE, plot_cred = TRUE)
 #' # We can also only plot the correlations where the credible interval does not include zero
-#' plot_relations(emc, plot_means = TRUE, only_cred = TRUE)
-#' }
+#' plot_relations(samples_LNR, plot_means = TRUE, only_cred = TRUE)
+#'
 #' @export
 #'
 plot_relations <- function(emc = NULL, stage = "sample",  plot_cred = TRUE,

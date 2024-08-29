@@ -42,7 +42,6 @@ To get the default prior for a type, run: \verb{get_prior_\{type\}(design = desi
 E.g.: \code{get_prior_diagonal(design = design, sample = F)}
 }
 \examples{
-\dontrun{
 # First define a design for the model
 design_DDMaE <- design(data = forstmann,model=DDM,
                            formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
@@ -65,5 +64,4 @@ design_DDMat0E <- design(data = forstmann,model=DDM,
                            constants=c(s=log(1)))
 # We can easily update the prior
 prior_DDMat0E <- prior(design_DDMat0E, update = prior_DDMaE)
-}
 }

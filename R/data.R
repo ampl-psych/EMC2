@@ -22,7 +22,7 @@
 #'   \item{rt}{reaction time for each trial as a double}
 #'   \item{subjects}{integer ID for each subject}
 #' }
-#' @source \url{https://www.pnas.org/content/105/45/17538}
+#' @source \url{https://www.pnas.org/doi/10.1073/pnas.0805903105}
 "forstmann"
 
 #' An emc object of an LNR model of the Forstmann dataset using the first three subjects
@@ -78,5 +78,5 @@
 #'   \item{sampler_nuis}{A sampler list for nuisance parameters (in this case there are none),
 #'   similarly structured to the overall samples list of one of the MCMC chains.}
 #' }
-#' @source \url{https://www.pnas.org/content/105/45/17538}
+#' @source \url{https://www.pnas.org/doi/10.1073/pnas.0805903105}
 "samples_LNR"

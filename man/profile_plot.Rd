@@ -55,6 +55,7 @@ Creates likelihood profile plots from a design and the experimental data by
 varying one model parameter while holding all others constant.
 }
 \examples{
+\dontrun{
 # First create a design
 design_DDMaE <- design(data = forstmann,model=DDM,
                       formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
@@ -66,4 +67,5 @@ p_vector=c(v_Sleft=-2,v_Sright=2,a=log(.95),a_Eneutral=log(1.5),a_Eaccuracy=log(
 profile_plot(p_vector = p_vector, p_min = c(t0 = -1.35),
              p_max = c(t0 = -1.45), use_par = c("a", "t0", "SZ"),
              data = forstmann, design = design_DDMaE, n_point = 10)
+}
 }

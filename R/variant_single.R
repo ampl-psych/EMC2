@@ -28,7 +28,7 @@ add_info_single <- function(sampler, prior = NULL, ...){
 #' @param design The design obtained from `design()`, required when `map = TRUE`
 #' @param selection  Character. If `sample = TRUE`, what prior to sample from. Options: `"alpha"`.
 #' @return A list with a single entry named `"alpha"` and samples from the prior (if `sample = TRUE`) or else a prior object
-#' @examples \dontrun{
+#' @examples
 #' # First define a design for the model
 #' design_DDMaE <- design(data = forstmann,model=DDM,
 #'                            formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
@@ -38,8 +38,8 @@ add_info_single <- function(sampler, prior = NULL, ...){
 #' # We can change values in the default prior or use `prior`
 #' # Then we can get samples from this prior e.g.
 #' samples <- get_prior_single(prior = prior, design = design_DDMaE,
-#'   sample = TRUE, type = "alpha")
-#' }
+#'   sample = TRUE, selection = "alpha")
+#'
 #' @export
 
 get_prior_single <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5,

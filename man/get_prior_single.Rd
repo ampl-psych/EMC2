@@ -48,7 +48,6 @@ To specify a (multivariate normal) prior, \code{prior$theta_mu_mean} and \code{p
 is needed for each parameter.
 }
 \examples{
-\dontrun{
 # First define a design for the model
 design_DDMaE <- design(data = forstmann,model=DDM,
                            formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
@@ -58,6 +57,6 @@ prior <- get_prior_single(design = design_DDMaE, sample = FALSE)
 # We can change values in the default prior or use `prior`
 # Then we can get samples from this prior e.g.
 samples <- get_prior_single(prior = prior, design = design_DDMaE,
-  sample = TRUE, type = "alpha")
-}
+  sample = TRUE, selection = "alpha")
+
 }

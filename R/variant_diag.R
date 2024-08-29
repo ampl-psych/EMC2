@@ -17,7 +17,7 @@ add_info_diag <- function(sampler, prior = NULL, ...){
 #'
 #' @inheritParams get_prior_standard
 #' @return A list with a single entry of type of samples from the prior (if `sample = TRUE`) or else a prior object
-#' @examples \dontrun{
+#' @examples
 #' # First define a design for the model
 #' design_DDMaE <- design(data = forstmann,model=DDM,
 #'                            formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
@@ -27,8 +27,8 @@ add_info_diag <- function(sampler, prior = NULL, ...){
 #' # We can change values in the default prior or use `prior`
 #' # Then we can get samples from this prior e.g.
 #' samples <- get_prior_diag(prior = prior, design = design_DDMaE,
-#'   sample = TRUE, type = "mu")
-#' }
+#'   sample = TRUE, selection = "mu")
+#'
 #' @export
 get_prior_diag <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, selection = "mu", design = NULL){
   # Checking and default priors
