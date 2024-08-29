@@ -269,10 +269,10 @@ ask_user_prior <- function(prior, cur_idx, to_do, fill_default, group_to_do){
 #' # Here we left the variance prior at default
 #' prior_DDMaE <- prior(design_DDMaE,mu_mean=p_vector,mu_sd=psd)
 #' # Now we can plot all sorts of (implied) priors
-#' plot_prior(prior_DDMaE, design_DDMaE, selection = "mu")
-#' plot_prior(prior_DDMaE, design_DDMaE, selection = "mu", mapped = FALSE)
+#' plot_prior(prior_DDMaE, design_DDMaE, selection = "mu", N = 1e3)
+#' plot_prior(prior_DDMaE, design_DDMaE, selection = "mu", mapped = FALSE, N=1e3)
 #' # We can also plot the implied prior on the participant level effects.
-#' plot_prior(prior_DDMaE, design_DDMaE, selection = "alpha", col = "green", N = 1e4)
+#' plot_prior(prior_DDMaE, design_DDMaE, selection = "alpha", col = "green", N = 1e3)
 plot_prior <- function(prior, design, selection = "mu", do_plot = TRUE, covariates = NULL,
                            layout = NA, N = 5e4, ...){
   dots <- add_defaults(list(...), breaks = 30, cut_off = 0.0015, prob = TRUE, by_subject = TRUE, map = TRUE)

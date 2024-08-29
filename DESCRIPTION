@@ -1,5 +1,5 @@
 Package: EMC2
-Title: Bayesian Hierarchical Analysis Of Cognitive Models Of Choice
+Title: Bayesian Hierarchical Analysis of Cognitive Models of Choice
 Version: 2.0.1
 Authors@R: 
     c(person("Niek", "Stevenson", email = "niek.stevenson@gmail.com", 
@@ -21,7 +21,7 @@ Description: Fit Bayesian (hierarchical) cognitive models
     posterior inference. Models can be easily evaluated using functions
     that plot posterior predictions or using relative model comparison metrics 
     such as information criteria or Bayes factors.    
-    References: Stevenson et al. (2024) <doi:10.31234/osf.io.2e4dq>.
+    References: Stevenson et al. (2024) <doi:10.31234/osf.io/2e4dq>.
 License: MIT + file LICENSE
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
