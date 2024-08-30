@@ -118,7 +118,7 @@ prior <- function(design, type = "standard", update = NULL,
               to_do <- rep(F, length(to_check))
             } else{
               to_do <- !(names(to_check) %in% names(input))
-              to_check[!to_do] <- input
+              to_check[!to_do] <- input[names(input) %in% names(to_check)][names(to_check)[!to_do]]
               prior$prior[[pri]][,] <- diag(to_check)
             }
           } else{
@@ -131,7 +131,7 @@ prior <- function(design, type = "standard", update = NULL,
               to_do <- rep(F, length(to_check))
             } else{
               to_do <- !(names(to_check) %in% names(input))
-              to_check[!to_do] <- input[names(to_check)]
+              to_check[!to_do] <- input[names(input) %in% names(to_check)][names(to_check)[!to_do]]
               prior$prior[[pri]] <- to_check
             }
           }
