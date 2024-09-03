@@ -39,11 +39,12 @@ remove_samples <- function(samples, stage = "sample", filter = NULL, thin = 1,
   } else if(thin > 1){
     filter_idx <- round(seq(min_dim, max_dim, by = thin))
   }
+  if(keep_stages) filter_idx <- c(which(!(samples$samples$stage %in% stage)), filter_idx)
+
   if(any(samples$nuisance)) {
     samples$sampler_nuis$samples <- base::rapply(samples$sampler_nuis$samples, f = function(x) filter_obj(x, filter_idx), how = "replace")
     samples$sampler_nuis$samples$idx <- length(filter_idx)
   }
-  if(keep_stages) filter_idx <- c(which(!(samples$samples$stage %in% stage)), filter_idx)
   samples$samples <- base::rapply(samples$samples, f = function(x) filter_obj(x, filter_idx), how = "replace")
   samples$samples$stage <- samples$samples$stage[filter_idx]
   samples$samples$idx <- length(filter_idx)
