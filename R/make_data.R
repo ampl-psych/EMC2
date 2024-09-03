@@ -163,6 +163,15 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
     if(is.null(colnames(parameters))) colnames(parameters) <- sampled_p_names
     if(is.null(rownames(parameters))) rownames(parameters) <- design$Ffactors$subjects
   }
+
+  if(!is.null(attr(design, "custom_ll"))){
+    data <- list()
+    for(i in 1:nrow(parameters)){
+      data[[i]] <- attr(design, "rfun")(parameters[i,], n_trials = n_trials, subject = i)
+    }
+    return(do.call(rbind, data))
+  }
+
   model <- design$model
   if (!is.matrix(parameters)) parameters <- make_pmat(parameters,design)
   if ( is.null(data) ) {
