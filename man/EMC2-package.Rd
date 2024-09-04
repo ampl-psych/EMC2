@@ -17,5 +17,11 @@ Authors:
   \item Andrew Heathcote
 }
 
+Other contributors:
+\itemize{
+  \item Jochen Voss [contributor]
+  \item Andreas Voss [contributor]
+}
+
 }
 \keyword{internal}

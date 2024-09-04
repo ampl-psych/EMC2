@@ -9,7 +9,7 @@ Authors@R:
       person("Andrew", "Heathcote", 
            role = c("aut")),
       person("Jochen", "Voss", 
-           role = c("ctb"))
+           role = c("ctb")),
       person("Andreas", "Voss", 
            role = c("ctb")))
 Description: Fit Bayesian (hierarchical) cognitive models
