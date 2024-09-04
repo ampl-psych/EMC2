@@ -96,6 +96,9 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
 
   if(!is.null(custom_p_vector)){
     design <- list(Flist = formula, model = model, Ffactors = factors)
+    if(!is.null(list(...)$rfun)){
+      attr(design, "rfun") <- rfun
+    }
     attr(design, "sampled_p_names") <-custom_p_vector
     attr(design, "custom_ll") <- TRUE
     return(design)
@@ -290,6 +293,11 @@ sampled_p_vector <- function(design,model=NULL,doMap=TRUE, add_da = FALSE, all_c
   if(is.null(design)) return(NULL)
   if(!is.null(design$Ffactors)){
     design <- list(design)
+  }
+  if(!is.null(attr(design, "custom_ll"))){
+    pars <- numeric(length(attr(design,"sampled_p_names")))
+    names(pars) <- attr(design,"sampled_p_names")
+    return(pars)
   }
   out <- c()
   map_list <- list()
