@@ -217,7 +217,7 @@ standardize_loadings <- function(emc = NULL, loadings = NULL, sig_err_inv = NULL
 #' @param nice_names Character string. Alternative names to give the parameters
 #' @param ... Optional additional arguments
 #'
-#' @return NULL
+#' @return No return value, creates a plot of group-level relations
 #' @examples
 #' # For a given set of hierarchical model samples we can make a
 #' # correlation matrix plot.
