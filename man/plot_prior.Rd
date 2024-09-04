@@ -40,7 +40,7 @@ An mcmc.list object with prior samples of the selected type
 Title
 }
 \examples{
-\dontrun{
+\donttest{
 # First define a design for the model
 design_DDMaE <- design(data = forstmann,model=DDM,
                            formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),

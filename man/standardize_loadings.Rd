@@ -9,7 +9,7 @@ standardize_loadings(
   loadings = NULL,
   sig_err_inv = NULL,
   stage = "sample",
-  merge_chains = T
+  merge_chains = TRUE
 )
 }
 \arguments{
@@ -30,13 +30,4 @@ standardized loadings
 Returns a set of standardized factor loadings.
 The standardization considers the residual error as well
 as described in Stevenson, Heathcote, Forstmann & Matzke, 2024.
-}
-\examples{
-\dontrun{
-# For a given set of hierarchical factor model samples we can standardize the loadings
-standardize_loadings(emc)
-# By default merges across chains, but we could also get a list of standardized loadings
-standardize_loadings(emc, merge_chains = FALSE)
-}
-
 }

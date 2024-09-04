@@ -37,13 +37,24 @@ Returns the BPIC/DIC based model weights for each participant in a list of sampl
 }
 \examples{
 \dontrun{
-# Define a emc list of two (or more different models)
+# Define a list of two (or more different models)
 # Here the full model is an emc object with the hypothesized effect
 # The null model is an emc object without the hypothesized effect
+design_full <- design(data = forstmann,model=DDM,
+                           formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
+                           constants=c(s=log(1)))
+# Now without a ~ E
+design_null <- design(data = forstmann,model=DDM,
+                           formula =list(v~0+S,a~1, t0~1, s~1, Z~1, sv~1, SZ~1),
+                           constants=c(s=log(1)))
+
+full_model <- make_emc(forstmann, design_full)
+full_model <- fit(full_model, cores_for_chains = 1)
+
+null_model <- make_emc(forstmann, design_null, cores_for_chains = 1)
+null_model <- fit(null_model)
 sList <- list(full_model, null_model)
-# By default emc uses 4 cores to parallelize marginal likelihood estimation across proposals
-# So cores_per_prop = 3 results in 12 cores used.
-compare_subject(sList, cores_per_prop = 3)
+compare_subject(sList)
 # prints a set of weights for each model for the different participants
 # And returns the DIC and BPIC for each participant for each model.
 }

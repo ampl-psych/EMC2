@@ -231,4 +231,11 @@
 <text x='667.19' y='348.96' text-anchor='middle' style='font-size: 9.96px; font-family: sans;' textLength='50.94px' lengthAdjust='spacingAndGlyphs'>Contraction</text>
 <text x='671.14' y='364.33' style='font-size: 9.96px; font-family: sans;' textLength='5.54px' lengthAdjust='spacingAndGlyphs'>1</text>
 </g>
+<defs>
+  <clipPath id='cpNTkuMDR8Njg5Ljc2fDU5LjA0fDUwMi41Ng=='>
+    <rect x='59.04' y='59.04' width='630.72' height='443.52' />
+  </clipPath>
+</defs>
+<g clip-path='url(#cpNTkuMDR8Njg5Ljc2fDU5LjA0fDUwMi41Ng==)'>
+</g>
 </svg>

@@ -81,11 +81,25 @@ were well chosen.
 \examples{
 \dontrun{
 # Run a credible interval test (Bayesian ''t-test'')
-credible(emc, x_name = "v")
+# Here the full model is an emc object with the hypothesized effect
+design_full <- design(data = forstmann,model=DDM,
+                           formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
+                           constants=c(s=log(1)))
+
+full_model <- make_emc(forstmann, design_full)
+full_model <- fit(full_model)
+credible(full_model, x_name = "v")
 # We can also compare between two sets of emc objects
-credible(x = emc1, x_name = "v", y = emc2, y_name = "v")
+# Now without a ~ E
+design_null <- design(data = forstmann,model=DDM,
+                           formula =list(v~0+S,a~1, t0~1, s~1, Z~1, sv~1, SZ~1),
+                           constants=c(s=log(1)))
+
+null_model <- make_emc(forstmann, design_null)
+null_model <- fit(null_model)
+credible(x = null_model, x_name = "a", y = full_model, y_name = "a")
 
 # Or provide custom functions
-credible(x = emc, x_fun = function(d) d["B_Eaccuracy"] - d["B_Eneutral"])
+credible(x = full_model, x_fun = function(d) d["a_Eaccuracy"] - d["a_Eneutral"])
 }
 }

@@ -36,8 +36,8 @@ A list of simulated data sets of length \code{n_post}
 Simulate \code{n_post} data sets using the posterior parameter estimates
 }
 \examples{
-\dontrun{
+\donttest{
 # based on an emc object ran by fit() we can generate posterior predictives
-predict(samples_LNR, n_cores = 8)
+predict(samples_LNR, n_cores = 1, n_post = 10)
 }
 }

@@ -97,7 +97,7 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
   if(!is.null(custom_p_vector)){
     design <- list(Flist = formula, model = model, Ffactors = factors)
     if(!is.null(list(...)$rfun)){
-      attr(design, "rfun") <- rfun
+      attr(design, "rfun") <- list(...)$rfun
     }
     attr(design, "sampled_p_names") <-custom_p_vector
     attr(design, "custom_ll") <- TRUE

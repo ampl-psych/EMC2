@@ -255,7 +255,7 @@ ask_user_prior <- function(prior, cur_idx, to_do, fill_default, group_to_do){
 #' @return An mcmc.list object with prior samples of the selected type
 #' @export
 #'
-#' @examples \dontrun{
+#' @examples \donttest{
 #' # First define a design for the model
 #' design_DDMaE <- design(data = forstmann,model=DDM,
 #'                            formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
@@ -277,6 +277,8 @@ ask_user_prior <- function(prior, cur_idx, to_do, fill_default, group_to_do){
 plot_prior <- function(prior, design, selection = "mu", do_plot = TRUE, covariates = NULL,
                            layout = NA, N = 5e4, ...){
   dots <- add_defaults(list(...), breaks = 30, cut_off = 0.0015, prob = TRUE, by_subject = TRUE, map = TRUE)
+  oldpar <- par(no.readonly = TRUE) # code line i
+  on.exit(par(oldpar)) # code line i + 1
   if(is.null(design$Ffactors)){
     dots$map <- FALSE
     warning("For joint models, map = TRUE is not yet implemented")

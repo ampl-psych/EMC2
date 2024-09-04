@@ -107,9 +107,9 @@ If more than one subject is included, the data and fits are aggregated across su
 Also see \code{?plot_defective_density()} for more details.
 }
 \examples{
-\dontrun{
+\donttest{
 # First generate posterior predictives based on an emc object run with run_emc
-pp <- predict(samples_LNR, n_cores = 4)
+pp <- predict(samples_LNR, n_cores = 1, n_post = 10)
 # Then visualize the model fit
 plot_fit(forstmann, pp, factors = c("S", "E"), layout = c(2,3))
 

@@ -115,9 +115,9 @@ plot.emc <- function(x, stage = "sample", selection = c("mu", "sigma2", "alpha")
 #' Will take either random samples from the chain(s) or use the mean or median of the parameter estimates.
 #' @param ... Optional additional arguments passed to `get_pars` or `make_data`
 #' @return A list of simulated data sets of length `n_post`
-#' @examples \dontrun{
+#' @examples \donttest{
 #' # based on an emc object ran by fit() we can generate posterior predictives
-#' predict(samples_LNR, n_cores = 8)
+#' predict(samples_LNR, n_cores = 1, n_post = 10)
 #' }
 #' @export
 predict.emc <- function(object,hyper=FALSE,n_post=100,n_cores=1,
@@ -169,10 +169,8 @@ predict.emc <- function(object,hyper=FALSE,n_post=100,n_cores=1,
     if (n_cores==1) {
       simDat <- vector(mode="list",length=n_post)
       for (i in 1:n_post) {
-        cat(".")
         simDat[[i]] <- do.call(make_data, c(list(pars[[i]],design=design[[j]],data=data[[j]]), fix_dots(dots, make_data)))
       }
-      cat("\n")
     } else {
       simDat <- mclapply(1:n_post,function(i){
         do.call(make_data, c(list(pars[[i]],design=design[[j]],data=data[[j]]), fix_dots(dots, make_data)))
@@ -195,6 +193,8 @@ predict.emc <- function(object,hyper=FALSE,n_post=100,n_cores=1,
 #' @export
 check.emc <- function(emc, selection = c('mu', 'sigma2', 'alpha'), digits = 3,
                       plot_worst = TRUE, ...){
+  oldpar <- par(no.readonly = TRUE) # code line i
+  on.exit(par(oldpar)) # code line i + 1
   dots <- list(...)
   out_list <- list()
   cat("Iterations:\n")
@@ -202,7 +202,7 @@ check.emc <- function(emc, selection = c('mu', 'sigma2', 'alpha'), digits = 3,
   if(attr(emc[[1]], "variant_funs")$type == "single") selection <- "alpha"
   if(plot_worst){
     mfrow <- coda_setmfrow(Nchains = length(emc), Nparms = length(selection),nplots = 1)
-    oldpar <- par(mfrow = mfrow)
+    par(mfrow = mfrow)
   }
   for(select in selection){
     dots$flatten <- ifelse(select == "alpha", FALSE, TRUE)
@@ -495,7 +495,7 @@ fit.emc <- function(emc, stage = NULL, iter = 1000, stop_criteria = NULL,report_
 #'
 #' # Example of how to use the stop_criteria:
 #' emc_forstmann <- fit(emc_forstmann, stop_criteria = list(mean_gd = 1.1, max_gd = 1.5,
-#'             selection = c('alpha', 'sigma2'), omit_mpsrf = TRUE, min_es = 1000).
+#'             selection = c('alpha', 'sigma2'), omit_mpsrf = TRUE, min_es = 1000))
 #' # In this case the stop_criteria are set for the sample stage, which will be
 #' # run until the mean_gd < 1.1, the max_gd < 1.5 (omitting the multivariate psrf)
 #' # and the effective sample size > 1000,
@@ -506,7 +506,7 @@ fit.emc <- function(emc, stage = NULL, iter = 1000, stop_criteria = NULL,report_
 #' # are assumed which are found in Stevenson et al. 2024 <doi.org/10.31234/osf.io/2e4dq>
 #'
 #' # Alternatively, you can also specify the stop_criteria for specific stages by creating a
-#' # nested list:
+#' # nested list
 #' emc_forstmann <- fit(emc_forstmann, stop_criteria = list("burn" = list(mean_gd = 1.1, max_gd = 1.5,
 #'             selection = c('alpha')), "adapt" = list(min_unique = 100)))
 #'}
@@ -710,16 +710,15 @@ hypothesis.emc <- function(emc, parameter = NULL, H0 = 0, fun = NULL,selection =
 #' @param do_plot Boolean. If `FALSE` will omit the prior-posterior plot and only return the savage-dickey ratio.
 #' @inheritParams plot_pars
 #' @return The Bayes factor for the hypothesis against H0.
-#' @examples \dontrun{
-#' # Here the emc object has an effect parameter (e.g. B_Eneutral),
+#' @examples
+#' # Here the emc object has an effect parameter (e.g. m),
 #' # that maps onto a certain hypothesis.
-#' # The hypothesis here is that B_Eneutral is different from zero.
-#' # We can test whether there's a group-level effect of Eneutral on B:
-#' hypothesis(emc, parameter = "B_Eneutral")
-#' # Alternatively we can also test whether two parameters from each other
-#' Bdiff <- function(p)diff(p[c("B_Eneutral","B_Eaccuracy")])
-#' hypothesis(emc,fun=Bdiff)
-#' }
+#' # The hypothesis here is that m is different from zero.
+#' # We can test whether there's a group-level effect on m:
+#' hypothesis(samples_LNR, parameter = "m")
+#' # Alternatively we can also test whether two parameters differ from each other
+#' mdiff <- function(p)diff(p[c("m","m_lMd")])
+#' hypothesis(samples_LNR,fun=mdiff)
 #' @export
 hypothesis <- function(emc, ...){
   UseMethod("hypothesis")
@@ -848,12 +847,27 @@ credible.emc <- function(x,x_name=NULL,x_fun=NULL,x_fun_name="fun", selection = 
 #' @param ... Additional optional arguments that can be passed to `get_pars`
 #' @examples \dontrun{
 #' # Run a credible interval test (Bayesian ''t-test'')
-#' credible(emc, x_name = "v")
+#' # Here the full model is an emc object with the hypothesized effect
+#' design_full <- design(data = forstmann,model=DDM,
+#'                            formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
+#'                            constants=c(s=log(1)))
+#'
+#' full_model <- make_emc(forstmann, design_full)
+#' full_model <- fit(full_model)
+#' credible(full_model, x_name = "v")
 #' # We can also compare between two sets of emc objects
-#' credible(x = emc1, x_name = "v", y = emc2, y_name = "v")
+
+#' # Now without a ~ E
+#' design_null <- design(data = forstmann,model=DDM,
+#'                            formula =list(v~0+S,a~1, t0~1, s~1, Z~1, sv~1, SZ~1),
+#'                            constants=c(s=log(1)))
+#'
+#' null_model <- make_emc(forstmann, design_null)
+#' null_model <- fit(null_model)
+#' credible(x = null_model, x_name = "a", y = full_model, y_name = "a")
 #'
 #' # Or provide custom functions
-#' credible(x = emc, x_fun = function(d) d["B_Eaccuracy"] - d["B_Eneutral"])
+#' credible(x = full_model, x_fun = function(d) d["a_Eaccuracy"] - d["a_Eneutral"])
 #' }
 #' @return Invisible results table with no rounding.
 #' @export

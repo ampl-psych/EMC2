@@ -42,7 +42,7 @@ If \code{selection = alpha} the parameter chains are concatenated across partici
 (after standardizing if \code{scale_subjects = TRUE}) and then correlated.
 }
 \examples{
-\dontrun{
+\donttest{
 # Plot the sloppiness for the individual-level subjects
 pairs_posterior(samples_LNR, selection = "alpha")
 

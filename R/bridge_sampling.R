@@ -124,7 +124,7 @@ run.iterative.scheme <- function(q11, q12, q21, q22, r0, tol,
 }
 
 bridge_sampling <- function(samples, n_eff, split_idx, cores_for_props = 1, cores_per_prop = 1, maxiter = 5000,
-                            stage = "sample", r0 = 1e-5, tol1 = 1e-10, tol2 = 1e-6, hyper_only = F){
+                            stage = "sample", r0 = 1e-5, tol1 = 1e-10, tol2 = 1e-6, hyper_only = FALSE){
   if(Sys.info()[1] == "Windows" & cores_per_prop > 1) stop("only cores_for_props can be set on Windows")
   variant_funs <- attr(samples, "variant_funs")
   data <- samples$data
@@ -235,12 +235,12 @@ bridge_sampling <- function(samples, n_eff, split_idx, cores_for_props = 1, core
 #' @examples \dontrun{
 #' # After `fit` has converged on a specific model
 #' # We can take those samples and calculate the marginal log-likelihood for them
-#' MLL <- run_bridge_sampling(list_of_emc, cores_per_prop = 2)
+#' MLL <- run_bridge_sampling(list(samples_LNR), cores_per_prop = 2)
 #' # This will run on 2*4 cores (since 4 is the default for ``cores_for_props``)
 #' }
 #' @export
 #'
-run_bridge_sampling <- function(emc, stage = "sample", filter = NULL, repetitions = 1, cores_for_props = 4,  cores_per_prop = 1, both_splits = T, ...){
+run_bridge_sampling <- function(emc, stage = "sample", filter = NULL, repetitions = 1, cores_for_props = 4,  cores_per_prop = 1, both_splits = TRUE, ...){
   # Hyper parameters and dev options
   maxiter <- 5000
   r0 <- 1e-5

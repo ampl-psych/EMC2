@@ -53,14 +53,12 @@ since it only considers the group level effect and not the whole model (i.e. sub
 For details see: Wagenmakers, Lodewyckx, Kuriyal, & Grasman (2010).
 }
 \examples{
-\dontrun{
-# Here the emc object has an effect parameter (e.g. B_Eneutral),
+# Here the emc object has an effect parameter (e.g. m),
 # that maps onto a certain hypothesis.
-# The hypothesis here is that B_Eneutral is different from zero.
-# We can test whether there's a group-level effect of Eneutral on B:
-hypothesis(emc, parameter = "B_Eneutral")
-# Alternatively we can also test whether two parameters from each other
-Bdiff <- function(p)diff(p[c("B_Eneutral","B_Eaccuracy")])
-hypothesis(emc,fun=Bdiff)
-}
+# The hypothesis here is that m is different from zero.
+# We can test whether there's a group-level effect on m:
+hypothesis(samples_LNR, parameter = "m")
+# Alternatively we can also test whether two parameters differ from each other
+mdiff <- function(p)diff(p[c("m","m_lMd")])
+hypothesis(samples_LNR,fun=mdiff)
 }

@@ -8,13 +8,13 @@ make_factor_diagram(
   emc = NULL,
   stage = "sample",
   loadings = NULL,
-  standardize = T,
-  simple = F,
-  only_cred = F,
+  standardize = TRUE,
+  simple = FALSE,
+  only_cred = FALSE,
   cut = 0,
   nice_names = NULL,
   factor_names = NULL,
-  sort = T,
+  sort = TRUE,
   adj = 1,
   main = NULL,
   cex = NULL
@@ -49,13 +49,4 @@ make_factor_diagram(
 }
 \description{
 Makes a factor diagram plot. Heavily based on the fa.diagram function of the \code{psych} package.
-}
-\examples{
-\dontrun{
-# For a given set of hierarchical factor model samples we can make a factor diagram
-make_factor_diagram(emc, only_cred = T)
-# We can also specify nice names and adjust the loading positions
-make_factor_diagram(emc, nice_names = paste0("V", 1:10), adj = 2)
-}
-
 }

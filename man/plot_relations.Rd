@@ -30,6 +30,9 @@ the sampling stage \code{sample}.}
 
 \item{...}{Optional additional arguments}
 }
+\value{
+No return value, creates a plot of group-level relations
+}
 \description{
 An adjusted version of the \code{corrplot} package function \code{corrplot()} tailored
 to \code{EMC2} and the plotting of estimated correlations.

@@ -44,7 +44,6 @@ Note that if \code{sample = FALSE}, prior$theta_mu_invar (the inverse of the pri
 is also returned, which is only used for computational efficiency
 }
 \examples{
-\dontrun{
 # First define a design for the model
 design_DDMaE <- design(data = forstmann,model=DDM,
                            formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
@@ -54,6 +53,5 @@ prior <- get_prior_standard(design = design_DDMaE, sample = FALSE)
 # We can change values in the default prior or use `prior`
 # Then we can get samples from this prior e.g.
 samples <- get_prior_standard(prior = prior, design = design_DDMaE,
-  sample = TRUE, type = "mu")
-}
+  sample = TRUE, selection = "mu")
 }
