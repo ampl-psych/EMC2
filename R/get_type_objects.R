@@ -287,7 +287,7 @@ get_objects_factor <- function(type, selection, sample_prior, return_prior, desi
 get_objects_infnt_factor <- function(type, selection, sample_prior, return_prior, design = NULL,
                                  prior = NULL, stage = 'sample', N = 1e5, sampler = NULL, ...){
   acc_selection <- c("mu", "sigma2", "covariance", "correlation", "alpha", "Sigma", "loadings", "residuals", "LL")
-  if(return_prior){
+  if(return_prior & !sample_prior){
     prior$prior <- do.call(get_prior_infnt_factor, c(list(design = design, sample = F, prior = prior), fix_dots(list(...), get_prior_infnt_factor)))
     prior$descriptions <- list(
       theta_mu_mean = "mean of the group-level mean prior",
