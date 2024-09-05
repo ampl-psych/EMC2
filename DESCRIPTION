@@ -1,6 +1,6 @@
 Package: EMC2
 Title: Bayesian Hierarchical Analysis of Cognitive Models of Choice
-Version: 2.0.1
+Version: 2.0.2
 Authors@R: 
     c(person("Niek", "Stevenson", email = "niek.stevenson@gmail.com", 
            role = c("aut", "cre"), comment = c(ORCID = "0000-0003-3206-7544")),
@@ -8,6 +8,8 @@ Authors@R:
            role = c("aut")),
       person("Andrew", "Heathcote", 
            role = c("aut")),
+      person("Steven", "Miletić", 
+           role = c("ctb")),
       person("Jochen", "Voss", 
            role = c("ctb")),
       person("Andreas", "Voss", 

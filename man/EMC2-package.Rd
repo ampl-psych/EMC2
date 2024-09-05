@@ -19,6 +19,7 @@ Authors:
 
 Other contributors:
 \itemize{
+  \item Steven Miletić [contributor]
   \item Jochen Voss [contributor]
   \item Andreas Voss [contributor]
 }
