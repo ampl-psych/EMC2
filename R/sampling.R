@@ -728,6 +728,18 @@ get_variant_funs <- function(type = "standard") {
       bridge_add_info = bridge_add_info_diag,
       bridge_group_and_prior_and_jac = bridge_group_and_prior_and_jac_diag
     )
+  } else if(type == "diagonal-gamma"){
+    list_fun <- list(# store functions
+      sample_store = sample_store_diag_gamma,
+      add_info = add_info_diag_gamma,
+      get_startpoints = get_startpoints_diag_gamma,
+      get_group_level = get_group_level_standard,
+      fill_samples = fill_samples_diag_gamma,
+      gibbs_step = gibbs_step_diag_gamma,
+      group_IC = group__IC_standard,
+      filtered_samples = filtered_samples_standard,
+      get_conditionals = get_conditionals_diag
+    )
   } else if(type == "factor"){
     list_fun <- list(# store functions
       sample_store = sample_store_factor,
