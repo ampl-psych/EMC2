@@ -788,7 +788,7 @@ make_emc <- function(data,design,model=NULL,
     assign(name, optionals[[name]])
   }
 
-  if (!(type %in% c("standard","diagonal","blocked","factor","single", "lm", "infnt_factor", "SEM")))
+  if (!(type %in% c("standard","diagonal","blocked","factor","single", "lm", "infnt_factor", "SEM", "diagonal-gamma")))
     stop("type must be one of: standard,diagonal,blocked,factor,infnt_factor, lm, single")
 
   if(!is.null(nuisance) & !is.null(nuisance_non_hyper)){
@@ -877,7 +877,7 @@ make_emc <- function(data,design,model=NULL,
 
   # if(!is.null(subject_covariates)) attr(dadm_list, "subject_covariates") <- subject_covariates
   variant_funs <- get_variant_funs(type = type)
-  if (type %in% c("standard", "single", "diagonal", "infnt_factor")) {
+  if (type %in% c("standard", "single", "diagonal", "infnt_factor", "diagonal-gamma")) {
     out <- pmwgs(dadm_list, variant_funs, nuisance = nuisance, nuisance_non_hyper =
                    nuisance_non_hyper, grouped_pars = grouped_pars, n_factors = n_factors)
   } else if (type == "blocked") {
