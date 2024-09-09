@@ -6,7 +6,7 @@ sample_store_diag_gamma <- function(data, par_names, iters = 1, stage = "init", 
   n_pars <- length(par_names)
   samples <- list(
     theta_mu = array(NA_real_,dim = c(n_pars, iters), dimnames = list(par_names, NULL)),
-    theta_var = array(NA_real_,dim = c(n_pars, n_pars, iters),dimnames = list(par_names, par_names, NULL)),
+    theta_var = array(NA_real_,dim = c(n_pars, n_pars, iters),dimnames = list(par_names, par_names, NULL))
   )
   if(integrate) samples <- c(samples, base_samples)
   return(samples)
@@ -112,7 +112,7 @@ last_sample_diag_gamma <- function(store) {
   list(
     tmu = store$theta_mu[, store$idx],
     tvar = store$theta_var[, , store$idx],
-    tvinv = store$last_theta_var_inv,
+    tvinv = store$last_theta_var_inv
   )
 }
 
@@ -135,7 +135,7 @@ gibbs_step_diag_gamma <- function(sampler, alpha){
 
   # InvGamma alternative (probably inferior) prior
   shape = prior$shape + sampler$n_subjects / 2
-  rate = hyper$rate + rowSums( (alpha-tmu)^2 ) / 2
+  rate = prior$rate + rowSums( (alpha-tmu)^2 ) / 2
   tvinv = rgamma(n=sampler$n_pars, shape=shape, rate=rate)
   tvar = 1/tvinv
   return(list(tmu = tmu, tvar = diag(tvar, n_pars), tvinv = diag(tvinv, n_pars), alpha = alpha))

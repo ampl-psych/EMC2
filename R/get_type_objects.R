@@ -102,7 +102,7 @@ get_objects_diag_gamma <- function(type, selection, sample_prior, return_prior, 
                              prior = NULL, stage = 'sample', N = 1e5, sampler = NULL,...){
   acc_selection <- c("mu", "sigma2", "alpha", "LL", "Sigma")
   if(return_prior & !sample_prior){
-    prior$prior <- get_prior_diag(design = design, sample = F, prior = prior)
+    prior$prior <- get_prior_diag_gamma(design = design, sample = F, prior = prior)
     prior$descriptions <- list(
       theta_mu_mean = "mean of the group-level mean prior",
       theta_mu_var = "variance of the group-level mean prior",
