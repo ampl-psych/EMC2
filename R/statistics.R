@@ -101,6 +101,54 @@ std_error_IS2 <- function(IS_samples, n_bootstrap = 50000){
   return(sd(log_marglik_boot))
 }
 
+
+# robust_diwish <- function (W, v, S) { #RJI_change: this function is to protect against weird proposals in the diwish function, where sometimes matrices weren't pos def
+#   if (!is.matrix(S)) S <- matrix(S)
+#   if (!is.matrix(W)) W <- matrix(W)
+#   p <- nrow(S)
+#   gammapart <- sum(lgamma((v + 1 - 1:p)/2))
+#   ldenom <- gammapart + 0.5 * v * p * log(2) + 0.25 * p * (p - 1) * log(pi)
+#   if (corpcor::is.positive.definite(W, tol=1e-8)){
+#     cholW<-base::chol(W)
+#   }else{
+#     return(1e-10)
+#   }
+#   if (corpcor::is.positive.definite(S, tol=1e-8)){
+#     cholS <- base::chol(S)
+#   }else{
+#     return(1e-10)
+#   }
+#   halflogdetS <- sum(log(diag(cholS)))
+#   halflogdetW <- sum(log(diag(cholW)))
+#   invW <- chol2inv(cholW)
+#   exptrace <- sum(S * invW)
+#   lnum <- v * halflogdetS - (v + p + 1) * halflogdetW - 0.5 * exptrace
+#   lpdf <- lnum - ldenom
+#   out <- exp(lpdf)
+#   if(!is.finite(out)) return(1e-100)
+#   if(out < 1e-10) return(1e-100)
+#   return(exp(lpdf))
+# }
+
+robust_diwish <- function (W, v, S) { #RJI_change: this function is to protect against weird proposals in the diwish function, where sometimes matrices weren't pos def
+  if (!is.matrix(S)) S <- matrix(S)
+  if (!is.matrix(W)) W <- matrix(W)
+  p <- nrow(S)
+  gammapart <- sum(lgamma((v + 1 - 1:p)/2))
+  ldenom <- gammapart + 0.5 * v * p * log(2) + 0.25 * p * (p - 1) * log(pi)
+  cholW <- base::chol(nearPD(W)$mat)
+  cholS <- base::chol(nearPD(S)$mat)
+  halflogdetS <- sum(log(diag(cholS)))
+  halflogdetW <- sum(log(diag(cholW)))
+  invW <- chol2inv(cholW)
+  exptrace <- sum(S * invW)
+  lnum <- v * halflogdetS - (v + p + 1) * halflogdetW - 0.5 * exptrace
+  lpdf <- lnum - ldenom
+  out <- exp(lpdf)
+  if(!is.finite(out)) return(1e-100)
+  return(out)
+}
+
 dhalft <- function (x, scale = 25, nu = 1, log = FALSE)
 {
   x <- as.vector(x)
@@ -146,10 +194,7 @@ riwish <- function(v, S){
 }
 
 logdinvGamma <- function(x, shape, rate){
-  alpha <- shape
-  beta <- 1/rate
-  log.density <- alpha * log(beta) - lgamma(alpha) - (alpha +
-                                                        1) * log(x) - (beta/x)
+  dgamma(1/x, shape, rate, log = TRUE) - 2 * log(x)
 }
 
 split_mcl <- function(mcl)

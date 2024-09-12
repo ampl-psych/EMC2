@@ -151,17 +151,16 @@ gibbs_step_blocked <- function(sampler, alpha){
 
       # Sample new mixing weights.
       a_half <- 1 / rgamma(n = n_pars,shape = (prior$v + n_pars) / 2,
-                           rate = prior$v * diag(tvinv) + 1/(prior$v^2))
+                           rate = prior$v * diag(tvinv) + 1/(prior$A[group_idx]^2))
     } else{
       var_mu = 1.0 / (sampler$n_subjects * last$tvinv[group_idx, group_idx] + prior$theta_mu_invar[group_idx, group_idx])
-      mean_mu = var_mu * (sum(alpha[group_idx,]) * last$tvinv[group_idx, group_idx] + prior$theta_mu_invar[group_idx, group_idx] * prior$theta_mu_mean[group_idx])
+      mean_mu = var_mu * (sum(alpha[group_idx,]) * last$tvinv[group_idx,group_idx] + prior$theta_mu_mean[group_idx] * prior$theta_mu_invar[group_idx, group_idx])
       tmu <- rnorm(n_pars, mean_mu, sd = sqrt(var_mu))
       tvinv = rgamma(n=n_pars, shape=prior$v/2 + sampler$n_subjects/2, rate=prior$v/last$a_half +
-                       rowSums( (alpha-tmu)^2 ) / 2)
+                       sum( (alpha[group_idx,]-tmu)^2 ) / 2)
       tvar = 1/tvinv
-      #Contrary to standard pmwg I use shape, rate for IG()
-      a_half <- 1 / rgamma(n = n_pars, shape = (prior$v + 1) / 2,
-                           rate = prior$v * tvinv + 1/(prior$v^2))
+      a_half <- 1 / rgamma(n = 1, shape = (prior$v+ 1) / 2,
+                           rate = prior$v * tvinv + 1/(prior$A[group_idx]^2))
     }
 
     tmu_out[group_idx] <- tmu
@@ -204,3 +203,58 @@ prior_dist_blocked <- function(parameters, info){
   stop("no IS2 for blocked estimation yet")
 
 }
+
+# bridge_sampling ---------------------------------------------------------
+bridge_group_and_prior_and_jac_blocked <- function(proposals_group, proposals_list, info){
+  prior <- info$prior
+  par_groups <- info$par_groups
+  has_cov <- par_groups %in% which(table(par_groups) > 1)
+  proposals <- do.call(cbind, proposals_list)
+  theta_mu <- proposals_group[,1:info$n_pars]
+  theta_a <- proposals_group[,(info$n_pars + 1):(2*info$n_pars)]
+  theta_var1 <- proposals_group[,(2*info$n_pars + 1):(2*info$n_pars + sum(!has_cov))]
+  theta_var2 <- proposals_group[,(2*info$n_pars + sum(!has_cov) + 1):(2*info$n_pars + sum(!has_cov) + (sum(has_cov) * (sum(has_cov) +1))/2)]
+
+  n_iter <- nrow(theta_mu)
+  sum_out <- numeric(n_iter)
+  var_curr <- matrix(0, nrow = info$n_pars, ncol = info$n_pars)
+
+  for(i in 1:n_iter){ # these unfortunately can't be vectorized
+    # prior_delta2 <- log(robust_diwish(solve(delta2_curr), v=prior$a_d, S = diag(prior$b_d, sum(!info$is_structured))))
+    var2curr <- unwind_chol(theta_var2[i,], reverse = T)
+    var_curr[!has_cov, !has_cov] <- diag(exp(theta_var1[i,]), sum(!has_cov))
+    var_curr[has_cov, has_cov] <- var2curr
+    proposals_curr <- matrix(proposals[i,], ncol = info$n_pars, byrow = T)
+    group_ll <- sum(dmvnorm(proposals_curr, theta_mu[i,], var_curr, log = T))
+    prior_var1 <- sum(logdinvGamma(exp(theta_var1[i,]), shape = prior$v/2, rate = prior$v/exp(theta_a[i,!has_cov])))
+    prior_var2 <- log(robust_diwish(var2curr, v=prior$v+ sum(has_cov)-1, S = 2*prior$v*diag(1/theta_a[i,has_cov])))
+    prior_a <- sum(logdinvGamma(exp(theta_a[i,]), shape = 1/2,rate=1/(prior$A^2)))
+    jac_var2 <- log(2^sum(has_cov))+sum((sum(has_cov))*log(diag(var2curr))) # Log of derivative of cholesky transformation
+    sum_out[i] <- group_ll + prior_var1 + prior_var2 + jac_var2 + prior_a
+  }
+  prior_mu <- dmvnorm(theta_mu, mean = prior$theta_mu_mean, sigma = prior$theta_mu_var, log =T)
+  jac_var1 <- rowSums(theta_var1)
+  jac_a <- rowSums(theta_a)
+  return(sum_out + prior_mu + jac_var1 + jac_a)
+}
+
+
+bridge_add_info_blocked <- function(info, samples){
+  par_groups <- samples$par_groups
+  has_cov <- par_groups %in% which(table(par_groups) > 1)
+  info$par_groups <- par_groups
+  info$group_idx <- (samples$n_pars*samples$n_subjects + 1):(samples$n_pars*samples$n_subjects + 2*samples$n_pars +
+                                                               sum(!has_cov) + (sum(has_cov) * (sum(has_cov) +1))/2)
+  return(info)
+}
+
+bridge_add_group_blocked <- function(all_samples, samples, idx){
+  all_samples <- cbind(all_samples, t(samples$samples$theta_mu[,idx]))
+  all_samples <- cbind(all_samples, t(log(samples$samples$a_half[,idx])))
+  par_groups <- samples$par_groups
+  has_cov <- par_groups %in% which(table(par_groups) > 1)
+  all_samples <- cbind(all_samples, t(log(matrix(apply(samples$samples$theta_var[!has_cov,!has_cov,idx, drop = F], 3, diag), ncol = nrow(all_samples)))))
+  all_samples <- cbind(all_samples, t(matrix(apply(samples$samples$theta_var[has_cov,has_cov,idx, drop = F], 3, unwind_chol), ncol = nrow(all_samples))))
+  return(all_samples)
+}
+

@@ -261,28 +261,32 @@ bridge_group_and_prior_and_jac_diag <- function(proposals_group, proposals_list,
   proposals <- do.call(cbind, proposals_list)
   theta_mu <- proposals_group[,1:info$n_pars]
   theta_var <- proposals_group[,(info$n_pars + 1):(2*info$n_pars)]
-  group_ll <- 0
-  for(i in 1:info$n_pars){
-    group_ll <- group_ll + dnorm(proposals[,info$par_names[i]], theta_mu[,i], sqrt(exp(theta_var[,i])), log = T)
+  theta_a <- proposals_group[,(2*info$n_pars + 1):(3*info$n_pars)]
+  n_iter <- nrow(theta_mu)
+  sum_out <- numeric(n_iter)
+  for(i in 1:n_iter){ # these unfortunately can't be vectorized
+    proposals_curr <- matrix(proposals[i,], ncol = info$n_pars, byrow = T)
+    group_ll <- sum(dmvnorm(proposals_curr, theta_mu[i,], diag(exp(theta_var[i,]), nrow = info$n_pars), log = T))
+    prior_var <- sum(logdinvGamma(exp(theta_var[i,]), shape = prior$v/2, rate = prior$v/exp(theta_a[i,])))
+    prior_a <- sum(logdinvGamma(exp(theta_a[i,]), shape = 1/2,rate=1/(prior$A^2)))
+    sum_out[i] <- group_ll + prior_var + prior_a
   }
-  prior_mu <- colSums(dnorm(t(theta_mu), mean = prior$theta_mu_mean, sd = sqrt(diag(prior$theta_mu_var)), log =T))
-  prior_var <- 0
-  for(i in 1:info$n_pars){
-    prior_var <- prior_var +  dhalft(sqrt(exp(theta_var[,i])), scale = prior$A, nu = prior$v, log = T)
-  }
+  prior_mu <- dmvnorm(theta_mu, mean = prior$theta_mu_mean, sigma = prior$theta_mu_var, log =T)
   jac_var <- rowSums(theta_var)
-  return(group_ll + prior_mu + prior_var + jac_var)
+  jac_a <- rowSums(theta_a)
+  return(sum_out + prior_mu + jac_var + jac_a)
 }
 
 
 bridge_add_info_diag <- function(info, samples){
-  info$group_idx <- (samples$n_pars*samples$n_subjects + 1):(samples$n_pars*samples$n_subjects + 2*samples$n_pars)
+  info$group_idx <- (samples$n_pars*samples$n_subjects + 1):(samples$n_pars*samples$n_subjects + 3*samples$n_pars)
   return(info)
 }
 
 bridge_add_group_diag <- function(all_samples, samples, idx){
   all_samples <- cbind(all_samples, t(samples$samples$theta_mu[,idx]))
   all_samples <- cbind(all_samples, t(log(apply(samples$samples$theta_var[,,idx], 3, diag))))
+  all_samples <- cbind(all_samples, t(log(samples$samples$a_half[,idx])))
   return(all_samples)
 }
 

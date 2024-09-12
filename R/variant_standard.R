@@ -309,34 +309,34 @@ get_all_pars_standard <- function(samples, idx, info){
   info$X.given_ind <- 1:(n_params-info$n_randeffect)
   return(list(X = X, mu_tilde = mu_tilde, var_tilde = var_tilde, info = info))
 }
-
-robust_diwish <- function (W, v, S) { #RJI_change: this function is to protect against weird proposals in the diwish function, where sometimes matrices weren't pos def
-  if (!is.matrix(S)) S <- matrix(S)
-  if (!is.matrix(W)) W <- matrix(W)
-  p <- nrow(S)
-  gammapart <- sum(lgamma((v + 1 - 1:p)/2))
-  ldenom <- gammapart + 0.5 * v * p * log(2) + 0.25 * p * (p - 1) * log(pi)
-  if (corpcor::is.positive.definite(W, tol=1e-8)){
-    cholW<-base::chol(W)
-  }else{
-    return(1e-10)
-  }
-  if (corpcor::is.positive.definite(S, tol=1e-8)){
-    cholS <- base::chol(S)
-  }else{
-    return(1e-10)
-  }
-  halflogdetS <- sum(log(diag(cholS)))
-  halflogdetW <- sum(log(diag(cholW)))
-  invW <- chol2inv(cholW)
-  exptrace <- sum(S * invW)
-  lnum <- v * halflogdetS - (v + p + 1) * halflogdetW - 0.5 * exptrace
-  lpdf <- lnum - ldenom
-  out <- exp(lpdf)
-  if(!is.finite(out)) return(1e-100)
-  if(out < 1e-10) return(1e-100)
-  return(exp(lpdf))
-}
+#
+# robust_diwish <- function (W, v, S) { #RJI_change: this function is to protect against weird proposals in the diwish function, where sometimes matrices weren't pos def
+#   if (!is.matrix(S)) S <- matrix(S)
+#   if (!is.matrix(W)) W <- matrix(W)
+#   p <- nrow(S)
+#   gammapart <- sum(lgamma((v + 1 - 1:p)/2))
+#   ldenom <- gammapart + 0.5 * v * p * log(2) + 0.25 * p * (p - 1) * log(pi)
+#   if (corpcor::is.positive.definite(W, tol=1e-8)){
+#     cholW<-base::chol(W)
+#   }else{
+#     return(1e-10)
+#   }
+#   if (corpcor::is.positive.definite(S, tol=1e-8)){
+#     cholS <- base::chol(S)
+#   }else{
+#     return(1e-10)
+#   }
+#   halflogdetS <- sum(log(diag(cholS)))
+#   halflogdetW <- sum(log(diag(cholW)))
+#   invW <- chol2inv(cholW)
+#   exptrace <- sum(S * invW)
+#   lnum <- v * halflogdetS - (v + p + 1) * halflogdetW - 0.5 * exptrace
+#   lpdf <- lnum - ldenom
+#   out <- exp(lpdf)
+#   if(!is.finite(out)) return(1e-100)
+#   if(out < 1e-10) return(1e-100)
+#   return(exp(lpdf))
+# }
 
 unwind_chol <- function(x,reverse=FALSE) {
 

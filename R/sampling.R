@@ -708,7 +708,10 @@ get_variant_funs <- function(type = "standard") {
       get_conditionals = get_conditionals_blocked,
       get_all_pars_IS2 = get_all_pars_blocked,
       prior_dist_IS2 = prior_dist_blocked,
-      group_dist_IS2 = group_dist_blocked
+      group_dist_IS2 = group_dist_blocked,
+      bridge_add_group = bridge_add_group_blocked,
+      bridge_add_info = bridge_add_info_blocked,
+      bridge_group_and_prior_and_jac = bridge_group_and_prior_and_jac_blocked
     )
   } else if(type == "diagonal"){
     list_fun <- list(# store functions
