@@ -1,3 +1,37 @@
+make_missing <- function(data,LT=0,UT=Inf,LC=0,UC=Inf,
+                         LCresponse=TRUE,UCresponse=TRUE,LCdirection=TRUE,UCdirection=TRUE)
+{
+
+  censor <- function(data,L=0,U=Inf,Ld=TRUE,Ud=TRUE,Lr=TRUE,Ur=TRUE)
+  {
+    if (Ld) Ld <- -Inf else Ld <- NA
+    if (Ud) Ud <- Inf else Ud <- NA
+    snams <- levels(data$subjects)
+    if (length(L)==1) L <- setNames(rep(L,length(snams)),snams)
+    if (length(U)==1) U <- setNames(rep(U,length(snams)),snams)
+    for (i in snams) {
+      pick <- data$subjects==i & data$rt < L[i]
+      pick[is.na(pick)] <- FALSE
+      data$rt[pick] <- Ld
+      if (!Lr) data$R[pick] <- NA
+      pick <- data$subjects==i & data$rt > U[i]
+      pick[is.na(pick)] <- FALSE
+      data$rt[pick] <- Ud
+      if (!Ur) data$R[pick] <- NA
+    }
+    data
+  }
+
+  pick <- is.infinite(data$rt) | (data$rt>LT & data$rt<UT)
+  pick[is.na(pick)] <- TRUE
+  out <- censor(data[pick,],L=LC,U=UC,Lr=LCresponse,Ur=UCresponse,Ld=LCdirection,Ud=UCdirection)
+  if (LC != 0) attr(out,"LC") <- LC
+  if (UC != Inf) attr(out,"UC") <- UC
+  if (LT != 0) attr(out,"LT") <- LT
+  if (UT != Inf) attr(out,"UT") <- UT
+  out
+}
+
 #' Simulate data
 #'
 #' Simulates data based on a model design and a parameter vector (`p_vector`) by one of two methods:
