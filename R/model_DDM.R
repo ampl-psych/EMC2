@@ -149,11 +149,6 @@ DDM <- function(){
 }
 
 
-
-
-#' Diffusion decision model with t0 on the natural scale
-#'
-#' @return A model list with all the necessary functions to sample
 DDMt0natural <- function(){
   list(
     type="DDM",

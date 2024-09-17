@@ -158,42 +158,42 @@ plot_roc <- function(data,signalFactor="S",zROC=FALSE,qfun=NULL,main="",lim=NULL
   invisible(ctab)
 }
 
-#' Plots choice data
-#'
-#' Plots choice data with no response times.
-#'
-#' @param data A data frame. The experimental data in EMC2 format with at least `subject` (i.e., the
-#' subject factor), `R` (i.e., the response factor) and `rt` (i.e., response time) variable.
-#' Additional factor variables of the design are optional.
-#' @param pp Posterior predictives created by `predict()`
-#' @param subject Integer or string picking out subject(s).
-#' @param factors Character vector of factors in data to display separately. If
-#' `NULL` (i.e., the default), use names of all columns in data except `trials`,`R`, and `rt`.
-#' Omitted factors are aggregated over. If `NA`, treats entire data set as a single cell.
-#' If `stat` is used, the default is changed to `NA`.
-#' @param functions A named list of functions that create new factors which can then be
-#' used by the `factors` and `stat` arguments.
-#' @param stat A function that takes a the data and returns a single value.
-#' @param stat_name A string naming what the `stat` argument calculates.
-#' @param adjust Control of smoothing in density plots
-#' @param ci Credible interval and central tendency quantiles for return when
-#' stat argument is supplied (defaults to the 2.5\\%, the 50\\% and the 97.5\\%
-#' quantiles)
-#' @param do_plot Boolean (defaults to `TRUE`) whether a plot should be created or not
-#' @param xlim x-axis plot limit, 2-vector (same for all) or matrix (one row for each paramter)
-#' @param ylim y-axis plot limit, 2-vector (same for all) or matrix (one row for each paramter)
-#' @param main Text title, pasted before cell name.
-#' @param layout 2-vector specifying `par(mfrow)` or `par(mfcol)`. The default `NULL` uses current,
-#' `NA` keeps `par` currently active.
-#' @param mfcol Boolean for `layout` settings, the default `TRUE` uses `mfcol`, else `mfrow`.
-#' @param signalFactor Character name of factor for the signal
-#' @param zROC Boolean, plot Z transformed ROC (defaults to `FALSE`)
-#' @param qfun Type of Z transform (defaults to probit)
-#' @param lim `x` = `y` limit for ROC plots
-#' @param rocfit_cex Size of points in ROC plot (default 0.5)
-#'
-#' @return If stat argument is provided a matrix of observed values and predicted quantiles
-#' is returned
+# #' Plots choice data
+# #'
+# #' Plots choice data with no response times.
+# #'
+# #' @param data A data frame. The experimental data in EMC2 format with at least `subject` (i.e., the
+# #' subject factor), `R` (i.e., the response factor) and `rt` (i.e., response time) variable.
+# #' Additional factor variables of the design are optional.
+# #' @param pp Posterior predictives created by `predict()`
+# #' @param subject Integer or string picking out subject(s).
+# #' @param factors Character vector of factors in data to display separately. If
+# #' `NULL` (i.e., the default), use names of all columns in data except `trials`,`R`, and `rt`.
+# #' Omitted factors are aggregated over. If `NA`, treats entire data set as a single cell.
+# #' If `stat` is used, the default is changed to `NA`.
+# #' @param functions A named list of functions that create new factors which can then be
+# #' used by the `factors` and `stat` arguments.
+# #' @param stat A function that takes a the data and returns a single value.
+# #' @param stat_name A string naming what the `stat` argument calculates.
+# #' @param adjust Control of smoothing in density plots
+# #' @param ci Credible interval and central tendency quantiles for return when
+# #' stat argument is supplied (defaults to the 2.5\\%, the 50\\% and the 97.5\\%
+# #' quantiles)
+# #' @param do_plot Boolean (defaults to `TRUE`) whether a plot should be created or not
+# #' @param xlim x-axis plot limit, 2-vector (same for all) or matrix (one row for each paramter)
+# #' @param ylim y-axis plot limit, 2-vector (same for all) or matrix (one row for each paramter)
+# #' @param main Text title, pasted before cell name.
+# #' @param layout 2-vector specifying `par(mfrow)` or `par(mfcol)`. The default `NULL` uses current,
+# #' `NA` keeps `par` currently active.
+# #' @param mfcol Boolean for `layout` settings, the default `TRUE` uses `mfcol`, else `mfrow`.
+# #' @param signalFactor Character name of factor for the signal
+# #' @param zROC Boolean, plot Z transformed ROC (defaults to `FALSE`)
+# #' @param qfun Type of Z transform (defaults to probit)
+# #' @param lim `x` = `y` limit for ROC plots
+# #' @param rocfit_cex Size of points in ROC plot (default 0.5)
+# #'
+# #' @return If stat argument is provided a matrix of observed values and predicted quantiles
+# #' is returned
 plot_fit_choice <- function(data,pp,subject=NULL,factors=NULL,functions=NULL,
                             stat=NULL,stat_name="",adjust=1,
                             ci=c(.025,.5,.975),do_plot=TRUE,
@@ -919,20 +919,20 @@ make_recov_summary <- function(stats){
 }
 
 
-#' Plot MCMC
-#'
-#' Uses the coda plot functions that are applied per chain
-#'
-#' @param emc An emc object
-#' @param selection A Character string. Indicates which parameter type to plot (e.g., `alpha`, `mu`, `sigma2`, `correlation`).
-#' @param fun A plot function that takes a vector/mcmc object as input, e.g. cumuplot, acf
-#' @param layout A vector indicating which layout to use as in par(mfrow = layout). If NA, will automatically generate an appropriate layout.
-#' @param plot_type type argument passed on to coda fun.
-#' @param chain Integer, which chain to include, if more than 1 will make separate plots per chain.
-#' @param ... Optional arguments that can be passed to `get_pars`,
-#' the chosen coda plot function, or `plot.default` (see `par()`)
-#'
-#' @return A coda plot
+# #' Plot MCMC
+# #'
+# #' Uses the coda plot functions that are applied per chain
+# #'
+# #' @param emc An emc object
+# #' @param selection A Character string. Indicates which parameter type to plot (e.g., `alpha`, `mu`, `sigma2`, `correlation`).
+# #' @param fun A plot function that takes a vector/mcmc object as input, e.g. cumuplot, acf
+# #' @param layout A vector indicating which layout to use as in par(mfrow = layout). If NA, will automatically generate an appropriate layout.
+# #' @param plot_type type argument passed on to coda fun.
+# #' @param chain Integer, which chain to include, if more than 1 will make separate plots per chain.
+# #' @param ... Optional arguments that can be passed to `get_pars`,
+# #' the chosen coda plot function, or `plot.default` (see `par()`)
+# #'
+# #' @return A coda plot
 plot_mcmc <- function(emc, selection = "mu", fun = 'cumuplot', layout=NA, chain = 1,
                       plot_type = NULL, ...)
 {
@@ -966,18 +966,18 @@ plot_mcmc <- function(emc, selection = "mu", fun = 'cumuplot', layout=NA, chain 
   }
 }
 
-#' Plot MCMC.list
-#'
-#' Uses the coda plot functions that are applied across chain
-#'
-#' @param emc An emc object
-#' @param selection A Character string. Indicates which parameter type to plot (e.g., `alpha`, `mu`, `sigma2`, `correlation`).
-#' @param fun A coda plot function choice from
-#' @param layout A vector indicating which layout to use as in par(mfrow = layout). If NA, will automatically generate an appropriate layout.
-#' @param ... Optional arguments that can be passed to `get_pars`,
-#' the chosen coda plot function, or `plot.default` (see `par()`)
-#'
-#' @return A coda plot
+# #' Plot MCMC.list
+# #'
+# #' Uses the coda plot functions that are applied across chain
+# #'
+# #' @param emc An emc object
+# #' @param selection A Character string. Indicates which parameter type to plot (e.g., `alpha`, `mu`, `sigma2`, `correlation`).
+# #' @param fun A coda plot function choice from
+# #' @param layout A vector indicating which layout to use as in par(mfrow = layout). If NA, will automatically generate an appropriate layout.
+# #' @param ... Optional arguments that can be passed to `get_pars`,
+# #' the chosen coda plot function, or `plot.default` (see `par()`)
+# #'
+# #' @return A coda plot
 plot_mcmc_list <- function(emc, selection = "mu", fun = 'traceplot', layout=NA, ...)
 {
   oldpar <- par(no.readonly = TRUE) # code line i

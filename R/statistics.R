@@ -231,23 +231,23 @@ gelman_diag_robust <- function(mcl,autoburnin = FALSE,transform = TRUE, omit_mps
   }
 }
 
-#' Calculate information criteria (DIC, BPIC), effective number of parameters and
-#' constituent posterior deviance (D) summaries (meanD = mean of D, Dmean = D
-#' for mean of posterior parameters and minD = minimum of D).
-#'
-#' @param emc emc object or list of these
-#' @param stage A string. Specifies which stage you want to plot.
-#' @param filter An integer or vector. If it's an integer, iterations up until the value set by `filter` will be excluded.
-#' If a vector is supplied, only the iterations in the vector will be considered.
-#' @param use_best_fit Boolean, default TRUE use best of minD and Dmean in
-#' calculation otherwise always use Dmean
-#' @param print_summary Boolean (default TRUE) print table of results
-#' @param digits Integer, significant digits in printed table
-#' @param subject Integer or string selecting a single subject, default NULL
-#' returns sums over all subjects
-#' @param group_only Boolean. If `TRUE` will calculate the IC for the group-level only
-#'
-#' @return Table of DIC, BPIC, EffectiveN, meanD, Dmean, and minD
+# #' Calculate information criteria (DIC, BPIC), effective number of parameters and
+# #' constituent posterior deviance (D) summaries (meanD = mean of D, Dmean = D
+# #' for mean of posterior parameters and minD = minimum of D).
+# #'
+# #' @param emc emc object or list of these
+# #' @param stage A string. Specifies which stage you want to plot.
+# #' @param filter An integer or vector. If it's an integer, iterations up until the value set by `filter` will be excluded.
+# #' If a vector is supplied, only the iterations in the vector will be considered.
+# #' @param use_best_fit Boolean, default TRUE use best of minD and Dmean in
+# #' calculation otherwise always use Dmean
+# #' @param print_summary Boolean (default TRUE) print table of results
+# #' @param digits Integer, significant digits in printed table
+# #' @param subject Integer or string selecting a single subject, default NULL
+# #' returns sums over all subjects
+# #' @param group_only Boolean. If `TRUE` will calculate the IC for the group-level only
+# #'
+# #' @return Table of DIC, BPIC, EffectiveN, meanD, Dmean, and minD
 
 IC <- function(emc,stage="sample",filter=0,use_best_fit=TRUE,
                print_summary=TRUE,digits=0,subject=NULL,
@@ -411,20 +411,20 @@ compare_subject <- function(sList,stage="sample",filter=0,use_best_fit=TRUE,
 }
 
 
-#' Calculate a table of model probabilities based for a list of samples objects
-#' based on samples of marginal log-likelihood (MLL) added to these objects by
-#' run_IS2. Probabilities estimated by a bootstrap ath picks a vector of MLLs,
-#' one for each model in the list randomly with replacement nboot times,
-#' calculates model probabilities and averages
-#'
-#'
-#' @param mll List of samples objects with IS_samples attribute added by by run_IS2
-#' @param nboot Integer number of bootstrap samples, the default (1e5) usually
-#' gives stable results at 2 decimal places.
-#' @param print_summary Boolean (default TRUE) print table of results
-#' @param digits Integer, significant digits in printed table
-#'
-#' @return Vector of model probabilities with names from samples list.
+# #' Calculate a table of model probabilities based for a list of samples objects
+# #' based on samples of marginal log-likelihood (MLL) added to these objects by
+# #' run_IS2. Probabilities estimated by a bootstrap ath picks a vector of MLLs,
+# #' one for each model in the list randomly with replacement nboot times,
+# #' calculates model probabilities and averages
+# #'
+# #'
+# #' @param mll List of samples objects with IS_samples attribute added by by run_IS2
+# #' @param nboot Integer number of bootstrap samples, the default (1e5) usually
+# #' gives stable results at 2 decimal places.
+# #' @param print_summary Boolean (default TRUE) print table of results
+# #' @param digits Integer, significant digits in printed table
+# #'
+# #' @return Vector of model probabilities with names from samples list.
 
 compare_MLL <- function(mll,nboot=1e5,digits=2,print_summary=TRUE)
   # mll is a list of vectors of marginal log-likelihoods for a set of models

@@ -623,102 +623,6 @@ loadRData <- function(fileName){
   get(ls()[ls() != "fileName"])
 }
 
-#' Runs burn-in for emc.
-#'
-#' Special instance of `run_emc`, with default arguments specified for completing burn_in.
-#' Will run both preburn and burn.
-#'
-#' @param preburn An integer. The number of iterations run for preburn stage.
-#' @inheritParams run_emc
-#' @return An emc object
-
-auto_burn <- function(emc, preburn = 150,
-                      p_accept = .8, step_size = 100, verbose = FALSE, verboseProgress = FALSE,
-                      fileName = NULL, stop_criteria = NULL,
-                      particles = NULL, particle_factor=50, cores_per_chain = 1,
-                      cores_for_chains = length(emc), max_tries = 20, n_blocks = 1){
-  if(!is.null(stop_criteria) & length(stop_criteria) == 1){
-    stop_criteria[["burn"]] <- stop_criteria
-  }
-  if(is.null(stop_criteria)){
-    stop_criteria <- vector("list", length = 2)
-    names(stop_criteria) <- c("preburn", "burn")
-  }
-  for(stage_name in c("preburn", "burn")){
-    if(!stage_name %in% names(stop_criteria)) stop_criteria[stage_name] <- list(NULL)
-  }
-  stop_criteria <- stop_criteria[c("preburn", "burn")]
-  stop_criteria <- mapply(get_stop_criteria, c("preburn", "burn"), stop_criteria, MoreArgs = list(type = attr(emc[[1]], "variant_funs")$type))
-  stop_criteria[["preburn"]]$iter <- preburn
-  names(stop_criteria) <- c("preburn", "burn")
-
-  emc <- run_emc(emc, stage = "preburn", stop_criteria = stop_criteria[["preburn"]],
-                           cores_for_chains = cores_for_chains, p_accept = p_accept,
-                           step_size = step_size,  verbose = verbose, verboseProgress = verboseProgress,
-                           fileName = fileName,
-                           particles = particles, particle_factor =  particle_factor,
-                           cores_per_chain = cores_per_chain, max_tries = max_tries, n_blocks = n_blocks)
-  emc <-  run_emc(emc, stage = "burn",  stop_criteria = stop_criteria[["preburn"]], cores_for_chains = cores_for_chains, p_accept = p_accept,
-                            step_size = step_size,  verbose = verbose, verboseProgress = verboseProgress,
-                            fileName = fileName,
-                            particles = particles, particle_factor =  particle_factor,
-                            cores_per_chain = cores_per_chain, max_tries = max_tries, n_blocks = n_blocks)
-  return(emc)
-}
-#' Runs adapt stage for emc.
-#'
-#' Special instance of `run_emc`, with default arguments specified for completing adaptation.
-#'
-#'
-#' @inheritParams run_emc
-#' @return An emc object
-
-run_adapt <- function(emc, stop_criteria = NULL,
-                      p_accept = .8, step_size = 100, verbose = FALSE, verboseProgress = FALSE,
-                      fileName = NULL,
-                      particles = NULL, particle_factor=50, cores_per_chain = 1,
-                      cores_for_chains = length(emc), max_tries = 20, n_blocks = 1)
-{
-  if(is.null(stop_criteria)){
-    stop_criteria <- list()
-    stop_criteria[["adapt"]] <-list(NULL)
-  }
-  stop_criteria <- get_stop_criteria("adapt", stop_criteria[["adapt"]], type = attr(emc[[1]], "variant_funs")$type)
-
-  emc <- run_emc(emc, stage = "adapt",  stop_criteria = stop_criteria[[1]],
-                           cores_for_chains = cores_for_chains, p_accept = p_accept,
-                           step_size = step_size,  verbose = verbose, verboseProgress = verboseProgress,
-                           fileName = fileName,
-                           particles = particles, particle_factor =  particle_factor,
-                           cores_per_chain = cores_per_chain, max_tries = max_tries, n_blocks = n_blocks)
-  return(emc)
-}
-#' Runs sample stage for emc.
-#'
-#' Special instance of `run_emc`, with default arguments specified for running sample stage.
-#'
-#' @inheritParams run_emc
-#' @param iter Integer. Number of sample stage iterations to run
-#' @return An emc object
-
-run_sample <- function(emc, iter = 1000, stop_criteria = NULL,
-                       p_accept = .8, step_size = 100, verbose = FALSE, verboseProgress = FALSE,
-                       fileName = NULL,
-                       particles = NULL, particle_factor=50, cores_per_chain = 1,
-                       cores_for_chains = length(emc), max_tries = 20, n_blocks = 1)
-{
-  if(is.null(stop_criteria)){
-    stop_criteria <- list()
-  }
-  stop_criteria <- get_stop_criteria("sample", stop_criteria, type = attr(emc[[1]], "variant_funs")$type)
-  stop_criteria[["sample"]] <-iter
-  emc <- run_emc(emc, stage = "sample", stop_criteria[[1]], cores_for_chains = cores_for_chains, p_accept = p_accept,
-                           step_size = step_size,  verbose = verbose, verboseProgress = verboseProgress,
-                           fileName = fileName,
-                           particles = particles, particle_factor =  particle_factor,
-                           cores_per_chain = cores_per_chain, max_tries = max_tries, n_blocks = n_blocks)
-  return(emc)
-}
 
 #' Make an emc object
 #'
@@ -948,20 +852,18 @@ extractDadms <- function(dadms, names = 1:length(dadms)){
               dadm_list = dadm_list, subjects = subjects))
 }
 
-#' Runs IS2 from Tran et al. 2021 on a list of emc
-#'
-#' Runs IS2 on a list of emc, only works for types standard, factor and diagonal yet.
-#'
-#' @param emc A list of emc
-#' @param stage A string. Indicates which stage to take samples from
-#' @param filter An integer or vector. If integer specifies how many samples to remove from within that stage. If vector used as index for samples to keep.
-#' @param IS_samples An integer. Specifies how many IS2 samples to collect
-#' @param max_particles An integer. Specifies the maximum number of particles to collect before stopping one IS iteration.
-#' @param stepsize_particles An integer. It will increase particles till optimal variance with this stepsize.
-#' @param n_cores An integer. Specifies how many cores to run IS_2 on.
-#' @param df An integer. The degrees of freedom used in the t-distribution used as IS distribution for the group-level proposals.
-#'
-#' @return emc, with IS2 attribute
+# #' Runs IS2 from Tran et al. 2021 on a list of emc
+# #'
+# #' @param emc A list of emc
+# #' @param stage A string. Indicates which stage to take samples from
+# #' @param filter An integer or vector. If integer specifies how many samples to remove from within that stage. If vector used as index for samples to keep.
+# #' @param IS_samples An integer. Specifies how many IS2 samples to collect
+# #' @param max_particles An integer. Specifies the maximum number of particles to collect before stopping one IS iteration.
+# #' @param stepsize_particles An integer. It will increase particles till optimal variance with this stepsize.
+# #' @param n_cores An integer. Specifies how many cores to run IS_2 on.
+# #' @param df An integer. The degrees of freedom used in the t-distribution used as IS distribution for the group-level proposals.
+# #'
+# #' @return emc, with IS2 attribute
 
 run_IS2 <- function(emc, stage = "sample", filter = 0, IS_samples = 1000,
                     stepsize_particles = 500, max_particles = 5000, n_cores = 1, df = 5){
