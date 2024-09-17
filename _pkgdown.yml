@@ -1,4 +1,9 @@
 url: https://ampl-psych.github.io/EMC2/
 template:
   bootstrap: 5
+  light-switch: true
 
+# navbar:
+#   structure:
+#     left: [search]
+#     right: [reference, articles]
