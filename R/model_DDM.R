@@ -121,27 +121,25 @@ DDM <- function(){
       pars <- cbind(pars,z=pars[,"a"]*pars[,"Z"],
                     sz = 2*pars[,"SZ"]*pars[,"a"]*apply(cbind(pars[,"Z"],1-pars[,"Z"]),1,min))
       pars <- cbind(pars, d = pars[,"t0"]*(2*pars[,"DP"]-1))
-      attr(pars,"ok") <-
-        !( abs(pars[,"v"])> 20 | pars[,"a"]> 10 | pars[,"sv"]> 10 | pars[,"SZ"]> .999 |
-             pars[,"t0"] < .05 | pars[,"st0"]>.2)
-      if (pars[1,"sv"] !=0) attr(pars,"ok") <- attr(pars,"ok") & pars[,"sv"] > .001
-      if (pars[1,"SZ"] !=0) attr(pars,"ok") <- attr(pars,"ok") & pars[,"SZ"] > .001
+      attr(pars,"ok") <- rep(TRUE, nrow(pars))
+      #   !( abs(pars[,"v"])> 20 | pars[,"a"]> 10 | pars[,"sv"]> 10 | pars[,"SZ"]> .999 |
+      #        pars[,"t0"] < .05 | pars[,"st0"]>.2)
+      # if (pars[1,"sv"] !=0) attr(pars,"ok") <- attr(pars,"ok") & pars[,"sv"] > .001
+      # if (pars[1,"SZ"] !=0) attr(pars,"ok") <- attr(pars,"ok") & pars[,"SZ"] > .001
       pars
     },
-    # p_vector transform, sets s as a scaling parameter
     transform = function(p) p,
     # Random function
     rfun=function(lR=NULL,pars) {
-      ok <- !( abs(pars[,"v"])> 20 | pars[,"a"]> 10 | pars[,"sv"]> 10 | pars[,"SZ"]> .999 |
-                 pars[,"st0"]>.2 | pars[,"t0"] < .05)
-      if (pars[1,"sv"] !=0) attr(pars,"ok") <- attr(pars,"ok") & pars[,"sv"] > .001
-      if (pars[1,"SZ"] !=0) attr(pars,"ok") <- attr(pars,"ok") & pars[,"SZ"] > .001
-      if (is.null(lR)) ok else rDDM(lR,pars,precision=2.5,ok)
+      # ok <- !( abs(pars[,"v"])> 20 | pars[,"a"]> 10 | pars[,"sv"]> 10 | pars[,"SZ"]> .999 |
+      #            pars[,"st0"]>.2 | pars[,"t0"] < .05)
+      ok <- rep(TRUE, nrow(pars))
+      if (is.null(lR)) ok else rDDM(lR,pars,precision=3,ok)
     },
     # Density function (PDF)
-    dfun=function(rt,R,pars) dDDM(rt,R,pars,precision=2.5),
+    dfun=function(rt,R,pars) dDDM(rt,R,pars,precision=3),
     # Probability function (CDF)
-    pfun=function(rt,R,pars) pDDM(rt,R,pars,precision=2.5),
+    pfun=function(rt,R,pars) pDDM(rt,R,pars,precision=3),
     log_likelihood=function(p_vector,dadm,min_ll=log(1e-10)){
       log_likelihood_ddm(p_vector=p_vector, dadm = dadm, min_ll = min_ll)
     }
