@@ -85,42 +85,6 @@ get_prior_diag <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, 
   }
   return(out)
 }
-#   if(sample){
-#     out <- list()
-#     if(!selection %in% c("mu", "variance", "full_var")){
-#       stop("for variant diagonal, you can only specify the prior on the mean or variance parameters")
-#     }
-#     if(selection == "mu"){
-#       samples <- mvtnorm::rmvnorm(N, mean = prior$theta_mu_mean,
-#                                   sigma = prior$theta_mu_var)
-#       if(!is.null(design)){
-#         colnames(samples) <- par_names <- names(sampled_p_vector(design, doMap = F))
-#         if(map){
-#           samples <- map_mcmc(samples,design,design$model,include_constants=FALSE)
-#         }
-#       }
-#       out$mu <- samples
-#       return(out)
-#     } else {
-#
-#       var <- array(NA_real_, dim = c(N, n_pars))
-#       for(i in 1:N){
-#         a_half <- 1 / rgamma(n = n_pars,shape = 1/2,
-#                              rate = 1/(prior$A^2))
-#         var[i,] <- 1 / rgamma(n = n_pars, shape = prior$v/2, rate = prior$v/a_half)
-#       }
-#       colnames(var) <- names(sampled_p_vector(design, doMap = F))
-#       if (selection == "full_var"){
-#         out$full_var <- var
-#       } else{
-#         out$variance <- var
-#       }
-#       return(out)
-#     }
-#   }
-#   return(prior)
-# }
-
 
 get_startpoints_diag <- function(pmwgs, start_mu, start_var){
   n_pars <- sum(!(pmwgs$nuisance | pmwgs$grouped))

@@ -13,6 +13,10 @@ get_objects <- function(type, selection = NULL, sample_prior = F, design = NULL,
     out <- get_objects_diag(type, selection, sample_prior, return_prior, design, prior, stage, N = N,
                               sampler, ...)
   }
+  else if(type == "diagonal-gamma"){
+    out <- get_objects_diag_gamma(type, selection, sample_prior, return_prior, design, prior, stage, N = N,
+                            sampler, ...)
+  }
   else if(type == "blocked"){
     out <- get_objects_blocked(type, selection, sample_prior, return_prior, design, prior, stage, N = N,
                             sampler, ...)
@@ -85,6 +89,46 @@ get_objects_diag <- function(type, selection, sample_prior, return_prior, design
         sampler <- list(list(samples =  list(alpha = get_alphas(mu, var, sub_names))))
       } else{
         sampler <- list(list(samples = get_prior_diag(prior = prior, design = design, selection = selection,N = N)))
+      }
+      attr(sampler, "design_list") <- list(design)
+      return(sampler)
+    }
+    idx <- get_idx(sampler, stage)
+    return(get_base(sampler, idx, selection))
+  }
+}
+
+get_objects_diag_gamma <- function(type, selection, sample_prior, return_prior, design = NULL,
+                             prior = NULL, stage = 'sample', N = 1e5, sampler = NULL,...){
+  acc_selection <- c("mu", "sigma2", "alpha", "LL", "Sigma")
+  if(return_prior & !sample_prior){
+    prior$prior <- get_prior_diag_gamma(design = design, sample = F, prior = prior)
+    prior$descriptions <- list(
+      theta_mu_mean = "mean of the group-level mean prior",
+      theta_mu_var = "variance of the group-level mean prior",
+      shape = "shape of the group-level variance prior",
+      rate = "rate of the group-level variance prior"
+    )
+    prior$groups <- list(
+      mu = c("theta_mu_mean", "theta_mu_var"),
+      Sigma = c("shape", "rate")
+    )
+    prior$group_descriptions <- list(
+      mu = "Group-level mean",
+      Sigma = 'Group-level covariance matrix'
+    )
+    prior$prior <- add_prior_names(prior$prior, design)
+    return(prior)
+  } else{
+    if(!selection %in% acc_selection) stop(paste0("selection must be in : ", paste(acc_selection, collapse = ", ")))
+    if(sample_prior){
+      if(selection == "alpha" & !is.null(sampler)){
+        mu <- get_pars(sampler, selection = "mu", stage = stage, map = FALSE, return_mcmc = FALSE, merge_chains = TRUE, ...)
+        var <- get_pars(sampler, selection = "Sigma", stage = stage, map = FALSE, return_mcmc = FALSE, merge_chains = TRUE, ...)
+        sub_names <- names(sampler[[1]]$data)
+        sampler <- list(list(samples =  list(alpha = get_alphas(mu, var, sub_names))))
+      } else{
+        sampler <- list(list(samples = get_prior_diag_gamma(prior = prior, design = design, selection = selection,N = N)))
       }
       attr(sampler, "design_list") <- list(design)
       return(sampler)
