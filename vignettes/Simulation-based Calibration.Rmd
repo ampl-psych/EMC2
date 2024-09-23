@@ -1,0 +1,92 @@
+---
+title: "Simulation-based Calibration"
+description: "A guide to SBC in EMC2"
+author: "Niek Stevenson"
+output: rmarkdown::html_document
+---
+
+```{r, echo = FALSE}
+rm(list = ls())
+library(EMC2)
+
+```
+
+## Introduction
+
+Simulation-based calibration(SBC) is a technique used to validate and calibrate Bayesian estimation methods and models. It checks whether a model correctly accounts for uncertainty and whether the posterior distributions it produces are consistent with the true data-generating process. First we outline how to perform SBC in theory, after which we describe our experiences with SBC in *EMC2*, which will also illustrate how to perform SBC for your own model.
+
+## How to SBC
+
+Here we briefly outline the steps to performing SBC, for more detail we refer the reader to X
+
+### 1. Specify the Probabilistic Model
+
+-   Define the Bayesian model you're working with. This includes specifying the prior distribution for the parameters and the likelihood function that connects the data to the parameters.
+-   For example, suppose you have a model with a set of parameters $\alpha$ and observed data $y$ such that $y \sim p(y|\alpha)$ and $\alpha \sim p(\alpha)$.
+
+### 2. Simulate Parameters and Data
+
+-   **Sample Parameters**: Draw a large number of sets of parameters $\alpha^{(i)}$ from the prior distribution $p(\alpha)$.
+-   **Simulate Data**: For each set of set parameters $\alpha^{(i)}$, simulate a dataset $y^{(i)}$ from the likelihood $p(y|\alpha^{(i)})$.
+
+### 3. Compute Posterior Distributions
+
+-   For each simulated dataset $y^{(i)}$, compute the posterior distribution $p(\alpha | y^{(i)})$ using your Bayesian model.
+
+### 4. Evaluate the Rank Statistics
+
+-   For each simulated dataset, determine where the set of true parameters $\alpha^{(i)}$ ranks in the posterior samples of $\alpha$. The rank is essentially the number of posterior samples that are less than the true $\alpha^{(i)}$.
+-   Normalize the ranks to lie between 0 and 1. This is your **rank statistic**.
+
+### 5. Check Uniformity
+
+-   Aggregate the rank statistics across all simulated datasets. If your model is well-calibrated, the ranks should be uniformly distributed because each posterior should correctly reflect the uncertainty about the parameter.
+-   Plot a histogram of the rank statistics. If the model is correctly calibrated, this histogram should be roughly uniform across all bins. Throughout we include dotted lines of the 2.5%, 50% and 97.5% quantile of where randomly generated uniform data is expected to fall in the histogram.
+
+### 6. Interpret the Results
+
+-   **Uniform Distribution**: If the rank histogram is uniform, it suggests that the posterior distributions are well-calibrated and the model properly reflects the uncertainty in the parameters.
+-   **Non-Uniform Distribution**: If the rank histogram is not uniform (e.g., it shows peaks or troughs), it suggests that the model might be mis-specified. For example, if the histogram is skewed, it might indicate that the model is underestimating or overestimating uncertainty.
+
+## Non-hierarchical SBC in EMC2
+
+*EMC2* allows for both hierarchical and non-hierarchical estimation. Given the desirable statistical and estimation properties of hierarchical models, we normally recommend to use hierarchical models. However, given that estimating hundreds of models is quite time consuming and practically unfeasible without a computational server, we recommend running SBC on non-hierarchical models for typical applications. Here we use the LBA and DDM to illustrate non-hierarchical SBC. First we clear our workspace and load EMC2
+
+```{r, results = "hide"}
+rm(list = ls())
+library(EMC2) 
+```
+
+
+### LBA
+
+First we specify a design and a prior for the model. EMC2 assumes normal priors on the parameters. Thus, some parameters are transformed to better match the normal prior and to satisfy the assumption of the normal distribution to have full support on the real line. To check the parameter transformations we use `?LBA` .
+
+
+```{r}
+?LBA
+matchfun <- function(d) d$S == d$lR
+
+design_LBA <- design(factors=list(subjects=1,S=c("left", "right")),
+                     Rlevels = c("left", "right"),
+                     matchfun = matchfun,
+                     formula =list(v~lM,B~1, t0~1, sv~1, A~1),
+                     constants=c(sv=log(1)),
+                     model = LBA)
+
+prior_LBA <- prior(design_LBA, type = "single",
+                  pmean = c(1.3, .7, log(.8), log(.2), log(.3)),
+                  psd = c(.2, .1, .1, .05, .05))
+```
+
+Now we plot the prior, with `map = TRUE` (the default) to see how the implied prior on the transformed parameters.
+```{r}
+plot_prior(prior_LBA, design_LBA)
+```
+
+Next we can simply run `run_SBC` with our specified design and prior.
+We can use ?run_SBC to see the description of the function arguments
+```{r, eval=FALSE}
+result <- SBC_single(design_LBA, prior_LBA, replicates = 500, trials = 100, plot_data = F,
+                  iter = 1000, n_post = 1000)
+```

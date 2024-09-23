@@ -7,3 +7,10 @@ template:
 #   structure:
 #     left: [search]
 #     right: [reference, articles]
+#
+# articles:
+# - title: Simulation-based calibration
+#   contents:
+#   - Simulation-based Calibration
+
+

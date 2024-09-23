@@ -1,6 +1,9 @@
 <urlset xmlns = 'http://www.sitemaps.org/schemas/sitemap/0.9'>
 <url><loc>https://ampl-psych.github.io/EMC2/404.html</loc></url>
 <url><loc>https://ampl-psych.github.io/EMC2/LICENSE.html</loc></url>
+<url><loc>https://ampl-psych.github.io/EMC2/articles/Simulation-based Calibration.html</loc></url>
+<url><loc>https://ampl-psych.github.io/EMC2/articles/index.html</loc></url>
+<url><loc>https://ampl-psych.github.io/EMC2/articles/test.html</loc></url>
 <url><loc>https://ampl-psych.github.io/EMC2/authors.html</loc></url>
 <url><loc>https://ampl-psych.github.io/EMC2/index.html</loc></url>
 <url><loc>https://ampl-psych.github.io/EMC2/reference/DDM.html</loc></url>
@@ -8,6 +11,8 @@
 <url><loc>https://ampl-psych.github.io/EMC2/reference/LBA.html</loc></url>
 <url><loc>https://ampl-psych.github.io/EMC2/reference/LNR.html</loc></url>
 <url><loc>https://ampl-psych.github.io/EMC2/reference/RDM.html</loc></url>
+<url><loc>https://ampl-psych.github.io/EMC2/reference/SBC_hierarchical.html</loc></url>
+<url><loc>https://ampl-psych.github.io/EMC2/reference/SBC_single.html</loc></url>
 <url><loc>https://ampl-psych.github.io/EMC2/reference/chain_n.html</loc></url>
 <url><loc>https://ampl-psych.github.io/EMC2/reference/check.html</loc></url>
 <url><loc>https://ampl-psych.github.io/EMC2/reference/compare.html</loc></url>
