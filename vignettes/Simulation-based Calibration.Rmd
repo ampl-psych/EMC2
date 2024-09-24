@@ -60,10 +60,10 @@ library(EMC2)
 
 ### LBA
 
-First we specify a design and a prior for the model. EMC2 assumes normal priors on the parameters. Thus, some parameters are transformed to better match the normal prior and to satisfy the assumption of the normal distribution to have full support on the real line. To check the parameter transformations we use `?LBA` .
+To run SBC we specify a design and a prior for the model. EMC2 assumes normal priors on the parameters for non-hierarchical models. Thus, some parameters are transformed to better match the normal prior and to satisfy the assumption of the normal distribution to have full support on the real line. To check the parameter transformations we use `?LBA` .
 
 
-```{r}
+```{r, echo=TRUE, message=FALSE, warning=FALSE, results='hide'}
 ?LBA
 matchfun <- function(d) d$S == d$lR
 
@@ -80,7 +80,7 @@ prior_LBA <- prior(design_LBA, type = "single",
 ```
 
 Now we plot the prior, with `map = TRUE` (the default) to see how the implied prior on the transformed parameters.
-```{r}
+```{r, fig.alt = "Prior for LBA non-hierarchical model"}
 plot_prior(prior_LBA, design_LBA)
 ```
 

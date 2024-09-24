@@ -198,18 +198,21 @@ However, given that estimating hundreds of models is quite time
 consuming and practically unfeasible without a computational server, we
 recommend running SBC on non-hierarchical models for typical
 applications. Here we use the LBA and DDM to illustrate non-hierarchical
-SBC.</p>
+SBC. First we clear our workspace and load EMC2</p>
+<div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/rm.html" class="external-link">rm</a></span><span class="op">(</span>list <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/ls.html" class="external-link">ls</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://ampl-psych.github.io/EMC2/">EMC2</a></span><span class="op">)</span> </span></code></pre></div>
 <div class="section level3">
 <h3 id="lba">LBA<a class="anchor" aria-label="anchor" href="#lba"></a>
 </h3>
-<p>First we specify a design and a prior for the model. EMC2 assumes
-normal priors on the parameters. Thus, some parameters are transformed
-to better match the normal prior and to satisfy the assumption of the
-normal distribution to have full support on the real line. To check the
-parameter transformations we use <code><a href="../reference/LBA.html">?LBA</a></code> .</p>
-<div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va">EMC2</span><span class="op">)</span></span>
-<span><span class="op">?</span><span class="va">LBA</span></span>
+<p>To run SBC we specify a design and a prior for the model. EMC2
+assumes normal priors on the parameters for non-hierarchical models.
+Thus, some parameters are transformed to better match the normal prior
+and to satisfy the assumption of the normal distribution to have full
+support on the real line. To check the parameter transformations we use
+<code><a href="../reference/LBA.html">?LBA</a></code> .</p>
+<div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="op">?</span><span class="va">LBA</span></span>
 <span><span class="va">matchfun</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">d</span><span class="op">)</span> <span class="va">d</span><span class="op">$</span><span class="va">S</span> <span class="op">==</span> <span class="va">d</span><span class="op">$</span><span class="va">lR</span></span>
 <span></span>
 <span><span class="va">design_LBA</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/design.html">design</a></span><span class="op">(</span>factors<span class="op">=</span><span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>subjects<span class="op">=</span><span class="fl">1</span>,S<span class="op">=</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"left"</span>, <span class="st">"right"</span><span class="op">)</span><span class="op">)</span>,</span>
@@ -219,16 +222,19 @@ parameter transformations we use <code><a href="../reference/LBA.html">?LBA</a><
 <span>                     constants<span class="op">=</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>sv<span class="op">=</span><span class="fu"><a href="https://rdrr.io/r/base/Log.html" class="external-link">log</a></span><span class="op">(</span><span class="fl">1</span><span class="op">)</span><span class="op">)</span>,</span>
 <span>                     model <span class="op">=</span> <span class="va">LBA</span><span class="op">)</span></span>
 <span></span>
-<span><span class="va">prior_in</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/prior.html">prior</a></span><span class="op">(</span><span class="va">design_LBA</span>, type <span class="op">=</span> <span class="st">"single"</span>,</span>
+<span><span class="va">prior_LBA</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/prior.html">prior</a></span><span class="op">(</span><span class="va">design_LBA</span>, type <span class="op">=</span> <span class="st">"single"</span>,</span>
 <span>                  pmean <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">1.3</span>, <span class="fl">.7</span>, <span class="fu"><a href="https://rdrr.io/r/base/Log.html" class="external-link">log</a></span><span class="op">(</span><span class="fl">.8</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/Log.html" class="external-link">log</a></span><span class="op">(</span><span class="fl">.2</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/Log.html" class="external-link">log</a></span><span class="op">(</span><span class="fl">.3</span><span class="op">)</span><span class="op">)</span>,</span>
 <span>                  psd <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">.2</span>, <span class="fl">.1</span>, <span class="fl">.1</span>, <span class="fl">.05</span>, <span class="fl">.05</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
 <p>Now we plot the prior, with <code>map = TRUE</code> (the default) to
 see how the implied prior on the transformed parameters.</p>
+<div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="fu"><a href="../reference/plot_prior.html">plot_prior</a></span><span class="op">(</span><span class="va">prior_LBA</span>, <span class="va">design_LBA</span><span class="op">)</span></span></code></pre></div>
+<p><img src="Simulation-based%20Calibration_files/figure-html/unnamed-chunk-4-1.png" alt="Prior for LBA non-hierarchical model" width="700"></p>
 <p>Next we can simply run <code>run_SBC</code> with our specified design
 and prior. We can use ?run_SBC to see the description of the function
 arguments</p>
-<div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">result</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/SBC_single.html">SBC_single</a></span><span class="op">(</span><span class="va">design_LBA</span>, <span class="va">prior_in</span>, replicates <span class="op">=</span> <span class="fl">500</span>, trials <span class="op">=</span> <span class="fl">100</span>, plot_data <span class="op">=</span> <span class="cn">F</span>,</span>
+<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">result</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/SBC_single.html">SBC_single</a></span><span class="op">(</span><span class="va">design_LBA</span>, <span class="va">prior_LBA</span>, replicates <span class="op">=</span> <span class="fl">500</span>, trials <span class="op">=</span> <span class="fl">100</span>, plot_data <span class="op">=</span> <span class="cn">F</span>,</span>
 <span>                  iter <span class="op">=</span> <span class="fl">1000</span>, n_post <span class="op">=</span> <span class="fl">1000</span><span class="op">)</span></span></code></pre></div>
 </div>
 </div>
