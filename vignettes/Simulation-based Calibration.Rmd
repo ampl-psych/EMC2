@@ -41,27 +41,24 @@ Here we briefly outline the steps to performing SBC, for more detail we refer th
 ### 5. Check Uniformity
 
 -   Aggregate the rank statistics across all simulated datasets. If your model is well-calibrated, the ranks should be uniformly distributed because each posterior should correctly reflect the uncertainty about the parameter.
--   Plot a histogram of the rank statistics. If the model is correctly calibrated, this histogram should be roughly uniform across all bins. Throughout we include dotted lines of the 2.5%, 50% and 97.5% quantile of where randomly generated uniform data is expected to fall in the histogram.
+-   Plot the rank statistics. Here we present both histograms of the rank statistic and plot that compares the cumulative rank to the expected cumulative density function (ecdf) of a uniform distribution.
 
-### 6. Interpret the Results
+## Non-hierarchical SBC in *EMC2*
 
--   **Uniform Distribution**: If the rank histogram is uniform, it suggests that the posterior distributions are well-calibrated and the model properly reflects the uncertainty in the parameters.
--   **Non-Uniform Distribution**: If the rank histogram is not uniform (e.g., it shows peaks or troughs), it suggests that the model might be mis-specified. For example, if the histogram is skewed, it might indicate that the model is underestimating or overestimating uncertainty.
-
-## Non-hierarchical SBC in EMC2
-
-*EMC2* allows for both hierarchical and non-hierarchical estimation. Given the desirable statistical and estimation properties of hierarchical models, we normally recommend to use hierarchical models. However, given that estimating hundreds of models is quite time consuming and practically unfeasible without a computational server, we recommend running SBC on non-hierarchical models for typical applications. Here we use the LBA and DDM to illustrate non-hierarchical SBC. First we clear our workspace and load EMC2
+*EMC2* allows for both hierarchical and non-hierarchical estimation. Given the desirable statistical and estimation properties of hierarchical models, we normally recommend to use hierarchical models. However, given that estimating hundreds of models is quite time consuming and practically unfeasible without a computational server, we recommend running SBC on non-hierarchical models for typical applications. Here we use the LBA and DDM to illustrate non-hierarchical SBC. First we clear our workspace and load *EMC2*
 
 ```{r, results = "hide"}
 rm(list = ls())
 library(EMC2) 
 ```
 
+### Compression
+
+Before we start with the SBC, we want to give a quick note on datacompression. By default uses compression to 20ms, since typical lab set-ups do not allow response times to be measured with a higher resolution. However, generated data is not subject to the same physical constraints. Therefore, and to avoid biases, compression is turned off. To turn on compression regardless, you can set `compression = TRUE`, and set the resolution using `rt_resolution = 0.02 (for example)` in the `run_sbc` function, which will speed up computation but potentially introduces biases.
 
 ### LBA
 
-To run SBC we specify a design and a prior for the model. EMC2 assumes normal priors on the parameters for non-hierarchical models. Thus, some parameters are transformed to better match the normal prior and to satisfy the assumption of the normal distribution to have full support on the real line. To check the parameter transformations we use `?LBA` .
-
+To run SBC we specify a design and a prior for the model. *EMC2* assumes normal priors on the parameters for non-hierarchical models. Thus, some parameters are transformed to better match the normal prior and to satisfy the assumption of the normal distribution to have full support on the real line. To check the parameter transformations we use `?LBA` .
 
 ```{r, echo=TRUE, message=FALSE, warning=FALSE, results='hide'}
 ?LBA
@@ -80,13 +77,55 @@ prior_LBA <- prior(design_LBA, type = "single",
 ```
 
 Now we plot the prior, with `map = TRUE` (the default) to see how the implied prior on the transformed parameters.
-```{r, fig.alt = "Prior for LBA non-hierarchical model"}
+
+```{r, fig.alt = "Prior for LBA non-hierarchical model", fig.height = 5}
 plot_prior(prior_LBA, design_LBA)
 ```
 
-Next we can simply run `run_SBC` with our specified design and prior.
-We can use ?run_SBC to see the description of the function arguments
+Next we can simply run `run_sbc` with our specified design and prior. We can use `?run_sbc` to see the description of the function arguments
+
 ```{r, eval=FALSE}
-result <- SBC_single(design_LBA, prior_LBA, replicates = 500, trials = 100, plot_data = F,
-                  iter = 1000, n_post = 1000)
+sbc_LBA_single <- run_sbc(design_LBA, prior_LBA, replicates = 500, trials = 100, plot_data = FALSE,
+                  iter = 1000, n_post = 1000, fileName = "SBC_LBA_single.RData",
+                  cores_per_chain = 30)
 ```
+
+In non-hierarchical models, setting `cores_per_chain = 30` will estimate 30 simulated data-sets simultaneously. Which is feasible on the computational server we used. But given that the LBA estimates so fast, non-hierarchical SBC is also feasible on a personal computer. It is recommended to specify `fileName` to store intermediary results in case of crashes.
+
+*EMC2* also comes with plotting functions that allow us to visualize the results. First we can plot the standard histograms, with a number of equally spaced bins between 0 and 1 of the normalized rank statistic.
+
+```{r, include=FALSE}
+load("SBC_LBA_single.RData")
+```
+
+```{r, fig.height = 6, fig.alt = "Histogram SBC LBA single"}
+plot_sbc_hist(sbc_LBA_single, bins = 10)
+```
+
+Here the gray lines indicate the 2.5, 50 and 97.5% percentile of where *n* samples from a uniform distribution are expected to fall. As we can see most of the bins are are nicely within these bounds and no clear pattern emerges. However, this visualization very much depends on bin size, as pointed out by X. Therefore EMC also comes with plots that visualize the difference in the observed cumulative rank and the expected cumulative density function (ecdf) of a uniform distribution (for details see X).
+
+```{r, fig.height = 6, fig.alt = "ecdf LBA single"}
+plot_sbc_ecdf(sbc_LBA_single)
+```
+
+Notice the resemblance with eggs? The blue area visualizes the 95% area of expected cumulative values. As with real eggs, the observed line, (i.e. the cracks) should lie somewhere on the egg. For an explanation and guide to interpretation to these plots we recommend the following article <https://hyunjimoon.github.io/SBC/articles/rank_visualizations.html>. In the remainder of this article we'll use these plots to visualize SBC results.
+
+### DDM
+
+Next we test non-hierarchical for the DDM as well. RESULTS
+
+## Hierarchical SBC
+
+Besides being a friendly introduction to doing SBC in *EMC2*, this post also serves as a test of unbiased estimation of the four main classes of EAMs included in *EMC2*. Still we would recommend the user to typically run SBC on non-hierarchical models, except when doing model development.
+
+The approach to running hierarchical SBC is very similar to running non-hierarchical SBC. However we can now write the model of data $y$ as $y \sim p(y|\alpha)p(\alpha|\theta)p(\theta)$. Here $p(\theta)$ is the prior on the group-level parameters. The generated data for one sample $y^{(i)}$ is still generated from $\alpha^{(i)}$, but with $\alpha^{(i)}$ generated from $\theta^{(i)}$, with $\theta^{(i)} \sim p(\theta)$.
+
+### Prior structure
+
+Although in the paper we rely on the prior structure defined by X, which is also the default in *EMC2*, this prior structure has a lot of mass near 0 for the group-level variance parameters (a half*-t* distribution). From a Bayesian posterior view these prior structures are attractive (see X), since they do not artificially increase the variance estimates and thus err on the safe side. However, in SBC data-generation this means we sample many data-sets with no individual differences. Unfortunately, for numerical reasons *EMC2* cannot recover a true zero on group-level variances. Thus, *EMC2* will both have difficulty converging and it will identify, albeit very small, some degree of individual differences. Therefore, the `type = "standard"` prior structure results in biased SBC variance estimates. Therefore, in SBC we recommend using `type = "diagonal-gamma"`, which as the name suggests uses gamma distributions for the variance parameters, which have less mass at zero.
+
+Nevertheless we believe the standard prior is not problematic in real data, since it will always contain at least some degree of individual differences (only a true zero cannot be recovered).
+
+### LBA
+
+Now we dive into hierarchical SBC for the LBA model.

@@ -132,7 +132,19 @@ SBC_single <- function(design_in, prior_in, replicates = 250, trials = 100,
               prior = list(alpha = prior_alpha)))
 }
 
-plot_sbc <- function(ranks, bins = 10, layout = NA, ...){
+#' Plot the histogram of the observed rank statistics of SBC
+#'
+#' Note that this plot is dependent on the number of bins, and a more general
+#' visualization is to use `plot_sbc_ecdf`
+#'
+#' @param ranks A list of named dataframes of the rank statistic
+#' @param bins An integer specifying the number of bins to use when plotting the histogram
+#' @param layout Optional. A numeric vector specifying the layout using `par(mfrow = layout)`
+#'
+#' @return No returns
+#' @export
+plot_sbc_hist <- function(ranks, bins = 10, layout = NA, ...){
+  if(!is.null(ranks$rank)) ranks <- ranks$rank
   selects <- names(ranks)
   oldpar <- par(no.readonly = TRUE) # code line i
   on.exit(par(oldpar)) # code line i + 1
@@ -206,7 +218,19 @@ make_smooth <- function(x, y, N = 1000){
   return(predict(lo,xl)$y)
 }
 
-plot_ecdf_sbc <- function(ranks, layout = NA){
+#' Plot the ECDF difference in SBC ranks
+#'
+#' Plots the difference in observed cumulative rank statistics and the
+#' expected cumulative distribution of a uniform distribution. The blue
+#' shaded areas indicate the 95% credible interval.
+#'
+#' @param ranks A list of named dataframes of the rank statistic
+#' @param layout Optional. A numeric vector specifying the layout using `par(mfrow = layout)`
+#'
+#' @return No returns
+#' @export
+plot_sbc_ecdf <- function(ranks, layout = NA){
+  if(!is.null(ranks$rank)) ranks <- ranks$rank
   selects <- names(ranks)
   oldpar <- par(no.readonly = TRUE) # code line i
   on.exit(par(oldpar)) # code line i + 1

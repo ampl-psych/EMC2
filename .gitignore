@@ -9,3 +9,4 @@ test.R
 *.RData
 *.pdf
 .DS_Store
+docs

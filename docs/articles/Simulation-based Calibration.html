@@ -163,28 +163,10 @@ than the true
 model is well-calibrated, the ranks should be uniformly distributed
 because each posterior should correctly reflect the uncertainty about
 the parameter.</li>
-<li>Plot a histogram of the rank statistics. If the model is correctly
-calibrated, this histogram should be roughly uniform across all bins.
-Throughout we include dotted lines of the 2.5%, 50% and 97.5% quantile
-of where randomly generated uniform data is expected to fall in the
-histogram.</li>
-</ul>
-</div>
-<div class="section level3">
-<h3 id="interpret-the-results">6. Interpret the Results<a class="anchor" aria-label="anchor" href="#interpret-the-results"></a>
-</h3>
-<ul>
-<li>
-<strong>Uniform Distribution</strong>: If the rank histogram is
-uniform, it suggests that the posterior distributions are
-well-calibrated and the model properly reflects the uncertainty in the
-parameters.</li>
-<li>
-<strong>Non-Uniform Distribution</strong>: If the rank histogram is
-not uniform (e.g., it shows peaks or troughs), it suggests that the
-model might be mis-specified. For example, if the histogram is skewed,
-it might indicate that the model is underestimating or overestimating
-uncertainty.</li>
+<li>Plot the rank statistics. Here we present both histograms of the
+rank statistic and plot that compares the cumulative rank to the
+expected cumulative density function (ecdf) of a uniform
+distribution.</li>
 </ul>
 </div>
 </div>
@@ -230,12 +212,37 @@ see how the implied prior on the transformed parameters.</p>
 <div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/plot_prior.html">plot_prior</a></span><span class="op">(</span><span class="va">prior_LBA</span>, <span class="va">design_LBA</span><span class="op">)</span></span></code></pre></div>
 <p><img src="Simulation-based%20Calibration_files/figure-html/unnamed-chunk-4-1.png" alt="Prior for LBA non-hierarchical model" width="700"></p>
-<p>Next we can simply run <code>run_SBC</code> with our specified design
-and prior. We can use ?run_SBC to see the description of the function
-arguments</p>
+<p>Next we can simply run <code>run_sbc</code> with our specified design
+and prior. We can use <code><a href="../reference/run_sbc.html">?run_sbc</a></code> to see the description of
+the function arguments</p>
 <div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">result</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/SBC_single.html">SBC_single</a></span><span class="op">(</span><span class="va">design_LBA</span>, <span class="va">prior_LBA</span>, replicates <span class="op">=</span> <span class="fl">500</span>, trials <span class="op">=</span> <span class="fl">100</span>, plot_data <span class="op">=</span> <span class="cn">F</span>,</span>
-<span>                  iter <span class="op">=</span> <span class="fl">1000</span>, n_post <span class="op">=</span> <span class="fl">1000</span><span class="op">)</span></span></code></pre></div>
+<code class="sourceCode R"><span><span class="va">sbc_LBA_single</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/run_sbc.html">run_sbc</a></span><span class="op">(</span><span class="va">design_LBA</span>, <span class="va">prior_LBA</span>, replicates <span class="op">=</span> <span class="fl">500</span>, trials <span class="op">=</span> <span class="fl">100</span>, plot_data <span class="op">=</span> <span class="cn">FALSE</span>,</span>
+<span>                  iter <span class="op">=</span> <span class="fl">1000</span>, n_post <span class="op">=</span> <span class="fl">1000</span>, fileName <span class="op">=</span> <span class="st">"SBC_LBA_single.RData"</span>,</span>
+<span>                  cores_per_chain <span class="op">=</span> <span class="fl">30</span><span class="op">)</span></span></code></pre></div>
+<p>In non-hierarchical models, setting <code>cores_per_chain = 30</code>
+will estimate 30 simulated data-sets simultaneously. Which is feasible
+on the computational server we used. But given that the LBA estimates so
+fast, non-hierarchical SBC is also feasible on a personal computer. It
+is recommended to specify a fileName to store intermediary results in
+case of crashes.</p>
+<p>EMC2 also comes with plotting functions that allow us to visualize
+the results. First we can plot the standard histograms, with a number of
+equally spaced bins between 0 and 1 of the normalized rank
+statistic.</p>
+<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="fu"><a href="../reference/plot_sbc_hist.html">plot_sbc_hist</a></span><span class="op">(</span><span class="va">sbc_LBA_single</span><span class="op">$</span><span class="va">rank</span>, bins <span class="op">=</span> <span class="fl">10</span><span class="op">)</span></span></code></pre></div>
+<p><img src="Simulation-based%20Calibration_files/figure-html/unnamed-chunk-7-1.png" alt="Histogram SBC LBA single" width="700"></p>
+<p>Here the gray lines indicate the 2.5, 50 and 97.5% percentile of
+where <em>n</em> samples from a uniform distribution are expected to
+fall. As we can see most of the bins are are nicely within these bounds
+and no clear pattern emerges. However, this visualization very much
+depends on bin size, as pointed out by X. Therefore EMC also comes with
+plots that visualize the difference in the observed cumulative rank and
+the expected cumulative density function (ecdf) of a uniform
+distribution.</p>
+<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="fu"><a href="../reference/plot_sbc_ecdf.html">plot_sbc_ecdf</a></span><span class="op">(</span><span class="va">sbc_LBA_single</span><span class="op">$</span><span class="va">rank</span><span class="op">)</span></span></code></pre></div>
+<p><img src="Simulation-based%20Calibration_files/figure-html/unnamed-chunk-8-1.png" alt="ecdf LBA single" width="700"></p>
 </div>
 </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>

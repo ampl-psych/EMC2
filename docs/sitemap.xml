@@ -32,6 +32,7 @@
 <url><loc>https://ampl-psych.github.io/EMC2/reference/get_pars.html</loc></url>
 <url><loc>https://ampl-psych.github.io/EMC2/reference/get_prior_blocked.html</loc></url>
 <url><loc>https://ampl-psych.github.io/EMC2/reference/get_prior_diag.html</loc></url>
+<url><loc>https://ampl-psych.github.io/EMC2/reference/get_prior_diag_gamma.html</loc></url>
 <url><loc>https://ampl-psych.github.io/EMC2/reference/get_prior_factor.html</loc></url>
 <url><loc>https://ampl-psych.github.io/EMC2/reference/get_prior_single.html</loc></url>
 <url><loc>https://ampl-psych.github.io/EMC2/reference/get_prior_standard.html</loc></url>
@@ -51,6 +52,8 @@
 <url><loc>https://ampl-psych.github.io/EMC2/reference/plot_pars.html</loc></url>
 <url><loc>https://ampl-psych.github.io/EMC2/reference/plot_prior.html</loc></url>
 <url><loc>https://ampl-psych.github.io/EMC2/reference/plot_relations.html</loc></url>
+<url><loc>https://ampl-psych.github.io/EMC2/reference/plot_sbc_ecdf.html</loc></url>
+<url><loc>https://ampl-psych.github.io/EMC2/reference/plot_sbc_hist.html</loc></url>
 <url><loc>https://ampl-psych.github.io/EMC2/reference/posterior_summary.html</loc></url>
 <url><loc>https://ampl-psych.github.io/EMC2/reference/predict.emc.html</loc></url>
 <url><loc>https://ampl-psych.github.io/EMC2/reference/prior.html</loc></url>
@@ -58,6 +61,7 @@
 <url><loc>https://ampl-psych.github.io/EMC2/reference/recovery.html</loc></url>
 <url><loc>https://ampl-psych.github.io/EMC2/reference/run_bridge_sampling.html</loc></url>
 <url><loc>https://ampl-psych.github.io/EMC2/reference/run_emc.html</loc></url>
+<url><loc>https://ampl-psych.github.io/EMC2/reference/run_sbc.html</loc></url>
 <url><loc>https://ampl-psych.github.io/EMC2/reference/sampled_p_vector.html</loc></url>
 <url><loc>https://ampl-psych.github.io/EMC2/reference/samples_LNR.html</loc></url>
 <url><loc>https://ampl-psych.github.io/EMC2/reference/subset.emc.html</loc></url>
