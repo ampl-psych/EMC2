@@ -110,6 +110,7 @@ SBC_single <- function(design_in, prior_in, replicates = 250, trials = 100,
       if(i > replicates) next
       design_in$Ffactors$subjects <- j
       data <- rbind(data, make_data(t(prior_alpha[,,i]),design_in, trials, model = design_in$model))
+      data$subjects <- j
       i <- i + 1
     }
     if(plot_data){
