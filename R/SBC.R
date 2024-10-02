@@ -109,8 +109,9 @@ SBC_single <- function(design_in, prior_in, replicates = 250, trials = 100,
     for(j in 1:dots$cores_per_chain){
       if(i > replicates) next
       design_in$Ffactors$subjects <- j
-      data <- rbind(data, make_data(t(prior_alpha[,,i]),design_in, trials, model = design_in$model))
-      data$subjects <- j
+      tmp <- make_data(t(prior_alpha[,,i]),design_in, trials, model = design_in$model)
+      tmp$subjects <- j
+      data <- rbind(data, tmp)
       i <- i + 1
     }
     if(plot_data){
