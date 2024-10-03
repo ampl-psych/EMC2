@@ -1,4 +1,13 @@
-rDDM <- function(lR,pars,precision=2.5,ok=rep(TRUE,length(lR)))
+find_duplicate_indices <- function(df) {
+  df <- as.data.frame(df)
+  # Convert dataframe rows to character strings for fast comparison
+  row_strings <- do.call(paste, c(df, sep = "_"))
+  first_occurrence <- !duplicated(row_strings)
+  index_map <- match(row_strings, row_strings[first_occurrence])
+  return(index_map)
+}
+
+rDDM <- function(lR,pars,precision=1e-3,ok=rep(TRUE,length(lR)))
   # lR is an empty latent response factor lR with one level for each boundary
   # pars is a matrix of parameter values named as in p_types
   # lower is mapped to first level of lR and upper to second
@@ -10,15 +19,26 @@ rDDM <- function(lR,pars,precision=2.5,ok=rep(TRUE,length(lR)))
 {
   bad <- rep(NA,length(lR))
   out <- data.frame(response=bad,rt=bad)
-  out[ok,2:1] <- rtdists::rdiffusion(length(lR[ok]), a = pars[ok,"a"], v = pars[ok,"v"], t0 = pars[ok,"t0"],
-                            z = pars[ok,"z"], d = pars[ok,"d"], sz = pars[ok,"sz"], sv = pars[ok,"sv"],
-                            st0 = pars[ok,"st0"], s = pars[ok,"s"])
+  out_ok <- out[ok,]
+  pars <- pars[ok,]
+  lR <- lR[ok]
+  idx <- find_duplicate_indices(pars)
+  for(id in unique(idx)){
+    is_id <- which(idx == id)
+    first <- is_id[1]
+    tmp <- WienR::rWDM(N = length(is_id), a = pars[first,"a"], v = pars[first,"v"], t0 = pars[first,"t0"],
+                       w = pars[first,"z"], sw = pars[first,"sz"], sv = pars[first,"sv"],
+                       st0 = pars[first,"st0"], precision = precision)
+    tmp <- data.frame(response = tmp$response, rt = tmp$q)
+    out_ok[is_id,] <- tmp[sample(nrow(tmp)),]
+  }
+  out[ok,] <- out_ok
   # cbind.data.frame(R=factor(out[,"response"],levels=c("lower","upper"),labels=levels(lR)),rt=out[,"rt"])
-  cbind.data.frame(R=factor(out[,"response"],levels=1:2,labels=levels(lR)),rt=out[,"rt"])
+  cbind.data.frame(R=factor(out[,"response"], labels = levels(lR)),rt=out[,"rt"])
 }
 
 
-dDDM <- function(rt,R,pars,precision=2.5)
+dDDM <- function(rt,R,pars,precision=1e-3)
   # DDM density for response factor R with rt
   # lower is mapped to first level of R and upper to second
   # test
@@ -27,19 +47,18 @@ dDDM <- function(rt,R,pars,precision=2.5)
   # R <- factor(c("left","right")); rt=c(1,1)
 {
   levels(R) <- c("lower","upper")
-  rtdists::ddiffusion(rt,response=as.character(R),
-             a = pars[,"a"], v = pars[,"v"], t0 = pars[,"t0"], z = pars[,"z"],d = pars[,"d"],
-             sz = pars[,"sz"], sv = pars[,"sv"],st0 = pars[,"st0"], s = pars[,"s"])
+  res <- WienR::dWDM(rt, response=as.character(R), a = pars[,"a"], v = pars[,"v"], t0 = pars[,"t0"], w = pars[,"z"],
+       sw = pars[,"sz"], sv = pars[,"sv"],st0 = pars[,"st0"], precision = precision)$value
+  return(res)
 }
 
-pDDM <- function(rt,R,pars,precision=2.5)
+pDDM <- function(rt,R,pars,precision=1e-3)
   # DDM cdf for response factor R with rt
   # lower is mapped to first level of R and upper to second
 {
   levels(R) <- c("lower","upper")
-  rtdists::pdiffusion(rt,response=as.character(R),
-             a = pars[,"a"], v = pars[,"v"], t0 = pars[,"t0"], z = pars[,"z"],d = pars[,"d"],
-             sz = pars[,"sz"], sv = pars[,"sv"],st0 = pars[,"st0"], s = pars[,"s"])
+  WienR::pWDM(rt, response=as.character(R), a = pars[,"a"], v = pars[,"v"], t0 = pars[,"t0"], w = pars[,"z"],
+              sw = pars[,"sz"], sv = pars[,"sv"],st0 = pars[,"st0"], precision = precision)$value
 }
 
 
@@ -93,7 +112,7 @@ DDM <- function(){
   list(
     type="DDM",
     c_name = "DDM",
-    p_types=c("v" = 1,"a" = log(1),"sv" = log(0),"t0" = log(0),"st0" = log(0),"s" = log(1),"Z" = qnorm(0.5),"SZ" = qnorm(0),"DP" = qnorm(0.5)),
+    p_types=c("v" = 1,"a" = log(1),"sv" = log(0),"t0" = log(0),"st0" = log(0),"s" = log(1),"Z" = qnorm(0.5),"SZ" = qnorm(0)),
     # The "TZD" parameterization defined relative to the "rtdists" package is:
     # natural scale
     #   v = rtdists rate v (positive favors upper)
@@ -118,78 +137,31 @@ DDM <- function(){
     },
     # Trial dependent parameter transform
     Ttransform = function(pars,dadm) {
-      pars <- cbind(pars,z=pars[,"a"]*pars[,"Z"],
-                    sz = 2*pars[,"SZ"]*pars[,"a"]*apply(cbind(pars[,"Z"],1-pars[,"Z"]),1,min))
-      pars <- cbind(pars, d = pars[,"t0"]*(2*pars[,"DP"]-1))
-        !( abs(pars[,"v"])> 20 | pars[,"a"]> 10 | pars[,"sv"]> 10 | pars[,"SZ"]> .999 |
-             pars[,"t0"] < .05 | pars[,"st0"]>1)
+      pars <- cbind(pars,z=pars[,"Z"],
+                    sz = 2*pars[,"SZ"]*apply(cbind(pars[,"Z"],1-pars[,"Z"]),1,min))
+      attr(pars,"ok") <- !( abs(pars[,"v"])> 20 | pars[,"a"]> 10 | pars[,"sv"]> 10 | pars[,"SZ"]> .999 |
+             pars[,"t0"] < .05 | pars[,"st0"]>5)
       if (pars[1,"sv"] !=0) attr(pars,"ok") <- attr(pars,"ok") & pars[,"sv"] > .001
       if (pars[1,"SZ"] !=0) attr(pars,"ok") <- attr(pars,"ok") & pars[,"SZ"] > .001
+      attr(pars, "ok") <- rep(TRUE, nrow(pars))
       pars
-    },
-    transform = function(p) p,
-    # Random function
-    rfun=function(lR=NULL,pars) {
-      ok <- !( abs(pars[,"v"])> 20 | pars[,"a"]> 10 | pars[,"sv"]> 10 | pars[,"SZ"]> .999 |
-                 pars[,"st0"]>1 | pars[,"t0"] < .05)
-      if (pars[1,"sv"] !=0) ok <- ok & pars[,"sv"] > .001
-      if (pars[1,"SZ"] !=0) ok <- ok & pars[,"SZ"] > .001
-      if (is.null(lR)) ok else rDDM(lR,pars,precision=3,ok)
-    },
-    # Density function (PDF)
-    dfun=function(rt,R,pars) dDDM(rt,R,pars,precision=3),
-    # Probability function (CDF)
-    pfun=function(rt,R,pars) pDDM(rt,R,pars,precision=3),
-    log_likelihood=function(p_vector,dadm,min_ll=log(1e-10)){
-      log_likelihood_ddm(p_vector=p_vector, dadm = dadm, min_ll = min_ll)
-    }
-  )
-}
-
-
-DDMt0natural <- function(){
-  list(
-    type="DDM",
-    p_types=c("v" = 1,"a" = log(1),"sv" = log(1),"t0" = 0,"st0" = log(0),"s" = log(1),"Z" = qnorm(0.5),"SZ" = qnorm(0),"DP" = qnorm(0.5)),
-    # Like "TZD" but t0 on natural scale and kept positive with ok so
-    # t0 can be combined additively on natural scale
-    Ntransform=function(x) {
-      islog <- dimnames(x)[[2]] %in% c("a","sv","st0","s")
-      isprobit <- dimnames(x)[[2]] %in% c("Z","SZ","DP")
-      x[,islog] <- exp(x[,islog])
-      x[,isprobit] <- pnorm(x[,isprobit])
-      x
     },
     # p_vector transform, sets s as a scaling parameter
     transform = function(p) p,
-    # Trial dependent parameter transform
-    # Trial dependent parameter transform
-    Ttransform = function(pars,dadm) {
-      pars <- cbind(pars,z=pars[,"a"]*pars[,"Z"],
-                    sz = 2*pars[,"SZ"]*pars[,"a"]*apply(cbind(pars[,"Z"],1-pars[,"Z"]),1,min))
-      pars <- cbind(pars, d = pars[,"t0"]*(2*pars[,"DP"]-1))
-      attr(pars,"ok") <-
-        !( abs(pars[,"v"])> 20 | pars[,"a"]> 10 | pars[,"sv"]> 10 | pars[,"SZ"]> .999 |
-           pars[,"t0"] < .05 | pars[,"st0"]>.2)
-      if (pars[1,"sv"] !=0) attr(pars,"ok") <- attr(pars,"ok") & pars[,"sv"] > .001
-      if (pars[1,"SZ"] !=0) attr(pars,"ok") <- attr(pars,"ok") & pars[,"SZ"] > .001
-      pars
-    },
     # Random function
     rfun=function(lR=NULL,pars) {
       ok <- !( abs(pars[,"v"])> 20 | pars[,"a"]> 10 | pars[,"sv"]> 10 | pars[,"SZ"]> .999 |
-                 pars[,"t0"] < .05 | pars[,"st0"]>.2)
+                 pars[,"st0"]>5 | pars[,"t0"] < .05)
       if (pars[1,"sv"] !=0) attr(pars,"ok") <- attr(pars,"ok") & pars[,"sv"] > .001
       if (pars[1,"SZ"] !=0) attr(pars,"ok") <- attr(pars,"ok") & pars[,"SZ"] > .001
-      if (is.null(lR)) ok else rDDM(lR,pars,precision=2.5,ok)
+      if (is.null(lR)) ok else rDDM(lR,pars,precision=1e-3,ok)
     },
     # Density function (PDF)
-    dfun=function(rt,R,pars) dDDM(rt,R,pars,precision=2.5),
+    dfun=function(rt,R,pars) dDDM(rt,R,pars,precision=1e-3),
     # Probability function (CDF)
-    pfun=function(rt,R,pars) pDDM(rt,R,pars,precision=2.5),
+    pfun=function(rt,R,pars) pDDM(rt,R,pars,precision=1e-3),
     log_likelihood=function(p_vector,dadm,min_ll=log(1e-10)){
       log_likelihood_ddm(p_vector=p_vector, dadm = dadm, min_ll = min_ll)
     }
   )
-
 }

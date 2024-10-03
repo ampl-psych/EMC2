@@ -352,26 +352,26 @@ NumericVector d_DDM_c (NumericVector rts, NumericVector R, List group_idx, Numer
 }
 
 
-NumericMatrix Ntransform_DDM(NumericMatrix x) {
-  NumericMatrix out(clone(x));
-  CharacterVector is_log = {"a","sv","t0","st0","s"};
-  CharacterVector is_probit = {"Z","SZ","DP"};
-  LogicalVector col_idx_log = contains_multiple(colnames(x), is_log);
-  LogicalVector col_idx_probit = contains_multiple(colnames(x), is_probit);
-  for(int i = 0; i < x.ncol(); i ++){
-    if(col_idx_log[i] == TRUE){
-      out (_, i) = exp(out(_, i));
-    };
-    if(col_idx_probit[i] == TRUE){
-      out (_, i) = pnorm_multiple(out(_, i));
-    };
-  };
-  return(out);
-}
-
-NumericVector transform_DDM(NumericVector x){
-  return(x);
-}
+// NumericMatrix Ntransform_DDM(NumericMatrix x) {
+//   NumericMatrix out(clone(x));
+//   CharacterVector is_log = {"a","sv","t0","st0","s"};
+//   CharacterVector is_probit = {"Z","SZ","DP"};
+//   LogicalVector col_idx_log = contains_multiple(colnames(x), is_log);
+//   LogicalVector col_idx_probit = contains_multiple(colnames(x), is_probit);
+//   for(int i = 0; i < x.ncol(); i ++){
+//     if(col_idx_log[i] == TRUE){
+//       out (_, i) = exp(out(_, i));
+//     };
+//     if(col_idx_probit[i] == TRUE){
+//       out (_, i) = pnorm_multiple(out(_, i));
+//     };
+//   };
+//   return(out);
+// }
+//
+// NumericVector transform_DDM(NumericVector x){
+//   return(x);
+// }
 
 
 
