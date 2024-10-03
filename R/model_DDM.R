@@ -22,6 +22,7 @@ rDDM <- function(lR,pars,precision=1e-3,ok=rep(TRUE,length(lR)))
   out_ok <- out[ok,]
   pars <- pars[ok,]
   lR <- lR[ok]
+  pars <- as.matrix(pars);
   idx <- find_duplicate_indices(pars)
   for(id in unique(idx)){
     is_id <- which(idx == id)
