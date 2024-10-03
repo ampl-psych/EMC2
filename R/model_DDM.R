@@ -34,7 +34,7 @@ rDDM <- function(lR,pars,precision=1e-3,ok=rep(TRUE,length(lR)))
   }
   out[ok,] <- out_ok
   # cbind.data.frame(R=factor(out[,"response"],levels=c("lower","upper"),labels=levels(lR)),rt=out[,"rt"])
-  cbind.data.frame(R=factor(out[,"response"], labels = levels(lR)),rt=out[,"rt"])
+  cbind.data.frame(R=factor(out[,"response"], labels = levels(lR), levels = c("lower", "upper")),rt=out[,"rt"])
 }
 
 
