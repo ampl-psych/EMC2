@@ -1,7 +1,7 @@
 #' Simulation-based calibration
 #'
 #' Runs SBC for an EMC2 model and associated design. Returns
-#' normalized rank [0,1] and prior samples. For hierarchical modesl the group-level mean and
+#' normalized rank (between 0 and 1) and prior samples. For hierarchical models the group-level mean and
 #' the (implied) group-level (co-)variance are returned.
 #' For non-hierarchical models only the subject-level parameters rank is returned.
 #'
@@ -145,7 +145,7 @@ SBC_single <- function(design_in, prior_in, replicates = 250, trials = 100,
 #'
 #' @return No returns
 #' @export
-plot_sbc_hist <- function(ranks, bins = 10, layout = NA, ...){
+plot_sbc_hist <- function(ranks, bins = 10, layout = NA){
   if(!is.null(ranks$rank)) ranks <- ranks$rank
   selects <- names(ranks)
   oldpar <- par(no.readonly = TRUE) # code line i

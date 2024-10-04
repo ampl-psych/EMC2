@@ -42,8 +42,6 @@ LBA_s <- make_emc(dat, design_LBA, compress = F, n_chains = 1)
 RDM_s <- make_emc(dat, design_RDM, compress = F, n_chains = 1)
 DDM_s <- make_emc(dat, design_DDM, compress = F, n_chains = 1)
 
-make_data(p_DDM, design_DDM, n_trials = 10)
-
 test_that("LNR", {
   RNGkind("L'Ecuyer-CMRG")
   set.seed(123)

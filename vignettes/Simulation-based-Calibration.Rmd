@@ -3,6 +3,10 @@ title: "Simulation-based Calibration"
 description: "A guide to SBC in EMC2"
 author: "Niek Stevenson"
 output: rmarkdown::html_document
+vignette: >
+  %\VignetteIndexEntry{"Simulation-based Calibration"}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
 ---
 
 ```{r, echo = FALSE}
@@ -41,7 +45,7 @@ Here we briefly outline the steps to performing SBC, for more detail we refer th
 ### 5. Check Uniformity
 
 -   Aggregate the rank statistics across all simulated datasets. If your model is well-calibrated, the ranks should be uniformly distributed because each posterior should correctly reflect the uncertainty about the parameter.
--   Plot the rank statistics. Here we present both histograms of the rank statistic and plot that compares the cumulative rank to the expected cumulative density function (ecdf) of a uniform distribution.
+-   Plot the rank statistics. Here we present both histograms of the rank statistic and plot that compares the empirical cumulative rank to the cumulative density function of a uniform distribution.
 
 ## Non-hierarchical SBC in *EMC2*
 
@@ -102,7 +106,7 @@ load("SBC_LBA_single.RData")
 plot_sbc_hist(sbc_LBA_single, bins = 10)
 ```
 
-Here the gray lines indicate the 2.5, 50 and 97.5% percentile of where *n* samples from a uniform distribution are expected to fall. As we can see most of the bins are are nicely within these bounds and no clear pattern emerges. However, this visualization very much depends on bin size, as pointed out by X. Therefore EMC also comes with plots that visualize the difference in the observed cumulative rank and the expected cumulative density function (ecdf) of a uniform distribution (for details see X).
+Here the gray lines indicate the 2.5, 50 and 97.5% percentile of where *n* samples from a uniform distribution are expected to fall. As we can see most of the bins are are nicely within these bounds and no clear pattern emerges. However, this visualization very much depends on bin size, as pointed out by X. Therefore EMC also comes with plots that visualize the difference in the empirical cumulative density function (ecdf) and the cumulative density function of a uniform distribution (for details see X).
 
 ```{r, fig.height = 6, fig.alt = "ecdf LBA single"}
 plot_sbc_ecdf(sbc_LBA_single)
@@ -112,7 +116,39 @@ Notice the resemblance with eggs? The blue area visualizes the 95% area of expec
 
 ### DDM
 
-Next we test non-hierarchical for the DDM as well. RESULTS
+Next we test non-hierarchical for the DDM as well. Initial results actually showed bias in the estimation of non-decision time and non-decision time variability. Whereas we first based our DDM implementation on the *rtdists* package, the bias pushed us to test with alternative packages, after which we stumbled on the *WienR* package. Which not only boasts much faster likelihood evaluations, but also no longer shows bias in the SBC results. Hence in the newest CRAN release we adapted our C++ code to instead use the *WienR* *C++* routines.
+
+For the SBC itself we used the following prior and design settings, again being mindful of the required transformations.
+
+```{r, echo=TRUE, message=FALSE, warning=FALSE, results='hide', eval = FALSE}
+?DDM
+design_DDM <- design(factors=list(subjects=1,S=c("left", "right")),
+                       Rlevels = c("left", "right"),
+                       formula =list(v~1,a~1, t0~1, s~1, Z~1, sv~1, SZ~1, st0 ~ 1),
+                       constants=c(s=log(1)),
+                       model = DDM)
+
+
+prior_DDM <- prior(design_DDM, type = "single",
+                  pmean = c(1, log(.8), log(.3), qnorm(.5), log(.1), qnorm(.05), log(.05)),
+                  psd = c(.15, .15, .1, .05, .15, .15, .15))
+
+sbc_DDM_single <- run_sbc(design_DDM, prior_DDM, replicates = 500, trials = 100, fileName = "WienR_single.RData",
+               cores_per_chain = 30)
+
+```
+
+Next we plot the ECDF differ
+
+```{r, include=FALSE}
+load("SBC_DDM_single.RData")
+```
+
+```{r, fig.height = 6, fig.alt = "ecdf DDM single", fig.width= 10}
+plot_sbc_ecdf(sbc_DDM_single)
+```
+
+As you can see minor misfits in *a* and *sv* but nothing too worrying. To double check we did refits, that showed that this bias is not systematic.
 
 ## Hierarchical SBC
 

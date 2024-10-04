@@ -4,7 +4,6 @@
 #include "model_LBA.h"
 #include "model_RDM.h"
 #include "model_DDM.h"
-#include "model_fMRI.h"
 using namespace Rcpp;
 
 
@@ -79,15 +78,14 @@ double c_log_likelihood_DDM(NumericMatrix pars, DataFrame data,
                           double min_ll, List group_idx){
   const int n_out = expand.length();
   NumericVector rts = data["rt"];
-  NumericVector R = data["R"];
+  IntegerVector R = data["R"];
   NumericVector lls(n_trials);
   NumericVector lls_exp(n_out);
-  lls = log(d_DDM_c(rts, R, group_idx, pars));
+  lls = d_DDM_Wien(rts, R, pars);
   lls_exp = c_expand(lls, expand); // decompress
   lls_exp[is_na(lls_exp)] = min_ll;
   lls_exp[is_infinite(lls_exp)] = min_ll;
   lls_exp[lls_exp < min_ll] = min_ll;
-
   return(sum(lls_exp));
 }
 
@@ -154,11 +152,11 @@ NumericVector calc_ll(NumericMatrix p_matrix, DataFrame data, NumericVector cons
   NumericVector lls(n_particles);
   NumericVector p_vector(p_matrix.ncol());
   if(type == "MRI"){
-    for(int i = 0; i < n_particles; i++){
-      p_vector = p_matrix(i, _);
-      NumericMatrix designMatrix = data.attr("design_matrix_mri");
-      lls[i] = c_log_likelihood_fMRI(p_vector, data, designMatrix, min_ll);
-    }
+    // for(int i = 0; i < n_particles; i++){
+    //   p_vector = p_matrix(i, _);
+    //   NumericMatrix designMatrix = data.attr("design_matrix_mri");
+    //   lls[i] = c_log_likelihood_fMRI(p_vector, data, designMatrix, min_ll);
+    // }
   } else{
     CharacterVector p_names = colnames(p_matrix);
     NumericMatrix pars(n_trials, p_types.length());

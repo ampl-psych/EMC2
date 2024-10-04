@@ -4,7 +4,7 @@
 \alias{plot_sbc_hist}
 \title{Plot the histogram of the observed rank statistics of SBC}
 \usage{
-plot_sbc_hist(ranks, bins = 10, layout = NA, ...)
+plot_sbc_hist(ranks, bins = 10, layout = NA)
 }
 \arguments{
 \item{ranks}{A list of named dataframes of the rank statistic}

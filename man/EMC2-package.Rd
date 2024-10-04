@@ -29,8 +29,15 @@ Authors:
 Other contributors:
 \itemize{
   \item Steven Miletić [contributor]
-  \item Jochen Voss [contributor]
-  \item Andreas Voss [contributor]
+  \item Raphael Hartmann [contributor]
+  \item Karl C. Klauer [contributor]
+  \item Steven G. Johnson [contributor]
+  \item Jean M. Linhart [contributor]
+  \item Brian Gough [contributor]
+  \item Gerard Jungman [contributor]
+  \item Rudolf Schuerer [contributor]
+  \item Przemyslaw Sliwa [contributor]
+  \item Jason H. Stover [contributor]
 }
 
 }

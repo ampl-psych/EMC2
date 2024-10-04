@@ -43,7 +43,7 @@ The ranks and prior samples. For hierarchical models also the prior-generated su
 }
 \description{
 Runs SBC for an EMC2 model and associated design. Returns
-normalized rank \link{0,1} and prior samples. For hierarchical modesl the group-level mean and
+normalized rank (between 0 and 1) and prior samples. For hierarchical models the group-level mean and
 the (implied) group-level (co-)variance are returned.
 For non-hierarchical models only the subject-level parameters rank is returned.
 }

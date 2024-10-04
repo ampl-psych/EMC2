@@ -830,17 +830,7 @@ calc_ll_manager <- function(proposals, dadm, ll_func, component = NULL){
       }
       constants <- attr(dadm, "constants")
       if(is.null(constants)) constants <- NA
-      if(c_name == "DDM"){
-        levels(dadm$R) <- c(0,1)
-        pars <- get_pars_matrix(proposals[1,],dadm)
-        pars <- cbind(pars, dadm$R)
-        parameter_char <- apply(pars, 1, paste0, collapse = "\t")
-        parameter_factor <- factor(parameter_char, levels = unique(parameter_char))
-        parameter_indices <- split(seq_len(nrow(pars)), f = parameter_factor)
-        names(parameter_indices) <- 1:length(parameter_indices)
-      } else{
-        parameter_indices <- list()
-      }
+      parameter_indices <- list()
       lls <- calc_ll(proposals, dadm, constants = constants, designs = designs, type = c_name,
                      p_types = p_types, min_ll = log(1e-10), group_idx = parameter_indices)
     }
