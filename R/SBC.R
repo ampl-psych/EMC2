@@ -1,7 +1,7 @@
 #' Simulation-based calibration
 #'
 #' Runs SBC for an EMC2 model and associated design. Returns
-#' normalized rank (between 0 and 1) and prior samples. For hierarchical modesl the group-level mean and
+#' normalized rank (between 0 and 1) and prior samples. For hierarchical models the group-level mean and
 #' the (implied) group-level (co-)variance are returned.
 #' For non-hierarchical models only the subject-level parameters rank is returned.
 #'
