@@ -84,7 +84,6 @@ pDDM <- function(rt,R,pars,precision=1e-3)
 #' | *SZ*      | probit    | \[0, 1\]        | qnorm(0)  | *sz* = 2 x *SZ* x min(*a* x *Z*, *a* x (1-*Z*)) | Relative between-trial variation in start point       |
 #' | *sv*      | log       | \[0, Inf\]        | log(0)    |                            | Between-trial standard deviation of drift rate           |
 #' | *st0*     | log       | \[0, Inf\]        | log(0)    |                            | Between-trial variation (range) in non-decision time    |
-#' | *DP*      | probit    | \[0, 1\]        | qnorm(0.5)| *dp* = *t0* x (2 x *DP* -1)     | Relative difference in non-decision time between responses |
 #'
 #' `a`, `t0`, `sv`, `st0`, `s` are sampled on the log scale because these parameters are strictly positive,
 #' `Z`, `SZ` and `DP` are sampled on the probit scale because they should be strictly between 0 and 1.
