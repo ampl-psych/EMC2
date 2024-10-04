@@ -4,16 +4,18 @@ Version: 2.0.2
 Authors@R: 
     c(person("Niek", "Stevenson", email = "niek.stevenson@gmail.com", 
            role = c("aut", "cre"), comment = c(ORCID = "0000-0003-3206-7544")),
-      person("Michelle", "Donzallaz", 
-           role = c("aut")),
-      person("Andrew", "Heathcote", 
-           role = c("aut")),
-      person("Steven", "Miletić", 
-           role = c("ctb")),
-      person("Jochen", "Voss", 
-           role = c("ctb")),
-      person("Andreas", "Voss", 
-           role = c("ctb")))
+      person("Michelle", "Donzallaz", role = c("aut")),
+      person("Andrew", "Heathcote", role = c("aut")),
+      person("Steven", "Miletić", role = c("ctb")),
+      person("Raphael", "Hartmann", role = c("ctb")),
+      person("Karl C.", "Klauer", role=c("ctb")),
+      person("Steven G.", "Johnson", role=c("ctb")),
+      person("Jean M.", "Linhart", role=c("ctb")),
+      person("Brian", "Gough", role=c("ctb")),
+      person("Gerard", "Jungman", role=c("ctb")),
+      person("Rudolf", "Schuerer", role=c("ctb")),
+      person("Przemyslaw", "Sliwa", role=c("ctb")),
+      person("Jason H.", "Stover", role=c("ctb")))
 Description: Fit Bayesian (hierarchical) cognitive models
     using a linear modeling language interface using particle metropolis Markov
     chain Monte Carlo sampling with Gibbs steps. The diffusion decision model (DDM), 
