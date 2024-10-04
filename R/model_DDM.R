@@ -27,8 +27,8 @@ rDDM <- function(lR,pars,precision=1e-3,ok=rep(TRUE,length(lR)))
   for(id in unique(idx)){
     is_id <- which(idx == id)
     first <- is_id[1]
-    tmp <- WienR::rWDM(N = length(is_id), a = pars[first,"a"], v = pars[first,"v"], t0 = pars[first,"t0"],
-                       w = pars[first,"z"], sw = pars[first,"sz"], sv = pars[first,"sv"],
+    tmp <- rWDM(N = length(is_id), a = pars[first,"a"]/pars[first, "s"], v = pars[first,"v"]/pars[first, "s"], t0 = pars[first,"t0"],
+                       w = pars[first,"z"], sw = pars[first,"sz"], sv = pars[first,"sv"]/pars[first, "s"],
                        st0 = pars[first,"st0"], precision = precision)
     tmp <- data.frame(response = tmp$response, rt = tmp$q)
     out_ok[is_id,] <- tmp[sample(nrow(tmp)),]
@@ -48,8 +48,8 @@ dDDM <- function(rt,R,pars,precision=1e-3)
   # R <- factor(c("left","right")); rt=c(1,1)
 {
   levels(R) <- c("lower","upper")
-  res <- WienR::dWDM(rt, response=as.character(R), a = pars[,"a"], v = pars[,"v"], t0 = pars[,"t0"], w = pars[,"z"],
-       sw = pars[,"sz"], sv = pars[,"sv"],st0 = pars[,"st0"], precision = precision)$value
+  res <- dWDM(rt, response=as.character(R), a = pars[,"a"]/pars[, "s"], v = pars[,"v"]/pars[, "s"], t0 = pars[,"t0"], w = pars[,"z"],
+       sw = pars[,"sz"], sv = pars[,"sv"]/pars[, "s"],st0 = pars[,"st0"], precision = precision)$value
   return(res)
 }
 
@@ -58,8 +58,8 @@ pDDM <- function(rt,R,pars,precision=1e-3)
   # lower is mapped to first level of R and upper to second
 {
   levels(R) <- c("lower","upper")
-  WienR::pWDM(rt, response=as.character(R), a = pars[,"a"], v = pars[,"v"], t0 = pars[,"t0"], w = pars[,"z"],
-              sw = pars[,"sz"], sv = pars[,"sv"],st0 = pars[,"st0"], precision = precision)$value
+  pWDM(rt, response=as.character(R), a = pars[,"a"]/pars[, "s"], v = pars[,"v"]/pars[, "s"], t0 = pars[,"t0"], w = pars[,"z"],
+              sw = pars[,"sz"], sv = pars[,"sv"]/pars[, "s"],st0 = pars[,"st0"], precision = precision)$value
 }
 
 

@@ -4,7 +4,6 @@
 #include "model_LBA.h"
 #include "model_RDM.h"
 #include "model_DDM.h"
-#include "DDM_wienR.h"
 using namespace Rcpp;
 
 

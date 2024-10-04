@@ -3,6 +3,10 @@ title: "Simulation-based Calibration"
 description: "A guide to SBC in EMC2"
 author: "Niek Stevenson"
 output: rmarkdown::html_document
+vignette: >
+  %\VignetteIndexEntry{"Simulation-based Calibration"}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
 ---
 
 ```{r, echo = FALSE}

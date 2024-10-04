@@ -34,9 +34,12 @@ BugReports: https://github.com/ampl-psych/EMC2/issues
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.2
+VignetteBuilder: knitr
 Suggests: 
     testthat (>= 3.0.0),
-    vdiffr
+    vdiffr,
+    knitr,
+    rmarkdown
 Config/testthat/edition: 3
 Imports: 
     abind,
@@ -47,7 +50,6 @@ Imports:
     magic,
     MASS,
     matrixcalc,
-    rtdists,
     methods,
     msm,
     mvtnorm,
@@ -60,7 +62,8 @@ Imports:
     colorspace,
     psych,
     utils,
-    lpSolve
+    lpSolve,
+    WienR
 LinkingTo: 
     Rcpp
 Depends: 
