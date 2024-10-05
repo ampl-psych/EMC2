@@ -64,7 +64,6 @@ void ddiff(int choice, double t, int low_or_up, double a, double v, double t0, d
   // double valueln;
 
   double *val_ptr = &value;
-  double errorW1 = sw, errorW2 = sw, abstol1 = sw, abstol2 = sw;
   double errorW = myerr*0.1;
 
   my_params params = {t, low_or_up, a, v, t0, w, sw, sv, st, errorW, K, epsFLAG, val_ptr};

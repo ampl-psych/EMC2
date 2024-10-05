@@ -32,7 +32,7 @@ NumericVector transform_DDM(NumericVector x){
 
 NumericVector d_DDM_Wien(NumericVector rts, IntegerVector Rs, NumericMatrix pars){
   int Epsflag = 1;
-  double eps = 1e-3;
+  double eps = 5e-2;
   int K = 0;
   int Neval = 6000;
   int choice = 0; //the type of integration method to choose.
