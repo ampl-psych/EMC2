@@ -9,14 +9,6 @@
 
 /* dependencies for Wrapper */
 int int_ddiff(unsigned, const double *, void *, unsigned, double *);
-int int_dtddiff(unsigned, const double *, void *, unsigned, double *);
-int int_daddiff(unsigned, const double *, void *, unsigned, double *);
-int int_dvddiff(unsigned, const double *, void *, unsigned, double *);
-int int_dt0ddiff(unsigned, const double *, void *, unsigned, double *);
-int int_dwddiff(unsigned, const double *, void *, unsigned, double *);
-int int_dswddiff(unsigned, const double *, void *, unsigned, double *);
-int int_dsvddiff(unsigned, const double *, void *, unsigned, double *);
-int int_dst0ddiff(unsigned, const double *, void *, unsigned, double *);
 /*-----------------------------------------------*/
 
 
