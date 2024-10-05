@@ -138,7 +138,7 @@ sbc_DDM_single <- run_sbc(design_DDM, prior_DDM, replicates = 500, trials = 100,
 
 ```
 
-Next we plot the ECDF differ
+Next we plot the ECDF difference plot again.
 
 ```{r, include=FALSE}
 load("SBC_DDM_single.RData")
