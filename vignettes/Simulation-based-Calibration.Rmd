@@ -89,7 +89,7 @@ plot_prior(prior_LBA, design_LBA)
 Next we can simply run `run_sbc` with our specified design and prior. We can use `?run_sbc` to see the description of the function arguments
 
 ```{r, eval=FALSE}
-sbc_LBA_single <- run_sbc(design_LBA, prior_LBA, replicates = 500, trials = 100, plot_data = FALSE,
+SBC_LBA_single <- run_sbc(design_LBA, prior_LBA, replicates = 500, trials = 100, plot_data = FALSE,
                   iter = 1000, n_post = 1000, fileName = "SBC_LBA_single.RData",
                   cores_per_chain = 30)
 ```
@@ -103,13 +103,13 @@ load("SBC_LBA_single.RData")
 ```
 
 ```{r, fig.height = 6, fig.alt = "Histogram SBC LBA single"}
-plot_sbc_hist(sbc_LBA_single, bins = 10)
+plot_sbc_hist(SBC_LBA_single, bins = 10)
 ```
 
 Here the gray lines indicate the 2.5, 50 and 97.5% percentile of where *n* samples from a uniform distribution are expected to fall. As we can see most of the bins are are nicely within these bounds and no clear pattern emerges. However, this visualization very much depends on bin size, as pointed out by X. Therefore EMC also comes with plots that visualize the difference in the empirical cumulative density function (ecdf) and the cumulative density function of a uniform distribution (for details see X).
 
 ```{r, fig.height = 6, fig.alt = "ecdf LBA single"}
-plot_sbc_ecdf(sbc_LBA_single)
+plot_sbc_ecdf(SBC_LBA_single)
 ```
 
 Notice the resemblance with eggs? The blue area visualizes the 95% area of expected cumulative values. As with real eggs, the observed line, (i.e. the cracks) should lie somewhere on the egg. For an explanation and guide to interpretation to these plots we recommend the following article <https://hyunjimoon.github.io/SBC/articles/rank_visualizations.html>. In the remainder of this article we'll use these plots to visualize SBC results.
@@ -133,7 +133,7 @@ prior_DDM <- prior(design_DDM, type = "single",
                   pmean = c(1, log(.8), log(.3), qnorm(.5), log(.1), qnorm(.05), log(.05)),
                   psd = c(.15, .15, .1, .05, .15, .15, .15))
 
-sbc_DDM_single <- run_sbc(design_DDM, prior_DDM, replicates = 500, trials = 100, fileName = "WienR_single.RData",
+SBC_DDM_single <- run_sbc(design_DDM, prior_DDM, replicates = 500, trials = 100, fileName = "WienR_single.RData",
                cores_per_chain = 30)
 
 ```
@@ -145,7 +145,7 @@ load("SBC_DDM_single.RData")
 ```
 
 ```{r, fig.height = 6, fig.alt = "ecdf DDM single", fig.width= 10}
-plot_sbc_ecdf(sbc_DDM_single)
+plot_sbc_ecdf(SBC_DDM_single)
 ```
 
 As you can see minor misfits in *a* and *sv* but nothing too worrying. To double check we did refits, that showed that this bias is not systematic.
@@ -164,4 +164,51 @@ Nevertheless we believe the standard prior is not problematic in real data, sinc
 
 ### LBA
 
-Now we dive into hierarchical SBC for the LBA model.
+Now we dive into hierarchical SBC for the LBA model. The prior structure we chose was as follows. Here we have to be extra mindful of choosing a prior that ensures plausible generated data, since there's a double propagation of prior space. First through the prior on the standard deviation of the group-level mean, but also through the prior on the group-level variance.
+
+```{r, echo=TRUE, message=FALSE, warning=FALSE, results='hide'}
+n_subjects <- 30
+# 
+matchfun <- function(d) d$S == d$lR
+
+design_LBA <- design(factors=list(subjects=1:n_subjects,S=c("left", "right")),
+                     Rlevels = c("left", "right"),
+                     matchfun = matchfun,
+                     formula =list(v~lM,B~1, t0~1, sv~1, A~1),
+                     constants=c(sv=log(1)),
+                     model = LBA)
+
+prior_LBA <- prior(design_LBA, type = "diagonal-gamma",
+                  mu_mean = c(1.3, .7, log(.8), log(.2), log(.3)),
+                  mu_sd = c(.2, .1, .1, .05, .05),
+                  shape = 10,
+                  rate = c(.2, .2, .2, .1, .1))
+
+```
+
+We can also plot what the implied prior range is of the subject-level parameters:
+
+```{r, fig.alt = "Prior for LBA hierarchical model", fig.height = 5}
+plot_prior(prior_LBA, design_LBA, selection = "alpha")
+```
+
+To actually run SBC, we can use the same function as before, now also specifying how many subjects we want to have in the hierarchical model
+
+```{r, eval=FALSE}
+SBC_LBA <- SBC_hierarchical(design_LBA, prior_in, replicates = 500, trials = 100,
+                        n_subjects = n_subjects, fileName = "SBC_LBA.RData", cores_per_chain = 30)
+```
+
+We can also plot the results again using the `plot_sbc_ecdf` function. It will now generate a set of ECDF difference plots for the hierarchical variance ranks and the hierarchical means ranks.
+
+```{r, include=FALSE}
+load("SBC_LBA.RData")
+```
+
+```{r, fig.height = 6, fig.alt = "ECDF SBC LBA"}
+plot_sbc_ecdf(SBC_LBA)
+```
+
+As we can see good results for the hierarchical SBC and no noticable bias in the group-level mean or variance parameters.
+
+### RDM
