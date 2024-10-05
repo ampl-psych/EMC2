@@ -236,15 +236,16 @@ plot_sbc_ecdf <- function(ranks, layout = NA){
   selects <- names(ranks)
   oldpar <- par(no.readonly = TRUE) # code line i
   on.exit(par(oldpar)) # code line i + 1
-  if(any(is.na(layout))){
-    par(mfrow = coda_setmfrow(Nchains = 1, Nparms = ncol(ranks[[1]]),
-                                     nplots = length(ranks)))
-  } else{par(mfrow=layout)}
 
   K <- N <- nrow(ranks[[1]])
   gamma <- get_gamma(N, K)
   res <- get_lims(N, K, gamma)
   for(j in 1:length(ranks)){
+    if(any(is.na(layout))){
+      par(mfrow = coda_setmfrow(Nchains = 1, Nparms = ncol(ranks[[1]]),
+                                nplots = length(ranks)))
+    } else{par(mfrow=layout)}
+
     rank <- ranks[[j]]
     par_names <- colnames(rank)
     res$x <- apply(rank, 2, function(x) sort(x) - res$z)
