@@ -42,14 +42,7 @@ int int_ddiff(unsigned dim, const double *x, void *p, unsigned fdim, double *ret
 
   if (t - tau <= 0) retval[0] = 0.0;
   else {
-    double ldW = dwiener(low_or_up * (t - tau), a, v, omega, sv, errorW, K, epsFLAG);
-
-    double temp2 = 0;
-    //if (sv) temp2 = -0.5 * pow(y, 2) - M_LN_SQRT_PI - 0.5 * M_LN2 + log1p(temp) - 2 * log1p(-temp);
-
-    double integrand = exp(ldW + temp2);
-
-    retval[0] = integrand;
+    retval[0] = dwiener(low_or_up * (t - tau), a, v, omega, sv, errorW, K, epsFLAG);
   }
   return 0;
 }
