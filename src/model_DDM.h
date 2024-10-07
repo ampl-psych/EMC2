@@ -32,7 +32,7 @@ NumericVector transform_DDM(NumericVector x){
 
 NumericVector d_DDM_Wien(NumericVector rts, IntegerVector Rs, NumericMatrix pars){
   int Epsflag = 1;
-  double eps = 1e-3;
+  double eps = 5e-3;
   int K = 0;
   int Neval = 6000;
   int choice = 0; //the type of integration method to choose.
@@ -65,7 +65,7 @@ NumericVector d_DDM_Wien(NumericVector rts, IntegerVector Rs, NumericMatrix pars
         double Rerr;
         double sz = (pars(i,6) < (1 - pars(i,6))) ? 2*pars(i,7)*pars(i,6) : 2*pars(i,7)*(1-pars(i,6));
         ddiff(choice, rts[i], pm, pars(i, 1)/pars(i,5), pars(i, 0)/pars(i,5), pars(i, 3), pars(i, 6), sz, pars(i, 2)/pars(i,5), pars(i,4), eps, K, Epsflag, Neval, &Rval, &Rerr);
-        out[i] = Rval;
+        out[i] = log(Rval);
       }
     }
   }
