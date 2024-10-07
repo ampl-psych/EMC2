@@ -86,7 +86,7 @@ Now we plot the prior, with `map = TRUE` (the default) to see how the implied pr
 plot_prior(prior_LBA, design_LBA)
 ```
 
-Next we can simply run `run_sbc` with our specified design and prior. We can use `?run_sbc` to see the description of the function arguments
+Next we can simply run `run_sbc` with our specified design and prior. We can use `?run_sbc` to see the description of the function arguments. The trials argument refers the number of trials per cell, since we have an S factor in our design (and all other designs used), we will simulate 200 trials per data set.
 
 ```{r, eval=FALSE}
 SBC_LBA_single <- run_sbc(design_LBA, prior_LBA, replicates = 500, trials = 100, plot_data = FALSE,
@@ -133,8 +133,8 @@ prior_DDM <- prior(design_DDM, type = "single",
                   pmean = c(1, log(.8), log(.3), qnorm(.5), log(.1), qnorm(.05), log(.05)),
                   psd = c(.15, .15, .1, .05, .15, .15, .15))
 
-SBC_DDM_single <- run_sbc(design_DDM, prior_DDM, replicates = 500, trials = 100, fileName = "WienR_single.RData",
-               cores_per_chain = 30)
+SBC_DDM_single <- run_sbc(design_DDM, prior_DDM, replicates = 500, trials = 100, 
+                          fileName = "WienR_single.RData", cores_per_chain = 30)
 
 ```
 
@@ -195,7 +195,7 @@ plot_prior(prior_LBA, design_LBA, selection = "alpha")
 To actually run SBC, we can use the same function as before, now also specifying how many subjects we want to have in the hierarchical model
 
 ```{r, eval=FALSE}
-SBC_LBA <- SBC_hierarchical(design_LBA, prior_in, replicates = 500, trials = 100,
+SBC_LBA <- run_sbc(design_LBA, prior_LBA, replicates = 500, trials = 100,
                         n_subjects = n_subjects, fileName = "SBC_LBA.RData", cores_per_chain = 30)
 ```
 
@@ -211,4 +211,105 @@ plot_sbc_ecdf(SBC_LBA)
 
 As we can see good results for the hierarchical SBC and no noticable bias in the group-level mean or variance parameters.
 
+### DDM
+
+We also tested hierarchical SBC for the seven parameter DDM. We again chose priors carefully here to match realistic behavioral data.
+
+```{r, echo=TRUE, message=FALSE, warning=FALSE, results='hide'}
+design_DDM <- design(factors=list(subjects=1:30,S=c("left", "right")),
+                       Rlevels = c("left", "right"),
+                       formula =list(v~1,a~1, t0~1, s~1, Z~1, sv~1, SZ~1, st0 ~ 1),
+                       constants=c(s=log(1)),
+                       model = DDM)
+
+
+prior_DDM <- prior(design_DDM, type = "diagonal-gamma",
+                  pmean = c(1.2, log(.8), log(.3), qnorm(.5), log(.1), qnorm(.05), log(.05)),
+                  psd = c(.15, .15, .1, .05, .1, .1, .15),
+                  shape = 10,
+                  rate = c(.2, .2, .2, .1, .1, .1, .1))
+
+```
+
+In contrast to the other models, we generated 200 (instead of 100) trials per person per cell, since with 100 trials the model sometimes did not converge or was very slow to converge.
+
+```{r, eval=FALSE}
+SBC_DDM <- run_sbc(design_DDM, prior_DDM, replicates = 500, trials = 200,
+                        n_subjects = n_subjects, fileName = "SBC_DDM.RData", cores_per_chain = 30)
+```
+
 ### RDM
+
+For completion and as a proof of correct implementation we also test hierarchical SBC for the RDM with the following model definition and prior structure.
+
+```{r, echo=TRUE, eval = FALSE}
+n_subjects <- 30
+
+matchfun <- function(d) d$S == d$lR
+
+
+design_RDM <- design(factors=list(subjects=1:n_subjects,S=c("left", "right")),
+                     Rlevels = c("left", "right"),
+                     matchfun = matchfun,
+                     formula =list(v~lM,B~1, t0~1, A~1, s ~ 1),
+                     constants=c(s=log(1)),
+                     model = RDM)
+
+prior_RDM <- prior(design_RDM, type = "diagonal-gamma",
+                  mu_mean = c(1.4, .3, log(1.5), log(.2), log(.3)),
+                  mu_sd = c(.05, .1, .1, .05, .05),
+                  shape = 10,
+                  rate = c(.1, .2, .2, .2, .1))
+
+SBC_RDM <- run_sbc(design_RDM, prior_RDM, replicates = 500, trials = 100,
+                        n_subjects = n_subjects, fileName = "SBC_RDM.RData", cores_per_chain = 30)
+
+```
+
+We again note that SBC shows no bias in the hierarchical RDM model
+
+```{r, include=FALSE}
+load("SBC_RDM.RData")
+```
+
+```{r, fig.height = 6, fig.alt = "ECDF SBC RDM"}
+plot_sbc_ecdf(SBC_RDM)
+```
+
+### LNR
+
+Lastly, we run hierarchical SBC for the LNR with the following specification
+
+```{r, echo=TRUE, eval = FALSE}
+n_subjects <- 30
+
+matchfun <- function(d) d$S == d$lR
+
+design_LNR <- design(factors=list(subjects=1:n_subjects,S=c("left", "right")),
+                     Rlevels = c("left", "right"),
+                     matchfun = matchfun,
+                     formula =list(m~lM,s~1, t0~1),
+                     model = LNR)
+
+prior_LNR <- prior(design_LNR, type = "diagonal-gamma",
+                  mu_mean = c(-.7, -.5, log(1), log(.2)),
+                  mu_sd = c(.2, .1, .1, .05),
+                  shape = 10,
+                  rate = c(.2, .2, .2, .1))
+
+SBC_LNR <- run_sbc(design_LNR, prior_LNR, replicates = 500, trials = 100,
+                        n_subjects = n_subjects, fileName = "SBC_LNR.RData", cores_per_chain = 30)
+
+```
+
+Also for the LNR hierarchical SBC shows no considerable bias
+
+```{r, include=FALSE}
+load("SBC_LNR.RData")
+```
+
+```{r, fig.height = 6, fig.alt = "ECDF SBC RDM"}
+plot_sbc_ecdf(SBC_LNR, layout = c(2,2))
+```
+
+### 
