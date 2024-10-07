@@ -41,7 +41,7 @@
     </div>
 
     <div class="section level2">
-      <h2 id="all-functions">All functions<a class="anchor" aria-label="anchor" href="#all-functions"></a></h2>
+      <h2 id="models">Models<a class="anchor" aria-label="anchor" href="#models"></a></h2>
 
 
 
@@ -75,6 +75,106 @@
 
         </dt>
         <dd>The Racing Diffusion Model</dd>
+      </dl></div><div class="section level2">
+      <h2 id="design-and-estimation">Design and estimation<a class="anchor" aria-label="anchor" href="#design-and-estimation"></a></h2>
+
+
+
+
+    </div><div class="section level2">
+
+
+
+
+      <dl><dt>
+
+          <code><a href="fit.html">fit()</a></code>
+
+        </dt>
+        <dd>Model estimation in EMC2</dd>
+      </dl><dl><dt>
+
+          <code><a href="design.html">design()</a></code>
+
+        </dt>
+        <dd>Specify a design and model</dd>
+      </dl><dl><dt>
+
+          <code><a href="make_emc.html">make_emc()</a></code>
+
+        </dt>
+        <dd>Make an emc object</dd>
+      </dl><dl><dt>
+
+          <code><a href="init_chains.html">init_chains()</a></code>
+
+        </dt>
+        <dd>Initialize chains</dd>
+      </dl><dl><dt>
+
+          <code><a href="run_emc.html">run_emc()</a></code>
+
+        </dt>
+        <dd>Custom function for more controlled model estimation</dd>
+      </dl><dl><dt>
+
+          <code><a href="mapped_par.html">mapped_par()</a></code>
+
+        </dt>
+        <dd>Parameter mapping back to the design factors</dd>
+      </dl><dl><dt>
+
+          <code><a href="sampled_p_vector.html">sampled_p_vector()</a></code>
+
+        </dt>
+        <dd>Get model parameters from a design</dd>
+      </dl><dl><dt>
+
+          <code><a href="profile_plot.html">profile_plot()</a></code>
+
+        </dt>
+        <dd>Likelihood profile plots</dd>
+      </dl><dl><dt>
+
+          <code><a href="plot_defective_density.html">plot_defective_density()</a></code>
+
+        </dt>
+        <dd>Plot defective densities for each subject and cell</dd>
+      </dl></div><div class="section level2">
+      <h2 id="model-checking">Model checking<a class="anchor" aria-label="anchor" href="#model-checking"></a></h2>
+
+
+
+
+    </div><div class="section level2">
+
+
+
+
+      <dl><dt>
+
+          <code><a href="check.html">check()</a></code>
+
+        </dt>
+        <dd>Convergence checks for an emc object</dd>
+      </dl><dl><dt>
+
+          <code><a href="summary.emc.html">summary(<i>&lt;emc&gt;</i>)</a></code>
+
+        </dt>
+        <dd>Summary statistics for emc objects</dd>
+      </dl><dl><dt>
+
+          <code><a href="ess_summary.html">ess_summary()</a></code>
+
+        </dt>
+        <dd>Effective sample size</dd>
+      </dl><dl><dt>
+
+          <code><a href="gd_summary.html">gd_summary()</a></code>
+
+        </dt>
+        <dd>Gelman-Rubin statistic</dd>
       </dl><dl><dt>
 
           <code><a href="chain_n.html">chain_n()</a></code>
@@ -83,11 +183,128 @@
         <dd>chain_n()</dd>
       </dl><dl><dt>
 
-          <code><a href="check.html">check()</a></code>
+          <code><a href="plot.emc.html">plot(<i>&lt;emc&gt;</i>)</a></code>
 
         </dt>
-        <dd>Convergence checks for an emc object</dd>
+        <dd>Plot function for emc objects</dd>
       </dl><dl><dt>
+
+          <code><a href="pairs_posterior.html">pairs_posterior()</a></code>
+
+        </dt>
+        <dd>Plot within-chain correlations</dd>
+      </dl></div><div class="section level2">
+      <h2 id="posterior-inference">Posterior inference<a class="anchor" aria-label="anchor" href="#posterior-inference"></a></h2>
+
+
+
+
+    </div><div class="section level2">
+
+
+
+
+      <dl><dt>
+
+          <code><a href="posterior_summary.html">posterior_summary()</a></code>
+
+        </dt>
+        <dd>Posterior quantiles</dd>
+      </dl><dl><dt>
+
+          <code><a href="parameters.html">parameters()</a></code>
+
+        </dt>
+        <dd>Returns a parameter type from an emc object as a data frame.</dd>
+      </dl><dl><dt>
+
+          <code><a href="get_pars.html">get_pars()</a></code>
+
+        </dt>
+        <dd>Filter/manipulate parameters from emc object</dd>
+      </dl><dl><dt>
+
+          <code><a href="plot_pars.html">plot_pars()</a></code>
+
+        </dt>
+        <dd>Plots density for parameters</dd>
+      </dl><dl><dt>
+
+          <code><a href="plot_relations.html">plot_relations()</a></code>
+
+        </dt>
+        <dd>Plot relations</dd>
+      </dl><dl><dt>
+
+          <code><a href="merge_chains.html">merge_chains()</a></code>
+
+        </dt>
+        <dd>Merge samples</dd>
+      </dl><dl><dt>
+
+          <code><a href="subset.emc.html">subset(<i>&lt;emc&gt;</i>)</a></code>
+
+        </dt>
+        <dd>Shorten an emc object</dd>
+      </dl></div><div class="section level2">
+      <h2 id="posterior-predictives-and-recovery">Posterior predictives and recovery<a class="anchor" aria-label="anchor" href="#posterior-predictives-and-recovery"></a></h2>
+
+
+
+
+    </div><div class="section level2">
+
+
+
+
+      <dl><dt>
+
+          <code><a href="predict.emc.html">predict(<i>&lt;emc&gt;</i>)</a></code>
+
+        </dt>
+        <dd>Generate posterior predictives</dd>
+      </dl><dl><dt>
+
+          <code><a href="plot_fit.html">plot_fit()</a></code>
+
+        </dt>
+        <dd>Posterior predictive checks</dd>
+      </dl><dl><dt>
+
+          <code><a href="make_data.html">make_data()</a></code>
+
+        </dt>
+        <dd>Simulate data</dd>
+      </dl><dl><dt>
+
+          <code><a href="make_random_effects.html">make_random_effects()</a></code>
+
+        </dt>
+        <dd>Make random effects</dd>
+      </dl><dl><dt>
+
+          <code><a href="recovery.html">recovery()</a></code>
+
+        </dt>
+        <dd>Recovery plots</dd>
+      </dl><dl><dt>
+
+          <code><a href="get_data.html">get_data()</a></code>
+
+        </dt>
+        <dd>Get data</dd>
+      </dl></div><div class="section level2">
+      <h2 id="model-comparison">Model comparison<a class="anchor" aria-label="anchor" href="#model-comparison"></a></h2>
+
+
+
+
+    </div><div class="section level2">
+
+
+
+
+      <dl><dt>
 
           <code><a href="compare.html">compare()</a></code>
 
@@ -101,64 +318,10 @@
         <dd>Information criteria for each participant</dd>
       </dl><dl><dt>
 
-          <code><a href="contr.anova.html">contr.anova()</a></code>
+          <code><a href="run_bridge_sampling.html">run_bridge_sampling()</a></code>
 
         </dt>
-        <dd>Anova style contrast matrix</dd>
-      </dl><dl><dt>
-
-          <code><a href="contr.bayes.html">contr.bayes()</a></code>
-
-        </dt>
-        <dd>Contrast to enforce equal prior variance on each level</dd>
-      </dl><dl><dt>
-
-          <code><a href="contr.decreasing.html">contr.decreasing()</a></code>
-
-        </dt>
-        <dd>Contrast to enforce decreasing estimates</dd>
-      </dl><dl><dt>
-
-          <code><a href="contr.increasing.html">contr.increasing()</a></code>
-
-        </dt>
-        <dd>Contrast to enforce increasing estimates</dd>
-      </dl><dl><dt>
-
-          <code><a href="credible.html">credible()</a></code>
-
-        </dt>
-        <dd>Posterior credible interval tests</dd>
-      </dl><dl><dt>
-
-          <code><a href="design.html">design()</a></code>
-
-        </dt>
-        <dd>Specify a design and model</dd>
-      </dl><dl><dt>
-
-          <code><a href="ess_summary.html">ess_summary()</a></code>
-
-        </dt>
-        <dd>Effective sample size</dd>
-      </dl><dl><dt>
-
-          <code><a href="fit.html">fit()</a></code>
-
-        </dt>
-        <dd>Model estimation in EMC2</dd>
-      </dl><dl><dt>
-
-          <code><a href="forstmann.html">forstmann</a></code>
-
-        </dt>
-        <dd>Forstmann et al.'s data</dd>
-      </dl><dl><dt>
-
-          <code><a href="gd_summary.html">gd_summary()</a></code>
-
-        </dt>
-        <dd>Gelman-Rubin statistic</dd>
+        <dd>Estimating Marginal likelihoods using WARP-III bridge sampling</dd>
       </dl><dl><dt>
 
           <code><a href="get_BayesFactor.html">get_BayesFactor()</a></code>
@@ -167,17 +330,28 @@
         <dd>Bayes Factors</dd>
       </dl><dl><dt>
 
-          <code><a href="get_data.html">get_data()</a></code>
+          <code><a href="credible.html">credible()</a></code>
 
         </dt>
-        <dd>Get data</dd>
+        <dd>Posterior credible interval tests</dd>
       </dl><dl><dt>
 
-          <code><a href="get_pars.html">get_pars()</a></code>
+          <code><a href="hypothesis.html">hypothesis()</a></code>
 
         </dt>
-        <dd>Filter/manipulate parameters from emc object</dd>
-      </dl><dl><dt>
+        <dd>Within-model hypothesis testing</dd>
+      </dl></div><div class="section level2">
+      <h2 id="priors">Priors<a class="anchor" aria-label="anchor" href="#priors"></a></h2>
+
+
+
+
+    </div><div class="section level2">
+
+
+
+
+      <dl><dt>
 
           <code><a href="get_prior_blocked.html">get_prior_blocked()</a></code>
 
@@ -215,95 +389,63 @@
         <dd>Prior specification or prior sampling for standard estimation.</dd>
       </dl><dl><dt>
 
-          <code><a href="hypothesis.html">hypothesis()</a></code>
-
-        </dt>
-        <dd>Within-model hypothesis testing</dd>
-      </dl><dl><dt>
-
-          <code><a href="init_chains.html">init_chains()</a></code>
-
-        </dt>
-        <dd>Initialize chains</dd>
-      </dl><dl><dt>
-
-          <code><a href="make_data.html">make_data()</a></code>
-
-        </dt>
-        <dd>Simulate data</dd>
-      </dl><dl><dt>
-
-          <code><a href="make_emc.html">make_emc()</a></code>
-
-        </dt>
-        <dd>Make an emc object</dd>
-      </dl><dl><dt>
-
-          <code><a href="make_random_effects.html">make_random_effects()</a></code>
-
-        </dt>
-        <dd>Make random effects</dd>
-      </dl><dl><dt>
-
-          <code><a href="mapped_par.html">mapped_par()</a></code>
-
-        </dt>
-        <dd>Parameter mapping back to the design factors</dd>
-      </dl><dl><dt>
-
-          <code><a href="merge_chains.html">merge_chains()</a></code>
-
-        </dt>
-        <dd>Merge samples</dd>
-      </dl><dl><dt>
-
-          <code><a href="pairs_posterior.html">pairs_posterior()</a></code>
-
-        </dt>
-        <dd>Plot within-chain correlations</dd>
-      </dl><dl><dt>
-
-          <code><a href="parameters.html">parameters()</a></code>
-
-        </dt>
-        <dd>Returns a parameter type from an emc object as a data frame.</dd>
-      </dl><dl><dt>
-
-          <code><a href="plot.emc.html">plot(<i>&lt;emc&gt;</i>)</a></code>
-
-        </dt>
-        <dd>Plot function for emc objects</dd>
-      </dl><dl><dt>
-
-          <code><a href="plot_defective_density.html">plot_defective_density()</a></code>
-
-        </dt>
-        <dd>Plot defective densities for each subject and cell</dd>
-      </dl><dl><dt>
-
-          <code><a href="plot_fit.html">plot_fit()</a></code>
-
-        </dt>
-        <dd>Posterior predictive checks</dd>
-      </dl><dl><dt>
-
-          <code><a href="plot_pars.html">plot_pars()</a></code>
-
-        </dt>
-        <dd>Plots density for parameters</dd>
-      </dl><dl><dt>
-
           <code><a href="plot_prior.html">plot_prior()</a></code>
 
         </dt>
         <dd>Title</dd>
       </dl><dl><dt>
 
-          <code><a href="plot_relations.html">plot_relations()</a></code>
+          <code><a href="prior.html">prior()</a></code>
 
         </dt>
-        <dd>Plot relations</dd>
+        <dd>Prior specification</dd>
+      </dl></div><div class="section level2">
+      <h2 id="contrasts">Contrasts<a class="anchor" aria-label="anchor" href="#contrasts"></a></h2>
+
+
+
+
+    </div><div class="section level2">
+
+
+
+
+      <dl><dt>
+
+          <code><a href="contr.anova.html">contr.anova()</a></code>
+
+        </dt>
+        <dd>Anova style contrast matrix</dd>
       </dl><dl><dt>
+
+          <code><a href="contr.bayes.html">contr.bayes()</a></code>
+
+        </dt>
+        <dd>Contrast to enforce equal prior variance on each level</dd>
+      </dl><dl><dt>
+
+          <code><a href="contr.decreasing.html">contr.decreasing()</a></code>
+
+        </dt>
+        <dd>Contrast to enforce decreasing estimates</dd>
+      </dl><dl><dt>
+
+          <code><a href="contr.increasing.html">contr.increasing()</a></code>
+
+        </dt>
+        <dd>Contrast to enforce increasing estimates</dd>
+      </dl></div><div class="section level2">
+      <h2 id="simulation-based-calibration">Simulation-based calibration<a class="anchor" aria-label="anchor" href="#simulation-based-calibration"></a></h2>
+
+
+
+
+    </div><div class="section level2">
+
+
+
+
+      <dl><dt>
 
           <code><a href="plot_sbc_ecdf.html">plot_sbc_ecdf()</a></code>
 
@@ -317,78 +459,36 @@
         <dd>Plot the histogram of the observed rank statistics of SBC</dd>
       </dl><dl><dt>
 
-          <code><a href="posterior_summary.html">posterior_summary()</a></code>
-
-        </dt>
-        <dd>Posterior quantiles</dd>
-      </dl><dl><dt>
-
-          <code><a href="predict.emc.html">predict(<i>&lt;emc&gt;</i>)</a></code>
-
-        </dt>
-        <dd>Generate posterior predictives</dd>
-      </dl><dl><dt>
-
-          <code><a href="prior.html">prior()</a></code>
-
-        </dt>
-        <dd>Prior specification</dd>
-      </dl><dl><dt>
-
-          <code><a href="profile_plot.html">profile_plot()</a></code>
-
-        </dt>
-        <dd>Likelihood profile plots</dd>
-      </dl><dl><dt>
-
-          <code><a href="recovery.html">recovery()</a></code>
-
-        </dt>
-        <dd>Recovery plots</dd>
-      </dl><dl><dt>
-
-          <code><a href="run_bridge_sampling.html">run_bridge_sampling()</a></code>
-
-        </dt>
-        <dd>Estimating Marginal likelihoods using WARP-III bridge sampling</dd>
-      </dl><dl><dt>
-
-          <code><a href="run_emc.html">run_emc()</a></code>
-
-        </dt>
-        <dd>Custom function for more controlled model estimation</dd>
-      </dl><dl><dt>
-
           <code><a href="run_sbc.html">run_sbc()</a></code>
 
         </dt>
         <dd>Simulation-based calibration</dd>
-      </dl><dl><dt>
+      </dl></div><div class="section level2">
+      <h2 id="included-data">Included data<a class="anchor" aria-label="anchor" href="#included-data"></a></h2>
 
-          <code><a href="sampled_p_vector.html">sampled_p_vector()</a></code>
+
+
+
+    </div><div class="section level2">
+
+
+
+
+      <dl><dt>
+
+          <code><a href="forstmann.html">forstmann</a></code>
 
         </dt>
-        <dd>Get model parameters from a design</dd>
+        <dd>Forstmann et al.'s data</dd>
       </dl><dl><dt>
 
           <code><a href="samples_LNR.html">samples_LNR</a></code>
 
         </dt>
         <dd>An emc object of an LNR model of the Forstmann dataset using the first three subjects</dd>
-      </dl><dl><dt>
-
-          <code><a href="subset.emc.html">subset(<i>&lt;emc&gt;</i>)</a></code>
-
-        </dt>
-        <dd>Shorten an emc object</dd>
-      </dl><dl><dt>
-
-          <code><a href="summary.emc.html">summary(<i>&lt;emc&gt;</i>)</a></code>
-
-        </dt>
-        <dd>Summary statistics for emc objects</dd>
       </dl></div>
-  </main></div>
+  </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
+    </nav></aside></div>
 
 
     <footer><div class="pkgdown-footer-left">

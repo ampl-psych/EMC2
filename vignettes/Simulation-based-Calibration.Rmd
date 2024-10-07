@@ -58,7 +58,7 @@ library(EMC2)
 
 ### Compression
 
-Before we start with the SBC, we want to give a quick note on datacompression. By default uses compression to 20ms, since typical lab set-ups do not allow response times to be measured with a higher resolution. However, generated data is not subject to the same physical constraints. Therefore, and to avoid biases, compression is turned off. To turn on compression regardless, you can set `compression = TRUE`, and set the resolution using `rt_resolution = 0.02 (for example)` in the `run_sbc` function, which will speed up computation but potentially introduces biases.
+Before we start with the SBC, we want to give a quick note on data compression. By default compresses RTs to bins of 20ms, since typical lab set-ups do not allow response times to be measured with a higher resolution. However, generated data is not subject to the same physical constraints. Therefore, and to avoid biases, compression is turned off. To turn on compression regardless, you can set `compression = TRUE`, and set the resolution using `rt_resolution = 0.02 (for example)` in the `run_sbc` function, which will speed up computation but potentially introduces biases.
 
 ### LBA
 
