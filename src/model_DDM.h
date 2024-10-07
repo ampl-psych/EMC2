@@ -32,7 +32,7 @@ NumericVector transform_DDM(NumericVector x){
 
 NumericVector d_DDM_Wien(NumericVector rts, IntegerVector Rs, NumericMatrix pars){
   int Epsflag = 1;
-  double eps = 5e-2;
+  double eps = 1e-3;
   int K = 0;
   int Neval = 6000;
   int choice = 0; //the type of integration method to choose.
@@ -43,7 +43,7 @@ NumericVector d_DDM_Wien(NumericVector rts, IntegerVector Rs, NumericMatrix pars
   //   pars[,"t0"] < .05 | pars[,"st0"]>.2)
   for(int i = 0; i < N; i++){
     if(pars(i, 0) < - 20 || pars(i, 0) > 20 || pars(i, 1) > 10 || pars(i, 2) > 20 ||
-       pars(i, 7) > .999 || pars(i, 3) < 0.05){
+       pars(i, 7) > .999){
       out[i] = R_NegInf;
     } else if(pars(i, 2) != 0 && pars(i, 2) < 0.001){
       out[i] = R_NegInf;

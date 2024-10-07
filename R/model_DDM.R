@@ -7,7 +7,7 @@ find_duplicate_indices <- function(df) {
   return(index_map)
 }
 
-rDDM <- function(lR,pars,precision=5e-2,ok=rep(TRUE,length(lR)))
+rDDM <- function(lR,pars,precision=1e-3,ok=rep(TRUE,length(lR)))
   # lR is an empty latent response factor lR with one level for each boundary
   # pars is a matrix of parameter values named as in p_types
   # lower is mapped to first level of lR and upper to second
@@ -39,7 +39,7 @@ rDDM <- function(lR,pars,precision=5e-2,ok=rep(TRUE,length(lR)))
 }
 
 
-dDDM <- function(rt,R,pars,precision=5e-2)
+dDDM <- function(rt,R,pars,precision=1e-3)
   # DDM density for response factor R with rt
   # lower is mapped to first level of R and upper to second
   # test
@@ -53,7 +53,7 @@ dDDM <- function(rt,R,pars,precision=5e-2)
   return(res)
 }
 
-pDDM <- function(rt,R,pars,precision=5e-2)
+pDDM <- function(rt,R,pars,precision=1e-3)
   # DDM cdf for response factor R with rt
   # lower is mapped to first level of R and upper to second
 {
