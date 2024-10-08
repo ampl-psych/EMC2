@@ -36,13 +36,14 @@ run_sbc <- function(design_in, prior_in, replicates = 250, trials = 100, n_subje
 
 
 SBC_hierarchical <- function(design_in, prior_in, replicates = 250, trials = 100, n_subjects = 30,
-                             plot_data = FALSE, verbose = TRUE,  n_post = 1000,
+                             plot_data = FALSE, verbose = TRUE,
                              fileName = NULL, ...){
-  dots <- add_defaults(list(...), max_tries = 50, compress = FALSE, rt_resolution = 1e-12)
+  dots <- add_defaults(list(...), max_tries = 50, compress = FALSE, rt_resolution = 1e-12,
+                       stop_criteria = list(min_es = 250, max_gd = 1.1))
   dots$verbose <- verbose
   type <- attr(prior_in, "type")
   if(type != "diagonal-gamma") warning("SBC in EMC2 is frequently biased for prior structures with heavy variance mass around 0 \n
-                                       please consider using 'type = diagonal-gamma' to test your model. See also BLOGPOST")
+                                       please consider using 'type = diagonal-gamma' to test your model. See also vignettes")
   # Draw prior samples
   prior_mu <- plot_prior(prior_in, design_in, do_plot = F, N = replicates, selection = "mu", return_mcmc = FALSE, map = FALSE)[[1]]
   prior_var <- plot_prior(prior_in, design_in, do_plot = F, N = replicates, selection = "Sigma", return_mcmc = FALSE,
@@ -70,13 +71,16 @@ SBC_hierarchical <- function(design_in, prior_in, replicates = 250, trials = 100
     }
     emc <-  do.call(make_emc, c(list(data = data, design = design_in, prior_list = prior_in, type = type), fix_dots(dots, make_emc)))
     emc <-  do.call(fit, c(list(emc = emc), fix_dots(dots, fit)))
-    n_post_pc <- round((n_post-1)/length(emc))
-    mu_rec <- get_pars(emc, selection = "mu", return_mcmc = F, merge_chains = T, length.out = n_post_pc, flatten = T)
-    var_rec <- get_pars(emc, selection = "Sigma", return_mcmc = F, merge_chains = T, length.out = n_post_pc, flatten = T)
+
+    ESS_mu <- round(pmin(unlist(ess_summary(emc, selection = "mu", stat = NULL)), chain_n(emc)[1,"sample"]))
+    mu_rec <- get_pars(emc, selection = "mu", return_mcmc = F, merge_chains = T,flatten = T)
+    rank_mu <- rbind(rank_mu, mapply(get_ranks_ESS, split(mu_rec, row(mu_rec)), t(ESS_mu), prior_mu[,i]))
+
+    ESS_var <- round(pmin(unlist(ess_summary(emc, selection = "Sigma", stat = NULL)), chain_n(emc)[1,"sample"]))
+    var_rec <- get_pars(emc, selection = "Sigma", return_mcmc = F, merge_chains = T, flatten = T)
     prior_var_input <- get_pars(emc, selection = "Sigma", flatten = T, true_pars = prior_var[,,i])[[1]][[1]]
-    actual_n_post <- (n_post_pc*length(emc))+1
-    rank_mu <- rbind(rank_mu, (apply(cbind(prior_mu[,i], mu_rec), 1, rank)[1,])/actual_n_post)
-    rank_var <- rbind(rank_var, (apply(cbind(t(prior_var_input), var_rec), 1, rank)[1,])/actual_n_post)
+    rank_var <- rbind(rank_var, mapply(get_ranks_ESS, split(var_rec, row(var_rec)), t(ESS_var), prior_var_input))
+
     colnames(rank_mu) <- par_names
     colnames(rank_var) <- colnames(prior_var_input)
     if(!is.null(fileName)) save(rank_mu, rank_var, emc, prior_mu, prior_var, all_rand_effects, file = fileName)
@@ -257,3 +261,7 @@ plot_sbc_ecdf <- function(ranks, layout = NA){
   }
 }
 
+get_ranks_ESS <- function(posterior, ESS, prior){
+  posterior <- posterior[seq(1, length(posterior), length.out = ESS)]
+  return(rank(c(prior, posterior))[1]/(ESS+1))
+}
