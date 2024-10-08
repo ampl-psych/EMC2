@@ -28,7 +28,7 @@ run_sbc <- function(design_in, prior_in, replicates = 250, trials = 100, n_subje
                       plot_data, verbose, n_post, fileName, ...)
   } else{
     out <- SBC_hierarchical(design_in, prior_in, replicates, trials, n_subjects,
-                    plot_data, verbose, n_post, fileName, ...)
+                    plot_data, verbose, fileName, ...)
   }
   return(out)
 }
