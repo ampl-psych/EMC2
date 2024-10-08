@@ -39,7 +39,8 @@ SBC_hierarchical <- function(design_in, prior_in, replicates = 250, trials = 100
                              plot_data = FALSE, verbose = TRUE,
                              fileName = NULL, ...){
   dots <- add_defaults(list(...), max_tries = 50, compress = FALSE, rt_resolution = 1e-12,
-                       stop_criteria = list(min_es = 250, max_gd = 1.1))
+                       stop_criteria = list(min_es = 250, max_gd = 1.1,
+                                            selection = c("alpha", "mu", "Sigma")))
   dots$verbose <- verbose
   type <- attr(prior_in, "type")
   if(type != "diagonal-gamma") warning("SBC in EMC2 is frequently biased for prior structures with heavy variance mass around 0 \n
