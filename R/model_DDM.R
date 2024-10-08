@@ -28,7 +28,7 @@ rDDM <- function(lR,pars,precision=5e-3,ok=rep(TRUE,length(lR)))
     is_id <- which(idx == id)
     first <- is_id[1]
     tmp <- rWDM(N = length(is_id), a = pars[first,"a"]/pars[first, "s"], v = pars[first,"v"]/pars[first, "s"], t0 = pars[first,"t0"],
-                       w = pars[first,"z"], sw = pars[first,"sz"], sv = pars[first,"sv"]/pars[first, "s"],
+                       w = pars[first,"Z"], sw = pars[first,"SZ"], sv = pars[first,"sv"]/pars[first, "s"],
                        st0 = pars[first,"st0"], precision = precision)
     tmp <- data.frame(response = tmp$response, rt = tmp$q)
     out_ok[is_id,] <- tmp[sample(nrow(tmp)),]
@@ -48,8 +48,8 @@ dDDM <- function(rt,R,pars,precision=5e-3)
   # R <- factor(c("left","right")); rt=c(1,1)
 {
   levels(R) <- c("lower","upper")
-  res <- dWDM(rt, response=as.character(R), a = pars[,"a"]/pars[, "s"], v = pars[,"v"]/pars[, "s"], t0 = pars[,"t0"], w = pars[,"z"],
-       sw = pars[,"sz"], sv = pars[,"sv"]/pars[, "s"],st0 = pars[,"st0"], precision = precision)$value
+  res <- dWDM(rt, response=as.character(R), a = pars[,"a"]/pars[, "s"], v = pars[,"v"]/pars[, "s"], t0 = pars[,"t0"], w = pars[,"Z"],
+       sw = pars[,"SZ"], sv = pars[,"sv"]/pars[, "s"],st0 = pars[,"st0"], precision = precision)$value
   return(res)
 }
 
@@ -58,8 +58,8 @@ pDDM <- function(rt,R,pars,precision=5e-3)
   # lower is mapped to first level of R and upper to second
 {
   levels(R) <- c("lower","upper")
-  pWDM(rt, response=as.character(R), a = pars[,"a"]/pars[, "s"], v = pars[,"v"]/pars[, "s"], t0 = pars[,"t0"], w = pars[,"z"],
-              sw = pars[,"sz"], sv = pars[,"sv"]/pars[, "s"],st0 = pars[,"st0"], precision = precision)$value
+  pWDM(rt, response=as.character(R), a = pars[,"a"]/pars[, "s"], v = pars[,"v"]/pars[, "s"], t0 = pars[,"t0"], w = pars[,"Z"],
+              sw = pars[,"SZ"], sv = pars[,"sv"]/pars[, "s"],st0 = pars[,"st0"], precision = precision)$value
 }
 
 
@@ -137,8 +137,9 @@ DDM <- function(){
     },
     # Trial dependent parameter transform
     Ttransform = function(pars,dadm) {
-      pars <- cbind(pars,z=pars[,"Z"],
-                    sz = 2*pars[,"SZ"]*apply(cbind(pars[,"Z"],1-pars[,"Z"]),1,min))
+      pars[,"SZ"] <- 2*pars[,"SZ"]*apply(cbind(pars[,"Z"],1-pars[,"Z"]),1,min)
+      pars <- cbind(pars,z=pars[,"Z"]*pars[,"a"],
+                    sz = pars[,"SZ"]*pars[,"a"])
       attr(pars,"ok") <- !( abs(pars[,"v"])> 20 | pars[,"a"]> 10 | pars[,"sv"]> 10 | pars[,"SZ"]> .999 |
              pars[,"t0"] < .05 | pars[,"st0"]>5)
       if (pars[1,"sv"] !=0) attr(pars,"ok") <- attr(pars,"ok") & pars[,"sv"] > .001
