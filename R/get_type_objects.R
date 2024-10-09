@@ -320,7 +320,7 @@ get_objects_factor <- function(type, selection, sample_prior, return_prior, desi
       return(lapply(sampler, FUN = function(x) return(x$samples$theta_lambda[,,idx])))
     }
     if(selection == "residuals"){
-      return(lapply(sampler, FUN = function(x) return(1/x$samples$sig_err_inv[,idx])))
+      return(lapply(sampler, FUN = function(x) return(1/x$samples$theta_sig_err_inv[,idx])))
     }
     return(get_base(sampler, idx, selection))
   }
@@ -377,7 +377,7 @@ get_objects_infnt_factor <- function(type, selection, sample_prior, return_prior
       return(lapply(sampler, FUN = function(x) return(x$samples$theta_lambda[,,idx])))
     }
     if(selection == "residuals"){
-      return(lapply(sampler, FUN = function(x) return(1/x$samples$sig_err_inv[,idx])))
+      return(lapply(sampler, FUN = function(x) return(1/x$samples$theta_sig_err_inv[,idx])))
     }
     return(get_base(sampler, idx, selection))
   }

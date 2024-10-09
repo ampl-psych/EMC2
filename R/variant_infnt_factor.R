@@ -90,7 +90,7 @@ get_prior_infnt_factor <- function(prior = NULL, n_pars = NULL, sample = TRUE, N
                           ncol = n_pars, byrow = T))
       rownames(residuals) <- par_names
       if(selection %in% "residuals"){
-        samples$sig_err_inv <- residuals
+        samples$theta_sig_err_inv <- residuals
       }
     }
     if(selection %in% c("sigma2", "covariance", "correlation", "Sigma", "alpha")) {
