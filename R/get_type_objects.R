@@ -62,7 +62,6 @@ get_objects_diag <- function(selection, sample_prior, return_prior, design = NUL
                                  prior = NULL, stage = 'sample', N = 1e5, sampler = NULL,...){
   acc_selection <- c("mu", "sigma2", "alpha", "LL", "Sigma")
   if(return_prior & !sample_prior){
-    prior$prior <- get_prior_diag(design = design, sample = F, prior = prior)
     prior$descriptions <- list(
       theta_mu_mean = "mean of the group-level mean prior",
       theta_mu_var = "variance of the group-level mean prior",
@@ -77,6 +76,8 @@ get_objects_diag <- function(selection, sample_prior, return_prior, design = NUL
       mu = "Group-level mean",
       Sigma = 'Group-level covariance matrix'
     )
+    if(list(...)$return_info) return(prior)
+    prior$prior <- get_prior_diag(design = design, sample = F, prior = prior)
     prior$prior <- add_prior_names(prior$prior, design)
     return(prior)
   } else{
@@ -102,7 +103,6 @@ get_objects_diag_gamma <- function(selection, sample_prior, return_prior, design
                              prior = NULL, stage = 'sample', N = 1e5, sampler = NULL,...){
   acc_selection <- c("mu", "sigma2", "alpha", "LL", "Sigma")
   if(return_prior & !sample_prior){
-    prior$prior <- get_prior_diag_gamma(design = design, sample = F, prior = prior)
     prior$descriptions <- list(
       theta_mu_mean = "mean of the group-level mean prior",
       theta_mu_var = "variance of the group-level mean prior",
@@ -117,6 +117,8 @@ get_objects_diag_gamma <- function(selection, sample_prior, return_prior, design
       mu = "Group-level mean",
       Sigma = 'Group-level covariance matrix'
     )
+    if(list(...)$return_info) return(prior)
+    prior$prior <- get_prior_diag_gamma(design = design, sample = F, prior = prior)
     prior$prior <- add_prior_names(prior$prior, design)
     return(prior)
   } else{
@@ -143,7 +145,6 @@ get_objects_standard <- function(selection, sample_prior, return_prior, design =
                                  prior = NULL, stage = 'sample', N = 1e5, sampler = NULL, ...){
   acc_selection <- c("mu", "sigma2", "covariance", "correlation", "alpha", "Sigma", "LL")
   if(return_prior & !sample_prior){
-    prior$prior <- get_prior_standard(design = design, sample = F, prior = prior)
     prior$descriptions <- list(
       theta_mu_mean = "mean of the group-level mean prior",
       theta_mu_var = "variance of the group-level mean prior",
@@ -158,6 +159,8 @@ get_objects_standard <- function(selection, sample_prior, return_prior, design =
       mu = "Group-level mean",
       Sigma = 'Group-level covariance matrix'
     )
+    if(list(...)$return_info) return(prior)
+    prior$prior <- get_prior_standard(design = design, sample = F, prior = prior)
     prior$prior <- add_prior_names(prior$prior, design)
     return(prior)
   } else{
@@ -196,7 +199,6 @@ get_objects_blocked <- function(selection, sample_prior, return_prior, design = 
                                  prior = NULL, stage = 'sample', N = 1e5, sampler = NULL,...){
   acc_selection <- c("mu", "sigma2", "covariance", "correlation", "alpha", "Sigma", "LL")
   if(return_prior & !sample_prior){
-    prior$prior <- do.call(get_prior_blocked, c(list(design = design, sample = F, prior = prior), fix_dots(list(...), get_prior_blocked)))
     prior$descriptions <- list(
       theta_mu_mean = "mean of the group-level mean prior",
       theta_mu_var = "variance of the group-level mean prior",
@@ -211,6 +213,8 @@ get_objects_blocked <- function(selection, sample_prior, return_prior, design = 
       mu = "Group-level mean",
       Sigma = 'Group-level covariance matrix'
     )
+    if(list(...)$return_info) return(prior)
+    prior$prior <- do.call(get_prior_blocked, c(list(design = design, sample = F, prior = prior), fix_dots(list(...), get_prior_blocked)))
     prior$prior <- add_prior_names(prior$prior, design)
     return(prior)
   } else{
@@ -244,7 +248,6 @@ get_objects_single <- function(selection, sample_prior, return_prior, design = N
                                  prior = NULL, stage = 'sample', N = 1e5, sampler = NULL,...){
   acc_selection <- c("alpha", "LL")
   if(return_prior & !sample_prior){
-    prior$prior <- get_prior_single(design = design, sample = F, prior = prior)
     prior$descriptions <- list(
       theta_mu_mean = "mean of the prior",
       theta_mu_var = "variance of the prior"
@@ -255,6 +258,8 @@ get_objects_single <- function(selection, sample_prior, return_prior, design = N
     prior$type_descriptions <- list(
       alpha = "Subject-level prior"
     )
+    if(list(...)$return_info) return(prior)
+    prior$prior <- get_prior_single(design = design, sample = F, prior = prior)
     prior$prior <- add_prior_names(prior$prior, design)
     return(prior)
   } else{
@@ -273,7 +278,6 @@ get_objects_factor <- function(selection, sample_prior, return_prior, design = N
                                      prior = NULL, stage = 'sample', N = 1e5, sampler = NULL, ...){
   acc_selection <- c("mu", "sigma2", "covariance", "correlation", "alpha", "Sigma", "loadings", "residuals", "LL")
   if(return_prior & !sample_prior){
-    prior$prior <- do.call(get_prior_factor, c(list(design = design, sample = F, prior = prior), fix_dots(list(...), get_prior_factor)))
     prior$descriptions <- list(
       theta_mu_mean = "mean of the group-level mean prior",
       theta_mu_var = "variance of the group-level mean prior",
@@ -293,6 +297,8 @@ get_objects_factor <- function(selection, sample_prior, return_prior, design = N
       loadings = "Factor loadings",
       residuals = "Residual errors on the variances"
     )
+    if(list(...)$return_info) return(prior)
+    prior$prior <- do.call(get_prior_factor, c(list(design = design, sample = F, prior = prior), fix_dots(list(...), get_prior_factor)))
     prior$prior <- add_prior_names(prior$prior, design)
     return(prior)
   } else{
@@ -332,7 +338,6 @@ get_objects_infnt_factor <- function(selection, sample_prior, return_prior, desi
                                  prior = NULL, stage = 'sample', N = 1e5, sampler = NULL, ...){
   acc_selection <- c("mu", "sigma2", "covariance", "correlation", "alpha", "Sigma", "loadings", "residuals", "LL")
   if(return_prior & !sample_prior){
-    prior$prior <- do.call(get_prior_infnt_factor, c(list(design = design, sample = F, prior = prior), fix_dots(list(...), get_prior_infnt_factor)))
     prior$descriptions <- list(
       theta_mu_mean = "mean of the group-level mean prior",
       theta_mu_var = "variance of the group-level mean prior",
@@ -354,6 +359,8 @@ get_objects_infnt_factor <- function(selection, sample_prior, return_prior, desi
       loadings = "Factor loadings",
       residuals = "Residual errors on the variances"
     )
+    if(list(...)$return_info) return(prior)
+    prior$prior <- do.call(get_prior_infnt_factor, c(list(design = design, sample = F, prior = prior), fix_dots(list(...), get_prior_infnt_factor)))
     prior$prior <- add_prior_names(prior$prior, design)
     return(prior)
   } else{
@@ -390,7 +397,6 @@ get_objects_SEM <- function(selection, sample_prior, return_prior, design = NULL
                      "factor_residuals", "regressors", "factor_regressors", "structural_regressors",
                      "mu_implied", "LL")
   if(return_prior & !sample_prior){
-    prior$prior <- do.call(get_prior_SEM, c(list(design = design, sample = F, prior = prior), fix_dots(list(...), get_prior_SEM)))
     prior$descriptions <- list(
       theta_mu_mean = "mean of the group-level mean prior",
       theta_mu_var = "variance of the group-level mean prior",
@@ -421,6 +427,8 @@ get_objects_SEM <- function(selection, sample_prior, return_prior, design = NULL
       factor_regressors = "regressors on factors",
       structural_regressors = "structural regressors between factors"
     )
+    if(list(...)$return_info) return(prior)
+    prior$prior <- do.call(get_prior_SEM, c(list(design = design, sample = F, prior = prior), fix_dots(list(...), get_prior_SEM)))
     prior$prior <- add_prior_names(prior$prior, design)
     return(prior)
   } else{
@@ -482,24 +490,6 @@ get_objects_SEM <- function(selection, sample_prior, return_prior, design = NULL
     return(get_base(sampler, idx, selection))
   }
 }
-
-get_mu_implied <- function(x, idx){
-  mu <- x$samples$theta_mu[,idx]
-  B <- x$samples$B[,,idx, drop = F]
-  G <- x$samples$G[,,idx, drop = F]
-  K <- x$samples$K[,,idx, drop = F]
-  loadings <- x$samples$lambda[,,idx, drop = F]
-  n_factors <- ncol(loadings)
-  x_mu <- colMeans(x$covariates)
-  for(i in 1:ncol(mu)){
-    B_0_inv <- solve(diag(n_factors) - as.matrix(B[,,i]))
-    mu[,i] <- as.matrix(mu[,i]) + as.matrix(loadings[,,i]) %*% B_0_inv %*% as.matrix(G[,,i]) %*% x_mu
-                + as.matrix(K[,,i]) %*% x_mu
-  }
-  return(mu)
-}
-
-
 
 get_base <- function(sampler, idx, selection){
   if(selection == "alpha"){

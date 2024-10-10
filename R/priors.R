@@ -308,4 +308,32 @@ plot_prior <- function(prior, design, selection = "mu", do_plot = TRUE, covariat
   return(invisible(MCMC_samples))
 }
 
+prior_help <- function(type){
+  prior <- get_objects(type, return_prior = TRUE, return_info = TRUE)
+  # Loop through each type
+  for (type in names(prior$types)) {
+    # Get the type description
+    type_desc <- prior$type_descriptions[[type]]
+
+    # Display type and description
+    cat(paste("type:", type, "\n"))
+    cat(paste(type_desc, "\n\n"))
+    cat("  Hyperparameters: \n")
+    # Loop through hyperparameters within the type
+    for (param in prior$types[[type]]) {
+      # Get the hyperparameter description
+      param_desc <- prior$descriptions[[param]]
+
+      # Display hyperparameter and description
+      cat(paste("  -", param, ":", param_desc, "\n"))
+    }
+
+    # New line for separation between types
+    cat("\n")
+  }
+  return(invisible(prior))
+}
+
+
+
 
