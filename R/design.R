@@ -70,6 +70,7 @@
 design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
                        contrasts=NULL,matchfun=NULL,constants=NULL,covariates=NULL,
                        functions=NULL,report_p_vector=TRUE, custom_p_vector = NULL,
+                   transform = NULL, bound = NULL,
                        ...){
 
   optionals <- list(...)
@@ -122,6 +123,10 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
     constants <- c(constants, additional_constants)
     for(add_constant in not_specified) formula[[length(formula)+ 1]] <- as.formula(paste0(add_constant, "~ 1"))
   }
+
+  model$transform <- fill_transform(transform,model)
+  model$bound <- fill_bound(bound,model)
+
   design <- list(Flist=formula,Ffactors=factors,Rlevels=Rlevels,
                  Clist=contrasts,matchfun=matchfun,constants=constants,
                  Fcovariates=covariates,Ffunctions=functions,adapt=adapt,model=model)

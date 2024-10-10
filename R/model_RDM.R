@@ -381,8 +381,6 @@ RDM <- function(){
       # transform parameters back to real line
       exp(x)
     },
-    # p_vector transform
-    transform = function(x) x,
     # Trial dependent parameter transform
     Ttransform = function(pars,dadm) {
       pars <- cbind(pars,b=pars[,"B"] + pars[,"A"])

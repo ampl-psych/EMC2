@@ -1,3 +1,17 @@
+do_transform <- function(pars,transform)
+  # pars is the parameter matrix, transform is a transform list
+{
+  isexp <- transform$func[colnames(pars)] == "exp"
+  isprobit <- transform$func[colnames(pars)] == "pnorm"
+  pars[,isexp] <- exp(pars[,isexp]- rep(transform$lower[isexp],each=nrow(pars)))
+  pars[,isprobit] <- pnorm((pars[,isprobit]-
+                              rep(transform$lower[isprobit],each=nrow(pars)))/
+                             (rep((transform$upper[isprobit]-transform$lower[isprobit]),each=nrow(pars))))
+  pars
+}
+
+
+
 get_pars_matrix <- function(p_vector,dadm) {
   # Add constants, transform p_vector, map to design, transform mapped parameters
   # to the natural scale, and create trial-dependent parameters. Ordinal
@@ -7,13 +21,10 @@ get_pars_matrix <- function(p_vector,dadm) {
     if (is.matrix(p_vector))
        p_vector[,attr(dadm,"ordinal")] <- exp(p_vector[,attr(dadm,"ordinal")]) else
        p_vector[attr(dadm,"ordinal")] <- exp(p_vector[attr(dadm,"ordinal")])
-
-  attr(dadm,"model")()$Ttransform(
-    attr(dadm,"model")()$Ntransform(
-      map_p(
-        attr(dadm,"model")()$transform(add_constants(p_vector,attr(dadm,"constants"))),
-        dadm)),
-    dadm)
+  pars <- map_p(attr(dadm,"model")()$transform(add_constants(p_vector,attr(dadm,"constants"))),dadm)
+  pars <- attr(dadm,"model")()$Ttransform(do_transform(pars, transform), dadm)
+  pars <- add_bound(pars)
+  return(pars)
 }
 
 get_design <- function(samples)
@@ -31,53 +42,12 @@ get_design_matrix <- function(samples){
   attr(sampled_p_vector(attr(samples,"design_list")[[1]]),"map")
 }
 
-get_map <- function(samples,add_design=TRUE) {
-  out <- attr(attr(attr(samples,"design_list")[[1]],"p_vector"),"map")
-  if (add_design) {
-    design <- attr(samples,"design_list")[[1]]
-    mnl <- mapped_name_list(design, design$model,TRUE)
-    for (i in names(out)) out[[i]] <- cbind(mnl[[i]],out[[i]])
-  }
-  out
-}
-
 pmat <- function(p_vector,design)
   # puts vector form of p_vector into matrix form
 {
   ss <- design$Ffactors$subjects
   matrix(rep(p_vector,each=length(ss)),nrow=length(ss),
          dimnames=list(ss,names(p_vector)))
-}
-
-
-
-mapped_name_list <- function(design,model,save_design=FALSE)
-  # makes a list, with entries for each parameter type, of names for mapped
-  # parameters or with unique design columns
-{
-  doMap <- function(mapi,pmat) t(mapi %*% t(pmat[,dimnames(mapi)[[2]],drop=FALSE]))
-
-  constants <- design$constants
-  p_vector <- attr(design,"p_vector")
-  mp <- mapped_par(p_vector,design)
-  map <- attr(sampled_p_vector(design),"map")
-  pmat <- model()$transform(add_constants(t(as.matrix(p_vector)),constants))
-  plist <- lapply(map,doMap,pmat=pmat)
-  if (model()$type=="SDT") {
-    ht <- apply(map$threshold[,grepl("lR",dimnames(map$threshold)[[2]]),drop=FALSE],1,sum)
-    plist$threshold <- plist$threshold[,ht!=max(ht),drop=FALSE]
-  }
-  # Give mapped variables names and remove constants
-  for (i in 1:length(plist)) {
-    vars <- row.names(attr(terms(design$Flist[[i]]),"factors"))
-    if (is.null(vars)) dimnames(plist[[i]])[2] <- names(plist)[i] else {
-      uniq <- !duplicated(apply(mp[,vars],1,paste,collapse="_"))
-      if (save_design) plist[[i]] <- mp[uniq,vars[-1]] else
-        dimnames(plist[[i]])[[2]] <-
-          paste(vars[1],apply(mp[uniq,vars[-1],drop=FALSE],1,paste,collapse="_"),sep="_")
-    }
-  }
-  if (save_design) plist else lapply(plist,function(x){dimnames(x)[[2]]})
 }
 
 
@@ -304,6 +274,55 @@ map_mcmc <- function(mcmc,design,include_constants = TRUE, add_recalculated = FA
   return(out)
 }
 
+
+
+fill_transform <- function(transform, model,
+                           supported=c("identity","exp","pnorm"),
+                           has_lower=c("exp","pnorm"),has_upper=c("pnorm")) {
+  # if (!is.null(transform)){
+  #   if (!all(transform %in% supported))
+  #     stop("Only ",supported," transforms supported")
+  #   if (!all(names(transform) %in% names(model()$p_types)))
+  #     stop("Transform parameter not in the model")
+  #   if (!is.null(lower)) {
+  #     if (!all(names(lower) %in% names(transform[transform %in% has_lower])))
+  #       stop("lower can only apply to tranforms of type ",paste(has_lower,collapse=","))
+  #   }
+  #   if (!is.null(upper)) {
+  #     if (!all(names(upper) %in% names(transform[transform %in% has_upper])))
+  #       stop("upper can only apply to tranforms of type ",paste(has_upper,collapse=","))
+  #   }
+  # } else if (!is.null(lower) & !is.null(upper)) stop("transform must be provided if lower and/or upper are provided")
+  filled_transform <- model()$transform$transform
+  filled_transform[names(transform$transform)] <- transform$transform
+  filled_lower <- setNames(rep(-Inf,length(filled_transform)),names(filled_transform))
+  filled_upper <- setNames(rep(Inf,length(filled_transform)),names(filled_transform))
+  filled_lower[filled_transform %in% has_lower] <- 0
+  filled_upper[filled_transform %in% has_upper] <- 1
+  if (!is.null(transform$lower)) filled_lower[names(transform$lower)] <- transform$lower
+  if (!is.null(transform$upper)) filled_lower[names(transform$upper)] <- transform$upper
+  list(transform=filled_transform,lower=filled_lower,upper=filled_upper)
+}
+
+
+fill_bound <- function(bound, model) {
+  filled_bound <- model()$bound
+  if (!is.null(bound)) {
+    if (names(bound)[1] != "minmax")
+      stop("first entry of bound must be named minmax")
+    if (!all(colnames(bound$minmax) %in% names(model()$p_types)))
+      stop("minmax column names must correspond to parameter types")
+    if (!is.null(bound$exception) &&
+        (!all(names(bound$exception) %in% names(model()$p_types))))
+      stop("exception names must correspond to parameter types")
+    filled_bound$minmax[,colnames(bound$minmax)] <- bound$minmax
+    if (!is.null(bound$exception)) {
+      filled_bound$exception <- c(bound$exception,filled_bound$exception)
+      filled_bound$exception <- filled_bound$exception[!duplicated(names(filled_bound$exception))]
+    }
+  }
+  filled_bound
+}
 
 
 

@@ -147,8 +147,6 @@ DDM <- function(){
       attr(pars, "ok") <- rep(TRUE, nrow(pars))
       pars
     },
-    # p_vector transform, sets s as a scaling parameter
-    transform = function(p) p,
     # Random function
     rfun=function(lR=NULL,pars) {
       ok <- !(abs(pars[,"v"])> 20 | pars[,"a"]> 10 | pars[,"sv"]> 10 | pars[,"SZ"]> .999 |

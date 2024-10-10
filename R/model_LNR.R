@@ -95,8 +95,6 @@ LNR <- function() {
       x[,dimnames(x)[[2]] != "m"] <- exp(x[,dimnames(x)[[2]] != "m"])
       x
     },
-    # p_vector transform scaling parameter by s=1 assumed in lnr.R
-    transform = function(x) x,
     # Trial dependent parameter transform
     Ttransform = function(pars,dadm) pars,
     # Random function for racing accumulators
