@@ -76,7 +76,7 @@ get_objects_diag <- function(selection, sample_prior, return_prior, design = NUL
       mu = "Group-level mean",
       Sigma = 'Group-level covariance matrix'
     )
-    if(list(...)$return_info) return(prior)
+    if(!is.null(list(...)$return_info))return(prior)
     prior$prior <- get_prior_diag(design = design, sample = F, prior = prior)
     prior$prior <- add_prior_names(prior$prior, design)
     return(prior)
@@ -117,7 +117,7 @@ get_objects_diag_gamma <- function(selection, sample_prior, return_prior, design
       mu = "Group-level mean",
       Sigma = 'Group-level covariance matrix'
     )
-    if(list(...)$return_info) return(prior)
+    if(!is.null(list(...)$return_info)) return(prior)
     prior$prior <- get_prior_diag_gamma(design = design, sample = F, prior = prior)
     prior$prior <- add_prior_names(prior$prior, design)
     return(prior)
@@ -159,7 +159,7 @@ get_objects_standard <- function(selection, sample_prior, return_prior, design =
       mu = "Group-level mean",
       Sigma = 'Group-level covariance matrix'
     )
-    if(list(...)$return_info) return(prior)
+    if(!is.null(list(...)$return_info)) return(prior)
     prior$prior <- get_prior_standard(design = design, sample = F, prior = prior)
     prior$prior <- add_prior_names(prior$prior, design)
     return(prior)
@@ -213,7 +213,7 @@ get_objects_blocked <- function(selection, sample_prior, return_prior, design = 
       mu = "Group-level mean",
       Sigma = 'Group-level covariance matrix'
     )
-    if(list(...)$return_info) return(prior)
+    if(!is.null(list(...)$return_info)) return(prior)
     prior$prior <- do.call(get_prior_blocked, c(list(design = design, sample = F, prior = prior), fix_dots(list(...), get_prior_blocked)))
     prior$prior <- add_prior_names(prior$prior, design)
     return(prior)
@@ -258,7 +258,7 @@ get_objects_single <- function(selection, sample_prior, return_prior, design = N
     prior$type_descriptions <- list(
       alpha = "Subject-level prior"
     )
-    if(list(...)$return_info) return(prior)
+    if(!is.null(list(...)$return_info)) return(prior)
     prior$prior <- get_prior_single(design = design, sample = F, prior = prior)
     prior$prior <- add_prior_names(prior$prior, design)
     return(prior)
@@ -297,7 +297,7 @@ get_objects_factor <- function(selection, sample_prior, return_prior, design = N
       loadings = "Factor loadings",
       residuals = "Residual errors on the variances"
     )
-    if(list(...)$return_info) return(prior)
+    if(!is.null(list(...)$return_info)) return(prior)
     prior$prior <- do.call(get_prior_factor, c(list(design = design, sample = F, prior = prior), fix_dots(list(...), get_prior_factor)))
     prior$prior <- add_prior_names(prior$prior, design)
     return(prior)
@@ -343,7 +343,7 @@ get_objects_infnt_factor <- function(selection, sample_prior, return_prior, desi
       theta_mu_var = "variance of the group-level mean prior",
       as = "shape of inverse-gamma prior on the residual variances",
       bs = "rate of inverse-gamma prior on the residual variances",
-      df = "shape and rate prior on cross-loadings (local) shrinkage parameter",
+      df = "shape and rate prior on loadings (local) shrinkage parameter",
       ad1 = "shape prior on factor loading variances of first column",
       bd1 = "rate prior on factor loading variances of first column",
       ad2 = "multiplicative shape prior on factor loading variances of subsequent columns",
@@ -359,7 +359,7 @@ get_objects_infnt_factor <- function(selection, sample_prior, return_prior, desi
       loadings = "Factor loadings",
       residuals = "Residual errors on the variances"
     )
-    if(list(...)$return_info) return(prior)
+    if(!is.null(list(...)$return_info)) return(prior)
     prior$prior <- do.call(get_prior_infnt_factor, c(list(design = design, sample = F, prior = prior), fix_dots(list(...), get_prior_infnt_factor)))
     prior$prior <- add_prior_names(prior$prior, design)
     return(prior)
@@ -427,7 +427,7 @@ get_objects_SEM <- function(selection, sample_prior, return_prior, design = NULL
       factor_regressors = "regressors on factors",
       structural_regressors = "structural regressors between factors"
     )
-    if(list(...)$return_info) return(prior)
+    if(!is.null(list(...)$return_info)) return(prior)
     prior$prior <- do.call(get_prior_SEM, c(list(design = design, sample = F, prior = prior), fix_dots(list(...), get_prior_SEM)))
     prior$prior <- add_prior_names(prior$prior, design)
     return(prior)
