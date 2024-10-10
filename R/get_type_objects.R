@@ -2,35 +2,35 @@ get_objects <- function(type, selection = NULL, sample_prior = F, design = NULL,
                         prior = NULL, stage = 'sample', N = 1e5, ...){
   return_prior <- ifelse(is.null(sampler), TRUE, FALSE)
   if(type == "standard"){
-    out <- get_objects_standard(type, selection, sample_prior, return_prior, design, prior, stage, N = N,
+    out <- get_objects_standard(selection, sample_prior, return_prior, design, prior, stage, N = N,
                                 sampler, ...)
   }
   else if(type == "single"){
-    out <- get_objects_single(type, selection, sample_prior, return_prior, design, prior, stage, N = N,
+    out <- get_objects_single(selection, sample_prior, return_prior, design, prior, stage, N = N,
                                 sampler, ...)
   }
   else if(type == "diagonal"){
-    out <- get_objects_diag(type, selection, sample_prior, return_prior, design, prior, stage, N = N,
+    out <- get_objects_diag(selection, sample_prior, return_prior, design, prior, stage, N = N,
                               sampler, ...)
   }
   else if(type == "diagonal-gamma"){
-    out <- get_objects_diag_gamma(type, selection, sample_prior, return_prior, design, prior, stage, N = N,
+    out <- get_objects_diag_gamma(selection, sample_prior, return_prior, design, prior, stage, N = N,
                             sampler, ...)
   }
   else if(type == "blocked"){
-    out <- get_objects_blocked(type, selection, sample_prior, return_prior, design, prior, stage, N = N,
+    out <- get_objects_blocked(selection, sample_prior, return_prior, design, prior, stage, N = N,
                             sampler, ...)
   }
   else if(type == "infnt_factor"){
-    out <- get_objects_infnt_factor(type, selection, sample_prior, return_prior, design, prior, stage, N = N,
+    out <- get_objects_infnt_factor(selection, sample_prior, return_prior, design, prior, stage, N = N,
                                sampler, ...)
   }
   else if(type == "factor"){
-    out <- get_objects_factor(type, selection, sample_prior, return_prior, design, prior, stage, N = N,
+    out <- get_objects_factor(selection, sample_prior, return_prior, design, prior, stage, N = N,
                                     sampler,...)
   }
   else if(type == "SEM"){
-    out <- get_objects_SEM(type, selection, sample_prior, return_prior, design, prior, stage, N = N,
+    out <- get_objects_SEM(selection, sample_prior, return_prior, design, prior, stage, N = N,
                               sampler,...)
   }
   else{
@@ -58,7 +58,7 @@ add_prior_names <- function(prior, design){
   return(prior)
 }
 
-get_objects_diag <- function(type, selection, sample_prior, return_prior, design = NULL,
+get_objects_diag <- function(selection, sample_prior, return_prior, design = NULL,
                                  prior = NULL, stage = 'sample', N = 1e5, sampler = NULL,...){
   acc_selection <- c("mu", "sigma2", "alpha", "LL", "Sigma")
   if(return_prior & !sample_prior){
@@ -69,11 +69,11 @@ get_objects_diag <- function(type, selection, sample_prior, return_prior, design
       v = "degrees of freedom on the group-level variance prior",
       A = "scale on the group-level variance prior, larger values lead to larger variances"
     )
-    prior$groups <- list(
+    prior$types <- list(
       mu = c("theta_mu_mean", "theta_mu_var"),
       Sigma = c("v", "A")
     )
-    prior$group_descriptions <- list(
+    prior$type_descriptions <- list(
       mu = "Group-level mean",
       Sigma = 'Group-level covariance matrix'
     )
@@ -98,7 +98,7 @@ get_objects_diag <- function(type, selection, sample_prior, return_prior, design
   }
 }
 
-get_objects_diag_gamma <- function(type, selection, sample_prior, return_prior, design = NULL,
+get_objects_diag_gamma <- function(selection, sample_prior, return_prior, design = NULL,
                              prior = NULL, stage = 'sample', N = 1e5, sampler = NULL,...){
   acc_selection <- c("mu", "sigma2", "alpha", "LL", "Sigma")
   if(return_prior & !sample_prior){
@@ -109,11 +109,11 @@ get_objects_diag_gamma <- function(type, selection, sample_prior, return_prior, 
       shape = "shape of the group-level variance prior",
       rate = "rate of the group-level variance prior"
     )
-    prior$groups <- list(
+    prior$types <- list(
       mu = c("theta_mu_mean", "theta_mu_var"),
       Sigma = c("shape", "rate")
     )
-    prior$group_descriptions <- list(
+    prior$type_descriptions <- list(
       mu = "Group-level mean",
       Sigma = 'Group-level covariance matrix'
     )
@@ -139,7 +139,7 @@ get_objects_diag_gamma <- function(type, selection, sample_prior, return_prior, 
 }
 
 
-get_objects_standard <- function(type, selection, sample_prior, return_prior, design = NULL,
+get_objects_standard <- function(selection, sample_prior, return_prior, design = NULL,
                                  prior = NULL, stage = 'sample', N = 1e5, sampler = NULL, ...){
   acc_selection <- c("mu", "sigma2", "covariance", "correlation", "alpha", "Sigma", "LL")
   if(return_prior & !sample_prior){
@@ -150,11 +150,11 @@ get_objects_standard <- function(type, selection, sample_prior, return_prior, de
       v = "degrees of freedom on the group-level (co-)variance prior, 2 leads to uniform correlations. Single value",
       A = "scale on the group-level variance prior, larger values lead to larger variances"
     )
-    prior$groups <- list(
+    prior$types <- list(
       mu = c("theta_mu_mean", "theta_mu_var"),
       Sigma = c("v", "A")
     )
-    prior$group_descriptions <- list(
+    prior$type_descriptions <- list(
       mu = "Group-level mean",
       Sigma = 'Group-level covariance matrix'
     )
@@ -192,7 +192,7 @@ get_idx <- function(sampler, stage){
 
 
 
-get_objects_blocked <- function(type, selection, sample_prior, return_prior, design = NULL,
+get_objects_blocked <- function(selection, sample_prior, return_prior, design = NULL,
                                  prior = NULL, stage = 'sample', N = 1e5, sampler = NULL,...){
   acc_selection <- c("mu", "sigma2", "covariance", "correlation", "alpha", "Sigma", "LL")
   if(return_prior & !sample_prior){
@@ -203,11 +203,11 @@ get_objects_blocked <- function(type, selection, sample_prior, return_prior, des
       v = "degrees of freedom on the group-level (co-)variance prior, 2 leads to uniform correlations. Single value",
       A = "scale on the group-level variance prior, larger values lead to larger variances"
     )
-    prior$groups <- list(
+    prior$types <- list(
       mu = c("theta_mu_mean", "theta_mu_var"),
       Sigma = c("v", "A")
     )
-    prior$group_descriptions <- list(
+    prior$type_descriptions <- list(
       mu = "Group-level mean",
       Sigma = 'Group-level covariance matrix'
     )
@@ -240,7 +240,7 @@ get_objects_blocked <- function(type, selection, sample_prior, return_prior, des
 
 
 
-get_objects_single <- function(type, selection, sample_prior, return_prior, design = NULL,
+get_objects_single <- function(selection, sample_prior, return_prior, design = NULL,
                                  prior = NULL, stage = 'sample', N = 1e5, sampler = NULL,...){
   acc_selection <- c("alpha", "LL")
   if(return_prior & !sample_prior){
@@ -249,10 +249,10 @@ get_objects_single <- function(type, selection, sample_prior, return_prior, desi
       theta_mu_mean = "mean of the prior",
       theta_mu_var = "variance of the prior"
     )
-    prior$groups <- list(
+    prior$types <- list(
       alpha = c("theta_mu_mean", "theta_mu_var")
     )
-    prior$group_descriptions <- list(
+    prior$type_descriptions <- list(
       alpha = "Subject-level prior"
     )
     prior$prior <- add_prior_names(prior$prior, design)
@@ -269,7 +269,7 @@ get_objects_single <- function(type, selection, sample_prior, return_prior, desi
   }
 }
 
-get_objects_factor <- function(type, selection, sample_prior, return_prior, design = NULL,
+get_objects_factor <- function(selection, sample_prior, return_prior, design = NULL,
                                      prior = NULL, stage = 'sample', N = 1e5, sampler = NULL, ...){
   acc_selection <- c("mu", "sigma2", "covariance", "correlation", "alpha", "Sigma", "loadings", "residuals", "LL")
   if(return_prior & !sample_prior){
@@ -283,12 +283,12 @@ get_objects_factor <- function(type, selection, sample_prior, return_prior, desi
       ap = "shape prior of inverse gamma on factor variances",
       bp = "rate prior of inverse gamma on factor variances"
     )
-    prior$groups <- list(
+    prior$types <- list(
       mu = c("theta_mu_mean", "theta_mu_var"),
       loadings = c("theta_lambda_var", "ap", "bp"),
       residuals = c("as", "bs")
     )
-    prior$group_descriptions <- list(
+    prior$type_descriptions <- list(
       mu = "Group-level mean",
       loadings = "Factor loadings",
       residuals = "Residual errors on the variances"
@@ -328,7 +328,7 @@ get_objects_factor <- function(type, selection, sample_prior, return_prior, desi
 
 
 
-get_objects_infnt_factor <- function(type, selection, sample_prior, return_prior, design = NULL,
+get_objects_infnt_factor <- function(selection, sample_prior, return_prior, design = NULL,
                                  prior = NULL, stage = 'sample', N = 1e5, sampler = NULL, ...){
   acc_selection <- c("mu", "sigma2", "covariance", "correlation", "alpha", "Sigma", "loadings", "residuals", "LL")
   if(return_prior & !sample_prior){
@@ -344,12 +344,12 @@ get_objects_infnt_factor <- function(type, selection, sample_prior, return_prior
       ad2 = "multiplicative shape prior on factor loading variances of subsequent columns",
       bd2 = "multiplicative rate prior on factor loading variances of subsequent columns"
     )
-    prior$groups <- list(
+    prior$types <- list(
       mu = c("theta_mu_mean", "theta_mu_var"),
       loadings = c("df", "ad1", "bd1",  "ad2", "bd2"),
       residuals = c("as", "bs")
     )
-    prior$group_descriptions <- list(
+    prior$type_descriptions <- list(
       mu = "Group-level mean",
       loadings = "Factor loadings",
       residuals = "Residual errors on the variances"
@@ -384,7 +384,7 @@ get_objects_infnt_factor <- function(type, selection, sample_prior, return_prior
 }
 
 
-get_objects_SEM <- function(type, selection, sample_prior, return_prior, design = NULL,
+get_objects_SEM <- function(selection, sample_prior, return_prior, design = NULL,
                                prior = NULL, stage = 'sample', N = 1e5, sampler = NULL, ...){
   acc_selection <- c("mu", "sigma2", "covariance", "alpha", "correlation", "Sigma", "loadings", "residuals",
                      "factor_residuals", "regressors", "factor_regressors", "structural_regressors",
@@ -403,7 +403,7 @@ get_objects_SEM <- function(type, selection, sample_prior, return_prior, design 
       a_e = "shape prior of inverse gamma on residuals",
       b_e = "rate prior of inverse gamma on residuals"
     )
-    prior$groups <- list(
+    prior$types <- list(
       mu = c("theta_mu_mean", "theta_mu_var"),
       loadings = c("theta_lambda_var"),
       residuals = c("a_e", "b_e"),
@@ -412,7 +412,7 @@ get_objects_SEM <- function(type, selection, sample_prior, return_prior, design 
       factor_regressors = c("G_var"),
       structural_regressors = c("B_var")
     )
-    prior$group_descriptions <- list(
+    prior$type_descriptions <- list(
       mu = "group-level mean",
       loadings = "factor variances",
       residuals = "residuals on parameter variances",

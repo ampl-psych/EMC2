@@ -97,14 +97,14 @@ prior <- function(design, type = "standard", update = NULL,
       }
     }
   }
-  for(group in names(prior$groups)){
+  for(group in names(prior$types)){
     if(is.null(ask) & !fill_default){
       group_to_do <- TRUE
     } else{
       group_to_do <- group %in% ask
     }
-    if(group_to_do) cat(paste0(prior$group_descriptions[[group]], "\n \n"))
-    for(pri in prior$groups[[group]]){
+    if(group_to_do) cat(paste0(prior$type_descriptions[[group]], "\n \n"))
+    for(pri in prior$types[[group]]){
       if(pri %in% names(prior$descriptions)){ # This excluded prior$theta_mu_invar
         if(pri %in% names(args)){ # Already specified in ellipsis, so fill in
           input <- args[[pri]]
