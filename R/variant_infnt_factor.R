@@ -18,6 +18,9 @@ get_prior_infnt_factor <- function(prior = NULL, n_pars = NULL, sample = TRUE, N
   if(!is.null(design)){
     n_pars <- length(sampled_p_vector(design, doMap = F))
   }
+  if (!is.null(prior$theta_mu_mean)) {
+    n_pars <- length(prior$theta_mu_mean)
+  }
   if(is.null(prior$theta_mu_mean)){
     prior$theta_mu_mean <- rep(0, n_pars)
   }
