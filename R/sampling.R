@@ -731,6 +731,18 @@ get_variant_funs <- function(type = "standard") {
       bridge_add_info = bridge_add_info_diag,
       bridge_group_and_prior_and_jac = bridge_group_and_prior_and_jac_diag
     )
+  } else if(type == "diagonal-gamma"){
+    list_fun <- list(# store functions
+      sample_store = sample_store_diag_gamma,
+      add_info = add_info_diag_gamma,
+      get_startpoints = get_startpoints_diag_gamma,
+      get_group_level = get_group_level_standard,
+      fill_samples = fill_samples_diag_gamma,
+      gibbs_step = gibbs_step_diag_gamma,
+      group_IC = group__IC_standard,
+      filtered_samples = filtered_samples_standard,
+      get_conditionals = get_conditionals_diag
+    )
   } else if(type == "factor"){
     list_fun <- list(# store functions
       sample_store = sample_store_factor,
@@ -818,17 +830,7 @@ calc_ll_manager <- function(proposals, dadm, ll_func, component = NULL){
       }
       constants <- attr(dadm, "constants")
       if(is.null(constants)) constants <- NA
-      if(c_name == "DDM"){
-        levels(dadm$R) <- c(0,1)
-        pars <- get_pars_matrix(proposals[1,],dadm)
-        pars <- cbind(pars, dadm$R)
-        parameter_char <- apply(pars, 1, paste0, collapse = "\t")
-        parameter_factor <- factor(parameter_char, levels = unique(parameter_char))
-        parameter_indices <- split(seq_len(nrow(pars)), f = parameter_factor)
-        names(parameter_indices) <- 1:length(parameter_indices)
-      } else{
-        parameter_indices <- list()
-      }
+      parameter_indices <- list()
       lls <- calc_ll(proposals, dadm, constants = constants, designs = designs, type = c_name,
                      p_types = p_types, min_ll = log(1e-10), group_idx = parameter_indices)
     }
@@ -858,7 +860,7 @@ merge_group_level <- function(tmu, tmu_nuis, tvar, tvar_nuis, is_nuisance){
 }
 
 
-run_hyper <- function(type, data, prior = NULL, iter = 5000, ...){
+run_hyper <- function(type, data, prior = NULL, iter = 1000, n_chains =3, ...){
   args <- list(...)
   if(length(dim(data)) == 3){
     data_input <- data
@@ -872,39 +874,45 @@ run_hyper <- function(type, data, prior = NULL, iter = 5000, ...){
     is_mcmc <- F
     pars <- colnames(data_input)
   }
-  variant_funs <- get_variant_funs(type)
-  samples <- variant_funs$sample_store(data = data ,par_names = pars, is_nuisance = rep(F, length(pars)), integrate = F, is_grouped =
-                                         rep(F, length(pars)), ...)
-  subjects <- unique(data$subjects)
-  sampler <- list(
-    data = data,
-    par_names = pars,
-    subjects = subjects,
-    n_pars = length(pars),
-    nuisance = rep(F, length(pars)),
-    grouped = rep(F, length(pars)),
-    n_subjects = length(subjects),
-    samples = samples,
-    init = TRUE
-  )
-  class(sampler) <- "pmwgs"
-  sampler <- variant_funs$add_info(sampler, prior, ...)
-  startpoints <- variant_funs$get_startpoints(sampler, start_mu = NULL, start_var = NULL)
-  sampler$samples <- variant_funs$fill_samples(samples = sampler$samples, group_level = startpoints, proposals = NULL,
-                                               epsilon = NA, j = 1, n_pars = sampler$n_pars)
-  sampler$samples$idx <- 1
-  sampler <- extend_sampler(sampler, iter-1, "sample")
-  for(i in 2:iter){
-    if(is_mcmc){
-      pars <- variant_funs$gibbs_step(sampler, data_input[,,i])
-    } else{
-      pars <- variant_funs$gibbs_step(sampler, t(data_input))
+  emc <- list()
+  for(j in 1:n_chains){
+    variant_funs <- get_variant_funs(type)
+    samples <- variant_funs$sample_store(data = data ,par_names = pars, is_nuisance = rep(F, length(pars)), integrate = F, is_grouped =
+                                           rep(F, length(pars)), ...)
+    subjects <- unique(data$subjects)
+    sampler <- list(
+      data = split(data, data$subjects),
+      par_names = pars,
+      subjects = subjects,
+      n_pars = length(pars),
+      nuisance = rep(F, length(pars)),
+      grouped = rep(F, length(pars)),
+      n_subjects = length(subjects),
+      samples = samples,
+      init = TRUE
+    )
+    class(sampler) <- "pmwgs"
+    sampler <- variant_funs$add_info(sampler, prior, ...)
+    startpoints <- variant_funs$get_startpoints(sampler, start_mu = NULL, start_var = NULL)
+    sampler$samples <- variant_funs$fill_samples(samples = sampler$samples, group_level = startpoints, proposals = NULL,
+                                                 epsilon = NA, j = 1, n_pars = sampler$n_pars)
+    sampler$samples$idx <- 1
+    sampler <- extend_sampler(sampler, iter-1, "sample")
+    for(i in 2:iter){
+      if(is_mcmc){
+        group_pars <- variant_funs$gibbs_step(sampler, data_input[,,i])
+      } else{
+        group_pars <- variant_funs$gibbs_step(sampler, t(data_input))
+      }
+      sampler$samples$idx <- i
+      sampler$samples <- variant_funs$fill_samples(samples = sampler$samples, group_level = group_pars, proposals = NULL,
+                                                   epsilon = NA, j = i, n_pars = sampler$n_pars)
     }
-    sampler$samples$idx <- i
-    sampler$samples <- variant_funs$fill_samples(samples = sampler$samples, group_level = pars, proposals = NULL,
-                                                 epsilon = NA, j = i, n_pars = sampler$n_pars)
+    attr(sampler, "variant_funs") <- variant_funs
+    emc[[j]] <- sampler
   }
-  return(sampler)
+  class(emc) <- "emc"
+  return(emc)
 }
 
 

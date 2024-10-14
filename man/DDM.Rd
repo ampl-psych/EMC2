@@ -26,7 +26,6 @@ argument of \code{design()}.They can also be accessed with \code{DDM()$p_types}.
    \emph{SZ} \tab probit \tab [0, 1] \tab qnorm(0) \tab \emph{sz} = 2 x \emph{SZ} x min(\emph{a} x \emph{Z}, \emph{a} x (1-\emph{Z})) \tab Relative between-trial variation in start point \cr
    \emph{sv} \tab log \tab [0, Inf] \tab log(0) \tab  \tab Between-trial standard deviation of drift rate \cr
    \emph{st0} \tab log \tab [0, Inf] \tab log(0) \tab  \tab Between-trial variation (range) in non-decision time \cr
-   \emph{DP} \tab probit \tab [0, 1] \tab qnorm(0.5) \tab \emph{dp} = \emph{t0} x (2 x \emph{DP} -1) \tab Relative difference in non-decision time between responses \cr
 }
 
 
