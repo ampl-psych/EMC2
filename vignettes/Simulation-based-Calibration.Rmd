@@ -4,13 +4,8 @@ description: "A guide to SBC in EMC2"
 author: "Niek Stevenson"
 output: rmarkdown::html_document
 bibliography: refs.bib
-resource_files:
-  - SBC_DDM_single.RData
-  - SBC_DDM.RData
-  - SBC_LBA.RData
-  - SBC_LBA_single.RData
-  - SBC_RDM.RData
-  - SBC_LNR.RData
+params:
+  EVAL: !r identical(Sys.getenv("NOT_CRAN"), "true")
 vignette: >
   %\VignetteIndexEntry{"Simulation-based Calibration"}
   %\VignetteEngine{knitr::rmarkdown}
