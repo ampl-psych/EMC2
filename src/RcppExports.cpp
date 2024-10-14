@@ -42,22 +42,6 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
-// d_DDM_c
-NumericVector d_DDM_c(NumericVector rts, NumericVector R, List group_idx, NumericMatrix pars, double precision, bool stop_on_error);
-RcppExport SEXP _EMC2_d_DDM_c(SEXP rtsSEXP, SEXP RSEXP, SEXP group_idxSEXP, SEXP parsSEXP, SEXP precisionSEXP, SEXP stop_on_errorSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< NumericVector >::type rts(rtsSEXP);
-    Rcpp::traits::input_parameter< NumericVector >::type R(RSEXP);
-    Rcpp::traits::input_parameter< List >::type group_idx(group_idxSEXP);
-    Rcpp::traits::input_parameter< NumericMatrix >::type pars(parsSEXP);
-    Rcpp::traits::input_parameter< double >::type precision(precisionSEXP);
-    Rcpp::traits::input_parameter< bool >::type stop_on_error(stop_on_errorSEXP);
-    rcpp_result_gen = Rcpp::wrap(d_DDM_c(rts, R, group_idx, pars, precision, stop_on_error));
-    return rcpp_result_gen;
-END_RCPP
-}
 // dlba
 NumericVector dlba(NumericVector t, NumericVector A, NumericVector b, NumericVector v, NumericVector sv, bool posdrift, bool robust);
 RcppExport SEXP _EMC2_dlba(SEXP tSEXP, SEXP ASEXP, SEXP bSEXP, SEXP vSEXP, SEXP svSEXP, SEXP posdriftSEXP, SEXP robustSEXP) {
@@ -126,7 +110,6 @@ END_RCPP
 static const R_CallMethodDef CallEntries[] = {
     {"_EMC2_c_map_p", (DL_FUNC) &_EMC2_c_map_p, 4},
     {"_EMC2_calc_ll", (DL_FUNC) &_EMC2_calc_ll, 8},
-    {"_EMC2_d_DDM_c", (DL_FUNC) &_EMC2_d_DDM_c, 6},
     {"_EMC2_dlba", (DL_FUNC) &_EMC2_dlba, 7},
     {"_EMC2_plba", (DL_FUNC) &_EMC2_plba, 7},
     {"_EMC2_dWald", (DL_FUNC) &_EMC2_dWald, 5},

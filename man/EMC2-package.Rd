@@ -8,6 +8,15 @@
 \description{
 Fit Bayesian (hierarchical) cognitive models using a linear modeling language interface using particle metropolis Markov chain Monte Carlo sampling with Gibbs steps. The diffusion decision model (DDM), linear ballistic accumulator model (LBA), racing diffusion model (RDM), and the lognormal race model (LNR) are supported. Additionally, users can specify their own likelihood function and/or choose for non-hierarchical estimation, as well as for a diagonal, blocked or full multivariate normal group-level distribution to test individual differences. Prior specification is facilitated through methods that visualize the (implied) prior. A wide range of plotting functions assist in assessing model convergence and posterior inference. Models can be easily evaluated using functions that plot posterior predictions or using relative model comparison metrics such as information criteria or Bayes factors. References: Stevenson et al. (2024) \doi{10.31234/osf.io/2e4dq}.
 }
+\seealso{
+Useful links:
+\itemize{
+  \item \url{https://ampl-psych.github.io/EMC2/}
+  \item \url{https://github.com/ampl-psych/EMC2}
+  \item Report bugs at \url{https://github.com/ampl-psych/EMC2/issues}
+}
+
+}
 \author{
 \strong{Maintainer}: Niek Stevenson \email{niek.stevenson@gmail.com} (\href{https://orcid.org/0000-0003-3206-7544}{ORCID})
 
@@ -20,8 +29,15 @@ Authors:
 Other contributors:
 \itemize{
   \item Steven Miletić [contributor]
-  \item Jochen Voss [contributor]
-  \item Andreas Voss [contributor]
+  \item Raphael Hartmann [contributor]
+  \item Karl C. Klauer [contributor]
+  \item Steven G. Johnson [contributor]
+  \item Jean M. Linhart [contributor]
+  \item Brian Gough [contributor]
+  \item Gerard Jungman [contributor]
+  \item Rudolf Schuerer [contributor]
+  \item Przemyslaw Sliwa [contributor]
+  \item Jason H. Stover [contributor]
 }
 
 }

@@ -1,0 +1,88 @@
+url: https://ampl-psych.github.io/EMC2/
+template:
+  bootstrap: 5
+  light-switch: true
+
+bibliography: refs.bib
+
+reference:
+- title: Models
+- contents:
+  - DDM
+  - LBA
+  - LNR
+  - RDM
+- title: Design and estimation
+- contents:
+  - fit
+  - design
+  - make_emc
+  - init_chains
+  - run_emc
+  - mapped_par
+  - sampled_p_vector
+  - profile_plot
+  - plot_defective_density
+- title: Model checking
+- contents:
+  - check
+  - summary.emc
+  - ess_summary
+  - gd_summary
+  - chain_n
+  - plot.emc
+  - pairs_posterior
+- title: Posterior inference
+- contents:
+  - posterior_summary
+  - parameters
+  - get_pars
+  - plot_pars
+  - plot_relations
+  - merge_chains
+  - subset.emc
+- title: Posterior predictives and recovery
+- contents:
+  - predict.emc
+  - plot_fit
+  - make_data
+  - make_random_effects
+  - recovery
+  - get_data.emc
+- title: Model comparison
+- contents:
+  - compare
+  - compare_subject
+  - run_bridge_sampling
+  - get_BayesFactor
+  - credible
+  - hypothesis
+
+- title: Priors
+- contents:
+  - matches("prior")
+
+- title: Contrasts
+- contents:
+  - matches("contr")
+
+- title: Simulation-based calibration
+- contents:
+  - matches("sbc")
+
+- title: Included data
+- contents:
+  - forstmann
+  - samples_LNR
+
+# navbar:
+#   structure:
+#     left: [search]
+#     right: [reference, articles]
+#
+# articles:
+# - title: Simulation-based calibration
+#   contents:
+#   - Simulation-based Calibration
+
+

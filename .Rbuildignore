@@ -3,3 +3,7 @@
 ^test_files$
 ^LICENSE\.md$
 ^\.github$
+^_pkgdown\.yml$
+^docs$
+^pkgdown$
+^\.RData$

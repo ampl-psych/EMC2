@@ -1,21 +1,5 @@
-#' make_missing
-#'
-#' Truncate or censor data. is.na(rt) not truncated or censored.
-#'
-#' @param data Data frame with rt and R columns
-#' @param LT lower truncation bound below which data are removed (scalar or subject named vector)
-#' @param UT upper truncation bound above which data are removed (scalar or subject named vector)
-#' @param LC lower censoring bound (scalar or subject named vector)
-#' @param UC upper censoring bound (scalar or subject named vector)
-#' @param LCresponse Boolean, default TRUE, if false set LC response to NA
-#' @param UCresponse Boolean, default TRUE, if false set UC response to NA
-#' @param LCdirection Boolean, default TRUE, set LC rt to 0, else to NA
-#' @param UCdirection Boolean, default TRUE, set LC rt to Inf, else to NA
-#'
-#' @return Truncated and censored data frame
-
 make_missing <- function(data,LT=0,UT=Inf,LC=0,UC=Inf,
-    LCresponse=TRUE,UCresponse=TRUE,LCdirection=TRUE,UCdirection=TRUE)
+                         LCresponse=TRUE,UCresponse=TRUE,LCdirection=TRUE,UCdirection=TRUE)
 {
 
   censor <- function(data,L=0,U=Inf,Ld=TRUE,Ud=TRUE,Lr=TRUE,Ur=TRUE)
@@ -47,7 +31,6 @@ make_missing <- function(data,LT=0,UT=Inf,LC=0,UC=Inf,
   if (UT != Inf) attr(out,"UT") <- UT
   out
 }
-
 
 #' Simulate data
 #'

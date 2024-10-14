@@ -54,48 +54,6 @@ add_info_factor <- function(sampler, prior = NULL, ...){
   return(sampler)
 }
 
-
-#' Prior specification and prior sampling for factor estimation
-#'
-#' To get the default priors for a given design: `get_prior_factor(design = design, sample = FALSE)`
-#'
-#' For details see Ghosh, J., & Dunson, D. B. (2009).
-#' Default prior distributions and efficient posterior computation in Bayesian factor analysis.
-#' *Journal of Computational and Graphical Statistics*, 18, 306-320. or
-#' Stevenson, N., Innes, R. J., Gronau, Q. F., Miletic, S., Heathcote, A., PhD,
-#' Forstmann, B., & Brown, S. (2024). Using group level factor models to resolve
-#' high dimensionality in model-based sampling. https://doi.org/10.31234/osf.io/pn3wv.
-#'
-#' Note that if `sample = FALSE`, prior$theta_mu_invar (the inverse of the prior covariance matrix on the group-level mean) is returned,
-#' which is only used for computational efficiency
-#'
-#' @param prior A named list that can contain the prior mean (`theta_mu_mean`) and
-#' variance (`theta_mu_var`) on the group-level mean; the variance of the loadings (`theta_lambda_var`);
-#' shape and rate of the factor variances (`ap` and `bp`) and shape and rate of the residual variances
-#' (`as` and `bs`). For `NULL` entries, the default prior is is used.
-#' @param n_pars Often inferred from the design, but if `design = NULL`, `n_pars`
-#' will be used to determine the size of prior.
-#' @param sample Whether to sample from the prior or to simply return the prior. Default is TRUE,
-#' @param N How many samples to draw from the prior, the default is 1e5
-#' @param design The design obtained from `design()`, required when `map = TRUE`
-#' @param selection  Character. If `sample = TRUE`, what priors to sample from.
-#' @param n_factors Integer. The number of factors.
-#' @param Lambda_mat The loadings constraint matrix.
-#'
-#' @return A list with a single entry of type of samples from the prior (if `sample = TRUE`) or else a prior object
-#' @examples
-#' # First define a design for the model
-#' design_DDMaE <- design(data = forstmann,model=DDM,
-#'                            formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
-#'                            constants=c(s=log(1)))
-#' # Now get the default prior
-#' prior <- get_prior_factor(design = design_DDMaE, sample = FALSE, n_factors = 3)
-#' # We can change values in the default prior or use `prior`
-#' # Then we can get samples from this prior e.g.
-#' samples <- get_prior_factor(prior = prior, design = design_DDMaE,
-#'   sample = TRUE, selection = "mu", n_factors = 3)
-#'
-#' @export
 get_prior_factor <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, selection = "mu", design = NULL,
                              Lambda_mat = NULL, n_factors = NULL){
 
@@ -174,7 +132,7 @@ get_prior_factor <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5
                           ncol = n_pars, byrow = T))
       rownames(residuals) <- par_names
       if(selection %in% "residuals"){
-        samples$sig_err_inv <- residuals
+        samples$theta_sig_err_inv <- residuals
       }
     }
     if(selection %in% c("sigma2", "covariance", "correlation", "Sigma", "alpha")) {

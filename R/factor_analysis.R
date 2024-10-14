@@ -147,19 +147,19 @@ rearrange_loadings <- function(loadings){
   return(loadings)
 }
 
-#' Standardized factor loadings
-#'
-#' Returns a set of standardized factor loadings.
-#' The standardization considers the residual error as well
-#' as described in Stevenson, Heathcote, Forstmann & Matzke, 2024.
-#'
-#' @param emc An emc object with samples from a hierarchical factor analysis model
-#' @param loadings Array of pars by factors by iters. Can also specify loadings instead of emc
-#' @param sig_err_inv Array of pars by iters. Can also specify sig_err_inv instead of emc
-#' @param stage Character. From which stage to take samples
-#' @param merge_chains Return the loadings for each chain separately or merged together.
-#'
-#' @return standardized loadings
+# #' Standardized factor loadings
+# #'
+# #' Returns a set of standardized factor loadings.
+# #' The standardization considers the residual error as well
+# #' as described in Stevenson, Heathcote, Forstmann & Matzke, 2024.
+# #'
+# #' @param emc An emc object with samples from a hierarchical factor analysis model
+# #' @param loadings Array of pars by factors by iters. Can also specify loadings instead of emc
+# #' @param sig_err_inv Array of pars by iters. Can also specify sig_err_inv instead of emc
+# #' @param stage Character. From which stage to take samples
+# #' @param merge_chains Return the loadings for each chain separately or merged together.
+
+# #' @return standardized loadings
 # #' @examples \donttest{
 # #' # For a given set of hierarchical factor model samples we can standardize the loadings
 # #' standardize_loadings(emc)
@@ -201,8 +201,6 @@ standardize_loadings <- function(emc = NULL, loadings = NULL, sig_err_inv = NULL
   return(out)
 }
 
-
-# plotting ----------------------------------------------------------------
 #' Plot relations
 #'
 #' An adjusted version of the `corrplot` package function `corrplot()` tailored
@@ -226,7 +224,7 @@ standardize_loadings <- function(emc = NULL, loadings = NULL, sig_err_inv = NULL
 #' plot_relations(samples_LNR, plot_means = TRUE, only_cred = TRUE)
 #'
 #' @export
-#'
+
 plot_relations <- function(emc = NULL, stage = "sample",  plot_cred = TRUE,
                            plot_means = TRUE, only_cred = FALSE, nice_names = NULL, ...){
 
@@ -339,26 +337,24 @@ plot_relations <- function(emc = NULL, stage = "sample",  plot_cred = TRUE,
   }
 }
 
-
-#' Factor diagram plot
-#'
-#' Makes a factor diagram plot. Heavily based on the fa.diagram function of the `psych` package.
-#'
-#' @param emc An emc object
-#' @param stage Character. The stage from which to take the samples
-#' @param loadings An array of loadings. Can be alternatively supplied if emc is not supplied
-#' @param standardize Boolean. Whether to standardize the loadings
-#' @param simple Boolean. Whether the factor diagram should be simplified for visual clarity.
-#' @param only_cred Boolean. Whether to only plot the credible loadings
-#' @param cut Numeric. Mean loadings beneath this number will be excluded.
-#' @param nice_names Character vector. Alternative names to give the parameters
-#' @param factor_names Character vector. Names to give the different factors
-#' @param sort Boolean. Whether to sort the paramaters before plotting for visual clarity.
-#' @param adj Integer. Adjust to adjust loading values positions in the diagram if illegible.
-#' @param main Character vector. Title of the plot
-#' @param cex Integer. Font size
-#'
-#' @return NULL
+# #'
+# #' Factor diagram plot
+# #' #Makes a factor diagram plot. Heavily based on the fa.diagram function of the `psych` package.
+# #'
+# #' @param emc An emc object
+# #' @param stage Character. The stage from which to take the samples
+# #' @param loadings An array of loadings. Can be alternatively supplied if emc is not supplied
+# #' @param standardize Boolean. Whether to standardize the loadings
+# #' @param simple Boolean. Whether the factor diagram should be simplified for visual clarity.
+# #' @param only_cred Boolean. Whether to only plot the credible loadings
+# #' @param cut Numeric. Mean loadings beneath this number will be excluded.
+# #' @param nice_names Character vector. Alternative names to give the parameters
+# #' @param factor_names Character vector. Names to give the different factors
+# #' @param sort Boolean. Whether to sort the paramaters before plotting for visual clarity.
+# #' @param adj Integer. Adjust to adjust loading values positions in the diagram if illegible.
+# #' @param main Character vector. Title of the plot
+# #' @param cex Integer. Font size
+# #' @return NULL
 # #' @examples \donttest{
 # #' # For a given set of hierarchical factor model samples we can make a factor diagram
 # #' make_factor_diagram(emc, only_cred = T)

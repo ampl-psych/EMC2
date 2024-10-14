@@ -4,32 +4,6 @@ add_info_diag <- function(sampler, prior = NULL, ...){
   return(sampler)
 }
 
-#' Prior specification or prior sampling for diagonal estimation
-#'
-#' To get the default prior for a created design: `get_prior_diag(design = design, sample = FALSE)`
-#'
-#'
-#' For details see Huang, A., & Wand, M. P. (2013). Simple marginally noninformative
-#' prior distributions for covariance matrices. *Bayesian Analysis*, 8, 439-452. https://doi.org/10.1214/13-BA815.
-#'
-#' Note that if `sample = FALSE`, prior$theta_mu_invar (the inverse of the prior covariance matrix on the group-level mean) is returned,
-#' which is only used for computational efficiency.
-#'
-#' @inheritParams get_prior_standard
-#' @return A list with a single entry of type of samples from the prior (if `sample = TRUE`) or else a prior object
-#' @examples
-#' # First define a design for the model
-#' design_DDMaE <- design(data = forstmann,model=DDM,
-#'                            formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
-#'                            constants=c(s=log(1)))
-#' # Now get the default prior
-#' prior <- get_prior_diag(design = design_DDMaE, sample = FALSE)
-#' # We can change values in the default prior or use `prior`
-#' # Then we can get samples from this prior e.g.
-#' samples <- get_prior_diag(prior = prior, design = design_DDMaE,
-#'   sample = TRUE, selection = "mu")
-#'
-#' @export
 get_prior_diag <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, selection = "mu", design = NULL){
   # Checking and default priors
   if(is.null(prior)){
@@ -85,42 +59,6 @@ get_prior_diag <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, 
   }
   return(out)
 }
-#   if(sample){
-#     out <- list()
-#     if(!selection %in% c("mu", "variance", "full_var")){
-#       stop("for variant diagonal, you can only specify the prior on the mean or variance parameters")
-#     }
-#     if(selection == "mu"){
-#       samples <- mvtnorm::rmvnorm(N, mean = prior$theta_mu_mean,
-#                                   sigma = prior$theta_mu_var)
-#       if(!is.null(design)){
-#         colnames(samples) <- par_names <- names(sampled_p_vector(design, doMap = F))
-#         if(map){
-#           samples <- map_mcmc(samples,design,design$model,include_constants=FALSE)
-#         }
-#       }
-#       out$mu <- samples
-#       return(out)
-#     } else {
-#
-#       var <- array(NA_real_, dim = c(N, n_pars))
-#       for(i in 1:N){
-#         a_half <- 1 / rgamma(n = n_pars,shape = 1/2,
-#                              rate = 1/(prior$A^2))
-#         var[i,] <- 1 / rgamma(n = n_pars, shape = prior$v/2, rate = prior$v/a_half)
-#       }
-#       colnames(var) <- names(sampled_p_vector(design, doMap = F))
-#       if (selection == "full_var"){
-#         out$full_var <- var
-#       } else{
-#         out$variance <- var
-#       }
-#       return(out)
-#     }
-#   }
-#   return(prior)
-# }
-
 
 get_startpoints_diag <- function(pmwgs, start_mu, start_var){
   n_pars <- sum(!(pmwgs$nuisance | pmwgs$grouped))
@@ -261,28 +199,32 @@ bridge_group_and_prior_and_jac_diag <- function(proposals_group, proposals_list,
   proposals <- do.call(cbind, proposals_list)
   theta_mu <- proposals_group[,1:info$n_pars]
   theta_var <- proposals_group[,(info$n_pars + 1):(2*info$n_pars)]
-  group_ll <- 0
-  for(i in 1:info$n_pars){
-    group_ll <- group_ll + dnorm(proposals[,info$par_names[i]], theta_mu[,i], sqrt(exp(theta_var[,i])), log = T)
+  theta_a <- proposals_group[,(2*info$n_pars + 1):(3*info$n_pars)]
+  n_iter <- nrow(theta_mu)
+  sum_out <- numeric(n_iter)
+  for(i in 1:n_iter){ # these unfortunately can't be vectorized
+    proposals_curr <- matrix(proposals[i,], ncol = info$n_pars, byrow = T)
+    group_ll <- sum(dmvnorm(proposals_curr, theta_mu[i,], diag(exp(theta_var[i,]), nrow = info$n_pars), log = T))
+    prior_var <- sum(logdinvGamma(exp(theta_var[i,]), shape = prior$v/2, rate = prior$v/exp(theta_a[i,])))
+    prior_a <- sum(logdinvGamma(exp(theta_a[i,]), shape = 1/2,rate=1/(prior$A^2)))
+    sum_out[i] <- group_ll + prior_var + prior_a
   }
-  prior_mu <- colSums(dnorm(t(theta_mu), mean = prior$theta_mu_mean, sd = sqrt(diag(prior$theta_mu_var)), log =T))
-  prior_var <- 0
-  for(i in 1:info$n_pars){
-    prior_var <- prior_var +  dhalft(sqrt(exp(theta_var[,i])), scale = prior$A, nu = prior$v, log = T)
-  }
+  prior_mu <- dmvnorm(theta_mu, mean = prior$theta_mu_mean, sigma = prior$theta_mu_var, log =T)
   jac_var <- rowSums(theta_var)
-  return(group_ll + prior_mu + prior_var + jac_var)
+  jac_a <- rowSums(theta_a)
+  return(sum_out + prior_mu + jac_var + jac_a)
 }
 
 
 bridge_add_info_diag <- function(info, samples){
-  info$group_idx <- (samples$n_pars*samples$n_subjects + 1):(samples$n_pars*samples$n_subjects + 2*samples$n_pars)
+  info$group_idx <- (samples$n_pars*samples$n_subjects + 1):(samples$n_pars*samples$n_subjects + 3*samples$n_pars)
   return(info)
 }
 
 bridge_add_group_diag <- function(all_samples, samples, idx){
   all_samples <- cbind(all_samples, t(samples$samples$theta_mu[,idx]))
   all_samples <- cbind(all_samples, t(log(apply(samples$samples$theta_var[,,idx], 3, diag))))
+  all_samples <- cbind(all_samples, t(log(samples$samples$a_half[,idx])))
   return(all_samples)
 }
 

@@ -89,13 +89,6 @@ make_pmat <- function(p_vector,design)
          dimnames=list(ss,names(p_vector)))
 }
 
-#' Augments parameter matrix or vector p with constant parameters (also used in data)
-#'
-#' @param p either a matrix or vector of parameters
-#' @param constants a named vector of constants
-#'
-#' @return a matrix or vector, depending on input, with the varying parameters and constants combined.
-#'
 add_constants <- function(p,constants)
 {
   if (is.null(constants)) return(p)

@@ -6,15 +6,14 @@
 #' Where a value is not supplied, the user is prompted to enter
 #' numeric values (or functions that evaluate to numbers).
 #'
-#' To get the default prior for a type, run: `get_prior_{type}(design = design, sample = F)`
-#'
-#' E.g.: `get_prior_diagonal(design = design, sample = F)`
+#' To get the prior help use `prior_help(type)`. With `type` e.g. 'diagonal'.
 #'
 #' @param design Design list for which a prior is constructed, typically the output of `design()`
 #' @param update Prior list from which to copy values
 #' @param type Character. What type of group-level model you plan on using i.e. `diagonal`
-#' @param ask Character. For which parameter types to ask for prior specification, i.e. `Sigma`, `mu` or `loadings` for factor models
-#' @param fill_default Boolean, If `TRUE` will fill all non-specified parameters, and parameters outside of `ask`, to default values
+#' @param do_ask Character. For which parameter types or hyperparameters to ask for prior specification,
+#' i.e. `Sigma`, `mu` or `loadings` for factor models, but `theta_mu_mean` or `A` also works.
+#' @param fill_default Boolean, If `TRUE` will fill all non-specified parameters, and parameters outside of `do_ask`, to default values
 #' @param ... Either values to prefill, i.e. `theta_mu_mean = c(1:6)`, or additional arguments such as `n_factors = 2`
 #' @return A prior list object
 #' @examples
@@ -42,123 +41,181 @@
 #' prior_DDMat0E <- prior(design_DDMat0E, update = prior_DDMaE)
 #' @export
 prior <- function(design, type = "standard", update = NULL,
-                      ask = NULL, fill_default = TRUE, ...){
+                      do_ask = NULL, fill_default = TRUE, ...){
   if(!is.null(update)){
     type <- attr(update, "type")
   }
-  prior <- get_objects(design = design, type = type, ...)
+  input <- get_objects(design = design, type = type, ...)
+  descriptions <- input$descriptions
+  groups <- input$types
+  group_descriptions <- input$type_descriptions
+  orig <- input <- input$prior
+  input <- input[names(input) %in% names(descriptions)]
   args <- list(...)
-  if(!is.null(args$mu_mean)){
-    args$theta_mu_mean <- args$mu_mean
-    if(is.null(names(args$theta_mu_mean))) names(args$theta_mu_mean) <- names(prior$prior$theta_mu_mean)
-  }
-  if(!is.null(args$mu_sd)){
-    args$theta_mu_var <- args$mu_sd^2
-    if(is.null(names(args$theta_mu_var))) names(args$theta_mu_var) <- names(prior$prior$theta_mu_mean)
-  }
-  if(!is.null(args$pmean)){
-    args$theta_mu_mean <- args$pmean
-    if(is.null(names(args$theta_mu_mean))) names(args$theta_mu_mean) <- names(prior$prior$theta_mu_mean)
-  }
-  if(!is.null(args$psd)){
-    args$theta_mu_var <- args$psd^2
-    if(is.null(names(args$theta_mu_var))) names(args$theta_mu_var) <- names(prior$prior$theta_mu_mean)
-  }
+  input <- check_var_prior(input)
+  args <- check_var_prior(args)
+  update <- check_var_prior(update)
+  # First check if mu_mean, mu_sd, pmean or psd are filled in
+  if(!is.null(args$psd)) args$mu_sd <- args$psd
+  if(!is.null(args$pmean)) args$mu_mean <- args$pmean
+  if(!is.null(args$mu_mean)) args$theta_mu_mean <- args$mu_mean
+  if(!is.null(args$mu_sd)) args$theta_mu_var <- args$mu_sd^2
+  # Initialize updated_flags
+  updated_flags <- lapply(input, make_prior_idx)
 
-  if(!is.null(update)){
-    for(name in names(update)){
-      if(is.null(args[[name]])){
-        if(!is.null(dim(update[[name]]))){
-          update[[name]] <- diag(update[[name]])
-        } else{
-          update[[name]] <- update[[name]]
-        }
-        args[[name]] <- update[[name]]
-      } else{
-        # First make sure we only take diagonals
-        if(!is.null(dim(update[[name]]))){
-          prior_par_names <- names(diag(prior$prior[[name]]))
-          upd <- diag(update[[name]])
-        } else{
-          prior_par_names <- names(prior$prior[[name]])
-          upd <- update[[name]]
-        }
-        # now fill in
-        upd_names <- names(upd)
-        if(length(upd) == 1){
-          if(!name %in% names(args)) args[[name]] <- upd
-        } else{
-          for(i in 1:length(upd)){
-            if(upd_names[i] %in% prior_par_names & (!upd_names[i] %in% names(args[[name]]))){
-              args[[name]][upd_names[i]] <- upd[i]
-            }
-          }
-        }
-      }
-    }
+  # First, update 'input' with the 'update' list
+  result <- update_prior_input(input, update, updated_flags)
+  input <- result$input
+  updated_flags <- result$flags
+
+  # Then, update 'input' with the ellipsis arguments (taking precedence)
+  result <- update_prior_input(input, args, updated_flags)
+  input <- result$input
+  updated_flags <- result$flags
+
+  # Now, prompt user for un-updated elements
+  if(!fill_default) do_ask <- names(input)
+  do_ask <- unique(c(do_ask, unlist(groups[names(groups) %in% do_ask])))
+  input[names(input) %in% do_ask] <- prompt_for_prior_updates(input[names(input) %in% do_ask],
+                                                              updated_flags[names(updated_flags) %in% do_ask],
+                                                              descriptions[names(descriptions) %in% do_ask])
+  if(!is.null(input$theta_mu_var)){
+    if(!is.matrix(input$theta_mu_var) & is.matrix(orig$theta_mu_var)) input$theta_mu_var <- diag(input$theta_mu_var)
   }
-  for(group in names(prior$groups)){
-    if(is.null(ask) & !fill_default){
-      group_to_do <- TRUE
-    } else{
-      group_to_do <- group %in% ask
-    }
-    if(group_to_do) cat(paste0(prior$group_descriptions[[group]], "\n \n"))
-    for(pri in prior$groups[[group]]){
-      if(pri %in% names(prior$descriptions)){ # This excluded prior$theta_mu_invar
-        if(pri %in% names(args)){ # Already specified in ellipsis, so fill in
-          input <- args[[pri]]
-          if(!is.null(dim(prior$prior[[pri]]))){
-            to_check <- diag(prior$prior[[pri]])
-            if(length(input) == length(to_check) & is.null(names(input))){
-              prior$prior[[pri]] <- input
-              to_do <- rep(F, length(to_check))
-            } else if (length(input) == 1 & is.null(names(input))){
-              prior$prior[[pri]] <- rep(input, length(to_check))
-              to_do <- rep(F, length(to_check))
-            } else{
-              to_do <- !(names(to_check) %in% names(input))
-              to_check[!to_do] <- input[names(input) %in% names(to_check)][names(to_check)[!to_do]]
-              prior$prior[[pri]][,] <- diag(to_check)
-            }
-          } else{
-            to_check <- prior$prior[[pri]]
-            if(length(input) == length(to_check) & is.null(names(input))){
-              prior$prior[[pri]] <- input
-              to_do <- rep(F, length(to_check))
-            } else if (length(input) == 1 & is.null(names(input))){
-              prior$prior[[pri]] <- rep(input, length(to_check))
-              to_do <- rep(F, length(to_check))
-            } else{
-              to_do <- !(names(to_check) %in% names(input))
-              to_check[!to_do] <- input[names(input) %in% names(to_check)][names(to_check)[!to_do]]
-              prior$prior[[pri]] <- to_check
-            }
-          }
-        } else{
-          if(!is.null(dim(prior$prior[[pri]]))){
-            to_do <- rep(T, nrow(prior$prior[[pri]]))
-          } else{
-            to_do <- rep(T, length(prior$prior[[pri]]))
-          }
-        }
-        # Ask the user to manually specify
-        if(any(to_do)){
-          tmp <- ask_user_prior(prior, pri, to_do, fill_default, group_to_do)
-          if(!is.null(dim(prior$prior[[pri]]))){
-            input <- diag(prior$prior[[pri]][,])
-            input[to_do] <- tmp
-            prior$prior[[pri]][,] <- diag(input)
-          } else{
-            prior$prior[[pri]][to_do] <- tmp
-          }
-        }
-      }
-    }
-  }
-  prior <- get_objects(design = design, type = type, prior = prior$prior, ...)
+  prior <- get_objects(design = design, type = type, prior = input, ...)
   return(prior$prior)
 }
+
+check_var_prior <- function(inp){
+  if(!is.null(inp$theta_mu_var)){
+    if(is.matrix(inp$theta_mu_var)){
+      tmp <- diag(inp$theta_mu_var)
+      names(tmp) <- colnames(inp$theta_mu_var)
+      inp$theta_mu_var <- tmp
+    }
+  }
+  return(inp)
+}
+
+# Function to initialize updated flags for tracking
+make_prior_idx <- function(input_element) {
+  if (is.atomic(input_element) && length(input_element) > 1) {
+    setNames(rep(FALSE, length(input_element)), names(input_element))
+  } else {
+    FALSE
+  }
+}
+
+# Updated helper function to update individual elements and flags
+update_prior_element <- function(input_element, update_value, updated_flags_element) {
+  # Check if 'input_element' is a vector with length greater than 1
+  if (is.vector(input_element) && length(input_element) > 1) {
+    if (length(update_value) == 1 && is.null(names(update_value))) {
+      # If 'update_value' is a single unnamed value, update all elements
+      input_element[] <- update_value
+      updated_flags_element[] <- TRUE
+    } else if (!is.null(names(update_value))) {
+      # If 'update_value' is a named vector, update matching names
+      common_names <- intersect(names(input_element), names(update_value))
+      input_element[common_names] <- update_value[common_names]
+      updated_flags_element[common_names] <- TRUE
+    } else if (is.null(names(update_value)) && length(update_value) == length(input_element)) {
+      # If 'update_value' is an unnamed vector of same length, update in order
+      input_element[] <- update_value
+      updated_flags_element[] <- TRUE
+    }
+    # If 'update_value' is an unnamed vector of different length, no action taken
+  } else {
+    # If 'input_element' is a single value, update it directly
+    input_element <- update_value
+    updated_flags_element <- TRUE
+  }
+  return(list(element = input_element, flags = updated_flags_element))
+}
+
+# Helper function to update the 'input' list based on 'updates' and flags
+update_prior_input <- function(input, updates, updated_flags) {
+  for (name in names(updates)) {
+    if (name %in% names(input)) {
+      # Update the corresponding element in 'input'
+      result <- update_prior_element(input[[name]], updates[[name]], updated_flags[[name]])
+      input[[name]] <- result$element
+      updated_flags[[name]] <- result$flags
+    }
+    # If the name is not in 'input', it is ignored
+  }
+  return(list(input = input, flags = updated_flags))
+}
+
+# Function to convert user input to appropriate type
+convert_prior_input <- function(user_input, current_value) {
+  if (is.numeric(current_value)) {
+    new_value <- as.numeric(user_input)
+    if (is.na(new_value)) {
+      new_value <- current_value
+    }
+  } else if (is.character(current_value)) {
+    new_value <- user_input
+  } else if (is.logical(current_value)) {
+    if (tolower(user_input) %in% c("true", "t", "1")) {
+      new_value <- TRUE
+    } else if (tolower(user_input) %in% c("false", "f", "0")) {
+      new_value <- FALSE
+    } else {
+      new_value <- current_value
+    }
+  } else {
+    new_value <- user_input
+  }
+  return(new_value)
+}
+
+# Function to prompt user for unfilled values
+prompt_for_prior_updates <- function(input, updated_flags, descriptions) {
+  for (name in names(input)) {
+    flags <- updated_flags[[name]]
+    if(all(flags)) next
+    element <- input[[name]]
+    cat("Specify", descriptions[[name]], "\n")
+    cat("Press enter to use default value (", element[1], ")")
+    if (is.atomic(element) && length(element) > 1) {
+      # It's a vector
+      for (i in seq_along(element)) {
+        if (!flags[i]) {
+          # This element was not updated, prompt the user
+          current_value <- element[i]
+          elem_name <- names(element)[i]
+          prompt_text <- paste0("Enter value for '", elem_name, "': ")
+          user_input <- readline(prompt_text)
+          if (user_input == "") {
+            # Use default value
+            new_value <- current_value
+          } else {
+            new_value <- convert_prior_input(user_input, current_value)
+          }
+          element[i] <- new_value
+        }
+      }
+      input[[name]] <- element
+    } else {
+      # Single value
+      if (!flags) {
+        current_value <- element
+        prompt_text <- paste0("Enter value: ")
+        user_input <- readline(prompt_text)
+        if (user_input == "") {
+          # Use default value
+          new_value <- current_value
+        } else {
+          new_value <- convert_prior_input(user_input, current_value)
+        }
+        input[[name]] <- new_value
+      }
+    }
+  }
+  return(input)
+}
+
 
 check_prior <- function(prior, sampled_p_names){
   if (is.null(names(prior$theta_mu_mean)))
@@ -208,42 +265,7 @@ merge_priors <- function(prior_list){
 }
 
 
-ask_user_prior <- function(prior, cur_idx, to_do, fill_default, group_to_do){
-  if(!is.null(dim(prior$prior[[cur_idx]]))){
-    tmp <- diag(prior$prior[[cur_idx]])[to_do]
-  } else{
-    tmp <- prior$prior[[cur_idx]][to_do]
-  }
-  if(!fill_default || group_to_do){
-    cat(paste0("Specify ", prior$descriptions[[cur_idx]]," \n"))
-    if(length(tmp) == 1){
-      cat("Press enter to use default value (", tmp[1], ")")
-    } else{
-      cat("Press enter to fill with default value (", tmp[1], ")")
-    }
-    for(i in 1:length(tmp)){ # Loop over the length of the prior object
-      name <- ifelse(length(to_do) == 1, "", names(tmp)[i])
-      repeat {
-        ans <- try(eval(parse(text=readline(paste0(name,": ")))),silent=TRUE)
-        if(!is.null(ans)){
-          if (any(class(ans) %in% c("warning", "error", "try-error")) || is.na(ans) || !is.numeric(ans)) {
-            cat("Must provide a numeric value\n")
-          } else {
-            tmp[i] <- ans
-            break
-          }
-        } else{
-          break
-        }
-      }
-    }
-  }
-  return(tmp)
-}
-
-
-
-#' Title
+#' Plot a prior
 #'
 #' @param prior A prior list created with `prior`
 #' @param design A design list created with `design`
@@ -307,5 +329,43 @@ plot_prior <- function(prior, design, selection = "mu", do_plot = TRUE, covariat
   }
   return(invisible(MCMC_samples))
 }
+
+#' Prior specification information
+#'
+#' Prints information associated with the prior for certain 'type'
+#'
+#' @param type A character string indicating which 'type' of model to run (e.g. 'standard' or 'single')
+#'
+#' @return Invisible return with a list of all the information that is also printed
+#' @export
+#'
+#' @examples
+#' prior_help('diagonal')
+prior_help <- function(type){
+  prior <- get_objects(type, return_prior = TRUE, return_info = TRUE)
+  # Loop through each type
+  for (type in names(prior$types)) {
+    # Get the type description
+    type_desc <- prior$type_descriptions[[type]]
+
+    # Display type and description
+    cat(paste("type:", type, "\n"))
+    cat(paste(type_desc, "\n\n"))
+    cat("  Hyperparameters: \n")
+    # Loop through hyperparameters within the type
+    for (param in prior$types[[type]]) {
+      # Get the hyperparameter description
+      param_desc <- prior$descriptions[[param]]
+
+      # Display hyperparameter and description
+      cat(paste("  -", param, ":", param_desc, "\n"))
+    }
+    # New line for separation between types
+    cat("\n")
+  }
+  return(invisible(prior))
+}
+
+
 
 

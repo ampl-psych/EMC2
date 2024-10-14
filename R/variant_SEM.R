@@ -65,25 +65,6 @@ add_info_SEM <- function(sampler, prior = NULL, ...){
   return(sampler)
 }
 
-#' Prior specification or prior sampling for SEM estimation.
-#'
-#' @param prior A named list containing the prior mean on group-level mean (theta_mu_mean), variance of group-level mean (theta_mu_var),
-#' variance of the loadings and G (lambda_var), variance of the latent regressions and (B_var), shape and rate prior on the factor variances (a_p and b_p),
-#' and shape and rate prior on the residual variances (a_e and b_e)
-#' @param n_pars Argument used by the sampler, best left NULL. In user case inferred from the design
-#' @param sample Whether to sample from the prior. Default is TRUE. If not returns a prior list
-#' @param N How many samples to draw from the prior, default 1e5
-#' @param selection Which parameter type to select e.g. `alpha`
-#' @param design The design obtained from `design`, required when map = TRUE
-#' @param Lambda_mat The loadings constraint matrix
-#' @param B_mat The latent regressions constraint matrix
-#' @param K_mat The regression on the parameters by the included covariates
-#' @param G_mat The regression on the latent factors by the included covariates
-#' @param covariates The included covariates
-#'
-#' @return A list with a single entry of type of samples from the prior (if sample = TRUE) or else a prior object
-#' @export
-#'
 get_prior_SEM <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, selection = "mu", design = NULL,
                           Lambda_mat = NULL, B_mat = NULL, K_mat = NULL, G_mat = NULL,
                           covariates = NULL){
@@ -467,6 +448,22 @@ group__IC_SEM <- function(emc, stage="sample",filter=NULL, ...){
   Dmean <- -2*mean_pars_ll
   return(list(mean_ll = mean_ll, Dmean = Dmean,
               minD = minD))
+}
+
+get_mu_implied <- function(x, idx){
+  mu <- x$samples$theta_mu[,idx]
+  B <- x$samples$B[,,idx, drop = F]
+  G <- x$samples$G[,,idx, drop = F]
+  K <- x$samples$K[,,idx, drop = F]
+  loadings <- x$samples$lambda[,,idx, drop = F]
+  n_factors <- ncol(loadings)
+  x_mu <- colMeans(x$covariates)
+  for(i in 1:ncol(mu)){
+    B_0_inv <- solve(diag(n_factors) - as.matrix(B[,,i]))
+    mu[,i] <- as.matrix(mu[,i]) + as.matrix(loadings[,,i]) %*% B_0_inv %*% as.matrix(G[,,i]) %*% x_mu
+    + as.matrix(K[,,i]) %*% x_mu
+  }
+  return(mu)
 }
 
 
