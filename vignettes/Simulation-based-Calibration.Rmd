@@ -4,8 +4,6 @@ description: "A guide to SBC in EMC2"
 author: "Niek Stevenson"
 output: rmarkdown::html_document
 bibliography: refs.bib
-params:
-  EVAL: !r identical(Sys.getenv("NOT_CRAN"), "true")
 vignette: >
   %\VignetteIndexEntry{"Simulation-based Calibration"}
   %\VignetteEngine{knitr::rmarkdown}
@@ -100,230 +98,218 @@ In non-hierarchical models, setting `cores_per_chain = 30` will estimate 30 simu
 
 *EMC2* also comes with plotting functions that allow us to visualize the results. First we can plot the standard histograms, with a number of equally spaced bins between 0 and 1 of the normalized rank statistic.
 
-```{r, include=FALSE}
-load("SBC_LBA_single.RData")
-```
-
-```{r, fig.height = 6, fig.alt = "Histogram SBC LBA single"}
-plot_sbc_hist(SBC_LBA_single, bins = 10)
-```
-
 Here the gray lines indicate the 2.5, 50 and 97.5% percentile of where *n* samples from a uniform distribution are expected to fall. As we can see most of the bins are are nicely within these bounds and no clear pattern emerges. However, this visualization very much depends on bin size, as pointed out by @talts2018validating. Therefore EMC also comes with plots that visualize the difference in the empirical cumulative density function (ecdf) and the cumulative density function of a uniform distribution.
-
-```{r, fig.height = 6, fig.alt = "ecdf LBA single"}
-plot_sbc_ecdf(SBC_LBA_single)
-```
 
 In these dinosaur eggs the blue area visualizes the 95% area of expected cumulative values. As with real eggs, the observed line, (i.e. the cracks) should obviously lie somewhere on the egg. For an explanation and guide to interpretation to these plots we recommend the following article <https://hyunjimoon.github.io/SBC/articles/rank_visualizations.html>. In the remainder of this article we'll use these plots to visualize SBC results.
 
-### DDM
+<!-- ### DDM -->
 
-Next we test non-hierarchical for the DDM as well. Initial results actually showed bias in the estimation of non-decision time and non-decision time variability. Whereas we first based our DDM implementation on the *rtdists* package [@Sigmann2022], the bias pushed us to test with alternative packages, after which we stumbled on the *WienR* package [@Hartmann2023]. Which not only boasts faster likelihood evaluations, but also no longer shows bias in the SBC results. Hence in the newest CRAN release we adapted our C++ code to instead use the *WienR* *C++* routines.
+<!-- Next we test non-hierarchical for the DDM as well. Initial results actually showed bias in the estimation of non-decision time and non-decision time variability. Whereas we first based our DDM implementation on the *rtdists* package [@Sigmann2022], the bias pushed us to test with alternative packages, after which we stumbled on the *WienR* package [@Hartmann2023]. Which not only boasts faster likelihood evaluations, but also no longer shows bias in the SBC results. Hence in the newest CRAN release we adapted our C++ code to instead use the *WienR* *C++* routines. -->
 
-For the SBC itself we used the following prior and design settings, again being mindful of the required transformations.
+<!-- For the SBC itself we used the following prior and design settings, again being mindful of the required transformations. -->
 
-```{r, echo=TRUE, message=FALSE, warning=FALSE, results='hide', eval = FALSE}
-#?DDM
-design_DDM <- design(factors=list(subjects=1,S=c("left", "right")),
-                       Rlevels = c("left", "right"),
-                       formula =list(v~1,a~1, t0~1, s~1, Z~1, sv~1, SZ~1, st0 ~ 1),
-                       constants=c(s=log(1)),
-                       model = DDM)
+<!-- ```{r, echo=TRUE, message=FALSE, warning=FALSE, results='hide', eval = FALSE} -->
+<!-- #?DDM -->
+<!-- design_DDM <- design(factors=list(subjects=1,S=c("left", "right")), -->
+<!--                        Rlevels = c("left", "right"), -->
+<!--                        formula =list(v~1,a~1, t0~1, s~1, Z~1, sv~1, SZ~1, st0 ~ 1), -->
+<!--                        constants=c(s=log(1)), -->
+<!--                        model = DDM) -->
 
 
-prior_DDM <- prior(design_DDM, type = "single",
-                  pmean = c(1, log(.8), log(.3), qnorm(.5), log(.1), qnorm(.05), log(.05)),
-                  psd = c(.15, .15, .1, .05, .15, .15, .15))
+<!-- prior_DDM <- prior(design_DDM, type = "single", -->
+<!--                   pmean = c(1, log(.8), log(.3), qnorm(.5), log(.1), qnorm(.05), log(.05)), -->
+<!--                   psd = c(.15, .15, .1, .05, .15, .15, .15)) -->
 
-SBC_DDM_single <- run_sbc(design_DDM, prior_DDM, replicates = 500, trials = 100, 
-                          fileName = "SBC_DDM_single.RData", cores_per_chain = 30)
+<!-- SBC_DDM_single <- run_sbc(design_DDM, prior_DDM, replicates = 500, trials = 100,  -->
+<!--                           fileName = "SBC_DDM_single.RData", cores_per_chain = 30) -->
 
-```
+<!-- ``` -->
 
-Next we plot the ECDF difference plot again.
+<!-- Next we plot the ECDF difference plot again. -->
 
-```{r, include=FALSE}
-load("SBC_DDM_single.RData")
-```
+<!-- ```{r, include=FALSE} -->
+<!-- load("SBC_DDM_single.RData") -->
+<!-- ``` -->
 
-```{r, fig.height = 6, fig.alt = "ecdf DDM single", fig.width= 10}
-plot_sbc_ecdf(SBC_DDM_single)
-```
+<!-- ```{r, fig.height = 6, fig.alt = "ecdf DDM single", fig.width= 10} -->
+<!-- plot_sbc_ecdf(SBC_DDM_single) -->
+<!-- ``` -->
 
-As you can see minor misfits in *a* and *sv* but nothing too worrying. To double check we did refits, that showed that this bias is not systematic.
+<!-- As you can see minor misfits in *a* and *sv* but nothing too worrying. To double check we did refits, that showed that this bias is not systematic. -->
 
-## Hierarchical SBC
+<!-- ## Hierarchical SBC -->
 
-Besides being a friendly introduction to doing SBC in *EMC2*, this post also serves as a test of unbiased estimation of the four main classes of EAMs included in *EMC2*. Still we would recommend the user to typically run SBC on non-hierarchical models, except when doing model development.
+<!-- Besides being a friendly introduction to doing SBC in *EMC2*, this post also serves as a test of unbiased estimation of the four main classes of EAMs included in *EMC2*. Still we would recommend the user to typically run SBC on non-hierarchical models, except when doing model development. -->
 
-The approach to running hierarchical SBC is very similar to running non-hierarchical SBC. However we can now write the model of data $y$ as $y \sim p(y|\alpha)p(\alpha|\theta)p(\theta)$. Here $p(\theta)$ is the prior on the group-level parameters. The generated data for one sample $y^{(i)}$ is still generated from $\alpha^{(i)}$, but with $\alpha^{(i)}$ generated from $\theta^{(i)}$, with $\theta^{(i)} \sim p(\theta)$.
+<!-- The approach to running hierarchical SBC is very similar to running non-hierarchical SBC. However we can now write the model of data $y$ as $y \sim p(y|\alpha)p(\alpha|\theta)p(\theta)$. Here $p(\theta)$ is the prior on the group-level parameters. The generated data for one sample $y^{(i)}$ is still generated from $\alpha^{(i)}$, but with $\alpha^{(i)}$ generated from $\theta^{(i)}$, with $\theta^{(i)} \sim p(\theta)$. -->
 
-### Prior structure
+<!-- ### Prior structure -->
 
-Although in the paper we rely on the prior structure defined by @Huang2013Jun, which is also the default in *EMC2*, this prior structure has a lot of mass near zero for the group-level variance parameters (a half*-t* distribution). From a Bayesian posterior view these prior structures are attractive [@Gelman2006Sep], since they do not artificially increase the variance estimates and thus err on the safe side. However, in SBC data-generation this means we sample many data-sets with no individual differences. Unfortunately, for numerical reasons *EMC2* cannot recover a true zero on group-level variances. Thus, *EMC2* will both have difficulty converging and it will identify, albeit very small, some degree of individual differences. Therefore, the `type = "standard"` prior structure results in biased SBC variance estimates. Therefore, in SBC we recommend using `type = "diagonal-gamma"`, which as the name suggests uses gamma distributions for the variance parameters, which have less mass at zero.
+<!-- Although in the paper we rely on the prior structure defined by @Huang2013Jun, which is also the default in *EMC2*, this prior structure has a lot of mass near zero for the group-level variance parameters (a half*-t* distribution). From a Bayesian posterior view these prior structures are attractive [@Gelman2006Sep], since they do not artificially increase the variance estimates and thus err on the safe side. However, in SBC data-generation this means we sample many data-sets with no individual differences. Unfortunately, for numerical reasons *EMC2* cannot recover a true zero on group-level variances. Thus, *EMC2* will both have difficulty converging and it will identify, albeit very small, some degree of individual differences. Therefore, the `type = "standard"` prior structure results in biased SBC variance estimates. Therefore, in SBC we recommend using `type = "diagonal-gamma"`, which as the name suggests uses gamma distributions for the variance parameters, which have less mass at zero. -->
 
-Nevertheless we believe the standard prior is not problematic in real data, since it will always contain at least some degree of individual differences (only a true zero cannot be recovered).
+<!-- Nevertheless we believe the standard prior is not problematic in real data, since it will always contain at least some degree of individual differences (only a true zero cannot be recovered). -->
 
-### LBA
+<!-- ### LBA -->
 
-Now we dive into hierarchical SBC for the LBA model. The prior structure we chose was as follows. Here we have to be extra mindful of choosing a prior that ensures plausible generated data, since there's a double propagation of induced variance through the prior. First through the prior on the standard deviation of the group-level mean, but also through the prior on the group-level variance.
+<!-- Now we dive into hierarchical SBC for the LBA model. The prior structure we chose was as follows. Here we have to be extra mindful of choosing a prior that ensures plausible generated data, since there's a double propagation of induced variance through the prior. First through the prior on the standard deviation of the group-level mean, but also through the prior on the group-level variance. -->
 
-```{r, echo=TRUE, message=FALSE, warning=FALSE, results='hide'}
-n_subjects <- 30
-# 
-matchfun <- function(d) d$S == d$lR
+<!-- ```{r, echo=TRUE, message=FALSE, warning=FALSE, results='hide'} -->
+<!-- n_subjects <- 30 -->
+<!-- #  -->
+<!-- matchfun <- function(d) d$S == d$lR -->
 
-design_LBA <- design(factors=list(subjects=1:n_subjects,S=c("left", "right")),
-                     Rlevels = c("left", "right"),
-                     matchfun = matchfun,
-                     formula =list(v~lM,B~1, t0~1, sv~1, A~1),
-                     constants=c(sv=log(1)),
-                     model = LBA)
+<!-- design_LBA <- design(factors=list(subjects=1:n_subjects,S=c("left", "right")), -->
+<!--                      Rlevels = c("left", "right"), -->
+<!--                      matchfun = matchfun, -->
+<!--                      formula =list(v~lM,B~1, t0~1, sv~1, A~1), -->
+<!--                      constants=c(sv=log(1)), -->
+<!--                      model = LBA) -->
 
-prior_LBA <- prior(design_LBA, type = "diagonal-gamma",
-                  mu_mean = c(1.3, .7, log(.8), log(.2), log(.3)),
-                  mu_sd = c(.2, .1, .1, .05, .05),
-                  shape = 10,
-                  rate = c(.2, .2, .2, .1, .1))
+<!-- prior_LBA <- prior(design_LBA, type = "diagonal-gamma", -->
+<!--                   mu_mean = c(1.3, .7, log(.8), log(.2), log(.3)), -->
+<!--                   mu_sd = c(.2, .1, .1, .05, .05), -->
+<!--                   shape = 10, -->
+<!--                   rate = c(.2, .2, .2, .1, .1)) -->
 
-```
+<!-- ``` -->
 
-We can also plot what the implied prior range is of the subject-level parameters:
+<!-- We can also plot what the implied prior range is of the subject-level parameters: -->
 
-```{r, fig.alt = "Prior for LBA hierarchical model", fig.height = 5}
-plot_prior(prior_LBA, design_LBA, selection = "alpha")
-```
+<!-- ```{r, fig.alt = "Prior for LBA hierarchical model", fig.height = 5} -->
+<!-- plot_prior(prior_LBA, design_LBA, selection = "alpha") -->
+<!-- ``` -->
 
-To actually run SBC, we can use the same function as before, now also specifying how many subjects we want to have in the hierarchical model
+<!-- To actually run SBC, we can use the same function as before, now also specifying how many subjects we want to have in the hierarchical model -->
 
-```{r, eval=FALSE}
-SBC_LBA <- run_sbc(design_LBA, prior_LBA, replicates = 500, trials = 100,
-                        n_subjects = n_subjects, fileName = "SBC_LBA.RData", cores_per_chain = 30)
-```
+<!-- ```{r, eval=FALSE} -->
+<!-- SBC_LBA <- run_sbc(design_LBA, prior_LBA, replicates = 500, trials = 100, -->
+<!--                         n_subjects = n_subjects, fileName = "SBC_LBA.RData", cores_per_chain = 30) -->
+<!-- ``` -->
 
-We can also plot the results again using the `plot_sbc_ecdf` function. It will now generate a set of ECDF difference plots for the hierarchical variance ranks and the hierarchical means ranks:
+<!-- We can also plot the results again using the `plot_sbc_ecdf` function. It will now generate a set of ECDF difference plots for the hierarchical variance ranks and the hierarchical means ranks: -->
 
-```{r, include=FALSE}
-load("SBC_LBA.RData")
-```
+<!-- ```{r, include=FALSE} -->
+<!-- load("SBC_LBA.RData") -->
+<!-- ``` -->
 
-```{r, fig.height = 6, fig.alt = "ECDF SBC LBA"}
-plot_sbc_ecdf(SBC_LBA)
-```
+<!-- ```{r, fig.height = 6, fig.alt = "ECDF SBC LBA"} -->
+<!-- plot_sbc_ecdf(SBC_LBA) -->
+<!-- ``` -->
 
-As we can see good results for the hierarchical SBC and no noticable bias in the group-level mean or variance parameters.
+<!-- As we can see good results for the hierarchical SBC and no noticable bias in the group-level mean or variance parameters. -->
 
-### DDM
+<!-- ### DDM -->
 
-We also tested hierarchical SBC for the seven parameter DDM. We again chose priors carefully here to match realistic behavioral data.
+<!-- We also tested hierarchical SBC for the seven parameter DDM. We again chose priors carefully here to match realistic behavioral data. -->
 
-```{r, echo=TRUE, message=FALSE, warning=FALSE, results='hide'}
-n_subjects <- 30
+<!-- ```{r, echo=TRUE, message=FALSE, warning=FALSE, results='hide'} -->
+<!-- n_subjects <- 30 -->
 
-design_DDM <- design(factors=list(subjects=1:n_subjects,S=c("left", "right")),
-                       Rlevels = c("left", "right"),
-                       formula =list(v~1,a~1, t0~1, s~1, Z~1, sv~1, SZ~1, st0 ~ 1),
-                       constants=c(s=log(1)),
-                       model = DDM)
+<!-- design_DDM <- design(factors=list(subjects=1:n_subjects,S=c("left", "right")), -->
+<!--                        Rlevels = c("left", "right"), -->
+<!--                        formula =list(v~1,a~1, t0~1, s~1, Z~1, sv~1, SZ~1, st0 ~ 1), -->
+<!--                        constants=c(s=log(1)), -->
+<!--                        model = DDM) -->
 
 
-prior_DDM <- prior(design_DDM, type = "diagonal-gamma",
-                  pmean = c(1.2, log(.8), log(.3), qnorm(.5), log(.1), qnorm(.05), log(.05)),
-                  psd = c(.15, .15, .1, .05, .1, .1, .15),
-                  shape = 10,
-                  rate = c(.2, .2, .2, .1, .1, .1, .1))
+<!-- prior_DDM <- prior(design_DDM, type = "diagonal-gamma", -->
+<!--                   pmean = c(1.2, log(.8), log(.3), qnorm(.5), log(.1), qnorm(.05), log(.05)), -->
+<!--                   psd = c(.15, .15, .1, .05, .1, .1, .15), -->
+<!--                   shape = 10, -->
+<!--                   rate = c(.2, .2, .2, .1, .1, .1, .1)) -->
 
-```
+<!-- ``` -->
 
-In contrast to the other models, we generated 200 (instead of 100) trials per person per cell, since with 100 trials the model sometimes did not converge or was very slow to converge. We also only generated 250 data sets due to the large computational costs associated with running a full hierarchical DDM.
+<!-- In contrast to the other models, we generated 200 (instead of 100) trials per person per cell, since with 100 trials the model sometimes did not converge or was very slow to converge. We also only generated 250 data sets due to the large computational costs associated with running a full hierarchical DDM. -->
 
-```{r, eval=FALSE}
-SBC_DDM <- run_sbc(design_DDM, prior_DDM, replicates = 250, trials = 200,
-                        n_subjects = n_subjects, fileName = "SBC_DDM.RData", cores_per_chain = 30)
-```
+<!-- ```{r, eval=FALSE} -->
+<!-- SBC_DDM <- run_sbc(design_DDM, prior_DDM, replicates = 250, trials = 200, -->
+<!--                         n_subjects = n_subjects, fileName = "SBC_DDM.RData", cores_per_chain = 30) -->
+<!-- ``` -->
 
-The group-level means look unbiased, the group-level variance of the between trial variability parameters is overestimated a bit. We note that the effective sample size for these parameters is also very small (although minimum a 100), which can bias the results [@talts2018validating].
+<!-- The group-level means look unbiased, the group-level variance of the between trial variability parameters is overestimated a bit. We note that the effective sample size for these parameters is also very small (although minimum a 100), which can bias the results [@talts2018validating]. -->
 
-```{r, include=FALSE}
-load("SBC_DDM.RData")
-```
+<!-- ```{r, include=FALSE} -->
+<!-- load("SBC_DDM.RData") -->
+<!-- ``` -->
 
-```{r, fig.height = 7, fig.alt = "ECDF SBC DDM"}
-plot_sbc_ecdf(SBC_DDM)
-```
+<!-- ```{r, fig.height = 7, fig.alt = "ECDF SBC DDM"} -->
+<!-- plot_sbc_ecdf(SBC_DDM) -->
+<!-- ``` -->
 
-### RDM
+<!-- ### RDM -->
 
-For completeness and as a proof of correct implementation we also test hierarchical SBC for the RDM with the following model definition and prior structure.
+<!-- For completeness and as a proof of correct implementation we also test hierarchical SBC for the RDM with the following model definition and prior structure. -->
 
-```{r, echo=TRUE, eval = FALSE}
-n_subjects <- 30
+<!-- ```{r, echo=TRUE, eval = FALSE} -->
+<!-- n_subjects <- 30 -->
 
-matchfun <- function(d) d$S == d$lR
+<!-- matchfun <- function(d) d$S == d$lR -->
 
 
-design_RDM <- design(factors=list(subjects=1:n_subjects,S=c("left", "right")),
-                     Rlevels = c("left", "right"),
-                     matchfun = matchfun,
-                     formula =list(v~lM,B~1, t0~1, A~1, s ~ 1),
-                     constants=c(s=log(1)),
-                     model = RDM)
+<!-- design_RDM <- design(factors=list(subjects=1:n_subjects,S=c("left", "right")), -->
+<!--                      Rlevels = c("left", "right"), -->
+<!--                      matchfun = matchfun, -->
+<!--                      formula =list(v~lM,B~1, t0~1, A~1, s ~ 1), -->
+<!--                      constants=c(s=log(1)), -->
+<!--                      model = RDM) -->
 
-prior_RDM <- prior(design_RDM, type = "diagonal-gamma",
-                  mu_mean = c(1.4, .3, log(1.5), log(.2), log(.3)),
-                  mu_sd = c(.05, .1, .1, .05, .05),
-                  shape = 10,
-                  rate = c(.1, .2, .2, .2, .1))
+<!-- prior_RDM <- prior(design_RDM, type = "diagonal-gamma", -->
+<!--                   mu_mean = c(1.4, .3, log(1.5), log(.2), log(.3)), -->
+<!--                   mu_sd = c(.05, .1, .1, .05, .05), -->
+<!--                   shape = 10, -->
+<!--                   rate = c(.1, .2, .2, .2, .1)) -->
 
-SBC_RDM <- run_sbc(design_RDM, prior_RDM, replicates = 500, trials = 100,
-                        n_subjects = n_subjects, fileName = "SBC_RDM.RData", cores_per_chain = 30)
+<!-- SBC_RDM <- run_sbc(design_RDM, prior_RDM, replicates = 500, trials = 100, -->
+<!--                         n_subjects = n_subjects, fileName = "SBC_RDM.RData", cores_per_chain = 30) -->
 
-```
+<!-- ``` -->
 
-We again note that SBC shows no bias in the hierarchical RDM model:
+<!-- We again note that SBC shows no bias in the hierarchical RDM model: -->
 
-```{r, include=FALSE}
-load("SBC_RDM.RData")
-```
+<!-- ```{r, include=FALSE} -->
+<!-- load("SBC_RDM.RData") -->
+<!-- ``` -->
 
-```{r, fig.height = 6, fig.alt = "ECDF SBC RDM"}
-plot_sbc_ecdf(SBC_RDM)
-```
+<!-- ```{r, fig.height = 6, fig.alt = "ECDF SBC RDM"} -->
+<!-- plot_sbc_ecdf(SBC_RDM) -->
+<!-- ``` -->
 
-### LNR
+<!-- ### LNR -->
 
-Lastly, we run hierarchical SBC for the LNR with the following specification
+<!-- Lastly, we run hierarchical SBC for the LNR with the following specification -->
 
-```{r, echo=TRUE, eval = FALSE}
-n_subjects <- 30
+<!-- ```{r, echo=TRUE, eval = FALSE} -->
+<!-- n_subjects <- 30 -->
 
-matchfun <- function(d) d$S == d$lR
+<!-- matchfun <- function(d) d$S == d$lR -->
 
-design_LNR <- design(factors=list(subjects=1:n_subjects,S=c("left", "right")),
-                     Rlevels = c("left", "right"),
-                     matchfun = matchfun,
-                     formula =list(m~lM,s~1, t0~1),
-                     model = LNR)
+<!-- design_LNR <- design(factors=list(subjects=1:n_subjects,S=c("left", "right")), -->
+<!--                      Rlevels = c("left", "right"), -->
+<!--                      matchfun = matchfun, -->
+<!--                      formula =list(m~lM,s~1, t0~1), -->
+<!--                      model = LNR) -->
 
-prior_LNR <- prior(design_LNR, type = "diagonal-gamma",
-                  mu_mean = c(-.7, -.5, log(1), log(.2)),
-                  mu_sd = c(.2, .1, .1, .05),
-                  shape = 10,
-                  rate = c(.2, .2, .2, .1))
+<!-- prior_LNR <- prior(design_LNR, type = "diagonal-gamma", -->
+<!--                   mu_mean = c(-.7, -.5, log(1), log(.2)), -->
+<!--                   mu_sd = c(.2, .1, .1, .05), -->
+<!--                   shape = 10, -->
+<!--                   rate = c(.2, .2, .2, .1)) -->
 
-SBC_LNR <- run_sbc(design_LNR, prior_LNR, replicates = 500, trials = 100,
-                        n_subjects = n_subjects, fileName = "SBC_LNR.RData", cores_per_chain = 30)
+<!-- SBC_LNR <- run_sbc(design_LNR, prior_LNR, replicates = 500, trials = 100, -->
+<!--                         n_subjects = n_subjects, fileName = "SBC_LNR.RData", cores_per_chain = 30) -->
 
-```
+<!-- ``` -->
 
-For the LNR hierarchical SBC also shows no considerable bias:
+<!-- For the LNR hierarchical SBC also shows no considerable bias: -->
 
-```{r, include=FALSE}
-load("SBC_LNR.RData")
-```
+<!-- ```{r, include=FALSE} -->
+<!-- load("SBC_LNR.RData") -->
+<!-- ``` -->
 
-```{r, fig.height = 6, fig.alt = "ECDF SBC RDM"}
-plot_sbc_ecdf(SBC_LNR, layout = c(2,2))
-```
+<!-- ```{r, fig.height = 6, fig.alt = "ECDF SBC RDM"} -->
+<!-- plot_sbc_ecdf(SBC_LNR, layout = c(2,2)) -->
+<!-- ``` -->
 
 ### 
