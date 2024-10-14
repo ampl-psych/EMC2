@@ -3,6 +3,8 @@ template:
   bootstrap: 5
   light-switch: true
 
+bibliography: refs.bib
+
 reference:
 - title: Models
 - contents:

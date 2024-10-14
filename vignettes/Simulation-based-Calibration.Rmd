@@ -4,6 +4,13 @@ description: "A guide to SBC in EMC2"
 author: "Niek Stevenson"
 output: rmarkdown::html_document
 bibliography: refs.bib
+resource_files:
+  - SBC_data/SBC_DDM_single.RData
+  - SBC_data/SBC_DDM.RData
+  - SBC_data/SBC_LBA.RData
+  - SBC_data/SBC_LBA_single.RData
+  - SBC_data/SBC_RDM.RData
+  - SBC_data/SBC_LNR.RData
 vignette: >
   %\VignetteIndexEntry{"Simulation-based Calibration"}
   %\VignetteEngine{knitr::rmarkdown}

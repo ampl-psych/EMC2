@@ -265,7 +265,7 @@ merge_priors <- function(prior_list){
 }
 
 
-#' Title
+#' Plot a prior
 #'
 #' @param prior A prior list created with `prior`
 #' @param design A design list created with `design`
@@ -330,6 +330,17 @@ plot_prior <- function(prior, design, selection = "mu", do_plot = TRUE, covariat
   return(invisible(MCMC_samples))
 }
 
+#' Prior specification information
+#'
+#' Prints information associated with the prior for certain 'type'
+#'
+#' @param type A character string indicating which 'type' of model to run (e.g. 'standard' or 'single')
+#'
+#' @return Invisible return with a list of all the information that is also printed
+#' @export
+#'
+#' @examples
+#' prior_help('diagonal')
 prior_help <- function(type){
   prior <- get_objects(type, return_prior = TRUE, return_info = TRUE)
   # Loop through each type
