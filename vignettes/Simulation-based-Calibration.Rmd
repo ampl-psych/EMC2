@@ -66,7 +66,6 @@ Before we start with the SBC, we want to give a quick note on data compression. 
 To run SBC we specify a design and a prior for the model. *EMC2* assumes normal priors on the parameters for non-hierarchical models. Thus, some parameters are transformed to better match the normal prior and to satisfy the assumption of the normal distribution to have full support on the real line. To check the parameter transformations we use `?LBA` .
 
 ```{r, echo=TRUE, message=FALSE, warning=FALSE, results='hide'}
-#?LBA
 matchfun <- function(d) d$S == d$lR
 
 design_LBA <- design(factors=list(subjects=1,S=c("left", "right")),
