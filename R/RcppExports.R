@@ -9,10 +9,6 @@ calc_ll <- function(p_matrix, data, constants, designs, type, p_types, min_ll, g
     .Call(`_EMC2_calc_ll`, p_matrix, data, constants, designs, type, p_types, min_ll, group_idx)
 }
 
-d_DDM_c <- function(rts, R, group_idx, pars, precision = 3, stop_on_error = TRUE) {
-    .Call(`_EMC2_d_DDM_c`, rts, R, group_idx, pars, precision, stop_on_error)
-}
-
 dlba <- function(t, A, b, v, sv, posdrift = TRUE, robust = FALSE) {
     .Call(`_EMC2_dlba`, t, A, b, v, sv, posdrift, robust)
 }

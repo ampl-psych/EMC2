@@ -88,8 +88,9 @@ test_that("run_single", {
 })
 
 test_that("run_bridge", {
-  expect_snapshot( # Blocked doesn't have bridge sampling yet
-    compare(list(single = LNR_single, diag = LNR_diag, factor = LNR_factor), stage = "preburn", cores_for_props = 1),
+  expect_snapshot(
+    compare(list(single = LNR_single, diag = LNR_diag, factor = LNR_factor,
+                 blocked = LNR_blocked), stage = "preburn", cores_for_props = 1),
     variant = Sys.info()[1]
   )
 })

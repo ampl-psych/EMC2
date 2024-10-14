@@ -101,6 +101,54 @@ std_error_IS2 <- function(IS_samples, n_bootstrap = 50000){
   return(sd(log_marglik_boot))
 }
 
+
+# robust_diwish <- function (W, v, S) { #RJI_change: this function is to protect against weird proposals in the diwish function, where sometimes matrices weren't pos def
+#   if (!is.matrix(S)) S <- matrix(S)
+#   if (!is.matrix(W)) W <- matrix(W)
+#   p <- nrow(S)
+#   gammapart <- sum(lgamma((v + 1 - 1:p)/2))
+#   ldenom <- gammapart + 0.5 * v * p * log(2) + 0.25 * p * (p - 1) * log(pi)
+#   if (corpcor::is.positive.definite(W, tol=1e-8)){
+#     cholW<-base::chol(W)
+#   }else{
+#     return(1e-10)
+#   }
+#   if (corpcor::is.positive.definite(S, tol=1e-8)){
+#     cholS <- base::chol(S)
+#   }else{
+#     return(1e-10)
+#   }
+#   halflogdetS <- sum(log(diag(cholS)))
+#   halflogdetW <- sum(log(diag(cholW)))
+#   invW <- chol2inv(cholW)
+#   exptrace <- sum(S * invW)
+#   lnum <- v * halflogdetS - (v + p + 1) * halflogdetW - 0.5 * exptrace
+#   lpdf <- lnum - ldenom
+#   out <- exp(lpdf)
+#   if(!is.finite(out)) return(1e-100)
+#   if(out < 1e-10) return(1e-100)
+#   return(exp(lpdf))
+# }
+
+robust_diwish <- function (W, v, S) { #RJI_change: this function is to protect against weird proposals in the diwish function, where sometimes matrices weren't pos def
+  if (!is.matrix(S)) S <- matrix(S)
+  if (!is.matrix(W)) W <- matrix(W)
+  p <- nrow(S)
+  gammapart <- sum(lgamma((v + 1 - 1:p)/2))
+  ldenom <- gammapart + 0.5 * v * p * log(2) + 0.25 * p * (p - 1) * log(pi)
+  cholW <- base::chol(nearPD(W)$mat)
+  cholS <- base::chol(nearPD(S)$mat)
+  halflogdetS <- sum(log(diag(cholS)))
+  halflogdetW <- sum(log(diag(cholW)))
+  invW <- chol2inv(cholW)
+  exptrace <- sum(S * invW)
+  lnum <- v * halflogdetS - (v + p + 1) * halflogdetW - 0.5 * exptrace
+  lpdf <- lnum - ldenom
+  out <- exp(lpdf)
+  if(!is.finite(out)) return(1e-100)
+  return(out)
+}
+
 dhalft <- function (x, scale = 25, nu = 1, log = FALSE)
 {
   x <- as.vector(x)
@@ -146,10 +194,7 @@ riwish <- function(v, S){
 }
 
 logdinvGamma <- function(x, shape, rate){
-  alpha <- shape
-  beta <- 1/rate
-  log.density <- alpha * log(beta) - lgamma(alpha) - (alpha +
-                                                        1) * log(x) - (beta/x)
+  dgamma(1/x, shape, rate, log = TRUE) - 2 * log(x)
 }
 
 split_mcl <- function(mcl)
@@ -186,23 +231,23 @@ gelman_diag_robust <- function(mcl,autoburnin = FALSE,transform = TRUE, omit_mps
   }
 }
 
-#' Calculate information criteria (DIC, BPIC), effective number of parameters and
-#' constituent posterior deviance (D) summaries (meanD = mean of D, Dmean = D
-#' for mean of posterior parameters and minD = minimum of D).
-#'
-#' @param emc emc object or list of these
-#' @param stage A string. Specifies which stage you want to plot.
-#' @param filter An integer or vector. If it's an integer, iterations up until the value set by `filter` will be excluded.
-#' If a vector is supplied, only the iterations in the vector will be considered.
-#' @param use_best_fit Boolean, default TRUE use best of minD and Dmean in
-#' calculation otherwise always use Dmean
-#' @param print_summary Boolean (default TRUE) print table of results
-#' @param digits Integer, significant digits in printed table
-#' @param subject Integer or string selecting a single subject, default NULL
-#' returns sums over all subjects
-#' @param group_only Boolean. If `TRUE` will calculate the IC for the group-level only
-#'
-#' @return Table of DIC, BPIC, EffectiveN, meanD, Dmean, and minD
+# #' Calculate information criteria (DIC, BPIC), effective number of parameters and
+# #' constituent posterior deviance (D) summaries (meanD = mean of D, Dmean = D
+# #' for mean of posterior parameters and minD = minimum of D).
+# #'
+# #' @param emc emc object or list of these
+# #' @param stage A string. Specifies which stage you want to plot.
+# #' @param filter An integer or vector. If it's an integer, iterations up until the value set by `filter` will be excluded.
+# #' If a vector is supplied, only the iterations in the vector will be considered.
+# #' @param use_best_fit Boolean, default TRUE use best of minD and Dmean in
+# #' calculation otherwise always use Dmean
+# #' @param print_summary Boolean (default TRUE) print table of results
+# #' @param digits Integer, significant digits in printed table
+# #' @param subject Integer or string selecting a single subject, default NULL
+# #' returns sums over all subjects
+# #' @param group_only Boolean. If `TRUE` will calculate the IC for the group-level only
+# #'
+# #' @return Table of DIC, BPIC, EffectiveN, meanD, Dmean, and minD
 
 IC <- function(emc,stage="sample",filter=0,use_best_fit=TRUE,
                print_summary=TRUE,digits=0,subject=NULL,
@@ -366,20 +411,20 @@ compare_subject <- function(sList,stage="sample",filter=0,use_best_fit=TRUE,
 }
 
 
-#' Calculate a table of model probabilities based for a list of samples objects
-#' based on samples of marginal log-likelihood (MLL) added to these objects by
-#' run_IS2. Probabilities estimated by a bootstrap ath picks a vector of MLLs,
-#' one for each model in the list randomly with replacement nboot times,
-#' calculates model probabilities and averages
-#'
-#'
-#' @param mll List of samples objects with IS_samples attribute added by by run_IS2
-#' @param nboot Integer number of bootstrap samples, the default (1e5) usually
-#' gives stable results at 2 decimal places.
-#' @param print_summary Boolean (default TRUE) print table of results
-#' @param digits Integer, significant digits in printed table
-#'
-#' @return Vector of model probabilities with names from samples list.
+# #' Calculate a table of model probabilities based for a list of samples objects
+# #' based on samples of marginal log-likelihood (MLL) added to these objects by
+# #' run_IS2. Probabilities estimated by a bootstrap ath picks a vector of MLLs,
+# #' one for each model in the list randomly with replacement nboot times,
+# #' calculates model probabilities and averages
+# #'
+# #'
+# #' @param mll List of samples objects with IS_samples attribute added by by run_IS2
+# #' @param nboot Integer number of bootstrap samples, the default (1e5) usually
+# #' gives stable results at 2 decimal places.
+# #' @param print_summary Boolean (default TRUE) print table of results
+# #' @param digits Integer, significant digits in printed table
+# #'
+# #' @return Vector of model probabilities with names from samples list.
 
 compare_MLL <- function(mll,nboot=1e5,digits=2,print_summary=TRUE)
   # mll is a list of vectors of marginal log-likelihoods for a set of models

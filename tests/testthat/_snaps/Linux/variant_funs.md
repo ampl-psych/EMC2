@@ -74,11 +74,11 @@
     Code
       LNR_blocked[[1]]$samples$alpha[, , idx]
     Output
-                   as1t        bd6t
-      m      -0.6064332  -0.5266625
-      m_lMd  -0.2040174  -0.3446261
-      s      -1.2660982  -1.1346625
-      t0    -10.4778607 -31.0242957
+                  as1t       bd6t
+      m     -0.8760931 -0.8901936
+      m_lMd -0.3100768 -0.5392801
+      s     -0.9179046 -0.6409944
+      t0    -2.0557331 -1.7723133
 
 ---
 
@@ -86,18 +86,18 @@
       LNR_blocked[[1]]$samples$theta_mu[, idx]
     Output
                m      m_lMd          s         t0 
-      -1.0458184 -0.1057472 -1.3440932  0.8481241 
+      -1.0751419 -0.3553975 -0.5406418 -1.2804899 
 
 ---
 
     Code
       LNR_blocked[[1]]$samples$theta_var[, , idx]
     Output
-                   m   m_lMd           s         t0
-      m     6.905368 0.00000  0.00000000   0.000000
-      m_lMd 0.000000 1.03098  0.00000000   0.000000
-      s     0.000000 0.00000  0.01855142  -2.198102
-      t0    0.000000 0.00000 -2.19810177 294.561468
+                    m      m_lMd          s         t0
+      m     0.5435368 0.00000000 0.00000000 0.00000000
+      m_lMd 0.0000000 0.07385396 0.00000000 0.00000000
+      s     0.0000000 0.00000000 0.03017365 0.05008961
+      t0    0.0000000 0.00000000 0.05008961 0.31154503
 
 # run_single
 
@@ -113,11 +113,12 @@
 # run_bridge
 
     Code
-      compare(list(single = LNR_single, diag = LNR_diag, factor = LNR_factor), stage = "preburn",
-      cores_for_props = 1)
+      compare(list(single = LNR_single, diag = LNR_diag, factor = LNR_factor,
+        blocked = LNR_blocked), stage = "preburn", cores_for_props = 1)
     Output
-               MD wMD  DIC wDIC BPIC wBPIC EffectiveN meanD Dmean minD
-      single -312   0  -62    0   97     0        159  -220  -379 -379
-      diag   -477   1 -353    1 -234     1        119  -472  -568 -592
-      factor  365   0 -112    0  114     0        225  -337  -551 -563
+                MD wMD  DIC wDIC BPIC wBPIC EffectiveN meanD Dmean minD
+      single  -312   0  -62    0   97     0        159  -220  -379 -379
+      diag    -490   0 -353    0 -234     0        119  -472  -568 -592
+      factor  -511   1 -112    0  114     0        225  -337  -551 -563
+      blocked -419   0 -432    1 -371     1         61  -493  -531 -554
 

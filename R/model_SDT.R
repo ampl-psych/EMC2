@@ -28,15 +28,15 @@ rPROBIT <- function(lR,pars,p_types=c("mean","sd","threshold"),lt=-Inf)
   cbind.data.frame(R=R,rt=NA)
 }
 
-#' Gaussian Signal Detection Theory Model
-#'
-#' Discrete choice based on continuous Gaussian latent, with no rt. Model
-#' parameters are mean (unbounded) sd (log scale) and threshold, with a first
-#' value is  on the natural scale, and others for designs with with more than
-#' two responses are threshold increases on a log scale to enforce monotonic
-#' increase on the natural scale.
-#'
-#' @return A model list with all the necessary functions to sample
+# #' Gaussian Signal Detection Theory Model
+# #'
+# #' Discrete choice based on continuous Gaussian latent, with no rt. Model
+# #' parameters are mean (unbounded) sd (log scale) and threshold, with a first
+# #' value is  on the natural scale, and others for designs with with more than
+# #' two responses are threshold increases on a log scale to enforce monotonic
+# #' increase on the natural scale.
+# #'
+# #' @return A model list with all the necessary functions to sample
 
 probit <- function(){
   list(

@@ -8,7 +8,7 @@ prior(
   design,
   type = "standard",
   update = NULL,
-  ask = NULL,
+  do_ask = NULL,
   fill_default = TRUE,
   ...
 )
@@ -20,9 +20,10 @@ prior(
 
 \item{update}{Prior list from which to copy values}
 
-\item{ask}{Character. For which parameter types to ask for prior specification, i.e. \code{Sigma}, \code{mu} or \code{loadings} for factor models}
+\item{do_ask}{Character. For which parameter types or hyperparameters to ask for prior specification,
+i.e. \code{Sigma}, \code{mu} or \code{loadings} for factor models, but \code{theta_mu_mean} or \code{A} also works.}
 
-\item{fill_default}{Boolean, If \code{TRUE} will fill all non-specified parameters, and parameters outside of \code{ask}, to default values}
+\item{fill_default}{Boolean, If \code{TRUE} will fill all non-specified parameters, and parameters outside of \code{do_ask}, to default values}
 
 \item{...}{Either values to prefill, i.e. \code{theta_mu_mean = c(1:6)}, or additional arguments such as \code{n_factors = 2}}
 }
@@ -37,9 +38,7 @@ recycled from another prior (given in the \code{update} argument).
 Where a value is not supplied, the user is prompted to enter
 numeric values (or functions that evaluate to numbers).
 
-To get the default prior for a type, run: \verb{get_prior_\{type\}(design = design, sample = F)}
-
-E.g.: \code{get_prior_diagonal(design = design, sample = F)}
+To get the prior help use \code{prior_help(type)}. With \code{type} e.g. 'diagonal'.
 }
 \examples{
 # First define a design for the model
