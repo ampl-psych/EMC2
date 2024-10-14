@@ -10,3 +10,5 @@ test.R
 *.pdf
 .DS_Store
 docs
+/doc/
+/Meta/
