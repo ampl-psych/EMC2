@@ -55,7 +55,7 @@ recycled from another prior (given in the <code>update</code> argument).</p>
 <span>  <span class="va">design</span>,</span>
 <span>  type <span class="op">=</span> <span class="st">"standard"</span>,</span>
 <span>  update <span class="op">=</span> <span class="cn">NULL</span>,</span>
-<span>  ask <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  do_ask <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  fill_default <span class="op">=</span> <span class="cn">TRUE</span>,</span>
 <span>  <span class="va">...</span></span>
 <span><span class="op">)</span></span></code></pre></div>
@@ -77,12 +77,13 @@ recycled from another prior (given in the <code>update</code> argument).</p>
 <dd><p>Prior list from which to copy values</p></dd>
 
 
-<dt id="arg-ask">ask<a class="anchor" aria-label="anchor" href="#arg-ask"></a></dt>
-<dd><p>Character. For which parameter types to ask for prior specification, i.e. <code>Sigma</code>, <code>mu</code> or <code>loadings</code> for factor models</p></dd>
+<dt id="arg-do-ask">do_ask<a class="anchor" aria-label="anchor" href="#arg-do-ask"></a></dt>
+<dd><p>Character. For which parameter types or hyperparameters to ask for prior specification,
+i.e. <code>Sigma</code>, <code>mu</code> or <code>loadings</code> for factor models, but <code>theta_mu_mean</code> or <code>A</code> also works.</p></dd>
 
 
 <dt id="arg-fill-default">fill_default<a class="anchor" aria-label="anchor" href="#arg-fill-default"></a></dt>
-<dd><p>Boolean, If <code>TRUE</code> will fill all non-specified parameters, and parameters outside of <code>ask</code>, to default values</p></dd>
+<dd><p>Boolean, If <code>TRUE</code> will fill all non-specified parameters, and parameters outside of <code>do_ask</code>, to default values</p></dd>
 
 
 <dt id="arg--">...<a class="anchor" aria-label="anchor" href="#arg--"></a></dt>
@@ -97,8 +98,7 @@ recycled from another prior (given in the <code>update</code> argument).</p>
     <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>
     <p>Where a value is not supplied, the user is prompted to enter
 numeric values (or functions that evaluate to numbers).</p>
-<p>To get the default prior for a type, run: <code>get_prior_{type}(design = design, sample = F)</code></p>
-<p>E.g.: <code>get_prior_diagonal(design = design, sample = F)</code></p>
+<p>To get the prior help use <code>prior_help(type)</code>. With <code>type</code> e.g. 'diagonal'.</p>
     </div>
 
     <div class="section level2">

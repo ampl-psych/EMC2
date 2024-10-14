@@ -3,6 +3,7 @@ title: "Simulation-based Calibration"
 description: "A guide to SBC in EMC2"
 author: "Niek Stevenson"
 output: rmarkdown::html_document
+bibliography: refs.bib
 vignette: >
   %\VignetteIndexEntry{"Simulation-based Calibration"}
   %\VignetteEngine{knitr::rmarkdown}
@@ -17,11 +18,11 @@ library(EMC2)
 
 ## Introduction
 
-Simulation-based calibration(SBC) is a technique used to validate and calibrate Bayesian estimation methods and models. It checks whether a model correctly accounts for uncertainty and whether the posterior distributions it produces are consistent with the true data-generating process. First we outline how to perform SBC in theory, after which we describe our experiences with SBC in *EMC2*, which will also illustrate how to perform SBC for your own model.
+Simulation-based calibration(SBC) is a technique used to validate and calibrate Bayesian estimation methods and models [@talts2018validating]. SBC checks whether a model correctly accounts for uncertainty and whether the posterior distributions it produces are consistent with the true data-generating process. First we outline how to perform SBC in theory, after which we describe our experiences with SBC in *EMC2*, which will also illustrate how to perform SBC for your own model.
 
 ## How to SBC
 
-Here we briefly outline the steps to performing SBC, for more detail we refer the reader to X
+Here we briefly outline the steps to performing SBC, for more detail we refer the reader to [@talts2018validating].
 
 ### 1. Specify the Probabilistic Model
 
@@ -39,12 +40,12 @@ Here we briefly outline the steps to performing SBC, for more detail we refer th
 
 ### 4. Evaluate the Rank Statistics
 
--   For each simulated dataset, determine where the set of true parameters $\alpha^{(i)}$ ranks in the posterior samples of $\alpha$. The rank is essentially the number of posterior samples that are less than the true $\alpha^{(i)}$.
+-   For each simulated dataset, determine where the set of true parameters $\alpha^{(i)}$ ranks in the posterior samples of $\alpha$. In *EMC2* we take a sample from the posterior equal to the number of effective sample size. The rank is essentially the number of posterior samples that are less than the true $\alpha^{(i)}$.
 -   Normalize the ranks to lie between 0 and 1. This is your **rank statistic**.
 
 ### 5. Check Uniformity
 
--   Aggregate the rank statistics across all simulated datasets. If your model is well-calibrated, the ranks should be uniformly distributed because each posterior should correctly reflect the uncertainty about the parameter.
+-   Aggregate the rank statistics across all simulated data-sets. If your model is well-calibrated, the ranks should be uniformly distributed because each posterior should correctly reflect the uncertainty about the parameter.
 -   Plot the rank statistics. Here we present both histograms of the rank statistic and plot that compares the empirical cumulative rank to the cumulative density function of a uniform distribution.
 
 ## Non-hierarchical SBC in *EMC2*
@@ -86,37 +87,37 @@ Now we plot the prior, with `map = TRUE` (the default) to see how the implied pr
 plot_prior(prior_LBA, design_LBA)
 ```
 
-Next we can simply run `run_sbc` with our specified design and prior. We can use `?run_sbc` to see the description of the function arguments. The trials argument refers the number of trials per cell, since we have an S factor in our design (and all other designs used), we will simulate 200 trials per data set.
+Next we can simply run `run_sbc` with our specified design and prior. We can use `?run_sbc` to see the description of the function arguments. The trials argument refers to the number of trials per cell, since we have an 2-level S factor in our design (and all other designs used), we will thus simulate 200 trials per data set. Also note that by default run_sbc will estimate till the point-scale reduction factor is smaller than 1.1 and the minimum effective sample size of any of the estimated parameters is larger than 100.
 
 ```{r, eval=FALSE}
 SBC_LBA_single <- run_sbc(design_LBA, prior_LBA, replicates = 500, trials = 100, plot_data = FALSE,
-                  iter = 1000, n_post = 1000, fileName = "SBC_LBA_single.RData",
+                  iter = 1000, n_post = 1000, fileName = "SBC_data/SBC_LBA_single.RData",
                   cores_per_chain = 30)
 ```
 
-In non-hierarchical models, setting `cores_per_chain = 30` will estimate 30 simulated data-sets simultaneously. Which is feasible on the computational server we used. But given that the LBA estimates so fast, non-hierarchical SBC is also feasible on a personal computer. It is recommended to specify `fileName` to store intermediary results in case of crashes.
+In non-hierarchical models, setting `cores_per_chain = 30` will estimate 30 simulated data-sets simultaneously. Which is feasible on the computational server we used. But given that the LBA is so quick to compute, non-hierarchical SBC is also feasible on a personal computer. It is recommended to specify `fileName` to store intermediary results in case of crashes.
 
 *EMC2* also comes with plotting functions that allow us to visualize the results. First we can plot the standard histograms, with a number of equally spaced bins between 0 and 1 of the normalized rank statistic.
 
 ```{r, include=FALSE}
-load("SBC_LBA_single.RData")
+load("SBC_data/SBC_LBA_single.RData")
 ```
 
 ```{r, fig.height = 6, fig.alt = "Histogram SBC LBA single"}
 plot_sbc_hist(SBC_LBA_single, bins = 10)
 ```
 
-Here the gray lines indicate the 2.5, 50 and 97.5% percentile of where *n* samples from a uniform distribution are expected to fall. As we can see most of the bins are are nicely within these bounds and no clear pattern emerges. However, this visualization very much depends on bin size, as pointed out by X. Therefore EMC also comes with plots that visualize the difference in the empirical cumulative density function (ecdf) and the cumulative density function of a uniform distribution (for details see X).
+Here the gray lines indicate the 2.5, 50 and 97.5% percentile of where *n* samples from a uniform distribution are expected to fall. As we can see most of the bins are are nicely within these bounds and no clear pattern emerges. However, this visualization very much depends on bin size, as pointed out by X. Therefore EMC also comes with plots that visualize the difference in the empirical cumulative density function (ecdf) and the cumulative density function of a uniform distribution [@talts2018validating].
 
 ```{r, fig.height = 6, fig.alt = "ecdf LBA single"}
 plot_sbc_ecdf(SBC_LBA_single)
 ```
 
-Notice the resemblance with eggs? The blue area visualizes the 95% area of expected cumulative values. As with real eggs, the observed line, (i.e. the cracks) should lie somewhere on the egg. For an explanation and guide to interpretation to these plots we recommend the following article <https://hyunjimoon.github.io/SBC/articles/rank_visualizations.html>. In the remainder of this article we'll use these plots to visualize SBC results.
+In these dinosaur eggs the blue area visualizes the 95% area of expected cumulative values. As with real eggs, the observed line, (i.e. the cracks) should obviously lie somewhere on the egg. For an explanation and guide to interpretation to these plots we recommend the following article <https://hyunjimoon.github.io/SBC/articles/rank_visualizations.html>. In the remainder of this article we'll use these plots to visualize SBC results.
 
 ### DDM
 
-Next we test non-hierarchical for the DDM as well. Initial results actually showed bias in the estimation of non-decision time and non-decision time variability. Whereas we first based our DDM implementation on the *rtdists* package, the bias pushed us to test with alternative packages, after which we stumbled on the *WienR* package. Which not only boasts much faster likelihood evaluations, but also no longer shows bias in the SBC results. Hence in the newest CRAN release we adapted our C++ code to instead use the *WienR* *C++* routines.
+Next we test non-hierarchical for the DDM as well. Initial results actually showed bias in the estimation of non-decision time and non-decision time variability. Whereas we first based our DDM implementation on the *rtdists* package [@Sigmann2022], the bias pushed us to test with alternative packages, after which we stumbled on the *WienR* package [@Hartmann2023]. Which not only boasts faster likelihood evaluations, but also no longer shows bias in the SBC results. Hence in the newest CRAN release we adapted our C++ code to instead use the *WienR* *C++* routines.
 
 For the SBC itself we used the following prior and design settings, again being mindful of the required transformations.
 
@@ -134,14 +135,14 @@ prior_DDM <- prior(design_DDM, type = "single",
                   psd = c(.15, .15, .1, .05, .15, .15, .15))
 
 SBC_DDM_single <- run_sbc(design_DDM, prior_DDM, replicates = 500, trials = 100, 
-                          fileName = "WienR_single.RData", cores_per_chain = 30)
+                          fileName = "SBC_data/SBC_DDM_single.RData", cores_per_chain = 30)
 
 ```
 
 Next we plot the ECDF difference plot again.
 
 ```{r, include=FALSE}
-load("SBC_DDM_single.RData")
+load("SBC_data/SBC_DDM_single.RData")
 ```
 
 ```{r, fig.height = 6, fig.alt = "ecdf DDM single", fig.width= 10}
@@ -158,7 +159,7 @@ The approach to running hierarchical SBC is very similar to running non-hierarch
 
 ### Prior structure
 
-Although in the paper we rely on the prior structure defined by X, which is also the default in *EMC2*, this prior structure has a lot of mass near 0 for the group-level variance parameters (a half*-t* distribution). From a Bayesian posterior view these prior structures are attractive (see X), since they do not artificially increase the variance estimates and thus err on the safe side. However, in SBC data-generation this means we sample many data-sets with no individual differences. Unfortunately, for numerical reasons *EMC2* cannot recover a true zero on group-level variances. Thus, *EMC2* will both have difficulty converging and it will identify, albeit very small, some degree of individual differences. Therefore, the `type = "standard"` prior structure results in biased SBC variance estimates. Therefore, in SBC we recommend using `type = "diagonal-gamma"`, which as the name suggests uses gamma distributions for the variance parameters, which have less mass at zero.
+Although in the paper we rely on the prior structure defined by X, which is also the default in *EMC2*, this prior structure has a lot of mass near 0 for the group-level variance parameters (a half*-t* distribution). From a Bayesian posterior view these prior structures are attractive [@Gelman2006Sep], since they do not artificially increase the variance estimates and thus err on the safe side. However, in SBC data-generation this means we sample many data-sets with no individual differences. Unfortunately, for numerical reasons *EMC2* cannot recover a true zero on group-level variances. Thus, *EMC2* will both have difficulty converging and it will identify, albeit very small, some degree of individual differences. Therefore, the `type = "standard"` prior structure results in biased SBC variance estimates. Therefore, in SBC we recommend using `type = "diagonal-gamma"`, which as the name suggests uses gamma distributions for the variance parameters, which have less mass at zero.
 
 Nevertheless we believe the standard prior is not problematic in real data, since it will always contain at least some degree of individual differences (only a true zero cannot be recovered).
 
@@ -196,13 +197,13 @@ To actually run SBC, we can use the same function as before, now also specifying
 
 ```{r, eval=FALSE}
 SBC_LBA <- run_sbc(design_LBA, prior_LBA, replicates = 500, trials = 100,
-                        n_subjects = n_subjects, fileName = "SBC_LBA.RData", cores_per_chain = 30)
+                        n_subjects = n_subjects, fileName = "SBC_data/SBC_LBA.RData", cores_per_chain = 30)
 ```
 
-We can also plot the results again using the `plot_sbc_ecdf` function. It will now generate a set of ECDF difference plots for the hierarchical variance ranks and the hierarchical means ranks.
+We can also plot the results again using the `plot_sbc_ecdf` function. It will now generate a set of ECDF difference plots for the hierarchical variance ranks and the hierarchical means ranks:
 
 ```{r, include=FALSE}
-load("SBC_LBA.RData")
+load("SBC_data/SBC_LBA.RData")
 ```
 
 ```{r, fig.height = 6, fig.alt = "ECDF SBC LBA"}
@@ -216,7 +217,9 @@ As we can see good results for the hierarchical SBC and no noticable bias in the
 We also tested hierarchical SBC for the seven parameter DDM. We again chose priors carefully here to match realistic behavioral data.
 
 ```{r, echo=TRUE, message=FALSE, warning=FALSE, results='hide'}
-design_DDM <- design(factors=list(subjects=1:30,S=c("left", "right")),
+n_subjects <- 30
+
+design_DDM <- design(factors=list(subjects=1:n_subjects,S=c("left", "right")),
                        Rlevels = c("left", "right"),
                        formula =list(v~1,a~1, t0~1, s~1, Z~1, sv~1, SZ~1, st0 ~ 1),
                        constants=c(s=log(1)),
@@ -231,16 +234,26 @@ prior_DDM <- prior(design_DDM, type = "diagonal-gamma",
 
 ```
 
-In contrast to the other models, we generated 200 (instead of 100) trials per person per cell, since with 100 trials the model sometimes did not converge or was very slow to converge.
+In contrast to the other models, we generated 200 (instead of 100) trials per person per cell, since with 100 trials the model sometimes did not converge or was very slow to converge. We also only generated 250 data sets due to the large computational costs associated with running a full hierarchical DDM.
 
 ```{r, eval=FALSE}
-SBC_DDM <- run_sbc(design_DDM, prior_DDM, replicates = 500, trials = 200,
-                        n_subjects = n_subjects, fileName = "SBC_DDM.RData", cores_per_chain = 30)
+SBC_DDM <- run_sbc(design_DDM, prior_DDM, replicates = 250, trials = 200,
+                        n_subjects = n_subjects, fileName = "SBC_data/SBC_DDM.RData", cores_per_chain = 30)
+```
+
+The group-level means look unbiased, the group-level variance of the between trial variability parameters is overestimated a bit. We note that the effective sample size for these parameters is also very small (although minimum a 100), which can bias the results [@talts2018validating].
+
+```{r, include=FALSE}
+load("SBC_data/SBC_DDM.RData")
+```
+
+```{r, fig.height = 7, fig.alt = "ECDF SBC DDM"}
+plot_sbc_ecdf(SBC_DDM)
 ```
 
 ### RDM
 
-For completion and as a proof of correct implementation we also test hierarchical SBC for the RDM with the following model definition and prior structure.
+For completeness and as a proof of correct implementation we also test hierarchical SBC for the RDM with the following model definition and prior structure.
 
 ```{r, echo=TRUE, eval = FALSE}
 n_subjects <- 30
@@ -266,10 +279,10 @@ SBC_RDM <- run_sbc(design_RDM, prior_RDM, replicates = 500, trials = 100,
 
 ```
 
-We again note that SBC shows no bias in the hierarchical RDM model
+We again note that SBC shows no bias in the hierarchical RDM model:
 
 ```{r, include=FALSE}
-load("SBC_RDM.RData")
+load("SBC_data/SBC_RDM.RData")
 ```
 
 ```{r, fig.height = 6, fig.alt = "ECDF SBC RDM"}
@@ -302,10 +315,10 @@ SBC_LNR <- run_sbc(design_LNR, prior_LNR, replicates = 500, trials = 100,
 
 ```
 
-Also for the LNR hierarchical SBC shows no considerable bias
+For the LNR hierarchical SBC also shows no considerable bias:
 
 ```{r, include=FALSE}
-load("SBC_LNR.RData")
+load("SBC_data/SBC_LNR.RData")
 ```
 
 ```{r, fig.height = 6, fig.alt = "ECDF SBC RDM"}
