@@ -232,10 +232,10 @@ bridge_sampling <- function(samples, n_eff, split_idx, cores_for_props = 1, core
 #' @param ... Additional, optional more in-depth hyperparameters
 #'
 #' @return A vector of length repetitions which contains the marginal log likelihood estimates per repetition
-#' @examples \dontrun{
+#' @examples \donttest{
 #' # After `fit` has converged on a specific model
 #' # We can take those samples and calculate the marginal log-likelihood for them
-#' MLL <- run_bridge_sampling(list(samples_LNR), cores_per_prop = 2)
+#' MLL <- run_bridge_sampling(samples_LNR, cores_for_props = 1, both_splits = FALSE)
 #' # This will run on 2*4 cores (since 4 is the default for ``cores_for_props``)
 #' }
 #' @export

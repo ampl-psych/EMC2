@@ -2,7 +2,7 @@
 % Please edit documentation in R/priors.R
 \name{plot_prior}
 \alias{plot_prior}
-\title{Title}
+\title{Plot a prior}
 \usage{
 plot_prior(
   prior,
@@ -37,7 +37,7 @@ or arguments required for the types of models e.g. n_factors for type = "factor"
 An mcmc.list object with prior samples of the selected type
 }
 \description{
-Title
+Takes a prior object and plots the selected implied prior
 }
 \examples{
 \donttest{

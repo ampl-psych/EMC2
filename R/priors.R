@@ -267,6 +267,8 @@ merge_priors <- function(prior_list){
 
 #' Plot a prior
 #'
+#' Takes a prior object and plots the selected implied prior
+#'
 #' @param prior A prior list created with `prior`
 #' @param design A design list created with `design`
 #' @param do_plot Boolean. If `FALSE` will only return prior samples and omit plotting.
