@@ -81,7 +81,7 @@ merge_chains <- function(emc){
   return(out_samples)
 }
 
-#' chain_n()
+#' Get chain iterations
 #'
 #' Returns a matrix with the number of samples per chain for each stage that is present
 #' in the emc object (i.e., `preburn`, `burn`, `adapt`,
