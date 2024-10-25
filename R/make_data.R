@@ -218,8 +218,6 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
   if (!is.null(model)) {
     if (!is.function(model)) stop("model argument must  be a function")
     if ( is.null(model()$p_types) ) stop("model()$p_types must be specified")
-    if ( is.null(model()$transform) ) stop("model()$transform must be specified")
-    if ( is.null(model()$Ntransform) ) stop("model()$Ntransform must be specified")
     if ( is.null(model()$Ttransform) ) stop("model()$Ttransform must be specified")
   }
   data <- design_model(
@@ -228,9 +226,10 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
     rt_check=FALSE)
   if (!is.null(attr(design,"ordinal")))
     parameters[,attr(design,"ordinal")] <- exp(parameters[,attr(design,"ordinal")])
-  pars <- model()$Ttransform(model()$Ntransform(map_p(
-    model()$transform(add_constants(parameters,design$constants)),data
-  )),data)
+
+  pars <- map_p(add_constants(parameters,design$constants),data)
+  pars <- model()$Ttransform(do_transform(pars, model()$transform), data)
+  pars <- add_bound(pars, model()$bound)
   if ( any(dimnames(pars)[[2]]=="pContaminant") && any(pars[,"pContaminant"]>0) )
     pc <- pars[data$lR==levels(data$lR)[1],"pContaminant"] else pc <- NULL
   if (!is.null(design$adapt)) {

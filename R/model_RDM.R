@@ -376,24 +376,17 @@ RDM <- function(){
     type="RACE",
     c_name = "RDM",
     p_types=c("v" = log(1),"B" = log(1),"A" = log(0),"t0" = log(0),"s" = log(1)),
-    # Transform to natural scale
-    Ntransform=function(x) {
-      # transform parameters back to real line
-      exp(x)
-    },
+    transform=list(func=c(v = "exp",sv = "exp", B = "exp", A = "exp",t0 = "exp")
+                   , lower=c(t0=.05)),
+    bound=list(minmax=cbind(v=c(1e-3,Inf),sv = c(0, Inf), A=c(1e-4,Inf),B=c(0,Inf),t0=c(0,Inf)),
+               exception=c(A=0, v=0)),
     # Trial dependent parameter transform
     Ttransform = function(pars,dadm) {
       pars <- cbind(pars,b=pars[,"B"] + pars[,"A"])
-      attr(pars,"ok") <- (pars[,"t0"] > .05) & ((pars[,"A"] > 1e-6) | pars[,"A"] == 0) &
-        ((pars[,"v"] > 1e-3) | pars[,"v"] == 0)
       pars
     },
     # Random function for racing accumulators
-    rfun=function(lR=NULL,pars) {
-      ok <- (pars[,"t0"] > .05) & ((pars[,"A"] > 1e-6) | pars[,"A"] == 0) &
-        ((pars[,"v"] > 1e-3) | pars[,"v"] == 0)
-      if (is.null(lR)) ok else rRDM(lR,pars,ok=ok)
-    },
+    rfun=function(lR=NULL,pars)  rRDM(lR,pars,ok=attr(pars, "ok")),
     # Density function (PDF) for single accumulator
     dfun=function(rt,pars) dRDM(rt,pars),
     # Probability function (CDF) for single accumulator

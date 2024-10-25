@@ -820,11 +820,11 @@ calc_ll_manager <- function(proposals, dadm, ll_func, component = NULL){
   if(!is.data.frame(dadm)){
     lls <- log_likelihood_joint(proposals, dadm, component)
   } else{
-    c_name <- attr(dadm,"model")()$c_name
-    if(is.null(c_name)){ # use the R implementation
+    model <- attr(dadm, "model")()
+    if(is.null(model$c_name)){ # use the R implementation
       lls <- apply(proposals,1, ll_func,dadm = dadm)
     } else{
-      p_types <- names(attr(dadm,"model")()$p_types)
+      p_types <- names(model$p_types)
       designs <- list()
       for(p in p_types){
         designs[[p]] <- attr(dadm,"designs")[[p]][attr(attr(dadm,"designs")[[p]],"expand"),,drop=FALSE]
@@ -832,8 +832,8 @@ calc_ll_manager <- function(proposals, dadm, ll_func, component = NULL){
       constants <- attr(dadm, "constants")
       if(is.null(constants)) constants <- NA
       parameter_indices <- list()
-      lls <- calc_ll(proposals, dadm, constants = constants, designs = designs, type = c_name,
-                     p_types = p_types, min_ll = log(1e-10), group_idx = parameter_indices)
+      lls <- calc_ll(proposals, dadm, constants = constants, designs = designs, type = model$c_name,
+                     model$bound, model$transform, p_types = p_types, min_ll = log(1e-10), group_idx = parameter_indices)
     }
   }
   return(lls)

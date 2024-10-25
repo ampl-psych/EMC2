@@ -124,9 +124,10 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
     for(add_constant in not_specified) formula[[length(formula)+ 1]] <- as.formula(paste0(add_constant, "~ 1"))
   }
 
-  model$transform <- fill_transform(transform,model)
-  model$bound <- fill_bound(bound,model)
-
+  model_list <- model()
+  model_list$transform <- fill_transform(transform,model)
+  model_list$bound <- fill_bound(bound,model)
+  model <- function(){return(model_list)}
   design <- list(Flist=formula,Ffactors=factors,Rlevels=Rlevels,
                  Clist=contrasts,matchfun=matchfun,constants=constants,
                  Fcovariates=covariates,Ffunctions=functions,adapt=adapt,model=model)
@@ -633,9 +634,8 @@ design_model <- function(data,design,model=NULL,
     da <- cbind.data.frame(da,newF)
   }
 
-  if (is.null(model()$p_types) | is.null(model()$transform) |
-      is.null(model()$Ntransform) | is.null(model()$Ttransform))
-    stop("p_types, transform and Ntransform must be supplied")
+  if (is.null(model()$p_types) | is.null(model()$Ttransform))
+    stop("p_types and Ttransform must be supplied")
   if (!all(unlist(lapply(design$Flist,class))=="formula"))
     stop("Flist must contain formulas")
   if(is.null(design$DM_fixed)){ # LM type

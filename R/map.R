@@ -3,10 +3,10 @@ do_transform <- function(pars,transform)
 {
   isexp <- transform$func[colnames(pars)] == "exp"
   isprobit <- transform$func[colnames(pars)] == "pnorm"
-  pars[,isexp] <- exp(pars[,isexp]- rep(transform$lower[isexp],each=nrow(pars)))
-  pars[,isprobit] <- pnorm((pars[,isprobit]-
-                              rep(transform$lower[isprobit],each=nrow(pars)))/
-                             (rep((transform$upper[isprobit]-transform$lower[isprobit]),each=nrow(pars))))
+  # Here instead of using isexp directly I use the column names in case v is replicated in pars (i.e. in map_mcmc)
+  pars[,isexp] <- exp(sweep(pars[,isexp], 2, transform$lower[colnames(pars)[isexp]], "-"))
+  pars[,isprobit] <- pnorm(sweep(sweep(pars[,isprobit], 2, transform$lower[colnames(pars)[isprobit]], "-")
+                                 , 2, transform$upper[colnames(pars)[isprobit]]-transform$lower[colnames(pars)[isprobit]], "/"))
   pars
 }
 
@@ -17,13 +17,16 @@ get_pars_matrix <- function(p_vector,dadm) {
   # to the natural scale, and create trial-dependent parameters. Ordinal
   # parameters are first exponentiated.
 
-  if (!is.null(attr(dadm,"ordinal")))
-    if (is.matrix(p_vector))
-       p_vector[,attr(dadm,"ordinal")] <- exp(p_vector[,attr(dadm,"ordinal")]) else
-       p_vector[attr(dadm,"ordinal")] <- exp(p_vector[attr(dadm,"ordinal")])
-  pars <- map_p(attr(dadm,"model")()$transform(add_constants(p_vector,attr(dadm,"constants"))),dadm)
-  pars <- attr(dadm,"model")()$Ttransform(do_transform(pars, transform), dadm)
-  pars <- add_bound(pars)
+  if (!is.null(attr(dadm,"ordinal"))){
+    if (is.matrix(p_vector)){
+      p_vector[,attr(dadm,"ordinal")] <- exp(p_vector[,attr(dadm,"ordinal")])
+    } else{
+      p_vector[attr(dadm,"ordinal")] <- exp(p_vector[attr(dadm,"ordinal")])
+    }
+  }
+  pars <- map_p(add_constants(p_vector,attr(dadm,"constants")),dadm)
+  pars <- attr(dadm,"model")()$Ttransform(do_transform(pars, attr(dadm,"model")()$transform), dadm)
+  pars <- add_bound(pars, attr(dadm,"model")()$bound)
   return(pars)
 }
 
@@ -220,7 +223,7 @@ map_mcmc <- function(mcmc,design,include_constants = TRUE, add_recalculated = FA
 
   for(k in 1:ncol(mcmc_array)){
     mcmc <- t(mcmc_array[,k,])
-    pmat <- model()$transform(add_constants(mcmc,constants))
+    pmat <- add_constants(mcmc,constants)
     plist <- lapply(map,doMap,pmat=pmat, covariates)
     # Give mapped variables names and flag constant
     for (i in 1:length(plist)) {
@@ -251,12 +254,12 @@ map_mcmc <- function(mcmc,design,include_constants = TRUE, add_recalculated = FA
     pmat <- do.call(cbind,plist)
     cnams <- colnames(pmat)
     colnames(pmat) <- get_p_types(cnams)
-    pmat[,] <- model()$Ntransform(pmat)[,1:length(cnams)]
+    pmat[,] <- do_transform(pmat, model()$transform)[,1:length(cnams)]
 
     if(add_recalculated) extras <- add_recalculated_pars(pmat, model, cnams)
     colnames(pmat) <- cnams
     if(add_recalculated) pmat <- cbind(pmat, extras)
-    is_constant <- apply(pmat,2,function(x){all(x[1]==x[-1])})
+    is_constant <- apply(pmat,2,function(x){all(duplicated(x)[-1])})
     if(!include_constants){
       pmat <- pmat[,!is_constant, drop = F]
     }
@@ -293,15 +296,15 @@ fill_transform <- function(transform, model,
   #       stop("upper can only apply to tranforms of type ",paste(has_upper,collapse=","))
   #   }
   # } else if (!is.null(lower) & !is.null(upper)) stop("transform must be provided if lower and/or upper are provided")
-  filled_transform <- model()$transform$transform
-  filled_transform[names(transform$transform)] <- transform$transform
+  filled_transform <- model()$transform$func
+  filled_transform[names(transform)] <- transform$func
   filled_lower <- setNames(rep(-Inf,length(filled_transform)),names(filled_transform))
   filled_upper <- setNames(rep(Inf,length(filled_transform)),names(filled_transform))
   filled_lower[filled_transform %in% has_lower] <- 0
   filled_upper[filled_transform %in% has_upper] <- 1
   if (!is.null(transform$lower)) filled_lower[names(transform$lower)] <- transform$lower
   if (!is.null(transform$upper)) filled_lower[names(transform$upper)] <- transform$upper
-  list(transform=filled_transform,lower=filled_lower,upper=filled_upper)
+  list(func=filled_transform,lower=filled_lower,upper=filled_upper)
 }
 
 
@@ -322,6 +325,22 @@ fill_bound <- function(bound, model) {
     }
   }
   filled_bound
+}
+
+# This form used in random number generation
+do_bound <- function(pars,bound) {
+  tpars <- t(pars[,colnames(bound$minmax),drop=FALSE])
+  ok <- tpars > bound$minmax[1,] & tpars < bound$minmax[2,]
+  if (!is.null(bound$exception)) ok[names(bound$exception),] <-
+    ok[names(bound$exception),] |
+    (tpars[names(bound$exception),] == bound$exception)
+  apply(ok,2,all)
+}
+
+# This form used in get_pars
+add_bound <- function(pars,bound) {
+  attr(pars,"ok") <- do_bound(pars,bound)
+  pars
 }
 
 
