@@ -860,7 +860,7 @@ merge_group_level <- function(tmu, tmu_nuis, tvar, tvar_nuis, is_nuisance){
 }
 
 
-run_hyper <- function(type, data, prior = NULL, iter = 5000, ...){
+run_hyper <- function(type, data, prior = NULL, iter = 1000, n_chains =3, ...){
   args <- list(...)
   if(length(dim(data)) == 3){
     data_input <- data
@@ -874,39 +874,45 @@ run_hyper <- function(type, data, prior = NULL, iter = 5000, ...){
     is_mcmc <- F
     pars <- colnames(data_input)
   }
-  variant_funs <- get_variant_funs(type)
-  samples <- variant_funs$sample_store(data = data ,par_names = pars, is_nuisance = rep(F, length(pars)), integrate = F, is_grouped =
-                                         rep(F, length(pars)), ...)
-  subjects <- unique(data$subjects)
-  sampler <- list(
-    data = data,
-    par_names = pars,
-    subjects = subjects,
-    n_pars = length(pars),
-    nuisance = rep(F, length(pars)),
-    grouped = rep(F, length(pars)),
-    n_subjects = length(subjects),
-    samples = samples,
-    init = TRUE
-  )
-  class(sampler) <- "pmwgs"
-  sampler <- variant_funs$add_info(sampler, prior, ...)
-  startpoints <- variant_funs$get_startpoints(sampler, start_mu = NULL, start_var = NULL)
-  sampler$samples <- variant_funs$fill_samples(samples = sampler$samples, group_level = startpoints, proposals = NULL,
-                                               epsilon = NA, j = 1, n_pars = sampler$n_pars)
-  sampler$samples$idx <- 1
-  sampler <- extend_sampler(sampler, iter-1, "sample")
-  for(i in 2:iter){
-    if(is_mcmc){
-      pars <- variant_funs$gibbs_step(sampler, data_input[,,i])
-    } else{
-      pars <- variant_funs$gibbs_step(sampler, t(data_input))
+  emc <- list()
+  for(j in 1:n_chains){
+    variant_funs <- get_variant_funs(type)
+    samples <- variant_funs$sample_store(data = data ,par_names = pars, is_nuisance = rep(F, length(pars)), integrate = F, is_grouped =
+                                           rep(F, length(pars)), ...)
+    subjects <- unique(data$subjects)
+    sampler <- list(
+      data = split(data, data$subjects),
+      par_names = pars,
+      subjects = subjects,
+      n_pars = length(pars),
+      nuisance = rep(F, length(pars)),
+      grouped = rep(F, length(pars)),
+      n_subjects = length(subjects),
+      samples = samples,
+      init = TRUE
+    )
+    class(sampler) <- "pmwgs"
+    sampler <- variant_funs$add_info(sampler, prior, ...)
+    startpoints <- variant_funs$get_startpoints(sampler, start_mu = NULL, start_var = NULL)
+    sampler$samples <- variant_funs$fill_samples(samples = sampler$samples, group_level = startpoints, proposals = NULL,
+                                                 epsilon = NA, j = 1, n_pars = sampler$n_pars)
+    sampler$samples$idx <- 1
+    sampler <- extend_sampler(sampler, iter-1, "sample")
+    for(i in 2:iter){
+      if(is_mcmc){
+        group_pars <- variant_funs$gibbs_step(sampler, data_input[,,i])
+      } else{
+        group_pars <- variant_funs$gibbs_step(sampler, t(data_input))
+      }
+      sampler$samples$idx <- i
+      sampler$samples <- variant_funs$fill_samples(samples = sampler$samples, group_level = group_pars, proposals = NULL,
+                                                   epsilon = NA, j = i, n_pars = sampler$n_pars)
     }
-    sampler$samples$idx <- i
-    sampler$samples <- variant_funs$fill_samples(samples = sampler$samples, group_level = pars, proposals = NULL,
-                                                 epsilon = NA, j = i, n_pars = sampler$n_pars)
+    attr(sampler, "variant_funs") <- variant_funs
+    emc[[j]] <- sampler
   }
-  return(sampler)
+  class(emc) <- "emc"
+  return(emc)
 }
 
 

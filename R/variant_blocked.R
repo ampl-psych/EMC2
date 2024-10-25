@@ -9,35 +9,6 @@ add_info_blocked <- function(sampler, prior = NULL, ...){
 }
 
 
-#' Prior specification or prior sampling for blocked estimation
-#'
-#' Works analogous to `get_prior_standard`. Blocks of the covariance matrix to estimate
-#' are only considered in sampling. To get the default prior for a created design:
-#' `get_prior_diag(design = design, sample = FALSE)`
-#'
-#' For details see Huang, A., & Wand, M. P. (2013). Simple marginally noninformative
-#' prior distributions for covariance matrices. *Bayesian Analysis*, 8, 439-452. https://doi.org/10.1214/13-BA815.
-#'
-#' Note that if `sample = FALSE`, prior$theta_mu_invar (the inverse of the prior covariance matrix on the group-level mean) is returned,
-#' which is only used for computational efficiency
-#'
-#' @inheritParams get_prior_standard
-#' @param par_groups Integer vector indicating which parts of the covariance matrix should be blocked together
-#' @return A list with a single entry of type of samples from the prior (if sample = TRUE) or else a prior object
-#' @examples
-#' # First define a design for the model
-#' design_DDMaE <- design(data = forstmann,model=DDM,
-#'                            formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
-#'                            constants=c(s=log(1)))
-#' # Now get the default prior
-#' prior <- get_prior_blocked(design = design_DDMaE, sample = FALSE)
-#' # We can change values in the default prior or use `prior`
-#' # Then we can get samples from this prior e.g.
-#' samples <- get_prior_blocked(prior = prior, design = design_DDMaE,
-#'   sample = TRUE, selection = "mu")
-#'
-#' @export
-
 get_prior_blocked <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, selection = "mu", design = NULL,
                               par_groups = NULL){
   # Checking and default priors

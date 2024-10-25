@@ -12,20 +12,19 @@
 #' @param n_subjects Integer. Only used for hierarchical models. The number of subjects to be used in data generation of each replicate
 #' @param plot_data Boolean. Whether to plot the data simulated (aggregated across subjects)
 #' @param verbose Verbose. Whether to print progress related messages
-#' @param n_post Integer. The number of posterior samples to be taken and calculated the rank across
 #' @param fileName Character. Highly recommended, saves temporary results to the fileName
 #' @param ... A list of optional additional arguments that can be passed to `fit` and `make_emc`
 #'
 #' @return The ranks and prior samples. For hierarchical models also the prior-generated subject-level parameters.
 #' @export
 run_sbc <- function(design_in, prior_in, replicates = 250, trials = 100, n_subjects = 30,
-                    plot_data = FALSE, verbose = TRUE,  n_post = 1000,
+                    plot_data = FALSE, verbose = TRUE,
                     fileName = NULL, ...){
   if(is.null(fileName)) message("Since SBC can take a while it's highly recommended to specify a fileName to save temporary results in case of crashes")
   type <- attr(prior_in, "type")
   if(type == "single"){
     out <- SBC_single(design_in, prior_in, replicates, trials,
-                      plot_data, verbose, n_post, fileName, ...)
+                      plot_data, verbose, fileName, ...)
   } else{
     out <- SBC_hierarchical(design_in, prior_in, replicates, trials, n_subjects,
                     plot_data, verbose, fileName, ...)
@@ -84,7 +83,12 @@ SBC_hierarchical <- function(design_in, prior_in, replicates = 250, trials = 100
 
     colnames(rank_mu) <- par_names
     colnames(rank_var) <- colnames(prior_var_input)
-    if(!is.null(fileName)) save(rank_mu, rank_var, emc, prior_mu, prior_var, all_rand_effects, file = fileName)
+    if(!is.null(fileName)){
+      SBC_temp <- list(rank = list(mu = rank_mu, var =  rank_var),
+                     prior = list(mu = prior_mu, var = prior_var),
+                     rand_effects = rand_effects, emc = emc)
+      save(SBC_temp, file = fileName)
+    }
   }
   return(list(rank = list(mu = rank_mu, var =  rank_var),
               prior = list(mu = prior_mu, var = prior_var),
@@ -93,10 +97,11 @@ SBC_hierarchical <- function(design_in, prior_in, replicates = 250, trials = 100
 
 
 SBC_single <- function(design_in, prior_in, replicates = 250, trials = 100,
-                             plot_data = FALSE, verbose = TRUE,  n_post = 1000,
+                             plot_data = FALSE, verbose = TRUE,
                              fileName = NULL, ...){
   dots <- add_defaults(list(...), max_tries = 50, compress = FALSE, rt_resolution = 1e-12,
-                       cores_per_chain = 1)
+                       stop_criteria = list(min_es = 100, max_gd = 1.1,
+                                            selection = c("alpha", "mu", "Sigma")))
   dots$verbose <- verbose
   type <- attr(prior_in, "type")
   if(type != "single") stop("can only use `type = single`")
@@ -124,16 +129,20 @@ SBC_single <- function(design_in, prior_in, replicates = 250, trials = 100,
     }
     emc <-  do.call(make_emc, c(list(data = data, design = design_in, prior_list = prior_in, type = type), fix_dots(dots, make_emc)))
     emc <-  do.call(fit, c(list(emc = emc), fix_dots(dots, fit)))
-    n_post_pc <- round((n_post-1)/length(emc))
-    actual_n_post <- (n_post_pc*length(emc))+1
+    ESS <- round(pmin(do.call(cbind, ess_summary(emc, selection = "alpha", stat = NULL)), chain_n(emc)[1,"sample"]))
+    alpha_rec <- get_pars(emc, selection = "alpha", return_mcmc = F, merge_chains = T, flatten = T)
     for(j in 1:dots$cores_per_chain){
       if(start > replicates) next
-      alpha_rec <- get_pars(emc, selection = "alpha", return_mcmc = F, merge_chains = T, length.out = n_post_pc, flatten = T)[,j,]
-      rank_alpha <- rbind(rank_alpha, (apply(cbind(prior_alpha[,,start], alpha_rec), 1, rank)[1,])/actual_n_post)
+      tmp_rec <- alpha_rec[,j,]
+      rank_alpha <- rbind(rank_alpha, mapply(get_ranks_ESS, split(tmp_rec, row(tmp_rec)), t(ESS[j,]), prior_alpha[,,start]))
       start <- start + 1
     }
     colnames(rank_alpha) <- par_names
-    if(!is.null(fileName)) save(rank_alpha, emc, prior_alpha, file = fileName)
+    if(!is.null(fileName)){
+      SBC_temp <- list(rank = list(alpha = rank_alpha),
+                       prior = list(alpha = prior_alpha), emc = emc)
+      save(SBC_temp, file = fileName)
+    }
   }
   return(list(rank = list(alpha = rank_alpha),
               prior = list(alpha = prior_alpha)))

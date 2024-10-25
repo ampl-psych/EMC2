@@ -12,7 +12,6 @@ run_sbc(
   n_subjects = 30,
   plot_data = FALSE,
   verbose = TRUE,
-  n_post = 1000,
   fileName = NULL,
   ...
 )
@@ -31,8 +30,6 @@ run_sbc(
 \item{plot_data}{Boolean. Whether to plot the data simulated (aggregated across subjects)}
 
 \item{verbose}{Verbose. Whether to print progress related messages}
-
-\item{n_post}{Integer. The number of posterior samples to be taken and calculated the rank across}
 
 \item{fileName}{Character. Highly recommended, saves temporary results to the fileName}
 
