@@ -845,29 +845,22 @@ credible.emc <- function(x,x_name=NULL,x_fun=NULL,x_fun_name="fun", selection = 
 #' @param x_fun_name Name to give to quantity calculated by `x_fun`
 #' @param y_fun_name Name to give to quantity calculated by `y_fun`
 #' @param ... Additional optional arguments that can be passed to `get_pars`
-#' @examples \dontrun{
+#' @examples{
 #' # Run a credible interval test (Bayesian ''t-test'')
-#' # Here the full model is an emc object with the hypothesized effect
-#' design_full <- design(data = forstmann,model=DDM,
-#'                            formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
-#'                            constants=c(s=log(1)))
-#'
-#' full_model <- make_emc(forstmann, design_full)
-#' full_model <- fit(full_model)
-#' credible(full_model, x_name = "v")
+#' credible(samples_LNR, x_name = "m")
 #' # We can also compare between two sets of emc objects
-
-#' # Now without a ~ E
-#' design_null <- design(data = forstmann,model=DDM,
-#'                            formula =list(v~0+S,a~1, t0~1, s~1, Z~1, sv~1, SZ~1),
-#'                            constants=c(s=log(1)))
 #'
-#' null_model <- make_emc(forstmann, design_null)
-#' null_model <- fit(null_model)
-#' credible(x = null_model, x_name = "a", y = full_model, y_name = "a")
-#'
-#' # Or provide custom functions
-#' credible(x = full_model, x_fun = function(d) d["a_Eaccuracy"] - d["a_Eneutral"])
+#' # # Now without a ~ E
+#' # design_null <- design(data = forstmann,model=DDM,
+#' #                            formula =list(v~0+S,a~1, t0~1, s~1, Z~1, sv~1, SZ~1),
+#' #                            constants=c(s=log(1)))
+#' #
+#' # null_model <- make_emc(forstmann, design_null)
+#' # null_model <- fit(null_model)
+#' # credible(x = null_model, x_name = "a", y = full_model, y_name = "a")
+#' #
+#' # # Or provide custom functions:
+#' # credible(x = full_model, x_fun = function(d) d["a_Eaccuracy"] - d["a_Eneutral"])
 #' }
 #' @return Invisible results table with no rounding.
 #' @export

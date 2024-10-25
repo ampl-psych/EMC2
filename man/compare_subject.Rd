@@ -36,26 +36,8 @@ mean deviance, deviance of mean, DIC, BPIC and associated weights.
 Returns the BPIC/DIC based model weights for each participant in a list of samples objects
 }
 \examples{
-\dontrun{
-# Define a list of two (or more different models)
-# Here the full model is an emc object with the hypothesized effect
-# The null model is an emc object without the hypothesized effect
-design_full <- design(data = forstmann,model=DDM,
-                           formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
-                           constants=c(s=log(1)))
-# Now without a ~ E
-design_null <- design(data = forstmann,model=DDM,
-                           formula =list(v~0+S,a~1, t0~1, s~1, Z~1, sv~1, SZ~1),
-                           constants=c(s=log(1)))
-
-full_model <- make_emc(forstmann, design_full)
-full_model <- fit(full_model, cores_for_chains = 1)
-
-null_model <- make_emc(forstmann, design_null, cores_for_chains = 1)
-null_model <- fit(null_model)
-sList <- list(full_model, null_model)
-compare_subject(sList)
-# prints a set of weights for each model for the different participants
-# And returns the DIC and BPIC for each participant for each model.
-}
+# For a broader illustration see `compare`.
+# Here we just take two times the same model, but normally one would compare
+# different models
+compare_subject(list(m0 = samples_LNR, m1 = samples_LNR))
 }

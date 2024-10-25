@@ -37,6 +37,8 @@ plot_defective_density <- function(data,subject=NULL,factors=NULL,
                                    rt_pos="top",accuracy="topright",
                                    ...)
 {
+  if(is.null(data$R)) stop("Make sure an R (response) column is present")
+  if(is.null(data$rt)) stop("Make sure an rt (response time) column is present")
   oldpar <- par(no.readonly = TRUE) # code line i
   on.exit(par(oldpar)) # code line i + 1
   dots <- list(...)

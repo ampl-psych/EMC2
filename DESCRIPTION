@@ -17,7 +17,7 @@ Authors@R:
       person("Przemyslaw", "Sliwa", role=c("ctb")),
       person("Jason H.", "Stover", role=c("ctb")))
 Description: Fit Bayesian (hierarchical) cognitive models
-    using a linear modeling language interface using particle metropolis Markov
+    using a linear modeling language interface using particle Metropolis Markov
     chain Monte Carlo sampling with Gibbs steps. The diffusion decision model (DDM), 
     linear ballistic accumulator model (LBA), racing diffusion model (RDM), and the lognormal
     race model (LNR) are supported. Additionally, users can specify their own likelihood
