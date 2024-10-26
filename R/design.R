@@ -120,6 +120,13 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
     nfacs <- nfacs[!(names(nfacs) %in% c("trials","rt"))]
     if (length(nfacs)>0) covariates <- nfacs
   }
+  if (!is.null(dynamic)) {
+    dynamic <- check_dynamic(dynamic, covariates)
+  }
+  if (!is.null(adaptive)) {
+    adaptive <- check_adaptive(adaptive,model, covariates, formula)
+  }
+
   nams <- unlist(lapply(formula,function(x) as.character(stats::terms(x)[[2]])))
   if (!all(sort(names(model()$p_types)) %in% sort(nams)) & is.null(custom_p_vector)){
     p_types <- model()$p_types
@@ -153,6 +160,12 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
   if (!is.null(ordinal)) if (!all(ordinal %in% names(p_vector)))
     stop("ordinal argument has parameters names not in the model")
 
+  if (!is.null(dynamic)) {
+    dynamic <- check_pars_dynamic(dynamic, p_vector, design){
+  }
+  if (!is.null(adaptive)) {
+    adaptive <- check_pars_adaptive(adaptive, design)
+  }
 
   if (report_p_vector) {
     cat("\n Sampled Parameters: \n")
