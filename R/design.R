@@ -40,6 +40,13 @@
 #' parameters to be estimated.
 #' @param custom_p_vector A character vector. If specified, a custom likelihood
 #' function can be supplied.
+#' @param transform A list with custom transformations to be applied to the parameters of the model,
+#' if the conventional transformations aren't desired.
+#' See `DDM()` for an example of such transformations
+#' @param bound A list with custom bounds to be applied to the parameters of the model,
+#' if the conventional bound aren't desired.
+#' see `DDM()` for an example of such bounds. Bounds are used to set limits to
+#' the likelihood landscape that cannot reasonable be achieved with `transform`
 #' @param ... Additional, optional arguments
 #'
 #' @return A design list.
@@ -527,15 +534,6 @@ compress_dadm <- function(da,designs,Fcov,Ffun)
 design_model <- function(data,design,model=NULL,
                          add_acc=TRUE,rt_resolution=0.02,verbose=TRUE,
                          compress=TRUE,rt_check=TRUE, add_da = FALSE, all_cells_dm = FALSE)
-  # Flist is a list of formula objects, one for each p_type
-  # da is augmented data (from add_accumulators), must have all of the factors
-  #   and covariates that are used in formulas
-  # Clist is a list of either a single unnamed contrast (as in the default)
-  #   lists, one for each model()$p_type (allowed to have some p_types missing).
-  # These elements of model define the paramaterization being used
-  #   ptypes defines the parameter types for which designs must be specified
-  #   transform if a function acting on p_vector before mapping
-  #   Ntransform is a function acting on the output of map_p
 {
 
   check_rt <- function(b,d,upper=TRUE)
@@ -955,6 +953,14 @@ update2version <- function(emc, model = NULL, transform = NULL, bound = NULL){
     return(x)
   })
   if(!is.null(model)){
+    # Apparently we're an old model with previous bounding system
+    if(is.null(design_list[[1]]$model()$bound)){
+      # Just to be sure let's set t0 transform lower to 0
+      if(is.null(transform)) transform <- list(lower = c(t0 = 0))
+    } else{
+      if(is.null(transform)) transform <- design_list[[1]]$model()$transform
+      if(is.null(bound)) bound <- design_list[[1]]$model()$bound
+    }
     model_list <- model()
     model_list$transform <- fill_transform(transform,model)
     model_list$bound <- fill_bound(bound,model)

@@ -297,7 +297,7 @@ fill_transform <- function(transform, model,
   #   }
   # } else if (!is.null(lower) & !is.null(upper)) stop("transform must be provided if lower and/or upper are provided")
   filled_transform <- model()$transform$func
-  filled_transform[names(transform)] <- transform$func
+  filled_transform[names(transform$func)] <- transform$func
   filled_lower <- setNames(rep(-Inf,length(filled_transform)),names(filled_transform))
   filled_upper <- setNames(rep(Inf,length(filled_transform)),names(filled_transform))
   filled_lower[filled_transform %in% has_lower] <- 0

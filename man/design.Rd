@@ -17,6 +17,8 @@ design(
   functions = NULL,
   report_p_vector = TRUE,
   custom_p_vector = NULL,
+  transform = NULL,
+  bound = NULL,
   ...
 )
 }
@@ -67,6 +69,15 @@ parameters to be estimated.}
 
 \item{custom_p_vector}{A character vector. If specified, a custom likelihood
 function can be supplied.}
+
+\item{transform}{A list with custom transformations to be applied to the parameters of the model,
+if the conventional transformations aren't desired.
+See \code{DDM()} for an example of such transformations}
+
+\item{bound}{A list with custom bounds to be applied to the parameters of the model,
+if the conventional bound aren't desired.
+see \code{DDM()} for an example of such bounds. Bounds are used to set limits to
+the likelihood landscape that cannot reasonable be achieved with \code{transform}}
 
 \item{...}{Additional, optional arguments}
 }
