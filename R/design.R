@@ -948,4 +948,30 @@ dm_list <- function(dadm)
   return(dl)
 }
 
-
+update2version <- function(emc, model = NULL, transform = NULL, bound = NULL){
+  design_list <- attr(emc,"design_list")
+  emc <- lapply(emc, FUN = function(x){
+    attr(x, "variant_funs") <- get_variant_funs(attr(x, "variant_funs")$type)
+    return(x)
+  })
+  if(!is.null(model)){
+    model_list <- model()
+    model_list$transform <- fill_transform(transform,model)
+    model_list$bound <- fill_bound(bound,model)
+    model <- function(){return(model_list)}
+    design_list <- lapply(design_list, FUN = function(x){
+      x$model <- model
+      return(x)
+    })
+    emc <- lapply(emc, FUN = function(x){
+      x$data <- lapply(x$data, FUN = function(y){
+        attr(y, "model") <- model
+        return(y)
+      })
+      return(x)
+    })
+  }
+  class(emc) <- "emc"
+  attr(emc, "design_list") <- design_list
+  return(emc)
+}

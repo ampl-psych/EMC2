@@ -96,7 +96,7 @@ LNR <- function() {
     # Trial dependent parameter transform
     Ttransform = function(pars,dadm) pars,
     # Random function for racing accumulators
-    rfun=function(lR=NULL,pars) rLNR(lR,pars, attr(pars, "ok")),
+    rfun=function(lR=NULL,pars) rLNR(lR,pars, ok = attr(pars, "ok")),
     # Density function (PDF) for single accumulator
     dfun=function(rt,pars) dLNR(rt,pars),
     # Probability function (CDF) for single accumulator
