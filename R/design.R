@@ -82,11 +82,18 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
 
   optionals <- list(...)
 
-  if(!is.null(optionals$adapt)){
-    adapt <- optionals$adapt
+  if(!is.null(optionals$adaptive)){
+    adaptive <- optionals$adaptive
   } else {
-    adapt <- NULL
+    adaptive <- NULL
   }
+
+  if(!is.null(optionals$dynamic)){
+    dynamic <- optionals$dynamic
+  } else {
+    dynamic <- NULL
+  }
+
 
   if(!is.null(optionals$ordinal)){
     ordinal <- optionals$ordinal
@@ -144,7 +151,8 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
   model <- function(){return(model_list)}
   design <- list(Flist=formula,Ffactors=factors,Rlevels=Rlevels,
                  Clist=contrasts,matchfun=matchfun,constants=constants,
-                 Fcovariates=covariates,Ffunctions=functions,adapt=adapt,model=model)
+                 Fcovariates=covariates,Ffunctions=functions,model=model,
+                 adaptive = adaptive, dynamic = dynamic)
   p_vector <- sampled_p_vector(design,design$model)
   if (model()$type=="SDT") {
     tnams <- dimnames(attr(p_vector,"map")$threshold)[[2]]
@@ -550,26 +558,25 @@ compress_dadm <- function(da,designs,Fcov,Ffun)
     out
 }
 
+check_rt <- function(b,d,upper=TRUE)
+  # Check bounds respected if present
+{
+  if (!all(sort(levels(d$subjects))==sort(names(b))))
+    stop("Bound vector must have same names as subjects")
+  d <- d[!is.na(d$rt),]
+  d <- d[is.finite(d$rt),]
+  bound <- d$subjects
+  levels(bound) <- unlist(b)[levels(bound)]
+  if (upper)
+    ok <- all(d$rt < as.numeric(as.character(bound))) else
+      ok <- all(d$rt > as.numeric(as.character(bound)))
+  if (!all(ok)) stop("Bound not respected in data")
+}
+
 design_model <- function(data,design,model=NULL,
                          add_acc=TRUE,rt_resolution=0.02,verbose=TRUE,
                          compress=TRUE,rt_check=TRUE, add_da = FALSE, all_cells_dm = FALSE)
 {
-
-  check_rt <- function(b,d,upper=TRUE)
-    # Check bounds respected if present
-  {
-    if (!all(sort(levels(d$subjects))==sort(names(b))))
-      stop("Bound vector must have same names as subjects")
-    d <- d[!is.na(d$rt),]
-    d <- d[is.finite(d$rt),]
-    bound <- d$subjects
-    levels(bound) <- unlist(b)[levels(bound)]
-    if (upper)
-      ok <- all(d$rt < as.numeric(as.character(bound))) else
-        ok <- all(d$rt > as.numeric(as.character(bound)))
-    if (!all(ok)) stop("Bound not respected in data")
-  }
-
   if (is.null(model)) {
     if (is.null(design$model))
       stop("Model must be supplied if it has not been added to design")
@@ -655,64 +662,72 @@ design_model <- function(data,design,model=NULL,
     stop("p_types and Ttransform must be supplied")
   if (!all(unlist(lapply(design$Flist,class))=="formula"))
     stop("Flist must contain formulas")
-  if(is.null(design$DM_fixed)){ # LM type
-    nams <- unlist(lapply(design$Flist,function(x)as.character(stats::terms(x)[[2]])))
-    names(design$Flist) <- nams
-    if (is.null(design$Clist)) design$Clist=list(stats::contr.treatment)
-    if (!is.list(design$Clist)) stop("Clist must be a list")
-    if (!is.list(design$Clist[[1]])[1]) # same contrasts for all p_types
-      design$Clist <- stats::setNames(lapply(1:length(names(model()$p_types)),
-                                             function(x)design$Clist),names(model()$p_types))
-    else {
-     missing_p_types <- names(model()$p_types)[!(names(model()$p_types) %in% names(design$Clist))]
-     if (length(missing_p_types)>0) {
-       nok <- length(design$Clist)
-       for (i in 1:length(missing_p_types)) {
-         design$Clist[[missing_p_types[i]]] <- list(stats::contr.treatment)
-         names(design$Clist)[nok+i] <- missing_p_types[i]
-       }
+  nams <- unlist(lapply(design$Flist,function(x)as.character(stats::terms(x)[[2]])))
+  names(design$Flist) <- nams
+  if (is.null(design$Clist)) design$Clist=list(stats::contr.treatment)
+  if (!is.list(design$Clist)) stop("Clist must be a list")
+  if (is.null(design$adaptive)){
+    ptypes <- model()$p_types
+  } else{
+    ptypes <- c(model()$p_types, setNames(numeric(length(design$adaptive$B$aptypes)),design$adaptive$B$aptypes))
+  }
+  if (!is.list(design$Clist[[1]])[1]){
+    design$Clist <- stats::setNames(lapply(1:length(names(model()$p_types)),
+                                           function(x)design$Clist),names(model()$p_types))
+  } else {
+   missing_p_types <- names(model()$p_types)[!(names(model()$p_types) %in% names(design$Clist))]
+   if (length(missing_p_types)>0) {
+     nok <- length(design$Clist)
+     for (i in 1:length(missing_p_types)) {
+       design$Clist[[missing_p_types[i]]] <- list(stats::contr.treatment)
+       names(design$Clist)[nok+i] <- missing_p_types[i]
      }
    }
-    if(model()$type != "MRI") for (i in names(model()$p_types)) attr(design$Flist[[i]],"Clist") <- design$Clist[[i]]
-    out <- lapply(design$Flist,make_dm,da=da,Fcovariates=design$Fcovariates, add_da = add_da, all_cells_dm = all_cells_dm)
-    if (!is.null(rt_resolution) & !is.null(da$rt)) da$rt <- round(da$rt/rt_resolution)*rt_resolution
-    if (compress) dadm <- compress_dadm(da,designs=out,
-                                        Fcov=design$Fcovariates,Ffun=names(design$Ffunctions)) else {
-                                          dadm <- da
-                                          attr(dadm,"designs") <- out
-                                          attr(dadm,"s_expand") <- da$subjects
-                                          attr(dadm,"expand") <- 1:dim(dadm)[1]
-                                        }
-    if(model()$type == "MRI"){
-      attr(dadm, "design_matrix_mri") <- attr(design, "design_matrix")
-    }
-    p_names <-  unlist(lapply(out,function(x){dimnames(x)[[2]]}),use.names=FALSE)
-
-    bad_constants <- names(design$constants)[!(names(design$constants) %in% p_names)]
-    if (length(bad_constants) > 0)
-      stop("Constant(s) ",paste(bad_constants,collapse=" ")," not in design")
-
-    # Pick out constants
-    sampled_p_names <- p_names[!(p_names %in% names(design$constants))]
-    attr(dadm,"p_names") <- p_names
-    attr(dadm,"sampled_p_names") <- sampled_p_names
-    attr(dadm, "LT") <- attr(data,"LT")
-    attr(dadm, "UT") <- attr(data,"UT")
-    attr(dadm, "LC") <- attr(data,"LC")
-    attr(dadm, "UC") <- attr(data,"UC")
-  } else{
-    if (!is.null(rt_resolution) & !is.null(da$rt)) da$rt <- round(da$rt/rt_resolution)*rt_resolution
-    design$DM_fixed <- lapply(design$DM_fixed, FUN = function(x) return(x[order_idx,,drop =F]))
-    design$DM_random <- lapply(design$DM_random, FUN = function(x) return(x[order_idx,, drop = F]))
-    # dadm <- compress_dadm_lm(da, design$DM_fixed, design$DM_random, Fcov = design$Fcovariates)
-    attr(dadm, "g_fixed") <- attr(design, "g_fixed")
-    attr(dadm, "g_random") <- attr(design, "g_random")
-    attr(dadm, "p_vector_random") <- attr(design, "p_vector_random")
-    attr(dadm, "p_vector_fixed") <- attr(design, "p_vector_fixed")
-
-    attr(dadm, "constants") <- design$constants
-    attr(dadm, "per_subject")<- design$per_subject
+ }
+  if(model()$type != "MRI") for (i in names(model()$p_types)) attr(design$Flist[[i]],"Clist") <- design$Clist[[i]]
+  out <- lapply(design$Flist,make_dm,da=da,Fcovariates=design$Fcovariates, add_da = add_da, all_cells_dm = all_cells_dm)
+  if (!is.null(rt_resolution) & !is.null(da$rt)) da$rt <- round(da$rt/rt_resolution)*rt_resolution
+  if (!is.null(design$dynamic)) {
+    compress <- !any(unlist(lapply(design$dynamic,function(x){
+      x$dyntype %in% names(dynamic_names("learn"))})))
   }
+  if (!is.null(design$adaptive)) compress=FALSE
+  if (compress){
+    dadm <- compress_dadm(da,designs=out, Fcov=design$Fcovariates,Ffun=names(design$Ffunctions))
+  }  else {
+    if (!is.null(design$dynamic) | !is.null(design$adaptive)) {
+      dadm_design <- dadmRL(dadm,design)
+      dadm <- dadm_design$dadm
+      design <- dadm_design$design
+    }
+    dadm <- da
+    attr(dadm,"designs") <- out
+    attr(dadm,"s_expand") <- da$subjects
+    attr(dadm,"expand") <- 1:dim(dadm)[1]
+  }
+  if(model()$type == "MRI"){
+    attr(dadm, "design_matrix_mri") <- attr(design, "design_matrix")
+  }
+  p_names <-  unlist(lapply(out,function(x){dimnames(x)[[2]]}),use.names=FALSE)
+  if (!is.null(design$dynamic))  {
+    d_names <- character(0)
+    for (i in names(design$dynamic)) {
+      d_names <- c(d_names,design$dynamic[[i]]$dpnames)
+    }
+    p_names <- c(p_names,unique(d_names))
+  }
+  bad_constants <- names(design$constants)[!(names(design$constants) %in% p_names)]
+  if (length(bad_constants) > 0)
+    stop("Constant(s) ",paste(bad_constants,collapse=" ")," not in design")
+
+  # Pick out constants
+  sampled_p_names <- p_names[!(p_names %in% names(design$constants))]
+  attr(dadm,"p_names") <- p_names
+  attr(dadm,"sampled_p_names") <- sampled_p_names
+  attr(dadm, "LT") <- attr(data,"LT")
+  attr(dadm, "UT") <- attr(data,"UT")
+  attr(dadm, "LC") <- attr(data,"LC")
+  attr(dadm, "UC") <- attr(data,"UC")
   if (model()$type=="DDM") nunique <- dim(dadm)[1] else
     nunique <- dim(dadm)[1]/length(levels(dadm$lR))
   if (verbose & compress) message("Likelihood speedup factor: ",
@@ -727,17 +742,12 @@ design_model <- function(data,design,model=NULL,
     attr(dadm, "ok_da_winner") <- attr(dadm, "ok_dadm_winner")[attr(dadm,"expand")]
     attr(dadm, "ok_da_looser") <- attr(dadm, "ok_dadm_looser")[attr(dadm,"expand")]
   }
+  attr(dadm,"dynamic") <- design$dynamic
+  attr(dadm,"adaptive") <- design$adaptive
   attr(dadm,"ok_trials") <- is.finite(data$rt)
   attr(dadm,"s_data") <- data$subjects
   attr(dadm,"dL") <- attr(design,"dL")
-  # if (!is.null(design$adapt)) {
-  #   attr(dadm,"adapt") <- stats::setNames(
-  #     lapply(levels(dadm$subjects),augment,da=dadm,design=design),
-  #     levels(dadm$subjects))
-  #   attr(dadm,"adapt")$design <- design$adapt
-  # }
   attr(dadm,"ordinal") <- attr(design,"ordinal")
-
   dadm
 }
 
@@ -833,15 +843,6 @@ map_p <- function(p,dadm)
         pm[,j] <- update_pm_dynamic(dadm, cur_dynamic, p, pm[,j])
       }
     }
-    tmp <- pm*attr(dadm,"designs")[[i]][attr(attr(dadm,"designs")[[i]],"expand"),,drop=FALSE]
-    tmp[is.nan(tmp)] <- 0 # 0 weight x Inf parameter fix
-    pars[,i] <- apply(tmp,1,sum)
-  }
-  for (i in names(attr(dadm,"model")()$p_types)) {
-    if ( !is.matrix(p) ) {
-      pm <- t(as.matrix(p[colnames(attr(dadm,"designs")[[i]])[[2]]]))
-      pm <- pm[rep(1,dim(pars)[1]),]
-    } else pm <- p[,dimnames(attr(dadm,"designs")[[i]])[[2]],drop=FALSE]
     tmp <- pm*attr(dadm,"designs")[[i]][attr(attr(dadm,"designs")[[i]],"expand"),,drop=FALSE]
     tmp[is.nan(tmp)] <- 0 # 0 weight x Inf parameter fix
     pars[,i] <- apply(tmp,1,sum)
