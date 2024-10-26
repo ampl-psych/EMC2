@@ -34,6 +34,18 @@ LogicalVector contains_multiple(CharacterVector sv, CharacterVector inputs) {
   return res;
 }
 
+NumericMatrix submat_rcpp(NumericMatrix X, LogicalVector condition) {
+  int n=X.nrow(), k=X.ncol();
+  NumericMatrix out(sum(condition),k);
+  for (int i = 0, j = 0; i < n; i++) {
+    if(condition[i]) {
+      out(j,_) = X(i,_);
+      j = j+1;
+    }
+  }
+  return(out);
+}
+
 #endif
 
 

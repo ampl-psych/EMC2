@@ -4,6 +4,7 @@
 #include "model_LBA.h"
 #include "model_RDM.h"
 #include "model_DDM.h"
+#include "dynamic.h"
 using namespace Rcpp;
 
 LogicalVector c_do_bound(NumericMatrix pars, List bound) {
@@ -151,25 +152,48 @@ NumericVector c_add_vectors(NumericVector x1, NumericVector x2){
 
 // LL generic functions
 // [[Rcpp::export]]
-NumericMatrix c_map_p(NumericVector p_vector, CharacterVector p_types, List designs, int n_trials){
+NumericMatrix c_map_p(NumericVector p_vector, CharacterVector p_types, List designs, int n_trials, List dynamic,
+                      DataFrame data){
   NumericMatrix pars(n_trials, p_types.length());
+  NumericVector p_mult_design;
   for(int i = 0; i < p_types.length(); i++){
+
     NumericMatrix curr_design = designs[i];
+
     CharacterVector curr_names = colnames(curr_design);
-    for(int j = 0; j < curr_design.ncol(); j ++){
-      String curr_name(curr_names[j]);
-      pars(_, i) = pars(_, i) + p_vector[curr_name] * curr_design(_, j);
-    };
+    if(dynamic.length() > 0){
+      LogicalVector isin = contains_multiple(curr_names, dynamic.names());
+      if(sum(isin) > 0){
+        // some of the columns are updated dynamically (could be for example intercept but not slope)
+        NumericMatrix p_mat = map_dyn(dynamic, data, p_vector, curr_names, isin);
+        for(int k = 0; k < curr_design.ncol(); k ++){
+          pars(_, i) = pars(_, i) + p_mat(_, k) * curr_design(_, k);
+        };
+      } else{ // no adaptive for this parameter type
+        for(int j = 0; j < curr_design.ncol(); j ++){
+          String curr_name(curr_names[j]);
+          pars(_, i) = pars(_, i) + p_vector[curr_name] * curr_design(_, j);
+        };
+      }
+    } else{ // no adaptive at all
+      for(int j = 0; j < curr_design.ncol(); j ++){
+        String curr_name(curr_names[j]);
+        p_mult_design =  p_vector[curr_name] * curr_design(_, j);
+        p_mult_design[is_nan(p_mult_design)] = 0;
+        pars(_, i) = pars(_, i) + p_mult_design;
+      };
+
+    }
   };
   colnames(pars) = p_types;
   return(pars);
 }
 
 NumericMatrix get_pars_matrix(NumericVector p_vector, NumericVector constants, List transforms,
-                       CharacterVector p_types, List designs, int n_trials){
+                       CharacterVector p_types, List designs, int n_trials, DataFrame data, List dynamic){
   NumericVector p_vector_updtd(clone(p_vector));
   p_vector_updtd = c_add_vectors(p_vector_updtd, constants);
-  NumericMatrix pars = c_map_p(p_vector_updtd, p_types, designs, n_trials);
+  NumericMatrix pars = c_map_p(p_vector_updtd, p_types, designs, n_trials, data, dynamic);
   pars = c_do_transform(pars, transforms);
   return(pars);
 }
@@ -249,7 +273,7 @@ double c_log_likelihood_race(NumericMatrix pars, DataFrame data,
 // [[Rcpp::export]]
 NumericVector calc_ll(NumericMatrix p_matrix, DataFrame data, NumericVector constants,
                       List designs, String type, List bounds, List transforms, CharacterVector p_types,
-                      double min_ll, List group_idx){
+                      double min_ll, List group_idx, List adaptive, List dynamic){
   const int n_particles = p_matrix.nrow();
   const int n_trials = data.nrow();
   NumericVector lls(n_particles);
@@ -262,7 +286,10 @@ NumericVector calc_ll(NumericMatrix p_matrix, DataFrame data, NumericVector cons
   if(type == "DDM"){
     for(int i = 0; i < n_particles; i++){
       p_vector = p_matrix(i, _);
-      pars = get_pars_matrix(p_vector, constants, transforms, p_types, designs, n_trials);
+      pars = get_pars_matrix(p_vector, constants, transforms, p_types, designs, n_trials, data, dynamic);
+      if(adaptive.length() > 0){
+        pars = map_adaptive(adaptive, pars, data);
+      }
       is_ok = c_do_bound(pars, bounds);
       lls[i] = c_log_likelihood_DDM(pars, data, n_trials, expand, min_ll, is_ok);
     }
@@ -284,7 +311,10 @@ NumericVector calc_ll(NumericMatrix p_matrix, DataFrame data, NumericVector cons
     }
     for(int i = 0; i < n_particles; i++){
       p_vector = p_matrix(i, _);
-      pars = get_pars_matrix(p_vector, constants, transforms, p_types, designs, n_trials);
+      pars = get_pars_matrix(p_vector, constants, transforms, p_types, designs, n_trials, data, dynamic);
+      if(adaptive.length() > 0){
+        pars = map_adaptive(adaptive, pars, data);
+      }
       is_ok = c_do_bound(pars, bounds);
       lls[i] = c_log_likelihood_race(pars, data, dfun, pfun, n_trials, winner, expand, min_ll, is_ok);
     }

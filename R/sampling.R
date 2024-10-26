@@ -826,14 +826,15 @@ calc_ll_manager <- function(proposals, dadm, ll_func, component = NULL){
     } else{
       p_types <- names(model$p_types)
       designs <- list()
-      for(p in p_types){
+      for(p in c(p_types, attr(attr(dadm, "adaptive"), "aptypes"))){
         designs[[p]] <- attr(dadm,"designs")[[p]][attr(attr(dadm,"designs")[[p]],"expand"),,drop=FALSE]
       }
       constants <- attr(dadm, "constants")
       if(is.null(constants)) constants <- NA
       parameter_indices <- list()
       lls <- calc_ll(proposals, dadm, constants = constants, designs = designs, type = model$c_name,
-                     model$bound, model$transform, p_types = p_types, min_ll = log(1e-10), group_idx = parameter_indices)
+                     model$bound, model$transform, p_types = p_types, min_ll = log(1e-10), group_idx = parameter_indices,
+                     model$adaptive, model$dynamic)
     }
   }
   return(lls)
