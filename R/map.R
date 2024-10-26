@@ -26,6 +26,7 @@ get_pars_matrix <- function(p_vector,dadm) {
   }
   pars <- map_p(add_constants(p_vector,attr(dadm,"constants")),dadm)
   pars <- attr(dadm,"model")()$Ttransform(do_transform(pars, attr(dadm,"model")()$transform), dadm)
+  if (!is.null(attr(dadm,"adaptive"))) pars <- do_adaptive(pars,dadm)
   pars <- add_bound(pars, attr(dadm,"model")()$bound)
   return(pars)
 }

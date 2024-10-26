@@ -413,15 +413,16 @@ check_pars_dynamic <- function(dynamic, p_vector, design){
 }
 
 
-check_adaptive <- function(adaptive,model, covariates,formula=NULL) {
-  if (!all(names(adaptive) %in% names(model()$p_types)))
-    stop("adaptive argument has a parameter type names not in the model")
-  if (is.null(covariates))
-    stop("must specify covariates when using adaptive")
-  covnames <- unlist(lapply(adaptive,function(x)x$covnames))
-  if (!all(covnames %in% names(covariates)))
-    stop("adaptive argument has covnames not in covariates")
-  if (any(duplicated(names(adaptive)))) stop("Duplicate names in adaptive")
+check_adaptive <- function(adaptive,model = NULL, covariates = NULL,formula=NULL) {
+  if(!is.null(model)){
+    if (!all(names(adaptive) %in% names(model()$p_types)))
+      stop("adaptive argument has a parameter type names not in the model")
+    if (is.null(covariates)) stop("must specify covariates when using adaptive")
+    covnames <- unlist(lapply(adaptive,function(x)x$covnames))
+    if (!all(covnames %in% names(covariates)))
+      stop("adaptive argument has covnames not in covariates")
+    if (any(duplicated(names(adaptive)))) stop("Duplicate names in adaptive")
+  }
   for (i in names(adaptive)) {
     anams <- names(adaptive[[i]])
     nams <- anams[!(anams %in% c("anames","maptype","transform","equal_accumulators","shared","S","pcovnames"))]
@@ -493,7 +494,19 @@ check_pars_adaptive <- function(adaptive, design){
   return(adaptive)
 }
 
-
+update_pm_dynamic <- function(dadm, dynamic, p, pm_vec){
+  dyntype <- dynamic$dyntype
+  maptype <- dynamic$maptype
+  dpnames <- dynamic$dpnames
+  covnames <- dynamic$covnames
+  if (any(covnames=="winner")) dadm$winner <- dadm$R == dadm$lR
+  if (any(names(dadm)=="winner"))
+    dadm$winner[is.na(dadm$winner)] <- TRUE
+  lR <- dynamic$lR1
+  if (is.matrix(p)) dp <- p[,dpnames] else dp <- p[dpnames]  # Matrix for make_data
+  pm_vec <- dynfuns(pm_vec,dp,dyntype,dadm[,c("lR",covnames),drop=FALSE],lR,maptype)
+  return(pm_vec)
+}
 
 
 #' Get dynamic parameter, or underlying non-linear components

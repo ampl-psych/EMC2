@@ -161,10 +161,16 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
     stop("ordinal argument has parameters names not in the model")
 
   if (!is.null(dynamic)) {
-    dynamic <- check_pars_dynamic(dynamic, p_vector, design){
+    dynamic <- check_pars_dynamic(dynamic, p_vector, design)
+    design$dynamic <- dynamic
   }
   if (!is.null(adaptive)) {
     adaptive <- check_pars_adaptive(adaptive, design)
+    design$adaptive <- adaptive
+  }
+  if(!is.null(adaptive) || !is.null(dynamic)){
+    attr(design,"transform_names") <- unique(c(attr(dynamic,"transform_names"),
+                                               attr(adaptive,"transform_names")))
   }
 
   if (report_p_vector) {
@@ -813,12 +819,27 @@ map_p <- function(p,dadm)
     p <- p[dadm$subjects,]
   } else if (!all(sort(names(p))==sort(attr(dadm,"p_names"))))
     stop("p names must be: ",paste(attr(dadm,"p_names"),collapse=", "))
-
-  pars <- matrix(nrow=dim(dadm)[1],ncol=length(names(attr(dadm,"model")()$p_types)),
-                 dimnames=list(NULL,names(attr(dadm,"model")()$p_types)))
-  for (i in names(attr(dadm,"model")()$p_types)) {
+  do_p <- c(names(attr(dadm,"model")()$p_types),attr(attr(dadm,"adaptive"),"aptypes"))
+  pars <- matrix(nrow=dim(dadm)[1],ncol=length(do_p),dimnames=list(NULL,do_p))
+  for (i in do_p) {
     if ( !is.matrix(p) ) {
       pm <- t(as.matrix(p[dimnames(attr(dadm,"designs")[[i]])[[2]]]))
+      pm <- pm[rep(1,dim(pars)[1]),,drop=FALSE]
+    } else pm <- p[,dimnames(attr(dadm,"designs")[[i]])[[2]],drop=FALSE]
+    if (!is.null(attr(dadm,"dynamic"))) {
+      isin <- names(attr(dadm,"dynamic")) %in% colnames(pm)
+      if (any(isin)) for (j in names(attr(dadm,"dynamic"))[isin]) {
+        cur_dynamic <- attr(dadm,"dynamic")[[j]]
+        pm[,j] <- update_pm_dynamic(dadm, cur_dynamic, p, pm[,j])
+      }
+    }
+    tmp <- pm*attr(dadm,"designs")[[i]][attr(attr(dadm,"designs")[[i]],"expand"),,drop=FALSE]
+    tmp[is.nan(tmp)] <- 0 # 0 weight x Inf parameter fix
+    pars[,i] <- apply(tmp,1,sum)
+  }
+  for (i in names(attr(dadm,"model")()$p_types)) {
+    if ( !is.matrix(p) ) {
+      pm <- t(as.matrix(p[colnames(attr(dadm,"designs")[[i]])[[2]]]))
       pm <- pm[rep(1,dim(pars)[1]),]
     } else pm <- p[,dimnames(attr(dadm,"designs")[[i]])[[2]],drop=FALSE]
     tmp <- pm*attr(dadm,"designs")[[i]][attr(attr(dadm,"designs")[[i]],"expand"),,drop=FALSE]
