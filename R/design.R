@@ -695,12 +695,14 @@ design_model <- function(data,design,model=NULL,
   if (compress){
     dadm <- compress_dadm(da,designs=out, Fcov=design$Fcovariates,Ffun=names(design$Ffunctions))
   }  else {
+    dadm <- da
+    # # Andrew is this the correct order? Now only if not compressed
+    # Also UT UC still needed?
     if (!is.null(design$dynamic) | !is.null(design$adaptive)) {
       dadm_design <- dadmRL(dadm,design)
       dadm <- dadm_design$dadm
       design <- dadm_design$design
     }
-    dadm <- da
     attr(dadm,"designs") <- out
     attr(dadm,"s_expand") <- da$subjects
     attr(dadm,"expand") <- 1:dim(dadm)[1]

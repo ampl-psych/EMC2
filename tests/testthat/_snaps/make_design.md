@@ -3,7 +3,7 @@
     Code
       str(design_data, give.attr = FALSE)
     Output
-      List of 10
+      List of 11
        $ Flist      :List of 5
         ..$ :Class 'formula'  language v ~ lM
         ..$ :Class 'formula'  language sv ~ lM
@@ -24,15 +24,16 @@
         ..$ CO: NULL
        $ Ffunctions :List of 1
         ..$ E2:function (d)  
-       $ adapt      : NULL
        $ model      :function ()  
+       $ adaptive   : NULL
+       $ dynamic    : NULL
 
 ---
 
     Code
       str(design_custom, give.attr = FALSE)
     Output
-      List of 10
+      List of 11
        $ Flist      :List of 3
         ..$ :Class 'formula'  language m ~ 0 + S
         ..$ :Class 'formula'  language s ~ 1
@@ -46,6 +47,7 @@
        $ constants  : Named num 0
        $ Fcovariates: NULL
        $ Ffunctions : NULL
-       $ adapt      : NULL
        $ model      :function ()  
+       $ adaptive   : NULL
+       $ dynamic    : NULL
 

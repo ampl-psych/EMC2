@@ -11,8 +11,8 @@ Rcpp::Rostream<false>& Rcpp::Rcerr = Rcpp::Rcpp_cerr_get();
 #endif
 
 // c_map_p
-NumericMatrix c_map_p(NumericVector p_vector, CharacterVector p_types, List designs, int n_trials, List dynamic, DataFrame data);
-RcppExport SEXP _EMC2_c_map_p(SEXP p_vectorSEXP, SEXP p_typesSEXP, SEXP designsSEXP, SEXP n_trialsSEXP, SEXP dynamicSEXP, SEXP dataSEXP) {
+NumericMatrix c_map_p(NumericVector p_vector, CharacterVector p_types, List designs, int n_trials, DataFrame data, List dynamic);
+RcppExport SEXP _EMC2_c_map_p(SEXP p_vectorSEXP, SEXP p_typesSEXP, SEXP designsSEXP, SEXP n_trialsSEXP, SEXP dataSEXP, SEXP dynamicSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -20,15 +20,15 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< CharacterVector >::type p_types(p_typesSEXP);
     Rcpp::traits::input_parameter< List >::type designs(designsSEXP);
     Rcpp::traits::input_parameter< int >::type n_trials(n_trialsSEXP);
-    Rcpp::traits::input_parameter< List >::type dynamic(dynamicSEXP);
     Rcpp::traits::input_parameter< DataFrame >::type data(dataSEXP);
-    rcpp_result_gen = Rcpp::wrap(c_map_p(p_vector, p_types, designs, n_trials, dynamic, data));
+    Rcpp::traits::input_parameter< List >::type dynamic(dynamicSEXP);
+    rcpp_result_gen = Rcpp::wrap(c_map_p(p_vector, p_types, designs, n_trials, data, dynamic));
     return rcpp_result_gen;
 END_RCPP
 }
 // calc_ll
-NumericVector calc_ll(NumericMatrix p_matrix, DataFrame data, NumericVector constants, List designs, String type, List bounds, List transforms, CharacterVector p_types, double min_ll, List group_idx, List adaptive, List dynamic);
-RcppExport SEXP _EMC2_calc_ll(SEXP p_matrixSEXP, SEXP dataSEXP, SEXP constantsSEXP, SEXP designsSEXP, SEXP typeSEXP, SEXP boundsSEXP, SEXP transformsSEXP, SEXP p_typesSEXP, SEXP min_llSEXP, SEXP group_idxSEXP, SEXP adaptiveSEXP, SEXP dynamicSEXP) {
+NumericVector calc_ll(NumericMatrix p_matrix, DataFrame data, NumericVector constants, List designs, String type, List bounds, List transforms, CharacterVector p_types, double min_ll, List adaptive, List dynamic);
+RcppExport SEXP _EMC2_calc_ll(SEXP p_matrixSEXP, SEXP dataSEXP, SEXP constantsSEXP, SEXP designsSEXP, SEXP typeSEXP, SEXP boundsSEXP, SEXP transformsSEXP, SEXP p_typesSEXP, SEXP min_llSEXP, SEXP adaptiveSEXP, SEXP dynamicSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -41,10 +41,9 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< List >::type transforms(transformsSEXP);
     Rcpp::traits::input_parameter< CharacterVector >::type p_types(p_typesSEXP);
     Rcpp::traits::input_parameter< double >::type min_ll(min_llSEXP);
-    Rcpp::traits::input_parameter< List >::type group_idx(group_idxSEXP);
     Rcpp::traits::input_parameter< List >::type adaptive(adaptiveSEXP);
     Rcpp::traits::input_parameter< List >::type dynamic(dynamicSEXP);
-    rcpp_result_gen = Rcpp::wrap(calc_ll(p_matrix, data, constants, designs, type, bounds, transforms, p_types, min_ll, group_idx, adaptive, dynamic));
+    rcpp_result_gen = Rcpp::wrap(calc_ll(p_matrix, data, constants, designs, type, bounds, transforms, p_types, min_ll, adaptive, dynamic));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -115,7 +114,7 @@ END_RCPP
 
 static const R_CallMethodDef CallEntries[] = {
     {"_EMC2_c_map_p", (DL_FUNC) &_EMC2_c_map_p, 6},
-    {"_EMC2_calc_ll", (DL_FUNC) &_EMC2_calc_ll, 12},
+    {"_EMC2_calc_ll", (DL_FUNC) &_EMC2_calc_ll, 11},
     {"_EMC2_dlba", (DL_FUNC) &_EMC2_dlba, 7},
     {"_EMC2_plba", (DL_FUNC) &_EMC2_plba, 7},
     {"_EMC2_dWald", (DL_FUNC) &_EMC2_dWald, 5},
