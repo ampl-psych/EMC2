@@ -260,13 +260,13 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
       pick <- data$RACE==i
       lRi <- factor(data$lR[pick & ok])
       tmp <- pars[pick & ok,]
-      attr(tmp, "ok") <- rep(TRUE, nrow(tmp))
+      attr(tmp, "ok") <- rep(T, nrow(tmp))
       Rrti <- model()$rfun(lRi,tmp)
       Rrti$R <- as.numeric(Rrti$R)
       Rrt[RACE==i,] <- as.matrix(Rrti)
     }
     Rrt <- data.frame(Rrt)
-    if (any(names(data) == "RACE")) {
+    Rrt$R <- factor(Rrt$R, labels = levels(lR), levels = 1:length(levels(lR)))
   } else Rrt <- model()$rfun(lR,pars)
   dropNames <- c("lR","lM","lSmagnitude")
   if (!return_Ffunctions && !is.null(design$Ffunctions))
