@@ -93,12 +93,10 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
   } else {
     dynamic <- NULL
   }
-
-
-  if(!is.null(optionals$ordinal)){
-    ordinal <- optionals$ordinal
+  if(!is.null(optionals$pre_transform)){
+    pre_transform <- optionals$pre_transform
   } else {
-    ordinal <- NULL
+    pre_transform <- NULL
   }
 
   if(any(names(factors) %in% c("trial", "R", "rt", "lR", "lM"))){
@@ -145,10 +143,6 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
     for(add_constant in not_specified) formula[[length(formula)+ 1]] <- as.formula(paste0(add_constant, "~ 1"))
   }
 
-  model_list <- model()
-  model_list$transform <- fill_transform(transform,model)
-  model_list$bound <- fill_bound(bound,model)
-  model <- function(){return(model_list)}
   design <- list(Flist=formula,Ffactors=factors,Rlevels=Rlevels,
                  Clist=contrasts,matchfun=matchfun,constants=constants,
                  Fcovariates=covariates,Ffunctions=functions,model=model,
@@ -164,9 +158,13 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
       p_vector <- sampled_p_vector(design,design$model)
     }
   }
+  model_list <- model()
+  model_list$transform <- fill_transform(transform,model)
+  model_list$bound <- fill_bound(bound,model)
+  model <- function(){return(model_list)}
+  model_list$pre_transform <- fill_transform(pre_transform, p_vector, is_pre = TRUE)
+  design$model <- function(){return(model_list)}
   attr(design,"p_vector") <- p_vector
-  if (!is.null(ordinal)) if (!all(ordinal %in% names(p_vector)))
-    stop("ordinal argument has parameters names not in the model")
 
   if (!is.null(dynamic)) {
     dynamic <- check_pars_dynamic(dynamic, p_vector, design)
@@ -180,7 +178,6 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
     attr(design,"transform_names") <- unique(c(attr(dynamic,"transform_names"),
                                                attr(adaptive,"transform_names")))
   }
-
   if (report_p_vector) {
     cat("\n Sampled Parameters: \n")
     print(names(p_vector))
@@ -188,9 +185,6 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
     map_out <- sampled_p_vector(design,design$model, add_da = TRUE)
     print(attr(map_out, "map"), row.names = FALSE)
   }
-
-  attr(design,"ordinal") <- ordinal
-
   return(design)
 }
 
@@ -749,7 +743,6 @@ design_model <- function(data,design,model=NULL,
   attr(dadm,"ok_trials") <- is.finite(data$rt)
   attr(dadm,"s_data") <- data$subjects
   attr(dadm,"dL") <- attr(design,"dL")
-  attr(dadm,"ordinal") <- attr(design,"ordinal")
   dadm
 }
 

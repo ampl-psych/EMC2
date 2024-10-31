@@ -10,23 +10,33 @@ do_transform <- function(pars,transform)
   pars
 }
 
+do_pre_transform <- function(p_vector,transform)
+  # pars is the parameter matrix, transform is a transform list
+{
+  isexp <- transform$func[names(p_vector)] == "exp"
+  isprobit <- transform$func[names(p_vector)] == "pnorm"
+  # Here instead of using isexp directly I use the names in case v is replicated in p_vector (i.e. in map_mcmc)
+  p_vector[isexp] <- exp(p_vector[isexp] - transform$lower[names(p_vector)[isexp]])
+  p_vector[isprobit] <- pnorm((p_vector[isprobit] - transform$lower[names(p_vector)[isprobit]])/
+                                (transform$upper[names(p_vector)[isprobit]]-transform$lower[names(p_vector)[isprobit]]))
+  p_vector
+}
+
+
 
 
 get_pars_matrix <- function(p_vector,dadm) {
   # Add constants, transform p_vector, map to design, transform mapped parameters
   # to the natural scale, and create trial-dependent parameters. Ordinal
   # parameters are first exponentiated.
-
-  if (!is.null(attr(dadm,"ordinal"))){
-    if (is.matrix(p_vector)){
-      p_vector[,attr(dadm,"ordinal")] <- exp(p_vector[,attr(dadm,"ordinal")])
-    } else{
-      p_vector[attr(dadm,"ordinal")] <- exp(p_vector[attr(dadm,"ordinal")])
-    }
-  }
+  # Niek should constants be included in pre_transform? I think not?
+  p_vector <- do_pre_transform(p_vector, attr(dadm, "model")()$pre_transform)
   pars <- map_p(add_constants(p_vector,attr(dadm,"constants")),dadm)
-  pars <- attr(dadm,"model")()$Ttransform(do_transform(pars, attr(dadm,"model")()$transform), dadm)
+  # This might be worth thinking about:
+  # if (!is.null(attr(dadm,"adaptive"))) pars <- do_adaptive(pars,dadm)
+  pars <- do_transform(pars, attr(dadm,"model")()$transform)
   if (!is.null(attr(dadm,"adaptive"))) pars <- do_adaptive(pars,dadm)
+  pars <- attr(dadm,"model")()$Ttransform(pars, dadm)
   pars <- add_bound(pars, attr(dadm,"model")()$bound)
   return(pars)
 }
@@ -127,7 +137,7 @@ mapped_par <- function(p_vector,design,model=NULL,
   if (remove_subjects) design$Ffactors$subjects <- design$Ffactors$subjects[1]
   if (!is.matrix(p_vector)) p_vector <- make_pmat(p_vector,design)
   dadm <- design_model(make_data(p_vector,design,n_trials=1,Fcovariates=Fcovariates),
-                       design,model,rt_check=FALSE,compress=FALSE)
+                       design,model,rt_check=FALSE,compress=FALSE, verbose = FALSE)
   ok <- !(names(dadm) %in% c("subjects","trials","R","rt","winner"))
   out <- cbind(dadm[,ok],round(get_pars_matrix(p_vector,dadm),digits))
   if (model()$type=="SDT")  out <- out[dadm$lR!=levels(dadm$lR)[length(levels(dadm$lR))],]
@@ -209,9 +219,6 @@ map_mcmc <- function(mcmc,design,include_constants = TRUE, add_recalculated = FA
 
   constants <- design$constants
   if (!is.matrix(mcmc) & !is.array(mcmc)) mcmc <- t(as.matrix(mcmc))
-  if (!is.null(attr(design,"ordinal")))
-    mcmc[,attr(design,"ordinal")] <- exp(mcmc[,attr(design,"ordinal")])
-
   if(length(dim(mcmc)) == 2){
     is_matrix <- TRUE
     mcmc_array <- array(mcmc, dim = c(nrow(mcmc), 1, ncol(mcmc)))
@@ -224,6 +231,7 @@ map_mcmc <- function(mcmc,design,include_constants = TRUE, add_recalculated = FA
 
   for(k in 1:ncol(mcmc_array)){
     mcmc <- t(mcmc_array[,k,])
+    mcmc <- t(apply(mcmc, 1, do_pre_transform, design$model()$pre_transform))
     pmat <- add_constants(mcmc,constants)
     plist <- lapply(map,doMap,pmat=pmat, covariates)
     # Give mapped variables names and flag constant
@@ -282,22 +290,29 @@ map_mcmc <- function(mcmc,design,include_constants = TRUE, add_recalculated = FA
 
 fill_transform <- function(transform, model,
                            supported=c("identity","exp","pnorm"),
-                           has_lower=c("exp","pnorm"),has_upper=c("pnorm")) {
-  # if (!is.null(transform)){
-  #   if (!all(transform %in% supported))
-  #     stop("Only ",supported," transforms supported")
-  #   if (!all(names(transform) %in% names(model()$p_types)))
-  #     stop("Transform parameter not in the model")
-  #   if (!is.null(lower)) {
-  #     if (!all(names(lower) %in% names(transform[transform %in% has_lower])))
-  #       stop("lower can only apply to tranforms of type ",paste(has_lower,collapse=","))
-  #   }
-  #   if (!is.null(upper)) {
-  #     if (!all(names(upper) %in% names(transform[transform %in% has_upper])))
-  #       stop("upper can only apply to tranforms of type ",paste(has_upper,collapse=","))
-  #   }
-  # } else if (!is.null(lower) & !is.null(upper)) stop("transform must be provided if lower and/or upper are provided")
-  filled_transform <- model()$transform$func
+                           has_lower=c("exp","pnorm"),has_upper=c("pnorm"),
+                           is_pre = FALSE) {
+  # Note that for filling pre_transform model is the sampled_p_vector
+  if(!is.null(transform)){
+    if (!all(transform$func %in% supported)) stop("Only ",supported," transforms supported")
+    if(!is_pre){
+      if (!all(names(transform$func) %in% names(model()$p_types)))stop("transform parameter not in the model")
+    } else{
+      if (!all(names(transform$func) %in% names(model))) stop("pre_transform parameter not in the model")
+    }
+    if(!is.null(transform$lower) & !is.null(transform$upper) & is.null(transform$func)) stop("func must be provided if lower and/or upper are provided")
+    if (!is.null(transform$lower)) {
+      if (!all(names(transform$lower) %in% names(transform$func[transform$func %in% has_lower])))
+        stop("lower can only apply to tranforms of type ",paste(has_lower,collapse=","))
+      if (!all(names(transform$upper) %in% names(transform$func[transform$func %in% has_upper])))
+        stop("lower can only apply to tranforms of type ",paste(has_upper,collapse=","))
+    }
+  }
+  if(!is_pre){
+    filled_transform <- model()$transform$func
+  } else{
+    filled_transform <- setNames(rep("identity", length(model)), names(model))
+  }
   filled_transform[names(transform$func)] <- transform$func
   filled_lower <- setNames(rep(-Inf,length(filled_transform)),names(filled_transform))
   filled_upper <- setNames(rep(Inf,length(filled_transform)),names(filled_transform))
