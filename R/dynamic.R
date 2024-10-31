@@ -1,3 +1,8 @@
+# make_trend <- function(type, base, par_names, cov_names, transform){
+#
+# }
+#
+
 #### Dynfuns ----
 
 #### Learning functions ----
@@ -342,47 +347,61 @@ dynamic_names <- function(nam=NULL) {
 check_dynamic <- function(dynamic, covariates) {
   if (!is.null(covariates)){
     covnames <- unlist(lapply(dynamic,function(x)x$covnames))
-    if (!all(covnames %in% names(covariates))) stop("dynamic argument has covnames not in covariates")
+    if (!all(covnames %in% names(covariates))){
+      stop("dynamic argument has covnames not in covariates")
+    }
   }
   if (any(duplicated(names(dynamic)))) stop("Duplicate names in dynamic")
   for (i in names(dynamic)) {
     dnams <- names(dynamic[[i]])
     nams <- dnams[!(dnams %in% c("dnames","maptype","transform","equal_accumulators","shared","S"))]
-    if (length(nams)!=2 || (!all(nams %in% c("covnames","dyntype"))))
+    if (length(nams)!=2 || (!all(nams %in% c("covnames","dyntype")))){
       stop("dynamic argument ",i," must have names: covnames, dyntype")
-    if (!(dynamic[[i]]$dyntype %in% dynamic_names()$dtypes))
+    }
+    if (!(dynamic[[i]]$dyntype %in% dynamic_names()$dtypes)){
       stop("dynamic argument ",i," has an unsupported entry in dyntype, use one of:\n",
            paste(dynamic_names()$dtypes,collapse=","))
+    }
     if (dynamic[[i]]$dyntype=="d1b") stop("Learning rule d1b only supported for adaptive")
-    if (is.null(dynamic[[i]]$dnames))
+    if (is.null(dynamic[[i]]$dnames)){
       dynamic[[i]]$dnames <- dynamic_names(dynamic[[i]]$dyntype)
-    if (length(dynamic[[i]]$dnames) != length(dynamic_names(dynamic[[i]]$dyntype)))
+    }
+    if (length(dynamic[[i]]$dnames) != length(dynamic_names(dynamic[[i]]$dyntype))){
       stop("dnames argument must be length ",length(dynamic_names(dynamic[[i]]$dyntype)))
-    if (is.null(dynamic[[i]]$shared))
+    }
+    if (is.null(dynamic[[i]]$shared)){
       dynamic[[i]]$shared <- rep(FALSE,length(dynamic[[i]]$dnames))
-    if (length(dynamic[[i]]$shared)==1)
+    }
+    if (length(dynamic[[i]]$shared)==1){
       dynamic[[i]]$shared <- rep(dynamic[[i]]$shared,length(dynamic[[i]]$dnames))
-    if (!all(is.logical(dynamic[[i]]$shared)) |
-        length(dynamic[[i]]$shared) != length(dynamic[[i]]$dnames))
+    }
+    if (!all(is.logical(dynamic[[i]]$shared)) | length(dynamic[[i]]$shared) != length(dynamic[[i]]$dnames)){
       stop("shared argument must be a logical length 1 or ",length(dynamic[[i]]$dnames))
+    }
     if (is.null(dynamic[[i]]$maptype)) {
-      if (dynamic[[i]]$dyntype %in% dynamic_names("poly"))
-        dynamic[[i]]$maptype <- "add" else
-          dynamic[[i]]$maptype <- "lin"
+      if (dynamic[[i]]$dyntype %in% dynamic_names("poly")){
+        dynamic[[i]]$maptype <- "add"
+      } else{
+        dynamic[[i]]$maptype <- "lin"
+      }
     }
     if (is.null(dynamic[[i]]$transform)) dynamic[[i]]$transform <- TRUE
-    if (!(dynamic[[i]]$maptype %in% dynamic_names()$mtypes))
+    if (!(dynamic[[i]]$maptype %in% dynamic_names()$mtypes)){
       stop("dynamic argument ",i," has an unsupported entry in maptype, use one of:\n",
            paste(dynamic_names()$mtypes,collapse=","))
+    }
+
     dynamic[[i]]$dpnames <- dynamic[[i]]$dnames
     dynamic[[i]]$dpnames[!dynamic[[i]]$shared] <- paste0(i,dynamic[[i]]$dnames[!dynamic[[i]]$shared])
     if (!is.null(dynamic[[i]]$S)) {
-      if (!(dynamic[[i]]$dyntype %in% names(dynamic_names("learn"))))
+      if (!(dynamic[[i]]$dyntype %in% names(dynamic_names("learn")))){
         stop("Must specify a learning dyntype when S is supplied.")
+      }
       dynamic[[i]]$lR1 <- FALSE
     } else if (!is.null(dynamic[[i]]$equal_accumulators)) {
-      if (length(dynamic[[i]]$equal_accumulators)!=1 || !is.logical(dynamic[[i]]$equal_accumulators))
+      if (length(dynamic[[i]]$equal_accumulators)!=1 || !is.logical(dynamic[[i]]$equal_accumulators)){
         stop("equal_accumulators must be a logical length 1")
+      }
       dynamic[[i]]$lR1 <- dynamic[[i]]$equal_accumulators
       dynamic[[i]]$equal_accumulators <- NULL
     } else {
@@ -394,10 +413,10 @@ check_dynamic <- function(dynamic, covariates) {
 
 
 check_pars_dynamic <- function(dynamic, p_vector, design){
-  if (!all(names(dynamic) %in% names(add_constants(p_vector,design$constants))))
+  if (!all(names(dynamic) %in% names(add_constants(p_vector,design$constants)))){
     stop("dynamic argument has parameter names not in the model")
-  pt <- lapply(attr(attr(design, "p_vector"), "map"),
-               function(x) unlist(dimnames(x)[[2]]))
+  }
+  pt <- lapply(attr(attr(design, "p_vector"), "map"), function(x) unlist(colnames(x)))
   isd <- setNames(!logical(length(pt)),names(pt))
   dp <- names(lapply(dynamic, function(x) names(x$dpnames)))
   dp <- dp[unlist(lapply(dynamic,function(x){!x$transform}))]
@@ -413,12 +432,15 @@ check_pars_dynamic <- function(dynamic, p_vector, design){
 
 check_adaptive <- function(adaptive,model = NULL, covariates = NULL,formula=NULL) {
   if(!is.null(model)){
-    if (!all(names(adaptive) %in% names(model()$p_types)))
+    if (!all(names(adaptive) %in% names(model()$p_types))){
       stop("adaptive argument has a parameter type names not in the model")
+    }
     if (is.null(covariates)) stop("must specify covariates when using adaptive")
     covnames <- unlist(lapply(adaptive,function(x)x$covnames))
-    if (!all(covnames %in% names(covariates)))
+    if (!all(covnames %in% names(covariates))){
       stop("adaptive argument has covnames not in covariates")
+    }
+
   }
   if (any(duplicated(names(adaptive)))) stop("Duplicate names in adaptive")
   for (i in names(adaptive)) {
@@ -427,43 +449,54 @@ check_adaptive <- function(adaptive,model = NULL, covariates = NULL,formula=NULL
     if (length(nams)!=2 || !all(nams %in% c("covnames","dyntype"))) {
       stop("adaptive argument ",i," must have names: covnames, dyntype")
     }
-    if (!(adaptive[[i]]$dyntype %in% dynamic_names()$dtypes))
+    if (!(adaptive[[i]]$dyntype %in% dynamic_names()$dtypes)){
       stop("adaptive argument ",i," has an unsupported entry in dyntype, use one of:\n",
            paste(dynamic_names()$dtypes,collapse=","))
-    if (is.null(adaptive[[i]]$maptype) & adaptive[[i]]$dyntype != "d1b") {
-      if (adaptive[[i]]$dyntype %in% dynamic_names("poly"))
-        adaptive[[i]]$maptype <- "add" else
-          adaptive[[i]]$maptype <- "lin"
     }
-    if (!is.null(adaptive[[i]]$maptype) && !(adaptive[[i]]$maptype %in% dynamic_names()$mtypes))
+
+    if (is.null(adaptive[[i]]$maptype) & adaptive[[i]]$dyntype != "d1b") {
+      if (adaptive[[i]]$dyntype %in% dynamic_names("poly")){
+        adaptive[[i]]$maptype <- "add"
+      } else{
+        adaptive[[i]]$maptype <- "lin"
+      }
+    }
+    if (!is.null(adaptive[[i]]$maptype) && !(adaptive[[i]]$maptype %in% dynamic_names()$mtypes)){
       stop("adaptive argument ",i," has an unsupported entry in maptype, use one of:\n",
            paste(dynamic_names()$mtypes,collapse=","))
+    }
     if (is.null(adaptive[[i]]$transform)) adaptive[[i]]$transform <- FALSE
-    if (is.null(adaptive[[i]]$anames))
+    if (is.null(adaptive[[i]]$anames)){
       adaptive[[i]]$anames <- dynamic_names(adaptive[[i]]$dyntype)
-    if (length(adaptive[[i]]$anames) != length(dynamic_names(adaptive[[i]]$dyntype)))
+    }
+    if (length(adaptive[[i]]$anames) != length(dynamic_names(adaptive[[i]]$dyntype))){
       stop("anames argument must be length ",length(dynamic_names(adaptive[[i]]$dyntype)))
-    if (is.null(adaptive[[i]]$shared))
+    }
+    if (is.null(adaptive[[i]]$shared)){
       adaptive[[i]]$shared <- rep(FALSE,length(adaptive[[i]]$anames))
-    if (length(adaptive[[i]]$shared)==1)
+    }
+
+    if (length(adaptive[[i]]$shared)==1){
       adaptive[[i]]$shared <- rep(adaptive[[i]]$shared,length(adaptive[[i]]$anames))
-    if (!all(is.logical(adaptive[[i]]$shared)) |
-        length(adaptive[[i]]$shared) != length(adaptive[[i]]$anames))
+    }
+    if (!all(is.logical(adaptive[[i]]$shared)) | length(adaptive[[i]]$shared) != length(adaptive[[i]]$anames)){
       stop("shared argument must be a logical length 1 or ",length(adaptive[[i]]$anames))
+    }
     adaptive[[i]]$aptypes <- adaptive[[i]]$anames
-    adaptive[[i]]$aptypes[!adaptive[[i]]$shared] <-
-      paste(i,adaptive[[i]]$anames[!adaptive[[i]]$shared],sep="")
+    adaptive[[i]]$aptypes[!adaptive[[i]]$shared] <- paste(i,adaptive[[i]]$anames[!adaptive[[i]]$shared],sep="")
     if (!is.null(formula)) {
       isin <-  adaptive[[i]]$aptypes %in% unlist(lapply(formula,function(x)all.vars(x)[1]))
       if (!all(isin)) stop("Missing in formula: ",paste(adaptive[[i]]$aptypes[!isin],collapse=","))
     }
     if (!is.null(adaptive[[i]]$S)) {
-      if (!(adaptive[[i]]$dyntype %in% names(dynamic_names("learn"))))
+      if (!(adaptive[[i]]$dyntype %in% names(dynamic_names("learn")))){
         stop("Must specify a learning dyntype when S is supplied.")
+      }
       adaptive[[i]]$lR1 <- FALSE
     } else if (!is.null(adaptive[[i]]$equal_accumulators)) {
-      if (length(adaptive[[i]]$equal_accumulators)!=1 || !is.logical(adaptive[[i]]$equal_accumulators))
+      if (length(adaptive[[i]]$equal_accumulators)!=1 || !is.logical(adaptive[[i]]$equal_accumulators)){
         stop("equal_accumulators must be a logical length 1")
+      }
       adaptive[[i]]$lR1 <- adaptive[[i]]$equal_accumulators
       adaptive[[i]]$equal_accumulators <- NULL
     } else {
