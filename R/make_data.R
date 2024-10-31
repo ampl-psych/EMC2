@@ -224,10 +224,8 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
     add_accumulators(data,design$matchfun,simulate=TRUE,type=model()$type,Fcovariates=design$Fcovariates),
     design,model,add_acc=FALSE,compress=FALSE,verbose=FALSE,
     rt_check=FALSE)
-  if (!is.null(attr(design,"ordinal")))
-    parameters[,attr(design,"ordinal")] <- exp(parameters[,attr(design,"ordinal")])
-
-  pars <- map_p(add_constants(parameters,design$constants),data)
+  pars <- t(apply(parameters, 1, do_pre_transform, model()$pre_transform))
+  pars <- map_p(add_constants(pars,design$constants),data)
   pars <- model()$Ttransform(do_transform(pars, model()$transform), data)
   pars <- add_bound(pars, model()$bound)
   if ( any(dimnames(pars)[[2]]=="pContaminant") && any(pars[,"pContaminant"]>0) )
@@ -261,12 +259,14 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
     for (i in levels(RACE)) {
       pick <- data$RACE==i
       lRi <- factor(data$lR[pick & ok])
-      Rrti <- model()$rfun(lRi,pars[pick & ok,])
+      tmp <- pars[pick & ok,]
+      attr(tmp, "ok") <- rep(TRUE, nrow(tmp))
+      Rrti <- model()$rfun(lRi,tmp)
       Rrti$R <- as.numeric(Rrti$R)
       Rrt[RACE==i,] <- as.matrix(Rrti)
     }
     Rrt <- data.frame(Rrt)
-    Rrt$R <- factor(Rrt$R,labels=levels(lR))
+    if (any(names(data) == "RACE")) {
   } else Rrt <- model()$rfun(lR,pars)
   dropNames <- c("lR","lM","lSmagnitude")
   if (!return_Ffunctions && !is.null(design$Ffunctions))
