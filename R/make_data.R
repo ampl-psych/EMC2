@@ -121,7 +121,7 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
     assign(name, optionals[[name]])
   }
   if(is(parameters, "emc")){
-    if(is.null(design)) design <- attr(parameters, "design_list")[[1]]
+    if(is.null(design)) design <- get_design(parameters)
     if(is.null(data)) data <- get_data(parameters)
     if(!hyper){
       parameters <- do.call(rbind, posterior_summary(parameters, probs = 0.5, selection = "alpha", by_subject = TRUE))

@@ -82,8 +82,10 @@ prior <- function(design, type = "standard", update = NULL,
   if(!is.null(input$theta_mu_var)){
     if(!is.matrix(input$theta_mu_var) & is.matrix(orig$theta_mu_var)) input$theta_mu_var <- diag(input$theta_mu_var)
   }
-  prior <- get_objects(design = design, type = type, prior = input, ...)
-  return(prior$prior)
+  prior <- get_objects(design = design, type = type, prior = input, ...)$prior
+  attr(prior, "design") <- design
+  class(prior) <- "emc.prior"
+  return(prior)
 }
 
 check_var_prior <- function(inp){
@@ -264,74 +266,6 @@ merge_priors <- function(prior_list){
   return(out)
 }
 
-
-#' Plot a prior
-#'
-#' Takes a prior object and plots the selected implied prior
-#'
-#' @param prior A prior list created with `prior`
-#' @param design A design list created with `design`
-#' @param do_plot Boolean. If `FALSE` will only return prior samples and omit plotting.
-#' @param covariates dataframe/functions as specified by the design
-#' @inheritParams plot_pars
-#' @param ... Optional arguments that can be passed to get_pars, histogram, plot.default (see par()),
-#' or arguments required for the types of models e.g. n_factors for type = "factor"
-#' @return An mcmc.list object with prior samples of the selected type
-#' @export
-#'
-#' @examples \donttest{
-#' # First define a design for the model
-#' design_DDMaE <- design(data = forstmann,model=DDM,
-#'                            formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
-#'                            constants=c(s=log(1)))
-#' # Then set up a prior using make_prior
-#' p_vector=c(v_Sleft=-2,v_Sright=2,a=log(1),a_Eneutral=log(1.5),a_Eaccuracy=log(2),
-#'           t0=log(.2),Z=qnorm(.5),sv=log(.5),SZ=qnorm(.5))
-#' psd <- c(v_Sleft=1,v_Sright=1,a=.3,a_Eneutral=.3,a_Eaccuracy=.3,
-#'           t0=.4,Z=1,sv=.4,SZ=1)
-#' # Here we left the variance prior at default
-#' prior_DDMaE <- prior(design_DDMaE,mu_mean=p_vector,mu_sd=psd)
-#' # Now we can plot all sorts of (implied) priors
-#' plot_prior(prior_DDMaE, design_DDMaE, selection = "mu", N = 1e3)
-#' plot_prior(prior_DDMaE, design_DDMaE, selection = "mu", mapped = FALSE, N=1e3)
-#' # We can also plot the implied prior on the participant level effects.
-#' plot_prior(prior_DDMaE, design_DDMaE, selection = "alpha", col = "green", N = 1e3)
-#' }
-
-plot_prior <- function(prior, design, selection = "mu", do_plot = TRUE, covariates = NULL,
-                           layout = NA, N = 5e4, ...){
-  dots <- add_defaults(list(...), breaks = 30, cut_off = 0.0015, prob = TRUE, by_subject = TRUE, map = TRUE)
-  oldpar <- par(no.readonly = TRUE) # code line i
-  on.exit(par(oldpar)) # code line i + 1
-  if(is.null(design$Ffactors)){
-    dots$map <- FALSE
-    warning("For joint models, map = TRUE is not yet implemented")
-  }
-  type <- attr(prior, "type")
-  if(type == "single") selection <- "alpha"
-  samples <-  get_objects(design = design, prior = prior, type = type, sample_prior = T,
-                          selection = selection, N = N, ...)
-  MCMC_samples <- do.call(get_pars, c(list(samples, selection = selection, type = type, covariates = covariates), fix_dots(dots, get_pars)))
-  if(do_plot){
-    for(i in 1:length(MCMC_samples)){
-      xlab <- ifelse(is.null(names(MCMC_samples)[i]), selection, names(MCMC_samples)[i])
-      if(any(is.na(layout))){
-        par(mfrow = coda_setmfrow(Nchains = length(MCMC_samples[[1]]),
-                                  Nparms = ncol(MCMC_samples[[1]][[1]]), nplots = 1))
-      } else{
-        par(mfrow=layout)
-      }
-      for(j in 1:ncol(MCMC_samples[[i]][[1]])){
-        do.call(robust_hist, c(list(MCMC_samples[[i]][[1]][,j], dots$breaks, dots$cut_off, dots$prob),
-                               fix_dots_plot(add_defaults(dots, ylab = "Density", xlab = xlab,
-                                                          main = colnames(MCMC_samples[[i]][[1]])[j],
-                                                          cex.lab = 1.25, cex.main = 1.5))))
-      }
-    }
-  }
-  return(invisible(MCMC_samples))
-}
-
 #' Prior specification information
 #'
 #' Prints information associated with the prior for certain 'type'
@@ -367,6 +301,170 @@ prior_help <- function(type){
   }
   return(invisible(prior))
 }
+
+
+
+# Some S3 classes ---------------------------------------------------------
+
+
+#' @export
+print.emc.prior <- function(x, ...){
+  type <- attr(x, "type")
+  prior_info <- get_objects(type, return_prior = TRUE, return_info = TRUE)
+  for(type in names(prior_info$types)){
+    cat(paste(type, " - ", prior_info$type_descriptions[[type]], ": \n\n"))
+    for (param in prior_info$types[[type]]) {
+      # Get the hyperparameter description
+      param_desc <- prior_info$descriptions[[param]]
+      # Display hyperparameter and description
+      cat(paste(param_desc, ": \n"))
+      tmp <- x[[param]]
+      if(is.matrix(tmp)) tmp <- diag(tmp)
+      print(x[[param]])
+    }
+    cat("\n")
+  }
+}
+
+
+#' Plot a prior
+#'
+#' Takes a prior object and plots the selected implied prior
+#'
+#' @param x An `emc_prior` element
+#' @param do_plot Boolean. If `FALSE` will only return prior samples and omit plotting.
+#' @param covariates dataframe/functions as specified by the design
+#' @inheritParams plot_pars
+#' @param ... Optional arguments that can be passed to get_pars, histogram, plot.default (see par()),
+#' or arguments required for the types of models e.g. n_factors for type = "factor"
+#' @return An mcmc.list object with prior samples of the selected type
+#' @export
+#'
+#' @examples \donttest{
+#' # First define a design for the model
+#' design_DDMaE <- design(data = forstmann,model=DDM,
+#'                            formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
+#'                            constants=c(s=log(1)))
+#' # Then set up a prior using make_prior
+#' p_vector=c(v_Sleft=-2,v_Sright=2,a=log(1),a_Eneutral=log(1.5),a_Eaccuracy=log(2),
+#'           t0=log(.2),Z=qnorm(.5),sv=log(.5),SZ=qnorm(.5))
+#' psd <- c(v_Sleft=1,v_Sright=1,a=.3,a_Eneutral=.3,a_Eaccuracy=.3,
+#'           t0=.4,Z=1,sv=.4,SZ=1)
+#' # Here we left the variance prior at default
+#' prior_DDMaE <- prior(design_DDMaE,mu_mean=p_vector,mu_sd=psd)
+#' # Now we can plot all sorts of (implied) priors
+#' plot(prior_DDMaE, design_DDMaE, selection = "mu", N = 1e3)
+#' plot(prior_DDMaE, design_DDMaE, selection = "mu", mapped = FALSE, N=1e3)
+#' # We can also plot the implied prior on the participant level effects.
+#' plot(prior_DDMaE, design_DDMaE, selection = "alpha", col = "green", N = 1e3)
+#' }
+
+plot.emc.prior <- function(x, selection = "mu", do_plot = TRUE, covariates = NULL,
+                       layout = NA, N = 5e4, ...){
+  prior <- x
+  design <- get_design(prior)
+  dots <- add_defaults(list(...), breaks = 30, cut_off = 0.0015, prob = TRUE, by_subject = TRUE, map = TRUE)
+  oldpar <- par(no.readonly = TRUE) # code line i
+  on.exit(par(oldpar)) # code line i + 1
+  if(is.null(design$Ffactors)){
+    if(selection %in% c('alpha', 'mu') & map){
+      warning("For this type of design, map = TRUE is not yet implemented")
+    }
+    dots$map <- FALSE
+  }
+  type <- attr(prior, "type")
+  if(type == "single") selection <- "alpha"
+  samples <-  get_objects(design = design, prior = prior, type = type, sample_prior = T,
+                          selection = selection, N = N, ...)
+  MCMC_samples <- do.call(get_pars, c(list(samples, selection = selection, type = type, covariates = covariates), fix_dots(dots, get_pars)))
+  if(do_plot){
+    for(i in 1:length(MCMC_samples)){
+      xlab <- ifelse(is.null(names(MCMC_samples)[i]), selection, names(MCMC_samples)[i])
+      if(any(is.na(layout))){
+        par(mfrow = coda_setmfrow(Nchains = length(MCMC_samples[[1]]),
+                                  Nparms = ncol(MCMC_samples[[1]][[1]]), nplots = 1))
+      } else{
+        par(mfrow=layout)
+      }
+      for(j in 1:ncol(MCMC_samples[[i]][[1]])){
+        do.call(robust_hist, c(list(MCMC_samples[[i]][[1]][,j], dots$breaks, dots$cut_off, dots$prob),
+                               fix_dots_plot(add_defaults(dots, ylab = "Density", xlab = xlab,
+                                                          main = colnames(MCMC_samples[[i]][[1]])[j],
+                                                          cex.lab = 1.25, cex.main = 1.5))))
+      }
+    }
+  }
+  return(invisible(MCMC_samples))
+}
+
+#' @rdname parameters
+#' @export
+#' @examples
+#' # For prior inference:
+#' # First set up a prior
+#' design_DDMaE <- design(data = forstmann,model=DDM,
+#'                        formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
+#'                        constants=c(s=log(1)))
+#' # Then set up a prior using make_prior
+#' p_vector=c(v_Sleft=-2,v_Sright=2,a=log(1),a_Eneutral=log(1.5),a_Eaccuracy=log(2),
+#'            t0=log(.2),Z=qnorm(.5),sv=log(.5),SZ=qnorm(.5))
+#' psd <- c(v_Sleft=1,v_Sright=1,a=.3,a_Eneutral=.3,a_Eaccuracy=.3,
+#'          t0=.4,Z=1,sv=.4,SZ=1)
+#' # Here we left the variance prior at default
+#' prior_DDMaE <- prior(design_DDMaE,mu_mean=p_vector,mu_sd=psd)
+#' # Get our prior samples
+#' parameters(prior_DDMaE, N = 100)
+parameters.emc.prior <- function(x,selection = "mu", N = 1000, covariates = NULL, ...){
+  prior <- x
+  dots <- add_defaults(list(...), by_subject = TRUE, map = FALSE, return_mcmc = FALSE, merge_chains = TRUE)
+  type <- attr(prior, "type")
+  samples <-  get_objects(get_design(prior), prior = prior, type = type, sample_prior = T,
+                          selection = selection, N = N, ...)
+  samples <-  do.call(get_pars, c(list(samples, selection = selection,
+                                       type = type, covariates = covariates), fix_dots(dots, get_pars)))
+  if(selection == "alpha") samples <- samples[,1,]
+  return(as.data.frame(t(samples)))
+}
+
+#' @param data A data frame needed to exactly match the original design
+#' @param n_trials An integer. If `data` isn't provided (although preferred),
+#' can generate data based on `n_trials` per cell of `design`
+#' @rdname predict.emc
+#' @export
+predict.emc.prior <- function(object,n_post=100,n_cores=1,
+                              data = NULL, n_trials = NULL, ...)
+{
+  if(is.data.frame(data)) data <- list(data)
+  prior <- object
+  design <- get_design(prior)
+  dots <- add_defaults(list(...), selection = "alpha")
+  post_out <- vector('list', length(design))
+  for(k in 1:length(design)){
+    subjects <- design[[k]]$Ffactors$subjects
+    n_subjects <- length(subjects)
+    dots$merge_chains <- TRUE; dots$by_subject <- TRUE
+    samps <- do.call(parameters, c(list(object, N = n_subjects*n_post), dots))
+    simDat <- mclapply(1:n_post,function(i){
+      do.call(make_data, c(list(samps[(1+((i-1)*n_subjects)):(i*n_subjects),],design = design[[k]], data = data[[k]], n_trials = n_trials), fix_dots(dots, make_data)))
+    },mc.cores=n_cores)
+    out <- cbind(postn=rep(1:n_post,times=unlist(lapply(simDat,function(x)dim(x)[1]))),do.call(rbind,simDat))
+    attr(out,"pars") <- samps
+    post_out[[k]] <- out
+  }
+  if(length(post_out) == 1) post_out <- post_out[[1]]
+  return(post_out)
+}
+
+#' @rdname get_design
+#' @export
+get_design.emc.prior <- function(x)
+{
+  design <- attr(x, "design")
+  return(design)
+}
+
+
+
 
 
 

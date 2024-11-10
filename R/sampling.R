@@ -158,11 +158,9 @@ init <- function(pmwgs, start_mu = NULL, start_var = NULL,
 init_chains <- function(emc, start_mu = NULL, start_var = NULL, particles = 1000,
                         cores_per_chain=1,cores_for_chains = length(emc))
 {
-  attributes <- get_attributes(emc)
   emc <- mclapply(emc,init,start_mu = start_mu, start_var = start_var,
            verbose = FALSE, particles = particles,
            n_cores = cores_per_chain, mc.cores=cores_for_chains)
-  emc <- get_attributes(emc, attributes)
   class(emc) <- "emc"
   return(emc)
 }
