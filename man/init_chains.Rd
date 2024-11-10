@@ -35,6 +35,7 @@ Adds a set of start points to each chain. These start points are sampled from a 
 normal across subjects.
 }
 \examples{
+\donttest{
 # Make a design and an emc object
 design_DDMaE <- design(data = forstmann,model=DDM,
                            formula =list(v~0+S,a~E, t0~1, s~1),
@@ -52,5 +53,5 @@ DDMaE <- init_chains(DDMaE, start_mu = mu, start_var = var,
                      cores_per_chain = 1, cores_for_chains = 1)
 # Afterwards we can just use fit
 # DDMaE <- fit(DDMaE, cores_per_chain = 4)
-
+}
 }

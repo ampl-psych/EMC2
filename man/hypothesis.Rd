@@ -14,7 +14,7 @@
   do_plot = TRUE,
   use_prior_lim = TRUE,
   N = 10000,
-  prior_plot_args = list(),
+  prior_args = list(),
   ...
 )
 
@@ -37,7 +37,7 @@ hypothesis(emc, ...)
 
 \item{N}{Integer. How many prior samples to draw}
 
-\item{prior_plot_args}{A list. Optional additional arguments to be passed to plot.default for the plotting of the prior density (see \code{par()})}
+\item{prior_args}{A list. Optional additional arguments to be passed to plot.default for the plotting of the prior density (see \code{par()})}
 
 \item{...}{Optional arguments that can be passed to \code{get_pars}, \code{density}, or \code{plot.default} (see \code{par()})}
 }
