@@ -84,7 +84,6 @@ run_emc <- function(emc, stage, stop_criteria,
                          cores_for_chains = length(emc), max_tries = 20, n_blocks = 1){
   if(Sys.info()[1] == "Windows" & cores_per_chain > 1) stop("only cores_for_chains can be set on Windows")
   if (verbose) message(paste0("Running ", stage, " stage"))
-  attributes <- get_attributes(emc)
   total_iters_stage <- chain_n(emc)[,stage][1]
   if(stage != "preburn"){
     iter <- stop_criteria[["iter"]] + total_iters_stage
@@ -115,12 +114,10 @@ run_emc <- function(emc, stage, stop_criteria,
     progress <- progress[!names(progress) == 'emc'] # Frees up memory, courtesy of Steven
     if(!is.null(fileName)){
       fileName <- fix_fileName(fileName)
-      attr(emc,"design_list") <- attributes$design_list
       class(emc) <- "emc"
       save(emc, file = fileName)
     }
   }
-  emc <- get_attributes(emc, attributes)
   class(emc) <- "emc"
   return(emc)
 }
@@ -524,14 +521,6 @@ create_cov_proposals <- function(emc, samples_idx = NULL, do_block = TRUE){
 #   return(samplers)
 # }
 
-get_attributes <- function(emc, attributes = NULL){
-  if(is.null(attributes)) {
-    return(list(design_list = attr(emc,"design_list")))
-  } else{
-    attr(emc,"design_list") <- attributes$design_list
-    return(emc)
-  }
-}
 
 # test_adapted_lm <- function(samples, test_samples, min_unique, n_cores_conditional = 1,
 #                             verbose = FALSE){
@@ -802,7 +791,6 @@ make_emc <- function(data,design,model=NULL,
   # replicate chains
   dadm_lists <- rep(list(out),n_chains)
   # For post predict
-  attr(dadm_lists,"design_list") <- design
   class(dadm_lists) <- "emc"
   return(dadm_lists)
 }
