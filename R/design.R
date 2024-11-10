@@ -101,6 +101,7 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
     }
     attr(design, "sampled_p_names") <-custom_p_vector
     attr(design, "custom_ll") <- TRUE
+    class(design) <- "design.emc"
     return(design)
   }
   if (!is.null(data)) {
@@ -125,6 +126,7 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
   design <- list(Flist=formula,Ffactors=factors,Rlevels=Rlevels,
                  Clist=contrasts,matchfun=matchfun,constants=constants,
                  Fcovariates=covariates,Ffunctions=functions,adapt=adapt,model=model)
+  class(design) <- "emc.design"
   p_vector <- sampled_p_vector(design,design$model)
   if (model()$type=="SDT") {
     tnams <- dimnames(attr(p_vector,"map")$threshold)[[2]]
@@ -140,17 +142,10 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
   if (!is.null(ordinal)) if (!all(ordinal %in% names(p_vector)))
     stop("ordinal argument has parameters names not in the model")
 
-
-  if (report_p_vector) {
-    cat("\n Sampled Parameters: \n")
-    print(names(p_vector))
-    cat("\n Design Matrices: \n")
-    map_out <- sampled_p_vector(design,design$model, add_da = TRUE)
-    print(attr(map_out, "map"), row.names = FALSE)
-  }
-
   attr(design,"ordinal") <- ordinal
-
+  if (report_p_vector) {
+    print(design)
+  }
   return(design)
 }
 
@@ -259,85 +254,6 @@ contr.anova <- function(n) {
   contr <- stats::contr.helmert(n)
   contr/rep(2*apply(abs(contr),2,max),each=dim(contr)[1])
 }
-
-
-
-#' Get model parameters from a design
-#'
-#' Makes a vector with zeroes, with names and length corresponding to the
-#' model parameters of the design.
-#'
-#' @param design a list of the design made with `design()`.
-#' @param model a model list. Defaults to the model specified in the design list.
-#' @param doMap logical. If `TRUE` will also include an attribute `map`
-#' with the design matrices that perform the mapping back to the design
-#' @param add_da Boolean. Whether to include the relevant data columns in the map attribute
-#' @param all_cells_dm Boolean. Whether to include all levels of a factor in the mapping attribute,
-#' even when one is dropped in the design
-#'
-#'
-#' @return Named vector.
-#' @examples
-#' # First define a design
-#' design_DDMaE <- design(data = forstmann,model=DDM,
-#'                            formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
-#'                            constants=c(s=log(1)))
-#' # Then for this design get which cognitive model parameters are sampled:
-#' sampled_p_vector(design_DDMaE)
-#'
-#' @export
-
-sampled_p_vector <- function(design,model=NULL,doMap=TRUE, add_da = FALSE, all_cells_dm = FALSE)
-  # Makes an empty p_vector corresponding to model.
-{
-  if(is.null(design)) return(NULL)
-  if(!is.null(attr(design, "custom_ll"))){
-    pars <- numeric(length(attr(design,"sampled_p_names")))
-    names(pars) <- attr(design,"sampled_p_names")
-    return(pars)
-  }
-  if(!is.null(design$Ffactors)){
-    design <- list(design)
-  }
-  out <- c()
-  map_list <- list()
-  for(j in 1:length(design)){
-    cur_design <- design[[j]]
-    if (is.null(model)) model <- cur_design$model
-    if (is.null(model)) stop("Must supply model as not in design")
-
-    Ffactors=c(cur_design$Ffactors,list(R=cur_design$Rlevels))
-    data <- as.data.frame.table(array(dim=unlist(lapply(Ffactors,length)),
-                                      dimnames=Ffactors))[,-(length(Ffactors)+1)]
-    for (i in names(cur_design$Ffactors))
-      data[[i]] <- factor(data[[i]],levels=cur_design$Ffactors[[i]])
-
-    # if (!is.null(design$Ffunctions))
-    #   data <- cbind.data.frame(data,data.frame(lapply(design$Ffunctions,function(f){f(data)})))
-
-    if (!is.null(cur_design$Fcovariates)) {
-      covs <- matrix(1,nrow=dim(data)[1],ncol=length(cur_design$Fcovariates),
-                     dimnames=list(NULL,names(cur_design$Fcovariates)))
-      data <- cbind.data.frame(data,covs)
-    }
-    dadm <- design_model(
-      add_accumulators(data,matchfun=cur_design$matchfun,type=model()$type,Fcovariates=cur_design$Fcovariates),
-      cur_design,model,add_acc=FALSE,verbose=FALSE,rt_check=FALSE,compress=FALSE, add_da = add_da,
-      all_cells_dm = all_cells_dm)
-    sampled_p_names <- attr(dadm,"sampled_p_names")
-    if(length(design) != 1){
-      map_list[[j]] <- lapply(attributes(dadm)$designs,function(x){x[,,drop=FALSE]})
-      sampled_p_names <- paste(j, sampled_p_names, sep = "|")
-    }
-    out <- c(out, stats::setNames(numeric(length(sampled_p_names)),sampled_p_names))
-    if(length(design) == 1){
-      if (doMap) attr(out,"map") <- lapply(attributes(dadm)$designs,function(x){x[,,drop=FALSE]})
-    }
-  }
-  if(length(design) != 1) attr(out, "map") <- map_list
-  return(out)
-}
-
 
 add_accumulators <- function(data,matchfun=NULL,simulate=FALSE,type="RACE", Fcovariates=NULL) {
   if (!is.factor(data$R)) stop("data must have a factor R")
@@ -708,14 +624,7 @@ design_model <- function(data,design,model=NULL,
   attr(dadm,"ok_trials") <- is.finite(data$rt)
   attr(dadm,"s_data") <- data$subjects
   attr(dadm,"dL") <- attr(design,"dL")
-  # if (!is.null(design$adapt)) {
-  #   attr(dadm,"adapt") <- stats::setNames(
-  #     lapply(levels(dadm$subjects),augment,da=dadm,design=design),
-  #     levels(dadm$subjects))
-  #   attr(dadm,"adapt")$design <- design$adapt
-  # }
   attr(dadm,"ordinal") <- attr(design,"ordinal")
-
   dadm
 }
 
@@ -853,7 +762,6 @@ dm_list <- function(dadm)
   # ok_da_looser <- attr(dadm,"ok_da_looser")
   # expand_uc <- attr(dadm,"expand_uc")
   # expand_lc <- attr(dadm,"expand_lc")
-  adapt <- attr(dadm,"adapt")
   dms_mri <- attr(dadm, "design_matrix_mri")
 
   # winner on expanded dadm
@@ -931,11 +839,6 @@ dm_list <- function(dadm)
       if (!is.null(attr(dadm,"UC"))){
         attr(dl[[i]],"UC") <- attr(dadm,"UC")[names(attr(dadm,"UC"))==i]
       }
-
-      # adapt models
-      if (!is.null(adapt)){
-        attr(dl[[i]],"adapt") <- stats::setNames(list(adapt[[i]],adapt$design),c(i,"design"))
-      }
     }
   }
 
@@ -944,3 +847,110 @@ dm_list <- function(dadm)
 }
 
 
+# Some s3 classes ---------------------------------------------------------
+#' Get model parameters from a design
+#'
+#' Makes a vector with zeroes, with names and length corresponding to the
+#' model parameters of the design.
+#'
+#' @param x an `emc.design` object made with `design()` or an `emc` object.
+#' @param model a model list. Defaults to the model specified in the design list.
+#' @param doMap logical. If `TRUE` will also include an attribute `map`
+#' with the design matrices that perform the mapping back to the design
+#' @param add_da Boolean. Whether to include the relevant data columns in the map attribute
+#' @param all_cells_dm Boolean. Whether to include all levels of a factor in the mapping attribute,
+#' even when one is dropped in the design
+#'
+#'
+#' @return Named vector.
+#' @examples
+#' # First define a design
+#' design_DDMaE <- design(data = forstmann,model=DDM,
+#'                            formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
+#'                            constants=c(s=log(1)))
+#' # Then for this design get which cognitive model parameters are sampled:
+#' sampled_p_vector(design_DDMaE)
+#'
+#' @export
+sampled_p_vector <- function(x,model=NULL,doMap=TRUE, add_da = FALSE, all_cells_dm = FALSE)
+{
+  UseMethod("sampled_p_vector")
+}
+
+#' @rdname sampled_p_vector
+#' @export
+sampled_p_vector.emc.design <- function(x,model=NULL,doMap=TRUE, add_da = FALSE, all_cells_dm = FALSE){
+  design <- x
+  if(is.null(design)) return(NULL)
+  if(!is.null(attr(design, "custom_ll"))){
+    pars <- numeric(length(attr(design,"sampled_p_names")))
+    names(pars) <- attr(design,"sampled_p_names")
+    return(pars)
+  }
+  if(!is.null(design$Ffactors)){
+    design <- list(design)
+  }
+  out <- c()
+  map_list <- list()
+  for(j in 1:length(design)){
+    cur_design <- design[[j]]
+    if (is.null(model)) model <- cur_design$model
+    if (is.null(model)) stop("Must supply model as not in design")
+
+    Ffactors=c(cur_design$Ffactors,list(R=cur_design$Rlevels))
+    data <- as.data.frame.table(array(dim=unlist(lapply(Ffactors,length)),
+                                      dimnames=Ffactors))[,-(length(Ffactors)+1)]
+    for (i in names(cur_design$Ffactors))
+      data[[i]] <- factor(data[[i]],levels=cur_design$Ffactors[[i]])
+
+    # if (!is.null(design$Ffunctions))
+    #   data <- cbind.data.frame(data,data.frame(lapply(design$Ffunctions,function(f){f(data)})))
+
+    if (!is.null(cur_design$Fcovariates)) {
+      covs <- matrix(1,nrow=dim(data)[1],ncol=length(cur_design$Fcovariates),
+                     dimnames=list(NULL,names(cur_design$Fcovariates)))
+      data <- cbind.data.frame(data,covs)
+    }
+    dadm <- design_model(
+      add_accumulators(data,matchfun=cur_design$matchfun,type=model()$type,Fcovariates=cur_design$Fcovariates),
+      cur_design,model,add_acc=FALSE,verbose=FALSE,rt_check=FALSE,compress=FALSE, add_da = add_da,
+      all_cells_dm = all_cells_dm)
+    sampled_p_names <- attr(dadm,"sampled_p_names")
+    if(length(design) != 1){
+      map_list[[j]] <- lapply(attributes(dadm)$designs,function(x){x[,,drop=FALSE]})
+      sampled_p_names <- paste(j, sampled_p_names, sep = "|")
+    }
+    out <- c(out, stats::setNames(numeric(length(sampled_p_names)),sampled_p_names))
+    if(length(design) == 1){
+      if (doMap) attr(out,"map") <- lapply(attributes(dadm)$designs,function(x){x[,,drop=FALSE]})
+    }
+  }
+  if(length(design) != 1) attr(out, "map") <- map_list
+  return(out)
+}
+
+#' @export
+print.emc.design <- function(x, ...){
+  p_vector <- sampled_p_vector(x)
+  cat("\n Sampled Parameters: \n")
+  print(names(p_vector))
+  cat("\n Design Matrices: \n")
+  map_out <- sampled_p_vector(x,x$model, add_da = TRUE)
+  print(attr(map_out, "map"), row.names = FALSE)
+  return(map_out)
+}
+
+#' @exportS3Method
+sampled_p_vector.default <- function(x,model=NULL,doMap=TRUE, add_da = FALSE, all_cells_dm = FALSE){
+  if(is.null(x)) return(NULL)
+  if(!is.null(attr(x, "custom_ll"))){
+    pars <- numeric(length(attr(x,"sampled_p_names")))
+    names(pars) <- attr(x,"sampled_p_names")
+    return(pars)
+  }
+  if(!is.null(x$Ffactors)){
+    x <- list(x)
+    class(x) <- "emc.design"
+  }
+  sampled_p_vector(x, model = model, doMap = doMap, add_da = add_da, all_cells_dm = all_cells_dm)
+}
