@@ -91,7 +91,7 @@ get_objects_diag <- function(selection, sample_prior, return_prior, design = NUL
       } else{
         sampler <- list(list(samples = get_prior_diag(prior = prior, design = design, selection = selection,N = N)))
       }
-      attr(sampler, "design_list") <- list(design)
+      sampler[[1]]$prior <- prior
       return(sampler)
     }
     idx <- get_idx(sampler, stage)
@@ -132,7 +132,7 @@ get_objects_diag_gamma <- function(selection, sample_prior, return_prior, design
       } else{
         sampler <- list(list(samples = get_prior_diag_gamma(prior = prior, design = design, selection = selection,N = N)))
       }
-      attr(sampler, "design_list") <- list(design)
+      sampler[[1]]$prior <- prior
       return(sampler)
     }
     idx <- get_idx(sampler, stage)
@@ -174,7 +174,7 @@ get_objects_standard <- function(selection, sample_prior, return_prior, design =
       } else{
         sampler <- list(list(samples = get_prior_standard(prior = prior, design = design, selection = selection,N = N)))
       }
-      attr(sampler, "design_list") <- list(design)
+      sampler[[1]]$prior <- prior
       return(sampler)
     }
     idx <- get_idx(sampler, stage)
@@ -234,7 +234,7 @@ get_objects_blocked <- function(selection, sample_prior, return_prior, design = 
                                                c(list(prior = prior, design = design,
                                               selection = selection,N = N), fix_dots(dots, get_prior_blocked)))))
       }
-      attr(sampler, "design_list") <- list(design)
+      sampler[[1]]$prior <- prior
       return(sampler)
     }
     idx <- get_idx(sampler, stage)
@@ -266,7 +266,7 @@ get_objects_single <- function(selection, sample_prior, return_prior, design = N
     if(!selection %in% acc_selection) stop(paste0("selection must be in : ", paste(acc_selection, collapse = ", ")))
     if(sample_prior){
       sampler <- list(list(samples = get_prior_single(prior = prior, design = design, selection = selection,N = N)))
-      attr(sampler, "design_list") <- list(design)
+      sampler[[1]]$prior <- prior
       return(sampler)
     }
     idx <- get_idx(sampler, stage)
@@ -318,7 +318,7 @@ get_objects_factor <- function(selection, sample_prior, return_prior, design = N
                                                c(list(prior = prior, design = design,
                                                       selection = selection,N = N), fix_dots(dots, get_prior_factor)))))
       }
-      attr(sampler, "design_list") <- list(design)
+      sampler[[1]]$prior <- prior
       return(sampler)
     }
     idx <- get_idx(sampler, stage)
@@ -376,7 +376,7 @@ get_objects_infnt_factor <- function(selection, sample_prior, return_prior, desi
                                                c(list(prior = prior, design = design,
                                                       selection = selection,N = N), fix_dots(list(...), get_prior_infnt_factor)))))
       }
-      attr(sampler, "design_list") <- list(design)
+      sampler[[1]]$prior <- prior
       return(sampler)
     }
     idx <- get_idx(sampler, stage)
@@ -450,7 +450,7 @@ get_objects_SEM <- function(selection, sample_prior, return_prior, design = NULL
                                                c(list(prior = prior, design = design,
                                                       selection = selection,N = N), fix_dots(dots, get_prior_SEM)))))
       }
-      attr(sampler, "design_list") <- list(design)
+      sampler[[1]]$prior <- prior
       return(sampler)
     }
     idx <- get_idx(sampler, stage)
