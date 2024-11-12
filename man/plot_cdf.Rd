@@ -6,42 +6,56 @@
 \usage{
 plot_cdf(
   input,
+  post_predict = NULL,
+  prior_predict = NULL,
   subject = NULL,
+  quants = c(0.025, 0.975),
   factors = NULL,
   defective_factor = "R",
-  layout = NA,
-  post_predict = NULL,
-  quants = c(0.025, 0.975),
   n_cores = 1,
   n_post = 100,
-  predict_args = list(),
+  layout = NA,
+  to_plot = c("real", "posterior", "prior")[1:2],
+  use_lim = c("real", "posterior", "prior")[1:2],
+  posterior_args = list(),
+  prior_args = list(),
   ...
 )
 }
 \arguments{
+\item{input}{Either an emc object or a data frame. The data frame must be in EMC2 format with at least subjects, rt, and the defective factor columns.}
+
+\item{post_predict}{An optional data frame containing posterior predictive datasets.
+Should have the same columns as data, with an additional postn column indicating the index of the predicted dataset.}
+
+\item{prior_predict}{An optional data frame containing prior predictive datasets.
+Should have the same columns as data, with an additional postn column indicating the index of the predicted dataset.}
+
 \item{subject}{An integer or character string selecting a subject from the data.
 If specified, only that subject is plotted. By default (NULL), all subjects are plotted.}
+
+\item{quants}{A numeric vector specifying the quantiles for the credible intervals.}
 
 \item{factors}{A character vector of the factor names in the design to aggregate across.
 Defaults to all factors (i.e., NULL).}
 
 \item{defective_factor}{A character string specifying the factor to compute defective CDFs for. Defaults to "R".}
 
-\item{layout}{A vector indicating which layout to use as in par(mfrow = layout). If NA, will automatically generate an appropriate layout.}
-
-\item{post_predict}{A data frame containing posterior predictive datasets. Should have the same columns as data, with an additional postn column indicating the index of the predicted dataset.}
-
-\item{quants}{A numeric vector specifying the quantiles for the credible intervals (defaults to c(0.025, 0.975)).}
-
 \item{n_cores}{An integer specifying the number of cores with which to calculate predictives if specified.}
 
 \item{n_post}{An optional integer specifying how many posterior predictives to generate if the input is an emc object.}
 
+\item{layout}{A vector indicating which layout to use as in par(mfrow = layout). If NA, will automatically generate an appropriate layout.}
+
+\item{to_plot}{A character vector indicating whether to plot the real data, the posterior predictives, prior_predictives or a combination}
+
+\item{use_lim}{A character vector indicating whether to base the plot limits on the real data, the posterior predictives, prior_predictives or a combination}
+
+\item{posterior_args}{Optional arguments that can be passed to plotting functions for the posterior predictives.}
+
+\item{prior_args}{Optional arguments that can be passed to plotting functions for the prior predictives.}
+
 \item{...}{Optional arguments that can be passed to plotting functions for the real data.}
-
-\item{input.}{Either an emc object or a data frame. The data frame must be in EMC2 format with at least subjects, rt, and the defective factor columns.}
-
-\item{predicted_plot_args}{A list of plotting arguments to be used for the predicted data (e.g., col, lty).}
 }
 \value{
 Invisibly returns a data frame containing RT quantiles and mean proportions per factor combination and defective factor level.
@@ -51,7 +65,7 @@ If post_predict is provided or the input is an emc object, predicted values are 
 Plots panels that contain a set of cumulative distribution functions (CDFs) for each level of the specified defective factor in the data.
 These CDFs are defective; their maximum values are relative to the respective
 proportions of the defective factor levels. Across all levels, the maximum value sums to 1.
-Optionally, posterior predictive CDFs can be overlaid.
+Optionally, posterior predictive and/or prior predictive CDFs can be overlaid.
 }
 \examples{
 # Plot defective cdf for each subject and the factor combination in the design:
@@ -60,6 +74,7 @@ plot_cdf(forstmann)
 plot_cdf(forstmann, subject = 1)
 # Now collapsing across subjects and using a different defective factor:
 plot_cdf(forstmann, factors = "S", defective_factor = "E")
-# Or plot posterior predictives with an emc object
-plot_cdf(samples_LNR, n_post = 10)
+# Or plot posterior/prior predictives with an emc object
+# potentially also add 'prior' to to_plot
+plot_cdf(samples_LNR, to_plot = c('real', 'posterior'), n_post = 10)
 }

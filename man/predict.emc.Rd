@@ -5,7 +5,7 @@
 \alias{predict.emc}
 \title{Generate posterior predictives}
 \usage{
-\method{predict}{emc.prior}(object, n_post = 100, n_cores = 1, data = NULL, n_trials = NULL, ...)
+\method{predict}{emc.prior}(object, data = NULL, n_post = 100, n_cores = 1, n_trials = NULL, ...)
 
 \method{predict}{emc}(
   object,
@@ -19,11 +19,11 @@
 \arguments{
 \item{object}{An emc or emc.prior object from which to generate predictives}
 
+\item{data}{A data frame needed to exactly match the original design}
+
 \item{n_post}{Integer. Number of generated datasets}
 
 \item{n_cores}{Integer. Number of cores across which there should be parallellized}
-
-\item{data}{A data frame needed to exactly match the original design}
 
 \item{n_trials}{An integer. If \code{data} isn't provided (although preferred),
 can generate data based on \code{n_trials} per cell of \code{design}}

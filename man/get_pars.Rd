@@ -79,7 +79,7 @@ Does not apply for \code{selection = "alpha"}}
 
 \item{chain}{Integer. Which of the chain(s) to return}
 
-\item{covariates}{Only needed with \code{plot_prior} and covariates in the design}
+\item{covariates}{Only needed with \code{plot} for priors and covariates in the design}
 }
 \value{
 An mcmc.list object of the selected parameter types with the specified manipulations

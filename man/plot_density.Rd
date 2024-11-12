@@ -6,36 +6,54 @@
 \usage{
 plot_density(
   input,
+  post_predict = NULL,
+  prior_predict = NULL,
   subject = NULL,
+  quants = c(0.025, 0.975),
   factors = NULL,
   defective_factor = "R",
-  layout = NA,
-  post_predict = NULL,
-  quants = c(0.025, 0.975),
-  predict_args = list(),
   n_cores = 1,
   n_post = 100,
+  layout = NA,
+  to_plot = c("real", "posterior", "prior")[1:2],
+  use_lim = c("real", "posterior", "prior")[1:2],
+  posterior_args = list(),
+  prior_args = list(),
   ...
 )
 }
 \arguments{
+\item{input}{Either an emc object or a data frame. The data frame must be in EMC2 format with at least subjects, rt, and the defective factor columns.}
+
+\item{post_predict}{An optional data frame containing posterior predictive datasets.
+Should have the same columns as data, with an additional postn column indicating the index of the predicted dataset.}
+
+\item{prior_predict}{An optional data frame containing prior predictive datasets.
+Should have the same columns as data, with an additional postn column indicating the index of the predicted dataset.}
+
 \item{subject}{An integer or character string selecting a subject from the data.
 If specified, only that subject is plotted. By default (NULL), all subjects are plotted.}
+
+\item{quants}{A numeric vector specifying the quantiles for the credible intervals.}
 
 \item{factors}{A character vector of the factor names in the design to aggregate across.
 Defaults to all factors (i.e., NULL).}
 
 \item{defective_factor}{A character string specifying the factor to compute defective CDFs for. Defaults to "R".}
 
-\item{layout}{A vector indicating which layout to use as in par(mfrow = layout). If NA, will automatically generate an appropriate layout.}
-
-\item{post_predict}{A data frame containing posterior predictive datasets. Should have the same columns as data, with an additional postn column indicating the index of the predicted dataset.}
-
-\item{quants}{A numeric vector specifying the quantiles for the credible intervals (defaults to c(0.025, 0.975)).}
-
 \item{n_cores}{An integer specifying the number of cores with which to calculate predictives if specified.}
 
 \item{n_post}{An optional integer specifying how many posterior predictives to generate if the input is an emc object.}
+
+\item{layout}{A vector indicating which layout to use as in par(mfrow = layout). If NA, will automatically generate an appropriate layout.}
+
+\item{to_plot}{A character vector indicating whether to plot the real data, the posterior predictives, prior_predictives or a combination}
+
+\item{use_lim}{A character vector indicating whether to base the plot limits on the real data, the posterior predictives, prior_predictives or a combination}
+
+\item{posterior_args}{Optional arguments that can be passed to plotting functions for the posterior predictives.}
+
+\item{prior_args}{Optional arguments that can be passed to plotting functions for the prior predictives.}
 
 \item{...}{Optional arguments that can be passed to plotting functions for the real data.}
 }
@@ -43,7 +61,7 @@ Defaults to all factors (i.e., NULL).}
 Plots panels that contain a set of densities for each level of the specified defective factor in the data.
 These densities are defective; their areas are relative to the respective
 proportions of the defective factor levels. Across all levels, the area sums to 1.
-Optionally, posterior predictive densities can be overlaid.
+Optionally, posterior/prior predictive densities can be overlaid.
 }
 \examples{
 # Plot defective densities for each subject and the factor combination in the design:

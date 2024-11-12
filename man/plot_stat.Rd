@@ -6,38 +6,59 @@
 \usage{
 plot_stat(
   input,
+  post_predict = NULL,
+  prior_predict = NULL,
   stat_fun,
   stat_name = NULL,
+  subject = NULL,
   factors = NULL,
-  post_predict = NULL,
-  quants = c(0.025, 0.5, 0.975),
-  do_plot = TRUE,
-  layout = NA,
-  n_post = 100,
   n_cores = 1,
-  predict_args = list(),
+  n_post = 100,
+  quants = c(0.025, 0.5, 0.975),
+  layout = NA,
+  to_plot = c("real", "posterior", "prior")[1:2],
+  use_lim = c("real", "posterior", "prior")[1:2],
+  posterior_args = list(),
+  prior_args = list(),
   ...
 )
 }
 \arguments{
+\item{input}{Either an emc object or a data frame. The data frame must be in EMC2 format with at least subjects, rt, and the defective factor columns.}
+
+\item{post_predict}{An optional data frame containing posterior predictive datasets.
+Should have the same columns as data, with an additional postn column indicating the index of the predicted dataset.}
+
+\item{prior_predict}{An optional data frame containing prior predictive datasets.
+Should have the same columns as data, with an additional postn column indicating the index of the predicted dataset.}
+
 \item{stat_fun}{A function that can be applied to the data and returns a single value or a vector of values.}
 
 \item{stat_name}{The name of the calculated quantity}
 
+\item{subject}{An integer or character string selecting a subject from the data.
+If specified, only that subject is plotted. By default (NULL), all subjects are plotted.}
+
 \item{factors}{A character vector of the factor names in the design to aggregate across.
 Defaults to all factors (i.e., NULL).}
 
-\item{post_predict}{A data frame containing posterior predictive datasets. Should have the same columns as data, with an additional postn column indicating the index of the predicted dataset.}
-
-\item{quants}{A numeric vector specifying the quantiles for the credible intervals (defaults to c(0.025, 0.975)).}
-
-\item{layout}{A vector indicating which layout to use as in par(mfrow = layout). If NA, will automatically generate an appropriate layout.}
+\item{n_cores}{An integer specifying the number of cores with which to calculate predictives if specified.}
 
 \item{n_post}{An optional integer specifying how many posterior predictives to generate if the input is an emc object.}
 
-\item{n_cores}{An integer specifying the number of cores with which to calculate predictives if specified.}
+\item{quants}{A numeric vector specifying the quantiles for the credible intervals.}
 
-\item{...}{}
+\item{layout}{A vector indicating which layout to use as in par(mfrow = layout). If NA, will automatically generate an appropriate layout.}
+
+\item{to_plot}{A character vector indicating whether to plot the real data, the posterior predictives, prior_predictives or a combination}
+
+\item{use_lim}{A character vector indicating whether to base the plot limits on the real data, the posterior predictives, prior_predictives or a combination}
+
+\item{posterior_args}{Optional arguments that can be passed to plotting functions for the posterior predictives.}
+
+\item{prior_args}{Optional arguments that can be passed to plotting functions for the prior predictives.}
+
+\item{...}{Optional arguments that can be passed to plotting functions for the real data.}
 }
 \value{
 an invisible data frame with the stat applied to the real data, posterior predictives and/or prior predictives
@@ -48,10 +69,8 @@ The densities represent the predicted data across the posterior, the vertical li
 }
 \examples{
 # For example plot the observed and predicted response accuracy
-correct_fun <- function(data) mean(data$S == data$R)
-plot_stat(samples_LNR, correct_fun, n_post = 10)
 # Can also apply more sophisticated statistics
 drt <- function(data) diff(tapply(data$rt,data[,c("E")],mean))
-plot_stat(samples_LNR, drt, n_post = 10, stat_name = "RT diff Speed - A/N")
+plot_stat(samples_LNR, stat_fun = drt, n_post = 10, stat_name = "RT diff Speed - A/N")
 
 }
