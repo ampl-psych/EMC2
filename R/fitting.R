@@ -691,27 +691,6 @@ make_emc <- function(data,design,model=NULL,
   if(!is.null(prior_list) & !is.null(prior_list$theta_mu_mean)){
     prior_list <- list(prior_list)
   }
-  # Sort subject together and add unique trial within subject integer
-  # create overarching data list with one list per subject
-  if(type == "lm"){
-    if(length(data) > 1) stop("no joint models for lm yet")
-    vars <- c()
-    if(!is.null(formula)){
-      for(form in formula){
-        vars <- c(vars, split_form(form)$dep)
-      }
-      tmp <- data[[1]]
-      aggr_data <- tmp[cumsum(table(tmp$subjects)),c("subjects", unique(vars))]
-      for(i in 1:ncol(aggr_data)){
-        if(colnames(aggr_data)[i] != "subjects" & is.factor(aggr_data[,i])){
-          aggr_data[,i] <- factor(aggr_data[,i], levels = unique(aggr_data[,i]))
-        }
-      }
-    } else{
-      aggr_data <- NULL
-    }
-
-  }
   data <- lapply(data,function(d){
     if (!is.factor(d$subjects)) d$subjects <- factor(d$subjects)
     d <- d[order(d$subjects),]
@@ -726,10 +705,13 @@ make_emc <- function(data,design,model=NULL,
     attr(d,"UT") <- UT
     d
   })
-  if (!is.null(names(design)[1]) && names(design)[1]=="Flist")
+  if (!is.null(names(design)[1]) && names(design)[1]=="Flist"){
     design <- list(design)
-  if (length(design)!=length(data))
+  }
+
+  if (length(design)!=length(data)){
     design <- rep(design,length(data))
+  }
   if (is.null(model)) model <- lapply(design,function(x){x$model})
   if (any(unlist(lapply(model,is.null))))
     stop("Must supply model if model is not in all design components")
@@ -764,9 +746,11 @@ make_emc <- function(data,design,model=NULL,
     }
     # create a design model
   }
-  prior <- merge_priors(prior_list)
-
-  attr(dadm_list[[1]], "prior") <- prior
+  # Make sure class retains following changes
+  class(design) <- "emc.design"
+  prior_in <- merge_priors(prior_list)
+  prior_in <- prior(design, type, update = prior_in, ...)
+  attr(dadm_list[[1]], "prior") <- prior_in
 
   # if(!is.null(subject_covariates)) attr(dadm_list, "subject_covariates") <- subject_covariates
   variant_funs <- get_variant_funs(type = type)
@@ -777,9 +761,6 @@ make_emc <- function(data,design,model=NULL,
     if (is.null(par_groups)) stop("Must specify par_groups for blocked type")
     out <- pmwgs(dadm_list,par_groups=par_groups, variant_funs, nuisance = nuisance,
                  nuisance_non_hyper = nuisance_non_hyper, grouped_pars = grouped_pars)
-  } else if (type == "lm") {
-    out <- pmwgs(dadm_list,variant_funs, formula = formula, aggr_data = aggr_data,
-                 nuisance = nuisance, nuisance_non_hyper = nuisance_non_hyper, grouped_pars = grouped_pars)
   } else if (type == "factor") {
     out <- pmwgs(dadm_list,variant_funs, n_factors = n_factors, nuisance = nuisance,
                  nuisance_non_hyper = nuisance_non_hyper, grouped_pars = grouped_pars,
