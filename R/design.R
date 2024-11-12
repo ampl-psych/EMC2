@@ -101,7 +101,7 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
     }
     attr(design, "sampled_p_names") <-custom_p_vector
     attr(design, "custom_ll") <- TRUE
-    class(design) <- "design.emc"
+    class(design) <- "emc.design"
     return(design)
   }
   if (!is.null(data)) {
@@ -882,18 +882,24 @@ sampled_p_vector <- function(x,model=NULL,doMap=TRUE, add_da = FALSE, all_cells_
 sampled_p_vector.emc.design <- function(x,model=NULL,doMap=TRUE, add_da = FALSE, all_cells_dm = FALSE){
   design <- x
   if(is.null(design)) return(NULL)
-  if(!is.null(attr(design, "custom_ll"))){
-    pars <- numeric(length(attr(design,"sampled_p_names")))
-    names(pars) <- attr(design,"sampled_p_names")
-    return(pars)
-  }
-  if(!is.null(design$Ffactors)){
+  if("Ffactors" %in% names(design)){
     design <- list(design)
   }
   out <- c()
   map_list <- list()
   for(j in 1:length(design)){
     cur_design <- design[[j]]
+    if(!is.null(attr(cur_design, "custom_ll"))){
+      pars <- numeric(length(attr(cur_design,"sampled_p_names")))
+      if(length(design) != 1){
+        map_list[[j]] <- NA
+        names(pars) <- paste(j,  attr(cur_design,"sampled_p_names"), sep = "|")
+      } else{
+        names(pars) <- attr(cur_design,"sampled_p_names")
+      }
+      out <- c(out, pars)
+      next
+    }
     if (is.null(model)) model <- cur_design$model
     if (is.null(model)) stop("Must supply model as not in design")
 
@@ -937,7 +943,7 @@ print.emc.design <- function(x, ...){
   cat("\n Design Matrices: \n")
   map_out <- sampled_p_vector(x,x$model, add_da = TRUE)
   print(attr(map_out, "map"), row.names = FALSE)
-  return(map_out)
+  return(invisible(map_out))
 }
 
 #' @exportS3Method
@@ -952,5 +958,6 @@ sampled_p_vector.default <- function(x,model=NULL,doMap=TRUE, add_da = FALSE, al
     x <- list(x)
     class(x) <- "emc.design"
   }
-  sampled_p_vector(x, model = model, doMap = doMap, add_da = add_da, all_cells_dm = all_cells_dm)
+  out <- sampled_p_vector.emc.design(x, model = model, doMap = doMap, add_da = add_da, all_cells_dm = all_cells_dm)
+  return(out)
 }
