@@ -1018,7 +1018,6 @@ get_data <- function(emc){
 get_prior.emc <- function(emc){
   prior <- emc[[1]]$prior
   attr(prior, "type") <- attr(emc[[1]], "variant_funs")$type
-  attr(prior, "design") <- get_design(emc)
   class(prior) <- "emc.prior"
   return(prior)
 }
@@ -1039,7 +1038,12 @@ get_prior <- function(emc){
 #' @rdname get_design
 #' @export
 get_design.emc <- function(x){
-  emc_design <- get_design(get_prior(x))
+  # For backwards compatibility
+  if(!is.null(attr(x, "design_list"))){
+    emc_design <- attr(x, "design_list")
+  } else{
+    emc_design <- get_design(get_prior(x))
+  }
   class(emc_design) <- "emc.design"
   return(emc_design)
 }
@@ -1061,7 +1065,7 @@ get_design <- function(x){
 #' @export
 sampled_p_vector.emc <- function(x,model=NULL,doMap=TRUE, add_da = FALSE, all_cells_dm = FALSE){
   return(sampled_p_vector(get_design(x), model = model, doMap = doMap,
-                          add_da = add_da, all_cells_dm = all_cells_DM))
+                          add_da = add_da, all_cells_dm = all_cells_dm))
 }
 
 

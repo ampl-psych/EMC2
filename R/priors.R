@@ -45,7 +45,7 @@ prior <- function(design, type = "standard", update = NULL,
   if(!is.null(update)){
     type <- attr(update, "type")
   }
-  input <- get_objects(design = design, type = type, ...)
+  input <- do.call(get_objects, c(list(design = design, type = type), update, list(...)))
   descriptions <- input$descriptions
   groups <- input$types
   group_descriptions <- input$type_descriptions
@@ -337,7 +337,7 @@ print.emc.prior <- function(x, ...){
 #' @inheritParams plot_pars
 #' @param ... Optional arguments that can be passed to get_pars, histogram, plot.default (see par()),
 #' or arguments required for the types of models e.g. n_factors for type = "factor"
-#' @return An mcmc.list object with prior samples of the selected type
+#' @return An invisible mcmc.list object with prior samples of the selected type
 #' @export
 #'
 #' @examples \donttest{
@@ -353,10 +353,10 @@ print.emc.prior <- function(x, ...){
 #' # Here we left the variance prior at default
 #' prior_DDMaE <- prior(design_DDMaE,mu_mean=p_vector,mu_sd=psd)
 #' # Now we can plot all sorts of (implied) priors
-#' plot(prior_DDMaE, design_DDMaE, selection = "mu", N = 1e3)
-#' plot(prior_DDMaE, design_DDMaE, selection = "mu", mapped = FALSE, N=1e3)
+#' plot(prior_DDMaE, selection = "mu", N = 1e3)
+#' plot(prior_DDMaE, selection = "mu", mapped = FALSE, N=1e3)
 #' # We can also plot the implied prior on the participant level effects.
-#' plot(prior_DDMaE, design_DDMaE, selection = "alpha", col = "green", N = 1e3)
+#' plot(prior_DDMaE, selection = "alpha", col = "green", N = 1e3)
 #' }
 
 plot.emc.prior <- function(x, selection = "mu", do_plot = TRUE, covariates = NULL,
@@ -367,7 +367,7 @@ plot.emc.prior <- function(x, selection = "mu", do_plot = TRUE, covariates = NUL
   oldpar <- par(no.readonly = TRUE) # code line i
   on.exit(par(oldpar)) # code line i + 1
   if(is.null(design$Ffactors)){
-    if(selection %in% c('alpha', 'mu') & map){
+    if(selection %in% c('alpha', 'mu') & dots$map){
       warning("For this type of design, map = TRUE is not yet implemented")
     }
     dots$map <- FALSE
@@ -431,8 +431,8 @@ parameters.emc.prior <- function(x,selection = "mu", N = 1000, covariates = NULL
 #' can generate data based on `n_trials` per cell of `design`
 #' @rdname predict.emc
 #' @export
-predict.emc.prior <- function(object,n_post=100,n_cores=1,
-                              data = NULL, n_trials = NULL, ...)
+predict.emc.prior <- function(object,data = NULL,n_post=100,n_cores=1,
+                               n_trials = NULL, ...)
 {
   if(is.data.frame(data)) data <- list(data)
   prior <- object
@@ -460,6 +460,11 @@ predict.emc.prior <- function(object,n_post=100,n_cores=1,
 get_design.emc.prior <- function(x)
 {
   design <- attr(x, "design")
+  class(design) <- "emc.design"
+  if(is.null(design)){
+    stop("You are likely using samples ran with an old version of EMC2,
+         unfortunately this function only works with samples from a newer version of EMC2")
+  }
   return(design)
 }
 
