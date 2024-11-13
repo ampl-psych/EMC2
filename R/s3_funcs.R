@@ -105,8 +105,7 @@ plot.emc <- function(x, stage = "sample", selection = c("mu", "sigma2", "alpha")
 #'
 #' Simulate ``n_post`` data sets using the posterior parameter estimates
 #'
-#' @param object An emc object from which posterior predictives should
-#' be generated
+#' @param object An emc or emc.prior object from which to generate predictives
 #' @param hyper Boolean. Defaults to `FALSE`. If `TRUE`, simulates from the group-level (`hyper`)
 #' parameters instead of the subject-level parameters.
 #' @param n_post Integer. Number of generated datasets
@@ -133,7 +132,7 @@ predict.emc <- function(object,hyper=FALSE,n_post=100,n_cores=1,
   emc <- object
   dots <- list(...)
   data <- get_data(emc)
-  design <- attr(emc,"design_list")
+  design <- get_design(emc)
   if(is.null(data$subjects)){
     jointModel <- TRUE
     all_samples <- emc
@@ -166,19 +165,10 @@ predict.emc <- function(object,hyper=FALSE,n_post=100,n_cores=1,
         }
       }
     }
-    if (n_cores==1) {
-      simDat <- vector(mode="list",length=n_post)
-      for (i in 1:n_post) {
-        simDat[[i]] <- do.call(make_data, c(list(pars[[i]],design=design[[j]],data=data[[j]]), fix_dots(dots, make_data)))
-      }
-    } else {
-      simDat <- mclapply(1:n_post,function(i){
-        do.call(make_data, c(list(pars[[i]],design=design[[j]],data=data[[j]]), fix_dots(dots, make_data)))
-      },mc.cores=n_cores)
-    }
-    if (!is.null(attr(simDat[[1]],"adapt"))) adapt <- attr(simDat[[1]],"adapt")
+    simDat <- mclapply(1:n_post,function(i){
+      do.call(make_data, c(list(pars[[i]],design=design[[j]],data=data[[j]]), fix_dots(dots, make_data)))
+    },mc.cores=n_cores)
     out <- cbind(postn=rep(1:n_post,times=unlist(lapply(simDat,function(x)dim(x)[1]))),do.call(rbind,simDat))
-    if (!is.null(attr(simDat[[1]],"adapt"))) attr(out,"adapt") <- adapt
     if (n_post==1) pars <- pars[[1]]
     attr(out,"pars") <- pars
     post_out[[j]] <- out
@@ -279,10 +269,17 @@ check <- function(emc, ...){
 
 
 #' @rdname parameters
+#' @examples
+#' # For posterior inference:
+#' # Get 100 samples of the group-level mean (the default)
+#' parameters(samples_LNR, N = 100)
+#' # or from the individual-level parameters and mapped
+#' parameters(samples_LNR, selection = "alpha", map = TRUE)
 #' @export
-parameters.emc <- function(emc,selection = "mu", N = NULL, resample = FALSE, ...)
+parameters.emc <- function(x,selection = "mu", N = NULL, resample = FALSE, ...)
   # extracts and stacks chains into a matrix
 {
+  emc <- x
   dots <- list(...)
 
   if(is.null(N) || resample){
@@ -326,14 +323,16 @@ parameters.emc <- function(emc,selection = "mu", N = NULL, resample = FALSE, ...
 
 #' Returns a parameter type from an emc object as a data frame.
 #'
-#' @param emc An emc object
+#' @param x An emc or emc.prior object
 #' @param selection String designating parameter type (e.g. mu, sigma2, correlation, alpha)
-#' @param N Integer. How many samples to take from the posterior. If `NULL` will return the full posterior
+#' @param N Integer. How many samples to take from the posterior/prior. If `NULL` will return the full posterior
 #' @param resample Boolean. If `TRUE` will sample N samples from the posterior with replacement
+#' @param covariates For priors, possible covariates in the design
 #' @param ... Optional arguments that can be passed to `get_pars`
-#' @return A data frame with one row for each sample (with a subjects column if selection = "alpha")
+#' @return A data frame with one row for each sample
+#' (with a subjects column if selection = "alpha" and using draws from the posterior)
 #' @export
-parameters <- function(emc, ...){
+parameters <- function(x, ...){
   UseMethod("parameters")
 }
 
@@ -632,15 +631,15 @@ recovery <- function(emc, ...){
 #' @export
 hypothesis.emc <- function(emc, parameter = NULL, H0 = 0, fun = NULL,selection = "mu",
                           do_plot = TRUE, use_prior_lim = TRUE,
-                          N = 1e4, prior_plot_args = list(), ...){
+                          N = 1e4, prior_args = list(), ...){
   dots <- add_defaults(list(...), flatten = TRUE)
   type <- attr(emc[[1]], "variant_funs")$type
   if (length(emc[[1]]$data)==1) selection <- "alpha"
   if(selection == "alpha" & type != "single") stop("For savage-dickey ratio, selection cannot be alpha for hierarchical models")
-  prior <- emc[[1]]$prior
+  prior <- get_prior(emc)
 
 
-  psamples <-  get_objects(design = attr(emc,"design_list"),
+  psamples <-  get_objects(design = get_design(emc),
                            type = attr(emc[[1]], "variant_funs")$type, sample_prior = T,
                            selection = selection, N = N, sampler = emc)
   psamples <- do.call(get_pars, c(list(psamples, selection = selection, merge_chains = TRUE, return_mcmc = FALSE, by_subject = TRUE,
@@ -685,13 +684,13 @@ hypothesis.emc <- function(emc, parameter = NULL, H0 = 0, fun = NULL,selection =
         dots$xlim <- range(c(quantile(samples, c(0.025, 0.975)), H0 + .01, H0 - .01))
       }
     }
-    prior_plot_args <- add_defaults(prior_plot_args, cex = 2, col = "red", lwd = 1.5)
+    prior_args <- add_defaults(prior_args, cex = 2, col = "red", lwd = 1.5)
     dots <- add_defaults(dots, cex = 2, col = "black", lwd = 1.5, main = "Prior and posterior density")
     do.call(plot, c(list(post_density), fix_dots_plot(dots)))
-    do.call(lines, c(list(pdensity), fix_dots_plot(prior_plot_args)))
+    do.call(lines, c(list(pdensity), fix_dots_plot(prior_args)))
     do.call(points, c(list(H0 , post_dfun(H0)), fix_dots_plot(dots)))
-    do.call(points, c(list(H0, pdfun(H0)), fix_dots_plot(prior_plot_args)))
-    legend("topright", legend = c("posterior", "prior"), pch = c(1, 1), col = c(dots$col, prior_plot_args$col))
+    do.call(points, c(list(H0, pdfun(H0)), fix_dots_plot(prior_args)))
+    legend("topright", legend = c("posterior", "prior"), pch = c(1, 1), col = c(dots$col, prior_args$col))
   }
   return(pdfun(H0)/post_dfun(H0))
 }
@@ -881,10 +880,8 @@ credible <- function(x, ...){
 #' subset(samples_LNR, length.out = 10)
 subset.emc <- function(x, stage = "sample", filter = NULL, thin = 1, keep_stages = FALSE,
                        length.out = NULL, ...){
-  design_list <- attr(x, "design_list")
   x <- lapply(x, remove_samples, stage = stage, filter = filter,
                 thin = thin, length.out = length.out, keep_stages = keep_stages)
-  attr(x, "design_list") <- design_list
   class(x) <- "emc"
   return(x)
 }
@@ -977,14 +974,13 @@ posterior_summary <- function(emc, ...){
   UseMethod("posterior_summary")
 }
 
-
 #' @rdname get_data
 #' @export
 get_data.emc <- function(emc) {
   if(is.null(emc[[1]]$data[[1]]$subjects)){ # Joint model
     dat <- vector("list", length(emc[[1]]$data[[1]]))
     for(i in 1:length(dat)){
-      design <- attr(emc, "design_list")[[i]]
+      design <- get_design(emc)[[i]]
       tmp <- lapply(emc[[1]]$data,\(x) x[[i]][attr(x[[i]],"expand"),])
       tmp <- do.call(rbind, tmp)
       row.names(tmp) <- NULL
@@ -993,7 +989,7 @@ get_data.emc <- function(emc) {
       dat[[i]] <- tmp
     }
   } else{
-    design <- attr(emc, "design_list")[[1]]
+    design <- get_design(emc)[[1]]
     dat <- do.call(rbind,lapply(emc[[1]]$data,\(x) x[attr(x,"expand"),]))
     row.names(dat) <- NULL
     dat <- dat[dat$lR == levels(dat$lR)[1],]
@@ -1008,15 +1004,68 @@ get_data.emc <- function(emc) {
 #' @details
 #' emc adds columns and rows to a dataframe in order to facilitate efficient likelihood calculations.
 #' This function will return the data as provided originally.
-#'
 #' @param emc an emc object
-#'
 #' @return A dataframe of the original data
-#'
 #' @export
-#'
 #' @examples
 #' get_data(samples_LNR)
 get_data <- function(emc){
   UseMethod("get_data")
 }
+
+#' @rdname get_prior
+#' @export
+get_prior.emc <- function(emc){
+  prior <- emc[[1]]$prior
+  attr(prior, "type") <- attr(emc[[1]], "variant_funs")$type
+  class(prior) <- "emc.prior"
+  return(prior)
+}
+
+#' Get prior
+#'
+#' Extracts prior from an emc object
+#'
+#' @param emc an emc object
+#' @return A prior with class emc.prior
+#' @export
+#' @examples
+#' get_prior(samples_LNR)
+get_prior <- function(emc){
+  UseMethod("get_prior")
+}
+
+#' @rdname get_design
+#' @export
+get_design.emc <- function(x){
+  # For backwards compatibility
+  if(!is.null(attr(x, "design_list"))){
+    emc_design <- attr(x, "design_list")
+  } else{
+    emc_design <- get_design(get_prior(x))
+  }
+  class(emc_design) <- "emc.design"
+  return(emc_design)
+}
+
+#' Get design
+#'
+#' Extracts design from an emc object
+#'
+#' @param x an `emc` or `emc.prior` object
+#' @return A design with class emc.design
+#' @export
+#' @examples
+#' get_design(samples_LNR)
+get_design <- function(x){
+  UseMethod("get_design")
+}
+
+#' @rdname sampled_p_vector
+#' @export
+sampled_p_vector.emc <- function(x,model=NULL,doMap=TRUE, add_da = FALSE, all_cells_dm = FALSE){
+  return(sampled_p_vector(get_design(x), model = model, doMap = doMap,
+                          add_da = add_da, all_cells_dm = all_cells_dm))
+}
+
+

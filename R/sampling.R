@@ -45,6 +45,7 @@ pmwgs <- function(dadm, variant_funs, pars = NULL, ll_func = NULL, prior = NULL,
       grouped = rep(F, sum(is_nuisance)),
       type = type
     )
+    if(type == "single") sampler_nuis$samples <- NULL
     sampler_nuis <- get_variant_funs(type)$add_info(sampler_nuis, prior$prior_nuis, ...)
   }
   samples <- variant_funs$sample_store(dadm, pars, is_nuisance = is_nuisance,
@@ -158,11 +159,9 @@ init <- function(pmwgs, start_mu = NULL, start_var = NULL,
 init_chains <- function(emc, start_mu = NULL, start_var = NULL, particles = 1000,
                         cores_per_chain=1,cores_for_chains = length(emc))
 {
-  attributes <- get_attributes(emc)
   emc <- mclapply(emc,init,start_mu = start_mu, start_var = start_var,
            verbose = FALSE, particles = particles,
            n_cores = cores_per_chain, mc.cores=cores_for_chains)
-  emc <- get_attributes(emc, attributes)
   class(emc) <- "emc"
   return(emc)
 }
@@ -760,23 +759,7 @@ get_variant_funs <- function(type = "standard") {
       bridge_add_info = bridge_add_info_factor,
       bridge_group_and_prior_and_jac = bridge_group_and_prior_and_jac_factor
     )
-  } else if(type == "lm"){
-    list_fun <- list(# store functions
-      sample_store = sample_store_lm,
-      add_info = add_info_lm,
-      get_startpoints = get_startpoints_lm,
-      get_group_level = get_group_level_lm,
-      fill_samples = fill_samples_lm,
-      gibbs_step = gibbs_step_lm,
-      group_IC = group__IC_standard,
-      filtered_samples = filtered_samples_lm,
-      get_conditionals = get_conditionals_lm,
-      get_all_pars_IS2 = get_all_pars_lm,
-      prior_dist_IS2 = prior_dist_lm,
-      group_dist_IS2 = group_dist_lm
-    )
-  }
-  else if(type == "infnt_factor"){
+  } else if(type == "infnt_factor"){
     list_fun <- list(# store functions
       sample_store = sample_store_infnt_factor,
       add_info = add_info_infnt_factor,

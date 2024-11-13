@@ -83,7 +83,7 @@ prior_LBA <- prior(design_LBA, type = "single",
 Now we plot the prior, with `map = TRUE` (the default) to see the implied prior on the transformed parameters.
 
 ```{r, fig.alt = "Prior for LBA non-hierarchical model", fig.height = 5}
-plot_prior(prior_LBA, design_LBA)
+plot(prior_LBA)
 ```
 
 Next we can simply call `run_sbc` with our specified design and prior. We can use `?run_sbc` to see the description of the function arguments. The trials argument refers to the number of trials per cell. Since we have an 2-level S factor in our design (and all other designs used), we will thus simulate 200 trials per data set. Also note that by default run_sbc will estimate till the point-scale reduction factor is smaller than 1.1 and the minimum effective sample size of any of the estimated parameters is larger than 100.
@@ -152,7 +152,7 @@ We see minor biases in *a* and *sv*, but nothing too concerning. To double check
 
 ## Hierarchical SBC
 
-Besides being a friendly introduction to doing SBC in *EMC2*, this post also serves as a test of unbiased estimation of the four main classes of EAMs included in *EMC2*. However, depending on the research question, running non-hierarchical SBC might suffice as it is far more computationally efficient. 
+Besides being a friendly introduction to doing SBC in *EMC2*, this post also serves as a test of unbiased estimation of the four main classes of EAMs included in *EMC2*. However, depending on the research question, running non-hierarchical SBC might suffice as it is far more computationally efficient.
 
 The approach to running hierarchical SBC is very similar to running non-hierarchical SBC. However we can now write the model of data $y$ as $y \sim p(y|\alpha)p(\alpha|\theta)p(\theta)$. Here $p(\theta)$ is the prior on the group-level parameters. The generated data for one sample $y^{(i)}$ is still generated from $\alpha^{(i)}$, but with $\alpha^{(i)}$ generated from $\theta^{(i)}$, with $\theta^{(i)} \sim p(\theta)$.
 
@@ -189,7 +189,7 @@ prior_LBA <- prior(design_LBA, type = "diagonal-gamma",
 We can also plot what the implied prior range is of the subject-level parameters:
 
 ```{r, fig.alt = "Prior for LBA hierarchical model", fig.height = 5}
-plot_prior(prior_LBA, design_LBA, selection = "alpha")
+plot(prior_LBA, selection = "alpha")
 ```
 
 To actually run SBC, we can use the same function as before, now also specifying how many subjects we want to have in the hierarchical model

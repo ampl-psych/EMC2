@@ -261,7 +261,7 @@ IC <- function(emc,stage="sample",filter=0,use_best_fit=TRUE,
   alpha <- get_pars(emc,selection="alpha",stage=stage,filter=filter, by_subject = TRUE, merge_chains = TRUE)
   mean_pars <- lapply(alpha,function(x){apply(do.call(rbind,x),2,mean)})
   # log-likelihood for each subject using their mean parameter vector
-  ll_func <- attr(emc,"design_list")[[1]]$model()$log_likelihood
+  ll_func <- get_design(emc)[[1]]$model()$log_likelihood
   data <- emc[[1]]$data
   mean_pars_lls <- setNames(numeric(length(mean_pars)),names(mean_pars))
   for (sub in names(mean_pars)){

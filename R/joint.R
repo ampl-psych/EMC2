@@ -1,7 +1,6 @@
 
 single_out_joint <- function(joint_samples_list, i){
   single_samples_list <- lapply(joint_samples_list, return_single_sampler, i)
-  attr(single_samples_list, "design_list") <-   attr(joint_samples_list,"design_list")[i]
   return(single_samples_list)
 }
 

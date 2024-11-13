@@ -125,16 +125,12 @@ extract_samples <- function(sampler, stage = c("adapt", "sample"), max_n_sample 
   }
   if(any(sampler$nuisance)){
     nuisance <- sampler$nuisance[!sampler$grouped]
-    sampler$sampler_nuis$samples$alpha <- sampler$samples$alpha[nuisance,,,drop = F]
+    suppressWarnings(sampler$sampler_nuis$samples$alpha <- sampler$samples$alpha[nuisance,,,drop = F])
     sampler$samples$alpha <- sampler$samples$alpha[!nuisance,,]
     out <- variant_funs$filtered_samples(sampler, full_filter)
     out$nuisance <- get_variant_funs(type)$filtered_samples(sampler$sampler_nuis, full_filter)
   } else{
-    if(!is.null(sampler$g_map_fixed)){
-      out <- 1# filtered_samples_lm(sampler, full_filter)
-    } else{
-      out <- variant_funs$filtered_samples(sampler, full_filter)
-    }
+    out <- variant_funs$filtered_samples(sampler, full_filter)
   }
   return(out)
 }
@@ -355,7 +351,7 @@ fix_dots <- function(dots, fun, exclude = "", consider_dots = TRUE){
 #' (i.e. these are collapsed when `flatten = TRUE` and use_par should also be collapsed names).
 #' @param type Character indicating the group-level model selected. Only necessary if sampler isn't specified.
 #' @param true_pars Set of `true_parameters` can be specified to apply flatten or use_par on a set of true parameters
-#' @param covariates Only needed with `plot_prior` and covariates in the design
+#' @param covariates Only needed with `plot` for priors and covariates in the design
 #' @param chain Integer. Which of the chain(s) to return
 #'
 #' @return An mcmc.list object of the selected parameter types with the specified manipulations
@@ -382,7 +378,7 @@ get_pars <- function(emc,selection= "mu", stage="sample",thin=1,filter=0,
                          selection = selection)
 
   if(map){
-    samples <- lapply(samples, map_mcmc, attr(emc,"design_list")[[1]], include_constants = FALSE,
+    samples <- lapply(samples, map_mcmc, get_design(emc), include_constants = FALSE,
                       add_recalculated = add_recalculated, covariates = covariates)
   }
   if(flatten) remove_dup <- TRUE

@@ -40,6 +40,7 @@
 #' @importFrom psych fa.diagram
 #' @importFrom Rcpp sourceCpp
 #' @importFrom stats acf
+#' @importFrom stats aggregate
 #' @importFrom stats approxfun
 #' @importFrom stats as.dist
 #' @importFrom stats as.formula

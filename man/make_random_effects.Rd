@@ -38,10 +38,10 @@ design_DDMaE <- design(data = forstmann,model=DDM,
 group_means =c(v_Sleft=-2,v_Sright=2,a=log(1),a_Eneutral=log(1.5),a_Eaccuracy=log(2),
                t0=log(.2),Z=qnorm(.5),sv=log(.5),SZ=qnorm(.5))
 # Now we can create subject-level parameters
-subj_pars <- make_random_effects(design_DDMaE, group_means, n_subj = 5)
+subj_pars <- make_random_effects(design_DDMaE, group_means, n_subj = 19)
 
 # We can also define a covariance matrix to simulate from
-subj_pars <- make_random_effects(design_DDMaE, group_means, n_subj = 5,
+subj_pars <- make_random_effects(design_DDMaE, group_means, n_subj = 19,
              covariances = diag(.1, length(group_means)))
 
 # The subject level parameters can be used to generate data

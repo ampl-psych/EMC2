@@ -7,7 +7,15 @@ find_duplicate_indices <- function(df) {
   return(index_map)
 }
 
-rDDM <- function(lR,pars,ok=rep(TRUE,length(lR)), precision=5e-3)
+# Unfortunately there's some unwanted print statements in the code of rWDM
+# From the original package
+suppress_output <- function(expr) {
+  sink(tempfile())  # Redirect output to a temporary file
+  on.exit(sink())   # Ensure sink is reset afterward
+  invisible(force(expr))  # Run the expression
+}
+
+rDDM <- function(lR,pars,precision=5e-3,ok=rep(TRUE,length(lR)))
   # lR is an empty latent response factor lR with one level for each boundary
   # pars is a matrix of parameter values named as in p_types
   # lower is mapped to first level of lR and upper to second
@@ -26,10 +34,10 @@ rDDM <- function(lR,pars,ok=rep(TRUE,length(lR)), precision=5e-3)
   idx <- find_duplicate_indices(pars)
   for(id in unique(idx)){
     is_id <- which(idx == id)
-    first <- is_id[1]
-    tmp <- rWDM(N = length(is_id), a = pars[first,"a"]/pars[first, "s"], v = pars[first,"v"]/pars[first, "s"], t0 = pars[first,"t0"],
-                       w = pars[first,"Z"], sw = pars[first,"SZ"], sv = pars[first,"sv"]/pars[first, "s"],
-                       st0 = pars[first,"st0"], precision = precision)
+    cur_pars <- pars[is_id[1],]
+    tmp <- suppress_output(rWDM(N = length(is_id), a = cur_pars["a"]/cur_pars[ "s"], v = cur_pars["v"]/cur_pars[ "s"], t0 = cur_pars["t0"],
+                       w = cur_pars["Z"], sw = cur_pars["SZ"], sv = cur_pars["sv"]/cur_pars[ "s"],
+                       st0 = cur_pars["st0"], precision = precision))
     tmp <- data.frame(response = tmp$response, rt = tmp$q)
     out_ok[is_id,] <- tmp[sample(nrow(tmp)),]
   }

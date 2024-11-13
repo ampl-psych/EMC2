@@ -121,7 +121,7 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
     assign(name, optionals[[name]])
   }
   if(is(parameters, "emc")){
-    if(is.null(design)) design <- attr(parameters, "design_list")[[1]]
+    if(is.null(design)) design <- get_design(parameters)
     if(is.null(data)) data <- get_data(parameters)
     if(!hyper){
       parameters <- do.call(rbind, posterior_summary(parameters, probs = 0.5, selection = "alpha", by_subject = TRUE))
@@ -143,8 +143,11 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
     #   data<- data[data$subjects %in% design$Ffactors$subjects,]
     #   data$subjects <- factor(data$subjects)
     # }
+    if(length(rownames(parameters)) != length(design$Ffactors$subjects)){
+      stop("input parameter matrix must have number of rows equal to number of subjects specified in design")
+    }
     if(is.null(colnames(parameters))) colnames(parameters) <- sampled_p_names
-    if(is.null(rownames(parameters))) rownames(parameters) <- design$Ffactors$subjects
+    rownames(parameters) <- design$Ffactors$subjects
   }
 
   if(!is.null(attr(design, "custom_ll"))){
@@ -156,6 +159,7 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
   }
 
   model <- design$model
+  if(is.data.frame(parameters)) parameters <- as.matrix(parameters)
   if (!is.matrix(parameters)) parameters <- make_pmat(parameters,design)
   if ( is.null(data) ) {
     design$Ffactors$subjects <- rownames(parameters)
@@ -230,20 +234,6 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
   pars <- add_bound(pars, model()$bound)
   if ( any(dimnames(pars)[[2]]=="pContaminant") && any(pars[,"pContaminant"]>0) )
     pc <- pars[data$lR==levels(data$lR)[1],"pContaminant"] else pc <- NULL
-  if (!is.null(design$adapt)) {
-    if (expand>1) {
-      expand <- 1
-      warning("Expand does not work with this type of model")
-    }
-    # data <- adapt_data(data,design,model,pars,mapped_p=mapped_p,add_response = TRUE)
-    if (mapped_p) return(data)
-    adapt <- attr(data,"adapt")
-    data <- data[data$lR==levels(data$lR)[1],!(names(data) %in% c("lR","lM"))]
-    if('Qvalues' %in% names(attributes(pars))) attr(data, 'Qvalues') <- attr(pars, 'Qvalues')
-    if('predictionErrors' %in% names(attributes(pars))) attr(data, 'predictionErrors') <- attr(pars, 'predictionErrors')
-    attr(data,"adapt") <- adapt
-    return(data)
-  }
   if (mapped_p) return(cbind(data[,!(names(data) %in% c("R","rt"))],pars))
   if (expand>1) {
     data <- cbind(rep=rep(1:expand,each=dim(data)[1]),
@@ -325,10 +315,10 @@ add_Ffunctions <- function(data,design)
 #' group_means =c(v_Sleft=-2,v_Sright=2,a=log(1),a_Eneutral=log(1.5),a_Eaccuracy=log(2),
 #'                t0=log(.2),Z=qnorm(.5),sv=log(.5),SZ=qnorm(.5))
 #' # Now we can create subject-level parameters
-#' subj_pars <- make_random_effects(design_DDMaE, group_means, n_subj = 5)
+#' subj_pars <- make_random_effects(design_DDMaE, group_means, n_subj = 19)
 #'
 #' # We can also define a covariance matrix to simulate from
-#' subj_pars <- make_random_effects(design_DDMaE, group_means, n_subj = 5,
+#' subj_pars <- make_random_effects(design_DDMaE, group_means, n_subj = 19,
 #'              covariances = diag(.1, length(group_means)))
 #'
 #' # The subject level parameters can be used to generate data

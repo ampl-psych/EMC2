@@ -78,6 +78,8 @@ get_prior_blocked <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e
 }
 
 get_startpoints_blocked <- function(pmwgs, start_mu, start_var){
+  nuisance <- pmwgs$nuisance
+  n_pars <- sum(!(nuisance| pmwgs$grouped))
   if (is.null(start_mu)) start_mu <- rmvnorm(1, mean = pmwgs$prior$theta_mu_mean, sigma = pmwgs$prior$theta_mu_var)
   # If no starting point for group var just sample some
   if (is.null(start_var)) {
@@ -89,7 +91,7 @@ get_startpoints_blocked <- function(pmwgs, start_mu, start_var){
       start_var <- adiag(start_var, riwish(n_pars_group * 3,diag(n_pars_group)))
     }
   }
-  start_a_half <- 1 / rgamma(n = pmwgs$n_pars, shape = 2, rate = 1)
+  start_a_half <- 1 / rgamma(n = n_pars, shape = 2, rate = 1)
   return(list(tmu = start_mu, tvar = start_var, tvinv = MASS::ginv(start_var), a_half = start_a_half))
 }
 

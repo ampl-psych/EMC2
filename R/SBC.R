@@ -45,8 +45,9 @@ SBC_hierarchical <- function(design_in, prior_in, replicates = 250, trials = 100
   if(type != "diagonal-gamma") warning("SBC in EMC2 is frequently biased for prior structures with heavy variance mass around 0 \n
                                        please consider using 'type = diagonal-gamma' to test your model. See also vignettes")
   # Draw prior samples
-  prior_mu <- plot_prior(prior_in, design_in, do_plot = F, N = replicates, selection = "mu", return_mcmc = FALSE, map = FALSE)[[1]]
-  prior_var <- plot_prior(prior_in, design_in, do_plot = F, N = replicates, selection = "Sigma", return_mcmc = FALSE,
+  # Should at a later point go to predict
+  prior_mu <- plot(prior_in, design_in, do_plot = F, N = replicates, selection = "mu", return_mcmc = FALSE, map = FALSE)[[1]]
+  prior_var <- plot(prior_in, design_in, do_plot = F, N = replicates, selection = "Sigma", return_mcmc = FALSE,
                           remove_constants = FALSE)[[1]]
   rank_mu <- data.frame()
   rank_var <- data.frame()
@@ -67,7 +68,7 @@ SBC_hierarchical <- function(design_in, prior_in, replicates = 250, trials = 100
     # } else{
     data <- make_data(rand_effects,design_in, trials, model = design_in$model)
     if(plot_data){
-      plot_defective_density(data, factors = names(design_in$Ffactors)[names(design_in$Ffactors) != "subjects"])
+      plot_density(data, factors = names(design_in$Ffactors)[names(design_in$Ffactors) != "subjects"])
     }
     emc <-  do.call(make_emc, c(list(data = data, design = design_in, prior_list = prior_in, type = type), fix_dots(dots, make_emc)))
     emc <-  do.call(fit, c(list(emc = emc), fix_dots(dots, fit)))
@@ -106,7 +107,7 @@ SBC_single <- function(design_in, prior_in, replicates = 250, trials = 100,
   type <- attr(prior_in, "type")
   if(type != "single") stop("can only use `type = single`")
   # Draw prior samples
-  prior_alpha <- plot_prior(prior_in, design_in, do_plot = F, N = replicates, selection = "mu", return_mcmc = FALSE, map = FALSE)[[1]]
+  prior_alpha <- parameters(prior_in, N = replicates, selection = "alpha")
   rank_alpha <- data.frame()
   if(!is.null(fileName)) save(prior_alpha, file = fileName)
   i <- 1
@@ -119,13 +120,13 @@ SBC_single <- function(design_in, prior_in, replicates = 250, trials = 100,
     for(j in 1:dots$cores_per_chain){
       if(i > replicates) next
       design_in$Ffactors$subjects <- j
-      tmp <- make_data(t(prior_alpha[,,i]),design_in, trials, model = design_in$model)
+      tmp <- make_data(prior_alpha[i,],design_in, trials, model = design_in$model)
       tmp$subjects <- j
       data <- rbind(data, tmp)
       i <- i + 1
     }
     if(plot_data){
-      plot_defective_density(data, factors = names(design_in$Ffactors)[names(design_in$Ffactors) != "subjects"])
+      plot_density(data, factors = names(design_in$Ffactors)[names(design_in$Ffactors) != "subjects"])
     }
     emc <-  do.call(make_emc, c(list(data = data, design = design_in, prior_list = prior_in, type = type), fix_dots(dots, make_emc)))
     emc <-  do.call(fit, c(list(emc = emc), fix_dots(dots, fit)))
@@ -134,7 +135,7 @@ SBC_single <- function(design_in, prior_in, replicates = 250, trials = 100,
     for(j in 1:dots$cores_per_chain){
       if(start > replicates) next
       tmp_rec <- alpha_rec[,j,]
-      rank_alpha <- rbind(rank_alpha, mapply(get_ranks_ESS, split(tmp_rec, row(tmp_rec)), t(ESS[j,]), prior_alpha[,,start]))
+      rank_alpha <- rbind(rank_alpha, mapply(get_ranks_ESS, split(tmp_rec, row(tmp_rec)), t(ESS[j,]), prior_alpha[start,]))
       start <- start + 1
     }
     colnames(rank_alpha) <- par_names
