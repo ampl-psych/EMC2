@@ -16,7 +16,7 @@ profile_plot(
   n_point = 100,
   n_cores = 1,
   round = 3,
-  true_plot_args = list(),
+  true_args = list(),
   ...
 )
 }
@@ -43,7 +43,7 @@ profile_plot(
 
 \item{round}{Integer. To how many digits will the output be rounded.}
 
-\item{true_plot_args}{A list. Optional additional arguments that can be passed to plot.default for the plotting of the true vertical line.}
+\item{true_args}{A list. Optional additional arguments that can be passed to plot.default for the plotting of the true vertical line.}
 
 \item{...}{Optional additional arguments that can be passed to plot.default.}
 }

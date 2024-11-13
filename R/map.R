@@ -16,43 +16,11 @@ get_pars_matrix <- function(p_vector,dadm) {
   # Add constants, transform p_vector, map to design, transform mapped parameters
   # to the natural scale, and create trial-dependent parameters. Ordinal
   # parameters are first exponentiated.
-
-  if (!is.null(attr(dadm,"ordinal"))){
-    if (is.matrix(p_vector)){
-      p_vector[,attr(dadm,"ordinal")] <- exp(p_vector[,attr(dadm,"ordinal")])
-    } else{
-      p_vector[attr(dadm,"ordinal")] <- exp(p_vector[attr(dadm,"ordinal")])
-    }
-  }
   pars <- map_p(add_constants(p_vector,attr(dadm,"constants")),dadm)
   pars <- attr(dadm,"model")()$Ttransform(do_transform(pars, attr(dadm,"model")()$transform), dadm)
   pars <- add_bound(pars, attr(dadm,"model")()$bound)
   return(pars)
 }
-
-get_design <- function(samples)
-  # prints out design from samples object
-{
-  design <- attr(samples,"design_list")[[1]]
-  model <- design$model
-  design$Ffactors$subjects <- design$Ffactors$subjects[1]
-  dadm <- design_model(make_data(sampled_p_vector(design,model),design,n_trials=1),design,model,
-                       rt_check=FALSE,compress=FALSE)
-  dadm[,!(names(dadm) %in% c("subjects","trials","R","rt","winner"))]
-}
-
-get_design_matrix <- function(samples){
-  attr(sampled_p_vector(attr(samples,"design_list")[[1]]),"map")
-}
-
-pmat <- function(p_vector,design)
-  # puts vector form of p_vector into matrix form
-{
-  ss <- design$Ffactors$subjects
-  matrix(rep(p_vector,each=length(ss)),nrow=length(ss),
-         dimnames=list(ss,names(p_vector)))
-}
-
 
 make_pmat <- function(p_vector,design)
   # puts vector form of p_vector into matrix form
