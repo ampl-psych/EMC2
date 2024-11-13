@@ -15,7 +15,7 @@ suppress_output <- function(expr) {
   invisible(force(expr))  # Run the expression
 }
 
-rDDM <- function(lR,pars,precision=5e-3,ok=rep(TRUE,length(lR)))
+rDDM <- function(lR,pars,ok=rep(TRUE,length(lR)), precision=5e-3)
   # lR is an empty latent response factor lR with one level for each boundary
   # pars is a matrix of parameter values named as in p_types
   # lower is mapped to first level of lR and upper to second

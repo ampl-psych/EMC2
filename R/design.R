@@ -661,10 +661,6 @@ design_model <- function(data,design,model=NULL,
   attr(dadm,"ok_trials") <- is.finite(data$rt)
   attr(dadm,"s_data") <- data$subjects
   attr(dadm,"dL") <- attr(design,"dL")
-<<<<<<< HEAD
-=======
-  attr(dadm,"ordinal") <- attr(design,"ordinal")
->>>>>>> transforms
   dadm
 }
 
