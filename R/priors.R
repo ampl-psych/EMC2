@@ -83,6 +83,9 @@ prior <- function(design, type = "standard", update = NULL,
     if(!is.matrix(input$theta_mu_var) & is.matrix(orig$theta_mu_var)) input$theta_mu_var <- diag(input$theta_mu_var)
   }
   prior <- get_objects(design = design, type = type, prior = input, ...)$prior
+  if("Ffactors" %in% names(design)){
+    design <- list(design)
+  }
   attr(prior, "design") <- design
   class(prior) <- "emc.prior"
   return(prior)
