@@ -1,7 +1,67 @@
-# make_trend <- function(type, base, par_names, cov_names, transform){
-#
-# }
-#
+make_trend <- function(type, base, par_names, cov_names, transform){
+
+}
+
+trend_help <- function(kernel = NULL, map = NULL) {
+  kernels <- list(
+    ld = "Decreasing linear kernel: k = -c",
+    li = "Increasing linear kernel: k = c",
+    ed = "Decreasing exponential kernel: k = exp(-d * c)",
+    ei = "Increasing exponential kernel: k = 1 - exp(-d * c)",
+    pd = "Decreasing power kernel: k = (1 + c)^(-d)",
+    pi = "Increasing power kernel: k = 1 - (1 + c)^(-d)",
+    p2 = "Quadratic polynomial: k = b1 * c + b2 * c^2",
+    p3 = "Cubic polynomial: k = b1 * c + b2 * c^2 + b3 * c^3",
+    p4 = "Quartic polynomial: k = b1 * c + b2 * c^2 + b3 * c^3 + b4 * c^4",
+    d1 = paste(
+      "Standard delta rule kernel:",
+      "Updates q[i] = q[i-1] + alpha * (target[i-1] - q[i-1]).",
+      "Parameters: q0 (initial value), alpha (learning rate)."
+    ),
+    d2 = paste(
+      "Dual kernel delta rule:",
+      "Combines fast and slow learning rates.",
+      "Updates qFast and qSlow separately and switches between them based on dSwitch.",
+      "Parameters: q0 (initial value), alphaSlow (slow learning rate),",
+      "dFast (difference added to alphaSlow for fast rate), dSwitch (switch threshold)."
+    )
+  )
+
+  maps <- list(
+    lin = "Linear map: base + b * k",
+    plin = "Exponential linear map: exp(base) + exp(b) * k",
+    add = "Additive map: base + k",
+    identity = "Identity map: k"
+  )
+
+  if (is.null(kernel) && is.null(map)) {
+    cat("Available kernels (dyntype):\n")
+    for (k in names(kernels)) {
+      cat(paste0("  ", k, ": ", kernels[[k]], "\n"))
+    }
+    cat("\nAvailable map types (maptype):\n")
+    for (m in names(maps)) {
+      cat(paste0("  ", m, ": ", maps[[m]], "\n"))
+    }
+  } else {
+    if (!is.null(kernel)) {
+      if (kernel %in% names(kernels)) {
+        cat(paste0("Kernel '", kernel, "': ", kernels[[kernel]], "\n"))
+      } else {
+        cat(paste0("Kernel '", kernel, "' is not recognized.\n"))
+        cat("Run trend_help() for all available kernels.\n")
+      }
+    }
+    if (!is.null(map)) {
+      if (map %in% names(maps)) {
+        cat(paste0("Map '", map, "': ", maps[[map]], "\n"))
+      } else {
+        cat(paste0("Map '", map, "' is not recognized.\n"))
+        cat("Run trend_help() for all available map types.\n")
+      }
+    }
+  }
+}
 
 #### Dynfuns ----
 
@@ -96,30 +156,6 @@ run_delta2 <- function(q0,p,target,return_extras=FALSE) {
 }
 
 
-run_d1b <- function(base,scale,q0,alpha,target,return_extras=FALSE) {
-
-  q <- pe <- numeric(length(target))
-  q[1] <- q0
-  alpha <- pnorm(alpha)
-  for (i in 2:length(q)) {
-    # if (is.na(target[i-1])) { # remove? not needed for RL
-    #   pe[i-1] <- NA
-    #   q[i] <- q[i-1]
-    #   base[i] <- base[i-1]
-    # } else {
-    target[i-1] <- target[i-1]*base[i-1]
-    pe[i-1] <- target[i-1]-q[i-1]
-    q[i] <- q[i-1] + alpha[i-1]*pe[i-1]
-    base[i] <- base[i] + scale[i]*q[i]
-    # }
-  }
-  if (return_extras) {
-    pe <- target - q
-    cbind(q=q,pe=pe)
-  } else cbind(q=q,b=base)
-}
-
-
 
 rep_dadm <- function(out1,cs1,Rlevs,lR)
   # Expand out1 to fit with dadm if required.
@@ -150,11 +186,6 @@ rep_dadm <- function(out1,cs1,Rlevs,lR)
   out
 }
 
-# tmp <- array(dim=c(2,10000,2),dimnames=list(1:2,NULL,dimnames(out1)[[3]]))
-# tmp[1,,] <- out1[1,,]
-# tmp[2,,] <- out1[1,,]
-# out1=tmp
-
 dynfuns <- function(base,dp,dyntype,cs,lR,maptype="lin",
                     return_extras=FALSE) {
   Rlevs <- levels(cs[,1])
@@ -170,30 +201,27 @@ dynfuns <- function(base,dp,dyntype,cs,lR,maptype="lin",
   } else is1map <- is1
   if (is.matrix(dp)) {
     out1 <- switch(dyntype, # kernel
+                   # Linear decreasing, linear map type
                    ld = -cs[is1,2],
+                   # Linear increasing, linear map type
                    li = cs[is1,2],
+                   # Exponential decreasing, linear map type
                    ed = exp(-exp(dp[is1,2])*cs[is1,2]),
+                   # Exponential increasing - help
                    ei = (1-exp(-exp(dp[is1,2])*cs[is1,2])),
+                   # Decreasing power
                    pd = (1+cs[is1,2])^(-exp(dp[is1,2])),
+                   # Increasing power
                    pi = (1-(1+cs[is1,2])^(-exp(dp[is1,2]))),
+                   # Second to fourth order polynomials, for these map is default none? Or linear?
                    p2 = dp[is1,1]*cs[is1,2] + dp[is1,2]*cs[is1,2]^2,
                    p3 = dp[is1,1]*cs[is1,2] + dp[is1,2]*cs[is1,2]^2 + dp[is1,3]*cs[is1,2]^3,
-                   p4 = dp[is1,1]*cs[is1,2] + dp[is1,2]*cs[is1,2]^2 + dp[is1,3]*cs[is1,2]^3 +
-                     dp[is1,4]*cs[is1,2]^4,
-                   d1U = run_delta(pnorm(dp[is1,2][1]),dp[is1,3],
-                                   cs[is1,-c(1:remove_cs),drop=FALSE],return_extras=return_extras),
-                   d2U = run_delta2(pnorm(dp[is1,2][1]),dp[is1,3:5],
-                                    cs[is1,-c(1:remove_cs),drop=FALSE],return_extras=return_extras),
-                   d1P = run_delta(exp(dp[is1,2][1]),dp[is1,3],
-                                   cs[is1,-c(1:remove_cs),drop=FALSE],return_extras=return_extras),
-                   d2P = run_delta2(exp(dp[is1,2][1]),dp[is1,3:5],
-                                    cs[is1,-c(1:remove_cs),drop=FALSE],return_extras=return_extras),
+                   p4 = dp[is1,1]*cs[is1,2] + dp[is1,2]*cs[is1,2]^2 + dp[is1,3]*cs[is1,2]^3 + dp[is1,4]*cs[is1,2]^4,
+                   # Single and dual kernel learning rule
                    d1 = run_delta(dp[is1,2][1],dp[is1,3],
                                   cs[is1,-c(1:remove_cs),drop=FALSE],return_extras=return_extras),
                    d2 = run_delta2(dp[is1,2][1],dp[is1,3:5],
                                    cs[is1,-c(1:remove_cs),drop=FALSE],return_extras=return_extras),
-                   d1b = run_d1b(base=base[is1],scale=dp[is1,1],q0=dp[is1,2][1],alpha=dp[is1,3],
-                                 cs[is1,-c(1:remove_cs)],return_extras=return_extras)
     )
     if (!return_extras) {
       if (isRL) out1 <- out1[cbind(1:nrow(out1),cs[,2])]
@@ -203,7 +231,7 @@ dynfuns <- function(base,dp,dyntype,cs,lR,maptype="lin",
         lR <- FALSE
       }
       if (is.null(maptype)) {
-        out1 <- out1[,"b"]
+        out1 <- out1
       } else out1 <- switch(maptype, # map to parameter
                             lin = base + dp[is1map,1]*out1,
                             plin = exp(base) + exp(dp[is1map,1])*out1,
