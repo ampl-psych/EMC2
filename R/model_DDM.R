@@ -99,7 +99,7 @@ pDDM <- function(rt,R,pars,precision=5e-3)
 #' `Z` is estimated as the ratio of bias to one boundary where 0.5 means no bias.
 #' `DP` comprises the difference in non-decision time for each response option.
 #'
-#' Conventionally, `sv` is fixed to 1 to satisfy scaling constraints.
+#' Conventionally, `s` is fixed to 1 to satisfy scaling constraints.
 #'
 #' See Ratcliff, R., & McKoon, G. (2008).
 #' The diffusion decision model: theory and data for two-choice decision tasks.
