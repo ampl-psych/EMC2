@@ -129,6 +129,13 @@ update_prior_element <- function(input_element, update_value, updated_flags_elem
       input_element[] <- update_value
       updated_flags_element[] <- TRUE
     }
+    # If there are names, but they do not match and the length is the same
+    # still update
+    if(!any(updated_flags_element) && length(update_value) == length(input_element)){
+      input_element[] <- update_value
+      updated_flags_element[] <- TRUE
+    }
+
     # If 'update_value' is an unnamed vector of different length, no action taken
   } else {
     # If 'input_element' is a single value, update it directly
