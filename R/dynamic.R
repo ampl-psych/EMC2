@@ -1,60 +1,97 @@
-make_trend <- function(par_name, cov_name, kernel = NULL, map = NULL,
-                       shared = NULL, verbose = TRUE){
+dynamic1 <- list(B=list(covnames="strial",dyntype="li", dnames = "beta", shared = TRUE),
+                 v=list(covnames="strial",dyntype="li", dnames = "beta", shared = TRUE))
 
+
+make_trend <- function(par_names, cov_names, kernels, bases = NULL,
+                       shared = NULL, verbose = TRUE, premap = FALSE){
+
+  if(!all.equal(length(par_names), length(cov_names), length(kernels))){
+    stop("Make sure that par_names, cov_names and kernels have the same length")
+  }
+  if(!is.null(bases)){
+    if(length(kernels) != length(bases)){
+      stop("If bases not is NULL make sure you specify as many bases as kernels")
+    }
+  }
+  trends_out <- vector("list", length(par_names))
+  for(i in 1:length(par_names)){
+    # Kernel
+    if(!kernels[i] %in% trend_help(kernels[i], return_types = TRUE)$kernels){
+      stop("Kernel type not support see `trend_help()`")
+    } else{
+      trend <- kernels[i]
+    }
+    # base
+    if(is.null(bases)){
+      trend$base <- trend_help(kernels[i], do_return = TRUE)$bases[1]
+    } else{
+      if(bases[i] %in% trend_help(kernels[i], do_return = TRUE)$bases){
+        stop("base type not supported with kernel, see `trend_help(<kernel>)`")
+      }
+    }
+  }
+
+
+
+
+  if(is.null(cur_dyn$base$pnames)){
+    cur_dyn$base$pnames <- trend_help(base = cur_dyn$base, do_return = TRUE)$default_pars
+  }
 }
 
-trend_help <- function(kernel = NULL, map = NULL, ...){
-  dots <- add_defaults(list(...), do_return = FALSE)
-  maps <- list(
-    lin = list(description = "Linear map: parameter + b * k",
-               transforms = list(func = "identity")),
-
-    exp_lin = list(description = "Exponential linear map: exp(parameter) + exp(b) * k",
-                   transforms = list(func = "exp")),
-    add = list(description = "Additive map: parameter + k",
+trend_help <- function(kernel = NULL, base = NULL, ...){
+  dots <- add_defaults(list(...), do_return = FALSE, return_types = FALSE)
+  bases <- list(
+    lin = list(description = "Linear base: parameter + b * k",
+               transforms = list(func = "identity"),
+               default_pars = "B0"),
+    exp_lin = list(description = "Exponential linear base: exp(parameter) + exp(b) * k",
+                   transforms = list(func = "exp"),
+                   default_pars = "B0"),
+    add = list(description = "Additive base: parameter + k",
                transforms = NULL),
-    identity = list(description = "Identity map: k",
+    identity = list(description = "Identity base: k",
                     transforms = NULL)
   )
-  map_2p <- names(maps)[1:2]
-  map_1p <- names(maps)[3:4]
+  base_2p <- names(bases)[1:2]
+  base_1p <- names(bases)[3:4]
   kernels <- list(
     lin_decr = list(description = "Decreasing linear kernel: k = -c",
                     transforms = NULL,
                     default_pars = NULL,
-                    maps = map_2p),
+                    bases = base_2p),
     lin_incr = list(description = "Increasing linear kernel: k = c",
                     transforms = NULL,
                     default_pars = NULL,
-                    maps = map_2p),
+                    bases = base_2p),
     exp_decr = list(description = "Decreasing exponential kernel: k = exp(-d * c)",
                     transforms = list(func = "exp"),
                     default_pars = "d_ed",
-                    maps = map_2p),
+                    bases = base_2p),
     exp_incr = list(description = "Increasing exponential kernel: k = 1 - exp(-d * c)",
                     transforms = list(func = "exp"),
                     default_pars = "d_ei",
-                    maps = map_2p),
+                    bases = base_2p),
     pow_decr = list(description = "Decreasing power kernel: k = (1 + c)^(-d)",
                     transforms = list(func = "exp"),
                     default_pars = "d_pd",
-                    maps = map_2p),
+                    bases = base_2p),
     pow_incr = list(description = "Increasing power kernel: k = 1 - (1 + c)^(-d)",
                     transforms = list(func = "exp"),
                     default_pars = "d_pi",
-                    maps = map_2p),
+                    bases = base_2p),
     poly2 = list(description = "Quadratic polynomial: k = d1 * c + d2 * c^2",
                  transforms = list(func = c("identity", "identity")),
                  default_pars = c("d1", "d2"),
-                 maps = map_1p),
+                 bases = base_1p),
     poly3 = list(description = "Cubic polynomial: k = d1 * c + d2 * c^2 + d3 * c^3",
                  transforms = list(func = c("identity", "identity", "identity")),
                  default_pars = c("d1", "d2", "d3"),
-                 maps = map_1p),
+                 bases = base_1p),
     poly4 = list(description = "Quartic polynomial: k = d1 * c + d2 * c^2 + d3 * c^3 + d4 * c^4",
                  transforms = list(func = c("identity", "identity", "identity", "identity")),
                  default_pars = c("d1", "d2", "d3", "d4"),
-                 maps = map_1p),
+                 bases = base_1p),
     delta = list(description = paste(
         "Standard delta rule kernel:",
         "Updates k[i] = k[i-1] + alpha * (c[i-1] - k[i-1]).",
@@ -62,7 +99,7 @@ trend_help <- function(kernel = NULL, map = NULL, ...){
       ),
       default_pars = c("k0", "alpha"),
       transforms = list(func = c("identity", "exp")),
-      maps = map_2p),
+      bases = base_2p),
     delta2 = list(description = paste(
       "Dual kernel delta rule:",
       "Combines fast and slow learning rates",
@@ -72,16 +109,19 @@ trend_help <- function(kernel = NULL, map = NULL, ...){
     ),
     default_pars = c("k0", "alphaFast", "propSlow", "dSwitch"),
     transforms = list(func = c("identity", "exp", "pnorm", "pnorm")),
-    maps = map_2p)
+    bases = base_2p)
   )
-  if (is.null(kernel) && is.null(map)) {
+  if(return_types){
+    return(list(kernels = kernels, bases = bases))
+  }
+  if (is.null(kernel) && is.null(base)) {
     cat("Available kernels (dyntype):\n")
     for (k in names(kernels)) {
       cat(paste0("  ", k, ": ", kernels[[k]]$description, "\n"))
     }
-    cat("\nAvailable map types (maptype):\n")
-    for (m in names(maps)) {
-      cat(paste0("  ", m, ": ", maps[[m]]$description, "\n"))
+    cat("\nAvailable base types (basetype):\n")
+    for (m in names(bases)) {
+      cat(paste0("  ", m, ": ", bases[[m]]$description, "\n"))
     }
   } else {
     if (!is.null(kernel)) {
@@ -93,25 +133,25 @@ trend_help <- function(kernel = NULL, map = NULL, ...){
           cat("Default transformations (in order): \n")
           cat(paste0(kernels[[kernel]]$transforms, "\n \n"))
         }
-        cat("Available maps, first is the default: \n")
-        cat(paste0(kernels[[kernel]]$maps, collapse = ", "), "\n \n")
+        cat("Available bases, first is the default: \n")
+        cat(paste0(kernels[[kernel]]$bases, collapse = ", "), "\n \n")
       } else {
         cat(paste0("Kernel '", kernel, "' is not recognized.\n"))
         cat("Run trend_help() for all available kernels.\n")
       }
     }
-    if (!is.null(map)) {
-      if(dots$do_return) return(maps[[map]])
-      if (map %in% names(maps)) {
+    if (!is.null(base)) {
+      if(dots$do_return) return(bases[[base]])
+      if (base %in% names(bases)) {
         cat("Description: \n")
-        cat(maps[[map]]$description, "\n \n")
-        if(!is.null(maps[[map]]$transforms)){
+        cat(bases[[base]]$description, "\n \n")
+        if(!is.null(bases[[base]]$transforms)){
           cat("Default transformations: \n")
-          cat(paste0(maps[[map]]$transforms, "\n \n"))
+          cat(paste0(bases[[base]]$transforms, "\n \n"))
         }
       } else {
-        cat(paste0("Map '", map, "' is not recognized.\n"))
-        cat("Run trend_help() for all available map types.\n")
+        cat(paste0("base '", base, "' is not recognized.\n"))
+        cat("Run trend_help() for all available base types.\n")
       }
     }
   }
@@ -242,7 +282,7 @@ rep_dadm <- function(out1,cs1,Rlevs,lR)
 
 
 
-dynfuns <- function(base,dp,dyntype,cs,lR,maptype="lin",
+dynfuns <- function(base,dp,dyntype,cs,lR,basetype="lin",
                     return_extras=FALSE) {
   Rlevs <- levels(cs[,1])
   isRL <- any(names(cs)=="winner")
@@ -253,15 +293,15 @@ dynfuns <- function(base,dp,dyntype,cs,lR,maptype="lin",
     is1 <- cs[,1]==Rlevs[1]
   } else is1 <- !logical(nrow(cs))
   if (is.na(lR)) { # learning and adaptive
-    is1map <- !logical(nrow(cs))
-  } else is1map <- is1
+    is1base <- !logical(nrow(cs))
+  } else is1base <- is1
   if (is.matrix(dp)) {
     out1 <- switch(dyntype, # kernel
-                   # Linear decreasing, linear map type
+                   # Linear decreasing, linear base type
                    lin_decr = -cs[is1,2],
-                   # Linear increasing, linear map type
+                   # Linear increasing, linear base type
                    lin_incr = cs[is1,2],
-                   # Exponential decreasing, linear map type
+                   # Exponential decreasing, linear base type
                    exp_decr = exp(-exp(dp[is1,2])*cs[is1,2]),
                    # Exponential increasing - help
                    exp_incr = (1-exp(-exp(dp[is1,2])*cs[is1,2])),
@@ -269,7 +309,7 @@ dynfuns <- function(base,dp,dyntype,cs,lR,maptype="lin",
                    pow_decr = (1+cs[is1,2])^(-exp(dp[is1,2])),
                    # Increasing power
                    pow_incr = (1-(1+cs[is1,2])^(-exp(dp[is1,2]))),
-                   # Second to fourth order polynomials, for these map is default none? Or linear?
+                   # Second to fourth order polynomials, for these base is default none? Or linear?
                    poly2 = dp[is1,1]*cs[is1,2] + dp[is1,2]*cs[is1,2]^2,
                    poly3 = dp[is1,1]*cs[is1,2] + dp[is1,2]*cs[is1,2]^2 + dp[is1,3]*cs[is1,2]^3,
                    poly4 = dp[is1,1]*cs[is1,2] + dp[is1,2]*cs[is1,2]^2 + dp[is1,3]*cs[is1,2]^3 + dp[is1,4]*cs[is1,2]^4,
@@ -281,16 +321,16 @@ dynfuns <- function(base,dp,dyntype,cs,lR,maptype="lin",
     )
     if (!return_extras) {
       if (isRL) out1 <- out1[cbind(1:nrow(out1),cs[,2])]
-      if (length(base)>1) base <- base[is1map]
+      if (length(base)>1) base <- base[is1base]
       if (is.na(lR)) {
         out1 <- rep_dadm(out1,cs[,1],Rlevs,lR)
         lR <- FALSE
       }
-      if (is.null(maptype)) {
+      if (is.null(basetype)) {
         out1 <- out1
-      } else out1 <- switch(maptype, # map to parameter
-                            lin = base + dp[is1map,1]*out1,
-                            exp_lin = exp(base) + exp(dp[is1map,1])*out1,
+      } else out1 <- switch(basetype, # map to parameter
+                            lin = base + dp[is1base,1]*out1,
+                            exp_lin = exp(base) + exp(dp[is1base,1])*out1,
                             add = base + out1,
                             identity = out1
       )
@@ -313,16 +353,16 @@ dynfuns <- function(base,dp,dyntype,cs,lR,maptype="lin",
                    delta2 = run_delta2(dp[2],matrix(rep(dp[3:5],each=n*3),ncol=3),
                                    cs[is1,-c(1:remove_cs),drop=FALSE],return_extras=return_extras),
     )
-    if (!return_extras) { # map to parameter
+    if (!return_extras) { # base to parameter
       if (isRL) out1 <- out1[cbind(1:nrow(out1),cs[,2])]
-      if (length(base)>1) base <- base[is1map]
+      if (length(base)>1) base <- base[is1base]
       if (is.na(lR)) {
         out1 <- rep_dadm(out1,cs[,1],Rlevs,lR)
         lR <- FALSE
       }
-      if (is.null(maptype)) {
+      if (is.null(basetype)) {
         out1 <- out1[,"b"]
-      } else out1 <- switch(maptype, # map to parameter
+      } else out1 <- switch(basetype, # base to parameter
                             lin = base + dp[1]*out1,
                             exp_lin = exp(base) + exp(dp[1])*out1,
                             add = base + out1,
@@ -335,7 +375,7 @@ dynfuns <- function(base,dp,dyntype,cs,lR,maptype="lin",
 
 update_pm_dynamic <- function(dadm, dynamic, p, pm_vec){
   dyntype <- dynamic$dyntype
-  maptype <- dynamic$maptype
+  basetype <- dynamic$basetype
   dpnames <- dynamic$dpnames
   covnames <- dynamic$covnames
   if (any(covnames=="winner")) dadm$winner <- dadm$R == dadm$lR
@@ -343,14 +383,14 @@ update_pm_dynamic <- function(dadm, dynamic, p, pm_vec){
     dadm$winner[is.na(dadm$winner)] <- TRUE
   lR <- dynamic$lR1
   if (is.matrix(p)) dp <- p[,dpnames] else dp <- p[dpnames]  # Matrix for make_data
-  pm_vec <- dynfuns(pm_vec,dp,dyntype,dadm[,c("lR",covnames),drop=FALSE],lR,maptype)
+  pm_vec <- dynfuns(pm_vec,dp,dyntype,dadm[,c("lR",covnames),drop=FALSE],lR,basetype)
   return(pm_vec)
 }
 
 
 #### Utility functions ----
 do_adaptive <- function(pars,dadm)
-  # Used by adaptive to map parameters
+  # Used by adaptive to base parameters
 {
   for (j in names(attr(dadm,"adaptive"))) {
     dyntype <- attr(dadm,"adaptive")[[j]]$dyntype
@@ -367,9 +407,9 @@ do_adaptive <- function(pars,dadm)
       dadm[dadm$lR==Rlevs[1],covnames] <- dadm[dadm$lR==Rlevs[1],covnames]*
         apply(matrix(pars[,attr(dadm,"adaptive")[[j]]$pcovnames],nrow=length(Rlevs)),2,mean)
     }
-    maptype <- attr(dadm,"adaptive")[[j]]$maptype
+    basetype <- attr(dadm,"adaptive")[[j]]$basetype
     pars[,j] <- dynfuns(pars[,j],pars[,aptypes],dyntype,dadm[,c("lR",covnames),drop=FALSE],
-                        lR,maptype)
+                        lR,basetype)
   }
   pars
 }
@@ -381,59 +421,46 @@ do_adaptive <- function(pars,dadm)
 #' @return List of names generated from an adaptive "dyntype" specification
 #' @export
 adaptive_pars <- function(adaptive) {
-  pnams <- check_adaptive(adaptive)
-  lapply(pnams,\(x) x$aptypes)
+  pnams <- check_trend(adaptive)
+  lapply(pnams,\(x) x$trend_pnames)
 }
 
-check_dynamic <- function(dynamic, covariates) {
-  if (!is.null(covariates)){
-    covnames <- unlist(lapply(dynamic,function(x)x$covnames))
-    if (!all(covnames %in% names(covariates))){
-      stop("dynamic argument has covnames not in covariates")
+check_trend <- function(trend, covariates = NULL, model = NULL, formula = NULL) {
+  if(!is.null(model)){
+    if(trend$premap){
+      if (!all(names(trend) %in% names(model()$p_types))){
+        stop("trend premap has a parameter type name not in the model")
+      }
     }
   }
-  if (any(duplicated(names(dynamic)))) stop("Duplicate names in dynamic")
-  for (i in names(dynamic)) {
-    dnams <- names(dynamic[[i]])
-    if (is.null(dynamic[[i]]$dnames)){
-      dynamic[[i]]$dnames <- dynamic_names(kernel = dynamic[[i]]$dyntype)
-    }
-    if (length(dynamic[[i]]$dnames) != length(dynamic_names(dynamic[[i]]$dyntype))){
-      stop("dnames argument must be length ",length(dynamic_names(dynamic[[i]]$dyntype)))
-    }
-    if (is.null(dynamic[[i]]$shared)){
-      dynamic[[i]]$shared <- rep(FALSE,length(dynamic[[i]]$dnames))
-    }
-    if (length(dynamic[[i]]$shared)==1){
-      dynamic[[i]]$shared <- rep(dynamic[[i]]$shared,length(dynamic[[i]]$dnames))
-    }
-    if (!all(is.logical(dynamic[[i]]$shared)) | length(dynamic[[i]]$shared) != length(dynamic[[i]]$dnames)){
-      stop("shared argument must be a logical length 1 or ",length(dynamic[[i]]$dnames))
-    }
-    if (is.null(dynamic[[i]]$transform)) dynamic[[i]]$transform <- TRUE
-    if (!(dynamic[[i]]$maptype %in% dynamic_names()$mtypes)){
-      stop("dynamic argument ",i," has an unsupported entry in maptype, use one of:\n",
-           paste(dynamic_names()$mtypes,collapse=","))
-    }
-
-    dynamic[[i]]$dpnames <- dynamic[[i]]$dnames
-    dynamic[[i]]$dpnames[!dynamic[[i]]$shared] <- paste0(i,dynamic[[i]]$dnames[!dynamic[[i]]$shared])
-    if (!is.null(dynamic[[i]]$S)) {
-      if (!(dynamic[[i]]$dyntype %in% names(dynamic_names("learn")))){
-        stop("Must specify a learning dyntype when S is supplied.")
-      }
-      dynamic[[i]]$lR1 <- FALSE
-    } else if (!is.null(dynamic[[i]]$equal_accumulators)) {
-      if (length(dynamic[[i]]$equal_accumulators)!=1 || !is.logical(dynamic[[i]]$equal_accumulators)){
-        stop("equal_accumulators must be a logical length 1")
-      }
-      dynamic[[i]]$lR1 <- dynamic[[i]]$equal_accumulators
-      dynamic[[i]]$equal_accumulators <- NULL
-    } else {
-      dynamic[[i]]$lR1 <- TRUE
-    }
+  if (is.null(covariates)) stop("must specify covariates when using trend")
+  covnames <- unlist(lapply(trend,function(x)x$covnames))
+  if (!all(covnames %in% names(covariates))){
+    stop("trend has covnames not in covariates")
   }
-  dynamic
+  if (any(duplicated(names(trend)))) stop("Duplicate parameter names in trend")
+  for(par in names(trend)){
+    cur_dyn <- trend[[par]]
+    if(is.null(cur_dyn$kernel$pnames)){
+      cur_dyn$kernel$pnames <- trend_help(cur_dyn$kernel, do_return = TRUE)$default_pars
+    }
+    # Put them together
+    cur_dyn$trend_pnames <- c(cur_dyn$base$pnames, cur_dyn$kernel$pnames)
+    if (length(cur_dyn$shared)==1){
+      cur_dyn$shared <- rep(cur_dyn$shared,length(c(cur_dyn$trend_pnames)))
+    }
+    if (!all(is.logical(cur_dyn$shared)) | length(cur_dyn$shared) != length(cur_dyn$trend_pnames)){
+      stop("shared argument must be a logical length 1 or ",length(cur_dyn$trend_pnames))
+    }
+    if (!is.null(formula) && trend$premap) {
+      # @Niek this might break?
+      isin <-  cur_dyn$trend_pnames %in% unlist(lapply(formula,function(x)all.vars(x)[1]))
+      if (!all(isin)) stop("Missing in formula: ",paste(cur_dyn$trend_pnames[!isin],collapse=","))
+    }
+    cur_dyn$trend_pnames[!cur_dyn$shared] <- paste(par,cur_dyn$trend_pnames[!cur_dyn$shared],sep="")
+    trend[[par]] <- cur_dyn
+  }
+  return(trend)
 }
 
 
@@ -441,7 +468,7 @@ check_pars_dynamic <- function(dynamic, p_vector, design){
   if (!all(names(dynamic) %in% names(add_constants(p_vector,design$constants)))){
     stop("dynamic argument has parameter names not in the model")
   }
-  pt <- lapply(attr(attr(design, "p_vector"), "map"), function(x) unlist(colnames(x)))
+  pt <- lapply(attr(attr(design, "p_vector"), "base"), function(x) unlist(colnames(x)))
   isd <- setNames(!logical(length(pt)),names(pt))
   dp <- names(lapply(dynamic, function(x) names(x$dpnames)))
   dp <- dp[unlist(lapply(dynamic,function(x){!x$transform}))]
@@ -470,7 +497,7 @@ check_adaptive <- function(adaptive,model = NULL, covariates = NULL,formula=NULL
   if (any(duplicated(names(adaptive)))) stop("Duplicate names in adaptive")
   for (i in names(adaptive)) {
     anams <- names(adaptive[[i]])
-    nams <- anams[!(anams %in% c("anames","maptype","transform","equal_accumulators","shared","S","pcovnames"))]
+    nams <- anams[!(anams %in% c("anames","basetype","transform","equal_accumulators","shared","S","pcovnames"))]
     if (length(nams)!=2 || !all(nams %in% c("covnames","dyntype"))) {
       stop("adaptive argument ",i," must have names: covnames, dyntype")
     }
@@ -479,15 +506,15 @@ check_adaptive <- function(adaptive,model = NULL, covariates = NULL,formula=NULL
            paste(dynamic_names()$dtypes,collapse=","))
     }
 
-    if (is.null(adaptive[[i]]$maptype) & adaptive[[i]]$dyntype != "d1b") {
+    if (is.null(adaptive[[i]]$basetype) & adaptive[[i]]$dyntype != "d1b") {
       if (adaptive[[i]]$dyntype %in% dynamic_names("poly")){
-        adaptive[[i]]$maptype <- "add"
+        adaptive[[i]]$basetype <- "add"
       } else{
-        adaptive[[i]]$maptype <- "lin"
+        adaptive[[i]]$basetype <- "lin"
       }
     }
-    if (!is.null(adaptive[[i]]$maptype) && !(adaptive[[i]]$maptype %in% dynamic_names()$mtypes)){
-      stop("adaptive argument ",i," has an unsupported entry in maptype, use one of:\n",
+    if (!is.null(adaptive[[i]]$basetype) && !(adaptive[[i]]$basetype %in% dynamic_names()$mtypes)){
+      stop("adaptive argument ",i," has an unsupported entry in basetype, use one of:\n",
            paste(dynamic_names()$mtypes,collapse=","))
     }
     if (is.null(adaptive[[i]]$transform)) adaptive[[i]]$transform <- FALSE
@@ -534,7 +561,7 @@ check_adaptive <- function(adaptive,model = NULL, covariates = NULL,formula=NULL
 }
 
 check_pars_adaptive <- function(adaptive, design){
-  pt <- lapply(attr(attr(design, "p_vector"), "map"),
+  pt <- lapply(attr(attr(design, "p_vector"), "base"),
                function(x) unlist(dimnames(x)[[2]]))
   istrans <- setNames(!logical(length(pt)),names(pt))
   # Parameters not to transform
@@ -579,11 +606,11 @@ get_dynamic <- function(pname,p_vector,data,design,return_dadm=FALSE,return_p=FA
   covnames <- attr(dadm,"dynamic")[[pname]]$covnames
   if (!return_p & any(covnames=="winner")) return_dadm <- FALSE
   lR <- attr(dadm,"dynamic")[[pname]]$lR
-  maptype <- attr(dadm,"dynamic")[[pname]]$maptype
+  basetype <- attr(dadm,"dynamic")[[pname]]$basetype
   pm <- p_vector[pname]
   dp <- p_vector[dpnames]
   kernel <- dynfuns(pm,dp,dyntype,dadm[,c("lR",covnames),drop=FALSE],
-                    lR,maptype,return_extras=!return_p)
+                    lR,basetype,return_extras=!return_p)
   if (length(dim(kernel))!=3) {
     if (return_dadm) {
       out <- cbind(dadm,kernel)
@@ -642,9 +669,9 @@ get_adaptive <- function(pname,p_vector,data,design,return_dadm=TRUE,return_p=TR
       if (!any(names(dadm)=="winner")) dadm$winner <- dadm$R==dadm$lR
       lR <- FALSE
     } else lR <- attr(dadm,"adaptive")[[pname]]$lR
-    maptype <- attr(dadm,"adaptive")[[pname]]$maptype
+    basetype <- attr(dadm,"adaptive")[[pname]]$basetype
     out <- dynfuns(p[,pname],p[,aptypes],dyntype,dadm[,c("lR",covnames),drop=FALSE],
-                   lR,maptype,return_extras=!return_p)
+                   lR,basetype,return_extras=!return_p)
   }
   if (isRL & !return_p) return(out) else if (return_dadm) {
     out <- cbind(dadm,out)
@@ -709,7 +736,7 @@ dynamic_rfun <- function(dynamic_cv,p_vector,dadm,design)
     for (p in names(dpars)) {
       # Copy relevant bits of dynamic
       dpars[[p]]$dyntype <- attr(dadm, "dynamic")[[p]]$dyntype
-      dpars[[p]]$maptype <- attr(dadm, "dynamic")[[p]]$maptype
+      dpars[[p]]$basetype <- attr(dadm, "dynamic")[[p]]$basetype
       dpars[[p]]$dpnames <- attr(dadm, "dynamic")[[p]]$dpnames
       dpars[[p]]$covnames <- attr(dadm, "dynamic")[[p]]$covnames
       dpars[[p]]$lR <- attr(dadm, "dynamic")[[p]]$lR
@@ -749,8 +776,8 @@ dynamic_rfun <- function(dynamic_cv,p_vector,dadm,design)
     for (p in names(apars)) {
       # Copy relevant bits of adaptive
       apars[[p]]$dyntype <- attr(dadm, "adaptive")[[p]]$dyntype
-      apars[[p]]$maptype <- attr(dadm, "adaptive")[[p]]$maptype
-      if (apars[[p]]$dyntype=="d1b") apars[[p]]$maptype <- "lin"
+      apars[[p]]$basetype <- attr(dadm, "adaptive")[[p]]$basetype
+      if (apars[[p]]$dyntype=="d1b") apars[[p]]$basetype <- "lin"
       apars[[p]]$apnames <- attr(dadm, "adaptive")[[p]]$apnames
       apars[[p]]$aptypes <- attr(dadm, "adaptive")[[p]]$aptypes
       apars[[p]]$covnames <- attr(dadm, "adaptive")[[p]]$covnames
@@ -779,7 +806,7 @@ dynamic_rfun <- function(dynamic_cv,p_vector,dadm,design)
     pars[acci,,drop=FALSE],attr(design, "transform_names")),ndadadm)
   if (!is.null(design$adaptive)) {
     for (p in names(adaptive)) {
-      pars[acci,p] <- switch(apars[[p]]$maptype, # map q to parameter
+      pars[acci,p] <- switch(apars[[p]]$basetype, # map q to parameter
                              lin = pars[acci,p] + p_vector[,apars[[p]]$aptypes[1]]*aqlist[[p]][1],
                              plin = exp(pars[acci,p]) + exp(p_vector[,apars[[p]]$aptypes[1]])*aqlist[[p]][1],
                              ucent = pars[acci,p] + p_vector[,apars[[p]]$aptypes[1]]*(aqlist[[p]][1]-.5))
@@ -811,7 +838,7 @@ dynamic_rfun <- function(dynamic_cv,p_vector,dadm,design)
           useq <- length(dqlist[[p]])
         }
         pm <- dpars[[p]]$pm[j,,drop=FALSE] # Current base parameter
-        pm[,p] <- switch(dpars[[p]]$maptype, # map q to parameter
+        pm[,p] <- switch(dpars[[p]]$basetype, # map q to parameter
                          lin = pm[,p] + p_vector[,dpars[[p]]$dpnames[1]]*dqlist[[p]][useq],
                          plin = exp(pm[,p]) + exp(p_vector[,dpars[[p]]$dpnames[1]])*dqlist[[p]][useq],
                          ucent = pm[,p] + p_vector[,dpars[[p]]$dpnames[1]]*(dqlist[[p]][useq]-.5)
@@ -833,7 +860,7 @@ dynamic_rfun <- function(dynamic_cv,p_vector,dadm,design)
                                target,apars[[p]]$dyntype)
           useq <- length(aqlist[[p]])
         }
-        pars[j,p] <- switch(apars[[p]]$maptype, # map q to parameter
+        pars[j,p] <- switch(apars[[p]]$basetype, # map q to parameter
                             lin = pars[j,p] + pars[j,apars[[p]]$aptypes[1]]*aqlist[[p]][useq],
                             plin = exp(pars[,p]) + exp(pars[j,apars[[p]]$aptypes[1]])*aqlist[[p]][useq],
                             ucent = pars[j,p] + pars[j,apars[[p]]$aptypes[1]]*(aqlist[[p]][useq]-.5))

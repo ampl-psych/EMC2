@@ -5,47 +5,11 @@
 #include <Rcpp.h>
 using namespace Rcpp;
 
-// run_delta <- function(q0,p,target,return_extras=FALSE) {
-//   if (any(dimnames(target)[[2]]=="winner")) {
-//     winner <- as.numeric(target[,1]) # R always first
-//     target <- target[,-1,drop=FALSE]
-//   } else winner <- rep(1,nrow(target))
-//     if (!return_extras) out <- matrix(ncol=ncol(target),nrow=nrow(target)) else
-//       out <- array(dim=c(ncol(target),nrow(target),2),
-//                    dimnames=list(dimnames(target)[[2]],NULL,c("q","pe")))
-//       for (i in 1:ncol(target)) {
-//         if (!return_extras)
-//           out[,i] <- run_delta_i(q0,p,target[,i],winner,return_extras) else
-//             out[i,,] <- run_delta_i(q0,p,target[,i],winner,return_extras)
-//       }
-//       out
-// }
-
-// run_delta_i <- function(q0,alpha,target,winner,return_extras=FALSE) {
-//
-//   q <- pe <- numeric(length(target))
-//   q[1] <- q0
-//   alpha <- pnorm(alpha)
-//   for (i in 2:length(q)) {
-//     if (is.na(target[i-1]) | winner[i-1] != 1) {
-//       pe[i-1] <- NA
-//       q[i] <- q[i-1]
-//     } else {
-//       pe[i-1] <- target[i-1]-q[i-1]
-//       q[i] <- q[i-1] + alpha[i-1]*pe[i-1]
-//     }
-//   }
-//   if (return_extras) {
-//     pe <- target - q
-//     cbind(q=q,pe=pe)
-//   } else q
-// }
-
 NumericVector run_delta_i_dyn(double q0, double alpha, NumericVector target, NumericVector winner){
 
   NumericVector q(target.length());
   q[0] = q0;
-  double alpha_use = exp(alpha); //R::pnorm(alpha, 0, 1, TRUE, FALSE);
+  double alpha_use = alpha; //R::pnorm(alpha, 0, 1, TRUE, FALSE);
   double pe;
   for(int t = 1; t < q.length(); t ++){
     if(NumericVector::is_na(target[t-1]) || winner[t-1] != 1){

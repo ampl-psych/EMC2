@@ -81,17 +81,10 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
                        ...){
 
   optionals <- list(...)
-
-  if(!is.null(optionals$adaptive)){
-    adaptive <- optionals$adaptive
+  if(!is.null(optionals$trend)){
+    trend <- optionals$trend
   } else {
-    adaptive <- NULL
-  }
-
-  if(!is.null(optionals$dynamic)){
-    dynamic <- optionals$dynamic
-  } else {
-    dynamic <- NULL
+    trend <- NULL
   }
   if(!is.null(optionals$pre_transform)){
     pre_transform <- optionals$pre_transform
@@ -126,11 +119,8 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
     nfacs <- nfacs[!(names(nfacs) %in% c("trials","rt"))]
     if (length(nfacs)>0) covariates <- nfacs
   }
-  if (!is.null(dynamic)) {
-    dynamic <- check_dynamic(dynamic, covariates)
-  }
-  if (!is.null(adaptive)) {
-    adaptive <- check_adaptive(adaptive,model, covariates, formula)
+  if (!is.null(trend)) {
+    trend <- check_trend(trend,model, covariates, formula)
   }
 
   nams <- unlist(lapply(formula,function(x) as.character(stats::terms(x)[[2]])))
@@ -147,7 +137,7 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
   design <- list(Flist=formula,Ffactors=factors,Rlevels=Rlevels,
                  Clist=contrasts,matchfun=matchfun,constants=constants,
                  Fcovariates=covariates,Ffunctions=functions,model=model,
-                 adaptive = adaptive, dynamic = dynamic)
+                 trend = trend)
   class(design) <- "emc.design"
   p_vector <- sampled_p_vector(design,design$model)
   if (model()$type=="SDT") {
@@ -167,18 +157,18 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
   model_list$pre_transform <- fill_transform(pre_transform, p_vector, is_pre = TRUE)
   design$model <- function(){return(model_list)}
   attr(design,"p_vector") <- p_vector
-  if (!is.null(dynamic)) {
+  if (!is.null(trend)) {
     dynamic <- check_pars_dynamic(dynamic, p_vector, design)
     design$dynamic <- dynamic
   }
-  if (!is.null(adaptive)) {
-    adaptive <- check_pars_adaptive(adaptive, design)
-    design$adaptive <- adaptive
-  }
-  if(!is.null(adaptive) || !is.null(dynamic)){
-    attr(design,"transform_names") <- unique(c(attr(dynamic,"transform_names"),
-                                               attr(adaptive,"transform_names")))
-  }
+  # if (!is.null(adaptive)) {
+  #   adaptive <- check_pars_adaptive(adaptive, design)
+  #   design$adaptive <- adaptive
+  # }
+  # if(!is.null(adaptive) || !is.null(dynamic)){
+  #   attr(design,"transform_names") <- unique(c(attr(dynamic,"transform_names"),
+  #                                              attr(adaptive,"transform_names")))
+  # }
   if (report_p_vector) {
     print(design)
   }
