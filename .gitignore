@@ -6,3 +6,4 @@
 *.pdf
 .DS_Store
 docs
+.vscode
