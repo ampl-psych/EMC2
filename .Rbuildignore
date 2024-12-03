@@ -9,3 +9,6 @@
 ^\.RData$
 ^\.vscode$
 ^\.vscode/.*$
+^.Rhistory$
+^paper$
+^paper/.*$
