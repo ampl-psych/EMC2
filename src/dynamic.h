@@ -54,17 +54,17 @@ NumericVector run_delta_dyn(double q0, double p, NumericMatrix target, bool isRL
   return(out_v);
 }
 
-// Here base is the base parameter, and dp are the additional parameters. They are all doubles.
-// Dyntype and maptype inform us what transformation to be done.
-// Data and cnames, tell us what columns in the data are informing our transformations
-NumericVector dynfuns_c(double base, NumericVector dp, String dyntype, String maptype, DataFrame data, CharacterVector cnames,
+// Here param is the parameter, and dp are the additional parameters. They are all doubles.
+// kernel and base inform us what transformation to be done.
+// Data and covnames, tell us what columns in the data are informing our transformations
+NumericVector dynfuns_c(double param, NumericVector dp, String kernel, String base, DataFrame data, CharacterVector covnames,
                         bool do_lR) {
-  bool isRL = is_true(any(contains(cnames, "winner")));
+  bool isRL = is_true(any(contains(covnames, "winner")));
   NumericVector out(data.nrow());
   NumericVector lR = data["lR"];
-  NumericMatrix covariates(data.nrow(), cnames.length());
+  NumericMatrix covariates(data.nrow(), covnames.length());
   CharacterVector data_names = data.names();
-  LogicalVector cnames_idx = contains_multiple(data_names, cnames);
+  LogicalVector cnames_idx = contains_multiple(data_names, covnames);
   int k = 0;
   CharacterVector col_names(sum(cnames_idx));
   for(int j = 0; j < data.ncol(); j ++){
@@ -83,55 +83,53 @@ NumericVector dynfuns_c(double base, NumericVector dp, String dyntype, String ma
   NumericVector res(covariates.nrow());
   //
   // dyntypes
-  if(dyntype == "ld"){
-    res = -1* as<NumericVector>(covariates);
+  if(kernel == "lin_decr"){
+    out = -1* as<NumericVector>(covariates);
   }
-  if(dyntype == "li"){
-    res = as<NumericVector>(covariates);
+  if(kernel == "lin_incr"){
+    out = as<NumericVector>(covariates);
   }
-  if(dyntype == "ed"){
-    res = exp(-exp(dp[1])*as<NumericVector>(covariates));
+  if(kernel == "exp_decr"){
+    out = exp(dp[1]*as<NumericVector>(covariates));
   }
-  if(dyntype == "ei"){
-    res = 1-exp(-exp(dp[1])*as<NumericVector>(covariates));
+  if(kernel == "exp_incr"){
+    out = 1-exp(-dp[1]*as<NumericVector>(covariates));
   }
-  if(dyntype == "pd"){
-    res = pow((1+as<NumericVector>(covariates)), -exp(dp[1]));
+  if(kernel == "pow_decr"){
+    out = pow((1+as<NumericVector>(covariates)), -dp[1]);
   }
-  if(dyntype == "pi"){
-    res = 1-pow((1+as<NumericVector>(covariates)), -exp(dp[1]));
+  if(kernel == "pow_incr"){
+    out = 1-pow((1+as<NumericVector>(covariates)), -dp[1]);
   }
-  if(dyntype == "p2"){
-    res = dp[0]*as<NumericVector>(covariates) + dp[1]* pow(as<NumericVector>(covariates), 2);
+  if(kernel == "poly2"){
+    out = dp[0]*as<NumericVector>(covariates) + dp[1]* pow(as<NumericVector>(covariates), 2);
   }
-  if(dyntype == "p3"){
-    res = dp[0]*as<NumericVector>(covariates) + dp[1]* pow(as<NumericVector>(covariates), 2) + dp[2]* pow(as<NumericVector>(covariates), 3);
+  if(kernel == "poly3"){
+    out = dp[0]*as<NumericVector>(covariates) + dp[1]* pow(as<NumericVector>(covariates), 2) + dp[2]* pow(as<NumericVector>(covariates), 3);
   }
-  if(dyntype == "p4"){
-    res = dp[0]*as<NumericVector>(covariates) + dp[1]* pow(as<NumericVector>(covariates), 2) + dp[2]* pow(as<NumericVector>(covariates), 3) + dp[3]* pow(as<NumericVector>(covariates), 4);
+  if(kernel == "poly4"){
+    out = dp[0]*as<NumericVector>(covariates) + dp[1]* pow(as<NumericVector>(covariates), 2) + dp[2]* pow(as<NumericVector>(covariates), 3) + dp[3]* pow(as<NumericVector>(covariates), 4);
   }
-  if(dyntype == "d1"){
-    res = run_delta_dyn(dp[1], dp[2], covariates, isRL);
+  if(kernel == "delta"){
+    out = run_delta_dyn(dp[1], dp[2], covariates, isRL);
+  }
+  if(kernel == "delta2"){
+    // Note: delta2 implementation would go here
   }
   // Map types
-  if(maptype == "lin"){
-    res = base + dp[0]*res;
+  if(base == "lin"){
+    out = param + dp[0]*out;
   }
-  if(maptype == "plin"){
-    res = exp(base) + exp(dp[0])*res;
+  if(base == "exp_lin"){
+    out = exp(param) + dp[0]*out;
   }
-  if(maptype == "add"){
-    res = base + res;
-  }
-  if(maptype == "ucent"){
-    res = base + dp[0]*(res - .5);
+  if(base == "add"){
+    out = param + out;
   }
   if(do_lR){
     for(int i = 0; i < max(lR); i ++){
-      out[lR == (i + 1)] = res;
+      out[lR == (i + 1)] = out;
     }
-  } else{
-    out = res;
   }
   return(out);
 }
@@ -148,13 +146,13 @@ NumericMatrix map_dyn(List dynamic, DataFrame data, NumericVector p, CharacterVe
     if(isin[q] == TRUE){
       String curr_name = curr_names[q];
       cur_dynamic = dynamic[curr_name];
-      String dyntype = cur_dynamic["dyntype"];
-      String maptype = cur_dynamic["maptype"];
+      String kernel = cur_dynamic["kernel"];
+      String base = cur_dynamic["base"];
       CharacterVector dpnames = cur_dynamic["dpnames"];
-      CharacterVector cnames = cur_dynamic["covnames"];
+      CharacterVector covnames = cur_dynamic["covnames"];
       bool do_lR = cur_dynamic["lR1"];
       dp = p[dpnames];
-      out(_, q) = dynfuns_c(p_curr[q],dp, dyntype, maptype, data, cnames, do_lR);
+      out(_, q) = dynfuns_c(p_curr[q],dp, kernel, base, data, covnames, do_lR);
     } else{
       input.fill(p_curr[q]);
       out(_, q) = input;
@@ -182,7 +180,7 @@ NumericVector run_delta_i_map(NumericVector q0, NumericVector alpha, NumericVect
       q[t] = q[t-1];
     } else{
       pe = target[t-1] - q[t-1];
-      q[t] = q[t-1] + exp(alpha[t-1])*pe; //R::pnorm(alpha[t-1], 0, 1, TRUE, FALSE)*pe;
+      q[t] = q[t-1] + alpha[t-1]*pe;
     }
   }
   return(q);
@@ -222,17 +220,17 @@ NumericVector run_delta_adapt(NumericVector q0, NumericVector p, NumericMatrix t
 }
 
 
-// Here base is the base parameter, and dp are the additional parameters. They are all vectors.
+// Here param is the param parameter, and dp are the additional parameters. They are all vectors.
 // Because here they have already been mapped back to the design (so one parameter per observation * number of accumulators)
-// Dyntype and maptype inform us what transformation to be done.
-// Data and cnames, tell us what columns in the data are informing our transformations
-NumericVector adaptfuns_c(NumericVector base, NumericMatrix dp, String dyntype, String maptype, DataFrame data, CharacterVector cnames, bool do_lR) {
+// kernel and base inform us what transformation to be done.
+// Data and covnames, tell us what columns in the data are informing our transformations
+NumericVector adaptfuns_c(NumericVector param, NumericMatrix dp, String kernel, String base, DataFrame data, CharacterVector covnames, bool do_lR) {
   NumericVector out(data.nrow());
-  bool isRL = is_true(any(contains(cnames, "winner")));
+  bool isRL = is_true(any(contains(covnames, "winner")));
   NumericVector lR = data["lR"];
-  NumericMatrix covariates(data.nrow(), cnames.length());
+  NumericMatrix covariates(data.nrow(), covnames.length());
   CharacterVector data_names = data.names();
-  LogicalVector cnames_idx = contains_multiple(data_names, cnames);
+  LogicalVector cnames_idx = contains_multiple(data_names, covnames);
   int k = 0;
   CharacterVector col_names(sum(cnames_idx));
   for(int j = 0; j < data.ncol(); j ++){
@@ -253,48 +251,48 @@ NumericVector adaptfuns_c(NumericVector base, NumericMatrix dp, String dyntype, 
   NumericVector res(covariates.nrow());
 
   // dyntypes
-  if(dyntype == "ld"){
+  if(kernel == "lin_decr"){
     res = -1*as<NumericVector>(covariates);
   }
-  if(dyntype == "li"){
+  if(kernel == "lin_incr"){
     res = as<NumericVector>(covariates);
   }
-  if(dyntype == "ed"){
-    res = exp(-exp(dp(_, 1))*as<NumericVector>(covariates));
+  if(kernel == "exp_decr"){
+    res = exp(dp(_, 1)*as<NumericVector>(covariates));
   }
-  if(dyntype == "ei"){
-    res = 1-exp(-exp(dp(_, 1))*as<NumericVector>(covariates));
+  if(kernel == "exp_incr"){
+    res = 1-exp(-dp(_, 1)*as<NumericVector>(covariates));
   }
-  if(dyntype == "pd"){
-    res = vector_pow((1+as<NumericVector>(covariates)), -exp(dp(_, 1)));
+  if(kernel == "pow_decr"){
+    res = vector_pow((1+as<NumericVector>(covariates)), -dp(_, 1));
   }
-  if(dyntype == "pi"){
-    res = 1-vector_pow((1+as<NumericVector>(covariates)), -exp(dp(_, 1)));
+  if(kernel == "pow_incr"){
+    res = 1-vector_pow((1+as<NumericVector>(covariates)), -dp(_, 1));
   }
-  if(dyntype == "p2"){
+  if(kernel == "poly2"){
     res = dp(_, 0)*as<NumericVector>(covariates) + dp(_, 1)*pow(as<NumericVector>(covariates), 2);
   }
-  if(dyntype == "p3"){
+  if(kernel == "poly3"){
     res = dp(_, 0)*as<NumericVector>(covariates) + dp(_, 1)*pow(as<NumericVector>(covariates), 2) + dp(_, 2)*pow(as<NumericVector>(covariates), 3);
   }
-  if(dyntype == "p4"){
+  if(kernel == "poly4"){
     res = dp(_, 0)*as<NumericVector>(covariates) + dp(_, 1)*pow(as<NumericVector>(covariates), 2) + dp(_, 2)*pow(as<NumericVector>(covariates), 3) + dp(_, 3)*pow(as<NumericVector>(covariates), 4);
   }
-  if(dyntype == "d1"){
+  if(kernel == "delta"){
     res = run_delta_adapt(dp(_, 1), dp(_, 2), covariates, isRL);
   }
+  if(kernel == "delta2"){
+    // Note: delta2 implementation would go here
+  }
   // Map types
-  if(maptype == "lin"){
-    res = base + dp(_, 0)*res;
+  if(base == "lin"){
+    res = param + dp(_, 0)*res;
   }
-  if(maptype == "plin"){
-    res = exp(base) + exp(dp(_, 0))*res;
+  if(base == "exp_lin"){
+    res = exp(param) + exp(dp(_, 0))*res;
   }
-  if(maptype == "add"){
-    res = base + res;
-  }
-  if(maptype == "ucent"){
-    res = base + dp(_, 0)*(res - .5);
+  if(base == "add"){
+    res = param + res;
   }
   if(do_lR){
     for(int i = 0; i < max(lR); i ++){
@@ -318,9 +316,9 @@ NumericMatrix map_adaptive(List adaptive, NumericMatrix p, DataFrame data) {
     if(isin[q] == TRUE){
       String curr_name = curr_names[q];
       cur_dynamic = adaptive[curr_name];
-      String dyntype = cur_dynamic["dyntype"];
-      String maptype = cur_dynamic["maptype"];
-      CharacterVector cnames = cur_dynamic["covnames"];
+      String kernel = cur_dynamic["kernel"];
+      String base = cur_dynamic["base"];
+      CharacterVector covnames = cur_dynamic["covnames"];
       CharacterVector aptypes = cur_dynamic["aptypes"];
       LogicalVector is_adapt = contains_multiple(curr_names, aptypes);
       NumericMatrix dp(p.nrow(), sum(is_adapt));
@@ -332,12 +330,12 @@ NumericMatrix map_adaptive(List adaptive, NumericMatrix p, DataFrame data) {
         }
       }
       bool do_lR;
-      if(is_true(any(contains(cnames, "winner")))){
+      if(is_true(any(contains(covnames, "winner")))){
         do_lR = FALSE;
       } else{
         do_lR = cur_dynamic["lR1"];
       }
-      p(_, q) = adaptfuns_c(p(_, q),dp, dyntype, maptype, data, cnames, do_lR);
+      p(_, q) = adaptfuns_c(p(_, q),dp, kernel, base, data, covnames, do_lR);
     }
   }
   return(p);

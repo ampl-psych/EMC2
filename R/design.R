@@ -120,7 +120,7 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
     if (length(nfacs)>0) covariates <- nfacs
   }
   if (!is.null(trend)) {
-    trend <- check_trend(trend,model, covariates, formula)
+    formula <- check_trend(trend,covariates, model, formula)
   }
 
   nams <- unlist(lapply(formula,function(x) as.character(stats::terms(x)[[2]])))
@@ -140,35 +140,19 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
                  trend = trend)
   class(design) <- "emc.design"
   p_vector <- sampled_p_vector(design,design$model)
-  if (model()$type=="SDT") {
-    tnams <- dimnames(attr(p_vector,"map")$threshold)[[2]]
-    max_threshold=paste0("lR",Rlevels[length(Rlevels)])
-    tnams <- tnams[grepl(max_threshold,tnams)]
-    if (!any(tnams %in% names(constants))) {
-      design$constants <- stats::setNames(c(constants,rep(log(1e100),length(tnams))),
-                                          c(names(constants),tnams))
-      p_vector <- sampled_p_vector(design,design$model)
-    }
+  if (!is.null(trend)) {
+    model <- update_model_trend(trend, model)
+    model_list <- model()
+    model <- function(){return(model_list)}
   }
+
   model_list <- model()
   model_list$transform <- fill_transform(transform,model)
   model_list$bound <- fill_bound(bound,model)
+  model_list$pre_transform <- fill_transform(pre_transform, model = model, p_vector = p_vector, is_pre = TRUE)
   model <- function(){return(model_list)}
-  model_list$pre_transform <- fill_transform(pre_transform, p_vector, is_pre = TRUE)
-  design$model <- function(){return(model_list)}
+  design$model <- model
   attr(design,"p_vector") <- p_vector
-  if (!is.null(trend)) {
-    dynamic <- check_pars_dynamic(dynamic, p_vector, design)
-    design$dynamic <- dynamic
-  }
-  # if (!is.null(adaptive)) {
-  #   adaptive <- check_pars_adaptive(adaptive, design)
-  #   design$adaptive <- adaptive
-  # }
-  # if(!is.null(adaptive) || !is.null(dynamic)){
-  #   attr(design,"transform_names") <- unique(c(attr(dynamic,"transform_names"),
-  #                                              attr(adaptive,"transform_names")))
-  # }
   if (report_p_vector) {
     print(design)
   }
@@ -443,7 +427,7 @@ compress_dadm <- function(da,designs,Fcov,Ffun)
     #    levels=unique(cells_nortR)))[as.numeric(factor(cells,levels=unique(cells)))]
 
     # Lower censor
-    if (!any(is.na(out$rt))) { # Not an choice only model
+    if (!any(is.na(out$rt))) { # Not a choice only model
       winner <- out$lR==levels(out$lR)[[1]]
       ok <- out$rt[winner]==-Inf
       if (any(ok)) {
@@ -475,6 +459,57 @@ check_rt <- function(b,d,upper=TRUE)
   if (!all(ok)) stop("Bound not respected in data")
 }
 
+rt_check_function <- function(data){
+  # Truncation
+  if (!is.null(attr(data,"UT"))) {
+    if (length(attr(data,"UT"))==1 && is.null(names(attr(data,"UT"))))
+      attr(data,"UT") <- stats::setNames(rep(attr(data,"UT"),length(levels(data$subjects))),
+                                         levels(data$subjects))
+    check_rt(attr(data,"UT"),data)
+  }
+  if (!is.null(attr(data,"LT"))) {
+    if (length(attr(data,"LT"))==1 && is.null(names(attr(data,"LT"))))
+      attr(data,"LT") <- stats::setNames(rep(attr(data,"LT"),length(levels(data$subjects))),
+                                         levels(data$subjects))
+    if (any(attr(data,"LT")<0)) stop("Lower truncation cannot be negative")
+    check_rt(attr(data,"LT"),data,upper=FALSE)
+  }
+  if (!is.null(attr(data,"UT")) & !is.null(attr(data,"LT"))) {
+    DT <- attr(data,"UT") - attr(data,"LT")
+    if (!is.null(DT) && any(DT<0)) stop("UT must be greater than LT")
+  }
+
+  # Censoring
+  if (!is.null(attr(data,"UC"))) {
+    if (length(attr(data,"UC"))==1 && is.null(names(attr(data,"UC"))))
+      attr(data,"UC") <- stats::setNames(rep(attr(data,"UC"),length(levels(data$subjects))),
+                                         levels(data$subjects))
+    check_rt(attr(data,"UC"),data)
+    if (!is.null(attr(data,"UT")) && attr(data,"UT") < attr(data,"UC"))
+      stop("Upper censor must be less than upper truncation")
+  }
+  if (!is.null(attr(data,"LC"))) {
+    if (length(attr(data,"LC"))==1 && is.null(names(attr(data,"LC"))))
+      attr(data,"LC") <- stats::setNames(rep(attr(data,"LC"),length(levels(data$subjects))),
+                                         levels(data$subjects))
+    if (any(attr(data,"LC")<0)) stop("Lower censor cannot be negative")
+    check_rt(attr(data,"LC"),data,upper=FALSE)
+    if (!is.null(attr(data,"LT")) && attr(data,"LT") > attr(data,"LC"))
+      stop("Lower censor must be greater than lower truncation")
+  }
+  if (any(data$rt[!is.na(data$rt)]==-Inf) & is.null(attr(data,"LC")))
+    stop("Data must have an LC attribute if any rt = -Inf")
+  if (any(data$rt[!is.na(data$rt)]==Inf) & is.null(attr(data,"UC")))
+    stop("Data must have an UC attribute if any rt = Inf")
+  if (!is.null(attr(data,"UC"))) check_rt(attr(data,"UC"),data)
+  if (!is.null(attr(data,"LC"))) check_rt(attr(data,"LC"),data,upper=FALSE)
+  if (!is.null(attr(data,"UC")) & !is.null(attr(data,"LC"))) {
+    DC <- attr(data,"UC") - attr(data,"LC")
+    if (!is.null(DC) && any(DC<0)) stop("UC must be greater than LC")
+  }
+}
+
+
 design_model <- function(data,design,model=NULL,
                          add_acc=TRUE,rt_resolution=0.02,verbose=TRUE,
                          compress=TRUE,rt_check=TRUE, add_da = FALSE, all_cells_dm = FALSE)
@@ -490,7 +525,6 @@ design_model <- function(data,design,model=NULL,
     add_acc <- FALSE
     compress <- FALSE
   }
-  if (!is.null(design$adapt)) compress=FALSE # RL models
   if (any(names(model()$p_types) %in% names(data)))
     stop("Data cannot have columns with the same names as model parameters")
   if (!is.factor(data$subjects)) {
@@ -499,57 +533,7 @@ design_model <- function(data,design,model=NULL,
   }
 
   if (!any(names(data)=="trials")) data$trials <- 1:dim(data)[1]
-
-  if (rt_check) {
-    # Truncation
-    if (!is.null(attr(data,"UT"))) {
-      if (length(attr(data,"UT"))==1 && is.null(names(attr(data,"UT"))))
-        attr(data,"UT") <- stats::setNames(rep(attr(data,"UT"),length(levels(data$subjects))),
-                                    levels(data$subjects))
-      check_rt(attr(data,"UT"),data)
-    }
-    if (!is.null(attr(data,"LT"))) {
-      if (length(attr(data,"LT"))==1 && is.null(names(attr(data,"LT"))))
-        attr(data,"LT") <- stats::setNames(rep(attr(data,"LT"),length(levels(data$subjects))),
-                                    levels(data$subjects))
-      if (any(attr(data,"LT")<0)) stop("Lower truncation cannot be negative")
-      check_rt(attr(data,"LT"),data,upper=FALSE)
-    }
-    if (!is.null(attr(data,"UT")) & !is.null(attr(data,"LT"))) {
-      DT <- attr(data,"UT") - attr(data,"LT")
-      if (!is.null(DT) && any(DT<0)) stop("UT must be greater than LT")
-    }
-
-    # Censoring
-    if (!is.null(attr(data,"UC"))) {
-      if (length(attr(data,"UC"))==1 && is.null(names(attr(data,"UC"))))
-        attr(data,"UC") <- stats::setNames(rep(attr(data,"UC"),length(levels(data$subjects))),
-                                    levels(data$subjects))
-      check_rt(attr(data,"UC"),data)
-      if (!is.null(attr(data,"UT")) && attr(data,"UT") < attr(data,"UC"))
-        stop("Upper censor must be less than upper truncation")
-    }
-    if (!is.null(attr(data,"LC"))) {
-      if (length(attr(data,"LC"))==1 && is.null(names(attr(data,"LC"))))
-        attr(data,"LC") <- stats::setNames(rep(attr(data,"LC"),length(levels(data$subjects))),
-                                    levels(data$subjects))
-      if (any(attr(data,"LC")<0)) stop("Lower censor cannot be negative")
-      check_rt(attr(data,"LC"),data,upper=FALSE)
-      if (!is.null(attr(data,"LT")) && attr(data,"LT") > attr(data,"LC"))
-        stop("Lower censor must be greater than lower truncation")
-    }
-    if (any(data$rt[!is.na(data$rt)]==-Inf) & is.null(attr(data,"LC")))
-          stop("Data must have an LC attribute if any rt = -Inf")
-    if (any(data$rt[!is.na(data$rt)]==Inf) & is.null(attr(data,"UC")))
-          stop("Data must have an UC attribute if any rt = Inf")
-    if (!is.null(attr(data,"UC"))) check_rt(attr(data,"UC"),data)
-    if (!is.null(attr(data,"LC"))) check_rt(attr(data,"LC"),data,upper=FALSE)
-    if (!is.null(attr(data,"UC")) & !is.null(attr(data,"LC"))) {
-      DC <- attr(data,"UC") - attr(data,"LC")
-      if (!is.null(DC) && any(DC<0)) stop("UC must be greater than LC")
-    }
-  }
-
+  if(rt_check){rt_check_function(data)}
   if (!add_acc) da <- data else
     da <- add_accumulators(data,design$matchfun,type=model()$type,Fcovariates=design$Fcovariates)
   order_idx <- order(da$subjects)
@@ -568,16 +552,15 @@ design_model <- function(data,design,model=NULL,
   names(design$Flist) <- nams
   if (is.null(design$Clist)) design$Clist=list(stats::contr.treatment)
   if (!is.list(design$Clist)) stop("Clist must be a list")
-  if (is.null(design$adaptive)){
-    ptypes <- model()$p_types
-  } else{
-    ptypes <- c(model()$p_types, setNames(numeric(length(design$adaptive$B$aptypes)),design$adaptive$B$aptypes))
+  pnames <- names(model()$p_types)
+  if (!is.null(design$trend)){
+    pnames <- c(pnames, get_trend_pnames(design$trend))
   }
   if (!is.list(design$Clist[[1]])[1]){
-    design$Clist <- stats::setNames(lapply(1:length(names(model()$p_types)),
-                                           function(x)design$Clist),names(model()$p_types))
+    design$Clist <- stats::setNames(lapply(1:length(pnames),
+                                           function(x)design$Clist),pnames)
   } else {
-   missing_p_types <- names(model()$p_types)[!(names(model()$p_types) %in% names(design$Clist))]
+   missing_p_types <- pnames[!(pnames %in% names(design$Clist))]
    if (length(missing_p_types)>0) {
      nok <- length(design$Clist)
      for (i in 1:length(missing_p_types)) {
@@ -586,25 +569,17 @@ design_model <- function(data,design,model=NULL,
      }
    }
  }
-  if(model()$type != "MRI") for (i in names(model()$p_types)) attr(design$Flist[[i]],"Clist") <- design$Clist[[i]]
+  if(model()$type != "MRI") for (i in pnames) attr(design$Flist[[i]],"Clist") <- design$Clist[[i]]
   out <- lapply(design$Flist,make_dm,da=da,Fcovariates=design$Fcovariates, add_da = add_da, all_cells_dm = all_cells_dm)
   if (!is.null(rt_resolution) & !is.null(da$rt)) da$rt <- round(da$rt/rt_resolution)*rt_resolution
-  if (!is.null(design$dynamic)) {
-    compress <- !any(unlist(lapply(design$dynamic,function(x){
-      x$dyntype %in% names(dynamic_names("learn"))})))
+  if (!is.null(design$trend)) {
+    compress <- TRUE
   }
   if (!is.null(design$adaptive)) compress=FALSE
   if (compress){
     dadm <- compress_dadm(da,designs=out, Fcov=design$Fcovariates,Ffun=names(design$Ffunctions))
   }  else {
     dadm <- da
-    # # Andrew is this the correct order? Now only if not compressed
-    # Also UT UC still needed?
-    if (!is.null(design$dynamic) | !is.null(design$adaptive)) {
-      dadm_design <- dadmRL(dadm,design)
-      dadm <- dadm_design$dadm
-      design <- dadm_design$design
-    }
     attr(dadm,"designs") <- out
     attr(dadm,"s_expand") <- da$subjects
     attr(dadm,"expand") <- 1:dim(dadm)[1]
@@ -613,13 +588,6 @@ design_model <- function(data,design,model=NULL,
     attr(dadm, "design_matrix_mri") <- attr(design, "design_matrix")
   }
   p_names <-  unlist(lapply(out,function(x){dimnames(x)[[2]]}),use.names=FALSE)
-  if (!is.null(design$dynamic))  {
-    d_names <- character(0)
-    for (i in names(design$dynamic)) {
-      d_names <- c(d_names,design$dynamic[[i]]$dpnames)
-    }
-    p_names <- c(p_names,unique(d_names))
-  }
   bad_constants <- names(design$constants)[!(names(design$constants) %in% p_names)]
   if (length(bad_constants) > 0)
     stop("Constant(s) ",paste(bad_constants,collapse=" ")," not in design")
@@ -628,10 +596,6 @@ design_model <- function(data,design,model=NULL,
   sampled_p_names <- p_names[!(p_names %in% names(design$constants))]
   attr(dadm,"p_names") <- p_names
   attr(dadm,"sampled_p_names") <- sampled_p_names
-  attr(dadm, "LT") <- attr(data,"LT")
-  attr(dadm, "UT") <- attr(data,"UT")
-  attr(dadm, "LC") <- attr(data,"LC")
-  attr(dadm, "UC") <- attr(data,"UC")
   if (model()$type=="DDM") nunique <- dim(dadm)[1] else
     nunique <- dim(dadm)[1]/length(levels(dadm$lR))
   if (verbose & compress) message("Likelihood speedup factor: ",
@@ -646,11 +610,9 @@ design_model <- function(data,design,model=NULL,
     attr(dadm, "ok_da_winner") <- attr(dadm, "ok_dadm_winner")[attr(dadm,"expand")]
     attr(dadm, "ok_da_looser") <- attr(dadm, "ok_dadm_looser")[attr(dadm,"expand")]
   }
-  attr(dadm,"dynamic") <- design$dynamic
-  attr(dadm,"adaptive") <- design$adaptive
+  attr(dadm,"trend") <- design$trend
   attr(dadm,"ok_trials") <- is.finite(data$rt)
   attr(dadm,"s_data") <- data$subjects
-  attr(dadm,"dL") <- attr(design,"dL")
   dadm
 }
 
@@ -722,35 +684,82 @@ make_dm <- function(form,da,Clist=NULL,Fcovariates=NULL, add_da = FALSE, all_cel
 map_p <- function(p,dadm)
   # Map p to dadm and returns matrix of mapped parameters
   # p is either a vector or a matrix (ncol = number of subjects) of p_vectors
+  # dadm is a design matrix with attributes containing model information
 {
 
+  # Check if p is a matrix and validate column names match parameter names
   if ( is.matrix(p) ) {
     if (!all(sort(dimnames(p)[[2]])==sort(attr(dadm,"p_names"))))
       stop("p col.names must be: ",paste(attr(dadm,"p_names"),collapse=", "))
     if (!all(levels(dadm$subjects) %in% dimnames(p)[[1]]))
       stop("p must have rows named for every subject in dadm")
     p <- p[dadm$subjects,]
-  } else if (!all(sort(names(p))==sort(attr(dadm,"p_names"))))
+  } else if (!all(sort(names(p))==sort(attr(dadm,"p_names")))) # If p is vector, check names
     stop("p names must be: ",paste(attr(dadm,"p_names"),collapse=", "))
-  do_p <- c(names(attr(dadm,"model")()$p_types),attr(attr(dadm,"adaptive"),"aptypes"))
-  pars <- matrix(nrow=dim(dadm)[1],ncol=length(do_p),dimnames=list(NULL,do_p))
+
+  # Get parameter names from model and create output matrix
+  do_p <- names(attr(dadm,"model")()$p_types)
+  pars <- matrix(nrow=nrow(dadm),ncol=length(do_p),dimnames=list(NULL,do_p))
+
+  # If there are any trends do these first, they might be used later in mapping
+  if(!is.null(attr(dadm,"model")()$trend) &&
+     (attr(attr(dadm,"model")()$trend, "premap") || attr(attr(dadm,"model")()$trend, "pretransform"))){
+    trend_names <- get_trend_pnames(attr(dadm,"model")()$trend)
+    pretrend_idx <- do_p %in% trend_names
+    if((attr(attr(dadm,"model")()$trend, "premap"))){
+      # These can be removed from the pars matrix at the end
+      # Since they are already used before the mapping
+      premap_idx <- pretrend_idx
+    } else{
+      # Otherwise we're not mapping here, but we are doing it pre-transform
+      # So these trend parameters are post-map, pre-transform
+      premap_idx <- rep(F, length(do_p))
+    }
+    # Reorder parameters to make design matrix for trends first
+    do_p <- c(do_p[pretrend_idx], do_p[!pretrend_idx])
+  } else{
+    pretrend_idx <- rep(F, length(do_p))
+  }
+  k <- 1
+  # Loop through each parameter
   for (i in do_p) {
+    cur_design <- attr(dadm,"designs")[[i]]
+    # Handle vector vs matrix input differently
     if ( !is.matrix(p) ) {
-      pm <- t(as.matrix(p[dimnames(attr(dadm,"designs")[[i]])[[2]]]))
-      pm <- pm[rep(1,dim(pars)[1]),,drop=FALSE]
-    } else pm <- p[,dimnames(attr(dadm,"designs")[[i]])[[2]],drop=FALSE]
-    if (!is.null(attr(dadm,"dynamic"))) {
-      isin <- names(attr(dadm,"dynamic")) %in% colnames(pm)
-      if (any(isin)) for (j in names(attr(dadm,"dynamic"))[isin]) {
-        cur_dynamic <- attr(dadm,"dynamic")[[j]]
-        pm[,j] <- update_pm_dynamic(dadm, cur_dynamic, p, pm[,j])
+      pm <- t(as.matrix(p[colnames(cur_design)]))
+      pm <- pm[rep(1,nrow(pars)),,drop=FALSE]
+    } else pm <- p[,colnames(cur_design),drop=FALSE]
+
+    # Apply pre-mapped trends if they exist
+    if (!is.null(attr(dadm,"model")()$trend) && attr(attr(dadm,"model")()$trend, "premap")) {
+      trend <- attr(dadm,"model")()$trend
+      isin <- names(trend) %in% colnames(pm)
+      if (any(isin)){ # At this point the trend has already been mapped and transformed
+        for (j in names(trend)[isin]) {
+          cur_trend <- trend[[j]]
+          # We can select the trend pars from the already update pars matrix
+          trend_pars <- pars[,cur_trend$trend_pnames]
+          pm[,j] <- run_trend(dadm, cur_trend, pm[,j], trend_pars)
+        }
       }
     }
-    tmp <- pm*attr(dadm,"designs")[[i]][attr(attr(dadm,"designs")[[i]],"expand"),,drop=FALSE]
-    tmp[is.nan(tmp)] <- 0 # 0 weight x Inf parameter fix
-    pars[,i] <- apply(tmp,1,sum)
+
+    # Apply design matrix and sum parameter effects
+    tmp <- pm*cur_design[attr(cur_design,"expand"),,drop=FALSE]
+    tmp[is.nan(tmp)] <- 0 # Handle 0 weight x Inf parameter cases
+    tmp <- apply(tmp,1,sum)
+    # If this is a premap trend parameter, transform it here already
+    # We'll need it transformed later in this loop (for trending other parameters)
+    if(k <= sum(pretrend_idx)){
+      tmp <- as.matrix(tmp)
+      colnames(tmp) <- i
+      tmp <- do_transform(tmp, attr(dadm,"model")()$transform)
+    }
+    k <- k + 1
+    pars[,i] <- tmp
   }
-  pars
+  # Return only non-trend parameters
+  return(pars[,!premap_idx])
 }
 
 # data generation

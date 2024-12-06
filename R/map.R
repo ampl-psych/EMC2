@@ -4,8 +4,8 @@ do_transform <- function(pars,transform)
   isexp <- transform$func[colnames(pars)] == "exp"
   isprobit <- transform$func[colnames(pars)] == "pnorm"
   # Here instead of using isexp directly I use the column names in case v is replicated in pars (i.e. in map_mcmc)
-  pars[,isexp] <- exp(sweep(pars[,isexp], 2, transform$lower[colnames(pars)[isexp]], "-"))
-  pars[,isprobit] <- pnorm(sweep(sweep(pars[,isprobit], 2, transform$lower[colnames(pars)[isprobit]], "-")
+  pars[,isexp] <- exp(sweep(pars[,isexp, drop = F], 2, transform$lower[colnames(pars)[isexp]], "-"))
+  pars[,isprobit] <- pnorm(sweep(sweep(pars[,isprobit, drop = F], 2, transform$lower[colnames(pars)[isprobit]], "-")
                                  , 2, transform$upper[colnames(pars)[isprobit]]-transform$lower[colnames(pars)[isprobit]], "/"))
   pars
 }
@@ -26,16 +26,34 @@ do_pre_transform <- function(p_vector,transform)
 
 
 get_pars_matrix <- function(p_vector,dadm) {
-  # Add constants, transform p_vector, map to design, transform mapped parameters
-  # to the natural scale, and create trial-dependent parameters. Ordinal
-  # parameters are first exponentiated.
+  # Order:
+  # 1 pretransform
+  # 2 add constants
+  # 3 map
+  # # - if premap trend:
+  # #   First make trend pars matrix
+  # #   Apply trends premap and remove trend pars from pars matrix
+  # # - map
+  # 4 if pretransform trend:
+  # # - apply trends and remove trend pars from pars matrix
+  # 5 transform
+  # 6 if posttransform trend:
+  # # - apply trends and remove trend pars from pars matrix
+  # 7 trial-wise transform
+  # 8 bound
+
   # Niek should constants be included in pre_transform? I think not?
   p_vector <- do_pre_transform(p_vector, attr(dadm, "model")()$pre_transform)
   pars <- map_p(add_constants(p_vector,attr(dadm,"constants")),dadm)
-  # This might be worth thinking about:
-  # if (!is.null(attr(dadm,"adaptive"))) pars <- do_adaptive(pars,dadm)
+  if(!is.null(attr(dadm, "model")()$trend && attr(attr(dadm, "model")()$trend, "pretransform"))){
+    # This runs the trend and afterwards removes the trend parameters
+    pars <- prep_trend(dadm, attr(dadm, "model")()$trend, pars)
+  }
   pars <- do_transform(pars, attr(dadm,"model")()$transform)
-  if (!is.null(attr(dadm,"adaptive"))) pars <- do_adaptive(pars,dadm)
+  if(!is.null(attr(dadm, "model")()$trend && attr(attr(dadm, "model")()$trend, "posttransform"))){
+    # This runs the trend and afterwards removes the trend parameters
+    pars <- prep_trend(dadm, attr(dadm, "model")()$trend, pars)
+  }
   pars <- attr(dadm,"model")()$Ttransform(pars, dadm)
   pars <- add_bound(pars, attr(dadm,"model")()$bound)
   return(pars)
@@ -61,10 +79,6 @@ add_constants <- function(p,constants)
     return(c(p,constants))
   }
 
-}
-
-add_constants_mcmc <- function(p,constants){
-  return(mcmc(add_constants(p,constants)))
 }
 
 #' Parameter mapping back to the design factors
@@ -264,34 +278,48 @@ map_mcmc <- function(mcmc,design,include_constants = TRUE, add_recalculated = FA
 
 
 
-fill_transform <- function(transform, model,
+fill_transform <- function(transform, model = NULL, p_vector = NULL,
                            supported=c("identity","exp","pnorm"),
                            has_lower=c("exp","pnorm"),has_upper=c("pnorm"),
                            is_pre = FALSE) {
   # Note that for filling pre_transform model is the sampled_p_vector
   if(!is.null(transform)){
-    if (!all(transform$func %in% supported)) stop("Only ",supported," transforms supported")
+    if (!all(transform$func %in% supported)) stop("Only ", paste(supported, collapse = ", "), " transforms supported")
     if(!is_pre){
       if (!all(names(transform$func) %in% names(model()$p_types)))stop("transform parameter not in the model")
     } else{
-      if (!all(names(transform$func) %in% names(model))) stop("pre_transform parameter not in the model")
+      if (!all(names(transform$func) %in% names(p_vector))) stop("pre_transform parameter not in the model")
     }
     if(!is.null(transform$lower) & !is.null(transform$upper) & is.null(transform$func)) stop("func must be provided if lower and/or upper are provided")
     if (!is.null(transform$lower)) {
       if (!all(names(transform$lower) %in% names(transform$func[transform$func %in% has_lower])))
-        stop("lower can only apply to tranforms of type ",paste(has_lower,collapse=","))
+        stop("lower can only apply to tranforms of type ",paste(has_lower,collapse=", "))
       if (!all(names(transform$upper) %in% names(transform$func[transform$func %in% has_upper])))
-        stop("lower can only apply to tranforms of type ",paste(has_upper,collapse=","))
+        stop("lower can only apply to tranforms of type ", paste(has_upper, collapse = ", "))
     }
   }
   if(!is_pre){
     filled_transform <- model()$transform$func
   } else{
-    filled_transform <- setNames(rep("identity", length(model)), names(model))
+    if(!is.null(model()$pre_transform$func)){
+      filled_transform <- model()$pre_transform$func
+      filled_transform[names(p_vector)[!names(p_vector) %in% names(filled_transform)]] <- "identity"
+      filled_transform <- filled_transform[names(p_vector)]
+    } else{
+      filled_transform <- setNames(rep("identity", length(p_vector)), names(p_vector))
+    }
   }
   filled_transform[names(transform$func)] <- transform$func
   filled_lower <- setNames(rep(-Inf,length(filled_transform)),names(filled_transform))
   filled_upper <- setNames(rep(Inf,length(filled_transform)),names(filled_transform))
+  if(!is_pre){
+    filled_lower[names(model()$transform$lower)] <- model()$transform$lower
+    filled_upper[names(model()$transform$upper)] <- model()$transform$upper
+  } else{
+    filled_lower[names(model()$pre_transform$lower)] <- model()$pre_transform$lower
+    filled_upper[names(model()$pre_transform$upper)] <- model()$pre_transform$upper
+  }
+
   filled_lower[filled_transform %in% has_lower] <- 0
   filled_upper[filled_transform %in% has_upper] <- 1
   if (!is.null(transform$lower)) filled_lower[names(transform$lower)] <- transform$lower
