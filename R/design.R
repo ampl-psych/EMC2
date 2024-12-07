@@ -702,6 +702,9 @@ map_p <- function(p,dadm)
   pars <- matrix(nrow=nrow(dadm),ncol=length(do_p),dimnames=list(NULL,do_p))
 
   # If there are any trends do these first, they might be used later in mapping
+  # Otherwise we're not applying the trend premap, but we are doing it pre-transform
+  # So these trend parameters are post-map, pre-transform and have to be included in the pars output
+  premap_idx <- rep(F, length(do_p))
   if(!is.null(attr(dadm,"model")()$trend) &&
      (attr(attr(dadm,"model")()$trend, "premap") || attr(attr(dadm,"model")()$trend, "pretransform"))){
     trend_names <- get_trend_pnames(attr(dadm,"model")()$trend)
@@ -710,10 +713,6 @@ map_p <- function(p,dadm)
       # These can be removed from the pars matrix at the end
       # Since they are already used before the mapping
       premap_idx <- pretrend_idx
-    } else{
-      # Otherwise we're not mapping here, but we are doing it pre-transform
-      # So these trend parameters are post-map, pre-transform
-      premap_idx <- rep(F, length(do_p))
     }
     # Reorder parameters to make design matrix for trends first
     do_p <- c(do_p[pretrend_idx], do_p[!pretrend_idx])

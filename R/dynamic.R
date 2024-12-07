@@ -143,21 +143,21 @@ trend_help <- function(kernel = NULL, base = NULL, ...){
                  bases = base_1p),
     delta = list(description = paste(
         "Standard delta rule kernel:",
-        "Updates k[i] = k[i-1] + alpha * (c[i-1] - k[i-1]).",
-        "Parameters: k0 (initial value), alpha (learning rate)."
+        "Updates q[i] = q[i-1] + alpha * (c[i-1] - q[i-1]).",
+        "Parameters: q0 (initial value), alpha (learning rate)."
       ),
-      default_pars = c("k0", "alpha"),
-      transforms = list(func = list("k0" = "identity", "alpha" = "exp")),
+      default_pars = c("q0", "alpha"),
+      transforms = list(func = list("q0" = "identity", "alpha" = "exp")),
       bases = base_2p),
     delta2 = list(description = paste(
       "Dual kernel delta rule:",
       "Combines fast and slow learning rates",
       "and switches between them based on dSwitch.",
-      "Parameters: k0 (initial value), alphaFast (fast learning rate),",
+      "Parameters: q0 (initial value), alphaFast (fast learning rate),",
       "propSlow (alphaSlow = propSlow * alphaFast), dSwitch (switch threshold)."
     ),
-    default_pars = c("k0", "alphaFast", "propSlow", "dSwitch"),
-    transforms = list(func = list("k0" = "identity", "alphaFast" = "exp",
+    default_pars = c("q0", "alphaFast", "propSlow", "dSwitch"),
+    transforms = list(func = list("q0" = "identity", "alphaFast" = "exp",
                                 "propSlow" = "pnorm", "dSwitch" = "pnorm")),
     bases = base_2p)
   )
@@ -236,6 +236,7 @@ trend_help <- function(kernel = NULL, base = NULL, ...){
 #'
 #' @return Vector of transformed values based on the specified kernel function
 run_kernel <- function(param, trend_pars = NULL, kernel, covariate) {
+  # Covariate
   out <- switch(kernel, # kernel
                   # Linear decreasing, linear base type
                   lin_decr = -covariate,
@@ -255,16 +256,16 @@ run_kernel <- function(param, trend_pars = NULL, kernel, covariate) {
                   poly4 = trend_pars[,1]*covariate + trend_pars[,2]*covariate^2 + trend_pars[,3]*covariate^3 + trend_pars[,4]*covariate^4,
                   # Single and dual kernel learning rule
                   delta = run_delta(trend_pars[,1],trend_pars[,2],
-                                covariate,return_extras=return_extras),
-                  delta2 = run_delta2(trend_pars[,1],trend_pars[,2:4],
-                                  covariate,return_extras=return_extras),
+                                covariate),
+                  delta2 = run_delta2(trend_pars[,1],trend_pars[,2], trend_pars[,3], trend_pars[,4],
+                                  covariate),
   )
   return(out)
 }
 
 prep_trend <- function(dadm, trend, pars){
   for(par in names(trend)){
-    pars[,par] <- run_trend(dadm, trend, pars[,par], pars[,trend[[par]]$trend_pnames])
+    pars[,par] <- run_trend(dadm, trend, pars[,par], pars[,trend[[par]]$trend_pnames, drop = FALSE])
   }
   pars[,!colnames(pars) %in% get_trend_pnames(trend)]
   return(pars)
@@ -272,35 +273,45 @@ prep_trend <- function(dadm, trend, pars){
 
 run_trend <- function(dadm, trend, param, trend_pars){
   # For now assume no sequential process
-  together <- cbind(dadm[,trend$covariate], trend_pars)
-  filter <- !duplicated(together)
+
   n_base_pars <- switch(trend$base,
                         lin = 1,
                         exp_lin = 1,
                         add = 0,
                         identity = 0)
-  # Prep trend parameters to filter out base parameters
-  kernel_pars <- trend_pars[filter,(n_base_pars+1):ncol(trend_pars), drop = FALSE]
-  # Keep an expansion index
-  unq_idx <- cumsum(filter)
-  # Run trend
-  output <- run_kernel(param, kernel_pars, trend$kernel, dadm[filter,trend$covariate])
-  # Decompress output
-  output <- output[unq_idx]
+  out <- numeric(nrow(dadm))
+  for(cov_name in trend$covariate){
+    # Loop over covariates, first filter out NAs
+    NA_idx <- is.na(dadm[,cov_name])
+    cov_tmp <- dadm[!NA_idx, cov_name]
+    param_tmp <- param[!NA_idx]
+    trend_pars_tmp <- trend_pars[!NA_idx,, drop = FALSE]
+    if(trend$kernel %in% c("delta", "delta2")){
+      # These trends have a sequential nature, don't filter duplicate entries
+      filter <- rep(T, length(cov_tmp))
+    } else{
+      # Else filter out duplicated entries
+      together <- cbind(cov_tmp, trend_pars_tmp)
+      filter <- !duplicated(together)
+    }
+    # Prep trend parameters to filter out base parameters
+    kernel_pars <- trend_pars_tmp[filter,(n_base_pars+1):ncol(trend_pars), drop = FALSE]
+    # Keep an expansion index
+    unq_idx <- cumsum(filter)
+    # Run trend
+    output <- run_kernel(param_tmp[filter], kernel_pars, trend$kernel, cov_tmp[filter])
+    # Decompress output and map back based on non-NA
+    out[!NA_idx] <- out[!NA_idx] + output[unq_idx]
+  }
   # Do the mapping
-  output <- switch(trend$base,
-                        lin = param + trend_pars[,1]*output,
-                        exp_lin = exp(param) + trend_pars[,1]*output,
-                        add = param + output,
-                        identity = output
+  out <- switch(trend$base,
+                        lin = param + trend_pars[,1]*out,
+                        exp_lin = exp(param) + trend_pars[,1]*out,
+                        add = param + out,
+                        identity = out
   )
-  return(output)
+  return(out)
 }
-
-prep_sequential <- function(dadm, trend, param, trend_pars){
-  # something sequential
-}
-
 
 check_trend <- function(trend, covariates = NULL, model = NULL, formula = NULL) {
   if(!is.null(model)){
@@ -320,7 +331,6 @@ check_trend <- function(trend, covariates = NULL, model = NULL, formula = NULL) 
   for(par in names(trend)){
     cur_dyn <- trend[[par]]
     if (!is.null(formula)) {
-      # @Niek this might break?
       isin <-  cur_dyn$trend_pnames %in% unlist(lapply(formula,function(x)all.vars(x)[1]))
       if(any(!isin)){
       # Add missing trend parameters to formula with intercept-only model
@@ -360,3 +370,34 @@ update_model_trend <- function(trend, model) {
   model <- function() { return(model_list) }
   return(model)
 }
+
+run_delta <- function(q0,alpha,covariate) {
+  q <- pe <- numeric(length(target))
+  q[1] <- q0[1]
+  for (i in 2:length(q)) {
+    pe[i-1] <- covariate[i-1]-q[i-1]
+    q[i] <- q[i-1] + alpha[i-1]*pe[i-1]
+  }
+  return(q)
+}
+
+run_delta2_i <- function(q0,alphaFast,propSlow,dSwitch,covariate) {
+  q <- qFast <- qSlow <- peFast <- peSlow <- numeric(length(target))
+  q[1] <- qFast[1] <- qSlow[1] <- q0[1]
+  alphaSlow <- propSlow*alphaFast
+  for (i in 2:length(target)) {
+    peFast[i-1] <- target[i-1]-qFast[i-1]
+    peSlow[i-1] <- target[i-1]-qSlow[i-1]
+    qFast[i] <- qFast[i-1] + alphaFast[i-1]*peFast[i-1]
+    qSlow[i] <- qSlow[i-1] + alphaSlow[i-1]*peSlow[i-1]
+    if (abs(qFast[i]-qSlow[i])>dSwitch[i]){
+      q[i] <- qFast[i]
+    } else{
+      q[i] <- qSlow[i]
+    }
+  }
+  return(q)
+}
+
+
+

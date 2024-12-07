@@ -44,13 +44,14 @@ get_pars_matrix <- function(p_vector,dadm) {
 
   # Niek should constants be included in pre_transform? I think not?
   p_vector <- do_pre_transform(p_vector, attr(dadm, "model")()$pre_transform)
+  # If there's any premap trends, they're done in map_p
   pars <- map_p(add_constants(p_vector,attr(dadm,"constants")),dadm)
-  if(!is.null(attr(dadm, "model")()$trend && attr(attr(dadm, "model")()$trend, "pretransform"))){
+  if(!is.null(attr(dadm, "model")()$trend) && attr(attr(dadm, "model")()$trend, "pretransform")){
     # This runs the trend and afterwards removes the trend parameters
     pars <- prep_trend(dadm, attr(dadm, "model")()$trend, pars)
   }
   pars <- do_transform(pars, attr(dadm,"model")()$transform)
-  if(!is.null(attr(dadm, "model")()$trend && attr(attr(dadm, "model")()$trend, "posttransform"))){
+  if(!is.null(attr(dadm, "model")()$trend) && attr(attr(dadm, "model")()$trend, "posttransform")){
     # This runs the trend and afterwards removes the trend parameters
     pars <- prep_trend(dadm, attr(dadm, "model")()$trend, pars)
   }
