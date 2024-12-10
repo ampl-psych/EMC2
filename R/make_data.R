@@ -230,7 +230,16 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
     rt_check=FALSE)
   pars <- t(apply(parameters, 1, do_pre_transform, model()$pre_transform))
   pars <- map_p(add_constants(pars,design$constants),data)
-  pars <- model()$Ttransform(do_transform(pars, model()$transform), data)
+  if(!is.null(model()$trend) && attr(model()$trend, "pretransform")){
+    # This runs the trend and afterwards removes the trend parameters
+    pars <- prep_trend(dadm, model()$trend, pars)
+  }
+  pars <- do_transform(pars, model()$transform)
+  if(!is.null(model()$trend) && attr(model()$trend, "posttransform")){
+    # This runs the trend and afterwards removes the trend parameters
+    pars <- prep_trend(dadm, model()$trend, pars)
+  }
+  pars <- model()$Ttransform(pars, data)
   pars <- add_bound(pars, model()$bound)
   if ( any(dimnames(pars)[[2]]=="pContaminant") && any(pars[,"pContaminant"]>0) )
     pc <- pars[data$lR==levels(data$lR)[1],"pContaminant"] else pc <- NULL

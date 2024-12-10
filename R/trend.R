@@ -66,6 +66,7 @@ make_trend <- function(par_names, cov_names, kernels, bases = NULL,
     trend$shared <- shared
     trends_out[[par_names[i]]] <- trend
   }
+  attr(trends_out, "sequential") <- any(kernels %in% c("delta", "delta2"))
   attr(trends_out, "premap") <- premap
   attr(trends_out, "pretransform") <- pretransform & !premap
   attr(trends_out, "posttransform") <- !pretransform & !premap

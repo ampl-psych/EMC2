@@ -136,8 +136,7 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
 
   design <- list(Flist=formula,Ffactors=factors,Rlevels=Rlevels,
                  Clist=contrasts,matchfun=matchfun,constants=constants,
-                 Fcovariates=covariates,Ffunctions=functions,model=model,
-                 trend = trend)
+                 Fcovariates=covariates,Ffunctions=functions,model=model)
   class(design) <- "emc.design"
   p_vector <- sampled_p_vector(design,design$model)
   if (!is.null(trend)) {
@@ -553,8 +552,8 @@ design_model <- function(data,design,model=NULL,
   if (is.null(design$Clist)) design$Clist=list(stats::contr.treatment)
   if (!is.list(design$Clist)) stop("Clist must be a list")
   pnames <- names(model()$p_types)
-  if (!is.null(design$trend)){
-    pnames <- c(pnames, get_trend_pnames(design$trend))
+  if (!is.null(design$model()$trend)){
+    pnames <- c(pnames, get_trend_pnames(design$model()$trend))
   }
   if (!is.list(design$Clist[[1]])[1]){
     design$Clist <- stats::setNames(lapply(1:length(pnames),
@@ -572,10 +571,9 @@ design_model <- function(data,design,model=NULL,
   if(model()$type != "MRI") for (i in pnames) attr(design$Flist[[i]],"Clist") <- design$Clist[[i]]
   out <- lapply(design$Flist,make_dm,da=da,Fcovariates=design$Fcovariates, add_da = add_da, all_cells_dm = all_cells_dm)
   if (!is.null(rt_resolution) & !is.null(da$rt)) da$rt <- round(da$rt/rt_resolution)*rt_resolution
-  if (!is.null(design$trend)) {
-    compress <- TRUE
+  if(!is.null(design$model()$trend) && attr(design$model()$trend, "sequential")){
+    compress <- FALSE
   }
-  if (!is.null(design$adaptive)) compress=FALSE
   if (compress){
     dadm <- compress_dadm(da,designs=out, Fcov=design$Fcovariates,Ffun=names(design$Ffunctions))
   }  else {
@@ -610,7 +608,6 @@ design_model <- function(data,design,model=NULL,
     attr(dadm, "ok_da_winner") <- attr(dadm, "ok_dadm_winner")[attr(dadm,"expand")]
     attr(dadm, "ok_da_looser") <- attr(dadm, "ok_dadm_looser")[attr(dadm,"expand")]
   }
-  attr(dadm,"trend") <- design$trend
   attr(dadm,"ok_trials") <- is.finite(data$rt)
   attr(dadm,"s_data") <- data$subjects
   dadm
