@@ -77,8 +77,7 @@
 design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
                        contrasts=NULL,matchfun=NULL,constants=NULL,covariates=NULL,
                        functions=NULL,report_p_vector=TRUE, custom_p_vector = NULL,
-                   transform = NULL, bound = NULL,
-                       ...){
+                   transform = NULL, bound = NULL, ...){
 
   optionals <- list(...)
   if(!is.null(optionals$trend)){
@@ -123,6 +122,7 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
     formula <- check_trend(trend,covariates, model, formula)
   }
 
+  # Check if all parameters in the model are specified in the formula
   nams <- unlist(lapply(formula,function(x) as.character(stats::terms(x)[[2]])))
   if (!all(sort(names(model()$p_types)) %in% sort(nams)) & is.null(custom_p_vector)){
     p_types <- model()$p_types
@@ -143,6 +143,14 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
     model <- update_model_trend(trend, model)
     model_list <- model()
     model <- function(){return(model_list)}
+  }
+  lhs_terms <- unlist(lapply(formula, function(x) as.character(stats::terms(x)[[2]])))
+
+  # Check if any terms are not in model parameters
+  if (!is.null(formula) && !all(lhs_terms %in% names(model()$p_types))) {
+    invalid_terms <- lhs_terms[!lhs_terms %in% names(model()$p_types)]
+    stop(paste0("Parameter(s) ", paste0(invalid_terms, collapse=", "),
+                " in formula not found in model p_types"))
   }
 
   model_list <- model()

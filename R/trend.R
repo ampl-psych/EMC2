@@ -31,7 +31,7 @@ make_trend <- function(par_names, cov_names, kernels, bases = NULL,
   }
   if(length(cov_names) != length(par_names) && length(cov_names) == 1){
     cov_names <- rep(cov_names, length(par_names))
-  } else{
+  } else if(length(cov_names) != 1){
     stop("Make sure that cov_names and par_names have the same length")
   }
   if(!is.null(bases)){
@@ -351,7 +351,7 @@ update_model_trend <- function(trend, model) {
 }
 
 run_delta <- function(q0,alpha,covariate) {
-  q <- pe <- numeric(length(target))
+  q <- pe <- numeric(length(covariate))
   q[1] <- q0[1]
   for (i in 2:length(q)) {
     pe[i-1] <- covariate[i-1]-q[i-1]
@@ -361,12 +361,12 @@ run_delta <- function(q0,alpha,covariate) {
 }
 
 run_delta2 <- function(q0,alphaFast,propSlow,dSwitch,covariate) {
-  q <- qFast <- qSlow <- peFast <- peSlow <- numeric(length(target))
+  q <- qFast <- qSlow <- peFast <- peSlow <- numeric(length(covariate))
   q[1] <- qFast[1] <- qSlow[1] <- q0[1]
   alphaSlow <- propSlow*alphaFast
-  for (i in 2:length(target)) {
-    peFast[i-1] <- target[i-1]-qFast[i-1]
-    peSlow[i-1] <- target[i-1]-qSlow[i-1]
+  for (i in 2:length(covariate)) {
+    peFast[i-1] <- covariate[i-1]-qFast[i-1]
+    peSlow[i-1] <- covariate[i-1]-qSlow[i-1]
     qFast[i] <- qFast[i-1] + alphaFast[i-1]*peFast[i-1]
     qSlow[i] <- qSlow[i-1] + alphaSlow[i-1]*peSlow[i-1]
     if (abs(qFast[i]-qSlow[i])>dSwitch[i]){

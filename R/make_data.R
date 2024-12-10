@@ -232,12 +232,12 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
   pars <- map_p(add_constants(pars,design$constants),data)
   if(!is.null(model()$trend) && attr(model()$trend, "pretransform")){
     # This runs the trend and afterwards removes the trend parameters
-    pars <- prep_trend(dadm, model()$trend, pars)
+    pars <- prep_trend(data, model()$trend, pars)
   }
   pars <- do_transform(pars, model()$transform)
   if(!is.null(model()$trend) && attr(model()$trend, "posttransform")){
     # This runs the trend and afterwards removes the trend parameters
-    pars <- prep_trend(dadm, model()$trend, pars)
+    pars <- prep_trend(data, model()$trend, pars)
   }
   pars <- model()$Ttransform(pars, data)
   pars <- add_bound(pars, model()$bound)
