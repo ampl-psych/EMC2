@@ -23,6 +23,87 @@ do_pre_transform <- function(p_vector,transform)
 }
 
 
+#### Functions to look at parameters ----
+
+map_p <- function(p,dadm)
+  # Map p to dadm and returns matrix of mapped parameters
+  # p is either a vector or a matrix (ncol = number of subjects) of p_vectors
+  # dadm is a design matrix with attributes containing model information
+{
+
+  # Check if p is a matrix and validate column names match parameter names
+  if ( is.matrix(p) ) {
+    if (!all(sort(dimnames(p)[[2]])==sort(attr(dadm,"p_names"))))
+      stop("p col.names must be: ",paste(attr(dadm,"p_names"),collapse=", "))
+    if (!all(levels(dadm$subjects) %in% dimnames(p)[[1]]))
+      stop("p must have rows named for every subject in dadm")
+    p <- p[dadm$subjects,]
+  } else if (!all(sort(names(p))==sort(attr(dadm,"p_names")))) # If p is vector, check names
+    stop("p names must be: ",paste(attr(dadm,"p_names"),collapse=", "))
+
+  # Get parameter names from model and create output matrix
+  do_p <- names(attr(dadm,"model")()$p_types)
+  pars <- matrix(nrow=nrow(dadm),ncol=length(do_p),dimnames=list(NULL,do_p))
+
+  # If there are any trends do these first, they might be used later in mapping
+  # Otherwise we're not applying the trend premap, but we are doing it pre-transform
+  # So these trend parameters are post-map, pre-transform and have to be included in the pars output
+  premap_idx <- rep(F, length(do_p))
+  if(!is.null(attr(dadm,"model")()$trend) &&
+     (attr(attr(dadm,"model")()$trend, "premap") || attr(attr(dadm,"model")()$trend, "pretransform"))){
+    trend_names <- get_trend_pnames(attr(dadm,"model")()$trend)
+    pretrend_idx <- do_p %in% trend_names
+    if((attr(attr(dadm,"model")()$trend, "premap"))){
+      # These can be removed from the pars matrix at the end
+      # Since they are already used before the mapping
+      premap_idx <- pretrend_idx
+    }
+    # Reorder parameters to make design matrix for trends first
+    do_p <- c(do_p[pretrend_idx], do_p[!pretrend_idx])
+  } else{
+    pretrend_idx <- rep(F, length(do_p))
+  }
+  k <- 1
+  # Loop through each parameter
+  for (i in do_p) {
+    cur_design <- attr(dadm,"designs")[[i]]
+    # Handle vector vs matrix input differently
+    if ( !is.matrix(p) ) {
+      pm <- t(as.matrix(p[colnames(cur_design)]))
+      pm <- pm[rep(1,nrow(pars)),,drop=FALSE]
+    } else pm <- p[,colnames(cur_design),drop=FALSE]
+
+    # Apply pre-mapped trends if they exist
+    if (!is.null(attr(dadm,"model")()$trend) && attr(attr(dadm,"model")()$trend, "premap")) {
+      trend <- attr(dadm,"model")()$trend
+      isin <- names(trend) %in% colnames(pm)
+      if (any(isin)){ # At this point the trend has already been mapped and transformed
+        for (j in names(trend)[isin]) {
+          cur_trend <- trend[[j]]
+          # We can select the trend pars from the already update pars matrix
+          trend_pars <- pars[,cur_trend$trend_pnames]
+          pm[,j] <- run_trend(dadm, cur_trend, pm[,j], trend_pars)
+        }
+      }
+    }
+
+    # Apply design matrix and sum parameter effects
+    tmp <- pm*cur_design[attr(cur_design,"expand"),,drop=FALSE]
+    tmp[is.nan(tmp)] <- 0 # Handle 0 weight x Inf parameter cases
+    tmp <- apply(tmp,1,sum)
+    # If this is a premap trend parameter, transform it here already
+    # We'll need it transformed later in this loop (for trending other parameters)
+    if(k <= sum(pretrend_idx)){
+      tmp <- as.matrix(tmp)
+      colnames(tmp) <- i
+      tmp <- do_transform(tmp, attr(dadm,"model")()$transform)
+    }
+    k <- k + 1
+    pars[,i] <- tmp
+  }
+  # Return only non-trend parameters
+  return(pars[,!premap_idx])
+}
 
 
 get_pars_matrix <- function(p_vector,dadm) {
@@ -279,55 +360,54 @@ map_mcmc <- function(mcmc,design,include_constants = TRUE, add_recalculated = FA
 
 
 
-fill_transform <- function(transform, model = NULL, p_vector = NULL,
+fill_transform <- function(transform, model, p_vector,
                            supported=c("identity","exp","pnorm"),
                            has_lower=c("exp","pnorm"),has_upper=c("pnorm"),
-                           is_pre = FALSE) {
-  # Note that for filling pre_transform model is the sampled_p_vector
+                           is_pre = FALSE){
   if(!is.null(transform)){
-    if (!all(transform$func %in% supported)) stop("Only ", paste(supported, collapse = ", "), " transforms supported")
+    if (!all(transform$func %in% supported)){
+      stop("Only ", paste(supported, collapse = ", "), " transforms supported")
+    }
     if(!is_pre){
-      if (!all(names(transform$func) %in% names(model()$p_types)))stop("transform parameter not in the model")
+      if (!all(names(transform$func) %in% names(model()$p_types)))stop("transform on parameter not in the model p_types")
+      if (!all(names(transform$lower) %in% names(model()$p_types)))stop("transform on parameter not in the model p_types")
+      if (!all(names(transform$upper) %in% names(model()$p_types)))stop("transform on parameter not in the model p_types")
     } else{
-      if (!all(names(transform$func) %in% names(p_vector))) stop("pre_transform parameter not in the model")
-    }
-    if(!is.null(transform$lower) & !is.null(transform$upper) & is.null(transform$func)) stop("func must be provided if lower and/or upper are provided")
-    if (!is.null(transform$lower)) {
-      if (!all(names(transform$lower) %in% names(transform$func[transform$func %in% has_lower])))
-        stop("lower can only apply to tranforms of type ",paste(has_lower,collapse=", "))
-      if (!all(names(transform$upper) %in% names(transform$func[transform$func %in% has_upper])))
-        stop("lower can only apply to tranforms of type ", paste(has_upper, collapse = ", "))
+      if (!all(names(transform$func) %in% names(p_vector))) stop("pre_transform on parameter not in the sampled_p_vector")
+      if (!all(names(transform$lower) %in% names(p_vector))) stop("transform on parameter not in the model p_types")
+      if (!all(names(transform$upper) %in% names(p_vector))) stop("transform on parameter not in the model p_types")
     }
   }
-  if(!is_pre){
-    filled_transform <- model()$transform$func
+  model_list <- model()
+  p_names <- names(model_list$p_types)
+  if(is_pre){
+    p_names <- names(p_vector)
+  }
+  filled_func <- filled_lower <- filled_upper <- setNames(rep(NA, length(p_names)), p_names)
+  # First update from the model
+  if(is_pre){
+    filled_func[names(model_list$pre_transform$func)] <- model_list$pre_transform$func
+    filled_lower[names(model_list$pre_transform$lower)] <- model_list$pre_transform$lower
+    filled_upper[names(model_list$pre_transform$upper)] <- model_list$pre_transform$upper
   } else{
-    if(!is.null(model()$pre_transform$func)){
-      filled_transform <- model()$pre_transform$func
-      filled_transform[names(p_vector)[!names(p_vector) %in% names(filled_transform)]] <- "identity"
-      filled_transform <- filled_transform[names(p_vector)]
-    } else{
-      filled_transform <- setNames(rep("identity", length(p_vector)), names(p_vector))
-    }
+    filled_func[names(model_list$transform$func)] <- model_list$transform$func
+    filled_lower[names(model_list$transform$lower)] <- model_list$transform$lower
+    filled_upper[names(model_list$transform$upper)] <- model_list$transform$upper
   }
-  filled_transform[names(transform$func)] <- transform$func
-  filled_lower <- setNames(rep(-Inf,length(filled_transform)),names(filled_transform))
-  filled_upper <- setNames(rep(Inf,length(filled_transform)),names(filled_transform))
-  if(!is_pre){
-    filled_lower[names(model()$transform$lower)] <- model()$transform$lower
-    filled_upper[names(model()$transform$upper)] <- model()$transform$upper
-  } else{
-    filled_lower[names(model()$pre_transform$lower)] <- model()$pre_transform$lower
-    filled_upper[names(model()$pre_transform$upper)] <- model()$pre_transform$upper
-  }
+  # Now updates from the user transform (they override the model)
+  filled_func[names(transform$func)] <- transform$func
+  filled_lower[names(transform$lower)] <- transform$lower
+  filled_upper[names(transform$upper)] <- transform$upper
 
-  filled_lower[filled_transform %in% has_lower] <- 0
-  filled_upper[filled_transform %in% has_upper] <- 1
-  if (!is.null(transform$lower)) filled_lower[names(transform$lower)] <- transform$lower
-  if (!is.null(transform$upper)) filled_lower[names(transform$upper)] <- transform$upper
-  list(func=filled_transform,lower=filled_lower,upper=filled_upper)
+  # Now fill in remainers
+  filled_func[is.na(filled_func)] <- "identity"
+  filled_lower[is.na(filled_lower) & (filled_func %in% has_lower)] <- 0
+  filled_upper[is.na(filled_upper) & (filled_func %in% has_upper)] <- 1
+  # Remainers must be identity and have no bounds
+  filled_lower[is.na(filled_lower)] <- -Inf
+  filled_upper[is.na(filled_upper)] <- Inf
+  return(list(func=filled_func,lower=filled_lower,upper=filled_upper))
 }
-
 
 fill_bound <- function(bound, model) {
   filled_bound <- model()$bound

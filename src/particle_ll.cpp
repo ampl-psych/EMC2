@@ -4,7 +4,7 @@
 #include "model_LBA.h"
 #include "model_RDM.h"
 #include "model_DDM.h"
-#include "dynamic.h"
+#include "trend.h"
 using namespace Rcpp;
 
 LogicalVector c_do_bound(NumericMatrix pars, List bound) {
@@ -59,12 +59,54 @@ LogicalVector c_do_bound(NumericMatrix pars, List bound) {
   return result;
 }
 
+NumericVector c_do_pre_transform(NumericVector p_vector,
+                                 List transform) {
+  // Extract transform components
+  CharacterVector func = transform["func"];
+  NumericVector lower = transform["lower"];
+  NumericVector upper = transform["upper"];
+  // Get the names of p_vector and transform components
+  CharacterVector p_names = p_vector.names();
+  CharacterVector func_names = func.names();
+  CharacterVector lower_names = lower.names();
+  CharacterVector upper_names = upper.names();
+
+  int n = p_vector.size();
+  // Match p_names to func_names to align indices
+  // match() returns 1-based indices
+  Function match("match");
+  IntegerVector idx = match(p_names, func_names);
+
+  if (is_true(any(is_na(idx)))) {
+    stop("Some names in p_vector not found in transform$func.");
+  }
+
+  // Now, idx[i]-1 gives the position in func, lower, upper corresponding to p_vector[i]
+  for (int i = 0; i < n; i++) {
+    int pos = idx[i] - 1;
+    std::string f = as<std::string>(func[pos]);
+    if (f == "exp") {
+      double val = p_vector[i];
+      double lw = lower[pos];
+      p_vector[i] = exp(val - lw);
+    } else if (f == "pnorm") {
+      double val = p_vector[i];
+      double lw = lower[pos];
+      double up = upper[pos];
+      // Transform the value before pnorm
+      double z = (val - lw) / (up - lw);
+      p_vector[i] = R::pnorm(z, 0.0, 1.0, 1, 0);
+    }
+    // If other transformations exist, handle them similarly
+  }
+  return p_vector;
+}
+
 NumericMatrix c_do_transform(NumericMatrix pars, List transform) {
   // Get the column names of pars
   CharacterVector colnames_pars = colnames(pars);
   int ncol = pars.ncol();
   int nrow = pars.nrow();
-
   // Get 'func', 'lower', 'upper' from transform
   CharacterVector func_charvec = transform["func"];
   CharacterVector names_func = func_charvec.names();
@@ -72,7 +114,6 @@ NumericMatrix c_do_transform(NumericMatrix pars, List transform) {
   CharacterVector names_lower = lower_numvec.names();
   NumericVector upper_numvec = transform["upper"];
   CharacterVector names_upper = upper_numvec.names();
-
   // Create maps from names to values
   std::map<String, String> func_map;
   for (int i = 0; i < func_charvec.size(); i++) {
@@ -86,7 +127,6 @@ NumericMatrix c_do_transform(NumericMatrix pars, List transform) {
   for (int i = 0; i < upper_numvec.size(); i++) {
     upper_map[ names_upper[i] ] = upper_numvec[i];
   }
-
   // For each column, apply the appropriate transformation
   for (int j = 0; j < ncol; j++) {
     String colname = colnames_pars[j];
@@ -96,7 +136,7 @@ NumericMatrix c_do_transform(NumericMatrix pars, List transform) {
 
     if (f == "exp") {
       for (int i = 0; i < nrow; i++) {
-        pars(i,j) = exp(pars(i,j) - l);
+        pars(i, j) = exp(pars(i,j) - l);
       }
     } else if (f == "pnorm") {
       double range = u - l;
@@ -105,102 +145,137 @@ NumericMatrix c_do_transform(NumericMatrix pars, List transform) {
         pars(i,j) = R::pnorm(z, 0.0, 1.0, 1, 0);
       }
     }
-    // For "identity" or other functions, no transformation is applied
+    // For "identity" no transformation is applied
   }
   return pars;
 }
 
 
+NumericMatrix c_map_p(NumericVector p_vector,
+                      CharacterVector p_types,
+                      List designs,
+                      int n_trials,
+                      DataFrame data,
+                      List trend,
+                      List transforms) {
 
-NumericVector c_expand(NumericVector x1, NumericVector expand){
-  const int n_out = expand.length();
-  NumericVector out(n_out);
-  int curr_idx;
-  for(int i = 0; i < n_out; i++){
-    curr_idx = expand[i] - 1; //expand created in 1-based R
-    out[i] = x1[curr_idx];
+  // Extract information about trends
+  bool has_trend = (trend.length() > 0); // or another condition
+  bool premap = false;
+  bool pretransform = false;
+  CharacterVector trend_names;
+  // If trend has these flags
+  if (has_trend) {
+    premap = trend.attr("premap");
+    pretransform = trend.attr("pretransform");
+    trend_names = trend.names();
   }
-  return(out);
-}
-
-LogicalVector c_bool_expand(LogicalVector x1, NumericVector expand){
-  const int n_out = expand.length();
-  LogicalVector out(n_out);
-  int curr_idx;
-  for(int i = 0; i < n_out; i++){
-    curr_idx = expand[i] - 1; //expand created in 1-based R
-    out[i] = x1[curr_idx];
-  }
-  return(out);
-}
-
-NumericVector c_add_vectors(NumericVector x1, NumericVector x2){
-  if(is_na(x2)[0] ){
-    return(x1);
-  }
-  NumericVector output(x1.size() + x2.size());
-  std::copy(x1.begin(), x1.end(), output.begin());
-  std::copy(x2.begin(), x2.end(), output.begin() + x1.size());
-  CharacterVector all_names(x1.size() + x2.size());
-  CharacterVector x1_names = x1.names();
-  CharacterVector x2_names = x2.names();
-  std::copy(x1_names.begin(), x1_names.end(), all_names.begin());
-  std::copy(x2_names.begin(), x2_names.end(), all_names.begin() + x1.size());
-  output.names() = all_names;
-  return output;
-}
-
-// LL generic functions
-// [[Rcpp::export]]
-NumericMatrix c_map_p(NumericVector p_vector, CharacterVector p_types, List designs, int n_trials, DataFrame data, List dynamic){
-  NumericMatrix pars(n_trials, p_types.length());
   NumericVector p_mult_design;
-  for(int i = 0; i < p_types.length(); i++){
-
-    NumericMatrix curr_design = designs[i];
-
-    CharacterVector curr_names = colnames(curr_design);
-    if(dynamic.length() > 0){
-      LogicalVector isin = contains_multiple(curr_names, dynamic.names());
-      CharacterVector tmpn = dynamic.names();
-      if(sum(isin) > 0){
-        // some of the columns are updated dynamically (could be for example intercept but not slope)
-        NumericMatrix p_mat = map_dyn(dynamic, data, p_vector, curr_names, isin);
-        for(int k = 0; k < curr_design.ncol(); k ++){
-          pars(_, i) = pars(_, i) + p_mat(_, k) * curr_design(_, k);
-        };
-      } else{ // no dynamic for this parameter type
-        for(int j = 0; j < curr_design.ncol(); j ++){
-          String curr_name(curr_names[j]);
-          pars(_, i) = pars(_, i) + p_vector[curr_name] * curr_design(_, j);
-        };
+  int n_params = p_types.size();
+  NumericMatrix pars(n_trials, n_params);
+  colnames(pars) = p_types;
+  NumericMatrix trend_pars;
+  // Identify trend parameters if any
+  CharacterVector trend_pnames;
+  LogicalVector trend_index(n_params, FALSE);
+  if (has_trend && (premap || pretransform)) {
+    // First deal with trend parameters
+    for(unsigned int q = 0; q < trend.length(); q++){
+      // Loop over trends
+      List cur_trend = trend[q];
+      LogicalVector cur_trend_idx = contains_multiple(p_types,as<CharacterVector>(cur_trend["trend_pnames"]));
+      trend_pnames = c_add_charvectors(trend_pnames, as<CharacterVector>(cur_trend["trend_pnames"]));
+      // Loop over p_types, pick out any that are trends
+      for(unsigned int j = 0; j < cur_trend_idx.length(); j ++){
+        if(cur_trend_idx[j] == TRUE){
+          NumericMatrix cur_design_trend = designs[j];
+          CharacterVector cur_names_trend = colnames(cur_design_trend);
+          // Make an empty 1 column matrix
+          // This is needed for c_do_transform
+          // Take the current design and loop over columns
+          for(int k = 0; k < cur_design_trend.ncol(); k ++){
+            String cur_name_trend(cur_names_trend[k]);
+            p_mult_design =  p_vector[cur_name_trend] * cur_design_trend(_, k);
+            p_mult_design[is_nan(p_mult_design)] = 0;
+            pars(_, j) = pars(_, j) + p_mult_design;
+          }
+        }
       }
-    } else{ // no dynamic at all
-      for(int j = 0; j < curr_design.ncol(); j ++){
-        String curr_name(curr_names[j]);
-        p_mult_design =  p_vector[curr_name] * curr_design(_, j);
+    }
+    trend_pars = c_do_transform(submat_rcpp_col(pars, contains_multiple(p_types, trend_pnames)), transforms);
+    trend_index = contains_multiple(p_types, trend_pnames);
+  }
+  for(int i = 0, t = 0; i < n_params; i++){
+    if(trend_index[i] == FALSE){
+      NumericMatrix cur_design = designs[i];
+      CharacterVector cur_names = colnames(cur_design);
+      for(int j = 0; j < cur_design.ncol(); j ++){
+        String cur_name(cur_names[j]);
+        p_mult_design =  p_vector[cur_name] * cur_design(_, j);
+        if(has_trend && premap){
+          // Check if trend is on current parameter
+          LogicalVector cur_has_trend = contains(trend_names, cur_name);
+          for(unsigned int w = 0; w < cur_has_trend.length(); w ++){
+            if(cur_has_trend[w] == TRUE){ // if so apply trend
+              List cur_trend = trend[cur_name];
+              CharacterVector cur_trend_pnames = cur_trend["trend_pnames"];
+              p_mult_design = run_trend_rcpp(data, cur_trend, p_mult_design,
+                                             submat_rcpp_col(trend_pars, contains_multiple(trend_pnames, cur_trend_pnames)));
+            }
+          }
+        }
         p_mult_design[is_nan(p_mult_design)] = 0;
         pars(_, i) = pars(_, i) + p_mult_design;
       };
-
+    } else if(pretransform){
+      // These trends aren't applied here, but rather after mapping,
+      // But they are transformed here already, so input them here.
+      pars(_, i) = trend_pars(_, t);
+      t++;
     }
   };
-  colnames(pars) = p_types;
+  if(has_trend){
+    if(premap){
+      pars = submat_rcpp_col(pars, !contains_multiple(p_types, trend_pnames));
+    } else{
+
+    }
+
+  }
   return(pars);
 }
 
-NumericMatrix get_pars_matrix(NumericVector p_vector, NumericVector constants, List transforms,
-                       CharacterVector p_types, List designs, int n_trials, DataFrame data, List dynamic){
+NumericMatrix get_pars_matrix(NumericVector p_vector, NumericVector constants, List transforms, List pretransforms,
+                              CharacterVector p_types, List designs, int n_trials, DataFrame data, List trend){
+  bool has_trend = (trend.length() > 0);
+  bool pretransform = false;
+  bool posttransform = false;
+  // If trend has these flags
+  if (has_trend) {
+    pretransform = trend.attr("pretransform");
+    posttransform = trend.attr("posttransform");
+  }
   NumericVector p_vector_updtd(clone(p_vector));
+  CharacterVector par_names = p_vector_updtd.names();
+  p_vector_updtd = c_do_pre_transform(p_vector_updtd, pretransforms);
   p_vector_updtd = c_add_vectors(p_vector_updtd, constants);
-  NumericMatrix pars = c_map_p(p_vector_updtd, p_types, designs, n_trials, data, dynamic);
+  NumericMatrix pars = c_map_p(p_vector_updtd, p_types, designs, n_trials, data, trend, transforms);
+  // // Check if pretransform trend applies
+  if(pretransform){ // automatically only applies if trend
+    pars = prep_trend(data, trend, pars);
+  }
   pars = c_do_transform(pars, transforms);
+  // Check if posttransform trend applies
+  if(posttransform){ // automatically only applies if trend
+    pars = prep_trend(data, trend, pars);
+  }
+  // ok is calculated afterwards and Ttransform applied in the function
   return(pars);
 }
 
 double c_log_likelihood_DDM(NumericMatrix pars, DataFrame data,
-                          const int n_trials, NumericVector expand,
-                          double min_ll, LogicalVector is_ok){
+                            const int n_trials, IntegerVector expand,
+                            double min_ll, LogicalVector is_ok){
   const int n_out = expand.length();
   NumericVector rts = data["rt"];
   IntegerVector R = data["R"];
@@ -217,7 +292,7 @@ double c_log_likelihood_DDM(NumericMatrix pars, DataFrame data,
 double c_log_likelihood_race(NumericMatrix pars, DataFrame data,
                              NumericVector (*dfun)(NumericVector, NumericMatrix, LogicalVector, double, LogicalVector),
                              NumericVector (*pfun)(NumericVector, NumericMatrix, LogicalVector, double, LogicalVector),
-                             const int n_trials, LogicalVector winner, NumericVector expand,
+                             const int n_trials, LogicalVector winner, IntegerVector expand,
                              double min_ll, LogicalVector is_ok){
   const int n_out = expand.length();
   NumericVector lds(n_trials);
@@ -272,24 +347,21 @@ double c_log_likelihood_race(NumericMatrix pars, DataFrame data,
 
 // [[Rcpp::export]]
 NumericVector calc_ll(NumericMatrix p_matrix, DataFrame data, NumericVector constants,
-                      List designs, String type, List bounds, List transforms, CharacterVector p_types,
-                      double min_ll, List adaptive, List dynamic){
+            List designs, String type, List bounds, List transforms, List pretransforms,
+            CharacterVector p_types, double min_ll, List trend){
   const int n_particles = p_matrix.nrow();
   const int n_trials = data.nrow();
   NumericVector lls(n_particles);
   NumericVector p_vector(p_matrix.ncol());
   CharacterVector p_names = colnames(p_matrix);
-  NumericMatrix pars(n_trials, p_types.length());
   p_vector.names() = p_names;
-  NumericVector expand = data.attr("expand");
+  NumericMatrix pars(n_trials, p_types.length());
+  IntegerVector expand = data.attr("expand");
   LogicalVector is_ok(n_trials);
   if(type == "DDM"){
     for(int i = 0; i < n_particles; i++){
       p_vector = p_matrix(i, _);
-      pars = get_pars_matrix(p_vector, constants, transforms, p_types, designs, n_trials, data, dynamic);
-      if(adaptive.length() > 0){
-        pars = map_adaptive(adaptive, pars, data);
-      }
+      pars = get_pars_matrix(p_vector, constants, transforms, pretransforms, p_types, designs, n_trials, data, trend);
       is_ok = c_do_bound(pars, bounds);
       lls[i] = c_log_likelihood_DDM(pars, data, n_trials, expand, min_ll, is_ok);
     }
@@ -311,14 +383,10 @@ NumericVector calc_ll(NumericMatrix p_matrix, DataFrame data, NumericVector cons
     }
     for(int i = 0; i < n_particles; i++){
       p_vector = p_matrix(i, _);
-      pars = get_pars_matrix(p_vector, constants, transforms, p_types, designs, n_trials, data, dynamic);
-      if(adaptive.length() > 0){
-        pars = map_adaptive(adaptive, pars, data);
-      }
+      pars = get_pars_matrix(p_vector, constants, transforms, pretransforms, p_types, designs, n_trials, data, trend);
       is_ok = c_do_bound(pars, bounds);
       lls[i] = c_log_likelihood_race(pars, data, dfun, pfun, n_trials, winner, expand, min_ll, is_ok);
     }
   }
   return(lls);
 }
-

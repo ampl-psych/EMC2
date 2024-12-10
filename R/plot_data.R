@@ -68,7 +68,7 @@ prep_data_plot <- function(input = NULL, post_predict = NULL,
   to_plot <- unique(c(to_plot))
   xlim <- NULL
   # Compute xlim based on quantiles and perform checks
-  x_lim_probs <- c(0.001, 0.995)
+  x_lim_probs <- c(0.0001, 0.995)
   if(!is.null(data)){
     data <- check_data_plot(data, defective_factor, subject, factors)
     if('real' %in% limits & make_xlim){

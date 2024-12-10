@@ -1,6 +1,6 @@
-#' Create a trend specification for dynamic parameters
+#' Create a trend specification for model parameters
 #'
-#' @param par_names Character vector specifying which parameters should be made dynamic
+#' @param par_names Character vector specifying which parameters to apply trend to
 #' @param cov_names Character vector specifying which covariates to use for each trend
 #' @param kernels Character vector specifying which kernel function to use for each trend
 #' @param bases Optional character vector specifying which base function to use for each trend
@@ -12,8 +12,8 @@
 #' @export
 #'
 #' @examples
-#' # Make B and v parameters dynamic using exponential kernels
-#' dynamic <- make_trend(
+#' # Put trend on B and v parameters
+#' trend <- make_trend(
 #'   par_names = c("B", "v"),
 #'   cov_names = "strial",
 #'   kernels = c("exp_incr", "poly3"),
@@ -147,7 +147,7 @@ trend_help <- function(kernel = NULL, base = NULL, ...){
         "Parameters: q0 (initial value), alpha (learning rate)."
       ),
       default_pars = c("q0", "alpha"),
-      transforms = list(func = list("q0" = "identity", "alpha" = "exp")),
+      transforms = list(func = list("q0" = "identity", "alpha" = "probit")),
       bases = base_2p),
     delta2 = list(description = paste(
       "Dual kernel delta rule:",
@@ -157,7 +157,7 @@ trend_help <- function(kernel = NULL, base = NULL, ...){
       "propSlow (alphaSlow = propSlow * alphaFast), dSwitch (switch threshold)."
     ),
     default_pars = c("q0", "alphaFast", "propSlow", "dSwitch"),
-    transforms = list(func = list("q0" = "identity", "alphaFast" = "exp",
+    transforms = list(func = list("q0" = "identity", "alphaFast" = "probit",
                                 "propSlow" = "pnorm", "dSwitch" = "pnorm")),
     bases = base_2p)
   )
@@ -214,28 +214,7 @@ trend_help <- function(kernel = NULL, base = NULL, ...){
   }
 }
 
-#' Run a kernel function for trend analysis
-#'
-#' @param param Parameter value to be modified by the trend
-#' @param trend_pars Matrix or vector of trend parameters
-#' @param kernel String specifying which kernel function to use. Options include:
-#'   \itemize{
-#'     \item lin_decr - Linear decreasing
-#'     \item lin_incr - Linear increasing
-#'     \item exp_decr - Exponential decreasing
-#'     \item exp_incr - Exponential increasing
-#'     \item pow_decr - Power decreasing
-#'     \item pow_incr - Power increasing
-#'     \item poly2 - Second order polynomial
-#'     \item poly3 - Third order polynomial
-#'     \item poly4 - Fourth order polynomial
-#'     \item delta - Single kernel learning rule
-#'     \item delta2 - Dual kernel learning rule
-#'   }
-#' @param covariate Vector of covariate values
-#'
-#' @return Vector of transformed values based on the specified kernel function
-run_kernel <- function(param, trend_pars = NULL, kernel, covariate) {
+run_kernel <- function(trend_pars = NULL, kernel, covariate) {
   # Covariate
   out <- switch(kernel, # kernel
                   # Linear decreasing, linear base type
@@ -245,11 +224,11 @@ run_kernel <- function(param, trend_pars = NULL, kernel, covariate) {
                   # Exponential decreasing, linear base type
                   exp_decr = exp(trend_pars[,1]*covariate),
                   # Exponential increasing - help
-                  exp_incr = (1-exp(-trend_pars[1]*covariate)),
+                  exp_incr = 1-exp(-trend_pars[,1]*covariate),
                   # Decreasing power
-                  pow_decr = (1+covariate)^(-trend_pars[1]),
+                  pow_decr = (1+covariate)^(-trend_pars[,1]),
                   # Increasing power
-                  pow_incr = (1-(1+covariate)^(-trend_pars[1])),
+                  pow_incr = (1-(1+covariate)^(-trend_pars[,1])),
                   # Second to fourth order polynomials, for these base is default none? Or linear?
                   poly2 =  trend_pars[,1]*covariate + trend_pars[,2]*covariate^2,
                   poly3 = trend_pars[,1]*covariate + trend_pars[,2]*covariate^2 + trend_pars[,3]*covariate^3,
@@ -264,16 +243,15 @@ run_kernel <- function(param, trend_pars = NULL, kernel, covariate) {
 }
 
 prep_trend <- function(dadm, trend, pars){
+  print(pars)
   for(par in names(trend)){
-    pars[,par] <- run_trend(dadm, trend, pars[,par], pars[,trend[[par]]$trend_pnames, drop = FALSE])
+    pars[,par] <- run_trend(dadm, trend[[par]], pars[,par], pars[,trend[[par]]$trend_pnames, drop = FALSE])
   }
-  pars[,!colnames(pars) %in% get_trend_pnames(trend)]
+  pars <- pars[,!colnames(pars) %in% get_trend_pnames(trend)]
   return(pars)
 }
 
 run_trend <- function(dadm, trend, param, trend_pars){
-  # For now assume no sequential process
-
   n_base_pars <- switch(trend$base,
                         lin = 1,
                         exp_lin = 1,
@@ -299,7 +277,7 @@ run_trend <- function(dadm, trend, param, trend_pars){
     # Keep an expansion index
     unq_idx <- cumsum(filter)
     # Run trend
-    output <- run_kernel(param_tmp[filter], kernel_pars, trend$kernel, cov_tmp[filter])
+    output <- run_kernel(kernel_pars, trend$kernel, cov_tmp[filter])
     # Decompress output and map back based on non-NA
     out[!NA_idx] <- out[!NA_idx] + output[unq_idx]
   }
@@ -352,13 +330,13 @@ update_model_trend <- function(trend, model) {
   for (par in names(trend)) {
     cur_trend <- trend[[par]]
 
-    # Get default transforms from kernel and base
-    kernel_transforms <- trend_help(cur_trend$kernel, do_return = TRUE)$transforms
+    # Get default transforms from base and kernel
     base_transforms <- trend_help(base = cur_trend$base, do_return = TRUE)$transforms
+    kernel_transforms <- trend_help(cur_trend$kernel, do_return = TRUE)$transforms
 
     # Combine transforms
     if (!is.null(kernel_transforms) || !is.null(base_transforms)) {
-      tmp <- c(kernel_transforms$func, base_transforms$func)
+      tmp <- c(base_transforms$func, kernel_transforms$func)
       names(tmp) <- cur_trend$trend_pnames
       # Update the appropriate transform list based on premap
       model_list$transform$func <- c(model_list$transform$func, unlist(tmp))
@@ -381,7 +359,7 @@ run_delta <- function(q0,alpha,covariate) {
   return(q)
 }
 
-run_delta2_i <- function(q0,alphaFast,propSlow,dSwitch,covariate) {
+run_delta2 <- function(q0,alphaFast,propSlow,dSwitch,covariate) {
   q <- qFast <- qSlow <- peFast <- peSlow <- numeric(length(target))
   q[1] <- qFast[1] <- qSlow[1] <- q0[1]
   alphaSlow <- propSlow*alphaFast

@@ -678,89 +678,6 @@ make_dm <- function(form,da,Clist=NULL,Fcovariates=NULL, add_da = FALSE, all_cel
   return(out)
 }
 
-
-#### Functions to look at parameters ----
-
-map_p <- function(p,dadm)
-  # Map p to dadm and returns matrix of mapped parameters
-  # p is either a vector or a matrix (ncol = number of subjects) of p_vectors
-  # dadm is a design matrix with attributes containing model information
-{
-
-  # Check if p is a matrix and validate column names match parameter names
-  if ( is.matrix(p) ) {
-    if (!all(sort(dimnames(p)[[2]])==sort(attr(dadm,"p_names"))))
-      stop("p col.names must be: ",paste(attr(dadm,"p_names"),collapse=", "))
-    if (!all(levels(dadm$subjects) %in% dimnames(p)[[1]]))
-      stop("p must have rows named for every subject in dadm")
-    p <- p[dadm$subjects,]
-  } else if (!all(sort(names(p))==sort(attr(dadm,"p_names")))) # If p is vector, check names
-    stop("p names must be: ",paste(attr(dadm,"p_names"),collapse=", "))
-
-  # Get parameter names from model and create output matrix
-  do_p <- names(attr(dadm,"model")()$p_types)
-  pars <- matrix(nrow=nrow(dadm),ncol=length(do_p),dimnames=list(NULL,do_p))
-
-  # If there are any trends do these first, they might be used later in mapping
-  # Otherwise we're not applying the trend premap, but we are doing it pre-transform
-  # So these trend parameters are post-map, pre-transform and have to be included in the pars output
-  premap_idx <- rep(F, length(do_p))
-  if(!is.null(attr(dadm,"model")()$trend) &&
-     (attr(attr(dadm,"model")()$trend, "premap") || attr(attr(dadm,"model")()$trend, "pretransform"))){
-    trend_names <- get_trend_pnames(attr(dadm,"model")()$trend)
-    pretrend_idx <- do_p %in% trend_names
-    if((attr(attr(dadm,"model")()$trend, "premap"))){
-      # These can be removed from the pars matrix at the end
-      # Since they are already used before the mapping
-      premap_idx <- pretrend_idx
-    }
-    # Reorder parameters to make design matrix for trends first
-    do_p <- c(do_p[pretrend_idx], do_p[!pretrend_idx])
-  } else{
-    pretrend_idx <- rep(F, length(do_p))
-  }
-  k <- 1
-  # Loop through each parameter
-  for (i in do_p) {
-    cur_design <- attr(dadm,"designs")[[i]]
-    # Handle vector vs matrix input differently
-    if ( !is.matrix(p) ) {
-      pm <- t(as.matrix(p[colnames(cur_design)]))
-      pm <- pm[rep(1,nrow(pars)),,drop=FALSE]
-    } else pm <- p[,colnames(cur_design),drop=FALSE]
-
-    # Apply pre-mapped trends if they exist
-    if (!is.null(attr(dadm,"model")()$trend) && attr(attr(dadm,"model")()$trend, "premap")) {
-      trend <- attr(dadm,"model")()$trend
-      isin <- names(trend) %in% colnames(pm)
-      if (any(isin)){ # At this point the trend has already been mapped and transformed
-        for (j in names(trend)[isin]) {
-          cur_trend <- trend[[j]]
-          # We can select the trend pars from the already update pars matrix
-          trend_pars <- pars[,cur_trend$trend_pnames]
-          pm[,j] <- run_trend(dadm, cur_trend, pm[,j], trend_pars)
-        }
-      }
-    }
-
-    # Apply design matrix and sum parameter effects
-    tmp <- pm*cur_design[attr(cur_design,"expand"),,drop=FALSE]
-    tmp[is.nan(tmp)] <- 0 # Handle 0 weight x Inf parameter cases
-    tmp <- apply(tmp,1,sum)
-    # If this is a premap trend parameter, transform it here already
-    # We'll need it transformed later in this loop (for trending other parameters)
-    if(k <= sum(pretrend_idx)){
-      tmp <- as.matrix(tmp)
-      colnames(tmp) <- i
-      tmp <- do_transform(tmp, attr(dadm,"model")()$transform)
-    }
-    k <- k + 1
-    pars[,i] <- tmp
-  }
-  # Return only non-trend parameters
-  return(pars[,!premap_idx])
-}
-
 # data generation
 
 # Used in make_data and make_emc
@@ -886,38 +803,38 @@ dm_list <- function(dadm)
   return(dl)
 }
 
-update2version <- function(emc, model = NULL, transform = NULL, bound = NULL){
-  design_list <- attr(emc,"design_list")
+update2version <- function(emc, model, transform = NULL, bound = NULL,
+                           pre_transform = NULL){
+  design_list <- get_design(emc)
   type <- attr(emc[[1]], "variant_funs")$type
   emc <- lapply(emc, FUN = function(x){
     attr(x, "variant_funs") <- get_variant_funs(type)
     return(x)
   })
-  if(!is.null(model)){
-    # Apparently we're an old model with previous bounding system
-    if(is.null(design_list[[1]]$model()$bound)){
-      # Just to be sure let's set t0 transform lower to 0
-      if(is.null(transform)) transform <- list(lower = c(t0 = 0))
-    } else{
-      if(is.null(transform)) transform <- design_list[[1]]$model()$transform
-      if(is.null(bound)) bound <- design_list[[1]]$model()$bound
-    }
-    model_list <- model()
-    model_list$transform <- fill_transform(transform,model)
-    model_list$bound <- fill_bound(bound,model)
-    model <- function(){return(model_list)}
-    design_list <- lapply(design_list, FUN = function(x){
-      x$model <- model
-      return(x)
-    })
-    emc <- lapply(emc, FUN = function(x){
-      x$data <- lapply(x$data, FUN = function(y){
-        attr(y, "model") <- model
-        return(y)
-      })
-      return(x)
-    })
+  # Apparently we're an old model with previous bounding system
+  if(is.null(design_list[[1]]$model()$bound)){
+    # Just to be sure let's set t0 transform lower to 0
+    if(is.null(transform)) transform <- list(lower = c(t0 = 0))
+  } else{
+    if(is.null(transform)) transform <- design_list[[1]]$model()$transform
+    if(is.null(bound)) bound <- design_list[[1]]$model()$bound
   }
+  model_list <- model()
+  model_list$transform <- fill_transform(transform,model)
+  model_list$pre_transform <- fill_transform(pre_transform, model = model, p_vector = sampled_p_vector(design_list), is_pre = TRUE)
+  model_list$bound <- fill_bound(bound,model)
+  model <- function(){return(model_list)}
+  design_list <- lapply(design_list, FUN = function(x){
+    x$model <- model
+    return(x)
+  })
+  emc <- lapply(emc, FUN = function(x){
+    x$data <- lapply(x$data, FUN = function(y){
+      attr(y, "model") <- model
+      return(y)
+    })
+    return(x)
+  })
   prior_new <- emc[[1]]$prior
   attr(prior_new, "type") <- type
   prior_new <- prior(design_list, type, update = prior_new)
