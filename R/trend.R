@@ -4,7 +4,7 @@
 #' @param cov_names Character vector specifying which covariates to use for each trend
 #' @param kernels Character vector specifying which kernel function to use for each trend
 #' @param bases Optional character vector specifying which base function to use for each trend
-#' @param shared Logical indicating if parameters should be shared across trends on different parameters
+#' @param shared Named list with entries the parameter names to be shared and the names the new names of the shared parameter.
 #' @param trend_pnames Optional character vector specifying custom parameter names
 #' @param premap Logical indicating if trend should be applied before or after parameter mapping
 #' @param pretransform If !premap, logical indicating if trend should be applied before or after parameter transformation
@@ -17,11 +17,13 @@
 #'   par_names = c("B", "v"),
 #'   cov_names = "strial",
 #'   kernels = c("exp_incr", "poly3"),
-#'   premap = TRUE
+#'   premap = TRUE,
+#'   shared = list(shrd = list("B.B0", "v.d1"))
 #' )
+#' get_trend_pnames(trend)
 #'
 make_trend <- function(par_names, cov_names, kernels, bases = NULL,
-                       shared = FALSE, trend_pnames = NULL, premap = TRUE,
+                       shared = NULL, trend_pnames = NULL, premap = TRUE,
                        pretransform = FALSE){
   if(pretransform & premap){
     warning("Setting pretransform has no effect if premap = TRUE")
@@ -92,7 +94,7 @@ make_trend <- function(par_names, cov_names, kernels, bases = NULL,
 }
 
 
-#' Get parameter names from trend object
+#' Get parameter types from trend object
 #'
 #' @param trend A trend object created by make_trend()
 #' @return A character vector of parameter names used in the trend

@@ -9,7 +9,7 @@ make_trend(
   cov_names,
   kernels,
   bases = NULL,
-  shared = FALSE,
+  shared = NULL,
   trend_pnames = NULL,
   premap = TRUE,
   pretransform = FALSE
@@ -24,7 +24,7 @@ make_trend(
 
 \item{bases}{Optional character vector specifying which base function to use for each trend}
 
-\item{shared}{Logical indicating if parameters should be shared across trends on different parameters}
+\item{shared}{Named list with entries the parameter names to be shared and the names the new names of the shared parameter.}
 
 \item{trend_pnames}{Optional character vector specifying custom parameter names}
 
@@ -44,7 +44,9 @@ trend <- make_trend(
   par_names = c("B", "v"),
   cov_names = "strial",
   kernels = c("exp_incr", "poly3"),
-  premap = TRUE
+  premap = TRUE,
+  shared = list(shrd = list("B.B0", "v.d1"))
 )
+get_trend_pnames(trend)
 
 }

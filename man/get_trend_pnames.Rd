@@ -2,7 +2,7 @@
 % Please edit documentation in R/trend.R
 \name{get_trend_pnames}
 \alias{get_trend_pnames}
-\title{Get parameter names from trend object}
+\title{Get parameter types from trend object}
 \usage{
 get_trend_pnames(trend)
 }
@@ -13,7 +13,7 @@ get_trend_pnames(trend)
 A character vector of parameter names used in the trend
 }
 \description{
-Get parameter names from trend object
+Get parameter types from trend object
 }
 \examples{
 trend <- make_trend(par_names = "v", cov_names = "trial", kernels = "exp_incr")
