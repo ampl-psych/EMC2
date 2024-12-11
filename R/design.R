@@ -138,12 +138,12 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
                  Clist=contrasts,matchfun=matchfun,constants=constants,
                  Fcovariates=covariates,Ffunctions=functions,model=model)
   class(design) <- "emc.design"
-  p_vector <- sampled_p_vector(design,design$model)
   if (!is.null(trend)) {
     model <- update_model_trend(trend, model)
     model_list <- model()
     model <- function(){return(model_list)}
   }
+  p_vector <- sampled_p_vector(design,model)
   lhs_terms <- unlist(lapply(formula, function(x) as.character(stats::terms(x)[[2]])))
 
   # Check if any terms are not in model parameters
@@ -152,7 +152,6 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
     stop(paste0("Parameter(s) ", paste0(invalid_terms, collapse=", "),
                 " in formula not found in model p_types"))
   }
-
   model_list <- model()
   model_list$transform <- fill_transform(transform,model)
   model_list$bound <- fill_bound(bound,model)

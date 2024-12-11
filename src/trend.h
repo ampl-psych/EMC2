@@ -75,18 +75,18 @@ NumericVector run_kernel_rcpp(NumericMatrix trend_pars, String kernel, NumericVe
   }
   else if(kernel == "poly3") {
     out = trend_pars(_, 0 + n_base_pars) * covariate + trend_pars(_, 1 + n_base_pars) * pow(covariate, 2) +
-          trend_pars(_, 2 + n_base_pars) * pow(covariate, 3);
+      trend_pars(_, 2 + n_base_pars) * pow(covariate, 3);
   }
   else if(kernel == "poly4") {
     out = trend_pars(_, 0 + n_base_pars) * covariate + trend_pars(_, 1 + n_base_pars) * pow(covariate, 2) +
-          trend_pars(_, 2 + n_base_pars) * pow(covariate, 3) + trend_pars(_, 3 + n_base_pars) * pow(covariate, 4);
+      trend_pars(_, 2 + n_base_pars) * pow(covariate, 3) + trend_pars(_, 3 + n_base_pars) * pow(covariate, 4);
   }
   else if(kernel == "delta") {
     out = run_delta_rcpp(trend_pars(_, 0 + n_base_pars), trend_pars(_, 1 + n_base_pars), covariate);
   }
   else if(kernel == "delta2") {
     out = run_delta2_rcpp(trend_pars(_, 0 + n_base_pars), trend_pars(_, 1 + n_base_pars), trend_pars(_, 2 + n_base_pars),
-                         trend_pars(_, 3 + n_base_pars), covariate);
+                          trend_pars(_, 3 + n_base_pars), covariate);
   }
 
   return out;
@@ -97,9 +97,9 @@ NumericVector run_trend_rcpp(DataFrame data, List trend, NumericVector param, Nu
   String kernel = as<String>(trend["kernel"]);
   String base = as<String>(trend["base"]);
   CharacterVector covnames = trend["covariate"];
-
   // Initialize output vector with zeros
-  NumericVector out(param.length());
+  int n_trials = param.length();
+  NumericVector out(n_trials);
   int n_base_pars = 0;
   if(base == "lin" || base == "exp_lin") {
     n_base_pars = 1;
@@ -128,12 +128,17 @@ NumericVector run_trend_rcpp(DataFrame data, List trend, NumericVector param, Nu
     }
     // Run kernel on unique entries
     NumericVector output = run_kernel_rcpp(submat_rcpp(trend_pars_tmp, filter), kernel, cov_tmp[filter], n_base_pars);
-
     // // Create index for expanding back to full size
     IntegerVector unq_idx = cumsum_logical(filter); // Is 1-based
     NumericVector expanded_output = c_expand(output, unq_idx); //This assumes 1-based as well
     // Add to cumulative output
-    out[!NA_idx] = out[!NA_idx] + expanded_output[!NA_idx];
+    for(int k = 0, l = 0; k < n_trials; k ++){
+      // put back values, expanded output could be shorter, since NAs are excluded
+      if(NA_idx[k] == FALSE){
+        out[k] = out[k] + expanded_output[l];
+        l++;
+      }
+    }
   }
   // Apply base transformation to final summed output
   if(base == "lin") {
@@ -152,14 +157,15 @@ NumericVector run_trend_rcpp(DataFrame data, List trend, NumericVector param, Nu
 NumericMatrix prep_trend(DataFrame data, List trend, NumericMatrix pars) {
   // Get parameter names
   CharacterVector trend_names = trend.names();
-  CharacterVector trend_pnames;
+  CharacterVector all_trend_names;
+  CharacterVector par_names = colnames(pars);
   // Apply trends
   for(unsigned int i = 0; i < trend_names.length(); i ++) {
-    CharacterVector par_names = colnames(pars);
     String par = trend_names[i];
     List cur_trend = trend[par];
     // Get trend parameter names
     CharacterVector trend_pnames = cur_trend["trend_pnames"];
+    all_trend_names = c_add_charvectors(all_trend_names, trend_pnames);
     LogicalVector idx = contains_multiple(par_names, trend_pnames);
     LogicalVector par_idx = contains(par_names, par);
     // Extract parameter and trend parameter columns
@@ -167,8 +173,9 @@ NumericMatrix prep_trend(DataFrame data, List trend, NumericMatrix pars) {
     NumericMatrix trend_pars = submat_rcpp_col(pars, idx);
     // Run trend
     pars(_, as<int>(which_rcpp(par_idx))) = run_trend_rcpp(data, cur_trend, param, trend_pars);
-    pars = submat_rcpp_col(pars, !idx);
   }
+  all_trend_names = unique(all_trend_names);
+  pars = submat_rcpp_col(pars, !contains_multiple(par_names, all_trend_names));
   return(pars);
 }
 

@@ -29,10 +29,12 @@ make_trend <- function(par_names, cov_names, kernels, bases = NULL,
   if(!(length(par_names) == length(kernels))){
     stop("Make sure that par_names and kernels have the same length")
   }
-  if(length(cov_names) != length(par_names) && length(cov_names) == 1){
-    cov_names <- rep(cov_names, length(par_names))
-  } else if(length(cov_names) != 1){
-    stop("Make sure that cov_names and par_names have the same length")
+  if(length(cov_names) != length(par_names)){
+    if(length(cov_names) == 1){
+      cov_names <- rep(cov_names, length(par_names))
+    } else{
+      stop("Make sure that cov_names and par_names have the same length")
+    }
   }
   if(!is.null(bases)){
     if(length(kernels) != length(bases)){
@@ -62,10 +64,26 @@ make_trend <- function(par_names, cov_names, kernels, bases = NULL,
     trend_pnames <- trend_help(base = trend$base, do_return = TRUE)$default_pars
     trend_pnames <- c(trend_pnames, trend_help(kernel = kernels[i], do_return = TRUE)$default_pars)
     trend$trend_pnames <- paste0(par_names[i], ".", trend_pnames)
-    trend$covariate <- cov_names[i]
-    trend$shared <- shared
+    trend$covariate <- unlist(cov_names[i])
     trends_out[[par_names[i]]] <- trend
   }
+  if(!is.null(shared)){
+    # For each group of shared parameters
+    for (main_par in names(shared)) {
+      # Get the parameters to be replaced
+      to_replace <- shared[[main_par]]
+      # Loop through all trends
+      for (trend_name in names(trends_out)) {
+        # Get current trend parameter names
+        curr_pnames <- trends_out[[trend_name]]$trend_pnames
+
+        # Check if any of the parameters to be replaced exist
+        curr_pnames[curr_pnames %in% to_replace] <- main_par
+        trends_out[[trend_name]]$trend_pnames <- curr_pnames
+      }
+    }
+  }
+
   attr(trends_out, "sequential") <- any(kernels %in% c("delta", "delta2"))
   attr(trends_out, "premap") <- premap
   attr(trends_out, "pretransform") <- pretransform & !premap
@@ -86,7 +104,7 @@ make_trend <- function(par_names, cov_names, kernels, bases = NULL,
 get_trend_pnames <- function(trend){
   out <- unlist(lapply(trend, function(x) x$trend_pnames))
   names(out) <- NULL
-  return(out)
+  return(unique(out))
 }
 
 trend_help <- function(kernel = NULL, base = NULL, ...){
@@ -148,7 +166,7 @@ trend_help <- function(kernel = NULL, base = NULL, ...){
         "Parameters: q0 (initial value), alpha (learning rate)."
       ),
       default_pars = c("q0", "alpha"),
-      transforms = list(func = list("q0" = "identity", "alpha" = "probit")),
+      transforms = list(func = list("q0" = "identity", "alpha" = "pnorm")),
       bases = base_2p),
     delta2 = list(description = paste(
       "Dual kernel delta rule:",
@@ -158,7 +176,7 @@ trend_help <- function(kernel = NULL, base = NULL, ...){
       "propSlow (alphaSlow = propSlow * alphaFast), dSwitch (switch threshold)."
     ),
     default_pars = c("q0", "alphaFast", "propSlow", "dSwitch"),
-    transforms = list(func = list("q0" = "identity", "alphaFast" = "probit",
+    transforms = list(func = list("q0" = "identity", "alphaFast" = "pnorm",
                                 "propSlow" = "pnorm", "dSwitch" = "pnorm")),
     bases = base_2p)
   )
@@ -244,7 +262,6 @@ run_kernel <- function(trend_pars = NULL, kernel, covariate) {
 }
 
 prep_trend <- function(dadm, trend, pars){
-  print(pars)
   for(par in names(trend)){
     pars[,par] <- run_trend(dadm, trend[[par]], pars[,par], pars[,trend[[par]]$trend_pnames, drop = FALSE])
   }
@@ -295,9 +312,8 @@ run_trend <- function(dadm, trend, param, trend_pars){
 check_trend <- function(trend, covariates = NULL, model = NULL, formula = NULL) {
   if(!is.null(model)){
     if(!attr(trend, "premap")){
-      param_names <- names(trend)
-      if (!all(param_names %in% names(model()$p_types))){
-        stop("trend premap has a parameter type name not in the model")
+      if (!all(names(trend) %in% names(model()$p_types))){
+        stop("pretransform or posttransform trend has a parameter type name not in the model")
       }
     }
   }
@@ -306,18 +322,15 @@ check_trend <- function(trend, covariates = NULL, model = NULL, formula = NULL) 
   if (!all(covnames %in% names(covariates))){
     stop("trend has covnames not in covariates")
   }
-  if (any(duplicated(names(trend)))) stop("Duplicate parameter names in trend")
-  for(par in names(trend)){
-    cur_dyn <- trend[[par]]
-    if (!is.null(formula)) {
-      isin <-  cur_dyn$trend_pnames %in% unlist(lapply(formula,function(x)all.vars(x)[1]))
-      if(any(!isin)){
+  if (any(duplicated(names(trend)))) stop("Duplicate target cognitive model parameter in trend")
+  trend_pnames <- get_trend_pnames(trend)
+  if (!is.null(formula)) {
+    isin <-  trend_pnames %in% unlist(lapply(formula,function(x)all.vars(x)[1]))
+    if(any(!isin)){
       # Add missing trend parameters to formula with intercept-only model
-        formula <- c(formula, lapply(cur_dyn$trend_pnames[!isin], function(x) as.formula(paste(x, "~ 1"))))
-        message("Intercept formula added for trend_pars: ", paste(cur_dyn$trend_pnames[!isin],collapse=", "))
-      }
+      formula <- c(formula, lapply(trend_pnames[!isin], function(x) as.formula(paste(x, "~ 1"))))
+      message("Intercept formula added for trend_pars: ", paste(trend_pnames[!isin],collapse=", "))
     }
-    trend[[par]] <- cur_dyn
   }
   return(formula)
 }
@@ -344,6 +357,8 @@ update_model_trend <- function(trend, model) {
     }
     model_list$p_types <- c(model_list$p_types, setNames(numeric(length(cur_trend$trend_pnames)), cur_trend$trend_pnames))
   }
+  # Ensure that shared parameters are removed
+  model_list$p_types <- model_list$p_types[unique(names(model_list$p_types))]
   model_list$trend <- trend
   # Return updated model function
   model <- function() { return(model_list) }

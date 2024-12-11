@@ -70,7 +70,6 @@ NumericVector c_do_pre_transform(NumericVector p_vector,
   CharacterVector func_names = func.names();
   CharacterVector lower_names = lower.names();
   CharacterVector upper_names = upper.names();
-
   int n = p_vector.size();
   // Match p_names to func_names to align indices
   // match() returns 1-based indices
@@ -179,26 +178,25 @@ NumericMatrix c_map_p(NumericVector p_vector,
   CharacterVector trend_pnames;
   LogicalVector trend_index(n_params, FALSE);
   if (has_trend && (premap || pretransform)) {
-    // First deal with trend parameters
+    // first loop over trends to get all trend pnames
     for(unsigned int q = 0; q < trend.length(); q++){
-      // Loop over trends
       List cur_trend = trend[q];
-      LogicalVector cur_trend_idx = contains_multiple(p_types,as<CharacterVector>(cur_trend["trend_pnames"]));
       trend_pnames = c_add_charvectors(trend_pnames, as<CharacterVector>(cur_trend["trend_pnames"]));
-      // Loop over p_types, pick out any that are trends
-      for(unsigned int j = 0; j < cur_trend_idx.length(); j ++){
-        if(cur_trend_idx[j] == TRUE){
-          NumericMatrix cur_design_trend = designs[j];
-          CharacterVector cur_names_trend = colnames(cur_design_trend);
-          // Make an empty 1 column matrix
-          // This is needed for c_do_transform
-          // Take the current design and loop over columns
-          for(int k = 0; k < cur_design_trend.ncol(); k ++){
-            String cur_name_trend(cur_names_trend[k]);
-            p_mult_design =  p_vector[cur_name_trend] * cur_design_trend(_, k);
-            p_mult_design[is_nan(p_mult_design)] = 0;
-            pars(_, j) = pars(_, j) + p_mult_design;
-          }
+      // Takes care of shared parameters
+      trend_pnames = unique(trend_pnames);
+    }
+    // index which p_types are trends
+    LogicalVector trend_index = contains_multiple(p_types,trend_pnames);
+    for(unsigned int j = 0; j < trend_index.length(); j ++){
+      if(trend_index[j] == TRUE){
+        NumericMatrix cur_design_trend = designs[j];
+        CharacterVector cur_names_trend = colnames(cur_design_trend);
+        // Take the current design and loop over columns
+        for(int k = 0; k < cur_design_trend.ncol(); k ++){
+          String cur_name_trend(cur_names_trend[k]);
+          p_mult_design =  p_vector[cur_name_trend] * cur_design_trend(_, k);
+          p_mult_design[is_nan(p_mult_design)] = 0;
+          pars(_, j) = pars(_, j) + p_mult_design;
         }
       }
     }
@@ -209,21 +207,28 @@ NumericMatrix c_map_p(NumericVector p_vector,
     if(trend_index[i] == FALSE){
       NumericMatrix cur_design = designs[i];
       CharacterVector cur_names = colnames(cur_design);
+
       for(int j = 0; j < cur_design.ncol(); j ++){
         String cur_name(cur_names[j]);
-        p_mult_design =  p_vector[cur_name] * cur_design(_, j);
+        NumericVector p_mult_design(n_trials, p_vector[cur_name]);
         if(has_trend && premap){
           // Check if trend is on current parameter
           LogicalVector cur_has_trend = contains(trend_names, cur_name);
+          // This is a bit tricky and arguable.
+          // Here we first fill a p_mult_design vector, then apply a trend then multiply with design matrix
+          // Arguably you could also multiply parameter with design matrix and then apply trend
+          // But that results in weird effects that if a parameter is set at 0, it could no longer be 0 post-trend
           for(unsigned int w = 0; w < cur_has_trend.length(); w ++){
             if(cur_has_trend[w] == TRUE){ // if so apply trend
               List cur_trend = trend[cur_name];
               CharacterVector cur_trend_pnames = cur_trend["trend_pnames"];
               p_mult_design = run_trend_rcpp(data, cur_trend, p_mult_design,
                                              submat_rcpp_col(trend_pars, contains_multiple(trend_pnames, cur_trend_pnames)));
+
             }
           }
         }
+        p_mult_design = p_mult_design * cur_design(_, j);
         p_mult_design[is_nan(p_mult_design)] = 0;
         pars(_, i) = pars(_, i) + p_mult_design;
       };
@@ -234,13 +239,8 @@ NumericMatrix c_map_p(NumericVector p_vector,
       t++;
     }
   };
-  if(has_trend){
-    if(premap){
-      pars = submat_rcpp_col(pars, !contains_multiple(p_types, trend_pnames));
-    } else{
-
-    }
-
+  if(has_trend && premap){
+    pars = submat_rcpp_col(pars, !contains_multiple(p_types, trend_pnames));
   }
   return(pars);
 }
