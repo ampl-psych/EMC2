@@ -222,19 +222,17 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
   if (!is.null(model)) {
     if (!is.function(model)) stop("model argument must  be a function")
     if ( is.null(model()$p_types) ) stop("model()$p_types must be specified")
-    if ( is.null(model()$transform) ) stop("model()$transform must be specified")
-    if ( is.null(model()$Ntransform) ) stop("model()$Ntransform must be specified")
     if ( is.null(model()$Ttransform) ) stop("model()$Ttransform must be specified")
   }
   data <- design_model(
     add_accumulators(data,design$matchfun,simulate=TRUE,type=model()$type,Fcovariates=design$Fcovariates),
     design,model,add_acc=FALSE,compress=FALSE,verbose=FALSE,
     rt_check=FALSE)
-  if (!is.null(attr(design,"ordinal")))
-    parameters[,attr(design,"ordinal")] <- exp(parameters[,attr(design,"ordinal")])
-  pars <- model()$Ttransform(model()$Ntransform(map_p(
-    model()$transform(add_constants(parameters,design$constants)),data
-  )),data)
+  pars <- t(apply(parameters, 1, do_pre_transform, model()$pre_transform))
+  pars <- map_p(add_constants(pars,design$constants),data)
+  pars <- do_transform(pars, model()$transform)
+  pars <- model()$Ttransform(pars, data)
+  pars <- add_bound(pars, model()$bound)
   if ( any(dimnames(pars)[[2]]=="pContaminant") && any(pars[,"pContaminant"]>0) )
     pc <- pars[data$lR==levels(data$lR)[1],"pContaminant"] else pc <- NULL
   if (mapped_p) return(cbind(data[,!(names(data) %in% c("R","rt"))],pars))
@@ -252,12 +250,14 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
     for (i in levels(RACE)) {
       pick <- data$RACE==i
       lRi <- factor(data$lR[pick & ok])
-      Rrti <- model()$rfun(lRi,pars[pick & ok,])
+      tmp <- pars[pick & ok,]
+      attr(tmp, "ok") <- rep(T, nrow(tmp))
+      Rrti <- model()$rfun(lRi,tmp)
       Rrti$R <- as.numeric(Rrti$R)
       Rrt[RACE==i,] <- as.matrix(Rrti)
     }
     Rrt <- data.frame(Rrt)
-    Rrt$R <- factor(Rrt$R,labels=levels(lR))
+    Rrt$R <- factor(Rrt$R, labels = levels(lR), levels = 1:length(levels(lR)))
   } else Rrt <- model()$rfun(lR,pars)
   dropNames <- c("lR","lM","lSmagnitude")
   if (!return_Ffunctions && !is.null(design$Ffunctions))

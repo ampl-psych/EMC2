@@ -7,20 +7,6 @@
 // using namespace Rcpp;
 //
 //
-// NumericVector transform_fMRI(NumericVector x){
-//   return(x);
-// }
-//
-// NumericMatrix Ntransform_fMRI(NumericMatrix x) {
-//   NumericMatrix out(clone(x));
-//   LogicalVector col_idx = contains(colnames(x), "sd");
-//   for(int i = 0; i < x.ncol(); i ++){
-//     if(col_idx[i] == FALSE){
-//       out (_, i) = exp(out(_, i)) + 0.001;
-//     };
-//   };
-//   return(out);
-// }
 //
 // double c_log_likelihood_fMRI(NumericVector pars, DataFrame data, NumericMatrix designMatrix, double min_ll){
 //   int n = data.nrow();

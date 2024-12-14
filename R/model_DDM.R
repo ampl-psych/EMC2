@@ -15,7 +15,7 @@ suppress_output <- function(expr) {
   invisible(force(expr))  # Run the expression
 }
 
-rDDM <- function(lR,pars,precision=5e-3,ok=rep(TRUE,length(lR)))
+rDDM <- function(lR,pars,ok=rep(TRUE,length(lR)), precision=5e-3)
   # lR is an empty latent response factor lR with one level for each boundary
   # pars is a matrix of parameter values named as in p_types
   # lower is mapped to first level of lR and upper to second
@@ -118,57 +118,26 @@ pDDM <- function(rt,R,pars,precision=5e-3)
 
 DDM <- function(){
   list(
-    type="DDM",
     c_name = "DDM",
+    type="DDM",
     p_types=c("v" = 1,"a" = log(1),"sv" = log(0),"t0" = log(0),"st0" = log(0),"s" = log(1),"Z" = qnorm(0.5),"SZ" = qnorm(0)),
-    # The "TZD" parameterization defined relative to the "rtdists" package is:
-    # natural scale
-    #   v = rtdists rate v (positive favors upper)
-    # log scale
-    #   t0 > 0: lower bound of non-decision time
-    #   st0 > 0: rtdists width of non-decision time distribution
-    #   a > 0: rtdists upper threshold, a
-    #   sv > 0: rtdists v standard deviation sv
-    #   s > 0: rtdists moment-to-moment standard deviation, s
-    # probit scale
-    #   0 < Z < 1: rtdists start point z = Z*a
-    #   0 < SZ < 1: rtdists start-point variability, sz = 2*SZ*min(c(a*Z,a*(1-Z))
-    #   0 < DP < 1: rtdists d = t0(upper)-t0(lower) = (2*DP-1)*t0  #
-    #
-    # Transform to natural scale
-    Ntransform=function(x) {
-      islog <- dimnames(x)[[2]] %in% c("a","sv","t0","st0","s")
-      isprobit <- dimnames(x)[[2]] %in% c("Z","SZ","DP")
-      x[,islog] <- exp(x[,islog])
-      x[,isprobit] <- pnorm(x[,isprobit])
-      x
-    },
     # Trial dependent parameter transform
+    transform=list(func=c(v = "identity",a = "exp",sv = "exp",t0 = "exp",
+                          st0 = "exp",s = "exp",Z = "pnorm",SZ = "pnorm"),lower=c(t0=.05)),
+    bound=list(minmax=cbind(v=c(-20,20),a=c(0,10),Z=c(.001,.999),t0=c(0,Inf),
+                            sv=c(.001,10),s=c(0,Inf),SZ=c(.001,.999),st0=c(0,.5)),
+               exception=c(sv=0,SZ=0,st0=0)),
     Ttransform = function(pars,dadm) {
       pars[,"SZ"] <- 2*pars[,"SZ"]*apply(cbind(pars[,"Z"],1-pars[,"Z"]),1,min)
-      pars <- cbind(pars,z=pars[,"Z"]*pars[,"a"],
-                    sz = pars[,"SZ"]*pars[,"a"])
-      attr(pars,"ok") <- !( abs(pars[,"v"])> 20 | pars[,"a"]> 10 | pars[,"sv"]> 10 | pars[,"SZ"]> .999 |
-             pars[,"t0"] < .05 | pars[,"st0"]>5)
-      if (pars[1,"sv"] !=0) attr(pars,"ok") <- attr(pars,"ok") & pars[,"sv"] > .001
-      if (pars[1,"SZ"] !=0) attr(pars,"ok") <- attr(pars,"ok") & pars[,"SZ"] > .001
-      attr(pars, "ok") <- rep(TRUE, nrow(pars))
+      pars <- cbind(pars,z=pars[,"Z"]*pars[,"a"], sz = pars[,"SZ"]*pars[,"a"])
       pars
     },
-    # p_vector transform, sets s as a scaling parameter
-    transform = function(p) p,
     # Random function
-    rfun=function(lR=NULL,pars) {
-      ok <- !(abs(pars[,"v"])> 20 | pars[,"a"]> 10 | pars[,"sv"]> 10 | pars[,"SZ"]> .999 |
-                 pars[,"st0"]>5 | pars[,"t0"] < .05)
-      if (pars[1,"sv"] !=0) attr(pars,"ok") <- attr(pars,"ok") & pars[,"sv"] > .001
-      if (pars[1,"SZ"] !=0) attr(pars,"ok") <- attr(pars,"ok") & pars[,"SZ"] > .001
-      if (is.null(lR)) ok else rDDM(lR,pars,precision=1e-3,ok)
-    },
+    rfun=function(lR=NULL,pars) rDDM(lR,pars, attr(pars, "ok")),
     # Density function (PDF)
-    dfun=function(rt,R,pars) dDDM(rt,R,pars,precision=1e-3),
+    dfun=function(rt,R,pars) dDDM(rt,R,pars),
     # Probability function (CDF)
-    pfun=function(rt,R,pars) pDDM(rt,R,pars,precision=1e-3),
+    pfun=function(rt,R,pars) pDDM(rt,R,pars),
     log_likelihood=function(p_vector,dadm,min_ll=log(1e-10)){
       log_likelihood_ddm(p_vector=p_vector, dadm = dadm, min_ll = min_ll)
     }

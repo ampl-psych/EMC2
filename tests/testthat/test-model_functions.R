@@ -18,7 +18,7 @@ design_LBA <- design(data = dat,model=LBA,matchfun=matchfun,
                             formula=list(v~lM,sv~lM,B~E+lR,A~1,t0~1),
                             contrasts=list(v=list(lM=ADmat)),constants=c(sv=log(1)))
 
-p_LBA <- c(v=.5,v_lMd=1, sv_lMTRUE = log(.5), B = log(2), B_Eneutral = .5,
+p_LBA <- c(v=1.5,v_lMd=1, sv_lMTRUE = log(.5), B = log(2), B_Eneutral = .5,
            B_Eaccuracy = .3, B_lRright = 0, A = log(.4), t0=log(.2))
 
 

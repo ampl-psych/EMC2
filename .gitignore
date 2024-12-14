@@ -6,6 +6,6 @@
 *.pdf
 .DS_Store
 docs
-paper  
 .vscode
 settings.json
+paper
