@@ -12,7 +12,7 @@ vignette: >
 
 ```{r, echo = FALSE}
 rm(list = ls())
-devtools::load_all()
+library(EMC2)
 ```
 
 ## Introduction
