@@ -170,13 +170,13 @@ get_startpoints_factor<- function(pmwgs, start_mu, start_var){
               eta = start_eta))
 }
 
-fill_samples_factor <- function(samples, group_level, proposals, epsilon, j = 1, n_pars){
+fill_samples_factor <- function(samples, group_level, proposals, j = 1, n_pars){
   samples$theta_lambda[,,j] <- group_level$lambda
   samples$lambda_untransf[,,j] <- group_level$lambda_untransf
   samples$theta_sig_err_inv[,j] <- group_level$sig_err_inv
   samples$theta_psi_inv[,j] <- group_level$psi_inv
   samples$theta_eta[,,j] <- group_level$eta
-  samples <- fill_samples_base(samples, group_level, proposals, epsilon, j = j, n_pars)
+  samples <- fill_samples_base(samples, group_level, proposals, j = j, n_pars)
   return(samples)
 }
 

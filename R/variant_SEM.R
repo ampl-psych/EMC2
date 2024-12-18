@@ -256,7 +256,7 @@ get_startpoints_SEM<- function(pmwgs, start_mu, start_var){
               eta = start_eta, sub_mu = start_mu))
 }
 
-fill_samples_SEM <- function(samples, group_level, proposals, epsilon, j = 1, n_pars){
+fill_samples_SEM <- function(samples, group_level, proposals, j = 1, n_pars){
   samples$lambda[,,j] <- group_level$lambda
   samples$B[,,j] <- group_level$B
   samples$K[,,j] <- group_level$K
@@ -264,7 +264,7 @@ fill_samples_SEM <- function(samples, group_level, proposals, epsilon, j = 1, n_
   samples$epsilon_inv[,,j] <- group_level$epsilon_inv
   samples$delta_inv[,,j] <- group_level$delta_inv
   samples$eta[,,j] <- group_level$eta
-  samples <- fill_samples_base(samples, group_level, proposals, epsilon, j = j, n_pars)
+  samples <- fill_samples_base(samples, group_level, proposals, j = j, n_pars)
   return(samples)
 }
 
@@ -277,7 +277,7 @@ gibbs_step_SEM <- function(sampler, alpha){
   # Just some ease of reading
   y <- t(alpha)
   n_subjects <- sampler$n_subjects
-  n_pars <- sum(!sampler$nuisance) 
+  n_pars <- sum(!sampler$nuisance)
   n_factors <- sampler$n_factors
   n_cov <- sampler$n_cov
   covariates <- sampler$covariates

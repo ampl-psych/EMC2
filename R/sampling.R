@@ -53,13 +53,11 @@ pmwgs <- function(dadm, type, pars = NULL, prior = NULL,
 }
 
 init <- function(pmwgs, start_mu = NULL, start_var = NULL,
-                 verbose = FALSE, particles = 1000, n_cores = 1, epsilon = NULL) {
+                 verbose = FALSE, particles = 1000, n_cores = 1) {
   # Gets starting points for the mcmc process
   # If no starting point for group mean just use zeros
   type <- pmwgs$type
   startpoints <-startpoints_comb <- get_startpoints(pmwgs, start_mu, start_var, type)
-  if(is.null(epsilon)) epsilon <- rep(set_epsilon(pmwgs$n_pars), pmwgs$n_subjects)
-  if(length(epsilon) == 1) epsilon <- rep(epsilon, pmwgs$n_subjects)
   if(any(pmwgs$nuisance)){
     type_nuis <- pmwgs$sampler_nuis$type
     startpoints_nuis <- get_startpoints(pmwgs$sampler_nuis, start_mu = NULL, start_var = NULL, type = type_nuis)
@@ -68,7 +66,7 @@ init <- function(pmwgs, start_mu = NULL, start_var = NULL,
                                           pmwgs$nuisance)
     pmwgs$sampler_nuis$samples <- fill_samples(samples = pmwgs$sampler_nuis$samples,
                                                                       group_level = startpoints_nuis,
-                                                                      epsilon = epsilon, j = 1,
+                                                                      j = 1,
                                                                       proposals = NULL,
                                                                       n_pars = pmwgs$n_pars, type = type_nuis)
     pmwgs$sampler_nuis$samples$idx <- 1
@@ -82,7 +80,7 @@ init <- function(pmwgs, start_mu = NULL, start_var = NULL,
   # Sample the mixture variables' initial values.
 
   pmwgs$samples <- fill_samples(samples = pmwgs$samples, group_level = startpoints, proposals = proposals,
-                                             epsilon = epsilon, j = 1, n_pars = pmwgs$n_pars, type = type)
+                                             j = 1, n_pars = pmwgs$n_pars, type = type)
   pmwgs$init <- TRUE
   return(pmwgs)
 }
@@ -140,43 +138,63 @@ start_proposals <- function(s, parameters, n_particles, pmwgs, type){
                         model = pmwgs$model)
   weight <- exp(lw - max(lw))
   idx <- sample(x = n_particles, size = 1, prob = weight)
-  return(list(proposal = proposals[idx,], ll = lw[idx], origin = 2))
+  return(list(proposal = proposals[idx,], ll = lw[idx]))
+}
+
+
+check_tune_settings <- function(tune, n_pars){
+  if(is.null(tune$p_accept)) tune$p_accept <- .8
+  if(is.null(tune$components)) tune$components <- rep(1, n_pars)
+  if(is.null(tune$shared_ll_idx)) tune$shared_ll_idx <- tune$components
+  if(is.null(tune$ESS_ratio)) tune$ESS_ratio <- .5
+  if(is.null(tune$ESS_scale)) tune$ESS_scale <- .5
+  if(is.null(tune$mix_adapt)) tune$mix_adapt <- .05
+  tune$alphaStar <- -qnorm(tune$p_accept/2)
+  tune$n0 <- 100
+  return(tune)
+}
+
+check_sampling_settings <- function(pm_settings, stage, n_pars, particles){
+  pm_settings$mix <- check_mix(pm_settings$mix, stage)
+  pm_settings$epsilon <- check_epsilon(pm_settings$epsilon, n_pars)
+  pm_settings$prop_performance <- check_prop_performance(pm_settings$prop_performance, stage)
+  if(is.null(pm_settings$n_particles)) pm_settings$n_particles <- particles
+  return(pm_settings)
 }
 
 run_stage <- function(pmwgs,
                       stage,
                       iter = 1000,
                       particles = 100,
-                      verbose = TRUE,
-                      verboseProgress = TRUE,
-                      force_prev_epsilon = TRUE,
                       n_cores = 1,
-                      epsilon = NULL,
-                      p_accept = NULL) {
+                      tune = NULL,
+                      verbose = TRUE,
+                      verboseProgress = TRUE) {
   # Set defaults for NULL values
   # Set necessary local variables
   # Set stable (fixed) new_sample argument for this run
   n_pars <- pmwgs$n_pars
-  components <- attr(pmwgs$data, "components")
-  shared_ll_idx <- attr(pmwgs$data, "shared_ll_idx")
+  tune$components <- attr(pmwgs$data, "components")
+  tune$shared_ll_idx <- attr(pmwgs$data, "shared_ll_idx")
 
-  alphaStar=-qnorm(p_accept/2) #Idk about this one
-  n0=round(5/(p_accept*(1-p_accept)))[1] #Also not questioning this math for now
+  pm_settings <- pmwgs$samples$pm_settings
+  # Intialize sampling tuning settings
+  if(is.null(pm_settings)) pm_settings <- vector("list", pmwgs$n_subjects)
+  tune <- check_tune_settings(tune, n_pars)
+  pm_settings <- lapply(pm_settings, FUN = check_sampling_settings,  stage = stage, n_pars = n_pars, particles)
 
-  epsilon <- fix_epsilon(pmwgs, epsilon, force_prev_epsilon, components)
-  if(length(particles) == 1){
-    particles <- rep(particles, max(pmwgs$n_subjects, 2)) # kluge to keep it as a vector
-  }
   # Build new sample storage
   pmwgs <- extend_sampler(pmwgs, iter, stage)
-  # create progress bar
+
+  # Add proposal distributions
   eff_mu <- pmwgs$eff_mu
   eff_var <- pmwgs$eff_var
+  chains_var <- pmwgs$chains_var
+
+  # Make sure that there's at least something to mapply over
   if(is.null(eff_mu)) eff_mu <- vector("list", pmwgs$n_subjects)
   if(is.null(eff_var)) eff_var <- vector("list", pmwgs$n_subjects)
-  chains_cov <- attr(pmwgs, "chains_cov")
-  if(is.null(chains_cov)) chains_cov <- vector("list", pmwgs$n_subjects)
-  mix <- set_mix(stage)
+  if(is.null(chains_var)) chains_var <- vector("list", pmwgs$n_subjects)
   if (verboseProgress) {
     pb <- accept_progress_bar(min = 0, max = iter)
   }
@@ -184,13 +202,12 @@ run_stage <- function(pmwgs,
 
   data <- pmwgs$data
   subjects <- pmwgs$subjects
-  unq_components <- unique(components)
   nuisance <- pmwgs$nuisance
   if(any(nuisance)){
     type <- pmwgs$sampler_nuis$type
     pmwgs$sampler_nuis$samples$idx <- pmwgs$samples$idx
   }
-  block_idx <- block_variance_idx(components)
+  block_idx <- block_variance_idx(tune$components)
   # Main iteration loop
   for (i in 1:iter) {
     if (verboseProgress) {
@@ -207,56 +224,38 @@ run_stage <- function(pmwgs,
       pars_comb$alpha <- pmwgs$samples$alpha[,,j-1]
       pmwgs$sampler_nuis$samples <- fill_samples(samples = pmwgs$sampler_nuis$samples,
                                                                         group_level = pars_nuis,
-                                                                        epsilon = epsilon, j = j,
+                                                                        j = j,
                                                                         proposals = NULL,
                                                                         n_pars = n_pars, type = pmwgs$sampler_nuis$type)
       pmwgs$sampler_nuis$samples$idx <- j
     }
     # Particle step
-    proposals <- parallel::mcmapply(new_particle, 1:pmwgs$n_subjects, data, particles, eff_mu, eff_var,
-                                    chains_cov,
-                                    pmwgs$samples$subj_ll[,j-1],
-                                    MoreArgs = list(pars_comb, mix, pmwgs$model, epsilon, components, stage,
-                                                    get_group_level, block_idx, shared_ll_idx, pmwgs$type),
+    proposals <- parallel::mcmapply(new_particle, 1:pmwgs$n_subjects, data, pm_settings, eff_mu, eff_var,
+                                    chains_var, pmwgs$samples$subj_ll[,j-1],
+                                    MoreArgs = list(pars_comb, pmwgs$model, stage,
+                                                    pmwgs$type,
+                                                    tune, j),
                                     mc.cores =n_cores)
-    proposals <- array(unlist(proposals), dim = c(pmwgs$n_pars + 2, pmwgs$n_subjects))
+    pm_settings <- proposals[3,]
+    proposals <- array(unlist(proposals[1:2,]), dim = c(pmwgs$n_pars + 1, pmwgs$n_subjects))
 
     #Fill samples
     pmwgs$samples <- fill_samples(samples = pmwgs$samples, group_level = pars,
-                                               proposals = proposals, epsilon = rowMeans(epsilon), j = j, n_pars = pmwgs$n_pars, type = pmwgs$type)
-
-    # Update epsilon
-    if(!is.null(p_accept)){
-      if(j > n0){
-        for(component in unq_components){
-          idx <- components == component
-          acc <-  pmwgs$samples$alpha[max(which(idx)),,j] != pmwgs$samples$alpha[max(which(idx)),,(j-1)]
-          epsilon[,component] <-update_epsilon(epsilon[,component]^2, acc, p_accept, j, sum(idx), alphaStar)
-        }
-      }
-    }
+                                               proposals = proposals, j = j, n_pars = pmwgs$n_pars, type = pmwgs$type)
+    pmwgs$samples$pm_settings <- pm_settings
   }
   if (verboseProgress) close(pb)
-  attr(pmwgs, "epsilon") <- epsilon
   return(pmwgs)
 }
 
 
-new_particle <- function (s, data, num_particles, eff_mu = NULL,
-                          eff_var = NULL, chains_cov, prev_ll,
-                          parameters, mix_proportion = c(0.5, 0.5, 0),
-                          model = NULL, epsilon = NULL,
-                          components, stage,  group_level_func,
-                          block_idx, shared_ll_idx, type)
+new_particle <- function (s, data, pm_settings, eff_mu = NULL,
+                          eff_var = NULL, chains_var, prev_ll,
+                          parameters, model = NULL, stage,
+                          type, tune, iter)
 {
-  # if(stage == "sample"){
-  #   if(rbinom(1, size = 1, prob = .5) == 1){
-  #     components <- rep(1, length(components))
-  #     shared_ll_idx <- rep(1, length(components))
-  #   }
-  # }
   group_pars <- get_group_level(parameters, s, type)
-  unq_components <- unique(components)
+  unq_components <- unique(tune$components)
   proposal_out <- numeric(length(group_pars$mu))
   group_mu <- group_pars$mu
   group_var <- group_pars$var
@@ -272,35 +271,34 @@ new_particle <- function (s, data, num_particles, eff_mu = NULL,
   out_lls <- numeric(length(unq_components))
   for(i in unq_components){
     if(stage != "sample"){
-      eff_var <- chains_cov * epsilon[s,i]^2
-      var_subj <- group_var_subj *  epsilon[s,i]^2
+      eff_var <- chains_var * pm_settings$epsilon^2
+      var_subj <- group_var_subj *  pm_settings$epsilon^2
     } else{
-      eff_var <- eff_var_old * epsilon[s,i]^2
-      var_subj <- chains_cov *  epsilon[s,i]^2
+      eff_var <- eff_var_old * pm_settings$epsilon^2
+      var_subj <- chains_var *  pm_settings$epsilon^2
     }
-    idx <- components == i
+    idx <- tune$components == i
     # Draw new proposals for this component
-    particle_numbers <- numbers_from_proportion(mix_proportion, num_particles)
-    cumuNumbers <- cumsum(particle_numbers) + 1 # Include the particle from b4
+    particle_numbers <- numbers_from_proportion(pm_settings$mix, pm_settings$n_particles)
     pop_particles <- particle_draws(particle_numbers[1], group_mu[idx], group_var[idx, idx])
     ind_particles <- particle_draws(particle_numbers[2], subj_mu[idx], var_subj[idx, idx])
-    if(mix_proportion[3] == 0){
+    if(length(pm_settings$mix) < 3){
       eff_particles <- NULL
     } else{
       eff_particles <- particle_draws(particle_numbers[3], eff_mu[idx], eff_var[idx, idx ])# eff_alpha, eff_tau)
     }
     # Rejoin new proposals with current MCMC values for other components
-    proposals <- matrix(rep(subj_mu, num_particles + 1), nrow = num_particles + 1, byrow = T)
+    proposals <- matrix(rep(subj_mu, pm_settings$n_particles + 1), nrow = pm_settings$n_particles + 1, byrow = T)
     colnames(proposals) <- names(subj_mu)
-    proposals[2:(num_particles+1),idx] <- rbind(pop_particles, ind_particles, eff_particles)
+    proposals[2:(pm_settings$n_particles+1),idx] <- rbind(pop_particles, ind_particles, eff_particles)
     ll_proposals <- proposals
     # Normally we assume that a component contains all the parameters to estimate the individual likelihood of a joint model
     # Sometimes we may also want to block within a model if it has very high dimensionality
-    shared_idx <- shared_ll_idx[idx][1]
-    is_shared <- shared_idx == shared_ll_idx
+    shared_idx <- tune$shared_ll_idx[idx][1]
+    is_shared <- shared_idx == tune$shared_ll_idx
 
     # Calculate likelihoods
-    if(components[length(components)] > 1){
+    if(tune$components[length(tune$components)] > 1){
       lw <- calc_ll_manager(ll_proposals[,is_shared], dadm = data, model, component = shared_idx)
     } else{
       lw <- calc_ll_manager(ll_proposals[,is_shared], dadm = data, model)
@@ -314,31 +312,68 @@ new_particle <- function (s, data, num_particles, eff_mu = NULL,
       prior_density <- lp
     }
 
-    if (mix_proportion[3] == 0) {
+    if (length(pm_settings$mix) < 3) {
       eff_density <- 0
+      lm <- log(pm_settings$mix[1] * exp(lp) + (pm_settings$mix[2] * prop_density))
     }
     else {
-      #if(is.null(eff_alpha)){
       eff_density <- mvtnorm::dmvnorm(x = proposals[,idx], mean = eff_mu[idx], sigma = eff_var[idx,idx])
-      # } else{
-      #   eff_density <- sn::dmsn(x = proposals[,idx], xi = eff_mu[idx], Omega = eff_var[idx,idx],
-      #                            alpha = eff_alpha, tau = eff_tau)
-      # }
+      lm <- log(pm_settings$mix[1] * exp(lp) + (pm_settings$mix[2] * prop_density) + (pm_settings$mix[3] * eff_density))
     }
-    lm <- log(mix_proportion[1] * exp(lp) + (mix_proportion[2] * prop_density) + (mix_proportion[3] * eff_density))
+
     infnt_idx <- is.infinite(lm)
     lm[infnt_idx] <- min(lm[!infnt_idx])
     # Calculate weights and center
     l <- lw_total + prior_density - lm
     weights <- exp(l - max(l))
     # Do MH step and return everything
-    idx_ll <- sample(x = num_particles+1, size = 1, prob = weights)
-    origin <- min(which(idx_ll <= cumuNumbers))
+    idx_ll <- sample(x = pm_settings$n_particles+1, size = 1, prob = weights)
+
     out_lls[i] <- lw[idx_ll]
     proposal_out[idx] <- proposals[idx_ll,idx]
+    pm_settings <- update_pm_settings(pm_settings, idx_ll, weights, particle_numbers, tune, iter, length(subj_mu))
   } # Note that origin only contains last components origin, just used by devs anyway
-  return(list(proposal = proposal_out, ll = sum(out_lls), origin = origin))
+  return(list(proposal = proposal_out, ll = sum(out_lls), pm_settings = pm_settings))
 }
+
+
+update_pm_settings <- function(pm_settings, chosen_idx, weights, particle_numbers, tune, iter, n_pars) {
+  prop_performance <- pm_settings$prop_performance
+  mix <- pm_settings$mix
+  # Check if chosen_idx corresponds to a new proposal (not the previous particle)
+  if (chosen_idx > 1) {
+    # Identify which proposal block produced the chosen particle
+    origin <- min(which(chosen_idx <=  (cumsum(particle_numbers) +1)))
+    prop_performance[origin] <- prop_performance[origin] + 1
+  }
+  # First update prop_performance
+  pm_settings$prop_performance <- prop_performance
+
+  # After a small period of burn-in:
+  if(iter > tune$n0){
+    # 1. Update mixing weights continuously
+    # Compute observed acceptance rates per proposal (scaled by mix)
+    target_weights <- (prop_performance*(1-mix))/sum(prop_performance*(1-mix))
+    # Smooth update
+    mix_weights_new <- (1 - tune$mix_adapt)*pm_settings$mix + tune$mix_adapt*target_weights
+    # Ensure minimum weight
+    mix_weights_new <- pmax(mix_weights_new, 0.01)
+    pm_settings$mix <- mix_weights_new / sum(mix_weights_new)
+
+    # 2. Adapt number of particles based on ESS
+    ess <- (sum(weights))^2 / sum(weights^2)
+    desired_ess <- pm_settings$n_particles * tune$ESS_ratio
+    scale_factor <- (desired_ess / ess)^tune$ESS_scale
+    new_num_particles <- round(pm_settings$n_particles * scale_factor)
+    pm_settings$n_particles <- max(10, min(200, new_num_particles))
+
+    # 3. Update epsilon
+    # If chosen_idx > 1 a new proposal was accepted
+    pm_settings$epsilon <- update_epsilon(pm_settings$epsilon^2, chosen_idx > 1, tune$p_accept, iter, n_pars, tune$alphaStar)
+  }
+  return(pm_settings)
+}
+
 
 # Utility functions for sampling below ------------------------------------
 
@@ -351,15 +386,9 @@ update_epsilon<- function(epsilon2, acc, p, i, d, alpha) {
 }
 
 
-numbers_from_proportion <- function(mix_proportion, num_particles = 1000) {
-  numbers <- stats::rbinom(n = 2, size = num_particles, prob = mix_proportion)
-  if (mix_proportion[3] == 0) {
-    numbers[3] <- 0
-    numbers[2] <- num_particles - numbers[1]
-  } else {
-    numbers[3] <- num_particles - sum(numbers)
-  }
-  return(numbers)
+numbers_from_proportion <- function(mix_proportion, n_particles = 1000) {
+  # Make sure each proposal has at least 1 particle
+  return(pmax(1, rmultinom(1, n_particles, mix_proportion)))
 }
 
 
@@ -370,39 +399,7 @@ particle_draws <- function(n, mu, covar, alpha = NULL, tau= NULL) {
   if(is.null(alpha)){
     return(mvtnorm::rmvnorm(n, mu, covar))
   }
-  # else{
-  #   return(sn::rmsn(n, xi = mu, Omega = covar, alpha = alpha, tau = tau))
-  # }
 }
-
-fix_epsilon <- function(pmwgs, epsilon, force_prev_epsilon, components){
-  if(is.null(epsilon) | force_prev_epsilon){
-    epsilon <- attr(pmwgs, "epsilon")
-    if(is.null(epsilon)){
-      epsilon <- pmwgs$samples$epsilon[,ncol(pmwgs$samples$epsilon)]
-    }
-  }
-  if(is.matrix(epsilon)){
-    if(ncol(epsilon) != max(components)){
-      epsilon <- matrix(rowMeans(epsilon), nrow = pmwgs$n_subjects, ncol = max(components))
-    }
-  } else if (length(epsilon) == 1 | is.vector(epsilon)){
-    epsilon <- matrix(epsilon, nrow = pmwgs$n_subjects, ncol = max(components))
-  }
-  return(epsilon)
-}
-
-set_epsilon <- function(n_pars) {
-  if (n_pars > 15) {
-    epsilon <- 0.5
-  } else if (n_pars > 10) {
-    epsilon <- 1
-  } else {
-    epsilon <- 1.5
-  }
-  return(epsilon)
-}
-
 
 extend_sampler <- function(sampler, n_samples, stage) {
   # This function takes the sampler and extends it along the intended number of
@@ -436,8 +433,6 @@ sample_store_base <- function(data, par_names, iters = 1, stage = "init", is_nui
   n_pars <- length(par_names)
   n_subjects <- length(subject_ids)
   samples <- list(
-    epsilon = array(NA_real_,dim = c(n_subjects, iters),dimnames = list(subject_ids, NULL)),
-    origin = array(NA_real_,dim = c(n_subjects, iters),dimnames = list(subject_ids, NULL)),
     alpha = array(NA_real_,dim = c(n_pars, n_subjects, iters),dimnames = list(par_names, subject_ids, NULL)),
     stage = array(stage, iters),
     subj_ll = array(NA_real_,dim = c(n_subjects, iters),dimnames = list(subject_ids, NULL))
@@ -453,38 +448,76 @@ block_variance_idx <- function(components){
   return(vars_out == 0)
 }
 
-fill_samples_base <- function(samples, group_level, proposals, epsilon, j = 1, n_pars){
+fill_samples_base <- function(samples, group_level, proposals, j = 1, n_pars){
   # Fill samples both group level and random effects
   samples$theta_mu[, j] <- group_level$tmu
   samples$theta_var[, , j] <- group_level$tvar
-  if(!is.null(proposals)) samples <- fill_samples_RE(samples, proposals, epsilon,j, n_pars)
+  if(!is.null(proposals)) samples <- fill_samples_RE(samples, proposals, j, n_pars)
   return(samples)
 }
 
 
 
-fill_samples_RE <- function(samples, proposals, epsilon, j = 1, n_pars, ...){
+fill_samples_RE <- function(samples, proposals, j = 1, n_pars, ...){
   # Only for random effects, separated because group level sometimes differs.
   if(!is.null(proposals)){
     samples$alpha[, , j] <- proposals[1:n_pars,]
     samples$subj_ll[, j] <- proposals[n_pars + 1,]
-    samples$origin[,j] <- proposals[n_pars + 2,]
     samples$idx <- j
-    samples$epsilon[,j] <- epsilon
   }
   return(samples)
 }
 
-set_mix <- function(stage) {
-  if (stage %in% c("burn", "adapt")) {
-    mix <- c(0.15, 0.15, 0.7)
-  } else if(stage == "sample"){
-    mix <- c(0.1, 0.3, 0.6)
+check_mix <- function(mix, stage) {
+  if (stage %in% c("burn", "adapt", "sample")) {
+    default_mix <- c(0.1, 0.3, 0.6)
   } else{ #Preburn stage
-    mix <- c(0.5, 0.5, 0)
+    default_mix <- c(0.5, 0.5)
+  }
+  if(is.null(mix)) mix <- default_mix
+  if(length(mix) < length(default_mix)){
+    if(length(default_mix) - length(mix) == 1){
+      mix <- mix*(1-default_mix[length(default_mix)])
+      mix <- c(mix, default_mix[length(default_mix)])
+    } else{
+      stop("mix settings are not compatible with stage")
+    }
   }
   return(mix)
 }
+
+check_epsilon <- function(epsilon, n_pars) {
+  if (is.null(epsilon)) {
+    if (n_pars > 15) {
+      epsilon <- 0.5
+    } else if (n_pars > 10) {
+      epsilon <- 1
+    } else {
+      epsilon <- 1.5
+    }
+  }
+  return(epsilon)
+}
+
+check_prop_performance <- function(prop_performance, stage){
+  if (stage %in% c("burn", "adapt", "sample")) {
+    default_mix <- c(0.1, 0.3, 0.6)
+  } else{ #Preburn stage
+    default_mix <- c(0.5, 0.5)
+  }
+  if(is.null(prop_performance)) prop_performance <- rep(0, length(default_mix))
+  if(length(prop_performance) < length(default_mix)){
+    if(length(default_mix) - length(prop_performance) == 1){
+      n_total <- sum(prop_performance)
+      prop_performance <- prop_performance*(1-default_mix[length(default_mix)])
+      prop_performance <- c(prop_performance, default_mix[length(default_mix)]*n_total)
+    } else{
+      stop("prop_performance settings are not compatible with stage")
+    }
+  }
+  return(round(prop_performance))
+}
+
 
 condMVN <- function (mean, sigma, dependent.ind, given.ind, X.given, check.sigma = TRUE)
 {
@@ -581,7 +614,7 @@ run_hyper <- function(type, data, prior = NULL, iter = 1000, n_chains =3, ...){
     sampler <- add_info(sampler, prior, type = type, ...)
     startpoints <- get_startpoints(sampler, start_mu = NULL, start_var = NULL, type = type)
     sampler$samples <- fill_samples(samples = sampler$samples, group_level = startpoints, proposals = NULL,
-                                                 epsilon = NA, j = 1, n_pars = sampler$n_pars, type = type)
+                                    j = 1, n_pars = sampler$n_pars, type = type)
     sampler$samples$idx <- 1
     sampler <- extend_sampler(sampler, iter-1, "sample")
     for(i in 2:iter){
@@ -592,7 +625,7 @@ run_hyper <- function(type, data, prior = NULL, iter = 1000, n_chains =3, ...){
       }
       sampler$samples$idx <- i
       sampler$samples <- fill_samples(samples = sampler$samples, group_level = group_pars, proposals = NULL,
-                                                   epsilon = NA, j = i, n_pars = sampler$n_pars, type = type)
+                                                   j = i, n_pars = sampler$n_pars, type = type)
     }
     emc[[j]] <- sampler
   }

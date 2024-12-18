@@ -99,10 +99,10 @@ get_group_level_standard <- function(parameters, s){
   return(list(mu = mu, var = var))
 }
 
-fill_samples_standard <- function(samples, group_level, proposals, epsilon, j = 1, n_pars){
+fill_samples_standard <- function(samples, group_level, proposals,  j = 1, n_pars){
   samples$a_half[, j] <- group_level$a_half
   samples$last_theta_var_inv <- group_level$tvinv
-  samples <- fill_samples_base(samples, group_level, proposals, epsilon, j = j, n_pars)
+  samples <- fill_samples_base(samples, group_level, proposals, j = j, n_pars)
   return(samples)
 }
 

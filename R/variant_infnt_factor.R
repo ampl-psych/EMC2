@@ -160,13 +160,13 @@ get_startpoints_infnt_factor<- function(pmwgs, start_mu, start_var){
               eta = start_eta, delta = start_delta))
 }
 
-fill_samples_infnt_factor <- function(samples, group_level, proposals, epsilon, j = 1, n_pars){
+fill_samples_infnt_factor <- function(samples, group_level, proposals, j = 1, n_pars){
   samples$theta_lambda[,,j] <- group_level$lambda
   samples$theta_sig_err_inv[,j] <- group_level$sig_err_inv
   samples$theta_psi[,,j] <- group_level$psi
   samples$theta_eta[,,j] <- group_level$eta
   samples$theta_delta[,j] <- group_level$delta
-  samples <- fill_samples_base(samples, group_level, proposals, epsilon, j = j, n_pars)
+  samples <- fill_samples_base(samples, group_level, proposals, j = j, n_pars)
   return(samples)
 }
 
@@ -180,7 +180,7 @@ gibbs_step_infnt_factor <- function(sampler, alpha){
   # extract previous values (for ease of reading)
   alpha_t <- t(alpha)
   n_subjects <- sampler$n_subjects
-  n_pars <- sum(!sampler$nuisance) 
+  n_pars <- sum(!sampler$nuisance)
   max_factors <- hyper$max_factors
 
   eta <- matrix(last$eta, n_subjects, max_factors)

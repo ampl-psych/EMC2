@@ -1,7 +1,7 @@
 get_stop_criteria <- function(stage, stop_criteria, type){
   if(is.null(stop_criteria)){
     if(stage == "preburn"){
-      stop_criteria$iter <- 150
+      stop_criteria$iter <- 100
     }
     if(stage == "burn"){
       stop_criteria$mean_gd <- 1.1
@@ -140,18 +140,18 @@ run_stages <- function(sampler, stage = "preburn", iter=0, verbose = TRUE, verbo
     sampler <- init(sampler, n_cores = n_cores)
   }
   if (iter == 0) return(sampler)
-
+  tune <- list(p_accept = p_accept)
   sampler <- run_stage(sampler, stage = stage,iter = iter, particles = particles,
-                       n_cores = n_cores, p_accept = p_accept, verbose = verbose, verboseProgress = verboseProgress)
+                       n_cores = n_cores, tune = tune, verbose = verbose, verboseProgress = verboseProgress)
   return(sampler)
 }
 
 add_proposals <- function(emc, stage, n_cores, n_blocks){
   if(stage != "preburn"){
     # if(!is.null(emc[[1]]$g_map_fixed)){
-    #   emc <- create_cov_proposals_lm(emc)
+    #   emc <- create_chain_proposals_lm(emc)
     # } else{    }
-    emc <- create_cov_proposals(emc, do_block = stage != "sample")
+    emc <- create_chain_proposals(emc, do_block = stage != "sample")
     if(!is.null(n_blocks)){
       if(n_blocks > 1){
         components <- sub_blocking(emc, n_blocks)
@@ -391,7 +391,7 @@ create_eff_proposals <- function(emc, n_cores){
 
 
 sub_blocking <- function(emc, n_blocks){
-  covs <- lapply(emc, FUN = function(x){return(attr(x, "chains_cov"))})
+  covs <- lapply(emc, FUN = function(x){return(x$chains_var)})
   out <- array(0, dim = dim(covs[[1]][[1]]))
   for(i in 1:length(covs)){
     cov_tmp <- covs[[1]]
@@ -413,7 +413,7 @@ sub_blocking <- function(emc, n_blocks){
   return(components)
 }
 
-create_cov_proposals <- function(emc, samples_idx = NULL, do_block = TRUE){
+create_chain_proposals <- function(emc, samples_idx = NULL, do_block = TRUE){
   get_covs <- function(sampler, samples_idx, sub){
     return(var(t(sampler$samples$alpha[,sub, samples_idx])))
   }
@@ -428,22 +428,22 @@ create_cov_proposals <- function(emc, samples_idx = NULL, do_block = TRUE){
   components <- attr(emc[[1]]$data, "components")
   block_idx <- block_variance_idx(components)
   for(j in 1:n_chains){
-    chains_cov <- array(NA_real_, dim = c(n_pars, n_pars, n_subjects))
+    chains_var <- array(NA_real_, dim = c(n_pars, n_pars, n_subjects))
     for(sub in 1:n_subjects){
       mean_covs <- get_covs(emc[[j]], samples_idx, sub)
       if(do_block) mean_covs[block_idx] <- 0
       if(is.negative.semi.definite(mean_covs)){
-        if(!is.null(attr(emc[[j]], "chains_cov")[[sub]])){
-          chains_cov[,,sub] <- attr(emc[[j]], "chains_cov")[[sub]]
+        if(!is.null(emc[[j]]$chains_var[[sub]])){
+          chains_var[,,sub] <- emc[[j]]$chains_var[[sub]]
         } else{
-          chains_cov[,,sub] <- diag(nrow(mean_covs))
+          chains_var[,,sub] <- diag(nrow(mean_covs))
         }
       } else{
-        chains_cov[,,sub] <-  as.matrix(nearPD(mean_covs)$mat)
+        chains_var[,,sub] <-  as.matrix(nearPD(mean_covs)$mat)
       }
     }
-    chains_cov <- apply(chains_cov, 3, identity, simplify = F)
-    attr(emc[[j]], "chains_cov") <- chains_cov
+    emc[[j]]$chains_var <- apply(chains_var, 3, identity, simplify = F)
+    emc[[j]]$chains_mu <- lapply(1:n_subjects, function(x) rowMeans(emc[[j]]$samples$alpha[,x,samples_idx]))
   }
   return(emc)
 }

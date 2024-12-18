@@ -62,7 +62,7 @@ get_startpoints <- function(sampler, start_mu, start_var, type, ...) {
 # Retrieves group-level parameters based on sampler type
 # Parameters:
 #   parameters: Current parameter values
-#   s: Sampler object
+#   s: subject
 #   type: Type of sampler
 get_group_level <- function(parameters, s, type, ...) {
   switch(type,
@@ -83,20 +83,19 @@ get_group_level <- function(parameters, s, type, ...) {
 #   samples: Current samples storage
 #   group_level: Group-level parameters
 #   proposals: Proposed parameter values
-#   epsilon: scaling factor for the proposal
 #   j: Current iteration
 #   n_pars: Number of parameters
 #   type: Type of sampler
-fill_samples <- function(samples, group_level, proposals, epsilon, j = 1, n_pars, type, ...) {
+fill_samples <- function(samples, group_level, proposals, j = 1, n_pars, type, ...) {
   switch(type,
-    "standard" = fill_samples_standard(samples, group_level, proposals, epsilon, j, n_pars, ...),
-    "single" = fill_samples_RE(samples, proposals, epsilon, j, n_pars, ...),
-    "blocked" = fill_samples_standard(samples, group_level, proposals, epsilon, j, n_pars, ...),
-    "diagonal" = fill_samples_standard(samples, group_level, proposals, epsilon, j, n_pars, ...),
-    "factor" = fill_samples_factor(samples, group_level, proposals, epsilon, j, n_pars, ...),
-    "infnt_factor" = fill_samples_infnt_factor(samples, group_level, proposals, epsilon, j, n_pars, ...),
-    "SEM" = fill_samples_SEM(samples, group_level, proposals, epsilon, j, n_pars, ...),
-    "diagonal-gamma" = fill_samples_diag_gamma(samples, group_level, proposals, epsilon, j, n_pars, ...),
+    "standard" = fill_samples_standard(samples, group_level, proposals, j, n_pars, ...),
+    "single" = fill_samples_RE(samples, proposals, j, n_pars, ...),
+    "blocked" = fill_samples_standard(samples, group_level, proposals, j, n_pars, ...),
+    "diagonal" = fill_samples_standard(samples, group_level, proposals, j, n_pars, ...),
+    "factor" = fill_samples_factor(samples, group_level, proposals, j, n_pars, ...),
+    "infnt_factor" = fill_samples_infnt_factor(samples, group_level, proposals, j, n_pars, ...),
+    "SEM" = fill_samples_SEM(samples, group_level, proposals, j, n_pars, ...),
+    "diagonal-gamma" = fill_samples_diag_gamma(samples, group_level, proposals, j, n_pars, ...),
     stop("Invalid type specified")
   )
 }
