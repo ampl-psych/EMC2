@@ -146,11 +146,11 @@ check_tune_settings <- function(tune, n_pars){
   if(is.null(tune$p_accept)) tune$p_accept <- .8
   if(is.null(tune$components)) tune$components <- rep(1, n_pars)
   if(is.null(tune$shared_ll_idx)) tune$shared_ll_idx <- tune$components
-  if(is.null(tune$ESS_ratio)) tune$ESS_ratio <- .5
+  if(is.null(tune$ESS_ratio)) tune$ESS_ratio <- .3
   if(is.null(tune$ESS_scale)) tune$ESS_scale <- .5
   if(is.null(tune$mix_adapt)) tune$mix_adapt <- .05
   tune$alphaStar <- -qnorm(tune$p_accept/2)
-  tune$n0 <- 100
+  tune$n0 <- 50
   return(tune)
 }
 

@@ -112,9 +112,11 @@ run_emc <- function(emc, stage, stop_criteria,
     progress <- progress[!names(progress) == 'emc']
     emc <- restore_duplicates(emc)
     if(!is.null(fileName)){
+      emc <- strip_duplicates(emc)
       fileName <- fix_fileName(fileName)
       class(emc) <- "emc"
       save(emc, file = fileName)
+      emc <- restore_duplicates(emc)
     }
   }
   emc <- strip_duplicates(emc)
