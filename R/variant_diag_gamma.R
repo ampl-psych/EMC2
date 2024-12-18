@@ -1,8 +1,8 @@
-sample_store_diag_gamma <- function(data, par_names, iters = 1, stage = "init", integrate = T, is_nuisance, is_grouped, ...) {
+sample_store_diag_gamma <- function(data, par_names, iters = 1, stage = "init", integrate = T, is_nuisance, ...) {
   subject_ids <- unique(data$subjects)
   n_subjects <- length(subject_ids)
-  base_samples <- sample_store_base(data, par_names[!is_grouped], iters, stage)
-  par_names <- par_names[!is_nuisance & !is_grouped]
+  base_samples <- sample_store_base(data, par_names, iters, stage)
+  par_names <- par_names[!is_nuisance]
   n_pars <- length(par_names)
   samples <- list(
     theta_mu = array(NA_real_,dim = c(n_pars, iters), dimnames = list(par_names, NULL)),
@@ -20,7 +20,7 @@ fill_samples_diag_gamma <- function(samples, group_level, proposals, epsilon, j 
 
 
 add_info_diag_gamma <- function(sampler, prior = NULL, ...){
-  sampler$prior <- get_prior_diag_gamma(prior, sum(!(sampler$nuisance | sampler$grouped)), sample = F)
+  sampler$prior <- get_prior_diag_gamma(prior, sum(!sampler$nuisance), sample = F)
   return(sampler)
 }
 
@@ -79,7 +79,7 @@ get_prior_diag_gamma <- function(prior = NULL, n_pars = NULL, sample = TRUE, N =
 }
 
 get_startpoints_diag_gamma <- function(pmwgs, start_mu, start_var){
-  n_pars <- sum(!(pmwgs$nuisance | pmwgs$grouped))
+  n_pars <- sum(!pmwgs$nuisance)
   if (is.null(start_mu)) start_mu <- rnorm(n_pars, mean = pmwgs$prior$theta_mu_mean, sd = sqrt(diag(pmwgs$prior$theta_mu_var)))
   # If no starting point for group var just sample some
   if (is.null(start_var)) start_var <- diag(1/rgamma(n_pars, 10, 5), n_pars) #Bit stupid maybe as startpoint
@@ -102,13 +102,13 @@ gibbs_step_diag_gamma <- function(sampler, alpha){
   hyper <- attributes(sampler)
   prior <- sampler$prior
   last$tvinv <- diag(last$tvinv)
-  n_pars <- sum(!(sampler$nuisance | sampler$grouped))
+  n_pars <- sum(!sampler$nuisance)
   alpha <- as.matrix(alpha)
   #Mu
   var_mu = 1.0 / (sampler$n_subjects * last$tvinv + diag(prior$theta_mu_invar))
   mean_mu = var_mu * ((apply(alpha, 1, sum) * last$tvinv + prior$theta_mu_mean * diag(prior$theta_mu_invar)))
   tmu <- rnorm(n_pars, mean_mu, sd = sqrt(var_mu))
-  names(tmu) <- sampler$par_names[!(sampler$nuisance | sampler$grouped)]
+  names(tmu) <- sampler$par_names[!sampler$nuisance]
 
 
   # InvGamma alternative (probably inferior) prior

@@ -49,9 +49,9 @@ get_group_level_single <- function(parameters, s){
 }
 
 gibbs_step_single <- function(sampler, alpha){
-  n_pars <- sampler$n_pars-sum(sampler$nuisance) - sum(sampler$grouped)
+  n_pars <- sum(!sampler$nuisance)
   alpha_out <- matrix(alpha, nrow = n_pars, ncol = sampler$n_subjects)
-  rownames(alpha_out) <- sampler$par_names[!(sampler$nuisance | sampler$grouped)]
+  rownames(alpha_out) <- sampler$par_names[!sampler$nuisance]
   return(list(tmu = sampler$prior$theta_mu_mean,tvar = sampler$prior$theta_mu_var,alpha = alpha_out))
 }
 

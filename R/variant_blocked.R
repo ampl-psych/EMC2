@@ -1,10 +1,10 @@
 add_info_blocked <- function(sampler, prior = NULL, ...){
   # blocked specific attributes
-  n_pars <- sum(!(sampler$nuisance | sampler$grouped))
+  n_pars <- sum(!sampler$nuisance)
   par_groups <- list(...)$par_groups
   sampler$par_groups <- par_groups
   sampler$n_par_groups <- length(unique(par_groups))
-  sampler$prior <- get_prior_blocked(prior, sum(!(sampler$nuisance | sampler$grouped)), sample = F)
+  sampler$prior <- get_prior_blocked(prior, n_pars, sample = F)
   return(sampler)
 }
 
@@ -79,7 +79,7 @@ get_prior_blocked <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e
 
 get_startpoints_blocked <- function(pmwgs, start_mu, start_var){
   nuisance <- pmwgs$nuisance
-  n_pars <- sum(!(nuisance| pmwgs$grouped))
+  n_pars <- sum(!nuisance)
   if (is.null(start_mu)) start_mu <- rmvnorm(1, mean = pmwgs$prior$theta_mu_mean, sigma = pmwgs$prior$theta_mu_var)
   # If no starting point for group var just sample some
   if (is.null(start_var)) {
@@ -100,7 +100,7 @@ gibbs_step_blocked <- function(sampler, alpha){
   # tmu = theta_mu, tvar = theta_var
   last <- last_sample_standard(sampler$samples)
   prior <- sampler$prior
-  n_pars_total <- sampler$n_pars-sum(sampler$nuisance) - sum(sampler$grouped)
+  n_pars_total <- sampler$n_pars-sum(sampler$nuisance)
   tmu_out <- numeric(n_pars_total)
   a_half_out <- numeric(n_pars_total)
   tvar_out <- matrix(0, nrow = n_pars_total, ncol = n_pars_total)

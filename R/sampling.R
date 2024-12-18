@@ -1,27 +1,14 @@
-
-pmwgs <- function(dadm, variant_funs, pars = NULL, ll_func = NULL, prior = NULL,
-                  nuisance = NULL, nuisance_non_hyper = NULL, grouped_pars = NULL, ...) {
+pmwgs <- function(dadm, type, pars = NULL, prior = NULL,
+                  nuisance = NULL, nuisance_non_hyper = NULL, ...) {
   if(is.data.frame(dadm)) dadm <- list(dadm)
   dadm <- extractDadms(dadm)
   if(is.null(pars)) pars <- dadm$pars
-  if(is.null(ll_func)) ll_func <- dadm$ll_func
   if(is.null(prior)) prior <- dadm$prior
   dadm_list <-dadm$dadm_list
   # Storage for the samples.
   subjects <- sort(as.numeric(unique(dadm$subjects)))
-  if(!is.null(grouped_pars) & !is.numeric(grouped_pars)) grouped_pars <- which(pars %in% grouped_pars)
   if(!is.null(nuisance) & !is.numeric(nuisance)) nuisance <- which(pars %in% nuisance)
   if(!is.null(nuisance_non_hyper) & !is.numeric(nuisance_non_hyper)) nuisance_non_hyper <- which(pars %in% nuisance_non_hyper)
-
-  if(!is.null(grouped_pars)){
-    is_grouped <- is.element(seq_len(length(pars)), grouped_pars)
-    group_pars <- array(NA_real_, dim = c(sum(is_grouped),1), dimnames = list(pars[is_grouped], NULL))
-    epsilon_grouped <- .5
-  } else{
-    is_grouped <- rep(F, length(pars))
-    group_pars <- NULL
-    epsilon_grouped <- NULL
-  }
 
   if(!is.null(nuisance_non_hyper)){
     is_nuisance <- is.element(seq_len(length(pars)), nuisance_non_hyper)
@@ -37,22 +24,17 @@ pmwgs <- function(dadm, variant_funs, pars = NULL, ll_func = NULL, prior = NULL,
   sampler_nuis <- NULL
   if(any(is_nuisance)){
     sampler_nuis <- list(
-      samples = get_variant_funs(type)$sample_store(dadm, pars, integrate = F,
-                                                    is_nuisance = !is_nuisance, is_grouped = is_grouped, ...),
+      samples = sample_store(dadm, pars, type, integrate = F,
+                                                    is_nuisance = !is_nuisance, ...),
       n_subjects = length(subjects),
       n_pars = sum(is_nuisance),
       nuisance = rep(F, sum(is_nuisance)),
-      grouped = rep(F, sum(is_nuisance)),
       type = type
     )
     if(type == "single") sampler_nuis$samples <- NULL
-    sampler_nuis <- get_variant_funs(type)$add_info(sampler_nuis, prior$prior_nuis, ...)
+    sampler_nuis <- add_info(sampler_nuis, prior$prior_nuis, type, ...)
   }
-  samples <- variant_funs$sample_store(dadm, pars, is_nuisance = is_nuisance,
-                                       is_grouped = is_grouped, ...)
-  samples$grouped_pars <- group_pars
-  samples$epsilon_grouped <- epsilon_grouped
-
+  samples <- sample_store(dadm, pars, type, is_nuisance = is_nuisance, ...)
   sampler <- list(
     data = dadm_list,
     par_names = pars,
@@ -60,17 +42,13 @@ pmwgs <- function(dadm, variant_funs, pars = NULL, ll_func = NULL, prior = NULL,
     n_pars = length(pars),
     nuisance = is_nuisance,
     n_subjects = length(subjects),
-    ll_func = ll_func,
     samples = samples,
-    grouped = is_grouped,
     sampler_nuis = sampler_nuis,
+    type = type,
     init = FALSE
   )
   class(sampler) <- "pmwgs"
-  sampler <- variant_funs$add_info(sampler, prior, ...)
-  sampler$prior$prior_grouped <- get_prior_single(prior$prior_grouped,
-                                                  n_pars = sum(is_grouped), sample = F)
-  attr(sampler, "variant_funs") <- variant_funs
+  sampler <- add_info(sampler, prior, type, ...)
   return(sampler)
 }
 
@@ -78,46 +56,33 @@ init <- function(pmwgs, start_mu = NULL, start_var = NULL,
                  verbose = FALSE, particles = 1000, n_cores = 1, epsilon = NULL) {
   # Gets starting points for the mcmc process
   # If no starting point for group mean just use zeros
-  variant_funs <- attr(pmwgs, "variant_funs")
-  startpoints <-startpoints_comb <- variant_funs$get_startpoints(pmwgs, start_mu, start_var)
+  type <- pmwgs$type
+  startpoints <-startpoints_comb <- get_startpoints(pmwgs, start_mu, start_var, type)
   if(is.null(epsilon)) epsilon <- rep(set_epsilon(pmwgs$n_pars), pmwgs$n_subjects)
   if(length(epsilon) == 1) epsilon <- rep(epsilon, pmwgs$n_subjects)
   if(any(pmwgs$nuisance)){
-    type <- pmwgs$sampler_nuis$type
-    startpoints_nuis <- get_variant_funs(type)$get_startpoints(pmwgs$sampler_nuis, start_mu = NULL, start_var = NULL)
+    type_nuis <- pmwgs$sampler_nuis$type
+    startpoints_nuis <- get_startpoints(pmwgs$sampler_nuis, start_mu = NULL, start_var = NULL, type = type_nuis)
     startpoints_comb <- merge_group_level(startpoints$tmu, startpoints_nuis$tmu,
                                           startpoints$tvar, startpoints_nuis$tvar,
-                                          pmwgs$nuisance[!pmwgs$grouped])
-    pmwgs$sampler_nuis$samples <- get_variant_funs(type)$fill_samples(samples = pmwgs$sampler_nuis$samples,
+                                          pmwgs$nuisance)
+    pmwgs$sampler_nuis$samples <- fill_samples(samples = pmwgs$sampler_nuis$samples,
                                                                       group_level = startpoints_nuis,
                                                                       epsilon = epsilon, j = 1,
                                                                       proposals = NULL,
-                                                                      n_pars = pmwgs$n_pars)
+                                                                      n_pars = pmwgs$n_pars, type = type_nuis)
     pmwgs$sampler_nuis$samples$idx <- 1
-  }
-  if(any(pmwgs$grouped)){
-    grouped_pars <- mvtnorm::rmvnorm(particles, pmwgs$prior$prior_grouped$theta_mu_mean,
-                                     pmwgs$prior$prior_grouped$theta_mu_var)
-    colnames(grouped_pars) <- pmwgs$par_names[pmwgs$grouped]
-  } else{
-    grouped_pars <- NULL
   }
   proposals <- parallel::mclapply(X=1:pmwgs$n_subjects,FUN=start_proposals,
                                   parameters = startpoints_comb, n_particles = particles,
-                                  pmwgs = pmwgs, variant_funs = variant_funs, grouped_pars = grouped_pars[1,], is_grouped = pmwgs$grouped,
+                                  pmwgs = pmwgs, type = type,
                                   mc.cores = n_cores)
-  proposals <- array(unlist(proposals), dim = c(pmwgs$n_pars - sum(pmwgs$grouped) + 2, pmwgs$n_subjects))
+  proposals <- array(unlist(proposals), dim = c(pmwgs$n_pars + 2, pmwgs$n_subjects))
 
   # Sample the mixture variables' initial values.
 
-  pmwgs$samples <- variant_funs$fill_samples(samples = pmwgs$samples, group_level = startpoints, proposals = proposals,
-                                             epsilon = epsilon, j = 1, n_pars = sum(!pmwgs$grouped))
-  if(any(pmwgs$grouped)){
-    grouped_pars <- start_proposals_group(pmwgs$data, grouped_pars, pmwgs$samples$alpha[,,1], pmwgs$par_names,
-                                          pmwgs$ll_func, pmwgs$grouped, variant_funs, pmwgs$subjects, n_cores)
-
-    pmwgs$samples$grouped_pars[,1] <- grouped_pars
-  }
+  pmwgs$samples <- fill_samples(samples = pmwgs$samples, group_level = startpoints, proposals = proposals,
+                                             epsilon = epsilon, j = 1, n_pars = pmwgs$n_pars, type = type)
   pmwgs$init <- TRUE
   return(pmwgs)
 }
@@ -166,36 +131,16 @@ init_chains <- function(emc, start_mu = NULL, start_var = NULL, particles = 1000
   return(emc)
 }
 
-start_proposals_group <- function(data, group_pars, alpha, par_names,
-                                  likelihood_func, is_grouped,
-                                  variant_funs, subjects, n_cores){
-  num_particles <- nrow(group_pars)
-  n_subjects <- length(subjects)
-  proposals_list <- vector("list", n_subjects)
-  for(i in 1:n_subjects){
-    proposals_list[[i]] <- bind_alpha(group_pars, alpha[,i], num_particles, is_grouped, par_names)
-  }
-  lws <- parallel::mcmapply(calc_ll_for_group, proposals_list, data, MoreArgs = list(ll = likelihood_func), mc.cores = n_cores)
-  lw <- rowSums(lws)
-  weight <- exp(lw - max(lw))
-  idx <- sample(x = num_particles, size = 1, prob = weight)
-  return(group_pars[idx,])
-}
-
-start_proposals <- function(s, parameters, n_particles, pmwgs, variant_funs, grouped_pars, is_grouped){
+start_proposals <- function(s, parameters, n_particles, pmwgs, type){
   #Draw the first start point
-  group_pars <- variant_funs$get_group_level(parameters, s)
+  group_pars <- get_group_level(parameters, s, type)
   proposals <- particle_draws(n_particles, group_pars$mu, group_pars$var)
   colnames(proposals) <- rownames(pmwgs$samples$alpha) # preserve par names
-  if(any(is_grouped)){
-    proposals <- update_proposals_grouped(proposals, grouped_pars, is_grouped,
-                                          par_names = colnames(proposals))
-  }
   lw <- calc_ll_manager(proposals, dadm = pmwgs$data[[which(pmwgs$subjects == s)]],
-                        ll_func = pmwgs$ll_func)
+                        model = pmwgs$model)
   weight <- exp(lw - max(lw))
   idx <- sample(x = n_particles, size = 1, prob = weight)
-  return(list(proposal = proposals[idx,!is_grouped], ll = lw[idx], origin = 2))
+  return(list(proposal = proposals[idx,], ll = lw[idx], origin = 2))
 }
 
 run_stage <- function(pmwgs,
@@ -225,18 +170,12 @@ run_stage <- function(pmwgs,
   # Build new sample storage
   pmwgs <- extend_sampler(pmwgs, iter, stage)
   # create progress bar
-  eff_mu <- attr(pmwgs, "eff_mu")
-  eff_var <- attr(pmwgs, "eff_var")
-  # eff_alpha <- attr(pmwgs, "eff_alpha")
-  # eff_tau <- attr(pmwgs, "eff_tau")
+  eff_mu <- pmwgs$eff_mu
+  eff_var <- pmwgs$eff_var
   if(is.null(eff_mu)) eff_mu <- vector("list", pmwgs$n_subjects)
   if(is.null(eff_var)) eff_var <- vector("list", pmwgs$n_subjects)
-  # if(is.null(eff_alpha)) eff_alpha <- vector("list", pmwgs$n_subjects)
-  # if(is.null(eff_tau)) eff_tau <- vector("list", pmwgs$n_subjects)
   chains_cov <- attr(pmwgs, "chains_cov")
   if(is.null(chains_cov)) chains_cov <- vector("list", pmwgs$n_subjects)
-
-  chains_cov_grouped <- attr(pmwgs, "chains_cov_grouped")
   mix <- set_mix(stage)
   if (verboseProgress) {
     pb <- accept_progress_bar(min = 0, max = iter)
@@ -246,19 +185,12 @@ run_stage <- function(pmwgs,
   data <- pmwgs$data
   subjects <- pmwgs$subjects
   unq_components <- unique(components)
-  variant_funs <- attr(pmwgs, "variant_funs")
   nuisance <- pmwgs$nuisance
   if(any(nuisance)){
     type <- pmwgs$sampler_nuis$type
     pmwgs$sampler_nuis$samples$idx <- pmwgs$samples$idx
   }
-  grouped <- pmwgs$grouped
-  if(any(grouped)){
-    epsilon_grouped <- pmwgs$samples$epsilon_grouped
-    mix_grouped <- c(0.1, 0.9, 0)
-    particles_grouped <- round(sqrt(nrow(pmwgs$samples$grouped_pars))*40)
-  }
-  block_idx <- block_variance_idx(components[!grouped])
+  block_idx <- block_variance_idx(components)
   # Main iteration loop
   for (i in 1:iter) {
     if (verboseProgress) {
@@ -268,55 +200,38 @@ run_stage <- function(pmwgs,
     j <- start_iter + i
 
     # Gibbs step
-    pars <- pars_comb <- variant_funs$gibbs_step(pmwgs, pmwgs$samples$alpha[!nuisance[!grouped],,j-1])
+    pars <- pars_comb <- gibbs_step(pmwgs, pmwgs$samples$alpha[!nuisance,,j-1], pmwgs$type)
     if(any(nuisance)){
-      pars_nuis <- get_variant_funs(type)$gibbs_step(pmwgs$sampler_nuis, pmwgs$samples$alpha[nuisance[!grouped],,j-1])
-      pars_comb <- merge_group_level(pars$tmu, pars_nuis$tmu, pars$tvar, pars_nuis$tvar, nuisance[!grouped])
+      pars_nuis <- gibbs_step(pmwgs$sampler_nuis, pmwgs$samples$alpha[nuisance,,j-1], pmwgs$sampler_nuis$type)
+      pars_comb <- merge_group_level(pars$tmu, pars_nuis$tmu, pars$tvar, pars_nuis$tvar, nuisance)
       pars_comb$alpha <- pmwgs$samples$alpha[,,j-1]
-      pmwgs$sampler_nuis$samples <- get_variant_funs(type)$fill_samples(samples = pmwgs$sampler_nuis$samples,
+      pmwgs$sampler_nuis$samples <- fill_samples(samples = pmwgs$sampler_nuis$samples,
                                                                         group_level = pars_nuis,
                                                                         epsilon = epsilon, j = j,
                                                                         proposals = NULL,
-                                                                        n_pars = n_pars)
+                                                                        n_pars = n_pars, type = pmwgs$sampler_nuis$type)
       pmwgs$sampler_nuis$samples$idx <- j
     }
-    if(any(grouped)){
-      subj_prior <-sum(apply(pars_comb$alpha, 2, FUN = function(x) mvtnorm::dmvnorm(x, pars$tmu, sigma = pars$tvar, log = TRUE)))
-      grouped_pars <- new_particle_group(pmwgs$data, particles_grouped, pmwgs$prior$prior_grouped,
-                                         chains_cov_grouped, mix_grouped, epsilon_grouped,
-                                         pmwgs$samples$grouped_pars[,j-1] , pars_comb$alpha, pmwgs$par_names,
-                                         pmwgs$ll_func, pmwgs$grouped, stage, variant_funs, pmwgs$subjects, subj_prior, n_cores)
-      pmwgs$samples$grouped_pars[,j] <- grouped_pars$proposal
-      pmwgs$samples$epsilon_grouped <- epsilon_grouped
-    } else{
-      grouped_pars <- NULL
-    }
-
     # Particle step
     proposals <- parallel::mcmapply(new_particle, 1:pmwgs$n_subjects, data, particles, eff_mu, eff_var,
                                     chains_cov,
                                     pmwgs$samples$subj_ll[,j-1],
-                                    MoreArgs = list(pars_comb, mix, pmwgs$ll_func, epsilon, components, stage,
-                                                    variant_funs$get_group_level, block_idx, shared_ll_idx, grouped_pars$proposal, grouped,
-                                                    group_prior = grouped_pars$prior),
+                                    MoreArgs = list(pars_comb, mix, pmwgs$model, epsilon, components, stage,
+                                                    get_group_level, block_idx, shared_ll_idx, pmwgs$type),
                                     mc.cores =n_cores)
-    proposals <- array(unlist(proposals), dim = c(pmwgs$n_pars - sum(grouped) + 2, pmwgs$n_subjects))
+    proposals <- array(unlist(proposals), dim = c(pmwgs$n_pars + 2, pmwgs$n_subjects))
 
     #Fill samples
-    pmwgs$samples <- variant_funs$fill_samples(samples = pmwgs$samples, group_level = pars,
-                                               proposals = proposals, epsilon = rowMeans(epsilon), j = j, n_pars = sum(!pmwgs$grouped))
+    pmwgs$samples <- fill_samples(samples = pmwgs$samples, group_level = pars,
+                                               proposals = proposals, epsilon = rowMeans(epsilon), j = j, n_pars = pmwgs$n_pars, type = pmwgs$type)
 
     # Update epsilon
     if(!is.null(p_accept)){
       if(j > n0){
         for(component in unq_components){
-          idx <- components[!grouped] == component
+          idx <- components == component
           acc <-  pmwgs$samples$alpha[max(which(idx)),,j] != pmwgs$samples$alpha[max(which(idx)),,(j-1)]
           epsilon[,component] <-update_epsilon(epsilon[,component]^2, acc, p_accept, j, sum(idx), alphaStar)
-        }
-        if(any(grouped)){
-          acc <-  pmwgs$samples$grouped_pars[1,j] !=  pmwgs$samples$grouped_pars[1,(j-1)]
-          epsilon_grouped <-update_epsilon(epsilon_grouped^2, acc, mean(p_accept), j, sum(grouped), mean(alphaStar))
         }
       }
     }
@@ -330,10 +245,9 @@ run_stage <- function(pmwgs,
 new_particle <- function (s, data, num_particles, eff_mu = NULL,
                           eff_var = NULL, chains_cov, prev_ll,
                           parameters, mix_proportion = c(0.5, 0.5, 0),
-                          likelihood_func = NULL, epsilon = NULL,
+                          model = NULL, epsilon = NULL,
                           components, stage,  group_level_func,
-                          block_idx, shared_ll_idx, grouped_pars, is_grouped,
-                          group_prior)
+                          block_idx, shared_ll_idx, type)
 {
   # if(stage == "sample"){
   #   if(rbinom(1, size = 1, prob = .5) == 1){
@@ -341,7 +255,7 @@ new_particle <- function (s, data, num_particles, eff_mu = NULL,
   #     shared_ll_idx <- rep(1, length(components))
   #   }
   # }
-  group_pars <- group_level_func(parameters, s)
+  group_pars <- get_group_level(parameters, s, type)
   unq_components <- unique(components)
   proposal_out <- numeric(length(group_pars$mu))
   group_mu <- group_pars$mu
@@ -364,7 +278,7 @@ new_particle <- function (s, data, num_particles, eff_mu = NULL,
       eff_var <- eff_var_old * epsilon[s,i]^2
       var_subj <- chains_cov *  epsilon[s,i]^2
     }
-    idx <- components[!is_grouped] == i
+    idx <- components == i
     # Draw new proposals for this component
     particle_numbers <- numbers_from_proportion(mix_proportion, num_particles)
     cumuNumbers <- cumsum(particle_numbers) + 1 # Include the particle from b4
@@ -380,10 +294,6 @@ new_particle <- function (s, data, num_particles, eff_mu = NULL,
     colnames(proposals) <- names(subj_mu)
     proposals[2:(num_particles+1),idx] <- rbind(pop_particles, ind_particles, eff_particles)
     ll_proposals <- proposals
-    if(any(is_grouped)){
-      ll_proposals <- update_proposals_grouped(proposals, grouped_pars, is_grouped,
-                                               par_names = names(subj_mu))
-    }
     # Normally we assume that a component contains all the parameters to estimate the individual likelihood of a joint model
     # Sometimes we may also want to block within a model if it has very high dimensionality
     shared_idx <- shared_ll_idx[idx][1]
@@ -391,9 +301,9 @@ new_particle <- function (s, data, num_particles, eff_mu = NULL,
 
     # Calculate likelihoods
     if(components[length(components)] > 1){
-      lw <- calc_ll_manager(ll_proposals[,is_shared], dadm = data, likelihood_func, component = shared_idx)
+      lw <- calc_ll_manager(ll_proposals[,is_shared], dadm = data, model, component = shared_idx)
     } else{
-      lw <- calc_ll_manager(ll_proposals[,is_shared], dadm = data, likelihood_func)
+      lw <- calc_ll_manager(ll_proposals[,is_shared], dadm = data, model)
     }
     lw_total <- lw + prev_ll - lw[1] # make sure lls from other components are included
     lp <- mvtnorm::dmvnorm(x = proposals[,idx], mean = group_mu[idx], sigma = group_var[idx,idx], log = TRUE)
@@ -402,9 +312,6 @@ new_particle <- function (s, data, num_particles, eff_mu = NULL,
       prior_density <- mvtnorm::dmvnorm(x = proposals, mean = group_mu, sigma = group_var, log = TRUE)
     } else{
       prior_density <- lp
-    }
-    if(any(is_grouped)){
-      prior_density <- prior_density + group_prior
     }
 
     if (mix_proportion[3] == 0) {
@@ -431,54 +338,6 @@ new_particle <- function (s, data, num_particles, eff_mu = NULL,
     proposal_out[idx] <- proposals[idx_ll,idx]
   } # Note that origin only contains last components origin, just used by devs anyway
   return(list(proposal = proposal_out, ll = sum(out_lls), origin = origin))
-}
-
-new_particle_group <- function(data, num_particles, prior,
-                               chains_cov, mix_proportion = c(.1, .9), epsilon_grouped,
-                               prev_mu, alpha, par_names, likelihood_func = NULL,
-                               is_grouped, stage,
-                               variant_funs, subjects, subj_prior, n_cores){
-  prior_mu <- prior$theta_mu_mean
-  prior_var <- prior$theta_mu_var
-  if(stage == "preburn"){
-    chains_cov <- prior_var
-  }
-  chains_cov <- chains_cov * epsilon_grouped^2
-  particle_numbers <- numbers_from_proportion(mix_proportion, num_particles)
-  prior_particles <- particle_draws(particle_numbers[1], prior_mu, prior_var)
-  ind_particles <- particle_draws(particle_numbers[2], prev_mu, chains_cov)
-  proposals <- rbind(prev_mu, prior_particles, ind_particles)
-  n_subjects <- length(subjects)
-  proposals_list <- vector("list", n_subjects)
-  for(i in 1:n_subjects){
-    proposals_list[[i]] <- bind_alpha(proposals, alpha[,i], num_particles + 1, is_grouped, par_names)
-  }
-  lws <- parallel::mcmapply(calc_ll_for_group, proposals_list, data, MoreArgs = list(ll = likelihood_func), mc.cores = n_cores)
-  lw <- rowSums(lws)
-  lp <- mvtnorm::dmvnorm(x = proposals, mean = prior_mu, sigma = prior_var, log = TRUE)
-  prop_density <- mvtnorm::dmvnorm(x = proposals, mean = prev_mu, sigma = chains_cov)
-  lm <- log(mix_proportion[1] * exp(lp) + mix_proportion[2] * prop_density)
-  prior_density <- lp + subj_prior
-  l <- lw + prior_density - lm
-  weights <- exp(l - max(l))
-  idx <- sample(x = num_particles + 1, size = 1, prob = weights)
-  return(list(proposal = proposals[idx,], prior = lp[idx]/length(subjects)))
-}
-
-
-
-
-calc_ll_for_group <- function(proposals, data, ll){
-  lw <- calc_ll_manager(proposals, dadm = data, ll)
-}
-
-
-bind_alpha <- function(proposals, alpha, num_particles, is_grouped, par_names){
-  tmp <- matrix(0, ncol = length(is_grouped), nrow = num_particles)
-  tmp[,!is_grouped] <- matrix(alpha, ncol = length(alpha), nrow = num_particles, byrow = T)
-  tmp[,is_grouped] <- proposals
-  colnames(tmp) <- par_names
-  return(tmp)
 }
 
 # Utility functions for sampling below ------------------------------------
@@ -655,182 +514,28 @@ condMVN <- function (mean, sigma, dependent.ind, given.ind, X.given, check.sigma
   list(condMean = cMu, condVar = cVar)
 }
 
-
-# some sort of variants, used to be called via a list called variant_funs
-
-get_variant_funs <- function(type = "standard") {
-  if(type == "standard") {
-    list_fun <- list(# store functions
-      sample_store = sample_store_standard,
-      get_prior = get_prior_standard,
-      add_info = add_info_standard,
-      get_startpoints = get_startpoints_standard,
-      get_group_level = get_group_level_standard,
-      fill_samples = fill_samples_standard,
-      gibbs_step = gibbs_step_standard,
-      group_IC = group__IC_standard,
-      filtered_samples = filtered_samples_standard,
-      get_conditionals = get_conditionals_standard,
-      get_all_pars_IS2 = get_all_pars_standard,
-      prior_dist_IS2 = prior_dist_standard,
-      group_dist_IS2 = group_dist_standard,
-      bridge_add_group = bridge_add_group_standard,
-      bridge_add_info = bridge_add_info_standard,
-      bridge_group_and_prior_and_jac = bridge_group_and_prior_and_jac_standard
-    )
-  } else if(type == "single"){
-    list_fun <- list(# store functions
-      sample_store = sample_store_base,
-      get_prior = get_prior_single,
-      add_info = add_info_single,
-      get_startpoints = get_startpoints_single,
-      get_group_level = get_group_level_single,
-      fill_samples = fill_samples_RE,
-      gibbs_step = gibbs_step_single,
-      group_IC = group__IC_single,
-      filtered_samples = filtered_samples_single,
-      get_conditionals = get_conditionals_single,
-      bridge_add_group = bridge_add_group_single,
-      bridge_add_info = bridge_add_info_single,
-      bridge_group_and_prior_and_jac = bridge_group_and_prior_and_jac_single
-    )
-  } else if(type == "blocked"){
-    list_fun <- list(# store functions
-      sample_store = sample_store_standard,
-      add_info = add_info_blocked,
-      get_prior = get_prior_blocked,
-      get_startpoints = get_startpoints_blocked,
-      get_group_level = get_group_level_standard,
-      fill_samples = fill_samples_standard,
-      gibbs_step = gibbs_step_blocked,
-      group_IC = group__IC_standard,
-      filtered_samples = filtered_samples_standard,
-      get_conditionals = get_conditionals_blocked,
-      get_all_pars_IS2 = get_all_pars_blocked,
-      prior_dist_IS2 = prior_dist_blocked,
-      group_dist_IS2 = group_dist_blocked,
-      bridge_add_group = bridge_add_group_blocked,
-      bridge_add_info = bridge_add_info_blocked,
-      bridge_group_and_prior_and_jac = bridge_group_and_prior_and_jac_blocked
-    )
-  } else if(type == "diagonal"){
-    list_fun <- list(# store functions
-      sample_store = sample_store_standard,
-      add_info = add_info_diag,
-      get_startpoints = get_startpoints_diag,
-      get_group_level = get_group_level_standard,
-      fill_samples = fill_samples_standard,
-      gibbs_step = gibbs_step_diag,
-      group_IC = group__IC_standard,
-      filtered_samples = filtered_samples_standard,
-      get_conditionals = get_conditionals_diag,
-      get_all_pars_IS2 = get_all_pars_standard,
-      prior_dist_IS2 = prior_dist_diag,
-      group_dist_IS2 = group_dist_diag,
-      bridge_add_group = bridge_add_group_diag,
-      bridge_add_info = bridge_add_info_diag,
-      bridge_group_and_prior_and_jac = bridge_group_and_prior_and_jac_diag
-    )
-  } else if(type == "diagonal-gamma"){
-    list_fun <- list(# store functions
-      sample_store = sample_store_diag_gamma,
-      add_info = add_info_diag_gamma,
-      get_startpoints = get_startpoints_diag_gamma,
-      get_group_level = get_group_level_standard,
-      fill_samples = fill_samples_diag_gamma,
-      gibbs_step = gibbs_step_diag_gamma,
-      group_IC = group__IC_standard,
-      filtered_samples = filtered_samples_standard,
-      get_conditionals = get_conditionals_diag
-    )
-  } else if(type == "factor"){
-    list_fun <- list(# store functions
-      sample_store = sample_store_factor,
-      add_info = add_info_factor,
-      get_startpoints = get_startpoints_factor,
-      get_prior = get_prior_factor,
-      get_group_level = get_group_level_standard,
-      fill_samples = fill_samples_factor,
-      gibbs_step = gibbs_step_factor,
-      group_IC = group__IC_standard,
-      filtered_samples = filtered_samples_factor,
-      get_conditionals = get_conditionals_factor,
-      bridge_add_group = bridge_add_group_factor,
-      bridge_add_info = bridge_add_info_factor,
-      bridge_group_and_prior_and_jac = bridge_group_and_prior_and_jac_factor
-    )
-  } else if(type == "infnt_factor"){
-    list_fun <- list(# store functions
-      sample_store = sample_store_infnt_factor,
-      add_info = add_info_infnt_factor,
-      get_startpoints = get_startpoints_infnt_factor,
-      get_prior = get_prior_factor,
-      get_group_level = get_group_level_standard,
-      fill_samples = fill_samples_infnt_factor,
-      gibbs_step = gibbs_step_infnt_factor,
-      group_IC = group__IC_standard,
-      filtered_samples = filtered_samples_infnt_factor,
-      get_conditionals = get_conditionals_infnt_factor,
-      get_all_pars_IS2 = get_all_pars_infnt_factor,
-      prior_dist_IS2 = prior_dist_infnt_factor,
-      group_dist_IS2 = group_dist_infnt_factor
-    )
-  }
-  else if(type == "SEM"){
-    list_fun <- list(# store functions
-      sample_store = sample_store_SEM,
-      add_info = add_info_SEM,
-      get_startpoints = get_startpoints_SEM,
-      get_group_level = get_group_level_SEM,
-      fill_samples = fill_samples_SEM,
-      gibbs_step = gibbs_step_SEM,
-      group_IC = group__IC_SEM,
-      filtered_samples = filtered_samples_SEM,
-      get_conditionals = get_conditionals_SEM,
-      get_all_pars_IS2 = get_all_pars_infnt_factor,
-      prior_dist_IS2 = prior_dist_infnt_factor,
-      group_dist_IS2 = group_dist_infnt_factor,
-      bridge_add_group = bridge_add_group_SEM,
-      bridge_add_info = bridge_add_info_SEM,
-      bridge_group_and_prior_and_jac = bridge_group_and_prior_and_jac_SEM
-    )
-  }
-  list_fun$type <- type
-  return(list_fun)
-}
-
-calc_ll_manager <- function(proposals, dadm, ll_func, component = NULL){
+calc_ll_manager <- function(proposals, dadm, model, component = NULL){
   if(!is.data.frame(dadm)){
-    lls <- log_likelihood_joint(proposals, dadm, component)
+    lls <- log_likelihood_joint(proposals, dadm, model, component)
   } else{
-    c_name <- attr(dadm,"model")()$c_name
-    if(is.null(c_name)){ # use the R implementation
-      lls <- apply(proposals,1, ll_func,dadm = dadm)
+    model <- model()
+    if(is.null(model$c_name)){ # use the R implementation
+      lls <- apply(proposals,1, calc_ll_R, model, dadm = dadm)
     } else{
-      p_types <- names(attr(dadm,"model")()$p_types)
+      p_types <- names(model$p_types)
       designs <- list()
       for(p in p_types){
         designs[[p]] <- attr(dadm,"designs")[[p]][attr(attr(dadm,"designs")[[p]],"expand"),,drop=FALSE]
       }
       constants <- attr(dadm, "constants")
       if(is.null(constants)) constants <- NA
-      parameter_indices <- list()
-      lls <- calc_ll(proposals, dadm, constants = constants, designs = designs, type = c_name,
-                     p_types = p_types, min_ll = log(1e-10), group_idx = parameter_indices)
+      lls <- calc_ll(proposals, dadm, constants = constants, designs = designs, type = model$c_name,
+                     model$bound, model$transform, model$pre_transform, p_types = p_types, min_ll = log(1e-10),
+                     model$trend)
     }
   }
   return(lls)
 }
-
-update_proposals_grouped <- function(proposals, grouped_pars, is_grouped, par_names){
-  proposals_full <- matrix(0, nrow = nrow(proposals), ncol = length(is_grouped))
-  proposals_full[,!is_grouped] <- proposals
-  proposals_full[,is_grouped] <- matrix(grouped_pars, ncol = length(grouped_pars), nrow = nrow(proposals), byrow = T)
-  colnames(proposals_full)[!is_grouped] <- par_names
-  colnames(proposals_full)[is_grouped] <- names(grouped_pars)
-  return(proposals_full)
-}
-
 
 merge_group_level <- function(tmu, tmu_nuis, tvar, tvar_nuis, is_nuisance){
   n_pars <- length(is_nuisance)
@@ -860,9 +565,7 @@ run_hyper <- function(type, data, prior = NULL, iter = 1000, n_chains =3, ...){
   }
   emc <- list()
   for(j in 1:n_chains){
-    variant_funs <- get_variant_funs(type)
-    samples <- variant_funs$sample_store(data = data ,par_names = pars, is_nuisance = rep(F, length(pars)), integrate = F, is_grouped =
-                                           rep(F, length(pars)), ...)
+    samples <- sample_store(data = data ,par_names = pars, is_nuisance = rep(F, length(pars)), integrate = F, type = type, ...)
     subjects <- unique(data$subjects)
     sampler <- list(
       data = split(data, data$subjects),
@@ -870,36 +573,29 @@ run_hyper <- function(type, data, prior = NULL, iter = 1000, n_chains =3, ...){
       subjects = subjects,
       n_pars = length(pars),
       nuisance = rep(F, length(pars)),
-      grouped = rep(F, length(pars)),
       n_subjects = length(subjects),
       samples = samples,
       init = TRUE
     )
     class(sampler) <- "pmwgs"
-    sampler <- variant_funs$add_info(sampler, prior, ...)
-    startpoints <- variant_funs$get_startpoints(sampler, start_mu = NULL, start_var = NULL)
-    sampler$samples <- variant_funs$fill_samples(samples = sampler$samples, group_level = startpoints, proposals = NULL,
-                                                 epsilon = NA, j = 1, n_pars = sampler$n_pars)
+    sampler <- add_info(sampler, prior, type = type, ...)
+    startpoints <- get_startpoints(sampler, start_mu = NULL, start_var = NULL, type = type)
+    sampler$samples <- fill_samples(samples = sampler$samples, group_level = startpoints, proposals = NULL,
+                                                 epsilon = NA, j = 1, n_pars = sampler$n_pars, type = type)
     sampler$samples$idx <- 1
     sampler <- extend_sampler(sampler, iter-1, "sample")
     for(i in 2:iter){
       if(is_mcmc){
-        group_pars <- variant_funs$gibbs_step(sampler, data_input[,,i])
+        group_pars <- gibbs_step(sampler, data_input[,,i], type = type)
       } else{
-        group_pars <- variant_funs$gibbs_step(sampler, t(data_input))
+        group_pars <- gibbs_step(sampler, t(data_input), type = type)
       }
       sampler$samples$idx <- i
-      sampler$samples <- variant_funs$fill_samples(samples = sampler$samples, group_level = group_pars, proposals = NULL,
-                                                   epsilon = NA, j = i, n_pars = sampler$n_pars)
+      sampler$samples <- fill_samples(samples = sampler$samples, group_level = group_pars, proposals = NULL,
+                                                   epsilon = NA, j = i, n_pars = sampler$n_pars, type = type)
     }
-    attr(sampler, "variant_funs") <- variant_funs
     emc[[j]] <- sampler
   }
   class(emc) <- "emc"
   return(emc)
 }
-
-
-
-
-

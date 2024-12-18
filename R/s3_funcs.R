@@ -37,7 +37,7 @@ summary.emc <- function(object, selection = c("mu", "sigma2", "alpha"), probs = 
                         digits = 3, ...){
   dots <- list(...)
   dots <- add_defaults(dots, by_subject = TRUE)
-  if(attr(object[[1]], "variant_funs")$type == "single"){
+  if(object[[1]]$type == "single"){
     selection <- "alpha"
   }
   out_list <- list()
@@ -91,7 +91,7 @@ summary.emc <- function(object, selection = c("mu", "sigma2", "alpha"), probs = 
 
 plot.emc <- function(x, stage = "sample", selection = c("mu", "sigma2", "alpha"),
                      layout=NA, ...){
-  if(attr(x[[1]], "variant_funs")$type == "single"){
+  if(x[[1]]$type == "single"){
     selection <- "alpha"
   }
   for(select in selection){
@@ -189,7 +189,7 @@ check.emc <- function(emc, selection = c('mu', 'sigma2', 'alpha'), digits = 3,
   out_list <- list()
   cat("Iterations:\n")
   print(chain_n(emc))
-  if(attr(emc[[1]], "variant_funs")$type == "single") selection <- "alpha"
+  if(emc[[1]]$type == "single") selection <- "alpha"
   if(plot_worst){
     mfrow <- coda_setmfrow(Nchains = length(emc), Nparms = length(selection),nplots = 1)
     par(mfrow = mfrow)
@@ -360,7 +360,7 @@ fit.emc <- function(emc, stage = NULL, iter = 1000, stop_criteria = NULL,report_
   }
 
   stop_criteria <- stop_criteria[stages_names]
-  stop_criteria <- mapply(get_stop_criteria, stages_names, stop_criteria, MoreArgs = list(type = attr(emc[[1]], "variant_funs")$type))
+  stop_criteria <- mapply(get_stop_criteria, stages_names, stop_criteria, MoreArgs = list(type = emc[[1]]$type))
   if(is.null(stop_criteria[["sample"]]$iter)) stop_criteria[["sample"]]$iter <- iter
   names(stop_criteria) <- stages_names
   if (is.character(emc)) {
@@ -527,7 +527,7 @@ recovery.emc <- function(emc, true_pars,
                           CI = .95, ci_plot_args = list(), ...)
 {
   dots <- list(...)
-  type <- attr(emc[[1]], "variant_funs")$type
+  type <- emc[[1]]$type
   if(length(dots$subject) == 1 || emc[[1]]$n_subjects == 1) dots$by_subject <- TRUE
   dots$merge_chains <- TRUE
   MCMC_samples <- do.call(get_pars, c(list(emc, selection = selection), fix_dots(dots, get_pars)))
@@ -633,17 +633,17 @@ hypothesis.emc <- function(emc, parameter = NULL, H0 = 0, fun = NULL,selection =
                           do_plot = TRUE, use_prior_lim = TRUE,
                           N = 1e4, prior_args = list(), ...){
   dots <- add_defaults(list(...), flatten = TRUE)
-  type <- attr(emc[[1]], "variant_funs")$type
+  type <- emc[[1]]$type
   if (length(emc[[1]]$data)==1) selection <- "alpha"
   if(selection == "alpha" & type != "single") stop("For savage-dickey ratio, selection cannot be alpha for hierarchical models")
   prior <- get_prior(emc)
 
 
   psamples <-  get_objects(design = get_design(emc),
-                           type = attr(emc[[1]], "variant_funs")$type, sample_prior = T,
+                           type = emc[[1]]$type, sample_prior = T,
                            selection = selection, N = N, sampler = emc)
   psamples <- do.call(get_pars, c(list(psamples, selection = selection, merge_chains = TRUE, return_mcmc = FALSE, by_subject = TRUE,
-                                          type = attr(emc[[1]], "variant_funs")$type),
+                                          type = emc[[1]]$type),
                                      fix_dots(dots, get_pars, exclude = c("thin", "filter"))))
   samples <- do.call(get_pars, c(list(emc, selection = selection, merge_chains = TRUE, return_mcmc = FALSE, by_subject = TRUE),
                                     fix_dots(dots, get_pars)))
@@ -1017,7 +1017,7 @@ get_data <- function(emc){
 #' @export
 get_prior.emc <- function(emc){
   prior <- emc[[1]]$prior
-  attr(prior, "type") <- attr(emc[[1]], "variant_funs")$type
+  attr(prior, "type") <- emc[[1]]$type
   class(prior) <- "emc.prior"
   return(prior)
 }

@@ -104,9 +104,9 @@ chain_n <- function(emc)
 }
 
 extract_samples <- function(sampler, stage = c("adapt", "sample"), max_n_sample = NULL, n_chains) {
-  variant_funs <- attr(sampler, "variant_funs")
+  type <- sampler$type
   samples <- sampler$samples
-  type <- sampler$sampler_nuis$type
+  nuis_type <- sampler$sampler_nuis$type
   if("sample" %in% stage & !is.null(max_n_sample)){
     sample_filter <- which(samples$stage %in% "sample" & seq_along(samples$stage) <= samples$idx)
     adapt_filter <- which(samples$stage %in% "adapt" & seq_along(samples$stage) <= samples$idx)
@@ -124,13 +124,13 @@ extract_samples <- function(sampler, stage = c("adapt", "sample"), max_n_sample 
     full_filter <- which(samples$stage %in% stage & seq_along(samples$stage) <= samples$idx)
   }
   if(any(sampler$nuisance)){
-    nuisance <- sampler$nuisance[!sampler$grouped]
+    nuisance <- sampler$nuisance
     suppressWarnings(sampler$sampler_nuis$samples$alpha <- sampler$samples$alpha[nuisance,,,drop = F])
     sampler$samples$alpha <- sampler$samples$alpha[!nuisance,,]
-    out <- variant_funs$filtered_samples(sampler, full_filter)
-    out$nuisance <- get_variant_funs(type)$filtered_samples(sampler$sampler_nuis, full_filter)
+    out <- filtered_samples(sampler, full_filter, type = type)
+    out$nuisance <- filtered_samples(sampler$sampler_nuis, full_filter, type = nuis_type)
   } else{
-    out <- variant_funs$filtered_samples(sampler, full_filter)
+    out <-  filtered_samples(sampler, full_filter, type = type)
   }
   return(out)
 }
@@ -372,7 +372,7 @@ get_pars <- function(emc,selection= "mu", stage="sample",thin=1,filter=0,
 {
   if(add_recalculated) map <- TRUE
   if(!(selection %in% c("mu", "alpha"))) map <- FALSE
-  if(is.null(type)) type <- attr(emc[[1]], "variant_funs")$type
+  if(is.null(type)) type <- emc[[1]]$type
   if(type == "single" & !(selection %in% c("LL", "alpha"))) selection <- "alpha"
   samples <- get_objects(type = type, sampler = emc, stage = stage,
                          selection = selection)
@@ -420,7 +420,6 @@ get_pars <- function(emc,selection= "mu", stage="sample",thin=1,filter=0,
     if(any(!(chain %in% 1:length(samples)))) stop("chain selection exceeds number of chains")
     samples <- samples[chain]
   }
-  # if(is.null(attr(emc[[1]], "variant_funs")$type)) subnames <- "alpha"
   if(merge_chains){
     if(length(dim(samples[[1]])) == 2){
       samples <- do.call(cbind, samples)

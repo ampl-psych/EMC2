@@ -14,7 +14,7 @@ return_single_sampler <- function(joint_samples, i){
   single_samples$samples <- base::rapply(joint_samples$samples, f = function(x) fix_single_object(x, prefix, current_pars, replacement), how = "replace")
   single_samples$par_names <- replacement
   single_samples$data <- lapply(joint_samples$data, FUN = function(x) return(x[[i]]))
-  single_samples$ll_func <- attr(single_samples$data[[1]], "model")()$log_likelihood
+  single_samples$model <- lapply(joint_samples$model, FUN = function(x) return(x[[i]]))
   single_samples$prior <- fix_single_prior(single_samples$prior, idx)
   return(single_samples)
 }

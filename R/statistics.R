@@ -261,14 +261,14 @@ IC <- function(emc,stage="sample",filter=0,use_best_fit=TRUE,
   alpha <- get_pars(emc,selection="alpha",stage=stage,filter=filter, by_subject = TRUE, merge_chains = TRUE)
   mean_pars <- lapply(alpha,function(x){apply(do.call(rbind,x),2,mean)})
   # log-likelihood for each subject using their mean parameter vector
-  ll_func <- get_design(emc)[[1]]$model()$log_likelihood
+  model <- emc[[1]]$model()
   data <- emc[[1]]$data
   mean_pars_lls <- setNames(numeric(length(mean_pars)),names(mean_pars))
   for (sub in names(mean_pars)){
-    if(!is.data.frame(emc[[1]]$data[[1]])){
-      mean_pars_lls[sub] <- log_likelihood_joint(t(mean_pars[[sub]]),dadms = data[[sub]])
+    if(!is.function(model)){
+      mean_pars_lls[sub] <- log_likelihood_joint(t(mean_pars[[sub]]),dadms = data[[sub]], model)
     } else{
-      mean_pars_lls[sub] <- ll_func(mean_pars[[sub]],dadm = data[[sub]])
+      mean_pars_lls[sub] <- calc_ll_R(mean_pars[[sub]],dadm = data[[sub]], model)
     }
   }
   Dmeans <- -2*mean_pars_lls
@@ -278,7 +278,7 @@ IC <- function(emc,stage="sample",filter=0,use_best_fit=TRUE,
     mean_lls <- mean_lls[subject[1]]
     minDs <- minDs[subject[1]]
   } else{
-    group_stats <- attr(emc[[1]], "variant_funs")$group_IC(emc, stage=stage,filter=filter)
+    group_stats <- group_IC(emc, stage=stage,filter=filter, type = emc[[1]]$type)
     if(group_only){
       mean_lls <- group_stats$mean_ll
       minDs <- group_stats$minD

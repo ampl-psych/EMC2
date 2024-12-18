@@ -25,7 +25,7 @@ do_pre_transform <- function(p_vector,transform)
 
 #### Functions to look at parameters ----
 
-map_p <- function(p,dadm)
+map_p <- function(p,dadm, model)
   # Map p to dadm and returns matrix of mapped parameters
   # p is either a vector or a matrix (ncol = number of subjects) of p_vectors
   # dadm is a design matrix with attributes containing model information
@@ -42,7 +42,7 @@ map_p <- function(p,dadm)
     stop("p names must be: ",paste(attr(dadm,"p_names"),collapse=", "))
 
   # Get parameter names from model and create output matrix
-  do_p <- names(attr(dadm,"model")()$p_types)
+  do_p <- names(model$p_types)
   pretrend_idx <- rep(F, length(do_p))
   pars <- matrix(nrow=nrow(dadm),ncol=length(do_p),dimnames=list(NULL,do_p))
 
@@ -68,7 +68,7 @@ map_p <- function(p,dadm)
     if(k <= sum(pretrend_idx)){
       tmp <- as.matrix(tmp)
       colnames(tmp) <- i
-      tmp <- do_transform(tmp, attr(dadm,"model")()$transform)
+      tmp <- do_transform(tmp, model$transform)
     }
     k <- k + 1
     pars[,i] <- tmp
@@ -78,7 +78,7 @@ map_p <- function(p,dadm)
 }
 
 
-get_pars_matrix <- function(p_vector,dadm) {
+get_pars_matrix <- function(p_vector,dadm, model) {
   # Order:
   # 1 pretransform
   # 2 add constants
@@ -96,12 +96,12 @@ get_pars_matrix <- function(p_vector,dadm) {
   # 8 bound
 
   # Niek should constants be included in pre_transform? I think not?
-  p_vector <- do_pre_transform(p_vector, attr(dadm, "model")()$pre_transform)
+  p_vector <- do_pre_transform(p_vector, model$pre_transform)
   # If there's any premap trends, they're done in map_p
-  pars <- map_p(add_constants(p_vector,attr(dadm,"constants")),dadm)
-  pars <- do_transform(pars, attr(dadm,"model")()$transform)
-  pars <- attr(dadm,"model")()$Ttransform(pars, dadm)
-  pars <- add_bound(pars, attr(dadm,"model")()$bound)
+  pars <- map_p(add_constants(p_vector,attr(dadm,"constants")),dadm, model = model)
+  pars <- do_transform(pars, model$transform)
+  pars <- model$Ttransform(pars, dadm)
+  pars <- add_bound(pars, model$bound)
   return(pars)
 }
 

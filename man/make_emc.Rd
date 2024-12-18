@@ -13,7 +13,6 @@ make_emc(
   compress = TRUE,
   rt_resolution = 0.02,
   prior_list = NULL,
-  grouped_pars = NULL,
   par_groups = NULL,
   ...
 )
@@ -34,8 +33,6 @@ make_emc(
 \item{rt_resolution}{A double. Used for compression, response times will be binned based on this resolution.}
 
 \item{prior_list}{A named list containing the prior. Default prior created if \code{NULL}. For the default priors, see \verb{?get_prior_\{type\}}.}
-
-\item{grouped_pars}{An integer vector. Parameters on this location of the vector of parameters are treated as constant across subjects}
 
 \item{par_groups}{A vector. Only to be specified with type \code{blocked}, e.g., \code{c(1,1,1,2,2)} means the covariances
 of the first three and of the last two parameters are estimated as two separate blocks.}

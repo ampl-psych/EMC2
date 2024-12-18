@@ -192,18 +192,15 @@
         .. ..$ alpha    : num [1:7, 1:19, 1] NA NA NA NA NA NA NA NA NA NA ...
         .. ..$ stage    : chr [1(1d)] "init"
         .. ..$ subj_ll  : num [1:19, 1] NA NA NA NA NA NA NA NA NA NA ...
-        ..$ grouped     : logi [1:7] FALSE FALSE FALSE FALSE FALSE FALSE ...
         ..$ sampler_nuis: NULL
+        ..$ type        : chr "standard"
         ..$ init        : logi FALSE
-        ..$ prior       :List of 6
+        ..$ prior       :List of 5
         .. ..$ theta_mu_mean : Named num [1:7] 1 -0.693 0.405 0.693 0 ...
         .. ..$ theta_mu_var  : num [1:7, 1:7] 1 0 0 0 0 0 0 0 0.09 0 ...
         .. ..$ v             : num 2
         .. ..$ A             : Named num [1:7] 0.3 0.3 0.3 0.3 0.3 0.3 0.3
         .. ..$ theta_mu_invar: num [1:7, 1:7] 1 0 0 0 0 ...
-        .. ..$ prior_grouped :List of 2
-        .. .. ..$ theta_mu_mean: num(0) 
-        .. .. ..$ theta_mu_var : num[0 , 0 ] 
        $ :List of 12
         ..$ data        :List of 19
         .. ..$ as1t:'data.frame':	1620 obs. of  8 variables:
@@ -392,18 +389,15 @@
         .. ..$ alpha    : num [1:7, 1:19, 1] NA NA NA NA NA NA NA NA NA NA ...
         .. ..$ stage    : chr [1(1d)] "init"
         .. ..$ subj_ll  : num [1:19, 1] NA NA NA NA NA NA NA NA NA NA ...
-        ..$ grouped     : logi [1:7] FALSE FALSE FALSE FALSE FALSE FALSE ...
         ..$ sampler_nuis: NULL
+        ..$ type        : chr "standard"
         ..$ init        : logi FALSE
-        ..$ prior       :List of 6
+        ..$ prior       :List of 5
         .. ..$ theta_mu_mean : Named num [1:7] 1 -0.693 0.405 0.693 0 ...
         .. ..$ theta_mu_var  : num [1:7, 1:7] 1 0 0 0 0 0 0 0 0.09 0 ...
         .. ..$ v             : num 2
         .. ..$ A             : Named num [1:7] 0.3 0.3 0.3 0.3 0.3 0.3 0.3
         .. ..$ theta_mu_invar: num [1:7, 1:7] 1 0 0 0 0 ...
-        .. ..$ prior_grouped :List of 2
-        .. .. ..$ theta_mu_mean: num(0) 
-        .. .. ..$ theta_mu_var : num[0 , 0 ] 
        $ :List of 12
         ..$ data        :List of 19
         .. ..$ as1t:'data.frame':	1620 obs. of  8 variables:
@@ -592,16 +586,13 @@
         .. ..$ alpha    : num [1:7, 1:19, 1] NA NA NA NA NA NA NA NA NA NA ...
         .. ..$ stage    : chr [1(1d)] "init"
         .. ..$ subj_ll  : num [1:19, 1] NA NA NA NA NA NA NA NA NA NA ...
-        ..$ grouped     : logi [1:7] FALSE FALSE FALSE FALSE FALSE FALSE ...
         ..$ sampler_nuis: NULL
+        ..$ type        : chr "standard"
         ..$ init        : logi FALSE
-        ..$ prior       :List of 6
+        ..$ prior       :List of 5
         .. ..$ theta_mu_mean : Named num [1:7] 1 -0.693 0.405 0.693 0 ...
         .. ..$ theta_mu_var  : num [1:7, 1:7] 1 0 0 0 0 0 0 0 0.09 0 ...
         .. ..$ v             : num 2
         .. ..$ A             : Named num [1:7] 0.3 0.3 0.3 0.3 0.3 0.3 0.3
         .. ..$ theta_mu_invar: num [1:7, 1:7] 1 0 0 0 0 ...
-        .. ..$ prior_grouped :List of 2
-        .. .. ..$ theta_mu_mean: num(0) 
-        .. .. ..$ theta_mu_var : num[0 , 0 ] 
 

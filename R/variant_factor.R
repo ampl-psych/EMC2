@@ -1,5 +1,5 @@
 
-sample_store_factor <- function(data, par_names, iters = 1, stage = "init", integrate = T, is_nuisance, is_grouped, ...) {
+sample_store_factor <- function(data, par_names, iters = 1, stage = "init", integrate = T, is_nuisance, ...) {
   n_factors <- list(...)$n_factors
   Lambda_mat <- list(...)$Lambda_mat
   if(is.null(n_factors)){
@@ -11,8 +11,8 @@ sample_store_factor <- function(data, par_names, iters = 1, stage = "init", inte
   }
   subject_ids <- unique(data$subjects)
   n_subjects <- length(subject_ids)
-  base_samples <- sample_store_base(data, par_names[!is_grouped], iters, stage)
-  par_names <- par_names[!is_nuisance & !is_grouped]
+  base_samples <- sample_store_base(data, par_names, iters, stage)
+  par_names <- par_names[!is_nuisance]
   n_pars <- length(par_names)
   samples <- list(
     theta_mu = array(NA_real_,dim = c(n_pars, iters), dimnames = list(par_names, NULL)),
@@ -34,7 +34,7 @@ add_info_factor <- function(sampler, prior = NULL, ...){
   n_factors <- args$n_factors
   Lambda_mat <- args$Lambda_mat
   if(is.null(n_factors)) n_factors <- ncol(Lambda_mat)
-  n_pars <- sum(!(sampler$nuisance | sampler$grouped))
+  n_pars <- sum(!sampler$nuisance)
   if(is.null(Lambda_mat)){
     Lambda_mat <- matrix(Inf, nrow = n_pars, ncol = n_factors)
     diag(Lambda_mat) <- 1
@@ -49,7 +49,7 @@ add_info_factor <- function(sampler, prior = NULL, ...){
   attr(sampler, "signFix") <- signFix
   attr(sampler, "Lambda_mat") <- Lambda_mat
 
-  sampler$prior <- get_prior_factor(prior, sum(!(sampler$nuisance | sampler$grouped)), sample = F, n_factors = n_factors)
+  sampler$prior <- get_prior_factor(prior, sum(!sampler$nuisance), sample = F, n_factors = n_factors)
   sampler$n_factors <- n_factors
   return(sampler)
 }
@@ -155,7 +155,7 @@ get_prior_factor <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5
 }
 
 get_startpoints_factor<- function(pmwgs, start_mu, start_var){
-  n_pars <- sum(!(pmwgs$nuisance | pmwgs$grouped))
+  n_pars <- sum(!pmwgs$nuisance)
   if (is.null(start_mu)) start_mu <- rnorm(pmwgs$prior$theta_mu_mean, sd = sqrt(pmwgs$prior$theta_mu_var))
   # If no starting point for group var just sample some
   if (is.null(start_var)) start_var <- riwish(n_pars * 3,diag(n_pars))
@@ -191,7 +191,7 @@ gibbs_step_factor <- function(sampler, alpha){
 
   alpha <- t(alpha)
   n_subjects <- sampler$n_subjects
-  n_pars <- sampler$n_pars-sum(sampler$nuisance) - sum(sampler$grouped)
+  n_pars <- sum(!sampler$nuisance)
   n_factors <- sampler$n_factors
   Lambda_mat <- hyper$Lambda_mat
   Lambda_mat <- Lambda_mat == Inf #For indexing

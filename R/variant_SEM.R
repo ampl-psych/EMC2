@@ -1,13 +1,13 @@
 
-sample_store_SEM <- function(data, par_names, iters = 1, stage = "init", integrate = T, is_nuisance, is_grouped, ...) {
+sample_store_SEM <- function(data, par_names, iters = 1, stage = "init", integrate = T, is_nuisance, ...) {
   args <- list(...)
   n_factors <- ncol(args$Lambda_mat)
   covariates <- as.matrix(args$covariates)
   n_cov <- ncol(covariates)
   subject_ids <- unique(data$subjects)
   n_subjects <- length(subject_ids)
-  base_samples <- sample_store_base(data, par_names[!is_grouped], iters, stage)
-  par_names <- par_names[!is_nuisance & !is_grouped]
+  base_samples <- sample_store_base(data, par_names, iters, stage)
+  par_names <- par_names[!is_nuisance]
   n_pars <- length(par_names)
   x_names <- colnames(covariates)
   factor_names <- paste0("F", 1:n_factors)
@@ -37,7 +37,7 @@ add_info_SEM <- function(sampler, prior = NULL, ...){
   G_mat <- args$G_mat
   covariates <- as.matrix(args$covariates)
   n_cov <- ncol(covariates)
-  n_pars <- sum(!(sampler$nuisance | sampler$grouped))
+  n_pars <- sum(!sampler$nuisance)
   if(is.null(Lambda_mat)){
     Lambda_mat <- matrix(0, nrow = n_pars, ncol = n_factors)
   }
@@ -58,7 +58,7 @@ add_info_SEM <- function(sampler, prior = NULL, ...){
 
   sampler$covariates <- covariates
   sampler$n_cov <- n_cov
-  sampler$prior <- get_prior_SEM(prior, sum(!(sampler$nuisance | sampler$grouped)), sample = F,
+  sampler$prior <- get_prior_SEM(prior, sum(!sampler$nuisance), sample = F,
                                  Lambda_mat = Lambda_mat, B_mat = B_mat, K_mat = K_mat, G_mat = G_mat,
                                  covariates = covariates)
   sampler$n_factors <- n_factors
@@ -229,7 +229,7 @@ get_prior_SEM <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, s
 }
 
 get_startpoints_SEM<- function(pmwgs, start_mu, start_var){
-  n_pars <- sum(!(pmwgs$nuisance | pmwgs$grouped))
+  n_pars <- sum(!pmwgs$nuisance)
   if (is.null(start_mu)) start_mu <- rnorm(pmwgs$prior$theta_mu_mean, sd = sqrt(pmwgs$prior$theta_mu_var))
   # If no starting point for group var just sample some
   if (is.null(start_var)) start_var <- riwish(n_pars * 3,diag(n_pars))
@@ -277,7 +277,7 @@ gibbs_step_SEM <- function(sampler, alpha){
   # Just some ease of reading
   y <- t(alpha)
   n_subjects <- sampler$n_subjects
-  n_pars <- sampler$n_pars-sum(sampler$nuisance) - sum(sampler$grouped)
+  n_pars <- sum(!sampler$nuisance) 
   n_factors <- sampler$n_factors
   n_cov <- sampler$n_cov
   covariates <- sampler$covariates

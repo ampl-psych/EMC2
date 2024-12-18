@@ -63,7 +63,6 @@ SBC_hierarchical <- function(design_in, prior_in, replicates = 250, trials = 100
     #   rand_effects$subjects <- 1:nrow(rand_effects)
     #   emc <- EMC2:::run_hyper(type, rand_effects, prior = prior_in, iter = 5000)
     #   emc <- list(emc)
-    #   attr(emc[[1]], "variant_funs") <- EMC2:::get_variant_funs(type)
     #   class(emc) <- "emc"
     # } else{
     data <- make_data(rand_effects,design_in, trials, model = design_in$model)

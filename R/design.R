@@ -727,7 +727,7 @@ dm_list <- function(dadm)
       # isin2 <- attr(dadm,"s_data")==i  # data
 
 
-      attr(dl[[i]],"model") <- model
+      attr(dl[[i]],"model") <- NULL
       attr(dl[[i]],"p_names") <- p_names
       attr(dl[[i]],"sampled_p_names") <- sampled_p_names
       attr(dl[[i]],"designs") <- sub_design(designs,isin)
@@ -743,23 +743,27 @@ dm_list <- function(dadm)
       attr(dl[[i]],"s_expand") <- NULL
       attr(dl[[i]],"prior") <- NULL
       attr(dl[[i]], "design_matrix_mri") <- dms_mri[[i]]
+      attr(dl[[i]], "unique_nort") <- NULL
+      attr(dl[[i]], "unique_nortR") <- NULL
+      attr(dl[[i]], "expand_nort") <- NULL
+      attr(dl[[i]], "expand_nortR") <- NULL
       # attr(dl[[i]],"ok_dadm_winner") <- ok_dadm_winner[isin]
       # attr(dl[[i]],"ok_dadm_looser") <- ok_dadm_looser[isin]
       #
       # attr(dl[[i]],"ok_da_winner") <- ok_da_winner[isin1]
       # attr(dl[[i]],"ok_da_looser") <- ok_da_looser[isin1]
 
-      attr(dl[[i]],"unique_nort") <- unique_nort[isin]
-      attr(dl[[i]],"unique_nortR") <- unique_nortR[isin]
+      # attr(dl[[i]],"unique_nort") <- unique_nort[isin]
+      # attr(dl[[i]],"unique_nortR") <- unique_nortR[isin]
 
       # isinlR1 <- slR1==i
 
-      if (!is.null(expand_nort)){
-        attr(dl[[i]],"expand_nort") <-  expand_nort[isin] - min(expand_nort[isin]) + 1
-      }
-      if (!is.null(expand_nortR)){
-        attr(dl[[i]],"expand_nortR") <- expand_nortR[isin]-min(expand_nortR[isin]) + 1
-      }
+      # if (!is.null(expand_nort)){
+      #   attr(dl[[i]],"expand_nort") <-  expand_nort[isin] - min(expand_nort[isin]) + 1
+      # }
+      # if (!is.null(expand_nortR)){
+      #   attr(dl[[i]],"expand_nortR") <- expand_nortR[isin]-min(expand_nortR[isin]) + 1
+      # }
 
       # attr(dl[[i]],"ok_trials") <- ok_trials[isin2]
       # if (!is.null(expand_winner)){
@@ -795,11 +799,14 @@ dm_list <- function(dadm)
 update2version <- function(emc, model, transform = NULL, bound = NULL,
                            pre_transform = NULL){
   design_list <- get_design(emc)
-  type <- attr(emc[[1]], "variant_funs")$type
-  emc <- lapply(emc, FUN = function(x){
-    attr(x, "variant_funs") <- get_variant_funs(type)
-    return(x)
-  })
+  if(is.null(emc[[1]]$type)){
+    type <- attr(emc[[1]], "variant_funs")$type
+    emc <- lapply(emc, FUN = function(x){
+      x$type <- type
+      return(x)
+    })
+  }
+  type <- emc[[1]]$type
   # Apparently we're an old model with previous bounding system
   if(is.null(design_list[[1]]$model()$bound)){
     # Just to be sure let's set t0 transform lower to 0
@@ -838,7 +845,7 @@ update2version <- function(emc, model, transform = NULL, bound = NULL,
 }
 
 
-# Some s3 classes ---------------------------------------------------------
+# Some s3 classes for design objects ---------------------------------------------------------
 #' Get model parameters from a design
 #'
 #' Makes a vector with zeroes, with names and length corresponding to the

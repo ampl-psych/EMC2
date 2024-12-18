@@ -229,7 +229,7 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
     design,model,add_acc=FALSE,compress=FALSE,verbose=FALSE,
     rt_check=FALSE)
   pars <- t(apply(parameters, 1, do_pre_transform, model()$pre_transform))
-  pars <- map_p(add_constants(pars,design$constants),data)
+  pars <- map_p(add_constants(pars,design$constants),data, model())
   pars <- do_transform(pars, model()$transform)
   pars <- model()$Ttransform(pars, data)
   pars <- add_bound(pars, model()$bound)

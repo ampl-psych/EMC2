@@ -138,8 +138,8 @@ DDM <- function(){
     dfun=function(rt,R,pars) dDDM(rt,R,pars),
     # Probability function (CDF)
     pfun=function(rt,R,pars) pDDM(rt,R,pars),
-    log_likelihood=function(p_vector,dadm,min_ll=log(1e-10)){
-      log_likelihood_ddm(p_vector=p_vector, dadm = dadm, min_ll = min_ll)
+    log_likelihood=function(pars,dadm,model,min_ll=log(1e-10)){
+      log_likelihood_ddm(pars=pars, dadm = dadm, model = model, min_ll = min_ll)
     }
   )
 }

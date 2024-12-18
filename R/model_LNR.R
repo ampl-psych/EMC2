@@ -102,8 +102,8 @@ LNR <- function() {
     # Probability function (CDF) for single accumulator
     pfun=function(rt,pars) pLNR(rt,pars),
     # Race likelihood combining pfun and dfun
-    log_likelihood=function(p_vector,dadm,min_ll=log(1e-10))
-      log_likelihood_race(p_vector=p_vector, dadm = dadm, min_ll = min_ll)
+    log_likelihood=function(pars,dadm, model, min_ll=log(1e-10))
+      log_likelihood_race(pars=pars, dadm = dadm, model = model, min_ll = min_ll)
   )
 }
 

@@ -433,7 +433,7 @@ plot_pars <- function(emc,layout=NA, selection="mu", show_chains = FALSE, plot_p
   oldpar <- par(no.readonly = TRUE) # code line i
   on.exit(par(oldpar)) # code line i + 1
   dots <- list(...)
-  type <- attr(emc[[1]], "variant_funs")$type
+  type <- emc[[1]]$type
   if(length(dots$subject) == 1 || emc[[1]]$n_subjects == 1) dots$by_subject <- TRUE
   if(type == "single" & !(selection %in% c("LL", "alpha"))) selection <- "alpha"
   if(all_subjects){
