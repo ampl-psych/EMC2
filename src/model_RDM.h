@@ -118,7 +118,7 @@ NumericVector drdm_c(NumericVector rts, NumericMatrix pars, LogicalVector idx, d
     if(idx[i] == TRUE){
       if(NumericVector::is_na(pars(i,0))){
         out[k] = 0;
-      } else if((rts[i] - pars(i,3) > 0) & (is_ok[i] == TRUE)){
+      } else if((rts[i] - pars(i,3) > 0) && (is_ok[i] == TRUE)){
         out[k] = digt(rts[i] - pars(i,3), pars(i,1)/pars(i,4) + .5 * pars(i,2)/pars(i,4), pars(i,0)/pars(i,4), .5*pars(i,2)/pars(i,4));
       } else{
         out[k] = min_ll;
@@ -138,7 +138,7 @@ NumericVector prdm_c(NumericVector rts, NumericMatrix pars, LogicalVector idx, d
     if(idx[i] == TRUE){
       if(NumericVector::is_na(pars(i,0))){
         out[k] = 0;
-      } else if((rts[i] - pars(i,3) > 0) & (is_ok[i] == TRUE)){
+      } else if((rts[i] - pars(i,3) > 0) && (is_ok[i] == TRUE)){
         out[k] = pigt(rts[i] - pars(i,3), pars(i,1)/pars(i,4) + .5 * pars(i,2)/pars(i,4), pars(i,0)/pars(i,4), .5*pars(i,2)/pars(i,4));
       } else{
         out[k] = min_ll;
