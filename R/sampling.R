@@ -75,7 +75,7 @@ init <- function(pmwgs, start_mu = NULL, start_var = NULL,
                                   parameters = startpoints_comb, n_particles = particles,
                                   pmwgs = pmwgs, type = type,
                                   mc.cores = n_cores)
-  proposals <- array(unlist(proposals), dim = c(pmwgs$n_pars + 2, pmwgs$n_subjects))
+  proposals <- array(unlist(proposals), dim = c(pmwgs$n_pars + 1, pmwgs$n_subjects))
 
   # Sample the mixture variables' initial values.
 
@@ -141,22 +141,33 @@ start_proposals <- function(s, parameters, n_particles, pmwgs, type){
   return(list(proposal = proposals[idx,], ll = lw[idx]))
 }
 
+set_p_accept <- function(p_accept, stage){
+  # Proposals distributions:
+  # 1. Prior - unscaled: all stages
+  # 2. Prev particle - scaled chain variance: all stages in preburn scaled by prior variance
+  # 3. Chain mean - scaled chain variance: burn onwards
+  # 4. Eff mean - scaled eff variance: sample onwards
+  if(stage == "preburn") return(.5)
+  if(stage == "burn") return(c(0.5, .9))
+  if(stage == "adapt") return(c(0.5, 0.9))
+  if(stage == "sample") return(c(0.5, 0.95, 0.95))
+}
 
-check_tune_settings <- function(tune, n_pars){
-  if(is.null(tune$p_accept)) tune$p_accept <- .8
+check_tune_settings <- function(tune, n_pars, stage){
+  tune$p_accept <- set_p_accept(tune$p_accept, stage)
   if(is.null(tune$components)) tune$components <- rep(1, n_pars)
   if(is.null(tune$shared_ll_idx)) tune$shared_ll_idx <- tune$components
-  if(is.null(tune$ESS_ratio)) tune$ESS_ratio <- .3
+  if(is.null(tune$target_ESS)) tune$target_ESS <- 5*sqrt(n_pars)
   if(is.null(tune$ESS_scale)) tune$ESS_scale <- .5
-  if(is.null(tune$mix_adapt)) tune$mix_adapt <- .05
+  if(is.null(tune$mix_adapt)) tune$mix_adapt <- .1
   tune$alphaStar <- -qnorm(tune$p_accept/2)
-  tune$n0 <- 50
+  tune$n0 <- 100
   return(tune)
 }
 
 check_sampling_settings <- function(pm_settings, stage, n_pars, particles){
   pm_settings$mix <- check_mix(pm_settings$mix, stage)
-  pm_settings$epsilon <- check_epsilon(pm_settings$epsilon, n_pars)
+  pm_settings$epsilon <- check_epsilon(pm_settings$epsilon, n_pars, pm_settings$mix)
   pm_settings$prop_performance <- check_prop_performance(pm_settings$prop_performance, stage)
   if(is.null(pm_settings$n_particles)) pm_settings$n_particles <- particles
   return(pm_settings)
@@ -177,7 +188,7 @@ run_stage <- function(pmwgs,
   tune$components <- attr(pmwgs$data, "components")
   tune$shared_ll_idx <- attr(pmwgs$data, "shared_ll_idx")
 
-  pm_settings <- pmwgs$samples$pm_settings
+  pm_settings <- attr(pmwgs$samples, "pm_settings")
   # Intialize sampling tuning settings
   if(is.null(pm_settings)) pm_settings <- vector("list", pmwgs$n_subjects)
   tune <- check_tune_settings(tune, n_pars)
@@ -231,7 +242,7 @@ run_stage <- function(pmwgs,
     }
     # Particle step
     proposals <- parallel::mcmapply(new_particle, 1:pmwgs$n_subjects, data, pm_settings, eff_mu, eff_var,
-                                    chains_var, pmwgs$samples$subj_ll[,j-1],
+                                    chains_mu, chains_var, pmwgs$samples$subj_ll[,j-1],
                                     MoreArgs = list(pars_comb, pmwgs$model, stage,
                                                     pmwgs$type,
                                                     tune, j),
@@ -242,15 +253,16 @@ run_stage <- function(pmwgs,
     #Fill samples
     pmwgs$samples <- fill_samples(samples = pmwgs$samples, group_level = pars,
                                                proposals = proposals, j = j, n_pars = pmwgs$n_pars, type = pmwgs$type)
-    pmwgs$samples$pm_settings <- pm_settings
   }
+  attr(pmwgs$samples, "pm_settings") <- pm_settings
   if (verboseProgress) close(pb)
   return(pmwgs)
 }
 
 
 new_particle <- function (s, data, pm_settings, eff_mu = NULL,
-                          eff_var = NULL, chains_var, prev_ll,
+                          eff_var = NULL, chains_mu = NULL,
+                          chains_var = NULL, prev_ll,
                           parameters, model = NULL, stage,
                           type, tune, iter)
 {
@@ -260,25 +272,18 @@ new_particle <- function (s, data, pm_settings, eff_mu = NULL,
   group_mu <- group_pars$mu
   group_var <- group_pars$var
   subj_mu <- parameters$alpha[,s]
-  eff_var_old <- eff_var
-  if(stage != "sample"){
-    eff_mu <- subj_mu
-    group_var_subj <- group_var
-    if(length(unq_components) > 1){
-      group_var_subj[block_idx] <- 0
-    }
-  }
   out_lls <- numeric(length(unq_components))
+  if(stage == "preburn"){
+    chains_var <- group_var
+  }
+
+
+
   for(i in unq_components){
-    if(stage != "sample"){
-      eff_var <- chains_var * pm_settings$epsilon^2
-      var_subj <- group_var_subj *  pm_settings$epsilon^2
-    } else{
-      eff_var <- eff_var_old * pm_settings$epsilon^2
-      var_subj <- chains_var *  pm_settings$epsilon^2
-    }
+    eff_var <- eff_var * pm_settings$epsilon^2
+    chains_var <- chains_var * pm_settings$epsilon^2
     idx <- tune$components == i
-    # Draw new proposals for this component
+    # Draw new proposals for each component
     particle_numbers <- numbers_from_proportion(pm_settings$mix, pm_settings$n_particles)
     pop_particles <- particle_draws(particle_numbers[1], group_mu[idx], group_var[idx, idx])
     ind_particles <- particle_draws(particle_numbers[2], subj_mu[idx], var_subj[idx, idx])
@@ -343,7 +348,7 @@ update_pm_settings <- function(pm_settings, chosen_idx, weights, particle_number
   # Check if chosen_idx corresponds to a new proposal (not the previous particle)
   if (chosen_idx > 1) {
     # Identify which proposal block produced the chosen particle
-    origin <- min(which(chosen_idx <=  (cumsum(particle_numbers) +1)))
+    origin <- min(which(chosen_idx <=  (cumsum(particle_numbers) + 1)))
     prop_performance[origin] <- prop_performance[origin] + 1
   }
   # First update prop_performance
@@ -361,15 +366,24 @@ update_pm_settings <- function(pm_settings, chosen_idx, weights, particle_number
     pm_settings$mix <- mix_weights_new / sum(mix_weights_new)
 
     # 2. Adapt number of particles based on ESS
-    ess <- (sum(weights))^2 / sum(weights^2)
-    desired_ess <- pm_settings$n_particles * tune$ESS_ratio
-    scale_factor <- (desired_ess / ess)^tune$ESS_scale
-    new_num_particles <- round(pm_settings$n_particles * scale_factor)
-    pm_settings$n_particles <- max(10, min(200, new_num_particles))
-
+    # Calculate ESS per source independently
+    # ess <- 0
+    # idx_vector <- rep(1:length(particle_numbers), particle_numbers)
+    # for(i in 1:length(prop_performance)){
+    #   idx <- idx_vector == i
+    #   tmp_ess <- (sum(weights[idx]))^2 / sum(weights[idx]^2)
+    #   if(is.nan(tmp_ess)) tmp_ess <- 0.001
+    #   ess <- ess + tmp_ess
+    # }
+    #
+    # desired_ess <- tune$target_ESS
+    # scale_factor <- (desired_ess / ess)^tune$ESS_scale
+    # new_num_particles <- round(pm_settings$n_particles * scale_factor)
+    # pm_settings$n_particles <- max(10, min(1000, new_num_particles))
+    # print(new_num_particles)
     # 3. Update epsilon
     # If chosen_idx > 1 a new proposal was accepted
-    pm_settings$epsilon <- update_epsilon(pm_settings$epsilon^2, chosen_idx > 1, tune$p_accept, iter, n_pars, tune$alphaStar)
+    pm_settings$epsilon <- update_epsilon(pm_settings$epsilon^2, chosen_idx > 1, tune$p_accept, iter,n_pars, tune$alphaStar)
   }
   return(pm_settings)
 }
@@ -469,9 +483,11 @@ fill_samples_RE <- function(samples, proposals, j = 1, n_pars, ...){
 }
 
 check_mix <- function(mix, stage) {
-  if (stage %in% c("burn", "adapt", "sample")) {
+  if (stage %in% c("burn", "adapt")) {
     default_mix <- c(0.1, 0.3, 0.6)
-  } else{ #Preburn stage
+  } else if(stage == "sample"){
+    default_mix <- c(0.1, 0.1, 0.4, 0.4)
+  }  else{
     default_mix <- c(0.5, 0.5)
   }
   if(is.null(mix)) mix <- default_mix
@@ -486,23 +502,27 @@ check_mix <- function(mix, stage) {
   return(mix)
 }
 
-check_epsilon <- function(epsilon, n_pars) {
-  if (is.null(epsilon)) {
+check_epsilon <- function(epsilon, n_pars, mix) {
+  if (is.null(epsilon)) { # In preburn case
     if (n_pars > 15) {
-      epsilon <- 0.5
+      epsilon <- 0.6
     } else if (n_pars > 10) {
-      epsilon <- 1
+      epsilon <- 0.8
     } else {
-      epsilon <- 1.5
+      epsilon <- 1
     }
+  } else if(length(epsilon) < length(mix)){
+    epsilon <- c(epsilon, epsilon[length(epsilon)])
   }
   return(epsilon)
 }
 
 check_prop_performance <- function(prop_performance, stage){
-  if (stage %in% c("burn", "adapt", "sample")) {
+  if (stage %in% c("burn", "adapt")) {
     default_mix <- c(0.1, 0.3, 0.6)
-  } else{ #Preburn stage
+  } else if(stage == "sample"){
+    default_mix <- c(0.1, 0.1, 0.4, 0.4)
+  }  else{
     default_mix <- c(0.5, 0.5)
   }
   if(is.null(prop_performance)) prop_performance <- rep(0, length(default_mix))

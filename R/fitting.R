@@ -78,7 +78,7 @@ get_stop_criteria <- function(stage, stop_criteria, type){
 #'}
 
 run_emc <- function(emc, stage, stop_criteria,
-                         p_accept = .8, step_size = 100, verbose = FALSE, verboseProgress = FALSE,
+                         p_accept = .9, step_size = 100, verbose = FALSE, verboseProgress = FALSE,
                          fileName = NULL,
                          particles = NULL, particle_factor=50, cores_per_chain = 1,
                          cores_for_chains = length(emc), max_tries = 20, n_blocks = 1){
@@ -307,16 +307,17 @@ check_gd <- function(emc, stage, max_gd, mean_gd, omit_mpsrf, trys, verbose,
   #   n_blocks <- floor(iter/1000) + 1
   #   n_blocks <- max(n_blocks_old, n_blocks)
   # }
-  if(stage == "sample" & !ok_gd & "alpha" %in% selection) {
-    gds <- gd_summary.emc(emc, selection = "alpha")
-    if(!is.null(mean_gd)){
-      gds_bad <- (colMeans(gds)[-ncol(gds)] > mean_gd)
-    } else{
-      gds_bad <- (apply(gds, 2, max)[-ncol(gds)] > max_gd)
-    }
-  } else{
-    gds_bad <- NULL
-  }
+  # if(stage == "sample" & !ok_gd & "alpha" %in% selection) {
+  #   gds <- gd_summary.emc(emc, selection = "alpha")
+  #   if(!is.null(mean_gd)){
+  #     gds_bad <- (colMeans(gds)[-ncol(gds)] > mean_gd)
+  #   } else{
+  #     gds_bad <- (apply(gds, 2, max)[-ncol(gds)] > max_gd)
+  #   }
+  # } else{
+  #   gds_bad <- NULL
+  # }
+  gds_bad <- NULL
   if(verbose) {
     if(n_blocks_old != n_blocks) {
       message(paste0("More than ", floor(iter/1000)*1000, " sample iterations past without convergence. Now block updating parameters with ", n_blocks, " blocks."))
