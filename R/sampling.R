@@ -174,7 +174,7 @@ run_stage <- function(pmwgs,
   eff_var <- pmwgs$eff_var
   if(is.null(eff_mu)) eff_mu <- vector("list", pmwgs$n_subjects)
   if(is.null(eff_var)) eff_var <- vector("list", pmwgs$n_subjects)
-  chains_cov <- attr(pmwgs, "chains_cov")
+  chains_cov <- pmwgs$chains_cov
   if(is.null(chains_cov)) chains_cov <- vector("list", pmwgs$n_subjects)
   mix <- set_mix(stage)
   if (verboseProgress) {

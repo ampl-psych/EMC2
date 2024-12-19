@@ -19,7 +19,7 @@
 #'
 #' @return Matrix of effective number of parameters, mean deviance, deviance of
 #' mean, DIC, BPIC, Marginal Deviance (if `BayesFactor=TRUE`) and associated weights.
-#' @examples
+#' @examples \donttest{
 #' compare(list(samples_LNR), cores_for_props = 1)
 #' # Typically we would define a list of two (or more) different models:
 #' # # Here the full model is an emc object with the hypothesized effect
@@ -41,6 +41,7 @@
 #' # # By default emc uses 4 cores to parallelize marginal likelihood estimation across proposals
 #' # # So cores_per_prop = 3 results in 12 cores used.
 #' # compare(sList, cores_per_prop = 3)
+#' }
 #' @export
 
 compare <- function(sList,stage="sample",filter=NULL,use_best_fit=TRUE,
@@ -265,7 +266,7 @@ IC <- function(emc,stage="sample",filter=0,use_best_fit=TRUE,
   data <- emc[[1]]$data
   mean_pars_lls <- setNames(numeric(length(mean_pars)),names(mean_pars))
   for (sub in names(mean_pars)){
-    if(!is.function(model)){
+    if(!is.function(model$log_likelihood)){
       mean_pars_lls[sub] <- log_likelihood_joint(t(mean_pars[[sub]]),dadms = data[[sub]], model)
     } else{
       mean_pars_lls[sub] <- calc_ll_R(mean_pars[[sub]],dadm = data[[sub]], model)
@@ -323,11 +324,12 @@ IC <- function(emc,stage="sample",filter=0,use_best_fit=TRUE,
 #' @param MLL2 Numeric. Marginal likelihood of model 2. Obtained with `run_bridge_sampling()`
 #'
 #' @return The BayesFactor for model 1 over model 2
-#' @examples
+#' @examples \donttest{
 #' # Normally one would compare two different models
 #' # Here we use two times the same model:
 #' M1 <- M0 <- run_bridge_sampling(samples_LNR, both_splits = FALSE, cores_for_props = 1)
 #' get_BayesFactor(M1, M0)
+#' }
 #' @export
 get_BayesFactor <- function(MLL1, MLL2){
   exp(MLL1 - MLL2)

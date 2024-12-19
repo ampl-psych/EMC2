@@ -94,8 +94,3 @@ test_that("run_bridge", {
     variant = Sys.info()[1]
   )
 })
-
-
-
-
-

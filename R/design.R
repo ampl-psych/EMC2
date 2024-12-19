@@ -100,10 +100,13 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
   }
 
   if(!is.null(custom_p_vector)){
-    design <- list(Flist = formula, model = model, Ffactors = factors)
+
+    model_list <- function(){list(log_likelihood = model)}
     if(!is.null(list(...)$rfun)){
-      attr(design, "rfun") <- list(...)$rfun
+      model_list$rfun <- list(...)$rfun
     }
+    design <- list(Flist = formula, model = model_list, Ffactors = factors)
+
     attr(design, "sampled_p_names") <-custom_p_vector
     attr(design, "custom_ll") <- TRUE
     class(design) <- "emc.design"

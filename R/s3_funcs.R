@@ -882,6 +882,7 @@ subset.emc <- function(x, stage = "sample", filter = NULL, thin = 1, keep_stages
                        length.out = NULL, ...){
   x <- lapply(x, remove_samples, stage = stage, filter = filter,
                 thin = thin, length.out = length.out, keep_stages = keep_stages)
+  x <- strip_duplicates(x)
   class(x) <- "emc"
   return(x)
 }

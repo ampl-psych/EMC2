@@ -1,7 +1,7 @@
 get_stop_criteria <- function(stage, stop_criteria, type){
   if(is.null(stop_criteria)){
     if(stage == "preburn"){
-      stop_criteria$iter <- 150
+      stop_criteria$iter <- 100
     }
     if(stage == "burn"){
       stop_criteria$mean_gd <- 1.1
@@ -14,7 +14,7 @@ get_stop_criteria <- function(stage, stop_criteria, type){
 
     }
     if(stage == "adapt"){
-      stop_criteria$min_unique <- 600
+      stop_criteria$min_unique <- 150
     }
     if(stage == "sample"){
       stop_criteria$max_gd <- 1.1
@@ -443,7 +443,7 @@ create_cov_proposals <- function(emc, samples_idx = NULL, do_block = TRUE){
       }
     }
     chains_cov <- apply(chains_cov, 3, identity, simplify = F)
-    attr(emc[[j]], "chains_cov") <- chains_cov
+    emc[[j]]$chains_cov <- chains_cov
   }
   return(emc)
 }
@@ -738,6 +738,12 @@ strip_duplicates <- function(emc) {
   for (i in 2:length(emc)) {
     samples <- emc[[i]]$samples
     emc[[i]] <- list(samples = samples)
+  }
+  # Also remove eff_mu, eff_var, chains_cov
+  for (i in 1:length(emc)) {
+    emc[[i]]$eff_mu <- NULL
+    emc[[i]]$eff_var <- NULL
+    emc[[i]]$chains_cov <- NULL
   }
   return(emc)
 }

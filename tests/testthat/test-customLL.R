@@ -1,6 +1,6 @@
 # Simple normal likelihood, the first half of the parameters are the means,
 # the second half the variances. We exp them to ensure positive variances
-custom_ll <- function(dadm, pars){
+custom_ll <- function(pars, dadm, ...){
   idx <- dadm$S == "left"
   ll_left <- dnorm(dadm$rt[idx], pars[1], exp(pars[3]))
   ll_right <- dnorm(dadm$rt[!idx], pars[2], exp(pars[4]))

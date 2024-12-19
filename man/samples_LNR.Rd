@@ -12,16 +12,16 @@ specific structure and elements, as outlined below.
 \item{par_names}{A character vector containing the model parameter names}
 \item{n_pars}{The number of parameters in the model}
 \item{n_subjects}{The number of unique subject ID's in the data}
+\item{model}{A list containing the model functions}
+\item{nuisance}{A logical vector indicating which parameters are nuisance parameters}
 \item{subjects}{A vector containing the unique subject ID's}
+\item{type}{The type of model e.g., "standard" or "diagonal"}
 \item{prior}{A list that holds the prior for \code{theta_mu} (the model
 parameters). Contains the mean (\code{theta_mu_mean}), covariance matrix
 (\code{theta_mu_var}), degrees of freedom (\code{v}), and scale (\code{A})
 and inverse covariance matrix (\code{theta_mu_invar})}
-\item{ll_func}{The log likelihood function used by pmwg for model
-estimation}
 \item{samples}{A list with defined structure containing the samples, see
 the Samples Element section for more detail}
-\item{grouped}{Which parameters are grouped across subjects, in this case none}
 \item{sampler_nuis}{A sampler list for nuisance parameters (in this case there are none),
 similarly structured to the overall samples list of one of the MCMC chains.}
 }
