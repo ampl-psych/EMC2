@@ -147,10 +147,10 @@ set_p_accept <- function(p_accept, stage){
   # 2. Prev particle - scaled chain variance: all stages in preburn scaled by prior variance
   # 3. Chain mean - scaled chain variance: burn onwards
   # 4. Eff mean - scaled eff variance: sample onwards
-  if(stage == "preburn") return(.5)
-  if(stage == "burn") return(c(0.5, .9))
-  if(stage == "adapt") return(c(0.5, 0.9))
-  if(stage == "sample") return(c(0.5, 0.95, 0.95))
+  if(stage == "preburn") return(.8)
+  if(stage == "burn") return(c(0.8, .8))
+  if(stage == "adapt") return(c(0.8, 0.8))
+  if(stage == "sample") return(c(0.8, 0.8, 0.8))
 }
 
 check_tune_settings <- function(tune, n_pars, stage){
@@ -191,7 +191,7 @@ run_stage <- function(pmwgs,
   pm_settings <- attr(pmwgs$samples, "pm_settings")
   # Intialize sampling tuning settings
   if(is.null(pm_settings)) pm_settings <- vector("list", pmwgs$n_subjects)
-  tune <- check_tune_settings(tune, n_pars)
+  tune <- check_tune_settings(tune, n_pars, stage)
   pm_settings <- lapply(pm_settings, FUN = check_sampling_settings,  stage = stage, n_pars = n_pars, particles)
 
   # Build new sample storage
@@ -201,9 +201,10 @@ run_stage <- function(pmwgs,
   eff_mu <- pmwgs$eff_mu
   eff_var <- pmwgs$eff_var
   chains_var <- pmwgs$chains_var
-
+  chains_mu <- pmwgs$chains_mu
   # Make sure that there's at least something to mapply over
   if(is.null(eff_mu)) eff_mu <- vector("list", pmwgs$n_subjects)
+  if(is.null(chains_mu)) chains_mu <- vector("list", pmwgs$n_subjects)
   if(is.null(eff_var)) eff_var <- vector("list", pmwgs$n_subjects)
   if(is.null(chains_var)) chains_var <- vector("list", pmwgs$n_subjects)
   if (verboseProgress) {
@@ -273,30 +274,34 @@ new_particle <- function (s, data, pm_settings, eff_mu = NULL,
   group_var <- group_pars$var
   subj_mu <- parameters$alpha[,s]
   out_lls <- numeric(length(unq_components))
+
+  # Set the proposals
   if(stage == "preburn"){
-    chains_var <- group_var
+    Mus <- list(group_mu, group_mu)
+    Sigmas <- list(group_var, group_var)
+  } else if(stage != "sample"){ # Burn and adapt
+    Mus <- list(group_mu, subj_mu, chains_mu)
+    Sigmas <- list(group_var, chains_var, chains_var)
+  } else{ # Sample
+    Mus <- list(group_mu, subj_mu, chains_mu, eff_mu)
+    Sigmas <- list(group_var, chains_var, chains_var, eff_var)
   }
-
-
-
+  n_proposals <- length(Mus)
+  # Add 1 to epsilons such that prior proposals aren't scaled
+  epsilons <- c(1, pm_settings$epsilon)
   for(i in unq_components){
-    eff_var <- eff_var * pm_settings$epsilon^2
-    chains_var <- chains_var * pm_settings$epsilon^2
     idx <- tune$components == i
     # Draw new proposals for each component
     particle_numbers <- numbers_from_proportion(pm_settings$mix, pm_settings$n_particles)
-    pop_particles <- particle_draws(particle_numbers[1], group_mu[idx], group_var[idx, idx])
-    ind_particles <- particle_draws(particle_numbers[2], subj_mu[idx], var_subj[idx, idx])
-    if(length(pm_settings$mix) < 3){
-      eff_particles <- NULL
-    } else{
-      eff_particles <- particle_draws(particle_numbers[3], eff_mu[idx], eff_var[idx, idx ])# eff_alpha, eff_tau)
+    proposals <- vector("list", n_proposals +1)
+    proposals[[1]] <- subj_mu
+    for(j in 1:n_proposals){
+      # Fill up the proposals
+      proposals[[j + 1]] <- particle_draws(particle_numbers[j], Mus[[j]][idx], Sigmas[[j]][idx,idx] * epsilons[j])
     }
+    proposals <- do.call(rbind, proposals)
     # Rejoin new proposals with current MCMC values for other components
-    proposals <- matrix(rep(subj_mu, pm_settings$n_particles + 1), nrow = pm_settings$n_particles + 1, byrow = T)
     colnames(proposals) <- names(subj_mu)
-    proposals[2:(pm_settings$n_particles+1),idx] <- rbind(pop_particles, ind_particles, eff_particles)
-    ll_proposals <- proposals
     # Normally we assume that a component contains all the parameters to estimate the individual likelihood of a joint model
     # Sometimes we may also want to block within a model if it has very high dimensionality
     shared_idx <- tune$shared_ll_idx[idx][1]
@@ -304,35 +309,33 @@ new_particle <- function (s, data, pm_settings, eff_mu = NULL,
 
     # Calculate likelihoods
     if(tune$components[length(tune$components)] > 1){
-      lw <- calc_ll_manager(ll_proposals[,is_shared], dadm = data, model, component = shared_idx)
+      lw <- calc_ll_manager(proposals[,is_shared], dadm = data, model, component = shared_idx)
     } else{
-      lw <- calc_ll_manager(ll_proposals[,is_shared], dadm = data, model)
+      lw <- calc_ll_manager(proposals[,is_shared], dadm = data, model)
     }
     lw_total <- lw + prev_ll - lw[1] # make sure lls from other components are included
+    # Prior density
     lp <- mvtnorm::dmvnorm(x = proposals[,idx], mean = group_mu[idx], sigma = group_var[idx,idx], log = TRUE)
-    prop_density <- mvtnorm::dmvnorm(x = proposals[,idx], mean = subj_mu[idx], sigma = var_subj[idx,idx])
     if(length(unq_components) > 1){
       prior_density <- mvtnorm::dmvnorm(x = proposals, mean = group_mu, sigma = group_var, log = TRUE)
     } else{
       prior_density <- lp
     }
-
-    if (length(pm_settings$mix) < 3) {
-      eff_density <- 0
-      lm <- log(pm_settings$mix[1] * exp(lp) + (pm_settings$mix[2] * prop_density))
+    # We can start from 2, since first proposal is prior density
+    lm <- pm_settings$mix[1]*exp(lp)
+    for(k in 2:length(Sigmas)){
+      # Mix is not used for the first proposal (the prior density)
+      lm <- lm + pm_settings$mix[k]*mvtnorm::dmvnorm(x = proposals[,idx], mean = Mus[[k]][idx], sigma = Sigmas[[k]][idx,idx]*epsilons[k])
     }
-    else {
-      eff_density <- mvtnorm::dmvnorm(x = proposals[,idx], mean = eff_mu[idx], sigma = eff_var[idx,idx])
-      lm <- log(pm_settings$mix[1] * exp(lp) + (pm_settings$mix[2] * prop_density) + (pm_settings$mix[3] * eff_density))
-    }
-
+    # Avoid infinite values
+    lm <- log(lm)
     infnt_idx <- is.infinite(lm)
     lm[infnt_idx] <- min(lm[!infnt_idx])
     # Calculate weights and center
     l <- lw_total + prior_density - lm
     weights <- exp(l - max(l))
     # Do MH step and return everything
-    idx_ll <- sample(x = pm_settings$n_particles+1, size = 1, prob = weights)
+    idx_ll <- sample(x = sum(particle_numbers) + 1, size = 1, prob = weights)
 
     out_lls[i] <- lw[idx_ll]
     proposal_out[idx] <- proposals[idx_ll,idx]
@@ -358,12 +361,12 @@ update_pm_settings <- function(pm_settings, chosen_idx, weights, particle_number
   if(iter > tune$n0){
     # 1. Update mixing weights continuously
     # Compute observed acceptance rates per proposal (scaled by mix)
-    target_weights <- (prop_performance*(1-mix))/sum(prop_performance*(1-mix))
-    # Smooth update
-    mix_weights_new <- (1 - tune$mix_adapt)*pm_settings$mix + tune$mix_adapt*target_weights
-    # Ensure minimum weight
-    mix_weights_new <- pmax(mix_weights_new, 0.01)
-    pm_settings$mix <- mix_weights_new / sum(mix_weights_new)
+    # target_weights <- (prop_performance*(1-mix))/sum(prop_performance*(1-mix))
+    # # Smooth update
+    # mix_weights_new <- (1 - tune$mix_adapt)*pm_settings$mix + tune$mix_adapt*target_weights
+    # # Ensure minimum weight
+    # mix_weights_new <- pmax(mix_weights_new, 0.01)
+    # pm_settings$mix <- mix_weights_new / sum(mix_weights_new)
 
     # 2. Adapt number of particles based on ESS
     # Calculate ESS per source independently
@@ -511,7 +514,8 @@ check_epsilon <- function(epsilon, n_pars, mix) {
     } else {
       epsilon <- 1
     }
-  } else if(length(epsilon) < length(mix)){
+    # The first proposal is always unscaled
+  } else if(length(epsilon) < (length(mix) -1)){
     epsilon <- c(epsilon, epsilon[length(epsilon)])
   }
   return(epsilon)
