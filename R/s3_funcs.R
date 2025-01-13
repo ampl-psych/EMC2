@@ -1043,8 +1043,6 @@ get_design.emc <- function(x){
   return(emc_design)
 }
 
-
-#' plot_design(samples_LNR)
 #' Plot design
 #'
 #' Makes design illustration by plotting simulated data based on the design

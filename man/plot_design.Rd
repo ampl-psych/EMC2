@@ -4,15 +4,15 @@
 \alias{plot_design.emc.prior}
 \alias{plot_design}
 \alias{plot_design.emc}
-\title{plot_design(samples_LNR)
-Plot design}
+\title{Plot design}
 \usage{
 \method{plot_design}{emc.prior}(
   x,
   data = NULL,
   factors = NULL,
   plot_factor = NULL,
-  n_data_sim = 10
+  n_data_sim = 10,
+  ...
 )
 
 plot_design(
@@ -29,7 +29,8 @@ plot_design(
   data = NULL,
   factors = NULL,
   plot_factor = NULL,
-  n_data_sim = 10
+  n_data_sim = 10,
+  ...
 )
 }
 \arguments{
@@ -50,8 +51,4 @@ No return value. Just plots the design
 }
 \description{
 Makes design illustration by plotting simulated data based on the design
-}
-\examples{
-plot_design(samples_LNR)
-plot_design(samples_LNR, n_data_sim = 20)
 }
