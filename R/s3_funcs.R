@@ -369,13 +369,7 @@ fit.emc <- function(emc, stage = NULL, iter = 1000, stop_criteria = NULL,report_
     emc <- loadRData(emc)
   }
   if(is.null(stage)){
-    nstage <- colSums(chain_n(emc))
-    if(all(nstage == 0)){
-      stage <- "preburn"
-    } else{
-      has_ran <- nstage[nstage != 0]
-      stage <- names(has_ran)[length(has_ran)]
-    }
+    stage <- get_last_stage(emc)
   }
   if(stage == "preburn"){
     emc <- run_emc(emc, stage = "preburn", stop_criteria[['preburn']], cores_for_chains = cores_for_chains, p_accept = p_accept,
@@ -1049,6 +1043,32 @@ get_design.emc <- function(x){
   return(emc_design)
 }
 
+
+#' plot_design(samples_LNR)
+#' Plot design
+#'
+#' Makes design illustration by plotting simulated data based on the design
+#'
+#' @param x An `emc` or `emc.prior` object containing the design to plot
+#' @param data Optional data to overlay on the design plot
+#' @param factors Factors to use for varying parameters
+#' @param plot_factor Optional. Make separate plots for each level of this factor
+#' @param n_data_sim If data is provided, number of simulated datasets to generate for the plot. Default is 10.
+#' @param ... Additional arguments to pass to `make_design_plot`
+#' @return No return value. Just plots the design
+#' @export
+plot_design <- function(x, data = NULL, factors = NULL, plot_factor = NULL, n_data_sim = 10, ...){
+  UseMethod("plot_design")
+}
+
+#' @rdname plot_design
+#' @export
+plot_design.emc <- function(x, data = NULL, factors = NULL, plot_factor = NULL, n_data_sim = 10, ...){
+  p_vector <- posterior_summary(x, probs = .5)[[1]]
+  design <- get_design(x)[[1]]
+  plot(design, p_vector, data = data, factors = factors, plot_factor = plot_factor, n_data_sim = n_data_sim, ...)
+}
+
 #' Get design
 #'
 #' Extracts design from an emc object
@@ -1061,6 +1081,9 @@ get_design.emc <- function(x){
 get_design <- function(x){
   UseMethod("get_design")
 }
+
+
+
 
 #' @rdname sampled_p_vector
 #' @export

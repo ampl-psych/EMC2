@@ -318,22 +318,75 @@ prior_help <- function(type){
 
 
 #' @export
-print.emc.prior <- function(x, ...){
-  type <- attr(x, "type")
+summary.emc.prior <- function(object, ...){
+  type <- attr(object, "type")
   prior_info <- get_objects(type, return_prior = TRUE, return_info = TRUE)
   for(type in names(prior_info$types)){
-    cat(paste(type, " - ", prior_info$type_descriptions[[type]], ": \n\n"))
+    cat(paste(type, " - ", prior_info$type_descriptions[[type]], "\n\n"))
     for (param in prior_info$types[[type]]) {
       # Get the hyperparameter description
       param_desc <- prior_info$descriptions[[param]]
       # Display hyperparameter and description
       cat(paste(param_desc, ": \n"))
-      tmp <- x[[param]]
+      tmp <- object[[param]]
       if(is.matrix(tmp)) tmp <- diag(tmp)
-      print(x[[param]])
+      print(object[[param]])
     }
     cat("\n")
   }
+}
+
+
+#' @export
+print.emc.prior <- function(x, ...){
+  # Check that the required entries exist
+  if (!"theta_mu_mean" %in% names(x) || !"theta_mu_var" %in% names(x)) {
+    stop("The object must contain 'theta_mu_mean' and 'theta_mu_var' entries.")
+  }
+  cat("Mean and variance of the prior on the transformed parameters: \n")
+  means <- x$theta_mu_mean
+  vars  <- x$theta_mu_var
+  if(is.matrix(vars)) vars <- diag(vars)
+  if (length(means) != length(vars)) {
+    stop("Lengths of 'theta_mu_mean' and 'theta_mu_var' must match.")
+  }
+
+  # Helper function to determine how many decimals to keep (max 2)
+  get_decimal_places <- function(num) {
+    # Convert to character, remove trailing zeros and decimal point if needed
+    s <- sub("0+$", "", sub("\\.$", "", as.character(num)))
+    # Find the decimal point
+    point_pos <- regexpr("\\.", s)
+    if (point_pos == -1) {
+      # No decimal point => 0 decimals
+      return(0)
+    } else {
+      # Number of decimals = total chars after the decimal
+      n <- nchar(s) - point_pos
+      # Limit to 2
+      return(min(n, 2))
+    }
+  }
+
+  # Helper to format the number using the above rule
+  format_number <- function(num) {
+    d <- get_decimal_places(num)
+    fmt <- paste0("%.", d, "f")
+    sprintf(fmt, num)
+  }
+
+  # Use names of means as the left-hand side labels
+  lhs_names <- names(means)
+  if (is.null(lhs_names)) {
+    # Fallback: use the index if no names
+    lhs_names <- as.character(seq_along(means))
+  }
+  # Loop through and print each entry in the desired format
+  for (i in seq_along(means)) {
+    cat(sprintf("%s ~ \U0001D441(%s, %s)\n", lhs_names[i], format_number(means[i]), format_number(vars[i])))
+  }
+
+  cat("\nFor detailed info use summary(prior)\n")
 }
 
 
@@ -376,7 +429,7 @@ plot.emc.prior <- function(x, selection = "mu", do_plot = TRUE, covariates = NUL
   dots <- add_defaults(list(...), breaks = 30, cut_off = 0.0015, prob = TRUE, by_subject = TRUE, map = TRUE)
   oldpar <- par(no.readonly = TRUE) # code line i
   on.exit(par(oldpar)) # code line i + 1
-  if(is.null(design$Ffactors)){
+  if(is.null(design[[1]]$Ffactors)){
     if(selection %in% c('alpha', 'mu') & dots$map){
       warning("For this type of design, map = TRUE is not yet implemented")
     }
@@ -386,7 +439,7 @@ plot.emc.prior <- function(x, selection = "mu", do_plot = TRUE, covariates = NUL
   if(type == "single") selection <- "alpha"
   samples <-  get_objects(design = design, prior = prior, type = type, sample_prior = T,
                           selection = selection, N = N, ...)
-  MCMC_samples <- do.call(get_pars, c(list(samples, selection = selection, type = type, covariates = covariates), fix_dots(dots, get_pars)))
+  MCMC_samples <- do.call(get_pars, c(list(samples, selection = selection, type = type, covariates = covariates, stage = "sample"), fix_dots(dots, get_pars)))
   if(do_plot){
     for(i in 1:length(MCMC_samples)){
       xlab <- ifelse(is.null(names(MCMC_samples)[i]), selection, names(MCMC_samples)[i])
@@ -478,7 +531,13 @@ get_design.emc.prior <- function(x)
   return(design)
 }
 
-
+#' @rdname plot_design
+#' @export
+plot_design.emc.prior <- function(x, data = NULL, factors = NULL, plot_factor = NULL, n_data_sim = 10, ...){
+  p_vector <- x$theta_mu_mean
+  design <- get_design(x)
+  plot(design, p_vector, data = data, factors = factors, plot_factor = plot_factor, n_data_sim = n_data_sim, ...)
+}
 
 
 
