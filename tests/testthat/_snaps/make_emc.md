@@ -182,7 +182,6 @@
         ..$ n_pars      : int 7
         ..$ nuisance    : logi [1:7] FALSE FALSE FALSE FALSE FALSE FALSE ...
         ..$ n_subjects  : int 19
-        ..$ ll_func     :function (p_vector, dadm, min_ll = log(1e-10))  
         ..$ samples     :List of 8
         .. ..$ theta_mu : num [1:7, 1] NA NA NA NA NA NA NA
         .. ..$ theta_var: num [1:7, 1:7, 1] NA NA NA NA NA NA NA NA NA NA ...
@@ -201,6 +200,7 @@
         .. ..$ v             : num 2
         .. ..$ A             : Named num [1:7] 0.3 0.3 0.3 0.3 0.3 0.3 0.3
         .. ..$ theta_mu_invar: num [1:7, 1:7] 1 0 0 0 0 ...
+        ..$ model       :function ()  
        $ :List of 12
         ..$ data        :List of 19
         .. ..$ as1t:'data.frame':	1620 obs. of  8 variables:
@@ -379,7 +379,6 @@
         ..$ n_pars      : int 7
         ..$ nuisance    : logi [1:7] FALSE FALSE FALSE FALSE FALSE FALSE ...
         ..$ n_subjects  : int 19
-        ..$ ll_func     :function (p_vector, dadm, min_ll = log(1e-10))  
         ..$ samples     :List of 8
         .. ..$ theta_mu : num [1:7, 1] NA NA NA NA NA NA NA
         .. ..$ theta_var: num [1:7, 1:7, 1] NA NA NA NA NA NA NA NA NA NA ...
@@ -398,6 +397,7 @@
         .. ..$ v             : num 2
         .. ..$ A             : Named num [1:7] 0.3 0.3 0.3 0.3 0.3 0.3 0.3
         .. ..$ theta_mu_invar: num [1:7, 1:7] 1 0 0 0 0 ...
+        ..$ model       :function ()  
        $ :List of 12
         ..$ data        :List of 19
         .. ..$ as1t:'data.frame':	1620 obs. of  8 variables:
@@ -576,7 +576,6 @@
         ..$ n_pars      : int 7
         ..$ nuisance    : logi [1:7] FALSE FALSE FALSE FALSE FALSE FALSE ...
         ..$ n_subjects  : int 19
-        ..$ ll_func     :function (p_vector, dadm, min_ll = log(1e-10))  
         ..$ samples     :List of 8
         .. ..$ theta_mu : num [1:7, 1] NA NA NA NA NA NA NA
         .. ..$ theta_var: num [1:7, 1:7, 1] NA NA NA NA NA NA NA NA NA NA ...
@@ -595,4 +594,5 @@
         .. ..$ v             : num 2
         .. ..$ A             : Named num [1:7] 0.3 0.3 0.3 0.3 0.3 0.3 0.3
         .. ..$ theta_mu_invar: num [1:7, 1:7] 1 0 0 0 0 ...
+        ..$ model       :function ()  
 

@@ -288,6 +288,19 @@ filter_sub_and_par <- function(obj, sub, sub_names, par){
   return(obj)
 }
 
+# Returns the last ran stage of an emc object
+get_last_stage <- function(emc){
+  nstage <- colSums(chain_n(emc))
+  if(all(nstage == 0)){
+    stage <- "preburn"
+  } else{
+    has_ran <- nstage[nstage != 0]
+    stage <- names(has_ran)[length(has_ran)]
+  }
+  return(stage)
+}
+
+
 add_defaults <- function(dots, ...){
   extra_args <- list(...)
   arg_names <- names(extra_args)
@@ -363,7 +376,7 @@ fix_dots <- function(dots, fun, exclude = "", consider_dots = TRUE){
 #'
 #' # Or return the flattened correlation, with 10 iterations per chain
 #' get_pars(samples_LNR, stage = "sample", selection = "correlation", flatten = TRUE, length.out = 10)
-get_pars <- function(emc,selection= "mu", stage="sample",thin=1,filter=0,
+get_pars <- function(emc,selection= "mu", stage=get_last_stage(emc),thin=1,filter=0,
                     map = FALSE, add_recalculated = FALSE, length.out = NULL,
                     by_subject = FALSE, return_mcmc = TRUE, merge_chains = FALSE,
                     subject = NULL, flatten = FALSE, remove_dup = FALSE,

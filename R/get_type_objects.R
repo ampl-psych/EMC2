@@ -197,6 +197,7 @@ get_idx <- function(sampler, stage){
     dims <- dim(sampler[[1]][[1]][[1]])
     idx <- 1:(dims[length(dims)])
   } else{
+    if(sum(chain_n(sampler)) == 0) stop("Run fit to collect MCMC samples before using this function")
     idx <- which(sampler[[1]]$samples$stage %in% stage)
   }
   if(length(idx) == 0) stop("Make sure there are already samples of the selected stage")

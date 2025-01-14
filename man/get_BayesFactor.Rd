@@ -18,8 +18,10 @@ The BayesFactor for model 1 over model 2
 returns the Bayes Factor for two models
 }
 \examples{
+\donttest{
 # Normally one would compare two different models
 # Here we use two times the same model:
 M1 <- M0 <- run_bridge_sampling(samples_LNR, both_splits = FALSE, cores_for_props = 1)
 get_BayesFactor(M1, M0)
+}
 }

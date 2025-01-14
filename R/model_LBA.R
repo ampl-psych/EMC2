@@ -232,9 +232,8 @@ LBA <- function(){
     c_name = "LBA",
     # p_vector transform, sets sv as a scaling parameter
     p_types=c("v" = 1,"sv" = log(1),"B" = log(1),"A" = log(0),"t0" = log(0)),
-    transform=list(func=c(v = "identity",sv = "exp", B = "exp", A = "exp",t0 = "exp")
-                    , lower=c(t0=.05)),
-    bound=list(minmax=cbind(v=c(-Inf,Inf),sv = c(0, Inf), A=c(1e-4,Inf),B=c(0,Inf),t0=c(0,Inf)),
+    transform=list(func=c(v = "identity",sv = "exp", B = "exp", A = "exp",t0 = "exp")),
+    bound=list(minmax=cbind(v=c(-Inf,Inf),sv = c(0, Inf), A=c(1e-4,Inf),B=c(0,Inf),t0=c(0.05,Inf)),
                exception=c(A=0)),
     # Transform to natural scale
     # Trial dependent parameter transform

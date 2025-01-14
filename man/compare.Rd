@@ -52,6 +52,7 @@ mean, DIC, BPIC, Marginal Deviance (if \code{BayesFactor=TRUE}) and associated w
 Returns the BPIC/DIC or marginal deviance (-2*marginal likelihood) for a list of samples objects.
 }
 \examples{
+\donttest{
 compare(list(samples_LNR), cores_for_props = 1)
 # Typically we would define a list of two (or more) different models:
 # # Here the full model is an emc object with the hypothesized effect
@@ -73,4 +74,5 @@ compare(list(samples_LNR), cores_for_props = 1)
 # # By default emc uses 4 cores to parallelize marginal likelihood estimation across proposals
 # # So cores_per_prop = 3 results in 12 cores used.
 # compare(sList, cores_per_prop = 3)
+}
 }

@@ -7,7 +7,7 @@
 get_pars(
   emc,
   selection = "mu",
-  stage = "sample",
+  stage = get_last_stage(emc),
   thin = 1,
   filter = 0,
   map = FALSE,

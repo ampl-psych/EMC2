@@ -150,11 +150,10 @@ bridge_add_info <- function(info, samples, type, ...) {
   switch(type,
     "standard" = bridge_add_info_standard(info, samples, ...),
     "single" = bridge_add_info_single(info, samples, ...),
-    "blocked" = bridge_add_info_standard(info, samples, ...),
-    "diagonal" = bridge_add_info_standard(info, samples, ...),
+    "blocked" = bridge_add_info_blocked(info, samples, ...),
+    "diagonal" = bridge_add_info_diag(info, samples, ...),
     "factor" = bridge_add_info_factor(info, samples, ...),
     "SEM" = bridge_add_info_SEM(info, samples, ...),
-    "diagonal-gamma" = bridge_add_info_standard(info, samples, ...),
     stop("Invalid type specified")
   )
 }
@@ -169,11 +168,10 @@ bridge_group_and_prior_and_jac <- function(proposals_group, proposals_list, info
   switch(type,
     "standard" = bridge_group_and_prior_and_jac_standard(proposals_group, proposals_list, info, ...),
     "single" = bridge_group_and_prior_and_jac_single(proposals_group, proposals_list, info, ...),
-    "blocked" = bridge_group_and_prior_and_jac_standard(proposals_group, proposals_list, info, ...),
-    "diagonal" = bridge_group_and_prior_and_jac_standard(proposals_group, proposals_list, info, ...),
+    "blocked" = bridge_group_and_prior_and_jac_blocked(proposals_group, proposals_list, info, ...),
+    "diagonal" = bridge_group_and_prior_and_jac_diag(proposals_group, proposals_list, info, ...),
     "factor" = bridge_group_and_prior_and_jac_factor(proposals_group, proposals_list, info, ...),
     "SEM" = bridge_group_and_prior_and_jac_SEM(proposals_group, proposals_list, info, ...),
-    "diagonal-gamma" = bridge_group_and_prior_and_jac_standard(proposals_group, proposals_list, info, ...),
     stop("Invalid type specified")
   )
 }
@@ -188,11 +186,10 @@ bridge_add_group <- function(all_samples, samples, idx, type, ...) {
   switch(type,
     "standard" = bridge_add_group_standard(all_samples, samples, idx, ...),
     "single" = bridge_add_group_single(all_samples, samples, idx, ...),
-    "blocked" = bridge_add_group_standard(all_samples, samples, idx, ...),
-    "diagonal" = bridge_add_group_standard(all_samples, samples, idx, ...),
+    "blocked" = bridge_add_group_blocked(all_samples, samples, idx, ...),
+    "diagonal" = bridge_add_group_diag(all_samples, samples, idx, ...),
     "factor" = bridge_add_group_factor(all_samples, samples, idx, ...),
     "SEM" = bridge_add_group_SEM(all_samples, samples, idx, ...),
-    "diagonal-gamma" = bridge_add_group_standard(all_samples, samples, idx, ...),
     stop("Invalid type specified")
   )
 }

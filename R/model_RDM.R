@@ -376,9 +376,8 @@ RDM <- function(){
     type="RACE",
     c_name = "RDM",
     p_types=c("v" = log(1),"B" = log(1),"A" = log(0),"t0" = log(0),"s" = log(1)),
-    transform=list(func=c(v = "exp", B = "exp", A = "exp",t0 = "exp", s = "exp")
-                   , lower=c(t0=.05)),
-    bound=list(minmax=cbind(v=c(1e-3,Inf), B=c(0,Inf), A=c(1e-4,Inf),t0=c(0,Inf), s=c(0,Inf)),
+    transform=list(func=c(v = "exp", B = "exp", A = "exp",t0 = "exp", s = "exp")),
+    bound=list(minmax=cbind(v=c(1e-3,Inf), B=c(0,Inf), A=c(1e-4,Inf),t0=c(0.05,Inf), s=c(0,Inf)),
                exception=c(A=0, v=0)),
     # Trial dependent parameter transform
     Ttransform = function(pars,dadm) {

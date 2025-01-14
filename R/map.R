@@ -175,7 +175,7 @@ mapped_par <- function(p_vector,design,model=NULL,
   dadm <- design_model(make_data(p_vector,design,n_trials=1,Fcovariates=Fcovariates),
                        design,model,rt_check=FALSE,compress=FALSE, verbose = FALSE)
   ok <- !(names(dadm) %in% c("subjects","trials","R","rt","winner"))
-  out <- cbind(dadm[,ok],round(get_pars_matrix(p_vector,dadm),digits))
+  out <- cbind(dadm[,ok],round(get_pars_matrix(p_vector,dadm, design$model()),digits))
   if (model()$type=="SDT")  out <- out[dadm$lR!=levels(dadm$lR)[length(levels(dadm$lR))],]
   if (model()$type=="DDM")  out <- out[,!(names(out) %in% c("lR","lM"))]
   if (any(names(out)=="RACE") && remove_RACE)

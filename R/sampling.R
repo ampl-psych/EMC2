@@ -147,10 +147,10 @@ set_p_accept <- function(p_accept, stage){
   # 2. Prev particle - scaled chain variance: all stages in preburn scaled by prior variance
   # 3. Chain mean - scaled chain variance: burn onwards
   # 4. Eff mean - scaled eff variance: sample onwards
-  if(stage == "preburn") return(.8)
-  if(stage == "burn") return(c(0.8, .8))
+  if(stage == "preburn") return(.6)
+  if(stage == "burn") return(c(0.6, .6))
   if(stage == "adapt") return(c(0.8, 0.8))
-  if(stage == "sample") return(c(0.8, 0.8, 0.8))
+  if(stage == "sample") return(c(0.9, 0.9, 0.9))
 }
 
 check_tune_settings <- function(tune, n_pars, stage){
@@ -361,12 +361,12 @@ update_pm_settings <- function(pm_settings, chosen_idx, weights, particle_number
   if(iter > tune$n0){
     # 1. Update mixing weights continuously
     # Compute observed acceptance rates per proposal (scaled by mix)
-    # target_weights <- (prop_performance*(1-mix))/sum(prop_performance*(1-mix))
-    # # Smooth update
-    # mix_weights_new <- (1 - tune$mix_adapt)*pm_settings$mix + tune$mix_adapt*target_weights
-    # # Ensure minimum weight
-    # mix_weights_new <- pmax(mix_weights_new, 0.01)
-    # pm_settings$mix <- mix_weights_new / sum(mix_weights_new)
+    target_weights <- (prop_performance/mix)/sum(prop_performance/mix)
+    # Smooth update
+    mix_weights_new <- (1 - tune$mix_adapt)*pm_settings$mix + tune$mix_adapt*target_weights
+    # Ensure minimum weight
+    mix_weights_new <- pmax(mix_weights_new, 0.01)
+    pm_settings$mix <- mix_weights_new / sum(mix_weights_new)
 
     # 2. Adapt number of particles based on ESS
     # Calculate ESS per source independently

@@ -90,9 +90,8 @@ LNR <- function() {
     type="RACE",
     c_name = "LNR",
     p_types=c("m" = 1,"s" = log(1),"t0" = log(0)),
-    transform=list(func=c(m = "identity",s = "exp", t0 = "exp")
-                   , lower=c(t0=.05)),
-    bound=list(minmax=cbind(m=c(-Inf,Inf),s = c(0, Inf), t0=c(0,Inf))),
+    transform=list(func=c(m = "identity",s = "exp", t0 = "exp")),
+    bound=list(minmax=cbind(m=c(-Inf,Inf),s = c(0, Inf), t0=c(0.05,Inf))),
     # Trial dependent parameter transform
     Ttransform = function(pars,dadm) pars,
     # Random function for racing accumulators

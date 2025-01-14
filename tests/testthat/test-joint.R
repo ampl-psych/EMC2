@@ -9,7 +9,8 @@ data_in <- get_data(samples_LNR)
 prior_joint <- prior(list(design_in, design_in))
 
 joint <- make_emc(list(data_in, data_in), list(design_in, design_in), prior_list = prior_joint)
-
+RNGkind("L'Ecuyer-CMRG")
+set.seed(123)
 test_that("joint", {
-  expect_snapshot(init_chains(joint, particles = 10, cores_for_chains = 1))
+  expect_snapshot(init_chains(joint, particles = 10, cores_for_chains = 1)[[1]]$samples)
 })

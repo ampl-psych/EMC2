@@ -21,10 +21,13 @@
 #' @importFrom graphics hist pairs rect text
 #' @importFrom graphics legend
 #' @importFrom graphics lines
+#' @importFrom graphics mtext
 #' @importFrom graphics par
 #' @importFrom graphics plot.default
 #' @importFrom graphics points
 #' @importFrom graphics polygon
+#' @importFrom graphics segments
+#' @importFrom graphics title
 #' @importFrom grDevices adjustcolor
 #' @importFrom grDevices dev.off
 #' @importFrom grDevices pdf

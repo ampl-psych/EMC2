@@ -1,5 +1,9 @@
 calc_ll_R <- function(p_vector, model, dadm){
-  pars <- get_pars_matrix(p_vector, dadm, model)
+  if(!is.null(model$transform)){
+    pars <- get_pars_matrix(p_vector, dadm, model)
+  } else{
+    pars <- p_vector
+  }
   ll <- model$log_likelihood(pars, dadm, model)
   return(ll)
 }

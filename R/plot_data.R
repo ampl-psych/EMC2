@@ -173,8 +173,8 @@ plot_cdf <- function(input, post_predict = NULL, prior_predict = NULL, subject =
     quants <- lapply(dens_pred, function(x){
       out <- list()
       for(deflev in defective_levels){
-        tmp <- apply(do.call(cbind, lapply(x, function(q) return(q[[deflev]][,'x']))), 1, quantile, probs = quantiles)
-        out[[deflev]] <- rbind(tmp, apply(do.call(cbind, lapply(x, function(q) return(q[[deflev]][,'y']))), 1, median))
+        tmp <- apply(do.call(cbind, lapply(x, function(q) return(q[[deflev]][,'x']))), 1, quantile, probs = quantiles, na.rm= T)
+        out[[deflev]] <- rbind(tmp, apply(do.call(cbind, lapply(x, function(q) return(q[[deflev]][,'y']))), 1, median, na.rm = T))
       }
       return(out)
     })
@@ -189,8 +189,8 @@ plot_cdf <- function(input, post_predict = NULL, prior_predict = NULL, subject =
     quants_prior <- lapply(dens_prior, function(x){
       out <- list()
       for(deflev in defective_levels){
-        tmp <- apply(do.call(cbind, lapply(x, function(q) return(q[[deflev]][,'x']))), 1, quantile, probs = quantiles)
-        out[[deflev]] <- rbind(tmp, apply(do.call(cbind, lapply(x, function(q) return(q[[deflev]][,'y']))), 1, median))
+        tmp <- apply(do.call(cbind, lapply(x, function(q) return(q[[deflev]][,'x']))), 1, quantile, probs = quantiles, na.rm = T)
+        out[[deflev]] <- rbind(tmp, apply(do.call(cbind, lapply(x, function(q) return(q[[deflev]][,'y']))), 1, median, na.rm = T))
       }
       return(out)
     })

@@ -100,10 +100,13 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
   }
 
   if(!is.null(custom_p_vector)){
-    design <- list(Flist = formula, model = model, Ffactors = factors)
+
+    model_list <- function(){list(log_likelihood = model)}
     if(!is.null(list(...)$rfun)){
-      attr(design, "rfun") <- list(...)$rfun
+      model_list$rfun <- list(...)$rfun
     }
+    design <- list(Flist = formula, model = model_list, Ffactors = factors)
+
     attr(design, "sampled_p_names") <-custom_p_vector
     attr(design, "custom_ll") <- TRUE
     class(design) <- "emc.design"
@@ -151,7 +154,7 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
   design$model <- model
   attr(design,"p_vector") <- p_vector
   if (report_p_vector) {
-    print(design)
+    summary(design)
   }
   return(design)
 }
@@ -934,15 +937,64 @@ sampled_p_vector.emc.design <- function(x,model=NULL,doMap=TRUE, add_da = FALSE,
 }
 
 #' @export
-print.emc.design <- function(x, ...){
-  p_vector <- sampled_p_vector(x)
+summary.emc.design <- function(object, ...){
+  p_vector <- sampled_p_vector(object)
   cat("\n Sampled Parameters: \n")
   print(names(p_vector))
   cat("\n Design Matrices: \n")
-  map_out <- sampled_p_vector(x,x$model, add_da = TRUE)
+  map_out <- sampled_p_vector(object,object$model, add_da = TRUE)
   print(attr(map_out, "map"), row.names = FALSE)
   return(invisible(map_out))
 }
+
+#' @export
+print.emc.design <- function(x, ...){
+  if("Ffactors" %in% names(x)){
+    x <- list(x)
+  }
+  for(i in 1:length(x)){
+    for(j in 1:length(x[[i]]$Flist)){
+      cat(deparse(x[[i]]$Flist[j][[1]]), "\n")
+    }
+  }
+}
+
+#'@export
+plot.emc.design <- function(x, p_vector, data = NULL, factors = NULL, plot_factor = NULL, n_data_sim = 10, ...){
+  if(!"Ffactors" %in% names(x)){
+    if(length(x) != 1){
+      stop("Current design type not supported for plotting")
+    } else{
+      x <- x[[1]]
+    }
+  }
+  # Get a mapped parameter for each cell of the design
+  pars <- mapped_par(p_vector, x)
+  if(is.null(data)){
+    data <- vector("list", n_data_sim)
+    # If no data is supplied generate some data sets
+    for(i in 1:n_data_sim){
+      data[[i]] <- make_data(p_vector, design = x, n_trials = 50)
+    } # and bind them back together
+    data <- do.call(rbind, data)
+  }
+  data <- design_model(data, x, compress = FALSE, rt_resolution = 1e-15)
+
+  if(is.null(x$model()$c_name)) stop("Current design type not supported for plotting")
+  if(x$model()$c_name == "LNR") stop("LNR designs not supported for plotting")
+  type <- ifelse(x$model()$c_name == "DDM", "DDM", "race")
+  within_noise <- ifelse(x$model()$c_name == "LBA", FALSE, TRUE)
+  # Split only relevant for DDM
+  dots <- add_defaults(list(...), split = "R", within_noise = within_noise)
+  if(type != "DDM"){
+    dots$split = NULL
+    data <- data[data$winner,]
+  }
+  make_design_plot(data = data, pars = pars, factors = factors, main = dots$main,
+                   plot_factor = plot_factor,
+                   type = type, split = dots$split, within_noise = dots$within_noise)
+}
+
 
 #' @exportS3Method
 sampled_p_vector.default <- function(x,model=NULL,doMap=TRUE, add_da = FALSE, all_cells_dm = FALSE){
