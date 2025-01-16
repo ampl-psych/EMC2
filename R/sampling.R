@@ -141,34 +141,25 @@ start_proposals <- function(s, parameters, n_particles, pmwgs, type){
   return(list(proposal = proposals[idx,], ll = lw[idx]))
 }
 
-set_p_accept <- function(p_accept, stage){
-  # Proposals distributions:
-  # 1. Prior - unscaled: all stages
-  # 2. Prev particle - scaled chain variance: all stages in preburn scaled by prior variance
-  # 3. Chain mean - scaled chain variance: burn onwards
-  # 4. Eff mean - scaled eff variance: sample onwards
-  if(stage == "preburn") return(.6)
-  if(stage == "burn") return(c(0.6, .6))
-  if(stage == "adapt") return(c(0.8, 0.8))
-  if(stage == "sample") return(c(0.9, 0.9, 0.9))
-}
 
-check_tune_settings <- function(tune, n_pars, stage){
+check_tune_settings <- function(tune, n_pars, stage, particles){
   tune$p_accept <- set_p_accept(tune$p_accept, stage)
   if(is.null(tune$components)) tune$components <- rep(1, n_pars)
   if(is.null(tune$shared_ll_idx)) tune$shared_ll_idx <- tune$components
-  if(is.null(tune$target_ESS)) tune$target_ESS <- 5*sqrt(n_pars)
-  if(is.null(tune$ESS_scale)) tune$ESS_scale <- .5
-  if(is.null(tune$mix_adapt)) tune$mix_adapt <- .1
+  if(is.null(tune$target_ESS)) tune$target_ESS <- 2*sqrt(n_pars)
+  if(is.null(tune$ESS_scale)) tune$ESS_scale <- .1
+  if(is.null(tune$mix_adapt)) tune$mix_adapt <- .05
+  if(is.null(tune$max_particles)) tune$max_particles <- particles
   tune$alphaStar <- -qnorm(tune$p_accept/2)
-  tune$n0 <- 100
+  tune$n0 <- 25
   return(tune)
 }
 
 check_sampling_settings <- function(pm_settings, stage, n_pars, particles){
   pm_settings$mix <- check_mix(pm_settings$mix, stage)
   pm_settings$epsilon <- check_epsilon(pm_settings$epsilon, n_pars, pm_settings$mix)
-  pm_settings$prop_performance <- check_prop_performance(pm_settings$prop_performance, stage)
+  pm_settings$proposal_counts <- check_prop_performance(pm_settings$proposal_counts, stage)
+  pm_settings$acc_counts <- check_prop_performance(pm_settings$acc_counts, stage)
   if(is.null(pm_settings$n_particles)) pm_settings$n_particles <- particles
   return(pm_settings)
 }
@@ -191,7 +182,7 @@ run_stage <- function(pmwgs,
   pm_settings <- attr(pmwgs$samples, "pm_settings")
   # Intialize sampling tuning settings
   if(is.null(pm_settings)) pm_settings <- vector("list", pmwgs$n_subjects)
-  tune <- check_tune_settings(tune, n_pars, stage)
+  tune <- check_tune_settings(tune, n_pars, stage, particles)
   pm_settings <- lapply(pm_settings, FUN = check_sampling_settings,  stage = stage, n_pars = n_pars, particles)
 
   # Build new sample storage
@@ -277,9 +268,12 @@ new_particle <- function (s, data, pm_settings, eff_mu = NULL,
 
   # Set the proposals
   if(stage == "preburn"){
-    Mus <- list(group_mu, group_mu)
+    Mus <- list(group_mu, subj_mu)
     Sigmas <- list(group_var, group_var)
-  } else if(stage != "sample"){ # Burn and adapt
+  } else if(stage == "burn"){ # Burn
+    Mus <- list(group_mu, subj_mu, subj_mu)
+    Sigmas <- list(group_var, group_var, chains_var)
+  } else if(stage == "adapt"){
     Mus <- list(group_mu, subj_mu, chains_mu)
     Sigmas <- list(group_var, chains_var, chains_var)
   } else{ # Sample
@@ -287,7 +281,7 @@ new_particle <- function (s, data, pm_settings, eff_mu = NULL,
     Sigmas <- list(group_var, chains_var, chains_var, eff_var)
   }
   n_proposals <- length(Mus)
-  # Add 1 to epsilons such that prior proposals aren't scaled
+  # Add 1 to epsilons such that prior/group-level proposals aren't scaled
   epsilons <- c(1, pm_settings$epsilon)
   for(i in unq_components){
     idx <- tune$components == i
@@ -297,7 +291,7 @@ new_particle <- function (s, data, pm_settings, eff_mu = NULL,
     proposals[[1]] <- subj_mu
     for(j in 1:n_proposals){
       # Fill up the proposals
-      proposals[[j + 1]] <- particle_draws(particle_numbers[j], Mus[[j]][idx], Sigmas[[j]][idx,idx] * epsilons[j])
+      proposals[[j + 1]] <- particle_draws(particle_numbers[j], Mus[[j]][idx], Sigmas[[j]][idx,idx] * (epsilons[j]^2))
     }
     proposals <- do.call(rbind, proposals)
     # Rejoin new proposals with current MCMC values for other components
@@ -324,8 +318,8 @@ new_particle <- function (s, data, pm_settings, eff_mu = NULL,
     # We can start from 2, since first proposal is prior density
     lm <- pm_settings$mix[1]*exp(lp)
     for(k in 2:length(Sigmas)){
-      # Mix is not used for the first proposal (the prior density)
-      lm <- lm + pm_settings$mix[k]*mvtnorm::dmvnorm(x = proposals[,idx], mean = Mus[[k]][idx], sigma = Sigmas[[k]][idx,idx]*epsilons[k])
+      # Prior density is updated separately so start at 2
+      lm <- lm + pm_settings$mix[k]*mvtnorm::dmvnorm(x = proposals[,idx], mean = Mus[[k]][idx], sigma = Sigmas[[k]][idx,idx]*(epsilons[k]^2))
     }
     # Avoid infinite values
     lm <- log(lm)
@@ -345,55 +339,123 @@ new_particle <- function (s, data, pm_settings, eff_mu = NULL,
 }
 
 
-update_pm_settings <- function(pm_settings, chosen_idx, weights, particle_numbers, tune, iter, n_pars) {
-  prop_performance <- pm_settings$prop_performance
-  mix <- pm_settings$mix
-  # Check if chosen_idx corresponds to a new proposal (not the previous particle)
-  if (chosen_idx > 1) {
-    # Identify which proposal block produced the chosen particle
-    origin <- min(which(chosen_idx <=  (cumsum(particle_numbers) + 1)))
-    prop_performance[origin] <- prop_performance[origin] + 1
-  }
-  # First update prop_performance
-  pm_settings$prop_performance <- prop_performance
+update_pm_settings <- function(pm_settings, chosen_idx, weights, particle_numbers,
+                               tune, iter, n_pars) {
+  # 0) If we're past an initial burn-in, do the adaptation
+  if (iter > tune$n0) {
 
-  # After a small period of burn-in:
-  if(iter > tune$n0){
-    # 1. Update mixing weights continuously
-    # Compute observed acceptance rates per proposal (scaled by mix)
-    target_weights <- (prop_performance/mix)/sum(prop_performance/mix)
-    # Smooth update
-    mix_weights_new <- (1 - tune$mix_adapt)*pm_settings$mix + tune$mix_adapt*target_weights
-    # Ensure minimum weight
-    mix_weights_new <- pmax(mix_weights_new, 0.01)
-    pm_settings$mix <- mix_weights_new / sum(mix_weights_new)
+    # A) Update proposal_counts
+    # -------------------------
+    # Each proposal j was used "particle_numbers[j]" times
+    pm_settings$proposal_counts <- pm_settings$proposal_counts + particle_numbers
 
-    # 2. Adapt number of particles based on ESS
-    # Calculate ESS per source independently
-    # ess <- 0
-    # idx_vector <- rep(1:length(particle_numbers), particle_numbers)
-    # for(i in 1:length(prop_performance)){
-    #   idx <- idx_vector == i
-    #   tmp_ess <- (sum(weights[idx]))^2 / sum(weights[idx]^2)
-    #   if(is.nan(tmp_ess)) tmp_ess <- 0.001
-    #   ess <- ess + tmp_ess
+    # B) Update acceptance counts: "percent better than old"
+    # ------------------------------------------------------
+    # weights[1] = old particle's weight
+    # weights[2..(1+sum(particle_numbers))] = new draws' weights
+    old_weight <- weights[1]
+
+    # We'll parse out each proposal's chunk in weights[-1]
+    # using the known counts in particle_numbers.
+    offset <- 2  # start index in 'weights' for new proposals
+    for (j in seq_along(particle_numbers)) {
+      # The chunk of new weights for proposal j
+      n_j <- particle_numbers[j]
+      if (n_j > 0) {
+        draws_j <- weights[offset:(offset + n_j - 1)]
+        # Count how many draws_j exceed old_weight
+        better_j <- sum(draws_j > old_weight)
+        # Accumulate that in acceptance counts
+        pm_settings$acc_counts[j] <- pm_settings$acc_counts[j] + better_j
+        offset <- offset + n_j
+      }
+    }
+
+    # C) Compute per-proposal acceptance rates
+    # ----------------------------------------
+    acc_rates <- ifelse(pm_settings$proposal_counts > 0, pm_settings$acc_counts / pm_settings$proposal_counts, 0)
+
+    # D) Adapt epsilon via continuous approach
+    # ----------------------------------------
+    # pm_settings$epsilon is a vector, same length as pm_settings$mix
+    # tune$p_accept is also a vector, e.g. c(0.2, 0.3, 0.6) for each proposal
+    new_epsilon <- update_epsilon_continuous(
+      epsilon   = pm_settings$epsilon,
+      acceptance = acc_rates[-1],
+      target     = tune$p_accept,
+      iter       = iter,
+      d          = n_pars,
+      alphaStar  = tune$alphaStar,
+      damp       = 100,          # Example
+      clamp      = c(0.2, 4)    # Example range
+    )
+    pm_settings$epsilon <- new_epsilon
+
+    # E) Adapt mixing weights based on acceptance vs. target
+    # ------------------------------------------------------
+    # If ratio_j > 1 (proposal j acceptance > target), its mix goes up;
+    # if ratio_j < 1, mix goes down.
+
+    # 1) Compute ratio of acceptance to target
+    eps_val <- 1e-12  # To avoid divide-by-zero
+    acc_ratio <- (acc_rates + eps_val) / (c(acc_rates[1],tune$p_accept) + eps_val)
+
+    # 2) Exponential update (like a mini "gradient" step)
+    new_mix <- pm_settings$mix * (acc_ratio ^ tune$mix_adapt)
+
+    # 3) Impose a small floor to keep proposals alive
+    new_mix <- pmax(new_mix, 0.05)
+
+    # 4) Normalize to sum to 1
+    new_mix <- new_mix / sum(new_mix)
+
+    # # 5) Store result
+    # pm_settings$mix <- new_mix
+
+    # F) Adapt the number of particles (ESS logic)
+    # -------------------------------------------------------
+    # If length mix > 2, we're in adapt or sample stage
+    # if (length(pm_settings$mix) > 3) {
+    #   ess <- sum(weights)^2 / sum(weights^2)
+    #   desired_ess <- tune$target_ESS
+    #   scale_factor <- (desired_ess / ess)^tune$ESS_scale
+    #   new_num_particles <- round(pm_settings$n_particles * scale_factor)
+    #   pm_settings$n_particles <- max(10, min(tune$max_particles, new_num_particles))
     # }
-    #
-    # desired_ess <- tune$target_ESS
-    # scale_factor <- (desired_ess / ess)^tune$ESS_scale
-    # new_num_particles <- round(pm_settings$n_particles * scale_factor)
-    # pm_settings$n_particles <- max(10, min(1000, new_num_particles))
-    # print(new_num_particles)
-    # 3. Update epsilon
-    # If chosen_idx > 1 a new proposal was accepted
-    pm_settings$epsilon <- update_epsilon(pm_settings$epsilon^2, chosen_idx > 1, tune$p_accept, iter,n_pars, tune$alphaStar)
   }
+
   return(pm_settings)
 }
 
 
-# Utility functions for sampling below ------------------------------------
 
+# Utility functions for sampling below ------------------------------------
+update_epsilon_continuous <- function(
+    epsilon,    # vector of current epsilons
+    acceptance, # vector of acceptance rates, same length
+    target,     # vector of target acceptance rates, same length
+    iter,
+    d,
+    alphaStar,
+    damp = 100,
+    clamp = c(0.2, 4)
+) {
+  log_eps <- log(epsilon)
+  # 2) define step size
+  # We'll do one pass per element. If you want a single c_term, that's also fine.
+  c_term <- (1 - 1/d)*sqrt(2*pi)*exp(alphaStar^2/2)/(2*alphaStar) + 1/(d*target*(1-target))
+  step_size <- c_term / max(damp, iter)
+  # 3) compute difference from target acceptance
+  diff_accept <- acceptance - target
+  # 4) update in log space (vectorized)
+  log_eps_new <- log_eps + step_size * diff_accept
+  # 5) exponentiate
+  eps_new <- exp(log_eps_new)
+  # 6) clamp
+  eps_new <- pmin(clamp[2], pmax(eps_new, clamp[1]))
+
+  return(eps_new)
+}
 
 update_epsilon<- function(epsilon2, acc, p, i, d, alpha) {
   c <- ((1-1/d)*sqrt(2*pi)*exp(alpha^2/2)/(2*alpha) + 1/(d*p*(1-p)))
@@ -485,34 +547,55 @@ fill_samples_RE <- function(samples, proposals, j = 1, n_pars, ...){
   return(samples)
 }
 
-check_mix <- function(mix, stage) {
-  if (stage %in% c("burn", "adapt")) {
-    default_mix <- c(0.1, 0.3, 0.6)
+
+set_p_accept <- function(p_accept, stage){
+  # Proposals distributions:
+  # 1. Prior - unscaled: all stages
+  # 2. Prev particle - scaled chain variance: all stages in preburn scaled by prior variance
+  # 3. Chain mean - scaled chain variance: burn onwards
+  # 4. Eff mean - scaled eff variance: sample onwards
+  if(stage == "preburn") return(0.02)
+  if(stage == "burn") return(c(0.02, 0.05))
+  if(stage == "adapt") return(c(0.1, 0.1))
+  if(stage == "sample") return(c(0.1, 0.1, 0.1))
+}
+
+get_default_mix <- function(stage){
+  if (stage == "burn") {
+    default_mix <- c(0.15, 0.15, 0.7)
+  } else if(stage == "adapt"){
+    default_mix <- c(0.1, 0.4, 0.4)
   } else if(stage == "sample"){
-    default_mix <- c(0.1, 0.1, 0.4, 0.4)
+    default_mix <- c(0.05, 0.3, 0.3, 0.35)
   }  else{
     default_mix <- c(0.5, 0.5)
   }
-  if(is.null(mix)) mix <- default_mix
-  if(length(mix) < length(default_mix)){
-    if(length(default_mix) - length(mix) == 1){
-      mix <- mix*(1-default_mix[length(default_mix)])
-      mix <- c(mix, default_mix[length(default_mix)])
-    } else{
-      stop("mix settings are not compatible with stage")
-    }
-  }
+  return(default_mix)
+}
+
+
+check_mix <- function(mix, stage) {
+  default_mix <- get_default_mix(stage)
+  mix <- default_mix
+  # if(length(mix) < length(default_mix)){
+  #   if(length(default_mix) - length(mix) == 1){
+  #     mix <- mix*(1-default_mix[length(default_mix)])
+  #     mix <- c(mix, default_mix[length(default_mix)])
+  #   } else{
+  #     stop("mix settings are not compatible with stage")
+  #   }
+  # }
   return(mix)
 }
 
 check_epsilon <- function(epsilon, n_pars, mix) {
   if (is.null(epsilon)) { # In preburn case
     if (n_pars > 15) {
-      epsilon <- 0.6
-    } else if (n_pars > 10) {
-      epsilon <- 0.8
-    } else {
       epsilon <- 1
+    } else if (n_pars > 10) {
+      epsilon <- 1.25
+    } else {
+      epsilon <- 1.5
     }
     # The first proposal is always unscaled
   } else if(length(epsilon) < (length(mix) -1)){
@@ -522,14 +605,8 @@ check_epsilon <- function(epsilon, n_pars, mix) {
 }
 
 check_prop_performance <- function(prop_performance, stage){
-  if (stage %in% c("burn", "adapt")) {
-    default_mix <- c(0.1, 0.3, 0.6)
-  } else if(stage == "sample"){
-    default_mix <- c(0.1, 0.1, 0.4, 0.4)
-  }  else{
-    default_mix <- c(0.5, 0.5)
-  }
-  if(is.null(prop_performance)) prop_performance <- rep(0, length(default_mix))
+  default_mix <- get_default_mix(stage)
+  if(is.null(prop_performance) || stage == "adapt") prop_performance <- rep(0, length(default_mix))
   if(length(prop_performance) < length(default_mix)){
     if(length(default_mix) - length(prop_performance) == 1){
       n_total <- sum(prop_performance)

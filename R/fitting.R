@@ -78,9 +78,9 @@ get_stop_criteria <- function(stage, stop_criteria, type){
 #'}
 
 run_emc <- function(emc, stage, stop_criteria,
-                         p_accept = .9, step_size = 100, verbose = FALSE, verboseProgress = FALSE,
+                         p_accept = .1, step_size = 100, verbose = FALSE, verboseProgress = FALSE,
                          fileName = NULL,
-                         particles = NULL, particle_factor=50, cores_per_chain = 1,
+                         particles = NULL, particle_factor=75, cores_per_chain = 1,
                          cores_for_chains = length(emc), max_tries = 20, n_blocks = 1){
   emc <- restore_duplicates(emc)
   if(Sys.info()[1] == "Windows" & cores_per_chain > 1) stop("only cores_for_chains can be set on Windows")
@@ -98,11 +98,11 @@ run_emc <- function(emc, stage, stop_criteria,
   while(!progress$done){
     if(!is.null(progress$n_blocks)) n_blocks <- progress$n_blocks
     emc <- add_proposals(emc, stage, cores_per_chain*cores_for_chains, n_blocks)
-    if(!is.null(progress$gds_bad)){
-      particle_factor_in <- particle_factor_in + .05 * progress$gds_bad * particle_factor_in
-      p_accept_in <- pmax(0.4, p_accept - progress$gds_bad*.3)
-      particle_factor_in[!progress$gds_bad] <- particle_factor
-    }
+    # if(!is.null(progress$gds_bad)){
+    #   particle_factor_in <- particle_factor_in + .05 * progress$gds_bad * particle_factor_in
+    #   p_accept_in <- pmax(0.4, p_accept - progress$gds_bad*.3)
+    #   particle_factor_in[!progress$gds_bad] <- particle_factor
+    # }
     emc <- auto_mclapply(emc,run_stages, stage = stage, iter= progress$step_size,
                               verbose=verbose,  verboseProgress = verboseProgress,
                               particles=particles,particle_factor=particle_factor_in,
@@ -125,7 +125,7 @@ run_emc <- function(emc, stage, stop_criteria,
 }
 
 run_stages <- function(sampler, stage = "preburn", iter=0, verbose = TRUE, verboseProgress = TRUE,
-                       particles=NULL,particle_factor=50, p_accept= NULL, n_cores=1)
+                       particles=NULL,particle_factor=75, p_accept= NULL, n_cores=1)
 {
 
   if (is.null(particles)){
@@ -423,7 +423,7 @@ create_chain_proposals <- function(emc, samples_idx = NULL, do_block = TRUE){
   n_subjects <- emc[[1]]$n_subjects
   n_chains <- length(emc)
   n_pars <- emc[[1]]$n_pars
-
+  stage <- emc[[1]]$samples$stage[length(emc[[1]]$samples$stage)]
   if(is.null(samples_idx)){
     idx_subtract <- min(250, emc[[1]]$samples$idx/2)
     samples_idx <- round(emc[[1]]$samples$idx - idx_subtract):emc[[1]]$samples$idx
@@ -431,24 +431,47 @@ create_chain_proposals <- function(emc, samples_idx = NULL, do_block = TRUE){
   components <- attr(emc[[1]]$data, "components")
   block_idx <- block_variance_idx(components)
   for(j in 1:n_chains){
-    chains_var <- array(NA_real_, dim = c(n_pars, n_pars, n_subjects))
+    chains_var <- vector("list", n_subjects)
     for(sub in 1:n_subjects){
       mean_covs <- get_covs(emc[[j]], samples_idx, sub)
       if(do_block) mean_covs[block_idx] <- 0
       if(is.negative.semi.definite(mean_covs)){
-        if(!is.null(emc[[j]]$chains_var[[sub]])){
-          chains_var[,,sub] <- emc[[j]]$chains_var[[sub]]
-        } else{
-          chains_var[,,sub] <- diag(nrow(mean_covs))
-        }
+        next
       } else{
-        chains_var[,,sub] <-  as.matrix(nearPD(mean_covs)$mat)
+        chains_var[[sub]] <-  as.matrix(nearPD(mean_covs)$mat)
       }
     }
-    emc[[j]]$chains_var <- apply(chains_var, 3, identity, simplify = F)
+    null_idx <- sapply(chains_var, is.null)
+    mean_chains_var <- Reduce(`+`, chains_var[!null_idx]) / sum(!null_idx)
+    for(q in 1:n_subjects){
+      if(null_idx[q]) chains_var[[q]] <- mean_chains_var
+    }
+    new_prop_var <- mean(diag(mean_chains_var))
+    if(is.null(attr(emc[[j]], "prop_var"))){
+      # This is in preburn case, group-level proposals are wider
+      # So we scale the epsilon a bit to account for narrow individual proposals
+      prop_var_ratio <- 1
+    } else{
+      prop_var_ratio <- attr(emc[[j]], "prop_var")/new_prop_var
+    }
+    if(stage != "sample"){
+      emc[[j]] <- update_epsilon_scale(emc[[j]], prop_var_ratio)
+    }
+    attr(emc[[j]], "prop_var") <- new_prop_var
+    emc[[j]]$chains_var <- chains_var
     emc[[j]]$chains_mu <- lapply(1:n_subjects, function(x) rowMeans(emc[[j]]$samples$alpha[,x,samples_idx]))
   }
   return(emc)
+}
+
+update_epsilon_scale <- function(pmwgs, prop_var_ratio){
+  pm_settings <- attr(pmwgs$samples, "pm_settings")
+  pm_settings <- lapply(pm_settings, function(x){
+    x$epsilon <- x$epsilon * prop_var_ratio
+    return(x)
+  })
+  attr(pmwgs$samples, "pm_settings") <- pm_settings
+  return(pmwgs)
 }
 
 test_adapted <- function(sampler, test_samples, min_unique, n_cores_conditional = 1,
@@ -736,17 +759,22 @@ auto_mclapply <- function(X, FUN, mc.cores, ...){
 #' @param emc A list of EMC objects
 #' @return The same list with everything but samples removed from all but first entry
 #' @noRd
-strip_duplicates <- function(emc) {
+strip_duplicates <- function(emc, incl_props = TRUE) {
   # Keep only samples in non-first entries
   for (i in 2:length(emc)) {
     samples <- emc[[i]]$samples
+    prop_var <- attr(emc[[i]], "prop_var")
     emc[[i]] <- list(samples = samples)
+    attr(emc[[i]], "prop_var") <- prop_var
   }
-  # Also remove eff_mu, eff_var, chains_cov
-  for (i in 1:length(emc)) {
-    emc[[i]]$eff_mu <- NULL
-    emc[[i]]$eff_var <- NULL
-    emc[[i]]$chains_cov <- NULL
+  if(incl_props){
+    # Also remove eff_mu, eff_var, chains_cov
+    for (i in 1:length(emc)) {
+      emc[[i]]$eff_mu <- NULL
+      emc[[i]]$eff_var <- NULL
+      emc[[i]]$chains_cov <- NULL
+      emc[[i]]$chains_mu <- NULL
+    }
   }
   return(emc)
 }
