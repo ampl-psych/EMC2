@@ -341,8 +341,8 @@ parameters <- function(x, ...){
 #' @export
 
 fit.emc <- function(emc, stage = NULL, iter = 1000, stop_criteria = NULL,report_time=TRUE,
-                    p_accept = .1, step_size = 100, verbose = TRUE, verboseProgress = FALSE, fileName = NULL,
-                    particles = NULL, particle_factor=75, cores_per_chain = 1,
+                    search_width = 1, step_size = 100, verbose = TRUE, verboseProgress = FALSE, fileName = NULL,
+                    particles = NULL, particle_factor=70, cores_per_chain = 1,
                     cores_for_chains = length(emc), max_tries = 20, n_blocks = 1,
                     ...){
 
@@ -372,7 +372,7 @@ fit.emc <- function(emc, stage = NULL, iter = 1000, stop_criteria = NULL,report_
     stage <- get_last_stage(emc)
   }
   if(stage == "preburn"){
-    emc <- run_emc(emc, stage = "preburn", stop_criteria[['preburn']], cores_for_chains = cores_for_chains, p_accept = p_accept,
+    emc <- run_emc(emc, stage = "preburn", stop_criteria[['preburn']], cores_for_chains = cores_for_chains, search_width = search_width,
                              step_size = step_size,  verbose = verbose, verboseProgress = verboseProgress,
                              fileName = fileName,
                              particles = particles, particle_factor =  particle_factor,
@@ -380,21 +380,21 @@ fit.emc <- function(emc, stage = NULL, iter = 1000, stop_criteria = NULL,report_
   }
 
   if(any(stage %in% c("preburn", "burn"))){
-    emc <-  run_emc(emc, stage = "burn", stop_criteria[['burn']], cores_for_chains = cores_for_chains, p_accept = p_accept,
+    emc <-  run_emc(emc, stage = "burn", stop_criteria[['burn']], cores_for_chains = cores_for_chains, search_width = search_width,
                               step_size = step_size,  verbose = verbose, verboseProgress = verboseProgress,
                               fileName = fileName,
                               particles = particles, particle_factor =  particle_factor,
                               cores_per_chain = cores_per_chain, max_tries = max_tries, n_blocks = n_blocks)
   }
   if(any(stage %in% c("preburn", "burn", "adapt"))){
-    emc <-  run_emc(emc, stage = "adapt", stop_criteria[['adapt']],cores_for_chains = cores_for_chains, p_accept = p_accept,
+    emc <-  run_emc(emc, stage = "adapt", stop_criteria[['adapt']],cores_for_chains = cores_for_chains, search_width = search_width,
                               step_size = step_size,  verbose = verbose, verboseProgress = verboseProgress,
                               fileName = fileName,
                               particles = particles, particle_factor =  particle_factor,
                               cores_per_chain = cores_per_chain, max_tries = max_tries, n_blocks = n_blocks)
   }
   if(any(stage %in% c("preburn", "burn", "adapt", "sample")) ){
-    emc <-  run_emc(emc, stage = "sample",stop_criteria[['sample']],cores_for_chains = cores_for_chains, p_accept = p_accept,
+    emc <-  run_emc(emc, stage = "sample",stop_criteria[['sample']],cores_for_chains = cores_for_chains, search_width = search_width,
                               step_size = step_size,  verbose = verbose, verboseProgress = verboseProgress,
                               fileName = fileName,
                               particles = particles, particle_factor = particle_factor,
@@ -444,8 +444,9 @@ fit.emc <- function(emc, stage = NULL, iter = 1000, stop_criteria = NULL,report_
 #' @param stage A string. Indicates which stage to start the run from, either ``preburn``, ``burn``, ``adapt`` or ``sample``.
 #' If unspecified, it will run the subsequent stage (if there is one).
 #' @param iter An integer. Indicates how many iterations to run in the sampling stage.
-#' @param p_accept A double. The target acceptance probability of the MCMC process.
-#' This fine-tunes the width of the search space to obtain the desired acceptance probability. Defaults to .8
+#' @param search_width A double. Tunes target acceptance probability of the MCMC process.
+#' This fine-tunes the width of the search space to obtain the desired acceptance probability.
+#' 1 is the default width, increases lead to broader search.
 #' @param step_size An integer. After each step, the stopping requirements as specified
 #' by ``stop_criteria`` are checked and proposal distributions are updated. Defaults to 100.
 #' @param verbose Logical. Whether to print messages between each step with the current status regarding the ``stop_criteria``.
@@ -483,8 +484,8 @@ fit.emc <- function(emc, stage = NULL, iter = 1000, stop_criteria = NULL,report_
 #' emc_forstmann <- fit(emc_forstmann, fileName = "intermediate_save_location.RData")
 #'
 #' # For particularly hard models it pays off to increase the ``particle_factor``
-#' # and, although to a lesser extent, lower ``p_accept``.
-#' emc_forstmann <- fit(emc_forstmann, particle_factor = 100, p_accept = .6)
+#' # and, although to a lesser extent, increase ``search_width``.
+#' emc_forstmann <- fit(emc_forstmann, particle_factor = 100, search_width = 1.5)
 #'
 #' # Example of how to use the stop_criteria:
 #' emc_forstmann <- fit(emc_forstmann, stop_criteria = list(mean_gd = 1.1, max_gd = 1.5,

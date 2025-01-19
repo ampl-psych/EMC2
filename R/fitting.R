@@ -28,6 +28,7 @@ get_stop_criteria <- function(stage, stop_criteria, type){
   }
   if(!is.null(stop_criteria$max_gd) || !is.null(stop_criteria$mean_gd)){
     if(is.null(stop_criteria$selection)) stop_criteria$selection <- c('alpha', 'mu')
+    if(is.null(stop_criteria$omit_mpsrf)) stop_criteria$omit_mpsrf <- TRUE
   }
   if(stage == "adapt" & is.null(stop_criteria$min_unique)) stop_criteria$min_unique <- 600
   if(stage != "adapt" & !is.null(stop_criteria$min_unique)) stop("min_unique only applicable for adapt stage, try min_es instead.")
@@ -43,8 +44,9 @@ get_stop_criteria <- function(stage, stop_criteria, type){
 #'
 #' @param emc An emc object
 #' @param stage A string. Indicates which stage is to be run, either `preburn`, `burn`, `adapt` or `sample`
-#' @param p_accept A double. The target acceptance probability of the MCMC process.
-#' This fine-tunes the width of the search space to obtain the desired acceptance probability. Defaults to .8
+#' @param search_width A double. Tunes target acceptance probability of the MCMC process.
+#' This fine-tunes the width of the search space to obtain the desired acceptance probability.
+#' 1 is the default width, increases lead to broader search.
 #' @param step_size An integer. After each step, the stopping requirements as
 #' specified by `stop_criteria` are checked and proposal distributions are updated. Defaults to 100.
 #' @param verbose Logical. Whether to print messages between each step with the current status regarding the stop_criteria.
@@ -78,9 +80,9 @@ get_stop_criteria <- function(stage, stop_criteria, type){
 #'}
 
 run_emc <- function(emc, stage, stop_criteria,
-                         p_accept = .1, step_size = 100, verbose = FALSE, verboseProgress = FALSE,
+                         search_width = 1, step_size = 100, verbose = FALSE, verboseProgress = FALSE,
                          fileName = NULL,
-                         particles = NULL, particle_factor=75, cores_per_chain = 1,
+                         particles = NULL, particle_factor=70, cores_per_chain = 1,
                          cores_for_chains = length(emc), max_tries = 20, n_blocks = 1){
   emc <- restore_duplicates(emc)
   if(Sys.info()[1] == "Windows" & cores_per_chain > 1) stop("only cores_for_chains can be set on Windows")
@@ -91,22 +93,19 @@ run_emc <- function(emc, stage, stop_criteria,
   } else{
     iter <- stop_criteria[["iter"]]
   }
+
+  emc <- reset_pm_settings(emc, stage)
+
   progress <- check_progress(emc, stage, iter, stop_criteria, max_tries, step_size, cores_per_chain*cores_for_chains, verbose, n_blocks = n_blocks)
   emc <- progress$emc
   progress <- progress[!names(progress) == 'emc']
-  particle_factor_in <- particle_factor; p_accept_in <- p_accept
   while(!progress$done){
     if(!is.null(progress$n_blocks)) n_blocks <- progress$n_blocks
     emc <- add_proposals(emc, stage, cores_per_chain*cores_for_chains, n_blocks)
-    # if(!is.null(progress$gds_bad)){
-    #   particle_factor_in <- particle_factor_in + .05 * progress$gds_bad * particle_factor_in
-    #   p_accept_in <- pmax(0.4, p_accept - progress$gds_bad*.3)
-    #   particle_factor_in[!progress$gds_bad] <- particle_factor
-    # }
     emc <- auto_mclapply(emc,run_stages, stage = stage, iter= progress$step_size,
                               verbose=verbose,  verboseProgress = verboseProgress,
-                              particles=particles,particle_factor=particle_factor_in,
-                              p_accept=p_accept_in, n_cores=cores_per_chain, mc.cores = cores_for_chains)
+                              particles=particles,particle_factor=particle_factor,
+                              search_width=search_width, n_cores=cores_per_chain, mc.cores = cores_for_chains)
     progress <- check_progress(emc, stage, iter, stop_criteria, max_tries, step_size, cores_per_chain*cores_for_chains,verbose, progress,n_blocks)
     emc <- progress$emc
     progress <- progress[!names(progress) == 'emc']
@@ -125,7 +124,7 @@ run_emc <- function(emc, stage, stop_criteria,
 }
 
 run_stages <- function(sampler, stage = "preburn", iter=0, verbose = TRUE, verboseProgress = TRUE,
-                       particles=NULL,particle_factor=75, p_accept= NULL, n_cores=1)
+                       particles=NULL,particle_factor=70, search_width= NULL, n_cores=1)
 {
 
   if (is.null(particles)){
@@ -142,7 +141,7 @@ run_stages <- function(sampler, stage = "preburn", iter=0, verbose = TRUE, verbo
     sampler <- init(sampler, n_cores = n_cores)
   }
   if (iter == 0) return(sampler)
-  tune <- list(p_accept = p_accept)
+  tune <- list(search_width = search_width)
   sampler <- run_stage(sampler, stage = stage,iter = iter, particles = particles,
                        n_cores = n_cores, tune = tune, verbose = verbose, verboseProgress = verboseProgress)
   return(sampler)
@@ -240,8 +239,7 @@ check_progress <- function (emc, stage, iter, stop_criteria,
     }
   }
   return(list(emc = gd$emc, done = done, step_size = step_size,
-              trys = trys, iters_total = iters_total, n_blocks = gd$n_blocks,
-              gds_bad = gd$gds_bad))
+              trys = trys, iters_total = iters_total, n_blocks = gd$n_blocks))
 }
 
 check_gd <- function(emc, stage, max_gd, mean_gd, omit_mpsrf, trys, verbose,
@@ -300,35 +298,12 @@ check_gd <- function(emc, stage, max_gd, mean_gd, omit_mpsrf, trys, verbose,
     }
     ok_gd <- ok_mean_gd & ok_max_gd
   }
-
-
-  n_blocks_old <- n_blocks
-  # if(iter > 1000 & stage == "sample" & !ok_gd) {
-  #   n_blocks <- floor(iter/1000) + 1
-  #   n_blocks <- max(n_blocks_old, n_blocks)
-  # }
-  # if(stage == "sample" & !ok_gd & "alpha" %in% selection) {
-  #   gds <- gd_summary.emc(emc, selection = "alpha")
-  #   if(!is.null(mean_gd)){
-  #     gds_bad <- (colMeans(gds)[-ncol(gds)] > mean_gd)
-  #   } else{
-  #     gds_bad <- (apply(gds, 2, max)[-ncol(gds)] > max_gd)
-  #   }
-  # } else{
-  #   gds_bad <- NULL
-  # }
-  gds_bad <- NULL
-  if(verbose) {
-    if(n_blocks_old != n_blocks) {
-      message(paste0("More than ", floor(iter/1000)*1000, " sample iterations past without convergence. Now block updating parameters with ", n_blocks, " blocks."))
-    }
-  }
   if(verbose) {
     if (omit_mpsrf) type <- "psrf" else type <- "m/psrf"
     if (!is.null(mean_gd)) message("Mean ",type," = ",round(mean(gd),3)) else
       if (!is.null(max_gd)) message("Max ",type," = ",round(max(gd),3))
   }
-  return(list(gd = gd, gd_done = ok_gd, emc = emc, n_blocks = n_blocks, gds_bad = gds_bad))
+  return(list(gd = gd, gd_done = ok_gd, emc = emc))
 }
 
 
@@ -442,10 +417,17 @@ create_chain_proposals <- function(emc, samples_idx = NULL, do_block = TRUE){
       }
     }
     null_idx <- sapply(chains_var, is.null)
-    mean_chains_var <- Reduce(`+`, chains_var[!null_idx]) / sum(!null_idx)
-    for(q in 1:n_subjects){
-      if(null_idx[q]) chains_var[[q]] <- mean_chains_var
+    if(all(null_idx)){
+      mean_chains_var <- diag(n_pars) * .5
+    } else{
+      mean_chains_var <- Reduce(`+`, chains_var[!null_idx]) / sum(!null_idx)
     }
+    if(any(null_idx)){
+      for(q in 1:n_subjects){
+        if(null_idx[q]) chains_var[[q]] <- mean_chains_var
+      }
+    }
+
     new_prop_var <- mean(diag(mean_chains_var))
     if(is.null(attr(emc[[j]], "prop_var"))){
       # This is in preburn case, group-level proposals are wider
@@ -460,6 +442,22 @@ create_chain_proposals <- function(emc, samples_idx = NULL, do_block = TRUE){
     attr(emc[[j]], "prop_var") <- new_prop_var
     emc[[j]]$chains_var <- chains_var
     emc[[j]]$chains_mu <- lapply(1:n_subjects, function(x) rowMeans(emc[[j]]$samples$alpha[,x,samples_idx]))
+  }
+  return(emc)
+}
+
+reset_pm_settings <- function(emc, stage){
+  if(stage != get_last_stage(emc)){ # In this case we're running a new stage
+    for(i in 1:length(emc)){
+      pm_settings <- attr(emc[[i]]$samples, "pm_settings")
+      attr(emc[[i]]$samples, "pm_settings") <- lapply(pm_settings, function(x){
+        x$proposal_counts <- rep(0, length(x$proposal_counts))
+        x$acc_counts <- rep(0, length(x$proposal_counts))
+        x$iter <- 25
+        x$mix <- NULL
+        return(x)
+      })
+    }
   }
   return(emc)
 }
@@ -597,6 +595,10 @@ make_emc <- function(data,design,model=NULL,
   optionals <- list(...)
   for (name in names(optionals) ) {
     assign(name, optionals[[name]])
+  }
+
+  if(type != "single" && length(unique(data$subjects) > 1)){
+    stop("can only use type = `single` if there's only one subject in the data")
   }
 
   if (!(type %in% c("standard","diagonal","blocked","factor","single", "lm", "infnt_factor", "SEM", "diagonal-gamma")))
