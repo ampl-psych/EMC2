@@ -45,8 +45,9 @@ remove_samples <- function(samples, stage = "sample", filter = NULL, thin = 1,
     samples$sampler_nuis$samples <- base::rapply(samples$sampler_nuis$samples, f = function(x) filter_obj(x, filter_idx), how = "replace")
     samples$sampler_nuis$samples$idx <- length(filter_idx)
   }
+  stage <- samples$samples$stage
   samples$samples <- base::rapply(samples$samples, f = function(x) filter_obj(x, filter_idx), how = "replace")
-  samples$samples$stage <- samples$samples$stage[filter_idx]
+  samples$samples$stage <- stage[filter_idx]
   samples$samples$idx <- length(filter_idx)
   return(samples)
 }
@@ -460,6 +461,31 @@ get_pars <- function(emc,selection= "mu", stage=get_last_stage(emc),thin=1,filte
   }
   return(samples)
 }
+
+concat_emc <- function(emc1, emc2, step_size, stage){
+  out_samples <- emc2
+  remove_idx <- ifelse(chain_n(emc1)[1,stage] != 0, 1, 0)
+  emc2 <- subset(emc2, stage = c("preburn", "burn", "adapt", "sample"), filter = 1:(chain_n(emc2)[1,stage] - remove_idx))
+  for(i in 1:length(emc1)){
+    sampled_objects <- list(emc1[[i]]$samples, emc2[[i]]$samples)
+    keys <- unique(unlist(lapply(sampled_objects, names)))
+    sampled_objects <- setNames(do.call(mapply, c(abind, lapply(sampled_objects, '[', keys))), keys)
+    sampled_objects$idx <- sum(sampled_objects$idx)
+    attr(sampled_objects, "pm_settings") <- attr(emc2[[i]]$samples, "pm_settings")
+    out_samples[[i]]$samples <- sampled_objects
+    out_samples[[i]]$samples$last_theta_var_inv <- emc2[[i]]$samples$last_theta_var_inv
+    if(any(out_samples[[1]]$nuisance)){
+      sampled_objects <- list(emc1[[i]]$sampler_nuis$samples, emc2[[i]]$sampler_nuis$samples)
+      keys <- unique(unlist(lapply(sampled_objects, names)))
+      sampled_objects <- setNames(do.call(mapply, c(abind, lapply(sampled_objects, '[', keys))), keys)
+      out_samples[[i]]$sampler_nuis$samples <- sampled_objects
+      out_samples[[i]]$sampler_nuis$samples$last_theta_var_inv <- emc2[[i]]$sampler_nuis$samples$last_theta_var_inv
+    }
+  }
+  rm(emc1); rm(emc2)
+  return(out_samples)
+}
+
 
 fit_remove_samples <- function(emc){
   if(chain_n(emc)[1,4] > chain_n(emc)[1,3]){

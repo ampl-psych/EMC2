@@ -64,6 +64,7 @@ get_stop_criteria <- function(stage, stop_criteria, type){
 #' conditions as specified by stop_criteria? Defaults to 20. max_tries is ignored if the required number of iterations has not been reached yet.
 #' @param n_blocks An integer. Number of blocks. Will block the parameter chains such that they are updated in blocks. This can be helpful in extremely tough models with a large number of parameters.
 #' @param stop_criteria A list. Defines the stopping criteria and for which types of parameters these should hold. See ``?fit``.
+#' @param thin_auto A boolean. If `TRUE` will automatically thin the MCMC samples, closely matched to the ESS.
 #' @export
 #' @return An emc object
 #' @examples \donttest{
@@ -80,10 +81,11 @@ get_stop_criteria <- function(stage, stop_criteria, type){
 #'}
 
 run_emc <- function(emc, stage, stop_criteria,
-                         search_width = 1, step_size = 100, verbose = FALSE, verboseProgress = FALSE,
-                         fileName = NULL,
-                         particles = NULL, particle_factor=70, cores_per_chain = 1,
-                         cores_for_chains = length(emc), max_tries = 20, n_blocks = 1){
+                    search_width = 1, step_size = 100, verbose = FALSE, verboseProgress = FALSE,
+                    fileName = NULL,
+                    particles = NULL, particle_factor=70, cores_per_chain = 1,
+                    cores_for_chains = length(emc), max_tries = 20, n_blocks = 1,
+                    thin_auto = FALSE){
   emc <- restore_duplicates(emc)
   if(Sys.info()[1] == "Windows" & cores_per_chain > 1) stop("only cores_for_chains can be set on Windows")
   if (verbose) message(paste0("Running ", stage, " stage"))
@@ -117,12 +119,12 @@ run_emc <- function(emc, stage, stop_criteria,
                               search_width=search_width, n_cores=cores_per_chain, mc.cores = cores_for_chains)
 
     class(sub_emc) <- "emc"
-    if(stage != 'preburn' & thin_auto){
-      sub_emc <- auto_thin(sub_emc, stage = stage)
+    if(stage != 'preburn'){
+      if(thin_auto) sub_emc <- auto_thin(sub_emc, stage = c("preburn", "burn", "adapt", "sample"))
+      emc <- concat_emc(emc, sub_emc, progress$step_size, stage)
+    } else{
+      emc <- sub_emc
     }
-    emc <- concat_emc(emc, sub_emc, remove_first = emc[[1]]$init) # Don't remove the first since we're not adding anything
-    rm(sub_emc)
-
     progress <- check_progress(emc, stage, iter, stop_criteria, max_tries, step_size, cores_per_chain*cores_for_chains,verbose, progress,n_blocks)
     emc <- progress$emc
     progress <- progress[!names(progress) == 'emc']
@@ -327,6 +329,7 @@ check_gd <- function(emc, stage, max_gd, mean_gd, omit_mpsrf, trys, verbose,
       if (!is.null(max_gd)) message("Max ",type," = ",round(max(gd),3))
   }
   emc <- set_tune_ess(emc, alpha_gd, mean_gd, max_gd)
+  class(emc) <- "emc"
   return(list(gd = gd, gd_done = ok_gd, emc = emc))
 }
 

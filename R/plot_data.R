@@ -156,8 +156,8 @@ plot_cdf <- function(input, post_predict = NULL, prior_predict = NULL, subject =
   y_max <- 0
   quantiles <- sort(c(quants, 0.5))
   # Compute xlim based on quantiles
-  posterior_args <- add_defaults(posterior_args, col = "red")
-  prior_args <- add_defaults(prior_args, col = "darkgreen")
+  posterior_args <- add_defaults(posterior_args, col = "darkgreen")
+  prior_args <- add_defaults(prior_args, col = "red")
   # Compute densities and y_max
   if(!is.null(data) & c('real' %in% to_plot)){
     dens_data <- lapply(split(data, data$group_key), get_def_cdf, defective_factor, dots)
@@ -401,7 +401,7 @@ plot_stat <- function(input, post_predict = NULL, prior_predict = NULL, stat_fun
   xlim <- range(summary_df[,stat_names])
   # Check limits
   if(!is.null(post_predict) & c('posterior' %in% to_plot)){
-    posterior_args <- add_defaults(posterior_args, lty = lty, col = "red")
+    posterior_args <- add_defaults(posterior_args, lty = lty, col = "darkgreen")
     dens <- lapply(split(post_stats_df, post_stats_df$group_key), function(x){
       lapply(stat_names, function(y){
         do.call(density, c(list(x[,y]), fix_dots(posterior_args, density.default, consider_dots = F)))
@@ -415,7 +415,7 @@ plot_stat <- function(input, post_predict = NULL, prior_predict = NULL, stat_fun
   }
 
   if(!is.null(prior_predict) & c('prior' %in% to_plot)){
-    prior_args <- add_defaults(prior_args, lty = lty, col = "darkgreen")
+    prior_args <- add_defaults(prior_args, lty = lty, col = "red")
     dens_prior <- lapply(split(prior_stats_df, prior_stats_df$group_key), function(x){
       lapply(stat_names, function(y){
         do.call(density, c(list(x[,y]), fix_dots(prior_args, density.default, consider_dots = F)))
@@ -512,8 +512,8 @@ plot_density <- function(input, post_predict = NULL, prior_predict = NULL, subje
   y_max <- 0
   quantiles <- sort(c(quants, 0.5))
   dots <- add_defaults(list(...), col = "black")
-  posterior_args <- add_defaults(posterior_args, col = "red")
-  prior_args <- add_defaults(prior_args, col = "darkgreen")
+  posterior_args <- add_defaults(posterior_args, col = "darkgreen")
+  prior_args <- add_defaults(prior_args, col = "red")
 
   # Compute densities and y_max
   if(!is.null(data) & c('real' %in% to_plot)){

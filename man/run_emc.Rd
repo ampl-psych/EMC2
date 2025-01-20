@@ -8,17 +8,18 @@ run_emc(
   emc,
   stage,
   stop_criteria,
-  p_accept = 0.8,
+  search_width = 1,
   step_size = 100,
   verbose = FALSE,
   verboseProgress = FALSE,
   fileName = NULL,
   particles = NULL,
-  particle_factor = 50,
+  particle_factor = 70,
   cores_per_chain = 1,
   cores_for_chains = length(emc),
   max_tries = 20,
-  n_blocks = 1
+  n_blocks = 1,
+  thin_auto = FALSE
 )
 }
 \arguments{
@@ -28,8 +29,9 @@ run_emc(
 
 \item{stop_criteria}{A list. Defines the stopping criteria and for which types of parameters these should hold. See \code{?fit}.}
 
-\item{p_accept}{A double. The target acceptance probability of the MCMC process.
-This fine-tunes the width of the search space to obtain the desired acceptance probability. Defaults to .8}
+\item{search_width}{A double. Tunes target acceptance probability of the MCMC process.
+This fine-tunes the width of the search space to obtain the desired acceptance probability.
+1 is the default width, increases lead to broader search.}
 
 \item{step_size}{An integer. After each step, the stopping requirements as
 specified by \code{stop_criteria} are checked and proposal distributions are updated. Defaults to 100.}
@@ -56,6 +58,8 @@ Defaults to the number of chains. the total number of cores used is equal to \co
 conditions as specified by stop_criteria? Defaults to 20. max_tries is ignored if the required number of iterations has not been reached yet.}
 
 \item{n_blocks}{An integer. Number of blocks. Will block the parameter chains such that they are updated in blocks. This can be helpful in extremely tough models with a large number of parameters.}
+
+\item{thin_auto}{A boolean. If \code{TRUE} will automatically thin the MCMC samples, closely matched to the ESS.}
 }
 \value{
 An emc object
