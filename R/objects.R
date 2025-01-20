@@ -461,6 +461,18 @@ get_pars <- function(emc,selection= "mu", stage=get_last_stage(emc),thin=1,filte
   return(samples)
 }
 
+fit_remove_samples <- function(emc){
+  if(chain_n(emc)[1,4] > chain_n(emc)[1,3]){
+    emc <- subset(emc, stage = "sample")
+  } else if (chain_n(emc)[1,4] > 0){
+    emc <- subset(emc, stage = c("adapt", "sample"))
+  } else if(chain_n(emc)[1,3] > 0){
+    emc <- subset(emc, stage = c("burn", "adapt"))
+  }
+  return(emc)
+}
+
+
 
 
 

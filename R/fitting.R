@@ -98,16 +98,34 @@ run_emc <- function(emc, stage, stop_criteria,
   progress <- progress[!names(progress) == 'emc']
   while(!progress$done){
     emc <- reset_pm_settings(emc, stage)
+    # Remove redundant samples
+    emc <- fit_remove_samples(emc)
     if(!is.null(progress$n_blocks)) n_blocks <- progress$n_blocks
     emc <- add_proposals(emc, stage, cores_per_chain*cores_for_chains, n_blocks)
-    emc <- auto_mclapply(emc,run_stages, stage = stage, iter= progress$step_size,
+    last_stage <- get_last_stage(emc)
+    if(stage == "preburn"){
+      sub_emc <- emc
+    } else if(stage != last_stage){
+      sub_emc <- subset(emc, filter = chain_n(emc)[1,last_stage]-1, stage = last_stage)
+    } else{
+      sub_emc <- subset(emc, filter = chain_n(emc)[1,stage] - 1, stage = stage)
+    }
+    # Actual sampling
+    sub_emc <- auto_mclapply(sub_emc,run_stages, stage = stage, iter= progress$step_size,
                               verbose=verbose,  verboseProgress = verboseProgress,
                               particles=particles,particle_factor=particle_factor,
                               search_width=search_width, n_cores=cores_per_chain, mc.cores = cores_for_chains)
+
+    class(sub_emc) <- "emc"
+    if(stage != 'preburn' & thin_auto){
+      sub_emc <- auto_thin(sub_emc, stage = stage)
+    }
+    emc <- concat_emc(emc, sub_emc, remove_first = emc[[1]]$init) # Don't remove the first since we're not adding anything
+    rm(sub_emc)
+
     progress <- check_progress(emc, stage, iter, stop_criteria, max_tries, step_size, cores_per_chain*cores_for_chains,verbose, progress,n_blocks)
     emc <- progress$emc
     progress <- progress[!names(progress) == 'emc']
-    emc <- restore_duplicates(emc)
     if(!is.null(fileName)){
       emc <- strip_duplicates(emc)
       fileName <- fix_fileName(fileName)
