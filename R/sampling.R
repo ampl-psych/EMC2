@@ -144,17 +144,17 @@ start_proposals <- function(s, parameters, n_particles, pmwgs, type){
 
 check_tune_settings <- function(tune, n_pars, stage, particles){
   # Acceptance ratio tuning
-  tune$alphaStar <- 2
+  tune$alphaStar <- ifelse(stage == "sample", 2, 3)
   tune$p_accept <- set_p_accept(stage, tune$search_width)
   # Potential blocking settings
   if(is.null(tune$components)) tune$components <- rep(1, n_pars)
   if(is.null(tune$shared_ll_idx)) tune$shared_ll_idx <- tune$components
   # Tuning of number of particles, might be a bit arbitrary
   if(is.null(tune$target_ESS)) tune$target_ESS <- 3*sqrt(n_pars)
-  if(is.null(tune$ESS_scale)) tune$ESS_scale <- .1
+  if(is.null(tune$ESS_scale)) tune$ESS_scale <- .05
   if(is.null(tune$max_particles)) tune$max_particles <- particles
   # Mix tuning settings
-  if(is.null(tune$mix_adapt)) tune$mix_adapt <- .025
+  if(is.null(tune$mix_adapt)) tune$mix_adapt <- .05
   # After n0 all the tuning kicks in
   tune$n0 <- 25
   return(tune)
@@ -171,6 +171,7 @@ check_sampling_settings <- function(pm_settings, stage, n_pars, particles){
   # Setting particles
   if(is.null(pm_settings$n_particles)) pm_settings$n_particles <- particles
   if(is.null(pm_settings$iter)) pm_settings$iter <- 1
+  if(is.null(pm_settings$gd_good)) pm_settings$gd_good <- FALSE
   return(pm_settings)
 }
 
@@ -275,11 +276,13 @@ new_particle <- function (s, data, pm_settings, eff_mu = NULL,
   group_var <- group_pars$var
   subj_mu <- parameters$alpha[,s]
   out_lls <- numeric(length(unq_components))
-
+  particle_multiplier <- 1
   # Set the proposals
   if(stage == "preburn"){
     Mus <- list(group_mu, subj_mu)
     Sigmas <- list(group_var, group_var)
+    # For preburn use a lot of proposals, to increase initial search a bit
+    particle_multiplier <- 2
   } else if(stage == "burn"){ # Burn
     Mus <- list(group_mu, subj_mu, subj_mu)
     Sigmas <- list(group_var, group_var, chains_var)
@@ -296,7 +299,7 @@ new_particle <- function (s, data, pm_settings, eff_mu = NULL,
   for(i in unq_components){
     idx <- tune$components == i
     # Draw new proposals for each component
-    particle_numbers <- numbers_from_proportion(pm_settings$mix, pm_settings$n_particles)
+    particle_numbers <- numbers_from_proportion(pm_settings$mix, pm_settings$n_particles*particle_multiplier)
     proposals <- vector("list", n_proposals +1)
     proposals[[1]] <- subj_mu
     for(j in 1:n_proposals){
@@ -386,6 +389,9 @@ update_pm_settings <- function(pm_settings, chosen_idx, weights, particle_number
     # ----------------------------------------
     acc_rates <- ifelse(pm_settings$proposal_counts > 0, pm_settings$acc_counts / pm_settings$proposal_counts, 0)
 
+    # .1 for preburn, .4 for burn and adapt and .6 for sample
+    clamp_min <- ifelse(length(pm_settings$mix) == 2, .1, ifelse(length(pm_settings$mix) == 3, .4, .6))
+
     # D) Adapt epsilon via continuous approach
     # ----------------------------------------
     # pm_settings$epsilon is a vector, same length as pm_settings$mix
@@ -398,7 +404,7 @@ update_pm_settings <- function(pm_settings, chosen_idx, weights, particle_number
       d          = n_pars,
       alphaStar  = tune$alphaStar,
       damp       = 100,          # Example
-      clamp      = c(0.6, 5)    # Example range
+      clamp      = c(clamp_min, 5)    # Example range
     )
     pm_settings$epsilon <- new_epsilon
 
@@ -429,10 +435,6 @@ update_pm_settings <- function(pm_settings, chosen_idx, weights, particle_number
       # 5) Impose a floor, re-normalize
       new_mix <- pmax(new_mix, 0.02)
       new_mix <- new_mix / sum(new_mix)
-
-      pm_settings$mix <- new_mix
-
-      # # 5) Store result
       pm_settings$mix <- new_mix
     }
 
@@ -440,7 +442,8 @@ update_pm_settings <- function(pm_settings, chosen_idx, weights, particle_number
     # F) Adapt the number of particles (ESS logic)
     # -------------------------------------------------------
     # If length mix > 2, we're in sample stage
-    if (length(pm_settings$mix) > 3) {
+    # Only reduce number of particles when we're already converged
+    if (length(pm_settings$mix) > 3 && pm_settings$gd_good) {
       ess <- sum(weights)^2 / sum(weights^2)
       desired_ess <- tune$target_ESS
       scale_factor <- (desired_ess / ess)^tune$ESS_scale
@@ -580,8 +583,8 @@ set_p_accept <- function(stage, search_width){
   # 3. Chain mean - scaled chain variance: burn onwards
   # 4. Eff mean - scaled eff variance: sample onwards
   if(stage == "preburn") return(0.02 * (1/search_width))
-  if(stage == "burn") return(c(0.02, 0.2)* (1/search_width))
-  if(stage == "adapt") return(c(0.2, 0.2)* (1/search_width))
+  if(stage == "burn") return(c(0.02, 0.25)* (1/search_width))
+  if(stage == "adapt") return(c(0.2, 0.25)* (1/search_width))
   if(stage == "sample") return(c(0.25, 0.25, 0.25)* (1/search_width))
 }
 
@@ -616,11 +619,11 @@ check_mix <- function(mix = NULL, stage) {
 check_epsilon <- function(epsilon, n_pars, mix) {
   if (is.null(epsilon)) { # In preburn case, there's only one epsilon here
     if (n_pars > 15) {
-      epsilon <- 1
+      epsilon <- .5
     } else if (n_pars > 10) {
-      epsilon <- 1.25
+      epsilon <- .6
     } else {
-      epsilon <- 1.5
+      epsilon <- .7
     }
     # The first proposal is always unscaled
     # Every subsequent phase at most adds one epsilon

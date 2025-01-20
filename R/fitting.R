@@ -1,7 +1,7 @@
 get_stop_criteria <- function(stage, stop_criteria, type){
   if(is.null(stop_criteria)){
     if(stage == "preburn"){
-      stop_criteria$iter <- 100
+      stop_criteria$iter <- 50
     }
     if(stage == "burn"){
       stop_criteria$mean_gd <- 1.1
@@ -93,13 +93,11 @@ run_emc <- function(emc, stage, stop_criteria,
   } else{
     iter <- stop_criteria[["iter"]]
   }
-
-  emc <- reset_pm_settings(emc, stage)
-
   progress <- check_progress(emc, stage, iter, stop_criteria, max_tries, step_size, cores_per_chain*cores_for_chains, verbose, n_blocks = n_blocks)
   emc <- progress$emc
   progress <- progress[!names(progress) == 'emc']
   while(!progress$done){
+    emc <- reset_pm_settings(emc, stage)
     if(!is.null(progress$n_blocks)) n_blocks <- progress$n_blocks
     emc <- add_proposals(emc, stage, cores_per_chain*cores_for_chains, n_blocks)
     emc <- auto_mclapply(emc,run_stages, stage = stage, iter= progress$step_size,
@@ -247,20 +245,25 @@ check_gd <- function(emc, stage, max_gd, mean_gd, omit_mpsrf, trys, verbose,
 {
   get_gds <- function(emc,omit_mpsrf, selection, stage) {
     gd_out <- c()
+    alpha <- NULL
     for(select in selection){
       gd <- unlist(gd_summary.emc(emc, selection = select, stage = stage,
                                   omit_mpsrf = omit_mpsrf, stat = NULL))
       gd_out <- c(gd_out, c(gd))
+      if(select == "alpha"){
+        alpha <- gd
+      }
     }
     gd_out[is.na(gd_out)] <- Inf
-    return(gd_out)
+    return(list(gd = gd_out, alpha = alpha))
   }
-
   if(is.null(max_gd) & is.null(mean_gd)) return(list(gd_done = TRUE, emc = emc))
   if(!emc[[1]]$init | !stage %in% emc[[1]]$samples$stage)
     return(list(gd_done = FALSE, emc = emc))
   if(is.null(omit_mpsrf)) omit_mpsrf <- TRUE
   gd <- get_gds(emc,omit_mpsrf,selection, stage)
+  alpha_gd <- gd$alpha
+  gd <- gd$gd
   if(!is.null(max_gd)){
     ok_max_gd <- ifelse(all(is.finite(gd)), all(gd < max_gd), FALSE)
   } else{
@@ -280,10 +283,12 @@ check_gd <- function(emc, stage, max_gd, mean_gd, omit_mpsrf, trys, verbose,
       gd_short <- Inf
     } else{
       gd_short <- get_gds(samplers_short,omit_mpsrf,selection, stage)
-
+      alpha_gd_short <- gd_short$alpha
+      gd_short <- gd_short$gd
     }
     if (is.null(max_gd) & (mean(gd_short) < mean(gd)) | (!is.null(max_gd) & (max(gd_short) < max(gd)))) {
       gd <- gd_short
+      alpha_gd <- alpha_gd_short
       emc <- samplers_short
     }
     if(!is.null(max_gd)){
@@ -303,7 +308,36 @@ check_gd <- function(emc, stage, max_gd, mean_gd, omit_mpsrf, trys, verbose,
     if (!is.null(mean_gd)) message("Mean ",type," = ",round(mean(gd),3)) else
       if (!is.null(max_gd)) message("Max ",type," = ",round(max(gd),3))
   }
+  emc <- set_tune_ess(emc, alpha_gd, mean_gd, max_gd)
   return(list(gd = gd, gd_done = ok_gd, emc = emc))
+}
+
+set_tune_ess <- function(emc, alpha_gd = NULL, mean_gd = NULL, max_gd = NULL){
+  if(is.null(alpha_gd)){
+    return(emc)
+  }
+  alpha_gd <- matrix(alpha_gd, emc[[1]]$n_subjects)
+  if(!is.null(mean_gd)){
+    mean_alpha_ok <- rowMeans(alpha_gd) < 1+(mean_gd-1)*.5
+  } else{
+    mean_alpha_ok <- rep(T, nrow(alpha_gd))
+  }
+  if(!is.null(max_gd)){
+    max_alpha_ok <- apply(alpha_gd, 1, max) < 1+(max_gd-1)*.5
+  } else{
+    max_alpha_ok <- rep(T, nrow(alpha_gd))
+  }
+  alpha_ok <- max_alpha_ok & mean_alpha_ok
+  emc <- lapply(emc, function(x){
+    pm_settings <- attr(x$samples, "pm_settings")
+    pm_settings <- mapply(pm_settings, alpha_ok, FUN = function(y, z){
+      y$gd_good <- z
+      return(list(y))
+    })
+    attr(x$samples, "pm_settings") <- pm_settings
+    return(x)
+  })
+  return(emc)
 }
 
 
@@ -400,7 +434,7 @@ create_chain_proposals <- function(emc, samples_idx = NULL, do_block = TRUE){
   n_pars <- emc[[1]]$n_pars
   stage <- emc[[1]]$samples$stage[length(emc[[1]]$samples$stage)]
   if(is.null(samples_idx)){
-    idx_subtract <- min(250, emc[[1]]$samples$idx/2)
+    idx_subtract <- min(250, emc[[1]]$samples$idx/1.5)
     samples_idx <- round(emc[[1]]$samples$idx - idx_subtract):emc[[1]]$samples$idx
   }
   components <- attr(emc[[1]]$data, "components")
@@ -432,7 +466,7 @@ create_chain_proposals <- function(emc, samples_idx = NULL, do_block = TRUE){
     if(is.null(attr(emc[[j]], "prop_var"))){
       # This is in preburn case, group-level proposals are wider
       # So we scale the epsilon a bit to account for narrow individual proposals
-      prop_var_ratio <- 1
+      prop_var_ratio <- 2
     } else{
       prop_var_ratio <- attr(emc[[j]], "prop_var")/new_prop_var
     }
@@ -447,14 +481,16 @@ create_chain_proposals <- function(emc, samples_idx = NULL, do_block = TRUE){
 }
 
 reset_pm_settings <- function(emc, stage){
-  if(stage != get_last_stage(emc)){ # In this case we're running a new stage
+  if(stage != get_last_stage(emc) || stage == "burn"){ # In this case we're running a new stage
     for(i in 1:length(emc)){
       pm_settings <- attr(emc[[i]]$samples, "pm_settings")
       attr(emc[[i]]$samples, "pm_settings") <- lapply(pm_settings, function(x){
         x$proposal_counts <- rep(0, length(x$proposal_counts))
         x$acc_counts <- rep(0, length(x$proposal_counts))
-        x$iter <- 25
-        x$mix <- NULL
+        if(stage != get_last_stage(emc)){
+          x$iter <- 25
+          x$mix <- NULL
+        }
         return(x)
       })
     }
@@ -597,7 +633,7 @@ make_emc <- function(data,design,model=NULL,
     assign(name, optionals[[name]])
   }
 
-  if(type != "single" && length(unique(data$subjects) > 1)){
+  if(type != "single" && length(unique(data$subjects)) == 1){
     stop("can only use type = `single` if there's only one subject in the data")
   }
 
