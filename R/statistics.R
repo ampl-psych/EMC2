@@ -262,15 +262,10 @@ IC <- function(emc,stage="sample",filter=0,use_best_fit=TRUE,
   alpha <- get_pars(emc,selection="alpha",stage=stage,filter=filter, by_subject = TRUE, merge_chains = TRUE)
   mean_pars <- lapply(alpha,function(x){apply(do.call(rbind,x),2,mean)})
   # log-likelihood for each subject using their mean parameter vector
-  model <- emc[[1]]$model()
   data <- emc[[1]]$data
   mean_pars_lls <- setNames(numeric(length(mean_pars)),names(mean_pars))
   for (sub in names(mean_pars)){
-    if(!is.function(model$log_likelihood)){
-      mean_pars_lls[sub] <- log_likelihood_joint(t(mean_pars[[sub]]),dadms = data[[sub]], model)
-    } else{
-      mean_pars_lls[sub] <- calc_ll_R(mean_pars[[sub]],dadm = data[[sub]], model)
-    }
+    mean_pars_lls[sub] <- calc_ll_manager(t(mean_pars[[sub]]),dadm = data[[sub]], emc[[1]]$model)
   }
   Dmeans <- -2*mean_pars_lls
 

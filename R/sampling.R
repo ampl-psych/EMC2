@@ -150,7 +150,7 @@ check_tune_settings <- function(tune, n_pars, stage, particles){
   if(is.null(tune$components)) tune$components <- rep(1, n_pars)
   if(is.null(tune$shared_ll_idx)) tune$shared_ll_idx <- tune$components
   # Tuning of number of particles, might be a bit arbitrary
-  if(is.null(tune$target_ESS)) tune$target_ESS <- 3*sqrt(n_pars)
+  if(is.null(tune$target_ESS)) tune$target_ESS <- 2.5*sqrt(n_pars)
   if(is.null(tune$ESS_scale)) tune$ESS_scale <- .05
   if(is.null(tune$max_particles)) tune$max_particles <- particles
   # Mix tuning settings
