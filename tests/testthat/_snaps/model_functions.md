@@ -40,16 +40,6 @@
       s           0.3334446
       t0          0.2464756
       
-      $epsilon
-           [,1]
-      as1t  1.5
-      bd6t  1.5
-      
-      $origin
-           [,1]
-      as1t    2
-      bd6t    2
-      
       $alpha
       , , 1
       
@@ -263,16 +253,6 @@
       B_lRright   2.2752573
       A           0.7726374
       t0          0.3149199
-      
-      $epsilon
-           [,1]
-      as1t  1.5
-      bd6t  1.5
-      
-      $origin
-           [,1]
-      as1t    2
-      bd6t    2
       
       $alpha
       , , 1
@@ -504,16 +484,6 @@
       A           0.7726374
       t0          0.3149199
       
-      $epsilon
-           [,1]
-      as1t  1.5
-      bd6t  1.5
-      
-      $origin
-           [,1]
-      as1t    2
-      bd6t    2
-      
       $alpha
       , , 1
       
@@ -743,16 +713,6 @@
       Z           2.2752573
       sv          0.7726374
       SZ          0.3149199
-      
-      $epsilon
-           [,1]
-      as1t  1.5
-      bd6t  1.5
-      
-      $origin
-           [,1]
-      as1t    2
-      bd6t    2
       
       $alpha
       , , 1

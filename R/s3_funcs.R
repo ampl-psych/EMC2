@@ -1095,7 +1095,7 @@ sampled_pars.emc <- function(x,model=NULL,doMap=TRUE, add_da = FALSE, all_cells_
 
 #' @rdname auto_thin
 #' @export
-auto_thin.emc <- function(emc, stage = "sample", selection = c("alpha", "mu")){
+auto_thin.emc <- function(emc, stage = "sample", selection = c("alpha", "mu"), ...){
   ess <- 0
   for(select in selection){
     ess <- ess + ess_summary(emc, selection = select, stage = stage, stat_only = TRUE, stat = "mean")

@@ -72,6 +72,7 @@
 #' @importFrom stats rchisq
 #' @importFrom stats rexp
 #' @importFrom stats rgamma
+#' @importFrom stats rmultinom
 #' @importFrom stats rnorm
 #' @importFrom stats runif
 #' @importFrom stats sd

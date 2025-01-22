@@ -969,7 +969,7 @@ plot.emc.design <- function(x, p_vector, data = NULL, factors = NULL, plot_facto
     }
   }
   # Get a mapped parameter for each cell of the design
-  pars <- mapped_parss(p_vector, x)
+  pars <- mapped_pars(p_vector, x)
   if(is.null(data)){
     data <- vector("list", n_data_sim)
     # If no data is supplied generate some data sets

@@ -97,7 +97,7 @@
 #
 #
 
-dLBA <- function (rt, pars, posdrift = TRUE, robust = FALSE)
+dLBA <- function (rt, pars, posdrift = TRUE)
   # posdrift = truncated positive normal rates
   # robust slower, deals with extreme rate values
 {
@@ -107,11 +107,11 @@ dLBA <- function (rt, pars, posdrift = TRUE, robust = FALSE)
   out <- numeric(length(dt))
   out[ok] <- dlba(t = dt[ok], A = pars[ok,"A"], b = pars[ok,"b"],
                          v = pars[ok,"v"], sv = pars[ok,"sv"],
-                         posdrift = posdrift, robust = robust)
+                         posdrift = posdrift)
   out
 }
 
-pLBA <- function (rt, pars, posdrift = TRUE, robust = FALSE)
+pLBA <- function (rt, pars, posdrift = TRUE)
   # posdrift = truncated positive normal rates
   # robust slower, deals with extreme rate values
 {
@@ -121,7 +121,7 @@ pLBA <- function (rt, pars, posdrift = TRUE, robust = FALSE)
   out <- numeric(length(dt))
   out[ok] <- plba(t = dt[ok], A = pars[ok,"A"], b = pars[ok,"b"],
                          v = pars[ok,"v"], sv = pars[ok,"sv"],
-                         posdrift = posdrift, robust = robust)
+                         posdrift = posdrift)
   out
 }
 
@@ -244,9 +244,9 @@ LBA <- function(){
     # Random function for racing accumulator
     rfun=function(lR=NULL,pars) rLBA(lR,pars,posdrift=TRUE,ok = attr(pars, "ok")),
     # Density function (PDF) for single accumulator
-    dfun=function(rt,pars) dLBA(rt,pars,posdrift = TRUE, robust = FALSE),
+    dfun=function(rt,pars) dLBA(rt,pars,posdrift = TRUE),
     # Probability function (CDF) for single accumulator
-    pfun=function(rt,pars) pLBA(rt,pars,posdrift = TRUE, robust = FALSE),
+    pfun=function(rt,pars) pLBA(rt,pars,posdrift = TRUE),
     # Race likelihood combining pfun and dfun
     log_likelihood=function(pars,dadm,model,min_ll=log(1e-10)){
       log_likelihood_race(pars=pars, dadm = dadm, model = model, min_ll = min_ll)

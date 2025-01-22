@@ -352,7 +352,9 @@ set_tune_ess <- function(emc, alpha_gd = NULL, mean_gd = NULL, max_gd = NULL){
   emc <- lapply(emc, function(x){
     pm_settings <- attr(x$samples, "pm_settings")
     pm_settings <- mapply(pm_settings, alpha_ok, FUN = function(y, z){
-      y$gd_good <- z
+      for(i in 1:length(y)){
+        y[[i]]$gd_good <- z
+      }
       return(list(y))
     })
     attr(x$samples, "pm_settings") <- pm_settings
@@ -506,11 +508,13 @@ reset_pm_settings <- function(emc, stage){
     for(i in 1:length(emc)){
       pm_settings <- attr(emc[[i]]$samples, "pm_settings")
       attr(emc[[i]]$samples, "pm_settings") <- lapply(pm_settings, function(x){
-        x$proposal_counts <- rep(0, length(x$proposal_counts))
-        x$acc_counts <- rep(0, length(x$proposal_counts))
-        if(stage != get_last_stage(emc)){
-          x$iter <- 25
-          x$mix <- NULL
+        for(i in 1:length(x)){
+          x[[i]]$proposal_counts <- rep(0, length(x[[i]]$proposal_counts))
+          x[[i]]$acc_counts <- rep(0, length(x[[i]]$proposal_counts))
+          if(stage != get_last_stage(emc)){
+            x[[i]]$iter <- 25
+            x[[i]]$mix <- NULL
+          }
         }
         return(x)
       })
@@ -522,7 +526,9 @@ reset_pm_settings <- function(emc, stage){
 update_epsilon_scale <- function(pmwgs, prop_var_ratio){
   pm_settings <- attr(pmwgs$samples, "pm_settings")
   pm_settings <- lapply(pm_settings, function(x){
-    x$epsilon <- x$epsilon * prop_var_ratio
+    for(i in 1:length(x)){
+      x[[i]]$epsilon <- x[[i]]$epsilon * prop_var_ratio
+    }
     return(x)
   })
   attr(pmwgs$samples, "pm_settings") <- pm_settings
@@ -653,7 +659,12 @@ make_emc <- function(data,design,model=NULL,
   for (name in names(optionals) ) {
     assign(name, optionals[[name]])
   }
-
+  if(!is.null(prior_list) & !is.null(prior_list$theta_mu_mean)){
+    prior_list <- list(prior_list)
+  }
+  if(!is.null(prior_list)){
+    type <- attr(prior_list[[1]], "type")
+  }
   if(type != "single" && length(unique(data$subjects)) == 1){
     stop("can only use type = `single` if there's only one subject in the data")
   }
@@ -665,9 +676,7 @@ make_emc <- function(data,design,model=NULL,
     stop("You can only specify nuisance OR nuisance_non_hyper")
   }
   if (is(data, "data.frame")) data <- list(data)
-  if(!is.null(prior_list) & !is.null(prior_list$theta_mu_mean)){
-    prior_list <- list(prior_list)
-  }
+
   data <- lapply(data,function(d){
     if (!is.factor(d$subjects)) d$subjects <- factor(d$subjects)
     d <- d[order(d$subjects),]

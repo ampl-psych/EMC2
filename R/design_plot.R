@@ -434,23 +434,23 @@ single_DDM_plot <- function(
   ## (I) Legend
   #################################################################
   if (plot_legend_sub) {
-    x_legend<- x_lim[2]*0.5
-    y_legend<- y_lim[2]*0.95
+    x_legend<- x_lim[2]*0.3
+    y_legend<- min(b_vals) * .8
     if (length(v_levels)>1) {
       legend(x=x_legend, y=y_legend,
              legend=names(v_levels),
              title="v",
              col=v_colors[names(v_levels)],
-             lwd=3, lty=1, bty="n", cex = 1)
+             lwd=3, lty=1, bty="n", cex = .9)
     }
     if (length(t0_vals)>1) {
-      y_legend<- min(b_vals) * .8
+      x_legend<- x_lim[2]*0.6
       legend(x=x_legend, y=y_legend,
              legend=names(t0_vals),
              title="t0",
              col="black", lwd=3,
              lty=t0_ltys[names(t0_vals)],
-             bty="n", cex = 1)
+             bty="n", cex = .9)
     }
   }
 

@@ -161,17 +161,19 @@ check_tune_settings <- function(tune, n_pars, stage, particles){
 }
 
 check_sampling_settings <- function(pm_settings, stage, n_pars, particles){
-  # Mix settings
-  pm_settings$mix <- check_mix(pm_settings$mix, stage)
-  # For p_accept
-  pm_settings$epsilon <- check_epsilon(pm_settings$epsilon, n_pars, pm_settings$mix)
-  # For mix and p_accept tuning
-  pm_settings$proposal_counts <- check_prop_performance(pm_settings$proposal_counts, stage)
-  pm_settings$acc_counts <- check_prop_performance(pm_settings$acc_counts, stage)
-  # Setting particles
-  if(is.null(pm_settings$n_particles)) pm_settings$n_particles <- particles
-  if(is.null(pm_settings$iter)) pm_settings$iter <- 1
-  if(is.null(pm_settings$gd_good)) pm_settings$gd_good <- FALSE
+  for(i in 1:length(pm_settings)){
+    # Mix settings
+    pm_settings[[i]]$mix <- check_mix(pm_settings[[i]]$mix, stage)
+    # For p_accept
+    pm_settings[[i]]$epsilon <- check_epsilon(pm_settings[[i]]$epsilon, n_pars, pm_settings[[i]]$mix)
+    # For mix and p_accept tuning
+    pm_settings[[i]]$proposal_counts <- check_prop_performance(pm_settings[[i]]$proposal_counts, stage)
+    pm_settings[[i]]$acc_counts <- check_prop_performance(pm_settings[[i]]$acc_counts, stage)
+    # Setting particles
+    if(is.null(pm_settings[[i]]$n_particles)) pm_settings[[i]]$n_particles <- particles
+    if(is.null(pm_settings[[i]]$iter)) pm_settings[[i]]$iter <- 1
+    if(is.null(pm_settings[[i]]$gd_good)) pm_settings[[i]]$gd_good <- FALSE
+  }
   return(pm_settings)
 }
 
@@ -192,7 +194,7 @@ run_stage <- function(pmwgs,
 
   pm_settings <- attr(pmwgs$samples, "pm_settings")
   # Intialize sampling tuning settings
-  if(is.null(pm_settings)) pm_settings <- vector("list", pmwgs$n_subjects)
+  if(is.null(pm_settings)) pm_settings <- lapply(1:pmwgs$n_subjects, function(x) return(vector("list", length(unique(tune$components)))))
   tune <- check_tune_settings(tune, n_pars, stage, particles)
   pm_settings <- lapply(pm_settings, FUN = check_sampling_settings,  stage = stage, n_pars = n_pars, particles)
 
@@ -294,21 +296,32 @@ new_particle <- function (s, data, pm_settings, eff_mu = NULL,
     Sigmas <- list(group_var, chains_var, chains_var, eff_var)
   }
   n_proposals <- length(Mus)
-  # Add 1 to epsilons such that prior/group-level proposals aren't scaled
-  epsilons <- c(1, pm_settings$epsilon)
   for(i in unq_components){
+    # Add 1 to epsilons such that prior/group-level proposals aren't scaled
+    epsilons <- c(1, pm_settings[[i]]$epsilon)
     idx <- tune$components == i
     # Draw new proposals for each component
-    particle_numbers <- numbers_from_proportion(pm_settings$mix, pm_settings$n_particles*particle_multiplier)
+    particle_numbers <- numbers_from_proportion(pm_settings[[i]]$mix, pm_settings[[i]]$n_particles*particle_multiplier)
     proposals <- vector("list", n_proposals +1)
-    proposals[[1]] <- subj_mu
+    proposals[[1]] <- subj_mu[idx]
     for(j in 1:n_proposals){
       # Fill up the proposals
       proposals[[j + 1]] <- particle_draws(particle_numbers[j], Mus[[j]][idx], Sigmas[[j]][idx,idx] * (epsilons[j]^2))
     }
     proposals <- do.call(rbind, proposals)
+
+    # Non -used proposals (for prior calculations)
     # Rejoin new proposals with current MCMC values for other components
-    colnames(proposals) <- names(subj_mu)
+    if(any(!idx)){
+      proposals_other <- do.call(rbind, rep(list(subj_mu[!idx]), nrow(proposals)))
+      colnames(proposals_other) <- names(subj_mu)[!idx]
+      colnames(proposals) <- names(subj_mu)[idx]
+      proposals <- cbind(proposals, proposals_other)
+      proposals <- proposals[,names(subj_mu)]
+    } else{
+      colnames(proposals) <- names(subj_mu)
+    }
+
     # Normally we assume that a component contains all the parameters to estimate the individual likelihood of a joint model
     # Sometimes we may also want to block within a model if it has very high dimensionality
     shared_idx <- tune$shared_ll_idx[idx][1]
@@ -329,10 +342,10 @@ new_particle <- function (s, data, pm_settings, eff_mu = NULL,
       prior_density <- lp
     }
     # We can start from 2, since first proposal is prior density
-    lm <- pm_settings$mix[1]*exp(lp)
+    lm <- pm_settings[[i]]$mix[1]*exp(lp)
     for(k in 2:length(Sigmas)){
       # Prior density is updated separately so start at 2
-      lm <- lm + pm_settings$mix[k]*mvtnorm::dmvnorm(x = proposals[,idx], mean = Mus[[k]][idx], sigma = Sigmas[[k]][idx,idx]*(epsilons[k]^2))
+      lm <- lm + pm_settings[[i]]$mix[k]*mvtnorm::dmvnorm(x = proposals[,idx], mean = Mus[[k]][idx], sigma = Sigmas[[k]][idx,idx]*(epsilons[k]^2))
     }
     # Avoid infinite values
     lm <- log(lm)
@@ -346,8 +359,8 @@ new_particle <- function (s, data, pm_settings, eff_mu = NULL,
 
     out_lls[i] <- lw[idx_ll]
     proposal_out[idx] <- proposals[idx_ll,idx]
-    pm_settings <- update_pm_settings(pm_settings, idx_ll, weights, particle_numbers, tune, length(subj_mu))
-  } # Note that origin only contains last components origin, just used by devs anyway
+    pm_settings[[i]] <- update_pm_settings(pm_settings[[i]], idx_ll, weights, particle_numbers, tune, sum(idx))
+  }
   return(list(proposal = proposal_out, ll = sum(out_lls), pm_settings = pm_settings))
 }
 

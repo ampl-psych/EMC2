@@ -48,18 +48,6 @@
       2|s     1.2044677
       2|t0    0.3491948
       
-      $epsilon
-           [,1]
-      as1t  1.5
-      bd6t  1.5
-      bl1t  1.5
-      
-      $origin
-           [,1]
-      as1t    2
-      bd6t    2
-      bl1t    2
-      
       $alpha
       , , 1
       
