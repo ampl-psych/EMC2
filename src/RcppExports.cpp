@@ -11,8 +11,8 @@ Rcpp::Rostream<false>& Rcpp::Rcerr = Rcpp::Rcpp_cerr_get();
 #endif
 
 // dlba
-NumericVector dlba(NumericVector t, NumericVector A, NumericVector b, NumericVector v, NumericVector sv, bool posdrift, bool robust);
-RcppExport SEXP _EMC2_dlba(SEXP tSEXP, SEXP ASEXP, SEXP bSEXP, SEXP vSEXP, SEXP svSEXP, SEXP posdriftSEXP, SEXP robustSEXP) {
+NumericVector dlba(NumericVector t, NumericVector A, NumericVector b, NumericVector v, NumericVector sv, bool posdrift);
+RcppExport SEXP _EMC2_dlba(SEXP tSEXP, SEXP ASEXP, SEXP bSEXP, SEXP vSEXP, SEXP svSEXP, SEXP posdriftSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -22,14 +22,13 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< NumericVector >::type v(vSEXP);
     Rcpp::traits::input_parameter< NumericVector >::type sv(svSEXP);
     Rcpp::traits::input_parameter< bool >::type posdrift(posdriftSEXP);
-    Rcpp::traits::input_parameter< bool >::type robust(robustSEXP);
-    rcpp_result_gen = Rcpp::wrap(dlba(t, A, b, v, sv, posdrift, robust));
+    rcpp_result_gen = Rcpp::wrap(dlba(t, A, b, v, sv, posdrift));
     return rcpp_result_gen;
 END_RCPP
 }
 // plba
-NumericVector plba(NumericVector t, NumericVector A, NumericVector b, NumericVector v, NumericVector sv, bool posdrift, bool robust);
-RcppExport SEXP _EMC2_plba(SEXP tSEXP, SEXP ASEXP, SEXP bSEXP, SEXP vSEXP, SEXP svSEXP, SEXP posdriftSEXP, SEXP robustSEXP) {
+NumericVector plba(NumericVector t, NumericVector A, NumericVector b, NumericVector v, NumericVector sv, bool posdrift);
+RcppExport SEXP _EMC2_plba(SEXP tSEXP, SEXP ASEXP, SEXP bSEXP, SEXP vSEXP, SEXP svSEXP, SEXP posdriftSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -39,8 +38,7 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< NumericVector >::type v(vSEXP);
     Rcpp::traits::input_parameter< NumericVector >::type sv(svSEXP);
     Rcpp::traits::input_parameter< bool >::type posdrift(posdriftSEXP);
-    Rcpp::traits::input_parameter< bool >::type robust(robustSEXP);
-    rcpp_result_gen = Rcpp::wrap(plba(t, A, b, v, sv, posdrift, robust));
+    rcpp_result_gen = Rcpp::wrap(plba(t, A, b, v, sv, posdrift));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -109,8 +107,8 @@ END_RCPP
 }
 
 static const R_CallMethodDef CallEntries[] = {
-    {"_EMC2_dlba", (DL_FUNC) &_EMC2_dlba, 7},
-    {"_EMC2_plba", (DL_FUNC) &_EMC2_plba, 7},
+    {"_EMC2_dlba", (DL_FUNC) &_EMC2_dlba, 6},
+    {"_EMC2_plba", (DL_FUNC) &_EMC2_plba, 6},
     {"_EMC2_dWald", (DL_FUNC) &_EMC2_dWald, 5},
     {"_EMC2_pWald", (DL_FUNC) &_EMC2_pWald, 5},
     {"_EMC2_calc_ll", (DL_FUNC) &_EMC2_calc_ll, 11},

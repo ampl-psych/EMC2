@@ -131,10 +131,10 @@ add_constants <- function(p,constants)
 #'
 #' Maps a parameter vector that corresponds to sampled parameters
 #' of the cognitive model back to the experimental design. The parameter vector
-#' can be created using ``sampled_p_vector()``. The returned matrix shows whether/how parameters
+#' can be created using ``sampled_pars()``. The returned matrix shows whether/how parameters
 #' differ across the experimental factors.
 #'
-#' @param p_vector A parameter vector. Must be in the form of ``sampled_p_vector(design)``
+#' @param p_vector A parameter vector. Must be in the form of ``sampled_pars(design)``
 #' @param design A design list. Created by ``design``
 #' @param model Optional model type (if not already specified in ``design``)
 #' @param digits Integer. Will round the output parameter values to this many decimals
@@ -151,11 +151,11 @@ add_constants <- function(p,constants)
 #' p_vector=c(v_Sleft=-2,v_Sright=2,a=log(1),a_Eneutral=log(1.5),a_Eaccuracy=log(2),
 #'           t0=log(.2),Z=qnorm(.5),sv=log(.5),SZ=qnorm(.5))
 #' # This will map the parameters of the p_vector back to the design
-#' mapped_par(p_vector,design_DDMaE)
+#' mapped_pars(p_vector,design_DDMaE)
 #'
 #' @export
 
-mapped_par <- function(p_vector,design,model=NULL,
+mapped_pars <- function(p_vector,design,model=NULL,
                        digits=3,remove_subjects=TRUE,
                        covariates=NULL,...)
   # Show augmented data and corresponding mapped parameter
@@ -251,7 +251,7 @@ map_mcmc <- function(mcmc,design,include_constants = TRUE, add_recalculated = FA
   }
 
 
-  map <- attr(sampled_p_vector(design, add_da = TRUE, all_cells_dm = TRUE),"map")
+  map <- attr(sampled_pars(design, add_da = TRUE, all_cells_dm = TRUE),"map")
 
   constants <- design$constants
   if (!is.matrix(mcmc) & !is.array(mcmc)) mcmc <- t(as.matrix(mcmc))
@@ -263,7 +263,7 @@ map_mcmc <- function(mcmc,design,include_constants = TRUE, add_recalculated = FA
     mcmc_array <- mcmc
     is_matrix <- FALSE
   }
-  mp <- mapped_par(mcmc_array[,1,1],design,remove_RACE=FALSE, covariates = covariates)
+  mp <- mapped_pars(mcmc_array[,1,1],design,remove_RACE=FALSE, covariates = covariates)
 
   for(k in 1:ncol(mcmc_array)){
     mcmc <- t(mcmc_array[,k,])
@@ -337,7 +337,7 @@ fill_transform <- function(transform, model, p_vector,
       if (!all(names(transform$lower) %in% names(model()$p_types)))stop("transform on parameter not in the model p_types")
       if (!all(names(transform$upper) %in% names(model()$p_types)))stop("transform on parameter not in the model p_types")
     } else{
-      if (!all(names(transform$func) %in% names(p_vector))) stop("pre_transform on parameter not in the sampled_p_vector")
+      if (!all(names(transform$func) %in% names(p_vector))) stop("pre_transform on parameter not in the sampled_pars")
       if (!all(names(transform$lower) %in% names(p_vector))) stop("transform on parameter not in the model p_types")
       if (!all(names(transform$upper) %in% names(p_vector))) stop("transform on parameter not in the model p_types")
     }

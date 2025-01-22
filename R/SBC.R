@@ -51,7 +51,7 @@ SBC_hierarchical <- function(design_in, prior_in, replicates = 250, trials = 100
                           remove_constants = FALSE)[[1]]
   rank_mu <- data.frame()
   rank_var <- data.frame()
-  par_names <- names(sampled_p_vector(design_in))
+  par_names <- names(sampled_pars(design_in))
   if(!is.null(fileName)) save(prior_mu, prior_var, file = fileName)
   all_rand_effects <- vector("list", length = replicates)
   for(i in 1:replicates){
@@ -111,7 +111,7 @@ SBC_single <- function(design_in, prior_in, replicates = 250, trials = 100,
   if(!is.null(fileName)) save(prior_alpha, file = fileName)
   i <- 1
   if(dots$cores_per_chain > 1 & verbose) print("Since cores_per_chain > 1, estimating multiple data sets simultaneously")
-  par_names <- names(sampled_p_vector(design_in))
+  par_names <- names(sampled_pars(design_in))
   while(i < replicates){
     if(verbose) print(paste0("Sample ", i, " out of ", replicates))
     data <- data.frame()

@@ -41,7 +41,7 @@ get_objects <- function(type, selection = NULL, sample_prior = F, design = NULL,
 
 add_prior_names <- function(prior, design, ...){
   dots <- list(...)
-  pnames <- names(sampled_p_vector(design))
+  pnames <- names(sampled_pars(design))
   nuisance <- is.element(seq_len(length(pnames)), unique(c(dots$nuisance, dots$nuisance_non_hyper)))
   # This might be a weird place to set the nuisance parameters in the prior,
   # but it's the most efficient for now

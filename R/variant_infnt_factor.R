@@ -16,7 +16,7 @@ get_prior_infnt_factor <- function(prior = NULL, n_pars = NULL, sample = TRUE, N
     prior <- list()
   }
   if(!is.null(design)){
-    n_pars <- length(sampled_p_vector(design, doMap = F))
+    n_pars <- length(sampled_pars(design, doMap = F))
   }
   if (!is.null(prior$theta_mu_mean)) {
     n_pars <- length(prior$theta_mu_mean)
@@ -54,7 +54,7 @@ get_prior_infnt_factor <- function(prior = NULL, n_pars = NULL, sample = TRUE, N
   out <- prior
   if(sample){
     samples <- list()
-    par_names <- names(sampled_p_vector(design, doMap = F))
+    par_names <- names(sampled_pars(design, doMap = F))
     if(!selection %in% c("mu", "sigma2", "covariance", "alpha", "correlation", "Sigma", "loadings", "residuals")){
       stop("for variant factor, you can only specify the prior on the mean, variance, covariance, loadings, residuals, or the correlation of the parameters")
     }

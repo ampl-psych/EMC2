@@ -902,11 +902,11 @@ ess_summary.emc <- function(emc,selection="mu", stat = "min", stat_only = FALSE,
   return(out)
 }
 
-#' @rdname posterior_summary
+#' @rdname credint
 #' @export
-posterior_summary.emc <- function(emc, selection="mu", probs = c(0.025, .5, .975),
+credint.emc <- function(x, selection="mu", probs = c(0.025, .5, .975),
                                   digits = 3, ...){
-  out <- get_summary_stat(emc, selection, get_posterior_quantiles,
+  out <- get_summary_stat(x, selection, get_posterior_quantiles,
                           probs = probs, digits = digits, ...)
   return(out)
 }
@@ -961,14 +961,15 @@ ess_summary <- function(emc, ...){
 #' Full range of possible samples manipulations described in `get_pars`.
 #'
 #' @inheritParams gd_summary.emc
+#' @param x An emc or emc.prior object
 #' @param probs A vector. Indicates which quantiles to return from the posterior.
 #' @return A list of posterior quantiles for each parameter group in the selected parameter type.
 #' @export
 #'
 #' @examples
-#' posterior_summary(samples_LNR)
-posterior_summary <- function(emc, ...){
-  UseMethod("posterior_summary")
+#' credint(samples_LNR)
+credint <- function(x, ...){
+  UseMethod("credint")
 }
 
 #' @rdname get_data
@@ -1064,7 +1065,7 @@ plot_design <- function(x, data = NULL, factors = NULL, plot_factor = NULL, n_da
 #' @rdname plot_design
 #' @export
 plot_design.emc <- function(x, data = NULL, factors = NULL, plot_factor = NULL, n_data_sim = 10, ...){
-  p_vector <- posterior_summary(x, probs = .5)[[1]]
+  p_vector <- credint(x, probs = .5)[[1]]
   design <- get_design(x)[[1]]
   plot(design, p_vector, data = data, factors = factors, plot_factor = plot_factor, n_data_sim = n_data_sim, ...)
 }
@@ -1085,10 +1086,10 @@ get_design <- function(x){
 
 
 
-#' @rdname sampled_p_vector
+#' @rdname sampled_pars
 #' @export
-sampled_p_vector.emc <- function(x,model=NULL,doMap=TRUE, add_da = FALSE, all_cells_dm = FALSE){
-  return(sampled_p_vector(get_design(x), model = model, doMap = doMap,
+sampled_pars.emc <- function(x,model=NULL,doMap=TRUE, add_da = FALSE, all_cells_dm = FALSE){
+  return(sampled_pars(get_design(x), model = model, doMap = doMap,
                           add_da = add_da, all_cells_dm = all_cells_dm))
 }
 

@@ -124,7 +124,7 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
     if(is.null(design)) design <- get_design(parameters)
     if(is.null(data)) data <- get_data(parameters)
     if(!hyper){
-      parameters <- do.call(rbind, posterior_summary(parameters, probs = 0.5, selection = "alpha", by_subject = TRUE))
+      parameters <- do.call(rbind, credint(parameters, probs = 0.5, selection = "alpha", by_subject = TRUE))
     } else{
       mu <- get_pars(parameters, selection = "mu", merge_chains = T, return_mcmc = F)
       Sigma <- get_pars(parameters, selection = "Sigma", merge_chains = T, return_mcmc = F)
@@ -134,7 +134,7 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
     }
   }
 
-  sampled_p_names <- names(sampled_p_vector(design))
+  sampled_p_names <- names(sampled_pars(design))
   if(is.null(dim(parameters))){
     if(is.null(names(parameters))) names(parameters) <- sampled_p_names
   } else{
@@ -301,7 +301,7 @@ add_Ffunctions <- function(data,design)
 #' Simulates subject-level parameters in the format required by ``make_data()``.
 #'
 #' @param design A design list. The design as specified by `design()`
-#' @param group_means A numeric vector. The group level means for each parameter, in the same order as `sampled_p_vector(design)`
+#' @param group_means A numeric vector. The group level means for each parameter, in the same order as `sampled_pars(design)`
 #' @param n_subj An integer. The number of subjects to generate parameters for. If `NULL` will be inferred from design
 #' @param variance_proportion A double. Optional. If ``covariances`` are not specified, the variances will be created by multiplying the means by this number. The covariances will be 0.
 #' @param covariances A covariance matrix. Optional. Specify the intended covariance matrix.
@@ -333,10 +333,10 @@ make_random_effects <- function(design, group_means, n_subj = NULL, variance_pro
   } else{
     subnames <- as.character(1:n_subj)
   }
-  if(length(group_means) != length(sampled_p_vector(design))) stop("You must specify as many means as parameters in your design")
+  if(length(group_means) != length(sampled_pars(design))) stop("You must specify as many means as parameters in your design")
   if(is.null(covariances)) covariances <- diag(abs(group_means)*variance_proportion)
   random_effects <- mvtnorm::rmvnorm(n_subj,mean=group_means,sigma=covariances)
-  colnames(random_effects) <- names(sampled_p_vector(design))
+  colnames(random_effects) <- names(sampled_pars(design))
   rownames(random_effects) <- subnames
   return(random_effects)
 }

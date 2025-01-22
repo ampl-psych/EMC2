@@ -57,7 +57,7 @@ response was correct or not. Example: \code{function(d)d$S==d$lR} where lR refer
 to the latent response factor.}
 
 \item{constants}{A named vector that sets constants. Any parameter in
-\code{sampled_p_vector} can be set constant.}
+\code{sampled_pars} can be set constant.}
 
 \item{covariates}{Names of numeric covariates.}
 

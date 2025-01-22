@@ -15,7 +15,7 @@ make_random_effects(
 \arguments{
 \item{design}{A design list. The design as specified by \code{design()}}
 
-\item{group_means}{A numeric vector. The group level means for each parameter, in the same order as \code{sampled_p_vector(design)}}
+\item{group_means}{A numeric vector. The group level means for each parameter, in the same order as \code{sampled_pars(design)}}
 
 \item{n_subj}{An integer. The number of subjects to generate parameters for. If \code{NULL} will be inferred from design}
 

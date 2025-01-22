@@ -310,7 +310,7 @@ pairs_posterior <- function(emc, selection="alpha", scale_subjects=TRUE,
 #'
 #' @param data A dataframe. Experimental data used, needed for the design mapping
 #' @param design A design list. Created using ``design``.
-#' @param p_vector Named vector of parameter values (typically created with ``sampled_p_vector(design)``)
+#' @param p_vector Named vector of parameter values (typically created with ``sampled_pars(design)``)
 #' @param range Numeric. The max and min will be p_vector + range/2 and p_vector - range/2, unless specified in p_min or p_max.
 #' @param layout A vector indicating which layout to use as in par(mfrow = layout). If NA, will automatically generate an appropriate layout.
 #' @param p_min Named vector. If specified will instead use these values for minimum range of the selected parameters.

@@ -32,7 +32,7 @@
 #' response was correct or not. Example: `function(d)d$S==d$lR` where lR refers
 #' to the latent response factor.
 #' @param constants A named vector that sets constants. Any parameter in
-#' `sampled_p_vector` can be set constant.
+#' `sampled_pars` can be set constant.
 #' @param covariates Names of numeric covariates.
 #' @param functions List of functions to create new factors based on those in
 #' the factors argument. These new factors can then be used in `formula`.
@@ -137,7 +137,7 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
                  Clist=contrasts,matchfun=matchfun,constants=constants,
                  Fcovariates=covariates,Ffunctions=functions,model=model)
   class(design) <- "emc.design"
-  p_vector <- sampled_p_vector(design,model)
+  p_vector <- sampled_pars(design,model)
   lhs_terms <- unlist(lapply(formula, function(x) as.character(stats::terms(x)[[2]])))
 
   # Check if any terms are not in model parameters
@@ -820,7 +820,7 @@ update2version <- function(emc, model, transform = NULL, bound = NULL,
   }
   model_list <- model()
   model_list$transform <- fill_transform(transform,model)
-  model_list$pre_transform <- fill_transform(pre_transform, model = model, p_vector = sampled_p_vector(design_list), is_pre = TRUE)
+  model_list$pre_transform <- fill_transform(pre_transform, model = model, p_vector = sampled_pars(design_list), is_pre = TRUE)
   model_list$bound <- fill_bound(bound,model)
   model <- function(){return(model_list)}
   design_list <- lapply(design_list, FUN = function(x){
@@ -870,17 +870,17 @@ update2version <- function(emc, model, transform = NULL, bound = NULL,
 #'                            formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
 #'                            constants=c(s=log(1)))
 #' # Then for this design get which cognitive model parameters are sampled:
-#' sampled_p_vector(design_DDMaE)
+#' sampled_pars(design_DDMaE)
 #'
 #' @export
-sampled_p_vector <- function(x,model=NULL,doMap=TRUE, add_da = FALSE, all_cells_dm = FALSE)
+sampled_pars <- function(x,model=NULL,doMap=TRUE, add_da = FALSE, all_cells_dm = FALSE)
 {
-  UseMethod("sampled_p_vector")
+  UseMethod("sampled_pars")
 }
 
-#' @rdname sampled_p_vector
+#' @rdname sampled_pars
 #' @export
-sampled_p_vector.emc.design <- function(x,model=NULL,doMap=TRUE, add_da = FALSE, all_cells_dm = FALSE){
+sampled_pars.emc.design <- function(x,model=NULL,doMap=TRUE, add_da = FALSE, all_cells_dm = FALSE){
   design <- x
   if(is.null(design)) return(NULL)
   if("Ffactors" %in% names(design)){
@@ -938,11 +938,11 @@ sampled_p_vector.emc.design <- function(x,model=NULL,doMap=TRUE, add_da = FALSE,
 
 #' @export
 summary.emc.design <- function(object, ...){
-  p_vector <- sampled_p_vector(object)
+  p_vector <- sampled_pars(object)
   cat("\n Sampled Parameters: \n")
   print(names(p_vector))
   cat("\n Design Matrices: \n")
-  map_out <- sampled_p_vector(object,object$model, add_da = TRUE)
+  map_out <- sampled_pars(object,object$model, add_da = TRUE)
   print(attr(map_out, "map"), row.names = FALSE)
   return(invisible(map_out))
 }
@@ -969,7 +969,7 @@ plot.emc.design <- function(x, p_vector, data = NULL, factors = NULL, plot_facto
     }
   }
   # Get a mapped parameter for each cell of the design
-  pars <- mapped_par(p_vector, x)
+  pars <- mapped_parss(p_vector, x)
   if(is.null(data)){
     data <- vector("list", n_data_sim)
     # If no data is supplied generate some data sets
@@ -997,7 +997,7 @@ plot.emc.design <- function(x, p_vector, data = NULL, factors = NULL, plot_facto
 
 
 #' @exportS3Method
-sampled_p_vector.default <- function(x,model=NULL,doMap=TRUE, add_da = FALSE, all_cells_dm = FALSE){
+sampled_pars.default <- function(x,model=NULL,doMap=TRUE, add_da = FALSE, all_cells_dm = FALSE){
   if(is.null(x)) return(NULL)
   if(!is.null(attr(x, "custom_ll"))){
     pars <- numeric(length(attr(x,"sampled_p_names")))
@@ -1008,6 +1008,6 @@ sampled_p_vector.default <- function(x,model=NULL,doMap=TRUE, add_da = FALSE, al
     x <- list(x)
     class(x) <- "emc.design"
   }
-  out <- sampled_p_vector.emc.design(x, model = model, doMap = doMap, add_da = add_da, all_cells_dm = all_cells_dm)
+  out <- sampled_pars.emc.design(x, model = model, doMap = doMap, add_da = add_da, all_cells_dm = all_cells_dm)
   return(out)
 }

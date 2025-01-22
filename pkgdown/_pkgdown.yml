@@ -19,8 +19,8 @@ reference:
   - make_emc
   - init_chains
   - run_emc
-  - mapped_par
-  - sampled_p_vector
+  - mapped_pars
+  - sampled_pars
   - profile_plot
   - plot_defective_density
 - title: Model checking
@@ -34,7 +34,7 @@ reference:
   - pairs_posterior
 - title: Posterior inference
 - contents:
-  - posterior_summary
+  - credint
   - parameters
   - get_pars
   - plot_pars

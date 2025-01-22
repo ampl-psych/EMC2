@@ -25,7 +25,7 @@ profile_plot(
 
 \item{design}{A design list. Created using \code{design}.}
 
-\item{p_vector}{Named vector of parameter values (typically created with \code{sampled_p_vector(design)})}
+\item{p_vector}{Named vector of parameter values (typically created with \code{sampled_pars(design)})}
 
 \item{range}{Numeric. The max and min will be p_vector + range/2 and p_vector - range/2, unless specified in p_min or p_max.}
 

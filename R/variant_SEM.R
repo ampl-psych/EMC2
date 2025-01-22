@@ -75,7 +75,7 @@ get_prior_SEM <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, s
     prior <- list()
   }
   if(!is.null(design)){
-    n_pars <- length(sampled_p_vector(design, doMap = F))
+    n_pars <- length(sampled_pars(design, doMap = F))
   }
   if (is.null(prior$theta_mu_mean)) {
     prior$theta_mu_mean <- rep(0, n_pars)
@@ -120,7 +120,7 @@ get_prior_SEM <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, s
     is_structured <- rowSums(isFree_B) != 0
     factor_names <- paste0("F", 1:n_factors)
     samples <- list()
-    par_names <- names(sampled_p_vector(design, doMap = F))
+    par_names <- names(sampled_pars(design, doMap = F))
     if(selection %in% c("mu", "alpha", "mu_implied")){
       mu <- t(mvtnorm::rmvnorm(N, mean = prior$theta_mu_mean,
                                sigma = diag(prior$theta_mu_var)))

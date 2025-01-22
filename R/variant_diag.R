@@ -10,7 +10,7 @@ get_prior_diag <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, 
     prior <- list()
   }
   if(!is.null(design)){
-    n_pars <- length(sampled_p_vector(design, doMap = F))
+    n_pars <- length(sampled_pars(design, doMap = F))
   }
   if (!is.null(prior$theta_mu_mean)) {
     n_pars <- length(prior$theta_mu_mean)
@@ -32,7 +32,7 @@ get_prior_diag <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, 
   attr(prior, "type") <- "diagonal"
   out <- prior
   if(sample){
-    par_names <- names(sampled_p_vector(design, doMap = F))
+    par_names <- names(sampled_pars(design, doMap = F))
     samples <- list()
     if(selection %in% c("mu", "alpha")){
       mu <- t(mvtnorm::rmvnorm(N, mean = prior$theta_mu_mean,

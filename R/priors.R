@@ -386,7 +386,7 @@ print.emc.prior <- function(x, ...){
     cat(sprintf("%s ~ \U0001D441(%s, %s)\n", lhs_names[i], format_number(means[i]), format_number(vars[i])))
   }
 
-  cat("\nFor detailed info use summary(prior)\n")
+  cat("\nFor detailed info use summary(<prior>)\n")
 }
 
 
@@ -481,12 +481,30 @@ parameters.emc.prior <- function(x,selection = "mu", N = 1000, covariates = NULL
   prior <- x
   dots <- add_defaults(list(...), by_subject = TRUE, map = FALSE, return_mcmc = FALSE, merge_chains = TRUE)
   type <- attr(prior, "type")
+  if(type == "single") selection <- "alpha"
   samples <-  get_objects(get_design(prior), prior = prior, type = type, sample_prior = T,
                           selection = selection, N = N, ...)
   samples <-  do.call(get_pars, c(list(samples, selection = selection,
                                        type = type, covariates = covariates), fix_dots(dots, get_pars)))
   if(selection == "alpha") samples <- samples[,1,]
   return(as.data.frame(t(samples)))
+}
+
+#' @rdname credint
+#' @param N An integer. Number of samples to use for the quantile calculation (only for prior.emc objects)
+#' @param covariates A list of covariates to use for the quantile calculation (only for prior.emc objects)
+#' @export
+credint.emc.prior <- function(x, selection="mu", probs = c(0.025, .5, .975),
+                        digits = 3, N = 1000, covariates = NULL, ...){
+  prior <- x
+  dots <- add_defaults(list(...), by_subject = TRUE, map = TRUE)
+  type <- attr(prior, "type")
+  if(type == "single") selection <- "alpha"
+  samples <-  do.call(get_objects, c(list(design = get_design(prior), type = type, sample_prior = T,
+                          selection = selection, prior = prior, N = N), fix_dots(dots, get_objects)))
+  out <- do.call(get_summary_stat, c(list(samples, selection, get_posterior_quantiles,
+                          probs = probs, digits = digits, type = type), fix_dots(dots, get_summary_stat)))
+  return(out)
 }
 
 #' @param data A data frame needed to exactly match the original design
@@ -540,6 +558,11 @@ plot_design.emc.prior <- function(x, data = NULL, factors = NULL, plot_factor = 
 }
 
 
-
+#' @rdname sampled_pars
+#' @export
+sampled_pars.emc.prior <- function(x,model=NULL,doMap=TRUE, add_da = FALSE, all_cells_dm = FALSE){
+  return(sampled_pars(get_design(x), model = model, doMap = doMap,
+                          add_da = add_da, all_cells_dm = all_cells_dm))
+}
 
 

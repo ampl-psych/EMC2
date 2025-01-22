@@ -7,147 +7,99 @@
 #include "trend.h"
 using namespace Rcpp;
 
-LogicalVector c_do_bound(NumericMatrix pars, List bound) {
-  // Extract 'minmax' matrix and its column names
-  NumericMatrix minmax = bound["minmax"];
-  CharacterVector minmax_colnames = colnames(minmax);
-
-  // Map parameter names to column indices in 'pars'
-  CharacterVector pars_colnames = colnames(pars);
-  std::unordered_map<std::string, int> col_indices;
-  for (int j = 0; j < pars_colnames.size(); ++j) {
-    col_indices[as<std::string>(pars_colnames[j])] = j;
-  }
-
+LogicalVector c_do_bound(NumericMatrix pars,
+                              const std::vector<BoundSpec>& specs)
+{
   int nrows = pars.nrow();
-  int ncols = minmax_colnames.size();
-
-  // Initialize the result vector to 'true'
   LogicalVector result(nrows, true);
 
-  // Extract exception vector and its names if 'exception' is not NULL
-  bool has_exception = bound.containsElementNamed("exception") && !Rf_isNull(bound["exception"]);
-  NumericVector exception_vec;
-  CharacterVector exception_names;
-  if (has_exception) {
-    exception_vec = bound["exception"];
-    exception_names = exception_vec.names();
-  }
+  // For each parameter that has bounds
+  for (size_t j = 0; j < specs.size(); j++) {
+    const BoundSpec& bs = specs[j];
+    int col_idx   = bs.col_idx;
+    double min_v  = bs.min_val;
+    double max_v  = bs.max_val;
+    bool has_exc  = bs.has_exception;
+    double exc_val= bs.exception_val;
 
-  // Loop over each parameter in 'minmax'
-  for (int j = 0; j < ncols; ++j) {
-    std::string var_name = as<std::string>(minmax_colnames[j]);
-    int col_idx = col_indices[var_name];
-    NumericVector pars_col = pars(_, col_idx);
-
-    double min_val = minmax(0, j);
-    double max_val = minmax(1, j);
-
-    // Perform bounds checking
-    LogicalVector ok_col = (pars_col > min_val) & (pars_col < max_val);
-
-    // Apply exception if any
-    if (has_exception && exception_vec.containsElementNamed(var_name.c_str())) {
-      double exception_value = exception_vec[var_name];
-      ok_col = ok_col | (pars_col == exception_value);
+    // Check each row
+    for (int i = 0; i < nrows; i++) {
+      double val = pars(i, col_idx);
+      bool ok = (val > min_v && val < max_v);
+      if (!ok && has_exc) {
+        // If out of range, see if exception matches
+        ok = (val == exc_val);
+      }
+      // Merge with existing result (like result = result & ok_col)
+      if (result[i] && !ok) {
+        result[i] = false;
+      }
     }
-
-    // Update the result vector
-    result = result & ok_col;
   }
-
   return result;
 }
 
 NumericVector c_do_pre_transform(NumericVector p_vector,
-                                 List transform) {
-  // Extract transform components
-  CharacterVector func = transform["func"];
-  NumericVector lower = transform["lower"];
-  NumericVector upper = transform["upper"];
-  // Get the names of p_vector and transform components
-  CharacterVector p_names = p_vector.names();
-  CharacterVector func_names = func.names();
-  CharacterVector lower_names = lower.names();
-  CharacterVector upper_names = upper.names();
-  int n = p_vector.size();
-  // Match p_names to func_names to align indices
-  // match() returns 1-based indices
-  Function match("match");
-  IntegerVector idx = match(p_names, func_names);
-
-  if (is_true(any(is_na(idx)))) {
-    stop("Some names in p_vector not found in transform$func.");
-  }
-
-  // Now, idx[i]-1 gives the position in func, lower, upper corresponding to p_vector[i]
-  for (int i = 0; i < n; i++) {
-    int pos = idx[i] - 1;
-    std::string f = as<std::string>(func[pos]);
-    if (f == "exp") {
-      double val = p_vector[i];
-      double lw = lower[pos];
-      p_vector[i] = exp(val - lw);
-    } else if (f == "pnorm") {
-      double val = p_vector[i];
-      double lw = lower[pos];
-      double up = upper[pos];
-      // Transform the value before pnorm
-      double z = (val - lw) / (up - lw);
-      p_vector[i] = R::pnorm(z, 0.0, 1.0, 1, 0);
+                                      const std::vector<PreTransformSpec>& specs)
+{
+  for (size_t i = 0; i < specs.size(); i++) {
+    const PreTransformSpec& s = specs[i];
+    double val = p_vector[s.index];
+    switch (s.code) {
+    case PTF_EXP: {
+      p_vector[s.index] = std::exp(val - s.lower);
+      break;
     }
-    // If other transformations exist, handle them similarly
+    case PTF_PNORM: {
+      double z = (val - s.lower) / (s.upper - s.lower);
+      p_vector[s.index] = R::pnorm(z, 0.0, 1.0, 1, 0);
+      break;
+    }
+    default:
+      // no transform
+      break;
+    }
   }
   return p_vector;
 }
 
-NumericMatrix c_do_transform(NumericMatrix pars, List transform) {
-  // Get the column names of pars
-  CharacterVector colnames_pars = colnames(pars);
-  int ncol = pars.ncol();
-  int nrow = pars.nrow();
-  // Get 'func', 'lower', 'upper' from transform
-  CharacterVector func_charvec = transform["func"];
-  CharacterVector names_func = func_charvec.names();
-  NumericVector lower_numvec = transform["lower"];
-  CharacterVector names_lower = lower_numvec.names();
-  NumericVector upper_numvec = transform["upper"];
-  CharacterVector names_upper = upper_numvec.names();
-  // Create maps from names to values
-  std::map<String, String> func_map;
-  for (int i = 0; i < func_charvec.size(); i++) {
-    func_map[ names_func[i] ] = func_charvec[i];
-  }
-  std::map<String, double> lower_map;
-  for (int i = 0; i < lower_numvec.size(); i++) {
-    lower_map[ names_lower[i] ] = lower_numvec[i];
-  }
-  std::map<String, double> upper_map;
-  for (int i = 0; i < upper_numvec.size(); i++) {
-    upper_map[ names_upper[i] ] = upper_numvec[i];
-  }
-  // For each column, apply the appropriate transformation
-  for (int j = 0; j < ncol; j++) {
-    String colname = colnames_pars[j];
-    String f = func_map[colname];
-    double l = lower_map[colname];
-    double u = upper_map[colname];
 
-    if (f == "exp") {
+NumericMatrix c_do_transform(NumericMatrix pars,
+                                  const std::vector<TransformSpec>& specs)
+{
+  int nrow = pars.nrow();
+
+  for (size_t j = 0; j < specs.size(); j++) {
+    const TransformSpec& sp = specs[j];
+    int col_idx     = sp.col_idx;
+    TransformCode c = sp.code;
+    double lw       = sp.lower;
+    double up       = sp.upper;
+
+    switch (c) {
+    case EXP: {
       for (int i = 0; i < nrow; i++) {
-        pars(i, j) = exp(pars(i,j) - l);
-      }
-    } else if (f == "pnorm") {
-      double range = u - l;
-      for (int i = 0; i < nrow; i++) {
-        double z = (pars(i,j) - l) / range;
-        pars(i,j) = R::pnorm(z, 0.0, 1.0, 1, 0);
-      }
+      pars(i, col_idx) = std::exp(pars(i, col_idx) - lw);
     }
-    // For "identity" no transformation is applied
+      break;
+    }
+    case PNORM: {
+      double range = up - lw;
+      for (int i = 0; i < nrow; i++) {
+        double z = (pars(i, col_idx) - lw) / range;
+        pars(i, col_idx) = R::pnorm(z, 0.0, 1.0, /*lower_tail=*/1, /*log_p=*/0);
+      }
+      break;
+    }
+    case IDENTITY:
+    default:
+      // do nothing
+      break;
+    }
   }
   return pars;
 }
+
 
 
 NumericMatrix c_map_p(NumericVector p_vector,
@@ -200,7 +152,9 @@ NumericMatrix c_map_p(NumericVector p_vector,
         }
       }
     }
-    trend_pars = c_do_transform(submat_rcpp_col(pars, contains_multiple(p_types, trend_pnames)), transforms);
+    std::vector<TransformSpec> t_specs = make_transform_specs(pars, transforms);
+    // Then repeatedly:
+    trend_pars = c_do_transform(pars, t_specs);
     trend_index = contains_multiple(p_types, trend_pnames);
   }
   for(int i = 0, t = 0; i < n_params; i++){
@@ -257,14 +211,16 @@ NumericMatrix get_pars_matrix(NumericVector p_vector, NumericVector constants, L
   }
   NumericVector p_vector_updtd(clone(p_vector));
   CharacterVector par_names = p_vector_updtd.names();
-  p_vector_updtd = c_do_pre_transform(p_vector_updtd, pretransforms);
+  std::vector<PreTransformSpec> p_specs = make_pretransform_specs(p_vector_updtd, pretransforms);
+  p_vector_updtd = c_do_pre_transform(p_vector_updtd, p_specs);
   p_vector_updtd = c_add_vectors(p_vector_updtd, constants);
   NumericMatrix pars = c_map_p(p_vector_updtd, p_types, designs, n_trials, data, trend, transforms);
   // // Check if pretransform trend applies
   if(pretransform){ // automatically only applies if trend
     pars = prep_trend(data, trend, pars);
   }
-  pars = c_do_transform(pars, transforms);
+  std::vector<TransformSpec> t_specs = make_transform_specs(pars, transforms);
+  pars = c_do_transform(pars, t_specs);
   // Check if posttransform trend applies
   if(posttransform){ // automatically only applies if trend
     pars = prep_trend(data, trend, pars);
@@ -358,11 +314,18 @@ NumericVector calc_ll(NumericMatrix p_matrix, DataFrame data, NumericVector cons
   NumericMatrix pars(n_trials, p_types.length());
   IntegerVector expand = data.attr("expand");
   LogicalVector is_ok(n_trials);
+
+  // Once (outside the main loop over particles):
+  NumericMatrix minmax = bounds["minmax"];
+  CharacterVector mm_names = colnames(minmax);
+
   if(type == "DDM"){
     for(int i = 0; i < n_particles; i++){
       p_vector = p_matrix(i, _);
       pars = get_pars_matrix(p_vector, constants, transforms, pretransforms, p_types, designs, n_trials, data, trend);
-      is_ok = c_do_bound(pars, bounds);
+      // Precompute specs
+      std::vector<BoundSpec> bound_specs = make_bound_specs(minmax, mm_names, pars, bounds);
+      is_ok = c_do_bound(pars, bound_specs);
       lls[i] = c_log_likelihood_DDM(pars, data, n_trials, expand, min_ll, is_ok);
     }
   } else{
@@ -384,7 +347,8 @@ NumericVector calc_ll(NumericMatrix p_matrix, DataFrame data, NumericVector cons
     for(int i = 0; i < n_particles; i++){
       p_vector = p_matrix(i, _);
       pars = get_pars_matrix(p_vector, constants, transforms, pretransforms, p_types, designs, n_trials, data, trend);
-      is_ok = c_do_bound(pars, bounds);
+      std::vector<BoundSpec> bound_specs = make_bound_specs(minmax, mm_names, pars, bounds);
+      is_ok = c_do_bound(pars, bound_specs);
       lls[i] = c_log_likelihood_race(pars, data, dfun, pfun, n_trials, winner, expand, min_ll, is_ok);
     }
   }

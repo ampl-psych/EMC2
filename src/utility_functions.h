@@ -254,6 +254,214 @@ IntegerVector which_rcpp(LogicalVector x) {
   return out;
 }
 
+
+// For do_bounds
+struct BoundSpec {
+  int col_idx;         // which column in 'pars'
+  double min_val;
+  double max_val;
+  bool has_exception;
+  double exception_val;
+};
+
+
+std::vector<BoundSpec> make_bound_specs(NumericMatrix minmax,
+                                        CharacterVector minmax_colnames,
+                                        NumericMatrix pars,
+                                        List bound)
+{
+  // 1) Build a map from param-name -> column index in 'pars'
+  CharacterVector pcolnames = colnames(pars);
+  std::unordered_map<std::string, int> colMap;
+  for (int j = 0; j < pcolnames.size(); j++) {
+    colMap[ Rcpp::as<std::string>(pcolnames[j]) ] = j;
+  }
+
+  // 2) Build a map from param-name -> exception value
+  bool has_exception = bound.containsElementNamed("exception") && !Rf_isNull(bound["exception"]);
+  std::unordered_map<std::string, double> exceptionMap;
+  if (has_exception) {
+    NumericVector except_vec = bound["exception"];
+    CharacterVector except_names = except_vec.names();
+    for (int i = 0; i < (int)except_vec.size(); i++) {
+      exceptionMap[ Rcpp::as<std::string>(except_names[i])] = except_vec[i];
+    }
+  }
+
+  // 3) Create BoundSpec for each column in minmax
+  int ncols = minmax_colnames.size();
+  std::vector<BoundSpec> specs(ncols);
+  for (int j = 0; j < ncols; j++) {
+    std::string var_name = Rcpp::as<std::string>(minmax_colnames[j]);
+
+    // Fill the struct
+    BoundSpec s;
+    s.col_idx     = colMap[var_name];
+    s.min_val     = minmax(0, j);
+    s.max_val     = minmax(1, j);
+
+    auto it = exceptionMap.find(var_name);
+    if (it != exceptionMap.end()) {
+      s.has_exception = true;
+      s.exception_val = it->second;
+    } else {
+      s.has_exception = false;
+      s.exception_val = NA_REAL;  // or 0
+    }
+    specs[j] = s;
+  }
+  return specs;
+}
+
+// For transforms
+enum TransformCode {
+  IDENTITY = 0,
+  EXP      = 1,
+  PNORM    = 2
+};
+
+struct TransformSpec {
+  int col_idx;        // which column in 'pars'
+  TransformCode code; // e.g. EXP, PNORM, ...
+  double lower;
+  double upper;
+};
+
+std::vector<TransformSpec> make_transform_specs(NumericMatrix pars, List transform)
+{
+  // gather 'func', 'lower', 'upper'
+  CharacterVector func_charvec = transform["func"];
+  NumericVector lower_numvec   = transform["lower"];
+  NumericVector upper_numvec   = transform["upper"];
+
+  // Build a map param_name -> code
+  std::unordered_map<std::string,TransformCode> codeMap;
+  {
+    // e.g. "param_name" -> "exp" or "pnorm" in func_charvec
+    CharacterVector fnames = func_charvec.names();
+    for (int i = 0; i < func_charvec.size(); i++) {
+      std::string name = Rcpp::as<std::string>(fnames[i]);
+      std::string f    = Rcpp::as<std::string>(func_charvec[i]);
+      if (f == "exp") {
+        codeMap[name] = EXP;
+      } else if (f == "pnorm") {
+        codeMap[name] = PNORM;
+      } else {
+        codeMap[name] = IDENTITY;
+      }
+    }
+  }
+
+  // Build param_name -> (lower, upper)
+  std::unordered_map<std::string,std::pair<double,double>> boundMap;
+  {
+    CharacterVector ln = lower_numvec.names();
+    for (int i = 0; i < lower_numvec.size(); i++) {
+      std::string nm = Rcpp::as<std::string>(ln[i]);
+      boundMap[nm].first = lower_numvec[i];
+    }
+    CharacterVector un = upper_numvec.names();
+    for (int i = 0; i < upper_numvec.size(); i++) {
+      std::string nm = Rcpp::as<std::string>(un[i]);
+      boundMap[nm].second = upper_numvec[i];
+    }
+  }
+
+  // Now fill specs for each col in pars
+  int ncol = pars.ncol();
+  std::vector<TransformSpec> specs(ncol);
+
+  CharacterVector cparnames = colnames(pars);
+  for (int j = 0; j < ncol; j++) {
+    std::string colname = Rcpp::as<std::string>(cparnames[j]);
+    TransformSpec sp;
+    sp.col_idx = j;
+    sp.code    = codeMap[colname];
+    auto it    = boundMap.find(colname);
+    if (it != boundMap.end()) {
+      sp.lower = it->second.first;
+      sp.upper = it->second.second;
+    } else {
+      sp.lower = 0.0;  // or default
+      sp.upper = 1.0;  // or default
+    }
+    specs[j] = sp;
+  }
+
+  return specs;
+}
+
+
+// For pretransform
+enum PreTFCode { PTF_EXP = 1, PTF_PNORM = 2, PTF_NONE = 0 };
+
+struct PreTransformSpec {
+  int index;       // index in p_vector
+  PreTFCode code;
+  double lower;
+  double upper;
+  // Possibly store the original name if needed
+};
+
+std::vector<PreTransformSpec> make_pretransform_specs(NumericVector p_vector, List transform)
+{
+  // e.g. transform["func"], transform["lower"], transform["upper"]
+  CharacterVector func   = transform["func"];
+  NumericVector lowervec = transform["lower"];
+  NumericVector uppervec = transform["upper"];
+
+  // Build a map param_name -> code
+  std::unordered_map<std::string,PreTFCode> codeMap;
+  CharacterVector fnames = func.names();
+  for (int i = 0; i < func.size(); i++) {
+    std::string name = Rcpp::as<std::string>(fnames[i]);
+    std::string f    = Rcpp::as<std::string>(func[i]);
+    if (f == "exp") {
+      codeMap[name] = PTF_EXP;
+    } else if (f == "pnorm") {
+      codeMap[name] = PTF_PNORM;
+    } else {
+      codeMap[name] = PTF_NONE;
+    }
+  }
+
+  // Build a map param_name -> (lower, upper)
+  std::unordered_map<std::string, std::pair<double,double>> boundMap;
+  {
+    CharacterVector ln = lowervec.names();
+    for (int i = 0; i < lowervec.size(); i++) {
+      boundMap[ Rcpp::as<std::string>(ln[i]) ].first = lowervec[i];
+    }
+    CharacterVector un = uppervec.names();
+    for (int i = 0; i < uppervec.size(); i++) {
+      boundMap[ Rcpp::as<std::string>(un[i]) ].second = uppervec[i];
+    }
+  }
+
+  // Now create PreTransformSpec for each element in p_vector
+  CharacterVector p_names = p_vector.names();
+  int n = p_vector.size();
+  std::vector<PreTransformSpec> specs(n);
+  for (int i = 0; i < n; i++) {
+    std::string pname = Rcpp::as<std::string>(p_names[i]);
+    PreTransformSpec s;
+    s.index = i;
+    s.code = codeMap[pname];
+    auto it = boundMap.find(pname);
+    if (it != boundMap.end()) {
+      s.lower = it->second.first;
+      s.upper = it->second.second;
+    } else {
+      s.lower = 0.0;
+      s.upper = 1.0;
+    }
+    specs[i] = s;
+  }
+  return specs;
+}
+
+
+
 #endif
 
 
