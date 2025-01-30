@@ -71,15 +71,13 @@
 
     <div class="section level2">
     <h2 id="ref-examples">Examples<a class="anchor" aria-label="anchor" href="#ref-examples"></a></h2>
-    <div class="sourceCode"><pre class="sourceCode r"><code><span class="r-in"><span><span class="kw">if</span> <span class="op">(</span><span class="cn">FALSE</span><span class="op">)</span> <span class="op">{</span> <span class="co"># \dontrun{</span></span></span>
-<span class="r-in"><span><span class="co"># First get the marginal likelihood for two_models</span></span></span>
-<span class="r-in"><span><span class="co"># Here the full model is an emc object with the hypothesized effect</span></span></span>
-<span class="r-in"><span><span class="co"># The null model is an emc object without the hypothesized effect</span></span></span>
-<span class="r-in"><span><span class="va">MLL_full</span> <span class="op">&lt;-</span> <span class="fu"><a href="run_bridge_sampling.html">run_bridge_sampling</a></span><span class="op">(</span><span class="va">full_model</span>, cores_per_prop <span class="op">=</span> <span class="fl">3</span><span class="op">)</span></span></span>
-<span class="r-in"><span><span class="va">MLL_null</span> <span class="op">&lt;-</span> <span class="fu"><a href="run_bridge_sampling.html">run_bridge_sampling</a></span><span class="op">(</span><span class="va">null_model</span>, cores_per_prop <span class="op">=</span> <span class="fl">3</span><span class="op">)</span></span></span>
-<span class="r-in"><span><span class="co"># Now we can calculate their Bayes factor</span></span></span>
-<span class="r-in"><span><span class="fu">get_BayesFactor</span><span class="op">(</span><span class="va">MLL_full</span>, <span class="va">MLL_null</span><span class="op">)</span></span></span>
-<span class="r-in"><span><span class="op">}</span> <span class="co"># }</span></span></span>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span class="r-in"><span><span class="co"># \donttest{</span></span></span>
+<span class="r-in"><span><span class="co"># Normally one would compare two different models</span></span></span>
+<span class="r-in"><span><span class="co"># Here we use two times the same model:</span></span></span>
+<span class="r-in"><span><span class="va">M1</span> <span class="op">&lt;-</span> <span class="va">M0</span> <span class="op">&lt;-</span> <span class="fu"><a href="run_bridge_sampling.html">run_bridge_sampling</a></span><span class="op">(</span><span class="va">samples_LNR</span>, both_splits <span class="op">=</span> <span class="cn">FALSE</span>, cores_for_props <span class="op">=</span> <span class="fl">1</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="fu">get_BayesFactor</span><span class="op">(</span><span class="va">M1</span>, <span class="va">M0</span><span class="op">)</span></span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> [1] 1</span>
+<span class="r-in"><span><span class="co"># }</span></span></span>
 </code></pre></div>
     </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>

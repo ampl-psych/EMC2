@@ -1015,6 +1015,13 @@ sampled_pars.emc.design <- function(x,model=NULL,doMap=TRUE, add_da = FALSE, all
   return(out)
 }
 
+#' Summary method for emc.design objects
+#'
+#' Prints a summary of the design object, including sampled parameters and design matrices.
+#'
+#' @param object An object of class `emc.design` containing the design to summarize
+#' @param ... Additional arguments (not used)
+#' @return Invisibly returns the design matrices
 #' @export
 summary.emc.design <- function(object, ...){
   p_vector <- sampled_pars(object)
@@ -1047,7 +1054,21 @@ plot_design.emc.design <- function(x, data = NULL, factors = NULL, plot_factor =
        functions = functions, ...)
 }
 
-#'@export
+
+#' Plot method for emc.design objects
+#'
+#' Makes design illustration by plotting simulated data based on the design
+#'
+#' @param x An object of class `emc.design` containing the design to plot
+#' @param p_vector A named vector of parameter values to use for data generation
+#' @param data Optional data frame to overlay on the design plot. If NULL, data will be simulated.
+#' @param factors Character vector. Factors to use for varying parameters in the plot
+#' @param plot_factor Optional character. Make separate plots for each level of this factor
+#' @param n_data_sim Integer. If data is NULL, number of simulated datasets to generate for the plot. Default is 10.
+#' @param functions Optional named list of functions that create additional columns in the data
+#' @param ... Additional arguments passed to `make_design_plot`
+#' @return No return value, called for side effect of plotting
+#' @export
 plot.emc.design <- function(x, p_vector, data = NULL, factors = NULL, plot_factor = NULL, n_data_sim = 10,
                             functions = NULL, ...){
   if(!"Ffactors" %in% names(x)){

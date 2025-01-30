@@ -61,7 +61,6 @@ and model specification into a <code>emc</code> object that is needed in <code><
 <span>  compress <span class="op">=</span> <span class="cn">TRUE</span>,</span>
 <span>  rt_resolution <span class="op">=</span> <span class="fl">0.02</span>,</span>
 <span>  prior_list <span class="op">=</span> <span class="cn">NULL</span>,</span>
-<span>  grouped_pars <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  par_groups <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  <span class="va">...</span></span>
 <span><span class="op">)</span></span></code></pre></div>
@@ -101,10 +100,6 @@ and model specification into a <code>emc</code> object that is needed in <code><
 
 <dt id="arg-prior-list">prior_list<a class="anchor" aria-label="anchor" href="#arg-prior-list"></a></dt>
 <dd><p>A named list containing the prior. Default prior created if <code>NULL</code>. For the default priors, see <code>?get_prior_{type}</code>.</p></dd>
-
-
-<dt id="arg-grouped-pars">grouped_pars<a class="anchor" aria-label="anchor" href="#arg-grouped-pars"></a></dt>
-<dd><p>An integer vector. Parameters on this location of the vector of parameters are treated as constant across subjects</p></dd>
 
 
 <dt id="arg-par-groups">par_groups<a class="anchor" aria-label="anchor" href="#arg-par-groups"></a></dt>

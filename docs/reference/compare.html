@@ -123,28 +123,31 @@ mean, DIC, BPIC, Marginal Deviance (if <code>BayesFactor=TRUE</code>) and associ
 
     <div class="section level2">
     <h2 id="ref-examples">Examples<a class="anchor" aria-label="anchor" href="#ref-examples"></a></h2>
-    <div class="sourceCode"><pre class="sourceCode r"><code><span class="r-in"><span><span class="kw">if</span> <span class="op">(</span><span class="cn">FALSE</span><span class="op">)</span> <span class="op">{</span> <span class="co"># \dontrun{</span></span></span>
-<span class="r-in"><span><span class="co"># Define a list of two (or more different models)</span></span></span>
-<span class="r-in"><span><span class="co"># Here the full model is an emc object with the hypothesized effect</span></span></span>
-<span class="r-in"><span><span class="co"># The null model is an emc object without the hypothesized effect</span></span></span>
-<span class="r-in"><span><span class="va">design_full</span> <span class="op">&lt;-</span> <span class="fu"><a href="design.html">design</a></span><span class="op">(</span>data <span class="op">=</span> <span class="va">forstmann</span>,model<span class="op">=</span><span class="va">DDM</span>,</span></span>
-<span class="r-in"><span>                           formula <span class="op">=</span><span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="va">v</span><span class="op">~</span><span class="fl">0</span><span class="op">+</span><span class="va">S</span>,<span class="va">a</span><span class="op">~</span><span class="va">E</span>, <span class="va">t0</span><span class="op">~</span><span class="fl">1</span>, <span class="va">s</span><span class="op">~</span><span class="fl">1</span>, <span class="va">Z</span><span class="op">~</span><span class="fl">1</span>, <span class="va">sv</span><span class="op">~</span><span class="fl">1</span>, <span class="va">SZ</span><span class="op">~</span><span class="fl">1</span><span class="op">)</span>,</span></span>
-<span class="r-in"><span>                           constants<span class="op">=</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>s<span class="op">=</span><span class="fu"><a href="https://rdrr.io/r/base/Log.html" class="external-link">log</a></span><span class="op">(</span><span class="fl">1</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span></span>
-<span class="r-in"><span><span class="co"># Now without a ~ E</span></span></span>
-<span class="r-in"><span><span class="va">design_null</span> <span class="op">&lt;-</span> <span class="fu"><a href="design.html">design</a></span><span class="op">(</span>data <span class="op">=</span> <span class="va">forstmann</span>,model<span class="op">=</span><span class="va">DDM</span>,</span></span>
-<span class="r-in"><span>                           formula <span class="op">=</span><span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="va">v</span><span class="op">~</span><span class="fl">0</span><span class="op">+</span><span class="va">S</span>,<span class="va">a</span><span class="op">~</span><span class="fl">1</span>, <span class="va">t0</span><span class="op">~</span><span class="fl">1</span>, <span class="va">s</span><span class="op">~</span><span class="fl">1</span>, <span class="va">Z</span><span class="op">~</span><span class="fl">1</span>, <span class="va">sv</span><span class="op">~</span><span class="fl">1</span>, <span class="va">SZ</span><span class="op">~</span><span class="fl">1</span><span class="op">)</span>,</span></span>
-<span class="r-in"><span>                           constants<span class="op">=</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>s<span class="op">=</span><span class="fu"><a href="https://rdrr.io/r/base/Log.html" class="external-link">log</a></span><span class="op">(</span><span class="fl">1</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span></span>
-<span class="r-in"><span></span></span>
-<span class="r-in"><span><span class="va">full_model</span> <span class="op">&lt;-</span> <span class="fu"><a href="make_emc.html">make_emc</a></span><span class="op">(</span><span class="va">forstmann</span>, <span class="va">design_full</span><span class="op">)</span></span></span>
-<span class="r-in"><span><span class="va">full_model</span> <span class="op">&lt;-</span> <span class="fu"><a href="fit.html">fit</a></span><span class="op">(</span><span class="va">full_model</span><span class="op">)</span></span></span>
-<span class="r-in"><span></span></span>
-<span class="r-in"><span><span class="va">null_model</span> <span class="op">&lt;-</span> <span class="fu"><a href="make_emc.html">make_emc</a></span><span class="op">(</span><span class="va">forstmann</span>, <span class="va">design_null</span><span class="op">)</span></span></span>
-<span class="r-in"><span><span class="va">null_model</span> <span class="op">&lt;-</span> <span class="fu"><a href="fit.html">fit</a></span><span class="op">(</span><span class="va">null_model</span><span class="op">)</span></span></span>
-<span class="r-in"><span><span class="va">sList</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="va">full_model</span>, <span class="va">null_model</span><span class="op">)</span></span></span>
-<span class="r-in"><span><span class="co"># By default emc uses 4 cores to parallelize marginal likelihood estimation across proposals</span></span></span>
-<span class="r-in"><span><span class="co"># So cores_per_prop = 3 results in 12 cores used.</span></span></span>
-<span class="r-in"><span><span class="fu">compare</span><span class="op">(</span><span class="va">sList</span>, cores_per_prop <span class="op">=</span> <span class="fl">3</span><span class="op">)</span></span></span>
-<span class="r-in"><span><span class="op">}</span> <span class="co"># }</span></span></span>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span class="r-in"><span><span class="co"># \donttest{</span></span></span>
+<span class="r-in"><span><span class="fu">compare</span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="va">samples_LNR</span><span class="op">)</span>, cores_for_props <span class="op">=</span> <span class="fl">1</span><span class="op">)</span></span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>     MD wMD  DIC wDIC BPIC wBPIC EffectiveN meanD Dmean minD</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 1 -190   1 -615    1 -579     1         35  -650  -657 -686</span>
+<span class="r-in"><span><span class="co"># Typically we would define a list of two (or more) different models:</span></span></span>
+<span class="r-in"><span><span class="co"># # Here the full model is an emc object with the hypothesized effect</span></span></span>
+<span class="r-in"><span><span class="co"># # The null model is an emc object without the hypothesized effect</span></span></span>
+<span class="r-in"><span><span class="co"># design_full &lt;- design(data = forstmann,model=DDM,</span></span></span>
+<span class="r-in"><span><span class="co">#                            formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),</span></span></span>
+<span class="r-in"><span><span class="co">#                            constants=c(s=log(1)))</span></span></span>
+<span class="r-in"><span><span class="co"># # Now without a ~ E</span></span></span>
+<span class="r-in"><span><span class="co"># design_null &lt;- design(data = forstmann,model=DDM,</span></span></span>
+<span class="r-in"><span><span class="co">#                            formula =list(v~0+S,a~1, t0~1, s~1, Z~1, sv~1, SZ~1),</span></span></span>
+<span class="r-in"><span><span class="co">#                            constants=c(s=log(1)))</span></span></span>
+<span class="r-in"><span><span class="co">#</span></span></span>
+<span class="r-in"><span><span class="co"># full_model &lt;- make_emc(forstmann, design_full)</span></span></span>
+<span class="r-in"><span><span class="co"># full_model &lt;- fit(full_model)</span></span></span>
+<span class="r-in"><span><span class="co">#</span></span></span>
+<span class="r-in"><span><span class="co"># null_model &lt;- make_emc(forstmann, design_null)</span></span></span>
+<span class="r-in"><span><span class="co"># null_model &lt;- fit(null_model)</span></span></span>
+<span class="r-in"><span><span class="co"># sList &lt;- list(full_model, null_model)</span></span></span>
+<span class="r-in"><span><span class="co"># # By default emc uses 4 cores to parallelize marginal likelihood estimation across proposals</span></span></span>
+<span class="r-in"><span><span class="co"># # So cores_per_prop = 3 results in 12 cores used.</span></span></span>
+<span class="r-in"><span><span class="co"># compare(sList, cores_per_prop = 3)</span></span></span>
+<span class="r-in"><span><span class="co"># }</span></span></span>
 </code></pre></div>
     </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>

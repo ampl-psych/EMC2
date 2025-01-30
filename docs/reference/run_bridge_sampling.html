@@ -133,12 +133,12 @@ constants via a simple identity: A theoretical exploration. <em>Statistica Sinic
 
     <div class="section level2">
     <h2 id="ref-examples">Examples<a class="anchor" aria-label="anchor" href="#ref-examples"></a></h2>
-    <div class="sourceCode"><pre class="sourceCode r"><code><span class="r-in"><span><span class="kw">if</span> <span class="op">(</span><span class="cn">FALSE</span><span class="op">)</span> <span class="op">{</span> <span class="co"># \dontrun{</span></span></span>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span class="r-in"><span><span class="co"># \donttest{</span></span></span>
 <span class="r-in"><span><span class="co"># After `fit` has converged on a specific model</span></span></span>
 <span class="r-in"><span><span class="co"># We can take those samples and calculate the marginal log-likelihood for them</span></span></span>
-<span class="r-in"><span><span class="va">MLL</span> <span class="op">&lt;-</span> <span class="fu">run_bridge_sampling</span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="va">samples_LNR</span><span class="op">)</span>, cores_per_prop <span class="op">=</span> <span class="fl">2</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="va">MLL</span> <span class="op">&lt;-</span> <span class="fu">run_bridge_sampling</span><span class="op">(</span><span class="va">samples_LNR</span>, cores_for_props <span class="op">=</span> <span class="fl">1</span>, both_splits <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="co"># This will run on 2*4 cores (since 4 is the default for ``cores_for_props``)</span></span></span>
-<span class="r-in"><span><span class="op">}</span> <span class="co"># }</span></span></span>
+<span class="r-in"><span><span class="co"># }</span></span></span>
 </code></pre></div>
     </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>

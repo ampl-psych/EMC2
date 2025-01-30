@@ -64,7 +64,7 @@ varying one model parameter while holding all others constant.</p>
 <span>  n_point <span class="op">=</span> <span class="fl">100</span>,</span>
 <span>  n_cores <span class="op">=</span> <span class="fl">1</span>,</span>
 <span>  round <span class="op">=</span> <span class="fl">3</span>,</span>
-<span>  true_plot_args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="op">)</span>,</span>
+<span>  true_args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="op">)</span>,</span>
 <span>  <span class="va">...</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
@@ -82,7 +82,7 @@ varying one model parameter while holding all others constant.</p>
 
 
 <dt id="arg-p-vector">p_vector<a class="anchor" aria-label="anchor" href="#arg-p-vector"></a></dt>
-<dd><p>Named vector of parameter values (typically created with <code>sampled_p_vector(design)</code>)</p></dd>
+<dd><p>Named vector of parameter values (typically created with <code>sampled_pars(design)</code>)</p></dd>
 
 
 <dt id="arg-range">range<a class="anchor" aria-label="anchor" href="#arg-range"></a></dt>
@@ -117,7 +117,7 @@ varying one model parameter while holding all others constant.</p>
 <dd><p>Integer. To how many digits will the output be rounded.</p></dd>
 
 
-<dt id="arg-true-plot-args">true_plot_args<a class="anchor" aria-label="anchor" href="#arg-true-plot-args"></a></dt>
+<dt id="arg-true-args">true_args<a class="anchor" aria-label="anchor" href="#arg-true-args"></a></dt>
 <dd><p>A list. Optional additional arguments that can be passed to plot.default for the plotting of the true vertical line.</p></dd>
 
 
@@ -188,9 +188,9 @@ varying one model parameter while holding all others constant.</p>
 <span class="r-in"><span>             data <span class="op">=</span> <span class="va">forstmann</span>, design <span class="op">=</span> <span class="va">design_DDMaE</span>, n_point <span class="op">=</span> <span class="fl">10</span><span class="op">)</span></span></span>
 <span class="r-plt img"><img src="profile_plot-1.png" alt="" width="700" height="433"></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>      true    max  miss</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> a  -0.051 -0.190 0.139</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> t0 -1.386 -1.386 0.000</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> SZ  0.000 -0.139 0.139</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> a  -0.051 -0.301 0.250</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> t0 -1.386 -1.450 0.064</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> SZ  0.000 -0.250 0.250</span>
 <span class="r-in"><span><span class="co"># }</span></span></span>
 </code></pre></div>
     </div>

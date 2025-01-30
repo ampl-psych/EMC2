@@ -62,17 +62,18 @@ More details can be found in the <code>fit</code> help files (<code><a href="fit
 <span>  <span class="va">emc</span>,</span>
 <span>  <span class="va">stage</span>,</span>
 <span>  <span class="va">stop_criteria</span>,</span>
-<span>  p_accept <span class="op">=</span> <span class="fl">0.8</span>,</span>
+<span>  search_width <span class="op">=</span> <span class="fl">1</span>,</span>
 <span>  step_size <span class="op">=</span> <span class="fl">100</span>,</span>
 <span>  verbose <span class="op">=</span> <span class="cn">FALSE</span>,</span>
 <span>  verboseProgress <span class="op">=</span> <span class="cn">FALSE</span>,</span>
 <span>  fileName <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  particles <span class="op">=</span> <span class="cn">NULL</span>,</span>
-<span>  particle_factor <span class="op">=</span> <span class="fl">50</span>,</span>
+<span>  particle_factor <span class="op">=</span> <span class="fl">70</span>,</span>
 <span>  cores_per_chain <span class="op">=</span> <span class="fl">1</span>,</span>
 <span>  cores_for_chains <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/length.html" class="external-link">length</a></span><span class="op">(</span><span class="va">emc</span><span class="op">)</span>,</span>
 <span>  max_tries <span class="op">=</span> <span class="fl">20</span>,</span>
-<span>  n_blocks <span class="op">=</span> <span class="fl">1</span></span>
+<span>  n_blocks <span class="op">=</span> <span class="fl">1</span>,</span>
+<span>  thin_auto <span class="op">=</span> <span class="cn">FALSE</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
 
@@ -92,9 +93,10 @@ More details can be found in the <code>fit</code> help files (<code><a href="fit
 <dd><p>A list. Defines the stopping criteria and for which types of parameters these should hold. See <code><a href="fit.html">?fit</a></code>.</p></dd>
 
 
-<dt id="arg-p-accept">p_accept<a class="anchor" aria-label="anchor" href="#arg-p-accept"></a></dt>
-<dd><p>A double. The target acceptance probability of the MCMC process.
-This fine-tunes the width of the search space to obtain the desired acceptance probability. Defaults to .8</p></dd>
+<dt id="arg-search-width">search_width<a class="anchor" aria-label="anchor" href="#arg-search-width"></a></dt>
+<dd><p>A double. Tunes target acceptance probability of the MCMC process.
+This fine-tunes the width of the search space to obtain the desired acceptance probability.
+1 is the default width, increases lead to broader search.</p></dd>
 
 
 <dt id="arg-step-size">step_size<a class="anchor" aria-label="anchor" href="#arg-step-size"></a></dt>
@@ -142,6 +144,10 @@ conditions as specified by stop_criteria? Defaults to 20. max_tries is ignored i
 <dt id="arg-n-blocks">n_blocks<a class="anchor" aria-label="anchor" href="#arg-n-blocks"></a></dt>
 <dd><p>An integer. Number of blocks. Will block the parameter chains such that they are updated in blocks. This can be helpful in extremely tough models with a large number of parameters.</p></dd>
 
+
+<dt id="arg-thin-auto">thin_auto<a class="anchor" aria-label="anchor" href="#arg-thin-auto"></a></dt>
+<dd><p>A boolean. If <code>TRUE</code> will automatically thin the MCMC samples, closely matched to the ESS.</p></dd>
+
 </dl></div>
     <div class="section level2">
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
@@ -150,18 +156,62 @@ conditions as specified by stop_criteria? Defaults to 20. max_tries is ignored i
 
     <div class="section level2">
     <h2 id="ref-examples">Examples<a class="anchor" aria-label="anchor" href="#ref-examples"></a></h2>
-    <div class="sourceCode"><pre class="sourceCode r"><code><span class="r-in"><span><span class="kw">if</span> <span class="op">(</span><span class="cn">FALSE</span><span class="op">)</span> <span class="op">{</span> <span class="co"># \dontrun{</span></span></span>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span class="r-in"><span><span class="co"># \donttest{</span></span></span>
 <span class="r-in"><span><span class="co"># First define a design</span></span></span>
-<span class="r-in"><span><span class="va">design_DDMaE</span> <span class="op">&lt;-</span> <span class="fu"><a href="design.html">design</a></span><span class="op">(</span>data <span class="op">=</span> <span class="va">forstmann</span>,model<span class="op">=</span><span class="va">DDM</span>,</span></span>
+<span class="r-in"><span><span class="va">design_in</span> <span class="op">&lt;-</span> <span class="fu"><a href="design.html">design</a></span><span class="op">(</span>data <span class="op">=</span> <span class="va">forstmann</span>,model<span class="op">=</span><span class="va">DDM</span>,</span></span>
 <span class="r-in"><span>                           formula <span class="op">=</span><span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="va">v</span><span class="op">~</span><span class="fl">0</span><span class="op">+</span><span class="va">S</span>,<span class="va">a</span><span class="op">~</span><span class="va">E</span>, <span class="va">t0</span><span class="op">~</span><span class="fl">1</span>, <span class="va">s</span><span class="op">~</span><span class="fl">1</span>, <span class="va">Z</span><span class="op">~</span><span class="fl">1</span>, <span class="va">sv</span><span class="op">~</span><span class="fl">1</span>, <span class="va">SZ</span><span class="op">~</span><span class="fl">1</span><span class="op">)</span>,</span></span>
 <span class="r-in"><span>                           constants<span class="op">=</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>s<span class="op">=</span><span class="fu"><a href="https://rdrr.io/r/base/Log.html" class="external-link">log</a></span><span class="op">(</span><span class="fl">1</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span></span>
+<span class="r-msg co"><span class="r-pr">#&gt;</span> Parameter(s) st0 not specified in formula and assumed constant.</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>  Sampled Parameters: </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> [1] "v_Sleft"     "v_Sright"    "a"           "a_Eneutral"  "a_Eaccuracy"</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> [6] "t0"          "Z"           "sv"          "SZ"         </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>  Design Matrices: </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> $v</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>      S v_Sleft v_Sright</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   left       1        0</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>  right       0        1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> $a</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>         E a a_Eneutral a_Eaccuracy</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>     speed 1          0           0</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   neutral 1          1           0</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>  accuracy 1          0           1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> $t0</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>  t0</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> $s</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>  s</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>  1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> $Z</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>  Z</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>  1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> $sv</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>  sv</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> $SZ</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>  SZ</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> $st0</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>  st0</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>    1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> </span>
 <span class="r-in"><span><span class="co"># Then make the emc, we've omitted a prior here for brevity so default priors will be used.</span></span></span>
-<span class="r-in"><span><span class="va">emc</span> <span class="op">&lt;-</span> <span class="fu"><a href="make_emc.html">make_emc</a></span><span class="op">(</span><span class="va">forstmann</span>, <span class="va">design</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="va">emc</span> <span class="op">&lt;-</span> <span class="fu"><a href="make_emc.html">make_emc</a></span><span class="op">(</span><span class="va">forstmann</span>, <span class="va">design_in</span><span class="op">)</span></span></span>
+<span class="r-msg co"><span class="r-pr">#&gt;</span> Processing data set 1</span>
+<span class="r-msg co"><span class="r-pr">#&gt;</span> Likelihood speedup factor: 4 (3955 unique trials)</span>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="co"># Now for example we can specify that we only want to run the "preburn" phase</span></span></span>
-<span class="r-in"><span><span class="co"># for MCMC 200 iterations</span></span></span>
-<span class="r-in"><span><span class="va">emc</span> <span class="op">&lt;-</span> <span class="fu">run_emc</span><span class="op">(</span><span class="va">emc</span>, stage <span class="op">=</span> <span class="st">"preburn"</span>, stop_criteria <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>iter <span class="op">=</span> <span class="fl">200</span><span class="op">)</span><span class="op">)</span></span></span>
-<span class="r-in"><span><span class="op">}</span> <span class="co"># }</span></span></span>
+<span class="r-in"><span><span class="co"># for MCMC 10 iterations</span></span></span>
+<span class="r-in"><span><span class="va">emc</span> <span class="op">&lt;-</span> <span class="fu">run_emc</span><span class="op">(</span><span class="va">emc</span>, stage <span class="op">=</span> <span class="st">"preburn"</span>, stop_criteria <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>iter <span class="op">=</span> <span class="fl">10</span><span class="op">)</span>, cores_for_chains <span class="op">=</span> <span class="fl">1</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="co"># }</span></span></span>
 </code></pre></div>
     </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>

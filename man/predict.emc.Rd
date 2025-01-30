@@ -3,7 +3,7 @@
 \name{predict.emc.prior}
 \alias{predict.emc.prior}
 \alias{predict.emc}
-\title{Generate posterior predictives}
+\title{Generate posterior/prior predictives}
 \usage{
 \method{predict}{emc.prior}(object, data = NULL, n_post = 50, n_cores = 1, n_trials = NULL, ...)
 
@@ -40,7 +40,7 @@ Will take either random samples from the chain(s) or use the mean or median of t
 A list of simulated data sets of length \code{n_post}
 }
 \description{
-Simulate \code{n_post} data sets using the posterior parameter estimates
+Simulate \code{n_post} data sets using the posterior/prior parameter estimates
 }
 \examples{
 \donttest{

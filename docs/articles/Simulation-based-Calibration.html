@@ -122,7 +122,7 @@ parameters
 from the prior distribution
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>p</mi><mrow><mo stretchy="true" form="prefix">(</mo><mi>α</mi><mo stretchy="true" form="postfix">)</mo></mrow></mrow><annotation encoding="application/x-tex">p(\alpha)</annotation></semantics></math>.</li>
 <li>
-<strong>Simulate Data</strong>: For each set of set parameters
+<strong>Simulate Data</strong>: For each set of parameters
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msup><mi>α</mi><mrow><mo stretchy="true" form="prefix">(</mo><mi>i</mi><mo stretchy="true" form="postfix">)</mo></mrow></msup><annotation encoding="application/x-tex">\alpha^{(i)}</annotation></semantics></math>,
 simulate a dataset
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msup><mi>y</mi><mrow><mo stretchy="true" form="prefix">(</mo><mi>i</mi><mo stretchy="true" form="postfix">)</mo></mrow></msup><annotation encoding="application/x-tex">y^{(i)}</annotation></semantics></math>
@@ -167,7 +167,7 @@ your model is well-calibrated, the ranks should be uniformly distributed
 because each posterior should correctly reflect the uncertainty about
 the parameter.</li>
 <li>Plot the rank statistics. Here we present both histograms of the
-rank statistic and plot that compares the empirical cumulative rank to
+rank statistic and plots that compares the empirical cumulative rank to
 the cumulative density function of a uniform distribution.</li>
 </ul>
 </div>
@@ -195,9 +195,9 @@ compression. By default <em>EMC2</em> compresses RTs to bins of 20ms,
 since typical lab set-ups do not allow response times to be measured
 with a higher resolution. However, generated data is not subject to the
 same physical constraints. Therefore, and to avoid biases, compression
-is turned off. To turn on compression regardless, you can set
-<code>compression = TRUE</code>, and set the resolution using
-<code>rt_resolution = 0.02</code> (for example) in the
+is turned off in the SBC functions. To turn on compression regardless,
+you can set <code>compression = TRUE</code>, and set the resolution
+using <code>rt_resolution = 0.02</code> (for example) in the
 <code>run_sbc</code> function, which will speed up computation but
 potentially introduces biases.</p>
 </div>
@@ -226,7 +226,7 @@ parameter transformations we use <code><a href="../reference/LBA.html">?LBA</a><
 <p>Now we plot the prior, with <code>map = TRUE</code> (the default) to
 see the implied prior on the transformed parameters.</p>
 <div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="fu"><a href="../reference/plot_prior.html">plot_prior</a></span><span class="op">(</span><span class="va">prior_LBA</span>, <span class="va">design_LBA</span><span class="op">)</span></span></code></pre></div>
+<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/graphics/plot.default.html" class="external-link">plot</a></span><span class="op">(</span><span class="va">prior_LBA</span><span class="op">)</span></span></code></pre></div>
 <p><img src="Simulation-based-Calibration_files/figure-html/unnamed-chunk-4-1.png" alt="Prior for LBA non-hierarchical model" width="700"></p>
 <p>Next we can simply call <code>run_sbc</code> with our specified
 design and prior. We can use <code><a href="../reference/run_sbc.html">?run_sbc</a></code> to see the
@@ -279,13 +279,13 @@ results.</p>
 <p>Next we test non-hierarchical for the DDM as well. Initial results
 actually showed bias in the estimation of non-decision time and
 non-decision time variability. Whereas we first based our DDM
-implementation on the <em>rtdists</em> package <span class="citation">(Singmann et al. 2022)</span>, the bias pushed us to
-test with alternative packages, after which we stumbled on the
+implementation on the <em>rtdists</em> package <span class="citation">(Singmann et al. 2022)</span>. The bias led us to
+explore alternative packages, which eventually brought us to the
 <em>WienR</em> package <span class="citation">(Hartmann and Klauer
-2023)</span>. Which not only boasts faster likelihood evaluations, but
-also no longer shows bias in the SBC results. Hence in the newest CRAN
-release we adapted our C++ code to instead use the <em>WienR</em>
-<em>C++</em> routines.</p>
+2023)</span>. This package not only offers faster likelihood evaluations
+but also eliminates the bias observed in the SBC results. Hence as of
+CRAN release 2.1.0 we adapted our code to instead use the WienR C++
+routines.</p>
 <p>For the SBC itself we used the following prior and design settings,
 again being mindful of the required transformations.</p>
 <div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
@@ -307,9 +307,9 @@ again being mindful of the required transformations.</p>
 <div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/plot_sbc_ecdf.html">plot_sbc_ecdf</a></span><span class="op">(</span><span class="va">SBC_DDM_single</span><span class="op">)</span></span></code></pre></div>
 <p><img src="Simulation-based-Calibration_files/figure-html/unnamed-chunk-11-1.png" alt="ecdf DDM single" width="960"></p>
-<p>As you can see minor misfits in <em>a</em> and <em>sv</em> but
-nothing too worrying. To double check we did refits, that showed that
-this bias is not systematic.</p>
+<p>We see minor biases in <em>a</em> and <em>sv</em>, but nothing too
+concerning. To double check, we repeated the analysis, and confirmed
+that the bias is not systematic.</p>
 </div>
 </div>
 <div class="section level2">
@@ -317,9 +317,9 @@ this bias is not systematic.</p>
 </h2>
 <p>Besides being a friendly introduction to doing SBC in <em>EMC2</em>,
 this post also serves as a test of unbiased estimation of the four main
-classes of EAMs included in <em>EMC2</em>. Still we would recommend the
-user to typically run SBC on non-hierarchical models, except when doing
-model development.</p>
+classes of EAMs included in <em>EMC2</em>. However, depending on the
+research question, running non-hierarchical SBC might suffice as it is
+far more computationally efficient.</p>
 <p>The approach to running hierarchical SBC is very similar to running
 non-hierarchical SBC. However we can now write the model of data
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>y</mi><annotation encoding="application/x-tex">y</annotation></semantics></math>
@@ -350,16 +350,18 @@ artificially increase the variance estimates and thus err on the safe
 side. However, in SBC data-generation this means we sample many
 data-sets with no individual differences. Unfortunately, for numerical
 reasons <em>EMC2</em> cannot recover a true zero on group-level
-variances. Thus, <em>EMC2</em> will both have difficulty converging and
-it will identify, albeit very small, some degree of individual
-differences. Therefore, the <code>type = "standard"</code> prior
-structure results in biased SBC variance estimates. Therefore, in SBC we
-recommend using <code>type = "diagonal-gamma"</code>, which as the name
-suggests uses gamma distributions for the variance parameters, which
-have less mass at zero.</p>
+variances. Thus, <em>EMC2</em> will struggle to converge and will
+identify some level of individual differences, although they may be very
+small. Therefore, the <code>type = "standard"</code> prior structure
+results in biased SBC variance estimates. Therefore, in SBC we recommend
+using <code>type = "diagonal-gamma"</code>, which as the name suggests
+uses gamma distributions for the variance parameters, which have less
+mass at zero.</p>
 <p>Nevertheless we believe the standard prior is not problematic in real
 data, since it will always contain at least some degree of individual
-differences (only a true zero cannot be recovered).</p>
+differences (only a true zero cannot be recovered). Therefore it will
+remain the default prior in EMC2 as of now, though the type
+“diagonal-gamma” is available to the user as well.</p>
 </div>
 <div class="section level3">
 <h3 id="lba-1">LBA<a class="anchor" aria-label="anchor" href="#lba-1"></a>
@@ -390,7 +392,7 @@ through the prior on the group-level variance.</p>
 <p>We can also plot what the implied prior range is of the subject-level
 parameters:</p>
 <div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="fu"><a href="../reference/plot_prior.html">plot_prior</a></span><span class="op">(</span><span class="va">prior_LBA</span>, <span class="va">design_LBA</span>, selection <span class="op">=</span> <span class="st">"alpha"</span><span class="op">)</span></span></code></pre></div>
+<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/graphics/plot.default.html" class="external-link">plot</a></span><span class="op">(</span><span class="va">prior_LBA</span>, selection <span class="op">=</span> <span class="st">"alpha"</span><span class="op">)</span></span></code></pre></div>
 <p><img src="Simulation-based-Calibration_files/figure-html/unnamed-chunk-13-1.png" alt="Prior for LBA hierarchical model" width="700"></p>
 <p>To actually run SBC, we can use the same function as before, now also
 specifying how many subjects we want to have in the hierarchical

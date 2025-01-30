@@ -101,9 +101,9 @@ plot.emc <- function(x, stage = "sample", selection = c("mu", "sigma2", "alpha")
 
 
 
-#' Generate posterior predictives
+#' Generate posterior/prior predictives
 #'
-#' Simulate ``n_post`` data sets using the posterior parameter estimates
+#' Simulate ``n_post`` data sets using the posterior/prior parameter estimates
 #'
 #' @param object An emc or emc.prior object from which to generate predictives
 #' @param hyper Boolean. Defaults to `FALSE`. If `TRUE`, simulates from the group-level (`hyper`)

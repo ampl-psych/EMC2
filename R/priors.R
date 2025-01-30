@@ -318,6 +318,22 @@ prior_help <- function(type){
 # Some S3 classes ---------------------------------------------------------
 
 
+#' Summary method for emc.prior objects
+#'
+#' Prints a summary of the prior specification, including descriptions of the prior types
+#' and their associated hyperparameters.
+#'
+#' @param object An object of class 'emc.prior' containing prior specifications
+#' @param ... Additional arguments passed to other methods (not currently used)
+#'
+#' @return Invisibly returns NULL. Called for its side effect of printing the summary.
+#'
+#' @examples
+#' # Take a prior object
+#' prior <- get_prior(samples_LNR)
+#' summary(prior)
+#'
+#' @seealso \code{\link{prior}} for creating prior objects
 #' @export
 summary.emc.prior <- function(object, ...){
   type <- attr(object, "type")

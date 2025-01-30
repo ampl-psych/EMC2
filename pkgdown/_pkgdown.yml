@@ -12,27 +12,41 @@ reference:
   - LBA
   - LNR
   - RDM
-- title: Design and estimation
+- title: Design and Mapping
 - contents:
-  - fit
   - design
-  - make_emc
-  - init_chains
-  - run_emc
   - mapped_pars
   - sampled_pars
-  - profile_plot
-  - plot_defective_density
+  - plot_design
+  - plot.emc.design
+  - summary.emc.design
+  - get_design
+- title: Prior Specification
+- contents:
+  - prior
+  - summary.emc.prior
+  - plot.emc.prior
+  - predict.emc.prior
+  - get_prior
+  - prior_help
+  - credint.emc.prior
+- title: Estimation
+- contents:
+  - init_chains
+  - make_emc
+  - fit
+  - run_emc
 - title: Model checking
 - contents:
   - check
   - summary.emc
+  - credint.emc
   - ess_summary
   - gd_summary
   - chain_n
   - plot.emc
   - pairs_posterior
-- title: Posterior inference
+- title: Posterior Inference
 - contents:
   - credint
   - parameters
@@ -41,15 +55,22 @@ reference:
   - plot_relations
   - merge_chains
   - subset.emc
-- title: Posterior predictives and recovery
+  - auto_thin.emc
+- title: Data Generation and Recovery
 - contents:
   - predict.emc
-  - plot_fit
+  - recovery
   - make_data
   - make_random_effects
   - recovery
   - get_data.emc
-- title: Model comparison
+  - profile_plot
+- title: Model Fit
+- contents:
+  - plot_density
+  - plot_cdf
+  - plot_stat
+- title: Model Comparison
 - contents:
   - compare
   - compare_subject
@@ -57,10 +78,6 @@ reference:
   - get_BayesFactor
   - credible
   - hypothesis
-
-- title: Priors
-- contents:
-  - matches("prior")
 
 - title: Contrasts
 - contents:
