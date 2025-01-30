@@ -119,7 +119,7 @@ plot.emc <- function(x, stage = "sample", selection = c("mu", "sigma2", "alpha")
 #' predict(samples_LNR, n_cores = 1, n_post = 10)
 #' }
 #' @export
-predict.emc <- function(object,hyper=FALSE,n_post=100,n_cores=1,
+predict.emc <- function(object,hyper=FALSE,n_post=50,n_cores=1,
                         stat=c("random","mean","median")[1], ...)
 {
   # #' @param force_direction Boolean, take censor direction from argument not samples (default FALSE)
@@ -1055,19 +1055,34 @@ get_design.emc <- function(x){
 #' @param factors Factors to use for varying parameters
 #' @param plot_factor Optional. Make separate plots for each level of this factor
 #' @param n_data_sim If data is provided, number of simulated datasets to generate for the plot. Default is 10.
+#' @param p_vector Only needed when x is an `emc.design` object, which parameters to use for data generation.
+#' @param functions A named list of functions that create additional columns in the data.
 #' @param ... Additional arguments to pass to `make_design_plot`
 #' @return No return value. Just plots the design
 #' @export
-plot_design <- function(x, data = NULL, factors = NULL, plot_factor = NULL, n_data_sim = 10, ...){
+plot_design <- function(x, data = NULL, factors = NULL, plot_factor = NULL, n_data_sim = 10, p_vector = NULL,
+                        functions = NULL, ...){
   UseMethod("plot_design")
 }
 
 #' @rdname plot_design
 #' @export
-plot_design.emc <- function(x, data = NULL, factors = NULL, plot_factor = NULL, n_data_sim = 10, ...){
+plot_design.emc <- function(x, data = NULL, factors = NULL, plot_factor = NULL, n_data_sim = 10, p_vector = NULL,
+                            functions = NULL, ...){
   p_vector <- credint(x, probs = .5)[[1]]
   design <- get_design(x)[[1]]
-  plot(design, p_vector, data = data, factors = factors, plot_factor = plot_factor, n_data_sim = n_data_sim, ...)
+  plot(design, p_vector, data = data, factors = factors, plot_factor = plot_factor, n_data_sim = n_data_sim,
+       p_vector = p_vector, functions = functions, ...)
+}
+
+#' @rdname mapped_pars
+#' @export
+mapped_pars.emc <- function(x, p_vector = NULL, model = NULL, digits=3,remove_subjects=TRUE,
+                                  covariates=NULL,...){
+  if(is.null(p_vector)) p_vector <- credint(x, probs = .5)[[1]]
+  design <- get_design(x)
+  mapped_pars(design, p_vector, digits = digits, remove_subjects=remove_subjects,
+              covariates=covariates,...)
 }
 
 #' Get design

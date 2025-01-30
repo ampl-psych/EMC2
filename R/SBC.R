@@ -58,13 +58,6 @@ SBC_hierarchical <- function(design_in, prior_in, replicates = 250, trials = 100
     if(verbose) print(paste0("Sample ", i, " out of ", replicates))
     rand_effects <- make_random_effects(design_in, prior_mu[,i], n_subj = n_subjects, covariances = prior_var[,,i])
     all_rand_effects[[i]] <- rand_effects
-    # if(hyper_only){
-    #   rand_effects <- as.data.frame(rand_effects)
-    #   rand_effects$subjects <- 1:nrow(rand_effects)
-    #   emc <- EMC2:::run_hyper(type, rand_effects, prior = prior_in, iter = 5000)
-    #   emc <- list(emc)
-    #   class(emc) <- "emc"
-    # } else{
     data <- make_data(rand_effects,design_in, trials, model = design_in$model)
     if(plot_data){
       plot_density(data, factors = names(design_in$Ffactors)[names(design_in$Ffactors) != "subjects"])

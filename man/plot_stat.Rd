@@ -13,52 +13,54 @@ plot_stat(
   subject = NULL,
   factors = NULL,
   n_cores = 1,
-  n_post = 100,
+  n_post = 50,
   quants = c(0.025, 0.5, 0.975),
+  functions = NULL,
   layout = NA,
   to_plot = c("real", "posterior", "prior")[1:2],
   use_lim = c("real", "posterior", "prior")[1:2],
+  legendpos = c("topleft", "top"),
   posterior_args = list(),
   prior_args = list(),
   ...
 )
 }
 \arguments{
-\item{input}{Either an emc object or a data frame. The data frame must be in EMC2 format with at least subjects, rt, and the defective factor columns.}
+\item{input}{Either an \code{emc} object or a data frame, or a \emph{list} of such objects.}
 
-\item{post_predict}{An optional data frame containing posterior predictive datasets.
-Should have the same columns as data, with an additional postn column indicating the index of the predicted dataset.}
+\item{post_predict}{Optional posterior predictive data (matching columns) or \emph{list} thereof.}
 
-\item{prior_predict}{An optional data frame containing prior predictive datasets.
-Should have the same columns as data, with an additional postn column indicating the index of the predicted dataset.}
+\item{prior_predict}{Optional prior predictive data (matching columns) or \emph{list} thereof.}
 
 \item{stat_fun}{A function that can be applied to the data and returns a single value or a vector of values.}
 
 \item{stat_name}{The name of the calculated quantity}
 
-\item{subject}{An integer or character string selecting a subject from the data.
-If specified, only that subject is plotted. By default (NULL), all subjects are plotted.}
+\item{subject}{Subset the data to a single subject (by index or name).}
 
-\item{factors}{A character vector of the factor names in the design to aggregate across.
-Defaults to all factors (i.e., NULL).}
+\item{factors}{Character vector of factor names to aggregate over; defaults to all factors if \code{NULL}.}
 
-\item{n_cores}{An integer specifying the number of cores with which to calculate predictives if specified.}
+\item{n_cores}{Number of CPU cores to use if generating predictives from an \code{emc} object.}
 
-\item{n_post}{An optional integer specifying how many posterior predictives to generate if the input is an emc object.}
+\item{n_post}{Number of posterior draws to simulate if needed for predictives.}
 
-\item{quants}{A numeric vector specifying the quantiles for the credible intervals.}
+\item{quants}{Numeric vector of credible interval bounds (e.g. \code{c(0.025, 0.975)}).}
 
-\item{layout}{A vector indicating which layout to use as in par(mfrow = layout). If NA, will automatically generate an appropriate layout.}
+\item{functions}{A function (or list of functions) that create new columns in the datasets or predictives}
 
-\item{to_plot}{A character vector indicating whether to plot the real data, the posterior predictives, prior_predictives or a combination}
+\item{layout}{Numeric vector used in \code{par(mfrow=...)}; use \code{NA} for auto-layout.}
 
-\item{use_lim}{A character vector indicating whether to base the plot limits on the real data, the posterior predictives, prior_predictives or a combination}
+\item{to_plot}{Character vector: any of \code{"real"}, \code{"posterior"}, \code{"prior"}.}
 
-\item{posterior_args}{Optional arguments that can be passed to plotting functions for the posterior predictives.}
+\item{use_lim}{Character vector controlling which source(s) define \code{xlim}.}
 
-\item{prior_args}{Optional arguments that can be passed to plotting functions for the prior predictives.}
+\item{legendpos}{Character vector controlling the positions of the legends}
 
-\item{...}{Optional arguments that can be passed to plotting functions for the real data.}
+\item{posterior_args}{Optional list of graphical parameters for posterior lines/ribbons.}
+
+\item{prior_args}{Optional list of graphical parameters for prior lines/ribbons.}
+
+\item{...}{Other graphical parameters for the real data lines.}
 }
 \value{
 an invisible data frame with the stat applied to the real data, posterior predictives and/or prior predictives

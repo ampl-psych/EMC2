@@ -5,12 +5,12 @@
 \alias{predict.emc}
 \title{Generate posterior predictives}
 \usage{
-\method{predict}{emc.prior}(object, data = NULL, n_post = 100, n_cores = 1, n_trials = NULL, ...)
+\method{predict}{emc.prior}(object, data = NULL, n_post = 50, n_cores = 1, n_trials = NULL, ...)
 
 \method{predict}{emc}(
   object,
   hyper = FALSE,
-  n_post = 100,
+  n_post = 50,
   n_cores = 1,
   stat = c("random", "mean", "median")[1],
   ...

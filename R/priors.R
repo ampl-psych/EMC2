@@ -40,11 +40,12 @@
 #' # We can easily update the prior
 #' prior_DDMat0E <- prior(design_DDMat0E, update = prior_DDMaE)
 #' @export
-prior <- function(design, type = "standard", update = NULL,
+prior <- function(design, type = NULL, update = NULL,
                       do_ask = NULL, fill_default = TRUE, ...){
-  if(!is.null(update)){
+  if(!is.null(update) && is.null(type)){
     type <- attr(update, "type")
   }
+  if(is.null(type)) type <- 'standard'
   input <- do.call(get_objects, c(list(design = design, type = type), update, list(...)))
   descriptions <- input$descriptions
   groups <- input$types
@@ -512,7 +513,7 @@ credint.emc.prior <- function(x, selection="mu", probs = c(0.025, .5, .975),
 #' can generate data based on `n_trials` per cell of `design`
 #' @rdname predict.emc
 #' @export
-predict.emc.prior <- function(object,data = NULL,n_post=100,n_cores=1,
+predict.emc.prior <- function(object,data = NULL,n_post=50,n_cores=1,
                                n_trials = NULL, ...)
 {
   if(is.data.frame(data)) data <- list(data)
@@ -551,12 +552,23 @@ get_design.emc.prior <- function(x)
 
 #' @rdname plot_design
 #' @export
-plot_design.emc.prior <- function(x, data = NULL, factors = NULL, plot_factor = NULL, n_data_sim = 10, ...){
-  p_vector <- x$theta_mu_mean
+plot_design.emc.prior <- function(x, data = NULL, factors = NULL, plot_factor = NULL, n_data_sim = 10,
+                                  p_vector = NULL, functions = NULL, ...){
+  if(is.null(p_vector)) p_vector <- x$theta_mu_mean
   design <- get_design(x)
-  plot(design, p_vector, data = data, factors = factors, plot_factor = plot_factor, n_data_sim = n_data_sim, ...)
+  plot(design, p_vector, data = data, factors = factors, plot_factor = plot_factor, n_data_sim = n_data_sim,
+       functions = functions, ...)
 }
 
+#' @rdname mapped_pars
+#' @export
+mapped_pars.emc.prior <- function(x, p_vector = NULL, model = NULL, digits=3,remove_subjects=TRUE,
+                                   covariates=NULL,...){
+  if(is.null(p_vector)) p_vector <- x$theta_mu_mean
+  design <- get_design(x)
+  mapped_pars(design, p_vector, digits = digits, remove_subjects=remove_subjects,
+              covariates=covariates,...)
+}
 
 #' @rdname sampled_pars
 #' @export

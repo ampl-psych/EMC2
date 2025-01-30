@@ -6,7 +6,7 @@
 \usage{
 prior(
   design,
-  type = "standard",
+  type = NULL,
   update = NULL,
   do_ask = NULL,
   fill_default = TRUE,

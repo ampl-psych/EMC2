@@ -18,7 +18,7 @@ RNGkind("L'Ecuyer-CMRG")
 set.seed(123)
 LNR_s <- fit(LNR_s, cores_for_chains = 1, stop_criteria = list(
   preburn = list(iter = 10), burn = list(mean_gd = 2.5), adapt = list(min_unique = 20),
-  sample = list(iter = 25)), verbose = FALSE)
+  sample = list(iter = 25)), verbose = FALSE, particle_factor = 30)
 idx <- LNR_s[[1]]$samples$idx
 
 test_that("fit", {

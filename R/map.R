@@ -127,62 +127,6 @@ add_constants <- function(p,constants)
 
 }
 
-#' Parameter mapping back to the design factors
-#'
-#' Maps a parameter vector that corresponds to sampled parameters
-#' of the cognitive model back to the experimental design. The parameter vector
-#' can be created using ``sampled_pars()``. The returned matrix shows whether/how parameters
-#' differ across the experimental factors.
-#'
-#' @param p_vector A parameter vector. Must be in the form of ``sampled_pars(design)``
-#' @param design A design list. Created by ``design``
-#' @param model Optional model type (if not already specified in ``design``)
-#' @param digits Integer. Will round the output parameter values to this many decimals
-#' @param ... optional arguments
-#' @param remove_subjects Boolean. Whether to include subjects as a factor in the design
-#' @param covariates Covariates specified in the design can be included here.
-#' @return Matrix with a column for each factor in the design and for each model parameter type (``p_type``).
-#' @examples
-#' # First define a design:
-#' design_DDMaE <- design(data = forstmann,model=DDM,
-#'                            formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
-#'                            constants=c(s=log(1)))
-#' # Then create a p_vector:
-#' p_vector=c(v_Sleft=-2,v_Sright=2,a=log(1),a_Eneutral=log(1.5),a_Eaccuracy=log(2),
-#'           t0=log(.2),Z=qnorm(.5),sv=log(.5),SZ=qnorm(.5))
-#' # This will map the parameters of the p_vector back to the design
-#' mapped_pars(p_vector,design_DDMaE)
-#'
-#' @export
-
-mapped_pars <- function(p_vector,design,model=NULL,
-                       digits=3,remove_subjects=TRUE,
-                       covariates=NULL,...)
-  # Show augmented data and corresponding mapped parameter
-{
-  remove_RACE <- TRUE
-  optionals <- list(...)
-  for (name in names(optionals) ) {
-    assign(name, optionals[[name]])
-  }
-  if (is.null(covariates))
-      Fcovariates <- design$Fcovariates else
-      Fcovariates <- covariates
-  if (is.null(model)) if (is.null(design$model))
-  stop("Must specify model as not in design") else model <- design$model
-  if (remove_subjects) design$Ffactors$subjects <- design$Ffactors$subjects[1]
-  if (!is.matrix(p_vector)) p_vector <- make_pmat(p_vector,design)
-  dadm <- design_model(make_data(p_vector,design,n_trials=1,Fcovariates=Fcovariates),
-                       design,model,rt_check=FALSE,compress=FALSE, verbose = FALSE)
-  ok <- !(names(dadm) %in% c("subjects","trials","R","rt","winner"))
-  out <- cbind(dadm[,ok],round(get_pars_matrix(p_vector,dadm, design$model()),digits))
-  if (model()$type=="SDT")  out <- out[dadm$lR!=levels(dadm$lR)[length(levels(dadm$lR))],]
-  if (model()$type=="DDM")  out <- out[,!(names(out) %in% c("lR","lM"))]
-  if (any(names(out)=="RACE") && remove_RACE)
-    out <- out[as.numeric(out$lR) <= as.numeric(as.character(out$RACE)),,drop=FALSE]
-  return(out)
-}
-
 add_recalculated_pars <- function(pmat, model, cnams){
   modifiers <- unlist(lapply(strsplit(cnams,"_"),function(x){paste0(x[-1], collapse = "_")}))
   par_names <- colnames(pmat)
@@ -263,7 +207,7 @@ map_mcmc <- function(mcmc,design,include_constants = TRUE, add_recalculated = FA
     mcmc_array <- mcmc
     is_matrix <- FALSE
   }
-  mp <- mapped_pars(mcmc_array[,1,1],design,remove_RACE=FALSE, covariates = covariates)
+  mp <- mapped_pars(design,mcmc_array[,1,1],remove_RACE=FALSE, covariates = covariates)
 
   for(k in 1:ncol(mcmc_array)){
     mcmc <- t(mcmc_array[,k,])
@@ -406,6 +350,121 @@ do_bound <- function(pars,bound) {
 add_bound <- function(pars,bound) {
   attr(pars,"ok") <- do_bound(pars,bound)
   pars
+}
+
+generate_design_equations <- function(design_matrix,
+                                      factor_cols = NULL,
+                                      numeric_cols = NULL,
+                                      transform) {
+  # 1. If user hasn't specified which columns are factors or numeric, guess:
+  if (is.null(factor_cols)) {
+    # We'll assume anything that is a factor or character is a "factor column"
+    factor_cols <- names(design_matrix)[
+      sapply(design_matrix, function(x) is.factor(x) || is.character(x))
+    ]
+  }
+  if (is.null(numeric_cols)) {
+    # We'll assume everything that is numeric is for the design (contrast) columns
+    numeric_cols <- names(design_matrix)[
+      sapply(design_matrix, is.numeric)
+    ]
+  }
+
+  # 2. Build the "equation" strings from numeric cols
+  make_equation_string <- function(row_i) {
+    eq_terms <- c()
+    for (colname in numeric_cols) {
+      val <- as.numeric(row_i[[colname]])
+      # Skip zeros
+      if (abs(val) < 1e-15) next
+
+      # If val is exactly +1 or -1, skip numeric part:
+      if (abs(val - 1) < 1e-15) {
+        # val == +1
+        term_str <- paste0("+ ", colname)
+      } else if (abs(val + 1) < 1e-15) {
+        # val == -1
+        term_str <- paste0("- ", colname)
+      } else {
+        # Some other numeric coefficient => e.g. "+ 0.5 * col"
+        sign_str <- ifelse(val >= 0, "+ ", "- ")
+        term_str <- paste0(sign_str, format(abs(val), digits = 3), " * ", colname)
+      }
+      eq_terms <- c(eq_terms, term_str)
+    }
+
+    if (length(eq_terms) == 0) {
+      # If everything was zero
+      return("0")
+    }
+
+    # Combine eq_terms
+    eq_string <- paste(eq_terms, collapse = " ")
+    # Remove the leading '+ ' if present
+    sub("^\\+ ", "", eq_string)
+  }
+
+  # 3. Compute the equation string for each row
+  eq_strings <- apply(design_matrix, 1, make_equation_string)
+
+  # 4. Determine the widths needed for each factor column
+  #    so everything lines up in columns nicely.
+  col_widths <- sapply(factor_cols, function(fc) {
+    # The width must accommodate either the column name or the largest factor level
+    max(nchar(fc), max(nchar(as.character(design_matrix[[fc]])), na.rm = TRUE))
+  })
+
+  # We'll label the final column as "Equation"
+  eq_header <- ""
+  # We don't necessarily need to align the entire equation column itself
+  # (since it may vary in length), but let's keep a short label for the header.
+
+  # 5. Print the header row
+  #    E.g. if factor_cols = c("S", "E"), we do:
+  #    " S     E    : Equation"
+  factor_header_str <- paste(mapply(function(fc, w) {
+    sprintf("%-*s", w, fc)   # left-justify the column name
+  }, factor_cols, col_widths),
+  collapse = "  ")
+
+  cat("  ", factor_header_str, "  ", eq_header, "\n", sep="")
+
+  # Optionally, add a simple "rule" line or blank line:
+  # (Uncomment if you like to separate header from rows)
+  # cat(" ", paste(rep("-", nchar(factor_header_str) + nchar(eq_header) + 5),
+  #               collapse=""), "\n", sep="")
+
+  # 6. Print each row: factor columns in their spaces, then ": <equation>"
+  for (i in seq_len(nrow(design_matrix))) {
+    row_factor_str <- paste(mapply(function(fc, w) {
+      # Each factor value is left-justified in the same width as the header
+      sprintf("%-*s", w, as.character(design_matrix[[fc]][i]))
+    }, factor_cols, col_widths),
+    collapse = "  ")
+    if(transform == "identity"){
+      cat(" ", row_factor_str, "  : ", eq_strings[i], "\n", sep="")
+    } else{
+      cat(" ", row_factor_str, "  : ", transform, "(", eq_strings[i], ")", "\n", sep="")
+    }
+
+  }
+}
+
+
+verbal_dm <- function(design){
+  map <- attr(sampled_pars(design,design$model, add_da = TRUE), "map")
+  map_no_da <- attr(sampled_pars(design,design$model), "map")
+  transforms <- design$model()$transform$func
+  for(i in 1:length(map)){
+    m <- map[[i]]
+    if(ncol(m) == 1) next
+    cat(paste0("$", names(map)[i]), "\n")
+    mnd <- map_no_da[[i]]
+    par_idx <- colnames(m) %in% colnames(mnd)
+    generate_design_equations(m, colnames(m)[!par_idx], colnames(m)[par_idx],
+                              transform = transforms[names(map)[i]])
+    cat("\n")
+  }
 }
 
 

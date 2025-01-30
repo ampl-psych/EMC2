@@ -849,6 +849,85 @@ update2version <- function(emc, model, transform = NULL, bound = NULL,
 
 
 # Some s3 classes for design objects ---------------------------------------------------------
+#' Parameter mapping back to the design factors
+#'
+#' Maps parameters of the cognitive model back to the experimental design. If p_vector
+#' is left unspecified will print a textual description of the mapping.
+#' Otherwise the p_vector can be created using ``sampled_pars()``.
+#' The returned matrix shows whether/how parameters
+#' differ across the experimental factors.
+#'
+#' @param x an `emc`, `emc.prior` or `emc.design` object
+#' @param p_vector Optional. Specify parameter vector to get numeric mappings.
+#' Must be in the form of ``sampled_pars(design)``
+#' @param model Optional model type (if not already specified in ``design``)
+#' @param digits Integer. Will round the output parameter values to this many decimals
+#' @param ... optional arguments
+#' @param remove_subjects Boolean. Whether to include subjects as a factor in the design
+#' @param covariates Covariates specified in the design can be included here.
+#' @return Matrix with a column for each factor in the design and for each model parameter type (``p_type``).
+#' @examples
+#' # First define a design:
+#' design_DDMaE <- design(data = forstmann,model=DDM,
+#'                            formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
+#'                            constants=c(s=log(1)))
+#' mapped_pars(design_DDMaE)
+#' # Then create a p_vector:
+#' p_vector=c(v_Sleft=-2,v_Sright=2,a=log(1),a_Eneutral=log(1.5),a_Eaccuracy=log(2),
+#'           t0=log(.2),Z=qnorm(.5),sv=log(.5),SZ=qnorm(.5))
+#' # This will map the parameters of the p_vector back to the design
+#' mapped_pars(design_DDMaE, p_vector)
+#'
+#' @export
+mapped_pars <- function(x, p_vector = NULL, model=NULL,
+                        digits=3,remove_subjects=TRUE,
+                        covariates=NULL,...)
+  # Show augmented data and corresponding mapped parameter
+{
+  UseMethod("mapped_pars")
+}
+
+#' @rdname mapped_pars
+#' @export
+mapped_pars.emc.design <- function(x, p_vector = NULL, model=NULL,
+                                   digits=3,remove_subjects=TRUE,
+                                   covariates=NULL,...){
+  if(is.null(x)) return(NULL)
+  if(is.null(x$Ffactors)){
+    x <- x[[1]]
+  }
+  if(!is.null(attr(x, "custom_ll"))){
+    stop("Mapped_pars not available for this design type")
+  }
+  design <- x
+  if(is.null(p_vector)){
+    return(verbal_dm(design))
+  }
+  remove_RACE <- TRUE
+  optionals <- list(...)
+  for (name in names(optionals) ) {
+    assign(name, optionals[[name]])
+  }
+  if (is.null(covariates))
+    Fcovariates <- design$Fcovariates else
+      Fcovariates <- covariates
+  if (is.null(model)) if (is.null(design$model))
+    stop("Must specify model as not in design") else model <- design$model
+  if (remove_subjects) design$Ffactors$subjects <- design$Ffactors$subjects[1]
+  if (!is.matrix(p_vector)) p_vector <- make_pmat(p_vector,design)
+  dadm <- design_model(make_data(p_vector,design,n_trials=1,Fcovariates=Fcovariates),
+                       design,model,rt_check=FALSE,compress=FALSE, verbose = FALSE)
+  ok <- !(names(dadm) %in% c("subjects","trials","R","rt","winner"))
+  out <- cbind(dadm[,ok],round(get_pars_matrix(p_vector,dadm, design$model()),digits))
+  if (model()$type=="SDT")  out <- out[dadm$lR!=levels(dadm$lR)[length(levels(dadm$lR))],]
+  if (model()$type=="DDM")  out <- out[,!(names(out) %in% c("lR","lM"))]
+  if (any(names(out)=="RACE") && remove_RACE)
+    out <- out[as.numeric(out$lR) <= as.numeric(as.character(out$RACE)),,drop=FALSE]
+  return(out)
+}
+
+
+
 #' Get model parameters from a design
 #'
 #' Makes a vector with zeroes, with names and length corresponding to the
@@ -959,8 +1038,18 @@ print.emc.design <- function(x, ...){
   }
 }
 
+#' @rdname plot_design
+#' @export
+plot_design.emc.design <- function(x, data = NULL, factors = NULL, plot_factor = NULL, n_data_sim = 10,
+                            p_vector = NULL, functions = NULL, ...){
+  if(is.null(p_vector)) stop("p_vector must be supplied if only the design is given")
+  plot(x, p_vector, data = data, factors = factors, plot_factor = plot_factor, n_data_sim = n_data_sim,
+       functions = functions, ...)
+}
+
 #'@export
-plot.emc.design <- function(x, p_vector, data = NULL, factors = NULL, plot_factor = NULL, n_data_sim = 10, ...){
+plot.emc.design <- function(x, p_vector, data = NULL, factors = NULL, plot_factor = NULL, n_data_sim = 10,
+                            functions = NULL, ...){
   if(!"Ffactors" %in% names(x)){
     if(length(x) != 1){
       stop("Current design type not supported for plotting")
@@ -968,8 +1057,9 @@ plot.emc.design <- function(x, p_vector, data = NULL, factors = NULL, plot_facto
       x <- x[[1]]
     }
   }
+  x$Ffunctions <- c(x$Ffunctions, functions)
   # Get a mapped parameter for each cell of the design
-  pars <- mapped_pars(p_vector, x)
+  pars <- mapped_pars(x, p_vector)
   if(is.null(data)){
     data <- vector("list", n_data_sim)
     # If no data is supplied generate some data sets
@@ -978,6 +1068,7 @@ plot.emc.design <- function(x, p_vector, data = NULL, factors = NULL, plot_facto
     } # and bind them back together
     data <- do.call(rbind, data)
   }
+  data <- data[!is.na(data$rt) & !is.infinite(data$rt),]
   data <- design_model(data, x, compress = FALSE, rt_resolution = 1e-15)
 
   if(is.null(x$model()$c_name)) stop("Current design type not supported for plotting")
