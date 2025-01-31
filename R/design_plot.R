@@ -168,11 +168,11 @@ draw_noise_paths_DDM <- function(x0, x1, y0, y1,
       }
     }
     y_vals <- pmax(y_min, pmin(y_vals, y_max))
-    lines(x_vals, y_vals, col=adjustcolor(col, alpha.f=0.5), lwd=0.7)
+    lines(x_vals, y_vals, col=adjustcolor(col, alpha.f=0.5), lwd=0.8)
   }
 }
 
-draw_noise_paths_race <- function(x0, x1, y0, y1, s = 5, n_paths = 3, col = "black") {
+draw_noise_paths_race <- function(x0, x1, y0, y1, s = 1, n_paths = 3, col = "black") {
   if (x1 == x0) {
     return()
   }
@@ -190,19 +190,17 @@ draw_noise_paths_race <- function(x0, x1, y0, y1, s = 5, n_paths = 3, col = "bla
 
     for (j in seq_len(n_steps)) {
       x_vals[j + 1] <- x_vals[j] + dx
-      new_y <- y_vals[j] + slope_data * dx + s*sqrt(dx)*rnorm(1)
-      if (new_y < y_min) {
-        new_y <- y_min
-      }
+      new_y <- y_vals[j] + slope_data * dx + s * sqrt(dx) * rnorm(1)
+      y_vals[j + 1] <- new_y
       if (new_y > y_max) {
-        # end path
-        x_vals <- x_vals[1:j]
-        y_vals <- y_vals[1:j]
+        x_vals <- x_vals[1:(j+1)]
+        y_vals <- y_vals[1:(j+1)]
         break
       }
-      y_vals[j + 1] <- new_y
     }
-    lines(x_vals, y_vals, col=adjustcolor(col, alpha.f=0.5), lwd=0.7)
+    y_vals <- pmin(y_vals, y_max)
+    y_vals[y_vals < -0.1] <- -.1
+    lines(x_vals, y_vals, col=adjustcolor(col, alpha.f=0.5), lwd=0.8)
   }
 }
 

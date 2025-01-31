@@ -132,6 +132,7 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
     constants <- c(constants, additional_constants)
     for(add_constant in not_specified) formula[[length(formula)+ 1]] <- as.formula(paste0(add_constant, "~ 1"))
   }
+  if(!"subjects" %in% names(factors)) stop("make sure subjects identifier is present in data")
 
   design <- list(Flist=formula,Ffactors=factors,Rlevels=Rlevels,
                  Clist=contrasts,matchfun=matchfun,constants=constants,
@@ -1097,14 +1098,15 @@ plot.emc.design <- function(x, p_vector, data = NULL, factors = NULL, plot_facto
   type <- ifelse(x$model()$c_name == "DDM", "DDM", "race")
   within_noise <- ifelse(x$model()$c_name == "LBA", FALSE, TRUE)
   # Split only relevant for DDM
-  dots <- add_defaults(list(...), split = "R", within_noise = within_noise)
+  dots <- add_defaults(list(...), split = "R", within_noise = within_noise, plot_legend = TRUE)
   if(type != "DDM"){
     dots$split = NULL
     data <- data[data$winner,]
   }
   make_design_plot(data = data, pars = pars, factors = factors, main = dots$main,
                    plot_factor = plot_factor,
-                   type = type, split = dots$split, within_noise = dots$within_noise)
+                   type = type, split = dots$split, within_noise = dots$within_noise,
+                   plot_legend = dots$plot_legend)
 }
 
 
