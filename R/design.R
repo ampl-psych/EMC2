@@ -1094,8 +1094,8 @@ plot.emc.design <- function(x, p_vector, data = NULL, factors = NULL, plot_facto
   data <- design_model(data, x, compress = FALSE, rt_resolution = 1e-15)
 
   if(is.null(x$model()$c_name)) stop("Current design type not supported for plotting")
-  if(x$model()$c_name == "LNR") stop("LNR designs not supported for plotting")
-  type <- ifelse(x$model()$c_name == "DDM", "DDM", "race")
+  # if(x$model()$c_name == "LNR") stop("LNR designs not supported for plotting")
+  type <- ifelse(x$model()$c_name == "DDM", "DDM", ifelse(x$model()$c_name == "LNR", "LNR", "race"))
   within_noise <- ifelse(x$model()$c_name == "LBA", FALSE, TRUE)
   # Split only relevant for DDM
   dots <- add_defaults(list(...), split = "R", within_noise = within_noise, plot_legend = TRUE)
@@ -1103,10 +1103,9 @@ plot.emc.design <- function(x, p_vector, data = NULL, factors = NULL, plot_facto
     dots$split = NULL
     data <- data[data$winner,]
   }
-  make_design_plot(data = data, pars = pars, factors = factors, main = dots$main,
+  do.call(make_design_plot, c(list(data = data, pars = pars, factors = factors, main = dots$main,
                    plot_factor = plot_factor,
-                   type = type, split = dots$split, within_noise = dots$within_noise,
-                   plot_legend = dots$plot_legend)
+                   type = type), fix_dots(dots, make_design_plot)))
 }
 
 

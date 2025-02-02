@@ -138,8 +138,8 @@ get_defect_scalars <- function(
 ### 7) Noise-drawing helpers
 ###############################################################################
 draw_noise_paths_DDM <- function(x0, x1, y0, y1,
-                                 s       = 2,
-                                 n_paths = 3,
+                                 s       = 3,
+                                 n_paths = 10,
                                  col     = "black") {
   if (x1 == x0) {
     return()
@@ -148,7 +148,7 @@ draw_noise_paths_DDM <- function(x0, x1, y0, y1,
   y_min <- -abs(y1)
   y_max <- abs(y1)
   n_steps <- 2000
-  dx      <- 0.01
+  dx      <- 0.005
 
   for (i in seq_len(n_paths)) {
     x_vals <- numeric(n_steps + 1)
@@ -172,7 +172,7 @@ draw_noise_paths_DDM <- function(x0, x1, y0, y1,
   }
 }
 
-draw_noise_paths_race <- function(x0, x1, y0, y1, s = 1, n_paths = 3, col = "black") {
+draw_noise_paths_race <- function(x0, x1, y0, y1, s = 1.5, n_paths = 5, col = "black") {
   if (x1 == x0) {
     return()
   }
@@ -180,7 +180,7 @@ draw_noise_paths_race <- function(x0, x1, y0, y1, s = 1, n_paths = 3, col = "bla
   y_min <- min(y0, y1)
   y_max <- max(y0, y1)
   n_steps <- 2000
-  dx      <- 0.01
+  dx      <- 0.005
 
   for (i in seq_len(n_paths)) {
     x_vals <- numeric(n_steps + 1)
@@ -497,7 +497,8 @@ single_DDM_plot <- function(
   }
 
   #### (J) Axes
-  arrows(x0=-0.025,x1=-0.025, y0=y_lim[1],y1=y_lim[2], lwd=3, length=0.1)
+  arrows(x0=-0.015,x1=-0.015, y0=y_lim[1],y1=y_lim[2], lwd=3, length=0.1)
+  arrows(x0=-0.015,x1=-0.015, y0=y_lim[2],y1=y_lim[1], lwd=3, length=0.1)
   mtext("evidence",side=2,line=0.5,cex=1.2)
 
   # label b-levels if multiple
@@ -516,9 +517,6 @@ single_DDM_plot <- function(
 
 ###############################################################################
 ### (9) single_race_plot()
-###############################################################################
-###############################################################################
-### single_race_plot()
 ###############################################################################
 single_race_plot <- function(
     data_sub,
@@ -763,7 +761,7 @@ single_race_plot <- function(
 
   # (J) Axis
   mtext("evidence", side=2,line=0.25, cex=1.2, adj=.3)
-  arrows(x0=-0.025,x1=-0.025, y0=-.1, y1=max(b_vals,0)*1.2, lwd=3, length=0.1)
+  arrows(x0=-0.015,x1=-0.015, y0=-.1, y1=max(b_vals,0)*1.2, lwd=3, length=0.1)
 
   if(length(b_vals)>1 && draw_axis_labels){
     for(bn in names(b_vals)){
@@ -775,10 +773,228 @@ single_race_plot <- function(
 }
 
 
+###############################################################################
+### (10) single_LNR_plot()
+###############################################################################
+single_LNR_plot <- function(
+    data_sub,
+    main_sub,
+    plot_legend_sub,
+    x_lim,
+    y_lim,
+
+    # "full" factor => numeric param
+    v_factor,
+    t0_factor,
+    v_vals,
+    t0_vals,
+
+    # color factor => for legend
+    v_factor_color  = v_factor,
+    t0_factor_color = t0_factor,
+    v_vals_color    = v_vals,
+    t0_vals_color   = t0_vals,
+
+    # union of columns => used to build cell names
+    plot_cols_union,
+
+    v_colors,
+    t0_ltys,
+
+    defect_scalars   = NULL,
+    squash_dens      = 1,
+    within_noise     = TRUE,     # Not actually used for LNR
+    draw_axis_labels = TRUE
+) {
+  ##################################################################
+  ### (A) Figure out anchoring & arrow positions
+  ##################################################################
+  # 1) Horizontal arrow near bottom:
+  arrow_y <- 0  # We will draw an arrow at y=0
+  # 2) We want to shift densities up by 0.1.
+  anchor_y <- 0.1
+  # 3) The user asked to anchor x at mean(t0_vals):
+  mean_t0  <- mean(t0_vals, na.rm=TRUE)
+  # We will shift each density so its minimum x lands at mean_t0.
+
+  ##################################################################
+  ### (B) Identify unique "cells" by combining the relevant columns
+  ##################################################################
+  cols_in_data <- intersect(plot_cols_union, colnames(data_sub))
+  if (length(cols_in_data) == 0) {
+    row_cells <- rep("global", nrow(data_sub))
+  } else {
+    row_cells <- apply(data_sub[, cols_in_data, drop=FALSE], 1, function(r) {
+      paste(r, collapse=" ")
+    })
+  }
+  unique_cells <- unique(row_cells)
+
+  ##################################################################
+  ### (C) Build per-cell info (density, param values, median RT, etc.)
+  ##################################################################
+  cell_info <- lapply(unique_cells, function(uc) {
+    idx <- which(row_cells == uc)
+    tmp_data <- data_sub[idx, , drop=FALSE]
+
+    v_cell  <- get_cell_param(idx, v_factor,  v_vals,  data_sub)
+    t0_cell <- get_cell_param(idx, t0_factor, t0_vals, data_sub)
+    med_rt  <- median(tmp_data$rt, na.rm=TRUE)
+
+    # Density
+    if (nrow(tmp_data) < 2) {
+      d <- list(x = c(0, tmp_data$rt), y = c(0, 0))
+    } else {
+      d <- density(tmp_data$rt, from = x_lim[1], to = x_lim[2]*1.2)
+    }
+
+    # Scale the density by defect_scalars
+    cell_prop <- if (!is.null(defect_scalars[[uc]])) defect_scalars[[uc]] else 1
+    d$y <- d$y * squash_dens * cell_prop
+
+    # We do NOT shift here; we store that for the next step
+    list(
+      cell    = uc,
+      data    = tmp_data,
+      v       = v_cell,
+      t0      = t0_cell,
+      density = d,
+      med_rt  = med_rt
+    )
+  })
+
+  ##################################################################
+  ### (D) Set up the plot
+  ##################################################################
+  plot(0, 0, type="n", xlim=x_lim, ylim=y_lim,
+       xlab="", ylab="", axes=FALSE, main=main_sub)
+
+  # Draw the horizontal arrow at arrow_y
+  arrows(x0 = 0, x1 = x_lim[2], y0 = arrow_y, y1 = arrow_y, lwd=3, length=0.1)
+  title(xlab="RT",line=0, cex.lab=1.5)
+
+  ##################################################################
+  ### (E) Sort cells by median RT => layering of density polygons
+  ##################################################################
+  med_rts_sub <- sapply(cell_info, `[[`, "med_rt")
+  o           <- order(med_rts_sub)
+  cell_info   <- cell_info[o]
+
+  # Optional: ensure minimal spacing in layering
+  min_diff_sub <- 0.05 * x_lim[2]
+  for (i in seq_along(cell_info)[-1]) {
+    if ((cell_info[[i]]$med_rt - cell_info[[i-1]]$med_rt) < min_diff_sub) {
+      cell_info[[i]]$med_rt <- cell_info[[i-1]]$med_rt + min_diff_sub
+    }
+  }
+
+  ##################################################################
+  ### (F) t0 lines
+  ### We'll plot them offset in x by mean_t0, and in y by anchor_y
+  ##################################################################
+  if (length(t0_vals) > 0) {
+    t0_sorted <- sort(t0_vals)
+    vertical_step <- 0.1
+    i <- 0
+    for (tn in names(t0_sorted)) {
+      y_i  <- anchor_y + i*vertical_step
+      # We used to do segments(0, y_i, t0_i, y_i)
+      # Now let's anchor them at x= mean_t0:
+      t0_i <- t0_sorted[tn]
+      lty_i <- if (tn %in% names(t0_ltys)) t0_ltys[tn] else 1
+
+      # If you'd rather "start" the line at mean_t0 and extend by t0_i
+      # that might be: segments(mean_t0, y_i, mean_t0 + t0_i, y_i)
+      # but that can push them far out. Another approach is to do:
+      # segments(mean_t0 - t0_i, y_i, mean_t0, y_i), etc.
+      # For simplicity, let's do from (mean_t0) to (mean_t0 + t0_i):
+      segments(0, y_i, 0 + t0_i, y_i, lwd=3, lty=lty_i, col="black")
+
+      i <- i + 1
+    }
+  }
+
+  ##################################################################
+  ### (G) Draw the densities themselves
+  ### Shift them so their minimum x is at mean_t0, and shift y by anchor_y.
+  ##################################################################
+  alpha <- 0.2
+  for (ci in cell_info) {
+    d <- ci$density
+    # SHIFT in x so min(d$x) => mean_t0
+    d$x <- d$x + mean_t0 + .001
+
+    # SHIFT in y by anchor_y
+    d$y <- d$y + anchor_y + (length(t0_vals) -1)*0.1*.5
+
+    # Determine color from v_factor_color
+    idx_ci <- seq_len(nrow(ci$data))
+    c_col   <- "black"
+    fill_col<- "#036ffc"
+    if (!is.null(v_factor_color) && v_factor_color %in% names(ci$data)) {
+      v_lab <- unique(ci$data[[v_factor_color]][idx_ci])
+      if (length(v_lab) == 1 && v_lab %in% names(v_colors)) {
+        c_col   <- v_colors[v_lab]
+        fill_col<- v_colors[v_lab]
+      }
+    }
+
+    # Determine lty from t0_factor_color
+    c_lty <- 1
+    if (!is.null(t0_factor_color) && t0_factor_color %in% names(ci$data)) {
+      t0_lab <- unique(ci$data[[t0_factor_color]][idx_ci])
+      if (length(t0_lab) == 1 && t0_lab %in% names(t0_ltys)) {
+        c_lty <- t0_ltys[t0_lab]
+      }
+    }
+
+    # Draw the line + polygon
+    lines(d, lwd=3, col=c_col, lty=c_lty)
+    polygon(d, col=adjustcolor(fill_col, alpha.f=alpha), lty=c_lty)
+  }
+
+  ##################################################################
+  ### (H) Legend
+  ##################################################################
+  if (plot_legend_sub) {
+    x_legend <- x_lim[2] * 0.6
+    y_legend <- y_lim[2] * .8
+
+    # v-color legend
+    if (length(v_colors) > 1) {
+      legend(
+        x      = x_legend,
+        y      = y_legend,
+        legend = names(v_colors),
+        title  = "v",
+        col    = v_colors,
+        lwd    = 3,
+        lty    = 1,
+        bty    = "n"
+      )
+    }
+
+    # t0-lty legend
+    if (length(t0_ltys) > 1) {
+      y_legend <- y_lim[2] * 0.6
+      legend(
+        x      = x_legend,
+        y      = y_legend,
+        legend = names(t0_ltys),
+        title  = "t0",
+        col    = "black",
+        lwd    = 3,
+        lty    = t0_ltys,
+        bty    = "n"
+      )
+    }
+  }
+}
+
 
 
 ###############################################################################
-### (10) make_design_plot()
+### (11) make_design_plot()
 ###############################################################################
 make_design_plot <- function(
     data,
@@ -786,6 +1002,7 @@ make_design_plot <- function(
     factors,
     main,
     type,
+    layout = NA,
     split        = NULL,
     plot_legend  = TRUE,
     plot_factor  = NULL,
@@ -795,9 +1012,21 @@ make_design_plot <- function(
   if ("a" %in% colnames(pars)) {
     colnames(pars)[colnames(pars) == "a"] <- "b"
   }
+  if ("m" %in% colnames(pars)) {
+    colnames(pars)[colnames(pars) == "m"] <- "v"
+  }
+  if(type == "LNR"){
+    pars$b <- 0
+  }
 
   #### (2) Identify factor sets
-  v_factors <- if ("v" %in% names(factors)) factors$v else NULL
+  if ("v" %in% names(factors)) {
+    v_factors <- factors$v
+  } else if ("m" %in% names(factors)) {
+    v_factors <- factors$m
+  } else {
+    v_factors <- NULL
+  }
   if ("B" %in% names(factors)) {
     b_factors <- factors$B
   } else if ("a" %in% names(factors)) {
@@ -878,13 +1107,22 @@ make_design_plot <- function(
   x_lims <- c(0, global_out$max_rt_sub)
   # Determine an ideal ratio of evidence plot width to density width
   # Twice as much plot_width
-  target_ratio <- .4
-  current_ratio <- (global_out$max_y_sub - max(b_vals_full))/max(b_vals_full)
-  # Multiply defect scalars by ratio
-  global_out$defect_scalars <- global_out$defect_scalars*(target_ratio/current_ratio)
-  global_out$max_y_sub <- max(b_vals_full) + (global_out$max_y_sub - max(b_vals_full))*(target_ratio/current_ratio)
+  if(type != "LNR"){
+    target_ratio <- .4
+    current_ratio <- (global_out$max_y_sub - max(b_vals_full))/max(b_vals_full)
+    # Multiply defect scalars by ratio
+    global_out$defect_scalars <- global_out$defect_scalars*(target_ratio/current_ratio)
+    global_out$max_y_sub <- max(b_vals_full) + (global_out$max_y_sub - max(b_vals_full))*(target_ratio/current_ratio)
+  } else{
+    multiplier <- 1.5/max(global_out$defect_scalars)
+    global_out$defect_scalars <- global_out$defect_scalars*multiplier
+    global_out$max_y_sub <- global_out$max_y_sub*multiplier
+  }
+
   if(type=="race"){
     y_lims <- c(-0.15, global_out$max_y_sub+0.1)
+  } else if(type == "LNR"){
+    y_lims <- c(-0.15, global_out$max_y_sub*1.2)
   } else {
     range_val<- max(abs(global_out$min_y_sub), abs(global_out$max_y_sub))
     y_lims   <- c(-range_val-0.05, range_val+0.1)
@@ -898,9 +1136,12 @@ make_design_plot <- function(
   }
   n_plots <- length(levels_plot)
 
-  old_par <- par(no.readonly=TRUE)
-  on.exit(par(old_par), add=TRUE)
-  par(mfrow=c(1,n_plots), mar=c(5,4,3,2))
+  if (any(is.na(layout))) {
+    par(mfrow = coda_setmfrow(Nchains = 1, Nparms = length(n_plots), nplots = 1))
+  } else if(!is.null(layout)){
+    par(mfrow = layout)
+  }
+  par(mar = c(4, 2, 2, 1))
 
   #### (7) for each level => subset data, but do param wise subsetting for v,b,t0
   for (i in seq_along(levels_plot)) {
@@ -998,7 +1239,7 @@ make_design_plot <- function(
         within_noise    = within_noise,
         draw_axis_labels= draw_axis_labels_sub
       )
-    } else {
+    } else if(type == "DDM"){
       single_DDM_plot(
         data_sub        = data_subset,
         main_sub        = main_sub,
@@ -1029,6 +1270,30 @@ make_design_plot <- function(
         squash_dens     = length(b_vals_full)*0.8,
         within_noise    = within_noise,
         draw_axis_labels= draw_axis_labels_sub
+      )
+    } else{
+      # Then call single_LNR_plot(...) with no b.
+      single_LNR_plot(
+        data_sub         = data,
+        main_sub         = main,
+        plot_legend_sub  = plot_legend,
+        x_lim            = x_lims,
+        y_lim            = y_lims,
+        v_factor         = v_factor_full,
+        t0_factor        = t0_factor_full,
+        v_vals           = v_vals_sub,
+        t0_vals          = t0_vals_sub,
+        v_factor_color   = v_factor_color,
+        t0_factor_color  = t0_factor_color,
+        v_vals_color     = v_vals_color_sub,
+        t0_vals_color    = t0_vals_color_sub,
+        plot_cols_union  = plot_cols_union,
+        v_colors         = v_colors_map,
+        t0_ltys          = t0_ltys_map,
+        defect_scalars   = global_out$defect_scalars,
+        squash_dens      = length(b_vals_sub)*0.8,  # or a fixed factor
+        within_noise     = within_noise,
+        draw_axis_labels = draw_axis_labels_sub
       )
     }
   }
