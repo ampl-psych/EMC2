@@ -324,7 +324,7 @@ check_gd <- function(emc, stage, max_gd, mean_gd, omit_mpsrf, trys, verbose,
     ok_gd <- ok_mean_gd & ok_max_gd
   }
   if(verbose) {
-    if (omit_mpsrf) type <- "psrf" else type <- "m/psrf"
+    type <- "Rhat"
     if (!is.null(mean_gd)) message("Mean ",type," = ",round(mean(gd),3)) else
       if (!is.null(max_gd)) message("Max ",type," = ",round(max(gd),3))
   }
