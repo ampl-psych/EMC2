@@ -1019,6 +1019,7 @@ sampled_pars.emc.design <- function(x,model=NULL,doMap=TRUE, add_da = FALSE, all
 #' Summary method for emc.design objects
 #'
 #' Prints a summary of the design object, including sampled parameters and design matrices.
+#' For continuous covariates just prints one row, instead of all covariates.
 #'
 #' @param object An object of class `emc.design` containing the design to summarize
 #' @param ... Additional arguments (not used)

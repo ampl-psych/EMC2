@@ -1137,11 +1137,11 @@ make_design_plot <- function(
   n_plots <- length(levels_plot)
 
   if (any(is.na(layout))) {
-    par(mfrow = coda_setmfrow(Nchains = 1, Nparms = length(n_plots), nplots = 1))
+    par(mfrow = coda_setmfrow(Nchains = 1, Nparms = n_plots, nplots = 1))
   } else if(!is.null(layout)){
     par(mfrow = layout)
   }
-  par(mar = c(4, 2, 2, 1))
+  par(mar = c(4, 4, 2, 1))
 
   #### (7) for each level => subset data, but do param wise subsetting for v,b,t0
   for (i in seq_along(levels_plot)) {
