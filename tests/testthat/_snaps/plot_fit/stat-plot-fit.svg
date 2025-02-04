@@ -68,7 +68,7 @@
 <line x1='337.55' y1='87.84' x2='359.15' y2='87.84' style='stroke-width: 0.75;' />
 <line x1='337.55' y1='102.24' x2='359.15' y2='102.24' style='stroke-width: 0.75; stroke: #006400;' />
 <text x='374.40' y='73.44' text-anchor='middle' style='font-size: 12.00px; font-family: sans;' textLength='38.03px' lengthAdjust='spacingAndGlyphs'>Source</text>
-<text x='369.95' y='91.97' style='font-size: 12.00px; font-family: sans;' textLength='20.01px' lengthAdjust='spacingAndGlyphs'>real</text>
+<text x='369.95' y='91.97' style='font-size: 12.00px; font-family: sans;' textLength='23.36px' lengthAdjust='spacingAndGlyphs'>data</text>
 <text x='369.95' y='106.37' style='font-size: 12.00px; font-family: sans;' textLength='46.69px' lengthAdjust='spacingAndGlyphs'>posterior</text>
 </g>
 </svg>

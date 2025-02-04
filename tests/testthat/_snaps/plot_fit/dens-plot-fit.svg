@@ -69,6 +69,6 @@
 <line x1='348.90' y1='102.24' x2='370.50' y2='102.24' style='stroke-width: 0.75;' />
 <text x='374.40' y='73.44' text-anchor='middle' style='font-size: 12.00px; font-family: sans;' textLength='38.03px' lengthAdjust='spacingAndGlyphs'>Source</text>
 <text x='381.30' y='91.97' style='font-size: 12.00px; font-family: sans;' textLength='24.00px' lengthAdjust='spacingAndGlyphs'>prior</text>
-<text x='381.30' y='106.37' style='font-size: 12.00px; font-family: sans;' textLength='20.01px' lengthAdjust='spacingAndGlyphs'>real</text>
+<text x='381.30' y='106.37' style='font-size: 12.00px; font-family: sans;' textLength='23.36px' lengthAdjust='spacingAndGlyphs'>data</text>
 </g>
 </svg>

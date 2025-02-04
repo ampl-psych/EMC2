@@ -89,7 +89,7 @@ prep_data_plot <- function(input, post_predict, prior_predict, to_plot, limits,
       stop("Input must be either all emc objects or no emc objects")
     }
   } else{
-    input <- list(real = input)
+    input <- list(data = input)
   }
   # Check for post_predict and prior_predict
   if(!is.data.frame(post_predict) && is.list(post_predict)){
@@ -126,11 +126,11 @@ prep_data_plot <- function(input, post_predict, prior_predict, to_plot, limits,
   }
   if(length(unique(all_data)) == 1){
     all_data <- all_data[1]
-    datasets['real'] <- all_data
-    sources['real'] <- 'real'
+    datasets['data'] <- all_data
+    sources['data'] <- 'data'
   } else{
     datasets[names(input)] <- all_data
-    sources[names(input)] <- 'real'
+    sources[names(input)] <- 'data'
   }
   # Check if posterior or prior predictives need to be generated
   for(k in 1:length(input)){
@@ -203,7 +203,7 @@ prep_data_plot <- function(input, post_predict, prior_predict, to_plot, limits,
 plot_stat <- function(input, post_predict = NULL, prior_predict = NULL, stat_fun, stat_name = NULL,
                       subject = NULL, factors = NULL, n_cores = 1, n_post = 50,
                       quants = c(0.025, 0.5, 0.975), functions = NULL,
-                      layout = NA, to_plot = c('real', 'posterior', 'prior')[1:2], use_lim = c('real', 'posterior', 'prior')[1:2],
+                      layout = NA, to_plot = c('data', 'posterior', 'prior')[1:2], use_lim = c('data', 'posterior', 'prior')[1:2],
                       legendpos = c('topleft', 'top'), posterior_args = list(), prior_args = list(), ...) {
   check <- prep_data_plot(input, post_predict, prior_predict, to_plot, use_lim,
                           factors, defective_factor = NULL, subject, n_cores, n_post, functions)
@@ -281,7 +281,7 @@ plot_stat <- function(input, post_predict = NULL, prior_predict = NULL, stat_fun
       rownames(summary_df) <- NULL
       stat_names <- names(summary_df)[!(names(summary_df) %in% c('group_key', factors))]
 
-      if('real' %in% use_lim){
+      if('data' %in% use_lim){
         xlim <- range(xlim, summary_df[,stat_names])
       }
       line_sources[[src_name]] <- summary_sources[[src_name]] <- summary_df
@@ -315,7 +315,7 @@ plot_stat <- function(input, post_predict = NULL, prior_predict = NULL, stat_fun
       src_type <- sources[k]
       src_data <- data_sources[[k]]
       src_name <- names(sources)[k]
-      if(src_type == "real") {
+      if(src_type == "data") {
         src_args <- tmp_dots
         tmp_dots$col <- tmp_dots$col[-1]
       } else if (src_type == "posterior") {
@@ -328,7 +328,7 @@ plot_stat <- function(input, post_predict = NULL, prior_predict = NULL, stat_fun
       legend_map[src_name] <- src_args$col[1]
       lines_args <- fix_dots_plot(src_args)
       lines_args$col <- lines_args$col[1]
-      if(src_type == 'real'){
+      if(src_type == 'data'){
         summary_df <- line_sources[[src_name]]
         do.call(abline, c(list(v = summary_df[summary_df$group_key == group_key, stat_names]), lines_args))
       } else{
@@ -394,8 +394,8 @@ plot_density <- function(input, post_predict = NULL, prior_predict = NULL,
                          subject = NULL, quants = c(0.025, 0.975), functions = NULL,
                          factors = NULL, defective_factor = "R", n_cores = 1, n_post = 50,
                          layout = NA,
-                         to_plot = c('real', 'posterior', 'prior')[1:2],
-                         use_lim = c('real', 'posterior', 'prior')[1:2],
+                         to_plot = c('data', 'posterior', 'prior')[1:2],
+                         use_lim = c('data', 'posterior', 'prior')[1:2],
                          legendpos = c("topright", "top"),
                          posterior_args = list(), prior_args = list(), ...) {
   # 1) prep_data_plot
@@ -410,7 +410,7 @@ plot_density <- function(input, post_predict = NULL, prior_predict = NULL,
   posterior_args <- add_defaults(posterior_args, col = c("darkgreen", "#008B8B", "#0000FF"))
   prior_args <- add_defaults(prior_args, col = c("red", "#CC00FF", "#800080"))
 
-  data <- data_sources[[which(sources == "real")[1]]]
+  data <- data_sources[[which(sources == "data")[1]]]
   defective_levels <- if (!is.null(data)) levels(factor(data[[defective_factor]])) else character(0)
   line_types <- seq_along(defective_levels)
   quantiles <- sort(c(quants, 0.5))
@@ -531,8 +531,8 @@ plot_density <- function(input, post_predict = NULL, prior_predict = NULL,
   # We do that at plotting time to keep the same 512 points
   build_x_grid <- function(src_type, src_name, group_key = NULL) {
     # for postn or single data we found a from/to in a dictionary
-    if (src_type %in% c("real", 'posterior')) {
-      # if real was used, dens_list[['real']][[group_key]] => each level => length=512
+    if (src_type %in% c("data", 'posterior')) {
+      # if data was used, dens_list[['data']][[group_key]] => each level => length=512
       # but we didn't store the x's. We'll reconstruct from the dots or from
       rng <- quantile(data_sources[[src_name]]$rt, c(0, 0.99))
       return(seq(rng[1], rng[2], length.out = 512))
@@ -557,7 +557,7 @@ plot_density <- function(input, post_predict = NULL, prior_predict = NULL,
       src_type <- sources[k]
       src_data <- data_sources[[k]]
       src_name <- names(sources)[k]
-      if(src_type == "real") {
+      if(src_type == "data") {
         src_args <- tmp_dots
         tmp_dots$col <- tmp_dots$col[-1]
       } else if (src_type == "posterior") {
@@ -670,12 +670,13 @@ get_def_cdf <- function(x, defective_factor, dots) {
 #' @param subject Subset the data to a single subject (by index or name).
 #' @param quants Numeric vector of credible interval bounds (e.g. `c(0.025, 0.975)`).
 #' @param functions A function (or list of functions) that create new columns in the datasets or predictives
-#' @param factors Character vector of factor names to aggregate over; defaults to all factors if `NULL`.
+#' @param factors Character vector of factor names to aggregate over;
+#' defaults to plotting full data set ungrouped by factors if `NULL`.
 #' @param defective_factor Name of the factor used for the defective CDF (default "R").
 #' @param n_cores Number of CPU cores to use if generating predictives from an `emc` object.
 #' @param n_post Number of posterior draws to simulate if needed for predictives.
 #' @param layout Numeric vector used in `par(mfrow=...)`; use `NA` for auto-layout.
-#' @param to_plot Character vector: any of `"real"`, `"posterior"`, `"prior"`.
+#' @param to_plot Character vector: any of `"data"`, `"posterior"`, `"prior"`.
 #' @param use_lim Character vector controlling which source(s) define `xlim`.
 #' @param legendpos Character vector controlling the positions of the legends
 #' @param posterior_args Optional list of graphical parameters for posterior lines/ribbons.
@@ -685,10 +686,10 @@ get_def_cdf <- function(x, defective_factor, dots) {
 #' @return Returns `NULL` invisibly.
 #' @examples
 #' # Plot defective CDF for data only
-#' # plot_cdf(forstmann, to_plot = "real")
+#' # plot_cdf(forstmann, to_plot = "data")
 #' #
 #' # Plot with posterior predictions
-#' # plot_cdf(samples_LNR, to_plot = c("real","posterior"), n_post=10)
+#' # plot_cdf(samples_LNR, to_plot = c("data","posterior"), n_post=10)
 #' #
 #' # Or a list of multiple emc objects ...
 #' @export
@@ -702,8 +703,8 @@ plot_cdf <- function(input,
                      n_cores = 1,
                      n_post = 50,
                      layout = NA,
-                     to_plot = c('real','posterior','prior')[1:2],
-                     use_lim = c('real','posterior','prior')[1:2],
+                     to_plot = c('data','posterior','prior')[1:2],
+                     use_lim = c('data','posterior','prior')[1:2],
                      legendpos = c('top', 'topright'),
                      posterior_args = list(),
                      prior_args = list(),
@@ -742,7 +743,7 @@ plot_cdf <- function(input,
   # -------------------------------------------------------------------
   for (k in seq_along(data_sources)) {
     df   <- data_sources[[k]]
-    styp <- sources[k]       # "real","posterior","prior"
+    styp <- sources[k]       # "data","posterior","prior"
     sname <- names(sources)[k]  # the name of this dataset in the list
 
     if (is.null(df) || !nrow(df)) {
@@ -857,9 +858,9 @@ plot_cdf <- function(input,
     legend_map <- character(0)  # to store source name -> color
 
     for (k in seq_along(data_sources)) {
-      styp  <- sources[k]       # "real","posterior","prior"
+      styp  <- sources[k]       # "data","posterior","prior"
       sname <- names(sources)[k]
-      if(styp == "real") {
+      if(styp == "data") {
         src_args <- tmp_dots
         tmp_dots$col <- tmp_dots$col[-1]
       } else if (styp == "posterior") {
