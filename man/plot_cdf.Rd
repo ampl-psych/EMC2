@@ -16,8 +16,8 @@ plot_cdf(
   n_cores = 1,
   n_post = 50,
   layout = NA,
-  to_plot = c("real", "posterior", "prior")[1:2],
-  use_lim = c("real", "posterior", "prior")[1:2],
+  to_plot = c("data", "posterior", "prior")[1:2],
+  use_lim = c("data", "posterior", "prior")[1:2],
   legendpos = c("top", "topright"),
   posterior_args = list(),
   prior_args = list(),
@@ -37,7 +37,8 @@ plot_cdf(
 
 \item{functions}{A function (or list of functions) that create new columns in the datasets or predictives}
 
-\item{factors}{Character vector of factor names to aggregate over; defaults to all factors if \code{NULL}.}
+\item{factors}{Character vector of factor names to aggregate over;
+defaults to plotting full data set ungrouped by factors if \code{NULL}.}
 
 \item{defective_factor}{Name of the factor used for the defective CDF (default "R").}
 
@@ -47,7 +48,7 @@ plot_cdf(
 
 \item{layout}{Numeric vector used in \code{par(mfrow=...)}; use \code{NA} for auto-layout.}
 
-\item{to_plot}{Character vector: any of \code{"real"}, \code{"posterior"}, \code{"prior"}.}
+\item{to_plot}{Character vector: any of \code{"data"}, \code{"posterior"}, \code{"prior"}.}
 
 \item{use_lim}{Character vector controlling which source(s) define \code{xlim}.}
 
@@ -70,10 +71,10 @@ Optionally, posterior and/or prior predictive CDFs can be overlaid.
 }
 \examples{
 # Plot defective CDF for data only
-# plot_cdf(forstmann, to_plot = "real")
+# plot_cdf(forstmann, to_plot = "data")
 #
 # Plot with posterior predictions
-# plot_cdf(samples_LNR, to_plot = c("real","posterior"), n_post=10)
+# plot_cdf(samples_LNR, to_plot = c("data","posterior"), n_post=10)
 #
 # Or a list of multiple emc objects ...
 }

@@ -16,4 +16,5 @@ Invisibly returns the design matrices
 }
 \description{
 Prints a summary of the design object, including sampled parameters and design matrices.
+For continuous covariates just prints one row, instead of all covariates.
 }
