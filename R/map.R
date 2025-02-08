@@ -162,7 +162,7 @@ add_recalculated_pars <- function(pmat, model, cnams){
     to_add <- do.call(cbind, cur_par[not_dups])
     cur_modfs <- modfs[not_dups]
     fnams <- sapply(cur_modfs, function(x) paste0(unique(unlist(strsplit(x[pars_vary], split = "_"))), collapse = "_"))
-    colnames(to_add) <- paste0(colnames(to_add)[1], "_", fnams)
+    if(fnams != "") colnames(to_add) <- paste0(colnames(to_add)[1], "_", fnams)
     m_out <- cbind(m_out, to_add)
   }
   return(m_out)
