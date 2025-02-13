@@ -472,9 +472,9 @@ single_DDM_plot <- function(
 
   #### (I) Legend
   if(plot_legend_sub){
-    x_legend<- x_lim[2]*0.4
+    x_legend<- x_lim[2]*0.5
     if(length(b_vals)) {
-      y_legend<- min(b_vals)*0.8
+      y_legend<- min(b_vals)*0.5
     } else y_legend<- y_lim[1]+0.2*(y_lim[2]-y_lim[1])
     # v-color legend
     if(length(v_colors)>1) {
@@ -486,7 +486,7 @@ single_DDM_plot <- function(
     }
     # t0-lty legend
     if(length(t0_ltys)>1) {
-      x_legend<- x_lim[2]*0.7
+      x_legend<- x_lim[2]*0.75
       legend(x=x_legend,y=y_legend,
              legend=names(t0_ltys),
              title="t0",

@@ -67,7 +67,7 @@ Imports:
     lpSolve,
     WienR
 LinkingTo: 
-    Rcpp
+    Rcpp, RcppArmadillo
 Depends: 
     R (>= 3.5.0)
 LazyData: true
