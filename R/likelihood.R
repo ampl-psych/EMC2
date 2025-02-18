@@ -59,10 +59,10 @@ log_likelihood_ddmgng <- function(pars,dadm,model,min_ll=log(1e-10))
   if (any(attr(pars,"ok"))) {
     isna <- is.na(dadm$rt)
     ok <- attr(pars,"ok") & !isna
-    like[ok] <- attr(dadm,"model")()$dfun(dadm$rt[ok],dadm$R[ok],pars[ok,,drop=FALSE])
+    like[ok] <- model$dfun(dadm$rt[ok],dadm$R[ok],pars[ok,,drop=FALSE])
     ok <- attr(pars,"ok") & isna
     like[ok] <- # dont terminate on go boundary before timeout
-      pmax(0,pmin(1,(1-attr(dadm,"model")()$pfun(dadm$TIMEOUT[ok],dadm$Rgo[ok],pars[ok,,drop=FALSE]))))
+      pmax(0,pmin(1,(1-model$pfun(dadm$TIMEOUT[ok],dadm$Rgo[ok],pars[ok,,drop=FALSE]))))
 
   }
   like[attr(pars,"ok")][is.na(like[attr(pars,"ok")])] <- 0
