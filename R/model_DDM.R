@@ -143,3 +143,44 @@ DDM <- function(){
     }
   )
 }
+
+#### GNG ----
+
+#' The GNG Diffusion Decision Model
+#'
+#' @return A model list with all the necessary functions to sample
+#' @export
+#'
+DDMGNGnoC <- function(){
+  list(
+    type="DDM",
+    p_types=c("v" = 1,"a" = log(1),"sv" = log(0),"t0" = log(0),"st0" = log(0),
+              "s" = log(1),"Z" = qnorm(0.5),"SZ" = qnorm(0)),
+    # Trial dependent parameter transform
+    transform=list(func=c(v = "identity",a = "exp",sv = "exp",t0 = "exp",
+                          st0 = "exp",s = "exp",Z = "pnorm",SZ = "pnorm")),
+    bound=list(minmax=cbind(v=c(-20,20),a=c(0,10),Z=c(.01,.99),t0=c(0.05,Inf),
+                            sv=c(.01,10),s=c(0,Inf),SZ=c(.01,.99),st0=c(0,.5)),
+               exception=c(sv=0,SZ=0,st0=0)),
+    Ttransform = function(pars,dadm) {
+      pars[,"SZ"] <- 2*pars[,"SZ"]*apply(cbind(pars[,"Z"],1-pars[,"Z"]),1,min)
+      pars <- cbind(pars,z=pars[,"Z"]*pars[,"a"], sz = pars[,"SZ"]*pars[,"a"])
+      pars
+    },
+    # Random function
+    rfun=function(lR=NULL,pars) {
+      out <- rDDM(lR,pars, attr(pars, "ok"))
+      out$rt[out$rt>pars[,"TIMEOUT"]] <- NA
+      out$rt[as.numeric(out$R)==pars[,"Rnogo"]] <- NA
+      out
+    },
+    # Density function (PDF)
+    dfun=function(rt,R,pars) dDDM(rt,R,pars),
+    # Probability function (CDF)
+    pfun=function(rt,R,pars) pDDM(rt,R,pars),
+    log_likelihood=function(pars,dadm,model,min_ll=log(1e-10)){
+      log_likelihood_ddmgng(pars=pars, dadm = dadm, model = model, min_ll = min_ll)
+    }
+  )
+}
+
