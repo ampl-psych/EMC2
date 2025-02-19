@@ -164,8 +164,8 @@ DDMGNGnoC <- function(){
                exception=c(sv=0,SZ=0,st0=0)),
     Ttransform = function(pars,dadm) {
       pars[,"SZ"] <- 2*pars[,"SZ"]*apply(cbind(pars[,"Z"],1-pars[,"Z"]),1,min)
-      pars <- cbind(pars,z=pars[,"Z"]*pars[,"a"], sz = pars[,"SZ"]*pars[,"a"])
-      pars <- cbind(pars,TIMEOUT=dadm$TIMEOUT,Rnogo=as.numeric(dadm$Rnogo))
+      pars <- cbind(pars,z=pars[,"Z"]*pars[,"a"], sz = pars[,"SZ"]*pars[,"a"],
+                    TIMEOUT=dadm$TIMEOUT,Rnogo=as.numeric(dadm$Rnogo))
       pars
     },
     # Random function
