@@ -159,12 +159,13 @@ DDMGNGnoC <- function(){
     # Trial dependent parameter transform
     transform=list(func=c(v = "identity",a = "exp",sv = "exp",t0 = "exp",
                           st0 = "exp",s = "exp",Z = "pnorm",SZ = "pnorm")),
-    bound=list(minmax=cbind(v=c(-20,20),a=c(0,10),Z=c(.01,.99),t0=c(0.05,Inf),
-                            sv=c(.01,10),s=c(0,Inf),SZ=c(.01,.99),st0=c(0,.5)),
+    bound=list(minmax=cbind(v=c(-20,20),a=c(0,10),Z=c(.001,.999),t0=c(0.05,Inf),
+                            sv=c(.01,10),s=c(0,Inf),SZ=c(.001,.999),st0=c(0,.5)),
                exception=c(sv=0,SZ=0,st0=0)),
     Ttransform = function(pars,dadm) {
       pars[,"SZ"] <- 2*pars[,"SZ"]*apply(cbind(pars[,"Z"],1-pars[,"Z"]),1,min)
       pars <- cbind(pars,z=pars[,"Z"]*pars[,"a"], sz = pars[,"SZ"]*pars[,"a"])
+      pars <- cbind(pars,TIMEOUT=dadm$TIMEOUT,Rnogo=as.numeric(dadm$Rnogo))
       pars
     },
     # Random function
