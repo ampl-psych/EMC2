@@ -4,6 +4,7 @@
 #include "model_LBA.h"
 #include "model_RDM.h"
 #include "model_DDM.h"
+#include "model_MRI.h"
 #include "trend.h"
 using namespace Rcpp;
 
@@ -312,7 +313,6 @@ NumericVector calc_ll(NumericMatrix p_matrix, DataFrame data, NumericVector cons
   CharacterVector p_names = colnames(p_matrix);
   p_vector.names() = p_names;
   NumericMatrix pars(n_trials, p_types.length());
-  IntegerVector expand = data.attr("expand");
   LogicalVector is_ok(n_trials);
 
   // Once (outside the main loop over particles):
@@ -320,6 +320,7 @@ NumericVector calc_ll(NumericMatrix p_matrix, DataFrame data, NumericVector cons
   CharacterVector mm_names = colnames(minmax);
 
   if(type == "DDM"){
+    IntegerVector expand = data.attr("expand");
     for(int i = 0; i < n_particles; i++){
       p_vector = p_matrix(i, _);
       pars = get_pars_matrix(p_vector, constants, transforms, pretransforms, p_types, designs, n_trials, data, trend);
@@ -328,7 +329,23 @@ NumericVector calc_ll(NumericMatrix p_matrix, DataFrame data, NumericVector cons
       is_ok = c_do_bound(pars, bound_specs);
       lls[i] = c_log_likelihood_DDM(pars, data, n_trials, expand, min_ll, is_ok);
     }
+  } else if(type == "MRI" || type == "MRI_white"){
+    int n_pars = p_types.length();
+    NumericVector y = extract_y(data);
+    for(int i = 0; i < n_particles; i++){
+      p_vector = p_matrix(i, _);
+      pars = get_pars_matrix(p_vector, constants, transforms, pretransforms, p_types, designs, n_trials, data, trend);
+      // Precompute specs
+      std::vector<BoundSpec> bound_specs = make_bound_specs(minmax, mm_names, pars, bounds);
+      is_ok = c_do_bound(pars, bound_specs);
+      if(type == "MRI"){
+        lls[i] = c_log_likelihood_MRI(pars, y, is_ok, n_trials, n_pars, min_ll);
+      } else{
+        lls[i] = c_log_likelihood_MRI_white(pars, y, is_ok, n_trials, n_pars, min_ll);
+      }
+    }
   } else{
+    IntegerVector expand = data.attr("expand");
     LogicalVector winner = data["winner"];
     // Love me some good old ugly but fast c++ pointers
     NumericVector (*dfun)(NumericVector, NumericMatrix, LogicalVector, double, LogicalVector);

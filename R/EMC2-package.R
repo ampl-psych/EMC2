@@ -70,6 +70,7 @@
 #' @importFrom stats quantile
 #' @importFrom stats rbinom
 #' @importFrom stats rchisq
+#' @importFrom stats reshape
 #' @importFrom stats rexp
 #' @importFrom stats rgamma
 #' @importFrom stats rmultinom

@@ -521,10 +521,15 @@ design_model <- function(data,design,model=NULL,
     model <- design$model
   }
   if (model()$type=="SDT") rt_check <- FALSE
-  if(model()$type == "MRI"){
-    rt_check <- FALSE
-    add_acc <- FALSE
-    compress <- FALSE
+  if(grepl("MRI", model()$type)){
+    dadm <- data
+    attr(dadm, "design_matrix") <- attr(design, "design_matrix")
+    attr(design, "design_matrix") <- NULL
+    p_names <- names(model()$p_types)
+    attr(dadm,"p_names") <- p_names
+    sampled_p_names <- p_names[!(p_names %in% names(design$constants))]
+    attr(dadm,"sampled_p_names") <- sampled_p_names
+    return(dadm)
   }
   if (any(names(model()$p_types) %in% names(data)))
     stop("Data cannot have columns with the same names as model parameters")
@@ -561,13 +566,14 @@ design_model <- function(data,design,model=NULL,
    missing_p_types <- pnames[!(pnames %in% names(design$Clist))]
    if (length(missing_p_types)>0) {
      nok <- length(design$Clist)
-     for (i in 1:length(missing_p_types)) {
-       design$Clist[[missing_p_types[i]]] <- list(stats::contr.treatment)
-       names(design$Clist)[nok+i] <- missing_p_types[i]
-     }
-   }
- }
-  if(model()$type != "MRI") for (i in pnames) attr(design$Flist[[i]],"Clist") <- design$Clist[[i]]
+      for (i in 1:length(missing_p_types)) {
+        design$Clist[[missing_p_types[i]]] <- list(stats::contr.treatment)
+        names(design$Clist)[nok+i] <- missing_p_types[i]
+      }
+    }
+  }
+  for (i in pnames) attr(design$Flist[[i]],"Clist") <- design$Clist[[i]]
+
   out <- lapply(design$Flist,make_dm,da=da,Fcovariates=design$Fcovariates, add_da = add_da, all_cells_dm = all_cells_dm)
   if (!is.null(rt_resolution) & !is.null(da$rt)) da$rt <- round(da$rt/rt_resolution)*rt_resolution
   if (compress){
@@ -577,9 +583,6 @@ design_model <- function(data,design,model=NULL,
     attr(dadm,"designs") <- out
     attr(dadm,"s_expand") <- da$subjects
     attr(dadm,"expand") <- 1:dim(dadm)[1]
-  }
-  if(model()$type == "MRI"){
-    attr(dadm, "design_matrix_mri") <- attr(design, "design_matrix")
   }
   p_names <-  unlist(lapply(out,function(x){dimnames(x)[[2]]}),use.names=FALSE)
   bad_constants <- names(design$constants)[!(names(design$constants) %in% p_names)]
@@ -712,7 +715,7 @@ dm_list <- function(dadm)
   # ok_da_looser <- attr(dadm,"ok_da_looser")
   # expand_uc <- attr(dadm,"expand_uc")
   # expand_lc <- attr(dadm,"expand_lc")
-  dms_mri <- attr(dadm, "design_matrix_mri")
+  dms_mri <- attr(dadm, "design_matrix")
 
   # winner on expanded dadm
   expand_winner <- attr(dadm,"expand_winner")
@@ -735,7 +738,7 @@ dm_list <- function(dadm)
       attr(dl[[i]],"p_names") <- p_names
       attr(dl[[i]],"sampled_p_names") <- sampled_p_names
       attr(dl[[i]],"designs") <- sub_design(designs,isin)
-      attr(dl[[i]],"expand") <- expand[isin1]-min(expand[isin1]) + 1
+      if(!is.null(expand)) attr(dl[[i]],"expand") <- expand[isin1]-min(expand[isin1]) + 1
       attr(dl[[i]],"contract") <- NULL
       attr(dl[[i]],"expand_winner") <- NULL
       attr(dl[[i]],"ok_dadm_winner") <- NULL
@@ -746,7 +749,10 @@ dm_list <- function(dadm)
       attr(dl[[i]],"s_data") <- NULL
       attr(dl[[i]],"s_expand") <- NULL
       attr(dl[[i]],"prior") <- NULL
-      attr(dl[[i]], "design_matrix_mri") <- dms_mri[[i]]
+      if(!is.null(dms_mri)){
+        attr(dl[[i]], "designs") <- make_mri_sampling_design(dms_mri[[i]], sampled_p_names)
+      }
+
       attr(dl[[i]], "unique_nort") <- NULL
       attr(dl[[i]], "unique_nortR") <- NULL
       attr(dl[[i]], "expand_nort") <- NULL
@@ -982,6 +988,7 @@ sampled_pars.emc.design <- function(x,model=NULL,doMap=TRUE, add_da = FALSE, all
       next
     }
     if (is.null(model)) model <- cur_design$model
+    if(grepl("MRI", model()$type)) return(model()$p_types)
     if (is.null(model)) stop("Must supply model as not in design")
 
     Ffactors=c(cur_design$Ffactors,list(R=cur_design$Rlevels))

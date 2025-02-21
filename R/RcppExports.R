@@ -17,6 +17,38 @@ pWald <- function(t, v, B, A, t0) {
     .Call(`_EMC2_pWald`, t, v, B, A, t0)
 }
 
+fft_convolve_equiv_cpp <- function(x, y, conj_flag = TRUE) {
+    .Call(`_EMC2_fft_convolve_equiv_cpp`, x, y, conj_flag)
+}
+
+compute_gamma_diff_hrf <- function(tr, oversampling = 50L, time_length = 32, onset = 0, delay = 6, undershoot = 12, dispersion = 0.9, u_dispersion = 0.9, ratio = 0.35) {
+    .Call(`_EMC2_compute_gamma_diff_hrf`, tr, oversampling, time_length, onset, delay, undershoot, dispersion, u_dispersion, ratio)
+}
+
+compute_glover_hrf <- function(tr, oversampling = 50L, time_length = 32, onset = 0) {
+    .Call(`_EMC2_compute_glover_hrf`, tr, oversampling, time_length, onset)
+}
+
+compute_glover_time_derivative <- function(tr, oversampling = 50L, time_length = 32, onset = 0, delta = 0.1) {
+    .Call(`_EMC2_compute_glover_time_derivative`, tr, oversampling, time_length, onset, delta)
+}
+
+build_hrf_kernel <- function(hrf_model, tr, oversampling = 50L, time_length = 32, onset = 0) {
+    .Call(`_EMC2_build_hrf_kernel`, hrf_model, tr, oversampling, time_length, onset)
+}
+
+sample_event_condition <- function(exp_condition, frame_times, oversampling = 50L, min_onset = -24) {
+    .Call(`_EMC2_sample_event_condition`, exp_condition, frame_times, oversampling, min_onset)
+}
+
+compute_convolved_regressor <- function(exp_condition, hrf_model, frame_times, con_id = "cond", oversampling = 50L, min_onset = -24) {
+    .Call(`_EMC2_compute_convolved_regressor`, exp_condition, hrf_model, frame_times, con_id, oversampling, min_onset)
+}
+
+construct_design_matrix <- function(frame_times, events, hrf_model = "glover", min_onset = -24, oversampling = 50L, add_intercept = TRUE) {
+    .Call(`_EMC2_construct_design_matrix`, frame_times, events, hrf_model, min_onset, oversampling, add_intercept)
+}
+
 calc_ll <- function(p_matrix, data, constants, designs, type, bounds, transforms, pretransforms, p_types, min_ll, trend) {
     .Call(`_EMC2_calc_ll`, p_matrix, data, constants, designs, type, bounds, transforms, pretransforms, p_types, min_ll, trend)
 }
