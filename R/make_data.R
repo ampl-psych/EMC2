@@ -115,11 +115,13 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
   force_response<-FALSE
   rtContaminantNA<-FALSE
   return_Ffunctions <- FALSE
+  covariates=NULL
   Fcovariates=NULL
   optionals <- list(...)
   for (name in names(optionals) ) {
     assign(name, optionals[[name]])
   }
+  Fcovariates <- covariates
   if(is(parameters, "emc")){
     if(is.null(design)) design <- get_design(parameters)
     if(is.null(data)) data <- get_data(parameters)
