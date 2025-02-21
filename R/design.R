@@ -521,7 +521,7 @@ design_model <- function(data,design,model=NULL,
     model <- design$model
   }
   if (model()$type=="SDT") rt_check <- FALSE
-  if(model()$type == "MRI"){
+  if(grepl("MRI", model()$type)){
     dadm <- data
     attr(dadm, "design_matrix") <- attr(design, "design_matrix")
     attr(design, "design_matrix") <- NULL
@@ -750,7 +750,7 @@ dm_list <- function(dadm)
       attr(dl[[i]],"s_expand") <- NULL
       attr(dl[[i]],"prior") <- NULL
       if(!is.null(dms_mri)){
-        attr(dl[[i]], "designs") <- make_mri_sampling_design(dms_mri[[i]])
+        attr(dl[[i]], "designs") <- make_mri_sampling_design(dms_mri[[i]], sampled_p_names)
       }
 
       attr(dl[[i]], "unique_nort") <- NULL
@@ -988,7 +988,7 @@ sampled_pars.emc.design <- function(x,model=NULL,doMap=TRUE, add_da = FALSE, all
       next
     }
     if (is.null(model)) model <- cur_design$model
-    if(model()$type == "MRI") return(model()$p_types)
+    if(grepl("MRI", model()$type)) return(model()$p_types)
     if (is.null(model)) stop("Must supply model as not in design")
 
     Ffactors=c(cur_design$Ffactors,list(R=cur_design$Rlevels))

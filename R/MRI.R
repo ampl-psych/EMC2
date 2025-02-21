@@ -6,10 +6,10 @@ apply_contrasts <- function(events, contrast = NULL, cell_coding = FALSE, remove
   if(!is.null(contrast)){
     if(is.matrix(contrast)){
       events[[factor_name]] <- factor(events[[factor_name]], levels = rownames(contrast))
-      contrasts(events[[factor_name]], how.many = ncol(contrast)) <- contrast
+      stats::contrasts(events[[factor_name]], how.many = ncol(contrast)) <- contrast
     } else {
       events[[factor_name]] <- factor(events[[factor_name]])
-      contrasts(events[[factor_name]]) <- do.call(contrast, list(n = length(unique(events[[factor_name]]))))
+      stats::contrasts(events[[factor_name]]) <- do.call(contrast, list(n = length(unique(events[[factor_name]]))))
     }
   } else {
     events[[factor_name]] <- factor(events[[factor_name]])
@@ -43,8 +43,23 @@ apply_contrasts <- function(events, contrast = NULL, cell_coding = FALSE, remove
 }
 
 
-make_mri_sampling_design <- function(design){
-
+make_mri_sampling_design <- function(design, sampled_p_names){
+  out <- list()
+  expand <- 1:nrow(design)
+  rownames(design) <- NULL
+  for(i in 1:ncol(design)){
+    out[[i]] <- design[,i, drop = F]
+    attr(out[[i]], "expand") <- expand
+  }
+  names(out) <- colnames(design)
+  no_design <- sampled_p_names[!sampled_p_names %in% colnames(design)]
+  for (nam in no_design){
+    mat <- matrix(1, 1, 1)
+    colnames(mat) <- nam
+    out[[nam]] <- mat
+    attr(out[[nam]], "expand") <- rep(1, nrow(design))
+  }
+  return(out)
 }
 
 # Build the full design matrices for all subjects and runs.
@@ -126,7 +141,7 @@ make_design_fmri <- function(data,
   model_list$transform$func <- c(model_list$transform$func, new_t)
   model_list$transform$func <- model_list$transform$func[names(model_list$transform$func) != "beta"]
   # Make pre transforms
-  par_names <- c(betas, "sd")
+  par_names <- c(betas, names(p_not_beta))
   model_list$pre_transform$func <- setNames(rep("identity", length(par_names)), par_names)
   model <- function() {return(model_list)}
   n_pars <- length(par_names)
@@ -158,7 +173,7 @@ normal_mri <- function(){
   return(
     list(
       type="MRI",
-      # c_name = "MRI",
+      c_name = "MRI",
       p_types=c("beta" = 0, "sd" = log(1)),
       transform=list(func=c(beta = "identity", sd = "exp")),
       bound=list(minmax=cbind(beta=c(-Inf,Inf),sd=c(0.001,Inf))),
@@ -167,20 +182,70 @@ normal_mri <- function(){
       # Density function (PDF) for single accumulator
       log_likelihood=function(pars, dadm, model, min_ll=log(1e-10)){
         y <- as.matrix(dadm[,!colnames(dadm) %in% c("subjects", 'run', 'time', "trials")])
-
-        # Design matrix is already generated
-        X <- attr(dadm, "design_matrix_mri")
         # grab the right parameters
-        is_sd <- grepl("sd", colnames(pars))
-        sigma <- pars[,is_sd]
-        betas <- pars[,!is_sd]
-
-        ll <- sum(pmax(dnorm(as.matrix(y), mean = X%*%betas, sd = sigma, log = T), min_ll))
+        sigma <- pars[,ncol(pars)]
+        betas <- pars[,-ncol(pars)]
+        y_hat <- rowSums(betas)
+        y_hat <- y_hat - mean(y_hat)
+        ll <- sum(pmax(dnorm(as.matrix(y), mean = y_hat, sd = sigma, log = T), min_ll))
         return(ll)
       }
     )
   )
 }
+
+
+white_mri <- function(){
+  return(
+    list(
+      type="MRI_white",
+      c_name = "MRI_white",
+      p_types=c("beta" = 0, "rho" = pnorm(0.001), "sd" = log(1)),
+      transform=list(func=c(beta = "identity",  rho = "pnorm", sd = "exp")),
+      bound=list(minmax=cbind(beta=c(-Inf,Inf),sd=c(0.001,Inf), rho = c(0.0001, 1)),
+                 exception=c(rho=0)),
+      Ttransform = function(pars, dadm) return(pars),
+      rfun=function(lR,pars) return(pars),
+      # Density function (PDF) for single accumulator
+      log_likelihood = function(pars, dadm, model, min_ll = log(1e-10)) {
+        # Extract observed data (as a vector)
+        y <- as.vector(as.matrix(dadm[, !colnames(dadm) %in% c("subjects", "run", "time", "trials")]))
+        n <- length(y)
+
+        # Total number of parameter columns
+        m <- ncol(pars)
+
+        # Extract parameters:
+        # - betas: columns 1 to (m-2)
+        # - rho: column (m-1)
+        # - sigma: column m (stationary standard deviation)
+        betas <- pars[, 1:(m - 2), drop = FALSE]
+        rho   <- pars[, m - 1]
+        sigma <- pars[, m]
+
+        # Compute predicted values and demean them
+        y_hat <- rowSums(betas)
+        y_hat <- y_hat - mean(y_hat)
+
+        # Log-likelihood for the first observation
+        ll <- numeric(n)
+        ll[1] <- dnorm(y[1], mean = y_hat[1], sd = sigma[1], log = TRUE)
+
+        # For observations t = 2:n, compute conditional means and sds vectorized:
+        cond_mean <- y_hat[-1] + rho[-1] * (y[-n] - y_hat[-n])
+        cond_sd   <- sigma[-1] * sqrt(1 - rho[-1]^2)
+        ll[-1] <- dnorm(y[-1], mean = cond_mean, sd = cond_sd, log = TRUE)
+
+        # Replace any log-likelihood values below min_ll with min_ll
+        ll <- pmax(ll, min_ll)
+
+        sum(ll)
+      }
+    )
+  )
+}
+
+
 
 
 
