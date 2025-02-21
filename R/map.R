@@ -27,7 +27,7 @@ do_pre_transform <- function(p_vector,transform)
 
 #### Functions to look at parameters ----
 
-map_p <- function(p,dadm)
+map_p <- function(p,dadm,model)
   # Map p to dadm and returns matrix of mapped parameters
   # p is either a vector or a matrix (ncol = number of subjects) of p_vectors
   # dadm is a design matrix with attributes containing model information
@@ -44,18 +44,18 @@ map_p <- function(p,dadm)
     stop("p names must be: ",paste(attr(dadm,"p_names"),collapse=", "))
 
   # Get parameter names from model and create output matrix
-  do_p <- names(attr(dadm,"model")()$p_types)
+  do_p <- names(model$p_types)
   pars <- matrix(nrow=nrow(dadm),ncol=length(do_p),dimnames=list(NULL,do_p))
 
   # If there are any trends do these first, they might be used later in mapping
   # Otherwise we're not applying the trend premap, but we are doing it pre-transform
   # So these trend parameters are post-map, pre-transform and have to be included in the pars output
   premap_idx <- rep(F, length(do_p))
-  if(!is.null(attr(dadm,"model")()$trend) &&
-     (attr(attr(dadm,"model")()$trend, "premap") || attr(attr(dadm,"model")()$trend, "pretransform"))){
-    trend_names <- get_trend_pnames(attr(dadm,"model")()$trend)
+  if(!is.null(model$trend) &&
+     (attr(model$trend, "premap") || attr(model$trend, "pretransform"))){
+    trend_names <- get_trend_pnames(model$trend)
     pretrend_idx <- do_p %in% trend_names
-    if((attr(attr(dadm,"model")()$trend, "premap"))){
+    if((attr(model$trend, "premap"))){
       # These can be removed from the pars matrix at the end
       # Since they are already used before the mapping
       premap_idx <- pretrend_idx
@@ -76,8 +76,8 @@ map_p <- function(p,dadm)
     } else pm <- p[,colnames(cur_design),drop=FALSE]
 
     # Apply pre-mapped trends if they exist
-    if (!is.null(attr(dadm,"model")()$trend) && attr(attr(dadm,"model")()$trend, "premap")) {
-      trend <- attr(dadm,"model")()$trend
+    if (!is.null(model$trend) && attr(model$trend, "premap")) {
+      trend <- model$trend
       isin <- names(trend) %in% colnames(pm)
       if (any(isin)){ # At this point the trend has already been mapped and transformed
         for (j in names(trend)[isin]) {
@@ -98,7 +98,7 @@ map_p <- function(p,dadm)
     if(k <= sum(pretrend_idx)){
       tmp <- as.matrix(tmp)
       colnames(tmp) <- i
-      tmp <- do_transform(tmp, attr(dadm,"model")()$transform)
+      tmp <- do_transform(tmp, model$transform)
     }
     k <- k + 1
     pars[,i] <- tmp
@@ -108,7 +108,7 @@ map_p <- function(p,dadm)
 }
 
 
-get_pars_matrix <- function(p_vector,dadm) {
+get_pars_matrix <- function(p_vector,dadm,model) {
   # Order:
   # 1 pretransform
   # 2 add constants
@@ -126,20 +126,20 @@ get_pars_matrix <- function(p_vector,dadm) {
   # 8 bound
 
   # Niek should constants be included in pre_transform? I think not?
-  p_vector <- do_pre_transform(p_vector, attr(dadm, "model")()$pre_transform)
+  p_vector <- do_pre_transform(p_vector, model$pre_transform)
   # If there's any premap trends, they're done in map_p
-  pars <- map_p(add_constants(p_vector,attr(dadm,"constants")),dadm)
-  if(!is.null(attr(dadm, "model")()$trend) && attr(attr(dadm, "model")()$trend, "pretransform")){
+  pars <- map_p(add_constants(p_vector,attr(dadm,"constants")),dadm, model)
+  if(!is.null(model$trend) && attr(model$trend, "pretransform")){
     # This runs the trend and afterwards removes the trend parameters
-    pars <- prep_trend(dadm, attr(dadm, "model")()$trend, pars)
+    pars <- prep_trend(dadm, model$trend, pars)
   }
-  pars <- do_transform(pars, attr(dadm,"model")()$transform)
-  if(!is.null(attr(dadm, "model")()$trend) && attr(attr(dadm, "model")()$trend, "posttransform")){
+  pars <- do_transform(pars, model$transform)
+  if(!is.null(model$trend) && attr(model$trend, "posttransform")){
     # This runs the trend and afterwards removes the trend parameters
-    pars <- prep_trend(dadm, attr(dadm, "model")()$trend, pars)
+    pars <- prep_trend(dadm, model$trend, pars)
   }
-  pars <- attr(dadm,"model")()$Ttransform(pars, dadm)
-  pars <- add_bound(pars, attr(dadm,"model")()$bound)
+  pars <- model$Ttransform(pars, dadm)
+  pars <- add_bound(pars, model$bound)
   return(pars)
 }
 
