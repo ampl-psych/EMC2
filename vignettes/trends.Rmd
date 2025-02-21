@@ -1,0 +1,294 @@
+---
+title: "Trends"
+description: "A guide to trends in EMC2"
+author: "Niek Stevenson"
+output: rmarkdown::html_document
+bibliography: refs.bib
+vignette: >
+  %\VignetteIndexEntry{"Trends"}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, echo = FALSE}
+rm(list = ls())
+devtools::load_all()
+```
+
+## Introduction
+
+Trends in EMC2 allow you to model how parameters change as a function of covariates. They provide a flexible way to capture systematic changes in model parameters across different conditions or over time. This vignette demonstrates how to use different types of trends and explains their applications.
+
+## Trend Composition
+
+A trend is composed of a kernel function and a base function. The kernel function is the core of the trend, which describes the shape of the relationship between the parameter and the covariate. The base function is used to model the relationship between the parameter and the covariate. We can use the `trend_help()` function to see the different kernels and associated base functions. Don't worry about the trend options, outlined last, for now. These will be covered in the [Timing of Trend Application](#timing-of-trend-application) section later. 
+
+```{r}
+trend_help()
+```
+
+# Defining a Trend
+
+A trend is created using the `make_trend()` function with the following main arguments:
+
+- `par_names`: Which cognitive model parameters to apply the trend to
+- `cov_names`: Which covariates to use for each trend
+- `kernels`: Which kernel function to use for each trend
+- `bases`: Optional base functions for each trend
+
+Let's take the following example:
+
+```{r}
+trend_lin_decr <- make_trend(
+  par_names = "v",
+  cov_names = "trial",
+  kernels = "lin_incr",
+  bases = "lin"
+)
+```
+This trend will apply a linear increasing kernel to the `v` parameter, using the `trial` covariate. This could for example capture the hypothesis that the participants drift rate (`v`) increases over the course of the experiment. To see how the trend is formulated we can use the `trend_help()` function. 
+
+```{r}
+trend_help(kernel = "lin_incr")
+```
+
+The function tells us how the kernel maps the covariate to the kernel `k`. In this case the kernel `k` is just the covariate `c`. The kernel is then used in the base function. The `trend_help()` function also shows us the available base functions for this kernel. In this case we will use the `lin` base function. To see how this base function is formulated we can use the `trend_help()` function again.
+
+```{r}
+trend_help(base = "lin")
+```
+Together these inform us how the trend affects the cognitive model parameter `v`. `v` = `v` + `b` * `k`, where `b` is the base parameter and `k` is the kernel (which in this case is just covariate `c`). Put more simply, the trend is applied to the parameter `v` as `v` = `v` + `b` * `c`. Although this separation into kernel and base might seem overly complex here, it allows for more flexibility in complex trend specifications.
+
+EMC2 automatically creates parameter names for the trend, which can be accessed using the `get_trend_pnames()` function.
+
+```{r}
+get_trend_pnames(trend_lin_decr)
+```
+These parameter names are now included in the parameter types of the model. 
+
+## Available Kernel Types
+
+EMC2 provides several kernel functions for modeling how cognitive model parameters change as a function of covariates.
+
+### Linear Trends
+```{r}
+# Linear decreasing trend
+trend_lin_decr <- make_trend(
+  par_names = "v",
+  cov_names = "trial",
+  kernels = "lin_decr"
+)
+
+# Linear increasing trend
+trend_lin_incr <- make_trend(
+  par_names = "v",
+  cov_names = "trial",
+  kernels = "lin_incr"
+)
+```
+
+Linear trends model straight-line relationships between parameters and covariates. They're useful when you expect simple proportional changes. Technically, the linear kernel could just be included in the design as a covariate (see `?design`), however, for some more advanced functionality covered below, it is useful to also include it as a kernel. 
+
+### Exponential Trends
+```{r}
+# Exponential decreasing trend
+trend_exp_decr <- make_trend(
+  par_names = "v",
+  cov_names = "trial",
+  kernels = "exp_decr"
+)
+
+# Exponential increasing trend
+trend_exp_incr <- make_trend(
+  par_names = "v",
+  cov_names = "trial",
+  kernels = "exp_incr"
+)
+```
+
+Exponential trends are useful for modeling rapid initial changes that level off over time. The `exp_decr` kernel models decay-like patterns, while `exp_incr` models learning-like patterns, with quick initial increases that level off over time.
+
+### Power Trends
+```{r}
+# Power decreasing trend
+trend_pow_decr <- make_trend(
+  par_names = "v",
+  cov_names = "trial",
+  kernels = "pow_decr"
+)
+
+# Power increasing trend
+trend_pow_incr <- make_trend(
+  par_names = "v",
+  cov_names = "trial",
+  kernels = "pow_incr"
+)
+```
+
+Power trends provide another way to model non-linear relationships, often useful for skill acquisition or practice effects. The `pow_decr` kernel models a power decay-like pattern, while `pow_incr` models a power learning-like pattern, with increasingly smaller increases over time.
+
+### Polynomial Trends
+```{r}
+# Quadratic trend
+trend_poly2 <- make_trend(
+  par_names = "v",
+  cov_names = "trial",
+  kernels = "poly2"
+)
+
+# Cubic trend
+trend_poly3 <- make_trend(
+  par_names = "v",
+  cov_names = "trial",
+  kernels = "poly3"
+)
+
+# Quartic trend
+trend_poly4 <- make_trend(
+  par_names = "v",
+  cov_names = "trial",
+  kernels = "poly4"
+)
+```
+
+Polynomial trends allow for more complex relationships, including multiple changes in direction. Higher-order polynomials (poly3, poly4) can capture more complex patterns but may be prone to overfitting.
+
+### Learning Rule Trends
+```{r}
+# Standard delta learning rule
+trend_delta <- make_trend(
+  par_names = "v",
+  cov_names = "trial",
+  kernels = "delta"
+)
+
+# Dual learning rate delta rule
+trend_delta2 <- make_trend(
+  par_names = "v",
+  cov_names = "trial",
+  kernels = "delta2"
+)
+```
+
+The delta rules are particularly useful for modeling learning processes. The standard delta rule updates parameters based on prediction errors. The dual-rate delta rule encorporates two learning rules, which are picked adaptively based on the separate prediction errors. This allows for a learning process that accounts for both fast and slow learning.
+
+Each kernel has associated available bases, at the time of writing, there are only four available bases, and each kernel only supports two of those bases. The bases can be left to default settings, or specified in the `make_trend()` function. Setting different bases is often useful for more complex trend specifications:
+
+ ```{r}
+trend_exp_incr <- make_trend(
+  par_names = "v",
+  cov_names = "trial",
+  kernels = "exp_incr",
+  bases =  "exp_lin"
+)
+ ```
+
+For example the default base for the `exp_incr` kernel is `lin`, which means that the trend is applied as `v` = `v` + `b` * `k`, where `b` is the base parameter and `k` is the kernel. However, we can specify a different base, for example `exp_lin`, which means that the trend is applied as `v` = exp(`v`) + exp(`b`) * `k`. This can be useful is you assume an exponential relationship between the parameter and the covariate.
+
+
+## Setting multiple trends 
+
+Some models have multiple parameters that are affected by the same covariate. In this case, we can specify multiple trends for the same covariate. Note that with the kernels argument, we can specify different kernels for each parameter.
+```{r}
+# Applying different trends to multiple parameters
+trend_multi <- make_trend(
+  par_names = c("v", "t0"),
+  cov_names = c("trial"),
+  kernels = c("exp_incr", "poly2")
+)
+```
+
+Alternatively, some models have multiple parameters that are each affected by a different covariate. In this we can specify different covariates for each trend. Here for example we specify that the drift rate `v` is affected by the `trial` covariate, while the non-decision time `t0` is affected by the `block` covariate.
+
+```{r}
+# Specifying different covariates for each trend
+trend_multi <- make_trend(
+  par_names = c("v", "t0"),
+  cov_names = c("trial", "block"),
+  kernels = c("exp_incr", "poly2")
+)
+```
+
+Lastly, in some models a parameter is affected by multiple covariates. In the example below we specify that the drift rate `v` is affected by the `trial` and `block` covariates, while the non-decision time `t0` is only affected by the `block` covariate.
+```{r}
+# Specifying multiple covariates for a trend
+trend_multi <- make_trend(
+  par_names = c("v", "t0"),
+  cov_names = list(c("trial", "block"), "block"),
+  kernels = c("exp_incr", "poly2")
+)
+```
+
+At the time of writing, EMC2 does not support different kernels for multiple covariates that affect the same cognitive model parameter (but this is planned for the near future).
+
+### Sharing Parameters
+In some cases, we may want to share parameters between trends. For example, we may want to share the base parameter for the different trends for the drift rate `v` and the threshold `a` between the `exp_incr` and `exp_decr` trends. This can be done using the `shared` argument.
+```{r}
+# Sharing parameters between trends
+trend_shared <- make_trend(
+  par_names = c("v", "a"),
+  cov_names = "trial",
+  kernels = c("exp_incr", "exp_incr"),
+  shared = list(intercept = list("v.B0", "a.B0"))
+)
+```
+
+This trend will share the base parameter `B0` between `v` and `a` parameters. Thus instead of two base parameters, there is only one base parameter. The parameters to share are defined as the list entries and the name of the new shared parameter is set as the list name(s), in this case "intercept". To be able to specify the parameters that are to be shared, we need to know the names of the parameters which we can access using the `get_trend_pnames()` function.
+
+```{r}
+get_trend_pnames(trend_shared)
+```
+
+We can also specify multiple shared parameters, for example `shared = list(intercept = list("v.B0", "a.B0"), slope = list("v.d_ei", "a.d_ei"))`. 
+
+## Timing of Trend Application
+
+The timing of trend application can be controlled using the `premap` and `pretransform` arguments:
+
+
+
+
+
+
+
+
+Lastly if both premap and pretransform are `FALSE`, the trend is applied after parameter mapping **and** after parameter transformation. The differences between premap, pretransform and posttransform are described in the . First we outline how a trend is composed.
+
+```{r}
+# Pre-mapping trend
+trend_premap <- make_trend(
+  par_names = "v",
+  cov_names = "trial",
+  kernels = "exp_incr",
+  premap = TRUE
+)
+
+# Pre-transform trend
+trend_pretrans <- make_trend(
+  par_names = "v",
+  cov_names = "trial",
+  kernels = "exp_incr",
+  premap = FALSE,
+  pretransform = TRUE
+)
+
+# Post-transform trend
+trend_posttrans <- make_trend(
+  par_names = "v",
+  cov_names = "trial",
+  kernels = "exp_incr",
+  premap = FALSE,
+  pretransform = FALSE
+)
+```
+
+The timing affects how the trend interacts with parameter mappings and transformations in your model.
+
+## Tips for Choosing Trends
+
+1. Start simple: Begin with linear trends before moving to more complex options
+2. Match theory: Choose trends that align with theoretical expectations
+3. Consider interpretability: Simpler trends are often easier to interpret
+4. Watch for overfitting: More complex trends (like high-order polynomials) may overfit
+5. Use shared parameters when you expect related processes
+6. Consider the timing of trend application based on your model's structure
