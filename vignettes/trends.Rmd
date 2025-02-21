@@ -12,7 +12,7 @@ vignette: >
 
 ```{r, echo = FALSE}
 rm(list = ls())
-devtools::load_all()
+library(EMC2)
 ```
 
 ## Introduction
@@ -244,13 +244,6 @@ We can also specify multiple shared parameters, for example `shared = list(inter
 ## Timing of Trend Application
 
 The timing of trend application can be controlled using the `premap` and `pretransform` arguments:
-
-
-
-
-
-
-
 
 Lastly if both premap and pretransform are `FALSE`, the trend is applied after parameter mapping **and** after parameter transformation. The differences between premap, pretransform and posttransform are described in the . First we outline how a trend is composed.
 
