@@ -106,8 +106,6 @@ double c_log_likelihood_MRI_white(NumericMatrix pars, NumericVector y, LogicalVe
 //
 NumericVector extract_y(DataFrame data) {
   CharacterVector names = data.names();
-  int n = data.nrows();
-
   // Loop through the column names and return the first column that is not excluded
   for (int j = 0; j < names.size(); j++) {
     std::string nm = Rcpp::as<std::string>(names[j]);

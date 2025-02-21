@@ -269,7 +269,6 @@ List sample_event_condition(NumericMatrix exp_condition, NumericVector frame_tim
   int n_frames = frame_times.size();
   double tmin = Rcpp::min(frame_times);
   double tmax = Rcpp::max(frame_times);
-  double n_frames_d = n_frames;
   // Compute number of high-resolution time points.
   double n_hr_calc = ((n_frames - 1) / (tmax - tmin)) *
     (tmax * (1 + 1.0 / (n_frames - 1)) - tmin - min_onset) * oversampling + 1;
