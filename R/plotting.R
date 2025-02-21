@@ -349,7 +349,7 @@ profile_plot <- function(data, design, p_vector, range = .5, layout = NA,
   dots <- list(...)
   lfun <- function(i,x,p_vector,pname,dadm) {
     p_vector[pname] <- x[i]
-    calc_ll_R(p_vector, attr(dadm, "model")(), model)
+    calc_ll_R(p_vector, attr(dadm, "model")(), dadm)
   }
   if(!identical(names(p_min), names(p_max))) stop("p_min and p_max should be specified for the same parameters")
   if(!is.null(names(p_min)) & length(p_min) == length(use_par)) names(p_min) <- use_par
