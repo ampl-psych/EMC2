@@ -53,7 +53,7 @@ add_prior_names <- function(prior, design, ...){
       }
     } else{
       if(length(pnames) == nrow(prior[[pri]])){
-        prior[[pri]] <- prior[[pri]][!nuisance,]
+        prior[[pri]] <- prior[[pri]][!nuisance,,drop=TRUE]
         rownames(prior[[pri]]) <- pnames[!nuisance]
       }
       if(length(pnames) == ncol(prior[[pri]])){
