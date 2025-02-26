@@ -524,7 +524,7 @@ design_model <- function(data,design,model=NULL,
   if(grepl("MRI", model()$type)){
     dadm <- data
     attr(dadm, "design_matrix") <- attr(design, "design_matrix")
-    attr(design, "design_matrix") <- NULL
+    # attr(design, "design_matrix") <- NULL
     p_names <- names(model()$p_types)
     attr(dadm,"p_names") <- p_names
     sampled_p_names <- p_names[!(p_names %in% names(design$constants))]
@@ -751,6 +751,7 @@ dm_list <- function(dadm)
       attr(dl[[i]],"prior") <- NULL
       if(!is.null(dms_mri)){
         attr(dl[[i]], "designs") <- make_mri_sampling_design(dms_mri[[i]], sampled_p_names)
+        attr(dl[[i]], "design_matrix") <- NULL
       }
 
       attr(dl[[i]], "unique_nort") <- NULL
@@ -969,7 +970,7 @@ sampled_pars <- function(x,model=NULL,doMap=TRUE, add_da = FALSE, all_cells_dm =
 sampled_pars.emc.design <- function(x,model=NULL,doMap=TRUE, add_da = FALSE, all_cells_dm = FALSE){
   design <- x
   if(is.null(design)) return(NULL)
-  if("Ffactors" %in% names(design)){
+  if("Flist" %in% names(design)){
     design <- list(design)
   }
   out <- c()
@@ -988,7 +989,15 @@ sampled_pars.emc.design <- function(x,model=NULL,doMap=TRUE, add_da = FALSE, all
       next
     }
     if (is.null(model)) model <- cur_design$model
-    if(grepl("MRI", model()$type)) return(model()$p_types)
+    if(grepl("MRI", model()$type)){
+      pars <- model()$p_types
+      if(length(design) != 1){
+        pars <- paste(j,  names(pars), sep = "|")
+        map_list[[j]] <- NA
+      }
+      out <- c(out, pars)
+      next
+    }
     if (is.null(model)) stop("Must supply model as not in design")
 
     Ffactors=c(cur_design$Ffactors,list(R=cur_design$Rlevels))

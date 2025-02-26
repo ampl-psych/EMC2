@@ -144,7 +144,7 @@ predict.emc <- function(object,hyper=FALSE,n_post=50,n_cores=1,
   for(j in 1:length(data)){
     if(jointModel) emc <- single_out_joint(all_samples, j)
     subjects <- levels(data[[j]]$subjects)
-
+    if(grepl("MRI", design[[j]]$model()$type)) design[[j]] <- add_design_fMRI_predict(design[[j]], emc)
     if (hyper) {
       pars <- vector(mode="list",length=n_post)
       # for (i in 1:n_post) {
@@ -979,17 +979,32 @@ get_data.emc <- function(emc) {
     dat <- vector("list", length(emc[[1]]$data[[1]]))
     for(i in 1:length(dat)){
       design <- get_design(emc)[[i]]
-      tmp <- lapply(emc[[1]]$data,\(x) x[[i]][attr(x[[i]],"expand"),])
-      tmp <- do.call(rbind, tmp)
+      tmp <- do.call(rbind,lapply(emc[[1]]$data,function(x){
+        expand <- attr(x[[i]],"expand")
+        if(is.null(expand)) expand <- 1:nrow(x[[i]])
+        return(x[[i]][expand,])
+      }))
       row.names(tmp) <- NULL
+      if(is.null(tmp$lR)){
+        tmp$lR <- 1
+        tmp$lR <- factor(tmp$lR)
+      }
       tmp <- tmp[tmp$lR == levels(tmp$lR)[1],]
       tmp <- tmp[,!(colnames(tmp) %in% c("trials","lR","lM", "winner", "SlR", "RACE", names(design$Ffunctions)))]
       dat[[i]] <- tmp
     }
   } else{
     design <- get_design(emc)[[1]]
-    dat <- do.call(rbind,lapply(emc[[1]]$data,\(x) x[attr(x,"expand"),]))
+    dat <- do.call(rbind,lapply(emc[[1]]$data,function(x){
+      expand <- attr(x,"expand")
+      if(is.null(expand)) expand <- 1:nrow(x)
+      return(x[expand,])
+    }))
     row.names(dat) <- NULL
+    if(is.null(dat$lR)){
+      dat$lR <- 1
+      dat$lR <- factor(dat$lR)
+    }
     dat <- dat[dat$lR == levels(dat$lR)[1],]
     dat <- dat[,!(colnames(dat) %in% c("trials","lR","lM","winner", "SlR", "RACE", names(design$Ffunctions)))]
   }

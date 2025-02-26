@@ -350,7 +350,6 @@ NumericVector calc_ll(NumericMatrix p_matrix, DataFrame data, NumericVector cons
     // Love me some good old ugly but fast c++ pointers
     NumericVector (*dfun)(NumericVector, NumericMatrix, LogicalVector, double, LogicalVector);
     NumericVector (*pfun)(NumericVector, NumericMatrix, LogicalVector, double, LogicalVector);
-    // NumericMatrix (*Ttransform)(NumericMatrix);
     if(type == "LBA"){
       dfun = dlba_c;
       pfun = plba_c;

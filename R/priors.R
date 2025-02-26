@@ -87,6 +87,11 @@ prior <- function(design, type = NULL, update = NULL,
   if("Ffactors" %in% names(design)){
     design <- list(design)
   }
+  # For fMRI models, design matrices are stored in design until dadm creation
+  design <- lapply(design, function(x){
+    attr(x, "design_matrix") <- NULL
+    return(x)
+  })
   attr(prior, "design") <- design
   class(prior) <- "emc.prior"
   return(prior)
