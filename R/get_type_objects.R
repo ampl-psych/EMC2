@@ -57,7 +57,7 @@ add_prior_names <- function(prior, design, ...){
         rownames(prior[[pri]]) <- pnames[!nuisance]
       }
       if(length(pnames) == ncol(prior[[pri]])){
-        prior[[pri]] <- prior[[pri]][,!nuisance]
+        prior[[pri]] <- prior[[pri]][,!nuisance,drop=FALSE]
         colnames(prior[[pri]]) <- pnames[!nuisance]
       }
     }
