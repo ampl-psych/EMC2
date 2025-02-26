@@ -99,8 +99,8 @@ log_likelihood_sdt <- function(pars,dadm,lb=-Inf, model, min_ll=log(1e-10))
   if (!is.null(attr(pars,"ok"))) { # Bad parameter region
     ok <- attr(pars,"ok")
     okw <- ok[dadm$winner]
-    ll[ok] <- log(model$pfun(lt=lt[okw],ut=ut[okw],pars=pars[dadm$winner & ok,]))
-  } else ll <- log(model$pfun(lt=lt,ut=ut,pars=pars[dadm$winner,]))
+    ll[ok] <- log(model$pfun(lt=lt[okw],ut=ut[okw],pars=pars[dadm$winner & ok,,drop=FALSE]))
+  } else ll <- log(model$pfun(lt=lt,ut=ut,pars=pars[dadm$winner,,drop=FALSE]))
   ll <- ll[expand]
   ll[is.na(ll)] <- 0
   sum(pmax(min_ll,ll))
