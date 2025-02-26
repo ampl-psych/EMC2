@@ -280,7 +280,7 @@ parameters.emc <- function(x,selection = "mu", N = NULL, resample = FALSE, ...)
   # extracts and stacks chains into a matrix
 {
   emc <- x
-  dots <- list(...)
+  dots <- add_defaults(list(...), flatten = TRUE, length.out = N/length(emc))
 
   if(is.null(N) || resample){
     nstage <- colSums(chain_n(emc))
@@ -293,7 +293,6 @@ parameters.emc <- function(x,selection = "mu", N = NULL, resample = FALSE, ...)
     N <- nstage[names(has_ran)[length(has_ran)]]
   }
   dots$merge_chains <- TRUE ; dots$return_mcmc <- FALSE
-  dots$flatten <- TRUE; dots$length.out <- N/length(emc)
   out <- do.call(get_pars, c(list(emc,selection=selection), fix_dots(dots, get_pars)))
   if(selection == "alpha"){
     out <- aperm(out, c(3,1,2))
