@@ -341,7 +341,7 @@ parameters <- function(x, ...){
 
 fit.emc <- function(emc, stage = NULL, iter = 1000, stop_criteria = NULL,report_time=TRUE,
                     search_width = 1, step_size = 100, verbose = TRUE, verboseProgress = FALSE, fileName = NULL,
-                    particles = NULL, particle_factor=70, cores_per_chain = 1,
+                    particles = NULL, particle_factor=50, cores_per_chain = 1,
                     cores_for_chains = length(emc), max_tries = 20,
                     thin_auto = FALSE,n_blocks = 1,
                     ...){
