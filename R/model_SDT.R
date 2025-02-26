@@ -37,37 +37,22 @@ rPROBIT <- function(lR,pars,p_types=c("mean","sd","threshold"),lt=-Inf)
 # #' increase on the natural scale.
 # #'
 # #' @return A model list with all the necessary functions to sample
+#' @export
+#'
 
 probit <- function(){
   list(
   type="SDT",
   p_types=c("mean" = 0,"sd" = log(1),"threshold" = 0),
-  # Transform to natural scale
-  Ntransform=function(x) {
-    is_sd <- grepl("sd",dimnames(x)[[2]])
-    x[,is_sd] <- exp(x[,is_sd])
-    x
-  },
-  # p_vector transform
-  transform = function(x) {
-    if (!is.matrix(x)) {
-      increasing <- grepl("threshold",names(x)) & grepl(":lR",names(x)) | grepl("threshold_lR",names(x))
-      x[increasing] <- exp(x[increasing])
-      x
-    } else {
-      increasing <- grepl("threshold",dimnames(x)[[2]]) & grepl(":lR",dimnames(x)[[2]]) |
-        grepl("threshold_lR",dimnames(x)[[2]])
-      x[,increasing] <- exp(x[,increasing])
-      x
-    }
-  },
   # Trial dependent parameter transform
+  transform=list(func=c(mean = "identity",sd = "exp",threshold="identity")),
+  bound=list(minmax=cbind(mean=c(-Inf,Inf),sd = c(0, Inf), threshold=c(-Inf,Inf))),
   Ttransform = function(pars,dadm) {
     pars
   },
   # Random function for discrete choices
   rfun=function(lR=NULL,pars) {
-    if (is.null(lR)) rep(TRUE,dim(pars)[1]) else rPROBIT(lR,pars)
+    rPROBIT(lR,pars)
   },
   # probability of choice between lower and upper thresholds (lt & ut)
   pfun=function(lt,ut,pars) pPROBIT(lt,ut,pars),
