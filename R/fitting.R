@@ -472,7 +472,7 @@ create_chain_proposals <- function(emc, samples_idx = NULL, do_block = TRUE){
     chains_var <- vector("list", n_subjects)
     chains_mu <- vector("list", n_subjects)
     for(sub in 1:n_subjects){
-      moments <- weighted_moments(alpha[,j,rnd_index], LL[j,rnd_index])
+      moments <- weighted_moments(alpha[,sub,rnd_index], LL[sub, rnd_index])
       emp_covs <- moments$w_cov
       chains_mu[[sub]] <- moments$w_mu
       if(do_block) emp_covs[block_idx] <- 0
