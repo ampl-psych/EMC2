@@ -643,7 +643,6 @@ make_emc <- function(data,design,model=NULL,
                           n_chains=3,compress=TRUE,rt_resolution=0.02,
                           prior_list = NULL,
                           par_groups=NULL, ...){
-
   # arguments for future compatibility
   n_factors <- NULL
   formula <- NULL
@@ -694,7 +693,8 @@ make_emc <- function(data,design,model=NULL,
   if (!is.null(names(design)[1]) && names(design)[1]=="Flist"){
     design <- list(design)
   }
-
+  checks <- sapply(design, function(x) is(x, "emc.design"))
+  if (!all(checks)) stop("design must be a list of emc.design objects")
   if (length(design)!=length(data)){
     design <- rep(design,length(data))
   }

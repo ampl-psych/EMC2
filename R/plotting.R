@@ -256,7 +256,7 @@ plot_fit_choice <- function(data,pp,subject=NULL,factors=NULL,functions=NULL,
 pairs_posterior <- function(emc, selection="alpha", scale_subjects=TRUE,
                             do_plot=TRUE,N=500, ...)
 {
-
+  if(!is(emc, "emc")) stop("input must be an emc object")
   panel.hist <- function(x, ...)
   {
     usr <- par("usr"); on.exit(par(usr))
@@ -430,6 +430,7 @@ plot_pars <- function(emc,layout=NA, selection="mu", show_chains = FALSE, plot_p
                       use_prior_lim = !all_subjects, lpos = "topright", true_pars = NULL, all_subjects = FALSE,
                       prior_args = list(), true_args = list(), ...)
 {
+  if(!is(emc, "emc")) stop("input must be an emc object")
   oldpar <- par(no.readonly = TRUE) # code line i
   on.exit(par(oldpar)) # code line i + 1
   dots <- list(...)

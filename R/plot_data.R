@@ -211,9 +211,9 @@ plot_stat <- function(input, post_predict = NULL, prior_predict = NULL, stat_fun
   sources <- check$sources
 
   # Basic definitions
-  dots <- add_defaults(list(...), col = c("black", "#666666", "#A9A9A9"))
-  posterior_args <- add_defaults(posterior_args, col = c("darkgreen", "#008B8B", "#0000FF"))
-  prior_args <- add_defaults(prior_args, col = c("red", "#CC00FF", "#800080"))
+  dots <- add_defaults(list(...), col = c("black",  "#A9A9A9", "#666666"))
+  posterior_args <- add_defaults(posterior_args, col = c("darkgreen",  "#0000FF", "#008B8B"))
+  prior_args <- add_defaults(prior_args, col = c("red", "#800080", "#CC00FF"))
 
   line_sources <- list()
   dens_sources <- list()
@@ -406,9 +406,9 @@ plot_density <- function(input, post_predict = NULL, prior_predict = NULL,
   xlim <- check$xlim
 
   # Basic definitions
-  dots <- add_defaults(list(...), col = c("black", "#666666", "#A9A9A9"))
-  posterior_args <- add_defaults(posterior_args, col = c("darkgreen", "#008B8B", "#0000FF"))
-  prior_args <- add_defaults(prior_args, col = c("red", "#CC00FF", "#800080"))
+  dots <- add_defaults(list(...), col = c("black",  "#A9A9A9", "#666666"))
+  posterior_args <- add_defaults(posterior_args, col = c("darkgreen",  "#0000FF", "#008B8B"))
+  prior_args <- add_defaults(prior_args, col = c("red", "#800080", "#CC00FF"))
 
   data <- data_sources[[which(sources == "data")[1]]]
   defective_levels <- if (!is.null(data)) levels(factor(data[[defective_factor]])) else character(0)
@@ -718,9 +718,9 @@ plot_cdf <- function(input,
   xlim <- check$xlim
 
   # Basic definitions
-  dots <- add_defaults(list(...), col = c("black", "#666666", "#A9A9A9"))
-  posterior_args <- add_defaults(posterior_args, col = c("darkgreen", "#008B8B", "#0000FF"))
-  prior_args <- add_defaults(prior_args, col = c("red", "#CC00FF", "#800080"))
+  dots <- add_defaults(list(...), col = c("black",  "#A9A9A9", "#666666"))
+  posterior_args <- add_defaults(posterior_args, col = c("darkgreen",  "#0000FF", "#008B8B"))
+  prior_args <- add_defaults(prior_args, col = c("red", "#800080", "#CC00FF"))
 
   defective_levels <- levels(factor(data_sources[[1]][[defective_factor]]))
   unique_group_keys <- unique(data_sources[[1]]$group_key)
