@@ -598,7 +598,7 @@ set_p_accept <- function(stage, search_width){
   if(stage == "preburn") return(0.02 * (1/search_width))
   if(stage == "burn") return(c(0.02, 0.25)* (1/search_width))
   if(stage == "adapt") return(c(0.2, 0.25)* (1/search_width))
-  if(stage == "sample") return(c(0.25, 0.25, 0.25)* (1/search_width))
+  if(stage == "sample") return(c(0.3, 0.3, 0.3)* (1/search_width))
 }
 
 get_default_mix <- function(stage){
