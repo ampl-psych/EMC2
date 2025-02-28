@@ -423,6 +423,8 @@ compare_MLL <- function(mll,nboot=1e5,digits=2,print_summary=TRUE)
 
 
 
+
+
 condMVN <- function (mean, sigma, dependent.ind, given.ind, X.given, check.sigma = TRUE)
 {
   if (missing(dependent.ind))
@@ -439,8 +441,9 @@ condMVN <- function (mean, sigma, dependent.ind, given.ind, X.given, check.sigma
     if (!isSymmetric(sigma))
       stop("sigma is not a symmetric matrix")
     eigenvalues <- eigen(sigma, only.values = TRUE)$values
-    if (any(eigenvalues < 1e-08))
-      stop("sigma is not positive-definite")
+    if (any(eigenvalues < 1e-08)){
+      sigma <- sigma + abs(diag(rnorm(nrow(sigma), sd = 1e-3)))
+    }
   }
   B <- sigma[dependent.ind, dependent.ind]
   C <- sigma[dependent.ind, given.ind, drop = FALSE]
