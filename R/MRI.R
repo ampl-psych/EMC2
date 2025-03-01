@@ -1,3 +1,6 @@
+
+# Design matrix functions -------------------------------------------------
+
 apply_contrasts <- function(events, contrast = NULL, cell_coding = FALSE, remove_intercept = FALSE, do_print = FALSE) {
   factor_name <- events$factor[1]
   colnames(events)[colnames(events) == "event_type"] <- factor_name
@@ -40,26 +43,6 @@ apply_contrasts <- function(events, contrast = NULL, cell_coding = FALSE, remove
   long_events <- long_events[, !(colnames(long_events) %in% c("id", factor_name))]
   long_events <- long_events[order(long_events$onset), ]
   return(long_events)
-}
-
-
-make_mri_sampling_design <- function(design, sampled_p_names){
-  out <- list()
-  expand <- 1:nrow(design)
-  rownames(design) <- NULL
-  for(i in 1:ncol(design)){
-    out[[i]] <- design[,i, drop = F]
-    attr(out[[i]], "expand") <- expand
-  }
-  names(out) <- colnames(design)
-  no_design <- sampled_p_names[!sampled_p_names %in% colnames(design)]
-  for (nam in no_design){
-    mat <- matrix(1, 1, 1)
-    colnames(mat) <- nam
-    out[[nam]] <- mat
-    attr(out[[nam]], "expand") <- rep(1, nrow(design))
-  }
-  return(out)
 }
 
 # Build the full design matrices for all subjects and runs.
@@ -106,6 +89,11 @@ build_fmri_design_matrices <- function(timeseries, events, factors, contrasts,
 
   return(all_dms)
 }
+
+
+# Models ------------------------------------------------------------------
+
+
 
 make_design_fmri <- function(data,
                              events,
@@ -289,24 +277,10 @@ white_mri <- function(){
   )
 }
 
-make_data_fMRI <- function(parameters, model, data, design, ...){
-  # if(is.null(attr(design, "design_matrix"))){
-  #   stop("for fMRI simulation the original design needs to be passed to the simulation function")
-  # }
-  attr(data, "designs") <- design$fMRI_design[[data$subjects[1]]]
-  pars <- t(apply(parameters, 1, do_pre_transform, model()$pre_transform))
-  pars <- map_p(add_constants(pars,design$constants),data, model())
-  pars <- do_transform(pars, model()$transform)
-  pars <- model()$Ttransform(pars, data)
-  pars <- add_bound(pars, model()$bound)
-  data[, !colnames(data) %in% c("subjects", "run", "time", "trials")] <- model()$rfun(pars)
-  return(data)
-}
 
-add_design_fMRI_predict <- function(design, emc){
-  design$fMRI_design <- lapply(emc[[1]]$data, function(x) return(attr(x,"designs")))
-  return(design)
-}
+# Plotting functions ------------------------------------------------------
+
+
 
 plot_hrf <- function(timeseries, events,
                      factors,
@@ -389,5 +363,49 @@ plot_hrf <- function(timeseries, events,
 
   # Reset the plotting parameters.
   par(old_par)
+}
+
+
+# Utility functions -------------------------------------------------------
+
+
+
+make_mri_sampling_design <- function(design, sampled_p_names){
+  out <- list()
+  expand <- 1:nrow(design)
+  rownames(design) <- NULL
+  for(i in 1:ncol(design)){
+    out[[i]] <- design[,i, drop = F]
+    attr(out[[i]], "expand") <- expand
+  }
+  names(out) <- colnames(design)
+  no_design <- sampled_p_names[!sampled_p_names %in% colnames(design)]
+  for (nam in no_design){
+    mat <- matrix(1, 1, 1)
+    colnames(mat) <- nam
+    out[[nam]] <- mat
+    attr(out[[nam]], "expand") <- rep(1, nrow(design))
+  }
+  return(out)
+}
+
+
+make_data_fMRI <- function(parameters, model, data, design, ...){
+  # if(is.null(attr(design, "design_matrix"))){
+  #   stop("for fMRI simulation the original design needs to be passed to the simulation function")
+  # }
+  attr(data, "designs") <- design$fMRI_design[[data$subjects[1]]]
+  pars <- t(apply(parameters, 1, do_pre_transform, model()$pre_transform))
+  pars <- map_p(add_constants(pars,design$constants),data, model())
+  pars <- do_transform(pars, model()$transform)
+  pars <- model()$Ttransform(pars, data)
+  pars <- add_bound(pars, model()$bound)
+  data[, !colnames(data) %in% c("subjects", "run", "time", "trials")] <- model()$rfun(pars)
+  return(data)
+}
+
+add_design_fMRI_predict <- function(design, emc){
+  design$fMRI_design <- lapply(emc[[1]]$data, function(x) return(attr(x,"designs")))
+  return(design)
 }
 
