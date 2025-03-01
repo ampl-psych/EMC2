@@ -17,7 +17,7 @@
   verboseProgress = FALSE,
   fileName = NULL,
   particles = NULL,
-  particle_factor = 70,
+  particle_factor = 50,
   cores_per_chain = 1,
   cores_for_chains = length(emc),
   max_tries = 20,

@@ -152,7 +152,7 @@ check_tune_settings <- function(tune, n_pars, stage, particles){
   # Tuning of number of particles, might be a bit arbitrary
   if(is.null(tune$target_ESS)) tune$target_ESS <- 2.5*sqrt(n_pars)
   if(is.null(tune$ESS_scale)) tune$ESS_scale <- .05
-  if(is.null(tune$max_particles)) tune$max_particles <- particles
+  if(is.null(tune$max_particles)) tune$max_particles <- particles*1.2
   # Mix tuning settings
   if(is.null(tune$mix_adapt)) tune$mix_adapt <- .05
   # After n0 all the tuning kicks in
@@ -598,7 +598,7 @@ set_p_accept <- function(stage, search_width){
   if(stage == "preburn") return(0.02 * (1/search_width))
   if(stage == "burn") return(c(0.02, 0.25)* (1/search_width))
   if(stage == "adapt") return(c(0.2, 0.25)* (1/search_width))
-  if(stage == "sample") return(c(0.25, 0.25, 0.25)* (1/search_width))
+  if(stage == "sample") return(c(0.3, 0.3, 0.3)* (1/search_width))
 }
 
 get_default_mix <- function(stage){
