@@ -512,7 +512,6 @@ pstopEXGST <- function(parstop,n_acc,upper=Inf,st=1,
 }
 
 
-
 #### Model list ----
 #' Stop-signal exGaussian race
 #'
@@ -523,31 +522,17 @@ SSexG <- function() {
     type="RACE",
     p_types=c(mu=log(.4),sigma=log(.05),tau=log(.1),
               muS=log(.3),sigmaS=log(.025),tauS=log(.05),tf=qnorm(0),gf=qnorm(0)),
-    Ntransform=function(x,use=NULL) {
-      # transform parameters back to real line
-      isprobit <- dimnames(x)[[2]] %in% c("tf","gf")
-      if (is.null(use)) {
-        x[,!isprobit] <- exp(x[,!isprobit])
-        x[,isprobit] <- pnorm(x[,isprobit])
-      } else {
-        ok <- dimnames(x)[[2]] %in% use
-        x[,!isprobit & ok] <- exp(x[,!isprobit & ok])
-        x[,isprobit & ok] <- pnorm(x[,isprobit & ok])
-      }
-      x
-    },
-    # p_vector transform
-    transform = function(x) x,
-    # Trial dependent parameter transform
+    transform =list(func=c(mu = "exp",sigma = "exp",tau = "exp",
+                           muS = "exp",sigmaS = "exp",tauS = "exp",tf = "pnorm", gf = "pnorm")),
+    bound=list(minmax=cbind(mu = c(0.001,Inf), sigma = c(0.001,1), tau = c(0.001,1),
+                            muS = c(0.001, Inf), sigmaS = c(0.001, 1), tauS = c(0.001, 1),
+                            tf = c(0, 1), gf = c(0, 1))),
     Ttransform = function(pars,dadm) {
-      if (any(names(dadm)=="SSD")) pars <- cbind(pars,SSD=dadm$SSD) else
+      if (any(names(dadm)=="SSD")){
+        pars <- cbind(pars,SSD=dadm$SSD)
+      } else {
         pars <- cbind(pars,SSD=rep(NA,dim(pars)[1]))
-      attr(pars,"ok") <- (pars[,"tau"] > 1e-3) & (pars[,"sigma"] > 1e-3) & (pars[,"mu"] > 1e-3) &
-        (pars[,"tau"] < 1) & (pars[,"sigma"] < 1) &
-        (pars[,"tauS"] > 1e-3) & (pars[,"sigmaS"] > 1e-3) & (pars[,"muS"] > 1e-3) &
-        (pars[,"tauS"] < 1) & (pars[,"sigmaS"] < 1) &
-        ((pars[,"tf"] > 1e-6) | pars[,"tf"] == 0) & ((pars[,"gf"] > 1e-6) | pars[,"gf"] == 0)
-
+      }
       pars <- cbind(pars,lI=as.numeric(dadm$lI))  # Only necessary for data generation.
       pars
     },
@@ -563,223 +548,12 @@ SSexG <- function() {
     sfun=function(pars,n_acc,st=1,upper=Inf) pstopEXGST(pars,n_acc,upper=upper,st=st),
     # Random function for SS race
     rfun=function(lR=NULL,pars) {
-      ok <- (pars[,"tau"] > 1e-3) & (pars[,"sigma"] > 1e-3) & (pars[,"mu"] > 1e-3) &
-        (pars[,"tau"] < 1) & (pars[,"sigma"] < 1) &
-        (pars[,"tauS"] > 1e-3) & (pars[,"sigmaS"] > 1e-3) & (pars[,"muS"] > 1e-3) &
-        (pars[,"tauS"] < 1) & (pars[,"sigmaS"] < 1) &
-        ((pars[,"tf"] > 1e-6) | pars[,"tf"] == 0) & ((pars[,"gf"] > 1e-6) | pars[,"gf"] == 0)
-
-      if (is.null(lR)) ok else rSSexGaussian(lR,pars)
+      rSSexGaussian(lR,pars,attr(pars, "ok"))
     },
     # Race likelihood combining pfun and dfun
-    log_likelihood=function(p_vector,dadm,min_ll=log(1e-10))
-      log_likelihood_race_ss(p_vector=p_vector, dadm = dadm, min_ll = min_ll)
+    log_likelihood=function(pars,dadm,model,min_ll=log(1e-10)){
+      log_likelihood_race_ss(pars=pars, dadm = dadm, model= model, min_ll = min_ll)
+    }
   )
-}
-
-#### Model list ----
-#' Stop-signal exGaussian race with uni-valent stop-triggered responding
-#'
-#' @return A model list with all the necessary functions to sample
-#' @export
-SSexGuv <- function() {
-  list(
-    type="RACE",
-    p_types=c(mu=log(.4),sigma=log(.05),tau=log(.1),
-              muS=log(.3),sigmaS=log(.025),tauS=log(.05),tf=qnorm(0),gf=qnorm(0)),
-    Ntransform=function(x,use=NULL) {
-      # transform parameters back to real line
-      isprobit <- dimnames(x)[[2]] %in% c("tf","gf")
-      if (is.null(use)) {
-        x[,!isprobit] <- exp(x[,!isprobit])
-        x[,isprobit] <- pnorm(x[,isprobit])
-      } else {
-        ok <- dimnames(x)[[2]] %in% use
-        x[,!isprobit & ok] <- exp(x[,!isprobit & ok])
-        x[,isprobit & ok] <- pnorm(x[,isprobit & ok])
-      }
-      x
-    },
-    # p_vector transform
-    transform = function(x) x,
-    # Trial dependent parameter transform
-    Ttransform = function(pars,dadm) {
-      if (any(names(dadm)=="SSD")) pars <- cbind(pars,SSD=dadm$SSD) else
-        pars <- cbind(pars,SSD=rep(NA,dim(pars)[1]))
-      attr(pars,"ok") <- (pars[,"tau"] > 1e-3) & (pars[,"sigma"] > 1e-3) & (pars[,"mu"] > 1e-3) &
-        (pars[,"tau"] < 1) & (pars[,"sigma"] < 1) &
-        (pars[,"tauS"] > 1e-3) & (pars[,"sigmaS"] > 1e-3) & (pars[,"muS"] > 1e-3) &
-        (pars[,"tauS"] < 1) & (pars[,"sigmaS"] < 1) &
-        ((pars[,"tf"] > 1e-6) | pars[,"tf"] == 0) & ((pars[,"gf"] > 1e-6) | pars[,"gf"] == 0)
-
-      pars <- cbind(pars,lI=as.numeric(dadm$lI))  # Only necessary for data generation.
-      pars
-    },
-    # Density function (PDF) for single go racer
-    dfunG=function(rt,pars) dexGaussianG(rt,pars),
-    # Probability function (CDF) for single go racer
-    pfunG=function(rt,pars) pexGaussianG(rt,pars),
-    # Density function (PDF) for single stop racer
-    dfunS=function(rt,pars) dexGaussianS(rt,pars[,c("muS","sigmaS","tauS","SSD"),drop=FALSE]),
-    # Probability function (CDF) for single stop racer
-    pfunS=function(rt,pars) pexGaussianS(rt,pars[,c("muS","sigmaS","tauS","SSD"),drop=FALSE]),
-    # Stop probability integral
-    sfun=function(pars,n_acc,upper=Inf) pstopEXG(pars,n_acc,upper=upper),
-    # Random function for SS race
-    rfun=function(lR=NULL,pars) {
-      ok <- (pars[,"tau"] > 1e-3) & (pars[,"sigma"] > 1e-3) & (pars[,"mu"] > 1e-3) &
-        (pars[,"tau"] < 1) & (pars[,"sigma"] < 1) &
-        (pars[,"tauS"] > 1e-3) & (pars[,"sigmaS"] > 1e-3) & (pars[,"muS"] > 1e-3) &
-        (pars[,"tauS"] < 1) & (pars[,"sigmaS"] < 1) &
-        ((pars[,"tf"] > 1e-6) | pars[,"tf"] == 0) & ((pars[,"gf"] > 1e-6) | pars[,"gf"] == 0)
-
-      if (is.null(lR)) ok else rSSexGaussian(lR,pars)
-    },
-    # Race likelihood combining pfun and dfun
-    log_likelihood=function(p_vector,dadm,min_ll=log(1e-10))
-      log_likelihood_race_ss_uv(p_vector=p_vector, dadm = dadm, min_ll = min_ll)
-  )
-}
-
-
-
-
-# Used by different stop-signal models
-
-update_ssd <- function(isstop,idx,idx1,ssd,stairstep,stairmin,stairmax)
-  # Used in random function
-{
-  if (isstop) {
-    if (ssd[idx]+ stairstep < stairmax)
-      ssd[idx1] <- ssd[idx] + stairstep else ssd[idx1] <- ssd[idx]
-  } else {
-    if (ssd[idx] - stairstep > stairmin)
-      ssd[idx1] <- ssd[idx] - stairstep else ssd[idx1] <- ssd[idx]
-  }
-  ssd
-}
-
-
-# p stop functions
-
-my.integrate <- function(...,upper=Inf,big=10)
-  # Avoids bug in integrate upper=Inf that uses only 1  subdivision
-  # Use of  big=10 is arbitrary ...
-{
-  out <- try(integrate(...,upper=upper),silent=TRUE)
-  if (is(out,"try-error")) 0 else
-  {
-    if (upper==Inf & out$subdivisions==1)
-    {
-      out <- try(integrate(...,upper=big),silent=TRUE)
-      if (is(out,"try-error")) 0 else
-      {
-        if (out$subdivisions==1) 0 else out$value
-      }
-    } else out$value
-  }
-}
-
-#' Staircase function
-#'
-#' Staircase function for stop-signal models. Can be used to generate
-#' stop-signal data.
-#'
-#' @param dadm A data-augmented design
-#' @param p Proportion of stop-trials
-#' @param pars Parameter matrix, needs to have the same number of rows as `dadm`
-#' @param SSD0 Minimum SSD in seconds
-#' @param stairstep Step size in seconds
-#' @param stairmin Minimum SSD in seconds
-#' @param stairmax Maximum SSD in seconds
-#'
-#' @return A data frame with variables `R`, `rt`, and `SSD`
-#' @export
-#'
-staircase_fun <- function(dadm,p=.25,pars=NULL,
-                          SSD0=.25,stairstep=.05,stairmin=0,stairmax=Inf)
-  # random p of trials get NA, ready to be filled in by a staircase
-{
-  # if pars not supplied return an SSD column indicating all go trials
-  if (is.null(pars)) return(rep(Inf,nrow(dadm)))
-
-  # levels(dadm$lR) <- levels(dadm$lR)
-
-  # if pars supplied potentially run staircase for each participant
-  for(i in 1:length(unique(dadm$subjects))){
-    dadm_i <- dadm[dadm$subjects==unique(dadm$subjects)[i],]
-    pars_i <- pars[dadm$subjects==unique(dadm$subjects)[i],]
-    nacc <- length(levels(dadm_i$lR))
-    is1 <- dadm_i$lR==levels(dadm_i$lR)[1] # first accumulator
-    ntrials <- sum(is1)
-    if (!any(colnames(dadm_i)=="SSD")) { # pick staircase trials
-      dadm_i$SSD <- rep(Inf, nrow(dadm_i))
-      tmp <- matrix(dadm_i$SSD,nrow=nacc)
-      tmp[,sample(1:ntrials,round(ntrials*p))] <- NA
-      dadm_i$SSD <- as.vector(tmp)
-    }
-    out_i <- setNames(data.frame(matrix(NA,nrow=ntrials,ncol=3)),c("R","rt","SSD"))
-    pick <- is.infinite(dadm_i$SSD)
-    if (any(pick)) { # fill in no-stop trials
-      out_i$SSD[pick[is1]] <- Inf
-      pars_i[pick,"SSD"] <- Inf
-      out_i[pick[is1],c("R","rt")] <- attributes(dadm_i)$model()$rfun(dadm_i$lR[pick],pars_i[pick,,drop=FALSE])
-    }
-    pick <- is.finite(dadm_i$SSD)
-    if (any(pick)) { # fill in fixed SSD trials
-      out_i$SSD[pick[is1]] <- dadm_i$SSD[pick][is1[pick]]
-      pars_i[pick,"SSD"] <- dadm_i$SSD[pick]
-      out_i[pick[is1],c("R","rt")] <- attributes(dadm_i)$model()$rfun(dadm_i$lR[pick],pars_i[pick,,drop=FALSE])
-    }
-    isna <- is.na(dadm_i$SSD)
-    if (any(isna)) { # run staircase if any NAs to fill in
-      nstair <- sum(isna)/nacc # number of staircase trials
-      trials <- rep(0,ntrials*nacc) # used to pick out_i each staircase trial in pars_i
-      trials[is.na(dadm_i$SSD)] <- rep(1:nstair,each=nacc)
-      for (s in 1:nstair) { # run staircase
-        current <-  trials == s # current staircase trial
-        if (s==1)  dadm_i$SSD[current] <- out_i$SSD[current[is1]] <- SSD0 # initialize
-        p_stairs <- pars_i[current,,drop=FALSE] # parameters for current staircase trial
-        # simulate 1 trial, because is.na(SSD) in pars_i rfun returns dt, an nacc x 1 matrix
-        dt <- attributes(dadm_i)$model()$rfun(dadm_i$lR[current],p_stairs)
-        inhibit <- p_stairs[,"lI"]==1 # inhibition triggered
-        # add SSD to stop and inhibition triggered
-        dt[c(TRUE,inhibit),] <- dt[c(TRUE,inhibit),] + dadm_i$SSD[current][1]
-        winner <- which.min(dt)
-        iinhibit <- c(1,1+c(1:nacc)[inhibit]) # stop or inhibition triggered index
-        if (s != nstair) { # set SSD for next staircase trial
-          nexts <- trials == (s+1)
-          if (any(iinhibit==winner))   # round as otherwise get spurious tiny differences
-            dadm_i$SSD[nexts] <- round(dadm_i$SSD[current] + stairstep,3) else  # successful stop
-              dadm_i$SSD[nexts] <- round(dadm_i$SSD[current] - stairstep,3)       # failed stop
-            if ((dadm_i$SSD[nexts][1]<stairmin) | (dadm_i$SSD[nexts][1]>stairmax))
-              dadm_i$SSD[nexts] <- dadm_i$SSD[current] # dont step
-            out_i$SSD[c(trials == s+1)[is1]] <- dadm_i$SSD[nexts][1]
-        }
-        if (winner==1) { # stop wins
-          if (any(inhibit)) { # inhibition triggered response
-            if (all(is.infinite(dt[c(FALSE,inhibit),])))  # tf
-              out_i[current[is1],c("R","rt")] <- c(NA,NA) else {
-                pick <- which.min(dt[c(FALSE,inhibit),])
-                out_i[current[is1],c("R","rt")] <-
-                  c(c(1:nacc)[inhibit][pick],dt[c(FALSE,inhibit),][pick])
-              }
-          } # otherwise no response
-        } else { # pick from all except stop
-          out_i[current[is1],c("R","rt")] <- c(winner-1,dt[winner,])
-        }
-      }
-    }
-    out_i$R <- factor(out_i$R,levels=1:nacc,labels=levels(dadm_i$lR))
-    if(i == 1){
-      out <- out_i
-    } else {
-      out <- rbind(out, out_i)
-    }
-    if(length(unique(dadm$subjects)) == 1){
-      return(out)
-    }
-  }
-  return(out)
 }
 
