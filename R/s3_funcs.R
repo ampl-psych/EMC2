@@ -479,7 +479,7 @@ fit.emc <- function(emc, stage = NULL, iter = 1000, stop_criteria = NULL,report_
 #'                            formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
 #'                            constants=c(s=log(1)))
 #' # Then make the emc object, we've omitted a prior here for brevity so default priors will be used.
-#' emc_forstmann <- make_emc(forstmann, design)
+#' emc_forstmann <- make_emc(forstmann, design_DDMaE)
 #'
 #' # With the emc object we can start sampling by simply calling fit
 #' emc_forstmann <- fit(emc_forstmann, fileName = "intermediate_save_location.RData")
