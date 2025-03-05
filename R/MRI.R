@@ -286,16 +286,10 @@ white_mri <- function(){
         n <- length(y)
 
         m <- ncol(pars)
-
-        # Extract parameters:
-        # - betas: columns 1 to (m-2)
-        # - rho: column (m-1)
-        # - sigma: column m (stationary standard deviation)
         betas <- pars[, 1:(m - 2), drop = FALSE]
         rho   <- pars[, m - 1]
         sigma <- pars[, m]
 
-        # Compute predicted values and demean them
         y_hat <- rowSums(betas)
         y_hat <- y_hat - mean(y_hat)
 
@@ -303,7 +297,7 @@ white_mri <- function(){
         ll <- numeric(n)
         ll[1] <- dnorm(y[1], mean = y_hat[1], sd = sigma[1], log = TRUE)
 
-        # For observations t = 2:n, compute conditional means and sds vectorized:
+        # For observations t = 2:n, compute conditional means
         cond_mean <- y_hat[-1] + rho[-1] * (y[-n] - y_hat[-n])
         cond_sd   <- sigma[-1] * sqrt(1 - rho[-1]^2)
         ll[-1] <- dnorm(y[-1], mean = cond_mean, sd = cond_sd, log = TRUE)

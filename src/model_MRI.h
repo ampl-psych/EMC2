@@ -2,8 +2,9 @@
 #define mri_H
 
 #include <Rcpp.h>
-#include <"mri.h">
 using namespace Rcpp;
+//
+// #include "mri.h"
 
 double c_log_likelihood_MRI(NumericMatrix pars, NumericVector y, LogicalVector is_ok,
                             int n, int m,
@@ -119,107 +120,101 @@ NumericVector extract_y(DataFrame data) {
   return NumericVector(0);
 }
 
-// [[Rcpp::export]]
-double log_likelihood_double_gamma(NumericVector y,
-                                   NumericVector parameters,
-                                   double tr,
-                                   NumericVector frame_times,
-                                   List event_cache) {
-  // Define hyperparameters as constants.
-  int oversampling = 50;
-  double time_length = 32.0;
-  double onset = 0.0;
-  double undershoot = 12.0;
-  double dispersion = 0.9;
-  double u_dispersion = 0.9;
-  double ratio = 0.35;
-  double min_onset = -24.0;
-
-  // event_cache is a list with one element per condition.
-  int num_conditions = event_cache.size();
-
-  // Parameter vector format: [ beta_1, beta_2, ..., beta_m, free_delay, sigma ]
-  int total_params = parameters.size();
-  if(total_params < 2)
-    stop("Parameter vector must contain beta weights, free delay, and sigma.");
-
-  double free_delay = parameters[total_params - 2];
-  double sigma = parameters[total_params - 1];
-  NumericVector beta = parameters[Range(0, total_params - 3)];
-  if(beta.size() != num_conditions)
-    stop("Number of beta weights must equal the number of conditions in event_cache.");
-
-  // Precompute common derived quantities.
-  int n_scanner = frame_times.size();  // number of scanner time points
-
-  // Recompute the current HRF kernel (for the "glover" model) using the free_delay.
-  // We use our updated build_hrf_kernel function.
-  NumericMatrix hkernel = build_hrf_kernel("glover", tr, oversampling, time_length, onset,
-                                           free_delay, undershoot, dispersion, u_dispersion, ratio);
-  // For "glover", the kernel is one-column. Reverse it.
-  NumericVector hkernel_col = hkernel(_, 0);
-  NumericVector hkernel_rev = reverse_vector(hkernel_col);
-
-  // All cached regressor FFTs should have the same length.
-  // Use the first condition to obtain the padded FFT length.
-  List first_cache = event_cache[0];
-  arma::cx_vec reg_fft_example = as<arma::cx_vec>(first_cache["regressor_fft"]);
-  int L = reg_fft_example.n_elem;
-
-  // Zero-pad the current HRF kernel to length L.
-  NumericVector kernel_padded(L);
-  int kernel_length = hkernel_rev.size();
-  for (int i = 0; i < kernel_length; i++) {
-    kernel_padded[i] = hkernel_rev[i];
-  }
-  for (int i = kernel_length; i < L; i++) {
-    kernel_padded[i] = 0.0;
-  }
-  arma::vec kernel_vec = as<arma::vec>(kernel_padded);
-  arma::cx_vec kernel_fft = arma::fft(conv_to<cx_vec>::from(kernel_vec));
-
-  // For each condition, use the cached FFT of the high-res event regressor.
-  // Multiply by the current HRF kernel FFT, perform inverse FFT, and downsample.
-  arma::mat X(n_scanner, num_conditions, fill::zeros);
-
-  for (int cond = 0; cond < num_conditions; cond++) {
-    List cond_cache = event_cache[cond];
-    NumericVector cond_hr_regressor = cond_cache["hr_regressor"];     // high-res regressor
-    NumericVector cond_hr_frame_times = cond_cache["hr_frame_times"];   // high-res time grid
-    arma::cx_vec regressor_fft = as<arma::cx_vec>(cond_cache["regressor_fft"]); // precomputed FFT
-
-    // Convolve: multiply cached FFT with current HRF kernel FFT.
-    arma::cx_vec conv_fft = regressor_fft % kernel_fft;
-    arma::cx_vec conv_ifft = arma::ifft(conv_fft);
-    arma::vec conv_full = arma::real(conv_ifft.head(cond_hr_regressor.size()));
-
-    // Downsample conv_full from cond_hr_frame_times to scanner frame_times.
-    // Wrap conv_full as a one-column NumericMatrix.
-    NumericVector conv_full_vec = wrap(conv_full);
-    NumericMatrix conv_full_mat(conv_full_vec.size(), 1);
-    for (int i = 0; i < conv_full_vec.size(); i++) {
-      conv_full_mat(i, 0) = conv_full_vec[i];
-    }
-    // Downsample using resample_matrix.
-    NumericMatrix ds = resample_matrix(conv_full_mat, cond_hr_frame_times, frame_times);
-    arma::vec ds_vec = as<arma::vec>(ds(_,0));
-    X.col(cond) = ds_vec;
-  }
-
-  // Compute the model prediction: X * beta.
-  arma::vec beta_vec = as<arma::vec>(beta);
-  arma::vec pred = X * beta_vec;
-
-  // Compute the log-likelihood: sum over time points of log-density.
-  arma::vec y_vec = as<arma::vec>(y);
-  int n = y_vec.n_elem;
-  double logLik = 0.0;
-  for (int i = 0; i < n; i++) {
-    logLik += R::dnorm(y_vec(i), pred[i], sigma, 1);
-  }
-
-  return logLik;
-}
+// // [[Rcpp::export]]
+// double log_likelihood_double_gamma(NumericVector y,
+//                                    NumericVector parameters,
+//                                    double tr,
+//                                    NumericVector frame_times,
+//                                    List event_cache) {
+//   // Define hyperparameters as constants.
+//   int oversampling = 50;
+//   double time_length = 32.0;
+//   double onset = 0.0;
+//   double undershoot = 12.0;
+//   double dispersion = 0.9;
+//   double u_dispersion = 0.9;
+//   double ratio = 0.35;
+//   double min_onset = -24.0;
+//
+//   // event_cache is a list with one element per condition.
+//   int num_conditions = event_cache.size();
+//
+//   // Parameter vector format: [ beta_1, beta_2, ..., beta_m, free_delay, sigma ]
+//   int total_params = parameters.size();
+//   double free_delay = parameters[total_params - 2];
+//   double sigma = parameters[total_params - 1];
+//   NumericVector beta = parameters[Range(0, total_params - 3)];
+//   // Precompute common derived quantities.
+//   int n_scanner = frame_times.size();  // number of scanner time points
+//
+//   // Recompute the current HRF kernel (for the "glover" model) using the free_delay.
+//   // We use our updated build_hrf_kernel function.
+//   NumericMatrix hkernel = build_hrf_kernel("glover", tr, oversampling, time_length, onset,
+//                                            free_delay, undershoot, dispersion, u_dispersion, ratio);
+//   // For "glover", the kernel is one-column. Reverse it.
+//   NumericVector hkernel_col = hkernel(_, 0);
+//   NumericVector hkernel_rev = reverse_vector(hkernel_col);
+//
+//   // All cached regressor FFTs should have the same length.
+//   // Use the first condition to obtain the padded FFT length.
+//   List first_cache = event_cache[0];
+//   arma::cx_vec reg_fft_example = as<arma::cx_vec>(first_cache["regressor_fft"]);
+//   int L = reg_fft_example.n_elem;
+//
+//   // Zero-pad the current HRF kernel to length L.
+//   NumericVector kernel_padded(L);
+//   int kernel_length = hkernel_rev.size();
+//   for (int i = 0; i < kernel_length; i++) {
+//     kernel_padded[i] = hkernel_rev[i];
+//   }
+//   for (int i = kernel_length; i < L; i++) {
+//     kernel_padded[i] = 0.0;
+//   }
+//   arma::vec kernel_vec = as<arma::vec>(kernel_padded);
+//   arma::cx_vec kernel_fft = arma::fft(conv_to<cx_vec>::from(kernel_vec));
+//
+//   // For each condition, use the cached FFT of the high-res event regressor.
+//   // Multiply by the current HRF kernel FFT, perform inverse FFT, and downsample.
+//   arma::mat X(n_scanner, num_conditions, fill::zeros);
+//
+//   for (int cond = 0; cond < num_conditions; cond++) {
+//     List cond_cache = event_cache[cond];
+//     NumericVector cond_hr_regressor = cond_cache["hr_regressor"];     // high-res regressor
+//     NumericVector cond_hr_frame_times = cond_cache["hr_frame_times"];   // high-res time grid
+//     arma::cx_vec regressor_fft = as<arma::cx_vec>(cond_cache["regressor_fft"]); // precomputed FFT
+//
+//     // Convolve: multiply cached FFT with current HRF kernel FFT.
+//     arma::cx_vec conv_fft = regressor_fft % kernel_fft;
+//     arma::cx_vec conv_ifft = arma::ifft(conv_fft);
+//     arma::vec conv_full = arma::real(conv_ifft.head(cond_hr_regressor.size()));
+//
+//     // Downsample conv_full from cond_hr_frame_times to scanner frame_times.
+//     // Wrap conv_full as a one-column NumericMatrix.
+//     NumericVector conv_full_vec = wrap(conv_full);
+//     NumericMatrix conv_full_mat(conv_full_vec.size(), 1);
+//     for (int i = 0; i < conv_full_vec.size(); i++) {
+//       conv_full_mat(i, 0) = conv_full_vec[i];
+//     }
+//     // Downsample using resample_matrix.
+//     NumericMatrix ds = resample_matrix(conv_full_mat, cond_hr_frame_times, frame_times);
+//     arma::vec ds_vec = as<arma::vec>(ds(_,0));
+//     X.col(cond) = ds_vec;
+//   }
+//
+//   // Compute the model prediction: X * beta.
+//   arma::vec beta_vec = as<arma::vec>(beta);
+//   arma::vec pred = X * beta_vec;
+//
+//   // Compute the log-likelihood: sum over time points of log-density.
+//   arma::vec y_vec = as<arma::vec>(y);
+//   int n = y_vec.n_elem;
+//   double logLik = 0.0;
+//   for (int i = 0; i < n; i++) {
+//     logLik += R::dnorm(y_vec(i), pred[i], sigma, 1);
+//   }
+//
+//   return logLik;
+// }
 
 
 #endif

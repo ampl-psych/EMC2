@@ -37,12 +37,20 @@ build_hrf_kernel <- function(hrf_model, tr, oversampling, time_length, onset, de
     .Call(`_EMC2_build_hrf_kernel`, hrf_model, tr, oversampling, time_length, onset, delay, undershoot, dispersion, u_dispersion, ratio)
 }
 
-compute_convolved_regressor <- function(exp_condition, hrf_model, frame_times, con_id, oversampling, min_onset, time_length, onset, delay, undershoot, dispersion, u_dispersion, ratio) {
-    .Call(`_EMC2_compute_convolved_regressor`, exp_condition, hrf_model, frame_times, con_id, oversampling, min_onset, time_length, onset, delay, undershoot, dispersion, u_dispersion, ratio)
-}
-
 construct_design_matrix <- function(frame_times, events, hrf_model, min_onset, oversampling, time_length, onset, delay, undershoot, dispersion, u_dispersion, ratio, add_intercept) {
     .Call(`_EMC2_construct_design_matrix`, frame_times, events, hrf_model, min_onset, oversampling, time_length, onset, delay, undershoot, dispersion, u_dispersion, ratio, add_intercept)
+}
+
+build_glover_hrf_kernel_numeric <- function(tr, oversampling, time_length, onset, delay, undershoot, dispersion, u_dispersion, ratio) {
+    .Call(`_EMC2_build_glover_hrf_kernel_numeric`, tr, oversampling, time_length, onset, delay, undershoot, dispersion, u_dispersion, ratio)
+}
+
+build_event_cache_cpp <- function(events, run_times, oversampling = 50L, min_onset = -24.0, time_length = 32.0, onset = 0.0, nominal_delay = 6.0, undershoot = 12.0, dispersion = 0.9, u_dispersion = 0.9, ratio = 0.35) {
+    .Call(`_EMC2_build_event_cache_cpp`, events, run_times, oversampling, min_onset, time_length, onset, nominal_delay, undershoot, dispersion, u_dispersion, ratio)
+}
+
+log_likelihood_double_gamma_precomputed_multi <- function(y, parameters, event_cache) {
+    .Call(`_EMC2_log_likelihood_double_gamma_precomputed_multi`, y, parameters, event_cache)
 }
 
 calc_ll <- function(p_matrix, data, constants, designs, type, bounds, transforms, pretransforms, p_types, min_ll, trend) {
