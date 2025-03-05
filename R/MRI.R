@@ -1,6 +1,27 @@
 
 # Design matrix functions -------------------------------------------------
 
+create_covariates <- function(events, do_print = FALSE, remove_intercept = FALSE){
+  cov_name <- events$covariate[1]
+  colnames(events)[colnames(events) == "event_type"] <- cov_name
+  design <- model.matrix(as.formula(paste0("~ ", cov_name)), events)
+  colnames(design)[1] <- paste0(cov_name, "0")
+  events_design <- cbind(events, design)
+  if(do_print){
+    print(unique(events_design[, !colnames(events_design) %in% c("onset", "subjects", "duration")]))
+  }
+  long_events <- reshape(events_design,
+                         direction = "long",
+                         varying = colnames(design),
+                         v.names = "modulation",
+                         timevar = "regressor",
+                         times = colnames(design))
+  rownames(long_events) <- NULL
+  long_events <- long_events[long_events$modulation != 0, ]
+  long_events <- long_events[, !(colnames(long_events) %in% c("id", cov_name))]
+  long_events <- long_events[order(long_events$onset), ]
+}
+
 apply_contrasts <- function(events, contrast = NULL, cell_coding = FALSE, remove_intercept = FALSE, do_print = FALSE) {
   factor_name <- events$factor[1]
   colnames(events)[colnames(events) == "event_type"] <- factor_name
@@ -46,7 +67,8 @@ apply_contrasts <- function(events, contrast = NULL, cell_coding = FALSE, remove
 }
 
 # Build the full design matrices for all subjects and runs.
-build_fmri_design_matrices <- function(timeseries, events, factors, contrasts,
+build_fmri_design_matrices <- function(timeseries, events, factors = NULL, contrasts = NULL,
+                                       covariates = NULL,
                                        hrf_model = 'glover + derivative', cell_coding = NULL) {
   events$duration <- 0.01  # default duration
   if(!is.data.frame(events)) events <- do.call(rbind, events)
@@ -73,12 +95,27 @@ build_fmri_design_matrices <- function(timeseries, events, factors, contrasts,
                                                 cell_coding = fact %in% cell_coding))
       }
 
+      for(cov in names(covariates)){
+        idx <- ev_run$event_type %in% covariates[[cov]]
+        ev_run$covariate[idx] <- cov
+        tmp <- ev_run[idx, ]
+        ev_tmp <- rbind(ev_tmp, create_covariates(tmp,
+                        do_print = (run == runs[1]) & (subject == subjects[1])))
+      }
+
       ev_tmp <- ev_tmp[order(ev_tmp$onset), ]
       dms_sub[[as.character(run)]] <- construct_design_matrix(ts_run$time,
                                                               events = ev_tmp,
                                                               hrf_model = hrf_model,
-                                                              min_onset = -24,
-                                                              oversampling = 50,
+                                                              time_length = 32, # total hrf duration
+                                                              min_onset = -24, # Grid computation start time for oversampling
+                                                              oversampling = 50, # How many timepoints per tr
+                                                              onset = 0, # accounts for shifts in HRF
+                                                              undershoot = 12, # When does the negative time point occur
+                                                              delay = 6, # Time to peak of initial bump
+                                                              dispersion = .9, # Width of positive gamma
+                                                              u_dispersion = .9, # Width of negative gamma
+                                                              ratio = .35, # Relative size of undershoot compared to overshoot
                                                               add_intercept = FALSE)
     }
 
@@ -98,7 +135,8 @@ build_fmri_design_matrices <- function(timeseries, events, factors, contrasts,
 make_design_fmri <- function(data,
                              events,
                              model = normal_mri,
-                             factors,
+                             factors = NULL,
+                             covariates = NULL,
                              contrasts = NULL,
                              hrf_model='glover + derivative',
                              cell_coding = NULL,
@@ -107,7 +145,7 @@ make_design_fmri <- function(data,
   if(!is.null(cell_coding) && !cell_coding %in% names(factors)) stop("Cell coded factors must have same name as factors argument")
   dots <- list(...)
   dots$add_intercept <- FALSE
-  design_matrix <- build_fmri_design_matrices(data, events, factors, contrasts, hrf_model, cell_coding)
+  design_matrix <- build_fmri_design_matrices(data, events, factors, contrasts, covariates, hrf_model, cell_coding)
   data_names <- colnames(data)[!colnames(data) %in% c('subjects', 'run', 'time')]
   # First create the design matrix
 
