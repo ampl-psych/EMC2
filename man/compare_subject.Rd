@@ -2,7 +2,7 @@
 % Please edit documentation in R/statistics.R
 \name{compare_subject}
 \alias{compare_subject}
-\title{Information criteria for each participant}
+\title{Information Criteria For Each Participant}
 \usage{
 compare_subject(
   sList,
