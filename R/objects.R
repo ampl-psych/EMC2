@@ -52,7 +52,7 @@ remove_samples <- function(samples, stage = "sample", filter = NULL, thin = 1,
   return(samples)
 }
 
-#' Merge samples
+#' Merge Samples
 #'
 #' Merges samples from all chains as one unlisted object.
 #'
@@ -82,7 +82,7 @@ merge_chains <- function(emc){
   return(out_samples)
 }
 
-#' Get chain iterations
+#' MCMC Chain Iterations
 #'
 #' Returns a matrix with the number of samples per chain for each stage that is present
 #' in the emc object (i.e., `preburn`, `burn`, `adapt`,
@@ -331,7 +331,7 @@ fix_dots <- function(dots, fun, exclude = "", consider_dots = TRUE){
   }
 }
 
-#' Filter/manipulate parameters from emc object
+#' Filter/Manipulate Parameters from emc Object
 #'
 #' Underlying function used in most plotting and object handling functions in
 #' EMC2. Can for example be used to filter/thin a parameter type

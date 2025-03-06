@@ -3,7 +3,7 @@
 \name{fit.emc}
 \alias{fit.emc}
 \alias{fit}
-\title{Model estimation in EMC2}
+\title{Model Estimation in EMC2}
 \usage{
 \method{fit}{emc}(
   emc,

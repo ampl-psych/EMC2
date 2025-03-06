@@ -3,7 +3,7 @@
 \name{ess_summary.emc}
 \alias{ess_summary.emc}
 \alias{ess_summary}
-\title{Effective sample size}
+\title{Effective Sample Size}
 \usage{
 \method{ess_summary}{emc}(
   emc,

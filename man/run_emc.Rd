@@ -2,7 +2,7 @@
 % Please edit documentation in R/fitting.R
 \name{run_emc}
 \alias{run_emc}
-\title{Custom function for more controlled model estimation}
+\title{Custom Function for More Controlled Model Estimation}
 \usage{
 run_emc(
   emc,

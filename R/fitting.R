@@ -35,7 +35,7 @@ get_stop_criteria <- function(stage, stop_criteria, type){
   return(stop_criteria)
 }
 
-#' Custom function for more controlled model estimation
+#' Custom Function for More Controlled Model Estimation
 #'
 #' Although typically users will rely on ``fit``, this function can be used for more fine-tuned specification of estimation needs.
 #' The function will throw an error if a stage is skipped,
@@ -613,7 +613,7 @@ loadRData <- function(fileName){
 }
 
 
-#' Make an emc object
+#' Make an emc Object
 #'
 #' Creates an emc object by combining the data, prior,
 #' and model specification into a `emc` object that is needed in `fit()`.

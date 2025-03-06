@@ -2,7 +2,7 @@
 % Please edit documentation in R/SBC.R
 \name{plot_sbc_ecdf}
 \alias{plot_sbc_ecdf}
-\title{Plot the ECDF difference in SBC ranks}
+\title{Plot the ECDF Difference in SBC Ranks}
 \usage{
 plot_sbc_ecdf(ranks, layout = NA)
 }

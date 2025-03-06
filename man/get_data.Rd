@@ -3,7 +3,7 @@
 \name{get_data.emc}
 \alias{get_data.emc}
 \alias{get_data}
-\title{Get data}
+\title{Get Data}
 \usage{
 \method{get_data}{emc}(emc)
 

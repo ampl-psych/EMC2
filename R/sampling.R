@@ -85,7 +85,7 @@ init <- function(pmwgs, start_mu = NULL, start_var = NULL,
   return(pmwgs)
 }
 
-#' Initialize chains
+#' Initialize Chains
 #'
 #' Adds a set of start points to each chain. These start points are sampled from a user-defined multivariate
 #' normal across subjects.

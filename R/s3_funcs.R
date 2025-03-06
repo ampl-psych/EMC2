@@ -14,7 +14,7 @@ print.emc <- function(x, ...){
   return(invisible(list(iterations = n_chain, subjects = sub_names, parameters = par_names)))
 }
 
-#' Summary statistics for emc objects
+#' Summary Statistics for emc Objects
 #'
 #' Computes quantiles, `Rhat` and `ESS` for selected model parameters.
 #'
@@ -67,7 +67,7 @@ summary.emc <- function(object, selection = c("mu", "sigma2", "alpha"), probs = 
 }
 
 
-#' Plot function for emc objects
+#' Plot Function for emc Objects
 #'
 #' Makes trace plots for model parameters.
 #'
@@ -101,7 +101,7 @@ plot.emc <- function(x, stage = "sample", selection = c("mu", "sigma2", "alpha")
 
 
 
-#' Generate posterior/prior predictives
+#' Generate Posterior/Prior Predictives
 #'
 #' Simulate ``n_post`` data sets using the posterior/prior parameter estimates
 #'
@@ -240,7 +240,7 @@ check.emc <- function(emc, selection = c('mu', 'sigma2', 'alpha'), digits = 3,
   return(invisible(out_list))
 }
 
-#' Convergence checks for an emc object
+#' Convergence Checks for an emc Object
 #'
 #' Runs a series of convergence checks, prints statistics to the console, and
 #' makes traceplots of the worst converged parameter per selection.
@@ -320,7 +320,7 @@ parameters.emc <- function(x,selection = "mu", N = NULL, resample = FALSE, ...)
 }
 
 
-#' Returns a parameter type from an emc object as a data frame.
+#' Return Data Frame of Parameters
 #'
 #' @param x An emc or emc.prior object
 #' @param selection String designating parameter type (e.g. mu, sigma2, correlation, alpha)
@@ -404,7 +404,7 @@ fit.emc <- function(emc, stage = NULL, iter = 1000, stop_criteria = NULL,report_
   return(emc)
 }
 
-#' Model estimation in EMC2
+#' Model Estimation in EMC2
 #'
 #' General purpose function to estimate models specified in EMC2.
 #'
@@ -585,7 +585,7 @@ recovery.emc <- function(emc, true_pars,
 }
 
 
-#' Recovery plots
+#' Recovery Plots
 #'
 #' Plots recovery of data generating parameters/samples.
 #' Full range of samples manipulations described in `get_pars`
@@ -691,7 +691,7 @@ hypothesis.emc <- function(emc, parameter = NULL, H0 = 0, fun = NULL,selection =
   return(pdfun(H0)/post_dfun(H0))
 }
 
-#' Within-model hypothesis testing
+#' Within-Model Hypothesis Testing
 #'
 #' Approximates the Bayes factor for parameter effects using the savage-dickey ratio.
 #'
@@ -811,7 +811,7 @@ credible.emc <- function(x,x_name=NULL,x_fun=NULL,x_fun_name="fun", selection = 
   invisible(tab)
 }
 
-#' Posterior credible interval tests
+#' Posterior Credible Interval Tests
 #'
 #' Modeled after `t.test`, returns the credible interval of the parameter or test
 #' and what proportion of the posterior distribution (or the difference in posterior distributions
@@ -863,7 +863,7 @@ credible <- function(x, ...){
   UseMethod("credible")
 }
 
-#' Shorten an emc object
+#' Shorten an emc Object
 #'
 #' @inheritParams get_pars
 #' @param ... additional optional arguments
@@ -910,7 +910,7 @@ credint.emc <- function(x, selection="mu", probs = c(0.025, .5, .975),
   return(out)
 }
 
-#' Gelman-Rubin statistic
+#' Gelman-Rubin Statistic
 #'
 #' Returns the Gelman-Rubin diagnostics (otherwise known as the R-hat) of the selected parameter type;
 #' i.e. the ratio of between to within MCMC chain variance.
@@ -939,7 +939,7 @@ gd_summary <- function(emc, ...){
   UseMethod("gd_summary")
 }
 
-#' Effective sample size
+#' Effective Sample Size
 #'
 #' Returns the effective sample size (ESS) of the selected parameter type.
 #' Full range of possible samples manipulations described in `get_pars`.
@@ -954,7 +954,7 @@ ess_summary <- function(emc, ...){
   UseMethod("ess_summary")
 }
 
-#' Posterior quantiles
+#' Posterior Quantiles
 #'
 #' Returns the quantiles of the selected parameter type.
 #' Full range of possible samples manipulations described in `get_pars`.
@@ -1009,7 +1009,7 @@ get_data.emc <- function(emc) {
   }
   return(dat)
 }
-#' Get data
+#' Get Data
 #'
 #' Extracts data from an emc object
 #'
@@ -1034,7 +1034,7 @@ get_prior.emc <- function(emc){
   return(prior)
 }
 
-#' Get prior
+#' Get Prior
 #'
 #' Extracts prior from an emc object
 #'
@@ -1060,7 +1060,7 @@ get_design.emc <- function(x){
   return(emc_design)
 }
 
-#' Plot design
+#' Plot Design
 #'
 #' Makes design illustration by plotting simulated data based on the design
 #'
@@ -1099,7 +1099,7 @@ mapped_pars.emc <- function(x, p_vector = NULL, model = NULL, digits=3,remove_su
               covariates=covariates,...)
 }
 
-#' Get design
+#' Get Design
 #'
 #' Extracts design from an emc object
 #'
@@ -1134,7 +1134,7 @@ auto_thin.emc <- function(emc, stage = "sample", selection = c("alpha", "mu"), .
 }
 
 
-#' Automatically thin an emc object
+#' Automatically Thin an emc Object
 #'
 #' Uses the effective sample size of `selection` to determine how much to optimally thin an emc object
 #'

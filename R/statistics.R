@@ -1,4 +1,4 @@
-#' Information criteria and marginal likelihoods
+#' Information Criteria and Marginal Likelihoods
 #'
 #' Returns the BPIC/DIC or marginal deviance (-2*marginal likelihood) for a list of samples objects.
 #'
@@ -330,7 +330,7 @@ get_BayesFactor <- function(MLL1, MLL2){
   exp(MLL1 - MLL2)
 }
 
-#' Information criteria for each participant
+#' Information Criteria For Each Participant
 #'
 #' Returns the BPIC/DIC based model weights for each participant in a list of samples objects
 #'

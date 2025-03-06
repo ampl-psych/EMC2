@@ -2,7 +2,7 @@
 % Please edit documentation in R/design.R
 \name{update2version}
 \alias{update2version}
-\title{Update EMC objects to the current version}
+\title{Update EMC Objects to the Current Version}
 \usage{
 update2version(emc)
 }

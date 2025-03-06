@@ -1,5 +1,5 @@
 
-#' Specify a design and model
+#' Specify a Design and Model
 #'
 #' This function combines information regarding the data, type of model, and
 #' the model specification.
@@ -161,7 +161,7 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
 }
 
 
-#' Contrast to enforce equal prior variance on each level
+#' Contrast Enforcing Equal Prior Variance on each Level
 #'
 #' Typical contrasts impose different levels of marginal prior variance for the different levels.
 #' This contrast can be used to ensure that each level has equal marginal priors (Rouder, Morey, Speckman, & Province; 2012).
@@ -194,7 +194,7 @@ contr.bayes <- function(n) {
 }
 
 
-#' Contrast to enforce increasing estimates
+#' Contrast Enforcing Increasing Estimates
 #'
 #' Each level will be estimated additively from the previous level
 #'
@@ -222,7 +222,7 @@ contr.increasing <- function(n)
   contr
 }
 
-#' Contrast to enforce decreasing estimates
+#' Contrast Enforcing Decreasing Estimates
 #'
 #' Each level will be estimated as a reduction from the previous level
 #'
@@ -240,7 +240,7 @@ contr.decreasing <- function(n) {
   out[dim(out)[1]:1,]
 }
 
-#' Anova style contrast matrix
+#' Anova Style Contrast Matrix
 #'
 #' Similar to `contr.helmert`, but then scaled to estimate differences between conditions. Use in `design()`.
 #'
@@ -807,7 +807,7 @@ dm_list <- function(dadm)
   return(dl)
 }
 
-#' Update EMC objects to the current version
+#' Update EMC Objects to the Current Version
 #'
 #' This function updates EMC objects created with older versions of the package to be compatible with the current version.
 #'
@@ -882,7 +882,7 @@ update2version <- function(emc){
 
 
 # Some s3 classes for design objects ---------------------------------------------------------
-#' Parameter mapping back to the design factors
+#' Parameter Mapping Back to the Design Factors
 #'
 #' Maps parameters of the cognitive model back to the experimental design. If p_vector
 #' is left unspecified will print a textual description of the mapping.
@@ -898,7 +898,7 @@ update2version <- function(emc){
 #' @param ... optional arguments
 #' @param remove_subjects Boolean. Whether to include subjects as a factor in the design
 #' @param covariates Covariates specified in the design can be included here.
-#' @return Matrix with a column for each factor in the design and for each model parameter type (``p_type``).
+#' @return Matrix with a column for each factor in the design and for   each model parameter type (``p_type``).
 #' @examples
 #' # First define a design:
 #' design_DDMaE <- design(data = forstmann,model=DDM,
@@ -961,7 +961,7 @@ mapped_pars.emc.design <- function(x, p_vector = NULL, model=NULL,
 
 
 
-#' Get model parameters from a design
+#' Get Model Parameters from a Design
 #'
 #' Makes a vector with zeroes, with names and length corresponding to the
 #' model parameters of the design.

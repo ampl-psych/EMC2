@@ -201,7 +201,7 @@ standardize_loadings <- function(emc = NULL, loadings = NULL, sig_err_inv = NULL
   return(out)
 }
 
-#' Plot relations
+#' Plot Group-Level Relations
 #'
 #' An adjusted version of the `corrplot` package function `corrplot()` tailored
 #' to `EMC2` and the plotting of estimated correlations.

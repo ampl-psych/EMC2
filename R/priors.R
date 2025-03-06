@@ -1,10 +1,10 @@
-#' Prior specification
+
 #'
-#' Specify priors for the chosen model. These values are entered manually by default but can be
-#' recycled from another prior (given in the `update` argument).
+#' Specify Priors for the Chosen Model
 #'
-#' Where a value is not supplied, the user is prompted to enter
-#' numeric values (or functions that evaluate to numbers).
+#' These values are entered manually by default but can be recycled from another prior (given in the `update` argument).
+#'
+#' Where a value is not supplied, the user is prompted to enter numeric values (or functions that evaluate to numbers).
 #'
 #' To get the prior help use `prior_help(type)`. With `type` e.g. 'diagonal'.
 #'
@@ -282,7 +282,7 @@ merge_priors <- function(prior_list){
   return(out)
 }
 
-#' Prior specification information
+#' Prior Specification Information
 #'
 #' Prints information associated with the prior for certain 'type'
 #'

@@ -2,7 +2,7 @@
 % Please edit documentation in R/s3_funcs.R
 \name{plot.emc}
 \alias{plot.emc}
-\title{Plot function for emc objects}
+\title{Plot Function for emc Objects}
 \usage{
 \method{plot}{emc}(
   x,

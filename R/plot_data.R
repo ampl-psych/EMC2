@@ -181,7 +181,7 @@ prep_data_plot <- function(input, post_predict, prior_predict, to_plot, limits,
   return(list(datasets = datasets, sources = sources, xlim = xlim))
 }
 
-#' Plot statistics on data
+#' Plot Statistics on Data
 #'
 #' Plots panels that contain a set of densities for each level of the specified `factor`
 #' The densities represent the predicted data across the posterior, the vertical lines represent the real data.
@@ -372,7 +372,7 @@ compute_def_dens <- function(dat, defective_factor, dargs) {
 }
 
 
-#' Plot defective densities
+#' Plot Defective Densities
 #'
 #' Plots panels that contain a set of densities for each level of the specified defective factor in the data.
 #' These densities are defective; their areas are relative to the respective
@@ -657,7 +657,7 @@ get_def_cdf <- function(x, defective_factor, dots) {
 ###############################################################################
 ## Plot Defective CDFs
 ###############################################################################
-#' Plot defective cumulative distribution functions
+#' Plot Defective Cumulative Distribution Functions
 #'
 #' Plots panels of cumulative distribution functions (CDFs) for each level of the specified
 #' defective factor in the data. The CDFs are *defective*; each factor level's CDF

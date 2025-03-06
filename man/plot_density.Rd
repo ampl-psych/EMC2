@@ -2,7 +2,7 @@
 % Please edit documentation in R/plot_data.R
 \name{plot_density}
 \alias{plot_density}
-\title{Plot defective densities}
+\title{Plot Defective Densities}
 \usage{
 plot_density(
   input,

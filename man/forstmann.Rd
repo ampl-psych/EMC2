@@ -3,7 +3,7 @@
 \docType{data}
 \name{forstmann}
 \alias{forstmann}
-\title{Forstmann et al.'s data}
+\title{Forstmann et al.'s Data}
 \format{
 A data frame with 15818 rows and 5 variables:
 \describe{

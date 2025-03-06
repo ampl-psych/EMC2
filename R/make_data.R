@@ -32,7 +32,7 @@ make_missing <- function(data,LT=0,UT=Inf,LC=0,UC=Inf,
   out
 }
 
-#' Simulate data
+#' Simulate Data
 #'
 #' Simulates data based on a model design and a parameter vector (`p_vector`) by one of two methods:
 #' 1) Creating a fully crossed and balanced design specified by the design,
@@ -296,7 +296,7 @@ add_Ffunctions <- function(data,design)
     data <-  cbind.data.frame(data,Fdf[,ok,drop=FALSE])
 }
 
-#' Make random effects
+#' Generate Subject-Level Parameters
 #'
 #' Simulates subject-level parameters in the format required by ``make_data()``.
 #'
