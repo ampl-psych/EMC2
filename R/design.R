@@ -807,8 +807,38 @@ dm_list <- function(dadm)
   return(dl)
 }
 
-update2version <- function(emc, model, transform = NULL, bound = NULL,
-                           pre_transform = NULL){
+#' Update EMC objects to the current version
+#'
+#' This function updates EMC objects created with older versions of the package to be compatible with the current version.
+#'
+#' @param emc An EMC object to update
+#' @return An updated EMC object compatible with the current version
+#' @examples
+#' # Update the model to current version
+#' updated_model <- update2version(samples_LNR)
+#'
+#' @export
+update2version <- function(emc){
+  get_new_model <- function(old_model, pars){
+    if(old_model()$c_name == "LBA"){
+      model <- LBA
+    } else if(old_model()$c_name == "DDM"){
+      model <- DDM
+    } else if(old_model()$c_name == "RDM"){
+      model <- RDM
+    } else if(old_model()$c_name == "LNR"){
+      model <- LNR
+    } else{
+      stop("current model not supported for updating, sorry!!")
+    }
+    model_list <- model()
+    model_list$transform <- fill_transform(transform = NULL,model)
+    model_list$pre_transform <- fill_transform(transform = NULL, model = model, p_vector = pars, is_pre = TRUE)
+    model_list$bound <- fill_bound(bound = NULL,model)
+    model <- function(){return(model_list)}
+    return(model)
+  }
+
   design_list <- get_design(emc)
   if(is.null(emc[[1]]$type)){
     type <- attr(emc[[1]], "variant_funs")$type
@@ -816,32 +846,27 @@ update2version <- function(emc, model, transform = NULL, bound = NULL,
       x$type <- type
       return(x)
     })
-  }
-  type <- emc[[1]]$type
-  # Apparently we're an old model with previous bounding system
-  if(is.null(design_list[[1]]$model()$bound)){
-    # Just to be sure let's set t0 transform lower to 0
-    if(is.null(transform)) transform <- list(lower = c(t0 = 0))
   } else{
-    if(is.null(transform)) transform <- design_list[[1]]$model()$transform
-    if(is.null(bound)) bound <- design_list[[1]]$model()$bound
+    type <- emc[[1]]$type
   }
-  model_list <- model()
-  model_list$transform <- fill_transform(transform,model)
-  model_list$pre_transform <- fill_transform(pre_transform, model = model, p_vector = sampled_pars(design_list), is_pre = TRUE)
-  model_list$bound <- fill_bound(bound,model)
-  model <- function(){return(model_list)}
-  design_list <- lapply(design_list, FUN = function(x){
-    x$model <- model
-    return(x)
-  })
-  emc <- lapply(emc, FUN = function(x){
-    x$data <- lapply(x$data, FUN = function(y){
-      attr(y, "model") <- model
-      return(y)
-    })
-    return(x)
-  })
+  # Model used to be stored in data
+  first_data <- emc[[1]]$data[[1]]
+  if(is.null(emc[[1]]$model)){
+    if(is.data.frame(first_data)){
+      old_model <- attr(first_data, "model")
+      new_model <- get_new_model(old_model, sampled_pars(design_list[[1]]))
+      design_list[[1]]$model <- new_model
+      emc[[1]]$model <- new_model
+    } else{
+      old_model <- lapply(first_data, function(x) attr(x, "model"))
+      new_model <- mapply(get_new_model, old_model, lapply(design_list, sampled_pars))
+      design_list <- mapply(function(x, y){
+        x$model <- y
+        return(list(x))
+      }, design_list, new_model)
+    }
+    emc[[1]]$model <- new_model
+  }
   prior_new <- emc[[1]]$prior
   attr(prior_new, "type") <- type
   prior_new <- prior(design_list, type, update = prior_new)

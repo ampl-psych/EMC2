@@ -1,6 +1,3 @@
-#ifndef mri_dm
-#define mri_dm
-
 // [[Rcpp::depends(RcppArmadillo)]]
 #include <RcppArmadillo.h>
 #include <cmath>
@@ -512,5 +509,3 @@ DataFrame construct_design_matrix(NumericVector frame_times, DataFrame events,
 
   return df;
 }
-
-#endif
