@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">EMC2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">2.1.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">3.0.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -42,6 +42,25 @@
       <small>Source: <a href="https://github.com/ampl-psych/EMC2/blob/HEAD/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="3.0.0" id="emc2-300">EMC2 3.0.0<a class="anchor" aria-label="anchor" href="#emc2-300"></a></h2>
+<div class="section level3">
+<h3 id="new-features-3-0-0">New features<a class="anchor" aria-label="anchor" href="#new-features-3-0-0"></a></h3>
+<ul><li><p>IMPORTANT: to keep your old samples compatible with current EMC2, run update2version(<name of old samples>)</name></p></li>
+<li><p>IMPORTANT: Design and prior are now also S3 methods with their own S3 classes, see EMC2 paper</p></li>
+<li><p>plot_fit is deprecated and has branched of into plot_density, plot_cdf and plot_stat</p></li>
+<li><p>sampled_p_vector is deprecated and is now named sampled_pars</p></li>
+<li><p>Added a design_plot function, which makes a plot of the proposed accumulation process</p></li>
+<li><p>Sampling is completely reworked. Adaptive tuning of the number of particles and more stable convergence</p></li>
+</ul></div>
+<div class="section level3">
+<h3 id="bug-fixes-3-0-0">Bug Fixes<a class="anchor" aria-label="anchor" href="#bug-fixes-3-0-0"></a></h3>
+<ul><li><p>Fixed rare case where conditional MVN would break</p></li>
+<li><p>Fixed bug in predict on joint models</p></li>
+<li><p>Suppressed unwanted print statements in DDM estimation/prediction</p></li>
+<li><p>Added more checks to a wide array of functions to ensure proper input format</p></li>
+</ul></div>
+</div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="2.1.0" id="emc2-210">EMC2 2.1.0<a class="anchor" aria-label="anchor" href="#emc2-210"></a></h2><p class="text-muted">CRAN release: 2024-10-14</p>
 <div class="section level3">
