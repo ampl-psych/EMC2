@@ -83,7 +83,7 @@ get_stop_criteria <- function(stage, stop_criteria, type){
 run_emc <- function(emc, stage, stop_criteria,
                     search_width = 1, step_size = 100, verbose = FALSE, verboseProgress = FALSE,
                     fileName = NULL,
-                    particles = NULL, particle_factor=70, cores_per_chain = 1,
+                    particles = NULL, particle_factor=50, cores_per_chain = 1,
                     cores_for_chains = length(emc), max_tries = 20, n_blocks = 1,
                     thin_auto = FALSE){
   emc <- restore_duplicates(emc)
@@ -142,7 +142,7 @@ run_emc <- function(emc, stage, stop_criteria,
 }
 
 run_stages <- function(sampler, stage = "preburn", iter=0, verbose = TRUE, verboseProgress = TRUE,
-                       particles=NULL,particle_factor=70, search_width= NULL, n_cores=1)
+                       particles=NULL,particle_factor=50, search_width= NULL, n_cores=1)
 {
 
   if (is.null(particles)){
@@ -449,9 +449,6 @@ sub_blocking <- function(emc, n_blocks){
 }
 
 create_chain_proposals <- function(emc, samples_idx = NULL, do_block = TRUE){
-  get_covs <- function(sampler, samples_idx, sub){
-    return(var(t(sampler$samples$alpha[,sub, samples_idx])))
-  }
   n_subjects <- emc[[1]]$n_subjects
   n_chains <- length(emc)
   n_pars <- emc[[1]]$n_pars
@@ -460,21 +457,36 @@ create_chain_proposals <- function(emc, samples_idx = NULL, do_block = TRUE){
     idx_subtract <- min(250, emc[[1]]$samples$idx/1.5)
     samples_idx <- round(emc[[1]]$samples$idx - idx_subtract):emc[[1]]$samples$idx
   }
+  LL <- get_pars(emc, filter = samples_idx-1, selection = "LL",
+                 stage = c('preburn', 'burn', 'adapt', 'sample'),
+                 merge_chains = T, return_mcmc = F)
+  alpha <- get_pars(emc, filter = samples_idx-1, selection = "alpha",
+                    stage = c('preburn', 'burn', 'adapt', 'sample'),
+                    by_subject = T, merge_chains = T, return_mcmc = F)
+
   components <- attr(emc[[1]]$data, "components")
   block_idx <- block_variance_idx(components)
   for(j in 1:n_chains){
+    # Take only a random half of all the samples for each chain
+    rnd_index <- sample(1:ncol(LL), round(ncol(LL)/2))
     chains_var <- vector("list", n_subjects)
+    chains_mu <- vector("list", n_subjects)
     for(sub in 1:n_subjects){
-      mean_covs <- get_covs(emc[[j]], samples_idx, sub)
-      if(do_block) mean_covs[block_idx] <- 0
-      if(is.negative.semi.definite(mean_covs)){
+      moments <- weighted_moments(alpha[,sub,rnd_index], LL[sub, rnd_index])
+      emp_covs <- moments$w_cov
+      chains_mu[[sub]] <- moments$w_mu
+      if(do_block) emp_covs[block_idx] <- 0
+      if(is.negative.semi.definite(emp_covs)){
+        # If negative semi definite, do not use it
         next
       } else{
-        chains_var[[sub]] <-  as.matrix(nearPD(mean_covs)$mat)
+        chains_var[[sub]] <- emp_covs
       }
     }
+    # Instead use the mean of all other subjects
     null_idx <- sapply(chains_var, is.null)
     if(all(null_idx)){
+      # If all subjects are NULL just come up with something
       mean_chains_var <- diag(n_pars) * .5
     } else{
       mean_chains_var <- Reduce(`+`, chains_var[!null_idx]) / sum(!null_idx)
@@ -498,10 +510,17 @@ create_chain_proposals <- function(emc, samples_idx = NULL, do_block = TRUE){
     }
     attr(emc[[j]], "prop_var") <- new_prop_var
     emc[[j]]$chains_var <- chains_var
-    emc[[j]]$chains_mu <- lapply(1:n_subjects, function(x) rowMeans(emc[[j]]$samples$alpha[,x,samples_idx]))
+    emc[[j]]$chains_mu <- chains_mu
   }
   return(emc)
 }
+
+
+
+
+
+
+
 
 reset_pm_settings <- function(emc, stage){
   if(stage != get_last_stage(emc) || stage == "burn"){ # In this case we're running a new stage
@@ -846,6 +865,40 @@ strip_duplicates <- function(emc, incl_props = TRUE) {
   }
   return(emc)
 }
+
+get_posterior_weights <- function(ll){
+  max_ll <- max(ll)
+  weights <- exp(ll - max_ll)
+  weights <- weights / sum(weights)
+  return(weights)
+}
+
+weighted_moments <- function(chain, ll = NULL) {
+  # chain: a matrix with each col as a sample, and each row as a parameter
+  # weights: an optional vector of weights. If not provided, equal weighting is assumed.
+  n <- ncol(chain)
+  d <- nrow(chain)
+
+  # Use equal weights if none are provided.
+  if (is.null(ll)) {
+    weights <- rep(1 / n, n)
+  } else {
+    weights <- get_posterior_weights(ll)
+  }
+
+  # Compute the weighted mean of the chain.
+  weighted_mean <- colSums(apply(chain, 1, function(x) x*weights))
+
+  # Compute the weighted covariance matrix.
+  cov_matrix <- matrix(0, nrow = d, ncol = d)
+  for (i in 1:n) {
+    diff <- chain[,i] - weighted_mean
+    cov_matrix <- cov_matrix + weights[i] * (diff %*% t(diff))
+  }
+  return(list(w_cov = cov_matrix, w_mu = weighted_mean))
+}
+
+
 
 #' Restore all entries to EMC list entries from first entry
 #' @param emc A list of EMC objects with stripped duplicates
