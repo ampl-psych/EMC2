@@ -1,10 +1,10 @@
 add_info_blocked <- function(sampler, prior = NULL, ...){
   # blocked specific attributes
-  n_pars <- sum(!(sampler$nuisance | sampler$grouped))
+  n_pars <- sum(!sampler$nuisance)
   par_groups <- list(...)$par_groups
   sampler$par_groups <- par_groups
   sampler$n_par_groups <- length(unique(par_groups))
-  sampler$prior <- get_prior_blocked(prior, sum(!(sampler$nuisance | sampler$grouped)), sample = F)
+  sampler$prior <- get_prior_blocked(prior, n_pars, sample = F)
   return(sampler)
 }
 
@@ -16,7 +16,7 @@ get_prior_blocked <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e
     prior <- list()
   }
   if(!is.null(design)){
-    n_pars <- length(sampled_p_vector(design, doMap = F))
+    n_pars <- length(sampled_pars(design, doMap = F))
   }
   if (!is.null(prior$theta_mu_mean)) {
     n_pars <- length(prior$theta_mu_mean)
@@ -37,7 +37,7 @@ get_prior_blocked <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e
   attr(prior, "type") <- "blocked"
   out <- prior
   if(sample){
-    par_names <- names(sampled_p_vector(design, doMap = F))
+    par_names <- names(sampled_pars(design, doMap = F))
     samples <- list()
     if(selection %in% c("mu", "alpha")){
       mu <- t(mvtnorm::rmvnorm(N, mean = prior$theta_mu_mean,
@@ -78,6 +78,8 @@ get_prior_blocked <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e
 }
 
 get_startpoints_blocked <- function(pmwgs, start_mu, start_var){
+  nuisance <- pmwgs$nuisance
+  n_pars <- sum(!nuisance)
   if (is.null(start_mu)) start_mu <- rmvnorm(1, mean = pmwgs$prior$theta_mu_mean, sigma = pmwgs$prior$theta_mu_var)
   # If no starting point for group var just sample some
   if (is.null(start_var)) {
@@ -89,7 +91,7 @@ get_startpoints_blocked <- function(pmwgs, start_mu, start_var){
       start_var <- adiag(start_var, riwish(n_pars_group * 3,diag(n_pars_group)))
     }
   }
-  start_a_half <- 1 / rgamma(n = pmwgs$n_pars, shape = 2, rate = 1)
+  start_a_half <- 1 / rgamma(n = n_pars, shape = 2, rate = 1)
   return(list(tmu = start_mu, tvar = start_var, tvinv = MASS::ginv(start_var), a_half = start_a_half))
 }
 
@@ -98,7 +100,7 @@ gibbs_step_blocked <- function(sampler, alpha){
   # tmu = theta_mu, tvar = theta_var
   last <- last_sample_standard(sampler$samples)
   prior <- sampler$prior
-  n_pars_total <- sampler$n_pars-sum(sampler$nuisance) - sum(sampler$grouped)
+  n_pars_total <- sampler$n_pars-sum(sampler$nuisance)
   tmu_out <- numeric(n_pars_total)
   a_half_out <- numeric(n_pars_total)
   tvar_out <- matrix(0, nrow = n_pars_total, ncol = n_pars_total)

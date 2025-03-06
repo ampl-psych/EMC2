@@ -2,7 +2,7 @@
 % Please edit documentation in R/s3_funcs.R
 \name{summary.emc}
 \alias{summary.emc}
-\title{Summary statistics for emc objects}
+\title{Summary Statistics for emc Objects}
 \usage{
 \method{summary}{emc}(
   object,

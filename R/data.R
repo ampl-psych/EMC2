@@ -1,4 +1,4 @@
-#' Forstmann et al.'s data
+#' Forstmann et al.'s Data
 #'
 #' A dataset containing the speed or accuracy manipulation for a Random Dot
 #' Motion experiment.
@@ -25,7 +25,7 @@
 #' @source \url{https://www.pnas.org/doi/10.1073/pnas.0805903105}
 "forstmann"
 
-#' An emc object of an LNR model of the Forstmann dataset using the first three subjects
+#' LNR Model of Forstmann Data (First 3 Subjects)
 #'
 #' An emc object with a limited number of samples and subjects of the Forstmann dataset.
 #' The object is a nested list of lenght three, each list containing the MCMC samples
@@ -53,9 +53,6 @@
 #'   \item{last_theta_var_inv}{The inverse of the last samples covariance
 #'     matrix}
 #'   \item{idx}{The index of the last sample drawn}
-#'   \item{epsilon}{The scaling parameter of the proposal distributions for each subject array of size (n_subjects x n_samples)}
-#'   \item{origin}{From which propoosal distribution the accepted samples in the MCMC chain came,
-#'   an array of size (n_subjects x n_samples)}
 #' }
 #'
 #' @format An emc object. An emc object is a list with a
@@ -65,16 +62,16 @@
 #'   \item{par_names}{A character vector containing the model parameter names}
 #'   \item{n_pars}{The number of parameters in the model}
 #'   \item{n_subjects}{The number of unique subject ID's in the data}
+#'   \item{model}{A list containing the model functions}
+#'   \item{nuisance}{A logical vector indicating which parameters are nuisance parameters}
 #'   \item{subjects}{A vector containing the unique subject ID's}
+#'   \item{type}{The type of model e.g., "standard" or "diagonal"}
 #'   \item{prior}{A list that holds the prior for \code{theta_mu} (the model
 #'     parameters). Contains the mean (\code{theta_mu_mean}), covariance matrix
 #'     (\code{theta_mu_var}), degrees of freedom (\code{v}), and scale (\code{A})
 #'     and inverse covariance matrix (\code{theta_mu_invar})}
-#'   \item{ll_func}{The log likelihood function used by pmwg for model
-#'     estimation}
 #'   \item{samples}{A list with defined structure containing the samples, see
 #'     the Samples Element section for more detail}
-#'   \item{grouped}{Which parameters are grouped across subjects, in this case none}
 #'   \item{sampler_nuis}{A sampler list for nuisance parameters (in this case there are none),
 #'   similarly structured to the overall samples list of one of the MCMC chains.}
 #' }

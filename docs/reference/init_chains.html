@@ -98,24 +98,69 @@ Smaller values will lead to less deviation around the mean.</p></dd>
 
     <div class="section level2">
     <h2 id="ref-examples">Examples<a class="anchor" aria-label="anchor" href="#ref-examples"></a></h2>
-    <div class="sourceCode"><pre class="sourceCode r"><code><span class="r-in"><span><span class="kw">if</span> <span class="op">(</span><span class="cn">FALSE</span><span class="op">)</span> <span class="op">{</span> <span class="co"># \dontrun{</span></span></span>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span class="r-in"><span><span class="co"># \donttest{</span></span></span>
 <span class="r-in"><span><span class="co"># Make a design and an emc object</span></span></span>
 <span class="r-in"><span><span class="va">design_DDMaE</span> <span class="op">&lt;-</span> <span class="fu"><a href="design.html">design</a></span><span class="op">(</span>data <span class="op">=</span> <span class="va">forstmann</span>,model<span class="op">=</span><span class="va">DDM</span>,</span></span>
-<span class="r-in"><span>                           formula <span class="op">=</span><span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="va">v</span><span class="op">~</span><span class="fl">0</span><span class="op">+</span><span class="va">S</span>,<span class="va">a</span><span class="op">~</span><span class="va">E</span>, <span class="va">t0</span><span class="op">~</span><span class="fl">1</span>, <span class="va">s</span><span class="op">~</span><span class="fl">1</span>, <span class="va">Z</span><span class="op">~</span><span class="fl">1</span>, <span class="va">sv</span><span class="op">~</span><span class="fl">1</span>, <span class="va">SZ</span><span class="op">~</span><span class="fl">1</span><span class="op">)</span>,</span></span>
+<span class="r-in"><span>                           formula <span class="op">=</span><span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="va">v</span><span class="op">~</span><span class="fl">0</span><span class="op">+</span><span class="va">S</span>,<span class="va">a</span><span class="op">~</span><span class="va">E</span>, <span class="va">t0</span><span class="op">~</span><span class="fl">1</span>, <span class="va">s</span><span class="op">~</span><span class="fl">1</span><span class="op">)</span>,</span></span>
 <span class="r-in"><span>                           constants<span class="op">=</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>s<span class="op">=</span><span class="fu"><a href="https://rdrr.io/r/base/Log.html" class="external-link">log</a></span><span class="op">(</span><span class="fl">1</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span></span>
+<span class="r-msg co"><span class="r-pr">#&gt;</span> Parameter(s) SZ, Z, st0, sv not specified in formula and assumed constant.</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>  Sampled Parameters: </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> [1] "v_Sleft"     "v_Sright"    "a"           "a_Eneutral"  "a_Eaccuracy"</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> [6] "t0"         </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>  Design Matrices: </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> $v</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>      S v_Sleft v_Sright</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   left       1        0</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>  right       0        1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> $a</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>         E a a_Eneutral a_Eaccuracy</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>     speed 1          0           0</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   neutral 1          1           0</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>  accuracy 1          0           1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> $t0</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>  t0</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> $s</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>  s</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>  1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> $SZ</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>  SZ</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> $Z</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>  Z</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>  1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> $st0</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>  st0</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>    1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> $sv</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>  sv</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> </span>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="va">DDMaE</span> <span class="op">&lt;-</span> <span class="fu"><a href="make_emc.html">make_emc</a></span><span class="op">(</span><span class="va">forstmann</span>, <span class="va">design_DDMaE</span><span class="op">)</span></span></span>
+<span class="r-msg co"><span class="r-pr">#&gt;</span> Processing data set 1</span>
+<span class="r-msg co"><span class="r-pr">#&gt;</span> Likelihood speedup factor: 4 (3955 unique trials)</span>
 <span class="r-in"><span><span class="co"># set up our mean starting points (same used across subjects).</span></span></span>
 <span class="r-in"><span><span class="va">mu</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>v_Sleft<span class="op">=</span><span class="op">-</span><span class="fl">2</span>,v_Sright<span class="op">=</span><span class="fl">2</span>,a<span class="op">=</span><span class="fu"><a href="https://rdrr.io/r/base/Log.html" class="external-link">log</a></span><span class="op">(</span><span class="fl">1</span><span class="op">)</span>,a_Eneutral<span class="op">=</span><span class="fu"><a href="https://rdrr.io/r/base/Log.html" class="external-link">log</a></span><span class="op">(</span><span class="fl">1.5</span><span class="op">)</span>,a_Eaccuracy<span class="op">=</span><span class="fu"><a href="https://rdrr.io/r/base/Log.html" class="external-link">log</a></span><span class="op">(</span><span class="fl">2</span><span class="op">)</span>,</span></span>
-<span class="r-in"><span>       t0<span class="op">=</span><span class="fu"><a href="https://rdrr.io/r/base/Log.html" class="external-link">log</a></span><span class="op">(</span><span class="fl">.2</span><span class="op">)</span>,Z<span class="op">=</span><span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">qnorm</a></span><span class="op">(</span><span class="fl">.5</span><span class="op">)</span>,sv<span class="op">=</span><span class="fu"><a href="https://rdrr.io/r/base/Log.html" class="external-link">log</a></span><span class="op">(</span><span class="fl">.5</span><span class="op">)</span>,SZ<span class="op">=</span><span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">qnorm</a></span><span class="op">(</span><span class="fl">.5</span><span class="op">)</span><span class="op">)</span></span></span>
+<span class="r-in"><span>       t0<span class="op">=</span><span class="fu"><a href="https://rdrr.io/r/base/Log.html" class="external-link">log</a></span><span class="op">(</span><span class="fl">.2</span><span class="op">)</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="co"># Small variances to simulate start points from a tight range</span></span></span>
 <span class="r-in"><span><span class="va">var</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/diag.html" class="external-link">diag</a></span><span class="op">(</span><span class="fl">0.05</span>, <span class="fu"><a href="https://rdrr.io/r/base/length.html" class="external-link">length</a></span><span class="op">(</span><span class="va">mu</span><span class="op">)</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="co"># Initialize chains, 4 cores per chain, and parallelizing across our 3 chains as well</span></span></span>
 <span class="r-in"><span><span class="co"># so 4*3 cores used.</span></span></span>
-<span class="r-in"><span><span class="va">DDMaE</span> <span class="op">&lt;-</span> <span class="fu">init_chains</span><span class="op">(</span><span class="va">DDMaE</span>, start_mu <span class="op">=</span> <span class="va">p_vector</span>, start_var <span class="op">=</span> <span class="va">var</span>, cores_per_chain <span class="op">=</span> <span class="fl">4</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="va">DDMaE</span> <span class="op">&lt;-</span> <span class="fu">init_chains</span><span class="op">(</span><span class="va">DDMaE</span>, start_mu <span class="op">=</span> <span class="va">mu</span>, start_var <span class="op">=</span> <span class="va">var</span>,</span></span>
+<span class="r-in"><span>                     cores_per_chain <span class="op">=</span> <span class="fl">1</span>, cores_for_chains <span class="op">=</span> <span class="fl">1</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="co"># Afterwards we can just use fit</span></span></span>
-<span class="r-in"><span><span class="va">DDMaE</span> <span class="op">&lt;-</span> <span class="fu"><a href="fit.html">fit</a></span><span class="op">(</span><span class="va">DDMaE</span>, cores_per_chain <span class="op">=</span> <span class="fl">4</span><span class="op">)</span></span></span>
-<span class="r-in"><span><span class="op">}</span> <span class="co"># }</span></span></span>
+<span class="r-in"><span><span class="co"># DDMaE &lt;- fit(DDMaE, cores_per_chain = 4)</span></span></span>
+<span class="r-in"><span><span class="co"># }</span></span></span>
 </code></pre></div>
     </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>

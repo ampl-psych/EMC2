@@ -32,7 +32,7 @@ make_missing <- function(data,LT=0,UT=Inf,LC=0,UC=Inf,
   out
 }
 
-#' Simulate data
+#' Simulate Data
 #'
 #' Simulates data based on a model design and a parameter vector (`p_vector`) by one of two methods:
 #' 1) Creating a fully crossed and balanced design specified by the design,
@@ -121,10 +121,10 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
     assign(name, optionals[[name]])
   }
   if(is(parameters, "emc")){
-    if(is.null(design)) design <- attr(parameters, "design_list")[[1]]
+    if(is.null(design)) design <- get_design(parameters)
     if(is.null(data)) data <- get_data(parameters)
     if(!hyper){
-      parameters <- do.call(rbind, posterior_summary(parameters, probs = 0.5, selection = "alpha", by_subject = TRUE))
+      parameters <- do.call(rbind, credint(parameters, probs = 0.5, selection = "alpha", by_subject = TRUE))
     } else{
       mu <- get_pars(parameters, selection = "mu", merge_chains = T, return_mcmc = F)
       Sigma <- get_pars(parameters, selection = "Sigma", merge_chains = T, return_mcmc = F)
@@ -134,7 +134,7 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
     }
   }
 
-  sampled_p_names <- names(sampled_p_vector(design))
+  sampled_p_names <- names(sampled_pars(design))
   if(is.null(dim(parameters))){
     if(is.null(names(parameters))) names(parameters) <- sampled_p_names
   } else{
@@ -143,19 +143,23 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
     #   data<- data[data$subjects %in% design$Ffactors$subjects,]
     #   data$subjects <- factor(data$subjects)
     # }
+    if(length(rownames(parameters)) != length(design$Ffactors$subjects)){
+      stop("input parameter matrix must have number of rows equal to number of subjects specified in design")
+    }
     if(is.null(colnames(parameters))) colnames(parameters) <- sampled_p_names
-    if(is.null(rownames(parameters))) rownames(parameters) <- design$Ffactors$subjects
+    rownames(parameters) <- design$Ffactors$subjects
   }
 
   if(!is.null(attr(design, "custom_ll"))){
     data <- list()
     for(i in 1:nrow(parameters)){
-      data[[i]] <- attr(design, "rfun")(parameters[i,], n_trials = n_trials, subject = i)
+      data[[i]] <- design$model()$rfun(parameters[i,], n_trials = n_trials, subject = i)
     }
     return(do.call(rbind, data))
   }
 
   model <- design$model
+  if(is.data.frame(parameters)) parameters <- as.matrix(parameters)
   if (!is.matrix(parameters)) parameters <- make_pmat(parameters,design)
   if ( is.null(data) ) {
     design$Ffactors$subjects <- rownames(parameters)
@@ -218,35 +222,19 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
   if (!is.null(model)) {
     if (!is.function(model)) stop("model argument must  be a function")
     if ( is.null(model()$p_types) ) stop("model()$p_types must be specified")
-    if ( is.null(model()$transform) ) stop("model()$transform must be specified")
-    if ( is.null(model()$Ntransform) ) stop("model()$Ntransform must be specified")
     if ( is.null(model()$Ttransform) ) stop("model()$Ttransform must be specified")
   }
   data <- design_model(
     add_accumulators(data,design$matchfun,simulate=TRUE,type=model()$type,Fcovariates=design$Fcovariates),
     design,model,add_acc=FALSE,compress=FALSE,verbose=FALSE,
     rt_check=FALSE)
-  if (!is.null(attr(design,"ordinal")))
-    parameters[,attr(design,"ordinal")] <- exp(parameters[,attr(design,"ordinal")])
-  pars <- model()$Ttransform(model()$Ntransform(map_p(
-    model()$transform(add_constants(parameters,design$constants)),data
-  )),data)
+  pars <- t(apply(parameters, 1, do_pre_transform, model()$pre_transform))
+  pars <- map_p(add_constants(pars,design$constants),data, model())
+  pars <- do_transform(pars, model()$transform)
+  pars <- model()$Ttransform(pars, data)
+  pars <- add_bound(pars, model()$bound)
   if ( any(dimnames(pars)[[2]]=="pContaminant") && any(pars[,"pContaminant"]>0) )
     pc <- pars[data$lR==levels(data$lR)[1],"pContaminant"] else pc <- NULL
-  if (!is.null(design$adapt)) {
-    if (expand>1) {
-      expand <- 1
-      warning("Expand does not work with this type of model")
-    }
-    # data <- adapt_data(data,design,model,pars,mapped_p=mapped_p,add_response = TRUE)
-    if (mapped_p) return(data)
-    adapt <- attr(data,"adapt")
-    data <- data[data$lR==levels(data$lR)[1],!(names(data) %in% c("lR","lM"))]
-    if('Qvalues' %in% names(attributes(pars))) attr(data, 'Qvalues') <- attr(pars, 'Qvalues')
-    if('predictionErrors' %in% names(attributes(pars))) attr(data, 'predictionErrors') <- attr(pars, 'predictionErrors')
-    attr(data,"adapt") <- adapt
-    return(data)
-  }
   if (mapped_p) return(cbind(data[,!(names(data) %in% c("R","rt"))],pars))
   if (expand>1) {
     data <- cbind(rep=rep(1:expand,each=dim(data)[1]),
@@ -262,12 +250,14 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
     for (i in levels(RACE)) {
       pick <- data$RACE==i
       lRi <- factor(data$lR[pick & ok])
-      Rrti <- model()$rfun(lRi,pars[pick & ok,])
+      tmp <- pars[pick & ok,]
+      attr(tmp, "ok") <- rep(T, nrow(tmp))
+      Rrti <- model()$rfun(lRi,tmp)
       Rrti$R <- as.numeric(Rrti$R)
       Rrt[RACE==i,] <- as.matrix(Rrti)
     }
     Rrt <- data.frame(Rrt)
-    Rrt$R <- factor(Rrt$R,labels=levels(lR))
+    Rrt$R <- factor(Rrt$R, labels = levels(lR), levels = 1:length(levels(lR)))
   } else Rrt <- model()$rfun(lR,pars)
   dropNames <- c("lR","lM","lSmagnitude")
   if (!return_Ffunctions && !is.null(design$Ffunctions))
@@ -306,12 +296,12 @@ add_Ffunctions <- function(data,design)
     data <-  cbind.data.frame(data,Fdf[,ok,drop=FALSE])
 }
 
-#' Make random effects
+#' Generate Subject-Level Parameters
 #'
 #' Simulates subject-level parameters in the format required by ``make_data()``.
 #'
 #' @param design A design list. The design as specified by `design()`
-#' @param group_means A numeric vector. The group level means for each parameter, in the same order as `sampled_p_vector(design)`
+#' @param group_means A numeric vector. The group level means for each parameter, in the same order as `sampled_pars(design)`
 #' @param n_subj An integer. The number of subjects to generate parameters for. If `NULL` will be inferred from design
 #' @param variance_proportion A double. Optional. If ``covariances`` are not specified, the variances will be created by multiplying the means by this number. The covariances will be 0.
 #' @param covariances A covariance matrix. Optional. Specify the intended covariance matrix.
@@ -326,10 +316,10 @@ add_Ffunctions <- function(data,design)
 #' group_means =c(v_Sleft=-2,v_Sright=2,a=log(1),a_Eneutral=log(1.5),a_Eaccuracy=log(2),
 #'                t0=log(.2),Z=qnorm(.5),sv=log(.5),SZ=qnorm(.5))
 #' # Now we can create subject-level parameters
-#' subj_pars <- make_random_effects(design_DDMaE, group_means, n_subj = 5)
+#' subj_pars <- make_random_effects(design_DDMaE, group_means, n_subj = 19)
 #'
 #' # We can also define a covariance matrix to simulate from
-#' subj_pars <- make_random_effects(design_DDMaE, group_means, n_subj = 5,
+#' subj_pars <- make_random_effects(design_DDMaE, group_means, n_subj = 19,
 #'              covariances = diag(.1, length(group_means)))
 #'
 #' # The subject level parameters can be used to generate data
@@ -343,10 +333,10 @@ make_random_effects <- function(design, group_means, n_subj = NULL, variance_pro
   } else{
     subnames <- as.character(1:n_subj)
   }
-  if(length(group_means) != length(sampled_p_vector(design))) stop("You must specify as many means as parameters in your design")
+  if(length(group_means) != length(sampled_pars(design))) stop("You must specify as many means as parameters in your design")
   if(is.null(covariances)) covariances <- diag(abs(group_means)*variance_proportion)
   random_effects <- mvtnorm::rmvnorm(n_subj,mean=group_means,sigma=covariances)
-  colnames(random_effects) <- names(sampled_p_vector(design))
+  colnames(random_effects) <- names(sampled_pars(design))
   rownames(random_effects) <- subnames
   return(random_effects)
 }

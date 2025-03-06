@@ -2,11 +2,11 @@
 % Please edit documentation in R/priors.R
 \name{prior}
 \alias{prior}
-\title{Prior specification}
+\title{Specify Priors for the Chosen Model}
 \usage{
 prior(
   design,
-  type = "standard",
+  type = NULL,
   update = NULL,
   do_ask = NULL,
   fill_default = TRUE,
@@ -31,12 +31,10 @@ i.e. \code{Sigma}, \code{mu} or \code{loadings} for factor models, but \code{the
 A prior list object
 }
 \description{
-Specify priors for the chosen model. These values are entered manually by default but can be
-recycled from another prior (given in the \code{update} argument).
+These values are entered manually by default but can be recycled from another prior (given in the \code{update} argument).
 }
 \details{
-Where a value is not supplied, the user is prompted to enter
-numeric values (or functions that evaluate to numbers).
+Where a value is not supplied, the user is prompted to enter numeric values (or functions that evaluate to numbers).
 
 To get the prior help use \code{prior_help(type)}. With \code{type} e.g. 'diagonal'.
 }

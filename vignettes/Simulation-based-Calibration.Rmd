@@ -32,7 +32,7 @@ Here we briefly outline the steps to performing SBC, for more detail we refer th
 ### 2. Simulate Parameters and Data
 
 -   **Sample Parameters**: Draw a large number of sets of parameters $\alpha^{(i)}$ from the prior distribution $p(\alpha)$.
--   **Simulate Data**: For each set of set parameters $\alpha^{(i)}$, simulate a dataset $y^{(i)}$ from the likelihood $p(y|\alpha^{(i)})$.
+-   **Simulate Data**: For each set of parameters $\alpha^{(i)}$, simulate a dataset $y^{(i)}$ from the likelihood $p(y|\alpha^{(i)})$.
 
 ### 3. Compute Posterior Distributions
 
@@ -46,7 +46,7 @@ Here we briefly outline the steps to performing SBC, for more detail we refer th
 ### 5. Check Uniformity
 
 -   Aggregate the rank statistics across all simulated data-sets. If your model is well-calibrated, the ranks should be uniformly distributed because each posterior should correctly reflect the uncertainty about the parameter.
--   Plot the rank statistics. Here we present both histograms of the rank statistic and plot that compares the empirical cumulative rank to the cumulative density function of a uniform distribution.
+-   Plot the rank statistics. Here we present both histograms of the rank statistic and plots that compares the empirical cumulative rank to the cumulative density function of a uniform distribution.
 
 ## Non-hierarchical SBC in *EMC2*
 
@@ -59,7 +59,7 @@ library(EMC2)
 
 ### Compression
 
-Before we start with the SBC, we want to give a quick note on data compression. By default *EMC2* compresses RTs to bins of 20ms, since typical lab set-ups do not allow response times to be measured with a higher resolution. However, generated data is not subject to the same physical constraints. Therefore, and to avoid biases, compression is turned off. To turn on compression regardless, you can set `compression = TRUE`, and set the resolution using `rt_resolution = 0.02` (for example) in the `run_sbc` function, which will speed up computation but potentially introduces biases.
+Before we start with the SBC, we want to give a quick note on data compression. By default *EMC2* compresses RTs to bins of 20ms, since typical lab set-ups do not allow response times to be measured with a higher resolution. However, generated data is not subject to the same physical constraints. Therefore, and to avoid biases, compression is turned off in the SBC functions. To turn on compression regardless, you can set `compression = TRUE`, and set the resolution using `rt_resolution = 0.02` (for example) in the `run_sbc` function, which will speed up computation but potentially introduces biases.
 
 ### LBA
 
@@ -83,7 +83,7 @@ prior_LBA <- prior(design_LBA, type = "single",
 Now we plot the prior, with `map = TRUE` (the default) to see the implied prior on the transformed parameters.
 
 ```{r, fig.alt = "Prior for LBA non-hierarchical model", fig.height = 5}
-plot_prior(prior_LBA, design_LBA)
+plot(prior_LBA)
 ```
 
 Next we can simply call `run_sbc` with our specified design and prior. We can use `?run_sbc` to see the description of the function arguments. The trials argument refers to the number of trials per cell. Since we have an 2-level S factor in our design (and all other designs used), we will thus simulate 200 trials per data set. Also note that by default run_sbc will estimate till the point-scale reduction factor is smaller than 1.1 and the minimum effective sample size of any of the estimated parameters is larger than 100.
@@ -116,7 +116,7 @@ In these dinosaur eggs the blue area visualizes the 95% area of expected cumulat
 
 ### DDM
 
-Next we test non-hierarchical for the DDM as well. Initial results actually showed bias in the estimation of non-decision time and non-decision time variability. Whereas we first based our DDM implementation on the *rtdists* package [@Sigmann2022], the bias pushed us to test with alternative packages, after which we stumbled on the *WienR* package [@Hartmann2023]. Which not only boasts faster likelihood evaluations, but also no longer shows bias in the SBC results. Hence in the newest CRAN release we adapted our C++ code to instead use the *WienR* *C++* routines.
+Next we test non-hierarchical for the DDM as well. Initial results actually showed bias in the estimation of non-decision time and non-decision time variability. Whereas we first based our DDM implementation on the *rtdists* package [@Sigmann2022]. The bias led us to explore alternative packages, which eventually brought us to the *WienR* package [@Hartmann2023]. This package not only offers faster likelihood evaluations but also eliminates the bias observed in the SBC results. Hence as of CRAN release 2.1.0 we adapted our code to instead use the WienR C++ routines.
 
 For the SBC itself we used the following prior and design settings, again being mindful of the required transformations.
 
@@ -148,19 +148,19 @@ load("SBC_data/SBC_DDM_single.RData")
 plot_sbc_ecdf(SBC_DDM_single)
 ```
 
-As you can see minor misfits in *a* and *sv* but nothing too worrying. To double check we did refits, that showed that this bias is not systematic.
+We see minor biases in *a* and *sv*, but nothing too concerning. To double check, we repeated the analysis, and confirmed that the bias is not systematic.
 
 ## Hierarchical SBC
 
-Besides being a friendly introduction to doing SBC in *EMC2*, this post also serves as a test of unbiased estimation of the four main classes of EAMs included in *EMC2*. Still we would recommend the user to typically run SBC on non-hierarchical models, except when doing model development.
+Besides being a friendly introduction to doing SBC in *EMC2*, this post also serves as a test of unbiased estimation of the four main classes of EAMs included in *EMC2*. However, depending on the research question, running non-hierarchical SBC might suffice as it is far more computationally efficient.
 
 The approach to running hierarchical SBC is very similar to running non-hierarchical SBC. However we can now write the model of data $y$ as $y \sim p(y|\alpha)p(\alpha|\theta)p(\theta)$. Here $p(\theta)$ is the prior on the group-level parameters. The generated data for one sample $y^{(i)}$ is still generated from $\alpha^{(i)}$, but with $\alpha^{(i)}$ generated from $\theta^{(i)}$, with $\theta^{(i)} \sim p(\theta)$.
 
 ### Prior structure
 
-Although in the paper we rely on the prior structure defined by @Huang2013Jun, which is also the default in *EMC2*, this prior structure has a lot of mass near zero for the group-level variance parameters (a half*-t* distribution). From a Bayesian posterior view these prior structures are attractive [@Gelman2006Sep], since they do not artificially increase the variance estimates and thus err on the safe side. However, in SBC data-generation this means we sample many data-sets with no individual differences. Unfortunately, for numerical reasons *EMC2* cannot recover a true zero on group-level variances. Thus, *EMC2* will both have difficulty converging and it will identify, albeit very small, some degree of individual differences. Therefore, the `type = "standard"` prior structure results in biased SBC variance estimates. Therefore, in SBC we recommend using `type = "diagonal-gamma"`, which as the name suggests uses gamma distributions for the variance parameters, which have less mass at zero.
+Although in the paper we rely on the prior structure defined by @Huang2013Jun, which is also the default in *EMC2*, this prior structure has a lot of mass near zero for the group-level variance parameters (a half*-t* distribution). From a Bayesian posterior view these prior structures are attractive [@Gelman2006Sep], since they do not artificially increase the variance estimates and thus err on the safe side. However, in SBC data-generation this means we sample many data-sets with no individual differences. Unfortunately, for numerical reasons *EMC2* cannot recover a true zero on group-level variances. Thus, *EMC2* will struggle to converge and will identify some level of individual differences, although they may be very small. Therefore, the `type = "standard"` prior structure results in biased SBC variance estimates. Therefore, in SBC we recommend using `type = "diagonal-gamma"`, which as the name suggests uses gamma distributions for the variance parameters, which have less mass at zero.
 
-Nevertheless we believe the standard prior is not problematic in real data, since it will always contain at least some degree of individual differences (only a true zero cannot be recovered).
+Nevertheless we believe the standard prior is not problematic in real data, since it will always contain at least some degree of individual differences (only a true zero cannot be recovered). Therefore it will remain the default prior in EMC2 as of now, though the type “diagonal-gamma” is available to the user as well.
 
 ### LBA
 
@@ -189,7 +189,7 @@ prior_LBA <- prior(design_LBA, type = "diagonal-gamma",
 We can also plot what the implied prior range is of the subject-level parameters:
 
 ```{r, fig.alt = "Prior for LBA hierarchical model", fig.height = 5}
-plot_prior(prior_LBA, design_LBA, selection = "alpha")
+plot(prior_LBA, selection = "alpha")
 ```
 
 To actually run SBC, we can use the same function as before, now also specifying how many subjects we want to have in the hierarchical model

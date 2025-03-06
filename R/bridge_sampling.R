@@ -1,14 +1,14 @@
-make_info <- function(samples, variant_funs){
+make_info <- function(samples, type){
   info <- list(
     subjects = samples$subjects,
     par_names = samples$par_names,
     n_pars = samples$n_pars,
     n_subjects = samples$n_subjects,
     prior = samples$prior,
-    variant_funs = variant_funs,
-    ll_func = samples$ll_func
+    type = type,
+    model = samples$model
   )
-  info <- variant_funs$bridge_add_info(info, samples)
+  info <- bridge_add_info(info, samples, type)
 
 }
 
@@ -37,10 +37,6 @@ eval.unnormalized.posterior <- function(samples_iter, gen_samples, data, m, L, i
 
 }
 
-# Q11 = samples + 2*m - samples
-# Q21 = samples + cov
-
-
 h.unnormalized.posterior <- function(proposals, data, info, n_cores, hyper_only) {
   n_pars <- info$n_pars
   n_subjects <- info$n_subjects
@@ -53,11 +49,11 @@ h.unnormalized.posterior <- function(proposals, data, info, n_cores, hyper_only)
   if(hyper_only){
     lw <- 0
   } else{
-    lws <- parallel::mcmapply(calc_ll_for_group, proposals_list, data, MoreArgs = list(ll = info$ll_func), mc.cores = n_cores)
+    lws <- parallel::mcmapply(calc_ll_manager, proposals_list, data, MoreArgs = list(model = info$model), mc.cores = n_cores)
     lw <- rowSums(lws)
   }
   proposals_group <- proposals[,info$group_idx]
-  gr_pr_jac <- info$variant_funs$bridge_group_and_prior_and_jac(proposals_group, proposals_list, info)
+  gr_pr_jac <- bridge_group_and_prior_and_jac(proposals_group, proposals_list, info, info$type)
   return(lw + gr_pr_jac)
 }
 
@@ -126,9 +122,9 @@ run.iterative.scheme <- function(q11, q12, q21, q22, r0, tol,
 bridge_sampling <- function(samples, n_eff, split_idx, cores_for_props = 1, cores_per_prop = 1, maxiter = 5000,
                             stage = "sample", r0 = 1e-5, tol1 = 1e-10, tol2 = 1e-6, hyper_only = FALSE){
   if(Sys.info()[1] == "Windows" & cores_per_prop > 1) stop("only cores_for_props can be set on Windows")
-  variant_funs <- attr(samples, "variant_funs")
+  type <- samples$type
   data <- samples$data
-  info <- make_info(samples, variant_funs)
+  info <- make_info(samples, type)
   n_pars <- samples$n_pars
   n_subjects <- samples$n_subjects
   idx <- samples$samples$stage == stage
@@ -136,7 +132,7 @@ bridge_sampling <- function(samples, n_eff, split_idx, cores_for_props = 1, core
   for(i in 1:n_subjects){
     all_samples[,((i-1)*n_pars + 1):(i*n_pars)] <- t(samples$samples$alpha[,i,idx])
   }
-  all_samples <- variant_funs$bridge_add_group(all_samples, samples, idx)
+  all_samples <- bridge_add_group(all_samples, samples, idx, type)
   samples_fit <- all_samples[split_idx,]
   samples_iter <- all_samples[-split_idx,]
   if(nrow(samples_fit) != nrow(samples_iter)){
@@ -188,7 +184,7 @@ bridge_sampling <- function(samples, n_eff, split_idx, cores_for_props = 1, core
 }
 
 
-#' Estimating Marginal likelihoods using WARP-III bridge sampling
+#' Estimating Marginal Likelihoods Using WARP-III Bridge Sampling
 #'
 #' Uses bridge sampling that matches a proposal distribution to the first three moments
 #' of the posterior distribution to get an accurate estimate of the marginal likelihood.
@@ -232,10 +228,10 @@ bridge_sampling <- function(samples, n_eff, split_idx, cores_for_props = 1, core
 #' @param ... Additional, optional more in-depth hyperparameters
 #'
 #' @return A vector of length repetitions which contains the marginal log likelihood estimates per repetition
-#' @examples \dontrun{
+#' @examples \donttest{
 #' # After `fit` has converged on a specific model
 #' # We can take those samples and calculate the marginal log-likelihood for them
-#' MLL <- run_bridge_sampling(list(samples_LNR), cores_per_prop = 2)
+#' MLL <- run_bridge_sampling(samples_LNR, cores_for_props = 1, both_splits = FALSE)
 #' # This will run on 2*4 cores (since 4 is the default for ``cores_for_props``)
 #' }
 #' @export

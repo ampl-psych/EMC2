@@ -14,7 +14,7 @@ print.emc <- function(x, ...){
   return(invisible(list(iterations = n_chain, subjects = sub_names, parameters = par_names)))
 }
 
-#' Summary statistics for emc objects
+#' Summary Statistics for emc Objects
 #'
 #' Computes quantiles, `Rhat` and `ESS` for selected model parameters.
 #'
@@ -37,7 +37,7 @@ summary.emc <- function(object, selection = c("mu", "sigma2", "alpha"), probs = 
                         digits = 3, ...){
   dots <- list(...)
   dots <- add_defaults(dots, by_subject = TRUE)
-  if(attr(object[[1]], "variant_funs")$type == "single"){
+  if(object[[1]]$type == "single"){
     selection <- "alpha"
   }
   out_list <- list()
@@ -67,7 +67,7 @@ summary.emc <- function(object, selection = c("mu", "sigma2", "alpha"), probs = 
 }
 
 
-#' Plot function for emc objects
+#' Plot Function for emc Objects
 #'
 #' Makes trace plots for model parameters.
 #'
@@ -91,7 +91,7 @@ summary.emc <- function(object, selection = c("mu", "sigma2", "alpha"), probs = 
 
 plot.emc <- function(x, stage = "sample", selection = c("mu", "sigma2", "alpha"),
                      layout=NA, ...){
-  if(attr(x[[1]], "variant_funs")$type == "single"){
+  if(x[[1]]$type == "single"){
     selection <- "alpha"
   }
   for(select in selection){
@@ -101,12 +101,11 @@ plot.emc <- function(x, stage = "sample", selection = c("mu", "sigma2", "alpha")
 
 
 
-#' Generate posterior predictives
+#' Generate Posterior/Prior Predictives
 #'
-#' Simulate ``n_post`` data sets using the posterior parameter estimates
+#' Simulate ``n_post`` data sets using the posterior/prior parameter estimates
 #'
-#' @param object An emc object from which posterior predictives should
-#' be generated
+#' @param object An emc or emc.prior object from which to generate predictives
 #' @param hyper Boolean. Defaults to `FALSE`. If `TRUE`, simulates from the group-level (`hyper`)
 #' parameters instead of the subject-level parameters.
 #' @param n_post Integer. Number of generated datasets
@@ -120,7 +119,7 @@ plot.emc <- function(x, stage = "sample", selection = c("mu", "sigma2", "alpha")
 #' predict(samples_LNR, n_cores = 1, n_post = 10)
 #' }
 #' @export
-predict.emc <- function(object,hyper=FALSE,n_post=100,n_cores=1,
+predict.emc <- function(object,hyper=FALSE,n_post=50,n_cores=1,
                         stat=c("random","mean","median")[1], ...)
 {
   # #' @param force_direction Boolean, take censor direction from argument not samples (default FALSE)
@@ -133,7 +132,7 @@ predict.emc <- function(object,hyper=FALSE,n_post=100,n_cores=1,
   emc <- object
   dots <- list(...)
   data <- get_data(emc)
-  design <- attr(emc,"design_list")
+  design <- get_design(emc)
   if(is.null(data$subjects)){
     jointModel <- TRUE
     all_samples <- emc
@@ -145,7 +144,7 @@ predict.emc <- function(object,hyper=FALSE,n_post=100,n_cores=1,
   for(j in 1:length(data)){
     if(jointModel) emc <- single_out_joint(all_samples, j)
     subjects <- levels(data[[j]]$subjects)
-
+    if(grepl("MRI", design[[j]]$model()$type)) design[[j]] <- add_design_fMRI_predict(design[[j]], emc)
     if (hyper) {
       pars <- vector(mode="list",length=n_post)
       # for (i in 1:n_post) {
@@ -166,19 +165,10 @@ predict.emc <- function(object,hyper=FALSE,n_post=100,n_cores=1,
         }
       }
     }
-    if (n_cores==1) {
-      simDat <- vector(mode="list",length=n_post)
-      for (i in 1:n_post) {
-        simDat[[i]] <- do.call(make_data, c(list(pars[[i]],design=design[[j]],data=data[[j]]), fix_dots(dots, make_data)))
-      }
-    } else {
-      simDat <- mclapply(1:n_post,function(i){
-        do.call(make_data, c(list(pars[[i]],design=design[[j]],data=data[[j]]), fix_dots(dots, make_data)))
-      },mc.cores=n_cores)
-    }
-    if (!is.null(attr(simDat[[1]],"adapt"))) adapt <- attr(simDat[[1]],"adapt")
+    simDat <- mclapply(1:n_post,function(i){
+      do.call(make_data, c(list(pars[[i]],design=design[[j]],data=data[[j]]), fix_dots(dots, make_data)))
+    },mc.cores=n_cores)
     out <- cbind(postn=rep(1:n_post,times=unlist(lapply(simDat,function(x)dim(x)[1]))),do.call(rbind,simDat))
-    if (!is.null(attr(simDat[[1]],"adapt"))) attr(out,"adapt") <- adapt
     if (n_post==1) pars <- pars[[1]]
     attr(out,"pars") <- pars
     post_out[[j]] <- out
@@ -199,7 +189,7 @@ check.emc <- function(emc, selection = c('mu', 'sigma2', 'alpha'), digits = 3,
   out_list <- list()
   cat("Iterations:\n")
   print(chain_n(emc))
-  if(attr(emc[[1]], "variant_funs")$type == "single") selection <- "alpha"
+  if(emc[[1]]$type == "single") selection <- "alpha"
   if(plot_worst){
     mfrow <- coda_setmfrow(Nchains = length(emc), Nparms = length(selection),nplots = 1)
     par(mfrow = mfrow)
@@ -250,7 +240,7 @@ check.emc <- function(emc, selection = c('mu', 'sigma2', 'alpha'), digits = 3,
   return(invisible(out_list))
 }
 
-#' Convergence checks for an emc object
+#' Convergence Checks for an emc Object
 #'
 #' Runs a series of convergence checks, prints statistics to the console, and
 #' makes traceplots of the worst converged parameter per selection.
@@ -279,11 +269,17 @@ check <- function(emc, ...){
 
 
 #' @rdname parameters
+#' @examples
+#' # For posterior inference:
+#' # Get 100 samples of the group-level mean (the default)
+#' parameters(samples_LNR, N = 100)
+#' # or from the individual-level parameters and mapped
+#' parameters(samples_LNR, selection = "alpha", map = TRUE)
 #' @export
-parameters.emc <- function(emc,selection = "mu", N = NULL, resample = FALSE, ...)
+parameters.emc <- function(x,selection = "mu", N = NULL, resample = FALSE, ...)
   # extracts and stacks chains into a matrix
 {
-  dots <- list(...)
+  emc <- x
 
   if(is.null(N) || resample){
     nstage <- colSums(chain_n(emc))
@@ -295,8 +291,8 @@ parameters.emc <- function(emc,selection = "mu", N = NULL, resample = FALSE, ...
     }
     N <- nstage[names(has_ran)[length(has_ran)]]
   }
+  dots <- add_defaults(list(...), flatten = TRUE, length.out = N/length(emc))
   dots$merge_chains <- TRUE ; dots$return_mcmc <- FALSE
-  dots$flatten <- TRUE; dots$length.out <- N/length(emc)
   out <- do.call(get_pars, c(list(emc,selection=selection), fix_dots(dots, get_pars)))
   if(selection == "alpha"){
     out <- aperm(out, c(3,1,2))
@@ -324,16 +320,18 @@ parameters.emc <- function(emc,selection = "mu", N = NULL, resample = FALSE, ...
 }
 
 
-#' Returns a parameter type from an emc object as a data frame.
+#' Return Data Frame of Parameters
 #'
-#' @param emc An emc object
+#' @param x An emc or emc.prior object
 #' @param selection String designating parameter type (e.g. mu, sigma2, correlation, alpha)
-#' @param N Integer. How many samples to take from the posterior. If `NULL` will return the full posterior
+#' @param N Integer. How many samples to take from the posterior/prior. If `NULL` will return the full posterior
 #' @param resample Boolean. If `TRUE` will sample N samples from the posterior with replacement
+#' @param covariates For priors, possible covariates in the design
 #' @param ... Optional arguments that can be passed to `get_pars`
-#' @return A data frame with one row for each sample (with a subjects column if selection = "alpha")
+#' @return A data frame with one row for each sample
+#' (with a subjects column if selection = "alpha" and using draws from the posterior)
 #' @export
-parameters <- function(emc, ...){
+parameters <- function(x, ...){
   UseMethod("parameters")
 }
 
@@ -342,9 +340,10 @@ parameters <- function(emc, ...){
 #' @export
 
 fit.emc <- function(emc, stage = NULL, iter = 1000, stop_criteria = NULL,report_time=TRUE,
-                    p_accept = .8, step_size = 100, verbose = TRUE, verboseProgress = FALSE, fileName = NULL,
+                    search_width = 1, step_size = 100, verbose = TRUE, verboseProgress = FALSE, fileName = NULL,
                     particles = NULL, particle_factor=50, cores_per_chain = 1,
-                    cores_for_chains = length(emc), max_tries = 20, n_blocks = 1,
+                    cores_for_chains = length(emc), max_tries = 20,
+                    thin_auto = FALSE,n_blocks = 1,
                     ...){
 
   if (report_time) start_time <- Sys.time()
@@ -361,7 +360,7 @@ fit.emc <- function(emc, stage = NULL, iter = 1000, stop_criteria = NULL,report_
   }
 
   stop_criteria <- stop_criteria[stages_names]
-  stop_criteria <- mapply(get_stop_criteria, stages_names, stop_criteria, MoreArgs = list(type = attr(emc[[1]], "variant_funs")$type))
+  stop_criteria <- mapply(get_stop_criteria, stages_names, stop_criteria, MoreArgs = list(type = emc[[1]]$type))
   if(is.null(stop_criteria[["sample"]]$iter)) stop_criteria[["sample"]]$iter <- iter
   names(stop_criteria) <- stages_names
   if (is.character(emc)) {
@@ -370,48 +369,42 @@ fit.emc <- function(emc, stage = NULL, iter = 1000, stop_criteria = NULL,report_
     emc <- loadRData(emc)
   }
   if(is.null(stage)){
-    nstage <- colSums(chain_n(emc))
-    if(all(nstage == 0)){
-      stage <- "preburn"
-    } else{
-      has_ran <- nstage[nstage != 0]
-      stage <- names(has_ran)[length(has_ran)]
-    }
+    stage <- get_last_stage(emc)
   }
   if(stage == "preburn"){
-    emc <- run_emc(emc, stage = "preburn", stop_criteria[['preburn']], cores_for_chains = cores_for_chains, p_accept = p_accept,
+    emc <- run_emc(emc, stage = "preburn", stop_criteria[['preburn']], cores_for_chains = cores_for_chains, search_width = search_width,
                              step_size = step_size,  verbose = verbose, verboseProgress = verboseProgress,
                              fileName = fileName,
                              particles = particles, particle_factor =  particle_factor,
-                             cores_per_chain = cores_per_chain, max_tries = max_tries, n_blocks = n_blocks)
+                             cores_per_chain = cores_per_chain, max_tries = max_tries, thin_auto = thin_auto, n_blocks = n_blocks)
   }
 
   if(any(stage %in% c("preburn", "burn"))){
-    emc <-  run_emc(emc, stage = "burn", stop_criteria[['burn']], cores_for_chains = cores_for_chains, p_accept = p_accept,
+    emc <-  run_emc(emc, stage = "burn", stop_criteria[['burn']], cores_for_chains = cores_for_chains, search_width = search_width,
                               step_size = step_size,  verbose = verbose, verboseProgress = verboseProgress,
                               fileName = fileName,
                               particles = particles, particle_factor =  particle_factor,
-                              cores_per_chain = cores_per_chain, max_tries = max_tries, n_blocks = n_blocks)
+                              cores_per_chain = cores_per_chain, max_tries = max_tries, thin_auto = thin_auto, n_blocks = n_blocks)
   }
   if(any(stage %in% c("preburn", "burn", "adapt"))){
-    emc <-  run_emc(emc, stage = "adapt", stop_criteria[['adapt']],cores_for_chains = cores_for_chains, p_accept = p_accept,
+    emc <-  run_emc(emc, stage = "adapt", stop_criteria[['adapt']],cores_for_chains = cores_for_chains, search_width = search_width,
                               step_size = step_size,  verbose = verbose, verboseProgress = verboseProgress,
                               fileName = fileName,
                               particles = particles, particle_factor =  particle_factor,
-                              cores_per_chain = cores_per_chain, max_tries = max_tries, n_blocks = n_blocks)
+                              cores_per_chain = cores_per_chain, max_tries = max_tries, thin_auto = thin_auto, n_blocks = n_blocks)
   }
   if(any(stage %in% c("preburn", "burn", "adapt", "sample")) ){
-    emc <-  run_emc(emc, stage = "sample",stop_criteria[['sample']],cores_for_chains = cores_for_chains, p_accept = p_accept,
+    emc <-  run_emc(emc, stage = "sample",stop_criteria[['sample']],cores_for_chains = cores_for_chains, search_width = search_width,
                               step_size = step_size,  verbose = verbose, verboseProgress = verboseProgress,
                               fileName = fileName,
                               particles = particles, particle_factor = particle_factor,
-                              cores_per_chain = cores_per_chain, max_tries = max_tries, n_blocks = n_blocks)
+                              cores_per_chain = cores_per_chain, max_tries = max_tries, thin_auto = thin_auto, n_blocks = n_blocks)
   }
   if (report_time) print(Sys.time()-start_time)
   return(emc)
 }
 
-#' Model estimation in EMC2
+#' Model Estimation in EMC2
 #'
 #' General purpose function to estimate models specified in EMC2.
 #'
@@ -451,8 +444,9 @@ fit.emc <- function(emc, stage = NULL, iter = 1000, stop_criteria = NULL,report_
 #' @param stage A string. Indicates which stage to start the run from, either ``preburn``, ``burn``, ``adapt`` or ``sample``.
 #' If unspecified, it will run the subsequent stage (if there is one).
 #' @param iter An integer. Indicates how many iterations to run in the sampling stage.
-#' @param p_accept A double. The target acceptance probability of the MCMC process.
-#' This fine-tunes the width of the search space to obtain the desired acceptance probability. Defaults to .8
+#' @param search_width A double. Tunes target acceptance probability of the MCMC process.
+#' This fine-tunes the width of the search space to obtain the desired acceptance probability.
+#' 1 is the default width, increases lead to broader search.
 #' @param step_size An integer. After each step, the stopping requirements as specified
 #' by ``stop_criteria`` are checked and proposal distributions are updated. Defaults to 100.
 #' @param verbose Logical. Whether to print messages between each step with the current status regarding the ``stop_criteria``.
@@ -475,6 +469,7 @@ fit.emc <- function(emc, stage = NULL, iter = 1000, stop_criteria = NULL,report_
 #' updated in blocks. This can be helpful in extremely tough models with a large number of parameters.
 #' @param stop_criteria A list. Defines the stopping criteria and for which types
 #' of parameters these should hold. See the details and examples section.
+#' @param thin_auto A boolean. If `TRUE` will automatically thin the MCMC samples, closely matched to the ESS.
 #' @param report_time Boolean. If `TRUE`, the time taken to run the MCMC chains till completion of the `stop_criteria` will be printed.
 #' @param ... Additional optional arguments
 #' @return An emc object
@@ -484,14 +479,14 @@ fit.emc <- function(emc, stage = NULL, iter = 1000, stop_criteria = NULL,report_
 #'                            formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
 #'                            constants=c(s=log(1)))
 #' # Then make the emc object, we've omitted a prior here for brevity so default priors will be used.
-#' emc_forstmann <- make_emc(forstmann, design)
+#' emc_forstmann <- make_emc(forstmann, design_DDMaE)
 #'
 #' # With the emc object we can start sampling by simply calling fit
 #' emc_forstmann <- fit(emc_forstmann, fileName = "intermediate_save_location.RData")
 #'
 #' # For particularly hard models it pays off to increase the ``particle_factor``
-#' # and, although to a lesser extent, lower ``p_accept``.
-#' emc_forstmann <- fit(emc_forstmann, particle_factor = 100, p_accept = .6)
+#' # and, although to a lesser extent, increase ``search_width``.
+#' emc_forstmann <- fit(emc_forstmann, particle_factor = 100, search_width = 1.5)
 #'
 #' # Example of how to use the stop_criteria:
 #' emc_forstmann <- fit(emc_forstmann, stop_criteria = list(mean_gd = 1.1, max_gd = 1.5,
@@ -528,7 +523,7 @@ recovery.emc <- function(emc, true_pars,
                           CI = .95, ci_plot_args = list(), ...)
 {
   dots <- list(...)
-  type <- attr(emc[[1]], "variant_funs")$type
+  type <- emc[[1]]$type
   if(length(dots$subject) == 1 || emc[[1]]$n_subjects == 1) dots$by_subject <- TRUE
   dots$merge_chains <- TRUE
   MCMC_samples <- do.call(get_pars, c(list(emc, selection = selection), fix_dots(dots, get_pars)))
@@ -590,7 +585,7 @@ recovery.emc <- function(emc, true_pars,
 }
 
 
-#' Recovery plots
+#' Recovery Plots
 #'
 #' Plots recovery of data generating parameters/samples.
 #' Full range of samples manipulations described in `get_pars`
@@ -632,19 +627,19 @@ recovery <- function(emc, ...){
 #' @export
 hypothesis.emc <- function(emc, parameter = NULL, H0 = 0, fun = NULL,selection = "mu",
                           do_plot = TRUE, use_prior_lim = TRUE,
-                          N = 1e4, prior_plot_args = list(), ...){
+                          N = 1e4, prior_args = list(), ...){
   dots <- add_defaults(list(...), flatten = TRUE)
-  type <- attr(emc[[1]], "variant_funs")$type
+  type <- emc[[1]]$type
   if (length(emc[[1]]$data)==1) selection <- "alpha"
   if(selection == "alpha" & type != "single") stop("For savage-dickey ratio, selection cannot be alpha for hierarchical models")
-  prior <- emc[[1]]$prior
+  prior <- get_prior(emc)
 
 
-  psamples <-  get_objects(design = attr(emc,"design_list"),
-                           type = attr(emc[[1]], "variant_funs")$type, sample_prior = T,
+  psamples <-  get_objects(design = get_design(emc),
+                           type = emc[[1]]$type, sample_prior = T,
                            selection = selection, N = N, sampler = emc)
   psamples <- do.call(get_pars, c(list(psamples, selection = selection, merge_chains = TRUE, return_mcmc = FALSE, by_subject = TRUE,
-                                          type = attr(emc[[1]], "variant_funs")$type),
+                                          type = emc[[1]]$type),
                                      fix_dots(dots, get_pars, exclude = c("thin", "filter"))))
   samples <- do.call(get_pars, c(list(emc, selection = selection, merge_chains = TRUE, return_mcmc = FALSE, by_subject = TRUE),
                                     fix_dots(dots, get_pars)))
@@ -685,18 +680,18 @@ hypothesis.emc <- function(emc, parameter = NULL, H0 = 0, fun = NULL,selection =
         dots$xlim <- range(c(quantile(samples, c(0.025, 0.975)), H0 + .01, H0 - .01))
       }
     }
-    prior_plot_args <- add_defaults(prior_plot_args, cex = 2, col = "red", lwd = 1.5)
+    prior_args <- add_defaults(prior_args, cex = 2, col = "red", lwd = 1.5)
     dots <- add_defaults(dots, cex = 2, col = "black", lwd = 1.5, main = "Prior and posterior density")
     do.call(plot, c(list(post_density), fix_dots_plot(dots)))
-    do.call(lines, c(list(pdensity), fix_dots_plot(prior_plot_args)))
+    do.call(lines, c(list(pdensity), fix_dots_plot(prior_args)))
     do.call(points, c(list(H0 , post_dfun(H0)), fix_dots_plot(dots)))
-    do.call(points, c(list(H0, pdfun(H0)), fix_dots_plot(prior_plot_args)))
-    legend("topright", legend = c("posterior", "prior"), pch = c(1, 1), col = c(dots$col, prior_plot_args$col))
+    do.call(points, c(list(H0, pdfun(H0)), fix_dots_plot(prior_args)))
+    legend("topright", legend = c("posterior", "prior"), pch = c(1, 1), col = c(dots$col, prior_args$col))
   }
   return(pdfun(H0)/post_dfun(H0))
 }
 
-#' Within-model hypothesis testing
+#' Within-Model Hypothesis Testing
 #'
 #' Approximates the Bayes factor for parameter effects using the savage-dickey ratio.
 #'
@@ -816,7 +811,7 @@ credible.emc <- function(x,x_name=NULL,x_fun=NULL,x_fun_name="fun", selection = 
   invisible(tab)
 }
 
-#' Posterior credible interval tests
+#' Posterior Credible Interval Tests
 #'
 #' Modeled after `t.test`, returns the credible interval of the parameter or test
 #' and what proportion of the posterior distribution (or the difference in posterior distributions
@@ -845,29 +840,22 @@ credible.emc <- function(x,x_name=NULL,x_fun=NULL,x_fun_name="fun", selection = 
 #' @param x_fun_name Name to give to quantity calculated by `x_fun`
 #' @param y_fun_name Name to give to quantity calculated by `y_fun`
 #' @param ... Additional optional arguments that can be passed to `get_pars`
-#' @examples \dontrun{
+#' @examples{
 #' # Run a credible interval test (Bayesian ''t-test'')
-#' # Here the full model is an emc object with the hypothesized effect
-#' design_full <- design(data = forstmann,model=DDM,
-#'                            formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
-#'                            constants=c(s=log(1)))
-#'
-#' full_model <- make_emc(forstmann, design_full)
-#' full_model <- fit(full_model)
-#' credible(full_model, x_name = "v")
+#' credible(samples_LNR, x_name = "m")
 #' # We can also compare between two sets of emc objects
-
-#' # Now without a ~ E
-#' design_null <- design(data = forstmann,model=DDM,
-#'                            formula =list(v~0+S,a~1, t0~1, s~1, Z~1, sv~1, SZ~1),
-#'                            constants=c(s=log(1)))
 #'
-#' null_model <- make_emc(forstmann, design_null)
-#' null_model <- fit(null_model)
-#' credible(x = null_model, x_name = "a", y = full_model, y_name = "a")
-#'
-#' # Or provide custom functions
-#' credible(x = full_model, x_fun = function(d) d["a_Eaccuracy"] - d["a_Eneutral"])
+#' # # Now without a ~ E
+#' # design_null <- design(data = forstmann,model=DDM,
+#' #                            formula =list(v~0+S,a~1, t0~1, s~1, Z~1, sv~1, SZ~1),
+#' #                            constants=c(s=log(1)))
+#' #
+#' # null_model <- make_emc(forstmann, design_null)
+#' # null_model <- fit(null_model)
+#' # credible(x = null_model, x_name = "a", y = full_model, y_name = "a")
+#' #
+#' # # Or provide custom functions:
+#' # credible(x = full_model, x_fun = function(d) d["a_Eaccuracy"] - d["a_Eneutral"])
 #' }
 #' @return Invisible results table with no rounding.
 #' @export
@@ -875,7 +863,7 @@ credible <- function(x, ...){
   UseMethod("credible")
 }
 
-#' Shorten an emc object
+#' Shorten an emc Object
 #'
 #' @inheritParams get_pars
 #' @param ... additional optional arguments
@@ -888,10 +876,8 @@ credible <- function(x, ...){
 #' subset(samples_LNR, length.out = 10)
 subset.emc <- function(x, stage = "sample", filter = NULL, thin = 1, keep_stages = FALSE,
                        length.out = NULL, ...){
-  design_list <- attr(x, "design_list")
   x <- lapply(x, remove_samples, stage = stage, filter = filter,
                 thin = thin, length.out = length.out, keep_stages = keep_stages)
-  attr(x, "design_list") <- design_list
   class(x) <- "emc"
   return(x)
 }
@@ -915,16 +901,16 @@ ess_summary.emc <- function(emc,selection="mu", stat = "min", stat_only = FALSE,
   return(out)
 }
 
-#' @rdname posterior_summary
+#' @rdname credint
 #' @export
-posterior_summary.emc <- function(emc, selection="mu", probs = c(0.025, .5, .975),
+credint.emc <- function(x, selection="mu", probs = c(0.025, .5, .975),
                                   digits = 3, ...){
-  out <- get_summary_stat(emc, selection, get_posterior_quantiles,
+  out <- get_summary_stat(x, selection, get_posterior_quantiles,
                           probs = probs, digits = digits, ...)
   return(out)
 }
 
-#' Gelman-Rubin statistic
+#' Gelman-Rubin Statistic
 #'
 #' Returns the Gelman-Rubin diagnostics (otherwise known as the R-hat) of the selected parameter type;
 #' i.e. the ratio of between to within MCMC chain variance.
@@ -953,7 +939,7 @@ gd_summary <- function(emc, ...){
   UseMethod("gd_summary")
 }
 
-#' Effective sample size
+#' Effective Sample Size
 #'
 #' Returns the effective sample size (ESS) of the selected parameter type.
 #' Full range of possible samples manipulations described in `get_pars`.
@@ -968,22 +954,22 @@ ess_summary <- function(emc, ...){
   UseMethod("ess_summary")
 }
 
-#' Posterior quantiles
+#' Posterior Quantiles
 #'
 #' Returns the quantiles of the selected parameter type.
 #' Full range of possible samples manipulations described in `get_pars`.
 #'
 #' @inheritParams gd_summary.emc
+#' @param x An emc or emc.prior object
 #' @param probs A vector. Indicates which quantiles to return from the posterior.
 #' @return A list of posterior quantiles for each parameter group in the selected parameter type.
 #' @export
 #'
 #' @examples
-#' posterior_summary(samples_LNR)
-posterior_summary <- function(emc, ...){
-  UseMethod("posterior_summary")
+#' credint(samples_LNR)
+credint <- function(x, ...){
+  UseMethod("credint")
 }
-
 
 #' @rdname get_data
 #' @export
@@ -991,39 +977,173 @@ get_data.emc <- function(emc) {
   if(is.null(emc[[1]]$data[[1]]$subjects)){ # Joint model
     dat <- vector("list", length(emc[[1]]$data[[1]]))
     for(i in 1:length(dat)){
-      design <- attr(emc, "design_list")[[i]]
-      tmp <- lapply(emc[[1]]$data,\(x) x[[i]][attr(x[[i]],"expand"),])
-      tmp <- do.call(rbind, tmp)
+      design <- get_design(emc)[[i]]
+      tmp <- do.call(rbind,lapply(emc[[1]]$data,function(x){
+        expand <- attr(x[[i]],"expand")
+        if(is.null(expand)) expand <- 1:nrow(x[[i]])
+        return(x[[i]][expand,])
+      }))
       row.names(tmp) <- NULL
+      if(is.null(tmp$lR)){
+        tmp$lR <- 1
+        tmp$lR <- factor(tmp$lR)
+      }
       tmp <- tmp[tmp$lR == levels(tmp$lR)[1],]
       tmp <- tmp[,!(colnames(tmp) %in% c("trials","lR","lM", "winner", "SlR", "RACE", names(design$Ffunctions)))]
       dat[[i]] <- tmp
     }
   } else{
-    design <- attr(emc, "design_list")[[1]]
-    dat <- do.call(rbind,lapply(emc[[1]]$data,\(x) x[attr(x,"expand"),]))
+    design <- get_design(emc)[[1]]
+    dat <- do.call(rbind,lapply(emc[[1]]$data,function(x){
+      expand <- attr(x,"expand")
+      if(is.null(expand)) expand <- 1:nrow(x)
+      return(x[expand,])
+    }))
     row.names(dat) <- NULL
+    if(is.null(dat$lR)){
+      dat$lR <- 1
+      dat$lR <- factor(dat$lR)
+    }
     dat <- dat[dat$lR == levels(dat$lR)[1],]
     dat <- dat[,!(colnames(dat) %in% c("trials","lR","lM","winner", "SlR", "RACE", names(design$Ffunctions)))]
   }
   return(dat)
 }
-#' Get data
+#' Get Data
 #'
 #' Extracts data from an emc object
 #'
 #' @details
 #' emc adds columns and rows to a dataframe in order to facilitate efficient likelihood calculations.
 #' This function will return the data as provided originally.
-#'
 #' @param emc an emc object
-#'
 #' @return A dataframe of the original data
-#'
 #' @export
-#'
 #' @examples
 #' get_data(samples_LNR)
 get_data <- function(emc){
   UseMethod("get_data")
 }
+
+#' @rdname get_prior
+#' @export
+get_prior.emc <- function(emc){
+  prior <- emc[[1]]$prior
+  attr(prior, "type") <- emc[[1]]$type
+  class(prior) <- "emc.prior"
+  return(prior)
+}
+
+#' Get Prior
+#'
+#' Extracts prior from an emc object
+#'
+#' @param emc an emc object
+#' @return A prior with class emc.prior
+#' @export
+#' @examples
+#' get_prior(samples_LNR)
+get_prior <- function(emc){
+  UseMethod("get_prior")
+}
+
+#' @rdname get_design
+#' @export
+get_design.emc <- function(x){
+  # For backwards compatibility
+  if(!is.null(attr(x, "design_list"))){
+    emc_design <- attr(x, "design_list")
+  } else{
+    emc_design <- get_design(get_prior(x))
+  }
+  class(emc_design) <- "emc.design"
+  return(emc_design)
+}
+
+#' Plot Design
+#'
+#' Makes design illustration by plotting simulated data based on the design
+#'
+#' @param x An `emc` or `emc.prior` object containing the design to plot
+#' @param data Optional data to overlay on the design plot
+#' @param factors Factors to use for varying parameters
+#' @param plot_factor Optional. Make separate plots for each level of this factor
+#' @param n_data_sim If data is provided, number of simulated datasets to generate for the plot. Default is 10.
+#' @param p_vector Only needed when x is an `emc.design` object, which parameters to use for data generation.
+#' @param functions A named list of functions that create additional columns in the data.
+#' @param ... Additional arguments to pass to `make_design_plot`
+#' @return No return value. Just plots the design
+#' @export
+plot_design <- function(x, data = NULL, factors = NULL, plot_factor = NULL, n_data_sim = 10, p_vector = NULL,
+                        functions = NULL, ...){
+  UseMethod("plot_design")
+}
+
+#' @rdname plot_design
+#' @export
+plot_design.emc <- function(x, data = NULL, factors = NULL, plot_factor = NULL, n_data_sim = 10, p_vector = NULL,
+                            functions = NULL, ...){
+  p_vector <- credint(x, probs = .5)[[1]]
+  design <- get_design(x)[[1]]
+  plot(design, p_vector, data = data, factors = factors, plot_factor = plot_factor, n_data_sim = n_data_sim,
+       p_vector = p_vector, functions = functions, ...)
+}
+
+#' @rdname mapped_pars
+#' @export
+mapped_pars.emc <- function(x, p_vector = NULL, model = NULL, digits=3,remove_subjects=TRUE,
+                                  covariates=NULL,...){
+  if(is.null(p_vector)) p_vector <- credint(x, probs = .5)[[1]]
+  design <- get_design(x)
+  mapped_pars(design, p_vector, digits = digits, remove_subjects=remove_subjects,
+              covariates=covariates,...)
+}
+
+#' Get Design
+#'
+#' Extracts design from an emc object
+#'
+#' @param x an `emc` or `emc.prior` object
+#' @return A design with class emc.design
+#' @export
+#' @examples
+#' get_design(samples_LNR)
+get_design <- function(x){
+  UseMethod("get_design")
+}
+
+
+
+
+#' @rdname sampled_pars
+#' @export
+sampled_pars.emc <- function(x,model=NULL,doMap=TRUE, add_da = FALSE, all_cells_dm = FALSE){
+  return(sampled_pars(get_design(x), model = model, doMap = doMap,
+                          add_da = add_da, all_cells_dm = all_cells_dm))
+}
+
+#' @rdname auto_thin
+#' @export
+auto_thin.emc <- function(emc, stage = "sample", selection = c("alpha", "mu"), ...){
+  ess <- 0
+  for(select in selection){
+    ess <- ess + ess_summary(emc, selection = select, stage = stage, stat_only = TRUE, stat = "mean")
+  }
+  ess <- ess/length(selection)
+  return(subset(emc, stage = stage, length.out = min(ess/length(emc), sum(chain_n(emc)[1,stage]))))
+}
+
+
+#' Automatically Thin an emc Object
+#'
+#' Uses the effective sample size of `selection` to determine how much to optimally thin an emc object
+#'
+#' @inheritParams get_pars
+#' @param selection Which parameter types (i.e. 'alpha' or 'mu' to consider when determining the effective sample size)
+#' @param ... additional optional arguments
+#'
+#' @export
+auto_thin <- function(emc, stage = "sample", selection = c("alpha", "mu"), ...){
+  UseMethod("auto_thin")
+}
+

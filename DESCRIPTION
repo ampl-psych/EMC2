@@ -1,6 +1,6 @@
 Package: EMC2
 Title: Bayesian Hierarchical Analysis of Cognitive Models of Choice
-Version: 2.1.0
+Version: 3.0.0
 Authors@R: 
     c(person("Niek", "Stevenson", email = "niek.stevenson@gmail.com", 
            role = c("aut", "cre"), comment = c(ORCID = "0000-0003-3206-7544")),
@@ -17,7 +17,7 @@ Authors@R:
       person("Przemyslaw", "Sliwa", role=c("ctb")),
       person("Jason H.", "Stover", role=c("ctb")))
 Description: Fit Bayesian (hierarchical) cognitive models
-    using a linear modeling language interface using particle metropolis Markov
+    using a linear modeling language interface using particle Metropolis Markov
     chain Monte Carlo sampling with Gibbs steps. The diffusion decision model (DDM), 
     linear ballistic accumulator model (LBA), racing diffusion model (RDM), and the lognormal
     race model (LNR) are supported. Additionally, users can specify their own likelihood
@@ -67,7 +67,7 @@ Imports:
     lpSolve,
     WienR
 LinkingTo: 
-    Rcpp
+    Rcpp, RcppArmadillo
 Depends: 
     R (>= 3.5.0)
 LazyData: true

@@ -73,8 +73,17 @@ specific structure and elements, as outlined below.</p><dl><dt>data</dt>
 <dt>n_subjects</dt>
 <dd><p>The number of unique subject ID's in the data</p></dd>
 
+<dt>model</dt>
+<dd><p>A list containing the model functions</p></dd>
+
+<dt>nuisance</dt>
+<dd><p>A logical vector indicating which parameters are nuisance parameters</p></dd>
+
 <dt>subjects</dt>
 <dd><p>A vector containing the unique subject ID's</p></dd>
+
+<dt>type</dt>
+<dd><p>The type of model e.g., "standard" or "diagonal"</p></dd>
 
 <dt>prior</dt>
 <dd><p>A list that holds the prior for <code>theta_mu</code> (the model
@@ -82,16 +91,9 @@ parameters). Contains the mean (<code>theta_mu_mean</code>), covariance matrix
 (<code>theta_mu_var</code>), degrees of freedom (<code>v</code>), and scale (<code>A</code>)
 and inverse covariance matrix (<code>theta_mu_invar</code>)</p></dd>
 
-<dt>ll_func</dt>
-<dd><p>The log likelihood function used by pmwg for model
-estimation</p></dd>
-
 <dt>samples</dt>
 <dd><p>A list with defined structure containing the samples, see
 the Samples Element section for more detail</p></dd>
-
-<dt>grouped</dt>
-<dd><p>Which parameters are grouped across subjects, in this case none</p></dd>
 
 <dt>sampler_nuis</dt>
 <dd><p>A sampler list for nuisance parameters (in this case there are none),

@@ -7,3 +7,8 @@
 ^docs$
 ^pkgdown$
 ^\.RData$
+^\.json$
+^\.vscode$
+^paper$
+^\.settings\.json$
+

@@ -56,16 +56,17 @@
 <span>  iter <span class="op">=</span> <span class="fl">1000</span>,</span>
 <span>  stop_criteria <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  report_time <span class="op">=</span> <span class="cn">TRUE</span>,</span>
-<span>  p_accept <span class="op">=</span> <span class="fl">0.8</span>,</span>
+<span>  search_width <span class="op">=</span> <span class="fl">1</span>,</span>
 <span>  step_size <span class="op">=</span> <span class="fl">100</span>,</span>
 <span>  verbose <span class="op">=</span> <span class="cn">TRUE</span>,</span>
 <span>  verboseProgress <span class="op">=</span> <span class="cn">FALSE</span>,</span>
 <span>  fileName <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  particles <span class="op">=</span> <span class="cn">NULL</span>,</span>
-<span>  particle_factor <span class="op">=</span> <span class="fl">50</span>,</span>
+<span>  particle_factor <span class="op">=</span> <span class="fl">70</span>,</span>
 <span>  cores_per_chain <span class="op">=</span> <span class="fl">1</span>,</span>
 <span>  cores_for_chains <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/length.html" class="external-link">length</a></span><span class="op">(</span><span class="va">emc</span><span class="op">)</span>,</span>
 <span>  max_tries <span class="op">=</span> <span class="fl">20</span>,</span>
+<span>  thin_auto <span class="op">=</span> <span class="cn">FALSE</span>,</span>
 <span>  n_blocks <span class="op">=</span> <span class="fl">1</span>,</span>
 <span>  <span class="va">...</span></span>
 <span><span class="op">)</span></span>
@@ -100,9 +101,10 @@ of parameters these should hold. See the details and examples section.</p></dd>
 <dd><p>Boolean. If <code>TRUE</code>, the time taken to run the MCMC chains till completion of the <code>stop_criteria</code> will be printed.</p></dd>
 
 
-<dt id="arg-p-accept">p_accept<a class="anchor" aria-label="anchor" href="#arg-p-accept"></a></dt>
-<dd><p>A double. The target acceptance probability of the MCMC process.
-This fine-tunes the width of the search space to obtain the desired acceptance probability. Defaults to .8</p></dd>
+<dt id="arg-search-width">search_width<a class="anchor" aria-label="anchor" href="#arg-search-width"></a></dt>
+<dd><p>A double. Tunes target acceptance probability of the MCMC process.
+This fine-tunes the width of the search space to obtain the desired acceptance probability.
+1 is the default width, increases lead to broader search.</p></dd>
 
 
 <dt id="arg-step-size">step_size<a class="anchor" aria-label="anchor" href="#arg-step-size"></a></dt>
@@ -148,6 +150,10 @@ Defaults to the number of chains. The total number of cores used is equal to <co
 <dd><p>An integer. How many times should it try to meet the finish
 conditions as specified by <code>stop_criteria</code>? Defaults to 20. <code>max_tries</code> is
 ignored if the required number of iterations has not been reached yet.</p></dd>
+
+
+<dt id="arg-thin-auto">thin_auto<a class="anchor" aria-label="anchor" href="#arg-thin-auto"></a></dt>
+<dd><p>A boolean. If <code>TRUE</code> will automatically thin the MCMC samples, closely matched to the ESS.</p></dd>
 
 
 <dt id="arg-n-blocks">n_blocks<a class="anchor" aria-label="anchor" href="#arg-n-blocks"></a></dt>
@@ -198,8 +204,8 @@ EMC2: An R Package for cognitive models of choice. doi.org/10.31234/osf.io/2e4dq
 <span class="r-in"><span><span class="va">emc_forstmann</span> <span class="op">&lt;-</span> <span class="fu">fit</span><span class="op">(</span><span class="va">emc_forstmann</span>, fileName <span class="op">=</span> <span class="st">"intermediate_save_location.RData"</span><span class="op">)</span></span></span>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="co"># For particularly hard models it pays off to increase the ``particle_factor``</span></span></span>
-<span class="r-in"><span><span class="co"># and, although to a lesser extent, lower ``p_accept``.</span></span></span>
-<span class="r-in"><span><span class="va">emc_forstmann</span> <span class="op">&lt;-</span> <span class="fu">fit</span><span class="op">(</span><span class="va">emc_forstmann</span>, particle_factor <span class="op">=</span> <span class="fl">100</span>, p_accept <span class="op">=</span> <span class="fl">.6</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="co"># and, although to a lesser extent, increase ``search_width``.</span></span></span>
+<span class="r-in"><span><span class="va">emc_forstmann</span> <span class="op">&lt;-</span> <span class="fu">fit</span><span class="op">(</span><span class="va">emc_forstmann</span>, particle_factor <span class="op">=</span> <span class="fl">100</span>, search_width <span class="op">=</span> <span class="fl">1.5</span><span class="op">)</span></span></span>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="co"># Example of how to use the stop_criteria:</span></span></span>
 <span class="r-in"><span><span class="va">emc_forstmann</span> <span class="op">&lt;-</span> <span class="fu">fit</span><span class="op">(</span><span class="va">emc_forstmann</span>, stop_criteria <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>mean_gd <span class="op">=</span> <span class="fl">1.1</span>, max_gd <span class="op">=</span> <span class="fl">1.5</span>,</span></span>

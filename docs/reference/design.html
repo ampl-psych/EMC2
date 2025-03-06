@@ -65,6 +65,8 @@ the model specification.</p>
 <span>  functions <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  report_p_vector <span class="op">=</span> <span class="cn">TRUE</span>,</span>
 <span>  custom_p_vector <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  transform <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  bound <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  <span class="va">...</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
@@ -121,7 +123,7 @@ to the latent response factor.</p></dd>
 
 <dt id="arg-constants">constants<a class="anchor" aria-label="anchor" href="#arg-constants"></a></dt>
 <dd><p>A named vector that sets constants. Any parameter in
-<code>sampled_p_vector</code> can be set constant.</p></dd>
+<code>sampled_pars</code> can be set constant.</p></dd>
 
 
 <dt id="arg-covariates">covariates<a class="anchor" aria-label="anchor" href="#arg-covariates"></a></dt>
@@ -141,6 +143,19 @@ parameters to be estimated.</p></dd>
 <dt id="arg-custom-p-vector">custom_p_vector<a class="anchor" aria-label="anchor" href="#arg-custom-p-vector"></a></dt>
 <dd><p>A character vector. If specified, a custom likelihood
 function can be supplied.</p></dd>
+
+
+<dt id="arg-transform">transform<a class="anchor" aria-label="anchor" href="#arg-transform"></a></dt>
+<dd><p>A list with custom transformations to be applied to the parameters of the model,
+if the conventional transformations aren't desired.
+See <code><a href="DDM.html">DDM()</a></code> for an example of such transformations</p></dd>
+
+
+<dt id="arg-bound">bound<a class="anchor" aria-label="anchor" href="#arg-bound"></a></dt>
+<dd><p>A list with custom bounds to be applied to the parameters of the model,
+if the conventional bound aren't desired.
+see <code><a href="DDM.html">DDM()</a></code> for an example of such bounds. Bounds are used to set limits to
+the likelihood landscape that cannot reasonable be achieved with <code>transform</code></p></dd>
 
 
 <dt id="arg--">...<a class="anchor" aria-label="anchor" href="#arg--"></a></dt>

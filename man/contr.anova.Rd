@@ -2,7 +2,7 @@
 % Please edit documentation in R/design.R
 \name{contr.anova}
 \alias{contr.anova}
-\title{Anova style contrast matrix}
+\title{Anova Style Contrast Matrix}
 \usage{
 contr.anova(n)
 }

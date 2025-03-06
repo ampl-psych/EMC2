@@ -3,7 +3,7 @@
 \name{recovery.emc}
 \alias{recovery.emc}
 \alias{recovery}
-\title{Recovery plots}
+\title{Recovery Plots}
 \usage{
 \method{recovery}{emc}(
   emc,

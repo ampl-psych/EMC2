@@ -2,7 +2,7 @@
 % Please edit documentation in R/plotting.R
 \name{plot_pars}
 \alias{plot_pars}
-\title{Plots density for parameters}
+\title{Plots Density for Parameters}
 \usage{
 plot_pars(
   emc,
@@ -15,8 +15,8 @@ plot_pars(
   lpos = "topright",
   true_pars = NULL,
   all_subjects = FALSE,
-  prior_plot_args = list(),
-  true_plot_args = list(),
+  prior_args = list(),
+  true_args = list(),
   ...
 )
 }
@@ -43,9 +43,9 @@ If an emc object will plot the densities of the object as well, assumed to be th
 
 \item{all_subjects}{Boolean. Will plot the densities of all (selected) subjects overlaid with the group-level distribution}
 
-\item{prior_plot_args}{A list. Optional additional arguments to be passed to plot.default for the plotting of the prior density (see \code{par()})}
+\item{prior_args}{A list. Optional additional arguments to be passed to plot.default for the plotting of the prior density (see \code{par()})}
 
-\item{true_plot_args}{A list. Optional additional arguments to be passed to plot.default for the plotting of the true parameters (see \code{par()})}
+\item{true_args}{A list. Optional additional arguments to be passed to plot.default for the plotting of the true parameters (see \code{par()})}
 
 \item{...}{Optional arguments that can be passed to \code{get_pars}, \code{density}, or \code{plot.default} (see \code{par()})}
 }
@@ -63,5 +63,5 @@ plot_pars(samples_LNR)
 plot_pars(samples_LNR, all_subjects = TRUE, col = 'purple')
 # Or plot recovery
 true_emc <- samples_LNR # This would normally be the data-generating samples
-plot_pars(samples_LNR, true_pars = true_emc, true_plot_args = list(col = 'blue'), adjust = 2)
+plot_pars(samples_LNR, true_pars = true_emc, true_args = list(col = 'blue'), adjust = 2)
 }

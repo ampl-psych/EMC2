@@ -1,7 +1,7 @@
 get_stop_criteria <- function(stage, stop_criteria, type){
   if(is.null(stop_criteria)){
     if(stage == "preburn"){
-      stop_criteria$iter <- 150
+      stop_criteria$iter <- 50
     }
     if(stage == "burn"){
       stop_criteria$mean_gd <- 1.1
@@ -14,7 +14,7 @@ get_stop_criteria <- function(stage, stop_criteria, type){
 
     }
     if(stage == "adapt"){
-      stop_criteria$min_unique <- 600
+      stop_criteria$min_unique <- 150
     }
     if(stage == "sample"){
       stop_criteria$max_gd <- 1.1
@@ -28,13 +28,14 @@ get_stop_criteria <- function(stage, stop_criteria, type){
   }
   if(!is.null(stop_criteria$max_gd) || !is.null(stop_criteria$mean_gd)){
     if(is.null(stop_criteria$selection)) stop_criteria$selection <- c('alpha', 'mu')
+    if(is.null(stop_criteria$omit_mpsrf)) stop_criteria$omit_mpsrf <- TRUE
   }
   if(stage == "adapt" & is.null(stop_criteria$min_unique)) stop_criteria$min_unique <- 600
   if(stage != "adapt" & !is.null(stop_criteria$min_unique)) stop("min_unique only applicable for adapt stage, try min_es instead.")
   return(stop_criteria)
 }
 
-#' Custom function for more controlled model estimation
+#' Custom Function for More Controlled Model Estimation
 #'
 #' Although typically users will rely on ``fit``, this function can be used for more fine-tuned specification of estimation needs.
 #' The function will throw an error if a stage is skipped,
@@ -43,8 +44,9 @@ get_stop_criteria <- function(stage, stop_criteria, type){
 #'
 #' @param emc An emc object
 #' @param stage A string. Indicates which stage is to be run, either `preburn`, `burn`, `adapt` or `sample`
-#' @param p_accept A double. The target acceptance probability of the MCMC process.
-#' This fine-tunes the width of the search space to obtain the desired acceptance probability. Defaults to .8
+#' @param search_width A double. Tunes target acceptance probability of the MCMC process.
+#' This fine-tunes the width of the search space to obtain the desired acceptance probability.
+#' 1 is the default width, increases lead to broader search.
 #' @param step_size An integer. After each step, the stopping requirements as
 #' specified by `stop_criteria` are checked and proposal distributions are updated. Defaults to 100.
 #' @param verbose Logical. Whether to print messages between each step with the current status regarding the stop_criteria.
@@ -62,29 +64,31 @@ get_stop_criteria <- function(stage, stop_criteria, type){
 #' conditions as specified by stop_criteria? Defaults to 20. max_tries is ignored if the required number of iterations has not been reached yet.
 #' @param n_blocks An integer. Number of blocks. Will block the parameter chains such that they are updated in blocks. This can be helpful in extremely tough models with a large number of parameters.
 #' @param stop_criteria A list. Defines the stopping criteria and for which types of parameters these should hold. See ``?fit``.
+#' @param thin_auto A boolean. If `TRUE` will automatically thin the MCMC samples, closely matched to the ESS.
 #' @export
 #' @return An emc object
-#' @examples \dontrun{
+#' @examples \donttest{
 #' # First define a design
-#' design_DDMaE <- design(data = forstmann,model=DDM,
+#' design_in <- design(data = forstmann,model=DDM,
 #'                            formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
 #'                            constants=c(s=log(1)))
 #' # Then make the emc, we've omitted a prior here for brevity so default priors will be used.
-#' emc <- make_emc(forstmann, design)
+#' emc <- make_emc(forstmann, design_in)
 #'
 #' # Now for example we can specify that we only want to run the "preburn" phase
-#' # for MCMC 200 iterations
-#' emc <- run_emc(emc, stage = "preburn", stop_criteria = list(iter = 200))
+#' # for MCMC 10 iterations
+#' emc <- run_emc(emc, stage = "preburn", stop_criteria = list(iter = 10), cores_for_chains = 1)
 #'}
 
 run_emc <- function(emc, stage, stop_criteria,
-                         p_accept = .8, step_size = 100, verbose = FALSE, verboseProgress = FALSE,
-                         fileName = NULL,
-                         particles = NULL, particle_factor=50, cores_per_chain = 1,
-                         cores_for_chains = length(emc), max_tries = 20, n_blocks = 1){
+                    search_width = 1, step_size = 100, verbose = FALSE, verboseProgress = FALSE,
+                    fileName = NULL,
+                    particles = NULL, particle_factor=50, cores_per_chain = 1,
+                    cores_for_chains = length(emc), max_tries = 20, n_blocks = 1,
+                    thin_auto = FALSE){
+  emc <- restore_duplicates(emc)
   if(Sys.info()[1] == "Windows" & cores_per_chain > 1) stop("only cores_for_chains can be set on Windows")
   if (verbose) message(paste0("Running ", stage, " stage"))
-  attributes <- get_attributes(emc)
   total_iters_stage <- chain_n(emc)[,stage][1]
   if(stage != "preburn"){
     iter <- stop_criteria[["iter"]] + total_iters_stage
@@ -93,40 +97,52 @@ run_emc <- function(emc, stage, stop_criteria,
   }
   progress <- check_progress(emc, stage, iter, stop_criteria, max_tries, step_size, cores_per_chain*cores_for_chains, verbose, n_blocks = n_blocks)
   emc <- progress$emc
-  progress <- progress[!names(progress) == 'emc'] # Frees up memory, courtesy of Steven
-  particle_factor_in <- particle_factor; p_accept_in <- p_accept
+  progress <- progress[!names(progress) == 'emc']
   while(!progress$done){
+    emc <- reset_pm_settings(emc, stage)
+    # Remove redundant samples
+    emc <- fit_remove_samples(emc)
     if(!is.null(progress$n_blocks)) n_blocks <- progress$n_blocks
     emc <- add_proposals(emc, stage, cores_per_chain*cores_for_chains, n_blocks)
-    if(!is.null(progress$gds_bad)){
-      particle_factor_in <- particle_factor_in + .05 * progress$gds_bad * particle_factor_in
-      p_accept_in <- pmax(0.4, p_accept - progress$gds_bad*.3)
-      particle_factor_in[!progress$gds_bad] <- particle_factor
+    last_stage <- get_last_stage(emc)
+    if(stage == "preburn"){
+      sub_emc <- emc
+    } else if(stage != last_stage){
+      sub_emc <- subset(emc, filter = chain_n(emc)[1,last_stage]-1, stage = last_stage)
+    } else{
+      sub_emc <- subset(emc, filter = chain_n(emc)[1,stage] - 1, stage = stage)
     }
-    emc <- auto_mclapply(emc,run_stages, stage = stage, iter= progress$step_size,
+    # Actual sampling
+    sub_emc <- auto_mclapply(sub_emc,run_stages, stage = stage, iter= progress$step_size,
                               verbose=verbose,  verboseProgress = verboseProgress,
-                              particles=particles,particle_factor=particle_factor_in,
-                              p_accept=p_accept_in, n_cores=cores_per_chain, mc.cores = cores_for_chains)
-    for(i in 2:length(emc)){ # Frees up memory, courtesy of Steven
-      emc[[i]]$data <- emc[[1]]$data
+                              particles=particles,particle_factor=particle_factor,
+                              search_width=search_width, n_cores=cores_per_chain, mc.cores = cores_for_chains)
+
+    class(sub_emc) <- "emc"
+    if(stage != 'preburn'){
+      if(thin_auto) sub_emc <- auto_thin(sub_emc, stage = c("preburn", "burn", "adapt", "sample"))
+      emc <- concat_emc(emc, sub_emc, progress$step_size, stage)
+    } else{
+      emc <- sub_emc
     }
     progress <- check_progress(emc, stage, iter, stop_criteria, max_tries, step_size, cores_per_chain*cores_for_chains,verbose, progress,n_blocks)
     emc <- progress$emc
-    progress <- progress[!names(progress) == 'emc'] # Frees up memory, courtesy of Steven
+    progress <- progress[!names(progress) == 'emc']
     if(!is.null(fileName)){
+      emc <- strip_duplicates(emc)
       fileName <- fix_fileName(fileName)
-      attr(emc,"design_list") <- attributes$design_list
       class(emc) <- "emc"
       save(emc, file = fileName)
+      emc <- restore_duplicates(emc)
     }
   }
-  emc <- get_attributes(emc, attributes)
+  emc <- strip_duplicates(emc)
   class(emc) <- "emc"
   return(emc)
 }
 
 run_stages <- function(sampler, stage = "preburn", iter=0, verbose = TRUE, verboseProgress = TRUE,
-                       particles=NULL,particle_factor=50, p_accept= NULL, n_cores=1)
+                       particles=NULL,particle_factor=50, search_width= NULL, n_cores=1)
 {
 
   if (is.null(particles)){
@@ -140,32 +156,21 @@ run_stages <- function(sampler, stage = "preburn", iter=0, verbose = TRUE, verbo
 
   }
   if (!sampler$init) {
-    # if(!is.null(sampler$g_map_fixed)){
-    #   sampler <- init_lm(sampler, n_cores = n_cores)
-    # } else{
-    #   sampler <- init(sampler, n_cores = n_cores)
-    # }
     sampler <- init(sampler, n_cores = n_cores)
   }
   if (iter == 0) return(sampler)
-  # if(!is.null(sampler$g_map_fixed)){
-  #   sampler <- run_stage_lm(sampler, stage = stage,iter = iter, particles = particles,
-  #                           n_cores = n_cores, p_accept = p_accept, verbose = verbose, verboseProgress = verboseProgress)
-  # } else{
-  #     sampler <- run_stage(sampler, stage = stage,iter = iter, particles = particles,
-  #                          n_cores = n_cores, p_accept = p_accept, verbose = verbose, verboseProgress = verboseProgress)
-  # }
+  tune <- list(search_width = search_width)
   sampler <- run_stage(sampler, stage = stage,iter = iter, particles = particles,
-                       n_cores = n_cores, p_accept = p_accept, verbose = verbose, verboseProgress = verboseProgress)
+                       n_cores = n_cores, tune = tune, verbose = verbose, verboseProgress = verboseProgress)
   return(sampler)
 }
 
 add_proposals <- function(emc, stage, n_cores, n_blocks){
   if(stage != "preburn"){
     # if(!is.null(emc[[1]]$g_map_fixed)){
-    #   emc <- create_cov_proposals_lm(emc)
+    #   emc <- create_chain_proposals_lm(emc)
     # } else{    }
-    emc <- create_cov_proposals(emc, do_block = stage != "sample")
+    emc <- create_chain_proposals(emc, do_block = stage != "sample")
     if(!is.null(n_blocks)){
       if(n_blocks > 1){
         components <- sub_blocking(emc, n_blocks)
@@ -252,8 +257,7 @@ check_progress <- function (emc, stage, iter, stop_criteria,
     }
   }
   return(list(emc = gd$emc, done = done, step_size = step_size,
-              trys = trys, iters_total = iters_total, n_blocks = gd$n_blocks,
-              gds_bad = gd$gds_bad))
+              trys = trys, iters_total = iters_total, n_blocks = gd$n_blocks))
 }
 
 check_gd <- function(emc, stage, max_gd, mean_gd, omit_mpsrf, trys, verbose,
@@ -261,20 +265,25 @@ check_gd <- function(emc, stage, max_gd, mean_gd, omit_mpsrf, trys, verbose,
 {
   get_gds <- function(emc,omit_mpsrf, selection, stage) {
     gd_out <- c()
+    alpha <- NULL
     for(select in selection){
       gd <- unlist(gd_summary.emc(emc, selection = select, stage = stage,
                                   omit_mpsrf = omit_mpsrf, stat = NULL))
       gd_out <- c(gd_out, c(gd))
+      if(select == "alpha"){
+        alpha <- gd
+      }
     }
     gd_out[is.na(gd_out)] <- Inf
-    return(gd_out)
+    return(list(gd = gd_out, alpha = alpha))
   }
-
   if(is.null(max_gd) & is.null(mean_gd)) return(list(gd_done = TRUE, emc = emc))
   if(!emc[[1]]$init | !stage %in% emc[[1]]$samples$stage)
     return(list(gd_done = FALSE, emc = emc))
   if(is.null(omit_mpsrf)) omit_mpsrf <- TRUE
   gd <- get_gds(emc,omit_mpsrf,selection, stage)
+  alpha_gd <- gd$alpha
+  gd <- gd$gd
   if(!is.null(max_gd)){
     ok_max_gd <- ifelse(all(is.finite(gd)), all(gd < max_gd), FALSE)
   } else{
@@ -294,10 +303,12 @@ check_gd <- function(emc, stage, max_gd, mean_gd, omit_mpsrf, trys, verbose,
       gd_short <- Inf
     } else{
       gd_short <- get_gds(samplers_short,omit_mpsrf,selection, stage)
-
+      alpha_gd_short <- gd_short$alpha
+      gd_short <- gd_short$gd
     }
     if (is.null(max_gd) & (mean(gd_short) < mean(gd)) | (!is.null(max_gd) & (max(gd_short) < max(gd)))) {
       gd <- gd_short
+      alpha_gd <- alpha_gd_short
       emc <- samplers_short
     }
     if(!is.null(max_gd)){
@@ -312,46 +323,56 @@ check_gd <- function(emc, stage, max_gd, mean_gd, omit_mpsrf, trys, verbose,
     }
     ok_gd <- ok_mean_gd & ok_max_gd
   }
-
-
-  n_blocks_old <- n_blocks
-  # if(iter > 1000 & stage == "sample" & !ok_gd) {
-  #   n_blocks <- floor(iter/1000) + 1
-  #   n_blocks <- max(n_blocks_old, n_blocks)
-  # }
-  if(stage == "sample" & !ok_gd & "alpha" %in% selection) {
-    gds <- gd_summary.emc(emc, selection = "alpha")
-    if(!is.null(mean_gd)){
-      gds_bad <- (colMeans(gds)[-ncol(gds)] > mean_gd)
-    } else{
-      gds_bad <- (apply(gds, 2, max)[-ncol(gds)] > max_gd)
-    }
-  } else{
-    gds_bad <- NULL
-  }
   if(verbose) {
-    if(n_blocks_old != n_blocks) {
-      message(paste0("More than ", floor(iter/1000)*1000, " sample iterations past without convergence. Now block updating parameters with ", n_blocks, " blocks."))
-    }
-  }
-  if(verbose) {
-    if (omit_mpsrf) type <- "psrf" else type <- "m/psrf"
+    type <- "Rhat"
     if (!is.null(mean_gd)) message("Mean ",type," = ",round(mean(gd),3)) else
       if (!is.null(max_gd)) message("Max ",type," = ",round(max(gd),3))
   }
-  return(list(gd = gd, gd_done = ok_gd, emc = emc, n_blocks = n_blocks, gds_bad = gds_bad))
+  emc <- set_tune_ess(emc, alpha_gd, mean_gd, max_gd)
+  class(emc) <- "emc"
+  return(list(gd = gd, gd_done = ok_gd, emc = emc))
+}
+
+set_tune_ess <- function(emc, alpha_gd = NULL, mean_gd = NULL, max_gd = NULL){
+  if(is.null(alpha_gd)){
+    return(emc)
+  }
+  alpha_gd <- matrix(alpha_gd, emc[[1]]$n_subjects)
+  if(!is.null(mean_gd)){
+    mean_alpha_ok <- rowMeans(alpha_gd) < 1+(mean_gd-1)*.5
+  } else{
+    mean_alpha_ok <- rep(T, nrow(alpha_gd))
+  }
+  if(!is.null(max_gd)){
+    max_alpha_ok <- apply(alpha_gd, 1, max) < 1+(max_gd-1)*.5
+  } else{
+    max_alpha_ok <- rep(T, nrow(alpha_gd))
+  }
+  alpha_ok <- max_alpha_ok & mean_alpha_ok
+  emc <- lapply(emc, function(x){
+    pm_settings <- attr(x$samples, "pm_settings")
+    pm_settings <- mapply(pm_settings, alpha_ok, FUN = function(y, z){
+      for(i in 1:length(y)){
+        y[[i]]$gd_good <- z
+      }
+      return(list(y))
+    })
+    attr(x$samples, "pm_settings") <- pm_settings
+    return(x)
+  })
+  return(emc)
 }
 
 
 create_eff_proposals <- function(emc, n_cores){
   samples_merged <- merge_chains(emc)
   test_samples <- extract_samples(samples_merged, stage = c("adapt", "sample"), max_n_sample = 750, n_chains = length(emc))
-  variant_funs <- attr(emc[[1]], "variant_funs")
-  components <- attr(emc[[1]]$data, "components")[!emc[[1]]$grouped]
+  type <- emc[[1]]$type
+  components <- attr(emc[[1]]$data, "components")
   for(i in 1:length(emc)){
     iteration = round(test_samples$iteration * i/length(emc))
-    n_pars <- sum(!emc[[1]]$grouped)
-    nuisance <- emc[[1]]$nuisance[!emc[[1]]$grouped]
+    n_pars <- emc[[1]]$n_pars
+    nuisance <- emc[[1]]$nuisance
     n_subjects <- emc[[1]]$n_subjects
     eff_mu <- matrix(0, nrow = n_pars, ncol = n_subjects)
     eff_var <- array(0, dim = c(n_pars, n_pars, n_subjects))
@@ -361,12 +382,14 @@ create_eff_proposals <- function(emc, n_cores){
       if(any(nuis_idx)){
         type <- samples_merged$sampler_nuis$type
         conditionals <- auto_mclapply(X = 1:n_subjects,
-                                      FUN = variant_funs$get_conditionals,samples = test_samples,
+                                      FUN = get_conditionals, samples = test_samples,
                                       n_pars = sum(idx[!nuisance]), iteration =  iteration, idx = idx[!nuisance],
+                                      type = type ,
                                       mc.cores = n_cores)
         conditionals_nuis <- auto_mclapply(X = 1:n_subjects,
-                                           FUN = get_variant_funs(type)$get_conditionals,samples = test_samples$nuisance,
+                                           FUN = get_conditionals, samples = test_samples$nuisance,
                                            n_pars = sum(idx[nuisance]), iteration =  iteration, idx = idx[nuisance],
+                                           type = type,
                                            mc.cores = n_cores)
         conditionals <- array(unlist(conditionals), dim = c(sum(idx[!nuisance]), sum(idx[!nuisance]) + 1, n_subjects))
         conditionals_nuis <- array(unlist(conditionals_nuis), dim = c(sum(idx[nuisance]), sum(idx[nuisance]) + 1, n_subjects))
@@ -376,8 +399,9 @@ create_eff_proposals <- function(emc, n_cores){
         eff_var[idx & nuisance,idx & nuisance,] <- conditionals_nuis[,2:(sum(idx[nuisance])+1),]
       } else{
         conditionals <- auto_mclapply(X = 1:n_subjects,
-                                      FUN = variant_funs$get_conditionals,samples = test_samples,
+                                      FUN = get_conditionals, samples = test_samples,
                                       n_pars = sum(idx[!nuisance]), iteration =  iteration, idx = idx[!nuisance],
+                                      type = type,
                                       mc.cores = n_cores)
         conditionals <- array(unlist(conditionals), dim = c(sum(idx[!nuisance]), sum(idx[!nuisance]) + 1, n_subjects))
         eff_mu[idx & !nuisance,] <- conditionals[,1,]
@@ -392,8 +416,8 @@ create_eff_proposals <- function(emc, n_cores){
 
     eff_mu <- split(eff_mu, col(eff_mu))
     eff_var <- apply(eff_var, 3, identity, simplify = F)
-    attr(emc[[i]], "eff_mu") <- eff_mu
-    attr(emc[[i]], "eff_var") <- eff_var
+    emc[[i]]$eff_mu <- eff_mu
+    emc[[i]]$eff_var <- eff_var
     # attr(emc[[i]], "eff_alpha") <- eff_alpha
     # attr(emc[[i]], "eff_tau") <- eff_tau
   }
@@ -402,7 +426,7 @@ create_eff_proposals <- function(emc, n_cores){
 
 
 sub_blocking <- function(emc, n_blocks){
-  covs <- lapply(emc, FUN = function(x){return(attr(x, "chains_cov"))})
+  covs <- lapply(emc, FUN = function(x){return(x$chains_var)})
   out <- array(0, dim = dim(covs[[1]][[1]]))
   for(i in 1:length(covs)){
     cov_tmp <- covs[[1]]
@@ -424,146 +448,111 @@ sub_blocking <- function(emc, n_blocks){
   return(components)
 }
 
-create_cov_proposals <- function(emc, samples_idx = NULL, do_block = TRUE){
-  get_covs <- function(sampler, samples_idx, sub){
-    return(var(t(sampler$samples$alpha[,sub, samples_idx])))
-  }
+create_chain_proposals <- function(emc, samples_idx = NULL, do_block = TRUE){
   n_subjects <- emc[[1]]$n_subjects
   n_chains <- length(emc)
-  grouped <- emc[[1]]$grouped
-  n_pars <- sum(!grouped)
-
+  n_pars <- emc[[1]]$n_pars
+  stage <- emc[[1]]$samples$stage[length(emc[[1]]$samples$stage)]
   if(is.null(samples_idx)){
-    idx_subtract <- min(250, emc[[1]]$samples$idx/2)
+    idx_subtract <- min(250, emc[[1]]$samples$idx/1.5)
     samples_idx <- round(emc[[1]]$samples$idx - idx_subtract):emc[[1]]$samples$idx
   }
-  components <- attr(emc[[1]]$data, "components")
-  block_idx <- block_variance_idx(components[!grouped])
-  for(j in 1:n_chains){
-    chains_cov <- array(NA_real_, dim = c(n_pars, n_pars, n_subjects))
-    for(sub in 1:n_subjects){
-      mean_covs <- get_covs(emc[[j]], samples_idx, sub)
-      if(do_block) mean_covs[block_idx] <- 0
-      if(is.negative.semi.definite(mean_covs)){
-        if(!is.null(attr(emc[[j]], "chains_cov")[[sub]])){
-          chains_cov[,,sub] <- attr(emc[[j]], "chains_cov")[[sub]]
-        } else{
-          chains_cov[,,sub] <- diag(nrow(mean_covs))
-        }
-      } else{
-        chains_cov[,,sub] <-  as.matrix(nearPD(mean_covs)$mat)
-      }
-    }
-    if(any(grouped)){
-      if(sum(grouped) == 1){
-        chains_cov_grouped <- as.matrix(var(emc[[j]]$samples$grouped_pars[, samples_idx]))
-      } else{
-        chains_cov_grouped <- var(t(emc[[j]]$samples$grouped_pars[, samples_idx]))
-        if(is.negative.semi.definite(chains_cov_grouped)){
-          chains_cov_grouped <- attr(emc[[j]], "chains_cov_grouped")
-        } else{
-          chains_cov_grouped <-  as.matrix(nearPD(chains_cov_grouped)$mat)
-        }
-      }
+  LL <- get_pars(emc, filter = samples_idx-1, selection = "LL",
+                 stage = c('preburn', 'burn', 'adapt', 'sample'),
+                 merge_chains = T, return_mcmc = F)
+  alpha <- get_pars(emc, filter = samples_idx-1, selection = "alpha",
+                    stage = c('preburn', 'burn', 'adapt', 'sample'),
+                    by_subject = T, merge_chains = T, return_mcmc = F)
 
-      attr(emc[[j]], "chains_cov_grouped") <- chains_cov_grouped
+  components <- attr(emc[[1]]$data, "components")
+  block_idx <- block_variance_idx(components)
+  for(j in 1:n_chains){
+    # Take only a random half of all the samples for each chain
+    rnd_index <- sample(1:ncol(LL), round(ncol(LL)/2))
+    chains_var <- vector("list", n_subjects)
+    chains_mu <- vector("list", n_subjects)
+    for(sub in 1:n_subjects){
+      moments <- weighted_moments(alpha[,sub,rnd_index], LL[sub, rnd_index])
+      emp_covs <- moments$w_cov
+      chains_mu[[sub]] <- moments$w_mu
+      if(do_block) emp_covs[block_idx] <- 0
+      if(is.negative.semi.definite(emp_covs)){
+        # If negative semi definite, do not use it
+        next
+      } else{
+        chains_var[[sub]] <- emp_covs
+      }
     }
-    chains_cov <- apply(chains_cov, 3, identity, simplify = F)
-    attr(emc[[j]], "chains_cov") <- chains_cov
+    # Instead use the mean of all other subjects
+    null_idx <- sapply(chains_var, is.null)
+    if(all(null_idx)){
+      # If all subjects are NULL just come up with something
+      mean_chains_var <- diag(n_pars) * .5
+    } else{
+      mean_chains_var <- Reduce(`+`, chains_var[!null_idx]) / sum(!null_idx)
+    }
+    if(any(null_idx)){
+      for(q in 1:n_subjects){
+        if(null_idx[q]) chains_var[[q]] <- mean_chains_var
+      }
+    }
+
+    new_prop_var <- mean(diag(mean_chains_var))
+    if(is.null(attr(emc[[j]], "prop_var"))){
+      # This is in preburn case, group-level proposals are wider
+      # So we scale the epsilon a bit to account for narrow individual proposals
+      prop_var_ratio <- 2
+    } else{
+      prop_var_ratio <- attr(emc[[j]], "prop_var")/new_prop_var
+    }
+    if(stage != "sample"){
+      emc[[j]] <- update_epsilon_scale(emc[[j]], prop_var_ratio)
+    }
+    attr(emc[[j]], "prop_var") <- new_prop_var
+    emc[[j]]$chains_var <- chains_var
+    emc[[j]]$chains_mu <- chains_mu
   }
   return(emc)
 }
 
-# create_eff_proposals_lm <- function(samplers, n_cores){
-#   samples_merged <- merge_chains(samplers)
-#   test_samples <- extract_samples(samples_merged, stage = c("adapt", "sample"), max_n_sample = 1000)
-#   for(i in 1:length(samplers)){
-#     iteration = round(test_samples$iteration * i/length(samplers))
-#     attr(samplers[[i]], "eff_props") <- auto_mclapply(X = samplers[[1]]$subjects,FUN = get_conditionals_lm,samples = test_samples, iteration = iteration,
-#                                                       mc.cores = n_cores)
-#     attr(samplers[[i]], "eff_props_between") <- get_conditionals_lm_between(samples = test_samples, iteration = iteration)
-#   }
-#   return(samplers)
-# }
 
-# create_cov_proposals_lm <- function(samplers, samples_idx = NULL){
-#   get_covs <- function(sampler, samples_idx, par_idx){
-#     return(var(t(sampler$samples$random[par_idx, samples_idx])))
-#   }
-#   n_subjects <- samplers[[1]]$n_subjects
-#   n_chains <- length(samplers)
-#
-#   if(is.null(samples_idx)){
-#     idx_subtract <- min(250, samplers[[1]]$samples$idx/2)
-#     samples_idx <- round(samplers[[1]]$samples$idx - idx_subtract):samplers[[1]]$samples$idx
-#   }
-#   pars_per_subject <- lapply(samplers[[1]]$subjects, FUN = function(x, pars) pars[get_sub_idx(x, pars)], samplers[[1]]$pars_random)
-#   between_idx <- !grepl("subjects", samplers[[1]]$pars_random)
-#
-#   chains_cov_sub <- vector("list", length = n_subjects)
-#   for(j in 1:n_chains){
-#     for(sub in 1:n_subjects){
-#       mean_covs <- get_covs(samplers[[j]], samples_idx, par_idx = pars_per_subject[[sub]])
-#       if(is.negative.semi.definite(mean_covs)){
-#         chains_cov_sub[[sub]] <- attr(samplers[[j]], "chains_cov_sub")[[sub]]
-#       } else{
-#         chains_cov_sub[[sub]] <-  as.matrix(nearPD(mean_covs)$mat)
-#       }
-#     }
-#     mean_covs_between <- var(t(rbind(samplers[[j]]$samples$fixed[, samples_idx],
-#                                      samplers[[j]]$samples$random[between_idx,samples_idx])))
-#     if(is.negative.semi.definite(mean_covs_between)){
-#       mean_covs_between <- attr(samplers[[j]], "chains_cov_between")
-#     } else{
-#       mean_covs_between <-  as.matrix(nearPD(mean_covs_between)$mat)
-#     }
-#     attr(samplers[[j]], "chains_cov_sub") <- chains_cov_sub
-#     attr(samplers[[j]], "chains_cov_between") <- mean_covs_between
-#
-#   }
-#   return(samplers)
-# }
 
-get_attributes <- function(emc, attributes = NULL){
-  if(is.null(attributes)) {
-    return(list(design_list = attr(emc,"design_list")))
-  } else{
-    attr(emc,"design_list") <- attributes$design_list
-    return(emc)
+
+
+
+
+
+reset_pm_settings <- function(emc, stage){
+  if(stage != get_last_stage(emc) || stage == "burn"){ # In this case we're running a new stage
+    for(i in 1:length(emc)){
+      pm_settings <- attr(emc[[i]]$samples, "pm_settings")
+      attr(emc[[i]]$samples, "pm_settings") <- lapply(pm_settings, function(x){
+        for(i in 1:length(x)){
+          x[[i]]$proposal_counts <- rep(0, length(x[[i]]$proposal_counts))
+          x[[i]]$acc_counts <- rep(0, length(x[[i]]$proposal_counts))
+          if(stage != get_last_stage(emc)){
+            x[[i]]$iter <- 25
+            x[[i]]$mix <- NULL
+          }
+        }
+        return(x)
+      })
+    }
   }
+  return(emc)
 }
 
-# test_adapted_lm <- function(samples, test_samples, min_unique, n_cores_conditional = 1,
-#                             verbose = FALSE){
-#   unq_per_sub <- sapply(samples$subjects, FUN = function(x, samples){
-#     pars <- samples[get_sub_idx(x, rownames(samples)),]
-#     return(length(unique(pars[1,])))}, test_samples$random)
-#   if(all(unq_per_sub > min_unique)){
-#     if(verbose){
-#       message("Enough unique values detected: ", min_unique)
-#       message("Testing proposal distribution creation")
-#     }
-#     attempt <- tryCatch({
-#       auto_mclapply(X = samples$subjects,FUN = get_conditionals_lm,samples = test_samples,
-#                     mc.cores = n_cores_conditional)
-#       get_conditionals_lm_between(samples = test_samples)
-#     },error=function(e) e, warning=function(w) w)
-#     if (any(class(attempt) %in% c("warning", "error", "try-error"))) {
-#       if(verbose){
-#         message("Can't create efficient distribution yet")
-#         message("Increasing required unique values and continuing adaptation")
-#       }
-#       return(FALSE)
-#     }
-#     else {
-#       if(verbose) message("Successfully adapted after ", test_samples$iteration, "iterations - stopping adaptation")
-#       return(TRUE)
-#     }
-#
-#   } else{
-#     return(FALSE)
-#   }
-# }
+update_epsilon_scale <- function(pmwgs, prop_var_ratio){
+  pm_settings <- attr(pmwgs$samples, "pm_settings")
+  pm_settings <- lapply(pm_settings, function(x){
+    for(i in 1:length(x)){
+      x[[i]]$epsilon <- x[[i]]$epsilon * prop_var_ratio
+    }
+    return(x)
+  })
+  attr(pmwgs$samples, "pm_settings") <- pm_settings
+  return(pmwgs)
+}
 
 test_adapted <- function(sampler, test_samples, min_unique, n_cores_conditional = 1,
                          verbose = FALSE)
@@ -577,10 +566,8 @@ test_adapted <- function(sampler, test_samples, min_unique, n_cores_conditional 
   # all subjects is greater than unq_vals
   n_unique_sub <- apply(first_par, 1, FUN = function(x) return(length(unique(x))))
   n_pars <- sampler$n_pars
-  variant_funs <- attr(sampler, "variant_funs")
-  grouped <- sampler$grouped
-  components <- attr(sampler$data, "components")[!grouped]
-  nuisance <- sampler$nuisance[!grouped]
+  components <- attr(sampler$data, "components")
+  nuisance <- sampler$nuisance
   if (length(n_unique_sub) != 0 & all(n_unique_sub > min_unique)) {
     if(verbose){
       message("Enough unique values detected: ", min_unique)
@@ -593,12 +580,14 @@ test_adapted <- function(sampler, test_samples, min_unique, n_cores_conditional 
         if(any(nuis_idx)){
           type <- sampler$sampler_nuis$type
           auto_mclapply(X = 1:sampler$n_subjects,
-                        FUN = get_variant_funs(type)$get_conditionals,samples = test_samples$nuisance,
+                        FUN = get_conditionals, samples = test_samples$nuisance,
                         n_pars = sum(idx[nuisance]), idx = idx[nuisance],
+                        type = type,
                         mc.cores = n_cores_conditional)
         }
-        auto_mclapply(X = 1:sampler$n_subjects,FUN = variant_funs$get_conditionals,samples = test_samples,
-                      n_pars = sum(idx[!nuisance]), idx = idx[!nuisance], mc.cores = n_cores_conditional)
+        auto_mclapply(X = 1:sampler$n_subjects,FUN = get_conditionals,samples = test_samples,
+                      n_pars = sum(idx[!nuisance]), idx = idx[!nuisance], type = sampler$type,
+                      mc.cores = n_cores_conditional)
       }
     },error=function(e) e, warning=function(w) w)
     if (any(class(attempt) %in% c("warning", "error", "try-error"))) {
@@ -624,7 +613,7 @@ loadRData <- function(fileName){
 }
 
 
-#' Make an emc object
+#' Make an emc Object
 #'
 #' Creates an emc object by combining the data, prior,
 #' and model specification into a `emc` object that is needed in `fit()`.
@@ -639,7 +628,6 @@ loadRData <- function(fileName){
 #' @param par_groups A vector. Only to be specified with type `blocked`, e.g., `c(1,1,1,2,2)` means the covariances
 #' of the first three and of the last two parameters are estimated as two separate blocks.
 #' @param prior_list A named list containing the prior. Default prior created if `NULL`. For the default priors, see `?get_prior_{type}`.
-#' @param grouped_pars An integer vector. Parameters on this location of the vector of parameters are treated as constant across subjects
 #' @param ... Additional, optional arguments.
 #' @return An uninitialized emc object
 #' @examples dat <- forstmann
@@ -673,9 +661,7 @@ make_emc <- function(data,design,model=NULL,
                           type="standard",
                           n_chains=3,compress=TRUE,rt_resolution=0.02,
                           prior_list = NULL,
-                          grouped_pars = NULL,
                           par_groups=NULL, ...){
-
   # arguments for future compatibility
   n_factors <- NULL
   formula <- NULL
@@ -691,6 +677,15 @@ make_emc <- function(data,design,model=NULL,
   for (name in names(optionals) ) {
     assign(name, optionals[[name]])
   }
+  if(!is.null(prior_list) & !is.null(prior_list$theta_mu_mean)){
+    prior_list <- list(prior_list)
+  }
+  if(!is.null(prior_list)){
+    type <- attr(prior_list[[1]], "type")
+  }
+  if(type != "single" && length(unique(data$subjects)) == 1){
+    stop("can only use type = `single` if there's only one subject in the data")
+  }
 
   if (!(type %in% c("standard","diagonal","blocked","factor","single", "lm", "infnt_factor", "SEM", "diagonal-gamma")))
     stop("type must be one of: standard,diagonal,blocked,factor,infnt_factor, lm, single")
@@ -699,30 +694,7 @@ make_emc <- function(data,design,model=NULL,
     stop("You can only specify nuisance OR nuisance_non_hyper")
   }
   if (is(data, "data.frame")) data <- list(data)
-  if(!is.null(prior_list) & !is.null(prior_list$theta_mu_mean)){
-    prior_list <- list(prior_list)
-  }
-  # Sort subject together and add unique trial within subject integer
-  # create overarching data list with one list per subject
-  if(type == "lm"){
-    if(length(data) > 1) stop("no joint models for lm yet")
-    vars <- c()
-    if(!is.null(formula)){
-      for(form in formula){
-        vars <- c(vars, split_form(form)$dep)
-      }
-      tmp <- data[[1]]
-      aggr_data <- tmp[cumsum(table(tmp$subjects)),c("subjects", unique(vars))]
-      for(i in 1:ncol(aggr_data)){
-        if(colnames(aggr_data)[i] != "subjects" & is.factor(aggr_data[,i])){
-          aggr_data[,i] <- factor(aggr_data[,i], levels = unique(aggr_data[,i]))
-        }
-      }
-    } else{
-      aggr_data <- NULL
-    }
 
-  }
   data <- lapply(data,function(d){
     if (!is.factor(d$subjects)) d$subjects <- factor(d$subjects)
     d <- d[order(d$subjects),]
@@ -737,10 +709,14 @@ make_emc <- function(data,design,model=NULL,
     attr(d,"UT") <- UT
     d
   })
-  if (!is.null(names(design)[1]) && names(design)[1]=="Flist")
+  if (!is.null(names(design)[1]) && names(design)[1]=="Flist"){
     design <- list(design)
-  if (length(design)!=length(data))
+  }
+  checks <- sapply(design, function(x) is(x, "emc.design"))
+  if (!all(checks)) stop("design must be a list of emc.design objects")
+  if (length(design)!=length(data)){
     design <- rep(design,length(data))
+  }
   if (is.null(model)) model <- lapply(design,function(x){x$model})
   if (any(unlist(lapply(model,is.null))))
     stop("Must supply model if model is not in all design components")
@@ -775,34 +751,39 @@ make_emc <- function(data,design,model=NULL,
     }
     # create a design model
   }
-  prior <- merge_priors(prior_list)
-
-  attr(dadm_list[[1]], "prior") <- prior
+  # Make sure class retains following changes
+  class(design) <- "emc.design"
+  prior_in <- merge_priors(prior_list)
+  prior_in <- prior(design, type, update = prior_in, ...)
+  attr(dadm_list[[1]], "prior") <- prior_in
 
   # if(!is.null(subject_covariates)) attr(dadm_list, "subject_covariates") <- subject_covariates
-  variant_funs <- get_variant_funs(type = type)
   if (type %in% c("standard", "single", "diagonal", "infnt_factor", "diagonal-gamma")) {
-    out <- pmwgs(dadm_list, variant_funs, nuisance = nuisance, nuisance_non_hyper =
-                   nuisance_non_hyper, grouped_pars = grouped_pars, n_factors = n_factors)
+    out <- pmwgs(dadm_list, type, nuisance = nuisance,
+                 nuisance_non_hyper = nuisance_non_hyper,
+                 n_factors = n_factors)
   } else if (type == "blocked") {
     if (is.null(par_groups)) stop("Must specify par_groups for blocked type")
-    out <- pmwgs(dadm_list,par_groups=par_groups, variant_funs, nuisance = nuisance,
-                 nuisance_non_hyper = nuisance_non_hyper, grouped_pars = grouped_pars)
-  } else if (type == "lm") {
-    out <- pmwgs(dadm_list,variant_funs, formula = formula, aggr_data = aggr_data,
-                 nuisance = nuisance, nuisance_non_hyper = nuisance_non_hyper, grouped_pars = grouped_pars)
+    out <- pmwgs(dadm_list, type, par_groups=par_groups,
+                 nuisance = nuisance,
+                 nuisance_non_hyper = nuisance_non_hyper)
   } else if (type == "factor") {
-    out <- pmwgs(dadm_list,variant_funs, n_factors = n_factors, nuisance = nuisance,
-                 nuisance_non_hyper = nuisance_non_hyper, grouped_pars = grouped_pars,
+    out <- pmwgs(dadm_list, type, n_factors = n_factors,
+                 nuisance = nuisance,
+                 nuisance_non_hyper = nuisance_non_hyper,
                  Lambda_mat = Lambda_mat)
   } else if (type == "SEM"){
-    out <- pmwgs(dadm_list,variant_funs, Lambda_mat = Lambda_mat, B_mat = B_mat, K_mat = K_mat, G_mat = G_mat,
-                 covariates = covariates, nuisance = nuisance, nuisance_non_hyper = nuisance_non_hyper, grouped_pars = grouped_pars)
+    out <- pmwgs(dadm_list, type, Lambda_mat = Lambda_mat,
+                 B_mat = B_mat, K_mat = K_mat, G_mat = G_mat,
+                 covariates = covariates, nuisance = nuisance,
+                 nuisance_non_hyper = nuisance_non_hyper)
   }
+  out$model <- lapply(design, function(x) x$model)
+  # Only for joint models we need to keep a list of functions
+  if(length(out$model) == 1) out$model <- out$model[[1]]
   # replicate chains
   dadm_lists <- rep(list(out),n_chains)
   # For post predict
-  attr(dadm_lists,"design_list") <- design
   class(dadm_lists) <- "emc"
   return(dadm_lists)
 }
@@ -822,7 +803,6 @@ extractDadms <- function(dadms, names = 1:length(dadms)){
   N_models <- length(dadms)
   pars <- attr(dadms[[1]], "sampled_p_names")
   prior <- attr(dadms[[1]], "prior")
-  ll_func <- attr(dadms[[1]], "model")()$log_likelihood
   subjects <- unique(factor(sapply(dadms, FUN = function(x) levels(x$subjects))))
   dadm_list <- dm_list(dadms[[1]])
   components <- rep(1, length(pars))
@@ -841,38 +821,15 @@ extractDadms <- function(dadms, names = 1:length(dadms)){
       components <- c(components, rep(k, length(curr_pars)))
       pars <- c(pars, paste(names[k], curr_pars, sep = "|"))
     }
-    ll_func <- log_likelihood_joint
     dadm_list <- do.call(mapply, c(list, total_dadm_list, SIMPLIFY = F))
   }
   # subject_covariates_ok <- unlist(lapply(subject_covariates, FUN = function(x) length(x) == length(subjects)))
   # if(!is.null(subject_covariates_ok)) if(any(!subject_covariates_ok)) stop("subject_covariates must be as long as the number of subjects")
   attr(dadm_list, "components") <- components
   attr(dadm_list, "shared_ll_idx") <- components
-  return(list(ll_func = ll_func, pars = pars, prior = prior,
+  return(list(pars = pars, prior = prior,
               dadm_list = dadm_list, subjects = subjects))
 }
-
-# #' Runs IS2 from Tran et al. 2021 on a list of emc
-# #'
-# #' @param emc A list of emc
-# #' @param stage A string. Indicates which stage to take samples from
-# #' @param filter An integer or vector. If integer specifies how many samples to remove from within that stage. If vector used as index for samples to keep.
-# #' @param IS_samples An integer. Specifies how many IS2 samples to collect
-# #' @param max_particles An integer. Specifies the maximum number of particles to collect before stopping one IS iteration.
-# #' @param stepsize_particles An integer. It will increase particles till optimal variance with this stepsize.
-# #' @param n_cores An integer. Specifies how many cores to run IS_2 on.
-# #' @param df An integer. The degrees of freedom used in the t-distribution used as IS distribution for the group-level proposals.
-# #'
-# #' @return emc, with IS2 attribute
-
-run_IS2 <- function(emc, stage = "sample", filter = 0, IS_samples = 1000,
-                    stepsize_particles = 500, max_particles = 5000, n_cores = 1, df = 5){
-  samples_merged <- merge_chains(emc)
-  IS_samples <- IS2(samples_merged, stage, filter = filter, IS_samples, stepsize_particles, max_particles, n_cores, df)
-  attr(emc, "IS_samples") <- IS_samples
-  return(emc)
-}
-
 
 auto_mclapply <- function(X, FUN, mc.cores, ...){
   if(Sys.info()[1] == "Windows"){
@@ -883,4 +840,76 @@ auto_mclapply <- function(X, FUN, mc.cores, ...){
     list_out <- parallel::mclapply(X, FUN, mc.cores = mc.cores, ...)
   }
   return(list_out)
+}
+
+#' Strip all entries except samples from EMC list entries
+#' @param emc A list of EMC objects
+#' @return The same list with everything but samples removed from all but first entry
+#' @noRd
+strip_duplicates <- function(emc, incl_props = TRUE) {
+  # Keep only samples in non-first entries
+  for (i in 2:length(emc)) {
+    samples <- emc[[i]]$samples
+    prop_var <- attr(emc[[i]], "prop_var")
+    emc[[i]] <- list(samples = samples)
+    attr(emc[[i]], "prop_var") <- prop_var
+  }
+  if(incl_props){
+    # Also remove eff_mu, eff_var, chains_cov
+    for (i in 1:length(emc)) {
+      emc[[i]]$eff_mu <- NULL
+      emc[[i]]$eff_var <- NULL
+      emc[[i]]$chains_cov <- NULL
+      emc[[i]]$chains_mu <- NULL
+    }
+  }
+  return(emc)
+}
+
+get_posterior_weights <- function(ll){
+  max_ll <- max(ll)
+  weights <- exp(ll - max_ll)
+  weights <- weights / sum(weights)
+  return(weights)
+}
+
+weighted_moments <- function(chain, ll = NULL) {
+  # chain: a matrix with each col as a sample, and each row as a parameter
+  # weights: an optional vector of weights. If not provided, equal weighting is assumed.
+  n <- ncol(chain)
+  d <- nrow(chain)
+
+  # Use equal weights if none are provided.
+  if (is.null(ll)) {
+    weights <- rep(1 / n, n)
+  } else {
+    weights <- get_posterior_weights(ll)
+  }
+
+  # Compute the weighted mean of the chain.
+  weighted_mean <- colSums(apply(chain, 1, function(x) x*weights))
+
+  # Compute the weighted covariance matrix.
+  cov_matrix <- matrix(0, nrow = d, ncol = d)
+  for (i in 1:n) {
+    diff <- chain[,i] - weighted_mean
+    cov_matrix <- cov_matrix + weights[i] * (diff %*% t(diff))
+  }
+  return(list(w_cov = cov_matrix, w_mu = weighted_mean))
+}
+
+
+
+#' Restore all entries to EMC list entries from first entry
+#' @param emc A list of EMC objects with stripped duplicates
+#' @return The same list with all fields restored from first entry except samples
+#' @noRd
+restore_duplicates <- function(emc) {
+  # Restore everything except samples from first entry
+  for (i in 2:length(emc)) {
+    samples <- emc[[i]]$samples
+    emc[[i]] <- emc[[1]]
+    emc[[i]]$samples <- samples
+  }
+  return(emc)
 }

@@ -2,12 +2,12 @@
 % Please edit documentation in R/objects.R
 \name{get_pars}
 \alias{get_pars}
-\title{Filter/manipulate parameters from emc object}
+\title{Filter/Manipulate Parameters from emc Object}
 \usage{
 get_pars(
   emc,
   selection = "mu",
-  stage = "sample",
+  stage = get_last_stage(emc),
   thin = 1,
   filter = 0,
   map = FALSE,
@@ -79,7 +79,7 @@ Does not apply for \code{selection = "alpha"}}
 
 \item{chain}{Integer. Which of the chain(s) to return}
 
-\item{covariates}{Only needed with \code{plot_prior} and covariates in the design}
+\item{covariates}{Only needed with \code{plot} for priors and covariates in the design}
 }
 \value{
 An mcmc.list object of the selected parameter types with the specified manipulations

@@ -1,9 +1,9 @@
 
-sample_store_standard <- function(data, par_names, iters = 1, stage = "init", integrate = T, is_nuisance, is_grouped,...) {
+sample_store_standard <- function(data, par_names, iters = 1, stage = "init", integrate = T, is_nuisance,...) {
   subject_ids <- unique(data$subjects)
   n_subjects <- length(subject_ids)
-  base_samples <- sample_store_base(data, par_names[!is_grouped], iters, stage)
-  par_names <- par_names[!is_nuisance & !is_grouped]
+  base_samples <- sample_store_base(data, par_names, iters, stage)
+  par_names <- par_names[!is_nuisance]
   n_pars <- length(par_names)
 
   samples <- list(
@@ -16,7 +16,7 @@ sample_store_standard <- function(data, par_names, iters = 1, stage = "init", in
 }
 
 add_info_standard <- function(sampler, prior = NULL, ...){
-  sampler$prior <- get_prior_standard(prior, sum(!(sampler$nuisance | sampler$grouped)), sample = F)
+  sampler$prior <- get_prior_standard(prior, sum(!sampler$nuisance), sample = F)
   return(sampler)
 }
 
@@ -27,7 +27,7 @@ get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1
     prior <- list()
   }
   if(!is.null(design)){
-    n_pars <- length(sampled_p_vector(design, doMap = F))
+    n_pars <- length(sampled_pars(design, doMap = F))
   }
   if (!is.null(prior$theta_mu_mean)) {
     n_pars <- length(prior$theta_mu_mean)
@@ -49,7 +49,7 @@ get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1
   attr(prior, "type") <- "standard"
   out <- prior
   if(sample){
-    par_names <- names(sampled_p_vector(design, doMap = F))
+    par_names <- names(sampled_pars(design, doMap = F))
     samples <- list()
     if(selection %in% c("mu", "alpha")){
       mu <- t(mvtnorm::rmvnorm(N, mean = prior$theta_mu_mean,
@@ -84,7 +84,7 @@ get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1
 }
 
 get_startpoints_standard <- function(pmwgs, start_mu, start_var){
-  n_pars <- sum(!(pmwgs$nuisance | pmwgs$grouped))
+  n_pars <- sum(!pmwgs$nuisance)
   if (is.null(start_mu)) start_mu <- rmvnorm(1, mean = pmwgs$prior$theta_mu_mean, sigma = pmwgs$prior$theta_mu_var)
   # If no starting point for group var just sample some
   if (is.null(start_var)) start_var <- riwish(n_pars * 3,diag(n_pars))
@@ -99,10 +99,10 @@ get_group_level_standard <- function(parameters, s){
   return(list(mu = mu, var = var))
 }
 
-fill_samples_standard <- function(samples, group_level, proposals, epsilon, j = 1, n_pars){
+fill_samples_standard <- function(samples, group_level, proposals,  j = 1, n_pars){
   samples$a_half[, j] <- group_level$a_half
   samples$last_theta_var_inv <- group_level$tvinv
-  samples <- fill_samples_base(samples, group_level, proposals, epsilon, j = j, n_pars)
+  samples <- fill_samples_base(samples, group_level, proposals, j = j, n_pars)
   return(samples)
 }
 
@@ -114,14 +114,14 @@ gibbs_step_standard <- function(sampler, alpha){
   last <- last_sample_standard(sampler$samples)
   prior <- sampler$prior
 
-  n_pars <- sampler$n_pars-sum(sampler$nuisance) - sum(sampler$grouped)
+  n_pars <- sampler$n_pars-sum(sampler$nuisance)
   # Here mu is group mean, so we are getting mean and variance
   var_mu <- ginv(sampler$n_subjects * last$tvinv + prior$theta_mu_invar)
   mean_mu <- as.vector(var_mu %*% (last$tvinv %*% apply(alpha, 1, sum) +
                                      prior$theta_mu_invar %*% prior$theta_mu_mean))
   chol_var_mu <- t(chol(var_mu)) # t() because I want lower triangle.
   tmu <- rmvnorm(1, mean_mu, chol_var_mu %*% t(chol_var_mu))[1, ]
-  names(tmu) <- sampler$par_names[!(sampler$nuisance | sampler$grouped)]
+  names(tmu) <- sampler$par_names[!sampler$nuisance]
 
   # New values for group var
   theta_temp <- alpha - tmu

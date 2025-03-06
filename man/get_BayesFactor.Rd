@@ -18,13 +18,10 @@ The BayesFactor for model 1 over model 2
 returns the Bayes Factor for two models
 }
 \examples{
-\dontrun{
-# First get the marginal likelihood for two_models
-# Here the full model is an emc object with the hypothesized effect
-# The null model is an emc object without the hypothesized effect
-MLL_full <- run_bridge_sampling(full_model, cores_per_prop = 3)
-MLL_null <- run_bridge_sampling(null_model, cores_per_prop = 3)
-# Now we can calculate their Bayes factor
-get_BayesFactor(MLL_full, MLL_null)
+\donttest{
+# Normally one would compare two different models
+# Here we use two times the same model:
+M1 <- M0 <- run_bridge_sampling(samples_LNR, both_splits = FALSE, cores_for_props = 1)
+get_BayesFactor(M1, M0)
 }
 }

@@ -1,4 +1,4 @@
-#' Simulation-based calibration
+#' Simulation-Based Calibration
 #'
 #' Runs SBC for an EMC2 model and associated design. Returns
 #' normalized rank (between 0 and 1) and prior samples. For hierarchical models the group-level mean and
@@ -45,29 +45,22 @@ SBC_hierarchical <- function(design_in, prior_in, replicates = 250, trials = 100
   if(type != "diagonal-gamma") warning("SBC in EMC2 is frequently biased for prior structures with heavy variance mass around 0 \n
                                        please consider using 'type = diagonal-gamma' to test your model. See also vignettes")
   # Draw prior samples
-  prior_mu <- plot_prior(prior_in, design_in, do_plot = F, N = replicates, selection = "mu", return_mcmc = FALSE, map = FALSE)[[1]]
-  prior_var <- plot_prior(prior_in, design_in, do_plot = F, N = replicates, selection = "Sigma", return_mcmc = FALSE,
+  # Should at a later point go to predict
+  prior_mu <- plot(prior_in, design_in, do_plot = F, N = replicates, selection = "mu", return_mcmc = FALSE, map = FALSE)[[1]]
+  prior_var <- plot(prior_in, design_in, do_plot = F, N = replicates, selection = "Sigma", return_mcmc = FALSE,
                           remove_constants = FALSE)[[1]]
   rank_mu <- data.frame()
   rank_var <- data.frame()
-  par_names <- names(sampled_p_vector(design_in))
+  par_names <- names(sampled_pars(design_in))
   if(!is.null(fileName)) save(prior_mu, prior_var, file = fileName)
   all_rand_effects <- vector("list", length = replicates)
   for(i in 1:replicates){
     if(verbose) print(paste0("Sample ", i, " out of ", replicates))
     rand_effects <- make_random_effects(design_in, prior_mu[,i], n_subj = n_subjects, covariances = prior_var[,,i])
     all_rand_effects[[i]] <- rand_effects
-    # if(hyper_only){
-    #   rand_effects <- as.data.frame(rand_effects)
-    #   rand_effects$subjects <- 1:nrow(rand_effects)
-    #   emc <- EMC2:::run_hyper(type, rand_effects, prior = prior_in, iter = 5000)
-    #   emc <- list(emc)
-    #   attr(emc[[1]], "variant_funs") <- EMC2:::get_variant_funs(type)
-    #   class(emc) <- "emc"
-    # } else{
     data <- make_data(rand_effects,design_in, trials, model = design_in$model)
     if(plot_data){
-      plot_defective_density(data, factors = names(design_in$Ffactors)[names(design_in$Ffactors) != "subjects"])
+      plot_density(data, factors = names(design_in$Ffactors)[names(design_in$Ffactors) != "subjects"])
     }
     emc <-  do.call(make_emc, c(list(data = data, design = design_in, prior_list = prior_in, type = type), fix_dots(dots, make_emc)))
     emc <-  do.call(fit, c(list(emc = emc), fix_dots(dots, fit)))
@@ -106,12 +99,12 @@ SBC_single <- function(design_in, prior_in, replicates = 250, trials = 100,
   type <- attr(prior_in, "type")
   if(type != "single") stop("can only use `type = single`")
   # Draw prior samples
-  prior_alpha <- plot_prior(prior_in, design_in, do_plot = F, N = replicates, selection = "mu", return_mcmc = FALSE, map = FALSE)[[1]]
+  prior_alpha <- parameters(prior_in, N = replicates, selection = "alpha")
   rank_alpha <- data.frame()
   if(!is.null(fileName)) save(prior_alpha, file = fileName)
   i <- 1
   if(dots$cores_per_chain > 1 & verbose) print("Since cores_per_chain > 1, estimating multiple data sets simultaneously")
-  par_names <- names(sampled_p_vector(design_in))
+  par_names <- names(sampled_pars(design_in))
   while(i < replicates){
     if(verbose) print(paste0("Sample ", i, " out of ", replicates))
     data <- data.frame()
@@ -119,13 +112,13 @@ SBC_single <- function(design_in, prior_in, replicates = 250, trials = 100,
     for(j in 1:dots$cores_per_chain){
       if(i > replicates) next
       design_in$Ffactors$subjects <- j
-      tmp <- make_data(t(prior_alpha[,,i]),design_in, trials, model = design_in$model)
+      tmp <- make_data(prior_alpha[i,],design_in, trials, model = design_in$model)
       tmp$subjects <- j
       data <- rbind(data, tmp)
       i <- i + 1
     }
     if(plot_data){
-      plot_defective_density(data, factors = names(design_in$Ffactors)[names(design_in$Ffactors) != "subjects"])
+      plot_density(data, factors = names(design_in$Ffactors)[names(design_in$Ffactors) != "subjects"])
     }
     emc <-  do.call(make_emc, c(list(data = data, design = design_in, prior_list = prior_in, type = type), fix_dots(dots, make_emc)))
     emc <-  do.call(fit, c(list(emc = emc), fix_dots(dots, fit)))
@@ -134,7 +127,7 @@ SBC_single <- function(design_in, prior_in, replicates = 250, trials = 100,
     for(j in 1:dots$cores_per_chain){
       if(start > replicates) next
       tmp_rec <- alpha_rec[,j,]
-      rank_alpha <- rbind(rank_alpha, mapply(get_ranks_ESS, split(tmp_rec, row(tmp_rec)), t(ESS[j,]), prior_alpha[,,start]))
+      rank_alpha <- rbind(rank_alpha, mapply(get_ranks_ESS, split(tmp_rec, row(tmp_rec)), t(ESS[j,]), prior_alpha[start,]))
       start <- start + 1
     }
     colnames(rank_alpha) <- par_names
@@ -148,7 +141,7 @@ SBC_single <- function(design_in, prior_in, replicates = 250, trials = 100,
               prior = list(alpha = prior_alpha)))
 }
 
-#' Plot the histogram of the observed rank statistics of SBC
+#' Plot the Histogram of the Observed Rank Statistics of SBC
 #'
 #' Note that this plot is dependent on the number of bins, and a more general
 #' visualization is to use `plot_sbc_ecdf`
@@ -234,7 +227,7 @@ make_smooth <- function(x, y, N = 1000){
   return(predict(lo,xl)$y)
 }
 
-#' Plot the ECDF difference in SBC ranks
+#' Plot the ECDF Difference in SBC Ranks
 #'
 #' Plots the difference in observed cumulative rank statistics and the
 #' expected cumulative distribution of a uniform distribution. The blue

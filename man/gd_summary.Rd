@@ -3,7 +3,7 @@
 \name{gd_summary.emc}
 \alias{gd_summary.emc}
 \alias{gd_summary}
-\title{Gelman-Rubin statistic}
+\title{Gelman-Rubin Statistic}
 \usage{
 \method{gd_summary}{emc}(
   emc,

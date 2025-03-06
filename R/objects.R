@@ -45,13 +45,14 @@ remove_samples <- function(samples, stage = "sample", filter = NULL, thin = 1,
     samples$sampler_nuis$samples <- base::rapply(samples$sampler_nuis$samples, f = function(x) filter_obj(x, filter_idx), how = "replace")
     samples$sampler_nuis$samples$idx <- length(filter_idx)
   }
+  stage <- samples$samples$stage
   samples$samples <- base::rapply(samples$samples, f = function(x) filter_obj(x, filter_idx), how = "replace")
-  samples$samples$stage <- samples$samples$stage[filter_idx]
+  samples$samples$stage <- stage[filter_idx]
   samples$samples$idx <- length(filter_idx)
   return(samples)
 }
 
-#' Merge samples
+#' Merge Samples
 #'
 #' Merges samples from all chains as one unlisted object.
 #'
@@ -81,7 +82,7 @@ merge_chains <- function(emc){
   return(out_samples)
 }
 
-#' chain_n()
+#' MCMC Chain Iterations
 #'
 #' Returns a matrix with the number of samples per chain for each stage that is present
 #' in the emc object (i.e., `preburn`, `burn`, `adapt`,
@@ -104,9 +105,9 @@ chain_n <- function(emc)
 }
 
 extract_samples <- function(sampler, stage = c("adapt", "sample"), max_n_sample = NULL, n_chains) {
-  variant_funs <- attr(sampler, "variant_funs")
+  type <- sampler$type
   samples <- sampler$samples
-  type <- sampler$sampler_nuis$type
+  nuis_type <- sampler$sampler_nuis$type
   if("sample" %in% stage & !is.null(max_n_sample)){
     sample_filter <- which(samples$stage %in% "sample" & seq_along(samples$stage) <= samples$idx)
     adapt_filter <- which(samples$stage %in% "adapt" & seq_along(samples$stage) <= samples$idx)
@@ -124,17 +125,13 @@ extract_samples <- function(sampler, stage = c("adapt", "sample"), max_n_sample 
     full_filter <- which(samples$stage %in% stage & seq_along(samples$stage) <= samples$idx)
   }
   if(any(sampler$nuisance)){
-    nuisance <- sampler$nuisance[!sampler$grouped]
-    sampler$sampler_nuis$samples$alpha <- sampler$samples$alpha[nuisance,,,drop = F]
+    nuisance <- sampler$nuisance
+    suppressWarnings(sampler$sampler_nuis$samples$alpha <- sampler$samples$alpha[nuisance,,,drop = F])
     sampler$samples$alpha <- sampler$samples$alpha[!nuisance,,]
-    out <- variant_funs$filtered_samples(sampler, full_filter)
-    out$nuisance <- get_variant_funs(type)$filtered_samples(sampler$sampler_nuis, full_filter)
+    out <- filtered_samples(sampler, full_filter, type = type)
+    out$nuisance <- filtered_samples(sampler$sampler_nuis, full_filter, type = nuis_type)
   } else{
-    if(!is.null(sampler$g_map_fixed)){
-      out <- 1# filtered_samples_lm(sampler, full_filter)
-    } else{
-      out <- variant_funs$filtered_samples(sampler, full_filter)
-    }
+    out <-  filtered_samples(sampler, full_filter, type = type)
   }
   return(out)
 }
@@ -192,8 +189,11 @@ filter_const_and_dup <- function(samples, remove_dup = TRUE, remove_constants = 
   } else{
     x <- do.call(abind, samples)
     is_constant <- apply(x[,,1:(min(100, dim(x)[3])), drop = F], 1:2, sd) == 0
+    # Add all the samples together, if any of them are the same (up till 8 digits)
+    # We should probably assume that they are a duplicated entry
+    # This is useful for correlations and such (on which samples are usually mirrored)
     all_sums <- c(apply(x[,,1:(min(100, dim(x)[3])), drop = F], 1:2, sum))
-    is_duplicate <- duplicated(round(all_sums/mean(all_sums, na.rm = TRUE), 4))
+    is_duplicate <- duplicated(round(all_sums/mean(all_sums, na.rm = TRUE), 8))
     if(remove_dup){
       filter <- is_duplicate | is_constant
     } else{
@@ -292,6 +292,19 @@ filter_sub_and_par <- function(obj, sub, sub_names, par){
   return(obj)
 }
 
+# Returns the last ran stage of an emc object
+get_last_stage <- function(emc){
+  nstage <- colSums(chain_n(emc))
+  if(all(nstage == 0)){
+    stage <- "preburn"
+  } else{
+    has_ran <- nstage[nstage != 0]
+    stage <- names(has_ran)[length(has_ran)]
+  }
+  return(stage)
+}
+
+
 add_defaults <- function(dots, ...){
   extra_args <- list(...)
   arg_names <- names(extra_args)
@@ -318,7 +331,7 @@ fix_dots <- function(dots, fun, exclude = "", consider_dots = TRUE){
   }
 }
 
-#' Filter/manipulate parameters from emc object
+#' Filter/Manipulate Parameters from emc Object
 #'
 #' Underlying function used in most plotting and object handling functions in
 #' EMC2. Can for example be used to filter/thin a parameter type
@@ -355,7 +368,7 @@ fix_dots <- function(dots, fun, exclude = "", consider_dots = TRUE){
 #' (i.e. these are collapsed when `flatten = TRUE` and use_par should also be collapsed names).
 #' @param type Character indicating the group-level model selected. Only necessary if sampler isn't specified.
 #' @param true_pars Set of `true_parameters` can be specified to apply flatten or use_par on a set of true parameters
-#' @param covariates Only needed with `plot_prior` and covariates in the design
+#' @param covariates Only needed with `plot` for priors and covariates in the design
 #' @param chain Integer. Which of the chain(s) to return
 #'
 #' @return An mcmc.list object of the selected parameter types with the specified manipulations
@@ -367,7 +380,7 @@ fix_dots <- function(dots, fun, exclude = "", consider_dots = TRUE){
 #'
 #' # Or return the flattened correlation, with 10 iterations per chain
 #' get_pars(samples_LNR, stage = "sample", selection = "correlation", flatten = TRUE, length.out = 10)
-get_pars <- function(emc,selection= "mu", stage="sample",thin=1,filter=0,
+get_pars <- function(emc,selection= "mu", stage=get_last_stage(emc),thin=1,filter=0,
                     map = FALSE, add_recalculated = FALSE, length.out = NULL,
                     by_subject = FALSE, return_mcmc = TRUE, merge_chains = FALSE,
                     subject = NULL, flatten = FALSE, remove_dup = FALSE,
@@ -376,13 +389,13 @@ get_pars <- function(emc,selection= "mu", stage="sample",thin=1,filter=0,
 {
   if(add_recalculated) map <- TRUE
   if(!(selection %in% c("mu", "alpha"))) map <- FALSE
-  if(is.null(type)) type <- attr(emc[[1]], "variant_funs")$type
+  if(is.null(type)) type <- emc[[1]]$type
   if(type == "single" & !(selection %in% c("LL", "alpha"))) selection <- "alpha"
   samples <- get_objects(type = type, sampler = emc, stage = stage,
                          selection = selection)
 
   if(map){
-    samples <- lapply(samples, map_mcmc, attr(emc,"design_list")[[1]], include_constants = FALSE,
+    samples <- lapply(samples, map_mcmc, get_design(emc), include_constants = FALSE,
                       add_recalculated = add_recalculated, covariates = covariates)
   }
   if(flatten) remove_dup <- TRUE
@@ -424,7 +437,6 @@ get_pars <- function(emc,selection= "mu", stage="sample",thin=1,filter=0,
     if(any(!(chain %in% 1:length(samples)))) stop("chain selection exceeds number of chains")
     samples <- samples[chain]
   }
-  # if(is.null(attr(emc[[1]], "variant_funs")$type)) subnames <- "alpha"
   if(merge_chains){
     if(length(dim(samples[[1]])) == 2){
       samples <- do.call(cbind, samples)
@@ -452,6 +464,43 @@ get_pars <- function(emc,selection= "mu", stage="sample",thin=1,filter=0,
   }
   return(samples)
 }
+
+concat_emc <- function(emc1, emc2, step_size, stage){
+  out_samples <- emc2
+  remove_idx <- ifelse(chain_n(emc1)[1,stage] != 0, 1, 0)
+  emc2 <- subset(emc2, stage = c("preburn", "burn", "adapt", "sample"), filter = 1:(chain_n(emc2)[1,stage] - remove_idx))
+  for(i in 1:length(emc1)){
+    sampled_objects <- list(emc1[[i]]$samples, emc2[[i]]$samples)
+    keys <- unique(unlist(lapply(sampled_objects, names)))
+    sampled_objects <- setNames(do.call(mapply, c(abind, lapply(sampled_objects, '[', keys))), keys)
+    sampled_objects$idx <- sum(sampled_objects$idx)
+    attr(sampled_objects, "pm_settings") <- attr(emc2[[i]]$samples, "pm_settings")
+    out_samples[[i]]$samples <- sampled_objects
+    out_samples[[i]]$samples$last_theta_var_inv <- emc2[[i]]$samples$last_theta_var_inv
+    if(any(out_samples[[1]]$nuisance)){
+      sampled_objects <- list(emc1[[i]]$sampler_nuis$samples, emc2[[i]]$sampler_nuis$samples)
+      keys <- unique(unlist(lapply(sampled_objects, names)))
+      sampled_objects <- setNames(do.call(mapply, c(abind, lapply(sampled_objects, '[', keys))), keys)
+      out_samples[[i]]$sampler_nuis$samples <- sampled_objects
+      out_samples[[i]]$sampler_nuis$samples$last_theta_var_inv <- emc2[[i]]$sampler_nuis$samples$last_theta_var_inv
+    }
+  }
+  rm(emc1); rm(emc2)
+  return(out_samples)
+}
+
+
+fit_remove_samples <- function(emc){
+  if(chain_n(emc)[1,4] > chain_n(emc)[1,3]){
+    emc <- subset(emc, stage = "sample")
+  } else if (chain_n(emc)[1,4] > 0){
+    emc <- subset(emc, stage = c("adapt", "sample"))
+  } else if(chain_n(emc)[1,3] > 0){
+    emc <- subset(emc, stage = c("burn", "adapt"))
+  }
+  return(emc)
+}
+
 
 
 

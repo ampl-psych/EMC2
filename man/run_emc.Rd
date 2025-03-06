@@ -2,13 +2,13 @@
 % Please edit documentation in R/fitting.R
 \name{run_emc}
 \alias{run_emc}
-\title{Custom function for more controlled model estimation}
+\title{Custom Function for More Controlled Model Estimation}
 \usage{
 run_emc(
   emc,
   stage,
   stop_criteria,
-  p_accept = 0.8,
+  search_width = 1,
   step_size = 100,
   verbose = FALSE,
   verboseProgress = FALSE,
@@ -18,7 +18,8 @@ run_emc(
   cores_per_chain = 1,
   cores_for_chains = length(emc),
   max_tries = 20,
-  n_blocks = 1
+  n_blocks = 1,
+  thin_auto = FALSE
 )
 }
 \arguments{
@@ -28,8 +29,9 @@ run_emc(
 
 \item{stop_criteria}{A list. Defines the stopping criteria and for which types of parameters these should hold. See \code{?fit}.}
 
-\item{p_accept}{A double. The target acceptance probability of the MCMC process.
-This fine-tunes the width of the search space to obtain the desired acceptance probability. Defaults to .8}
+\item{search_width}{A double. Tunes target acceptance probability of the MCMC process.
+This fine-tunes the width of the search space to obtain the desired acceptance probability.
+1 is the default width, increases lead to broader search.}
 
 \item{step_size}{An integer. After each step, the stopping requirements as
 specified by \code{stop_criteria} are checked and proposal distributions are updated. Defaults to 100.}
@@ -56,6 +58,8 @@ Defaults to the number of chains. the total number of cores used is equal to \co
 conditions as specified by stop_criteria? Defaults to 20. max_tries is ignored if the required number of iterations has not been reached yet.}
 
 \item{n_blocks}{An integer. Number of blocks. Will block the parameter chains such that they are updated in blocks. This can be helpful in extremely tough models with a large number of parameters.}
+
+\item{thin_auto}{A boolean. If \code{TRUE} will automatically thin the MCMC samples, closely matched to the ESS.}
 }
 \value{
 An emc object
@@ -67,16 +71,16 @@ the stages have to be run in order ("preburn", "burn", "adapt", "sample").
 More details can be found in the \code{fit} help files (\code{?fit}).
 }
 \examples{
-\dontrun{
+\donttest{
 # First define a design
-design_DDMaE <- design(data = forstmann,model=DDM,
+design_in <- design(data = forstmann,model=DDM,
                            formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
                            constants=c(s=log(1)))
 # Then make the emc, we've omitted a prior here for brevity so default priors will be used.
-emc <- make_emc(forstmann, design)
+emc <- make_emc(forstmann, design_in)
 
 # Now for example we can specify that we only want to run the "preburn" phase
-# for MCMC 200 iterations
-emc <- run_emc(emc, stage = "preburn", stop_criteria = list(iter = 200))
+# for MCMC 10 iterations
+emc <- run_emc(emc, stage = "preburn", stop_criteria = list(iter = 10), cores_for_chains = 1)
 }
 }

@@ -59,7 +59,7 @@
 <span>  do_plot <span class="op">=</span> <span class="cn">TRUE</span>,</span>
 <span>  use_prior_lim <span class="op">=</span> <span class="cn">TRUE</span>,</span>
 <span>  N <span class="op">=</span> <span class="fl">10000</span>,</span>
-<span>  prior_plot_args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="op">)</span>,</span>
+<span>  prior_args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="op">)</span>,</span>
 <span>  <span class="va">...</span></span>
 <span><span class="op">)</span></span>
 <span></span>
@@ -102,7 +102,7 @@
 <dd><p>Integer. How many prior samples to draw</p></dd>
 
 
-<dt id="arg-prior-plot-args">prior_plot_args<a class="anchor" aria-label="anchor" href="#arg-prior-plot-args"></a></dt>
+<dt id="arg-prior-args">prior_args<a class="anchor" aria-label="anchor" href="#arg-prior-args"></a></dt>
 <dd><p>A list. Optional additional arguments to be passed to plot.default for the plotting of the prior density (see <code><a href="https://rdrr.io/r/graphics/par.html" class="external-link">par()</a></code>)</p></dd>
 
 
@@ -129,12 +129,12 @@ For details see: Wagenmakers, Lodewyckx, Kuriyal, &amp; Grasman (2010).</p>
 <span class="r-in"><span><span class="co"># We can test whether there's a group-level effect on m:</span></span></span>
 <span class="r-in"><span><span class="fu">hypothesis</span><span class="op">(</span><span class="va">samples_LNR</span>, parameter <span class="op">=</span> <span class="st">"m"</span><span class="op">)</span></span></span>
 <span class="r-plt img"><img src="hypothesis-1.png" alt="" width="700" height="433"></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> [1] 9.952023e+15</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> [1] 4.865551e+15</span>
 <span class="r-in"><span><span class="co"># Alternatively we can also test whether two parameters differ from each other</span></span></span>
 <span class="r-in"><span><span class="va">mdiff</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">p</span><span class="op">)</span><span class="fu"><a href="https://rdrr.io/r/base/diff.html" class="external-link">diff</a></span><span class="op">(</span><span class="va">p</span><span class="op">[</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"m"</span>,<span class="st">"m_lMd"</span><span class="op">)</span><span class="op">]</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="fu">hypothesis</span><span class="op">(</span><span class="va">samples_LNR</span>,fun<span class="op">=</span><span class="va">mdiff</span><span class="op">)</span></span></span>
 <span class="r-plt img"><img src="hypothesis-2.png" alt="" width="700" height="433"></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> [1] 19.62834</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> [1] 17.04599</span>
 </code></pre></div>
     </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>

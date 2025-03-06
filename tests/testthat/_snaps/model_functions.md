@@ -40,16 +40,6 @@
       s           0.3334446
       t0          0.2464756
       
-      $epsilon
-           [,1]
-      as1t  1.5
-      bd6t  1.5
-      
-      $origin
-           [,1]
-      as1t    2
-      bd6t    2
-      
       $alpha
       , , 1
       
@@ -264,16 +254,6 @@
       A           0.7726374
       t0          0.3149199
       
-      $epsilon
-           [,1]
-      as1t  1.5
-      bd6t  1.5
-      
-      $origin
-           [,1]
-      as1t    2
-      bd6t    2
-      
       $alpha
       , , 1
       
@@ -329,126 +309,126 @@
       make_data(p_LBA, design_LBA, n_trials = 10)
     Output
           subjects        E     S trials     R        rt
-      1       as1t    speed  left      1 right  3.030501
-      5       as1t  neutral  left      1  left  3.539124
-      9       as1t accuracy  left      1 right  2.018035
-      13      as1t    speed right      1 right  4.039522
-      17      as1t  neutral right      1 right  3.096771
-      21      as1t accuracy right      1 right  2.831589
-      25      as1t    speed  left      2  left  1.582925
-      29      as1t  neutral  left      2  left  2.274229
-      33      as1t accuracy  left      2 right  1.846171
-      37      as1t    speed right      2 right  1.889838
-      41      as1t  neutral right      2 right  2.484168
-      45      as1t accuracy right      2  left  3.046477
-      49      as1t    speed  left      3  left  1.486228
-      53      as1t  neutral  left      3  left  3.778649
-      57      as1t accuracy  left      3 right  1.576586
-      61      as1t    speed right      3 right  2.388316
-      65      as1t  neutral right      3 right  3.756077
-      69      as1t accuracy right      3  left  6.599845
-      73      as1t    speed  left      4  left  1.745405
-      77      as1t  neutral  left      4  left  3.839705
-      81      as1t accuracy  left      4  left  3.845541
-      85      as1t    speed right      4 right  1.060495
-      89      as1t  neutral right      4 right  3.446446
-      93      as1t accuracy right      4 right  1.908258
-      97      as1t    speed  left      5  left  2.236360
-      101     as1t  neutral  left      5  left  2.467514
-      105     as1t accuracy  left      5 right  2.376394
-      109     as1t    speed right      5 right  1.815742
-      113     as1t  neutral right      5  left  6.137105
-      117     as1t accuracy right      5 right  3.050245
-      121     as1t    speed  left      6 right  4.654374
-      125     as1t  neutral  left      6 right  3.737266
-      129     as1t accuracy  left      6  left  3.261177
-      133     as1t    speed right      6 right  2.419888
-      137     as1t  neutral right      6 right  2.328470
-      141     as1t accuracy right      6  left  1.912428
-      145     as1t    speed  left      7 right  1.773037
-      149     as1t  neutral  left      7  left  2.060795
-      153     as1t accuracy  left      7  left  3.284590
-      157     as1t    speed right      7 right  2.278090
-      161     as1t  neutral right      7  left  3.814300
-      165     as1t accuracy right      7 right  3.006519
-      169     as1t    speed  left      8  left  2.730204
-      173     as1t  neutral  left      8  left  9.251958
-      177     as1t accuracy  left      8 right  5.571195
-      181     as1t    speed right      8 right  1.697408
-      185     as1t  neutral right      8  left  2.403360
-      189     as1t accuracy right      8 right  1.772008
-      193     as1t    speed  left      9  left  1.371370
-      197     as1t  neutral  left      9  left  1.877307
-      201     as1t accuracy  left      9 right  4.181847
-      205     as1t    speed right      9 right  5.671736
-      209     as1t  neutral right      9 right  6.015465
-      213     as1t accuracy right      9  left  1.970632
-      217     as1t    speed  left     10  left  1.920388
-      221     as1t  neutral  left     10  left  2.253761
-      225     as1t accuracy  left     10  left  1.770226
-      229     as1t    speed right     10 right  1.801675
-      233     as1t  neutral right     10 right  2.370456
-      237     as1t accuracy right     10 right  1.745306
-      3       bd6t    speed  left      1  left  2.212102
-      7       bd6t  neutral  left      1  left  3.743711
-      11      bd6t accuracy  left      1  left  3.324826
-      15      bd6t    speed right      1  left  2.016301
-      19      bd6t  neutral right      1 right  2.106579
-      23      bd6t accuracy right      1  left  2.139603
-      27      bd6t    speed  left      2  left  3.334463
-      31      bd6t  neutral  left      2  left  2.029409
-      35      bd6t accuracy  left      2 right  3.957159
-      39      bd6t    speed right      2 right  2.117888
-      43      bd6t  neutral right      2 right  3.021339
-      47      bd6t accuracy right      2 right  2.316572
-      51      bd6t    speed  left      3 right  3.056940
-      55      bd6t  neutral  left      3  left  3.128322
-      59      bd6t accuracy  left      3  left  3.181291
-      63      bd6t    speed right      3  left  1.283469
-      67      bd6t  neutral right      3 right  2.567409
-      71      bd6t accuracy right      3 right  2.278658
-      75      bd6t    speed  left      4  left  2.210870
-      79      bd6t  neutral  left      4  left  2.744873
-      83      bd6t accuracy  left      4  left  2.774626
-      87      bd6t    speed right      4  left  1.480785
-      91      bd6t  neutral right      4  left  7.277249
-      95      bd6t accuracy right      4 right  1.548620
-      99      bd6t    speed  left      5  left  5.784232
-      103     bd6t  neutral  left      5 right  3.327742
-      107     bd6t accuracy  left      5 right  3.104018
-      111     bd6t    speed right      5  left  1.203665
-      115     bd6t  neutral right      5  left  2.090526
-      119     bd6t accuracy right      5  left  4.917617
-      123     bd6t    speed  left      6  left  2.501372
-      127     bd6t  neutral  left      6  left  5.301814
-      131     bd6t accuracy  left      6  left  3.460860
-      135     bd6t    speed right      6 right  2.318174
-      139     bd6t  neutral right      6 right  3.773084
-      143     bd6t accuracy right      6  left  3.505149
-      147     bd6t    speed  left      7  left  1.799115
-      151     bd6t  neutral  left      7  left  3.401848
-      155     bd6t accuracy  left      7  left  2.444221
-      159     bd6t    speed right      7 right  1.289936
-      163     bd6t  neutral right      7  left  5.230063
-      167     bd6t accuracy right      7 right  2.277541
-      171     bd6t    speed  left      8  left  1.522399
-      175     bd6t  neutral  left      8 right  1.849652
-      179     bd6t accuracy  left      8  left  1.379855
-      183     bd6t    speed right      8 right  1.790735
-      187     bd6t  neutral right      8 right  3.215419
-      191     bd6t accuracy right      8  left  2.678309
-      195     bd6t    speed  left      9 right  1.449396
-      199     bd6t  neutral  left      9  left  2.880126
-      203     bd6t accuracy  left      9  left  2.541788
-      207     bd6t    speed right      9  left  4.824451
-      211     bd6t  neutral right      9 right  2.519785
-      215     bd6t accuracy right      9 right  5.377238
-      219     bd6t    speed  left     10  left  2.250957
-      223     bd6t  neutral  left     10  left  2.622829
-      227     bd6t accuracy  left     10 right  2.837247
-      231     bd6t    speed right     10 right  1.353242
-      235     bd6t  neutral right     10 right 10.014760
-      239     bd6t accuracy right     10 right  2.474592
+      1       as1t    speed  left      1  left 1.4633807
+      5       as1t  neutral  left      1  left 2.1702340
+      9       as1t accuracy  left      1  left 1.4852344
+      13      as1t    speed right      1 right 0.9423191
+      17      as1t  neutral right      1 right 1.6249727
+      21      as1t accuracy right      1  left 1.6289250
+      25      as1t    speed  left      2  left 0.9759322
+      29      as1t  neutral  left      2  left 2.2181263
+      33      as1t accuracy  left      2  left 1.5406683
+      37      as1t    speed right      2 right 1.3311058
+      41      as1t  neutral right      2 right 1.1949201
+      45      as1t accuracy right      2 right 1.3299111
+      49      as1t    speed  left      3  left 1.2642489
+      53      as1t  neutral  left      3  left 2.0398431
+      57      as1t accuracy  left      3  left 1.9756260
+      61      as1t    speed right      3 right 2.1560090
+      65      as1t  neutral right      3 right 2.0795816
+      69      as1t accuracy right      3  left 1.4747640
+      73      as1t    speed  left      4 right 1.0183507
+      77      as1t  neutral  left      4  left 2.0591050
+      81      as1t accuracy  left      4  left 2.0299050
+      85      as1t    speed right      4 right 1.7444860
+      89      as1t  neutral right      4 right 1.6223118
+      93      as1t accuracy right      4 right 1.2664438
+      97      as1t    speed  left      5 right 0.8479725
+      101     as1t  neutral  left      5  left 2.5810174
+      105     as1t accuracy  left      5  left 2.0660525
+      109     as1t    speed right      5 right 1.1061526
+      113     as1t  neutral right      5  left 1.5656606
+      117     as1t accuracy right      5 right 1.1412750
+      121     as1t    speed  left      6  left 1.2552418
+      125     as1t  neutral  left      6  left 1.9701327
+      129     as1t accuracy  left      6  left 1.2969671
+      133     as1t    speed right      6 right 0.9069431
+      137     as1t  neutral right      6 right 1.9277024
+      141     as1t accuracy right      6 right 1.4062788
+      145     as1t    speed  left      7 right 1.7466986
+      149     as1t  neutral  left      7  left 1.9530480
+      153     as1t accuracy  left      7  left 1.3515376
+      157     as1t    speed right      7 right 1.0903481
+      161     as1t  neutral right      7 right 2.0526427
+      165     as1t accuracy right      7 right 1.1242640
+      169     as1t    speed  left      8  left 1.7874152
+      173     as1t  neutral  left      8 right 1.3507243
+      177     as1t accuracy  left      8  left 1.7284682
+      181     as1t    speed right      8 right 1.5629776
+      185     as1t  neutral right      8 right 1.9109834
+      189     as1t accuracy right      8 right 1.8096389
+      193     as1t    speed  left      9  left 1.1294915
+      197     as1t  neutral  left      9 right 1.4011195
+      201     as1t accuracy  left      9 right 1.7618616
+      205     as1t    speed right      9 right 0.9635151
+      209     as1t  neutral right      9  left 0.9964543
+      213     as1t accuracy right      9 right 2.2168005
+      217     as1t    speed  left     10  left 1.2540213
+      221     as1t  neutral  left     10  left 1.7238653
+      225     as1t accuracy  left     10  left 1.3217336
+      229     as1t    speed right     10 right 1.1129529
+      233     as1t  neutral right     10 right 1.3371482
+      237     as1t accuracy right     10 right 1.4788349
+      3       bd6t    speed  left      1  left 1.1431110
+      7       bd6t  neutral  left      1 right 1.7701594
+      11      bd6t accuracy  left      1  left 1.4828631
+      15      bd6t    speed right      1  left 0.8311659
+      19      bd6t  neutral right      1 right 1.7368588
+      23      bd6t accuracy right      1  left 1.1528011
+      27      bd6t    speed  left      2  left 1.1984658
+      31      bd6t  neutral  left      2 right 1.7074347
+      35      bd6t accuracy  left      2  left 1.7261127
+      39      bd6t    speed right      2  left 0.9345510
+      43      bd6t  neutral right      2 right 1.7837362
+      47      bd6t accuracy right      2 right 1.3253715
+      51      bd6t    speed  left      3  left 0.9382072
+      55      bd6t  neutral  left      3  left 1.6609535
+      59      bd6t accuracy  left      3  left 1.2350623
+      63      bd6t    speed right      3 right 1.2555053
+      67      bd6t  neutral right      3 right 2.0236594
+      71      bd6t accuracy right      3 right 1.8515205
+      75      bd6t    speed  left      4  left 1.1070257
+      79      bd6t  neutral  left      4  left 1.7790590
+      83      bd6t accuracy  left      4  left 1.5055781
+      87      bd6t    speed right      4 right 1.2143236
+      91      bd6t  neutral right      4  left 1.5663614
+      95      bd6t accuracy right      4 right 1.4461514
+      99      bd6t    speed  left      5 right 1.2060786
+      103     bd6t  neutral  left      5  left 1.4588243
+      107     bd6t accuracy  left      5  left 1.3866129
+      111     bd6t    speed right      5 right 1.6574897
+      115     bd6t  neutral right      5  left 1.2277583
+      119     bd6t accuracy right      5  left 2.1361914
+      123     bd6t    speed  left      6  left 1.0186402
+      127     bd6t  neutral  left      6 right 2.2555354
+      131     bd6t accuracy  left      6 right 1.3513423
+      135     bd6t    speed right      6 right 1.1363703
+      139     bd6t  neutral right      6 right 2.2786338
+      143     bd6t accuracy right      6 right 1.7136703
+      147     bd6t    speed  left      7 right 1.1315176
+      151     bd6t  neutral  left      7 right 2.8129833
+      155     bd6t accuracy  left      7  left 1.8581362
+      159     bd6t    speed right      7 right 1.4264524
+      163     bd6t  neutral right      7  left 1.9479597
+      167     bd6t accuracy right      7 right 1.3138114
+      171     bd6t    speed  left      8 right 1.2901186
+      175     bd6t  neutral  left      8  left 2.1920405
+      179     bd6t accuracy  left      8  left 1.4267523
+      183     bd6t    speed right      8  left 1.0080981
+      187     bd6t  neutral right      8  left 1.9679805
+      191     bd6t accuracy right      8 right 1.5223778
+      195     bd6t    speed  left      9 right 1.3196324
+      199     bd6t  neutral  left      9  left 1.4713529
+      203     bd6t accuracy  left      9  left 2.2323876
+      207     bd6t    speed right      9 right 1.2076100
+      211     bd6t  neutral right      9 right 1.6209301
+      215     bd6t accuracy right      9 right 1.6692198
+      219     bd6t    speed  left     10 right 0.8206576
+      223     bd6t  neutral  left     10  left 1.3604141
+      227     bd6t accuracy  left     10  left 1.5717983
+      231     bd6t    speed right     10  left 0.9161352
+      235     bd6t  neutral right     10 right 1.3449899
+      239     bd6t accuracy right     10 right 1.3311090
 
 # RDM
 
@@ -503,16 +483,6 @@
       B_lRright   2.2752573
       A           0.7726374
       t0          0.3149199
-      
-      $epsilon
-           [,1]
-      as1t  1.5
-      bd6t  1.5
-      
-      $origin
-           [,1]
-      as1t    2
-      bd6t    2
       
       $alpha
       , , 1
@@ -743,16 +713,6 @@
       Z           2.2752573
       sv          0.7726374
       SZ          0.3149199
-      
-      $epsilon
-           [,1]
-      as1t  1.5
-      bd6t  1.5
-      
-      $origin
-           [,1]
-      as1t    2
-      bd6t    2
       
       $alpha
       , , 1

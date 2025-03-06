@@ -97,7 +97,7 @@
 #
 #
 
-dLBA <- function (rt, pars, posdrift = TRUE, robust = FALSE)
+dLBA <- function (rt, pars, posdrift = TRUE)
   # posdrift = truncated positive normal rates
   # robust slower, deals with extreme rate values
 {
@@ -107,11 +107,11 @@ dLBA <- function (rt, pars, posdrift = TRUE, robust = FALSE)
   out <- numeric(length(dt))
   out[ok] <- dlba(t = dt[ok], A = pars[ok,"A"], b = pars[ok,"b"],
                          v = pars[ok,"v"], sv = pars[ok,"sv"],
-                         posdrift = posdrift, robust = robust)
+                         posdrift = posdrift)
   out
 }
 
-pLBA <- function (rt, pars, posdrift = TRUE, robust = FALSE)
+pLBA <- function (rt, pars, posdrift = TRUE)
   # posdrift = truncated positive normal rates
   # robust slower, deals with extreme rate values
 {
@@ -121,7 +121,7 @@ pLBA <- function (rt, pars, posdrift = TRUE, robust = FALSE)
   out <- numeric(length(dt))
   out[ok] <- plba(t = dt[ok], A = pars[ok,"A"], b = pars[ok,"b"],
                          v = pars[ok,"v"], sv = pars[ok,"sv"],
-                         posdrift = posdrift, robust = robust)
+                         posdrift = posdrift)
   out
 }
 
@@ -232,30 +232,24 @@ LBA <- function(){
     c_name = "LBA",
     # p_vector transform, sets sv as a scaling parameter
     p_types=c("v" = 1,"sv" = log(1),"B" = log(1),"A" = log(0),"t0" = log(0)),
-    transform = function(p) p,
+    transform=list(func=c(v = "identity",sv = "exp", B = "exp", A = "exp",t0 = "exp")),
+    bound=list(minmax=cbind(v=c(-Inf,Inf),sv = c(0, Inf), A=c(1e-4,Inf),B=c(0,Inf),t0=c(0.05,Inf)),
+               exception=c(A=0)),
     # Transform to natural scale
-    Ntransform=function(x) {
-      x[,dimnames(x)[[2]] != "v"] <- exp(x[,dimnames(x)[[2]] != "v"])
-      x
-    },
     # Trial dependent parameter transform
     Ttransform = function(pars,dadm) {
       pars <- cbind(pars,b=pars[,"B"] + pars[,"A"])
-      attr(pars,"ok") <- (pars[,"t0"] > .05) & ((pars[,"A"] > 1e-6) | pars[,"A"] == 0)
       pars
     },
     # Random function for racing accumulator
-    rfun=function(lR=NULL,pars) {
-      ok <- (pars[,"t0"] > .05) & ((pars[,"A"] > 1e-6) | pars[,"A"] == 0)
-      if (is.null(lR)) ok else rLBA(lR,pars,posdrift=TRUE,ok=ok)
-    },
+    rfun=function(lR=NULL,pars) rLBA(lR,pars,posdrift=TRUE,ok = attr(pars, "ok")),
     # Density function (PDF) for single accumulator
-    dfun=function(rt,pars) dLBA(rt,pars,posdrift = TRUE, robust = FALSE),
+    dfun=function(rt,pars) dLBA(rt,pars,posdrift = TRUE),
     # Probability function (CDF) for single accumulator
-    pfun=function(rt,pars) pLBA(rt,pars,posdrift = TRUE, robust = FALSE),
+    pfun=function(rt,pars) pLBA(rt,pars,posdrift = TRUE),
     # Race likelihood combining pfun and dfun
-    log_likelihood=function(p_vector,dadm,min_ll=log(1e-10)){
-      log_likelihood_race(p_vector=p_vector, dadm = dadm, min_ll = min_ll)
+    log_likelihood=function(pars,dadm,model,min_ll=log(1e-10)){
+      log_likelihood_race(pars=pars, dadm = dadm, model = model, min_ll = min_ll)
     }
   )
 }

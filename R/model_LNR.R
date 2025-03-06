@@ -90,27 +90,19 @@ LNR <- function() {
     type="RACE",
     c_name = "LNR",
     p_types=c("m" = 1,"s" = log(1),"t0" = log(0)),
-    Ntransform=function(x) {
-      # Transform to natural scale
-      x[,dimnames(x)[[2]] != "m"] <- exp(x[,dimnames(x)[[2]] != "m"])
-      x
-    },
-    # p_vector transform scaling parameter by s=1 assumed in lnr.R
-    transform = function(x) x,
+    transform=list(func=c(m = "identity",s = "exp", t0 = "exp")),
+    bound=list(minmax=cbind(m=c(-Inf,Inf),s = c(0, Inf), t0=c(0.05,Inf))),
     # Trial dependent parameter transform
     Ttransform = function(pars,dadm) pars,
     # Random function for racing accumulators
-    rfun=function(lR=NULL,pars) {
-      if (is.null(lR)) return(rep(TRUE,dim(pars)[1]))
-      rLNR(lR,pars)
-    },
+    rfun=function(lR=NULL,pars) rLNR(lR,pars, ok = attr(pars, "ok")),
     # Density function (PDF) for single accumulator
     dfun=function(rt,pars) dLNR(rt,pars),
     # Probability function (CDF) for single accumulator
     pfun=function(rt,pars) pLNR(rt,pars),
     # Race likelihood combining pfun and dfun
-    log_likelihood=function(p_vector,dadm,min_ll=log(1e-10))
-      log_likelihood_race(p_vector=p_vector, dadm = dadm, min_ll = min_ll)
+    log_likelihood=function(pars,dadm, model, min_ll=log(1e-10))
+      log_likelihood_race(pars=pars, dadm = dadm, model = model, min_ll = min_ll)
   )
 }
 

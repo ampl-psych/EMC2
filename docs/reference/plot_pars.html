@@ -63,8 +63,8 @@ Full range of samples manipulations described in <code>get_pars</code>.</p>
 <span>  lpos <span class="op">=</span> <span class="st">"topright"</span>,</span>
 <span>  true_pars <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  all_subjects <span class="op">=</span> <span class="cn">FALSE</span>,</span>
-<span>  prior_plot_args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="op">)</span>,</span>
-<span>  true_plot_args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="op">)</span>,</span>
+<span>  prior_args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="op">)</span>,</span>
+<span>  true_args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="op">)</span>,</span>
 <span>  <span class="va">...</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
@@ -115,11 +115,11 @@ If an emc object will plot the densities of the object as well, assumed to be th
 <dd><p>Boolean. Will plot the densities of all (selected) subjects overlaid with the group-level distribution</p></dd>
 
 
-<dt id="arg-prior-plot-args">prior_plot_args<a class="anchor" aria-label="anchor" href="#arg-prior-plot-args"></a></dt>
+<dt id="arg-prior-args">prior_args<a class="anchor" aria-label="anchor" href="#arg-prior-args"></a></dt>
 <dd><p>A list. Optional additional arguments to be passed to plot.default for the plotting of the prior density (see <code><a href="https://rdrr.io/r/graphics/par.html" class="external-link">par()</a></code>)</p></dd>
 
 
-<dt id="arg-true-plot-args">true_plot_args<a class="anchor" aria-label="anchor" href="#arg-true-plot-args"></a></dt>
+<dt id="arg-true-args">true_args<a class="anchor" aria-label="anchor" href="#arg-true-args"></a></dt>
 <dd><p>A list. Optional additional arguments to be passed to plot.default for the plotting of the true parameters (see <code><a href="https://rdrr.io/r/graphics/par.html" class="external-link">par()</a></code>)</p></dd>
 
 
@@ -142,7 +142,7 @@ If an emc object will plot the densities of the object as well, assumed to be th
 <span class="r-plt img"><img src="plot_pars-2.png" alt="" width="700" height="433"></span>
 <span class="r-in"><span><span class="co"># Or plot recovery</span></span></span>
 <span class="r-in"><span><span class="va">true_emc</span> <span class="op">&lt;-</span> <span class="va">samples_LNR</span> <span class="co"># This would normally be the data-generating samples</span></span></span>
-<span class="r-in"><span><span class="fu">plot_pars</span><span class="op">(</span><span class="va">samples_LNR</span>, true_pars <span class="op">=</span> <span class="va">true_emc</span>, true_plot_args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>col <span class="op">=</span> <span class="st">'blue'</span><span class="op">)</span>, adjust <span class="op">=</span> <span class="fl">2</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="fu">plot_pars</span><span class="op">(</span><span class="va">samples_LNR</span>, true_pars <span class="op">=</span> <span class="va">true_emc</span>, true_args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>col <span class="op">=</span> <span class="st">'blue'</span><span class="op">)</span>, adjust <span class="op">=</span> <span class="fl">2</span><span class="op">)</span></span></span>
 <span class="r-plt img"><img src="plot_pars-3.png" alt="" width="700" height="433"></span>
 </code></pre></div>
     </div>

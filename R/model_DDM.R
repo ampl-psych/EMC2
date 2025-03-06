@@ -7,7 +7,15 @@ find_duplicate_indices <- function(df) {
   return(index_map)
 }
 
-rDDM <- function(lR,pars,precision=5e-3,ok=rep(TRUE,length(lR)))
+# Unfortunately there's some unwanted print statements in the code of rWDM
+# From the original package
+suppress_output <- function(expr) {
+  sink(tempfile())  # Redirect output to a temporary file
+  on.exit(sink())   # Ensure sink is reset afterward
+  invisible(force(expr))  # Run the expression
+}
+
+rDDM <- function(lR,pars,ok=rep(TRUE,length(lR)), precision=5e-3)
   # lR is an empty latent response factor lR with one level for each boundary
   # pars is a matrix of parameter values named as in p_types
   # lower is mapped to first level of lR and upper to second
@@ -26,10 +34,10 @@ rDDM <- function(lR,pars,precision=5e-3,ok=rep(TRUE,length(lR)))
   idx <- find_duplicate_indices(pars)
   for(id in unique(idx)){
     is_id <- which(idx == id)
-    first <- is_id[1]
-    tmp <- rWDM(N = length(is_id), a = pars[first,"a"]/pars[first, "s"], v = pars[first,"v"]/pars[first, "s"], t0 = pars[first,"t0"],
-                       w = pars[first,"Z"], sw = pars[first,"SZ"], sv = pars[first,"sv"]/pars[first, "s"],
-                       st0 = pars[first,"st0"], precision = precision)
+    cur_pars <- pars[is_id[1],]
+    tmp <- suppress_output(rWDM(N = length(is_id), a = cur_pars["a"]/cur_pars[ "s"], v = cur_pars["v"]/cur_pars[ "s"], t0 = cur_pars["t0"],
+                       w = cur_pars["Z"], sw = cur_pars["SZ"], sv = cur_pars["sv"]/cur_pars[ "s"],
+                       st0 = cur_pars["st0"], precision = precision))
     tmp <- data.frame(response = tmp$response, rt = tmp$q)
     out_ok[is_id,] <- tmp[sample(nrow(tmp)),]
   }
@@ -91,7 +99,7 @@ pDDM <- function(rt,R,pars,precision=5e-3)
 #' `Z` is estimated as the ratio of bias to one boundary where 0.5 means no bias.
 #' `DP` comprises the difference in non-decision time for each response option.
 #'
-#' Conventionally, `sv` is fixed to 1 to satisfy scaling constraints.
+#' Conventionally, `s` is fixed to 1 to satisfy scaling constraints.
 #'
 #' See Ratcliff, R., & McKoon, G. (2008).
 #' The diffusion decision model: theory and data for two-choice decision tasks.
@@ -110,59 +118,28 @@ pDDM <- function(rt,R,pars,precision=5e-3)
 
 DDM <- function(){
   list(
-    type="DDM",
     c_name = "DDM",
+    type="DDM",
     p_types=c("v" = 1,"a" = log(1),"sv" = log(0),"t0" = log(0),"st0" = log(0),"s" = log(1),"Z" = qnorm(0.5),"SZ" = qnorm(0)),
-    # The "TZD" parameterization defined relative to the "rtdists" package is:
-    # natural scale
-    #   v = rtdists rate v (positive favors upper)
-    # log scale
-    #   t0 > 0: lower bound of non-decision time
-    #   st0 > 0: rtdists width of non-decision time distribution
-    #   a > 0: rtdists upper threshold, a
-    #   sv > 0: rtdists v standard deviation sv
-    #   s > 0: rtdists moment-to-moment standard deviation, s
-    # probit scale
-    #   0 < Z < 1: rtdists start point z = Z*a
-    #   0 < SZ < 1: rtdists start-point variability, sz = 2*SZ*min(c(a*Z,a*(1-Z))
-    #   0 < DP < 1: rtdists d = t0(upper)-t0(lower) = (2*DP-1)*t0  #
-    #
-    # Transform to natural scale
-    Ntransform=function(x) {
-      islog <- dimnames(x)[[2]] %in% c("a","sv","t0","st0","s")
-      isprobit <- dimnames(x)[[2]] %in% c("Z","SZ","DP")
-      x[,islog] <- exp(x[,islog])
-      x[,isprobit] <- pnorm(x[,isprobit])
-      x
-    },
     # Trial dependent parameter transform
+    transform=list(func=c(v = "identity",a = "exp",sv = "exp",t0 = "exp",
+                          st0 = "exp",s = "exp",Z = "pnorm",SZ = "pnorm")),
+    bound=list(minmax=cbind(v=c(-20,20),a=c(0,10),Z=c(.01,.99),t0=c(0.05,Inf),
+                            sv=c(.01,10),s=c(0,Inf),SZ=c(.01,.99),st0=c(0,.5)),
+               exception=c(sv=0,SZ=0,st0=0)),
     Ttransform = function(pars,dadm) {
       pars[,"SZ"] <- 2*pars[,"SZ"]*apply(cbind(pars[,"Z"],1-pars[,"Z"]),1,min)
-      pars <- cbind(pars,z=pars[,"Z"]*pars[,"a"],
-                    sz = pars[,"SZ"]*pars[,"a"])
-      attr(pars,"ok") <- !( abs(pars[,"v"])> 20 | pars[,"a"]> 10 | pars[,"sv"]> 10 | pars[,"SZ"]> .999 |
-             pars[,"t0"] < .05 | pars[,"st0"]>5)
-      if (pars[1,"sv"] !=0) attr(pars,"ok") <- attr(pars,"ok") & pars[,"sv"] > .001
-      if (pars[1,"SZ"] !=0) attr(pars,"ok") <- attr(pars,"ok") & pars[,"SZ"] > .001
-      attr(pars, "ok") <- rep(TRUE, nrow(pars))
+      pars <- cbind(pars,z=pars[,"Z"]*pars[,"a"], sz = pars[,"SZ"]*pars[,"a"])
       pars
     },
-    # p_vector transform, sets s as a scaling parameter
-    transform = function(p) p,
     # Random function
-    rfun=function(lR=NULL,pars) {
-      ok <- !(abs(pars[,"v"])> 20 | pars[,"a"]> 10 | pars[,"sv"]> 10 | pars[,"SZ"]> .999 |
-                 pars[,"st0"]>5 | pars[,"t0"] < .05)
-      if (pars[1,"sv"] !=0) attr(pars,"ok") <- attr(pars,"ok") & pars[,"sv"] > .001
-      if (pars[1,"SZ"] !=0) attr(pars,"ok") <- attr(pars,"ok") & pars[,"SZ"] > .001
-      if (is.null(lR)) ok else rDDM(lR,pars,precision=1e-3,ok)
-    },
+    rfun=function(lR=NULL,pars) rDDM(lR,pars, attr(pars, "ok")),
     # Density function (PDF)
-    dfun=function(rt,R,pars) dDDM(rt,R,pars,precision=1e-3),
+    dfun=function(rt,R,pars) dDDM(rt,R,pars),
     # Probability function (CDF)
-    pfun=function(rt,R,pars) pDDM(rt,R,pars,precision=1e-3),
-    log_likelihood=function(p_vector,dadm,min_ll=log(1e-10)){
-      log_likelihood_ddm(p_vector=p_vector, dadm = dadm, min_ll = min_ll)
+    pfun=function(rt,R,pars) pDDM(rt,R,pars),
+    log_likelihood=function(pars,dadm,model,min_ll=log(1e-10)){
+      log_likelihood_ddm(pars=pars, dadm = dadm, model = model, min_ll = min_ll)
     }
   )
 }

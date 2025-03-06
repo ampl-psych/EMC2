@@ -2,7 +2,7 @@
 % Please edit documentation in R/bridge_sampling.R
 \name{run_bridge_sampling}
 \alias{run_bridge_sampling}
-\title{Estimating Marginal likelihoods using WARP-III bridge sampling}
+\title{Estimating Marginal Likelihoods Using WARP-III Bridge Sampling}
 \usage{
 run_bridge_sampling(
   emc,
@@ -69,10 +69,10 @@ Meng, X.-L., & Schilling, S. (2002). Warp bridge sampling.
 11(3), 552-586. doi.org/10.1198/106186002457
 }
 \examples{
-\dontrun{
+\donttest{
 # After `fit` has converged on a specific model
 # We can take those samples and calculate the marginal log-likelihood for them
-MLL <- run_bridge_sampling(list(samples_LNR), cores_per_prop = 2)
+MLL <- run_bridge_sampling(samples_LNR, cores_for_props = 1, both_splits = FALSE)
 # This will run on 2*4 cores (since 4 is the default for ``cores_for_props``)
 }
 }

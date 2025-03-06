@@ -6,3 +6,6 @@
 *.pdf
 .DS_Store
 docs
+.vscode
+settings.json
+paper

@@ -5,7 +5,7 @@ add_info_infnt_factor <- function(sampler, prior = NULL, ...){
   if(is.null(max_factors)) max_factors <- 10
   attr(sampler, "max_factors") <- max_factors
 
-  sampler$prior <- get_prior_infnt_factor(prior, sum(!(sampler$nuisance | sampler$grouped)), sample = F, n_factors = max_factors)
+  sampler$prior <- get_prior_infnt_factor(prior, sum(!sampler$nuisance), sample = F, n_factors = max_factors)
   return(sampler)
 }
 
@@ -16,7 +16,7 @@ get_prior_infnt_factor <- function(prior = NULL, n_pars = NULL, sample = TRUE, N
     prior <- list()
   }
   if(!is.null(design)){
-    n_pars <- length(sampled_p_vector(design, doMap = F))
+    n_pars <- length(sampled_pars(design, doMap = F))
   }
   if (!is.null(prior$theta_mu_mean)) {
     n_pars <- length(prior$theta_mu_mean)
@@ -54,7 +54,7 @@ get_prior_infnt_factor <- function(prior = NULL, n_pars = NULL, sample = TRUE, N
   out <- prior
   if(sample){
     samples <- list()
-    par_names <- names(sampled_p_vector(design, doMap = F))
+    par_names <- names(sampled_pars(design, doMap = F))
     if(!selection %in% c("mu", "sigma2", "covariance", "alpha", "correlation", "Sigma", "loadings", "residuals")){
       stop("for variant factor, you can only specify the prior on the mean, variance, covariance, loadings, residuals, or the correlation of the parameters")
     }
@@ -116,14 +116,13 @@ get_prior_infnt_factor <- function(prior = NULL, n_pars = NULL, sample = TRUE, N
 
 
 
-sample_store_infnt_factor <- function(data, par_names, iters = 1, stage = "init", integrate = T, is_nuisance,
-                                      is_grouped, ...) {
+sample_store_infnt_factor <- function(data, par_names, iters = 1, stage = "init", integrate = T, is_nuisance, ...) {
   n_factors <- list(...)$n_factors
   if(is.null(n_factors)) n_factors <- 10
   subject_ids <- unique(data$subjects)
   n_subjects <- length(subject_ids)
-  base_samples <- sample_store_base(data, par_names[!is_grouped], iters, stage)
-  par_names <- par_names[!is_nuisance & !is_grouped]
+  base_samples <- sample_store_base(data, par_names, iters, stage)
+  par_names <- par_names[!is_nuisance]
   n_pars <- length(par_names)
   samples <- list(
     theta_mu = array(NA_real_,dim = c(n_pars, iters), dimnames = list(par_names, NULL)),
@@ -139,7 +138,7 @@ sample_store_infnt_factor <- function(data, par_names, iters = 1, stage = "init"
 }
 
 get_startpoints_infnt_factor<- function(pmwgs, start_mu, start_var){
-  n_pars <- sum(!(pmwgs$nuisance | pmwgs$grouped))
+  n_pars <- sum(!pmwgs$nuisance)
   prior <- pmwgs$prior
   if (is.null(start_mu)) start_mu <- rnorm(n_pars, prior$theta_mu_mean, sd = sqrt(prior$theta_mu_var))
   # If no starting point for group var just sample some
@@ -161,13 +160,13 @@ get_startpoints_infnt_factor<- function(pmwgs, start_mu, start_var){
               eta = start_eta, delta = start_delta))
 }
 
-fill_samples_infnt_factor <- function(samples, group_level, proposals, epsilon, j = 1, n_pars){
+fill_samples_infnt_factor <- function(samples, group_level, proposals, j = 1, n_pars){
   samples$theta_lambda[,,j] <- group_level$lambda
   samples$theta_sig_err_inv[,j] <- group_level$sig_err_inv
   samples$theta_psi[,,j] <- group_level$psi
   samples$theta_eta[,,j] <- group_level$eta
   samples$theta_delta[,j] <- group_level$delta
-  samples <- fill_samples_base(samples, group_level, proposals, epsilon, j = j, n_pars)
+  samples <- fill_samples_base(samples, group_level, proposals, j = j, n_pars)
   return(samples)
 }
 
@@ -181,7 +180,7 @@ gibbs_step_infnt_factor <- function(sampler, alpha){
   # extract previous values (for ease of reading)
   alpha_t <- t(alpha)
   n_subjects <- sampler$n_subjects
-  n_pars <- sampler$n_pars - sum(sampler$nuisance) - sum(sampler$grouped)
+  n_pars <- sum(!sampler$nuisance)
   max_factors <- hyper$max_factors
 
   eta <- matrix(last$eta, n_subjects, max_factors)

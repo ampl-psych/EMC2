@@ -2,7 +2,7 @@
 % Please edit documentation in R/design.R
 \name{design}
 \alias{design}
-\title{Specify a design and model}
+\title{Specify a Design and Model}
 \usage{
 design(
   formula = NULL,
@@ -17,6 +17,8 @@ design(
   functions = NULL,
   report_p_vector = TRUE,
   custom_p_vector = NULL,
+  transform = NULL,
+  bound = NULL,
   ...
 )
 }
@@ -55,7 +57,7 @@ response was correct or not. Example: \code{function(d)d$S==d$lR} where lR refer
 to the latent response factor.}
 
 \item{constants}{A named vector that sets constants. Any parameter in
-\code{sampled_p_vector} can be set constant.}
+\code{sampled_pars} can be set constant.}
 
 \item{covariates}{Names of numeric covariates.}
 
@@ -67,6 +69,15 @@ parameters to be estimated.}
 
 \item{custom_p_vector}{A character vector. If specified, a custom likelihood
 function can be supplied.}
+
+\item{transform}{A list with custom transformations to be applied to the parameters of the model,
+if the conventional transformations aren't desired.
+See \code{DDM()} for an example of such transformations}
+
+\item{bound}{A list with custom bounds to be applied to the parameters of the model,
+if the conventional bound aren't desired.
+see \code{DDM()} for an example of such bounds. Bounds are used to set limits to
+the likelihood landscape that cannot reasonable be achieved with \code{transform}}
 
 \item{...}{Additional, optional arguments}
 }

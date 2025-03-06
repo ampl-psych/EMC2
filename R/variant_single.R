@@ -10,13 +10,13 @@ get_prior_single <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5
     prior <- list()
   }
   if(!is.null(design)){
-    n_pars <- length(sampled_p_vector(design, doMap = F))
+    n_pars <- length(sampled_pars(design, doMap = F))
   }
   if (!is.null(prior$theta_mu_mean)) {
     n_pars <- length(prior$theta_mu_mean)
   }
   if (is.null(prior$theta_mu_mean)) {
-    prior$theta_mu_mean <- setNames(rep(0, n_pars),names(sampled_p_vector(design, doMap = F)))
+    prior$theta_mu_mean <- setNames(rep(0, n_pars),names(sampled_pars(design, doMap = F)))
   }
   if(is.null(prior$theta_mu_var)){
     prior$theta_mu_var <- diag(rep(1, n_pars))
@@ -25,11 +25,10 @@ get_prior_single <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5
   out <- prior
   if(sample){
     out <- list()
-    par_names <- names(sampled_p_vector(design, doMap = F))
+    par_names <- names(sampled_pars(design, doMap = F))
     if(selection != "alpha") stop("for variant single, only alpha can be specified")
     out$alpha <- t(mvtnorm::rmvnorm(N, prior$theta_mu_mean, prior$theta_mu_var))
-    out$alpha <- array(out$alpha, dim = c(length(par_names), 1, N))
-    rownames(out$alpha) <- par_names
+    out$alpha <- array(out$alpha, dim = c(length(par_names), 1, N), dimnames = list(par_names, "alpha", NULL))
   }
   return(out)
 }
@@ -49,9 +48,9 @@ get_group_level_single <- function(parameters, s){
 }
 
 gibbs_step_single <- function(sampler, alpha){
-  n_pars <- sampler$n_pars-sum(sampler$nuisance) - sum(sampler$grouped)
+  n_pars <- sum(!sampler$nuisance)
   alpha_out <- matrix(alpha, nrow = n_pars, ncol = sampler$n_subjects)
-  rownames(alpha_out) <- sampler$par_names[!(sampler$nuisance | sampler$grouped)]
+  rownames(alpha_out) <- sampler$par_names[!sampler$nuisance]
   return(list(tmu = sampler$prior$theta_mu_mean,tvar = sampler$prior$theta_mu_var,alpha = alpha_out))
 }
 

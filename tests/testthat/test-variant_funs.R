@@ -28,16 +28,16 @@ set.seed(123)
 N <- 50
 
 LNR_factor <- init_chains(LNR_factor, cores_for_chains = 1, particles = 10)
-LNR_factor <- run_emc(LNR_factor, cores_for_chains = 1, stop_criteria = list(iter = N), stage = "preburn")
+LNR_factor <- run_emc(LNR_factor, cores_for_chains = 1, stop_criteria = list(iter = N), stage = "preburn", particle_factor = 25)
 
 LNR_diag <- init_chains(LNR_diag, cores_for_chains = 1, particles = 10)
-LNR_diag <- run_emc(LNR_diag, cores_for_chains = 1, stop_criteria = list(iter = N), stage = "preburn")
+LNR_diag <- run_emc(LNR_diag, cores_for_chains = 1, stop_criteria = list(iter = N), stage = "preburn", particle_factor = 25)
 
 LNR_blocked <- init_chains(LNR_blocked, cores_for_chains = 1, particles = 10)
-LNR_blocked <- run_emc(LNR_blocked, cores_for_chains = 1, stop_criteria = list(iter = N), stage = "preburn")
+LNR_blocked <- run_emc(LNR_blocked, cores_for_chains = 1, stop_criteria = list(iter = N), stage = "preburn", particle_factor = 25)
 
 LNR_single <- init_chains(LNR_single, cores_for_chains = 1, particles = 10)
-LNR_single <- run_emc(LNR_single, cores_for_chains = 1, stop_criteria = list(iter = N), stage = "preburn")
+LNR_single <- run_emc(LNR_single, cores_for_chains = 1, stop_criteria = list(iter = N), stage = "preburn", particle_factor = 25)
 
 
 idx <- N + 1
@@ -94,8 +94,3 @@ test_that("run_bridge", {
     variant = Sys.info()[1]
   )
 })
-
-
-
-
-

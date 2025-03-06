@@ -110,14 +110,15 @@ double digt(double t, double k = 1., double l = 1., double a = .1, double thresh
 }
 
 
-NumericVector drdm_c(NumericVector rts, NumericMatrix pars, LogicalVector idx, double min_ll){
+NumericVector drdm_c(NumericVector rts, NumericMatrix pars, LogicalVector idx, double min_ll, LogicalVector is_ok){
   //v = 0, B = 1, A = 2, t0 = 3, s = 4
-  int n = sum(idx);
-  NumericVector out(n);
+  NumericVector out(sum(idx));
   int k = 0;
   for(int i = 0; i < rts.length(); i++){
     if(idx[i] == TRUE){
-      if(!NumericVector::is_na(pars(i,0)) && (rts[i] - pars(i,3) > 0) && (pars(i,3) > 0.05) && ((pars(i,2) > 1e-6) || (pars(i,2) == 0)) && ((pars(i,0) > 1e-3) || (pars(i,0) == 0))){
+      if(NumericVector::is_na(pars(i,0))){
+        out[k] = 0;
+      } else if((rts[i] - pars(i,3) > 0) && (is_ok[i] == TRUE)){
         out[k] = digt(rts[i] - pars(i,3), pars(i,1)/pars(i,4) + .5 * pars(i,2)/pars(i,4), pars(i,0)/pars(i,4), .5*pars(i,2)/pars(i,4));
       } else{
         out[k] = min_ll;
@@ -129,14 +130,15 @@ NumericVector drdm_c(NumericVector rts, NumericMatrix pars, LogicalVector idx, d
   return(out);
 }
 
-NumericVector prdm_c(NumericVector rts, NumericMatrix pars, LogicalVector idx, double min_ll){
+NumericVector prdm_c(NumericVector rts, NumericMatrix pars, LogicalVector idx, double min_ll, LogicalVector is_ok){
   //v = 0, B = 1, A = 2, t0 = 3, s = 4
-  int n = sum(idx);
-  NumericVector out(n);
+  NumericVector out(sum(idx));
   int k = 0;
   for(int i = 0; i < rts.length(); i++){
     if(idx[i] == TRUE){
-      if(!NumericVector::is_na(pars(i,0)) && (rts[i] - pars(i,3) > 0) && (pars(i,3) > 0.05) && ((pars(i,2) > 1e-6) || (pars(i,2) == 0)) && ((pars(i,0) > 1e-3) || (pars(i,0) == 0))){
+      if(NumericVector::is_na(pars(i,0))){
+        out[k] = 0;
+      } else if((rts[i] - pars(i,3) > 0) && (is_ok[i] == TRUE)){
         out[k] = pigt(rts[i] - pars(i,3), pars(i,1)/pars(i,4) + .5 * pars(i,2)/pars(i,4), pars(i,0)/pars(i,4), .5*pars(i,2)/pars(i,4));
       } else{
         out[k] = min_ll;
@@ -148,18 +150,6 @@ NumericVector prdm_c(NumericVector rts, NumericMatrix pars, LogicalVector idx, d
   return(out);
 }
 
-
-NumericMatrix Ntransform_rdm(NumericMatrix x) {
-  NumericMatrix out(clone(x));
-  for(int i = 0; i < x.ncol(); i ++){
-    out (_, i) = exp(out(_, i));
-  };
-  return(out);
-}
-
-NumericVector transform_rdm(NumericVector x){
-  return(x);
-}
 
 // [[Rcpp::export]]
 NumericVector dWald(NumericVector t, NumericVector v,

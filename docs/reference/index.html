@@ -77,7 +77,7 @@
         </dt>
         <dd>The Racing Diffusion Model</dd>
       </dl></div><div class="section level2">
-      <h2 id="design-and-estimation">Design and estimation<a class="anchor" aria-label="anchor" href="#design-and-estimation"></a></h2>
+      <h2 id="design-and-mapping">Design and Mapping<a class="anchor" aria-label="anchor" href="#design-and-mapping"></a></h2>
 
 
 
@@ -89,16 +89,116 @@
 
       <dl><dt>
 
-          <code><a href="fit.html">fit()</a></code>
-
-        </dt>
-        <dd>Model estimation in EMC2</dd>
-      </dl><dl><dt>
-
           <code><a href="design.html">design()</a></code>
 
         </dt>
         <dd>Specify a design and model</dd>
+      </dl><dl><dt>
+
+          <code><a href="mapped_pars.html">mapped_pars()</a></code>
+
+        </dt>
+        <dd>Parameter mapping back to the design factors</dd>
+      </dl><dl><dt>
+
+          <code><a href="sampled_pars.html">sampled_pars()</a></code>
+
+        </dt>
+        <dd>Get model parameters from a design</dd>
+      </dl><dl><dt>
+
+          <code><a href="plot_design.html">plot_design()</a></code>
+
+        </dt>
+        <dd>Plot design</dd>
+      </dl><dl><dt>
+
+          <code><a href="plot.emc.design.html">plot(<i>&lt;emc.design&gt;</i>)</a></code>
+
+        </dt>
+        <dd>Plot method for emc.design objects</dd>
+      </dl><dl><dt>
+
+          <code><a href="summary.emc.design.html">summary(<i>&lt;emc.design&gt;</i>)</a></code>
+
+        </dt>
+        <dd>Summary method for emc.design objects</dd>
+      </dl><dl><dt>
+
+          <code><a href="get_design.html">get_design()</a></code>
+
+        </dt>
+        <dd>Get design</dd>
+      </dl></div><div class="section level2">
+      <h2 id="prior-specification">Prior Specification<a class="anchor" aria-label="anchor" href="#prior-specification"></a></h2>
+
+
+
+
+    </div><div class="section level2">
+
+
+
+
+      <dl><dt>
+
+          <code><a href="prior.html">prior()</a></code>
+
+        </dt>
+        <dd>Prior specification</dd>
+      </dl><dl><dt>
+
+          <code><a href="summary.emc.prior.html">summary(<i>&lt;emc.prior&gt;</i>)</a></code>
+
+        </dt>
+        <dd>Summary method for emc.prior objects</dd>
+      </dl><dl><dt>
+
+          <code><a href="plot.emc.prior.html">plot(<i>&lt;emc.prior&gt;</i>)</a></code>
+
+        </dt>
+        <dd>Plot a prior</dd>
+      </dl><dl><dt>
+
+          <code><a href="predict.emc.html">predict(<i>&lt;emc.prior&gt;</i>)</a></code> <code><a href="predict.emc.html">predict(<i>&lt;emc&gt;</i>)</a></code>
+
+        </dt>
+        <dd>Generate posterior/prior predictives</dd>
+      </dl><dl><dt>
+
+          <code><a href="get_prior.html">get_prior()</a></code>
+
+        </dt>
+        <dd>Get prior</dd>
+      </dl><dl><dt>
+
+          <code><a href="prior_help.html">prior_help()</a></code>
+
+        </dt>
+        <dd>Prior specification information</dd>
+      </dl><dl><dt>
+
+          <code><a href="credint.html">credint()</a></code>
+
+        </dt>
+        <dd>Posterior quantiles</dd>
+      </dl></div><div class="section level2">
+      <h2 id="estimation">Estimation<a class="anchor" aria-label="anchor" href="#estimation"></a></h2>
+
+
+
+
+    </div><div class="section level2">
+
+
+
+
+      <dl><dt>
+
+          <code><a href="init_chains.html">init_chains()</a></code>
+
+        </dt>
+        <dd>Initialize chains</dd>
       </dl><dl><dt>
 
           <code><a href="make_emc.html">make_emc()</a></code>
@@ -107,40 +207,16 @@
         <dd>Make an emc object</dd>
       </dl><dl><dt>
 
-          <code><a href="init_chains.html">init_chains()</a></code>
+          <code><a href="fit.html">fit()</a></code>
 
         </dt>
-        <dd>Initialize chains</dd>
+        <dd>Model estimation in EMC2</dd>
       </dl><dl><dt>
 
           <code><a href="run_emc.html">run_emc()</a></code>
 
         </dt>
         <dd>Custom function for more controlled model estimation</dd>
-      </dl><dl><dt>
-
-          <code><a href="mapped_par.html">mapped_par()</a></code>
-
-        </dt>
-        <dd>Parameter mapping back to the design factors</dd>
-      </dl><dl><dt>
-
-          <code><a href="sampled_p_vector.html">sampled_p_vector()</a></code>
-
-        </dt>
-        <dd>Get model parameters from a design</dd>
-      </dl><dl><dt>
-
-          <code><a href="profile_plot.html">profile_plot()</a></code>
-
-        </dt>
-        <dd>Likelihood profile plots</dd>
-      </dl><dl><dt>
-
-          <code><a href="plot_defective_density.html">plot_defective_density()</a></code>
-
-        </dt>
-        <dd>Plot defective densities for each subject and cell</dd>
       </dl></div><div class="section level2">
       <h2 id="model-checking">Model checking<a class="anchor" aria-label="anchor" href="#model-checking"></a></h2>
 
@@ -166,6 +242,12 @@
         <dd>Summary statistics for emc objects</dd>
       </dl><dl><dt>
 
+          <code><a href="credint.html">credint()</a></code>
+
+        </dt>
+        <dd>Posterior quantiles</dd>
+      </dl><dl><dt>
+
           <code><a href="ess_summary.html">ess_summary()</a></code>
 
         </dt>
@@ -181,7 +263,7 @@
           <code><a href="chain_n.html">chain_n()</a></code>
 
         </dt>
-        <dd>chain_n()</dd>
+        <dd>Get chain iterations</dd>
       </dl><dl><dt>
 
           <code><a href="plot.emc.html">plot(<i>&lt;emc&gt;</i>)</a></code>
@@ -195,7 +277,7 @@
         </dt>
         <dd>Plot within-chain correlations</dd>
       </dl></div><div class="section level2">
-      <h2 id="posterior-inference">Posterior inference<a class="anchor" aria-label="anchor" href="#posterior-inference"></a></h2>
+      <h2 id="posterior-inference">Posterior Inference<a class="anchor" aria-label="anchor" href="#posterior-inference"></a></h2>
 
 
 
@@ -207,7 +289,7 @@
 
       <dl><dt>
 
-          <code><a href="posterior_summary.html">posterior_summary()</a></code>
+          <code><a href="credint.html">credint()</a></code>
 
         </dt>
         <dd>Posterior quantiles</dd>
@@ -247,8 +329,14 @@
 
         </dt>
         <dd>Shorten an emc object</dd>
+      </dl><dl><dt>
+
+          <code><a href="auto_thin.html">auto_thin()</a></code>
+
+        </dt>
+        <dd>Automatically thin an emc object</dd>
       </dl></div><div class="section level2">
-      <h2 id="posterior-predictives-and-recovery">Posterior predictives and recovery<a class="anchor" aria-label="anchor" href="#posterior-predictives-and-recovery"></a></h2>
+      <h2 id="data-generation-and-recovery">Data Generation and Recovery<a class="anchor" aria-label="anchor" href="#data-generation-and-recovery"></a></h2>
 
 
 
@@ -260,16 +348,16 @@
 
       <dl><dt>
 
-          <code><a href="predict.emc.html">predict(<i>&lt;emc&gt;</i>)</a></code>
+          <code><a href="predict.emc.html">predict(<i>&lt;emc.prior&gt;</i>)</a></code> <code><a href="predict.emc.html">predict(<i>&lt;emc&gt;</i>)</a></code>
 
         </dt>
-        <dd>Generate posterior predictives</dd>
+        <dd>Generate posterior/prior predictives</dd>
       </dl><dl><dt>
 
-          <code><a href="plot_fit.html">plot_fit()</a></code>
+          <code><a href="recovery.html">recovery()</a></code>
 
         </dt>
-        <dd>Posterior predictive checks</dd>
+        <dd>Recovery plots</dd>
       </dl><dl><dt>
 
           <code><a href="make_data.html">make_data()</a></code>
@@ -284,18 +372,47 @@
         <dd>Make random effects</dd>
       </dl><dl><dt>
 
-          <code><a href="recovery.html">recovery()</a></code>
-
-        </dt>
-        <dd>Recovery plots</dd>
-      </dl><dl><dt>
-
           <code><a href="get_data.html">get_data()</a></code>
 
         </dt>
         <dd>Get data</dd>
+      </dl><dl><dt>
+
+          <code><a href="profile_plot.html">profile_plot()</a></code>
+
+        </dt>
+        <dd>Likelihood profile plots</dd>
       </dl></div><div class="section level2">
-      <h2 id="model-comparison">Model comparison<a class="anchor" aria-label="anchor" href="#model-comparison"></a></h2>
+      <h2 id="model-fit">Model Fit<a class="anchor" aria-label="anchor" href="#model-fit"></a></h2>
+
+
+
+
+    </div><div class="section level2">
+
+
+
+
+      <dl><dt>
+
+          <code><a href="plot_density.html">plot_density()</a></code>
+
+        </dt>
+        <dd>Plot defective densities</dd>
+      </dl><dl><dt>
+
+          <code><a href="plot_cdf.html">plot_cdf()</a></code>
+
+        </dt>
+        <dd>Plot defective cumulative distribution functions</dd>
+      </dl><dl><dt>
+
+          <code><a href="plot_stat.html">plot_stat()</a></code>
+
+        </dt>
+        <dd>Plot statistics on data</dd>
+      </dl></div><div class="section level2">
+      <h2 id="model-comparison">Model Comparison<a class="anchor" aria-label="anchor" href="#model-comparison"></a></h2>
 
 
 
@@ -341,29 +458,6 @@
 
         </dt>
         <dd>Within-model hypothesis testing</dd>
-      </dl></div><div class="section level2">
-      <h2 id="priors">Priors<a class="anchor" aria-label="anchor" href="#priors"></a></h2>
-
-
-
-
-    </div><div class="section level2">
-
-
-
-
-      <dl><dt>
-
-          <code><a href="plot_prior.html">plot_prior()</a></code>
-
-        </dt>
-        <dd>Title</dd>
-      </dl><dl><dt>
-
-          <code><a href="prior.html">prior()</a></code>
-
-        </dt>
-        <dd>Prior specification</dd>
       </dl></div><div class="section level2">
       <h2 id="contrasts">Contrasts<a class="anchor" aria-label="anchor" href="#contrasts"></a></h2>
 

@@ -3,7 +3,7 @@
 \name{fit.emc}
 \alias{fit.emc}
 \alias{fit}
-\title{Model estimation in EMC2}
+\title{Model Estimation in EMC2}
 \usage{
 \method{fit}{emc}(
   emc,
@@ -11,7 +11,7 @@
   iter = 1000,
   stop_criteria = NULL,
   report_time = TRUE,
-  p_accept = 0.8,
+  search_width = 1,
   step_size = 100,
   verbose = TRUE,
   verboseProgress = FALSE,
@@ -21,6 +21,7 @@
   cores_per_chain = 1,
   cores_for_chains = length(emc),
   max_tries = 20,
+  thin_auto = FALSE,
   n_blocks = 1,
   ...
 )
@@ -41,8 +42,9 @@ of parameters these should hold. See the details and examples section.}
 
 \item{report_time}{Boolean. If \code{TRUE}, the time taken to run the MCMC chains till completion of the \code{stop_criteria} will be printed.}
 
-\item{p_accept}{A double. The target acceptance probability of the MCMC process.
-This fine-tunes the width of the search space to obtain the desired acceptance probability. Defaults to .8}
+\item{search_width}{A double. Tunes target acceptance probability of the MCMC process.
+This fine-tunes the width of the search space to obtain the desired acceptance probability.
+1 is the default width, increases lead to broader search.}
 
 \item{step_size}{An integer. After each step, the stopping requirements as specified
 by \code{stop_criteria} are checked and proposal distributions are updated. Defaults to 100.}
@@ -70,6 +72,8 @@ Defaults to the number of chains. The total number of cores used is equal to \co
 \item{max_tries}{An integer. How many times should it try to meet the finish
 conditions as specified by \code{stop_criteria}? Defaults to 20. \code{max_tries} is
 ignored if the required number of iterations has not been reached yet.}
+
+\item{thin_auto}{A boolean. If \code{TRUE} will automatically thin the MCMC samples, closely matched to the ESS.}
 
 \item{n_blocks}{An integer. Number of blocks. Will block the parameter chains such that they are
 updated in blocks. This can be helpful in extremely tough models with a large number of parameters.}
@@ -118,14 +122,14 @@ design_DDMaE <- design(data = forstmann,model=DDM,
                            formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
                            constants=c(s=log(1)))
 # Then make the emc object, we've omitted a prior here for brevity so default priors will be used.
-emc_forstmann <- make_emc(forstmann, design)
+emc_forstmann <- make_emc(forstmann, design_DDMaE)
 
 # With the emc object we can start sampling by simply calling fit
 emc_forstmann <- fit(emc_forstmann, fileName = "intermediate_save_location.RData")
 
 # For particularly hard models it pays off to increase the ``particle_factor``
-# and, although to a lesser extent, lower ``p_accept``.
-emc_forstmann <- fit(emc_forstmann, particle_factor = 100, p_accept = .6)
+# and, although to a lesser extent, increase ``search_width``.
+emc_forstmann <- fit(emc_forstmann, particle_factor = 100, search_width = 1.5)
 
 # Example of how to use the stop_criteria:
 emc_forstmann <- fit(emc_forstmann, stop_criteria = list(mean_gd = 1.1, max_gd = 1.5,

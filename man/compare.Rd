@@ -2,7 +2,7 @@
 % Please edit documentation in R/statistics.R
 \name{compare}
 \alias{compare}
-\title{Information criteria and marginal likelihoods}
+\title{Information Criteria and Marginal Likelihoods}
 \usage{
 compare(
   sList,
@@ -52,26 +52,27 @@ mean, DIC, BPIC, Marginal Deviance (if \code{BayesFactor=TRUE}) and associated w
 Returns the BPIC/DIC or marginal deviance (-2*marginal likelihood) for a list of samples objects.
 }
 \examples{
-\dontrun{
-# Define a list of two (or more different models)
-# Here the full model is an emc object with the hypothesized effect
-# The null model is an emc object without the hypothesized effect
-design_full <- design(data = forstmann,model=DDM,
-                           formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
-                           constants=c(s=log(1)))
-# Now without a ~ E
-design_null <- design(data = forstmann,model=DDM,
-                           formula =list(v~0+S,a~1, t0~1, s~1, Z~1, sv~1, SZ~1),
-                           constants=c(s=log(1)))
-
-full_model <- make_emc(forstmann, design_full)
-full_model <- fit(full_model)
-
-null_model <- make_emc(forstmann, design_null)
-null_model <- fit(null_model)
-sList <- list(full_model, null_model)
-# By default emc uses 4 cores to parallelize marginal likelihood estimation across proposals
-# So cores_per_prop = 3 results in 12 cores used.
-compare(sList, cores_per_prop = 3)
+\donttest{
+compare(list(samples_LNR), cores_for_props = 1)
+# Typically we would define a list of two (or more) different models:
+# # Here the full model is an emc object with the hypothesized effect
+# # The null model is an emc object without the hypothesized effect
+# design_full <- design(data = forstmann,model=DDM,
+#                            formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
+#                            constants=c(s=log(1)))
+# # Now without a ~ E
+# design_null <- design(data = forstmann,model=DDM,
+#                            formula =list(v~0+S,a~1, t0~1, s~1, Z~1, sv~1, SZ~1),
+#                            constants=c(s=log(1)))
+#
+# full_model <- make_emc(forstmann, design_full)
+# full_model <- fit(full_model)
+#
+# null_model <- make_emc(forstmann, design_null)
+# null_model <- fit(null_model)
+# sList <- list(full_model, null_model)
+# # By default emc uses 4 cores to parallelize marginal likelihood estimation across proposals
+# # So cores_per_prop = 3 results in 12 cores used.
+# compare(sList, cores_per_prop = 3)
 }
 }

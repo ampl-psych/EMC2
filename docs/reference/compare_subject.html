@@ -97,28 +97,19 @@ mean deviance, deviance of mean, DIC, BPIC and associated weights.</p>
 
     <div class="section level2">
     <h2 id="ref-examples">Examples<a class="anchor" aria-label="anchor" href="#ref-examples"></a></h2>
-    <div class="sourceCode"><pre class="sourceCode r"><code><span class="r-in"><span><span class="kw">if</span> <span class="op">(</span><span class="cn">FALSE</span><span class="op">)</span> <span class="op">{</span> <span class="co"># \dontrun{</span></span></span>
-<span class="r-in"><span><span class="co"># Define a list of two (or more different models)</span></span></span>
-<span class="r-in"><span><span class="co"># Here the full model is an emc object with the hypothesized effect</span></span></span>
-<span class="r-in"><span><span class="co"># The null model is an emc object without the hypothesized effect</span></span></span>
-<span class="r-in"><span><span class="va">design_full</span> <span class="op">&lt;-</span> <span class="fu"><a href="design.html">design</a></span><span class="op">(</span>data <span class="op">=</span> <span class="va">forstmann</span>,model<span class="op">=</span><span class="va">DDM</span>,</span></span>
-<span class="r-in"><span>                           formula <span class="op">=</span><span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="va">v</span><span class="op">~</span><span class="fl">0</span><span class="op">+</span><span class="va">S</span>,<span class="va">a</span><span class="op">~</span><span class="va">E</span>, <span class="va">t0</span><span class="op">~</span><span class="fl">1</span>, <span class="va">s</span><span class="op">~</span><span class="fl">1</span>, <span class="va">Z</span><span class="op">~</span><span class="fl">1</span>, <span class="va">sv</span><span class="op">~</span><span class="fl">1</span>, <span class="va">SZ</span><span class="op">~</span><span class="fl">1</span><span class="op">)</span>,</span></span>
-<span class="r-in"><span>                           constants<span class="op">=</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>s<span class="op">=</span><span class="fu"><a href="https://rdrr.io/r/base/Log.html" class="external-link">log</a></span><span class="op">(</span><span class="fl">1</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span></span>
-<span class="r-in"><span><span class="co"># Now without a ~ E</span></span></span>
-<span class="r-in"><span><span class="va">design_null</span> <span class="op">&lt;-</span> <span class="fu"><a href="design.html">design</a></span><span class="op">(</span>data <span class="op">=</span> <span class="va">forstmann</span>,model<span class="op">=</span><span class="va">DDM</span>,</span></span>
-<span class="r-in"><span>                           formula <span class="op">=</span><span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="va">v</span><span class="op">~</span><span class="fl">0</span><span class="op">+</span><span class="va">S</span>,<span class="va">a</span><span class="op">~</span><span class="fl">1</span>, <span class="va">t0</span><span class="op">~</span><span class="fl">1</span>, <span class="va">s</span><span class="op">~</span><span class="fl">1</span>, <span class="va">Z</span><span class="op">~</span><span class="fl">1</span>, <span class="va">sv</span><span class="op">~</span><span class="fl">1</span>, <span class="va">SZ</span><span class="op">~</span><span class="fl">1</span><span class="op">)</span>,</span></span>
-<span class="r-in"><span>                           constants<span class="op">=</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>s<span class="op">=</span><span class="fu"><a href="https://rdrr.io/r/base/Log.html" class="external-link">log</a></span><span class="op">(</span><span class="fl">1</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span></span>
-<span class="r-in"><span></span></span>
-<span class="r-in"><span><span class="va">full_model</span> <span class="op">&lt;-</span> <span class="fu"><a href="make_emc.html">make_emc</a></span><span class="op">(</span><span class="va">forstmann</span>, <span class="va">design_full</span><span class="op">)</span></span></span>
-<span class="r-in"><span><span class="va">full_model</span> <span class="op">&lt;-</span> <span class="fu"><a href="fit.html">fit</a></span><span class="op">(</span><span class="va">full_model</span>, cores_for_chains <span class="op">=</span> <span class="fl">1</span><span class="op">)</span></span></span>
-<span class="r-in"><span></span></span>
-<span class="r-in"><span><span class="va">null_model</span> <span class="op">&lt;-</span> <span class="fu"><a href="make_emc.html">make_emc</a></span><span class="op">(</span><span class="va">forstmann</span>, <span class="va">design_null</span>, cores_for_chains <span class="op">=</span> <span class="fl">1</span><span class="op">)</span></span></span>
-<span class="r-in"><span><span class="va">null_model</span> <span class="op">&lt;-</span> <span class="fu"><a href="fit.html">fit</a></span><span class="op">(</span><span class="va">null_model</span><span class="op">)</span></span></span>
-<span class="r-in"><span><span class="va">sList</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="va">full_model</span>, <span class="va">null_model</span><span class="op">)</span></span></span>
-<span class="r-in"><span><span class="fu">compare_subject</span><span class="op">(</span><span class="va">sList</span><span class="op">)</span></span></span>
-<span class="r-in"><span><span class="co"># prints a set of weights for each model for the different participants</span></span></span>
-<span class="r-in"><span><span class="co"># And returns the DIC and BPIC for each participant for each model.</span></span></span>
-<span class="r-in"><span><span class="op">}</span> <span class="co"># }</span></span></span>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span class="r-in"><span><span class="co"># For a broader illustration see `compare`.</span></span></span>
+<span class="r-in"><span><span class="co"># Here we just take two times the same model, but normally one would compare</span></span></span>
+<span class="r-in"><span><span class="co"># different models</span></span></span>
+<span class="r-in"><span><span class="fu">compare_subject</span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>m0 <span class="op">=</span> <span class="va">samples_LNR</span>, m1 <span class="op">=</span> <span class="va">samples_LNR</span><span class="op">)</span><span class="op">)</span></span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>      wDIC_m0 wDIC_m1 wBPIC_m0 wBPIC_m1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> as1t     0.5     0.5      0.5      0.5</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> bd6t     0.5     0.5      0.5      0.5</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> bl1t     0.5     0.5      0.5      0.5</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> Winners</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>      m0</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> DIC   3</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> BPIC  3</span>
 </code></pre></div>
     </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>

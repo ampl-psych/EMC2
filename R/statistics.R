@@ -1,4 +1,4 @@
-#' Information criteria and marginal likelihoods
+#' Information Criteria and Marginal Likelihoods
 #'
 #' Returns the BPIC/DIC or marginal deviance (-2*marginal likelihood) for a list of samples objects.
 #'
@@ -19,27 +19,28 @@
 #'
 #' @return Matrix of effective number of parameters, mean deviance, deviance of
 #' mean, DIC, BPIC, Marginal Deviance (if `BayesFactor=TRUE`) and associated weights.
-#' @examples \dontrun{
-#' # Define a list of two (or more different models)
-#' # Here the full model is an emc object with the hypothesized effect
-#' # The null model is an emc object without the hypothesized effect
-#' design_full <- design(data = forstmann,model=DDM,
-#'                            formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
-#'                            constants=c(s=log(1)))
-#' # Now without a ~ E
-#' design_null <- design(data = forstmann,model=DDM,
-#'                            formula =list(v~0+S,a~1, t0~1, s~1, Z~1, sv~1, SZ~1),
-#'                            constants=c(s=log(1)))
-#'
-#' full_model <- make_emc(forstmann, design_full)
-#' full_model <- fit(full_model)
-#'
-#' null_model <- make_emc(forstmann, design_null)
-#' null_model <- fit(null_model)
-#' sList <- list(full_model, null_model)
-#' # By default emc uses 4 cores to parallelize marginal likelihood estimation across proposals
-#' # So cores_per_prop = 3 results in 12 cores used.
-#' compare(sList, cores_per_prop = 3)
+#' @examples \donttest{
+#' compare(list(samples_LNR), cores_for_props = 1)
+#' # Typically we would define a list of two (or more) different models:
+#' # # Here the full model is an emc object with the hypothesized effect
+#' # # The null model is an emc object without the hypothesized effect
+#' # design_full <- design(data = forstmann,model=DDM,
+#' #                            formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
+#' #                            constants=c(s=log(1)))
+#' # # Now without a ~ E
+#' # design_null <- design(data = forstmann,model=DDM,
+#' #                            formula =list(v~0+S,a~1, t0~1, s~1, Z~1, sv~1, SZ~1),
+#' #                            constants=c(s=log(1)))
+#' #
+#' # full_model <- make_emc(forstmann, design_full)
+#' # full_model <- fit(full_model)
+#' #
+#' # null_model <- make_emc(forstmann, design_null)
+#' # null_model <- fit(null_model)
+#' # sList <- list(full_model, null_model)
+#' # # By default emc uses 4 cores to parallelize marginal likelihood estimation across proposals
+#' # # So cores_per_prop = 3 results in 12 cores used.
+#' # compare(sList, cores_per_prop = 3)
 #' }
 #' @export
 
@@ -261,15 +262,10 @@ IC <- function(emc,stage="sample",filter=0,use_best_fit=TRUE,
   alpha <- get_pars(emc,selection="alpha",stage=stage,filter=filter, by_subject = TRUE, merge_chains = TRUE)
   mean_pars <- lapply(alpha,function(x){apply(do.call(rbind,x),2,mean)})
   # log-likelihood for each subject using their mean parameter vector
-  ll_func <- attr(emc,"design_list")[[1]]$model()$log_likelihood
   data <- emc[[1]]$data
   mean_pars_lls <- setNames(numeric(length(mean_pars)),names(mean_pars))
   for (sub in names(mean_pars)){
-    if(!is.data.frame(emc[[1]]$data[[1]])){
-      mean_pars_lls[sub] <- log_likelihood_joint(t(mean_pars[[sub]]),dadms = data[[sub]])
-    } else{
-      mean_pars_lls[sub] <- ll_func(mean_pars[[sub]],dadm = data[[sub]])
-    }
+    mean_pars_lls[sub] <- calc_ll_manager(t(mean_pars[[sub]]),dadm = data[[sub]], emc[[1]]$model)
   }
   Dmeans <- -2*mean_pars_lls
 
@@ -278,7 +274,7 @@ IC <- function(emc,stage="sample",filter=0,use_best_fit=TRUE,
     mean_lls <- mean_lls[subject[1]]
     minDs <- minDs[subject[1]]
   } else{
-    group_stats <- attr(emc[[1]], "variant_funs")$group_IC(emc, stage=stage,filter=filter)
+    group_stats <- group_IC(emc, stage=stage,filter=filter, type = emc[[1]]$type)
     if(group_only){
       mean_lls <- group_stats$mean_ll
       minDs <- group_stats$minD
@@ -323,21 +319,18 @@ IC <- function(emc,stage="sample",filter=0,use_best_fit=TRUE,
 #' @param MLL2 Numeric. Marginal likelihood of model 2. Obtained with `run_bridge_sampling()`
 #'
 #' @return The BayesFactor for model 1 over model 2
-#' @examples \dontrun{
-#' # First get the marginal likelihood for two_models
-#' # Here the full model is an emc object with the hypothesized effect
-#' # The null model is an emc object without the hypothesized effect
-#' MLL_full <- run_bridge_sampling(full_model, cores_per_prop = 3)
-#' MLL_null <- run_bridge_sampling(null_model, cores_per_prop = 3)
-#' # Now we can calculate their Bayes factor
-#' get_BayesFactor(MLL_full, MLL_null)
+#' @examples \donttest{
+#' # Normally one would compare two different models
+#' # Here we use two times the same model:
+#' M1 <- M0 <- run_bridge_sampling(samples_LNR, both_splits = FALSE, cores_for_props = 1)
+#' get_BayesFactor(M1, M0)
 #' }
 #' @export
 get_BayesFactor <- function(MLL1, MLL2){
   exp(MLL1 - MLL2)
 }
 
-#' Information criteria for each participant
+#' Information Criteria For Each Participant
 #'
 #' Returns the BPIC/DIC based model weights for each participant in a list of samples objects
 #'
@@ -352,28 +345,11 @@ get_BayesFactor <- function(MLL1, MLL2){
 #'
 #' @return List of matrices for each subject of effective number of parameters,
 #' mean deviance, deviance of mean, DIC, BPIC and associated weights.
-#' @examples \dontrun{
-#' # Define a list of two (or more different models)
-#' # Here the full model is an emc object with the hypothesized effect
-#' # The null model is an emc object without the hypothesized effect
-#' design_full <- design(data = forstmann,model=DDM,
-#'                            formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
-#'                            constants=c(s=log(1)))
-#' # Now without a ~ E
-#' design_null <- design(data = forstmann,model=DDM,
-#'                            formula =list(v~0+S,a~1, t0~1, s~1, Z~1, sv~1, SZ~1),
-#'                            constants=c(s=log(1)))
-#'
-#' full_model <- make_emc(forstmann, design_full)
-#' full_model <- fit(full_model, cores_for_chains = 1)
-#'
-#' null_model <- make_emc(forstmann, design_null, cores_for_chains = 1)
-#' null_model <- fit(null_model)
-#' sList <- list(full_model, null_model)
-#' compare_subject(sList)
-#' # prints a set of weights for each model for the different participants
-#' # And returns the DIC and BPIC for each participant for each model.
-#' }
+#' @examples
+#' # For a broader illustration see `compare`.
+#' # Here we just take two times the same model, but normally one would compare
+#' # different models
+#' compare_subject(list(m0 = samples_LNR, m1 = samples_LNR))
 #' @export
 compare_subject <- function(sList,stage="sample",filter=0,use_best_fit=TRUE,
                             print_summary=TRUE,digits=3) {
@@ -447,6 +423,8 @@ compare_MLL <- function(mll,nboot=1e5,digits=2,print_summary=TRUE)
 
 
 
+
+
 condMVN <- function (mean, sigma, dependent.ind, given.ind, X.given, check.sigma = TRUE)
 {
   if (missing(dependent.ind))
@@ -463,8 +441,9 @@ condMVN <- function (mean, sigma, dependent.ind, given.ind, X.given, check.sigma
     if (!isSymmetric(sigma))
       stop("sigma is not a symmetric matrix")
     eigenvalues <- eigen(sigma, only.values = TRUE)$values
-    if (any(eigenvalues < 1e-08))
-      stop("sigma is not positive-definite")
+    if (any(eigenvalues < 1e-08)){
+      sigma <- sigma + abs(diag(rnorm(nrow(sigma), sd = 1e-3)))
+    }
   }
   B <- sigma[dependent.ind, dependent.ind]
   C <- sigma[dependent.ind, given.ind, drop = FALSE]
@@ -510,7 +489,7 @@ make_nice_summary <- function(object, stat = "max", stat_only = FALSE, stat_name
 get_summary_stat <- function(emc, selection = "mu", fun, stat = NULL,
                              stat_only = FALSE, stat_name = NULL, digits = 3, ...){
   dots <- list(...)
-  if(length(dots$subject) == 1 || emc[[1]]$n_subjects == 1) dots$by_subject <- TRUE
+  if(is.null(emc[[1]]$n_subjects) || length(dots$subject) == 1 || emc[[1]]$n_subjects == 1) dots$by_subject <- TRUE
   MCMC_samples <- do.call(get_pars, c(list(emc = emc, selection = selection), fix_dots(dots, get_pars)))
   out <- vector("list", length = length(MCMC_samples))
   for(i in 1:length(MCMC_samples)){

@@ -1,6 +1,6 @@
 
 add_info_diag <- function(sampler, prior = NULL, ...){
-  sampler$prior <- get_prior_diag(prior, sum(!(sampler$nuisance | sampler$grouped)), sample = F)
+  sampler$prior <- get_prior_diag(prior, sum(!sampler$nuisance), sample = F)
   return(sampler)
 }
 
@@ -10,7 +10,7 @@ get_prior_diag <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, 
     prior <- list()
   }
   if(!is.null(design)){
-    n_pars <- length(sampled_p_vector(design, doMap = F))
+    n_pars <- length(sampled_pars(design, doMap = F))
   }
   if (!is.null(prior$theta_mu_mean)) {
     n_pars <- length(prior$theta_mu_mean)
@@ -32,7 +32,7 @@ get_prior_diag <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, 
   attr(prior, "type") <- "diagonal"
   out <- prior
   if(sample){
-    par_names <- names(sampled_p_vector(design, doMap = F))
+    par_names <- names(sampled_pars(design, doMap = F))
     samples <- list()
     if(selection %in% c("mu", "alpha")){
       mu <- t(mvtnorm::rmvnorm(N, mean = prior$theta_mu_mean,
@@ -61,7 +61,7 @@ get_prior_diag <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, 
 }
 
 get_startpoints_diag <- function(pmwgs, start_mu, start_var){
-  n_pars <- sum(!(pmwgs$nuisance | pmwgs$grouped))
+  n_pars <- sum(!pmwgs$nuisance)
   if (is.null(start_mu)) start_mu <- rnorm(n_pars, mean = pmwgs$prior$theta_mu_mean, sd = sqrt(diag(pmwgs$prior$theta_mu_var)))
   # If no starting point for group var just sample some
   if (is.null(start_var)) start_var <- diag(1/rgamma(n_pars, 10, 5), n_pars) #Bit stupid maybe as startpoint
@@ -95,13 +95,13 @@ gibbs_step_diag <- function(sampler, alpha){
   hyper <- attributes(sampler)
   prior <- sampler$prior
   last$tvinv <- diag(last$tvinv)
-  n_pars <- sum(!(sampler$nuisance | sampler$grouped))
+  n_pars <- sum(!sampler$nuisance)
   alpha <- as.matrix(alpha)
   #Mu
   var_mu = 1.0 / (sampler$n_subjects * last$tvinv + diag(prior$theta_mu_invar))
   mean_mu = var_mu * ((apply(alpha, 1, sum) * last$tvinv + prior$theta_mu_mean * diag(prior$theta_mu_invar)))
   tmu <- rnorm(n_pars, mean_mu, sd = sqrt(var_mu))
-  names(tmu) <- sampler$par_names[!(sampler$nuisance | sampler$grouped)]
+  names(tmu) <- sampler$par_names[!sampler$nuisance]
   tvinv = rgamma(n=n_pars, shape=prior$v/2 + sampler$n_subjects/2, rate=prior$v/last$a_half +
                    rowSums( (alpha-tmu)^2 ) / 2)
   tvar = 1/tvinv
