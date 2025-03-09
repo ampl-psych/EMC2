@@ -92,7 +92,7 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
   }
 
   if(any(names(factors) %in% c("trial", "R", "rt", "lR", "lM"))){
-    stop("Please do not use any of the following names within Ffactors: trial, R, rt, lR, lM")
+    stop("Please do not use any of the following names within factors argument: trial, R, rt, lR, lM")
   }
 
   if(any(grepl("_", names(factors)))){
