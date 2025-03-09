@@ -192,6 +192,7 @@ make_design_fmri <- function(data,
   })
   par_names <- setNames(numeric(length(par_names)), par_names)
   attr(design, "p_vector") <- par_names
+  class(design) <- 'emc.design'
   return(design = design)
 }
 
