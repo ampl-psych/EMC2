@@ -3,7 +3,7 @@ pkgdown: 2.1.1
 pkgdown_sha: ~
 articles:
   Simulation-based-Calibration: Simulation-based-Calibration.html
-last_built: 2025-03-10T03:57Z
+last_built: 2025-03-10T04:03Z
 urls:
   reference: https://ampl-psych.github.io/EMC2/reference
   article: https://ampl-psych.github.io/EMC2/articles
