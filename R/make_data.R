@@ -233,6 +233,11 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
   pars <- do_transform(pars, model()$transform)
   pars <- model()$Ttransform(pars, data)
   pars <- add_bound(pars, model()$bound)
+  pars_ok <- attr(pars, 'ok')
+  if(any(!pars_ok)){
+    warning("Parameter values fall out of model bounds, see <model_name>$bounds()")
+    return(FALSE)
+  }
   if ( any(dimnames(pars)[[2]]=="pContaminant") && any(pars[,"pContaminant"]>0) )
     pc <- pars[data$lR==levels(data$lR)[1],"pContaminant"] else pc <- NULL
   if (mapped_p) return(cbind(data[,!(names(data) %in% c("R","rt"))],pars))
@@ -284,8 +289,6 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
   attr(data,"p_vector") <- parameters;
   data
 }
-
-
 
 add_Ffunctions <- function(data,design)
   # Adds columns created by Ffunctions (if not already there)
