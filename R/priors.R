@@ -547,9 +547,19 @@ predict.emc.prior <- function(object,data = NULL,n_post=50,n_cores=1,
     n_subjects <- length(subjects)
     dots$merge_chains <- TRUE; dots$by_subject <- TRUE
     samps <- do.call(parameters, c(list(object, N = n_subjects*n_post), dots))
-    simDat <- mclapply(1:n_post,function(i){
+    simDat <- suppressWarnings(mclapply(1:n_post,function(i){
       do.call(make_data, c(list(samps[(1+((i-1)*n_subjects)):(i*n_subjects),],design = design[[k]], data = data[[k]], n_trials = n_trials), fix_dots(dots, make_data)))
-    },mc.cores=n_cores)
+    },mc.cores=n_cores))
+    # These were returned as FALSE since their parameter values fell outside of model bounds
+    in_bounds <- !sapply(simDat, is.logical)
+    if(all(!in_bounds)) stop("All prior samples fall outside of model bounds, choose a more informative prior")
+    if(sum(!in_bounds) > (length(in_bounds)/2)) warning("Most prior samples fall outside of model bounds, choose a more informative prior")
+    if(any(!in_bounds)){
+      good_post <- sample(1:n_post, sum(!in_bounds))
+      simDat[!in_bounds] <- suppressWarnings(mclapply(good_post,function(i){
+        do.call(make_data, c(list(samps[(1+((i-1)*n_subjects)):(i*n_subjects),],design = design[[k]], data = data[[k]], n_trials = n_trials), fix_dots(dots, make_data)))
+      },mc.cores=n_cores))
+    }
     out <- cbind(postn=rep(1:n_post,times=unlist(lapply(simDat,function(x)dim(x)[1]))),do.call(rbind,simDat))
     attr(out,"pars") <- samps
     post_out[[k]] <- out

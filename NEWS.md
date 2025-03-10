@@ -1,3 +1,18 @@
+# EMC2 3.1.0
+
+## New features
+
+* model_averaging function, which allows you to compare evidence for an effect across a set of models
+
+## Bug fixes
+
+* Small hotfix in which creating proposals and the start of burn would 
+sometimes fail for large number of subjects
+
+* Patched up old error in which model bounds weren't considered in data generation
+
+* Fixed error in which compare_subject would return IC for whole dataset for every subject. 
+
 # EMC2 3.0.0
 
 ## New features
