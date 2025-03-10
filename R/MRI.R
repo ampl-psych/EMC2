@@ -69,18 +69,21 @@ apply_contrasts <- function(events, contrast = NULL, cell_coding = FALSE, remove
 # Build the full design matrices for all subjects and runs.
 build_fmri_design_matrices <- function(timeseries, events, factors = NULL, contrasts = NULL,
                                        covariates = NULL,
-                                       hrf_model = 'glover + derivative', cell_coding = NULL) {
+                                       hrf_model = 'glover + derivative', cell_coding = NULL,
+                                       high_pass = TRUE, nuisance = NULL) {
   events$duration <- 0.01  # default duration
   if(!is.data.frame(events)) events <- do.call(rbind, events)
   subjects <- unique(timeseries$subjects)
+  # Holders for filtered timeseries and constructed design matrix
   all_dms <- list()
-
+  all_new_ts <- list()
   for(subject in subjects){
     ev_sub <- events[events$subjects == subject, ]
     ts_sub <- timeseries[timeseries$subjects == subject, ]
     runs <- unique(ts_sub$run)
+    # Define subject-wise new design matrix and timeseries
     dms_sub <- vector("list", length = length(runs))
-
+    new_ts_sub <- vector("list", length = length(runs))
     for(run in runs){
       ev_run <- ev_sub[ev_sub$run == run, ]
       ts_run <- ts_sub[ts_sub$run == run, ]
@@ -100,39 +103,99 @@ build_fmri_design_matrices <- function(timeseries, events, factors = NULL, contr
         ev_run$covariate[idx] <- cov
         tmp <- ev_run[idx, ]
         ev_tmp <- rbind(ev_tmp, create_covariates(tmp,
-                        do_print = (run == runs[1]) & (subject == subjects[1])))
+                                                  do_print = (run == runs[1]) & (subject == subjects[1])))
       }
 
       ev_tmp <- ev_tmp[order(ev_tmp$onset), ]
-      dms_sub[[as.character(run)]] <- construct_design_matrix(ts_run$time,
-                                                              events = ev_tmp,
-                                                              hrf_model = hrf_model,
-                                                              time_length = 32, # total hrf duration
-                                                              min_onset = -24, # Grid computation start time for oversampling
-                                                              oversampling = 50, # How many timepoints per tr
-                                                              onset = 0, # accounts for shifts in HRF
-                                                              undershoot = 12, # When does the negative time point occur
-                                                              delay = 6, # Time to peak of initial bump
-                                                              dispersion = .9, # Width of positive gamma
-                                                              u_dispersion = .9, # Width of negative gamma
-                                                              ratio = .35, # Relative size of undershoot compared to overshoot
-                                                              add_intercept = FALSE)
+      dm <- construct_design_matrix(ts_run$time,
+                                    events = ev_tmp,
+                                    hrf_model = hrf_model,
+                                    time_length = 32, # total hrf duration
+                                    min_onset = -24, # Grid computation start time for oversampling
+                                    oversampling = 50, # How many timepoints per tr
+                                    onset = 0, # accounts for shifts in HRF
+                                    undershoot = 12, # When does the negative time point occur
+                                    delay = 6, # Time to peak of initial bump
+                                    dispersion = .9, # Width of positive gamma
+                                    u_dispersion = .9, # Width of negative gamma
+                                    ratio = .35, # Relative size of undershoot compared to overshoot
+                                    add_intercept = FALSE)
+      filtered <- regress_out(dm, ts_run, nuisance)
+      dms_sub[[as.character(run)]] <- filtered$design_matrix
+      new_ts_sub[[as.character(run)]] <- filtered$timeseries
     }
-
-    dm_sub <- do.call(rbind, dms_sub)
-    dm_sub$subjects <- subject
-    all_dms[[as.character(subject)]] <- dm_sub
+    new_ts_sub <- do.call(rbind, new_ts_sub)
+    dms_sub <- do.call(rbind, dms_sub)
+    dms_sub$subjects <- subject
+    all_new_ts[[as.character(subject)]] <- new_ts_sub
+    all_dms[[as.character(subject)]] <- dms_sub
   }
 
-  return(all_dms)
+  return(list(timeseries = do.call(rbind, all_new_ts), design_matrix = all_dms))
 }
 
+regress_out <- function(design_matrix, timeseries, high_pass = TRUE, nuisance = NULL){
+  return(list(timeseries = timeseries, design_matrix = as.data.frame(design_matrix)))
+  # Example settings:
+  TR <- timeseries$time[2] - timeseries$time[1]
+  cutoff <- 128           # High-pass filter cutoff period (in seconds)
+  n <- nrow(timeseries)          # Number of time points
+  T_total <- n * TR       # Total scan time
+
+  # Determine the number of DCT basis functions
+  # This follows a common practice: number of basis functions = floor(2 * T_total / cutoff) + 1.
+  # This count includes the constant term (k = 0).
+  n_dct <- floor(2 * T_total / cutoff) + 1
+
+  # Create a time vector (in seconds)
+  t <- seq(0, n - 1) * TR
+
+  # Generate DCT basis functions:
+  # We use a cosine formulation similar to the DCT-II.
+  # Here, for k=0 we get a constant term.
+  dct_basis <- sapply(0:(n_dct - 1), function(k) {
+    cos( (pi * k * (2 * t + TR)) / (2 * T_total) )
+  })
+  colnames(dct_basis) <- paste0("dct", 0:(n_dct - 1))
+  #
+  #   # Optional: Visualize the first few DCT regressors
+  #   matplot(t, dct_basis[, 1:min(4, n_dct)], type = "l",
+  #           xlab = "Time (s)", ylab = "Basis amplitude",
+  #           main = "First few DCT basis functions")
+
+  # Regress out the DCT regressors from the time series.
+  # We include all DCT columns (including the constant) so that the low-frequency drifts are removed.
+  fit_timeseries <- lm(timeseries[,!colnames(timeseries) %in% c('subjects', 'run', 'time')] ~ dct_basis - 1)  # '-1' removes the default intercept since the constant is provided
+  timeseries[,!colnames(timeseries) %in% c('subjects', 'run', 'time')] <- residuals(fit_timeseries)
+
+  # # Plot original and filtered time series for comparison
+  # plot(t, y, type = "l", col = "gray", lwd = 2,
+  #      xlab = "Time (s)", ylab = "Signal",
+  #      main = "Original vs. High-pass filtered time series")
+  # lines(t, y_filtered, col = "blue", lwd = 2)
+  # legend("topright", legend = c("Original", "Filtered"), col = c("gray", "blue"), lwd = 2)
+
+  # ---------------------------------------------------
+  # Filter every column of the design matrix
+  filter_design_matrix <- function(X, dct_basis) {
+    apply(X, 2, function(col) {
+      fit <- lm(col ~ dct_basis - 1)
+      residuals(fit)
+    })
+  }
+  design_matrix <- filter_design_matrix(design_matrix, dct_basis)
+
+  # You now have:
+  # y_filtered  : your time series with low-frequency drifts regressed out
+  # X_filtered  : your design matrix similarly filtered
+  return(list(timeseries = timeseries, design_matrix = as.data.frame(design_matrix)))
+}
 
 # Models ------------------------------------------------------------------
 
 
 
-make_design_fmri <- function(data,
+make_design_fmri <- function(timeseries,
                              events,
                              model = normal_mri,
                              factors = NULL,
@@ -140,13 +203,18 @@ make_design_fmri <- function(data,
                              contrasts = NULL,
                              hrf_model='glover + derivative',
                              cell_coding = NULL,
+                             high_pass = TRUE,
+                             nuisance = NULL,
                              ...) {
   dots <- list(...)
   if(!is.null(cell_coding) && !cell_coding %in% names(factors)) stop("Cell coded factors must have same name as factors argument")
   dots <- list(...)
   dots$add_intercept <- FALSE
-  design_matrix <- build_fmri_design_matrices(data, events, factors, contrasts, covariates, hrf_model, cell_coding)
-  data_names <- colnames(data)[!colnames(data) %in% c('subjects', 'run', 'time')]
+  updated <- build_fmri_design_matrices(timeseries, events, factors, contrasts,
+                                        covariates, hrf_model, cell_coding,
+                                        high_pass, nuisance)
+  design_matrix <- updated$design_matrix
+  timeseries <- updated$timeseries
   # First create the design matrix
 
   betas <- colnames(design_matrix[[1]])[colnames(design_matrix[[1]]) != "subjects"]
@@ -185,7 +253,7 @@ make_design_fmri <- function(data,
     Flist[[i]] <- as.formula(paste0(par_names[i], "~1"))
   }
 
-  design <- list(Flist = Flist, model = model, Ffactors = list(subjects = unique(data$subjects)))
+  design <- list(Flist = Flist, model = model, Ffactors = list(subjects = unique(timeseries$subjects)))
   attr(design, "design_matrix") <- lapply(design_matrix, FUN=function(x) {
     y <- x[,colnames(x) != 'subjects']
     data.matrix(y)
@@ -193,7 +261,7 @@ make_design_fmri <- function(data,
   par_names <- setNames(numeric(length(par_names)), par_names)
   attr(design, "p_vector") <- par_names
   class(design) <- 'emc.design'
-  return(design = design)
+  return(list(design = design, timeseries = timeseries))
 }
 
 normal_mri <- function(){
@@ -441,4 +509,3 @@ add_design_fMRI_predict <- function(design, emc){
   design$fMRI_design <- lapply(emc[[1]]$data, function(x) return(attr(x,"designs")))
   return(design)
 }
-
