@@ -101,6 +101,7 @@ mean deviance, deviance of mean, DIC, BPIC and associated weights.</p>
 <span class="r-in"><span><span class="co"># Here we just take two times the same model, but normally one would compare</span></span></span>
 <span class="r-in"><span><span class="co"># different models</span></span></span>
 <span class="r-in"><span><span class="fu">compare_subject</span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>m0 <span class="op">=</span> <span class="va">samples_LNR</span>, m1 <span class="op">=</span> <span class="va">samples_LNR</span><span class="op">)</span><span class="op">)</span></span></span>
+<span class="r-wrn co"><span class="r-pr">#&gt;</span> <span class="warning">Warning: </span>subject-by-subject comparison is best done with models of type `single`</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>      wDIC_m0 wDIC_m1 wBPIC_m0 wBPIC_m1</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> as1t     0.5     0.5      0.5      0.5</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> bd6t     0.5     0.5      0.5      0.5</span>
