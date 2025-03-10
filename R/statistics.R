@@ -52,8 +52,6 @@ compare <- function(sList,stage="sample",filter=NULL,use_best_fit=TRUE,
     IC <- -(IC - min(IC))/2
     exp(IC)/sum(exp(IC))
   }
-  if(!is.null(list(...)$subject)) subject <- list(...)$subject
-
   if (is.numeric(filter)) defaultsf <- filter[1] else defaultsf <- 0
   sflist <- as.list(setNames(rep(defaultsf,length(sList)),names(sList)))
   if (is.list(filter)) for (i in names(filter))
@@ -61,7 +59,7 @@ compare <- function(sList,stage="sample",filter=NULL,use_best_fit=TRUE,
   dots <- add_defaults(list(...), group_only = FALSE)
   ICs <- setNames(vector(mode="list",length=length(sList)),names(sList))
   for (i in 1:length(ICs)) ICs[[i]] <- IC(sList[[i]],stage=stage,
-                                          filter=sflist[[i]],use_best_fit=use_best_fit,subject=subject,print_summary=FALSE,
+                                          filter=sflist[[i]],use_best_fit=use_best_fit,subject=list(...)$subject,print_summary=FALSE,
                                           group_only = dots$group_only)
   ICs <- data.frame(do.call(rbind,ICs))
   DICp <- getp(ICs$DIC)
