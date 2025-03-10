@@ -74,6 +74,7 @@ reference:
 - contents:
   - compare
   - compare_subject
+  - model_averaging
   - run_bridge_sampling
   - get_BayesFactor
   - credible

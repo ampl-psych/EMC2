@@ -524,5 +524,79 @@ get_posterior_quantiles <- function(x, probs = c(0.025, .5, .975)){
   return(summ$quantiles)
 }
 
+#' Model Averaging
+#'
+#' Computes model weights and a Bayes factor by comparing two groups of models based on their
+#' Information Criterion (IC) values. The function works with either numeric vectors or data
+#' frames containing multiple IC measures (e.g., MD, BPIC, DIC).
+#'
+#' When provided with numeric vectors, it computes the weights for the two groups by first
+#' converting the IC values into relative weights and then normalizing them. When provided with
+#' a data frame, it assumes that the data frame is the output of a call to `compare`
+#' and applies averaging to each IC metric
+#'
+#' @param IC_for A numeric vector or the output of `compare`
+#' @param IC_against A numeric vector or the output of `compare`
+#'
+#' @return A \code{data.frame} with the following columns:
+#'   \describe{
+#'     \item{\code{wFor}}{The aggregated weight of the models in favor.}
+#'     \item{\code{wAgainst}}{The aggregated weight of the models against.}
+#'     \item{\code{Factor}}{The Bayes factor (ratio of \code{wFor} to \code{wAgainst}).}
+#'   }
+#'   If \code{IC_for} is a data frame, a matrix with rows corresponding to each IC measure is returned.
+#'
+#' @examples
+#' # First set up some example models (normally these would be alternative models)
+#' samples_LNR2 <- subset(samples_LNR, length.out = 45)
+#' samples_LNR3 <- subset(samples_LNR, length.out = 40)
+#' samples_LNR4 <- subset(samples_LNR, length.out = 35)
+#'
+#' # Run compare on them, BayesFactor = F is set for speed.
+#' ICs <- compare(list(S1 = samples_LNR, S2 = samples_LNR2,
+#'                     S3 = samples_LNR3, S4 = samples_LNR4), BayesFactor = FALSE)
+#'
+#' # Model averaging can either be done with a vector of ICs:
+#' model_averaging(ICs$BPIC[1:2], ICs$BPIC[2:4])
+#'
+#' # Or the output of compare:
+#' model_averaging(ICs[1:2,], ICs[3:4,])
+#'
+#' @export
+model_averaging <- function(IC_for, IC_against) {
+  if(is.null(IC_for)) return(NULL)
 
+  if(is.data.frame(IC_for)){
+    # Recursive call to make it work with the output of compare
+    MD <- model_averaging(IC_for$MD, IC_against$MD)
+    BPIC <- model_averaging(IC_for$BPIC, IC_against$BPIC)
+    DIC <- model_averaging(IC_for$DIC, IC_against$DIC)
+    return(rbind(MD = MD, BPIC = BPIC, DIC = DIC))
+  }
+  # Combine the IC values from both groups
+  all_IC <- c(IC_for, IC_against)
+
+  # Find the smallest IC value (for numerical stability)
+  min_IC <- min(all_IC)
+
+  # Compute the unnormalized weights
+  unnorm_weights <- exp(-0.5 * (all_IC - min_IC))
+
+  # Normalize weights so they sum to 1
+  weights <- unnorm_weights / sum(unnorm_weights)
+
+  # Separate the weights for the two groups
+  weight_for <- sum(weights[seq_along(IC_for)])
+  weight_against <- sum(weights[(length(IC_for) + 1):length(all_IC)])
+
+  # Compute the Bayes factor: evidence in favor relative to against
+  bayes_factor <- weight_for / weight_against
+
+  # Return the results as a data frame
+  return(data.frame(
+    wFor = weight_for,
+    wAgainst = weight_against,
+    Factor = bayes_factor
+  ))
+}
 
