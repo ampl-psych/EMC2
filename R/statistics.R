@@ -61,7 +61,7 @@ compare <- function(sList,stage="sample",filter=NULL,use_best_fit=TRUE,
   dots <- add_defaults(list(...), group_only = FALSE)
   ICs <- setNames(vector(mode="list",length=length(sList)),names(sList))
   for (i in 1:length(ICs)) ICs[[i]] <- IC(sList[[i]],stage=stage,
-                                          filter=sflist[[i]],use_best_fit=use_best_fit,subject=NULL,print_summary=FALSE,
+                                          filter=sflist[[i]],use_best_fit=use_best_fit,subject=subject,print_summary=FALSE,
                                           group_only = dots$group_only)
   ICs <- data.frame(do.call(rbind,ICs))
   DICp <- getp(ICs$DIC)
@@ -355,6 +355,8 @@ compare_subject <- function(sList,stage="sample",filter=0,use_best_fit=TRUE,
                             print_summary=TRUE,digits=3) {
   if(is(sList, "emc")) sList <- list(sList)
   subjects <- names(sList[[1]][[1]]$data)
+  is_single <- sapply(sList, function(x) return(x[[1]]$type == "single"))
+  if(any(!is_single)) warning("subject-by-subject comparison is best done with models of type `single`")
   out <- setNames(vector(mode="list",length=length(subjects)),subjects)
   for (i in subjects) out[[i]] <- compare(sList,subject=i,BayesFactor=FALSE,
                                           stage=stage,filter=filter,use_best_fit=use_best_fit,print_summary=FALSE)
