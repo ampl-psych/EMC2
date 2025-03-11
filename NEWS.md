@@ -1,3 +1,9 @@
+# EMC2 3.1.1
+
+## Bug fixes
+
+* Small bug fixes in plot_data to make it more flexible
+
 # EMC2 3.1.0
 
 ## New features
