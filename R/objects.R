@@ -178,8 +178,8 @@ filter_const_and_dup <- function(samples, remove_dup = TRUE, remove_constants = 
   # We only need the first list entry to calculate the idx
   if(length(dim(samples[[1]])) == 2){
     x <- do.call(cbind, samples)
-    is_constant <- apply(x[,1:(min(500, ncol(x))), drop = F], 1, sd) == 0
-    is_duplicate <- duplicated(round(rowSums(x[,1:(min(500, ncol(x))), drop = F]), 8))
+    is_constant <- apply(x[,1:ncol(x), drop = F], 1, sd) == 0
+    is_duplicate <- duplicated(round(rowSums(x[,1:ncol(x), drop = F]), 8))
     if(remove_dup){
       filter <- is_duplicate | is_constant
     } else{
@@ -188,11 +188,11 @@ filter_const_and_dup <- function(samples, remove_dup = TRUE, remove_constants = 
     samples <- lapply(samples, function(x) x[!filter,,drop = F])
   } else{
     x <- do.call(abind, samples)
-    is_constant <- apply(x[,,1:(min(100, dim(x)[3])), drop = F], 1:2, sd) == 0
+    is_constant <- apply(x[,,1:dim(x)[3], drop = F], 1:2, sd) == 0
     # Add all the samples together, if any of them are the same (up till 8 digits)
     # We should probably assume that they are a duplicated entry
     # This is useful for correlations and such (on which samples are usually mirrored)
-    all_sums <- c(apply(x[,,1:(min(100, dim(x)[3])), drop = F], 1:2, sum))
+    all_sums <- c(apply(x[,,1:dim(x)[3], drop = F], 1:2, sum))
     is_duplicate <- duplicated(round(all_sums/mean(all_sums, na.rm = TRUE), 8))
     if(remove_dup){
       filter <- is_duplicate | is_constant
