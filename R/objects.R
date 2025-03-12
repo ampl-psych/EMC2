@@ -178,8 +178,8 @@ filter_const_and_dup <- function(samples, remove_dup = TRUE, remove_constants = 
   # We only need the first list entry to calculate the idx
   if(length(dim(samples[[1]])) == 2){
     x <- do.call(cbind, samples)
-    is_constant <- apply(x[,1:(min(100, ncol(x))), drop = F], 1, sd) == 0
-    is_duplicate <- duplicated(round(rowSums(x[,1:(min(100, ncol(x))), drop = F]), 8))
+    is_constant <- apply(x[,1:(min(500, ncol(x))), drop = F], 1, sd) == 0
+    is_duplicate <- duplicated(round(rowSums(x[,1:(min(500, ncol(x))), drop = F]), 8))
     if(remove_dup){
       filter <- is_duplicate | is_constant
     } else{

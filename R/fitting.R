@@ -888,13 +888,14 @@ weighted_moments <- function(chain, ll = NULL) {
 
   # Compute the weighted mean of the chain.
   weighted_mean <- colSums(apply(chain, 1, function(x) x*weights))
-
-  # Compute the weighted covariance matrix.
-  cov_matrix <- matrix(0, nrow = d, ncol = d)
-  for (i in 1:n) {
-    diff <- chain[,i] - weighted_mean
-    cov_matrix <- cov_matrix + weights[i] * (diff %*% t(diff))
-  }
+  # NIEK THIS CAUSES ERRORS
+  # # Compute the weighted covariance matrix.
+  # cov_matrix <- matrix(0, nrow = d, ncol = d)
+  # for (i in 1:n) {
+  #   diff <- chain[,i] - weighted_mean
+  #   cov_matrix <- cov_matrix + weights[i] * (diff %*% t(diff))
+  # }
+  cov_matrix <- cov(t(chain))
   return(list(w_cov = cov_matrix, w_mu = weighted_mean))
 }
 
