@@ -129,7 +129,7 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
     message(paste0("Parameter(s) ", paste0(not_specified, collapse = ", "), " not specified in formula and assumed constant."))
     additional_constants <- p_types[not_specified]
     names(additional_constants) <- not_specified
-    constants <- c(constants, additional_constants)
+    constants <- c(constants, additional_constants[!names(additional_constants) %in% names(constants)])
     for(add_constant in not_specified) formula[[length(formula)+ 1]] <- as.formula(paste0(add_constant, "~ 1"))
   }
   if(!"subjects" %in% names(factors)) stop("make sure subjects identifier is present in data")
