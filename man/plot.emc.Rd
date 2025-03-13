@@ -31,6 +31,10 @@ A trace/acf plot of the selected MCMC chains
 \description{
 Makes trace plots for model parameters.
 }
+\details{
+If an emc object that has not been run with \code{fit} yet is supplied
+prior plots will be returned.
+}
 \examples{
 plot(samples_LNR)
 # Or trace autocorrelation for the second subject:

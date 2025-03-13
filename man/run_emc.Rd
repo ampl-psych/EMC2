@@ -2,7 +2,7 @@
 % Please edit documentation in R/fitting.R
 \name{run_emc}
 \alias{run_emc}
-\title{Custom Function for More Controlled Model Estimation}
+\title{Fine-Tuned Model Estimation}
 \usage{
 run_emc(
   emc,
@@ -13,13 +13,13 @@ run_emc(
   verbose = FALSE,
   verboseProgress = FALSE,
   fileName = NULL,
-  particles = NULL,
   particle_factor = 50,
   cores_per_chain = 1,
   cores_for_chains = length(emc),
   max_tries = 20,
   n_blocks = 1,
-  thin_auto = FALSE
+  thin = FALSE,
+  trim = TRUE
 )
 }
 \arguments{
@@ -42,9 +42,6 @@ specified by \code{stop_criteria} are checked and proposal distributions are upd
 
 \item{fileName}{A string. If specified will autosave emc at this location on every iteration.}
 
-\item{particles}{An integer. How many particles to use, default is \code{NULL} and \code{particle_factor} is used instead.
-If specified will override \code{particle_factor}.}
-
 \item{particle_factor}{An integer. \code{particle_factor} multiplied by the square root of the number of sampled parameters determines the number of particles used.}
 
 \item{cores_per_chain}{An integer. How many cores to use per chain.
@@ -59,7 +56,10 @@ conditions as specified by stop_criteria? Defaults to 20. max_tries is ignored i
 
 \item{n_blocks}{An integer. Number of blocks. Will block the parameter chains such that they are updated in blocks. This can be helpful in extremely tough models with a large number of parameters.}
 
-\item{thin_auto}{A boolean. If \code{TRUE} will automatically thin the MCMC samples, closely matched to the ESS.}
+\item{thin}{A boolean. If \code{TRUE} will automatically thin the MCMC samples, closely matched to the ESS.
+Can also be set to a double, in which case 1/thin of the chain will be removed (does not have to be an integer).}
+
+\item{trim}{A boolean. If \code{TRUE} will automatically remove redundant samples (i.e. from preburn, burn, adapt).}
 }
 \value{
 An emc object

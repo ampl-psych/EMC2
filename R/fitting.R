@@ -35,7 +35,7 @@ get_stop_criteria <- function(stage, stop_criteria, type){
   return(stop_criteria)
 }
 
-#' Custom Function for More Controlled Model Estimation
+#' Fine-Tuned Model Estimation
 #'
 #' Although typically users will rely on ``fit``, this function can be used for more fine-tuned specification of estimation needs.
 #' The function will throw an error if a stage is skipped,
@@ -52,8 +52,6 @@ get_stop_criteria <- function(stage, stop_criteria, type){
 #' @param verbose Logical. Whether to print messages between each step with the current status regarding the stop_criteria.
 #' @param verboseProgress Logical. Whether to print a progress bar within each step or not. Will print one progress bar for each chain and only if cores_for_chains = 1.
 #' @param fileName A string. If specified will autosave emc at this location on every iteration.
-#' @param particles An integer. How many particles to use, default is `NULL` and ``particle_factor`` is used instead.
-#' If specified will override ``particle_factor``.
 #' @param particle_factor An integer. `particle_factor` multiplied by the square root of the number of sampled parameters determines the number of particles used.
 #' @param cores_per_chain An integer. How many cores to use per chain.
 #' Parallelizes across participant calculations. Only available on Linux or Mac OS.
@@ -64,7 +62,9 @@ get_stop_criteria <- function(stage, stop_criteria, type){
 #' conditions as specified by stop_criteria? Defaults to 20. max_tries is ignored if the required number of iterations has not been reached yet.
 #' @param n_blocks An integer. Number of blocks. Will block the parameter chains such that they are updated in blocks. This can be helpful in extremely tough models with a large number of parameters.
 #' @param stop_criteria A list. Defines the stopping criteria and for which types of parameters these should hold. See ``?fit``.
-#' @param thin_auto A boolean. If `TRUE` will automatically thin the MCMC samples, closely matched to the ESS.
+#' @param thin A boolean. If `TRUE` will automatically thin the MCMC samples, closely matched to the ESS.
+#' Can also be set to a double, in which case 1/thin of the chain will be removed (does not have to be an integer).
+#' @param trim A boolean. If `TRUE` will automatically remove redundant samples (i.e. from preburn, burn, adapt).
 #' @export
 #' @return An emc object
 #' @examples \donttest{
@@ -82,10 +82,9 @@ get_stop_criteria <- function(stage, stop_criteria, type){
 
 run_emc <- function(emc, stage, stop_criteria,
                     search_width = 1, step_size = 100, verbose = FALSE, verboseProgress = FALSE,
-                    fileName = NULL,
-                    particles = NULL, particle_factor=50, cores_per_chain = 1,
+                    fileName = NULL,particle_factor=50, cores_per_chain = 1,
                     cores_for_chains = length(emc), max_tries = 20, n_blocks = 1,
-                    thin_auto = FALSE){
+                    thin = FALSE, trim = TRUE){
   emc <- restore_duplicates(emc)
   if(Sys.info()[1] == "Windows" & cores_per_chain > 1) stop("only cores_for_chains can be set on Windows")
   if (verbose) message(paste0("Running ", stage, " stage"))
@@ -98,10 +97,14 @@ run_emc <- function(emc, stage, stop_criteria,
   progress <- check_progress(emc, stage, iter, stop_criteria, max_tries, step_size, cores_per_chain*cores_for_chains, verbose, n_blocks = n_blocks)
   emc <- progress$emc
   progress <- progress[!names(progress) == 'emc']
+  # We need to multiply step_size by thin to make an accurate guess for good step_size.
+  cur_thin <- ifelse(is.numeric(thin), thin, 1)
   while(!progress$done){
     emc <- reset_pm_settings(emc, stage)
     # Remove redundant samples
-    emc <- fit_remove_samples(emc)
+    if(trim){
+      emc <- fit_remove_samples(emc)
+    }
     if(!is.null(progress$n_blocks)) n_blocks <- progress$n_blocks
     emc <- add_proposals(emc, stage, cores_per_chain*cores_for_chains, n_blocks)
     last_stage <- get_last_stage(emc)
@@ -113,19 +116,26 @@ run_emc <- function(emc, stage, stop_criteria,
       sub_emc <- subset(emc, filter = chain_n(emc)[1,stage] - 1, stage = stage)
     }
     # Actual sampling
-    sub_emc <- auto_mclapply(sub_emc,run_stages, stage = stage, iter= progress$step_size,
-                              verbose=verbose,  verboseProgress = verboseProgress,
-                              particles=particles,particle_factor=particle_factor,
-                              search_width=search_width, n_cores=cores_per_chain, mc.cores = cores_for_chains)
+    sub_emc <- auto_mclapply(sub_emc,run_stages, stage = stage, iter= progress$step_size*max(1,cur_thin),
+                             verbose=verbose,  verboseProgress = verboseProgress,
+                             particle_factor=particle_factor,search_width=search_width,
+                             n_cores=cores_per_chain, mc.cores = cores_for_chains)
 
     class(sub_emc) <- "emc"
     if(stage != 'preburn'){
-      if(thin_auto) sub_emc <- auto_thin(sub_emc, stage = c("preburn", "burn", "adapt", "sample"))
+      if(is.numeric(thin)){
+        sub_emc <- subset(sub_emc, stage = c("preburn", "burn", "adapt", "sample"), thin = thin)
+      } else if(thin){
+        sub_emc <- auto_thin(sub_emc, stage = c("preburn", "burn", "adapt", "sample"))
+        # Update current rough guess for thinning:
+        cur_thin <- progress$step_size/chain_n(sub_emc)[1,stage]
+      }
       emc <- concat_emc(emc, sub_emc, progress$step_size, stage)
     } else{
       emc <- sub_emc
     }
-    progress <- check_progress(emc, stage, iter, stop_criteria, max_tries, step_size, cores_per_chain*cores_for_chains,verbose, progress,n_blocks)
+    progress <- check_progress(emc, stage, iter, stop_criteria, max_tries, step_size, cores_per_chain*cores_for_chains,
+                               verbose, progress,n_blocks)
     emc <- progress$emc
     progress <- progress[!names(progress) == 'emc']
     if(!is.null(fileName)){
@@ -142,19 +152,11 @@ run_emc <- function(emc, stage, stop_criteria,
 }
 
 run_stages <- function(sampler, stage = "preburn", iter=0, verbose = TRUE, verboseProgress = TRUE,
-                       particles=NULL,particle_factor=50, search_width= NULL, n_cores=1)
+                       particle_factor=50, search_width= NULL, n_cores=1)
 {
 
-  if (is.null(particles)){
-    # if(!is.null(sampler$g_map_fixed)){
-    #   particles <- round(particle_factor*sqrt(length(sampler$pars_random)/sampler$n_subjects))
-    # } else{
-    #   particles <- round(particle_factor*sqrt(length(sampler$par_names)))
-    # }
-    max_pars <- max(table(attr(sampler[[1]], "components")))
-    particles <- round(particle_factor*sqrt(max_pars))
-
-  }
+  max_pars <- max(table(attr(sampler[[1]], "components")))
+  particles <- round(particle_factor*sqrt(max_pars))
   if (!sampler$init) {
     sampler <- init(sampler, n_cores = n_cores)
   }
@@ -257,7 +259,7 @@ check_progress <- function (emc, stage, iter, stop_criteria,
     }
   }
   return(list(emc = gd$emc, done = done, step_size = step_size,
-              trys = trys, iters_total = iters_total, n_blocks = gd$n_blocks))
+              trys = trys, n_blocks = gd$n_blocks))
 }
 
 check_gd <- function(emc, stage, max_gd, mean_gd, omit_mpsrf, trys, verbose,
@@ -514,13 +516,6 @@ create_chain_proposals <- function(emc, samples_idx = NULL, do_block = TRUE){
   }
   return(emc)
 }
-
-
-
-
-
-
-
 
 reset_pm_settings <- function(emc, stage){
   if(stage != get_last_stage(emc) || stage == "burn"){ # In this case we're running a new stage
