@@ -2,7 +2,7 @@
 % Please edit documentation in R/factor_analysis.R
 \name{plot_relations}
 \alias{plot_relations}
-\title{Plot relations}
+\title{Plot Group-Level Relations}
 \usage{
 plot_relations(
   emc = NULL,

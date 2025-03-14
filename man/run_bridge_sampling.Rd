@@ -2,7 +2,7 @@
 % Please edit documentation in R/bridge_sampling.R
 \name{run_bridge_sampling}
 \alias{run_bridge_sampling}
-\title{Estimating Marginal likelihoods using WARP-III bridge sampling}
+\title{Estimating Marginal Likelihoods Using WARP-III Bridge Sampling}
 \usage{
 run_bridge_sampling(
   emc,

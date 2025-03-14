@@ -2,7 +2,7 @@
 % Please edit documentation in R/sampling.R
 \name{init_chains}
 \alias{init_chains}
-\title{Initialize chains}
+\title{Initialize Chains}
 \usage{
 init_chains(
   emc,

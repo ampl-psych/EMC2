@@ -2,7 +2,7 @@
 % Please edit documentation in R/design.R
 \name{contr.bayes}
 \alias{contr.bayes}
-\title{Contrast to enforce equal prior variance on each level}
+\title{Contrast Enforcing Equal Prior Variance on each Level}
 \usage{
 contr.bayes(n)
 }

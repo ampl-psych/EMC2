@@ -1,5 +1,5 @@
 
-#' Specify a design and model
+#' Specify a Design and Model
 #'
 #' This function combines information regarding the data, type of model, and
 #' the model specification.
@@ -92,7 +92,7 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
   }
 
   if(any(names(factors) %in% c("trial", "R", "rt", "lR", "lM"))){
-    stop("Please do not use any of the following names within Ffactors: trial, R, rt, lR, lM")
+    stop("Please do not use any of the following names within factors argument: trial, R, rt, lR, lM")
   }
 
   if(any(grepl("_", names(factors)))){
@@ -129,7 +129,7 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
     message(paste0("Parameter(s) ", paste0(not_specified, collapse = ", "), " not specified in formula and assumed constant."))
     additional_constants <- p_types[not_specified]
     names(additional_constants) <- not_specified
-    constants <- c(constants, additional_constants)
+    constants <- c(constants, additional_constants[!names(additional_constants) %in% names(constants)])
     for(add_constant in not_specified) formula[[length(formula)+ 1]] <- as.formula(paste0(add_constant, "~ 1"))
   }
   if(!"subjects" %in% names(factors)) stop("make sure subjects identifier is present in data")
@@ -161,7 +161,7 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
 }
 
 
-#' Contrast to enforce equal prior variance on each level
+#' Contrast Enforcing Equal Prior Variance on each Level
 #'
 #' Typical contrasts impose different levels of marginal prior variance for the different levels.
 #' This contrast can be used to ensure that each level has equal marginal priors (Rouder, Morey, Speckman, & Province; 2012).
@@ -194,7 +194,7 @@ contr.bayes <- function(n) {
 }
 
 
-#' Contrast to enforce increasing estimates
+#' Contrast Enforcing Increasing Estimates
 #'
 #' Each level will be estimated additively from the previous level
 #'
@@ -222,7 +222,7 @@ contr.increasing <- function(n)
   contr
 }
 
-#' Contrast to enforce decreasing estimates
+#' Contrast Enforcing Decreasing Estimates
 #'
 #' Each level will be estimated as a reduction from the previous level
 #'
@@ -240,7 +240,7 @@ contr.decreasing <- function(n) {
   out[dim(out)[1]:1,]
 }
 
-#' Anova style contrast matrix
+#' Anova Style Contrast Matrix
 #'
 #' Similar to `contr.helmert`, but then scaled to estimate differences between conditions. Use in `design()`.
 #'
@@ -807,8 +807,38 @@ dm_list <- function(dadm)
   return(dl)
 }
 
-update2version <- function(emc, model, transform = NULL, bound = NULL,
-                           pre_transform = NULL){
+#' Update EMC Objects to the Current Version
+#'
+#' This function updates EMC objects created with older versions of the package to be compatible with the current version.
+#'
+#' @param emc An EMC object to update
+#' @return An updated EMC object compatible with the current version
+#' @examples
+#' # Update the model to current version
+#' updated_model <- update2version(samples_LNR)
+#'
+#' @export
+update2version <- function(emc){
+  get_new_model <- function(old_model, pars){
+    if(old_model()$c_name == "LBA"){
+      model <- LBA
+    } else if(old_model()$c_name == "DDM"){
+      model <- DDM
+    } else if(old_model()$c_name == "RDM"){
+      model <- RDM
+    } else if(old_model()$c_name == "LNR"){
+      model <- LNR
+    } else{
+      stop("current model not supported for updating, sorry!!")
+    }
+    model_list <- model()
+    model_list$transform <- fill_transform(transform = NULL,model)
+    model_list$pre_transform <- fill_transform(transform = NULL, model = model, p_vector = pars, is_pre = TRUE)
+    model_list$bound <- fill_bound(bound = NULL,model)
+    model <- function(){return(model_list)}
+    return(model)
+  }
+
   design_list <- get_design(emc)
   if(is.null(emc[[1]]$type)){
     type <- attr(emc[[1]], "variant_funs")$type
@@ -816,32 +846,27 @@ update2version <- function(emc, model, transform = NULL, bound = NULL,
       x$type <- type
       return(x)
     })
-  }
-  type <- emc[[1]]$type
-  # Apparently we're an old model with previous bounding system
-  if(is.null(design_list[[1]]$model()$bound)){
-    # Just to be sure let's set t0 transform lower to 0
-    if(is.null(transform)) transform <- list(lower = c(t0 = 0))
   } else{
-    if(is.null(transform)) transform <- design_list[[1]]$model()$transform
-    if(is.null(bound)) bound <- design_list[[1]]$model()$bound
+    type <- emc[[1]]$type
   }
-  model_list <- model()
-  model_list$transform <- fill_transform(transform,model)
-  model_list$pre_transform <- fill_transform(pre_transform, model = model, p_vector = sampled_pars(design_list), is_pre = TRUE)
-  model_list$bound <- fill_bound(bound,model)
-  model <- function(){return(model_list)}
-  design_list <- lapply(design_list, FUN = function(x){
-    x$model <- model
-    return(x)
-  })
-  emc <- lapply(emc, FUN = function(x){
-    x$data <- lapply(x$data, FUN = function(y){
-      attr(y, "model") <- model
-      return(y)
-    })
-    return(x)
-  })
+  # Model used to be stored in data
+  first_data <- emc[[1]]$data[[1]]
+  if(is.null(emc[[1]]$model)){
+    if(is.data.frame(first_data)){
+      old_model <- attr(first_data, "model")
+      new_model <- get_new_model(old_model, sampled_pars(design_list[[1]]))
+      design_list[[1]]$model <- new_model
+      emc[[1]]$model <- new_model
+    } else{
+      old_model <- lapply(first_data, function(x) attr(x, "model"))
+      new_model <- mapply(get_new_model, old_model, lapply(design_list, sampled_pars))
+      design_list <- mapply(function(x, y){
+        x$model <- y
+        return(list(x))
+      }, design_list, new_model)
+    }
+    emc[[1]]$model <- new_model
+  }
   prior_new <- emc[[1]]$prior
   attr(prior_new, "type") <- type
   prior_new <- prior(design_list, type, update = prior_new)
@@ -857,7 +882,7 @@ update2version <- function(emc, model, transform = NULL, bound = NULL,
 
 
 # Some s3 classes for design objects ---------------------------------------------------------
-#' Parameter mapping back to the design factors
+#' Parameter Mapping Back to the Design Factors
 #'
 #' Maps parameters of the cognitive model back to the experimental design. If p_vector
 #' is left unspecified will print a textual description of the mapping.
@@ -873,7 +898,7 @@ update2version <- function(emc, model, transform = NULL, bound = NULL,
 #' @param ... optional arguments
 #' @param remove_subjects Boolean. Whether to include subjects as a factor in the design
 #' @param covariates Covariates specified in the design can be included here.
-#' @return Matrix with a column for each factor in the design and for each model parameter type (``p_type``).
+#' @return Matrix with a column for each factor in the design and for   each model parameter type (``p_type``).
 #' @examples
 #' # First define a design:
 #' design_DDMaE <- design(data = forstmann,model=DDM,
@@ -936,7 +961,7 @@ mapped_pars.emc.design <- function(x, p_vector = NULL, model=NULL,
 
 
 
-#' Get model parameters from a design
+#' Get Model Parameters from a Design
 #'
 #' Makes a vector with zeroes, with names and length corresponding to the
 #' model parameters of the design.

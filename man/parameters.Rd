@@ -4,7 +4,7 @@
 \alias{parameters.emc.prior}
 \alias{parameters.emc}
 \alias{parameters}
-\title{Returns a parameter type from an emc object as a data frame.}
+\title{Return Data Frame of Parameters}
 \usage{
 \method{parameters}{emc.prior}(x, selection = "mu", N = 1000, covariates = NULL, ...)
 
@@ -30,7 +30,7 @@ A data frame with one row for each sample
 (with a subjects column if selection = "alpha" and using draws from the posterior)
 }
 \description{
-Returns a parameter type from an emc object as a data frame.
+Return Data Frame of Parameters
 }
 \examples{
 # For prior inference:

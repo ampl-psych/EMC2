@@ -2,7 +2,7 @@
 % Please edit documentation in R/SBC.R
 \name{plot_sbc_hist}
 \alias{plot_sbc_hist}
-\title{Plot the histogram of the observed rank statistics of SBC}
+\title{Plot the Histogram of the Observed Rank Statistics of SBC}
 \usage{
 plot_sbc_hist(ranks, bins = 10, layout = NA)
 }

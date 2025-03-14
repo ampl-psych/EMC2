@@ -2,7 +2,7 @@
 % Please edit documentation in R/statistics.R
 \name{compare}
 \alias{compare}
-\title{Information criteria and marginal likelihoods}
+\title{Information Criteria and Marginal Likelihoods}
 \usage{
 compare(
   sList,

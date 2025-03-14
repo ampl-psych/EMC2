@@ -4,7 +4,7 @@
 \alias{credint.emc.prior}
 \alias{credint.emc}
 \alias{credint}
-\title{Posterior quantiles}
+\title{Posterior Quantiles}
 \usage{
 \method{credint}{emc.prior}(
   x,

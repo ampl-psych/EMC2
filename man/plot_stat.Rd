@@ -2,7 +2,7 @@
 % Please edit documentation in R/plot_data.R
 \name{plot_stat}
 \alias{plot_stat}
-\title{Plot statistics on data}
+\title{Plot Statistics on Data}
 \usage{
 plot_stat(
   input,

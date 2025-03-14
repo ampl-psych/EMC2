@@ -2,7 +2,7 @@
 % Please edit documentation in R/plotting.R
 \name{profile_plot}
 \alias{profile_plot}
-\title{Likelihood profile plots}
+\title{Likelihood Profile Plots}
 \usage{
 profile_plot(
   data,

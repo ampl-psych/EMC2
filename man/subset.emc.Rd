@@ -2,7 +2,7 @@
 % Please edit documentation in R/s3_funcs.R
 \name{subset.emc}
 \alias{subset.emc}
-\title{Shorten an emc object}
+\title{Shorten an emc Object}
 \usage{
 \method{subset}{emc}(
   x,
@@ -36,7 +36,7 @@ desired length of the MCMC chains, which will be thinned appropriately.}
 A shortened emc object
 }
 \description{
-Shorten an emc object
+Shorten an emc Object
 }
 \examples{
 subset(samples_LNR, length.out = 10)

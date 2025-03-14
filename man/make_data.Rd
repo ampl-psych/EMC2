@@ -2,7 +2,7 @@
 % Please edit documentation in R/make_data.R
 \name{make_data}
 \alias{make_data}
-\title{Simulate data}
+\title{Simulate Data}
 \usage{
 make_data(
   parameters,

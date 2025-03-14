@@ -184,7 +184,7 @@ bridge_sampling <- function(samples, n_eff, split_idx, cores_for_props = 1, core
 }
 
 
-#' Estimating Marginal likelihoods using WARP-III bridge sampling
+#' Estimating Marginal Likelihoods Using WARP-III Bridge Sampling
 #'
 #' Uses bridge sampling that matches a proposal distribution to the first three moments
 #' of the posterior distribution to get an accurate estimate of the marginal likelihood.

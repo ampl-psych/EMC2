@@ -3,7 +3,7 @@
 \name{check.emc}
 \alias{check.emc}
 \alias{check}
-\title{Convergence checks for an emc object}
+\title{Convergence Checks for an emc Object}
 \usage{
 \method{check}{emc}(
   emc,

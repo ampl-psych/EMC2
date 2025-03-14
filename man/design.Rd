@@ -2,7 +2,7 @@
 % Please edit documentation in R/design.R
 \name{design}
 \alias{design}
-\title{Specify a design and model}
+\title{Specify a Design and Model}
 \usage{
 design(
   formula = NULL,

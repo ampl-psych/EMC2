@@ -3,7 +3,7 @@
 \docType{data}
 \name{samples_LNR}
 \alias{samples_LNR}
-\title{An emc object of an LNR model of the Forstmann dataset using the first three subjects}
+\title{LNR Model of Forstmann Data (First 3 Subjects)}
 \format{
 An emc object. An emc object is a list with a
 specific structure and elements, as outlined below.
@@ -59,9 +59,6 @@ new sample for the covariance matrix}
 \item{last_theta_var_inv}{The inverse of the last samples covariance
 matrix}
 \item{idx}{The index of the last sample drawn}
-\item{epsilon}{The scaling parameter of the proposal distributions for each subject array of size (n_subjects x n_samples)}
-\item{origin}{From which propoosal distribution the accepted samples in the MCMC chain came,
-an array of size (n_subjects x n_samples)}
 }
 }
 

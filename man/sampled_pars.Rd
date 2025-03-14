@@ -5,7 +5,7 @@
 \alias{sampled_pars.emc.design}
 \alias{sampled_pars.emc.prior}
 \alias{sampled_pars.emc}
-\title{Get model parameters from a design}
+\title{Get Model Parameters from a Design}
 \usage{
 sampled_pars(
   x,

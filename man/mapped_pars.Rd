@@ -5,7 +5,7 @@
 \alias{mapped_pars.emc.design}
 \alias{mapped_pars.emc.prior}
 \alias{mapped_pars.emc}
-\title{Parameter mapping back to the design factors}
+\title{Parameter Mapping Back to the Design Factors}
 \usage{
 mapped_pars(
   x,
@@ -64,7 +64,7 @@ Must be in the form of \code{sampled_pars(design)}}
 \item{...}{optional arguments}
 }
 \value{
-Matrix with a column for each factor in the design and for each model parameter type (\code{p_type}).
+Matrix with a column for each factor in the design and for   each model parameter type (\code{p_type}).
 }
 \description{
 Maps parameters of the cognitive model back to the experimental design. If p_vector

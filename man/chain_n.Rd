@@ -2,7 +2,7 @@
 % Please edit documentation in R/objects.R
 \name{chain_n}
 \alias{chain_n}
-\title{Get chain iterations}
+\title{MCMC Chain Iterations}
 \usage{
 chain_n(emc)
 }

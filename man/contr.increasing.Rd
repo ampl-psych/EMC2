@@ -2,7 +2,7 @@
 % Please edit documentation in R/design.R
 \name{contr.increasing}
 \alias{contr.increasing}
-\title{Contrast to enforce increasing estimates}
+\title{Contrast Enforcing Increasing Estimates}
 \usage{
 contr.increasing(n)
 }

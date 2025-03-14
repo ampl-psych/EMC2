@@ -3,7 +3,7 @@
 \name{hypothesis.emc}
 \alias{hypothesis.emc}
 \alias{hypothesis}
-\title{Within-model hypothesis testing}
+\title{Within-Model Hypothesis Testing}
 \usage{
 \method{hypothesis}{emc}(
   emc,

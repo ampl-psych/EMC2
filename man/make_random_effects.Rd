@@ -2,7 +2,7 @@
 % Please edit documentation in R/make_data.R
 \name{make_random_effects}
 \alias{make_random_effects}
-\title{Make random effects}
+\title{Generate Subject-Level Parameters}
 \usage{
 make_random_effects(
   design,

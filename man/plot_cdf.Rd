@@ -2,7 +2,7 @@
 % Please edit documentation in R/plot_data.R
 \name{plot_cdf}
 \alias{plot_cdf}
-\title{Plot defective cumulative distribution functions}
+\title{Plot Defective Cumulative Distribution Functions}
 \usage{
 plot_cdf(
   input,

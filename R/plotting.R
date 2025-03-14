@@ -225,7 +225,7 @@ plot_fit_choice <- function(data,pp,subject=NULL,factors=NULL,functions=NULL,
   }
 }
 
-#' Plot within-chain correlations
+#' Plot Within-Chain Correlations
 #'
 #' Plots within-chain parameter correlations (upper triangle) and corresponding
 #' scatterplots (lower triangle) to visualize parameter sloppiness.
@@ -248,7 +248,7 @@ plot_fit_choice <- function(data,pp,subject=NULL,factors=NULL,functions=NULL,
 #' # Plot the sloppiness for the individual-level subjects
 #' pairs_posterior(samples_LNR, selection = "alpha")
 #'
-#' # We can also choose group-level parameters and subsets of the parameter space
+#' # We can also choose group-level parameters and subsets of the parameter space 
 #' pairs_posterior(samples_LNR, use_par = c("m", "t0"), selection = "sigma2")
 #' }
 #' @export
@@ -303,7 +303,7 @@ pairs_posterior <- function(emc, selection="alpha", scale_subjects=TRUE,
   invisible(rs)
 }
 
-#' Likelihood profile plots
+#' Likelihood Profile Plots
 #'
 #' Creates likelihood profile plots from a design and the experimental data by
 #' varying one model parameter while holding all others constant.
@@ -394,7 +394,7 @@ profile_plot <- function(data, design, p_vector, range = .5, layout = NA,
   return(round(out, 3))
 }
 
-#' Plots density for parameters
+#' Plots Density for Parameters
 #'
 #' Plots the posterior and prior density for selected parameters of a model.
 #' Full range of samples manipulations described in `get_pars`.

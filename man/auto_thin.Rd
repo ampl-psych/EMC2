@@ -3,7 +3,7 @@
 \name{auto_thin.emc}
 \alias{auto_thin.emc}
 \alias{auto_thin}
-\title{Automatically thin an emc object}
+\title{Automatically Thin an emc Object}
 \usage{
 \method{auto_thin}{emc}(emc, stage = "sample", selection = c("alpha", "mu"), ...)
 

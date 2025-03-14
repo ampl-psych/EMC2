@@ -3,7 +3,7 @@
 \name{credible.emc}
 \alias{credible.emc}
 \alias{credible}
-\title{Posterior credible interval tests}
+\title{Posterior Credible Interval Tests}
 \usage{
 \method{credible}{emc}(
   x,

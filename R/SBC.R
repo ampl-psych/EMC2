@@ -1,4 +1,4 @@
-#' Simulation-based calibration
+#' Simulation-Based Calibration
 #'
 #' Runs SBC for an EMC2 model and associated design. Returns
 #' normalized rank (between 0 and 1) and prior samples. For hierarchical models the group-level mean and
@@ -141,7 +141,7 @@ SBC_single <- function(design_in, prior_in, replicates = 250, trials = 100,
               prior = list(alpha = prior_alpha)))
 }
 
-#' Plot the histogram of the observed rank statistics of SBC
+#' Plot the Histogram of the Observed Rank Statistics of SBC
 #'
 #' Note that this plot is dependent on the number of bins, and a more general
 #' visualization is to use `plot_sbc_ecdf`
@@ -227,7 +227,7 @@ make_smooth <- function(x, y, N = 1000){
   return(predict(lo,xl)$y)
 }
 
-#' Plot the ECDF difference in SBC ranks
+#' Plot the ECDF Difference in SBC Ranks
 #'
 #' Plots the difference in observed cumulative rank statistics and the
 #' expected cumulative distribution of a uniform distribution. The blue
