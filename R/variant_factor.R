@@ -17,11 +17,11 @@ sample_store_factor <- function(data, par_names, iters = 1, stage = "init", inte
   samples <- list(
     theta_mu = array(NA_real_,dim = c(n_pars, iters), dimnames = list(par_names, NULL)),
     theta_var = array(NA_real_,dim = c(n_pars, n_pars, iters),dimnames = list(par_names, par_names, NULL)),
-    theta_lambda = array(NA_real_,dim = c(n_pars, n_factors, iters),dimnames = list(par_names, f_names, NULL)),
+    lambda = array(NA_real_,dim = c(n_pars, n_factors, iters),dimnames = list(par_names, f_names, NULL)),
     lambda_untransf = array(NA_real_,dim = c(n_pars, n_factors, iters),dimnames = list(par_names, f_names, NULL)),
-    theta_sig_err_inv = array(NA_real_,dim = c(n_pars, iters),dimnames = list(par_names, NULL)),
-    theta_psi_inv = array(NA_real_, dim = c(n_factors, iters), dimnames = list(NULL, NULL)),
-    theta_eta = array(NA_real_, dim = c(n_subjects, n_factors, iters), dimnames = list(subject_ids, NULL, NULL))
+    epsilon_inv = array(NA_real_,dim = c(n_pars, iters),dimnames = list(par_names, NULL)),
+    psi_inv = array(NA_real_, dim = c(n_factors, iters), dimnames = list(NULL, NULL)),
+    eta = array(NA_real_, dim = c(n_subjects, n_factors, iters), dimnames = list(subject_ids, NULL, NULL))
   )
   if(integrate) samples <- c(samples, base_samples)
   return(samples)
@@ -124,7 +124,7 @@ get_prior_factor <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5
         colnames(lambda) <- colnames(Lambda_mat)
       }
       if(selection %in% "loadings"){
-        samples$theta_lambda <- lambda
+        samples$lambda <- lambda
       }
     }
     if(selection %in% c("residuals", "alpha", "correlation", "Sigma", "covariance", "sigma2")) {
@@ -132,7 +132,7 @@ get_prior_factor <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5
                           ncol = n_pars, byrow = T))
       rownames(residuals) <- par_names
       if(selection %in% "residuals"){
-        samples$theta_sig_err_inv <- residuals
+        samples$epsilon_inv <- residuals
       }
     }
     if(selection %in% c("sigma2", "covariance", "correlation", "Sigma", "alpha")) {
@@ -171,11 +171,11 @@ get_startpoints_factor<- function(pmwgs, start_mu, start_var){
 }
 
 fill_samples_factor <- function(samples, group_level, proposals, j = 1, n_pars){
-  samples$theta_lambda[,,j] <- group_level$lambda
+  samples$lambda[,,j] <- group_level$lambda
   samples$lambda_untransf[,,j] <- group_level$lambda_untransf
-  samples$theta_sig_err_inv[,j] <- group_level$sig_err_inv
-  samples$theta_psi_inv[,j] <- group_level$psi_inv
-  samples$theta_eta[,,j] <- group_level$eta
+  samples$epsilon_inv[,j] <- group_level$sig_err_inv
+  samples$psi_inv[,j] <- group_level$psi_inv
+  samples$eta[,,j] <- group_level$eta
   samples <- fill_samples_base(samples, group_level, proposals, j = j, n_pars)
   return(samples)
 }
@@ -258,19 +258,19 @@ gibbs_step_factor <- function(sampler, alpha){
 last_sample_factor <- function(store) {
   list(
     mu = store$theta_mu[, store$idx],
-    eta = store$theta_eta[,,store$idx],
+    eta = store$eta[,,store$idx],
     lambda = store$lambda_untransf[,,store$idx],
-    psi_inv = store$theta_psi_inv[,store$idx],
-    sig_err_inv = store$theta_sig_err_inv[,store$idx]
+    psi_inv = store$psi_inv[,store$idx],
+    sig_err_inv = store$epsilon_inv[,store$idx]
   )
 }
 
 get_conditionals_factor <- function(s, samples, n_pars, iteration = NULL, idx = NULL){
   iteration <- ifelse(is.null(iteration), samples$iteration, iteration)
   if(is.null(idx)) idx <- 1:n_pars
-  sig_err <- log(samples$theta_sig_err_inv[idx,])
-  psi <- log(samples$theta_psi_inv)
-  eta <- matrix(samples$theta_eta[s,,], nrow = samples$n_factors)
+  sig_err <- log(samples$epsilon_inv[idx,])
+  psi <- log(samples$psi_inv)
+  eta <- matrix(samples$eta[s,,], nrow = samples$n_factors)
   lambda <- apply(samples$lambda_untransf[idx,,,drop = F], 3, unwind_lambda, samples$Lambda_mat[idx,])
   theta_mu <- samples$theta_mu[idx,]
   all_samples <- rbind(samples$alpha[idx, s,],theta_mu, eta, sig_err, psi, lambda)#, sig_err, psi, lambda)
@@ -279,9 +279,9 @@ get_conditionals_factor <- function(s, samples, n_pars, iteration = NULL, idx = 
   condmvn <- condMVN(mean = mu_tilde, sigma = var_tilde,
                      dependent.ind = 1:n_pars, given.ind = (n_pars + 1):length(mu_tilde),
                      X.given = c(samples$theta_mu[idx,iteration],
-                                 samples$theta_eta[s,,iteration],
-                                 log(samples$theta_sig_err_inv[idx, iteration]),
-                                 log(samples$theta_psi_inv[,iteration, drop = F]),
+                                 samples$eta[s,,iteration],
+                                 log(samples$epsilon_inv[idx, iteration]),
+                                 log(samples$psi_inv[,iteration, drop = F]),
                                  unwind_lambda(samples$lambda_untransf[idx,, iteration], samples$Lambda_mat[idx,])))
   return(list(eff_mu = condmvn$condMean, eff_var = condmvn$condVar))
 }
@@ -290,9 +290,9 @@ filtered_samples_factor <- function(sampler, filter){
   out <- list(
     theta_mu = sampler$samples$theta_mu[, filter],
     lambda_untransf = sampler$samples$lambda_untransf[, , filter, drop = F],
-    theta_psi_inv = sampler$samples$theta_psi_inv[, filter, drop = F],
-    theta_sig_err_inv = sampler$samples$theta_sig_err_inv[, filter],
-    theta_eta = sampler$samples$theta_eta[, , filter, drop = F],
+    psi_inv = sampler$samples$psi_inv[, filter, drop = F],
+    epsilon_inv = sampler$samples$epsilon_inv[, filter],
+    eta = sampler$samples$eta[, , filter, drop = F],
     theta_var = sampler$samples$theta_var[,,filter],
     alpha = sampler$samples$alpha[, , filter],
     Lambda_mat = attributes(sampler)$Lambda_mat,
@@ -334,8 +334,8 @@ bridge_add_group_factor <- function(all_samples, samples, idx){
   Lambda_mat <- attr(samples, "Lambda_mat")
   all_samples <- cbind(all_samples, t(samples$samples$theta_mu[,idx]))
   all_samples <- cbind(all_samples, t(matrix(apply(samples$samples$lambda_untransf[,,idx,drop = F], 3, unwind_lambda, Lambda_mat), ncol = nrow(all_samples))))
-  all_samples <- cbind(all_samples, t(log(samples$samples$theta_sig_err_inv[,idx])))
-  all_samples <- cbind(all_samples, t(log(samples$samples$theta_psi_inv[,idx, drop = F])))
+  all_samples <- cbind(all_samples, t(log(samples$samples$epsilon_inv[,idx])))
+  all_samples <- cbind(all_samples, t(log(samples$samples$psi_inv[,idx, drop = F])))
   return(all_samples)
 }
 
@@ -343,29 +343,29 @@ bridge_group_and_prior_and_jac_factor <- function(proposals_group, proposals_lis
   prior <- info$prior
   proposals <- do.call(cbind, proposals_list)
   theta_mu <- proposals_group[,1:info$n_pars]
-  theta_lambda <- proposals_group[,(info$n_pars +1):(info$n_pars + sum(info$Lambda_mat == Inf))]
+  lambda <- proposals_group[,(info$n_pars +1):(info$n_pars + sum(info$Lambda_mat == Inf))]
   theta_epsilon_inv <- proposals_group[,(1 + info$n_pars + sum(info$Lambda_mat == Inf)): (info$n_pars + sum(info$Lambda_mat == Inf) + info$n_pars)]
-  theta_psi_inv <- proposals_group[,(1 + info$n_pars + sum(info$Lambda_mat == Inf) + info$n_pars):
+  psi_inv <- proposals_group[,(1 + info$n_pars + sum(info$Lambda_mat == Inf) + info$n_pars):
                                      (info$n_pars + sum(info$Lambda_mat == Inf) + info$n_pars + info$n_factors), drop = F]
 
   n_iter <- nrow(theta_mu)
   sum_out <- numeric(n_iter)
   for(i in 1:n_iter){ # these unfortunately can't be vectorized
-    lambda_curr <- unwind_lambda(theta_lambda[i,], info$Lambda_mat, reverse = T)
+    lambda_curr <- unwind_lambda(lambda[i,], info$Lambda_mat, reverse = T)
     epsilon_curr <- diag(1/exp(theta_epsilon_inv[i,]))
-    psi_curr <- diag(1/exp(theta_psi_inv[i,]), info$n_factors)
+    psi_curr <- diag(1/exp(psi_inv[i,]), info$n_factors)
     theta_var_curr <- lambda_curr %*% psi_curr %*% t(lambda_curr) + epsilon_curr
     proposals_curr <- matrix(proposals[i,], ncol = info$n_pars, byrow = T)
     group_ll <- sum(dmvnorm(proposals_curr, theta_mu[i,], theta_var_curr, log = T))
     prior_epsilon <- sum(logdinvGamma(1/exp(theta_epsilon_inv[i,]), shape = prior$as, rate = prior$bs))
-    prior_psi <- sum(logdinvGamma(1/exp(theta_psi_inv[i,]), prior$ap, rate = prior$bp))
+    prior_psi <- sum(logdinvGamma(1/exp(psi_inv[i,]), prior$ap, rate = prior$bp))
     sum_out[i] <- group_ll + prior_epsilon + prior_psi
   }
-  prior_lambda <- dmvnorm(theta_lambda, mean = rep(0, ncol(theta_lambda)),
-                          sigma = diag(prior$theta_lambda_var, ncol(theta_lambda)), log = T)
+  prior_lambda <- dmvnorm(lambda, mean = rep(0, ncol(lambda)),
+                          sigma = diag(prior$theta_lambda_var, ncol(lambda)), log = T)
   prior_mu <- dmvnorm(theta_mu, mean = prior$theta_mu_mean, sigma = diag(prior$theta_mu_var), log =T)
   jac_psi <- rowSums(theta_epsilon_inv)
-  jac_epsilon <- rowSums(theta_psi_inv)
+  jac_epsilon <- rowSums(psi_inv)
   return(sum_out + prior_mu + prior_lambda + jac_psi + jac_epsilon) # Output is of length nrow(proposals)
 }
 
@@ -378,8 +378,8 @@ bridge_group_and_prior_and_jac_factor <- function(proposals_group, proposals_lis
 #   alpha <- samples$samples$alpha[,,samples$samples$stage== filter]
 #   theta_mu <- samples$samples$theta_mu[,samples$samples$stage== filter]
 #   lambda <- samples$samples$lambda_untransf[,,samples$samples$stage==filter, drop = F]
-#   psi_inv <- samples$samples$theta_psi_inv[,,samples$samples$stage==filter, drop = F]
-#   sig_err_inv <- samples$samples$theta_sig_err_inv[,,samples$samples$stage==filter]
+#   psi_inv <- samples$samples$psi_inv[,,samples$samples$stage==filter, drop = F]
+#   sig_err_inv <- samples$samples$epsilon_inv[,,samples$samples$stage==filter]
 #
 #   Lambda_mat <- info$hyper$Lambda_mat
 #   n_factors <- samples$n_factors

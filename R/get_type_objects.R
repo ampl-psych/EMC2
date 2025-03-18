@@ -295,7 +295,7 @@ get_objects_factor <- function(selection, sample_prior, return_prior, design = N
     prior$descriptions <- list(
       theta_mu_mean = "mean of the group-level mean prior",
       theta_mu_var = "variance of the group-level mean prior",
-      theta_lambda_var = "variance of the factor loadings",
+      lambda_var = "variance of the factor loadings",
       as = "shape of inverse-gamma prior on the residual variances",
       bs = "rate of inverse-gamma prior on the residual variances",
       ap = "shape prior of inverse gamma on factor variances",
@@ -303,7 +303,7 @@ get_objects_factor <- function(selection, sample_prior, return_prior, design = N
     )
     prior$types <- list(
       mu = c("theta_mu_mean", "theta_mu_var"),
-      loadings = c("theta_lambda_var", "ap", "bp"),
+      loadings = c("lambda_var", "ap", "bp"),
       residuals = c("as", "bs")
     )
     prior$type_descriptions <- list(
