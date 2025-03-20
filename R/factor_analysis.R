@@ -23,7 +23,70 @@ sp_new <- function(iter, lambda_varimax, q, p, dim_all_c, all_c, lambda_hat, st,
               switchedMatrix = switchedMatrix))
 }
 
-rsp_mc <- function (lambda, maxIter = 100, threshold = 1e-06, verbose = TRUE,
+
+#' Reorder MCMC Samples of Factor Loadings
+#'
+#' This function reorders MCMC samples of factor loadings to address the label switching problem
+#' in Bayesian factor analysis. It implements a parallelized version of the code and
+#' algorithm proposed by Papastamoulis and Ntzoufras (2022)
+#' @references Papastamoulis, P., & Ntzoufras, I. (2022). On the identifiability of Bayesian factor
+#' analytic models. *Statistical Computing*, 32(2), 1-29. doi: 10.1007/s11222-022-10084-4
+#'
+#' @param lambda Array of factor loadings with dimensions p (variables) x q (factors) x n (MCMC iterations)
+#' @param maxIter Maximum number of iterations for the alignment algorithm
+#' @param threshold Convergence threshold for the algorithm
+#' @param verbose Logical; whether to print progress information
+#' @param rotate Logical; whether to apply varimax rotation before alignment
+#' @param printIter Frequency of iteration reporting when verbose is TRUE
+#' @param n_cores Number of cores for parallel processing
+#'
+#' @return A list containing:
+#'   \item{lambda_reordered}{Array of reordered loadings}
+#'   \item{lambda_reordered_mcmc}{Array of reordered loadings as MCMC object}
+#'   \item{lambda_hat}{Matrix of mean loadings after reordering}
+#'   \item{v_vectors}{Matrix of permutation vectors}
+#'   \item{c_vectors}{Matrix of sign-switching vectors}
+#'
+#' @examples
+#' # Simulate a small example with 5 variables, 2 factors, and 10 MCMC iterations
+#' set.seed(123)
+#' p <- 5  # Number of variables
+#' q <- 2  # Number of factors
+#' n <- 10 # Number of MCMC iterations
+#'
+#' # Create random factor loadings with label switching
+#' lambda <- array(0, dim = c(p, q, n))
+#' for (i in 1:n) {
+#'   # Generate base loadings
+#'   base_loadings <- matrix(rnorm(p*q, 0, 0.5), p, q)
+#'   base_loadings[1:3, 1] <- abs(base_loadings[1:3, 1]) + 0.5  # Strong loadings on factor 1
+#'   base_loadings[4:5, 2] <- abs(base_loadings[4:5, 2]) + 0.5  # Strong loadings on factor 2
+#'
+#'   # Randomly switch labels and signs
+#'   if (runif(1) > 0.5) {
+#'     # Switch factor order
+#'     base_loadings <- base_loadings[, c(2, 1)]
+#'   }
+#'   if (runif(1) > 0.5) {
+#'     # Switch sign of factor 1
+#'     base_loadings[, 1] <- -base_loadings[, 1]
+#'   }
+#'   if (runif(1) > 0.5) {
+#'     # Switch sign of factor 2
+#'     base_loadings[, 2] <- -base_loadings[, 2]
+#'   }
+#'
+#'   lambda[,,i] <- base_loadings
+#' }
+#'
+#' # Align the loadings
+#' result <- align_loadings(lambda, maxIter = 10, verbose = TRUE, n_cores = 1)
+#'
+#' # Examine the aligned loadings
+#' print(result$lambda_hat)
+#'
+#' @export
+align_loadings <- function (lambda, maxIter = 100, threshold = 1e-06, verbose = TRUE,
                     rotate = TRUE, printIter = 1000, n_cores = 1)
 {
   q <- ncol(lambda)
@@ -107,28 +170,14 @@ rsp_mc <- function (lambda, maxIter = 100, threshold = 1e-06, verbose = TRUE,
   t_exact <- c(0, t1[1:totalIterations])
   f_exact <- c(f_zero, f[1:totalIterations])
   objective_function <- data.frame(time = t_exact, value = f_exact)
-  lambda_reordered_mcmc <- matrix(0, nrow = mcmcIterations, ncol = p*q)
   lambda_reordered <- lambda_varimax
   for (i in 1:mcmcIterations) {
     lambda <- matrix(lambda_varimax[,,i], nrow = p, ncol = q)
     switchedMatrix <- matrix(c_vectors[i, ], ncol = q, nrow = p,
                              byrow = T) * lambda[, v_vectors[i, ]]
     lambda_reordered[,,i] <- switchedMatrix
-    lambda_reordered_mcmc[i, ] <- c(t(switchedMatrix))
   }
-  colnames(lambda_reordered_mcmc) <- paste0(rep(paste0("LambdaV", 1:p, "_"), each = q),1:q)
-  lambda_reordered_mcmc <- coda::as.mcmc(lambda_reordered_mcmc)
-  result <- vector("list", length = 5)
-  result[[1]] <- lambda_reordered_mcmc
-  result[[2]] <- c_vectors
-  result[[3]] <- v_vectors
-  result[[4]] <- lambda_hat
-  result[[5]] <- objective_function
-  result[[6]] <- lambda_reordered
-  names(result) <- c("lambda_reordered_mcmc", "sign_vectors",
-                     "permute_vectors", "lambda_hat", "objective_function", "lambda_reordered")
-  class(result) <- c("list", "rsp")
-  return(result)
+  return(lambda_reordered)
 }
 
 
@@ -167,8 +216,8 @@ rearrange_loadings <- function(loadings){
 # #' standardize_loadings(emc, merge_chains = FALSE)
 # #' }
 # #'
-standardize_loadings <- function(emc = NULL, loadings = NULL, sig_err_inv = NULL,
-                                 stage = "sample", merge_chains = TRUE){
+standardize_loadings <- function(loadings = NULL, residuals = NULL,
+                                 stage = "sample"){
   stdize_set <- function(samples = NULL, idx = NULL, loadings = NULL, sig_err_inv = NULL){
     if(is.null(loadings)) loadings <- samples$samples$theta_lambda[,,idx, drop = F]
     if(is.null(sig_err_inv)) sig_err_inv <- samples$samples$theta_sig_err_inv[,idx]
@@ -213,6 +262,7 @@ standardize_loadings <- function(emc = NULL, loadings = NULL, sig_err_inv = NULL
 #' @param plot_means Boolean. Whether to plot the means or not
 #' @param only_cred Boolean. Whether to only plot credible values
 #' @param nice_names Character string. Alternative names to give the parameters
+#' @param selection Character. Whether to plot correlations or loadings
 #' @param ... Optional additional arguments
 #'
 #' @return No return value, creates a plot of group-level relations
@@ -226,7 +276,12 @@ standardize_loadings <- function(emc = NULL, loadings = NULL, sig_err_inv = NULL
 #' @export
 
 plot_relations <- function(emc = NULL, stage = "sample",  plot_cred = TRUE,
-                           plot_means = TRUE, only_cred = FALSE, nice_names = NULL, ...){
+                           plot_means = TRUE, only_cred = FALSE, nice_names = NULL,
+                           selection = "correlation", ...){
+
+  if(!selection %in% c("correlation", "loadings")){
+    stop("Selection must be either 'correlation' or 'loadings'")
+  }
 
   # for future factor model compatibility
   loadings <- NULL

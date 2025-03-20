@@ -64,12 +64,14 @@ get_prior_factor <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5
   if(!is.null(design)){
     n_pars <- length(sampled_pars(design, doMap = F))
   }
-  if(is.null(n_factors)) n_factors <- ncol(Lambda_mat)
+  if(is.null(Lambda_mat)) Lambda_mat <- attr(prior, "Lambda_mat")
   if(is.null(Lambda_mat)){
     Lambda_mat <- matrix(Inf, nrow = n_pars, ncol = n_factors)
     diag(Lambda_mat) <- 1
     Lambda_mat[upper.tri(Lambda_mat, diag = F)] <- 0
   }
+  if(is.null(n_factors)) n_factors <- ncol(Lambda_mat)
+
   if (is.null(prior$theta_mu_mean)) {
     prior$theta_mu_mean <- rep(0, n_pars)
   }
@@ -77,7 +79,7 @@ get_prior_factor <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5
     prior$theta_mu_var <- rep(1, n_pars)
   }
   if(is.null(prior$theta_lambda_var)){
-    prior$theta_lambda_var <- rep(.7, n_pars)
+    prior$theta_lambda_var <- rep(.2, n_pars)
   }
   if(is.null(prior$ap)){
     prior$ap <- 2
@@ -86,7 +88,7 @@ get_prior_factor <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5
     prior$bp <- .5
   }
   if(is.null(prior$as)){
-    prior$as <- rep(2, n_pars)
+    prior$as <- rep(2.5, n_pars)
   }
   if(is.null(prior$bs)){
     prior$bs <- rep(.1, n_pars)
@@ -96,6 +98,7 @@ get_prior_factor <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5
   prior$theta_lambda_invar <-1/prior$theta_lambda_var
   # Things I save rather than re-compute inside the loops.
   attr(prior, "type") <- "factor"
+  attr(prior, "Lambda_mat") <- Lambda_mat
   out <- prior
   if(sample){
     samples <- list()
@@ -187,14 +190,17 @@ gibbs_step_factor <- function(sampler, alpha){
   hyper <- attributes(sampler)
   prior <- sampler$prior
 
-  #extract previous values (for ease of reading)
-
+  # extract previous values (for ease of reading)
   alpha <- t(alpha)
   n_subjects <- sampler$n_subjects
   n_pars <- sum(!sampler$nuisance)
   n_factors <- sampler$n_factors
-  Lambda_mat <- hyper$Lambda_mat
-  Lambda_mat <- Lambda_mat == Inf #For indexing
+
+  # Save the original constraint matrix (with fixed values) for later rescaling.
+  Lambda_constraints <- hyper$Lambda_mat
+
+  # Create a binary indicator: TRUE for free parameters (Inf) and FALSE for fixed ones.
+  Lambda_mat <- (Lambda_constraints == Inf)
 
   eta <- matrix(last$eta, n_subjects, n_factors)
   psi_inv <- diag(last$psi_inv, n_factors)
@@ -202,56 +208,72 @@ gibbs_step_factor <- function(sampler, alpha){
   lambda <- matrix(last$lambda, n_pars, n_factors)
   mu <- last$mu
 
-  #Update mu
+  # Update mu
   mu_sig <- solve(n_subjects * sig_err_inv + prior$theta_mu_invar)
-  mu_mu <- mu_sig %*% (sig_err_inv %*% colSums(alpha - eta %*% t(lambda)) + prior$theta_mu_invar %*% prior$theta_mu_mean)
+  mu_mu <- mu_sig %*% (sig_err_inv %*% colSums(alpha - eta %*% t(lambda)) +
+                         prior$theta_mu_invar %*% prior$theta_mu_mean)
   mu <- rmvnorm(1, mu_mu, mu_sig)
   colnames(mu) <- colnames(alpha)
+
   # calculate mean-centered observations
   alphatilde <- sweep(alpha, 2, mu)
 
-  #Update eta, I do this one first since I don't want to save eta
+  # Update eta (latent factors)
   eta_sig <- solve(psi_inv + t(lambda) %*% sig_err_inv %*% lambda)
   eta_mu <- eta_sig %*% t(lambda) %*% sig_err_inv %*% t(alphatilde)
-  eta[,] <- t(apply(eta_mu, 2, FUN = function(x){rmvnorm(1, x, eta_sig)}))
+  eta[,] <- t(apply(eta_mu, 2, FUN = function(x){ rmvnorm(1, x, eta_sig) }))
 
-  # for(p in 1:n_pars){
-  #   constraint <- Lambda_mat[p,] == Inf
-  #   for(j in 1:n_factors){
-  #     alphatilde[,p] <- alphatilde[,p] - lambda[p,j] * eta[,j] * (1-constraint[j])
+  # Update sig_err (error precisions)
+  sig_err_inv <- diag(rgamma(n_pars, shape = prior$as + n_subjects/2,
+                             rate = prior$bs + colSums((alphatilde - eta %*% t(lambda))^2)/2))
+
+  # Update lambda (factor loadings) for free entries only
+  for (j in 1:n_pars) {
+    constraint <- Lambda_mat[j,]  # TRUE for free parameters
+    if(any(constraint)){  # Only update if there are free entries in row j
+      etaS <- eta[, constraint]
+      lambda_sig <- solve(sig_err_inv[j,j] * t(etaS) %*% etaS +
+                            diag(prior$theta_lambda_invar[j], sum(constraint)))
+      lambda_mu <- (lambda_sig * sig_err_inv[j,j]) %*% (t(etaS) %*% alphatilde[,j])
+      lambda[j, constraint] <- rmvnorm(1, lambda_mu, lambda_sig)
+    }
+  }
+
+  # Update psi_inv (latent factor precisions)
+  psi_inv[,] <- diag(rgamma(n_factors, shape = prior$ap + n_subjects/2,
+                            rate = prior$bp + colSums(eta^2)/2), n_factors)
+  # Optionally update via inverse Wishart if desired:
+  # psi_inv <- diag(n_factors) # or use riwish update
+
+  # **** New Rescaling Step to Enforce the Marker Constraints ****
+  # For each factor, locate the marker (fixed value) and rescale the factor loadings and scores.
+  # for (j in 1:n_factors) {
+  #   marker_idx <- which(!is.infinite(Lambda_constraints[, j]) & Lambda_constraints[,j] != 0)
+  #   if(length(marker_idx) == 0){
+  #     stop(sprintf("No constraint found for factor %d", j))
   #   }
+  #   # Choose the first marker in the column as the anchor.
+  #   marker_row <- marker_idx[1]
+  #   fixed_val <- Lambda_constraints[marker_row, j]  # e.g., should be 1 or another constant
+  #   # Compute scale factor: how far is the current loading from the fixed value?
+  #   scale_factor <- fixed_val / lambda[marker_row, j]
+  #   # Rescale the entire j-th column of lambda and adjust eta accordingly.
+  #   lambda[, j] <- lambda[, j] * scale_factor
+  #   eta[, j] <- eta[, j] / scale_factor
+  # }
+  # **** End Rescaling Step ****
+
+  # The rest of the code (e.g., signFix) can follow if desired.
+  # for(l in 1:n_factors){
+  #   mult <- ifelse(lambda[l, l] < 0, -1, 1)
+  #   lambda[,l] <- mult * lambda[, l]
   # }
 
-  #Update sig_err
-  sig_err_inv <- diag(rgamma(n_pars,shape=prior$as+n_subjects/2, rate= prior$bs + colSums((alphatilde - eta %*% t(lambda))^2)/2))
+  var <- lambda %*% solve(psi_inv) %*% t(lambda) + diag(1/diag(sig_err_inv))
+  lambda <- lambda %*% matrix(diag(sqrt(1/diag(psi_inv)), n_factors), nrow = n_factors)
 
-  #Update lambda
-  for (j in 1:n_pars) {
-    constraint <- Lambda_mat[j,] #T if item is not constraint (bit confusing tbh)
-    if(any(constraint)){ #Don't do this if there are no free entries in lambda
-      etaS <- eta[,constraint]
-      lambda_sig <- solve(sig_err_inv[j,j] * t(etaS) %*% etaS + diag(prior$theta_lambda_invar[j], sum(constraint)))
-      lambda_mu <- (lambda_sig * sig_err_inv[j,j]) %*% (t(etaS) %*% alphatilde[,j])
-      lambda[j,constraint] <- rmvnorm(1,lambda_mu,lambda_sig)
-    }
-  }
-
-  #Update psi_inv
-  psi_inv[,] <- diag(rgamma(n_factors ,shape=prior$ap+n_subjects/2,rate=prior$bp+colSums(eta^2)/2), n_factors)
-  # psi_inv <- diag(n_factors)#solve(riwish(n_subjects + prior$rho_0, t(eta) %*% eta + solve(prior$R_0)))
-
-  lambda_orig <- lambda
-  #If the diagonals of lambda aren't constrained to be 1, we should fix the signs
-  if(hyper$signFix){
-    for(l in 1:n_factors){
-      mult <- ifelse(lambda[l, l] < 0, -1, 1) #definitely a more clever function for this
-      lambda_orig[,l] <- mult * lambda[, l]
-    }
-  }
-
-  var <- lambda_orig %*% solve(psi_inv) %*% t(lambda_orig) + diag(1/diag((sig_err_inv)))
-  lambda_orig <- lambda_orig %*% matrix(diag(sqrt(1/diag(psi_inv)), n_factors), nrow = n_factors)
-  return(list(tmu = mu, tvar = var, lambda_untransf = lambda, lambda = lambda_orig, eta = eta,
+  return(list(tmu = mu, tvar = var, lambda_untransf = lambda,
+              lambda = lambda, eta = eta,
               sig_err_inv = diag(sig_err_inv), psi_inv = diag(psi_inv), alpha = t(alpha)))
 }
 

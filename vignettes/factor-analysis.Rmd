@@ -1,0 +1,301 @@
+---
+title: "Hierarchical Factor Analysis"
+description: "A guide to SBC in EMC2"
+author: "Niek Stevenson"
+output: rmarkdown::html_document
+bibliography: refs.bib
+vignette: >
+  %\VignetteIndexEntry{"Hierarchical Factor Analysis"}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+## Introduction
+
+*EMC2* is a package for estimating hierarchical models of choice behavior. Hierarchical models are a powerful tool for modeling within-subject variation in behavior, and are particularly useful for modeling individual differences. A more recent development in the field of hierarchical models is "joint modeling", which targets individual differences between different data-sets (i.e. are drift rates related between different tasks across participants) or even different data-streams, such as fMRI, to study neural correlates with cognitive model parameters [@palestroTutorialJoint2018; @stevensonJointModelling2024].
+
+The *EMC2* package is also equipped to perform hierarchical factor analysis, which is a technique that can be used to identify latent factors that explain within-subject variation between parameter estimates. These latent factors not only facilitate the interpretation of the model, but also provide a more parsimonious representation of the data.This vignette will guide you through the process of performing hierarchical factor analysis using the *EMC2* package.
+
+We first load the *EMC2* package and clear the workspace.
+
+```{r, results = "hide"}
+rm(list = ls())
+library(EMC2) 
+```
+
+### Overview of the data
+
+Here we will use the data set from @eisenberg2019may, which contains data from 7 different conflict tasks. Conflict tasks typically contain a conflict condition in which a incongruent/conflicting stimulus requires more cognitive control compared to a congruent stimulus.
+
+The data is externally hosted:
+
+```{r}
+load(url("https://raw.githubusercontent.com/ampl-psych/EMC2-data/main/data/Eisenberg.RData"))
+```
+
+### Data Preparation
+
+First, we should prepare the data for analysis. We need to ensure that our variables are properly formatted for *EMC2*, which expects a subjects (participant identifier), R (response) and rt (response time) column. Also ensure that columns that are supposed to be treated as factors are factor variables in your data frame. Here we've already done the required preprocessing:
+
+```{r}
+head(data)
+```
+
+We'll be making use of the likelihood factorization that *EMC2* employs to handle high dimensional parameter spaces. Therefore we will pass all 7 data sets and accompanying designs as a list to the `make_emc` function below. First we split the data sets by task
+
+```{r}
+data_list <- split(data, data$task)
+```
+
+## Specifying a Design
+
+For our hierarchical factor analysis, we need to specify the design of our model. The design object in *EMC2* describes how parameters relate to factors of the experimental design.
+
+Unfortunately this data was accuracy coded, meaning that we cannot estimate a response bias parameter (`Z`). Instead the upper bound of the evidence accumulation process in the DDM will be associated with the correct response, and the lower bound with the incorrect response (see figure below).
+
+We make the standard assumption that the conflict manipulation affects the drift rate. To that end we use the `ADmat` matrix to specify that we estimate a mean drift rate that holds across both conflict and non-conflict trials, and a difference in drift rate parameter that specifies how much the drift rate is affected by conflict effects.
+
+Furthermore, we specify specify that the boundary separation parameter `a` and the non-decision time `t0` are assumed to be the same across the design (within a task).
+
+```{r}
+# Create contrast matrix for drift rate difference
+ADmat <- matrix(c(-1/2,1/2),ncol=1,dimnames=list(NULL,"_d"))
+# Very low errors across the board which could prove difficult to converge
+# We'll find out! We can make the same design for all tasks.
+conflict_design <- design(data = data_list[[1]], contrasts = list(conflict_type = ADmat),
+                      formula =list(v~conflict_type,a~1, t0~1, s~1),
+                      constants=c(s=log(1)),
+                      model = DDM)
+```
+
+The drift rate mappings can also be examined using the `mapped_pars` function:
+
+```{r}
+mapped_pars(conflict_design)
+```
+
+Although we have now only specified a design for the first task, since the tasks are so similar in set up, we can reuse the design for all tasks.
+
+```{r}
+joint_design <- rep(list(conflict_design), length(data_list))
+```
+
+Now we end up with 7 data sets, and 7 accompanying designs.
+
+## Prior Specification
+
+Next, we specify the priors for our model parameters. First, we use the "infnt_factor" type which implements an hierarchical version of the prior structure proposed by @bhattacharya2011sparse.
+
+```{r}
+# Specify priors
+prior_efa <- prior(joint_design, 
+            theta_mu_mean = rep(c(2, 1, log(1.5), log(.2)),7),
+               type = "infnt_factor")
+```
+
+For an overview of the prior, including defaults we haven't changed (but can change if we want to by adding them to the prior call above), we can use:
+
+```{r}
+summary(prior_efa)
+```
+
+Here *EMC2* automatically added the `1|` or `2|` etc. to the parameter names to be able to distinguish the parameters belonging to the different tasks from each other. To for example change an additional prior we can use:
+
+```{r}
+prior_help("infnt_factor")
+prior_efa_alt <- prior(joint_design, update = prior_efa, df = 2)
+```
+
+Instead, for now we just use the default priors for everything except the group-level mean. It's always a good practice to visualize our priors to ensure they align with our expectations:
+
+```{r, eval = FALSE}
+# Visualize priors
+plot(prior_efa, selection = "correlation", N = 5e3)
+plot(prior_efa,  selection = "loadings", N = 5e3)
+plot(prior_efa, selection = "Sigma", N = 5e3)
+```
+
+The default priors were chosen such that they yield roughly uniform priors on the correlations. With the prior, design and data ready we can create an *EMC2* object and fit the model. Here the speedup factor, corresponds to the compression performed under the hood.
+
+```{r}
+
+# Create samplers for both datasets
+efa <- make_emc(data_list, joint_design, type = "infnt_factor", prior_list = prior_efa)
+
+# Fit the model, this will take a while:
+emc_efa <- fit(efa, cores_per_chain = 3, fileName = "Forstmann_samples_efa.RData")
+
+# Save the fitted model
+save(emc_efa, file = "Forstmann_samples_efa.RData")
+```
+
+We do a quick check if the chains look ok:
+
+```{r}
+check(emc_efa, selection = c("mu", "sigma2", "correlation", "alpha"))
+```
+
+Low efficiency for the group-level chains, (especially means and variances), but even the worst-subject level parameter looks good. For now we will continue with this, but we could of course sample for longer.
+
+## Model inference
+
+Before we look at the loadings, let's see if the model fits the data reasonably. To that end, we can use the predict function. This will generate 50 data-sets from random draws from the posterior.
+
+```{r}
+pp_efa <- predict(emc_efa, n_cores = 8)
+```
+
+For joint models, i.e., where two data sets have been fed to the make_emc function. *EMC2* will output a list of predictives, one for each data set. To plot the fit we can use the plot_cdf function:
+
+```{r}
+plot_cdf(data_in, pp_efa[[1]], factors = "cond", layout = c(1,3))
+```
+
+The model does not fit the data in the scanner well. Especially the neutral emphasis condition (condition 2) has significant misfit. Outside the scanner participants completed more trials, let's see if that helped the model fit the data better.
+
+```{r}
+plot_cdf(data_out, pp_efa[[2]], factors = "cond", layout = c(1,3))
+```
+
+No such luck, the misfit is still very present. Normally, this would prompt us to re-enter the model design phase and reconstruct our model, but since this tutorial is on factor analysis we'll keep going for now. Let's inspect the factor loadings
+
+```{r}
+loadings <- get_pars(emc_efa, selection = "loadings", merge_chains = TRUE, return_mcmc = FALSE)
+residuals <- get_pars(emc_efa, selection = "residuals", merge_chains = TRUE, return_mcmc = FALSE)
+# Quick heuristic to see how many factors to include in the posterior processing
+credint(emc_efa, selection = "loadings")
+```
+
+With the infinite factor type we are assuming no a-priori constraint on the factor loadings. However, due to rotational, permutation and sign ambiguities we need to post-hoc process the factor loadings. To that end we can use the `align_loadings` function. However, since this searches the complete space of available permutations, it is advisable to limit the number of factor columns fed to the function. Here since we found very small credible intervals for any factor beyond the second factor, we will only use the first four factors.
+
+```{r}
+loadings_aligned <- align_loadings(loadings[,1:4,], n_cores = 8)
+```
+
+Here *EMC2* automatically added the `1|` or `2|` to the parameter names to indicate which dataset the parameter belongs to (1 = in scanner, 2 = out scanner).
+
+However, the constraints imposed here required for identification of the model, resulted in the priors being non-uniform between some of the parameters.
+
+Let's elaborate a little bit on the constraints imposed. We can specify a matrix of constraints on the loadings using the Lambda_mat argument. Here the Lambda_mat is a matrix with rows equal to the number of parameters, and columns equal to the number of factors. Any numeric values in the matrix will be used as constants in the loading matrix. Any `Inf` entries in the loading matrix will be loadings that are freely estimated from the data. The default Lambda_mat (which is used when no Lambda_mat is specified) is a matrix of `Inf`s, with upper triangular elements set to 0 and the diagonal set to 1:
+
+```{r}
+Lambda_mat <- matrix(Inf, nrow = 12, ncol = 2)
+Lambda_mat[upper.tri(Lambda_mat)] <- 0
+diag(Lambda_mat) <- 1
+rownames(Lambda_mat) <- names(sampled_pars(joint_design))
+colnames(Lambda_mat) <- paste0("F", 1:2)
+Lambda_mat
+```
+
+To impose additional constraints on the Lambda_mat, we can set other values to non-Inf. These constraints unfortunately a priori influence parameter estimation. An alternative constraint would for example be to create a drift rate difference factor and a threshold factor.
+
+```{r}
+Lambda_mat[1,] <- c(Inf, Inf)
+Lambda_mat[2,] <- c(1,0)
+Lambda_mat[3,] <- c(0,1)
+Lambda_mat
+```
+
+We'll use this Lambda_mat for now, which provides some meaningful constraint, yet does not overconstrain.
+
+## Model Fitting
+
+Now we'll create and fit the samplers for both in-scanner and out-scanner data. We use the `make_emc` function to create the samplers, specifying the "infnt_factor" type to indicate that we want to perform factor analysis.
+
+```         
+```
+
+## Analyzing Factor Structure
+
+After fitting the model, we can analyze the factor structure. First, we'll create meaningful names for our parameters to make interpretation easier.
+
+```{r, eval=FALSE}
+# Create meaningful parameter names
+nice_names <- c("$V0['in']",
+                "$delta['in']",
+                "$B['in']^'neutral'",
+                "$B['in']^'accuracy'",
+                "$B['in']^'speed'",
+                "$t0['in']",
+                "$V0['out']",
+                "$delta['out']",
+                "$B['out']^'neutral'",
+                "$B['out']^'accuracy'",
+                "$B['out']^'speed'",
+                "$t0['out']")
+
+# Plot correlations between parameters
+plot_relations(samplers, do_corr = TRUE, plot_cred = FALSE, 
+               only_cred = TRUE, nice_names = nice_names)
+```
+
+## Factor Analysis Post-Processing
+
+For post-processing the factor analysis results, we'll extract the loadings and residuals, then determine the appropriate number of factors to retain.
+
+```{r, eval=FALSE}
+# Subset samplers for efficiency
+samplers_short <- subset(samplers, filter = 500)
+
+# Extract loadings and residuals
+loadings <- get_pars(samplers_short, selection = "loadings", 
+                    merge_chains = TRUE, return_mcmc = FALSE)
+residuals <- get_pars(samplers_short, selection = "residuals", 
+                     merge_chains = TRUE, return_mcmc = FALSE)
+
+# Examine loadings to determine number of factors
+posterior_summary(samplers_short, selection = "loadings")
+```
+
+We can see from the posterior summary that three factors appear significant, but we'll use five for our rotation to ensure we capture all potential factors.
+
+```{r, eval=FALSE}
+# Rotate factors
+res <- EMC2:::rsp_mc(loadings[,1:5,], n_cores = 20)
+
+# Visualize rotated factors
+library(factor.switching)
+plot(res)
+
+# Identify credible factors
+probs <- .95
+factors_out <- c(which(credible.region(res$lambda_reordered_mcmc, probs = probs)[[1]][1,] > 0),
+                 which(credible.region(res$lambda_reordered_mcmc, probs = probs)[[1]][2,] < 0))
+factors_out <- unique(as.numeric(sub("^[^_]*_", "", names(factors_out))))
+factors_out 
+
+# Rearrange and standardize loadings
+rear_lambda <- EMC2:::rearrange_loadings(res$lambda_reordered[,factors_out,,drop = FALSE])
+std_lambda <- EMC2:::standardize_loadings(loadings = rear_lambda, sig_err_inv = 1/residuals)
+
+# Create factor diagram
+EMC2:::make_factor_diagram(loadings = std_lambda, only_cred = FALSE, 
+                          sort = TRUE, nice_names = nice_names,
+                          cex = 1.5)
+
+# Plot final factor loadings
+plot_relations(loadings = std_lambda, plot_cred = FALSE, only_cred = TRUE, 
+               plot_means = TRUE, nice_names = nice_names)
+```
+
+## Interpretation
+
+The factor analysis reveals latent structures in our hierarchical model parameters. These factors represent underlying cognitive constructs that explain correlations between different model parameters. For example, we might discover:
+
+1.  A "response caution" factor that loads heavily on threshold parameters across conditions
+2.  A "processing efficiency" factor related to drift rates
+3.  A "motor preparation" factor associated with non-decision time parameters
+
+These factors help us understand the shared cognitive mechanisms that drive performance across different experimental conditions and settings (in and out of scanner).
+
+## Conclusion
+
+In this vignette, we've demonstrated how to perform hierarchical factor analysis using the EMC2 package. This approach allows us to:
+
+1.  Model parameters hierarchically across participants
+2.  Discover latent factor structure underlying parameter correlations
+3.  Interpret these factors in terms of cognitive mechanisms
+
+The infinite factor model implemented in EMC2 provides a flexible approach to discover the underlying dimensionality in your data without having to specify the number of factors in advance.
+
+## References
