@@ -28,15 +28,25 @@ rPROBIT <- function(lR,pars,p_types=c("mean","sd","threshold"),lt=-Inf)
   cbind.data.frame(R=R,rt=NA)
 }
 
-# #' Gaussian Signal Detection Theory Model
-# #'
-# #' Discrete choice based on continuous Gaussian latent, with no rt. Model
-# #' parameters are mean (unbounded) sd (log scale) and threshold, with a first
-# #' value is  on the natural scale, and others for designs with with more than
-# #' two responses are threshold increases on a log scale to enforce monotonic
-# #' increase on the natural scale.
-# #'
-# #' @return A model list with all the necessary functions to sample
+#' Gaussian Signal Detection Theory Model for Binary Responses (probit)
+#'
+#' Discrete binary choice based on continuous Gaussian latent, with no rt (rt
+#' must be set to NA in data).
+#'
+#' Model parameters are:
+#'    mean (unbounded)
+#'    sd (log scale) and
+#'    threshold (unbounded).
+#'
+#' For identifiability in one condition two parameters must be fixed
+#' (conventionally mean=0 and sd = 1). When used with data that records only
+#' accuracy (so reponse bias cannot be evaluated) a single threshold must be
+#' assumed and fixed (e.g., threshold = 0).
+#'
+#' At present this model is not fully implemented in C, but as its likelihood
+#' requires only pnorm evaluation it is quite fast.
+#'
+#' @return A model list with all the necessary functions to sample
 #' @export
 #'
 
