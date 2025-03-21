@@ -2,7 +2,7 @@
 % Please edit documentation in R/s3_funcs.R
 \name{plot.emc}
 \alias{plot.emc}
-\title{Plot function for emc objects}
+\title{Plot Function for emc Objects}
 \usage{
 \method{plot}{emc}(
   x,
@@ -30,6 +30,10 @@ A trace/acf plot of the selected MCMC chains
 }
 \description{
 Makes trace plots for model parameters.
+}
+\details{
+If an emc object that has not been run with \code{fit} yet is supplied
+prior plots will be returned.
 }
 \examples{
 plot(samples_LNR)

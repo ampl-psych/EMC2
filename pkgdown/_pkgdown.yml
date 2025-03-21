@@ -74,6 +74,7 @@ reference:
 - contents:
   - compare
   - compare_subject
+  - model_averaging
   - run_bridge_sampling
   - get_BayesFactor
   - credible
@@ -86,6 +87,10 @@ reference:
 - title: Simulation-based calibration
 - contents:
   - matches("sbc")
+
+- title: miscellaneous
+- contents:
+  - update2version
 
 - title: Included data
 - contents:

@@ -3,26 +3,22 @@
 \name{fit.emc}
 \alias{fit.emc}
 \alias{fit}
-\title{Model estimation in EMC2}
+\title{Model Estimation in EMC2}
 \usage{
 \method{fit}{emc}(
   emc,
   stage = NULL,
   iter = 1000,
   stop_criteria = NULL,
-  report_time = TRUE,
   search_width = 1,
   step_size = 100,
   verbose = TRUE,
-  verboseProgress = FALSE,
   fileName = NULL,
-  particles = NULL,
-  particle_factor = 70,
+  particle_factor = 50,
   cores_per_chain = 1,
   cores_for_chains = length(emc),
   max_tries = 20,
-  thin_auto = FALSE,
-  n_blocks = 1,
+  thin = FALSE,
   ...
 )
 
@@ -40,8 +36,6 @@ If unspecified, it will run the subsequent stage (if there is one).}
 \item{stop_criteria}{A list. Defines the stopping criteria and for which types
 of parameters these should hold. See the details and examples section.}
 
-\item{report_time}{Boolean. If \code{TRUE}, the time taken to run the MCMC chains till completion of the \code{stop_criteria} will be printed.}
-
 \item{search_width}{A double. Tunes target acceptance probability of the MCMC process.
 This fine-tunes the width of the search space to obtain the desired acceptance probability.
 1 is the default width, increases lead to broader search.}
@@ -51,13 +45,7 @@ by \code{stop_criteria} are checked and proposal distributions are updated. Defa
 
 \item{verbose}{Logical. Whether to print messages between each step with the current status regarding the \code{stop_criteria}.}
 
-\item{verboseProgress}{Logical. Whether to print a progress bar within each step or not.
-Will print one progress bar for each chain and only if \code{cores_for_chains = 1}.}
-
 \item{fileName}{A string. If specified, will auto-save emc object at this location on every iteration.}
-
-\item{particles}{An integer. How many particles to use, default is \code{NULL} and
-\code{particle_factor} is used instead. If specified, \code{particle_factor} is overwritten.}
 
 \item{particle_factor}{An integer. \code{particle_factor} multiplied by the square
 root of the number of sampled parameters determines the number of particles used.}
@@ -73,10 +61,8 @@ Defaults to the number of chains. The total number of cores used is equal to \co
 conditions as specified by \code{stop_criteria}? Defaults to 20. \code{max_tries} is
 ignored if the required number of iterations has not been reached yet.}
 
-\item{thin_auto}{A boolean. If \code{TRUE} will automatically thin the MCMC samples, closely matched to the ESS.}
-
-\item{n_blocks}{An integer. Number of blocks. Will block the parameter chains such that they are
-updated in blocks. This can be helpful in extremely tough models with a large number of parameters.}
+\item{thin}{A boolean. If \code{TRUE} will automatically thin the MCMC samples, closely matched to the ESS.
+Can also be set to a double, in which case 1/thin of the chain will be removed (does not have to be an integer).}
 
 \item{...}{Additional optional arguments}
 }
@@ -116,36 +102,24 @@ Stevenson, N., Donzallaz, M. C., Innes, R. J., Forstmann, B., Matzke, D., & Heat
 EMC2: An R Package for cognitive models of choice. doi.org/10.31234/osf.io/2e4dq
 }
 \examples{
-\dontrun{
-# First define a design
-design_DDMaE <- design(data = forstmann,model=DDM,
-                           formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
-                           constants=c(s=log(1)))
-# Then make the emc object, we've omitted a prior here for brevity so default priors will be used.
-emc_forstmann <- make_emc(forstmann, design)
+\donttest{
+# Define a design first
+ADmat <- matrix(c(-1/2,1/2),ncol=1,dimnames=list(NULL,"d"))
+# We also define a match function for lM
+matchfun=function(d)d$S==d$lR
 
-# With the emc object we can start sampling by simply calling fit
-emc_forstmann <- fit(emc_forstmann, fileName = "intermediate_save_location.RData")
+# Drop most subjects for speed
+dat <- forstmann[forstmann$subjects \%in\% unique(forstmann$subjects)[1:2],]
+dat$subjects <- droplevels(dat$subjects)
 
-# For particularly hard models it pays off to increase the ``particle_factor``
-# and, although to a lesser extent, increase ``search_width``.
-emc_forstmann <- fit(emc_forstmann, particle_factor = 100, search_width = 1.5)
-
-# Example of how to use the stop_criteria:
-emc_forstmann <- fit(emc_forstmann, stop_criteria = list(mean_gd = 1.1, max_gd = 1.5,
-            selection = c('alpha', 'sigma2'), omit_mpsrf = TRUE, min_es = 1000))
-# In this case the stop_criteria are set for the sample stage, which will be
-# run until the mean_gd < 1.1, the max_gd < 1.5 (omitting the multivariate psrf)
-# and the effective sample size > 1000,
-# for both the individual-subject parameters ("alpha")
-# and the group-level variance parameters.
-
-# For the unspecified stages in the ``stop_criteria`` the default values
-# are assumed which are found in Stevenson et al. 2024 <doi.org/10.31234/osf.io/2e4dq>
-
-# Alternatively, you can also specify the stop_criteria for specific stages by creating a
-# nested list
-emc_forstmann <- fit(emc_forstmann, stop_criteria = list("burn" = list(mean_gd = 1.1, max_gd = 1.5,
-            selection = c('alpha')), "adapt" = list(min_unique = 100)))
+design_LNR <- design(data = dat,model=LNR,matchfun=matchfun,
+                     formula=list(m~lM,s~1,t0~1),
+                     contrasts=list(m=list(lM=ADmat)))
+# Before fit can be called, we first need to make an emc object
+LNR_s <- make_emc(dat, design_LNR, rt_resolution = 0.05, n_chains = 2)
+# Run fit, here illustrating how to use stop_criteria (also for speed purposes)
+LNR_s <- fit(LNR_s, cores_for_chains = 1, stop_criteria = list(
+  preburn = list(iter = 10), burn = list(mean_gd = 2.5), adapt = list(min_unique = 20),
+  sample = list(iter = 25, max_gd = 2)), verbose = FALSE, particle_factor = 30, step_size = 25)
 }
 }

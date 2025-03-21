@@ -2,7 +2,7 @@
 % Please edit documentation in R/SBC.R
 \name{run_sbc}
 \alias{run_sbc}
-\title{Simulation-based calibration}
+\title{Simulation-Based Calibration}
 \usage{
 run_sbc(
   design_in,

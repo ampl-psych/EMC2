@@ -139,7 +139,7 @@ get_defect_scalars <- function(
 ###############################################################################
 draw_noise_paths_DDM <- function(x0, x1, y0, y1,
                                  s       = 3,
-                                 n_paths = 10,
+                                 n_paths = 5,
                                  col     = "black") {
   if (x1 == x0) {
     return()
@@ -168,7 +168,7 @@ draw_noise_paths_DDM <- function(x0, x1, y0, y1,
       }
     }
     y_vals <- pmax(y_min, pmin(y_vals, y_max))
-    lines(x_vals, y_vals, col=adjustcolor(col, alpha.f=0.5), lwd=0.8)
+    lines(x_vals, y_vals, col=adjustcolor(col, alpha.f=0.5), lwd=0.6)
   }
 }
 
@@ -200,15 +200,10 @@ draw_noise_paths_race <- function(x0, x1, y0, y1, s = 1.5, n_paths = 5, col = "b
     }
     y_vals <- pmin(y_vals, y_max)
     y_vals[y_vals < -0.1] <- -.1
-    lines(x_vals, y_vals, col=adjustcolor(col, alpha.f=0.5), lwd=0.8)
+    lines(x_vals, y_vals, col=adjustcolor(col, alpha.f=0.5), lwd=0.6)
   }
 }
 
-
-
-###############################################################################
-### (8) single_DDM_plot()
-###############################################################################
 ###############################################################################
 ### single_DDM_plot()
 ###############################################################################

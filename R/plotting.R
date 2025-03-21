@@ -225,7 +225,7 @@ plot_fit_choice <- function(data,pp,subject=NULL,factors=NULL,functions=NULL,
   }
 }
 
-#' Plot within-chain correlations
+#' Plot Within-Chain Correlations
 #'
 #' Plots within-chain parameter correlations (upper triangle) and corresponding
 #' scatterplots (lower triangle) to visualize parameter sloppiness.
@@ -256,7 +256,7 @@ plot_fit_choice <- function(data,pp,subject=NULL,factors=NULL,functions=NULL,
 pairs_posterior <- function(emc, selection="alpha", scale_subjects=TRUE,
                             do_plot=TRUE,N=500, ...)
 {
-
+  if(!is(emc, "emc")) stop("input must be an emc object")
   panel.hist <- function(x, ...)
   {
     usr <- par("usr"); on.exit(par(usr))
@@ -303,7 +303,7 @@ pairs_posterior <- function(emc, selection="alpha", scale_subjects=TRUE,
   invisible(rs)
 }
 
-#' Likelihood profile plots
+#' Likelihood Profile Plots
 #'
 #' Creates likelihood profile plots from a design and the experimental data by
 #' varying one model parameter while holding all others constant.
@@ -349,7 +349,7 @@ profile_plot <- function(data, design, p_vector, range = .5, layout = NA,
   dots <- list(...)
   lfun <- function(i,x,p_vector,pname,dadm) {
     p_vector[pname] <- x[i]
-    calc_ll_R(p_vector, attr(dadm,"model")(), dadm)
+    calc_ll_R(p_vector, attr(dadm, "model")(), dadm)
   }
   if(!identical(names(p_min), names(p_max))) stop("p_min and p_max should be specified for the same parameters")
   if(!is.null(names(p_min)) & length(p_min) == length(use_par)) names(p_min) <- use_par
@@ -394,7 +394,7 @@ profile_plot <- function(data, design, p_vector, range = .5, layout = NA,
   return(round(out, 3))
 }
 
-#' Plots density for parameters
+#' Plots Density for Parameters
 #'
 #' Plots the posterior and prior density for selected parameters of a model.
 #' Full range of samples manipulations described in `get_pars`.
@@ -430,6 +430,7 @@ plot_pars <- function(emc,layout=NA, selection="mu", show_chains = FALSE, plot_p
                       use_prior_lim = !all_subjects, lpos = "topright", true_pars = NULL, all_subjects = FALSE,
                       prior_args = list(), true_args = list(), ...)
 {
+  if(!is(emc, "emc")) stop("input must be an emc object")
   oldpar <- par(no.readonly = TRUE) # code line i
   on.exit(par(oldpar)) # code line i + 1
   dots <- list(...)

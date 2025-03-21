@@ -181,7 +181,7 @@ prep_data_plot <- function(input, post_predict, prior_predict, to_plot, limits,
   return(list(datasets = datasets, sources = sources, xlim = xlim))
 }
 
-#' Plot statistics on data
+#' Plot Statistics on Data
 #'
 #' Plots panels that contain a set of densities for each level of the specified `factor`
 #' The densities represent the predicted data across the posterior, the vertical lines represent the real data.
@@ -211,9 +211,9 @@ plot_stat <- function(input, post_predict = NULL, prior_predict = NULL, stat_fun
   sources <- check$sources
 
   # Basic definitions
-  dots <- add_defaults(list(...), col = c("black", "#666666", "#A9A9A9"))
-  posterior_args <- add_defaults(posterior_args, col = c("darkgreen", "#008B8B", "#0000FF"))
-  prior_args <- add_defaults(prior_args, col = c("red", "#CC00FF", "#800080"))
+  dots <- add_defaults(list(...), col = c("black",  "#A9A9A9", "#666666"))
+  posterior_args <- add_defaults(posterior_args, col = c("darkgreen",  "#0000FF", "#008B8B"))
+  prior_args <- add_defaults(prior_args, col = c("red", "#800080", "#CC00FF"))
 
   line_sources <- list()
   dens_sources <- list()
@@ -257,7 +257,7 @@ plot_stat <- function(input, post_predict = NULL, prior_predict = NULL, stat_fun
                                  quantile_stats)
       dens <- lapply(split(src_stats_df, src_stats_df$group_key), function(x){
         lapply(stat_names, function(y){
-          do.call(density, c(list(x[,y]), fix_dots(src_args, density.default, consider_dots = F)))
+          do.call(density, c(list(x[,y]), fix_dots(dots, density.default, consider_dots = F)))
         })
       })
       dens_sources[[src_name]] <- dens
@@ -292,9 +292,10 @@ plot_stat <- function(input, post_predict = NULL, prior_predict = NULL, stat_fun
   first_data <- data_sources[[1]]
   if (is.null(first_data)) return(invisible(NULL))
   unique_group_keys <- unique(first_data$group_key)
-
-  oldpar <- par(no.readonly = TRUE)
-  on.exit(par(oldpar))
+  if(!is.null(layout)){
+    oldpar <- par(no.readonly = TRUE)
+    on.exit(par(oldpar))
+  }
   if (any(is.na(layout))) {
     par(mfrow = coda_setmfrow(Nchains = 1, Nparms = length(unique_group_keys), nplots = 1))
   } else {
@@ -309,6 +310,7 @@ plot_stat <- function(input, post_predict = NULL, prior_predict = NULL, stat_fun
     tmp_posterior_args <- posterior_args
     tmp_prior_args <- prior_args
     legend_map <- c()
+    lwd_map <- numeric()
     main_in <- ifelse(is.null(stat_name), group_key, paste(group_key, "-", stat_name))
     do.call(plot, c(list(NA), fix_dots_plot(add_defaults(dots, main = main_in, ylab = "Density", xlab = " "))))
     for (k in 1:length(data_sources)) {
@@ -326,6 +328,7 @@ plot_stat <- function(input, post_predict = NULL, prior_predict = NULL, stat_fun
         tmp_prior_args$col <- tmp_prior_args$col[-1]
       }
       legend_map[src_name] <- src_args$col[1]
+      lwd_map[src_name] <- ifelse(is.null(src_args$lwd), 1, src_args$lwd)
       lines_args <- fix_dots_plot(src_args)
       lines_args$col <- lines_args$col[1]
       if(src_type == 'data'){
@@ -341,7 +344,7 @@ plot_stat <- function(input, post_predict = NULL, prior_predict = NULL, stat_fun
       legend(x = legendpos[1], legend = stat_names, lty = lty, col = "black", bty = "n")
     }
     if (length(data_sources) > 1) {
-      legend(legendpos[2], legend = names(legend_map), lty = 1, col = legend_map, title = "Source", bty = "n")
+      legend(legendpos[2], legend = names(legend_map), lty = 1, col = legend_map, title = "Source", bty = "n", lwd = lwd_map)
     }
   }
   return(invisible(summary_df[,!grepl("group_key", colnames(summary_df))]))
@@ -372,7 +375,7 @@ compute_def_dens <- function(dat, defective_factor, dargs) {
 }
 
 
-#' Plot defective densities
+#' Plot Defective Densities
 #'
 #' Plots panels that contain a set of densities for each level of the specified defective factor in the data.
 #' These densities are defective; their areas are relative to the respective
@@ -406,9 +409,9 @@ plot_density <- function(input, post_predict = NULL, prior_predict = NULL,
   xlim <- check$xlim
 
   # Basic definitions
-  dots <- add_defaults(list(...), col = c("black", "#666666", "#A9A9A9"))
-  posterior_args <- add_defaults(posterior_args, col = c("darkgreen", "#008B8B", "#0000FF"))
-  prior_args <- add_defaults(prior_args, col = c("red", "#CC00FF", "#800080"))
+  dots <- add_defaults(list(...), col = c("black",  "#A9A9A9", "#666666"))
+  posterior_args <- add_defaults(posterior_args, col = c("darkgreen",  "#0000FF", "#008B8B"))
+  prior_args <- add_defaults(prior_args, col = c("red", "#800080", "#CC00FF"))
 
   data <- data_sources[[which(sources == "data")[1]]]
   defective_levels <- if (!is.null(data)) levels(factor(data[[defective_factor]])) else character(0)
@@ -497,9 +500,10 @@ plot_density <- function(input, post_predict = NULL, prior_predict = NULL,
   }
 
   # 3) Second big loop: plotting
-  oldpar <- par(no.readonly = TRUE)
-  on.exit(par(oldpar))
-
+  if(!is.null(layout)){
+    oldpar <- par(no.readonly = TRUE)
+    on.exit(par(oldpar))
+  }
   # figure out group keys from whichever data source is not null
   # pick the first in data_sources
   first_data <- data_sources[[1]]
@@ -553,6 +557,7 @@ plot_density <- function(input, post_predict = NULL, prior_predict = NULL,
     plot_args <- fix_dots_plot(plot_args)
     do.call(plot, c(list(NA), plot_args))
     legend_map <- c()
+    lwd_map <- numeric()
     for (k in 1:length(data_sources)) {
       src_type <- sources[k]
       src_data <- data_sources[[k]]
@@ -568,6 +573,7 @@ plot_density <- function(input, post_predict = NULL, prior_predict = NULL,
         tmp_prior_args$col <- tmp_prior_args$col[-1]
       }
       legend_map[src_name] <- src_args$col[1]
+      lwd_map[src_name] <- ifelse(is.null(src_args$lwd), 1, src_args$lwd)
       # if no postn => single dataset
       if (!("postn" %in% colnames(src_data))) {
         # dens_list[[src_name]][[group_key]] => list of defective_levels => vector of length=512
@@ -623,7 +629,8 @@ plot_density <- function(input, post_predict = NULL, prior_predict = NULL,
     legend(legendpos[1], legend = defective_levels, lty = line_types, col = "black",
            title = defective_factor, bty = "n")
     if (length(data_sources) > 1) {
-      legend(legendpos[2], legend = names(legend_map), lty = 1, col = legend_map, title = "Source", bty = "n")
+      legend(legendpos[2], legend = names(legend_map), lty = 1, col = legend_map, title = "Source", bty = "n",
+             lwd = lwd_map)
     }
   }
 }
@@ -657,7 +664,7 @@ get_def_cdf <- function(x, defective_factor, dots) {
 ###############################################################################
 ## Plot Defective CDFs
 ###############################################################################
-#' Plot defective cumulative distribution functions
+#' Plot Defective Cumulative Distribution Functions
 #'
 #' Plots panels of cumulative distribution functions (CDFs) for each level of the specified
 #' defective factor in the data. The CDFs are *defective*; each factor level's CDF
@@ -718,9 +725,9 @@ plot_cdf <- function(input,
   xlim <- check$xlim
 
   # Basic definitions
-  dots <- add_defaults(list(...), col = c("black", "#666666", "#A9A9A9"))
-  posterior_args <- add_defaults(posterior_args, col = c("darkgreen", "#008B8B", "#0000FF"))
-  prior_args <- add_defaults(prior_args, col = c("red", "#CC00FF", "#800080"))
+  dots <- add_defaults(list(...), col = c("black",  "#A9A9A9", "#666666"))
+  posterior_args <- add_defaults(posterior_args, col = c("darkgreen",  "#0000FF", "#008B8B"))
+  prior_args <- add_defaults(prior_args, col = c("red", "#800080", "#CC00FF"))
 
   defective_levels <- levels(factor(data_sources[[1]][[defective_factor]]))
   unique_group_keys <- unique(data_sources[[1]]$group_key)
@@ -829,9 +836,10 @@ plot_cdf <- function(input,
   # -------------------------------------------------------------------
   # 3) SECOND BIG LOOP: Plot one panel per group_key
   # -------------------------------------------------------------------
-  oldpar <- par(no.readonly=TRUE)
-  on.exit(par(oldpar), add=TRUE)
-
+  if(!is.null(layout)){
+    oldpar <- par(no.readonly = TRUE)
+    on.exit(par(oldpar))
+  }
   # layout
   if (any(is.na(layout))) {
     par(mfrow = coda_setmfrow(Nchains=1, Nparms=length(unique_group_keys), nplots=1))
@@ -856,7 +864,7 @@ plot_cdf <- function(input,
 
     # draw lines for each dataset
     legend_map <- character(0)  # to store source name -> color
-
+    lwd_map <- numeric()
     for (k in seq_along(data_sources)) {
       styp  <- sources[k]       # "data","posterior","prior"
       sname <- names(sources)[k]
@@ -871,7 +879,7 @@ plot_cdf <- function(input,
         tmp_prior_args$col <- tmp_prior_args$col[-1]
       }
       legend_map[sname] <- src_args$col[1]
-
+      lwd_map[sname] <- ifelse(is.null(src_args$lwd), 1, src_args$lwd)
       # if no postn => single cdf => cdf_list[[sname]][[group_key]] => factor-level => matrix(x,y)
       # if postn => cdf_quants_list[[sname]][[group_key]] => factor-level => matrix(4 x length-probs)
 
@@ -943,7 +951,7 @@ plot_cdf <- function(input,
     # If multiple data sources, show source legend
     if (length(data_sources) > 1) {
       legend(legendpos[2], legend=names(legend_map), lty=1, col=legend_map,
-             title="Source", bty="n")
+             title="Source", bty="n", lwd = lwd_map)
     }
   } # end for each group_key
 
