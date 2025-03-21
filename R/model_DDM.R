@@ -180,9 +180,15 @@ DDM <- function(){
 #' implemented in C, so is a little slower to use than the DDM, but not greatly.
 #'
 #' @return A model list with all the necessary functions to sample
+#' @examples
+#' design_DDMgng <- design(data = forstmann,model=DDMGNG,
+#'                            formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
+#'                            constants=c(s=log(1)))
+#' # For all parameters that are not defined in the formula, default values are assumed
+#' # (see Table above).
 #' @export
 #'
-DDMGNGnoC <- function(){
+DDMGNG <- function(){
   list(
     type="DDM",
     p_types=c("v" = 1,"a" = log(1),"sv" = log(0),"t0" = log(0),"st0" = log(0),
