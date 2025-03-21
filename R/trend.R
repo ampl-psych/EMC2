@@ -109,6 +109,26 @@ get_trend_pnames <- function(trend){
   return(unique(out))
 }
 
+#' Get help information for trend kernels and bases
+#'
+#' @param kernel Character string specifying the kernel type to get information about
+#' @param base Character string specifying the base type to get information about
+#' @param ... Additional arguments
+#' @param do_return Logical; if TRUE, returns the help information, otherwise prints it
+#' @param return_types Logical; if TRUE, returns available kernel and base types
+#'
+#' @return If do_return is TRUE, returns a list with information about the specified kernel or base.
+#'         If return_types is TRUE, returns a list of available kernel and base types.
+#' @export
+#' @examples
+#' # Get information about exponential increasing kernel
+#' trend_help(kernel = "exp_incr")
+#' 
+#' # Get information about linear base
+#' trend_help(base = "lin")
+#' 
+#' # Return available kernel and base types
+#' trend_help()
 trend_help <- function(kernel = NULL, base = NULL, ...){
   dots <- add_defaults(list(...), do_return = FALSE, return_types = FALSE)
   bases <- list(

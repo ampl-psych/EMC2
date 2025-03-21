@@ -284,4 +284,4 @@ The timing affects how the trend interacts with parameter mappings and transform
 3. Consider interpretability: Simpler trends are often easier to interpret
 4. Watch for overfitting: More complex trends (like high-order polynomials) may overfit
 5. Use shared parameters when you expect related processes
-6. Consider the timing of trend application based on your model's structure
+6. Consider the timing (premap, postmap, posttransform) of trend application based on your model's structure
