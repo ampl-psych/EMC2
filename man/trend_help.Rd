@@ -12,14 +12,9 @@ trend_help(kernel = NULL, base = NULL, ...)
 \item{base}{Character string specifying the base type to get information about}
 
 \item{...}{Additional arguments}
-
-\item{do_return}{Logical; if TRUE, returns the help information, otherwise prints it}
-
-\item{return_types}{Logical; if TRUE, returns available kernel and base types}
 }
 \value{
-If do_return is TRUE, returns a list with information about the specified kernel or base.
-If return_types is TRUE, returns a list of available kernel and base types.
+Formatted trend information
 }
 \description{
 Get help information for trend kernels and bases
