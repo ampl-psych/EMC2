@@ -59,7 +59,7 @@ NumericVector run_kernel_rcpp(NumericMatrix trend_pars, String kernel, NumericVe
     out = covariate;
   }
   else if(kernel == "exp_decr") {
-    out = exp(trend_pars(_, 0 + n_base_pars) * covariate);
+    out = exp(-trend_pars(_, 0 + n_base_pars) * covariate);
   }
   else if(kernel == "exp_incr") {
     out = 1 - exp(-trend_pars(_, 0 + n_base_pars) * covariate);
@@ -100,7 +100,7 @@ NumericVector run_trend_rcpp(DataFrame data, List trend, NumericVector param, Nu
   int n_trials = param.length();
   NumericVector out(n_trials);
   int n_base_pars = 0;
-  if(base == "lin" || base == "exp_lin") {
+  if(base == "lin" || base == "exp_lin" || base == "centered") {
     n_base_pars = 1;
   }
   // Loop through covariates
@@ -145,6 +145,9 @@ NumericVector run_trend_rcpp(DataFrame data, List trend, NumericVector param, Nu
   }
   else if(base == "exp_lin") {
     out = exp(param) + trend_pars(_, 0) * out;
+  }
+  else if(base == "centered") {
+    out = param + trend_pars(_, 0) * (out - 0.5);
   }
   else if(base == "add") {
     out = param + out;

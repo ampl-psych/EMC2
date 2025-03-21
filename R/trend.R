@@ -118,13 +118,16 @@ trend_help <- function(kernel = NULL, base = NULL, ...){
     exp_lin = list(description = "Exponential linear base: exp(parameter) + exp(b) * k",
                    transforms = list(func = list("B0" = "exp")),
                    default_pars = "B0"),
+    centered = list(description = "Centered mapping: parameter + b*(k - 0.5)",
+                    transforms = list(func = list("B0" = "identity")),
+                    default_pars = "B0"),
     add = list(description = "Additive base: parameter + k",
                transforms = NULL),
     identity = list(description = "Identity base: k",
                     transforms = NULL)
   )
-  base_2p <- names(bases)[1:2]
-  base_1p <- names(bases)[3:4]
+  base_2p <- names(bases)[1:3]
+  base_1p <- names(bases)[4:5]
   kernels <- list(
     lin_decr = list(description = "Decreasing linear kernel: k = -c",
                     transforms = NULL,
@@ -243,8 +246,8 @@ run_kernel <- function(trend_pars = NULL, kernel, covariate) {
                 # Linear increasing, linear base type
                 lin_incr = covariate,
                 # Exponential decreasing, linear base type
-                exp_decr = exp(trend_pars[,1]*covariate),
-                # Exponential increasing - help
+                exp_decr = exp(-trend_pars[,1]*covariate),
+                # Exponential increasing
                 exp_incr = 1-exp(-trend_pars[,1]*covariate),
                 # Decreasing power
                 pow_decr = (1+covariate)^(-trend_pars[,1]),
@@ -275,6 +278,7 @@ run_trend <- function(dadm, trend, param, trend_pars){
   n_base_pars <- switch(trend$base,
                         lin = 1,
                         exp_lin = 1,
+                        centered = 1,
                         add = 0,
                         identity = 0)
   out <- numeric(nrow(dadm))
@@ -305,6 +309,7 @@ run_trend <- function(dadm, trend, param, trend_pars){
   out <- switch(trend$base,
                 lin = param + trend_pars[,1]*out,
                 exp_lin = exp(param) + trend_pars[,1]*out,
+                centered = param + trend_pars[,1]*(out-.5),
                 add = param + out,
                 identity = out
   )
