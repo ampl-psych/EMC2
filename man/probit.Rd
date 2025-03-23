@@ -27,3 +27,13 @@ assumed and fixed (e.g., threshold = 0).
 At present this model is not fully implemented in C, but as its likelihood
 requires only pnorm evaluation it is quite fast.
 }
+\examples{
+dprobit <- design(Rlevels = c("left","right"),
+           factors=list(subjects=1,S=c("left","right")),
+           formula=list(mean ~ 0+S, sd ~ 1,threshold ~ 1),
+           matchfun=function(d)d$S==d$lR,
+           constants=c(sd=log(1),threshold=0),
+           model=probit)
+
+p_vector <- sampled_pars(dprobit)
+}

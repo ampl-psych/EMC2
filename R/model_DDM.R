@@ -181,13 +181,19 @@ DDM <- function(){
 #'
 #' @return A model list with all the necessary functions to sample
 #' @examples
-#' design_DDMgng <- design(data = forstmann,model=DDMGNG,
-#'                            formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
-#'                            constants=c(s=log(1)))
-#' # For all parameters that are not defined in the formula, default values are assumed
-#' # (see Table above).
-#' @export
+#' dGNG <- design(Rlevels = c("left","right"),
+#'                factors=list(subjects=1,S=c("left","right")),
+#'                functions=list(
+#'                TIMEOUT=function(d)rep(2.5,nrow(d)),
+#'                # no go response level
+#'                Rnogo=function(d)factor(rep("left",nrow(d)),levels=c("left","right")),
+#'                # go response level
+#'                Rgo=function(d)factor(rep("right",nrow(d)),levels=c("left","right"))),
+#'                formula=list(v~S,a~1, Z~1, t0~1),
+#'                model=DDMGNG)
 #'
+#' p_vector <- sampled_pars(dGNG)
+#' @export
 DDMGNG <- function(){
   list(
     type="DDM",

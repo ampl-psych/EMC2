@@ -47,8 +47,16 @@ rPROBIT <- function(lR,pars,p_types=c("mean","sd","threshold"),lt=-Inf)
 #' requires only pnorm evaluation it is quite fast.
 #'
 #' @return A model list with all the necessary functions to sample
-#' @export
+#' @examples
+#' dprobit <- design(Rlevels = c("left","right"),
+#'            factors=list(subjects=1,S=c("left","right")),
+#'            formula=list(mean ~ 0+S, sd ~ 1,threshold ~ 1),
+#'            matchfun=function(d)d$S==d$lR,
+#'            constants=c(sd=log(1),threshold=0),
+#'            model=probit)
 #'
+#' p_vector <- sampled_pars(dprobit)
+#' @export
 
 probit <- function(){
   list(
