@@ -194,7 +194,7 @@ DDM <- function(){
 #'
 #' p_vector <- sampled_pars(dGNG)
 #' @export
-DDMGNG <- function(){
+DDMGNGnoC <- function(){
   list(
     type="DDM",
     p_types=c("v" = 1,"a" = log(1),"sv" = log(0),"t0" = log(0),"st0" = log(0),
