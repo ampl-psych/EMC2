@@ -32,7 +32,7 @@ make_missing <- function(data,LT=0,UT=Inf,LC=0,UC=Inf,
   out
 }
 
-#' Simulate data
+#' Simulate Data
 #'
 #' Simulates data based on a model design and a parameter vector (`p_vector`) by one of two methods:
 #' 1) Creating a fully crossed and balanced design specified by the design,
@@ -233,6 +233,11 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
   pars <- do_transform(pars, model()$transform)
   pars <- model()$Ttransform(pars, data)
   pars <- add_bound(pars, model()$bound)
+  pars_ok <- attr(pars, 'ok')
+  if(any(!pars_ok)){
+    warning("Parameter values fall out of model bounds, see <model_name>$bounds()")
+    return(FALSE)
+  }
   if ( any(dimnames(pars)[[2]]=="pContaminant") && any(pars[,"pContaminant"]>0) )
     pc <- pars[data$lR==levels(data$lR)[1],"pContaminant"] else pc <- NULL
   if (mapped_p) return(cbind(data[,!(names(data) %in% c("R","rt"))],pars))
@@ -285,8 +290,6 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
   data
 }
 
-
-
 add_Ffunctions <- function(data,design)
   # Adds columns created by Ffunctions (if not already there)
 {
@@ -296,7 +299,7 @@ add_Ffunctions <- function(data,design)
     data <-  cbind.data.frame(data,Fdf[,ok,drop=FALSE])
 }
 
-#' Make random effects
+#' Generate Subject-Level Parameters
 #'
 #' Simulates subject-level parameters in the format required by ``make_data()``.
 #'

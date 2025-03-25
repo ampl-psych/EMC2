@@ -1,4 +1,4 @@
-#' Forstmann et al.'s data
+#' Forstmann et al.'s Data
 #'
 #' A dataset containing the speed or accuracy manipulation for a Random Dot
 #' Motion experiment.
@@ -25,7 +25,7 @@
 #' @source \url{https://www.pnas.org/doi/10.1073/pnas.0805903105}
 "forstmann"
 
-#' An emc object of an LNR model of the Forstmann dataset using the first three subjects
+#' LNR Model of Forstmann Data (First 3 Subjects)
 #'
 #' An emc object with a limited number of samples and subjects of the Forstmann dataset.
 #' The object is a nested list of lenght three, each list containing the MCMC samples
@@ -53,9 +53,6 @@
 #'   \item{last_theta_var_inv}{The inverse of the last samples covariance
 #'     matrix}
 #'   \item{idx}{The index of the last sample drawn}
-#'   \item{epsilon}{The scaling parameter of the proposal distributions for each subject array of size (n_subjects x n_samples)}
-#'   \item{origin}{From which propoosal distribution the accepted samples in the MCMC chain came,
-#'   an array of size (n_subjects x n_samples)}
 #' }
 #'
 #' @format An emc object. An emc object is a list with a

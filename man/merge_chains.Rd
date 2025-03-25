@@ -2,7 +2,7 @@
 % Please edit documentation in R/objects.R
 \name{merge_chains}
 \alias{merge_chains}
-\title{Merge samples}
+\title{Merge Samples}
 \usage{
 merge_chains(emc)
 }

@@ -49,10 +49,6 @@ build_event_cache_cpp <- function(events, run_times, oversampling = 50L, min_ons
     .Call(`_EMC2_build_event_cache_cpp`, events, run_times, oversampling, min_onset, time_length, onset, nominal_delay, undershoot, dispersion, u_dispersion, ratio)
 }
 
-log_likelihood_double_gamma <- function(y, parameters, event_cache) {
-    .Call(`_EMC2_log_likelihood_double_gamma`, y, parameters, event_cache)
-}
-
 calc_ll <- function(p_matrix, data, constants, designs, type, bounds, transforms, pretransforms, p_types, min_ll, trend) {
     .Call(`_EMC2_calc_ll`, p_matrix, data, constants, designs, type, bounds, transforms, pretransforms, p_types, min_ll, trend)
 }

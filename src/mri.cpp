@@ -617,82 +617,82 @@ List build_event_cache_cpp(DataFrame events, NumericVector run_times,
 }
 
 
-// [[Rcpp::export]]
-double log_likelihood_double_gamma(NumericVector y,
-                                   NumericVector parameters,
-                                   List event_cache) {
-  // hyperparameters
-  int oversampling = 50;
-  double time_length = 32.0;
-  double onset = 0.0;
-  double undershoot = 12.0;
-  double dispersion = 0.9;
-  double u_dispersion = 0.9;
-  double ratio = 0.35;
-  double min_onset = -24.0;
-
-  // TR stored in first condition
-  List firstCache = event_cache[0];
-  double tr = as<double>(firstCache["tr"]);
-
-  // Compute scanner frame_times (starting at 0).
-  int n_scanner = y.size();
-  NumericVector scanner_frame_times = seq_lin(0, tr * (n_scanner - 1), n_scanner);
-
-  // Number of conditions.
-  int num_conditions = event_cache.size();
-
-  // Betas first, then any additional parameters (sigma, delay, undershoot?, rho?)
-  int total_params = parameters.size();
-  double free_delay = parameters[total_params - 2];
-  double sigma = parameters[total_params - 1];
-  NumericVector beta = parameters[Range(0, total_params - 3)];
-  // Compute the current HRF kernel using free_delay.
-  NumericVector hkernel_rev = build_glover_hrf_kernel_numeric(tr, oversampling, time_length, onset,
-                                                              free_delay, undershoot, dispersion, u_dispersion, ratio);
-
-  // Retrieve padded length from the first condition's cached FFT.
-  arma::cx_vec first_fft = as<arma::cx_vec>(firstCache["regressor_fft"]);
-  int padded_length = first_fft.n_elem;
-  int kernel_length = as<arma::vec>(hkernel_rev).n_elem;
-
-  // Zero-pad HRF kernel using join_vert.
-  arma::vec padded_kernel = join_vert(as<arma::vec>(hkernel_rev), arma::zeros(padded_length - kernel_length));
-  arma::cx_vec kernel_fft = arma::fft(padded_kernel);
-
-  // Initialize prediction vector.
-  NumericVector pred(n_scanner);
-
-  // Loop over conditions.
-  for (int cond = 0; cond < num_conditions; cond++) {
-    List cond_cache = event_cache[cond];
-    // Retrieve the cached FFT.
-    arma::cx_vec cached_fft = as<arma::cx_vec>(cond_cache["regressor_fft"]);
-
-    // Recompute hr_regressor and hr_frame_times using the cached exp_condition.
-    NumericMatrix exp_condition = as<NumericMatrix>(cond_cache["exp_condition"]);
-    List sample_out = sample_event_condition(exp_condition, scanner_frame_times, oversampling, min_onset);
-    NumericVector hr_regressor = sample_out["regressor"];
-    NumericVector hr_frame_times = sample_out["hr_frame_times"];
-    int M = hr_regressor.size();
-
-    // Convolution: use cached FFT
-    arma::cx_vec conv_fft = cached_fft % kernel_fft;
-    arma::cx_vec conv_ifft = arma::ifft(conv_fft);
-    arma::vec conv_full = arma::real(conv_ifft.head(M));
-
-    // Downsample using resample_vector.
-    NumericVector ds_numeric = resample_vector(hr_frame_times, wrap(conv_full), scanner_frame_times);
-
-    // Prediction; sum of X_i * B_i
-    pred += beta[cond] * ds_numeric;
-  }
-
-  // LL
-  double logLik = 0.0;
-  for (int i = 0; i < n_scanner; i++) {
-    logLik += R::dnorm(y[i], pred[i], sigma, true);
-  }
-
-  return logLik;
-}
+// // [[Rcpp::export]]
+// double log_likelihood_double_gamma(NumericVector y,
+//                                    NumericVector parameters,
+//                                    List event_cache) {
+//   // hyperparameters
+//   int oversampling = 50;
+//   double time_length = 32.0;
+//   double onset = 0.0;
+//   double undershoot = 12.0;
+//   double dispersion = 0.9;
+//   double u_dispersion = 0.9;
+//   double ratio = 0.35;
+//   double min_onset = -24.0;
+//
+//   // TR stored in first condition
+//   List firstCache = event_cache[0];
+//   double tr = as<double>(firstCache["tr"]);
+//
+//   // Compute scanner frame_times (starting at 0).
+//   int n_scanner = y.size();
+//   NumericVector scanner_frame_times = seq_lin(0, tr * (n_scanner - 1), n_scanner);
+//
+//   // Number of conditions.
+//   int num_conditions = event_cache.size();
+//
+//   // Betas first, then any additional parameters (sigma, delay, undershoot?, rho?)
+//   int total_params = parameters.size();
+//   double free_delay = parameters[total_params - 2];
+//   double sigma = parameters[total_params - 1];
+//   NumericVector beta = parameters[Range(0, total_params - 3)];
+//   // Compute the current HRF kernel using free_delay.
+//   NumericVector hkernel_rev = build_glover_hrf_kernel_numeric(tr, oversampling, time_length, onset,
+//                                                               free_delay, undershoot, dispersion, u_dispersion, ratio);
+//
+//   // Retrieve padded length from the first condition's cached FFT.
+//   arma::cx_vec first_fft = as<arma::cx_vec>(firstCache["regressor_fft"]);
+//   int padded_length = first_fft.n_elem;
+//   int kernel_length = as<arma::vec>(hkernel_rev).n_elem;
+//
+//   // Zero-pad HRF kernel using join_vert.
+//   arma::vec padded_kernel = join_vert(as<arma::vec>(hkernel_rev), arma::zeros(padded_length - kernel_length));
+//   arma::cx_vec kernel_fft = arma::fft(padded_kernel);
+//
+//   // Initialize prediction vector.
+//   NumericVector pred(n_scanner);
+//
+//   // Loop over conditions.
+//   for (int cond = 0; cond < num_conditions; cond++) {
+//     List cond_cache = event_cache[cond];
+//     // Retrieve the cached FFT.
+//     arma::cx_vec cached_fft = as<arma::cx_vec>(cond_cache["regressor_fft"]);
+//
+//     // Recompute hr_regressor and hr_frame_times using the cached exp_condition.
+//     NumericMatrix exp_condition = as<NumericMatrix>(cond_cache["exp_condition"]);
+//     List sample_out = sample_event_condition(exp_condition, scanner_frame_times, oversampling, min_onset);
+//     NumericVector hr_regressor = sample_out["regressor"];
+//     NumericVector hr_frame_times = sample_out["hr_frame_times"];
+//     int M = hr_regressor.size();
+//
+//     // Convolution: use cached FFT
+//     arma::cx_vec conv_fft = cached_fft % kernel_fft;
+//     arma::cx_vec conv_ifft = arma::ifft(conv_fft);
+//     arma::vec conv_full = arma::real(conv_ifft.head(M));
+//
+//     // Downsample using resample_vector.
+//     NumericVector ds_numeric = resample_vector(hr_frame_times, wrap(conv_full), scanner_frame_times);
+//
+//     // Prediction; sum of X_i * B_i
+//     pred += beta[cond] * ds_numeric;
+//   }
+//
+//   // LL
+//   double logLik = 0.0;
+//   for (int i = 0; i < n_scanner; i++) {
+//     logLik += R::dnorm(y[i], pred[i], sigma, true);
+//   }
+//
+//   return logLik;
+// }

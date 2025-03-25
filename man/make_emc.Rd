@@ -2,7 +2,7 @@
 % Please edit documentation in R/fitting.R
 \name{make_emc}
 \alias{make_emc}
-\title{Make an emc object}
+\title{Make an emc Object}
 \usage{
 make_emc(
   data,

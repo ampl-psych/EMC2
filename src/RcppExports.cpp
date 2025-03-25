@@ -227,19 +227,6 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
-// log_likelihood_double_gamma
-double log_likelihood_double_gamma(NumericVector y, NumericVector parameters, List event_cache);
-RcppExport SEXP _EMC2_log_likelihood_double_gamma(SEXP ySEXP, SEXP parametersSEXP, SEXP event_cacheSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< NumericVector >::type y(ySEXP);
-    Rcpp::traits::input_parameter< NumericVector >::type parameters(parametersSEXP);
-    Rcpp::traits::input_parameter< List >::type event_cache(event_cacheSEXP);
-    rcpp_result_gen = Rcpp::wrap(log_likelihood_double_gamma(y, parameters, event_cache));
-    return rcpp_result_gen;
-END_RCPP
-}
 // calc_ll
 NumericVector calc_ll(NumericMatrix p_matrix, DataFrame data, NumericVector constants, List designs, String type, List bounds, List transforms, List pretransforms, CharacterVector p_types, double min_ll, List trend);
 RcppExport SEXP _EMC2_calc_ll(SEXP p_matrixSEXP, SEXP dataSEXP, SEXP constantsSEXP, SEXP designsSEXP, SEXP typeSEXP, SEXP boundsSEXP, SEXP transformsSEXP, SEXP pretransformsSEXP, SEXP p_typesSEXP, SEXP min_llSEXP, SEXP trendSEXP) {
@@ -287,7 +274,6 @@ static const R_CallMethodDef CallEntries[] = {
     {"_EMC2_construct_design_matrix", (DL_FUNC) &_EMC2_construct_design_matrix, 13},
     {"_EMC2_build_glover_hrf_kernel_numeric", (DL_FUNC) &_EMC2_build_glover_hrf_kernel_numeric, 9},
     {"_EMC2_build_event_cache_cpp", (DL_FUNC) &_EMC2_build_event_cache_cpp, 11},
-    {"_EMC2_log_likelihood_double_gamma", (DL_FUNC) &_EMC2_log_likelihood_double_gamma, 3},
     {"_EMC2_calc_ll", (DL_FUNC) &_EMC2_calc_ll, 11},
     {"_EMC2_c_add_charvectors", (DL_FUNC) &_EMC2_c_add_charvectors, 2},
     {NULL, NULL, 0}

@@ -2,7 +2,7 @@
 % Please edit documentation in R/objects.R
 \name{get_pars}
 \alias{get_pars}
-\title{Filter/manipulate parameters from emc object}
+\title{Filter/Manipulate Parameters from emc Object}
 \usage{
 get_pars(
   emc,

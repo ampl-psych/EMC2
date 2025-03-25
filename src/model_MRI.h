@@ -144,6 +144,15 @@ NumericVector extract_y(DataFrame data) {
 //   double free_delay = parameters[total_params - 2];
 //   double sigma = parameters[total_params - 1];
 //   NumericVector beta = parameters[Range(0, total_params - 3)];
+//   if(total_params < 2)
+//     stop("Parameter vector must contain beta weights, free delay, and sigma.");
+//
+//   double free_delay = parameters[total_params - 2];
+//   double sigma = parameters[total_params - 1];
+//   NumericVector beta = parameters[Range(0, total_params - 3)];
+//   if(beta.size() != num_conditions)
+//     stop("Number of beta weights must equal the number of conditions in event_cache.");
+//
 //   // Precompute common derived quantities.
 //   int n_scanner = frame_times.size();  // number of scanner time points
 //
@@ -215,7 +224,6 @@ NumericVector extract_y(DataFrame data) {
 //
 //   return logLik;
 // }
-
 
 #endif
 

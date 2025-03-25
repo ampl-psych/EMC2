@@ -4,7 +4,7 @@
 \alias{get_design.emc.prior}
 \alias{get_design.emc}
 \alias{get_design}
-\title{Get design}
+\title{Get Design}
 \usage{
 \method{get_design}{emc.prior}(x)
 

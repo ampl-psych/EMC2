@@ -3,7 +3,7 @@
 \name{get_prior.emc}
 \alias{get_prior.emc}
 \alias{get_prior}
-\title{Get prior}
+\title{Get Prior}
 \usage{
 \method{get_prior}{emc}(emc)
 

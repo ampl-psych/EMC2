@@ -2,7 +2,7 @@
 % Please edit documentation in R/priors.R
 \name{prior_help}
 \alias{prior_help}
-\title{Prior specification information}
+\title{Prior Specification Information}
 \usage{
 prior_help(type)
 }

@@ -2,7 +2,7 @@
 % Please edit documentation in R/plotting.R
 \name{pairs_posterior}
 \alias{pairs_posterior}
-\title{Plot within-chain correlations}
+\title{Plot Within-Chain Correlations}
 \usage{
 pairs_posterior(
   emc,
@@ -46,7 +46,7 @@ If \code{selection = alpha} the parameter chains are concatenated across partici
 # Plot the sloppiness for the individual-level subjects
 pairs_posterior(samples_LNR, selection = "alpha")
 
-# We can also choose group-level parameters and subsets of the parameter space
+# We can also choose group-level parameters and subsets of the parameter space 
 pairs_posterior(samples_LNR, use_par = c("m", "t0"), selection = "sigma2")
 }
 }

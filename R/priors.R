@@ -1,10 +1,10 @@
-#' Prior specification
+
 #'
-#' Specify priors for the chosen model. These values are entered manually by default but can be
-#' recycled from another prior (given in the `update` argument).
+#' Specify Priors for the Chosen Model
 #'
-#' Where a value is not supplied, the user is prompted to enter
-#' numeric values (or functions that evaluate to numbers).
+#' These values are entered manually by default but can be recycled from another prior (given in the `update` argument).
+#'
+#' Where a value is not supplied, the user is prompted to enter numeric values (or functions that evaluate to numbers).
 #'
 #' To get the prior help use `prior_help(type)`. With `type` e.g. 'diagonal'.
 #'
@@ -282,7 +282,7 @@ merge_priors <- function(prior_list){
   return(out)
 }
 
-#' Prior specification information
+#' Prior Specification Information
 #'
 #' Prints information associated with the prior for certain 'type'
 #'
@@ -547,9 +547,19 @@ predict.emc.prior <- function(object,data = NULL,n_post=50,n_cores=1,
     n_subjects <- length(subjects)
     dots$merge_chains <- TRUE; dots$by_subject <- TRUE
     samps <- do.call(parameters, c(list(object, N = n_subjects*n_post), dots))
-    simDat <- mclapply(1:n_post,function(i){
+    simDat <- suppressWarnings(mclapply(1:n_post,function(i){
       do.call(make_data, c(list(samps[(1+((i-1)*n_subjects)):(i*n_subjects),],design = design[[k]], data = data[[k]], n_trials = n_trials), fix_dots(dots, make_data)))
-    },mc.cores=n_cores)
+    },mc.cores=n_cores))
+    # These were returned as FALSE since their parameter values fell outside of model bounds
+    in_bounds <- !sapply(simDat, is.logical)
+    if(all(!in_bounds)) stop("All prior samples fall outside of model bounds, choose a more informative prior")
+    if(sum(!in_bounds) > (length(in_bounds)/2)) warning("Most prior samples fall outside of model bounds, choose a more informative prior")
+    if(any(!in_bounds)){
+      good_post <- sample(1:n_post, sum(!in_bounds))
+      simDat[!in_bounds] <- suppressWarnings(mclapply(good_post,function(i){
+        do.call(make_data, c(list(samps[(1+((i-1)*n_subjects)):(i*n_subjects),],design = design[[k]], data = data[[k]], n_trials = n_trials), fix_dots(dots, make_data)))
+      },mc.cores=n_cores))
+    }
     out <- cbind(postn=rep(1:n_post,times=unlist(lapply(simDat,function(x)dim(x)[1]))),do.call(rbind,simDat))
     attr(out,"pars") <- samps
     post_out[[k]] <- out

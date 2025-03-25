@@ -5,7 +5,7 @@
 \alias{plot_design.emc.prior}
 \alias{plot_design}
 \alias{plot_design.emc}
-\title{Plot design}
+\title{Plot Design}
 \usage{
 \method{plot_design}{emc.design}(
   x,

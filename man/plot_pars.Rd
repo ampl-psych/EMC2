@@ -2,7 +2,7 @@
 % Please edit documentation in R/plotting.R
 \name{plot_pars}
 \alias{plot_pars}
-\title{Plots density for parameters}
+\title{Plots Density for Parameters}
 \usage{
 plot_pars(
   emc,
