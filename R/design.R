@@ -113,6 +113,8 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
     return(design)
   }
   if (!is.null(data)) {
+    if(!"subjects" %in% colnames(data)) stop("make sure subjects identifier is present in data")
+    data$subjects <- factor(data$subjects)
     facs <- lapply(data,levels)
     nfacs <- facs[unlist(lapply(facs,is.null))]
     facs <- facs[!unlist(lapply(facs,is.null))]
@@ -132,7 +134,6 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
     constants <- c(constants, additional_constants[!names(additional_constants) %in% names(constants)])
     for(add_constant in not_specified) formula[[length(formula)+ 1]] <- as.formula(paste0(add_constant, "~ 1"))
   }
-  if(!"subjects" %in% names(factors)) stop("make sure subjects identifier is present in data")
 
   design <- list(Flist=formula,Ffactors=factors,Rlevels=Rlevels,
                  Clist=contrasts,matchfun=matchfun,constants=constants,
@@ -1013,7 +1014,9 @@ sampled_pars.emc.design <- function(x,model=NULL,doMap=TRUE, add_da = FALSE, all
       out <- c(out, pars)
       next
     }
-    if (is.null(model)) model <- cur_design$model
+    model <- cur_design$model
+    if (is.null(model)) stop("Must supply model as not in design")
+
     if(grepl("MRI", model()$type)){
       pars <- model()$p_types
       if(length(design) != 1){
@@ -1023,7 +1026,6 @@ sampled_pars.emc.design <- function(x,model=NULL,doMap=TRUE, add_da = FALSE, all
       out <- c(out, pars)
       next
     }
-    if (is.null(model)) stop("Must supply model as not in design")
 
     Ffactors=c(cur_design$Ffactors,list(R=cur_design$Rlevels))
     data <- as.data.frame.table(array(dim=unlist(lapply(Ffactors,length)),

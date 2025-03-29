@@ -1,28 +1,5 @@
 
-# Design matrix functions -------------------------------------------------
-
-create_covariates <- function(events, do_print = FALSE, remove_intercept = FALSE){
-  cov_name <- events$covariate[1]
-  colnames(events)[colnames(events) == "event_type"] <- cov_name
-  design <- model.matrix(as.formula(paste0("~ ", cov_name)), events)
-  colnames(design)[1] <- paste0(cov_name, "0")
-  events_design <- cbind(events, design)
-  if(do_print){
-    print(unique(events_design[, !colnames(events_design) %in% c("onset", "subjects", "duration")]))
-  }
-  long_events <- reshape(events_design,
-                         direction = "long",
-                         varying = colnames(design),
-                         v.names = "modulation",
-                         timevar = "regressor",
-                         times = colnames(design))
-  rownames(long_events) <- NULL
-  long_events <- long_events[long_events$modulation != 0, ]
-  long_events <- long_events[, !(colnames(long_events) %in% c("id", cov_name))]
-  long_events <- long_events[order(long_events$onset), ]
-}
-
-apply_contrasts <- function(events, contrast = NULL, cell_coding = FALSE, remove_intercept = FALSE, do_print = FALSE) {
+apply_contrasts <- function(events, contrast = NULL, cell_coding = FALSE, remove_intercept = TRUE) {
   factor_name <- events$factor[1]
   colnames(events)[colnames(events) == "event_type"] <- factor_name
 
@@ -40,18 +17,18 @@ apply_contrasts <- function(events, contrast = NULL, cell_coding = FALSE, remove
     # R's default contrasts will be used.
   }
 
-  if(cell_coding){
+  if(length(unique(events[[factor_name]])) == 1){
+    design <- matrix(1, nrow = nrow(events))
+    colnames(design) <- factor_name
+  } else if(cell_coding){
     design <- model.matrix(as.formula(paste0("~ 0 + ", factor_name)), events)
   } else {
     design <- model.matrix(as.formula(paste0("~ ", factor_name)), events)
     colnames(design)[1] <- paste0(factor_name, "0")
     if(remove_intercept) design <- design[, -1, drop = FALSE]
   }
-
-  events_design <- cbind(events, design)
-  if(do_print){
-    print(unique(events_design[, !colnames(events_design) %in% c("onset", "subjects", "duration")]))
-  }
+  events$factor <- NULL
+  events_design <- cbind(design, events)
 
   long_events <- reshape(events_design,
                          direction = "long",
@@ -66,24 +43,189 @@ apply_contrasts <- function(events, contrast = NULL, cell_coding = FALSE, remove
   return(long_events)
 }
 
-# Build the full design matrices for all subjects and runs.
-build_fmri_design_matrices <- function(timeseries, events, factors = NULL, contrasts = NULL,
+
+#' Reshape events data for fMRI analysis
+#'
+#' This function reshapes event data into a format suitable for fMRI analysis by
+#' converting specified event_types into separate event types with appropriate modulation values.
+#'
+#' @param events A data frame containing event information with required columns 'subjects', 'run', and 'onset'
+#' @param event_types A character vector of column names in the events data frame to be treated as event_types
+#' @param duration Either a single numeric value (applied to all event_types), a list with named elements
+#'        corresponding to event_types, or a function that takes the events data frame and returns durations
+#'
+#' @return A data frame with columns 'subjects', 'onset', 'run', 'modulation', 'duration', and 'event_type'
+#' @export
+#' @examples
+#' # Create a simple events data frame
+#' events <- data.frame(
+#'   subjects = rep(1, 10),
+#'   run = rep(1, 10),
+#'   onset = seq(0, 90, by = 10),
+#'   condition = rep(c("A", "B"), 5),
+#'   rt = runif(10, 0.5, 1.5),
+#'   accuracy = sample(0:1, 10, replace = TRUE)
+#' )
+#'
+#' # Reshape with default duration
+#' reshaped1 <- reshape_events(events, event_types = c("condition", "accuracy"))
+#'
+#' # Reshape with custom duration for each event_type
+#' reshaped2 <- reshape_events(events,
+#'                            event_types = c("condition", "accuracy", "rt"),
+#'                            duration = list(condition = 0.5,
+#'                                           accuracy = 0.2,
+#'                                           rt = function(x) x$rt))
+
+reshape_events <- function(events, event_types, duration = 0.001, modulation = NULL){
+  if(!(all(c("onset", "run", "subjects") %in% colnames(events)))){
+    stop("Expected columns: subjects, duration, onset, run")
+  }
+
+
+  # First check if only 1 numeric entry is present
+  if(length(duration) == 1 && !is.list(duration)){
+    duration <- rep(duration, length(event_types))
+    duration <- lapply(duration, function(x) return(x)) # and make it into a list
+  } else if(is.list(duration) & any(names(duration) %in% event_types)){
+    duration_tmp <- replicate(length(event_types), list(0.001)) # Fill in the default spike function
+    for(i in 1:length(event_types)){
+      if(names(duration) %in% event_types[i]){
+        duration_tmp[[i]] <- duration[[event_types[i]]]
+      }
+    }
+    duration <- duration_tmp
+  } else if(length(duration) != length(event_types)){
+    stop("Length of duration must be 1 or equal to the number of event_types")
+  }
+  if(!is.list(duration)){
+    duration <- lapply(duration, function(x) return(x))
+  }
+  out <- list()
+  for(i in 1:length(event_types)){
+    fact <- event_types[i]
+    tmp <- events[,c('subjects', 'run', 'onset', fact)]
+    if(is.character(tmp[,fact]) || is.factor(tmp[,fact])){
+      tmp[,fact] <- paste0(fact, "_", tmp[,fact])
+      colnames(tmp)[4] <- "event_type"
+      if(is.null(modulation[[fact]])){
+        tmp$modulation <- 1
+      } else{
+        if(is.function(modulation[[fact]])){
+          tmp$modulation <- modulation[[fact]](events)
+        } else{
+          tmp$modulation <- modulation[[fact]]
+        }
+      }
+    } else{
+      if(!is.null(modulation[[fact]])){
+        if(is.function(modulation[[fact]])){
+          tmp[,4] <- modulation[[fact]](events)
+        } else{
+          tmp[,4] <- modulation[[fact]]
+        }
+      }
+      colnames(tmp)[4] <- "modulation"
+      tmp$event_type <- fact
+    }
+
+    if(is.function(duration[[i]])){
+      tmp$duration <- duration[[i]](events)
+    } else{
+      tmp$duration <- duration[[i]]
+    }
+
+    out[[fact]] <- tmp
+  }
+  out <- do.call(rbind, out)
+  rownames(out) <- NULL
+  out <- out[order(out$subjects, out$run, out$onset),]
+  return(out)
+}
+
+
+#' Convolve Events with HRF to Construct Design Matrices
+#'
+#' This function convolves events with the HRF to construct design matrices for fMRI analysis.
+#'
+#' @param timeseries A data frame containing fMRI time series data with columns 'subjects', 'run', 'time', and at least one ROI column
+#' @param events A data frame containing event information with required columns `subjects`, `run`, `onset`, `duration`, `event_type`, and `modulation`
+#' @param factors A named list mapping factor names to event types
+#' @param contrasts A named list of contrast matrices for each factor
+#' @param covariates A character vector of event types to include as covariates
+#' @param hrf_model A character string specifying the HRF model to use ('glover', 'spm', 'glover + derivative', or 'spm + derivative')
+#' @param cell_coding A character vector of factor names to use cell coding for
+#' @param high_pass Logical indicating whether to apply high-pass filtering
+#' @param cut_off A numeric value specifying the cutoff for the high-pass filter
+#'
+#' @return A list containing the design matrices
+#' @export
+#' @examples
+#' # Generate a simple example timeseries
+#' ts <- data.frame(
+#'   subjects = rep(1, 100),
+#'   run = rep(1, 100),
+#'   time = seq(0, 99),
+#'   ROI1 = rnorm(100)
+#' )
+#'
+#' # Generate example events
+#' events <- data.frame(
+#'   subjects = rep(1, 4),
+#'   run = rep(1, 4),
+#'   onset = c(10, 30, 50, 70),
+#'   duration = rep(0.5, 4),
+#'   event_type = c("hard", "easy", "hard", "easy"),
+#'   modulation = c(1, 1, 1, 1)
+#' )
+#'
+#' # Build design matrices
+#' design_matrices <-  convolved_design_matrix(
+#'   timeseries = ts,
+#'   events = events,
+#'   factors = list(difficulty = c("hard", "easy"))
+#' )
+convolved_design_matrix <- function(timeseries, events, factors = NULL, contrasts = NULL,
                                        covariates = NULL,
                                        hrf_model = 'glover + derivative', cell_coding = NULL,
-                                       high_pass = TRUE, nuisance = NULL) {
-  events$duration <- 0.01  # default duration
+                                       high_pass = TRUE, cut_off = 1e-5) {
+
+  if(!(all(c("onset", "run", "subjects", "modulation", "duration") %in% colnames(events)))){
+    stop("Expected columns in events: subjects, duration, onset, run, modulation, duration")
+  }
+
+  if(!(all(c("run", "subjects", "time") %in% colnames(timeseries)))){
+    stop("Expected columns in frame_times: run, subjects, time")
+  }
+
+  if(!setequal(unique(timeseries$subjects), unique(events$subjects))){
+    stop("please make sure timeseries and events have the same subjects")
+  }
+
+  if(!is.null(cell_coding) && !cell_coding %in% names(factors)) stop("Cell coded factors must have same name as factors argument")
+  # Define double-gamma hyperparameters
+  if(grepl("glover", hrf_model)){
+    undershoot <- 12 # When does the negative time point occur
+    dispersion <- .9 # Width of positive gamma
+    u_dispersion <- .9 # Width of negative gamma
+    ratio <- .35 # Relative size of undershoot compared to overshoot
+  } else{ # Different settings for SPM models
+    undershoot <- 16
+    dispersion <- 1
+    u_dispersion <- 1
+    ratio <- 1/6
+  }
+
   if(!is.data.frame(events)) events <- do.call(rbind, events)
   subjects <- unique(timeseries$subjects)
-  # Holders for filtered timeseries and constructed design matrix
+  # Holders for filtered design matrix
   all_dms <- list()
-  all_new_ts <- list()
   for(subject in subjects){
     ev_sub <- events[events$subjects == subject, ]
     ts_sub <- timeseries[timeseries$subjects == subject, ]
     runs <- unique(ts_sub$run)
     # Define subject-wise new design matrix and timeseries
     dms_sub <- vector("list", length = length(runs))
-    new_ts_sub <- vector("list", length = length(runs))
     for(run in runs){
       ev_run <- ev_sub[ev_sub$run == run, ]
       ts_run <- ts_sub[ts_sub$run == run, ]
@@ -94,52 +236,91 @@ build_fmri_design_matrices <- function(timeseries, events, factors = NULL, contr
         ev_run$factor[idx] <- fact
         tmp <- ev_run[idx, ]
         ev_tmp <- rbind(ev_tmp, apply_contrasts(tmp, contrast = contrasts[[fact]],
-                                                do_print = (run == runs[1]) & (subject == subjects[1]),
                                                 cell_coding = fact %in% cell_coding))
       }
 
-      for(cov in names(covariates)){
-        idx <- ev_run$event_type %in% covariates[[cov]]
-        ev_run$covariate[idx] <- cov
-        tmp <- ev_run[idx, ]
-        ev_tmp <- rbind(ev_tmp, create_covariates(tmp,
-                                                  do_print = (run == runs[1]) & (subject == subjects[1])))
+      for(cov in covariates){
+        idx <- ev_run$event_type %in% cov
+        tmp <- ev_run[idx,c('subjects', 'onset', 'run', 'modulation', 'duration')]
+        tmp$regressor <- cov
+        ev_tmp <- rbind(ev_tmp, tmp)
       }
 
       ev_tmp <- ev_tmp[order(ev_tmp$onset), ]
+      if((run == runs[1]) & (subject == subjects[1])){
+        unq_idx <- !duplicated(ev_tmp[, !colnames(ev_tmp) %in% c("onset", "subjects", "duration", "modulation")])
+        print(ev_tmp[unq_idx,])
+      }
+
       dm <- construct_design_matrix(ts_run$time,
                                     events = ev_tmp,
-                                    hrf_model = hrf_model,
+                                    has_derivative = grepl("derivative", hrf_model),
                                     time_length = 32, # total hrf duration
                                     min_onset = -24, # Grid computation start time for oversampling
                                     oversampling = 50, # How many timepoints per tr
                                     onset = 0, # accounts for shifts in HRF
-                                    undershoot = 12, # When does the negative time point occur
                                     delay = 6, # Time to peak of initial bump
-                                    dispersion = .9, # Width of positive gamma
-                                    u_dispersion = .9, # Width of negative gamma
-                                    ratio = .35, # Relative size of undershoot compared to overshoot
+                                    undershoot = undershoot,
+                                    dispersion = dispersion,
+                                    u_dispersion = u_dispersion,
+                                    ratio = ratio,
                                     add_intercept = FALSE)
-      filtered <- regress_out(dm, ts_run, nuisance)
-      dms_sub[[as.character(run)]] <- filtered$design_matrix
-      new_ts_sub[[as.character(run)]] <- filtered$timeseries
+      if(high_pass){
+        if((run == runs[1]) & (subject == subjects[1])){
+          message("High pass filtering design matrix, please make sure you also use high_pass_filter(<timeseries>)")
+        }
+        dm <- high_pass_filter(dm, ts_run$time)
+      }
+      dms_sub[[as.character(run)]] <- dm
     }
-    new_ts_sub <- do.call(rbind, new_ts_sub)
     dms_sub <- do.call(rbind, dms_sub)
+    dms_sub[abs(dms_sub) < cut_off] <- 0
     dms_sub$subjects <- subject
-    all_new_ts[[as.character(subject)]] <- new_ts_sub
+    rownames(dms_sub) <- NULL
     all_dms[[as.character(subject)]] <- dms_sub
   }
-
-  return(list(timeseries = do.call(rbind, all_new_ts), design_matrix = all_dms))
+  return(all_dms)
 }
 
-regress_out <- function(design_matrix, timeseries, high_pass = TRUE, nuisance = NULL){
-  return(list(timeseries = timeseries, design_matrix = as.data.frame(design_matrix)))
-  # Example settings:
-  TR <- timeseries$time[2] - timeseries$time[1]
+split_timeseries <- function(timeseries, columns = NULL){
+  if(!(all(c("run", "subjects", "time") %in% colnames(timeseries)))){
+    stop("Expected columns in timeseries: run, subjects, time")
+  }
+  if(is.null(columns)) columns <- colnames(timeseries)[!colnames(timeseries) %in% c('run', 'subjects', 'time')]
+  out <- list()
+  for(col in columns){
+    if(!col %in% colnames(timeseries)) stop("Please ensure selected columns are in timeseries")
+    out[[col]] <- timeseries[,c('subjects', 'run', 'time', col)]
+  }
+  return(out)
+}
+
+high_pass_filter <- function(X, frame_times = NULL, ...){
+  if(is.null(frame_times)){
+    if(!'time' %in% colnames(X)){
+      stop("no column named 'time' for frame_times present, please separately provide")
+    } else{
+      frame_times <- X[,'time']
+    }
+  }
+  if('subjects' %in% colnames(X) && is.null(list(...)$recursive)){
+    out <- list()
+    k <- 0
+    for(sub in unique(X[,'subjects'])){
+      tmp <- X[X[,'subjects'] == sub,]
+      for(run in unique(tmp[,'run'])){
+        k <- k + 1
+        tmp_run <- tmp[tmp[,'run'] == run,]
+        tmp_run <- high_pass_filter(tmp_run, recursive = TRUE)
+        out[[k]] <- tmp_run
+      }
+    }
+    return(do.call(rbind, out))
+  }
+  # return(list(timeseries = timeseries, design_matrix = as.data.frame(design_matrix)))
+  TR <- frame_times[2] - frame_times[1]
   cutoff <- 128           # High-pass filter cutoff period (in seconds)
-  n <- nrow(timeseries)          # Number of time points
+  n <- length(frame_times)         # Number of time points
   T_total <- n * TR       # Total scan time
 
   # Determine the number of DCT basis functions
@@ -157,69 +338,64 @@ regress_out <- function(design_matrix, timeseries, high_pass = TRUE, nuisance = 
     cos( (pi * k * (2 * t + TR)) / (2 * T_total) )
   })
   colnames(dct_basis) <- paste0("dct", 0:(n_dct - 1))
-  #
-  #   # Optional: Visualize the first few DCT regressors
-  #   matplot(t, dct_basis[, 1:min(4, n_dct)], type = "l",
-  #           xlab = "Time (s)", ylab = "Basis amplitude",
-  #           main = "First few DCT basis functions")
-
-  # Regress out the DCT regressors from the time series.
-  # We include all DCT columns (including the constant) so that the low-frequency drifts are removed.
-  fit_timeseries <- lm(timeseries[,!colnames(timeseries) %in% c('subjects', 'run', 'time')] ~ dct_basis - 1)  # '-1' removes the default intercept since the constant is provided
-  timeseries[,!colnames(timeseries) %in% c('subjects', 'run', 'time')] <- residuals(fit_timeseries)
-
-  # # Plot original and filtered time series for comparison
-  # plot(t, y, type = "l", col = "gray", lwd = 2,
-  #      xlab = "Time (s)", ylab = "Signal",
-  #      main = "Original vs. High-pass filtered time series")
-  # lines(t, y_filtered, col = "blue", lwd = 2)
-  # legend("topright", legend = c("Original", "Filtered"), col = c("gray", "blue"), lwd = 2)
-
-  # ---------------------------------------------------
-  # Filter every column of the design matrix
-  filter_design_matrix <- function(X, dct_basis) {
-    apply(X, 2, function(col) {
-      fit <- lm(col ~ dct_basis - 1)
-      residuals(fit)
-    })
+  gets_filter <- !colnames(X) %in% c('subjects', 'run', 'time')
+  for(i in 1:ncol(X)){
+    if(gets_filter[i]){
+      fit <- lm(X[,i] ~ dct_basis - 1)
+      X[,i] <- residuals(fit)
+    }
   }
-  design_matrix <- filter_design_matrix(design_matrix, dct_basis)
-
-  # You now have:
-  # y_filtered  : your time series with low-frequency drifts regressed out
-  # X_filtered  : your design matrix similarly filtered
-  return(list(timeseries = timeseries, design_matrix = as.data.frame(design_matrix)))
+  return(X)
 }
 
-# Models ------------------------------------------------------------------
+#' Create fMRI Design for EMC2 Sampling
+#'
+#' This function takes the output from convolved_design_matrix and transforms it into a design
+#' suitable for sampling with EMC2. It properly configures parameter types, bounds, and transformations
+#' for the specified model.
+#'
+#' @param design_matrix A list of design matrices,  the output from convolved_design_matrix
+#' @param model A function that returns a model specification, options are normal_mri or white_mri
+#' @param ... Additional arguments passed to the model
+#'
+#' @return An object of class 'emc.design' suitable for EMC2 sampling
+#' @export
+#'
+#' @examples
+#' # Generate a simple example timeseries
+#' ts <- data.frame(
+#'   subjects = rep(1, 100),
+#'   run = rep(1, 100),
+#'   time = seq(0, 99),
+#'   ROI1 = rnorm(100)
+#' )
+#'
+#' # Generate example events
+#' events <- data.frame(
+#'   subjects = rep(1, 4),
+#'   run = rep(1, 4),
+#'   onset = c(10, 30, 50, 70),
+#'   duration = rep(0.5, 4),
+#'   event_type = c("condition", "condition", "condition", "condition"),
+#'   modulation = c(1, 1, 1, 1)
+#' )
+#'
+#' # Create convolved design matrix
+#' design_matrix <- convolved_design_matrix(
+#'   timeseries = ts,
+#'   events = events,
+#'   factors = list(condition = "condition"),
+#'   hrf_model = "glover"
+#' )
+#'
+#' # Create fMRI design for EMC2
+#' fmri_design <- design_fmri(design_matrix, model = white_mri)
 
-
-
-make_design_fmri <- function(timeseries,
-                             events,
-                             model = normal_mri,
-                             factors = NULL,
-                             covariates = NULL,
-                             contrasts = NULL,
-                             hrf_model='glover + derivative',
-                             cell_coding = NULL,
-                             high_pass = TRUE,
-                             nuisance = NULL,
-                             ...) {
+design_fmri <- function(design_matrix,
+                             model = normal_mri, ...) {
   dots <- list(...)
-  if(!is.null(cell_coding) && !cell_coding %in% names(factors)) stop("Cell coded factors must have same name as factors argument")
-  dots <- list(...)
-  dots$add_intercept <- FALSE
-  updated <- build_fmri_design_matrices(timeseries, events, factors, contrasts,
-                                        covariates, hrf_model, cell_coding,
-                                        high_pass, nuisance)
-  design_matrix <- updated$design_matrix
-  timeseries <- updated$timeseries
-  # First create the design matrix
-
-  betas <- colnames(design_matrix[[1]])[colnames(design_matrix[[1]]) != "subjects"]
-
-
+  betas <- colnames(design_matrix[[1]])
+  subjects <- names(design_matrix)
   model_list <- model()
   # Fill in new p_types
   p_not_beta <- model_list$p_types[names(model_list$p_types) != "beta"]
@@ -253,17 +429,44 @@ make_design_fmri <- function(timeseries,
     Flist[[i]] <- as.formula(paste0(par_names[i], "~1"))
   }
 
-  design <- list(Flist = Flist, model = model, Ffactors = list(subjects = unique(timeseries$subjects)))
+  design <- list(Flist = Flist, model = model, Ffactors = list(subjects = subjects))
   attr(design, "design_matrix") <- lapply(design_matrix, FUN=function(x) {
     y <- x[,colnames(x) != 'subjects']
-    data.matrix(y)
+    DM_tmp <- data.matrix(y)
+    rownames(DM_tmp) <- NULL
+    return(DM_tmp)
   })
   par_names <- setNames(numeric(length(par_names)), par_names)
   attr(design, "p_vector") <- par_names
   class(design) <- 'emc.design'
-  return(list(design = design, timeseries = timeseries))
+  return(design)
 }
 
+
+#' GLM model for fMRI data
+#'
+#' Creates a model specification for fMRI data using a normal distribution.
+#' This model assumes that the observed BOLD signal follows a normal distribution
+#' with a mean determined by the design matrix and betas, and a standard deviation
+#' parameter for noise.
+#'
+#' @return A list containing model specification
+#'
+#' @details
+#' The model uses a normal distribution to model fMRI BOLD signals.
+#' Beta parameters represent the effect sizes for different conditions,
+#' and the sd parameter represents the standard deviation of the noise.
+#'
+#' The log-likelihood function centers the predicted values by subtracting
+#' the mean, which helps with model identifiability.
+#'
+#' @export
+#' @examples
+#' # Create a normal MRI model specification
+#' model_spec <- normal_mri()
+#'
+#' # Access model parameters
+#' model_spec$p_types
 normal_mri <- function(){
   return(
     list(
@@ -304,6 +507,24 @@ normal_mri <- function(){
   )
 }
 
+#' Create an AR(1) GLM model for fMRI data
+#'
+#' This function creates a model specification for MRI data with an AR(1) error structure.
+#' The model includes beta parameters for the design matrix, a rho parameter for the
+#' autocorrelation, and a standard deviation parameter for the noise.
+#'
+#' The AR(1) model accounts for temporal autocorrelation in the data, where each timepoint
+#' is correlated with the previous timepoint according to the rho parameter.
+#'
+#' @return A list containing the model specifications
+#'
+#' @export
+#' @examples
+#' # Create an AR(1) GLM model for fMRI data
+#' model_spec <- white_mri()
+#'
+#' # Access model parameters
+#' model_spec$p_types
 
 white_mri <- function(){
   return(
@@ -383,7 +604,7 @@ white_mri <- function(){
 
 
 
-plot_hrf <- function(timeseries, events,
+plot_hrf_shape <- function(timeseries, events,
                      factors,
                      contrasts = NULL,
                      cell_coding = FALSE,

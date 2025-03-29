@@ -672,6 +672,7 @@ make_emc <- function(data,design,model=NULL,
   for (name in names(optionals) ) {
     assign(name, optionals[[name]])
   }
+  if(!is.null(par_groups)) type <- "blocked"
   if(!is.null(prior_list) & !is.null(prior_list$theta_mu_mean)){
     prior_list <- list(prior_list)
   }
@@ -679,7 +680,7 @@ make_emc <- function(data,design,model=NULL,
     type <- attr(prior_list[[1]], "type")
   }
   if(type != "single" && length(unique(data$subjects)) == 1){
-    stop("can only use type = `single` if there's only one subject in the data")
+    stop("can only use type = `single` when there's only one subject in the data")
   }
 
   if (!(type %in% c("standard","diagonal","blocked","factor","single", "lm", "infnt_factor", "SEM", "diagonal-gamma")))
@@ -724,12 +725,6 @@ make_emc <- function(data,design,model=NULL,
   rt_resolution <- rep(rt_resolution,length.out=length(data))
   for (i in 1:length(dadm_list)) {
     message("Processing data set ",i)
-    # if (!is.null(design[[i]]$Ffunctions)) {
-    #   pars <- attr(data[[i]],"pars")
-    #   data[[i]] <- cbind.data.frame(data[[i]],data.frame(lapply(
-    #     design[[i]]$Ffunctions,function(f){f(data[[i]])})))
-    #   if (!is.null(pars)) attr(data[[i]],"pars") <- pars
-    # }
     if(is.null(attr(design[[i]], "custom_ll"))){
       dadm_list[[i]] <- design_model(data=data[[i]],design=design[[i]],
                                      compress=compress,model=model[[i]],rt_resolution=rt_resolution[i])
@@ -744,11 +739,11 @@ make_emc <- function(data,design,model=NULL,
         prior_list[[i]] <- check_prior(prior_list[[i]], sampled_p_names)
       }
     }
-    # create a design model
   }
   # Make sure class retains following changes
   class(design) <- "emc.design"
   prior_in <- merge_priors(prior_list)
+  # debug(prior)
   prior_in <- prior(design, type, update = prior_in, ...)
   attr(dadm_list[[1]], "prior") <- prior_in
 
@@ -758,6 +753,22 @@ make_emc <- function(data,design,model=NULL,
                  nuisance_non_hyper = nuisance_non_hyper,
                  n_factors = n_factors)
   } else if (type == "blocked") {
+    if(is.character(par_groups)){
+      par_groups <- list(par_groups)
+    }
+    if(is.list(par_groups)){
+      par_names <- names(sampled_pars(design))
+      new_par_groups <- rep(NA, length(par_names))
+      for(i in 1:length(par_groups)){
+        if(any(!par_groups[[i]] %in% par_names)) stop("Make sure you specified parameter names in par_groups correctly")
+        new_par_groups[par_names %in% par_groups[[i]]] <- i
+      }
+      new_par_groups[is.na(new_par_groups)] <- (i+1):(i+sum(is.na(new_par_groups)))
+      par_groups <- new_par_groups
+    }
+    if(length(par_groups) != length(sampled_pars(design))){
+      stop("par_groups length does not match number of sampled parameters, make sure you specified par_groups correctly")
+    }
     if (is.null(par_groups)) stop("Must specify par_groups for blocked type")
     out <- pmwgs(dadm_list, type, par_groups=par_groups,
                  nuisance = nuisance,
@@ -776,6 +787,7 @@ make_emc <- function(data,design,model=NULL,
   out$model <- lapply(design, function(x) x$model)
   # Only for joint models we need to keep a list of functions
   if(length(out$model) == 1) out$model <- out$model[[1]]
+  out <- check_duplicate_designs(out)
   # replicate chains
   dadm_lists <- rep(list(out),n_chains)
   # For post predict
@@ -792,7 +804,21 @@ fix_fileName <- function(x){
   }
 }
 
-
+check_duplicate_designs <- function(out){
+  if(is.data.frame(out$data[[1]])) return(out)
+  for(i in 1:length(out$data)){ # loop over subjects
+    designs <- lapply(out$data[[i]], function(y) attr(y, "designs"))
+    # Find duplicate designs to replace
+    unq_idx <- match(designs, designs)
+    duplicacy <- duplicated(unq_idx)
+    for(j in 1:length(out$data[[i]])){# Loop over data sets in this sub
+      if(duplicacy[j]){
+        attr(out$data[[i]][[j]], "designs") <- unq_idx[j]
+      }
+    }
+  }
+  return(out)
+}
 
 extractDadms <- function(dadms, names = 1:length(dadms)){
   N_models <- length(dadms)

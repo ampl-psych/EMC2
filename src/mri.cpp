@@ -256,7 +256,7 @@ NumericVector compute_gamma_diff_hrf(double tr, int oversampling, double time_le
 // Simply calls compute_gamma_diff_hrf with all parameters.
 // ----------------------------------------------
 // [[Rcpp::export]]
-NumericVector compute_glover_hrf(double tr, int oversampling, double time_length, double onset,
+NumericVector compute_hrf(double tr, int oversampling, double time_length, double onset,
                                  double delay, double undershoot, double dispersion,
                                  double u_dispersion, double ratio) {
   return compute_gamma_diff_hrf(tr, oversampling, time_length, onset,
@@ -268,13 +268,13 @@ NumericVector compute_glover_hrf(double tr, int oversampling, double time_length
 // Now accepts additional HRF parameters and delta.
 // ----------------------------------------------
 // [[Rcpp::export]]
-NumericVector compute_glover_time_derivative(double tr, int oversampling, double time_length,
+NumericVector compute_time_derivative(double tr, int oversampling, double time_length,
                                              double onset, double delay, double undershoot,
                                              double dispersion, double u_dispersion, double ratio,
                                              double delta = 0.1) {
-  NumericVector hrf1 = compute_glover_hrf(tr, oversampling, time_length, onset,
+  NumericVector hrf1 = compute_hrf(tr, oversampling, time_length, onset,
                                           delay, undershoot, dispersion, u_dispersion, ratio);
-  NumericVector hrf2 = compute_glover_hrf(tr, oversampling, time_length, onset + delta,
+  NumericVector hrf2 = compute_hrf(tr, oversampling, time_length, onset + delta,
                                           delay, undershoot, dispersion, u_dispersion, ratio);
   int n = hrf1.size();
   NumericVector deriv(n);
@@ -299,24 +299,22 @@ NumericVector reverse_vector(const NumericVector &v) {
 // Now requires HRF parameters as arguments.
 // ----------------------------------------------
 // [[Rcpp::export]]
-NumericMatrix build_hrf_kernel(std::string hrf_model, double tr, int oversampling,
+NumericMatrix build_hrf_kernel(bool has_derivative, double tr, int oversampling,
                                double time_length, double onset, double delay,
                                double undershoot, double dispersion, double u_dispersion,
                                double ratio) {
-  std::string model = hrf_model;
-  std::transform(model.begin(), model.end(), model.begin(), ::tolower);
-  if (model == "glover" || model == "glover_hrf") {
-    NumericVector hrf = compute_glover_hrf(tr, oversampling, time_length, onset,
+  if (!has_derivative) {
+    NumericVector hrf = compute_hrf(tr, oversampling, time_length, onset,
                                            delay, undershoot, dispersion, u_dispersion, ratio);
     NumericMatrix kernel(hrf.size(), 1);
     for (int i = 0; i < hrf.size(); i++) {
       kernel(i, 0) = hrf[i];
     }
     return kernel;
-  } else if (model == "glover+derivative" || model == "glover + derivative") {
-    NumericVector hrf = compute_glover_hrf(tr, oversampling, time_length, onset,
+  } else {
+    NumericVector hrf = compute_hrf(tr, oversampling, time_length, onset,
                                            delay, undershoot, dispersion, u_dispersion, ratio);
-    NumericVector deriv = compute_glover_time_derivative(tr, oversampling, time_length, onset,
+    NumericVector deriv = compute_time_derivative(tr, oversampling, time_length, onset,
                                                          delay, undershoot, dispersion, u_dispersion, ratio);
     int n = hrf.size();
     NumericMatrix kernel(n, 2);
@@ -325,8 +323,6 @@ NumericMatrix build_hrf_kernel(std::string hrf_model, double tr, int oversamplin
       kernel(i, 1) = deriv[i];
     }
     return kernel;
-  } else {
-    stop("Unsupported HRF model. Use 'glover' or 'glover + derivative'.");
   }
   return NumericMatrix(0);
 }
@@ -335,7 +331,7 @@ NumericMatrix build_hrf_kernel(std::string hrf_model, double tr, int oversamplin
 // Updated: compute_convolved_regressor
 // Now accepts HRF parameters and passes them to build_hrf_kernel.
 // ----------------------------------------------
-List compute_convolved_regressor(NumericMatrix exp_condition, std::string hrf_model,
+List compute_convolved_regressor(NumericMatrix exp_condition, bool has_derivative,
                                  NumericVector frame_times, std::string con_id,
                                  int oversampling, double min_onset,
                                  double time_length, double onset, double delay,
@@ -352,7 +348,7 @@ List compute_convolved_regressor(NumericMatrix exp_condition, std::string hrf_mo
   NumericVector hr_frame_times = cond_sample["hr_frame_times"];
 
   // Build HRF kernel using updated parameters.
-  NumericMatrix hkernel = build_hrf_kernel(hrf_model, tr, oversampling, time_length, onset,
+  NumericMatrix hkernel = build_hrf_kernel(has_derivative, tr, oversampling, time_length, onset,
                                            delay, undershoot, dispersion, u_dispersion, ratio);
   int n_basis = hkernel.ncol();
   int n_hr = hr_regressor.size();
@@ -392,14 +388,10 @@ List compute_convolved_regressor(NumericMatrix exp_condition, std::string hrf_mo
 
   // Set regressor names following the original behavior.
   CharacterVector reg_names;
-  std::string model = hrf_model;
-  std::transform(model.begin(), model.end(), model.begin(), ::tolower);
-  if (model == "glover" || model == "spm") {
+  if (!has_derivative) {
     reg_names = CharacterVector::create(con_id);
-  } else if (model == "glover+derivative" || model == "glover + derivative") {
-    reg_names = CharacterVector::create(con_id, con_id + std::string("_derivative"));
   } else {
-    reg_names = CharacterVector::create(con_id);
+    reg_names = CharacterVector::create(con_id, con_id + std::string("_derivative"));
   }
 
   return List::create(Named("computed_regressors") = computed_regressors,
@@ -412,7 +404,7 @@ List compute_convolved_regressor(NumericMatrix exp_condition, std::string hrf_mo
 // ----------------------------------------------
 // [[Rcpp::export]]
 DataFrame construct_design_matrix(NumericVector frame_times, DataFrame events,
-                                  std::string hrf_model, double min_onset, int oversampling,
+                                  bool has_derivative, double min_onset, int oversampling,
                                   double time_length, double onset, double delay,
                                   double undershoot, double dispersion, double u_dispersion,
                                   double ratio, bool add_intercept) {
@@ -455,7 +447,7 @@ DataFrame construct_design_matrix(NumericVector frame_times, DataFrame events,
       exp_condition(j, 2) = modulation[idx];
     }
     // Compute convolved regressor for this condition.
-    List out = compute_convolved_regressor(exp_condition, hrf_model, frame_times, cond, oversampling, min_onset,
+    List out = compute_convolved_regressor(exp_condition, has_derivative, frame_times, cond, oversampling, min_onset,
                                            time_length, onset, delay, undershoot, dispersion, u_dispersion, ratio);
     NumericMatrix reg = out["computed_regressors"];
     CharacterVector names = out["regressor_names"];
@@ -517,7 +509,7 @@ NumericVector build_glover_hrf_kernel_numeric(double tr, int oversampling, doubl
                                               double delay, double undershoot, double dispersion,
                                               double u_dispersion, double ratio) {
   // Compute the canonical Glover HRF using the provided hyperparameters.
-  NumericVector hrf = compute_glover_hrf(tr, oversampling, time_length, onset,
+  NumericVector hrf = compute_hrf(tr, oversampling, time_length, onset,
                                          delay, undershoot, dispersion, u_dispersion, ratio);
   // For the Glover model, hrf is a single vector.
   // Reverse the HRF kernel so that it can be used for convolution.

@@ -93,12 +93,18 @@ log_likelihood_joint <- function(proposals, dadms, model_list, component = NULL)
   if(!is.null(component)) dadms <- dadms[component]
   for(dadm in dadms){
     if(is.data.frame(dadm)){
+      # Sometimes designs are the same across models (typically in fMRI)
+      # Instead of storing multiple, we just store a pointer to the first original design
+      if(is.numeric(attr(dadm, "designs"))){
+        ref_idx <- attr(dadm, "designs")
+        attr(dadm, "designs") <- attr(dadms[[ref_idx]], "designs")
+      }
       i <- i + 1
       parPrefix <- parPreFixs[i]
       columns_to_use <- sapply(strsplit(colnames(proposals), "|", fixed = TRUE), function(x) x == parPrefix)[1,]
       currentPars <- proposals[,columns_to_use, drop = F]
       colnames(currentPars) <- gsub(".*[|]", "", colnames(currentPars))
-      total_ll <- total_ll +  calc_ll_manager(currentPars, dadm, model_list[[i]])
+      total_ll <- total_ll +  calc_ll_manager(currentPars, dadm, model_list[[as.numeric(parPrefix)]])
     }
   }
   return(total_ll)
