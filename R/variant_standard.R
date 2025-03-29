@@ -36,7 +36,7 @@ get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1
     n_pars <- length(prior$theta_mu_mean)
   }
 
-  if(!is.null(betas) > 0 & is.null(prior$beta_mean)){
+  if(!is.null(betas) & is.null(prior$beta_mean)){
     prior$beta_mean <- rep(0, length(betas))
   }
   if(!is.null(betas) & is.null(prior$beta_var)){
@@ -101,7 +101,7 @@ get_startpoints_standard <- function(pmwgs, start_mu, start_var){
   if (is.null(start_var)) start_var <- riwish(n_pars * 3,diag(n_pars))
   start_a_half <- 1 / rgamma(n = n_pars, shape = 2, rate = 1)
   if(!is.null(pmwgs$betas)){
-    betas <- rmvnorm(1, mean = pmwgs$prior$theta_mu_mean, sigma = pmwgs$prior$theta_mu_var)
+    betas <- rmvnorm(1, mean = pmwgs$prior$beta_mean, sigma = pmwgs$prior$beta_var)
   } else{
     betas <- NULL
   }
@@ -126,22 +126,27 @@ fill_samples_standard <- function(samples, group_level, proposals,  j = 1, n_par
 
 gibbs_step_standard <- function(sampler, alpha) {
   #
-  # alpha:         (p x n) subject-level parameter matrix
+  # alpha:  (p x n) subject-level parameter matrix
   #
   # sampler$design_mats:   list of length p, each (n x m_k)
-  # sampler$beta_indices:  list of length p, each integer indices in Beta for row k
+  # sampler$beta_indices:  list of length p, each integer indices in the big vector for row k
   # sampler$is_blocked:    length p logical; is_blocked[k] = TRUE => param k is in some covariance block
-  # sampler$par_group:     length p integer group label for each param (only matters if is_blocked=TRUE)
+  # sampler$par_group:     length p integer group labels (only used if is_blocked=TRUE)
   #
-  # sampler$prior contains:
-  #   - theta_mu_mean, theta_mu_invar  => prior mean & precision for Beta (length M and MxM)
-  #   - v, A => IW/Gamma hyperparams
+  # sampler$prior contains at least:
+  #   - theta_mu_mean (length p) and theta_mu_invar (p x p)
+  #   - beta_mean (length of "all slopes") and beta_var (matching dimension)
+  #   - v, A => hyperparams for the IW/Gamma updates
   #
+  # last_sample_standard(...) must provide:
+  #   - last$tmu (p-vector) of group means
+  #   - last$beta (the additional slopes, if any)
+  #   - last$tvar, last$tvinv (p x p)
+  #   - last$a_half (p)
   #
-  # This function returns an updated (beta, tvar, tvinv, a_half),
-  # doing partial block updates of tvar:
-  #   => If is_blocked[k] is TRUE, param k shares off-diagonal cov with its group in par_group.
-  #   => If is_blocked[k] is FALSE, param k is updated as diagonal-only with a Gamma draw.
+  # The function returns an updated (tmu, beta, tvar, tvinv, a_half, alpha),
+  # doing partial block updates for the covariance tvar, and a single joint
+  # update for [mu + beta] in one big vector.
 
 
   design_mats   <- sampler$design_mats
@@ -151,45 +156,83 @@ gibbs_step_standard <- function(sampler, alpha) {
   prior         <- sampler$prior
 
   last    <- last_sample_standard(sampler$samples)
-  beta    <- last$beta      # (M)
-  tvar    <- last$tvar      # (p x p)
-  tvinv   <- last$tvinv     # (p x p)
-  a_half  <- last$a_half    # (p)
+  tmu     <- last$tmu        # group means, dimension p
+  beta    <- last$beta       # additional slopes
+  tvar    <- last$tvar       # (p x p)
+  tvinv   <- last$tvinv
+  a_half  <- last$a_half     # length p
 
-  p <- nrow(alpha)          # number of parameters
-  n <- ncol(alpha)          # number of subjects
+  p <- nrow(alpha)           # must match length(tmu)
+  n <- ncol(alpha)           # number of subjects
 
-  ##------------------------ 1) Update Beta (jointly) ------------------------##
-  M <- length(beta)         # total dimension of Beta
+  ##--------------------------------------------------
+  ## 1) Combine tmu & beta into one big vector
+  ##--------------------------------------------------
+  # "mu" is length p, "beta" is length(...). So total dimension:
+  M <- length(tmu) + length(beta)
+
+  # We will build a single prior mean vector 'prior_mean' (length M)
+  # and a single prior precision 'prior_invar' (MxM).
+  prior_mean    <- numeric(M)
+  prior_invar   <- matrix(0, nrow=M, ncol=M)  # we'll fill the diagonal blocks
+
+  # Decide which indices in {1..M} correspond to mu, which to beta
+  # We rely on your trick: 'mean_index' are columns in sapply(beta_indices, min).
+  # That set of columns is treated as the group means (the intercept dimension).
+  mean_index <- seq_len(M) %in% sapply(beta_indices, min)
+
+  # Fill prior_mean for the group means vs. slopes
+  # e.g. prior$theta_mu_mean is length p, prior$beta_mean is length(M - p)
+  prior_mean[mean_index]  <- prior$theta_mu_mean
+  prior_mean[!mean_index] <- prior$beta_mean
+
+  # Fill prior_invar for the group means (block) vs. slopes (block)
+  # e.g. prior$theta_mu_invar is (p x p), prior$beta_var is (some dim x some dim)
+  # Fill the diagonal blocks with the correct inverses
+  mu_idx    <- which(mean_index)
+  beta_idx  <- which(!mean_index)
+  # group means block:
+  prior_invar[mu_idx, mu_idx] <- prior$theta_mu_invar
+  # slopes block:
+  beta_invar <- solve(prior$beta_var)
+  prior_invar[beta_idx, beta_idx] <- beta_invar
+
+  ##--------------------------------------------------
+  ## 2) Build data-based precision & mean, for the
+  ##    big vector of dimension M
+  ##--------------------------------------------------
   prec_data <- matrix(0, M, M)
   mean_data <- numeric(M)
 
-  # Build data-based precision & mean
+  # For each subject i, we build an (p x M) matrix that maps [mu+beta] -> predicted alpha_i
   for (i in seq_len(n)) {
-    # M_i = (p x M)
     M_i <- matrix(0, nrow=p, ncol=M)
     for (k in seq_len(p)) {
-      cols_k <- beta_indices[[k]]
+      cols_k <- beta_indices[[k]]      # columns in big vector that row k uses
       x_ik   <- design_mats[[k]][i, , drop=FALSE]
+      # place them in row k:
       M_i[k, cols_k] <- x_ik
     }
-    alpha_i <- alpha[, i, drop=FALSE]
 
+    alpha_i <- alpha[, i, drop=FALSE]  # p x 1
+
+    # Accumulate
     prec_data <- prec_data + crossprod(M_i, tvinv %*% M_i)
     mean_data <- mean_data + crossprod(M_i, tvinv %*% alpha_i)
   }
 
-  prec_post <- prior$theta_mu_invar + prec_data
+  prec_post <- prior_invar + prec_data
   cov_post  <- solve(prec_post)
-  mean_post <- cov_post %*% ( prior$theta_mu_invar %*% prior$theta_mu_mean + mean_data )
+  mean_post <- cov_post %*% (prior_invar %*% prior_mean + mean_data)
 
-  # Sample new Beta
-  L         <- t(chol(cov_post))
-  z         <- rnorm(M)
-  beta_new  <- as.vector(mean_post + L %*% z)
+  # Draw new big vector
+  L          <- t(chol(cov_post))
+  z          <- rnorm(M)
+  mean_new   <- as.vector(mean_post + L %*% z)
 
-
-  ##---------------------- 2) Compute residuals for tvar update -------------##
+  ##--------------------------------------------------
+  ## 3) Compute residuals = alpha - (X * [mu+beta])
+  ##--------------------------------------------------
   resid <- matrix(0, nrow=p, ncol=n)
   for (i in seq_len(n)) {
     alpha_i <- alpha[, i, drop=FALSE]
@@ -201,69 +244,58 @@ gibbs_step_standard <- function(sampler, alpha) {
       M_i[k, cols_k] <- x_ik
     }
 
-    mu_i <- M_i %*% beta_new
+    mu_i <- M_i %*% mean_new
     resid[, i] <- alpha_i[,1] - mu_i
   }
 
-
-  ##---------------- 3) Build a brand-new tvar_new partially blocked ---------##
+  ##--------------------------------------------------
+  ## 4) Partial-block update of tvar_new
+  ##--------------------------------------------------
   tvar_new <- matrix(0, p, p)
 
-  # Identify the subset of parameters that are blocked vs unblocked
   blocked_idx   <- which(is_blocked)
   unblocked_idx <- which(!is_blocked)
 
-  #--- 3a) Multi-parameter block IW for each group among blocked -------------
+  # 4a) For each block among the "blocked" subset, do an inverse-Wishart
   if (length(blocked_idx) > 0) {
     block_groups <- unique(par_group[blocked_idx])
     for (g in block_groups) {
       group_idx <- blocked_idx[ par_group[blocked_idx] == g ]
-      d <- length(group_idx)  # dimension of this block
-
+      d <- length(group_idx)
       resid_block <- resid[group_idx, , drop=FALSE]
       cov_block   <- resid_block %*% t(resid_block)
 
       B_half_block <- 2 * prior$v * diag(1 / a_half[group_idx], d) + cov_block
-      df_block <- prior$v + d - 1 + n
+      df_block     <- prior$v + d - 1 + n
 
-      Sigma_block <- riwish(df_block, B_half_block)
-
-      # place the block into tvar_new
+      Sigma_block  <- riwish(df_block, B_half_block)
       tvar_new[group_idx, group_idx] <- Sigma_block
     }
   }
 
-  #--- 3b) Vectorized gamma update for unblocked (diagonal-only) -------------
+  # 4b) For each "unblocked" param, do a vectorized Gamma for diagonal-only
   if (length(unblocked_idx) > 0) {
-    # sum of squares for each unblocked row
-    # rowSums( (resid[k,])^2 ) is the total squared residual for param k
     sum_sq_vec <- rowSums(resid[unblocked_idx, , drop=FALSE]^2)
-
     # shape = v/2 + n/2
-    shape_vec  <- prior$v/2 + n/2
-    # rate = prior$v / a_half[k] + 0.5 * sum_sq
-    rate_vec   <- prior$v / a_half[unblocked_idx] + 0.5 * sum_sq_vec
+    shape_vec <- prior$v/2 + n/2
+    # rate = v/a_half + 0.5 * sum_sq
+    rate_vec  <- prior$v / a_half[unblocked_idx] + 0.5 * sum_sq_vec
 
-    # Draw the precision for each unblocked param
     tvinv_diag <- rgamma(length(unblocked_idx), shape=shape_vec, rate=rate_vec)
     tvar_diag  <- 1 / tvinv_diag
 
-    # Fill these diagonal entries into tvar_new
     tvar_new[cbind(unblocked_idx, unblocked_idx)] <- tvar_diag
   }
 
-  ##------------------ 4) Invert tvar_new to get tvinv_new -------------------##
+  # Invert
   tvinv_new <- solve(tvar_new)
 
-
-  ##--------- 5) Update mixing weights a_half for all p parameters ----------##
-  #
-  # We'll allow the shape to depend on the dimension of each parameter's block:
-  #   shape_k = (v + block_dim[k]) / 2
-  # Where block_dim[k] = 1 if unblocked, or = size of that block if blocked.
+  ##--------------------------------------------------
+  ## 5) Update a_half
+  ##--------------------------------------------------
+  # shape depends on block dimension: (v + block_dim[k]) / 2
   block_dim <- integer(p)
   block_dim[unblocked_idx] <- 1
-  # For each block group g, set block_dim to the block size:
   if (length(blocked_idx) > 0) {
     block_groups <- unique(par_group[blocked_idx])
     for (g in block_groups) {
@@ -273,19 +305,27 @@ gibbs_step_standard <- function(sampler, alpha) {
   }
 
   shape_vec <- (prior$v + block_dim) / 2
-  rate_vec  <- prior$v * diag(tvinv_new) + 1 / (prior$A^2)
-
+  rate_vec  <- prior$v * diag(tvinv_new) + 1/(prior$A^2)
   a_half_new <- 1 / rgamma(p, shape=shape_vec, rate=rate_vec)
 
+  ##--------------------------------------------------
+  ## 6) Separate out the updated tmu & beta
+  ##--------------------------------------------------
+  # mean_index = those columns for 'group means' => new tmu
+  # !mean_index = those columns for slopes => new beta
+  tmu_new  <- mean_new[ mean_index ]
+  beta_new <- mean_new[ !mean_index ]
 
-  ##---------------------- 6) Return updated values -------------------------##
+  ##--------------------------------------------------
+  ## 7) Return updated values
+  ##--------------------------------------------------
   out <- list(
-    beta   = beta_new,
-    tmu = tmu,
+    tmu    = tmu_new,          # updated group means
+    beta   = beta_new,         # updated slopes
     tvar   = tvar_new,
     tvinv  = tvinv_new,
     a_half = a_half_new,
-    alpha = alpha
+    alpha  = alpha
   )
   return(out)
 }
@@ -314,6 +354,7 @@ unwind <- function(var_matrix, ...) {
 last_sample_standard <- function(store) {
   list(
     tmu = store$theta_mu[, store$idx],
+    beta = store$beta[,store$idx],
     tvar = store$theta_var[, , store$idx],
     tvinv = store$last_theta_var_inv,
     a_half = store$a_half[, store$idx]
@@ -366,54 +407,189 @@ unwind_chol <- function(x,reverse=FALSE) {
 }
 
 # bridge_sampling ---------------------------------------------------------
-bridge_group_and_prior_and_jac_blocked <- function(proposals_group, proposals_list, info){
-  prior <- info$prior
-  par_groups <- info$par_groups
-  has_cov <- par_groups %in% which(table(par_groups) > 1)
-  proposals <- do.call(cbind, proposals_list)
-  theta_mu <- proposals_group[,1:info$n_pars]
-  theta_a <- proposals_group[,(info$n_pars + 1):(2*info$n_pars)]
-  theta_var1 <- proposals_group[,(2*info$n_pars + 1):(2*info$n_pars + sum(!has_cov))]
-  theta_var2 <- proposals_group[,(2*info$n_pars + sum(!has_cov) + 1):(2*info$n_pars + sum(!has_cov) + (sum(has_cov) * (sum(has_cov) +1))/2)]
+bridge_group_and_prior_and_jac_standard <- function(
+    proposals_group,   # (n_iter x [theta_mu, theta_a, var1, var2, (beta)?])
+    proposals_list,    # list of length n_iter, each item is the subject-level alpha draws
+    info
+) {
+  # 'info' should contain:
+  #   info$n_pars        = p        (# of rows in alpha)
+  #   info$n_subjects    = n_subj   (# of subjects)
+  #   info$is_blocked    = logical p  (which rows are blocked)
+  #   info$par_group     = integer p  (group IDs for blocked rows)
+  #   info$design_mats   = list of length p, each (n_subj x m_k)
+  #   info$beta_indices  = list of length p, each subset of columns for row k
+  #   info$prior:
+  #       - $theta_mu_mean (p), $theta_mu_var (pxp)
+  #       - $beta_mean (maybe NULL or length=?), $beta_var (matching dimension)
+  #       - $v, $A (IW & gamma hyperparams)
+  #
+  # The 'proposals_group' columns are arranged:
+  #   1) theta_mu (p columns)
+  #   2) theta_a  (p columns) -> log(a_half)
+  #   3) theta_var1 (sum(!has_cov) columns) -> log of unblocked diagonal
+  #   4) theta_var2 ((d*(d+1))/2 columns)    -> cholesky for the blocked subset
+  #   5) (optional) betas  (length(prior$beta_mean) columns) -> could be log or direct
+  #
+  # 'proposals_list' is a list of length n_iter, each item is an (n_subj * p)-vector or
+  #   something that we can reshape into (n_subj x p), i.e. the subject-level alphas.
 
+  par_group <- info$par_group
+  has_cov   <- info$is_blocked
+  prior     <- info$prior
+
+  p         <- info$n_pars        # dimension of each alpha_i
+  n_subj    <- info$n_subjects
+  B <- length(info$betas)
+  M <- p + B
+
+  # Extract columns:
+  theta_mu   <- proposals_group[, seq_len(p),   drop=FALSE]  # (n_iter x p)
+  theta_a    <- proposals_group[, p + seq_len(p),    drop=FALSE]  # (n_iter x p)
+  if(B > 0){
+    theta_beta <- proposals_group[,(2*p + 1):(2*p+B), drop = FALSE]
+  }
+
+  theta_var1 <- proposals_group[, (2*p + 1 + B) : (2*p + B + sum(!has_cov)),       drop=FALSE]  # (n_iter x sum(!has_cov))
+  theta_var2 <- proposals_group[, (2*p + B + sum(!has_cov) + 1) : (2*p + B+ sum(!has_cov) + (sum(has_cov)*(sum(has_cov)+1)) / 2),drop=FALSE]  # (n_iter x (d*(d+1))/2)
   n_iter <- nrow(theta_mu)
   sum_out <- numeric(n_iter)
-  var_curr <- matrix(0, nrow = info$n_pars, ncol = info$n_pars)
 
-  for(i in 1:n_iter){ # these unfortunately can't be vectorized
-    # prior_delta2 <- log(robust_diwish(solve(delta2_curr), v=prior$a_d, S = diag(prior$b_d, sum(!info$is_structured))))
-    var2curr <- unwind_chol(theta_var2[i,], reverse = T)
-    var_curr[!has_cov, !has_cov] <- diag(exp(theta_var1[i,]), sum(!has_cov))
-    var_curr[has_cov, has_cov] <- var2curr
-    proposals_curr <- matrix(proposals[i,], ncol = info$n_pars, byrow = T)
-    group_ll <- sum(dmvnorm(proposals_curr, theta_mu[i,], var_curr, log = T))
-    prior_var1 <- sum(logdinvGamma(exp(theta_var1[i,]), shape = prior$v/2, rate = prior$v/exp(theta_a[i,!has_cov])))
-    prior_var2 <- log(robust_diwish(var2curr, v=prior$v+ sum(has_cov)-1, S = 2*prior$v*diag(1/theta_a[i,has_cov])))
-    prior_a <- sum(logdinvGamma(exp(theta_a[i,]), shape = 1/2,rate=1/(prior$A^2)))
-    jac_var2 <- calc_log_jac_chol(theta_var2[i, ])
-    sum_out[i] <- group_ll + prior_var1 + prior_var2 + jac_var2 + prior_a
+  # Precompute the prior on mu, beta outside the loop (vectorized)
+  prior_mu_log <- dmvnorm(theta_mu,
+                          mean  = prior$theta_mu_mean,
+                          sigma = prior$theta_mu_var,
+                          log   = TRUE)
+  prior_beta_log <- 0
+  if (B > 0) {
+    prior_beta_log <- dmvnorm(theta_beta,
+                              mean  = prior$beta_mean,
+                              sigma = prior$beta_var,
+                              log   = TRUE)
   }
-  prior_mu <- dmvnorm(theta_mu, mean = prior$theta_mu_mean, sigma = prior$theta_mu_var, log =T)
-  jac_var1 <- rowSums(theta_var1)
-  jac_a <- rowSums(theta_a)
-  return(sum_out + prior_mu + jac_var1 + jac_a)
+
+  # For the Jacobian of var1 => rowSums(theta_var1)
+  # For the Jacobian of a    => rowSums(theta_a)
+  if(any(!has_cov)){
+    jac_var1 <- rowSums(theta_var1)
+  } else{
+    jac_var1 <- 0
+  }
+  jac_a_vec    <- rowSums(theta_a)
+
+  #--- Main loop over MCMC draws ---
+  # We reconstruct var_curr & compute the group-likelihood, plus prior on var1/var2/a
+  # then we store in sum_out[i].  After the loop, we add prior_mu_log + prior_beta_log + jac_var1 + jac_a.
+  for (i in seq_len(n_iter)) {
+    # 1) Reconstruct partial-block var_curr
+    var_curr <- matrix(0, p, p)
+
+    # Unblocked diagonal => exp(theta_var1[i,])
+    if (any(!has_cov)) {
+      var_curr[!has_cov, !has_cov] <- diag(exp(theta_var1[i, ]), sum(!has_cov))
+    }
+
+    # Blocked => unwind_chol
+    if (any(has_cov)) {
+      var_block <- unwind_chol(theta_var2[i, ], reverse=TRUE)
+      var_curr[has_cov, has_cov] <- var_block
+    }
+    # 3) Compute group likelihood = sum_{s=1..n_subj} dmvnorm(alpha_s, mu_s, var_curr)
+
+    proposals_curr <- matrix(proposals[[i]], ncol = info$n_pars, byrow = T)
+    regressors_i <- numeric(M)
+    regressors_i[mean_index]  <- theta_mu[i, ]   # fill the intercept positions
+    if(B > 0){
+      regressors_i[!mean_index] <- theta_beta[i, ] # fill the slope positions
+    }
+    group_ll <- 0
+    for (s in seq_len(n_subj)) {
+      alpha_s <- proposals_curr[s, ]  # length p
+      mu_s <- numeric(p)            # will hold subject s's mean for each row k=1..p
+      for (k in seq_len(p)) {
+        # The columns in 'regressors_i' used by row k:
+        #   info$beta_indices[[k]] is, for example, c(1, 2) if row k has 2 columns in the design.
+        cols_k <- info$beta_indices[[k]]
+        # The row-k design vector for subject s is design_mats[[k]][s, ] => e.g. (1 x m_k).
+        x_sk <- info$design_mats[[k]][s, , drop = FALSE]
+        # Then the mean for row k is the dot product of x_sk with the relevant slice of 'regressors_i'.
+        mu_s[k] <- x_sk %*% regressors_i[cols_k]
+      }
+      # Now alpha_s ~ N(mu_s, var_curr)
+      group_ll <- group_ll + dmvnorm(alpha_s, mu_s, var_curr, log = TRUE)
+    }
+
+    # 4) Prior on var1, var2, and a => same partial-block logic
+    # "var1" => Inverse-Gamma with shape=v/2, rate=v/exp(theta_a[i, !has_cov])
+    # "var2" => robust_diwish( var_block, v= v + sum(has_cov)-1, S= 2 v diag(1/ a_half ) ), but a_half=exp(theta_a)
+    # "a" => a_half = exp(theta_a), shape=1/2, rate=1/(A^2)
+    prior_var1 <- 0
+    if (any(!has_cov)) {
+      # sum of logdinvGamma for each unblocked row
+      # x = exp(theta_var1), shape= v/2, rate= v / exp(theta_a)
+      # note that 'theta_a[i, !has_cov]' picks the relevant subset
+      prior_var1 <- sum( logdinvGamma(
+        x     = exp(theta_var1[i, ]),
+        shape = prior$v/2,
+        rate  = prior$v / exp( theta_a[i, !has_cov, drop=FALSE] )
+      ))
+    }
+
+    prior_var2 <- 0
+    if (any(has_cov)) {
+      # robust_diwish( var_block, v= v + d-1, S= 2*v diag(1/ exp(theta_a[i, has_cov])) )
+      d_block   <- sum(has_cov)
+      prior_var2 <- log( robust_diwish(
+        x = var_block,
+        v = prior$v + d_block - 1,
+        S = 2 * prior$v * diag( 1 / exp(theta_a[i, has_cov]) )
+      ))
+    }
+
+    prior_a <- sum(logdinvGamma(
+      x     = exp(theta_a[i, ]),
+      shape = 1/2,
+      rate  = 1/(prior$A^2)
+    ))
+
+    # Jacobian for var2
+    jac_var2 <- 0
+    if (sum(has_cov)>0) {
+      jac_var2 <- calc_log_jac_chol(theta_var2[i, ])
+    }
+
+    # Combine
+    sum_out[i] <- group_ll + prior_var1 + prior_var2 + jac_var2 + prior_a
+  } # end loop i
+
+  #--- 5) Add the vectorized prior on theta_mu, beta, plus Jacobians var1, a
+  # prior_mu_log, prior_beta_log each length=n_iter
+  sum_out <- sum_out + prior_mu_log + prior_beta_log + jac_var1 + jac_a_vec
+
+  return(sum_out)
 }
 
 
-bridge_add_info_blocked <- function(info, samples){
-  par_groups <- samples$par_groups
-  has_cov <- par_groups %in% which(table(par_groups) > 1)
-  info$par_groups <- par_groups
-  info$group_idx <- (samples$n_pars*samples$n_subjects + 1):(samples$n_pars*samples$n_subjects + 2*samples$n_pars +
+bridge_add_info_standard <- function(info, samples){
+  has_cov <- sampler$is_blocked
+  info$is_blocked <- has_cov
+  info$betas <- samples$betas
+  info$par_group <- samples$par_group
+  info$design_mats   <- samples$design_mats
+  info$beta_indices  <- samples$beta_indices
+  info$group_idx <- (samples$n_pars*samples$n_subjects + 1):(samples$n_pars*samples$n_subjects + 2*samples$n_pars + length(samples$betas) +
                                                                sum(!has_cov) + (sum(has_cov) * (sum(has_cov) +1))/2)
   return(info)
 }
 
-bridge_add_group_blocked <- function(all_samples, samples, idx){
+bridge_add_group_standard <- function(all_samples, samples, idx){
   all_samples <- cbind(all_samples, t(samples$samples$theta_mu[,idx]))
   all_samples <- cbind(all_samples, t(log(samples$samples$a_half[,idx])))
-  par_groups <- samples$par_groups
-  has_cov <- par_groups %in% which(table(par_groups) > 1)
+  if(!is.null(samples$betas)){
+    all_samples <- cbind(all_samples, t(log(samples$samples$beta[,idx])))
+  }
+  par_group <- samples$par_group
+  has_cov <- sampler$is_blocked
   all_samples <- cbind(all_samples, t(log(matrix(apply(samples$samples$theta_var[!has_cov,!has_cov,idx, drop = F], 3, diag), ncol = nrow(all_samples)))))
   all_samples <- cbind(all_samples, t(matrix(apply(samples$samples$theta_var[has_cov,has_cov,idx, drop = F], 3, unwind_chol), ncol = nrow(all_samples))))
   return(all_samples)
