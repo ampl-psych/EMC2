@@ -1024,9 +1024,10 @@ sampled_pars.emc.design <- function(x,model=NULL,doMap=TRUE, add_da = FALSE, all
     if(grepl("MRI", model()$type)){
       pars <- model()$p_types
       if(length(design) != 1){
-        pars <- paste(cur_name,  names(pars), sep = "|")
+        names(pars) <- paste(cur_name,  names(pars), sep = "|")
         map_list[[cur_name]] <- NA
       }
+      pars[1:length(pars)] <- 0
       out <- c(out, pars)
       next
     }

@@ -275,7 +275,6 @@ convolved_design_matrix <- function(timeseries, events, factors = NULL, contrast
     }
     dms_sub <- do.call(rbind, dms_sub)
     dms_sub[abs(dms_sub) < cut_off] <- 0
-    dms_sub$subjects <- subject
     rownames(dms_sub) <- NULL
     all_dms[[as.character(subject)]] <- dms_sub
   }
