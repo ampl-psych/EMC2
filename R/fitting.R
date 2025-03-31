@@ -748,29 +748,31 @@ make_emc <- function(data,design,model=NULL,
   attr(dadm_list[[1]], "prior") <- prior_in
 
   # if(!is.null(subject_covariates)) attr(dadm_list, "subject_covariates") <- subject_covariates
-  if (type %in% c("standard", "single", "diagonal", "infnt_factor", "diagonal-gamma")) {
+  if (type %in% c("single", "infnt_factor", "diagonal-gamma")) {
     out <- pmwgs(dadm_list, type, nuisance = nuisance,
                  nuisance_non_hyper = nuisance_non_hyper,
                  n_factors = n_factors)
-  } else if (type == "blocked") {
-    if(is.character(par_groups)){
-      par_groups <- list(par_groups)
-    }
-    if(is.list(par_groups)){
-      par_names <- names(sampled_pars(design))
-      new_par_groups <- rep(NA, length(par_names))
-      for(i in 1:length(par_groups)){
-        if(any(!par_groups[[i]] %in% par_names)) stop("Make sure you specified parameter names in par_groups correctly")
-        new_par_groups[par_names %in% par_groups[[i]]] <- i
+  } else if (type == "standard") {
+    if(!is.null(par_groups)){
+      if(is.character(par_groups)){
+        par_groups <- list(par_groups)
       }
-      new_par_groups[is.na(new_par_groups)] <- (i+1):(i+sum(is.na(new_par_groups)))
-      par_groups <- new_par_groups
+      if(is.list(par_groups)){
+        par_names <- names(sampled_pars(design))
+        new_par_groups <- rep(NA, length(par_names))
+        for(i in 1:length(par_groups)){
+          if(any(!par_groups[[i]] %in% par_names)) stop("Make sure you specified parameter names in par_groups correctly")
+          new_par_groups[par_names %in% par_groups[[i]]] <- i
+        }
+        new_par_groups[is.na(new_par_groups)] <- (i+1):(i+sum(is.na(new_par_groups)))
+        par_groups <- new_par_groups
+      }
+      if(length(par_groups) != length(sampled_pars(design))){
+        stop("par_groups length does not match number of sampled parameters, make sure you specified par_groups correctly")
+      }
     }
-    if(length(par_groups) != length(sampled_pars(design))){
-      stop("par_groups length does not match number of sampled parameters, make sure you specified par_groups correctly")
-    }
-    if (is.null(par_groups)) stop("Must specify par_groups for blocked type")
     out <- pmwgs(dadm_list, type, par_groups=par_groups,
+                 group_level_model = NULL,
                  nuisance = nuisance,
                  nuisance_non_hyper = nuisance_non_hyper)
   } else if (type == "factor") {

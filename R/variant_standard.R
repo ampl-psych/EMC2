@@ -19,7 +19,13 @@ sample_store_standard <- function(data, par_names, iters = 1, stage = "init", in
 }
 
 add_info_standard <- function(sampler, prior = NULL, ...){
-  sampler$prior <- get_prior_standard(prior, sum(!sampler$nuisance), sample = F, betas = list(...)$betas)
+  n_pars <-sum(!sampler$nuisance)
+  sampler$betas <- NULL
+  sampler$design_mats <- rep(list(matrix(1, sampler$n_subjects)), n_pars)
+  sampler$beta_indices <- lapply(1:n_pars, function(x) return(x))
+  sampler$par_group <- rep(1, n_pars)
+  sampler$is_blocked <- rep(T, n_pars)
+  sampler$prior <- get_prior_standard(prior, n_pars, sample = F, betas = list(...)$betas)
   return(sampler)
 }
 
@@ -189,13 +195,14 @@ gibbs_step_standard <- function(sampler, alpha) {
   # Fill prior_invar for the group means (block) vs. slopes (block)
   # e.g. prior$theta_mu_invar is (p x p), prior$beta_var is (some dim x some dim)
   # Fill the diagonal blocks with the correct inverses
-  mu_idx    <- which(mean_index)
-  beta_idx  <- which(!mean_index)
   # group means block:
-  prior_invar[mu_idx, mu_idx] <- prior$theta_mu_invar
+  prior_invar[mean_index, mean_index] <- prior$theta_mu_invar
   # slopes block:
-  beta_invar <- solve(prior$beta_var)
-  prior_invar[beta_idx, beta_idx] <- beta_invar
+  if(any(!mean_index)){
+    beta_invar <- solve(prior$beta_var)
+    prior_invar[!mean_index, !mean_index] <- beta_invar
+  }
+
 
   ##--------------------------------------------------
   ## 2) Build data-based precision & mean, for the
@@ -314,8 +321,11 @@ gibbs_step_standard <- function(sampler, alpha) {
   # mean_index = those columns for 'group means' => new tmu
   # !mean_index = those columns for slopes => new beta
   tmu_new  <- mean_new[ mean_index ]
-  beta_new <- mean_new[ !mean_index ]
-
+  if(any(!mean_index)){
+    beta_new <- mean_new[ !mean_index ]
+  } else{
+    beta_new <- NULL
+  }
   ##--------------------------------------------------
   ## 7) Return updated values
   ##--------------------------------------------------
