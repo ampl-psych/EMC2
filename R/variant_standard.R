@@ -21,8 +21,6 @@ sample_store_standard <- function(data, par_names, iters = 1, stage = "init", in
 add_info_standard <- function(sampler, prior = NULL, ...){
   n_pars <-sum(!sampler$nuisance)
   sampler$betas <- NULL
-  sampler$design_mats <- rep(list(matrix(1, sampler$n_subjects)), n_pars)
-  sampler$beta_indices <- lapply(1:n_pars, function(x) return(x))
   sampler$par_group <- rep(1, n_pars)
   sampler$is_blocked <- rep(T, n_pars)
   sampler$prior <- get_prior_standard(prior, n_pars, sample = F, betas = list(...)$betas)
@@ -130,12 +128,41 @@ fill_samples_standard <- function(samples, group_level, proposals,  j = 1, n_par
   return(samples)
 }
 
+add_intercepts <- function(par_names, design_mats = NULL, n_subjects) {
+  #
+  # par_names:   character vector of parameter names (length p)
+  # design_mats: named list of existing design matrices, e.g. $"param1" => (n x m1), etc.
+  #                    some par_names might not appear here.
+  # n_subjects:    integer, number of subjects (rows).
+  #
+  # Returns a new list, same length as par_names, each entry an (n_subjects x m_k) matrix
+  # that includes an intercept column as the FIRST column. If param was not in design_mats,
+  # we create a single column of 1’s of dimension (n_subjects x 1).
+
+  out_list <- vector("list", length(par_names))
+  names(out_list) <- par_names
+
+  for (k in seq_along(par_names)) {
+    pname <- par_names[k]
+    if (!is.null(design_mats[[pname]])) {
+      # existing design => prepend an intercept column
+      mat_k <- design_mats[[pname]]
+      # cbind(1, mat_k)
+      out_list[[k]] <- cbind(1, mat_k)
+    } else {
+      # no existing design => just a column of 1's
+      out_list[[k]] <- matrix(1, nrow = n_subjects, ncol = 1)
+    }
+  }
+
+  return(out_list)
+}
+
 gibbs_step_standard <- function(sampler, alpha) {
   #
   # alpha:  (p x n) subject-level parameter matrix
   #
   # sampler$design_mats:   list of length p, each (n x m_k)
-  # sampler$beta_indices:  list of length p, each integer indices in the big vector for row k
   # sampler$is_blocked:    length p logical; is_blocked[k] = TRUE => param k is in some covariance block
   # sampler$par_group:     length p integer group labels (only used if is_blocked=TRUE)
   #
@@ -156,7 +183,6 @@ gibbs_step_standard <- function(sampler, alpha) {
 
 
   design_mats   <- sampler$design_mats
-  beta_indices  <- sampler$beta_indices
   is_blocked    <- sampler$is_blocked
   par_group     <- sampler$par_group
   prior         <- sampler$prior
@@ -171,6 +197,7 @@ gibbs_step_standard <- function(sampler, alpha) {
   p <- nrow(alpha)           # must match length(tmu)
   n <- ncol(alpha)           # number of subjects
 
+  design_mats <- add_intercepts(names(tmu), design_mats, n)
   ##--------------------------------------------------
   ## 1) Combine tmu & beta into one big vector
   ##--------------------------------------------------
@@ -183,9 +210,8 @@ gibbs_step_standard <- function(sampler, alpha) {
   prior_invar   <- matrix(0, nrow=M, ncol=M)  # we'll fill the diagonal blocks
 
   # Decide which indices in {1..M} correspond to mu, which to beta
-  # We rely on your trick: 'mean_index' are columns in sapply(beta_indices, min).
   # That set of columns is treated as the group means (the intercept dimension).
-  mean_index <- seq_len(M) %in% sapply(beta_indices, min)
+  mean_index <- unlist(lapply(design_mats, \(x) c(TRUE, rep(FALSE, ncol(x) - 1))))
 
   # Fill prior_mean for the group means vs. slopes
   # e.g. prior$theta_mu_mean is length p, prior$beta_mean is length(M - p)
@@ -213,19 +239,17 @@ gibbs_step_standard <- function(sampler, alpha) {
 
   # For each subject i, we build an (p x M) matrix that maps [mu+beta] -> predicted alpha_i
   for (i in seq_len(n)) {
+    par_idx <- 0
     M_i <- matrix(0, nrow=p, ncol=M)
     for (k in seq_len(p)) {
-      cols_k <- beta_indices[[k]]      # columns in big vector that row k uses
       x_ik   <- design_mats[[k]][i, , drop=FALSE]
       # place them in row k:
-      M_i[k, cols_k] <- x_ik
+      M_i[k, par_idx + 1:ncol(design_mats[[k]])] <- x_ik
+      par_idx <- par_idx + ncol(design_mats[[k]])
     }
-
-    alpha_i <- alpha[, i, drop=FALSE]  # p x 1
-
     # Accumulate
     prec_data <- prec_data + crossprod(M_i, tvinv %*% M_i)
-    mean_data <- mean_data + crossprod(M_i, tvinv %*% alpha_i)
+    mean_data <- mean_data + crossprod(M_i, tvinv %*% alpha[, i, drop=FALSE])
   }
 
   prec_post <- prior_invar + prec_data
@@ -242,17 +266,16 @@ gibbs_step_standard <- function(sampler, alpha) {
   ##--------------------------------------------------
   resid <- matrix(0, nrow=p, ncol=n)
   for (i in seq_len(n)) {
-    alpha_i <- alpha[, i, drop=FALSE]
-
+    par_idx <- 0
     M_i <- matrix(0, nrow=p, ncol=M)
     for (k in seq_len(p)) {
-      cols_k <- beta_indices[[k]]
       x_ik   <- design_mats[[k]][i, , drop=FALSE]
-      M_i[k, cols_k] <- x_ik
+      M_i[k, par_idx + 1:ncol(design_mats[[k]])] <- x_ik
+      par_idx <- par_idx + ncol(design_mats[[k]])
     }
 
     mu_i <- M_i %*% mean_new
-    resid[, i] <- alpha_i[,1] - mu_i
+    resid[, i] <- alpha[,i] - mu_i
   }
 
   ##--------------------------------------------------
@@ -428,7 +451,6 @@ bridge_group_and_prior_and_jac_standard <- function(
   #   info$is_blocked    = logical p  (which rows are blocked)
   #   info$par_group     = integer p  (group IDs for blocked rows)
   #   info$design_mats   = list of length p, each (n_subj x m_k)
-  #   info$beta_indices  = list of length p, each subset of columns for row k
   #   info$prior:
   #       - $theta_mu_mean (p), $theta_mu_var (pxp)
   #       - $beta_mean (maybe NULL or length=?), $beta_var (matching dimension)
@@ -452,6 +474,8 @@ bridge_group_and_prior_and_jac_standard <- function(
   n_subj    <- info$n_subjects
   B <- length(info$betas)
   M <- p + B
+  design_mats <- add_intercepts(info$par_names, info$design_mats, n_subj)
+  mean_index <- unlist(lapply(design_mats, \(x) c(TRUE, rep(FALSE, ncol(x) - 1))))
 
   # Extract columns:
   theta_mu   <- proposals_group[, seq_len(p),   drop=FALSE]  # (n_iter x p)
@@ -516,14 +540,13 @@ bridge_group_and_prior_and_jac_standard <- function(
     for (s in seq_len(n_subj)) {
       alpha_s <- proposals_curr[s, ]  # length p
       mu_s <- numeric(p)            # will hold subject s's mean for each row k=1..p
+      par_idx <- 0
       for (k in seq_len(p)) {
-        # The columns in 'regressors_i' used by row k:
-        #   info$beta_indices[[k]] is, for example, c(1, 2) if row k has 2 columns in the design.
-        cols_k <- info$beta_indices[[k]]
         # The row-k design vector for subject s is design_mats[[k]][s, ] => e.g. (1 x m_k).
-        x_sk <- info$design_mats[[k]][s, , drop = FALSE]
+        x_sk <- design_mats[[k]][s, , drop = FALSE]
         # Then the mean for row k is the dot product of x_sk with the relevant slice of 'regressors_i'.
-        mu_s[k] <- x_sk %*% regressors_i[cols_k]
+        mu_s[k] <- x_sk %*% regressors_i[par_idx + 1:ncol(design_mats[[k]])]
+        par_idx <- par_idx + ncol(design_mats[[k]])
       }
       # Now alpha_s ~ N(mu_s, var_curr)
       group_ll <- group_ll + dmvnorm(alpha_s, mu_s, var_curr, log = TRUE)
@@ -586,7 +609,6 @@ bridge_add_info_standard <- function(info, samples){
   info$betas <- samples$betas
   info$par_group <- samples$par_group
   info$design_mats   <- samples$design_mats
-  info$beta_indices  <- samples$beta_indices
   info$group_idx <- (samples$n_pars*samples$n_subjects + 1):(samples$n_pars*samples$n_subjects + 2*samples$n_pars + length(samples$betas) +
                                                                sum(!has_cov) + (sum(has_cov) * (sum(has_cov) +1))/2)
   return(info)
