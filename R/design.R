@@ -512,7 +512,8 @@ rt_check_function <- function(data){
 
 
 design_model <- function(data,design,model=NULL,
-                         add_acc=TRUE,rt_resolution=0.02,verbose=TRUE,
+                         add_acc=TRUE,verbose=TRUE,
+                         rt_resolution=0.02,correct_monitor=TRUE,correct_clock=FALSE,
                          compress=TRUE,rt_check=TRUE, add_da = FALSE, all_cells_dm = FALSE)
 {
   if (is.null(model)) {
@@ -575,7 +576,11 @@ design_model <- function(data,design,model=NULL,
   for (i in pnames) attr(design$Flist[[i]],"Clist") <- design$Clist[[i]]
 
   out <- lapply(design$Flist,make_dm,da=da,Fcovariates=design$Fcovariates, add_da = add_da, all_cells_dm = all_cells_dm)
-  if (!is.null(rt_resolution) & !is.null(da$rt)) da$rt <- round(da$rt/rt_resolution)*rt_resolution
+  if (!is.null(rt_resolution) & !is.null(da$rt)) {
+    da$rt <- floor(da$rt/rt_resolution)*rt_resolution
+    if (correct_monitor) da$rt <- da$rt + rt_resolution/2
+    if (correct_clock) da$rt <- da$rt - rt_resolution/2
+  }
   if (compress){
     dadm <- compress_dadm(da,designs=out, Fcov=design$Fcovariates,Ffun=names(design$Ffunctions))
   }  else {
