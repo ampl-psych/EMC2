@@ -672,13 +672,13 @@ make_emc <- function(data,design,model=NULL,
   for (name in names(optionals) ) {
     assign(name, optionals[[name]])
   }
-  if(!is.null(par_groups)) type <- "blocked"
   if(!is.null(prior_list) & !is.null(prior_list$theta_mu_mean)){
     prior_list <- list(prior_list)
   }
   if(!is.null(prior_list)){
     type <- attr(prior_list[[1]], "type")
   }
+  if(!is.null(par_groups)) type <- "blocked"
   if(type != "single" && length(unique(data$subjects)) == 1){
     stop("can only use type = `single` when there's only one subject in the data")
   }
