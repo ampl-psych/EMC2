@@ -1,9 +1,10 @@
 pmwgs <- function(dadm, type, pars = NULL, prior = NULL,
                   nuisance = NULL, nuisance_non_hyper = NULL, ...) {
   if(is.data.frame(dadm)) dadm <- list(dadm)
+  if(is.null(pars)) pars <- names(sampled_pars(attr(dadm[[1]], "prior")))
+  if(is.null(prior)) prior <- attr(dadm[[1]], "prior")
   dadm <- extractDadms(dadm)
-  if(is.null(pars)) pars <- dadm$pars
-  if(is.null(prior)) prior <- dadm$prior
+
   dadm_list <-dadm$dadm_list
   # Storage for the samples.
   subjects <- sort(as.numeric(unique(dadm$subjects)))
