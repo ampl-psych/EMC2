@@ -162,6 +162,11 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
 }
 
 
+group_design <- function(formula, factors, data = NULL, contrasts = NULL,
+                         covariates = NULL){
+
+}
+
 #' Contrast Enforcing Equal Prior Variance on each Level
 #'
 #' Typical contrasts impose different levels of marginal prior variance for the different levels.

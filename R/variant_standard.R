@@ -28,7 +28,8 @@ add_info_standard <- function(sampler, prior = NULL, ...){
 }
 
 
-get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, selection = "mu", design = NULL, betas = NULL){
+get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, selection = "mu", design = NULL, betas = NULL,
+                               par_groups = NULL){
   # Checking and default priors
   if(is.null(prior)){
     prior <- list()
@@ -66,6 +67,12 @@ get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1
   if(sample){
     par_names <- names(sampled_pars(design, doMap = F))
     samples <- list()
+    if(selection %in% "beta"){
+      beta <- t(mvtnorm::rmvnorm(N, mean = prior$beta_mean,
+                               sigma = prior$beta_var))
+      rownames(beta) <- betas
+      samples$theta_beta <- mu
+    }
     if(selection %in% c("mu", "alpha")){
       mu <- t(mvtnorm::rmvnorm(N, mean = prior$theta_mu_mean,
                              sigma = prior$theta_mu_var))
@@ -88,6 +95,13 @@ get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1
           vars[,,i] <- vars[,,sample_idx]
         }
       }
+      if(is.null(par_groups)) par_groups <- rep(1, n_pars)
+      constraintMat <- matrix(0, n_pars, n_pars)
+      for(i in 1:length(unique(par_group))){
+        idx <- par_group == i
+        constraintMat[idx, idx] <- Inf
+      }
+      vars <- constrain_lambda(vars, constraintMat)
       if(selection != "alpha") samples$theta_var <- vars
     }
     if(selection %in% "alpha"){
@@ -115,7 +129,7 @@ get_startpoints_standard <- function(pmwgs, start_mu, start_var){
 
 get_group_level_standard <- function(parameters, s){
   # This function is modified for other versions
-  mu <- parameters$tmu
+  mu <- parameters$subj_mu[,s]
   var <- parameters$tvar
   return(list(mu = mu, var = var))
 }
@@ -187,6 +201,8 @@ gibbs_step_standard <- function(sampler, alpha) {
   par_group     <- sampler$par_group
   prior         <- sampler$prior
 
+
+
   last    <- last_sample_standard(sampler$samples)
   tmu     <- last$tmu        # group means, dimension p
   beta    <- last$beta       # additional slopes
@@ -196,6 +212,16 @@ gibbs_step_standard <- function(sampler, alpha) {
 
   p <- nrow(alpha)           # must match length(tmu)
   n <- ncol(alpha)           # number of subjects
+
+  # Some backwards compatibility
+  if(is.null(is_blocked)){
+    is_blocked <- rep(T, p)
+  }
+  if(is.null(par_group)){
+    par_group <- rep(1, p)
+  }
+
+
 
   design_mats <- add_intercepts(names(tmu), design_mats, n)
   ##--------------------------------------------------
@@ -265,6 +291,7 @@ gibbs_step_standard <- function(sampler, alpha) {
   ## 3) Compute residuals = alpha - (X * [mu+beta])
   ##--------------------------------------------------
   resid <- matrix(0, nrow=p, ncol=n)
+  subj_mu <- matrix(0, nrow=p, ncol=n)
   for (i in seq_len(n)) {
     par_idx <- 0
     M_i <- matrix(0, nrow=p, ncol=M)
@@ -275,6 +302,7 @@ gibbs_step_standard <- function(sampler, alpha) {
     }
 
     mu_i <- M_i %*% mean_new
+    subj_mu[,i] <- mu_i
     resid[, i] <- alpha[,i] - mu_i
   }
 
@@ -358,6 +386,7 @@ gibbs_step_standard <- function(sampler, alpha) {
     tvar   = tvar_new,
     tvinv  = tvinv_new,
     a_half = a_half_new,
+    subj_mu = subj_mu,
     alpha  = alpha
   )
   return(out)
@@ -468,6 +497,7 @@ bridge_group_and_prior_and_jac_standard <- function(
 
   par_group <- info$par_group
   has_cov   <- info$is_blocked
+  block_groups <- unique(par_group[has_cov])
   prior     <- info$prior
 
   p         <- info$n_pars        # dimension of each alpha_i
@@ -483,9 +513,21 @@ bridge_group_and_prior_and_jac_standard <- function(
   if(B > 0){
     theta_beta <- proposals_group[,(2*p + 1):(2*p+B), drop = FALSE]
   }
+  if(any(!has_cov)){
+    theta_var1 <- proposals_group[, (2*p + 1 + B) : (2*p + B + sum(!has_cov)),       drop=FALSE]  # (n_iter x sum(!has_cov))
+  }
+  if(any(has_cov)){
+    min_idx <- (2*p + B + sum(!has_cov))
+    theta_var2_list <- list()
+    for(block in block_groups){
+      cur_idx <- has_cov[par_group == block]
+      max_idx <- min_idx + (sum(cur_idx)*(sum(cur_idx)+1)) / 2
+      theta_var2_list[[block]] <- proposals_group[, (min_idx + 1) :
+                                      max_idx,drop=FALSE]  # (n_iter x (d*(d+1))/2)
+      min_idx <- max_idx
+    }
 
-  theta_var1 <- proposals_group[, (2*p + 1 + B) : (2*p + B + sum(!has_cov)),       drop=FALSE]  # (n_iter x sum(!has_cov))
-  theta_var2 <- proposals_group[, (2*p + B + sum(!has_cov) + 1) : (2*p + B+ sum(!has_cov) + (sum(has_cov)*(sum(has_cov)+1)) / 2),drop=FALSE]  # (n_iter x (d*(d+1))/2)
+  }
   n_iter <- nrow(theta_mu)
   sum_out <- numeric(n_iter)
 
@@ -523,14 +565,28 @@ bridge_group_and_prior_and_jac_standard <- function(
       var_curr[!has_cov, !has_cov] <- diag(exp(theta_var1[i, ]), sum(!has_cov))
     }
 
+    # Jacobian for var2
+    jac_var2 <- 0
+    prior_var2 <- 0
     # Blocked => unwind_chol
     if (any(has_cov)) {
-      var_block <- unwind_chol(theta_var2[i, ], reverse=TRUE)
-      var_curr[has_cov, has_cov] <- var_block
+      # Fill in theta_var2
+      for(block in block_groups){
+        cur_idx <- par_group == block
+        var_block <- unwind_chol(theta_var2_list[[block]][i, ], reverse=TRUE)
+        var_curr[cur_idx, cur_idx] <- var_block
+        # Prior influence
+        d_block   <- sum(cur_idx)
+        prior_var2 <- prior_var2 + log( robust_diwish(
+          W = var_block,
+          v = prior$v + d_block - 1,
+          S = 2 * prior$v * diag( 1 / exp(theta_a[i,cur_idx]) )
+        ))
+        # Jacobian influence
+        jac_var2 <- jac_var2 + calc_log_jac_chol(theta_var2_list[[block]][i, ])
+      }
     }
     # 3) Compute group likelihood = sum_{s=1..n_subj} dmvnorm(alpha_s, mu_s, var_curr)
-
-    proposals_curr <- matrix(proposals[[i]], ncol = info$n_pars, byrow = T)
     regressors_i <- numeric(M)
     regressors_i[mean_index]  <- theta_mu[i, ]   # fill the intercept positions
     if(B > 0){
@@ -538,7 +594,7 @@ bridge_group_and_prior_and_jac_standard <- function(
     }
     group_ll <- 0
     for (s in seq_len(n_subj)) {
-      alpha_s <- proposals_curr[s, ]  # length p
+      alpha_s <- proposals_list[[s]][i,]  # length p
       mu_s <- numeric(p)            # will hold subject s's mean for each row k=1..p
       par_idx <- 0
       for (k in seq_len(p)) {
@@ -568,29 +624,11 @@ bridge_group_and_prior_and_jac_standard <- function(
       ))
     }
 
-    prior_var2 <- 0
-    if (any(has_cov)) {
-      # robust_diwish( var_block, v= v + d-1, S= 2*v diag(1/ exp(theta_a[i, has_cov])) )
-      d_block   <- sum(has_cov)
-      prior_var2 <- log( robust_diwish(
-        x = var_block,
-        v = prior$v + d_block - 1,
-        S = 2 * prior$v * diag( 1 / exp(theta_a[i, has_cov]) )
-      ))
-    }
-
     prior_a <- sum(logdinvGamma(
       x     = exp(theta_a[i, ]),
       shape = 1/2,
       rate  = 1/(prior$A^2)
     ))
-
-    # Jacobian for var2
-    jac_var2 <- 0
-    if (sum(has_cov)>0) {
-      jac_var2 <- calc_log_jac_chol(theta_var2[i, ])
-    }
-
     # Combine
     sum_out[i] <- group_ll + prior_var1 + prior_var2 + jac_var2 + prior_a
   } # end loop i
@@ -604,10 +642,17 @@ bridge_group_and_prior_and_jac_standard <- function(
 
 
 bridge_add_info_standard <- function(info, samples){
-  has_cov <- sampler$is_blocked
+  if(is.null(samples$is_blocked)){
+    has_cov <- rep(T, samples$n_pars)
+  } else{
+    has_cov <- samples$is_blocked
+  }
+  info$par_group <- samples$par_group
+  if(is.null(info$par_group)){
+    info$par_group <- rep(1, samples$n_pars)
+  }
   info$is_blocked <- has_cov
   info$betas <- samples$betas
-  info$par_group <- samples$par_group
   info$design_mats   <- samples$design_mats
   info$group_idx <- (samples$n_pars*samples$n_subjects + 1):(samples$n_pars*samples$n_subjects + 2*samples$n_pars + length(samples$betas) +
                                                                sum(!has_cov) + (sum(has_cov) * (sum(has_cov) +1))/2)
@@ -621,9 +666,24 @@ bridge_add_group_standard <- function(all_samples, samples, idx){
     all_samples <- cbind(all_samples, t(log(samples$samples$beta[,idx])))
   }
   par_group <- samples$par_group
-  has_cov <- sampler$is_blocked
-  all_samples <- cbind(all_samples, t(log(matrix(apply(samples$samples$theta_var[!has_cov,!has_cov,idx, drop = F], 3, diag), ncol = nrow(all_samples)))))
-  all_samples <- cbind(all_samples, t(matrix(apply(samples$samples$theta_var[has_cov,has_cov,idx, drop = F], 3, unwind_chol), ncol = nrow(all_samples))))
+  has_cov <- samples$is_blocked
+  if(is.null(has_cov)){
+    has_cov <- rep(T, samples$n_pars)
+  }
+  par_group <- samples$par_group
+  if(is.null(par_group)){
+    par_group <- rep(1, samples$n_pars)
+  }
+
+  if(any(!has_cov)){
+    all_samples <- cbind(all_samples, t(log(matrix(apply(samples$samples$theta_var[!has_cov,!has_cov,idx, drop = F], 3, diag), ncol = nrow(all_samples)))))
+  }
+  if(any(has_cov)){
+    for(block in unique(par_group[has_cov])){
+      cur_idx <- par_group == block
+      all_samples <- cbind(all_samples, t(matrix(apply(samples$samples$theta_var[cur_idx,cur_idx,idx, drop = F], 3, unwind_chol), ncol = nrow(all_samples))))
+    }
+  }
   return(all_samples)
 }
 
