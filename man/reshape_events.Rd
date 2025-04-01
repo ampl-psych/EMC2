@@ -4,7 +4,7 @@
 \alias{reshape_events}
 \title{Reshape events data for fMRI analysis}
 \usage{
-reshape_events(events, event_types, duration = 0.001)
+reshape_events(events, event_types, duration = 0.001, modulation = NULL)
 }
 \arguments{
 \item{events}{A data frame containing event information with required columns 'subjects', 'run', and 'onset'}

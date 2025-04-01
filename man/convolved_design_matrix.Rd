@@ -64,6 +64,7 @@ events <- data.frame(
 design_matrices <-  convolved_design_matrix(
   timeseries = ts,
   events = events,
-  factors = list(difficulty = c("hard", "easy"))
+  factors = list(difficulty = c("hard", "easy")),
+  contrasts = list(difficulty = matrix(c(-1, 1)))
 )
 }

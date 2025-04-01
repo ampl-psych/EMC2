@@ -6,7 +6,11 @@ apply_contrasts <- function(events, contrast = NULL, cell_coding = FALSE, remove
   # If a contrast is provided, use it; otherwise let R default to its default contrasts.
   if(!is.null(contrast)){
     if(is.matrix(contrast)){
-      events[[factor_name]] <- factor(events[[factor_name]], levels = rownames(contrast))
+      if(!is.null(rownames(contrast))){
+        events[[factor_name]] <- factor(events[[factor_name]], levels = rownames(contrast))
+      } else{
+        events[[factor_name]] <- factor(events[[factor_name]])
+      }
       stats::contrasts(events[[factor_name]], how.many = ncol(contrast)) <- contrast
     } else {
       events[[factor_name]] <- factor(events[[factor_name]])
@@ -183,7 +187,8 @@ reshape_events <- function(events, event_types, duration = 0.001, modulation = N
 #' design_matrices <-  convolved_design_matrix(
 #'   timeseries = ts,
 #'   events = events,
-#'   factors = list(difficulty = c("hard", "easy"))
+#'   factors = list(difficulty = c("hard", "easy")),
+#'   contrasts = list(difficulty = matrix(c(-1, 1)))
 #' )
 convolved_design_matrix <- function(timeseries, events, factors = NULL, contrasts = NULL,
                                        covariates = NULL,
@@ -237,21 +242,26 @@ convolved_design_matrix <- function(timeseries, events, factors = NULL, contrast
         tmp <- ev_run[idx, ]
         ev_tmp <- rbind(ev_tmp, apply_contrasts(tmp, contrast = contrasts[[fact]],
                                                 cell_coding = fact %in% cell_coding))
+        ev_tmp <- cbind(event_type = ev_run$event_type[idx], ev_tmp)
       }
 
       for(cov in covariates){
         idx <- ev_run$event_type %in% cov
-        tmp <- ev_run[idx,c('subjects', 'onset', 'run', 'modulation', 'duration')]
+        tmp <- ev_run[idx,c('event_type', 'subjects', 'run', 'onset', 'duration', 'modulation',)]
         tmp$regressor <- cov
         ev_tmp <- rbind(ev_tmp, tmp)
       }
 
       ev_tmp <- ev_tmp[order(ev_tmp$onset), ]
       if((run == runs[1]) & (subject == subjects[1])){
-        unq_idx <- !duplicated(ev_tmp[, !colnames(ev_tmp) %in% c("onset", "subjects", "duration", "modulation")])
+        round_ev <- ev_tmp
+        round_ev$duration <- round(scale(round_ev$duration))
+        round_ev$modulation <- round(scale(round_ev$modulation))
+        unq_idx <- !duplicated(round_ev[, !colnames(round_ev) %in% c("onset", "subjects")])
         print(ev_tmp[unq_idx,])
       }
-
+      # Event_type was only included for printing
+      ev_tmp <- ev_tmp[,colnames(ev_tmp) != "event_type"]
       dm <- construct_design_matrix(ts_run$time,
                                     events = ev_tmp,
                                     has_derivative = grepl("derivative", hrf_model),
