@@ -116,7 +116,12 @@ run_emc <- function(emc, stage, stop_criteria,
       sub_emc <- subset(emc, filter = chain_n(emc)[1,stage] - 1, stage = stage)
     }
     # Actual sampling
-    sub_emc <- auto_mclapply(sub_emc,run_stages, stage = stage, iter= progress$step_size*max(1,cur_thin),
+    # sub_emc <- auto_mclapply(sub_emc,run_stages, stage = stage, iter= progress$step_size*max(1,cur_thin),
+    #                          verbose=verbose,  verboseProgress = verboseProgress,
+    #                          particle_factor=particle_factor,search_width=search_width,
+    #                          n_cores=cores_per_chain, mc.cores = cores_for_chains)
+
+    sub_emc <- parallel::mclapply(sub_emc,run_stages, stage = stage, iter= progress$step_size*max(1,cur_thin),
                              verbose=verbose,  verboseProgress = verboseProgress,
                              particle_factor=particle_factor,search_width=search_width,
                              n_cores=cores_per_chain, mc.cores = cores_for_chains)
@@ -836,8 +841,7 @@ auto_mclapply <- function(X, FUN, mc.cores, ...){
     list_out <- parallel::parLapply(cl = cluster, X,FUN, ...)
     parallel::stopCluster(cluster)
   } else{
-     list_out <- parallel::mclapply(X, FUN, mc.cores = mc.cores,
-                                    mc.preschedule = FALSE, ...)
+     list_out <- parallel::mclapply(X, FUN, mc.cores = mc.cores, ...)
   }
   return(list_out)
 }
