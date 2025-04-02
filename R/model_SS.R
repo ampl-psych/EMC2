@@ -150,7 +150,8 @@ pexGaussian <- function(rt,pars)
   rt
 }
 
-# Go cdf/pdf (strips out NAs and calls d/pexGaussian )
+# Go cdf/pdf (strips out NAs and calls d/pexGaussian)
+# Is stipping out rt NAs really necessary?
 
 dexGaussianG <- function(rt,pars)
 {
@@ -237,13 +238,13 @@ rSSexGaussian <- function(lR,pars,ok=rep(TRUE,dim(pars)[1]))
 {
 
   nacc <- length(levels(lR))   # Does not include stop runner
-  ntrials <- dim(pars)[1]/nacc
+  ntrials <- dim(pars)[1]/nacc # Number of trials to simulate
   is1 <- lR==levels(lR)[1]     # First go accumulator
-  acc <- 1:nacc
+  acc <- 1:nacc                # choice (go and ST) accumulator index
 
   # stop-triggered racers
   isST <- pars[,"lI"]==1              # Boolean for all pars
-  accST <- acc[pars[1:nacc,"lI"]==1]  # Index of ST accumulator
+  accST <- acc[pars[1:nacc,"lI"]==1]  # Index of ST accumulator, from 1st trial
 
   # Setup race among nacc+1 (includes stop accumulator)
   # Default Inf finishing time so if not changed always looses
@@ -271,6 +272,7 @@ rSSexGaussian <- function(lR,pars,ok=rep(TRUE,dim(pars)[1]))
   isSTT <- logical(ntrials*nacc) # Default false
 
   # Pick out stop-triggered accumulators that are triggered
+  # NB: can occur on gf trials
   isSTT[isSrace][rep(isT,each=nacc) & isST[isSrace]] <- TRUE
   nst <- sum(isSTT)
 
@@ -319,7 +321,7 @@ rSSexGaussian <- function(lR,pars,ok=rep(TRUE,dim(pars)[1]))
     rt[!allinf][!stopwins] <- dt[-1,!allinf,drop=FALSE][,!stopwins,drop=FALSE][pick]
   }
 
-  # then if stop triggers extra accumulators find their winner
+  # then if stop wins and kills go, find ST winner
   if (any(isST) & any(stopwins)) {
     # stop triggered accumulators that are racing
     rst <- dt[-1,!allinf,drop=FALSE][accST,stopwins,drop=FALSE]
@@ -449,43 +451,43 @@ pstopEXG <- function(parstop,n_acc,upper=Inf,
   ups[as.numeric(factor(cells,levels=cells[uniq]))]
 }
 
-#### Stop probability stop triggered ----
-
-
-stopfn_exgST <- function(t,mu,sigma,tau,SSD,st=1)
-  # Used by my.integrate, t = vector of times, SSD is a scalar stop-signal delay.
-  # st is a vector of indices for the stop and stop-triggered accumulators
-{
-  dt <- matrix(rep(t+SSD,each=length(mu)),nrow=length(mu))
-  dt[st,] <- dt[st,]-SSD
-  dEXGrace(dt,mu,sigma,tau)
-}
-
-
-pstopEXGST <- function(parstop,n_acc,upper=Inf,st=1,
-                     gpars=c("mu","sigma","tau"),spars=c("muS","sigmaS","tauS"))
-{
-  sindex <- seq(1,nrow(parstop),by=n_acc)
-  ps <- parstop[sindex,spars,drop=FALSE]
-  SSDs <- parstop[sindex,"SSD",drop=FALSE]
-  ntrials <- length(SSDs)
-  if (length(upper)==1) upper <- rep(upper,length.out=ntrials)
-  pgo <- array(parstop[,gpars],dim=c(n_acc,ntrials,length(gpars)),
-               dimnames=list(NULL,NULL,gpars))
-  cells <- apply(cbind(SSDs,ps,upper,
-    matrix(as.vector(aperm(pgo,c(2,1,3))),nrow=ntrials)),1,paste,collapse="")
-  # cells <- character(ntrials)
-  # for (i in 1:ntrials)
-  #   cells[i] <- paste(SSDs[i],ps[i,],pgo[,i,],upper[i],collapse="")
-  uniq <- !duplicated(cells)
-  ups <- sapply(1:sum(uniq),function(i){
-    my.integrate(f=stopfn_exgST,lower=-Inf,SSD=SSDs[i],upper=upper[i],
-                           mu=c(ps[i,"muS"],pgo[,i,"mu"]),
-                           sigma=c(ps[i,"sigmaS"],pgo[,i,"sigma"]),
-                           tau=c(ps[i,"tauS"],pgo[,i,"tau"]),st=st)
-  })
-  ups[as.numeric(factor(cells,levels=cells[uniq]))]
-}
+# #### Stop probability stop triggered ----
+#
+#
+# stopfn_exgST <- function(t,mu,sigma,tau,SSD,st=1)
+#   # Used by my.integrate, t = vector of times, SSD is a scalar stop-signal delay.
+#   # st is a vector of indices for the stop and stop-triggered accumulators
+# {
+#   dt <- matrix(rep(t+SSD,each=length(mu)),nrow=length(mu))
+#   dt[st,] <- dt[st,]-SSD
+#   dEXGrace(dt,mu,sigma,tau)
+# }
+#
+#
+# pstopEXGST <- function(parstop,n_acc,upper=Inf,st=1,
+#                      gpars=c("mu","sigma","tau"),spars=c("muS","sigmaS","tauS"))
+# {
+#   sindex <- seq(1,nrow(parstop),by=n_acc)
+#   ps <- parstop[sindex,spars,drop=FALSE]
+#   SSDs <- parstop[sindex,"SSD",drop=FALSE]
+#   ntrials <- length(SSDs)
+#   if (length(upper)==1) upper <- rep(upper,length.out=ntrials)
+#   pgo <- array(parstop[,gpars],dim=c(n_acc,ntrials,length(gpars)),
+#                dimnames=list(NULL,NULL,gpars))
+#   cells <- apply(cbind(SSDs,ps,upper,
+#     matrix(as.vector(aperm(pgo,c(2,1,3))),nrow=ntrials)),1,paste,collapse="")
+#   # cells <- character(ntrials)
+#   # for (i in 1:ntrials)
+#   #   cells[i] <- paste(SSDs[i],ps[i,],pgo[,i,],upper[i],collapse="")
+#   uniq <- !duplicated(cells)
+#   ups <- sapply(1:sum(uniq),function(i){
+#     my.integrate(f=stopfn_exgST,lower=-Inf,SSD=SSDs[i],upper=upper[i],
+#                            mu=c(ps[i,"muS"],pgo[,i,"mu"]),
+#                            sigma=c(ps[i,"sigmaS"],pgo[,i,"sigma"]),
+#                            tau=c(ps[i,"tauS"],pgo[,i,"tau"]),st=st)
+#   })
+#   ups[as.numeric(factor(cells,levels=cells[uniq]))]
+# }
 
 
 
@@ -545,7 +547,7 @@ SSexG <- function() {
     # Probability function (CDF) for single stop racer
     pfunS=function(rt,pars) pexGaussianS(rt,pars[,c("muS","sigmaS","tauS","SSD"),drop=FALSE]),
     # Stop probability integral
-    sfun=function(pars,n_acc,st=1,upper=Inf) pstopEXGST(pars,n_acc,upper=upper,st=st),
+    sfun=function(pars,n_acc,st=1,upper=Inf) pstopEXG(pars,n_acc,upper=upper,st=st),
     # Random function for SS race
     rfun=function(lR=NULL,pars) {
       rSSexGaussian(lR,pars,ok=attr(pars, "ok"))
