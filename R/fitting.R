@@ -119,8 +119,7 @@ run_emc <- function(emc, stage, stop_criteria,
     sub_emc <- auto_mclapply(sub_emc,run_stages, stage = stage, iter= progress$step_size*max(1,cur_thin),
                              verbose=verbose,  verboseProgress = verboseProgress,
                              particle_factor=particle_factor,search_width=search_width,
-                             n_cores=cores_per_chain, mc.cores = cores_for_chains,
-                             mc.preschedule=FALSE)
+                             n_cores=cores_per_chain, mc.cores = cores_for_chains)
 
     class(sub_emc) <- "emc"
     if(stage != 'preburn'){
@@ -832,13 +831,13 @@ extractDadms <- function(dadms, names = 1:length(dadms)){
 }
 
 auto_mclapply <- function(X, FUN, mc.cores, ...){
-  if(Sys.info()[1] == "Windows"){
+  # if(Sys.info()[1] == "Windows"){
     cluster <- parallel::makeCluster(mc.cores)
     list_out <- parallel::parLapply(cl = cluster, X,FUN, ...)
     parallel::stopCluster(cluster)
-  } else{
-    list_out <- parallel::mclapply(X, FUN, mc.cores = mc.cores, ...)
-  }
+  # } else{
+  #   list_out <- parallel::mclapply(X, FUN, mc.cores = mc.cores, ...)
+  # }
   return(list_out)
 }
 
