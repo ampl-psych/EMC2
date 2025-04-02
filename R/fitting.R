@@ -216,7 +216,7 @@ check_progress <- function (emc, stage, iter, stop_criteria,
   iter_done <- ifelse(is.null(iter) || length(iter) == 0, TRUE, total_iters_stage >= iter)
   if (min_es == 0) {
     es_done <- TRUE
-  } else if (iters_total != 0) {
+  } else if (total_iters_stage != 0) {
     class(emc) <- "emc"
     curr_min_es <- Inf
     for(select in selection){
