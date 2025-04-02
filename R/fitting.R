@@ -106,7 +106,7 @@ run_emc <- function(emc, stage, stop_criteria,
       emc <- fit_remove_samples(emc)
     }
     if(!is.null(progress$n_blocks)) n_blocks <- progress$n_blocks
-    emc <- add_proposals(emc, stage, cores_per_chain*cores_for_chains, n_blocks)
+    emc <- add_proposals(emc, stage, 1, n_blocks) # cores_per_chain*cores_for_chains
     last_stage <- get_last_stage(emc)
     if(stage == "preburn"){
       sub_emc <- emc
@@ -133,7 +133,7 @@ run_emc <- function(emc, stage, stop_criteria,
     } else{
       emc <- sub_emc
     }
-    progress <- check_progress(emc, stage, iter, stop_criteria, max_tries, step_size, cores_per_chain*cores_for_chains,
+    progress <- check_progress(emc, stage, iter, stop_criteria, max_tries, step_size, 1, # cores_per_chain*cores_for_chains,
                                verbose, progress,n_blocks)
     emc <- progress$emc
     progress <- progress[!names(progress) == 'emc']
