@@ -94,7 +94,7 @@ run_emc <- function(emc, stage, stop_criteria,
   } else{
     iter <- stop_criteria[["iter"]]
   }
-  progress <- check_progress(emc, stage, iter, stop_criteria, max_tries, step_size, cores_per_chain*cores_for_chains, verbose, n_blocks = n_blocks)
+  progress <- check_progress(emc, stage, iter, stop_criteria, max_tries, step_size, 1, verbose, n_blocks = n_blocks) #cores_per_chain*cores_for_chains
   emc <- progress$emc
   progress <- progress[!names(progress) == 'emc']
   # We need to multiply step_size by thin to make an accurate guess for good step_size.
@@ -116,16 +116,10 @@ run_emc <- function(emc, stage, stop_criteria,
       sub_emc <- subset(emc, filter = chain_n(emc)[1,stage] - 1, stage = stage)
     }
     # Actual sampling
-    # sub_emc <- auto_mclapply(sub_emc,run_stages, stage = stage, iter= progress$step_size*max(1,cur_thin),
-    #                          verbose=verbose,  verboseProgress = verboseProgress,
-    #                          particle_factor=particle_factor,search_width=search_width,
-    #                          n_cores=cores_per_chain, mc.cores = cores_for_chains)
-
-    sub_emc <- parallel::mclapply(sub_emc,run_stages, stage = stage, iter= progress$step_size*max(1,cur_thin),
+    sub_emc <- auto_mclapply(sub_emc,run_stages, stage = stage, iter= progress$step_size*max(1,cur_thin),
                              verbose=verbose,  verboseProgress = verboseProgress,
                              particle_factor=particle_factor,search_width=search_width,
                              n_cores=cores_per_chain, mc.cores = cores_for_chains)
-
     class(sub_emc) <- "emc"
     if(stage != 'preburn'){
       if(is.numeric(thin)){
