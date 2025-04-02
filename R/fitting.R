@@ -836,7 +836,8 @@ auto_mclapply <- function(X, FUN, mc.cores, ...){
     list_out <- parallel::parLapply(cl = cluster, X,FUN, ...)
     parallel::stopCluster(cluster)
   } else{
-     list_out <- parallel::mclapply(X, FUN, mc.cores = mc.cores, ...)
+     list_out <- parallel::mclapply(X, FUN, mc.cores = mc.cores,
+                                    mc.preschedule = FALSE, ...)
   }
   return(list_out)
 }
