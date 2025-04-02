@@ -119,7 +119,8 @@ run_emc <- function(emc, stage, stop_criteria,
     sub_emc <- auto_mclapply(sub_emc,run_stages, stage = stage, iter= progress$step_size*max(1,cur_thin),
                              verbose=verbose,  verboseProgress = verboseProgress,
                              particle_factor=particle_factor,search_width=search_width,
-                             n_cores=cores_per_chain, mc.cores = cores_for_chains)
+                             n_cores=cores_per_chain, mc.cores = cores_for_chains,
+                             mc.preschedule=FALSE)
 
     class(sub_emc) <- "emc"
     if(stage != 'preburn'){
