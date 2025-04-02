@@ -832,7 +832,7 @@ extractDadms <- function(dadms, names = 1:length(dadms)){
 
 auto_mclapply <- function(X, FUN, mc.cores, ...){
   # if(Sys.info()[1] == "Windows"){
-    cluster <- parallel::makeCluster(mc.cores)
+    cluster <- parallel::makeCluster(mc.cores,type="FORK")
     list_out <- parallel::parLapply(cl = cluster, X,FUN, ...)
     parallel::stopCluster(cluster)
   # } else{
