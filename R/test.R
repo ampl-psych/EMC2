@@ -1,7 +1,7 @@
 donothing <- function(i) repeat{}
 
 pdonothing <- function(i)
-  parallel:mclapply(1:3,donothing,mc.cores=3)
+  parallel::mclapply(1:3,donothing,mc.cores=3)
 
 #' Title
 #'
@@ -11,5 +11,5 @@ pdonothing <- function(i)
 #' @examples
 test_parallel <- function() {
   ncores=3
-  parallel:mclapply(1:ncores,pdonothing,mc.cores=ncores)
+  parallel::mclapply(1:ncores,pdonothing,mc.cores=ncores)
 }
