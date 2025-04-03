@@ -119,7 +119,11 @@ run_emc <- function(emc, stage, stop_criteria,
       sub_emc <- subset(emc, filter = chain_n(emc)[1,stage] - 1, stage = stage)
     }
     # Actual sampling
-    sub_emc <- auto_mclapply(sub_emc,run_stages, stage = stage, iter= progress$step_size*max(1,cur_thin),
+    # sub_emc <- auto_mclapply(sub_emc,run_stages, stage = stage, iter= progress$step_size*max(1,cur_thin),
+    #                          verbose=verbose,  verboseProgress = verboseProgress,
+    #                          particle_factor=particle_factor,search_width=search_width,
+    #                          n_cores=cores_per_chain, mc.cores = cores_for_chains)
+    sub_emc <- parallel::mclapply(sub_emc,run_stages, stage = stage, iter= progress$step_size*max(1,cur_thin),
                              verbose=verbose,  verboseProgress = verboseProgress,
                              particle_factor=particle_factor,search_width=search_width,
                              n_cores=cores_per_chain, mc.cores = cores_for_chains)
@@ -241,10 +245,8 @@ check_progress <- function (emc, stage, iter, stop_criteria,
     # if(!is.null(emc[[1]]$g_map_fixed)){
     #   adapted <- test_adapted_lm(emc[[1]], test_samples, min_unique, n_cores, verbose)
     # } else{    }
-
     adapted <- test_adapted(emc[[1]], test_samples,
                             min_unique, n_cores, verbose)
-
   }
   else {
     adapted <- TRUE
@@ -583,15 +585,9 @@ test_adapted <- function(sampler, test_samples, min_unique, n_cores_conditional 
                         type = type,
                         mc.cores = n_cores_conditional)
         }
-        # auto_mclapply(X = 1:sampler$n_subjects,FUN = get_conditionals,samples = test_samples,
-        #               n_pars = sum(idx[!nuisance]), idx = idx[!nuisance], type = sampler$type,
-        #               mc.cores = n_cores_conditional)
-        print("CUNT!")
-        repeat{
-          parallel::mclapply(1:sampler$n_subjects,get_conditionals,samples = test_samples,
+        auto_mclapply(X = 1:sampler$n_subjects,FUN = get_conditionals,samples = test_samples,
                       n_pars = sum(idx[!nuisance]), idx = idx[!nuisance], type = sampler$type,
                       mc.cores = n_cores_conditional)
-        }
       }
     },error=function(e) e, warning=function(w) w)
     if (any(class(attempt) %in% c("warning", "error", "try-error"))) {
