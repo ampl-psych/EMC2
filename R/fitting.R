@@ -96,9 +96,7 @@ run_emc <- function(emc, stage, stop_criteria,
     iter <- stop_criteria[["iter"]]
   }
 
-  repeat{
   progress <- check_progress(emc, stage, iter, stop_criteria, max_tries, step_size, cores_per_chain*cores_for_chains, verbose, n_blocks = n_blocks)
-  }
 
   emc <- progress$emc
   progress <- progress[!names(progress) == 'emc']
@@ -243,8 +241,11 @@ check_progress <- function (emc, stage, iter, stop_criteria,
     # if(!is.null(emc[[1]]$g_map_fixed)){
     #   adapted <- test_adapted_lm(emc[[1]], test_samples, min_unique, n_cores, verbose)
     # } else{    }
+
+    repeat {
     adapted <- test_adapted(emc[[1]], test_samples,
                             min_unique, n_cores, verbose)
+    }
 
   }
   else {
