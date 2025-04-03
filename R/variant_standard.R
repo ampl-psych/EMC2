@@ -52,7 +52,7 @@ get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1
     par_names <- names(sampled_pars(design, doMap = F))
     samples <- list()
     if(selection %in% c("mu", "alpha")){
-      mu <- t(mvtnorm::rmvnorm(N, mean = prior$theta_mu_mean,
+      mu <- t(rmvn(N, mean = prior$theta_mu_mean,
                              sigma = prior$theta_mu_var))
       rownames(mu) <- par_names
       if(selection %in% c("mu")){
@@ -85,7 +85,7 @@ get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1
 
 get_startpoints_standard <- function(pmwgs, start_mu, start_var){
   n_pars <- sum(!pmwgs$nuisance)
-  if (is.null(start_mu)) start_mu <- rmvnorm(1, mean = pmwgs$prior$theta_mu_mean, sigma = pmwgs$prior$theta_mu_var)
+  if (is.null(start_mu)) start_mu <- rmvn(1, mean = pmwgs$prior$theta_mu_mean, sigma = pmwgs$prior$theta_mu_var)
   # If no starting point for group var just sample some
   if (is.null(start_var)) start_var <- riwish(n_pars * 3,diag(n_pars))
   start_a_half <- 1 / rgamma(n = n_pars, shape = 2, rate = 1)
@@ -120,7 +120,7 @@ gibbs_step_standard <- function(sampler, alpha){
   mean_mu <- as.vector(var_mu %*% (last$tvinv %*% apply(alpha, 1, sum) +
                                      prior$theta_mu_invar %*% prior$theta_mu_mean))
   chol_var_mu <- t(chol(var_mu)) # t() because I want lower triangle.
-  tmu <- rmvnorm(1, mean_mu, chol_var_mu %*% t(chol_var_mu))[1, ]
+  tmu <- rmvn(1, mean_mu, chol_var_mu %*% t(chol_var_mu))[1, ]
   names(tmu) <- sampler$par_names[!sampler$nuisance]
 
   # New values for group var
@@ -328,7 +328,7 @@ group_dist_standard <- function(random_effect = NULL, parameters, sample = FALSE
   param.theta.sig.unwound <- parameters[(n_randeffect+1):(length(parameters)-n_randeffect)]
   param.theta.sig2 <- unwind_chol(param.theta.sig.unwound, reverse = TRUE)
   if (sample){
-    return(rmvnorm(n_samples, param.theta.mu,param.theta.sig2))
+    return(rmvn(n_samples, param.theta.mu,param.theta.sig2))
   }else{
     logw_second<-max(-5000*info$n_randeffect, dmvnorm(random_effect, param.theta.mu,param.theta.sig2,log=TRUE))
     return(logw_second)
