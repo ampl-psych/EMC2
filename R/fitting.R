@@ -86,8 +86,6 @@ run_emc <- function(emc, stage, stop_criteria,
                     cores_for_chains = length(emc), max_tries = 20, n_blocks = 1,
                     thin = FALSE, trim = TRUE){
 
-  test_parallel()
-
   emc <- restore_duplicates(emc)
   if(Sys.info()[1] == "Windows" & cores_per_chain > 1) stop("only cores_for_chains can be set on Windows")
   if (verbose) message(paste0("Running ", stage, " stage"))
@@ -97,7 +95,11 @@ run_emc <- function(emc, stage, stop_criteria,
   } else{
     iter <- stop_criteria[["iter"]]
   }
+
+  repeat{
   progress <- check_progress(emc, stage, iter, stop_criteria, max_tries, step_size, cores_per_chain*cores_for_chains, verbose, n_blocks = n_blocks)
+  }
+
   emc <- progress$emc
   progress <- progress[!names(progress) == 'emc']
   # We need to multiply step_size by thin to make an accurate guess for good step_size.
