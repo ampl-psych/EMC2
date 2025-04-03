@@ -577,16 +577,18 @@ test_adapted <- function(sampler, test_samples, min_unique, n_cores_conditional 
         nuis_idx <- nuisance[idx]
         if(any(nuis_idx)){
           type <- sampler$sampler_nuis$type
-          repeat{
           auto_mclapply(X = 1:sampler$n_subjects,
                         FUN = get_conditionals, samples = test_samples$nuisance,
                         n_pars = sum(idx[nuisance]), idx = idx[nuisance],
                         type = type,
                         mc.cores = n_cores_conditional)
-          }
         }
+        # auto_mclapply(X = 1:sampler$n_subjects,FUN = get_conditionals,samples = test_samples,
+        #               n_pars = sum(idx[!nuisance]), idx = idx[!nuisance], type = sampler$type,
+        #               mc.cores = n_cores_conditional)
+        print("CUNT!")
         repeat{
-        auto_mclapply(X = 1:sampler$n_subjects,FUN = get_conditionals,samples = test_samples,
+          parallel::mclapply(1:sampler$n_subjects,get_conditionals,samples = test_samples,
                       n_pars = sum(idx[!nuisance]), idx = idx[!nuisance], type = sampler$type,
                       mc.cores = n_cores_conditional)
         }
