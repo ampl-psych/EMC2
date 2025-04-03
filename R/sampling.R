@@ -743,6 +743,7 @@ run_hyper <- function(type, data, prior = NULL, iter = 1000, n_chains =3, ...){
     }
     emc[[j]] <- sampler
   }
+  emc[[1]]$type <- type
   class(emc) <- "emc"
   return(emc)
 }

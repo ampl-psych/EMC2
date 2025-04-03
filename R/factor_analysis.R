@@ -204,7 +204,7 @@ rearrange_loadings <- function(loadings){
 # #'
 # #' @param emc An emc object with samples from a hierarchical factor analysis model
 # #' @param loadings Array of pars by factors by iters. Can also specify loadings instead of emc
-# #' @param sig_err_inv Array of pars by iters. Can also specify sig_err_inv instead of emc
+# #' @param residuals Array of pars by iters. Can also specify residuals instead of emc
 # #' @param stage Character. From which stage to take samples
 # #' @param merge_chains Return the loadings for each chain separately or merged together.
 
@@ -218,12 +218,12 @@ rearrange_loadings <- function(loadings){
 # #'
 standardize_loadings <- function(loadings = NULL, residuals = NULL,
                                  stage = "sample"){
-  stdize_set <- function(samples = NULL, idx = NULL, loadings = NULL, sig_err_inv = NULL){
+  stdize_set <- function(samples = NULL, idx = NULL, loadings = NULL, residuals = NULL){
     if(is.null(loadings)) loadings <- samples$samples$theta_lambda[,,idx, drop = F]
-    if(is.null(sig_err_inv)) sig_err_inv <- samples$samples$theta_sig_err_inv[,idx]
+    if(is.null(residuals)) residuals <- samples$samples$theta_residuals[,idx]
     new_loadings <- loadings
     for(i in 1:dim(loadings)[3]){
-      sigma_err <- 1/sig_err_inv[,i]
+      sigma_err <- residuals[,i]
       vars <- loadings[,,i] %*% t(loadings[,,i]) + diag(sigma_err)
       Dinv <- 1/sqrt(diag(vars))
       new_loadings[,,i] <- loadings[,,i]*Dinv
@@ -231,20 +231,20 @@ standardize_loadings <- function(loadings = NULL, residuals = NULL,
     return(new_loadings)
   }
 
-  if(is.null(loadings) || is.null(sig_err_inv)){
+  if(is.null(loadings) || is.null(residuals)){
     if(merge_chains){
       samples <- merge_chains(emc)
       idx <- samples$samples$stage == stage
-      out <- stdize_set(samples, idx, loadings, sig_err_inv)
+      out <- stdize_set(samples, idx, loadings, residuals)
     } else{
       idx <- emc[[1]]$samples$stage == stage
       out <- vector("list", length(emc))
       for(i in 1:length(emc)){
-        out[[i]] <- stdize_set(emc[[i]], idx, loadings[[i]], sig_err_inv[[i]])
+        out[[i]] <- stdize_set(emc[[i]], idx, loadings[[i]], residuals[[i]])
       }
     }
   } else{
-    out <- stdize_set(loadings = loadings, sig_err_inv = sig_err_inv)
+    out <- stdize_set(loadings = loadings, residuals = residuals)
   }
 
   return(out)
