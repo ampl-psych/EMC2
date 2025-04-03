@@ -1,4 +1,3 @@
-
 #' Specify a Design and Model
 #'
 #' This function combines information regarding the data, type of model, and
@@ -161,10 +160,133 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
   return(design)
 }
 
+group_design <- function(formula, data, subject_design, contrasts = NULL){
+  par_names <- names(sampled_pars(subject_design))
+  
+  # Extract dependent variables (left hand side) from formula
+  lhs_terms <- unlist(lapply(formula, function(x) as.character(stats::terms(x)[[2]])))
+  
+  # Check if all dependent variables are in par_names
+  if (!all(lhs_terms %in% par_names)) {
+    invalid_terms <- lhs_terms[!lhs_terms %in% par_names]
+    stop(paste0("Parameter(s) ", paste0(invalid_terms, collapse=", "),
+                  " in formula not found in subject design parameters"))
+  }
+  
+  # Extract all variables from formula, both left and right sides
+  rhs_terms <- unique(unlist(lapply(formula, function(x) {
+    # Get all variables from right hand side of formula
+    all.vars(stats::terms(x)[[3]])
+  })))
 
-group_design <- function(formula, factors, data = NULL, contrasts = NULL,
-                         covariates = NULL){
-
+  # Check if all variables are in data
+  if (length(rhs_terms) > 0 && !all(rhs_terms %in% names(data))) {
+    missing_vars <- rhs_terms[!rhs_terms %in% names(data)]
+    stop(paste0("Variable(s) ", paste0(missing_vars, collapse=", "),
+                " in formula not found in data"))
+  }
+  
+  # Check if any factor has multiple levels per subject
+  for (var in rhs_terms) {
+    if (is.factor(data[[var]])) {
+      # Get count of unique levels per subject
+      level_counts <- tapply(data[[var]], data$subjects, function(x) length(unique(x)))
+      
+      # Check if any subject has more than one level
+      if (any(level_counts > 1)) {
+        problematic_subjects <- names(level_counts[level_counts > 1])
+        stop(paste0("Factor '", var, "' has multiple levels per subject. ",
+                    "First problematic subject: ", problematic_subjects[1], " with ", 
+                    level_counts[problematic_subjects[1]], " levels. ",
+                    "Group-level design requires exactly one level per subject for each factor."))
+      }
+    }
+  }
+  
+  # Create an empty list to store design matrices for each formula
+  design_matrices <- list()
+  
+  # Process each formula separately
+  for (i in seq_along(formula)) {
+    current_formula <- formula[[i]]
+    
+    # Get current formula's left-hand side (parameter name)
+    param_name <- as.character(stats::terms(current_formula)[[2]])
+    
+    # Get all variables used in the current formula (right-hand side)
+    current_vars <- all.vars(stats::terms(current_formula)[[3]])
+    
+    # Check if this is an intercept-only formula
+    if (length(current_vars) == 0 && deparse(stats::terms(current_formula)[[3]]) == "1") {
+      warning(paste0("Formula '", param_name, " ~ 1' detected. Note that the intercept is automatically ",
+                     "included as the group-level mean and does not need to be specified."))
+    }
+    
+    # Subset data to include only relevant variables
+    subset_data <- data[, c("subjects", current_vars), drop = FALSE]
+    
+    # Aggregate data by subject
+    agg_data <- stats::setNames(
+      data.frame(unique(subset_data$subjects)),
+      "subjects"
+    )
+    
+    # For each variable in the formula, add it to the aggregated data
+    for (var in current_vars) {
+      # Get unique values per subject
+      var_values <- stats::aggregate(
+        subset_data[[var]],
+        by = list(subjects = subset_data$subjects),
+        FUN = function(x) x[1]
+      )
+      
+      # Add to aggregated data
+      agg_data[[var]] <- var_values$x
+      
+      # Preserve factor levels if applicable
+      if (is.factor(subset_data[[var]])) {
+        agg_data[[var]] <- factor(agg_data[[var]], levels = levels(subset_data[[var]]))
+      }
+    }
+    
+    # Apply model.matrix with the current formula
+    # Instead of constructing a formula string, use the original formula with modified LHS
+    rhs_formula <- stats::terms(current_formula)[[3]]
+    if (!is.null(contrasts)) {
+      # Filter contrasts to only include variables in the current formula
+      formula_vars <- all.vars(rhs_formula)
+      filtered_contrasts <- contrasts[names(contrasts) %in% formula_vars]
+      
+      if (length(filtered_contrasts) > 0) {
+        dm <- stats::model.matrix(stats::reformulate(termlabels = deparse(rhs_formula)), 
+                                data = agg_data, 
+                                contrasts.arg = filtered_contrasts)
+      } else {
+        dm <- stats::model.matrix(stats::reformulate(termlabels = deparse(rhs_formula)), 
+                                data = agg_data)
+      }
+    } else {
+      dm <- stats::model.matrix(stats::reformulate(termlabels = deparse(rhs_formula)), 
+                              data = agg_data)
+    }
+    
+    # Check if the design matrix has an intercept
+    has_intercept <- "(Intercept)" %in% colnames(dm)
+    
+    if (!has_intercept) {
+      stop("Intercept-less design matrix not supported yet")
+    }
+    
+    # Drop the intercept column if present
+    if (has_intercept) {
+      dm <- dm[, colnames(dm) != "(Intercept)", drop = FALSE]
+    }
+    
+    # Store in the list
+    design_matrices[[param_name]] <- dm
+  }
+  
+  return(design_matrices)
 }
 
 #' Contrast Enforcing Equal Prior Variance on each Level
