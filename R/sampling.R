@@ -517,7 +517,8 @@ particle_draws <- function(n, mu, covar, alpha = NULL, tau= NULL) {
     return(NULL)
   }
   if(is.null(alpha)){
-    return(mvtnorm::rmvnorm(n, mu, covar))
+    # return(mvtnorm::rmvnorm(n, mu, covar))
+    return(rmvn(n, mu, covar))
   }
 }
 
