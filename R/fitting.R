@@ -242,10 +242,8 @@ check_progress <- function (emc, stage, iter, stop_criteria,
     #   adapted <- test_adapted_lm(emc[[1]], test_samples, min_unique, n_cores, verbose)
     # } else{    }
 
-    repeat {
     adapted <- test_adapted(emc[[1]], test_samples,
                             min_unique, n_cores, verbose)
-    }
 
   }
   else {
@@ -579,15 +577,19 @@ test_adapted <- function(sampler, test_samples, min_unique, n_cores_conditional 
         nuis_idx <- nuisance[idx]
         if(any(nuis_idx)){
           type <- sampler$sampler_nuis$type
+          repeat{
           auto_mclapply(X = 1:sampler$n_subjects,
                         FUN = get_conditionals, samples = test_samples$nuisance,
                         n_pars = sum(idx[nuisance]), idx = idx[nuisance],
                         type = type,
                         mc.cores = n_cores_conditional)
+          }
         }
+        repeat{
         auto_mclapply(X = 1:sampler$n_subjects,FUN = get_conditionals,samples = test_samples,
                       n_pars = sum(idx[!nuisance]), idx = idx[!nuisance], type = sampler$type,
                       mc.cores = n_cores_conditional)
+        }
       }
     },error=function(e) e, warning=function(w) w)
     if (any(class(attempt) %in% c("warning", "error", "try-error"))) {
