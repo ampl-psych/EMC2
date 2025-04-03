@@ -7,6 +7,30 @@
 #include <functional>
 using namespace Rcpp;
 
+// [[Rcpp::export]]
+NumericMatrix mat_mult(NumericMatrix A, NumericMatrix B) {
+  int n = A.nrow();
+  int m = A.ncol();
+  int p = B.ncol();
+
+  // Initialize result matrix with the correct dimensions
+  NumericMatrix result(n, p);
+
+  // Perform matrix multiplication
+  for (int i = 0; i < n; ++i) {
+    for (int j = 0; j < p; ++j) {
+      double sum = 0;
+      for (int k = 0; k < m; ++k) {
+        sum += A(i, k) * B(k, j);
+      }
+      result(i, j) = sum;
+    }
+  }
+
+  return result;
+}
+
+
 LogicalVector contains(CharacterVector sv, std::string txt) {
   LogicalVector res(sv.size());
   for (int i = 0; i < sv.size(); i ++) {
@@ -463,5 +487,7 @@ std::vector<PreTransformSpec> make_pretransform_specs(NumericVector p_vector, Li
 
 
 #endif
+
+
 
 
