@@ -23,6 +23,7 @@ NumericVector colSums_cpp(NumericMatrix mat) {
   return col_sums;
 }
 
+// [[Rcpp::export]]
 NumericMatrix backsolve_cpp(NumericMatrix A, NumericMatrix B) {
     int n = A.nrow(); // Number of rows in A (also number of rows in B)
     int m = B.ncol(); // Number of columns in B (i.e., the number of right-hand sides)
