@@ -23,6 +23,62 @@ NumericVector colSums_cpp(NumericMatrix mat) {
   return col_sums;
 }
 
+#include <Rcpp.h>
+using namespace Rcpp;
+
+// Function to perform back-substitution on an upper triangular matrix
+// r: upper triangular matrix (n x n)
+// x: matrix of right-hand sides (n x m)
+// transpose: logical flag, TRUE for solving r' * y = x, FALSE for r * y = x
+// [[Rcpp::export]]
+NumericMatrix rccp_backsolve(NumericMatrix r, NumericMatrix x, bool transpose = false) {
+  int n = r.nrow(); // Number of rows/columns in the upper triangular matrix
+  int m = x.ncol(); // Number of columns in the matrix x (i.e., number of right-hand sides)
+
+  // Result matrix to store the solutions
+  NumericMatrix y(n, m);
+
+  // If transpose = TRUE, we are solving t(r) * y = x
+  // This means we use the transpose of r, which is equivalent to solving r' * y = x
+  if (transpose) {
+    // Loop through each column of the matrix x (right-hand side vectors)
+    for (int j = 0; j < m; j++) {
+      // Loop for back-substitution
+      for (int i = n - 1; i >= 0; i--) {
+        // Start with the right-hand side value
+        y(i, j) = x(i, j);
+
+        // Subtract the known coefficients from the equation
+        for (int k = i + 1; k < n; k++) {
+          y(i, j) -= r(k, i) * y(k, j);
+        }
+
+        // Divide by the diagonal element (which is r(i, i))
+        y(i, j) /= r(i, i);
+      }
+    }
+  } else {
+    // Loop through each column of the matrix x (right-hand side vectors)
+    for (int j = 0; j < m; j++) {
+      // Loop for back-substitution
+      for (int i = n - 1; i >= 0; i--) {
+        // Start with the right-hand side value
+        y(i, j) = x(i, j);
+
+        // Subtract the known coefficients from the equation
+        for (int k = i + 1; k < n; k++) {
+          y(i, j) -= r(i, k) * y(k, j);
+        }
+
+        // Divide by the diagonal element (which is r(i, i))
+        y(i, j) /= r(i, i);
+      }
+    }
+  }
+
+  return y;
+}
+
 // [[Rcpp::export]]
 NumericMatrix backsolve_cpp(NumericMatrix A, NumericMatrix B) {
     int n = A.nrow(); // Number of rows in A (also number of rows in B)
