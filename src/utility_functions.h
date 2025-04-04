@@ -23,6 +23,28 @@ NumericVector colSums_cpp(NumericMatrix mat) {
   return col_sums;
 }
 
+// [[Rcpp::export]]
+NumericMatrix rcpp_forwardsolve(NumericMatrix l, NumericMatrix x) {
+    int n = l.nrow(); // Number of rows/columns in the lower triangular matrix
+    int m = x.ncol(); // Number of columns in the matrix x (i.e., number of right-hand sides)
+
+    // Result matrix to store the solutions
+    NumericMatrix y(n, m);
+
+    // Perform forward substitution
+    for (int j = 0; j < m; j++) { // Iterate through columns of x (right-hand sides)
+        for (int i = 0; i < n; i++) { // Iterate over rows of L (lower triangular matrix)
+            y(i, j) = x(i, j); // Start with the right-hand side value
+            for (int k = 0; k < i; k++) { // Subtract the known contributions
+                y(i, j) -= l(i, k) * y(k, j);
+            }
+            y(i, j) /= l(i, i); // Divide by the diagonal element (l(i, i))
+        }
+    }
+
+    return y;
+}
+
 // Function to perform back-substitution on an upper triangular matrix or lower triangular matrix (for transpose = TRUE)
 // r: upper triangular matrix (n x n)
 // x: matrix of right-hand sides (n x m)
@@ -37,7 +59,6 @@ NumericMatrix rccp_backsolve(NumericMatrix r, NumericMatrix x, bool transpose = 
 
   if (transpose) {
     // When transpose = TRUE, we are solving r' * y = x (i.e., treating r as lower triangular)
-    // Perform forward substitution for lower triangular matrix (t(r))
     for (int j = 0; j < m; j++) {
       for (int i = 0; i < n; i++) {
         // Start with the right-hand side value
@@ -54,7 +75,6 @@ NumericMatrix rccp_backsolve(NumericMatrix r, NumericMatrix x, bool transpose = 
     }
   } else {
     // When transpose = FALSE, we are solving r * y = x (upper triangular)
-    // Perform back-substitution for upper triangular matrix (r)
     for (int j = 0; j < m; j++) {
       for (int i = n - 1; i >= 0; i--) {
         // Start with the right-hand side value

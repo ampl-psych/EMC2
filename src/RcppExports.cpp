@@ -242,6 +242,18 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// rcpp_forwardsolve
+NumericMatrix rcpp_forwardsolve(NumericMatrix l, NumericMatrix x);
+RcppExport SEXP _EMC2_rcpp_forwardsolve(SEXP lSEXP, SEXP xSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericMatrix >::type l(lSEXP);
+    Rcpp::traits::input_parameter< NumericMatrix >::type x(xSEXP);
+    rcpp_result_gen = Rcpp::wrap(rcpp_forwardsolve(l, x));
+    return rcpp_result_gen;
+END_RCPP
+}
 // rccp_backsolve
 NumericMatrix rccp_backsolve(NumericMatrix r, NumericMatrix x, bool transpose);
 RcppExport SEXP _EMC2_rccp_backsolve(SEXP rSEXP, SEXP xSEXP, SEXP transposeSEXP) {
@@ -306,6 +318,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_EMC2_construct_design_matrix", (DL_FUNC) &_EMC2_construct_design_matrix, 13},
     {"_EMC2_calc_ll", (DL_FUNC) &_EMC2_calc_ll, 11},
     {"_EMC2_colSums_cpp", (DL_FUNC) &_EMC2_colSums_cpp, 1},
+    {"_EMC2_rcpp_forwardsolve", (DL_FUNC) &_EMC2_rcpp_forwardsolve, 2},
     {"_EMC2_rccp_backsolve", (DL_FUNC) &_EMC2_rccp_backsolve, 3},
     {"_EMC2_backsolve_cpp", (DL_FUNC) &_EMC2_backsolve_cpp, 2},
     {"_EMC2_mat_mult", (DL_FUNC) &_EMC2_mat_mult, 2},

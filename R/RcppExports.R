@@ -53,6 +53,10 @@ colSums_cpp <- function(mat) {
     .Call(`_EMC2_colSums_cpp`, mat)
 }
 
+rcpp_forwardsolve <- function(l, x) {
+    .Call(`_EMC2_rcpp_forwardsolve`, l, x)
+}
+
 rccp_backsolve <- function(r, x, transpose = FALSE) {
     .Call(`_EMC2_rccp_backsolve`, r, x, transpose)
 }
