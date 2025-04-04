@@ -294,7 +294,8 @@ filter_sub_and_par <- function(obj, sub, sub_names, par){
 
 # Returns the last ran stage of an emc object
 get_last_stage <- function(emc){
-  nstage <- colSums_cpp(chain_n(emc))
+  nstage <- chain_n(emc)
+  nstage <- setNames(colSums_cpp(chain_n(emc)),colnames(nstage))
   if(all(nstage == 0)){
     stage <- "preburn"
   } else{
