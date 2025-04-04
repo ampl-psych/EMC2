@@ -23,7 +23,7 @@ NumericVector colSums_cpp(NumericMatrix mat) {
   return col_sums;
 }
 
-// Function to perform back-substitution on an upper triangular matrix
+// Function to perform back-substitution on an upper triangular matrix or lower triangular matrix (for transpose = TRUE)
 // r: upper triangular matrix (n x n)
 // x: matrix of right-hand sides (n x m)
 // transpose: logical flag, TRUE for solving r' * y = x, FALSE for r * y = x
@@ -35,16 +35,15 @@ NumericMatrix rccp_backsolve(NumericMatrix r, NumericMatrix x, bool transpose = 
   // Result matrix to store the solutions
   NumericMatrix y(n, m);
 
-  // If transpose = TRUE, we are solving r' * y = x
   if (transpose) {
-    // Loop through each column of the matrix x (right-hand side vectors)
+    // When transpose = TRUE, we are solving r' * y = x (i.e., treating r as lower triangular)
+    // Perform forward substitution for lower triangular matrix (t(r))
     for (int j = 0; j < m; j++) {
-      // Loop for back-substitution from bottom to top (simulate lower triangular)
       for (int i = 0; i < n; i++) {
         // Start with the right-hand side value
         y(i, j) = x(i, j);
 
-        // Subtract the known coefficients from the equation (simulate lower triangular)
+        // Subtract the known coefficients from the equation (lower triangular)
         for (int k = 0; k < i; k++) {
           y(i, j) -= r(i, k) * y(k, j);
         }
@@ -54,14 +53,14 @@ NumericMatrix rccp_backsolve(NumericMatrix r, NumericMatrix x, bool transpose = 
       }
     }
   } else {
-    // Loop through each column of the matrix x (right-hand side vectors)
+    // When transpose = FALSE, we are solving r * y = x (upper triangular)
+    // Perform back-substitution for upper triangular matrix (r)
     for (int j = 0; j < m; j++) {
-      // Loop for back-substitution from bottom to top
       for (int i = n - 1; i >= 0; i--) {
         // Start with the right-hand side value
         y(i, j) = x(i, j);
 
-        // Subtract the known coefficients from the equation
+        // Subtract the known coefficients from the equation (upper triangular)
         for (int k = i + 1; k < n; k++) {
           y(i, j) -= r(i, k) * y(k, j);
         }
