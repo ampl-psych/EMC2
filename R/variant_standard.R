@@ -117,15 +117,16 @@ gibbs_step_standard <- function(sampler, alpha){
   n_pars <- sampler$n_pars-sum(sampler$nuisance)
   # Here mu is group mean, so we are getting mean and variance
   var_mu <- ginv(sampler$n_subjects * last$tvinv + prior$theta_mu_invar)
-  mean_mu <- as.vector(var_mu %*% (last$tvinv %*% apply(alpha, 1, sum) +
-                                     prior$theta_mu_invar %*% prior$theta_mu_mean))
+  mean_mu <- as.vector(mat_mult(var_mu,(
+    mat_mult(last$tvinv,apply(alpha, 1, sum)) +
+      mat_mult(prior$theta_mu_invar,prior$theta_mu_mean))))
   chol_var_mu <- t(chol(var_mu)) # t() because I want lower triangle.
-  tmu <- rmvn(1, mean_mu, chol_var_mu %*% t(chol_var_mu))[1, ]
+  tmu <- rmvn(1, mean_mu, mat_mult(chol_var_mu,t(chol_var_mu)))[1, ]
   names(tmu) <- sampler$par_names[!sampler$nuisance]
 
   # New values for group var
   theta_temp <- alpha - tmu
-  cov_temp <- (theta_temp) %*% (t(theta_temp))
+  cov_temp <- mat_mult(theta_temp,t(theta_temp))
   B_half <- 2 * prior$v * diag(1 / last$a_half) + cov_temp # nolint
   tvar <- riwish(prior$v + n_pars - 1 + sampler$n_subjects, B_half) # New sample for group variance
   tvinv <- ginv(tvar)
@@ -312,7 +313,7 @@ unwind_chol <- function(x,reverse=FALSE) {
     out=array(0,dim=c(n,n))
     out[lower.tri(out,diag=TRUE)]=x
     diag(out)=exp(diag(out))
-    out=out%*%t(out)
+    out=mat_mult(out,t(out))
   } else {
     y=t(base::chol(x))
     diag(y)=log(diag(y))
@@ -330,7 +331,7 @@ group_dist_standard <- function(random_effect = NULL, parameters, sample = FALSE
   if (sample){
     return(rmvn(n_samples, param.theta.mu,param.theta.sig2))
   }else{
-    logw_second<-max(-5000*info$n_randeffect, dmvnorm(random_effect, param.theta.mu,param.theta.sig2,log=TRUE))
+    logw_second<-max(-5000*info$n_randeffect, dmvn(random_effect, param.theta.mu,param.theta.sig2,log=TRUE))
     return(logw_second)
   }
 }
@@ -342,7 +343,7 @@ prior_dist_standard <- function(parameters, info){
   param.theta.sig.unwound <- parameters[(n_randeffect+1):(length(parameters)-n_randeffect)]
   param.theta.sig2 <- unwind_chol(param.theta.sig.unwound, reverse = TRUE)
   param.a <- exp(parameters[((length(parameters)-n_randeffect)+1):(length(parameters))])
-  log_prior_mu=dmvnorm(param.theta.mu, mean = prior$theta_mu_mean, sigma = prior$theta_mu_var, log =TRUE)
+  log_prior_mu=dmvn(param.theta.mu, mean = prior$theta_mu_mean, sigma = prior$theta_mu_var, log =TRUE)
   log_prior_sigma = log(robust_diwish(param.theta.sig2, v=prior$v+ n_randeffect-1, S = 2*prior$v*diag(1/param.a)))
   log_prior_a = sum(logdinvGamma(param.a,shape = 1/2,rate=1/(prior$A^2)))
   # These are Jacobian corrections for the transformations on these
@@ -378,13 +379,13 @@ bridge_group_and_prior_and_jac_standard <- function(proposals_group, proposals_l
   for(i in 1:n_iter){ # these unfortunately can't be vectorized
     theta_var_curr <- unwind_chol(theta_var[i,], reverse = T)
     proposals_curr <- matrix(proposals[i,], ncol = info$n_pars, byrow = T)
-    group_ll <- sum(dmvnorm(proposals_curr, theta_mu[i,], theta_var_curr, log = T))
+    group_ll <- sum(dmvn(proposals_curr, theta_mu[i,], theta_var_curr, log = T))
     prior_var <- log(robust_diwish(theta_var_curr, v=prior$v+ info$n_pars-1, S = 2*prior$v*diag(1/theta_a[i,])))
     prior_a <- sum(logdinvGamma(exp(theta_a[i,]), shape = 1/2,rate=1/(prior$A^2)))
     jac_var <- log(2^info$n_pars)+sum((info$n_pars + 1)*log(diag(theta_var_curr))) # Log of derivative of cholesky transformation
     sum_out[i] <- group_ll + prior_var + prior_a + jac_var
   }
-  prior_mu <- dmvnorm(theta_mu, mean = prior$theta_mu_mean, sigma = prior$theta_mu_var, log =T)
+  prior_mu <- dmvn(theta_mu, mean = prior$theta_mu_mean, sigma = prior$theta_mu_var, log =T)
   jac_a <- rowSums(theta_a)
   return(sum_out + prior_mu + jac_a) # Output is of length nrow(proposals)
 }
@@ -407,11 +408,11 @@ group__IC_standard <- function(emc, stage="sample",filter=NULL){
   N <- ncol(theta_mu)
   lls <- numeric(N)
   for(i in 1:N){
-    lls[i] <- sum(dmvnorm(t(alpha[,,i]), theta_mu[,i], theta_var[,,i], log = T))
+    lls[i] <- sum(dmvn(t(alpha[,,i]), theta_mu[,i], theta_var[,,i], log = T))
   }
   minD <- -2*max(lls)
   mean_ll <- mean(lls)
-  mean_pars_ll <-  sum(dmvnorm(t(mean_alpha), mean_mu, mean_var, log = TRUE))
+  mean_pars_ll <-  sum(dmvn(t(mean_alpha), mean_mu, mean_var, log = TRUE))
   Dmean <- -2*mean_pars_ll
   return(list(mean_ll = mean_ll, Dmean = Dmean,
               minD = minD))

@@ -7,7 +7,7 @@ filter_obj <- function(obj, idx){
   if(length(dims) == 2){
     if(nrow(obj) == ncol(obj)){
       if(nrow(obj) > 1){
-        if(mean(abs(abs(rowSums(obj/max(obj))) - abs(colSums(obj/max(obj))))) < .01) return(obj)
+        if(mean(abs(abs(rowSums(obj/max(obj))) - abs(colSums_cpp(obj/max(obj))))) < .01) return(obj)
       }
     }
   }
@@ -294,7 +294,7 @@ filter_sub_and_par <- function(obj, sub, sub_names, par){
 
 # Returns the last ran stage of an emc object
 get_last_stage <- function(emc){
-  nstage <- colSums(chain_n(emc))
+  nstage <- colSums_cpp(chain_n(emc))
   if(all(nstage == 0)){
     stage <- "preburn"
   } else{

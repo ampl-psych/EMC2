@@ -887,7 +887,7 @@ weighted_moments <- function(chain, ll = NULL) {
   }
 
   # Compute the weighted mean of the chain.
-  weighted_mean <- colSums(apply(chain, 1, function(x) x*weights))
+  weighted_mean <- colSums_cpp(apply(chain, 1, function(x) x*weights))
   # NIEK THIS CAUSES ERRORS
   # # Compute the weighted covariance matrix.
   # cov_matrix <- matrix(0, nrow = d, ncol = d)
