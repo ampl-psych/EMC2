@@ -231,6 +231,29 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// colSums_cpp
+NumericVector colSums_cpp(NumericMatrix mat);
+RcppExport SEXP _EMC2_colSums_cpp(SEXP matSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericMatrix >::type mat(matSEXP);
+    rcpp_result_gen = Rcpp::wrap(colSums_cpp(mat));
+    return rcpp_result_gen;
+END_RCPP
+}
+// backsolve_cpp
+NumericVector backsolve_cpp(NumericMatrix A, NumericVector b);
+RcppExport SEXP _EMC2_backsolve_cpp(SEXP ASEXP, SEXP bSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericMatrix >::type A(ASEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type b(bSEXP);
+    rcpp_result_gen = Rcpp::wrap(backsolve_cpp(A, b));
+    return rcpp_result_gen;
+END_RCPP
+}
 // mat_mult
 NumericMatrix mat_mult(NumericMatrix A, NumericMatrix B);
 RcppExport SEXP _EMC2_mat_mult(SEXP ASEXP, SEXP BSEXP) {
@@ -269,6 +292,8 @@ static const R_CallMethodDef CallEntries[] = {
     {"_EMC2_compute_convolved_regressor", (DL_FUNC) &_EMC2_compute_convolved_regressor, 13},
     {"_EMC2_construct_design_matrix", (DL_FUNC) &_EMC2_construct_design_matrix, 13},
     {"_EMC2_calc_ll", (DL_FUNC) &_EMC2_calc_ll, 11},
+    {"_EMC2_colSums_cpp", (DL_FUNC) &_EMC2_colSums_cpp, 1},
+    {"_EMC2_backsolve_cpp", (DL_FUNC) &_EMC2_backsolve_cpp, 2},
     {"_EMC2_mat_mult", (DL_FUNC) &_EMC2_mat_mult, 2},
     {"_EMC2_c_add_charvectors", (DL_FUNC) &_EMC2_c_add_charvectors, 2},
     {NULL, NULL, 0}

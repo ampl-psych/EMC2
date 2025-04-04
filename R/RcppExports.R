@@ -49,6 +49,14 @@ calc_ll <- function(p_matrix, data, constants, designs, type, bounds, transforms
     .Call(`_EMC2_calc_ll`, p_matrix, data, constants, designs, type, bounds, transforms, pretransforms, p_types, min_ll, trend)
 }
 
+colSums_cpp <- function(mat) {
+    .Call(`_EMC2_colSums_cpp`, mat)
+}
+
+backsolve_cpp <- function(A, b) {
+    .Call(`_EMC2_backsolve_cpp`, A, b)
+}
+
 mat_mult <- function(A, B) {
     .Call(`_EMC2_mat_mult`, A, B)
 }
