@@ -23,35 +23,32 @@ NumericVector colSums_cpp(NumericMatrix mat) {
   return col_sums;
 }
 
-// [[Rcpp::export]]
-NumericVector backsolve_cpp(NumericMatrix A, NumericVector b) {
-    int n = A.nrow();
+NumericMatrix rcpp_backsolve(NumericMatrix A, NumericMatrix B) {
+    int n = A.nrow(); // Number of rows in A (also number of rows in B)
+    int m = B.ncol(); // Number of columns in B (i.e., the number of right-hand sides)
 
-    // Ensure A is a square matrix and b is a vector of the appropriate size
-    if (A.ncol() != n) {
+    // Ensure A is a square matrix
+    if (A.nrow() != A.ncol()) {
         stop("Matrix A must be square.");
     }
-    if (b.size() != n) {
-        stop("Length of vector b must match the number of rows in A.");
-    }
 
-    NumericVector x(n);  // Solution vector
+    // Create a matrix to store the solution
+    NumericMatrix X(n, m);
 
-    // Back substitution process
-    for (int i = n - 1; i >= 0; i--) {
-        double sum = b[i];
-
-        // Loop through the elements to the right of the diagonal
-        for (int j = i + 1; j < n; j++) {
-            sum -= A(i, j) * x[j];
+    // Perform back substitution
+    for (int j = 0; j < m; j++) { // Loop through columns of B
+        for (int i = n - 1; i >= 0; i--) { // Loop through rows of A (backwards)
+            double sum = 0.0;
+            for (int k = i + 1; k < n; k++) {
+                sum += A(i, k) * X(k, j);
+            }
+            X(i, j) = (B(i, j) - sum) / A(i, i);
         }
-
-        // Solve for x[i]
-        x[i] = sum / A(i, i);
     }
 
-    return x;
+    return X;
 }
+
 
 // [[Rcpp::export]]
 NumericMatrix mat_mult(NumericMatrix A, NumericMatrix B) {
