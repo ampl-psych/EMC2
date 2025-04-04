@@ -117,9 +117,9 @@ gibbs_step_standard <- function(sampler, alpha){
   n_pars <- sampler$n_pars-sum(sampler$nuisance)
   # Here mu is group mean, so we are getting mean and variance
   var_mu <- ginv(sampler$n_subjects * last$tvinv + prior$theta_mu_invar)
-  mean_mu <- as.vector(mat_mult(var_mu,(
-    mat_mult(last$tvinv,apply(alpha, 1, sum)) +
-      mat_mult(prior$theta_mu_invar,prior$theta_mu_mean))))
+  mean_mu <- as.vector(mat_mult(var_mu, (
+    mat_mult(last$tvinv, matrix(apply(alpha, 1, sum),ncol=1)) +
+      mat_mult(prior$theta_mu_invar,matrix(prior$theta_mu_mean,ncol=1)))))
   chol_var_mu <- t(chol(var_mu)) # t() because I want lower triangle.
   tmu <- rmvn(1, mean_mu, mat_mult(chol_var_mu,t(chol_var_mu)))[1, ]
   names(tmu) <- sampler$par_names[!sampler$nuisance]
