@@ -39,7 +39,6 @@ NumericMatrix rccp_backsolve(NumericMatrix r, NumericMatrix x, bool transpose = 
   NumericMatrix y(n, m);
 
   // If transpose = TRUE, we are solving t(r) * y = x
-  // This means we use the transpose of r, which is equivalent to solving r' * y = x
   if (transpose) {
     // Loop through each column of the matrix x (right-hand side vectors)
     for (int j = 0; j < m; j++) {
@@ -78,6 +77,7 @@ NumericMatrix rccp_backsolve(NumericMatrix r, NumericMatrix x, bool transpose = 
 
   return y;
 }
+
 
 // [[Rcpp::export]]
 NumericMatrix backsolve_cpp(NumericMatrix A, NumericMatrix B) {
