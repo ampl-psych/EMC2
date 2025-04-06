@@ -240,7 +240,7 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
     if(check_bounds){
       return(FALSE)
     } else{
-      warning("(Some) parameter values are out of model bounds, see <model_name>$bounds()
+      warning("(Some) parameter values are out of model bounds, see <model_name>$bound
               This could cause biased recovery in recovery studies")
     }
   }
