@@ -126,7 +126,7 @@ SBC_single <- function(design_in, prior_in, replicates = 250, trials = 100,
     bad <- unlist(lapply(emcs,\(res) inherits(res, "try-error")))
     if (any(bad)) {
       warning("Fitting failed for ",sum(bad)," samples.")
-      emcs <- emcs[!bad]
+      emcs <- emcs[sum(!bad)]
     }
     if (!all(bad)) {
       ESS <- pmin(do.call(rbind,lapply(emcs,ess_summary,selection = "alpha")),chain_n(emcs[[1]])[1,"sample"])
