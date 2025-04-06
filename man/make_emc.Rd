@@ -30,7 +30,11 @@ make_emc(
 
 \item{compress}{A Boolean, if \code{TRUE} (i.e., the default), the data is compressed to speed up likelihood calculations.}
 
-\item{rt_resolution}{A double. Used for compression, response times will be binned based on this resolution.}
+\item{rt_resolution}{A double. Used for compression, response times rt will be binned based on this resolution as
+floor(rt/rt_resolution)*rt_resolution. By default rt_resolution/2 is also
+added (appropriate for binning due to monitor binning, ... argument
+correct_monitor=TRUE). Can also instead subtract rt_resolution/2 for clock
+binning (... argument correct_clock, default FALSE).}
 
 \item{prior_list}{A named list containing the prior. Default prior created if \code{NULL}. For the default priors, see \verb{?get_prior_\{type\}}.}
 
