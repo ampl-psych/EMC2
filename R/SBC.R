@@ -19,12 +19,12 @@
 #' @export
 run_sbc <- function(design_in, prior_in, replicates = 250, trials = 100, n_subjects = 30,
                     plot_data = FALSE, verbose = TRUE,
-                    fileName = NULL, ...){
+                    fileName = NULL, n_cores = 1, ...){
   if(is.null(fileName)) message("Since SBC can take a while it's highly recommended to specify a fileName to save temporary results in case of crashes")
   type <- attr(prior_in, "type")
   if(type == "single"){
     out <- SBC_single(design_in, prior_in, replicates, trials,
-                      plot_data, verbose, fileName, ...)
+                      plot_data, verbose, fileName, n_cores = n_cores, ...)
   } else{
     out <- SBC_hierarchical(design_in, prior_in, replicates, trials, n_subjects,
                     plot_data, verbose, fileName, ...)
