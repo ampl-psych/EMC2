@@ -110,7 +110,10 @@ SBC_single <- function(design_in, prior_in, replicates = 250, trials = 100,
   par_names <- names(sampled_pars(design_in))
   while(i < replicates){
     if (n_cores==1) print(paste0("Fitting sample ", i, " out of ", replicates)) else
-      print(paste0("Fitting samples ", i,"-",(i+n_cores-1), " out of ", replicates))
+    {
+      maxi <- max(c(i+n_cores-1,replicates))
+      print(paste0("Fitting samples ", i,"-",maxi, " out of ", replicates))
+    }
     start <- i
     dats <- parallel::mclapply(1:n_cores,make_datas,prior_alpha=prior_alpha,
                      design_in=design_in,trials=trials,mc.cores=n_cores)
