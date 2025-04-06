@@ -80,7 +80,6 @@ apply_contrasts <- function(events, contrast = NULL, cell_coding = FALSE, remove
 #'                            duration = list(condition = 0.5,
 #'                                           accuracy = 0.2,
 #'                                           rt = function(x) x$rt))
-
 reshape_events <- function(events, event_types, duration = 0.001, modulation = NULL){
   if(!(all(c("onset", "run", "subjects") %in% colnames(events)))){
     stop("Expected columns: subjects, duration, onset, run")
@@ -240,14 +239,15 @@ convolved_design_matrix <- function(timeseries, events, factors = NULL, contrast
         idx <- ev_run$event_type %in% factors[[fact]]
         ev_run$factor[idx] <- fact
         tmp <- ev_run[idx, ]
-        ev_tmp <- rbind(ev_tmp, apply_contrasts(tmp, contrast = contrasts[[fact]],
-                                                cell_coding = fact %in% cell_coding))
-        ev_tmp <- cbind(event_type = ev_run$event_type[idx], ev_tmp)
+        new_tmp <- apply_contrasts(tmp, contrast = contrasts[[fact]],
+                                   cell_coding = fact %in% cell_coding)
+        new_tmp <- cbind(event_type = ev_run$event_type[idx], new_tmp)
+        ev_tmp <- rbind(ev_tmp, new_tmp)
       }
 
       for(cov in covariates){
         idx <- ev_run$event_type %in% cov
-        tmp <- ev_run[idx,c('event_type', 'subjects', 'run', 'onset', 'duration', 'modulation',)]
+        tmp <- ev_run[idx,c('event_type', 'subjects', 'run', 'onset', 'duration', 'modulation')]
         tmp$regressor <- cov
         ev_tmp <- rbind(ev_tmp, tmp)
       }
