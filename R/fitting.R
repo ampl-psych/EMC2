@@ -695,9 +695,8 @@ make_emc <- function(data,design,model=NULL,
     stop("You can only specify nuisance OR nuisance_non_hyper")
   }
   if (is(data, "data.frame")) data <- list(data)
-
   data <- lapply(data,function(d){
-    if (!is.factor(d$subjects)) d$subjects <- factor(d$subjects)
+    d$subjects <- factor(d$subjects)
     d <- d[order(d$subjects),]
     LC <- attr(d,"LC")
     UC <- attr(d,"UC")
@@ -764,6 +763,9 @@ make_emc <- function(data,design,model=NULL,
     if(type == "diagonal"){
       par_groups <- 1:length(sampled_pars(design))
     }
+    if(type == "standard"){
+      par_groups <- rep(1, length(sampled_pars(design)))
+    }
     if(!is.null(par_groups)){
       if(is.character(par_groups)){
         par_groups <- list(par_groups)
@@ -782,6 +784,7 @@ make_emc <- function(data,design,model=NULL,
         stop("par_groups length does not match number of sampled parameters, make sure you specified par_groups correctly")
       }
     }
+    if(type %in% c("diagonal", "blocked")) type <- "standard"
     out <- pmwgs(dadm_list, type, par_groups=par_groups,
                  group_design = group_design,
                  nuisance = nuisance,

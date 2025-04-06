@@ -27,26 +27,32 @@ This function is used for hierarchical modeling to specify how subject-level par
 vary across groups or conditions.
 }
 \details{
-The function checks that all parameters in the formula exist in the subject-level design,
-and that all predictors exist in the data. It also verifies that each subject has exactly
-one level of each factor predictor, as required for group-level modeling.
+Here it is important to consider the interpreation of the group-level mean. This allows
+one to add covariates/group-level factors to the model. However, mu, the group-level mean, is still
+included for all parameters. Mu represents the intercept in the design matrix, this intercept is always
+added to the group-level model. Therefore, to keep the interpretation of mu as the group-level mean,
+it is important to ensure that the design matrix has a mean of zero. If not, this function will throw a
+warning. For some unbalanced designs, this is unavoidable and the warning can be ignored.
 }
 \examples{
 # Create subject-level design
 subj_design <- design(data = forstmann, model = DDM,
                       formula = list(v ~ S, a ~ E, t0 ~ 1),
                       contrasts = list(S = contr.helmert))
-# Add some age covariate
-forstmann$age <- as.numeric(forstmann$subjects) + 30
+# Add some age covariate and roughly demeans
+# Demeaning is important to ensure that the interpretation of the group-level intercept
+# is the mean of the group (i.e., 'mu' still represents the group-level mean)
+forstmann$age <- as.numeric(forstmann$subjects) -mean(as.numeric(forstmann$subjects))
 # Create fake group column
 forstmann$group <- ifelse(forstmann$subjects \%in\% unique(forstmann$subjects)[seq(1, 19, 2)], "A", "B")
 
 # Create group-level design matrices
-group_matrices <- group_design(
+group_des <- group_design(
   formula = list(v_S1 ~ age + group, a ~ age),
   data = forstmann,
   subject_design = subj_design,
   contrasts = list(group = contr.bayes)
 )
-
+# Then you can make the emc object with (setting compress = F here for speed)
+emc <- make_emc(forstmann, subj_design, compress = F, group_design = group_des)
 }

@@ -1,7 +1,7 @@
 get_objects <- function(type, selection = NULL, sample_prior = F, design = NULL, sampler = NULL,
                         prior = NULL, stage = 'sample', N = 1e5, ...){
   return_prior <- ifelse(is.null(sampler), TRUE, FALSE)
-  if(type == "standard"){
+  if(type %in% c("standard", "blocked", "diagonal")){
     out <- get_objects_standard(selection, sample_prior, return_prior, design, prior, stage, N = N,
                                 sampler, ...)
   }

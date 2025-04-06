@@ -25,9 +25,8 @@ add_info_standard <- function(sampler, prior = NULL, ...){
     sampler$betas <- betas
     sampler$group_designs <- list(...)$group_design
   }
-
-  sampler$par_group <- rep(1, n_pars)
-  sampler$is_blocked <- rep(T, n_pars)
+  sampler$par_group <- list(...)$par_groups
+  sampler$is_blocked <- sampler$par_group %in% which(table(sampler$par_group) > 1)
   sampler$prior <- get_prior_standard(prior, n_pars, sample = F, betas = betas)
   return(sampler)
 }
@@ -109,8 +108,8 @@ get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1
       }
       if(is.null(par_groups)) par_groups <- rep(1, n_pars)
       constraintMat <- matrix(0, n_pars, n_pars)
-      for(i in 1:length(unique(par_group))){
-        idx <- par_group == i
+      for(i in 1:length(unique(par_groups))){
+        idx <- par_groups == i
         constraintMat[idx, idx] <- Inf
       }
       vars <- constrain_lambda(vars, constraintMat)
@@ -680,7 +679,7 @@ bridge_add_group_standard <- function(all_samples, samples, idx){
   all_samples <- cbind(all_samples, t(samples$samples$theta_mu[,idx]))
   all_samples <- cbind(all_samples, t(log(samples$samples$a_half[,idx])))
   if(!is.null(samples$betas)){
-    all_samples <- cbind(all_samples, t(log(samples$samples$beta[,idx])))
+    all_samples <- cbind(all_samples, t(samples$samples$beta[,idx]))
   }
   par_group <- samples$par_group
   has_cov <- samples$is_blocked
@@ -707,27 +706,98 @@ bridge_add_group_standard <- function(all_samples, samples, idx){
 
 # for IC ------------------------------------------------------------------
 
-group__IC_standard <- function(emc, stage="sample",filter=NULL){
+group__IC_standard <- function(emc, stage="sample", filter=NULL) {
+  # 1) Retrieve draws
   alpha <- get_pars(emc, selection = "alpha", stage = stage, filter = filter,
-                       return_mcmc = FALSE, merge_chains = TRUE)
+                    return_mcmc = FALSE, merge_chains = TRUE)
   theta_mu <- get_pars(emc, selection = "mu", stage = stage, filter = filter,
-                          return_mcmc = FALSE, merge_chains = TRUE)
+                       return_mcmc = FALSE, merge_chains = TRUE)
   theta_var <- get_pars(emc, selection = "Sigma", stage = stage, filter = filter,
-                           return_mcmc = FALSE, merge_chains = TRUE, remove_constants = F)
-  mean_alpha <- apply(alpha, 1:2, mean)
-  mean_mu <- rowMeans(theta_mu)
-  mean_var <- apply(theta_var, 1:2, mean)
-
-  N <- ncol(theta_mu)
-  lls <- numeric(N)
-  for(i in 1:N){
-    lls[i] <- sum(dmvnorm(t(alpha[,,i]), theta_mu[,i], theta_var[,,i], log = T))
+                        return_mcmc = FALSE, merge_chains = TRUE, remove_constants = F)
+  if(!is.null(emc[[1]]$betas)){
+    theta_beta <- get_pars(emc, selection = "beta", stage = stage, filter = filter,
+                         return_mcmc = FALSE, merge_chains = TRUE)               # (B, N) or NULL
   }
+
+
+  p <- dim(alpha)[1]
+  n_subj <- dim(alpha)[2]
+  N <- dim(alpha)[3]
+  has_betas <- !is.null(emc[[1]]$betas)
+
+  # 2) Averages
+  mean_alpha <- apply(alpha, c(1,2), mean)
+  mean_mu <- rowMeans(theta_mu)
+  mean_var <- apply(theta_var, c(1,2), mean)
+  mean_beta <- if(has_betas) rowMeans(theta_beta) else NULL
+
+  # 3) Build bridging design if betas
+  if(has_betas) {
+    group_designs <- add_intercepts(emc[[1]]$par_names, emc[[1]]$group_designs, n_subj)
+    # figure out which columns go to mu vs beta
+    M <- p + length(mean_beta)
+    mean_index <- unlist(lapply(group_designs, function(x)
+      c(TRUE, rep(FALSE, ncol(x) - 1))))
+  }
+
+  # 4) Per-draw log-likelihood
+  lls <- numeric(N)
+  for(i in seq_len(N)) {
+    var_i <- theta_var[,, i]
+    if(!has_betas) {
+      # no betas => old approach
+      lls[i] <- sum(dmvnorm(t(alpha[,, i]), theta_mu[, i], var_i, log=TRUE))
+    } else {
+      # bridging approach
+      regressors_i <- numeric(p + length(mean_beta))
+      regressors_i[mean_index] <- theta_mu[, i]
+      regressors_i[!mean_index] <- theta_beta[, i]
+      ll_i <- 0
+      for(s in seq_len(n_subj)) {
+        # build M_i row by row
+        M_i <- numeric(p) # we'll store the mean for each row k
+        par_start <- 1
+        for(k in seq_len(p)) {
+          x_sk <- group_designs[[k]][s,,drop=FALSE]
+          ncols_k <- ncol(group_designs[[k]])
+          M_i[k] <- x_sk %*% regressors_i[par_start:(par_start + ncols_k - 1)]
+          par_start <- par_start + ncols_k
+        }
+        alpha_s <- alpha[, s, i]
+        ll_i <- ll_i + dmvnorm(alpha_s, M_i, var_i, log=TRUE)
+      }
+      lls[i] <- ll_i
+    }
+  }
+
   minD <- -2*max(lls)
   mean_ll <- mean(lls)
-  mean_pars_ll <-  sum(dmvnorm(t(mean_alpha), mean_mu, mean_var, log = TRUE))
-  Dmean <- -2*mean_pars_ll
-  return(list(mean_ll = mean_ll, Dmean = Dmean,
-              minD = minD))
-}
 
+  # 5) Likelihood at posterior mean
+  mean_pars_ll <- 0
+  if(!has_betas) {
+    for(s in seq_len(n_subj)) {
+      mean_pars_ll <- mean_pars_ll + dmvnorm(mean_alpha[, s], mean_mu, mean_var, log=TRUE)
+    }
+  } else {
+    # bridging with mean mu, mean beta
+    regressors_mean <- numeric(p + length(mean_beta))
+    regressors_mean[mean_index] <- mean_mu
+    regressors_mean[!mean_index] <- mean_beta
+    for(s in seq_len(n_subj)) {
+      M_s <- numeric(p)
+      par_start <- 1
+      for(k in seq_len(p)) {
+        x_sk <- group_designs[[k]][s,,drop=FALSE]
+        nc_k <- ncol(group_designs[[k]])
+        M_s[k] <- x_sk %*% regressors_mean[par_start:(par_start+nc_k-1)]
+        par_start <- par_start + nc_k
+      }
+      mean_pars_ll <- mean_pars_ll +
+        dmvnorm(mean_alpha[, s], M_s, mean_var, log=TRUE)
+    }
+  }
+  Dmean <- -2*mean_pars_ll
+
+  list(mean_ll = mean_ll, Dmean = Dmean, minD = minD)
+}
