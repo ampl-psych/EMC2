@@ -5,7 +5,10 @@ calc_ll_R <- function(p_vector, model, dadm){
     pars <- p_vector
   }
   ll <- model$log_likelihood(pars, dadm, model)
-  return(ll)
+  if(any(model$noisy_cov)){
+    ll <- ll + cov_noise_ll(pars, dadm)
+  }
+  return(sum(ll))
 }
 
 
@@ -34,8 +37,8 @@ log_likelihood_race <- function(pars,dadm,model,min_ll=log(1e-10))
         ll <- ll + apply(matrix(lds[!winner],nrow=n_acc-1),2,sum)
       }
       ll[is.na(ll)] <- min_ll
-      return(sum(pmax(min_ll,ll)))
-    } else return(sum(pmax(min_ll,lds)))
+      return(pmax(min_ll,ll))
+    } else return(pmax(min_ll,lds))
 }
 
 
@@ -48,7 +51,7 @@ log_likelihood_ddm <- function(pars,dadm,model,min_ll=log(1e-10))
     like[attr(pars,"ok")] <- model$dfun(dadm$rt[attr(pars,"ok")],dadm$R[attr(pars,"ok")],
                                                        pars[attr(pars,"ok"),,drop=FALSE])
   like[attr(pars,"ok")][is.na(like[attr(pars,"ok")])] <- 0
-  sum(pmax(min_ll,log(like[attr(dadm,"expand")])))
+  return(pmax(min_ll,log(like[attr(dadm,"expand")])))
 }
 
 #### sdt choice likelihoods ----
@@ -83,7 +86,7 @@ log_likelihood_sdt <- function(pars,dadm,lb=-Inf, model, min_ll=log(1e-10))
   } else ll <- log(model$pfun(lt=lt,ut=ut,pars=pars[dadm$winner,]))
   ll <- ll[expand]
   ll[is.na(ll)] <- 0
-  sum(pmax(min_ll,ll))
+  pmax(min_ll,ll)
 }
 
 # Two options:
