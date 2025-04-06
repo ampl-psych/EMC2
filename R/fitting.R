@@ -627,6 +627,7 @@ loadRData <- function(fileName){
 #' @param par_groups A vector. Only to be specified with type `blocked`, e.g., `c(1,1,1,2,2)` means the covariances
 #' of the first three and of the last two parameters are estimated as two separate blocks.
 #' @param prior_list A named list containing the prior. Default prior created if `NULL`. For the default priors, see `?get_prior_{type}`.
+#' @param verbose logical, report compression?
 #' @param ... Additional, optional arguments.
 #' @return An uninitialized emc object
 #' @examples dat <- forstmann
@@ -660,7 +661,9 @@ make_emc <- function(data,design,model=NULL,
                           type="standard",
                           n_chains=3,compress=TRUE,rt_resolution=0.02,
                           prior_list = NULL,
-                          par_groups=NULL, ...){
+                          par_groups=NULL,
+                          verbose = TRUE,
+                          ...){
   # arguments for future compatibility
   n_factors <- NULL
   formula <- NULL
@@ -727,7 +730,7 @@ make_emc <- function(data,design,model=NULL,
   dadm_list <- vector(mode="list",length=length(data))
   rt_resolution <- rep(rt_resolution,length.out=length(data))
   for (i in 1:length(dadm_list)) {
-    message("Processing data set ",i)
+    if (verbose) message("Processing data set ",i)
     # if (!is.null(design[[i]]$Ffunctions)) {
     #   pars <- attr(data[[i]],"pars")
     #   data[[i]] <- cbind.data.frame(data[[i]],data.frame(lapply(
@@ -736,7 +739,8 @@ make_emc <- function(data,design,model=NULL,
     # }
     if(is.null(attr(design[[i]], "custom_ll"))){
       dadm_list[[i]] <- design_model(data=data[[i]],design=design[[i]],
-                                     compress=compress,model=model[[i]],rt_resolution=rt_resolution[i])
+        compress=compress,model=model[[i]],rt_resolution=rt_resolution[i],
+        verbose=verbose)
       sampled_p_names <- names(attr(design[[i]],"p_vector"))
     } else{
       dadm_list[[i]] <- design_model_custom_ll(data = data[[i]],

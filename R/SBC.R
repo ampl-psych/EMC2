@@ -128,23 +128,25 @@ SBC_single <- function(design_in, prior_in, replicates = 250, trials = 100,
       warning("Fitting failed for ",sum(bad)," samples.")
       emcs <- emcs[!bad]
     }
-    ESS <- pmin(do.call(rbind,lapply(emcs,ess_summary,selection = "alpha")),chain_n(emcs[[1]])[1,"sample"])
-    ESS <- ESS[,colnames(ESS)!="min"]
-    alpha_rec <- lapply(emcs,get_pars,selection = "alpha", return_mcmc = F, merge_chains = T, flatten = T)
-    for(j in 1:n_cores){
-      if(start > replicates) next
-      tmp_rec <- alpha_rec[[j]][,1,]
-      rank_alpha <- rbind(rank_alpha,
-        mapply(get_ranks_ESS, split(tmp_rec, row(tmp_rec)), t(ESS[j,]),
-               prior_alpha[start,])
-      )
-      start <- start + 1
-    }
-    colnames(rank_alpha) <- par_names
-    if(!is.null(fileName)){
-      SBC_temp <- list(rank = list(alpha = rank_alpha),
-                       prior = list(alpha = prior_alpha), emc = emcs)
-      save(SBC_temp, file = fileName)
+    if (!all(bad)) {
+      ESS <- pmin(do.call(rbind,lapply(emcs,ess_summary,selection = "alpha")),chain_n(emcs[[1]])[1,"sample"])
+      ESS <- ESS[,colnames(ESS)!="min"]
+      alpha_rec <- lapply(emcs,get_pars,selection = "alpha", return_mcmc = F, merge_chains = T, flatten = T)
+      for(j in 1:n_cores[!bad]){
+        if(start > replicates) next
+        tmp_rec <- alpha_rec[[j]][,1,]
+        rank_alpha <- rbind(rank_alpha,
+          mapply(get_ranks_ESS, split(tmp_rec, row(tmp_rec)), t(ESS[j,]),
+                 prior_alpha[start,])
+        )
+        start <- start + 1
+      }
+      colnames(rank_alpha) <- par_names
+      if(!is.null(fileName)){
+        SBC_temp <- list(rank = list(alpha = rank_alpha),
+                         prior = list(alpha = prior_alpha), emc = emcs)
+        save(SBC_temp, file = fileName)
+      }
     }
   }
   return(list(rank = list(alpha = rank_alpha),
