@@ -109,7 +109,8 @@ SBC_single <- function(design_in, prior_in, replicates = 250, trials = 100,
   i <- 1
   par_names <- names(sampled_pars(design_in))
   while(i < replicates){
-    if (n_cores==1) print(paste0("Fitting sample ", i, " out of ", replicates)) else {
+    if (n_cores==1) print(paste0("Fitting sample ", i, " out of ", replicates)) else
+    {
       maxi <- max(c(i+n_cores-1,replicates))
       print(paste0("Fitting samples ", i,"-",maxi, " out of ", replicates))
     }
