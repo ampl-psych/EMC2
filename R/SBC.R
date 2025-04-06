@@ -95,6 +95,11 @@ SBC_single <- function(design_in, prior_in, replicates = 250, trials = 100,
 
   make_datas <- function(i,prior_alpha,design_in,trials)
     make_data(prior_alpha[i,],design_in, trials, model = design_in$model)
+
+  tryfit <- function(emc,...) {
+    try(fit(emc,verbose=FALSE,...),silent=TRUE)
+  }
+
   type <- attr(prior_in, "type")
   if(type != "single") stop("can only use `type = single`")
   # Draw prior samples
@@ -117,7 +122,12 @@ SBC_single <- function(design_in, prior_in, replicates = 250, trials = 100,
     }
     emcs <- mclapply(dats, make_emc, design = design_in, prior_list = prior_in,
             type = type, mc.cores = n_cores, ...)
-    emcs <- mclapply(emcs, fit, mc.cores=n_cores,...)
+    emcs <- mclapply(emcs, tryfit, mc.cores=n_cores, ...)
+    bad <- unlist(lapply(emcs,\(res) inherits(res, "try-error")))
+    if (any(bad)) {
+      warning("Fitting failed for ",sum(bad)," samples.")
+      emcs <- emcs[!bad]
+    }
     ESS <- pmin(do.call(rbind,lapply(emcs,ess_summary,selection = "alpha")),chain_n(emcs[[1]])[1,"sample"])
     ESS <- ESS[,colnames(ESS)!="min"]
     alpha_rec <- lapply(emcs,get_pars,selection = "alpha", return_mcmc = F, merge_chains = T, flatten = T)
