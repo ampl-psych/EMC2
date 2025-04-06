@@ -132,7 +132,7 @@ SBC_single <- function(design_in, prior_in, replicates = 250, trials = 100,
       ESS <- pmin(do.call(rbind,lapply(emcs,ess_summary,selection = "alpha")),chain_n(emcs[[1]])[1,"sample"])
       ESS <- ESS[,colnames(ESS)!="min"]
       alpha_rec <- lapply(emcs,get_pars,selection = "alpha", return_mcmc = F, merge_chains = T, flatten = T)
-      for(j in 1:n_cores[!bad]){
+      for(j in c(1:sum(bad))) {
         if(start > replicates) next
         tmp_rec <- alpha_rec[[j]][,1,]
         rank_alpha <- rbind(rank_alpha,
