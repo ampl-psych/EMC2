@@ -674,7 +674,6 @@ make_emc <- function(data,design,model=NULL,
   for (name in names(optionals) ) {
     assign(name, optionals[[name]])
   }
-  if(!is.null(par_groups)) type <- "blocked"
   if(!is.null(prior_list) & !is.null(prior_list$theta_mu_mean)){
     prior_list <- list(prior_list)
   }
@@ -836,7 +835,8 @@ check_duplicate_designs <- function(out){
   return(out)
 }
 
-extractDadms <- function(dadms, names = 1:length(dadms)){
+extractDadms <- function(dadms, names = NULL){
+  if(is.null(names)) names <- 1:length(dadms)
   N_models <- length(dadms)
   pars <- attr(dadms[[1]], "sampled_p_names")
   prior <- attr(dadms[[1]], "prior")
@@ -856,7 +856,6 @@ extractDadms <- function(dadms, names = 1:length(dadms)){
       total_dadm_list[[k]] <- tmp_list
       curr_pars <- attr(dadm, "sampled_p_names")
       components <- c(components, rep(k, length(curr_pars)))
-      pars <- c(pars, paste(names[k], curr_pars, sep = "|"))
     }
     dadm_list <- do.call(mapply, c(list, total_dadm_list, SIMPLIFY = F))
   }
@@ -864,7 +863,7 @@ extractDadms <- function(dadms, names = 1:length(dadms)){
   # if(!is.null(subject_covariates_ok)) if(any(!subject_covariates_ok)) stop("subject_covariates must be as long as the number of subjects")
   attr(dadm_list, "components") <- components
   attr(dadm_list, "shared_ll_idx") <- components
-  return(list(pars = pars, prior = prior,
+  return(list(prior = prior,
               dadm_list = dadm_list, subjects = subjects))
 }
 

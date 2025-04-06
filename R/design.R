@@ -1184,13 +1184,17 @@ sampled_pars.emc.design <- function(x,model=NULL,doMap=TRUE, add_da = FALSE, all
   }
   out <- c()
   map_list <- list()
+  if(is.null(names(design))){
+    names(design) <- as.character(1:length(design))
+  }
   for(j in 1:length(design)){
+    cur_name <- names(design)[j]
     cur_design <- design[[j]]
     if(!is.null(attr(cur_design, "custom_ll"))){
       pars <- numeric(length(attr(cur_design,"sampled_p_names")))
       if(length(design) != 1){
-        map_list[[j]] <- NA
-        names(pars) <- paste(j,  attr(cur_design,"sampled_p_names"), sep = "|")
+        map_list[[cur_name]] <- NA
+        names(pars) <- paste(cur_name,  attr(cur_design,"sampled_p_names"), sep = "|")
       } else{
         names(pars) <- attr(cur_design,"sampled_p_names")
       }
@@ -1203,9 +1207,10 @@ sampled_pars.emc.design <- function(x,model=NULL,doMap=TRUE, add_da = FALSE, all
     if(grepl("MRI", model()$type)){
       pars <- model()$p_types
       if(length(design) != 1){
-        pars <- paste(j,  names(pars), sep = "|")
-        map_list[[j]] <- NA
+        names(pars) <- paste(cur_name,  names(pars), sep = "|")
+        map_list[[cur_name]] <- NA
       }
+      pars[1:length(pars)] <- 0
       out <- c(out, pars)
       next
     }
@@ -1230,8 +1235,8 @@ sampled_pars.emc.design <- function(x,model=NULL,doMap=TRUE, add_da = FALSE, all
       all_cells_dm = all_cells_dm)
     sampled_p_names <- attr(dadm,"sampled_p_names")
     if(length(design) != 1){
-      map_list[[j]] <- lapply(attributes(dadm)$designs,function(x){x[,,drop=FALSE]})
-      sampled_p_names <- paste(j, sampled_p_names, sep = "|")
+      map_list[[cur_name]] <- lapply(attributes(dadm)$designs,function(x){x[,,drop=FALSE]})
+      sampled_p_names <- paste(cur_name, sampled_p_names, sep = "|")
     }
     out <- c(out, stats::setNames(numeric(length(sampled_p_names)),sampled_p_names))
     if(length(design) == 1){
@@ -1239,6 +1244,7 @@ sampled_pars.emc.design <- function(x,model=NULL,doMap=TRUE, add_da = FALSE, all
     }
   }
   if(length(design) != 1) attr(out, "map") <- map_list
+  if(any(duplicated(names(out)))) stop("duplicate parameter names found! Usually this happens when joint designs share indicator names")
   return(out)
 }
 
