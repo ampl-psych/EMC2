@@ -115,9 +115,9 @@ SBC_single <- function(design_in, prior_in, replicates = 250, trials = 100,
     if(plot_data){
       lapply(dats,plot_density,factors = names(design_in$Ffactors)[names(design_in$Ffactors) != "subjects"])
     }
-    emcs <- lapply(dats,make_emc,design = design_in, prior_list = prior_in,
-                     type = type,mc.cores=n_cores,...)
-    emcs <- mclapply(emcs,fit,...)
+    emcs <- mclapply(dats, make_emc, design = design_in, prior_list = prior_in,
+            type = type, mc.cores = n_cores, ...)
+    emcs <- mclapply(emcs, fit, mc.cores=n_cores,...)
     ESS <- pmin(do.call(rbind,lapply(emcs,ess_summary,selection = "alpha")),chain_n(emcs[[1]])[1,"sample"])
     ESS <- ESS[,colnames(ESS)!="min"]
     alpha_rec <- lapply(emcs,get_pars,selection = "alpha", return_mcmc = F, merge_chains = T, flatten = T)
