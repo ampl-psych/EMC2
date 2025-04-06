@@ -109,29 +109,30 @@ SBC_single <- function(design_in, prior_in, replicates = 250, trials = 100,
   i <- 1
   par_names <- names(sampled_pars(design_in))
   while(i < replicates){
-    if(verbose) {
-      if (n_cores==1) print(paste0("Fitting sample ", i, " out of ", replicates)) else
-        print(paste0("Fitting samples ", i,"-",(i+n_cores-1), " out of ", replicates))
-    }
+    if (n_cores==1) print(paste0("Fitting sample ", i, " out of ", replicates)) else
+      print(paste0("Fitting samples ", i,"-",(i+n_cores-1), " out of ", replicates))
     start <- i
     dats <- parallel::mclapply(1:n_cores,make_datas,prior_alpha=prior_alpha,
                      design_in=design_in,trials=trials,mc.cores=n_cores)
     i <- i + n_cores
     if(plot_data){
-      lapply(dats,plot_density,factors = names(design_in$Ffactors)[names(design_in$Ffactors) != "subjects"])
+      lapply(dats,plot_density,
+        factors = names(design_in$Ffactors)[names(design_in$Ffactors) != "subjects"])
     }
     emcs <- parallel::mclapply(dats, make_emc, design = design_in, prior_list = prior_in,
-            type = type, mc.cores = n_cores, ...)
+            type = type, mc.cores = n_cores, verbose=verbose, ...)
     emcs <- parallel::mclapply(emcs, tryfit, mc.cores=n_cores, ...)
     bad <- unlist(lapply(emcs,\(res) inherits(res, "try-error")))
     if (any(bad)) {
-      warning("Fitting failed for ",sum(bad)," samples.")
+      print(paste0("Fitting failed for ",sum(bad)," samples, prior may be too broad.\n"))
       emcs <- emcs[!bad]
     }
     if (!all(bad)) {
-      ESS <- pmin(do.call(rbind,lapply(emcs,ess_summary,selection = "alpha")),chain_n(emcs[[1]])[1,"sample"])
+      ESS <- pmin(do.call(rbind,lapply(emcs,ess_summary,selection = "alpha")),
+                  chain_n(emcs[[1]])[1,"sample"])
       ESS <- ESS[,colnames(ESS)!="min"]
-      alpha_rec <- lapply(emcs,get_pars,selection = "alpha", return_mcmc = F, merge_chains = T, flatten = T)
+      alpha_rec <- lapply(emcs,get_pars,selection = "alpha", return_mcmc = F,
+                          merge_chains = T, flatten = T)
       for(j in c(1:sum(!bad))) {
         if(start > replicates) next
         tmp_rec <- alpha_rec[[j]][,1,]
