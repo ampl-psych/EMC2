@@ -114,25 +114,25 @@ SBC_single <- function(design_in, prior_in, replicates = 250, trials = 100,
         print(paste0("Fitting samples ", i,"-",(i+n_cores-1), " out of ", replicates))
     }
     start <- i
-    dats <- mclapply(1:n_cores,make_datas,prior_alpha=prior_alpha,
+    dats <- parallel::mclapply(1:n_cores,make_datas,prior_alpha=prior_alpha,
                      design_in=design_in,trials=trials,mc.cores=n_cores)
     i <- i + n_cores
     if(plot_data){
       lapply(dats,plot_density,factors = names(design_in$Ffactors)[names(design_in$Ffactors) != "subjects"])
     }
-    emcs <- mclapply(dats, make_emc, design = design_in, prior_list = prior_in,
+    emcs <- parallel::mclapply(dats, make_emc, design = design_in, prior_list = prior_in,
             type = type, mc.cores = n_cores, ...)
-    emcs <- mclapply(emcs, tryfit, mc.cores=n_cores, ...)
+    emcs <- parallel::mclapply(emcs, tryfit, mc.cores=n_cores, ...)
     bad <- unlist(lapply(emcs,\(res) inherits(res, "try-error")))
     if (any(bad)) {
       warning("Fitting failed for ",sum(bad)," samples.")
-      emcs <- emcs[sum(!bad)]
+      emcs <- emcs[!bad]
     }
     if (!all(bad)) {
       ESS <- pmin(do.call(rbind,lapply(emcs,ess_summary,selection = "alpha")),chain_n(emcs[[1]])[1,"sample"])
       ESS <- ESS[,colnames(ESS)!="min"]
       alpha_rec <- lapply(emcs,get_pars,selection = "alpha", return_mcmc = F, merge_chains = T, flatten = T)
-      for(j in c(1:sum(bad))) {
+      for(j in c(1:sum(!bad))) {
         if(start > replicates) next
         tmp_rec <- alpha_rec[[j]][,1,]
         rank_alpha <- rbind(rank_alpha,
