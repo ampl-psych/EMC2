@@ -29,8 +29,6 @@ add_info <- function(sampler, prior, type, ...) {
   switch(type,
     "standard" = add_info_standard(sampler, prior, ...),
     "single" = add_info_single(sampler, prior, ...),
-    "blocked" = add_info_blocked(sampler, prior, ...),
-    "diagonal" = add_info_diag(sampler, prior, ...),
     "factor" = add_info_factor(sampler, prior, ...),
     "infnt_factor" = add_info_infnt_factor(sampler, prior, ...),
     "SEM" = add_info_SEM(sampler, prior, ...),
@@ -49,8 +47,6 @@ get_startpoints <- function(sampler, start_mu, start_var, type, ...) {
   switch(type,
     "standard" = get_startpoints_standard(sampler, start_mu, start_var, ...),
     "single" = get_startpoints_single(sampler, start_mu, start_var, ...),
-    "blocked" = get_startpoints_blocked(sampler, start_mu, start_var, ...),
-    "diagonal" = get_startpoints_diag(sampler, start_mu, start_var, ...),
     "factor" = get_startpoints_factor(sampler, start_mu, start_var, ...),
     "infnt_factor" = get_startpoints_infnt_factor(sampler, start_mu, start_var, ...),
     "SEM" = get_startpoints_SEM(sampler, start_mu, start_var, ...),
@@ -58,6 +54,14 @@ get_startpoints <- function(sampler, start_mu, start_var, type, ...) {
     stop("Invalid type specified")
   )
 }
+
+get_group_level_base <- function(parameters, s){
+  # This function is modified for other versions
+  mu <- parameters$tmu
+  var <- parameters$tvar
+  return(list(mu = mu, var = var))
+}
+
 
 # Retrieves group-level parameters based on sampler type
 # Parameters:
@@ -68,12 +72,10 @@ get_group_level <- function(parameters, s, type, ...) {
   switch(type,
     "standard" = get_group_level_standard(parameters, s, ...),
     "single" = get_group_level_single(parameters, s, ...),
-    "blocked" = get_group_level_standard(parameters, s, ...),
-    "diagonal" = get_group_level_standard(parameters, s, ...),
-    "factor" = get_group_level_standard(parameters, s, ...),
-    "infnt_factor" = get_group_level_standard(parameters, s, ...),
+    "factor" = get_group_level_base(parameters, s, ...),
+    "infnt_factor" = get_group_level_base(parameters, s, ...),
     "SEM" = get_group_level_SEM(parameters, s, ...),
-    "diagonal-gamma" = get_group_level_standard(parameters, s, ...),
+    "diagonal-gamma" = get_group_level_base(parameters, s, ...),
     stop("Invalid type specified")
   )
 }
@@ -90,8 +92,6 @@ fill_samples <- function(samples, group_level, proposals, j = 1, n_pars, type, .
   switch(type,
     "standard" = fill_samples_standard(samples, group_level, proposals, j, n_pars, ...),
     "single" = fill_samples_RE(samples, proposals, j, n_pars, ...),
-    "blocked" = fill_samples_standard(samples, group_level, proposals, j, n_pars, ...),
-    "diagonal" = fill_samples_standard(samples, group_level, proposals, j, n_pars, ...),
     "factor" = fill_samples_factor(samples, group_level, proposals, j, n_pars, ...),
     "infnt_factor" = fill_samples_infnt_factor(samples, group_level, proposals, j, n_pars, ...),
     "SEM" = fill_samples_SEM(samples, group_level, proposals, j, n_pars, ...),
@@ -109,8 +109,6 @@ gibbs_step <- function(sampler, alpha, type, ...) {
   switch(type,
     "standard" = gibbs_step_standard(sampler, alpha, ...),
     "single" = gibbs_step_single(sampler, alpha, ...),
-    "blocked" = gibbs_step_blocked(sampler, alpha, ...),
-    "diagonal" = gibbs_step_diag(sampler, alpha, ...),
     "factor" = gibbs_step_factor(sampler, alpha, ...),
     "infnt_factor" = gibbs_step_infnt_factor(sampler, alpha, ...),
     "SEM" = gibbs_step_SEM(sampler, alpha, ...),
@@ -131,8 +129,6 @@ get_conditionals <- function(s, samples, n_pars, iteration = NULL, idx, type, ..
   switch(type,
     "standard" = get_conditionals_standard(s, samples, n_pars, iteration, idx, ...),
     "single" = get_conditionals_single(s, samples, n_pars, iteration, idx, ...),
-    "blocked" = get_conditionals_blocked(s, samples, n_pars, iteration, idx, ...),
-    "diagonal" = get_conditionals_diag(s, samples, n_pars, iteration, idx, ...),
     "factor" = get_conditionals_factor(s, samples, n_pars, iteration, idx, ...),
     "infnt_factor" = get_conditionals_infnt_factor(s, samples, n_pars, iteration, idx, ...),
     "SEM" = get_conditionals_SEM(s, samples, n_pars, iteration, idx, ...),
@@ -150,8 +146,6 @@ bridge_add_info <- function(info, samples, type, ...) {
   switch(type,
     "standard" = bridge_add_info_standard(info, samples, ...),
     "single" = bridge_add_info_single(info, samples, ...),
-    "blocked" = bridge_add_info_blocked(info, samples, ...),
-    "diagonal" = bridge_add_info_diag(info, samples, ...),
     "factor" = bridge_add_info_factor(info, samples, ...),
     "SEM" = bridge_add_info_SEM(info, samples, ...),
     stop("Invalid type specified")
@@ -168,8 +162,6 @@ bridge_group_and_prior_and_jac <- function(proposals_group, proposals_list, info
   switch(type,
     "standard" = bridge_group_and_prior_and_jac_standard(proposals_group, proposals_list, info, ...),
     "single" = bridge_group_and_prior_and_jac_single(proposals_group, proposals_list, info, ...),
-    "blocked" = bridge_group_and_prior_and_jac_blocked(proposals_group, proposals_list, info, ...),
-    "diagonal" = bridge_group_and_prior_and_jac_diag(proposals_group, proposals_list, info, ...),
     "factor" = bridge_group_and_prior_and_jac_factor(proposals_group, proposals_list, info, ...),
     "SEM" = bridge_group_and_prior_and_jac_SEM(proposals_group, proposals_list, info, ...),
     stop("Invalid type specified")
@@ -186,8 +178,6 @@ bridge_add_group <- function(all_samples, samples, idx, type, ...) {
   switch(type,
     "standard" = bridge_add_group_standard(all_samples, samples, idx, ...),
     "single" = bridge_add_group_single(all_samples, samples, idx, ...),
-    "blocked" = bridge_add_group_blocked(all_samples, samples, idx, ...),
-    "diagonal" = bridge_add_group_diag(all_samples, samples, idx, ...),
     "factor" = bridge_add_group_factor(all_samples, samples, idx, ...),
     "SEM" = bridge_add_group_SEM(all_samples, samples, idx, ...),
     stop("Invalid type specified")
@@ -202,8 +192,6 @@ group_IC <- function(sampler, type, filter = NULL, stage = "sample", ...) {
   switch(type,
     "standard" = group__IC_standard(sampler, filter = filter, stage = stage, ...),
     "single" = group__IC_single(sampler, filter = filter, stage = stage, ...),
-    "blocked" = group__IC_standard(sampler, filter = filter, stage = stage, ...),
-    "diagonal" = group__IC_standard(sampler, filter = filter, stage = stage, ...),
     "factor" = group__IC_standard(sampler, filter = filter, stage = stage, ...),
     "infnt_factor" = group__IC_standard(sampler, filter = filter, stage = stage, ...),
     "SEM" = group__IC_SEM(sampler, filter = filter, stage = stage, ...),
@@ -220,8 +208,6 @@ filtered_samples <- function(samples, type, ...) {
   switch(type,
     "standard" = filtered_samples_standard(samples, ...),
     "single" = filtered_samples_single(samples, ...),
-    "blocked" = filtered_samples_standard(samples, ...),
-    "diagonal" = filtered_samples_standard(samples, ...),
     "factor" = filtered_samples_factor(samples, ...),
     "infnt_factor" = filtered_samples_infnt_factor(samples, ...),
     "SEM" = filtered_samples_SEM(samples, ...),
