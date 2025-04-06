@@ -620,7 +620,9 @@ loadRData <- function(fileName){
 #' @param n_chains An integer. Specifies the number of mcmc chains to be run (has to be more than 1 to compute `rhat`).
 #' @param compress A Boolean, if `TRUE` (i.e., the default), the data is compressed to speed up likelihood calculations.
 #' @param rt_resolution A double. Used for compression, response times will be binned based on this resolution.
-#' @param par_groups A vector. Only to be specified with type `blocked`, e.g., `c(1,1,1,2,2)` means the covariances
+#' @param group_design A design for group-level mappings, made using `group_design()`.
+#' @param par_groups A vector. Indicates which parameters are allowed to correlate. Could either be a list of character vectors of covariance blocks. Or
+#' a numeric vector, e.g., `c(1,1,1,2,2)` means the covariances
 #' of the first three and of the last two parameters are estimated as two separate blocks.
 #' @param prior_list A named list containing the prior. Default prior created if `NULL`. For the default priors, see `?get_prior_{type}`.
 #' @param ... Additional, optional arguments.
@@ -655,7 +657,7 @@ loadRData <- function(fileName){
 make_emc <- function(data,design,model=NULL,
                           type="standard",
                           n_chains=3,compress=TRUE,rt_resolution=0.02,
-                          prior_list = NULL,
+                          prior_list = NULL, group_design = NULL,
                           par_groups=NULL, ...){
   # arguments for future compatibility
   n_factors <- NULL
@@ -679,12 +681,15 @@ make_emc <- function(data,design,model=NULL,
   if(!is.null(prior_list)){
     type <- attr(prior_list[[1]], "type")
   }
+  if(!is.null(group_design) && !type %in% c("standard", "diagonal", "blocked")){
+    stop("group_design can only be used with standard, blocked or diagonal type")
+  }
   if(type != "single" && length(unique(data$subjects)) == 1){
     stop("can only use type = `single` when there's only one subject in the data")
   }
 
-  if (!(type %in% c("standard","diagonal","blocked","factor","single", "lm", "infnt_factor", "SEM", "diagonal-gamma")))
-    stop("type must be one of: standard,diagonal,blocked,factor,infnt_factor, lm, single")
+  if (!(type %in% c("standard","diagonal","blocked","factor","single", "infnt_factor", "SEM", "diagonal-gamma")))
+    stop("type must be one of: standard,diagonal,blocked,factor,infnt_factor, single")
 
   if(!is.null(nuisance) & !is.null(nuisance_non_hyper)){
     stop("You can only specify nuisance OR nuisance_non_hyper")
@@ -743,7 +748,7 @@ make_emc <- function(data,design,model=NULL,
   # Make sure class retains following changes
   class(design) <- "emc.design"
   prior_in <- merge_priors(prior_list)
-  # debug(prior)
+
   prior_in <- prior(design, type, update = prior_in, ...)
   attr(dadm_list[[1]], "prior") <- prior_in
 
@@ -752,7 +757,13 @@ make_emc <- function(data,design,model=NULL,
     out <- pmwgs(dadm_list, type, nuisance = nuisance,
                  nuisance_non_hyper = nuisance_non_hyper,
                  n_factors = n_factors)
-  } else if (type == "standard") {
+  } else if (type %in% c("standard", "blocked", "diagonal")) {
+    if(type == "blocked"){
+      if(is.null(par_groups)) stop("par_groups must be specified for blocked models")
+    }
+    if(type == "diagonal"){
+      par_groups <- 1:length(sampled_pars(design))
+    }
     if(!is.null(par_groups)){
       if(is.character(par_groups)){
         par_groups <- list(par_groups)
@@ -772,7 +783,7 @@ make_emc <- function(data,design,model=NULL,
       }
     }
     out <- pmwgs(dadm_list, type, par_groups=par_groups,
-                 group_level_model = NULL,
+                 group_design = group_design,
                  nuisance = nuisance,
                  nuisance_non_hyper = nuisance_non_hyper)
   } else if (type == "factor") {
