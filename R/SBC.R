@@ -19,12 +19,12 @@
 #' @export
 run_sbc <- function(design_in, prior_in, replicates = 250, trials = 100, n_subjects = 30,
                     plot_data = FALSE, verbose = TRUE,
-                    fileName = NULL, ...){
+                    fileName = NULL, n_cores = 1, ...){
   if(is.null(fileName)) message("Since SBC can take a while it's highly recommended to specify a fileName to save temporary results in case of crashes")
   type <- attr(prior_in, "type")
   if(type == "single"){
     out <- SBC_single(design_in, prior_in, replicates, trials,
-                      plot_data, verbose, fileName, ...)
+                      plot_data, verbose, fileName, n_cores = n_cores, ...)
   } else{
     out <- SBC_hierarchical(design_in, prior_in, replicates, trials, n_subjects,
                     plot_data, verbose, fileName, ...)
@@ -90,12 +90,16 @@ SBC_hierarchical <- function(design_in, prior_in, replicates = 250, trials = 100
 
 
 SBC_single <- function(design_in, prior_in, replicates = 250, trials = 100,
-                             plot_data = FALSE, verbose = TRUE,
+                       n_cores=1,plot_data = FALSE, verbose = TRUE,
                              fileName = NULL, ...){
-  dots <- add_defaults(list(...), max_tries = 50, compress = FALSE, rt_resolution = 1e-12,
-                       stop_criteria = list(min_es = 100, max_gd = 1.1,
-                                            selection = c("alpha", "mu", "Sigma")))
-  dots$verbose <- verbose
+
+  make_datas <- function(i,prior_alpha,design_in,trials)
+    make_data(prior_alpha[i,],design_in, trials, model = design_in$model)
+
+  tryfit <- function(emc,...) {
+    try(fit(emc,verbose=FALSE,...),silent=TRUE)
+  }
+
   type <- attr(prior_in, "type")
   if(type != "single") stop("can only use `type = single`")
   # Draw prior samples
@@ -103,38 +107,47 @@ SBC_single <- function(design_in, prior_in, replicates = 250, trials = 100,
   rank_alpha <- data.frame()
   if(!is.null(fileName)) save(prior_alpha, file = fileName)
   i <- 1
-  if(dots$cores_per_chain > 1 & verbose) print("Since cores_per_chain > 1, estimating multiple data sets simultaneously")
   par_names <- names(sampled_pars(design_in))
   while(i < replicates){
-    if(verbose) print(paste0("Sample ", i, " out of ", replicates))
-    data <- data.frame()
+    if (n_cores==1) print(paste0("Fitting sample ", i, " out of ", replicates)) else
+      print(paste0("Fitting samples ", i,"-",(i+n_cores-1), " out of ", replicates))
     start <- i
-    for(j in 1:dots$cores_per_chain){
-      if(i > replicates) next
-      design_in$Ffactors$subjects <- j
-      tmp <- make_data(prior_alpha[i,],design_in, trials, model = design_in$model)
-      tmp$subjects <- j
-      data <- rbind(data, tmp)
-      i <- i + 1
-    }
+    dats <- parallel::mclapply(1:n_cores,make_datas,prior_alpha=prior_alpha,
+                     design_in=design_in,trials=trials,mc.cores=n_cores)
+    i <- i + n_cores
     if(plot_data){
-      plot_density(data, factors = names(design_in$Ffactors)[names(design_in$Ffactors) != "subjects"])
+      lapply(dats,plot_density,
+        factors = names(design_in$Ffactors)[names(design_in$Ffactors) != "subjects"])
     }
-    emc <-  do.call(make_emc, c(list(data = data, design = design_in, prior_list = prior_in, type = type), fix_dots(dots, make_emc)))
-    emc <-  do.call(fit, c(list(emc = emc), fix_dots(dots, fit)))
-    ESS <- round(pmin(do.call(cbind, ess_summary(emc, selection = "alpha", stat = NULL)), chain_n(emc)[1,"sample"]))
-    alpha_rec <- get_pars(emc, selection = "alpha", return_mcmc = F, merge_chains = T, flatten = T)
-    for(j in 1:dots$cores_per_chain){
-      if(start > replicates) next
-      tmp_rec <- alpha_rec[,j,]
-      rank_alpha <- rbind(rank_alpha, mapply(get_ranks_ESS, split(tmp_rec, row(tmp_rec)), t(ESS[j,]), prior_alpha[start,]))
-      start <- start + 1
+    emcs <- parallel::mclapply(dats, make_emc, design = design_in, prior_list = prior_in,
+            type = type, mc.cores = n_cores, verbose=verbose, ...)
+    emcs <- parallel::mclapply(emcs, tryfit, mc.cores=n_cores, ...)
+    bad <- unlist(lapply(emcs,\(res) inherits(res, "try-error")))
+    if (any(bad)) {
+      print(paste0("Fitting failed for ",sum(bad)," samples, prior may be too broad.\n"))
+      emcs <- emcs[!bad]
     }
-    colnames(rank_alpha) <- par_names
-    if(!is.null(fileName)){
-      SBC_temp <- list(rank = list(alpha = rank_alpha),
-                       prior = list(alpha = prior_alpha), emc = emc)
-      save(SBC_temp, file = fileName)
+    if (!all(bad)) {
+      ESS <- pmin(do.call(rbind,lapply(emcs,ess_summary,selection = "alpha")),
+                  chain_n(emcs[[1]])[1,"sample"])
+      ESS <- ESS[,colnames(ESS)!="min"]
+      alpha_rec <- lapply(emcs,get_pars,selection = "alpha", return_mcmc = F,
+                          merge_chains = T, flatten = T)
+      for(j in c(1:sum(!bad))) {
+        if(start > replicates) next
+        tmp_rec <- alpha_rec[[j]][,1,]
+        rank_alpha <- rbind(rank_alpha,
+          mapply(get_ranks_ESS, split(tmp_rec, row(tmp_rec)), t(ESS[j,]),
+                 prior_alpha[start,])
+        )
+        start <- start + 1
+      }
+      colnames(rank_alpha) <- par_names
+      if(!is.null(fileName)){
+        SBC_temp <- list(rank = list(alpha = rank_alpha),
+                         prior = list(alpha = prior_alpha), emc = emcs)
+        save(SBC_temp, file = fileName)
+      }
     }
   }
   return(list(rank = list(alpha = rank_alpha),
