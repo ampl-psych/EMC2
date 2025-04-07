@@ -461,10 +461,12 @@ create_chain_proposals <- function(emc, samples_idx = NULL, do_block = TRUE){
   }
   LL <- get_pars(emc, filter = samples_idx-1, selection = "LL",
                  stage = c('preburn', 'burn', 'adapt', 'sample'),
-                 merge_chains = T, return_mcmc = F)
+                 merge_chains = T, return_mcmc = F, remove_constants = F,
+                 remove_dup = F)
   alpha <- get_pars(emc, filter = samples_idx-1, selection = "alpha",
                     stage = c('preburn', 'burn', 'adapt', 'sample'),
-                    by_subject = T, merge_chains = T, return_mcmc = F)
+                    by_subject = T, merge_chains = T, return_mcmc = F,
+                    remove_dup = F, remove_constants = F)
 
   components <- attr(emc[[1]]$data, "components")
   block_idx <- block_variance_idx(components)
