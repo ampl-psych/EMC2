@@ -124,9 +124,9 @@ SBC_single <- function(design_in, prior_in, replicates = 250, trials = 100,
       print(paste0("Fitting samples ", i,"-",maxi, " out of ", replicates))
     }
     start <- i
-    dats <- parallel::mclapply(start:(start+n_cores-1),make_datas,prior_alpha=prior_alpha,
-                     design_in=design_in,trials=trials,mc.cores=n_cores)
     i <- i + n_cores
+    dats <- parallel::mclapply(start:(i-1),make_datas,prior_alpha=prior_alpha,
+                     design_in=design_in,trials=trials,mc.cores=n_cores)
     if(plot_data){
       lapply(dats,plot_density,
         factors = names(design_in$Ffactors)[names(design_in$Ffactors) != "subjects"])
