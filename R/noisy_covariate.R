@@ -1,16 +1,31 @@
 # One potential issue, some data will have lapse responses that will never get
 # an acceptance for the latent states.
 
-add_cov_noise_ll <- function(pars, dadm, min_ll = log(1e-10)){
+add_cov_noise_ll <- function(pars, dadm, model, min_ll = log(1e-10)){
   # This step adds the likelihood of the noisy covariate model.
-  mu_latent <- pars[,'mu_latent']
-  sigma_latent <- pars[,'sigma_latent']
-  sigma_noise <- pars[,'sigma_noise']
-  # True latent mean with latent variability
-  latent_ll <- dnorm(dadm$latent, mean = mu_latent, sd = sigma_latent, log = TRUE)
-  # Measurement error going from the latent mean to the measurement noise
-  noise_ll <- dnorm(dadm$obs, mean = dadm$latent, sd = sigma_noise, log = TRUE)
-  return(pmax(min_ll, latent_ll + noise_ll))
+  ll <- 0
+  for(cov in model$noisy_cov){
+    # Add the latent states to the dadm
+    dadm <- fill_dadm(dadm, cov)
+    # dadm[,cov] is actually the latent now!
+    # This will return a vector of names, the first the mean, 2nd the latent sd, 3rd the error sd
+    latent_pars <- get_noisy_cov_pnames(cov)
+    # True latent mean with latent variability
+    latent_ll <- dnorm(dadm[,cov], mean = pars[,latent_pars[1]], sd = pars[,latent_pars[2]], log = TRUE)
+    # Measurement error going from the latent mean to the measurement noise
+    noise_ll <- dnorm(dadm$obs, mean = dadm[,cov], sd = pars[,latent_pars[3]], log = TRUE)
+    ll <- ll + pmax(min_ll, latent_ll + noise_ll)
+  }
+  return(ll)
+}
+
+fill_dadm <- function(dadm, cov){
+  noisy_cov <- attr(dadm, cov)
+  # Here we're replacing the observed variable with the latent variable!
+  dadm[,cov] <- noisy_cov$latent
+  # Add the actually observed noisy covariate
+  dadm$obs <- noisy_cov$obs
+  return(dadm)
 }
 
 update_latent_cov <- function(pars, dadm, model){
@@ -94,19 +109,67 @@ calc_acceptance <- function(weights, prev_acc, idx){
   return(updated_acc)
 }
 
-update_model_noisy_cov <- function(noise_cov, model) {
+get_noisy_cov_pnames <- function(noisy_cov){
+  return(paste0(c("mu.t", "sigma.t", "sigma.e"), "_", noisy_cov))
+}
+
+update_model_noisy_cov <- function(noisy_cov, model) {
   # Get model list to modify
   model_list <- model()
 
-  # For each parameter in the trend
-  for (par in names(noise_cov)) {
-    p_names <- paste0(c("mu_t", "sigma_t", "sigma_e"), par)
+  # For each noisy_covariate
+  for (cov in noisy_cov) {
+    p_names <- get_noisy_cov_pnames(cov)
     transforms <- setNames(c("identity", "exp", "exp"), p_names)
     model_list$transform$func <- c(model_list$transform$func, transforms)
     model_list$p_types <- c(model_list$p_types, setNames(numeric(length(p_names)), p_names))
   }
-  model_list$noise_cov <- noise_cov
+  model_list$noisy_cov <- noisy_cov
   # Return updated model function
   model <- function() { return(model_list) }
   return(model)
 }
+
+check_noisy_cov <- function(noisy_cov, covariates, formula = NULL) {
+  if (!all(noisy_cov %in% names(covariates))){
+    stop("noisy covariate not in defined covariates")
+  }
+  for(cov in noisy_cov){
+    noisy_cov_pnames <- get_noisy_cov_pnames(cov)
+    if (!is.null(formula)) {
+      isin <-  noisy_cov_pnames %in% unlist(lapply(formula,function(x)all.vars(x)[1]))
+      if(any(!isin)){
+        # Add missing noise parameters to formula with intercept-only model
+        formula <- c(formula, lapply(noisy_cov_pnames[!isin], function(x) as.formula(paste(x, "~ 1"))))
+        message("Intercept formula added for noise_pars: ", paste(noisy_cov_pnames[!isin],collapse=", "))
+      }
+    }
+  }
+  return(formula)
+}
+
+latent_manager <- function(proposals, dadm, model, component = NULL){
+  if(!is.data.frame(dadm)){
+    lls <- log_likelihood_joint(proposals, dadm, model, component)
+  } else{
+    model <- model()
+    if(is.null(model$c_name)){ # use the R implementation
+      lls <- apply(proposals,1, calc_ll_R, model, dadm = dadm)
+    } else{
+      p_types <- names(model$p_types)
+      designs <- list()
+      for(p in p_types){
+        designs[[p]] <- attr(dadm,"designs")[[p]][attr(attr(dadm,"designs")[[p]],"expand"),,drop=FALSE]
+      }
+      constants <- attr(dadm, "constants")
+      if(is.null(constants)) constants <- NA
+      lls <- calc_ll(proposals, dadm, constants = constants, designs = designs, type = model$c_name,
+                     model$bound, model$transform, model$pre_transform, p_types = p_types, min_ll = log(1e-10),
+                     model$trend)
+    }
+  }
+  return(dadm)
+}
+
+
+

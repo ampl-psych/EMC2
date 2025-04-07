@@ -79,6 +79,11 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
                    transform = NULL, bound = NULL, ...){
 
   optionals <- list(...)
+  if(!is.null(optionals$noisy_cov)){
+    noisy_cov <- optionals$noisy_cov
+  } else {
+    noisy_cov <- NULL
+  }
   if(!is.null(optionals$trend)){
     trend <- optionals$trend
   } else {
@@ -122,6 +127,11 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
     nfacs <- nfacs[!(names(nfacs) %in% c("trials","rt"))]
     if (length(nfacs)>0) covariates <- nfacs
   }
+
+  if (!is.null(noisy_cov)) {
+    formula <- check_noisy_cov(noisy_cov,covariates, formula)
+  }
+
   # Check if all parameters in the model are specified in the formula
   nams <- unlist(lapply(formula,function(x) as.character(stats::terms(x)[[2]])))
   if (!all(sort(names(model()$p_types)) %in% sort(nams)) & is.null(custom_p_vector)){
@@ -138,6 +148,13 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
                  Clist=contrasts,matchfun=matchfun,constants=constants,
                  Fcovariates=covariates,Ffunctions=functions,model=model)
   class(design) <- "emc.design"
+
+  if (!is.null(noisy_cov)) {
+    model <- update_model_noisy_cov(noisy_cov, model)
+    model_list <- model()
+    model <- function(){return(model_list)}
+  }
+
   p_vector <- sampled_pars(design,model)
   lhs_terms <- unlist(lapply(formula, function(x) as.character(stats::terms(x)[[2]])))
 
