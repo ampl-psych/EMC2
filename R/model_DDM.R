@@ -146,7 +146,7 @@ DDM <- function(){
 
 #### GNG ----
 
-#' The GNG (go/nogo) Diffusion Decision Model (DDMGNGnoC)
+#' The GNG (go/nogo) Diffusion Decision Model
 #'
 #' In the GNG paradigm one of the two possible choices results in a response
 #' being withheld (a non-response), which is indicated in the data by an NA for
