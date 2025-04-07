@@ -163,7 +163,7 @@ SBC_single <- function(design_in, prior_in, replicates = 250, trials = 100,
     }
   }
   if (!is.null(save_emc)) {
-    save(emc,file="save_emc")
+    save(emc,file=save_emc)
   }
   return(list(rank = list(alpha = rank_alpha),
               prior = list(alpha = prior_alpha)))
