@@ -113,9 +113,10 @@ SBC_single <- function(design_in, prior_in, replicates = 250, trials = 100,
   if(!is.null(fileName)) save(prior_alpha, file = fileName)
   i <- 1
   par_names <- names(sampled_pars(design_in))
+  bads <- logical(0)
   if (!is.null(save_emc)) {
     emc <- list()
-    attr(emc,"bad") <- NULL
+    attr(emc,"bad") <- bads
   }
   while(i < replicates){
     if (n_cores==1) print(paste0("Fitting sample ", i, " out of ", replicates)) else
@@ -143,6 +144,7 @@ SBC_single <- function(design_in, prior_in, replicates = 250, trials = 100,
       print(paste0("Fitting failed for ",sum(bad)," samples, prior may be too broad.\n"))
       emcs <- emcs[!bad]
     }
+    bads <- c(bads,bad)
     if (!all(bad)) {
       ESS <- pmin(do.call(rbind,lapply(emcs,ess_summary,selection = "alpha")),
                   chain_n(emcs[[1]])[1,"sample"])
@@ -164,6 +166,7 @@ SBC_single <- function(design_in, prior_in, replicates = 250, trials = 100,
       if(!is.null(fileName)){
         SBC_temp <- list(rank = list(alpha = rank_alpha),
                          prior = list(alpha = prior_alpha), emc = emcs)
+        attr(SBC_temp,"bad") <- bads
         save(SBC_temp, file = fileName)
       }
     } else start <- start + n_cores
@@ -171,8 +174,10 @@ SBC_single <- function(design_in, prior_in, replicates = 250, trials = 100,
   if (!is.null(save_emc)) {
     save(emc,file=save_emc)
   }
-  return(list(rank = list(alpha = rank_alpha),
-              prior = list(alpha = prior_alpha)))
+  out <- list(rank = list(alpha = rank_alpha),
+              prior = list(alpha = prior_alpha))
+  attr(out,"bad") <- bads
+  return(out)
 }
 
 #' Plot the Histogram of the Observed Rank Statistics of SBC
