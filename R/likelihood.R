@@ -144,7 +144,7 @@ my.integrate <- function(...,upper=Inf,big=10)
   }
 }
 
-log_likelihood_race_ss <- function(pars,dadm,min_ll=log(1e-10))
+log_likelihood_race_ss <- function(pars,dadm,model,min_ll=log(1e-10))
 {
 
   # # DELETE me when sure no longer happening

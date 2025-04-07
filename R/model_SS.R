@@ -553,8 +553,8 @@ SSexG <- function() {
       rSSexGaussian(lR,pars,ok=attr(pars, "ok"))
     },
     # Race likelihood combining pfun and dfun
-    log_likelihood=function(p_vector,dadm,min_ll=log(1e-10))
-      log_likelihood_race_ss(p_vector=p_vector, dadm = dadm, min_ll = min_ll)
+    log_likelihood=function(pars,dadm,model,min_ll=log(1e-10))
+      log_likelihood_race_ss(pars, dadm, model, min_ll = min_ll)
   )
 }
 
