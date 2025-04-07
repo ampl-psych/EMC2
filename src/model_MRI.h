@@ -22,12 +22,12 @@ double c_log_likelihood_MRI(NumericMatrix pars, NumericVector y, LogicalVector i
     sum_yhat += s;
   }
 
-  double mean_y_hat = sum_yhat / n;
-
-  // Center y_hat
-  for (int i = 0; i < n; i++) {
-    y_hat[i] -= mean_y_hat;
-  }
+  // double mean_y_hat = sum_yhat / n;
+  //
+  // // Center y_hat
+  // for (int i = 0; i < n; i++) {
+  //   y_hat[i] -= mean_y_hat;
+  // }
 
   NumericVector ll(n);
 
@@ -62,12 +62,12 @@ double c_log_likelihood_MRI_white(NumericMatrix pars, NumericVector y, LogicalVe
     sum_yhat += s;
   }
 
-  double mean_y_hat = sum_yhat / n;
-
-  // Center y_hat (i.e. omit the intercept by demeaning)
-  for (int i = 0; i < n; i++) {
-    y_hat[i] -= mean_y_hat;
-  }
+  // double mean_y_hat = sum_yhat / n;
+  //
+  // // Center y_hat (i.e. omit the intercept by demeaning)
+  // for (int i = 0; i < n; i++) {
+  //   y_hat[i] -= mean_y_hat;
+  // }
 
   NumericVector ll(n);
 

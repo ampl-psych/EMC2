@@ -558,7 +558,7 @@ white_mri <- function(){
 
         # Compute the linear predictor (sum of beta contributions) and center it.
         y_hat <- rowSums(betas)
-        y_hat <- y_hat - mean(y_hat)
+        # y_hat <- y_hat - mean(y_hat)
 
         # Allocate a vector for simulated data
         y_sim <- numeric(n)
@@ -590,7 +590,7 @@ white_mri <- function(){
         sigma <- pars[, m]
 
         y_hat <- rowSums(betas)
-        y_hat <- y_hat - mean(y_hat)
+        # y_hat <- y_hat - mean(y_hat)
 
         # Log-likelihood for the first observation
         ll <- numeric(n)
