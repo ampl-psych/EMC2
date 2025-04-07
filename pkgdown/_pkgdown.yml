@@ -12,6 +12,8 @@ reference:
   - LBA
   - LNR
   - RDM
+  - DDMGNG
+  - probit
 - title: Design and Mapping
 - contents:
   - design
