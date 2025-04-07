@@ -91,7 +91,7 @@ SBC_hierarchical <- function(design_in, prior_in, replicates = 250, trials = 100
 
 SBC_single <- function(design_in, prior_in, replicates = 250, trials = 100,
                        n_cores=1,plot_data = FALSE, verbose = TRUE,
-                             fileName = NULL, ...){
+                             fileName = NULL, save_emc = NULL, ...){
 
   make_datas <- function(i,prior_alpha,design_in,trials)
     make_data(prior_alpha[i,],design_in, trials, model = design_in$model)
@@ -108,6 +108,10 @@ SBC_single <- function(design_in, prior_in, replicates = 250, trials = 100,
   if(!is.null(fileName)) save(prior_alpha, file = fileName)
   i <- 1
   par_names <- names(sampled_pars(design_in))
+  if (!is.null(save_emc)) {
+    emc <- list()
+    attr(emc,"bad") <- NULL
+  }
   while(i < replicates){
     if (n_cores==1) print(paste0("Fitting sample ", i, " out of ", replicates)) else
     {
@@ -126,6 +130,10 @@ SBC_single <- function(design_in, prior_in, replicates = 250, trials = 100,
             type = type, mc.cores = n_cores, verbose=verbose, ...)
     emcs <- parallel::mclapply(emcs, tryfit, mc.cores=n_cores, ...)
     bad <- unlist(lapply(emcs,\(res) inherits(res, "try-error")))
+    if (!is.null(save_emc)) {
+      emc <- c(emc,emcs)
+      attr(emc,"bad") <- c(attr(emc,"bad"),bad)
+    }
     if (any(bad)) {
       print(paste0("Fitting failed for ",sum(bad)," samples, prior may be too broad.\n"))
       emcs <- emcs[!bad]
@@ -152,6 +160,9 @@ SBC_single <- function(design_in, prior_in, replicates = 250, trials = 100,
         save(SBC_temp, file = fileName)
       }
     }
+  }
+  if (!is.null(save_emc)) {
+    save(emc,file="save_emc")
   }
   return(list(rank = list(alpha = rank_alpha),
               prior = list(alpha = prior_alpha)))
