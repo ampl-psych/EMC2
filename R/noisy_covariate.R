@@ -30,23 +30,45 @@ update_latent_cov <- function(pars, dadm, model){
   # to account for detailed balance.
   # We can use the proposal density to weight the likelihood of each proposal
   # and then sample from the weighted likelihoods to get the new latent states.
-  n_particles <- 10
-  lls <- matrix(NA, nrow = nrow(dadm), ncol = n_particles + 1)
-  latents <- matrix(NA, nrow = nrow(dadm), ncol = n_particles +1)
-  lls[,1] <- calc_ll_R(pars, model, dadm)
-  latents[,1] <- dadm$latent
+  n_particles <- 5 # Number of particles per proposal distribution
+  n_dists <- 3 # Number of proposal distributions
+  weights <- matrix(NA, nrow = nrow(dadm), ncol = n_particles*n_dists + 1)
+  latents <- matrix(NA, nrow = nrow(dadm), ncol = n_particles*n_dists +1)
+  prev_latent <- dadm$latent
   # Now for k proposals we evaluate the likelihood given the new latent states
-  for(i in 1:n_particles){
-    dadm$latent <- rnorm(nrow(dadm), mean = dadm$obs, sd = dadm$running_sd)
-    lls[,i+1] <- calc_ll_R(pars, model, dadm)
+  # For now we'll sample from 3 densities.
+  # 1. Density centered on the observed value with some adaptive covariance
+  # 2. Density centered on previous z_i, with same adaptive covariance
+  # 3. Density centered on running z_i mean, with some adaptive covariance
+  cur_sd <- dadm$eps *dadm$running_sd
+  for(i in 1:(n_particles*n_dists + 1)){
+    if(i != 1){ # The old state is particle 1
+      if(i < (1 + n_particles)){
+        dadm$latent <- rnorm(nrow(dadm), mean = dadm$obs, sd = cur_sd)
+      } else if(i < (1 + 2*n_particles)){
+        dadm$latent <- rnorm(nrow(dadm), mean = prev_latent, sd = cur_sd)
+      } else{
+        dadm$latent <- rnorm(nrow(dadm), mean = dadm$running_mu, sd = cur_sd)
+      }
+    }
+    ll <- calc_ll_R(pars, model, dadm)
+    lm <- 1/3*dnorm(dadm$latent, mean = dadm$obs, sd = cur_sd) +
+      1/3*dnorm(dadm$latent, mean = prev_latent, sd = cur_sd) +
+      1/3*dnorm(dadm$latent, mean = dadm$running_mu, sd = cur_sd)
     # Some importance correction of all proposal densities
-    #<here>
-    latents[,i+1] <- dadm$latent
+    l <- ll - log(lm)
+    latents[,i] <- dadm$latent
+    # For now these weights are uncorrected for
+    weights[,i] <- l
   }
-
-  # Then do n metropolis steps, with n being the number of observations
+  # Now we need to sample from the weighted likelihoods
+  # using n metropolis steps, with n being the number of observations
+  mh_idx <- apply(weights, 1, function(x){
+    weights <- exp(x - max(x))
+    sample(x = n_particles*n_dists + 1, size = 1, prob = weights)
+  })
   # Sample each row based on weight
-  dadm$latent <- sampled_latent
+  dadm$latent <- latents[cbind(seq_len(nrow(dadm)), mh_idx)]
   # For race models we also need to keep a tracker that only the trials (not the lR)
   # are updated (so 1 per x accumulators, not per row)
   return(dadm)
