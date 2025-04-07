@@ -90,12 +90,16 @@ SBC_hierarchical <- function(design_in, prior_in, replicates = 250, trials = 100
 }
 
 
+# design_in=design_LNR; prior_in=prior_LNR; replicates = 300; trials = 100
+# fileName = paste0("LNRtest/", res, ".RData"); verbose=FALSE
+# n_cores=4; compress = TRUE; rt_resolution = res; save_emc = NULL
+
 SBC_single <- function(design_in, prior_in, replicates = 250, trials = 100,
                        n_cores=1,plot_data = FALSE, verbose = TRUE,
                              fileName = NULL, save_emc = NULL, ...){
 
   make_datas <- function(i,prior_alpha,design_in,trials)
-    make_data(prior_alpha[i,],design_in, trials, model = design_in$model)
+    make_data(unlist(prior_alpha[i,]),design_in, trials, model = design_in$model)
 
   tryfit <- function(emc,...) {
     try(fit(emc,verbose=FALSE,...),silent=TRUE)
@@ -120,7 +124,7 @@ SBC_single <- function(design_in, prior_in, replicates = 250, trials = 100,
       print(paste0("Fitting samples ", i,"-",maxi, " out of ", replicates))
     }
     start <- i
-    dats <- parallel::mclapply(1:n_cores,make_datas,prior_alpha=prior_alpha,
+    dats <- parallel::mclapply(start:(start+n_cores-1),make_datas,prior_alpha=prior_alpha,
                      design_in=design_in,trials=trials,mc.cores=n_cores)
     i <- i + n_cores
     if(plot_data){
@@ -145,13 +149,15 @@ SBC_single <- function(design_in, prior_in, replicates = 250, trials = 100,
       ESS <- ESS[,colnames(ESS)!="min"]
       alpha_rec <- lapply(emcs,get_pars,selection = "alpha", return_mcmc = F,
                           merge_chains = T, flatten = T)
-      for(j in c(1:sum(!bad))) {
+      for(j in c(1:n_cores)) {
         if(start > replicates) next
-        tmp_rec <- alpha_rec[[j]][,1,]
-        rank_alpha <- rbind(rank_alpha,
-          mapply(get_ranks_ESS, split(tmp_rec, row(tmp_rec)), t(ESS[j,]),
-                 prior_alpha[start,])
-        )
+        if (!bad[j]) {
+          tmp_rec <- alpha_rec[[j]][,1,]
+          rank_alpha <- rbind(rank_alpha,
+            mapply(get_ranks_ESS, split(tmp_rec, row(tmp_rec)), t(ESS[j,]),
+                   prior_alpha[start,])
+          )
+        }
         start <- start + 1
       }
       colnames(rank_alpha) <- par_names
@@ -160,7 +166,7 @@ SBC_single <- function(design_in, prior_in, replicates = 250, trials = 100,
                          prior = list(alpha = prior_alpha), emc = emcs)
         save(SBC_temp, file = fileName)
       }
-    }
+    } else start <- start + n_cores
   }
   if (!is.null(save_emc)) {
     save(emc,file=save_emc)
