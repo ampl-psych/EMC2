@@ -10,8 +10,6 @@
 
 * Rare bug in sampling removed
 
-## Bug fixes
-
 * Small bug fixes in plot_data to make it more flexible
 
 * cleared up argumentation of run_emc/fit
