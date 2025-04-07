@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">EMC2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">3.0.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">3.1.1</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -55,19 +55,15 @@
 <span>  stage <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  iter <span class="op">=</span> <span class="fl">1000</span>,</span>
 <span>  stop_criteria <span class="op">=</span> <span class="cn">NULL</span>,</span>
-<span>  report_time <span class="op">=</span> <span class="cn">TRUE</span>,</span>
 <span>  search_width <span class="op">=</span> <span class="fl">1</span>,</span>
 <span>  step_size <span class="op">=</span> <span class="fl">100</span>,</span>
 <span>  verbose <span class="op">=</span> <span class="cn">TRUE</span>,</span>
-<span>  verboseProgress <span class="op">=</span> <span class="cn">FALSE</span>,</span>
 <span>  fileName <span class="op">=</span> <span class="cn">NULL</span>,</span>
-<span>  particles <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  particle_factor <span class="op">=</span> <span class="fl">50</span>,</span>
 <span>  cores_per_chain <span class="op">=</span> <span class="fl">1</span>,</span>
 <span>  cores_for_chains <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/length.html" class="external-link">length</a></span><span class="op">(</span><span class="va">emc</span><span class="op">)</span>,</span>
 <span>  max_tries <span class="op">=</span> <span class="fl">20</span>,</span>
-<span>  thin_auto <span class="op">=</span> <span class="cn">FALSE</span>,</span>
-<span>  n_blocks <span class="op">=</span> <span class="fl">1</span>,</span>
+<span>  thin <span class="op">=</span> <span class="cn">FALSE</span>,</span>
 <span>  <span class="va">...</span></span>
 <span><span class="op">)</span></span>
 <span></span>
@@ -97,10 +93,6 @@ If unspecified, it will run the subsequent stage (if there is one).</p></dd>
 of parameters these should hold. See the details and examples section.</p></dd>
 
 
-<dt id="arg-report-time">report_time<a class="anchor" aria-label="anchor" href="#arg-report-time"></a></dt>
-<dd><p>Boolean. If <code>TRUE</code>, the time taken to run the MCMC chains till completion of the <code>stop_criteria</code> will be printed.</p></dd>
-
-
 <dt id="arg-search-width">search_width<a class="anchor" aria-label="anchor" href="#arg-search-width"></a></dt>
 <dd><p>A double. Tunes target acceptance probability of the MCMC process.
 This fine-tunes the width of the search space to obtain the desired acceptance probability.
@@ -116,18 +108,8 @@ by <code>stop_criteria</code> are checked and proposal distributions are updated
 <dd><p>Logical. Whether to print messages between each step with the current status regarding the <code>stop_criteria</code>.</p></dd>
 
 
-<dt id="arg-verboseprogress">verboseProgress<a class="anchor" aria-label="anchor" href="#arg-verboseprogress"></a></dt>
-<dd><p>Logical. Whether to print a progress bar within each step or not.
-Will print one progress bar for each chain and only if <code>cores_for_chains = 1</code>.</p></dd>
-
-
 <dt id="arg-filename">fileName<a class="anchor" aria-label="anchor" href="#arg-filename"></a></dt>
 <dd><p>A string. If specified, will auto-save emc object at this location on every iteration.</p></dd>
-
-
-<dt id="arg-particles">particles<a class="anchor" aria-label="anchor" href="#arg-particles"></a></dt>
-<dd><p>An integer. How many particles to use, default is <code>NULL</code> and
-<code>particle_factor</code> is used instead. If specified, <code>particle_factor</code> is overwritten.</p></dd>
 
 
 <dt id="arg-particle-factor">particle_factor<a class="anchor" aria-label="anchor" href="#arg-particle-factor"></a></dt>
@@ -152,13 +134,9 @@ conditions as specified by <code>stop_criteria</code>? Defaults to 20. <code>max
 ignored if the required number of iterations has not been reached yet.</p></dd>
 
 
-<dt id="arg-thin-auto">thin_auto<a class="anchor" aria-label="anchor" href="#arg-thin-auto"></a></dt>
-<dd><p>A boolean. If <code>TRUE</code> will automatically thin the MCMC samples, closely matched to the ESS.</p></dd>
-
-
-<dt id="arg-n-blocks">n_blocks<a class="anchor" aria-label="anchor" href="#arg-n-blocks"></a></dt>
-<dd><p>An integer. Number of blocks. Will block the parameter chains such that they are
-updated in blocks. This can be helpful in extremely tough models with a large number of parameters.</p></dd>
+<dt id="arg-thin">thin<a class="anchor" aria-label="anchor" href="#arg-thin"></a></dt>
+<dd><p>A boolean. If <code>TRUE</code> will automatically thin the MCMC samples, closely matched to the ESS.
+Can also be set to a double, in which case 1/thin of the chain will be removed (does not have to be an integer).</p></dd>
 
 
 <dt id="arg--">...<a class="anchor" aria-label="anchor" href="#arg--"></a></dt>
@@ -192,38 +170,46 @@ EMC2: An R Package for cognitive models of choice. doi.org/10.31234/osf.io/2e4dq
 
     <div class="section level2">
     <h2 id="ref-examples">Examples<a class="anchor" aria-label="anchor" href="#ref-examples"></a></h2>
-    <div class="sourceCode"><pre class="sourceCode r"><code><span class="r-in"><span><span class="kw">if</span> <span class="op">(</span><span class="cn">FALSE</span><span class="op">)</span> <span class="op">{</span> <span class="co"># \dontrun{</span></span></span>
-<span class="r-in"><span><span class="co"># First define a design</span></span></span>
-<span class="r-in"><span><span class="va">design_DDMaE</span> <span class="op">&lt;-</span> <span class="fu"><a href="design.html">design</a></span><span class="op">(</span>data <span class="op">=</span> <span class="va">forstmann</span>,model<span class="op">=</span><span class="va">DDM</span>,</span></span>
-<span class="r-in"><span>                           formula <span class="op">=</span><span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="va">v</span><span class="op">~</span><span class="fl">0</span><span class="op">+</span><span class="va">S</span>,<span class="va">a</span><span class="op">~</span><span class="va">E</span>, <span class="va">t0</span><span class="op">~</span><span class="fl">1</span>, <span class="va">s</span><span class="op">~</span><span class="fl">1</span>, <span class="va">Z</span><span class="op">~</span><span class="fl">1</span>, <span class="va">sv</span><span class="op">~</span><span class="fl">1</span>, <span class="va">SZ</span><span class="op">~</span><span class="fl">1</span><span class="op">)</span>,</span></span>
-<span class="r-in"><span>                           constants<span class="op">=</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>s<span class="op">=</span><span class="fu"><a href="https://rdrr.io/r/base/Log.html" class="external-link">log</a></span><span class="op">(</span><span class="fl">1</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span></span>
-<span class="r-in"><span><span class="co"># Then make the emc object, we've omitted a prior here for brevity so default priors will be used.</span></span></span>
-<span class="r-in"><span><span class="va">emc_forstmann</span> <span class="op">&lt;-</span> <span class="fu"><a href="make_emc.html">make_emc</a></span><span class="op">(</span><span class="va">forstmann</span>, <span class="va">design_DDMaE</span><span class="op">)</span></span></span>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span class="r-in"><span><span class="co"># \donttest{</span></span></span>
+<span class="r-in"><span><span class="co"># Define a design first</span></span></span>
+<span class="r-in"><span><span class="va">ADmat</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="op">-</span><span class="fl">1</span><span class="op">/</span><span class="fl">2</span>,<span class="fl">1</span><span class="op">/</span><span class="fl">2</span><span class="op">)</span>,ncol<span class="op">=</span><span class="fl">1</span>,dimnames<span class="op">=</span><span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="cn">NULL</span>,<span class="st">"d"</span><span class="op">)</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="co"># We also define a match function for lM</span></span></span>
+<span class="r-in"><span><span class="va">matchfun</span><span class="op">=</span><span class="kw">function</span><span class="op">(</span><span class="va">d</span><span class="op">)</span><span class="va">d</span><span class="op">$</span><span class="va">S</span><span class="op">==</span><span class="va">d</span><span class="op">$</span><span class="va">lR</span></span></span>
 <span class="r-in"><span></span></span>
-<span class="r-in"><span><span class="co"># With the emc object we can start sampling by simply calling fit</span></span></span>
-<span class="r-in"><span><span class="va">emc_forstmann</span> <span class="op">&lt;-</span> <span class="fu">fit</span><span class="op">(</span><span class="va">emc_forstmann</span>, fileName <span class="op">=</span> <span class="st">"intermediate_save_location.RData"</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="co"># Drop most subjects for speed</span></span></span>
+<span class="r-in"><span><span class="va">dat</span> <span class="op">&lt;-</span> <span class="va">forstmann</span><span class="op">[</span><span class="va">forstmann</span><span class="op">$</span><span class="va">subjects</span> <span class="op"><a href="https://rdrr.io/r/base/match.html" class="external-link">%in%</a></span> <span class="fu"><a href="https://rdrr.io/r/base/unique.html" class="external-link">unique</a></span><span class="op">(</span><span class="va">forstmann</span><span class="op">$</span><span class="va">subjects</span><span class="op">)</span><span class="op">[</span><span class="fl">1</span><span class="op">:</span><span class="fl">2</span><span class="op">]</span>,<span class="op">]</span></span></span>
+<span class="r-in"><span><span class="va">dat</span><span class="op">$</span><span class="va">subjects</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/droplevels.html" class="external-link">droplevels</a></span><span class="op">(</span><span class="va">dat</span><span class="op">$</span><span class="va">subjects</span><span class="op">)</span></span></span>
 <span class="r-in"><span></span></span>
-<span class="r-in"><span><span class="co"># For particularly hard models it pays off to increase the ``particle_factor``</span></span></span>
-<span class="r-in"><span><span class="co"># and, although to a lesser extent, increase ``search_width``.</span></span></span>
-<span class="r-in"><span><span class="va">emc_forstmann</span> <span class="op">&lt;-</span> <span class="fu">fit</span><span class="op">(</span><span class="va">emc_forstmann</span>, particle_factor <span class="op">=</span> <span class="fl">100</span>, search_width <span class="op">=</span> <span class="fl">1.5</span><span class="op">)</span></span></span>
-<span class="r-in"><span></span></span>
-<span class="r-in"><span><span class="co"># Example of how to use the stop_criteria:</span></span></span>
-<span class="r-in"><span><span class="va">emc_forstmann</span> <span class="op">&lt;-</span> <span class="fu">fit</span><span class="op">(</span><span class="va">emc_forstmann</span>, stop_criteria <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>mean_gd <span class="op">=</span> <span class="fl">1.1</span>, max_gd <span class="op">=</span> <span class="fl">1.5</span>,</span></span>
-<span class="r-in"><span>            selection <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">'alpha'</span>, <span class="st">'sigma2'</span><span class="op">)</span>, omit_mpsrf <span class="op">=</span> <span class="cn">TRUE</span>, min_es <span class="op">=</span> <span class="fl">1000</span><span class="op">)</span><span class="op">)</span></span></span>
-<span class="r-in"><span><span class="co"># In this case the stop_criteria are set for the sample stage, which will be</span></span></span>
-<span class="r-in"><span><span class="co"># run until the mean_gd &lt; 1.1, the max_gd &lt; 1.5 (omitting the multivariate psrf)</span></span></span>
-<span class="r-in"><span><span class="co"># and the effective sample size &gt; 1000,</span></span></span>
-<span class="r-in"><span><span class="co"># for both the individual-subject parameters ("alpha")</span></span></span>
-<span class="r-in"><span><span class="co"># and the group-level variance parameters.</span></span></span>
-<span class="r-in"><span></span></span>
-<span class="r-in"><span><span class="co"># For the unspecified stages in the ``stop_criteria`` the default values</span></span></span>
-<span class="r-in"><span><span class="co"># are assumed which are found in Stevenson et al. 2024 &lt;doi.org/10.31234/osf.io/2e4dq&gt;</span></span></span>
-<span class="r-in"><span></span></span>
-<span class="r-in"><span><span class="co"># Alternatively, you can also specify the stop_criteria for specific stages by creating a</span></span></span>
-<span class="r-in"><span><span class="co"># nested list</span></span></span>
-<span class="r-in"><span><span class="va">emc_forstmann</span> <span class="op">&lt;-</span> <span class="fu">fit</span><span class="op">(</span><span class="va">emc_forstmann</span>, stop_criteria <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="st">"burn"</span> <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>mean_gd <span class="op">=</span> <span class="fl">1.1</span>, max_gd <span class="op">=</span> <span class="fl">1.5</span>,</span></span>
-<span class="r-in"><span>            selection <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">'alpha'</span><span class="op">)</span><span class="op">)</span>, <span class="st">"adapt"</span> <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>min_unique <span class="op">=</span> <span class="fl">100</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span></span>
-<span class="r-in"><span><span class="op">}</span> <span class="co"># }</span></span></span>
+<span class="r-in"><span><span class="va">design_LNR</span> <span class="op">&lt;-</span> <span class="fu"><a href="design.html">design</a></span><span class="op">(</span>data <span class="op">=</span> <span class="va">dat</span>,model<span class="op">=</span><span class="va">LNR</span>,matchfun<span class="op">=</span><span class="va">matchfun</span>,</span></span>
+<span class="r-in"><span>                     formula<span class="op">=</span><span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="va">m</span><span class="op">~</span><span class="va">lM</span>,<span class="va">s</span><span class="op">~</span><span class="fl">1</span>,<span class="va">t0</span><span class="op">~</span><span class="fl">1</span><span class="op">)</span>,</span></span>
+<span class="r-in"><span>                     contrasts<span class="op">=</span><span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>m<span class="op">=</span><span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>lM<span class="op">=</span><span class="va">ADmat</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>  Sampled Parameters: </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> [1] "m"     "m_lMd" "s"     "t0"   </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>  Design Matrices: </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> $m</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>     lM m m_lMd</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   TRUE 1   0.5</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>  FALSE 1  -0.5</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> $s</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>  s</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>  1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> $t0</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>  t0</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> </span>
+<span class="r-in"><span><span class="co"># Before fit can be called, we first need to make an emc object</span></span></span>
+<span class="r-in"><span><span class="va">LNR_s</span> <span class="op">&lt;-</span> <span class="fu"><a href="make_emc.html">make_emc</a></span><span class="op">(</span><span class="va">dat</span>, <span class="va">design_LNR</span>, rt_resolution <span class="op">=</span> <span class="fl">0.05</span>, n_chains <span class="op">=</span> <span class="fl">2</span><span class="op">)</span></span></span>
+<span class="r-msg co"><span class="r-pr">#&gt;</span> Processing data set 1</span>
+<span class="r-msg co"><span class="r-pr">#&gt;</span> Likelihood speedup factor: 15.1 (110 unique trials)</span>
+<span class="r-in"><span><span class="co"># Run fit, here illustrating how to use stop_criteria (also for speed purposes)</span></span></span>
+<span class="r-in"><span><span class="va">LNR_s</span> <span class="op">&lt;-</span> <span class="fu">fit</span><span class="op">(</span><span class="va">LNR_s</span>, cores_for_chains <span class="op">=</span> <span class="fl">1</span>, stop_criteria <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span></span>
+<span class="r-in"><span>  preburn <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>iter <span class="op">=</span> <span class="fl">10</span><span class="op">)</span>, burn <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>mean_gd <span class="op">=</span> <span class="fl">2.5</span><span class="op">)</span>, adapt <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>min_unique <span class="op">=</span> <span class="fl">20</span><span class="op">)</span>,</span></span>
+<span class="r-in"><span>  sample <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>iter <span class="op">=</span> <span class="fl">25</span>, max_gd <span class="op">=</span> <span class="fl">2</span><span class="op">)</span><span class="op">)</span>, verbose <span class="op">=</span> <span class="cn">FALSE</span>, particle_factor <span class="op">=</span> <span class="fl">30</span>, step_size <span class="op">=</span> <span class="fl">25</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="co"># }</span></span></span>
 </code></pre></div>
     </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
