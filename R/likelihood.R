@@ -51,6 +51,26 @@ log_likelihood_ddm <- function(pars,dadm,model,min_ll=log(1e-10))
   sum(pmax(min_ll,log(like[attr(dadm,"expand")])))
 }
 
+
+log_likelihood_ddmgng <- function(pars,dadm,model,min_ll=log(1e-10))
+  # DDM summed log likelihood for go/nogo model
+{
+  like <- numeric(dim(dadm)[1])
+  if (any(attr(pars,"ok"))) {
+    isna <- is.na(dadm$rt)
+    ok <- attr(pars,"ok") & !isna
+    like[ok] <- model$dfun(dadm$rt[ok],dadm$R[ok],pars[ok,,drop=FALSE])
+    ok <- attr(pars,"ok") & isna
+    like[ok] <- # dont terminate on go boundary before timeout
+      pmax(0,pmin(1,(1-model$pfun(dadm$TIMEOUT[ok],dadm$Rgo[ok],pars[ok,,drop=FALSE]))))
+
+  }
+  like[attr(pars,"ok")][is.na(like[attr(pars,"ok")])] <- 0
+  sum(pmax(min_ll,log(like[attr(dadm,"expand")])))
+}
+
+
+
 #### sdt choice likelihoods ----
 
 log_likelihood_sdt <- function(pars,dadm,lb=-Inf, model, min_ll=log(1e-10))
@@ -79,8 +99,8 @@ log_likelihood_sdt <- function(pars,dadm,lb=-Inf, model, min_ll=log(1e-10))
   if (!is.null(attr(pars,"ok"))) { # Bad parameter region
     ok <- attr(pars,"ok")
     okw <- ok[dadm$winner]
-    ll[ok] <- log(model$pfun(lt=lt[okw],ut=ut[okw],pars=pars[dadm$winner & ok,]))
-  } else ll <- log(model$pfun(lt=lt,ut=ut,pars=pars[dadm$winner,]))
+    ll[ok] <- log(model$pfun(lt=lt[okw],ut=ut[okw],pars=pars[dadm$winner & ok,,drop=FALSE]))
+  } else ll <- log(model$pfun(lt=lt,ut=ut,pars=pars[dadm$winner,,drop=FALSE]))
   ll <- ll[expand]
   ll[is.na(ll)] <- 0
   sum(pmax(min_ll,ll))

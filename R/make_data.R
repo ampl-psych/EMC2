@@ -103,6 +103,8 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
   # #' @param Fcovariates either a data frame of covariate values with the same
   # #' number of rows as the data or a list of functions specifying covariates for
   # #' each trial. Must have names specified in the design Fcovariates argument.
+  check_bounds <- FALSE
+
   LT<-0
   UT<-Inf
   LC<-0
@@ -235,8 +237,12 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
   pars <- add_bound(pars, model()$bound)
   pars_ok <- attr(pars, 'ok')
   if(any(!pars_ok)){
-    warning("Parameter values fall out of model bounds, see <model_name>$bounds()")
-    return(FALSE)
+    if(check_bounds){
+      return(FALSE)
+    } else{
+      warning("(Some) parameter values are out of model bounds, see <model_name>$bounds()
+              This could cause biased recovery in recovery studies")
+    }
   }
   if ( any(dimnames(pars)[[2]]=="pContaminant") && any(pars[,"pContaminant"]>0) )
     pc <- pars[data$lR==levels(data$lR)[1],"pContaminant"] else pc <- NULL

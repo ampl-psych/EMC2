@@ -35,4 +35,7 @@ Note that if \code{selection = alpha} and \code{by_subject = TRUE} (default)
 is used, summary statistics are computed at the individual level.
 to the console but summary statistics for all subjects are returned by the
 function.
+
+If an emc object that has not been run with \code{fit} yet is supplied, summary of
+the design will be returned.
 }
