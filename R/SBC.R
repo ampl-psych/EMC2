@@ -19,12 +19,13 @@
 #' @export
 run_sbc <- function(design_in, prior_in, replicates = 250, trials = 100, n_subjects = 30,
                     plot_data = FALSE, verbose = TRUE,
-                    fileName = NULL, n_cores = 1, ...){
+                    fileName = NULL, n_cores = 1, save_emc = NULL, ...){
   if(is.null(fileName)) message("Since SBC can take a while it's highly recommended to specify a fileName to save temporary results in case of crashes")
   type <- attr(prior_in, "type")
   if(type == "single"){
     out <- SBC_single(design_in, prior_in, replicates, trials,
-                      plot_data, verbose, fileName, n_cores = n_cores, ...)
+                      plot_data, verbose, fileName,
+                      n_cores = n_cores, save_emc = save_emc, ...)
   } else{
     out <- SBC_hierarchical(design_in, prior_in, replicates, trials, n_subjects,
                     plot_data, verbose, fileName, ...)
@@ -89,12 +90,16 @@ SBC_hierarchical <- function(design_in, prior_in, replicates = 250, trials = 100
 }
 
 
+# design_in=design_LNR; prior_in=prior_LNR; replicates = 300; trials = 100
+# fileName = paste0("LNRtest/", res, ".RData"); verbose=FALSE
+# n_cores=4; compress = TRUE; rt_resolution = res; save_emc = NULL
+
 SBC_single <- function(design_in, prior_in, replicates = 250, trials = 100,
                        n_cores=1,plot_data = FALSE, verbose = TRUE,
-                             fileName = NULL, ...){
+                             fileName = NULL, save_emc = NULL, ...){
 
   make_datas <- function(i,prior_alpha,design_in,trials)
-    make_data(prior_alpha[i,],design_in, trials, model = design_in$model)
+    make_data(unlist(prior_alpha[i,]),design_in, trials, model = design_in$model)
 
   tryfit <- function(emc,...) {
     try(fit(emc,verbose=FALSE,...),silent=TRUE)
@@ -108,16 +113,21 @@ SBC_single <- function(design_in, prior_in, replicates = 250, trials = 100,
   if(!is.null(fileName)) save(prior_alpha, file = fileName)
   i <- 1
   par_names <- names(sampled_pars(design_in))
+  bads <- logical(0)
+  if (!is.null(save_emc)) {
+    emc <- list()
+    attr(emc,"bad") <- bads
+  }
   while(i < replicates){
     if (n_cores==1) print(paste0("Fitting sample ", i, " out of ", replicates)) else
     {
-      maxi <- max(c(i+n_cores-1,replicates))
+      maxi <- min(c(i+n_cores-1,replicates))
       print(paste0("Fitting samples ", i,"-",maxi, " out of ", replicates))
     }
     start <- i
-    dats <- parallel::mclapply(1:n_cores,make_datas,prior_alpha=prior_alpha,
-                     design_in=design_in,trials=trials,mc.cores=n_cores)
     i <- i + n_cores
+    dats <- parallel::mclapply(start:(i-1),make_datas,prior_alpha=prior_alpha,
+                     design_in=design_in,trials=trials,mc.cores=n_cores)
     if(plot_data){
       lapply(dats,plot_density,
         factors = names(design_in$Ffactors)[names(design_in$Ffactors) != "subjects"])
@@ -126,35 +136,48 @@ SBC_single <- function(design_in, prior_in, replicates = 250, trials = 100,
             type = type, mc.cores = n_cores, verbose=verbose, ...)
     emcs <- parallel::mclapply(emcs, tryfit, mc.cores=n_cores, ...)
     bad <- unlist(lapply(emcs,\(res) inherits(res, "try-error")))
+    if (!is.null(save_emc)) {
+      emc <- c(emc,emcs)
+      attr(emc,"bad") <- c(attr(emc,"bad"),bad)
+    }
     if (any(bad)) {
       print(paste0("Fitting failed for ",sum(bad)," samples, prior may be too broad.\n"))
       emcs <- emcs[!bad]
     }
+    bads <- c(bads,bad)
     if (!all(bad)) {
       ESS <- pmin(do.call(rbind,lapply(emcs,ess_summary,selection = "alpha")),
                   chain_n(emcs[[1]])[1,"sample"])
       ESS <- ESS[,colnames(ESS)!="min"]
       alpha_rec <- lapply(emcs,get_pars,selection = "alpha", return_mcmc = F,
                           merge_chains = T, flatten = T)
-      for(j in c(1:sum(!bad))) {
+      for(j in c(1:n_cores)) {
         if(start > replicates) next
-        tmp_rec <- alpha_rec[[j]][,1,]
-        rank_alpha <- rbind(rank_alpha,
-          mapply(get_ranks_ESS, split(tmp_rec, row(tmp_rec)), t(ESS[j,]),
-                 prior_alpha[start,])
-        )
+        if (!bad[j]) {
+          tmp_rec <- alpha_rec[[j]][,1,]
+          rank_alpha <- rbind(rank_alpha,
+            mapply(get_ranks_ESS, split(tmp_rec, row(tmp_rec)), t(ESS[j,]),
+                   prior_alpha[start,])
+          )
+        }
         start <- start + 1
       }
       colnames(rank_alpha) <- par_names
       if(!is.null(fileName)){
         SBC_temp <- list(rank = list(alpha = rank_alpha),
                          prior = list(alpha = prior_alpha), emc = emcs)
+        attr(SBC_temp,"bad") <- bads
         save(SBC_temp, file = fileName)
       }
-    }
+    } else start <- start + n_cores
   }
-  return(list(rank = list(alpha = rank_alpha),
-              prior = list(alpha = prior_alpha)))
+  if (!is.null(save_emc)) {
+    save(emc,file=save_emc)
+  }
+  out <- list(rank = list(alpha = rank_alpha),
+              prior = list(alpha = prior_alpha))
+  attr(out,"bad") <- bads
+  return(out)
 }
 
 #' Plot the Histogram of the Observed Rank Statistics of SBC
