@@ -240,13 +240,9 @@ NumericVector compute_gamma_diff_hrf(double tr, int oversampling, double time_le
     hrf[i] = peak_gamma[i] - ratio * undershoot_gamma[i];
   }
   // Normalize HRF by its maximum value.
-  double max_val = hrf[0];
-  for (int i = 1; i < n; i++) {
-    if (hrf[i] > max_val)
-      max_val = hrf[i];
-  }
+  double sum_hrf = sum(hrf);
   for (int i = 0; i < n; i++) {
-    hrf[i] /= max_val;
+    hrf[i] /= sum_hrf;
   }
   return hrf;
 }
@@ -503,111 +499,111 @@ DataFrame construct_design_matrix(NumericVector frame_times, DataFrame events,
 
 
 
-
-// [[Rcpp::export]]
-NumericVector build_glover_hrf_kernel_numeric(double tr, int oversampling, double time_length, double onset,
-                                              double delay, double undershoot, double dispersion,
-                                              double u_dispersion, double ratio) {
-  // Compute the canonical Glover HRF using the provided hyperparameters.
-  NumericVector hrf = compute_hrf(tr, oversampling, time_length, onset,
-                                         delay, undershoot, dispersion, u_dispersion, ratio);
-  // For the Glover model, hrf is a single vector.
-  // Reverse the HRF kernel so that it can be used for convolution.
-  NumericVector hrf_rev = reverse_vector(hrf);
-  return hrf_rev;
-}
-
-
-// This function groups the events by condition and, for each condition,
-// computes the exp_condition matrix (onset, duration, modulation) and precomputes
-// the FFT of the zero‑padded high-resolution event regressor. It stores only the
-// TR, condition name, exp_condition, and regressor_fft in the cache.
-
-// [[Rcpp::export]]
-List build_event_cache_cpp(DataFrame events, NumericVector run_times,
-                           int oversampling = 50,
-                           double min_onset = -24.0,
-                           double time_length = 32.0,
-                           double onset = 0.0,
-                           double nominal_delay = 6.0,
-                           double undershoot = 12.0,
-                           double dispersion = 0.9,
-                           double u_dispersion = 0.9,
-                           double ratio = 0.35) {
-  // Compute TR from run_times.
-  double tr = run_times[1] - run_times[0];
-  int n_events = events.nrows();
-
-  // Get unique condition names from the "regressor" column.
-  CharacterVector regressor_col = events["regressor"];
-  std::set<std::string> cond_set;
-  for (int i = 0; i < n_events; i++) {
-    cond_set.insert(as<std::string>(regressor_col[i]));
-  }
-  std::vector<std::string> conditions(cond_set.begin(), cond_set.end());
-
-  List cache_list(conditions.size());
-
-  for (size_t j = 0; j < conditions.size(); j++) {
-    std::string cond = conditions[j];
-    // Subset events for this condition.
-    std::vector<int> idx;
-    for (int i = 0; i < n_events; i++) {
-      if(as<std::string>(regressor_col[i]) == cond)
-        idx.push_back(i);
-    }
-    int n_cond = idx.size();
-
-    // Build exp_condition matrix with columns: onset, duration, modulation.
-    NumericVector onset_vec = events["onset"];
-    NumericVector duration_vec = events["duration"];
-    NumericVector modulation;
-    if (events.containsElementNamed("modulation"))
-      modulation = events["modulation"];
-    else
-      modulation = NumericVector(n_events, 1.0);
-
-    NumericMatrix exp_condition(n_cond, 3);
-    for (int i = 0; i < n_cond; i++) {
-      int row = idx[i];
-      exp_condition(i, 0) = onset_vec[row];
-      exp_condition(i, 1) = duration_vec[row];
-      exp_condition(i, 2) = modulation[row];
-    }
-
-    // Compute high-resolution regressor and grid using sample_event_condition.
-    List sample_out = sample_event_condition(exp_condition, run_times, oversampling, min_onset);
-    NumericVector hr_regressor = sample_out["regressor"];
-    // M = length of hr_regressor.
-    int M = hr_regressor.size();
-
-    // Determine padded length for FFT using a nominal HRF kernel.
-    NumericVector hkernel_rev = build_glover_hrf_kernel_numeric(tr, oversampling, time_length, onset,
-                                                                nominal_delay, undershoot, dispersion,
-                                                                u_dispersion, ratio);
-    int kernel_length = hkernel_rev.size();
-    int padded_length = next_power_of_two(M + kernel_length - 1);
-
-    // Zero-pad hr_regressor using Armadillo's join_vert.
-    arma::vec hr_regressor_vec = as<arma::vec>(hr_regressor);
-    arma::vec zeros_pad = arma::zeros<arma::vec>(padded_length - M);
-    arma::vec padded_regressor = join_vert(hr_regressor_vec, zeros_pad);
-    arma::cx_vec regressor_fft = arma::fft(padded_regressor);
-
-    // Store TR, condition name, exp_condition, and regressor_fft.
-    List cond_cache = List::create(
-      Named("tr") = tr,
-      Named("cond_name") = cond,
-      Named("exp_condition") = exp_condition,
-      Named("regressor_fft") = regressor_fft
-    );
-
-    cache_list[j] = cond_cache;
-  }
-
-  return cache_list;
-}
-
+//
+// // [[Rcpp::export]]
+// NumericVector build_glover_hrf_kernel_numeric(double tr, int oversampling, double time_length, double onset,
+//                                               double delay, double undershoot, double dispersion,
+//                                               double u_dispersion, double ratio) {
+//   // Compute the canonical Glover HRF using the provided hyperparameters.
+//   NumericVector hrf = compute_hrf(tr, oversampling, time_length, onset,
+//                                          delay, undershoot, dispersion, u_dispersion, ratio);
+//   // For the Glover model, hrf is a single vector.
+//   // Reverse the HRF kernel so that it can be used for convolution.
+//   NumericVector hrf_rev = reverse_vector(hrf);
+//   return hrf_rev;
+// }
+//
+//
+// // This function groups the events by condition and, for each condition,
+// // computes the exp_condition matrix (onset, duration, modulation) and precomputes
+// // the FFT of the zero‑padded high-resolution event regressor. It stores only the
+// // TR, condition name, exp_condition, and regressor_fft in the cache.
+//
+// // [[Rcpp::export]]
+// List build_event_cache_cpp(DataFrame events, NumericVector run_times,
+//                            int oversampling = 50,
+//                            double min_onset = -24.0,
+//                            double time_length = 32.0,
+//                            double onset = 0.0,
+//                            double nominal_delay = 6.0,
+//                            double undershoot = 12.0,
+//                            double dispersion = 0.9,
+//                            double u_dispersion = 0.9,
+//                            double ratio = 0.35) {
+//   // Compute TR from run_times.
+//   double tr = run_times[1] - run_times[0];
+//   int n_events = events.nrows();
+//
+//   // Get unique condition names from the "regressor" column.
+//   CharacterVector regressor_col = events["regressor"];
+//   std::set<std::string> cond_set;
+//   for (int i = 0; i < n_events; i++) {
+//     cond_set.insert(as<std::string>(regressor_col[i]));
+//   }
+//   std::vector<std::string> conditions(cond_set.begin(), cond_set.end());
+//
+//   List cache_list(conditions.size());
+//
+//   for (size_t j = 0; j < conditions.size(); j++) {
+//     std::string cond = conditions[j];
+//     // Subset events for this condition.
+//     std::vector<int> idx;
+//     for (int i = 0; i < n_events; i++) {
+//       if(as<std::string>(regressor_col[i]) == cond)
+//         idx.push_back(i);
+//     }
+//     int n_cond = idx.size();
+//
+//     // Build exp_condition matrix with columns: onset, duration, modulation.
+//     NumericVector onset_vec = events["onset"];
+//     NumericVector duration_vec = events["duration"];
+//     NumericVector modulation;
+//     if (events.containsElementNamed("modulation"))
+//       modulation = events["modulation"];
+//     else
+//       modulation = NumericVector(n_events, 1.0);
+//
+//     NumericMatrix exp_condition(n_cond, 3);
+//     for (int i = 0; i < n_cond; i++) {
+//       int row = idx[i];
+//       exp_condition(i, 0) = onset_vec[row];
+//       exp_condition(i, 1) = duration_vec[row];
+//       exp_condition(i, 2) = modulation[row];
+//     }
+//
+//     // Compute high-resolution regressor and grid using sample_event_condition.
+//     List sample_out = sample_event_condition(exp_condition, run_times, oversampling, min_onset);
+//     NumericVector hr_regressor = sample_out["regressor"];
+//     // M = length of hr_regressor.
+//     int M = hr_regressor.size();
+//
+//     // Determine padded length for FFT using a nominal HRF kernel.
+//     NumericVector hkernel_rev = build_glover_hrf_kernel_numeric(tr, oversampling, time_length, onset,
+//                                                                 nominal_delay, undershoot, dispersion,
+//                                                                 u_dispersion, ratio);
+//     int kernel_length = hkernel_rev.size();
+//     int padded_length = next_power_of_two(M + kernel_length - 1);
+//
+//     // Zero-pad hr_regressor using Armadillo's join_vert.
+//     arma::vec hr_regressor_vec = as<arma::vec>(hr_regressor);
+//     arma::vec zeros_pad = arma::zeros<arma::vec>(padded_length - M);
+//     arma::vec padded_regressor = join_vert(hr_regressor_vec, zeros_pad);
+//     arma::cx_vec regressor_fft = arma::fft(padded_regressor);
+//
+//     // Store TR, condition name, exp_condition, and regressor_fft.
+//     List cond_cache = List::create(
+//       Named("tr") = tr,
+//       Named("cond_name") = cond,
+//       Named("exp_condition") = exp_condition,
+//       Named("regressor_fft") = regressor_fft
+//     );
+//
+//     cache_list[j] = cond_cache;
+//   }
+//
+//   return cache_list;
+// }
+//
 
 // // [[Rcpp::export]]
 // double log_likelihood_double_gamma(NumericVector y,

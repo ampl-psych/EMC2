@@ -192,7 +192,7 @@ reshape_events <- function(events, event_types, duration = 0.001, modulation = N
 convolved_design_matrix <- function(timeseries, events, factors = NULL, contrasts = NULL,
                                        covariates = NULL, add_constant = TRUE,
                                        hrf_model = 'glover + derivative', cell_coding = NULL,
-                                       high_pass = TRUE, cut_off = 1e-5) {
+                                       high_pass = TRUE, cut_off = 1e-12) {
 
   if(!(all(c("onset", "run", "subjects", "modulation", "duration") %in% colnames(events)))){
     stop("Expected columns in events: subjects, duration, onset, run, modulation, duration")
@@ -277,7 +277,7 @@ convolved_design_matrix <- function(timeseries, events, factors = NULL, contrast
                                     add_intercept = FALSE)
 
       if(high_pass == "add"){
-        dm <- high_pass_filter(dm, ts_run$time, add = TRUE)
+        dm <- cbind(dm, cosine_drift(frame_times = ts_run$time))
       } else if(high_pass){
         if((run == runs[1]) & (subject == subjects[1])){
           message("High pass filtering design matrix, please make sure you also use high_pass_filter(<timeseries>)")
@@ -306,6 +306,64 @@ split_timeseries <- function(timeseries, columns = NULL){
     out[[col]] <- timeseries[,c('subjects', 'run', 'time', col)]
   }
   return(out)
+}
+
+poly_drift <- function(order, frame_times) {
+  # Ensure that 'order' is an integer
+  order <- as.integer(order)
+  n <- length(frame_times)
+  # Compute maximum of frame_times (will be used to scale the time vector)
+  tmax <- max(frame_times)
+
+  # Create a matrix where column k corresponds to (frame_times/tmax)^k,
+  # for k = 0, 1, ..., order; note that the 0th power yields a constant.
+  pol <- sapply(0:order, function(k) (frame_times / tmax) ^ k)
+  # 'pol' is now an n x (order+1) matrix
+
+  # Orthogonalize the columns using QR decomposition.
+  # The function qr.Q returns an orthonormal basis for the columns.
+  pol_orth <- qr.Q(qr(pol))
+
+  # Reorder the columns so that the constant (first column of pol_orth)
+  # becomes the last column (this matches Nilearn's convention).
+  # (pol_orth[,-1] is all columns except the first; pol_orth[,1] is the constant.)
+  result <- cbind(pol_orth[, -1, drop = FALSE], pol_orth[, 1, drop = FALSE])
+  return(result)
+}
+
+
+cosine_drift <- function(high_pass = .01, frame_times) {
+  n_frames <- length(frame_times)
+  n_times <- 0:(n_frames - 1)
+  # Compute the time interval (dt) between frames.
+  dt <- (frame_times[n_frames] - frame_times[1]) / (n_frames - 1)
+
+  # Check if the product high_pass * dt is too high, issuing a warning if so.
+  if (high_pass * dt >= 0.5) {
+    warning(sprintf("High-pass filter will span all accessible frequencies and saturate the design matrix. You may want to reduce the high_pass value. The provided value is %.3f Hz", high_pass))
+  }
+
+  # Determine the number of cosine basis functions (excluding the constant).
+  # This follows: order = min(n_frames - 1, floor(2 * n_frames * high_pass * dt))
+  order <- min(n_frames - 1, floor(2 * n_frames * high_pass * dt))
+
+  # Create a matrix to hold the cosine basis functions and a constant column.
+  # The result will have (order + 1) columns.
+  cosine_drift <- matrix(0, nrow = n_frames, ncol = order + 1)
+  normalizer <- sqrt(2.0 / n_frames)
+
+  # Fill the first 'order' columns with the cosine functions.
+  # For each k = 1, 2, ..., order we compute:
+  #   normalizer * cos( (pi/n_frames) * (n_times + 0.5) * k )
+  for (k in 1:order) {
+    cosine_drift[, k] <- normalizer * cos((pi / n_frames) * (n_times + 0.5) * k)
+  }
+  cosine_drift <- cosine_drift[,-ncol(cosine_drift)]
+
+  # Set the last column to a constant of 1.
+  colnames(cosine_drift) <- paste0("drift_", 1:ncol(cosine_drift))
+
+  return(cosine_drift)
 }
 
 high_pass_filter <- function(X, frame_times = NULL, add = FALSE, ...){

@@ -41,14 +41,6 @@ construct_design_matrix <- function(frame_times, events, has_derivative, min_ons
     .Call(`_EMC2_construct_design_matrix`, frame_times, events, has_derivative, min_onset, oversampling, time_length, onset, delay, undershoot, dispersion, u_dispersion, ratio, add_intercept)
 }
 
-build_glover_hrf_kernel_numeric <- function(tr, oversampling, time_length, onset, delay, undershoot, dispersion, u_dispersion, ratio) {
-    .Call(`_EMC2_build_glover_hrf_kernel_numeric`, tr, oversampling, time_length, onset, delay, undershoot, dispersion, u_dispersion, ratio)
-}
-
-build_event_cache_cpp <- function(events, run_times, oversampling = 50L, min_onset = -24.0, time_length = 32.0, onset = 0.0, nominal_delay = 6.0, undershoot = 12.0, dispersion = 0.9, u_dispersion = 0.9, ratio = 0.35) {
-    .Call(`_EMC2_build_event_cache_cpp`, events, run_times, oversampling, min_onset, time_length, onset, nominal_delay, undershoot, dispersion, u_dispersion, ratio)
-}
-
 calc_ll <- function(p_matrix, data, constants, designs, type, bounds, transforms, pretransforms, p_types, min_ll, trend) {
     .Call(`_EMC2_calc_ll`, p_matrix, data, constants, designs, type, bounds, transforms, pretransforms, p_types, min_ll, trend)
 }
