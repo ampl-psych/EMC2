@@ -190,7 +190,7 @@ reshape_events <- function(events, event_types, duration = 0.001, modulation = N
 #'   contrasts = list(difficulty = matrix(c(-1, 1)))
 #' )
 convolved_design_matrix <- function(timeseries, events, factors = NULL, contrasts = NULL,
-                                       covariates = NULL,
+                                       covariates = NULL, add_constant = TRUE,
                                        hrf_model = 'glover + derivative', cell_coding = NULL,
                                        high_pass = TRUE, cut_off = 1e-5) {
 
@@ -275,12 +275,16 @@ convolved_design_matrix <- function(timeseries, events, factors = NULL, contrast
                                     u_dispersion = u_dispersion,
                                     ratio = ratio,
                                     add_intercept = FALSE)
-      if(high_pass){
+
+      if(high_pass == "add"){
+        dm <- high_pass_filter(dm, ts_run$time, add = TRUE)
+      } else if(high_pass){
         if((run == runs[1]) & (subject == subjects[1])){
           message("High pass filtering design matrix, please make sure you also use high_pass_filter(<timeseries>)")
         }
         dm <- high_pass_filter(dm, ts_run$time)
       }
+      if(add_constant) dm$constant <- 1
       dms_sub[[as.character(run)]] <- dm
     }
     dms_sub <- do.call(rbind, dms_sub)
@@ -304,7 +308,7 @@ split_timeseries <- function(timeseries, columns = NULL){
   return(out)
 }
 
-high_pass_filter <- function(X, frame_times = NULL, ...){
+high_pass_filter <- function(X, frame_times = NULL, add = FALSE, ...){
   if(is.null(frame_times)){
     if(!'time' %in% colnames(X)){
       stop("no column named 'time' for frame_times present, please separately provide")
@@ -347,6 +351,11 @@ high_pass_filter <- function(X, frame_times = NULL, ...){
     cos( (pi * k * (2 * t + TR)) / (2 * T_total) )
   })
   colnames(dct_basis) <- paste0("dct", 0:(n_dct - 1))
+  dct_basis <- dct_basis[,-1] # Remove the constant term
+  if(add){
+    return(cbind(X, dct_basis))
+  }
+
   gets_filter <- !colnames(X) %in% c('subjects', 'run', 'time')
   for(i in 1:ncol(X)){
     if(gets_filter[i]){
