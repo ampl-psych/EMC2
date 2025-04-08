@@ -158,7 +158,9 @@ reshape_events <- function(events, event_types, duration = 0.001, modulation = N
 #' @param covariates A character vector of event types to include as covariates
 #' @param hrf_model A character string specifying the HRF model to use ('glover', 'spm', 'glover + derivative', or 'spm + derivative')
 #' @param cell_coding A character vector of factor names to use cell coding for
-#' @param high_pass Logical indicating whether to apply high-pass filtering
+#' @param high_pass Logical indicating whether to apply high-pass filtering.
+#' Alternatively, specifying 'add' adds the regressors to the design matrix
+#' @param high_pass_model Character indicating which type of high-pass filtering to apply ('cosine', 'poly')
 #' @param cut_off A numeric value specifying the cutoff for the high-pass filter
 #'
 #' @return A list containing the design matrices
@@ -192,7 +194,7 @@ reshape_events <- function(events, event_types, duration = 0.001, modulation = N
 convolved_design_matrix <- function(timeseries, events, factors = NULL, contrasts = NULL,
                                        covariates = NULL, add_constant = TRUE,
                                        hrf_model = 'glover + derivative', cell_coding = NULL,
-                                       high_pass = TRUE, cut_off = 1e-12) {
+                                       high_pass = TRUE, high_pass_model = "cosine", cut_off = 1e-12) {
 
   if(!(all(c("onset", "run", "subjects", "modulation", "duration") %in% colnames(events)))){
     stop("Expected columns in events: subjects, duration, onset, run, modulation, duration")
@@ -275,15 +277,7 @@ convolved_design_matrix <- function(timeseries, events, factors = NULL, contrast
                                     u_dispersion = u_dispersion,
                                     ratio = ratio,
                                     add_intercept = FALSE)
-
-      if(high_pass == "add"){
-        dm <- cbind(dm, cosine_drift(frame_times = ts_run$time))
-      } else if(high_pass){
-        if((run == runs[1]) & (subject == subjects[1])){
-          message("High pass filtering design matrix, please make sure you also use high_pass_filter(<timeseries>)")
-        }
-        dm <- high_pass_filter(dm, ts_run$time)
-      }
+      dm <- high_pass_filter(dm, high_pass_model, frame_times = ts_run$time, add=(high_pass == "add"))
       if(add_constant) dm$constant <- 1
       dms_sub[[as.character(run)]] <- dm
     }
@@ -308,7 +302,54 @@ split_timeseries <- function(timeseries, columns = NULL){
   return(out)
 }
 
-poly_drift <- function(order, frame_times) {
+
+# High pass filtering -----------------------------------------------------
+high_pass_filter <- function(X, high_pass_model = 'cosine', frame_times = NULL, ...){
+  if(is.null(frame_times)){
+    if(!'time' %in% colnames(X)){
+      stop("no column named 'time' for frame_times present, please separately provide")
+    } else{
+      frame_times <- X[,'time']
+    }
+  }
+  if('subjects' %in% colnames(X) && is.null(list(...)$recursive)){
+    out <- list()
+    k <- 0
+    for(sub in unique(X[,'subjects'])){
+      tmp <- X[X[,'subjects'] == sub,]
+      for(run in unique(tmp[,'run'])){
+        k <- k + 1
+        tmp_run <- tmp[tmp[,'run'] == run,]
+        tmp_run <- high_pass_filter(tmp_run, recursive = TRUE)
+        out[[k]] <- tmp_run
+      }
+    }
+    return(do.call(rbind, out))
+  }
+  if(high_pass_model == "cosine"){
+    nuisance <- cosine_drift(frame_times)
+  } else if(high_pass_model == "poly"){
+    nuisance <- poly_drift(frame_times)
+  } else{
+    stop("Only poly and cosine are supported as high_pass_model")
+  }
+  if(!is.null(list(...)$add)){
+    if(list(...)$add){
+      return(cbind(X, nuisance))
+    }
+  }
+
+  gets_filter <- !colnames(X) %in% c('subjects', 'run', 'time')
+  for(i in 1:ncol(X)){
+    if(gets_filter[i]){
+      fit <- lm(X[,i] ~ nuisance - 1)
+      X[,i] <- residuals(fit)
+    }
+  }
+  return(X)
+}
+
+poly_drift <- function(frame_times, order = 3) {
   # Ensure that 'order' is an integer
   order <- as.integer(order)
   n <- length(frame_times)
@@ -324,15 +365,14 @@ poly_drift <- function(order, frame_times) {
   # The function qr.Q returns an orthonormal basis for the columns.
   pol_orth <- qr.Q(qr(pol))
 
-  # Reorder the columns so that the constant (first column of pol_orth)
-  # becomes the last column (this matches Nilearn's convention).
-  # (pol_orth[,-1] is all columns except the first; pol_orth[,1] is the constant.)
-  result <- cbind(pol_orth[, -1, drop = FALSE], pol_orth[, 1, drop = FALSE])
+  # Drop the constant
+  result <- pol_orth[, -1, drop = FALSE]
+  colnames(result) <- paste0("pol_", 1:ncol(result))
   return(result)
 }
 
 
-cosine_drift <- function(high_pass = .01, frame_times) {
+cosine_drift <- function(frame_times, high_pass = .01) {
   n_frames <- length(frame_times)
   n_times <- 0:(n_frames - 1)
   # Compute the time interval (dt) between frames.
@@ -366,63 +406,6 @@ cosine_drift <- function(high_pass = .01, frame_times) {
   return(cosine_drift)
 }
 
-high_pass_filter <- function(X, frame_times = NULL, add = FALSE, ...){
-  if(is.null(frame_times)){
-    if(!'time' %in% colnames(X)){
-      stop("no column named 'time' for frame_times present, please separately provide")
-    } else{
-      frame_times <- X[,'time']
-    }
-  }
-  if('subjects' %in% colnames(X) && is.null(list(...)$recursive)){
-    out <- list()
-    k <- 0
-    for(sub in unique(X[,'subjects'])){
-      tmp <- X[X[,'subjects'] == sub,]
-      for(run in unique(tmp[,'run'])){
-        k <- k + 1
-        tmp_run <- tmp[tmp[,'run'] == run,]
-        tmp_run <- high_pass_filter(tmp_run, recursive = TRUE)
-        out[[k]] <- tmp_run
-      }
-    }
-    return(do.call(rbind, out))
-  }
-  # return(list(timeseries = timeseries, design_matrix = as.data.frame(design_matrix)))
-  TR <- frame_times[2] - frame_times[1]
-  cutoff <- 128           # High-pass filter cutoff period (in seconds)
-  n <- length(frame_times)         # Number of time points
-  T_total <- n * TR       # Total scan time
-
-  # Determine the number of DCT basis functions
-  # This follows a common practice: number of basis functions = floor(2 * T_total / cutoff) + 1.
-  # This count includes the constant term (k = 0).
-  n_dct <- floor(2 * T_total / cutoff) + 1
-
-  # Create a time vector (in seconds)
-  t <- seq(0, n - 1) * TR
-
-  # Generate DCT basis functions:
-  # We use a cosine formulation similar to the DCT-II.
-  # Here, for k=0 we get a constant term.
-  dct_basis <- sapply(0:(n_dct - 1), function(k) {
-    cos( (pi * k * (2 * t + TR)) / (2 * T_total) )
-  })
-  colnames(dct_basis) <- paste0("dct", 0:(n_dct - 1))
-  dct_basis <- dct_basis[,-1] # Remove the constant term
-  if(add){
-    return(cbind(X, dct_basis))
-  }
-
-  gets_filter <- !colnames(X) %in% c('subjects', 'run', 'time')
-  for(i in 1:ncol(X)){
-    if(gets_filter[i]){
-      fit <- lm(X[,i] ~ dct_basis - 1)
-      X[,i] <- residuals(fit)
-    }
-  }
-  return(X)
-}
 
 #' Create fMRI Design for EMC2 Sampling
 #'
