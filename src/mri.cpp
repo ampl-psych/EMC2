@@ -224,26 +224,61 @@ SEXP resample_regressor(SEXP hr_regressor, NumericVector hr_frame_times, Numeric
 NumericVector compute_gamma_diff_hrf(double tr, int oversampling, double time_length, double onset,
                                      double delay, double undershoot, double dispersion,
                                      double u_dispersion, double ratio) {
-  double dt = tr / oversampling;
-  int n_points = std::max(1, (int) std::round(time_length / dt));
-  NumericVector time_stamps = seq_lin(0, time_length, n_points);
-  for (int i = 0; i < time_stamps.size(); i++) {
-    time_stamps[i] = time_stamps[i] - onset;
+  // 1) Determine time step dt and number of points
+  double dt = tr / static_cast<double>(oversampling);
+  int n_points = static_cast<int>(std::round(time_length / dt));
+  if (n_points < 2) {
+    n_points = 2;
   }
-  int n = time_stamps.size();
-  NumericVector peak_gamma(n), undershoot_gamma(n), hrf(n);
-  for (int i = 0; i < n; i++) {
-    double t_val = (time_stamps[i] - dt) / dispersion;
-    peak_gamma[i] = R::dgamma(t_val, delay / dispersion, 1.0, 0);
-    double t_val2 = (time_stamps[i] - dt) / u_dispersion;
-    undershoot_gamma[i] = R::dgamma(t_val2, undershoot / u_dispersion, 1.0, 0);
-    hrf[i] = peak_gamma[i] - ratio * undershoot_gamma[i];
+
+  // 2) Generate time_stamps from 0 .. (n_points-1)*dt
+  Rcpp::NumericVector time_stamps(n_points);
+  for (int i = 0; i < n_points; i++){
+    time_stamps[i] = i * dt;
   }
-  // Normalize HRF by its maximum value.
-  double sum_hrf = sum(hrf);
-  for (int i = 0; i < n; i++) {
-    hrf[i] /= sum_hrf;
+
+  // 3) Subtract onset (same as Nilearn)
+  for (int i = 0; i < n_points; i++){
+    time_stamps[i] -= onset;
   }
+
+  // 4) Nilearn’s gamma.pdf(...) calls actually do:
+  //    shape = (delay / dispersion), loc = (dt / dispersion), scale = 1
+  //    shape = (undershoot / u_dispersion), loc = (dt / u_dispersion), scale = 1
+  //    We must manually shift t by loc and use scale=1 in R's dgamma().
+  double loc_peak   = dt / dispersion;
+  double loc_under  = dt / u_dispersion;
+
+  Rcpp::NumericVector hrf(n_points, 0.0);
+
+  for (int i = 0; i < n_points; i++){
+    double tval = time_stamps[i];
+
+    // Peak gamma
+    double peak_val = 0.0;
+    if (tval >= loc_peak) {
+      // shape = (delay / dispersion), scale=1, argument=(tval - loc_peak)
+      peak_val = R::dgamma(tval - loc_peak, delay / dispersion, /*scale=*/1.0, false);
+    }
+
+    // Undershoot gamma
+    double under_val = 0.0;
+    if (tval >= loc_under) {
+      // shape = (undershoot / u_dispersion), scale=1, argument=(tval - loc_under)
+      under_val = R::dgamma(tval - loc_under, undershoot / u_dispersion, /*scale=*/1.0, false);
+    }
+
+    hrf[i] = peak_val - ratio * under_val;
+  }
+
+  // 5) Normalize so the sum of the HRF = 1
+  double sum_hrf = std::accumulate(hrf.begin(), hrf.end(), 0.0);
+  if (sum_hrf != 0.0) {
+    for (int i = 0; i < n_points; i++){
+      hrf[i] /= sum_hrf;
+    }
+  }
+
   return hrf;
 }
 
