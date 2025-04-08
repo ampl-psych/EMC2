@@ -1,7 +1,7 @@
 # One potential issue, some data will have lapse responses that will never get
 # an acceptance for the latent states.
 
-add_cov_noise_ll <- function(pars, dadm, model, min_ll = log(1e-10)){
+cov_noise_ll <- function(pars, dadm, model, min_ll = log(1e-10)){
   # This step adds the likelihood of the noisy covariate model.
   ll <- 0
   for(cov in model$noisy_cov){
@@ -146,29 +146,6 @@ check_noisy_cov <- function(noisy_cov, covariates, formula = NULL) {
     }
   }
   return(formula)
-}
-
-latent_manager <- function(proposals, dadm, model, component = NULL){
-  if(!is.data.frame(dadm)){
-    lls <- log_likelihood_joint(proposals, dadm, model, component)
-  } else{
-    model <- model()
-    if(is.null(model$c_name)){ # use the R implementation
-      lls <- apply(proposals,1, calc_ll_R, model, dadm = dadm)
-    } else{
-      p_types <- names(model$p_types)
-      designs <- list()
-      for(p in p_types){
-        designs[[p]] <- attr(dadm,"designs")[[p]][attr(attr(dadm,"designs")[[p]],"expand"),,drop=FALSE]
-      }
-      constants <- attr(dadm, "constants")
-      if(is.null(constants)) constants <- NA
-      lls <- calc_ll(proposals, dadm, constants = constants, designs = designs, type = model$c_name,
-                     model$bound, model$transform, model$pre_transform, p_types = p_types, min_ll = log(1e-10),
-                     model$trend)
-    }
-  }
-  return(dadm)
 }
 
 

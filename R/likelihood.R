@@ -6,7 +6,7 @@ calc_ll_R <- function(p_vector, model, dadm){
   }
   ll <- model$log_likelihood(pars, dadm, model)
   if(any(model$noisy_cov)){
-    ll <- ll + cov_noise_ll(pars, dadm)
+    ll <- ll + cov_noise_ll(pars, dadm, model)
   }
   return(sum(ll))
 }

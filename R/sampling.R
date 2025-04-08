@@ -667,6 +667,12 @@ calc_ll_manager <- function(proposals, dadm, model, component = NULL){
     lls <- log_likelihood_joint(proposals, dadm, model, component)
   } else{
     model <- model()
+    if(!is.null(model$noisy_cov)){
+      # The winning proposal of last iteration (always first) will be used to update the latents
+      # This at least samples the latent particle correctly, now we just need a way to keep check of
+      # the proposal mean, variance, epsilon and acceptance
+      dadm <- update_latent_cov(proposals[1,], dadm, model)
+    } else noisy_cov <- NULL
     if(is.null(model$c_name)){ # use the R implementation
       lls <- apply(proposals,1, calc_ll_R, model, dadm = dadm)
     } else{
