@@ -759,10 +759,10 @@ make_emc <- function(data,design,model=NULL,
     if(type == "blocked"){
       if(is.null(par_groups)) stop("par_groups must be specified for blocked models")
     }
-    if(type == "diagonal"){
+    if(type == "diagonal" && is.null(par_groups)){
       par_groups <- 1:length(sampled_pars(design))
     }
-    if(type == "standard"){
+    if(type == "standard" && is.null(par_groups)){
       par_groups <- rep(1, length(sampled_pars(design)))
     }
     if(!is.null(par_groups)){
