@@ -584,7 +584,8 @@ design_model <- function(data,design,model=NULL,
     dadm <- da
     attr(dadm,"designs") <- out
     attr(dadm,"s_expand") <- da$subjects
-    attr(dadm,"expand") <- 1:dim(dadm)[1]
+    attr(dadm,"expand") <- 1:nrow(dadm)
+    attr(dadm,"expand_winner") <- 1:(nrow(dadm)/length(levels(dadm$lR)))
   }
   p_names <-  unlist(lapply(out,function(x){dimnames(x)[[2]]}),use.names=FALSE)
   bad_constants <- names(design$constants)[!(names(design$constants) %in% p_names)]
@@ -742,7 +743,7 @@ dm_list <- function(dadm)
       attr(dl[[i]],"designs") <- sub_design(designs,isin)
       if(!is.null(expand)) attr(dl[[i]],"expand") <- expand[isin1]-min(expand[isin1]) + 1
       attr(dl[[i]],"contract") <- NULL
-      attr(dl[[i]],"expand_winner") <- NULL
+#      attr(dl[[i]],"expand_winner") <- NULL
       attr(dl[[i]],"ok_dadm_winner") <- NULL
       attr(dl[[i]],"ok_dadm_looser") <- NULL
       attr(dl[[i]],"ok_da_winner") <- NULL
