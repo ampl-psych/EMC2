@@ -279,20 +279,20 @@ log_likelihood_race_ss <- function(pars,dadm,model,min_ll=log(1e-10))
 
       # Go beats stop and ST (if any)
       if (any(ispSGO)) {
-
         ispGOwin <-  ispSGO & dadm$winner # Winner go accumulator rows
         tGO <- ptrials[ispGOwin]          # Go trials
         like[tGO] <- log(attr(dadm,"model")()$dfunG(
-          rt=dadm[ispGOwin,"rt"],pars=pars[ispGOwin,,drop=FALSE])) +
-            log(1-attr(dadm,"model")()$pfunS(
-                rt=dadm[ispGOwin,"rt"],pars=pars[ispGOwin,,drop=FALSE]))
+          rt=dadm[ispGOwin,"rt"],pars=pars[ispGOwin,,drop=FALSE]))
         if (n_acc > 1) {  # Looser survivor accumulator(s)
           ispGOloss <- ispSGO & !dadm$winner
           like[tGO] <- like[tGO] + apply(matrix(log(1-attr(dadm,"model")()$pfunG(
             rt=dadm$rt[ispGOloss],pars=pars[ispGOloss,,drop=FALSE])),nrow=n_acc-1),2,sum)
         }
-        # Transform back to densities to include go failure
-        like[tGO] <- (1-gf[tGO])*exp(like[tGO])
+        # trigger stop, add in stop survivor
+        ts <- like[tGO] + log(1-attr(dadm,"model")()$pfunS(
+                rt=dadm[ispGOwin,"rt"],pars=pars[ispGOwin,,drop=FALSE]))
+        # Transform back to densities to include failures
+        like[tGO] <- (1-gf[tGO])*(tf[tGO]*exp(like[tGO]) + (1-tf[tGO])*exp(ts))
       }
 
       # ST WINS (never tf)
