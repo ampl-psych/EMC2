@@ -118,7 +118,7 @@ SBC_single <- function(design_in, prior_in, replicates = 250, trials = 100,
     pars <- model()$Ttransform(pars, data)
     ok <- do_bound(pars, model()$bound)[
       rep(pdesign$Rlevels==pdesign$Rlevels[1],times=nrow(prior_alpha))]
-    ok[1] <- T
+    ok[1] <- F
     if (any(!ok)) attr(ok,"badp") <- pars[!ok,]
     ok
   }
