@@ -37,7 +37,7 @@ map_p <- function(p,dadm, model)
       stop("p col.names must be: ",paste(attr(dadm,"p_names"),collapse=", "))
     if (!all(levels(dadm$subjects) %in% dimnames(p)[[1]]))
       stop("p must have rows named for every subject in dadm")
-    p <- p[dadm$subjects,]
+    p <- p[dadm$subjects,,drop=FALSE]
   } else if (!all(sort(names(p))==sort(attr(dadm,"p_names")))) # If p is vector, check names
     stop("p names must be: ",paste(attr(dadm,"p_names"),collapse=", "))
 
@@ -74,7 +74,7 @@ map_p <- function(p,dadm, model)
     pars[,i] <- tmp
   }
   # Return only non-trend parameters
-  return(pars[,!premap_idx])
+  return(pars[,!premap_idx,drop=FALSE])
 }
 
 
