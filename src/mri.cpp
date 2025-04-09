@@ -272,10 +272,10 @@ NumericVector compute_gamma_diff_hrf(double tr, int oversampling, double time_le
   }
 
   // 5) Normalize so the sum of the HRF = 1
-  double max_hrf = max(hrf);
-  if (max_hrf != 0.0) {
+  double sum_hrf = std::accumulate(hrf.begin(), hrf.end(), 0.0);
+  if (sum_hrf != 0.0) {
     for (int i = 0; i < n_points; i++){
-      hrf[i] /= max_hrf;
+      hrf[i] /= sum_hrf;
     }
   }
 
