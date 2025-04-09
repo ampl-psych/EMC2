@@ -118,7 +118,6 @@ SBC_single <- function(design_in, prior_in, replicates = 250, trials = 100,
     pars <- model()$Ttransform(pars, data)
     ok <- do_bound(pars, model()$bound)[
       rep(pdesign$Rlevels==pdesign$Rlevels[1],times=nrow(prior_alpha))]
-    ok[1] <- F
     if (any(!ok)) attr(ok,"badp") <- pars[!ok,]
     ok
   }
@@ -131,9 +130,9 @@ SBC_single <- function(design_in, prior_in, replicates = 250, trials = 100,
   # Check prior parameters are within bounds
   ok <- check_bound(prior_alpha,design_in)
   if (any(!ok)) {
-    cat("The following prior samples fall outside bounds for this model\n")
+    cat("The following prior samples fall outside bounds for this model:\n")
     print(prior_alpha[!ok,])
-    cat("\n These prior samples produce the following transformed parameters\n")
+    cat("\n The coresponding mapped parameters are:\n")
     print(attr(ok,"badp"))
     stop("Try again with tighter priors!")
   }
