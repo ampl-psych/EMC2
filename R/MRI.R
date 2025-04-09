@@ -277,7 +277,7 @@ convolved_design_matrix <- function(timeseries, events, factors = NULL, contrast
                                     u_dispersion = u_dispersion,
                                     ratio = ratio,
                                     add_intercept = FALSE)
-      if((run == runs[1]) & (subject == subjects[1]) & isTrue(high_pass)){
+      if((run == runs[1]) & (subject == subjects[1]) & isTRUE(high_pass)){
         warning("Filtering out high_pass noise, make sure you also use high_pass_filter(<timeseries>)")
       }
       dm <- high_pass_filter(dm, high_pass_model, frame_times = ts_run$time, add=(high_pass == "add"))
