@@ -105,10 +105,37 @@ SBC_single <- function(design_in, prior_in, replicates = 250, trials = 100,
     try(fit(emc,verbose=FALSE,...),silent=TRUE)
   }
 
+  check_bound <- function(prior_alpha,pdesign) {
+    model <- pdesign$model
+    pdesign$Ffactors$subjects <- 1:nrow(prior_alpha)
+    dadm <- design_model(
+      make_data(prior_alpha,pdesign, 1, model = model),
+    pdesign,verbose=FALSE,compress=FALSE)
+    pars <- t(apply(prior_alpha, 1, do_pre_transform, model()$pre_transform))
+    rownames(pars) <- pdesign$Ffactors$subjects
+    pars <- map_p(add_constants(pars,pdesign$constants),dadm, model())
+    pars <- do_transform(pars, model()$transform)
+    pars <- model()$Ttransform(pars, data)
+    ok <- do_bound(pars, model()$bound)[
+      rep(pdesign$Rlevels==pdesign$Rlevels[1],times=nrow(prior_alpha))]
+    ok[1] <- F
+    if (any(!ok)) attr(ok,"badp") <- pars[!ok,]
+    ok
+  }
+
+
   type <- attr(prior_in, "type")
   if(type != "single") stop("can only use `type = single`")
   # Draw prior samples
   prior_alpha <- parameters(prior_in, N = replicates, selection = "alpha")
+  # Check prior parameters are within bounds
+  ok <- check_bound(prior_alpha,design_in)
+  if (any(!ok)) {
+    cat("The following prior samples fall outside bounds for this model\n")
+    print(prior_alpha[!ok,])
+    cat("\n These prior samples produce the following transformed parameters\n")
+    print(attr(ok,"badp"))
+  }
   rank_alpha <- data.frame()
   if(!is.null(fileName)) save(prior_alpha, file = fileName)
   i <- 1
