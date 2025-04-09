@@ -58,7 +58,7 @@ update_latent_cov <- function(pars, dadm, model){
   # 1. Density centered on the observed value with some adaptive covariance
   # 2. Density centered on previous z_i, with same adaptive covariance
   # 3. Density centered on running z_i mean, with some adaptive covariance
-  cur_sd <- dadm$eps *dadm$running_sd
+  cur_sd <- dadm$eps *(dadm$running_ss/idx)
   for(i in 1:(n_particles*n_dists + 1)){
     if(i != 1){ # The old state is particle 1
       if(i < (1 + n_particles)){
@@ -96,11 +96,12 @@ update_latent_cov <- function(pars, dadm, model){
   dadm$acceptance <- calc_acceptance(weights, dadm$acceptance, idx)
   # Scaling parameter
   dadm$epsilon <- update_epsilon_continuous(dadm$epsilon, dadm$acceptance, target = .2,
-                                          iter =iter, d = 1, alphaStar = 3,
+                                          iter =idx, d = 1, alphaStar = 3,
                                           clamp = c(.5, 2))
   # Running mean:
-  dadm$running_mu
-
+  new_moments <- running_moments(dadm$latent, dadm$running_mu, dadm$running_ss, idx)
+  dadm$running_mu <- new_moments$mu
+  dadm$running_ss <- new_moments$ss
   # For race models we also need to keep a tracker that only the trials (not the lR)
   # are updated (so 1 per R accumulators, not per row)
   return(dadm)
@@ -135,6 +136,17 @@ update_model_noisy_cov <- function(noisy_cov, model) {
   # Return updated model function
   model <- function() { return(model_list) }
   return(model)
+}
+
+running_moments <- function(new_latent, old_mu, old_ss, idx){
+  n_new   <- idx + 1
+  delta   <- new_latent - old_mu
+  meanNew <- old_mu + delta / n_new
+  ssNew   <- old_ss + delta*(new_latent - old_mu)
+  list(
+    mu = meanNew,
+    ss   = ssNew,
+  )
 }
 
 check_noisy_cov <- function(noisy_cov, covariates, formula = NULL) {
