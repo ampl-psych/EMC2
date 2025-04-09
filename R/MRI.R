@@ -158,6 +158,7 @@ reshape_events <- function(events, event_types, duration = 0.001, modulation = N
 #' @param covariates A character vector of event types to include as covariates
 #' @param hrf_model A character string specifying the HRF model to use ('glover', 'spm', 'glover + derivative', or 'spm + derivative')
 #' @param cell_coding A character vector of factor names to use cell coding for
+#' @param scale A boolean indicating whether to scale the design matrix.
 #' @param high_pass Logical indicating whether to apply high-pass filtering.
 #' Alternatively, specifying 'add' adds the regressors to the design matrix
 #' @param high_pass_model Character indicating which type of high-pass filtering to apply ('cosine', 'poly')
@@ -192,9 +193,10 @@ reshape_events <- function(events, event_types, duration = 0.001, modulation = N
 #'   contrasts = list(difficulty = matrix(c(-1, 1)))
 #' )
 convolved_design_matrix <- function(timeseries, events, factors = NULL, contrasts = NULL,
-                                       covariates = NULL, add_constant = TRUE,
-                                       hrf_model = 'glover + derivative', cell_coding = NULL,
-                                       high_pass = TRUE, high_pass_model = "cosine", cut_off = 1e-12) {
+                                    covariates = NULL, add_constant = TRUE,
+                                    hrf_model = 'glover + derivative', cell_coding = NULL,
+                                    scale = TRUE, high_pass = TRUE,
+                                    high_pass_model = "cosine", cut_off = 1e-12) {
 
   if(!(all(c("onset", "run", "subjects", "modulation", "duration") %in% colnames(events)))){
     stop("Expected columns in events: subjects, duration, onset, run, modulation, duration")
@@ -288,6 +290,18 @@ convolved_design_matrix <- function(timeseries, events, factors = NULL, contrast
     dms_sub[abs(dms_sub) < cut_off] <- 0
     rownames(dms_sub) <- NULL
     all_dms[[as.character(subject)]] <- dms_sub
+  }
+  if(scale){
+    full_dm <- do.call(rbind, all_dms)
+    sds <- apply(full_dm, 2, sd)
+    all_dms <- lapply(all_dms, function(x){
+      for(i in 1:ncol(x)){
+        if(sds[i] > 1e-3){
+          x[,i] <- x[,i]/sds[i]
+        }
+      }
+      return(x)
+    })
   }
   return(all_dms)
 }
