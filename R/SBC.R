@@ -153,8 +153,9 @@ SBC_single <- function(design_in, prior_in, replicates = 250, trials = 100,
     }
     start <- i
     i <- i + n_cores
-    dats <- parallel::mclapply(start:(i-1),make_datas,prior_alpha=prior_alpha,
-                     design_in=design_in,trials=trials,mc.cores=n_cores)
+    dats <- parallel::mclapply(start:max(c(i-1),replicates),make_datas,
+        prior_alpha=prior_alpha,design_in=design_in,trials=trials,
+      mc.cores=n_cores)
     if(plot_data){
       lapply(dats,plot_density,
         factors = names(design_in$Ffactors)[names(design_in$Ffactors) != "subjects"])
@@ -165,8 +166,9 @@ SBC_single <- function(design_in, prior_in, replicates = 250, trials = 100,
     bad <- unlist(lapply(emcs,\(res) inherits(res, "try-error")))
     if (!is.null(save_emc)) {
       if (any(!bad)) emc0[!bad] <- emcs[!bad]
+      bad0 <- attr(emc,"bad")
       emc <- c(emc,emc0)
-      attr(emc,"bad") <- c(attr(emc,"bad"),bad)
+      attr(emc,"bad") <- c(bad0,bad)
     }
     if (any(bad)) {
       print(paste0("Fitting failed for ",sum(bad)," samples, prior may be too broad.\n"))
