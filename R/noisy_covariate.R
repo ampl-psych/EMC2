@@ -81,11 +81,7 @@ update_latent_cov <- function(pars, dadm, model){
     # For now these weights are uncorrected for
     weights[,i] <- l
   }
-  # First update acceptance
-  dadm$acceptance <- calc_acc(weights, dadm$acceptance, idx)
-  update_eps <- update_epsilon_continuous(dadm$epsilon, dadm$acceptance, target = .2,
-                                          iter =iter, d = 1, alphaStar = 3,
-                                          clamp = c(.5, 2))
+
   # Now we need to sample from the weighted likelihoods
   # using n metropolis steps, with n being the number of observations
   mh_idx <- apply(weights, 1, function(x){
@@ -94,6 +90,17 @@ update_latent_cov <- function(pars, dadm, model){
   })
   # Sample each row of latents based on weight and replace
   dadm$latent <- latents[cbind(seq_len(nrow(dadm)), mh_idx)]
+
+  # Finally let's update some sampling tuning parameters
+  # First update acceptance
+  dadm$acceptance <- calc_acceptance(weights, dadm$acceptance, idx)
+  # Scaling parameter
+  dadm$epsilon <- update_epsilon_continuous(dadm$epsilon, dadm$acceptance, target = .2,
+                                          iter =iter, d = 1, alphaStar = 3,
+                                          clamp = c(.5, 2))
+  # Running mean:
+  dadm$running_mu
+
   # For race models we also need to keep a tracker that only the trials (not the lR)
   # are updated (so 1 per R accumulators, not per row)
   return(dadm)
