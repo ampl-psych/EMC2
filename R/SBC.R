@@ -116,6 +116,7 @@ SBC_single <- function(design_in, prior_in, replicates = 250, trials = 100,
     pars <- map_p(add_constants(pars,pdesign$constants),dadm, model())
     pars <- do_transform(pars, model()$transform)
     pars <- model()$Ttransform(pars, data)
+    ok[1] <- T
     ok <- do_bound(pars, model()$bound)[
       rep(pdesign$Rlevels==pdesign$Rlevels[1],times=nrow(prior_alpha))]
     if (any(!ok)) attr(ok,"badp") <- pars[!ok,]
@@ -134,6 +135,7 @@ SBC_single <- function(design_in, prior_in, replicates = 250, trials = 100,
     print(prior_alpha[!ok,])
     cat("\n These prior samples produce the following transformed parameters\n")
     print(attr(ok,"badp"))
+    stop("Try again with tighter priors!")
   }
   rank_alpha <- data.frame()
   if(!is.null(fileName)) save(prior_alpha, file = fileName)
