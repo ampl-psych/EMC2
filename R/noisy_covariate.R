@@ -1,5 +1,9 @@
+
+# Sampling ----------------------------------------------------------------
+
 # One potential issue, some data will have lapse responses that will never get
 # an acceptance for the latent states.
+
 
 cov_noise_ll <- function(pars, dadm, model, min_ll = log(1e-10)){
   # This step adds the likelihood of the noisy covariate model.
@@ -48,62 +52,67 @@ update_latent_cov <- function(pars, dadm, model){
   # to account for detailed balance.
   # We can use the proposal density to weight the likelihood of each proposal
   # and then sample from the weighted likelihoods to get the new latent states.
-  n_particles <- 5 # Number of particles per proposal distribution
-  n_dists <- 3 # Number of proposal distributions
   weights <- matrix(NA, nrow = nrow(dadm), ncol = n_particles*n_dists + 1)
   latents <- matrix(NA, nrow = nrow(dadm), ncol = n_particles*n_dists +1)
-  prev_latent <- dadm$latent
-  # Now for k proposals we evaluate the likelihood given the new latent states
-  # For now we'll sample from 3 densities.
-  # 1. Density centered on the observed value with some adaptive covariance
-  # 2. Density centered on previous z_i, with same adaptive covariance
-  # 3. Density centered on running z_i mean, with some adaptive covariance
-  cur_sd <- dadm$eps *(dadm$running_ss/idx)
-  for(i in 1:(n_particles*n_dists + 1)){
-    if(i != 1){ # The old state is particle 1
-      if(i < (1 + n_particles)){
-        dadm$latent <- rnorm(nrow(dadm), mean = dadm$obs, sd = cur_sd)
-      } else if(i < (1 + 2*n_particles)){
-        dadm$latent <- rnorm(nrow(dadm), mean = prev_latent, sd = cur_sd)
-      } else{
-        dadm$latent <- rnorm(nrow(dadm), mean = dadm$running_mu, sd = cur_sd)
+  n_particles <- 5 # Number of particles per proposal distribution
+  n_dists <- 3 # Number of proposal distributions
+  for(cov in model$noisy_cov){
+    noisy_cov <- attr(dadm, "cov")
+    prev_latent <- dadm[,cov]
+    # Now for k proposals we evaluate the likelihood given the new latent states
+    # For now we'll sample from 3 densities.
+    # 1. Density centered on the observed value with some adaptive covariance
+    # 2. Density centered on previous z_i, with same adaptive covariance
+    # 3. Density centered on running z_i mean, with some adaptive covariance
+    cur_sd <- noisy_cov$eps *(noisy_cov$running_ss/idx)
+    # For now we'll just assume that each distributions carries 1/3 of the particles
+    for(i in 1:(n_particles*n_dists + 1)){
+      if(i != 1){ # The old state is particle 1
+        if(i < (1 + n_particles)){
+          dadm[,cov] <- rnorm(nrow(noisy_cov), mean = noisy_cov$obs, sd = cur_sd)
+        } else if(i < (1 + 2*n_particles)){
+          dadm[,cov] <- rnorm(nrow(noisy_cov), mean = prev_latent, sd = cur_sd)
+        } else{
+          dadm[,cov] <- rnorm(nrow(noisy_cov), mean = noisy_cov$running_mu, sd = cur_sd)
+        }
       }
+      # Calculate the likelihood
+      ll <- calc_ll_R(pars, model, dadm)
+      # For now assign each distribution a 1/3 weight
+      lm <- 1/3*dnorm(dadm[,cov], mean = noisy_cov$obs, sd = cur_sd) +
+        1/3*dnorm(dadm[,cov], mean = prev_latent, sd = cur_sd) +
+        1/3*dnorm(dadm[,cov], mean = noisy_cov$running_mu, sd = cur_sd)
+      # Importance correction of all proposal densities
+      l <- ll - log(lm)
+      latents[,i] <- dadm[,cov]
+      # Unnormalized weights
+      weights[,i] <- l
     }
-    # Calculate the likelihood
-    ll <- calc_ll_R(pars, model, dadm)
-    # For now assign each distribution a 1/3 weight
-    lm <- 1/3*dnorm(dadm$latent, mean = dadm$obs, sd = cur_sd) +
-      1/3*dnorm(dadm$latent, mean = prev_latent, sd = cur_sd) +
-      1/3*dnorm(dadm$latent, mean = dadm$running_mu, sd = cur_sd)
-    # Importance correction of all proposal densities
-    l <- ll - log(lm)
-    latents[,i] <- dadm$latent
-    # For now these weights are uncorrected for
-    weights[,i] <- l
+
+    # Now we need to sample from the weights
+    # using n metropolis steps, with n being the number of observations
+    mh_idx <- apply(weights, 1, function(x){
+      weights <- exp(x - max(x))
+      sample(x = n_particles*n_dists + 1, size = 1, prob = weights)
+    })
+    # Sample each row of latents based on weight and replace
+    dadm[,cov] <- latents[cbind(seq_len(nrow(noisy_cov)), mh_idx)]
+
+    # Finally let's update some sampling tuning parameters
+    # First update acceptance
+    noisy_cov$acceptance <- calc_acceptance(weights, noisy_cov$acceptance, idx)
+    # Scaling parameter
+    noisy_cov$epsilon <- update_epsilon_continuous(noisy_cov$epsilon, noisy_cov$acceptance, target = .2,
+                                              iter =idx, d = 1, alphaStar = 3,
+                                              clamp = c(.5, 2))
+    # Running mean:
+    new_moments <- running_moments(noisy_cov$latent, noisy_cov$running_mu, noisy_cov$running_ss, idx)
+    noisy_cov$running_mu <- new_moments$mu
+    noisy_cov$running_ss <- new_moments$ss
+    # For race models we also need to keep a tracker that only the trials (not the lR)
+    # are updated (so 1 per R accumulators, not per row)
+    attr(dadm, "cov") <- noisy_cov
   }
-
-  # Now we need to sample from the weighted likelihoods
-  # using n metropolis steps, with n being the number of observations
-  mh_idx <- apply(weights, 1, function(x){
-    weights <- exp(x - max(x))
-    sample(x = n_particles*n_dists + 1, size = 1, prob = weights)
-  })
-  # Sample each row of latents based on weight and replace
-  dadm$latent <- latents[cbind(seq_len(nrow(dadm)), mh_idx)]
-
-  # Finally let's update some sampling tuning parameters
-  # First update acceptance
-  dadm$acceptance <- calc_acceptance(weights, dadm$acceptance, idx)
-  # Scaling parameter
-  dadm$epsilon <- update_epsilon_continuous(dadm$epsilon, dadm$acceptance, target = .2,
-                                          iter =idx, d = 1, alphaStar = 3,
-                                          clamp = c(.5, 2))
-  # Running mean:
-  new_moments <- running_moments(dadm$latent, dadm$running_mu, dadm$running_ss, idx)
-  dadm$running_mu <- new_moments$mu
-  dadm$running_ss <- new_moments$ss
-  # For race models we also need to keep a tracker that only the trials (not the lR)
-  # are updated (so 1 per R accumulators, not per row)
   return(dadm)
 }
 
@@ -116,6 +125,22 @@ calc_acceptance <- function(weights, prev_acc, idx){
   updated_acc <- ((prev_acc * idx * (n-1)) + curr_acc) / ((idx + 1) * (n-1))
   return(updated_acc)
 }
+
+running_moments <- function(new_latent, old_mu, old_ss, idx){
+  n_new   <- idx + 1
+  delta   <- new_latent - old_mu
+  meanNew <- old_mu + delta / n_new
+  ssNew   <- old_ss + delta*(new_latent - old_mu)
+  list(
+    mu = meanNew,
+    ss   = ssNew,
+  )
+}
+
+
+
+# Design ------------------------------------------------------------------
+
 
 get_noisy_cov_pnames <- function(noisy_cov){
   return(paste0(c("mu.t", "sigma.t", "sigma.e"), "_", noisy_cov))
@@ -138,16 +163,7 @@ update_model_noisy_cov <- function(noisy_cov, model) {
   return(model)
 }
 
-running_moments <- function(new_latent, old_mu, old_ss, idx){
-  n_new   <- idx + 1
-  delta   <- new_latent - old_mu
-  meanNew <- old_mu + delta / n_new
-  ssNew   <- old_ss + delta*(new_latent - old_mu)
-  list(
-    mu = meanNew,
-    ss   = ssNew,
-  )
-}
+
 
 check_noisy_cov <- function(noisy_cov, covariates, formula = NULL) {
   if (!all(noisy_cov %in% names(covariates))){
