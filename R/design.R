@@ -825,6 +825,8 @@ dm_list <- function(dadm)
 #'
 #' @export
 update2version <- function(emc){
+  # For older versions, ensure that the class is emc:
+  class(emc) <- "emc"
   get_new_model <- function(old_model, pars){
     if(old_model()$c_name == "LBA"){
       model <- LBA

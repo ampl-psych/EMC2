@@ -27,7 +27,7 @@ dprobit <- design(Rlevels = c("left","right"),
                   formula=list(mean ~ 0+S, sd ~ 1,threshold ~ 1),
                   matchfun=function(d)d$S==d$lR,
                   constants=c(sd=log(1),threshold=0),
-                  model=probit)
+                  model=SDT)
 
 p_vector <- sampled_pars(dprobit,doMap=F)
 p_vector[1:2] <- c(-1,1)
