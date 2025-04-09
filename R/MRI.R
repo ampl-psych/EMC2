@@ -293,12 +293,10 @@ convolved_design_matrix <- function(timeseries, events, factors = NULL, contrast
   }
   if(scale){
     full_dm <- do.call(rbind, all_dms)
-    sds <- apply(full_dm, 2, sd)
+    maxs <- apply(full_dm, 2, max)
     all_dms <- lapply(all_dms, function(x){
       for(i in 1:ncol(x)){
-        if(sds[i] > 1e-3){
-          x[,i] <- x[,i]/sds[i]
-        }
+        x[,i] <- x[,i]/maxs[i]
       }
       return(x)
     })
