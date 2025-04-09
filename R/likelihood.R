@@ -192,7 +192,7 @@ log_likelihood_race_ss <- function(pars,dadm,model,min_ll=log(1e-10))
   tf <- pars[isp1,"tf"]
 
   # Go response names
-  GoR <- as.character(dadm[1:n_acc,"R"][dadm[1:n_acc,"lI"]==2])
+  GoR <- as.character(dadm[1:n_acc,"lR"][dadm[1:n_acc,"lI"]==2])
 
   # No response
   ispNR <- is.na(dadm$R)
@@ -276,6 +276,24 @@ log_likelihood_race_ss <- function(pars,dadm,model,min_ll=log(1e-10))
     if (any(ispStop)) {                       # Stop trials
       ispSGO <- ispStop & (dadm$R %in% GoR)   # Go responses
       ispSST <- ispStop & !(dadm$R %in% GoR)
+
+      # Go beats stop and ST (if any)
+      if (any(ispSGO)) {
+
+        ispGOwin <-  ispSGO & dadm$winner # Winner go accumulator rows
+        tGO <- ptrials[ispGOwin]          # Go trials
+        like[tGO] <- log(attr(dadm,"model")()$dfunG(
+          rt=dadm[ispGOwin,"rt"],pars=pars[ispGOwin,,drop=FALSE])) +
+            log(1-attr(dadm,"model")()$pfunS(
+                rt=dadm[ispGOwin,"rt"],pars=pars[ispGOwin,,drop=FALSE]))
+        if (n_acc > 1) {  # Looser survivor accumulator(s)
+          ispGOloss <- ispSGO & !dadm$winner
+          like[tGO] <- like[tGO] + apply(matrix(log(1-attr(dadm,"model")()$pfunG(
+            rt=dadm$rt[ispGOloss],pars=pars[ispGOloss,,drop=FALSE])),nrow=n_acc-1),2,sum)
+        }
+        # Transform back to densities to include go failure
+        like[tGO] <- (1-gf[tGO])*exp(like[tGO])
+      }
 
       # ST WINS (never tf)
       if (any(ispSST)) { # Go triggered 1a) with (1-pStop), all race,
