@@ -533,8 +533,9 @@ SSexG <- function() {
                             exception=c(tf=0,gf=0)),
     # Trial dependent parameter transform
     Ttransform = function(pars,dadm) {
-      if (any(names(dadm)=="SSD")) pars <- cbind(pars,SSD=dadm$SSD) else
-        pars <- cbind(pars,SSD=rep(NA,dim(pars)[1]))
+      # if (any(names(dadm)=="SSD")) pars <- cbind(pars,SSD=dadm$SSD) else
+      #   pars <- cbind(pars,SSD=rep(Inf,dim(pars)[1]))
+      pars <- cbind(pars,SSD=dadm$SSD)
       pars <- cbind(pars,lI=as.numeric(dadm$lI))  # Only necessary for data generation.
       pars
     },
@@ -547,7 +548,7 @@ SSexG <- function() {
     # Probability function (CDF) for single stop racer
     pfunS=function(rt,pars) pexGaussianS(rt,pars[,c("muS","sigmaS","tauS","SSD"),drop=FALSE]),
     # Stop probability integral
-    sfun=function(pars,n_acc,st=1,upper=Inf) pstopEXG(pars,n_acc,upper=upper,st=st),
+    sfun=function(pars,n_acc,st=1,upper=Inf) pstopEXG(pars,n_acc,upper=upper),
     # Random function for SS race
     rfun=function(lR=NULL,pars) {
       rSSexGaussian(lR,pars,ok=attr(pars, "ok"))
