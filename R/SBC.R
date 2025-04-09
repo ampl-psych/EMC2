@@ -159,12 +159,13 @@ SBC_single <- function(design_in, prior_in, replicates = 250, trials = 100,
       lapply(dats,plot_density,
         factors = names(design_in$Ffactors)[names(design_in$Ffactors) != "subjects"])
     }
-    emcs <- parallel::mclapply(dats, make_emc, design = design_in, prior_list = prior_in,
+    emc0 <- parallel::mclapply(dats, make_emc, design = design_in, prior_list = prior_in,
             type = type, mc.cores = n_cores, verbose=verbose, ...)
-    emcs <- parallel::mclapply(emcs, tryfit, mc.cores=n_cores, ...)
+    emcs <- parallel::mclapply(emc0, tryfit, mc.cores=n_cores, ...)
     bad <- unlist(lapply(emcs,\(res) inherits(res, "try-error")))
     if (!is.null(save_emc)) {
-      emc <- c(emc,emcs)
+      if (any(!bad)) emc0[!bad] <- emcs[!bad]
+      emc <- c(emc,emc0)
       attr(emc,"bad") <- c(attr(emc,"bad"),bad)
     }
     if (any(bad)) {
