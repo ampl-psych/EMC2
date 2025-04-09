@@ -99,10 +99,6 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
   # #' (the default) direction is taken from data or LCdirection or UCdirection (NB
   # #' if both of these are false an error occurs as then contamination is not identifiable).
   # #' @param return_Ffunctions if false covariates are not returned
-
-  # #' @param Fcovariates either a data frame of covariate values with the same
-  # #' number of rows as the data or a list of functions specifying covariates for
-  # #' each trial. Must have names specified in the design Fcovariates argument.
   LT<-0
   UT<-Inf
   LC<-0
@@ -115,7 +111,6 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
   force_response<-FALSE
   rtContaminantNA<-FALSE
   return_Ffunctions <- FALSE
-  Fcovariates=NULL
   optionals <- list(...)
   for (name in names(optionals) ) {
     assign(name, optionals[[name]])
@@ -176,22 +171,11 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
     data$trials <- as.numeric(as.character(data$trials))
     # Add covariates
     if (!is.null(design$Fcovariates)) {
-      if (!is.null(Fcovariates) & !all(unlist(lapply(Fcovariates,is.null)))) {
-        if (!(all(names(Fcovariates)  %in% names(design$Fcovariates))))
-          stop("All Fcovariates must be named in design$Fcovariates")
-        if (!is.data.frame(Fcovariates) ) {
-          if (!all(unlist(lapply(Fcovariates,is.function))))
-            stop("Fcovariates must be either a data frame or list of functions")
-          nams <- names(Fcovariates)
-          Fcovariates <- do.call(cbind.data.frame,lapply(Fcovariates,function(x){x(data)}))
-          names(Fcovariates) <- nams
-        }
-        n <- dim(Fcovariates)[1]
-        if(n != nrow(data)) Fcovariates <- Fcovariates[sample(1:n, nrow(data), replace = TRUE),, drop = F]
-        data <- cbind.data.frame(data,Fcovariates)
-      }
-      empty_covariates <- names(design$Fcovariates)[!(names(design$Fcovariates) %in% names(data))]
-      if (length(empty_covariates)>0) data[,empty_covariates] <- 0
+      nams <- names(design$Fcovariates)
+      covariates <- do.call(cbind.data.frame,lapply(
+        design$Fcovariates,function(x){x(data)}))
+      names(covariates) <- nams
+         data <- cbind.data.frame(data,covariates)
     }
   } else {
     LT <- attr(data,"LT"); if (is.null(LT)) LT <- 0
