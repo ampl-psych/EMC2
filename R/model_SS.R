@@ -28,48 +28,61 @@ log_likelihood_race_ss <- function(pars,dadm,model,min_ll=log(1e-10)){
     # Counts
     # create lI factor that allows for later model flexibility: addint stop-triggered accumulatory ("st")
     # in the standard model, lI is always "go", or TRUE. lI may lateron be user-supplied as a function
-    unique_values <- unique(dadm$lR)
-    dadm$lI <- factor(dadm$lR %in% unique_values, levels = c(FALSE, TRUE), labels = c("st", "go"))
-    n_acc <- length(levels(dadm$lR))                   # total number of accumulators
-    n_accG <- sum(dadm[1:n_acc,"lI"]==levels(dadm$lI)[2])   # go accumulators
-    n_accST <- sum(dadm[1:n_acc,"lI"]==levels(dadm$lI)[1])  # stop-triggered accumulators
+    n_accG <- length(levels(dadm$lR))                   # total number of go accumulators
+
+    # check if stop-triggered accumulators have been specified
+   if(!is.null(dadm$lI)){
+     n_accST <- sum(dadm[1:n_acc,"lI"]==levels(dadm$lI)[1])  # stop-triggered accumulators
+     STR <- levels(dadm$lR)[dadm[1:n_acc,"lI"]==levels(dadm$lI)[1]]
+   } else {
+     n_accST <- 0
+     # adds latent inhibitor to dadm, is only "go" in simple stop-signal paradigm
+     dadm$lI <- factor(dadm$lR %in% levels(dadm$lR),levels=c(FALSE,TRUE),labels=c("st","go"))
+   }
+
     GOR <- levels(dadm$lR)[dadm[1:n_acc,"lI"]==levels(dadm$lI)[2]]
-    if (n_accST>0) STR <- levels(dadm$lR)[dadm[1:n_acc,"lI"]==levels(dadm$lI)[1]]
 
     # Likelihood for all trials and for ok trials
     allLL <- numeric(nrow(dadm)/n_acc) # placeholder vector of the length of number of trials for participant
     allok <- ok[c(dadm$lR==levels(dadm$lR)[1])] # used to put back into allLL --> ok of length of nr of trials for participant
 
-    # remove bad trials
+    # remove bad trials, from here onwards only use the rows where parameters are within bounds
     pars <- pars[ok,,drop=FALSE]
     dadm <- dadm[ok,,drop=FALSE]
+
+    # isp1 indexes the pars/dadm
     isp1 <- dadm$lR==levels(dadm$lR)[1]      # 1st accumulator rows
-    ispGOacc <- dadm$lI==levels(dadm$lI)[2] # Go accumulator rows
-    ispStop <- is.finite(dadm$SSD) # stop-trial rows
+    ispGOacc <- dadm$lI==levels(dadm$lI)[2] # picks out the go accumulator rows (in simple stop signal, there are only go accumulator rows)
+    ispStop <- is.finite(dadm$SSD) # picks out the stop-trial rows
     gf <- pars[isp1,"gf"]
     tf <- pars[isp1,"tf"]
 
-    # No response
+    # first deal with non-responses --------------------------------------------
+
+    # If no response on any of the stop or go trials
     ispNR <- is.na(dadm$R) # no response
     if (any(ispNR)) { # If there are missing responses in the data (to be expected, also in the simple SST)
       ispgoNR <- ispNR & !ispStop # no response on go trial
-      tgoNR <- c(1:sum(isp1))[ispgoNR[isp1]]
-      if (any(ispgoNR)) { # any non-responses on go-trials
-        allLL[allok][tgoNR] <- log(gf[tgoNR]) # Go trials
+      tgoNR <- c(1:sum(isp1))[ispgoNR[isp1]] # go trials with no response
+      if (any(ispgoNR)) { # any non-responses on go-trials (go failures)
+        allLL[allok][tgoNR] <- log(gf[tgoNR]) # put log of go failure probability in there
       }
       ispstopNR <- ispNR & ispStop # successful stop
-      tstopNR <- (rep(1:(nrow(dadm)/n_acc),each=n_acc))[ispstopNR & isp1] # stop trials
+      tstopNR <- rep(1:(nrow(dadm)/n_acc),each=n_acc)[ispstopNR & isp1] # stop trials
       if (any(ispstopNR)) { # Stop trials
         if (n_accST>0) {
-          pStop <- 0
+          pStop <- 0 # you don't stop if there is a stop-triggered accumulator, you respond in those cases
+          # ...
         } else {
-          pStop <- pmax(0,model$sfun(pars[ispStop & ispGOacc & ispNR,,drop=FALSE],n_acc=n_accG))
-        allLL[allok][tstopNR] <- log(gf[tstopNR] + (1-gf[tstopNR])*(1-tf[tstopNR])*pStop)
-      }
+          pStop <- pmax(0,model$sfun(pars[ispStop & ispGOacc & ispNR,,drop=FALSE],n_acc=n_accG)) # sfun computes the probability of stopping
+        }
+        allLL[allok][tstopNR] <- log(gf[tstopNR] + (1-gf[tstopNR])*(1-tf[tstopNR])*pStop) # something is not right here, gives back -Inf and NAs
       }
     }
 
-    # remove no response trials
+    # then deal with responses -------------------------------------------------
+
+    # first remove no response trials
     allr <- !ispNR[isp1] # used to put back into allLL
     pars <- pars[!ispNR,,drop=FALSE]
     dadm <- dadm[!ispNR,,drop=FALSE]
@@ -81,30 +94,30 @@ log_likelihood_race_ss <- function(pars,dadm,model,min_ll=log(1e-10)){
 
     n_trials <- nrow(dadm)/n_acc # number of trial
     trials <- 1:n_trials         # trial number
-    ptrials <- rep(trials,each=n_acc)
-    accST <- c(1:n_acc)[dadm[1:n_acc,"lI"]==levels(dadm$lI)[1]]
-
+    ptrials <- rep(trials,each=n_acc) # trials replicated
     like <- numeric(n_trials)
-    lds <- numeric(nrow(dadm)) # log density and survivor, used for both go and stop trials
+    lds <- numeric(nrow(dadm)) # log density and survivor, used for both go and stop trials; length of dadm, for the winner the density, for the loser the survivor
 
-    # Go trials with response
+    # deal with go trials with response
     if (any(!ispStop)) {
-      ispGOwin <-  !ispStop & dadm$winner # Winner go accumulator rows
-      tGO <- trials[!ispStop[isp1]]
-      # Winner density
+      ispGOwin <-  !ispStop & dadm$winner # pick out go winners
+      tGO <- trials[!ispStop[isp1]] # pick out go winner trials
+      # Winner density, just deal with the standard race
       lds[ispGOwin] <- log(model$dfunG(
+        # go win RTs and go win parameters
         rt=dadm[ispGOwin,"rt"],pars=pars[ispGOwin,,drop=FALSE]))
-      like[tGO] <- lds[ispGOwin]
+      like[tGO] <- lds[ispGOwin] # density of the winner
       if (n_accG >1) {  # Looser survivor go accumulator(s)
         ispGOloss <- !ispStop & !dadm$winner & ispGOacc # Looser go accumulator rows
         lds[ispGOloss] <- log(1-model$pfunG(
           rt=dadm$rt[ispGOloss],pars=pars[ispGOloss,,drop=FALSE]))
+        # add the log of all of the survivors
         like[tGO] <- like[tGO] + apply(matrix(lds[ispGOloss],nrow=n_accG-1),2,sum)
       }
-      like[tGO] <- (1-gf[tGO])*exp(like[tGO])
+      like[tGO] <- (1-gf[tGO])*exp(like[tGO]) # make a likelihood on the likelihood scale because gf is a probability
     }
 
-    # Stop trials with a response
+    # Deal with Stop trials with a response
     if (any(ispStop)) {
       # Stop looses
       ispSwin <-       ispStop & dadm$winner              # Winner go of stop accumulator rows
@@ -112,7 +125,7 @@ log_likelihood_race_ss <- function(pars,dadm,model,min_ll=log(1e-10)){
       ispSlossSTacc <- ispStop & !dadm$winner & !ispGOacc # Loosing ST accumulator rows
 
       # pStop at observed rt if ST present (calculate before correcting rt)
-      if (n_accST>0) {
+      if (n_accST>0) { # probably not working yet
         tST <- trials[ispStop[isp1] & as.numeric(dadm$lI)[dadm$winner] == 1]
         ispST <- ptrials %in% tST
         if (any(ispST)) {
@@ -124,7 +137,8 @@ log_likelihood_race_ss <- function(pars,dadm,model,min_ll=log(1e-10)){
       }
 
       # For following race calculations correct rt with SSD for ST accumulators
-      if (any(ispSlossSTacc)) {
+      if (any(ispSlossSTacc)) { # subtract SSD for the stop loosers
+        # dadm will not be used later on so can be "corrected" here
         dadm[ispSlossSTacc,"rt"] <- dadm[ispSlossSTacc,"rt"]-dadm[ispSlossSTacc,"SSD"]
       }
 
@@ -143,22 +157,26 @@ log_likelihood_race_ss <- function(pars,dadm,model,min_ll=log(1e-10)){
         SSTGO <- matrix(0,ncol=2)
       }
 
-      # Stop accumulator survivor
+      # Stop accumulator survivor (no integration)
       sStop <- log(1-model$pfunS(rt=dadm[ispSwin,"rt"],pars=pars[ispSwin,,drop=FALSE]))
 
-      # Get like
+      # Put all of it together, get likelihood
       tS <- trials[ispStop[isp1]]
       # Sub-select from tS
       istSgo <- dadm$R[isp1][tS] %in% GOR
-      # Stop looses or not present, can produce ST but only if wins absolute race
+      # Stop looses (is the survivor) or not present (trigger failure), can produce ST but only if wins in the absolute race
       like[tS] <- # no failures, works for all responses
         (1-gf[tS])*(1-tf[tS])*exp(lds[ispSwin]+SSTGO[,1]+SSTGO[,2]+sStop)
-      if (any(istSgo)) like[tS][istSgo] <- like[tS][istSgo] + # tf (no stop runner), no gf, only produces GO responses
-        (1-gf[tS][istSgo])*(tf[tS][istSgo])*exp(lds[ispSwin][istSgo]+SSTGO[,2][istSgo])
-      # If both tf and gf then no response, handled previously
+      # if the trials in which
+      if (any(istSgo)){ # stop trial with a go response
+        like[tS][istSgo] <- like[tS][istSgo] + # tf (no stop runner), no gf, only produces GO responses
+          (1-gf[tS][istSgo])*(tf[tS][istSgo])*exp(lds[ispSwin][istSgo]+SSTGO[,2][istSgo])
+        # If both tf and gf then no response, handled previously
+      }
 
-      ### Stop wins at some time before rt, and so must be ST response, add to ST race winners
+      # if there are stop-triggered accumulators --------------------------
       if (n_accST>0) {
+        ### Stop wins at some time before rt, and so must be ST response, add to ST race winners
         istSst <- dadm$R[isp1][tS] %in% STR
         like[tS][istSst] <- like[tS][istSst] + # gf (no go runner) no tf, only produces ST responses
           (gf[tS][istSst])*(1-tf[tS][istSst])*exp(lds[ispSwin][istSst]+SSTGO[,1][istSst]+sStop[istSst])
@@ -170,6 +188,8 @@ log_likelihood_race_ss <- function(pars,dadm,model,min_ll=log(1e-10)){
         like[tS][istSst] <- like[tS][istSst] + pStop[tS][istSst]*exp(SST[tST])
       }
     }
+
+    # put everything together
     allLL[allok][allr] <- log(like)
     return(sum(pmax(min_ll,allLL)))
 }
