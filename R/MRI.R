@@ -559,8 +559,6 @@ normal_mri <- function(){
         betas <- pars[, -ncol(pars)]
         # Compute the predicted mean for each observation as the sum of its betas
         y_hat <- rowSums(betas)
-        # Center the predicted means (as in likelihood function)
-        y_hat <- y_hat - mean(y_hat)
         # Generate simulated data: for each observation, add noise drawn from a normal distribution
         # with mean 0 and standard deviation sigma.
         y_sim <- y_hat + rnorm(n = length(y_hat), mean = 0, sd = sigma)
@@ -573,7 +571,6 @@ normal_mri <- function(){
         sigma <- pars[,ncol(pars)]
         betas <- pars[,-ncol(pars)]
         y_hat <- rowSums(betas)
-        y_hat <- y_hat - mean(y_hat)
         ll <- sum(pmax(dnorm(as.matrix(y), mean = y_hat, sd = sigma, log = T), min_ll))
         return(ll)
       }
@@ -676,90 +673,123 @@ white_mri <- function(){
 
 # Plotting functions ------------------------------------------------------
 
-
-
-plot_hrf_shape <- function(timeseries, events,
-                     factors,
-                     contrasts = NULL,
-                     cell_coding = FALSE,
-                     hrf_model = "glover + derivative",
-                     min_onset = -24,
-                     oversampling = 50,
-                     factor_name = names(factors)[1],
-                     aggregate = TRUE,
-                     epoch_duration = 32) {
-  # Extract the frame times from the timeseries.
-  frame_times <- sort(unique(timeseries$time))
-
-  # Subset the events to only those that belong to the chosen factor.
-  ev_sub <- events[events$event_type %in% factors[[factor_name]], ]
-  # Tag these events with the factor name and rename the event type column.
-  ev_sub$factor <- factor_name
-  colnames(ev_sub)[colnames(ev_sub) == "event_type"] <- factor_name
-
-  # Apply contrasts if a contrast for this factor is provided.
-  ev_proc <- apply_contrasts(ev_sub,
-                             contrast = contrasts[[factor_name]],
-                             cell_coding = factor_name %in% cell_coding)
-
-  # ev_proc is in "long" format and should include a column 'regressor'
-  reg_levels <- unique(ev_proc$regressor)
-
-  # Set up a multi-panel plot (here we use 2 columns)
-  n_panels <- length(reg_levels)
-  old_par <- par(no.readonly = TRUE)
-  par(mfrow = c(ceiling(n_panels/2), 2))
-
-  # For each level (i.e. each regressor), compute and plot the convolved HRF.
-  for (lev in reg_levels) {
-    ev_lev <- ev_proc[ev_proc$regressor == lev, ]
-    # Make sure we have the key columns: onset, duration, modulation.
-    exp_condition <- as.matrix(ev_lev[, c("onset", "duration", "modulation")])
-
-    # Compute the convolved regressor for this condition.
-    reg_list <- compute_convolved_regressor(exp_condition,
-                                            hrf_model,
-                                            frame_times,
-                                            con_id = as.character(lev),
-                                            oversampling = oversampling,
-                                            min_onset = min_onset)
-    hrf_vector <- reg_list$computed_regressors[, 1]  # canonical HRF
-
-    if (aggregate) {
-      # Aggregate across events: extract epochs around each event onset and average.
-      event_onsets <- ev_lev$onset
-      # Determine the TR (assumes frame_times are equally spaced).
-      tr <- diff(frame_times)[1]
-      n_timepoints <- round(epoch_duration / tr)
-      segments <- matrix(NA, nrow = length(event_onsets), ncol = n_timepoints)
-      for (i in seq_along(event_onsets)) {
-        onset_time <- event_onsets[i]
-        # Find the index corresponding to the event onset.
-        idx <- which.min(abs(frame_times - onset_time))
-        # Make sure we have enough points after the event.
-        if (idx + n_timepoints - 1 <= length(frame_times)) {
-          segments[i, ] <- hrf_vector[idx:(idx + n_timepoints - 1)]
-        }
-      }
-      # Compute the average HRF (ignoring any incomplete epochs).
-      avg_hrf <- colMeans(segments, na.rm = TRUE)
-      time_axis <- seq(0, epoch_duration, length.out = n_timepoints)
-
-      # Plot the aggregated average HRF.
-      plot(time_axis, avg_hrf, type = "l", lwd = 2, col = "blue",
-           xlab = "Time (s) from event onset", ylab = "Average HRF amplitude",
-           main = paste("Factor:", factor_name, "\nLevel:", lev, "\nAggregated HRF"))
-    } else {
-      # Plot the full computed regressor over the entire timeseries.
-      plot(frame_times, hrf_vector, type = "l", lwd = 2, col = "blue",
-           xlab = "Time (s)", ylab = "HRF amplitude",
-           main = paste("Factor:", factor_name, "\nLevel:", lev))
+plot_design_fmri <- function(design_matrix, TRs = 100, events = NULL, remove_nuisance = TRUE,
+                             legend_pos = "bottomleft", ...){
+  if(is(design_matrix,"emc.design")){
+    design_matrix <- attr(design_matrix, "design_matrix")
+  }
+  if(!is.data.frame(design_matrix) && !is.matrix(design_matrix)){
+    if(is.list(design_matrix)) design_matrix <- design_matrix[[1]]
+  }
+  enames <- colnames(design_matrix)
+  if(remove_nuisance){
+    is_nuisance <- grepl("drift", enames) | grepl("poly", enames) | grepl("derivative", enames) | apply(design_matrix, 2, sd) == 0
+    design_matrix <- design_matrix[,!is_nuisance]
+  }
+  enames <- colnames(design_matrix)
+  if(is.null(events)){
+    events <- enames
+  } else{
+    if(any(!events %in% enames)){
+      stop("events not in colnames design matrix")
     }
   }
+  distinct_colors <- c(
+    "#E6194B", "#3CB44B", "#0082C8", "#F58231", "#911EB4",
+    "#46F0F0", "#F032E6", "#D2F53C", "#FABEBE", "#008080",
+    "#E6BEFF", "#AA6E28", "#FFFAC8", "#800000", "#FFD8B1"
+  )
+  dots <- add_defaults(list(...), col = distinct_colors, lwd = 2, lty = 1, main = NULL, xlab = "TRs", ylab = "Amplitude")
 
-  # Reset the plotting parameters.
-  par(old_par)
+
+  design_matrix <- design_matrix[1:TRs, events]
+  do.call(matplot, c(list(design_matrix, type = "l"), fix_dots_plot(dots)))
+  do.call(legend, c(list(legend_pos, legend = events, bty = "n"), fix_dots(dots, legend)))
 }
+
+
+# plot_hrf_shape <- function(timeseries, events,
+#                      factors,
+#                      contrasts = NULL,
+#                      cell_coding = FALSE,
+#                      hrf_model = "glover + derivative",
+#                      min_onset = -24,
+#                      oversampling = 50,
+#                      factor_name = names(factors)[1],
+#                      aggregate = TRUE,
+#                      epoch_duration = 32) {
+#   # Extract the frame times from the timeseries.
+#   frame_times <- sort(unique(timeseries$time))
+#
+#   # Subset the events to only those that belong to the chosen factor.
+#   ev_sub <- events[events$event_type %in% factors[[factor_name]], ]
+#   # Tag these events with the factor name and rename the event type column.
+#   ev_sub$factor <- factor_name
+#   colnames(ev_sub)[colnames(ev_sub) == "event_type"] <- factor_name
+#
+#   # Apply contrasts if a contrast for this factor is provided.
+#   ev_proc <- apply_contrasts(ev_sub,
+#                              contrast = contrasts[[factor_name]],
+#                              cell_coding = factor_name %in% cell_coding)
+#
+#   # ev_proc is in "long" format and should include a column 'regressor'
+#   reg_levels <- unique(ev_proc$regressor)
+#
+#   # Set up a multi-panel plot (here we use 2 columns)
+#   n_panels <- length(reg_levels)
+#   old_par <- par(no.readonly = TRUE)
+#   par(mfrow = c(ceiling(n_panels/2), 2))
+#
+#   # For each level (i.e. each regressor), compute and plot the convolved HRF.
+#   for (lev in reg_levels) {
+#     ev_lev <- ev_proc[ev_proc$regressor == lev, ]
+#     # Make sure we have the key columns: onset, duration, modulation.
+#     exp_condition <- as.matrix(ev_lev[, c("onset", "duration", "modulation")])
+#
+#     # Compute the convolved regressor for this condition.
+#     reg_list <- compute_convolved_regressor(exp_condition,
+#                                             hrf_model,
+#                                             frame_times,
+#                                             con_id = as.character(lev),
+#                                             oversampling = oversampling,
+#                                             min_onset = min_onset)
+#     hrf_vector <- reg_list$computed_regressors[, 1]  # canonical HRF
+#
+#     if (aggregate) {
+#       # Aggregate across events: extract epochs around each event onset and average.
+#       event_onsets <- ev_lev$onset
+#       # Determine the TR (assumes frame_times are equally spaced).
+#       tr <- diff(frame_times)[1]
+#       n_timepoints <- round(epoch_duration / tr)
+#       segments <- matrix(NA, nrow = length(event_onsets), ncol = n_timepoints)
+#       for (i in seq_along(event_onsets)) {
+#         onset_time <- event_onsets[i]
+#         # Find the index corresponding to the event onset.
+#         idx <- which.min(abs(frame_times - onset_time))
+#         # Make sure we have enough points after the event.
+#         if (idx + n_timepoints - 1 <= length(frame_times)) {
+#           segments[i, ] <- hrf_vector[idx:(idx + n_timepoints - 1)]
+#         }
+#       }
+#       # Compute the average HRF (ignoring any incomplete epochs).
+#       avg_hrf <- colMeans(segments, na.rm = TRUE)
+#       time_axis <- seq(0, epoch_duration, length.out = n_timepoints)
+#
+#       # Plot the aggregated average HRF.
+#       plot(time_axis, avg_hrf, type = "l", lwd = 2, col = "blue",
+#            xlab = "Time (s) from event onset", ylab = "Average HRF amplitude",
+#            main = paste("Factor:", factor_name, "\nLevel:", lev, "\nAggregated HRF"))
+#     } else {
+#       # Plot the full computed regressor over the entire timeseries.
+#       plot(frame_times, hrf_vector, type = "l", lwd = 2, col = "blue",
+#            xlab = "Time (s)", ylab = "HRF amplitude",
+#            main = paste("Factor:", factor_name, "\nLevel:", lev))
+#     }
+#   }
+#
+#   # Reset the plotting parameters.
+#   par(old_par)
+# }
 
 
 # Utility functions -------------------------------------------------------

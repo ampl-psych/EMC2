@@ -234,8 +234,8 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
   pars <- model()$Ttransform(pars, data)
   pars <- add_bound(pars, model()$bound)
   pars_ok <- attr(pars, 'ok')
-  if(any(!pars_ok)){
-    warning("Parameter values fall out of model bounds, see <model_name>$bounds()")
+  if(mean(!pars_ok) > .1){
+    warning("More than 10% of parameter values fall out of model bounds, see <model_name>$bounds()")
     return(FALSE)
   }
   if ( any(dimnames(pars)[[2]]=="pContaminant") && any(pars[,"pContaminant"]>0) )
