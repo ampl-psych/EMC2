@@ -1,12 +1,13 @@
-calc_ll_R <- function(p_vector, model, dadm){
+calc_ll_R <- function(p_vector, model, dadm, return_sum = TRUE){
   if(!is.null(model$transform)){
     pars <- get_pars_matrix(p_vector, dadm, model)
   } else{
     pars <- p_vector
   }
   ll <- model$log_likelihood(pars, dadm, model)
-  if(any(model$noisy_cov)){
+  if(!is.null(model$noisy_cov)){
     ll <- ll + cov_noise_ll(pars, dadm, model)
+    if(!return_sum) return(ll)
   }
   return(sum(ll))
 }

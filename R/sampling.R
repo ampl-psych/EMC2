@@ -327,12 +327,17 @@ new_particle <- function (s, data, pm_settings, eff_mu = NULL,
     # Sometimes we may also want to block within a model if it has very high dimensionality
     shared_idx <- tune$shared_ll_idx[idx][1]
     is_shared <- shared_idx == tune$shared_ll_idx
-
+    if(!is.null(pm_settings[[i]]$noisy_cov)){
+      data <- add_noisy_cov_dadm(data, model, pm_settings[[i]]$noisy_cov)
+    }
     # Calculate likelihoods
     if(tune$components[length(tune$components)] > 1){
       lw <- calc_ll_manager(proposals[,is_shared], dadm = data, model, component = shared_idx)
     } else{
       lw <- calc_ll_manager(proposals[,is_shared], dadm = data, model)
+    }
+    if(!is.null(attr(lw, "noisy_cov"))){
+      pm_settings[[i]]$noisy_cov <- attr(lw, "noisy_cov")
     }
     lw_total <- lw + prev_ll - lw[1] # make sure lls from other components are included
     # Prior density
@@ -672,7 +677,8 @@ calc_ll_manager <- function(proposals, dadm, model, component = NULL){
       # This at least samples the latent particle correctly, now we just need a way to keep check of
       # the proposal mean, variance, epsilon and acceptance
       dadm <- update_latent_cov(proposals[1,], dadm, model)
-    } else noisy_cov <- NULL
+      model$c_name <- NULL
+    }
     if(is.null(model$c_name)){ # use the R implementation
       lls <- apply(proposals,1, calc_ll_R, model, dadm = dadm)
     } else{
@@ -687,6 +693,10 @@ calc_ll_manager <- function(proposals, dadm, model, component = NULL){
                      model$bound, model$transform, model$pre_transform, p_types = p_types, min_ll = log(1e-10),
                      model$trend)
     }
+  }
+  if(!is.null(model$noisy_cov)){
+    attr(lls, "noisy_cov") <- attr(dadm, "noisy_cov")
+
   }
   return(lls)
 }
