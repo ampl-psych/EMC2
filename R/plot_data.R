@@ -25,7 +25,7 @@ check_data_plot <- function(data, defective_factor, subject, factors) {
     } else {
       data <- data[data$subjects %in% subject, ]
     }
-    data$subjects <- droplevels(data$subjects)
+    data$subjects <- factor(data$subjects)
   }
 
   # Remove missing or infinite rt

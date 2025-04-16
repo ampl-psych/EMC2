@@ -159,6 +159,19 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
   }
 
   model <- design$model
+
+  if(grepl("MRI", model()$type)){
+    data_list <- list()
+    for(i in 1:nrow(parameters)){
+      data_tmp <- data[data$subjects == unique(data$subjects)[i],]
+      data_tmp$subjects <- factor(data_tmp$subjects)
+      attr(data_tmp, "designs") <- design$fMRI_design[[i]]
+
+      data_list[[i]] <- make_data_fMRI(parameters[i,,drop = F], model, data_tmp, design)
+    }
+    return(do.call(rbind, data_list))
+  }
+
   if(is.data.frame(parameters)) parameters <- as.matrix(parameters)
   if (!is.matrix(parameters)) parameters <- make_pmat(parameters,design)
   if ( is.null(data) ) {

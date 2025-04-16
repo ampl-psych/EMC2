@@ -160,7 +160,12 @@ predict.emc <- function(object,hyper=FALSE,n_post=50,n_cores=1,
   for(j in 1:length(data)){
     if(jointModel) emc <- single_out_joint(all_samples, j)
     subjects <- levels(data[[j]]$subjects)
-    if(grepl("MRI", design[[j]]$model()$type)) design[[j]] <- add_design_fMRI_predict(design[[j]], emc)
+    if(grepl("MRI", design[[j]]$model()$type)) {
+      design[[j]] <- add_design_fMRI_predict(design[[j]], emc)
+      if(is.integer(design[[j]]$fMRI_design[[1]])){
+        design[[j]] <- design[[design[[j]]$fMRI_design[[1]]]]
+      }
+    }
     if (hyper) {
       pars <- vector(mode="list",length=n_post)
       # for (i in 1:n_post) {
@@ -197,7 +202,12 @@ predict.emc <- function(object,hyper=FALSE,n_post=50,n_cores=1,
     attr(out,"pars") <- pars
     post_out[[j]] <- out
   }
-  if(!jointModel) post_out <- post_out[[1]]
+  if(!jointModel){
+    post_out <- post_out[[1]]
+  } else{
+    joint_names <- get_joint_names(all_samples)
+    names(post_out) <- joint_names
+  }
   return(post_out)
 }
 
@@ -980,6 +990,7 @@ get_data.emc <- function(emc) {
       tmp <- tmp[,!(colnames(tmp) %in% c("trials","lR","lM", "winner", "SlR", "RACE", names(design$Ffunctions)))]
       dat[[i]] <- tmp
     }
+    names(dat) <- get_joint_names(emc)
   } else{
     design <- get_design(emc)[[1]]
     dat <- do.call(rbind,lapply(emc[[1]]$data,function(x){

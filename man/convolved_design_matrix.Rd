@@ -10,10 +10,13 @@ convolved_design_matrix(
   factors = NULL,
   contrasts = NULL,
   covariates = NULL,
+  add_constant = TRUE,
   hrf_model = "glover + derivative",
   cell_coding = NULL,
+  scale = TRUE,
   high_pass = TRUE,
-  cut_off = 1e-05
+  high_pass_model = "cosine",
+  cut_off = 1e-12
 )
 }
 \arguments{
@@ -31,7 +34,12 @@ convolved_design_matrix(
 
 \item{cell_coding}{A character vector of factor names to use cell coding for}
 
-\item{high_pass}{Logical indicating whether to apply high-pass filtering}
+\item{scale}{A boolean indicating whether to scale the design matrix.}
+
+\item{high_pass}{Logical indicating whether to apply high-pass filtering.
+Alternatively, specifying 'add' adds the regressors to the design matrix}
+
+\item{high_pass_model}{Character indicating which type of high-pass filtering to apply ('cosine', 'poly')}
 
 \item{cut_off}{A numeric value specifying the cutoff for the high-pass filter}
 }

@@ -1,4 +1,3 @@
-
 apply_contrasts <- function(events, contrast = NULL, cell_coding = FALSE, remove_intercept = TRUE) {
   factor_name <- events$factor[1]
   colnames(events)[colnames(events) == "event_type"] <- factor_name
@@ -186,13 +185,13 @@ reshape_events <- function(events, event_types, duration = 0.001, modulation = N
 #' )
 #'
 #' # Build design matrices
-#' design_matrices <-  convolved_design_matrix(
+#' design_matrices <-  convolve_design_matrix(
 #'   timeseries = ts,
 #'   events = events,
 #'   factors = list(difficulty = c("hard", "easy")),
 #'   contrasts = list(difficulty = matrix(c(-1, 1)))
 #' )
-convolved_design_matrix <- function(timeseries, events, factors = NULL, contrasts = NULL,
+convolve_design_matrix <- function(timeseries, events, factors = NULL, contrasts = NULL,
                                     covariates = NULL, add_constant = TRUE,
                                     hrf_model = 'glover + derivative', cell_coding = NULL,
                                     scale = TRUE, high_pass = TRUE,
@@ -304,6 +303,40 @@ convolved_design_matrix <- function(timeseries, events, factors = NULL, contrast
   return(all_dms)
 }
 
+#' Split fMRI Timeseries Data by ROI Columns
+#'
+#' This function splits a timeseries data frame containing multiple ROI columns into a list
+#' of data frames, where each data frame contains the common columns (subjects, run, time)
+#' and one ROI column.
+#'
+#' @param timeseries A data frame containing fMRI timeseries data with required columns
+#'   'subjects', 'run', and 'time', plus one or more ROI columns.
+#' @param columns A character vector specifying which columns to split by. If NULL (default),
+#'   all columns except 'subjects', 'run', and 'time' will be used.
+#'
+#' @return A named list of data frames, where each data frame contains the common columns
+#'   (subjects, run, time) and one ROI column. The names of the list elements correspond
+#'   to the ROI column names.
+#'
+#' @export
+#'
+#' @examples
+#' # Create a simple example timeseries with multiple ROIs
+#' set.seed(123)
+#' n_frames <- 100
+#'
+#' # Create a data frame with multiple ROIs
+#' timeseries <- data.frame(
+#'   subjects = rep(1, n_frames),
+#'   run = rep(1, n_frames),
+#'   time = seq(0, n_frames-1),
+#'   ROI1 = rnorm(n_frames),
+#'   ROI2 = rnorm(n_frames),
+#'   ROI3 = rnorm(n_frames)
+#' )
+#'
+#' # Split the timeseries by all ROI columns
+#' split_data <- split_timeseries(timeseries)
 split_timeseries <- function(timeseries, columns = NULL){
   if(!(all(c("run", "subjects", "time") %in% colnames(timeseries)))){
     stop("Expected columns in timeseries: run, subjects, time")
@@ -318,7 +351,46 @@ split_timeseries <- function(timeseries, columns = NULL){
 }
 
 
-# High pass filtering -----------------------------------------------------
+#' Apply High-Pass Filtering to fMRI Data
+#'
+#' This function applies high-pass filtering to fMRI data to remove low-frequency noise
+#' and drift. It supports two filtering methods: cosine basis functions and polynomial
+#' regressors.
+#'
+#' @param X A data frame or matrix containing the data to be filtered. If it contains
+#'   columns 'subjects' and 'run', the function will apply filtering separately for
+#'   each subject-run combination.
+#' @param high_pass_model A character string specifying the high-pass filtering method.
+#'   Options are 'cosine' (default) or 'poly' for polynomial regressors.
+#' @param frame_times A numeric vector of time points for each frame. If NULL, the
+#'   function will attempt to extract this from a 'time' column in X.
+#' @param ... Additional arguments passed to the function.
+#'
+#' @return A data frame or matrix with the same structure as X, but with high-frequency
+#'   components removed from the data columns.
+#'
+#' @export
+#'
+#' @examples
+#' # Create a simple example data frame with drift
+#' set.seed(123)
+#' n_frames <- 100
+#' time <- seq(0, 99)
+#'
+#' # Create a signal with low-frequency drift
+#' drift <- 0.1 * time
+#' signal <- sin(2 * pi * 0.1 * time) + drift
+#' noise <- rnorm(n_frames, 0, 0.5)
+#' data <- signal + noise
+#'
+#' # Create a data frame
+#' df <- data.frame(
+#'   time = time,
+#'   signal = data
+#' )
+#'
+#' # Apply high-pass filtering using cosine basis functions
+#' filtered_df <- high_pass_filter(df, high_pass_model = "cosine")
 high_pass_filter <- function(X, high_pass_model = 'cosine', frame_times = NULL, ...){
   if(is.null(frame_times)){
     if(!'time' %in% colnames(X)){
@@ -424,11 +496,11 @@ cosine_drift <- function(frame_times, high_pass = .01) {
 
 #' Create fMRI Design for EMC2 Sampling
 #'
-#' This function takes the output from convolved_design_matrix and transforms it into a design
+#' This function takes the output from convolve_design_matrix and transforms it into a design
 #' suitable for sampling with EMC2. It properly configures parameter types, bounds, and transformations
 #' for the specified model.
 #'
-#' @param design_matrix A list of design matrices,  the output from convolved_design_matrix
+#' @param design_matrix A list of design matrices,  the output from convolve_design_matrix
 #' @param model A function that returns a model specification, options are normal_mri or white_mri
 #' @param ... Additional arguments passed to the model
 #'
@@ -455,7 +527,7 @@ cosine_drift <- function(frame_times, high_pass = .01) {
 #' )
 #'
 #' # Create convolved design matrix
-#' design_matrix <- convolved_design_matrix(
+#' design_matrix <- convolve_design_matrix(
 #'   timeseries = ts,
 #'   events = events,
 #'   factors = list(condition = "condition"),
@@ -673,16 +745,98 @@ white_mri <- function(){
 
 # Plotting functions ------------------------------------------------------
 
-plot_design_fmri <- function(design_matrix, TRs = 100, events = NULL, remove_nuisance = TRUE,
+#' Plot fMRI Design Matrix
+#'
+#' This function creates a visualization of an fMRI design matrix, showing the temporal
+#' evolution of regressors over time. It can handle various input formats and provides
+#' options to customize the visualization.
+#'
+#' @param design_matrix A design matrix for fMRI analysis. Can be a data frame, matrix,
+#'   list of matrices, or an object of class 'emc.design'.
+#' @param TRs The number of time points (TRs) to plot. Default is 100.
+#' @param events A character vector specifying which regressors to plot. If NULL,
+#'   all non-nuisance regressors will be plotted.
+#' @param remove_nuisance Logical indicating whether to remove nuisance regressors
+#'   (drift terms, polynomial terms, derivatives) from the plot. Default is TRUE.
+#' @param subject The subject number to plot. Only applies for list of design matrices. Default is 1.
+#' @param legend_pos Position of the legend. Default is "bottomleft".
+#' @param ... Additional graphical parameters passed to matplot and legend.
+#'
+#' @return A plot showing the design matrix regressors over time.
+#'
+#' @export
+#'
+#' @examples
+#' # Create a simple design matrix
+#' set.seed(123)
+#' n_trs <- 200
+#'
+#' # Create a design matrix with two conditions and drift terms
+#' design <- data.frame(
+#'   condition1 = c(rep(0, 20), rep(1, 10), rep(0, 170)),
+#'   condition2 = c(rep(0, 100), rep(1, 10), rep(0, 90)),
+#'   drift1 = seq(0, 1, length.out = n_trs),
+#'   drift2 = seq(1, 0, length.out = n_trs),
+#'   derivative = c(rep(0, 10), rep(1, 5), rep(0, 185))
+#' )
+#'
+#' # Basic plot of the design matrix
+#' plot_design_fmri(design)
+#'
+#' # Plot specific events only
+#' plot_design_fmri(design, events = c("condition1", "condition2"))
+#'
+#' # Include nuisance regressors
+#' plot_design_fmri(design, remove_nuisance = FALSE)
+#'
+#' # Customize the plot
+#' plot_design_fmri(design,
+#'                 TRs = 150,
+#'                 legend_pos = "topright",
+#'                 main = "fMRI Design Matrix",
+#'                 lwd = 3)
+#'
+#' # Example with an emc.design object
+#' # First create a design matrix using convolve_design_matrix
+#' timeseries <- data.frame(
+#'   subjects = rep(1, 100),
+#'   run = rep(1, 100),
+#'   time = seq(0, 99),
+#'   ROI1 = rnorm(100)
+#' )
+#'
+#' events <- data.frame(
+#'   subjects = rep(1, 4),
+#'   run = rep(1, 4),
+#'   onset = c(10, 30, 50, 70),
+#'   duration = rep(0.5, 4),
+#'   event_type = c("A", "B", "A", "B"),
+#'   modulation = c(1, 1, 1, 1)
+#' )
+#'
+#' # Create convolved design matrix
+#' design_matrix <- convolve_design_matrix(
+#'   timeseries = timeseries,
+#'   events = events,
+#'   factors = list(condition = c("A", "B")),
+#'   hrf_model = "glover"
+#' )
+#'
+#' # Create fMRI design for EMC2
+#' fmri_design <- design_fmri(design_matrix, model = normal_mri)
+#'
+#' # Plot the design matrix
+#' plot_design_fmri(fmri_design)
+plot_design_fmri <- function(design_matrix, TRs = 100, events = NULL, remove_nuisance = TRUE, subject = 1,
                              legend_pos = "bottomleft", ...){
   if(is(design_matrix,"emc.design")){
     design_matrix <- attr(design_matrix, "design_matrix")
   }
   if(!is.data.frame(design_matrix) && !is.matrix(design_matrix)){
-    if(is.list(design_matrix)) design_matrix <- design_matrix[[1]]
+    if(is.list(design_matrix)) design_matrix <- design_matrix[[subject]]
   }
   enames <- colnames(design_matrix)
-  if(remove_nuisance){
+  if(remove_nuisance & is.null(events)){
     is_nuisance <- grepl("drift", enames) | grepl("poly", enames) | grepl("derivative", enames) | apply(design_matrix, 2, sd) == 0
     design_matrix <- design_matrix[,!is_nuisance]
   }
@@ -707,90 +861,362 @@ plot_design_fmri <- function(design_matrix, TRs = 100, events = NULL, remove_nui
   do.call(legend, c(list(legend_pos, legend = events, bty = "n"), fix_dots(dots, legend)))
 }
 
+get_peri_stim_lines <- function(
+    timeseries,
+    events,
+    event_type,
+    pre = 2,
+    post = 18,
+    n_bins = 4,
+    uniform_tol = 1e-5
+) {
+  if(!(all(c("run", "subjects", "time") %in% colnames(timeseries)))){
+    stop("Expected columns in timeseries: run, subjects, time")
+  }
+  timeseries <- timeseries[,colnames(timeseries) != "postn"]
+  if(ncol(timeseries) > 4) stop("Can only supply one ROI")
+  ROI_col <- colnames(timeseries)[!colnames(timeseries) %in% c("run", "subjects", "time")]
+  # -------------------------------------------------------------------
+  # 1) Prepare the events of interest (filter + bin/categorize modulation)
+  # -------------------------------------------------------------------
+  ev_sub <- prepare_event_groups(events, event_type, n_bins)
+  if (nrow(ev_sub) == 0) {
+    stop("No events found for event_type = ", event_type)
+  }
 
-# plot_hrf_shape <- function(timeseries, events,
-#                      factors,
-#                      contrasts = NULL,
-#                      cell_coding = FALSE,
-#                      hrf_model = "glover + derivative",
-#                      min_onset = -24,
-#                      oversampling = 50,
-#                      factor_name = names(factors)[1],
-#                      aggregate = TRUE,
-#                      epoch_duration = 32) {
-#   # Extract the frame times from the timeseries.
-#   frame_times <- sort(unique(timeseries$time))
-#
-#   # Subset the events to only those that belong to the chosen factor.
-#   ev_sub <- events[events$event_type %in% factors[[factor_name]], ]
-#   # Tag these events with the factor name and rename the event type column.
-#   ev_sub$factor <- factor_name
-#   colnames(ev_sub)[colnames(ev_sub) == "event_type"] <- factor_name
-#
-#   # Apply contrasts if a contrast for this factor is provided.
-#   ev_proc <- apply_contrasts(ev_sub,
-#                              contrast = contrasts[[factor_name]],
-#                              cell_coding = factor_name %in% cell_coding)
-#
-#   # ev_proc is in "long" format and should include a column 'regressor'
-#   reg_levels <- unique(ev_proc$regressor)
-#
-#   # Set up a multi-panel plot (here we use 2 columns)
-#   n_panels <- length(reg_levels)
-#   old_par <- par(no.readonly = TRUE)
-#   par(mfrow = c(ceiling(n_panels/2), 2))
-#
-#   # For each level (i.e. each regressor), compute and plot the convolved HRF.
-#   for (lev in reg_levels) {
-#     ev_lev <- ev_proc[ev_proc$regressor == lev, ]
-#     # Make sure we have the key columns: onset, duration, modulation.
-#     exp_condition <- as.matrix(ev_lev[, c("onset", "duration", "modulation")])
-#
-#     # Compute the convolved regressor for this condition.
-#     reg_list <- compute_convolved_regressor(exp_condition,
-#                                             hrf_model,
-#                                             frame_times,
-#                                             con_id = as.character(lev),
-#                                             oversampling = oversampling,
-#                                             min_onset = min_onset)
-#     hrf_vector <- reg_list$computed_regressors[, 1]  # canonical HRF
-#
-#     if (aggregate) {
-#       # Aggregate across events: extract epochs around each event onset and average.
-#       event_onsets <- ev_lev$onset
-#       # Determine the TR (assumes frame_times are equally spaced).
-#       tr <- diff(frame_times)[1]
-#       n_timepoints <- round(epoch_duration / tr)
-#       segments <- matrix(NA, nrow = length(event_onsets), ncol = n_timepoints)
-#       for (i in seq_along(event_onsets)) {
-#         onset_time <- event_onsets[i]
-#         # Find the index corresponding to the event onset.
-#         idx <- which.min(abs(frame_times - onset_time))
-#         # Make sure we have enough points after the event.
-#         if (idx + n_timepoints - 1 <= length(frame_times)) {
-#           segments[i, ] <- hrf_vector[idx:(idx + n_timepoints - 1)]
-#         }
-#       }
-#       # Compute the average HRF (ignoring any incomplete epochs).
-#       avg_hrf <- colMeans(segments, na.rm = TRUE)
-#       time_axis <- seq(0, epoch_duration, length.out = n_timepoints)
-#
-#       # Plot the aggregated average HRF.
-#       plot(time_axis, avg_hrf, type = "l", lwd = 2, col = "blue",
-#            xlab = "Time (s) from event onset", ylab = "Average HRF amplitude",
-#            main = paste("Factor:", factor_name, "\nLevel:", lev, "\nAggregated HRF"))
-#     } else {
-#       # Plot the full computed regressor over the entire timeseries.
-#       plot(frame_times, hrf_vector, type = "l", lwd = 2, col = "blue",
-#            xlab = "Time (s)", ylab = "HRF amplitude",
-#            main = paste("Factor:", factor_name, "\nLevel:", lev))
-#     }
-#   }
-#
-#   # Reset the plotting parameters.
-#   par(old_par)
-# }
+  # -------------------------------------------------------------------
+  # 2) Pre-split timeseries by subject-run, gather chunk metadata
+  # -------------------------------------------------------------------
+  chunk_info_list <- split_timeseries_chunks(timeseries, ROI_col, uniform_tol)
 
+  # -------------------------------------------------------------------
+  # 3) For each bin or unique mod_group, compute the average snippet
+  # -------------------------------------------------------------------
+  groups <- sort(unique(ev_sub$mod_group))
+
+  # We'll accumulate the final results as a data frame:
+  # columns => mod_group, time, avg_signal, optional min_mod, max_mod
+  output_list <- list()
+
+  for (g in groups) {
+    # events for this group
+    ev_g <- ev_sub[ev_sub$mod_group == g, ]
+    if (nrow(ev_g) == 0) next
+
+    # Compute the average snippet (time axis + average)
+    out_snip <- compute_avg_snippet_for_group(
+      ev_g,
+      chunk_info_list,
+      ROI_col,
+      pre,
+      post
+    )
+    if (is.null(out_snip)) {
+      # no valid snippet
+      next
+    }
+
+    # We'll store them in a data frame with columns:
+    # mod_group, time, avg_signal, (optional min_mod / max_mod)
+    # If we used binning, we can store the min/max modulation range
+    if (attr(ev_sub, "binned") == TRUE) {
+      # we used binning => figure out the min/max within this group
+      mod_in_bin <- ev_g$modulation
+      min_mod <- round(min(mod_in_bin, na.rm = TRUE), 3)
+      max_mod <- round(max(mod_in_bin, na.rm = TRUE), 3)
+      df_tmp <- data.frame(
+        mod_group = g,
+        time      = out_snip$time,
+        avg_signal= out_snip$avg,
+        min_mod   = min_mod,
+        max_mod   = max_mod
+      )
+    } else {
+      # we used discrete categories => store just mod_group
+      df_tmp <- data.frame(
+        mod_group = g,
+        time      = out_snip$time,
+        avg_signal= out_snip$avg
+      )
+    }
+
+    output_list[[as.character(g)]] <- df_tmp
+  }
+
+  # Combine into one big data frame
+  final_df <- do.call(rbind, output_list)
+  final_df <- final_df[final_df$time >= -pre & final_df$time <= post,]
+  rownames(final_df) <- NULL
+  return(final_df)
+}
+
+plot_fmri <- function(timeseries, post_predict = NULL, events, event_type, posterior_args = list(),
+                      legend_pos = "topright", layout = NA, ...){
+  posterior_args <- add_defaults(posterior_args, col = "darkgreen", lwd = 2)
+  plot_args <- add_defaults(list(...), col = "black", lwd = 2, xlab = "time (s)", ylab = "BOLD response")
+  ROI_col <- colnames(timeseries)[!colnames(timeseries) %in% c("run", "subjects", "time")]
+  ts <- get_peri_stim_lines(timeseries, events, event_type = event_type)
+  if(!is.null(post_predict)){
+    pps <- split(post_predict, post_predict$postn)
+    pps <- lapply(pps, get_peri_stim_lines, events, event_type = event_type)
+    df_all <- do.call(rbind, pps)
+    # Split the data by these grouping columns
+    split_list <- split(df_all, df_all[c("mod_group", "time")])
+
+    # 4) For each group, compute the 2.5, 50, 97.5 percentiles of avg_signal
+    res_list <- lapply(split_list, function(subdf) {
+      # subdf is all rows with the same (mod_group, time)
+      qs <- quantile(subdf$avg_signal, c(0.025, 0.5, 0.975), na.rm = TRUE)
+      # Build a small output row with just the grouping columns
+      out <- subdf[1, c("mod_group", "time"), drop = FALSE]
+      # If min_mod/max_mod exist, keep them from the first row
+      out$min_mod <- subdf$min_mod[1]
+      out$max_mod <- subdf$max_mod[1]
+      # Add the quantiles
+      out$p025 <- qs[1]
+      out$p50  <- qs[2]
+      out$p975 <- qs[3]
+      out
+    })
+
+    # 5) Reassemble into one data frame
+    res_df <- do.call(rbind, res_list)
+    rownames(res_df) <- NULL
+  }
+  par(mfrow = c(2,2))
+  n_plots <- length(unique(ts$mod_group))
+  if(n_plots == 1){
+    insert <- ""
+  } else{
+    insert <- "Q"
+  }
+
+  if(!is.null(layout)){
+    oldpar <- par(no.readonly = TRUE)
+    on.exit(par(oldpar))
+  }
+  if (any(is.na(layout))) {
+    par(mfrow = coda_setmfrow(Nchains = 1, Nparms = n_plots, nplots = 1))
+  } else {
+    par(mfrow = layout)
+  }
+  for(mod in unique(ts$mod_group)){
+    idx_ts <- ts$mod_group == mod
+    tmp_plot_args <- add_defaults(plot_args, ylim = c(min(ts$avg_signal, res_df$p025), max(ts$avg_signal, res_df$p975)),
+                                  main = paste0(ROI_col, " - ", event_type, ifelse(n_plots == 1, "", paste0(": ", insert, mod))))
+    do.call(plot, c(list(ts$time[idx_ts], ts$avg_signal[idx_ts], type = "l"), fix_dots_plot(tmp_plot_args)))
+    idx_pp <- res_df$mod_group == mod
+    abline(h = 0, lty = 2)
+    if(!is.null(post_predict)){
+      do.call(lines, c(list(res_df$time[idx_pp], res_df$p50[idx_pp]), fix_dots_plot(posterior_args)))
+      polygon_args <- posterior_args
+      polygon_args$col <- adjustcolor(polygon_args$col, alpha.f = .2)
+      do.call(polygon, c(list(
+        x = c(res_df$time[idx_pp], rev(res_df$time[idx_pp])),
+        y = c(res_df$p025[idx_pp], rev(res_df$p975[idx_pp])), border = NA), fix_dots_plot(polygon_args)))
+    }
+    dots_legend <- plot_args
+    dots_legend$col <- c(plot_args$col, posterior_args$col)
+    dots_legend$lty <- c(plot_args$lty, posterior_args$lty)
+    dots_legend$lwd <- c(plot_args$lwd, posterior_args$lwd)
+    if(is.null(post_predict)){
+      legend_in <- "data"
+    } else{
+      legend_in <- c("data", "posterior")
+    }
+    do.call(legend, c(list(legend_pos, legend = legend_in, bty = "n"), fix_dots(dots_legend, legend)))
+  }
+}
+
+
+# -------------------------------------------------------------------------
+# Helper 1: Filter events by event_type and bin/categorize the modulation
+# -------------------------------------------------------------------------
+prepare_event_groups <- function(events, event_type, n_bins = 4) {
+  ev_sub <- events[events$event_type == event_type, ]
+  if (nrow(ev_sub) == 0) {
+    return(ev_sub)  # empty
+  }
+  if (!"modulation" %in% names(ev_sub)) {
+    stop("The 'events' data frame must have a 'modulation' column.")
+  }
+
+  # Round to reduce floating precision issues
+  ev_sub$modulation <- round(ev_sub$modulation, 6)
+  mod_vals <- unique(ev_sub$modulation)
+  n_unique <- length(mod_vals)
+
+  if (n_unique > 6) {
+    # Calculate quartile breakpoints for the 'modulation' data
+    quartile_breaks <- quantile(ev_sub$modulation, probs = seq(0, 1, length.out = n_bins + 1), na.rm = TRUE)
+
+    # Bin the data into quartiles using these breakpoints
+    ev_sub$mod_group <- cut(ev_sub$modulation, breaks = quartile_breaks, include.lowest = TRUE, labels = 1:4)
+    attr(ev_sub, "binned") <- TRUE
+
+  } else {
+    # treat as categorical
+    ev_sub$mod_group <- factor(ev_sub$modulation, levels = sort(mod_vals))
+    attr(ev_sub, "binned") <- FALSE
+  }
+  return(ev_sub)
+}
+
+# -------------------------------------------------------------------------
+# Helper 2: Split timeseries by (subjects, run) and gather metadata
+# -------------------------------------------------------------------------
+split_timeseries_chunks <- function(timeseries, ROI_col, uniform_tol = 1e-5) {
+  # Split
+  ts_split <- split(timeseries, list(timeseries$subjects, timeseries$run), drop = TRUE)
+
+  # For each chunk, store:
+  #   df          => sorted by time
+  #   time_vec    => numeric vector of times
+  #   dt          => median diff
+  #   is_uniform  => whether the data are within uniform_tol of dt
+  # Return a named list keyed by "subj.run"
+  out_list <- lapply(ts_split, function(df_sub) {
+    df_sub <- df_sub[order(df_sub$time), ]
+    time_vec <- df_sub$time
+    if (length(time_vec) < 2) {
+      return(list(
+        df = df_sub,
+        time_vec = time_vec,
+        dt = NA_real_,
+        is_uniform = FALSE
+      ))
+    }
+    diffs <- diff(time_vec)
+    dt_median <- median(diffs)
+    max_dev <- max(abs(diffs - dt_median))
+    is_uni <- (max_dev < uniform_tol)
+    list(
+      df = df_sub,
+      time_vec = time_vec,
+      dt = dt_median,
+      is_uniform = is_uni
+    )
+  })
+  return(out_list)
+}
+
+# -------------------------------------------------------------------------
+# Helper 3: Extract a single snippet from a chunk
+# -------------------------------------------------------------------------
+extract_snippet <- function(ci, onset, pre, post, ROI_col) {
+  # ci => chunk info, with $df, $time_vec, $dt, $is_uniform
+  # returns baseline-corrected snippet or NULL if out-of-range
+
+  df_sub   <- ci$df
+  time_vec <- ci$time_vec
+  dt       <- ci$dt
+  n_pts    <- nrow(df_sub)
+
+  if (n_pts < 1) return(NULL)
+
+  start_t <- onset - pre
+  end_t   <- onset + post
+
+  if (ci$is_uniform && !is.na(dt) && dt > 0) {
+    # Direct index-based approach
+    t0 <- time_vec[1]
+    start_idx <- round((start_t - t0)/dt) + 1
+    end_idx   <- round((end_t   - t0)/dt) + 1
+
+    if (start_idx < 1 || end_idx < 1 ||
+        start_idx > n_pts || end_idx > n_pts ||
+        start_idx > end_idx) {
+      return(NULL)
+    }
+    snippet_vals <- df_sub[[ROI_col]][start_idx:end_idx]
+
+    # Baseline correction: subtract mean in [-pre, 0)
+    zero_idx   <- round((onset - t0)/dt) + 1
+    pre_start  <- start_idx
+    pre_end    <- max(zero_idx - 1, start_idx)
+    if (pre_end < pre_start) {
+      baseline_mean <- 0
+    } else {
+      baseline_vals <- df_sub[[ROI_col]][pre_start:pre_end]
+      baseline_mean <- mean(baseline_vals, na.rm = TRUE)
+    }
+    snippet_vals_bc <- snippet_vals - baseline_mean
+    return(snippet_vals_bc)
+
+  } else {
+    # fallback with findInterval
+    start_idx <- findInterval(start_t, time_vec)
+    end_idx   <- findInterval(end_t,   time_vec)
+    if (start_idx < 1) start_idx <- 1
+    if (end_idx   < 1) return(NULL)
+    if (end_idx   > n_pts) end_idx <- n_pts
+    if (start_idx > n_pts || start_idx > end_idx) return(NULL)
+
+    snippet_rows <- df_sub[start_idx:end_idx, ]
+    # baseline in [-pre, 0)
+    baseline_rows <- snippet_rows[snippet_rows$time < onset, ]
+    baseline_mean <- if (nrow(baseline_rows) > 0) {
+      mean(baseline_rows[[ROI_col]], na.rm = TRUE)
+    } else 0
+    snippet_vals_bc <- snippet_rows[[ROI_col]] - baseline_mean
+    return(snippet_vals_bc)
+  }
+}
+
+# -------------------------------------------------------------------------
+# Helper 4: Compute the average snippet for one group of events
+# -------------------------------------------------------------------------
+compute_avg_snippet_for_group <- function(ev_g, chunk_info_list, ROI_col, pre, post) {
+  # ev_g => subset of events for a single mod_group
+  # For each event, we do extract_snippet(...).
+  # Then we combine them. If uniform, they'll have the same length.
+  # We return a list with $time (the x-axis) and $avg (the averaged signal).
+
+  if (nrow(ev_g) < 1) return(NULL)
+
+  snippet_list <- vector("list", nrow(ev_g))
+  for (i in seq_len(nrow(ev_g))) {
+    subj_i  <- ev_g$subjects[i]
+    run_i   <- ev_g$run[i]
+    onset_i <- ev_g$onset[i]
+
+    chunk_key <- paste0(subj_i, ".", run_i)
+    ci <- chunk_info_list[[chunk_key]]
+    if (is.null(ci)) {
+      snippet_list[[i]] <- NULL
+      next
+    }
+    snippet_vals <- extract_snippet(ci, onset_i, pre, post, ROI_col)
+    snippet_list[[i]] <- snippet_vals
+  }
+
+  # Among all snippets, find max length
+  lens <- sapply(snippet_list, length)
+  max_len <- max(lens, na.rm = TRUE)
+  if (max_len < 1) {
+    return(NULL)
+  }
+
+  # Build a matrix of shape (max_len x #events), fill with NA
+  mat_snips <- matrix(NA, nrow = max_len, ncol = length(snippet_list))
+  for (col_i in seq_along(snippet_list)) {
+    vals <- snippet_list[[col_i]]
+    if (!is.null(vals) && length(vals) > 0) {
+      mat_snips[1:length(vals), col_i] <- vals
+    }
+  }
+  avg_snip <- rowMeans(mat_snips, na.rm = TRUE)
+
+  # approximate dt from all used chunks
+  # if truly uniform, they might differ across runs, but we do a single approach:
+  dts <- sapply(chunk_info_list, `[[`, "dt")
+  dt_global <- median(dts, na.rm = TRUE)
+  # define a time axis from -pre.. with steps dt_global
+  # length = max_len
+  time_axis <- seq(-pre, by = dt_global, length.out = max_len)
+
+  list(time = time_axis, avg = avg_snip)
+}
 
 # Utility functions -------------------------------------------------------
 
@@ -820,7 +1246,6 @@ make_data_fMRI <- function(parameters, model, data, design, ...){
   # if(is.null(attr(design, "design_matrix"))){
   #   stop("for fMRI simulation the original design needs to be passed to the simulation function")
   # }
-  attr(data, "designs") <- design$fMRI_design[[data$subjects[1]]]
   pars <- t(apply(parameters, 1, do_pre_transform, model()$pre_transform))
   pars <- map_p(add_constants(pars,design$constants),data, model())
   pars <- do_transform(pars, model()$transform)
