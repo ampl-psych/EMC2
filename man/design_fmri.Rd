@@ -7,7 +7,7 @@
 design_fmri(design_matrix, model = normal_mri, ...)
 }
 \arguments{
-\item{design_matrix}{A list of design matrices,  the output from convolved_design_matrix}
+\item{design_matrix}{A list of design matrices,  the output from convolve_design_matrix}
 
 \item{model}{A function that returns a model specification, options are normal_mri or white_mri}
 
@@ -17,7 +17,7 @@ design_fmri(design_matrix, model = normal_mri, ...)
 An object of class 'emc.design' suitable for EMC2 sampling
 }
 \description{
-This function takes the output from convolved_design_matrix and transforms it into a design
+This function takes the output from convolve_design_matrix and transforms it into a design
 suitable for sampling with EMC2. It properly configures parameter types, bounds, and transformations
 for the specified model.
 }
@@ -41,7 +41,7 @@ events <- data.frame(
 )
 
 # Create convolved design matrix
-design_matrix <- convolved_design_matrix(
+design_matrix <- convolve_design_matrix(
   timeseries = ts,
   events = events,
   factors = list(condition = "condition"),
