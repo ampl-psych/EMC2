@@ -55,6 +55,9 @@ make_missing <- function(data,LT=0,UT=Inf,LC=0,UC=Inf,
 #' cell and columns for each parameter specifying how they are mapped to the design cells.
 #' @param hyper If `TRUE` the supplied parameters must be a set of samples, from which the group-level will be used to generate subject level parameters.
 #' See also `make_random_effects` to generate subject-level parameters from a hyper distribution.
+#' @param staircase Default NULL, used with stop-signal paradigm simulation to specify a staircase
+#' algorithm. If non-null and a list then passed through as is, if not it is assigned the
+#' default list structure: list(p=.25,SSD0=.25,stairstep=.05,stairmin=0,stairmax=Inf)
 #' @param ... Additional optional arguments
 #' @return A data frame with simulated data
 #' @examples
@@ -83,7 +86,7 @@ make_missing <- function(data,LT=0,UT=Inf,LC=0,UC=Inf,
 #' @export
 
 make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
-  mapped_p=FALSE, hyper = FALSE, ...)
+  mapped_p=FALSE, hyper = FALSE, staircase = NULL, ...)
 {
   # #' @param LT lower truncation bound below which data are removed (scalar or subject named vector)
   # #' @param UT upper truncation bound above which data are removed (scalar or subject named vector)
@@ -99,6 +102,11 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
   # #' (the default) direction is taken from data or LCdirection or UCdirection (NB
   # #' if both of these are false an error occurs as then contamination is not identifiable).
   # #' @param return_Ffunctions if false covariates are not returned
+
+
+  if (!is.null(staircase)) if (!is.list(staircase))
+    staircase <- list(SSD0=.25,stairstep=.05,stairmin=0,stairmax=Inf)
+
   LT<-0
   UT<-Inf
   LC<-0
@@ -231,6 +239,10 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
     lR <- rep(data$lR,expand)
     pars <- apply(pars,2,rep,times=expand)
   } else lR <- data$lR
+  if (!is.null(staircase)) {
+    staircase$data <- data
+    attr(pars,"staircase") <- staircase  # Stop signal models
+  }
   if (any(names(data)=="RACE")) {
     Rrt <- matrix(ncol=2,nrow=dim(data)[1]/length(levels(data$lR)),
                   dimnames=list(NULL,c("R","rt")))
@@ -253,6 +265,8 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
     dropNames <- c(dropNames,names(design$Ffunctions) )
   data <- data[data$lR==levels(data$lR)[1],!(names(data) %in% dropNames)]
   for (i in dimnames(Rrt)[[2]]) data[[i]] <- Rrt[,i]
+  if (!is.null(attr(Rrt,"SSD")))
+    data[is.na(data[,"SSD"]),"SSD"] <- attr(Rrt,"SSD")
   data <- make_missing(data[,names(data)!="winner"],LT,UT,LC,UC,
     LCresponse,UCresponse,LCdirection,UCdirection)
   if ( !is.null(pc) ) {

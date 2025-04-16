@@ -12,6 +12,7 @@ make_data(
   expand = 1,
   mapped_p = FALSE,
   hyper = FALSE,
+  staircase = NULL,
   ...
 )
 }
@@ -34,6 +35,10 @@ cell and columns for each parameter specifying how they are mapped to the design
 
 \item{hyper}{If \code{TRUE} the supplied parameters must be a set of samples, from which the group-level will be used to generate subject level parameters.
 See also \code{make_random_effects} to generate subject-level parameters from a hyper distribution.}
+
+\item{staircase}{Default NULL, used with stop-signal paradigm simulation to specify a staircase
+algorithm. If non-null and a list then passed through as is, if not it is assigned the
+default list structure: list(p=.25,SSD0=.25,stairstep=.05,stairmin=0,stairmax=Inf)}
 
 \item{...}{Additional optional arguments}
 }
