@@ -613,7 +613,7 @@ design_fmri <- function(design_matrix,
 #'
 #' # Access model parameters
 #' model_spec$p_types
-normal_mri <- function(){
+MRI <- function(){
   return(
     list(
       type="MRI",
@@ -669,11 +669,11 @@ normal_mri <- function(){
 #' # Access model parameters
 #' model_spec$p_types
 
-white_mri <- function(){
+MRI_AR1 <- function(){
   return(
     list(
-      type="MRI_white",
-      c_name = "MRI_white",
+      type="MRI_AR1",
+      c_name = "MRI_AR1",
       p_types=c("beta" = 0, "rho" = pnorm(0.001), "sd" = log(1)),
       transform=list(func=c(beta = "identity",  rho = "pnorm", sd = "exp")),
       bound=list(minmax=cbind(beta=c(-Inf,Inf),sd=c(0.001,Inf), rho = c(0.0001, 1)),
