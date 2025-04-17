@@ -780,9 +780,9 @@ dm_list <- function(dadm)
       # }
 
       # attr(dl[[i]],"ok_trials") <- ok_trials[isin2]
-      # if (!is.null(expand_winner)){
-      #   attr(dl[[i]],"expand_winner") <- expand_winner[isin2]-min(expand_winner[isin2]) + 1
-      # }
+      if (!is.null(expand_winner)){
+        attr(dl[[i]],"expand_winner") <- expand_winner[isin2]-min(expand_winner[isin2]) + 1
+      }
       #
       # if (!is.null(attr(dadm,"expand_uc"))){
       #   attr(dl[[i]],"expand_uc") <- as.numeric(factor(expand_uc[isin2]))
