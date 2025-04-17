@@ -5,11 +5,6 @@ calc_ll_R <- function(p_vector, model, dadm){
     pars <- p_vector
   }
   ll <- model$log_likelihood(pars, dadm, model)
-  if (any(is.na(ll))) {
-    badpars <<- pars
-    baddadm <<- dadm
-    badmodel <<- model
-  }
   return(ll)
 }
 
