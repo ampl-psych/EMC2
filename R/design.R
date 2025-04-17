@@ -734,7 +734,7 @@ dm_list <- function(dadm)
     if(is.null(attr(dadm, "custom_ll"))){
 
       isin1 <- s_expand==i             # da
-      # isin2 <- attr(dadm,"s_data")==i  # data
+      isin2 <- attr(dadm,"s_data")==i  # data
 
 
       attr(dl[[i]],"model") <- NULL
