@@ -146,7 +146,6 @@ my.integrate <- function(...,upper=Inf,big=10)
 
 log_likelihood_race_ss <- function(pars,dadm,model,min_ll=log(1e-10))
 {
-
   # All bad?
   if (is.null(attr(pars,"ok")))
     ok <- !logical(dim(pars)[1]) else ok <- attr(pars,"ok")
@@ -159,6 +158,8 @@ log_likelihood_race_ss <- function(pars,dadm,model,min_ll=log(1e-10))
 
   # Counts
   n_acc <- length(levels(dadm$lR))                   # total number of accumulators
+  # If one accumulator has bad bounds whole trial must be removed.
+  ok <- as.vector(apply(matrix(ok,nrow=n_acc),2,\(x)rep(all(x),n_acc)))
   n_trials <- nrow(dadm)/n_acc                       # number of trials
   n_accG <- sum(as.numeric(dadm[1:n_acc,"lI"])==2)   # go accumulators
   n_accST <- sum(as.numeric(dadm[1:n_acc,"lI"])==1)
