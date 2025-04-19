@@ -225,6 +225,9 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
   pars <- do_transform(pars, model()$transform)
   pars <- model()$Ttransform(pars, data)
   pars <- add_bound(pars, model()$bound)
+  # If one accumulator has bad bounds whole trial must be removed.
+  attr(pars, "ok") <- as.vector(apply(
+    matrix(attr(pars, "ok"),nrow=length(design$Rlevels))),2,\(x)rep(all(x),n_acc))
   pars_ok <- attr(pars, 'ok')
   if(any(!pars_ok)){
     warning("Parameter values fall out of model bounds, see <model_name>$bounds()")
