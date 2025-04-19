@@ -153,7 +153,7 @@ SBC_single <- function(design_in, prior_in, replicates = 250, trials = 100,
     }
     start <- i
     i <- i + n_cores
-    dats <- parallel::mclapply(start:max(c(i-1),replicates),make_datas,
+    dats <- parallel::mclapply(start:min(c(i-1),replicates),make_datas,
         prior_alpha=prior_alpha,design_in=design_in,trials=trials,
       mc.cores=n_cores)
     if(plot_data){
