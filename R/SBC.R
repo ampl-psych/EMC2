@@ -19,13 +19,15 @@
 #' @export
 run_sbc <- function(design_in, prior_in, replicates = 250, trials = 100, n_subjects = 30,
                     plot_data = FALSE, verbose = TRUE,
-                    fileName = NULL, n_cores = 1, save_emc = NULL, ...){
+                    fileName = NULL, n_cores = 1,
+                    save_emc = NULL, add_noise = NULL, ...){
   if(is.null(fileName)) message("Since SBC can take a while it's highly recommended to specify a fileName to save temporary results in case of crashes")
   type <- attr(prior_in, "type")
   if(type == "single"){
     out <- SBC_single(design_in, prior_in, replicates, trials,
                       plot_data, verbose, fileName,
-                      n_cores = n_cores, save_emc = save_emc, ...)
+                      n_cores = n_cores,
+                      save_emc = save_emc, add_noise = NULL, ...)
   } else{
     out <- SBC_hierarchical(design_in, prior_in, replicates, trials, n_subjects,
                     plot_data, verbose, fileName, ...)
@@ -33,6 +35,13 @@ run_sbc <- function(design_in, prior_in, replicates = 250, trials = 100, n_subje
   return(out)
 }
 
+# NOTES FOR NIEK
+#
+# 1) I have only updated SBC_single
+# 2) Rather than SBC_temp maybe just call it SBC?
+# 3) Save estimated parameter medians? Useful for getting coverage and bias to
+# complement SBC results.
+# 4) Perhaps add_noise could be a hidden ... argument? Also save_emc?
 
 
 SBC_hierarchical <- function(design_in, prior_in, replicates = 250, trials = 100, n_subjects = 30,
@@ -96,10 +105,21 @@ SBC_hierarchical <- function(design_in, prior_in, replicates = 250, trials = 100
 
 SBC_single <- function(design_in, prior_in, replicates = 250, trials = 100,
                        n_cores=1,plot_data = FALSE, verbose = TRUE,
-                             fileName = NULL, save_emc = NULL, ...){
+                       fileName = NULL, save_emc = NULL, add_noise = NULL, ...){
 
-  make_datas <- function(i,prior_alpha,design_in,trials)
-    make_data(unlist(prior_alpha[i,]),design_in, trials, model = design_in$model)
+
+  noise_fun <- function(d,scale=.05,direction=-1, # negative = monitor
+                      rfun="runif",args=list(n=nrow(d)))
+  {
+    d$rt <- d$rt + direction*do.call(rfun,args)*scale
+    d
+  }
+
+  make_datas <- function(i,prior_alpha,design_in,trials,add_noise=NULL) {
+    datas <- make_data(unlist(prior_alpha[i,]),design_in, trials, model = design_in$model)
+    if (!is.null(add_noise)) datas <- noise_fun(datas,add_noise)
+    datas
+  }
 
   tryfit <- function(emc,...) {
     try(fit(emc,verbose=FALSE,...),silent=TRUE)
