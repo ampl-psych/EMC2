@@ -70,7 +70,7 @@ get_stop_criteria <- function(stage, stop_criteria, type){
 #' @examples \donttest{
 #' # First define a design
 #' design_in <- design(data = forstmann,model=DDM,
-#'                            formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
+#'                            formula =list(v~0+S,a~E, t0~1, s~1, Z~1),
 #'                            constants=c(s=log(1)))
 #' # Then make the emc, we've omitted a prior here for brevity so default priors will be used.
 #' emc <- make_emc(forstmann, design_in)
@@ -216,7 +216,7 @@ check_progress <- function (emc, stage, iter, stop_criteria,
   iter_done <- ifelse(is.null(iter) || length(iter) == 0, TRUE, total_iters_stage >= iter)
   if (min_es == 0) {
     es_done <- TRUE
-  } else if (iters_total != 0) {
+  } else if (total_iters_stage != 0) {
     class(emc) <- "emc"
     curr_min_es <- Inf
     for(select in selection){
@@ -461,10 +461,12 @@ create_chain_proposals <- function(emc, samples_idx = NULL, do_block = TRUE){
   }
   LL <- get_pars(emc, filter = samples_idx-1, selection = "LL",
                  stage = c('preburn', 'burn', 'adapt', 'sample'),
-                 merge_chains = T, return_mcmc = F)
+                 merge_chains = T, return_mcmc = F, remove_constants = F,
+                 remove_dup = F)
   alpha <- get_pars(emc, filter = samples_idx-1, selection = "alpha",
                     stage = c('preburn', 'burn', 'adapt', 'sample'),
-                    by_subject = T, merge_chains = T, return_mcmc = F)
+                    by_subject = T, merge_chains = T, return_mcmc = F,
+                    remove_dup = F, remove_constants = F)
 
   components <- attr(emc[[1]]$data, "components")
   block_idx <- block_variance_idx(components)

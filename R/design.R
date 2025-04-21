@@ -465,10 +465,16 @@ if (type=="DDM") {
     datar <- datar[order(rep(1:dim(data)[1],nacc),datar$lR),]
     if (!is.null(matchfun)) {
       lM <- matchfun(datar)
-      # if (any(is.na(lM)) || !(is.logical(lM)))
-      #   stop("matchfun not scoring properly")
-      datar$lM <- factor(lM)
+      if (!is.factor(lM))
+        datar$lM <- factor(lM) else
+        datar$lM <- factor(lM,levels=levels(lM))
     }
+    # if (!is.null(matchfun)) {
+    #   lM <- matchfun(datar)
+    #   # if (any(is.na(lM)) || !(is.logical(lM)))
+    #   #   stop("matchfun not scoring properly")
+    #   datar$lM <- factor(lM)
+    # }
     # Advantage NAFC
     nam <- unlist(lapply(strsplit(dimnames(datar)[[2]],"lS"),function(x)x[[1]]))
     islS <- nam ==""
@@ -1004,6 +1010,8 @@ dm_list <- function(dadm)
 #'
 #' @export
 update2version <- function(emc){
+  # For older versions, ensure that the class is emc:
+  class(emc) <- "emc"
   get_new_model <- function(old_model, pars){
     if(old_model()$c_name == "LBA"){
       model <- LBA
