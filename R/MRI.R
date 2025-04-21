@@ -56,7 +56,8 @@ apply_contrasts <- function(events, contrast = NULL, cell_coding = FALSE, remove
 #' @param event_types A character vector of column names in the events data frame to be treated as event_types
 #' @param duration Either a single numeric value (applied to all event_types), a list with named elements
 #'        corresponding to event_types, or a function that takes the events data frame and returns durations
-#'
+#' @param modulation Either a list with named elements corresponding to event_types, or a function that takes
+#'          the events data frame and returns durations
 #' @return A data frame with columns 'subjects', 'onset', 'run', 'modulation', 'duration', and 'event_type'
 #' @export
 #' @examples
@@ -92,7 +93,7 @@ reshape_events <- function(events, event_types, duration = 0.001, modulation = N
   } else if(is.list(duration) & any(names(duration) %in% event_types)){
     duration_tmp <- replicate(length(event_types), list(0.001)) # Fill in the default spike function
     for(i in 1:length(event_types)){
-      if(names(duration) %in% event_types[i]){
+      if(any(names(duration) %in% event_types[i])){
         duration_tmp[[i]] <- duration[[event_types[i]]]
       }
     }
@@ -155,6 +156,7 @@ reshape_events <- function(events, event_types, duration = 0.001, modulation = N
 #' @param factors A named list mapping factor names to event types
 #' @param contrasts A named list of contrast matrices for each factor
 #' @param covariates A character vector of event types to include as covariates
+#' @param add_constant A boolean specifying whether a 1 should be included to the design matrix post convolution
 #' @param hrf_model A character string specifying the HRF model to use ('glover', 'spm', 'glover + derivative', or 'spm + derivative')
 #' @param cell_coding A character vector of factor names to use cell coding for
 #' @param scale A boolean indicating whether to scale the design matrix.
@@ -244,6 +246,7 @@ convolve_design_matrix <- function(timeseries, events, factors = NULL, contrasts
         tmp <- ev_run[idx, ]
         new_tmp <- apply_contrasts(tmp, contrast = contrasts[[fact]],
                                    cell_coding = fact %in% cell_coding)
+        rownames(new_tmp) <- NULL
         new_tmp <- cbind(event_type = ev_run$event_type[idx], new_tmp)
         ev_tmp <- rbind(ev_tmp, new_tmp)
       }
@@ -279,7 +282,7 @@ convolve_design_matrix <- function(timeseries, events, factors = NULL, contrasts
                                     ratio = ratio,
                                     add_intercept = FALSE)
       if((run == runs[1]) & (subject == subjects[1]) & isTRUE(high_pass)){
-        warning("Filtering out high_pass noise, make sure you also use high_pass_filter(<timeseries>)")
+        message("Filtering out high_pass noise, make sure you also use high_pass_filter(<timeseries>)")
       }
       dm <- high_pass_filter(dm, high_pass_model, frame_times = ts_run$time, add=(high_pass == "add"))
       if(add_constant) dm$constant <- 1
@@ -397,6 +400,7 @@ high_pass_filter <- function(X, high_pass_model = 'cosine', frame_times = NULL, 
       stop("no column named 'time' for frame_times present, please separately provide")
     } else{
       frame_times <- X[,'time']
+      message("Make sure you also high_pass_filter your events (set high_pass = TRUE in convolve_design_matrix)")
     }
   }
   if('subjects' %in% colnames(X) && is.null(list(...)$recursive)){
@@ -501,7 +505,7 @@ cosine_drift <- function(frame_times, high_pass = .01) {
 #' for the specified model.
 #'
 #' @param design_matrix A list of design matrices,  the output from convolve_design_matrix
-#' @param model A function that returns a model specification, options are normal_mri or white_mri
+#' @param model A function that returns a model specification, options are MRI or MRI_AR1
 #' @param ... Additional arguments passed to the model
 #'
 #' @return An object of class 'emc.design' suitable for EMC2 sampling
@@ -510,35 +514,35 @@ cosine_drift <- function(frame_times, high_pass = .01) {
 #' @examples
 #' # Generate a simple example timeseries
 #' ts <- data.frame(
-#'   subjects = rep(1, 100),
-#'   run = rep(1, 100),
-#'   time = seq(0, 99),
-#'   ROI1 = rnorm(100)
+#'  subjects = rep(1, 100),
+#'  run = rep(1, 100),
+#'  time = cumsum(rep(1.38, 100)),
+#'  ROI1 = rnorm(100)
 #' )
 #'
 #' # Generate example events
 #' events <- data.frame(
-#'   subjects = rep(1, 4),
-#'   run = rep(1, 4),
-#'   onset = c(10, 30, 50, 70),
-#'   duration = rep(0.5, 4),
-#'   event_type = c("condition", "condition", "condition", "condition"),
-#'   modulation = c(1, 1, 1, 1)
+#'  subjects = rep(1, 4),
+#'  run = rep(1, 4),
+#'  onset = c(10, 30, 50, 70),
+#'  duration = rep(0.5, 4),
+#'  event_type = c("A", "B", "A", "B"),
+#'  modulation = c(1, 1, 1, 1)
 #' )
 #'
 #' # Create convolved design matrix
 #' design_matrix <- convolve_design_matrix(
-#'   timeseries = ts,
-#'   events = events,
-#'   factors = list(condition = "condition"),
-#'   hrf_model = "glover"
+#'  timeseries = ts,
+#'  events = events,
+#'  factors = list(condition = c("A", "B")),
+#'  hrf_model = "glover"
 #' )
 #'
 #' # Create fMRI design for EMC2
-#' fmri_design <- design_fmri(design_matrix, model = white_mri)
+#' fmri_design <- design_fmri(design_matrix, model = MRI_AR1)
 
 design_fmri <- function(design_matrix,
-                             model = normal_mri, ...) {
+                             model = MRI_AR1, ...) {
   dots <- list(...)
   betas <- colnames(design_matrix[[1]])
   subjects <- names(design_matrix)
@@ -609,7 +613,7 @@ design_fmri <- function(design_matrix,
 #' @export
 #' @examples
 #' # Create a normal MRI model specification
-#' model_spec <- normal_mri()
+#' model_spec <- MRI()
 #'
 #' # Access model parameters
 #' model_spec$p_types
@@ -664,7 +668,7 @@ MRI <- function(){
 #' @export
 #' @examples
 #' # Create an AR(1) GLM model for fMRI data
-#' model_spec <- white_mri()
+#' model_spec <- MRI_AR1()
 #'
 #' # Access model parameters
 #' model_spec$p_types
@@ -767,66 +771,37 @@ MRI_AR1 <- function(){
 #' @export
 #'
 #' @examples
-#' # Create a simple design matrix
-#' set.seed(123)
-#' n_trs <- 200
-#'
-#' # Create a design matrix with two conditions and drift terms
-#' design <- data.frame(
-#'   condition1 = c(rep(0, 20), rep(1, 10), rep(0, 170)),
-#'   condition2 = c(rep(0, 100), rep(1, 10), rep(0, 90)),
-#'   drift1 = seq(0, 1, length.out = n_trs),
-#'   drift2 = seq(1, 0, length.out = n_trs),
-#'   derivative = c(rep(0, 10), rep(1, 5), rep(0, 185))
-#' )
-#'
-#' # Basic plot of the design matrix
-#' plot_design_fmri(design)
-#'
-#' # Plot specific events only
-#' plot_design_fmri(design, events = c("condition1", "condition2"))
-#'
-#' # Include nuisance regressors
-#' plot_design_fmri(design, remove_nuisance = FALSE)
-#'
-#' # Customize the plot
-#' plot_design_fmri(design,
-#'                 TRs = 150,
-#'                 legend_pos = "topright",
-#'                 main = "fMRI Design Matrix",
-#'                 lwd = 3)
-#'
-#' # Example with an emc.design object
-#' # First create a design matrix using convolve_design_matrix
-#' timeseries <- data.frame(
+#' # Example time series
+#' ts <- data.frame(
 #'   subjects = rep(1, 100),
-#'   run = rep(1, 100),
-#'   time = seq(0, 99),
-#'   ROI1 = rnorm(100)
+#'   run      = rep(1, 100),
+#'   time     = seq(0, 99),
+#'   ROI      = rnorm(100)
 #' )
-#'
+#' # Create a simple events data frame
 #' events <- data.frame(
-#'   subjects = rep(1, 4),
-#'   run = rep(1, 4),
-#'   onset = c(10, 30, 50, 70),
-#'   duration = rep(0.5, 4),
-#'   event_type = c("A", "B", "A", "B"),
-#'   modulation = c(1, 1, 1, 1)
+#'   subjects = rep(1, 10),
+#'   run = rep(1, 10),
+#'   onset = seq(0, 90, by = 10),
+#'   condition = rep(c("A", "B"), 5),
+#'   rt = runif(10, 0.5, 1.5),
+#'   accuracy = sample(0:1, 10, replace = TRUE)
 #' )
-#'
-#' # Create convolved design matrix
-#' design_matrix <- convolve_design_matrix(
-#'   timeseries = timeseries,
-#'   events = events,
-#'   factors = list(condition = c("A", "B")),
-#'   hrf_model = "glover"
-#' )
-#'
-#' # Create fMRI design for EMC2
-#' fmri_design <- design_fmri(design_matrix, model = normal_mri)
+#' # Reshape with custom duration for each event_type
+#' reshaped <- reshape_events(events,
+#'                            event_types = c("condition", "accuracy", "rt"),
+#'                            duration = list(condition = 0.5,
+#'                                           accuracy = 0.2,
+#'                                           rt = function(x) x$rt))
+#' design_matrices <-  convolve_design_matrix(
+#'                     timeseries = ts,
+#'                     events = reshaped,
+#'                     covariates = c('accuracy', 'rt'),
+#'                     factors = list(cond = c("condition_A", "condition_B")),
+#'                     contrasts = list(cond = matrix(c(-1, 1))))
 #'
 #' # Plot the design matrix
-#' plot_design_fmri(fmri_design)
+#' plot_design_fmri(design_matrices)
 plot_design_fmri <- function(design_matrix, TRs = 100, events = NULL, remove_nuisance = TRUE, subject = 1,
                              legend_pos = "bottomleft", ...){
   if(is(design_matrix,"emc.design")){
@@ -838,7 +813,7 @@ plot_design_fmri <- function(design_matrix, TRs = 100, events = NULL, remove_nui
   enames <- colnames(design_matrix)
   if(remove_nuisance & is.null(events)){
     is_nuisance <- grepl("drift", enames) | grepl("poly", enames) | grepl("derivative", enames) | apply(design_matrix, 2, sd) == 0
-    design_matrix <- design_matrix[,!is_nuisance]
+    design_matrix <- design_matrix[,!is_nuisance, drop = F]
   }
   enames <- colnames(design_matrix)
   if(is.null(events)){
@@ -855,8 +830,8 @@ plot_design_fmri <- function(design_matrix, TRs = 100, events = NULL, remove_nui
   )
   dots <- add_defaults(list(...), col = distinct_colors, lwd = 2, lty = 1, main = NULL, xlab = "TRs", ylab = "Amplitude")
 
-
-  design_matrix <- design_matrix[1:TRs, events]
+  TRs <- min(c(TRs, nrow(design_matrix)))
+  design_matrix <- design_matrix[1:TRs, events, drop = F]
   do.call(matplot, c(list(design_matrix, type = "l"), fix_dots_plot(dots)))
   do.call(legend, c(list(legend_pos, legend = events, bty = "n"), fix_dots(dots, legend)))
 }
@@ -950,8 +925,40 @@ get_peri_stim_lines <- function(
   return(final_df)
 }
 
-plot_fmri <- function(timeseries, post_predict = NULL, events, event_type, posterior_args = list(),
-                      legend_pos = "topright", layout = NA, ...){
+#' Plot fMRI peri-stimulus time courses
+#'
+#' This function plots average BOLD response around specified events for a single ROI by computing peri-stimulus time courses.
+#' Posterior predictives can be overlaid via the `post_predict` argument.
+#'
+#' @param timeseries A data frame with columns 'subjects', 'run', 'time', and one ROI measurement column.
+#' @param events A data frame with columns 'subjects', 'run', 'onset', 'duration', 'event_type', and 'modulation'.
+#' @param event_type Character string specifying which `event_type` in `events` to plot.
+#' @param post_predict Optional posterior predictive samples data frame (not shown in examples).
+#' @param posterior_args Named list of graphical parameters for posterior predictive lines.
+#' @param legend_pos Position of the legend. Default: "topleft".
+#' @param layout Panel layout matrix for multiple modulation groups. Default: NA.
+#' @param ... Additional graphical parameters passed to plotting functions (e.g., col, lwd, lty).
+#'
+#' @return NULL. Produces plots as a side-effect.
+#' @export
+#'
+#' @examples
+#' ts <- data.frame(
+#'   subjects = rep(1, 100),
+#'   run      = rep(1, 100),
+#'   time     = seq(0, 99),
+#'   ROI      = rnorm(100)
+#' )
+#' events <- data.frame(
+#'   subjects   = rep(1, 5),
+#'   run        = rep(1, 5),
+#'   onset      = c(10, 30, 50, 70, 90),
+#'   event_type = rep("A", 5),
+#'   modulation = rep(1, 5),
+#'   duration   = rep(0.5, 5)
+#' )
+#' plot_fmri(ts, events = events, event_type = "A")
+plot_fmri <- function(timeseries, post_predict = NULL, events, event_type, posterior_args = list(), legend_pos = "topleft", layout = NA, ...) {
   posterior_args <- add_defaults(posterior_args, col = "darkgreen", lwd = 2)
   plot_args <- add_defaults(list(...), col = "black", lwd = 2, xlab = "time (s)", ylab = "BOLD response")
   ROI_col <- colnames(timeseries)[!colnames(timeseries) %in% c("run", "subjects", "time")]
@@ -1001,13 +1008,18 @@ plot_fmri <- function(timeseries, post_predict = NULL, events, event_type, poste
     par(mfrow = layout)
   }
   for(mod in unique(ts$mod_group)){
+    if(!is.null(post_predict)){
+      ylim <- c(min(ts$avg_signal, res_df$p025), max(ts$avg_signal, res_df$p975))
+    } else{
+      ylim <- range(ts$avg_signal)
+    }
     idx_ts <- ts$mod_group == mod
-    tmp_plot_args <- add_defaults(plot_args, ylim = c(min(ts$avg_signal, res_df$p025), max(ts$avg_signal, res_df$p975)),
+    tmp_plot_args <- add_defaults(plot_args, ylim = ylim,
                                   main = paste0(ROI_col, " - ", event_type, ifelse(n_plots == 1, "", paste0(": ", insert, mod))))
     do.call(plot, c(list(ts$time[idx_ts], ts$avg_signal[idx_ts], type = "l"), fix_dots_plot(tmp_plot_args)))
-    idx_pp <- res_df$mod_group == mod
     abline(h = 0, lty = 2)
     if(!is.null(post_predict)){
+      idx_pp <- res_df$mod_group == mod
       do.call(lines, c(list(res_df$time[idx_pp], res_df$p50[idx_pp]), fix_dots_plot(posterior_args)))
       polygon_args <- posterior_args
       polygon_args$col <- adjustcolor(polygon_args$col, alpha.f = .2)
@@ -1051,7 +1063,7 @@ prepare_event_groups <- function(events, event_type, n_bins = 4) {
     quartile_breaks <- quantile(ev_sub$modulation, probs = seq(0, 1, length.out = n_bins + 1), na.rm = TRUE)
 
     # Bin the data into quartiles using these breakpoints
-    ev_sub$mod_group <- cut(ev_sub$modulation, breaks = quartile_breaks, include.lowest = TRUE, labels = 1:4)
+    ev_sub$mod_group <- cut(ev_sub$modulation, breaks = quartile_breaks, include.lowest = TRUE, labels = 1:n_bins)
     attr(ev_sub, "binned") <- TRUE
 
   } else {
@@ -1259,3 +1271,4 @@ add_design_fMRI_predict <- function(design, emc){
   design$fMRI_design <- lapply(emc[[1]]$data, function(x) return(attr(x,"designs")))
   return(design)
 }
+

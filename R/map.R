@@ -109,8 +109,12 @@ make_pmat <- function(p_vector,design)
   # puts vector form of p_vector into matrix form
 {
   ss <- design$Ffactors$subjects
-  matrix(rep(p_vector,each=length(ss)),nrow=length(ss),
+  out <- matrix(rep(p_vector,each=length(ss)),nrow=length(ss),
          dimnames=list(ss,names(p_vector)))
+  if(is.null(colnames(out))){
+    colnames(out) <- names(sampled_pars(design))
+  }
+  return(out)
 }
 
 add_constants <- function(p,constants)
@@ -191,32 +195,43 @@ map_mcmc <- function(mcmc,design,include_constants = TRUE, add_recalculated = FA
   if(is.null(names(design))) names(design) <- as.character(1:length(design))
   par_idx <- 0
   out_list <- list()
+  # Deal with the case where it's a vector
+  if (!is.matrix(mcmc) & !is.array(mcmc)) mcmc <- t(as.matrix(mcmc))
+  # Now it must either be a matrix or array
+  if(length(dim(mcmc)) == 2){
+    is_matrix <- TRUE # Remember this for later
+    mcmc_array <- array(mcmc, dim = c(nrow(mcmc), 1, ncol(mcmc)))
+    rownames(mcmc_array) <- rownames(mcmc)
+  } else{
+    mcmc_array <- mcmc
+    is_matrix <- FALSE
+  }
+  # We end up with an array with dimensions, n_pars, n_subjects, n_iter
+
   for(q in 1:length(design)){
     cur_des <- design[[q]]
 
     cur_idx <- par_idx + seq_len(length(sampled_pars(cur_des)))
     par_idx <- max(cur_idx)
-    cur_mcmc <- mcmc[cur_idx,]
-    rownames(cur_mcmc) <- sub("^[^|]*\\|", "", rownames(cur_mcmc))
+    cur_mcmc_array <- mcmc_array[cur_idx,,, drop = FALSE]
+    joint <- F
     if(grepl("MRI", cur_des$model()$type)){
-      cur_mcmc[grepl("sd", rownames(cur_mcmc)),] <- exp(cur_mcmc[grepl("sd", rownames(cur_mcmc)),])
-      cur_mcmc[grepl("rho", rownames(cur_mcmc)),] <- pnorm(cur_mcmc[grepl("rho", rownames(cur_mcmc)),])
-      out_list[[q]] <- cur_mcmc
+      cur_mcmc_array[grepl("sd", rownames(cur_mcmc_array)),,] <- exp(cur_mcmc_array[grepl("sd", rownames(cur_mcmc_array)),,])
+      cur_mcmc_array[grepl("rho", rownames(cur_mcmc_array)),,] <- pnorm(cur_mcmc_array[grepl("rho", rownames(cur_mcmc_array)),,])
+      if(is_matrix) cur_mcmc_array <- cur_mcmc_array[,1,]
+      out_list[[q]] <- cur_mcmc_array
       next
+    }
+    if(any(grepl("|", rownames(cur_mcmc_array), fixed =  T))){
+      joint <- T
+      prefix <- unique(gsub("[|].*", "", rownames(cur_mcmc_array)))
+      rownames(cur_mcmc_array) <- sub("^[^|]*\\|", "", rownames(cur_mcmc_array))
     }
     constants <- cur_des$constants
     model <- cur_des$model
     map <- attr(sampled_pars(cur_des, add_da = TRUE, all_cells_dm = TRUE),"map")
 
-    if (!is.matrix(cur_mcmc) & !is.array(cur_mcmc)) cur_mcmc <- t(as.matrix(cur_mcmc))
-    if(length(dim(cur_mcmc)) == 2){
-      is_matrix <- TRUE
-      cur_mcmc_array <- array(cur_mcmc, dim = c(nrow(cur_mcmc), 1, ncol(cur_mcmc)))
-      rownames(cur_mcmc_array) <- rownames(cur_mcmc)
-    } else{
-      cur_mcmc_array <- cur_mcmc
-      is_matrix <- FALSE
-    }
+
     mp <- mapped_pars(cur_des,cur_mcmc_array[,1,1],remove_RACE=FALSE, covariates = covariates)
 
     for(k in 1:ncol(cur_mcmc_array)){
@@ -271,9 +286,17 @@ map_mcmc <- function(mcmc,design,include_constants = TRUE, add_recalculated = FA
     if(is_matrix){
       out <- out[,1,]
     }
+    if(joint){
+      rownames(out) <- paste0(prefix, "|", rownames(out))
+    }
     out_list[[q]] <- out
   }
-  return(do.call(rbind, out_list))
+  if(is_matrix){
+    return(do.call(rbind, out_list))
+  }
+  else{
+    return(do.call(abind, c(out_list, along = 1)))
+  }
 }
 
 

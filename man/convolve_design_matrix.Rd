@@ -30,6 +30,8 @@ convolve_design_matrix(
 
 \item{covariates}{A character vector of event types to include as covariates}
 
+\item{add_constant}{A boolean specifying whether a 1 should be included to the design matrix post convolution}
+
 \item{hrf_model}{A character string specifying the HRF model to use ('glover', 'spm', 'glover + derivative', or 'spm + derivative')}
 
 \item{cell_coding}{A character vector of factor names to use cell coding for}

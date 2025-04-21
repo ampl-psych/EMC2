@@ -41,64 +41,35 @@ evolution of regressors over time. It can handle various input formats and provi
 options to customize the visualization.
 }
 \examples{
-# Create a simple design matrix
-set.seed(123)
-n_trs <- 200
-
-# Create a design matrix with two conditions and drift terms
-design <- data.frame(
-  condition1 = c(rep(0, 20), rep(1, 10), rep(0, 170)),
-  condition2 = c(rep(0, 100), rep(1, 10), rep(0, 90)),
-  drift1 = seq(0, 1, length.out = n_trs),
-  drift2 = seq(1, 0, length.out = n_trs),
-  derivative = c(rep(0, 10), rep(1, 5), rep(0, 185))
-)
-
-# Basic plot of the design matrix
-plot_design_fmri(design)
-
-# Plot specific events only
-plot_design_fmri(design, events = c("condition1", "condition2"))
-
-# Include nuisance regressors
-plot_design_fmri(design, remove_nuisance = FALSE)
-
-# Customize the plot
-plot_design_fmri(design,
-                TRs = 150,
-                legend_pos = "topright",
-                main = "fMRI Design Matrix",
-                lwd = 3)
-
-# Example with an emc.design object
-# First create a design matrix using convolve_design_matrix
-timeseries <- data.frame(
+# Example time series
+ts <- data.frame(
   subjects = rep(1, 100),
-  run = rep(1, 100),
-  time = seq(0, 99),
-  ROI1 = rnorm(100)
+  run      = rep(1, 100),
+  time     = seq(0, 99),
+  ROI      = rnorm(100)
 )
-
+# Create a simple events data frame
 events <- data.frame(
-  subjects = rep(1, 4),
-  run = rep(1, 4),
-  onset = c(10, 30, 50, 70),
-  duration = rep(0.5, 4),
-  event_type = c("A", "B", "A", "B"),
-  modulation = c(1, 1, 1, 1)
+  subjects = rep(1, 10),
+  run = rep(1, 10),
+  onset = seq(0, 90, by = 10),
+  condition = rep(c("A", "B"), 5),
+  rt = runif(10, 0.5, 1.5),
+  accuracy = sample(0:1, 10, replace = TRUE)
 )
-
-# Create convolved design matrix
-design_matrix <- convolve_design_matrix(
-  timeseries = timeseries,
-  events = events,
-  factors = list(condition = c("A", "B")),
-  hrf_model = "glover"
-)
-
-# Create fMRI design for EMC2
-fmri_design <- design_fmri(design_matrix, model = normal_mri)
+# Reshape with custom duration for each event_type
+reshaped <- reshape_events(events,
+                           event_types = c("condition", "accuracy", "rt"),
+                           duration = list(condition = 0.5,
+                                          accuracy = 0.2,
+                                          rt = function(x) x$rt))
+design_matrices <-  convolve_design_matrix(
+                    timeseries = ts,
+                    events = reshaped,
+                    covariates = c('accuracy', 'rt'),
+                    factors = list(cond = c("condition_A", "condition_B")),
+                    contrasts = list(cond = matrix(c(-1, 1))))
 
 # Plot the design matrix
-plot_design_fmri(fmri_design)
+plot_design_fmri(design_matrices)
 }
