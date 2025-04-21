@@ -195,7 +195,7 @@ reshape_events <- function(events, event_types, duration = 0.001, modulation = N
 #' )
 convolve_design_matrix <- function(timeseries, events, factors = NULL, contrasts = NULL,
                                     covariates = NULL, add_constant = TRUE,
-                                    hrf_model = 'glover + derivative', cell_coding = NULL,
+                                    hrf_model = 'glover', cell_coding = NULL,
                                     scale = TRUE, high_pass = TRUE,
                                     high_pass_model = "cosine", cut_off = 1e-12) {
 
@@ -400,12 +400,12 @@ high_pass_filter <- function(X, high_pass_model = 'cosine', frame_times = NULL, 
       stop("no column named 'time' for frame_times present, please separately provide")
     } else{
       frame_times <- X[,'time']
-      message("Make sure you also high_pass_filter your events (set high_pass = TRUE in convolve_design_matrix)")
     }
   }
   if('subjects' %in% colnames(X) && is.null(list(...)$recursive)){
     out <- list()
     k <- 0
+    message("Make sure you also high_pass_filter your events (set high_pass = TRUE in convolve_design_matrix)")
     for(sub in unique(X[,'subjects'])){
       tmp <- X[X[,'subjects'] == sub,]
       for(run in unique(tmp[,'run'])){

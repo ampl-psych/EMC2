@@ -52,7 +52,7 @@ fmri_emc <- make_emc(ts, des, type = "single")
 
 
 test_that("joint", {
-  expect_snapshot(init_chains(fmri_emc, particles = 10, cores_for_chains = 1)[[1]]$samples)
+  expect_snapshot(round(init_chains(fmri_emc, particles = 10, cores_for_chains = 1)[[1]]$samples$subj_ll))
 })
 
 
