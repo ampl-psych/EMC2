@@ -1,4 +1,3 @@
-
 #' Specify a Design and Model
 #'
 #' This function combines information regarding the data, type of model, and
@@ -113,6 +112,8 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
     return(design)
   }
   if (!is.null(data)) {
+    if(!"subjects" %in% colnames(data)) stop("make sure subjects identifier is present in data")
+    data$subjects <- factor(data$subjects)
     facs <- lapply(data,levels)
     nfacs <- facs[unlist(lapply(facs,is.null))]
     facs <- facs[!unlist(lapply(facs,is.null))]
@@ -132,7 +133,6 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
     constants <- c(constants, additional_constants[!names(additional_constants) %in% names(constants)])
     for(add_constant in not_specified) formula[[length(formula)+ 1]] <- as.formula(paste0(add_constant, "~ 1"))
   }
-  if(!"subjects" %in% names(factors)) stop("make sure subjects identifier is present in data")
 
   design <- list(Flist=formula,Ffactors=factors,Rlevels=Rlevels,
                  Clist=contrasts,matchfun=matchfun,constants=constants,
@@ -160,6 +160,191 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
   return(design)
 }
 
+#' Create Group-Level Design Matrices
+#'
+#' Creates design matrices for group-level parameters based on subject-level design and formulas.
+#' This function is used for hierarchical modeling to specify how subject-level parameters
+#' vary across groups or conditions.
+#'
+#' @param formula A list of formulas specifying the relationship between subject-level parameters
+#'        and group-level predictors. Each formula should have a subject-level parameter on the left-hand side
+#'        and group-level predictors on the right-hand side.
+#' @param data The same data as used in the subject-level design. Must include a 'subjects' column.
+#' @param subject_design An emc.design object containing the subject-level design.
+#' @param contrasts Optional list of contrast matrices to be used for categorical predictors.
+#'
+#' @return A list of design matrices, one for each parameter specified in the formula. The intercept is
+#' automatically included as the group-level mean and is omitted from the design matrices.
+#'
+#' @details Here it is important to consider the interpreation of the group-level mean. This allows
+#' one to add covariates/group-level factors to the model. However, mu, the group-level mean, is still
+#' included for all parameters. Mu represents the intercept in the design matrix, this intercept is always
+#' added to the group-level model. Therefore, to keep the interpretation of mu as the group-level mean,
+#' it is important to ensure that the design matrix has a mean of zero. If not, this function will throw a
+#' warning. For some unbalanced designs, this is unavoidable and the warning can be ignored.
+#'
+#' @examples
+#' # Create subject-level design
+#' subj_design <- design(data = forstmann, model = DDM,
+#'                       formula = list(v ~ S, a ~ E, t0 ~ 1),
+#'                       contrasts = list(S = contr.helmert))
+#' # Add some age covariate and roughly demeans
+#' # Demeaning is important to ensure that the interpretation of the group-level intercept
+#' # is the mean of the group (i.e., 'mu' still represents the group-level mean)
+#' forstmann$age <- as.numeric(forstmann$subjects) -mean(as.numeric(forstmann$subjects))
+#' # Create fake group column
+#' forstmann$group <- ifelse(forstmann$subjects %in%
+#'               unique(forstmann$subjects)[seq(1, 19, 2)], "A", "B")
+#'
+#' # Create group-level design matrices
+#' group_des <- group_design(
+#'   formula = list(v_S1 ~ age + group, a ~ age),
+#'   data = forstmann,
+#'   subject_design = subj_design,
+#'   contrasts = list(group = contr.bayes)
+#' )
+#' # Then you can make the emc object with
+#' emc <- make_emc(forstmann, subj_design, compress = FALSE, group_design = group_des)
+#' @export
+group_design <- function(formula, data, subject_design, contrasts = NULL){
+  par_names <- names(sampled_pars(subject_design))
+
+  # Extract dependent variables (left hand side) from formula
+  lhs_terms <- unlist(lapply(formula, function(x) as.character(stats::terms(x)[[2]])))
+
+  # Check if all dependent variables are in par_names
+  if (!all(lhs_terms %in% par_names)) {
+    invalid_terms <- lhs_terms[!lhs_terms %in% par_names]
+    stop(paste0("Parameter(s) ", paste0(invalid_terms, collapse=", "),
+                  " in formula not found in subject design parameters"))
+  }
+
+  # Extract all variables from formula, both left and right sides
+  rhs_terms <- unique(unlist(lapply(formula, function(x) {
+    # Get all variables from right hand side of formula
+    all.vars(stats::terms(x)[[3]])
+  })))
+
+  # Check if all variables are in data
+  if (length(rhs_terms) > 0 && !all(rhs_terms %in% names(data))) {
+    missing_vars <- rhs_terms[!rhs_terms %in% names(data)]
+    stop(paste0("Variable(s) ", paste0(missing_vars, collapse=", "),
+                " in formula not found in data"))
+  }
+
+  # Check if any factor has multiple levels per subject
+  for (var in rhs_terms) {
+    if (is.factor(data[[var]])) {
+      # Get count of unique levels per subject
+      level_counts <- tapply(data[[var]], data$subjects, function(x) length(unique(x)))
+
+      # Check if any subject has more than one level
+      if (any(level_counts > 1)) {
+        problematic_subjects <- names(level_counts[level_counts > 1])
+        stop(paste0("Factor '", var, "' has multiple levels per subject. ",
+                    "First problematic subject: ", problematic_subjects[1], " with ",
+                    level_counts[problematic_subjects[1]], " levels. ",
+                    "Group-level design requires exactly one level per subject for each factor."))
+      }
+    }
+  }
+
+  # Create an empty list to store design matrices for each formula
+  design_matrices <- list()
+
+  # Process each formula separately
+  for (i in seq_along(formula)) {
+    current_formula <- formula[[i]]
+
+    # Get current formula's left-hand side (parameter name)
+    param_name <- as.character(stats::terms(current_formula)[[2]])
+
+    # Get all variables used in the current formula (right-hand side)
+    current_vars <- all.vars(stats::terms(current_formula)[[3]])
+
+    # Check if this is an intercept-only formula
+    if (length(current_vars) == 0 && deparse(stats::terms(current_formula)[[3]]) == "1") {
+      warning(paste0("Formula '", param_name, " ~ 1' detected. Note that the intercept is automatically ",
+                     "included as the group-level mean and does not need to be specified."))
+    }
+
+    # Subset data to include only relevant variables
+    subset_data <- data[, c("subjects", current_vars), drop = FALSE]
+
+    # Aggregate data by subject
+    agg_data <- stats::setNames(
+      data.frame(unique(subset_data$subjects)),
+      "subjects"
+    )
+
+    # For each variable in the formula, add it to the aggregated data
+    for (var in current_vars) {
+      # Get unique values per subject
+      var_values <- stats::aggregate(
+        subset_data[[var]],
+        by = list(subjects = subset_data$subjects),
+        FUN = function(x) x[1]
+      )
+
+      # Add to aggregated data
+      agg_data[[var]] <- var_values$x
+
+      # Preserve factor levels if applicable
+      if (is.factor(subset_data[[var]])) {
+        agg_data[[var]] <- factor(agg_data[[var]], levels = levels(subset_data[[var]]))
+      }
+    }
+
+    # Apply model.matrix with the current formula
+    # Instead of constructing a formula string, use the original formula with modified LHS
+    rhs_formula <- stats::terms(current_formula)[[3]]
+    if (!is.null(contrasts)) {
+      # Filter contrasts to only include variables in the current formula
+      formula_vars <- all.vars(rhs_formula)
+      filtered_contrasts <- contrasts[names(contrasts) %in% formula_vars]
+
+      if (length(filtered_contrasts) > 0) {
+        dm <- stats::model.matrix(stats::reformulate(termlabels = deparse(rhs_formula)),
+                                data = agg_data,
+                                contrasts.arg = filtered_contrasts)
+      } else {
+        dm <- stats::model.matrix(stats::reformulate(termlabels = deparse(rhs_formula)),
+                                data = agg_data)
+      }
+    } else {
+      dm <- stats::model.matrix(stats::reformulate(termlabels = deparse(rhs_formula)),
+                              data = agg_data)
+    }
+
+    # Check if the design matrix has an intercept
+    has_intercept <- "(Intercept)" %in% colnames(dm)
+
+    if (!has_intercept) {
+      stop("Intercept-less design matrix not supported yet")
+    }
+
+    # Drop the intercept column if present
+    if (has_intercept) {
+      dm <- dm[, colnames(dm) != "(Intercept)", drop = FALSE]
+    }
+
+    # Store in the list
+    design_matrices[[param_name]] <- dm
+
+    # Check if overall design matrix mean is zero
+    if (ncol(dm) > 0) {
+      design_mean <- mean(as.matrix(dm))
+      if (abs(design_mean) > 1e-1) {  # Small threshold for numerical precision
+        warning(paste0("Design matrix for parameter '", param_name, "' does not have mean zero. ",
+                      "For factors, consider using zero-sum contrast matrices (e.g., contr.bayes, contr.helmert). ",
+                      "For covariates, consider centering them. ",
+                      "This ensures the intercept can be interpreted as the group-level mean."))
+      }
+    }
+  }
+
+  return(design_matrices)
+}
 
 #' Contrast Enforcing Equal Prior Variance on each Level
 #'
@@ -1008,30 +1193,36 @@ sampled_pars.emc.design <- function(x,model=NULL,doMap=TRUE, add_da = FALSE, all
   }
   out <- c()
   map_list <- list()
+  if(is.null(names(design))){
+    names(design) <- as.character(1:length(design))
+  }
   for(j in 1:length(design)){
+    cur_name <- names(design)[j]
     cur_design <- design[[j]]
     if(!is.null(attr(cur_design, "custom_ll"))){
       pars <- numeric(length(attr(cur_design,"sampled_p_names")))
       if(length(design) != 1){
-        map_list[[j]] <- NA
-        names(pars) <- paste(j,  attr(cur_design,"sampled_p_names"), sep = "|")
+        map_list[[cur_name]] <- NA
+        names(pars) <- paste(cur_name,  attr(cur_design,"sampled_p_names"), sep = "|")
       } else{
         names(pars) <- attr(cur_design,"sampled_p_names")
       }
       out <- c(out, pars)
       next
     }
-    if (is.null(model)) model <- cur_design$model
+    model <- cur_design$model
+    if (is.null(model)) stop("Must supply model as not in design")
+
     if(grepl("MRI", model()$type)){
       pars <- model()$p_types
       if(length(design) != 1){
-        pars <- paste(j,  names(pars), sep = "|")
-        map_list[[j]] <- NA
+        names(pars) <- paste(cur_name,  names(pars), sep = "|")
+        map_list[[cur_name]] <- NA
       }
+      pars[1:length(pars)] <- 0
       out <- c(out, pars)
       next
     }
-    if (is.null(model)) stop("Must supply model as not in design")
 
     Ffactors=c(cur_design$Ffactors,list(R=cur_design$Rlevels))
     data <- as.data.frame.table(array(dim=unlist(lapply(Ffactors,length)),
@@ -1053,8 +1244,8 @@ sampled_pars.emc.design <- function(x,model=NULL,doMap=TRUE, add_da = FALSE, all
       all_cells_dm = all_cells_dm)
     sampled_p_names <- attr(dadm,"sampled_p_names")
     if(length(design) != 1){
-      map_list[[j]] <- lapply(attributes(dadm)$designs,function(x){x[,,drop=FALSE]})
-      sampled_p_names <- paste(j, sampled_p_names, sep = "|")
+      map_list[[cur_name]] <- lapply(attributes(dadm)$designs,function(x){x[,,drop=FALSE]})
+      sampled_p_names <- paste(cur_name, sampled_p_names, sep = "|")
     }
     out <- c(out, stats::setNames(numeric(length(sampled_p_names)),sampled_p_names))
     if(length(design) == 1){
@@ -1062,6 +1253,7 @@ sampled_pars.emc.design <- function(x,model=NULL,doMap=TRUE, add_da = FALSE, all
     }
   }
   if(length(design) != 1) attr(out, "map") <- map_list
+  if(!add_da & any(duplicated(names(out)))) stop("duplicate parameter names found! Usually this happens when joint designs share indicator names")
   return(out)
 }
 

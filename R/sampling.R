@@ -1,9 +1,10 @@
 pmwgs <- function(dadm, type, pars = NULL, prior = NULL,
                   nuisance = NULL, nuisance_non_hyper = NULL, ...) {
   if(is.data.frame(dadm)) dadm <- list(dadm)
+  if(is.null(pars)) pars <- names(sampled_pars(attr(dadm[[1]], "prior")))
+  if(is.null(prior)) prior <- attr(dadm[[1]], "prior")
   dadm <- extractDadms(dadm)
-  if(is.null(pars)) pars <- dadm$pars
-  if(is.null(prior)) prior <- dadm$prior
+
   dadm_list <-dadm$dadm_list
   # Storage for the samples.
   subjects <- sort(as.numeric(unique(dadm$subjects)))
@@ -726,6 +727,7 @@ run_hyper <- function(type, data, prior = NULL, iter = 1000, n_chains =3, ...){
     )
     class(sampler) <- "pmwgs"
     sampler <- add_info(sampler, prior, type = type, ...)
+    sampler$type <- type
     startpoints <- get_startpoints(sampler, start_mu = NULL, start_var = NULL, type = type)
     sampler$samples <- fill_samples(samples = sampler$samples, group_level = startpoints, proposals = NULL,
                                     j = 1, n_pars = sampler$n_pars, type = type)
@@ -744,5 +746,6 @@ run_hyper <- function(type, data, prior = NULL, iter = 1000, n_chains =3, ...){
     emc[[j]] <- sampler
   }
   class(emc) <- "emc"
+  emc <- subset(emc, filter = 1)
   return(emc)
 }

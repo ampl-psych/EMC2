@@ -109,8 +109,12 @@ make_pmat <- function(p_vector,design)
   # puts vector form of p_vector into matrix form
 {
   ss <- design$Ffactors$subjects
-  matrix(rep(p_vector,each=length(ss)),nrow=length(ss),
+  out <- matrix(rep(p_vector,each=length(ss)),nrow=length(ss),
          dimnames=list(ss,names(p_vector)))
+  if(is.null(colnames(out))){
+    colnames(out) <- names(sampled_pars(design))
+  }
+  return(out)
 }
 
 add_constants <- function(p,constants)
@@ -172,11 +176,6 @@ map_mcmc <- function(mcmc,design,include_constants = TRUE, add_recalculated = FA
   # Maps vector or matrix (usually mcmc object) of sampled parameters to native
   # model parameterization.
 {
-  if(is.null(design$model)){
-    design <- design[[1]]
-  }
-  model <- design$model
-
   doMap <- function(mapi,pmat, covariates = NULL){
     if(!is.null(covariates)){
       if(nrow(covariates) != nrow(pmat)) covariates <- covariates[sample(1:nrow(covariates), nrow(pmat), replace = T),, drop = F]
@@ -184,7 +183,6 @@ map_mcmc <- function(mcmc,design,include_constants = TRUE, add_recalculated = FA
     }
     t(mapi %*% t(pmat[,dimnames(mapi)[[2]],drop=FALSE]))
   }
-
   get_p_types <- function(nams, reverse = FALSE){
     if(reverse){
       out <- unlist(lapply(strsplit(nams,"_"),function(x){x[[-1]]}))
@@ -194,76 +192,111 @@ map_mcmc <- function(mcmc,design,include_constants = TRUE, add_recalculated = FA
     return(out)
   }
 
-
-  map <- attr(sampled_pars(design, add_da = TRUE, all_cells_dm = TRUE),"map")
-
-  constants <- design$constants
+  if(is.null(names(design))) names(design) <- as.character(1:length(design))
+  par_idx <- 0
+  out_list <- list()
+  # Deal with the case where it's a vector
   if (!is.matrix(mcmc) & !is.array(mcmc)) mcmc <- t(as.matrix(mcmc))
+  # Now it must either be a matrix or array
   if(length(dim(mcmc)) == 2){
-    is_matrix <- TRUE
+    is_matrix <- TRUE # Remember this for later
     mcmc_array <- array(mcmc, dim = c(nrow(mcmc), 1, ncol(mcmc)))
     rownames(mcmc_array) <- rownames(mcmc)
   } else{
     mcmc_array <- mcmc
     is_matrix <- FALSE
   }
-  mp <- mapped_pars(design,mcmc_array[,1,1],remove_RACE=FALSE, covariates = covariates)
+  # We end up with an array with dimensions, n_pars, n_subjects, n_iter
 
-  for(k in 1:ncol(mcmc_array)){
-    mcmc <- t(mcmc_array[,k,])
-    mcmc <- t(apply(mcmc, 1, do_pre_transform, design$model()$pre_transform))
-    pmat <- add_constants(mcmc,constants)
-    plist <- lapply(map,doMap,pmat=pmat, covariates)
-    # Give mapped variables names and flag constant
-    for (i in 1:length(plist)) {
-      vars <- row.names(attr(terms(design$Flist[[i]]),"factors"))
-      if(any(names(design$Fcovariates) %in% vars)){
-        cov_vars <- vars[(vars %in% names(design$Fcovariates))]
-        vars <- vars[!(vars %in% names(design$Fcovariates))]
-        has_cov <- TRUE
-      } else{
-        has_cov <- FALSE
-      }
-      uniq <- !duplicated(apply(mp[,vars, drop = F],1,paste,collapse="_"))
-      if (is.null(vars)) {
-        colnames(plist[[i]]) <- names(plist)[i]
-      }else {
-        if(length(vars) == 1) colnames(plist[[i]]) <- vars
-        else if(length(vars) == 2){
-          colnames(plist[[i]]) <- paste(vars[1], apply(matrix(do.call(cbind, Map(paste0, vars[-1], mp[uniq, vars[-1]])))
-                                                       ,1, paste0, collapse = "_"), sep = "_")
+  for(q in 1:length(design)){
+    cur_des <- design[[q]]
+
+    cur_idx <- par_idx + seq_len(length(sampled_pars(cur_des)))
+    par_idx <- max(cur_idx)
+    cur_mcmc_array <- mcmc_array[cur_idx,,, drop = FALSE]
+    joint <- F
+    if(grepl("MRI", cur_des$model()$type)){
+      cur_mcmc_array[grepl("sd", rownames(cur_mcmc_array)),,] <- exp(cur_mcmc_array[grepl("sd", rownames(cur_mcmc_array)),,])
+      cur_mcmc_array[grepl("rho", rownames(cur_mcmc_array)),,] <- pnorm(cur_mcmc_array[grepl("rho", rownames(cur_mcmc_array)),,])
+      if(is_matrix) cur_mcmc_array <- cur_mcmc_array[,1,]
+      out_list[[q]] <- cur_mcmc_array
+      next
+    }
+    if(any(grepl("|", rownames(cur_mcmc_array), fixed =  T))){
+      joint <- T
+      prefix <- unique(gsub("[|].*", "", rownames(cur_mcmc_array)))
+      rownames(cur_mcmc_array) <- sub("^[^|]*\\|", "", rownames(cur_mcmc_array))
+    }
+    constants <- cur_des$constants
+    model <- cur_des$model
+    map <- attr(sampled_pars(cur_des, add_da = TRUE, all_cells_dm = TRUE),"map")
+
+
+    mp <- mapped_pars(cur_des,cur_mcmc_array[,1,1],remove_RACE=FALSE, covariates = covariates)
+
+    for(k in 1:ncol(cur_mcmc_array)){
+      cur_mcmc <- t(cur_mcmc_array[,k,])
+      cur_mcmc <- t(apply(cur_mcmc, 1, do_pre_transform, cur_des$model()$pre_transform))
+      pmat <- add_constants(cur_mcmc,constants)
+      plist <- lapply(map,doMap,pmat=pmat, covariates)
+      # Give mapped variables names and flag constant
+      for (i in 1:length(plist)) {
+        vars <- row.names(attr(terms(cur_des$Flist[[i]]),"factors"))
+        if(any(names(cur_des$Fcovariates) %in% vars)){
+          cov_vars <- vars[(vars %in% names(cur_des$Fcovariates))]
+          vars <- vars[!(vars %in% names(cur_des$Fcovariates))]
+          has_cov <- TRUE
         } else{
-          colnames(plist[[i]]) <- paste(vars[1], apply(do.call(cbind, Map(paste0, vars[-1], mp[uniq, vars[-1]]))
-                                                       ,1, paste0, collapse = "_"), sep = "_")
+          has_cov <- FALSE
         }
+        uniq <- !duplicated(apply(mp[,vars, drop = F],1,paste,collapse="_"))
+        if (is.null(vars)) {
+          colnames(plist[[i]]) <- names(plist)[i]
+        }else {
+          if(length(vars) == 1) colnames(plist[[i]]) <- vars
+          else if(length(vars) == 2){
+            colnames(plist[[i]]) <- paste(vars[1], apply(matrix(do.call(cbind, Map(paste0, vars[-1], mp[uniq, vars[-1]])))
+                                                         ,1, paste0, collapse = "_"), sep = "_")
+          } else{
+            colnames(plist[[i]]) <- paste(vars[1], apply(do.call(cbind, Map(paste0, vars[-1], mp[uniq, vars[-1]]))
+                                                         ,1, paste0, collapse = "_"), sep = "_")
+          }
+        }
+        if(has_cov) colnames(plist[[i]]) <- paste(colnames(plist[[i]]), cov_vars, sep = "_")
       }
-      if(has_cov) colnames(plist[[i]]) <- paste(colnames(plist[[i]]), cov_vars, sep = "_")
-      # if (is.matrix(plist[[i]])) isConstant <- c(isConstant, apply(plist[[i]],2,function(x){all(x[1]==x[-1])}))
-    }
-    pmat <- do.call(cbind,plist)
-    cnams <- colnames(pmat)
-    colnames(pmat) <- get_p_types(cnams)
-    pmat[,] <- do_transform(pmat, model()$transform)[,1:length(cnams)]
+      pmat <- do.call(cbind,plist)
+      cnams <- colnames(pmat)
+      colnames(pmat) <- get_p_types(cnams)
+      pmat[,] <- do_transform(pmat, model()$transform)[,1:length(cnams)]
 
-    if(add_recalculated) extras <- add_recalculated_pars(pmat, model, cnams)
-    colnames(pmat) <- cnams
-    if(add_recalculated) pmat <- cbind(pmat, extras)
-    is_constant <- apply(pmat,2,function(x){all(duplicated(x)[-1])})
-    if(!include_constants){
-      pmat <- pmat[,!is_constant, drop = F]
+      if(add_recalculated) extras <- add_recalculated_pars(pmat, model, cnams)
+      colnames(pmat) <- cnams
+      if(add_recalculated) pmat <- cbind(pmat, extras)
+      is_constant <- apply(pmat,2,function(x){all(duplicated(x)[-1])})
+      if(!include_constants){
+        pmat <- pmat[,!is_constant, drop = F]
+      }
+      if(k == 1){
+        out <- array(0, dim = c(ncol(pmat), ncol(cur_mcmc_array), dim(cur_mcmc_array)[3]))
+        rownames(out) <- colnames(pmat)
+        colnames(out) <- colnames(cur_mcmc_array)
+      }
+      out[,k,] <- t(pmat)
     }
-    if(k == 1){
-      out <- array(0, dim = c(ncol(pmat), ncol(mcmc_array), dim(mcmc_array)[3]))
-      rownames(out) <- colnames(pmat)
-      colnames(out) <- colnames(mcmc_array)
+    if(is_matrix){
+      out <- out[,1,]
     }
-    out[,k,] <- t(pmat)
+    if(joint){
+      rownames(out) <- paste0(prefix, "|", rownames(out))
+    }
+    out_list[[q]] <- out
   }
   if(is_matrix){
-    out <- out[,1,]
+    return(do.call(rbind, out_list))
   }
-  attr(out,"isConstant") <- is_constant
-  return(out)
+  else{
+    return(do.call(abind, c(out_list, along = 1)))
+  }
 }
 
 

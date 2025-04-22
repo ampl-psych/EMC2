@@ -46,6 +46,8 @@ prior <- function(design, type = NULL, update = NULL,
     type <- attr(update, "type")
   }
   if(is.null(type)) type <- 'standard'
+  if(type %in% c("diagonal", "blocked")) type <- "standard"
+
   input <- do.call(get_objects, c(list(design = design, type = type), update, list(...)))
   descriptions <- input$descriptions
   groups <- input$types
