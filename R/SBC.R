@@ -166,10 +166,8 @@ SBC_single <- function(design_in, prior_in, replicates = 250, trials = 100,
   i <- 1
   par_names <- names(sampled_pars(design_in))
   bads <- logical(0)
-  if (!is.null(save_emc)) {
-    emc <- list()
-    attr(emc,"bad") <- bads
-  }
+  if (!is.null(save_emc)) emc <- vector(mode="list",length=replicates)
+  pci <- array(dim=c(replicates,length(par_names),3))
   while(i < replicates){
     if (n_cores==1) print(paste0("Fitting sample ", i, " out of ", replicates)) else
     {
@@ -185,15 +183,18 @@ SBC_single <- function(design_in, prior_in, replicates = 250, trials = 100,
       lapply(dats,plot_density,
         factors = names(design_in$Ffactors)[names(design_in$Ffactors) != "subjects"])
     }
-    emc0 <- parallel::mclapply(dats, make_emc, design = design_in, prior_list = prior_in,
+    emcs <- parallel::mclapply(dats, make_emc, design = design_in, prior_list = prior_in,
             type = type, mc.cores = n_cores, verbose=verbose, ...)
-    emcs <- parallel::mclapply(emc0, tryfit, mc.cores=n_cores, ...)
+    emcs <- parallel::mclapply(emcs, tryfit, mc.cores=n_cores, ...)
     bad <- unlist(lapply(emcs,\(res) inherits(res, "try-error")))
     if (!is.null(save_emc)) {
-      if (any(!bad)) emc0[!bad] <- emcs[!bad]
-      bad0 <- attr(emc,"bad")
-      emc <- c(emc,emc0)
-      attr(emc,"bad") <- c(bad0,bad)
+      emc[[c(start:min(c(i-1),replicates))[!bad]]] <- emcs[!bad]
+      attr(emc,"bad") <- c(attr(emc,"bad"),bad)
+    }
+    okj <- c(start:min(c(i-1),replicates))
+    if (length(okj[!bad])>0) {
+      tmp <- lapply(emcs[!bad],\(x)credint(x,map=TRUE)[[1]])
+      for (j in 1:length(tmp)) pci[okj[!bad][j],,] <- tmp[[j]]
     }
     if (any(bad)) {
       print(paste0("Fitting failed for ",sum(bad)," samples, prior may be too broad.\n"))
@@ -218,11 +219,15 @@ SBC_single <- function(design_in, prior_in, replicates = 250, trials = 100,
         start <- start + 1
       }
       colnames(rank_alpha) <- par_names
+      dimnames(pci)[[2]] <- par_names
+      dimnames(pci)[[3]] <- c("2.5%","50%","97.5%")
       if(!is.null(fileName)){
-        SBC_temp <- list(rank = list(alpha = rank_alpha),
-                         prior = list(alpha = prior_alpha), emc = emcs)
-        attr(SBC_temp,"bad") <- bads
-        save(SBC_temp, file = fileName)
+        SBC <- list(rank = list(alpha = rank_alpha),
+                         prior = list(alpha = prior_alpha),
+                         ci = list(alpha=pci),
+                         emc = emcs)
+        attr(SBC,"bad") <- bads
+        save(SBC, file = fileName)
       }
     } else start <- start + n_cores
   }
@@ -230,7 +235,8 @@ SBC_single <- function(design_in, prior_in, replicates = 250, trials = 100,
     save(emc,file=save_emc)
   }
   out <- list(rank = list(alpha = rank_alpha),
-              prior = list(alpha = prior_alpha))
+              prior = list(alpha = prior_alpha),
+              ci=list(alpha=pci))
   attr(out,"bad") <- bads
   return(out)
 }
