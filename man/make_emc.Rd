@@ -12,6 +12,7 @@ make_emc(
   n_chains = 3,
   compress = TRUE,
   rt_resolution = 0.02,
+  resolution_shift = NULL,
   prior_list = NULL,
   par_groups = NULL,
   verbose = TRUE,
@@ -32,10 +33,11 @@ make_emc(
 \item{compress}{A Boolean, if \code{TRUE} (i.e., the default), the data is compressed to speed up likelihood calculations.}
 
 \item{rt_resolution}{A double. Used for compression, response times rt will be binned based on this resolution as
-floor(rt/rt_resolution)*rt_resolution. By default rt_resolution/2 is also
-added (appropriate for binning due to monitor binning, ... argument
-resolution_shift = NULL default. If a numeric value is supplied that will instead be added.
-For example a negative number could be added to account for clock discretization.}
+floor(rt/rt_resolution)*rt_resolution + resolution_shift}
+
+\item{resolution_shift}{= NULL default  rt_resolution/2 is dded (appropriate for binning due to monitor.
+If a numeric value is supplied that will instead be added.For example a negative number could be added to
+account for clock discretization.}
 
 \item{prior_list}{A named list containing the prior. Default prior created if \code{NULL}. For the default priors, see \verb{?get_prior_\{type\}}.}
 

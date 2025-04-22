@@ -621,10 +621,10 @@ loadRData <- function(fileName){
 #' @param n_chains An integer. Specifies the number of mcmc chains to be run (has to be more than 1 to compute `rhat`).
 #' @param compress A Boolean, if `TRUE` (i.e., the default), the data is compressed to speed up likelihood calculations.
 #' @param rt_resolution A double. Used for compression, response times rt will be binned based on this resolution as
-#' floor(rt/rt_resolution)*rt_resolution. By default rt_resolution/2 is also
-#' added (appropriate for binning due to monitor binning, ... argument
-#' resolution_shift = NULL default. If a numeric value is supplied that will instead be added.
-#' For example a negative number could be added to account for clock discretization.
+#' floor(rt/rt_resolution)*rt_resolution + resolution_shift
+#' @param resolution_shift = NULL default  rt_resolution/2 is dded (appropriate for binning due to monitor.
+#' If a numeric value is supplied that will instead be added.For example a negative number could be added to
+#' account for clock discretization.
 #' @param par_groups A vector. Only to be specified with type `blocked`, e.g., `c(1,1,1,2,2)` means the covariances
 #' of the first three and of the last two parameters are estimated as two separate blocks.
 #' @param prior_list A named list containing the prior. Default prior created if `NULL`. For the default priors, see `?get_prior_{type}`.
@@ -659,7 +659,8 @@ loadRData <- function(fileName){
 
 make_emc <- function(data,design,model=NULL,
                           type="standard",
-                          n_chains=3,compress=TRUE,rt_resolution=0.02,
+                          n_chains=3,compress=TRUE,
+                          rt_resolution=0.02,resolution_shift=NULL,
                           prior_list = NULL,
                           par_groups=NULL,
                           verbose = TRUE,
@@ -739,7 +740,8 @@ make_emc <- function(data,design,model=NULL,
     # }
     if(is.null(attr(design[[i]], "custom_ll"))){
       dadm_list[[i]] <- design_model(data=data[[i]],design=design[[i]],
-        compress=compress,model=model[[i]],rt_resolution=rt_resolution[i],
+        compress=compress,model=model[[i]],
+        rt_resolution=rt_resolution[i],resolution_shift=resolution_shift[i],
         verbose=verbose)
       sampled_p_names <- names(attr(design[[i]],"p_vector"))
     } else{
