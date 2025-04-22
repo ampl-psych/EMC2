@@ -38,10 +38,7 @@ run_sbc <- function(design_in, prior_in, replicates = 250, trials = 100, n_subje
 # NOTES FOR NIEK
 #
 # 1) I have only updated SBC_single
-# 2) Rather than SBC_temp maybe just call it SBC?
-# 3) Save estimated parameter medians? Useful for getting coverage and bias to
-# complement SBC results.
-# 4) Perhaps add_noise could be a hidden ... argument? Also save_emc?
+# 2) Perhaps add_noise could be a hidden ... argument? Also save_emc?
 
 
 SBC_hierarchical <- function(design_in, prior_in, replicates = 250, trials = 100, n_subjects = 30,
