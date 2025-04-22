@@ -20,14 +20,16 @@
 run_sbc <- function(design_in, prior_in, replicates = 250, trials = 100, n_subjects = 30,
                     plot_data = FALSE, verbose = TRUE,
                     fileName = NULL, n_cores = 1,
-                    save_emc = NULL, add_noise = NULL, ...){
+                    save_emc = NULL, rt_resolution = NULL,
+                    add_noise = NULL, resolution_shift=NULL, ...){
   if(is.null(fileName)) message("Since SBC can take a while it's highly recommended to specify a fileName to save temporary results in case of crashes")
   type <- attr(prior_in, "type")
   if(type == "single"){
     out <- SBC_single(design_in, prior_in, replicates, trials,
                       plot_data, verbose, fileName,
                       n_cores = n_cores,
-                      save_emc = save_emc, add_noise = NULL, ...)
+                      save_emc = save_emc, rt_resolution = rt_resolution,
+                      add_noise = add_noise, resolution_shift = resolution_shift,...)
   } else{
     out <- SBC_hierarchical(design_in, prior_in, replicates, trials, n_subjects,
                     plot_data, verbose, fileName, ...)
@@ -102,7 +104,8 @@ SBC_hierarchical <- function(design_in, prior_in, replicates = 250, trials = 100
 
 SBC_single <- function(design_in, prior_in, replicates = 250, trials = 100,
                        n_cores=1,plot_data = FALSE, verbose = TRUE,
-                       fileName = NULL, save_emc = NULL, add_noise = NULL, ...){
+                       fileName = NULL, save_emc = NULL, rt_resolution = NULL,
+                       add_noise = NULL, resolution_shift = NULL, ...){
 
 
   noise_fun <- function(d,scale=-.05,# negative = monitor
@@ -113,7 +116,6 @@ SBC_single <- function(design_in, prior_in, replicates = 250, trials = 100,
       noise <- noise + do.call(rfun,args)*scale[i]
     }
     d$rt <- d$rt + noise
-
     d
   }
 
@@ -174,14 +176,15 @@ SBC_single <- function(design_in, prior_in, replicates = 250, trials = 100,
     start <- i
     i <- i + n_cores
     dats <- parallel::mclapply(start:min(c(i-1),replicates),make_datas,
-        prior_alpha=prior_alpha,design_in=design_in,trials=trials,
+        prior_alpha=prior_alpha,design_in=design_in,trials=trials,add_noise=add_noise,
       mc.cores=n_cores)
     if(plot_data){
       lapply(dats,plot_density,
         factors = names(design_in$Ffactors)[names(design_in$Ffactors) != "subjects"])
     }
     emcs <- parallel::mclapply(dats, make_emc, design = design_in, prior_list = prior_in,
-            type = type, mc.cores = n_cores, verbose=verbose, ...)
+            type = type, mc.cores = n_cores, verbose=verbose,
+            rt_resoluiotn = rt_resoluiton, resolution_shift = resolution_shift, ...)
     emcs <- parallel::mclapply(emcs, tryfit, mc.cores=n_cores, ...)
     bad <- unlist(lapply(emcs,\(res) inherits(res, "try-error")))
     if (!is.null(save_emc)) {

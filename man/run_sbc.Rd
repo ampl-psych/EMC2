@@ -15,7 +15,9 @@ run_sbc(
   fileName = NULL,
   n_cores = 1,
   save_emc = NULL,
+  rt_resolution = NULL,
   add_noise = NULL,
+  resolution_shift = NULL,
   ...
 )
 }
