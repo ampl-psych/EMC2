@@ -111,7 +111,7 @@ SBC_single <- function(design_in, prior_in, replicates = 250, trials = 100,
   noise_fun <- function(d,scale=-.05,# negative = monitor
                       rfun="runif",args=list(n=nrow(d)))
   {
-    noise <- numeric(0)
+    noise <- 0
     for (i in 1:length(scale)) {
       noise <- noise + do.call(rfun,args)*scale[i]
     }
@@ -184,7 +184,7 @@ SBC_single <- function(design_in, prior_in, replicates = 250, trials = 100,
     }
     emcs <- parallel::mclapply(dats, make_emc, design = design_in, prior_list = prior_in,
             type = type, mc.cores = n_cores, verbose=verbose,
-            rt_resoluiotn = rt_resoluiton, resolution_shift = resolution_shift, ...)
+            rt_resolution = rt_resolution, resolution_shift = resolution_shift, ...)
     emcs <- parallel::mclapply(emcs, tryfit, mc.cores=n_cores, ...)
     bad <- unlist(lapply(emcs,\(res) inherits(res, "try-error")))
     if (!is.null(save_emc)) {
