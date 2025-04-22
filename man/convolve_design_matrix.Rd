@@ -11,7 +11,7 @@ convolve_design_matrix(
   contrasts = NULL,
   covariates = NULL,
   add_constant = TRUE,
-  hrf_model = "glover + derivative",
+  hrf_model = "glover",
   cell_coding = NULL,
   scale = TRUE,
   high_pass = TRUE,
