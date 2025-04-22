@@ -4,6 +4,11 @@
 
 * added thin to fit/run_emc which can either be set to TRUE to automatically thin based on ESS, or on a numeric to only keep 1/x samples
 
+* added probit/SDT model for bimanual choices
+
+## Bug fixes
+
+* Rare bug in sampling removed
 
 ## Bug fixes
 

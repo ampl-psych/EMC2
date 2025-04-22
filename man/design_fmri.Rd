@@ -4,12 +4,12 @@
 \alias{design_fmri}
 \title{Create fMRI Design for EMC2 Sampling}
 \usage{
-design_fmri(design_matrix, model = normal_mri, ...)
+design_fmri(design_matrix, model = MRI_AR1, ...)
 }
 \arguments{
-\item{design_matrix}{A list of design matrices,  the output from convolved_design_matrix}
+\item{design_matrix}{A list of design matrices,  the output from convolve_design_matrix}
 
-\item{model}{A function that returns a model specification, options are normal_mri or white_mri}
+\item{model}{A function that returns a model specification, options are MRI or MRI_AR1}
 
 \item{...}{Additional arguments passed to the model}
 }
@@ -17,37 +17,37 @@ design_fmri(design_matrix, model = normal_mri, ...)
 An object of class 'emc.design' suitable for EMC2 sampling
 }
 \description{
-This function takes the output from convolved_design_matrix and transforms it into a design
+This function takes the output from convolve_design_matrix and transforms it into a design
 suitable for sampling with EMC2. It properly configures parameter types, bounds, and transformations
 for the specified model.
 }
 \examples{
 # Generate a simple example timeseries
 ts <- data.frame(
-  subjects = rep(1, 100),
-  run = rep(1, 100),
-  time = seq(0, 99),
-  ROI1 = rnorm(100)
+ subjects = rep(1, 100),
+ run = rep(1, 100),
+ time = cumsum(rep(1.38, 100)),
+ ROI1 = rnorm(100)
 )
 
 # Generate example events
 events <- data.frame(
-  subjects = rep(1, 4),
-  run = rep(1, 4),
-  onset = c(10, 30, 50, 70),
-  duration = rep(0.5, 4),
-  event_type = c("condition", "condition", "condition", "condition"),
-  modulation = c(1, 1, 1, 1)
+ subjects = rep(1, 4),
+ run = rep(1, 4),
+ onset = c(10, 30, 50, 70),
+ duration = rep(0.5, 4),
+ event_type = c("A", "B", "A", "B"),
+ modulation = c(1, 1, 1, 1)
 )
 
 # Create convolved design matrix
-design_matrix <- convolved_design_matrix(
-  timeseries = ts,
-  events = events,
-  factors = list(condition = "condition"),
-  hrf_model = "glover"
+design_matrix <- convolve_design_matrix(
+ timeseries = ts,
+ events = events,
+ factors = list(condition = c("A", "B")),
+ hrf_model = "glover"
 )
 
 # Create fMRI design for EMC2
-fmri_design <- design_fmri(design_matrix, model = white_mri)
+fmri_design <- design_fmri(design_matrix, model = MRI_AR1)
 }

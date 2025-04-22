@@ -210,7 +210,8 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
 #' # is the mean of the group (i.e., 'mu' still represents the group-level mean)
 #' forstmann$age <- as.numeric(forstmann$subjects) -mean(as.numeric(forstmann$subjects))
 #' # Create fake group column
-#' forstmann$group <- ifelse(forstmann$subjects %in% unique(forstmann$subjects)[seq(1, 19, 2)], "A", "B")
+#' forstmann$group <- ifelse(forstmann$subjects %in%
+#'               unique(forstmann$subjects)[seq(1, 19, 2)], "A", "B")
 #'
 #' # Create group-level design matrices
 #' group_des <- group_design(
@@ -219,8 +220,8 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
 #'   subject_design = subj_design,
 #'   contrasts = list(group = contr.bayes)
 #' )
-#' # Then you can make the emc object with (setting compress = F here for speed)
-#' emc <- make_emc(forstmann, subj_design, compress = F, group_design = group_des)
+#' # Then you can make the emc object with
+#' emc <- make_emc(forstmann, subj_design, compress = FALSE, group_design = group_des)
 #' @export
 group_design <- function(formula, data, subject_design, contrasts = NULL){
   par_names <- names(sampled_pars(subject_design))
@@ -481,10 +482,16 @@ if (type=="DDM") {
     datar <- datar[order(rep(1:dim(data)[1],nacc),datar$lR),]
     if (!is.null(matchfun)) {
       lM <- matchfun(datar)
-      # if (any(is.na(lM)) || !(is.logical(lM)))
-      #   stop("matchfun not scoring properly")
-      datar$lM <- factor(lM)
+      if (!is.factor(lM))
+        datar$lM <- factor(lM) else
+        datar$lM <- factor(lM,levels=levels(lM))
     }
+    # if (!is.null(matchfun)) {
+    #   lM <- matchfun(datar)
+    #   # if (any(is.na(lM)) || !(is.logical(lM)))
+    #   #   stop("matchfun not scoring properly")
+    #   datar$lM <- factor(lM)
+    # }
     # Advantage NAFC
     nam <- unlist(lapply(strsplit(dimnames(datar)[[2]],"lS"),function(x)x[[1]]))
     islS <- nam ==""
@@ -1020,6 +1027,8 @@ dm_list <- function(dadm)
 #'
 #' @export
 update2version <- function(emc){
+  # For older versions, ensure that the class is emc:
+  class(emc) <- "emc"
   get_new_model <- function(old_model, pars){
     if(old_model()$c_name == "LBA"){
       model <- LBA
@@ -1261,7 +1270,7 @@ sampled_pars.emc.design <- function(x,model=NULL,doMap=TRUE, add_da = FALSE, all
     }
   }
   if(length(design) != 1) attr(out, "map") <- map_list
-  if(any(duplicated(names(out)))) stop("duplicate parameter names found! Usually this happens when joint designs share indicator names")
+  if(!add_da & any(duplicated(names(out)))) stop("duplicate parameter names found! Usually this happens when joint designs share indicator names")
   return(out)
 }
 

@@ -103,6 +103,8 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
   # #' @param Fcovariates either a data frame of covariate values with the same
   # #' number of rows as the data or a list of functions specifying covariates for
   # #' each trial. Must have names specified in the design Fcovariates argument.
+  check_bounds <- FALSE
+
   LT<-0
   UT<-Inf
   LC<-0
@@ -159,6 +161,19 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
   }
 
   model <- design$model
+
+  if(grepl("MRI", model()$type)){
+    data_list <- list()
+    for(i in 1:nrow(parameters)){
+      data_tmp <- data[data$subjects == unique(data$subjects)[i],]
+      data_tmp$subjects <- factor(data_tmp$subjects)
+      attr(data_tmp, "designs") <- design$fMRI_design[[i]]
+
+      data_list[[i]] <- make_data_fMRI(parameters[i,,drop = F], model, data_tmp, design)
+    }
+    return(do.call(rbind, data_list))
+  }
+
   if(is.data.frame(parameters)) parameters <- as.matrix(parameters)
   if (!is.matrix(parameters)) parameters <- make_pmat(parameters,design)
   if ( is.null(data) ) {
@@ -234,8 +249,8 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
   pars <- model()$Ttransform(pars, data)
   pars <- add_bound(pars, model()$bound)
   pars_ok <- attr(pars, 'ok')
-  if(any(!pars_ok)){
-    warning("Parameter values fall out of model bounds, see <model_name>$bounds()")
+  if(mean(!pars_ok) > .1){
+    warning("More than 10% of parameter values fall out of model bounds, see <model_name>$bounds()")
     return(FALSE)
   }
   if ( any(dimnames(pars)[[2]]=="pContaminant") && any(pars[,"pContaminant"]>0) )

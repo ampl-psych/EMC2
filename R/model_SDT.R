@@ -28,46 +28,49 @@ rPROBIT <- function(lR,pars,p_types=c("mean","sd","threshold"),lt=-Inf)
   cbind.data.frame(R=R,rt=NA)
 }
 
-# #' Gaussian Signal Detection Theory Model
-# #'
-# #' Discrete choice based on continuous Gaussian latent, with no rt. Model
-# #' parameters are mean (unbounded) sd (log scale) and threshold, with a first
-# #' value is  on the natural scale, and others for designs with with more than
-# #' two responses are threshold increases on a log scale to enforce monotonic
-# #' increase on the natural scale.
-# #'
-# #' @return A model list with all the necessary functions to sample
+#' Gaussian Signal Detection Theory Model for Binary Responses (probit)
+#'
+#' Discrete binary choice based on continuous Gaussian latent, with no rt (rt
+#' must be set to NA in data).
+#'
+#' Model parameters are:
+#'    mean (unbounded)
+#'    sd (log scale) and
+#'    threshold (unbounded).
+#'
+#' For identifiability in one condition two parameters must be fixed
+#' (conventionally mean=0 and sd = 1). When used with data that records only
+#' accuracy (so reponse bias cannot be evaluated) a single threshold must be
+#' assumed and fixed (e.g., threshold = 0).
+#'
+#' At present this model is not fully implemented in C, but as its likelihood
+#' requires only pnorm evaluation it is quite fast.
+#'
+#' @return A model list with all the necessary functions to sample
+#' @examples
+#' dprobit <- design(Rlevels = c("left","right"),
+#'            factors=list(subjects=1,S=c("left","right")),
+#'            formula=list(mean ~ 0+S, sd ~ 1,threshold ~ 1),
+#'            matchfun=function(d)d$S==d$lR,
+#'            constants=c(sd=log(1),threshold=0),
+#'            model=SDT)
+#'
+#' p_vector <- sampled_pars(dprobit)
+#' @export
 
-probit <- function(){
+SDT <- function(){
   list(
   type="SDT",
   p_types=c("mean" = 0,"sd" = log(1),"threshold" = 0),
-  # Transform to natural scale
-  Ntransform=function(x) {
-    is_sd <- grepl("sd",dimnames(x)[[2]])
-    x[,is_sd] <- exp(x[,is_sd])
-    x
-  },
-  # p_vector transform
-  transform = function(x) {
-    if (!is.matrix(x)) {
-      increasing <- grepl("threshold",names(x)) & grepl(":lR",names(x)) | grepl("threshold_lR",names(x))
-      x[increasing] <- exp(x[increasing])
-      x
-    } else {
-      increasing <- grepl("threshold",dimnames(x)[[2]]) & grepl(":lR",dimnames(x)[[2]]) |
-        grepl("threshold_lR",dimnames(x)[[2]])
-      x[,increasing] <- exp(x[,increasing])
-      x
-    }
-  },
   # Trial dependent parameter transform
+  transform=list(func=c(mean = "identity",sd = "exp",threshold="identity")),
+  bound=list(minmax=cbind(mean=c(-Inf,Inf),sd = c(0, Inf), threshold=c(-Inf,Inf))),
   Ttransform = function(pars,dadm) {
     pars
   },
   # Random function for discrete choices
   rfun=function(lR=NULL,pars) {
-    if (is.null(lR)) rep(TRUE,dim(pars)[1]) else rPROBIT(lR,pars)
+    rPROBIT(lR,pars)
   },
   # probability of choice between lower and upper thresholds (lt & ut)
   pfun=function(lt,ut,pars) pPROBIT(lt,ut,pars),

@@ -187,46 +187,6 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
-// build_glover_hrf_kernel_numeric
-NumericVector build_glover_hrf_kernel_numeric(double tr, int oversampling, double time_length, double onset, double delay, double undershoot, double dispersion, double u_dispersion, double ratio);
-RcppExport SEXP _EMC2_build_glover_hrf_kernel_numeric(SEXP trSEXP, SEXP oversamplingSEXP, SEXP time_lengthSEXP, SEXP onsetSEXP, SEXP delaySEXP, SEXP undershootSEXP, SEXP dispersionSEXP, SEXP u_dispersionSEXP, SEXP ratioSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< double >::type tr(trSEXP);
-    Rcpp::traits::input_parameter< int >::type oversampling(oversamplingSEXP);
-    Rcpp::traits::input_parameter< double >::type time_length(time_lengthSEXP);
-    Rcpp::traits::input_parameter< double >::type onset(onsetSEXP);
-    Rcpp::traits::input_parameter< double >::type delay(delaySEXP);
-    Rcpp::traits::input_parameter< double >::type undershoot(undershootSEXP);
-    Rcpp::traits::input_parameter< double >::type dispersion(dispersionSEXP);
-    Rcpp::traits::input_parameter< double >::type u_dispersion(u_dispersionSEXP);
-    Rcpp::traits::input_parameter< double >::type ratio(ratioSEXP);
-    rcpp_result_gen = Rcpp::wrap(build_glover_hrf_kernel_numeric(tr, oversampling, time_length, onset, delay, undershoot, dispersion, u_dispersion, ratio));
-    return rcpp_result_gen;
-END_RCPP
-}
-// build_event_cache_cpp
-List build_event_cache_cpp(DataFrame events, NumericVector run_times, int oversampling, double min_onset, double time_length, double onset, double nominal_delay, double undershoot, double dispersion, double u_dispersion, double ratio);
-RcppExport SEXP _EMC2_build_event_cache_cpp(SEXP eventsSEXP, SEXP run_timesSEXP, SEXP oversamplingSEXP, SEXP min_onsetSEXP, SEXP time_lengthSEXP, SEXP onsetSEXP, SEXP nominal_delaySEXP, SEXP undershootSEXP, SEXP dispersionSEXP, SEXP u_dispersionSEXP, SEXP ratioSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< DataFrame >::type events(eventsSEXP);
-    Rcpp::traits::input_parameter< NumericVector >::type run_times(run_timesSEXP);
-    Rcpp::traits::input_parameter< int >::type oversampling(oversamplingSEXP);
-    Rcpp::traits::input_parameter< double >::type min_onset(min_onsetSEXP);
-    Rcpp::traits::input_parameter< double >::type time_length(time_lengthSEXP);
-    Rcpp::traits::input_parameter< double >::type onset(onsetSEXP);
-    Rcpp::traits::input_parameter< double >::type nominal_delay(nominal_delaySEXP);
-    Rcpp::traits::input_parameter< double >::type undershoot(undershootSEXP);
-    Rcpp::traits::input_parameter< double >::type dispersion(dispersionSEXP);
-    Rcpp::traits::input_parameter< double >::type u_dispersion(u_dispersionSEXP);
-    Rcpp::traits::input_parameter< double >::type ratio(ratioSEXP);
-    rcpp_result_gen = Rcpp::wrap(build_event_cache_cpp(events, run_times, oversampling, min_onset, time_length, onset, nominal_delay, undershoot, dispersion, u_dispersion, ratio));
-    return rcpp_result_gen;
-END_RCPP
-}
 // calc_ll
 NumericVector calc_ll(NumericMatrix p_matrix, DataFrame data, NumericVector constants, List designs, String type, List bounds, List transforms, List pretransforms, CharacterVector p_types, double min_ll, List trend);
 RcppExport SEXP _EMC2_calc_ll(SEXP p_matrixSEXP, SEXP dataSEXP, SEXP constantsSEXP, SEXP designsSEXP, SEXP typeSEXP, SEXP boundsSEXP, SEXP transformsSEXP, SEXP pretransformsSEXP, SEXP p_typesSEXP, SEXP min_llSEXP, SEXP trendSEXP) {
@@ -272,8 +232,6 @@ static const R_CallMethodDef CallEntries[] = {
     {"_EMC2_compute_time_derivative", (DL_FUNC) &_EMC2_compute_time_derivative, 10},
     {"_EMC2_build_hrf_kernel", (DL_FUNC) &_EMC2_build_hrf_kernel, 10},
     {"_EMC2_construct_design_matrix", (DL_FUNC) &_EMC2_construct_design_matrix, 13},
-    {"_EMC2_build_glover_hrf_kernel_numeric", (DL_FUNC) &_EMC2_build_glover_hrf_kernel_numeric, 9},
-    {"_EMC2_build_event_cache_cpp", (DL_FUNC) &_EMC2_build_event_cache_cpp, 11},
     {"_EMC2_calc_ll", (DL_FUNC) &_EMC2_calc_ll, 11},
     {"_EMC2_c_add_charvectors", (DL_FUNC) &_EMC2_c_add_charvectors, 2},
     {NULL, NULL, 0}
