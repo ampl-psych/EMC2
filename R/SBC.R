@@ -108,10 +108,13 @@ SBC_single <- function(design_in, prior_in, replicates = 250, trials = 100,
                        fileName = NULL, save_emc = NULL, add_noise = NULL, ...){
 
 
-  noise_fun <- function(d,scale=.05,direction=-1, # negative = monitor
+  noise_fun <- function(d,scale=-.05,# negative = monitor
                       rfun="runif",args=list(n=nrow(d)))
   {
-    d$rt <- d$rt + direction*do.call(rfun,args)*scale
+    for (i in 1:length(scale)) {
+      d$rt <- d$rt + do.call(rfun,args)*scale[i]
+    }
+
     d
   }
 
