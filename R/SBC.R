@@ -190,7 +190,7 @@ SBC_single <- function(design_in, prior_in, replicates = 250, trials = 100,
     }
     okj <- c(start:min(c(i-1),replicates))
     if (length(okj[!bad])>0) {
-      tmp <- lapply(emcs[!bad],\(x)credint(x,map=TRUE)[[1]])
+      tmp <- lapply(emcs[!bad],\(x)credint(x)[[1]])
       for (j in 1:length(tmp)) pci[okj[!bad][j],,] <- tmp[[j]]
     }
     if (any(bad)) {
