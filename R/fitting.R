@@ -623,8 +623,8 @@ loadRData <- function(fileName){
 #' @param rt_resolution A double. Used for compression, response times rt will be binned based on this resolution as
 #' floor(rt/rt_resolution)*rt_resolution. By default rt_resolution/2 is also
 #' added (appropriate for binning due to monitor binning, ... argument
-#' correct_monitor=TRUE). Can also instead subtract rt_resolution/2 for clock
-#' binning (... argument correct_clock, default FALSE).
+#' resolution_shift = NULL default. If a numeric value is supplied that will instead be added.
+#' For example a negative number could be added to account for clock discretization.
 #' @param par_groups A vector. Only to be specified with type `blocked`, e.g., `c(1,1,1,2,2)` means the covariances
 #' of the first three and of the last two parameters are estimated as two separate blocks.
 #' @param prior_list A named list containing the prior. Default prior created if `NULL`. For the default priors, see `?get_prior_{type}`.

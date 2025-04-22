@@ -13,6 +13,9 @@ run_sbc(
   plot_data = FALSE,
   verbose = TRUE,
   fileName = NULL,
+  n_cores = 1,
+  save_emc = NULL,
+  add_noise = NULL,
   ...
 )
 }

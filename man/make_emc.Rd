@@ -14,6 +14,7 @@ make_emc(
   rt_resolution = 0.02,
   prior_list = NULL,
   par_groups = NULL,
+  verbose = TRUE,
   ...
 )
 }
@@ -33,8 +34,8 @@ make_emc(
 \item{rt_resolution}{A double. Used for compression, response times rt will be binned based on this resolution as
 floor(rt/rt_resolution)*rt_resolution. By default rt_resolution/2 is also
 added (appropriate for binning due to monitor binning, ... argument
-correct_monitor=TRUE). Can also instead subtract rt_resolution/2 for clock
-binning (... argument correct_clock, default FALSE).}
+resolution_shift = NULL default. If a numeric value is supplied that will instead be added.
+For example a negative number could be added to account for clock discretization.}
 
 \item{prior_list}{A named list containing the prior. Default prior created if \code{NULL}. For the default priors, see \verb{?get_prior_\{type\}}.}
 
