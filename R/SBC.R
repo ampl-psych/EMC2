@@ -255,9 +255,10 @@ SBC_single <- function(design_in, prior_in, replicates = 250, trials = 100,
 plot_sbc_hist <- function(ranks, bins = 10, layout = NA){
   if(!is.null(ranks$rank)) ranks <- ranks$rank
   selects <- names(ranks)
-  oldpar <- par(no.readonly = TRUE) # code line i
-  on.exit(par(oldpar)) # code line i + 1
-
+  if (!is.null(layout)) {
+    oldpar <- par(no.readonly = TRUE) # code line i
+    on.exit(par(oldpar)) # code line i + 1
+  }
   n_sample <- nrow(ranks[[1]])
   low <- qbinom(0.025, n_sample, 1/bins)
   mid <- qbinom(0.5, n_sample, 1/bins)
@@ -343,9 +344,10 @@ make_smooth <- function(x, y, N = 1000){
 plot_sbc_ecdf <- function(ranks, layout = NA){
   if(!is.null(ranks$rank)) ranks <- ranks$rank
   selects <- names(ranks)
-  oldpar <- par(no.readonly = TRUE) # code line i
-  on.exit(par(oldpar)) # code line i + 1
-
+  if (!is.null(layout)) {
+    oldpar <- par(no.readonly = TRUE) # code line i
+    on.exit(par(oldpar)) # code line i + 1
+  }
   K <- N <- nrow(ranks[[1]])
   gamma <- get_gamma(N, K)
   res <- get_lims(N, K, gamma)
