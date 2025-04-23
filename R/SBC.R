@@ -264,10 +264,12 @@ plot_sbc_hist <- function(ranks, bins = 10, layout = NA){
   high <- qbinom(0.975, n_sample, 1/bins)
   par_names <- colnames(ranks[[1]])
   for(j in 1:length(ranks)){
-    if(any(is.na(layout))){
+    if (!is.null(layout)) {
+      if(any(is.na(layout))){
       par(mfrow = coda_setmfrow(Nchains = 1, Nparms = ncol(ranks[[1]]),
                                        nplots = 1))
-    } else{par(mfrow=layout)}
+      } else{par(mfrow=layout)}
+    }
     rank <- ranks[[j]]
     for(i in 1:ncol(rank)){
       hist(rank[,i], main = paste0(selects[j], " - ", par_names[i]), breaks = bins, ylim = c(0, high + 2))
@@ -348,11 +350,12 @@ plot_sbc_ecdf <- function(ranks, layout = NA){
   gamma <- get_gamma(N, K)
   res <- get_lims(N, K, gamma)
   for(j in 1:length(ranks)){
-    if(any(is.na(layout))){
-      par(mfrow = coda_setmfrow(Nchains = 1, Nparms = ncol(ranks[[1]]),
+    if (!is.null(layout)) {
+      if(any(is.na(layout))){
+        par(mfrow = coda_setmfrow(Nchains = 1, Nparms = ncol(ranks[[1]]),
                                 nplots = length(ranks)))
-    } else{par(mfrow=layout)}
-
+      } else{par(mfrow=layout)}
+    }
     rank <- ranks[[j]]
     par_names <- colnames(rank)
     res$x <- apply(rank, 2, function(x) sort(x) - res$z)
