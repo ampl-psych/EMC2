@@ -31,6 +31,9 @@ fill_dadm <- function(dadm, noisy_cov, cov_name){
   ### SOME INDEXING ###
   # Here we're replacing the observed variable with the latent variable!
   dadm[,cov_name] <- noisy_cov$latent
+  des <- attr(dadm, "designs")
+  des$v[,2] <- noisy_cov$latent
+  attr(dadm, "designs") <- des
   # Add the actually observed noisy covariate
   dadm$obs <- noisy_cov$obs
   return(dadm)
@@ -61,9 +64,10 @@ update_latent_cov <- function(pars, dadm, model){
 
   weights <- matrix(NA, nrow = nrow(dadm), ncol = n_particles*n_dists + 1)
   latents <- matrix(NA, nrow = nrow(dadm), ncol = n_particles*n_dists +1)
-
   noisy_covs <- list()
   for(cov in model$noisy_cov){
+    latent_pars <- get_noisy_cov_pnames(cov)
+
     noisy_cov <- attr(dadm, "noisy_cov")[[cov]]
     prev_latent <- noisy_cov$latent
     # Now for k proposals we evaluate the likelihood given the new latent states
@@ -76,9 +80,9 @@ update_latent_cov <- function(pars, dadm, model){
     for(i in 1:(n_particles*n_dists + 1)){
       if(i != 1){ # The old state is particle 1
         if(i < (1 + n_particles)){
-          noisy_cov$latent <- rnorm(nrow(noisy_cov), mean = noisy_cov$obs, sd = cur_sd)
+          noisy_cov$latent <- rnorm(nrow(noisy_cov), mean = noisy_cov$obs, sd = exp(pars[latent_pars[3]]))
         } else if(i < (1 + 2*n_particles)){
-          noisy_cov$latent <- rnorm(nrow(noisy_cov), mean = prev_latent, sd = cur_sd)
+          noisy_cov$latent <- rnorm(nrow(noisy_cov), mean = prev_latent, sd = exp(pars[latent_pars[3]]))
         } else{
           noisy_cov$latent <- rnorm(nrow(noisy_cov), mean = noisy_cov$running_mu, sd = cur_sd)
         }
@@ -86,8 +90,8 @@ update_latent_cov <- function(pars, dadm, model){
       # Calculate the likelihood
       ll <- calc_ll_R(pars, model, fill_dadm(dadm, noisy_cov, cov), return_sum = FALSE)
       # For now assign each distribution a 1/3 weight
-      lm <- 1/3*dnorm(noisy_cov$latent, mean = noisy_cov$obs, sd = cur_sd) +
-        1/3*dnorm(noisy_cov$latent, mean = prev_latent, sd = cur_sd) +
+      lm <- 1/3*dnorm(noisy_cov$latent, mean = noisy_cov$obs, sd = exp(pars[latent_pars[3]])) +
+        1/3*dnorm(noisy_cov$latent, mean = prev_latent, sd = exp(pars[latent_pars[3]])) +
         1/3*dnorm(noisy_cov$latent, mean = noisy_cov$running_mu, sd = cur_sd)
       # Importance correction of all proposal densities
       l <- ll - log(lm)
@@ -117,6 +121,7 @@ update_latent_cov <- function(pars, dadm, model){
     noisy_cov$running_sd <- new_moments$sd
     noisy_cov$idx <- noisy_cov$idx + 1
     noisy_covs[[cov]] <- noisy_cov
+    dadm <- fill_dadm(dadm, noisy_cov, cov)
   }
   attr(dadm, "noisy_cov") <- noisy_covs
   return(dadm)
