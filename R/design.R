@@ -579,7 +579,7 @@ design_model <- function(data,design,model=NULL,
   if (!is.null(rt_resolution) & !is.null(da$rt)) {
     if (!is.null(resolution_shift))
         da$rt <- da$rt + resolution_shift  else
-        da$rt <- da$rt + rt_resolution/2 # appropriate for monitor
+        da$rt <- da$rt - rt_resolution/2 # appropriate for monitor and keyboard
     da$rt <- round(da$rt/rt_resolution)*rt_resolution
   }
   if (compress){
