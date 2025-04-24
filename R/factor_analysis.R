@@ -1,27 +1,27 @@
 
 # Rewrite of the factor.switching package ---------------------------------
 
-sp_new <- function(iter, lambda_varimax, q, p, dim_all_c, all_c, lambda_hat, st,
-                   cost.matrix, perm){
-  lambda <- matrix(lambda_varimax[,,iter], nrow = p, ncol = q)
-  costs <- numeric(dim_all_c)
-  for (i in 1:dim_all_c) {
-    c_vec <- all_c[i, ]
-    lambda_switch <- matrix(c_vec, ncol = q, nrow = p,
-                            byrow = T) * lambda_hat
-    for (j in 1:q) {
-      temp <- (lambda - lambda_switch[, j])^2
-      cost.matrix[j, ] <- colSums(temp)
-    }
-    matr <- lpSolve::lp.assign(cost.matrix)$solution
-    perm[i,] <- order(which(matr > 0, arr.ind = T)[,1])
-    costs[i] <- sum(cost.matrix * matr)
-  }
-  minIndex <- order(costs)[1]
-  switchedMatrix <- matrix(all_c[minIndex, ], ncol = q, nrow = p, byrow = T) * lambda[,perm[minIndex, ]]
-  return(list(min_perm = perm[minIndex, ], min_c = all_c[minIndex, ], min_cost =  costs[minIndex],
-              switchedMatrix = switchedMatrix))
-}
+# sp_new <- function(iter, lambda_varimax, q, p, dim_all_c, all_c, lambda_hat, st,
+#                    cost.matrix, perm){
+#   lambda <- matrix(lambda_varimax[,,iter], nrow = p, ncol = q)
+#   costs <- numeric(dim_all_c)
+#   for (i in 1:dim_all_c) {
+#     c_vec <- all_c[i, ]
+#     lambda_switch <- matrix(c_vec, ncol = q, nrow = p,
+#                             byrow = T) * lambda_hat
+#     for (j in 1:q) {
+#       temp <- (lambda - lambda_switch[, j])^2
+#       cost.matrix[j, ] <- colSums(temp)
+#     }
+#     matr <- lpSolve::lp.assign(cost.matrix)$solution
+#     perm[i,] <- order(which(matr > 0, arr.ind = T)[,1])
+#     costs[i] <- sum(cost.matrix * matr)
+#   }
+#   minIndex <- order(costs)[1]
+#   switchedMatrix <- matrix(all_c[minIndex, ], ncol = q, nrow = p, byrow = T) * lambda[,perm[minIndex, ]]
+#   return(list(min_perm = perm[minIndex, ], min_c = all_c[minIndex, ], min_cost =  costs[minIndex],
+#               switchedMatrix = switchedMatrix))
+# }
 
 
 #' Reorder MCMC Samples of Factor Loadings
@@ -32,7 +32,9 @@ sp_new <- function(iter, lambda_varimax, q, p, dim_all_c, all_c, lambda_hat, st,
 #' @references Papastamoulis, P., & Ntzoufras, I. (2022). On the identifiability of Bayesian factor
 #' analytic models. *Statistical Computing*, 32(2), 1-29. doi: 10.1007/s11222-022-10084-4
 #'
-#' @param lambda Array of factor loadings with dimensions p (variables) x q (factors) x n (MCMC iterations)
+#' @param emc an 'emc' object of type `infnt_factor`.
+#' @param lambda Needs to be supplied if emc is not supplied.
+#' Array of factor loadings with dimensions p (variables) x q (factors) x n (MCMC iterations)
 #' @param maxIter Maximum number of iterations for the alignment algorithm
 #' @param threshold Convergence threshold for the algorithm
 #' @param verbose Logical; whether to print progress information
@@ -86,9 +88,15 @@ sp_new <- function(iter, lambda_varimax, q, p, dim_all_c, all_c, lambda_hat, st,
 #' print(result$lambda_hat)
 #'
 #' @export
-align_loadings <- function (lambda, maxIter = 100, threshold = 1e-06, verbose = TRUE,
+align_loadings <- function (emc = NULL, lambda = NULL, maxIter = 100, threshold = 1e-06, verbose = TRUE,
                     rotate = TRUE, printIter = 1000, n_cores = 1)
 {
+  if(is.null(lambda) & is.null(emc)) stop("Need to supply either emc or lambda")
+  if(is.null(lambda)){
+    lambda <- get_pars(emc, selection = "loadings", merge_chains = TRUE, return_mcmc = FALSE)
+  }
+  energy <- apply(lambda^2, 2, mean)          # length q
+  lambda <- lambda[,energy / max(energy) > 0.005,, drop = F]
   q <- ncol(lambda)
   p <- nrow(lambda)
   mcmcIterations <- dim(lambda)[3]
@@ -177,25 +185,50 @@ align_loadings <- function (lambda, maxIter = 100, threshold = 1e-06, verbose = 
                              byrow = T) * lambda[, v_vectors[i, ]]
     lambda_reordered[,,i] <- switchedMatrix
   }
+  lambda_reordered <- rearrange_loadings(lambda_reordered)
+  if(!is.null(emc)){
+    n_iter <- emc[[1]]$samples$idx
+    for(i in 1:length(emc)){
+      emc[[i]]$samples$lambda <- lambda_reordered[,,((i-1)*(n_iter)+ 1):(i*n_iter), drop = FALSE]
+    }
+    return(emc)
+  }
+
   return(lambda_reordered)
 }
 
 
 
 # Functions useful for descriptives of the loadings -----------------------
-
-rearrange_loadings <- function(loadings){
-  means <- apply(loadings, 2, mean)
-  if(length(dim(loadings)) == 3){
-    loadings[,means < 0,] <- loadings[,means < 0,] * -1
-    loadings <- loadings[,order(abs(means), decreasing = T),, drop = F]
-  } else{
-    loadings[,means < 0] <- loadings[,means < 0] * -1
-    loadings <- loadings[,order(abs(means), decreasing = T), drop = F]
+rearrange_loadings <- function(lambda, metric = c("ssq", "absmean"))
+{
+  metric <- match.arg(metric)
+  # ----- collapse MCMC draws to a single p × q summary -----------------
+  if (length(dim(lambda)) == 3L) {
+    lambda_hat <- apply(lambda, 1:2, mean)           # p × q
+  } else {
+    lambda_hat <- lambda
+    lambda      <- array(lambda, dim = c(dim(lambda), 1L))  # unify shape
   }
-  return(loadings)
-}
 
+  # ----- dominance score for each factor --------------------------------
+  score <- switch(metric,
+                  ssq     = colSums(lambda_hat^2),
+                  absmean = colMeans(abs(lambda_hat)))
+
+  ord <- order(score, decreasing = TRUE)             # strongest → first
+
+  # ----- sign-flip so column mean ≥ 0 -----------------------------------
+  sign_flip <- sign(colMeans(lambda_hat[, ord, drop = F]))
+  sign_flip[sign_flip == 0] <- 1                     # treat exact zeros as +
+
+  # ----- apply permutation + sign flips over *all* iterations -----------
+  lambda_re <- lambda[, ord, , drop = FALSE]         # permute columns
+  for (j in seq_along(sign_flip)) {
+    lambda_re[, j, ] <- sign_flip[j] * lambda_re[, j, ]
+  }
+  return(lambda_re)
+}
 # #' Standardized factor loadings
 # #'
 # #' Returns a set of standardized factor loadings.

@@ -240,7 +240,7 @@ get_objects_factor <- function(selection, sample_prior, return_prior, design = N
     }
     idx <- get_idx(sampler, stage)
     if(selection == "loadings"){
-      return(lapply(sampler, FUN = function(x) return(x$samples$lambda[,,idx])))
+      return(lapply(sampler, FUN = function(x) return(x$samples$lambda[,,idx, drop = FALSE])))
     }
     if(selection == "residuals"){
       return(lapply(sampler, FUN = function(x) return(1/x$samples$epsilon_inv[,idx])))
@@ -299,7 +299,7 @@ get_objects_infnt_factor <- function(selection, sample_prior, return_prior, desi
     }
     idx <- get_idx(sampler, stage)
     if(selection == "loadings"){
-      return(lapply(sampler, FUN = function(x) return(x$samples$lambda[,,idx])))
+      return(lapply(sampler, FUN = function(x) return(x$samples$lambda[,,idx, drop = FALSE])))
     }
     if(selection == "residuals"){
       return(lapply(sampler, FUN = function(x) return(1/x$samples$epsilon_inv[,idx])))
