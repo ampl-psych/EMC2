@@ -13,10 +13,10 @@ pmwgs <- function(dadm, type, pars = NULL, prior = NULL,
 
   if(!is.null(nuisance_non_hyper)){
     is_nuisance <- is.element(seq_len(length(pars)), nuisance_non_hyper)
-    type <- "single"
+    nuis_type <- "single"
   } else if(!is.null(nuisance)) {
     is_nuisance <- is.element(seq_len(length(pars)), nuisance)
-    type <- "diagonal"
+    nuis_type <- "diagonal"
   } else{
     is_nuisance <- rep(F, length(pars))
   }
@@ -25,15 +25,15 @@ pmwgs <- function(dadm, type, pars = NULL, prior = NULL,
   sampler_nuis <- NULL
   if(any(is_nuisance)){
     sampler_nuis <- list(
-      samples = sample_store(dadm, pars, type, integrate = F,
+      samples = sample_store(dadm, pars, nuis_type, integrate = F,
                                                     is_nuisance = !is_nuisance, ...),
       n_subjects = length(subjects),
       n_pars = sum(is_nuisance),
       nuisance = rep(F, sum(is_nuisance)),
-      type = type
+      type = nuis_type
     )
-    if(type == "single") sampler_nuis$samples <- NULL
-    sampler_nuis <- add_info(sampler_nuis, prior$prior_nuis, type, ...)
+    if(nuis_type == "single") sampler_nuis$samples <- NULL
+    sampler_nuis <- add_info(sampler_nuis, prior$prior_nuis, nuis_type, ...)
   }
   samples <- sample_store(dadm, pars, type, is_nuisance = is_nuisance, ...)
   sampler <- list(
