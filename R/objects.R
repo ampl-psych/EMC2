@@ -472,7 +472,7 @@ concat_emc <- function(emc1, emc2, step_size, stage){
   for(i in 1:length(emc1)){
     sampled_objects <- list(emc1[[i]]$samples, emc2[[i]]$samples)
     keys <- unique(unlist(lapply(sampled_objects, names)))
-    sampled_objects <- setNames(do.call(mapply, c(abind, lapply(sampled_objects, '[', keys))), keys)
+    sampled_objects <- do.call(mapply, c(abind, lapply(sampled_objects, '[', keys)))
     sampled_objects$idx <- sum(sampled_objects$idx)
     attr(sampled_objects, "pm_settings") <- attr(emc2[[i]]$samples, "pm_settings")
     out_samples[[i]]$samples <- sampled_objects
@@ -480,7 +480,12 @@ concat_emc <- function(emc1, emc2, step_size, stage){
     if(any(out_samples[[1]]$nuisance)){
       sampled_objects <- list(emc1[[i]]$sampler_nuis$samples, emc2[[i]]$sampler_nuis$samples)
       keys <- unique(unlist(lapply(sampled_objects, names)))
-      sampled_objects <- setNames(do.call(mapply, c(abind, lapply(sampled_objects, '[', keys))), keys)
+      sampled_objects <- do.call(mapply, c(abind, lapply(sampled_objects, '[', keys)))
+      if(!is.list(sampled_objects)){ # deals with niche case where there's only item and this drops list making
+        sampled_objects <- list(idx= sum(sampled_objects))
+      } else{
+        sampled_objects$idx <- sum(sampled_objects$idx)
+      }
       out_samples[[i]]$sampler_nuis$samples <- sampled_objects
       out_samples[[i]]$sampler_nuis$samples$last_theta_var_inv <- emc2[[i]]$sampler_nuis$samples$last_theta_var_inv
     }

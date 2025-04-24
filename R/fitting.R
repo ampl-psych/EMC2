@@ -70,7 +70,7 @@ get_stop_criteria <- function(stage, stop_criteria, type){
 #' @examples \donttest{
 #' # First define a design
 #' design_in <- design(data = forstmann,model=DDM,
-#'                            formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
+#'                            formula =list(v~0+S,a~E, t0~1, s~1, Z~1),
 #'                            constants=c(s=log(1)))
 #' # Then make the emc, we've omitted a prior here for brevity so default priors will be used.
 #' emc <- make_emc(forstmann, design_in)
@@ -214,7 +214,7 @@ check_progress <- function (emc, stage, iter, stop_criteria,
   iter_done <- ifelse(is.null(iter) || length(iter) == 0, TRUE, total_iters_stage >= iter)
   if (min_es == 0) {
     es_done <- TRUE
-  } else if (iters_total != 0) {
+  } else if (total_iters_stage != 0) {
     class(emc) <- "emc"
     curr_min_es <- Inf
     for(select in selection){
@@ -459,10 +459,12 @@ create_chain_proposals <- function(emc, samples_idx = NULL, do_block = TRUE){
   }
   LL <- get_pars(emc, filter = samples_idx-1, selection = "LL",
                  stage = c('preburn', 'burn', 'adapt', 'sample'),
-                 merge_chains = T, return_mcmc = F)
+                 merge_chains = T, return_mcmc = F, remove_constants = F,
+                 remove_dup = F)
   alpha <- get_pars(emc, filter = samples_idx-1, selection = "alpha",
                     stage = c('preburn', 'burn', 'adapt', 'sample'),
-                    by_subject = T, merge_chains = T, return_mcmc = F)
+                    by_subject = T, merge_chains = T, return_mcmc = F,
+                    remove_dup = F, remove_constants = F)
 
   components <- attr(emc[[1]]$data, "components")
   block_idx <- block_variance_idx(components)
@@ -618,7 +620,9 @@ loadRData <- function(fileName){
 #' @param n_chains An integer. Specifies the number of mcmc chains to be run (has to be more than 1 to compute `rhat`).
 #' @param compress A Boolean, if `TRUE` (i.e., the default), the data is compressed to speed up likelihood calculations.
 #' @param rt_resolution A double. Used for compression, response times will be binned based on this resolution.
-#' @param par_groups A vector. Only to be specified with type `blocked`, e.g., `c(1,1,1,2,2)` means the covariances
+#' @param group_design A design for group-level mappings, made using `group_design()`.
+#' @param par_groups A vector. Indicates which parameters are allowed to correlate. Could either be a list of character vectors of covariance blocks. Or
+#' a numeric vector, e.g., `c(1,1,1,2,2)` means the covariances
 #' of the first three and of the last two parameters are estimated as two separate blocks.
 #' @param prior_list A named list containing the prior. Default prior created if `NULL`. For the default priors, see `?get_prior_{type}`.
 #' @param ... Additional, optional arguments.
@@ -653,7 +657,7 @@ loadRData <- function(fileName){
 make_emc <- function(data,design,model=NULL,
                           type="standard",
                           n_chains=3,compress=TRUE,rt_resolution=0.02,
-                          prior_list = NULL,
+                          prior_list = NULL, group_design = NULL,
                           par_groups=NULL, ...){
   # arguments for future compatibility
   n_factors <- NULL
@@ -676,20 +680,22 @@ make_emc <- function(data,design,model=NULL,
   if(!is.null(prior_list)){
     type <- attr(prior_list[[1]], "type")
   }
+  if(!is.null(group_design) && !type %in% c("standard", "diagonal", "blocked")){
+    stop("group_design can only be used with standard, blocked or diagonal type")
+  }
   if(type != "single" && length(unique(data$subjects)) == 1){
-    stop("can only use type = `single` if there's only one subject in the data")
+    stop("can only use type = `single` when there's only one subject in the data")
   }
 
-  if (!(type %in% c("standard","diagonal","blocked","factor","single", "lm", "infnt_factor", "SEM", "diagonal-gamma")))
-    stop("type must be one of: standard,diagonal,blocked,factor,infnt_factor, lm, single")
+  if (!(type %in% c("standard","diagonal","blocked","factor","single", "infnt_factor", "SEM", "diagonal-gamma")))
+    stop("type must be one of: standard,diagonal,blocked,factor,infnt_factor, single")
 
   if(!is.null(nuisance) & !is.null(nuisance_non_hyper)){
     stop("You can only specify nuisance OR nuisance_non_hyper")
   }
   if (is(data, "data.frame")) data <- list(data)
-
   data <- lapply(data,function(d){
-    if (!is.factor(d$subjects)) d$subjects <- factor(d$subjects)
+    d$subjects <- factor(d$subjects)
     d <- d[order(d$subjects),]
     LC <- attr(d,"LC")
     UC <- attr(d,"UC")
@@ -722,12 +728,6 @@ make_emc <- function(data,design,model=NULL,
   rt_resolution <- rep(rt_resolution,length.out=length(data))
   for (i in 1:length(dadm_list)) {
     message("Processing data set ",i)
-    # if (!is.null(design[[i]]$Ffunctions)) {
-    #   pars <- attr(data[[i]],"pars")
-    #   data[[i]] <- cbind.data.frame(data[[i]],data.frame(lapply(
-    #     design[[i]]$Ffunctions,function(f){f(data[[i]])})))
-    #   if (!is.null(pars)) attr(data[[i]],"pars") <- pars
-    # }
     if(is.null(attr(design[[i]], "custom_ll"))){
       dadm_list[[i]] <- design_model(data=data[[i]],design=design[[i]],
                                      compress=compress,model=model[[i]],rt_resolution=rt_resolution[i])
@@ -742,22 +742,50 @@ make_emc <- function(data,design,model=NULL,
         prior_list[[i]] <- check_prior(prior_list[[i]], sampled_p_names)
       }
     }
-    # create a design model
   }
   # Make sure class retains following changes
   class(design) <- "emc.design"
   prior_in <- merge_priors(prior_list)
+
   prior_in <- prior(design, type, update = prior_in, ...)
   attr(dadm_list[[1]], "prior") <- prior_in
 
   # if(!is.null(subject_covariates)) attr(dadm_list, "subject_covariates") <- subject_covariates
-  if (type %in% c("standard", "single", "diagonal", "infnt_factor", "diagonal-gamma")) {
+  if (type %in% c("single", "infnt_factor", "diagonal-gamma")) {
     out <- pmwgs(dadm_list, type, nuisance = nuisance,
                  nuisance_non_hyper = nuisance_non_hyper,
                  n_factors = n_factors)
-  } else if (type == "blocked") {
-    if (is.null(par_groups)) stop("Must specify par_groups for blocked type")
+  } else if (type %in% c("standard", "blocked", "diagonal")) {
+    if(type == "blocked"){
+      if(is.null(par_groups)) stop("par_groups must be specified for blocked models")
+    }
+    if(type == "diagonal" && is.null(par_groups)){
+      par_groups <- 1:length(sampled_pars(design))
+    }
+    if(type == "standard" && is.null(par_groups)){
+      par_groups <- rep(1, length(sampled_pars(design)))
+    }
+    if(!is.null(par_groups)){
+      if(is.character(par_groups)){
+        par_groups <- list(par_groups)
+      }
+      if(is.list(par_groups)){
+        par_names <- names(sampled_pars(design))
+        new_par_groups <- rep(NA, length(par_names))
+        for(i in 1:length(par_groups)){
+          if(any(!par_groups[[i]] %in% par_names)) stop("Make sure you specified parameter names in par_groups correctly")
+          new_par_groups[par_names %in% par_groups[[i]]] <- i
+        }
+        new_par_groups[is.na(new_par_groups)] <- (i+1):(i+sum(is.na(new_par_groups)))
+        par_groups <- new_par_groups
+      }
+      if(length(par_groups) != length(sampled_pars(design))){
+        stop("par_groups length does not match number of sampled parameters, make sure you specified par_groups correctly")
+      }
+    }
+    if(type %in% c("diagonal", "blocked")) type <- "standard"
     out <- pmwgs(dadm_list, type, par_groups=par_groups,
+                 group_design = group_design,
                  nuisance = nuisance,
                  nuisance_non_hyper = nuisance_non_hyper)
   } else if (type == "factor") {
@@ -774,6 +802,7 @@ make_emc <- function(data,design,model=NULL,
   out$model <- lapply(design, function(x) x$model)
   # Only for joint models we need to keep a list of functions
   if(length(out$model) == 1) out$model <- out$model[[1]]
+  out <- check_duplicate_designs(out)
   # replicate chains
   dadm_lists <- rep(list(out),n_chains)
   # For post predict
@@ -790,9 +819,24 @@ fix_fileName <- function(x){
   }
 }
 
+check_duplicate_designs <- function(out){
+  if(is.data.frame(out$data[[1]])) return(out)
+  for(i in 1:length(out$data)){ # loop over subjects
+    designs <- lapply(out$data[[i]], function(y) attr(y, "designs"))
+    # Find duplicate designs to replace
+    unq_idx <- match(designs, designs)
+    duplicacy <- duplicated(unq_idx)
+    for(j in 1:length(out$data[[i]])){# Loop over data sets in this sub
+      if(duplicacy[j]){
+        attr(out$data[[i]][[j]], "designs") <- unq_idx[j]
+      }
+    }
+  }
+  return(out)
+}
 
-
-extractDadms <- function(dadms, names = 1:length(dadms)){
+extractDadms <- function(dadms, names = NULL){
+  if(is.null(names)) names <- 1:length(dadms)
   N_models <- length(dadms)
   pars <- attr(dadms[[1]], "sampled_p_names")
   prior <- attr(dadms[[1]], "prior")
@@ -812,7 +856,6 @@ extractDadms <- function(dadms, names = 1:length(dadms)){
       total_dadm_list[[k]] <- tmp_list
       curr_pars <- attr(dadm, "sampled_p_names")
       components <- c(components, rep(k, length(curr_pars)))
-      pars <- c(pars, paste(names[k], curr_pars, sep = "|"))
     }
     dadm_list <- do.call(mapply, c(list, total_dadm_list, SIMPLIFY = F))
   }
@@ -820,7 +863,7 @@ extractDadms <- function(dadms, names = 1:length(dadms)){
   # if(!is.null(subject_covariates_ok)) if(any(!subject_covariates_ok)) stop("subject_covariates must be as long as the number of subjects")
   attr(dadm_list, "components") <- components
   attr(dadm_list, "shared_ll_idx") <- components
-  return(list(pars = pars, prior = prior,
+  return(list(prior = prior,
               dadm_list = dadm_list, subjects = subjects))
 }
 

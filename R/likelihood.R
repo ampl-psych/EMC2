@@ -51,6 +51,26 @@ log_likelihood_ddm <- function(pars,dadm,model,min_ll=log(1e-10))
   sum(pmax(min_ll,log(like[attr(dadm,"expand")])))
 }
 
+
+log_likelihood_ddmgng <- function(pars,dadm,model,min_ll=log(1e-10))
+  # DDM summed log likelihood for go/nogo model
+{
+  like <- numeric(dim(dadm)[1])
+  if (any(attr(pars,"ok"))) {
+    isna <- is.na(dadm$rt)
+    ok <- attr(pars,"ok") & !isna
+    like[ok] <- model$dfun(dadm$rt[ok],dadm$R[ok],pars[ok,,drop=FALSE])
+    ok <- attr(pars,"ok") & isna
+    like[ok] <- # dont terminate on go boundary before timeout
+      pmax(0,pmin(1,(1-model$pfun(dadm$TIMEOUT[ok],dadm$Rgo[ok],pars[ok,,drop=FALSE]))))
+
+  }
+  like[attr(pars,"ok")][is.na(like[attr(pars,"ok")])] <- 0
+  sum(pmax(min_ll,log(like[attr(dadm,"expand")])))
+}
+
+
+
 #### sdt choice likelihoods ----
 
 log_likelihood_sdt <- function(pars,dadm,lb=-Inf, model, min_ll=log(1e-10))
@@ -79,26 +99,39 @@ log_likelihood_sdt <- function(pars,dadm,lb=-Inf, model, min_ll=log(1e-10))
   if (!is.null(attr(pars,"ok"))) { # Bad parameter region
     ok <- attr(pars,"ok")
     okw <- ok[dadm$winner]
-    ll[ok] <- log(model$pfun(lt=lt[okw],ut=ut[okw],pars=pars[dadm$winner & ok,]))
-  } else ll <- log(model$pfun(lt=lt,ut=ut,pars=pars[dadm$winner,]))
+    ll[ok] <- log(model$pfun(lt=lt[okw],ut=ut[okw],pars=pars[dadm$winner & ok,,drop=FALSE]))
+  } else ll <- log(model$pfun(lt=lt,ut=ut,pars=pars[dadm$winner,,drop=FALSE]))
   ll <- ll[expand]
   ll[is.na(ll)] <- 0
   sum(pmax(min_ll,ll))
 }
 
+# Two options:
+# 1) component = NULL in which case we do all likelihoods in one block
+# 2) component = integer, in which case we are blocking the ll and only want that one
 log_likelihood_joint <- function(proposals, dadms, model_list, component = NULL){
   parPreFixs <- unique(gsub("[|].*", "", colnames(proposals)))
   i <- 0
+  k <- 0
   total_ll <- 0
-  if(!is.null(component)) dadms <- dadms[component]
   for(dadm in dadms){
-    if(is.data.frame(dadm)){
-      i <- i + 1
-      parPrefix <- parPreFixs[i]
-      columns_to_use <- sapply(strsplit(colnames(proposals), "|", fixed = TRUE), function(x) x == parPrefix)[1,]
-      currentPars <- proposals[,columns_to_use, drop = F]
-      colnames(currentPars) <- gsub(".*[|]", "", colnames(currentPars))
-      total_ll <- total_ll +  calc_ll_manager(currentPars, dadm, model_list[[i]])
+    i <- i + 1
+    if(is.null(component) || component == i){
+      if(is.data.frame(dadm)){
+        k <- k + 1
+        # Sometimes designs are the same across models (typically in fMRI)
+        # Instead of storing multiple, we just store a pointer to the first original design
+        if(is.numeric(attr(dadm, "designs"))){
+          ref_idx <- attr(dadm, "designs")
+          attr(dadm, "designs") <- attr(dadms[[ref_idx]], "designs")
+        }
+        parPrefix <- parPreFixs[k]
+        # Unfortunately indexing can't get quicker than this as far as I can tell.
+        columns_to_use <- sapply(strsplit(colnames(proposals), "|", fixed = TRUE), function(x) x == parPrefix)[1,]
+        currentPars <- proposals[,columns_to_use, drop = F]
+        colnames(currentPars) <- gsub(".*[|]", "", colnames(currentPars))
+        total_ll <- total_ll +  calc_ll_manager(currentPars, dadm, model_list[[i]])
+      }
     }
   }
   return(total_ll)

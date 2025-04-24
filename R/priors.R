@@ -46,6 +46,8 @@ prior <- function(design, type = NULL, update = NULL,
     type <- attr(update, "type")
   }
   if(is.null(type)) type <- 'standard'
+  if(type %in% c("diagonal", "blocked")) type <- "standard"
+
   input <- do.call(get_objects, c(list(design = design, type = type), update, list(...)))
   descriptions <- input$descriptions
   groups <- input$types
@@ -548,7 +550,7 @@ predict.emc.prior <- function(object,data = NULL,n_post=50,n_cores=1,
     dots$merge_chains <- TRUE; dots$by_subject <- TRUE
     samps <- do.call(parameters, c(list(object, N = n_subjects*n_post), dots))
     simDat <- suppressWarnings(mclapply(1:n_post,function(i){
-      do.call(make_data, c(list(samps[(1+((i-1)*n_subjects)):(i*n_subjects),],design = design[[k]], data = data[[k]], n_trials = n_trials), fix_dots(dots, make_data)))
+      do.call(make_data, c(list(samps[(1+((i-1)*n_subjects)):(i*n_subjects),],design = design[[k]], data = data[[k]], n_trials = n_trials, check_bounds = TRUE), fix_dots(dots, make_data)))
     },mc.cores=n_cores))
     # These were returned as FALSE since their parameter values fell outside of model bounds
     in_bounds <- !sapply(simDat, is.logical)
