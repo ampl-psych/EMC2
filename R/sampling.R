@@ -64,7 +64,7 @@ init <- function(pmwgs, start_mu = NULL, start_var = NULL,
     startpoints_nuis <- get_startpoints(pmwgs$sampler_nuis, start_mu = NULL, start_var = NULL, type = type_nuis)
     startpoints_comb <- merge_group_level(startpoints$tmu, startpoints_nuis$tmu,
                                           startpoints$tvar, startpoints_nuis$tvar,
-                                          pmwgs$nuisance)
+                                          pmwgs$nuisance, startpoints$subj_mu)
     pmwgs$sampler_nuis$samples <- fill_samples(samples = pmwgs$sampler_nuis$samples,
                                                                       group_level = startpoints_nuis,
                                                                       j = 1,
@@ -237,7 +237,7 @@ run_stage <- function(pmwgs,
     pars <- pars_comb <- gibbs_step(pmwgs, pmwgs$samples$alpha[!nuisance,,j-1], pmwgs$type)
     if(any(nuisance)){
       pars_nuis <- gibbs_step(pmwgs$sampler_nuis, pmwgs$samples$alpha[nuisance,,j-1], pmwgs$sampler_nuis$type)
-      pars_comb <- merge_group_level(pars$tmu, pars_nuis$tmu, pars$tvar, pars_nuis$tvar, nuisance)
+      pars_comb <- merge_group_level(pars$tmu, pars_nuis$tmu, pars$tvar, pars_nuis$tvar, nuisance, pars$subj_mu)
       pars_comb$alpha <- pmwgs$samples$alpha[,,j-1]
       pmwgs$sampler_nuis$samples <- fill_samples(samples = pmwgs$sampler_nuis$samples,
                                                                         group_level = pars_nuis,
@@ -685,15 +685,18 @@ calc_ll_manager <- function(proposals, dadm, model, component = NULL){
   return(lls)
 }
 
-merge_group_level <- function(tmu, tmu_nuis, tvar, tvar_nuis, is_nuisance){
+merge_group_level <- function(tmu, tmu_nuis, tvar, tvar_nuis, is_nuisance, subj_mu){
   n_pars <- length(is_nuisance)
   tmu_out <- numeric(n_pars)
   tmu_out[!is_nuisance] <- tmu
   tmu_out[is_nuisance] <- tmu_nuis
   tvar_out <- matrix(0, nrow = n_pars, ncol = n_pars)
   tvar_out[!is_nuisance, !is_nuisance] <- tvar
-  tvar_out[is_nuisance, is_nuisance] <- tvar_nuis
-  return(list(tmu = tmu_out, tvar = tvar_out))
+
+  subj_mu_out <- matrix(NA, ncol = ncol(subj_mu), nrow = length(tmu_out))
+  subj_mu_out[is_nuisance,] <- do.call(cbind, rep(list(c(tmu_nuis)), ncol(subj_mu)))
+  subj_mu_out[!is_nuisance,] <- subj_mu
+  return(list(tmu = tmu_out, tvar = tvar_out, subj_mu = subj_mu_out))
 }
 
 

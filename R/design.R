@@ -928,9 +928,9 @@ dm_list <- function(dadm)
 
       isin1 <- s_expand==i             # da
       isin2 <- attr(dadm,"s_data")==i  # data
-
-      attr(dl[[i]],"expand") <- expand_winner[isin2]-min(expand_winner[isin2]) + 1
-
+      if(length(isin2) > 0){
+        attr(dl[[i]],"expand") <- expand_winner[isin2]-min(expand_winner[isin2]) + 1
+      }
       attr(dl[[i]],"model") <- NULL
       attr(dl[[i]],"p_names") <- p_names
       attr(dl[[i]],"sampled_p_names") <- sampled_p_names
