@@ -99,19 +99,32 @@ log_likelihood_sdt <- function(pars,dadm, model,lb=-Inf, min_ll=log(1e-10))
   sum(pmax(min_ll,ll))
 }
 
+# Two options:
+# 1) component = NULL in which case we do all likelihoods in one block
+# 2) component = integer, in which case we are blocking the ll and only want that one
 log_likelihood_joint <- function(proposals, dadms, model_list, component = NULL){
   parPreFixs <- unique(gsub("[|].*", "", colnames(proposals)))
   i <- 0
+  k <- 0
   total_ll <- 0
-  if(!is.null(component)) dadms <- dadms[component]
   for(dadm in dadms){
-    if(is.data.frame(dadm)){
-      i <- i + 1
-      parPrefix <- parPreFixs[i]
-      columns_to_use <- sapply(strsplit(colnames(proposals), "|", fixed = TRUE), function(x) x == parPrefix)[1,]
-      currentPars <- proposals[,columns_to_use, drop = F]
-      colnames(currentPars) <- gsub(".*[|]", "", colnames(currentPars))
-      total_ll <- total_ll +  calc_ll_manager(currentPars, dadm, model_list[[i]])
+    i <- i + 1
+    if(is.null(component) || component == i){
+      if(is.data.frame(dadm)){
+        k <- k + 1
+        # Sometimes designs are the same across models (typically in fMRI)
+        # Instead of storing multiple, we just store a pointer to the first original design
+        if(is.numeric(attr(dadm, "designs"))){
+          ref_idx <- attr(dadm, "designs")
+          attr(dadm, "designs") <- attr(dadms[[ref_idx]], "designs")
+        }
+        parPrefix <- parPreFixs[k]
+        # Unfortunately indexing can't get quicker than this as far as I can tell.
+        columns_to_use <- sapply(strsplit(colnames(proposals), "|", fixed = TRUE), function(x) x == parPrefix)[1,]
+        currentPars <- proposals[,columns_to_use, drop = F]
+        colnames(currentPars) <- gsub(".*[|]", "", colnames(currentPars))
+        total_ll <- total_ll +  calc_ll_manager(currentPars, dadm, model_list[[i]])
+      }
     }
   }
   return(total_ll)

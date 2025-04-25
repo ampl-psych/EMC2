@@ -1,9 +1,10 @@
 pmwgs <- function(dadm, type, pars = NULL, prior = NULL,
                   nuisance = NULL, nuisance_non_hyper = NULL, ...) {
   if(is.data.frame(dadm)) dadm <- list(dadm)
+  if(is.null(pars)) pars <- names(sampled_pars(attr(dadm[[1]], "prior")))
+  if(is.null(prior)) prior <- attr(dadm[[1]], "prior")
   dadm <- extractDadms(dadm)
-  if(is.null(pars)) pars <- dadm$pars
-  if(is.null(prior)) prior <- dadm$prior
+
   dadm_list <-dadm$dadm_list
   # Storage for the samples.
   subjects <- sort(as.numeric(unique(dadm$subjects)))
@@ -12,10 +13,10 @@ pmwgs <- function(dadm, type, pars = NULL, prior = NULL,
 
   if(!is.null(nuisance_non_hyper)){
     is_nuisance <- is.element(seq_len(length(pars)), nuisance_non_hyper)
-    type <- "single"
+    nuis_type <- "single"
   } else if(!is.null(nuisance)) {
     is_nuisance <- is.element(seq_len(length(pars)), nuisance)
-    type <- "diagonal"
+    nuis_type <- "diagonal"
   } else{
     is_nuisance <- rep(F, length(pars))
   }
@@ -24,15 +25,15 @@ pmwgs <- function(dadm, type, pars = NULL, prior = NULL,
   sampler_nuis <- NULL
   if(any(is_nuisance)){
     sampler_nuis <- list(
-      samples = sample_store(dadm, pars, type, integrate = F,
+      samples = sample_store(dadm, pars, nuis_type, integrate = F,
                                                     is_nuisance = !is_nuisance, ...),
       n_subjects = length(subjects),
       n_pars = sum(is_nuisance),
       nuisance = rep(F, sum(is_nuisance)),
-      type = type
+      type = nuis_type
     )
-    if(type == "single") sampler_nuis$samples <- NULL
-    sampler_nuis <- add_info(sampler_nuis, prior$prior_nuis, type, ...)
+    if(nuis_type == "single") sampler_nuis$samples <- NULL
+    sampler_nuis <- add_info(sampler_nuis, prior$prior_nuis, nuis_type, ...)
   }
   samples <- sample_store(dadm, pars, type, is_nuisance = is_nuisance, ...)
   sampler <- list(
@@ -726,6 +727,7 @@ run_hyper <- function(type, data, prior = NULL, iter = 1000, n_chains =3, ...){
     )
     class(sampler) <- "pmwgs"
     sampler <- add_info(sampler, prior, type = type, ...)
+    sampler$type <- type
     startpoints <- get_startpoints(sampler, start_mu = NULL, start_var = NULL, type = type)
     sampler$samples <- fill_samples(samples = sampler$samples, group_level = startpoints, proposals = NULL,
                                     j = 1, n_pars = sampler$n_pars, type = type)
@@ -744,5 +746,6 @@ run_hyper <- function(type, data, prior = NULL, iter = 1000, n_chains =3, ...){
     emc[[j]] <- sampler
   }
   class(emc) <- "emc"
+  emc <- subset(emc, filter = 1)
   return(emc)
 }

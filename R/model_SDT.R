@@ -53,12 +53,12 @@ rPROBIT <- function(lR,pars,p_types=c("mean","sd","threshold"),lt=-Inf)
 #'            formula=list(mean ~ 0+S, sd ~ 1,threshold ~ 1),
 #'            matchfun=function(d)d$S==d$lR,
 #'            constants=c(sd=log(1),threshold=0),
-#'            model=probit)
+#'            model=SDT)
 #'
 #' p_vector <- sampled_pars(dprobit)
 #' @export
 
-probit <- function(){
+SDT <- function(){
   list(
   type="SDT",
   p_types=c("mean" = 0,"sd" = log(1),"threshold" = 0),

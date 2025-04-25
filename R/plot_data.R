@@ -17,7 +17,16 @@ check_data_plot <- function(data, defective_factor, subject, factors) {
   if (!is.null(factors) && !all(factors %in% names(data))) {
     stop("factors must name factors in data")
   }
-
+  n_bins <- 4
+  for(fact in factors){
+    if(is.numeric(data[,fact])){
+      if(length(unique(data[,fact])) > 6){
+        quartile_breaks <- quantile(data[,fact], probs = seq(0, 1, length.out = n_bins + 1), na.rm = TRUE)
+        # Bin the data into quartiles using these breakpoints
+        data[,fact] <- cut(data[,fact], breaks = quartile_breaks, include.lowest = TRUE, labels = paste0("Q", 1:n_bins))
+      }
+    }
+  }
   # Handle subject argument
   if (!is.null(subject)) {
     if(is.numeric(subject)) {
@@ -25,7 +34,7 @@ check_data_plot <- function(data, defective_factor, subject, factors) {
     } else {
       data <- data[data$subjects %in% subject, ]
     }
-    data$subjects <- droplevels(data$subjects)
+    data$subjects <- factor(data$subjects)
   }
 
   # Remove missing or infinite rt
@@ -435,7 +444,7 @@ plot_density <- function(input, post_predict = NULL, prior_predict = NULL,
     # If 'postn' in colnames => multiple sets => need quantiles
     if ("postn" %in% names(src_data)) {
       # We'll compute from/to from data range
-      rng <-  max(src_data$rt)
+      rng <-  quantile(src_data$rt, .99)
       dargs <- switch(
         src_type,
         "posterior" = add_defaults(posterior_args, to = rng),
@@ -730,7 +739,7 @@ plot_cdf <- function(input,
   prior_args <- add_defaults(prior_args, col = c("red", "#800080", "#CC00FF"))
 
   defective_levels <- levels(factor(data_sources[[1]][[defective_factor]]))
-  unique_group_keys <- unique(data_sources[[1]]$group_key)
+  unique_group_keys <- levels(factor(data_sources[[1]]$group_key))
 
   if (is.null(defective_levels) || length(defective_levels) == 0) {
     defective_levels <- "Level1"  # fallback

@@ -81,24 +81,20 @@ compute_gamma_diff_hrf <- function(tr, oversampling, time_length, onset, delay, 
     .Call(`_EMC2_compute_gamma_diff_hrf`, tr, oversampling, time_length, onset, delay, undershoot, dispersion, u_dispersion, ratio)
 }
 
-compute_glover_hrf <- function(tr, oversampling, time_length, onset, delay, undershoot, dispersion, u_dispersion, ratio) {
-    .Call(`_EMC2_compute_glover_hrf`, tr, oversampling, time_length, onset, delay, undershoot, dispersion, u_dispersion, ratio)
+compute_hrf <- function(tr, oversampling, time_length, onset, delay, undershoot, dispersion, u_dispersion, ratio) {
+    .Call(`_EMC2_compute_hrf`, tr, oversampling, time_length, onset, delay, undershoot, dispersion, u_dispersion, ratio)
 }
 
-compute_glover_time_derivative <- function(tr, oversampling, time_length, onset, delay, undershoot, dispersion, u_dispersion, ratio, delta = 0.1) {
-    .Call(`_EMC2_compute_glover_time_derivative`, tr, oversampling, time_length, onset, delay, undershoot, dispersion, u_dispersion, ratio, delta)
+compute_time_derivative <- function(tr, oversampling, time_length, onset, delay, undershoot, dispersion, u_dispersion, ratio, delta = 0.1) {
+    .Call(`_EMC2_compute_time_derivative`, tr, oversampling, time_length, onset, delay, undershoot, dispersion, u_dispersion, ratio, delta)
 }
 
-build_hrf_kernel <- function(hrf_model, tr, oversampling, time_length, onset, delay, undershoot, dispersion, u_dispersion, ratio) {
-    .Call(`_EMC2_build_hrf_kernel`, hrf_model, tr, oversampling, time_length, onset, delay, undershoot, dispersion, u_dispersion, ratio)
+build_hrf_kernel <- function(has_derivative, tr, oversampling, time_length, onset, delay, undershoot, dispersion, u_dispersion, ratio) {
+    .Call(`_EMC2_build_hrf_kernel`, has_derivative, tr, oversampling, time_length, onset, delay, undershoot, dispersion, u_dispersion, ratio)
 }
 
-compute_convolved_regressor <- function(exp_condition, hrf_model, frame_times, con_id, oversampling, min_onset, time_length, onset, delay, undershoot, dispersion, u_dispersion, ratio) {
-    .Call(`_EMC2_compute_convolved_regressor`, exp_condition, hrf_model, frame_times, con_id, oversampling, min_onset, time_length, onset, delay, undershoot, dispersion, u_dispersion, ratio)
-}
-
-construct_design_matrix <- function(frame_times, events, hrf_model, min_onset, oversampling, time_length, onset, delay, undershoot, dispersion, u_dispersion, ratio, add_intercept) {
-    .Call(`_EMC2_construct_design_matrix`, frame_times, events, hrf_model, min_onset, oversampling, time_length, onset, delay, undershoot, dispersion, u_dispersion, ratio, add_intercept)
+construct_design_matrix <- function(frame_times, events, has_derivative, min_onset, oversampling, time_length, onset, delay, undershoot, dispersion, u_dispersion, ratio, add_intercept) {
+    .Call(`_EMC2_construct_design_matrix`, frame_times, events, has_derivative, min_onset, oversampling, time_length, onset, delay, undershoot, dispersion, u_dispersion, ratio, add_intercept)
 }
 
 calc_ll <- function(p_matrix, data, constants, designs, type, bounds, transforms, pretransforms, p_types, min_ll, trend) {

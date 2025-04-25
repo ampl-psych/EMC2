@@ -321,9 +321,9 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
-// compute_glover_hrf
-NumericVector compute_glover_hrf(double tr, int oversampling, double time_length, double onset, double delay, double undershoot, double dispersion, double u_dispersion, double ratio);
-RcppExport SEXP _EMC2_compute_glover_hrf(SEXP trSEXP, SEXP oversamplingSEXP, SEXP time_lengthSEXP, SEXP onsetSEXP, SEXP delaySEXP, SEXP undershootSEXP, SEXP dispersionSEXP, SEXP u_dispersionSEXP, SEXP ratioSEXP) {
+// compute_hrf
+NumericVector compute_hrf(double tr, int oversampling, double time_length, double onset, double delay, double undershoot, double dispersion, double u_dispersion, double ratio);
+RcppExport SEXP _EMC2_compute_hrf(SEXP trSEXP, SEXP oversamplingSEXP, SEXP time_lengthSEXP, SEXP onsetSEXP, SEXP delaySEXP, SEXP undershootSEXP, SEXP dispersionSEXP, SEXP u_dispersionSEXP, SEXP ratioSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -336,13 +336,13 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< double >::type dispersion(dispersionSEXP);
     Rcpp::traits::input_parameter< double >::type u_dispersion(u_dispersionSEXP);
     Rcpp::traits::input_parameter< double >::type ratio(ratioSEXP);
-    rcpp_result_gen = Rcpp::wrap(compute_glover_hrf(tr, oversampling, time_length, onset, delay, undershoot, dispersion, u_dispersion, ratio));
+    rcpp_result_gen = Rcpp::wrap(compute_hrf(tr, oversampling, time_length, onset, delay, undershoot, dispersion, u_dispersion, ratio));
     return rcpp_result_gen;
 END_RCPP
 }
-// compute_glover_time_derivative
-NumericVector compute_glover_time_derivative(double tr, int oversampling, double time_length, double onset, double delay, double undershoot, double dispersion, double u_dispersion, double ratio, double delta);
-RcppExport SEXP _EMC2_compute_glover_time_derivative(SEXP trSEXP, SEXP oversamplingSEXP, SEXP time_lengthSEXP, SEXP onsetSEXP, SEXP delaySEXP, SEXP undershootSEXP, SEXP dispersionSEXP, SEXP u_dispersionSEXP, SEXP ratioSEXP, SEXP deltaSEXP) {
+// compute_time_derivative
+NumericVector compute_time_derivative(double tr, int oversampling, double time_length, double onset, double delay, double undershoot, double dispersion, double u_dispersion, double ratio, double delta);
+RcppExport SEXP _EMC2_compute_time_derivative(SEXP trSEXP, SEXP oversamplingSEXP, SEXP time_lengthSEXP, SEXP onsetSEXP, SEXP delaySEXP, SEXP undershootSEXP, SEXP dispersionSEXP, SEXP u_dispersionSEXP, SEXP ratioSEXP, SEXP deltaSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -356,17 +356,17 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< double >::type u_dispersion(u_dispersionSEXP);
     Rcpp::traits::input_parameter< double >::type ratio(ratioSEXP);
     Rcpp::traits::input_parameter< double >::type delta(deltaSEXP);
-    rcpp_result_gen = Rcpp::wrap(compute_glover_time_derivative(tr, oversampling, time_length, onset, delay, undershoot, dispersion, u_dispersion, ratio, delta));
+    rcpp_result_gen = Rcpp::wrap(compute_time_derivative(tr, oversampling, time_length, onset, delay, undershoot, dispersion, u_dispersion, ratio, delta));
     return rcpp_result_gen;
 END_RCPP
 }
 // build_hrf_kernel
-NumericMatrix build_hrf_kernel(std::string hrf_model, double tr, int oversampling, double time_length, double onset, double delay, double undershoot, double dispersion, double u_dispersion, double ratio);
-RcppExport SEXP _EMC2_build_hrf_kernel(SEXP hrf_modelSEXP, SEXP trSEXP, SEXP oversamplingSEXP, SEXP time_lengthSEXP, SEXP onsetSEXP, SEXP delaySEXP, SEXP undershootSEXP, SEXP dispersionSEXP, SEXP u_dispersionSEXP, SEXP ratioSEXP) {
+NumericMatrix build_hrf_kernel(bool has_derivative, double tr, int oversampling, double time_length, double onset, double delay, double undershoot, double dispersion, double u_dispersion, double ratio);
+RcppExport SEXP _EMC2_build_hrf_kernel(SEXP has_derivativeSEXP, SEXP trSEXP, SEXP oversamplingSEXP, SEXP time_lengthSEXP, SEXP onsetSEXP, SEXP delaySEXP, SEXP undershootSEXP, SEXP dispersionSEXP, SEXP u_dispersionSEXP, SEXP ratioSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< std::string >::type hrf_model(hrf_modelSEXP);
+    Rcpp::traits::input_parameter< bool >::type has_derivative(has_derivativeSEXP);
     Rcpp::traits::input_parameter< double >::type tr(trSEXP);
     Rcpp::traits::input_parameter< int >::type oversampling(oversamplingSEXP);
     Rcpp::traits::input_parameter< double >::type time_length(time_lengthSEXP);
@@ -376,42 +376,19 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< double >::type dispersion(dispersionSEXP);
     Rcpp::traits::input_parameter< double >::type u_dispersion(u_dispersionSEXP);
     Rcpp::traits::input_parameter< double >::type ratio(ratioSEXP);
-    rcpp_result_gen = Rcpp::wrap(build_hrf_kernel(hrf_model, tr, oversampling, time_length, onset, delay, undershoot, dispersion, u_dispersion, ratio));
-    return rcpp_result_gen;
-END_RCPP
-}
-// compute_convolved_regressor
-List compute_convolved_regressor(NumericMatrix exp_condition, std::string hrf_model, NumericVector frame_times, std::string con_id, int oversampling, double min_onset, double time_length, double onset, double delay, double undershoot, double dispersion, double u_dispersion, double ratio);
-RcppExport SEXP _EMC2_compute_convolved_regressor(SEXP exp_conditionSEXP, SEXP hrf_modelSEXP, SEXP frame_timesSEXP, SEXP con_idSEXP, SEXP oversamplingSEXP, SEXP min_onsetSEXP, SEXP time_lengthSEXP, SEXP onsetSEXP, SEXP delaySEXP, SEXP undershootSEXP, SEXP dispersionSEXP, SEXP u_dispersionSEXP, SEXP ratioSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< NumericMatrix >::type exp_condition(exp_conditionSEXP);
-    Rcpp::traits::input_parameter< std::string >::type hrf_model(hrf_modelSEXP);
-    Rcpp::traits::input_parameter< NumericVector >::type frame_times(frame_timesSEXP);
-    Rcpp::traits::input_parameter< std::string >::type con_id(con_idSEXP);
-    Rcpp::traits::input_parameter< int >::type oversampling(oversamplingSEXP);
-    Rcpp::traits::input_parameter< double >::type min_onset(min_onsetSEXP);
-    Rcpp::traits::input_parameter< double >::type time_length(time_lengthSEXP);
-    Rcpp::traits::input_parameter< double >::type onset(onsetSEXP);
-    Rcpp::traits::input_parameter< double >::type delay(delaySEXP);
-    Rcpp::traits::input_parameter< double >::type undershoot(undershootSEXP);
-    Rcpp::traits::input_parameter< double >::type dispersion(dispersionSEXP);
-    Rcpp::traits::input_parameter< double >::type u_dispersion(u_dispersionSEXP);
-    Rcpp::traits::input_parameter< double >::type ratio(ratioSEXP);
-    rcpp_result_gen = Rcpp::wrap(compute_convolved_regressor(exp_condition, hrf_model, frame_times, con_id, oversampling, min_onset, time_length, onset, delay, undershoot, dispersion, u_dispersion, ratio));
+    rcpp_result_gen = Rcpp::wrap(build_hrf_kernel(has_derivative, tr, oversampling, time_length, onset, delay, undershoot, dispersion, u_dispersion, ratio));
     return rcpp_result_gen;
 END_RCPP
 }
 // construct_design_matrix
-DataFrame construct_design_matrix(NumericVector frame_times, DataFrame events, std::string hrf_model, double min_onset, int oversampling, double time_length, double onset, double delay, double undershoot, double dispersion, double u_dispersion, double ratio, bool add_intercept);
-RcppExport SEXP _EMC2_construct_design_matrix(SEXP frame_timesSEXP, SEXP eventsSEXP, SEXP hrf_modelSEXP, SEXP min_onsetSEXP, SEXP oversamplingSEXP, SEXP time_lengthSEXP, SEXP onsetSEXP, SEXP delaySEXP, SEXP undershootSEXP, SEXP dispersionSEXP, SEXP u_dispersionSEXP, SEXP ratioSEXP, SEXP add_interceptSEXP) {
+DataFrame construct_design_matrix(NumericVector frame_times, DataFrame events, bool has_derivative, double min_onset, int oversampling, double time_length, double onset, double delay, double undershoot, double dispersion, double u_dispersion, double ratio, bool add_intercept);
+RcppExport SEXP _EMC2_construct_design_matrix(SEXP frame_timesSEXP, SEXP eventsSEXP, SEXP has_derivativeSEXP, SEXP min_onsetSEXP, SEXP oversamplingSEXP, SEXP time_lengthSEXP, SEXP onsetSEXP, SEXP delaySEXP, SEXP undershootSEXP, SEXP dispersionSEXP, SEXP u_dispersionSEXP, SEXP ratioSEXP, SEXP add_interceptSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< NumericVector >::type frame_times(frame_timesSEXP);
     Rcpp::traits::input_parameter< DataFrame >::type events(eventsSEXP);
-    Rcpp::traits::input_parameter< std::string >::type hrf_model(hrf_modelSEXP);
+    Rcpp::traits::input_parameter< bool >::type has_derivative(has_derivativeSEXP);
     Rcpp::traits::input_parameter< double >::type min_onset(min_onsetSEXP);
     Rcpp::traits::input_parameter< int >::type oversampling(oversamplingSEXP);
     Rcpp::traits::input_parameter< double >::type time_length(time_lengthSEXP);
@@ -422,7 +399,7 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< double >::type u_dispersion(u_dispersionSEXP);
     Rcpp::traits::input_parameter< double >::type ratio(ratioSEXP);
     Rcpp::traits::input_parameter< bool >::type add_intercept(add_interceptSEXP);
-    rcpp_result_gen = Rcpp::wrap(construct_design_matrix(frame_times, events, hrf_model, min_onset, oversampling, time_length, onset, delay, undershoot, dispersion, u_dispersion, ratio, add_intercept));
+    rcpp_result_gen = Rcpp::wrap(construct_design_matrix(frame_times, events, has_derivative, min_onset, oversampling, time_length, onset, delay, undershoot, dispersion, u_dispersion, ratio, add_intercept));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -481,10 +458,9 @@ static const R_CallMethodDef CallEntries[] = {
     {"_EMC2_stopfn_rdex", (DL_FUNC) &_EMC2_stopfn_rdex, 10},
     {"_EMC2_fft_convolve_equiv_cpp", (DL_FUNC) &_EMC2_fft_convolve_equiv_cpp, 3},
     {"_EMC2_compute_gamma_diff_hrf", (DL_FUNC) &_EMC2_compute_gamma_diff_hrf, 9},
-    {"_EMC2_compute_glover_hrf", (DL_FUNC) &_EMC2_compute_glover_hrf, 9},
-    {"_EMC2_compute_glover_time_derivative", (DL_FUNC) &_EMC2_compute_glover_time_derivative, 10},
+    {"_EMC2_compute_hrf", (DL_FUNC) &_EMC2_compute_hrf, 9},
+    {"_EMC2_compute_time_derivative", (DL_FUNC) &_EMC2_compute_time_derivative, 10},
     {"_EMC2_build_hrf_kernel", (DL_FUNC) &_EMC2_build_hrf_kernel, 10},
-    {"_EMC2_compute_convolved_regressor", (DL_FUNC) &_EMC2_compute_convolved_regressor, 13},
     {"_EMC2_construct_design_matrix", (DL_FUNC) &_EMC2_construct_design_matrix, 13},
     {"_EMC2_calc_ll", (DL_FUNC) &_EMC2_calc_ll, 11},
     {"_EMC2_c_add_charvectors", (DL_FUNC) &_EMC2_c_add_charvectors, 2},
