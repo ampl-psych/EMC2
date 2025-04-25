@@ -581,14 +581,14 @@ design_model <- function(data,design,model=NULL,
   if (compress){
     dadm <- compress_dadm(da,designs=out, Fcov=design$Fcovariates,Ffun=names(design$Ffunctions))
     # Change expansion names
-    attr(dadm,"expand_all") <- attr(dadm,"expand")
+    # attr(dadm,"expand_all") <- attr(dadm,"expand")
     attr(dadm,"expand") <- attr(dadm,"expand_winner")
     attr(dadm,"expand_winner") <- NULL
   }  else {
     dadm <- da
     attr(dadm,"designs") <- out
     attr(dadm,"s_expand") <- da$subjects
-    attr(dadm,"expand_all") <- 1:nrow(dadm)
+    # attr(dadm,"expand_all") <- 1:nrow(dadm)
     attr(dadm,"expand") <- 1:(nrow(dadm)/length(levels(dadm$lR)))
   }
   p_names <-  unlist(lapply(out,function(x){dimnames(x)[[2]]}),use.names=FALSE)
@@ -785,7 +785,7 @@ dm_list <- function(dadm)
 
       # attr(dl[[i]],"ok_trials") <- ok_trials[isin2]
       # if (!is.null(expand_winner)){
-        attr(dl[[i]],"expand") <- expand_winner[isin2]-min(expand_winner[isin2]) + 1
+      attr(dl[[i]],"expand") <- expand_winner[isin2]-min(expand_winner[isin2]) + 1
       # }
       #
       # if (!is.null(attr(dadm,"expand_uc"))){
