@@ -444,7 +444,7 @@ plot_density <- function(input, post_predict = NULL, prior_predict = NULL,
     # If 'postn' in colnames => multiple sets => need quantiles
     if ("postn" %in% names(src_data)) {
       # We'll compute from/to from data range
-      rng <-  max(src_data$rt)
+      rng <-  quantile(src_data$rt, .99)
       dargs <- switch(
         src_type,
         "posterior" = add_defaults(posterior_args, to = rng),
