@@ -254,6 +254,21 @@ IntegerVector which_rcpp(LogicalVector x) {
   return out;
 }
 
+LogicalVector lr_all(LogicalVector ok, int n_side){
+  const int n_rows  = ok.size();
+  const int n_cols  = n_rows / n_side;   // one column = one trial/accumulator pair
+
+  LogicalVector out(n_rows);
+  for (int c = 0; c < n_cols; ++c) {
+    // indices for this pair
+    const int idxL = n_side * c;
+    const int idxR = idxL + 1;
+
+    const bool both = ok[idxL] && ok[idxR];
+    out[idxL] = out[idxR] = both;
+  }
+  return out;
+}
 
 // For do_bounds
 struct BoundSpec {
