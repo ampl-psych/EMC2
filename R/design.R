@@ -210,7 +210,7 @@ group_design <- function(formula, data, subject_design, contrasts = NULL){
   par_names <- names(sampled_pars(subject_design))
 
   # Extract dependent variables (left hand side) from formula
-  lhs_terms <- unlist(lapply(formula, function(x) as.character(stats::terms(as.formula(x))[[2]])))
+  lhs_terms <- unlist(lapply(formula, function(x) as.character(stats::terms(x)[[2]])))
 
   # Check if all dependent variables are in par_names
   if (!all(lhs_terms %in% par_names)) {
