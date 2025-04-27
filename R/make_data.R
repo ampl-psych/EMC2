@@ -244,6 +244,10 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
   pars <- do_transform(pars, model()$transform)
   pars <- model()$Ttransform(pars, data)
   pars <- add_bound(pars, model()$bound, data$lR)
+  # For all but DDM, if one accumulator has bad bounds whole trial must be removed.
+  # Could also use length(unique(data$lR))
+  if (model()$type != "DDM") attr(pars, "ok") <- as.vector(apply(matrix(attr(pars, "ok"),
+    nrow=length(design$Rlevels)),2,\(x)rep(all(x),length(design$Rlevels))))
   pars_ok <- attr(pars, 'ok')
   if(mean(!pars_ok) > .1){
     warning("More than 10% of parameter values fall out of model bounds, see <model_name>$bounds()")

@@ -123,6 +123,10 @@ get_pars_matrix <- function(p_vector,dadm, model) {
   pars <- do_transform(pars, model$transform)
   pars <- model$Ttransform(pars, dadm)
   pars <- add_bound(pars, model$bound, dadm$lR)
+  # For all but DDM, if one accumulator has bad bounds whole trial must be removed.
+  # Could also use length(unique(dadm$lR))
+  if (model$type != "DDM") attr(pars, "ok") <- as.vector(apply(matrix(attr(pars, "ok"),
+    nrow=length(levels(dadm$lR))),2,\(x)rep(all(x),length(levels(dadm$lR)))))
   return(pars)
 }
 
