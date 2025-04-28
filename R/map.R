@@ -31,7 +31,7 @@ do_bound <- function(pars,bound, lR = NULL) {
     (tpars[names(bound$exception),] == bound$exception)
   bound <- colSums(ok) == nrow(ok)
   if(!is.null(lR)){
-    lvl <- nlevels(lR)
+    lvl <- length(unique(lR))
     bound <- rep(colSums(matrix(bound, lvl)) == lvl, each = lvl)
   }
   return(bound)
