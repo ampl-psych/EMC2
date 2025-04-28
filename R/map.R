@@ -31,7 +31,7 @@ do_bound <- function(pars,bound, lR = NULL) {
     (tpars[names(bound$exception),] == bound$exception)
   bound <- colSums(ok) == nrow(ok)
   if(!is.null(lR)){
-    lvl <- nlevels(lR)
+    lvl <- length(unique(lR))
     bound <- rep(colSums(matrix(bound, lvl)) == lvl, each = lvl)
   }
   return(bound)
@@ -39,7 +39,7 @@ do_bound <- function(pars,bound, lR = NULL) {
 
 # This form used in get_pars
 add_bound <- function(pars,bound, lR = NULL) {
-  attr(pars, "ok") <- do_bound(pars,bound, lR = NULL)
+  attr(pars, "ok") <- do_bound(pars,bound, lR = lR)
   pars
 }
 
@@ -123,6 +123,8 @@ get_pars_matrix <- function(p_vector,dadm, model) {
   pars <- do_transform(pars, model$transform)
   pars <- model$Ttransform(pars, dadm)
   pars <- add_bound(pars, model$bound, dadm$lR)
+  # For all but DDM, if one accumulator has bad bounds whole trial must be removed.
+  # Could also use length(unique(dadm$lR))
   return(pars)
 }
 
