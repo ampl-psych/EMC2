@@ -493,7 +493,7 @@ if (type=="DDM") {
       datar$lSmagnitude <- as.numeric(lSmagnitude)
     }
   }
-  if (type %in% c("MT","TC")) {
+  if (type %in% c("BE","TC")) {
     datar <- cbind(do.call(rbind,lapply(1:2,function(x){data})),
       lR=factor(rep(1:2,each=dim(data)[1]),levels=1:2))
     if (!is.null(matchfun)) {
@@ -508,7 +508,7 @@ if (type=="DDM") {
     R <- datar$R
     R[is.na(R)] <- levels(datar$lR)[1]
 
-    if (type %in% c("MT","TC")) datar$winner <- NA else
+    if (type %in% c("BE","TC")) datar$winner <- NA else
       datar$winner <- datar$lR==R
     # datar$winner[is.na(datar$winner)] <- FALSE
   }
@@ -805,6 +805,8 @@ design_model <- function(data,design,model=NULL,
   }
   attr(dadm,"ok_trials") <- is.finite(data$rt)
   attr(dadm,"s_data") <- data$subjects
+  if (model()$type %in% c("BE","TC"))
+    attr(dadm,"dL") <- get_dL(length(levels(dadm$R)),model()$type)
   dadm
 }
 
@@ -968,6 +970,11 @@ dm_list <- function(dadm)
       if (!is.null(attr(dadm,"UC"))){
         attr(dl[[i]],"UC") <- attr(dadm,"UC")[names(attr(dadm,"UC"))==i]
       }
+
+      # TE and BE
+      if (!is.null(attr(dadm,"dL")))
+        attr(dl[[i]],"dL") <- attr(dadm,"dL")
+
     }
   }
 

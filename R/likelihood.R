@@ -338,3 +338,42 @@ log_likelihood_race_ss <- function(pars,dadm,model,min_ll=log(1e-10))
   sum(allLL[attr(dadm,"expand")])
 }
 
+#### BE and TE (mt = multiple threshold) ----
+
+log_likelihood_mt <- function(pars,dadm,model,min_ll=log(1e-10),n_cores=10)
+  # Multiple threshold (BE or TC) summed log likelihood
+  # attr(dadm,"dL")
+{
+
+  mt <- function(i,dadm,tmats,pmats) {
+    i2 <- i*2
+    # Get look up table for current rating (dadm$R[i2])
+    pick <- attr(dadm,"dL")[attr(dadm,"dL")[,"RR"]==as.numeric(dadm$R[i2]),,drop=FALSE]
+    tmp <- try(n1PDF_MTR_1(rt=dadm$rt[i2],
+      pars = pmats[c(pick[1,"sa"],pick[1,"nsa"]),i,],
+      dl = tmats[pick[1,"nsa"],i,pick[1,"lt"]],
+      du = tmats[pick[1,"nsa"],i,pick[1,"ut"] ],
+      b = tmats[pick[1,"sa"],i,pick[1,"tt"]]),silent=TRUE)
+    if (inherits(tmp,"try-error")) return(0) else if (nrow(pick)>1) { # middle in odd
+      tmp1 <- try(n1PDF_MTR_1(rt=dadm$rt[i2],
+        pars = pmats[c(pick[2,"sa"],pick[2,"nsa"]),i,],
+        dl = tmats[pick[2,"nsa"],i,pick[2,"lt"]],
+        du = tmats[pick[2,"nsa"],i,pick[2,"ut"] ],
+        b = tmats[pick[2,"sa"],i,pick[2,"tt"]]),silent=TRUE)
+      if (inherits(tmp1,"try-error")) return(0) else tmp <- tmp + tmp1
+    }
+    tmp
+  }
+
+  Dnams <- dimnames(pars)[[2]][substr(dimnames(pars)[[2]],1,2)=="DT"]
+  tmats <- array(cbind(rep(0,dim(pars)[1]),pars[,c(Dnams,"b")]),
+                 dim=c(2,nrow(pars)/2,2+length(Dnams)),
+                 dimnames=list(NULL,NULL,c("DT0",Dnams,"b")))
+  pnams <- dimnames(pars)[[2]][!(dimnames(pars)[[2]] %in% c(Dnams,"b"))]
+  pmats <- array(pars[,pnams],dim=c(2,nrow(pars)/2,length(pnams)),
+                 dimnames=list(NULL,NULL,pnams))
+  nt <- dim(pmats)[2]
+  ll <- log(unlist(mclapply(1:nt,mt,dadm=dadm,tmats=tmats,pmats=pmats,mc.cores=n_cores)))
+  ll[is.na(ll) | is.nan(ll) | ll == Inf] <- -Inf
+  return(sum(pmax(min_ll,ll[attr(dadm,"expand")])))
+}
