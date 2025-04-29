@@ -22,6 +22,27 @@ do_pre_transform <- function(p_vector,transform)
   p_vector
 }
 
+# This form used in random number generation
+do_bound <- function(pars,bound, lR = NULL) {
+  tpars <- t(pars[,colnames(bound$minmax),drop=FALSE])
+  ok <- tpars > bound$minmax[1,] & tpars < bound$minmax[2,]
+  if (!is.null(bound$exception)) ok[names(bound$exception),] <-
+    ok[names(bound$exception),] |
+    (tpars[names(bound$exception),] == bound$exception)
+  bound <- colSums(ok) == nrow(ok)
+  if(!is.null(lR)){
+    lvl <- length(unique(lR))
+    bound <- rep(colSums(matrix(bound, lvl)) == lvl, each = lvl)
+  }
+  return(bound)
+}
+
+# This form used in get_pars
+add_bound <- function(pars,bound, lR = NULL) {
+  attr(pars, "ok") <- do_bound(pars,bound, lR = lR)
+  pars
+}
+
 
 #### Functions to look at parameters ----
 
@@ -101,7 +122,7 @@ get_pars_matrix <- function(p_vector,dadm, model) {
   pars <- map_p(add_constants(p_vector,attr(dadm,"constants")),dadm, model = model)
   pars <- do_transform(pars, model$transform)
   pars <- model$Ttransform(pars, dadm)
-  pars <- add_bound(pars, model$bound)
+  pars <- add_bound(pars, model$bound, dadm$lR)
   return(pars)
 }
 
@@ -369,21 +390,7 @@ fill_bound <- function(bound, model) {
   filled_bound
 }
 
-# This form used in random number generation
-do_bound <- function(pars,bound) {
-  tpars <- t(pars[,colnames(bound$minmax),drop=FALSE])
-  ok <- tpars > bound$minmax[1,] & tpars < bound$minmax[2,]
-  if (!is.null(bound$exception)) ok[names(bound$exception),] <-
-    ok[names(bound$exception),] |
-    (tpars[names(bound$exception),] == bound$exception)
-  apply(ok,2,all)
-}
 
-# This form used in get_pars
-add_bound <- function(pars,bound) {
-  attr(pars,"ok") <- do_bound(pars,bound)
-  pars
-}
 
 generate_design_equations <- function(design_matrix,
                                       factor_cols = NULL,

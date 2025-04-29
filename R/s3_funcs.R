@@ -977,16 +977,16 @@ get_data.emc <- function(emc) {
     for(i in 1:length(dat)){
       design <- get_design(emc)[[i]]
       tmp <- do.call(rbind,lapply(emc[[1]]$data,function(x){
-        expand <- attr(x[[i]],"expand")
-        if(is.null(expand)) expand <- 1:nrow(x[[i]])
-        return(x[[i]][expand,])
+        cur <- x[[i]]
+        if(is.null(cur$winner)){
+          cur$winner <- TRUE
+        }
+        cur <- cur[cur$winner,]
+        expand <- attr(cur,"expand")
+        if(is.null(expand)) expand <- 1:nrow(cur)
+        return(cur[expand,])
       }))
       row.names(tmp) <- NULL
-      if(is.null(tmp$lR)){
-        tmp$lR <- 1
-        tmp$lR <- factor(tmp$lR)
-      }
-      tmp <- tmp[tmp$lR == levels(tmp$lR)[1],]
       tmp <- tmp[,!(colnames(tmp) %in% c("trials","lR","lM", "winner", "SlR", "RACE", names(design$Ffunctions)))]
       dat[[i]] <- tmp
     }
@@ -994,16 +994,15 @@ get_data.emc <- function(emc) {
   } else{
     design <- get_design(emc)[[1]]
     dat <- do.call(rbind,lapply(emc[[1]]$data,function(x){
+      if(is.null(x$winner)){
+        x$winner <- TRUE
+      }
+      x <- x[x$winner,]
       expand <- attr(x,"expand")
       if(is.null(expand)) expand <- 1:nrow(x)
       return(x[expand,])
     }))
     row.names(dat) <- NULL
-    if(is.null(dat$lR)){
-      dat$lR <- 1
-      dat$lR <- factor(dat$lR)
-    }
-    dat <- dat[dat$lR == levels(dat$lR)[1],]
     dat <- dat[,!(colnames(dat) %in% c("trials","lR","lM","winner", "SlR", "RACE", names(design$Ffunctions)))]
   }
   return(dat)

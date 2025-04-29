@@ -482,16 +482,12 @@ if (type=="DDM") {
     datar <- datar[order(rep(1:dim(data)[1],nacc),datar$lR),]
     if (!is.null(matchfun)) {
       lM <- matchfun(datar)
-      if (!is.factor(lM))
-        datar$lM <- factor(lM) else
+      if (!is.factor(lM)){
+        datar$lM <- factor(lM)
+      } else{
         datar$lM <- factor(lM,levels=levels(lM))
+      }
     }
-    # if (!is.null(matchfun)) {
-    #   lM <- matchfun(datar)
-    #   # if (any(is.na(lM)) || !(is.logical(lM)))
-    #   #   stop("matchfun not scoring properly")
-    #   datar$lM <- factor(lM)
-    # }
     # Advantage NAFC
     nam <- unlist(lapply(strsplit(dimnames(datar)[[2]],"lS"),function(x)x[[1]]))
     islS <- nam ==""
@@ -786,11 +782,20 @@ design_model <- function(data,design,model=NULL,
   if (!is.null(rt_resolution) & !is.null(da$rt)) da$rt <- round(da$rt/rt_resolution)*rt_resolution
   if (compress){
     dadm <- compress_dadm(da,designs=out, Fcov=design$Fcovariates,Ffun=names(design$Ffunctions))
+    # Change expansion names
+    # attr(dadm,"expand_all") <- attr(dadm,"expand")
+    attr(dadm,"expand") <- attr(dadm,"expand_winner")
+    attr(dadm,"expand_winner") <- NULL
   }  else {
     dadm <- da
     attr(dadm,"designs") <- out
     attr(dadm,"s_expand") <- da$subjects
-    attr(dadm,"expand") <- 1:dim(dadm)[1]
+    # attr(dadm,"expand_all") <- 1:nrow(dadm)
+    if(is.null(dadm$lR)){
+      attr(dadm,"expand") <- 1:nrow(dadm)
+    } else{
+      attr(dadm,"expand") <- 1:(nrow(dadm)/length(unique(dadm$lR)))
+    }
   }
   p_names <-  unlist(lapply(out,function(x){dimnames(x)[[2]]}),use.names=FALSE)
   bad_constants <- names(design$constants)[!(names(design$constants) %in% p_names)]
@@ -926,7 +931,7 @@ dm_list <- function(dadm)
   dms_mri <- attr(dadm, "design_matrix")
 
   # winner on expanded dadm
-  expand_winner <- attr(dadm,"expand_winner")
+  expand_winner <- attr(dadm,"expand")
   # subjects for first level of lR in expanded dadm
   slR1=dadm$subjects[expand][dadm$lR[expand]==levels(dadm$lR)[[1]]]
 
@@ -939,14 +944,15 @@ dm_list <- function(dadm)
     if(is.null(attr(dadm, "custom_ll"))){
 
       isin1 <- s_expand==i             # da
-      # isin2 <- attr(dadm,"s_data")==i  # data
-
-
+      isin2 <- attr(dadm,"s_data")==i  # data
+      if(length(isin2) > 0){
+        attr(dl[[i]],"expand") <- expand_winner[isin2]-min(expand_winner[isin2]) + 1
+      }
       attr(dl[[i]],"model") <- NULL
       attr(dl[[i]],"p_names") <- p_names
       attr(dl[[i]],"sampled_p_names") <- sampled_p_names
       attr(dl[[i]],"designs") <- sub_design(designs,isin)
-      if(!is.null(expand)) attr(dl[[i]],"expand") <- expand[isin1]-min(expand[isin1]) + 1
+      # if(!is.null(expand)) attr(dl[[i]],"expand_all") <- expand[isin1]-min(expand[isin1]) + 1
       attr(dl[[i]],"contract") <- NULL
       attr(dl[[i]],"expand_winner") <- NULL
       attr(dl[[i]],"ok_dadm_winner") <- NULL
@@ -966,35 +972,6 @@ dm_list <- function(dadm)
       attr(dl[[i]], "unique_nortR") <- NULL
       attr(dl[[i]], "expand_nort") <- NULL
       attr(dl[[i]], "expand_nortR") <- NULL
-      # attr(dl[[i]],"ok_dadm_winner") <- ok_dadm_winner[isin]
-      # attr(dl[[i]],"ok_dadm_looser") <- ok_dadm_looser[isin]
-      #
-      # attr(dl[[i]],"ok_da_winner") <- ok_da_winner[isin1]
-      # attr(dl[[i]],"ok_da_looser") <- ok_da_looser[isin1]
-
-      # attr(dl[[i]],"unique_nort") <- unique_nort[isin]
-      # attr(dl[[i]],"unique_nortR") <- unique_nortR[isin]
-
-      # isinlR1 <- slR1==i
-
-      # if (!is.null(expand_nort)){
-      #   attr(dl[[i]],"expand_nort") <-  expand_nort[isin] - min(expand_nort[isin]) + 1
-      # }
-      # if (!is.null(expand_nortR)){
-      #   attr(dl[[i]],"expand_nortR") <- expand_nortR[isin]-min(expand_nortR[isin]) + 1
-      # }
-
-      # attr(dl[[i]],"ok_trials") <- ok_trials[isin2]
-      # if (!is.null(expand_winner)){
-      #   attr(dl[[i]],"expand_winner") <- expand_winner[isin2]-min(expand_winner[isin2]) + 1
-      # }
-      #
-      # if (!is.null(attr(dadm,"expand_uc"))){
-      #   attr(dl[[i]],"expand_uc") <- as.numeric(factor(expand_uc[isin2]))
-      # }
-      # if (!is.null(attr(dadm,"expand_lc"))){
-      #   attr(dl[[i]],"expand_lc") <- as.numeric(factor(expand_lc[isin2]))
-      # }
 
       if (!is.null(attr(dadm,"LT"))){
         attr(dl[[i]],"LT") <- attr(dadm,"LT")[names(attr(dadm,"LT"))==i]
