@@ -65,6 +65,7 @@ update_latent_cov <- function(pars, dadm, model){
   weights <- matrix(NA, nrow = nrow(dadm), ncol = n_particles*n_dists + 1)
   latents <- matrix(NA, nrow = nrow(dadm), ncol = n_particles*n_dists +1)
   noisy_covs <- list()
+  all_pars <- c(pars, attr(dadm, "constants"))
   for(cov in model$noisy_cov){
     latent_pars <- get_noisy_cov_pnames(cov)
 
@@ -80,18 +81,18 @@ update_latent_cov <- function(pars, dadm, model){
     for(i in 1:(n_particles*n_dists + 1)){
       if(i != 1){ # The old state is particle 1
         if(i < (1 + n_particles)){
-          noisy_cov$latent <- rnorm(nrow(noisy_cov), mean = noisy_cov$obs, sd = exp(pars[latent_pars[3]]))
+          noisy_cov$latent <- rnorm(nrow(noisy_cov), mean = noisy_cov$obs, sd = exp(all_pars[latent_pars[3]]))
         } else if(i < (1 + 2*n_particles)){
-          noisy_cov$latent <- rnorm(nrow(noisy_cov), mean = prev_latent, sd = exp(pars[latent_pars[3]]))
+          noisy_cov$latent <- rnorm(nrow(noisy_cov), mean = prev_latent, sd = exp(all_pars[latent_pars[3]]))
         } else{
-          noisy_cov$latent <- rnorm(nrow(noisy_cov), mean = noisy_cov$running_mu, sd = cur_sd)
+          noisy_cov$latent <- rnorm(nrow(noisy_cov), mean = noisy_cov$obs, sd = 1)
         }
       }
       # Calculate the likelihood
       ll <- calc_ll_R(pars, model, fill_dadm(dadm, noisy_cov, cov), return_sum = FALSE)
       # For now assign each distribution a 1/3 weight
-      lm <- 1/3*dnorm(noisy_cov$latent, mean = noisy_cov$obs, sd = exp(pars[latent_pars[3]])) +
-        1/3*dnorm(noisy_cov$latent, mean = prev_latent, sd = exp(pars[latent_pars[3]])) +
+      lm <- 1/3*dnorm(noisy_cov$latent, mean = noisy_cov$obs, sd = exp(all_pars[latent_pars[3]])) +
+        1/3*dnorm(noisy_cov$latent, mean = prev_latent, sd = exp(all_pars[latent_pars[3]])) +
         1/3*dnorm(noisy_cov$latent, mean = noisy_cov$running_mu, sd = cur_sd)
       # Importance correction of all proposal densities
       l <- ll - log(lm)
@@ -144,7 +145,7 @@ running_moments <- function(new_latent, old_mu, old_sd, idx){
   new_var <- ((idx - 1)*(old_sd^2) + (delta^2 * idx / n_new)) / (n_new - 1)
   list(
     mu = meanNew,
-    sd   = sqrt(new_var)
+    sd   = min(sqrt(new_var), 0.01)
   )
 }
 
