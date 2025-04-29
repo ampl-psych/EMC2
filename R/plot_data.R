@@ -443,16 +443,10 @@ plot_density <- function(input, post_predict = NULL, prior_predict = NULL,
 
     # If 'postn' in colnames => multiple sets => need quantiles
     if ("postn" %in% names(src_data)) {
-      # We'll compute from/to from data range
-      rng <-  quantile(src_data$rt, .99)
       dargs <- switch(
         src_type,
-        "posterior" = add_defaults(posterior_args, to = rng),
-        "prior"     = {
-          rng2 <- quantile(src_data$rt, c(0.975))
-          add_defaults(prior_args, to = rng2)
-        },
-        dots
+        "posterior" = posterior_args,
+        "prior"     = prior_args
       )
 
       splitted <- split(src_data, src_data$group_key)
@@ -460,7 +454,7 @@ plot_density <- function(input, post_predict = NULL, prior_predict = NULL,
       dens_list[[src_name]] <- lapply(splitted, function(dg) {
         postn_splits <- split(dg, dg$postn)
         lapply(postn_splits, function(dsub) {
-          compute_def_dens(dsub, defective_factor, dargs)
+          compute_def_dens(dsub, defective_factor, dargs, from = check$xlim[1]-0.05, to = check$xlim[2] + 0.05)
         })
       })
 
@@ -494,11 +488,9 @@ plot_density <- function(input, post_predict = NULL, prior_predict = NULL,
       }
 
     } else {
-      # Single dataset
-      rng <- quantile(src_data$rt, .99)
-      dargs <- add_defaults(dots, to = rng)
+      dargs <- dots
       splitted <- split(src_data, src_data$group_key)
-      dens_list[[src_name]] <- lapply(splitted, compute_def_dens, defective_factor, dargs)
+      dens_list[[src_name]] <- lapply(splitted, compute_def_dens, defective_factor, dargs, from = check$xlim[1]-0.05, to = check$xlim[2] + 0.05)
 
       if (src_type %in% use_lim) {
         # find max
