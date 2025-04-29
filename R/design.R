@@ -496,6 +496,7 @@ if (type=="DDM") {
   if (type %in% c("BE","TC")) {
     datar <- cbind(do.call(rbind,lapply(1:2,function(x){data})),
       lR=factor(rep(1:2,each=dim(data)[1]),levels=1:2))
+    datar <- datar[order(rep(1:dim(data)[1], 2), datar$lR),]
     if (!is.null(matchfun)) {
       lM <- matchfun(datar)
       if (any(is.na(lM)) || !(is.logical(lM)))
@@ -507,7 +508,6 @@ if (type=="DDM") {
   if (simulate) datar$rt <- NA else {
     R <- datar$R
     R[is.na(R)] <- levels(datar$lR)[1]
-
     if (type %in% c("BE","TC")) datar$winner <- NA else
       datar$winner <- datar$lR==R
     # datar$winner[is.na(datar$winner)] <- FALSE
