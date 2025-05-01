@@ -341,7 +341,7 @@ make_smooth <- function(x, y, N = 1000){
 #'
 #' @return No returns
 #' @export
-plot_sbc_ecdf <- function(ranks, layout = NA){
+plot_sbc_ecdf <- function(ranks, layout = NA, main=""){
   if(!is.null(ranks$rank)) ranks <- ranks$rank
   selects <- names(ranks)
   if (!is.null(layout)) {
@@ -363,7 +363,8 @@ plot_sbc_ecdf <- function(ranks, layout = NA){
     res$x <- apply(rank, 2, function(x) sort(x) - res$z)
     for(i in 1:ncol(rank)){
       plot(res$z, res$x[,i], type = "l", ylim = c(min(res$lower, res$x[,i]) - 0.01, max(res$upper,res$x[,i]) + 0.01), xlim = c(0, 1),
-           lwd = 2, ylab = "ECDF Difference", xlab = "Normalized Rank Statistic", main = paste0(selects[j], " - ", par_names[i]))
+           lwd = 2, ylab = "ECDF Difference", xlab = "Normalized Rank Statistic",
+           main = paste0(selects[j], " - ", par_names[i]),"\n",main)
       polygon(c(res$z, rev(res$z)), c(res$lower, rev(res$upper)), col = adjustcolor("cornflowerblue", 0.2))
     }
   }
