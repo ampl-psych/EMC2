@@ -750,6 +750,11 @@ make_emc <- function(data,design,model=NULL,
   prior_in <- merge_priors(prior_list)
 
   prior_in <- prior(design, type, update = prior_in, ...)
+
+  # GROSS HACK as prior strips
+  prior_in$beta_mean <- prior_list[[1]]$beta_mean
+  prior_in$beta_var <- prior_list[[1]]$beta_var
+
   attr(dadm_list[[1]], "prior") <- prior_in
 
   # if(!is.null(subject_covariates)) attr(dadm_list, "subject_covariates") <- subject_covariates
