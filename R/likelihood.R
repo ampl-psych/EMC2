@@ -340,10 +340,38 @@ log_likelihood_race_ss <- function(pars,dadm,model,min_ll=log(1e-10))
 
 #### BE and TE (mt = multiple threshold) ----
 
-log_likelihood_mt <- function(pars,dadm,model,min_ll=log(1e-10),n_cores=10)
+log_likelihood_mt <- function(pars,dadm,model,min_ll=log(1e-10),n_cores=1)
   # Multiple threshold (BE or TC) summed log likelihood
   # attr(dadm,"dL")
 {
+
+  to_rate <- function(rate,nrate) {
+    c(nrate:1,1:nrate)[rate]
+  }
+
+  llLBA <- function(pars, dadm, model, min_ll = log(1e-10))
+  {
+    lds <- numeric(dim(dadm)[1])
+    lds[dadm$winner] <- log(model$dfun(rt = dadm$rt[dadm$winner],
+        pars = pars[dadm$winner, ]))
+    n_acc <- length(levels(dadm$R))
+    if (n_acc > 1)
+        lds[!dadm$winner] <- log(1 - model$pfun(rt = dadm$rt[!dadm$winner],
+            pars = pars[!dadm$winner, ]))
+    lds[is.na(lds) | !ok] <- min_ll
+    if (n_acc > 1) {
+        ll <- lds[dadm$winner]
+        if (n_acc == 2) {
+            ll <- ll + lds[!dadm$winner]
+        }
+        else {
+            ll <- ll + apply(matrix(lds[!dadm$winner], nrow = n_acc -
+                1), 2, sum)
+        }
+        ll[is.na(ll)] <- min_ll
+        return(pmax(min_ll, ll))
+    } else return(pmax(min_ll, lds))
+  }
 
   mt <- function(i,dadm,tmats,pmats) {
     i2 <- i*2
@@ -360,7 +388,7 @@ log_likelihood_mt <- function(pars,dadm,model,min_ll=log(1e-10),n_cores=10)
         dl = tmats[pick[2,"nsa"],i,pick[2,"lt"]],
         du = tmats[pick[2,"nsa"],i,pick[2,"ut"] ],
         b = tmats[pick[2,"sa"],i,pick[2,"tt"]]),silent=TRUE)
-      if (inherits(tmp1,"try-error")) return(0) else tmp <- tmp + tmp1
+      if (inherits(tmp1,"try-error")) return(0) else tmp <- (tmp + tmp1)/2
     }
     tmp
   }
@@ -373,7 +401,19 @@ log_likelihood_mt <- function(pars,dadm,model,min_ll=log(1e-10),n_cores=10)
   pmats <- array(pars[,pnams],dim=c(2,nrow(pars)/2,length(pnams)),
                  dimnames=list(NULL,NULL,pnams))
   nt <- dim(pmats)[2]
-  ll <- log(unlist(mclapply(1:nt,mt,dadm=dadm,tmats=tmats,pmats=pmats,mc.cores=n_cores)))
+  ll <- unlist(mclapply(1:nt,mt,dadm=dadm,tmats=tmats,pmats=pmats,mc.cores=n_cores))
+  if (!all(pars[,"gp"]==0)) {
+    p <- pars[,c("v", "sv", "gb", "A", "t0")]
+    names(p)[3] <- "b"
+    LBAll <- llLBA(pars=p, dadm = dadm, model = LBA(), min_ll = min_ll)
+    pgnams <- sort(colnames(pars)[substr(colnames(pars),1,2)=="pg"])
+    pm <- get_pgm(pars[,pgnams])
+    pm <- cbind(pm,1-apply(pm,1,sum))
+    pR <- pm[cbind(c(1:nrow(dadm))[dadm$winner],                   # row
+      c(ncol(pm):1,1:ncol(pm))[as.numeric(dadm$R[dadm$winner])])]  # rating 1..max
+    ll <- (1-pars[dadm$winner,"gp"])*ll + pars[dadm$winner,"gp"]*LBAll*pR
+  }
+  ll <- log(ll)
   ll[is.na(ll) | is.nan(ll) | ll == Inf] <- -Inf
   return(sum(pmax(min_ll,ll[attr(dadm,"expand")])))
 }

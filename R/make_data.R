@@ -278,6 +278,8 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
     }
     Rrt <- data.frame(Rrt)
     Rrt$R <- factor(Rrt$R, labels = levels(lR), levels = 1:length(levels(lR)))
+  } else if (design$model()$type %in% c("TC","BE")) {
+    Rrt <- model()$rfun(design$Rlevels,pars)
   } else Rrt <- model()$rfun(lR,pars)
   dropNames <- c("lR","lM","lSmagnitude")
   if (!return_Ffunctions && !is.null(design$Ffunctions))

@@ -31,15 +31,16 @@ get_dL <- function(NR,type="BE") {
       nsa <- opposite(sa)
     }
     ut <- lt + 1         # upper threshold
-    c(sa=sa,tt=tt,nsa=nsa,lt=lt,ut=ut)
+    c(sa=sa,tt=tt+1,nsa=nsa,lt=lt+1,ut=ut+1) # move from 0 to 1 base for thresholds
   }
 
 
   if (!even(NR)) {
-    # stop("Only works for even number of possible responses")
-    nr = (NR+1)/2   # Will collapse two middle
+    # Use next NR up then adjust
+    NR <- NR+1
+    nr = NR/2
     out <- t(sapply(c(1:(2*nr)),getRR,nr=nr,type=type))
-    return(cbind(RR=c(1:nr,nr:NR),out))
+    return(cbind(RR=c(1:nr,nr:(NR-1)),out)) # collapse two middle
   } else {
     nr = NR/2   # rating strengths least 1..nr most
     out <- t(sapply(c(1:(2*nr)),getRR,nr=nr,type=type))
@@ -62,7 +63,41 @@ get_dL <- function(NR,type="BE") {
 
 #### Random (BE = balance of evidence, TC = threshold count) ----
 
-rLBA_BE <- function(pars,ok=rep(TRUE,dim(pars)[1]),return_activation = FALSE)
+# Probabilities of guessing rating 1..n from pg1, pg2 ... parameters
+get_pgm <- function(pm) {
+  ps <- 0
+  for (i in 2:ncol(pm)) {
+    ps <- ps + pm[,i-1]
+    pm[,i] <- (1-ps)*pm[,i]
+  }
+  pm
+}
+guess <- function(out,pars) {
+
+  pg <- function(pm) {
+    pm <- get_pgm(pm)
+    apply(apply(pm,1,cumsum),2,\(x) .bincode(runif(1),c(0,x,1)))
+  }
+
+  isguess <- runif(nrow(out)) < pars[is2,"gp"]
+  if (any(isguess)) {
+    nt <- sum(isguess)
+    p <- pars[isguess,c("v", "sv", "gb", "A", "t0"),drop=FALSE]
+    names(p)[3] <- "b"
+    Rrt <- rLBA(factor(rep(1:2,nt)),p)
+    Rrt$R <- as.numeric(Rrt$R)
+    isp2 <- 1:nrow(pars) %% 2 == 0
+    isR2 <- Rrt$R==2
+    nc <- sum(ispg)+1
+    pgnams <- sort(colnames(pars)[substr(colnames(pars),1,2)=="pg"])
+    Rrt$R[!isR2] <- (nc+1) - pg(pars[!isp2 & isguess,pgnams,drop=FALSE][!isR2,,drop=FALSE])
+    Rrt$R[ isR2] <-     nc + pg(pars[ isp2 & isguess,pgnams,drop=FALSE][ isR2,,drop=FALSE])
+    out[isguess,c("R","rt")] <- Rrt
+  }
+  out
+}
+
+rLBA_BE <- function(lR,pars,ok=rep(TRUE,dim(pars)[1]),return_activation = FALSE)
   # Balance of evidence
   # Rating from 1=high confidence left to length(d1)+length(d2)+2 for
   # high confidence right, assumes posdrift=TRUE.
@@ -103,23 +138,37 @@ rLBA_BE <- function(pars,ok=rep(TRUE,dim(pars)[1]),return_activation = FALSE)
   # 2=nacc x n x #DT
   d <- pmats[,,substr(dimnames(pmats)[[3]],1,2)=="DT",drop=FALSE]
   nr <- dim(d)[3]+1 # number of ratings = DT1, DT2 ..., b
-  if (any(looser2))
-    rating[looser2] <- apply(cbind(ylooser[looser2],rep(0,sum(looser2)),d[2,looser2,],pmats[2,looser2,"b"]),1,get_rate)
-  if (any(!looser2))
-    rating[!looser2] <- (2*nr+1)-apply(cbind(ylooser[!looser2],rep(0,sum(!looser2)),d[1,!looser2,],pmats[2,!looser2,"b"]),1,get_rate)
+  if (any(looser2)) {
+    if (sum(looser2)==1)
+      rating[looser2] <- get_rate(
+        c(ylooser[looser2],rep(0,sum(looser2)),d[2,looser2,],pmats[2,looser2,"b"])) else
+      rating[looser2] <- apply(
+        cbind(ylooser[looser2],rep(0,sum(looser2)),d[2,looser2,],pmats[2,looser2,"b"]),1,get_rate)
+  }
+  if (any(!looser2)) {
+    if (sum(!looser2)==1)
+      rating[!looser2] <- (2*nr+1)-get_rate(
+        c(ylooser[!looser2],rep(0,sum(!looser2)),d[1,!looser2,],pmats[2,!looser2,"b"])) else
+      rating[!looser2] <- (2*nr+1)-apply(
+        cbind(ylooser[!looser2],rep(0,sum(!looser2)),d[1,!looser2,],pmats[2,!looser2,"b"]),1,get_rate)
+  }
   ok <- matrix(ok,nrow=2)[1,]
   out[ok,] <- cbind(response = rating,rt = rt)
-
   if (return_activation) {
     tmp <- cbind(out[ok,],y = t(A) + t(q) * (rt - pmats[1,,"t0"]))
     out <- cbind(out,y1=bad,y2=bad)
     out[ok,] <- tmp
   }
+  out[ok,] <- guess(out[ok,],pars[ok,])
   out$R <- factor(out$R,levels=1:(2*nr))
+  if (!(length(lR)%%2==0)) {
+    levels(out$R) <- c(1:nr,nr:(2*nr-1))
+  }
+  out$R <- factor(out$R,levels=lR)
   out
 }
 
-rLBA_TC <- function(pars,ok=rep(TRUE,dim(pars)[1]),return_activation = FALSE)
+rLBA_TC <- function(lR,pars,ok=rep(TRUE,dim(pars)[1]),return_activation = FALSE)
   # Threshold count
   # Rating from 1=high confidence left to length(d1)+length(d2)+2 for
   # high confidence right, assumes posdrift=TRUE.
@@ -159,14 +208,11 @@ rLBA_TC <- function(pars,ok=rep(TRUE,dim(pars)[1]),return_activation = FALSE)
   dL[odd,1] <- 1; dL[even,1] <- 2
   dL[odd,2] <- nr:1; dL[even,2] <- 1:nr
   rate <- dL[,1] + (dL[,2]-1)*2
-
   n <- dim(pmats)[2]        # number of trials
   q <- apply(pmats,2,getq)  # rates
   A <- matrix(runif(length(pmats[,,"A"]),min=0,max=pmats[,,"A"]),nrow=2)
   rts=array(apply(tmats,3,function(x){(x-A)/q}),dim=dim(tmats))
-
   rts[rts<0] <- 0
-
   ok <- matrix(ok,nrow=2)[1,]
   out[ok,] <- t(apply(rts,2,function(x){
     rt <- sort(x)[nr]
@@ -178,7 +224,12 @@ rLBA_TC <- function(pars,ok=rep(TRUE,dim(pars)[1]),return_activation = FALSE)
     out <- cbind(out,y1=bad,y2=bad)
     out[ok,] <- tmp
   }
+  out[ok,] <- guess(out[ok,],pars[ok,])
   out$R <- factor(out$R,levels=1:(2*nr))
+  if (!(length(lR)%%2==0)) {
+    levels(out$R) <- c(1:nr,nr:(2*nr-1))
+  }
+  out$R <- factor(out$R,levels=lR)
   out
 }
 
@@ -251,7 +302,7 @@ recintab0 <- function (kappa, a, b, mu, Sigma)
                                      mbi, SSi)
       }
     }
-    M[1] = pmvnormt(lower = a, upper = b, mean = mu, sigma = Sigma)
+    M[1] = pmvnorm(lower = a, upper = b, mean = mu, sigma = Sigma)
     a[a == -Inf] = 0
     b[b == Inf] = 0
     cp1 = cp[p, ]
@@ -289,6 +340,7 @@ n1PDF_MTR_1 <- function(rt, pars,dl,du,b)
   # b is stopping threshold, dl and du are the upper and lower thresholds for
   # the accumulator that does not stop the race.
   # r and t0 same for both (second ignored)
+
 {
 
   if (rt <= pars[1,"t0"]) {
@@ -377,14 +429,18 @@ BE2LBA <- function(){
   list(
     type="BE",
     p_types=c("v" = 1,"sv" = log(1),"B" = log(1),"A" = log(0),"t0" = log(0),
-              r=qnorm(.5),DT1=log(.5)),
+              r=qnorm(.5),DT1=log(.5),
+              gB=log(1),gp=qnorm(1),pg1=qnorm(1)),
     transform=list(func=c(v = "identity",sv = "exp", B = "exp", A = "exp",t0 = "exp",
-                          r="pnorm",DT1="exp")),
+                          r="pnorm",DT1="exp",
+                          gB="exp",gp="pnorm",pg1="pnorm")),
     bound=list(minmax=cbind(v=c(-Inf,Inf),sv = c(0, Inf), A=c(1e-4,Inf),b=c(0,Inf),
-      t0=c(0.05,Inf),r=c(-1,1),DT1=c(0,Inf)),exception=c(A=0)),
+      t0=c(0.05,Inf),r=c(-1,1),DT1=c(0,Inf),
+      gb=c(0,Inf),gp=c(0,1),pg1=c(0,1)),exception=c(A=0)),
     # Trial dependent parameter transform
     Ttransform = function(pars,dadm) {
       pars[,"r"] <- 2*pars[,"r"]-1
+      pars <- cbind(pars,gb=pars[,"gB"] + pars[,"A"])
       pnams <- c("A",dimnames(pars)[[2]][substr(dimnames(pars)[[2]],1,2)=="DT"],"B")
       pars[,pnams] <- t(apply(pars[,pnams],1,cumsum))
       dimnames(pars)[[2]][dimnames(pars)[[2]]=="B"] <- "b"
@@ -392,11 +448,11 @@ BE2LBA <- function(){
     },
     # Random function for racing accumulator
     rfun=function(lR=NULL,pars) {
-      rLBA_BE(pars,ok=attr(pars, "ok"))
+      rLBA_BE(lR,pars,ok=attr(pars, "ok"))
     },
     # Race likelihood combining pfun and dfun
     log_likelihood=function(p_vector,dadm,model,min_ll=log(1e-10)){
-      log_likelihood_mt(pars=p_vector, dadm = dadm, model=model, min_ll = min_ll)
+      log_likelihood_mt(pars=p_vector, dadm = dadm, model=model, min_ll = min_ll,n_cores=3)
     }
   )
 }
@@ -413,15 +469,18 @@ BE2PLBA <- function(){
   list(
     type="BE",
     p_types=c("v" = 1,"sv" = log(1),"B" = log(1),"A" = log(0),"t0" = log(0),
-              r=qnorm(.5),DT1=pnorm(.5)),
+              r=qnorm(.5),DT1=pnorm(.5),
+              gB=log(1),gp=qnorm(0),pg1=qnorm(1)),
     transform=list(func=c(v = "identity",sv = "exp", B = "exp", A = "exp",t0 = "exp",
-                          r="pnorm",DT1="pnorm")),
+                          r="pnorm",DT1="pnorm",
+                          gB="exp",gp="pnorm",pg1="pnorm")),
     bound=list(minmax=cbind(v=c(-Inf,Inf),sv = c(0, Inf), A=c(1e-4,Inf),b=c(0,Inf),
-      t0=c(0.05,Inf),r=c(-1,1),DT1=c(0,1)),exception=c(A=0)),
+      t0=c(0.05,Inf),r=c(-1,1),DT1=c(0,1),
+      gb=c(0,Inf),gp=c(0,1),pg1=c(0,1)),exception=c(A=0)),
     # Trial dependent parameter transform
     Ttransform = function(pars,dadm) {
       pars[,"r"] <- 2*pars[,"r"]-1
-      pars <- cbind(pars,b=pars[,"B"] + pars[,"A"])
+      pars <- cbind(pars,b=pars[,"B"] + pars[,"A"],gb=pars[,"gB"] + pars[,"A"])
       isDT <- substr(dimnames(pars)[[2]],1,2)=="DT"
       pars[,isDT] <- pars[,isDT]*pars[,"b"]
       dimnames(pars)[[2]][dimnames(pars)[[2]]=="B"] <- "b"
@@ -429,11 +488,11 @@ BE2PLBA <- function(){
     },
     # Random function for racing accumulator
     rfun=function(lR=NULL,pars) {
-      rLBA_BE(pars,ok=attr(pars, "ok"))
+      rLBA_BE(lR,pars,ok=attr(pars, "ok"))
     },
     # Race likelihood combining pfun and dfun
     log_likelihood=function(p_vector,dadm,model,min_ll=log(1e-10)){
-      log_likelihood_mt(pars=p_vector, dadm = dadm, model=model, min_ll = min_ll)
+      log_likelihood_mt(pars=p_vector, dadm = dadm, model=model, min_ll = min_ll,n_cores=3)
     }
   )
 }
@@ -449,14 +508,18 @@ TC2LBA <- function(){
   list(
     type="TC",
     p_types=c("v" = 1,"sv" = log(1),"B" = log(1),"A" = log(0),"t0" = log(0),
-              r=qnorm(.5),DT1=log(.5)),
+              r=qnorm(.5),DT1=log(.5),
+              gB=log(1),gp=qnorm(0),pg1=qnorm(1)),
     transform=list(func=c(v = "identity",sv = "exp", B = "exp", A = "exp",t0 = "exp",
-                          r="pnorm",DT1="exp")),
+                          r="pnorm",DT1="exp",
+                          gB="exp",gp="pnorm",pg1="pnorm")),
     bound=list(minmax=cbind(v=c(-Inf,Inf),sv = c(0, Inf), A=c(1e-4,Inf),b=c(0,Inf),
-      t0=c(0.05,Inf),r=c(-1,1),DT1=c(0,Inf)),exception=c(A=0)),
+      t0=c(0.05,Inf),r=c(-1,1),DT1=c(0,Inf),
+      gb=c(0,Inf),gp=c(0,1),pg1=c(0,1)),exception=c(A=0)),
     # Trial dependent parameter transform
     Ttransform = function(pars,dadm) {
       pars[,"r"] <- 2*pars[,"r"]-1
+      pars <- cbind(pars,gb=pars[,"gB"] + pars[,"A"])
       pnams <- c("A",dimnames(pars)[[2]][substr(dimnames(pars)[[2]],1,2)=="DT"],"B")
       pars[,pnams] <- t(apply(pars[,pnams],1,cumsum))
       dimnames(pars)[[2]][dimnames(pars)[[2]]=="B"] <- "b"
@@ -464,11 +527,11 @@ TC2LBA <- function(){
     },
     # Random function for racing accumulator
     rfun=function(lR=NULL,pars) {
-      rLBA_TC(pars,ok=attr(pars, "ok"))
+      rLBA_TC(lR,pars,ok=attr(pars, "ok"))
     },
     # Race likelihood combining pfun and dfun
     log_likelihood=function(p_vector,dadm,model,min_ll=log(1e-10)){
-      log_likelihood_mt(pars=p_vector, dadm = dadm, model=model, min_ll = min_ll)
+      log_likelihood_mt(pars=p_vector, dadm = dadm, model=model, min_ll = min_ll,n_cores=3)
     }
   )
 }
@@ -484,14 +547,18 @@ BE3LBA <- function(){
   list(
     type="BE",
     p_types=c("v" = 1,"sv" = log(1),"B" = log(1),"A" = log(0),"t0" = log(0),
-              r=qnorm(.5),DT1=log(1/3),DT2=log(1/3)),
+              r=qnorm(.5),DT1=log(1/3),DT2=log(1/3),
+              gB=log(1),gp=qnorm(0),pg1=qnorm(1),pg2=qnorm(0)),
     transform=list(func=c(v = "identity",sv = "exp", B = "exp", A = "exp",t0 = "exp",
-                          r="pnorm",DT1="exp",DT2="exp")),
+                          r="pnorm",DT1="exp",DT2="exp",
+                          gB="exp",gp="pnorm",g1="pnorm",g2="pnorm")),
     bound=list(minmax=cbind(v=c(-Inf,Inf),sv = c(0, Inf), A=c(1e-4,Inf),b=c(0,Inf),
-      t0=c(0.05,Inf),r=c(-1,1),DT1=c(0,Inf),DT2=c(0,Inf)),exception=c(A=0)),
+      t0=c(0.05,Inf),r=c(-1,1),DT1=c(0,Inf),DT2=c(0,Inf),
+      gb=c(0,Inf),gp=c(0,1),pg1=c(0,1)),exception=c(A=0)),
     # Trial dependent parameter transform
     Ttransform = function(pars,dadm) {
       pars[,"r"] <- 2*pars[,"r"]-1
+      pars <- cbind(pars,gb=pars[,"gB"] + pars[,"A"])
       pnams <- c("A",dimnames(pars)[[2]][substr(dimnames(pars)[[2]],1,2)=="DT"],"B")
       pars[,pnams] <- t(apply(pars[,pnams],1,cumsum))
       dimnames(pars)[[2]][dimnames(pars)[[2]]=="B"] <- "b"
@@ -499,11 +566,11 @@ BE3LBA <- function(){
     },
     # Random function for racing accumulator
     rfun=function(lR=NULL,pars) {
-      rLBA_BE(pars,ok=attr(pars, "ok"))
+      rLBA_BE(lR,pars,ok=attr(pars, "ok"))
     },
     # Race likelihood combining pfun and dfun
     log_likelihood=function(p_vector,dadm,model,min_ll=log(1e-10)){
-      log_likelihood_mt(pars=p_vector, dadm = dadm, model=model, min_ll = min_ll)
+      log_likelihood_mt(pars=p_vector, dadm = dadm, model=model, min_ll = min_ll,n_cores=3)
     }
   )
 }
@@ -518,15 +585,18 @@ BE3PLBA <- function(){
   list(
     type="BE",
     p_types=c("v" = 1,"sv" = log(1),"B" = log(1),"A" = log(0),"t0" = log(0),
-              r=qnorm(.5),DT1=pnorm(1/3),DT2=pnorm(2/3)),
+              r=qnorm(.5),DT1=pnorm(1/3),DT2=pnorm(2/3),
+              gB=log(1),gp=qnorm(0),pg1=qnorm(1),pg2=qnorm(0)),
     transform=list(func=c(v = "identity",sv = "exp", B = "exp", A = "exp",t0 = "exp",
-                          r="pnorm",DT1="pnorm",DT2="pnorm")),
+                          r="pnorm",DT1="pnorm",DT2="pnorm",
+                          gB="exp",gp="pnorm",pg1="pnorm",pg2="pnorm")),
     bound=list(minmax=cbind(v=c(-Inf,Inf),sv = c(0, Inf), A=c(1e-4,Inf),b=c(0,Inf),
-      t0=c(0.05,Inf),r=c(-1,1),DT1=c(0,1),DT2=c(0,1)),exception=c(A=0)),
+      t0=c(0.05,Inf),r=c(-1,1),DT1=c(0,1),DT2=c(0,1),
+      gb=c(0,Inf),gp=c(0,1),pg1=c(0,1),pg2=c(0,1)),exception=c(A=0)),
     # Trial dependent parameter transform
     Ttransform = function(pars,dadm) {
       pars[,"r"] <- 2*pars[,"r"]-1
-      pars <- cbind(pars,b=pars[,"B"] + pars[,"A"])
+      pars <- cbind(pars,b=pars[,"B"] + pars[,"A"],gb=pars[,"gB"] + pars[,"A"])
       isDT <- substr(dimnames(pars)[[2]],1,2)=="DT"
       pars[,isDT] <- pars[,isDT]*pars[,"b"]
       dimnames(pars)[[2]][dimnames(pars)[[2]]=="B"] <- "b"
@@ -534,11 +604,11 @@ BE3PLBA <- function(){
     },
     # Random function for racing accumulator
     rfun=function(lR=NULL,pars) {
-      rLBA_BE(pars,ok=attr(pars, "ok"))
+      rLBA_BE(lR,pars,ok=attr(pars, "ok"))
     },
     # Race likelihood combining pfun and dfun
     log_likelihood=function(p_vector,dadm,model,min_ll=log(1e-10)){
-      log_likelihood_mt(pars=p_vector, dadm = dadm, model=model, min_ll = min_ll)
+      log_likelihood_mt(pars=p_vector, dadm = dadm, model=model, min_ll = min_ll,n_cores=3)
     }
   )
 }
@@ -553,14 +623,18 @@ TC3LBA <- function(){
   list(
     type="TC",
     p_types=c("v" = 1,"sv" = log(1),"B" = log(1),"A" = log(0),"t0" = log(0),
-              r=qnorm(.5),DT1=log(1/3),DT2=log(1/3)),
+              r=qnorm(.5),DT1=log(1/3),DT2=log(1/3),
+              gB=log(1),gp=qnorm(0),pg1=qnorm(1),pg2=qnorm(0)),
     transform=list(func=c(v = "identity",sv = "exp", B = "exp", A = "exp",t0 = "exp",
-                          r="pnorm",DT1="exp",DT2="exp")),
+                          r="pnorm",DT1="exp",DT2="exp",
+                          gB="exp",gp="pnorm",pg1="pnorm",pg2="pnorm")),
     bound=list(minmax=cbind(v=c(-Inf,Inf),sv = c(0, Inf), A=c(1e-4,Inf),b=c(0,Inf),
-      t0=c(0.05,Inf),r=c(-1,1),DT1=c(0,Inf),DT2=c(0,Inf)),exception=c(A=0)),
+      t0=c(0.05,Inf),r=c(-1,1),DT1=c(0,Inf),DT2=c(0,Inf),
+      gb=c(0,Inf),gp=c(0,1),pg1=c(0,1),pg2=c(0,1)),exception=c(A=0)),
     # Trial dependent parameter transform
     Ttransform = function(pars,dadm) {
       pars[,"r"] <- 2*pars[,"r"]-1
+      pars <- cbind(pars,gb=pars[,"gB"] + pars[,"A"])
       pnams <- c("A",dimnames(pars)[[2]][substr(dimnames(pars)[[2]],1,2)=="DT"],"B")
       pars[,pnams] <- t(apply(pars[,pnams],1,cumsum))
       dimnames(pars)[[2]][dimnames(pars)[[2]]=="B"] <- "b"
@@ -568,11 +642,11 @@ TC3LBA <- function(){
     },
     # Random function for racing accumulator
     rfun=function(lR=NULL,pars) {
-      rLBA_TC(pars,ok=attr(pars, "ok"))
+      rLBA_TC(lR,pars,ok=attr(pars, "ok"))
     },
     # Race likelihood combining pfun and dfun
     log_likelihood=function(p_vector,dadm,model,min_ll=log(1e-10)){
-      log_likelihood_mt(pars=p_vector, dadm = dadm, model=model, min_ll = min_ll)
+      log_likelihood_mt(pars=p_vector, dadm = dadm, model=model, min_ll = min_ll,n_cores=3)
     }
   )
 }
@@ -588,14 +662,18 @@ BE4LBA <- function(){
   list(
     type="BE",
     p_types=c("v" = 1,"sv" = log(1),"B" = log(1),"A" = log(0),"t0" = log(0),
-              r=qnorm(.5),DT1=log(1/4),DT2=log(1/4),DT3=log(1/4)),
+              r=qnorm(.5),DT1=log(1/4),DT2=log(1/4),DT3=log(1/4),
+              gB=log(1),gp=qnorm(0),pg1=qnorm(1),pg2=qnorm(0),pg3=qnorm(0)),
     transform=list(func=c(v = "identity",sv = "exp", B = "exp", A = "exp",t0 = "exp",
-                          r="pnorm",DT1="exp",DT2="exp",DT3="exp")),
+                          r="pnorm",DT1="exp",DT2="exp",DT3="exp",
+                          gB="exp",gp="pnorm",pg1="pnorm",pg2="pnorm",pg3="pnorm")),
     bound=list(minmax=cbind(v=c(-Inf,Inf),sv = c(0, Inf), A=c(1e-4,Inf),b=c(0,Inf),
-      t0=c(0.05,Inf),r=c(-1,1),DT1=c(0,Inf),DT2=c(0,Inf),DT3=c(0,Inf)),exception=c(A=0)),
+      t0=c(0.05,Inf),r=c(-1,1),DT1=c(0,Inf),DT2=c(0,Inf),DT3=c(0,Inf),
+      gb=c(0,Inf),gp=c(0,1),pg1=c(0,1),pg2=c(0,1),pg3=c(0,1)),exception=c(A=0)),
     # Trial dependent parameter transform
     Ttransform = function(pars,dadm) {
       pars[,"r"] <- 2*pars[,"r"]-1
+      pars <- cbind(pars,gb=pars[,"gB"] + pars[,"A"])
       pnams <- c("A",dimnames(pars)[[2]][substr(dimnames(pars)[[2]],1,2)=="DT"],"B")
       pars[,pnams] <- t(apply(pars[,pnams],1,cumsum))
       dimnames(pars)[[2]][dimnames(pars)[[2]]=="B"] <- "b"
@@ -603,11 +681,11 @@ BE4LBA <- function(){
     },
     # Random function for racing accumulator
     rfun=function(lR=NULL,pars) {
-      rLBA_BE(pars,ok=attr(pars, "ok"))
+      rLBA_BE(lR,pars,ok=attr(pars, "ok"))
     },
     # Race likelihood combining pfun and dfun
     log_likelihood=function(p_vector,dadm,model,min_ll=log(1e-10)){
-      log_likelihood_mt(pars=p_vector, dadm = dadm, model=model, min_ll = min_ll)
+      log_likelihood_mt(pars=p_vector, dadm = dadm, model=model, min_ll = min_ll,n_cores=3)
     }
   )
 }
@@ -622,15 +700,18 @@ BE4PLBA <- function(){
   list(
     type="BE",
     p_types=c("v" = 1,"sv" = log(1),"B" = log(1),"A" = log(0),"t0" = log(0),
-              r=qnorm(.5),DT1=pnorm(1/4),DT2=pnorm(1/2),DT3=pnorm(3/4)),
+              r=qnorm(.5),DT1=pnorm(1/4),DT2=pnorm(1/2),DT3=pnorm(3/4),
+              gB=log(1),gp=qnorm(0),pg1=qnorm(1),pg2=qnorm(0),pg3=qnorm(0)),
     transform=list(func=c(v = "identity",sv = "exp", B = "exp", A = "exp",t0 = "exp",
-                          r="pnorm",DT1="pnorm",DT2="pnorm",DT3="pnorm")),
+                          r="pnorm",DT1="pnorm",DT2="pnorm",DT3="pnorm",
+                          gB="exp",gp="pnorm",pg1="pnorm",pg2="pnorm",pg3="pnorm")),
     bound=list(minmax=cbind(v=c(-Inf,Inf),sv = c(0, Inf), A=c(1e-4,Inf),b=c(0,Inf),
-      t0=c(0.05,Inf),r=c(-1,1),DT1=c(0,1),DT2=c(0,1),DT3=c(0,1)),exception=c(A=0)),
+      t0=c(0.05,Inf),r=c(-1,1),DT1=c(0,1),DT2=c(0,1),DT3=c(0,1),
+      gb=c(0,Inf),gp=c(0,1),pg1=c(0,1),pg2=c(0,1),pg3=c(0,1)),exception=c(A=0)),
     # Trial dependent parameter transform
     Ttransform = function(pars,dadm) {
       pars[,"r"] <- 2*pars[,"r"]-1
-      pars <- cbind(pars,b=pars[,"B"] + pars[,"A"])
+      pars <- cbind(pars,b=pars[,"B"] + pars[,"A"],gb=pars[,"gB"] + pars[,"A"])
       isDT <- substr(dimnames(pars)[[2]],1,2)=="DT"
       pars[,isDT] <- pars[,isDT]*pars[,"b"]
       dimnames(pars)[[2]][dimnames(pars)[[2]]=="B"] <- "b"
@@ -638,11 +719,11 @@ BE4PLBA <- function(){
     },
     # Random function for racing accumulator
     rfun=function(lR=NULL,pars) {
-      rLBA_BE(pars,ok=attr(pars, "ok"))
+      rLBA_BE(lR,pars,ok=attr(pars, "ok"))
     },
     # Race likelihood combining pfun and dfun
     log_likelihood=function(p_vector,dadm,model,min_ll=log(1e-10)){
-      log_likelihood_mt(pars=p_vector, dadm = dadm, model=model, min_ll = min_ll)
+      log_likelihood_mt(pars=p_vector, dadm = dadm, model=model, min_ll = min_ll,n_cores=3)
     }
   )
 }
@@ -658,14 +739,18 @@ TC4LBA <- function(){
   list(
     type="TC",
     p_types=c("v" = 1,"sv" = log(1),"B" = log(1),"A" = log(0),"t0" = log(0),
-              r=qnorm(.5),DT1=log(1/4),DT2=log(1/4),DT3=log(1/4)),
+              r=qnorm(.5),DT1=log(1/4),DT2=log(1/4),DT3=log(1/4),
+              gB=log(1),gp=qnorm(0),pg1=qnorm(1),pg2=qnorm(0),pg3=qnorm(0)),
     transform=list(func=c(v = "identity",sv = "exp", B = "exp", A = "exp",t0 = "exp",
-                          r="pnorm",DT1="exp",DT2="exp",DT3="exp")),
+                          r="pnorm",DT1="exp",DT2="exp",DT3="exp",
+                          gB="exp",gp="pnorm",pg1="pnorm",pg2="pnorm",pg3="pnorm")),
     bound=list(minmax=cbind(v=c(-Inf,Inf),sv = c(0, Inf), A=c(1e-4,Inf),b=c(0,Inf),
-      t0=c(0.05,Inf),r=c(-1,1),DT1=c(0,Inf),DT2=c(0,Inf),DT3=c(0,Inf)),exception=c(A=0)),
+      t0=c(0.05,Inf),r=c(-1,1),DT1=c(0,Inf),DT2=c(0,Inf),DT3=c(0,Inf),
+      gb=c(0,Inf),gp=c(0,1),pg1=c(0,1),pg2=c(0,1),pg3=c(0,1)),exception=c(A=0)),
     # Trial dependent parameter transform
     Ttransform = function(pars,dadm) {
       pars[,"r"] <- 2*pars[,"r"]-1
+      pars <- cbind(pars,gb=pars[,"gB"] + pars[,"A"])
       pnams <- c("A",dimnames(pars)[[2]][substr(dimnames(pars)[[2]],1,2)=="DT"],"B")
       pars[,pnams] <- t(apply(pars[,pnams],1,cumsum))
       dimnames(pars)[[2]][dimnames(pars)[[2]]=="B"] <- "b"
@@ -673,11 +758,11 @@ TC4LBA <- function(){
     },
     # Random function for racing accumulator
     rfun=function(lR=NULL,pars) {
-      rLBA_TC(pars,ok=attr(pars, "ok"))
+      rLBA_TC(lR,pars,ok=attr(pars, "ok"))
     },
     # Race likelihood combining pfun and dfun
     log_likelihood=function(p_vector,dadm,model,min_ll=log(1e-10)){
-      log_likelihood_mt(pars=p_vector, dadm = dadm, model=model, min_ll = min_ll)
+      log_likelihood_mt(pars=p_vector, dadm = dadm, model=model, min_ll = min_ll,n_cores=3)
     }
   )
 }
