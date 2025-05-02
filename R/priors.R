@@ -1,4 +1,3 @@
-
 #'
 #' Specify Priors for the Chosen Model
 #'
@@ -40,7 +39,7 @@
 #' # We can easily update the prior
 #' prior_DDMat0E <- prior(design_DDMat0E, update = prior_DDMaE)
 #' @export
-prior <- function(design, type = NULL, update = NULL,
+prior <- function(design, type = NULL, update = NULL, group_design = NULL,
                       do_ask = NULL, fill_default = TRUE, ...){
   if(!is.null(update) && is.null(type)){
     type <- attr(update, "type")
@@ -95,6 +94,7 @@ prior <- function(design, type = NULL, update = NULL,
     return(x)
   })
   attr(prior, "design") <- design
+  attr(prior, "group_design") <- group_design
   class(prior) <- "emc.prior"
   return(prior)
 }
@@ -605,7 +605,7 @@ mapped_pars.emc.prior <- function(x, p_vector = NULL, model = NULL, digits=3,rem
 
 #' @rdname sampled_pars
 #' @export
-sampled_pars.emc.prior <- function(x,model=NULL,doMap=TRUE, add_da = FALSE, all_cells_dm = FALSE){
+sampled_pars.emc.prior <- function(x,model=NULL,doMap=FALSE, add_da = FALSE, all_cells_dm = FALSE){
   return(sampled_pars(get_design(x), model = model, doMap = doMap,
                           add_da = add_da, all_cells_dm = all_cells_dm))
 }

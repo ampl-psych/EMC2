@@ -250,7 +250,7 @@ map_mcmc <- function(mcmc,design,include_constants = TRUE, add_recalculated = FA
     }
     constants <- cur_des$constants
     model <- cur_des$model
-    map <- attr(sampled_pars(cur_des, add_da = TRUE, all_cells_dm = TRUE),"map")
+    map <- attr(sampled_pars(cur_des, add_da = TRUE, all_cells_dm = TRUE, doMap = TRUE),"map")
 
 
     mp <- mapped_pars(cur_des,cur_mcmc_array[,1,1],remove_RACE=FALSE, covariates = covariates)
@@ -492,8 +492,8 @@ generate_design_equations <- function(design_matrix,
 
 
 verbal_dm <- function(design){
-  map <- attr(sampled_pars(design,design$model, add_da = TRUE), "map")
-  map_no_da <- attr(sampled_pars(design,design$model), "map")
+  map <- attr(sampled_pars(design,design$model, add_da = TRUE, doMap = TRUE), "map")
+  map_no_da <- attr(sampled_pars(design,design$model, doMap = TRUE), "map")
   transforms <- design$model()$transform$func
   for(i in 1:length(map)){
     m <- map[[i]]

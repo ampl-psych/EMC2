@@ -21,7 +21,7 @@ check_data_plot <- function(data, defective_factor, subject, factors) {
   for(fact in factors){
     if(is.numeric(data[,fact])){
       if(length(unique(data[,fact])) > 6){
-        quartile_breaks <- quantile(data[,fact], probs = seq(0, 1, length.out = n_bins + 1), na.rm = TRUE)
+        quartile_breaks <- quantile(unique(data[,fact]), probs = seq(0, 1, length.out = n_bins + 1), na.rm = TRUE)
         # Bin the data into quartiles using these breakpoints
         data[,fact] <- cut(data[,fact], breaks = quartile_breaks, include.lowest = TRUE, labels = paste0("Q", 1:n_bins))
       }

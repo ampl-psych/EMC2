@@ -1,5 +1,3 @@
-
-
 filter_obj <- function(obj, idx){
   dims <- dim(obj)
   dim_names <- dimnames(obj)

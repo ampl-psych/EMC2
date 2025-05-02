@@ -10,7 +10,7 @@
 sampled_pars(
   x,
   model = NULL,
-  doMap = TRUE,
+  doMap = FALSE,
   add_da = FALSE,
   all_cells_dm = FALSE
 )
@@ -18,7 +18,7 @@ sampled_pars(
 \method{sampled_pars}{emc.design}(
   x,
   model = NULL,
-  doMap = TRUE,
+  doMap = FALSE,
   add_da = FALSE,
   all_cells_dm = FALSE
 )
@@ -26,7 +26,7 @@ sampled_pars(
 \method{sampled_pars}{emc.prior}(
   x,
   model = NULL,
-  doMap = TRUE,
+  doMap = FALSE,
   add_da = FALSE,
   all_cells_dm = FALSE
 )
@@ -34,7 +34,7 @@ sampled_pars(
 \method{sampled_pars}{emc}(
   x,
   model = NULL,
-  doMap = TRUE,
+  doMap = FALSE,
   add_da = FALSE,
   all_cells_dm = FALSE
 )

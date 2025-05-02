@@ -72,6 +72,7 @@
 #' @importFrom stats quantile
 #' @importFrom stats rbinom
 #' @importFrom stats rchisq
+#' @importFrom stats reformulate
 #' @importFrom stats reshape
 #' @importFrom stats residuals
 #' @importFrom stats rexp
