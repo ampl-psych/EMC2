@@ -26,6 +26,7 @@ add_info_standard <- function(sampler, prior = NULL, ...){
     sampler$group_designs <- list(...)$group_design
   }
   sampler$par_group <- list(...)$par_groups
+  if(is.null(sampler$par_group)) sampler$par_group <- rep(1, n_pars)
   sampler$is_blocked <- sampler$par_group %in% which(table(sampler$par_group) > 1)
   sampler$prior <- get_prior_standard(prior, n_pars, sample = F, betas = betas)
   return(sampler)
