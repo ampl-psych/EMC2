@@ -66,7 +66,7 @@ get_prior_infnt_factor <- function(prior = NULL, n_pars = NULL, sample = TRUE, N
         samples$theta_mu <- mu
       }
     }
-    if(selection %in% c("loadings", "alpha", "correlation", "Sigma", "covariance", "sigma2")) {
+    if(selection %in% c("loadings", "std_loadings", "alpha", "correlation", "Sigma", "covariance", "sigma2")) {
       lambda_tmp <- matrix(0, nrow = n_pars, ncol = n_factors)
       lambda <- array(0, dim = c(n_pars, n_factors, N))
       for(i in 1:N){
@@ -84,15 +84,15 @@ get_prior_infnt_factor <- function(prior = NULL, n_pars = NULL, sample = TRUE, N
       }
       rownames(lambda) <- par_names
       colnames(lambda) <- paste0("F", 1:n_factors)
-      if(selection %in% "loadings"){
+      if(selection %in% c("loadings", "std_loadings")){
         samples$lambda <- lambda
       }
     }
-    if(selection %in% c("residuals", "alpha", "correlation", "Sigma", "covariance", "sigma2")) {
+    if(selection %in% c("residuals", "std_loadings", "alpha", "correlation", "Sigma", "covariance", "sigma2")) {
       residuals <- t(matrix(rgamma(n_pars*N, shape = prior$as, rate = prior$bs),
                           ncol = n_pars, byrow = T))
       rownames(residuals) <- par_names
-      if(selection %in% "residuals"){
+      if(selection %in% c("residuals", "std_loadings")){
         samples$epsilon_inv <- residuals
       }
     }
@@ -124,15 +124,16 @@ sample_store_infnt_factor <- function(data, par_names, iters = 1, stage = "init"
   base_samples <- sample_store_base(data, par_names, iters, stage)
   par_names <- par_names[!is_nuisance]
   n_pars <- length(par_names)
+  FA_names <- paste0("F", 1:n_factors)
   samples <- list(
     theta_mu = array(NA_real_,dim = c(n_pars, iters), dimnames = list(par_names, NULL)),
     theta_var = array(NA_real_,dim = c(n_pars, n_pars, iters),dimnames = list(par_names, par_names, NULL)),
-    lambda = array(NA_real_,dim = c(n_pars, n_factors, iters),dimnames = list(par_names, NULL, NULL)),
+    lambda = array(NA_real_,dim = c(n_pars, n_factors, iters),dimnames = list(par_names, n_factors, NULL)),
     # Psi here is the precision of the loadings, slightly different to standard factor model
     psi = array(NA_real_, dim = c(n_pars, n_factors, iters), dimnames = list(par_names, NULL, NULL)),
     delta = array(NA_real_, dim = c(n_factors, iters), dimnames = list(NULL, NULL)),
     epsilon_inv = array(NA_real_,dim = c(n_pars, iters),dimnames = list(par_names, NULL)),
-    eta = array(NA_real_, dim = c(n_subjects, n_factors, iters), dimnames = list(subject_ids, NULL, NULL))
+    eta = array(NA_real_, dim = c(n_subjects, n_factors, iters), dimnames = list(subject_ids, n_factors, NULL))
   )
   if(integrate) samples <- c(samples, base_samples)
   return(samples)

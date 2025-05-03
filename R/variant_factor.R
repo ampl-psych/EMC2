@@ -114,7 +114,7 @@ get_prior_factor <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5
         samples$theta_mu <- mu
       }
     }
-    if(selection %in% c("loadings", "alpha", "correlation", "Sigma", "covariance", "sigma2")) {
+    if(selection %in% c("loadings", "std_loadings", "alpha", "correlation", "Sigma", "covariance", "sigma2")) {
       lambda <- array(0, dim = c(n_pars, n_factors, N))
       for(i in 1:n_factors){
         lambda[,i,] <- t(mvtnorm::rmvnorm(N, sigma = diag(prior$theta_lambda_var)))
@@ -126,15 +126,15 @@ get_prior_factor <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5
       } else{
         colnames(lambda) <- colnames(Lambda_mat)
       }
-      if(selection %in% "loadings"){
+      if(selection %in% c("loadings", "std_loadings")){
         samples$lambda <- lambda
       }
     }
-    if(selection %in% c("residuals", "alpha", "correlation", "Sigma", "covariance", "sigma2")) {
+    if(selection %in% c("residuals", "std_loadings", "alpha", "correlation", "Sigma", "covariance", "sigma2")) {
       residuals <- t(matrix(rgamma(n_pars*N, shape = prior$as, rate = prior$bs),
                           ncol = n_pars, byrow = T))
       rownames(residuals) <- par_names
-      if(selection %in% "residuals"){
+      if(selection %in% c("residuals", "std_loadings")){
         samples$epsilon_inv <- residuals
       }
     }

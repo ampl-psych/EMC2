@@ -192,7 +192,8 @@ get_objects_single <- function(selection, sample_prior, return_prior, design = N
 
 get_objects_factor <- function(selection, sample_prior, return_prior, design = NULL,
                                      prior = NULL, stage = 'sample', N = 1e5, sampler = NULL, ...){
-  acc_selection <- c("mu", "sigma2", "covariance", "correlation", "alpha", "Sigma", "loadings", "residuals", "LL")
+  acc_selection <- c("mu", "sigma2", "covariance", "correlation", "alpha", "Sigma", "loadings", "residuals", "LL",
+                     "std_loadings")
   if(return_prior & !sample_prior){
     if(is.null(list(...)$return_info)) prior$prior <- do.call(get_prior_factor, c(list(design = design, sample = F, prior = prior), fix_dots(list(...), get_prior_factor)))
     prior$descriptions <- list(
@@ -245,6 +246,9 @@ get_objects_factor <- function(selection, sample_prior, return_prior, design = N
     if(selection == "residuals"){
       return(lapply(sampler, FUN = function(x) return(1/x$samples$epsilon_inv[,idx])))
     }
+    if(selection == "std_loadings"){
+      return(lapply(sampler, FUN = function(x) standardize_loadings(x$samples$lambda[,,idx, drop = F], 1/x$samples$epsilon_inv[,idx])))
+    }
     return(get_base(sampler, idx, selection))
   }
 }
@@ -253,7 +257,8 @@ get_objects_factor <- function(selection, sample_prior, return_prior, design = N
 
 get_objects_infnt_factor <- function(selection, sample_prior, return_prior, design = NULL,
                                  prior = NULL, stage = 'sample', N = 1e5, sampler = NULL, ...){
-  acc_selection <- c("mu", "sigma2", "covariance", "correlation", "alpha", "Sigma", "loadings", "residuals", "LL")
+  acc_selection <- c("mu", "sigma2", "covariance", "correlation", "alpha", "Sigma", "loadings", "residuals", "LL",
+                     "std_loadings")
   if(return_prior & !sample_prior){
     if(is.null(list(...)$return_info)) prior$prior <- do.call(get_prior_infnt_factor, c(list(design = design, sample = F, prior = prior), fix_dots(list(...), get_prior_infnt_factor)))
     prior$descriptions <- list(
@@ -303,6 +308,9 @@ get_objects_infnt_factor <- function(selection, sample_prior, return_prior, desi
     }
     if(selection == "residuals"){
       return(lapply(sampler, FUN = function(x) return(1/x$samples$epsilon_inv[,idx])))
+    }
+    if(selection == "std_loadings"){
+      return(lapply(sampler, FUN = function(x) standardize_loadings(x$samples$lambda[,,idx, drop = F], 1/x$samples$epsilon_inv[,idx])))
     }
     return(get_base(sampler, idx, selection))
   }

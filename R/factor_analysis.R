@@ -35,11 +35,7 @@
 #' @param emc an 'emc' object of type `infnt_factor`.
 #' @param lambda Needs to be supplied if emc is not supplied.
 #' Array of factor loadings with dimensions p (variables) x q (factors) x n (MCMC iterations)
-#' @param maxIter Maximum number of iterations for the alignment algorithm
-#' @param threshold Convergence threshold for the algorithm
 #' @param verbose Logical; whether to print progress information
-#' @param rotate Logical; whether to apply varimax rotation before alignment
-#' @param printIter Frequency of iteration reporting when verbose is TRUE
 #' @param n_cores Number of cores for parallel processing
 #'
 #' @return A list containing:
@@ -82,21 +78,22 @@
 #' }
 #'
 #' # Align the loadings
-#' result <- align_loadings(lambda, maxIter = 10, verbose = TRUE, n_cores = 1)
+#' result <- align_loadings(lambda, verbose = TRUE, n_cores = 1)
 #'
 #' # Examine the aligned loadings
 #' print(result$lambda_hat)
 #'
 #' @export
-align_loadings <- function (emc = NULL, lambda = NULL, maxIter = 100, threshold = 1e-06, verbose = TRUE,
-                    rotate = TRUE, printIter = 1000, n_cores = 1)
+align_loadings <- function (emc = NULL, lambda = NULL, n_cores = 1, verbose = TRUE)
 {
+  maxIter <- 100; threshold <- 1e-06;
+  rotate <- TRUE; printIter <- 1000;
   if(is.null(lambda) & is.null(emc)) stop("Need to supply either emc or lambda")
   if(is.null(lambda)){
     lambda <- get_pars(emc, selection = "loadings", merge_chains = TRUE, return_mcmc = FALSE)
   }
   energy <- apply(lambda^2, 2, mean)          # length q
-  lambda <- lambda[,energy / max(energy) > 0.005,, drop = F]
+  lambda <- lambda[,energy / max(energy) > 0.01,, drop = F]
   q <- ncol(lambda)
   p <- nrow(lambda)
   mcmcIterations <- dim(lambda)[3]
@@ -229,28 +226,8 @@ rearrange_loadings <- function(lambda, metric = c("ssq", "absmean"))
   }
   return(lambda_re)
 }
-# #' Standardized factor loadings
-# #'
-# #' Returns a set of standardized factor loadings.
-# #' The standardization considers the residual error as well
-# #' as described in Stevenson, Heathcote, Forstmann & Matzke, 2024.
-# #'
-# #' @param emc An emc object with samples from a hierarchical factor analysis model
-# #' @param loadings Array of pars by factors by iters. Can also specify loadings instead of emc
-# #' @param residuals Array of pars by iters. Can also specify residuals instead of emc
-# #' @param stage Character. From which stage to take samples
-# #' @param merge_chains Return the loadings for each chain separately or merged together.
 
-# #' @return standardized loadings
-# #' @examples \donttest{
-# #' # For a given set of hierarchical factor model samples we can standardize the loadings
-# #' standardize_loadings(emc)
-# #' # By default merges across chains, but we could also get a list of standardized loadings
-# #' standardize_loadings(emc, merge_chains = FALSE)
-# #' }
-# #'
-standardize_loadings <- function(loadings = NULL, residuals = NULL,
-                                 stage = "sample"){
+standardize_loadings <- function(loadings, residuals){
   stdize_set <- function(samples = NULL, idx = NULL, loadings = NULL, residuals = NULL){
     if(is.null(loadings)) loadings <- samples$samples$theta_lambda[,,idx, drop = F]
     if(is.null(residuals)) residuals <- samples$samples$theta_residuals[,idx]
@@ -263,24 +240,12 @@ standardize_loadings <- function(loadings = NULL, residuals = NULL,
     }
     return(new_loadings)
   }
-
-  if(is.null(loadings) || is.null(residuals)){
-    if(merge_chains){
-      samples <- merge_chains(emc)
-      idx <- samples$samples$stage == stage
-      out <- stdize_set(samples, idx, loadings, residuals)
-    } else{
-      idx <- emc[[1]]$samples$stage == stage
-      out <- vector("list", length(emc))
-      for(i in 1:length(emc)){
-        out[[i]] <- stdize_set(emc[[i]], idx, loadings[[i]], residuals[[i]])
-      }
-    }
-  } else{
-    out <- stdize_set(loadings = loadings, residuals = residuals)
-  }
-
+  out <- stdize_set(loadings = loadings, residuals = residuals)
   return(out)
+}
+
+get_credible <- function(credints){
+  sapply(credints, function(x) (sum(x[,1] > 0) + sum(x[,3] < 0)) > 2)
 }
 
 #' Plot Group-Level Relations
