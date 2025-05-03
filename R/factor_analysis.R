@@ -244,8 +244,8 @@ standardize_loadings <- function(loadings, residuals){
   return(out)
 }
 
-get_credible <- function(credints){
-  sapply(credints, function(x) (sum(x[,1] > 0) + sum(x[,3] < 0)) > 2)
+get_credible_factors <- function(credints){
+  sapply(credints, function(x) (sum(x[,1] > 0) + sum(x[,3] < 0)) > 1)
 }
 
 #' Plot Group-Level Relations
