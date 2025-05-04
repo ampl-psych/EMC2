@@ -65,6 +65,7 @@ get_dL <- function(NR,type="BE") {
 
 # Probabilities of guessing rating 1..n from pg1, pg2 ... parameters
 get_pgm <- function(pm) {
+  if (ncol(pm)==1) return(pm)
   ps <- 0
   for (i in 2:ncol(pm)) {
     ps <- ps + pm[,i-1]
@@ -72,26 +73,29 @@ get_pgm <- function(pm) {
   }
   pm
 }
-guess <- function(out,pars) {
+
+guess_mtr <- function(out,pars) {
 
   pg <- function(pm) {
-    pm <- get_pgm(pm)
-    apply(apply(pm,1,cumsum),2,\(x) .bincode(runif(1),c(0,x,1)))
+    if (ncol(pm)>1) pm <- t(apply(get_pgm(pm),1,cumsum))
+    apply(pm,1,\(x) .bincode(runif(1),c(0,x,1)))
   }
 
-  isguess <- runif(nrow(out)) < pars[is2,"gp"]
+  isguess <- runif(nrow(out)) < pars[2*c(1:(nrow(pars)/2)),"gp"]
   if (any(isguess)) {
     nt <- sum(isguess)
-    p <- pars[isguess,c("v", "sv", "gb", "A", "t0"),drop=FALSE]
-    names(p)[3] <- "b"
+    pisguess <- rep(isguess,each=2)
+    p <- pars[pisguess,c("v", "sv", "gb", "A", "t0"),drop=FALSE]
+    colnames(p)[3] <- "b"
     Rrt <- rLBA(factor(rep(1:2,nt)),p)
     Rrt$R <- as.numeric(Rrt$R)
-    isp2 <- 1:nrow(pars) %% 2 == 0
-    isR2 <- Rrt$R==2
-    nc <- sum(ispg)+1
     pgnams <- sort(colnames(pars)[substr(colnames(pars),1,2)=="pg"])
-    Rrt$R[!isR2] <- (nc+1) - pg(pars[!isp2 & isguess,pgnams,drop=FALSE][!isR2,,drop=FALSE])
-    Rrt$R[ isR2] <-     nc + pg(pars[ isp2 & isguess,pgnams,drop=FALSE][ isR2,,drop=FALSE])
+    nc <- length(pgnams)+1
+    p <- pars[pisguess,pgnams,drop=FALSE]
+    isR2 <- Rrt$R==2
+    is2 <- 1:nrow(p)%%2 == 0
+    Rrt$R[!isR2] <- (nc+1) - pg(p[!is2,,drop=FALSE][!isR2,,drop=FALSE])
+    Rrt$R[ isR2] <-     nc + pg(p[ is2,,drop=FALSE][ isR2,,drop=FALSE])
     out[isguess,c("R","rt")] <- Rrt
   }
   out
@@ -159,12 +163,11 @@ rLBA_BE <- function(lR,pars,ok=rep(TRUE,dim(pars)[1]),return_activation = FALSE)
     out <- cbind(out,y1=bad,y2=bad)
     out[ok,] <- tmp
   }
-  out[ok,] <- guess(out[ok,],pars[ok,])
+  out[ok,] <- guess_mtr(out[ok,],pars[ok,])
   out$R <- factor(out$R,levels=1:(2*nr))
   if (!(length(lR)%%2==0)) {
     levels(out$R) <- c(1:nr,nr:(2*nr-1))
   }
-  out$R <- factor(out$R,levels=lR)
   out
 }
 
@@ -224,12 +227,11 @@ rLBA_TC <- function(lR,pars,ok=rep(TRUE,dim(pars)[1]),return_activation = FALSE)
     out <- cbind(out,y1=bad,y2=bad)
     out[ok,] <- tmp
   }
-  out[ok,] <- guess(out[ok,],pars[ok,])
+  out[ok,] <- guess_mtr(out[ok,],pars[ok,])
   out$R <- factor(out$R,levels=1:(2*nr))
   if (!(length(lR)%%2==0)) {
     levels(out$R) <- c(1:nr,nr:(2*nr-1))
   }
-  out$R <- factor(out$R,levels=lR)
   out
 }
 
@@ -430,13 +432,14 @@ BE2LBA <- function(){
     type="BE",
     p_types=c("v" = 1,"sv" = log(1),"B" = log(1),"A" = log(0),"t0" = log(0),
               r=qnorm(.5),DT1=log(.5),
-              gB=log(1),gp=qnorm(1),pg1=qnorm(1)),
+              gB=log(1),gp=qnorm(0),pg1=qnorm(1)),
     transform=list(func=c(v = "identity",sv = "exp", B = "exp", A = "exp",t0 = "exp",
                           r="pnorm",DT1="exp",
                           gB="exp",gp="pnorm",pg1="pnorm")),
     bound=list(minmax=cbind(v=c(-Inf,Inf),sv = c(0, Inf), A=c(1e-4,Inf),b=c(0,Inf),
       t0=c(0.05,Inf),r=c(-1,1),DT1=c(0,Inf),
-      gb=c(0,Inf),gp=c(0,1),pg1=c(0,1)),exception=c(A=0)),
+      gb=c(0,Inf),gp=c(0,.2),pg1=c(0,1)),
+      exception=list(c(A=0,gp=0,pg1=1),c(pg1=0))),
     # Trial dependent parameter transform
     Ttransform = function(pars,dadm) {
       pars[,"r"] <- 2*pars[,"r"]-1
@@ -476,7 +479,8 @@ BE2PLBA <- function(){
                           gB="exp",gp="pnorm",pg1="pnorm")),
     bound=list(minmax=cbind(v=c(-Inf,Inf),sv = c(0, Inf), A=c(1e-4,Inf),b=c(0,Inf),
       t0=c(0.05,Inf),r=c(-1,1),DT1=c(0,1),
-      gb=c(0,Inf),gp=c(0,1),pg1=c(0,1)),exception=c(A=0)),
+      gb=c(0,Inf),gp=c(0,.2),pg1=c(0,1)),
+      exception=list(c(A=0,gp=0,pg1=1),c(pg1=0))),
     # Trial dependent parameter transform
     Ttransform = function(pars,dadm) {
       pars[,"r"] <- 2*pars[,"r"]-1
@@ -515,7 +519,8 @@ TC2LBA <- function(){
                           gB="exp",gp="pnorm",pg1="pnorm")),
     bound=list(minmax=cbind(v=c(-Inf,Inf),sv = c(0, Inf), A=c(1e-4,Inf),b=c(0,Inf),
       t0=c(0.05,Inf),r=c(-1,1),DT1=c(0,Inf),
-      gb=c(0,Inf),gp=c(0,1),pg1=c(0,1)),exception=c(A=0)),
+      gb=c(0,Inf),gp=c(0,.2),pg1=c(0,1)),
+      exception=list(c(A=0,gp=0,pg1=1),c(pg1=0))),
     # Trial dependent parameter transform
     Ttransform = function(pars,dadm) {
       pars[,"r"] <- 2*pars[,"r"]-1
@@ -551,10 +556,11 @@ BE3LBA <- function(){
               gB=log(1),gp=qnorm(0),pg1=qnorm(1),pg2=qnorm(0)),
     transform=list(func=c(v = "identity",sv = "exp", B = "exp", A = "exp",t0 = "exp",
                           r="pnorm",DT1="exp",DT2="exp",
-                          gB="exp",gp="pnorm",g1="pnorm",g2="pnorm")),
+                          gB="exp",gp="pnorm",pg1="pnorm",pg2="pnorm")),
     bound=list(minmax=cbind(v=c(-Inf,Inf),sv = c(0, Inf), A=c(1e-4,Inf),b=c(0,Inf),
       t0=c(0.05,Inf),r=c(-1,1),DT1=c(0,Inf),DT2=c(0,Inf),
-      gb=c(0,Inf),gp=c(0,1),pg1=c(0,1)),exception=c(A=0)),
+      gb=c(0,Inf),gp=c(0,.2),pg1=c(0,1),pg2=c(0,1)),
+      exception=list(c(A=0,gp=0,pg1=1,pg2=1),c(pg1=0,pg2=0))),
     # Trial dependent parameter transform
     Ttransform = function(pars,dadm) {
       pars[,"r"] <- 2*pars[,"r"]-1
@@ -592,7 +598,8 @@ BE3PLBA <- function(){
                           gB="exp",gp="pnorm",pg1="pnorm",pg2="pnorm")),
     bound=list(minmax=cbind(v=c(-Inf,Inf),sv = c(0, Inf), A=c(1e-4,Inf),b=c(0,Inf),
       t0=c(0.05,Inf),r=c(-1,1),DT1=c(0,1),DT2=c(0,1),
-      gb=c(0,Inf),gp=c(0,1),pg1=c(0,1),pg2=c(0,1)),exception=c(A=0)),
+      gb=c(0,Inf),gp=c(0,.2),pg1=c(0,1),pg2=c(0,1)),
+      exception=list(c(A=0,gp=0,pg1=1,pg2=1),c(pg1=0,pg2=0))),
     # Trial dependent parameter transform
     Ttransform = function(pars,dadm) {
       pars[,"r"] <- 2*pars[,"r"]-1
@@ -630,7 +637,8 @@ TC3LBA <- function(){
                           gB="exp",gp="pnorm",pg1="pnorm",pg2="pnorm")),
     bound=list(minmax=cbind(v=c(-Inf,Inf),sv = c(0, Inf), A=c(1e-4,Inf),b=c(0,Inf),
       t0=c(0.05,Inf),r=c(-1,1),DT1=c(0,Inf),DT2=c(0,Inf),
-      gb=c(0,Inf),gp=c(0,1),pg1=c(0,1),pg2=c(0,1)),exception=c(A=0)),
+      gb=c(0,Inf),gp=c(0,.2),pg1=c(0,1),pg2=c(0,1)),
+      exception=list(c(A=0,gp=0,pg1=1,pg2=1),c(pg1=0,pg2=0))),
     # Trial dependent parameter transform
     Ttransform = function(pars,dadm) {
       pars[,"r"] <- 2*pars[,"r"]-1
@@ -669,7 +677,8 @@ BE4LBA <- function(){
                           gB="exp",gp="pnorm",pg1="pnorm",pg2="pnorm",pg3="pnorm")),
     bound=list(minmax=cbind(v=c(-Inf,Inf),sv = c(0, Inf), A=c(1e-4,Inf),b=c(0,Inf),
       t0=c(0.05,Inf),r=c(-1,1),DT1=c(0,Inf),DT2=c(0,Inf),DT3=c(0,Inf),
-      gb=c(0,Inf),gp=c(0,1),pg1=c(0,1),pg2=c(0,1),pg3=c(0,1)),exception=c(A=0)),
+      gb=c(0,Inf),gp=c(0,.2),pg1=c(0,1),pg2=c(0,1),pg3=c(0,1)),
+      exception=list(c(A=0,gp=0,pg1=1,pg2=1,pg3=1),c(pg1=0,pg2=0,pg3=0))),
     # Trial dependent parameter transform
     Ttransform = function(pars,dadm) {
       pars[,"r"] <- 2*pars[,"r"]-1
@@ -707,7 +716,8 @@ BE4PLBA <- function(){
                           gB="exp",gp="pnorm",pg1="pnorm",pg2="pnorm",pg3="pnorm")),
     bound=list(minmax=cbind(v=c(-Inf,Inf),sv = c(0, Inf), A=c(1e-4,Inf),b=c(0,Inf),
       t0=c(0.05,Inf),r=c(-1,1),DT1=c(0,1),DT2=c(0,1),DT3=c(0,1),
-      gb=c(0,Inf),gp=c(0,1),pg1=c(0,1),pg2=c(0,1),pg3=c(0,1)),exception=c(A=0)),
+      gb=c(0,Inf),gp=c(0,.2),pg1=c(0,1),pg2=c(0,1),pg3=c(0,1)),
+      exception=list(c(A=0,gp=0,pg1=1,pg2=1,pg3=1),c(pg1=0,pg2=0,pg3=0))),
     # Trial dependent parameter transform
     Ttransform = function(pars,dadm) {
       pars[,"r"] <- 2*pars[,"r"]-1
@@ -746,7 +756,8 @@ TC4LBA <- function(){
                           gB="exp",gp="pnorm",pg1="pnorm",pg2="pnorm",pg3="pnorm")),
     bound=list(minmax=cbind(v=c(-Inf,Inf),sv = c(0, Inf), A=c(1e-4,Inf),b=c(0,Inf),
       t0=c(0.05,Inf),r=c(-1,1),DT1=c(0,Inf),DT2=c(0,Inf),DT3=c(0,Inf),
-      gb=c(0,Inf),gp=c(0,1),pg1=c(0,1),pg2=c(0,1),pg3=c(0,1)),exception=c(A=0)),
+      gb=c(0,Inf),gp=c(0,.2),pg1=c(0,1),pg2=c(0,1),pg3=c(0,1)),
+      exception=list(c(A=0,gp=0,pg1=1,pg2=1,pg3=1),c(pg1=0,pg2=0,pg3=0))),
     # Trial dependent parameter transform
     Ttransform = function(pars,dadm) {
       pars[,"r"] <- 2*pars[,"r"]-1
