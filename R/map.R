@@ -26,9 +26,22 @@ do_pre_transform <- function(p_vector,transform)
 do_bound <- function(pars,bound, lR = NULL) {
   tpars <- t(pars[,colnames(bound$minmax),drop=FALSE])
   ok <- tpars > bound$minmax[1,] & tpars < bound$minmax[2,]
-  if (!is.null(bound$exception)) ok[names(bound$exception),] <-
-    ok[names(bound$exception),] |
-    (tpars[names(bound$exception),] == bound$exception)
+
+  if (!is.null(bound$exception)) {
+    if (is.list(bound$exception)) {
+      for (i in 1:length(bound$exception))
+        ok[names(bound$exception[[i]]),] <-
+          ok[names(bound$exception[[i]]),] |
+          (tpars[names(bound$exception[[i]]),] == bound$exception[[i]])
+    } else ok[names(bound$exception),] <-
+      ok[names(bound$exception),] |
+      (tpars[names(bound$exception),] == bound$exception)
+  }
+
+  # if (!is.null(bound$exception)) ok[names(bound$exception),] <-
+  #   ok[names(bound$exception),] |
+  #   (tpars[names(bound$exception),] == bound$exception)
+
   bound <- colSums(ok) == nrow(ok)
   if(!is.null(lR)){
     lvl <- length(unique(lR))
