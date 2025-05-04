@@ -508,8 +508,10 @@ if (type=="DDM") {
   if (simulate) datar$rt <- NA else {
     R <- datar$R
     R[is.na(R)] <- levels(datar$lR)[1]
-    if (type %in% c("BE","TC")) datar$winner <- NA else
-      datar$winner <- datar$lR==R
+    if (!(type %in% c("BE","TC"))) datar$winner <- datar$lR==R else {
+      halfway <- (max(as.numeric(datar$R))+1)/2 # This will be wrong half the time for odd ratings
+      datar$winner <- as.numeric(datar$lR)==(as.numeric(as.numeric(datar$R)>=halfway)+1)
+    }
     # datar$winner[is.na(datar$winner)] <- FALSE
   }
   # # sort cells together
