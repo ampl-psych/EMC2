@@ -357,7 +357,7 @@ make_random_effects <- function(design, group_means, n_subj = NULL, variance_pro
   }
   if(length(group_means) != length(sampled_pars(design))) stop("You must specify as many means as parameters in your design")
   if(is.null(covariances)) covariances <- diag(abs(group_means)*variance_proportion)
-  random_effects <- mvtnorm::rmvnorm(n_subj,mean=group_means,sigma=covariances)
+  random_effects <- rmvn(n_subj,mean=group_means,sigma=covariances)
   colnames(random_effects) <- names(sampled_pars(design))
   rownames(random_effects) <- subnames
   return(random_effects)
