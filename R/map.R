@@ -42,10 +42,10 @@ do_bound <- function(pars,bound, lR = NULL) {
   #   ok[names(bound$exception),] |
   #   (tpars[names(bound$exception),] == bound$exception)
 
-  bound <- colSums(ok) == nrow(ok)
+  bound <- colSums_cpp(ok) == nrow(ok)
   if(!is.null(lR)){
     lvl <- length(unique(lR))
-    bound <- rep(colSums(matrix(bound, lvl)) == lvl, each = lvl)
+    bound <- rep(colSums_cpp(matrix(bound, lvl)) == lvl, each = lvl)
   }
   return(bound)
 }
@@ -215,7 +215,7 @@ map_mcmc <- function(mcmc,design,include_constants = TRUE, add_recalculated = FA
       if(nrow(covariates) != nrow(pmat)) covariates <- covariates[sample(1:nrow(covariates), nrow(pmat), replace = T),, drop = F]
       pmat <- cbind(pmat, covariates)
     }
-    t(mapi %*% t(pmat[,dimnames(mapi)[[2]],drop=FALSE]))
+    t(mat_mult(mapi,t(pmat[,dimnames(mapi)[[2]],drop=FALSE])))
   }
   get_p_types <- function(nams, reverse = FALSE){
     if(reverse){

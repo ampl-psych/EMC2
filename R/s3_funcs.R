@@ -316,7 +316,7 @@ parameters.emc <- function(x,selection = "mu", N = NULL, resample = FALSE, ...)
   emc <- x
 
   if(is.null(N) || resample){
-    nstage <- colSums(chain_n(emc))
+    nstage <- colSums_cpp(chain_n(emc))
     has_ran <- nstage[nstage != 0]
     if(!is.null(N)){
       N_res <- N

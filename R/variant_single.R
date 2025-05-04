@@ -27,7 +27,7 @@ get_prior_single <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5
     out <- list()
     par_names <- names(sampled_pars(design, doMap = F))
     if(selection != "alpha") stop("for variant single, only alpha can be specified")
-    out$alpha <- t(mvtnorm::rmvnorm(N, prior$theta_mu_mean, prior$theta_mu_var))
+    out$alpha <- t(rmvn(N, prior$theta_mu_mean, prior$theta_mu_var))
     out$alpha <- array(out$alpha, dim = c(length(par_names), 1, N), dimnames = list(par_names, "alpha", NULL))
   }
   return(out)
@@ -99,9 +99,9 @@ filtered_samples_single <- function(sampler, filter){
 # group_dist_single <- function(random_effect = NULL, parameters, sample = FALSE, n_samples = NULL, info){
 #   # This is for the single case actually the prior distribution.
 #   if (sample){
-#     return(rmvnorm(n_samples, info$prior$theta_mu_mean, info$prior$theta_mu_var))
+#     return(rmvn(n_samples, info$prior$theta_mu_mean, info$prior$theta_mu_var))
 #   }else{
-#     logw_second<-max(-5000*info$n_randeffect, dmvnorm(random_effect, info$prior$theta_mu_mean,info$prior$theta_mu_var,log=TRUE))
+#     logw_second<-max(-5000*info$n_randeffect, dmvn(random_effect, info$prior$theta_mu_mean,info$prior$theta_mu_var,log=TRUE))
 #     return(logw_second)
 #   }
 # }
@@ -126,7 +126,7 @@ bridge_add_info_single <- function(info, samples){
 
 bridge_group_and_prior_and_jac_single <- function(proposals_group, proposals_list, info){
   proposals <- do.call(rbind, proposals_list)
-  prior_mu <- dmvnorm(proposals, mean = info$prior$theta_mu_mean, sigma = info$prior$theta_mu_var, log =T)
+  prior_mu <- dmvn(proposals, mean = info$prior$theta_mu_mean, sigma = info$prior$theta_mu_var, log =T)
   n_iter <- nrow(proposals_list[[1]])
   prior_mu <- matrix(prior_mu, ncol = info$n_subjects)
   return(rowSums(prior_mu)) # Output is of length n_iter

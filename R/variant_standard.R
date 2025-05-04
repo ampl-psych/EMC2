@@ -79,13 +79,13 @@ get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1
     par_names <- names(sampled_pars(design, doMap = F))
     samples <- list()
     if(selection %in% "beta"){
-      beta <- t(mvtnorm::rmvnorm(N, mean = prior$beta_mean,
+      beta <- t(rmvn(N, mean = prior$beta_mean,
                                sigma = prior$beta_var))
       rownames(beta) <- betas
       samples$beta <- beta
     }
     if(selection %in% c("mu", "alpha")){
-      mu <- t(mvtnorm::rmvnorm(N, mean = prior$theta_mu_mean,
+      mu <- t(rmvn(N, mean = prior$theta_mu_mean,
                              sigma = prior$theta_mu_var))
       rownames(mu) <- par_names
       if(selection %in% c("mu")){
@@ -125,12 +125,12 @@ get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1
 
 get_startpoints_standard <- function(pmwgs, start_mu, start_var){
   n_pars <- sum(!pmwgs$nuisance)
-  if (is.null(start_mu)) start_mu <- rmvnorm(1, mean = pmwgs$prior$theta_mu_mean, sigma = pmwgs$prior$theta_mu_var)
+  if (is.null(start_mu)) start_mu <- rmvn(1, mean = pmwgs$prior$theta_mu_mean, sigma = pmwgs$prior$theta_mu_var)
   # If no starting point for group var just sample some
   if (is.null(start_var)) start_var <- riwish(n_pars * 3,diag(n_pars))
   start_a_half <- 1 / rgamma(n = n_pars, shape = 2, rate = 1)
   if(!is.null(pmwgs$betas)){
-    betas <- rmvnorm(1, mean = pmwgs$prior$beta_mean, sigma = pmwgs$prior$beta_var)
+    betas <- rmvn(1, mean = pmwgs$prior$beta_mean, sigma = pmwgs$prior$beta_var)
   } else{
     betas <- NULL
   }
@@ -288,18 +288,18 @@ gibbs_step_standard <- function(sampler, alpha) {
       par_idx <- par_idx + ncol(group_designs[[k]])
     }
     # Accumulate
-    prec_data <- prec_data + crossprod(M_i, tvinv %*% M_i)
-    mean_data <- mean_data + crossprod(M_i, tvinv %*% alpha[, i, drop=FALSE])
+    prec_data <- prec_data + crossprod(M_i, mat_mult(tvinv,M_i))
+    mean_data <- mean_data + crossprod(M_i, mat_mult(tvinv,alpha[, i, drop=FALSE]))
   }
 
   prec_post <- prior_invar + prec_data
   cov_post  <- solve(prec_post)
-  mean_post <- cov_post %*% (prior_invar %*% prior_mean + mean_data)
+  mean_post <- mat_mult(cov_post,(mat_mult(prior_invar,prior_mean) + mean_data))
 
   # Draw new big vector
   L          <- t(chol(cov_post))
   z          <- rnorm(M)
-  mean_new   <- as.vector(mean_post + L %*% z)
+  mean_new   <- as.vector(mean_post + mat_mult(L,z))
 
   ##--------------------------------------------------
   ## 3) Compute residuals = alpha - (X * [mu+beta])
@@ -315,7 +315,7 @@ gibbs_step_standard <- function(sampler, alpha) {
       par_idx <- par_idx + ncol(group_designs[[k]])
     }
 
-    mu_i <- M_i %*% mean_new
+    mu_i <- mat_mult(M_i,mean_new)
     subj_mu[,i] <- mu_i
     resid[, i] <- alpha[,i] - mu_i
   }
@@ -335,7 +335,7 @@ gibbs_step_standard <- function(sampler, alpha) {
       group_idx <- blocked_idx[ par_group[blocked_idx] == g ]
       d <- length(group_idx)
       resid_block <- resid[group_idx, , drop=FALSE]
-      cov_block   <- resid_block %*% t(resid_block)
+      cov_block   <- mat_mult(resid_block,t(resid_block))
 
       B_half_block <- 2 * prior$v * diag(1 / a_half[group_idx], d) + cov_block
       df_block     <- prior$v + d - 1 + n
@@ -475,7 +475,7 @@ unwind_chol <- function(x,reverse=FALSE) {
     out=array(0,dim=c(n,n))
     out[lower.tri(out,diag=TRUE)]=x
     diag(out)=exp(diag(out))
-    out=out%*%t(out)
+    out=mat_mult(out,t(out))
   } else {
     y=t(base::chol(x))
     diag(y)=log(diag(y))
@@ -548,13 +548,13 @@ bridge_group_and_prior_and_jac_standard <- function(
   sum_out <- numeric(n_iter)
 
   # Precompute the prior on mu, beta outside the loop (vectorized)
-  prior_mu_log <- dmvnorm(theta_mu,
+  prior_mu_log <- dmvn(theta_mu,
                           mean  = prior$theta_mu_mean,
                           sigma = prior$theta_mu_var,
                           log   = TRUE)
   prior_beta_log <- 0
   if (B > 0) {
-    prior_beta_log <- dmvnorm(theta_beta,
+    prior_beta_log <- dmvn(theta_beta,
                               mean  = prior$beta_mean,
                               sigma = prior$beta_var,
                               log   = TRUE)
@@ -602,7 +602,7 @@ bridge_group_and_prior_and_jac_standard <- function(
         jac_var2 <- jac_var2 + calc_log_jac_chol(theta_var2_list[[block]][i, ])
       }
     }
-    # 3) Compute group likelihood = sum_{s=1..n_subj} dmvnorm(alpha_s, mu_s, var_curr)
+    # 3) Compute group likelihood = sum_{s=1..n_subj} dmvn(alpha_s, mu_s, var_curr)
     regressors_i <- numeric(M)
     regressors_i[mean_index]  <- theta_mu[i, ]   # fill the intercept positions
     if(B > 0){
@@ -617,11 +617,11 @@ bridge_group_and_prior_and_jac_standard <- function(
         # The row-k design vector for subject s is group_designs[[k]][s, ] => e.g. (1 x m_k).
         x_sk <- group_designs[[k]][s, , drop = FALSE]
         # Then the mean for row k is the dot product of x_sk with the relevant slice of 'regressors_i'.
-        mu_s[k] <- x_sk %*% regressors_i[par_idx + 1:ncol(group_designs[[k]])]
+        mu_s[k] <- mat_mult(x_sk,regressors_i[par_idx + 1:ncol(group_designs[[k]])])
         par_idx <- par_idx + ncol(group_designs[[k]])
       }
       # Now alpha_s ~ N(mu_s, var_curr)
-      group_ll <- group_ll + dmvnorm(alpha_s, mu_s, var_curr, log = TRUE)
+      group_ll <- group_ll + dmvn(alpha_s, mu_s, var_curr, log = TRUE)
     }
 
     # 4) Prior on var1, var2, and a => same partial-block logic
@@ -746,7 +746,7 @@ group__IC_standard <- function(emc, stage="sample", filter=NULL) {
     var_i <- theta_var[,, i]
     if(!has_betas) {
       # no betas => old approach
-      lls[i] <- sum(dmvnorm(t(alpha[,, i]), theta_mu[, i], var_i, log=TRUE))
+      lls[i] <- sum(dmvn(t(alpha[,, i]), theta_mu[, i], var_i, log=TRUE))
     } else {
       # bridging approach
       regressors_i <- numeric(p + length(mean_beta))
@@ -760,11 +760,11 @@ group__IC_standard <- function(emc, stage="sample", filter=NULL) {
         for(k in seq_len(p)) {
           x_sk <- group_designs[[k]][s,,drop=FALSE]
           ncols_k <- ncol(group_designs[[k]])
-          M_i[k] <- x_sk %*% regressors_i[par_start:(par_start + ncols_k - 1)]
+          M_i[k] <- mat_mult(x_sk,regressors_i[par_start:(par_start + ncols_k - 1)])
           par_start <- par_start + ncols_k
         }
         alpha_s <- alpha[, s, i]
-        ll_i <- ll_i + dmvnorm(alpha_s, M_i, var_i, log=TRUE)
+        ll_i <- ll_i + dmvn(alpha_s, M_i, var_i, log=TRUE)
       }
       lls[i] <- ll_i
     }
@@ -777,7 +777,7 @@ group__IC_standard <- function(emc, stage="sample", filter=NULL) {
   mean_pars_ll <- 0
   if(!has_betas) {
     for(s in seq_len(n_subj)) {
-      mean_pars_ll <- mean_pars_ll + dmvnorm(mean_alpha[, s], mean_mu, mean_var, log=TRUE)
+      mean_pars_ll <- mean_pars_ll + dmvn(mean_alpha[, s], mean_mu, mean_var, log=TRUE)
     }
   } else {
     # bridging with mean mu, mean beta
@@ -790,11 +790,11 @@ group__IC_standard <- function(emc, stage="sample", filter=NULL) {
       for(k in seq_len(p)) {
         x_sk <- group_designs[[k]][s,,drop=FALSE]
         nc_k <- ncol(group_designs[[k]])
-        M_s[k] <- x_sk %*% regressors_mean[par_start:(par_start+nc_k-1)]
+        M_s[k] <- mat_mult(x_sk,regressors_mean[par_start:(par_start+nc_k-1)])
         par_start <- par_start + nc_k
       }
       mean_pars_ll <- mean_pars_ll +
-        dmvnorm(mean_alpha[, s], M_s, mean_var, log=TRUE)
+        dmvn(mean_alpha[, s], M_s, mean_var, log=TRUE)
     }
   }
   Dmean <- -2*mean_pars_ll

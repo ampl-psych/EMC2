@@ -7,6 +7,69 @@
 #include <functional>
 using namespace Rcpp;
 
+// [[Rcpp::export]]
+NumericVector colSums_cpp(NumericMatrix mat) {
+  int ncol = mat.ncol();   // Get number of columns
+  int nrow = mat.nrow();   // Get number of rows
+  NumericVector col_sums(ncol);  // Create a vector to store column sums
+
+  for (int j = 0; j < ncol; j++) {
+    double sum = 0;
+    for (int i = 0; i < nrow; i++) {
+      sum += mat(i, j);  // Sum the elements in the j-th column
+    }
+    col_sums[j] = sum;
+  }
+  return col_sums;
+}
+
+// [[Rcpp::export]]
+NumericMatrix rcpp_forwardsolve(NumericMatrix l, NumericMatrix x) {
+    int n = l.nrow(); // Number of rows/columns in the lower triangular matrix
+    int m = x.ncol(); // Number of columns in the matrix x (i.e., number of right-hand sides)
+
+    // Result matrix to store the solutions
+    NumericMatrix y(n, m);
+
+    // Perform forward substitution
+    for (int j = 0; j < m; j++) { // Iterate through columns of x (right-hand sides)
+        for (int i = 0; i < n; i++) { // Iterate over rows of L (lower triangular matrix)
+            y(i, j) = x(i, j); // Start with the right-hand side value
+            for (int k = 0; k < i; k++) { // Subtract the known contributions
+                y(i, j) -= l(i, k) * y(k, j);
+            }
+            y(i, j) /= l(i, i); // Divide by the diagonal element (l(i, i))
+        }
+    }
+
+    return y;
+}
+
+
+
+// [[Rcpp::export]]
+NumericMatrix mat_mult(NumericMatrix A, NumericMatrix B) {
+  int n = A.nrow();
+  int m = A.ncol();
+  int p = B.ncol();
+
+  // Initialize result matrix with the correct dimensions
+  NumericMatrix result(n, p);
+
+  // Perform matrix multiplication
+  for (int i = 0; i < n; ++i) {
+    for (int j = 0; j < p; ++j) {
+      double sum = 0;
+      for (int k = 0; k < m; ++k) {
+        sum += A(i, k) * B(k, j);
+      }
+      result(i, j) = sum;
+    }
+  }
+
+  return result;
+}
+
 LogicalVector contains(CharacterVector sv, std::string txt) {
   LogicalVector res(sv.size());
   for (int i = 0; i < sv.size(); i ++) {
