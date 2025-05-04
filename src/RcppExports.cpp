@@ -424,6 +424,41 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// colSums_cpp
+NumericVector colSums_cpp(NumericMatrix mat);
+RcppExport SEXP _EMC2_colSums_cpp(SEXP matSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericMatrix >::type mat(matSEXP);
+    rcpp_result_gen = Rcpp::wrap(colSums_cpp(mat));
+    return rcpp_result_gen;
+END_RCPP
+}
+// rcpp_forwardsolve
+NumericMatrix rcpp_forwardsolve(NumericMatrix l, NumericMatrix x);
+RcppExport SEXP _EMC2_rcpp_forwardsolve(SEXP lSEXP, SEXP xSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericMatrix >::type l(lSEXP);
+    Rcpp::traits::input_parameter< NumericMatrix >::type x(xSEXP);
+    rcpp_result_gen = Rcpp::wrap(rcpp_forwardsolve(l, x));
+    return rcpp_result_gen;
+END_RCPP
+}
+// mat_mult
+NumericMatrix mat_mult(NumericMatrix A, NumericMatrix B);
+RcppExport SEXP _EMC2_mat_mult(SEXP ASEXP, SEXP BSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericMatrix >::type A(ASEXP);
+    Rcpp::traits::input_parameter< NumericMatrix >::type B(BSEXP);
+    rcpp_result_gen = Rcpp::wrap(mat_mult(A, B));
+    return rcpp_result_gen;
+END_RCPP
+}
 // c_add_charvectors
 CharacterVector c_add_charvectors(CharacterVector x, CharacterVector y);
 RcppExport SEXP _EMC2_c_add_charvectors(SEXP xSEXP, SEXP ySEXP) {
@@ -463,6 +498,9 @@ static const R_CallMethodDef CallEntries[] = {
     {"_EMC2_build_hrf_kernel", (DL_FUNC) &_EMC2_build_hrf_kernel, 10},
     {"_EMC2_construct_design_matrix", (DL_FUNC) &_EMC2_construct_design_matrix, 13},
     {"_EMC2_calc_ll", (DL_FUNC) &_EMC2_calc_ll, 11},
+    {"_EMC2_colSums_cpp", (DL_FUNC) &_EMC2_colSums_cpp, 1},
+    {"_EMC2_rcpp_forwardsolve", (DL_FUNC) &_EMC2_rcpp_forwardsolve, 2},
+    {"_EMC2_mat_mult", (DL_FUNC) &_EMC2_mat_mult, 2},
     {"_EMC2_c_add_charvectors", (DL_FUNC) &_EMC2_c_add_charvectors, 2},
     {NULL, NULL, 0}
 };

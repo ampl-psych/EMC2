@@ -1,18 +1,12 @@
-donothing <- function(i) repeat{}
-
-pdonothing <- function(i)
-  parallel::mclapply(1:3,donothing,mc.cores=3)
-
-#' Title
-#'
-#' @returns
-#' @export
-#'
-#' @examples
-test_parallel <- function() {
-  ncores=3
-  parallel::mclapply(1:ncores,pdonothing,mc.cores=ncores)
-}
+# donothing <- function(i) repeat{}
+#
+# pdonothing <- function(i)
+#   parallel::mclapply(1:3,donothing,mc.cores=3)
+#
+# test_parallel <- function() {
+#   ncores=3
+#   parallel::mclapply(1:ncores,pdonothing,mc.cores=ncores)
+# }
 
 
 rmvn <- function (n, mean = rep(0, nrow(sigma)), sigma = diag(length(mean)),
