@@ -215,7 +215,7 @@ rtmvnorm <- function (n, mean = rep(0, nrow(sigma)), sigma = diag(length(mean)),
         stop("Invalid arguments for ", sQuote("mean"), " and ",
             sQuote("sigma"), "/", sQuote("H"), ". Need at least mean vector and covariance or precision matrix.")
     }
-    cargs <- tmvnorm:::checkTmvArgs(mean, sigma, lower, upper)
+    cargs <- checkTmvArgs(mean, sigma, lower, upper)
     mean <- cargs$mean
     sigma <- cargs$sigma
     lower <- cargs$lower
