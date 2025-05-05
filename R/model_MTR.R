@@ -290,7 +290,7 @@ recintab0 <- function (kappa, a, b, mu, Sigma)
       bi = b[ind2]
       mui = mu[ind2]
       Si = Sigma[ind2, i]
-      SSi = Sigma[ind2, ind2] - mat_mult(Si,t(Si)/Sigma[i,i])
+      SSi = Sigma[ind2, ind2] - mvmult(Si,t(Si)/Sigma[i,i])
       ind = (begind[i] + 1):begind[i + 1]
       if (a[i] != -Inf) {
         mai = mui + Si/Sigma[i, i] * (a[i] - mu[i])
@@ -398,8 +398,8 @@ n1PDF_MTR_1 <- function(rt, pars,dl,du,b)
       C_j <- diag(cs[,x])
       m_j <- ms[,x]
 
-      m_x <- as.vector(m_j + mat_mult(C_j,pars[,"v"]))
-      sigma_x <- mat_mult(mat_mult(C_j,sigma),t(C_j))
+      m_x <- as.vector(m_j + mvmult(C_j,pars[,"v"]))
+      sigma_x <- mvmult(mvmult(C_j,sigma),t(C_j))
 
       mom <- recintab0(kappa = rep(1, 2),
                                   mu = m_x,

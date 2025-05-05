@@ -215,7 +215,7 @@ map_mcmc <- function(mcmc,design,include_constants = TRUE, add_recalculated = FA
       if(nrow(covariates) != nrow(pmat)) covariates <- covariates[sample(1:nrow(covariates), nrow(pmat), replace = T),, drop = F]
       pmat <- cbind(pmat, covariates)
     }
-    t(mat_mult(mapi,t(pmat[,dimnames(mapi)[[2]],drop=FALSE])))
+    t(mvmult(mapi,t(pmat[,dimnames(mapi)[[2]],drop=FALSE])))
   }
   get_p_types <- function(nams, reverse = FALSE){
     if(reverse){

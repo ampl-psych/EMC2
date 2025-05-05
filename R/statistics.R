@@ -184,7 +184,7 @@ rwish <- function(v, S){
     pseq <- 1:(p - 1)
     Z[rep(p * pseq, pseq) + unlist(lapply(pseq, seq))] <- rnorm(p * (p - 1)/2)
   }
-  return(crossprod(mat_mult(Z,CC)))
+  return(crossprod(mvmult(Z,CC)))
 }
 
 
@@ -448,9 +448,9 @@ condMVN <- function (mean, sigma, dependent.ind, given.ind, X.given, check.sigma
   B <- sigma[dependent.ind, dependent.ind]
   C <- sigma[dependent.ind, given.ind, drop = FALSE]
   D <- sigma[given.ind, given.ind]
-  CDinv <- mat_mult(C,chol2inv(chol(D)))
-  cMu <- c(mean[dependent.ind] + mat_mult(CDinv,(X.given - mean[given.ind])))
-  cVar <- B - mat_mult(CDinv,t(C))
+  CDinv <- mvmult(C,chol2inv(chol(D)))
+  cMu <- c(mean[dependent.ind] + mvmult(CDinv,(X.given - mean[given.ind])))
+  cVar <- B - mvmult(CDinv,t(C))
   list(condMean = cMu, condVar = cVar)
 }
 

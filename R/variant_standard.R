@@ -288,18 +288,18 @@ gibbs_step_standard <- function(sampler, alpha) {
       par_idx <- par_idx + ncol(group_designs[[k]])
     }
     # Accumulate
-    prec_data <- prec_data + crossprod(M_i, mat_mult(tvinv,M_i))
-    mean_data <- mean_data + crossprod(M_i, mat_mult(tvinv,alpha[, i, drop=FALSE]))
+    prec_data <- prec_data + crossprod(M_i, mvmult(tvinv,M_i))
+    mean_data <- mean_data + crossprod(M_i, mvmult(tvinv,alpha[, i, drop=FALSE]))
   }
 
   prec_post <- prior_invar + prec_data
   cov_post  <- solve(prec_post)
-  mean_post <- mat_mult(cov_post,(mat_mult(prior_invar,prior_mean) + mean_data))
+  mean_post <- mvmult(cov_post,(mvmult(prior_invar,prior_mean) + mean_data))
 
   # Draw new big vector
   L          <- t(chol(cov_post))
   z          <- rnorm(M)
-  mean_new   <- as.vector(mean_post + mat_mult(L,z))
+  mean_new   <- as.vector(mean_post + mvmult(L,z))
 
   ##--------------------------------------------------
   ## 3) Compute residuals = alpha - (X * [mu+beta])
@@ -315,7 +315,7 @@ gibbs_step_standard <- function(sampler, alpha) {
       par_idx <- par_idx + ncol(group_designs[[k]])
     }
 
-    mu_i <- mat_mult(M_i,mean_new)
+    mu_i <- mvmult(M_i,mean_new)
     subj_mu[,i] <- mu_i
     resid[, i] <- alpha[,i] - mu_i
   }
@@ -335,7 +335,7 @@ gibbs_step_standard <- function(sampler, alpha) {
       group_idx <- blocked_idx[ par_group[blocked_idx] == g ]
       d <- length(group_idx)
       resid_block <- resid[group_idx, , drop=FALSE]
-      cov_block   <- mat_mult(resid_block,t(resid_block))
+      cov_block   <- mvmult(resid_block,t(resid_block))
 
       B_half_block <- 2 * prior$v * diag(1 / a_half[group_idx], d) + cov_block
       df_block     <- prior$v + d - 1 + n
@@ -475,7 +475,7 @@ unwind_chol <- function(x,reverse=FALSE) {
     out=array(0,dim=c(n,n))
     out[lower.tri(out,diag=TRUE)]=x
     diag(out)=exp(diag(out))
-    out=mat_mult(out,t(out))
+    out=mvmult(out,t(out))
   } else {
     y=t(base::chol(x))
     diag(y)=log(diag(y))
@@ -617,7 +617,7 @@ bridge_group_and_prior_and_jac_standard <- function(
         # The row-k design vector for subject s is group_designs[[k]][s, ] => e.g. (1 x m_k).
         x_sk <- group_designs[[k]][s, , drop = FALSE]
         # Then the mean for row k is the dot product of x_sk with the relevant slice of 'regressors_i'.
-        mu_s[k] <- mat_mult(x_sk,regressors_i[par_idx + 1:ncol(group_designs[[k]])])
+        mu_s[k] <- mvmult(x_sk,regressors_i[par_idx + 1:ncol(group_designs[[k]])])
         par_idx <- par_idx + ncol(group_designs[[k]])
       }
       # Now alpha_s ~ N(mu_s, var_curr)
@@ -760,7 +760,7 @@ group__IC_standard <- function(emc, stage="sample", filter=NULL) {
         for(k in seq_len(p)) {
           x_sk <- group_designs[[k]][s,,drop=FALSE]
           ncols_k <- ncol(group_designs[[k]])
-          M_i[k] <- mat_mult(x_sk,regressors_i[par_start:(par_start + ncols_k - 1)])
+          M_i[k] <- mvmult(x_sk,regressors_i[par_start:(par_start + ncols_k - 1)])
           par_start <- par_start + ncols_k
         }
         alpha_s <- alpha[, s, i]
@@ -790,7 +790,7 @@ group__IC_standard <- function(emc, stage="sample", filter=NULL) {
       for(k in seq_len(p)) {
         x_sk <- group_designs[[k]][s,,drop=FALSE]
         nc_k <- ncol(group_designs[[k]])
-        M_s[k] <- mat_mult(x_sk,regressors_mean[par_start:(par_start+nc_k-1)])
+        M_s[k] <- mvmult(x_sk,regressors_mean[par_start:(par_start+nc_k-1)])
         par_start <- par_start + nc_k
       }
       mean_pars_ll <- mean_pars_ll +
