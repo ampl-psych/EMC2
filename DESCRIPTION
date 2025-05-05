@@ -53,6 +53,7 @@ Imports:
     matrixcalc,
     methods,
     msm,
+    mvtnorm,
     parallel,
     stats,
     Matrix,
