@@ -136,7 +136,7 @@ rtmvnorm.rejection <- function (n, mean = rep(0, nrow(sigma)), sigma = diag(leng
     r <- length(lower)
     d <- length(mean)
     if (r == d & identical(D, diag(d))) {
-        alpha <- pmvn(lower = lower, upper = upper, mean = mean,
+        alpha <- pmvnorm(lower = lower, upper = upper, mean = mean,
             sigma = sigma)
         if (alpha <= 0.01)
             warning(sprintf("Acceptance rate is very low (%s) and rejection sampling becomes inefficient. Consider using Gibbs sampling.",
