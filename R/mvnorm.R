@@ -344,80 +344,80 @@ checkmvArgs <- function (lower, upper, mean, corr, sigma)
         sigma = sigma, uni = UNI)
 }
 
-mvt <- function (lower, upper, df, corr, delta, algorithm = GenzBretz(),
-    ...)
-{
-    if (...length() > 0)
-        algorithm <- GenzBretz(...)
-    else if (is.function(algorithm) || is.character(algorithm))
-        algorithm <- do.call(algorithm, list())
-    if (any(abs(lower - upper) < sqrt(.Machine$double.eps) *
-        (abs(lower) + abs(upper)) | lower == upper))
-        return(list(value = 0, error = 0, msg = "lower == upper"))
-    n <- ncol(corr)
-    if (is.null(n) || n < 2)
-        stop("dimension less then n = 2")
-    if (length(lower) != n)
-        stop("wrong dimensions")
-    if (length(upper) != n)
-        stop("wrong dimensions")
-    if (n > 1000)
-        stop("only dimensions 1 <= n <= 1000 allowed")
-    infin <- rep(2, n)
-    infin[isInf(upper)] <- 1
-    infin[isNInf(lower)] <- 0
-    infin[isNInf(lower) & isInf(upper)] <- -1
-    if (n >= 2 && ((isMiwa <- inherits(algorithm, "Miwa")) ||
-        inherits(algorithm, "TVPACK"))) {
-        if (any(infin == -1)) {
-            WhereBothInfIs <- which(infin == -1)
-            n <- n - length(WhereBothInfIs)
-            corr <- corr[-WhereBothInfIs, -WhereBothInfIs]
-            upper <- upper[-WhereBothInfIs]
-            lower <- lower[-WhereBothInfIs]
-            if (!missing(delta))
-                delta <- delta[-WhereBothInfIs]
-            if (n <= 1) {
-                if (n && !missing(delta)) {
-                  upper <- upper - delta
-                  lower <- lower - delta
-                }
-                return(list(value = if (n == 0) 1 else pnorm(upper) -
-                  pnorm(lower), error = 0, msg = "Normal Complettion (dim reduced to 1)"))
-            }
-            infin <- infin[-WhereBothInfIs]
-        }
-        if (isMiwa && any(infin == 0)) {
-            WhereNegativInfIs <- which(infin == 0)
-            inversecorr <- rep(1, n)
-            inversecorr[WhereNegativInfIs] <- -1
-            corr <- mvmult(mvmult(diag(inversecorr),corr),diag(inversecorr))
-            infin[WhereNegativInfIs] <- 1
-            tempsaveupper <- upper[WhereNegativInfIs]
-            upper[WhereNegativInfIs] <- -lower[WhereNegativInfIs]
-            lower[WhereNegativInfIs] <- -tempsaveupper
-        }
-    }
-    if (all(infin < 0))
-        return(list(value = 1, error = 0, msg = "Normal Completion"))
-    if (inherits(algorithm, "GenzBretz") && n > 1) {
-        corr <- matrix(as.vector(corr), ncol = n, byrow = TRUE)
-        corr <- corr[upper.tri(corr)]
-    }
-    ret <- probval(algorithm, n, df, lower, upper, infin, corr,
-        delta)
-    inform <- ret$inform
-    msg <- if (inform == 0)
-        "Normal Completion"
-    else if (inform == 1)
-        "Completion with error > abseps"
-    else if (inform == 2)
-        "Dimension greater 1000 or dimension < 1"
-    else if (inform == 3)
-        "Covariance matrix not positive semidefinite"
-    else inform
-    list(value = ret$value, error = ret$error, msg = msg, algo = class(algorithm))
-}
+# mvt <- function (lower, upper, df, corr, delta, algorithm = GenzBretz(),
+#     ...)
+# {
+#     if (...length() > 0)
+#         algorithm <- GenzBretz(...)
+#     else if (is.function(algorithm) || is.character(algorithm))
+#         algorithm <- do.call(algorithm, list())
+#     if (any(abs(lower - upper) < sqrt(.Machine$double.eps) *
+#         (abs(lower) + abs(upper)) | lower == upper))
+#         return(list(value = 0, error = 0, msg = "lower == upper"))
+#     n <- ncol(corr)
+#     if (is.null(n) || n < 2)
+#         stop("dimension less then n = 2")
+#     if (length(lower) != n)
+#         stop("wrong dimensions")
+#     if (length(upper) != n)
+#         stop("wrong dimensions")
+#     if (n > 1000)
+#         stop("only dimensions 1 <= n <= 1000 allowed")
+#     infin <- rep(2, n)
+#     infin[isInf(upper)] <- 1
+#     infin[isNInf(lower)] <- 0
+#     infin[isNInf(lower) & isInf(upper)] <- -1
+#     if (n >= 2 && ((isMiwa <- inherits(algorithm, "Miwa")) ||
+#         inherits(algorithm, "TVPACK"))) {
+#         if (any(infin == -1)) {
+#             WhereBothInfIs <- which(infin == -1)
+#             n <- n - length(WhereBothInfIs)
+#             corr <- corr[-WhereBothInfIs, -WhereBothInfIs]
+#             upper <- upper[-WhereBothInfIs]
+#             lower <- lower[-WhereBothInfIs]
+#             if (!missing(delta))
+#                 delta <- delta[-WhereBothInfIs]
+#             if (n <= 1) {
+#                 if (n && !missing(delta)) {
+#                   upper <- upper - delta
+#                   lower <- lower - delta
+#                 }
+#                 return(list(value = if (n == 0) 1 else pnorm(upper) -
+#                   pnorm(lower), error = 0, msg = "Normal Complettion (dim reduced to 1)"))
+#             }
+#             infin <- infin[-WhereBothInfIs]
+#         }
+#         if (isMiwa && any(infin == 0)) {
+#             WhereNegativInfIs <- which(infin == 0)
+#             inversecorr <- rep(1, n)
+#             inversecorr[WhereNegativInfIs] <- -1
+#             corr <- mvmult(mvmult(diag(inversecorr),corr),diag(inversecorr))
+#             infin[WhereNegativInfIs] <- 1
+#             tempsaveupper <- upper[WhereNegativInfIs]
+#             upper[WhereNegativInfIs] <- -lower[WhereNegativInfIs]
+#             lower[WhereNegativInfIs] <- -tempsaveupper
+#         }
+#     }
+#     if (all(infin < 0))
+#         return(list(value = 1, error = 0, msg = "Normal Completion"))
+#     if (inherits(algorithm, "GenzBretz") && n > 1) {
+#         corr <- matrix(as.vector(corr), ncol = n, byrow = TRUE)
+#         corr <- corr[upper.tri(corr)]
+#     }
+#     ret <- probval(algorithm, n, df, lower, upper, infin, corr,
+#         delta)
+#     inform <- ret$inform
+#     msg <- if (inform == 0)
+#         "Normal Completion"
+#     else if (inform == 1)
+#         "Completion with error > abseps"
+#     else if (inform == 2)
+#         "Dimension greater 1000 or dimension < 1"
+#     else if (inform == 3)
+#         "Covariance matrix not positive semidefinite"
+#     else inform
+#     list(value = ret$value, error = ret$error, msg = msg, algo = class(algorithm))
+# }
 
 
 
