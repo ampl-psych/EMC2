@@ -73,7 +73,7 @@ dmvn <- function (x, mean = rep(0, p), sigma = diag(p), log = FALSE,
 mvmult <- function(a,b) {
   if (!is.matrix(a)) a <- matrix(a,nrow=1)
   if (!is.matrix(b)) b <- matrix(b,ncol=1)
-  mvmult(a,b)
+  mat_mult(a,b)
 }
 
 checkSymmetricPositiveDefinite <- function (x, name = "sigma")
@@ -446,7 +446,7 @@ pmvnorm <- function (lower = -Inf, upper = Inf, mean = rep(0, length(lower)),
             lower <- carg$lower - carg$mean
             upper <- carg$upper - carg$mean
             mean <- rep(0, length(lower))
-            RET <- mvt(lower = lower, upper = upper, df = 0,
+            RET <- mvtnorm:::mvt(lower = lower, upper = upper, df = 0,
                 corr = corr, delta = mean, algorithm = algorithm,
                 ...)
         }
@@ -462,7 +462,7 @@ pmvnorm <- function (lower = -Inf, upper = Inf, mean = rep(0, length(lower)),
             upper <- (carg$upper - carg$mean)/sqrt(diag(carg$sigma))
             mean <- rep(0, length(lower))
             corr <- cov2cor(carg$sigma)
-            RET <- mvt(lower = lower, upper = upper, df = 0,
+            RET <- mvtnorm:::mvt(lower = lower, upper = upper, df = 0,
                 corr = corr, delta = mean, algorithm = algorithm,
                 ...)
         }
