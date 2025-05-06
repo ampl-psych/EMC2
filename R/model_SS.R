@@ -1,5 +1,5 @@
 #### Staircase ----
-SSD_function <- \(d,SSD=NA,pSSD=.25) {
+SSD_function <- function(d,SSD=NA,pSSD=.25) {
   if (sum(pSSD)>1) stop("pSSD sum cannot exceed 1.")
   if (length(pSSD)==length(SSD)-1) pSSD <- c(pSSD,1-sum(pSSD))
   if (length(pSSD)!=length(SSD))
@@ -394,7 +394,7 @@ rSSexGaussian <- function(lR,pars,ok=rep(TRUE,dim(pars)[1]))
   R <- rt <- rep(NA,ntrials)
 
   # All accumulators Inf (usually when both gf and tf)
-  allinf <- apply(dt,2,\(x)all(is.infinite(x)))
+  allinf <- apply(dt,2,function(x)all(is.infinite(x)))
 
   # get winner of stop and go where there is a race
   r <- c(0, acc)[apply(dt[,!allinf,drop=FALSE],2,which.min)]
@@ -691,7 +691,7 @@ rSShybrid <- function(lR,pars,ok=rep(TRUE,dim(pars)[1]))
   R <- rt <- rep(NA,ntrials)
 
   # All accumulators Inf (usually when both gf and tf)
-  allinf <- apply(dt,2,\(x)all(is.infinite(x)))
+  allinf <- apply(dt,2,function(x)all(is.infinite(x)))
 
   # get winner of stop and go where there is a race
   r <- c(0, acc)[apply(dt[,!allinf,drop=FALSE],2,which.min)]

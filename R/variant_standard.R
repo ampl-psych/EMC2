@@ -251,7 +251,7 @@ gibbs_step_standard <- function(sampler, alpha) {
 
   # Decide which indices in {1..M} correspond to mu, which to beta
   # That set of columns is treated as the group means (the intercept dimension).
-  mean_index <- unlist(lapply(group_designs, \(x) c(TRUE, rep(FALSE, ncol(x) - 1))))
+  mean_index <- unlist(lapply(group_designs, function(x) c(TRUE, rep(FALSE, ncol(x) - 1))))
 
   # Fill prior_mean for the group means vs. slopes
   # e.g. prior$theta_mu_mean is length p, prior$beta_mean is length(M - p)
@@ -521,7 +521,7 @@ bridge_group_and_prior_and_jac_standard <- function(
   B <- length(info$betas)
   M <- p + B
   group_designs <- add_intercepts(info$par_names, info$group_designs, n_subj)
-  mean_index <- unlist(lapply(group_designs, \(x) c(TRUE, rep(FALSE, ncol(x) - 1))))
+  mean_index <- unlist(lapply(group_designs, function(x) c(TRUE, rep(FALSE, ncol(x) - 1))))
 
   # Extract columns:
   theta_mu   <- proposals_group[, seq_len(p),   drop=FALSE]  # (n_iter x p)
