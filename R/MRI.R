@@ -284,7 +284,9 @@ convolve_design_matrix <- function(timeseries, events, factors = NULL, contrasts
       if((run == runs[1]) & (subject == subjects[1]) & isTRUE(high_pass)){
         message("Filtering out high_pass noise, make sure you also use high_pass_filter(<timeseries>)")
       }
-      dm <- high_pass_filter(dm, high_pass_model, frame_times = ts_run$time, add=(high_pass == "add"))
+      if(!isFALSE(high_pass)){
+        dm <- high_pass_filter(dm, high_pass_model, frame_times = ts_run$time, add=(high_pass == "add"))
+      }
       if(add_constant) dm$constant <- 1
       dms_sub[[as.character(run)]] <- dm
     }
@@ -836,107 +838,293 @@ plot_design_fmri <- function(design_matrix, TRs = 100, events = NULL, remove_nui
   do.call(legend, c(list(legend_pos, legend = events, bty = "n"), fix_dots(dots, legend)))
 }
 
-get_peri_stim_lines <- function(
-    timeseries,
-    events,
-    event_type,
-    pre = 2,
-    post = 18,
-    n_bins = 4,
-    uniform_tol = 1e-5
-) {
-  if(!(all(c("run", "subjects", "time") %in% colnames(timeseries)))){
-    stop("Expected columns in timeseries: run, subjects, time")
-  }
-  timeseries <- timeseries[,colnames(timeseries) != "postn"]
-  if(ncol(timeseries) > 4) stop("Can only supply one ROI")
-  ROI_col <- colnames(timeseries)[!colnames(timeseries) %in% c("run", "subjects", "time")]
-  # -------------------------------------------------------------------
-  # 1) Prepare the events of interest (filter + bin/categorize modulation)
-  # -------------------------------------------------------------------
-  ev_sub <- prepare_event_groups(events, event_type, n_bins)
+
+
+# -------------------------------------------------------------------------
+# Filter events by event_type and bin/categorize the modulation
+# -------------------------------------------------------------------------
+prepare_event_groups <- function(events, event_type, n_bins = 4) {
+  ev_sub <- events[events$event_type == event_type, ]
   if (nrow(ev_sub) == 0) {
-    stop("No events found for event_type = ", event_type)
+    return(ev_sub)  # empty
+  }
+  if (!"modulation" %in% names(ev_sub)) {
+    stop("The 'events' data frame must have a 'modulation' column.")
   }
 
-  # -------------------------------------------------------------------
-  # 2) Pre-split timeseries by subject-run, gather chunk metadata
-  # -------------------------------------------------------------------
-  chunk_info_list <- split_timeseries_chunks(timeseries, ROI_col, uniform_tol)
+  # Round to reduce floating precision issues
+  ev_sub$modulation <- round(ev_sub$modulation, 6)
+  mod_vals <- unique(ev_sub$modulation)
+  n_unique <- length(mod_vals)
 
-  # -------------------------------------------------------------------
-  # 3) For each bin or unique mod_group, compute the average snippet
-  # -------------------------------------------------------------------
-  groups <- sort(unique(ev_sub$mod_group))
+  if (n_unique > 6) {
+    # Calculate quartile breakpoints for the 'modulation' data
+    quartile_breaks <- quantile(ev_sub$modulation, probs = seq(0, 1, length.out = n_bins + 1), na.rm = TRUE)
 
-  # We'll accumulate the final results as a data frame:
-  # columns => mod_group, time, avg_signal, optional min_mod, max_mod
-  output_list <- list()
+    # Bin the data into quartiles using these breakpoints
+    ev_sub$mod_group <- cut(ev_sub$modulation, breaks = quartile_breaks, include.lowest = TRUE, labels = 1:n_bins)
+    attr(ev_sub, "binned") <- TRUE
 
-  for (g in groups) {
-    # events for this group
-    ev_g <- ev_sub[ev_sub$mod_group == g, ]
-    if (nrow(ev_g) == 0) next
-
-    # Compute the average snippet (time axis + average)
-    out_snip <- compute_avg_snippet_for_group(
-      ev_g,
-      chunk_info_list,
-      ROI_col,
-      pre,
-      post
-    )
-    if (is.null(out_snip)) {
-      # no valid snippet
-      next
-    }
-
-    # We'll store them in a data frame with columns:
-    # mod_group, time, avg_signal, (optional min_mod / max_mod)
-    # If we used binning, we can store the min/max modulation range
-    if (attr(ev_sub, "binned") == TRUE) {
-      # we used binning => figure out the min/max within this group
-      mod_in_bin <- ev_g$modulation
-      min_mod <- round(min(mod_in_bin, na.rm = TRUE), 3)
-      max_mod <- round(max(mod_in_bin, na.rm = TRUE), 3)
-      df_tmp <- data.frame(
-        mod_group = g,
-        time      = out_snip$time,
-        avg_signal= out_snip$avg,
-        min_mod   = min_mod,
-        max_mod   = max_mod
-      )
-    } else {
-      # we used discrete categories => store just mod_group
-      df_tmp <- data.frame(
-        mod_group = g,
-        time      = out_snip$time,
-        avg_signal= out_snip$avg
-      )
-    }
-
-    output_list[[as.character(g)]] <- df_tmp
+  } else {
+    # treat as categorical
+    ev_sub$mod_group <- factor(ev_sub$modulation, levels = sort(mod_vals))
+    attr(ev_sub, "binned") <- FALSE
   }
-
-  # Combine into one big data frame
-  final_df <- do.call(rbind, output_list)
-  final_df <- final_df[final_df$time >= -pre & final_df$time <= post,]
-  rownames(final_df) <- NULL
-  return(final_df)
+  return(ev_sub)
 }
+
+# -----------------------------------------------------------------------------
+# Fast FIR utilities -----------------------------------------------------------
+# -----------------------------------------------------------------------------
+
+# 1) Build an FIR design matrix for one set of onsets --------------------------
+#    frame_times : numeric vector of acquisition times (s) **monotone**
+#    onsets      : numeric vector of event onsets (s)  (single modulation group)
+#    pre, post   : seconds before/after onset to model (positive numbers)
+#
+# Returns a dense matrix (length(frame_times) x K) where
+#   K = floor((pre+post)/dt)+1  (dt = median diff(frame_times))
+# Column k corresponds to lag t = -pre + (k-1)*dt.
+# ---------------------------------------------------------------------------
+# Build an FIR design with an optional externally‑specified TR  --------------
+# ---------------------------------------------------------------------------
+###############################################################################
+## Fast FIR utilities + plot_fmri (robust version, 3 May 2025)               ##
+###############################################################################
+
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 1)  FIR design – *global lag grid* ensured by `fixed_dt` argument
+# ─────────────────────────────────────────────────────────────────────────────
+build_fir_design <- function(frame_times, onsets, durations,
+                             pre, post, fixed_dt, weights = NULL) {
+
+  if (is.null(weights))   weights   <- rep(1, length(onsets))
+  if (is.null(durations)) durations <- rep(0, length(onsets))  # impulse
+  stopifnot(length(durations) == length(onsets))
+
+  dt   <- fixed_dt
+  lags <- seq(-pre, post, by = dt)
+  K    <- length(lags)
+  nTR  <- length(frame_times)
+
+  X <- matrix(0, nrow = nTR, ncol = K,
+              dimnames = list(NULL, sprintf("lag_%0.3f", lags)))
+
+  ## pre‑compute frame centres for fast look‑up
+  fc <- frame_times
+
+  for (j in seq_along(onsets)) {
+    onset <- onsets[j]
+    dur   <- durations[j]
+    w     <- weights[j]
+
+    ## frames whose centre is within the event window
+    in_evt <- which(fc >= onset & fc < onset + dur)
+    if (!length(in_evt)) {              # shorter than first half‑TR → impulse
+      in_evt <- which.min(abs(fc - onset))
+    }
+
+    ## update FIR cols for every lag
+    for (k in seq_len(K)) {
+      rows <- in_evt + round(lags[k] / dt)
+      rows <- rows[rows >= 1 & rows <= nTR]
+      if(length(rows))
+        X[rows, k] <- X[rows, k] + w
+    }
+  }
+  attr(X, "lag_seconds") <- lags
+  X
+}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 2)  AR(1) whitening
+# ─────────────────────────────────────────────────────────────────────────────
+estimate_rho <- function(y, clip = TRUE) {
+  if (length(y) < 2L) return(0)
+
+  y <- y - mean(y, na.rm = TRUE)        # 1 de‑mean
+  rho <- sum(y[-1] * y[-length(y)]) /
+    (sum(y[-length(y)]^2) + 1e-12)
+
+  if (clip) rho <- max(-0.99, min(0.99, rho))  # 2 safe bounds
+  rho
+}
+
+whiten_series <- function(mat_or_vec, rho) {
+  if (abs(rho) < 1e-6) return(mat_or_vec)
+
+  if (is.vector(mat_or_vec))
+    return(c(mat_or_vec[1],
+             mat_or_vec[-1] - rho * mat_or_vec[-length(mat_or_vec)]))
+
+  rbind(mat_or_vec[1, , drop = FALSE],
+        mat_or_vec[-1, , drop = FALSE] -
+          rho * mat_or_vec[-nrow(mat_or_vec), , drop = FALSE])
+}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 4)  Quick FIR GLM fit (OLS + AR(1) whitening, baseline correction)
+# ─────────────────────────────────────────────────────────────────────────────
+fit_fir_glm <- function(y, X, lags_sec, target) {
+  rho <- estimate_rho(y)
+  yw  <- whiten_series(y, rho)
+  Xw  <- whiten_series(X, rho)
+
+  beta <- as.vector(solve(crossprod(Xw), crossprod(Xw, yw)))
+  beta <- beta[target]
+  ## Baseline correction (pre‑stimulus lags)
+  idx_pre <- lags_sec < 0
+  if(any(idx_pre, na.rm = TRUE))
+    beta <- beta - mean(beta[idx_pre], na.rm = TRUE)
+  beta
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 5)  Main extractor – returns long data.frame for plotting
+# ─────────────────────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────────────
+# 5)  Main extractor – FIR for *all* events, returns long data‑frame
+# ─────────────────────────────────────────────────────────────────────────────
+get_fir_lines <- function(timeseries, events, event_type,
+                          pre = 2, post = 18, n_bins = 4,
+                          high_pass = TRUE, high_pass_model = "cosine") {
+
+  ## basic checks
+  stopifnot(all(c("run", "subjects", "time") %in% names(timeseries)))
+  ROI_col <- setdiff(names(timeseries),
+                     c("run", "subjects", "time", "postn"))
+  if(length(ROI_col) != 1L) stop("Exactly one ROI column required")
+
+  ## global lag grid
+  global_dt   <- median(diff(sort(unique(timeseries$time))))
+  global_lags <- seq(-pre, post, by = global_dt)
+  K           <- length(global_lags)
+
+  ## TARGET events (binned)
+  ev_sub  <- prepare_event_groups(events, event_type, n_bins)
+  if(nrow(ev_sub) == 0)
+    stop("No events found for event_type = ", event_type)
+  groups  <- sort(unique(ev_sub$mod_group))
+
+  ## NUISANCE events  (everything else)
+  ev_nuis <- events[events$event_type != event_type, ]
+  nuis_types <- sort(unique(ev_nuis$event_type))    # might be empty
+
+  betas <- setNames(vector("list", length(groups)), groups)
+
+  ts_split <- split(timeseries, list(timeseries$subjects,
+                                     timeseries$run), drop = TRUE)
+
+  for(chunk in ts_split) {
+    ft  <- chunk$time
+    y   <- chunk[[ROI_col]]
+    sid <- chunk$subjects[1]
+    rid <- chunk$run[1]
+
+    ## 1) build FIR blocks for *each nuisance type* in this run
+    X_nuis <- NULL
+    if(length(nuis_types)) {
+      for(et in nuis_types) {
+        ev_tmp <- ev_nuis[ev_nuis$event_type == et &
+                            ev_nuis$subjects   == sid &
+                            ev_nuis$run        == rid, ]
+        if(!nrow(ev_tmp)) next
+
+        if(sd(ev_tmp$modulation) == 0 & sd(ev_tmp$duration) == 0) next
+
+
+        ## centre the modulator so ‘main effect’ and modulation are orthogonal
+        if (sd(ev_tmp$modulation) > 0) {
+          ev_tmp$modulation <- ev_tmp$modulation - mean(ev_tmp$modulation)
+        } else{
+          ev_tmp$modulation <- ev_tmp$duration - mean(ev_tmp$duration)
+        }
+        Xet <- build_fir_design(ft,
+                                ev_tmp$onset,
+                                ev_tmp$duration,
+                                pre, post,
+                                fixed_dt = global_dt,
+                                weights  = ev_tmp$modulation)
+        colnames(Xet) <- paste0(et, "_", colnames(Xet))
+        X_nuis <- if(is.null(X_nuis)) Xet else cbind(X_nuis, Xet)
+      }
+    }
+
+    ## 2) loop over modulation groups of the TARGET event
+    for(g in groups) {
+      ev_g <- ev_sub[ev_sub$mod_group == g &
+                       ev_sub$subjects  == sid &
+                       ev_sub$run       == rid, ]
+      if(!nrow(ev_g)) next
+
+      ## NOTE: weights = NULL → un‑scaled FIR for the curve we plot
+      X_tar <- build_fir_design(ft,
+                                ev_g$onset,
+                                ev_g$duration,       # durations for the target
+                                pre, post,
+                                fixed_dt = global_dt,
+                                weights  = NULL)     # no amplitude scaling
+
+      X_full <- if(is.null(X_nuis)) X_tar else cbind(X_tar, X_nuis)
+
+      if(!isFALSE(high_pass)){
+        X_full <- high_pass_filter(X_full, high_pass_model, frame_times = ft, add=(high_pass == "add"))
+      }
+      b  <- fit_fir_glm(y, X_full, global_lags, target = seq_len(K))
+
+      if(all(is.na(b))) next
+      betas[[g]] <- rbind(betas[[g]],
+                          cbind(t(b), nrow(ev_g)))
+    }
+  }
+
+  ## 3) weight‑averaged β → long data.frame
+  out <- lapply(names(betas), function(g) {
+    mat <- betas[[g]]; if(is.null(mat)) return(NULL)
+    B <- mat[, 1:K, drop = FALSE]; w <- mat[, K+1L]
+    if(!is.matrix(B)) { B <- matrix(B, nrow = 1); w <- w[1] }
+
+    beta_avg <- colSums(B * w) / sum(w)
+
+    df <- data.frame(
+      mod_group  = rep(g, K),
+      time       = global_lags,
+      avg_signal = beta_avg
+    )
+    if(attr(ev_sub, "binned")) {
+      ev_all <- ev_sub[ev_sub$mod_group == g, ]
+      df$min_mod <- rep(min(ev_all$modulation), K)
+      df$max_mod <- rep(max(ev_all$modulation), K)
+    }
+    df
+  })
+  rownames_out <- NULL
+  do.call(rbind, out)
+}
+
 
 #' Plot fMRI peri-stimulus time courses
 #'
-#' This function plots average BOLD response around specified events for a single ROI by computing peri-stimulus time courses.
+#' This function plots average BOLD response around specified events for a single ROI
+#' by using FIR based event estimation, all event_types in events are taken into account in the FIR.
 #' Posterior predictives can be overlaid via the `post_predict` argument.
 #'
 #' @param timeseries A data frame with columns 'subjects', 'run', 'time', and one ROI measurement column.
 #' @param events A data frame with columns 'subjects', 'run', 'onset', 'duration', 'event_type', and 'modulation'.
 #' @param event_type Character string specifying which `event_type` in `events` to plot.
+#' @param high_pass Logical indicating whether to apply high-pass filtering.
+#' Alternatively, specifying 'add' adds the regressors to the design matrix in the FIR.
+#' The choice here should be the same as the choice for `convolve_design_matrix`
+#' @param high_pass_model Character indicating which type of high-pass filtering to apply ('cosine', 'poly')
 #' @param post_predict Optional posterior predictive samples data frame (not shown in examples).
 #' @param posterior_args Named list of graphical parameters for posterior predictive lines.
 #' @param legend_pos Position of the legend. Default: "topleft".
-#' @param layout Panel layout matrix for multiple modulation groups. Default: NA.
+#' @param layout Panel layout matrix for multiple modulation groups. NULL leaves current layout
+#' @param n_cores. Number of cores to calculate FIR across subjects with.
 #' @param ... Additional graphical parameters passed to plotting functions (e.g., col, lwd, lty).
 #'
 #' @return NULL. Produces plots as a side-effect.
@@ -958,39 +1146,39 @@ get_peri_stim_lines <- function(
 #'   duration   = rep(0.5, 5)
 #' )
 #' plot_fmri(ts, events = events, event_type = "A")
-plot_fmri <- function(timeseries, post_predict = NULL, events, event_type, posterior_args = list(), legend_pos = "topleft", layout = NA, ...) {
+plot_fmri <- function(timeseries, post_predict = NULL, events, event_type,
+                       high_pass = TRUE, high_pass_model = "cosine",
+                       posterior_args = list(),
+                       legend_pos = "topleft", layout = NA,
+                       n_cores = 1, ...) {
+
   posterior_args <- add_defaults(posterior_args, col = "darkgreen", lwd = 2)
-  plot_args <- add_defaults(list(...), col = "black", lwd = 2, xlab = "time (s)", ylab = "BOLD response")
-  ROI_col <- colnames(timeseries)[!colnames(timeseries) %in% c("run", "subjects", "time")]
-  ts <- get_peri_stim_lines(timeseries, events, event_type = event_type)
-  if(!is.null(post_predict)){
-    pps <- split(post_predict, post_predict$postn)
-    pps <- lapply(pps, get_peri_stim_lines, events, event_type = event_type)
-    df_all <- do.call(rbind, pps)
-    # Split the data by these grouping columns
-    split_list <- split(df_all, df_all[c("mod_group", "time")])
+  plot_args <- add_defaults(list(...), col = "black", lwd = 2,
+                            xlab = "time (s)", ylab = "BOLD response")
 
-    # 4) For each group, compute the 2.5, 50, 97.5 percentiles of avg_signal
-    res_list <- lapply(split_list, function(subdf) {
-      # subdf is all rows with the same (mod_group, time)
-      qs <- quantile(subdf$avg_signal, c(0.025, 0.5, 0.975), na.rm = TRUE)
-      # Build a small output row with just the grouping columns
-      out <- subdf[1, c("mod_group", "time"), drop = FALSE]
-      # If min_mod/max_mod exist, keep them from the first row
-      out$min_mod <- subdf$min_mod[1]
-      out$max_mod <- subdf$max_mod[1]
-      # Add the quantiles
-      out$p025 <- qs[1]
-      out$p50  <- qs[2]
-      out$p975 <- qs[3]
-      out
-    })
+  ROI_col <- setdiff(names(timeseries),
+                     c("run", "subjects", "time", "postn"))
 
-    # 5) Reassemble into one data frame
-    res_df <- do.call(rbind, res_list)
-    rownames(res_df) <- NULL
+  ts <- get_fir_lines(timeseries, events, event_type,
+                      high_pass       = high_pass,
+                      high_pass_model = high_pass_model)
+
+  ## posterior predictive overlay
+  if(!is.null(post_predict)) {
+    pp_split <- split(post_predict, post_predict$postn)
+    pp_lines <- auto_mclapply(pp_split, get_fir_lines, events, event_type,
+                              high_pass       = high_pass,
+                              high_pass_model = high_pass_model, mc.cores = n_cores)
+    pp_df <- do.call(rbind, pp_lines)
+
+    qfun  <- function(x) quantile(x, c(.025, .5, .975))
+    agg   <- aggregate(avg_signal ~ mod_group + time,
+                       data = pp_df, FUN = qfun)
+    res_df <- data.frame(agg[, 1:2], agg$avg_signal)
+    names(res_df)[3:5] <- c("p025", "p50", "p975")
   }
-  par(mfrow = c(2,2))
+
+  ## layout
   n_plots <- length(unique(ts$mod_group))
   if(n_plots == 1){
     insert <- ""
@@ -1007,6 +1195,8 @@ plot_fmri <- function(timeseries, post_predict = NULL, events, event_type, poste
   } else {
     par(mfrow = layout)
   }
+
+  ## loop over modulation groups
   for(mod in unique(ts$mod_group)){
     if(!is.null(post_predict)){
       ylim <- c(min(ts$avg_signal, res_df$p025), max(ts$avg_signal, res_df$p975))
@@ -1041,194 +1231,6 @@ plot_fmri <- function(timeseries, post_predict = NULL, events, event_type, poste
 }
 
 
-# -------------------------------------------------------------------------
-# Helper 1: Filter events by event_type and bin/categorize the modulation
-# -------------------------------------------------------------------------
-prepare_event_groups <- function(events, event_type, n_bins = 4) {
-  ev_sub <- events[events$event_type == event_type, ]
-  if (nrow(ev_sub) == 0) {
-    return(ev_sub)  # empty
-  }
-  if (!"modulation" %in% names(ev_sub)) {
-    stop("The 'events' data frame must have a 'modulation' column.")
-  }
-
-  # Round to reduce floating precision issues
-  ev_sub$modulation <- round(ev_sub$modulation, 6)
-  mod_vals <- unique(ev_sub$modulation)
-  n_unique <- length(mod_vals)
-
-  if (n_unique > 6) {
-    # Calculate quartile breakpoints for the 'modulation' data
-    quartile_breaks <- quantile(ev_sub$modulation, probs = seq(0, 1, length.out = n_bins + 1), na.rm = TRUE)
-
-    # Bin the data into quartiles using these breakpoints
-    ev_sub$mod_group <- cut(ev_sub$modulation, breaks = quartile_breaks, include.lowest = TRUE, labels = 1:n_bins)
-    attr(ev_sub, "binned") <- TRUE
-
-  } else {
-    # treat as categorical
-    ev_sub$mod_group <- factor(ev_sub$modulation, levels = sort(mod_vals))
-    attr(ev_sub, "binned") <- FALSE
-  }
-  return(ev_sub)
-}
-
-# -------------------------------------------------------------------------
-# Helper 2: Split timeseries by (subjects, run) and gather metadata
-# -------------------------------------------------------------------------
-split_timeseries_chunks <- function(timeseries, ROI_col, uniform_tol = 1e-5) {
-  # Split
-  ts_split <- split(timeseries, list(timeseries$subjects, timeseries$run), drop = TRUE)
-
-  # For each chunk, store:
-  #   df          => sorted by time
-  #   time_vec    => numeric vector of times
-  #   dt          => median diff
-  #   is_uniform  => whether the data are within uniform_tol of dt
-  # Return a named list keyed by "subj.run"
-  out_list <- lapply(ts_split, function(df_sub) {
-    df_sub <- df_sub[order(df_sub$time), ]
-    time_vec <- df_sub$time
-    if (length(time_vec) < 2) {
-      return(list(
-        df = df_sub,
-        time_vec = time_vec,
-        dt = NA_real_,
-        is_uniform = FALSE
-      ))
-    }
-    diffs <- diff(time_vec)
-    dt_median <- median(diffs)
-    max_dev <- max(abs(diffs - dt_median))
-    is_uni <- (max_dev < uniform_tol)
-    list(
-      df = df_sub,
-      time_vec = time_vec,
-      dt = dt_median,
-      is_uniform = is_uni
-    )
-  })
-  return(out_list)
-}
-
-# -------------------------------------------------------------------------
-# Helper 3: Extract a single snippet from a chunk
-# -------------------------------------------------------------------------
-extract_snippet <- function(ci, onset, pre, post, ROI_col) {
-  # ci => chunk info, with $df, $time_vec, $dt, $is_uniform
-  # returns baseline-corrected snippet or NULL if out-of-range
-
-  df_sub   <- ci$df
-  time_vec <- ci$time_vec
-  dt       <- ci$dt
-  n_pts    <- nrow(df_sub)
-
-  if (n_pts < 1) return(NULL)
-
-  start_t <- onset - pre
-  end_t   <- onset + post
-
-  if (ci$is_uniform && !is.na(dt) && dt > 0) {
-    # Direct index-based approach
-    t0 <- time_vec[1]
-    start_idx <- round((start_t - t0)/dt) + 1
-    end_idx   <- round((end_t   - t0)/dt) + 1
-
-    if (start_idx < 1 || end_idx < 1 ||
-        start_idx > n_pts || end_idx > n_pts ||
-        start_idx > end_idx) {
-      return(NULL)
-    }
-    snippet_vals <- df_sub[[ROI_col]][start_idx:end_idx]
-
-    # Baseline correction: subtract mean in [-pre, 0)
-    zero_idx   <- round((onset - t0)/dt) + 1
-    pre_start  <- start_idx
-    pre_end    <- max(zero_idx - 1, start_idx)
-    if (pre_end < pre_start) {
-      baseline_mean <- 0
-    } else {
-      baseline_vals <- df_sub[[ROI_col]][pre_start:pre_end]
-      baseline_mean <- mean(baseline_vals, na.rm = TRUE)
-    }
-    snippet_vals_bc <- snippet_vals - baseline_mean
-    return(snippet_vals_bc)
-
-  } else {
-    # fallback with findInterval
-    start_idx <- findInterval(start_t, time_vec)
-    end_idx   <- findInterval(end_t,   time_vec)
-    if (start_idx < 1) start_idx <- 1
-    if (end_idx   < 1) return(NULL)
-    if (end_idx   > n_pts) end_idx <- n_pts
-    if (start_idx > n_pts || start_idx > end_idx) return(NULL)
-
-    snippet_rows <- df_sub[start_idx:end_idx, ]
-    # baseline in [-pre, 0)
-    baseline_rows <- snippet_rows[snippet_rows$time < onset, ]
-    baseline_mean <- if (nrow(baseline_rows) > 0) {
-      mean(baseline_rows[[ROI_col]], na.rm = TRUE)
-    } else 0
-    snippet_vals_bc <- snippet_rows[[ROI_col]] - baseline_mean
-    return(snippet_vals_bc)
-  }
-}
-
-# -------------------------------------------------------------------------
-# Helper 4: Compute the average snippet for one group of events
-# -------------------------------------------------------------------------
-compute_avg_snippet_for_group <- function(ev_g, chunk_info_list, ROI_col, pre, post) {
-  # ev_g => subset of events for a single mod_group
-  # For each event, we do extract_snippet(...).
-  # Then we combine them. If uniform, they'll have the same length.
-  # We return a list with $time (the x-axis) and $avg (the averaged signal).
-
-  if (nrow(ev_g) < 1) return(NULL)
-
-  snippet_list <- vector("list", nrow(ev_g))
-  for (i in seq_len(nrow(ev_g))) {
-    subj_i  <- ev_g$subjects[i]
-    run_i   <- ev_g$run[i]
-    onset_i <- ev_g$onset[i]
-
-    chunk_key <- paste0(subj_i, ".", run_i)
-    ci <- chunk_info_list[[chunk_key]]
-    if (is.null(ci)) {
-      snippet_list[[i]] <- NULL
-      next
-    }
-    snippet_vals <- extract_snippet(ci, onset_i, pre, post, ROI_col)
-    snippet_list[[i]] <- snippet_vals
-  }
-
-  # Among all snippets, find max length
-  lens <- sapply(snippet_list, length)
-  max_len <- max(lens, na.rm = TRUE)
-  if (max_len < 1) {
-    return(NULL)
-  }
-
-  # Build a matrix of shape (max_len x #events), fill with NA
-  mat_snips <- matrix(NA, nrow = max_len, ncol = length(snippet_list))
-  for (col_i in seq_along(snippet_list)) {
-    vals <- snippet_list[[col_i]]
-    if (!is.null(vals) && length(vals) > 0) {
-      mat_snips[1:length(vals), col_i] <- vals
-    }
-  }
-  avg_snip <- rowMeans(mat_snips, na.rm = TRUE)
-
-  # approximate dt from all used chunks
-  # if truly uniform, they might differ across runs, but we do a single approach:
-  dts <- sapply(chunk_info_list, `[[`, "dt")
-  dt_global <- median(dts, na.rm = TRUE)
-  # define a time axis from -pre.. with steps dt_global
-  # length = max_len
-  time_axis <- seq(-pre, by = dt_global, length.out = max_len)
-
-  list(time = time_axis, avg = avg_snip)
-}
 
 # Utility functions -------------------------------------------------------
 
