@@ -39,9 +39,9 @@ The choice here should be the same as the choice for \code{convolve_design_matri
 
 \item{layout}{Panel layout matrix for multiple modulation groups. NULL leaves current layout}
 
-\item{...}{Additional graphical parameters passed to plotting functions (e.g., col, lwd, lty).}
+\item{n_cores}{Number of cores to calculate FIR across subjects with.}
 
-\item{n_cores.}{Number of cores to calculate FIR across subjects with.}
+\item{...}{Additional graphical parameters passed to plotting functions (e.g., col, lwd, lty).}
 }
 \value{
 NULL. Produces plots as a side-effect.

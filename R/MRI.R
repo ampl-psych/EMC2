@@ -1124,7 +1124,7 @@ get_fir_lines <- function(timeseries, events, event_type,
 #' @param posterior_args Named list of graphical parameters for posterior predictive lines.
 #' @param legend_pos Position of the legend. Default: "topleft".
 #' @param layout Panel layout matrix for multiple modulation groups. NULL leaves current layout
-#' @param n_cores. Number of cores to calculate FIR across subjects with.
+#' @param n_cores Number of cores to calculate FIR across subjects with.
 #' @param ... Additional graphical parameters passed to plotting functions (e.g., col, lwd, lty).
 #'
 #' @return NULL. Produces plots as a side-effect.
