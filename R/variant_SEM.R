@@ -95,10 +95,10 @@ get_prior_SEM <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, s
   if(is.null(prior$G_var)){
     prior$G_var <- rep(.5, n_factors)
   }
-  if(is.null(prior$a_p)){
+  if(is.null(prior$a_d)){
     prior$a_d <- 5
   }
-  if(is.null(prior$b_p)){
+  if(is.null(prior$b_d)){
     prior$b_d <- .3
   }
   if(is.null(prior$a_e)){
@@ -600,9 +600,9 @@ bridge_group_and_prior_and_jac_SEM <- function(proposals_group, proposals_list, 
     prior_delta1 <- sum(logdinvGamma(1/exp(delta_inv1[i,]), shape = prior$a_d, rate = prior$b_d))
     prior_delta2 <- log(robust_diwish(solve(delta2_curr), v=prior$a_d, S = diag(prior$b_d, sum(!info$is_structured))))
     prior_epsilon_inv <- sum(logdinvGamma(1/exp(epsilon_inv[i,]), shape = prior$a_e, rate = prior$b_e))
-    jac_delta2 <- log(2^sum(!info$is_structured))+sum((sum(!info$is_structured) + 1)*log(diag(delta2_curr))) # Log of derivative of cholesky transformation
+    # Log of derivative of cholesky transformation:
+    jac_delta2 <- calc_log_jac_chol(delta_inv2[i, ])
     sum_out[i] <- group_ll + prior_epsilon_inv + prior_delta1 + prior_delta2 + jac_delta2
-    if(is.infinite(sum_out[i])) browser()
   }
   prior_mu <- dmvnorm(theta_mu, mean = prior$theta_mu_mean, sigma = diag(prior$theta_mu_var), log =T)
   if(sum(info$Lambda_mat == Inf) > 0){
@@ -616,12 +616,12 @@ bridge_group_and_prior_and_jac_SEM <- function(proposals_group, proposals_list, 
     prior_B <- 0
   }
   if(sum(info$K_mat == Inf) > 0){
-    prior_K <- dmvnorm(K, mean = rep(0, ncol(K)), sigma = diag(prior$lambda_var, ncol(K)), log = T)
+    prior_K <- dmvnorm(K, mean = rep(0, ncol(K)), sigma = diag(prior$K_var, ncol(K)), log = T)
   } else{
     prior_K <- 0
   }
   if(sum(info$G_mat == Inf) > 0){
-    prior_G <- dmvnorm(G, mean = rep(0, ncol(G)), sigma = diag(prior$B_var, ncol(G)), log = T)
+    prior_G <- dmvnorm(G, mean = rep(0, ncol(G)), sigma = diag(prior$G_var, ncol(G)), log = T)
   } else{
     prior_G <- 0
   }

@@ -14,11 +14,11 @@ Or for the development version:
 
 ## Workflow Overview
 
-Pictured below are the four phases of an `EMC2`cognitive model analysis with associated functions (in `courier` font).  
+Pictured below are the four phases of an `EMC2`cognitive model analysis with associated functions:.  
 
 &nbsp;
 
-<img width="800" alt="workflow-emc2" src="https://github.com/user-attachments/assets/ed96de6c-17b9-47f5-9153-cd19cff47d34">
+<img width="800" alt="workflow-emc2" src="https://github.com/user-attachments/assets/53ef4499-1cad-4ab8-8e63-a3bcba24d94d">
 
 &nbsp;
 

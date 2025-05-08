@@ -6,9 +6,9 @@ design_in <- get_design(samples_LNR)[[1]]
 prior_in <- get_prior(samples_LNR)
 data_in <- get_data(samples_LNR)
 
-prior_joint <- prior(list(design_in, design_in))
+prior_joint <- prior(list(a = design_in, b = design_in))
 
-joint <- make_emc(list(data_in, data_in), list(design_in, design_in), prior_list = prior_joint)
+joint <- make_emc(list(data_in, data_in), list(a = design_in, b = design_in), prior_list = prior_joint)
 RNGkind("L'Ecuyer-CMRG")
 set.seed(123)
 test_that("joint", {

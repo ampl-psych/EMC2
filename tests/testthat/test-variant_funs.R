@@ -17,7 +17,7 @@ LNR_factor <- make_emc(dat, design_LNR, rt_resolution = 0.05, n_chains = 2, type
                        n_factors = 2)
 LNR_diag <- make_emc(dat, design_LNR, rt_resolution = 0.05, n_chains = 2, type = "diagonal")
 LNR_blocked <- make_emc(dat, design_LNR, rt_resolution = 0.05, n_chains = 2, type = "blocked",
-                       par_groups = c(1,2,3,3))
+                       par_group = c(1,2,3,3))
 LNR_single <- make_emc(dat, design_LNR, rt_resolution = 0.05, n_chains = 2, type = "single")
 
 # Set seed for mclapply

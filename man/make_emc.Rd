@@ -13,6 +13,7 @@ make_emc(
   compress = TRUE,
   rt_resolution = 0.02,
   prior_list = NULL,
+  group_design = NULL,
   par_groups = NULL,
   ...
 )
@@ -34,7 +35,10 @@ make_emc(
 
 \item{prior_list}{A named list containing the prior. Default prior created if \code{NULL}. For the default priors, see \verb{?get_prior_\{type\}}.}
 
-\item{par_groups}{A vector. Only to be specified with type \code{blocked}, e.g., \code{c(1,1,1,2,2)} means the covariances
+\item{group_design}{A design for group-level mappings, made using \code{group_design()}.}
+
+\item{par_groups}{A vector. Indicates which parameters are allowed to correlate. Could either be a list of character vectors of covariance blocks. Or
+a numeric vector, e.g., \code{c(1,1,1,2,2)} means the covariances
 of the first three and of the last two parameters are estimated as two separate blocks.}
 
 \item{...}{Additional, optional arguments.}

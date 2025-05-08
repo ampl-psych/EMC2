@@ -4,7 +4,7 @@
       str(emc, give.attr = F)
     Output
       List of 3
-       $ :List of 12
+       $ :List of 14
         ..$ data        :List of 19
         .. ..$ as1t:'data.frame':	1620 obs. of  8 variables:
         .. .. ..$ subjects: Factor w/ 1 level "as1t": 1 1 1 1 1 1 1 1 1 1 ...
@@ -192,6 +192,8 @@
         ..$ sampler_nuis: NULL
         ..$ type        : chr "standard"
         ..$ init        : logi FALSE
+        ..$ par_group   : num [1:7] 1 1 1 1 1 1 1
+        ..$ is_blocked  : logi [1:7] TRUE TRUE TRUE TRUE TRUE TRUE ...
         ..$ prior       :List of 5
         .. ..$ theta_mu_mean : Named num [1:7] 1 -0.693 0.405 0.693 0 ...
         .. ..$ theta_mu_var  : num [1:7, 1:7] 1 0 0 0 0 0 0 0 0.09 0 ...
@@ -199,7 +201,7 @@
         .. ..$ A             : Named num [1:7] 0.3 0.3 0.3 0.3 0.3 0.3 0.3
         .. ..$ theta_mu_invar: num [1:7, 1:7] 1 0 0 0 0 ...
         ..$ model       :function ()  
-       $ :List of 12
+       $ :List of 14
         ..$ data        :List of 19
         .. ..$ as1t:'data.frame':	1620 obs. of  8 variables:
         .. .. ..$ subjects: Factor w/ 1 level "as1t": 1 1 1 1 1 1 1 1 1 1 ...
@@ -387,6 +389,8 @@
         ..$ sampler_nuis: NULL
         ..$ type        : chr "standard"
         ..$ init        : logi FALSE
+        ..$ par_group   : num [1:7] 1 1 1 1 1 1 1
+        ..$ is_blocked  : logi [1:7] TRUE TRUE TRUE TRUE TRUE TRUE ...
         ..$ prior       :List of 5
         .. ..$ theta_mu_mean : Named num [1:7] 1 -0.693 0.405 0.693 0 ...
         .. ..$ theta_mu_var  : num [1:7, 1:7] 1 0 0 0 0 0 0 0 0.09 0 ...
@@ -394,7 +398,7 @@
         .. ..$ A             : Named num [1:7] 0.3 0.3 0.3 0.3 0.3 0.3 0.3
         .. ..$ theta_mu_invar: num [1:7, 1:7] 1 0 0 0 0 ...
         ..$ model       :function ()  
-       $ :List of 12
+       $ :List of 14
         ..$ data        :List of 19
         .. ..$ as1t:'data.frame':	1620 obs. of  8 variables:
         .. .. ..$ subjects: Factor w/ 1 level "as1t": 1 1 1 1 1 1 1 1 1 1 ...
@@ -582,6 +586,8 @@
         ..$ sampler_nuis: NULL
         ..$ type        : chr "standard"
         ..$ init        : logi FALSE
+        ..$ par_group   : num [1:7] 1 1 1 1 1 1 1
+        ..$ is_blocked  : logi [1:7] TRUE TRUE TRUE TRUE TRUE TRUE ...
         ..$ prior       :List of 5
         .. ..$ theta_mu_mean : Named num [1:7] 1 -0.693 0.405 0.693 0 ...
         .. ..$ theta_mu_var  : num [1:7, 1:7] 1 0 0 0 0 0 0 0 0.09 0 ...

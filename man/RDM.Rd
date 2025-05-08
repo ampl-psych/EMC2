@@ -22,7 +22,7 @@ argument of \code{design()}.They can also be accessed with \code{RDM()$p_types}.
    \emph{A} \tab log \tab [0, Inf] \tab log(0) \tab  \tab Between-trial variation (range) in start point \cr
    \emph{B} \tab log \tab [0, Inf] \tab log(1) \tab \emph{b} = \emph{B} + \emph{A} \tab Distance from \emph{A} to \emph{b} (response threshold) \cr
    \emph{t0} \tab log \tab [0, Inf] \tab log(0) \tab  \tab Non-decision time \cr
-   \emph{sv} \tab log \tab [0, Inf] \tab log(1) \tab  \tab Within-trial standard deviation of drift rate \cr
+   \emph{s} \tab log \tab [0, Inf] \tab log(1) \tab  \tab Within-trial standard deviation of drift rate \cr
 }
 
 

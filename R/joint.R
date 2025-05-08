@@ -6,6 +6,10 @@ single_out_joint <- function(joint_samples_list, i){
   return(single_samples_list)
 }
 
+get_joint_names <- function(emc){
+  unique(gsub("[|].*", "", names(sampled_pars(emc))))
+}
+
 return_single_sampler <- function(joint_samples, i){
   par_names <- rownames(joint_samples$samples$alpha)
   prefix <- unique(gsub("[|].*", "", par_names))[i]
