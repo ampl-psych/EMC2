@@ -118,8 +118,8 @@ SBC_single <- function(design_in, prior_in, replicates = 250, trials = 100,
     for (i in 1:length(scale)) {
       if (quantize_when==i) {
         if (quantize_by<0)
-          d$rt <- floor(d$rt*quantize_by)*abs(quantize_by) else  # Clock
-          d$rt <- ceiling(d$rt*quantize_by)*abs(quantize_by)     # Keyboard
+          d$rt <- floor(d$rt/quantize_by)*abs(quantize_by) else  # Clock
+          d$rt <- ceiling(d$rt/quantize_by)*abs(quantize_by)     # Keyboard
       }
       d$rt <- d$rt + do.call(rfun,args)*scale[i]
     }
