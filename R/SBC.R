@@ -21,7 +21,8 @@ run_sbc <- function(design_in, prior_in, replicates = 250, trials = 100, n_subje
                     plot_data = FALSE, verbose = TRUE,
                     fileName = NULL, n_cores = 1,
                     save_emc = NULL, rt_resolution = NULL,
-                    add_noise = NULL, resolution_shift=NULL, ...){
+                    add_noise = NULL, resolution_shift=NULL,
+                    quantize_when=NULL,quantize_by=NULL,...){
   if(is.null(fileName)) message("Since SBC can take a while it's highly recommended to specify a fileName to save temporary results in case of crashes")
   type <- attr(prior_in, "type")
   if(type == "single"){
@@ -29,7 +30,8 @@ run_sbc <- function(design_in, prior_in, replicates = 250, trials = 100, n_subje
                       plot_data, verbose, fileName,
                       n_cores = n_cores,
                       save_emc = save_emc, rt_resolution = rt_resolution,
-                      add_noise = add_noise, resolution_shift = resolution_shift,...)
+                      add_noise = add_noise, resolution_shift = resolution_shift,
+                      quantize_when=quantize_when,quantize_by=quantize_by,...)
   } else{
     out <- SBC_hierarchical(design_in, prior_in, replicates, trials, n_subjects,
                     plot_data, verbose, fileName, ...)
@@ -105,23 +107,29 @@ SBC_hierarchical <- function(design_in, prior_in, replicates = 250, trials = 100
 SBC_single <- function(design_in, prior_in, replicates = 250, trials = 100,
                        n_cores=1,plot_data = FALSE, verbose = TRUE,
                        fileName = NULL, save_emc = NULL, rt_resolution = NULL,
-                       add_noise = NULL, resolution_shift = NULL, ...){
+                       add_noise = NULL, resolution_shift = NULL,
+                       quantize_when=NULL,quantize_by=NULL, ...){
 
 
-  noise_fun <- function(d,scale=-.05,# negative = monitor
+  noise_fun <- function(d,scale,quantize_when,quantize_by,
                       rfun="runif",args=list(n=nrow(d)))
   {
     noise <- 0
     for (i in 1:length(scale)) {
-      noise <- noise + do.call(rfun,args)*scale[i]
+      if (quantize_when==i) {
+        if (quantize_by<0)
+          d$rt <- floor(d$rt*quantize_by)*abs(quantize_by) else  # Clock
+          d$rt <- ceiling(d$rt*quantize_by)*abs(quantize_by)     # Keyboard
+      }
+      d$rt <- d$rt + do.call(rfun,args)*scale[i]
     }
-    d$rt <- d$rt + noise
+    noise
     d
   }
 
   make_datas <- function(i,prior_alpha,design_in,trials,add_noise=NULL) {
     datas <- make_data(unlist(prior_alpha[i,]),design_in, trials, model = design_in$model)
-    if (!is.null(add_noise)) datas <- noise_fun(datas,add_noise)
+    if (!is.null(add_noise)) datas <- noise_fun(datas,add_noise,quantize_when,quantize_by)
     datas
   }
 
