@@ -1,26 +1,38 @@
-do_transform <- function(pars,transform)
-  # pars is the parameter matrix, transform is a transform list
+do_transform <- function(pars, transform)
 {
-  isexp <- transform$func[colnames(pars)] == "exp"
+  isexp    <- transform$func[colnames(pars)] == "exp"
   isprobit <- transform$func[colnames(pars)] == "pnorm"
-  # Here instead of using isexp directly I use the column names in case v is replicated in pars (i.e. in map_mcmc)
-  pars[,isexp] <- exp(sweep(pars[,isexp, drop = F], 2, transform$lower[colnames(pars)[isexp]], "-"))
-  pars[,isprobit] <- pnorm(sweep(sweep(pars[,isprobit, drop = F], 2, transform$lower[colnames(pars)[isprobit]], "-")
-                                 , 2, transform$upper[colnames(pars)[isprobit]]-transform$lower[colnames(pars)[isprobit]], "/"))
+
+  ## exp link:  lower + exp(real)
+  pars[, isexp] <- sweep(
+    exp(pars[, isexp, drop = FALSE]), 2,
+    transform$lower[colnames(pars)[isexp]], "+")
+
+  ## probit link: lower + (upper‑lower) * pnorm(real)
+  pars[, isprobit] <- sweep(
+    sweep(pnorm(pars[, isprobit, drop = FALSE]), 2,
+          transform$upper[colnames(pars)[isprobit]] -
+            transform$lower[colnames(pars)[isprobit]], "*"),
+    2, transform$lower[colnames(pars)[isprobit]], "+")
   pars
 }
 
-do_pre_transform <- function(p_vector,transform)
-  # pars is the parameter matrix, transform is a transform list
+do_pre_transform <- function(p_vector, transform)
 {
-  isexp <- transform$func[names(p_vector)] == "exp"
+  isexp    <- transform$func[names(p_vector)] == "exp"
   isprobit <- transform$func[names(p_vector)] == "pnorm"
-  # Here instead of using isexp directly I use the names in case v is replicated in p_vector (i.e. in map_mcmc)
-  p_vector[isexp] <- exp(p_vector[isexp] - transform$lower[names(p_vector)[isexp]])
-  p_vector[isprobit] <- pnorm((p_vector[isprobit] - transform$lower[names(p_vector)[isprobit]])/
-                                (transform$upper[names(p_vector)[isprobit]]-transform$lower[names(p_vector)[isprobit]]))
+
+  ## exp link
+  p_vector[isexp] <- transform$lower[names(p_vector)[isexp]] + exp(p_vector[isexp])
+
+  ## probit link
+  p_vector[isprobit] <- transform$lower[names(p_vector)[isprobit]] +
+    (transform$upper[names(p_vector)[isprobit]] -
+       transform$lower[names(p_vector)[isprobit]]) *
+    pnorm(p_vector[isprobit])
   p_vector
 }
+
 
 # This form used in random number generation
 do_bound <- function(pars,bound, lR = NULL) {
