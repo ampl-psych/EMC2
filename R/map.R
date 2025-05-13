@@ -187,10 +187,19 @@ add_recalculated_pars <- function(pmat, model, cnams){
     to_add <- do.call(cbind, cur_par[not_dups])
     cur_modfs <- modfs[not_dups]
     fnams <- sapply(cur_modfs, function(x) paste0(unique(unlist(strsplit(x[pars_vary], split = "_"))), collapse = "_"))
-    if(fnams != "") colnames(to_add) <- paste0(colnames(to_add)[1], "_", fnams)
+    if(!all(fnams == "")) colnames(to_add) <- paste0(colnames(to_add)[1], "_", fnams)
     m_out <- cbind(m_out, to_add)
   }
   return(m_out)
+}
+
+get_p_types <- function(nams, reverse = FALSE){
+  if(reverse){
+    out <- unlist(lapply(strsplit(nams,"_"),function(x){x[[-1]]}))
+  } else{
+    out <- unlist(lapply(strsplit(nams,"_"),function(x){x[[1]]}))
+  }
+  return(out)
 }
 
 map_mcmc <- function(mcmc,design,include_constants = TRUE, add_recalculated = FALSE, covariates = NULL)
@@ -204,15 +213,6 @@ map_mcmc <- function(mcmc,design,include_constants = TRUE, add_recalculated = FA
     }
     t(mapi %*% t(pmat[,dimnames(mapi)[[2]],drop=FALSE]))
   }
-  get_p_types <- function(nams, reverse = FALSE){
-    if(reverse){
-      out <- unlist(lapply(strsplit(nams,"_"),function(x){x[[-1]]}))
-    } else{
-      out <- unlist(lapply(strsplit(nams,"_"),function(x){x[[1]]}))
-    }
-    return(out)
-  }
-
   if(is.null(names(design))) names(design) <- as.character(1:length(design))
   par_idx <- 0
   out_list <- list()

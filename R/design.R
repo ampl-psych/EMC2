@@ -273,13 +273,10 @@ contr.anova <- function(n) {
   contr/rep(2*apply(abs(contr),2,max),each=dim(contr)[1])
 }
 
-add_accumulators <- function(data,matchfun=NULL,simulate=FALSE,type="RACE", Fcovariates=NULL) {
+add_accumulators <- function(data,matchfun=NULL,simulate=FALSE, type = "RACE", Fcovariates=NULL) {
+  if(is.null(type) || !type %in% c("RACE", "SDT", "MT", "TC")) return(data)
   if (!is.factor(data$R)) stop("data must have a factor R")
   factors <- names(data)[!names(data) %in% c("R","rt","trials",Fcovariates)]
-if (type=="DDM") {
-    datar <- cbind(data,lR=factor(rep(levels(data$R)[1],dim(data)[1]),
-      levels=levels(data$R)),lM=factor(rep(TRUE,dim(data)[1])))
-  }
   if (type %in% c("RACE","SDT")) {
     nacc <- length(levels(data$R))
     datar <- cbind(do.call(rbind,lapply(1:nacc,function(x){data})),
@@ -332,23 +329,7 @@ if (type=="DDM") {
 
     if (type %in% c("MT","TC")) datar$winner <- NA else
       datar$winner <- datar$lR==R
-    # datar$winner[is.na(datar$winner)] <- FALSE
   }
-  # # sort cells together
-  # if ("trials" %in% names(data)){
-  #   if(length(factors) > 1){
-  #     datar[order(apply(datar[,c(factors)],1,paste,collapse="_"), as.numeric(datar$trials),as.numeric(datar$lR)),]
-  #   } else{
-  #     datar[order(datar[,c(factors)], as.numeric(datar$trials),as.numeric(datar$lR)),]
-  #   }
-  # }
-  # else{
-  #   if(length(factors) > 1){
-  #     datar[order(apply(datar[,c(factors)],1,paste,collapse="_"), as.numeric(datar$lR)),]
-  #   } else{
-  #     datar[order(datar[,c(factors)], as.numeric(datar$lR)),]
-  #   }
-  # }
   datar
 }
 
@@ -677,7 +658,8 @@ make_dm <- function(form,da,Clist=NULL,Fcovariates=NULL, add_da = FALSE, all_cel
       }
   }
   out <- stats::model.matrix(form,da)
-  if (dim(out)[2]==1) dimnames(out)[[2]] <- as.character(pnam) else {
+  if (dim(out)[2]==1) dimnames(out)[[2]] <- as.character(pnam)
+  else {
     if (attr(stats::terms(form),"intercept")!=0) {
       cnams <- paste(pnam,dimnames(out)[[2]][-1],sep="_")
       dimnames(out)[[2]] <- c(pnam,cnams)
@@ -1034,7 +1016,7 @@ sampled_pars.emc.design <- function(x,model=NULL,doMap=FALSE, add_da = FALSE, al
 
     if (!is.null(cur_design$Fcovariates)) {
       covs <- matrix(1,nrow=dim(data)[1],ncol=length(cur_design$Fcovariates),
-                     dimnames=list(NULL,names(cur_design$Fcovariates)))
+                     dimnames=list(NULL,cur_design$Fcovariates))
       data <- cbind.data.frame(data,covs)
     }
     dadm <- design_model(
