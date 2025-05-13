@@ -41,19 +41,23 @@ LogicalVector c_do_bound(NumericMatrix pars,
 }
 
 NumericVector c_do_pre_transform(NumericVector p_vector,
-                                      const std::vector<PreTransformSpec>& specs)
+                                 const std::vector<PreTransformSpec>& specs)
 {
   for (size_t i = 0; i < specs.size(); i++) {
     const PreTransformSpec& s = specs[i];
     double val = p_vector[s.index];
+
     switch (s.code) {
     case PTF_EXP: {
-      p_vector[s.index] = std::exp(val - s.lower);
+      // lower + exp(real)
+      p_vector[s.index] = s.lower + std::exp(val);
       break;
     }
     case PTF_PNORM: {
-      double z = (val - s.lower) / (s.upper - s.lower);
-      p_vector[s.index] = R::pnorm(z, 0.0, 1.0, 1, 0);
+      double range = s.upper - s.lower;
+      // lower + range * Φ(real)
+      p_vector[s.index] = s.lower +
+        range * R::pnorm(val, 0.0, 1.0, /*lower_tail=*/1, /*log_p=*/0);
       break;
     }
     default:
@@ -64,31 +68,33 @@ NumericVector c_do_pre_transform(NumericVector p_vector,
   return p_vector;
 }
 
-
 NumericMatrix c_do_transform(NumericMatrix pars,
-                                  const std::vector<TransformSpec>& specs)
+                             const std::vector<TransformSpec>& specs)
 {
   int nrow = pars.nrow();
 
   for (size_t j = 0; j < specs.size(); j++) {
     const TransformSpec& sp = specs[j];
-    int col_idx     = sp.col_idx;
-    TransformCode c = sp.code;
-    double lw       = sp.lower;
-    double up       = sp.upper;
+    int          col_idx = sp.col_idx;
+    TransformCode c      = sp.code;
+    double        lw     = sp.lower;
+    double        up     = sp.upper;
 
     switch (c) {
     case EXP: {
       for (int i = 0; i < nrow; i++) {
-      pars(i, col_idx) = std::exp(pars(i, col_idx) - lw);
+      // lower + exp(real)
+      pars(i, col_idx) = lw + std::exp(pars(i, col_idx));
     }
       break;
     }
     case PNORM: {
       double range = up - lw;
       for (int i = 0; i < nrow; i++) {
-        double z = (pars(i, col_idx) - lw) / range;
-        pars(i, col_idx) = R::pnorm(z, 0.0, 1.0, /*lower_tail=*/1, /*log_p=*/0);
+        // lower + range * Φ(real)
+        pars(i, col_idx) = lw +
+          range * R::pnorm(pars(i, col_idx), 0.0, 1.0,
+                           /*lower_tail=*/1, /*log_p=*/0);
       }
       break;
     }
@@ -100,7 +106,6 @@ NumericMatrix c_do_transform(NumericMatrix pars,
   }
   return pars;
 }
-
 
 
 NumericMatrix c_map_p(NumericVector p_vector,
