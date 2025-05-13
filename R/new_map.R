@@ -1,5 +1,5 @@
 minimal_design <- function(design, covariates = NULL, drop_subjects = TRUE,
-                           n_trials = 1, add_acc = TRUE, ...) {
+                           n_trials = 1, add_acc = TRUE, drop_R = TRUE, ...) {
   dots <- add_defaults(list(...), verbose = TRUE)
   if(!is.null(design$Ffactors)) design <- list(design)
   out <- list()
@@ -57,7 +57,7 @@ minimal_design <- function(design, covariates = NULL, drop_subjects = TRUE,
     if(add_acc){
       fac_df <- add_accumulators(fac_df, matchfun = cur_des$matchfun, type = cur_des$model()$type)
     }
-    if(!is.null(fac_df$R)){
+    if(!is.null(fac_df$R) & drop_R){
       fac_df <- fac_df[fac_df$R == unique(fac_df$R)[1],]
       fac_df <- fac_df[,!colnames(fac_df) %in% c("R", "winner")]
     }
@@ -86,7 +86,7 @@ add_map <- function(draws, design, add_recalculated = FALSE, ...) {
   ## 2.  minimal experimental design --------------------------------------
   design_df <- minimal_design(design,
                               drop_subjects = TRUE,
-                              n_trials      = 100,
+                              n_trials      = 100, # sample 100 here so that covariate is semi-accurately represented
                               add_acc       = FALSE,
                               ...)
 

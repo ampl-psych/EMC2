@@ -1004,23 +1004,9 @@ sampled_pars.emc.design <- function(x,model=NULL,doMap=FALSE, add_da = FALSE, al
       out <- c(out, pars)
       next
     }
-
-    Ffactors=c(cur_design$Ffactors,list(R=cur_design$Rlevels))
-    data <- as.data.frame.table(array(dim=unlist(lapply(Ffactors,length)),
-                                      dimnames=Ffactors))[,-(length(Ffactors)+1)]
-    for (i in names(cur_design$Ffactors))
-      data[[i]] <- factor(data[[i]],levels=cur_design$Ffactors[[i]])
-
-    # if (!is.null(design$Ffunctions))
-    #   data <- cbind.data.frame(data,data.frame(lapply(design$Ffunctions,function(f){f(data)})))
-
-    if (!is.null(cur_design$Fcovariates)) {
-      covs <- matrix(1,nrow=dim(data)[1],ncol=length(cur_design$Fcovariates),
-                     dimnames=list(NULL,cur_design$Fcovariates))
-      data <- cbind.data.frame(data,covs)
-    }
+    min_design <- minimal_design(cur_design, drop_subjects = F, drop_R = F)
     dadm <- design_model(
-      add_accumulators(data,matchfun=cur_design$matchfun,type=model()$type,Fcovariates=cur_design$Fcovariates),
+      min_design,
       cur_design,model,add_acc=FALSE,verbose=FALSE,rt_check=FALSE,compress=FALSE, add_da = add_da,
       all_cells_dm = all_cells_dm)
     sampled_p_names <- attr(dadm,"sampled_p_names")
