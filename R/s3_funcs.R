@@ -978,7 +978,7 @@ get_data.emc <- function(emc) {
       design <- get_design(emc)[[i]]
       tmp <- do.call(rbind,lapply(emc[[1]]$data,function(x){
         cur <- x[[i]]
-        if(is.null(cur$winner)){
+        if(is.null(x$lR) || length(unique(x$lR)) == 1){
           cur$winner <- TRUE
         }
         cur <- cur[cur$winner,]
@@ -994,7 +994,7 @@ get_data.emc <- function(emc) {
   } else{
     design <- get_design(emc)[[1]]
     dat <- do.call(rbind,lapply(emc[[1]]$data,function(x){
-      if(is.null(x$winner)){
+      if(is.null(x$lR) || length(unique(x$lR)) == 1){
         x$winner <- TRUE
       }
       x <- x[x$winner,]
