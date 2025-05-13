@@ -228,7 +228,7 @@ gibbs_step_standard <- function(sampler, alpha) {
   n <- ncol(alpha)           # number of subjects
 
   # Some backwards compatibility
-  if(is.null(is_blocked)){
+  if(is.null(is_blocked) || length(is_blocked) == 0){
     is_blocked <- rep(T, p)
   }
   if(is.null(par_group)){
@@ -361,7 +361,6 @@ gibbs_step_standard <- function(sampler, alpha) {
 
   # Invert
   tvinv_new <- solve(tvar_new)
-
   ##--------------------------------------------------
   ## 5) Update a_half
   ##--------------------------------------------------
