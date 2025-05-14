@@ -136,7 +136,7 @@ get_objects_standard <- function(selection, sample_prior, return_prior, design =
         sampler <- list(list(samples =  list(alpha = get_alphas(mu, var, sub_names))))
       } else{
         sampler <- list(list(samples = get_prior_standard(prior = prior, design = design, selection = selection,N = N,
-                                                          par_groups = sampler[[1]]$par_groups, betas = sampler[[1]]$betas)))
+                                                          par_groups = sampler[[1]]$par_groups, group_design = sampler[[1]]$group_design)))
       }
       sampler[[1]]$prior <- prior
       class(sampler) <- "emc"

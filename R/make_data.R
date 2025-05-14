@@ -85,8 +85,7 @@ make_missing <- function(data,LT=0,UT=Inf,LC=0,UC=Inf,
 #' data <- make_data(parameters, design_DDMaE, data = forstmann)
 #' @export
 
-make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
-  mapped_p=FALSE, hyper = FALSE, staircase = NULL, ...)
+make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1, staircase = NULL, ...)
 {
   # #' @param LT lower truncation bound below which data are removed (scalar or subject named vector)
   # #' @param UT upper truncation bound above which data are removed (scalar or subject named vector)
@@ -132,26 +131,14 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
   if(is(parameters, "emc")){
     if(is.null(design)) design <- get_design(parameters)
     if(is.null(data)) data <- get_data(parameters)
-    if(!hyper){
-      parameters <- do.call(rbind, credint(parameters, probs = 0.5, selection = "alpha", by_subject = TRUE))
-    } else{
-      mu <- get_pars(parameters, selection = "mu", merge_chains = T, return_mcmc = F)
-      Sigma <- get_pars(parameters, selection = "Sigma", merge_chains = T, return_mcmc = F)
-      mu <- rowMeans(mu)
-      Sigma <- apply(Sigma, 1:2, mean)
-      parameters <- make_random_effects(design, group_means = mu, covariances = Sigma)
-    }
+    parameters <- do.call(rbind, credint(parameters, probs = 0.5, selection = "alpha", by_subject = TRUE))
   }
 
+  # Make sure parameters are in the right format, either matrix or vector
   sampled_p_names <- names(sampled_pars(design))
   if(is.null(dim(parameters))){
     if(is.null(names(parameters))) names(parameters) <- sampled_p_names
   } else{
-    # design$Ffactors$subjects <- design$Ffactors$subjects[1:nrow(parameters)]
-    # if(!is.null(data)){
-    #   data<- data[data$subjects %in% design$Ffactors$subjects,]
-    #   data$subjects <- factor(data$subjects)
-    # }
     if(length(rownames(parameters)) != length(design$Ffactors$subjects)){
       stop("input parameter matrix must have number of rows equal to number of subjects specified in design")
     }
@@ -170,15 +157,7 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
   model <- design$model
 
   if(grepl("MRI", model()$type)){
-    data_list <- list()
-    for(i in 1:nrow(parameters)){
-      data_tmp <- data[data$subjects == unique(data$subjects)[i],]
-      data_tmp$subjects <- factor(data_tmp$subjects)
-      attr(data_tmp, "designs") <- design$fMRI_design[[i]]
-
-      data_list[[i]] <- make_data_fMRI(parameters[i,,drop = F], model, data_tmp, design)
-    }
-    return(do.call(rbind, data_list))
+    return(make_data_wrapper_MRI(parameters, data, design))
   }
 
   if(is.data.frame(parameters)) parameters <- as.matrix(parameters)
@@ -188,22 +167,9 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
     if (mapped_p) n_trials <- 1
     if ( is.null(n_trials) )
       stop("If data is not provided need to specify number of trials")
-    Ffactors=c(design$Ffactors,list(trials=1:n_trials))
-    data <- as.data.frame.table(array(dim=unlist(lapply(Ffactors,length)),
-                                        dimnames=Ffactors))
-    for (i in names(design$Ffactors))
-      data[[i]] <- factor(data[[i]],levels=design$Ffactors[[i]])
-    names(data)[dim(data)[2]] <- "R"
-    data$R <- factor(data$R,levels=design$Rlevels)
-    data$trials <- as.numeric(as.character(data$trials))
-    # Add covariates
-    if (!is.null(design$Fcovariates)) {
-      nams <- names(design$Fcovariates)
-      covariates <- do.call(cbind.data.frame,lapply(
-        design$Fcovariates,function(x){x(data)}))
-      names(covariates) <- nams
-         data <- cbind.data.frame(data,covariates)
-    }
+      data <- minimal_design(design, covariates = list(...)$covariates,
+                             drop_subjects = F, n_trials = n_trials, add_acc=F,
+                             drop_R = F)
   } else {
     LT <- attr(data,"LT"); if (is.null(LT)) LT <- 0
     UT <- attr(data,"UT"); if (is.null(UT)) UT <- Inf

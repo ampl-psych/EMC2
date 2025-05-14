@@ -4,11 +4,11 @@ sample_store_standard <- function(data, par_names, iters = 1, stage = "init", in
   base_samples <- sample_store_base(data, par_names, iters, stage)
   par_names <- par_names[!is_nuisance]
   n_pars <- length(par_names)
-  
+
   # Get total parameters including regressors
   group_design <- list(...)$group_design
   total_par_names <- par_names
-  
+
   if (!is.null(group_design)) {
     # Extract all regressor names from design matrices
     regressor_names <- unlist(Map(function(name, values) {
@@ -19,22 +19,22 @@ sample_store_standard <- function(data, par_names, iters = 1, stage = "init", in
         character(0)
       }
     }, names(group_design), group_design))
-    
+
     if (length(regressor_names) > 0) {
       total_par_names <- c(par_names, regressor_names)
     }
   }
-  
+
   # Create samples structure
   samples <- list(
-    theta_mu = array(NA_real_, dim = c(length(total_par_names), iters), 
+    theta_mu = array(NA_real_, dim = c(length(total_par_names), iters),
                      dimnames = list(total_par_names, NULL)),
     theta_var = array(NA_real_, dim = c(n_pars, n_pars, iters),
                      dimnames = list(par_names, par_names, NULL)),
     a_half = array(NA_real_, dim = c(n_pars, iters),
                   dimnames = list(par_names, NULL))
   )
-  
+
   if(integrate) samples <- c(samples, base_samples)
   return(samples)
 }
@@ -42,14 +42,14 @@ sample_store_standard <- function(data, par_names, iters = 1, stage = "init", in
 add_info_standard <- function(sampler, prior = NULL, ...){
   n_pars <- sum(!sampler$nuisance)
   group_design <- list(...)$group_design
-  
+
   # Get all parameter names including regressors
   sampler$par_names_all <- sampler$par_names
-  
+
   # Extract regressor names if group_design is provided
   if(!is.null(group_design)){
     sampler$group_designs <- group_design
-    
+
     # Get regressor names
     regressor_names <- unlist(Map(function(name, values) {
       colnames <- colnames(values)
@@ -59,15 +59,15 @@ add_info_standard <- function(sampler, prior = NULL, ...){
         character(0)
       }
     }, names(group_design), group_design))
-    
+
     if (length(regressor_names) > 0) {
       sampler$par_names_all <- c(sampler$par_names, regressor_names)
     }
   }
-  
+
   sampler$par_group <- list(...)$par_groups
   sampler$is_blocked <- sampler$par_group %in% which(table(sampler$par_group) > 1)
-  sampler$prior <- get_prior_standard(prior, n_pars, sample = F, 
+  sampler$prior <- get_prior_standard(prior, n_pars, sample = F,
                                       betas = regressor_names)
   return(sampler)
 }
@@ -96,10 +96,10 @@ get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1
 
   # Number of additional parameters from design matrices
   n_additional <- 0
-  if(!is.null(betas)){
+  if(!is.null(group_design)){
     n_additional <- length(betas)
   }
-  
+
   # Set up combined theta_mu_mean to include both intercepts and slopes
   if(is.null(prior$theta_mu_mean)) {
     prior$theta_mu_mean <- rep(0, n_pars + n_additional)
@@ -126,7 +126,7 @@ get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1
       if(n_additional > 0){
         # Split the combined parameters
         rownames(mu[1:n_pars,]) <- par_names
-        if(!is.null(betas)) rownames(mu[(n_pars+1):(n_pars+n_additional),]) <- betas
+        if(!is.null(group_design)) rownames(mu[(n_pars+1):(n_pars+n_additional),]) <- betas
       } else {
         rownames(mu) <- par_names
       }
@@ -168,16 +168,16 @@ get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1
 get_startpoints_standard <- function(pmwgs, start_mu, start_var){
   n_pars <- sum(!pmwgs$nuisance)
   n_total_pars <- length(pmwgs$prior$theta_mu_mean) # Includes regressor parameters
-  
+
   if (is.null(start_mu)) start_mu <- rmvnorm(1, mean = pmwgs$prior$theta_mu_mean, sigma = pmwgs$prior$theta_mu_var)
   # If no starting point for group var just sample some
   if (is.null(start_var)) start_var <- riwish(n_pars * 3, diag(n_pars))
   start_a_half <- 1 / rgamma(n = n_pars, shape = 2, rate = 1)
-  
+
   subj_mu <- matrix(0, nrow = n_pars, ncol = pmwgs$n_subjects)
   # Calculate subject-specific means using design matrices
   group_designs <- add_group_design(pmwgs$par_names, pmwgs$group_designs, pmwgs$n_subjects)
-  
+
   for (s in 1:pmwgs$n_subjects) {
     par_idx <- 0
     for (k in 1:n_pars) {
@@ -186,7 +186,7 @@ get_startpoints_standard <- function(pmwgs, start_mu, start_var){
       par_idx <- par_idx + ncol(group_designs[[k]])
     }
   }
-  
+
   return(list(tmu = start_mu, tvar = start_var, tvinv = ginv(start_var),
               a_half = start_a_half, subj_mu = subj_mu))
 }
@@ -512,7 +512,7 @@ bridge_group_and_prior_and_jac_standard <- function(
   p         <- info$n_pars        # dimension of each alpha_i
   n_subj    <- info$n_subjects
   group_designs <- add_group_design(info$par_names, info$group_designs, n_subj)
-  
+
   # Total parameters (including regressors)
   total_pars <- length(prior$theta_mu_mean)
 
@@ -523,7 +523,7 @@ bridge_group_and_prior_and_jac_standard <- function(
   if(any(!has_cov)){
     theta_var1 <- proposals_group[, (total_pars + p + 1) : (total_pars + p + sum(!has_cov)), drop=FALSE]  # (n_iter x sum(!has_cov))
   }
-  
+
   if(any(has_cov)){
     min_idx <- (total_pars + p + sum(!has_cov))
     theta_var2_list <- list()
@@ -535,7 +535,7 @@ bridge_group_and_prior_and_jac_standard <- function(
       min_idx <- max_idx
     }
   }
-  
+
   n_iter <- nrow(theta_mu)
   sum_out <- numeric(n_iter)
 
@@ -587,7 +587,7 @@ bridge_group_and_prior_and_jac_standard <- function(
         jac_var2 <- jac_var2 + calc_log_jac_chol(theta_var2_list[[block]][i, ])
       }
     }
-    
+
     # 3) Compute group likelihood = sum_{s=1..n_subj} dmvnorm(alpha_s, mu_s, var_curr)
     group_ll <- 0
     for (s in seq_len(n_subj)) {
@@ -649,15 +649,15 @@ bridge_add_info_standard <- function(info, samples){
   }
   info$is_blocked <- has_cov
   info$group_designs <- samples$group_designs
-  
+
   # Calculate total parameters (including former beta)
   n_total_pars <- nrow(samples$samples$theta_mu)
-  
+
   # Calculate group index including all parameters (theta_mu now includes beta)
   info$group_idx <- (samples$n_pars*samples$n_subjects + 1):
     (samples$n_pars*samples$n_subjects + n_total_pars + samples$n_pars +
        sum(!has_cov) + (sum(has_cov) * (sum(has_cov) +1))/2)
-  
+
   return(info)
 }
 
@@ -665,7 +665,7 @@ bridge_add_group_standard <- function(all_samples, samples, idx){
   # Add theta_mu (now includes all parameters)
   all_samples <- cbind(all_samples, t(samples$samples$theta_mu[,idx]))
   all_samples <- cbind(all_samples, t(log(samples$samples$a_half[,idx])))
-  
+
   # Handle variance matrices
   par_group <- samples$par_group
   has_cov <- samples$is_blocked

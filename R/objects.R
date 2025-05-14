@@ -393,7 +393,7 @@ get_pars <- function(emc,selection= "mu", stage=get_last_stage(emc),thin=1,filte
                          selection = selection)
 
   if(map){
-    samples <- lapply(samples, map_mcmc, get_design(emc), include_constants = FALSE,
+    samples <- lapply(samples, do_map, get_design(emc), include_constants = FALSE,
                       add_recalculated = add_recalculated, covariates = covariates)
   }
   if(flatten) remove_dup <- TRUE

@@ -1254,6 +1254,18 @@ make_mri_sampling_design <- function(design, sampled_p_names){
 }
 
 
+make_data_wrapper_MRI <- function(parameters, data, design){
+  data_list <- list()
+  for(i in 1:nrow(parameters)){
+    data_tmp <- data[data$subjects == unique(data$subjects)[i],]
+    data_tmp$subjects <- factor(data_tmp$subjects)
+    attr(data_tmp, "designs") <- design$fMRI_design[[i]]
+
+    data_list[[i]] <- make_data_fMRI(parameters[i,,drop = F], design$model, data_tmp, design)
+  }
+  return(do.call(rbind, data_list))
+}
+
 make_data_fMRI <- function(parameters, model, data, design, ...){
   # if(is.null(attr(design, "design_matrix"))){
   #   stop("for fMRI simulation the original design needs to be passed to the simulation function")

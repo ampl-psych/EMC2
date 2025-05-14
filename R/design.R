@@ -922,7 +922,7 @@ mapped_pars.emc.design <- function(x, p_vector = NULL, model=NULL,
     stop("Must specify model as not in design") else model <- design$model
   if (remove_subjects) design$Ffactors$subjects <- design$Ffactors$subjects[1]
   if (!is.matrix(p_vector)) p_vector <- make_pmat(p_vector,design)
-  dadm <- design_model(make_data(p_vector,design,n_trials=1,Fcovariates=Fcovariates),
+  dadm <- design_model(minimal_design(design, covariates = Fcovariates, verbose = F, drop_R = F, add_acc = F, drop_subjects = F),
                        design,model,rt_check=FALSE,compress=FALSE, verbose = FALSE)
   ok <- !(names(dadm) %in% c("subjects","trials","R","rt","winner"))
   out <- cbind(dadm[,ok],round(get_pars_matrix(p_vector,dadm, design$model()),digits))
@@ -930,7 +930,8 @@ mapped_pars.emc.design <- function(x, p_vector = NULL, model=NULL,
   if (model()$type=="DDM")  out <- out[,!(names(out) %in% c("lR","lM"))]
   if (any(names(out)=="RACE") && remove_RACE)
     out <- out[as.numeric(out$lR) <= as.numeric(as.character(out$RACE)),,drop=FALSE]
-  return(out)
+
+  return(unique(out))
 }
 
 
@@ -1004,7 +1005,7 @@ sampled_pars.emc.design <- function(x,model=NULL,doMap=FALSE, add_da = FALSE, al
       out <- c(out, pars)
       next
     }
-    min_design <- minimal_design(cur_design, drop_subjects = F, drop_R = F)
+    min_design <- minimal_design(cur_design, drop_subjects = F, drop_R = F, verbose = F)
     dadm <- design_model(
       min_design,
       cur_design,model,add_acc=FALSE,verbose=FALSE,rt_check=FALSE,compress=FALSE, add_da = add_da,

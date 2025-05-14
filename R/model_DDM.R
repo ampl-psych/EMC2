@@ -16,16 +16,8 @@ suppress_output <- function(expr) {
 }
 
 rDDM <- function(lR,pars,ok=rep(TRUE,length(lR)), precision=5e-3)
-  # lR is an empty latent response factor lR with one level for each boundary
-  # pars is a matrix of parameter values named as in p_types
-  # lower is mapped to first level of lR and upper to second
-  # test
-  # pars=cbind.data.frame(a=c(1,1),v=c(-1,1),t0=c(.2,.2),z=c(.5,.5),d=c(0,0),
-  #                       sz=c(0,0),sv=c(0,0),st0=c(0,0),s=c(1,1))
-  # lR <- factor(c("left","right"))
-
 {
-  bad <- rep(NA,length(lR))
+  bad <- rep(NA,nrow(pars))
   out <- data.frame(response=bad,rt=bad)
   out_ok <- out[ok,]
   pars <- pars[ok,]
