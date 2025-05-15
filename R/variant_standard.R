@@ -6,24 +6,8 @@ sample_store_standard <- function(data, par_names, iters = 1, stage = "init", in
   n_pars <- length(par_names)
 
   # Get total parameters including regressors
-  group_design <- list(...)$group_design
-  total_par_names <- par_names
-
-  if (!is.null(group_design)) {
-    # Extract all regressor names from design matrices
-    regressor_names <- unlist(Map(function(name, values) {
-      colnames <- colnames(values)
-      if (length(colnames) > 1) {
-        paste0(name, "_", colnames[-1])  # Skip first column (will be intercept)
-      } else {
-        character(0)
-      }
-    }, names(group_design), group_design))
-
-    if (length(regressor_names) > 0) {
-      total_par_names <- c(par_names, regressor_names)
-    }
-  }
+  group_designs <- list(...)$group_design
+  total_par_names <- add_group_par_names(par_names, group_designs)
 
   # Create samples structure
   samples <- list(
@@ -44,31 +28,13 @@ add_info_standard <- function(sampler, prior = NULL, ...){
   group_design <- list(...)$group_design
 
   # Get all parameter names including regressors
-  sampler$par_names_all <- sampler$par_names
-
-  # Extract regressor names if group_design is provided
-  if(!is.null(group_design)){
-    sampler$group_designs <- group_design
-
-    # Get regressor names
-    regressor_names <- unlist(Map(function(name, values) {
-      colnames <- colnames(values)
-      if (length(colnames) > 1) {
-        paste0(name, "_", colnames[-1])  # Skip first column (will be intercept)
-      } else {
-        character(0)
-      }
-    }, names(group_design), group_design))
-
-    if (length(regressor_names) > 0) {
-      sampler$par_names_all <- c(sampler$par_names, regressor_names)
-    }
-  }
+  sampler$par_names_all <- add_group_par_names(sampler$par_names, group_design)
 
   sampler$par_group <- list(...)$par_groups
   sampler$is_blocked <- sampler$par_group %in% which(table(sampler$par_group) > 1)
   sampler$prior <- get_prior_standard(prior, n_pars, sample = F,
-                                      betas = regressor_names)
+                                      group_des = group_design)
+  sampler$group_designs <- group_design
   return(sampler)
 }
 
@@ -81,7 +47,7 @@ add_info_standard <- function(sampler, prior = NULL, ...){
 #   return(betas)
 # }
 
-get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, selection = "mu", design = NULL, group_design = NULL,
+get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, selection = "mu", design = NULL, group_des = NULL,
                                par_groups = NULL){
   # Checking and default priors
   if(is.null(prior)){
@@ -95,9 +61,8 @@ get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1
   }
 
   # Number of additional parameters from design matrices
-  n_additional <- 0
-  if(!is.null(group_design)){
-    n_additional <- length(betas)
+  if(!is.null(group_des)){
+    n_additional <- n_additional_group_pars(group_des)
   }
 
   # Set up combined theta_mu_mean to include both intercepts and slopes
@@ -126,7 +91,7 @@ get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1
       if(n_additional > 0){
         # Split the combined parameters
         rownames(mu[1:n_pars,]) <- par_names
-        if(!is.null(group_design)) rownames(mu[(n_pars+1):(n_pars+n_additional),]) <- betas
+        if(!is.null(group_des)) rownames(mu[(n_pars+1):(n_pars+n_additional),]) <- names(sampled_pars(group_des))
       } else {
         rownames(mu) <- par_names
       }
@@ -205,31 +170,6 @@ fill_samples_standard <- function(samples, group_level, proposals, j = 1, n_pars
   return(samples)
 }
 
-add_group_design <- function(par_names, group_designs = NULL, n_subjects) {
-  #
-  # par_names:   character vector of parameter names (length p)
-  # group_designs: named list of existing design matrices, e.g. $"param1" => (n x m1), etc.
-  #                    some par_names might not appear here.
-  # n_subjects:    integer, number of subjects (rows).
-  #
-  # Returns a new list, same length as par_names, each entry an (n_subjects x m_k) matrix
-  # If param was not in group_designs, we create a single column of 1's of dimension (n_subjects x 1).
-
-  out_list <- vector("list", length(par_names))
-  names(out_list) <- par_names
-
-  for (k in seq_along(par_names)) {
-    pname <- par_names[k]
-    if (!is.null(group_designs[[pname]])) {
-      out_list[[k]] <- group_designs[[pname]]
-    } else {
-      # no existing design => just a column of 1's
-      out_list[[k]] <- matrix(1, nrow = n_subjects, ncol = 1)
-    }
-  }
-  return(out_list)
-}
-
 gibbs_step_standard <- function(sampler, alpha) {
   #
   # alpha:  (p x n) subject-level parameter matrix
@@ -274,7 +214,7 @@ gibbs_step_standard <- function(sampler, alpha) {
     par_group <- rep(1, p)
   }
 
-  group_designs <- add_group_design(names(tmu)[1:p], group_designs, n)
+  group_designs <- add_group_design(sampler$par_names, group_designs, n)
 
   # Calculate total parameters (including regressors)
   M <- length(tmu)  # Total parameters (former mu + beta)
@@ -412,9 +352,6 @@ last_sample_standard <- function(store) {
   )
 }
 
-
-
-# For now don't consider betas in conditionals
 get_conditionals_standard <- function(s, samples, n_pars, iteration = NULL, idx = NULL){
   iteration <- ifelse(is.null(iteration), samples$iteration, iteration)
   if(is.null(idx)) idx <- 1:n_pars

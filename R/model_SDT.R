@@ -69,8 +69,8 @@ SDT <- function(){
     pars
   },
   # Random function for discrete choices
-  rfun=function(lR=NULL,pars) {
-    rPROBIT(lR,pars)
+  rfun=function(data=NULL,pars) {
+    rPROBIT(data$lR,pars)
   },
   # probability of choice between lower and upper thresholds (lt & ut)
   pfun=function(lt,ut,pars) pPROBIT(lt,ut,pars),

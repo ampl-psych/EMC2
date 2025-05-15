@@ -385,7 +385,7 @@ RDM <- function(){
       pars
     },
     # Random function for racing accumulators
-    rfun=function(lR=NULL,pars)  rRDM(lR,pars,ok=attr(pars, "ok")),
+    rfun=function(data=NULL,pars)  rRDM(data$lR,pars,ok=attr(pars, "ok")),
     # Density function (PDF) for single accumulator
     dfun=function(rt,pars) dRDM(rt,pars),
     # Probability function (CDF) for single accumulator

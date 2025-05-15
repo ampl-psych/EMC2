@@ -39,7 +39,7 @@
 #' # We can easily update the prior
 #' prior_DDMat0E <- prior(design_DDMat0E, update = prior_DDMaE)
 #' @export
-prior <- function(design, type = NULL, update = NULL, group_design = NULL,
+prior <- function(design, type = NULL, update = NULL,
                       do_ask = NULL, fill_default = TRUE, ...){
   if(!is.null(update) && is.null(type)){
     type <- attr(update, "type")
@@ -94,7 +94,7 @@ prior <- function(design, type = NULL, update = NULL, group_design = NULL,
     return(x)
   })
   attr(prior, "design") <- design
-  attr(prior, "group_design") <- group_design
+  attr(prior, "group_design") <- list(...)$group_design
   class(prior) <- "emc.prior"
   return(prior)
 }

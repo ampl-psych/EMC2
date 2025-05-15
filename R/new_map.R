@@ -1,5 +1,6 @@
 minimal_design <- function(design, covariates = NULL, drop_subjects = TRUE,
-                           n_trials = 1, add_acc = TRUE, drop_R = TRUE, ...) {
+                           n_trials = 1, add_acc = TRUE, drop_R = TRUE,
+                           drop_R_levels = TRUE, ...) {
   dots <- add_defaults(list(...), verbose = TRUE)
   if(!is.null(design$Ffactors)) design <- list(design)
   out <- list()
@@ -16,14 +17,16 @@ minimal_design <- function(design, covariates = NULL, drop_subjects = TRUE,
       cur_des$Ffactors <- cur_des$Ffactors[names(cur_des$Ffactors) != "subjects"]
     }
     if(n_trials > 1){
-      cur_des$Ffactors$trials <- 1:n_trials
+      cur_des$Ffactors <- c("trials" = list(1:n_trials), cur_des$Ffactors)
     }
     fac_df <- do.call(expand.grid, c(cur_des$Ffactors))
-    if(n_trials > 1 & !drop_subjects){
-      fac_df$trials <- ave(fac_df$subjects, fac_df$subjects, FUN = seq_along)
-    }
     n <- nrow(fac_df)
     fac_df[] <- lapply(fac_df, as.factor)
+    if(n_trials > 1 & !drop_subjects){
+      fac_df$trials <- as.numeric(ave(as.character(fac_df$subjects), as.character(fac_df$subjects), FUN = seq_along))
+    } else if(n_trials > 1){
+      fac_df$trials <- 1:nrow(fac_df)
+    }
 
     ## 2.  Add covariates (if requested)
     if (!is.null(cur_des$Fcovariates)) {
@@ -57,8 +60,10 @@ minimal_design <- function(design, covariates = NULL, drop_subjects = TRUE,
     if(add_acc){
       fac_df <- add_accumulators(fac_df, matchfun = cur_des$matchfun, type = cur_des$model()$type)
     }
-    if(!is.null(fac_df$R) & drop_R){
+    if(!is.null(fac_df$R) & drop_R_levels){
       fac_df <- fac_df[fac_df$R == unique(fac_df$R)[1],]
+    }
+    if(!is.null(fac_df$R) & drop_R){
       fac_df <- fac_df[,!colnames(fac_df) %in% c("R", "winner")]
     }
     out[[i]] <- fac_df
@@ -126,25 +131,11 @@ do_map <- function(draws, design, add_recalculated = FALSE, ...) {
     names(mapped_list) <- names(fmls)
 
     for (par in names(fmls)) {
-
-      rhs_only <- stats::update(fmls[[par]], NULL ~ .)
-
       ## covariates that this formula actually uses -------------------------
-      par_covs <- intersect(covariate_cols, all.vars(rhs_only))
+      par_covs <- intersect(covariate_cols, all.vars(fmls[[par]]))
 
       ## model‑matrix template (1 dummy row just to grab column names) -------
-      X <- model.matrix(rhs_only,
-                        data           = design_df[1, , drop = FALSE],
-                        contrasts.arg  = cur_des$Fcontrasts)
-
-      ## rename coefficient columns so they match the draws -----------------
-      if (ncol(X) == 1) {
-        colnames(X) <- par
-      } else if (attr(stats::terms(fmls[[par]]), "intercept") != 0) {
-        colnames(X) <- c(par, paste(par, colnames(X)[-1], sep = "_"))
-      } else {
-        colnames(X) <- paste(par, colnames(X), sep = "_")
-      }
+      X <- make_full_dm(fmls[[par]], cur_des$Clist, design_df)
       X <- X[, !colnames(X) %in% names(cur_des$constants), drop = FALSE]
       if (!ncol(X)) next                                  # nothing to map
       beta <- cur_draws[, colnames(X), drop = FALSE]
@@ -154,8 +145,7 @@ do_map <- function(draws, design, add_recalculated = FALSE, ...) {
       if (length(par_covs))
         for (cv in par_covs) zero_df[[cv]] <- 0
 
-      mm_factor <- model.matrix(rhs_only, zero_df,
-                                contrasts.arg = cur_des$Fcontrasts)
+      mm_factor <- make_full_dm(fmls[[par]], cur_des$Clist, zero_df)
       colnames(mm_factor) <- colnames(X)
 
       keep_cell     <- !duplicated(t(mm_factor))
@@ -175,21 +165,19 @@ do_map <- function(draws, design, add_recalculated = FALSE, ...) {
           this_df <- base_cells_u
           this_df[, par_covs] <- z[rep(1L, n_cell), , drop = FALSE]  # overwrite 0s
 
-          mm_full <- model.matrix(rhs_only, this_df,
-                                  contrasts.arg = cur_des$Fcontrasts)
+          mm_full <- make_full_dm(fmls[[par]], cur_des$Clist, this_df)
           colnames(mm_full) <- colnames(X)
           map_mat[d, ] <- beta[d, ] %*% t(mm_full[, mm_order, drop = FALSE])
         }
       } else {
         ## no covariates in formula → vectorised multiply
-        mm_full <- model.matrix(rhs_only, base_cells_u,
-                                contrasts.arg = cur_des$Fcontrasts)
+        mm_full <- make_full_dm(fmls[[par]], cur_des$Clist, base_cells_u)
         colnames(mm_full) <- colnames(X)
         map_mat[,] <- beta %*% t(mm_full[, mm_order, drop = FALSE])
       }
 
       ## label columns ------------------------------------------------------
-      vary_facs <- intersect(attr(stats::terms(rhs_only), "term.labels"), factor_cols)
+      vary_facs <- intersect(attr(stats::terms(fmls[[par]]), "term.labels"), factor_cols)
 
       ## (1) factor part of the label
       if (length(vary_facs)) {

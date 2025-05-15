@@ -15,13 +15,13 @@ suppress_output <- function(expr) {
   invisible(force(expr))  # Run the expression
 }
 
-rDDM <- function(lR,pars,ok=rep(TRUE,length(lR)), precision=5e-3)
+rDDM <- function(R,pars,ok=rep(TRUE,length(R)), precision=5e-3)
 {
   bad <- rep(NA,nrow(pars))
   out <- data.frame(response=bad,rt=bad)
   out_ok <- out[ok,]
   pars <- pars[ok,]
-  lR <- lR[ok]
+  R <- R[ok]
   pars <- as.matrix(pars);
   idx <- find_duplicate_indices(pars)
   for(id in unique(idx)){
@@ -34,8 +34,7 @@ rDDM <- function(lR,pars,ok=rep(TRUE,length(lR)), precision=5e-3)
     out_ok[is_id,] <- tmp[sample(nrow(tmp)),]
   }
   out[ok,] <- out_ok
-  # cbind.data.frame(R=factor(out[,"response"],levels=c("lower","upper"),labels=levels(lR)),rt=out[,"rt"])
-  cbind.data.frame(R=factor(out[,"response"], labels = levels(lR), levels = c("lower", "upper")),rt=out[,"rt"])
+  cbind.data.frame(R=factor(out[,"response"], labels = levels(R), levels = c("lower", "upper")),rt=out[,"rt"])
 }
 
 
@@ -125,7 +124,7 @@ DDM <- function(){
       pars
     },
     # Random function
-    rfun=function(lR=NULL,pars) rDDM(lR,pars, attr(pars, "ok")),
+    rfun=function(data=NULL,pars) rDDM(data$R,pars, attr(pars, "ok")),
     # Density function (PDF)
     dfun=function(rt,R,pars) dDDM(rt,R,pars),
     # Probability function (CDF)
@@ -204,8 +203,8 @@ DDMGNG <- function(){
       pars
     },
     # Random function
-    rfun=function(lR=NULL,pars) {
-      out <- rDDM(lR,pars, attr(pars, "ok"))
+    rfun=function(data,pars) {
+      out <- rDDM(data$R,pars, attr(pars, "ok"))
       out$rt[out$rt>pars[,"TIMEOUT"]] <- NA
       out$rt[as.numeric(out$R)==pars[,"Rnogo"]] <- NA
       out

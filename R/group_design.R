@@ -100,12 +100,6 @@ group_design <- function(formula, data, subject_design, contrasts = NULL){
     # Get all variables used in the current formula (right-hand side)
     current_vars <- all.vars(terms(current_formula)[[3]])
 
-    # Check if this is an intercept-only formula
-    if (length(current_vars) == 0 && deparse(terms(current_formula)[[3]]) == "1") {
-      warning(paste0("Formula '", param_name, " ~ 1' detected. Note that the intercept is automatically ",
-                     "included as the group-level mean and does not need to be specified."))
-    }
-
     # Subset data to include only relevant variables
     subset_data <- data[, c("subjects", current_vars), drop = FALSE]
 
@@ -136,66 +130,103 @@ group_design <- function(formula, data, subject_design, contrasts = NULL){
     # Apply model.matrix with the current formula
     # Instead of constructing a formula string, use the original formula with modified LHS
     rhs_formula <- terms(current_formula)[[3]]
-    if (!is.null(contrasts)) {
-      # Filter contrasts to only include variables in the current formula
-      formula_vars <- all.vars(rhs_formula)
-      filtered_contrasts <- contrasts[names(contrasts) %in% formula_vars]
-
-      if (length(filtered_contrasts) > 0) {
-        dm <- model.matrix(reformulate(termlabels = deparse(rhs_formula)),
-                                  data = agg_data,
-                                  contrasts.arg = filtered_contrasts)
-      } else {
-        dm <- model.matrix(reformulate(termlabels = deparse(rhs_formula)),
-                                  data = agg_data)
-      }
-    } else {
-      dm <- model.matrix(reformulate(termlabels = deparse(rhs_formula)),
-                                data = agg_data)
-    }
-
-    # Check if the design matrix has an intercept
-    has_intercept <- "(Intercept)" %in% colnames(dm)
-
-    if (!has_intercept) {
-      stop("Intercept-less design matrix not supported yet")
-    }
-
-    # Drop the intercept column if present
-    if (has_intercept) {
-      dm <- dm[, colnames(dm) != "(Intercept)", drop = FALSE]
-    }
-
+    dm <- build_design(current_formula, agg_data, contrasts.arg = contrasts)
+    # # Check if the design matrix has an intercept
+    # has_intercept <- "(Intercept)" %in% colnames(dm)
+    #
+    # if (!has_intercept) {
+    #   stop("Intercept-less design matrix not supported yet")
+    # }
+    #
+    # # Drop the intercept column if present
+    # if (has_intercept) {
+    #   dm <- dm[, colnames(dm) != "(Intercept)", drop = FALSE]
+    # }
+    is_int <- grepl("(Intercept)", colnames(dm), fixed = TRUE)
+    colnames(dm)[is_int] <- param_name
+    colnames(dm)[!is_int] <- paste0(param_name, "_", colnames(dm)[!is_int])
     # Store in the list
     design_matrices[[param_name]] <- dm
-
-    # Check if overall design matrix mean is zero
-    if (ncol(dm) > 0) {
-      design_mean <- mean(as.matrix(dm))
-      if (abs(design_mean) > 1e-1) {  # Small threshold for numerical precision
-        warning(paste0("Design matrix for parameter '", param_name, "' does not have mean zero. ",
-                       "For factors, consider using zero-sum contrast matrices (e.g., contr.bayes, contr.helmert). ",
-                       "For covariates, consider centering them. ",
-                       "This ensures the intercept can be interpreted as the group-level mean."))
-      }
-    }
+    # # Check if overall design matrix mean is zero
+    # if (ncol(dm) > 0) {
+    #   design_mean <- mean(as.matrix(dm))
+    #   if (abs(design_mean) > 1e-1) {  # Small threshold for numerical precision
+    #     warning(paste0("Design matrix for parameter '", param_name, "' does not have mean zero. ",
+    #                    "For factors, consider using zero-sum contrast matrices (e.g., contr.bayes, contr.helmert). ",
+    #                    "For covariates, consider centering them. ",
+    #                    "This ensures the intercept can be interpreted as the group-level mean."))
+    #   }
+    # }
   }
   class(design_matrices) <- "emc.group_design"
   return(design_matrices)
 }
+
+#' @rdname sampled_pars
+#' @export
+sampled_pars.emc.group_design <- function(x,model=NULL,doMap=FALSE, add_da = FALSE, all_cells_dm = FALSE){
+  if(is.null(x)) return(logical(0))
+  par_names <- unlist(lapply(x, colnames))
+  par_names <- setNames(rep(0, length(par_names)), par_names)
+  return(par_names)
+}
+
+
+add_group_par_names <- function(pars, group_des){
+  if(is.null(group_des)) return(pars)
+  out <- c()
+  for(par in pars){
+    if(par %in% names(group_des)){
+      out <- c(out, names(sampled_pars.emc.group_design(group_des[par])))
+    } else{
+      out <- c(out, par)
+    }
+  }
+  return(out)
+}
+
+n_additional_group_pars <- function(group_des){
+  if(is.null(group_des)) return(0)
+  return(length(sampled_pars(group_des)) - length(group_des))
+}
+
+add_group_design <- function(par_names, group_designs = NULL, n_subjects) {
+  #
+  # par_names:   character vector of parameter names (length p)
+  # group_designs: named list of existing design matrices, e.g. $"param1" => (n x m1), etc.
+  #                    some par_names might not appear here.
+  # n_subjects:    integer, number of subjects (rows).
+  #
+  # Returns a new list, same length as par_names, each entry an (n_subjects x m_k) matrix
+  # If param was not in group_designs, we create a single column of 1's of dimension (n_subjects x 1).
+
+  out_list <- vector("list", length(par_names))
+  names(out_list) <- par_names
+
+  for (k in seq_along(par_names)) {
+    pname <- par_names[k]
+    if (!is.null(group_designs[[pname]])) {
+      out_list[[k]] <- group_designs[[pname]]
+    } else {
+      # no existing design => just a column of 1's
+      out_list[[k]] <- matrix(1, nrow = n_subjects, ncol = 1)
+    }
+  }
+  return(out_list)
+}
+
+
 build_design <- function(formula, data, contrasts.arg = NULL) {
 
-  ## ---- helpers ---------------------------------------------------------
-  is_bar  <- function(x) is.call(x) && (identical(x[[1]], quote(`|`)) ||
-                                          identical(x[[1]], quote(`||`)))
-  ## remove bar terms completely (à la lme4::nobars)
-  nobars  <- function(term) {
-    if (is_bar(term)) return(NULL)                     # <- *remove*, not 0/1
+  ## ---------- helpers --------------------------------------------------
+  is_bar <- function(x) is.call(x) && (identical(x[[1]], quote(`|`)) ||
+                                         identical(x[[1]], quote(`||`)))
+  nobars <- function(term) {                                  # drop bar terms
+    if (is_bar(term)) return(NULL)
     if (!is.call(term)) return(term)
     as.call(c(term[[1]], lapply(as.list(term)[-1], nobars)))
   }
-  ## turn (a|g) into  a + g  so model.frame() can collect variables
-  bars_to_plus <- function(term) {
+  bars_to_plus <- function(term) {                            # (a|g) → a + g
     if (is_bar(term))
       return(as.call(list(quote(`+`), bars_to_plus(term[[2]]), bars_to_plus(term[[3]]))))
     if (!is.call(term)) return(term)
@@ -204,55 +235,63 @@ build_design <- function(formula, data, contrasts.arg = NULL) {
   find_bars <- function(term) if (is_bar(term)) list(term) else
     if (is.call(term)) unlist(lapply(as.list(term)[-1], find_bars), FALSE)
 
-  ## ---- 1. safe model frame (no “|” evaluation) -------------------------
+  ## ---------- 0. pre‑filter contrasts ----------------------------------
+  if (!is.null(contrasts.arg)) {
+    keep <- intersect(names(contrasts.arg), names(data))
+    contrasts.arg <- if (length(keep)) contrasts.arg[keep] else NULL
+  }
+
+  ## ---------- 1. safe model frame --------------------------------------
   rhs_safe <- bars_to_plus(formula[[3]])
   mf <- model.frame(as.formula(call("~", rhs_safe)), data, na.action = NULL)
 
-  ## ---- 2. fixed-effects matrix ----------------------------------------
-  rhs_fixed  <- nobars(formula[[3]])
-  tt_fixed   <- terms(as.formula(call("~", rhs_fixed)))
-  fml_fixed  <- reformulate(attr(tt_fixed, "term.labels"),
-                            intercept = attr(tt_fixed, "intercept"))
-  X <- model.matrix(fml_fixed, mf, contrasts.arg = contrasts.arg)
+  ## ---------- 2. fixed‑effect matrix -----------------------------------
+  rhs_fixed <- nobars(formula[[3]])
+  tt_fixed  <- terms(as.formula(call("~", rhs_fixed)))
+  fml_fixed <- reformulate(attr(tt_fixed, "term.labels"),
+                           intercept = attr(tt_fixed, "intercept"))
+  X <- suppressWarnings(model.matrix(fml_fixed, mf, contrasts.arg = contrasts.arg))
 
-  ## ---- 3. random-effects matrix ---------------------------------------
+  ## ---------- 3. random‑effect matrix ----------------------------------
   Z_parts <- list()
   for (bar in find_bars(formula[[3]])) {
 
-    ## --- grouping factor incidence -----------------------------------
+    ## -- 3a. grouping incidence ----------------------------------------
     gname <- deparse(bar[[3]])
-    g <- as.factor(mf[[gname]])
-    J <- model.matrix(~ 0 + g)
-    colnames(J) <- paste(levels(g), "(Intercept)", sep = ":")
+    g     <- as.factor(mf[[gname]])
+    J     <- model.matrix(~0 + g)
+    colnames(J) <- paste0(gname, levels(g))              # idA, idB, …
 
-    ## --- coefficient part -------------------------------------------
+    ## -- 3b. slope design ---------------------------------------------
     lhs <- bar[[2]]
     tt  <- terms(as.formula(paste("~", deparse(lhs))))
     slope_labels <- attr(tt, "term.labels")
     has_int <- attr(tt, "intercept") == 1
 
     mm <- if (length(slope_labels)) {
-      fml_slope <- reformulate(slope_labels, intercept = FALSE)  # *always* no intercept
-      needed <- intersect(names(contrasts.arg), all.vars(fml_slope))
+      fml_slope <- reformulate(slope_labels, intercept = FALSE)
+      need <- if (is.null(contrasts.arg)) character(0)
+      else intersect(names(contrasts.arg), all.vars(fml_slope))
       model.matrix(fml_slope, mf,
-                   contrasts.arg = if (length(needed))
-                     contrasts.arg[needed] else NULL)
-    } else
-      matrix(, nrow(mf), 0)
+                   contrasts.arg = if (length(need)) contrasts.arg[need] else NULL)
+    } else matrix(, nrow(mf), 0)
 
-    ## --- build Z block ----------------------------------------------
+    ## -- 3c. assemble block -------------------------------------------
     Z <- if (has_int) J else NULL
     if (ncol(mm)) {
       Zs <- do.call(cbind,
                     lapply(seq_len(ncol(mm)),
                            \(k) sweep(J, 1, mm[, k], `*`)))
-      colnames(Zs) <- outer(levels(g), colnames(mm), paste, sep = ":")
+      colnames(Zs) <- outer(paste0(gname, levels(g)),
+                            colnames(mm),
+                            paste, sep = ":")            # idA:x, …
       Z <- if (is.null(Z)) Zs else cbind(Z, Zs)
     }
     Z_parts[[length(Z_parts) + 1]] <- Z
   }
   Zbig <- if (length(Z_parts)) do.call(cbind, Z_parts) else matrix(0, nrow(mf), 0)
 
-  ## ---- 4. combined dense matrix ---------------------------------------
+  ## ---------- 4. combined dense matrix ---------------------------------
   cbind(X, Zbig)
 }
+

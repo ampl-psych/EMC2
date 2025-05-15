@@ -129,7 +129,7 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
     assign(name, optionals[[name]])
   }
   if(is(parameters, "emc")){
-    if(is.null(design)) design <- get_design(parameters)
+    if(is.null(design)) design <- get_design(parameters)[[1]] # Currently not supported for multiple designs
     if(is.null(data)) data <- get_data(parameters)
     parameters <- do.call(rbind, credint(parameters, probs = 0.5, selection = "alpha", by_subject = TRUE))
   }
@@ -164,12 +164,11 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
   if (!is.matrix(parameters)) parameters <- make_pmat(parameters,design)
   if ( is.null(data) ) {
     design$Ffactors$subjects <- rownames(parameters)
-    if (mapped_p) n_trials <- 1
     if ( is.null(n_trials) )
       stop("If data is not provided need to specify number of trials")
-      data <- minimal_design(design, covariates = list(...)$covariates,
+    data <- minimal_design(design, covariates = list(...)$covariates,
                              drop_subjects = F, n_trials = n_trials, add_acc=F,
-                             drop_R = F)
+                           drop_R = F)
   } else {
     LT <- attr(data,"LT"); if (is.null(LT)) LT <- 0
     UT <- attr(data,"UT"); if (is.null(UT)) UT <- Inf
@@ -217,38 +216,24 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
   }
   if ( any(dimnames(pars)[[2]]=="pContaminant") && any(pars[,"pContaminant"]>0) )
     pc <- pars[data$lR==levels(data$lR)[1],"pContaminant"] else pc <- NULL
-  if (mapped_p) return(cbind(data[,!(names(data) %in% c("R","rt"))],pars))
   if (expand>1) {
     data <- cbind(rep=rep(1:expand,each=dim(data)[1]),
                   data.frame(lapply(data,rep,times=expand)))
-    lR <- rep(data$lR,expand)
     pars <- apply(pars,2,rep,times=expand)
-  } else lR <- data$lR
+  }
   if (!is.null(staircase)) {
     staircase$data <- data
     attr(pars,"staircase") <- staircase  # Stop signal models
   }
   if (any(names(data)=="RACE")) {
-    Rrt <- matrix(ncol=2,nrow=dim(data)[1]/length(levels(data$lR)),
-                  dimnames=list(NULL,c("R","rt")))
-    RACE <- data[data$lR==levels(data$lR)[1],"RACE"]
-    ok <- as.numeric(data$lR) <= as.numeric(as.character(data$RACE))
-    for (i in levels(RACE)) {
-      pick <- data$RACE==i
-      lRi <- factor(data$lR[pick & ok])
-      tmp <- pars[pick & ok,]
-      attr(tmp, "ok") <- rep(T, nrow(tmp))
-      Rrti <- model()$rfun(lRi,tmp)
-      Rrti$R <- as.numeric(Rrti$R)
-      Rrt[RACE==i,] <- as.matrix(Rrti)
-    }
-    Rrt <- data.frame(Rrt)
-    Rrt$R <- factor(Rrt$R, labels = levels(lR), levels = 1:length(levels(lR)))
-  } else Rrt <- model()$rfun(lR,pars)
+    Rrt <- RACE_rfun(data, pars, model)
+  } else Rrt <- model()$rfun(data,pars)
+  browser
   dropNames <- c("lR","lM","lSmagnitude")
   if (!return_Ffunctions && !is.null(design$Ffunctions))
-    dropNames <- c(dropNames,names(design$Ffunctions) )
-  data <- data[data$lR==levels(data$lR)[1],!(names(data) %in% dropNames)]
+    dropNames <- c(dropNames,names(design$Ffunctions))
+  if(!is.null(data$lR)) data <- data[data$lR == levels(data$lR)[1],]
+  data <- data[,!(names(data) %in% dropNames)]
   for (i in dimnames(Rrt)[[2]]) data[[i]] <- Rrt[,i]
   if (!is.null(attr(Rrt,"SSD")))
     data[is.na(data[,"SSD"]),"SSD"] <- attr(Rrt,"SSD")
@@ -271,6 +256,25 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
   }
   attr(data,"p_vector") <- parameters;
   data
+}
+
+RACE_rfun <- function(data, pars, model){
+  matrix(ncol=2,nrow=dim(data)[1]/length(levels(data$lR)),
+         dimnames=list(NULL,c("R","rt")))
+  RACE <- data[data$lR==levels(data$lR)[1],"RACE"]
+  ok <- as.numeric(data$lR) <= as.numeric(as.character(data$RACE))
+  for (i in levels(RACE)) {
+    pick <- data$RACE==i
+    lRi <- factor(data$lR[pick & ok])
+    tmp <- pars[pick & ok,]
+    attr(tmp, "ok") <- rep(T, nrow(tmp))
+    Rrti <- model()$rfun(lRi,tmp)
+    Rrti$R <- as.numeric(Rrti$R)
+    Rrt[RACE==i,] <- as.matrix(Rrti)
+  }
+  Rrt <- data.frame(Rrt)
+  Rrt$R <- factor(Rrt$R, labels = levels(lR), levels = 1:length(levels(lR)))
+  return(Rrt)
 }
 
 add_Ffunctions <- function(data,design)
