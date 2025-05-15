@@ -31,6 +31,10 @@ minimal_design <- function(design, covariates = NULL, drop_subjects = TRUE,
     ## 2.  Add covariates (if requested)
     if (!is.null(cur_des$Fcovariates)) {
       for (cv in cur_des$Fcovariates) {
+        if(!is.null(list(...)$emc)){
+          dat <- get_data(list(...)$emc)
+          covariates[[cv]] <- dat[,cv]
+        }
         if(!cv %in% names(covariates)){
           if(dots$verbose) message(paste0("Imputing ", cv, " with random values"))
           vec <- rnorm(n)

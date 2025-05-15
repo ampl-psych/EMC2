@@ -394,7 +394,8 @@ get_pars <- function(emc,selection= "mu", stage=get_last_stage(emc),thin=1,filte
 
   if(map){
     samples <- lapply(samples, do_map, get_design(emc), include_constants = FALSE,
-                      add_recalculated = add_recalculated, covariates = covariates)
+                      add_recalculated = add_recalculated, covariates = covariates,
+                      emc = emc)
   }
   if(flatten) remove_dup <- TRUE
   if(!is.null(true_pars)){ # Kluge to make sure the right object dimensions/filtering is performed on simulated parameters
