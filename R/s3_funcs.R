@@ -1115,9 +1115,9 @@ get_design <- function(x){
 
 #' @rdname sampled_pars
 #' @export
-sampled_pars.emc <- function(x,model=NULL,doMap=FALSE, add_da = FALSE, all_cells_dm = FALSE){
+sampled_pars.emc <- function(x,model=NULL,doMap=FALSE, add_da = FALSE, all_cells_dm = FALSE, data = NULL){
   return(sampled_pars(get_design(x), model = model, doMap = doMap,
-                          add_da = add_da, all_cells_dm = all_cells_dm))
+                          add_da = add_da, all_cells_dm = all_cells_dm, data = data))
 }
 
 #' @rdname auto_thin

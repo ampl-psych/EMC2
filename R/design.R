@@ -163,7 +163,7 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
   design$model <- model
   attr(design,"p_vector") <- p_vector
   if (report_p_vector) {
-    summary(design)
+    summary(design, data = data)
   }
   return(design)
 }
@@ -959,6 +959,7 @@ mapped_pars.emc.design <- function(x, p_vector = NULL, model=NULL,
 #' @param add_da Boolean. Whether to include the relevant data columns in the map attribute
 #' @param all_cells_dm Boolean. Whether to include all levels of a factor in the mapping attribute,
 #' even when one is dropped in the design
+#' @param data A data frame to be included for accurate covariate mapping in summary.design
 #'
 #'
 #' @return Named vector.
@@ -971,14 +972,14 @@ mapped_pars.emc.design <- function(x, p_vector = NULL, model=NULL,
 #' sampled_pars(design_DDMaE)
 #'
 #' @export
-sampled_pars <- function(x,model=NULL,doMap=FALSE, add_da = FALSE, all_cells_dm = FALSE)
+sampled_pars <- function(x,model=NULL,doMap=FALSE, add_da = FALSE, all_cells_dm = FALSE, data = NULL)
 {
   UseMethod("sampled_pars")
 }
 
 #' @rdname sampled_pars
 #' @export
-sampled_pars.emc.design <- function(x,model=NULL,doMap=FALSE, add_da = FALSE, all_cells_dm = FALSE){
+sampled_pars.emc.design <- function(x,model=NULL,doMap=FALSE, add_da = FALSE, all_cells_dm = FALSE, data = NULL){
   design <- x
   if(is.null(design)) return(NULL)
   if("Flist" %in% names(design)){
@@ -1016,7 +1017,8 @@ sampled_pars.emc.design <- function(x,model=NULL,doMap=FALSE, add_da = FALSE, al
       out <- c(out, pars)
       next
     }
-    min_design <- minimal_design(cur_design, drop_subjects = F, drop_R = F, verbose = F)
+    cur_design$Ffactors$subjects <- 1
+    min_design <- minimal_design(cur_design, drop_subjects = F, drop_R = F, verbose = F, emc = data)
     dadm <- design_model(
       min_design,
       cur_design,model,add_acc=FALSE,verbose=FALSE,rt_check=FALSE,compress=FALSE, add_da = add_da,
@@ -1036,6 +1038,22 @@ sampled_pars.emc.design <- function(x,model=NULL,doMap=FALSE, add_da = FALSE, al
   return(out)
 }
 
+unique_rows_by_index <- function(df, columns) {
+  # Keep only valid columns that are in the dataframe
+  valid_columns <- intersect(columns, names(df))
+
+  if (length(valid_columns) == 0) {
+    # No valid columns to check uniqueness — return first row
+    return(df[1, , drop = FALSE])
+  }
+
+  # Compute uniqueness based on valid columns
+  unique_idx <- !duplicated(df[, valid_columns, drop = FALSE])
+
+  # Return full rows from original dataframe
+  df[unique_idx, , drop = FALSE]
+}
+
 #' Summary method for emc.design objects
 #'
 #' Prints a summary of the design object, including sampled parameters and design matrices.
@@ -1050,8 +1068,9 @@ summary.emc.design <- function(object, ...){
   cat("\n Sampled Parameters: \n")
   print(names(p_vector))
   cat("\n Design Matrices: \n")
-  map_out <- sampled_pars(object,object$model, add_da = TRUE, doMap = TRUE)
-  print(attr(map_out, "map"), row.names = FALSE)
+  map_out <- sampled_pars(object,object$model, add_da = TRUE, doMap = TRUE, data = list(...)$data)
+  print_map <-
+  print(lapply(attr(map_out, "map"), unique_rows_by_index, names(object$Ffactors)), row.names = FALSE)
   return(invisible(map_out))
 }
 
@@ -1131,7 +1150,7 @@ plot.emc.design <- function(x, p_vector, data = NULL, factors = NULL, plot_facto
 
 
 #' @exportS3Method
-sampled_pars.default <- function(x,model=NULL,doMap=FALSE, add_da = FALSE, all_cells_dm = FALSE){
+sampled_pars.default <- function(x,model=NULL,doMap=FALSE, add_da = FALSE, all_cells_dm = FALSE, data = NULL){
   if(is.null(x)) return(NULL)
   if(!is.null(attr(x, "custom_ll"))){
     pars <- numeric(length(attr(x,"sampled_p_names")))
@@ -1142,6 +1161,6 @@ sampled_pars.default <- function(x,model=NULL,doMap=FALSE, add_da = FALSE, all_c
     x <- list(x)
     class(x) <- "emc.design"
   }
-  out <- sampled_pars.emc.design(x, model = model, doMap = doMap, add_da = add_da, all_cells_dm = all_cells_dm)
+  out <- sampled_pars.emc.design(x, model = model, doMap = doMap, add_da = add_da, all_cells_dm = all_cells_dm, data = data)
   return(out)
 }

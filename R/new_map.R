@@ -32,7 +32,10 @@ minimal_design <- function(design, covariates = NULL, drop_subjects = TRUE,
     if (!is.null(cur_des$Fcovariates)) {
       for (cv in cur_des$Fcovariates) {
         if(!is.null(list(...)$emc)){
-          dat <- get_data(list(...)$emc)
+          dat <- list(...)$emc
+          if(is(dat, "emc")){
+            dat <- get_data(dat)
+          }
           covariates[[cv]] <- dat[,cv]
         }
         if(!cv %in% names(covariates)){

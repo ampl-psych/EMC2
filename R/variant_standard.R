@@ -63,6 +63,8 @@ get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1
   # Number of additional parameters from design matrices
   if(!is.null(group_des)){
     n_additional <- n_additional_group_pars(group_des)
+  } else{
+    n_additional <- 0
   }
 
   # Set up combined theta_mu_mean to include both intercepts and slopes
