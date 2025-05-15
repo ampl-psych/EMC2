@@ -122,8 +122,8 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
     nfacs <- nfacs[!(names(nfacs) %in% c("trials","rt"))]
     all_preds <- unlist(lapply(lapply(formula, `[[`, 3L), all.vars))
     if (length(nfacs)>0){
-      covariates <- nfacs
-      covariates <- covariates[names(covariates) %in% all_preds]
+      covariates <- names(nfacs)
+      covariates <- covariates[covariates %in% all_preds]
       if(length(covariates) == 0) covariates <- NULL
     }
     factors <- factors[names(factors) %in% c(all_preds, "subjects")]
@@ -942,7 +942,7 @@ mapped_pars.emc.design <- function(x, p_vector = NULL, model=NULL,
   if (any(names(out)=="RACE") && remove_RACE)
     out <- out[as.numeric(out$lR) <= as.numeric(as.character(out$RACE)),,drop=FALSE]
 
-  return(unique(out))
+  return(out)
 }
 
 
