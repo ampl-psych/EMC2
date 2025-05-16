@@ -1,5 +1,4 @@
 #### Staircase ----
-
 #' Assign Stop-Signal Delays (SSDs) to trials
 #'
 #' @description
@@ -565,8 +564,8 @@ SSexG <- function() {
     transform=list(func=c( mu = "exp",  sigma = "exp",  tau = "exp",
                           muS = "exp", sigmaS = "exp", tauS = "exp",
                           tf="pnorm",gf="pnorm")),
-    bound=list(minmax=cbind( mu=c(0,Inf),  sigma=c(0,Inf),  tau=c(1e-4,Inf),
-                            muS=c(0,Inf), sigmaS=c(0,Inf), tauS=c(1e-4,Inf),
+    bound=list(minmax=cbind( mu=c(0,Inf),  sigma=c(1e-4,Inf),  tau=c(1e-4,Inf),
+                            muS=c(0,Inf), sigmaS=c(1e-4,Inf), tauS=c(1e-4,Inf),
                             tf=c(.001,.999),gf=c(.001,.999)),
                             exception=c(tf=0,gf=0)),
     # Trial dependent parameter transform
@@ -812,7 +811,7 @@ SShybrid <- function() {
                           muS = "exp", sigmaS = "exp", tauS = "exp",
                           tf="pnorm",gf="pnorm")),
     bound=list(minmax=cbind(v=c(1e-3,Inf), B=c(0,Inf), A=c(1e-4,Inf),t0=c(0.05,Inf),
-                            s=c(0,Inf),muS=c(0,Inf), sigmaS=c(0,Inf), tauS=c(1e-4,Inf),
+                            s=c(0,Inf),muS=c(0,Inf), sigmaS=c(1e-4,Inf), tauS=c(1e-4,Inf),
                             tf=c(.001,.999),gf=c(.001,.999)),
                exception=c(A=0, v=0,tf=0,gf=0)),
     # Trial dependent parameter transform

@@ -9,9 +9,12 @@ plot_fmri(
   post_predict = NULL,
   events,
   event_type,
+  high_pass = TRUE,
+  high_pass_model = "cosine",
   posterior_args = list(),
   legend_pos = "topleft",
   layout = NA,
+  n_cores = 1,
   ...
 )
 }
@@ -24,11 +27,19 @@ plot_fmri(
 
 \item{event_type}{Character string specifying which \code{event_type} in \code{events} to plot.}
 
+\item{high_pass}{Logical indicating whether to apply high-pass filtering.
+Alternatively, specifying 'add' adds the regressors to the design matrix in the FIR.
+The choice here should be the same as the choice for \code{convolve_design_matrix}}
+
+\item{high_pass_model}{Character indicating which type of high-pass filtering to apply ('cosine', 'poly')}
+
 \item{posterior_args}{Named list of graphical parameters for posterior predictive lines.}
 
 \item{legend_pos}{Position of the legend. Default: "topleft".}
 
-\item{layout}{Panel layout matrix for multiple modulation groups. Default: NA.}
+\item{layout}{Panel layout matrix for multiple modulation groups. NULL leaves current layout}
+
+\item{n_cores}{Number of cores to calculate FIR across subjects with.}
 
 \item{...}{Additional graphical parameters passed to plotting functions (e.g., col, lwd, lty).}
 }
@@ -36,7 +47,8 @@ plot_fmri(
 NULL. Produces plots as a side-effect.
 }
 \description{
-This function plots average BOLD response around specified events for a single ROI by computing peri-stimulus time courses.
+This function plots average BOLD response around specified events for a single ROI
+by using FIR based event estimation, all event_types in events are taken into account in the FIR.
 Posterior predictives can be overlaid via the \code{post_predict} argument.
 }
 \examples{

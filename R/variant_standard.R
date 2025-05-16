@@ -208,7 +208,7 @@ gibbs_step_standard <- function(sampler, alpha) {
   n <- ncol(alpha)           # number of subjects
 
   # Some backwards compatibility
-  if(is.null(is_blocked)){
+  if(is.null(is_blocked) || length(is_blocked) == 0){
     is_blocked <- rep(T, p)
   }
   if(is.null(par_group)){
@@ -310,7 +310,6 @@ gibbs_step_standard <- function(sampler, alpha) {
 
   # Invert
   tvinv_new <- solve(tvar_new)
-
   ##--------------------------------------------------
   ## 4) Update a_half
   ##--------------------------------------------------
@@ -453,7 +452,6 @@ bridge_group_and_prior_and_jac_standard <- function(
 
   # Total parameters (including regressors)
   total_pars <- length(prior$theta_mu_mean)
-
   # Extract columns:
   theta_mu   <- proposals_group[, seq_len(total_pars), drop=FALSE]  # (n_iter x (p+B))
   theta_a    <- proposals_group[, total_pars + seq_len(p), drop=FALSE]  # (n_iter x p)
