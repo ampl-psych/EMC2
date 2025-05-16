@@ -51,10 +51,6 @@ make_missing <- function(data,LT=0,UT=Inf,LC=0,UC=Inf,
 #' @param n_trials Integer. If ``data`` is not supplied, number of trials to create per design cell
 #' @param data Data frame. If supplied, the factors are taken from the data. Determines the number of trials per level of the design factors and can thus allow for unbalanced designs
 #' @param expand Integer. Replicates the ``data`` (if supplied) expand times to increase number of trials per cell.
-#' @param mapped_p If `TRUE` instead returns a data frame with one row per design
-#' cell and columns for each parameter specifying how they are mapped to the design cells.
-#' @param hyper If `TRUE` the supplied parameters must be a set of samples, from which the group-level will be used to generate subject level parameters.
-#' See also `make_random_effects` to generate subject-level parameters from a hyper distribution.
 #' @param staircase Default NULL, used with stop-signal paradigm simulation to specify a staircase
 #' algorithm. If non-null and a list then passed through as is, if not it is assigned the
 #' default list structure: list(p=.25,SSD0=.25,stairstep=.05,stairmin=0,stairmax=Inf)
@@ -220,8 +216,7 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
     pars <- apply(pars,2,rep,times=expand)
   }
   if (!is.null(staircase)) {
-    staircase$data <- data
-    attr(pars,"staircase") <- staircase  # Stop signal models
+    attr(data, "staircase") <- staircase
   }
   if (any(names(data)=="RACE")) {
     Rrt <- RACE_rfun(data, pars, model)
@@ -232,8 +227,6 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
   if(!is.null(data$lR)) data <- data[data$lR == levels(data$lR)[1],]
   data <- data[,!(names(data) %in% dropNames)]
   for (i in dimnames(Rrt)[[2]]) data[[i]] <- Rrt[,i]
-  if (!is.null(attr(Rrt,"SSD")))
-    data[is.na(data[,"SSD"]),"SSD"] <- attr(Rrt,"SSD")
   data <- make_missing(data[,names(data)!="winner"],LT,UT,LC,UC,
     LCresponse,UCresponse,LCdirection,UCdirection)
   if ( !is.null(pc) ) {
@@ -270,7 +263,7 @@ RACE_rfun <- function(data, pars, model){
     Rrt[RACE==i,] <- as.matrix(Rrti)
   }
   Rrt <- data.frame(Rrt)
-  Rrt$R <- factor(Rrt$R, labels = levels(lR), levels = 1:length(levels(lR)))
+  Rrt$R <- factor(Rrt$R, labels = levels(data$lR), levels = 1:length(levels(data$lR)))
   return(Rrt)
 }
 

@@ -80,6 +80,12 @@ minimal_design <- function(design, covariates = NULL, drop_subjects = TRUE,
 }
 
 do_map <- function(draws, design, add_recalculated = FALSE, ...) {
+  if(!is.matrix(draws)){
+    draws <- draws[,1,]
+    is_array <- TRUE
+  } else{
+    is_array <- FALSE
+  }
   draws <- t(draws)
   n_draws <- nrow(draws)
 
@@ -228,5 +234,9 @@ do_map <- function(draws, design, add_recalculated = FALSE, ...) {
     }
     all_out[[i]] <- out
   }
-  return(t(do.call(cbind, all_out)))
+  out <- t(do.call(cbind, all_out))
+  if(is_array){
+    out <- array(out, dim = c(nrow(out), 1, ncol(out)), dimnames = list(rownames(out), "alpha", colnames(out)))
+  }
+  return(out)
 }

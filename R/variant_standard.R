@@ -135,8 +135,7 @@ get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1
 get_startpoints_standard <- function(pmwgs, start_mu, start_var){
   n_pars <- sum(!pmwgs$nuisance)
   n_total_pars <- length(pmwgs$prior$theta_mu_mean) # Includes regressor parameters
-
-  if (is.null(start_mu)) start_mu <- rmvnorm(1, mean = pmwgs$prior$theta_mu_mean, sigma = pmwgs$prior$theta_mu_var)
+  if (is.null(start_mu)) start_mu <- rmvnorm(1, mean = pmwgs$prior$theta_mu_mean, sigma = pmwgs$prior$theta_mu_var)[1,]
   # If no starting point for group var just sample some
   if (is.null(start_var)) start_var <- riwish(n_pars * 3, diag(n_pars))
   start_a_half <- 1 / rgamma(n = n_pars, shape = 2, rate = 1)
@@ -149,7 +148,7 @@ get_startpoints_standard <- function(pmwgs, start_mu, start_var){
     par_idx <- 0
     for (k in 1:n_pars) {
       x_sk <- group_designs[[k]][s, , drop = FALSE]
-      subj_mu[k, s] <- x_sk %*% start_mu[1, par_idx + 1:ncol(group_designs[[k]])]
+      subj_mu[k, s] <- x_sk %*% start_mu[par_idx + 1:ncol(group_designs[[k]])]
       par_idx <- par_idx + ncol(group_designs[[k]])
     }
   }

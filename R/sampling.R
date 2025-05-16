@@ -115,7 +115,7 @@ init <- function(pmwgs, start_mu = NULL, start_var = NULL,
 #' # Initialize chains, 4 cores per chain, and parallelizing across our 3 chains as well
 #' # so 4*3 cores used.
 #' DDMaE <- init_chains(DDMaE, start_mu = mu, start_var = var,
-#'                      cores_per_chain = 1, cores_for_chains = 1)
+#'                      cores_per_chain = 1, cores_for_chains = 1, particles = 10)
 #' # Afterwards we can just use fit
 #' # DDMaE <- fit(DDMaE, cores_per_chain = 4)
 #' }

@@ -21,7 +21,3 @@ Trials without a stop signal are assigned Inf.
 \description{
 This function assigns stop-signal delays (SSDs) to trials based on specified probabilities.
 }
-\examples{
-# data <- data.frame(lR = factor(c("left", "right")), rt = c(0.5, 0.6))
-# SSD_function(data, SSD = c(0.2, 0.3), pSSD = c(0.2, 0.3))
-}

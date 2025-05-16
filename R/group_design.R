@@ -281,7 +281,7 @@ build_design <- function(formula, data, contrasts.arg = NULL) {
     if (ncol(mm)) {
       Zs <- do.call(cbind,
                     lapply(seq_len(ncol(mm)),
-                           \(k) sweep(J, 1, mm[, k], `*`)))
+                           function(k) sweep(J, 1, mm[, k], `*`)))
       colnames(Zs) <- outer(paste0(gname, levels(g)),
                             colnames(mm),
                             paste, sep = ":")            # idA:x, …
