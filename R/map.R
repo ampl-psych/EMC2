@@ -58,7 +58,9 @@ add_bound <- function(pars,bound, lR = NULL) {
 
 #### Functions to look at parameters ----
 
-map_p <- function(p,dadm, model)
+#### Functions to look at parameters ----
+
+map_p <- function(p,dadm,model)
   # Map p to dadm and returns matrix of mapped parameters
   # p is either a vector or a matrix (ncol = number of subjects) of p_vectors
   # dadm is a design matrix with attributes containing model information
@@ -76,13 +78,26 @@ map_p <- function(p,dadm, model)
 
   # Get parameter names from model and create output matrix
   do_p <- names(model$p_types)
-  pretrend_idx <- rep(F, length(do_p))
   pars <- matrix(nrow=nrow(dadm),ncol=length(do_p),dimnames=list(NULL,do_p))
 
   # If there are any trends do these first, they might be used later in mapping
   # Otherwise we're not applying the trend premap, but we are doing it pre-transform
   # So these trend parameters are post-map, pre-transform and have to be included in the pars output
   premap_idx <- rep(F, length(do_p))
+  if(!is.null(model$trend) &&
+     (attr(model$trend, "premap") || attr(model$trend, "pretransform"))){
+    trend_names <- get_trend_pnames(model$trend)
+    pretrend_idx <- do_p %in% trend_names
+    if((attr(model$trend, "premap"))){
+      # These can be removed from the pars matrix at the end
+      # Since they are already used before the mapping
+      premap_idx <- pretrend_idx
+    }
+    # Reorder parameters to make design matrix for trends first
+    do_p <- c(do_p[pretrend_idx], do_p[!pretrend_idx])
+  } else{
+    pretrend_idx <- rep(F, length(do_p))
+  }
   k <- 1
   # Loop through each parameter
   for (i in do_p) {
@@ -92,6 +107,21 @@ map_p <- function(p,dadm, model)
       pm <- t(as.matrix(p[colnames(cur_design)]))
       pm <- pm[rep(1,nrow(pars)),,drop=FALSE]
     } else pm <- p[,colnames(cur_design),drop=FALSE]
+
+    # Apply pre-mapped trends if they exist
+    if (!is.null(model$trend) && attr(model$trend, "premap")) {
+      trend <- model$trend
+      isin <- names(trend) %in% colnames(pm)
+      if (any(isin)){ # At this point the trend has already been mapped and transformed
+        for (j in names(trend)[isin]) {
+          cur_trend <- trend[[j]]
+          # We can select the trend pars from the already update pars matrix
+          trend_pars <- pars[,cur_trend$trend_pnames]
+          pm[,j] <- run_trend(dadm, cur_trend, pm[,j], trend_pars)
+        }
+      }
+    }
+
     # Apply design matrix and sum parameter effects
     tmp <- pm*cur_design[attr(cur_design,"expand"),,drop=FALSE]
     tmp[is.nan(tmp)] <- 0 # Handle 0 weight x Inf parameter cases
@@ -111,7 +141,7 @@ map_p <- function(p,dadm, model)
 }
 
 
-get_pars_matrix <- function(p_vector,dadm, model) {
+get_pars_matrix <- function(p_vector,dadm,model) {
   # Order:
   # 1 pretransform
   # 2 add constants
@@ -131,12 +161,21 @@ get_pars_matrix <- function(p_vector,dadm, model) {
   # Niek should constants be included in pre_transform? I think not?
   p_vector <- do_pre_transform(p_vector, model$pre_transform)
   # If there's any premap trends, they're done in map_p
-  pars <- map_p(add_constants(p_vector,attr(dadm,"constants")),dadm, model = model)
+  pars <- map_p(add_constants(p_vector,attr(dadm,"constants")),dadm, model)
+  if(!is.null(model$trend) && attr(model$trend, "pretransform")){
+    # This runs the trend and afterwards removes the trend parameters
+    pars <- prep_trend(dadm, model$trend, pars)
+  }
   pars <- do_transform(pars, model$transform)
+  if(!is.null(model$trend) && attr(model$trend, "posttransform")){
+    # This runs the trend and afterwards removes the trend parameters
+    pars <- prep_trend(dadm, model$trend, pars)
+  }
   pars <- model$Ttransform(pars, dadm)
   pars <- add_bound(pars, model$bound, dadm$lR)
   return(pars)
 }
+
 
 make_pmat <- function(p_vector,design)
   # puts vector form of p_vector into matrix form

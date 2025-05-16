@@ -46,7 +46,7 @@ If \code{selection = alpha} the parameter chains are concatenated across partici
 # Plot the sloppiness for the individual-level subjects
 pairs_posterior(samples_LNR, selection = "alpha")
 
-# We can also choose group-level parameters and subsets of the parameter space 
+# We can also choose group-level parameters and subsets of the parameter space
 pairs_posterior(samples_LNR, use_par = c("m", "t0"), selection = "sigma2")
 }
 }

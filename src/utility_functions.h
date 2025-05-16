@@ -92,7 +92,52 @@ NumericMatrix submat_rcpp_col(NumericMatrix X, LogicalVector condition) {
   return out;
 }
 
+NumericMatrix submat_rcpp_col_by_names(NumericMatrix X, CharacterVector cols) {
+  int n = X.nrow();
+  int k = X.ncol();
+  int m = cols.size();
 
+  // Get the original column names from X
+  CharacterVector orig_colnames = colnames(X);
+
+  // Create a vector to store the column indices to keep
+  std::vector<int> indices;
+  indices.reserve(m);
+
+  // For each name in 'cols', find the corresponding column in X
+  for (int i = 0; i < m; i++) {
+    bool found = false;
+    for (int j = 0; j < k; j++) {
+      if (as<std::string>(cols[i]) == as<std::string>(orig_colnames[j])) {
+        indices.push_back(j);
+        found = true;
+        break;
+      }
+    }
+    if (!found) {
+      stop("Column name " + as<std::string>(cols[i]) + " not found in matrix.");
+    }
+  }
+
+  // Create the output matrix with the same number of rows but only m columns
+  NumericMatrix out(n, m);
+
+  double* x_ptr = REAL(X);
+  double* out_ptr = REAL(out);
+
+  // Copy each selected column into the output matrix in the order given by 'cols'
+  for (int i = 0; i < m; i++) {
+    int col_idx = indices[i];
+    double* x_col_start = x_ptr + col_idx * n;
+    double* out_col_start = out_ptr + i * n;
+    std::copy(x_col_start, x_col_start + n, out_col_start);
+  }
+
+  // Set the column names of the output matrix to be the ones provided
+  colnames(out) = cols;
+
+  return out;
+}
 
 NumericMatrix submat_rcpp(NumericMatrix X, LogicalVector condition) {
   int n = X.nrow(), k = X.ncol();

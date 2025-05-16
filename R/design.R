@@ -128,6 +128,10 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
     }
     # factors <- factors[names(factors) %in% c(all_preds, "subjects")]
   }
+  if (!is.null(trend)) {
+    formula <- check_trend(trend,covariates, model, formula)
+  }
+
   # Check if all parameters in the model are specified in the formula
   nams <- unlist(lapply(formula,function(x) as.character(stats::terms(x)[[2]])))
   if (!all(sort(names(model()$p_types)) %in% sort(nams)) & is.null(custom_p_vector)){
@@ -145,6 +149,11 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
                  Clist=contrasts,matchfun=matchfun,constants=constants,
                  Fcovariates=covariates,Ffunctions=functions,model=model)
   class(design) <- "emc.design"
+  if (!is.null(trend)) {
+    model <- update_model_trend(trend, model)
+    model_list <- model()
+    model <- function(){return(model_list)}
+  }
   p_vector <- sampled_pars(design,model)
   lhs_terms <- unlist(lapply(formula, function(x) as.character(stats::terms(x)[[2]])))
 

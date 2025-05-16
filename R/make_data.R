@@ -200,7 +200,15 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
     rt_check=FALSE)
   pars <- t(apply(parameters, 1, do_pre_transform, model()$pre_transform))
   pars <- map_p(add_constants(pars,design$constants),data, model())
+  if(!is.null(model()$trend) && attr(model()$trend, "pretransform")){
+    # This runs the trend and afterwards removes the trend parameters
+    pars <- prep_trend(data, model()$trend, pars)
+  }
   pars <- do_transform(pars, model()$transform)
+  if(!is.null(model()$trend) && attr(model()$trend, "posttransform")){
+    # This runs the trend and afterwards removes the trend parameters
+    pars <- prep_trend(data, model()$trend, pars)
+  }
   pars <- model()$Ttransform(pars, data)
   pars <- add_bound(pars, model()$bound, data$lR)
   pars_ok <- attr(pars, 'ok')
