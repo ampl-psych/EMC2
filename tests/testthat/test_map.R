@@ -1,12 +1,18 @@
+RNGkind("L'Ecuyer-CMRG")
+set.seed(123)
+
 dat <- forstmann
-dat$covariate <- rnorm(nrow(forstmann))
+dat$covariate <- 1:nrow(forstmann)
 
-
-debug(summary.emc.design)
-des <- design(data = dat, formula = list(v ~ covariate, B ~ E, t0 ~ S),
+des <- design(data = dat, formula = list(v ~ covariate*E, B ~ E, t0 ~ S),
               model = LBA)
 
-test_that("designS3", {
+test_that("map", {
+  expect_snapshot(mapped_pars(des))
+  expect_snapshot(mapped_pars(des, p_vector= rnorm(length(sampled_pars(des)))))
+  expect_snapshot(mapped_pars(prior(des, mu_mean = c('v_covariate'  = 1))))
   expect_snapshot(mapped_pars(samples_LNR))
-  expect_snapshot(summary(design))
+  expect_snapshot(mapped_pars(get_prior(samples_LNR)))
+  expect_snapshot(mapped_pars(get_design(samples_LNR)))
 })
+

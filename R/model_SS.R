@@ -1,5 +1,18 @@
 #### Staircase ----
-SSD_function <- \(d,SSD=NA,pSSD=.25) {
+
+#' Assign Stop-Signal Delays (SSDs) to trials
+#'
+#' @description
+#' This function assigns stop-signal delays (SSDs) to trials based on specified probabilities.
+#'
+#' @param d A data frame containing trial data with a response factor column 'lR'
+#' @param SSD A vector of stop-signal delays to be assigned to trials
+#' @param pSSD A vector of probabilities for each SSD value. If length is one less than SSD,
+#'             the remaining probability is calculated automatically. Default is 0.25.
+#'
+#' @return A vector of SSDs with the same length as the number of rows in 'd'.
+#'         Trials without a stop signal are assigned Inf.
+SSD_function <- function(d,SSD=NA,pSSD=.25) {
   if (sum(pSSD)>1) stop("pSSD sum cannot exceed 1.")
   if (length(pSSD)==length(SSD)-1) pSSD <- c(pSSD,1-sum(pSSD))
   if (length(pSSD)!=length(SSD))
@@ -15,7 +28,6 @@ SSD_function <- \(d,SSD=NA,pSSD=.25) {
   }
   return(out)
 }
-
 
 staircase_function <- function(dts,staircase) {
   ns <- ncol(dts)
@@ -38,6 +50,17 @@ staircase_function <- function(dts,staircase) {
   }
   list(sR=sR,srt=srt,SSD=SSD)
 }
+
+
+check_staircase <- function(staircase){
+  if (!is.list(staircase)){
+    staircase <- list(SSD0=.25,stairstep=.05,stairmin=0,stairmax=Inf)
+  }
+  return(staircase)
+}
+
+
+
 
 ST_staircase_function <- function(dts,staircase) {
   ns <- ncol(dts)
@@ -394,7 +417,7 @@ rSSexGaussian <- function(lR,pars,ok=rep(TRUE,dim(pars)[1]))
   R <- rt <- rep(NA,ntrials)
 
   # All accumulators Inf (usually when both gf and tf)
-  allinf <- apply(dt,2,\(x)all(is.infinite(x)))
+  allinf <- apply(dt,2,function(x)all(is.infinite(x)))
 
   # get winner of stop and go where there is a race
   r <- c(0, acc)[apply(dt[,!allinf,drop=FALSE],2,which.min)]
@@ -691,7 +714,7 @@ rSShybrid <- function(lR,pars,ok=rep(TRUE,dim(pars)[1]))
   R <- rt <- rep(NA,ntrials)
 
   # All accumulators Inf (usually when both gf and tf)
-  allinf <- apply(dt,2,\(x)all(is.infinite(x)))
+  allinf <- apply(dt,2,function(x)all(is.infinite(x)))
 
   # get winner of stop and go where there is a race
   r <- c(0, acc)[apply(dt[,!allinf,drop=FALSE],2,which.min)]

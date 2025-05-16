@@ -8,7 +8,6 @@ prior(
   design,
   type = NULL,
   update = NULL,
-  group_design = NULL,
   do_ask = NULL,
   fill_default = TRUE,
   ...

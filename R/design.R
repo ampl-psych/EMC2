@@ -123,11 +123,10 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
     all_preds <- unlist(lapply(lapply(formula, `[[`, 3L), all.vars))
     if (length(nfacs)>0){
       covariates <- names(nfacs)
-      covariates <- covariates[covariates %in% all_preds]
+      # covariates <- covariates[covariates %in% all_preds]
       if(length(covariates) == 0) covariates <- NULL
     }
-    factors <- factors[names(factors) %in% c(all_preds, "subjects")]
-
+    # factors <- factors[names(factors) %in% c(all_preds, "subjects")]
   }
   # Check if all parameters in the model are specified in the formula
   nams <- unlist(lapply(formula,function(x) as.character(stats::terms(x)[[2]])))
@@ -607,38 +606,54 @@ design_model <- function(data,design,model=NULL,
 }
 
 
-make_full_dm <- function(form, Clist, da){
-  if (is.null(Clist)) Clist <- attr(form,"Clist")
+make_full_dm <- function(form, Clist, da) {
+  if (is.null(Clist)) Clist <- attr(form, "Clist")
   pnam <- stats::terms(form)[[2]]
   da[[pnam]] <- 1
-  for (i in names(Clist)) if (i %in% names(da)) {
-    if (!is.factor(da[[i]]))
-      stop(i," must be a factor (design factors has a parameter name?)")
-    levs <- levels(da[[i]])
-    nl <- length(levs)
-    if (class(Clist[[i]])[1]=="function"){
-      stats::contrasts(da[[i]]) <- do.call(Clist[[i]],list(n=levs))
-    }
-    else {
-      if (!is.matrix(Clist[[i]]) || nrow(Clist[[i]])!=nl) {
-        if (all(levs %in% row.names(Clist[[i]]))){
-          Clist[[i]] <- Clist[[i]][levs,]
-        } # design with missing cells
-        else stop("Clist for ",i," not a ",nl," row matrix")
-      } else {
-        dimnames(Clist[[i]])[[1]] <- levs
+  # Check if there are any nested CList entries to only contrast for this parameter
+  if(any(names(Clist) == pnam)){
+    Clist[[names(Clist[[pnam]])]] <- Clist[[pnam]][[1]]
+    Clist[[pnam]] <- NULL
+  }
+  for (i in names(Clist)) {
+    if (i %in% names(da)) {
+      if (!is.factor(da[[i]])) {
+        stop(i, " must be a factor (design factors has a parameter name?)")
       }
-      stats::contrasts(da[[i]],how.many=ncol(Clist[[i]])) <- Clist[[i]]
+
+      levs <- levels(da[[i]])
+      nl <- length(levs)
+
+      if (class(Clist[[i]])[1] == "function") {
+        stats::contrasts(da[[i]]) <- do.call(Clist[[i]], list(n = levs))
+      } else {
+        if (!is.matrix(Clist[[i]]) || nrow(Clist[[i]]) != nl) {
+          if (all(levs %in% row.names(Clist[[i]]))) {
+            Clist[[i]] <- Clist[[i]][levs, ]
+          } else {
+            stop("Clist for ", i, " not a ", nl, " row matrix")
+          }
+        } else {
+          dimnames(Clist[[i]])[[1]] <- levs
+        }
+        stats::contrasts(da[[i]], how.many = ncol(Clist[[i]])) <- Clist[[i]]
+      }
     }
   }
-  out <- stats::model.matrix(form,da)
-  if (dim(out)[2]==1) dimnames(out)[[2]] <- as.character(pnam)
-  else {
-    if (attr(stats::terms(form),"intercept")!=0) {
-      cnams <- paste(pnam,dimnames(out)[[2]][-1],sep="_")
-      dimnames(out)[[2]] <- c(pnam,cnams)
-    } else dimnames(out)[[2]] <- paste(pnam,dimnames(out)[[2]],sep="_")
+
+  out <- stats::model.matrix(form, da)
+
+  if (dim(out)[2] == 1) {
+    dimnames(out)[[2]] <- as.character(pnam)
+  } else {
+    if (attr(stats::terms(form), "intercept") != 0) {
+      cnams <- paste(pnam, dimnames(out)[[2]][-1], sep = "_")
+      dimnames(out)[[2]] <- c(pnam, cnams)
+    } else {
+      dimnames(out)[[2]] <- paste(pnam, dimnames(out)[[2]], sep = "_")
+    }
   }
+
   return(out)
 }
 
@@ -1070,7 +1085,8 @@ summary.emc.design <- function(object, ...){
   cat("\n Design Matrices: \n")
   map_out <- sampled_pars(object,object$model, add_da = TRUE, doMap = TRUE, data = list(...)$data)
   print_map <-
-  print(lapply(attr(map_out, "map"), unique_rows_by_index, names(object$Ffactors)), row.names = FALSE)
+  print(lapply(attr(map_out, "map"), unique_rows_by_index,
+               c(names(object$Ffactors), names(object$Ffunctions), 'lM', 'lR')), row.names = FALSE)
   return(invisible(map_out))
 }
 

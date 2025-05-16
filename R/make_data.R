@@ -103,9 +103,7 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
   # #' @param return_Ffunctions if false covariates are not returned
 
   if (!is.null(staircase)){
-    if (!is.list(staircase)){
-      staircase <- list(SSD0=.25,stairstep=.05,stairmin=0,stairmax=Inf)
-    }
+    staircase <- check_staircase(staircase)
   }
   # #' @param Fcovariates either a data frame of covariate values with the same
   # #' number of rows as the data or a list of functions specifying covariates for
@@ -228,7 +226,6 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
   if (any(names(data)=="RACE")) {
     Rrt <- RACE_rfun(data, pars, model)
   } else Rrt <- model()$rfun(data,pars)
-  browser
   dropNames <- c("lR","lM","lSmagnitude")
   if (!return_Ffunctions && !is.null(design$Ffunctions))
     dropNames <- c(dropNames,names(design$Ffunctions))

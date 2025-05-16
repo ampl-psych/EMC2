@@ -14,7 +14,8 @@ sampled_pars(
   model = NULL,
   doMap = FALSE,
   add_da = FALSE,
-  all_cells_dm = FALSE
+  all_cells_dm = FALSE,
+  data = NULL
 )
 
 \method{sampled_pars}{emc.design}(
@@ -22,7 +23,8 @@ sampled_pars(
   model = NULL,
   doMap = FALSE,
   add_da = FALSE,
-  all_cells_dm = FALSE
+  all_cells_dm = FALSE,
+  data = NULL
 )
 
 \method{sampled_pars}{emc.group_design}(
@@ -30,7 +32,8 @@ sampled_pars(
   model = NULL,
   doMap = FALSE,
   add_da = FALSE,
-  all_cells_dm = FALSE
+  all_cells_dm = FALSE,
+  data = NULL
 )
 
 \method{sampled_pars}{emc.prior}(
@@ -38,7 +41,8 @@ sampled_pars(
   model = NULL,
   doMap = FALSE,
   add_da = FALSE,
-  all_cells_dm = FALSE
+  all_cells_dm = FALSE,
+  data = NULL
 )
 
 \method{sampled_pars}{emc}(
@@ -46,7 +50,8 @@ sampled_pars(
   model = NULL,
   doMap = FALSE,
   add_da = FALSE,
-  all_cells_dm = FALSE
+  all_cells_dm = FALSE,
+  data = NULL
 )
 }
 \arguments{
@@ -61,6 +66,8 @@ with the design matrices that perform the mapping back to the design}
 
 \item{all_cells_dm}{Boolean. Whether to include all levels of a factor in the mapping attribute,
 even when one is dropped in the design}
+
+\item{data}{A data frame to be included for accurate covariate mapping in summary.design}
 }
 \value{
 Named vector.

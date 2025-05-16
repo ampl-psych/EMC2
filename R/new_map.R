@@ -56,9 +56,9 @@ minimal_design <- function(design, covariates = NULL, drop_subjects = TRUE,
       funs <- cur_des$Ffunctions
       if (!is.list(funs)) funs <- list(funs)
 
-      for (i in seq_along(funs)) {
-        res <- funs[[i]](fac_df)
-        nm <- names(funs)[i]
+      for (j in seq_along(funs)) {
+        res <- funs[[j]](fac_df)
+        nm <- names(funs)[j]
         fac_df[[nm]] <- res
       }
     }
@@ -93,7 +93,7 @@ do_map <- function(draws, design, add_recalculated = FALSE, ...) {
     par_idx <- max(cur_idx)
     cur_draws <- draws[,cur_idx]
     if(grepl("MRI", cur_des$model()$type)){
-      draws[,grepl("sd", colnames(cur_draws))] <- exp(cur_draws[,grepl("sd", colnames(cur_draws))])
+      cur_draws[,grepl("sd", colnames(cur_draws))] <- exp(cur_draws[,grepl("sd", colnames(cur_draws))])
       cur_draws[,grepl("rho", colnames(cur_draws))] <- pnorm(cur_draws[,grepl("rho", colnames(cur_draws))])
       all_out[[i]] <- cur_draws
       next
@@ -120,10 +120,10 @@ do_map <- function(draws, design, add_recalculated = FALSE, ...) {
     design_df <- minimal_design(cur_des,
                                 drop_subjects = TRUE,
                                 n_trials      = 100, # sample 100 here so that covariate is semi-accurately represented
-                                add_acc       = FALSE,
+                                add_acc       = TRUE,
                                 ...)
 
-    factor_cols    <- unique(c(names(cur_des$Ffactors), names(cur_des$Ffunctions)))
+    factor_cols    <- unique(c(names(cur_des$Ffactors), names(cur_des$Ffunctions), 'lM', 'lR'))
     covariate_cols <- if (!is.null(cur_des$Fcovariates)) cur_des$Fcovariates else character(0)
 
     base_cells <- unique(design_df[, colnames(design_df) %in% factor_cols, drop = FALSE])
