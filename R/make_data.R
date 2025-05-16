@@ -122,7 +122,6 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
   for (name in names(optionals) ) {
     assign(name, optionals[[name]])
   }
-  Fcovariates <- covariates
   if(is(parameters, "emc")){
     if(is.null(design)) design <- get_design(parameters)[[1]] # Currently not supported for multiple designs
     if(is.null(data)) data <- get_data(parameters)
