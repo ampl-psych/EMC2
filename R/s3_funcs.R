@@ -160,7 +160,12 @@ predict.emc <- function(object,hyper=FALSE,n_post=50,n_cores=1,
   for(j in 1:length(data)){
     if(jointModel) emc <- single_out_joint(all_samples, j)
     subjects <- levels(data[[j]]$subjects)
-    if(grepl("MRI", design[[j]]$model()$type)) design[[j]] <- add_design_fMRI_predict(design[[j]], emc)
+    if(grepl("MRI", design[[j]]$model()$type)) {
+      design[[j]] <- add_design_fMRI_predict(design[[j]], emc)
+      if(is.integer(design[[j]]$fMRI_design[[1]])){
+        design[[j]] <- design[[design[[j]]$fMRI_design[[1]]]]
+      }
+    }
     if (hyper) {
       pars <- vector(mode="list",length=n_post)
       # for (i in 1:n_post) {
@@ -189,7 +194,7 @@ predict.emc <- function(object,hyper=FALSE,n_post=50,n_cores=1,
     if(any(!in_bounds)){
       good_post <- sample(1:n_post, sum(!in_bounds))
       simDat[!in_bounds] <- suppressWarnings(mclapply(good_post,function(i){
-        do.call(make_data, c(list(pars[[i]],design=design[[j]],data=data[[j]]), fix_dots(dots, make_data)))
+        do.call(make_data, c(list(pars[[i]],design=design[[j]],data=data[[j]], check_bounds = TRUE), fix_dots(dots, make_data)))
       },mc.cores=n_cores))
     }
     out <- cbind(postn=rep(1:n_post,times=unlist(lapply(simDat,function(x)dim(x)[1]))),do.call(rbind,simDat))
@@ -197,7 +202,12 @@ predict.emc <- function(object,hyper=FALSE,n_post=50,n_cores=1,
     attr(out,"pars") <- pars
     post_out[[j]] <- out
   }
-  if(!jointModel) post_out <- post_out[[1]]
+  if(!jointModel){
+    post_out <- post_out[[1]]
+  } else{
+    joint_names <- get_joint_names(all_samples)
+    names(post_out) <- joint_names
+  }
   return(post_out)
 }
 
@@ -967,32 +977,32 @@ get_data.emc <- function(emc) {
     for(i in 1:length(dat)){
       design <- get_design(emc)[[i]]
       tmp <- do.call(rbind,lapply(emc[[1]]$data,function(x){
-        expand <- attr(x[[i]],"expand")
-        if(is.null(expand)) expand <- 1:nrow(x[[i]])
-        return(x[[i]][expand,])
+        cur <- x[[i]]
+        if(!is.null(cur$winner) && (length(unique(cur$lR)) > 1)){
+          cur <- cur[cur$winner,]
+        }
+        expand <- attr(cur,"expand")
+        if(is.null(expand)) expand <- 1:nrow(cur)
+        return(cur[expand,])
       }))
       row.names(tmp) <- NULL
-      if(is.null(tmp$lR)){
-        tmp$lR <- 1
-        tmp$lR <- factor(tmp$lR)
-      }
-      tmp <- tmp[tmp$lR == levels(tmp$lR)[1],]
       tmp <- tmp[,!(colnames(tmp) %in% c("trials","lR","lM", "winner", "SlR", "RACE", names(design$Ffunctions)))]
       dat[[i]] <- tmp
     }
+    names(dat) <- get_joint_names(emc)
   } else{
     design <- get_design(emc)[[1]]
     dat <- do.call(rbind,lapply(emc[[1]]$data,function(x){
+      if(!is.null(x$winner) && (length(unique(x$lR)) > 1)){
+        # Only expand winner for race models
+        x <- x[x$winner,]
+      }
+
       expand <- attr(x,"expand")
       if(is.null(expand)) expand <- 1:nrow(x)
       return(x[expand,])
     }))
     row.names(dat) <- NULL
-    if(is.null(dat$lR)){
-      dat$lR <- 1
-      dat$lR <- factor(dat$lR)
-    }
-    dat <- dat[dat$lR == levels(dat$lR)[1],]
     dat <- dat[,!(colnames(dat) %in% c("trials","lR","lM","winner", "SlR", "RACE", names(design$Ffunctions)))]
   }
   return(dat)
@@ -1105,9 +1115,9 @@ get_design <- function(x){
 
 #' @rdname sampled_pars
 #' @export
-sampled_pars.emc <- function(x,model=NULL,doMap=TRUE, add_da = FALSE, all_cells_dm = FALSE){
+sampled_pars.emc <- function(x,model=NULL,doMap=FALSE, add_da = FALSE, all_cells_dm = FALSE, data = NULL){
   return(sampled_pars(get_design(x), model = model, doMap = doMap,
-                          add_da = add_da, all_cells_dm = all_cells_dm))
+                          add_da = add_da, all_cells_dm = all_cells_dm, data = data))
 }
 
 #' @rdname auto_thin

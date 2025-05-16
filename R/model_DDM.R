@@ -15,21 +15,13 @@ suppress_output <- function(expr) {
   invisible(force(expr))  # Run the expression
 }
 
-rDDM <- function(lR,pars,ok=rep(TRUE,length(lR)), precision=5e-3)
-  # lR is an empty latent response factor lR with one level for each boundary
-  # pars is a matrix of parameter values named as in p_types
-  # lower is mapped to first level of lR and upper to second
-  # test
-  # pars=cbind.data.frame(a=c(1,1),v=c(-1,1),t0=c(.2,.2),z=c(.5,.5),d=c(0,0),
-  #                       sz=c(0,0),sv=c(0,0),st0=c(0,0),s=c(1,1))
-  # lR <- factor(c("left","right"))
-
+rDDM <- function(R,pars,ok=rep(TRUE,length(R)), precision=5e-3)
 {
-  bad <- rep(NA,length(lR))
+  bad <- rep(NA,nrow(pars))
   out <- data.frame(response=bad,rt=bad)
   out_ok <- out[ok,]
   pars <- pars[ok,]
-  lR <- lR[ok]
+  R <- R[ok]
   pars <- as.matrix(pars);
   idx <- find_duplicate_indices(pars)
   for(id in unique(idx)){
@@ -42,8 +34,7 @@ rDDM <- function(lR,pars,ok=rep(TRUE,length(lR)), precision=5e-3)
     out_ok[is_id,] <- tmp[sample(nrow(tmp)),]
   }
   out[ok,] <- out_ok
-  # cbind.data.frame(R=factor(out[,"response"],levels=c("lower","upper"),labels=levels(lR)),rt=out[,"rt"])
-  cbind.data.frame(R=factor(out[,"response"], labels = levels(lR), levels = c("lower", "upper")),rt=out[,"rt"])
+  cbind.data.frame(R=factor(out[,"response"], labels = levels(R), levels = c("lower", "upper")),rt=out[,"rt"])
 }
 
 
@@ -133,7 +124,7 @@ DDM <- function(){
       pars
     },
     # Random function
-    rfun=function(lR=NULL,pars) rDDM(lR,pars, attr(pars, "ok")),
+    rfun=function(data=NULL,pars) rDDM(data$R,pars, attr(pars, "ok")),
     # Density function (PDF)
     dfun=function(rt,R,pars) dDDM(rt,R,pars),
     # Probability function (CDF)
@@ -143,3 +134,88 @@ DDM <- function(){
     }
   )
 }
+
+#### GNG ----
+
+#' The GNG (go/nogo) Diffusion Decision Model (DDMGNGnoC)
+#'
+#' In the GNG paradigm one of the two possible choices results in a response
+#' being withheld (a non-response), which is indicated in the data by an NA for
+#' the rt, with the corresponding level of the R (response) factor still being
+#' specified. For example, suppose the go response is coded as "yes" and nogo is
+#' coded as "no", then for a non-response (R,rt) = ("no",NA) and for a response
+#' e.g., (R,rt) = ("yes",1.36). The GNG paradigm must also have a response
+#' # window (i.e., a length of time, TIMEOUT period, after which withholding is
+#' assumed).
+#'
+#' The model used is described in the following paper, with the addition of
+#' modeling the TIMEOUT (which is considered but not used in this paper).
+#'
+#' Gomez, P., Ratcliff, R., & Perea, M. (2007). A Model of the Go/No-Go Task.
+#' Journal of Experimental Psychology: General, 136(3), 389–413.
+#' https://doi.org/10.1037/0096-3445.136.3.389
+#'
+#' The likelihood of non-responses requires and evaluation of the DDM cdf,
+#' specifically 1 - p(hitting the yes boundary before TIMEOUT).
+#'
+#' To use these models three functions must be supplied in the design's function
+#' argument with the names TIMEOUT, Rnogo and Rgo. For example, assuming a
+#' 2.5 second timeout, and R factor with levels c("no","yes") and "no" mapping
+#' to a non-response.
+#'
+#' TIMEOUT=function(d)rep(2.5,nrow(d))
+#' Rnogo=function(d)factor(rep("no",nrow(d)),levels=c("no","yes"))
+#' Rgo=function(d)factor(rep("yes",nrow(d)),levels=c("no","yes")))
+#'
+#' See the help for DDM for further details. At present this model is not fully
+#' implemented in C, so is a little slower to use than the DDM, but not greatly.
+#'
+#' @return A model list with all the necessary functions to sample
+#' @examples
+#' dGNG <- design(Rlevels = c("left","right"),
+#'                factors=list(subjects=1,S=c("left","right")),
+#'                functions=list(
+#'                TIMEOUT=function(d)rep(2.5,nrow(d)),
+#'                # no go response level
+#'                Rnogo=function(d)factor(rep("left",nrow(d)),levels=c("left","right")),
+#'                # go response level
+#'                Rgo=function(d)factor(rep("right",nrow(d)),levels=c("left","right"))),
+#'                formula=list(v~S,a~1, Z~1, t0~1),
+#'                model=DDMGNG)
+#'
+#' p_vector <- sampled_pars(dGNG)
+#' @export
+DDMGNG <- function(){
+  list(
+    type="DDM",
+    p_types=c("v" = 1,"a" = log(1),"sv" = log(0),"t0" = log(0),"st0" = log(0),
+              "s" = log(1),"Z" = qnorm(0.5),"SZ" = qnorm(0)),
+    # Trial dependent parameter transform
+    transform=list(func=c(v = "identity",a = "exp",sv = "exp",t0 = "exp",
+                          st0 = "exp",s = "exp",Z = "pnorm",SZ = "pnorm")),
+    bound=list(minmax=cbind(v=c(-20,20),a=c(0,10),Z=c(.001,.999),t0=c(0.05,Inf),
+                            sv=c(.01,10),s=c(0,Inf),SZ=c(.001,.999),st0=c(0,.5)),
+               exception=c(sv=0,SZ=0,st0=0)),
+    Ttransform = function(pars,dadm) {
+      pars[,"SZ"] <- 2*pars[,"SZ"]*apply(cbind(pars[,"Z"],1-pars[,"Z"]),1,min)
+      pars <- cbind(pars,z=pars[,"Z"]*pars[,"a"], sz = pars[,"SZ"]*pars[,"a"],
+                    TIMEOUT=dadm$TIMEOUT,Rnogo=as.numeric(dadm$Rnogo))
+      pars
+    },
+    # Random function
+    rfun=function(data,pars) {
+      out <- rDDM(data$R,pars, attr(pars, "ok"))
+      out$rt[out$rt>pars[,"TIMEOUT"]] <- NA
+      out$rt[as.numeric(out$R)==pars[,"Rnogo"]] <- NA
+      out
+    },
+    # Density function (PDF)
+    dfun=function(rt,R,pars) dDDM(rt,R,pars),
+    # Probability function (CDF)
+    pfun=function(rt,R,pars) pDDM(rt,R,pars),
+    log_likelihood=function(pars,dadm,model,min_ll=log(1e-10)){
+      log_likelihood_ddmgng(pars=pars, dadm = dadm, model = model, min_ll = min_ll)
+    }
+  )
+}
+

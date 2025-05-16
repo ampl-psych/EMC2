@@ -17,7 +17,16 @@ check_data_plot <- function(data, defective_factor, subject, factors) {
   if (!is.null(factors) && !all(factors %in% names(data))) {
     stop("factors must name factors in data")
   }
-
+  n_bins <- 4
+  for(fact in factors){
+    if(is.numeric(data[,fact])){
+      if(length(unique(data[,fact])) > 6){
+        quartile_breaks <- quantile(unique(data[,fact]), probs = seq(0, 1, length.out = n_bins + 1), na.rm = TRUE)
+        # Bin the data into quartiles using these breakpoints
+        data[,fact] <- cut(data[,fact], breaks = quartile_breaks, include.lowest = TRUE, labels = paste0("Q", 1:n_bins))
+      }
+    }
+  }
   # Handle subject argument
   if (!is.null(subject)) {
     if(is.numeric(subject)) {
@@ -25,7 +34,7 @@ check_data_plot <- function(data, defective_factor, subject, factors) {
     } else {
       data <- data[data$subjects %in% subject, ]
     }
-    data$subjects <- droplevels(data$subjects)
+    data$subjects <- factor(data$subjects)
   }
 
   # Remove missing or infinite rt
@@ -354,7 +363,7 @@ plot_stat <- function(input, post_predict = NULL, prior_predict = NULL, stat_fun
 
 
 # A small function to compute the defective densities across factor levels
-compute_def_dens <- function(dat, defective_factor, dargs) {
+compute_def_dens <- function(dat, defective_factor, dargs, from = NULL, to = NULL) {
   p_defective <- prop.table(table(dat[[defective_factor]]))
   # We'll call density() on each subset of rt, then multiply by proportion
   # so that the sum across factor levels is 1
@@ -367,7 +376,7 @@ compute_def_dens <- function(dat, defective_factor, dargs) {
       # avoid error
       out[[lev]] <- rep(0, 512)
     } else {
-      dd <- do.call(density, c(list(x = subdat$rt), fix_dots(dargs, density.default, consider_dots = FALSE)))
+      dd <- do.call(density, c(list(x = subdat$rt, from = from, to = to), fix_dots(dargs, density.default, consider_dots = FALSE)))
       out[[lev]] <- dd$y * p_defective[lev]
     }
   }
@@ -434,16 +443,10 @@ plot_density <- function(input, post_predict = NULL, prior_predict = NULL,
 
     # If 'postn' in colnames => multiple sets => need quantiles
     if ("postn" %in% names(src_data)) {
-      # We'll compute from/to from data range
-      rng <-  max(src_data$rt)
       dargs <- switch(
         src_type,
-        "posterior" = add_defaults(posterior_args, to = rng),
-        "prior"     = {
-          rng2 <- quantile(src_data$rt, c(0.975))
-          add_defaults(prior_args, to = rng2)
-        },
-        dots
+        "posterior" = posterior_args,
+        "prior"     = prior_args
       )
 
       splitted <- split(src_data, src_data$group_key)
@@ -451,7 +454,7 @@ plot_density <- function(input, post_predict = NULL, prior_predict = NULL,
       dens_list[[src_name]] <- lapply(splitted, function(dg) {
         postn_splits <- split(dg, dg$postn)
         lapply(postn_splits, function(dsub) {
-          compute_def_dens(dsub, defective_factor, dargs)
+          compute_def_dens(dsub, defective_factor, dargs, from = check$xlim[1]-0.05, to = check$xlim[2] + 0.05)
         })
       })
 
@@ -485,11 +488,9 @@ plot_density <- function(input, post_predict = NULL, prior_predict = NULL,
       }
 
     } else {
-      # Single dataset
-      rng <- quantile(src_data$rt, .99)
-      dargs <- add_defaults(dots, to = rng)
+      dargs <- dots
       splitted <- split(src_data, src_data$group_key)
-      dens_list[[src_name]] <- lapply(splitted, compute_def_dens, defective_factor, dargs)
+      dens_list[[src_name]] <- lapply(splitted, compute_def_dens, defective_factor, dargs, from = check$xlim[1]-0.05, to = check$xlim[2] + 0.05)
 
       if (src_type %in% use_lim) {
         # find max
@@ -730,7 +731,7 @@ plot_cdf <- function(input,
   prior_args <- add_defaults(prior_args, col = c("red", "#800080", "#CC00FF"))
 
   defective_levels <- levels(factor(data_sources[[1]][[defective_factor]]))
-  unique_group_keys <- unique(data_sources[[1]]$group_key)
+  unique_group_keys <- levels(factor(data_sources[[1]]$group_key))
 
   if (is.null(defective_levels) || length(defective_levels) == 0) {
     defective_levels <- "Level1"  # fallback

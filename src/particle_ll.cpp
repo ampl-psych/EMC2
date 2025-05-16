@@ -205,7 +205,7 @@ NumericMatrix c_map_p(NumericVector p_vector,
   return(pars);
 }
 
-NumericMatrix get_pars_matrix(NumericVector p_vector, NumericVector constants, List transforms, List pretransforms,
+NumericMatrix get_pars_matrix(NumericVector p_vector, NumericVector constants, List transforms, const std::vector<PreTransformSpec>& p_specs,
                               CharacterVector p_types, List designs, int n_trials, DataFrame data, List trend){
   bool has_trend = (trend.length() > 0);
   bool pretransform = false;
@@ -217,7 +217,6 @@ NumericMatrix get_pars_matrix(NumericVector p_vector, NumericVector constants, L
   }
   NumericVector p_vector_updtd(clone(p_vector));
   CharacterVector par_names = p_vector_updtd.names();
-  std::vector<PreTransformSpec> p_specs = make_pretransform_specs(p_vector_updtd, pretransforms);
   p_vector_updtd = c_do_pre_transform(p_vector_updtd, p_specs);
   p_vector_updtd = c_add_vectors(p_vector_updtd, constants);
   NumericMatrix pars = c_map_p(p_vector_updtd, p_types, designs, n_trials, data, trend, transforms);
@@ -245,6 +244,7 @@ double c_log_likelihood_DDM(NumericMatrix pars, DataFrame data,
   NumericVector lls_exp(n_out);
   lls = d_DDM_Wien(rts, R, pars, is_ok);
   lls_exp = c_expand(lls, expand); // decompress
+  // lls_exp = lls;
   lls_exp[is_na(lls_exp)] = min_ll;
   lls_exp[is_infinite(lls_exp)] = min_ll;
   lls_exp[lls_exp < min_ll] = min_ll;
@@ -282,15 +282,13 @@ double c_log_likelihood_race(NumericMatrix pars, DataFrame data,
     lds[!winner] = loss;
   }
   lds[is_na(lds)] = min_ll;
-  lds_exp = c_expand(lds, expand); // decompress
   if(n_acc > 1){
-    LogicalVector winner_exp = c_bool_expand(winner, expand);
-    NumericVector ll_out = lds_exp[winner_exp];
+    // LogicalVector winner_exp = c_bool_expand(winner, expand);
+    NumericVector ll_out = lds[winner];
+    NumericVector lds_los = lds[!winner];
     if(n_acc == 2){
-      NumericVector lds_los = lds_exp[!winner_exp];
       ll_out = ll_out + lds_los;
     } else{
-      NumericVector lds_los = lds_exp[!winner_exp];
       for(int z = 0; z < ll_out.length(); z++){
         ll_out[z] = ll_out[z] + sum(lds_los[seq( z * (n_acc -1), (z+1) * (n_acc -1) -1)]);
       }
@@ -298,11 +296,13 @@ double c_log_likelihood_race(NumericMatrix pars, DataFrame data,
     ll_out[is_na(ll_out)] = min_ll;
     ll_out[is_infinite(ll_out)] = min_ll;
     ll_out[ll_out < min_ll] = min_ll;
+    ll_out = c_expand(ll_out, expand); // decompress
     return(sum(ll_out));
   } else{
     lds_exp[is_na(lds_exp)] = min_ll;
     lds_exp[is_infinite(lds_exp)] = min_ll;
     lds_exp[lds_exp < min_ll] = min_ll;
+    lds_exp = c_expand(lds, expand); // decompress
     return(sum(lds_exp));
   }
 }
@@ -323,25 +323,37 @@ NumericVector calc_ll(NumericMatrix p_matrix, DataFrame data, NumericVector cons
   // Once (outside the main loop over particles):
   NumericMatrix minmax = bounds["minmax"];
   CharacterVector mm_names = colnames(minmax);
+  std::vector<PreTransformSpec> p_specs;
+  std::vector<BoundSpec> bound_specs;
 
   if(type == "DDM"){
     IntegerVector expand = data.attr("expand");
     for(int i = 0; i < n_particles; i++){
       p_vector = p_matrix(i, _);
-      pars = get_pars_matrix(p_vector, constants, transforms, pretransforms, p_types, designs, n_trials, data, trend);
+      if(i == 0){
+        p_specs = make_pretransform_specs(p_vector, pretransforms);
+      }
+      pars = get_pars_matrix(p_vector, constants, transforms, p_specs, p_types, designs, n_trials, data, trend);
       // Precompute specs
-      std::vector<BoundSpec> bound_specs = make_bound_specs(minmax, mm_names, pars, bounds);
+      if (i == 0) {                            // first particle only, just to get colnames
+        bound_specs = make_bound_specs(minmax,mm_names,pars,bounds);
+      }
       is_ok = c_do_bound(pars, bound_specs);
       lls[i] = c_log_likelihood_DDM(pars, data, n_trials, expand, min_ll, is_ok);
     }
-  } else if(type == "MRI" || type == "MRI_white"){
+  } else if(type == "MRI" || type == "MRI_AR1"){
     int n_pars = p_types.length();
     NumericVector y = extract_y(data);
     for(int i = 0; i < n_particles; i++){
       p_vector = p_matrix(i, _);
-      pars = get_pars_matrix(p_vector, constants, transforms, pretransforms, p_types, designs, n_trials, data, trend);
+      if(i == 0){
+        p_specs = make_pretransform_specs(p_vector, pretransforms);
+      }
+      pars = get_pars_matrix(p_vector, constants, transforms, p_specs, p_types, designs, n_trials, data, trend);
       // Precompute specs
-      std::vector<BoundSpec> bound_specs = make_bound_specs(minmax, mm_names, pars, bounds);
+      if (i == 0) {                            // first particle only, just to get colnames
+        bound_specs = make_bound_specs(minmax,mm_names,pars,bounds);
+      }
       is_ok = c_do_bound(pars, bound_specs);
       if(type == "MRI"){
         lls[i] = c_log_likelihood_MRI(pars, y, is_ok, n_trials, n_pars, min_ll);
@@ -365,11 +377,19 @@ NumericVector calc_ll(NumericMatrix p_matrix, DataFrame data, NumericVector cons
       dfun = dlnr_c;
       pfun = plnr_c;
     }
-    for(int i = 0; i < n_particles; i++){
+    NumericVector lR = data["lR"];
+    int n_lR = unique(lR).length();
+    for (int i = 0; i < n_particles; ++i) {
       p_vector = p_matrix(i, _);
-      pars = get_pars_matrix(p_vector, constants, transforms, pretransforms, p_types, designs, n_trials, data, trend);
-      std::vector<BoundSpec> bound_specs = make_bound_specs(minmax, mm_names, pars, bounds);
+      if(i == 0){
+        p_specs = make_pretransform_specs(p_vector, pretransforms);
+      }
+      pars = get_pars_matrix(p_vector, constants, transforms, p_specs, p_types, designs, n_trials, data, trend);
+      if (i == 0) {                            // first particle only, just to get colnames
+        bound_specs = make_bound_specs(minmax,mm_names,pars,bounds);
+      }
       is_ok = c_do_bound(pars, bound_specs);
+      is_ok = lr_all(is_ok, n_lR);
       lls[i] = c_log_likelihood_race(pars, data, dfun, pfun, n_trials, winner, expand, min_ll, is_ok);
     }
   }
