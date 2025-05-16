@@ -1,4 +1,16 @@
 #### Staircase ----
+#' Assign Stop-Signal Delays (SSDs) to trials
+#'
+#' @description
+#' This function assigns stop-signal delays (SSDs) to trials based on specified probabilities.
+#'
+#' @param d A data frame containing trial data with a response factor column 'lR'
+#' @param SSD A vector of stop-signal delays to be assigned to trials
+#' @param pSSD A vector of probabilities for each SSD value. If length is one less than SSD,
+#'             the remaining probability is calculated automatically. Default is 0.25.
+#'
+#' @return A vector of SSDs with the same length as the number of rows in 'd'.
+#'         Trials without a stop signal are assigned Inf.
 SSD_function <- function(d,SSD=NA,pSSD=.25) {
   if (sum(pSSD)>1) stop("pSSD sum cannot exceed 1.")
   if (length(pSSD)==length(SSD)-1) pSSD <- c(pSSD,1-sum(pSSD))
@@ -15,7 +27,6 @@ SSD_function <- function(d,SSD=NA,pSSD=.25) {
   }
   return(out)
 }
-
 
 staircase_function <- function(dts,staircase) {
   ns <- ncol(dts)
@@ -38,6 +49,17 @@ staircase_function <- function(dts,staircase) {
   }
   list(sR=sR,srt=srt,SSD=SSD)
 }
+
+
+check_staircase <- function(staircase){
+  if (!is.list(staircase)){
+    staircase <- list(SSD0=.25,stairstep=.05,stairmin=0,stairmax=Inf)
+  }
+  return(staircase)
+}
+
+
+
 
 ST_staircase_function <- function(dts,staircase) {
   ns <- ncol(dts)
@@ -284,7 +306,7 @@ rexGaussian <- function(lR,pars,p_types=c("mu","sigma","tau"),
 
 # FIX ME ok NOT IMPLEMENTED
 
-rSSexGaussian <- function(lR,pars,ok=rep(TRUE,dim(pars)[1]))
+rSSexGaussian <- function(data,pars,ok=rep(TRUE,dim(pars)[1]))
   # lR is an empty latent response factor lR with one level for each accumulator.
   # pars must contain an SSD column and an lI column indicating if an
   # accumulator is triggered by the stop signal (ST = stop-triggered).
@@ -292,12 +314,12 @@ rSSexGaussian <- function(lR,pars,ok=rep(TRUE,dim(pars)[1]))
   # NB1: Go failures will only apply to accumulators where lI = TRUE
   #      and can still have a stop-triggered response on a go-failure trial.
 {
-
+  lR <- data$lR
   nacc <- length(levels(lR))   # Does not include stop runner
   ntrials <- dim(pars)[1]/nacc # Number of trials to simulate
   is1 <- lR==levels(lR)[1]     # First go accumulator
   acc <- 1:nacc                # choice (go and ST) accumulator index
-
+  data <- data[is1,]
   # stop-triggered racers
   isST <- pars[,"lI"]==1              # Boolean for all pars
   accST <- acc[pars[1:nacc,"lI"]==1]  # Index of ST accumulator, from 1st trial
@@ -349,10 +371,9 @@ rSSexGaussian <- function(lR,pars,ok=rep(TRUE,dim(pars)[1]))
   pstair <- is.na(pars[,"SSD"])
   stair <- pstair[is1]
   if (any(stair)) {
-    if (is.null(attr(pars,"staircase")))
+    if (is.null(attr(data,"staircase")))
       stop("When SSD has NAs a staircase list must be supplied!")
-    staircase <- attr(pars,"staircase")
-    staircase$data <- staircase$data[is1,]
+    staircase <- attr(data,"staircase")
     if (length(accST)>0)
       staircase$accST <- 1+accST
     if (is.null(attr(staircase,"staircase_function"))) {
@@ -373,9 +394,9 @@ rSSexGaussian <- function(lR,pars,ok=rep(TRUE,dim(pars)[1]))
     isST <- isST[!pstair]
     ntrials <- sum(!stair)
     is1 <- is1[!pstair]
-    if (!is.null(staircase$data))
-      staircase$data <- staircase$data[stair,]
-
+    if (!is.null(data)){
+      data <- data[stair,]
+    }
     stair_res <- attr(staircase,"staircase_function")(dts,staircase)
     allR[stair] <- stair_res$sR
     allrt[stair] <- stair_res$srt
@@ -428,9 +449,10 @@ rSSexGaussian <- function(lR,pars,ok=rep(TRUE,dim(pars)[1]))
   if (any(stair)) {
     allrt[!stair] <- rt
     allR[!stair] <- R
+    allSSD <- NA
+    allSSD[stair] <- stair_res$SSD
     out <- cbind.data.frame(R=factor(allR,levels=1:nacc,labels=levels(lR)),
-                            rt=allrt)
-    attr(out,"SSD") <- stair_res$SSD
+                            rt=allrt, SSD = allSSD)
     return(out)
   }
   cbind.data.frame(R=factor(R,levels=1:nacc,labels=levels(lR)),rt=rt)
@@ -567,8 +589,8 @@ SSexG <- function() {
     # Stop probability integral
     sfun=function(pars,n_acc,upper=Inf) pstopEXG(pars,n_acc,upper=upper),
     # Random function for SS race
-    rfun=function(lR=NULL,pars) {
-      rSSexGaussian(lR,pars,ok=attr(pars, "ok"))
+    rfun=function(data=NULL,pars) {
+      rSSexGaussian(data,pars,ok=attr(pars, "ok"))
     },
     # Race likelihood combining pfun and dfun
     log_likelihood=function(pars,dadm,model,min_ll=log(1e-10))
@@ -581,7 +603,7 @@ SSexG <- function() {
 
 #### RDEX SS random ----
 
-rSShybrid <- function(lR,pars,ok=rep(TRUE,dim(pars)[1]))
+rSShybrid <- function(data,pars,ok=rep(TRUE,dim(pars)[1]))
   # lR is an empty latent response factor lR with one level for each accumulator.
   # pars must contain an SSD column and an lI column indicating if an
   # accumulator is triggered by the stop signal (ST = stop-triggered).
@@ -589,7 +611,7 @@ rSShybrid <- function(lR,pars,ok=rep(TRUE,dim(pars)[1]))
   # NB1: Go failures will only apply to accumulators where lI = TRUE
   #      and can still have a stop-triggered response on a go-failure trial.
 {
-
+  lR <- data$lR
   pars[,c("A","B","v")] <- pars[,c("A","B","v")]/pars[ok,"s"]
 
   nacc <- length(levels(lR))   # Does not include stop runner
@@ -652,7 +674,7 @@ rSShybrid <- function(lR,pars,ok=rep(TRUE,dim(pars)[1]))
       stop("When SSD has NAs a staircase list must be supplied!")
 
     staircase <- attr(pars,"staircase")
-    staircase$data <- staircase$data[is1,]
+    data <- data[is1,]
     if (length(accST)>0)
       staircase$accST <- 1+accST
     if (is.null(attr(staircase,"staircase_function")))
@@ -670,8 +692,7 @@ rSShybrid <- function(lR,pars,ok=rep(TRUE,dim(pars)[1]))
     isST <- isST[!pstair]
     ntrials <- sum(!stair)
     is1 <- is1[!pstair]
-    if (!is.null(staircase$data))
-      staircase$data <- staircase$data[stair,]
+    data <- data[stair,]
 
     stair_res <- attr(staircase,"staircase_function")(dts,staircase)
     allR[stair] <- stair_res$sR
@@ -725,9 +746,10 @@ rSShybrid <- function(lR,pars,ok=rep(TRUE,dim(pars)[1]))
   if (any(stair)) {
     allrt[!stair] <- rt
     allR[!stair] <- R
+    allSSD <- NA
+    allSSD[stair] <- stair_res$SSD
     out <- cbind.data.frame(R=factor(allR,levels=1:nacc,labels=levels(lR)),
-                            rt=allrt)
-    attr(out,"SSD") <- stair_res$SSD
+                            rt=allrt, SSD = allSSD)
     return(out)
   }
   cbind.data.frame(R=factor(R,levels=1:nacc,labels=levels(lR)),rt=rt)
@@ -812,8 +834,8 @@ SShybrid <- function() {
     # Stop probability integral
     sfun=function(pars,n_acc,upper=Inf) pstopHybrid(pars,n_acc,upper=upper),
     # Random function for SS race
-    rfun=function(lR=NULL,pars) {
-      rSShybrid(lR,pars,ok=attr(pars, "ok"))
+    rfun=function(data=NULL,pars) {
+      rSShybrid(data,pars,ok=attr(pars, "ok"))
     },
     # Race likelihood combining pfun and dfun
     log_likelihood=function(pars,dadm,model,min_ll=log(1e-10))

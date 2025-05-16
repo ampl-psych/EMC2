@@ -51,10 +51,6 @@ make_missing <- function(data,LT=0,UT=Inf,LC=0,UC=Inf,
 #' @param n_trials Integer. If ``data`` is not supplied, number of trials to create per design cell
 #' @param data Data frame. If supplied, the factors are taken from the data. Determines the number of trials per level of the design factors and can thus allow for unbalanced designs
 #' @param expand Integer. Replicates the ``data`` (if supplied) expand times to increase number of trials per cell.
-#' @param mapped_p If `TRUE` instead returns a data frame with one row per design
-#' cell and columns for each parameter specifying how they are mapped to the design cells.
-#' @param hyper If `TRUE` the supplied parameters must be a set of samples, from which the group-level will be used to generate subject level parameters.
-#' See also `make_random_effects` to generate subject-level parameters from a hyper distribution.
 #' @param staircase Default NULL, used with stop-signal paradigm simulation to specify a staircase
 #' algorithm. If non-null and a list then passed through as is, if not it is assigned the
 #' default list structure: list(p=.25,SSD0=.25,stairstep=.05,stairmin=0,stairmax=Inf)
@@ -85,8 +81,7 @@ make_missing <- function(data,LT=0,UT=Inf,LC=0,UC=Inf,
 #' data <- make_data(parameters, design_DDMaE, data = forstmann)
 #' @export
 
-make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
-  mapped_p=FALSE, hyper = FALSE, staircase = NULL, ...)
+make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1, staircase = NULL, ...)
 {
   # #' @param LT lower truncation bound below which data are removed (scalar or subject named vector)
   # #' @param UT upper truncation bound above which data are removed (scalar or subject named vector)
@@ -104,9 +99,7 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
   # #' @param return_Ffunctions if false covariates are not returned
 
   if (!is.null(staircase)){
-    if (!is.list(staircase)){
-      staircase <- list(SSD0=.25,stairstep=.05,stairmin=0,stairmax=Inf)
-    }
+    staircase <- check_staircase(staircase)
   }
   # #' @param Fcovariates either a data frame of covariate values with the same
   # #' number of rows as the data or a list of functions specifying covariates for
@@ -130,28 +123,16 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
     assign(name, optionals[[name]])
   }
   if(is(parameters, "emc")){
-    if(is.null(design)) design <- get_design(parameters)
+    if(is.null(design)) design <- get_design(parameters)[[1]] # Currently not supported for multiple designs
     if(is.null(data)) data <- get_data(parameters)
-    if(!hyper){
-      parameters <- do.call(rbind, credint(parameters, probs = 0.5, selection = "alpha", by_subject = TRUE))
-    } else{
-      mu <- get_pars(parameters, selection = "mu", merge_chains = T, return_mcmc = F)
-      Sigma <- get_pars(parameters, selection = "Sigma", merge_chains = T, return_mcmc = F)
-      mu <- rowMeans(mu)
-      Sigma <- apply(Sigma, 1:2, mean)
-      parameters <- make_random_effects(design, group_means = mu, covariances = Sigma)
-    }
+    parameters <- do.call(rbind, credint(parameters, probs = 0.5, selection = "alpha", by_subject = TRUE))
   }
 
+  # Make sure parameters are in the right format, either matrix or vector
   sampled_p_names <- names(sampled_pars(design))
   if(is.null(dim(parameters))){
     if(is.null(names(parameters))) names(parameters) <- sampled_p_names
   } else{
-    # design$Ffactors$subjects <- design$Ffactors$subjects[1:nrow(parameters)]
-    # if(!is.null(data)){
-    #   data<- data[data$subjects %in% design$Ffactors$subjects,]
-    #   data$subjects <- factor(data$subjects)
-    # }
     if(length(rownames(parameters)) != length(design$Ffactors$subjects)){
       stop("input parameter matrix must have number of rows equal to number of subjects specified in design")
     }
@@ -170,40 +151,18 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
   model <- design$model
 
   if(grepl("MRI", model()$type)){
-    data_list <- list()
-    for(i in 1:nrow(parameters)){
-      data_tmp <- data[data$subjects == unique(data$subjects)[i],]
-      data_tmp$subjects <- factor(data_tmp$subjects)
-      attr(data_tmp, "designs") <- design$fMRI_design[[i]]
-
-      data_list[[i]] <- make_data_fMRI(parameters[i,,drop = F], model, data_tmp, design)
-    }
-    return(do.call(rbind, data_list))
+    return(make_data_wrapper_MRI(parameters, data, design))
   }
 
   if(is.data.frame(parameters)) parameters <- as.matrix(parameters)
   if (!is.matrix(parameters)) parameters <- make_pmat(parameters,design)
   if ( is.null(data) ) {
     design$Ffactors$subjects <- rownames(parameters)
-    if (mapped_p) n_trials <- 1
     if ( is.null(n_trials) )
       stop("If data is not provided need to specify number of trials")
-    Ffactors=c(design$Ffactors,list(trials=1:n_trials))
-    data <- as.data.frame.table(array(dim=unlist(lapply(Ffactors,length)),
-                                        dimnames=Ffactors))
-    for (i in names(design$Ffactors))
-      data[[i]] <- factor(data[[i]],levels=design$Ffactors[[i]])
-    names(data)[dim(data)[2]] <- "R"
-    data$R <- factor(data$R,levels=design$Rlevels)
-    data$trials <- as.numeric(as.character(data$trials))
-    # Add covariates
-    if (!is.null(design$Fcovariates)) {
-      nams <- names(design$Fcovariates)
-      covariates <- do.call(cbind.data.frame,lapply(
-        design$Fcovariates,function(x){x(data)}))
-      names(covariates) <- nams
-         data <- cbind.data.frame(data,covariates)
-    }
+    data <- minimal_design(design, covariates = list(...)$covariates,
+                             drop_subjects = F, n_trials = n_trials, add_acc=F,
+                           drop_R = F)
   } else {
     LT <- attr(data,"LT"); if (is.null(LT)) LT <- 0
     UT <- attr(data,"UT"); if (is.null(UT)) UT <- Inf
@@ -251,41 +210,23 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
   }
   if ( any(dimnames(pars)[[2]]=="pContaminant") && any(pars[,"pContaminant"]>0) )
     pc <- pars[data$lR==levels(data$lR)[1],"pContaminant"] else pc <- NULL
-  if (mapped_p) return(cbind(data[,!(names(data) %in% c("R","rt"))],pars))
   if (expand>1) {
     data <- cbind(rep=rep(1:expand,each=dim(data)[1]),
                   data.frame(lapply(data,rep,times=expand)))
-    lR <- rep(data$lR,expand)
     pars <- apply(pars,2,rep,times=expand)
-  } else lR <- data$lR
+  }
   if (!is.null(staircase)) {
-    staircase$data <- data
-    attr(pars,"staircase") <- staircase  # Stop signal models
+    attr(data, "staircase") <- staircase
   }
   if (any(names(data)=="RACE")) {
-    Rrt <- matrix(ncol=2,nrow=dim(data)[1]/length(levels(data$lR)),
-                  dimnames=list(NULL,c("R","rt")))
-    RACE <- data[data$lR==levels(data$lR)[1],"RACE"]
-    ok <- as.numeric(data$lR) <= as.numeric(as.character(data$RACE))
-    for (i in levels(RACE)) {
-      pick <- data$RACE==i
-      lRi <- factor(data$lR[pick & ok])
-      tmp <- pars[pick & ok,]
-      attr(tmp, "ok") <- rep(T, nrow(tmp))
-      Rrti <- model()$rfun(lRi,tmp)
-      Rrti$R <- as.numeric(Rrti$R)
-      Rrt[RACE==i,] <- as.matrix(Rrti)
-    }
-    Rrt <- data.frame(Rrt)
-    Rrt$R <- factor(Rrt$R, labels = levels(lR), levels = 1:length(levels(lR)))
-  } else Rrt <- model()$rfun(lR,pars)
+    Rrt <- RACE_rfun(data, pars, model)
+  } else Rrt <- model()$rfun(data,pars)
   dropNames <- c("lR","lM","lSmagnitude")
   if (!return_Ffunctions && !is.null(design$Ffunctions))
-    dropNames <- c(dropNames,names(design$Ffunctions) )
-  data <- data[data$lR==levels(data$lR)[1],!(names(data) %in% dropNames)]
+    dropNames <- c(dropNames,names(design$Ffunctions))
+  if(!is.null(data$lR)) data <- data[data$lR == levels(data$lR)[1],]
+  data <- data[,!(names(data) %in% dropNames)]
   for (i in dimnames(Rrt)[[2]]) data[[i]] <- Rrt[,i]
-  if (!is.null(attr(Rrt,"SSD")))
-    data[is.na(data[,"SSD"]),"SSD"] <- attr(Rrt,"SSD")
   data <- make_missing(data[,names(data)!="winner"],LT,UT,LC,UC,
     LCresponse,UCresponse,LCdirection,UCdirection)
   if ( !is.null(pc) ) {
@@ -305,6 +246,25 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
   }
   attr(data,"p_vector") <- parameters;
   data
+}
+
+RACE_rfun <- function(data, pars, model){
+  matrix(ncol=2,nrow=dim(data)[1]/length(levels(data$lR)),
+         dimnames=list(NULL,c("R","rt")))
+  RACE <- data[data$lR==levels(data$lR)[1],"RACE"]
+  ok <- as.numeric(data$lR) <= as.numeric(as.character(data$RACE))
+  for (i in levels(RACE)) {
+    pick <- data$RACE==i
+    lRi <- factor(data$lR[pick & ok])
+    tmp <- pars[pick & ok,]
+    attr(tmp, "ok") <- rep(T, nrow(tmp))
+    Rrti <- model()$rfun(lRi,tmp)
+    Rrti$R <- as.numeric(Rrti$R)
+    Rrt[RACE==i,] <- as.matrix(Rrti)
+  }
+  Rrt <- data.frame(Rrt)
+  Rrt$R <- factor(Rrt$R, labels = levels(data$lR), levels = 1:length(levels(data$lR)))
+  return(Rrt)
 }
 
 add_Ffunctions <- function(data,design)
