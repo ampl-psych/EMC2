@@ -137,6 +137,7 @@ NumericMatrix c_map_p(NumericVector p_vector,
   LogicalVector trend_index(n_params, FALSE);
   if (has_trend && (premap || pretransform)) {
     // first loop over trends to get all trend pnames
+    // But only for trends that are premap or pretransform
     for(unsigned int q = 0; q < trend.length(); q++){
       List cur_trend = trend[q];
       trend_pnames = c_add_charvectors(trend_pnames, as<CharacterVector>(cur_trend["trend_pnames"]));
@@ -146,10 +147,12 @@ NumericMatrix c_map_p(NumericVector p_vector,
     // index which p_types are trends
     LogicalVector trend_index = contains_multiple(p_types,trend_pnames);
     for(unsigned int j = 0; j < trend_index.length(); j ++){
+      // If we are a trend parameter:
       if(trend_index[j] == TRUE){
         NumericMatrix cur_design_trend = designs[j];
         CharacterVector cur_names_trend = colnames(cur_design_trend);
         // Take the current design and loop over columns
+        // Multiply by design matrix
         for(int k = 0; k < cur_design_trend.ncol(); k ++){
           String cur_name_trend(cur_names_trend[k]);
           p_mult_design =  p_vector[cur_name_trend] * cur_design_trend(_, k);
@@ -158,9 +161,9 @@ NumericMatrix c_map_p(NumericVector p_vector,
         }
       }
     }
-    std::vector<TransformSpec> t_specs = make_transform_specs(pars, transforms);
-    // Then repeatedly:
-    trend_pars = c_do_transform(pars, t_specs);
+    trend_pars = submat_rcpp_col_by_names(pars, trend_pnames);
+    std::vector<TransformSpec> t_specs = make_transform_specs(trend_pars, transforms);
+    trend_pars = c_do_transform(trend_pars, t_specs);
     trend_index = contains_multiple(p_types, trend_pnames);
   }
   for(int i = 0, t = 0; i < n_params; i++){
@@ -171,6 +174,8 @@ NumericMatrix c_map_p(NumericVector p_vector,
       for(int j = 0; j < cur_design.ncol(); j ++){
         String cur_name(cur_names[j]);
         NumericVector p_mult_design(n_trials, p_vector[cur_name]);
+        // at this point we're multiplying by specific parameters (e.g. v_lMd)
+        // So first apply trend to this parameter, then multiply by design matrix;
         if(has_trend && premap){
           // Check if trend is on current parameter
           LogicalVector cur_has_trend = contains(trend_names, cur_name);
@@ -183,7 +188,7 @@ NumericMatrix c_map_p(NumericVector p_vector,
               List cur_trend = trend[cur_name];
               CharacterVector cur_trend_pnames = cur_trend["trend_pnames"];
               p_mult_design = run_trend_rcpp(data, cur_trend, p_mult_design,
-                                             submat_rcpp_col(trend_pars, contains_multiple(trend_pnames, cur_trend_pnames)));
+                                             submat_rcpp_col_by_names(trend_pars,cur_trend_pnames));
 
             }
           }

@@ -749,7 +749,7 @@ make_emc <- function(data,design,model=NULL,
   class(design) <- "emc.design"
   prior_in <- merge_priors(prior_list)
 
-  prior_in <- prior(design, type, update = prior_in, ...)
+  prior_in <- prior(design, type, update = prior_in, group_design = group_design, ...)
   attr(dadm_list[[1]], "prior") <- prior_in
 
   # if(!is.null(subject_covariates)) attr(dadm_list, "subject_covariates") <- subject_covariates
