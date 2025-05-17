@@ -117,7 +117,7 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
   force_direction<-FALSE
   force_response<-FALSE
   rtContaminantNA<-FALSE
-  return_Ffunctions <- FALSE
+  return_Ffunctions <- TRUE
   optionals <- list(...)
   for (name in names(optionals) ) {
     assign(name, optionals[[name]])
