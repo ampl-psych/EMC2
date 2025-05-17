@@ -1,6 +1,6 @@
 minimal_design <- function(design, covariates = NULL, drop_subjects = TRUE,
                            n_trials = 1, add_acc = TRUE, drop_R = TRUE,
-                           drop_R_levels = TRUE, ...) {
+                           drop_R_levels = TRUE, do_functions = TRUE, ...) {
   dots <- add_defaults(list(...), verbose = TRUE)
   if(!is.null(design$Ffactors)) design <- list(design)
   out <- list()
@@ -54,7 +54,7 @@ minimal_design <- function(design, covariates = NULL, drop_subjects = TRUE,
     }
 
     ## 3.  Derive additional columns via Ffunctions (if any)
-    if (!is.null(cur_des$Ffunctions)) {
+    if (!is.null(cur_des$Ffunctions) & do_functions) {
       funs <- cur_des$Ffunctions
       if (!is.list(funs)) funs <- list(funs)
 

@@ -957,7 +957,8 @@ mapped_pars.emc.design <- function(x, p_vector = NULL, model=NULL,
     stop("Must specify model as not in design") else model <- design$model
   if (remove_subjects) design$Ffactors$subjects <- design$Ffactors$subjects[1]
   if (!is.matrix(p_vector)) p_vector <- make_pmat(p_vector,design)
-  dadm <- design_model(minimal_design(design, covariates = Fcovariates, verbose = F, drop_R = F, add_acc = F, drop_subjects = F),
+  dadm <- design_model(minimal_design(design, covariates = Fcovariates, verbose = F, drop_R = F, add_acc = F, drop_subjects = F,
+                                      do_functions = F),
                        design,model,rt_check=FALSE,compress=FALSE, verbose = FALSE)
   ok <- !(names(dadm) %in% c("subjects","trials","R","rt","winner"))
   out <- cbind(dadm[,ok],round(get_pars_matrix(p_vector,dadm, design$model()),digits))
