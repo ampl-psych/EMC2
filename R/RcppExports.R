@@ -73,6 +73,18 @@ stopfn_rdex <- function(t, n_acc, mu, sigma, tau, v, B, A, t0, SSD) {
     .Call(`_EMC2_stopfn_rdex`, t, n_acc, mu, sigma, tau, v, B, A, t0, SSD)
 }
 
+calculate_subject_means <- function(group_designs, params, n_subjects, n_pars) {
+    .Call(`_EMC2_calculate_subject_means`, group_designs, params, n_subjects, n_pars)
+}
+
+dmvnorm_cpp <- function(x, mean, sigma, logd = FALSE) {
+    .Call(`_EMC2_dmvnorm_mat`, x, mean, sigma, logd)
+}
+
+standard_subj_ll <- function(group_designs, theta_var, theta_mu, alpha, n_subj) {
+    .Call(`_EMC2_standard_subj_ll`, group_designs, theta_var, theta_mu, alpha, n_subj)
+}
+
 fft_convolve_equiv_cpp <- function(x, y, conj_flag = TRUE) {
     .Call(`_EMC2_fft_convolve_equiv_cpp`, x, y, conj_flag)
 }

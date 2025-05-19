@@ -11,6 +11,7 @@ make_data(
   data = NULL,
   expand = 1,
   staircase = NULL,
+  functions = NULL,
   ...
 )
 }
@@ -31,6 +32,8 @@ or an emc object with sampled parameters
 \item{staircase}{Default NULL, used with stop-signal paradigm simulation to specify a staircase
 algorithm. If non-null and a list then passed through as is, if not it is assigned the
 default list structure: list(p=.25,SSD0=.25,stairstep=.05,stairmin=0,stairmax=Inf)}
+
+\item{functions}{List of functions you want to apply to the data generation.}
 
 \item{...}{Additional optional arguments}
 }

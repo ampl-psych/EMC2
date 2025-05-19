@@ -30,48 +30,27 @@
     Code
       make_data(p_vector, dGNG, n_trials = 10)
     Output
-         trials subjects     S     R TIMEOUT Rnogo   Rgo TIMEOUT.1 Rnogo.1 Rgo.1
-      1       1        1  left  left     2.5  left right       2.5    left right
-      2       2        1  left  left     2.5  left right       2.5    left right
-      3       3        1  left  left     2.5  left right       2.5    left right
-      4       4        1  left  left     2.5  left right       2.5    left right
-      5       5        1  left  left     2.5  left right       2.5    left right
-      6       6        1  left  left     2.5  left right       2.5    left right
-      7       7        1  left  left     2.5  left right       2.5    left right
-      8       8        1  left  left     2.5  left right       2.5    left right
-      9       9        1  left  left     2.5  left right       2.5    left right
-      10     10        1  left  left     2.5  left right       2.5    left right
-      11     11        1 right  left     2.5  left right       2.5    left right
-      12     12        1 right right     2.5  left right       2.5    left right
-      13     13        1 right right     2.5  left right       2.5    left right
-      14     14        1 right right     2.5  left right       2.5    left right
-      15     15        1 right right     2.5  left right       2.5    left right
-      16     16        1 right  left     2.5  left right       2.5    left right
-      17     17        1 right right     2.5  left right       2.5    left right
-      18     18        1 right right     2.5  left right       2.5    left right
-      19     19        1 right right     2.5  left right       2.5    left right
-      20     20        1 right right     2.5  left right       2.5    left right
-                rt
-      1         NA
-      2         NA
-      3         NA
-      4         NA
-      5         NA
-      6         NA
-      7         NA
-      8         NA
-      9         NA
-      10        NA
-      11        NA
-      12 0.7486671
-      13 1.0350038
-      14 0.4898115
-      15 0.7117752
-      16        NA
-      17 1.2646380
-      18 0.4848544
-      19 0.4545908
-      20 0.5352639
+         trials subjects     S     R        rt
+      1       1        1  left  left        NA
+      2       2        1  left  left        NA
+      3       3        1  left  left        NA
+      4       4        1  left  left        NA
+      5       5        1  left  left        NA
+      6       6        1  left  left        NA
+      7       7        1  left  left        NA
+      8       8        1  left  left        NA
+      9       9        1  left  left        NA
+      10     10        1  left  left        NA
+      11     11        1 right  left        NA
+      12     12        1 right right 0.7486671
+      13     13        1 right right 1.0350038
+      14     14        1 right right 0.4898115
+      15     15        1 right right 0.7117752
+      16     16        1 right  left        NA
+      17     17        1 right right 1.2646380
+      18     18        1 right right 0.4848544
+      19     19        1 right right 0.4545908
+      20     20        1 right right 0.5352639
 
 # probit
 

@@ -520,8 +520,6 @@ std::vector<PreTransformSpec> make_pretransform_specs(NumericVector p_vector, Li
   return specs;
 }
 
-
-
 #endif
 
 

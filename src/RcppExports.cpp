@@ -289,6 +289,49 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// calculate_subject_means
+arma::mat calculate_subject_means(const Rcpp::List& group_designs, const arma::colvec& params, const int n_subjects, const int n_pars);
+RcppExport SEXP _EMC2_calculate_subject_means(SEXP group_designsSEXP, SEXP paramsSEXP, SEXP n_subjectsSEXP, SEXP n_parsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const Rcpp::List& >::type group_designs(group_designsSEXP);
+    Rcpp::traits::input_parameter< const arma::colvec& >::type params(paramsSEXP);
+    Rcpp::traits::input_parameter< const int >::type n_subjects(n_subjectsSEXP);
+    Rcpp::traits::input_parameter< const int >::type n_pars(n_parsSEXP);
+    rcpp_result_gen = Rcpp::wrap(calculate_subject_means(group_designs, params, n_subjects, n_pars));
+    return rcpp_result_gen;
+END_RCPP
+}
+// dmvnorm_mat
+arma::vec dmvnorm_mat(const arma::mat& x, const arma::rowvec& mean, const arma::mat& sigma, const bool logd);
+RcppExport SEXP _EMC2_dmvnorm_mat(SEXP xSEXP, SEXP meanSEXP, SEXP sigmaSEXP, SEXP logdSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const arma::mat& >::type x(xSEXP);
+    Rcpp::traits::input_parameter< const arma::rowvec& >::type mean(meanSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type sigma(sigmaSEXP);
+    Rcpp::traits::input_parameter< const bool >::type logd(logdSEXP);
+    rcpp_result_gen = Rcpp::wrap(dmvnorm_mat(x, mean, sigma, logd));
+    return rcpp_result_gen;
+END_RCPP
+}
+// standard_subj_ll
+arma::vec standard_subj_ll(const Rcpp::List& group_designs, const arma::cube& theta_var, const arma::mat& theta_mu, const arma::cube& alpha, const int n_subj);
+RcppExport SEXP _EMC2_standard_subj_ll(SEXP group_designsSEXP, SEXP theta_varSEXP, SEXP theta_muSEXP, SEXP alphaSEXP, SEXP n_subjSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const Rcpp::List& >::type group_designs(group_designsSEXP);
+    Rcpp::traits::input_parameter< const arma::cube& >::type theta_var(theta_varSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type theta_mu(theta_muSEXP);
+    Rcpp::traits::input_parameter< const arma::cube& >::type alpha(alphaSEXP);
+    Rcpp::traits::input_parameter< const int >::type n_subj(n_subjSEXP);
+    rcpp_result_gen = Rcpp::wrap(standard_subj_ll(group_designs, theta_var, theta_mu, alpha, n_subj));
+    return rcpp_result_gen;
+END_RCPP
+}
 // fft_convolve_equiv_cpp
 arma::vec fft_convolve_equiv_cpp(const arma::vec& x, const arma::vec& y, bool conj_flag);
 RcppExport SEXP _EMC2_fft_convolve_equiv_cpp(SEXP xSEXP, SEXP ySEXP, SEXP conj_flagSEXP) {
@@ -456,6 +499,9 @@ static const R_CallMethodDef CallEntries[] = {
     {"_EMC2_pWald_RDEX", (DL_FUNC) &_EMC2_pWald_RDEX, 5},
     {"_EMC2_dRDEXrace", (DL_FUNC) &_EMC2_dRDEXrace, 9},
     {"_EMC2_stopfn_rdex", (DL_FUNC) &_EMC2_stopfn_rdex, 10},
+    {"_EMC2_calculate_subject_means", (DL_FUNC) &_EMC2_calculate_subject_means, 4},
+    {"_EMC2_dmvnorm_mat", (DL_FUNC) &_EMC2_dmvnorm_mat, 4},
+    {"_EMC2_standard_subj_ll", (DL_FUNC) &_EMC2_standard_subj_ll, 5},
     {"_EMC2_fft_convolve_equiv_cpp", (DL_FUNC) &_EMC2_fft_convolve_equiv_cpp, 3},
     {"_EMC2_compute_gamma_diff_hrf", (DL_FUNC) &_EMC2_compute_gamma_diff_hrf, 9},
     {"_EMC2_compute_hrf", (DL_FUNC) &_EMC2_compute_hrf, 9},

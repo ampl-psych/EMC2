@@ -48,7 +48,7 @@ add_info_standard <- function(sampler, prior = NULL, ...){
 calculate_mean_design <- function(group_designs, n_pars) {
   # Initialize the mean design matrix for each parameter
   mean_designs <- list()
-  
+
   for (k in 1:n_pars) {
     if (is.null(group_designs) || is.null(group_designs[[k]])) {
       # If no design matrix, use a simple intercept
@@ -58,7 +58,7 @@ calculate_mean_design <- function(group_designs, n_pars) {
       mean_designs[[k]] <- colMeans(group_designs[[k]], dims = 1)
     }
   }
-  
+
   return(mean_designs)
 }
 
@@ -71,14 +71,14 @@ calculate_mean_design <- function(group_designs, n_pars) {
 #' @return Vector of implied means
 calculate_implied_means <- function(mean_designs, beta_params, n_pars) {
   mu_implied <- numeric(n_pars)
-  
+
   par_idx <- 0
   for (k in 1:n_pars) {
     x_k_mean <- mean_designs[[k]]
     mu_implied[k] <- x_k_mean %*% beta_params[par_idx + 1:length(x_k_mean)]
     par_idx <- par_idx + length(x_k_mean)
   }
-  
+
   return(mu_implied)
 }
 
@@ -127,15 +127,15 @@ get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1
       beta <- t(mvtnorm::rmvnorm(N, mean = prior$theta_mu_mean,
                              sigma = prior$theta_mu_var))
       rownames(beta) <- par_names
-      
+
       # Calculate mu (implied means) if we have group designs
       if(!is.null(group_des)) {
         # Prepare group designs in proper format
         group_designs <- add_group_design(par_names, group_des, N)
-        
+
         # Calculate mean design matrices
         mean_designs <- calculate_mean_design(group_designs, n_pars)
-        
+
         # Calculate implied means for each sample
         mu <- matrix(0, nrow = n_pars, ncol = N)
         for (i in 1:N) {
@@ -146,7 +146,7 @@ get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1
         # If no group designs, mu and beta are the same
         mu <- beta
       }
-      
+
       if(selection %in% c("mu")){
         samples$theta_mu <- mu
       }
@@ -183,22 +183,6 @@ get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1
     out <- samples
   }
   return(out)
-}
-
-# Function to calculate subject-level means using design matrices
-calculate_subject_means <- function(group_designs, params, n_subjects, n_pars) {
-  subj_mu <- matrix(0, nrow = n_pars, ncol = n_subjects)
-
-  for (s in 1:n_subjects) {
-    par_idx <- 0
-    for (k in 1:n_pars) {
-      x_sk <- group_designs[[k]][s, , drop = FALSE]
-      subj_mu[k, s] <- x_sk %*% params[par_idx + 1:ncol(group_designs[[k]])]
-      par_idx <- par_idx + ncol(group_designs[[k]])
-    }
-  }
-
-  return(subj_mu)
 }
 
 get_startpoints_standard <- function(pmwgs, start_mu, start_var){
@@ -533,7 +517,7 @@ bridge_group_and_prior_and_jac_standard <- function(
   prior_mu_log <- dmvnorm(theta_mu,
                           mean  = prior$theta_mu_mean,
                           sigma = prior$theta_mu_var,
-                          log   = TRUE)
+                          logd   = TRUE)
 
   # For the Jacobian of var1 => rowSums(theta_var1)
   # For the Jacobian of a    => rowSums(theta_a)
@@ -592,7 +576,7 @@ bridge_group_and_prior_and_jac_standard <- function(
         par_idx <- par_idx + ncol(group_designs[[k]])
       }
       # Now alpha_s ~ N(mu_s, var_curr)
-      group_ll <- group_ll + dmvnorm(alpha_s, mu_s, var_curr, log = TRUE)
+      group_ll <- group_ll + dmvnorm(alpha_s, mu_s, var_curr, logd = TRUE)
     }
 
     # 4) Prior on var1, var2, and a => same partial-block logic
@@ -678,6 +662,13 @@ bridge_add_group_standard <- function(all_samples, samples, idx){
   return(all_samples)
 }
 
+dmvnorm <- function(x, mean, sigma, logd = FALSE)
+{
+  if (is.null(dim(x)))            # plain numeric vector?
+    x <- matrix(x, nrow = 1)      # → 1 × p
+
+  dmvnorm_cpp(x, mean, sigma, logd)
+}
 
 # for IC ------------------------------------------------------------------
 
@@ -703,22 +694,7 @@ group__IC_standard <- function(emc, stage="sample", filter=NULL) {
   group_designs <- add_group_design(emc[[1]]$par_names, emc[[1]]$group_designs, n_subj)
 
   # 4) Per-draw log-likelihood
-  lls <- numeric(N)
-  for(i in seq_len(N)) {
-    var_i <- theta_var[,, i]
-    regressors_i <- theta_mu[, i]  # Now includes both intercepts and slopes
-
-    # Calculate subject-level means for this draw
-    subj_means <- calculate_subject_means(group_designs, regressors_i, n_subj, p)
-
-    ll_i <- 0
-    for(s in seq_len(n_subj)) {
-      alpha_s <- alpha[, s, i]
-      ll_i <- ll_i + dmvnorm(alpha_s, subj_means[, s], var_i, log=TRUE)
-    }
-    lls[i] <- ll_i
-  }
-
+  lls <- standard_subj_ll(group_designs, theta_var, theta_mu, alpha, n_subj)
   minD <- -2*max(lls)
   mean_ll <- mean(lls)
 
@@ -729,7 +705,7 @@ group__IC_standard <- function(emc, stage="sample", filter=NULL) {
   mean_pars_ll <- 0
   for(s in seq_len(n_subj)) {
     mean_pars_ll <- mean_pars_ll +
-      dmvnorm(mean_alpha[, s], mean_subj_means[, s], mean_var, log=TRUE)
+      dmvnorm(mean_alpha[, s], mean_subj_means[, s], mean_var, logd=TRUE)
   }
   Dmean <- -2*mean_pars_ll
 
