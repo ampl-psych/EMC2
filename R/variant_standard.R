@@ -695,7 +695,7 @@ group__IC_standard <- function(emc, stage="sample", filter=NULL) {
     for(i in 1:N){
       lls[i] <- sum(dmvnorm(t(alpha[,,i]), theta_mu[,i], theta_var[,,i], logd = T))
     }
-    mean_pars_ll <-  sum(dmvnorm(t(mean_alpha), mean_mu, mean_var, log = TRUE))
+    mean_pars_ll <-  sum(dmvnorm(t(mean_alpha), mean_mu, mean_var, logd = TRUE))
   } else{
     # 3) Build design matrices
     group_designs <- add_group_design(emc[[1]]$par_names, emc[[1]]$group_designs, n_subj)
