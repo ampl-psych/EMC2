@@ -8,10 +8,6 @@
 using namespace Rcpp;
 using namespace arma;
 
-
-#include <RcppArmadillo.h>
-// [[Rcpp::depends(RcppArmadillo)]]
-
 // [[Rcpp::export]]
 arma::mat calculate_subject_means(const Rcpp::List& group_designs,
                                   const arma::colvec& params,
