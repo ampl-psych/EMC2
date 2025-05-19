@@ -38,14 +38,49 @@ add_info_standard <- function(sampler, prior = NULL, ...){
   return(sampler)
 }
 
-# Function replaced by direct handling in sample_store_standard and other functions
-# get_betas <- function(group_design){
-#   if(is.null(group_design)) return(NULL)
-#   betas <- unlist(Map(function(name, values) paste0(name, "_", values), names(group_design),
-#                       lapply(group_design, function(x) colnames(x))))
-#   names(betas) <- NULL
-#   return(betas)
-# }
+
+# Function to calculate mean design matrices
+#' @title Calculate mean design matrices
+#' @description Calculates the mean design matrix for each parameter across subjects
+#' @param group_designs List of design matrices for each parameter
+#' @param n_pars Number of parameters
+#' @return List of mean design matrices
+calculate_mean_design <- function(group_designs, n_pars) {
+  # Initialize the mean design matrix for each parameter
+  mean_designs <- list()
+  
+  for (k in 1:n_pars) {
+    if (is.null(group_designs) || is.null(group_designs[[k]])) {
+      # If no design matrix, use a simple intercept
+      mean_designs[[k]] <- matrix(1, nrow = 1, ncol = 1)
+    } else {
+      # Calculate the mean of the design matrix across subjects
+      mean_designs[[k]] <- colMeans(group_designs[[k]], dims = 1)
+    }
+  }
+  
+  return(mean_designs)
+}
+
+# Function to calculate implied means using mean design matrix
+#' @title Calculate implied means
+#' @description Calculates the implied means for parameters using mean design matrices
+#' @param mean_designs List of mean design matrices
+#' @param beta_params Vector of beta parameters (all parameters including regressors)
+#' @param n_pars Number of parameters
+#' @return Vector of implied means
+calculate_implied_means <- function(mean_designs, beta_params, n_pars) {
+  mu_implied <- numeric(n_pars)
+  
+  par_idx <- 0
+  for (k in 1:n_pars) {
+    x_k_mean <- mean_designs[[k]]
+    mu_implied[k] <- x_k_mean %*% beta_params[par_idx + 1:length(x_k_mean)]
+    par_idx <- par_idx + length(x_k_mean)
+  }
+  
+  return(mu_implied)
+}
 
 get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, selection = "mu", design = NULL, group_des = NULL,
                                par_groups = NULL){
@@ -87,18 +122,36 @@ get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1
   if(sample){
     par_names <- names(sampled_pars(design, doMap = F))
     samples <- list()
-    if(selection %in% c("mu", "alpha")){
-      mu <- t(mvtnorm::rmvnorm(N, mean = prior$theta_mu_mean,
+    if(selection %in% c("mu", "beta", "alpha")){
+      # Sample beta (all parameters including regressors)
+      beta <- t(mvtnorm::rmvnorm(N, mean = prior$theta_mu_mean,
                              sigma = prior$theta_mu_var))
-      if(n_additional > 0){
-        # Split the combined parameters
-        rownames(mu[1:n_pars,]) <- par_names
-        if(!is.null(group_des)) rownames(mu[(n_pars+1):(n_pars+n_additional),]) <- names(sampled_pars(group_des))
-      } else {
+      rownames(beta) <- par_names
+      
+      # Calculate mu (implied means) if we have group designs
+      if(!is.null(group_des)) {
+        # Prepare group designs in proper format
+        group_designs <- add_group_design(par_names, group_des, N)
+        
+        # Calculate mean design matrices
+        mean_designs <- calculate_mean_design(group_designs, n_pars)
+        
+        # Calculate implied means for each sample
+        mu <- matrix(0, nrow = n_pars, ncol = N)
+        for (i in 1:N) {
+          mu[, i] <- calculate_implied_means(mean_designs, beta[, i], n_pars)
+        }
         rownames(mu) <- par_names
+      } else {
+        # If no group designs, mu and beta are the same
+        mu <- beta
       }
+      
       if(selection %in% c("mu")){
         samples$theta_mu <- mu
+      }
+      if(selection %in% c("beta")){
+        samples$theta_beta <- beta
       }
     }
     if(selection %in% c("sigma2", "covariance", "correlation", "Sigma", "alpha")) {
@@ -132,6 +185,22 @@ get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1
   return(out)
 }
 
+# Function to calculate subject-level means using design matrices
+calculate_subject_means <- function(group_designs, params, n_subjects, n_pars) {
+  subj_mu <- matrix(0, nrow = n_pars, ncol = n_subjects)
+
+  for (s in 1:n_subjects) {
+    par_idx <- 0
+    for (k in 1:n_pars) {
+      x_sk <- group_designs[[k]][s, , drop = FALSE]
+      subj_mu[k, s] <- x_sk %*% params[par_idx + 1:ncol(group_designs[[k]])]
+      par_idx <- par_idx + ncol(group_designs[[k]])
+    }
+  }
+
+  return(subj_mu)
+}
+
 get_startpoints_standard <- function(pmwgs, start_mu, start_var){
   n_pars <- sum(!pmwgs$nuisance)
   n_total_pars <- length(pmwgs$prior$theta_mu_mean) # Includes regressor parameters
@@ -140,18 +209,9 @@ get_startpoints_standard <- function(pmwgs, start_mu, start_var){
   if (is.null(start_var)) start_var <- riwish(n_pars * 3, diag(n_pars))
   start_a_half <- 1 / rgamma(n = n_pars, shape = 2, rate = 1)
 
-  subj_mu <- matrix(0, nrow = n_pars, ncol = pmwgs$n_subjects)
   # Calculate subject-specific means using design matrices
   group_designs <- add_group_design(pmwgs$par_names, pmwgs$group_designs, pmwgs$n_subjects)
-
-  for (s in 1:pmwgs$n_subjects) {
-    par_idx <- 0
-    for (k in 1:n_pars) {
-      x_sk <- group_designs[[k]][s, , drop = FALSE]
-      subj_mu[k, s] <- x_sk %*% start_mu[par_idx + 1:ncol(group_designs[[k]])]
-      par_idx <- par_idx + ncol(group_designs[[k]])
-    }
-  }
+  subj_mu <- calculate_subject_means(group_designs, start_mu, pmwgs$n_subjects, n_pars)
 
   return(list(tmu = start_mu, tvar = start_var, tvinv = ginv(start_var),
               a_half = start_a_half, subj_mu = subj_mu))
@@ -254,19 +314,13 @@ gibbs_step_standard <- function(sampler, alpha) {
   ## 2) Compute residuals = alpha - (X * tmu)
   ##--------------------------------------------------
   resid <- matrix(0, nrow=p, ncol=n)
-  subj_mu <- matrix(0, nrow=p, ncol=n)
-  for (i in seq_len(n)) {
-    par_idx <- 0
-    M_i <- matrix(0, nrow=p, ncol=M)
-    for (k in seq_len(p)) {
-      x_ik   <- group_designs[[k]][i, , drop=FALSE]
-      M_i[k, par_idx + 1:ncol(group_designs[[k]])] <- x_ik
-      par_idx <- par_idx + ncol(group_designs[[k]])
-    }
 
-    mu_i <- M_i %*% tmu_new
-    subj_mu[,i] <- mu_i
-    resid[, i] <- alpha[,i] - mu_i
+  # Calculate subject-level means using the new parameters
+  subj_mu <- calculate_subject_means(group_designs, tmu_new, n, p)
+
+  # Compute residuals
+  for (i in seq_len(n)) {
+    resid[, i] <- alpha[, i] - subj_mu[, i]
   }
 
   ##--------------------------------------------------
@@ -653,19 +707,14 @@ group__IC_standard <- function(emc, stage="sample", filter=NULL) {
   for(i in seq_len(N)) {
     var_i <- theta_var[,, i]
     regressors_i <- theta_mu[, i]  # Now includes both intercepts and slopes
+
+    # Calculate subject-level means for this draw
+    subj_means <- calculate_subject_means(group_designs, regressors_i, n_subj, p)
+
     ll_i <- 0
     for(s in seq_len(n_subj)) {
-      # build M_i row by row
-      M_i <- numeric(p) # we'll store the mean for each row k
-      par_idx <- 0
-      for(k in seq_len(p)) {
-        x_sk <- group_designs[[k]][s,,drop=FALSE]
-        ncols_k <- ncol(group_designs[[k]])
-        M_i[k] <- x_sk %*% regressors_i[par_idx + 1:ncols_k]
-        par_idx <- par_idx + ncols_k
-      }
       alpha_s <- alpha[, s, i]
-      ll_i <- ll_i + dmvnorm(alpha_s, M_i, var_i, log=TRUE)
+      ll_i <- ll_i + dmvnorm(alpha_s, subj_means[, s], var_i, log=TRUE)
     }
     lls[i] <- ll_i
   }
@@ -674,19 +723,13 @@ group__IC_standard <- function(emc, stage="sample", filter=NULL) {
   mean_ll <- mean(lls)
 
   # 5) Likelihood at posterior mean
+  # Calculate subject-level means using the mean parameters
+  mean_subj_means <- calculate_subject_means(group_designs, mean_mu, n_subj, p)
+
   mean_pars_ll <- 0
-  # Calculate means using design matrices
   for(s in seq_len(n_subj)) {
-    M_s <- numeric(p)
-    par_idx <- 0
-    for(k in seq_len(p)) {
-      x_sk <- group_designs[[k]][s,,drop=FALSE]
-      ncols_k <- ncol(group_designs[[k]])
-      M_s[k] <- x_sk %*% mean_mu[par_idx + 1:ncols_k]
-      par_idx <- par_idx + ncols_k
-    }
     mean_pars_ll <- mean_pars_ll +
-      dmvnorm(mean_alpha[, s], M_s, mean_var, log=TRUE)
+      dmvnorm(mean_alpha[, s], mean_subj_means[, s], mean_var, log=TRUE)
   }
   Dmean <- -2*mean_pars_ll
 

@@ -432,7 +432,13 @@ get_base <- function(sampler, idx, selection){
   } else if(selection == "mu"){
     return(lapply(sampler, FUN = function(x) return(x$samples$theta_mu[,idx, drop = F])))
   } else if(selection == "beta"){
-    return(lapply(sampler, FUN = function(x) return(x$samples$beta[,idx, drop = F])))
+    return(lapply(sampler, FUN = function(x) {
+      if (!is.null(x$samples$theta_beta)) {
+        return(x$samples$theta_beta[,idx, drop = F])
+      } else {
+        return(x$samples$theta_mu[,idx, drop = F])
+      }
+    }))
   } else if(selection == "covariance"){
     return(lapply(sampler, FUN = function(x){
       out <- x$samples$theta_var[,,idx, drop = F]
