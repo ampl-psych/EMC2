@@ -54,6 +54,7 @@ make_missing <- function(data,LT=0,UT=Inf,LC=0,UC=Inf,
 #' @param staircase Default NULL, used with stop-signal paradigm simulation to specify a staircase
 #' algorithm. If non-null and a list then passed through as is, if not it is assigned the
 #' default list structure: list(p=.25,SSD0=.25,stairstep=.05,stairmin=0,stairmax=Inf)
+#' @param functions List of functions you want to apply to the data generation.
 #' @param ... Additional optional arguments
 #' @return A data frame with simulated data
 #' @examples
@@ -81,7 +82,8 @@ make_missing <- function(data,LT=0,UT=Inf,LC=0,UC=Inf,
 #' data <- make_data(parameters, design_DDMaE, data = forstmann)
 #' @export
 
-make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1, staircase = NULL, ...)
+make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1, staircase = NULL,
+                      functions = NULL, ...)
 {
   # #' @param LT lower truncation bound below which data are removed (scalar or subject named vector)
   # #' @param UT upper truncation bound above which data are removed (scalar or subject named vector)
@@ -117,7 +119,7 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
   force_direction<-FALSE
   force_response<-FALSE
   rtContaminantNA<-FALSE
-  return_Ffunctions <- TRUE
+  return_Ffunctions <- FALSE
   optionals <- list(...)
   for (name in names(optionals) ) {
     assign(name, optionals[[name]])
@@ -153,14 +155,15 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
   if(grepl("MRI", model()$type)){
     return(make_data_wrapper_MRI(parameters, data, design))
   }
-
   if(is.data.frame(parameters)) parameters <- as.matrix(parameters)
   if (!is.matrix(parameters)) parameters <- make_pmat(parameters,design)
   if ( is.null(data) ) {
     design$Ffactors$subjects <- rownames(parameters)
     if ( is.null(n_trials) )
       stop("If data is not provided need to specify number of trials")
-    data <- minimal_design(design, covariates = list(...)$covariates,
+    design_in <- design
+    design_in$Fcovariates <- design_in$Fcovariates[!design$Fcovariates %in% names(functions)]
+    data <- minimal_design(design_in, covariates = list(...)$covariates,
                              drop_subjects = F, n_trials = n_trials, add_acc=F,
                            drop_R = F)
   } else {
@@ -188,12 +191,18 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
     }
     data <- add_trials(data[order(data$subjects),])
   }
+  if(!is.null(functions)){
+    for(i in 1:length(functions)){
+      data[[names(functions)[i]]] <- functions[[i]](data)
+    }
+  }
   if (!is.factor(data$subjects)) data$subjects <- factor(data$subjects)
   if (!is.null(model)) {
     if (!is.function(model)) stop("model argument must  be a function")
     if ( is.null(model()$p_types) ) stop("model()$p_types must be specified")
     if ( is.null(model()$Ttransform) ) stop("model()$Ttransform must be specified")
   }
+
   data <- design_model(
     add_accumulators(data,design$matchfun,simulate=TRUE,type=model()$type,Fcovariates=design$Fcovariates),
     design,model,add_acc=FALSE,compress=FALSE,verbose=FALSE,
