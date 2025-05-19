@@ -690,24 +690,30 @@ group__IC_standard <- function(emc, stage="sample", filter=NULL) {
   mean_mu <- rowMeans(theta_mu)
   mean_var <- apply(theta_var, c(1,2), mean)
 
-  # 3) Build design matrices
-  group_designs <- add_group_design(emc[[1]]$par_names, emc[[1]]$group_designs, n_subj)
+  if(is.null(emc[[1]]$group_designs)){
+    lls <- numeric(N)
+    for(i in 1:N){
+      lls[i] <- sum(dmvnorm(t(alpha[,,i]), theta_mu[,i], theta_var[,,i], logd = T))
+    }
+    mean_pars_ll <-  sum(dmvnorm(t(mean_alpha), mean_mu, mean_var, log = TRUE))
+  } else{
+    # 3) Build design matrices
+    group_designs <- add_group_design(emc[[1]]$par_names, emc[[1]]$group_designs, n_subj)
+    # 4) Per-draw log-likelihood
+    lls <- standard_subj_ll(group_designs, theta_var, theta_mu, alpha, n_subj)
+    # 5) Likelihood at posterior mean
+    # Calculate subject-level means using the mean parameters
+    mean_subj_means <- calculate_subject_means(group_designs, mean_mu, n_subj, p)
+    mean_pars_ll <- 0
+    for(s in seq_len(n_subj)) {
+      mean_pars_ll <- mean_pars_ll +
+        dmvnorm(mean_alpha[, s], mean_subj_means[, s], mean_var, logd=TRUE)
+    }
 
-  # 4) Per-draw log-likelihood
-  lls <- standard_subj_ll(group_designs, theta_var, theta_mu, alpha, n_subj)
+  }
+
   minD <- -2*max(lls)
   mean_ll <- mean(lls)
-
-  # 5) Likelihood at posterior mean
-  # Calculate subject-level means using the mean parameters
-  mean_subj_means <- calculate_subject_means(group_designs, mean_mu, n_subj, p)
-
-  mean_pars_ll <- 0
-  for(s in seq_len(n_subj)) {
-    mean_pars_ll <- mean_pars_ll +
-      dmvnorm(mean_alpha[, s], mean_subj_means[, s], mean_var, logd=TRUE)
-  }
   Dmean <- -2*mean_pars_ll
-
   list(mean_ll = mean_ll, Dmean = Dmean, minD = minD)
 }
