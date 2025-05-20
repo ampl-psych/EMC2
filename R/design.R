@@ -1043,7 +1043,8 @@ sampled_pars.emc.design <- function(x,model=NULL,doMap=FALSE, add_da = FALSE, al
       next
     }
     cur_design$Ffactors$subjects <- 1
-    min_design <- minimal_design(cur_design, drop_subjects = F, drop_R = F, verbose = F, emc = data)
+    min_design <- minimal_design(cur_design, drop_subjects = F, drop_R = F, verbose = F, emc = data,
+                                 do_functions = F, add_acc = T)
     dadm <- design_model(
       min_design,
       cur_design,model,add_acc=FALSE,verbose=FALSE,rt_check=FALSE,compress=FALSE, add_da = add_da,
