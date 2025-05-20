@@ -827,8 +827,8 @@ update2version <- function(emc){
       stop("current model not supported for updating, sorry!!")
     }
     model_list <- model()
-    model_list$transform <- fill_transform(transform = NULL,model)
-    model_list$pre_transform <- fill_transform(transform = NULL, model = model, p_vector = pars, is_pre = TRUE)
+    model_list$transform <- fill_transform(transform = old_model()$transform,model)
+    model_list$pre_transform <- fill_transform(transform = old_model()$pre_transform, model = model, p_vector = pars, is_pre = TRUE)
     model_list$bound <- fill_bound(bound = NULL,model)
     model <- function(){return(model_list)}
     return(model)
