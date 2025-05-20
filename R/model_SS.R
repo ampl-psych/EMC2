@@ -319,7 +319,7 @@ rSSexGaussian <- function(data,pars,ok=rep(TRUE,dim(pars)[1]))
   ntrials <- dim(pars)[1]/nacc # Number of trials to simulate
   is1 <- lR==levels(lR)[1]     # First go accumulator
   acc <- 1:nacc                # choice (go and ST) accumulator index
-  data <- data[is1,]
+  allSSD <- data$SSD[is1]
   # stop-triggered racers
   isST <- pars[,"lI"]==1              # Boolean for all pars
   accST <- acc[pars[1:nacc,"lI"]==1]  # Index of ST accumulator, from 1st trial
@@ -394,9 +394,6 @@ rSSexGaussian <- function(data,pars,ok=rep(TRUE,dim(pars)[1]))
     isST <- isST[!pstair]
     ntrials <- sum(!stair)
     is1 <- is1[!pstair]
-    if (!is.null(data)){
-      data <- data[stair,]
-    }
     stair_res <- attr(staircase,"staircase_function")(dts,staircase)
     allR[stair] <- stair_res$sR
     allrt[stair] <- stair_res$srt
@@ -449,7 +446,6 @@ rSSexGaussian <- function(data,pars,ok=rep(TRUE,dim(pars)[1]))
   if (any(stair)) {
     allrt[!stair] <- rt
     allR[!stair] <- R
-    allSSD <- NA
     allSSD[stair] <- stair_res$SSD
     out <- cbind.data.frame(R=factor(allR,levels=1:nacc,labels=levels(lR)),
                             rt=allrt, SSD = allSSD)
