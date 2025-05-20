@@ -266,16 +266,17 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
 }
 
 RACE_rfun <- function(data, pars, model){
-  matrix(ncol=2,nrow=dim(data)[1]/length(levels(data$lR)),
+  Rrt <- matrix(ncol=2,nrow=dim(data)[1]/length(levels(data$lR)),
          dimnames=list(NULL,c("R","rt")))
   RACE <- data[data$lR==levels(data$lR)[1],"RACE"]
   ok <- as.numeric(data$lR) <= as.numeric(as.character(data$RACE))
   for (i in levels(RACE)) {
     pick <- data$RACE==i
-    lRi <- factor(data$lR[pick & ok])
+    data_in <- data[pick & ok,]
+    data_in$lR <- factor(data$lR[pick & ok])
     tmp <- pars[pick & ok,]
     attr(tmp, "ok") <- rep(T, nrow(tmp))
-    Rrti <- model()$rfun(lRi,tmp)
+    Rrti <- model()$rfun(data_in,tmp)
     Rrti$R <- as.numeric(Rrti$R)
     Rrt[RACE==i,] <- as.matrix(Rrti)
   }
