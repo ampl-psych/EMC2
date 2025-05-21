@@ -299,18 +299,35 @@ IntegerVector which_rcpp(LogicalVector x) {
   return out;
 }
 
-LogicalVector lr_all(LogicalVector ok, int n_side){
-  const int n_rows  = ok.size();
-  const int n_cols  = n_rows / n_side;   // one column = one trial/accumulator pair
+LogicalVector lr_all(LogicalVector ok, int n_side)
+{
+  const R_xlen_t n = ok.size();
+  if (n % n_side)
+    stop("Vector length is not a multiple of n_side");
 
-  LogicalVector out(n_rows);
-  for (int c = 0; c < n_cols; ++c) {
-    // indices for this pair
-    const int idxL = n_side * c;
-    const int idxR = idxL + 1;
+  // Allocate without initializing for speed
+  LogicalVector out(no_init(n));
 
-    const bool both = ok[idxL] && ok[idxR];
-    out[idxL] = out[idxR] = both;
+  const int* x = LOGICAL(ok);   // input pointer
+  int*       o = LOGICAL(out);  // output pointer
+
+  for (R_xlen_t i = 0; i < n; i += n_side) {
+
+    int state = TRUE;                 // optimistic
+
+    // inspect one “column”
+    for (int j = 0; j < n_side; ++j) {
+      const int v = x[i + j];
+      if (v == FALSE) {             // any FALSE trumps everything
+        state = FALSE;
+        break;
+      }
+      if (v == NA_LOGICAL)          // remember NA unless FALSE appears
+        state = NA_LOGICAL;
+    }
+
+    // replicate result to each entry of the column
+    std::fill(o + i, o + i + n_side, state);
   }
   return out;
 }
