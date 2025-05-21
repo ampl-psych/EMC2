@@ -117,6 +117,11 @@ do_map <- function(draws, design, add_recalculated = FALSE, ...) {
       cur_draws <- cur_draws[, !colnames(cur_draws) %in% names(cur_des$constants), drop = FALSE]
     }
     cur_draws <- t(apply(cur_draws, 1, do_pre_transform, cur_des$model()$pre_transform))
+    if(!is.null(cur_des$constants)){
+      constants <- matrix(rep(cur_des$constants, each = nrow(cur_draws)), nrow = nrow(cur_draws), dimnames = list(NULL, names(cur_des$constants)))
+      cur_draws <- cbind(cur_draws, constants)
+    }
+
     ## 1.  formula list ------------------------------------------------------
     fmls <- if (!is.null(cur_des$Fformula)) cur_des$Fformula else cur_des$Flist
     if (is.null(fmls))
@@ -151,22 +156,26 @@ do_map <- function(draws, design, add_recalculated = FALSE, ...) {
 
       ## model‑matrix template (1 dummy row just to grab column names) -------
       X <- make_full_dm(fmls[[par]], cur_des$Clist, design_df)
-      X <- X[, !colnames(X) %in% names(cur_des$constants), drop = FALSE]
       if (!ncol(X)) next                                  # nothing to map
       beta <- cur_draws[, colnames(X), drop = FALSE]
 
       ## -- build factor‑only matrix to detect unique cells -----------------
+      ##  -- build factor-only matrix & find unique cells ------------------------
       zero_df <- base_cells
-      if (length(par_covs))
-        for (cv in par_covs) zero_df[[cv]] <- 0
 
+      if (length(par_covs)) {
+        # add zero-filled placeholders for any covariates that appear in the formula
+        zero_df[par_covs] <- 0
+      }
+
+      # model matrix that ignores covariates by construction
       mm_factor <- make_full_dm(fmls[[par]], cur_des$Clist, zero_df)
-      colnames(mm_factor) <- colnames(X)
 
-      keep_cell     <- !duplicated(t(mm_factor))
-      base_cells_u  <- zero_df[keep_cell, , drop = FALSE]
-      mm_order      <- colnames(X)
-      n_cell        <- nrow(base_cells_u)
+      dup  <- duplicated(mm_factor)   # TRUE for repeated rows
+      u_df <- zero_df[!dup, , drop = FALSE]
+
+      mm_order <- colnames(mm_factor) # == colnames(X)
+      n_cell   <- nrow(u_df)
 
       ## allocate result matrix --------------------------------------------
       map_mat <- matrix(NA_real_, nrow = n_draws, ncol = n_cell)
@@ -177,7 +186,7 @@ do_map <- function(draws, design, add_recalculated = FALSE, ...) {
         for (d in seq_len(n_draws)) {
           z <- cov_source[sample.int(n_cov_rows, 1L), par_covs, drop = FALSE]
 
-          this_df <- base_cells_u
+          this_df <- u_df
           this_df[, par_covs] <- z[rep(1L, n_cell), , drop = FALSE]  # overwrite 0s
 
           mm_full <- make_full_dm(fmls[[par]], cur_des$Clist, this_df)
@@ -186,7 +195,7 @@ do_map <- function(draws, design, add_recalculated = FALSE, ...) {
         }
       } else {
         ## no covariates in formula → vectorised multiply
-        mm_full <- make_full_dm(fmls[[par]], cur_des$Clist, base_cells_u)
+        mm_full <- make_full_dm(fmls[[par]], cur_des$Clist, u_df)
         colnames(mm_full) <- colnames(X)
         map_mat[,] <- beta %*% t(mm_full[, mm_order, drop = FALSE])
       }
@@ -196,7 +205,7 @@ do_map <- function(draws, design, add_recalculated = FALSE, ...) {
 
       ## (1) factor part of the label
       if (length(vary_facs)) {
-        fac_lbl <- apply(base_cells_u[, vary_facs, drop = FALSE], 1,
+        fac_lbl <- apply(u_df[, vary_facs, drop = FALSE], 1,
                          function(z) paste(paste0(names(z), z), collapse = "_"))
       } else {
         fac_lbl <- rep("", n_cell)
