@@ -677,6 +677,7 @@ calc_ll_manager <- function(proposals, dadm, model, component = NULL){
       }
       constants <- attr(dadm, "constants")
       if(is.null(constants)) constants <- NA
+      save(proposals, dadm, constants, designs, model, p_types, file = "test_RDM.RData")
       lls <- calc_ll(proposals, dadm, constants = constants, designs = designs, type = model$c_name,
                      model$bound, model$transform, model$pre_transform, p_types = p_types, min_ll = log(1e-10),
                      model$trend)

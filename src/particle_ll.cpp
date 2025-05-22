@@ -265,10 +265,10 @@ double c_log_likelihood_race(NumericMatrix pars, DataFrame data,
   NumericVector lds(n_trials);
   NumericVector rts = data["rt"];
   CharacterVector R = data["R"];
+  NumericVector lR = data["lR"];
   NumericVector lds_exp(n_out);
-  const int n_acc = unique(R).length();
+  const int n_acc = unique(lR).length();
   if(sum(contains(data.names(), "RACE")) == 1){
-    NumericVector lR = data["lR"];
     NumericVector NACC = data["RACE"];
     CharacterVector vals_NACC = NACC.attr("levels");
     for(int x = 0; x < pars.nrow(); x++){
@@ -287,6 +287,7 @@ double c_log_likelihood_race(NumericMatrix pars, DataFrame data,
     lds[!winner] = loss;
   }
   lds[is_na(lds)] = min_ll;
+
   if(n_acc > 1){
     // LogicalVector winner_exp = c_bool_expand(winner, expand);
     NumericVector ll_out = lds[winner];
@@ -298,6 +299,7 @@ double c_log_likelihood_race(NumericMatrix pars, DataFrame data,
         ll_out[z] = ll_out[z] + sum(lds_los[seq( z * (n_acc -1), (z+1) * (n_acc -1) -1)]);
       }
     }
+
     ll_out[is_na(ll_out)] = min_ll;
     ll_out[is_infinite(ll_out)] = min_ll;
     ll_out[ll_out < min_ll] = min_ll;
