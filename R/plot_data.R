@@ -356,7 +356,7 @@ plot_stat <- function(input, post_predict = NULL, prior_predict = NULL, stat_fun
       if(!is.na(legendpos[2])) legend(legendpos[2], legend = names(legend_map), lty = 1, col = legend_map, title = "Source", bty = "n", lwd = lwd_map)
     }
   }
-  return(invisible(summary_df[,!grepl("group_key", colnames(summary_df))]))
+  return(invisible(lapply(summary_sources, function(x) x[,colnames(x) != "group_key"])))
 }
 
 

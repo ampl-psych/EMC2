@@ -201,7 +201,7 @@ do_map <- function(draws, design, add_recalculated = FALSE, ...) {
       }
 
       ## label columns ------------------------------------------------------
-      vary_facs <- intersect(attr(stats::terms(fmls[[par]]), "term.labels"), factor_cols)
+      vary_facs <- intersect(all.vars(fmls[[par]][[3]]), factor_cols)
 
       ## (1) factor part of the label
       if (length(vary_facs)) {
