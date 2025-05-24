@@ -657,18 +657,12 @@ loadRData <- function(fileName){
 #' @export
 
 make_emc <- function(data,design,model=NULL,
-                          type="standard",
-                          n_chains=3,compress=TRUE,rt_resolution=0.02,
-                          prior_list = NULL, group_design = NULL,
-                          par_groups=NULL, ...){
+                    type="standard",
+                    n_chains=3,compress=TRUE,rt_resolution=0.02,
+                    prior_list = NULL, group_design = NULL,
+                    SEM_settings, par_groups=NULL, ...){
   # arguments for future compatibility
   n_factors <- NULL
-  formula <- NULL
-  Lambda_mat <- NULL
-  B_mat <- NULL
-  K_mat <- NULL
-  G_mat <- NULL
-  covariates <- NULL
   nuisance <- NULL
   nuisance_non_hyper <- NULL
   # overwrite those that were supplied
