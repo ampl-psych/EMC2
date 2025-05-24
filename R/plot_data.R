@@ -350,10 +350,10 @@ plot_stat <- function(input, post_predict = NULL, prior_predict = NULL, stat_fun
       }
     }
     if(length(stat_names) > 1){
-      legend(x = legendpos[1], legend = stat_names, lty = lty, col = "black", bty = "n")
+      if(!is.null(legendpos[1])) legend(x = legendpos[1], legend = stat_names, lty = lty, col = "black", bty = "n")
     }
     if (length(data_sources) > 1) {
-      legend(legendpos[2], legend = names(legend_map), lty = 1, col = legend_map, title = "Source", bty = "n", lwd = lwd_map)
+      if(!is.null(legendpos[2])) legend(legendpos[2], legend = names(legend_map), lty = 1, col = legend_map, title = "Source", bty = "n", lwd = lwd_map)
     }
   }
   return(invisible(summary_df[,!grepl("group_key", colnames(summary_df))]))
@@ -627,11 +627,15 @@ plot_density <- function(input, post_predict = NULL, prior_predict = NULL,
       }
     }
     # Add legends
-    legend(legendpos[1], legend = defective_levels, lty = line_types, col = "black",
-           title = defective_factor, bty = "n")
+    if(!is.null(legendpos[1])){
+      legend(legendpos[1], legend = defective_levels, lty = line_types, col = "black",
+             title = defective_factor, bty = "n")
+    }
     if (length(data_sources) > 1) {
-      legend(legendpos[2], legend = names(legend_map), lty = 1, col = legend_map, title = "Source", bty = "n",
-             lwd = lwd_map)
+      if(!is.null(legendpos[2])){
+        legend(legendpos[2], legend = names(legend_map), lty = 1, col = legend_map, title = "Source", bty = "n",
+               lwd = lwd_map)
+      }
     }
   }
 }
@@ -946,13 +950,18 @@ plot_cdf <- function(input,
     }
 
     # Factor-level legend
-    legend(legendpos[1], legend=defective_levels, lty=line_types, col="black",
-           title=defective_factor, bty="n")
+    if(!is.null(legendpos[1])){
+      legend(legendpos[1], legend=defective_levels, lty=line_types, col="black",
+             title=defective_factor, bty="n")
+    }
+
 
     # If multiple data sources, show source legend
     if (length(data_sources) > 1) {
-      legend(legendpos[2], legend=names(legend_map), lty=1, col=legend_map,
-             title="Source", bty="n", lwd = lwd_map)
+      if(!is.null(legendpos[2])){
+        legend(legendpos[2], legend=names(legend_map), lty=1, col=legend_map,
+               title="Source", bty="n", lwd = lwd_map)
+      }
     }
   } # end for each group_key
 
