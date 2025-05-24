@@ -621,7 +621,10 @@ make_full_dm <- function(form, Clist, da) {
   da[[pnam]] <- 1
   # Check if there are any nested CList entries to only contrast for this parameter
   if(any(names(Clist) == pnam)){
-    Clist[[names(Clist[[pnam]])]] <- Clist[[pnam]][[1]]
+    replac <- Clist[[pnam]]
+    for(i in 1:length(replac)){
+      Clist[[names(replac)[i]]] <- replac[[i]]
+    }
     Clist[[pnam]] <- NULL
   }
   for (i in names(Clist)) {
