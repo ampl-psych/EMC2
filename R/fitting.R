@@ -790,9 +790,7 @@ make_emc <- function(data,design,model=NULL,
                  nuisance_non_hyper = nuisance_non_hyper,
                  Lambda_mat = Lambda_mat)
   } else if (type == "SEM"){
-    out <- pmwgs(dadm_list, type, Lambda_mat = Lambda_mat,
-                 B_mat = B_mat, K_mat = K_mat, G_mat = G_mat,
-                 covariates = covariates, nuisance = nuisance,
+    out <- pmwgs(dadm_list, type, sem_settings = sem_settings, nuisance = nuisance,
                  nuisance_non_hyper = nuisance_non_hyper)
   }
   out$model <- lapply(design, function(x) x$model)
@@ -823,6 +821,7 @@ check_duplicate_designs <- function(out){
     unq_idx <- match(designs, designs)
     duplicacy <- duplicated(unq_idx)
     for(j in 1:length(out$data[[i]])){# Loop over data sets in this sub
+      if(is.null(designs[[j]])) next
       if(duplicacy[j]){
         attr(out$data[[i]][[j]], "designs") <- unq_idx[j]
       }

@@ -420,21 +420,12 @@ filtered_samples_standard <- function(sampler, filter, ...){
 
 
 calc_log_jac_chol <- function(x) {
-  # x: a vector of length n*(n+1)/2 representing the lower-triangular
-  # matrix with its diagonal stored on the log-scale.
-  # Determine n from the length of x.
   n <- floor(sqrt(2 * length(x) + 0.25) - 0.5)
-
-  # Reconstruct the lower-triangular matrix in "parameter space"
   mat <- matrix(NA, n, n)
   mat[lower.tri(mat, diag = TRUE)] <- x
-
-  # The diagonal of the actual Cholesky factor is exp(x_diag),
-  # so log(diag(L)) = x_diag.
-  # The log-Jacobian is then:
-  #   sum_{i=1}^{n} (n - i + 2) * x_diag[i]
-  log_jac <- sum( (n - seq_len(n) + 2) * diag(mat) )
-
+  diagL <- exp(diag(mat))            # L_ii on the natural scale
+  # full Jacobian: d*log(2) + Σ (d - i + 2) * log L_ii
+  log_jac <- n * log(2) + sum((n - seq_len(n) + 2) * logL)
   return(log_jac)
 }
 
