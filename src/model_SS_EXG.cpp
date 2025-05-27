@@ -31,33 +31,43 @@ NumericVector pEXG(
     return cdf;
   }
 
+  // if exponential rate has very small value relative to Gaussian SD, treat as
+  // Gaussian
+  if (tau < .05 * sigma) {
+    for (int i = 0; i < n; i++) {
+      cdf[i] = R::pnorm(q[i], mu, sigma, lower_tail, log_p);
+    }
+    return cdf;
+  }
+
+  // main ex-Gaussian computation:
+
+  const double mu2 = mu * mu;
+  const double sig2 = sigma * sigma;
+  const double sig2_tau = sig2 / tau;
+
+  // evaluate ex-Gaussian cumulative distribution function
   for (int i = 0; i < n; i++) {
-    if (!traits::is_infinite<REALSXP>(q[i])) {
-      if (tau > .05 * sigma) {
-        // if exponential rate has reasonable value, treat as ex-Gaussian
-        double delta = sigma * sigma / tau;
-        double z = q[i] - mu - delta;
-        double norm1 = R::pnorm((q[i] - mu) / sigma, 0., 1., true, false);
-        double norm2 = R::pnorm(z / sigma, 0., 1., true, false);
-        double exponent = (
-          std::pow(mu + delta, 2.) - mu * mu - 2. * q[i] * delta
-        ) / (2. * sigma * sigma);
-        cdf[i] = norm1 - std::exp(std::log(norm2) + exponent);
-      } else {
-        // if not, treat as Gaussian
-        cdf[i] = R::pnorm(q[i], mu, sigma, true, false);
-      }
+    double q_i = q[i];
+    if (!traits::is_infinite<REALSXP>(q_i)) {
+      double z = q_i - mu - sig2_tau;
+      double norm1 = R::pnorm((q_i - mu) / sigma, 0., 1., true, false);
+      double norm2 = R::pnorm(z / sigma, 0., 1., true, false);
+      double exponent = (
+        std::pow(mu + sig2_tau, 2.) - mu2 - 2. * q_i * sig2_tau
+      ) / (2. * sig2);
+      cdf[i] = norm1 - std::exp(std::log(norm2) + exponent);
     } else {
       // handle negative and positive infinity input q
-      cdf[i] = (q[i] < 0.0) ? 0. : 1.;
+      cdf[i] = (q_i < 0.0) ? 0. : 1.;
     }
   }
 
   if (!lower_tail || log_p) {
     for (int i = 0; i < n; i++) {
-      // complementary CDF
+      // convert to complementary CDF a.k.a. survival function
       if (!lower_tail) cdf[i] = 1. - cdf[i];
-      // log transform
+      // convert to log-probability
       if (log_p) cdf[i] = std::log(cdf[i]);
     }
   }
@@ -67,38 +77,62 @@ NumericVector pEXG(
 
 
 // [[Rcpp::export]]
-NumericVector dEXG(NumericVector x,
-                   double mu = 5., double sigma = 1., double tau = 1.,
-                   bool log_d = false) {
+NumericVector dEXG(
+    NumericVector x,
+    double mu = 5.,
+    double sigma = 1.,
+    double tau = 1.,
+    bool log_d = false
+) {
+
   int n = x.size();
-  if (tau <= 0 || sigma <= 0) {
-    NumericVector pdf(n, NA_REAL);
+  NumericVector pdf(n);
+
+  // return NA for invalid parameter values
+  if (sigma <= 0 || tau <= 0) {
+    std::fill(pdf.begin(), pdf.end(), NA_REAL);
     return pdf;
   }
 
-  NumericVector pdf(n);
-  if (sigma < 1e-4){
-    for (int i = 0; i < n; i++){
+  // if Gaussian SD is practically zero, treat as shifted exponential
+  if (sigma < 1e-4) {
+    for (int i = 0; i < n; i++) {
       pdf[i] = R::dexp(x[i] - mu, tau, log_d);
     }
     return pdf;
   }
 
-  for (int i = 0; i < n; i++){
-    if (tau > .05 * sigma){
-      double z_i = x[i] - mu - (sigma * sigma) / tau;
-      pdf[i] = - std::log(tau) - (z_i + (sigma * sigma)/(2. * tau)) / tau + std::log(R::pnorm(z_i / sigma, 0., 1., true, false));
-    } else {
-      pdf[i] = R::dnorm(x[i], mu, sigma, true);
+  // if exponential rate has very small value relative to Gaussian SD, treat as
+  // Gaussian
+  if (tau < .05 * sigma) {
+    for (int i = 0; i < n; i++) {
+      pdf[i] = R::dnorm(x[i], mu, sigma, log_d);
     }
+    return pdf;
   }
+
+  // main ex-Gaussian computation:
+
+  const double sig2 = sigma * sigma;
+
+  // evaluate ex-Gaussian log probability density function
+  for (int i = 0; i < n; i++) {
+    double z = x[i] - mu - sig2 / tau;
+    double log_phi = std::log(R::pnorm(z / sigma, 0., 1., true, false));
+    double log_exp = -std::log(tau) - (z + sig2 / (2. * tau)) / tau;
+    pdf[i] = log_exp + log_phi;
+  }
+
   if (!log_d){
+    // convert from log-probability to probability
     for(int i = 0; i < n; i++){
       pdf[i] = std::exp(pdf[i]);
     }
   }
+
   return pdf;
 }
+
 
 // [[Rcpp::export]]
 NumericVector dEXGrace(NumericMatrix dt,
