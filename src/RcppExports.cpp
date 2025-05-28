@@ -12,23 +12,6 @@ Rcpp::Rostream<true>&  Rcpp::Rcout = Rcpp::Rcpp_cout_get();
 Rcpp::Rostream<false>& Rcpp::Rcerr = Rcpp::Rcpp_cerr_get();
 #endif
 
-// sp_new
-Rcpp::List sp_new(const int iter, const arma::cube& lambda_varimax, const int q, const int p, const int dim_all_c, const arma::mat& all_c, const arma::mat& lambda_hat, const arma::uvec& st, arma::mat cost_matrix, arma::mat perm);
-RcppExport SEXP _EMC2_sp_new(SEXP iterSEXP, SEXP lambda_varimaxSEXP, SEXP qSEXP, SEXP pSEXP, SEXP dim_all_cSEXP, SEXP all_cSEXP, SEXP lambda_hatSEXP, SEXP stSEXP, SEXP cost_matrixSEXP, SEXP permSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< const int >::type iter(iterSEXP);
-    Rcpp::traits::input_parameter< const arma::cube& >::type lambda_varimax(lambda_varimaxSEXP);
-    Rcpp::traits::input_parameter< const int >::type q(qSEXP);
-    Rcpp::traits::input_parameter< const int >::type p(pSEXP);
-    Rcpp::traits::input_parameter< const int >::type dim_all_c(dim_all_cSEXP);
-    Rcpp::traits::input_parameter< const arma::mat& >::type all_c(all_cSEXP);
-    Rcpp::traits::input_parameter< const arma::mat& >::type lambda_hat(lambda_hatSEXP);
-    Rcpp::traits::input_parameter< const arma::uvec& >::type st(stSEXP);
-    Rcpp::traits::input_parameter< arma::mat >::type cost_matrix(cost_matrixSEXP);
-    Rcpp::traits::input_parameter< arma::mat >::type perm(permSEXP);
-    rcpp_result_gen = Rcpp::wrap(sp_new(iter, lambda_varimax, q, p, dim_all_c, all_c, lambda_hat, st, cost_matrix, perm));
 // calculate_subject_means
 arma::mat calculate_subject_means(const Rcpp::List& group_designs, const arma::colvec& params, const int n_subjects, const int n_pars);
 RcppExport SEXP _EMC2_calculate_subject_means(SEXP group_designsSEXP, SEXP paramsSEXP, SEXP n_subjectsSEXP, SEXP n_parsSEXP) {
@@ -69,6 +52,26 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< const Eigen::MatrixXd& >::type sigma(sigmaSEXP);
     Rcpp::traits::input_parameter< const bool >::type logd(logdSEXP);
     rcpp_result_gen = Rcpp::wrap(dmvnorm_cpp(X, mean, sigma, logd));
+    return rcpp_result_gen;
+END_RCPP
+}
+// sp_new
+Rcpp::List sp_new(const int iter, const arma::cube& lambda_varimax, const int q, const int p, const int dim_all_c, const arma::mat& all_c, const arma::mat& lambda_hat, const arma::uvec& st, arma::mat cost_matrix, arma::mat perm);
+RcppExport SEXP _EMC2_sp_new(SEXP iterSEXP, SEXP lambda_varimaxSEXP, SEXP qSEXP, SEXP pSEXP, SEXP dim_all_cSEXP, SEXP all_cSEXP, SEXP lambda_hatSEXP, SEXP stSEXP, SEXP cost_matrixSEXP, SEXP permSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const int >::type iter(iterSEXP);
+    Rcpp::traits::input_parameter< const arma::cube& >::type lambda_varimax(lambda_varimaxSEXP);
+    Rcpp::traits::input_parameter< const int >::type q(qSEXP);
+    Rcpp::traits::input_parameter< const int >::type p(pSEXP);
+    Rcpp::traits::input_parameter< const int >::type dim_all_c(dim_all_cSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type all_c(all_cSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type lambda_hat(lambda_hatSEXP);
+    Rcpp::traits::input_parameter< const arma::uvec& >::type st(stSEXP);
+    Rcpp::traits::input_parameter< arma::mat >::type cost_matrix(cost_matrixSEXP);
+    Rcpp::traits::input_parameter< arma::mat >::type perm(permSEXP);
+    rcpp_result_gen = Rcpp::wrap(sp_new(iter, lambda_varimax, q, p, dim_all_c, all_c, lambda_hat, st, cost_matrix, perm));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -499,10 +502,10 @@ END_RCPP
 }
 
 static const R_CallMethodDef CallEntries[] = {
-    {"_EMC2_sp_new", (DL_FUNC) &_EMC2_sp_new, 10},
     {"_EMC2_calculate_subject_means", (DL_FUNC) &_EMC2_calculate_subject_means, 4},
     {"_EMC2_standard_subj_ll", (DL_FUNC) &_EMC2_standard_subj_ll, 5},
     {"_EMC2_dmvnorm_cpp", (DL_FUNC) &_EMC2_dmvnorm_cpp, 4},
+    {"_EMC2_sp_new", (DL_FUNC) &_EMC2_sp_new, 10},
     {"_EMC2_dlba", (DL_FUNC) &_EMC2_dlba, 6},
     {"_EMC2_plba", (DL_FUNC) &_EMC2_plba, 6},
     {"_EMC2_dWald", (DL_FUNC) &_EMC2_dWald, 5},
