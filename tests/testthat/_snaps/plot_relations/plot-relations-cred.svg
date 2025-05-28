@@ -326,9 +326,5 @@
 <text x='84.56' y='373.47' text-anchor='end' style='font-size: 12.00px; font-family: sans;' textLength='6.00px' lengthAdjust='spacingAndGlyphs'>s</text>
 <text x='84.56' y='503.60' text-anchor='end' style='font-size: 12.00px; font-family: sans;' textLength='10.01px' lengthAdjust='spacingAndGlyphs'>t0</text>
 <rect x='90.32' y='45.38' width='520.53' height='520.53' style='stroke-width: 0.75; stroke: #BEBEBE;' />
-<text x='155.39' y='140.95' text-anchor='middle' style='font-size: 6.60px; font-weight: bold; font-family: sans;' textLength='25.68px' lengthAdjust='spacingAndGlyphs'>[ 1.0:1.0]</text>
-<text x='285.52' y='271.09' text-anchor='middle' style='font-size: 6.60px; font-weight: bold; font-family: sans;' textLength='25.68px' lengthAdjust='spacingAndGlyphs'>[ 1.0:1.0]</text>
-<text x='415.65' y='401.22' text-anchor='middle' style='font-size: 6.60px; font-weight: bold; font-family: sans;' textLength='25.68px' lengthAdjust='spacingAndGlyphs'>[ 1.0:1.0]</text>
-<text x='545.79' y='531.35' text-anchor='middle' style='font-size: 6.60px; font-weight: bold; font-family: sans;' textLength='25.68px' lengthAdjust='spacingAndGlyphs'>[ 1.0:1.0]</text>
 </g>
 </svg>

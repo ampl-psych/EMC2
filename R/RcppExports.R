@@ -13,6 +13,10 @@ dmvnorm_cpp <- function(X, mean, sigma, logd = FALSE) {
     .Call(`_EMC2_dmvnorm_cpp`, X, mean, sigma, logd)
 }
 
+sp_new <- function(iter, lambda_varimax, q, p, dim_all_c, all_c, lambda_hat, st, cost_matrix, perm) {
+    .Call(`_EMC2_sp_new`, iter, lambda_varimax, q, p, dim_all_c, all_c, lambda_hat, st, cost_matrix, perm)
+}
+
 dlba <- function(t, A, b, v, sv, posdrift = TRUE) {
     .Call(`_EMC2_dlba`, t, A, b, v, sv, posdrift)
 }
