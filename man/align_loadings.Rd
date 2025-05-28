@@ -4,30 +4,17 @@
 \alias{align_loadings}
 \title{Reorder MCMC Samples of Factor Loadings}
 \usage{
-align_loadings(
-  lambda,
-  maxIter = 100,
-  threshold = 1e-06,
-  verbose = TRUE,
-  rotate = TRUE,
-  printIter = 1000,
-  n_cores = 1
-)
+align_loadings(emc = NULL, lambda = NULL, n_cores = 1, verbose = TRUE)
 }
 \arguments{
-\item{lambda}{Array of factor loadings with dimensions p (variables) x q (factors) x n (MCMC iterations)}
+\item{emc}{an 'emc' object of type \code{infnt_factor}.}
 
-\item{maxIter}{Maximum number of iterations for the alignment algorithm}
-
-\item{threshold}{Convergence threshold for the algorithm}
-
-\item{verbose}{Logical; whether to print progress information}
-
-\item{rotate}{Logical; whether to apply varimax rotation before alignment}
-
-\item{printIter}{Frequency of iteration reporting when verbose is TRUE}
+\item{lambda}{Needs to be supplied if emc is not supplied.
+Array of factor loadings with dimensions p (variables) x q (factors) x n (MCMC iterations)}
 
 \item{n_cores}{Number of cores for parallel processing}
+
+\item{verbose}{Logical; whether to print progress information}
 }
 \value{
 A list containing:
@@ -39,9 +26,11 @@ A list containing:
 }
 \description{
 This function reorders MCMC samples of factor loadings to address the label switching problem
-in Bayesian factor analysis. It implements the algorithm proposed by Papastamoulis and Ntzoufras (2022)
+in Bayesian factor analysis. It implements a parallelized version of the code and
+algorithm proposed by Papastamoulis and Ntzoufras (2022)
 }
 \examples{
+# This function works natively with emc objects, but also factor arrays:
 # Simulate a small example with 5 variables, 2 factors, and 10 MCMC iterations
 set.seed(123)
 p <- 5  # Number of variables
@@ -55,7 +44,7 @@ for (i in 1:n) {
   base_loadings <- matrix(rnorm(p*q, 0, 0.5), p, q)
   base_loadings[1:3, 1] <- abs(base_loadings[1:3, 1]) + 0.5  # Strong loadings on factor 1
   base_loadings[4:5, 2] <- abs(base_loadings[4:5, 2]) + 0.5  # Strong loadings on factor 2
-  
+
   # Randomly switch labels and signs
   if (runif(1) > 0.5) {
     # Switch factor order
@@ -69,15 +58,15 @@ for (i in 1:n) {
     # Switch sign of factor 2
     base_loadings[, 2] <- -base_loadings[, 2]
   }
-  
+
   lambda[,,i] <- base_loadings
 }
 
 # Align the loadings
-result <- align_loadings(lambda, maxIter = 10, verbose = TRUE, n_cores = 1)
+result <- align_loadings(lambda = lambda, verbose = TRUE, n_cores = 1)
 
 # Examine the aligned loadings
-print(result$lambda_hat)
+print(result)
 
 }
 \references{

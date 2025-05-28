@@ -384,8 +384,8 @@ bridge_group_and_prior_and_jac_factor <- function(proposals_group, proposals_lis
     sum_out[i] <- group_ll + prior_epsilon + prior_psi
   }
 
-  prior_lambda <- dmvnorm(theta_lambda, mean = rep(0, ncol(theta_lambda)),
-                          sigma = diag(prior$theta_lambda_var, ncol(theta_lambda)), logd = T)
+  prior_lambda <- dmvnorm(lambda, mean = rep(0, ncol(lambda)),
+                          sigma = diag(prior$theta_lambda_var, ncol(lambda)), logd = T)
   prior_mu <- dmvnorm(theta_mu, mean = prior$theta_mu_mean, sigma = diag(prior$theta_mu_var), logd =T)
 
   jac_psi <- rowSums(theta_epsilon_inv)

@@ -106,3 +106,15 @@
       s     -0.9029937 -0.6085757
       t0    -2.1009790 -1.7736820
 
+# run_bridge
+
+    Code
+      compare(list(single = LNR_single, diag = LNR_diag, factor = LNR_factor,
+        blocked = LNR_blocked), stage = "preburn", cores_for_props = 1)
+    Output
+                MD wMD  DIC wDIC BPIC wBPIC EffectiveN meanD Dmean minD
+      single  -495   0 -417    1 -360     1         57  -474  -531 -531
+      diag    -503   0 -349    0 -230     0        119  -468  -568 -586
+      factor  -557   1 3001    0 4761     0       1759  1242  -510 -517
+      blocked -520   0 -201    0  -10     0        191  -392  -568 -582
+

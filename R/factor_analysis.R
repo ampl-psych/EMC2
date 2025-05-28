@@ -46,6 +46,7 @@
 #'   \item{c_vectors}{Matrix of sign-switching vectors}
 #'
 #' @examples
+#' # This function works natively with emc objects, but also factor arrays:
 #' # Simulate a small example with 5 variables, 2 factors, and 10 MCMC iterations
 #' set.seed(123)
 #' p <- 5  # Number of variables
@@ -78,10 +79,10 @@
 #' }
 #'
 #' # Align the loadings
-#' result <- align_loadings(lambda, verbose = TRUE, n_cores = 1)
+#' result <- align_loadings(lambda = lambda, verbose = TRUE, n_cores = 1)
 #'
 #' # Examine the aligned loadings
-#' print(result$lambda_hat)
+#' print(result)
 #'
 #' @export
 align_loadings <- function (emc = NULL, lambda = NULL, n_cores = 1, verbose = TRUE)
@@ -93,7 +94,7 @@ align_loadings <- function (emc = NULL, lambda = NULL, n_cores = 1, verbose = TR
     lambda <- get_pars(emc, selection = "loadings", merge_chains = TRUE, return_mcmc = FALSE)
   }
   energy <- apply(lambda^2, 2, mean)          # length q
-  lambda <- lambda[,energy / max(energy) > 0.01,, drop = F]
+  lambda <- lambda[,energy / max(energy) > 0.0075,, drop = F]
   q <- ncol(lambda)
   p <- nrow(lambda)
   mcmcIterations <- dim(lambda)[3]
@@ -188,9 +189,9 @@ align_loadings <- function (emc = NULL, lambda = NULL, n_cores = 1, verbose = TR
     for(i in 1:length(emc)){
       emc[[i]]$samples$lambda <- lambda_reordered[,,((i-1)*(n_iter)+ 1):(i*n_iter), drop = FALSE]
     }
+    class(emc) <- "emc"
     return(emc)
   }
-
   return(lambda_reordered)
 }
 
@@ -229,8 +230,8 @@ rearrange_loadings <- function(lambda, metric = c("ssq", "absmean"))
 
 standardize_loadings <- function(loadings, residuals){
   stdize_set <- function(samples = NULL, idx = NULL, loadings = NULL, residuals = NULL){
-    if(is.null(loadings)) loadings <- samples$samples$theta_lambda[,,idx, drop = F]
-    if(is.null(residuals)) residuals <- samples$samples$theta_residuals[,idx]
+    if(is.null(loadings)) loadings <- samples$samples$lambda[,,idx, drop = F]
+    if(is.null(residuals)) residuals <- samples$samples$epsilon_inv[,idx]
     new_loadings <- loadings
     for(i in 1:dim(loadings)[3]){
       sigma_err <- residuals[,i]
@@ -241,7 +242,33 @@ standardize_loadings <- function(loadings, residuals){
     return(new_loadings)
   }
   out <- stdize_set(loadings = loadings, residuals = residuals)
+  if(is.null(colnames(out))) colnames(out) <- paste0("F", 1:ncol(out))
   return(out)
+}
+
+#' Cut Factors Based on Credible Loadings
+#'
+#' This function removes factors that do not have more than one credible loading
+#' based on the specified confidence interval.
+#'
+#' @param emc An 'emc' object containing factor analysis results
+#' @param CI Numeric. Confidence interval percentage (default is 95)
+#'
+#' @return An 'emc' object with factors that don't meet the credibility criterion removed
+#'
+#' @export
+cut_factors <- function(emc, CI = 95){
+  lower <- (100-CI)/2
+  upper <- (100-CI)/2 + CI
+  credints <- credint(emc, selection = "std_loadings", probs = c(lower/100, .5, upper/100))
+  is_credible <- get_credible_factors(credints)
+  if(!any(is_credible)) stop("no factors with more than 1 credible loading")
+  for(i in 1:length(emc)){
+    emc[[i]]$samples$lambda <- emc[[i]]$samples$lambda[,is_credible,]
+    emc[[i]]$samples$eta <- emc[[i]]$samples$eta[,is_credible,]
+  }
+  class(emc) <- "emc"
+  return(emc)
 }
 
 get_credible_factors <- function(credints){
@@ -273,62 +300,26 @@ get_credible_factors <- function(credints){
 #'
 #' @export
 
-plot_relations <- function(emc = NULL, stage = "sample",  plot_cred = TRUE,
-                           plot_means = TRUE, only_cred = FALSE, nice_names = NULL,
+plot_relations <- function(emc = NULL, stage = "sample",  plot_cred = FALSE,
+                           plot_means = TRUE, only_cred = TRUE, nice_names = NULL,
                            selection = "correlation", ...){
 
-  if(!selection %in% c("correlation", "loadings")){
-    stop("Selection must be either 'correlation' or 'loadings'")
+  if(!selection %in% c("correlation", "loadings", "std_loadings")){
+    stop("Selection must be either 'correlation', 'std_loadings', or 'loadings'")
   }
-
-  # for future factor model compatibility
-  loadings <- NULL
-  standardize <- TRUE
-  do_corr <- TRUE
-  corrs <- NULL
-
-  # overwrite the optionals that were supplied
-  optionals <- list(...)
-  for (name in names(optionals) ) {
-    assign(name, optionals[[name]])
+  if(selection == "correlation"){
+    do_corr <- TRUE
   }
-  if(!is.null(loadings)) do_corr <- F
   addCoef.col <- "black"
-  if(!plot_means) addCoef.col <- NULL
-  if(!is.null(emc)) sampled <- merge_chains(emc)
-  if(do_corr || !is.null(corrs)){
-    if(is.null(corrs)){
-      values <- sampled$samples$theta_var[,,sampled$samples$stage == stage, drop = F]
-    } else{
-      values <- corrs
-    }
-    means <- cov2cor(apply(values, 1:2, mean))
-  } else{
-    # Now we assume loadings
-    if(is.null(loadings)){
-      if(standardize){
-        loadings <- standardize_loadings(emc, stage = stage)
-      } else{
-        samples <- merge_chains(emc)
-        loadings <- samples$samples$theta_lambda[,,samples$samples$stage == stage]
-      }
-    }
-    values <- loadings
-    means <- apply(values, 1:2, mean)
-  }
+  values <- get_pars(emc, selection = selection, return_mcmc = F, merge_chains = TRUE, remove_constants = F)
+  means <- apply(values, 1:2, mean)
 
 
 
   # You might have to play around with the x and y limits of the legend.
 
-  # Only add this if you want confidence intervals
+  # Only add this if you want credible intervals
   if(plot_cred || only_cred){
-    if(do_corr){
-      for(i in 1:dim(values)[3]){
-        values[,,i] <- cov2cor(values[,,i])
-      }
-    }
-
     cred <- aperm(apply(values, 1:2, quantile, probs = c(0.025, 0.975)))
     conf <- paste0("[", format(cred[,,1,drop = F], digits=1), ":", format(cred[,,2,drop = F], digits=1), "]")
     if(only_cred){
@@ -338,10 +329,8 @@ plot_relations <- function(emc = NULL, stage = "sample",  plot_cred = TRUE,
       means[!1:length(means) %in% is_cred] <- NA
     }
     cred <- round(cred, 2)
-
-
   }
-  if(do_corr || !is.null(corrs)){
+  if(do_corr){
     if(!is.null(nice_names)) colnames(means) <- rownames(means) <- nice_names
 
     if(only_cred){
@@ -381,6 +370,7 @@ plot_relations <- function(emc = NULL, stage = "sample",  plot_cred = TRUE,
   if(plot_cred){
     xs <- row(matrix(cred[,,1], nrow = ncol(means)))
     ys <- (ncol(matrix(cred[,,1], nrow = ncol(means)))+1) - col(matrix(cred[,,2], nrow = ncol(means))) - 0.05
+    conf[conf == "[ 1.0:1.0]"] <- ""
     if(plot_means){
       ys <- ys - 0.1
       text(xs, ys, conf, pos=1, cex=0.55, font = 2)
@@ -390,44 +380,35 @@ plot_relations <- function(emc = NULL, stage = "sample",  plot_cred = TRUE,
   }
 }
 
-# #'
-# #' Factor diagram plot
-# #' #Makes a factor diagram plot. Heavily based on the fa.diagram function of the `psych` package.
-# #'
-# #' @param emc An emc object
-# #' @param stage Character. The stage from which to take the samples
-# #' @param loadings An array of loadings. Can be alternatively supplied if emc is not supplied
-# #' @param standardize Boolean. Whether to standardize the loadings
-# #' @param simple Boolean. Whether the factor diagram should be simplified for visual clarity.
-# #' @param only_cred Boolean. Whether to only plot the credible loadings
-# #' @param cut Numeric. Mean loadings beneath this number will be excluded.
-# #' @param nice_names Character vector. Alternative names to give the parameters
-# #' @param factor_names Character vector. Names to give the different factors
-# #' @param sort Boolean. Whether to sort the paramaters before plotting for visual clarity.
-# #' @param adj Integer. Adjust to adjust loading values positions in the diagram if illegible.
-# #' @param main Character vector. Title of the plot
-# #' @param cex Integer. Font size
-# #' @return NULL
-# #' @examples \donttest{
-# #' # For a given set of hierarchical factor model samples we can make a factor diagram
-# #' make_factor_diagram(emc, only_cred = T)
-# #' # We can also specify nice names and adjust the loading positions
-# #' make_factor_diagram(emc, nice_names = paste0("V", 1:10), adj = 2)
-# #' }
+#'
+#' Factor diagram plot
+#' #Makes a factor diagram plot. Heavily based on the fa.diagram function of the `psych` package.
+#'
+#' @param emc An emc object
+#' @param stage Character. The stage from which to take the samples
+#' @param loadings An array of loadings. Can be alternatively supplied if emc is not supplied
+#' @param standardize Boolean. Whether to standardize the loadings
+#' @param simple Boolean. Whether the factor diagram should be simplified for visual clarity.
+#' @param only_cred Boolean. Whether to only plot the credible loadings
+#' @param cut Numeric. Mean loadings beneath this number will be excluded.
+#' @param nice_names Character vector. Alternative names to give the parameters
+#' @param factor_names Character vector. Names to give the different factors
+#' @param sort Boolean. Whether to sort the paramaters before plotting for visual clarity.
+#' @param adj Integer. Adjust to adjust loading values positions in the diagram if illegible.
+#' @param main Character vector. Title of the plot
+#' @param cex Integer. Font size
+#' @return NULL
 
-make_factor_diagram <- function(emc = NULL, stage = "sample",
+factor_diagram <- function(emc = NULL, stage = "sample",
                                 loadings = NULL, standardize = TRUE,
-                                simple = FALSE, only_cred = FALSE,
+                                simple = FALSE, only_cred = TRUE,
                                 cut = 0, nice_names = NULL,
                                 factor_names = NULL, sort = TRUE,
                                 adj = 1, main = NULL, cex = NULL){
-  if(is.null(loadings)){
-    if(standardize){
-      loadings <- standardize_loadings(emc, stage = stage)
-    } else{
-      samples <- merge_chains(emc)
-      loadings <- samples$samples$theta_lambda[,,samples$samples$stage == stage]
-    }
+  if(standardize){
+    loadings <- get_pars(emc, selection = "std_loadings", return_mcmc = F, merge_chains = TRUE)
+  } else{
+    loadings <- get_pars(emc, selection = "loadings", return_mcmc = F, merge_chains = TRUE)
   }
   means <- apply(loadings, 1:2, mean)
   if(only_cred){

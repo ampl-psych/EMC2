@@ -7,9 +7,9 @@
 plot_relations(
   emc = NULL,
   stage = "sample",
-  plot_cred = TRUE,
+  plot_cred = FALSE,
   plot_means = TRUE,
-  only_cred = FALSE,
+  only_cred = TRUE,
   nice_names = NULL,
   selection = "correlation",
   ...
