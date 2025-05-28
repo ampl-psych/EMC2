@@ -157,9 +157,45 @@ get_objects_standard <- function(selection, sample_prior, return_prior, design =
       return(sampler)
     }
     idx <- get_idx(sampler, stage)
+    if(selection == "mu"){
+      return(lapply(sampler, implied_mean, idx))
+    }
     return(get_base(sampler, idx, selection))
   }
 }
+
+implied_mean <- function(sampler, idx){
+  beta <- sampler$samples$theta_mu[,idx]
+  N <- ncol(beta)
+  group_des <- sampler$group_designs
+  par_names <- sampler$par_names
+  if(is.null(par_names)){
+    group_des <- sampler$samples$group_designs
+    par_names <- sampler$samples$par_names
+  }
+  n_pars <- length(par_names)
+  # Calculate mu (implied means) if we have group designs
+  if(!is.null(group_des)) {
+    # Prepare group designs in proper format
+    group_designs <- add_group_design(par_names, group_des, N)
+
+    # Calculate mean design matrices
+    mean_designs <- calculate_mean_design(group_designs, n_pars)
+
+    # Calculate implied means for each sample
+    mu <- matrix(0, nrow = n_pars, ncol = N)
+    for (i in 1:N) {
+      mu[, i] <- calculate_implied_means(mean_designs, beta[, i], n_pars)
+    }
+    rownames(mu) <- par_names
+  } else {
+    # If no group designs, mu and beta are the same
+    mu <- beta
+  }
+  return(mu)
+}
+
+
 
 get_idx <- function(sampler, stage){
   if(is.null(sampler[[1]]$samples$stage)){
