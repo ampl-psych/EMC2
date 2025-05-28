@@ -107,7 +107,7 @@ plot.emc <- function(x, stage = "sample", selection = c("mu", "sigma2", "alpha")
     plot(get_prior(x))
     return(invisible(prior(x)))
   }
-  if(x[[1]]$type == "single"){
+  if(x[[1]]$type == "single" & selection[1] != "LL"){
     selection <- "alpha"
   }
   for(select in selection){
@@ -977,16 +977,15 @@ get_data.emc <- function(emc) {
     for(i in 1:length(dat)){
       design <- get_design(emc)[[i]]
       tmp <- do.call(rbind,lapply(emc[[1]]$data,function(x){
-        expand <- attr(x[[i]],"expand")
-        if(is.null(expand)) expand <- 1:nrow(x[[i]])
-        return(x[[i]][expand,])
+        cur <- x[[i]]
+        if(!is.null(cur$winner) && (length(unique(cur$lR)) > 1)){
+          cur <- cur[cur$winner,]
+        }
+        expand <- attr(cur,"expand")
+        if(is.null(expand)) expand <- 1:nrow(cur)
+        return(cur[expand,])
       }))
       row.names(tmp) <- NULL
-      if(is.null(tmp$lR)){
-        tmp$lR <- 1
-        tmp$lR <- factor(tmp$lR)
-      }
-      tmp <- tmp[tmp$lR == levels(tmp$lR)[1],]
       tmp <- tmp[,!(colnames(tmp) %in% c("trials","lR","lM", "winner", "SlR", "RACE", names(design$Ffunctions)))]
       dat[[i]] <- tmp
     }
@@ -994,16 +993,16 @@ get_data.emc <- function(emc) {
   } else{
     design <- get_design(emc)[[1]]
     dat <- do.call(rbind,lapply(emc[[1]]$data,function(x){
+      if(!is.null(x$winner) && (length(unique(x$lR)) > 1)){
+        # Only expand winner for race models
+        x <- x[x$winner,]
+      }
+
       expand <- attr(x,"expand")
       if(is.null(expand)) expand <- 1:nrow(x)
       return(x[expand,])
     }))
     row.names(dat) <- NULL
-    if(is.null(dat$lR)){
-      dat$lR <- 1
-      dat$lR <- factor(dat$lR)
-    }
-    dat <- dat[dat$lR == levels(dat$lR)[1],]
     dat <- dat[,!(colnames(dat) %in% c("trials","lR","lM","winner", "SlR", "RACE", names(design$Ffunctions)))]
   }
   return(dat)
@@ -1116,9 +1115,9 @@ get_design <- function(x){
 
 #' @rdname sampled_pars
 #' @export
-sampled_pars.emc <- function(x,model=NULL,doMap=TRUE, add_da = FALSE, all_cells_dm = FALSE){
+sampled_pars.emc <- function(x,model=NULL,doMap=FALSE, add_da = FALSE, all_cells_dm = FALSE, data = NULL){
   return(sampled_pars(get_design(x), model = model, doMap = doMap,
-                          add_da = add_da, all_cells_dm = all_cells_dm))
+                          add_da = add_da, all_cells_dm = all_cells_dm, data = data))
 }
 
 #' @rdname auto_thin

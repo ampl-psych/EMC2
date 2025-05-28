@@ -1,31 +1,66 @@
-do_transform <- function(pars,transform)
-  # pars is the parameter matrix, transform is a transform list
+do_transform <- function(pars, transform)
 {
-  isexp <- transform$func[colnames(pars)] == "exp"
+  isexp    <- transform$func[colnames(pars)] == "exp"
   isprobit <- transform$func[colnames(pars)] == "pnorm"
-  # Here instead of using isexp directly I use the column names in case v is replicated in pars (i.e. in map_mcmc)
-  pars[,isexp] <- exp(sweep(pars[,isexp, drop = F], 2, transform$lower[colnames(pars)[isexp]], "-"))
-  pars[,isprobit] <- pnorm(sweep(sweep(pars[,isprobit, drop = F], 2, transform$lower[colnames(pars)[isprobit]], "-")
-                                 , 2, transform$upper[colnames(pars)[isprobit]]-transform$lower[colnames(pars)[isprobit]], "/"))
+
+  ## exp link:  lower + exp(real)
+  pars[, isexp] <- sweep(
+    exp(pars[, isexp, drop = FALSE]), 2,
+    transform$lower[colnames(pars)[isexp]], "+")
+
+  ## probit link: lower + (upper‑lower) * pnorm(real)
+  pars[, isprobit] <- sweep(
+    sweep(pnorm(pars[, isprobit, drop = FALSE]), 2,
+          transform$upper[colnames(pars)[isprobit]] -
+            transform$lower[colnames(pars)[isprobit]], "*"),
+    2, transform$lower[colnames(pars)[isprobit]], "+")
   pars
 }
 
-do_pre_transform <- function(p_vector,transform)
-  # pars is the parameter matrix, transform is a transform list
+do_pre_transform <- function(p_vector, transform)
 {
-  isexp <- transform$func[names(p_vector)] == "exp"
+  isexp    <- transform$func[names(p_vector)] == "exp"
   isprobit <- transform$func[names(p_vector)] == "pnorm"
-  # Here instead of using isexp directly I use the names in case v is replicated in p_vector (i.e. in map_mcmc)
-  p_vector[isexp] <- exp(p_vector[isexp] - transform$lower[names(p_vector)[isexp]])
-  p_vector[isprobit] <- pnorm((p_vector[isprobit] - transform$lower[names(p_vector)[isprobit]])/
-                                (transform$upper[names(p_vector)[isprobit]]-transform$lower[names(p_vector)[isprobit]]))
+
+  ## exp link
+  p_vector[isexp] <- transform$lower[names(p_vector)[isexp]] + exp(p_vector[isexp])
+
+  ## probit link
+  p_vector[isprobit] <- transform$lower[names(p_vector)[isprobit]] +
+    (transform$upper[names(p_vector)[isprobit]] -
+       transform$lower[names(p_vector)[isprobit]]) *
+    pnorm(p_vector[isprobit])
   p_vector
+}
+
+
+# This form used in random number generation
+do_bound <- function(pars,bound, lR = NULL) {
+  tpars <- t(pars[,colnames(bound$minmax),drop=FALSE])
+  ok <- tpars > bound$minmax[1,] & tpars < bound$minmax[2,]
+  if (!is.null(bound$exception)) ok[names(bound$exception),] <-
+    ok[names(bound$exception),] |
+    (tpars[names(bound$exception),] == bound$exception)
+  bound <- colSums(ok) == nrow(ok)
+  if(!is.null(lR)){
+    lvl <- length(unique(lR))
+    bound <- rep(colSums(matrix(bound, lvl)) == lvl, each = lvl)
+  }
+  return(bound)
+}
+
+# This form used in get_pars
+add_bound <- function(pars,bound, lR = NULL) {
+  attr(pars, "ok") <- do_bound(pars,bound, lR = lR)
+  pars
 }
 
 
 #### Functions to look at parameters ----
 
-map_p <- function(p,dadm, model)
+#### Functions to look at parameters ----
+
+map_p <- function(p,dadm,model)
   # Map p to dadm and returns matrix of mapped parameters
   # p is either a vector or a matrix (ncol = number of subjects) of p_vectors
   # dadm is a design matrix with attributes containing model information
@@ -43,13 +78,26 @@ map_p <- function(p,dadm, model)
 
   # Get parameter names from model and create output matrix
   do_p <- names(model$p_types)
-  pretrend_idx <- rep(F, length(do_p))
   pars <- matrix(nrow=nrow(dadm),ncol=length(do_p),dimnames=list(NULL,do_p))
 
   # If there are any trends do these first, they might be used later in mapping
   # Otherwise we're not applying the trend premap, but we are doing it pre-transform
   # So these trend parameters are post-map, pre-transform and have to be included in the pars output
   premap_idx <- rep(F, length(do_p))
+  if(!is.null(model$trend) &&
+     (attr(model$trend, "premap") || attr(model$trend, "pretransform"))){
+    trend_names <- get_trend_pnames(model$trend)
+    pretrend_idx <- do_p %in% trend_names
+    if((attr(model$trend, "premap"))){
+      # These can be removed from the pars matrix at the end
+      # Since they are already used before the mapping
+      premap_idx <- pretrend_idx
+    }
+    # Reorder parameters to make design matrix for trends first
+    do_p <- c(do_p[pretrend_idx], do_p[!pretrend_idx])
+  } else{
+    pretrend_idx <- rep(F, length(do_p))
+  }
   k <- 1
   # Loop through each parameter
   for (i in do_p) {
@@ -59,6 +107,21 @@ map_p <- function(p,dadm, model)
       pm <- t(as.matrix(p[colnames(cur_design)]))
       pm <- pm[rep(1,nrow(pars)),,drop=FALSE]
     } else pm <- p[,colnames(cur_design),drop=FALSE]
+
+    # Apply pre-mapped trends if they exist
+    if (!is.null(model$trend) && attr(model$trend, "premap")) {
+      trend <- model$trend
+      isin <- names(trend) %in% colnames(pm)
+      if (any(isin)){ # At this point the trend has already been mapped and transformed
+        for (j in names(trend)[isin]) {
+          cur_trend <- trend[[j]]
+          # We can select the trend pars from the already update pars matrix
+          trend_pars <- pars[,cur_trend$trend_pnames]
+          pm[,j] <- run_trend(dadm, cur_trend, pm[,j], trend_pars)
+        }
+      }
+    }
+
     # Apply design matrix and sum parameter effects
     tmp <- pm*cur_design[attr(cur_design,"expand"),,drop=FALSE]
     tmp[is.nan(tmp)] <- 0 # Handle 0 weight x Inf parameter cases
@@ -78,7 +141,7 @@ map_p <- function(p,dadm, model)
 }
 
 
-get_pars_matrix <- function(p_vector,dadm, model) {
+get_pars_matrix <- function(p_vector,dadm,model) {
   # Order:
   # 1 pretransform
   # 2 add constants
@@ -98,12 +161,21 @@ get_pars_matrix <- function(p_vector,dadm, model) {
   # Niek should constants be included in pre_transform? I think not?
   p_vector <- do_pre_transform(p_vector, model$pre_transform)
   # If there's any premap trends, they're done in map_p
-  pars <- map_p(add_constants(p_vector,attr(dadm,"constants")),dadm, model = model)
+  pars <- map_p(add_constants(p_vector,attr(dadm,"constants")),dadm, model)
+  if(!is.null(model$trend) && attr(model$trend, "pretransform")){
+    # This runs the trend and afterwards removes the trend parameters
+    pars <- prep_trend(dadm, model$trend, pars)
+  }
   pars <- do_transform(pars, model$transform)
+  if(!is.null(model$trend) && attr(model$trend, "posttransform")){
+    # This runs the trend and afterwards removes the trend parameters
+    pars <- prep_trend(dadm, model$trend, pars)
+  }
   pars <- model$Ttransform(pars, dadm)
-  pars <- add_bound(pars, model$bound)
+  pars <- add_bound(pars, model$bound, dadm$lR)
   return(pars)
 }
+
 
 make_pmat <- function(p_vector,design)
   # puts vector form of p_vector into matrix form
@@ -166,140 +238,20 @@ add_recalculated_pars <- function(pmat, model, cnams){
     to_add <- do.call(cbind, cur_par[not_dups])
     cur_modfs <- modfs[not_dups]
     fnams <- sapply(cur_modfs, function(x) paste0(unique(unlist(strsplit(x[pars_vary], split = "_"))), collapse = "_"))
-    if(fnams != "") colnames(to_add) <- paste0(colnames(to_add)[1], "_", fnams)
+    if(!all(fnams == "")) colnames(to_add) <- paste0(colnames(to_add)[1], "_", fnams)
     m_out <- cbind(m_out, to_add)
   }
   return(m_out)
 }
 
-map_mcmc <- function(mcmc,design,include_constants = TRUE, add_recalculated = FALSE, covariates = NULL)
-  # Maps vector or matrix (usually mcmc object) of sampled parameters to native
-  # model parameterization.
-{
-  doMap <- function(mapi,pmat, covariates = NULL){
-    if(!is.null(covariates)){
-      if(nrow(covariates) != nrow(pmat)) covariates <- covariates[sample(1:nrow(covariates), nrow(pmat), replace = T),, drop = F]
-      pmat <- cbind(pmat, covariates)
-    }
-    t(mapi %*% t(pmat[,dimnames(mapi)[[2]],drop=FALSE]))
-  }
-  get_p_types <- function(nams, reverse = FALSE){
-    if(reverse){
-      out <- unlist(lapply(strsplit(nams,"_"),function(x){x[[-1]]}))
-    } else{
-      out <- unlist(lapply(strsplit(nams,"_"),function(x){x[[1]]}))
-    }
-    return(out)
-  }
-
-  if(is.null(names(design))) names(design) <- as.character(1:length(design))
-  par_idx <- 0
-  out_list <- list()
-  # Deal with the case where it's a vector
-  if (!is.matrix(mcmc) & !is.array(mcmc)) mcmc <- t(as.matrix(mcmc))
-  # Now it must either be a matrix or array
-  if(length(dim(mcmc)) == 2){
-    is_matrix <- TRUE # Remember this for later
-    mcmc_array <- array(mcmc, dim = c(nrow(mcmc), 1, ncol(mcmc)))
-    rownames(mcmc_array) <- rownames(mcmc)
+get_p_types <- function(nams, reverse = FALSE){
+  if(reverse){
+    out <- unlist(lapply(strsplit(nams,"_"),function(x){x[[-1]]}))
   } else{
-    mcmc_array <- mcmc
-    is_matrix <- FALSE
+    out <- unlist(lapply(strsplit(nams,"_"),function(x){x[[1]]}))
   }
-  # We end up with an array with dimensions, n_pars, n_subjects, n_iter
-
-  for(q in 1:length(design)){
-    cur_des <- design[[q]]
-
-    cur_idx <- par_idx + seq_len(length(sampled_pars(cur_des)))
-    par_idx <- max(cur_idx)
-    cur_mcmc_array <- mcmc_array[cur_idx,,, drop = FALSE]
-    joint <- F
-    if(grepl("MRI", cur_des$model()$type)){
-      cur_mcmc_array[grepl("sd", rownames(cur_mcmc_array)),,] <- exp(cur_mcmc_array[grepl("sd", rownames(cur_mcmc_array)),,])
-      cur_mcmc_array[grepl("rho", rownames(cur_mcmc_array)),,] <- pnorm(cur_mcmc_array[grepl("rho", rownames(cur_mcmc_array)),,])
-      if(is_matrix) cur_mcmc_array <- cur_mcmc_array[,1,]
-      out_list[[q]] <- cur_mcmc_array
-      next
-    }
-    if(any(grepl("|", rownames(cur_mcmc_array), fixed =  T))){
-      joint <- T
-      prefix <- unique(gsub("[|].*", "", rownames(cur_mcmc_array)))
-      rownames(cur_mcmc_array) <- sub("^[^|]*\\|", "", rownames(cur_mcmc_array))
-    }
-    constants <- cur_des$constants
-    model <- cur_des$model
-    map <- attr(sampled_pars(cur_des, add_da = TRUE, all_cells_dm = TRUE),"map")
-
-
-    mp <- mapped_pars(cur_des,cur_mcmc_array[,1,1],remove_RACE=FALSE, covariates = covariates)
-
-    for(k in 1:ncol(cur_mcmc_array)){
-      cur_mcmc <- t(cur_mcmc_array[,k,])
-      cur_mcmc <- t(apply(cur_mcmc, 1, do_pre_transform, cur_des$model()$pre_transform))
-      pmat <- add_constants(cur_mcmc,constants)
-      plist <- lapply(map,doMap,pmat=pmat, covariates)
-      # Give mapped variables names and flag constant
-      for (i in 1:length(plist)) {
-        vars <- row.names(attr(terms(cur_des$Flist[[i]]),"factors"))
-        if(any(names(cur_des$Fcovariates) %in% vars)){
-          cov_vars <- vars[(vars %in% names(cur_des$Fcovariates))]
-          vars <- vars[!(vars %in% names(cur_des$Fcovariates))]
-          has_cov <- TRUE
-        } else{
-          has_cov <- FALSE
-        }
-        uniq <- !duplicated(apply(mp[,vars, drop = F],1,paste,collapse="_"))
-        if (is.null(vars)) {
-          colnames(plist[[i]]) <- names(plist)[i]
-        }else {
-          if(length(vars) == 1) colnames(plist[[i]]) <- vars
-          else if(length(vars) == 2){
-            colnames(plist[[i]]) <- paste(vars[1], apply(matrix(do.call(cbind, Map(paste0, vars[-1], mp[uniq, vars[-1]])))
-                                                         ,1, paste0, collapse = "_"), sep = "_")
-          } else{
-            colnames(plist[[i]]) <- paste(vars[1], apply(do.call(cbind, Map(paste0, vars[-1], mp[uniq, vars[-1]]))
-                                                         ,1, paste0, collapse = "_"), sep = "_")
-          }
-        }
-        if(has_cov) colnames(plist[[i]]) <- paste(colnames(plist[[i]]), cov_vars, sep = "_")
-      }
-      pmat <- do.call(cbind,plist)
-      cnams <- colnames(pmat)
-      colnames(pmat) <- get_p_types(cnams)
-      pmat[,] <- do_transform(pmat, model()$transform)[,1:length(cnams)]
-
-      if(add_recalculated) extras <- add_recalculated_pars(pmat, model, cnams)
-      colnames(pmat) <- cnams
-      if(add_recalculated) pmat <- cbind(pmat, extras)
-      is_constant <- apply(pmat,2,function(x){all(duplicated(x)[-1])})
-      if(!include_constants){
-        pmat <- pmat[,!is_constant, drop = F]
-      }
-      if(k == 1){
-        out <- array(0, dim = c(ncol(pmat), ncol(cur_mcmc_array), dim(cur_mcmc_array)[3]))
-        rownames(out) <- colnames(pmat)
-        colnames(out) <- colnames(cur_mcmc_array)
-      }
-      out[,k,] <- t(pmat)
-    }
-    if(is_matrix){
-      out <- out[,1,]
-    }
-    if(joint){
-      rownames(out) <- paste0(prefix, "|", rownames(out))
-    }
-    out_list[[q]] <- out
-  }
-  if(is_matrix){
-    return(do.call(rbind, out_list))
-  }
-  else{
-    return(do.call(abind, c(out_list, along = 1)))
-  }
+  return(out)
 }
-
-
 
 fill_transform <- function(transform, model, p_vector,
                            supported=c("identity","exp","pnorm"),
@@ -369,21 +321,7 @@ fill_bound <- function(bound, model) {
   filled_bound
 }
 
-# This form used in random number generation
-do_bound <- function(pars,bound) {
-  tpars <- t(pars[,colnames(bound$minmax),drop=FALSE])
-  ok <- tpars > bound$minmax[1,] & tpars < bound$minmax[2,]
-  if (!is.null(bound$exception)) ok[names(bound$exception),] <-
-    ok[names(bound$exception),] |
-    (tpars[names(bound$exception),] == bound$exception)
-  apply(ok,2,all)
-}
 
-# This form used in get_pars
-add_bound <- function(pars,bound) {
-  attr(pars,"ok") <- do_bound(pars,bound)
-  pars
-}
 
 generate_design_equations <- function(design_matrix,
                                       factor_cols = NULL,
@@ -485,8 +423,8 @@ generate_design_equations <- function(design_matrix,
 
 
 verbal_dm <- function(design){
-  map <- attr(sampled_pars(design,design$model, add_da = TRUE), "map")
-  map_no_da <- attr(sampled_pars(design,design$model), "map")
+  map <- attr(sampled_pars(design,design$model, add_da = TRUE, doMap = TRUE), "map")
+  map_no_da <- attr(sampled_pars(design,design$model, doMap = TRUE), "map")
   transforms <- design$model()$transform$func
   for(i in 1:length(map)){
     m <- map[[i]]

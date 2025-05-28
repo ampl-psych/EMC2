@@ -378,103 +378,18 @@ bridge_group_and_prior_and_jac_factor <- function(proposals_group, proposals_lis
     psi_curr <- diag(1/exp(psi_inv[i,]), info$n_factors)
     theta_var_curr <- lambda_curr %*% psi_curr %*% t(lambda_curr) + epsilon_curr
     proposals_curr <- matrix(proposals[i,], ncol = info$n_pars, byrow = T)
-    group_ll <- sum(dmvnorm(proposals_curr, theta_mu[i,], theta_var_curr, log = T))
+    group_ll <- sum(dmvnorm(proposals_curr, theta_mu[i,], theta_var_curr, logd = T))
     prior_epsilon <- sum(logdinvGamma(1/exp(theta_epsilon_inv[i,]), shape = prior$as, rate = prior$bs))
     prior_psi <- sum(logdinvGamma(1/exp(psi_inv[i,]), prior$ap, rate = prior$bp))
     sum_out[i] <- group_ll + prior_epsilon + prior_psi
   }
-  prior_lambda <- dmvnorm(lambda, mean = rep(0, ncol(lambda)),
-                          sigma = diag(prior$theta_lambda_var, ncol(lambda)), log = T)
-  prior_mu <- dmvnorm(theta_mu, mean = prior$theta_mu_mean, sigma = diag(prior$theta_mu_var), log =T)
+
+  prior_lambda <- dmvnorm(theta_lambda, mean = rep(0, ncol(theta_lambda)),
+                          sigma = diag(prior$theta_lambda_var, ncol(theta_lambda)), logd = T)
+  prior_mu <- dmvnorm(theta_mu, mean = prior$theta_mu_mean, sigma = diag(prior$theta_mu_var), logd =T)
+
   jac_psi <- rowSums(theta_epsilon_inv)
   jac_epsilon <- rowSums(psi_inv)
   return(sum_out + prior_mu + prior_lambda + jac_psi + jac_epsilon) # Output is of length nrow(proposals)
 }
 
-
-
-# get_all_pars_factor <- function(samples, filter, info){
-#   n_subjects <- samples$n_subjects
-#   n_iter = length(samples$samples$stage[samples$samples$stage== filter])
-#   # Extract relevant objects
-#   alpha <- samples$samples$alpha[,,samples$samples$stage== filter]
-#   theta_mu <- samples$samples$theta_mu[,samples$samples$stage== filter]
-#   lambda <- samples$samples$lambda_untransf[,,samples$samples$stage==filter, drop = F]
-#   psi_inv <- samples$samples$psi_inv[,,samples$samples$stage==filter, drop = F]
-#   sig_err_inv <- samples$samples$epsilon_inv[,,samples$samples$stage==filter]
-#
-#   Lambda_mat <- info$hyper$Lambda_mat
-#   n_factors <- samples$n_factors
-#
-#   lambda.unwound <- apply(lambda,3,unwind_lambda, Lambda_mat)
-#   sig_err_inv.diag <- log(apply(sig_err_inv, 3, diag))
-#   psi_inv.diag <- matrix(log(apply(psi_inv, 3, diag)), nrow = n_factors)
-#
-#   # Set up
-#   n_params<- nrow(alpha) + nrow(theta_mu) + nrow(sig_err_inv.diag) + nrow(psi_inv.diag) + nrow(lambda.unwound)
-#   all_samples=array(dim=c(n_subjects,n_params,n_iter))
-#   mu_tilde=array(dim = c(n_subjects,n_params))
-#   var_tilde=array(dim = c(n_subjects,n_params,n_params))
-#
-#   for (j in 1:n_subjects){
-#     all_samples[j,,] = rbind(alpha[,j,],theta_mu[,],sig_err_inv.diag[,],psi_inv.diag[,],lambda.unwound[,])
-#     # calculate the mean for re, mu and sigma
-#     mu_tilde[j,] =apply(all_samples[j,,],1,mean)
-#     # calculate the covariance matrix for random effects, mu and sigma
-#     var_tilde[j,,] = cov(t(all_samples[j,,]))
-#   }
-#
-#   for(i in 1:n_subjects){ #RJI_change: this bit makes sure that the sigma tilde is pos def
-#     if(!corpcor::is.positive.definite(var_tilde[i,,], tol=1e-8)){
-#       var_tilde[i,,]<-corpcor::make.positive.definite(var_tilde[i,,], tol=1e-6)
-#     }
-#   }
-#
-#   X <- cbind(t(theta_mu),t(sig_err_inv.diag),t(psi_inv.diag), t(lambda.unwound))
-#   info$n_params <- n_params
-#   info$n_factors <- n_factors
-#   info$given.ind <- (info$n_randeffect+1):n_params
-#   info$X.given_ind <- 1:length(info$given.ind)
-#   return(list(X = X, mu_tilde = mu_tilde, var_tilde = var_tilde, info = info))
-# }
-#
-
-# group_dist_factor = function(random_effect = NULL, parameters, sample = FALSE, n_samples = NULL, info){
-#   n_randeffect <- info$n_randeffect
-#   n_factors <- info$n_factors
-#   param.theta_mu <- parameters[1:n_randeffect]
-#   param.sig_err_inv <- exp(parameters[(n_randeffect+1):(n_randeffect + n_randeffect)])
-#   param.psi_inv <- exp(parameters[(n_randeffect+n_randeffect+1):(n_randeffect + n_randeffect+ n_factors)])
-#   param.lambda.unwound <- parameters[(n_randeffect+n_randeffect+n_factors+1):length(parameters)]
-#   param.lambda <- unwind_lambda(param.lambda.unwound, info$hyper$Lambda_mat, reverse = T)
-#   param.var <- param.lambda %*% diag(1/param.psi_inv, length(param.psi_inv)) %*% t(param.lambda) + diag(1/param.sig_err_inv)
-#   if (sample){
-#     return(mvtnorm::rmvnorm(n_samples, param.theta_mu, param.var))
-#   }else{
-#     logw_second<-max(-5000*info$n_randeffect, mvtnorm::dmvnorm(random_effect, param.theta_mu,param.var,log=TRUE))
-#     return(logw_second)
-#   }
-# }
-#
-# prior_dist_factor = function(parameters, info){
-#   n_randeffect <- info$n_randeffect
-#   n_factors <- info$n_factors
-#   prior <- info$prior
-#   hyper <- info$hyper
-#   #Extract and when necessary transform back
-#   param.theta_mu <- parameters[1:n_randeffect]
-#   param.sig_err_inv <- exp(parameters[(n_randeffect+1):(n_randeffect + n_randeffect)])
-#   param.psi_inv <- exp(parameters[(n_randeffect+n_randeffect+1):(n_randeffect + n_randeffect+ n_factors)])
-#   param.lambda.unwound <- parameters[(n_randeffect+n_randeffect+n_factors+1):length(parameters)]
-#
-#   log_prior_mu=sum(dnorm(param.theta_mu, mean = prior$theta_mu_mean, sd = sqrt(prior$theta_mu_var), log =TRUE))
-#   log_prior_sig_err_inv = sum(pmax(-1000, dgamma(param.sig_err_inv, shape = prior$nu/2, rate = (prior$s2*prior$nu)/2, log=TRUE)))
-#   log_prior_psi_inv = sum(pmax(-1000, dgamma(param.psi_inv, shape = prior$ap, rate = prior$bp, log=TRUE)))
-#   log_prior_lambda=sum(dnorm(param.lambda.unwound, mean = 0, sd = sqrt(prior$theta_lambda_var), log =TRUE))
-#
-#   jac_sig_err_inv <- -sum(log(param.sig_err_inv)) # Jacobian determinant of transformation of log of the sig_err_inv
-#   jac_psi_inv <- -sum(log(param.psi_inv)) # Jacobian determinant of transformation of log of the psi_inv
-#   # Jacobians are actually part of the denominator (dnorm(prop_theta)) since transformations of the data (rather than parameters),
-#   # warrant a jacobian added. But we add the jacobians here for ease of calculations.
-#   return(log_prior_mu + log_prior_sig_err_inv + log_prior_psi_inv + log_prior_lambda - jac_psi_inv - jac_sig_err_inv)
-# }

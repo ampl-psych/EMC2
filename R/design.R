@@ -120,8 +120,18 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
     Rlevels <- facs[["R"]]
     factors <- facs[names(facs)!="R"]
     nfacs <- nfacs[!(names(nfacs) %in% c("trials","rt"))]
-    if (length(nfacs)>0) covariates <- nfacs
+    all_preds <- unlist(lapply(lapply(formula, `[[`, 3L), all.vars))
+    if (length(nfacs)>0){
+      covariates <- names(nfacs)
+      # covariates <- covariates[covariates %in% all_preds]
+      if(length(covariates) == 0) covariates <- NULL
+    }
+    # factors <- factors[names(factors) %in% c(all_preds, "subjects")]
   }
+  if (!is.null(trend)) {
+    formula <- check_trend(trend,covariates, model, formula)
+  }
+
   # Check if all parameters in the model are specified in the formula
   nams <- unlist(lapply(formula,function(x) as.character(stats::terms(x)[[2]])))
   if (!all(sort(names(model()$p_types)) %in% sort(nams)) & is.null(custom_p_vector)){
@@ -134,10 +144,16 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
     for(add_constant in not_specified) formula[[length(formula)+ 1]] <- as.formula(paste0(add_constant, "~ 1"))
   }
 
+
   design <- list(Flist=formula,Ffactors=factors,Rlevels=Rlevels,
                  Clist=contrasts,matchfun=matchfun,constants=constants,
                  Fcovariates=covariates,Ffunctions=functions,model=model)
   class(design) <- "emc.design"
+  if (!is.null(trend)) {
+    model <- update_model_trend(trend, model)
+    model_list <- model()
+    model <- function(){return(model_list)}
+  }
   p_vector <- sampled_pars(design,model)
   lhs_terms <- unlist(lapply(formula, function(x) as.character(stats::terms(x)[[2]])))
 
@@ -155,195 +171,9 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
   design$model <- model
   attr(design,"p_vector") <- p_vector
   if (report_p_vector) {
-    summary(design)
+    summary(design, data = data)
   }
   return(design)
-}
-
-#' Create Group-Level Design Matrices
-#'
-#' Creates design matrices for group-level parameters based on subject-level design and formulas.
-#' This function is used for hierarchical modeling to specify how subject-level parameters
-#' vary across groups or conditions.
-#'
-#' @param formula A list of formulas specifying the relationship between subject-level parameters
-#'        and group-level predictors. Each formula should have a subject-level parameter on the left-hand side
-#'        and group-level predictors on the right-hand side.
-#' @param data The same data as used in the subject-level design. Must include a 'subjects' column.
-#' @param subject_design An emc.design object containing the subject-level design.
-#' @param contrasts Optional list of contrast matrices to be used for categorical predictors.
-#'
-#' @return A list of design matrices, one for each parameter specified in the formula. The intercept is
-#' automatically included as the group-level mean and is omitted from the design matrices.
-#'
-#' @details Here it is important to consider the interpreation of the group-level mean. This allows
-#' one to add covariates/group-level factors to the model. However, mu, the group-level mean, is still
-#' included for all parameters. Mu represents the intercept in the design matrix, this intercept is always
-#' added to the group-level model. Therefore, to keep the interpretation of mu as the group-level mean,
-#' it is important to ensure that the design matrix has a mean of zero. If not, this function will throw a
-#' warning. For some unbalanced designs, this is unavoidable and the warning can be ignored.
-#'
-#' @examples
-#' # Create subject-level design
-#' subj_design <- design(data = forstmann, model = DDM,
-#'                       formula = list(v ~ S, a ~ E, t0 ~ 1),
-#'                       contrasts = list(S = contr.helmert))
-#' # Add some age covariate and roughly demeans
-#' # Demeaning is important to ensure that the interpretation of the group-level intercept
-#' # is the mean of the group (i.e., 'mu' still represents the group-level mean)
-#' forstmann$age <- as.numeric(forstmann$subjects) -mean(as.numeric(forstmann$subjects))
-#' # Create fake group column
-#' forstmann$group <- ifelse(forstmann$subjects %in%
-#'               unique(forstmann$subjects)[seq(1, 19, 2)], "A", "B")
-#'
-#' # Create group-level design matrices
-#' group_des <- group_design(
-#'   formula = list(v_S1 ~ age + group, a ~ age),
-#'   data = forstmann,
-#'   subject_design = subj_design,
-#'   contrasts = list(group = contr.bayes)
-#' )
-#' # Then you can make the emc object with
-#' emc <- make_emc(forstmann, subj_design, compress = FALSE, group_design = group_des)
-#' @export
-group_design <- function(formula, data, subject_design, contrasts = NULL){
-  par_names <- names(sampled_pars(subject_design))
-
-  # Extract dependent variables (left hand side) from formula
-  lhs_terms <- unlist(lapply(formula, function(x) as.character(stats::terms(x)[[2]])))
-
-  # Check if all dependent variables are in par_names
-  if (!all(lhs_terms %in% par_names)) {
-    invalid_terms <- lhs_terms[!lhs_terms %in% par_names]
-    stop(paste0("Parameter(s) ", paste0(invalid_terms, collapse=", "),
-                  " in formula not found in subject design parameters"))
-  }
-
-  # Extract all variables from formula, both left and right sides
-  rhs_terms <- unique(unlist(lapply(formula, function(x) {
-    # Get all variables from right hand side of formula
-    all.vars(stats::terms(x)[[3]])
-  })))
-
-  # Check if all variables are in data
-  if (length(rhs_terms) > 0 && !all(rhs_terms %in% names(data))) {
-    missing_vars <- rhs_terms[!rhs_terms %in% names(data)]
-    stop(paste0("Variable(s) ", paste0(missing_vars, collapse=", "),
-                " in formula not found in data"))
-  }
-
-  # Check if any factor has multiple levels per subject
-  for (var in rhs_terms) {
-    if (is.factor(data[[var]])) {
-      # Get count of unique levels per subject
-      level_counts <- tapply(data[[var]], data$subjects, function(x) length(unique(x)))
-
-      # Check if any subject has more than one level
-      if (any(level_counts > 1)) {
-        problematic_subjects <- names(level_counts[level_counts > 1])
-        stop(paste0("Factor '", var, "' has multiple levels per subject. ",
-                    "First problematic subject: ", problematic_subjects[1], " with ",
-                    level_counts[problematic_subjects[1]], " levels. ",
-                    "Group-level design requires exactly one level per subject for each factor."))
-      }
-    }
-  }
-
-  # Create an empty list to store design matrices for each formula
-  design_matrices <- list()
-
-  # Process each formula separately
-  for (i in seq_along(formula)) {
-    current_formula <- formula[[i]]
-
-    # Get current formula's left-hand side (parameter name)
-    param_name <- as.character(stats::terms(current_formula)[[2]])
-
-    # Get all variables used in the current formula (right-hand side)
-    current_vars <- all.vars(stats::terms(current_formula)[[3]])
-
-    # Check if this is an intercept-only formula
-    if (length(current_vars) == 0 && deparse(stats::terms(current_formula)[[3]]) == "1") {
-      warning(paste0("Formula '", param_name, " ~ 1' detected. Note that the intercept is automatically ",
-                     "included as the group-level mean and does not need to be specified."))
-    }
-
-    # Subset data to include only relevant variables
-    subset_data <- data[, c("subjects", current_vars), drop = FALSE]
-
-    # Aggregate data by subject
-    agg_data <- stats::setNames(
-      data.frame(unique(subset_data$subjects)),
-      "subjects"
-    )
-
-    # For each variable in the formula, add it to the aggregated data
-    for (var in current_vars) {
-      # Get unique values per subject
-      var_values <- stats::aggregate(
-        subset_data[[var]],
-        by = list(subjects = subset_data$subjects),
-        FUN = function(x) x[1]
-      )
-
-      # Add to aggregated data
-      agg_data[[var]] <- var_values$x
-
-      # Preserve factor levels if applicable
-      if (is.factor(subset_data[[var]])) {
-        agg_data[[var]] <- factor(agg_data[[var]], levels = levels(subset_data[[var]]))
-      }
-    }
-
-    # Apply model.matrix with the current formula
-    # Instead of constructing a formula string, use the original formula with modified LHS
-    rhs_formula <- stats::terms(current_formula)[[3]]
-    if (!is.null(contrasts)) {
-      # Filter contrasts to only include variables in the current formula
-      formula_vars <- all.vars(rhs_formula)
-      filtered_contrasts <- contrasts[names(contrasts) %in% formula_vars]
-
-      if (length(filtered_contrasts) > 0) {
-        dm <- stats::model.matrix(stats::reformulate(termlabels = deparse(rhs_formula)),
-                                data = agg_data,
-                                contrasts.arg = filtered_contrasts)
-      } else {
-        dm <- stats::model.matrix(stats::reformulate(termlabels = deparse(rhs_formula)),
-                                data = agg_data)
-      }
-    } else {
-      dm <- stats::model.matrix(stats::reformulate(termlabels = deparse(rhs_formula)),
-                              data = agg_data)
-    }
-
-    # Check if the design matrix has an intercept
-    has_intercept <- "(Intercept)" %in% colnames(dm)
-
-    if (!has_intercept) {
-      stop("Intercept-less design matrix not supported yet")
-    }
-
-    # Drop the intercept column if present
-    if (has_intercept) {
-      dm <- dm[, colnames(dm) != "(Intercept)", drop = FALSE]
-    }
-
-    # Store in the list
-    design_matrices[[param_name]] <- dm
-
-    # Check if overall design matrix mean is zero
-    if (ncol(dm) > 0) {
-      design_mean <- mean(as.matrix(dm))
-      if (abs(design_mean) > 1e-1) {  # Small threshold for numerical precision
-        warning(paste0("Design matrix for parameter '", param_name, "' does not have mean zero. ",
-                      "For factors, consider using zero-sum contrast matrices (e.g., contr.bayes, contr.helmert). ",
-                      "For covariates, consider centering them. ",
-                      "This ensures the intercept can be interpreted as the group-level mean."))
-      }
-    }
-  }
-
-  return(design_matrices)
 }
 
 #' Contrast Enforcing Equal Prior Variance on each Level
@@ -451,13 +281,10 @@ contr.anova <- function(n) {
   contr/rep(2*apply(abs(contr),2,max),each=dim(contr)[1])
 }
 
-add_accumulators <- function(data,matchfun=NULL,simulate=FALSE,type="RACE", Fcovariates=NULL) {
+add_accumulators <- function(data,matchfun=NULL,simulate=FALSE, type = "RACE", Fcovariates=NULL) {
+  if(is.null(type) || !type %in% c("RACE", "SDT", "MT", "TC")) return(data)
   if (!is.factor(data$R)) stop("data must have a factor R")
   factors <- names(data)[!names(data) %in% c("R","rt","trials",Fcovariates)]
-if (type=="DDM") {
-    datar <- cbind(data,lR=factor(rep(levels(data$R)[1],dim(data)[1]),
-      levels=levels(data$R)),lM=factor(rep(TRUE,dim(data)[1])))
-  }
   if (type %in% c("RACE","SDT")) {
     nacc <- length(levels(data$R))
     datar <- cbind(do.call(rbind,lapply(1:nacc,function(x){data})),
@@ -465,16 +292,12 @@ if (type=="DDM") {
     datar <- datar[order(rep(1:dim(data)[1],nacc),datar$lR),]
     if (!is.null(matchfun)) {
       lM <- matchfun(datar)
-      if (!is.factor(lM))
-        datar$lM <- factor(lM) else
+      if (!is.factor(lM)){
+        datar$lM <- factor(lM)
+      } else{
         datar$lM <- factor(lM,levels=levels(lM))
+      }
     }
-    # if (!is.null(matchfun)) {
-    #   lM <- matchfun(datar)
-    #   # if (any(is.na(lM)) || !(is.logical(lM)))
-    #   #   stop("matchfun not scoring properly")
-    #   datar$lM <- factor(lM)
-    # }
     # Advantage NAFC
     nam <- unlist(lapply(strsplit(dimnames(datar)[[2]],"lS"),function(x)x[[1]]))
     islS <- nam ==""
@@ -514,23 +337,7 @@ if (type=="DDM") {
 
     if (type %in% c("MT","TC")) datar$winner <- NA else
       datar$winner <- datar$lR==R
-    # datar$winner[is.na(datar$winner)] <- FALSE
   }
-  # # sort cells together
-  # if ("trials" %in% names(data)){
-  #   if(length(factors) > 1){
-  #     datar[order(apply(datar[,c(factors)],1,paste,collapse="_"), as.numeric(datar$trials),as.numeric(datar$lR)),]
-  #   } else{
-  #     datar[order(datar[,c(factors)], as.numeric(datar$trials),as.numeric(datar$lR)),]
-  #   }
-  # }
-  # else{
-  #   if(length(factors) > 1){
-  #     datar[order(apply(datar[,c(factors)],1,paste,collapse="_"), as.numeric(datar$lR)),]
-  #   } else{
-  #     datar[order(datar[,c(factors)], as.numeric(datar$lR)),]
-  #   }
-  # }
   datar
 }
 
@@ -619,20 +426,20 @@ compress_dadm <- function(da,designs,Fcov,Ffun)
     #    levels=unique(cells_nortR)))[as.numeric(factor(cells,levels=unique(cells)))]
 
     # Lower censor
-    if (!any(is.na(out$rt))) { # Not a choice only model
-      winner <- out$lR==levels(out$lR)[[1]]
-      ok <- out$rt[winner]==-Inf
-      if (any(ok)) {
-        ok[ok] <- 1:sum(ok)
-        attr(out,"expand_lc") <- ok[attr(out,"expand_winner")] + 1
-      }
-      # Upper censor
-      ok <- out$rt[winner]==Inf
-      if (any(ok)) {
-        ok[ok] <- 1:sum(ok)
-        attr(out,"expand_uc") <- ok[attr(out,"expand_winner")] + 1
-      }
-    }
+    # if (!any(is.na(out$rt))) { # Not a choice only model
+    #   winner <- out$lR==levels(out$lR)[[1]]
+    #   ok <- out$rt[winner]==-Inf
+    #   if (any(ok)) {
+    #     ok[ok] <- 1:sum(ok)
+    #     attr(out,"expand_lc") <- ok[attr(out,"expand_winner")] + 1
+    #   }
+    #   # Upper censor
+    #   ok <- out$rt[winner]==Inf
+    #   if (any(ok)) {
+    #     ok[ok] <- 1:sum(ok)
+    #     attr(out,"expand_uc") <- ok[attr(out,"expand_winner")] + 1
+    #   }
+    # }
     out
 }
 
@@ -769,11 +576,22 @@ design_model <- function(data,design,model=NULL,
   if (!is.null(rt_resolution) & !is.null(da$rt)) da$rt <- round(da$rt/rt_resolution)*rt_resolution
   if (compress){
     dadm <- compress_dadm(da,designs=out, Fcov=design$Fcovariates,Ffun=names(design$Ffunctions))
+    # Change expansion names
+    # attr(dadm,"expand_all") <- attr(dadm,"expand")
+    if(!is.null(dadm$lR)){
+      attr(dadm,"expand") <- attr(dadm,"expand_winner")
+      attr(dadm,"expand_winner") <- NULL
+    }
   }  else {
     dadm <- da
     attr(dadm,"designs") <- out
     attr(dadm,"s_expand") <- da$subjects
-    attr(dadm,"expand") <- 1:dim(dadm)[1]
+    # attr(dadm,"expand_all") <- 1:nrow(dadm)
+    if(is.null(dadm$lR)){
+      attr(dadm,"expand") <- 1:nrow(dadm)
+    } else{
+      attr(dadm,"expand") <- 1:(nrow(dadm)/length(unique(dadm$lR)))
+    }
   }
   p_names <-  unlist(lapply(out,function(x){dimnames(x)[[2]]}),use.names=FALSE)
   bad_constants <- names(design$constants)[!(names(design$constants) %in% p_names)]
@@ -791,18 +609,65 @@ design_model <- function(data,design,model=NULL,
 
   attr(dadm,"model") <- model
   attr(dadm,"constants") <- design$constants
-
-  if (add_acc) {
-    attr(dadm, "ok_dadm_winner") <- is.finite(dadm$rt) & dadm$winner
-    attr(dadm, "ok_dadm_looser") <- is.finite(dadm$rt) & !dadm$winner
-    attr(dadm, "ok_da_winner") <- attr(dadm, "ok_dadm_winner")[attr(dadm,"expand")]
-    attr(dadm, "ok_da_looser") <- attr(dadm, "ok_dadm_looser")[attr(dadm,"expand")]
-  }
   attr(dadm,"ok_trials") <- is.finite(data$rt)
   attr(dadm,"s_data") <- data$subjects
   dadm
 }
 
+
+make_full_dm <- function(form, Clist, da) {
+  if (is.null(Clist)) Clist <- attr(form, "Clist")
+  pnam <- stats::terms(form)[[2]]
+  da[[pnam]] <- 1
+  # Check if there are any nested CList entries to only contrast for this parameter
+  if(any(names(Clist) == pnam)){
+    replac <- Clist[[pnam]]
+    for(i in 1:length(replac)){
+      Clist[[names(replac)[i]]] <- replac[[i]]
+    }
+    Clist[[pnam]] <- NULL
+  }
+  for (i in names(Clist)) {
+    if (i %in% names(da)) {
+      if (!is.factor(da[[i]])) {
+        stop(i, " must be a factor (design factors has a parameter name?)")
+      }
+
+      levs <- levels(da[[i]])
+      nl <- length(levs)
+
+      if (class(Clist[[i]])[1] == "function") {
+        stats::contrasts(da[[i]]) <- do.call(Clist[[i]], list(n = levs))
+      } else {
+        if (!is.matrix(Clist[[i]]) || nrow(Clist[[i]]) != nl) {
+          if (all(levs %in% row.names(Clist[[i]]))) {
+            Clist[[i]] <- Clist[[i]][levs, ]
+          } else {
+            stop("Clist for ", i, " not a ", nl, " row matrix")
+          }
+        } else {
+          dimnames(Clist[[i]])[[1]] <- levs
+        }
+        stats::contrasts(da[[i]], how.many = ncol(Clist[[i]])) <- Clist[[i]]
+      }
+    }
+  }
+
+  out <- stats::model.matrix(form, da)
+
+  if (dim(out)[2] == 1) {
+    dimnames(out)[[2]] <- as.character(pnam)
+  } else {
+    if (attr(stats::terms(form), "intercept") != 0) {
+      cnams <- paste(pnam, dimnames(out)[[2]][-1], sep = "_")
+      dimnames(out)[[2]] <- c(pnam, cnams)
+    } else {
+      dimnames(out)[[2]] <- paste(pnam, dimnames(out)[[2]], sep = "_")
+    }
+  }
+
+  return(out)
+}
 
 make_dm <- function(form,da,Clist=NULL,Fcovariates=NULL, add_da = FALSE, all_cells_dm = FALSE)
   # Makes a design matrix based on formula form from augmented data frame da
@@ -830,32 +695,8 @@ make_dm <- function(form,da,Clist=NULL,Fcovariates=NULL, add_da = FALSE, all_cel
     attr(out,"contrasts") <- contr
     out
   }
+  out <- make_full_dm(form, Clist, da)
 
-  if (is.null(Clist)) Clist <- attr(form,"Clist")
-  pnam <- stats::terms(form)[[2]]
-  da[[pnam]] <- 1
-  for (i in names(Clist)) if (i %in% names(da)) {
-    if (!is.factor(da[[i]]))
-      stop(i," must be a factor (design factors has a parameter name?)")
-    levs <- levels(da[[i]])
-    nl <- length(levs)
-    if (class(Clist[[i]])[1]=="function")
-      stats::contrasts(da[[i]]) <- do.call(Clist[[i]],list(n=levs)) else {
-        if (!is.matrix(Clist[[i]]) || dim(Clist[[i]])[1]!=nl) {
-          if (all(levs %in% row.names(Clist[[i]]))) # design with missing cells
-            Clist[[i]] <- Clist[[i]][levs,] else
-            stop("Clist for ",i," not a ",nl," row matrix")
-        } else dimnames(Clist[[i]])[[1]] <- levs
-        stats::contrasts(da[[i]],how.many=dim(Clist[[i]])[2]) <- Clist[[i]]
-      }
-  }
-  out <- stats::model.matrix(form,da)
-  if (dim(out)[2]==1) dimnames(out)[[2]] <- as.character(pnam) else {
-    if (attr(stats::terms(form),"intercept")!=0) {
-      cnams <- paste(pnam,dimnames(out)[[2]][-1],sep="_")
-      dimnames(out)[[2]] <- c(pnam,cnams)
-    } else dimnames(out)[[2]] <- paste(pnam,dimnames(out)[[2]],sep="_")
-  }
   if(add_da){
     da <- da[,all.vars(form)[-1], drop = F]
     out <- compress_dm(out, da, all_cells_dm)
@@ -900,16 +741,12 @@ dm_list <- function(dadm)
   unique_nortR <- attr(dadm,"unique_nortR")
   expand_nortR <- attr(dadm,"expand_nortR")
   # ok_trials <- attr(dadm,"ok_trials")
-  # ok_dadm_winner <- attr(dadm,"ok_dadm_winner")
-  # ok_dadm_looser <- attr(dadm,"ok_dadm_looser")
-  # ok_da_winner <- attr(dadm,"ok_da_winner")
-  # ok_da_looser <- attr(dadm,"ok_da_looser")
   # expand_uc <- attr(dadm,"expand_uc")
   # expand_lc <- attr(dadm,"expand_lc")
   dms_mri <- attr(dadm, "design_matrix")
 
   # winner on expanded dadm
-  expand_winner <- attr(dadm,"expand_winner")
+  expand_winner <- attr(dadm,"expand")
   # subjects for first level of lR in expanded dadm
   slR1=dadm$subjects[expand][dadm$lR[expand]==levels(dadm$lR)[[1]]]
 
@@ -922,20 +759,17 @@ dm_list <- function(dadm)
     if(is.null(attr(dadm, "custom_ll"))){
 
       isin1 <- s_expand==i             # da
-      # isin2 <- attr(dadm,"s_data")==i  # data
-
-
+      isin2 <- attr(dadm,"s_data")==i  # data
+      if(length(isin2) > 0){
+        attr(dl[[i]],"expand") <- expand_winner[isin2]-min(expand_winner[isin2]) + 1
+      }
       attr(dl[[i]],"model") <- NULL
       attr(dl[[i]],"p_names") <- p_names
       attr(dl[[i]],"sampled_p_names") <- sampled_p_names
       attr(dl[[i]],"designs") <- sub_design(designs,isin)
-      if(!is.null(expand)) attr(dl[[i]],"expand") <- expand[isin1]-min(expand[isin1]) + 1
+      # if(!is.null(expand)) attr(dl[[i]],"expand_all") <- expand[isin1]-min(expand[isin1]) + 1
       attr(dl[[i]],"contract") <- NULL
       attr(dl[[i]],"expand_winner") <- NULL
-      attr(dl[[i]],"ok_dadm_winner") <- NULL
-      attr(dl[[i]],"ok_dadm_looser") <- NULL
-      attr(dl[[i]],"ok_da_winner") <- NULL
-      attr(dl[[i]],"ok_da_looser") <- NULL
       attr(dl[[i]],"ok_trials") <- NULL
       attr(dl[[i]],"s_data") <- NULL
       attr(dl[[i]],"s_expand") <- NULL
@@ -949,35 +783,6 @@ dm_list <- function(dadm)
       attr(dl[[i]], "unique_nortR") <- NULL
       attr(dl[[i]], "expand_nort") <- NULL
       attr(dl[[i]], "expand_nortR") <- NULL
-      # attr(dl[[i]],"ok_dadm_winner") <- ok_dadm_winner[isin]
-      # attr(dl[[i]],"ok_dadm_looser") <- ok_dadm_looser[isin]
-      #
-      # attr(dl[[i]],"ok_da_winner") <- ok_da_winner[isin1]
-      # attr(dl[[i]],"ok_da_looser") <- ok_da_looser[isin1]
-
-      # attr(dl[[i]],"unique_nort") <- unique_nort[isin]
-      # attr(dl[[i]],"unique_nortR") <- unique_nortR[isin]
-
-      # isinlR1 <- slR1==i
-
-      # if (!is.null(expand_nort)){
-      #   attr(dl[[i]],"expand_nort") <-  expand_nort[isin] - min(expand_nort[isin]) + 1
-      # }
-      # if (!is.null(expand_nortR)){
-      #   attr(dl[[i]],"expand_nortR") <- expand_nortR[isin]-min(expand_nortR[isin]) + 1
-      # }
-
-      # attr(dl[[i]],"ok_trials") <- ok_trials[isin2]
-      # if (!is.null(expand_winner)){
-      #   attr(dl[[i]],"expand_winner") <- expand_winner[isin2]-min(expand_winner[isin2]) + 1
-      # }
-      #
-      # if (!is.null(attr(dadm,"expand_uc"))){
-      #   attr(dl[[i]],"expand_uc") <- as.numeric(factor(expand_uc[isin2]))
-      # }
-      # if (!is.null(attr(dadm,"expand_lc"))){
-      #   attr(dl[[i]],"expand_lc") <- as.numeric(factor(expand_lc[isin2]))
-      # }
 
       if (!is.null(attr(dadm,"LT"))){
         attr(dl[[i]],"LT") <- attr(dadm,"LT")[names(attr(dadm,"LT"))==i]
@@ -1025,8 +830,8 @@ update2version <- function(emc){
       stop("current model not supported for updating, sorry!!")
     }
     model_list <- model()
-    model_list$transform <- fill_transform(transform = NULL,model)
-    model_list$pre_transform <- fill_transform(transform = NULL, model = model, p_vector = pars, is_pre = TRUE)
+    model_list$transform <- fill_transform(transform = old_model()$transform,model)
+    model_list$pre_transform <- fill_transform(transform = old_model()$pre_transform, model = model, p_vector = pars, is_pre = TRUE)
     model_list$bound <- fill_bound(bound = NULL,model)
     model <- function(){return(model_list)}
     return(model)
@@ -1057,8 +862,22 @@ update2version <- function(emc){
         x$model <- y
         return(list(x))
       }, design_list, new_model)
+      emc[[1]]$model <- new_model
     }
-    emc[[1]]$model <- new_model
+
+  } else{
+    if(is.data.frame(first_data)){
+      emc[[1]]$model <- get_new_model(emc[[1]]$model, sampled_pars(design_list[[1]]))
+      design_list[[1]]$model <- emc[[1]]$model
+    } else{
+      old_model <- emc[[1]]$model
+      new_model <- mapply(get_new_model, old_model, lapply(design_list, sampled_pars))
+      design_list <- mapply(function(x, y){
+        x$model <- y
+        return(list(x))
+      }, design_list, new_model)
+      emc[[1]]$model <- new_model
+    }
   }
   prior_new <- emc[[1]]$prior
   attr(prior_new, "type") <- type
@@ -1140,8 +959,9 @@ mapped_pars.emc.design <- function(x, p_vector = NULL, model=NULL,
   if (is.null(model)) if (is.null(design$model))
     stop("Must specify model as not in design") else model <- design$model
   if (remove_subjects) design$Ffactors$subjects <- design$Ffactors$subjects[1]
-  if (!is.matrix(p_vector)) p_vector <- make_pmat(p_vector,design)
-  dadm <- design_model(make_data(p_vector,design,n_trials=1,Fcovariates=Fcovariates),
+  if(is.null(names(p_vector))) names(p_vector) <- names(sampled_pars(design))
+  dadm <- design_model(minimal_design(design, covariates = Fcovariates, verbose = F, drop_R = F, add_acc = F, drop_subjects = F,
+                                      do_functions = F),
                        design,model,rt_check=FALSE,compress=FALSE, verbose = FALSE)
   ok <- !(names(dadm) %in% c("subjects","trials","R","rt","winner"))
   out <- cbind(dadm[,ok],round(get_pars_matrix(p_vector,dadm, design$model()),digits))
@@ -1149,6 +969,7 @@ mapped_pars.emc.design <- function(x, p_vector = NULL, model=NULL,
   if (model()$type=="DDM")  out <- out[,!(names(out) %in% c("lR","lM"))]
   if (any(names(out)=="RACE") && remove_RACE)
     out <- out[as.numeric(out$lR) <= as.numeric(as.character(out$RACE)),,drop=FALSE]
+
   return(out)
 }
 
@@ -1166,6 +987,7 @@ mapped_pars.emc.design <- function(x, p_vector = NULL, model=NULL,
 #' @param add_da Boolean. Whether to include the relevant data columns in the map attribute
 #' @param all_cells_dm Boolean. Whether to include all levels of a factor in the mapping attribute,
 #' even when one is dropped in the design
+#' @param data A data frame to be included for accurate covariate mapping in summary.design
 #'
 #'
 #' @return Named vector.
@@ -1178,14 +1000,14 @@ mapped_pars.emc.design <- function(x, p_vector = NULL, model=NULL,
 #' sampled_pars(design_DDMaE)
 #'
 #' @export
-sampled_pars <- function(x,model=NULL,doMap=TRUE, add_da = FALSE, all_cells_dm = FALSE)
+sampled_pars <- function(x,model=NULL,doMap=FALSE, add_da = FALSE, all_cells_dm = FALSE, data = NULL)
 {
   UseMethod("sampled_pars")
 }
 
 #' @rdname sampled_pars
 #' @export
-sampled_pars.emc.design <- function(x,model=NULL,doMap=TRUE, add_da = FALSE, all_cells_dm = FALSE){
+sampled_pars.emc.design <- function(x,model=NULL,doMap=FALSE, add_da = FALSE, all_cells_dm = FALSE, data = NULL){
   design <- x
   if(is.null(design)) return(NULL)
   if("Flist" %in% names(design)){
@@ -1223,23 +1045,11 @@ sampled_pars.emc.design <- function(x,model=NULL,doMap=TRUE, add_da = FALSE, all
       out <- c(out, pars)
       next
     }
-
-    Ffactors=c(cur_design$Ffactors,list(R=cur_design$Rlevels))
-    data <- as.data.frame.table(array(dim=unlist(lapply(Ffactors,length)),
-                                      dimnames=Ffactors))[,-(length(Ffactors)+1)]
-    for (i in names(cur_design$Ffactors))
-      data[[i]] <- factor(data[[i]],levels=cur_design$Ffactors[[i]])
-
-    # if (!is.null(design$Ffunctions))
-    #   data <- cbind.data.frame(data,data.frame(lapply(design$Ffunctions,function(f){f(data)})))
-
-    if (!is.null(cur_design$Fcovariates)) {
-      covs <- matrix(1,nrow=dim(data)[1],ncol=length(cur_design$Fcovariates),
-                     dimnames=list(NULL,names(cur_design$Fcovariates)))
-      data <- cbind.data.frame(data,covs)
-    }
+    cur_design$Ffactors$subjects <- 1
+    min_design <- minimal_design(cur_design, drop_subjects = F, drop_R = F, verbose = F, emc = data,
+                                 do_functions = F, add_acc = T)
     dadm <- design_model(
-      add_accumulators(data,matchfun=cur_design$matchfun,type=model()$type,Fcovariates=cur_design$Fcovariates),
+      min_design,
       cur_design,model,add_acc=FALSE,verbose=FALSE,rt_check=FALSE,compress=FALSE, add_da = add_da,
       all_cells_dm = all_cells_dm)
     sampled_p_names <- attr(dadm,"sampled_p_names")
@@ -1257,6 +1067,22 @@ sampled_pars.emc.design <- function(x,model=NULL,doMap=TRUE, add_da = FALSE, all
   return(out)
 }
 
+unique_rows_by_index <- function(df, columns) {
+  # Keep only valid columns that are in the dataframe
+  valid_columns <- intersect(columns, names(df))
+
+  if (length(valid_columns) == 0) {
+    # No valid columns to check uniqueness — return first row
+    return(df[1, , drop = FALSE])
+  }
+
+  # Compute uniqueness based on valid columns
+  unique_idx <- !duplicated(df[, valid_columns, drop = FALSE])
+
+  # Return full rows from original dataframe
+  df[unique_idx, , drop = FALSE]
+}
+
 #' Summary method for emc.design objects
 #'
 #' Prints a summary of the design object, including sampled parameters and design matrices.
@@ -1267,12 +1093,14 @@ sampled_pars.emc.design <- function(x,model=NULL,doMap=TRUE, add_da = FALSE, all
 #' @return Invisibly returns the design matrices
 #' @export
 summary.emc.design <- function(object, ...){
-  p_vector <- sampled_pars(object)
+  p_vector <- sampled_pars(object, doMap = TRUE)
   cat("\n Sampled Parameters: \n")
   print(names(p_vector))
   cat("\n Design Matrices: \n")
-  map_out <- sampled_pars(object,object$model, add_da = TRUE)
-  print(attr(map_out, "map"), row.names = FALSE)
+  map_out <- sampled_pars(object,object$model, add_da = TRUE, doMap = TRUE, data = list(...)$data)
+  print_map <-
+  print(lapply(attr(map_out, "map"), unique_rows_by_index,
+               c(names(object$Ffactors), names(object$Ffunctions), 'lM', 'lR')), row.names = FALSE)
   return(invisible(map_out))
 }
 
@@ -1352,7 +1180,7 @@ plot.emc.design <- function(x, p_vector, data = NULL, factors = NULL, plot_facto
 
 
 #' @exportS3Method
-sampled_pars.default <- function(x,model=NULL,doMap=TRUE, add_da = FALSE, all_cells_dm = FALSE){
+sampled_pars.default <- function(x,model=NULL,doMap=FALSE, add_da = FALSE, all_cells_dm = FALSE, data = NULL){
   if(is.null(x)) return(NULL)
   if(!is.null(attr(x, "custom_ll"))){
     pars <- numeric(length(attr(x,"sampled_p_names")))
@@ -1363,6 +1191,6 @@ sampled_pars.default <- function(x,model=NULL,doMap=TRUE, add_da = FALSE, all_ce
     x <- list(x)
     class(x) <- "emc.design"
   }
-  out <- sampled_pars.emc.design(x, model = model, doMap = doMap, add_da = add_da, all_cells_dm = all_cells_dm)
+  out <- sampled_pars.emc.design(x, model = model, doMap = doMap, add_da = add_da, all_cells_dm = all_cells_dm, data = data)
   return(out)
 }

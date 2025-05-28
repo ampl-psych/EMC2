@@ -198,6 +198,7 @@ gibbs_step_infnt_factor <- function(sampler, alpha){
 
   mu_sig <- 1/(n_subjects * epsilon_inv + prior$theta_mu_invar)
   mu_mu <- mu_sig * (epsilon_inv * colSums(alpha_t - eta %*% t(lambda)) + prior$theta_mu_invar * prior$theta_mu_mean)
+
   mu <- rmvnorm(1, mu_mu, diag(mu_sig))
   colnames(mu) <- colnames(alpha_t)
   # calculate mean-centered observations

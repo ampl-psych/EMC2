@@ -10,7 +10,7 @@ double c_log_likelihood_MRI(NumericMatrix pars, NumericVector y, LogicalVector i
                             int n, int m,
                             double min_ll = std::log(1e-10)) {
   NumericVector y_hat(n);
-  double sum_yhat = 0.0;
+  // double sum_yhat = 0.0;
 
   // Compute row sums of betas and accumulate for overall mean
   for (int i = 0; i < n; i++) {
@@ -19,7 +19,7 @@ double c_log_likelihood_MRI(NumericMatrix pars, NumericVector y, LogicalVector i
       s += pars(i, j);
     }
     y_hat[i] = s;
-    sum_yhat += s;
+    // sum_yhat += s;
   }
 
   // double mean_y_hat = sum_yhat / n;
@@ -51,7 +51,7 @@ double c_log_likelihood_MRI_white(NumericMatrix pars, NumericVector y, LogicalVe
                                         int n, int m,
                                         double min_ll = std::log(1e-10)) {
   NumericVector y_hat(n);
-  double sum_yhat = 0.0;
+  // double sum_yhat = 0.0;
   // Compute row sums of the betas (assumed to be in the first m-2 columns)
   for (int i = 0; i < n; i++) {
     double s = 0.0;
@@ -59,7 +59,7 @@ double c_log_likelihood_MRI_white(NumericMatrix pars, NumericVector y, LogicalVe
       s += pars(i, j);
     }
     y_hat[i] = s;
-    sum_yhat += s;
+    // sum_yhat += s;
   }
 
   // double mean_y_hat = sum_yhat / n;

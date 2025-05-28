@@ -20,8 +20,7 @@
         .. ..$ lM: num [1:2, 1] -0.5 0.5
        $ matchfun   :function (d)  
        $ constants  : Named num [1:2] 0 -Inf
-       $ Fcovariates:List of 1
-        ..$ CO: NULL
+       $ Fcovariates: chr "CO"
        $ Ffunctions :List of 1
         ..$ E2:function (d)  
        $ model      :function ()  

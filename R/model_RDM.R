@@ -319,7 +319,7 @@ rRDM <- function(lR,pars,p_types=c("v","B","A","t0"),ok=rep(TRUE,dim(pars)[1]))
 #' | *A*       | log       | \[0, Inf\]      | log(0)    |                  | Between-trial variation (range) in start point                 |
 #' | *B*       | log       | \[0, Inf\]      | log(1)    | *b* = *B* + *A*      | Distance from *A* to *b* (response threshold)                  |
 #' | *t0*      | log       | \[0, Inf\]      | log(0)    |                  | Non-decision time                                             |
-#' | *sv*      | log       | \[0, Inf\]      | log(1)    |                  | Within-trial standard deviation of drift rate                 |
+#' | *s*       | log       | \[0, Inf\]      | log(1)    |                  | Within-trial standard deviation of drift rate                 |
 #'
 #'
 #' All parameters are estimated on the log scale.
@@ -385,7 +385,7 @@ RDM <- function(){
       pars
     },
     # Random function for racing accumulators
-    rfun=function(lR=NULL,pars)  rRDM(lR,pars,ok=attr(pars, "ok")),
+    rfun=function(data=NULL,pars)  rRDM(data$lR,pars,ok=attr(pars, "ok")),
     # Density function (PDF) for single accumulator
     dfun=function(rt,pars) dRDM(rt,pars),
     # Probability function (CDF) for single accumulator

@@ -30,27 +30,27 @@
     Code
       make_data(p_vector, dGNG, n_trials = 10)
     Output
-         subjects     S trials     R        rt
-      1         1  left      1  left        NA
-      2         1 right      1  left        NA
-      3         1  left      2  left        NA
-      4         1 right      2 right 0.7486671
-      5         1  left      3  left        NA
-      6         1 right      3 right 1.0350038
-      7         1  left      4  left        NA
-      8         1 right      4 right 0.4898115
-      9         1  left      5  left        NA
-      10        1 right      5 right 0.7117752
-      11        1  left      6  left        NA
-      12        1 right      6  left        NA
-      13        1  left      7  left        NA
-      14        1 right      7 right 1.2646380
-      15        1  left      8  left        NA
-      16        1 right      8 right 0.4848544
-      17        1  left      9  left        NA
-      18        1 right      9 right 0.4545908
-      19        1  left     10  left        NA
-      20        1 right     10 right 0.5352639
+         trials subjects     S     R        rt
+      1       1        1  left  left        NA
+      2       2        1  left  left        NA
+      3       3        1  left  left        NA
+      4       4        1  left  left        NA
+      5       5        1  left  left        NA
+      6       6        1  left  left        NA
+      7       7        1  left  left        NA
+      8       8        1  left  left        NA
+      9       9        1  left  left        NA
+      10     10        1  left  left        NA
+      11     11        1 right  left        NA
+      12     12        1 right right 0.7486671
+      13     13        1 right right 1.0350038
+      14     14        1 right right 0.4898115
+      15     15        1 right right 0.7117752
+      16     16        1 right  left        NA
+      17     17        1 right right 1.2646380
+      18     18        1 right right 0.4848544
+      19     19        1 right right 0.4545908
+      20     20        1 right right 0.5352639
 
 # probit
 
@@ -70,7 +70,7 @@
       
       $subj_ll
              [,1]
-      1 -9.816787
+      1 -7.266329
       
       $idx
       [1] 1
@@ -81,25 +81,25 @@
     Code
       make_data(p_vector, dprobit, n_trials = 10)
     Output
-         subjects     S trials     R rt
-      1         1  left      1  left NA
-      3         1 right      1 right NA
-      5         1  left      2 right NA
-      7         1 right      2  left NA
-      9         1  left      3 right NA
-      11        1 right      3  left NA
-      13        1  left      4  left NA
-      15        1 right      4 right NA
-      17        1  left      5 right NA
-      19        1 right      5 right NA
-      21        1  left      6  left NA
-      23        1 right      6  left NA
-      25        1  left      7  left NA
-      27        1 right      7 right NA
-      29        1  left      8  left NA
-      31        1 right      8  left NA
-      33        1  left      9  left NA
-      35        1 right      9 right NA
-      37        1  left     10  left NA
-      39        1 right     10 right NA
+         trials subjects     S     R rt
+      1       1        1  left  left NA
+      3       2        1  left  left NA
+      5       3        1  left right NA
+      7       4        1  left  left NA
+      9       5        1  left right NA
+      11      6        1  left  left NA
+      13      7        1  left  left NA
+      15      8        1  left  left NA
+      17      9        1  left right NA
+      19     10        1  left  left NA
+      21     11        1 right  left NA
+      23     12        1 right  left NA
+      25     13        1 right  left NA
+      27     14        1 right right NA
+      29     15        1 right  left NA
+      31     16        1 right  left NA
+      33     17        1 right right NA
+      35     18        1 right right NA
+      37     19        1 right right NA
+      39     20        1 right right NA
 

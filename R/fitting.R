@@ -478,8 +478,8 @@ create_chain_proposals <- function(emc, samples_idx = NULL, do_block = TRUE){
       emp_covs <- moments$w_cov
       chains_mu[[sub]] <- moments$w_mu
       if(do_block) emp_covs[block_idx] <- 0
-      if(is.negative.semi.definite(emp_covs)){
-        # If negative semi definite, do not use it
+      if(!is.positive.definite(emp_covs)){
+        # If not positive definite, do not use it
         next
       } else{
         chains_var[[sub]] <- emp_covs
@@ -747,7 +747,7 @@ make_emc <- function(data,design,model=NULL,
   class(design) <- "emc.design"
   prior_in <- merge_priors(prior_list)
 
-  prior_in <- prior(design, type, update = prior_in, ...)
+  prior_in <- prior(design, type, update = prior_in, group_design = group_design, ...)
   attr(dadm_list[[1]], "prior") <- prior_in
 
   # if(!is.null(subject_covariates)) attr(dadm_list, "subject_covariates") <- subject_covariates

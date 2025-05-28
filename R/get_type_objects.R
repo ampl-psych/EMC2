@@ -34,6 +34,8 @@ get_objects <- function(type, selection = NULL, sample_prior = F, design = NULL,
 add_prior_names <- function(prior, design, ...){
   dots <- list(...)
   pnames <- names(sampled_pars(design))
+  # If there is a group_design add its names
+  gnames <- add_group_par_names(pnames, list(...)$group_design)
   nuisance <- is.element(seq_len(length(pnames)), unique(c(dots$nuisance, dots$nuisance_non_hyper)))
   # This might be a weird place to set the nuisance parameters in the prior,
   # but it's the most efficient for now
@@ -43,6 +45,10 @@ add_prior_names <- function(prior, design, ...){
         prior[[pri]] <- prior[[pri]][!nuisance]
         names(prior[[pri]]) <- pnames[!nuisance]
       }
+      if(length(gnames) == length(prior[[pri]])){
+        prior[[pri]] <- prior[[pri]][!nuisance]
+        names(prior[[pri]]) <- gnames[!nuisance]
+      }
     } else{
       if(length(pnames) == nrow(prior[[pri]])){
         prior[[pri]] <- prior[[pri]][!nuisance,,drop=FALSE]
@@ -51,6 +57,14 @@ add_prior_names <- function(prior, design, ...){
       if(length(pnames) == ncol(prior[[pri]])){
         prior[[pri]] <- prior[[pri]][,!nuisance,drop=FALSE]
         colnames(prior[[pri]]) <- pnames[!nuisance]
+      }
+      if(length(gnames) == nrow(prior[[pri]])){
+        prior[[pri]] <- prior[[pri]][!nuisance,,drop=FALSE]
+        rownames(prior[[pri]]) <- gnames[!nuisance]
+      }
+      if(length(gnames) == ncol(prior[[pri]])){
+        prior[[pri]] <- prior[[pri]][,!nuisance,drop=FALSE]
+        colnames(prior[[pri]]) <- gnames[!nuisance]
       }
     }
   }
@@ -104,7 +118,7 @@ get_objects_standard <- function(selection, sample_prior, return_prior, design =
                                  prior = NULL, stage = 'sample', N = 1e5, sampler = NULL, ...){
   acc_selection <- c("mu", "sigma2", "beta", "covariance", "correlation", "alpha", "Sigma", "LL")
   if(return_prior & !sample_prior){
-    if(is.null(list(...)$return_info)) prior$prior <- get_prior_standard(design = design, sample = F, prior = prior)
+    if(is.null(list(...)$return_info)) prior$prior <- get_prior_standard(design = design, sample = F, prior = prior, group_des = list(...)$group_design)
     prior$descriptions <- list(
       theta_mu_mean = "mean of the group-level mean prior",
       theta_mu_var = "variance of the group-level mean prior",
@@ -136,7 +150,7 @@ get_objects_standard <- function(selection, sample_prior, return_prior, design =
         sampler <- list(list(samples =  list(alpha = get_alphas(mu, var, sub_names))))
       } else{
         sampler <- list(list(samples = get_prior_standard(prior = prior, design = design, selection = selection,N = N,
-                                                          par_groups = sampler[[1]]$par_groups, betas = sampler[[1]]$betas)))
+                                                          par_groups = sampler[[1]]$par_groups, group_des = sampler[[1]]$group_design)))
       }
       sampler[[1]]$prior <- prior
       class(sampler) <- "emc"
@@ -426,7 +440,13 @@ get_base <- function(sampler, idx, selection){
   } else if(selection == "mu"){
     return(lapply(sampler, FUN = function(x) return(x$samples$theta_mu[,idx, drop = F])))
   } else if(selection == "beta"){
-    return(lapply(sampler, FUN = function(x) return(x$samples$beta[,idx, drop = F])))
+    return(lapply(sampler, FUN = function(x) {
+      if (!is.null(x$samples$theta_beta)) {
+        return(x$samples$theta_beta[,idx, drop = F])
+      } else {
+        return(x$samples$theta_mu[,idx, drop = F])
+      }
+    }))
   } else if(selection == "covariance"){
     return(lapply(sampler, FUN = function(x){
       out <- x$samples$theta_var[,,idx, drop = F]
