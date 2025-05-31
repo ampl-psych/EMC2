@@ -33,7 +33,7 @@ add_info_standard <- function(sampler, prior = NULL, ...){
   sampler$par_group <- list(...)$par_groups
   sampler$is_blocked <- sampler$par_group %in% which(table(sampler$par_group) > 1)
   sampler$prior <- get_prior_standard(prior, n_pars, sample = F,
-                                      group_des = group_design)
+                                      group_design = group_design)
   sampler$group_designs <- group_design
   return(sampler)
 }
@@ -82,7 +82,7 @@ calculate_implied_means <- function(mean_designs, beta_params, n_pars) {
   return(mu_implied)
 }
 
-get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, selection = "mu", design = NULL, group_des = NULL,
+get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, selection = "mu", design = NULL, group_design = NULL,
                                par_groups = NULL){
   # Checking and default priors
   if(is.null(prior)){
@@ -96,8 +96,8 @@ get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1
   }
 
   # Number of additional parameters from design matrices
-  if(!is.null(group_des)){
-    n_additional <- n_additional_group_pars(group_des)
+  if(!is.null(group_design)){
+    n_additional <- n_additional_group_pars(group_design)
   } else{
     n_additional <- 0
   }
@@ -126,12 +126,12 @@ get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1
       # Sample beta (all parameters including regressors)
       beta <- t(mvtnorm::rmvnorm(N, mean = prior$theta_mu_mean,
                              sigma = prior$theta_mu_var))
-      rownames(beta) <- add_group_par_names(par_names, group_des)
+      rownames(beta) <- add_group_par_names(par_names, group_design)
       if(selection %in% c("beta", "mu", "alpha")){
         samples$theta_mu <- beta
         if(selection %in% c("mu", "alpha")){
           samples$par_names <- par_names
-          samples$group_designs <- group_des
+          samples$group_designs <- group_design
         }
       }
     }

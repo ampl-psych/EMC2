@@ -12,28 +12,29 @@ calc_ll_R <- function(p_vector, model, dadm){
 log_likelihood_race <- function(pars,dadm,model,min_ll=log(1e-10))
   # Race model summed log likelihood
 {
-  if (any(names(dadm)=="RACE")) # Some accumulators not present
+  if (any(names(dadm)=="RACE")){# Some accumulators not present
     pars[as.numeric(dadm$lR)>as.numeric(as.character(dadm$RACE)),] <- NA
+  }
 
-  if (is.null(attr(pars,"ok")))
-    ok <- !logical(dim(pars)[1]) else ok <- attr(pars,"ok")
-
-    lds <- numeric(dim(dadm)[1]) # log pdf (winner) or survivor (losers)
-    lds[dadm$winner] <- log(model$dfun(rt=dadm$rt[dadm$winner],
-                                                      pars=pars[dadm$winner,]))
-    n_acc <- length(levels(dadm$R))
-    if (n_acc>1) lds[!dadm$winner] <- log(1-model$pfun(rt=dadm$rt[!dadm$winner],pars=pars[!dadm$winner,]))
-    lds[is.na(lds) | !ok] <- min_ll
-    if (n_acc>1) {
-      ll <- lds[dadm$winner]
-      if (n_acc==2) {
-        ll <- ll + lds[!dadm$winner]
-      } else {
-        ll <- ll + apply(matrix(lds[!dadm$winner],nrow=n_acc-1),2,sum)
-      }
-      ll[is.na(ll)] <- min_ll
-      return(sum(pmax(min_ll,ll[attr(dadm,"expand")])))
-    } else return(sum(pmax(min_ll,lds[attr(dadm,"expand")])))
+  if (is.null(attr(pars,"ok"))){
+    ok <- !logical(dim(pars)[1])
+  } else ok <- attr(pars,"ok")
+  lds <- numeric(dim(dadm)[1]) # log pdf (winner) or survivor (losers)
+  lds[dadm$winner] <- log(model$dfun(rt=dadm$rt[dadm$winner],
+                                                    pars=pars[dadm$winner,]))
+  n_acc <- length(levels(dadm$R))
+  if (n_acc>1) lds[!dadm$winner] <- log(1-model$pfun(rt=dadm$rt[!dadm$winner],pars=pars[!dadm$winner,]))
+  lds[is.na(lds) | !ok] <- min_ll
+  if (n_acc>1) {
+    ll <- lds[dadm$winner]
+    if (n_acc==2) {
+      ll <- ll + lds[!dadm$winner]
+    } else {
+      ll <- ll + apply(matrix(lds[!dadm$winner],nrow=n_acc-1),2,sum)
+    }
+    ll[is.na(ll)] <- min_ll
+    return(sum(pmax(min_ll,ll[attr(dadm,"expand")])))
+  } else return(sum(pmax(min_ll,lds[attr(dadm,"expand")])))
 }
 
 

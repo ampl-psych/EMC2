@@ -11,7 +11,7 @@
 \usage{
 sampled_pars(
   x,
-  model = NULL,
+  group_design = NULL,
   doMap = FALSE,
   add_da = FALSE,
   all_cells_dm = FALSE,
@@ -20,7 +20,7 @@ sampled_pars(
 
 \method{sampled_pars}{emc.design}(
   x,
-  model = NULL,
+  group_design = NULL,
   doMap = FALSE,
   add_da = FALSE,
   all_cells_dm = FALSE,
@@ -29,7 +29,7 @@ sampled_pars(
 
 \method{sampled_pars}{emc.group_design}(
   x,
-  model = NULL,
+  group_design = NULL,
   doMap = FALSE,
   add_da = FALSE,
   all_cells_dm = FALSE,
@@ -38,7 +38,7 @@ sampled_pars(
 
 \method{sampled_pars}{emc.prior}(
   x,
-  model = NULL,
+  group_design = NULL,
   doMap = FALSE,
   add_da = FALSE,
   all_cells_dm = FALSE,
@@ -47,7 +47,7 @@ sampled_pars(
 
 \method{sampled_pars}{emc}(
   x,
-  model = NULL,
+  group_design = NULL,
   doMap = FALSE,
   add_da = FALSE,
   all_cells_dm = FALSE,
@@ -57,7 +57,7 @@ sampled_pars(
 \arguments{
 \item{x}{an \code{emc.design} object made with \code{design()} or an \code{emc} object.}
 
-\item{model}{a model list. Defaults to the model specified in the design list.}
+\item{group_design}{an \code{emc.group_design} object made with \code{group_design()}}
 
 \item{doMap}{logical. If \code{TRUE} will also include an attribute \code{map}
 with the design matrices that perform the mapping back to the design}

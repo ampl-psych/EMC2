@@ -164,13 +164,12 @@ group_design <- function(formula, data, subject_design, contrasts = NULL){
 
 #' @rdname sampled_pars
 #' @export
-sampled_pars.emc.group_design <- function(x,model=NULL,doMap=FALSE, add_da = FALSE, all_cells_dm = FALSE, data= NULL){
+sampled_pars.emc.group_design <- function(x,group_design=NULL,doMap=FALSE, add_da = FALSE, all_cells_dm = FALSE, data= NULL){
   if(is.null(x)) return(logical(0))
   par_names <- unlist(lapply(x, colnames))
   par_names <- setNames(rep(0, length(par_names)), par_names)
   return(par_names)
 }
-
 
 add_group_par_names <- function(pars, group_des){
   if(is.null(group_des)) return(pars)
