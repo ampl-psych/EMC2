@@ -6,6 +6,9 @@
 #include "model_DDM.h"
 #include "model_MRI.h"
 #include "trend.h"
+#ifdef _OPENMP
+#include <omp.h>
+#endif
 using namespace Rcpp;
 
 LogicalVector c_do_bound(NumericMatrix pars,
@@ -321,51 +324,60 @@ NumericVector calc_ll(NumericMatrix p_matrix, DataFrame data, NumericVector cons
   const int n_particles = p_matrix.nrow();
   const int n_trials = data.nrow();
   NumericVector lls(n_particles);
-  NumericVector p_vector(p_matrix.ncol());
   CharacterVector p_names = colnames(p_matrix);
-  p_vector.names() = p_names;
-  NumericMatrix pars(n_trials, p_types.length());
-  LogicalVector is_ok(n_trials);
 
-  // Once (outside the main loop over particles):
+  // Pre-compute specs once before parallel region
   NumericMatrix minmax = bounds["minmax"];
   CharacterVector mm_names = colnames(minmax);
   std::vector<PreTransformSpec> p_specs;
   std::vector<BoundSpec> bound_specs;
+  
+  // Initialize specs based on first particle
+  if (n_particles > 0) {
+    NumericVector p_vector_init = p_matrix(0, _);
+    p_vector_init.names() = p_names;
+    p_specs = make_pretransform_specs(p_vector_init, pretransforms);
+    NumericMatrix pars_init = get_pars_matrix(p_vector_init, constants, transforms, p_specs, 
+                                               p_types, designs, n_trials, data, trend);
+    bound_specs = make_bound_specs(minmax, mm_names, pars_init, bounds);
+  }
 
   if(type == "DDM"){
     IntegerVector expand = data.attr("expand");
+    
+    #ifdef _OPENMP
+    #pragma omp parallel for
+    #endif
     for(int i = 0; i < n_particles; i++){
-      p_vector = p_matrix(i, _);
-      if(i == 0){
-        p_specs = make_pretransform_specs(p_vector, pretransforms);
-      }
-      pars = get_pars_matrix(p_vector, constants, transforms, p_specs, p_types, designs, n_trials, data, trend);
-      // Precompute specs
-      if (i == 0) {                            // first particle only, just to get colnames
-        bound_specs = make_bound_specs(minmax,mm_names,pars,bounds);
-      }
-      is_ok = c_do_bound(pars, bound_specs);
-      lls[i] = c_log_likelihood_DDM(pars, data, n_trials, expand, min_ll, is_ok);
+      // Create thread-local variables
+      NumericVector p_vector_local = p_matrix(i, _);
+      p_vector_local.names() = p_names;
+      
+      NumericMatrix pars_local = get_pars_matrix(p_vector_local, constants, transforms, p_specs, 
+                                                  p_types, designs, n_trials, data, trend);
+      LogicalVector is_ok_local = c_do_bound(pars_local, bound_specs);
+      
+      lls[i] = c_log_likelihood_DDM(pars_local, data, n_trials, expand, min_ll, is_ok_local);
     }
   } else if(type == "MRI" || type == "MRI_AR1"){
     int n_pars = p_types.length();
     NumericVector y = extract_y(data);
+    
+    #ifdef _OPENMP
+    #pragma omp parallel for
+    #endif
     for(int i = 0; i < n_particles; i++){
-      p_vector = p_matrix(i, _);
-      if(i == 0){
-        p_specs = make_pretransform_specs(p_vector, pretransforms);
-      }
-      pars = get_pars_matrix(p_vector, constants, transforms, p_specs, p_types, designs, n_trials, data, trend);
-      // Precompute specs
-      if (i == 0) {                            // first particle only, just to get colnames
-        bound_specs = make_bound_specs(minmax,mm_names,pars,bounds);
-      }
-      is_ok = c_do_bound(pars, bound_specs);
+      NumericVector p_vector_local = p_matrix(i, _);
+      p_vector_local.names() = p_names;
+      
+      NumericMatrix pars_local = get_pars_matrix(p_vector_local, constants, transforms, p_specs, 
+                                                  p_types, designs, n_trials, data, trend);
+      LogicalVector is_ok_local = c_do_bound(pars_local, bound_specs);
+      
       if(type == "MRI"){
-        lls[i] = c_log_likelihood_MRI(pars, y, is_ok, n_trials, n_pars, min_ll);
+        lls[i] = c_log_likelihood_MRI(pars_local, y, is_ok_local, n_trials, n_pars, min_ll);
       } else{
-        lls[i] = c_log_likelihood_MRI_white(pars, y, is_ok, n_trials, n_pars, min_ll);
+        lls[i] = c_log_likelihood_MRI_white(pars_local, y, is_ok_local, n_trials, n_pars, min_ll);
       }
     }
   } else{
@@ -386,19 +398,37 @@ NumericVector calc_ll(NumericMatrix p_matrix, DataFrame data, NumericVector cons
     }
     NumericVector lR = data["lR"];
     int n_lR = unique(lR).length();
+    
+    #ifdef _OPENMP
+    #pragma omp parallel for
+    #endif
     for (int i = 0; i < n_particles; ++i) {
-      p_vector = p_matrix(i, _);
-      if(i == 0){
-        p_specs = make_pretransform_specs(p_vector, pretransforms);
-      }
-      pars = get_pars_matrix(p_vector, constants, transforms, p_specs, p_types, designs, n_trials, data, trend);
-      if (i == 0) {                            // first particle only, just to get colnames
-        bound_specs = make_bound_specs(minmax,mm_names,pars,bounds);
-      }
-      is_ok = c_do_bound(pars, bound_specs);
-      is_ok = lr_all(is_ok, n_lR);
-      lls[i] = c_log_likelihood_race(pars, data, dfun, pfun, n_trials, winner, expand, min_ll, is_ok);
+      NumericVector p_vector_local = p_matrix(i, _);
+      p_vector_local.names() = p_names;
+      
+      NumericMatrix pars_local = get_pars_matrix(p_vector_local, constants, transforms, p_specs, 
+                                                  p_types, designs, n_trials, data, trend);
+      LogicalVector is_ok_local = c_do_bound(pars_local, bound_specs);
+      is_ok_local = lr_all(is_ok_local, n_lR);
+      
+      lls[i] = c_log_likelihood_race(pars_local, data, dfun, pfun, n_trials, winner, expand, min_ll, is_ok_local);
     }
   }
   return(lls);
+}
+
+// [[Rcpp::export]]
+int get_openmp_threads() {
+  #ifdef _OPENMP
+    return omp_get_max_threads();
+  #else
+    return 1;
+  #endif
+}
+
+// [[Rcpp::export]]
+void set_openmp_threads(int n) {
+  #ifdef _OPENMP
+    omp_set_num_threads(n);
+  #endif
 }

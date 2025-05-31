@@ -468,6 +468,26 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// get_openmp_threads
+int get_openmp_threads();
+RcppExport SEXP _EMC2_get_openmp_threads() {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    rcpp_result_gen = Rcpp::wrap(get_openmp_threads());
+    return rcpp_result_gen;
+END_RCPP
+}
+// set_openmp_threads
+void set_openmp_threads(int n);
+RcppExport SEXP _EMC2_set_openmp_threads(SEXP nSEXP) {
+BEGIN_RCPP
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< int >::type n(nSEXP);
+    set_openmp_threads(n);
+    return R_NilValue;
+END_RCPP
+}
 // c_add_charvectors
 CharacterVector c_add_charvectors(CharacterVector x, CharacterVector y);
 RcppExport SEXP _EMC2_c_add_charvectors(SEXP xSEXP, SEXP ySEXP) {
@@ -510,6 +530,8 @@ static const R_CallMethodDef CallEntries[] = {
     {"_EMC2_build_hrf_kernel", (DL_FUNC) &_EMC2_build_hrf_kernel, 10},
     {"_EMC2_construct_design_matrix", (DL_FUNC) &_EMC2_construct_design_matrix, 13},
     {"_EMC2_calc_ll", (DL_FUNC) &_EMC2_calc_ll, 11},
+    {"_EMC2_get_openmp_threads", (DL_FUNC) &_EMC2_get_openmp_threads, 0},
+    {"_EMC2_set_openmp_threads", (DL_FUNC) &_EMC2_set_openmp_threads, 1},
     {"_EMC2_c_add_charvectors", (DL_FUNC) &_EMC2_c_add_charvectors, 2},
     {NULL, NULL, 0}
 };

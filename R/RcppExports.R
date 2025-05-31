@@ -113,6 +113,14 @@ calc_ll <- function(p_matrix, data, constants, designs, type, bounds, transforms
     .Call(`_EMC2_calc_ll`, p_matrix, data, constants, designs, type, bounds, transforms, pretransforms, p_types, min_ll, trend)
 }
 
+get_openmp_threads <- function() {
+    .Call(`_EMC2_get_openmp_threads`)
+}
+
+set_openmp_threads <- function(n) {
+    invisible(.Call(`_EMC2_set_openmp_threads`, n))
+}
+
 c_add_charvectors <- function(x, y) {
     .Call(`_EMC2_c_add_charvectors`, x, y)
 }
