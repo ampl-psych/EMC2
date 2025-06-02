@@ -33,7 +33,7 @@ staircase_function <- function(dts,staircase) {
     } else {
       sR[i] <- Ri-1
       srt[i] <- min(dts[-1,i])
-    if (i<ns) SSD[i+1] <- round(SSD[i] - staircase$stairstep,3)
+      if (i<ns) SSD[i+1] <- round(SSD[i] - staircase$stairstep,3)
     }
   }
   list(sR=sR,srt=srt,SSD=SSD)
@@ -45,7 +45,7 @@ ST_staircase_function <- function(dts,staircase) {
   SSD[1] <- staircase$SSD0
   if (is.null(staircase$accST))  # Indices for accumulator with SSD
     iSSD <- 1 else               # Only stop accumulator
-    iSSD <- c(1,staircase$accST) # NB: accST refers to rows in dts
+      iSSD <- c(1,staircase$accST) # NB: accST refers to rows in dts
   for (i in 1:ns) {
     if (SSD[i]<staircase$stairmin) SSD[i] <- staircase$stairmin
     if (SSD[i]>staircase$stairmax) SSD[i] <- staircase$stairmax
@@ -67,7 +67,7 @@ ST_staircase_function <- function(dts,staircase) {
         if (i<ns) {
           if (Ri %in% iSSD) # Stop-triggered response
             SSD[i+1] <- round(SSD[i] + staircase$stairstep,3) else
-            SSD[i+1] <- round(SSD[i] - staircase$stairstep,3)
+              SSD[i+1] <- round(SSD[i] - staircase$stairstep,3)
         }
       }
     }
@@ -148,7 +148,7 @@ dexGaussian <- function(rt,pars)
   rt[isexp] <- dexp(rt[isexp]-pars[isexp,"mu"],1/pars[isexp,"tau"])
   isnorm <- !isexp & pars[,"tau"] < 0.05 * pars[,"sigma"] # normal
   rt[isnorm] <- dnorm(rt[isnorm], mean = pars[isnorm,"mu"],
-                                  sd = pars[isnorm,"sigma"])
+                      sd = pars[isnorm,"sigma"])
   isexg <- !(isexp | isnorm)
   if (any(isexg)) {
     s2 <- pars[isexg,"sigma"]^2
@@ -169,7 +169,7 @@ pexGaussian <- function(rt,pars)
   rt[isexp] <- pexp(rt[isexp]-pars[isexp,"mu"],1/pars[isexp,"tau"])
   isnorm <- !isexp & pars[,"tau"] < 0.05 * pars[,"sigma"] # normal
   rt[isnorm] <- pnorm(rt[isnorm], mean = pars[isnorm,"mu"],
-                                  sd = pars[isnorm,"sigma"])
+                      sd = pars[isnorm,"sigma"])
   isexg <- !(isexp | isnorm)
   if (any(isexg)) {
     s2 <- pars[isexg,"sigma"]^2
@@ -177,8 +177,8 @@ pexGaussian <- function(rt,pars)
     rt[isexg] <-
       pnorm((rt[isexg] - pars[isexg,"mu"])/pars[isexg,"sigma"]) -
       exp(log(pnorm(z/pars[isexg,"sigma"])) +
-        ((pars[isexg,"mu"] + (s2/pars[isexg,"tau"]))^2 - (pars[isexg,"mu"]^2) -
-          2 * rt[isexg] * (s2/pars[isexg,"tau"]))/(2 * s2))
+            ((pars[isexg,"mu"] + (s2/pars[isexg,"tau"]))^2 - (pars[isexg,"mu"]^2) -
+               2 * rt[isexg] * (s2/pars[isexg,"tau"]))/(2 * s2))
   }
   rt
 }
@@ -334,7 +334,7 @@ rSSexGaussian <- function(lR,pars,ok=rep(TRUE,dim(pars)[1]))
 
   # Fill in stop-triggered accumulators
   if (any(isSTT)) dt[-1,][isSTT] <- rexG(nst,pars[isSTT,"mu"],
-                                      pars[isSTT,"sigma"],pars[isSTT,"tau"])
+                                         pars[isSTT,"sigma"],pars[isSTT,"tau"])
 
   # pick out triggered stop racers
   isTS <- logical(ntrials)
@@ -343,7 +343,7 @@ rSSexGaussian <- function(lR,pars,ok=rep(TRUE,dim(pars)[1]))
 
   # Fill in stop accumulators
   if (any(isTS)) dt[1,isTS] <- rexG(ns,pars[is1,"muS"][isTS],
-                                 pars[is1,"sigmaS"][isTS],pars[is1,"tauS"][isTS])
+                                    pars[is1,"sigmaS"][isTS],pars[is1,"tauS"][isTS])
 
   # staircase algorithm
   pstair <- is.na(pars[,"SSD"])
@@ -451,16 +451,16 @@ pstopEXG <- function(parstop,n_acc,upper=Inf,
                dimnames=list(NULL,NULL,gpars))
   cells <- apply(
     cbind(SSDs,ps,upper,matrix(as.vector(aperm(pgo,c(2,1,3))),nrow=ntrials))
-  ,1,paste,collapse="")
+    ,1,paste,collapse="")
   # cells <- character(ntrials)
   # for (i in 1:ntrials)
   #   cells[i] <- paste(SSDs[i],ps[i,],pgo[,i,],upper[i],collapse="")
   uniq <- !duplicated(cells)
   ups <- sapply(1:sum(uniq),function(i){
     my.integrate(f=stopfn_exg,lower=-Inf,SSD=SSDs[i],upper=upper[i],
-                           mu=c(ps[i,"muS"],pgo[,i,"mu"]),
-                           sigma=c(ps[i,"sigmaS"],pgo[,i,"sigma"]),
-                           tau=c(ps[i,"tauS"],pgo[,i,"tau"]))
+                 mu=c(ps[i,"muS"],pgo[,i,"mu"]),
+                 sigma=c(ps[i,"sigmaS"],pgo[,i,"sigma"]),
+                 tau=c(ps[i,"tauS"],pgo[,i,"tau"]))
   })
   ups[as.numeric(factor(cells,levels=cells[uniq]))]
 }
@@ -540,12 +540,12 @@ SSexG <- function() {
     p_types=c(mu=log(.4),sigma=log(.05),tau=log(.1),
               muS=log(.3),sigmaS=log(.025),tauS=log(.05),tf=qnorm(0),gf=qnorm(0)),
     transform=list(func=c( mu = "exp",  sigma = "exp",  tau = "exp",
-                          muS = "exp", sigmaS = "exp", tauS = "exp",
-                          tf="pnorm",gf="pnorm")),
+                           muS = "exp", sigmaS = "exp", tauS = "exp",
+                           tf="pnorm",gf="pnorm")),
     bound=list(minmax=cbind( mu=c(0,Inf),  sigma=c(0,Inf),  tau=c(1e-4,Inf),
-                            muS=c(0,Inf), sigmaS=c(0,Inf), tauS=c(1e-4,Inf),
-                            tf=c(.001,.999),gf=c(.001,.999)),
-                            exception=c(tf=0,gf=0)),
+                             muS=c(0,Inf), sigmaS=c(0,Inf), tauS=c(1e-4,Inf),
+                             tf=c(.001,.999),gf=c(.001,.999)),
+               exception=c(tf=0,gf=0)),
     # Trial dependent parameter transform
     Ttransform = function(pars,dadm) {
       # if (any(names(dadm)=="SSD")) pars <- cbind(pars,SSD=dadm$SSD) else
@@ -642,7 +642,7 @@ rSShybrid <- function(lR,pars,ok=rep(TRUE,dim(pars)[1]))
 
   # Fill in stop accumulators
   if (any(isTS)) dt[1,isTS] <- rexG(ns,pars[is1,"muS"][isTS],
-    pars[is1,"sigmaS"][isTS],pars[is1,"tauS"][isTS])
+                                    pars[is1,"sigmaS"][isTS],pars[is1,"tauS"][isTS])
 
   # staircase algorithm
   pstair <- is.na(pars[,"SSD"])
@@ -742,7 +742,7 @@ rSShybrid <- function(lR,pars,ok=rep(TRUE,dim(pars)[1]))
 
 
 pstopHybrid <- function(parstop,n_acc,upper=Inf,
-  gpars=c("v","B","t0","A"),spars=c("muS","sigmaS","tauS"))
+                        gpars=c("v","B","t0","A"),spars=c("muS","sigmaS","tauS"))
 {
   sindex <- seq(1,nrow(parstop),by=n_acc)  # Stop accumulator index
   ps <- parstop[sindex,spars,drop=FALSE]   # Stop accumulator parameters
@@ -753,13 +753,13 @@ pstopHybrid <- function(parstop,n_acc,upper=Inf,
                dimnames=list(NULL,NULL,gpars))
   cells <- apply(
     cbind(SSDs,ps,upper,matrix(as.vector(aperm(pgo,c(2,1,3))),nrow=ntrials))
-  ,1,paste,collapse="")
+    ,1,paste,collapse="")
   uniq <- !duplicated(cells)
   ups <- sapply(1:sum(uniq),function(i){
     my.integrate(f=stopfn_rdex,lower=0,upper=upper[i],
-      mu=ps[i,"muS"],sigma=ps[i,"sigmaS"],tau=ps[i,"tauS"],
-      v=pgo[,i,"v"],B=pgo[,i,"B"],A=pgo[,i,"A"],t0=pgo[,i,"t0"],
-      SSD=SSDs[i],n_acc=n_acc)
+                 mu=ps[i,"muS"],sigma=ps[i,"sigmaS"],tau=ps[i,"tauS"],
+                 v=pgo[,i,"v"],B=pgo[,i,"B"],A=pgo[,i,"A"],t0=pgo[,i,"t0"],
+                 SSD=SSDs[i],n_acc=n_acc)
   })
   ups[as.numeric(factor(cells,levels=cells[uniq]))]
 }
@@ -805,10 +805,10 @@ SShybrid <- function() {
     pfunG=function(rt,pars) pRDM(rt,pars),
     # Density function (PDF) for single stop racer
     dfunS=function(rt,pars) dexGaussianS(rt,
-      pars[,c("muS","sigmaS","tauS","SSD"),drop=FALSE]),
+                                         pars[,c("muS","sigmaS","tauS","SSD"),drop=FALSE]),
     # Probability function (CDF) for single stop racer
     pfunS=function(rt,pars) pexGaussianS(rt,
-      pars[,c("muS","sigmaS","tauS","SSD"),drop=FALSE]),
+                                         pars[,c("muS","sigmaS","tauS","SSD"),drop=FALSE]),
     # Stop probability integral
     sfun=function(pars,n_acc,upper=Inf) pstopHybrid(pars,n_acc,upper=upper),
     # Random function for SS race
