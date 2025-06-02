@@ -1,3 +1,4 @@
+
 #include <Rcpp.h>
 #include "utility_functions.h"
 #include "model_lnr.h"
@@ -10,6 +11,9 @@
 #include <omp.h>
 #endif
 using namespace Rcpp;
+
+// [[Rcpp::plugins(openmp)]]
+
 
 LogicalVector c_do_bound(NumericMatrix pars,
                               const std::vector<BoundSpec>& specs)
@@ -331,20 +335,20 @@ NumericVector calc_ll(NumericMatrix p_matrix, DataFrame data, NumericVector cons
   CharacterVector mm_names = colnames(minmax);
   std::vector<PreTransformSpec> p_specs;
   std::vector<BoundSpec> bound_specs;
-  
+
   // Initialize specs based on first particle
   if (n_particles > 0) {
     NumericVector p_vector_init = p_matrix(0, _);
     p_vector_init.names() = p_names;
     p_specs = make_pretransform_specs(p_vector_init, pretransforms);
-    NumericMatrix pars_init = get_pars_matrix(p_vector_init, constants, transforms, p_specs, 
+    NumericMatrix pars_init = get_pars_matrix(p_vector_init, constants, transforms, p_specs,
                                                p_types, designs, n_trials, data, trend);
     bound_specs = make_bound_specs(minmax, mm_names, pars_init, bounds);
   }
 
   if(type == "DDM"){
     IntegerVector expand = data.attr("expand");
-    
+
     #ifdef _OPENMP
     #pragma omp parallel for
     #endif
@@ -352,28 +356,28 @@ NumericVector calc_ll(NumericMatrix p_matrix, DataFrame data, NumericVector cons
       // Create thread-local variables
       NumericVector p_vector_local = p_matrix(i, _);
       p_vector_local.names() = p_names;
-      
-      NumericMatrix pars_local = get_pars_matrix(p_vector_local, constants, transforms, p_specs, 
+
+      NumericMatrix pars_local = get_pars_matrix(p_vector_local, constants, transforms, p_specs,
                                                   p_types, designs, n_trials, data, trend);
       LogicalVector is_ok_local = c_do_bound(pars_local, bound_specs);
-      
+
       lls[i] = c_log_likelihood_DDM(pars_local, data, n_trials, expand, min_ll, is_ok_local);
     }
   } else if(type == "MRI" || type == "MRI_AR1"){
     int n_pars = p_types.length();
     NumericVector y = extract_y(data);
-    
+
     #ifdef _OPENMP
     #pragma omp parallel for
     #endif
     for(int i = 0; i < n_particles; i++){
       NumericVector p_vector_local = p_matrix(i, _);
       p_vector_local.names() = p_names;
-      
-      NumericMatrix pars_local = get_pars_matrix(p_vector_local, constants, transforms, p_specs, 
+
+      NumericMatrix pars_local = get_pars_matrix(p_vector_local, constants, transforms, p_specs,
                                                   p_types, designs, n_trials, data, trend);
       LogicalVector is_ok_local = c_do_bound(pars_local, bound_specs);
-      
+
       if(type == "MRI"){
         lls[i] = c_log_likelihood_MRI(pars_local, y, is_ok_local, n_trials, n_pars, min_ll);
       } else{
@@ -398,19 +402,19 @@ NumericVector calc_ll(NumericMatrix p_matrix, DataFrame data, NumericVector cons
     }
     NumericVector lR = data["lR"];
     int n_lR = unique(lR).length();
-    
+
     #ifdef _OPENMP
     #pragma omp parallel for
     #endif
     for (int i = 0; i < n_particles; ++i) {
       NumericVector p_vector_local = p_matrix(i, _);
       p_vector_local.names() = p_names;
-      
-      NumericMatrix pars_local = get_pars_matrix(p_vector_local, constants, transforms, p_specs, 
+
+      NumericMatrix pars_local = get_pars_matrix(p_vector_local, constants, transforms, p_specs,
                                                   p_types, designs, n_trials, data, trend);
       LogicalVector is_ok_local = c_do_bound(pars_local, bound_specs);
       is_ok_local = lr_all(is_ok_local, n_lR);
-      
+
       lls[i] = c_log_likelihood_race(pars_local, data, dfun, pfun, n_trials, winner, expand, min_ll, is_ok_local);
     }
   }
