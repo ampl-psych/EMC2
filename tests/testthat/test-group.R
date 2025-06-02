@@ -19,7 +19,7 @@ group_des <- group_design(
 )
 
 pri <- prior(subj_design, group_design = group_des)
-emc <- make_emc(forstmann, subj_design, group_design = group_des, prior_list = pri)
+emc <- make_emc(forstmann, subj_design, group_design = group_des, prior_list = pri, compress = F, n_chains = 1)
 
 test_that("groups", {
   expect_snapshot(print(group_des))
