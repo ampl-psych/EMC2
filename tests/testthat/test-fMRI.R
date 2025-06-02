@@ -48,7 +48,6 @@ test_that("prior_fmri", {
 })
 
 # Test whether sampling works
-# debug(dm_list)
 fmri_emc <- make_emc(ts, des, type = "single")
 
 

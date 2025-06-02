@@ -107,7 +107,7 @@ plot.emc <- function(x, stage = "sample", selection = c("mu", "sigma2", "alpha")
     plot(get_prior(x))
     return(invisible(prior(x)))
   }
-  if(x[[1]]$type == "single"){
+  if(x[[1]]$type == "single" & selection[1] != "LL"){
     selection <- "alpha"
   }
   for(select in selection){
@@ -978,10 +978,9 @@ get_data.emc <- function(emc) {
       design <- get_design(emc)[[i]]
       tmp <- do.call(rbind,lapply(emc[[1]]$data,function(x){
         cur <- x[[i]]
-        if(is.null(cur$winner)){
-          cur$winner <- TRUE
+        if(!is.null(cur$winner) && (length(unique(cur$lR)) > 1)){
+          cur <- cur[cur$winner,]
         }
-        cur <- cur[cur$winner,]
         expand <- attr(cur,"expand")
         if(is.null(expand)) expand <- 1:nrow(cur)
         return(cur[expand,])
@@ -994,10 +993,11 @@ get_data.emc <- function(emc) {
   } else{
     design <- get_design(emc)[[1]]
     dat <- do.call(rbind,lapply(emc[[1]]$data,function(x){
-      if(is.null(x$winner)){
-        x$winner <- TRUE
+      if(!is.null(x$winner) && (length(unique(x$lR)) > 1)){
+        # Only expand winner for race models
+        x <- x[x$winner,]
       }
-      x <- x[x$winner,]
+
       expand <- attr(x,"expand")
       if(is.null(expand)) expand <- 1:nrow(x)
       return(x[expand,])
@@ -1115,9 +1115,9 @@ get_design <- function(x){
 
 #' @rdname sampled_pars
 #' @export
-sampled_pars.emc <- function(x,model=NULL,doMap=TRUE, add_da = FALSE, all_cells_dm = FALSE){
-  return(sampled_pars(get_design(x), model = model, doMap = doMap,
-                          add_da = add_da, all_cells_dm = all_cells_dm))
+sampled_pars.emc <- function(x,group_design=NULL,doMap=FALSE, add_da = FALSE, all_cells_dm = FALSE, data = NULL){
+  return(sampled_pars(get_design(x), group_design = group_design, doMap = doMap,
+                          add_da = add_da, all_cells_dm = all_cells_dm, data = data))
 }
 
 #' @rdname auto_thin

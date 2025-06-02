@@ -1,5 +1,3 @@
-
-
 filter_obj <- function(obj, idx){
   dims <- dim(obj)
   dim_names <- dimnames(obj)
@@ -387,6 +385,7 @@ get_pars <- function(emc,selection= "mu", stage=get_last_stage(emc),thin=1,filte
                     remove_constants = TRUE, use_par = NULL, type = NULL,
                     true_pars = NULL, chain = NULL, covariates = NULL)
 {
+  if(!is.null(emc[[1]]$n_subjects)) emc <- restore_duplicates(emc)
   if(add_recalculated) map <- TRUE
   if(!(selection %in% c("mu", "alpha"))) map <- FALSE
   if(is.null(type)) type <- emc[[1]]$type
@@ -395,8 +394,9 @@ get_pars <- function(emc,selection= "mu", stage=get_last_stage(emc),thin=1,filte
                          selection = selection)
 
   if(map){
-    samples <- lapply(samples, map_mcmc, get_design(emc), include_constants = FALSE,
-                      add_recalculated = add_recalculated, covariates = covariates)
+    samples <- lapply(samples, do_map, get_design(emc), include_constants = FALSE,
+                      add_recalculated = add_recalculated, covariates = covariates,
+                      emc = emc)
   }
   if(flatten) remove_dup <- TRUE
   if(!is.null(true_pars)){ # Kluge to make sure the right object dimensions/filtering is performed on simulated parameters

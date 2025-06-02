@@ -248,7 +248,7 @@ plot_fit_choice <- function(data,pp,subject=NULL,factors=NULL,functions=NULL,
 #' # Plot the sloppiness for the individual-level subjects
 #' pairs_posterior(samples_LNR, selection = "alpha")
 #'
-#' # We can also choose group-level parameters and subsets of the parameter space 
+#' # We can also choose group-level parameters and subsets of the parameter space
 #' pairs_posterior(samples_LNR, use_par = c("m", "t0"), selection = "sigma2")
 #' }
 #' @export

@@ -7,6 +7,7 @@
 prior(
   design,
   type = NULL,
+  group_design = NULL,
   update = NULL,
   do_ask = NULL,
   fill_default = TRUE,
@@ -17,6 +18,8 @@ prior(
 \item{design}{Design list for which a prior is constructed, typically the output of \code{design()}}
 
 \item{type}{Character. What type of group-level model you plan on using i.e. \code{diagonal}}
+
+\item{group_design}{An \code{emc.group_design} object created with \code{group_design()}}
 
 \item{update}{Prior list from which to copy values}
 

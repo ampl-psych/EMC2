@@ -41,19 +41,23 @@ LogicalVector c_do_bound(NumericMatrix pars,
 }
 
 NumericVector c_do_pre_transform(NumericVector p_vector,
-                                      const std::vector<PreTransformSpec>& specs)
+                                 const std::vector<PreTransformSpec>& specs)
 {
   for (size_t i = 0; i < specs.size(); i++) {
     const PreTransformSpec& s = specs[i];
     double val = p_vector[s.index];
+
     switch (s.code) {
     case PTF_EXP: {
-      p_vector[s.index] = std::exp(val - s.lower);
+      // lower + exp(real)
+      p_vector[s.index] = s.lower + std::exp(val);
       break;
     }
     case PTF_PNORM: {
-      double z = (val - s.lower) / (s.upper - s.lower);
-      p_vector[s.index] = R::pnorm(z, 0.0, 1.0, 1, 0);
+      double range = s.upper - s.lower;
+      // lower + range * Φ(real)
+      p_vector[s.index] = s.lower +
+        range * R::pnorm(val, 0.0, 1.0, /*lower_tail=*/1, /*log_p=*/0);
       break;
     }
     default:
@@ -64,31 +68,33 @@ NumericVector c_do_pre_transform(NumericVector p_vector,
   return p_vector;
 }
 
-
 NumericMatrix c_do_transform(NumericMatrix pars,
-                                  const std::vector<TransformSpec>& specs)
+                             const std::vector<TransformSpec>& specs)
 {
   int nrow = pars.nrow();
 
   for (size_t j = 0; j < specs.size(); j++) {
     const TransformSpec& sp = specs[j];
-    int col_idx     = sp.col_idx;
-    TransformCode c = sp.code;
-    double lw       = sp.lower;
-    double up       = sp.upper;
+    int          col_idx = sp.col_idx;
+    TransformCode c      = sp.code;
+    double        lw     = sp.lower;
+    double        up     = sp.upper;
 
     switch (c) {
     case EXP: {
       for (int i = 0; i < nrow; i++) {
-      pars(i, col_idx) = std::exp(pars(i, col_idx) - lw);
+      // lower + exp(real)
+      pars(i, col_idx) = lw + std::exp(pars(i, col_idx));
     }
       break;
     }
     case PNORM: {
       double range = up - lw;
       for (int i = 0; i < nrow; i++) {
-        double z = (pars(i, col_idx) - lw) / range;
-        pars(i, col_idx) = R::pnorm(z, 0.0, 1.0, /*lower_tail=*/1, /*log_p=*/0);
+        // lower + range * Φ(real)
+        pars(i, col_idx) = lw +
+          range * R::pnorm(pars(i, col_idx), 0.0, 1.0,
+                           /*lower_tail=*/1, /*log_p=*/0);
       }
       break;
     }
@@ -100,7 +106,6 @@ NumericMatrix c_do_transform(NumericMatrix pars,
   }
   return pars;
 }
-
 
 
 NumericMatrix c_map_p(NumericVector p_vector,
@@ -132,6 +137,7 @@ NumericMatrix c_map_p(NumericVector p_vector,
   LogicalVector trend_index(n_params, FALSE);
   if (has_trend && (premap || pretransform)) {
     // first loop over trends to get all trend pnames
+    // But only for trends that are premap or pretransform
     for(unsigned int q = 0; q < trend.length(); q++){
       List cur_trend = trend[q];
       trend_pnames = c_add_charvectors(trend_pnames, as<CharacterVector>(cur_trend["trend_pnames"]));
@@ -141,10 +147,12 @@ NumericMatrix c_map_p(NumericVector p_vector,
     // index which p_types are trends
     LogicalVector trend_index = contains_multiple(p_types,trend_pnames);
     for(unsigned int j = 0; j < trend_index.length(); j ++){
+      // If we are a trend parameter:
       if(trend_index[j] == TRUE){
         NumericMatrix cur_design_trend = designs[j];
         CharacterVector cur_names_trend = colnames(cur_design_trend);
         // Take the current design and loop over columns
+        // Multiply by design matrix
         for(int k = 0; k < cur_design_trend.ncol(); k ++){
           String cur_name_trend(cur_names_trend[k]);
           p_mult_design =  p_vector[cur_name_trend] * cur_design_trend(_, k);
@@ -153,9 +161,9 @@ NumericMatrix c_map_p(NumericVector p_vector,
         }
       }
     }
-    std::vector<TransformSpec> t_specs = make_transform_specs(pars, transforms);
-    // Then repeatedly:
-    trend_pars = c_do_transform(pars, t_specs);
+    trend_pars = submat_rcpp_col_by_names(pars, trend_pnames);
+    std::vector<TransformSpec> t_specs = make_transform_specs(trend_pars, transforms);
+    trend_pars = c_do_transform(trend_pars, t_specs);
     trend_index = contains_multiple(p_types, trend_pnames);
   }
   for(int i = 0, t = 0; i < n_params; i++){
@@ -166,6 +174,8 @@ NumericMatrix c_map_p(NumericVector p_vector,
       for(int j = 0; j < cur_design.ncol(); j ++){
         String cur_name(cur_names[j]);
         NumericVector p_mult_design(n_trials, p_vector[cur_name]);
+        // at this point we're multiplying by specific parameters (e.g. v_lMd)
+        // So first apply trend to this parameter, then multiply by design matrix;
         if(has_trend && premap){
           // Check if trend is on current parameter
           LogicalVector cur_has_trend = contains(trend_names, cur_name);
@@ -178,7 +188,7 @@ NumericMatrix c_map_p(NumericVector p_vector,
               List cur_trend = trend[cur_name];
               CharacterVector cur_trend_pnames = cur_trend["trend_pnames"];
               p_mult_design = run_trend_rcpp(data, cur_trend, p_mult_design,
-                                             submat_rcpp_col(trend_pars, contains_multiple(trend_pnames, cur_trend_pnames)));
+                                             submat_rcpp_col_by_names(trend_pars,cur_trend_pnames));
 
             }
           }
@@ -255,10 +265,10 @@ double c_log_likelihood_race(NumericMatrix pars, DataFrame data,
   NumericVector lds(n_trials);
   NumericVector rts = data["rt"];
   CharacterVector R = data["R"];
+  NumericVector lR = data["lR"];
   NumericVector lds_exp(n_out);
-  const int n_acc = unique(R).length();
+  const int n_acc = unique(lR).length();
   if(sum(contains(data.names(), "RACE")) == 1){
-    NumericVector lR = data["lR"];
     NumericVector NACC = data["RACE"];
     CharacterVector vals_NACC = NACC.attr("levels");
     for(int x = 0; x < pars.nrow(); x++){
@@ -277,6 +287,7 @@ double c_log_likelihood_race(NumericMatrix pars, DataFrame data,
     lds[!winner] = loss;
   }
   lds[is_na(lds)] = min_ll;
+
   if(n_acc > 1){
     // LogicalVector winner_exp = c_bool_expand(winner, expand);
     NumericVector ll_out = lds[winner];
@@ -288,6 +299,7 @@ double c_log_likelihood_race(NumericMatrix pars, DataFrame data,
         ll_out[z] = ll_out[z] + sum(lds_los[seq( z * (n_acc -1), (z+1) * (n_acc -1) -1)]);
       }
     }
+
     ll_out[is_na(ll_out)] = min_ll;
     ll_out[is_infinite(ll_out)] = min_ll;
     ll_out[ll_out < min_ll] = min_ll;
