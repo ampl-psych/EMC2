@@ -38,6 +38,7 @@ public:
   min_ll(min_ll_) {}
 
   double operator()(const double& x) const {
+    // broadcast input response time x to repped vector, one per accumulator
     int n_acc = pars.nrow();
     NumericVector t(n_acc, x);
     // compute log density of winner accumulator finishing at time t

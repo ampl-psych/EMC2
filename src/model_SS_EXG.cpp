@@ -63,7 +63,7 @@ double pEXG(
 
   // main ex-Gaussian computation:
   double out;
-  if (traits::is_infinite<REALSXP>(q)) {
+  if (std::isinf(q)) {
     out = (q < 0.) ? 0. : 1.;
   } else {
     double mu2 = mu * mu;
@@ -86,26 +86,32 @@ double pEXG(
 
 // [[Rcpp::export]]
 NumericVector exg_lpdf(
-    NumericVector rts,
+    NumericVector rt,
     NumericMatrix pars,
     LogicalVector idx,
-    double min_ll,
-    LogicalVector is_ok
+    double min_ll
 ) {
   // pars columns: mu=0, sigma=1, tau=2, muS=3, sigmaS=4, tauS=5, tf=6, gf=7, SSD=8
   int n_out = sum(idx);
   NumericVector out(n_out);
   int k = 0;
 
-  for (int i = 0; i < rts.size(); i++) {
+  // if (rt.size() != pars.nrow() || rt.size() != idx.size()) {
+  //   stop("Inconsistent input lengths.");
+  // }
+
+  for (int i = 0; i < rt.size(); i++) {
     if (!idx[i]) continue;
 
     if (NumericVector::is_na(pars(i, 0))) {
       out[k] = R_NegInf;
-    } else if (is_ok[i] == TRUE) {
-      out[k] = dEXG(rts[i], pars(i, 0), pars(i, 1), pars(i, 2), true);
-    } else{
-      out[k] = min_ll;
+    } else {
+      double log_d = dEXG(rt[i], pars(i, 0), pars(i, 1), pars(i, 2), true);
+      if (!std::isfinite(log_d)) {
+        out[k] = min_ll;
+      } else {
+        out[k] = log_d;
+      }
     }
     k++;
   }
@@ -116,32 +122,66 @@ NumericVector exg_lpdf(
 
 // [[Rcpp::export]]
 NumericVector exg_lccdf(
-    NumericVector rts,
+    NumericVector rt,
     NumericMatrix pars,
     LogicalVector idx,
-    double min_ll,
-    LogicalVector is_ok
+    double min_ll
 ) {
   // pars columns: mu=0, sigma=1, tau=2, muS=3, sigmaS=4, tauS=5, tf=6, gf=7, SSD=8
   int n_out = sum(idx);
   NumericVector out(n_out);
   int k = 0;
 
-  for (int i = 0; i < rts.size(); i++) {
+  // if (rt.size() != pars.nrow() || rt.size() != idx.size()) {
+  //   stop("Inconsistent input lengths.");
+  // }
+
+  for (int i = 0; i < rt.size(); i++) {
     if (!idx[i]) continue;
 
     if (NumericVector::is_na(pars(i, 0))) {
       out[k] = R_NegInf;
-    } else if (is_ok[i] == TRUE) {
-      out[k] = pEXG(rts[i], pars(i, 0), pars(i, 1), pars(i, 2), false, true);
-    } else{
-      out[k] = min_ll;
+    } else {
+      double log_s = pEXG(rt[i], pars(i, 0), pars(i, 1), pars(i, 2), false, true);
+      if (!std::isfinite(log_s)) {
+        out[k] = min_ll;
+      } else {
+        out[k] = log_s;
+      }
     }
     k++;
   }
 
   return(out);
 }
+
+
+// NumericVector exg_go_race(
+//     NumericVector rts,
+//     NumericMatrix pars,
+//     LogicalVector idx,
+//     double min_ll,
+//     LogicalVector is_ok
+// ) {
+// }
+//
+// NumericVector exg_stopfail_race(
+//     NumericVector rts,
+//     NumericMatrix pars,
+//     LogicalVector idx,
+//     double min_ll,
+//     LogicalVector is_ok
+// ) {
+// }
+//
+// NumericVector exg_stopsuccess_race(
+//     NumericMatrix pars,
+//     LogicalVector idx,
+//     double min_ll,
+//     LogicalVector is_ok
+// ) {
+// }
+
 
 
 // // [[Rcpp::export]]
