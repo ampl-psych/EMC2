@@ -154,9 +154,7 @@ run_emc <- function(emc, stage, stop_criteria,
 run_stages <- function(sampler, stage = "preburn", iter=0, verbose = TRUE, verboseProgress = TRUE,
                        particle_factor=50, search_width= NULL, n_cores=1)
 {
-
-  max_pars <- max(table(attr(sampler[[1]], "components")))
-  particles <- round(particle_factor*sqrt(max_pars))
+  particles <- round(particle_factor*sqrt(sampler$n_pars))
   if (!sampler$init) {
     sampler <- init(sampler, n_cores = n_cores)
   }

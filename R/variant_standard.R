@@ -31,6 +31,7 @@ add_info_standard <- function(sampler, prior = NULL, ...){
   sampler$par_names_all <- add_group_par_names(sampler$par_names, group_design)
 
   sampler$par_group <- list(...)$par_groups
+  if(is.null(sampler$par_group)) sampler$par_group <- rep(1, n_pars)
   sampler$is_blocked <- sampler$par_group %in% which(table(sampler$par_group) > 1)
   sampler$prior <- get_prior_standard(prior, n_pars, sample = F,
                                       group_design = group_design)

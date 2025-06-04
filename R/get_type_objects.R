@@ -243,13 +243,14 @@ get_objects_single <- function(selection, sample_prior, return_prior, design = N
 
 get_objects_factor <- function(selection, sample_prior, return_prior, design = NULL,
                                      prior = NULL, stage = 'sample', N = 1e5, sampler = NULL, ...){
-  acc_selection <- c("mu", "sigma2", "covariance", "correlation", "alpha", "Sigma", "loadings", "residuals", "LL")
+  acc_selection <- c("mu", "sigma2", "covariance", "correlation", "alpha", "Sigma", "loadings", "residuals", "LL",
+                     "std_loadings")
   if(return_prior & !sample_prior){
     if(is.null(list(...)$return_info)) prior$prior <- do.call(get_prior_factor, c(list(design = design, sample = F, prior = prior), fix_dots(list(...), get_prior_factor)))
     prior$descriptions <- list(
       theta_mu_mean = "mean of the group-level mean prior",
       theta_mu_var = "variance of the group-level mean prior",
-      theta_lambda_var = "variance of the factor loadings",
+      lambda_var = "variance of the factor loadings",
       as = "shape of inverse-gamma prior on the residual variances",
       bs = "rate of inverse-gamma prior on the residual variances",
       ap = "shape prior of inverse gamma on factor variances",
@@ -257,7 +258,7 @@ get_objects_factor <- function(selection, sample_prior, return_prior, design = N
     )
     prior$types <- list(
       mu = c("theta_mu_mean", "theta_mu_var"),
-      loadings = c("theta_lambda_var", "ap", "bp"),
+      loadings = c("lambda_var", "ap", "bp"),
       residuals = c("as", "bs")
     )
     prior$type_descriptions <- list(
@@ -291,10 +292,13 @@ get_objects_factor <- function(selection, sample_prior, return_prior, design = N
     }
     idx <- get_idx(sampler, stage)
     if(selection == "loadings"){
-      return(lapply(sampler, FUN = function(x) return(x$samples$theta_lambda[,,idx])))
+      return(lapply(sampler, FUN = function(x) return(x$samples$lambda[,,idx, drop = FALSE])))
     }
     if(selection == "residuals"){
-      return(lapply(sampler, FUN = function(x) return(1/x$samples$theta_sig_err_inv[,idx])))
+      return(lapply(sampler, FUN = function(x) return(1/x$samples$epsilon_inv[,idx])))
+    }
+    if(selection == "std_loadings"){
+      return(lapply(sampler, FUN = function(x) standardize_loadings(x$samples$lambda[,,idx, drop = F], 1/x$samples$epsilon_inv[,idx])))
     }
     return(get_base(sampler, idx, selection))
   }
@@ -304,7 +308,8 @@ get_objects_factor <- function(selection, sample_prior, return_prior, design = N
 
 get_objects_infnt_factor <- function(selection, sample_prior, return_prior, design = NULL,
                                  prior = NULL, stage = 'sample', N = 1e5, sampler = NULL, ...){
-  acc_selection <- c("mu", "sigma2", "covariance", "correlation", "alpha", "Sigma", "loadings", "residuals", "LL")
+  acc_selection <- c("mu", "sigma2", "covariance", "correlation", "alpha", "Sigma", "loadings", "residuals", "LL",
+                     "std_loadings")
   if(return_prior & !sample_prior){
     if(is.null(list(...)$return_info)) prior$prior <- do.call(get_prior_infnt_factor, c(list(design = design, sample = F, prior = prior), fix_dots(list(...), get_prior_infnt_factor)))
     prior$descriptions <- list(
@@ -350,10 +355,13 @@ get_objects_infnt_factor <- function(selection, sample_prior, return_prior, desi
     }
     idx <- get_idx(sampler, stage)
     if(selection == "loadings"){
-      return(lapply(sampler, FUN = function(x) return(x$samples$theta_lambda[,,idx])))
+      return(lapply(sampler, FUN = function(x) return(x$samples$lambda[,,idx, drop = FALSE])))
     }
     if(selection == "residuals"){
-      return(lapply(sampler, FUN = function(x) return(1/x$samples$theta_sig_err_inv[,idx])))
+      return(lapply(sampler, FUN = function(x) return(1/x$samples$epsilon_inv[,idx])))
+    }
+    if(selection == "std_loadings"){
+      return(lapply(sampler, FUN = function(x) standardize_loadings(x$samples$lambda[,,idx, drop = F], 1/x$samples$epsilon_inv[,idx])))
     }
     return(get_base(sampler, idx, selection))
   }
