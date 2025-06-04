@@ -307,6 +307,7 @@ plot_relations <- function(emc = NULL, stage = "sample",  plot_cred = FALSE,
   if(!selection %in% c("correlation", "loadings", "std_loadings")){
     stop("Selection must be either 'correlation', 'std_loadings', or 'loadings'")
   }
+  do_corr <- FALSE
   if(selection == "correlation"){
     do_corr <- TRUE
   }

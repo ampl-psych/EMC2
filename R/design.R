@@ -838,6 +838,13 @@ update2version <- function(emc){
   }
 
   design_list <- get_design(emc)
+  design_list <- lapply(design_list, function(x){
+    if(!is.null(x$Fcovariates)){
+      x$Fcovariates <- names(x$Fcovariates)
+    }
+    return(x)
+  })
+
   if(is.null(emc[[1]]$type)){
     type <- attr(emc[[1]], "variant_funs")$type
     emc <- lapply(emc, FUN = function(x){
@@ -879,6 +886,8 @@ update2version <- function(emc){
       emc[[1]]$model <- new_model
     }
   }
+
+
   prior_new <- emc[[1]]$prior
   attr(prior_new, "type") <- type
   prior_new <- prior(design_list, type, update = prior_new)
