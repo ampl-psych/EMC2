@@ -17,38 +17,38 @@ struct IntegrationResult {
 
 class race_f : public Func {
 private:
+  NumericVector (*lpdf)(NumericVector, NumericMatrix, LogicalVector, double);
+  NumericVector (*lccdf)(NumericVector, NumericMatrix, LogicalVector, double);
   const NumericMatrix pars;
   const LogicalVector winner;
-  NumericVector (*ldfun)(NumericVector, NumericMatrix, LogicalVector, double);
-  NumericVector (*lccdfun)(NumericVector, NumericMatrix, LogicalVector, double);
   const double min_ll;
 
 public:
   race_f(
+    NumericVector (*lpdf_)(NumericVector, NumericMatrix, LogicalVector, double),
+    NumericVector (*lccdf_)(NumericVector, NumericMatrix, LogicalVector, double),
     NumericMatrix pars_,
     LogicalVector winner_,
-    NumericVector (*ldfun_)(NumericVector, NumericMatrix, LogicalVector, double),
-    NumericVector (*lccdfun_)(NumericVector, NumericMatrix, LogicalVector, double),
     double min_ll_
   ) :
+  lpdf(lpdf_),
+  lccdf(lccdf_),
   pars(pars_),
   winner(winner_),
-  ldfun(ldfun_),
-  lccdfun(lccdfun_),
   min_ll(min_ll_) {}
 
   double operator()(const double& x) const {
     int n_acc = pars.nrow();
     NumericVector t(n_acc, x);
     // compute log density of winner accumulator finishing at time t
-    NumericVector log_d = ldfun(t, pars, winner, min_ll);
+    NumericVector log_d = lpdf(t, pars, winner, min_ll);
     if (log_d.size() != 1) {
-      stop("ldfun must return a scalar NumericVector of length 1");
+      stop("expected lpdf to return a scalar NumericVector of length 1");
     }
     double log_out = log_d[0];
     // (summed) log survival probability of losing accumulator(s)
     if (n_acc > 1) {
-      NumericVector log_s = lccdfun(t, pars, !winner, min_ll);
+      NumericVector log_s = lccdf(t, pars, !winner, min_ll);
       log_out += std::accumulate(log_s.begin(), log_s.end(), 0.);
     }
     // output is instantaneous likelihood that winner accumulator finishes at
@@ -59,36 +59,41 @@ public:
 
 
 IntegrationResult my_integrate(
-    NumericMatrix pars,
-    LogicalVector winner,
-    NumericVector (*ldfun)(NumericVector, NumericMatrix, LogicalVector, double),
-    NumericVector (*lccdfun)(NumericVector, NumericMatrix, LogicalVector, double),
-    double min_ll,
+    const Func& race_pdf,
     double lower,
     double upper,
     bool check_err = true,
     double upper_retry = 10.,
-    double fail_out = 0.
+    double fail_out = 0.,
+    int max_subdivs = 100,
+    double abs_tol = 1e-8,
+    double rel_tol = 1e-6
 ) {
-  // set up the integrand (race model function)
-  race_f f(pars, winner, ldfun, lccdfun, min_ll);
-  double err_est;
-  int err_code;
 
   // initial attempt at numerical integration
-  double res = integrate(f, lower, upper, err_est, err_code);
+  double err_est;
+  int err_code;
+  double res = integrate(
+    race_pdf, lower, upper,
+    err_est, err_code,
+    max_subdivs, abs_tol, rel_tol
+  );
 
   if (!check_err) {
     return {res, err_est, err_code};
   }
 
-  // if integration terminated abnormally due to max. number of subdivisions
-  // reached, and upper bound was positive infinity, try again with large finite
-  // upper bound
+  // integration could have failed for several reasons (7 different values for
+  // err_code possible). If due to max. subdivisions reached (err_code == 1)
+  // *AND* upper bound was Inf, try again with large finite upper bound.
   if (err_code == 1 && upper == R_PosInf) {
     double err_est_retry;
     int err_code_retry;
-    double res_retry = integrate(f, lower, upper_retry, err_est_retry, err_code_retry);
+    double res_retry = integrate(
+      race_pdf, lower, upper_retry,
+      err_est_retry, err_code_retry,
+      max_subdivs, abs_tol, rel_tol
+    );
     // overwrite output elements
     res = res_retry;
     err_est = err_est_retry;
@@ -105,20 +110,16 @@ IntegrationResult my_integrate(
 
 
 double pr_pt(
-    NumericMatrix pars,
-    LogicalVector winner,
-    NumericVector (*ldfun)(NumericVector, NumericMatrix, LogicalVector, double),
-    NumericVector (*lccdfun)(NumericVector, NumericMatrix, LogicalVector, double),
-    double min_ll,
+    const Func& race_pdf,
     double LT,
     double UT
 ) {
   // probability in full response window (zero to positive infinity)
-  IntegrationResult pr = my_integrate(pars, winner, ldfun, lccdfun, min_ll, 0., R_PosInf);
+  IntegrationResult pr = my_integrate(race_pdf, 0., R_PosInf);
   if (pr.error_code != 0 || traits::is_nan<REALSXP>(pr.value)) return NA_REAL;
 
   // probability in truncated response window [LT, UT]
-  IntegrationResult pt = my_integrate(pars, winner, ldfun, lccdfun, min_ll, LT, UT);
+  IntegrationResult pt = my_integrate(race_pdf, LT, UT);
   if (pt.error_code != 0 || traits::is_nan<REALSXP>(pt.value)) return NA_REAL;
 
   // handle edge cases before computing and returning ratio of probabilities
@@ -133,22 +134,18 @@ double pr_pt(
 
 
 double pLU(
-    NumericMatrix pars,
-    LogicalVector winner,
-    NumericVector (*ldfun)(NumericVector, NumericMatrix, LogicalVector, double),
-    NumericVector (*lccdfun)(NumericVector, NumericMatrix, LogicalVector, double),
-    double min_ll,
+    const Func& race_pdf,
     double LT,
     double LC,
     double UC,
     double UT
 ) {
   // probability in [LT, LC]
-  IntegrationResult pL = my_integrate(pars, winner, ldfun, lccdfun, min_ll, LT, LC);
+  IntegrationResult pL = my_integrate(race_pdf, LT, LC);
   if (pL.error_code != 0 || traits::is_nan<REALSXP>(pL.value)) return NA_REAL;
 
   // probability in [UC, UT]
-  IntegrationResult pU = my_integrate(pars, winner, ldfun, lccdfun, min_ll, UC, UT);
+  IntegrationResult pU = my_integrate(race_pdf, UC, UT);
   if (pU.error_code != 0 || traits::is_nan<REALSXP>(pU.value)) return NA_REAL;
 
   // clamp probabilities to [0, 1] and return summed probability
