@@ -128,12 +128,12 @@ sample_store_infnt_factor <- function(data, par_names, iters = 1, stage = "init"
   samples <- list(
     theta_mu = array(NA_real_,dim = c(n_pars, iters), dimnames = list(par_names, NULL)),
     theta_var = array(NA_real_,dim = c(n_pars, n_pars, iters),dimnames = list(par_names, par_names, NULL)),
-    lambda = array(NA_real_,dim = c(n_pars, n_factors, iters),dimnames = list(par_names, n_factors, NULL)),
+    lambda = array(NA_real_,dim = c(n_pars, n_factors, iters),dimnames = list(par_names, FA_names, NULL)),
     # Psi here is the precision of the loadings, slightly different to standard factor model
     psi = array(NA_real_, dim = c(n_pars, n_factors, iters), dimnames = list(par_names, NULL, NULL)),
     delta = array(NA_real_, dim = c(n_factors, iters), dimnames = list(NULL, NULL)),
     epsilon_inv = array(NA_real_,dim = c(n_pars, iters),dimnames = list(par_names, NULL)),
-    eta = array(NA_real_, dim = c(n_subjects, n_factors, iters), dimnames = list(subject_ids, n_factors, NULL))
+    eta = array(NA_real_, dim = c(n_subjects, n_factors, iters), dimnames = list(subject_ids, FA_names, NULL))
   )
   if(integrate) samples <- c(samples, base_samples)
   return(samples)
