@@ -69,6 +69,8 @@ group_design <- function(formula, data, subject_design, contrasts = NULL){
     stop(paste0("Variable(s) ", paste0(missing_vars, collapse=", "),
                 " in formula not found in data"))
   }
+  summary_data <- data[!duplicated(data$subjects),rhs_terms, drop = F]
+  rownames(summary_data) <- unique(data$subjects)
 
   # Check if any factor has multiple levels per subject
   for (var in rhs_terms) {
@@ -159,18 +161,57 @@ group_design <- function(formula, data, subject_design, contrasts = NULL){
     # }
   }
   class(design_matrices) <- "emc.group_design"
+  attr(design_matrices, "Flist") <- formula
+  attr(design_matrices, "data") <- summary_data
   return(design_matrices)
 }
 
+#' @export
+print.emc.group_design <- function(x, ...){
+  Flist <- attr(x, "Flist")
+  for(j in 1:length(Flist)){
+    cat(deparse(Flist[j][[1]]), "\n")
+  }
+}
+
+#' @export
+summary.emc.group_design <- function(object, ...){
+  p_vector <- sampled_pars(object)
+  cat("\n Sampled Parameters: \n")
+  print(names(p_vector))
+  cat("\n Design Matrices: \n")
+  Flist <- attr(object, "Flist")
+  data <- attr(object, "data")
+  out <- list()
+  par_names <- unlist(lapply(Flist, function(x) as.character(terms(x)[[2]])))
+  for(i in 1:length(Flist)){
+    rhs_terms <- all.vars(terms(Flist[[i]])[[3]])
+    data <- data[,rhs_terms, drop = F]
+    out[[par_names[i]]] <-cbind(data, object[[i]])
+    print(lapply(out[i], function(df){
+      cov <- sapply(df, function(x) length(unique(x)) > 5)
+      out <- if (all(cov)) head(df, 3) else df[!duplicated(df[!cov]), ]
+      if (nrow(out) < 3) head(df, 3) else out
+    }))
+  }
+
+  return(invisible(out))
+}
+
+get_unique_rows <- function(df) {
+  cov <- sapply(df, function(x) length(unique(x)) > 5)
+  if (all(cov)) head(df, 3) else df[!duplicated(df[!cov]), ]
+}
+
+
 #' @rdname sampled_pars
 #' @export
-sampled_pars.emc.group_design <- function(x,model=NULL,doMap=FALSE, add_da = FALSE, all_cells_dm = FALSE, data= NULL){
+sampled_pars.emc.group_design <- function(x,group_design=NULL,doMap=FALSE, add_da = FALSE, all_cells_dm = FALSE, data= NULL){
   if(is.null(x)) return(logical(0))
   par_names <- unlist(lapply(x, colnames))
   par_names <- setNames(rep(0, length(par_names)), par_names)
   return(par_names)
 }
-
 
 add_group_par_names <- function(pars, group_des){
   if(is.null(group_des)) return(pars)

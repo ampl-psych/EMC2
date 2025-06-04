@@ -739,7 +739,7 @@ make_emc <- function(data,design,model=NULL,
     }
     if(length(prior_list) == length(data)){
       if(!is.null(prior_list[[i]])){
-        prior_list[[i]] <- check_prior(prior_list[[i]], sampled_p_names)
+        prior_list[[i]] <- check_prior(prior_list[[i]], sampled_p_names, group_design)
       }
     }
   }

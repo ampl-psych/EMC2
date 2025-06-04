@@ -34,7 +34,7 @@ add_info_standard <- function(sampler, prior = NULL, ...){
   if(is.null(sampler$par_group)) sampler$par_group <- rep(1, n_pars)
   sampler$is_blocked <- sampler$par_group %in% which(table(sampler$par_group) > 1)
   sampler$prior <- get_prior_standard(prior, n_pars, sample = F,
-                                      group_des = group_design)
+                                      group_design = group_design)
   sampler$group_designs <- group_design
   return(sampler)
 }
@@ -83,7 +83,7 @@ calculate_implied_means <- function(mean_designs, beta_params, n_pars) {
   return(mu_implied)
 }
 
-get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, selection = "mu", design = NULL, group_des = NULL,
+get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, selection = "mu", design = NULL, group_design = NULL,
                                par_groups = NULL){
   # Checking and default priors
   if(is.null(prior)){
@@ -97,8 +97,8 @@ get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1
   }
 
   # Number of additional parameters from design matrices
-  if(!is.null(group_des)){
-    n_additional <- n_additional_group_pars(group_des)
+  if(!is.null(group_design)){
+    n_additional <- n_additional_group_pars(group_design)
   } else{
     n_additional <- 0
   }
@@ -127,32 +127,13 @@ get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1
       # Sample beta (all parameters including regressors)
       beta <- t(mvtnorm::rmvnorm(N, mean = prior$theta_mu_mean,
                              sigma = prior$theta_mu_var))
-      rownames(beta) <- par_names
-
-      # Calculate mu (implied means) if we have group designs
-      if(!is.null(group_des)) {
-        # Prepare group designs in proper format
-        group_designs <- add_group_design(par_names, group_des, N)
-
-        # Calculate mean design matrices
-        mean_designs <- calculate_mean_design(group_designs, n_pars)
-
-        # Calculate implied means for each sample
-        mu <- matrix(0, nrow = n_pars, ncol = N)
-        for (i in 1:N) {
-          mu[, i] <- calculate_implied_means(mean_designs, beta[, i], n_pars)
+      rownames(beta) <- add_group_par_names(par_names, group_design)
+      if(selection %in% c("beta", "mu", "alpha")){
+        samples$theta_mu <- beta
+        if(selection %in% c("mu", "alpha")){
+          samples$par_names <- par_names
+          samples$group_designs <- group_design
         }
-        rownames(mu) <- par_names
-      } else {
-        # If no group designs, mu and beta are the same
-        mu <- beta
-      }
-
-      if(selection %in% c("mu")){
-        samples$theta_mu <- mu
-      }
-      if(selection %in% c("beta")){
-        samples$theta_beta <- beta
       }
     }
     if(selection %in% c("sigma2", "covariance", "correlation", "Sigma", "alpha")) {
@@ -179,6 +160,8 @@ get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1
       if(selection != "alpha") samples$theta_var <- vars
     }
     if(selection %in% "alpha"){
+      mu <-implied_mean(sampler = list(samples = samples), 1:N)
+      samples <- list()
       samples$alpha <- get_alphas(mu, vars, "alpha")
     }
     out <- samples
