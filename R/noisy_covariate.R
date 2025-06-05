@@ -145,7 +145,7 @@ running_moments <- function(new_latent, old_mu, old_sd, idx){
   new_var <- ((idx - 1)*(old_sd^2) + (delta^2 * idx / n_new)) / (n_new - 1)
   list(
     mu = meanNew,
-    sd   = min(sqrt(new_var), 0.01)
+    sd   = max(sqrt(new_var), 0.01)
   )
 }
 
