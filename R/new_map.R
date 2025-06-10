@@ -53,7 +53,18 @@ minimal_design <- function(design, covariates = NULL, drop_subjects = TRUE,
       }
     }
 
-    ## 3.  Derive additional columns via Ffunctions (if any)
+    ## 3. Add accumulators
+    if(add_acc){
+      fac_df <- add_accumulators(fac_df, matchfun = cur_des$matchfun, type = cur_des$model()$type)
+    }
+    if(!is.null(fac_df$R) & drop_R_levels){
+      fac_df <- fac_df[fac_df$R == unique(fac_df$R)[1],]
+    }
+    if(!is.null(fac_df$R) & drop_R){
+      fac_df <- fac_df[,!colnames(fac_df) %in% c("R", "winner")]
+    }
+
+    ## 4.  Derive additional columns via Ffunctions (if any)
     if (!is.null(cur_des$Ffunctions) & do_functions) {
       funs <- cur_des$Ffunctions
       if (!is.list(funs)) funs <- list(funs)
@@ -65,16 +76,6 @@ minimal_design <- function(design, covariates = NULL, drop_subjects = TRUE,
       }
     }
 
-    ## 4. Add accumulators
-    if(add_acc){
-      fac_df <- add_accumulators(fac_df, matchfun = cur_des$matchfun, type = cur_des$model()$type)
-    }
-    if(!is.null(fac_df$R) & drop_R_levels){
-      fac_df <- fac_df[fac_df$R == unique(fac_df$R)[1],]
-    }
-    if(!is.null(fac_df$R) & drop_R){
-      fac_df <- fac_df[,!colnames(fac_df) %in% c("R", "winner")]
-    }
     out[[i]] <- fac_df
   }
   if(length(out) == 1) out <- out[[1]]

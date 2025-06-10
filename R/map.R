@@ -326,7 +326,8 @@ fill_bound <- function(bound, model) {
 generate_design_equations <- function(design_matrix,
                                       factor_cols = NULL,
                                       numeric_cols = NULL,
-                                      transform) {
+                                      transform,
+                                      pre_transform) {
   # 1. If user hasn't specified which columns are factors or numeric, guess:
   if (is.null(factor_cols)) {
     # We'll assume anything that is a factor or character is a "factor column"
@@ -345,6 +346,13 @@ generate_design_equations <- function(design_matrix,
   make_equation_string <- function(row_i) {
     eq_terms <- c()
     for (colname in numeric_cols) {
+      new_name <- colname
+      if(colname %in% names(pre_transform)){
+        cur_trans <- pre_transform[colname]
+        if(cur_trans != "identity"){
+          new_name <- paste0(cur_trans, "(", colname, ")")
+        }
+      }
       val <- as.numeric(row_i[[colname]])
       # Skip zeros
       if (abs(val) < 1e-15) next
@@ -352,14 +360,14 @@ generate_design_equations <- function(design_matrix,
       # If val is exactly +1 or -1, skip numeric part:
       if (abs(val - 1) < 1e-15) {
         # val == +1
-        term_str <- paste0("+ ", colname)
+        term_str <- paste0("+ ", new_name)
       } else if (abs(val + 1) < 1e-15) {
         # val == -1
-        term_str <- paste0("- ", colname)
+        term_str <- paste0("- ", new_name)
       } else {
         # Some other numeric coefficient => e.g. "+ 0.5 * col"
         sign_str <- ifelse(val >= 0, "+ ", "- ")
-        term_str <- paste0(sign_str, format(abs(val), digits = 3), " * ", colname)
+        term_str <- paste0(sign_str, format(abs(val), digits = 3), " * ", new_name)
       }
       eq_terms <- c(eq_terms, term_str)
     }
@@ -374,7 +382,6 @@ generate_design_equations <- function(design_matrix,
     # Remove the leading '+ ' if present
     sub("^\\+ ", "", eq_string)
   }
-
   # 3. Compute the equation string for each row
   eq_strings <- apply(design_matrix, 1, make_equation_string)
 
@@ -426,6 +433,7 @@ verbal_dm <- function(design){
   map <- attr(sampled_pars(design, add_da = TRUE, doMap = TRUE), "map")
   map_no_da <- attr(sampled_pars(design, doMap = TRUE), "map")
   transforms <- design$model()$transform$func
+  pre_transforms <- design$model()$pre_transform$func
   for(i in 1:length(map)){
     m <- map[[i]]
     if(ncol(m) == 1) next
@@ -433,7 +441,8 @@ verbal_dm <- function(design){
     mnd <- map_no_da[[i]]
     par_idx <- colnames(m) %in% colnames(mnd)
     generate_design_equations(m, colnames(m)[!par_idx], colnames(m)[par_idx],
-                              transform = transforms[names(map)[i]])
+                              transform = transforms[names(map)[i]],
+                              pre_transform = pre_transforms)
     cat("\n")
   }
 }
