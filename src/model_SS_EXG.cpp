@@ -42,6 +42,16 @@ double log_diff_exp(double a, double b) {
   return a + std::log1p(-std::exp(b - a));
 }
 
+double log_sum_exp(double a, double b) {
+  if (a == R_NegInf) return b;
+  if (b == R_NegInf) return a;
+  if (a > b) {
+    return a + std::log1p(std::exp(b - a));
+  } else {
+    return b + std::log1p(std::exp(a - b));
+  }
+}
+
 // [[Rcpp::export]]
 double dexg(
     double x,
@@ -72,9 +82,9 @@ double dexg(
   double log_exp = (mu - x) / tau_p + (sig_p * sig_p) / (2. * tau_p * tau_p);
 
   // final output: log density of ex-Gaussian
-  double out = -std::log(tau_p) + log_exp + log_phi;
+  double log_out = -std::log(tau_p) + log_exp + log_phi;
 
-  return log_d ? out : std::exp(out);
+  return log_d ? log_out : std::exp(log_out);
 }
 
 
@@ -134,61 +144,162 @@ double pexg(
   return log_p ? log_out : std::exp(log_out);
 }
 
-
 // [[Rcpp::export]]
-NumericVector exg_lpdf(
-    NumericVector rt,
-    NumericMatrix pars,
-    LogicalVector idx,
-    double min_ll
+double dtexg(
+    double x,
+    double mu = 5.,
+    double sigma = 1.,
+    double tau = 1.,
+    double lower = R_NegInf,
+    double upper = R_PosInf,
+    bool log_d = false
 ) {
-  // pars columns: mu=0, sigma=1, tau=2, muS=3, sigmaS=4, tauS=5, tf=6, gf=7, SSD=8
-  int n_out = sum(idx);
-  NumericVector out(n_out);
-  int k = 0;
 
-  for (int i = 0; i < rt.size(); i++) {
-    if (!idx[i]) continue;
-
-    double log_d = dexg(rt[i], pars(i, 0), pars(i, 1), pars(i, 2), true);
-    if (!std::isfinite(log_d)) {
-      out[k] = min_ll;
-    } else {
-      out[k] = log_d;
-    }
-    k++;
+  if (lower >= upper) return NA_REAL;
+  if (x <= lower || x >= upper) return log_d ? R_NegInf : 0.;
+  if (lower == R_NegInf && upper == R_PosInf) {
+    return dexg(x, mu, sigma, tau, log_d);
   }
 
-  return(out);
+  double x_ld = dexg(x, mu, sigma, tau, true);
+  if (x_ld == R_NegInf) return log_d ? R_NegInf : 0.;
+
+  double lower_lcdf, upper_lcdf;
+  if (lower == R_NegInf) {
+    lower_lcdf = R_NegInf;
+  } else {
+    lower_lcdf = pexg(lower, mu, sigma, tau, true, true);
+  }
+  if (upper == R_PosInf) {
+    upper_lcdf = 0.;
+  } else {
+    upper_lcdf = pexg(upper, mu, sigma, tau, true, true);
+  }
+
+  if (lower_lcdf == upper_lcdf) return log_d ? R_NegInf : 0.;
+
+  double log_normaliser;
+  if (lower_lcdf == R_NegInf) {
+    log_normaliser = upper_lcdf;
+  } else {
+    log_normaliser = log_diff_exp(upper_lcdf, lower_lcdf);
+  }
+  if (log_normaliser == R_NegInf) return log_d ? R_NegInf : 0.;
+
+  double log_out = x_ld - log_normaliser;
+  return log_d ? log_out : std::exp(log_out);
+}
+
+// [[Rcpp::export]]
+double ptexg(
+    double q,
+    double mu = 5.,
+    double sigma = 1.,
+    double tau = 1.,
+    double lower = R_NegInf,
+    double upper = R_PosInf,
+    bool lower_tail = true,
+    bool log_p = false
+) {
+
+  if (lower >= upper) return NA_REAL;
+  if (q <= lower) {
+    double out = lower_tail ? 0. : 1.;
+    return log_p ? (out == 0. ? R_NegInf : 0.) : out;
+  }
+  if (q >= upper) {
+    double out = lower_tail ? 1. : 0.;
+    return log_p ? (out == 0. ? R_NegInf : 0.) : out;
+  }
+  if (lower == R_NegInf && upper == R_PosInf) {
+    return pexg(q, mu, sigma, tau, lower_tail, log_p);
+  }
+
+  double q_cdf = pexg(q, mu, sigma, tau);
+
+  double lower_cdf, upper_cdf;
+  if (lower == R_NegInf) {
+    lower_cdf = 0.;
+  } else {
+    lower_cdf = pexg(lower, mu, sigma, tau);
+  }
+  if (upper == R_PosInf) {
+    upper_cdf = 1.;
+  } else {
+    upper_cdf = pexg(upper, mu, sigma, tau);
+  }
+
+  double normaliser = upper_cdf - lower_cdf;
+  if (normaliser <= 0.) return NA_REAL;
+
+  double out;
+  if (lower_tail) {
+    out = (q_cdf - lower_cdf) / normaliser;
+  } else {
+    out = (upper_cdf - q_cdf) / normaliser;
+  }
+  out = std::clamp(out, 0., 1.);
+
+  return log_p ? std::log(out) : out;
 }
 
 
-// [[Rcpp::export]]
-NumericVector exg_lccdf(
-    NumericVector rt,
-    NumericMatrix pars,
-    LogicalVector idx,
-    double min_ll
-) {
-  // pars columns: mu=0, sigma=1, tau=2, muS=3, sigmaS=4, tauS=5, tf=6, gf=7, SSD=8
-  int n_out = sum(idx);
-  NumericVector out(n_out);
-  int k = 0;
 
-  for (int i = 0; i < rt.size(); i++) {
-    if (!idx[i]) continue;
 
-    double log_s = pexg(rt[i], pars(i, 0), pars(i, 1), pars(i, 2), false, true);
-    if (!std::isfinite(log_s)) {
-      out[k] = min_ll;
-    } else {
-      out[k] = log_s;
-    }
-    k++;
-  }
-
-  return(out);
-}
+// // [[Rcpp::export]]
+// NumericVector exg_lpdf(
+//     NumericVector rt,
+//     NumericMatrix pars,
+//     LogicalVector idx,
+//     double min_ll
+// ) {
+//   // pars columns: mu=0, sigma=1, tau=2, muS=3, sigmaS=4, tauS=5, tf=6, gf=7, SSD=8
+//   int n_out = sum(idx);
+//   NumericVector out(n_out);
+//   int k = 0;
+//
+//   for (int i = 0; i < rt.size(); i++) {
+//     if (!idx[i]) continue;
+//
+//     double log_d = dexg(rt[i], pars(i, 0), pars(i, 1), pars(i, 2), true);
+//     if (!std::isfinite(log_d)) {
+//       out[k] = min_ll;
+//     } else {
+//       out[k] = log_d;
+//     }
+//     k++;
+//   }
+//
+//   return(out);
+// }
+//
+//
+// // [[Rcpp::export]]
+// NumericVector exg_lccdf(
+//     NumericVector rt,
+//     NumericMatrix pars,
+//     LogicalVector idx,
+//     double min_ll
+// ) {
+//   // pars columns: mu=0, sigma=1, tau=2, muS=3, sigmaS=4, tauS=5, tf=6, gf=7, SSD=8
+//   int n_out = sum(idx);
+//   NumericVector out(n_out);
+//   int k = 0;
+//
+//   for (int i = 0; i < rt.size(); i++) {
+//     if (!idx[i]) continue;
+//
+//     double log_s = pexg(rt[i], pars(i, 0), pars(i, 1), pars(i, 2), false, true);
+//     if (!std::isfinite(log_s)) {
+//       out[k] = min_ll;
+//     } else {
+//       out[k] = log_s;
+//     }
+//     k++;
+//   }
+//
+//   return(out);
+// }
 
 
 // NumericVector exg_go_race(
