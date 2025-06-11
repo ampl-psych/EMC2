@@ -4,9 +4,46 @@
 using namespace Rcpp;
 #include "race_integrate.h"
 
+const double SIG_TAU_EPS = 1e-12;
+const double LOG_STD_NORMAL_CONST = -0.91893853320467274178032973640562;
+
+double phi_safe(
+    double z,
+    bool lower_tail = true,
+    bool log_p = false,
+    double lower_thresh = -15.,
+    double upper_thresh = 8.3
+) {
+  double log_out;
+
+  // use Mills ratio approximation for extreme values, otherwise R's pnorm
+  if (z < lower_thresh) {
+    if (lower_tail) {
+      log_out = LOG_STD_NORMAL_CONST - 0.5 * z * z - std::log(-z);
+    } else {
+      log_out = 0.;
+    }
+  } else if (z > upper_thresh) {
+    if (lower_tail) {
+      log_out = 0.;
+    } else {
+      log_out = LOG_STD_NORMAL_CONST - 0.5 * z * z - std::log(z);
+    }
+  } else {
+    log_out = R::pnorm(z, 0., 1., lower_tail, true);
+  }
+
+  return log_p ? log_out : std::exp(log_out);
+}
+
+double log_diff_exp(double a, double b) {
+  if (a <= b) return R_NegInf;
+  if (b == R_NegInf) return a;
+  return a + std::log1p(-std::exp(b - a));
+}
 
 // [[Rcpp::export]]
-double dEXG(
+double dexg(
     double x,
     double mu = 5.,
     double sigma = 1.,
@@ -14,32 +51,35 @@ double dEXG(
     bool log_d = false
 ) {
 
-  if (sigma <= 0 || tau <= 0) return NA_REAL;
+  // minimal parameter validation - assuming all inputs are finite
+  if (sigma <= 0. || tau <= 0.) return NA_REAL;
 
-  // if Gaussian SD is practically zero, treat as shifted exponential
-  if (sigma < 1e-4) {
-    return R::dexp(x - mu, tau, log_d);
+  // protect against numerical issues due to extremely small sigma or tau values
+  double tau_p = std::max(tau, SIG_TAU_EPS);
+  double sig_p = std::max(sigma, SIG_TAU_EPS);
+
+  // compute Phi term
+  double z = (x - mu) / sig_p - sig_p / tau_p;
+  double log_phi = phi_safe(z, true, true);
+  if (std::isnan(log_phi)) {
+    return NA_REAL;
+  }
+  if (std::isinf(log_phi)) {
+    return log_d ? log_phi : std::exp(log_phi);
   }
 
-  // if exponential rate has very small value relative to Gaussian SD, treat as
-  // Gaussian
-  if (tau < .05 * sigma) {
-    return R::dnorm(x, mu, sigma, log_d);
-  }
+  // compute exp term
+  double log_exp = (mu - x) / tau_p + (sig_p * sig_p) / (2. * tau_p * tau_p);
 
-  // main ex-Gaussian computation:
-  double sig2 = sigma * sigma;
-  double z = x - mu - sig2 / tau;
-  double log_phi = std::log(R::pnorm(z / sigma, 0., 1., true, false));
-  double log_exp = -std::log(tau) - (z + sig2 / (2. * tau)) / tau;
-  double out = log_exp + log_phi;
+  // final output: log density of ex-Gaussian
+  double out = -std::log(tau_p) + log_exp + log_phi;
 
   return log_d ? out : std::exp(out);
 }
 
 
 // [[Rcpp::export]]
-double pEXG(
+double pexg(
     double q,
     double mu = 5.,
     double sigma = 1.,
@@ -48,39 +88,50 @@ double pEXG(
     bool log_p = false
 ) {
 
-  if (sigma <= 0 || tau <= 0) return NA_REAL;
+  // minimal parameter validation - assuming mu, sigma, and tau are all finite
+  if (sigma <= 0. || tau <= 0.) return NA_REAL;
 
-  // if Gaussian SD is practically zero, treat as shifted exponential
-  if (sigma < 1e-4) {
-    return R::pexp(q - mu, tau, lower_tail, log_p);
-  }
-
-  // if exponential rate has very small value relative to Gaussian SD, treat as
-  // Gaussian
-  if (tau < .05 * sigma) {
-    return R::pnorm(q, mu, sigma, lower_tail, log_p);
-  }
-
-  // main ex-Gaussian computation:
-  double out;
+  // handle infinite q
   if (std::isinf(q)) {
-    out = (q < 0.) ? 0. : 1.;
-  } else {
-    double mu2 = mu * mu;
-    double sig2 = sigma * sigma;
-    double sig2_tau = sig2 / tau;
-    double z = q - mu - sig2_tau;
-    double norm1 = R::pnorm((q - mu) / sigma, 0., 1., true, false);
-    double norm2 = R::pnorm(z / sigma, 0., 1., true, false);
-    double exponent = (
-      std::pow(mu + sig2_tau, 2.) - mu2 - 2. * q * sig2_tau
-    ) / (2. * sig2);
-    out = norm1 - std::exp(std::log(norm2) + exponent);
+    double out = (q < 0.) ? 0. : 1.;
+    if (!lower_tail) out = 1. - out;
+    return log_p ? std::log(out) : out;
   }
 
-  if (!lower_tail) out = 1. - out;
+  // protect against numerical issues due to extremely small sigma or tau values
+  double tau_p = std::max(tau, SIG_TAU_EPS);
+  double sig_p = std::max(sigma, SIG_TAU_EPS);
 
-  return log_p ? std::log(out) : out;
+  // compute the two Phi terms
+  double log_phi_1 = phi_safe((q - mu) / sig_p, true, true);
+  double log_phi_2 = phi_safe((q - mu) / sig_p - sig_p / tau_p, true, true);
+
+  // compute the exp term in log space
+  double log_exp_term = (mu - q) / tau_p + (sig_p * sig_p) / (2. * tau_p * tau_p);
+
+  // combined second term
+  double log_second_term = log_exp_term + log_phi_2;
+
+  // final output: ex-Gaussian CDF
+  double log_out;
+  if (log_phi_1 > log_second_term) {
+    log_out = log_diff_exp(log_phi_1, log_second_term);
+  } else {
+    log_out = R_NegInf;
+  }
+
+  if (!lower_tail) {
+    double temp_out = std::exp(log_out);
+    if (log_out == R_NegInf || temp_out < 1e-15) {
+      log_out = 0.;
+    } else if (log_out == 0. || temp_out > 1. - 1e-15) {
+      log_out = R_NegInf;
+    } else {
+      log_out = std::log1p(-temp_out);
+    }
+  }
+
+  return log_p ? log_out : std::exp(log_out);
 }
 
 
@@ -96,22 +147,14 @@ NumericVector exg_lpdf(
   NumericVector out(n_out);
   int k = 0;
 
-  // if (rt.size() != pars.nrow() || rt.size() != idx.size()) {
-  //   stop("Inconsistent input lengths.");
-  // }
-
   for (int i = 0; i < rt.size(); i++) {
     if (!idx[i]) continue;
 
-    if (NumericVector::is_na(pars(i, 0))) {
-      out[k] = R_NegInf;
+    double log_d = dexg(rt[i], pars(i, 0), pars(i, 1), pars(i, 2), true);
+    if (!std::isfinite(log_d)) {
+      out[k] = min_ll;
     } else {
-      double log_d = dEXG(rt[i], pars(i, 0), pars(i, 1), pars(i, 2), true);
-      if (!std::isfinite(log_d)) {
-        out[k] = min_ll;
-      } else {
-        out[k] = log_d;
-      }
+      out[k] = log_d;
     }
     k++;
   }
@@ -132,22 +175,14 @@ NumericVector exg_lccdf(
   NumericVector out(n_out);
   int k = 0;
 
-  // if (rt.size() != pars.nrow() || rt.size() != idx.size()) {
-  //   stop("Inconsistent input lengths.");
-  // }
-
   for (int i = 0; i < rt.size(); i++) {
     if (!idx[i]) continue;
 
-    if (NumericVector::is_na(pars(i, 0))) {
-      out[k] = R_NegInf;
+    double log_s = pexg(rt[i], pars(i, 0), pars(i, 1), pars(i, 2), false, true);
+    if (!std::isfinite(log_s)) {
+      out[k] = min_ll;
     } else {
-      double log_s = pEXG(rt[i], pars(i, 0), pars(i, 1), pars(i, 2), false, true);
-      if (!std::isfinite(log_s)) {
-        out[k] = min_ll;
-      } else {
-        out[k] = log_s;
-      }
+      out[k] = log_s;
     }
     k++;
   }
