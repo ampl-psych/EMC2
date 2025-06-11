@@ -973,7 +973,7 @@ mapped_pars.emc.design <- function(x, p_vector = NULL, model=NULL,
                                       do_functions = F),
                        design,model,rt_check=FALSE,compress=FALSE, verbose = FALSE)
   ok <- !(names(dadm) %in% c("subjects","trials","R","rt","winner"))
-  out <- cbind(dadm[,ok],round(get_pars_matrix(p_vector,dadm, design$model()),digits))
+  out <- cbind(dadm[,ok, drop = F],round(get_pars_matrix(p_vector,dadm, design$model()),digits))
   if (model()$type=="SDT")  out <- out[dadm$lR!=levels(dadm$lR)[length(levels(dadm$lR))],]
   if (model()$type=="DDM")  out <- out[,!(names(out) %in% c("lR","lM"))]
   if (any(names(out)=="RACE") && remove_RACE)
