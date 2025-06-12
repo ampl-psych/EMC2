@@ -12,6 +12,7 @@ plot_relations(
   only_cred = TRUE,
   nice_names = NULL,
   selection = "correlation",
+  use_par = NULL,
   ...
 )
 }
@@ -30,6 +31,8 @@ the sampling stage \code{sample}.}
 \item{nice_names}{Character string. Alternative names to give the parameters}
 
 \item{selection}{Character. Whether to plot correlations or loadings}
+
+\item{use_par}{Character. Which parameters to include. If null, includes all.}
 
 \item{...}{Optional additional arguments}
 }
