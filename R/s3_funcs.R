@@ -634,7 +634,7 @@ hypothesis.emc <- function(emc, parameter = NULL, H0 = 0, fun = NULL,selection =
 
 
   psamples <-  get_objects(design = get_design(emc),
-                           type = emc[[1]]$type, sample_prior = T,
+                           type = emc[[1]]$type, sample_prior = T, prior = prior,
                            selection = selection, N = N, sampler = emc)
   psamples <- do.call(get_pars, c(list(psamples, selection = selection, merge_chains = TRUE, return_mcmc = FALSE, by_subject = TRUE,
                                           type = emc[[1]]$type),
