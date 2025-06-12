@@ -98,7 +98,8 @@ get_objects_diag_gamma <- function(selection, sample_prior, return_prior, design
     if(sample_prior){
       if(selection == "alpha" & !is.null(sampler)){
         mu <- get_pars(sampler, selection = "mu", stage = stage, map = FALSE, return_mcmc = FALSE, merge_chains = TRUE, ...)
-        var <- get_pars(sampler, selection = "Sigma", stage = stage, map = FALSE, return_mcmc = FALSE, merge_chains = TRUE, ...)
+        var <- get_pars(sampler, selection = "Sigma", stage = stage, map = FALSE, return_mcmc = FALSE, merge_chains = TRUE,
+                        remove_dup = FALSE, remove_constants = FALSE, ...)
         sub_names <- names(sampler[[1]]$data)
         sampler <- list(list(samples =  list(alpha = get_alphas(mu, var, sub_names))))
       } else{
@@ -146,7 +147,8 @@ get_objects_standard <- function(selection, sample_prior, return_prior, design =
       }
       if(selection == "alpha" & !is.null(sampler)){
         mu <- get_pars(sampler, selection = "mu", stage = stage, map = FALSE, return_mcmc = FALSE, merge_chains = TRUE, ...)
-        var <- get_pars(sampler, selection = "Sigma", stage = stage, map = FALSE, return_mcmc = FALSE, merge_chains = TRUE, ...)
+        var <- get_pars(sampler, selection = "Sigma", stage = stage, map = FALSE, return_mcmc = FALSE, merge_chains = TRUE,
+                        remove_dup = FALSE, remove_constants = FALSE, ...)
         sub_names <- names(sampler[[1]]$data)
         sampler <- list(list(samples =  list(alpha = get_alphas(mu, var, sub_names))))
       } else{
@@ -274,7 +276,8 @@ get_objects_factor <- function(selection, sample_prior, return_prior, design = N
     if(sample_prior){
       if(selection == "alpha" & !is.null(sampler)){
         mu <- get_pars(sampler, selection = "mu", stage = stage, map = FALSE, return_mcmc = FALSE, merge_chains = TRUE, ...)
-        var <- get_pars(sampler, selection = "Sigma", stage = stage, map = FALSE, return_mcmc = FALSE, merge_chains = TRUE, ...)
+        var <- get_pars(sampler, selection = "Sigma", stage = stage, map = FALSE, return_mcmc = FALSE, merge_chains = TRUE,
+                        remove_dup = FALSE, remove_constants = FALSE,...)
         sub_names <- names(sampler[[1]]$data)
         sampler <- list(list(samples =  list(alpha = get_alphas(mu, var, sub_names))))
       } else{
@@ -341,7 +344,8 @@ get_objects_infnt_factor <- function(selection, sample_prior, return_prior, desi
     if(sample_prior){
       if(selection == "alpha" & !is.null(sampler)){
         mu <- get_pars(sampler, selection = "mu", stage = stage, map = FALSE, return_mcmc = FALSE, merge_chains = TRUE, ...)
-        var <- get_pars(sampler, selection = "Sigma", stage = stage, map = FALSE, return_mcmc = FALSE, merge_chains = TRUE, ...)
+        var <- get_pars(sampler, selection = "Sigma", stage = stage, map = FALSE, return_mcmc = FALSE, merge_chains = TRUE,
+                        remove_dup = FALSE, remove_constants = FALSE,...)
         sub_names <- names(sampler[[1]]$data)
         sampler <- list(list(samples =  list(alpha = get_alphas(mu, var, sub_names))))
       } else{
@@ -413,7 +417,8 @@ get_objects_SEM <- function(selection, sample_prior, return_prior, design = NULL
     if(sample_prior){
       if(selection == "alpha" & !is.null(sampler)){
         mu <- get_pars(sampler, selection = "mu_implied", stage = stage, map = FALSE, return_mcmc = FALSE, merge_chains = TRUE, ...)
-        var <- get_pars(sampler, selection = "Sigma", stage = stage, map = FALSE, return_mcmc = FALSE, merge_chains = TRUE, ...)
+        var <- get_pars(sampler, selection = "Sigma", stage = stage, map = FALSE, return_mcmc = FALSE, merge_chains = TRUE,
+                        remove_dup = FALSE, remove_constants = FALSE,...)
         sub_names <- names(sampler[[1]]$data)
         sampler <- list(list(samples =  list(alpha = get_alphas(mu, var, sub_names))))
       } else{
