@@ -288,8 +288,8 @@ get_credible_factors <- function(credints){
 #' @param only_cred Boolean. Whether to only plot credible values
 #' @param nice_names Character string. Alternative names to give the parameters
 #' @param selection Character. Whether to plot correlations or loadings
+#' @param use_par Character. Which parameters to include. If null, includes all.
 #' @param ... Optional additional arguments
-#'
 #' @return No return value, creates a plot of group-level relations
 #' @examples
 #' # For a given set of hierarchical model samples we can make a
@@ -302,8 +302,9 @@ get_credible_factors <- function(credints){
 
 plot_relations <- function(emc = NULL, stage = "sample",  plot_cred = FALSE,
                            plot_means = TRUE, only_cred = TRUE, nice_names = NULL,
-                           selection = "correlation", ...){
+                           selection = "correlation", use_par = NULL, ...){
 
+  dots <- add_defaults(list(...), probs = c(0.025, .975))
   if(!selection %in% c("correlation", "loadings", "std_loadings")){
     stop("Selection must be either 'correlation', 'std_loadings', or 'loadings'")
   }
@@ -313,6 +314,14 @@ plot_relations <- function(emc = NULL, stage = "sample",  plot_cred = FALSE,
   }
   addCoef.col <- "black"
   values <- get_pars(emc, selection = selection, return_mcmc = F, merge_chains = TRUE, remove_constants = F)
+  if(!is.null(use_par)){
+    if(any(!use_par %in% rownames(values))) stop("some parameter names in use_par not in estimated parameters")
+    if(selection == "correlation"){
+      values <- values[use_par, use_par,, drop = F]
+    } else{
+      values <- values[use_par,,, drop = F]
+    }
+  }
   means <- apply(values, 1:2, mean)
 
 
@@ -321,7 +330,7 @@ plot_relations <- function(emc = NULL, stage = "sample",  plot_cred = FALSE,
 
   # Only add this if you want credible intervals
   if(plot_cred || only_cred){
-    cred <- aperm(apply(values, 1:2, quantile, probs = c(0.025, 0.975)))
+    cred <- aperm(apply(values, 1:2, quantile, probs = dots$probs))
     conf <- paste0("[", format(cred[,,1,drop = F], digits=1), ":", format(cred[,,2,drop = F], digits=1), "]")
     if(only_cred){
       is_cred <- unique(c(which(cred[,,1] > 0), which(cred[,,2] < 0)))
@@ -372,6 +381,7 @@ plot_relations <- function(emc = NULL, stage = "sample",  plot_cred = FALSE,
     xs <- row(matrix(cred[,,1], nrow = ncol(means)))
     ys <- (ncol(matrix(cred[,,1], nrow = ncol(means)))+1) - col(matrix(cred[,,2], nrow = ncol(means))) - 0.05
     conf[conf == "[ 1.0:1.0]"] <- ""
+    conf[conf == "[ 1.00:1.0]"] <- ""
     if(plot_means){
       ys <- ys - 0.1
       text(xs, ys, conf, pos=1, cex=0.55, font = 2)
