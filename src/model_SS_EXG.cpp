@@ -155,11 +155,11 @@ double dtexg(
     bool log_d = false
 ) {
 
-  if (lower >= upper) return NA_REAL;
-  if (x <= lower || x >= upper) return log_d ? R_NegInf : 0.;
   if (lower == R_NegInf && upper == R_PosInf) {
     return dexg(x, mu, sigma, tau, log_d);
   }
+  if (lower >= upper) return NA_REAL;
+  if (x <= lower || x >= upper) return log_d ? R_NegInf : 0.;
 
   double x_ld = dexg(x, mu, sigma, tau, true);
   if (x_ld == R_NegInf) return log_d ? R_NegInf : 0.;
@@ -202,6 +202,9 @@ double ptexg(
     bool log_p = false
 ) {
 
+  if (lower == R_NegInf && upper == R_PosInf) {
+    return pexg(q, mu, sigma, tau, lower_tail, log_p);
+  }
   if (lower >= upper) return NA_REAL;
   if (q <= lower) {
     double out = lower_tail ? 0. : 1.;
@@ -210,9 +213,6 @@ double ptexg(
   if (q >= upper) {
     double out = lower_tail ? 1. : 0.;
     return log_p ? (out == 0. ? R_NegInf : 0.) : out;
-  }
-  if (lower == R_NegInf && upper == R_PosInf) {
-    return pexg(q, mu, sigma, tau, lower_tail, log_p);
   }
 
   double q_cdf = pexg(q, mu, sigma, tau);
