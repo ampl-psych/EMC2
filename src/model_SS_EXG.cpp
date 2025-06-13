@@ -147,11 +147,11 @@ double pexg(
 // [[Rcpp::export]]
 double dtexg(
     double x,
-    double mu = 5.,
-    double sigma = 1.,
-    double tau = 1.,
-    double lower = R_NegInf,
-    double upper = R_PosInf,
+    double mu,
+    double sigma,
+    double tau,
+    double lower,
+    double upper,
     bool log_d = false
 ) {
 
@@ -193,11 +193,11 @@ double dtexg(
 // [[Rcpp::export]]
 double ptexg(
     double q,
-    double mu = 5.,
-    double sigma = 1.,
-    double tau = 1.,
-    double lower = R_NegInf,
-    double upper = R_PosInf,
+    double mu,
+    double sigma,
+    double tau,
+    double lower,
+    double upper,
     bool lower_tail = true,
     bool log_p = false
 ) {
