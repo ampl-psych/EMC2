@@ -29,20 +29,20 @@ pWald <- function(t, v, B, A, t0) {
     .Call(`_EMC2_pWald`, t, v, B, A, t0)
 }
 
-pEXG <- function(q, mu = 5., sigma = 1., tau = 1., lower_tail = TRUE, log_p = FALSE) {
-    .Call(`_EMC2_pEXG`, q, mu, sigma, tau, lower_tail, log_p)
+dexg <- function(x, mu = 5., sigma = 1., tau = 1., log_d = FALSE) {
+    .Call(`_EMC2_dexg`, x, mu, sigma, tau, log_d)
 }
 
-dEXG <- function(x, mu = 5., sigma = 1., tau = 1., log_d = FALSE) {
-    .Call(`_EMC2_dEXG`, x, mu, sigma, tau, log_d)
+pexg <- function(q, mu = 5., sigma = 1., tau = 1., lower_tail = TRUE, log_p = FALSE) {
+    .Call(`_EMC2_pexg`, q, mu, sigma, tau, lower_tail, log_p)
 }
 
-dEXGrace <- function(dt, mu, sigma, tau) {
-    .Call(`_EMC2_dEXGrace`, dt, mu, sigma, tau)
+dtexg <- function(x, mu, sigma, tau, lower, upper, log_d = FALSE) {
+    .Call(`_EMC2_dtexg`, x, mu, sigma, tau, lower, upper, log_d)
 }
 
-stopfn_exg <- function(t, mu, sigma, tau, SSD) {
-    .Call(`_EMC2_stopfn_exg`, t, mu, sigma, tau, SSD)
+ptexg <- function(q, mu, sigma, tau, lower, upper, lower_tail = TRUE, log_p = FALSE) {
+    .Call(`_EMC2_ptexg`, q, mu, sigma, tau, lower, upper, lower_tail, log_p)
 }
 
 pEXG_RDEX <- function(q, mu = 5., sigma = 1., tau = 1., lower_tail = TRUE, log_p = FALSE) {
