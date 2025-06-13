@@ -45,6 +45,22 @@ ptexg <- function(q, mu, sigma, tau, lower, upper, lower_tail = TRUE, log_p = FA
     .Call(`_EMC2_ptexg`, q, mu, sigma, tau, lower, upper, lower_tail, log_p)
 }
 
+dexg_c <- function(x, mu = 5., sigma = 1., tau = 1., log_d = FALSE) {
+    .Call(`_EMC2_dexg_c`, x, mu, sigma, tau, log_d)
+}
+
+pexg_c <- function(q, mu = 5., sigma = 1., tau = 1., lower_tail = TRUE, log_p = FALSE) {
+    .Call(`_EMC2_pexg_c`, q, mu, sigma, tau, lower_tail, log_p)
+}
+
+dEXGrace <- function(dt, mu, sigma, tau) {
+    .Call(`_EMC2_dEXGrace`, dt, mu, sigma, tau)
+}
+
+stopfn_exg <- function(t, mu, sigma, tau, SSD) {
+    .Call(`_EMC2_stopfn_exg`, t, mu, sigma, tau, SSD)
+}
+
 pEXG_RDEX <- function(q, mu = 5., sigma = 1., tau = 1., lower_tail = TRUE, log_p = FALSE) {
     .Call(`_EMC2_pEXG_RDEX`, q, mu, sigma, tau, lower_tail, log_p)
 }

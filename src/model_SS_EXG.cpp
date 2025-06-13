@@ -244,6 +244,38 @@ double ptexg(
 }
 
 
+// [[Rcpp::export]]
+NumericVector dexg_c(
+    NumericVector x,
+    double mu = 5.,
+    double sigma = 1.,
+    double tau = 1.,
+    bool log_d = false
+) {
+  int n = x.size();
+  NumericVector out(n);
+  for (int i = 0; i < n; i++) {
+    out[i] = dexg(x[i], mu, sigma, tau, log_d);
+  }
+  return(out);
+}
+
+// [[Rcpp::export]]
+NumericVector pexg_c(
+    NumericVector q,
+    double mu = 5.,
+    double sigma = 1.,
+    double tau = 1.,
+    bool lower_tail = true,
+    bool log_p = false
+) {
+  int n = q.size();
+  NumericVector out(n);
+  for (int i = 0; i < n; i++) {
+    out[i] = pexg(q[i], mu, sigma, tau, lower_tail, log_p);
+  }
+  return(out);
+}
 
 
 // // [[Rcpp::export]]
@@ -330,25 +362,25 @@ double ptexg(
 
 
 
-// // [[Rcpp::export]]
-// NumericVector dEXGrace(NumericMatrix dt,
-//                        NumericVector mu, NumericVector sigma, NumericVector tau){
-//   int n = mu.size();
-//   NumericVector out(dt.nrow());
-//   out = dEXG(dt(0, _), mu[0], sigma[0], tau[0], false);
-//   for (int i = 1; i < n; i++){
-//     out = out * pEXG(dt(i, _), mu[i], sigma[i], tau[i], false, false);
-//   }
-//   return out;
-// }
-//
-// // [[Rcpp::export]]
-// NumericVector stopfn_exg(NumericVector t,
-//                          NumericVector mu, NumericVector sigma, NumericVector tau,
-//                          double SSD){
-//   NumericVector tmp(mu.size() * t.size());
-//   tmp = rep_each(t, mu.size()) + SSD;
-//   NumericMatrix dt(mu.size(), t.size(), tmp.begin());
-//   dt(0, _) = dt(0, _) - SSD;
-//   return dEXGrace(dt, mu, sigma, tau);
-// }
+// [[Rcpp::export]]
+NumericVector dEXGrace(NumericMatrix dt,
+                       NumericVector mu, NumericVector sigma, NumericVector tau){
+  int n = mu.size();
+  NumericVector out(dt.nrow());
+  out = dexg_c(dt(0, _), mu[0], sigma[0], tau[0], false);
+  for (int i = 1; i < n; i++){
+    out = out * pexg_c(dt(i, _), mu[i], sigma[i], tau[i], false, false);
+  }
+  return out;
+}
+
+// [[Rcpp::export]]
+NumericVector stopfn_exg(NumericVector t,
+                         NumericVector mu, NumericVector sigma, NumericVector tau,
+                         double SSD){
+  NumericVector tmp(mu.size() * t.size());
+  tmp = rep_each(t, mu.size()) + SSD;
+  NumericMatrix dt(mu.size(), t.size(), tmp.begin());
+  dt(0, _) = dt(0, _) - SSD;
+  return dEXGrace(dt, mu, sigma, tau);
+}
