@@ -31,22 +31,22 @@ get_prior_infnt_factor <- function(prior = NULL, n_pars = NULL, sample = TRUE, N
     prior$as <- rep(5, n_pars) # shape prior on the error variances
   }
   if(is.null(prior$bs)){
-    prior$bs <- rep(.5, n_pars) # rate prior on the error variances
+    prior$bs <- rep(.25, n_pars) # rate prior on the error variances
   }
   if(is.null(prior$df)){
     prior$df <- 30 # Shape and rate prior on the global shrinkage
   }
   if(is.null(prior$ad1)){
-    prior$ad1 <- 2.5 # Shape prior on first column
+    prior$ad1 <- 3 # Shape prior on first column
   }
   if(is.null(prior$bd1)){
-    prior$bd1 <- 1.5 # Rate prior on first column
+    prior$bd1 <- 1 # Rate prior on first column
   }
   if(is.null(prior$ad2)){
-    prior$ad2 <- 5 # Multiplicative prior on shape subsequent columns
+    prior$ad2 <- 6 # Multiplicative prior on shape subsequent columns
   }
   if(is.null(prior$bd2)){
-    prior$bd2 <- 2 # Multiplicative prior on rate of subsequent columns
+    prior$bd2 <- 1.5 # Multiplicative prior on rate of subsequent columns
   }
   # Things I save rather than re-compute inside the loops.
   prior$theta_mu_invar <- 1/prior$theta_mu_var #Inverse of the matrix
