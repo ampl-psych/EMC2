@@ -721,6 +721,9 @@ run_hyper <- function(type, data, prior = NULL, iter = 1000, n_chains =3,
     out_alpha <- vector('list', n_chains)
     pri_single <- list(...)$prior_single
   }
+  pool      <- data_input          # FREEZE the stage-1 posterior
+  n_pool    <- dim(pool)[3]
+
   for(j in 1:n_chains){
     samples <- sample_store(data = data ,par_names = pars, is_nuisance = rep(F, length(pars)), integrate = F, type = type, ...)
     subjects <- unique(data$subjects)
@@ -737,11 +740,13 @@ run_hyper <- function(type, data, prior = NULL, iter = 1000, n_chains =3,
     class(sampler) <- "pmwgs"
     sampler <- add_info(sampler, prior, type = type, ...)
     sampler$type <- type
-    theta_bar <- apply(data_input, c(1, 2), mean)  # P × N matrix of subject means
     if(resample){
-      startpoints <- get_startpoints(sampler, start_mu = rowMeans(data_input), start_var = cov(t(theta_bar)), type = type)
+      theta_bar <- apply(data_input, c(1, 2), mean)     # P × N
+      start_mu  <- rowMeans(theta_bar)                  # length P
+      start_var <- cov(t(theta_bar))                    # P × P
+      startpoints <- group_pars <- get_startpoints(sampler, start_mu = rowMeans(theta_bar), start_var = cov(t(theta_bar)), type = type)
     } else{
-      startpoints <- get_startpoints(sampler, start_mu = NULL, start_var = NULL, type = type)
+      startpoints <- group_pars <- get_startpoints(sampler, start_mu = NULL, start_var = NULL, type = type)
     }
     sampler$samples <- fill_samples(samples = sampler$samples, group_level = startpoints, proposals = NULL,
                                     j = 1, n_pars = sampler$n_pars, type = type)
@@ -749,30 +754,23 @@ run_hyper <- function(type, data, prior = NULL, iter = 1000, n_chains =3,
     sampler <- extend_sampler(sampler, iter-1, "sample")
     input <- data_input[,,1]
     n_input <- dim(data_input)[3]
+    K <- 500
     for(i in 2:iter){
       if(is_mcmc){
-        group_pars <- gibbs_step(sampler, input, type = type)
         if(resample){
-          cand_pos <- sample.int(n_input, sampler$n_subjects, replace = TRUE)   # 1 draw / subject
-          prop <- data_input[
-            cbind(
-              rep(seq_len(sampler$n_pars),times = sampler$n_subjects),
-              rep(seq_len(sampler$n_subjects),each  = sampler$n_pars),
-              rep(cand_pos, each = sampler$n_pars)
-            )
-          ]
-          dim(prop) <- c(sampler$n_pars, sampler$n_subjects)
-          log_alpha <- dmvnorm(t(prop), mean = group_pars$tmu, sigma = group_pars$tvar, logd = TRUE) -
-            dmvnorm(t(input), mean = group_pars$tmu, sigma = group_pars$tvar, logd = TRUE) -
-            dmvnorm(t(prop), mean = pri_single$theta_mu_mean, sigma = pri_single$theta_mu_var, logd = TRUE) +
-            dmvnorm(t(input), mean = pri_single$theta_mu_mean, sigma = pri_single$theta_mu_var, logd = TRUE)
-          accept <- log(runif(sampler$n_subjects)) < log_alpha           # logical vector length n_subj
-
-          ## -------- write the next slice ------------------------------------------
-          data_input[ ,  accept, i] <- prop[ ,  accept]      # accepted columns
-          data_input[ , !accept, i] <- data_input[ , !accept, i-1]     # re-use previous columns
+          for (k in seq_len(sampler$n_subjects)) {
+            cand_idx  <- sample.int(n_pool, K-1)       # draw from fixed pool
+            particles <- cbind( input[,k], pool[,k,cand_idx])
+            logw <- dmvnorm(t(particles), mean = group_pars$tmu,
+                            sigma = group_pars$tvar, logd = TRUE) -
+              dmvnorm(t(particles), mean = pri_single$theta_mu_mean,
+                      sigma = pri_single$theta_mu_var, logd = TRUE)
+            sel <- sample.int(K, 1, prob = exp(logw - max(logw)))
+            data_input[ , k, i] <- particles[ , sel ]
+          }
         }
         input <- data_input[,,i]
+        group_pars <- gibbs_step(sampler, input, type = type)
       } else{
         group_pars <- gibbs_step(sampler, t(data_input), type = type)
       }
