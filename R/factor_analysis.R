@@ -37,7 +37,7 @@
 #' Array of factor loadings with dimensions p (variables) x q (factors) x n (MCMC iterations)
 #' @param verbose Logical; whether to print progress information
 #' @param n_cores Number of cores for parallel processing
-#'
+#' @param rotate_fun A function that returns an orthogonally rotated factor loadings matrix. If NULL uses `varimax`
 #' @return A list containing:
 #'   \item{lambda_reordered}{Array of reordered loadings}
 #'   \item{lambda_reordered_mcmc}{Array of reordered loadings as MCMC object}
@@ -85,7 +85,7 @@
 #' print(result)
 #'
 #' @export
-align_loadings <- function (emc = NULL, lambda = NULL, n_cores = 1, verbose = TRUE)
+align_loadings <- function (emc = NULL, lambda = NULL, n_cores = 1, verbose = TRUE, rotate_fun = NULL)
 {
   maxIter <- 100; threshold <- 1e-06;
   rotate <- TRUE; printIter <- 1000;
@@ -100,10 +100,15 @@ align_loadings <- function (emc = NULL, lambda = NULL, n_cores = 1, verbose = TR
   mcmcIterations <- dim(lambda)[3]
   threshold <- threshold * mcmcIterations * p * q
   lambda_varimax <- lambda
+  if(is.null(rotate_fun)){
+    rotate_fun <- function(loadings){
+      varimax(loadings, normalize = F)$loadings
+    }
+  }
   if (rotate) {
     if (q > 1) {
       for (iter in 1:mcmcIterations) {
-        lambda_varimax[,,iter] <- varimax(lambda[,,iter], normalize = F)$loadings
+        lambda_varimax[,,iter] <- rotate_fun(lambda[,,iter])
       }
     }
   }

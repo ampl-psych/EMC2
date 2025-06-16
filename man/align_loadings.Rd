@@ -4,7 +4,13 @@
 \alias{align_loadings}
 \title{Reorder MCMC Samples of Factor Loadings}
 \usage{
-align_loadings(emc = NULL, lambda = NULL, n_cores = 1, verbose = TRUE)
+align_loadings(
+  emc = NULL,
+  lambda = NULL,
+  n_cores = 1,
+  verbose = TRUE,
+  rotate_fun = NULL
+)
 }
 \arguments{
 \item{emc}{an 'emc' object of type \code{infnt_factor}.}
@@ -15,6 +21,8 @@ Array of factor loadings with dimensions p (variables) x q (factors) x n (MCMC i
 \item{n_cores}{Number of cores for parallel processing}
 
 \item{verbose}{Logical; whether to print progress information}
+
+\item{rotate_fun}{A function that returns an orthogonally rotated factor loadings matrix. If NULL uses \code{varimax}}
 }
 \value{
 A list containing:
