@@ -43,10 +43,10 @@ get_prior_infnt_factor <- function(prior = NULL, n_pars = NULL, sample = TRUE, N
     prior$bd1 <- 1 # Rate prior on first column
   }
   if(is.null(prior$ad2)){
-    prior$ad2 <- 6 # Multiplicative prior on shape subsequent columns
+    prior$ad2 <- 5 # Multiplicative prior on shape subsequent columns
   }
   if(is.null(prior$bd2)){
-    prior$bd2 <- 1.5 # Multiplicative prior on rate of subsequent columns
+    prior$bd2 <- 1 # Multiplicative prior on rate of subsequent columns
   }
   # Things I save rather than re-compute inside the loops.
   prior$theta_mu_invar <- 1/prior$theta_mu_var #Inverse of the matrix
