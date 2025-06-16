@@ -249,10 +249,7 @@ double c_log_likelihood_DDM(NumericMatrix pars, DataFrame data,
   NumericVector lls_exp(n_out);
   lls = d_DDM_Wien(rts, R, pars, is_ok);
   lls_exp = c_expand(lls, expand); // decompress
-  // lls_exp = lls;
-  lls_exp[is_na(lls_exp)] = min_ll;
-  lls_exp[is_infinite(lls_exp)] = min_ll;
-  lls_exp[lls_exp < min_ll] = min_ll;
+  lls_exp = check_ll(lls_exp, min_ll); // protect against numerical issues
   return(sum(lls_exp));
 }
 
@@ -287,29 +284,53 @@ double c_log_likelihood_race(NumericMatrix pars, DataFrame data,
     lds[!winner] = loss;
   }
   lds[is_na(lds)] = min_ll;
-  if(n_acc > 1){
+  if (n_acc > 1) {
     // LogicalVector winner_exp = c_bool_expand(winner, expand);
     NumericVector ll_out = lds[winner];
     NumericVector lds_los = lds[!winner];
-    if(n_acc == 2){
+    if (n_acc == 2) {
       ll_out = ll_out + lds_los;
-    } else{
-      for(int z = 0; z < ll_out.length(); z++){
+    } else {
+      for (int z = 0; z < ll_out.length(); z++) {
         ll_out[z] = ll_out[z] + sum(lds_los[seq( z * (n_acc -1), (z+1) * (n_acc -1) -1)]);
       }
     }
-    ll_out[is_na(ll_out)] = min_ll;
-    ll_out[is_infinite(ll_out)] = min_ll;
-    ll_out[ll_out < min_ll] = min_ll;
+    ll_out = check_ll(ll_out, min_ll);
     ll_out = c_expand(ll_out, expand); // decompress
     return(sum(ll_out));
-  } else{
-    lds_exp[is_na(lds_exp)] = min_ll;
-    lds_exp[is_infinite(lds_exp)] = min_ll;
-    lds_exp[lds_exp < min_ll] = min_ll;
+  } else {
     lds_exp = c_expand(lds, expand); // decompress
+    lds_exp = check_ll(lds_exp, min_ll);
     return(sum(lds_exp));
   }
+}
+
+double c_log_likelihood_ss_exg(
+    NumericMatrix pars,
+    DataFrame data,
+    const int n_trials,
+    IntegerVector expand,
+    double min_ll,
+    LogicalVector is_ok
+) {
+  // declare local variables
+  const int n_out = expand.length();
+  NumericVector lls(n_trials);
+  NumericVector lls_expanded(n_out);
+  // extract data
+  NumericVector rts = data["rt"];
+  IntegerVector R = data["R"];
+  NumericVector SSD = data["SSD"];
+  LogicalVector winner = data["winner"];
+  // compute log likelihoods
+  // NB JUST USING DDM AS PLACEHOLDER
+  lls = d_DDM_Wien(rts, R, pars, is_ok);
+  // decompress
+  lls_expanded = c_expand(lls, expand);
+  // protect against numerical issues
+  lls_expanded = check_ll(lls_expanded, min_ll);
+  // return summed log-likelihood
+  return(sum(lls_expanded));
 }
 
 // [[Rcpp::export]]
@@ -331,11 +352,11 @@ NumericVector calc_ll(NumericMatrix p_matrix, DataFrame data, NumericVector cons
   std::vector<PreTransformSpec> p_specs;
   std::vector<BoundSpec> bound_specs;
 
-  if(type == "DDM"){
+  if (type == "DDM") {
     IntegerVector expand = data.attr("expand");
-    for(int i = 0; i < n_particles; i++){
+    for (int i = 0; i < n_particles; i++) {
       p_vector = p_matrix(i, _);
-      if(i == 0){
+      if (i == 0) {
         p_specs = make_pretransform_specs(p_vector, pretransforms);
       }
       pars = get_pars_matrix(p_vector, constants, transforms, p_specs, p_types, designs, n_trials, data, trend);
@@ -346,39 +367,52 @@ NumericVector calc_ll(NumericMatrix p_matrix, DataFrame data, NumericVector cons
       is_ok = c_do_bound(pars, bound_specs);
       lls[i] = c_log_likelihood_DDM(pars, data, n_trials, expand, min_ll, is_ok);
     }
-  } else if(type == "MRI" || type == "MRI_AR1"){
+  } else if (type == "MRI" || type == "MRI_AR1") {
     int n_pars = p_types.length();
     NumericVector y = extract_y(data);
-    for(int i = 0; i < n_particles; i++){
+    for (int i = 0; i < n_particles; i++) {
       p_vector = p_matrix(i, _);
-      if(i == 0){
+      if (i == 0) {
         p_specs = make_pretransform_specs(p_vector, pretransforms);
       }
       pars = get_pars_matrix(p_vector, constants, transforms, p_specs, p_types, designs, n_trials, data, trend);
-      // Precompute specs
-      if (i == 0) {                            // first particle only, just to get colnames
+      if (i == 0) {
         bound_specs = make_bound_specs(minmax,mm_names,pars,bounds);
       }
       is_ok = c_do_bound(pars, bound_specs);
-      if(type == "MRI"){
+      if (type == "MRI") {
         lls[i] = c_log_likelihood_MRI(pars, y, is_ok, n_trials, n_pars, min_ll);
-      } else{
+      } else {
         lls[i] = c_log_likelihood_MRI_white(pars, y, is_ok, n_trials, n_pars, min_ll);
       }
     }
-  } else{
+  } else if (type == "SS_EXG") {
+    IntegerVector expand = data.attr("expand");
+    for (int i = 0; i < n_particles; i++) {
+      p_vector = p_matrix(i, _);
+      if (i == 0) {
+        p_specs = make_pretransform_specs(p_vector, pretransforms);
+      }
+      pars = get_pars_matrix(p_vector, constants, transforms, p_specs, p_types, designs, n_trials, data, trend);
+      if (i == 0) {
+        bound_specs = make_bound_specs(minmax,mm_names,pars,bounds);
+      }
+      is_ok = c_do_bound(pars, bound_specs);
+      lls[i] = c_log_likelihood_ss_exg(pars, data, n_trials, expand, min_ll, is_ok);
+    }
+  } else {
     IntegerVector expand = data.attr("expand");
     LogicalVector winner = data["winner"];
     // Love me some good old ugly but fast c++ pointers
     NumericVector (*dfun)(NumericVector, NumericMatrix, LogicalVector, double, LogicalVector);
     NumericVector (*pfun)(NumericVector, NumericMatrix, LogicalVector, double, LogicalVector);
-    if(type == "LBA"){
+    if (type == "LBA") {
       dfun = dlba_c;
       pfun = plba_c;
-    } else if(type == "RDM"){
+    } else if (type == "RDM") {
       dfun = drdm_c;
       pfun = prdm_c;
-    } else{
+    } else {
       dfun = dlnr_c;
       pfun = plnr_c;
     }
@@ -386,11 +420,11 @@ NumericVector calc_ll(NumericMatrix p_matrix, DataFrame data, NumericVector cons
     int n_lR = unique(lR).length();
     for (int i = 0; i < n_particles; ++i) {
       p_vector = p_matrix(i, _);
-      if(i == 0){
+      if (i == 0) {
         p_specs = make_pretransform_specs(p_vector, pretransforms);
       }
       pars = get_pars_matrix(p_vector, constants, transforms, p_specs, p_types, designs, n_trials, data, trend);
-      if (i == 0) {                            // first particle only, just to get colnames
+      if (i == 0) {
         bound_specs = make_bound_specs(minmax,mm_names,pars,bounds);
       }
       is_ok = c_do_bound(pars, bound_specs);

@@ -31,6 +31,13 @@ NumericVector pnorm_multiple(NumericVector x){
   return out;
 }
 
+NumericVector check_ll(NumericVector& ll, const double min_ll) {
+  ll[is_na(ll)] = min_ll;
+  ll[is_infinite(ll)] = min_ll;
+  ll[ll < min_ll] = min_ll;
+  return ll;
+}
+
 LogicalVector contains_multiple(CharacterVector sv, CharacterVector inputs) {
   LogicalVector res(sv.size());
   for (int i = 0; i < sv.size(); i ++) {
