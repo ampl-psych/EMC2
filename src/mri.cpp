@@ -246,9 +246,6 @@ NumericVector compute_gamma_diff_hrf(double tr, int oversampling, double time_le
   //    shape = (delay / dispersion), loc = (dt / dispersion), scale = 1
   //    shape = (undershoot / u_dispersion), loc = (dt / u_dispersion), scale = 1
   //    We must manually shift t by loc and use scale=1 in R's dgamma().
-  double loc_peak   = dt / dispersion;
-  double loc_under  = dt / u_dispersion;
-
   Rcpp::NumericVector hrf(n_points, 0.0);
 
   for (int i = 0; i < n_points; i++){
@@ -256,16 +253,16 @@ NumericVector compute_gamma_diff_hrf(double tr, int oversampling, double time_le
 
     // Peak gamma
     double peak_val = 0.0;
-    if (tval >= loc_peak) {
+    if (tval >= dt / dispersion) {
       // shape = (delay / dispersion), scale=1, argument=(tval - loc_peak)
-      peak_val = R::dgamma(tval - loc_peak, delay / dispersion, /*scale=*/1.0, false);
+      peak_val = R::dgamma((tval - dt)/ dispersion, delay / dispersion, /*scale=*/1.0, false);
     }
 
     // Undershoot gamma
     double under_val = 0.0;
-    if (tval >= loc_under) {
+    if (tval >= dt / u_dispersion) {
       // shape = (undershoot / u_dispersion), scale=1, argument=(tval - loc_under)
-      under_val = R::dgamma(tval - loc_under, undershoot / u_dispersion, /*scale=*/1.0, false);
+      under_val = R::dgamma((tval -  dt)/ u_dispersion, undershoot / u_dispersion, /*scale=*/1.0, false);
     }
 
     hrf[i] = peak_val - ratio * under_val;
