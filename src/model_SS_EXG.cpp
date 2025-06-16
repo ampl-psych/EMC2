@@ -3,6 +3,7 @@
 #include <Rcpp.h>
 using namespace Rcpp;
 #include "race_integrate.h"
+#include "composite_functions.h"
 
 const double SIG_TAU_EPS = 1e-12;
 const double LOG_STD_NORMAL_CONST = -0.91893853320467274178032973640562;
@@ -34,22 +35,6 @@ double phi_safe(
   }
 
   return log_p ? log_out : std::exp(log_out);
-}
-
-double log_diff_exp(double a, double b) {
-  if (a <= b) return R_NegInf;
-  if (b == R_NegInf) return a;
-  return a + std::log1p(-std::exp(b - a));
-}
-
-double log_sum_exp(double a, double b) {
-  if (a == R_NegInf) return b;
-  if (b == R_NegInf) return a;
-  if (a > b) {
-    return a + std::log1p(std::exp(b - a));
-  } else {
-    return b + std::log1p(std::exp(a - b));
-  }
 }
 
 // [[Rcpp::export]]
