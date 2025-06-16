@@ -28,10 +28,10 @@ get_prior_infnt_factor <- function(prior = NULL, n_pars = NULL, sample = TRUE, N
     prior$theta_mu_var <- rep(1, n_pars)
   }
   if(is.null(prior$as)){
-    prior$as <- rep(5, n_pars) # shape prior on the error variances
+    prior$as <- rep(10, n_pars) # shape prior on the error variances
   }
   if(is.null(prior$bs)){
-    prior$bs <- rep(.25, n_pars) # rate prior on the error variances
+    prior$bs <- rep(.5, n_pars) # rate prior on the error variances
   }
   if(is.null(prior$df)){
     prior$df <- 30 # Shape and rate prior on the global shrinkage
