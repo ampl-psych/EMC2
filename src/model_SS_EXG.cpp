@@ -2,40 +2,11 @@
 #include <cmath>
 #include <Rcpp.h>
 using namespace Rcpp;
-#include "race_integrate.h"
 #include "composite_functions.h"
+#include "phi_functions.h"
+#include "race_integrate.h"
 
 const double SIG_TAU_EPS = 1e-12;
-const double LOG_STD_NORMAL_CONST = -0.91893853320467274178032973640562;
-
-double phi_safe(
-    double z,
-    bool lower_tail = true,
-    bool log_p = false,
-    double lower_thresh = -15.,
-    double upper_thresh = 8.3
-) {
-  double log_out;
-
-  // use Mills ratio approximation for extreme values, otherwise R's pnorm
-  if (z < lower_thresh) {
-    if (lower_tail) {
-      log_out = LOG_STD_NORMAL_CONST - 0.5 * z * z - std::log(-z);
-    } else {
-      log_out = 0.;
-    }
-  } else if (z > upper_thresh) {
-    if (lower_tail) {
-      log_out = 0.;
-    } else {
-      log_out = LOG_STD_NORMAL_CONST - 0.5 * z * z - std::log(z);
-    }
-  } else {
-    log_out = R::pnorm(z, 0., 1., lower_tail, true);
-  }
-
-  return log_p ? log_out : std::exp(log_out);
-}
 
 // [[Rcpp::export]]
 double dexg(

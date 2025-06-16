@@ -1,5 +1,5 @@
-#ifndef composite_h
-#define composite_h
+#ifndef composite_functions_h
+#define composite_functions_h
 
 #include <Rcpp.h>
 #include <cmath>
@@ -292,4 +292,4 @@ inline double log_mean_exp(const Rcpp::NumericVector& x) {
   return log_sum_exp(x) - std::log(static_cast<double>(x.size()));
 }
 
-#endif // composite_h
+#endif // composite_functions_h
