@@ -722,7 +722,7 @@ run_hyper <- function(type, data, prior = NULL, iter = 1000, n_chains =3,
     pri_single <- list(...)$prior_single
   }
   pool      <- data_input          # FREEZE the stage-1 posterior
-  n_pool    <- dim(pool)[3]
+  n_input    <- dim(pool)[3]
 
   for(j in 1:n_chains){
     samples <- sample_store(data = data ,par_names = pars, is_nuisance = rep(F, length(pars)), integrate = F, type = type, ...)
@@ -741,10 +741,10 @@ run_hyper <- function(type, data, prior = NULL, iter = 1000, n_chains =3,
     sampler <- add_info(sampler, prior, type = type, ...)
     sampler$type <- type
     if(resample){
-      theta_bar <- apply(data_input, c(1, 2), mean)     # P × N
+      theta_bar <- apply(pool, c(1, 2), mean)     # P × N
       start_mu  <- rowMeans(theta_bar)                  # length P
       start_var <- cov(t(theta_bar))                    # P × P
-      startpoints <- group_pars <- get_startpoints(sampler, start_mu = rowMeans(theta_bar), start_var = cov(t(theta_bar)), type = type)
+      startpoints <- group_pars <- get_startpoints(sampler, start_mu = start_mu, start_var = start_var, type = type)
     } else{
       startpoints <- group_pars <- get_startpoints(sampler, start_mu = NULL, start_var = NULL, type = type)
     }
@@ -752,14 +752,13 @@ run_hyper <- function(type, data, prior = NULL, iter = 1000, n_chains =3,
                                     j = 1, n_pars = sampler$n_pars, type = type)
     sampler$samples$idx <- 1
     sampler <- extend_sampler(sampler, iter-1, "sample")
-    input <- data_input[,,1]
-    n_input <- dim(data_input)[3]
-    K <- 500
+    input <- pool[,,1]
+    K <- 100
     for(i in 2:iter){
       if(is_mcmc){
         if(resample){
           for (k in seq_len(sampler$n_subjects)) {
-            cand_idx  <- sample.int(n_pool, K-1)       # draw from fixed pool
+            cand_idx  <- sample.int(n_input, K-1)       # draw from fixed pool
             particles <- cbind( input[,k], pool[,k,cand_idx])
             logw <- dmvnorm(t(particles), mean = group_pars$tmu,
                             sigma = group_pars$tvar, logd = TRUE) -
