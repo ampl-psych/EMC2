@@ -13,6 +13,40 @@
  */
 
 /**
+ * @brief Compute log(1 - x) in a numerically stable way
+ *
+ * This function computes log(1 - x) without precision loss that would
+ * occur with the naive computation when x is close to 0.
+ *
+ * @param x Input value (should be < 1 for real result)
+ * @return log(1 - x)
+ */
+inline double log1m(double x) {
+  if (ISNAN(x)) return NA_REAL;
+  if (x >= 1.0) return R_NegInf;  // log(1 - x) = log(0 or negative)
+  if (x == R_NegInf) return 0.0;  // log(1 - (-Inf)) = log(Inf) = Inf, but we return 0 for log(1)
+
+  return std::log1p(-x);
+}
+
+/**
+ * @brief Compute log(1 - x) for vectors in a numerically stable way
+ *
+ * Vectorized version of log1m for element-wise operations.
+ *
+ * @param x Vector of input values
+ * @return Vector of log(1 - x[i])
+ */
+inline Rcpp::NumericVector log1m(const Rcpp::NumericVector& x) {
+  int n = x.size();
+  Rcpp::NumericVector result(n);
+  for (int i = 0; i < n; i++) {
+    result[i] = log1m(x[i]);
+  }
+  return result;
+}
+
+/**
  * @brief Compute log(1 + exp(x)) in a numerically stable way
  *
  * This function computes log(1 + exp(x)) without intermediate overflow
@@ -70,7 +104,7 @@ inline double log1m_exp(double x) {
   if (x > -0.693147) {  // x > -log(2)
     return std::log(-std::expm1(x));
   } else {
-    return std::log1p(-std::exp(x));
+    return log1m(std::exp(x));
   }
 }
 
@@ -190,8 +224,8 @@ inline double log_diff_exp(double a, double b) {
 
   // For numerical stability when a and b are close
   if (diff > -0.693147) {  // diff > -log(2), i.e., exp(b)/exp(a) > 0.5
-    // Use log1p(-exp(diff)) = log1p(-exp(b-a))
-    return a + std::log1p(-std::exp(diff));
+    // Use log1m(exp(diff)) = log1m(exp(b-a))
+    return a + log1m(std::exp(diff));
   } else {
     // When exp(b-a) is small, use series expansion
     // log(1 - x) ~= -x - x^2/2 - x^3/3 - ... for small x
@@ -246,11 +280,11 @@ inline double log_mix(double theta, double lambda1, double lambda2) {
 
   // Handle infinite log densities
   if (lambda1 == R_NegInf && lambda2 == R_NegInf) return R_NegInf;
-  if (lambda1 == R_NegInf) return std::log1p(-theta) + lambda2;
+  if (lambda1 == R_NegInf) return log1m(theta) + lambda2;  // Using log1m for log(1-theta)
   if (lambda2 == R_NegInf) return std::log(theta) + lambda1;
 
   // General case: log(theta * exp(lambda1) + (1-theta) * exp(lambda2))
-  return log_sum_exp(std::log(theta) + lambda1, std::log1p(-theta) + lambda2);
+  return log_sum_exp(std::log(theta) + lambda1, log1m(theta) + lambda2);  // Using log1m for log(1-theta)
 }
 
 /**
