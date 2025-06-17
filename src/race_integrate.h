@@ -130,7 +130,7 @@ double pr_pt(
   double out = pr.value / pt.value;
   if (traits::is_infinite<REALSXP>(out)) return NA_REAL;
 
-  return std::clamp(out, 0., 1.);
+  return std::max(0., std::min(1., out));
 }
 
 
@@ -150,8 +150,9 @@ double pLU(
   if (pU.error_code != 0 || traits::is_nan<REALSXP>(pU.value)) return NA_REAL;
 
   // clamp probabilities to [0, 1] and return summed probability
-  double clampedL = std::clamp(pL.value, 0., 1.);
-  double clampedU = std::clamp(pU.value, 0., 1.);
+  // out = std::max(0., std::min(1., out));
+  double clampedL = std::max(0., std::min(1., pL.value));
+  double clampedU = std::max(0., std::min(1., pU.value));
 
   return clampedL + clampedU;
 }
