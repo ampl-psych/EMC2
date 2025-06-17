@@ -22,6 +22,7 @@ private:
   const NumericMatrix pars;
   const LogicalVector winner;
   const double min_ll;
+  const bool log_d;
 
 public:
   race_f(
@@ -29,13 +30,15 @@ public:
     NumericVector (*lccdf_)(NumericVector, NumericMatrix, LogicalVector, double),
     NumericMatrix pars_,
     LogicalVector winner_,
-    double min_ll_
+    double min_ll_,
+    bool log_d_ = false
   ) :
   lpdf(lpdf_),
   lccdf(lccdf_),
   pars(pars_),
   winner(winner_),
-  min_ll(min_ll_) {}
+  min_ll(min_ll_),
+  log_d(log_d_) {}
 
   double operator()(const double& x) const {
     // broadcast input response time x to repped vector, one per accumulator
@@ -52,9 +55,9 @@ public:
       NumericVector log_s = lccdf(t, pars, !winner, min_ll);
       log_out += std::accumulate(log_s.begin(), log_s.end(), 0.);
     }
-    // output is instantaneous likelihood that winner accumulator finishes at
-    // time t, before the loser accumulator(s).
-    return std::exp(log_out);
+    // output is instantaneous (log) likelihood that winner accumulator finishes
+    // at time t, before the loser accumulator(s).
+    return log_d ? log_out : std::exp(log_out);
   }
 };
 
