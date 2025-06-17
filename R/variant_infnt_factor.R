@@ -28,10 +28,10 @@ get_prior_infnt_factor <- function(prior = NULL, n_pars = NULL, sample = TRUE, N
     prior$theta_mu_var <- rep(1, n_pars)
   }
   if(is.null(prior$as)){
-    prior$as <- rep(10, n_pars) # shape prior on the error variances
+    prior$as <- rep(5, n_pars) # shape prior on the error variances
   }
   if(is.null(prior$bs)){
-    prior$bs <- rep(.5, n_pars) # rate prior on the error variances
+    prior$bs <- rep(.25, n_pars) # rate prior on the error variances
   }
   if(is.null(prior$df)){
     prior$df <- 30 # Shape and rate prior on the global shrinkage
@@ -46,7 +46,7 @@ get_prior_infnt_factor <- function(prior = NULL, n_pars = NULL, sample = TRUE, N
     prior$ad2 <- 5 # Multiplicative prior on shape subsequent columns
   }
   if(is.null(prior$bd2)){
-    prior$bd2 <- 1 # Multiplicative prior on rate of subsequent columns
+    prior$bd2 <- 2 # Multiplicative prior on rate of subsequent columns
   }
   # Things I save rather than re-compute inside the loops.
   prior$theta_mu_invar <- 1/prior$theta_mu_var #Inverse of the matrix
@@ -90,7 +90,7 @@ get_prior_infnt_factor <- function(prior = NULL, n_pars = NULL, sample = TRUE, N
     }
     if(selection %in% c("residuals", "std_loadings", "alpha", "correlation", "Sigma", "covariance", "sigma2")) {
       residuals <- t(matrix(rgamma(n_pars*N, shape = prior$as, rate = prior$bs),
-                          ncol = n_pars, byrow = T))
+                            ncol = n_pars, byrow = T))
       rownames(residuals) <- par_names
       if(selection %in% c("residuals", "std_loadings")){
         samples$epsilon_inv <- residuals
