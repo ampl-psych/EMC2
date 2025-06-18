@@ -197,10 +197,9 @@ double ss_exg_stop_success_lpdf(
 }
 
 // top-level log-likelihood function for the stop signal task
-// [[Rcpp::export]]
 NumericVector ss_exg_lpdf(
     NumericVector RT,
-    NumericVector R,
+    IntegerVector R,
     NumericVector SSD,
     NumericVector lR,
     LogicalVector winner,
