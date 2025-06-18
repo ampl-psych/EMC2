@@ -41,22 +41,25 @@ public:
   log_d(log_d_) {}
 
   double operator()(const double& x) const {
-    // broadcast input response time x to repped vector, one per accumulator
     int n_acc = pars.nrow();
+    int n_winner = sum(winner);
+    int n_loser = sum(!winner);
+    // broadcast input response time x to repped vector, one per accumulator
     NumericVector t(n_acc, x);
-    // compute log density of winner accumulator finishing at time t
-    NumericVector log_d = lpdf(t, pars, winner, min_ll);
-    if (log_d.size() != 1) {
-      stop("expected lpdf to return a scalar NumericVector of length 1");
+    // initialise log likelihood
+    double log_out = 0.;
+    if (n_winner == 1) {
+      // compute log density of winner accumulator finishing at time t
+      NumericVector log_d = lpdf(t, pars, winner, min_ll);
+      log_out += Rcpp::as<double>(log_d);
     }
-    double log_out = log_d[0];
-    // (summed) log survival probability of losing accumulator(s)
-    if (n_acc > 1) {
+    if (n_loser >= 1) {
+      // (summed) log survival probability of losing accumulator(s)
       NumericVector log_s = lccdf(t, pars, !winner, min_ll);
       log_out += std::accumulate(log_s.begin(), log_s.end(), 0.);
     }
     // output is instantaneous (log) likelihood that winner accumulator finishes
-    // at time t, before the loser accumulator(s).
+    // at time t and the loser accumulator(s) have not yet finished by time t.
     return log_d ? log_out : std::exp(log_out);
   }
 };
