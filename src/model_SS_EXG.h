@@ -1,4 +1,6 @@
-#define _USE_MATH_DEFINES
+#ifndef ss_exg_h
+#define ss_exg_h
+
 #include <cmath>
 #include <Rcpp.h>
 #include "utility_functions.h"
@@ -367,3 +369,5 @@ NumericVector stopfn_exg(NumericVector t,
   dt(0, _) = dt(0, _) - SSD;
   return dEXGrace(dt, mu, sigma, tau);
 }
+
+#endif
