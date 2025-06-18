@@ -103,11 +103,11 @@ double pexg(
 // probability density function of truncated ex-Gaussian distribution
 double dtexg(
     const double x,
-    const double mu,
-    const double sigma,
-    const double tau,
-    const double lower,
-    const double upper,
+    const double mu = 5.,
+    const double sigma = 1.,
+    const double tau = 1.,
+    const double lower = R_NegInf,
+    const double upper = R_PosInf,
     const bool log_d = false
 ) {
 
@@ -151,11 +151,11 @@ double dtexg(
 // cumulative distribution function of truncated ex-Gaussian distribution
 double ptexg(
     const double q,
-    const double mu,
-    const double sigma,
-    const double tau,
-    const double lower,
-    const double upper,
+    const double mu = 5.,
+    const double sigma = 1.,
+    const double tau = 1.,
+    const double lower = R_NegInf,
+    const double upper = R_PosInf,
     const bool lower_tail = true,
     const bool log_p = false
 ) {
