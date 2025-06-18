@@ -328,6 +328,12 @@ double c_log_likelihood_ss_exg(
   NumericVector SSD = data["SSD"];
   NumericVector lR = data["lR"];
   LogicalVector winner = data["winner"];
+  if (data.containsElementNamed("lI")) {
+    IntegerVector lI = data["lI"];
+    if (unique(lI).size() > 1) {
+      stop("Column 'lI' contains multiple unique values; not yet supported.");
+    }
+  }
   // compute log likelihoods
   lls = ss_exg_lpdf(RT, R, SSD, lR, winner, pars, is_ok, min_ll);
   // decompress
@@ -403,7 +409,7 @@ NumericVector calc_ll(NumericMatrix p_matrix, DataFrame data, NumericVector cons
       }
       pars = get_pars_matrix(p_vector, constants, transforms, p_specs, p_types, designs, n_trials, data, trend);
       if (i == 0) {
-        bound_specs = make_bound_specs(minmax,mm_names,pars,bounds);
+        bound_specs = make_bound_specs(minmax, mm_names, pars, bounds);
       }
       is_ok = c_do_bound(pars, bound_specs);
       is_ok = lr_all(is_ok, n_lR);
