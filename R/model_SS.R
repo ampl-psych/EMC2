@@ -577,10 +577,7 @@ SSexG <- function() {
         tf = c(.001, .999), gf = c(.001, .999),
         exg_lb = c(0, Inf), exgS_lb = c(0, Inf)
       ),
-      exception = c(
-        tf = 0, gf = 0,
-        exg_lb = -Inf, exgS_lb = -Inf # CHECK this might not work due to log transform
-      )
+      exception = c(tf = 0, gf = 0)
     ),
     # Trial dependent parameter transform
     Ttransform = function(pars, dadm) {
