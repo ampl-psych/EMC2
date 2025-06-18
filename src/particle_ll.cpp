@@ -5,6 +5,7 @@
 #include "model_RDM.h"
 #include "model_DDM.h"
 #include "model_MRI.h"
+#include "model_SS_EXG.h"
 #include "trend.h"
 using namespace Rcpp;
 
@@ -313,18 +314,22 @@ double c_log_likelihood_ss_exg(
     double min_ll,
     LogicalVector is_ok
 ) {
-  // declare local variables
+  // initialise local variables
   const int n_out = expand.length();
+  if (all(!is_ok)) {
+    NumericVector lls_expanded(n_out, min_ll);
+    return(sum(lls_expanded));
+  }
   NumericVector lls(n_trials);
   NumericVector lls_expanded(n_out);
   // extract data
-  NumericVector rts = data["rt"];
+  NumericVector RT = data["rt"];
   IntegerVector R = data["R"];
   NumericVector SSD = data["SSD"];
+  NumericVector lR = data["lR"];
   LogicalVector winner = data["winner"];
   // compute log likelihoods
-  // NB JUST USING DDM AS PLACEHOLDER
-  lls = d_DDM_Wien(rts, R, pars, is_ok);
+  lls = ss_exg_lpdf(RT, R, SSD, lR, winner, pars, is_ok, min_ll);
   // decompress
   lls_expanded = c_expand(lls, expand);
   // protect against numerical issues
@@ -388,6 +393,9 @@ NumericVector calc_ll(NumericMatrix p_matrix, DataFrame data, NumericVector cons
     }
   } else if (type == "SS_EXG") {
     IntegerVector expand = data.attr("expand");
+    NumericVector lR = data["lR"];
+    const int n_lR = unique(lR).length();
+    const int n_trials_ll = n_trials / n_lR;
     for (int i = 0; i < n_particles; i++) {
       p_vector = p_matrix(i, _);
       if (i == 0) {
@@ -398,7 +406,8 @@ NumericVector calc_ll(NumericMatrix p_matrix, DataFrame data, NumericVector cons
         bound_specs = make_bound_specs(minmax,mm_names,pars,bounds);
       }
       is_ok = c_do_bound(pars, bound_specs);
-      lls[i] = c_log_likelihood_ss_exg(pars, data, n_trials, expand, min_ll, is_ok);
+      is_ok = lr_all(is_ok, n_lR);
+      lls[i] = c_log_likelihood_ss_exg(pars, data, n_trials_ll, expand, min_ll, is_ok);
     }
   } else {
     IntegerVector expand = data.attr("expand");
