@@ -238,7 +238,7 @@ NumericVector ss_exg_lpdf(
 
     // if any accumulator was flagged as not ok for the current trial, assign
     // minimal log likelihood and skip to next trial
-    if (any(!is_ok[Range(start_row, end_row)])) {
+    if (is_true(any(!is_ok[Range(start_row, end_row)]))) {
       out[trial] = min_ll;
       continue;
     }

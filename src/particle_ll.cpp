@@ -316,7 +316,7 @@ double c_log_likelihood_ss_exg(
 ) {
   // initialise local variables
   const int n_out = expand.length();
-  if (all(!is_ok)) {
+  if (is_true(all(!is_ok))) {
     NumericVector lls_expanded(n_out, min_ll);
     return(sum(lls_expanded));
   }
