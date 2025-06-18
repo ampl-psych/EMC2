@@ -346,8 +346,9 @@ NumericVector pexg_c(
 }
 
 // [[Rcpp::export]]
-NumericVector dEXGrace(NumericMatrix dt,
-                       NumericVector mu, NumericVector sigma, NumericVector tau){
+NumericVector dEXGrace(
+    NumericMatrix dt, NumericVector mu, NumericVector sigma, NumericVector tau
+){
   int n = mu.size();
   NumericVector out(dt.nrow());
   out = dexg_c(dt(0, _), mu[0], sigma[0], tau[0], false);
@@ -358,9 +359,9 @@ NumericVector dEXGrace(NumericMatrix dt,
 }
 
 // [[Rcpp::export]]
-NumericVector stopfn_exg(NumericVector t,
-                         NumericVector mu, NumericVector sigma, NumericVector tau,
-                         double SSD){
+NumericVector stopfn_exg(
+    NumericVector t, NumericVector mu, NumericVector sigma, NumericVector tau, double SSD
+){
   NumericVector tmp(mu.size() * t.size());
   tmp = rep_each(t, mu.size()) + SSD;
   NumericMatrix dt(mu.size(), t.size(), tmp.begin());

@@ -78,26 +78,31 @@ double pexg(
   // combined second term
   double log_second_term = log_exp_term + log_phi_2;
 
-  // final output: ex-Gaussian CDF
-  double log_out;
+  // now obtain ex-Gaussian log CDF
+  double log_cdf_lower;
   if (log_phi_1 > log_second_term) {
-    log_out = log_diff_exp(log_phi_1, log_second_term);
+    log_cdf_lower = log_diff_exp(log_phi_1, log_second_term);
   } else {
-    log_out = R_NegInf;
+    log_cdf_lower = R_NegInf;
   }
 
-  if (!lower_tail) {
-    double temp_out = std::exp(log_out);
-    if (log_out == R_NegInf || temp_out < 1e-15) {
-      log_out = 0.;
-    } else if (log_out == 0. || temp_out > 1. - 1e-15) {
-      log_out = R_NegInf;
+  double out;
+  if (lower_tail) {
+    out = log_p ? log_cdf_lower : std::exp(log_cdf_lower);
+  } else {
+    if (log_cdf_lower == R_NegInf) {
+      out = log_p ? 0. : 1.;
     } else {
-      log_out = std::log1p(-temp_out);
+      double cdf_lower = std::exp(log_cdf_lower);
+      if (cdf_lower >= 1. - 1e-15) {
+        out = log_p ? R_NegInf : 0.;
+      } else {
+        out = log_p ? log1m(cdf_lower) : -std::expm1(log_cdf_lower);
+      }
     }
   }
 
-  return log_p ? log_out : std::exp(log_out);
+  return(out);
 }
 
 // probability density function of truncated ex-Gaussian distribution
