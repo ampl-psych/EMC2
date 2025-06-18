@@ -313,8 +313,7 @@ NumericVector ss_exg_lpdf(
 }
 
 
-// OLD STUFF BELOW, KEPT IN FOR TESTING
-
+// FOLLOWING ONLY KEPT IN FOR POSTERITY / TESTING R CODE
 NumericVector dexg_c(
     const NumericVector x,
     const double mu = 5.,

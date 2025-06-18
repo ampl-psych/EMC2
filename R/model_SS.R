@@ -556,6 +556,7 @@ pstopEXG <- function(parstop,n_acc,upper=Inf,
 SSexG <- function() {
   list(
     type = "RACE",
+    c_name = "SS_EXG",
     p_types = c(
       mu = log(.4), sigma = log(.05), tau = log(.1),
       muS = log(.3), sigmaS = log(.025), tauS = log(.05),
