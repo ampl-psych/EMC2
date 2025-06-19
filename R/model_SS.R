@@ -97,155 +97,229 @@ ST_staircase_function <- function(dts,staircase) {
   list(sR=sR,srt=srt,SSD=SSD)
 }
 
-#### Single exGaussian functions ----
+#### Numerically stable log computation functions ----
 
-# Following functions moved to C++ model_SS_EXG.cpp
+# log(1 - x)
+log1m <- function(x) {
+  ifelse(is.na(x), NA_real_,
+         ifelse(x >= 1, -Inf,
+                ifelse(x == -Inf, 0,
+                       log1p(-x))))
+}
 
-# pEXG <- function (q, mu = 5, sigma = 1, tau = 1, lower_tail = TRUE, log_p = FALSE)
-#     # ex-Gaussian cumulative density
-#     # Modified from gamlss.dist to make cdf in tau > 0.05 * sigma case robust,
-#     # and robust to -Inf and Inf inputs, returns NA for bad sigma or tau and
-#     # robust against small sigma cases.
-#   {
-#     if (sigma <= 0) return(rep(NA,length(q)))
-#       if (tau <= 0) return(rep(NA,length(q)))
-#
-#       # if (sigma < 0.05*tau)
-#       if (sigma < 1e-4)
-#        return(pexp(q-mu,1/tau,log.p=log_p,lower.tail=lower_tail)) # shfited exponential
-#
-#     ly <- length(q)
-#     sigma <- rep(sigma, length = ly)
-#     mu <- rep(mu, length = ly)
-#     tau <- rep(tau, length = ly)
-#     index <- seq(along = q)
-#     z <- q - mu - ((sigma^2)/tau)
-#     cdf <- ifelse(is.finite(q),
-#       ifelse(tau > 0.05 * sigma,
-#          pnorm((q - mu)/sigma) - exp(log(pnorm(z/sigma)) + ((mu + (sigma^2/tau))^2 -
-#            (mu^2) -  2 * q * ((sigma^2)/tau))/(2 * sigma^2)),
-#          pnorm(q, mean = mu, sd = sigma)),
-#         ifelse(q<0,0,1)
-#     )
-#     if (lower_tail == TRUE)
-#       cdf <- cdf
-#     else cdf <- 1 - cdf
-#     if (log_p == FALSE)
-#       cdf <- cdf
-#     else cdf <- log(cdf)
-#     cdf
-#   }
-#
-# dEXG <- function (x, mu = 5, sigma = 1, tau = 1, log = FALSE)
-#   # ex-Gaussian density
-#   # gamlss.dist function, but returns NA for bad sigma or tau, and
-#   # robust against small sigma cases.
-# {
-#     if (sigma <= 0) return(rep(NA,length(x)))
-#     if (tau <= 0) return(rep(NA,length(x)))
-#
-#     # if (sigma < 0.05*tau)
-#     if (sigma < 1e-4)
-#       return(dexp(x-mu,1/tau,log=log)) # shfited exponential
-#
-#     ly <- length(x)
-#     sigma <- rep(sigma, length = ly)
-#     mu <- rep(mu, length = ly)
-#     tau <- rep(tau, length = ly)
-#     z <- x - mu - ((sigma^2)/tau)
-#     logfy <- ifelse(tau > 0.05 * sigma,
-#       -log(tau) - (z + (sigma^2/(2 *  tau)))/tau + log(pnorm(z/sigma)),
-#       dnorm(x, mean = mu, sd = sigma, log = TRUE))
-#     if (log == FALSE)
-#       fy <- exp(logfy)
-#     else fy <- logfy
-#     fy
-# }
-#
+# log(1 - exp(x))
+log1m_exp <- function(x) {
+  ifelse(is.na(x), NA_real_,
+         ifelse(x > 0, NA_real_,  # 1 - exp(x) < 0 for x > 0
+                ifelse(x == 0, -Inf,  # log(1 - 1) = log(0) = -Inf
+                       ifelse(x == -Inf, 0,  # log(1 - 0) = log(1) = 0
+                              ifelse(x > -log(2),  # x > -log(2)
+                                     log(-expm1(x)),
+                                     log1m(exp(x)))))))
+}
 
-dexGaussian <- function(rt,pars)
-  # exGaussian pdf (returns normal or exponential for small tau/sigma)
-{
-  isexp <- pars[,"sigma"] < 1e-4 # shifted exponential
-  rt[isexp] <- dexp(rt[isexp]-pars[isexp,"mu"],1/pars[isexp,"tau"])
-  isnorm <- !isexp & pars[,"tau"] < 0.05 * pars[,"sigma"] # normal
-  rt[isnorm] <- dnorm(rt[isnorm], mean = pars[isnorm,"mu"],
-                                  sd = pars[isnorm,"sigma"])
-  isexg <- !(isexp | isnorm)
-  if (any(isexg)) {
-    s2 <- pars[isexg,"sigma"]^2
-    z <- rt[isexg] - pars[isexg,"mu"] - (s2/pars[isexg,"tau"])
-    rt[isexg] <- exp(
-      log(pnorm(z/pars[isexg,"sigma"])) -
-        log(pars[isexg,"tau"]) -
-        (z + (s2/(2 *  pars[isexg,"tau"])))/pars[isexg,"tau"]
+# log(exp(a) + exp(b))
+log_sum_exp <- function(a, b = NULL) {
+  if (is.null(b)) {
+    # Vector version: log(sum(exp(x)))
+    x <- a
+    if (length(x) == 0) return(-Inf)
+    if (length(x) == 1) return(x[1])
+
+    max_val <- max(x, na.rm = TRUE)
+    if (is.infinite(max_val) && max_val < 0) return(-Inf)
+
+    # Subtract max for numerical stability
+    exp_terms <- exp(x - max_val)
+    exp_terms[is.infinite(x) & x < 0] <- 0  # Handle -Inf cases
+
+    return(max_val + log(sum(exp_terms, na.rm = TRUE)))
+  } else {
+    # Two-argument version: log(exp(a) + exp(b))
+    ifelse(a == -Inf, b,
+           ifelse(b == -Inf, a,
+                  ifelse(a > b,
+                         a + log1p(exp(b - a)),
+                         b + log1p(exp(a - b)))))
+  }
+}
+
+# log(exp(a) - exp(b))
+log_diff_exp <- function(a, b) {
+  # Handle edge cases
+  result <- ifelse(is.na(a) | is.na(b), NA_real_,
+                   ifelse(is.infinite(a) & a > 0, NA_real_,  # +Inf case
+                          ifelse(a < b, NA_real_,  # log of negative
+                                 ifelse(a == b, -Inf,  # log(0)
+                                        ifelse(b == -Inf, a, NA_real_)))))  # Will be overwritten
+
+  # For valid cases where a > b and b != -Inf
+  valid <- !is.na(result) & a > b & is.finite(b)
+
+  if (any(valid)) {
+    diff <- b[valid] - a[valid]
+
+    # For numerical stability
+    stable_case <- diff > -log(2)  # exp(b)/exp(a) > 0.5
+
+    result[valid] <- ifelse(stable_case,
+                            a[valid] + log1m(exp(diff)),
+                            a[valid] + log(-expm1(diff)))
+  }
+
+  # Handle b == -Inf case
+  result[b == -Inf & !is.na(a)] <- a[b == -Inf & !is.na(a)]
+
+  return(result)
+}
+
+# log mixture density: log(theta * exp(lambda1) + (1-theta) * exp(lambda2))
+log_mix <- function(theta, lambda1, lambda2) {
+  # Input validation and edge cases
+  result <- ifelse(is.na(theta) | is.na(lambda1) | is.na(lambda2), NA_real_,
+                   ifelse(theta < 0 | theta > 1, NA_real_,
+                          ifelse(theta == 0, lambda2,
+                                 ifelse(theta == 1, lambda1, NA_real_))))  # Will be overwritten
+
+  # Handle cases where both lambdas are -Inf
+  both_neginf <- lambda1 == -Inf & lambda2 == -Inf
+  result[both_neginf & !is.na(result)] <- -Inf
+
+  # Handle cases where one lambda is -Inf
+  lambda1_neginf <- lambda1 == -Inf & lambda2 != -Inf & !both_neginf
+  lambda2_neginf <- lambda2 == -Inf & lambda1 != -Inf & !both_neginf
+
+  result[lambda1_neginf & !is.na(result)] <- log1m(theta[lambda1_neginf]) + lambda2[lambda1_neginf]
+  result[lambda2_neginf & !is.na(result)] <- log(theta[lambda2_neginf]) + lambda1[lambda2_neginf]
+
+  # General case: neither lambda is -Inf and theta is in (0,1)
+  general_case <- !is.na(result) & theta > 0 & theta < 1 &
+    is.finite(lambda1) & is.finite(lambda2)
+
+  if (any(general_case)) {
+    result[general_case] <- log_sum_exp(
+      log(theta[general_case]) + lambda1[general_case],
+      log1m(theta[general_case]) + lambda2[general_case]
     )
   }
-  rt
+
+  return(result)
 }
 
-pexGaussian <- function(rt,pars)
-  # exGaussian cdf (returns normal or exponential for small tau/sigma)
-{
-  isexp <- pars[,"sigma"] < 1e-4 # shifted exponential
-  rt[isexp] <- pexp(rt[isexp]-pars[isexp,"mu"],1/pars[isexp,"tau"])
-  isnorm <- !isexp & pars[,"tau"] < 0.05 * pars[,"sigma"] # normal
-  rt[isnorm] <- pnorm(rt[isnorm], mean = pars[isnorm,"mu"],
-                                  sd = pars[isnorm,"sigma"])
-  isexg <- !(isexp | isnorm)
-  if (any(isexg)) {
-    s2 <- pars[isexg,"sigma"]^2
-    z <- rt[isexg] - pars[isexg,"mu"] - (s2/pars[isexg,"tau"])
-    rt[isexg] <-
-      pnorm((rt[isexg] - pars[isexg,"mu"])/pars[isexg,"sigma"]) -
-      exp(log(pnorm(z/pars[isexg,"sigma"])) +
-        ((pars[isexg,"mu"] + (s2/pars[isexg,"tau"]))^2 - (pars[isexg,"mu"]^2) -
-          2 * rt[isexg] * (s2/pars[isexg,"tau"]))/(2 * s2))
+
+
+#### Single exGaussian functions ----
+
+# vectorised ex-Gaussian (log) PDF
+# written to be equivalent to version in src/exgaussian_functions.h
+dexGaussian <- function(rt, pars, log.d = FALSE) {
+  log_out <- vector("numeric", length(rt))
+  mu <- pars[, "mu"]
+  sigma <- pmax(pars[, "sigma"], 1e-12)
+  tau <- pmax(pars[, "tau"], 1e-12)
+  z <- (rt - mu) / sigma - sigma / tau
+  log_phi <- pnorm(z, log.p = TRUE)
+  isnan <- is.nan(log_phi)
+  if (any(isnan)) {
+    log_out[isnan] <- NA_real_
   }
-  rt
+  isinf <- is.infinite(log_phi)
+  if (any(isinf)) {
+    log_out[isinf] <- log_phi[isinf]
+  }
+  ok <- !isnan & !isinf
+  if (any(ok)) {
+    log_exp <- (mu[ok] - rt[ok]) / tau[ok] + sigma[ok]^2 / (2 * tau[ok]^2)
+    log_out[ok] <- -log(tau[ok]) + log_exp + log_phi[ok]
+  }
+  if (!log.d) {
+    return(exp(log_out))
+  } else {
+    return(log_out)
+  }
 }
 
-# Go cdf/pdf (strips out NAs and calls d/pexGaussian)
+# vectorised ex-Gaussian CDF, cleaned up from original code
+pexGaussian <- function(rt,pars) {
+  out <- vector("numeric", length(rt))
+  mu <- pars[, "mu"]
+  sigma <- pmax(pars[, "sigma"], 1e-12)
+  tau <- pmax(pars[, "tau"], 1e-12)
+  z <- (rt - mu - sigma^2 / tau) / sigma
+  out <- pnorm((rt - mu) / sigma) -
+    exp((sigma^2 / (2 * tau^2)) - (rt - mu) / tau) * pnorm(z)
+  return(out)
+}
+
+# TODO Figure out why tests are failing with this version of the CDF, that is
+# closer to the C code
+# vectorised ex-Gaussian (log) CDF
+# written to be equivalent to version in src/exgaussian_functions.h
+# pexGaussian <- function(rt, pars, lower.tail = TRUE, log.p = FALSE) {
+#   log_out_lower <- vector("numeric", length(rt))
+#   mu <- pars[, "mu"]
+#   sigma <- pmax(pars[, "sigma"], 1e-12)
+#   tau <- pmax(pars[, "tau"], 1e-12)
+#   isinf <- is.infinite(rt)
+#   if (any(isinf)) {
+#     log_out_lower[isinf] <- ifelse(rt[isinf] < 0, -Inf, 0)
+#   }
+#   ok <- !isinf
+#   z <-  (rt[ok] - mu[ok]) / sigma[ok]
+#   log_phi_1 <- pnorm(z, log.p = TRUE)
+#   log_phi_2 <- pnorm(z - sigma[ok] / tau[ok], log.p = TRUE)
+#   log_exp_term <- (mu[ok] - rt[ok]) / tau[ok] + sigma[ok]^2 / (2 * tau[ok]^2)
+#   log_out_lower[ok] <- log_diff_exp(log_phi_1, (log_exp_term + log_phi_2))
+#   if (lower.tail) {
+#     if (log.p) {
+#       return(log_out_lower)
+#     } else {
+#       return(exp(log_out_lower))
+#     }
+#   } else {
+#     if (log.p) {
+#       return(log1m_exp(log_out_lower))
+#     } else {
+#       return(-expm1(log_out_lower))
+#     }
+#   }
+# }
+
+# wrapper around exG cdf/pdf for go trials (strips out NAs and calls d/pexGaussian)
 # Is stripping out rt NAs really necessary?
-
-dexGaussianG <- function(rt,pars)
-{
+dexGaussianG <- function(rt, pars) {
   out <- numeric(length(rt))
   ok <- !is.na(rt)
-  out[ok] <- dexGaussian(rt[ok],pars[ok,,drop=FALSE])
-  out
+  out[ok] <- dexGaussian(rt[ok], pars[ok, , drop = FALSE])
+  return(out)
 }
 
-pexGaussianG <- function(rt,pars)
-{
+pexGaussianG <- function(rt, pars) {
   out <- numeric(length(rt))
   ok <- !is.na(rt)
-  out[ok] <- pexGaussian(rt[ok],pars[ok,,drop=FALSE])
-  out
+  out[ok] <- pexGaussian(rt[ok], pars[ok, , drop = FALSE])
+  return(out)
 }
 
 
 #### Stop Single ExGaussian ----
 
-# Stop cdf/pdf, subtracts SSD and uses muS/sigmaS/tauS by renaming
-
-dexGaussianS <- function(rt,pars)
-{
+# wrapper around exG cdf/pdf for stop process
+# subtracts SSD and uses muS/sigmaS/tauS by renaming
+dexGaussianS <- function(rt, pars) {
   rt <- rt - pars[,"SSD"]
-  dimnames(pars)[[2]][dimnames(pars)[[2]]=="muS"] <- "mu"
-  dimnames(pars)[[2]][dimnames(pars)[[2]]=="sigmaS"] <- "sigma"
-  dimnames(pars)[[2]][dimnames(pars)[[2]]=="tauS"] <- "tau"
-  dexGaussian(rt,pars)
+  dimnames(pars)[[2]][dimnames(pars)[[2]] == "muS"] <- "mu"
+  dimnames(pars)[[2]][dimnames(pars)[[2]] == "sigmaS"] <- "sigma"
+  dimnames(pars)[[2]][dimnames(pars)[[2]] == "tauS"] <- "tau"
+  return(dexGaussian(rt, pars))
 }
 
-
-pexGaussianS <- function(rt,pars)
-{
+pexGaussianS <- function(rt, pars) {
   rt <- rt - pars[,"SSD"]
-  dimnames(pars)[[2]][dimnames(pars)[[2]]=="muS"] <- "mu"
-  dimnames(pars)[[2]][dimnames(pars)[[2]]=="sigmaS"] <- "sigma"
-  dimnames(pars)[[2]][dimnames(pars)[[2]]=="tauS"] <- "tau"
-  pexGaussian(rt,pars)
+  dimnames(pars)[[2]][dimnames(pars)[[2]] == "muS"] <- "mu"
+  dimnames(pars)[[2]][dimnames(pars)[[2]] == "sigmaS"] <- "sigma"
+  dimnames(pars)[[2]][dimnames(pars)[[2]] == "tauS"] <- "tau"
+  return(pexGaussian(rt, pars))
 }
 
 
@@ -556,7 +630,7 @@ pstopEXG <- function(parstop,n_acc,upper=Inf,
 SSexG <- function() {
   list(
     type = "RACE",
-    c_name = "SS_EXG",
+    # c_name = "SS_EXG",
     p_types = c(
       mu = log(.4), sigma = log(.05), tau = log(.1),
       muS = log(.3), sigmaS = log(.025), tauS = log(.05),

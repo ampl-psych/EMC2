@@ -350,12 +350,12 @@ NumericVector dEXGrace(
     NumericMatrix dt, NumericVector mu, NumericVector sigma, NumericVector tau
 ){
   int n = mu.size();
-  NumericVector out(dt.nrow());
-  out = dexg_c(dt(0, _), mu[0], sigma[0], tau[0], false);
+  NumericVector log_out(dt.nrow());
+  log_out = dexg_c(dt(0, _), mu[0], sigma[0], tau[0], true);
   for (int i = 1; i < n; i++){
-    out = out * pexg_c(dt(i, _), mu[i], sigma[i], tau[i], false, false);
+    log_out += pexg_c(dt(i, _), mu[i], sigma[i], tau[i], false, true);
   }
-  return out;
+  return exp(log_out);
 }
 
 // [[Rcpp::export]]
