@@ -97,116 +97,6 @@ ST_staircase_function <- function(dts,staircase) {
   list(sR=sR,srt=srt,SSD=SSD)
 }
 
-#### Numerically stable log computation functions ----
-
-# log(1 - x)
-log1m <- function(x) {
-  ifelse(is.na(x), NA_real_,
-         ifelse(x >= 1, -Inf,
-                ifelse(x == -Inf, 0,
-                       log1p(-x))))
-}
-
-# log(1 - exp(x))
-log1m_exp <- function(x) {
-  ifelse(is.na(x), NA_real_,
-         ifelse(x > 0, NA_real_,  # 1 - exp(x) < 0 for x > 0
-                ifelse(x == 0, -Inf,  # log(1 - 1) = log(0) = -Inf
-                       ifelse(x == -Inf, 0,  # log(1 - 0) = log(1) = 0
-                              ifelse(x > -log(2),  # x > -log(2)
-                                     log(-expm1(x)),
-                                     log1m(exp(x)))))))
-}
-
-# log(exp(a) + exp(b))
-log_sum_exp <- function(a, b = NULL) {
-  if (is.null(b)) {
-    # Vector version: log(sum(exp(x)))
-    x <- a
-    if (length(x) == 0) return(-Inf)
-    if (length(x) == 1) return(x[1])
-
-    max_val <- max(x, na.rm = TRUE)
-    if (is.infinite(max_val) && max_val < 0) return(-Inf)
-
-    # Subtract max for numerical stability
-    exp_terms <- exp(x - max_val)
-    exp_terms[is.infinite(x) & x < 0] <- 0  # Handle -Inf cases
-
-    return(max_val + log(sum(exp_terms, na.rm = TRUE)))
-  } else {
-    # Two-argument version: log(exp(a) + exp(b))
-    ifelse(a == -Inf, b,
-           ifelse(b == -Inf, a,
-                  ifelse(a > b,
-                         a + log1p(exp(b - a)),
-                         b + log1p(exp(a - b)))))
-  }
-}
-
-# log(exp(a) - exp(b))
-log_diff_exp <- function(a, b) {
-  # Handle edge cases
-  result <- ifelse(is.na(a) | is.na(b), NA_real_,
-                   ifelse(is.infinite(a) & a > 0, NA_real_,  # +Inf case
-                          ifelse(a < b, NA_real_,  # log of negative
-                                 ifelse(a == b, -Inf,  # log(0)
-                                        ifelse(b == -Inf, a, NA_real_)))))  # Will be overwritten
-
-  # For valid cases where a > b and b != -Inf
-  valid <- !is.na(result) & a > b & is.finite(b)
-
-  if (any(valid)) {
-    diff <- b[valid] - a[valid]
-
-    # For numerical stability
-    stable_case <- diff > -log(2)  # exp(b)/exp(a) > 0.5
-
-    result[valid] <- ifelse(stable_case,
-                            a[valid] + log1m(exp(diff)),
-                            a[valid] + log(-expm1(diff)))
-  }
-
-  # Handle b == -Inf case
-  result[b == -Inf & !is.na(a)] <- a[b == -Inf & !is.na(a)]
-
-  return(result)
-}
-
-# log mixture density: log(theta * exp(lambda1) + (1-theta) * exp(lambda2))
-log_mix <- function(theta, lambda1, lambda2) {
-  # Input validation and edge cases
-  result <- ifelse(is.na(theta) | is.na(lambda1) | is.na(lambda2), NA_real_,
-                   ifelse(theta < 0 | theta > 1, NA_real_,
-                          ifelse(theta == 0, lambda2,
-                                 ifelse(theta == 1, lambda1, NA_real_))))  # Will be overwritten
-
-  # Handle cases where both lambdas are -Inf
-  both_neginf <- lambda1 == -Inf & lambda2 == -Inf
-  result[both_neginf & !is.na(result)] <- -Inf
-
-  # Handle cases where one lambda is -Inf
-  lambda1_neginf <- lambda1 == -Inf & lambda2 != -Inf & !both_neginf
-  lambda2_neginf <- lambda2 == -Inf & lambda1 != -Inf & !both_neginf
-
-  result[lambda1_neginf & !is.na(result)] <- log1m(theta[lambda1_neginf]) + lambda2[lambda1_neginf]
-  result[lambda2_neginf & !is.na(result)] <- log(theta[lambda2_neginf]) + lambda1[lambda2_neginf]
-
-  # General case: neither lambda is -Inf and theta is in (0,1)
-  general_case <- !is.na(result) & theta > 0 & theta < 1 &
-    is.finite(lambda1) & is.finite(lambda2)
-
-  if (any(general_case)) {
-    result[general_case] <- log_sum_exp(
-      log(theta[general_case]) + lambda1[general_case],
-      log1m(theta[general_case]) + lambda2[general_case]
-    )
-  }
-
-  return(result)
-}
-
-
 
 #### Single exGaussian functions ----
 
@@ -531,30 +421,62 @@ rSSexGaussian <- function(data,pars,ok=rep(TRUE,dim(pars)[1]))
 
 #### ExG stop probability (no stop triggered) ----
 
-pstopEXG <- function(parstop,n_acc,upper=Inf,
-                     gpars=c("mu","sigma","tau"),spars=c("muS","sigmaS","tauS"))
-{
-  sindex <- seq(1,nrow(parstop),by=n_acc)  # Stop accumulator index
-  ps <- parstop[sindex,spars,drop=FALSE]   # Stop accumulator parameters
-  SSDs <- parstop[sindex,"SSD",drop=FALSE] # SSDs
+pstopEXG <- function(
+    parstop, n_acc,
+    upper = Inf, gpars = c("mu","sigma","tau"), spars = c("muS","sigmaS","tauS")
+) {
+  sindex <- seq(1, nrow(parstop), by = n_acc)   # Stop accumulator index
+  ps <- parstop[sindex, spars, drop = FALSE]    # Stop accumulator parameters
+  SSDs <- parstop[sindex,"SSD", drop = FALSE]   # SSDs
   ntrials <- length(SSDs)
-  if (length(upper)==1) upper <- rep(upper,length.out=ntrials)
-  pgo <- array(parstop[,gpars],dim=c(n_acc,ntrials,length(gpars)),
-               dimnames=list(NULL,NULL,gpars))
+  if (length(upper) == 1) {
+    upper <- rep(upper, ntrials)
+  }
+  # 3D array of go accumulator parameter values:
+  # slices = parameters (mu/sigma/tau); rows = accumulators, columns = trials
+  pgo <- array(
+    data = parstop[ , gpars],
+    dim = c(n_acc, ntrials, length(gpars)),
+    dimnames = list(NULL, NULL, gpars)
+  )
+  # transpose so that rows = trials and columns = accumulators, then collapse into vector:
+  # [param1_acc1_trial1, param1_acc1_trail2, ..., param1_acc1_trialN, param1_acc2_trial1, ..., param1_accN_trialN, param2_acc1_trial1, ..., paramN_accN_trialN]
+  # finally puts that in a matrix where rows = trials and columns = [param_1_acc1, param1_acc2, ..., param1_accN, param2_acc1, ..., paramN_accN]
+  pgo_mat <- matrix(
+    as.vector(
+      aperm(pgo, c(2, 1, 3))),
+    nrow = ntrials
+  )
+  # bring together all relevant variables: SSD, stop parameters, upper limit of
+  # integration, and go parameters
   cells <- apply(
-    cbind(SSDs,ps,upper,matrix(as.vector(aperm(pgo,c(2,1,3))),nrow=ntrials))
-  ,1,paste,collapse="")
-  # cells <- character(ntrials)
-  # for (i in 1:ntrials)
-  #   cells[i] <- paste(SSDs[i],ps[i,],pgo[,i,],upper[i],collapse="")
-  uniq <- !duplicated(cells)
-  ups <- sapply(1:sum(uniq),function(i){
-    my.integrate(f=stopfn_exg,lower=-Inf,SSD=SSDs[i],upper=upper[i],
-                           mu=c(ps[i,"muS"],pgo[,i,"mu"]),
-                           sigma=c(ps[i,"sigmaS"],pgo[,i,"sigma"]),
-                           tau=c(ps[i,"tauS"],pgo[,i,"tau"]))
-  })
-  ups[as.numeric(factor(cells,levels=cells[uniq]))]
+    X = cbind(SSDs, ps, upper, pgo_mat),
+    MARGIN = 1,
+    FUN = paste,
+    collapse = ""
+  )
+  # get indices of unique parameter combinations across trials
+  unique_cells <- !duplicated(cells)
+  # calculate stop success probability by integration, only for unique
+  # parameter combinations
+  ss_integral <- sapply(
+    X = 1:sum(unique_cells),
+    FUN = function(i) {
+      # wrapper function for numerical integration, defined in likelihood.R
+      my.integrate(
+        f = stopfn_exg, # integrand, defined in src/model_SS_EXG.h
+        lower = -Inf, # lower limit of integration
+        SSD = SSDs[i],
+        upper = upper[i],
+        mu = c(ps[i, "muS"], pgo[ , i , "mu"]),
+        sigma = c(ps[i, "sigmaS"], pgo[ , i, "sigma"]),
+        tau = c(ps[i, "tauS"], pgo[ , i, "tau"])
+      )
+    }
+  )
+  # expand into trial-wise likelihood by getting indices of unique cells
+  out <- ss_integral[as.numeric(factor(cells, levels = cells[unique_cells]))]
+  return(out)
 }
 
 # #### Stop probability stop triggered ----
