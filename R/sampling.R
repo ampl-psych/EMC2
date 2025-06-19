@@ -336,9 +336,9 @@ new_particle <- function (s, data, pm_settings, eff_mu = NULL,
     }
     lw_total <- lw + prev_ll - lw[1] # make sure lls from other components are included
     # Prior density
-    lp <- dmvnorm(x = proposals[,idx], mean = group_mu[idx], sigma = group_var[idx,idx], logd = TRUE)
+    lp <- mvtnorm::dmvnorm(x = proposals[,idx], mean = group_mu[idx], sigma = group_var[idx,idx], log = TRUE)
     if(length(unq_components) > 1){
-      prior_density <- dmvnorm(x = proposals, mean = group_mu, sigma = group_var, logd = TRUE)
+      prior_density <- mvtnorm::dmvnorm(x = proposals, mean = group_mu, sigma = group_var, log = TRUE)
     } else{
       prior_density <- lp
     }
@@ -346,7 +346,7 @@ new_particle <- function (s, data, pm_settings, eff_mu = NULL,
     lm <- pm_settings[[i]]$mix[1]*exp(lp)
     for(k in 2:length(Sigmas)){
       # Prior density is updated separately so start at 2
-      lm <- lm + pm_settings[[i]]$mix[k]*dmvnorm(x = proposals[,idx], mean = Mus[[k]][idx], sigma = Sigmas[[k]][idx,idx]*(epsilons[k]^2))
+      lm <- lm + pm_settings[[i]]$mix[k]*mvtnorm::dmvnorm(x = proposals[,idx], mean = Mus[[k]][idx], sigma = Sigmas[[k]][idx,idx]*(epsilons[k]^2))
     }
     # Avoid infinite values
     lm <- log(lm)
@@ -760,10 +760,10 @@ run_hyper <- function(type, data, prior = NULL, iter = 1000, n_chains =3,
           for (k in seq_len(sampler$n_subjects)) {
             cand_idx  <- sample.int(n_input, K-1)       # draw from fixed pool
             particles <- cbind( input[,k], pool[,k,cand_idx])
-            logw <- dmvnorm(t(particles), mean = group_pars$tmu,
-                            sigma = group_pars$tvar, logd = TRUE) -
-              dmvnorm(t(particles), mean = pri_single$theta_mu_mean,
-                      sigma = pri_single$theta_mu_var, logd = TRUE)
+            logw <- mvtnorm::dmvnorm(t(particles), mean = group_pars$tmu,
+                            sigma = group_pars$tvar, log = TRUE) -
+              mvtnorm::dmvnorm(t(particles), mean = pri_single$theta_mu_mean,
+                      sigma = pri_single$theta_mu_var, log = TRUE)
             sel <- sample.int(K, 1, prob = exp(logw - max(logw)))
             data_input[ , k, i] <- particles[ , sel ]
           }
