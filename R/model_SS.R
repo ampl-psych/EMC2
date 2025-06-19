@@ -130,7 +130,7 @@ dexGaussian <- function(rt, pars, log.d = FALSE) {
 }
 
 # vectorised ex-Gaussian CDF, cleaned up from original code
-pexGaussian <- function(rt,pars) {
+pexGaussian <- function(rt, pars, lower.tail = TRUE, log.p = FALSE) {
   out <- vector("numeric", length(rt))
   mu <- pars[, "mu"]
   sigma <- pmax(pars[, "sigma"], 1e-12)
@@ -138,6 +138,12 @@ pexGaussian <- function(rt,pars) {
   z <- (rt - mu - sigma^2 / tau) / sigma
   out <- pnorm((rt - mu) / sigma) -
     exp((sigma^2 / (2 * tau^2)) - (rt - mu) / tau) * pnorm(z)
+  if (!lower.tail) {
+    out <- 1 - out
+  }
+  if (log.p) {
+    out <- log(out)
+  }
   return(out)
 }
 
@@ -177,17 +183,17 @@ pexGaussian <- function(rt,pars) {
 
 # wrapper around exG cdf/pdf for go trials (strips out NAs and calls d/pexGaussian)
 # Is stripping out rt NAs really necessary?
-dexGaussianG <- function(rt, pars) {
+dexGaussianG <- function(rt, pars, log.d = FALSE) {
   out <- numeric(length(rt))
   ok <- !is.na(rt)
-  out[ok] <- dexGaussian(rt[ok], pars[ok, , drop = FALSE])
+  out[ok] <- dexGaussian(rt[ok], pars[ok, , drop = FALSE], log.d)
   return(out)
 }
 
-pexGaussianG <- function(rt, pars) {
+pexGaussianG <- function(rt, pars, lower.tail = TRUE, log.p = FALSE) {
   out <- numeric(length(rt))
   ok <- !is.na(rt)
-  out[ok] <- pexGaussian(rt[ok], pars[ok, , drop = FALSE])
+  out[ok] <- pexGaussian(rt[ok], pars[ok, , drop = FALSE], lower.tail, log.p)
   return(out)
 }
 
@@ -196,20 +202,20 @@ pexGaussianG <- function(rt, pars) {
 
 # wrapper around exG cdf/pdf for stop process
 # subtracts SSD and uses muS/sigmaS/tauS by renaming
-dexGaussianS <- function(rt, pars) {
+dexGaussianS <- function(rt, pars, log.d = FALSE) {
   rt <- rt - pars[,"SSD"]
   dimnames(pars)[[2]][dimnames(pars)[[2]] == "muS"] <- "mu"
   dimnames(pars)[[2]][dimnames(pars)[[2]] == "sigmaS"] <- "sigma"
   dimnames(pars)[[2]][dimnames(pars)[[2]] == "tauS"] <- "tau"
-  return(dexGaussian(rt, pars))
+  return(dexGaussian(rt, pars, log.d))
 }
 
-pexGaussianS <- function(rt, pars) {
+pexGaussianS <- function(rt, pars, lower.tail = TRUE, log.p = FALSE) {
   rt <- rt - pars[,"SSD"]
   dimnames(pars)[[2]][dimnames(pars)[[2]] == "muS"] <- "mu"
   dimnames(pars)[[2]][dimnames(pars)[[2]] == "sigmaS"] <- "sigma"
   dimnames(pars)[[2]][dimnames(pars)[[2]] == "tauS"] <- "tau"
-  return(pexGaussian(rt, pars))
+  return(pexGaussian(rt, pars, lower.tail, log.p))
 }
 
 
@@ -583,18 +589,22 @@ SSexG <- function() {
       return(pars)
     },
     # Density function (PDF) for single go racer
-    dfunG = function(rt, pars) return(dexGaussianG(rt, pars)),
+    dfunG = function(rt, pars, log.d = FALSE) {
+      return(dexGaussianG(rt, pars, log.d))
+    },
     # Probability function (CDF) for single go racer
-    pfunG = function(rt, pars) return(pexGaussianG(rt, pars)),
+    pfunG = function(rt, pars, lower.tail = TRUE, log.p = FALSE) {
+      return(pexGaussianG(rt, pars, lower.tail, log.p))
+    },
     # Density function (PDF) for single stop racer
-    dfunS = function(rt, pars) {
+    dfunS = function(rt, pars, log.d = FALSE) {
       parsS <- pars[ , c("muS", "sigmaS", "tauS", "SSD"), drop = FALSE]
-      return(dexGaussianS(rt, parsS))
+      return(dexGaussianS(rt, parsS, log.d))
     },
     # Probability function (CDF) for single stop racer
-    pfunS = function(rt, pars) {
+    pfunS = function(rt, pars, lower.tail = TRUE, log.p = FALSE) {
       parsS <- pars[ , c("muS", "sigmaS", "tauS", "SSD"), drop = FALSE]
-      return(pexGaussianS(rt, parsS))
+      return(pexGaussianS(rt, parsS, lower.tail, log.p))
     },
     # Stop probability integral
     sfun = function(pars, n_acc, upper = Inf) {
