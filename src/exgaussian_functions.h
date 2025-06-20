@@ -5,7 +5,6 @@
 using namespace Rcpp;
 #include <cmath>
 #include "composite_functions.h"
-#include "phi_functions.h"
 
 const double SIG_TAU_EPS = 1e-12;
 
@@ -27,7 +26,7 @@ double dexg(
 
   // compute Phi term
   double z = (x - mu) / sig_p - sig_p / tau_p;
-  double log_phi = phi_safe(z, true, true);
+  double log_phi = R::pnorm(z, 0.0, 1.0, true, true);
   if (std::isnan(log_phi)) {
     return NA_REAL;
   }
@@ -69,8 +68,10 @@ double pexg(
   double sig_p = std::max(sigma, SIG_TAU_EPS);
 
   // compute the two Phi terms
-  double log_phi_1 = phi_safe((q - mu) / sig_p, true, true);
-  double log_phi_2 = phi_safe((q - mu) / sig_p - sig_p / tau_p, true, true);
+  double log_phi_1 = R::pnorm((q - mu) / sig_p, 0.0, 1.0, true, true);
+  double log_phi_2 = R::pnorm(
+    (q - mu) / sig_p - sig_p / tau_p, 0.0, 1.0, true, true
+  );
 
   // compute the exp term in log space
   double log_exp_term = (mu - q) / tau_p + (sig_p * sig_p) / (2. * tau_p * tau_p);
