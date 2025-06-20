@@ -11,7 +11,10 @@ designSSexG <- design(
   matchfun = function(d) as.numeric(d$S) == as.numeric(d$lR),
   functions = list(
     lI = function(d) factor(rep(2, nrow(d)), levels = 1:2),
-    SSD = function(d) SSD_function(d, SSD = NA, p = .25)
+    # 3 levels spanning ~ 75/50/25 % stop with 10% gf and tf
+    SSD = function(d) {
+      SSD_function(d, SSD = c(.26, .35, .46), p = rep(.25 / 3, 3))
+    }
   ),
   formula = list(
     mu ~ lM, sigma ~ 1, tau ~ 1,
@@ -34,9 +37,9 @@ dat <- make_data(p_vector, designSSexG, n_trials = 10, staircase = TRUE)
 emc <- make_emc(dat, designSSexG, type = "single")
 
 test_that("exG", {
-  # expect_snapshot(
-  #   make_data(p_vector, dGNG, n_trials = 10)
-  # )
+  expect_snapshot(
+    make_data(p_vector, designSSexG, n_trials = 10)
+  )
   expect_snapshot(
     init_chains(emc, particles = 10, cores_for_chains = 1)[[1]]$samples
   )
