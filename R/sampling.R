@@ -341,9 +341,9 @@ new_particle <- function (s, data, pm_settings, eff_mu = NULL,
     }
     lw_total <- lw + prev_ll - lw[1] # make sure lls from other components are included
     # Prior density
-    lp <- dmvnorm(x = proposals[,idx], mean = group_mu[idx], sigma = group_var[idx,idx], logd = TRUE)
+    lp <- mvtnorm::dmvnorm(x = proposals[,idx], mean = group_mu[idx], sigma = group_var[idx,idx], log = TRUE)
     if(length(unq_components) > 1){
-      prior_density <- dmvnorm(x = proposals, mean = group_mu, sigma = group_var, logd = TRUE)
+      prior_density <- mvtnorm::dmvnorm(x = proposals, mean = group_mu, sigma = group_var, log = TRUE)
     } else{
       prior_density <- lp
     }
@@ -351,7 +351,7 @@ new_particle <- function (s, data, pm_settings, eff_mu = NULL,
     lm <- pm_settings[[i]]$mix[1]*exp(lp)
     for(k in 2:length(Sigmas)){
       # Prior density is updated separately so start at 2
-      lm <- lm + pm_settings[[i]]$mix[k]*dmvnorm(x = proposals[,idx], mean = Mus[[k]][idx], sigma = Sigmas[[k]][idx,idx]*(epsilons[k]^2))
+      lm <- lm + pm_settings[[i]]$mix[k]*mvtnorm::dmvnorm(x = proposals[,idx], mean = Mus[[k]][idx], sigma = Sigmas[[k]][idx,idx]*(epsilons[k]^2))
     }
     # Avoid infinite values
     lm <- log(lm)

@@ -378,15 +378,15 @@ bridge_group_and_prior_and_jac_factor <- function(proposals_group, proposals_lis
     psi_curr <- diag(1/exp(psi_inv[i,]), info$n_factors)
     theta_var_curr <- lambda_curr %*% psi_curr %*% t(lambda_curr) + epsilon_curr
     proposals_curr <- matrix(proposals[i,], ncol = info$n_pars, byrow = T)
-    group_ll <- sum(dmvnorm(proposals_curr, theta_mu[i,], theta_var_curr, logd = T))
+    group_ll <- sum(dmvnorm(proposals_curr, theta_mu[i,], theta_var_curr, log = T))
     prior_epsilon <- sum(logdinvGamma(1/exp(theta_epsilon_inv[i,]), shape = prior$as, rate = prior$bs))
     prior_psi <- sum(logdinvGamma(1/exp(psi_inv[i,]), prior$ap, rate = prior$bp))
     sum_out[i] <- group_ll + prior_epsilon + prior_psi
   }
 
   prior_lambda <- dmvnorm(lambda, mean = rep(0, ncol(lambda)),
-                          sigma = diag(prior$theta_lambda_var, ncol(lambda)), logd = T)
-  prior_mu <- dmvnorm(theta_mu, mean = prior$theta_mu_mean, sigma = diag(prior$theta_mu_var), logd =T)
+                          sigma = diag(prior$theta_lambda_var, ncol(lambda)), log = T)
+  prior_mu <- dmvnorm(theta_mu, mean = prior$theta_mu_mean, sigma = diag(prior$theta_mu_var), log =T)
 
   jac_psi <- rowSums(theta_epsilon_inv)
   jac_epsilon <- rowSums(psi_inv)
