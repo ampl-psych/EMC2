@@ -9,13 +9,7 @@ designSSexG <- design(
   ),
   Rlevels = c("left","right"),
   matchfun = function(d) as.numeric(d$S) == as.numeric(d$lR),
-  functions = list(
-    lI = function(d) factor(rep(2, nrow(d)), levels = 1:2),
-    # 3 levels spanning ~ 75/50/25 % stop with 10% gf and tf
-    SSD = function(d) {
-      SSD_function(d, SSD = c(.26, .35, .46), p = rep(.25 / 3, 3))
-    }
-  ),
+  functions = list(lI = function(d) factor(rep(2, nrow(d)), levels = 1:2)),
   formula = list(
     mu ~ lM, sigma ~ 1, tau ~ 1,
     muS ~ 1, sigmaS ~ 1, tauS ~ 1,
@@ -33,12 +27,21 @@ p_vector[1:length(p_vector)] <- c(
   qnorm(.1),qnorm(.1)
 )
 
-dat <- make_data(p_vector, designSSexG, n_trials = 10, staircase = TRUE)
+# 3 levels spanning ~ 75/50/25 % stop with 10% gf and tf
+mySSD_function <- function(d) {
+  SSD_function(d, SSD = c(.26, .35, .46), p = rep(.25 / 3, 3))
+}
+
+dat <- make_data(
+  p_vector, designSSexG, n_trials = 10, functions = list(SSD = mySSD_function)
+)
 emc <- make_emc(dat, designSSexG, type = "single")
 
 test_that("exG", {
   expect_snapshot(
-    make_data(p_vector, designSSexG, n_trials = 10)
+    make_data(
+      p_vector, designSSexG, n_trials = 10, functions = list(SSD = mySSD_function)
+    )
   )
   expect_snapshot(
     init_chains(emc, particles = 10, cores_for_chains = 1)[[1]]$samples
