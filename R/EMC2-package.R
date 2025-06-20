@@ -38,6 +38,7 @@
 #' @importFrom Matrix nearPD
 #' @importFrom matrixcalc is.positive.definite
 #' @importFrom methods is
+#' @importFrom mvtnorm dmvnorm
 #' @importFrom mvtnorm rmvnorm
 #' @importFrom parallel mclapply
 #' @importFrom psych fa.diagram

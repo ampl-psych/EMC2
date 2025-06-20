@@ -823,9 +823,12 @@ check_duplicate_designs <- function(out){
   if(is.data.frame(out$data[[1]])) return(out)
   for(i in 1:length(out$data)){ # loop over subjects
     designs <- lapply(out$data[[i]], function(y) attr(y, "designs"))
-    # Find duplicate designs to replace
-    unq_idx <- match(designs, designs)
-    duplicacy <- duplicated(unq_idx)
+    duplicacy <- duplicated(designs)
+    unq_idx <-   sapply(seq_along(designs), function(i) {
+      for (j in seq_along(designs)) {
+        if (identical(designs[[i]], designs[[j]])) return(j)
+      }
+    })
     for(j in 1:length(out$data[[i]])){# Loop over data sets in this sub
       if(duplicacy[j]){
         attr(out$data[[i]][[j]], "designs") <- unq_idx[j]
