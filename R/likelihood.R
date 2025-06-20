@@ -242,12 +242,18 @@ log_mix <- function(theta, lambda1, lambda2) {
 # wrapper function for numerical integration of race likelihood function
 # retries with arbitrary large but finite upper limit, if initially failed with Inf upper
 my.integrate <- function(..., upper = Inf, big = 10) {
-  out <- try(integrate(..., upper = upper), silent = TRUE)
+  out <- try(
+    integrate(..., upper = upper, rel.tol = 1e-6, abs.tol = 1e-8),
+    silent = TRUE
+  )
   if (inherits(out, "try-error")) {
     return(0)
   }
   if (upper == Inf && out$subdivisions == 1) {
-    out <- try(integrate(..., upper = big), silent = TRUE)
+    out <- try(
+      integrate(..., upper = big, rel.tol = 1e-6, abs.tol = 1e-8),
+      silent = TRUE
+    )
     if (inherits(out, "try-error") || out$subdivisions == 1) {
       return(0)
     }
