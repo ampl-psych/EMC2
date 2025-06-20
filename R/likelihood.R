@@ -1,12 +1,13 @@
-calc_ll_R <- function(p_vector, model, dadm){
+calc_ll_R <- function(p_vector, model, dadm, return_sum = TRUE){
   if(!is.null(model$transform)){
     pars <- get_pars_matrix(p_vector, dadm, model)
   } else{
     pars <- p_vector
   }
   ll <- model$log_likelihood(pars, dadm, model)
-  if(any(model$noisy_cov)){
-    ll <- ll + cov_noise_ll(pars, dadm)
+  if(!is.null(model$noisy_cov)){
+    ll <- ll + cov_noise_ll(pars, dadm, model)
+    if(!return_sum) return(ll)
   }
   return(sum(ll))
 }
@@ -38,7 +39,6 @@ log_likelihood_race <- function(pars,dadm,model,min_ll=log(1e-10))
     return(sum(pmax(min_ll,ll[attr(dadm,"expand")])))
   } else return(sum(pmax(min_ll,lds[attr(dadm,"expand")])))
 }
-
 
 
 log_likelihood_ddm <- function(pars,dadm,model,min_ll=log(1e-10))

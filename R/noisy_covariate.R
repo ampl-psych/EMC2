@@ -1,12 +1,19 @@
-# One potential issue, some data will have lapse responses that will never get
-# an acceptance for the latent states.
+# Major issue:
+# calc_ll_manager only returns lls, but I need to update running mean, variance
+# and scaling. Current idea: Attach it as an attribute to lls, and pass this
+# attribute to  the dadm in calc_ll_manger, which is then passed back to the next ll calculation.
 
-add_cov_noise_ll <- function(pars, dadm, model, min_ll = log(1e-10)){
+
+# Sampling ----------------------------------------------------------------
+
+# One potential minor issue, some data will have lapse responses that will never get
+# an acceptance for the latent states.
+cov_noise_ll <- function(pars, dadm, model, min_ll = log(1e-10)){
   # This step adds the likelihood of the noisy covariate model.
   ll <- 0
   for(cov in model$noisy_cov){
     # Add the latent states to the dadm
-    dadm <- fill_dadm(dadm, cov)
+    dadm <- fill_dadm(dadm, attr(dadm, "noisy_cov")[[cov]], cov)
     # dadm[,cov] is actually the latent now!
     # This will return a vector of names, the first the mean, 2nd the latent sd, 3rd the error sd
     latent_pars <- get_noisy_cov_pnames(cov)
@@ -19,10 +26,14 @@ add_cov_noise_ll <- function(pars, dadm, model, min_ll = log(1e-10)){
   return(ll)
 }
 
-fill_dadm <- function(dadm, cov){
-  noisy_cov <- attr(dadm, cov)
+fill_dadm <- function(dadm, noisy_cov, cov_name){
+  # Here we could perform some indexing needed for race models!
+  ### SOME INDEXING ###
   # Here we're replacing the observed variable with the latent variable!
-  dadm[,cov] <- noisy_cov$latent
+  dadm[,cov_name] <- noisy_cov$latent
+  des <- attr(dadm, "designs")
+  des$v[,2] <- noisy_cov$latent
+  attr(dadm, "designs") <- des
   # Add the actually observed noisy covariate
   dadm$obs <- noisy_cov$obs
   return(dadm)
@@ -50,64 +61,120 @@ update_latent_cov <- function(pars, dadm, model){
   # and then sample from the weighted likelihoods to get the new latent states.
   n_particles <- 5 # Number of particles per proposal distribution
   n_dists <- 3 # Number of proposal distributions
+
   weights <- matrix(NA, nrow = nrow(dadm), ncol = n_particles*n_dists + 1)
   latents <- matrix(NA, nrow = nrow(dadm), ncol = n_particles*n_dists +1)
-  prev_latent <- dadm$latent
-  # Now for k proposals we evaluate the likelihood given the new latent states
-  # For now we'll sample from 3 densities.
-  # 1. Density centered on the observed value with some adaptive covariance
-  # 2. Density centered on previous z_i, with same adaptive covariance
-  # 3. Density centered on running z_i mean, with some adaptive covariance
-  cur_sd <- dadm$eps *dadm$running_sd
-  for(i in 1:(n_particles*n_dists + 1)){
-    if(i != 1){ # The old state is particle 1
-      if(i < (1 + n_particles)){
-        dadm$latent <- rnorm(nrow(dadm), mean = dadm$obs, sd = cur_sd)
-      } else if(i < (1 + 2*n_particles)){
-        dadm$latent <- rnorm(nrow(dadm), mean = prev_latent, sd = cur_sd)
-      } else{
-        dadm$latent <- rnorm(nrow(dadm), mean = dadm$running_mu, sd = cur_sd)
+  noisy_covs <- list()
+  all_pars <- c(pars, attr(dadm, "constants"))
+  for(cov in model$noisy_cov){
+    latent_pars <- get_noisy_cov_pnames(cov)
+
+    noisy_cov <- attr(dadm, "noisy_cov")[[cov]]
+    prev_latent <- noisy_cov$latent
+    # Now for k proposals we evaluate the likelihood given the new latent states
+    # For now we'll sample from 3 densities.
+    # 1. Density centered on the observed value with some adaptive covariance
+    # 2. Density centered on previous z_i, with same adaptive covariance
+    # 3. Density centered on running z_i mean, with some adaptive covariance
+    cur_sd <- noisy_cov$epsilon * noisy_cov$running_sd
+    # For now we'll just assume that each distributions carries 1/3 of the particles
+    for(i in 1:(n_particles*n_dists + 1)){
+      if(i != 1){ # The old state is particle 1
+        if(i < (1 + n_particles)){
+          noisy_cov$latent <- rnorm(nrow(noisy_cov), mean = noisy_cov$obs, sd = exp(all_pars[latent_pars[3]]))
+        } else if(i < (1 + 2*n_particles)){
+          noisy_cov$latent <- rnorm(nrow(noisy_cov), mean = prev_latent, sd = exp(all_pars[latent_pars[3]]))
+        } else{
+          noisy_cov$latent <- rnorm(nrow(noisy_cov), mean = noisy_cov$obs, sd = 1)
+        }
       }
+      # Calculate the likelihood
+      ll <- calc_ll_R(pars, model, fill_dadm(dadm, noisy_cov, cov), return_sum = FALSE)
+      # For now assign each distribution a 1/3 weight
+      lm <- 1/3*dnorm(noisy_cov$latent, mean = noisy_cov$obs, sd = exp(all_pars[latent_pars[3]])) +
+        1/3*dnorm(noisy_cov$latent, mean = prev_latent, sd = exp(all_pars[latent_pars[3]])) +
+        1/3*dnorm(noisy_cov$latent, mean = noisy_cov$running_mu, sd = cur_sd)
+      # Importance correction of all proposal densities
+      l <- ll - log(lm)
+      latents[,i] <- noisy_cov$latent
+      # Unnormalized weights
+      weights[,i] <- l
     }
-    # Calculate the likelihood
-    ll <- calc_ll_R(pars, model, dadm)
-    # For now assign each distribution a 1/3 weight
-    lm <- 1/3*dnorm(dadm$latent, mean = dadm$obs, sd = cur_sd) +
-      1/3*dnorm(dadm$latent, mean = prev_latent, sd = cur_sd) +
-      1/3*dnorm(dadm$latent, mean = dadm$running_mu, sd = cur_sd)
-    # Importance correction of all proposal densities
-    l <- ll - log(lm)
-    latents[,i] <- dadm$latent
-    # For now these weights are uncorrected for
-    weights[,i] <- l
+
+    # Now we need to sample from the weights
+    # using n metropolis steps, with n being the number of observations
+    mh_idx <- apply(weights, 1, function(x){
+      weights <- exp(x - max(x))
+      sample(x = n_particles*n_dists + 1, size = 1, prob = weights)
+    })
+    # Sample each row of latents based on weight and replace
+    noisy_cov$latent <- latents[cbind(seq_len(nrow(noisy_cov)), mh_idx)]
+    # Finally let's update some sampling tuning parameters
+    # First update acceptance
+    noisy_cov$acceptance <- calc_acceptance(weights, noisy_cov$acceptance, noisy_cov$idx)
+    # Scaling parameter
+    noisy_cov$epsilon <- update_epsilon_continuous(noisy_cov$epsilon, noisy_cov$acceptance, target = .2,
+                                              iter =noisy_cov$idx, d = 1, alphaStar = 3,
+                                              clamp = c(.5, 2))
+    # Running mean:
+    new_moments <- running_moments(noisy_cov$latent, noisy_cov$running_mu, noisy_cov$running_sd, noisy_cov$idx)
+    noisy_cov$running_mu <- new_moments$mu
+    noisy_cov$running_sd <- new_moments$sd
+    noisy_cov$idx <- noisy_cov$idx + 1
+    noisy_covs[[cov]] <- noisy_cov
+    dadm <- fill_dadm(dadm, noisy_cov, cov)
   }
-  # First update acceptance
-  dadm$acceptance <- calc_acc(weights, dadm$acceptance, idx)
-  update_eps <- update_epsilon_continuous(dadm$epsilon, dadm$acceptance, target = .2,
-                                          iter =iter, d = 1, alphaStar = 3,
-                                          clamp = c(.5, 2))
-  # Now we need to sample from the weighted likelihoods
-  # using n metropolis steps, with n being the number of observations
-  mh_idx <- apply(weights, 1, function(x){
-    weights <- exp(x - max(x))
-    sample(x = n_particles*n_dists + 1, size = 1, prob = weights)
-  })
-  # Sample each row of latents based on weight and replace
-  dadm$latent <- latents[cbind(seq_len(nrow(dadm)), mh_idx)]
-  # For race models we also need to keep a tracker that only the trials (not the lR)
-  # are updated (so 1 per R accumulators, not per row)
+  attr(dadm, "noisy_cov") <- noisy_covs
   return(dadm)
 }
 
 calc_acceptance <- function(weights, prev_acc, idx){
   # Subtract weight from previous particle
   n <- ncol(weights)
-  weights <- weights[,2:n] - weights[,1]
-  curr_acc <- rowSums(weights > 0)
+  new <- weights[,2:n] - rep(weights[,1], times = n-1)
+  curr_acc <- rowSums(new > 0)
   # Calculate total accept counts, add the current one
   updated_acc <- ((prev_acc * idx * (n-1)) + curr_acc) / ((idx + 1) * (n-1))
   return(updated_acc)
 }
+
+running_moments <- function(new_latent, old_mu, old_sd, idx){
+  n_new   <- idx + 1
+  delta   <- new_latent - old_mu
+  meanNew <- old_mu + delta / n_new
+  new_var <- ((idx - 1)*(old_sd^2) + (delta^2 * idx / n_new)) / (n_new - 1)
+  list(
+    mu = meanNew,
+    sd   = max(sqrt(new_var), 0.01)
+  )
+}
+
+
+add_noisy_cov_dadm <- function(dadm, model, noisy_cov){
+  if(is.data.frame(dadm)){
+    if(!is.null(model()$noisy_cov)){
+      noisy_covs <- model()$noisy_cov
+      attr(dadm, "noisy_cov") <- noisy_cov[noisy_covs]
+    }
+  } else{
+    for(j in 1:length(dadm)){
+      if(!is.null(model[[j]]()$noisy_cov)){
+        noisy_covs <- model[[j]]()$noisy_cov
+        attr(dadm[[j]], "noisy_cov") <- noisy_cov[noisy_covs]
+      }
+    }
+  }
+  return(dadm)
+}
+
+find_noisy_cov <- function(pm_settings){
+  return(!is.null(pm_settings$noisy_cov))
+}
+
+
+
+# Design ------------------------------------------------------------------
+
 
 get_noisy_cov_pnames <- function(noisy_cov){
   return(paste0(c("mu.t", "sigma.t", "sigma.e"), "_", noisy_cov))
@@ -130,6 +197,7 @@ update_model_noisy_cov <- function(noisy_cov, model) {
   return(model)
 }
 
+
 check_noisy_cov <- function(noisy_cov, covariates, formula = NULL) {
   if (!all(noisy_cov %in% names(covariates))){
     stop("noisy covariate not in defined covariates")
@@ -146,29 +214,6 @@ check_noisy_cov <- function(noisy_cov, covariates, formula = NULL) {
     }
   }
   return(formula)
-}
-
-latent_manager <- function(proposals, dadm, model, component = NULL){
-  if(!is.data.frame(dadm)){
-    lls <- log_likelihood_joint(proposals, dadm, model, component)
-  } else{
-    model <- model()
-    if(is.null(model$c_name)){ # use the R implementation
-      lls <- apply(proposals,1, calc_ll_R, model, dadm = dadm)
-    } else{
-      p_types <- names(model$p_types)
-      designs <- list()
-      for(p in p_types){
-        designs[[p]] <- attr(dadm,"designs")[[p]][attr(attr(dadm,"designs")[[p]],"expand"),,drop=FALSE]
-      }
-      constants <- attr(dadm, "constants")
-      if(is.null(constants)) constants <- NA
-      lls <- calc_ll(proposals, dadm, constants = constants, designs = designs, type = model$c_name,
-                     model$bound, model$transform, model$pre_transform, p_types = p_types, min_ll = log(1e-10),
-                     model$trend)
-    }
-  }
-  return(dadm)
 }
 
 
