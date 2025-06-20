@@ -132,7 +132,7 @@ get_conditionals <- function(s, samples, n_pars, iteration = NULL, idx, type, ..
     "factor" = get_conditionals_factor(s, samples, n_pars, iteration, idx, ...),
     "infnt_factor" = get_conditionals_infnt_factor(s, samples, n_pars, iteration, idx, ...),
     "SEM" = get_conditionals_SEM(s, samples, n_pars, iteration, idx, ...),
-    "diagonal-gamma" = get_conditionals_diag(s, samples, n_pars, iteration, idx, ...),
+    "diagonal-gamma" = get_conditionals_standard(s, samples, n_pars, iteration, idx, ...),
     stop("Invalid type specified")
   )
 }

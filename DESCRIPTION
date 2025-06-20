@@ -46,7 +46,6 @@ Config/testthat/edition: 3
 Imports: 
     abind,
     coda,
-    corpcor,
     graphics,
     grDevices,
     magic,
@@ -67,7 +66,7 @@ Imports:
     lpSolve,
     WienR
 LinkingTo: 
-    Rcpp, RcppArmadillo
+    Rcpp, RcppArmadillo, RcppEigen
 Depends: 
     R (>= 3.5.0)
 LazyData: true

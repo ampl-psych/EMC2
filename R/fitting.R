@@ -70,7 +70,7 @@ get_stop_criteria <- function(stage, stop_criteria, type){
 #' @examples \donttest{
 #' # First define a design
 #' design_in <- design(data = forstmann,model=DDM,
-#'                            formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
+#'                            formula =list(v~0+S,a~E, t0~1, s~1, Z~1),
 #'                            constants=c(s=log(1)))
 #' # Then make the emc, we've omitted a prior here for brevity so default priors will be used.
 #' emc <- make_emc(forstmann, design_in)
@@ -154,9 +154,7 @@ run_emc <- function(emc, stage, stop_criteria,
 run_stages <- function(sampler, stage = "preburn", iter=0, verbose = TRUE, verboseProgress = TRUE,
                        particle_factor=50, search_width= NULL, n_cores=1)
 {
-
-  max_pars <- max(table(attr(sampler[[1]], "components")))
-  particles <- round(particle_factor*sqrt(max_pars))
+  particles <- round(particle_factor*sqrt(sampler$n_pars))
   if (!sampler$init) {
     sampler <- init(sampler, n_cores = n_cores)
   }
@@ -216,7 +214,7 @@ check_progress <- function (emc, stage, iter, stop_criteria,
   iter_done <- ifelse(is.null(iter) || length(iter) == 0, TRUE, total_iters_stage >= iter)
   if (min_es == 0) {
     es_done <- TRUE
-  } else if (iters_total != 0) {
+  } else if (total_iters_stage != 0) {
     class(emc) <- "emc"
     curr_min_es <- Inf
     for(select in selection){
@@ -461,10 +459,12 @@ create_chain_proposals <- function(emc, samples_idx = NULL, do_block = TRUE){
   }
   LL <- get_pars(emc, filter = samples_idx-1, selection = "LL",
                  stage = c('preburn', 'burn', 'adapt', 'sample'),
-                 merge_chains = T, return_mcmc = F)
+                 merge_chains = T, return_mcmc = F, remove_constants = F,
+                 remove_dup = F)
   alpha <- get_pars(emc, filter = samples_idx-1, selection = "alpha",
                     stage = c('preburn', 'burn', 'adapt', 'sample'),
-                    by_subject = T, merge_chains = T, return_mcmc = F)
+                    by_subject = T, merge_chains = T, return_mcmc = F,
+                    remove_dup = F, remove_constants = F)
 
   components <- attr(emc[[1]]$data, "components")
   block_idx <- block_variance_idx(components)
@@ -478,8 +478,8 @@ create_chain_proposals <- function(emc, samples_idx = NULL, do_block = TRUE){
       emp_covs <- moments$w_cov
       chains_mu[[sub]] <- moments$w_mu
       if(do_block) emp_covs[block_idx] <- 0
-      if(is.negative.semi.definite(emp_covs)){
-        # If negative semi definite, do not use it
+      if(!is.positive.definite(emp_covs)){
+        # If not positive definite, do not use it
         next
       } else{
         chains_var[[sub]] <- emp_covs
@@ -739,7 +739,7 @@ make_emc <- function(data,design,model=NULL,
     }
     if(length(prior_list) == length(data)){
       if(!is.null(prior_list[[i]])){
-        prior_list[[i]] <- check_prior(prior_list[[i]], sampled_p_names)
+        prior_list[[i]] <- check_prior(prior_list[[i]], sampled_p_names, group_design)
       }
     }
   }
@@ -747,7 +747,7 @@ make_emc <- function(data,design,model=NULL,
   class(design) <- "emc.design"
   prior_in <- merge_priors(prior_list)
 
-  prior_in <- prior(design, type, update = prior_in, ...)
+  prior_in <- prior(design, type, update = prior_in, group_design = group_design, ...)
   attr(dadm_list[[1]], "prior") <- prior_in
 
   # if(!is.null(subject_covariates)) attr(dadm_list, "subject_covariates") <- subject_covariates
@@ -759,10 +759,10 @@ make_emc <- function(data,design,model=NULL,
     if(type == "blocked"){
       if(is.null(par_groups)) stop("par_groups must be specified for blocked models")
     }
-    if(type == "diagonal"){
+    if(type == "diagonal" && is.null(par_groups)){
       par_groups <- 1:length(sampled_pars(design))
     }
-    if(type == "standard"){
+    if(type == "standard" && is.null(par_groups)){
       par_groups <- rep(1, length(sampled_pars(design)))
     }
     if(!is.null(par_groups)){

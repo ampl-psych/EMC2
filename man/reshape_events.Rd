@@ -13,6 +13,9 @@ reshape_events(events, event_types, duration = 0.001, modulation = NULL)
 
 \item{duration}{Either a single numeric value (applied to all event_types), a list with named elements
 corresponding to event_types, or a function that takes the events data frame and returns durations}
+
+\item{modulation}{Either a list with named elements corresponding to event_types, or a function that takes
+the events data frame and returns durations}
 }
 \value{
 A data frame with columns 'subjects', 'onset', 'run', 'modulation', 'duration', and 'event_type'

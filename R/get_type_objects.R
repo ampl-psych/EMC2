@@ -34,6 +34,8 @@ get_objects <- function(type, selection = NULL, sample_prior = F, design = NULL,
 add_prior_names <- function(prior, design, ...){
   dots <- list(...)
   pnames <- names(sampled_pars(design))
+  # If there is a group_design add its names
+  gnames <- add_group_par_names(pnames, list(...)$group_design)
   nuisance <- is.element(seq_len(length(pnames)), unique(c(dots$nuisance, dots$nuisance_non_hyper)))
   # This might be a weird place to set the nuisance parameters in the prior,
   # but it's the most efficient for now
@@ -43,14 +45,26 @@ add_prior_names <- function(prior, design, ...){
         prior[[pri]] <- prior[[pri]][!nuisance]
         names(prior[[pri]]) <- pnames[!nuisance]
       }
+      if(length(gnames) == length(prior[[pri]])){
+        prior[[pri]] <- prior[[pri]][!nuisance]
+        names(prior[[pri]]) <- gnames[!nuisance]
+      }
     } else{
       if(length(pnames) == nrow(prior[[pri]])){
-        prior[[pri]] <- prior[[pri]][!nuisance,]
+        prior[[pri]] <- prior[[pri]][!nuisance,,drop=FALSE]
         rownames(prior[[pri]]) <- pnames[!nuisance]
       }
       if(length(pnames) == ncol(prior[[pri]])){
-        prior[[pri]] <- prior[[pri]][,!nuisance]
+        prior[[pri]] <- prior[[pri]][,!nuisance,drop=FALSE]
         colnames(prior[[pri]]) <- pnames[!nuisance]
+      }
+      if(length(gnames) == nrow(prior[[pri]])){
+        prior[[pri]] <- prior[[pri]][!nuisance,,drop=FALSE]
+        rownames(prior[[pri]]) <- gnames[!nuisance]
+      }
+      if(length(gnames) == ncol(prior[[pri]])){
+        prior[[pri]] <- prior[[pri]][,!nuisance,drop=FALSE]
+        colnames(prior[[pri]]) <- gnames[!nuisance]
       }
     }
   }
@@ -84,7 +98,8 @@ get_objects_diag_gamma <- function(selection, sample_prior, return_prior, design
     if(sample_prior){
       if(selection == "alpha" & !is.null(sampler)){
         mu <- get_pars(sampler, selection = "mu", stage = stage, map = FALSE, return_mcmc = FALSE, merge_chains = TRUE, ...)
-        var <- get_pars(sampler, selection = "Sigma", stage = stage, map = FALSE, return_mcmc = FALSE, merge_chains = TRUE, ...)
+        var <- get_pars(sampler, selection = "Sigma", stage = stage, map = FALSE, return_mcmc = FALSE, merge_chains = TRUE,
+                        remove_dup = FALSE, remove_constants = FALSE, ...)
         sub_names <- names(sampler[[1]]$data)
         sampler <- list(list(samples =  list(alpha = get_alphas(mu, var, sub_names))))
       } else{
@@ -104,24 +119,20 @@ get_objects_standard <- function(selection, sample_prior, return_prior, design =
                                  prior = NULL, stage = 'sample', N = 1e5, sampler = NULL, ...){
   acc_selection <- c("mu", "sigma2", "beta", "covariance", "correlation", "alpha", "Sigma", "LL")
   if(return_prior & !sample_prior){
-    if(is.null(list(...)$return_info)) prior$prior <- get_prior_standard(design = design, sample = F, prior = prior)
+    if(is.null(list(...)$return_info)) prior$prior <- get_prior_standard(design = design, sample = F, prior = prior, group_design = list(...)$group_design)
     prior$descriptions <- list(
       theta_mu_mean = "mean of the group-level mean prior",
       theta_mu_var = "variance of the group-level mean prior",
-      beta_mean = "mean of the group-level regressors",
-      beta_var = "variance of the group-level regressors",
       v = "degrees of freedom on the group-level (co-)variance prior, 2 leads to uniform correlations. Single value",
       A = "scale on the group-level variance prior, larger values lead to larger variances"
     )
     prior$types <- list(
       mu = c("theta_mu_mean", "theta_mu_var"),
-      Sigma = c("v", "A"),
-      beta = c("beta_mean", "beta_var")
+      Sigma = c("v", "A")
     )
     prior$type_descriptions <- list(
       mu = "Group-level mean",
-      Sigma = 'Group-level covariance matrix',
-      beta = "Group-level regressors"
+      Sigma = 'Group-level covariance matrix'
     )
     if(!is.null(list(...)$return_info)) return(prior[c("types", "type_descriptions", "descriptions")])
     prior$prior <- add_prior_names(prior$prior, design, ...)
@@ -129,22 +140,65 @@ get_objects_standard <- function(selection, sample_prior, return_prior, design =
   } else{
     if(!selection %in% acc_selection) stop(paste0("selection must be in : ", paste(acc_selection, collapse = ", ")))
     if(sample_prior){
+      dots <- list(...)
+      if(!is.null(sampler$par_groups)){
+        dots$par_groups <- sampler$par_groups
+        dots$group_design <- sampler$group_design
+      }
       if(selection == "alpha" & !is.null(sampler)){
         mu <- get_pars(sampler, selection = "mu", stage = stage, map = FALSE, return_mcmc = FALSE, merge_chains = TRUE, ...)
-        var <- get_pars(sampler, selection = "Sigma", stage = stage, map = FALSE, return_mcmc = FALSE, merge_chains = TRUE, ...)
+        var <- get_pars(sampler, selection = "Sigma", stage = stage, map = FALSE, return_mcmc = FALSE, merge_chains = TRUE,
+                        remove_dup = FALSE, remove_constants = FALSE, ...)
         sub_names <- names(sampler[[1]]$data)
         sampler <- list(list(samples =  list(alpha = get_alphas(mu, var, sub_names))))
       } else{
-        sampler <- list(list(samples = get_prior_standard(prior = prior, design = design, selection = selection,N = N)))
+        sampler <- list(list(samples = do.call(get_prior_standard, c(list(prior = prior, design = design, selection = selection,N = N),
+                                                                     fix_dots(dots, get_prior_standard)))))
       }
       sampler[[1]]$prior <- prior
       class(sampler) <- "emc"
       return(sampler)
     }
     idx <- get_idx(sampler, stage)
+    if(selection == "mu"){
+      return(lapply(sampler, implied_mean, idx))
+    }
     return(get_base(sampler, idx, selection))
   }
 }
+
+implied_mean <- function(sampler, idx){
+  beta <- sampler$samples$theta_mu[,idx]
+  N <- ncol(beta)
+  group_des <- sampler$group_designs
+  par_names <- sampler$par_names
+  if(is.null(par_names)){
+    group_des <- sampler$samples$group_designs
+    par_names <- sampler$samples$par_names
+  }
+  n_pars <- length(par_names)
+  # Calculate mu (implied means) if we have group designs
+  if(!is.null(group_des)) {
+    # Prepare group designs in proper format
+    group_designs <- add_group_design(par_names, group_des, N)
+
+    # Calculate mean design matrices
+    mean_designs <- calculate_mean_design(group_designs, n_pars)
+
+    # Calculate implied means for each sample
+    mu <- matrix(0, nrow = n_pars, ncol = N)
+    for (i in 1:N) {
+      mu[, i] <- calculate_implied_means(mean_designs, beta[, i], n_pars)
+    }
+    rownames(mu) <- par_names
+  } else {
+    # If no group designs, mu and beta are the same
+    mu <- beta
+  }
+  return(mu)
+}
+
+
 
 get_idx <- function(sampler, stage){
   if(is.null(sampler[[1]]$samples$stage)){
@@ -191,13 +245,14 @@ get_objects_single <- function(selection, sample_prior, return_prior, design = N
 
 get_objects_factor <- function(selection, sample_prior, return_prior, design = NULL,
                                      prior = NULL, stage = 'sample', N = 1e5, sampler = NULL, ...){
-  acc_selection <- c("mu", "sigma2", "covariance", "correlation", "alpha", "Sigma", "loadings", "residuals", "LL")
+  acc_selection <- c("mu", "sigma2", "covariance", "correlation", "alpha", "Sigma", "loadings", "residuals", "LL",
+                     "std_loadings")
   if(return_prior & !sample_prior){
     if(is.null(list(...)$return_info)) prior$prior <- do.call(get_prior_factor, c(list(design = design, sample = F, prior = prior), fix_dots(list(...), get_prior_factor)))
     prior$descriptions <- list(
       theta_mu_mean = "mean of the group-level mean prior",
       theta_mu_var = "variance of the group-level mean prior",
-      theta_lambda_var = "variance of the factor loadings",
+      lambda_var = "variance of the factor loadings",
       as = "shape of inverse-gamma prior on the residual variances",
       bs = "rate of inverse-gamma prior on the residual variances",
       ap = "shape prior of inverse gamma on factor variances",
@@ -205,7 +260,7 @@ get_objects_factor <- function(selection, sample_prior, return_prior, design = N
     )
     prior$types <- list(
       mu = c("theta_mu_mean", "theta_mu_var"),
-      loadings = c("theta_lambda_var", "ap", "bp"),
+      loadings = c("lambda_var", "ap", "bp"),
       residuals = c("as", "bs")
     )
     prior$type_descriptions <- list(
@@ -221,7 +276,8 @@ get_objects_factor <- function(selection, sample_prior, return_prior, design = N
     if(sample_prior){
       if(selection == "alpha" & !is.null(sampler)){
         mu <- get_pars(sampler, selection = "mu", stage = stage, map = FALSE, return_mcmc = FALSE, merge_chains = TRUE, ...)
-        var <- get_pars(sampler, selection = "Sigma", stage = stage, map = FALSE, return_mcmc = FALSE, merge_chains = TRUE, ...)
+        var <- get_pars(sampler, selection = "Sigma", stage = stage, map = FALSE, return_mcmc = FALSE, merge_chains = TRUE,
+                        remove_dup = FALSE, remove_constants = FALSE,...)
         sub_names <- names(sampler[[1]]$data)
         sampler <- list(list(samples =  list(alpha = get_alphas(mu, var, sub_names))))
       } else{
@@ -239,10 +295,13 @@ get_objects_factor <- function(selection, sample_prior, return_prior, design = N
     }
     idx <- get_idx(sampler, stage)
     if(selection == "loadings"){
-      return(lapply(sampler, FUN = function(x) return(x$samples$theta_lambda[,,idx])))
+      return(lapply(sampler, FUN = function(x) return(x$samples$lambda[,,idx, drop = FALSE])))
     }
     if(selection == "residuals"){
-      return(lapply(sampler, FUN = function(x) return(1/x$samples$theta_sig_err_inv[,idx])))
+      return(lapply(sampler, FUN = function(x) return(1/x$samples$epsilon_inv[,idx])))
+    }
+    if(selection == "std_loadings"){
+      return(lapply(sampler, FUN = function(x) standardize_loadings(x$samples$lambda[,,idx, drop = F], 1/x$samples$epsilon_inv[,idx])))
     }
     return(get_base(sampler, idx, selection))
   }
@@ -252,7 +311,8 @@ get_objects_factor <- function(selection, sample_prior, return_prior, design = N
 
 get_objects_infnt_factor <- function(selection, sample_prior, return_prior, design = NULL,
                                  prior = NULL, stage = 'sample', N = 1e5, sampler = NULL, ...){
-  acc_selection <- c("mu", "sigma2", "covariance", "correlation", "alpha", "Sigma", "loadings", "residuals", "LL")
+  acc_selection <- c("mu", "sigma2", "covariance", "correlation", "alpha", "Sigma", "loadings", "residuals", "LL",
+                     "std_loadings")
   if(return_prior & !sample_prior){
     if(is.null(list(...)$return_info)) prior$prior <- do.call(get_prior_infnt_factor, c(list(design = design, sample = F, prior = prior), fix_dots(list(...), get_prior_infnt_factor)))
     prior$descriptions <- list(
@@ -284,7 +344,8 @@ get_objects_infnt_factor <- function(selection, sample_prior, return_prior, desi
     if(sample_prior){
       if(selection == "alpha" & !is.null(sampler)){
         mu <- get_pars(sampler, selection = "mu", stage = stage, map = FALSE, return_mcmc = FALSE, merge_chains = TRUE, ...)
-        var <- get_pars(sampler, selection = "Sigma", stage = stage, map = FALSE, return_mcmc = FALSE, merge_chains = TRUE, ...)
+        var <- get_pars(sampler, selection = "Sigma", stage = stage, map = FALSE, return_mcmc = FALSE, merge_chains = TRUE,
+                        remove_dup = FALSE, remove_constants = FALSE,...)
         sub_names <- names(sampler[[1]]$data)
         sampler <- list(list(samples =  list(alpha = get_alphas(mu, var, sub_names))))
       } else{
@@ -298,10 +359,13 @@ get_objects_infnt_factor <- function(selection, sample_prior, return_prior, desi
     }
     idx <- get_idx(sampler, stage)
     if(selection == "loadings"){
-      return(lapply(sampler, FUN = function(x) return(x$samples$theta_lambda[,,idx])))
+      return(lapply(sampler, FUN = function(x) return(x$samples$lambda[,,idx, drop = FALSE])))
     }
     if(selection == "residuals"){
-      return(lapply(sampler, FUN = function(x) return(1/x$samples$theta_sig_err_inv[,idx])))
+      return(lapply(sampler, FUN = function(x) return(1/x$samples$epsilon_inv[,idx])))
+    }
+    if(selection == "std_loadings"){
+      return(lapply(sampler, FUN = function(x) standardize_loadings(x$samples$lambda[,,idx, drop = F], 1/x$samples$epsilon_inv[,idx])))
     }
     return(get_base(sampler, idx, selection))
   }
@@ -353,7 +417,8 @@ get_objects_SEM <- function(selection, sample_prior, return_prior, design = NULL
     if(sample_prior){
       if(selection == "alpha" & !is.null(sampler)){
         mu <- get_pars(sampler, selection = "mu_implied", stage = stage, map = FALSE, return_mcmc = FALSE, merge_chains = TRUE, ...)
-        var <- get_pars(sampler, selection = "Sigma", stage = stage, map = FALSE, return_mcmc = FALSE, merge_chains = TRUE, ...)
+        var <- get_pars(sampler, selection = "Sigma", stage = stage, map = FALSE, return_mcmc = FALSE, merge_chains = TRUE,
+                        remove_dup = FALSE, remove_constants = FALSE,...)
         sub_names <- names(sampler[[1]]$data)
         sampler <- list(list(samples =  list(alpha = get_alphas(mu, var, sub_names))))
       } else{
@@ -417,7 +482,13 @@ get_base <- function(sampler, idx, selection){
   } else if(selection == "mu"){
     return(lapply(sampler, FUN = function(x) return(x$samples$theta_mu[,idx, drop = F])))
   } else if(selection == "beta"){
-    return(lapply(sampler, FUN = function(x) return(x$samples$beta[,idx, drop = F])))
+    return(lapply(sampler, FUN = function(x) {
+      if (!is.null(x$samples$theta_beta)) {
+        return(x$samples$theta_beta[,idx, drop = F])
+      } else {
+        return(x$samples$theta_mu[,idx, drop = F])
+      }
+    }))
   } else if(selection == "covariance"){
     return(lapply(sampler, FUN = function(x){
       out <- x$samples$theta_var[,,idx, drop = F]

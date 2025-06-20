@@ -242,7 +242,7 @@ LBA <- function(){
       pars
     },
     # Random function for racing accumulator
-    rfun=function(lR=NULL,pars) rLBA(lR,pars,posdrift=TRUE,ok = attr(pars, "ok")),
+    rfun=function(data,pars) rLBA(data$lR,pars,posdrift=TRUE,ok = attr(pars, "ok")),
     # Density function (PDF) for single accumulator
     dfun=function(rt,pars) dLBA(rt,pars,posdrift = TRUE),
     # Probability function (CDF) for single accumulator

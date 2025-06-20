@@ -41,19 +41,23 @@ LogicalVector c_do_bound(NumericMatrix pars,
 }
 
 NumericVector c_do_pre_transform(NumericVector p_vector,
-                                      const std::vector<PreTransformSpec>& specs)
+                                 const std::vector<PreTransformSpec>& specs)
 {
   for (size_t i = 0; i < specs.size(); i++) {
     const PreTransformSpec& s = specs[i];
     double val = p_vector[s.index];
+
     switch (s.code) {
     case PTF_EXP: {
-      p_vector[s.index] = std::exp(val - s.lower);
+      // lower + exp(real)
+      p_vector[s.index] = s.lower + std::exp(val);
       break;
     }
     case PTF_PNORM: {
-      double z = (val - s.lower) / (s.upper - s.lower);
-      p_vector[s.index] = R::pnorm(z, 0.0, 1.0, 1, 0);
+      double range = s.upper - s.lower;
+      // lower + range * Φ(real)
+      p_vector[s.index] = s.lower +
+        range * R::pnorm(val, 0.0, 1.0, /*lower_tail=*/1, /*log_p=*/0);
       break;
     }
     default:
@@ -64,31 +68,33 @@ NumericVector c_do_pre_transform(NumericVector p_vector,
   return p_vector;
 }
 
-
 NumericMatrix c_do_transform(NumericMatrix pars,
-                                  const std::vector<TransformSpec>& specs)
+                             const std::vector<TransformSpec>& specs)
 {
   int nrow = pars.nrow();
 
   for (size_t j = 0; j < specs.size(); j++) {
     const TransformSpec& sp = specs[j];
-    int col_idx     = sp.col_idx;
-    TransformCode c = sp.code;
-    double lw       = sp.lower;
-    double up       = sp.upper;
+    int          col_idx = sp.col_idx;
+    TransformCode c      = sp.code;
+    double        lw     = sp.lower;
+    double        up     = sp.upper;
 
     switch (c) {
     case EXP: {
       for (int i = 0; i < nrow; i++) {
-      pars(i, col_idx) = std::exp(pars(i, col_idx) - lw);
+      // lower + exp(real)
+      pars(i, col_idx) = lw + std::exp(pars(i, col_idx));
     }
       break;
     }
     case PNORM: {
       double range = up - lw;
       for (int i = 0; i < nrow; i++) {
-        double z = (pars(i, col_idx) - lw) / range;
-        pars(i, col_idx) = R::pnorm(z, 0.0, 1.0, /*lower_tail=*/1, /*log_p=*/0);
+        // lower + range * Φ(real)
+        pars(i, col_idx) = lw +
+          range * R::pnorm(pars(i, col_idx), 0.0, 1.0,
+                           /*lower_tail=*/1, /*log_p=*/0);
       }
       break;
     }
@@ -100,7 +106,6 @@ NumericMatrix c_do_transform(NumericMatrix pars,
   }
   return pars;
 }
-
 
 
 NumericMatrix c_map_p(NumericVector p_vector,
@@ -132,6 +137,7 @@ NumericMatrix c_map_p(NumericVector p_vector,
   LogicalVector trend_index(n_params, FALSE);
   if (has_trend && (premap || pretransform)) {
     // first loop over trends to get all trend pnames
+    // But only for trends that are premap or pretransform
     for(unsigned int q = 0; q < trend.length(); q++){
       List cur_trend = trend[q];
       trend_pnames = c_add_charvectors(trend_pnames, as<CharacterVector>(cur_trend["trend_pnames"]));
@@ -141,10 +147,12 @@ NumericMatrix c_map_p(NumericVector p_vector,
     // index which p_types are trends
     LogicalVector trend_index = contains_multiple(p_types,trend_pnames);
     for(unsigned int j = 0; j < trend_index.length(); j ++){
+      // If we are a trend parameter:
       if(trend_index[j] == TRUE){
         NumericMatrix cur_design_trend = designs[j];
         CharacterVector cur_names_trend = colnames(cur_design_trend);
         // Take the current design and loop over columns
+        // Multiply by design matrix
         for(int k = 0; k < cur_design_trend.ncol(); k ++){
           String cur_name_trend(cur_names_trend[k]);
           p_mult_design =  p_vector[cur_name_trend] * cur_design_trend(_, k);
@@ -153,9 +161,9 @@ NumericMatrix c_map_p(NumericVector p_vector,
         }
       }
     }
-    std::vector<TransformSpec> t_specs = make_transform_specs(pars, transforms);
-    // Then repeatedly:
-    trend_pars = c_do_transform(pars, t_specs);
+    trend_pars = submat_rcpp_col_by_names(pars, trend_pnames);
+    std::vector<TransformSpec> t_specs = make_transform_specs(trend_pars, transforms);
+    trend_pars = c_do_transform(trend_pars, t_specs);
     trend_index = contains_multiple(p_types, trend_pnames);
   }
   for(int i = 0, t = 0; i < n_params; i++){
@@ -166,6 +174,8 @@ NumericMatrix c_map_p(NumericVector p_vector,
       for(int j = 0; j < cur_design.ncol(); j ++){
         String cur_name(cur_names[j]);
         NumericVector p_mult_design(n_trials, p_vector[cur_name]);
+        // at this point we're multiplying by specific parameters (e.g. v_lMd)
+        // So first apply trend to this parameter, then multiply by design matrix;
         if(has_trend && premap){
           // Check if trend is on current parameter
           LogicalVector cur_has_trend = contains(trend_names, cur_name);
@@ -178,7 +188,7 @@ NumericMatrix c_map_p(NumericVector p_vector,
               List cur_trend = trend[cur_name];
               CharacterVector cur_trend_pnames = cur_trend["trend_pnames"];
               p_mult_design = run_trend_rcpp(data, cur_trend, p_mult_design,
-                                             submat_rcpp_col(trend_pars, contains_multiple(trend_pnames, cur_trend_pnames)));
+                                             submat_rcpp_col_by_names(trend_pars,cur_trend_pnames));
 
             }
           }
@@ -200,7 +210,7 @@ NumericMatrix c_map_p(NumericVector p_vector,
   return(pars);
 }
 
-NumericMatrix get_pars_matrix(NumericVector p_vector, NumericVector constants, List transforms, List pretransforms,
+NumericMatrix get_pars_matrix(NumericVector p_vector, NumericVector constants, List transforms, const std::vector<PreTransformSpec>& p_specs,
                               CharacterVector p_types, List designs, int n_trials, DataFrame data, List trend){
   bool has_trend = (trend.length() > 0);
   bool pretransform = false;
@@ -212,7 +222,6 @@ NumericMatrix get_pars_matrix(NumericVector p_vector, NumericVector constants, L
   }
   NumericVector p_vector_updtd(clone(p_vector));
   CharacterVector par_names = p_vector_updtd.names();
-  std::vector<PreTransformSpec> p_specs = make_pretransform_specs(p_vector_updtd, pretransforms);
   p_vector_updtd = c_do_pre_transform(p_vector_updtd, p_specs);
   p_vector_updtd = c_add_vectors(p_vector_updtd, constants);
   NumericMatrix pars = c_map_p(p_vector_updtd, p_types, designs, n_trials, data, trend, transforms);
@@ -240,6 +249,7 @@ double c_log_likelihood_DDM(NumericMatrix pars, DataFrame data,
   NumericVector lls_exp(n_out);
   lls = d_DDM_Wien(rts, R, pars, is_ok);
   lls_exp = c_expand(lls, expand); // decompress
+  // lls_exp = lls;
   lls_exp[is_na(lls_exp)] = min_ll;
   lls_exp[is_infinite(lls_exp)] = min_ll;
   lls_exp[lls_exp < min_ll] = min_ll;
@@ -255,10 +265,10 @@ double c_log_likelihood_race(NumericMatrix pars, DataFrame data,
   NumericVector lds(n_trials);
   NumericVector rts = data["rt"];
   CharacterVector R = data["R"];
+  NumericVector lR = data["lR"];
   NumericVector lds_exp(n_out);
-  const int n_acc = unique(R).length();
+  const int n_acc = unique(lR).length();
   if(sum(contains(data.names(), "RACE")) == 1){
-    NumericVector lR = data["lR"];
     NumericVector NACC = data["RACE"];
     CharacterVector vals_NACC = NACC.attr("levels");
     for(int x = 0; x < pars.nrow(); x++){
@@ -277,27 +287,29 @@ double c_log_likelihood_race(NumericMatrix pars, DataFrame data,
     lds[!winner] = loss;
   }
   lds[is_na(lds)] = min_ll;
-  lds_exp = c_expand(lds, expand); // decompress
+
   if(n_acc > 1){
-    LogicalVector winner_exp = c_bool_expand(winner, expand);
-    NumericVector ll_out = lds_exp[winner_exp];
+    // LogicalVector winner_exp = c_bool_expand(winner, expand);
+    NumericVector ll_out = lds[winner];
+    NumericVector lds_los = lds[!winner];
     if(n_acc == 2){
-      NumericVector lds_los = lds_exp[!winner_exp];
       ll_out = ll_out + lds_los;
     } else{
-      NumericVector lds_los = lds_exp[!winner_exp];
       for(int z = 0; z < ll_out.length(); z++){
         ll_out[z] = ll_out[z] + sum(lds_los[seq( z * (n_acc -1), (z+1) * (n_acc -1) -1)]);
       }
     }
+
     ll_out[is_na(ll_out)] = min_ll;
     ll_out[is_infinite(ll_out)] = min_ll;
     ll_out[ll_out < min_ll] = min_ll;
+    ll_out = c_expand(ll_out, expand); // decompress
     return(sum(ll_out));
   } else{
     lds_exp[is_na(lds_exp)] = min_ll;
     lds_exp[is_infinite(lds_exp)] = min_ll;
     lds_exp[lds_exp < min_ll] = min_ll;
+    lds_exp = c_expand(lds, expand); // decompress
     return(sum(lds_exp));
   }
 }
@@ -318,25 +330,37 @@ NumericVector calc_ll(NumericMatrix p_matrix, DataFrame data, NumericVector cons
   // Once (outside the main loop over particles):
   NumericMatrix minmax = bounds["minmax"];
   CharacterVector mm_names = colnames(minmax);
+  std::vector<PreTransformSpec> p_specs;
+  std::vector<BoundSpec> bound_specs;
 
   if(type == "DDM"){
     IntegerVector expand = data.attr("expand");
     for(int i = 0; i < n_particles; i++){
       p_vector = p_matrix(i, _);
-      pars = get_pars_matrix(p_vector, constants, transforms, pretransforms, p_types, designs, n_trials, data, trend);
+      if(i == 0){
+        p_specs = make_pretransform_specs(p_vector, pretransforms);
+      }
+      pars = get_pars_matrix(p_vector, constants, transforms, p_specs, p_types, designs, n_trials, data, trend);
       // Precompute specs
-      std::vector<BoundSpec> bound_specs = make_bound_specs(minmax, mm_names, pars, bounds);
+      if (i == 0) {                            // first particle only, just to get colnames
+        bound_specs = make_bound_specs(minmax,mm_names,pars,bounds);
+      }
       is_ok = c_do_bound(pars, bound_specs);
       lls[i] = c_log_likelihood_DDM(pars, data, n_trials, expand, min_ll, is_ok);
     }
-  } else if(type == "MRI" || type == "MRI_white"){
+  } else if(type == "MRI" || type == "MRI_AR1"){
     int n_pars = p_types.length();
     NumericVector y = extract_y(data);
     for(int i = 0; i < n_particles; i++){
       p_vector = p_matrix(i, _);
-      pars = get_pars_matrix(p_vector, constants, transforms, pretransforms, p_types, designs, n_trials, data, trend);
+      if(i == 0){
+        p_specs = make_pretransform_specs(p_vector, pretransforms);
+      }
+      pars = get_pars_matrix(p_vector, constants, transforms, p_specs, p_types, designs, n_trials, data, trend);
       // Precompute specs
-      std::vector<BoundSpec> bound_specs = make_bound_specs(minmax, mm_names, pars, bounds);
+      if (i == 0) {                            // first particle only, just to get colnames
+        bound_specs = make_bound_specs(minmax,mm_names,pars,bounds);
+      }
       is_ok = c_do_bound(pars, bound_specs);
       if(type == "MRI"){
         lls[i] = c_log_likelihood_MRI(pars, y, is_ok, n_trials, n_pars, min_ll);
@@ -360,11 +384,19 @@ NumericVector calc_ll(NumericMatrix p_matrix, DataFrame data, NumericVector cons
       dfun = dlnr_c;
       pfun = plnr_c;
     }
-    for(int i = 0; i < n_particles; i++){
+    NumericVector lR = data["lR"];
+    int n_lR = unique(lR).length();
+    for (int i = 0; i < n_particles; ++i) {
       p_vector = p_matrix(i, _);
-      pars = get_pars_matrix(p_vector, constants, transforms, pretransforms, p_types, designs, n_trials, data, trend);
-      std::vector<BoundSpec> bound_specs = make_bound_specs(minmax, mm_names, pars, bounds);
+      if(i == 0){
+        p_specs = make_pretransform_specs(p_vector, pretransforms);
+      }
+      pars = get_pars_matrix(p_vector, constants, transforms, p_specs, p_types, designs, n_trials, data, trend);
+      if (i == 0) {                            // first particle only, just to get colnames
+        bound_specs = make_bound_specs(minmax,mm_names,pars,bounds);
+      }
       is_ok = c_do_bound(pars, bound_specs);
+      is_ok = lr_all(is_ok, n_lR);
       lls[i] = c_log_likelihood_race(pars, data, dfun, pfun, n_trials, winner, expand, min_ll, is_ok);
     }
   }
