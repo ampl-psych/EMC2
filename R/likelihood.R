@@ -456,14 +456,7 @@ log_likelihood_race_ss <- function(pars, dadm, model, min_ll = log(1e-10)) {
           )
         }
         # likelihood = (1-gf) x [tf x go_prob + (1-tf) x stop_fail_prob]
-        loglike[tGO] <- log1m(gf[tGO]) + log(
-          tf[tGO] * exp(loglike[tGO]) + (1 - tf[tGO]) * exp(ts + stl)
-        )
-        # TODO following line should be theoretically equivalent but in practice
-        # more accurate than the previous line due to more careful computation
-        # in log space with the log_mix function.
-        # However, it causes the test to fail.
-        # loglike[tGO] <- log1m(gf[tGO]) + log_mix(tf[tGO], loglike[tGO], ts + stl)
+        loglike[tGO] <- log1m(gf[tGO]) + log_mix(tf[tGO], loglike[tGO], ts + stl)
       }
 
       # ST WINS (never tf)

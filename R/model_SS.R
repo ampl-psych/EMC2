@@ -129,57 +129,37 @@ dexGaussian <- function(rt, pars, log.d = FALSE) {
   }
 }
 
-# vectorised ex-Gaussian CDF, cleaned up from original code
+# vectorised ex-Gaussian (log) CDF
+# written to be equivalent to version in src/exgaussian_functions.h
 pexGaussian <- function(rt, pars, lower.tail = TRUE, log.p = FALSE) {
-  out <- vector("numeric", length(rt))
+  log_out_lower <- vector("numeric", length(rt))
   mu <- pars[, "mu"]
   sigma <- pmax(pars[, "sigma"], 1e-12)
   tau <- pmax(pars[, "tau"], 1e-12)
-  z <- (rt - mu - sigma^2 / tau) / sigma
-  out <- pnorm((rt - mu) / sigma) -
-    exp((sigma^2 / (2 * tau^2)) - (rt - mu) / tau) * pnorm(z)
-  if (!lower.tail) {
-    out <- 1 - out
+  isinf <- is.infinite(rt)
+  if (any(isinf)) {
+    log_out_lower[isinf] <- ifelse(rt[isinf] < 0, -Inf, 0)
   }
-  if (log.p) {
-    out <- log(out)
+  ok <- !isinf
+  z <-  (rt[ok] - mu[ok]) / sigma[ok]
+  log_phi_1 <- pnorm(z, log.p = TRUE)
+  log_phi_2 <- pnorm(z - sigma[ok] / tau[ok], log.p = TRUE)
+  log_exp_term <- (mu[ok] - rt[ok]) / tau[ok] + sigma[ok]^2 / (2 * tau[ok]^2)
+  log_out_lower[ok] <- log_diff_exp(log_phi_1, (log_exp_term + log_phi_2))
+  if (lower.tail) {
+    if (log.p) {
+      return(log_out_lower)
+    } else {
+      return(exp(log_out_lower))
+    }
+  } else {
+    if (log.p) {
+      return(log1m_exp(log_out_lower))
+    } else {
+      return(-expm1(log_out_lower))
+    }
   }
-  return(out)
 }
-
-# TODO Figure out why tests are failing with this version of the CDF, that is
-# closer to the C code
-# vectorised ex-Gaussian (log) CDF
-# written to be equivalent to version in src/exgaussian_functions.h
-# pexGaussian <- function(rt, pars, lower.tail = TRUE, log.p = FALSE) {
-#   log_out_lower <- vector("numeric", length(rt))
-#   mu <- pars[, "mu"]
-#   sigma <- pmax(pars[, "sigma"], 1e-12)
-#   tau <- pmax(pars[, "tau"], 1e-12)
-#   isinf <- is.infinite(rt)
-#   if (any(isinf)) {
-#     log_out_lower[isinf] <- ifelse(rt[isinf] < 0, -Inf, 0)
-#   }
-#   ok <- !isinf
-#   z <-  (rt[ok] - mu[ok]) / sigma[ok]
-#   log_phi_1 <- pnorm(z, log.p = TRUE)
-#   log_phi_2 <- pnorm(z - sigma[ok] / tau[ok], log.p = TRUE)
-#   log_exp_term <- (mu[ok] - rt[ok]) / tau[ok] + sigma[ok]^2 / (2 * tau[ok]^2)
-#   log_out_lower[ok] <- log_diff_exp(log_phi_1, (log_exp_term + log_phi_2))
-#   if (lower.tail) {
-#     if (log.p) {
-#       return(log_out_lower)
-#     } else {
-#       return(exp(log_out_lower))
-#     }
-#   } else {
-#     if (log.p) {
-#       return(log1m_exp(log_out_lower))
-#     } else {
-#       return(-expm1(log_out_lower))
-#     }
-#   }
-# }
 
 # wrapper around exG cdf/pdf for go trials (strips out NAs and calls d/pexGaussian)
 # Is stripping out rt NAs really necessary?
