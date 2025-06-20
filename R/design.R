@@ -135,6 +135,7 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
   }
   if (!is.null(noisy_cov)) {
     formula <- check_noisy_cov(noisy_cov,covariates, formula)
+  }
   if (!is.null(trend)) {
     formula <- check_trend(trend,covariates, model, formula)
   }

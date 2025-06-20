@@ -199,7 +199,7 @@ update_model_noisy_cov <- function(noisy_cov, model) {
 
 
 check_noisy_cov <- function(noisy_cov, covariates, formula = NULL) {
-  if (!all(noisy_cov %in% names(covariates))){
+  if (!all(noisy_cov %in% covariates)){
     stop("noisy covariate not in defined covariates")
   }
   for(cov in noisy_cov){
