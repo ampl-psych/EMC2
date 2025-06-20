@@ -802,7 +802,7 @@ make_emc <- function(data,design,model=NULL,
   out$model <- lapply(design, function(x) x$model)
   # Only for joint models we need to keep a list of functions
   if(length(out$model) == 1) out$model <- out$model[[1]]
-  # out <- check_duplicate_designs(out)
+  out <- check_duplicate_designs(out)
   # replicate chains
   dadm_lists <- rep(list(out),n_chains)
   # For post predict
@@ -824,6 +824,11 @@ check_duplicate_designs <- function(out){
   for(i in 1:length(out$data)){ # loop over subjects
     designs <- lapply(out$data[[i]], function(y) attr(y, "designs"))
     duplicacy <- duplicated(designs)
+    unq_idx <-   sapply(seq_along(designs), function(i) {
+      for (j in seq_along(designs)) {
+        if (identical(designs[[i]], designs[[j]])) return(j)
+      }
+    })
     for(j in 1:length(out$data[[i]])){# Loop over data sets in this sub
       if(duplicacy[j]){
         attr(out$data[[i]][[j]], "designs") <- unq_idx[j]

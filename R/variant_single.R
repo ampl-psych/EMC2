@@ -109,7 +109,7 @@ bridge_add_info_single <- function(info, samples){
 
 bridge_group_and_prior_and_jac_single <- function(proposals_group, proposals_list, info){
   proposals <- do.call(rbind, proposals_list)
-  prior_mu <- dmvnorm(proposals, mean = info$prior$theta_mu_mean, sigma = info$prior$theta_mu_var, logd =T)
+  prior_mu <- dmvnorm(proposals, mean = info$prior$theta_mu_mean, sigma = info$prior$theta_mu_var, log =T)
   n_iter <- nrow(proposals_list[[1]])
   prior_mu <- matrix(prior_mu, ncol = info$n_subjects)
   return(rowSums(prior_mu)) # Output is of length n_iter

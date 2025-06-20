@@ -435,16 +435,16 @@ group__IC_SEM <- function(emc, stage="sample",filter=NULL, ...){
   if(list(...)$for_WAIC){
     lls <- matrix(NA, nrow = ncol(mean_alpha), ncol = N)
     for(i in 1:N){
-      lls[,i] <- dmvnorm(t(alpha[,,i]), theta_mu[,i], theta_var[,,i], logd = T)
+      lls[,i] <- dmvnorm(t(alpha[,,i]), theta_mu[,i], theta_var[,,i], log = T)
     }
     return(lls)
   }
   for(i in 1:N){
-    lls[i] <- sum(dmvnorm(t(alpha[,,i]), theta_mu[,i], theta_var[,,i], logd = T))
+    lls[i] <- sum(dmvnorm(t(alpha[,,i]), theta_mu[,i], theta_var[,,i], log = T))
   }
   minD <- -2*max(lls)
   mean_ll <- mean(lls)
-  mean_pars_ll <-  sum(dmvnorm(t(mean_alpha), mean_mu, mean_var, logd = TRUE))
+  mean_pars_ll <-  sum(dmvnorm(t(mean_alpha), mean_mu, mean_var, log = TRUE))
   Dmean <- -2*mean_pars_ll
   return(list(mean_ll = mean_ll, Dmean = Dmean,
               minD = minD))
@@ -596,7 +596,7 @@ bridge_group_and_prior_and_jac_SEM <- function(proposals_group, proposals_list, 
     group_mean <- c(theta_mu[i,] + lambda_curr %*% B_0_inv %*% G_curr %*% x_mu + K_curr %*% x_mu)
     group_var <- lambda_curr %*% B_0_inv %*% (G_curr %*% x_var %*% t(G_curr) + solve(delta_curr)) %*% t(B_0_inv) %*% t(lambda_curr) +
       K_curr %*% x_var %*% t(K_curr) + diag(1/exp(epsilon_inv[i,]))
-    group_ll <- sum(dmvnorm(proposals_curr, group_mean, group_var, logd = T))
+    group_ll <- sum(dmvnorm(proposals_curr, group_mean, group_var, log = T))
     prior_delta1 <- sum(logdinvGamma(1/exp(delta_inv1[i,]), shape = prior$a_d, rate = prior$b_d))
     prior_delta2 <- log(robust_diwish(solve(delta2_curr), v=prior$a_d, S = diag(prior$b_d, sum(!info$is_structured))))
     prior_epsilon_inv <- sum(logdinvGamma(1/exp(epsilon_inv[i,]), shape = prior$a_e, rate = prior$b_e))
@@ -604,24 +604,24 @@ bridge_group_and_prior_and_jac_SEM <- function(proposals_group, proposals_list, 
     jac_delta2 <- calc_log_jac_chol(delta_inv2[i, ])
     sum_out[i] <- group_ll + prior_epsilon_inv + prior_delta1 + prior_delta2 + jac_delta2
   }
-  prior_mu <- dmvnorm(theta_mu, mean = prior$theta_mu_mean, sigma = diag(prior$theta_mu_var), logd =T)
+  prior_mu <- dmvnorm(theta_mu, mean = prior$theta_mu_mean, sigma = diag(prior$theta_mu_var), log =T)
   if(sum(info$Lambda_mat == Inf) > 0){
-    prior_lambda <- dmvnorm(lambda, mean = rep(0, ncol(lambda)), sigma = diag(prior$lambda_var, ncol(lambda)), logd = T)
+    prior_lambda <- dmvnorm(lambda, mean = rep(0, ncol(lambda)), sigma = diag(prior$lambda_var, ncol(lambda)), log = T)
   } else{
     prior_lambda <- 0
   }
   if(sum(info$B_mat == Inf) > 0){
-    prior_B <- dmvnorm(B, mean = rep(0, ncol(B)), sigma = diag(prior$B_var, ncol(B)), logd = T)
+    prior_B <- dmvnorm(B, mean = rep(0, ncol(B)), sigma = diag(prior$B_var, ncol(B)), log = T)
   } else{
     prior_B <- 0
   }
   if(sum(info$K_mat == Inf) > 0){
-    prior_K <- dmvnorm(K, mean = rep(0, ncol(K)), sigma = diag(prior$K_var, ncol(K)), logd = T)
+    prior_K <- dmvnorm(K, mean = rep(0, ncol(K)), sigma = diag(prior$K_var, ncol(K)), log = T)
   } else{
     prior_K <- 0
   }
   if(sum(info$G_mat == Inf) > 0){
-    prior_G <- dmvnorm(G, mean = rep(0, ncol(G)), sigma = diag(prior$G_var, ncol(G)), logd = T)
+    prior_G <- dmvnorm(G, mean = rep(0, ncol(G)), sigma = diag(prior$G_var, ncol(G)), log = T)
   } else{
     prior_G <- 0
   }

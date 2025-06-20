@@ -147,11 +147,11 @@ bridge_sampling <- function(samples, n_eff, split_idx, cores_for_props = 1, core
                                       ncol = length(m),
                                       byrow = TRUE)) %*%t(solve(L))
   if(hyper_only){
-    q12 <- dmvnorm(q12_input[,info$group_idx],  mean = rep(0, length(info$group_idx)), sigma = diag(length(info$group_idx)), logd = TRUE)
-    q22 <- dmvnorm(gen_samples[,info$group_idx], mean = rep(0, length(info$group_idx)), sigma = diag(length(info$group_idx)), logd = TRUE)
+    q12 <- dmvnorm(q12_input[,info$group_idx],  mean = rep(0, length(info$group_idx)), sigma = diag(length(info$group_idx)), log = TRUE)
+    q22 <- dmvnorm(gen_samples[,info$group_idx], mean = rep(0, length(info$group_idx)), sigma = diag(length(info$group_idx)), log = TRUE)
   } else{
-    q12 <- dmvnorm(q12_input,  mean = rep(0, ncol(samples_iter)), sigma = diag(ncol(samples_iter)), logd = TRUE)
-    q22 <- dmvnorm(gen_samples, mean = rep(0, ncol(samples_fit)), sigma = diag(ncol(samples_fit)), logd = TRUE)
+    q12 <- dmvnorm(q12_input,  mean = rep(0, ncol(samples_iter)), sigma = diag(ncol(samples_iter)), log = TRUE)
+    q22 <- dmvnorm(gen_samples, mean = rep(0, ncol(samples_fit)), sigma = diag(ncol(samples_fit)), log = TRUE)
   }
 
   qList <- eval.unnormalized.posterior(samples_iter = samples_iter, gen_samples = gen_samples,
