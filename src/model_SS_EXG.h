@@ -193,6 +193,8 @@ double ss_exg_stop_success_lpdf(
   // check for numerical issues
   bool bad_out = out.error_code != 0 || !traits::is_finite<REALSXP>(out.value);
   // return *log* likelihood
+  // NB in the original R code from the DMC toolbox (`my.integrate`), -Inf was
+  // returned in case of failed integration
   return bad_out ? min_ll : std::log(out.value);
 }
 
