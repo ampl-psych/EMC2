@@ -29,12 +29,12 @@ pWald <- function(t, v, B, A, t0) {
     .Call(`_EMC2_pWald`, t, v, B, A, t0)
 }
 
-dEXGrace <- function(dt, mu, sigma, tau) {
-    .Call(`_EMC2_dEXGrace`, dt, mu, sigma, tau)
+dEXGrace <- function(dt, mu, sigma, tau, min_ll) {
+    .Call(`_EMC2_dEXGrace`, dt, mu, sigma, tau, min_ll)
 }
 
-stopfn_exg <- function(t, mu, sigma, tau, SSD) {
-    .Call(`_EMC2_stopfn_exg`, t, mu, sigma, tau, SSD)
+stopfn_exg <- function(t, mu, sigma, tau, SSD, min_ll) {
+    .Call(`_EMC2_stopfn_exg`, t, mu, sigma, tau, SSD, min_ll)
 }
 
 pEXG_RDEX <- function(q, mu = 5., sigma = 1., tau = 1., lower_tail = TRUE, log_p = FALSE) {
