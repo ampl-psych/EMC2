@@ -332,7 +332,8 @@ log_likelihood_race_ss <- function(pars, dadm, model, min_ll = log(1e-10)) {
           0,
           model$sfun(
             pars = pars[ispNR & ispStop & ispGOacc, , drop = FALSE],
-            n_acc = n_accG
+            n_acc = n_accG,
+            min_ll = min_ll
           )
         )
       )
@@ -373,7 +374,8 @@ log_likelihood_race_ss <- function(pars, dadm, model, min_ll = log(1e-10)) {
       loglike[tGO] <- model$dfunG(
         rt = dadm$rt[ispGOwin],
         pars = pars[ispGOwin, , drop = FALSE],
-        log.d = TRUE
+        log.d = TRUE,
+        min_ll = min_ll
       )
       if (n_accG > 1) {
         # Looser survivor go accumulator(s)
@@ -385,7 +387,8 @@ log_likelihood_race_ss <- function(pars, dadm, model, min_ll = log(1e-10)) {
               rt = dadm$rt[ispGOloss],
               pars = pars[ispGOloss, , drop = FALSE],
               lower.tail = FALSE,
-              log.p = TRUE
+              log.p = TRUE,
+              min_ll = min_ll
             ),
             nrow = n_accG - 1
           ),
@@ -415,7 +418,8 @@ log_likelihood_race_ss <- function(pars, dadm, model, min_ll = log(1e-10)) {
         loglike[tGO] <- model$dfunG(
           rt = dadm$rt[ispGOwin],
           pars = pars[ispGOwin, , drop = FALSE],
-          log.d = TRUE
+          log.d = TRUE,
+          min_ll = min_ll
         )
         if (n_accG > 1) {
           # Loser survivor gp accumulators
@@ -427,7 +431,8 @@ log_likelihood_race_ss <- function(pars, dadm, model, min_ll = log(1e-10)) {
                 rt = dadm$rt[ispGOloss],
                 pars = pars[ispGOloss, , drop = FALSE],
                 lower.tail = FALSE,
-                log.p = TRUE
+                log.p = TRUE,
+                min_ll = min_ll
               ),
               nrow = n_accG - 1
             ),
@@ -440,7 +445,8 @@ log_likelihood_race_ss <- function(pars, dadm, model, min_ll = log(1e-10)) {
           rt = dadm$rt[ispGOwin],
           pars = pars[ispGOwin, , drop = FALSE],
           lower.tail = FALSE,
-          log.p = TRUE
+          log.p = TRUE,
+          min_ll = min_ll
         )
         # ST loosers
         if (n_accST == 0) {
@@ -453,7 +459,8 @@ log_likelihood_race_ss <- function(pars, dadm, model, min_ll = log(1e-10)) {
                 rt = dadm$rt[ispSTloss] - pars[ispSTloss, "SSD"], # correct for SSD
                 pars=pars[ispSTloss, , drop = FALSE],
                 lower.tail = FALSE,
-                log.p = TRUE
+                log.p = TRUE,
+                min_ll = min_ll
               ),
               nrow = n_accST
             ),
@@ -475,14 +482,16 @@ log_likelihood_race_ss <- function(pars, dadm, model, min_ll = log(1e-10)) {
         pStop <- model$sfun(
           pars = pars[ispSST & ispGOacc, , drop = FALSE],
           n_acc = n_accG,
-          upper = dadm$rt[ispSSTwin]
+          upper = dadm$rt[ispSSTwin],
+          min_ll = min_ll
         ) # pStop before observed RT
         # ST win ll
         tST <- ptrials[ispSSTwin]
         loglike[tST] <- model$dfunG(
           rt = dadm$rt[ispSSTwin] - dadm$SSD[ispSSTwin], # correct ST racers for SSD delay
           pars = pars[ispSSTwin, , drop = FALSE],
-          log.d = TRUE
+          log.d = TRUE,
+          min_ll = min_ll
         )
         # ST looser survivors
         if (n_accST > 1) {
@@ -492,7 +501,8 @@ log_likelihood_race_ss <- function(pars, dadm, model, min_ll = log(1e-10)) {
             rt = dadm$rt[ispSSTloss] - dadm$SSD[ispSSTloss],
             pars = pars[ispSSTloss, , drop = FALSE],
             lower.tail = FALSE,
-            log.p = TRUE
+            log.p = TRUE,
+            min_ll = min_ll
           )
           if (n_accST == 2) {
             # Could remove branch, maybe faster as no matrix sum?
@@ -513,7 +523,8 @@ log_likelihood_race_ss <- function(pars, dadm, model, min_ll = log(1e-10)) {
               rt = dadm$rt[ispSGloss],
               pars = pars[ispSGloss,,drop=FALSE],
               lower.tail = FALSE,
-              log.p = TRUE
+              log.p = TRUE,
+              min_ll = min_ll
             ),
             nrow = n_accG
           ),
@@ -543,7 +554,7 @@ log_likelihood_race_ss <- function(pars, dadm, model, min_ll = log(1e-10)) {
 
   # protect against non-finity / tiny log likelihoods
   allLL[is.na(allLL) | is.nan(allLL)] <- min_ll
-  allLL <- pmax(min_ll,allLL)
+  allLL <- pmax(min_ll, allLL)
   # de-compress
   allLL <- allLL[attr(dadm, "expand")]
 

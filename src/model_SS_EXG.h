@@ -112,6 +112,9 @@ double ss_exg_stop_fail_lpdf(
   double stop_survivor_lprob = pexg(
     RT - SSD, pars(0, 3), pars(0, 4), pars(0, 5), false, true
   );
+  if (!traits::is_finite<REALSXP>(stop_survivor_lprob)) {
+    stop_survivor_lprob = min_ll;
+  }
   // final output of race model is summed log likelihood
   return go_lprob + stop_survivor_lprob;
 }
@@ -139,8 +142,12 @@ double exg_stop_success_integrand(
   // obtain the winner log probability of the stop process
   // input args: x, muS, sigmaS, tauS, log_d = TRUE
   double stop_winner_lprob = dexg(x, pars(0, 3), pars(0, 4), pars(0, 5), true);
+  if (!traits::is_finite<REALSXP>(stop_winner_lprob)) {
+    stop_winner_lprob = min_ll;
+  }
   // final output of race model is summed log likelihood, exponentiated to the
   // likelihood to enable numerical integration
+  // TODO anything to make the following more numerically stable?
   return std::exp(go_lprob + stop_winner_lprob);
 }
 
@@ -347,28 +354,46 @@ NumericVector pexg_c(
   return(out);
 }
 
+NumericVector protect_finite(const NumericVector& x, double min_ll) {
+  NumericVector out = clone(x);
+  for (int i = 0; i < out.size(); i++) {
+    if (!R_FINITE(out[i])) {
+      out[i] = min_ll;
+    }
+  }
+  return out;
+}
+
 // [[Rcpp::export]]
 NumericVector dEXGrace(
-    NumericMatrix dt, NumericVector mu, NumericVector sigma, NumericVector tau
+    NumericMatrix dt, NumericVector mu, NumericVector sigma, NumericVector tau,
+    double min_ll
 ){
   int n = mu.size();
   NumericVector log_out(dt.nrow());
-  log_out = dexg_c(dt(0, _), mu[0], sigma[0], tau[0], true);
-  for (int i = 1; i < n; i++){
-    log_out += pexg_c(dt(i, _), mu[i], sigma[i], tau[i], false, true);
+  log_out = protect_finite(
+    dexg_c(dt(0, _), mu[0], sigma[0], tau[0], true),
+    min_ll
+  );
+  for (int i = 1; i < n; i++) {
+    log_out += protect_finite(
+      pexg_c(dt(i, _), mu[i], sigma[i], tau[i], false, true),
+      min_ll
+    );
   }
   return exp(log_out);
 }
 
 // [[Rcpp::export]]
 NumericVector stopfn_exg(
-    NumericVector t, NumericVector mu, NumericVector sigma, NumericVector tau, double SSD
+    NumericVector t, NumericVector mu, NumericVector sigma, NumericVector tau,
+    double SSD, double min_ll
 ){
   NumericVector tmp(mu.size() * t.size());
   tmp = rep_each(t, mu.size()) + SSD;
   NumericMatrix dt(mu.size(), t.size(), tmp.begin());
   dt(0, _) = dt(0, _) - SSD;
-  return dEXGrace(dt, mu, sigma, tau);
+  return dEXGrace(dt, mu, sigma, tau, min_ll);
 }
 
 #endif
