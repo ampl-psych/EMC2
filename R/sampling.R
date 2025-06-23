@@ -408,8 +408,8 @@ update_pm_settings <- function(pm_settings, chosen_idx, weights, particle_number
     # ----------------------------------------
     acc_rates <- ifelse(pm_settings$proposal_counts > 0, pm_settings$acc_counts / pm_settings$proposal_counts, 0)
 
-    # .1 for preburn, .4 for burn and adapt and .6 for sample
-    clamp_min <- ifelse(length(pm_settings$mix) == 2, .1, ifelse(length(pm_settings$mix) == 3, .4, .6))
+    # .1 for preburn, .3 for burn and adapt and .4 for sample
+    clamp_min <- ifelse(length(pm_settings$mix) == 2, .1, ifelse(length(pm_settings$mix) == 3, .3, .4))
 
     # D) Adapt epsilon via continuous approach
     # ----------------------------------------
