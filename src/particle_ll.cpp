@@ -6,6 +6,7 @@
 #include "model_DDM.h"
 #include "model_MRI.h"
 #include "trend.h"
+#include "model_SS_EXG.h"
 using namespace Rcpp;
 
 LogicalVector c_do_bound(NumericMatrix pars,
