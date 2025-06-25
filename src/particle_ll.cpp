@@ -314,6 +314,54 @@ double c_log_likelihood_race(NumericMatrix pars, DataFrame data,
   }
 }
 
+double c_log_likelihood_ss_exg(
+    NumericMatrix pars,
+    DataFrame data,
+    const int n_trials,
+    IntegerVector expand,
+    double min_ll,
+    LogicalVector is_ok
+) {
+  // initialise local variables
+  const int n_out = expand.length();
+  if (is_true(all(!is_ok))) {
+    NumericVector lls_expanded(n_out, min_ll);
+    return(sum(lls_expanded));
+  }
+  NumericVector lls(n_trials);
+  NumericVector lls_expanded(n_out);
+  // extract data
+  NumericVector RT = data["rt"];
+  IntegerVector R = data["R"];
+
+    Rf_PrintValue(R);
+
+  NumericVector SSD = data["SSD"];
+  NumericVector lR = data["lR"];
+  LogicalVector winner = data["winner"];
+  if (data.containsElementNamed("lI")) {
+    IntegerVector lI = data["lI"];
+    if (unique(lI).size() > 1) {
+      stop("Column 'lI' contains multiple unique values; not yet supported.");
+    }
+  }
+  // compute log likelihoods
+  lls = ss_exg_lpdf(RT, R, SSD, lR, winner, pars, is_ok, min_ll);
+
+  Environment global = Environment::global_env();
+  global["llscpp"] = lls;
+
+  // decompress
+  lls_expanded = c_expand(lls, expand);
+  // protect against numerical issues
+  lls_expanded = check_ll(lls_expanded, min_ll);
+  // return summed log-likelihood
+
+  Rf_PrintValue(lls_expanded);
+
+  return(sum(lls_expanded));
+}
+
 // [[Rcpp::export]]
 NumericVector calc_ll(NumericMatrix p_matrix, DataFrame data, NumericVector constants,
             List designs, String type, List bounds, List transforms, List pretransforms,
@@ -367,6 +415,24 @@ NumericVector calc_ll(NumericMatrix p_matrix, DataFrame data, NumericVector cons
       } else{
         lls[i] = c_log_likelihood_MRI_white(pars, y, is_ok, n_trials, n_pars, min_ll);
       }
+    }
+  } else if (type == "SS_EXG") {
+    IntegerVector expand = data.attr("expand");
+    NumericVector lR = data["lR"];
+    const int n_lR = unique(lR).length();
+    const int n_trials_ll = n_trials / n_lR;
+    for (int i = 0; i < n_particles; i++) {
+      p_vector = p_matrix(i, _);
+      if (i == 0) {
+        p_specs = make_pretransform_specs(p_vector, pretransforms);
+      }
+      pars = get_pars_matrix(p_vector, constants, transforms, p_specs, p_types, designs, n_trials, data, trend);
+      if (i == 0) {
+        bound_specs = make_bound_specs(minmax, mm_names, pars, bounds);
+      }
+      is_ok = c_do_bound(pars, bound_specs);
+      is_ok = lr_all(is_ok, n_lR);
+      lls[i] = c_log_likelihood_ss_exg(pars, data, n_trials_ll, expand, min_ll, is_ok);
     }
   } else{
     IntegerVector expand = data.attr("expand");
