@@ -10,8 +10,8 @@ make_data(
   n_trials = NULL,
   data = NULL,
   expand = 1,
-  mapped_p = FALSE,
-  hyper = FALSE,
+  staircase = NULL,
+  functions = NULL,
   ...
 )
 }
@@ -29,11 +29,11 @@ or an emc object with sampled parameters
 
 \item{expand}{Integer. Replicates the \code{data} (if supplied) expand times to increase number of trials per cell.}
 
-\item{mapped_p}{If \code{TRUE} instead returns a data frame with one row per design
-cell and columns for each parameter specifying how they are mapped to the design cells.}
+\item{staircase}{Default NULL, used with stop-signal paradigm simulation to specify a staircase
+algorithm. If non-null and a list then passed through as is, if not it is assigned the
+default list structure: list(p=.25,SSD0=.25,stairstep=.05,stairmin=0,stairmax=Inf)}
 
-\item{hyper}{If \code{TRUE} the supplied parameters must be a set of samples, from which the group-level will be used to generate subject level parameters.
-See also \code{make_random_effects} to generate subject-level parameters from a hyper distribution.}
+\item{functions}{List of functions you want to apply to the data generation.}
 
 \item{...}{Additional optional arguments}
 }

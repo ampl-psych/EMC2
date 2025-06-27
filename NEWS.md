@@ -1,3 +1,22 @@
+# EMC2 3.2.0
+
+## New features
+
+* group_design specification (tutorial coming up)
+
+* trends specification (tutorial also coming up)
+
+* broader continuous covariates support with `map = TRUE`
+
+* fMRI joint modelling (tutorial on https://osf.io/preprints/psyarxiv/rhfk3_v1)
+
+* Made changes to how lR was used in compressed likelihood for race models. Run `update2version` to reuse older samples
+
+
+## Bug fixes
+
+* Made legend including or excluding more flexible for `plot_cdf`, `plot_density` and `plot_stat`
+
 # EMC2 3.1.1
 
 ## New features

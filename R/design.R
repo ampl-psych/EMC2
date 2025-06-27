@@ -1,4 +1,3 @@
-
 #' Specify a Design and Model
 #'
 #' This function combines information regarding the data, type of model, and
@@ -113,14 +112,26 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
     return(design)
   }
   if (!is.null(data)) {
+    if(!"subjects" %in% colnames(data)) stop("make sure subjects identifier is present in data")
+    data$subjects <- factor(data$subjects)
     facs <- lapply(data,levels)
     nfacs <- facs[unlist(lapply(facs,is.null))]
     facs <- facs[!unlist(lapply(facs,is.null))]
     Rlevels <- facs[["R"]]
     factors <- facs[names(facs)!="R"]
     nfacs <- nfacs[!(names(nfacs) %in% c("trials","rt"))]
-    if (length(nfacs)>0) covariates <- nfacs
+    all_preds <- unlist(lapply(lapply(formula, `[[`, 3L), all.vars))
+    if (length(nfacs)>0){
+      covariates <- names(nfacs)
+      # covariates <- covariates[covariates %in% all_preds]
+      if(length(covariates) == 0) covariates <- NULL
+    }
+    # factors <- factors[names(factors) %in% c(all_preds, "subjects")]
   }
+  if (!is.null(trend)) {
+    formula <- check_trend(trend,covariates, model, formula)
+  }
+
   # Check if all parameters in the model are specified in the formula
   nams <- unlist(lapply(formula,function(x) as.character(stats::terms(x)[[2]])))
   if (!all(sort(names(model()$p_types)) %in% sort(nams)) & is.null(custom_p_vector)){
@@ -132,13 +143,18 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
     constants <- c(constants, additional_constants[!names(additional_constants) %in% names(constants)])
     for(add_constant in not_specified) formula[[length(formula)+ 1]] <- as.formula(paste0(add_constant, "~ 1"))
   }
-  if(!"subjects" %in% names(factors)) stop("make sure subjects identifier is present in data")
+
 
   design <- list(Flist=formula,Ffactors=factors,Rlevels=Rlevels,
                  Clist=contrasts,matchfun=matchfun,constants=constants,
                  Fcovariates=covariates,Ffunctions=functions,model=model)
   class(design) <- "emc.design"
-  p_vector <- sampled_pars(design,model)
+  if (!is.null(trend)) {
+    model <- update_model_trend(trend, model)
+    model_list <- model()
+    model <- function(){return(model_list)}
+  }
+  p_vector <- sampled_pars(design)
   lhs_terms <- unlist(lapply(formula, function(x) as.character(stats::terms(x)[[2]])))
 
   # Check if any terms are not in model parameters
@@ -155,11 +171,10 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
   design$model <- model
   attr(design,"p_vector") <- p_vector
   if (report_p_vector) {
-    summary(design)
+    summary(design, data = data)
   }
   return(design)
 }
-
 
 #' Contrast Enforcing Equal Prior Variance on each Level
 #'
@@ -266,13 +281,10 @@ contr.anova <- function(n) {
   contr/rep(2*apply(abs(contr),2,max),each=dim(contr)[1])
 }
 
-add_accumulators <- function(data,matchfun=NULL,simulate=FALSE,type="RACE", Fcovariates=NULL) {
+add_accumulators <- function(data,matchfun=NULL,simulate=FALSE, type = "RACE", Fcovariates=NULL) {
+  if(is.null(type) || !type %in% c("RACE", "SDT", "MT", "TC")) return(data)
   if (!is.factor(data$R)) stop("data must have a factor R")
   factors <- names(data)[!names(data) %in% c("R","rt","trials",Fcovariates)]
-if (type=="DDM") {
-    datar <- cbind(data,lR=factor(rep(levels(data$R)[1],dim(data)[1]),
-      levels=levels(data$R)),lM=factor(rep(TRUE,dim(data)[1])))
-  }
   if (type %in% c("RACE","SDT")) {
     nacc <- length(levels(data$R))
     datar <- cbind(do.call(rbind,lapply(1:nacc,function(x){data})),
@@ -280,16 +292,12 @@ if (type=="DDM") {
     datar <- datar[order(rep(1:dim(data)[1],nacc),datar$lR),]
     if (!is.null(matchfun)) {
       lM <- matchfun(datar)
-      if (!is.factor(lM))
-        datar$lM <- factor(lM) else
+      if (!is.factor(lM)){
+        datar$lM <- factor(lM)
+      } else{
         datar$lM <- factor(lM,levels=levels(lM))
+      }
     }
-    # if (!is.null(matchfun)) {
-    #   lM <- matchfun(datar)
-    #   # if (any(is.na(lM)) || !(is.logical(lM)))
-    #   #   stop("matchfun not scoring properly")
-    #   datar$lM <- factor(lM)
-    # }
     # Advantage NAFC
     nam <- unlist(lapply(strsplit(dimnames(datar)[[2]],"lS"),function(x)x[[1]]))
     islS <- nam ==""
@@ -329,23 +337,7 @@ if (type=="DDM") {
 
     if (type %in% c("MT","TC")) datar$winner <- NA else
       datar$winner <- datar$lR==R
-    # datar$winner[is.na(datar$winner)] <- FALSE
   }
-  # # sort cells together
-  # if ("trials" %in% names(data)){
-  #   if(length(factors) > 1){
-  #     datar[order(apply(datar[,c(factors)],1,paste,collapse="_"), as.numeric(datar$trials),as.numeric(datar$lR)),]
-  #   } else{
-  #     datar[order(datar[,c(factors)], as.numeric(datar$trials),as.numeric(datar$lR)),]
-  #   }
-  # }
-  # else{
-  #   if(length(factors) > 1){
-  #     datar[order(apply(datar[,c(factors)],1,paste,collapse="_"), as.numeric(datar$lR)),]
-  #   } else{
-  #     datar[order(datar[,c(factors)], as.numeric(datar$lR)),]
-  #   }
-  # }
   datar
 }
 
@@ -434,20 +426,20 @@ compress_dadm <- function(da,designs,Fcov,Ffun)
     #    levels=unique(cells_nortR)))[as.numeric(factor(cells,levels=unique(cells)))]
 
     # Lower censor
-    if (!any(is.na(out$rt))) { # Not a choice only model
-      winner <- out$lR==levels(out$lR)[[1]]
-      ok <- out$rt[winner]==-Inf
-      if (any(ok)) {
-        ok[ok] <- 1:sum(ok)
-        attr(out,"expand_lc") <- ok[attr(out,"expand_winner")] + 1
-      }
-      # Upper censor
-      ok <- out$rt[winner]==Inf
-      if (any(ok)) {
-        ok[ok] <- 1:sum(ok)
-        attr(out,"expand_uc") <- ok[attr(out,"expand_winner")] + 1
-      }
-    }
+    # if (!any(is.na(out$rt))) { # Not a choice only model
+    #   winner <- out$lR==levels(out$lR)[[1]]
+    #   ok <- out$rt[winner]==-Inf
+    #   if (any(ok)) {
+    #     ok[ok] <- 1:sum(ok)
+    #     attr(out,"expand_lc") <- ok[attr(out,"expand_winner")] + 1
+    #   }
+    #   # Upper censor
+    #   ok <- out$rt[winner]==Inf
+    #   if (any(ok)) {
+    #     ok[ok] <- 1:sum(ok)
+    #     attr(out,"expand_uc") <- ok[attr(out,"expand_winner")] + 1
+    #   }
+    # }
     out
 }
 
@@ -584,11 +576,22 @@ design_model <- function(data,design,model=NULL,
   if (!is.null(rt_resolution) & !is.null(da$rt)) da$rt <- round(da$rt/rt_resolution)*rt_resolution
   if (compress){
     dadm <- compress_dadm(da,designs=out, Fcov=design$Fcovariates,Ffun=names(design$Ffunctions))
+    # Change expansion names
+    # attr(dadm,"expand_all") <- attr(dadm,"expand")
+    if(!is.null(dadm$lR)){
+      attr(dadm,"expand") <- attr(dadm,"expand_winner")
+      attr(dadm,"expand_winner") <- NULL
+    }
   }  else {
     dadm <- da
     attr(dadm,"designs") <- out
     attr(dadm,"s_expand") <- da$subjects
-    attr(dadm,"expand") <- 1:dim(dadm)[1]
+    # attr(dadm,"expand_all") <- 1:nrow(dadm)
+    if(is.null(dadm$lR)){
+      attr(dadm,"expand") <- 1:nrow(dadm)
+    } else{
+      attr(dadm,"expand") <- 1:(nrow(dadm)/length(unique(dadm$lR)))
+    }
   }
   p_names <-  unlist(lapply(out,function(x){dimnames(x)[[2]]}),use.names=FALSE)
   bad_constants <- names(design$constants)[!(names(design$constants) %in% p_names)]
@@ -606,18 +609,65 @@ design_model <- function(data,design,model=NULL,
 
   attr(dadm,"model") <- model
   attr(dadm,"constants") <- design$constants
-
-  if (add_acc) {
-    attr(dadm, "ok_dadm_winner") <- is.finite(dadm$rt) & dadm$winner
-    attr(dadm, "ok_dadm_looser") <- is.finite(dadm$rt) & !dadm$winner
-    attr(dadm, "ok_da_winner") <- attr(dadm, "ok_dadm_winner")[attr(dadm,"expand")]
-    attr(dadm, "ok_da_looser") <- attr(dadm, "ok_dadm_looser")[attr(dadm,"expand")]
-  }
   attr(dadm,"ok_trials") <- is.finite(data$rt)
   attr(dadm,"s_data") <- data$subjects
   dadm
 }
 
+
+make_full_dm <- function(form, Clist, da) {
+  if (is.null(Clist)) Clist <- attr(form, "Clist")
+  pnam <- stats::terms(form)[[2]]
+  da[[pnam]] <- 1
+  # Check if there are any nested CList entries to only contrast for this parameter
+  if(any(names(Clist) == pnam)){
+    replac <- Clist[[pnam]]
+    for(i in 1:length(replac)){
+      Clist[[names(replac)[i]]] <- replac[[i]]
+    }
+    Clist[[pnam]] <- NULL
+  }
+  for (i in names(Clist)) {
+    if (i %in% names(da)) {
+      if (!is.factor(da[[i]])) {
+        stop(i, " must be a factor (design factors has a parameter name?)")
+      }
+
+      levs <- levels(da[[i]])
+      nl <- length(levs)
+
+      if (class(Clist[[i]])[1] == "function") {
+        stats::contrasts(da[[i]]) <- do.call(Clist[[i]], list(n = levs))
+      } else {
+        if (!is.matrix(Clist[[i]]) || nrow(Clist[[i]]) != nl) {
+          if (all(levs %in% row.names(Clist[[i]]))) {
+            Clist[[i]] <- Clist[[i]][levs, ]
+          } else {
+            stop("Clist for ", i, " not a ", nl, " row matrix")
+          }
+        } else {
+          dimnames(Clist[[i]])[[1]] <- levs
+        }
+        stats::contrasts(da[[i]], how.many = ncol(Clist[[i]])) <- Clist[[i]]
+      }
+    }
+  }
+
+  out <- stats::model.matrix(form, da)
+
+  if (dim(out)[2] == 1) {
+    dimnames(out)[[2]] <- as.character(pnam)
+  } else {
+    if (attr(stats::terms(form), "intercept") != 0) {
+      cnams <- paste(pnam, dimnames(out)[[2]][-1], sep = "_")
+      dimnames(out)[[2]] <- c(pnam, cnams)
+    } else {
+      dimnames(out)[[2]] <- paste(pnam, dimnames(out)[[2]], sep = "_")
+    }
+  }
+
+  return(out)
+}
 
 make_dm <- function(form,da,Clist=NULL,Fcovariates=NULL, add_da = FALSE, all_cells_dm = FALSE)
   # Makes a design matrix based on formula form from augmented data frame da
@@ -645,32 +695,8 @@ make_dm <- function(form,da,Clist=NULL,Fcovariates=NULL, add_da = FALSE, all_cel
     attr(out,"contrasts") <- contr
     out
   }
+  out <- make_full_dm(form, Clist, da)
 
-  if (is.null(Clist)) Clist <- attr(form,"Clist")
-  pnam <- stats::terms(form)[[2]]
-  da[[pnam]] <- 1
-  for (i in names(Clist)) if (i %in% names(da)) {
-    if (!is.factor(da[[i]]))
-      stop(i," must be a factor (design factors has a parameter name?)")
-    levs <- levels(da[[i]])
-    nl <- length(levs)
-    if (class(Clist[[i]])[1]=="function")
-      stats::contrasts(da[[i]]) <- do.call(Clist[[i]],list(n=levs)) else {
-        if (!is.matrix(Clist[[i]]) || dim(Clist[[i]])[1]!=nl) {
-          if (all(levs %in% row.names(Clist[[i]]))) # design with missing cells
-            Clist[[i]] <- Clist[[i]][levs,] else
-            stop("Clist for ",i," not a ",nl," row matrix")
-        } else dimnames(Clist[[i]])[[1]] <- levs
-        stats::contrasts(da[[i]],how.many=dim(Clist[[i]])[2]) <- Clist[[i]]
-      }
-  }
-  out <- stats::model.matrix(form,da)
-  if (dim(out)[2]==1) dimnames(out)[[2]] <- as.character(pnam) else {
-    if (attr(stats::terms(form),"intercept")!=0) {
-      cnams <- paste(pnam,dimnames(out)[[2]][-1],sep="_")
-      dimnames(out)[[2]] <- c(pnam,cnams)
-    } else dimnames(out)[[2]] <- paste(pnam,dimnames(out)[[2]],sep="_")
-  }
   if(add_da){
     da <- da[,all.vars(form)[-1], drop = F]
     out <- compress_dm(out, da, all_cells_dm)
@@ -715,16 +741,12 @@ dm_list <- function(dadm)
   unique_nortR <- attr(dadm,"unique_nortR")
   expand_nortR <- attr(dadm,"expand_nortR")
   # ok_trials <- attr(dadm,"ok_trials")
-  # ok_dadm_winner <- attr(dadm,"ok_dadm_winner")
-  # ok_dadm_looser <- attr(dadm,"ok_dadm_looser")
-  # ok_da_winner <- attr(dadm,"ok_da_winner")
-  # ok_da_looser <- attr(dadm,"ok_da_looser")
   # expand_uc <- attr(dadm,"expand_uc")
   # expand_lc <- attr(dadm,"expand_lc")
   dms_mri <- attr(dadm, "design_matrix")
 
   # winner on expanded dadm
-  expand_winner <- attr(dadm,"expand_winner")
+  expand_winner <- attr(dadm,"expand")
   # subjects for first level of lR in expanded dadm
   slR1=dadm$subjects[expand][dadm$lR[expand]==levels(dadm$lR)[[1]]]
 
@@ -737,20 +759,17 @@ dm_list <- function(dadm)
     if(is.null(attr(dadm, "custom_ll"))){
 
       isin1 <- s_expand==i             # da
-      # isin2 <- attr(dadm,"s_data")==i  # data
-
-
+      isin2 <- attr(dadm,"s_data")==i  # data
+      if(length(isin2) > 0){
+        attr(dl[[i]],"expand") <- expand_winner[isin2]-min(expand_winner[isin2]) + 1
+      }
       attr(dl[[i]],"model") <- NULL
       attr(dl[[i]],"p_names") <- p_names
       attr(dl[[i]],"sampled_p_names") <- sampled_p_names
       attr(dl[[i]],"designs") <- sub_design(designs,isin)
-      if(!is.null(expand)) attr(dl[[i]],"expand") <- expand[isin1]-min(expand[isin1]) + 1
+      # if(!is.null(expand)) attr(dl[[i]],"expand_all") <- expand[isin1]-min(expand[isin1]) + 1
       attr(dl[[i]],"contract") <- NULL
       attr(dl[[i]],"expand_winner") <- NULL
-      attr(dl[[i]],"ok_dadm_winner") <- NULL
-      attr(dl[[i]],"ok_dadm_looser") <- NULL
-      attr(dl[[i]],"ok_da_winner") <- NULL
-      attr(dl[[i]],"ok_da_looser") <- NULL
       attr(dl[[i]],"ok_trials") <- NULL
       attr(dl[[i]],"s_data") <- NULL
       attr(dl[[i]],"s_expand") <- NULL
@@ -764,35 +783,6 @@ dm_list <- function(dadm)
       attr(dl[[i]], "unique_nortR") <- NULL
       attr(dl[[i]], "expand_nort") <- NULL
       attr(dl[[i]], "expand_nortR") <- NULL
-      # attr(dl[[i]],"ok_dadm_winner") <- ok_dadm_winner[isin]
-      # attr(dl[[i]],"ok_dadm_looser") <- ok_dadm_looser[isin]
-      #
-      # attr(dl[[i]],"ok_da_winner") <- ok_da_winner[isin1]
-      # attr(dl[[i]],"ok_da_looser") <- ok_da_looser[isin1]
-
-      # attr(dl[[i]],"unique_nort") <- unique_nort[isin]
-      # attr(dl[[i]],"unique_nortR") <- unique_nortR[isin]
-
-      # isinlR1 <- slR1==i
-
-      # if (!is.null(expand_nort)){
-      #   attr(dl[[i]],"expand_nort") <-  expand_nort[isin] - min(expand_nort[isin]) + 1
-      # }
-      # if (!is.null(expand_nortR)){
-      #   attr(dl[[i]],"expand_nortR") <- expand_nortR[isin]-min(expand_nortR[isin]) + 1
-      # }
-
-      # attr(dl[[i]],"ok_trials") <- ok_trials[isin2]
-      # if (!is.null(expand_winner)){
-      #   attr(dl[[i]],"expand_winner") <- expand_winner[isin2]-min(expand_winner[isin2]) + 1
-      # }
-      #
-      # if (!is.null(attr(dadm,"expand_uc"))){
-      #   attr(dl[[i]],"expand_uc") <- as.numeric(factor(expand_uc[isin2]))
-      # }
-      # if (!is.null(attr(dadm,"expand_lc"))){
-      #   attr(dl[[i]],"expand_lc") <- as.numeric(factor(expand_lc[isin2]))
-      # }
 
       if (!is.null(attr(dadm,"LT"))){
         attr(dl[[i]],"LT") <- attr(dadm,"LT")[names(attr(dadm,"LT"))==i]
@@ -825,6 +815,8 @@ dm_list <- function(dadm)
 #'
 #' @export
 update2version <- function(emc){
+  # For older versions, ensure that the class is emc:
+  class(emc) <- "emc"
   get_new_model <- function(old_model, pars){
     if(old_model()$c_name == "LBA"){
       model <- LBA
@@ -838,14 +830,51 @@ update2version <- function(emc){
       stop("current model not supported for updating, sorry!!")
     }
     model_list <- model()
-    model_list$transform <- fill_transform(transform = NULL,model)
-    model_list$pre_transform <- fill_transform(transform = NULL, model = model, p_vector = pars, is_pre = TRUE)
+    model_list$transform <- fill_transform(transform = old_model()$transform,model)
+    model_list$pre_transform <- fill_transform(transform = old_model()$pre_transform, model = model, p_vector = pars, is_pre = TRUE)
     model_list$bound <- fill_bound(bound = NULL,model)
     model <- function(){return(model_list)}
     return(model)
   }
 
+  new_expand <- function(x){
+    if(!is.null(x$winner)){
+      old_exp <- attr(x, "expand")
+      if(length(unique(old_exp) != length(unique(x$winner)))){
+        # In older versions we were working with a different expand version
+        new_x <- x[old_exp,]
+        new_x <- new_x[new_x$winner,]
+
+        reduced <- unique(new_x)       # keeps the first appearance of every row
+
+        ## ——— 2. create the “expand” index ———
+        key_full    <- do.call(paste, c(new_x,      sep = "\r"))   # one string per row
+        key_reduced <- do.call(paste, c(reduced, sep = "\r"))   # the same for reduced
+        attr(x, "expand") <- match(key_full, key_reduced)
+      }
+    }
+    return(x)
+  }
+  update_expand <- function(emc){
+    first_data <- emc[[1]]$data[[1]]
+    if(is.data.frame(first_data)){
+      emc[[1]]$data <- lapply(emc[[1]]$data, new_expand)
+    } else{
+      emc[[1]]$data <- lapply(emc[[1]]$data, function(y){
+        y <- lapply(y, new_expand)})
+    }
+    return(emc)
+  }
+
+  emc <- update_expand(emc)
   design_list <- get_design(emc)
+  design_list <- lapply(design_list, function(x){
+    if(!is.null(x$Fcovariates)){
+      x$Fcovariates <- names(x$Fcovariates)
+    }
+    return(x)
+  })
+
   if(is.null(emc[[1]]$type)){
     type <- attr(emc[[1]], "variant_funs")$type
     emc <- lapply(emc, FUN = function(x){
@@ -870,9 +899,25 @@ update2version <- function(emc){
         x$model <- y
         return(list(x))
       }, design_list, new_model)
+      emc[[1]]$model <- new_model
     }
-    emc[[1]]$model <- new_model
+
+  } else{
+    if(is.data.frame(first_data)){
+      emc[[1]]$model <- get_new_model(emc[[1]]$model, sampled_pars(design_list[[1]]))
+      design_list[[1]]$model <- emc[[1]]$model
+    } else{
+      old_model <- emc[[1]]$model
+      new_model <- mapply(get_new_model, old_model, lapply(design_list, sampled_pars))
+      design_list <- mapply(function(x, y){
+        x$model <- y
+        return(list(x))
+      }, design_list, new_model)
+      emc[[1]]$model <- new_model
+    }
   }
+
+
   prior_new <- emc[[1]]$prior
   attr(prior_new, "type") <- type
   prior_new <- prior(design_list, type, update = prior_new)
@@ -953,15 +998,17 @@ mapped_pars.emc.design <- function(x, p_vector = NULL, model=NULL,
   if (is.null(model)) if (is.null(design$model))
     stop("Must specify model as not in design") else model <- design$model
   if (remove_subjects) design$Ffactors$subjects <- design$Ffactors$subjects[1]
-  if (!is.matrix(p_vector)) p_vector <- make_pmat(p_vector,design)
-  dadm <- design_model(make_data(p_vector,design,n_trials=1,Fcovariates=Fcovariates),
+  if(is.null(names(p_vector))) names(p_vector) <- names(sampled_pars(design))
+  dadm <- design_model(minimal_design(design, covariates = Fcovariates, verbose = F, drop_R = F, add_acc = F, drop_subjects = F,
+                                      do_functions = F),
                        design,model,rt_check=FALSE,compress=FALSE, verbose = FALSE)
   ok <- !(names(dadm) %in% c("subjects","trials","R","rt","winner"))
-  out <- cbind(dadm[,ok],round(get_pars_matrix(p_vector,dadm, design$model()),digits))
+  out <- cbind(dadm[,ok, drop = F],round(get_pars_matrix(p_vector,dadm, design$model()),digits))
   if (model()$type=="SDT")  out <- out[dadm$lR!=levels(dadm$lR)[length(levels(dadm$lR))],]
   if (model()$type=="DDM")  out <- out[,!(names(out) %in% c("lR","lM"))]
   if (any(names(out)=="RACE") && remove_RACE)
     out <- out[as.numeric(out$lR) <= as.numeric(as.character(out$RACE)),,drop=FALSE]
+
   return(out)
 }
 
@@ -973,12 +1020,13 @@ mapped_pars.emc.design <- function(x, p_vector = NULL, model=NULL,
 #' model parameters of the design.
 #'
 #' @param x an `emc.design` object made with `design()` or an `emc` object.
-#' @param model a model list. Defaults to the model specified in the design list.
+#' @param group_design an `emc.group_design` object made with `group_design()`
 #' @param doMap logical. If `TRUE` will also include an attribute `map`
 #' with the design matrices that perform the mapping back to the design
 #' @param add_da Boolean. Whether to include the relevant data columns in the map attribute
 #' @param all_cells_dm Boolean. Whether to include all levels of a factor in the mapping attribute,
 #' even when one is dropped in the design
+#' @param data A data frame to be included for accurate covariate mapping in summary.design
 #'
 #'
 #' @return Named vector.
@@ -991,14 +1039,14 @@ mapped_pars.emc.design <- function(x, p_vector = NULL, model=NULL,
 #' sampled_pars(design_DDMaE)
 #'
 #' @export
-sampled_pars <- function(x,model=NULL,doMap=TRUE, add_da = FALSE, all_cells_dm = FALSE)
+sampled_pars <- function(x,group_design=NULL,doMap=FALSE, add_da = FALSE, all_cells_dm = FALSE, data = NULL)
 {
   UseMethod("sampled_pars")
 }
 
 #' @rdname sampled_pars
 #' @export
-sampled_pars.emc.design <- function(x,model=NULL,doMap=TRUE, add_da = FALSE, all_cells_dm = FALSE){
+sampled_pars.emc.design <- function(x,group_design=NULL,doMap=FALSE, add_da = FALSE, all_cells_dm = FALSE, data = NULL){
   design <- x
   if(is.null(design)) return(NULL)
   if("Flist" %in% names(design)){
@@ -1006,53 +1054,47 @@ sampled_pars.emc.design <- function(x,model=NULL,doMap=TRUE, add_da = FALSE, all
   }
   out <- c()
   map_list <- list()
+  if(is.null(names(design))){
+    names(design) <- as.character(1:length(design))
+  }
   for(j in 1:length(design)){
+    cur_name <- names(design)[j]
     cur_design <- design[[j]]
     if(!is.null(attr(cur_design, "custom_ll"))){
       pars <- numeric(length(attr(cur_design,"sampled_p_names")))
       if(length(design) != 1){
-        map_list[[j]] <- NA
-        names(pars) <- paste(j,  attr(cur_design,"sampled_p_names"), sep = "|")
+        map_list[[cur_name]] <- NA
+        names(pars) <- paste(cur_name,  attr(cur_design,"sampled_p_names"), sep = "|")
       } else{
         names(pars) <- attr(cur_design,"sampled_p_names")
       }
       out <- c(out, pars)
       next
     }
-    if (is.null(model)) model <- cur_design$model
+    model <- cur_design$model
+    if (is.null(model)) stop("Must supply model as not in design")
+
     if(grepl("MRI", model()$type)){
       pars <- model()$p_types
       if(length(design) != 1){
-        pars <- paste(j,  names(pars), sep = "|")
-        map_list[[j]] <- NA
+        names(pars) <- paste(cur_name,  names(pars), sep = "|")
+        map_list[[cur_name]] <- NA
       }
+      pars[1:length(pars)] <- 0
       out <- c(out, pars)
       next
     }
-    if (is.null(model)) stop("Must supply model as not in design")
-
-    Ffactors=c(cur_design$Ffactors,list(R=cur_design$Rlevels))
-    data <- as.data.frame.table(array(dim=unlist(lapply(Ffactors,length)),
-                                      dimnames=Ffactors))[,-(length(Ffactors)+1)]
-    for (i in names(cur_design$Ffactors))
-      data[[i]] <- factor(data[[i]],levels=cur_design$Ffactors[[i]])
-
-    # if (!is.null(design$Ffunctions))
-    #   data <- cbind.data.frame(data,data.frame(lapply(design$Ffunctions,function(f){f(data)})))
-
-    if (!is.null(cur_design$Fcovariates)) {
-      covs <- matrix(1,nrow=dim(data)[1],ncol=length(cur_design$Fcovariates),
-                     dimnames=list(NULL,names(cur_design$Fcovariates)))
-      data <- cbind.data.frame(data,covs)
-    }
+    cur_design$Ffactors$subjects <- 1
+    min_design <- minimal_design(cur_design, drop_subjects = F, drop_R = F, verbose = F, emc = data,
+                                 do_functions = F, add_acc = T)
     dadm <- design_model(
-      add_accumulators(data,matchfun=cur_design$matchfun,type=model()$type,Fcovariates=cur_design$Fcovariates),
+      min_design,
       cur_design,model,add_acc=FALSE,verbose=FALSE,rt_check=FALSE,compress=FALSE, add_da = add_da,
       all_cells_dm = all_cells_dm)
     sampled_p_names <- attr(dadm,"sampled_p_names")
     if(length(design) != 1){
-      map_list[[j]] <- lapply(attributes(dadm)$designs,function(x){x[,,drop=FALSE]})
-      sampled_p_names <- paste(j, sampled_p_names, sep = "|")
+      map_list[[cur_name]] <- lapply(attributes(dadm)$designs,function(x){x[,,drop=FALSE]})
+      sampled_p_names <- paste(cur_name, sampled_p_names, sep = "|")
     }
     out <- c(out, stats::setNames(numeric(length(sampled_p_names)),sampled_p_names))
     if(length(design) == 1){
@@ -1060,7 +1102,31 @@ sampled_pars.emc.design <- function(x,model=NULL,doMap=TRUE, add_da = FALSE, all
     }
   }
   if(length(design) != 1) attr(out, "map") <- map_list
+  if(!add_da & any(duplicated(names(out)))) stop("duplicate parameter names found! Usually this happens when joint designs share indicator names")
+  if(!is.null(group_design)){
+    map <- attr(out, "map")
+    par_names <- names(out)
+    par_names <- add_group_par_names(par_names, group_design)
+    out <- setNames(numeric(length(par_names)), par_names)
+    attr(out, "map") <- map
+  }
   return(out)
+}
+
+unique_rows_by_index <- function(df, columns) {
+  # Keep only valid columns that are in the dataframe
+  valid_columns <- intersect(columns, names(df))
+
+  if (length(valid_columns) == 0) {
+    # No valid columns to check uniqueness — return first row
+    return(df[1, , drop = FALSE])
+  }
+
+  # Compute uniqueness based on valid columns
+  unique_idx <- !duplicated(df[, valid_columns, drop = FALSE])
+
+  # Return full rows from original dataframe
+  df[unique_idx, , drop = FALSE]
 }
 
 #' Summary method for emc.design objects
@@ -1073,12 +1139,14 @@ sampled_pars.emc.design <- function(x,model=NULL,doMap=TRUE, add_da = FALSE, all
 #' @return Invisibly returns the design matrices
 #' @export
 summary.emc.design <- function(object, ...){
-  p_vector <- sampled_pars(object)
+  p_vector <- sampled_pars(object, doMap = TRUE)
   cat("\n Sampled Parameters: \n")
   print(names(p_vector))
   cat("\n Design Matrices: \n")
-  map_out <- sampled_pars(object,object$model, add_da = TRUE)
-  print(attr(map_out, "map"), row.names = FALSE)
+  map_out <- sampled_pars(object,add_da = TRUE, doMap = TRUE, data = list(...)$data)
+  print_map <-
+  print(lapply(attr(map_out, "map"), unique_rows_by_index,
+               c(names(object$Ffactors), names(object$Ffunctions), 'lM', 'lR')), row.names = FALSE)
   return(invisible(map_out))
 }
 
@@ -1158,7 +1226,7 @@ plot.emc.design <- function(x, p_vector, data = NULL, factors = NULL, plot_facto
 
 
 #' @exportS3Method
-sampled_pars.default <- function(x,model=NULL,doMap=TRUE, add_da = FALSE, all_cells_dm = FALSE){
+sampled_pars.default <- function(x,group_design=NULL,doMap=FALSE, add_da = FALSE, all_cells_dm = FALSE, data = NULL){
   if(is.null(x)) return(NULL)
   if(!is.null(attr(x, "custom_ll"))){
     pars <- numeric(length(attr(x,"sampled_p_names")))
@@ -1169,6 +1237,6 @@ sampled_pars.default <- function(x,model=NULL,doMap=TRUE, add_da = FALSE, all_ce
     x <- list(x)
     class(x) <- "emc.design"
   }
-  out <- sampled_pars.emc.design(x, model = model, doMap = doMap, add_da = add_da, all_cells_dm = all_cells_dm)
+  out <- sampled_pars.emc.design(x, group_design = group_design, doMap = doMap, add_da = add_da, all_cells_dm = all_cells_dm, data = data)
   return(out)
 }

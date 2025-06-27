@@ -224,30 +224,59 @@ SEXP resample_regressor(SEXP hr_regressor, NumericVector hr_frame_times, Numeric
 NumericVector compute_gamma_diff_hrf(double tr, int oversampling, double time_length, double onset,
                                      double delay, double undershoot, double dispersion,
                                      double u_dispersion, double ratio) {
-  double dt = tr / oversampling;
-  int n_points = std::max(1, (int) std::round(time_length / dt));
-  NumericVector time_stamps = seq_lin(0, time_length, n_points);
-  for (int i = 0; i < time_stamps.size(); i++) {
-    time_stamps[i] = time_stamps[i] - onset;
+  // 1) Determine time step dt and number of points
+  double dt = tr / static_cast<double>(oversampling);
+  int n_points = static_cast<int>(std::round(time_length / dt));
+  if (n_points < 2) {
+    n_points = 2;
   }
-  int n = time_stamps.size();
-  NumericVector peak_gamma(n), undershoot_gamma(n), hrf(n);
-  for (int i = 0; i < n; i++) {
-    double t_val = (time_stamps[i] - dt) / dispersion;
-    peak_gamma[i] = R::dgamma(t_val, delay / dispersion, 1.0, 0);
-    double t_val2 = (time_stamps[i] - dt) / u_dispersion;
-    undershoot_gamma[i] = R::dgamma(t_val2, undershoot / u_dispersion, 1.0, 0);
-    hrf[i] = peak_gamma[i] - ratio * undershoot_gamma[i];
+
+  // 2) Generate time_stamps from 0 .. (n_points-1)*dt
+  Rcpp::NumericVector time_stamps(n_points);
+  for (int i = 0; i < n_points; i++){
+    time_stamps[i] = i * dt;
   }
-  // Normalize HRF by its maximum value.
-  double max_val = hrf[0];
-  for (int i = 1; i < n; i++) {
-    if (hrf[i] > max_val)
-      max_val = hrf[i];
+
+  // 3) Subtract onset (same as Nilearn)
+  for (int i = 0; i < n_points; i++){
+    time_stamps[i] -= onset;
   }
-  for (int i = 0; i < n; i++) {
-    hrf[i] /= max_val;
+
+  // 4) Nilearn’s gamma.pdf(...) calls actually do:
+  //    shape = (delay / dispersion), loc = (dt / dispersion), scale = 1
+  //    shape = (undershoot / u_dispersion), loc = (dt / u_dispersion), scale = 1
+  //    We must manually shift t by loc and use scale=1 in R's dgamma().
+  Rcpp::NumericVector hrf(n_points, 0.0);
+
+  for (int i = 0; i < n_points; i++){
+    double tval = time_stamps[i];
+
+    // Peak gamma
+    double peak_val = 0.0;
+    if (tval >= dt / dispersion) {
+      // shape = (delay / dispersion), scale=1, argument=(tval - loc_peak)
+      peak_val = R::dgamma((tval - dt)/ dispersion, delay / dispersion, /*scale=*/1.0, false);
+    }
+
+    // Undershoot gamma
+    double under_val = 0.0;
+    if (tval >= dt / u_dispersion) {
+      // shape = (undershoot / u_dispersion), scale=1, argument=(tval - loc_under)
+      under_val = R::dgamma((tval -  dt)/ u_dispersion, undershoot / u_dispersion, /*scale=*/1.0, false);
+    }
+
+    hrf[i] = peak_val - ratio * under_val;
   }
+
+  // 5) Normalize so the sum of the HRF = 1
+  // double sum_hrf = std::accumulate(hrf.begin(), hrf.end(), 0.0);
+  double max_hrf = max(hrf);
+  if (max_hrf != 0.0) {
+    for (int i = 0; i < n_points; i++){
+      hrf[i] /= max_hrf;
+    }
+  }
+
   return hrf;
 }
 
@@ -256,7 +285,7 @@ NumericVector compute_gamma_diff_hrf(double tr, int oversampling, double time_le
 // Simply calls compute_gamma_diff_hrf with all parameters.
 // ----------------------------------------------
 // [[Rcpp::export]]
-NumericVector compute_glover_hrf(double tr, int oversampling, double time_length, double onset,
+NumericVector compute_hrf(double tr, int oversampling, double time_length, double onset,
                                  double delay, double undershoot, double dispersion,
                                  double u_dispersion, double ratio) {
   return compute_gamma_diff_hrf(tr, oversampling, time_length, onset,
@@ -268,13 +297,13 @@ NumericVector compute_glover_hrf(double tr, int oversampling, double time_length
 // Now accepts additional HRF parameters and delta.
 // ----------------------------------------------
 // [[Rcpp::export]]
-NumericVector compute_glover_time_derivative(double tr, int oversampling, double time_length,
+NumericVector compute_time_derivative(double tr, int oversampling, double time_length,
                                              double onset, double delay, double undershoot,
                                              double dispersion, double u_dispersion, double ratio,
                                              double delta = 0.1) {
-  NumericVector hrf1 = compute_glover_hrf(tr, oversampling, time_length, onset,
+  NumericVector hrf1 = compute_hrf(tr, oversampling, time_length, onset,
                                           delay, undershoot, dispersion, u_dispersion, ratio);
-  NumericVector hrf2 = compute_glover_hrf(tr, oversampling, time_length, onset + delta,
+  NumericVector hrf2 = compute_hrf(tr, oversampling, time_length, onset + delta,
                                           delay, undershoot, dispersion, u_dispersion, ratio);
   int n = hrf1.size();
   NumericVector deriv(n);
@@ -299,24 +328,22 @@ NumericVector reverse_vector(const NumericVector &v) {
 // Now requires HRF parameters as arguments.
 // ----------------------------------------------
 // [[Rcpp::export]]
-NumericMatrix build_hrf_kernel(std::string hrf_model, double tr, int oversampling,
+NumericMatrix build_hrf_kernel(bool has_derivative, double tr, int oversampling,
                                double time_length, double onset, double delay,
                                double undershoot, double dispersion, double u_dispersion,
                                double ratio) {
-  std::string model = hrf_model;
-  std::transform(model.begin(), model.end(), model.begin(), ::tolower);
-  if (model == "glover" || model == "glover_hrf") {
-    NumericVector hrf = compute_glover_hrf(tr, oversampling, time_length, onset,
+  if (!has_derivative) {
+    NumericVector hrf = compute_hrf(tr, oversampling, time_length, onset,
                                            delay, undershoot, dispersion, u_dispersion, ratio);
     NumericMatrix kernel(hrf.size(), 1);
     for (int i = 0; i < hrf.size(); i++) {
       kernel(i, 0) = hrf[i];
     }
     return kernel;
-  } else if (model == "glover+derivative" || model == "glover + derivative") {
-    NumericVector hrf = compute_glover_hrf(tr, oversampling, time_length, onset,
+  } else {
+    NumericVector hrf = compute_hrf(tr, oversampling, time_length, onset,
                                            delay, undershoot, dispersion, u_dispersion, ratio);
-    NumericVector deriv = compute_glover_time_derivative(tr, oversampling, time_length, onset,
+    NumericVector deriv = compute_time_derivative(tr, oversampling, time_length, onset,
                                                          delay, undershoot, dispersion, u_dispersion, ratio);
     int n = hrf.size();
     NumericMatrix kernel(n, 2);
@@ -325,8 +352,6 @@ NumericMatrix build_hrf_kernel(std::string hrf_model, double tr, int oversamplin
       kernel(i, 1) = deriv[i];
     }
     return kernel;
-  } else {
-    stop("Unsupported HRF model. Use 'glover' or 'glover + derivative'.");
   }
   return NumericMatrix(0);
 }
@@ -335,8 +360,7 @@ NumericMatrix build_hrf_kernel(std::string hrf_model, double tr, int oversamplin
 // Updated: compute_convolved_regressor
 // Now accepts HRF parameters and passes them to build_hrf_kernel.
 // ----------------------------------------------
-// [[Rcpp::export]]
-List compute_convolved_regressor(NumericMatrix exp_condition, std::string hrf_model,
+List compute_convolved_regressor(NumericMatrix exp_condition, bool has_derivative,
                                  NumericVector frame_times, std::string con_id,
                                  int oversampling, double min_onset,
                                  double time_length, double onset, double delay,
@@ -353,7 +377,7 @@ List compute_convolved_regressor(NumericMatrix exp_condition, std::string hrf_mo
   NumericVector hr_frame_times = cond_sample["hr_frame_times"];
 
   // Build HRF kernel using updated parameters.
-  NumericMatrix hkernel = build_hrf_kernel(hrf_model, tr, oversampling, time_length, onset,
+  NumericMatrix hkernel = build_hrf_kernel(has_derivative, tr, oversampling, time_length, onset,
                                            delay, undershoot, dispersion, u_dispersion, ratio);
   int n_basis = hkernel.ncol();
   int n_hr = hr_regressor.size();
@@ -393,14 +417,10 @@ List compute_convolved_regressor(NumericMatrix exp_condition, std::string hrf_mo
 
   // Set regressor names following the original behavior.
   CharacterVector reg_names;
-  std::string model = hrf_model;
-  std::transform(model.begin(), model.end(), model.begin(), ::tolower);
-  if (model == "glover" || model == "spm") {
+  if (!has_derivative) {
     reg_names = CharacterVector::create(con_id);
-  } else if (model == "glover+derivative" || model == "glover + derivative") {
-    reg_names = CharacterVector::create(con_id, con_id + std::string("_derivative"));
   } else {
-    reg_names = CharacterVector::create(con_id);
+    reg_names = CharacterVector::create(con_id, con_id + std::string("_derivative"));
   }
 
   return List::create(Named("computed_regressors") = computed_regressors,
@@ -413,7 +433,7 @@ List compute_convolved_regressor(NumericMatrix exp_condition, std::string hrf_mo
 // ----------------------------------------------
 // [[Rcpp::export]]
 DataFrame construct_design_matrix(NumericVector frame_times, DataFrame events,
-                                  std::string hrf_model, double min_onset, int oversampling,
+                                  bool has_derivative, double min_onset, int oversampling,
                                   double time_length, double onset, double delay,
                                   double undershoot, double dispersion, double u_dispersion,
                                   double ratio, bool add_intercept) {
@@ -456,7 +476,7 @@ DataFrame construct_design_matrix(NumericVector frame_times, DataFrame events,
       exp_condition(j, 2) = modulation[idx];
     }
     // Compute convolved regressor for this condition.
-    List out = compute_convolved_regressor(exp_condition, hrf_model, frame_times, cond, oversampling, min_onset,
+    List out = compute_convolved_regressor(exp_condition, has_derivative, frame_times, cond, oversampling, min_onset,
                                            time_length, onset, delay, undershoot, dispersion, u_dispersion, ratio);
     NumericMatrix reg = out["computed_regressors"];
     CharacterVector names = out["regressor_names"];
@@ -509,3 +529,191 @@ DataFrame construct_design_matrix(NumericVector frame_times, DataFrame events,
 
   return df;
 }
+
+
+
+//
+// // [[Rcpp::export]]
+// NumericVector build_glover_hrf_kernel_numeric(double tr, int oversampling, double time_length, double onset,
+//                                               double delay, double undershoot, double dispersion,
+//                                               double u_dispersion, double ratio) {
+//   // Compute the canonical Glover HRF using the provided hyperparameters.
+//   NumericVector hrf = compute_hrf(tr, oversampling, time_length, onset,
+//                                          delay, undershoot, dispersion, u_dispersion, ratio);
+//   // For the Glover model, hrf is a single vector.
+//   // Reverse the HRF kernel so that it can be used for convolution.
+//   NumericVector hrf_rev = reverse_vector(hrf);
+//   return hrf_rev;
+// }
+//
+//
+// // This function groups the events by condition and, for each condition,
+// // computes the exp_condition matrix (onset, duration, modulation) and precomputes
+// // the FFT of the zero‑padded high-resolution event regressor. It stores only the
+// // TR, condition name, exp_condition, and regressor_fft in the cache.
+//
+// // [[Rcpp::export]]
+// List build_event_cache_cpp(DataFrame events, NumericVector run_times,
+//                            int oversampling = 50,
+//                            double min_onset = -24.0,
+//                            double time_length = 32.0,
+//                            double onset = 0.0,
+//                            double nominal_delay = 6.0,
+//                            double undershoot = 12.0,
+//                            double dispersion = 0.9,
+//                            double u_dispersion = 0.9,
+//                            double ratio = 0.35) {
+//   // Compute TR from run_times.
+//   double tr = run_times[1] - run_times[0];
+//   int n_events = events.nrows();
+//
+//   // Get unique condition names from the "regressor" column.
+//   CharacterVector regressor_col = events["regressor"];
+//   std::set<std::string> cond_set;
+//   for (int i = 0; i < n_events; i++) {
+//     cond_set.insert(as<std::string>(regressor_col[i]));
+//   }
+//   std::vector<std::string> conditions(cond_set.begin(), cond_set.end());
+//
+//   List cache_list(conditions.size());
+//
+//   for (size_t j = 0; j < conditions.size(); j++) {
+//     std::string cond = conditions[j];
+//     // Subset events for this condition.
+//     std::vector<int> idx;
+//     for (int i = 0; i < n_events; i++) {
+//       if(as<std::string>(regressor_col[i]) == cond)
+//         idx.push_back(i);
+//     }
+//     int n_cond = idx.size();
+//
+//     // Build exp_condition matrix with columns: onset, duration, modulation.
+//     NumericVector onset_vec = events["onset"];
+//     NumericVector duration_vec = events["duration"];
+//     NumericVector modulation;
+//     if (events.containsElementNamed("modulation"))
+//       modulation = events["modulation"];
+//     else
+//       modulation = NumericVector(n_events, 1.0);
+//
+//     NumericMatrix exp_condition(n_cond, 3);
+//     for (int i = 0; i < n_cond; i++) {
+//       int row = idx[i];
+//       exp_condition(i, 0) = onset_vec[row];
+//       exp_condition(i, 1) = duration_vec[row];
+//       exp_condition(i, 2) = modulation[row];
+//     }
+//
+//     // Compute high-resolution regressor and grid using sample_event_condition.
+//     List sample_out = sample_event_condition(exp_condition, run_times, oversampling, min_onset);
+//     NumericVector hr_regressor = sample_out["regressor"];
+//     // M = length of hr_regressor.
+//     int M = hr_regressor.size();
+//
+//     // Determine padded length for FFT using a nominal HRF kernel.
+//     NumericVector hkernel_rev = build_glover_hrf_kernel_numeric(tr, oversampling, time_length, onset,
+//                                                                 nominal_delay, undershoot, dispersion,
+//                                                                 u_dispersion, ratio);
+//     int kernel_length = hkernel_rev.size();
+//     int padded_length = next_power_of_two(M + kernel_length - 1);
+//
+//     // Zero-pad hr_regressor using Armadillo's join_vert.
+//     arma::vec hr_regressor_vec = as<arma::vec>(hr_regressor);
+//     arma::vec zeros_pad = arma::zeros<arma::vec>(padded_length - M);
+//     arma::vec padded_regressor = join_vert(hr_regressor_vec, zeros_pad);
+//     arma::cx_vec regressor_fft = arma::fft(padded_regressor);
+//
+//     // Store TR, condition name, exp_condition, and regressor_fft.
+//     List cond_cache = List::create(
+//       Named("tr") = tr,
+//       Named("cond_name") = cond,
+//       Named("exp_condition") = exp_condition,
+//       Named("regressor_fft") = regressor_fft
+//     );
+//
+//     cache_list[j] = cond_cache;
+//   }
+//
+//   return cache_list;
+// }
+//
+
+// // [[Rcpp::export]]
+// double log_likelihood_double_gamma(NumericVector y,
+//                                    NumericVector parameters,
+//                                    List event_cache) {
+//   // hyperparameters
+//   int oversampling = 50;
+//   double time_length = 32.0;
+//   double onset = 0.0;
+//   double undershoot = 12.0;
+//   double dispersion = 0.9;
+//   double u_dispersion = 0.9;
+//   double ratio = 0.35;
+//   double min_onset = -24.0;
+//
+//   // TR stored in first condition
+//   List firstCache = event_cache[0];
+//   double tr = as<double>(firstCache["tr"]);
+//
+//   // Compute scanner frame_times (starting at 0).
+//   int n_scanner = y.size();
+//   NumericVector scanner_frame_times = seq_lin(0, tr * (n_scanner - 1), n_scanner);
+//
+//   // Number of conditions.
+//   int num_conditions = event_cache.size();
+//
+//   // Betas first, then any additional parameters (sigma, delay, undershoot?, rho?)
+//   int total_params = parameters.size();
+//   double free_delay = parameters[total_params - 2];
+//   double sigma = parameters[total_params - 1];
+//   NumericVector beta = parameters[Range(0, total_params - 3)];
+//   // Compute the current HRF kernel using free_delay.
+//   NumericVector hkernel_rev = build_glover_hrf_kernel_numeric(tr, oversampling, time_length, onset,
+//                                                               free_delay, undershoot, dispersion, u_dispersion, ratio);
+//
+//   // Retrieve padded length from the first condition's cached FFT.
+//   arma::cx_vec first_fft = as<arma::cx_vec>(firstCache["regressor_fft"]);
+//   int padded_length = first_fft.n_elem;
+//   int kernel_length = as<arma::vec>(hkernel_rev).n_elem;
+//
+//   // Zero-pad HRF kernel using join_vert.
+//   arma::vec padded_kernel = join_vert(as<arma::vec>(hkernel_rev), arma::zeros(padded_length - kernel_length));
+//   arma::cx_vec kernel_fft = arma::fft(padded_kernel);
+//
+//   // Initialize prediction vector.
+//   NumericVector pred(n_scanner);
+//
+//   // Loop over conditions.
+//   for (int cond = 0; cond < num_conditions; cond++) {
+//     List cond_cache = event_cache[cond];
+//     // Retrieve the cached FFT.
+//     arma::cx_vec cached_fft = as<arma::cx_vec>(cond_cache["regressor_fft"]);
+//
+//     // Recompute hr_regressor and hr_frame_times using the cached exp_condition.
+//     NumericMatrix exp_condition = as<NumericMatrix>(cond_cache["exp_condition"]);
+//     List sample_out = sample_event_condition(exp_condition, scanner_frame_times, oversampling, min_onset);
+//     NumericVector hr_regressor = sample_out["regressor"];
+//     NumericVector hr_frame_times = sample_out["hr_frame_times"];
+//     int M = hr_regressor.size();
+//
+//     // Convolution: use cached FFT
+//     arma::cx_vec conv_fft = cached_fft % kernel_fft;
+//     arma::cx_vec conv_ifft = arma::ifft(conv_fft);
+//     arma::vec conv_full = arma::real(conv_ifft.head(M));
+//
+//     // Downsample using resample_vector.
+//     NumericVector ds_numeric = resample_vector(hr_frame_times, wrap(conv_full), scanner_frame_times);
+//
+//     // Prediction; sum of X_i * B_i
+//     pred += beta[cond] * ds_numeric;
+//   }
+//
+//   // LL
+//   double logLik = 0.0;
+//   for (int i = 0; i < n_scanner; i++) {
+//     logLik += R::dnorm(y[i], pred[i], sigma, true);
+//   }
+//
+//   return logLik;
+// }

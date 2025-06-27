@@ -96,23 +96,6 @@ filtered_samples_single <- function(sampler, filter){
 #   return(list(mu_tilde = mu_tilde, var_tilde = var_tilde, info = info))
 # }
 #
-# group_dist_single <- function(random_effect = NULL, parameters, sample = FALSE, n_samples = NULL, info){
-#   # This is for the single case actually the prior distribution.
-#   if (sample){
-#     return(rmvnorm(n_samples, info$prior$theta_mu_mean, info$prior$theta_mu_var))
-#   }else{
-#     logw_second<-max(-5000*info$n_randeffect, dmvnorm(random_effect, info$prior$theta_mu_mean,info$prior$theta_mu_var,log=TRUE))
-#     return(logw_second)
-#   }
-# }
-#
-# prior_dist_single <- function(parameters, info){
-#   # This is quite confusing, but now the actual prior dist is the group dist.
-#   # Just here for compatability with the other types.
-#   return(0)
-# }
-#
-
 # bridge sampling ---------------------------------------------------------
 
 bridge_add_group_single <- function(all_samples, samples, idx){

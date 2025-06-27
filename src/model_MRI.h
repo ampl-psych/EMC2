@@ -3,12 +3,14 @@
 
 #include <Rcpp.h>
 using namespace Rcpp;
+//
+// #include "mri.h"
 
 double c_log_likelihood_MRI(NumericMatrix pars, NumericVector y, LogicalVector is_ok,
                             int n, int m,
                             double min_ll = std::log(1e-10)) {
   NumericVector y_hat(n);
-  double sum_yhat = 0.0;
+  // double sum_yhat = 0.0;
 
   // Compute row sums of betas and accumulate for overall mean
   for (int i = 0; i < n; i++) {
@@ -17,15 +19,15 @@ double c_log_likelihood_MRI(NumericMatrix pars, NumericVector y, LogicalVector i
       s += pars(i, j);
     }
     y_hat[i] = s;
-    sum_yhat += s;
+    // sum_yhat += s;
   }
 
-  double mean_y_hat = sum_yhat / n;
-
-  // Center y_hat
-  for (int i = 0; i < n; i++) {
-    y_hat[i] -= mean_y_hat;
-  }
+  // double mean_y_hat = sum_yhat / n;
+  //
+  // // Center y_hat
+  // for (int i = 0; i < n; i++) {
+  //   y_hat[i] -= mean_y_hat;
+  // }
 
   NumericVector ll(n);
 
@@ -49,7 +51,7 @@ double c_log_likelihood_MRI_white(NumericMatrix pars, NumericVector y, LogicalVe
                                         int n, int m,
                                         double min_ll = std::log(1e-10)) {
   NumericVector y_hat(n);
-  double sum_yhat = 0.0;
+  // double sum_yhat = 0.0;
   // Compute row sums of the betas (assumed to be in the first m-2 columns)
   for (int i = 0; i < n; i++) {
     double s = 0.0;
@@ -57,15 +59,15 @@ double c_log_likelihood_MRI_white(NumericMatrix pars, NumericVector y, LogicalVe
       s += pars(i, j);
     }
     y_hat[i] = s;
-    sum_yhat += s;
+    // sum_yhat += s;
   }
 
-  double mean_y_hat = sum_yhat / n;
-
-  // Center y_hat (i.e. omit the intercept by demeaning)
-  for (int i = 0; i < n; i++) {
-    y_hat[i] -= mean_y_hat;
-  }
+  // double mean_y_hat = sum_yhat / n;
+  //
+  // // Center y_hat (i.e. omit the intercept by demeaning)
+  // for (int i = 0; i < n; i++) {
+  //   y_hat[i] -= mean_y_hat;
+  // }
 
   NumericVector ll(n);
 
@@ -117,7 +119,7 @@ NumericVector extract_y(DataFrame data) {
   // If no column is found, return an empty vector.
   return NumericVector(0);
 }
-//
+
 // // [[Rcpp::export]]
 // double log_likelihood_double_gamma(NumericVector y,
 //                                    NumericVector parameters,
@@ -139,6 +141,9 @@ NumericVector extract_y(DataFrame data) {
 //
 //   // Parameter vector format: [ beta_1, beta_2, ..., beta_m, free_delay, sigma ]
 //   int total_params = parameters.size();
+//   double free_delay = parameters[total_params - 2];
+//   double sigma = parameters[total_params - 1];
+//   NumericVector beta = parameters[Range(0, total_params - 3)];
 //   if(total_params < 2)
 //     stop("Parameter vector must contain beta weights, free delay, and sigma.");
 //
@@ -219,7 +224,6 @@ NumericVector extract_y(DataFrame data) {
 //
 //   return logLik;
 // }
-//
 
 #endif
 
