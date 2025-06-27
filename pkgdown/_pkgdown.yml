@@ -23,6 +23,7 @@ reference:
   - plot.emc.design
   - summary.emc.design
   - get_design
+  - group_design
 - title: Prior Specification
 - contents:
   - prior
@@ -90,10 +91,30 @@ reference:
 - contents:
   - matches("sbc")
 
+- title: fMRI modelling
+- contents:
+  - MRI
+  - MRI_AR1
+  - convolve_design_matrix
+  - design_fmri
+  - high_pass_filter
+  - plot_design_fmri
+  - plot_fmri
+  - reshape_events
+  - split_timeseries
+- title: trend modelling
+- contents:
+  - make_trend
+  - trend_help
+  - get_trend_pnames
+- title: Latent variable modelling
+- contents:
+  - align_loadings
+  - cut_factors
+  - factor_diagram
 - title: miscellaneous
 - contents:
   - update2version
-
 - title: Included data
 - contents:
   - forstmann

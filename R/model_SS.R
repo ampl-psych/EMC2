@@ -1,16 +1,4 @@
 #### Staircase ----
-#' Assign Stop-Signal Delays (SSDs) to trials
-#'
-#' @description
-#' This function assigns stop-signal delays (SSDs) to trials based on specified probabilities.
-#'
-#' @param d A data frame containing trial data with a response factor column 'lR'
-#' @param SSD A vector of stop-signal delays to be assigned to trials
-#' @param pSSD A vector of probabilities for each SSD value. If length is one less than SSD,
-#'             the remaining probability is calculated automatically. Default is 0.25.
-#'
-#' @return A vector of SSDs with the same length as the number of rows in 'd'.
-#'         Trials without a stop signal are assigned Inf.
 SSD_function <- function(d,SSD=NA,pSSD=.25) {
   if (sum(pSSD)>1) stop("pSSD sum cannot exceed 1.")
   if (length(pSSD)==length(SSD)-1) pSSD <- c(pSSD,1-sum(pSSD))

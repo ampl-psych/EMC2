@@ -39,13 +39,6 @@ add_info_standard <- function(sampler, prior = NULL, ...){
   return(sampler)
 }
 
-
-# Function to calculate mean design matrices
-#' @title Calculate mean design matrices
-#' @description Calculates the mean design matrix for each parameter across subjects
-#' @param group_designs List of design matrices for each parameter
-#' @param n_pars Number of parameters
-#' @return List of mean design matrices
 calculate_mean_design <- function(group_designs, n_pars) {
   # Initialize the mean design matrix for each parameter
   mean_designs <- list()
@@ -63,13 +56,6 @@ calculate_mean_design <- function(group_designs, n_pars) {
   return(mean_designs)
 }
 
-# Function to calculate implied means using mean design matrix
-#' @title Calculate implied means
-#' @description Calculates the implied means for parameters using mean design matrices
-#' @param mean_designs List of mean design matrices
-#' @param beta_params Vector of beta parameters (all parameters including regressors)
-#' @param n_pars Number of parameters
-#' @return Vector of implied means
 calculate_implied_means <- function(mean_designs, beta_params, n_pars) {
   mu_implied <- numeric(n_pars)
 
