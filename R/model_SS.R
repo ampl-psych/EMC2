@@ -522,36 +522,6 @@ pstopEXG <- function(parstop,n_acc,upper=Inf,
 # }
 
 
-
-#### SSexG Model list ----
-
-#' Stop-signal ex-Gaussian race
-#'
-#' Model file to estimate the ex-Gaussian race model for Stop-Signal data
-#'
-#' Model files are almost exclusively used in `design()`.
-#'
-#' @details
-#'
-#' Default values are used for all parameters that are not explicitly listed in the `formula`
-#' argument of `design()`.They can also be accessed with `SSexG()$p_types`.
-#'
-#' @details
-#' | **Parameter** | **Transform** | **Natural scale** | **Default**   | **Mapping**                    | **Interpretation**                                            |
-#' |-----------|-----------|---------------|-----------|----------------------------|-----------------------------------------------------------|
-#' | *mu*       | log         | \[0, Inf\]     | log(.4)         |                            | mu parameter of ex-Gaussian go finishing time distribution              |
-#' | *sigma*       | log       | \[0, Inf\]        | log(.05)    |                            | sigma parameter of ex-Gaussian go finishing time distribution                                        |
-#' | *tau*      | log       | \[0, Inf\]        | log(.1)    |                            | tau parameter of ex-Gaussian go finishing time distribution                                          |
-#' | *muS*       | log       | \[0, Inf\]        | log(.3)    |                            | mu parameter of ex-Gaussian stopping finishing time distribution           |
-#' | *sigmaS*       | log    | \[0, Inf\]        | log(.025)|                   | sigma parameter of ex-Gaussian stopping finishing time distribution                              |
-#' | *tauS*      | log    | \[0, Inf\]        | log(.05)  |  | tau parameter of ex-Gaussian stopping finishing time distribution       |
-#' | *tf*      | probit       | \[0, 1\]        | qnorm(0)    |                            | Trigger failure probability           |
-#' | *gf*     | probit       | \[0, 1\]        | qnorm(0)    |                            | Go failure probability    |
-#'
-#'
-#'
-#' @return A model list with all the necessary functions to sample
-#' @export
 SSexG <- function() {
   list(
     type="RACE",
@@ -785,19 +755,6 @@ pstopHybrid <- function(parstop,n_acc,upper=Inf,
 
 #### RDEX model list ----
 
-#' Stop-signal Hybrid (RDM go, ExGaussian stop) race
-#'
-#' Model file to estimate the Hybrid race model for Stop-Signal data
-#'
-#' Model files are almost exclusively used in `design()`.
-#'
-#' @details
-#'
-#' Default values are used for all parameters that are not explicitly listed in the `formula`
-#' argument of `design()`.They can also be accessed with `SShybrid()$p_types`.
-#'
-#' @return A model list with all the necessary functions to sample
-#' @export
 SShybrid <- function() {
   list(
     type="RACE",
