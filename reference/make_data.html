@@ -73,8 +73,8 @@ simulated data</p></li>
 <span>  n_trials <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  data <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  expand <span class="op">=</span> <span class="fl">1</span>,</span>
-<span>  mapped_p <span class="op">=</span> <span class="cn">FALSE</span>,</span>
-<span>  hyper <span class="op">=</span> <span class="cn">FALSE</span>,</span>
+<span>  staircase <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  functions <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  <span class="va">...</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
@@ -106,14 +106,14 @@ or an emc object with sampled parameters
 <dd><p>Integer. Replicates the <code>data</code> (if supplied) expand times to increase number of trials per cell.</p></dd>
 
 
-<dt id="arg-mapped-p">mapped_p<a class="anchor" aria-label="anchor" href="#arg-mapped-p"></a></dt>
-<dd><p>If <code>TRUE</code> instead returns a data frame with one row per design
-cell and columns for each parameter specifying how they are mapped to the design cells.</p></dd>
+<dt id="arg-staircase">staircase<a class="anchor" aria-label="anchor" href="#arg-staircase"></a></dt>
+<dd><p>Default NULL, used with stop-signal paradigm simulation to specify a staircase
+algorithm. If non-null and a list then passed through as is, if not it is assigned the
+default list structure: list(p=.25,SSD0=.25,stairstep=.05,stairmin=0,stairmax=Inf)</p></dd>
 
 
-<dt id="arg-hyper">hyper<a class="anchor" aria-label="anchor" href="#arg-hyper"></a></dt>
-<dd><p>If <code>TRUE</code> the supplied parameters must be a set of samples, from which the group-level will be used to generate subject level parameters.
-See also <code>make_random_effects</code> to generate subject-level parameters from a hyper distribution.</p></dd>
+<dt id="arg-functions">functions<a class="anchor" aria-label="anchor" href="#arg-functions"></a></dt>
+<dd><p>List of functions you want to apply to the data generation.</p></dd>
 
 
 <dt id="arg--">...<a class="anchor" aria-label="anchor" href="#arg--"></a></dt>
@@ -247,7 +247,7 @@ See also <code>make_random_effects</code> to generate subject-level parameters f
 </div>
 
 <div class="pkgdown-footer-right">
-  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.1.1.</p>
+  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.1.3.</p>
 </div>
 
     </footer></div>

@@ -61,6 +61,7 @@ and model specification into a <code>emc</code> object that is needed in <code><
 <span>  compress <span class="op">=</span> <span class="cn">TRUE</span>,</span>
 <span>  rt_resolution <span class="op">=</span> <span class="fl">0.02</span>,</span>
 <span>  prior_list <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  group_design <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  par_groups <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  <span class="va">...</span></span>
 <span><span class="op">)</span></span></code></pre></div>
@@ -102,8 +103,13 @@ and model specification into a <code>emc</code> object that is needed in <code><
 <dd><p>A named list containing the prior. Default prior created if <code>NULL</code>. For the default priors, see <code>?get_prior_{type}</code>.</p></dd>
 
 
+<dt id="arg-group-design">group_design<a class="anchor" aria-label="anchor" href="#arg-group-design"></a></dt>
+<dd><p>A design for group-level mappings, made using <code><a href="group_design.html">group_design()</a></code>.</p></dd>
+
+
 <dt id="arg-par-groups">par_groups<a class="anchor" aria-label="anchor" href="#arg-par-groups"></a></dt>
-<dd><p>A vector. Only to be specified with type <code>blocked</code>, e.g., <code>c(1,1,1,2,2)</code> means the covariances
+<dd><p>A vector. Indicates which parameters are allowed to correlate. Could either be a list of character vectors of covariance blocks. Or
+a numeric vector, e.g., <code>c(1,1,1,2,2)</code> means the covariances
 of the first three and of the last two parameters are estimated as two separate blocks.</p></dd>
 
 
@@ -189,7 +195,7 @@ of the first three and of the last two parameters are estimated as two separate 
 </div>
 
 <div class="pkgdown-footer-right">
-  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.1.1.</p>
+  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.1.3.</p>
 </div>
 
     </footer></div>

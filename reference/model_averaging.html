@@ -103,21 +103,21 @@ and applies averaging to each IC metric</p>
 <span class="r-in"><span><span class="va">ICs</span> <span class="op">&lt;-</span> <span class="fu"><a href="compare.html">compare</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>S1 <span class="op">=</span> <span class="va">samples_LNR</span>, S2 <span class="op">=</span> <span class="va">samples_LNR2</span>,</span></span>
 <span class="r-in"><span>                    S3 <span class="op">=</span> <span class="va">samples_LNR3</span>, S4 <span class="op">=</span> <span class="va">samples_LNR4</span><span class="op">)</span>, BayesFactor <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>     DIC  wDIC BPIC wBPIC EffectiveN meanD Dmean minD</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> S1 -615 0.210 -579 0.197         35  -650  -657 -686</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> S2 -615 0.223 -580 0.223         35  -650  -657 -686</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> S3 -615 0.282 -580 0.295         35  -651  -657 -686</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> S4 -615 0.285 -580 0.285         35  -651  -657 -686</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> S1 -610 0.255 -571 0.265         39  -648  -656 -687</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> S2 -609 0.216 -571 0.206         39  -648  -655 -687</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> S3 -609 0.204 -570 0.184         39  -648  -656 -687</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> S4 -610 0.325 -572 0.345         39  -649  -656 -687</span>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="co"># Model averaging can either be done with a vector of ICs:</span></span></span>
 <span class="r-in"><span><span class="fu">model_averaging</span><span class="op">(</span><span class="va">ICs</span><span class="op">$</span><span class="va">BPIC</span><span class="op">[</span><span class="fl">1</span><span class="op">:</span><span class="fl">2</span><span class="op">]</span>, <span class="va">ICs</span><span class="op">$</span><span class="va">BPIC</span><span class="op">[</span><span class="fl">2</span><span class="op">:</span><span class="fl">4</span><span class="op">]</span><span class="op">)</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>        wFor  wAgainst    Factor</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 1 0.3431633 0.6568367 0.5224484</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 1 0.3906135 0.6093865 0.6409947</span>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="co"># Or the output of compare:</span></span></span>
 <span class="r-in"><span><span class="fu">model_averaging</span><span class="op">(</span><span class="va">ICs</span><span class="op">[</span><span class="fl">1</span><span class="op">:</span><span class="fl">2</span>,<span class="op">]</span>, <span class="va">ICs</span><span class="op">[</span><span class="fl">3</span><span class="op">:</span><span class="fl">4</span>,<span class="op">]</span><span class="op">)</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>           wFor  wAgainst    Factor</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> BPIC 0.4197186 0.5802814 0.7233018</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> DIC  0.4324931 0.5675069 0.7620930</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> BPIC 0.4710716 0.5289284 0.8906151</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> DIC  0.4713225 0.5286775 0.8915123</span>
 <span class="r-in"><span></span></span>
 </code></pre></div>
     </div>
@@ -130,7 +130,7 @@ and applies averaging to each IC metric</p>
 </div>
 
 <div class="pkgdown-footer-right">
-  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.1.1.</p>
+  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.1.3.</p>
 </div>
 
     </footer></div>
