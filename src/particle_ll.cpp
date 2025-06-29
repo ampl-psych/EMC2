@@ -334,9 +334,6 @@ double c_log_likelihood_ss_exg(
   // extract data
   NumericVector RT = data["rt"];
   IntegerVector R = data["R"];
-
-    Rf_PrintValue(R);
-
   NumericVector SSD = data["SSD"];
   NumericVector lR = data["lR"];
   LogicalVector winner = data["winner"];
@@ -348,18 +345,11 @@ double c_log_likelihood_ss_exg(
   }
   // compute log likelihoods
   lls = ss_exg_lpdf(RT, R, SSD, lR, winner, pars, is_ok, min_ll);
-
-  Environment global = Environment::global_env();
-  global["llscpp"] = lls;
-
   // decompress
   lls_expanded = c_expand(lls, expand);
   // protect against numerical issues
   lls_expanded = check_ll(lls_expanded, min_ll);
   // return summed log-likelihood
-
-  Rf_PrintValue(lls_expanded);
-
   return(sum(lls_expanded));
 }
 
@@ -376,23 +366,17 @@ NumericVector calc_ll(NumericMatrix p_matrix, DataFrame data, NumericVector cons
   NumericMatrix pars(n_trials, p_types.length());
   LogicalVector is_ok(n_trials);
 
-  Environment global = Environment::global_env();
-  global["p_matrix"] = p_matrix;
-
-  CharacterVector message1 = "In calc_ll";
-  Rf_PrintValue(message1);
-
   // Once (outside the main loop over particles):
   NumericMatrix minmax = bounds["minmax"];
   CharacterVector mm_names = colnames(minmax);
   std::vector<PreTransformSpec> p_specs;
   std::vector<BoundSpec> bound_specs;
 
-  if(type == "DDM"){
+  if (type == "DDM") {
     IntegerVector expand = data.attr("expand");
-    for(int i = 0; i < n_particles; i++){
+    for (int i = 0; i < n_particles; i++) {
       p_vector = p_matrix(i, _);
-      if(i == 0){
+      if (i == 0) {
         p_specs = make_pretransform_specs(p_vector, pretransforms);
       }
       pars = get_pars_matrix(p_vector, constants, transforms, p_specs, p_types, designs, n_trials, data, trend);
@@ -403,31 +387,26 @@ NumericVector calc_ll(NumericMatrix p_matrix, DataFrame data, NumericVector cons
       is_ok = c_do_bound(pars, bound_specs);
       lls[i] = c_log_likelihood_DDM(pars, data, n_trials, expand, min_ll, is_ok);
     }
-  } else if(type == "MRI" || type == "MRI_AR1"){
+  } else if (type == "MRI" || type == "MRI_AR1") {
     int n_pars = p_types.length();
     NumericVector y = extract_y(data);
-    for(int i = 0; i < n_particles; i++){
+    for (int i = 0; i < n_particles; i++) {
       p_vector = p_matrix(i, _);
-      if(i == 0){
+      if (i == 0) {
         p_specs = make_pretransform_specs(p_vector, pretransforms);
       }
       pars = get_pars_matrix(p_vector, constants, transforms, p_specs, p_types, designs, n_trials, data, trend);
-      // Precompute specs
-      if (i == 0) {                            // first particle only, just to get colnames
+      if (i == 0) {
         bound_specs = make_bound_specs(minmax,mm_names,pars,bounds);
       }
       is_ok = c_do_bound(pars, bound_specs);
-      if(type == "MRI"){
+      if (type == "MRI") {
         lls[i] = c_log_likelihood_MRI(pars, y, is_ok, n_trials, n_pars, min_ll);
-      } else{
+      } else {
         lls[i] = c_log_likelihood_MRI_white(pars, y, is_ok, n_trials, n_pars, min_ll);
       }
     }
   } else if (type == "SS_EXG") {
-
-    CharacterVector message2 = "In SS_EXG";
-    Rf_PrintValue(message2);
-
     IntegerVector expand = data.attr("expand");
     NumericVector lR = data["lR"];
     const int n_lR = unique(lR).length();
@@ -443,25 +422,21 @@ NumericVector calc_ll(NumericMatrix p_matrix, DataFrame data, NumericVector cons
       }
       is_ok = c_do_bound(pars, bound_specs);
       is_ok = lr_all(is_ok, n_lR);
-
-      CharacterVector message3 = "Entering c_log_likelihood_ss_exg";
-      Rf_PrintValue(message3);
-
       lls[i] = c_log_likelihood_ss_exg(pars, data, n_trials_ll, expand, min_ll, is_ok);
     }
-  } else{
+  } else {
     IntegerVector expand = data.attr("expand");
     LogicalVector winner = data["winner"];
     // Love me some good old ugly but fast c++ pointers
     NumericVector (*dfun)(NumericVector, NumericMatrix, LogicalVector, double, LogicalVector);
     NumericVector (*pfun)(NumericVector, NumericMatrix, LogicalVector, double, LogicalVector);
-    if(type == "LBA"){
+    if (type == "LBA") {
       dfun = dlba_c;
       pfun = plba_c;
-    } else if(type == "RDM"){
+    } else if (type == "RDM") {
       dfun = drdm_c;
       pfun = prdm_c;
-    } else{
+    } else {
       dfun = dlnr_c;
       pfun = plnr_c;
     }
@@ -469,11 +444,11 @@ NumericVector calc_ll(NumericMatrix p_matrix, DataFrame data, NumericVector cons
     int n_lR = unique(lR).length();
     for (int i = 0; i < n_particles; ++i) {
       p_vector = p_matrix(i, _);
-      if(i == 0){
+      if (i == 0) {
         p_specs = make_pretransform_specs(p_vector, pretransforms);
       }
       pars = get_pars_matrix(p_vector, constants, transforms, p_specs, p_types, designs, n_trials, data, trend);
-      if (i == 0) {                            // first particle only, just to get colnames
+      if (i == 0) {
         bound_specs = make_bound_specs(minmax,mm_names,pars,bounds);
       }
       is_ok = c_do_bound(pars, bound_specs);
