@@ -349,6 +349,11 @@ double c_log_likelihood_ss_exg(
   lls_expanded = c_expand(lls, expand);
   // protect against numerical issues
   lls_expanded = check_ll(lls_expanded, min_ll);
+
+  Environment global = Environment::global_env();
+  global["llscpp"] = lls;
+
+
   // return summed log-likelihood
   return(sum(lls_expanded));
 }
