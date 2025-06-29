@@ -670,6 +670,7 @@ SSexG_old <- function() {
 SSexG <- function() {
   list(
     type="RACE",
+    c_name = "SS_EXG",
     p_types=c(mu=log(.4),sigma=log(.05),tau=log(.1),
               muS=log(.3),sigmaS=log(.025),tauS=log(.05),tf=qnorm(0),gf=qnorm(0)),
     transform=list(func=c( mu = "exp",  sigma = "exp",  tau = "exp",
