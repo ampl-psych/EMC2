@@ -457,6 +457,25 @@ rSSexGaussian <- function(data,pars,ok=rep(TRUE,dim(pars)[1]))
 
 #### ExG stop probability (no stop triggered) ----
 
+my.integrate_old <- function(...,upper=Inf,big=10)
+  # Avoids bug in integrate upper=Inf that uses only 1  subdivision
+  # Use of  big=10 is arbitrary ...
+{
+  out <- try(integrate(...,upper=upper),silent=TRUE)
+  if (inherits(out, "try-error")) 0 else
+  {
+    if (upper==Inf & out$subdivisions==1)
+    {
+      out <- try(integrate(...,upper=big),silent=TRUE)
+      if (inherits(out, "try-error")) 0 else
+      {
+        if (out$subdivisions==1) 0 else out$value
+      }
+    } else out$value
+  }
+}
+
+
 pstopEXG_old <- function(parstop,n_acc,upper=Inf,
                      gpars=c("mu","sigma","tau"),spars=c("muS","sigmaS","tauS"))
 {
@@ -475,7 +494,7 @@ pstopEXG_old <- function(parstop,n_acc,upper=Inf,
   #   cells[i] <- paste(SSDs[i],ps[i,],pgo[,i,],upper[i],collapse="")
   uniq <- !duplicated(cells)
   ups <- sapply(1:sum(uniq),function(i){
-    my.integrate(f=stopfn_exg_old,lower=-Inf,SSD=SSDs[i],upper=upper[i],
+    my.integrate_old(f=stopfn_exg_old,lower=-Inf,SSD=SSDs[i],upper=upper[i],
                            mu=c(ps[i,"muS"],pgo[,i,"mu"]),
                            sigma=c(ps[i,"sigmaS"],pgo[,i,"sigma"]),
                            tau=c(ps[i,"tauS"],pgo[,i,"tau"]))
@@ -870,7 +889,7 @@ pstopHybrid <- function(parstop,n_acc,upper=Inf,
   ,1,paste,collapse="")
   uniq <- !duplicated(cells)
   ups <- sapply(1:sum(uniq),function(i){
-    my.integrate(f=stopfn_rdex,lower=0,upper=upper[i],
+    my.integrate_old(f=stopfn_rdex,lower=0,upper=upper[i],
       mu=ps[i,"muS"],sigma=ps[i,"sigmaS"],tau=ps[i,"tauS"],
       v=pgo[,i,"v"],B=pgo[,i,"B"],A=pgo[,i,"A"],t0=pgo[,i,"t0"],
       SSD=SSDs[i],n_acc=n_acc)
@@ -936,25 +955,6 @@ SShybrid <- function() {
 }
 
 
-####  Stop-signal ----
-
-my.integrate <- function(...,upper=Inf,big=10)
-  # Avoids bug in integrate upper=Inf that uses only 1  subdivision
-  # Use of  big=10 is arbitrary ...
-{
-  out <- try(integrate(...,upper=upper),silent=TRUE)
-  if (inherits(out, "try-error")) 0 else
-  {
-    if (upper==Inf & out$subdivisions==1)
-    {
-      out <- try(integrate(...,upper=big),silent=TRUE)
-      if (inherits(out, "try-error")) 0 else
-      {
-        if (out$subdivisions==1) 0 else out$value
-      }
-    } else out$value
-  }
-}
 
 
 

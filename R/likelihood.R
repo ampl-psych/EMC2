@@ -131,6 +131,136 @@ log_likelihood_joint <- function(proposals, dadms, model_list, component = NULL)
   return(total_ll)
 }
 
+####  Stop-signal ----
+
+# log(1 - x)
+log1m <- function(x) {
+  ifelse(is.na(x), NA_real_,
+         ifelse(x >= 1, -Inf,
+                ifelse(x == -Inf, 0,
+                       log1p(-x))))
+}
+
+# log(1 - exp(x))
+log1m_exp <- function(x) {
+  ifelse(is.na(x), NA_real_,
+         ifelse(x > 0, NA_real_,  # 1 - exp(x) < 0 for x > 0
+                ifelse(x == 0, -Inf,  # log(1 - 1) = log(0) = -Inf
+                       ifelse(x == -Inf, 0,  # log(1 - 0) = log(1) = 0
+                              ifelse(x > -log(2),  # x > -log(2)
+                                     log(-expm1(x)),
+                                     log1m(exp(x)))))))
+}
+
+# log(exp(a) + exp(b))
+log_sum_exp <- function(a, b = NULL) {
+  if (is.null(b)) {
+    # Vector version: log(sum(exp(x)))
+    x <- a
+    if (length(x) == 0) return(-Inf)
+    if (length(x) == 1) return(x[1])
+
+    max_val <- max(x, na.rm = TRUE)
+    if (is.infinite(max_val) && max_val < 0) return(-Inf)
+
+    # Subtract max for numerical stability
+    exp_terms <- exp(x - max_val)
+    exp_terms[is.infinite(x) & x < 0] <- 0  # Handle -Inf cases
+
+    return(max_val + log(sum(exp_terms, na.rm = TRUE)))
+  } else {
+    # Two-argument version: log(exp(a) + exp(b))
+    ifelse(a == -Inf, b,
+           ifelse(b == -Inf, a,
+                  ifelse(a > b,
+                         a + log1p(exp(b - a)),
+                         b + log1p(exp(a - b)))))
+  }
+}
+
+# log(exp(a) - exp(b))
+log_diff_exp <- function(a, b) {
+  # Handle edge cases
+  result <- ifelse(is.na(a) | is.na(b), NA_real_,
+                   ifelse(is.infinite(a) & a > 0, NA_real_,  # +Inf case
+                          ifelse(a < b, NA_real_,  # log of negative
+                                 ifelse(a == b, -Inf,  # log(0)
+                                        ifelse(b == -Inf, a, NA_real_)))))  # Will be overwritten
+
+  # For valid cases where a > b and b != -Inf
+  valid <- !is.na(result) & a > b & is.finite(b)
+
+  if (any(valid)) {
+    diff <- b[valid] - a[valid]
+
+    # For numerical stability
+    stable_case <- diff > -log(2)  # exp(b)/exp(a) > 0.5
+
+    result[valid] <- ifelse(stable_case,
+                            a[valid] + log1m(exp(diff)),
+                            a[valid] + log(-expm1(diff)))
+  }
+
+  # Handle b == -Inf case
+  result[b == -Inf & !is.na(a)] <- a[b == -Inf & !is.na(a)]
+
+  return(result)
+}
+
+# log mixture density: log(theta * exp(lambda1) + (1-theta) * exp(lambda2))
+log_mix <- function(theta, lambda1, lambda2) {
+  # Input validation and edge cases
+  result <- ifelse(is.na(theta) | is.na(lambda1) | is.na(lambda2), NA_real_,
+                   ifelse(theta < 0 | theta > 1, NA_real_,
+                          ifelse(theta == 0, lambda2,
+                                 ifelse(theta == 1, lambda1, NA_real_))))  # Will be overwritten
+
+  # Handle cases where both lambdas are -Inf
+  both_neginf <- lambda1 == -Inf & lambda2 == -Inf
+  result[both_neginf & !is.na(result)] <- -Inf
+
+  # Handle cases where one lambda is -Inf
+  lambda1_neginf <- lambda1 == -Inf & lambda2 != -Inf & !both_neginf
+  lambda2_neginf <- lambda2 == -Inf & lambda1 != -Inf & !both_neginf
+
+  result[lambda1_neginf & !is.na(result)] <- log1m(theta[lambda1_neginf]) + lambda2[lambda1_neginf]
+  result[lambda2_neginf & !is.na(result)] <- log(theta[lambda2_neginf]) + lambda1[lambda2_neginf]
+
+  # General case: neither lambda is -Inf and theta is in (0,1)
+  general_case <- !is.na(result) & theta > 0 & theta < 1 &
+    is.finite(lambda1) & is.finite(lambda2)
+
+  if (any(general_case)) {
+    result[general_case] <- log_sum_exp(
+      log(theta[general_case]) + lambda1[general_case],
+      log1m(theta[general_case]) + lambda2[general_case]
+    )
+  }
+
+  return(result)
+}
+
+# wrapper function for numerical integration of race likelihood function
+# retries with arbitrary large but finite upper limit, if initially failed with Inf upper
+my.integrate <- function(..., upper = Inf, big = 10) {
+  out <- try(
+    integrate(..., upper = upper, rel.tol = 1e-6, abs.tol = 1e-8),
+    silent = TRUE
+  )
+  if (inherits(out, "try-error")) {
+    return(0)
+  }
+  if (upper == Inf && out$subdivisions == 1) {
+    out <- try(
+      integrate(..., upper = big, rel.tol = 1e-6, abs.tol = 1e-8),
+      silent = TRUE
+    )
+    if (inherits(out, "try-error") || out$subdivisions == 1) {
+      return(0)
+    }
+  }
+  return(out$value)
+}
 
 log_likelihood_race_ss <- function(pars, dadm, model, min_ll = log(1e-10)) {
   # All bad?
@@ -433,6 +563,7 @@ log_likelihood_race_ss <- function(pars, dadm, model, min_ll = log(1e-10)) {
   # return(sum(allLL))
   return(allLL)
 }
+
 
 log_likelihood_race_ss_old <- function(pars,dadm,model,min_ll=log(1e-10))
 {
