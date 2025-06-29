@@ -376,6 +376,12 @@ NumericVector calc_ll(NumericMatrix p_matrix, DataFrame data, NumericVector cons
   NumericMatrix pars(n_trials, p_types.length());
   LogicalVector is_ok(n_trials);
 
+  Environment global = Environment::global_env();
+  global["p_matrix"] = p_matrix;
+
+  CharacterVector message1 = "In calc_ll";
+  Rf_PrintValue(message1);
+
   // Once (outside the main loop over particles):
   NumericMatrix minmax = bounds["minmax"];
   CharacterVector mm_names = colnames(minmax);
@@ -418,6 +424,10 @@ NumericVector calc_ll(NumericMatrix p_matrix, DataFrame data, NumericVector cons
       }
     }
   } else if (type == "SS_EXG") {
+
+    CharacterVector message2 = "In SS_EXG";
+    Rf_PrintValue(message2);
+
     IntegerVector expand = data.attr("expand");
     NumericVector lR = data["lR"];
     const int n_lR = unique(lR).length();
@@ -433,6 +443,10 @@ NumericVector calc_ll(NumericMatrix p_matrix, DataFrame data, NumericVector cons
       }
       is_ok = c_do_bound(pars, bound_specs);
       is_ok = lr_all(is_ok, n_lR);
+
+      CharacterVector message3 = "Entering c_log_likelihood_ss_exg";
+      Rf_PrintValue(message3);
+
       lls[i] = c_log_likelihood_ss_exg(pars, data, n_trials_ll, expand, min_ll, is_ok);
     }
   } else{
