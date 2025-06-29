@@ -289,8 +289,8 @@ log_likelihood_race_ss <- function(pars, dadm, model, min_ll = log(1e-10)) {
         loglike[tGO] <- model$dfunG(
           rt = dadm$rt[ispGOwin],
           pars = pars[ispGOwin, , drop = FALSE],
-          log.d = TRUE,
-          min_ll = min_ll
+          log.d = TRUE
+          # ,min_ll = min_ll
         )
         if (n_accG > 1) {
           # Loser survivor gp accumulators
@@ -316,8 +316,8 @@ log_likelihood_race_ss <- function(pars, dadm, model, min_ll = log(1e-10)) {
           rt = dadm$rt[ispGOwin],
           pars = pars[ispGOwin, , drop = FALSE],
           lower.tail = FALSE,
-          log.p = TRUE,
-          min_ll = min_ll
+          log.p = TRUE
+          # ,min_ll = min_ll
         )
         # ST loosers
         if (n_accST == 0) {
