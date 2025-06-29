@@ -481,5 +481,5 @@ NumericVector calc_ll(NumericMatrix p_matrix, DataFrame data, NumericVector cons
       lls[i] = c_log_likelihood_race(pars, data, dfun, pfun, n_trials, winner, expand, min_ll, is_ok);
     }
   }
-  return(sum(lls_exp));
+  return(lls);
 }
