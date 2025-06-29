@@ -545,9 +545,11 @@ log_likelihood_race_ss <- function(pars, dadm, model, min_ll = log(1e-10)) {
   # de-compress
   allLL <- allLL[attr(dadm, "expand")]
 
+  llR <<- allLL
+
   # return summed log likelihood
-  # return(sum(allLL))
-  return(allLL)
+  return(sum(allLL))
+
 }
 
 
@@ -735,6 +737,8 @@ log_likelihood_race_ss_old <- function(pars,dadm,model,min_ll=log(1e-10))
 
     allLL[is.na(allLL)|is.nan(allLL)] <- min_ll
     allLL <- pmax(min_ll,allLL)
+
+    llR_old <<- allLL
 
     sum(allLL[attr(dadm,"expand")])
 }
