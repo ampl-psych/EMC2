@@ -262,6 +262,7 @@ my.integrate <- function(..., upper = Inf, big = 10) {
   return(out$value)
 }
 
+
 log_likelihood_race_ss <- function(pars, dadm, model, min_ll = log(1e-10)) {
   # All bad?
   if (is.null(attr(pars, "ok"))) {
@@ -372,25 +373,22 @@ log_likelihood_race_ss <- function(pars, dadm, model, min_ll = log(1e-10)) {
       ispGOwin <- !ispStop & dadm$winner # Winner go accumulator rows
       tGO <- ptrials[ispGOwin]  # Go trials
       # Winner density
-      loglike[tGO] <- model$dfunG(
+      loglike[tGO] <- log(model$dfunG(
         rt = dadm$rt[ispGOwin],
-        pars = pars[ispGOwin, , drop = FALSE],
-        log.d = TRUE
-        # ,min_ll = min_ll
-      )
+        pars = pars[ispGOwin, , drop = FALSE]
+        #,log.d = TRUE,min_ll = min_ll
+      ))
       if (n_accG > 1) {
         # Looser survivor go accumulator(s)
         ispGOloss <- !ispStop & !dadm$winner & ispGOacc # Looser go accumulator rows
         # add (summed) log survivor probability to winner log density
         loglike[tGO] <- loglike[tGO] + apply(
           X = matrix(
-            data = model$pfunG(
+            data = log(1-model$pfunG(
               rt = dadm$rt[ispGOloss],
-              pars = pars[ispGOloss, , drop = FALSE],
-              lower.tail = FALSE,
-              log.p = TRUE
-              # ,min_ll = min_ll
-            ),
+              pars = pars[ispGOloss, , drop = FALSE]
+              # lower.tail = FALSE,log.p = TRUE,min_ll = min_ll
+            )),
             nrow = n_accG - 1
           ),
           MARGIN = 2,
@@ -416,25 +414,22 @@ log_likelihood_race_ss <- function(pars, dadm, model, min_ll = log(1e-10)) {
       if (any(ispSGO)) {
         ispGOwin <- ispSGO & dadm$winner # Winner go accumulator rows
         tGO <- ptrials[ispGOwin]          # Go trials
-        loglike[tGO] <- model$dfunG(
+        loglike[tGO] <- log(model$dfunG(
           rt = dadm$rt[ispGOwin],
-          pars = pars[ispGOwin, , drop = FALSE],
-          log.d = TRUE
-          # ,min_ll = min_ll
-        )
+          pars = pars[ispGOwin, , drop = FALSE]
+          #,log.d = TRUE,min_ll = min_ll
+        ))
         if (n_accG > 1) {
           # Loser survivor gp accumulators
           ispGOloss <- ispSGO & !dadm$winner & ispGOacc
           # add (summed) log survivor probability to winner log density
           loglike[tGO] <- loglike[tGO] + apply(
             X = matrix(
-              data = model$pfunG(
+              data = log(1-model$pfunG(
                 rt = dadm$rt[ispGOloss],
-                pars = pars[ispGOloss, , drop = FALSE],
-                lower.tail = FALSE,
-                log.p = TRUE
-                # ,min_ll = min_ll
-              ),
+                pars = pars[ispGOloss, , drop = FALSE]
+                #,lower.tail = FALSE,log.p = TRUE,min_ll = min_ll
+              )),
               nrow = n_accG - 1
             ),
             MARGIN = 2,
@@ -442,13 +437,11 @@ log_likelihood_race_ss <- function(pars, dadm, model, min_ll = log(1e-10)) {
           )
         }
         # trigger stop, add in stop survivor
-        ts <- loglike[tGO] + model$pfunS(
+        ts <- loglike[tGO] + log(1-model$pfunS(
           rt = dadm$rt[ispGOwin],
-          pars = pars[ispGOwin, , drop = FALSE],
-          lower.tail = FALSE,
-          log.p = TRUE
-          # ,min_ll = min_ll
-        )
+          pars = pars[ispGOwin, , drop = FALSE]
+          #,lower.tail = FALSE,log.p = TRUE,min_ll = min_ll
+        ))
         # ST loosers
         if (n_accST == 0) {
           stl <- 0
@@ -456,13 +449,11 @@ log_likelihood_race_ss <- function(pars, dadm, model, min_ll = log(1e-10)) {
           ispSTloss <- ispSGO & !ispGOacc
           stl <- apply(
             X = matrix(
-              data = model$pfunG(
+              data = log(1-model$pfunG(
                 rt = dadm$rt[ispSTloss] - pars[ispSTloss, "SSD"], # correct for SSD
-                pars=pars[ispSTloss, , drop = FALSE],
-                lower.tail = FALSE,
-                log.p = TRUE
-                # ,min_ll = min_ll
-              ),
+                pars=pars[ispSTloss, , drop = FALSE]
+                # lower.tail = FALSE,log.p = TRUE,min_ll = min_ll
+              )),
               nrow = n_accST
             ),
             MARGIN = 2,
@@ -488,23 +479,20 @@ log_likelihood_race_ss <- function(pars, dadm, model, min_ll = log(1e-10)) {
         ) # pStop before observed RT
         # ST win ll
         tST <- ptrials[ispSSTwin]
-        loglike[tST] <- model$dfunG(
+        loglike[tST] <- log(model$dfunG(
           rt = dadm$rt[ispSSTwin] - dadm$SSD[ispSSTwin], # correct ST racers for SSD delay
-          pars = pars[ispSSTwin, , drop = FALSE],
-          log.d = TRUE
-          # ,min_ll = min_ll
-        )
+          pars = pars[ispSSTwin, , drop = FALSE]
+          #,log.d = TRUE,min_ll = min_ll
+        ))
         # ST looser survivors
         if (n_accST > 1) {
           # Survivor for loser for ST accumulator(s)
           ispSSTloss <- !dadm$winner & ispSST & !ispGOacc
-          llST <- model$pfunG(
+          llST <- log(1-model$pfunG(
             rt = dadm$rt[ispSSTloss] - dadm$SSD[ispSSTloss],
-            pars = pars[ispSSTloss, , drop = FALSE],
-            lower.tail = FALSE,
-            log.p = TRUE
-            # ,min_ll = min_ll
-          )
+            pars = pars[ispSSTloss, , drop = FALSE]
+            #,lower.tail = FALSE,log.p = TRUE,min_ll = min_ll
+          ))
           if (n_accST == 2) {
             # Could remove branch, maybe faster as no matrix sum?
             loglike[tST] <- loglike[tST] + llST
@@ -520,13 +508,11 @@ log_likelihood_race_ss <- function(pars, dadm, model, min_ll = log(1e-10)) {
         ispSGloss <- ispSST & ispGOacc
         llG <- apply(
           X = matrix(
-            data = model$pfunG(
+            data = log(1-model$pfunG(
               rt = dadm$rt[ispSGloss],
-              pars = pars[ispSGloss,,drop=FALSE],
-              lower.tail = FALSE,
-              log.p = TRUE
-              # ,min_ll = min_ll
-            ),
+              pars = pars[ispSGloss,,drop=FALSE]
+              #,lower.tail = FALSE,log.p = TRUE,min_ll = min_ll
+            )),
             nrow = n_accG
           ),
           MARGIN = 2,
