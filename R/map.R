@@ -394,8 +394,6 @@ generate_design_equations <- function(design_matrix,
 
   # We'll label the final column as "Equation"
   eq_header <- ""
-  # We don't necessarily need to align the entire equation column itself
-  # (since it may vary in length), but let's keep a short label for the header.
 
   # 5. Print the header row
   #    E.g. if factor_cols = c("S", "E"), we do:
@@ -406,12 +404,6 @@ generate_design_equations <- function(design_matrix,
   collapse = "  ")
 
   cat("  ", factor_header_str, "  ", eq_header, "\n", sep="")
-
-  # Optionally, add a simple "rule" line or blank line:
-  # (Uncomment if you like to separate header from rows)
-  # cat(" ", paste(rep("-", nchar(factor_header_str) + nchar(eq_header) + 5),
-  #               collapse=""), "\n", sep="")
-
   # 6. Print each row: factor columns in their spaces, then ": <equation>"
   for (i in seq_len(nrow(design_matrix))) {
     row_factor_str <- paste(mapply(function(fc, w) {

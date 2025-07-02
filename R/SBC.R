@@ -58,7 +58,7 @@ SBC_hierarchical <- function(design_in, prior_in, replicates = 250, trials = 100
     if(verbose) print(paste0("Sample ", i, " out of ", replicates))
     rand_effects <- make_random_effects(design_in, prior_mu[,i], n_subj = n_subjects, covariances = prior_var[,,i])
     all_rand_effects[[i]] <- rand_effects
-    data <- make_data(rand_effects,design_in, trials, model = design_in$model)
+    data <- make_data(rand_effects,design_in, trials, model = design_in$model, ...)
     if(plot_data){
       plot_density(data, factors = names(design_in$Ffactors)[names(design_in$Ffactors) != "subjects"])
     }
@@ -112,7 +112,7 @@ SBC_single <- function(design_in, prior_in, replicates = 250, trials = 100,
     for(j in 1:dots$cores_per_chain){
       if(i > replicates) next
       design_in$Ffactors$subjects <- j
-      tmp <- make_data(prior_alpha[i,],design_in, trials, model = design_in$model)
+      tmp <- make_data(prior_alpha[i,],design_in, trials, model = design_in$model, ...)
       tmp$subjects <- j
       data <- rbind(data, tmp)
       i <- i + 1
