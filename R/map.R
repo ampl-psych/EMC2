@@ -117,7 +117,19 @@ map_p <- function(p,dadm,model)
           cur_trend <- trend[[j]]
           # We can select the trend pars from the already update pars matrix
           trend_pars <- pars[,cur_trend$trend_pnames]
-          pm[,j] <- run_trend(dadm, cur_trend, pm[,j], trend_pars)
+
+          #pm[,j] <- run_trend(dadm, cur_trend, pm[,j], trend_pars)
+
+          ## SM
+          ## output Q-value as well, use Q-value slot. TO DO: how to identify the Q-value parameter??
+          output <- EMC2:::run_trend(dadm, cur_trend, pm[,j], trend_pars)
+
+          pm[, j] <- output[[1]]
+          if(cur_trend$kernel %in% c('delta')) {
+            pars[,cur_trend$trend_pnames[2]] <- output[[2]]  # assign updated Q-values to pars
+            ## also return this one
+            premap_idx[which(colnames(pars) == cur_trend$trend_pnames[2])] <- FALSE
+          }
         }
       }
     }
@@ -136,8 +148,12 @@ map_p <- function(p,dadm,model)
     k <- k + 1
     pars[,i] <- tmp
   }
+
+  # SM: Return all parameters, including Q-values
+  # return(pars)
+
   # Return only non-trend parameters
-  return(pars[,!premap_idx,drop=FALSE])
+   return(pars[,!premap_idx,drop=FALSE])
 }
 
 

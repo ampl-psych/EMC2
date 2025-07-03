@@ -283,11 +283,17 @@ run_kernel <- function(trend_pars = NULL, kernel, covariate) {
 }
 
 prep_trend <- function(dadm, trend, pars){
+  remove_idx <- colnames(pars) %in% get_trend_pnames(trend)
   for(par in names(trend)){
-    pars[,par] <- run_trend(dadm, trend[[par]], pars[,par], pars[,trend[[par]]$trend_pnames, drop = FALSE])
+    output <- run_trend(dadm, trend[[par]], pars[,par], pars[,trend[[par]]$trend_pnames, drop = FALSE])
+    pars[,par] <- output[[1]]
+    if(trend$kernel %in% c('delta')) {
+      pars[,trend$trend_pnames[[2]]] <- output[[2]]
+      remove_idx[which(colnames(pars) == trend$trend_pnames[2])] <- FALSE
+    }
   }
-  pars <- pars[,!colnames(pars) %in% get_trend_pnames(trend)]
-  return(pars)
+  # return(pars)
+  pars <- pars[,!remove_idx]
 }
 
 run_trend <- function(dadm, trend, param, trend_pars){
@@ -312,8 +318,12 @@ run_trend <- function(dadm, trend, param, trend_pars){
       together <- cbind(cov_tmp, trend_pars_tmp)
       filter <- !duplicated(together)
     }
-    # Prep trend parameters to filter out base parameters
-    kernel_pars <- trend_pars_tmp[filter,(n_base_pars+1):ncol(trend_pars), drop = FALSE]
+    if(ncol(trend_pars)>n_base_pars) {
+      # Prep trend parameters to filter out base parameters
+      kernel_pars <- trend_pars_tmp[filter,(n_base_pars+1):ncol(trend_pars), drop = FALSE]
+    } else {
+      kernel_pars <- trend_pars_tmp[filter,, drop = FALSE]
+    }
     # Keep an expansion index
     unq_idx <- cumsum(filter)
     # Run trend
@@ -329,7 +339,9 @@ run_trend <- function(dadm, trend, param, trend_pars){
                 add = param + out,
                 identity = out
   )
-  return(out)
+  ## SM: return both the trend itself and the mapping
+  #return(out)
+  return(list(out=out, trend=output))
 }
 
 check_trend <- function(trend, covariates = NULL, model = NULL, formula = NULL) {

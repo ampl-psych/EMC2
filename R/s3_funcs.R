@@ -189,6 +189,11 @@ predict.emc <- function(object,hyper=FALSE,n_post=50,n_cores=1,
     simDat <- suppressWarnings(mclapply(1:n_post,function(i){
       do.call(make_data, c(list(pars[[i]],design=design[[j]],data=data[[j]]), fix_dots(dots, make_data)))
     },mc.cores=n_cores))
+
+    ## SM: harvest covariates
+    covariates <- NULL
+    if('covariates' %in% names(attributes(simDat[[1]]))) covariates <- lapply(simDat, attr, 'covariates')
+
     in_bounds <- !sapply(simDat, is.logical)
     if(all(!in_bounds)) stop("All samples fall outside of model bounds")
     if(any(!in_bounds)){
@@ -200,6 +205,7 @@ predict.emc <- function(object,hyper=FALSE,n_post=50,n_cores=1,
     out <- cbind(postn=rep(1:n_post,times=unlist(lapply(simDat,function(x)dim(x)[1]))),do.call(rbind,simDat))
     if (n_post==1) pars <- pars[[1]]
     attr(out,"pars") <- pars
+    if(!is.null(covariates)) attr(out, 'covariates') <- covariates
     post_out[[j]] <- out
   }
   if(!jointModel){
