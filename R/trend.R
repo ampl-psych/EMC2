@@ -287,7 +287,7 @@ prep_trend <- function(dadm, trend, pars){
   for(par in names(trend)){
     output <- run_trend(dadm, trend[[par]], pars[,par], pars[,trend[[par]]$trend_pnames, drop = FALSE])
     pars[,par] <- output[[1]]
-    if(trend$kernel %in% c('delta')) {
+    if(trend[[par]]$kernel %in% c('delta')) {
       pars[,trend$trend_pnames[[2]]] <- output[[2]]
       remove_idx[which(colnames(pars) == trend$trend_pnames[2])] <- FALSE
     }
