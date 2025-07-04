@@ -124,6 +124,17 @@ NumericVector run_trend_rcpp(DataFrame data, List trend, NumericVector param, Nu
       filter = !duplicated_matrix(together);
     } else {
       filter = LogicalVector(cov_tmp.length(), true);
+
+      // SM: filter only first lR levels in dadm
+      bool filter_lR = as<bool>(trend["filter_lR"]);
+      if(filter_lR) {
+        IntegerVector lRcol = data["lR"];
+        for(int tr = 0; tr < lRcol.length(); tr++) {
+          if(lRcol[i] != 1) {
+            filter[i] = false;
+          }
+        }
+      }
     }
     // Run kernel on unique entries
     NumericVector output = run_kernel_rcpp(submat_rcpp(trend_pars_tmp, filter), kernel, cov_tmp[filter], n_base_pars);

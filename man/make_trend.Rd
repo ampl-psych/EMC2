@@ -12,7 +12,8 @@ make_trend(
   shared = NULL,
   trend_pnames = NULL,
   premap = TRUE,
-  pretransform = FALSE
+  pretransform = FALSE,
+  filter_lR = FALSE
 )
 }
 \arguments{
@@ -31,6 +32,8 @@ make_trend(
 \item{premap}{Logical indicating if trend should be applied before or after parameter mapping}
 
 \item{pretransform}{If !premap, logical indicating if trend should be applied before or after parameter transformation}
+
+\item{filter_lR}{If TRUE, does updating only once each trial (by filtering the dadm on the first level of lR). Only relevant for delta and delta2 kernels.}
 }
 \value{
 A list containing the trend specifications for each parameter

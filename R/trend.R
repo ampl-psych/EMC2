@@ -8,6 +8,7 @@
 #' @param trend_pnames Optional character vector specifying custom parameter names
 #' @param premap Logical indicating if trend should be applied before or after parameter mapping
 #' @param pretransform If !premap, logical indicating if trend should be applied before or after parameter transformation
+#' @param filter_lR If TRUE, does updating only once each trial (by filtering the dadm on the first level of lR). Only relevant for delta and delta2 kernels.
 #' @return A list containing the trend specifications for each parameter
 #' @export
 #'
@@ -24,7 +25,7 @@
 #'
 make_trend <- function(par_names, cov_names, kernels, bases = NULL,
                        shared = NULL, trend_pnames = NULL, premap = TRUE,
-                       pretransform = FALSE){
+                       pretransform = FALSE, filter_lR=FALSE){
   if(pretransform & premap){
     warning("Setting pretransform has no effect if premap = TRUE")
   }
@@ -49,8 +50,9 @@ make_trend <- function(par_names, cov_names, kernels, bases = NULL,
     # Kernel
     if(!kernels[i] %in% names(trend_help(kernels[i], return_types = TRUE)$kernels)){
       stop("Kernel type not support see `trend_help()`")
-    } else{
+    } else  {
       trend$kernel <- kernels[i]
+      if(kernels[i] %in% c('delta', 'delta2')) trend$filter_lR <- filter_lR
     }
 
     # base
@@ -313,7 +315,12 @@ run_trend <- function(dadm, trend, param, trend_pars){
     if(trend$kernel %in% c("delta", "delta2")){
       # These trends have a sequential nature, don't filter duplicate entries
       filter <- rep(T, length(cov_tmp))
-    } else{
+
+      ## SM only once
+      if(trend$filter_lR) {
+        filter[dadm$lR!=dadm$lR[1]] <- FALSE
+      }
+    } else {
       # Else filter out duplicated entries
       together <- cbind(cov_tmp, trend_pars_tmp)
       filter <- !duplicated(together)
@@ -341,7 +348,7 @@ run_trend <- function(dadm, trend, param, trend_pars){
   )
   ## SM: return both the trend itself and the mapping
   #return(out)
-  return(list(out=out, trend=output))
+  return(list(out=out, trend=output[unq_idx]))
 }
 
 check_trend <- function(trend, covariates = NULL, model = NULL, formula = NULL) {
