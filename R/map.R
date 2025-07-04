@@ -122,7 +122,7 @@ map_p <- function(p,dadm,model)
 
           ## SM
           ## output Q-value as well, use Q-value slot. TO DO: how to identify the Q-value parameter??
-          output <- EMC2:::run_trend(dadm, cur_trend, pm[,j], trend_pars)
+          output <- run_trend(dadm, cur_trend, pm[,j], trend_pars)
 
           pm[, j] <- output[[1]]
           if(cur_trend$kernel %in% c('delta')) {
