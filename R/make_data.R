@@ -214,6 +214,7 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
     rt_check=FALSE)
   pars <- t(apply(parameters, 1, do_pre_transform, model()$pre_transform))
 
+  covariates <- NULL
   if('conditionalOnData' %in% names(list(...))) {  # to do: better naming convention
     ## loop over trials, save covariates
     if(!is.null(model()$trend)) {
