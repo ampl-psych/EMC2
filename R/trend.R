@@ -410,6 +410,8 @@ update_model_trend <- function(trend, model) {
 run_delta <- function(q0,alpha,covariate) {
   q <- pe <- numeric(length(covariate))
   q[1] <- q0[1]
+  if(length(q) == 1) return(q)  # only 1 trial, cannot be updated
+
   for (i in 2:length(q)) {
     pe[i-1] <- covariate[i-1]-q[i-1]
     q[i] <- q[i-1] + alpha[i-1]*pe[i-1]

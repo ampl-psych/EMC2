@@ -210,6 +210,7 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
   pars <- t(apply(parameters, 1, do_pre_transform, model()$pre_transform))
 
   covariates <- NULL
+  all_parameters <- NULL
   if('conditionalOnData' %in% names(list(...))) {  # to do: better naming convention
     ## loop over trials, save covariates
     if(!is.null(model()$trend)) {
@@ -246,12 +247,12 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
           rt_check=FALSE)
         this_data <- this_data[order(this_data$subjects,this_data$trials),]  # ALWAYS sort
 
-        if(this_data$error[[1]]) browser()
+        # if(this_data$error[[1]]) browser()
         # Map single trial's parameters
         this_pars <- map_p(this_pars, this_data, model())
 
-        ## TMP: EVERY SECOND ROW SHOULD BE COPIED FROM EVERY FIRST ROW TO PREVENT DOUBLE UPDATING FROM INFLUENCING RESULTS. MUST BE REMOVED LATER
-        this_pars[this_data$lR==levels(this_data$lR)[2],covariate_names] <- this_pars[this_data$lR==levels(this_data$lR)[1],covariate_names]
+        # ## TMP: EVERY SECOND ROW SHOULD BE COPIED FROM EVERY FIRST ROW TO PREVENT DOUBLE UPDATING FROM INFLUENCING RESULTS. MUST BE REMOVED LATER
+        # this_pars[this_data$lR==levels(this_data$lR)[2],covariate_names] <- this_pars[this_data$lR==levels(this_data$lR)[1],covariate_names]
 
         if(!is.null(model()$trend) && attr(model()$trend, "pretransform")){
           # This runs the trend and afterwards removes the trend parameters
@@ -271,12 +272,13 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
         ## collect covariates and remove from pars
         if(!is.null(model()$trend)) {
           covariates[data$trials==this_trial&data$subjects==subject,covariate_names] <- this_pars[,covariate_names]
+          if(is.null(all_parameters)) all_parameters <- matrix(NA, nrow=nrow(data), ncol=ncol(this_pars))
+          all_parameters[data$trials==this_trial&data$subjects==subject,] <- this_pars
 
           # pars here is of length nrow(dadm). Index lR here?
           this_covariates <- t(t(this_pars[this_data$lR==levels(this_data$lR)[1],covariate_names]))
           this_pars <- this_pars[,!colnames(this_pars) %in% covariate_names]
         }
-        ## drop previous trial
         this_pars <- add_bound(this_pars, model()$bound, this_data$lR)
 
         Rrt <- model()$rfun(this_data,this_pars)
@@ -367,6 +369,7 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
   }
   attr(data,"p_vector") <- parameters;
   if(!is.null(covariates)) attr(data, 'covariates') <- covariates
+  if(!is.null(all_parameters)) attr(data, 'all_parameters') <- all_parameters
   data
 }
 
