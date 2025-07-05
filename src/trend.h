@@ -92,6 +92,7 @@ NumericVector run_kernel_rcpp(NumericMatrix trend_pars, String kernel, NumericVe
   return out;
 }
 
+// [[Rcpp::export]]
 NumericVector run_trend_rcpp(DataFrame data, List trend, NumericVector param, NumericMatrix trend_pars) {
   String kernel = as<String>(trend["kernel"]);
   String base = as<String>(trend["base"]);
