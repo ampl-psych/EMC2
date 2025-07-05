@@ -130,8 +130,8 @@ NumericVector run_trend_rcpp(DataFrame data, List trend, NumericVector param, Nu
       if(filter_lR) {
         IntegerVector lRcol = data["lR"];
         for(int tr = 0; tr < lRcol.length(); tr++) {
-          if(lRcol[i] != 1) {
-            filter[i] = false;
+          if(lRcol[tr] != 1) {
+            filter[tr] = false;
           }
         }
       }
