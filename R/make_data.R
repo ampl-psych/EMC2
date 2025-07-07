@@ -214,14 +214,20 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
     rt_check=FALSE)
   pars <- t(apply(parameters, 1, do_pre_transform, model()$pre_transform))
 
+  simulate_unconditional_on_data <- FALSE
+  if('unconditional_on_data' %in% names(list(...))) {
+    simulate_unconditional_on_data <- list(...)$unconditional_on_data
+  }
+
   covariates <- NULL
   all_parameters <- NULL
-  if('conditionalOnData' %in% names(list(...))) {  # to do: better naming convention
+  if(simulate_unconditional_on_data) {
     ## loop over trials, save covariates
     if(!is.null(model()$trend)) {
       covariate_names = covariates = NULL
       for(trend in model()$trend) {
-        if(trend$kernel == 'delta') covariate_names <- c(covariate_names, trend$trend_pnames[2])
+        if(trend$kernel %in% c('delta', 'deltab')) covariate_names <- c(covariate_names, trend$trend_pnames[2])
+        if(trend$kernel == 'deltab') data$rt <- 0  # ensure RT is not NA, so it won't be ignored because it's set to NA
       }
       covariates <- matrix(NA, nrow=nrow(data), ncol=length(covariate_names))
       colnames(covariates) <- covariate_names
@@ -229,74 +235,149 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
 
     pars <- add_constants(pars,design$constants)
 
-    # loop over subjects? currently needed(?) because run_kernel treats covariate as one continuous vector, not split by participant...
-    for(subject in unique(data$subjects)) {
-      all_trials <- sort(unique(data[data$subjects==subject,'trials']))
-      for(trial_idx in 1:length(all_trials)) {
-        subject_data <- droplevels(data[data$subjects==subject,]) # need to re-take this, otherwise the error isn't coded correctly?
-        this_pars <- pars[subject,,drop=FALSE]
+    # Try without looping over subjects
+    includeColumns <- !colnames(data) %in% c('lR', 'lM', names(design$Ffunctions))
+    all_trials <- sort(unique(data[,'trials']))
+    for(trial_idx in 1:length(all_trials)) {
+      this_pars <- pars
 
-        # simulate *two* trials at the same time, to capture update of Q-value from previous trial
-        this_trial <- all_trials[trial_idx]
-        if(trial_idx > 1) {
-          prev_trial <- all_trials[trial_idx-1]
-          # set Q-values to previous one seq(1, NROW(this_covariates),2)
-          this_pars[,covariate_names] <- this_covariates
-        } else {
-          prev_trial <- NULL
-        }
-        this_data <- design_model(
-          add_accumulators(subject_data[subject_data$trials%in%c(prev_trial, this_trial)&subject_data$lR==levels(data$lR)[1],!colnames(subject_data) %in% c('lR', 'lM', names(design$Ffunctions))],
-                           design$matchfun,simulate=FALSE,type=model()$type,Fcovariates=design$Fcovariates),
-          design,model,add_acc=FALSE,compress=FALSE,verbose=FALSE,
-          rt_check=FALSE)
-        this_data <- this_data[order(this_data$subjects,this_data$trials),]  # ALWAYS sort
+      # simulate *two* trials at the same time, to capture update of Q-value from previous trial
+      this_trial <- all_trials[trial_idx]
+      if(trial_idx > 1) {
+        prev_trial <- all_trials[trial_idx-1]
+        # set Q-values to previous one
+        this_pars[,covariate_names] <- this_covariates
+      } else {
+        prev_trial <- NULL
+      }
+      # this_data <- data[data$trials%in%c(prev_trial, this_trial)&data$lR==levels(data$lR)[1],includeColumns]
+      # this_data <- this_data[order(this_data$subjects,this_data$trials),]
+      this_data <- design_model(
+        add_accumulators(data[data$trials%in%c(prev_trial, this_trial)&data$lR==levels(data$lR)[1],includeColumns],
+                         design$matchfun,simulate=FALSE,type=model()$type,Fcovariates=design$Fcovariates),
+        design,model,add_acc=FALSE,compress=FALSE,verbose=FALSE,
+        rt_check=FALSE)
+      this_data <- this_data[order(this_data$subjects,this_data$trials),]  # ALWAYS sort
 
-        # if(this_data$error[[1]]) browser()
-        # Map single trial's parameters
-        this_pars <- map_p(this_pars, this_data, model())
+      # if(this_data$error[[1]]) browser()
+      # Map single trial's parameters
+      this_pars <- map_p(this_pars, this_data, model())
 
-        # ## TMP: EVERY SECOND ROW SHOULD BE COPIED FROM EVERY FIRST ROW TO PREVENT DOUBLE UPDATING FROM INFLUENCING RESULTS. MUST BE REMOVED LATER
-        # this_pars[this_data$lR==levels(this_data$lR)[2],covariate_names] <- this_pars[this_data$lR==levels(this_data$lR)[1],covariate_names]
+      # ## TMP: EVERY SECOND ROW SHOULD BE COPIED FROM EVERY FIRST ROW TO PREVENT DOUBLE UPDATING FROM INFLUENCING RESULTS. MUST BE REMOVED LATER
+      # this_pars[this_data$lR==levels(this_data$lR)[2],covariate_names] <- this_pars[this_data$lR==levels(this_data$lR)[1],covariate_names]
 
-        if(!is.null(model()$trend) && attr(model()$trend, "pretransform")){
-          # This runs the trend and afterwards removes the trend parameters
-          this_pars <- prep_trend(this_data, model()$trend, this_pars)
-        }
-        this_pars <- do_transform(this_pars, model()$transform)
-        if(!is.null(model()$trend) && attr(model()$trend, "posttransform")){
-          # This runs the trend and afterwards removes the trend parameters
-          this_pars <- prep_trend(this_data, model()$trend, this_pars)
-        }
-        this_pars <- model()$Ttransform(this_pars, this_data)
+      if(!is.null(model()$trend) && attr(model()$trend, "pretransform")){
+        # This runs the trend and afterwards removes the trend parameters
+        this_pars <- prep_trend(this_data, model()$trend, this_pars)
+      }
+      this_pars <- do_transform(this_pars, model()$transform)
+      if(!is.null(model()$trend) && attr(model()$trend, "posttransform")){
+        # This runs the trend and afterwards removes the trend parameters
+        this_pars <- prep_trend(this_data, model()$trend, this_pars)
+      }
+      this_pars <- model()$Ttransform(this_pars, this_data)
 
-        # drop previous trial from pars, data
-        this_pars <- this_pars[this_data$trials==this_trial,]
-        this_data <- this_data[this_data$trials==this_trial,]
+      # drop previous trial from pars, data
+      this_pars <- this_pars[this_data$trials==this_trial,]
+      this_data <- this_data[this_data$trials==this_trial,]
 
-        ## collect covariates and remove from pars
-        if(!is.null(model()$trend)) {
-          covariates[data$trials==this_trial&data$subjects==subject,covariate_names] <- this_pars[,covariate_names]
-          if(is.null(all_parameters)) all_parameters <- matrix(NA, nrow=nrow(data), ncol=ncol(this_pars))
-          all_parameters[data$trials==this_trial&data$subjects==subject,] <- this_pars
+      ## collect covariates and remove from pars
+      if(!is.null(model()$trend)) {
+        covariates[data$trials==this_trial,covariate_names] <- this_pars[,covariate_names]
+        if(is.null(all_parameters)) all_parameters <- matrix(NA, nrow=nrow(data), ncol=ncol(this_pars))
+        all_parameters[data$trials==this_trial,] <- this_pars
 
-          # pars here is of length nrow(dadm). Index lR here?
-          this_covariates <- t(t(this_pars[this_data$lR==levels(this_data$lR)[1],covariate_names]))
-          this_pars <- this_pars[,!colnames(this_pars) %in% covariate_names]
-        }
-        this_pars <- add_bound(this_pars, model()$bound, this_data$lR)
+        # pars here is of length nrow(dadm). Index lR here?
+        this_covariates <- t(t(this_pars[this_data$lR==levels(this_data$lR)[1],covariate_names]))
+        # if(any(this_covariates)>10) browser()
+        this_pars <- this_pars[,!colnames(this_pars) %in% covariate_names]
+      }
+      ## hmm
+      this_pars[,'B'] <- pmax(this_pars[,'B'], 0.01)
 
-        Rrt <- model()$rfun(this_data,this_pars)
+      this_pars <- add_bound(this_pars, model()$bound, this_data$lR)
 
-        # drop lR
-        if(!is.null(this_data$lR)) this_data <- this_data[this_data$lR == levels(this_data$lR)[1],!names(data) %in% c('lR', 'lM')]
-        for (i in dimnames(Rrt)[[2]]) this_data[[i]] <- Rrt[,i]
+      Rrt <- model()$rfun(this_data,this_pars)
 
-        ## re-apply Ffunctions (? maybe better somewhere else?)
-        if(!is.null(design$Ffunctions)) for(i in names(design$Ffunctions)) this_data[,i] <- design$Ffunctions[[1]](this_data)
-        data[data$trials==this_trial&data$subjects==subject,colnames(this_data)] <- this_data
+      # drop lR
+      if(!is.null(this_data$lR)) this_data <- this_data[this_data$lR == levels(this_data$lR)[1],!names(this_data) %in% c('lR', 'lM', 'winner')]
+      for (i in dimnames(Rrt)[[2]]) this_data[[i]] <- Rrt[,i]
+
+      ## re-apply Ffunctions (? maybe better somewhere else?)
+      if(!is.null(design$Ffunctions)) for(i in names(design$Ffunctions)) this_data[,i] <- design$Ffunctions[[1]](this_data)
+
+      ## should be a vectorized way to do this...
+      for(subject in unique(this_data$subjects)) {
+        data[data$trials==this_trial&data$subjects==subject,colnames(this_data)] <- this_data[this_data$subjects==subject,]
       }
     }
+
+
+    # # loop over subjects? currently needed(?) because run_kernel treats covariate as one continuous vector, not split by participant...
+    # for(subject in unique(data$subjects)) {
+    #   all_trials <- sort(unique(data[data$subjects==subject,'trials']))
+    #   for(trial_idx in 1:length(all_trials)) {
+    #     subject_data <- droplevels(data[data$subjects==subject,])
+    #     this_pars <- pars[subject,,drop=FALSE]
+    #
+    #     # simulate *two* trials at the same time, to capture update of Q-value from previous trial
+    #     this_trial <- all_trials[trial_idx]
+    #     if(trial_idx > 1) {
+    #       prev_trial <- all_trials[trial_idx-1]
+    #       # set Q-values to previous one
+    #       this_pars[,covariate_names] <- this_covariates
+    #     } else {
+    #       prev_trial <- NULL
+    #     }
+    #     this_data <- design_model(
+    #       add_accumulators(subject_data[subject_data$trials%in%c(prev_trial, this_trial)&subject_data$lR==levels(data$lR)[1],!colnames(subject_data) %in% c('lR', 'lM', 'winner', names(design$Ffunctions))],
+    #                        design$matchfun,simulate=FALSE,type=model()$type,Fcovariates=design$Fcovariates),
+    #       design,model,add_acc=FALSE,compress=FALSE,verbose=FALSE,
+    #       rt_check=FALSE)
+    #     this_data <- this_data[order(this_data$subjects,this_data$trials),]  # ALWAYS sort
+    #
+    #     # if(this_data$error[[1]]) browser()
+    #     # Map single trial's parameters
+    #     this_pars <- map_p(this_pars, this_data, model())
+    #
+    #     if(!is.null(model()$trend) && attr(model()$trend, "pretransform")){
+    #       # This runs the trend and afterwards removes the trend parameters
+    #       this_pars <- prep_trend(this_data, model()$trend, this_pars)
+    #     }
+    #     this_pars <- do_transform(this_pars, model()$transform)
+    #     if(!is.null(model()$trend) && attr(model()$trend, "posttransform")){
+    #       # This runs the trend and afterwards removes the trend parameters
+    #       this_pars <- prep_trend(this_data, model()$trend, this_pars)
+    #     }
+    #     this_pars <- model()$Ttransform(this_pars, this_data)
+    #
+    #     # drop previous trial from pars, data
+    #     this_pars <- this_pars[this_data$trials==this_trial,]
+    #     this_data <- this_data[this_data$trials==this_trial,]
+    #
+    #     ## collect covariates and remove from pars
+    #     if(!is.null(model()$trend)) {
+    #       covariates[data$trials==this_trial&data$subjects==subject,covariate_names] <- this_pars[,covariate_names]
+    #       if(is.null(all_parameters)) all_parameters <- matrix(NA, nrow=nrow(data), ncol=ncol(this_pars))
+    #       all_parameters[data$trials==this_trial&data$subjects==subject,] <- this_pars
+    #
+    #       # pars here is of length nrow(dadm). Index lR here?
+    #       this_covariates <- t(t(this_pars[this_data$lR==levels(this_data$lR)[1],covariate_names]))
+    #       this_pars <- this_pars[,!colnames(this_pars) %in% covariate_names]
+    #     }
+    #     this_pars <- add_bound(this_pars, model()$bound, this_data$lR)
+    #
+    #     Rrt <- model()$rfun(this_data,this_pars)
+    #
+    #     # drop lR
+    #     if(!is.null(this_data$lR)) this_data <- this_data[this_data$lR == levels(this_data$lR)[1],!names(data) %in% c('lR', 'lM')]
+    #     for (i in dimnames(Rrt)[[2]]) this_data[[i]] <- Rrt[,i]
+    #
+    #     ## re-apply Ffunctions (? maybe better somewhere else?)
+    #     if(!is.null(design$Ffunctions)) for(i in names(design$Ffunctions)) this_data[,i] <- design$Ffunctions[[1]](this_data)
+    #     data[data$trials==this_trial&data$subjects==subject,colnames(this_data)] <- this_data
+    #   }
+    # }
     # remove
     data <- data[data$lR == levels(data$lR)[1],!names(data) %in% c('lR', 'lM')]
 

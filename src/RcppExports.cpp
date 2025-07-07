@@ -458,6 +458,21 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// run_deltab_rcpp
+NumericVector run_deltab_rcpp(NumericVector weight, NumericVector q0, NumericVector alpha, NumericVector b, NumericVector covariate);
+RcppExport SEXP _EMC2_run_deltab_rcpp(SEXP weightSEXP, SEXP q0SEXP, SEXP alphaSEXP, SEXP bSEXP, SEXP covariateSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type weight(weightSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type q0(q0SEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type alpha(alphaSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type b(bSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type covariate(covariateSEXP);
+    rcpp_result_gen = Rcpp::wrap(run_deltab_rcpp(weight, q0, alpha, b, covariate));
+    return rcpp_result_gen;
+END_RCPP
+}
 // run_trend_rcpp
 NumericVector run_trend_rcpp(DataFrame data, List trend, NumericVector param, NumericMatrix trend_pars);
 RcppExport SEXP _EMC2_run_trend_rcpp(SEXP dataSEXP, SEXP trendSEXP, SEXP paramSEXP, SEXP trend_parsSEXP) {
@@ -513,6 +528,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_EMC2_build_hrf_kernel", (DL_FUNC) &_EMC2_build_hrf_kernel, 10},
     {"_EMC2_construct_design_matrix", (DL_FUNC) &_EMC2_construct_design_matrix, 13},
     {"_EMC2_calc_ll", (DL_FUNC) &_EMC2_calc_ll, 11},
+    {"_EMC2_run_deltab_rcpp", (DL_FUNC) &_EMC2_run_deltab_rcpp, 5},
     {"_EMC2_run_trend_rcpp", (DL_FUNC) &_EMC2_run_trend_rcpp, 4},
     {"_EMC2_c_add_charvectors", (DL_FUNC) &_EMC2_c_add_charvectors, 2},
     {NULL, NULL, 0}

@@ -6,6 +6,23 @@
 using namespace Rcpp;
 
 
+// [[Rcpp::export]]
+NumericVector run_deltab_rcpp(NumericVector weight, NumericVector q0, NumericVector alpha, NumericVector b, NumericVector covariate) {
+  int n = covariate.length();
+  NumericVector q(n);
+  NumericVector pe(n);
+  q[0] = q0[0];
+  b[0] = b[0] + weight[0]*q[0];
+  for(int i = 1; i < n; i++) {
+    pe[i-1] = b[i-1]/covariate[i-1] - q[i-1];
+    q[i] = q[i-1] + alpha[i-1] * pe[i-1];
+    b[i] = b[i] + weight[i]*q[i];
+  }
+
+  return q;
+}
+
+
 NumericVector run_delta_rcpp(NumericVector q0, NumericVector alpha, NumericVector covariate) {
   int n = covariate.length();
   NumericVector q(n);
@@ -50,7 +67,7 @@ NumericVector run_delta2_rcpp(NumericVector q0, NumericVector alphaFast,
 }
 
 
-NumericVector run_kernel_rcpp(NumericMatrix trend_pars, String kernel, NumericVector covariate, int n_base_pars) {
+NumericVector run_kernel_rcpp(NumericMatrix trend_pars, String kernel, NumericVector covariate, int n_base_pars, NumericVector param) {
   NumericVector out(covariate.length());
   if(kernel == "lin_decr") {
     out = -1 * covariate;
@@ -81,6 +98,10 @@ NumericVector run_kernel_rcpp(NumericMatrix trend_pars, String kernel, NumericVe
     out = trend_pars(_, 0 + n_base_pars) * covariate + trend_pars(_, 1 + n_base_pars) * pow(covariate, 2) +
       trend_pars(_, 2 + n_base_pars) * pow(covariate, 3) + trend_pars(_, 3 + n_base_pars) * pow(covariate, 4);
   }
+  else if(kernel == "deltab") {
+    // weight is always base_pars 0
+    out = run_deltab_rcpp(trend_pars(_, 0), trend_pars(_, 1), trend_pars(_, 2), param, covariate);
+  }
   else if(kernel == "delta") {
     out = run_delta_rcpp(trend_pars(_, 0 + n_base_pars), trend_pars(_, 1 + n_base_pars), covariate);
   }
@@ -103,6 +124,23 @@ NumericVector run_trend_rcpp(DataFrame data, List trend, NumericVector param, Nu
   int n_base_pars = 0;
   if(base == "lin" || base == "exp_lin" || base == "centered") {
     n_base_pars = 1;
+    if(kernel == "deltab") {
+      n_base_pars = 0;
+    //   // Create a new matrix that extends trend_pars so the last column is param
+    //   int m = trend_pars.ncol();
+    //   NumericMatrix trend_pars_with_param(n_trials, m + 1);
+    //   // Copy existing data from trend_pars to updated_trend_pars
+    //   for (int i = 0; i < n_trials; ++i) {
+    //     for (int j = 0; j < m; ++j) {
+    //       trend_pars_with_param(i, j) = trend_pars(i, j);
+    //     }
+    //     // Add the param vector as the new column
+    //     trend_pars_with_param(i, m) = param[i];
+    //   }
+    //   // Now clone back to the original matrix
+    //   trend_pars = trend_pars_with_param;
+    //   Rf_PrintValue(trend_pars);
+    }
   }
   // Loop through covariates
   for(int i = 0; i < covnames.length(); i++) {
@@ -115,7 +153,7 @@ NumericVector run_trend_rcpp(DataFrame data, List trend, NumericVector param, Nu
     NumericMatrix trend_pars_tmp = submat_rcpp(trend_pars, !NA_idx);
     // For non-delta kernels, filter duplicates
     LogicalVector filter;
-    if(kernel != "delta" && kernel != "delta2") {
+    if(kernel != "delta" && kernel != "delta2" && kernel != "deltab") {
       // Create matrix of covariate and trend parameters for duplicate checking
       NumericMatrix together(cov_tmp.length(), trend_pars_tmp.ncol() + 1);
       together(_, 0) = cov_tmp;
@@ -138,7 +176,7 @@ NumericVector run_trend_rcpp(DataFrame data, List trend, NumericVector param, Nu
       }
     }
     // Run kernel on unique entries
-    NumericVector output = run_kernel_rcpp(submat_rcpp(trend_pars_tmp, filter), kernel, cov_tmp[filter], n_base_pars);
+    NumericVector output = run_kernel_rcpp(submat_rcpp(trend_pars_tmp, filter), kernel, cov_tmp[filter], n_base_pars, param[filter]);
     // // Create index for expanding back to full size
     IntegerVector unq_idx = cumsum_logical(filter); // Is 1-based
     NumericVector expanded_output = c_expand(output, unq_idx); //This assumes 1-based as well

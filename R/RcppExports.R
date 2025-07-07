@@ -109,6 +109,10 @@ calc_ll <- function(p_matrix, data, constants, designs, type, bounds, transforms
     .Call(`_EMC2_calc_ll`, p_matrix, data, constants, designs, type, bounds, transforms, pretransforms, p_types, min_ll, trend)
 }
 
+run_deltab_rcpp <- function(weight, q0, alpha, b, covariate) {
+    .Call(`_EMC2_run_deltab_rcpp`, weight, q0, alpha, b, covariate)
+}
+
 run_trend_rcpp <- function(data, trend, param, trend_pars) {
     .Call(`_EMC2_run_trend_rcpp`, data, trend, param, trend_pars)
 }

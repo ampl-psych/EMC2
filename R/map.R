@@ -125,7 +125,7 @@ map_p <- function(p,dadm,model)
           output <- run_trend(dadm, cur_trend, pm[,j], trend_pars)
 
           pm[, j] <- output[[1]]
-          if(cur_trend$kernel %in% c('delta')) {
+          if(cur_trend$kernel %in% c('delta', 'deltab')) {
             pars[,cur_trend$trend_pnames[2]] <- output[[2]]  # assign updated Q-values to pars
             ## also return this one
             premap_idx[which(colnames(pars) == cur_trend$trend_pnames[2])] <- FALSE
