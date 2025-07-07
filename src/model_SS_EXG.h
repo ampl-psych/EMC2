@@ -130,11 +130,14 @@ double exg_stop_success_integrand(
     double SSD,
     // parameter values: rows = accumulators, columns = parameters
     NumericMatrix pars,
-    // index of accumulator winner and loser(s)
-    LogicalVector winner,
+    // // index of accumulator winner and loser(s)
+    // LogicalVector winner,
     // minimal log likelihood, to protect against numerical issues
     double min_ll
 ) {
+  // create local LogicalVector with all FALSE values (since the go accumulators
+  // by definition are all losers)
+  LogicalVector winner(pars.nrow(), false);
   // obtain the go race process log likelihood (since the go accumulators are
   // losers, this will just be the summed log survivor probability)
   // NB SSD added to stop finish time to get go RT
@@ -157,23 +160,24 @@ class exg_ss_integrand : public Func {
 private:
   const double SSD;
   const NumericMatrix pars;
-  const LogicalVector winner;
+  // const LogicalVector winner;
   const double min_ll;
 
 public:
   exg_ss_integrand(
     double SSD_,
     NumericMatrix pars_,
-    LogicalVector winner_,
+    // LogicalVector winner_,
     double min_ll_
   ) :
   SSD(SSD_),
   pars(pars_),
-  winner(winner_),
+  // winner(winner_),
   min_ll(min_ll_) {}
 
   double operator()(const double& x) const {
-    return exg_stop_success_integrand(x, SSD, pars, winner, min_ll);
+    // return exg_stop_success_integrand(x, SSD, pars, winner, min_ll);
+    return exg_stop_success_integrand(x, SSD, pars, min_ll);
   }
 };
 
@@ -184,17 +188,18 @@ double ss_exg_stop_success_lpdf(
     double SSD,
     // parameter values: rows = accumulators, columns = parameters
     NumericMatrix pars,
-    // index of accumulator winner and loser(s)
-    LogicalVector winner,
+    // // index of accumulator winner and loser(s)
+    // LogicalVector winner,
     // minimal log likelihood, to protect against numerical issues
     double min_ll,
     // lower limit for integration
-    double lower = R_NegInf,
+    double lower,
     // upper limit for integration
-    double upper = R_PosInf
+    double upper
 ) {
   // set up an instance of a stop success integrand
-  exg_ss_integrand race_integrand(SSD, pars, winner, min_ll);
+  // exg_ss_integrand race_integrand(SSD, pars, winner, min_ll);
+  exg_ss_integrand race_integrand(SSD, pars, min_ll);
   // perform integration: likelihood of stop process winning
   IntegrationResult out = my_integrate(race_integrand, lower, upper);
   // check for numerical issues
@@ -379,8 +384,10 @@ NumericVector ss_exg_lpdf(
         stop_success_integral = ss_exg_stop_success_lpdf(
           SSD[start_row],
           pars(Range(start_row, end_row), _),
-          winner[Range(start_row, end_row)],
-          min_ll
+          // winner[Range(start_row, end_row)],
+          min_ll,
+          R_NegInf,
+          R_PosInf
         );
         stop_success_lprob = log1m(gf[trial]) + log1m(tf[trial]) + stop_success_integral;
         // likelihood = gf + [(1-gf) x (1-tf) x stop_success_integral]
