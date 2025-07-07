@@ -52,7 +52,7 @@ make_trend <- function(par_names, cov_names, kernels, bases = NULL,
       stop("Kernel type not support see `trend_help()`")
     } else  {
       trend$kernel <- kernels[i]
-      if(kernels[i] %in% c('delta', 'delta2')) trend$filter_lR <- filter_lR
+      if(kernels[i] %in% c('delta', 'delta2', 'deltab')) trend$filter_lR <- filter_lR
     }
 
     # base
@@ -68,6 +68,7 @@ make_trend <- function(par_names, cov_names, kernels, bases = NULL,
     trend_pnames <- trend_help(base = trend$base, do_return = TRUE)$default_pars
     trend_pnames <- c(trend_pnames, trend_help(kernel = kernels[i], do_return = TRUE)$default_pars)
     trend$trend_pnames <- paste0(par_names[i], ".", trend_pnames)
+    # if(trend$kernel == 'deltab') trend$trend_pnames[4] <- 'B'
     trend$covariate <- unlist(cov_names[i])
     trends_out[[par_names[i]]] <- trend
   }
@@ -183,14 +184,22 @@ trend_help <- function(kernel = NULL, base = NULL, ...){
                  transforms = list(func = list("d1" = "identity", "d2" = "identity", "d3" = "identity", "d4" = "identity")),
                  default_pars = c("d1", "d2", "d3", "d4"),
                  bases = base_1p),
-    delta = list(description = paste(
-      "Standard delta rule kernel:",
-      "Updates q[i] = q[i-1] + alpha * (c[i-1] - q[i-1]).",
+    deltab = list(description = paste(
+      "Threshold learning delta rule kernel:",
+      "Updates q[i] = q[i-1] + alpha * (B[i]/c[i-1] - q[i-1]).",
       "Parameters: q0 (initial value), alpha (learning rate)."
     ),
     default_pars = c("q0", "alpha"),
     transforms = list(func = list("q0" = "identity", "alpha" = "pnorm")),
-    bases = base_2p),
+    bases = 'lin'),  ## must be linear
+    delta = list(description = paste(
+        "Standard delta rule kernel:",
+        "Updates q[i] = q[i-1] + alpha * (c[i-1] - q[i-1]).",
+        "Parameters: q0 (initial value), alpha (learning rate)."
+      ),
+      default_pars = c("q0", "alpha"),
+      transforms = list(func = list("q0" = "identity", "alpha" = "pnorm")),
+      bases = base_2p),
     delta2 = list(description = paste(
       "Dual kernel delta rule:",
       "Combines fast and slow learning rates",
@@ -256,7 +265,7 @@ trend_help <- function(kernel = NULL, base = NULL, ...){
   }
 }
 
-run_kernel <- function(trend_pars = NULL, kernel, covariate) {
+run_kernel <- function(trend_pars = NULL, kernel, covariate, param) {
   # Covariate
   out <- switch(kernel, # kernel
                 # Linear decreasing, linear base type
@@ -275,6 +284,8 @@ run_kernel <- function(trend_pars = NULL, kernel, covariate) {
                 poly2 =  trend_pars[,1]*covariate + trend_pars[,2]*covariate^2,
                 poly3 = trend_pars[,1]*covariate + trend_pars[,2]*covariate^2 + trend_pars[,3]*covariate^3,
                 poly4 = trend_pars[,1]*covariate + trend_pars[,2]*covariate^2 + trend_pars[,3]*covariate^3 + trend_pars[,4]*covariate^4,
+                deltab = run_deltab(trend_pars[,1],trend_pars[,2],trend_pars[,3],param,
+                                    covariate),
                 # Single and dual kernel learning rule
                 delta = run_delta(trend_pars[,1],trend_pars[,2],
                                   covariate),
@@ -289,7 +300,7 @@ prep_trend <- function(dadm, trend, pars){
   for(par in names(trend)){
     output <- run_trend(dadm, trend[[par]], pars[,par], pars[,trend[[par]]$trend_pnames, drop = FALSE])
     pars[,par] <- output[[1]]
-    if(trend[[par]]$kernel %in% c('delta')) {
+    if(trend[[par]]$kernel %in% c('delta','deltab')) {
       pars[,trend$trend_pnames[[2]]] <- output[[2]]
       remove_idx[which(colnames(pars) == trend$trend_pnames[2])] <- FALSE
     }
@@ -306,19 +317,30 @@ run_trend <- function(dadm, trend, param, trend_pars){
                         add = 0,
                         identity = 0)
   out <- numeric(nrow(dadm))
+  output_return <- matrix(nrow=nrow(dadm), ncol=length(trend$covariate))
   for(cov_name in trend$covariate){
+    # If trend is deltab, add param to trend pars
+    if(trend$kernel == 'deltab') {
+      n_base_pars <- 0   # add base weight to trend pars
+    }
+    if(trend$kernel %in% c('delta', 'delta2', 'deltab')) {
+      # set to NA -- only trials where q0 == NA should be updated
+      trend_pars[dadm$trials>min(dadm$trials),2] <- NA
+    }
     # Loop over covariates, first filter out NAs
     NA_idx <- is.na(dadm[,cov_name])
+    if(sum(!NA_idx)==0) next # if all covariates are NA, nothing to update.
+
     cov_tmp <- dadm[!NA_idx, cov_name]
     param_tmp <- param[!NA_idx]
     trend_pars_tmp <- trend_pars[!NA_idx,, drop = FALSE]
-    if(trend$kernel %in% c("delta", "delta2")){
+    if(trend$kernel %in% c("delta", "delta2", "deltab")){
       # These trends have a sequential nature, don't filter duplicate entries
       filter <- rep(T, length(cov_tmp))
 
       ## SM only once
       if(trend$filter_lR) {
-        filter[dadm$lR!=dadm$lR[1]] <- FALSE
+        filter[dadm[!NA_idx,'lR']!=dadm[!NA_idx,'lR'][1]] <- FALSE
       }
     } else {
       # Else filter out duplicated entries
@@ -326,7 +348,7 @@ run_trend <- function(dadm, trend, param, trend_pars){
       filter <- !duplicated(together)
     }
     if(ncol(trend_pars)>n_base_pars) {
-      # Prep trend parameters to filter out base parameters
+      # Prep trend parameters to filter out base parameters.
       kernel_pars <- trend_pars_tmp[filter,(n_base_pars+1):ncol(trend_pars), drop = FALSE]
     } else {
       kernel_pars <- trend_pars_tmp[filter,, drop = FALSE]
@@ -334,9 +356,10 @@ run_trend <- function(dadm, trend, param, trend_pars){
     # Keep an expansion index
     unq_idx <- cumsum(filter)
     # Run trend
-    output <- run_kernel(kernel_pars, trend$kernel, cov_tmp[filter])
+    output <- run_kernel(kernel_pars, trend$kernel, cov_tmp[filter], param[filter])
     # Decompress output and map back based on non-NA
     out[!NA_idx] <- out[!NA_idx] + output[unq_idx]
+    output_return <- output[unq_idx]
   }
   # Do the mapping
   out <- switch(trend$base,
@@ -348,7 +371,7 @@ run_trend <- function(dadm, trend, param, trend_pars){
   )
   ## SM: return both the trend itself and the mapping
   #return(out)
-  return(list(out=out, trend=output[unq_idx]))
+  return(list(out=out, trend=output_return))
 }
 
 check_trend <- function(trend, covariates = NULL, model = NULL, formula = NULL) {
@@ -407,14 +430,39 @@ update_model_trend <- function(trend, model) {
   return(model)
 }
 
+run_deltab <- function(weight, q0, alpha, b, covariate) {
+  # covariate is a vector of length trials
+  # b is a vector of length trials
+  q <- pe <- numeric(length(covariate))
+  q[1] <- q0[1]
+  b[1] <- b[1]+weight[1]*q[1]
+  if(length(q) == 1) return(q)  # only 1 trial, cannot be updated
+
+  for(i in 2:length(q)) {
+    if(is.na(q0[i])) {
+      pe[i-1] <- (b[i-1]/covariate[i-1])-q[i-1]
+      q[i] <- q[i-1]+alpha[i-1]*pe[i-1]
+    } else {
+      ## new subject's first trial, update q[i] so b[i] is updated as well
+      q[i] <- q0[i]
+    }
+    b[i] <- b[i]+weight[i]*q[i]
+  }
+  return(q)
+}
+
 run_delta <- function(q0,alpha,covariate) {
   q <- pe <- numeric(length(covariate))
   q[1] <- q0[1]
   if(length(q) == 1) return(q)  # only 1 trial, cannot be updated
 
   for (i in 2:length(q)) {
-    pe[i-1] <- covariate[i-1]-q[i-1]
-    q[i] <- q[i-1] + alpha[i-1]*pe[i-1]
+    if(is.na(q0[i])) {
+      pe[i-1] <- covariate[i-1]-q[i-1]
+      q[i] <- q[i-1] + alpha[i-1]*pe[i-1]
+    } else {
+      q[i] <- q0[i]
+    }
   }
   return(q)
 }
