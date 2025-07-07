@@ -318,6 +318,9 @@ run_trend <- function(dadm, trend, param, trend_pars){
                         identity = 0)
   out <- numeric(nrow(dadm))
   output_return <- matrix(nrow=nrow(dadm), ncol=length(trend$covariate))
+  # fix, otherwise indexing will fail
+  if(is.null(dim(trend_pars))) trend_pars <- t(t(trend_pars))
+
   for(cov_name in trend$covariate){
     # If trend is deltab, add param to trend pars
     if(trend$kernel == 'deltab') {
