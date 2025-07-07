@@ -292,8 +292,11 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
         # if(any(this_covariates)>10) browser()
         this_pars <- this_pars[,!colnames(this_pars) %in% covariate_names]
       }
+<<<<<<< HEAD
       ## hmm
       this_pars[,'B'] <- pmax(this_pars[,'B'], 0.01)
+=======
+>>>>>>> b6294eb (Don't enforce lower bound)
 
       this_pars <- add_bound(this_pars, model()$bound, this_data$lR)
 
