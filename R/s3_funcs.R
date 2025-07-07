@@ -191,9 +191,9 @@ predict.emc <- function(object,hyper=FALSE,n_post=50,n_cores=1,
     },mc.cores=n_cores))
 
     ## SM: harvest covariates
-    covariates <- all_parameters <- NULL
+    covariates <- trialwise_parameters <- NULL
     if('covariates' %in% names(attributes(simDat[[1]]))) covariates <- lapply(simDat, attr, 'covariates')
-    if('all_parameters' %in% names(attributes(simDat[[1]]))) all_parameters <- lapply(simDat, attr, 'all_parameters')
+    if('trialwise_parameters' %in% names(attributes(simDat[[1]]))) trialwise_parameters <- lapply(simDat, attr, 'trialwise_parameters')
 
     in_bounds <- !sapply(simDat, is.logical)
     if(all(!in_bounds)) stop("All samples fall outside of model bounds")
@@ -207,7 +207,7 @@ predict.emc <- function(object,hyper=FALSE,n_post=50,n_cores=1,
     if (n_post==1) pars <- pars[[1]]
     attr(out,"pars") <- pars
     if(!is.null(covariates)) attr(out, 'covariates') <- covariates
-    if(!is.null(all_parameters)) attr(out, 'all_parameters') <- all_parameters
+    if(!is.null(trialwise_parameters)) attr(out, 'trialwise_parameters') <- trialwise_parameters
     post_out[[j]] <- out
   }
   if(!jointModel){
