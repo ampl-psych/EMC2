@@ -130,8 +130,6 @@ double exg_stop_success_integrand(
     double SSD,
     // parameter values: rows = accumulators, columns = parameters
     NumericMatrix pars,
-    // // index of accumulator winner and loser(s)
-    // LogicalVector winner,
     // minimal log likelihood, to protect against numerical issues
     double min_ll
 ) {
@@ -150,7 +148,6 @@ double exg_stop_success_integrand(
   }
   // final output of race model is summed log likelihood, exponentiated to the
   // likelihood to enable numerical integration
-  // TODO anything to make the following more numerically stable?
   return std::exp(go_lprob + stop_winner_lprob);
 }
 
@@ -160,23 +157,19 @@ class exg_ss_integrand : public Func {
 private:
   const double SSD;
   const NumericMatrix pars;
-  // const LogicalVector winner;
   const double min_ll;
 
 public:
   exg_ss_integrand(
     double SSD_,
     NumericMatrix pars_,
-    // LogicalVector winner_,
     double min_ll_
   ) :
   SSD(SSD_),
   pars(pars_),
-  // winner(winner_),
   min_ll(min_ll_) {}
 
   double operator()(const double& x) const {
-    // return exg_stop_success_integrand(x, SSD, pars, winner, min_ll);
     return exg_stop_success_integrand(x, SSD, pars, min_ll);
   }
 };
@@ -188,8 +181,6 @@ double ss_exg_stop_success_lpdf(
     double SSD,
     // parameter values: rows = accumulators, columns = parameters
     NumericMatrix pars,
-    // // index of accumulator winner and loser(s)
-    // LogicalVector winner,
     // minimal log likelihood, to protect against numerical issues
     double min_ll,
     // lower limit for integration
@@ -198,7 +189,6 @@ double ss_exg_stop_success_lpdf(
     double upper
 ) {
   // set up an instance of a stop success integrand
-  // exg_ss_integrand race_integrand(SSD, pars, winner, min_ll);
   exg_ss_integrand race_integrand(SSD, pars, min_ll);
   // perform integration: likelihood of stop process winning
   IntegrationResult out = my_integrate(race_integrand, lower, upper);
@@ -208,49 +198,6 @@ double ss_exg_stop_success_lpdf(
   // NB in the original R code from the DMC toolbox (`my.integrate`), -Inf was
   // returned in case of failed integration
   return bad_out ? min_ll : std::log(out.value);
-}
-
-// go race log likelihood function, not accounting for go failure
-double exg_race(
-    // single RT
-    double RT,
-    // parameter values: rows = accumulators, columns = parameters
-    NumericMatrix pars,
-    // index of accumulator winner and loser(s)
-    LogicalVector winner,
-    // minimal log likelihood, to protect against numerical issues
-    double min_ll
-) {
-   const int n_acc = winner.length();
-   IntegerVector i = seq_len(n_acc)-1;
-   int wi = as<int>(i[winner]);
-
-   Rcpp::Rcout << "  wi: " << wi << std::endl;
-
-   double log_d = dexg(RT, pars(wi, 0), pars(wi, 1), pars(wi, 2), true);
-
-   Rcpp::Rcout << "  log_d: " << log_d << std::endl;
-
-//   Rcpp::Rcout << "  n_acc: " << n_acc << std::endl;
-
-   if(n_acc > 1) {
-     double log_s = 0;
-     if (n_acc == 2) {
-       int li = as<int>(i[!winner]);
-
-        Rcpp::Rcout << "  li: " << li << std::endl;
-
-       log_s = pexg(RT, pars(li, 0), pars(li, 1), pars(li, 2), false, true);
-     } else {
-       IntegerVector li = i[!winner];
-       for (int i = 0; i < (n_acc-2); i++) {
-         log_s = log_s +  pexg(RT, pars(li[i], 0), pars(li[i], 1), pars(li[i], 2), false, true);
-       }
-     }
-     Rcpp::Rcout << "  log_s: " << log_s << std::endl;
-     log_d = log_d + log_s;
-   }
-   return(std::isfinite(log_d) ? log_d : min_ll);
 }
 
 
@@ -290,39 +237,24 @@ NumericVector ss_exg_lpdf(
   // loop over trials
   for (int trial = 0; trial < n_trials; trial++) {
 
-    int trial1 = trial + 1;
-    Rcpp::Rcout << "Trial: " << trial1 << std::endl;
-
     // get indices for all accumulators corresponding to the current trial
     int start_row = trial * n_acc;
     int end_row = (trial + 1) * n_acc - 1;
 
     // if any accumulator was flagged as not ok for the current trial, assign
     // minimal log likelihood and skip to next trial
-
-
-    if (is_ok[trial]!=1) {
+    if (is_ok[trial] != 1) {
       out[trial] = min_ll;
       continue;
     }
 
-//    if (is_true(any(!is_ok[Range(start_row, end_row)]))) {
-//      out[trial] = min_ll;
-//      continue;
-//    }
-
     // branching logic:
     // first, was a response observed? second, was a stop signal presented?
-//    bool response_observed = !NumericVector::is_na(R[start_row]);
-
-    bool response_observed = R[start_row]!=NA_INTEGER;
+    bool response_observed = R[start_row] != NA_INTEGER;
     bool stop_signal_presented = std::isfinite(SSD[start_row]);
 
     if (response_observed) {
       if (stop_signal_presented) {
-
-      Rcpp::Rcout << "   Respond to stop signal" << std::endl;
-
         // stop trial with a response:
         // explained as a probabilistic mixture of
         // (i)  go process "won" because stop process wasn't triggered
@@ -346,22 +278,9 @@ NumericVector ss_exg_lpdf(
         // likelihood = (1-gf) x [tf x go_prob + (1-tf) x stop_fail_prob]
         out[trial] = log1m(gf[trial]) + log_mix(tf[trial], go_lprob, stop_fail_lprob);
       } else {
-
-        Rcpp::Rcout << "   Respond to go " << std::endl;
-//        NumericMatrix pi = pars(Range(start_row, end_row), _);
-//        Rcpp::Rcout <<  pi << std::endl;
-//        LogicalVector wi = winner[Range(start_row, end_row)];
-//        Rcpp::Rcout << wi << std::endl;
-
         // go trial with a response:
         // explained by go process without go failure
-//        go_lprob = ss_exg_go_lpdf(
-//          RT[start_row],
-//          pars(Range(start_row, end_row), _),
-//          winner[Range(start_row, end_row)],
-//          min_ll
-//        );
-        go_lprob = exg_race(
+        go_lprob = ss_exg_go_lpdf(
           RT[start_row],
           pars(Range(start_row, end_row), _),
           winner[Range(start_row, end_row)],
@@ -372,10 +291,6 @@ NumericVector ss_exg_lpdf(
       }
     } else {
       if (stop_signal_presented) {
-
-        Rcpp::Rcout << "   Signal inhibit" << std::endl;
-
-
         // stop trial with no response:
         // explained as a probabilistic mixture of
         // (i)  go failure; OR
@@ -384,7 +299,6 @@ NumericVector ss_exg_lpdf(
         stop_success_integral = ss_exg_stop_success_lpdf(
           SSD[start_row],
           pars(Range(start_row, end_row), _),
-          // winner[Range(start_row, end_row)],
           min_ll,
           R_NegInf,
           R_PosInf
@@ -393,9 +307,6 @@ NumericVector ss_exg_lpdf(
         // likelihood = gf + [(1-gf) x (1-tf) x stop_success_integral]
         out[trial] = log_sum_exp(std::log(gf[trial]), stop_success_lprob);
       } else {
-
-        Rcpp::Rcout << "   Go failure" << std::endl;
-
         // go trial with no response:
         // explained by go failure
         // likelihood = gf
