@@ -187,6 +187,28 @@ LogicalVector c_bool_expand(LogicalVector x1, IntegerVector expand){
   return(out);
 }
 
+NumericVector c_expand_jeroen(NumericVector x1, NumericVector expand){
+  const int n_out = expand.length();
+  NumericVector out(n_out);
+  int curr_idx;
+  for(int i = 0; i < n_out; i++){
+    curr_idx = expand[i] - 1; //expand created in 1-based R
+    out[i] = x1[curr_idx];
+  }
+  return(out);
+}
+
+LogicalVector c_bool_expand_jeroen(LogicalVector x1, NumericVector expand){
+  const int n_out = expand.length();
+  LogicalVector out(n_out);
+  int curr_idx;
+  for(int i = 0; i < n_out; i++){
+    curr_idx = expand[i] - 1; //expand created in 1-based R
+    out[i] = x1[curr_idx];
+  }
+  return(out);
+}
+
 NumericVector c_add_vectors(NumericVector x1, NumericVector x2){
   if(is_na(x2)[0] ){
     return(x1);
