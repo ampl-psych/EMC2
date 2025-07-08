@@ -124,7 +124,7 @@ LNR <- function() {
 #' @return A list defining the cognitive model
 #' @export
 
-LNR <- function() {
+MLNR <- function() {
   list(
     type="RACE",
     c_name = "LNR",
