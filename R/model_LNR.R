@@ -108,6 +108,45 @@ LNR <- function() {
 
 
 
+#' The Log-Normal Race Model with response omissions
+#'
+#' @details
+#' See ?LNR for most details
+#'
+#' pContaminant is a probit scaled parameter for non-process (contaminant) miss.
+#' For background see :
+#'
+#' Damaso, K. A. M., Castro, S. C., Todd, J., Strayer, D. L., Provost, A.,
+#' Matzke, D., & Heathcote, A. (2021). A cognitive model of response omissions
+#' in distraction paradigms. Memory & Cognition, 1–17.
+#' https://doi.org/10.3758/s13421-021-01265-z
+#'
+#' @return A list defining the cognitive model
+#' @export
+
+LNR <- function() {
+  list(
+    type="RACE",
+    c_name = "LNR",
+    p_types=c("m" = 1,"s" = log(1),"t0" = log(0),pContaminant=qnorm(0)),
+    transform=list(func=c(m = "identity",s = "exp", t0 = "exp"),
+                   pContaminant="pnorm"),
+    bound=list(minmax=cbind(m=c(-Inf,Inf),s = c(0, Inf), t0=c(0.05,Inf),
+                            pContaminant=c(0,1))),
+    # Trial dependent parameter transform
+    Ttransform = function(pars,dadm) pars,
+    # Random function for racing accumulators
+    rfun=function(data=NULL,pars) rLNR(data$lR, pars, ok = attr(pars, "ok")),
+    # Density function (PDF) for single accumulator
+    dfun=function(rt,pars) dLNR(rt,pars),
+    # Probability function (CDF) for single accumulator
+    pfun=function(rt,pars) pLNR(rt,pars),
+    # Race likelihood combining pfun and dfun
+    log_likelihood=function(pars,dadm, model, min_ll=log(1e-10))
+      log_likelihood_race_missing(pars=pars, dadm = dadm, model = model, min_ll = min_ll)
+  )
+}
+
 
 
 

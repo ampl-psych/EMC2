@@ -395,3 +395,48 @@ RDM <- function(){
       log_likelihood_race(pars=pars, dadm = dadm, model = model, min_ll = min_ll)
   )
 }
+
+
+#' The Racing Diffusion Model with response omissions
+#'
+#' @details
+#' See ?RDM for most details
+#'
+#' pContaminant is a probit scaled parameter for non-process (contaminant) miss.
+#' For background see :
+#'
+#' Damaso, K. A. M., Castro, S. C., Todd, J., Strayer, D. L., Provost, A.,
+#' Matzke, D., & Heathcote, A. (2021). A cognitive model of response omissions
+#' in distraction paradigms. Memory & Cognition, 1–17.
+#' https://doi.org/10.3758/s13421-021-01265-z
+#'
+#' @return A list defining the cognitive model
+#' @export
+
+MRDM <- function(){
+  list(
+    type="RACE",
+    c_name = "MRDM",
+    p_types=c("v" = log(1),"B" = log(1),"A" = log(0),"t0" = log(0),"s" = log(1),
+              pContaminant=qnorm(0)),
+    transform=list(func=c(v = "exp", B = "exp", A = "exp",t0 = "exp", s = "exp",
+                          pContaminant="pnorm")),
+    bound=list(minmax=cbind(v=c(1e-3,Inf), B=c(0,Inf), A=c(1e-4,Inf),
+                            t0=c(0.05,Inf), s=c(0,Inf),pContaminant=c(0,1)),
+               exception=c(A=0, v=0)),
+    # Trial dependent parameter transform
+    Ttransform = function(pars,dadm) {
+      pars <- cbind(pars,b=pars[,"B"] + pars[,"A"])
+      pars
+    },
+    # Random function for racing accumulators
+    rfun=function(data=NULL,pars)  rRDM(data$lR,pars,ok=attr(pars, "ok")),
+    # Density function (PDF) for single accumulator
+    dfun=function(rt,pars) dRDM(rt,pars),
+    # Probability function (CDF) for single accumulator
+    pfun=function(rt,pars) pRDM(rt,pars),
+    # Race likelihood combining pfun and dfun
+    log_likelihood=function(pars,dadm,model,min_ll=log(1e-10))
+      log_likelihood_race_missing(pars=pars, dadm = dadm, model = model, min_ll = min_ll)
+  )
+}
