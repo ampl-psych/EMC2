@@ -135,6 +135,54 @@ DDM <- function(){
   )
 }
 
+
+#' The DDM with response omissions
+#'
+#' @details
+#' See ?DDM for most details
+#'
+#' pContaminant is a probit scaled parameter for non-process (contaminant) miss.
+#' For background see :
+#'
+#' Damaso, K. A. M., Castro, S. C., Todd, J., Strayer, D. L., Provost, A.,
+#' Matzke, D., & Heathcote, A. (2021). A cognitive model of response omissions
+#' in distraction paradigms. Memory & Cognition, 1–17.
+#' https://doi.org/10.3758/s13421-021-01265-z
+#'
+#' Note: This model does not have an Rcpp version.
+#'
+#' @return A list defining the cognitive model
+#' @export
+
+MDDM <- function(){
+  list(
+    type="DDM",
+    p_types=c("v" = 1,"a" = log(1),"sv" = log(0),"t0" = log(0),"st0" = log(0),
+      "s" = log(1),"Z" = qnorm(0.5),"SZ" = qnorm(0),pContaminant=qnorm(0)),
+    # Trial dependent parameter transform
+    transform=list(func=c(v = "identity",a = "exp",sv = "exp",t0 = "exp",
+      st0 = "exp",s = "exp",Z = "pnorm",SZ = "pnorm",pContaminant="pnorm")),
+    bound=list(minmax=cbind(v=c(-20,20),a=c(0,10),Z=c(.01,.99),t0=c(0.05,Inf),
+      sv=c(.01,10),s=c(0,Inf),SZ=c(.01,.99),st0=c(0,.5),pContaminant=c(0,1)),
+               exception=c(sv=0,SZ=0,st0=0)),
+    Ttransform = function(pars,dadm) {
+      pars[,"SZ"] <- 2*pars[,"SZ"]*apply(cbind(pars[,"Z"],1-pars[,"Z"]),1,min)
+      pars <- cbind(pars,z=pars[,"Z"]*pars[,"a"], sz = pars[,"SZ"]*pars[,"a"])
+      pars
+    },
+    # Random function
+    rfun=function(data=NULL,pars) rDDM(data$R,pars, attr(pars, "ok")),
+    # Density function (PDF)
+    dfun=function(rt,R,pars) dDDM(rt,R,pars),
+    # Probability function (CDF)
+    pfun=function(rt,R,pars) pDDM(rt,R,pars),
+    log_likelihood=function(pars,dadm,model,min_ll=log(1e-10)){
+      log_likelihood_ddm_missing(pars=pars, dadm = dadm, model = model, min_ll = min_ll)
+    }
+  )
+}
+
+
 #### GNG ----
 
 #' The GNG (go/nogo) Diffusion Decision Model (DDMGNGnoC)
