@@ -1023,15 +1023,15 @@ log_likelihood_race_ss_old <- function(pars,dadm,model,min_ll=log(1e-10))
         # Fill in stop-trial non-response probabilities, either 1) go failure
         # 2) not go failure and not trigger failure and stop wins
         tstopNR <- trials[ispstopNR[isp1]]  # trial number
-        print("trial numbers: ")
-        print(tstopNR)
+        # print("trial numbers: ")
+        # print(tstopNR)
         allLL[allok][tstopNR] <- log(gf[tstopNR] + (1-gf[tstopNR])*(1-tf[tstopNR])*pStop)
-        print("stop_success_integral: ")
-        print(round(log(pStop), digits = 6))
-        print("stop_success_lprob: ")
-        print(round(log((1-gf[tstopNR])*(1-tf[tstopNR])*pStop), digits = 6))
-        print("trial_ll: ")
-        print(round(allLL[allok][tstopNR], digits = 6))
+        # print("stop_success_integral: ")
+        # print(round(log(pStop), digits = 6))
+        # print("stop_success_lprob: ")
+        # print(round(log((1-gf[tstopNR])*(1-tf[tstopNR])*pStop), digits = 6))
+        # print("trial_ll: ")
+        # print(round(allLL[allok][tstopNR], digits = 6))
       }
     }
 
