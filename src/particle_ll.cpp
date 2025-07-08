@@ -945,13 +945,13 @@ NumericVector calc_ll(NumericMatrix p_matrix, DataFrame data, NumericVector cons
     // Love me some good old ugly but fast c++ pointers
     NumericVector (*dfun)(NumericVector, NumericMatrix, LogicalVector, double, LogicalVector);
     NumericVector (*pfun)(NumericVector, NumericMatrix, LogicalVector, double, LogicalVector);
-    if (type == "LBA") {
+    if (type == "LBA" || type == "MLBA") {
       dfun = dlba_c;
       pfun = plba_c;
-    } else if (type == "RDM") {
+    } else if (type == "RDM" || type == "MRDM") {
       dfun = drdm_c;
       pfun = prdm_c;
-    } else {
+    } else { // type == "LNR" || type == "MLNR"
       dfun = dlnr_c;
       pfun = plnr_c;
     }
