@@ -132,7 +132,7 @@ MLNR <- function() {
     transform=list(func=c(m = "identity",s = "exp", t0 = "exp"),
                    pContaminant="pnorm"),
     bound=list(minmax=cbind(m=c(-Inf,Inf),s = c(0, Inf), t0=c(0.05,Inf),
-                            pContaminant=c(0,1))),
+                            pContaminant=c(0,1)),exception=c(pContaminant=0)),
     # Trial dependent parameter transform
     Ttransform = function(pars,dadm) pars,
     # Random function for racing accumulators
@@ -158,7 +158,7 @@ MLNRnoC <- function() {
     transform=list(func=c(m = "identity",s = "exp", t0 = "exp"),
                    pContaminant="pnorm"),
     bound=list(minmax=cbind(m=c(-Inf,Inf),s = c(0, Inf), t0=c(0.05,Inf),
-                            pContaminant=c(0,1))),
+                            pContaminant=c(0,1)),exception=c(pContaminant=0)),
     # Trial dependent parameter transform
     Ttransform = function(pars,dadm) pars,
     # Random function for racing accumulators

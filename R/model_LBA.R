@@ -282,7 +282,7 @@ MLBA <- function(){
                           t0 = "exp",pContaminant="pnorm")),
     bound=list(minmax=cbind(v=c(-Inf,Inf),sv = c(0, Inf), A=c(1e-4,Inf),
                             B=c(0,Inf),t0=c(0.05,Inf),pContaminant=c(0,1)),
-               exception=c(A=0)),
+               exception=c(A=0, pContaminant=0)),
     # Transform to natural scale
     # Trial dependent parameter transform
     Ttransform = function(pars,dadm) {
@@ -317,7 +317,7 @@ MLBAnoC <- function(){
                           t0 = "exp",pContaminant="pnorm")),
     bound=list(minmax=cbind(v=c(-Inf,Inf),sv = c(0, Inf), A=c(1e-4,Inf),
                             B=c(0,Inf),t0=c(0.05,Inf),pContaminant=c(0,1)),
-               exception=c(A=0)),
+               exception=c(A=0, pContaminant=0)),
     # Transform to natural scale
     # Trial dependent parameter transform
     Ttransform = function(pars,dadm) {

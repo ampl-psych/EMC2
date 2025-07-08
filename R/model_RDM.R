@@ -423,7 +423,7 @@ MRDM <- function(){
                           pContaminant="pnorm")),
     bound=list(minmax=cbind(v=c(1e-3,Inf), B=c(0,Inf), A=c(1e-4,Inf),
                             t0=c(0.05,Inf), s=c(0,Inf),pContaminant=c(0,1)),
-               exception=c(A=0, v=0)),
+               exception=c(A=0, v=0, pContaminant=0)),
     # Trial dependent parameter transform
     Ttransform = function(pars,dadm) {
       pars <- cbind(pars,b=pars[,"B"] + pars[,"A"])
@@ -454,7 +454,7 @@ MRDMnoC <- function(){
                           pContaminant="pnorm")),
     bound=list(minmax=cbind(v=c(1e-3,Inf), B=c(0,Inf), A=c(1e-4,Inf),
                             t0=c(0.05,Inf), s=c(0,Inf),pContaminant=c(0,1)),
-               exception=c(A=0, v=0)),
+               exception=c(A=0, v=0, pContaminant=0)),
     # Trial dependent parameter transform
     Ttransform = function(pars,dadm) {
       pars <- cbind(pars,b=pars[,"B"] + pars[,"A"])
