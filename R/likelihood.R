@@ -37,6 +37,179 @@ log_likelihood_race <- function(pars,dadm,model,min_ll=log(1e-10))
   } else return(sum(pmax(min_ll,lds[attr(dadm,"expand")])))
 }
 
+#### Omission or "missing" versions of race and ddm in R
+
+log_likelihood_ddm_missing <- function(p_vector,dadm,min_ll=log(1e-10))
+  # DDM summed log likelihood, with protection against numerical issues
+{
+
+  pr_pt <- function(LT,UT,R,p)
+  # p(untruncated response)/p(truncated response), > 1, multiplicative truncation correction
+  {
+    pr <- attr(dadm,"model")()$pfun(rep(Inf,length(R)),R,p)
+    out <- rep(1,length(R))
+    if (!any(is.na(pr))) {
+      ok <- pr>0
+      if (any(ok)) {
+        pt <- attr(dadm,"model")()$pfun(UT[ok],R[ok],p[ok,,drop=FALSE]) -
+            attr(dadm,"model")()$pfun(LT[ok],R[ok],p[ok,,drop=FALSE])
+        if (!any(is.na(pt))) out[ok] <- pr[ok]/pt
+      }
+    }
+    out[is.na(out) | is.nan(out) | !is.finite(out) | out < 1 ] <- 1
+    out
+  }
+
+  pars <- get_pars_matrix(p_vector,dadm)
+  like <- numeric(dim(dadm)[1])
+  if (any(attr(pars,"ok"))) {
+    rt <- dadm$rt[attr(pars,"ok")]
+    R <- dadm$R[attr(pars,"ok")]
+    p <- pars[attr(pars,"ok"),,drop=FALSE]
+
+    # Calculate truncation?
+    LT <- attr(dadm,"LT")
+    UT <- attr(dadm,"UT")
+    dotrunc <- (!is.null(LT) | !is.null(UT))
+    if (is.null(LT)) LT <- 0
+    if (is.null(UT)) UT <- Inf
+
+    # Calculate censoring
+    LC <- attr(dadm,"LC")
+    UC <- attr(dadm,"UC")
+
+    likeok <- rep(NA,sum(attr(pars,"ok")))
+
+    # Response known
+    # Fast
+    nort <- rt==-Inf; nort[is.na(nort)] <- FALSE; nort <- nort & !is.na(R)
+    if ( any(nort) ) {
+      likeok[nort] <- pmax(0,attr(dadm,"model")()$pfun(rep(LC,sum(nort)),R[nort],p[nort,,drop=FALSE]))
+    }
+    # Slow
+    nort <- rt==Inf; nort[is.na(nort)] <- FALSE; nort <- nort & !is.na(R)
+    if ( any(nort) ) {
+      likeok[nort] <- pmax(0,attr(dadm,"model")()$pfun(rep(Inf,sum(nort)),R[nort],p[nort,,drop=FALSE])-
+                      attr(dadm,"model")()$pfun(rep(UC,sum(nort)),R[nort],p[nort,,drop=FALSE]))
+    }
+    # No direction
+    nort <- is.na(rt) & !is.na(R)
+    if ( any(nort) ) {
+      likeok[nort] <- pmax(0,attr(dadm,"model")()$pfun(rep(LC,sum(nort)),R[nort],p[nort,,drop=FALSE]) +
+                      (attr(dadm,"model")()$pfun(rep(Inf,sum(nort)),R[nort],p[nort,,drop=FALSE])-
+                         attr(dadm,"model")()$pfun(rep(UC,sum(nort)),R[nort],p[nort,,drop=FALSE])))
+    }
+
+    # Response unknown.
+    # Fast
+    nort <- rt==-Inf; nort[is.na(nort)] <- FALSE; nort <- nort & is.na(R)
+    if ( any(nort) ) {
+      likeok[nort] <- pmax(0,attr(dadm,"model")()$pfun(rep(LC,sum(nort)),"lower",p[nort,,drop=FALSE]) +
+                      attr(dadm,"model")()$pfun(rep(LC,sum(nort)),"upper",p[nort,,drop=FALSE]))
+    }
+    # Slow
+    nort <- rt==Inf; nort[is.na(nort)] <- FALSE; nort <- nort & is.na(R)
+    if ( any(nort) ) {
+      likeok[nort] <- pmax(0,(attr(dadm,"model")()$pfun(rep(Inf,sum(nort)),"lower",p[nort,,drop=FALSE])-
+                       attr(dadm,"model")()$pfun(rep(UC,sum(nort)),"lower",p[nort,,drop=FALSE])) +
+                      (attr(dadm,"model")()$pfun(rep(Inf,sum(nort)),"upper",p[nort,,drop=FALSE])-
+                       attr(dadm,"model")()$pfun(rep(UC,sum(nort)),"upper",p[nort,,drop=FALSE])))
+    }
+    # no direction
+    nort <- is.na(rt) & is.na(R)
+    likeok[nort] <- 0
+    nort <- nort & (p[,"pContaminant"] == 0) # Otherwise not identifiable
+    if ( any(nort) ) {
+      likeok[nort] <- pmax(0,
+        attr(dadm,"model")()$pfun(rep(LC,sum(nort)),"lower",p[nort,,drop=FALSE]) +
+        attr(dadm,"model")()$pfun(rep(LC,sum(nort)),"upper",p[nort,,drop=FALSE]) +
+        (attr(dadm,"model")()$pfun(rep(Inf,sum(nort)),"lower",p[nort,,drop=FALSE])-
+         attr(dadm,"model")()$pfun(rep(UC,sum(nort)),"lower",p[nort,,drop=FALSE])) +
+        (attr(dadm,"model")()$pfun(rep(Inf,sum(nort)),"upper",p[nort,,drop=FALSE])-
+         attr(dadm,"model")()$pfun(rep(UC,sum(nort)),"upper",p[nort,,drop=FALSE])))
+    }
+
+    # Truncation where not censored or censored and response known
+    ok <- is.na(likeok) & !is.na(R)
+    mult <- rep(1,length(likeok))
+    if ( dotrunc & any(ok) )
+      mult[ok] <- pr_pt(rep(LT,sum(ok)),rep(UT,sum(ok)),R[ok],p[ok,,drop=FALSE])
+
+    # Usual non-missing update x truncation ratio
+    ok <- is.na(likeok)
+    likeok[ok] <- mult[ok]*attr(dadm,"model")()$dfun(rt[ok],R[ok],p[ok,,drop=FALSE])
+
+    # Non-process (contaminant) miss.
+    ispContaminant <- p[,"pContaminant"]>0
+    if ( any(ispContaminant) ) {
+      pc <- p[,"pContaminant"]
+      isMiss <- is.na(R)
+      likeok[isMiss] <- pc[isMiss] + (1-pc[isMiss])*likeok[isMiss]
+      likeok[!isMiss] <- (1-pc[!isMiss])*likeok[!isMiss]
+    }
+
+    like[attr(pars,"ok")] <- likeok
+  }
+
+  like[attr(pars,"ok")][is.na(like[attr(pars,"ok")])] <- 0
+  sum(pmax(min_ll,log(like[attr(dadm,"expand")])))
+}
+
+
+
+pr_pt <- function(LT,UT,ps,dadm)
+    # log(p(untruncated response)/p(truncated response)), >= log(1), multiplicative truncation correction
+  {
+
+  f <- function(t,p,dfun,pfun) {
+    # Called by integrate to get race density for vector of times t given
+    # matrix of parameters where first row is the winner.
+
+    out <- dfun(t,
+                matrix(rep(p[1,],each=length(t)),nrow=length(t),dimnames=list(NULL,dimnames(p)[[2]])))
+    if (dim(p)[1]>1) for (i in 2:dim(p)[1])
+      out <- out*(1-pfun(t,
+                         matrix(rep(p[i,],each=length(t)),nrow=length(t),dimnames=list(NULL,dimnames(p)[[2]]))))
+    out
+  }
+
+    pr <- my_integrate(f,lower=0,upper=Inf,p=ps,
+                       dfun=attr(dadm,"model")()$dfun,pfun=attr(dadm,"model")()$pfun)
+    if (inherits(pr, "try-error") || suppressWarnings(is.nan(pr$value))) return(NA)
+    if (pr$value==0) return(0)
+    pt <- my_integrate(f,lower=LT,upper=UT,p=ps,
+                       dfun=attr(dadm,"model")()$dfun,pfun=attr(dadm,"model")()$pfun)
+    if (inherits(pt, "try-error") || suppressWarnings(is.nan(pt$value)) || pt$value==0) return(NA)
+    out <- pmax(0,pmin(pr$value,1))/pmax(0,pmin(pt$value,1))
+    if (is.infinite(out)) return(NA)
+    out
+}
+
+pLU <- function(LT,LC,UC,UT,ps,dadm)
+    # Probability from LT-LC + UC-UT
+  {
+
+  f <- function(t,p,dfun,pfun) {
+    # Called by integrate to get race density for vector of times t given
+    # matrix of parameters where first row is the winner.
+
+    out <- dfun(t,
+                matrix(rep(p[1,],each=length(t)),nrow=length(t),dimnames=list(NULL,dimnames(p)[[2]])))
+    if (dim(p)[1]>1) for (i in 2:dim(p)[1])
+      out <- out*(1-pfun(t,
+                         matrix(rep(p[i,],each=length(t)),nrow=length(t),dimnames=list(NULL,dimnames(p)[[2]]))))
+    out
+  }
+
+    pL <- my_integrate(f,lower=LT,upper=LC,p=ps,
+                       dfun=attr(dadm,"model")()$dfun,pfun=attr(dadm,"model")()$pfun)
+    if (inherits(pL,"try-error") || suppressWarnings(is.nan(pL$value))) return(NA)
+    pU <- my_integrate(f,lower=UC,upper=UT,p=ps,
+                       dfun=attr(dadm,"model")()$dfun,pfun=attr(dadm,"model")()$pfun)
+    if (inherits(pU,"try-error") || suppressWarnings(is.nan(pU$value))) return(NA)
+    pmax(0,pmin(pL$value,1))+pmax(0,pmin(pU$value,1))
+}
+
 
 log_likelihood_race_missing <- function(pars,dadm,model,min_ll=log(1e-10))
   # Race model summed log likelihood for models allowing missing values
