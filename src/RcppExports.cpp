@@ -199,6 +199,70 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// pTEXG_vec
+NumericVector pTEXG_vec(NumericVector q, double mu, double sigma, double tau, double lb, bool lower_tail, bool log_p);
+RcppExport SEXP _EMC2_pTEXG_vec(SEXP qSEXP, SEXP muSEXP, SEXP sigmaSEXP, SEXP tauSEXP, SEXP lbSEXP, SEXP lower_tailSEXP, SEXP log_pSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type q(qSEXP);
+    Rcpp::traits::input_parameter< double >::type mu(muSEXP);
+    Rcpp::traits::input_parameter< double >::type sigma(sigmaSEXP);
+    Rcpp::traits::input_parameter< double >::type tau(tauSEXP);
+    Rcpp::traits::input_parameter< double >::type lb(lbSEXP);
+    Rcpp::traits::input_parameter< bool >::type lower_tail(lower_tailSEXP);
+    Rcpp::traits::input_parameter< bool >::type log_p(log_pSEXP);
+    rcpp_result_gen = Rcpp::wrap(pTEXG_vec(q, mu, sigma, tau, lb, lower_tail, log_p));
+    return rcpp_result_gen;
+END_RCPP
+}
+// dTEXG_vec
+NumericVector dTEXG_vec(NumericVector x, double mu, double sigma, double tau, double lb, bool log_d);
+RcppExport SEXP _EMC2_dTEXG_vec(SEXP xSEXP, SEXP muSEXP, SEXP sigmaSEXP, SEXP tauSEXP, SEXP lbSEXP, SEXP log_dSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type x(xSEXP);
+    Rcpp::traits::input_parameter< double >::type mu(muSEXP);
+    Rcpp::traits::input_parameter< double >::type sigma(sigmaSEXP);
+    Rcpp::traits::input_parameter< double >::type tau(tauSEXP);
+    Rcpp::traits::input_parameter< double >::type lb(lbSEXP);
+    Rcpp::traits::input_parameter< bool >::type log_d(log_dSEXP);
+    rcpp_result_gen = Rcpp::wrap(dTEXG_vec(x, mu, sigma, tau, lb, log_d));
+    return rcpp_result_gen;
+END_RCPP
+}
+// dTEXGrace
+NumericVector dTEXGrace(NumericMatrix dt, NumericVector mu, NumericVector sigma, NumericVector tau, NumericVector lb);
+RcppExport SEXP _EMC2_dTEXGrace(SEXP dtSEXP, SEXP muSEXP, SEXP sigmaSEXP, SEXP tauSEXP, SEXP lbSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericMatrix >::type dt(dtSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type mu(muSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type sigma(sigmaSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type tau(tauSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type lb(lbSEXP);
+    rcpp_result_gen = Rcpp::wrap(dTEXGrace(dt, mu, sigma, tau, lb));
+    return rcpp_result_gen;
+END_RCPP
+}
+// stopfn_texg
+NumericVector stopfn_texg(NumericVector t, NumericVector mu, NumericVector sigma, NumericVector tau, NumericVector lb, double SSD);
+RcppExport SEXP _EMC2_stopfn_texg(SEXP tSEXP, SEXP muSEXP, SEXP sigmaSEXP, SEXP tauSEXP, SEXP lbSEXP, SEXP SSDSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type t(tSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type mu(muSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type sigma(sigmaSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type tau(tauSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type lb(lbSEXP);
+    Rcpp::traits::input_parameter< double >::type SSD(SSDSEXP);
+    rcpp_result_gen = Rcpp::wrap(stopfn_texg(t, mu, sigma, tau, lb, SSD));
+    return rcpp_result_gen;
+END_RCPP
+}
 // pEXG_RDEX
 NumericVector pEXG_RDEX(NumericVector q, double mu, double sigma, double tau, bool lower_tail, bool log_p);
 RcppExport SEXP _EMC2_pEXG_RDEX(SEXP qSEXP, SEXP muSEXP, SEXP sigmaSEXP, SEXP tauSEXP, SEXP lower_tailSEXP, SEXP log_pSEXP) {
@@ -516,6 +580,10 @@ static const R_CallMethodDef CallEntries[] = {
     {"_EMC2_dEXG_old", (DL_FUNC) &_EMC2_dEXG_old, 5},
     {"_EMC2_dEXGrace_old", (DL_FUNC) &_EMC2_dEXGrace_old, 4},
     {"_EMC2_stopfn_exg_old", (DL_FUNC) &_EMC2_stopfn_exg_old, 5},
+    {"_EMC2_pTEXG_vec", (DL_FUNC) &_EMC2_pTEXG_vec, 7},
+    {"_EMC2_dTEXG_vec", (DL_FUNC) &_EMC2_dTEXG_vec, 6},
+    {"_EMC2_dTEXGrace", (DL_FUNC) &_EMC2_dTEXGrace, 5},
+    {"_EMC2_stopfn_texg", (DL_FUNC) &_EMC2_stopfn_texg, 6},
     {"_EMC2_pEXG_RDEX", (DL_FUNC) &_EMC2_pEXG_RDEX, 6},
     {"_EMC2_dEXG_RDEX", (DL_FUNC) &_EMC2_dEXG_RDEX, 5},
     {"_EMC2_pigt0_RDEX", (DL_FUNC) &_EMC2_pigt0_RDEX, 3},

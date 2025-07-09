@@ -122,7 +122,6 @@ double dtexg(
   }
   if (sigma <= 0. || tau <= 0.) return NA_REAL;
   if (lower >= upper) return NA_REAL;
-  // CHECK this might be too harsh; maybe x < lower || x > upper instead
   if (x <= lower || x >= upper) return log_d ? R_NegInf : 0.;
 
   double x_ld = dexg(x, mu, sigma, tau, true);

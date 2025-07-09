@@ -49,6 +49,22 @@ stopfn_exg_old <- function(t, mu, sigma, tau, SSD) {
     .Call(`_EMC2_stopfn_exg_old`, t, mu, sigma, tau, SSD)
 }
 
+pTEXG_vec <- function(q, mu = 5., sigma = 1., tau = 1., lb = .05, lower_tail = TRUE, log_p = FALSE) {
+    .Call(`_EMC2_pTEXG_vec`, q, mu, sigma, tau, lb, lower_tail, log_p)
+}
+
+dTEXG_vec <- function(x, mu = 5., sigma = 1., tau = 1., lb = .05, log_d = FALSE) {
+    .Call(`_EMC2_dTEXG_vec`, x, mu, sigma, tau, lb, log_d)
+}
+
+dTEXGrace <- function(dt, mu, sigma, tau, lb) {
+    .Call(`_EMC2_dTEXGrace`, dt, mu, sigma, tau, lb)
+}
+
+stopfn_texg <- function(t, mu, sigma, tau, lb, SSD) {
+    .Call(`_EMC2_stopfn_texg`, t, mu, sigma, tau, lb, SSD)
+}
+
 pEXG_RDEX <- function(q, mu = 5., sigma = 1., tau = 1., lower_tail = TRUE, log_p = FALSE) {
     .Call(`_EMC2_pEXG_RDEX`, q, mu, sigma, tau, lower_tail, log_p)
 }

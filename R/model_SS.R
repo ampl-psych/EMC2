@@ -598,6 +598,35 @@ pstopEXG <- function(parstop,n_acc,upper=Inf,
   ups[as.numeric(factor(cells,levels=cells[uniq]))]
 }
 
+
+pstopTEXG <- function(
+    parstop, n_acc, upper=Inf,
+    gpars=c("mu","sigma","tau","exg_lb"), spars=c("muS","sigmaS","tauS","exgS_lb")
+) {
+  sindex <- seq(1,nrow(parstop),by=n_acc)  # Stop accumulator index
+  ps <- parstop[sindex,spars,drop=FALSE]   # Stop accumulator parameters
+  SSDs <- parstop[sindex,"SSD",drop=FALSE] # SSDs
+  ntrials <- length(SSDs)
+  if (length(upper)==1) upper <- rep(upper,length.out=ntrials)
+  pgo <- array(parstop[,gpars],dim=c(n_acc,ntrials,length(gpars)),
+               dimnames=list(NULL,NULL,gpars))
+  cells <- apply(
+    cbind(SSDs,ps,upper,matrix(as.vector(aperm(pgo,c(2,1,3))),nrow=ntrials))
+    ,1,paste,collapse="")
+  # cells <- character(ntrials)
+  # for (i in 1:ntrials)
+  #   cells[i] <- paste(SSDs[i],ps[i,],pgo[,i,],upper[i],collapse="")
+  uniq <- !duplicated(cells)
+  ups <- sapply(1:sum(uniq),function(i){
+    my.integrate_old(f=stopfn_texg,lower=-Inf,SSD=SSDs[i],upper=upper[i],
+                     mu=c(ps[i,"muS"],pgo[,i,"mu"]),
+                     sigma=c(ps[i,"sigmaS"],pgo[,i,"sigma"]),
+                     tau=c(ps[i,"tauS"],pgo[,i,"tau"]),
+                     lb=c(ps[i,"exgS_lb"],pgo[,i,"exg_lb"]))
+  })
+  ups[as.numeric(factor(cells,levels=cells[uniq]))]
+}
+
 # #### Stop probability stop triggered ----
 #
 #
@@ -881,9 +910,8 @@ SStexG <- function() {
       return(ptexGaussianS(rt, parsS))
     },
     # Stop probability integral
-    # TODO
     sfun = function(pars, n_acc, upper = Inf) {
-      return(pstopEXG(pars, n_acc, upper = upper))
+      return(pstopTEXG(pars, n_acc, upper = upper))
     },
     # Random function for SS race
     # TODO
