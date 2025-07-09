@@ -130,6 +130,14 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
   }
   if (!is.null(trend)) {
     formula <- check_trend(trend,covariates, model, formula)
+    ## fix covariate name if filter_lR
+    for(trend_name in names(trend)) {
+      if('filter_lR' %in% names(trend[[trend_name]])) {
+        if(trend[[trend_name]]$filter_lR) {
+          trend[[trend_name]]$covariate <- paste0(trend[[trend_name]]$covariate,'_lRfiltered')
+        }
+      }
+    }
   }
 
   # Check if all parameters in the model are specified in the formula
@@ -597,8 +605,10 @@ design_model <- function(data,design,model=NULL,
       for(trend_name in names(trend)) {
         if('filter_lR' %in% names(trend[[trend_name]])) {
           if(trend[[trend_name]]$filter_lR) {
-            cov_name <- trend[[trend_name]]$covariate
-            dadm[dadm$lR!=levels(dadm$lR)[1],cov_name] <- NA
+            cov_name <- gsub('_lRfiltered', '', trend[[trend_name]]$covariate)
+            # copy to new column, filter
+            dadm[,trend[[trend_name]]$covariate] <- dadm[dadm$lR!=levels(dadm$lR)[1],cov_name]
+            dadm[dadm$lR!=levels(dadm$lR)[1],trend[[trend_name]]$covariate] <- NA
           }
         }
       }
