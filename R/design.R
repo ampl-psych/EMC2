@@ -591,6 +591,18 @@ design_model <- function(data,design,model=NULL,
       attr(dadm,"expand") <- 1:nrow(dadm)
     } else{
       attr(dadm,"expand") <- 1:(nrow(dadm)/length(unique(dadm$lR)))
+
+      ## SM: lR-filter
+      trend <- design$model()$trend
+      for(trend_name in names(trend)) {
+        if('filter_lR' %in% names(trend[[trend_name]])) {
+          if(trend[[trend_name]]$filter_lR) {
+            cov_name <- trend[[trend_name]]$covariate
+            dadm[dadm$lR!=levels(dadm$lR)[1],cov_name] <- NA
+          }
+        }
+      }
+      ## end SM
     }
   }
   p_names <-  unlist(lapply(out,function(x){dimnames(x)[[2]]}),use.names=FALSE)
