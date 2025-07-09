@@ -662,51 +662,76 @@ SSexG_old <- function() {
 #' | *tauS*      | log    | \[0, Inf\]        | log(.05)  |  | tau parameter of ex-Gaussian stopping finishing time distribution       |
 #' | *tf*      | probit       | \[0, 1\]        | qnorm(0)    |                            | Trigger failure probability           |
 #' | *gf*     | probit       | \[0, 1\]        | qnorm(0)    |                            | Go failure probability    |
-#'
+#' | *exg_lb*      | log       | \[0, Inf\]        | log(.05)    |                            | lower bound of ex-Gaussian go finishing time distribution           |
+#' | *exgS_lb*     | log       | \[0, Inf\]        | log(.05)    |                            | lower bound of ex-Gaussian stop finishing time distribution    |
 #'
 #'
 #' @return A model list with all the necessary functions to sample
 #' @export
 SSexG <- function() {
   list(
-    type="RACE",
+    type = "RACE",
     c_name = "SS_EXG",
-    p_types=c(mu=log(.4),sigma=log(.05),tau=log(.1),
-              muS=log(.3),sigmaS=log(.025),tauS=log(.05),tf=qnorm(0),gf=qnorm(0)),
-    transform=list(func=c( mu = "exp",  sigma = "exp",  tau = "exp",
-                          muS = "exp", sigmaS = "exp", tauS = "exp",
-                          tf="pnorm",gf="pnorm")),
-    bound=list(minmax=cbind( mu=c(0,Inf),  sigma=c(1e-4,Inf),  tau=c(1e-4,Inf),
-                            muS=c(0,Inf), sigmaS=c(1e-4,Inf), tauS=c(1e-4,Inf),
-                            tf=c(.001,.999),gf=c(.001,.999)),
-                            exception=c(tf=0,gf=0)),
+    p_types = c(
+      mu = log(.4), sigma = log(.05), tau = log(.1),
+      muS = log(.3), sigmaS = log(.025), tauS = log(.05),
+      tf = qnorm(0), gf = qnorm(0),
+      exg_lb = log(.05), exgS_lb = log(.05)
+    ),
+    transform = list(
+      func = c(
+        mu = "exp", sigma = "exp", tau = "exp",
+        muS = "exp", sigmaS = "exp", tauS = "exp",
+        tf = "pnorm", gf = "pnorm",
+        exg_lb = "exp", exgS_lb = "exp"
+      )
+    ),
+    bound = list(
+      minmax = cbind(
+        mu = c(0, Inf), sigma = c(1e-4, Inf), tau = c(1e-4, Inf),
+        muS = c(0, Inf), sigmaS = c(1e-4, Inf), tauS = c(1e-4, Inf),
+        tf = c(.001, .999), gf = c(.001, .999),
+        exg_lb = c(0, Inf), exgS_lb = c(0, Inf)
+      ),
+      exception = c(
+        tf = 0, gf = 0
+        # TODO add exception to allow for -Inf for exg_lb and exgS_lb
+      )
+    ),
     # Trial dependent parameter transform
     Ttransform = function(pars,dadm) {
       # if (any(names(dadm)=="SSD")) pars <- cbind(pars,SSD=dadm$SSD) else
       #   pars <- cbind(pars,SSD=rep(Inf,dim(pars)[1]))
-      pars <- cbind(pars,SSD=dadm$SSD)
-      pars <- cbind(pars,lI=as.numeric(dadm$lI))  # Only necessary for data generation.
-      pars
+      pars <- cbind(pars, SSD = dadm$SSD)
+      pars <- cbind(pars, lI = as.numeric(dadm$lI))  # Only necessary for data generation.
+      return(pars)
     },
     # Density function (PDF) for single go racer
-    dfunG=function(rt,pars) dexGaussianG(rt,pars),
+    dfunG = function(rt, pars) return(dexGaussianG(rt, pars)),
     # Probability function (CDF) for single go racer
-    pfunG=function(rt,pars) pexGaussianG(rt,pars),
+    pfunG = function(rt, pars) return(pexGaussianG(rt, pars)),
     # Density function (PDF) for single stop racer
-    dfunS=function(rt,pars)
-      dexGaussianS(rt,pars[,c("muS","sigmaS","tauS","SSD"),drop=FALSE]),
+    dfunS = function(rt, pars) {
+      parsS <- pars[ , c("muS", "sigmaS", "tauS", "SSD"), drop = FALSE]
+      return(dexGaussianS(rt, parsS))
+    },
     # Probability function (CDF) for single stop racer
-    pfunS=function(rt,pars)
-      pexGaussianS(rt,pars[,c("muS","sigmaS","tauS","SSD"),drop=FALSE]),
+    pfunS = function(rt, pars) {
+      parsS <- pars[ , c("muS", "sigmaS", "tauS", "SSD"), drop = FALSE]
+      return(pexGaussianS(rt, parsS))
+    },
     # Stop probability integral
-    sfun=function(pars,n_acc,upper=Inf) pstopEXG(pars,n_acc,upper=upper),
+    sfun = function(pars, n_acc, upper = Inf) {
+      return(pstopEXG(pars, n_acc, upper = upper))
+    },
     # Random function for SS race
-    rfun=function(data=NULL,pars) {
-      rSSexGaussian(data,pars,ok=attr(pars, "ok"))
+    rfun = function(data = NULL, pars) {
+      return(rSSexGaussian(data, pars, ok = attr(pars, "ok")))
     },
     # Race likelihood combining pfun and dfun
-    log_likelihood=function(pars,dadm,model,min_ll=log(1e-10))
-      log_likelihood_race_ss(pars, dadm, model, min_ll = min_ll)
+    log_likelihood = function(pars, dadm, model, min_ll = log(1e-10)) {
+      return(log_likelihood_race_ss(pars, dadm, model, min_ll = min_ll))
+    }
   )
 }
 

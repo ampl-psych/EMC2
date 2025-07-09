@@ -26,5 +26,7 @@ argument of \code{design()}.They can also be accessed with \code{SSexG()$p_types
    \emph{tauS} \tab log \tab [0, Inf] \tab log(.05) \tab  \tab tau parameter of ex-Gaussian stopping finishing time distribution \cr
    \emph{tf} \tab probit \tab [0, 1] \tab qnorm(0) \tab  \tab Trigger failure probability \cr
    \emph{gf} \tab probit \tab [0, 1] \tab qnorm(0) \tab  \tab Go failure probability \cr
+   \emph{exg_lb} \tab log \tab [0, Inf] \tab log(.05) \tab  \tab lower bound of ex-Gaussian go finishing time distribution \cr
+   \emph{exgS_lb} \tab log \tab [0, Inf] \tab log(.05) \tab  \tab lower bound of ex-Gaussian stop finishing time distribution \cr
 }
 }
