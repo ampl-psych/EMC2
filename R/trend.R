@@ -317,11 +317,13 @@ run_trend <- function(dadm, trend, param, trend_pars){
                         add = 0,
                         identity = 0)
   out <- numeric(nrow(dadm))
-  output_return <- matrix(nrow=nrow(dadm), ncol=length(trend$covariate))
+  updated_covariate <- matrix(nrow=nrow(dadm), ncol=length(trend$covariate))
+  #colnames(output_return) <-
   # fix, otherwise indexing will fail
   if(is.null(dim(trend_pars))) trend_pars <- t(t(trend_pars))
 
-  for(cov_name in trend$covariate){
+  for(i in 1:length(trend$covariate)){
+    cov_name <- trend$covariate[i]
     # If trend is deltab, add param to trend pars
     if(trend$kernel == 'deltab') {
       n_base_pars <- 0   # add base weight to trend pars
@@ -361,10 +363,10 @@ run_trend <- function(dadm, trend, param, trend_pars){
     # Keep an expansion index
     unq_idx <- cumsum(filter)
     # Run trend
-    output <- run_kernel(kernel_pars, trend$kernel, cov_tmp[filter], param[filter])
+    output <- run_kernel(kernel_pars, trend$kernel, cov_tmp[filter], param_tmp[filter])
     # Decompress output and map back based on non-NA
     out[!NA_idx] <- out[!NA_idx] + output[unq_idx]
-    output_return <- output[unq_idx]
+    updated_covariate[!NA_idx,i] <- output[unq_idx]
   }
   # Do the mapping
   out <- switch(trend$base,
@@ -376,7 +378,7 @@ run_trend <- function(dadm, trend, param, trend_pars){
   )
   ## SM: return both the trend itself and the mapping
   #return(out)
-  return(list(out=out, trend=output_return))
+  return(list(out=out, updated_covariate=updated_covariate))
 }
 
 check_trend <- function(trend, covariates = NULL, model = NULL, formula = NULL) {
