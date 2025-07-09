@@ -342,9 +342,11 @@ run_trend <- function(dadm, trend, param, trend_pars){
       filter <- rep(T, length(cov_tmp))
 
       ## SM only once
-      if(trend$filter_lR) {
-        filter[dadm[!NA_idx,'lR']!=dadm[!NA_idx,'lR'][1]] <- FALSE
-      }
+      # if(trend$filter_lR) {
+      #   if('lR' %in% colnames(dadm)) {
+      #     filter[dadm[!NA_idx,'lR']!=dadm[!NA_idx,'lR'][1]] <- FALSE
+      #   }
+      # }
     } else {
       # Else filter out duplicated entries
       together <- cbind(cov_tmp, trend_pars_tmp)
@@ -487,3 +489,13 @@ run_delta2 <- function(q0,alphaFast,propSlow,dSwitch,covariate) {
   }
   return(q)
 }
+
+
+# apply_lR_filter <- function(d, cov_name) {
+#   if(!lR %in% colnames(d)) {
+#     d[levels(d$lR)!=levels(d$lR)[1],cov_name] <- NA
+#   }
+#   d
+# }
+
+
