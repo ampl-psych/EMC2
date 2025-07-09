@@ -919,7 +919,6 @@ SStexG <- function() {
       return(rSSexGaussian(data, pars, ok = attr(pars, "ok")))
     },
     # Race likelihood combining pfun and dfun
-    # TODO
     log_likelihood = function(pars, dadm, model, min_ll = log(1e-10)) {
       return(log_likelihood_race_ss_old(pars, dadm, model, min_ll = min_ll))
     }
