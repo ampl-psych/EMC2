@@ -662,13 +662,103 @@ SSexG_old <- function() {
 #' | *tauS*      | log    | \[0, Inf\]        | log(.05)  |  | tau parameter of ex-Gaussian stopping finishing time distribution       |
 #' | *tf*      | probit       | \[0, 1\]        | qnorm(0)    |                            | Trigger failure probability           |
 #' | *gf*     | probit       | \[0, 1\]        | qnorm(0)    |                            | Go failure probability    |
+#'
+#'
+#' @return A model list with all the necessary functions to sample
+#' @export
+SSexG <- function() {
+  list(
+    type = "RACE",
+    c_name = "SS_EXG",
+    p_types = c(
+      mu = log(.4), sigma = log(.05), tau = log(.1),
+      muS = log(.3), sigmaS = log(.025), tauS = log(.05),
+      tf = qnorm(0), gf = qnorm(0)
+    ),
+    transform = list(
+      func = c(
+        mu = "exp", sigma = "exp", tau = "exp",
+        muS = "exp", sigmaS = "exp", tauS = "exp",
+        tf = "pnorm", gf = "pnorm"
+      )
+    ),
+    bound = list(
+      minmax = cbind(
+        mu = c(0, Inf), sigma = c(1e-4, Inf), tau = c(1e-4, Inf),
+        muS = c(0, Inf), sigmaS = c(1e-4, Inf), tauS = c(1e-4, Inf),
+        tf = c(.001, .999), gf = c(.001, .999)
+      ),
+      exception = c(
+        tf = 0, gf = 0
+      )
+    ),
+    # Trial dependent parameter transform
+    Ttransform = function(pars,dadm) {
+      # if (any(names(dadm)=="SSD")) pars <- cbind(pars,SSD=dadm$SSD) else
+      #   pars <- cbind(pars,SSD=rep(Inf,dim(pars)[1]))
+      pars <- cbind(pars, SSD = dadm$SSD)
+      pars <- cbind(pars, lI = as.numeric(dadm$lI))  # Only necessary for data generation.
+      return(pars)
+    },
+    # Density function (PDF) for single go racer
+    dfunG = function(rt, pars) return(dexGaussianG(rt, pars)),
+    # Probability function (CDF) for single go racer
+    pfunG = function(rt, pars) return(pexGaussianG(rt, pars)),
+    # Density function (PDF) for single stop racer
+    dfunS = function(rt, pars) {
+      parsS <- pars[ , c("muS", "sigmaS", "tauS", "SSD"), drop = FALSE]
+      return(dexGaussianS(rt, parsS))
+    },
+    # Probability function (CDF) for single stop racer
+    pfunS = function(rt, pars) {
+      parsS <- pars[ , c("muS", "sigmaS", "tauS", "SSD"), drop = FALSE]
+      return(pexGaussianS(rt, parsS))
+    },
+    # Stop probability integral
+    sfun = function(pars, n_acc, upper = Inf) {
+      return(pstopEXG(pars, n_acc, upper = upper))
+    },
+    # Random function for SS race
+    rfun = function(data = NULL, pars) {
+      return(rSSexGaussian(data, pars, ok = attr(pars, "ok")))
+    },
+    # Race likelihood combining pfun and dfun
+    log_likelihood = function(pars, dadm, model, min_ll = log(1e-10)) {
+      return(log_likelihood_race_ss(pars, dadm, model, min_ll = min_ll))
+    }
+  )
+}
+
+
+#' Stop-signal truncated ex-Gaussian race
+#'
+#' Model file to estimate the truncated ex-Gaussian race model for Stop-Signal data
+#'
+#' Model files are almost exclusively used in `design()`.
+#'
+#' @details
+#'
+#' Default values are used for all parameters that are not explicitly listed in the `formula`
+#' argument of `design()`.They can also be accessed with `SSexG()$p_types`.
+#'
+#' @details
+#' | **Parameter** | **Transform** | **Natural scale** | **Default**   | **Mapping**                    | **Interpretation**                                            |
+#' |-----------|-----------|---------------|-----------|----------------------------|-----------------------------------------------------------|
+#' | *mu*       | log         | \[0, Inf\]     | log(.4)         |                            | mu parameter of ex-Gaussian go finishing time distribution              |
+#' | *sigma*       | log       | \[0, Inf\]        | log(.05)    |                            | sigma parameter of ex-Gaussian go finishing time distribution                                        |
+#' | *tau*      | log       | \[0, Inf\]        | log(.1)    |                            | tau parameter of ex-Gaussian go finishing time distribution                                          |
+#' | *muS*       | log       | \[0, Inf\]        | log(.3)    |                            | mu parameter of ex-Gaussian stopping finishing time distribution           |
+#' | *sigmaS*       | log    | \[0, Inf\]        | log(.025)|                   | sigma parameter of ex-Gaussian stopping finishing time distribution                              |
+#' | *tauS*      | log    | \[0, Inf\]        | log(.05)  |  | tau parameter of ex-Gaussian stopping finishing time distribution       |
+#' | *tf*      | probit       | \[0, 1\]        | qnorm(0)    |                            | Trigger failure probability           |
+#' | *gf*     | probit       | \[0, 1\]        | qnorm(0)    |                            | Go failure probability    |
 #' | *exg_lb*      | log       | \[0, Inf\]        | log(.05)    |                            | lower bound of ex-Gaussian go finishing time distribution           |
 #' | *exgS_lb*     | log       | \[0, Inf\]        | log(.05)    |                            | lower bound of ex-Gaussian stop finishing time distribution    |
 #'
 #'
 #' @return A model list with all the necessary functions to sample
 #' @export
-SSexG <- function() {
+SStexG <- function() {
   list(
     type = "RACE",
     c_name = "SS_EXG",
@@ -734,7 +824,6 @@ SSexG <- function() {
     }
   )
 }
-
 
 
 #####################  RDEX ----
