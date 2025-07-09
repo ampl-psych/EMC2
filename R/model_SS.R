@@ -347,8 +347,41 @@ ptexGaussianS <- function(rt,pars)
 
 #### ExGaussian random ----
 
-rexG <- function(n,mu,sigma,tau)
+rexG <- function(n,mu,sigma,tau) {
   rnorm(n,mean=mu,sd=sigma) + rexp(n,rate=1/tau)
+}
+
+# following copied directly from Tanis et al. 2024 (https://osf.io/u3k5f/)
+rTEXG <- function(n,mu=.5,sigma=.05,tau=.1,a=-Inf,b=Inf)
+{
+  out <- rnorm(n=n, mean=mu,sd=sigma) + rexp(n=n,rate=1/tau)
+  ok <- (out > a) & (out < b)
+  if (any(!ok)) {
+    nneed <- sum(!ok)
+    nget <- ceiling(1.1*nneed/mean(ok))
+    rtok <- numeric(nneed)
+    full <- logical(nneed)
+    repeat {
+      tmp <- rnorm(n=nget, mean=mu,sd=sigma) + rexp(n=nget,rate=1/tau)
+      okrt <- (tmp > a) & (tmp < b)
+      if ( sum(okrt)>=nneed ) {
+        rtok[!full] <- tmp[okrt][1:nneed]
+        break
+      }
+      ngot <- sum(okrt)
+      if (ngot>0) {
+        rtok[!full][1:ngot] <- tmp[okrt]
+        full[!full][1:ngot] <- TRUE
+      }
+      nneed <- nneed - ngot
+      nget <- ceiling(nneed*2/mean(ok))
+    }
+    out[!ok] <- rtok
+  }
+  out
+}
+
+
 
 rexGaussian <- function(lR,pars,p_types=c("mu","sigma","tau"),
                         ok=rep(TRUE,dim(pars)[1]))
