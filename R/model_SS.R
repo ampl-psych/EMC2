@@ -255,6 +255,23 @@ pexGaussianG <- function(rt,pars)
   out
 }
 
+dtexGaussianG <- function(rt,pars)
+{
+  out <- numeric(length(rt))
+  ok <- !is.na(rt)
+  out[ok] <- dtexGaussian(rt[ok],pars[ok,,drop=FALSE])
+  out
+}
+
+ptexGaussianG <- function(rt,pars)
+{
+  out <- numeric(length(rt))
+  ok <- !is.na(rt)
+  out[ok] <- ptexGaussian(rt[ok],pars[ok,,drop=FALSE])
+  out
+}
+
+
 
 #### Stop Single ExGaussian ----
 
@@ -277,6 +294,28 @@ pexGaussianS <- function(rt,pars)
   dimnames(pars)[[2]][dimnames(pars)[[2]]=="sigmaS"] <- "sigma"
   dimnames(pars)[[2]][dimnames(pars)[[2]]=="tauS"] <- "tau"
   pexGaussian(rt,pars)
+}
+
+
+dtexGaussianS <- function(rt,pars)
+{
+  rt <- rt - pars[,"SSD"]
+  dimnames(pars)[[2]][dimnames(pars)[[2]]=="muS"] <- "mu"
+  dimnames(pars)[[2]][dimnames(pars)[[2]]=="sigmaS"] <- "sigma"
+  dimnames(pars)[[2]][dimnames(pars)[[2]]=="tauS"] <- "tau"
+  dimnames(pars)[[2]][dimnames(pars)[[2]]=="exgS_lb"] <- "exg_lb"
+  dtexGaussian(rt,pars)
+}
+
+
+ptexGaussianS <- function(rt,pars)
+{
+  rt <- rt - pars[,"SSD"]
+  dimnames(pars)[[2]][dimnames(pars)[[2]]=="muS"] <- "mu"
+  dimnames(pars)[[2]][dimnames(pars)[[2]]=="sigmaS"] <- "sigma"
+  dimnames(pars)[[2]][dimnames(pars)[[2]]=="tauS"] <- "tau"
+  dimnames(pars)[[2]][dimnames(pars)[[2]]=="exgS_lb"] <- "exg_lb"
+  ptexGaussian(rt,pars)
 }
 
 
@@ -828,30 +867,33 @@ SStexG <- function() {
       return(pars)
     },
     # Density function (PDF) for single go racer
-    dfunG = function(rt, pars) return(dexGaussianG(rt, pars)),
+    dfunG = function(rt, pars) return(dtexGaussianG(rt, pars)),
     # Probability function (CDF) for single go racer
-    pfunG = function(rt, pars) return(pexGaussianG(rt, pars)),
+    pfunG = function(rt, pars) return(ptexGaussianG(rt, pars)),
     # Density function (PDF) for single stop racer
     dfunS = function(rt, pars) {
-      parsS <- pars[ , c("muS", "sigmaS", "tauS", "SSD"), drop = FALSE]
-      return(dexGaussianS(rt, parsS))
+      parsS <- pars[ , c("muS", "sigmaS", "tauS", "SSD", "exgS_lb"), drop=FALSE]
+      return(dtexGaussianS(rt, parsS))
     },
     # Probability function (CDF) for single stop racer
     pfunS = function(rt, pars) {
-      parsS <- pars[ , c("muS", "sigmaS", "tauS", "SSD"), drop = FALSE]
-      return(pexGaussianS(rt, parsS))
+      parsS <- pars[ , c("muS", "sigmaS", "tauS", "SSD", "exgS_lb"), drop=FALSE]
+      return(ptexGaussianS(rt, parsS))
     },
     # Stop probability integral
+    # TODO
     sfun = function(pars, n_acc, upper = Inf) {
       return(pstopEXG(pars, n_acc, upper = upper))
     },
     # Random function for SS race
+    # TODO
     rfun = function(data = NULL, pars) {
       return(rSSexGaussian(data, pars, ok = attr(pars, "ok")))
     },
     # Race likelihood combining pfun and dfun
+    # TODO
     log_likelihood = function(pars, dadm, model, min_ll = log(1e-10)) {
-      return(log_likelihood_race_ss(pars, dadm, model, min_ll = min_ll))
+      return(log_likelihood_race_ss_old(pars, dadm, model, min_ll = min_ll))
     }
   )
 }
