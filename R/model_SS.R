@@ -205,6 +205,37 @@ pexGaussian <- function(rt,pars)
   rt
 }
 
+# following adapted from code released with Tanis et al. (2024)
+# https://osf.io/u3k5f/
+# DynamicCognitivePsychometrics/dmc/models/WALD-SSEXG/dists.R: functions dEXG and pEXG
+# for simplicity assuming no upper truncation
+
+dtexGaussian <- function(rt,pars) {
+  out <- Fa <- numeric(length(rt))
+  a <- pars[,"exg_lb"]
+  ok <- (rt>a) & (rt<Inf) & (a<Inf)
+  a_real <- (a>-Inf)
+  Fa[ok & a_real] <- pexGaussian(a[ok & a_real], pars[ok & a_real,,drop=FALSE])
+  normaliser <- 1 - Fa
+  out[ok] <- dexGaussian(rt[ok], pars[ok,,drop=FALSE]) / normaliser[ok]
+  return(out)
+}
+
+ptexGaussian <- function(rt,pars) {
+  out <- Fa <- numeric(length(rt))
+  a <- pars[,"exg_lb"]
+  ok <- (rt>a) & (rt<Inf) & (a<Inf)
+  out[rt==Inf] <- 1
+  a_real <- (a>-Inf)
+  Fa[ok & a_real] <- pexGaussian(a[ok & a_real], pars[ok & a_real,,drop=FALSE])
+  normaliser <- 1 - Fa
+  out[ok] <- (pexGaussian(rt[ok], pars[ok,,drop=FALSE]) - Fa[ok]) / normaliser[ok]
+  return(out)
+}
+
+
+#### Go Single ExGaussian ----
+
 # Go cdf/pdf (strips out NAs and calls d/pexGaussian)
 # Is stripping out rt NAs really necessary?
 

@@ -171,7 +171,6 @@ double ptexg(
   }
   if (sigma <= 0. || tau <= 0.) return NA_REAL;
   if (lower >= upper) return NA_REAL;
-  // CHECK this might be too harsh; maybe q < lower, q > upper instead
   if (q <= lower) {
     double out = lower_tail ? 0. : 1.;
     return log_p ? (out == 0. ? R_NegInf : 0.) : out;
