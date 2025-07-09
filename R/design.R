@@ -607,7 +607,7 @@ design_model <- function(data,design,model=NULL,
           if(trend[[trend_name]]$filter_lR) {
             cov_name <- gsub('_lRfiltered', '', trend[[trend_name]]$covariate)
             # copy to new column, filter
-            dadm[,trend[[trend_name]]$covariate] <- dadm[dadm$lR!=levels(dadm$lR)[1],cov_name]
+            dadm[,trend[[trend_name]]$covariate] <- dadm[,cov_name]
             dadm[dadm$lR!=levels(dadm$lR)[1],trend[[trend_name]]$covariate] <- NA
           }
         }
