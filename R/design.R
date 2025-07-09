@@ -506,6 +506,7 @@ rt_check_function <- function(data){
     DC <- attr(data,"UC") - attr(data,"LC")
     if (!is.null(DC) && any(DC<0)) stop("UC must be greater than LC")
   }
+  data
 }
 
 
@@ -537,7 +538,7 @@ design_model <- function(data,design,model=NULL,
   }
 
   if (!any(names(data)=="trials")) data$trials <- 1:dim(data)[1]
-  if(rt_check){rt_check_function(data)}
+  if(rt_check){ data <- rt_check_function(data)}
   if (!add_acc) da <- data else
     da <- add_accumulators(data,design$matchfun,type=model()$type,Fcovariates=design$Fcovariates)
   order_idx <- order(da$subjects)
@@ -611,6 +612,13 @@ design_model <- function(data,design,model=NULL,
   attr(dadm,"constants") <- design$constants
   attr(dadm,"ok_trials") <- is.finite(data$rt)
   attr(dadm,"s_data") <- data$subjects
+
+  attr(dadm, "LT") <- attr(data,"LT")
+  attr(dadm, "UT") <- attr(data,"UT")
+  attr(dadm, "LC") <- attr(data,"LC")
+  attr(dadm, "UC") <- attr(data,"UC")
+
+
   dadm
 }
 

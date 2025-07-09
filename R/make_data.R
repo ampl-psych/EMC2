@@ -25,11 +25,23 @@ make_missing <- function(data,LT=0,UT=Inf,LC=0,UC=Inf,
   pick <- is.infinite(data$rt) | (data$rt>LT & data$rt<UT)
   pick[is.na(pick)] <- TRUE
   out <- censor(data[pick,],L=LC,U=UC,Lr=LCresponse,Ur=UCresponse,Ld=LCdirection,Ud=UCdirection)
-  if (LC != 0) attr(out,"LC") <- LC
-  if (UC != Inf) attr(out,"UC") <- UC
-  if (LT != 0) attr(out,"LT") <- LT
-  if (UT != Inf) attr(out,"UT") <- UT
+  if (!all(LC == 0)) attr(out,"LC") <- LC
+  if (!all(UC == Inf)) attr(out,"UC") <- UC
+  if (!all(LT == 0)) attr(out,"LT") <- LT
+  if (!all(UT == Inf)) attr(out,"UT") <- UT
   out
+}
+
+
+fix_CT <- function(CT,subjs,type="LC") {
+  if (is.null(names(CT))) {
+    if (length(CT)>1) {
+      if (length(CT)!=length(subjs))
+        stop(type," must be the same length as subjects")
+      if (is.null(names(CT))) names(CT) <- subjs
+    } else CT <- setNames(rep(CT,length(subjs)),subjs)
+  }
+  CT
 }
 
 #' Simulate Data
@@ -85,10 +97,10 @@ make_missing <- function(data,LT=0,UT=Inf,LC=0,UC=Inf,
 make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1, staircase = NULL,
                       functions = NULL, ...)
 {
-  # #' @param LT lower truncation bound below which data are removed (scalar or subject named vector)
-  # #' @param UT upper truncation bound above which data are removed (scalar or subject named vector)
-  # #' @param LC lower censoring bound (scalar or subject named vector)
-  # #' @param UC upper censoring bound (scalar or subject named vector)
+  # #' @param LT lower truncation bound below which data are removed (scalar or vector, subject names added if absent)
+  # #' @param UT upper truncation bound above which data are removed (scalar or vector, subject names added if absent)
+  # #' @param LC lower censoring bound (scalar or vector, subject names added if absent)
+  # #' @param UC upper censoring bound (scalar or vector, subject names added if absent)
   # #' @param LCresponse Boolean, default TRUE, if false set LC response to NA
   # #' @param UCresponse Boolean, default TRUE, if false set UC response to NA
   # #' @param LCdirection Boolean, default TRUE, set LC rt to 0, else to NA
@@ -108,19 +120,28 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
   # #' each trial. Must have names specified in the design Fcovariates argument.
   check_bounds <- FALSE
 
-  LT<-0
-  UT<-Inf
-  LC<-0
-  UC<-Inf
-  LCresponse<-TRUE
-  UCresponse<-TRUE
-  LCdirection<-TRUE
-  UCdirection<-TRUE
-  force_direction<-FALSE
-  force_response<-FALSE
-  rtContaminantNA<-FALSE
-  return_Ffunctions <- FALSE
   optionals <- list(...)
+  if (is.null(optionals$LT)) LT<-0 else LT <- optionals$LT
+  if (is.null(optionals$UT)) UT<-Inf else UT <- optionals$UT
+  if (is.null(optionals$LC)) LC<-0 else LC <- optionals$LC
+  if (is.null(optionals$UC)) UC<-Inf else UC <- optionals$UC
+  if (is.null(optionals$LCresponse))
+    LCresponse <- TRUE else LCresponse <- optionals$LCresponse
+  if (is.null(optionals$UCresponse))
+    UCresponse <- TRUE else UCresponse <- optionals$UCresponse
+  if (is.null(optionals$LCdirection))
+    LCdirection <- TRUE else LC <- optionals$LCdirection
+  if (is.null(optionals$UCdirection))
+    UCdirection <- TRUE else UC <- optionals$UCdirection
+  if (is.null(optionals$force_direction))
+    force_direction <-FALSE else force_direction <- optionals$force_direction
+  if (is.null(optionals$force_response))
+    force_response <-FALSE else force_response <- optionals$force_response
+  if (is.null(optionals$rtContaminantNA))
+    rtContaminantNA <-FALSE else rtContaminantNA <- optionals$rtContaminantNA
+
+  return_Ffunctions <- FALSE
+
   for (name in names(optionals) ) {
     assign(name, optionals[[name]])
   }
@@ -166,6 +187,12 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
     data <- minimal_design(design_in, covariates = list(...)$covariates,
                              drop_subjects = F, n_trials = n_trials, add_acc=F,
                            drop_R = F)
+
+   if (!is.null(LC)) LC <- fix_CT(LC,design$Ffactors$subjects,"LC")
+   if (!is.null(UC)) UC <- fix_CT(UC,design$Ffactors$subjects,"UC")
+   if (!is.null(LT)) LT <- fix_CT(LT,design$Ffactors$subjects,"LT")
+   if (!is.null(UT)) UT <- fix_CT(UT,design$Ffactors$subjects,"UT")
+
   } else {
     LT <- attr(data,"LT"); if (is.null(LT)) LT <- 0
     UT <- attr(data,"UT"); if (is.null(UT)) UT <- Inf
