@@ -156,6 +156,15 @@ log_likelihood_ddm_missing <- function(p_vector,dadm,min_ll=log(1e-10))
 }
 
 
+my_integrate <- function(...,upper=Inf,big=10)
+  # Avoids bug in integrate upper=Inf that uses only 1  subdivision
+  # Use of  big=10 is arbitrary ...
+{
+  out <- try(integrate(...,upper=upper),silent=TRUE)
+  if (!is(out,"try-error") && upper==Inf && out$subdivisions==1)
+    out <- try(integrate(...,upper=big),silent=TRUE)
+  out
+}
 
 pr_pt <- function(LT,UT,ps,dadm)
     # log(p(untruncated response)/p(truncated response)), >= log(1), multiplicative truncation correction
