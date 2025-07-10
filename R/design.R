@@ -787,10 +787,13 @@ dm_list <- function(dadm)
         attr(dl[[i]], "design_matrix") <- NULL
       }
 
-      attr(dl[[i]], "unique_nort") <- NULL
       attr(dl[[i]], "unique_nortR") <- NULL
-      attr(dl[[i]], "expand_nort") <- NULL
       attr(dl[[i]], "expand_nortR") <- NULL
+
+      if ( is.null(attr(dadm,"LT")) & is.null(attr(dadm,"UT")) ) {
+        attr(dl[[i]], "unique_nort") <- NULL
+        attr(dl[[i]], "expand_nort") <- NULL
+      }
 
       if (!is.null(attr(dadm,"LT"))){
         attr(dl[[i]],"LT") <- attr(dadm,"LT")[names(attr(dadm,"LT"))==i]
