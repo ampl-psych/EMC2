@@ -69,20 +69,22 @@ class race_f_jeroen : public Func {
 private:
   Rcpp::NumericMatrix pars;
   Rcpp::LogicalVector winner;
-  Rcpp::NumericVector (*dfun)(Rcpp::NumericVector, Rcpp::NumericMatrix, Rcpp::LogicalVector, double);
-  Rcpp::NumericVector (*pfun)(Rcpp::NumericVector, Rcpp::NumericMatrix, Rcpp::LogicalVector, double);
+  Rcpp::NumericVector (*dfun)(Rcpp::NumericVector, Rcpp::NumericMatrix, Rcpp::LogicalVector, double, Rcpp::LogicalVector);
+  Rcpp::NumericVector (*pfun)(Rcpp::NumericVector, Rcpp::NumericMatrix, Rcpp::LogicalVector, double, Rcpp::LogicalVector);
   double min_ll;
+  Rcpp::LogicalVector is_ok;
 
 public:
   race_f_jeroen(Rcpp::NumericMatrix pars_,
         Rcpp::LogicalVector winner_,
-        Rcpp::NumericVector (*dfun_)(Rcpp::NumericVector, Rcpp::NumericMatrix, Rcpp::LogicalVector, double),
-        Rcpp::NumericVector (*pfun_)(Rcpp::NumericVector, Rcpp::NumericMatrix, Rcpp::LogicalVector, double),
-        double min_ll_) :
+        Rcpp::NumericVector (*dfun_)(Rcpp::NumericVector, Rcpp::NumericMatrix, Rcpp::LogicalVector, double, Rcpp::LogicalVector),
+        Rcpp::NumericVector (*pfun_)(Rcpp::NumericVector, Rcpp::NumericMatrix, Rcpp::LogicalVector, double, Rcpp::LogicalVector),
+        double min_ll_, Rcpp::LogicalVector is_ok_) :
   pars(pars_),
   winner(winner_),
   dfun(dfun_),
   pfun(pfun_),
+  is_ok(is_ok_),
   min_ll(min_ll_) {}
 
   double operator()(const double& x) const
@@ -90,11 +92,11 @@ public:
     double accumulators = pars.nrow();
     NumericVector t(accumulators);
     t.fill(x);
-    Rcpp::NumericVector d = dfun(t, pars, winner, exp(min_ll));
+    Rcpp::NumericVector d = dfun(t, pars, winner, exp(min_ll), is_ok);
     double out = Rcpp::as<double>(d);
 
     if (accumulators > 1) {
-      Rcpp::NumericVector p = 1 - pfun(t, pars, !winner, exp(min_ll));
+      Rcpp::NumericVector p = 1 - pfun(t, pars, !winner, exp(min_ll), is_ok);
       double prod_p = std::accumulate(p.begin(), p.end(), 1.0,
                                       std::multiplies<double>());
       out *= prod_p;
@@ -156,14 +158,15 @@ IntegrationResult my_integrate(
 
 //Jeroen
 NumericVector f_integrate(Rcpp::NumericMatrix pars,
-                                Rcpp::LogicalVector winner,
-                                Rcpp::NumericVector (*dfun)(NumericVector, NumericMatrix, LogicalVector, double),
-                                Rcpp::NumericVector (*pfun)(NumericVector, NumericMatrix, LogicalVector, double),
+                          Rcpp::LogicalVector winner,
+  Rcpp::NumericVector (*dfun)(NumericVector, NumericMatrix, LogicalVector, double, LogicalVector),
+  Rcpp::NumericVector (*pfun)(NumericVector, NumericMatrix, LogicalVector, double, LogicalVector),
                                 double min_ll,
                                 double lower,
-                                double upper)
+                                double upper,
+                                LogicalVector is_ok)
 {
-  race_f_jeroen f(pars, winner, dfun, pfun, min_ll);
+  race_f_jeroen f(pars, winner, dfun, pfun, min_ll, is_ok);
   double err_est;
   int err_code;
   double res = integrate(f, lower, upper, err_est, err_code);
@@ -172,14 +175,15 @@ NumericVector f_integrate(Rcpp::NumericMatrix pars,
 }
 
 NumericVector f_integrate_slow(Rcpp::NumericMatrix pars,
-                          Rcpp::LogicalVector winner,
-                          Rcpp::NumericVector (*dfun)(NumericVector, NumericMatrix, LogicalVector, double),
-                          Rcpp::NumericVector (*pfun)(NumericVector, NumericMatrix, LogicalVector, double),
+                               Rcpp::LogicalVector winner,
+  Rcpp::NumericVector (*dfun)(NumericVector, NumericMatrix, LogicalVector, double, LogicalVector),
+  Rcpp::NumericVector (*pfun)(NumericVector, NumericMatrix, LogicalVector, double, LogicalVector),
                           double min_ll,
                           double lower,
-                          double upper)
+                          double upper,
+                          LogicalVector is_ok)
 {
-  race_f_jeroen f(pars, winner, dfun, pfun, min_ll);
+  race_f_jeroen f(pars, winner, dfun, pfun, min_ll, is_ok);
   double err_est;
   int err_code;
   double res = integrate(f, lower, upper, err_est, err_code);
@@ -200,16 +204,17 @@ NumericVector f_integrate_slow(Rcpp::NumericMatrix pars,
 
 double pr_pt(Rcpp::NumericMatrix pars,
              Rcpp::LogicalVector winner,
-             Rcpp::NumericVector (*dfun)(NumericVector, NumericMatrix, LogicalVector, double),
-             Rcpp::NumericVector (*pfun)(NumericVector, NumericMatrix, LogicalVector, double),
+  Rcpp::NumericVector (*dfun)(NumericVector, NumericMatrix, LogicalVector, double, LogicalVector),
+  Rcpp::NumericVector (*pfun)(NumericVector, NumericMatrix, LogicalVector, double, LogicalVector),
              double min_ll,
              double LT,
-             double UT) {
-  NumericVector pr = f_integrate(pars, winner, dfun, pfun, min_ll, 0, R_PosInf);
+             double UT,
+             LogicalVector is_ok) {
+  NumericVector pr = f_integrate(pars, winner, dfun, pfun, min_ll, 0, R_PosInf, is_ok);
   if ((pr[2] != 0) || traits::is_nan<REALSXP>(pr[0])) return NA_REAL;
   if (pr[0] == 0.0) return 0.0;
 
-  NumericVector pt = f_integrate(pars, winner, dfun, pfun, min_ll, LT, UT);
+  NumericVector pt = f_integrate(pars, winner, dfun, pfun, min_ll, LT, UT, is_ok);
   if ((pt[2] != 0) || traits::is_nan<REALSXP>(pt[0])) return NA_REAL;
 
   double out = std::max(0.0, std::min(pr[0], 1.0)) / std::max(0.0, std::min(pt[0], 1.0));
@@ -221,18 +226,19 @@ double pr_pt(Rcpp::NumericMatrix pars,
 
 double pLU(Rcpp::NumericMatrix pars,
            Rcpp::LogicalVector winner,
-           Rcpp::NumericVector (*dfun)(NumericVector, NumericMatrix, LogicalVector, double),
-           Rcpp::NumericVector (*pfun)(NumericVector, NumericMatrix, LogicalVector, double),
+  Rcpp::NumericVector (*dfun)(NumericVector, NumericMatrix, LogicalVector, double, LogicalVector),
+  Rcpp::NumericVector (*pfun)(NumericVector, NumericMatrix, LogicalVector, double, LogicalVector),
            double min_ll,
            double LT,
            double LC,
            double UC,
-           double UT) {
-  NumericVector pL = f_integrate(pars, winner, dfun, pfun, min_ll, LT, LC);
+           double UT,
+           LogicalVector is_ok) {
+  NumericVector pL = f_integrate(pars, winner, dfun, pfun, min_ll, LT, LC, is_ok);
   if ((pL[2] != 0) | traits::is_nan<REALSXP>(pL[0])) {
     return NA_REAL;
   }
-  NumericVector pU = f_integrate(pars, winner, dfun, pfun, min_ll, UC, UT);
+  NumericVector pU = f_integrate(pars, winner, dfun, pfun, min_ll, UC, UT, is_ok);
   if ((pU[2] != 0) | traits::is_nan<REALSXP>(pU[0])) {
     return NA_REAL;
   }

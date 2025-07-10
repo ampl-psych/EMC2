@@ -187,7 +187,7 @@ LogicalVector c_bool_expand(LogicalVector x1, IntegerVector expand){
   return(out);
 }
 
-NumericVector c_expand_jeroen(NumericVector x1, NumericVector expand){
+NumericVector c_expand_jeroen(NumericVector x1, IntegerVector expand){
   const int n_out = expand.length();
   NumericVector out(n_out);
   int curr_idx;
@@ -198,7 +198,7 @@ NumericVector c_expand_jeroen(NumericVector x1, NumericVector expand){
   return(out);
 }
 
-LogicalVector c_bool_expand_jeroen(LogicalVector x1, NumericVector expand){
+LogicalVector c_bool_expand_jeroen(LogicalVector x1, IntegerVector expand){
   const int n_out = expand.length();
   LogicalVector out(n_out);
   int curr_idx;
