@@ -39,20 +39,20 @@ log_likelihood_race <- function(pars,dadm,model,min_ll=log(1e-10))
 
 #### Omission or "missing" versions of race and ddm in R
 
-log_likelihood_ddm_missing <- function(p_vector,dadm,min_ll=log(1e-10))
+log_likelihood_ddm_missing <- function(p_vector,dadm,model,min_ll=log(1e-10))
   # DDM summed log likelihood, with protection against numerical issues
 {
 
-  pr_pt <- function(LT,UT,R,p)
+  pr_pt <- function(LT,UT,R,p,model)
   # p(untruncated response)/p(truncated response), > 1, multiplicative truncation correction
   {
-    pr <- attr(dadm,"model")()$pfun(rep(Inf,length(R)),R,p)
+    pr <- model$pfun(rep(Inf,length(R)),R,p)
     out <- rep(1,length(R))
     if (!any(is.na(pr))) {
       ok <- pr>0
       if (any(ok)) {
-        pt <- attr(dadm,"model")()$pfun(UT[ok],R[ok],p[ok,,drop=FALSE]) -
-            attr(dadm,"model")()$pfun(LT[ok],R[ok],p[ok,,drop=FALSE])
+        pt <- model$pfun(UT[ok],R[ok],p[ok,,drop=FALSE]) -
+            model$pfun(LT[ok],R[ok],p[ok,,drop=FALSE])
         if (!any(is.na(pt))) out[ok] <- pr[ok]/pt
       }
     }
@@ -84,36 +84,36 @@ log_likelihood_ddm_missing <- function(p_vector,dadm,min_ll=log(1e-10))
     # Fast
     nort <- rt==-Inf; nort[is.na(nort)] <- FALSE; nort <- nort & !is.na(R)
     if ( any(nort) ) {
-      likeok[nort] <- pmax(0,attr(dadm,"model")()$pfun(rep(LC,sum(nort)),R[nort],p[nort,,drop=FALSE]))
+      likeok[nort] <- pmax(0,model$pfun(rep(LC,sum(nort)),R[nort],p[nort,,drop=FALSE]))
     }
     # Slow
     nort <- rt==Inf; nort[is.na(nort)] <- FALSE; nort <- nort & !is.na(R)
     if ( any(nort) ) {
-      likeok[nort] <- pmax(0,attr(dadm,"model")()$pfun(rep(Inf,sum(nort)),R[nort],p[nort,,drop=FALSE])-
-                      attr(dadm,"model")()$pfun(rep(UC,sum(nort)),R[nort],p[nort,,drop=FALSE]))
+      likeok[nort] <- pmax(0,model$pfun(rep(Inf,sum(nort)),R[nort],p[nort,,drop=FALSE])-
+                      model$pfun(rep(UC,sum(nort)),R[nort],p[nort,,drop=FALSE]))
     }
     # No direction
     nort <- is.na(rt) & !is.na(R)
     if ( any(nort) ) {
-      likeok[nort] <- pmax(0,attr(dadm,"model")()$pfun(rep(LC,sum(nort)),R[nort],p[nort,,drop=FALSE]) +
-                      (attr(dadm,"model")()$pfun(rep(Inf,sum(nort)),R[nort],p[nort,,drop=FALSE])-
-                         attr(dadm,"model")()$pfun(rep(UC,sum(nort)),R[nort],p[nort,,drop=FALSE])))
+      likeok[nort] <- pmax(0,model$pfun(rep(LC,sum(nort)),R[nort],p[nort,,drop=FALSE]) +
+                      (model$pfun(rep(Inf,sum(nort)),R[nort],p[nort,,drop=FALSE])-
+                         model$pfun(rep(UC,sum(nort)),R[nort],p[nort,,drop=FALSE])))
     }
 
     # Response unknown.
     # Fast
     nort <- rt==-Inf; nort[is.na(nort)] <- FALSE; nort <- nort & is.na(R)
     if ( any(nort) ) {
-      likeok[nort] <- pmax(0,attr(dadm,"model")()$pfun(rep(LC,sum(nort)),"lower",p[nort,,drop=FALSE]) +
-                      attr(dadm,"model")()$pfun(rep(LC,sum(nort)),"upper",p[nort,,drop=FALSE]))
+      likeok[nort] <- pmax(0,model$pfun(rep(LC,sum(nort)),"lower",p[nort,,drop=FALSE]) +
+                      model$pfun(rep(LC,sum(nort)),"upper",p[nort,,drop=FALSE]))
     }
     # Slow
     nort <- rt==Inf; nort[is.na(nort)] <- FALSE; nort <- nort & is.na(R)
     if ( any(nort) ) {
-      likeok[nort] <- pmax(0,(attr(dadm,"model")()$pfun(rep(Inf,sum(nort)),"lower",p[nort,,drop=FALSE])-
-                       attr(dadm,"model")()$pfun(rep(UC,sum(nort)),"lower",p[nort,,drop=FALSE])) +
-                      (attr(dadm,"model")()$pfun(rep(Inf,sum(nort)),"upper",p[nort,,drop=FALSE])-
-                       attr(dadm,"model")()$pfun(rep(UC,sum(nort)),"upper",p[nort,,drop=FALSE])))
+      likeok[nort] <- pmax(0,(model$pfun(rep(Inf,sum(nort)),"lower",p[nort,,drop=FALSE])-
+                       model$pfun(rep(UC,sum(nort)),"lower",p[nort,,drop=FALSE])) +
+                      (model$pfun(rep(Inf,sum(nort)),"upper",p[nort,,drop=FALSE])-
+                       model$pfun(rep(UC,sum(nort)),"upper",p[nort,,drop=FALSE])))
     }
     # no direction
     nort <- is.na(rt) & is.na(R)
@@ -121,23 +121,23 @@ log_likelihood_ddm_missing <- function(p_vector,dadm,min_ll=log(1e-10))
     nort <- nort & (p[,"pContaminant"] == 0) # Otherwise not identifiable
     if ( any(nort) ) {
       likeok[nort] <- pmax(0,
-        attr(dadm,"model")()$pfun(rep(LC,sum(nort)),"lower",p[nort,,drop=FALSE]) +
-        attr(dadm,"model")()$pfun(rep(LC,sum(nort)),"upper",p[nort,,drop=FALSE]) +
-        (attr(dadm,"model")()$pfun(rep(Inf,sum(nort)),"lower",p[nort,,drop=FALSE])-
-         attr(dadm,"model")()$pfun(rep(UC,sum(nort)),"lower",p[nort,,drop=FALSE])) +
-        (attr(dadm,"model")()$pfun(rep(Inf,sum(nort)),"upper",p[nort,,drop=FALSE])-
-         attr(dadm,"model")()$pfun(rep(UC,sum(nort)),"upper",p[nort,,drop=FALSE])))
+        model$pfun(rep(LC,sum(nort)),"lower",p[nort,,drop=FALSE]) +
+        model$pfun(rep(LC,sum(nort)),"upper",p[nort,,drop=FALSE]) +
+        (model$pfun(rep(Inf,sum(nort)),"lower",p[nort,,drop=FALSE])-
+         model$pfun(rep(UC,sum(nort)),"lower",p[nort,,drop=FALSE])) +
+        (model$pfun(rep(Inf,sum(nort)),"upper",p[nort,,drop=FALSE])-
+         model$pfun(rep(UC,sum(nort)),"upper",p[nort,,drop=FALSE])))
     }
 
     # Truncation where not censored or censored and response known
     ok <- is.na(likeok) & !is.na(R)
     mult <- rep(1,length(likeok))
     if ( dotrunc & any(ok) )
-      mult[ok] <- pr_pt(rep(LT,sum(ok)),rep(UT,sum(ok)),R[ok],p[ok,,drop=FALSE])
+      mult[ok] <- pr_pt(rep(LT,sum(ok)),rep(UT,sum(ok)),R[ok],p[ok,,drop=FALSE],model)
 
     # Usual non-missing update x truncation ratio
     ok <- is.na(likeok)
-    likeok[ok] <- mult[ok]*attr(dadm,"model")()$dfun(rt[ok],R[ok],p[ok,,drop=FALSE])
+    likeok[ok] <- mult[ok]*model$dfun(rt[ok],R[ok],p[ok,,drop=FALSE])
 
     # Non-process (contaminant) miss.
     ispContaminant <- p[,"pContaminant"]>0
@@ -156,6 +156,18 @@ log_likelihood_ddm_missing <- function(p_vector,dadm,min_ll=log(1e-10))
 }
 
 
+frace <- function(t,p,dfun,pfun) {
+    # Called by integrate to get race density for vector of times t given
+    # matrix of parameters where first row is the winner.
+
+    out <- dfun(t,
+                matrix(rep(p[1,],each=length(t)),nrow=length(t),dimnames=list(NULL,dimnames(p)[[2]])))
+    if (dim(p)[1]>1) for (i in 2:dim(p)[1])
+      out <- out*(1-pfun(t,
+                         matrix(rep(p[i,],each=length(t)),nrow=length(t),dimnames=list(NULL,dimnames(p)[[2]]))))
+    out
+}
+
 my_integrate <- function(...,upper=Inf,big=10)
   # Avoids bug in integrate upper=Inf that uses only 1  subdivision
   # Use of  big=10 is arbitrary ...
@@ -166,7 +178,7 @@ my_integrate <- function(...,upper=Inf,big=10)
   out
 }
 
-pr_pt <- function(LT,UT,ps,dadm)
+pr_pt <- function(LT,UT,ps,model)
     # log(p(untruncated response)/p(truncated response)), >= log(1), multiplicative truncation correction
   {
 
@@ -182,19 +194,19 @@ pr_pt <- function(LT,UT,ps,dadm)
     out
   }
 
-    pr <- my_integrate(f,lower=0,upper=Inf,p=ps,
-                       dfun=attr(dadm,"model")()$dfun,pfun=attr(dadm,"model")()$pfun)
+    pr <- my_integrate(frace,lower=0,upper=Inf,p=ps,
+                       dfun=model$dfun,pfun=model$pfun)
     if (inherits(pr, "try-error") || suppressWarnings(is.nan(pr$value))) return(NA)
     if (pr$value==0) return(0)
-    pt <- my_integrate(f,lower=LT,upper=UT,p=ps,
-                       dfun=attr(dadm,"model")()$dfun,pfun=attr(dadm,"model")()$pfun)
+    pt <- my_integrate(frace,lower=LT,upper=UT,p=ps,
+                       dfun=model$dfun,pfun=model$pfun)
     if (inherits(pt, "try-error") || suppressWarnings(is.nan(pt$value)) || pt$value==0) return(NA)
     out <- pmax(0,pmin(pr$value,1))/pmax(0,pmin(pt$value,1))
     if (is.infinite(out)) return(NA)
     out
 }
 
-pLU <- function(LT,LC,UC,UT,ps,dadm)
+pLU <- function(LT,LC,UC,UT,ps,model)
     # Probability from LT-LC + UC-UT
   {
 
@@ -210,11 +222,11 @@ pLU <- function(LT,LC,UC,UT,ps,dadm)
     out
   }
 
-    pL <- my_integrate(f,lower=LT,upper=LC,p=ps,
-                       dfun=attr(dadm,"model")()$dfun,pfun=attr(dadm,"model")()$pfun)
+    pL <- my_integrate(frace,lower=LT,upper=LC,p=ps,
+                       dfun=model$dfun,pfun=model$pfun)
     if (inherits(pL,"try-error") || suppressWarnings(is.nan(pL$value))) return(NA)
-    pU <- my_integrate(f,lower=UC,upper=UT,p=ps,
-                       dfun=attr(dadm,"model")()$dfun,pfun=attr(dadm,"model")()$pfun)
+    pU <- my_integrate(frace,lower=UC,upper=UT,p=ps,
+                       dfun=model$dfun,pfun=model$pfun)
     if (inherits(pU,"try-error") || suppressWarnings(is.nan(pU$value))) return(NA)
     pmax(0,pmin(pL$value,1))+pmax(0,pmin(pU$value,1))
 }
@@ -231,11 +243,11 @@ log_likelihood_race_missing <- function(pars,dadm,model,min_ll=log(1e-10))
     ok <- !logical(dim(pars)[1]) else ok <- attr(pars,"ok")
 
   lds <- numeric(dim(dadm)[1]) # log pdf (winner) or survivor (losers)
-  lds[dadm$winner] <- log(attr(dadm,"model")()$dfun(rt=dadm$rt[dadm$winner],
+  lds[dadm$winner] <- log(model$dfun(rt=dadm$rt[dadm$winner],
                                                     pars=pars[dadm$winner,]))
   n_acc <- length(levels(dadm$R))
   if (n_acc>1) lds[!dadm$winner] <-
-    log(1-attr(dadm,"model")()$pfun(rt=dadm$rt[!dadm$winner],pars=pars[!dadm$winner,]))
+    log(1-model$pfun(rt=dadm$rt[!dadm$winner],pars=pars[!dadm$winner,]))
   lds[is.na(lds) | !ok] <- -Inf
 
   # Calculate truncation?
@@ -260,8 +272,8 @@ log_likelihood_race_missing <- function(pars,dadm,model,min_ll=log(1e-10))
     for (i in 1:dim(mpars)[2]) {
       if (dim(mpars)[[1]]==1) pi <- t(as.matrix(mpars[,i,])) else
         pi <- mpars[,i,][order(!winner[,i]),]
-      tmp <- my_integrate(f,lower=LT,upper=LC,p=pi,
-                          dfun=attr(dadm,"model")()$dfun,pfun=attr(dadm,"model")()$pfun)
+      tmp <- my_integrate(frace,lower=LT,upper=LC,p=pi,
+                          dfun=model$dfun,pfun=model$pfun)
       if ( !inherits(tmp, "try-error") && suppressWarnings(!is.nan(log(tmp$value))) )
         lds[tofix][i] <- log(pmax(0,pmin(tmp$value,1)))
     }
@@ -276,8 +288,8 @@ log_likelihood_race_missing <- function(pars,dadm,model,min_ll=log(1e-10))
     for (i in 1:dim(mpars)[2]) {
       if (dim(mpars)[[1]]==1) pi <- t(as.matrix(mpars[,i,])) else
         pi <- mpars[,i,][order(!winner[,i]),]
-      tmp <- my_integrate(f,lower=UC,upper=UT,p=pi,
-                          dfun=attr(dadm,"model")()$dfun,pfun=attr(dadm,"model")()$pfun)
+      tmp <- my_integrate(frace,lower=UC,upper=UT,p=pi,
+                          dfun=model$dfun,pfun=model$pfun)
       if (!inherits(tmp, "try-error") && suppressWarnings(!is.nan(log(tmp$value))))
         lds[tofix][i] <- log(pmax(0,pmin(tmp$value,1)))
     }
@@ -292,14 +304,14 @@ log_likelihood_race_missing <- function(pars,dadm,model,min_ll=log(1e-10))
     for (i in 1:dim(mpars)[2]) {
       if (dim(mpars)[[1]]==1) pi <- t(as.matrix(mpars[,i,])) else
         pi <- mpars[,i,][order(!winner[,i]),]
-      tmp <- my_integrate(f,lower=LT,upper=LC,p=pi,
-                          dfun=attr(dadm,"model")()$dfun,pfun=attr(dadm,"model")()$pfun)
+      tmp <- my_integrate(frace,lower=LT,upper=LC,p=pi,
+                          dfun=model$dfun,pfun=model$pfun)
       if ( !inherits(tmp,"try-error") && suppressWarnings(!is.nan(tmp$value)) ) {
         p <- tmp$value
         if (dim(mpars)[[1]]==1) pi <- mpars[,i,,drop=FALSE] else
           pi <- mpars[,i,][order(!winner[,i]),]
-        tmp <- my_integrate(f,lower=UC,upper=UT,p=pi,
-                            dfun=attr(dadm,"model")()$dfun,pfun=attr(dadm,"model")()$pfun)
+        tmp <- my_integrate(frace,lower=UC,upper=UT,p=pi,
+                            dfun=model$dfun,pfun=model$pfun)
         if ( !inherits(tmp,"try-error") && suppressWarnings(!is.nan(tmp$value)) )
           p <- p + tmp$value else p <- 0
       } else p <- 0
@@ -318,22 +330,22 @@ log_likelihood_race_missing <- function(pars,dadm,model,min_ll=log(1e-10))
     for (i in 1:dim(mpars)[2]) {
       if (dim(mpars)[[1]]==1) pi <- t(as.matrix(mpars[,i,])) else
         pi <- mpars[,i,]
-      pc <- my_integrate(f,lower=LT,upper=LC,p=pi,
-                         dfun=attr(dadm,"model")()$dfun,pfun=attr(dadm,"model")()$pfun)
+      pc <- my_integrate(frace,lower=LT,upper=LC,p=pi,
+                         dfun=model$dfun,pfun=model$pfun)
       if (inherits(pc, "try-error") || suppressWarnings(is.nan(pc$value)))
         p <- NA else p <- pmax(0,pmin(pc$value,1))
       if (!is.na(p)) {
-        if (p != 0 && !(LT==0 & UT==Inf))  cf <- pr_pt(LT,UT,mpars[,i,],dadm) else cf <- 1
+        if (p != 0 && !(LT==0 & UT==Inf))  cf <- pr_pt(LT,UT,mpars[,i,],model) else cf <- 1
         if (!is.na(cf)) p <- p*cf
       }
       if (!is.na(p) & n_acc>1) for (j in 2:n_acc) {
-        pc <- my_integrate(f,lower=LT,upper=LC,p=mpars[,i,][c(j,c(1:n_acc)[-j]),],
-                           dfun=attr(dadm,"model")()$dfun,pfun=attr(dadm,"model")()$pfun)
+        pc <- my_integrate(frace,lower=LT,upper=LC,p=mpars[,i,][c(j,c(1:n_acc)[-j]),],
+                           dfun=model$dfun,pfun=model$pfun)
         if (inherits(pc, "try-error") || suppressWarnings(is.nan(pc$value))) {
           p <- NA; break
         }
         if (pc$value != 0 & !(LT==0 & UT==Inf))
-          cf <- pr_pt(LT,UT,mpars[,i,][c(j,c(1:n_acc)[-j]),],dadm) else cf <- 1
+          cf <- pr_pt(LT,UT,mpars[,i,][c(j,c(1:n_acc)[-j]),],model) else cf <- 1
           if (!is.na(cf)) p <- p + pc$value*cf
       }
       lp <- log(p)
@@ -350,22 +362,22 @@ log_likelihood_race_missing <- function(pars,dadm,model,min_ll=log(1e-10))
     for (i in 1:dim(mpars)[2]) {
       if (dim(mpars)[[1]]==1) pi <- t(as.matrix(mpars[,i,])) else
         pi <- mpars[,i,]
-      pc <- my_integrate(f,lower=UC,upper=UT,p=pi,
-                         dfun=attr(dadm,"model")()$dfun,pfun=attr(dadm,"model")()$pfun)
+      pc <- my_integrate(frace,lower=UC,upper=UT,p=pi,
+                         dfun=model$dfun,pfun=model$pfun)
       if (inherits(pc, "try-error") || suppressWarnings(is.nan(pc$value)))
         p <- NA else p <- pmax(0,pmin(pc$value,1))
       if (!is.na(p)) {
-        if (p != 0 && !(LT==0 & UT==Inf))  cf <- pr_pt(LT,UT,mpars[,i,],dadm) else cf <- 1
+        if (p != 0 && !(LT==0 & UT==Inf))  cf <- pr_pt(LT,UT,mpars[,i,],model) else cf <- 1
         if (!is.na(cf)) p <- p*cf
       }
       if (!is.na(p) & n_acc>1) for (j in 2:n_acc) {
-        pc <- my_integrate(f,lower=UC,upper=UT,p=mpars[,i,][c(j,c(1:n_acc)[-j]),],
-                           dfun=attr(dadm,"model")()$dfun,pfun=attr(dadm,"model")()$pfun)
+        pc <- my_integrate(frace,lower=UC,upper=UT,p=mpars[,i,][c(j,c(1:n_acc)[-j]),],
+                           dfun=model$dfun,pfun=model$pfun)
         if (inherits(pc, "try-error") || suppressWarnings(is.nan(pc$value))) {
           p <- NA; break
         }
         if (pc$value != 0 & !(LT==0 & UT==Inf))
-          cf <- pr_pt(LT,UT,mpars[,i,][c(j,c(1:n_acc)[-j]),],dadm) else cf <- 1
+          cf <- pr_pt(LT,UT,mpars[,i,][c(j,c(1:n_acc)[-j]),],model) else cf <- 1
           if (!is.na(cf)) p <- p + pc$value*cf
       }
       lp <- log(p)
@@ -383,17 +395,17 @@ log_likelihood_race_missing <- function(pars,dadm,model,min_ll=log(1e-10))
     for (i in 1:dim(mpars)[2]) {
       if (dim(mpars)[[1]]==1) pi <- t(as.matrix(mpars[,i,])) else
         pi <- mpars[,i,]
-      pc <- pLU(LT,LC,UC,UT,pi,dadm)
+      pc <- pLU(LT,LC,UC,UT,pi,model)
       if (is.na(pc)) p <- NA else {
-        if (pc!=0 & !(LT==0 & UT==Inf)) cf <- pr_pt(LT,UT,pi,dadm) else cf <- 1
+        if (pc!=0 & !(LT==0 & UT==Inf)) cf <- pr_pt(LT,UT,pi,model) else cf <- 1
         if (!is.na(cf)) p <- pc*cf else p <- NA
         if (!is.na(p) & n_acc>1) for (j in 2:n_acc) {
-          pc <- pLU(LT,LC,UC,UT,mpars[,i,][c(j,c(1:n_acc)[-j]),],dadm)
+          pc <- pLU(LT,LC,UC,UT,mpars[,i,][c(j,c(1:n_acc)[-j]),],model)
           if (is.na(pc)) {
             p <- NA; break
           }
           if (pc!=0 & !(LT==0 & UT==Inf))
-            cf <- pr_pt(LT,UT,mpars[,i,][c(j,c(1:n_acc)[-j]),],dadm) else cf <- 1
+            cf <- pr_pt(LT,UT,mpars[,i,][c(j,c(1:n_acc)[-j]),],model) else cf <- 1
             if (is.na(cf)) {
               p <- NA; break
             } else p <- p +  pc*cf
@@ -418,7 +430,7 @@ log_likelihood_race_missing <- function(pars,dadm,model,min_ll=log(1e-10))
     for (i in 1:length(ok)) if (ok[i]) {
       if (dim(tpars)[[1]]==1) pi <- t(as.matrix(tpars[,i,])) else
         pi <- tpars[,i,][order(!winner[,i]),]
-      cf[i] <- pr_pt(LT,UT,pi,dadm)
+      cf[i] <- pr_pt(LT,UT,pi,model)
     }
     cf <- rep(log(cf),each=n_acc)[attr(dadm,"expand_nort")]
     fix <- dadm$winner & !is.na(cf) & !is.nan(cf) & is.finite(cf)
@@ -450,7 +462,9 @@ log_likelihood_race_missing <- function(pars,dadm,model,min_ll=log(1e-10))
   } else ll <- lds
   ll[is.na(ll) | is.nan(ll)] <- -Inf
 
-  return(sum(pmax(min_ll,ll[attr(dadm,"expand_winner")])))
+  # print(ll[attr(dadm,"expand")])
+
+  return(sum(pmax(min_ll,ll[attr(dadm,"expand")])))
 }
 
 
