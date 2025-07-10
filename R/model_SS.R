@@ -884,8 +884,8 @@ SSexG <- function() {
 #' | *tauS*      | log    | \[0, Inf\]        | log(.05)  |  | tau parameter of ex-Gaussian stopping finishing time distribution       |
 #' | *tf*      | probit       | \[0, 1\]        | qnorm(0)    |                            | Trigger failure probability           |
 #' | *gf*     | probit       | \[0, 1\]        | qnorm(0)    |                            | Go failure probability    |
-#' | *exg_lb*      | log       | \[0, Inf\]        | log(.05)    |                            | lower bound of ex-Gaussian go finishing time distribution           |
-#' | *exgS_lb*     | log       | \[0, Inf\]        | log(.05)    |                            | lower bound of ex-Gaussian stop finishing time distribution    |
+#' | *exg_lb*      | -       | \[-Inf, Inf\]        | .05    |                            | lower bound of ex-Gaussian go finishing time distribution           |
+#' | *exgS_lb*     | -       | \[-Inf, Inf\]        | .05    |                            | lower bound of ex-Gaussian stop finishing time distribution    |
 #'
 #'
 #' @return A model list with all the necessary functions to sample
@@ -893,19 +893,19 @@ SSexG <- function() {
 SStexG <- function() {
   list(
     type = "RACE",
-    c_name = "SS_EXG",
+    c_name = "SS_TEXG",
     p_types = c(
       mu = log(.4), sigma = log(.05), tau = log(.1),
       muS = log(.3), sigmaS = log(.025), tauS = log(.05),
       tf = qnorm(0), gf = qnorm(0),
-      exg_lb = log(.05), exgS_lb = log(.05)
+      exg_lb = .05, exgS_lb = .05
     ),
     transform = list(
       func = c(
         mu = "exp", sigma = "exp", tau = "exp",
         muS = "exp", sigmaS = "exp", tauS = "exp",
         tf = "pnorm", gf = "pnorm",
-        exg_lb = "exp", exgS_lb = "exp"
+        exg_lb = "identity", exgS_lb = "identity"
       )
     ),
     bound = list(
@@ -913,11 +913,11 @@ SStexG <- function() {
         mu = c(0, Inf), sigma = c(1e-4, Inf), tau = c(1e-4, Inf),
         muS = c(0, Inf), sigmaS = c(1e-4, Inf), tauS = c(1e-4, Inf),
         tf = c(.001, .999), gf = c(.001, .999),
-        exg_lb = c(0, Inf), exgS_lb = c(0, Inf)
+        exg_lb = c(-Inf, Inf), exgS_lb = c(-Inf, Inf)
       ),
       exception = c(
-        tf = 0, gf = 0
-        # TODO add exception to allow for -Inf for exg_lb and exgS_lb
+        tf = 0, gf = 0,
+        exg_lb = -Inf, exgS_lb = -Inf
       )
     ),
     # Trial dependent parameter transform
