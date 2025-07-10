@@ -31,10 +31,26 @@ argument of \code{design()}.They can also be accessed with \code{SSexG()$p_types
 }
 
 
-The independent race model of the stop signal task was introduced in Logan & Cowan (1984).
+Because the ex-Gaussian stop signal model is a race model, it has one accumulator per response option.
+EMC2 automatically constructs a factor representing the accumulators \code{lR} (i.e., the
+latent response) with level names taken from the \code{R} column in the data.
+
+For race models, the \code{design()} argument \code{matchfun} can be provided, a
+function that takes the \code{lR} factor (defined in the augmented data (d)
+in the following function) and returns a logical defining the correct response.
+In the example below, the match is simply such that the \code{S} factor equals the
+latent response factor: \code{matchfun=function(d)d$S==d$lR}. Then \code{matchfun} is
+used to automatically create a latent match (\code{lM}) factor with
+levels \code{FALSE} (i.e., the stimulus does not match the accumulator) and \code{TRUE}
+(i.e., the stimulus does match the accumulator). This is added internally
+and can also be used in model formula.
+
+The race model of the stop signal task was first introduced by Logan & Cowan (1984), who modeled task performance as a race between two stochastic processes: a go process for response execution (triggered by the choice stimulus), and a stop process for response inhibition (triggered by the stop signal).
 Several review papers provide further background on the task paradigm and modelling framework (e.g., Matzke et al., 2018; Verbruggen et al., 2019; Colonius et al., 2023).
 
-The ex-Gaussian model was introduced as a simple race (i.e., unitary go process racing against stop process) in Matzke et al. (2013).
+Early work on the ex-Gaussian distribution as a descriptive model of RT data includes Ratcliff & Murdock (1976), Ratcliff (1979), and Heathcote et al. (1991).
+
+Matzke et al. (2013) introduced the ex-Gaussian distribution as a parametric model of the finish time distributions of the go and stop processes.
 This was extended in Matzke et al. (2019) to allow for an arbitrary number of go processes.
 
 Attentional lapse rate parameters for the stop process and go process, termed "trigger failure" and "go failure" respectively, were introduced in Matzke et al. (2017) and Matzke et al. (2019).
@@ -45,6 +61,8 @@ Note that the ex-Gaussian parameters do not have unique psychological interpreta
 }
 \references{
 Colonius, H., & Diederich, A. (2023). Modeling response inhibition in the stop signal task. \emph{F. G. Ashby, H. Colonius, & E. N. Dzhafarov (Eds.), New Handbook of Mathematical Psychology}, \emph{3}, 311-356. \doi{10.1017/9781108902724.008}
+
+Heathcote, A., Popiel, S. J., & Mewhort, D. J. (1991). Analysis of response time distributions: an example using the Stroop task. \emph{Psychological Bulletin}, \emph{109}(2), 340. \doi{10.1037/0033-2909.109.2.340}
 
 Logan, G. D., & Cowan, W. B. (1984). On the ability to inhibit thought and action: A theory of an act of control. \emph{Psychological Review}, \emph{91}(3), 295. \doi{10.1037/0033-295X.91.3.295}
 
@@ -57,6 +75,10 @@ Matzke, D., Love, J., & Heathcote, A. (2017). A Bayesian approach for estimating
 Matzke, D., Verbruggen, F., & Logan, G. (2018). The stop-signal paradigm. \emph{Stevens’ handbook of experimental psychology and cognitive neuroscience}, \emph{5}, 383-427. \doi{10.1002/9781119170174.epcn510}
 
 Matzke, D., Curley, S., Gong, C. Q., & Heathcote, A. (2019). Inhibiting responses to difficult choices. \emph{Journal of Experimental Psychology: General}, \emph{148}(1), 124. \doi{10.1037/xge0000525}
+
+Ratcliff, R., & Murdock, B. B. (1976). Retrieval processes in recognition memory. \emph{Psychological Review}, \emph{83}(3), 190. \doi{10.1037/0033-295X.83.3.190}
+
+Ratcliff, R. (1979). Group reaction time distributions and an analysis of distribution statistics. \emph{Psychological Bulletin}, \emph{86}(3), 446. \doi{10.1037/0033-2909.86.3.446}
 
 Tanis, C. C., Heathcote, A., Zrubka, M., & Matzke, D. (2024). A hybrid approach to dynamic cognitive psychometrics: Dynamic cognitive psychometrics. \emph{Behavior Research Methods}, \emph{56}(6), 5647-5666. \doi{10.3758/s13428-023-02295-y}
 
