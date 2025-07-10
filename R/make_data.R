@@ -245,6 +245,7 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
 
     # Try without looping over subjects
     includeColumns <- !colnames(data) %in% c('lR', 'lM', names(design$Ffunctions))
+    if(!'lR' %in% colnames(data)) data$lR <- factor(rep(1, nrow(data)))  # for simulations of the DDM, assume all rows are lR==1
     all_trials <- sort(unique(data[,'trials']))
     for(trial_idx in 1:length(all_trials)) {
       this_pars <- pars
