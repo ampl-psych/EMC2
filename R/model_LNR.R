@@ -129,8 +129,7 @@ MLNR <- function() {
     type="RACE",
     c_name = "MLNR",
     p_types=c("m" = 1,"s" = log(1),"t0" = log(0),pContaminant=qnorm(0)),
-    transform=list(func=c(m = "identity",s = "exp", t0 = "exp"),
-                   pContaminant="pnorm"),
+    transform=list(func=c(m = "identity",s = "exp", t0 = "exp",pContaminant="pnorm")),
     bound=list(minmax=cbind(m=c(-Inf,Inf),s = c(0, Inf), t0=c(0.05,Inf),
                             pContaminant=c(0,1)),exception=c(pContaminant=0)),
     # Trial dependent parameter transform
@@ -155,8 +154,7 @@ MLNRnoC <- function() {
   list(
     type="RACE",
     p_types=c("m" = 1,"s" = log(1),"t0" = log(0),pContaminant=qnorm(0)),
-    transform=list(func=c(m = "identity",s = "exp", t0 = "exp"),
-                   pContaminant="pnorm"),
+    transform=list(func=c(m = "identity",s = "exp", t0 = "exp",pContaminant="pnorm")),
     bound=list(minmax=cbind(m=c(-Inf,Inf),s = c(0, Inf), t0=c(0.05,Inf),
                             pContaminant=c(0,1)),exception=c(pContaminant=0)),
     # Trial dependent parameter transform
