@@ -651,7 +651,7 @@ pstopTEXG <- function(
   #   cells[i] <- paste(SSDs[i],ps[i,],pgo[,i,],upper[i],collapse="")
   uniq <- !duplicated(cells)
   ups <- sapply(1:sum(uniq),function(i){
-    my.integrate_old(f=stopfn_texg,lower=-Inf,SSD=SSDs[i],upper=upper[i],
+    my.integrate_old(f=stopfn_texg,lower=ps[i,"exgS_lb"],SSD=SSDs[i],upper=upper[i],
                      mu=c(ps[i,"muS"],pgo[,i,"mu"]),
                      sigma=c(ps[i,"sigmaS"],pgo[,i,"sigma"]),
                      tau=c(ps[i,"tauS"],pgo[,i,"tau"]),
