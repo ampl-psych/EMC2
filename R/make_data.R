@@ -247,13 +247,19 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
 
       # simulate *two* trials at the same time, to capture update of Q-value from previous trial
       this_trial <- all_trials[trial_idx]
+
       if(trial_idx > 1) {
         prev_trial <- all_trials[trial_idx-1]
+        # Remove pars from subjects that have fewer than this_trial trials
+        this_pars <- this_pars[as.character(unique(this_data$subjects)),]
         # set Q-values to previous one
         this_pars[,covariate_names] <- this_covariates
       } else {
         prev_trial <- NULL
       }
+
+      # filter subjects that don't have this_trial from this_pars
+
 
       this_data <- design_model(
         add_accumulators(data[data$trials%in%c(prev_trial, this_trial)&data$lR==levels(data$lR)[1],includeColumns],
@@ -261,6 +267,8 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
         design,model,add_acc=FALSE,compress=FALSE,verbose=FALSE,
         rt_check=FALSE)
 
+      # drop unused levels
+      this_data$subjects <- droplevels(this_data$subjects)
       # Ensure trials are sorted
       this_data <- this_data[order(this_data$subjects,this_data$trials),]
 
