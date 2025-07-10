@@ -92,11 +92,31 @@ pDDM <- function(rt,R,pars,precision=5e-3)
 #'
 #' Conventionally, `s` is fixed to 1 to satisfy scaling constraints.
 #'
-#' See Ratcliff, R., & McKoon, G. (2008).
-#' The diffusion decision model: theory and data for two-choice decision tasks.
-#' *Neural computation, 20*(4), 873-922. doi:10.1162/neco.2008.12-06-420.
+#' The DDM was introduced by Ratcliff (1978) with parameters `v`, `a`, `t0`, `s`, and `Z`.
+#' Between-trial variability parameters `SZ` and `sv` were introduced in Ratcliff & Rouder (1998). Between trial-variability parameter `st0` was introduced in Ratcliff (2002).
+#' Several review papers provide further background on the model (e.g., Forstmann et al., 2016; Ratcliff & McKoon, 2008; Ratcliff, 2013; Voss et al., 2004).
+#'
+#' The C++ implementation of the model's log likelihood function was adapted from code released with the `WienR` package (Hartmann & Klauer, 2021), available under a GPL-2 | GPL-3 license.
+#'
+#' @references
+#' Forstmann, B. U., Ratcliff, R., & Wagenmakers, E. J. (2016). Sequential sampling models in cognitive neuroscience: Advantages, applications, and extensions. *Annual Review of Psychology*, *67*(1), 641-666. \doi{10.1146/annurev-psych-122414-033645}
+#'
+#' Hartmann, R., & Klauer, K. C. (2021). Partial derivatives for the first-passage time distribution in Wiener diffusion models. *Journal of Mathematical Psychology*, *103*, 102550. \doi{10.1016/j.jmp.2021.102550}
+#'
+#' Ratcliff, R. (1978). A theory of memory retrieval. *Psychological Review*, *85*(2), 59. \doi{10.1037/0033-295X.85.2.59}
+#'
+#' Ratcliff, R. (2002). A diffusion model account of response time and accuracy in a brightness discrimination task: Fitting real data and failing to fit fake but plausible data. *Psychonomic Bulletin & Review*, *9*(2), 278-291. \doi{10.3758/BF03196302}
+#'
+#' Ratcliff, R. (2013). Parameter variability and distributional assumptions in the diffusion model. *Psychological Review*, *120*(1), 281. \doi{10.1037/a0030775}
+#'
+#' Ratcliff, R., & Rouder, J. N. (1998). Modeling response times for two-choice decisions. *Psychological Science*, *9*(5), 347-356. \doi{10.1111/1467-9280.00067}
+#'
+#' Ratcliff, R., & McKoon, G. (2008). The diffusion decision model: theory and data for two-choice decision tasks. *Neural computation*, *20*(4), 873-922. \doi{10.1162/neco.2008.12-06-420}
+#'
+#' Voss, A., Rothermund, K., & Voss, J. (2004). Interpreting the parameters of the diffusion model: An empirical validation. *Memory & Cognition*, *32*, 1206-1220. \doi{10.3758/BF03196893}
 #'
 #' @return A model list with all the necessary functions for EMC2 to sample
+#'
 #' @examples
 #' design_DDMaE <- design(data = forstmann,model=DDM,
 #'                            formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
@@ -105,8 +125,6 @@ pDDM <- function(rt,R,pars,precision=5e-3)
 #' # (see Table above).
 #'
 #' @export
-#'
-
 DDM <- function(){
   list(
     c_name = "DDM",
