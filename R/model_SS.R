@@ -651,7 +651,7 @@ pstopTEXG <- function(
   #   cells[i] <- paste(SSDs[i],ps[i,],pgo[,i,],upper[i],collapse="")
   uniq <- !duplicated(cells)
   ups <- sapply(1:sum(uniq),function(i){
-    my.integrate_old(f=stopfn_texg,lower=-Inf,SSD=SSDs[i],upper=upper[i],
+    my.integrate_old(f=stopfn_texg,lower=ps[i,"exgS_lb"],SSD=SSDs[i],upper=upper[i],
                      mu=c(ps[i,"muS"],pgo[,i,"mu"]),
                      sigma=c(ps[i,"sigmaS"],pgo[,i,"sigma"]),
                      tau=c(ps[i,"tauS"],pgo[,i,"tau"]),
@@ -862,9 +862,9 @@ SSexG <- function() {
 }
 
 
-#' Stop-signal truncated ex-Gaussian race
+#' The ex-Gaussian race model of the stop signal task
 #'
-#' Model file to estimate the truncated ex-Gaussian race model for Stop-Signal data
+#' Model file to estimate the ex-Gaussian race model of stop signal task data in EMC2.
 #'
 #' Model files are almost exclusively used in `design()`.
 #'
@@ -873,39 +873,90 @@ SSexG <- function() {
 #' Default values are used for all parameters that are not explicitly listed in the `formula`
 #' argument of `design()`.They can also be accessed with `SSexG()$p_types`.
 #'
-#' @details
 #' | **Parameter** | **Transform** | **Natural scale** | **Default**   | **Mapping**                    | **Interpretation**                                            |
 #' |-----------|-----------|---------------|-----------|----------------------------|-----------------------------------------------------------|
-#' | *mu*       | log         | \[0, Inf\]     | log(.4)         |                            | mu parameter of ex-Gaussian go finishing time distribution              |
-#' | *sigma*       | log       | \[0, Inf\]        | log(.05)    |                            | sigma parameter of ex-Gaussian go finishing time distribution                                        |
-#' | *tau*      | log       | \[0, Inf\]        | log(.1)    |                            | tau parameter of ex-Gaussian go finishing time distribution                                          |
-#' | *muS*       | log       | \[0, Inf\]        | log(.3)    |                            | mu parameter of ex-Gaussian stopping finishing time distribution           |
-#' | *sigmaS*       | log    | \[0, Inf\]        | log(.025)|                   | sigma parameter of ex-Gaussian stopping finishing time distribution                              |
-#' | *tauS*      | log    | \[0, Inf\]        | log(.05)  |  | tau parameter of ex-Gaussian stopping finishing time distribution       |
-#' | *tf*      | probit       | \[0, 1\]        | qnorm(0)    |                            | Trigger failure probability           |
-#' | *gf*     | probit       | \[0, 1\]        | qnorm(0)    |                            | Go failure probability    |
-#' | *exg_lb*      | log       | \[0, Inf\]        | log(.05)    |                            | lower bound of ex-Gaussian go finishing time distribution           |
-#' | *exgS_lb*     | log       | \[0, Inf\]        | log(.05)    |                            | lower bound of ex-Gaussian stop finishing time distribution    |
+#' | *mu*       | log         | \[0, Inf\]     | log(.4)         |                            | Mean of Gaussian component of ex-Gaussian go finish time distribution              |
+#' | *sigma*       | log       | \[0, Inf\]        | log(.05)    |                            | Standard deviation of Gaussian component of ex-Gaussian go finish time distribution                                        |
+#' | *tau*      | log       | \[0, Inf\]        | log(.1)    |                            | Mean (inverse rate) of exponential component of ex-Gaussian go finish time distribution                                          |
+#' | *muS*       | log       | \[0, Inf\]        | log(.3)    |                            | Mean of Gaussian component of ex-Gaussian stop finish time distribution           |
+#' | *sigmaS*       | log    | \[0, Inf\]        | log(.025)|                   | Standard deviation of Gaussian component of ex-Gaussian stop finish time distribution                              |
+#' | *tauS*      | log    | \[0, Inf\]        | log(.05)  |  | Mean (inverse rate) of exponential component of ex-Gaussian stop finish time distribution       |
+#' | *tf*      | probit       | \[0, 1\]        | qnorm(0)    |                            | Attentional lapse rate for stop process ("trigger failure")           |
+#' | *gf*     | probit       | \[0, 1\]        | qnorm(0)    |                            | Attentional lapse rate for go process ("go failure")    |
+#' | *exg_lb*      | -       | \[-Inf, Inf\]        | .05    |                            | Lower bound of ex-Gaussian go finish time distribution           |
+#' | *exgS_lb*     | -       | \[-Inf, Inf\]        | .05    |                            | Lower bound of ex-Gaussian stop finish time distribution    |
 #'
+#' Because the ex-Gaussian stop signal model is a race model, it has one accumulator per response option.
+#' EMC2 automatically constructs a factor representing the accumulators `lR` (i.e., the
+#' latent response) with level names taken from the `R` column in the data.
+#'
+#' For race models, the `design()` argument `matchfun` can be provided, a
+#' function that takes the `lR` factor (defined in the augmented data (d)
+#' in the following function) and returns a logical defining the correct response.
+#' In the example below, the match is simply such that the `S` factor equals the
+#' latent response factor: `matchfun=function(d)d$S==d$lR`. Then `matchfun` is
+#' used to automatically create a latent match (`lM`) factor with
+#' levels `FALSE` (i.e., the stimulus does not match the accumulator) and `TRUE`
+#' (i.e., the stimulus does match the accumulator). This is added internally
+#' and can also be used in model formula.
+#'
+#' The race model of the stop signal task was first introduced by Logan & Cowan (1984), who modeled task performance as a race between two stochastic processes: a go process for response execution (triggered by the choice stimulus), and a stop process for response inhibition (triggered by the stop signal).
+#' Several review papers provide further background on the task paradigm and modelling framework (e.g., Matzke et al., 2018; Verbruggen et al., 2019; Colonius et al., 2023).
+#'
+#' Early work on the ex-Gaussian distribution as a descriptive model of RT data includes Ratcliff & Murdock (1976), Ratcliff (1979), and Heathcote et al. (1991).
+#'
+#' Matzke et al. (2013) introduced the ex-Gaussian distribution as a parametric model of the finish time distributions of the go and stop processes.
+#' This was extended in Matzke et al. (2019) to allow for an arbitrary number of go processes.
+#'
+#' Attentional lapse rate parameters for the stop process and go process, termed "trigger failure" and "go failure" respectively, were introduced in Matzke et al. (2017) and Matzke et al. (2019).
+#'
+#' Lower truncation of the ex-Gaussian finish time distributions was introduced in Tanis et al. (2024).
+#'
+#' Note that the ex-Gaussian parameters do not have unique psychological interpretations (Matzke & Wagenmakers, 2009). Parameter estimates are typically summarised in terms of the mean of the ex-Gaussian distribution, which is given by `mu + tau`.
+#'
+#' @references
+#' Colonius, H., & Diederich, A. (2023). Modeling response inhibition in the stop signal task. *F. G. Ashby, H. Colonius, & E. N. Dzhafarov (Eds.), New Handbook of Mathematical Psychology*, *3*, 311-356. \doi{10.1017/9781108902724.008}
+#'
+#' Heathcote, A., Popiel, S. J., & Mewhort, D. J. (1991). Analysis of response time distributions: an example using the Stroop task. *Psychological Bulletin*, *109*(2), 340. \doi{10.1037/0033-2909.109.2.340}
+#'
+#' Logan, G. D., & Cowan, W. B. (1984). On the ability to inhibit thought and action: A theory of an act of control. *Psychological Review*, *91*(3), 295. \doi{10.1037/0033-295X.91.3.295}
+#'
+#' Matzke, D., & Wagenmakers, E. J. (2009). Psychological interpretation of the ex-Gaussian and shifted Wald parameters: A diffusion model analysis. *Psychonomic Bulletin & Review*, *16*, 798-817. \doi{10.3758/PBR.16.5.798}
+#'
+#' Matzke, D., Dolan, C. V., Logan, G. D., Brown, S. D., & Wagenmakers, E. J. (2013). Bayesian parametric estimation of stop-signal reaction time distributions. *Journal of Experimental Psychology: General*, *142*(4), 1047. \doi{10.1037/a0030543}
+#'
+#' Matzke, D., Love, J., & Heathcote, A. (2017). A Bayesian approach for estimating the probability of trigger failures in the stop-signal paradigm. *Behavior Research Methods*, *49*, 267-281. \doi{10.3758/s13428-015-0695-8}
+#'
+#' Matzke, D., Verbruggen, F., & Logan, G. (2018). The stop-signal paradigm. *Stevens’ handbook of experimental psychology and cognitive neuroscience*, *5*, 383-427. \doi{10.1002/9781119170174.epcn510}
+#'
+#' Matzke, D., Curley, S., Gong, C. Q., & Heathcote, A. (2019). Inhibiting responses to difficult choices. *Journal of Experimental Psychology: General*, *148*(1), 124. \doi{10.1037/xge0000525}
+#'
+#' Ratcliff, R., & Murdock, B. B. (1976). Retrieval processes in recognition memory. *Psychological Review*, *83*(3), 190. \doi{10.1037/0033-295X.83.3.190}
+#'
+#' Ratcliff, R. (1979). Group reaction time distributions and an analysis of distribution statistics. *Psychological Bulletin*, *86*(3), 446. \doi{10.1037/0033-2909.86.3.446}
+#'
+#' Tanis, C. C., Heathcote, A., Zrubka, M., & Matzke, D. (2024). A hybrid approach to dynamic cognitive psychometrics: Dynamic cognitive psychometrics. *Behavior Research Methods*, *56*(6), 5647-5666. \doi{10.3758/s13428-023-02295-y}
+#'
+#' Verbruggen, F., Aron, A. R., Band, G. P., Beste, C., Bissett, P. G., Brockett, A. T., ... & Boehler, C. N. (2019). A consensus guide to capturing the ability to inhibit actions and impulsive behaviors in the stop-signal task. *elife*, *8*, e46323. \doi{10.7554/eLife.46323}
 #'
 #' @return A model list with all the necessary functions to sample
 #' @export
 SStexG <- function() {
   list(
     type = "RACE",
-    c_name = "SS_EXG",
+    c_name = "SS_TEXG",
     p_types = c(
       mu = log(.4), sigma = log(.05), tau = log(.1),
       muS = log(.3), sigmaS = log(.025), tauS = log(.05),
       tf = qnorm(0), gf = qnorm(0),
-      exg_lb = log(.05), exgS_lb = log(.05)
+      exg_lb = .05, exgS_lb = .05
     ),
     transform = list(
       func = c(
         mu = "exp", sigma = "exp", tau = "exp",
         muS = "exp", sigmaS = "exp", tauS = "exp",
         tf = "pnorm", gf = "pnorm",
-        exg_lb = "exp", exgS_lb = "exp"
+        exg_lb = "identity", exgS_lb = "identity"
       )
     ),
     bound = list(
@@ -913,11 +964,11 @@ SStexG <- function() {
         mu = c(0, Inf), sigma = c(1e-4, Inf), tau = c(1e-4, Inf),
         muS = c(0, Inf), sigmaS = c(1e-4, Inf), tauS = c(1e-4, Inf),
         tf = c(.001, .999), gf = c(.001, .999),
-        exg_lb = c(0, Inf), exgS_lb = c(0, Inf)
+        exg_lb = c(-Inf, Inf), exgS_lb = c(-Inf, Inf)
       ),
       exception = c(
-        tf = 0, gf = 0
-        # TODO add exception to allow for -Inf for exg_lb and exgS_lb
+        tf = 0, gf = 0,
+        exg_lb = -Inf, exgS_lb = -Inf
       )
     ),
     # Trial dependent parameter transform

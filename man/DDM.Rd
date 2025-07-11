@@ -37,9 +37,11 @@ argument of \code{design()}.They can also be accessed with \code{DDM()$p_types}.
 
 Conventionally, \code{s} is fixed to 1 to satisfy scaling constraints.
 
-See Ratcliff, R., & McKoon, G. (2008).
-The diffusion decision model: theory and data for two-choice decision tasks.
-\emph{Neural computation, 20}(4), 873-922. doi:10.1162/neco.2008.12-06-420.
+The DDM was introduced by Ratcliff (1978) with parameters \code{v}, \code{a}, \code{t0}, \code{s}, and \code{Z}.
+Between-trial variability parameters \code{SZ} and \code{sv} were introduced in Ratcliff & Rouder (1998). Between trial-variability parameter \code{st0} was introduced in Ratcliff (2002).
+Several review papers provide further background on the model (e.g., Forstmann et al., 2016; Ratcliff & McKoon, 2008; Ratcliff, 2013; Voss et al., 2004).
+
+The C++ implementation of the model's log likelihood function was adapted from code released with the \code{WienR} package (Hartmann & Klauer, 2021), available under a GPL-2 | GPL-3 license.
 }
 \examples{
 design_DDMaE <- design(data = forstmann,model=DDM,
@@ -48,4 +50,21 @@ design_DDMaE <- design(data = forstmann,model=DDM,
 # For all parameters that are not defined in the formula, default values are assumed
 # (see Table above).
 
+}
+\references{
+Forstmann, B. U., Ratcliff, R., & Wagenmakers, E. J. (2016). Sequential sampling models in cognitive neuroscience: Advantages, applications, and extensions. \emph{Annual Review of Psychology}, \emph{67}(1), 641-666. \doi{10.1146/annurev-psych-122414-033645}
+
+Hartmann, R., & Klauer, K. C. (2021). Partial derivatives for the first-passage time distribution in Wiener diffusion models. \emph{Journal of Mathematical Psychology}, \emph{103}, 102550. \doi{10.1016/j.jmp.2021.102550}
+
+Ratcliff, R. (1978). A theory of memory retrieval. \emph{Psychological Review}, \emph{85}(2), 59. \doi{10.1037/0033-295X.85.2.59}
+
+Ratcliff, R. (2002). A diffusion model account of response time and accuracy in a brightness discrimination task: Fitting real data and failing to fit fake but plausible data. \emph{Psychonomic Bulletin & Review}, \emph{9}(2), 278-291. \doi{10.3758/BF03196302}
+
+Ratcliff, R. (2013). Parameter variability and distributional assumptions in the diffusion model. \emph{Psychological Review}, \emph{120}(1), 281. \doi{10.1037/a0030775}
+
+Ratcliff, R., & Rouder, J. N. (1998). Modeling response times for two-choice decisions. \emph{Psychological Science}, \emph{9}(5), 347-356. \doi{10.1111/1467-9280.00067}
+
+Ratcliff, R., & McKoon, G. (2008). The diffusion decision model: theory and data for two-choice decision tasks. \emph{Neural computation}, \emph{20}(4), 873-922. \doi{10.1162/neco.2008.12-06-420}
+
+Voss, A., Rothermund, K., & Voss, J. (2004). Interpreting the parameters of the diffusion model: An empirical validation. \emph{Memory & Cognition}, \emph{32}, 1206-1220. \doi{10.3758/BF03196893}
 }

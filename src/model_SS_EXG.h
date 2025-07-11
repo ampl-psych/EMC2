@@ -193,13 +193,13 @@ double ss_texg_stop_success_lpdf(
     NumericMatrix pars,
     // minimal log likelihood, to protect against numerical issues
     double min_ll,
-    // lower limit for integration
-    double lower,
     // upper limit for integration
     double upper
 ) {
   // set up an instance of a stop success integrand
   texg_ss_integrand race_integrand(SSD, pars, min_ll);
+  // lower limit of integration set to the lower bound of stop process distribution
+  double lower = pars(0, 9);
   // perform integration: likelihood of stop process winning
   IntegrationResult out = my_integrate(race_integrand, lower, upper);
   // check for numerical issues
@@ -273,16 +273,16 @@ NumericVector ss_texg_lpdf(
         // Lastly, this mixture has to be adjusted for lack of go failure
         go_lprob = ss_texg_go_lpdf(
           RT[start_row],
-            pars(Range(start_row, end_row), _),
-            winner[Range(start_row, end_row)],
-                  min_ll
+          pars(Range(start_row, end_row), _),
+          winner[Range(start_row, end_row)],
+          min_ll
         );
         stop_fail_lprob = ss_texg_stop_fail_lpdf(
           RT[start_row],
-            SSD[start_row],
-               pars(Range(start_row, end_row), _),
-               winner[Range(start_row, end_row)],
-                     min_ll
+          SSD[start_row],
+          pars(Range(start_row, end_row), _),
+          winner[Range(start_row, end_row)],
+          min_ll
         );
         // likelihood = (1-gf) x [tf x go_prob + (1-tf) x stop_fail_prob]
         out[trial] = log1m(gf[trial]) + log_mix(tf[trial], go_lprob, stop_fail_lprob);
@@ -291,9 +291,9 @@ NumericVector ss_texg_lpdf(
         // explained by go process without go failure
         go_lprob = ss_texg_go_lpdf(
           RT[start_row],
-            pars(Range(start_row, end_row), _),
-            winner[Range(start_row, end_row)],
-                  min_ll
+          pars(Range(start_row, end_row), _),
+          winner[Range(start_row, end_row)],
+          min_ll
         );
         // likelihood = (1-gf) x go_prob
         out[trial] = log1m(gf[trial]) + go_lprob;
@@ -307,10 +307,9 @@ NumericVector ss_texg_lpdf(
         //      failure and without trigger failure)
         stop_success_integral = ss_texg_stop_success_lpdf(
           SSD[start_row],
-             pars(Range(start_row, end_row), _),
-             min_ll,
-             R_NegInf,
-             R_PosInf
+          pars(Range(start_row, end_row), _),
+          min_ll,
+          R_PosInf
         );
         stop_success_lprob = log1m(gf[trial]) + log1m(tf[trial]) + stop_success_integral;
         // likelihood = gf + [(1-gf) x (1-tf) x stop_success_integral]

@@ -51,9 +51,6 @@ levels \code{FALSE} (i.e., the stimulus does not match the accumulator) and \cod
 (i.e., the stimulus does match the accumulator). This is added internally
 and can also be used in model formula, typically for parameters related to
 the rate of accumulation.
-
-Brown, S. D., & Heathcote, A. (2008). The simplest complete model of choice response time: Linear ballistic accumulation.
-\emph{Cognitive Psychology, 57}(3), 153-178. https://doi.org/10.1016/j.cogpsych.2007.12.002
 }
 \examples{
 # When working with lM it is useful to design  an "average and difference"
@@ -67,4 +64,7 @@ design_LBABE <- design(data = forstmann,model=LBA,matchfun=matchfun,
                        contrasts=list(v=list(lM=ADmat)),constants=c(sv=log(1)))
 # For all parameters that are not defined in the formula, default values are assumed
 # (see Table above).
+}
+\references{
+Brown, S. D., & Heathcote, A. (2008). The simplest complete model of choice response time: Linear ballistic accumulation. \emph{Cognitive Psychology, 57}(3), 153-178. \doi{10.1016/j.cogpsych.2007.12.002}
 }
