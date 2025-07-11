@@ -193,7 +193,7 @@ NumericVector f_integrate_slow(Rcpp::NumericMatrix pars,
     double res_hacky = integrate(f, lower, 10, err_est_hacky, err_code_hacky);
     NumericVector out{res_hacky, err_est_hacky, (double) err_code_hacky};
     return out;
-  } else if (err_code > 0) {
+  } else if (err_code > 2) {
     NumericVector out{min_ll, err_est, (double) err_code};
     return out;
   } else {

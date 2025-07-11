@@ -398,6 +398,7 @@ double c_log_likelihood_race_missing(NumericMatrix pars, DataFrame data,
     loss[loss == log(1 - exp(min_ll))] = min_ll;
     lds[!winner] = loss;
   }
+
   lds[is_na(lds) | (winner & is_infinite(rts))] = min_ll;
   lds[(!winner) & (is_infinite(rts) | is_na(rts))] = 0;
 
@@ -563,7 +564,8 @@ double c_log_likelihood_race_missing(NumericMatrix pars, DataFrame data,
       }
     }
 
-//    Rcpp::Rcout << "winner " << winner.length() << " " << winner << std::endl;
+//    Rcpp::Rcout << "dim pars " << pars.nrow() << " " << pars.ncol() << std::endl;
+//    Rcpp::Rcout << "dim mpars " << mpars.nrow() << " " << mpars.ncol() << std::endl;
 //    Rcpp::Rcout << "nortfastu " << nortfastu.length() << " " << nortfastu << std::endl;
 
     LogicalVector winnerfastuvec = winner[nortfastu];
@@ -571,10 +573,24 @@ double c_log_likelihood_race_missing(NumericMatrix pars, DataFrame data,
 
     tofixfast = (winner & nortfastu);
     NumericVector ldstofixfast(sum(tofixfast));
+
     for (int i = 0; i < sum(tofixfast); i++) {
-      NumericMatrix pi(n_acc, pars.nrow());
+
+//      NumericMatrix pi(n_acc, pars.nrow());
+      NumericMatrix pi(n_acc, pars.ncol());
+
+//      Rcpp::Rcout << n_acc << std::endl;
+//      Rcpp::Rcout << pars.nrow() << std::endl;
+
+//      Rcpp::Rcout << mpars.nrow() << std::endl;
+//      Rcpp::Rcout << mpars.ncol() << std::endl;
+//      Rcpp::Rcout << mpars << std::endl;
+
 
       for (int j = 0; j < n_acc; j++) {
+
+//        Rcpp::Rcout << j << std::endl;
+
         pi(j,_) = mpars(i * n_acc + j,_);
       }
 
@@ -586,11 +602,14 @@ double c_log_likelihood_race_missing(NumericMatrix pars, DataFrame data,
 //      Rcpp::Rcout << "pc " << pc.length() << " " << pc << std::endl;
 
       double p;
-      if (pc[2] != 0 || traits::is_nan<REALSXP>(pc[0])) {
+//      if (pc[2] != 0 || traits::is_nan<REALSXP>(pc[0])) {
+      if (pc[2] > 2 || traits::is_nan<REALSXP>(pc[0])) {
         p = NA_REAL;
       } else{
         p = std::max(0.0 ,std::min(pc[0],1.0));
       }
+
+//      Rcpp::Rcout << "p " <<  p << std::endl;
 
       double cf;
       if (p != 0 && !(LT==0 && UT==R_PosInf)) {
@@ -606,11 +625,18 @@ double c_log_likelihood_race_missing(NumericMatrix pars, DataFrame data,
       }
 
       if (!traits::is_na<REALSXP>(p) && n_acc > 1) {
+
         for (int j = 1; j < n_acc; j++) {
+
+//          Rcpp::Rcout << "in loop " << std::endl;
+
           idx.fill(0);
           idx[j] = 1;
           pc = f_integrate(pi, idx, dfun, pfun, min_ll, LT, LC, is_ok);
-          if (pc[2] != 0 || traits::is_nan<REALSXP>(pc[0])) {
+
+//          Rcpp::Rcout << "pc " << pc.length() << " " << pc << std::endl;
+
+          if (pc[2] > 2 || traits::is_nan<REALSXP>(pc[0])) {
             p = NA_REAL;
             break;
           }
@@ -619,6 +645,9 @@ double c_log_likelihood_race_missing(NumericMatrix pars, DataFrame data,
           } else{
             cf = 1;
           }
+
+//          Rcpp::Rcout << "cf " << cf << std::endl;
+
           if (!traits::is_na<REALSXP>(cf)) {
             p += pc[0] * cf;
           }
@@ -635,7 +664,10 @@ double c_log_likelihood_race_missing(NumericMatrix pars, DataFrame data,
 //    Rcpp::Rcout << "tofixfast " << tofixfast.length() << " " << tofixfast << std::endl;
 //    Rcpp::Rcout << "ldstofixfast " << ldstofixfast.length() << " " << ldstofixfast << std::endl;
 
-    lds[tofixfast] = ldstofixfast;
+   lds[tofixfast] = ldstofixfast;
+
+//   Rcpp::Rcout << "lds 2 " << lds.length() << " " << lds << std::endl;
+
   }
 
   // Slow
@@ -662,7 +694,8 @@ double c_log_likelihood_race_missing(NumericMatrix pars, DataFrame data,
     NumericVector ldstofixslow(sum(tofixslow));
 
     for (int i = 0; i < sum(tofixslow); i++) {
-      NumericMatrix pi(n_acc, pars.nrow());
+//      NumericMatrix pi(n_acc, pars.nrow());
+      NumericMatrix pi(n_acc, pars.ncol());
 
       for (int j = 0; j < n_acc; j++) {
         pi(j,_) = mpars(i * n_acc + j,_);
@@ -673,7 +706,7 @@ double c_log_likelihood_race_missing(NumericMatrix pars, DataFrame data,
 
       NumericVector pc = f_integrate(pi, idx, dfun, pfun, min_ll, UC, UT, is_ok);
       double p;
-      if (pc[2] != 0 || traits::is_nan<REALSXP>(pc[0])) {
+      if (pc[2] > 2 || traits::is_nan<REALSXP>(pc[0])) {
         p = NA_REAL;
       } else{
         p = std::max(0.0,std::min(pc[0],1.0));
@@ -695,7 +728,7 @@ double c_log_likelihood_race_missing(NumericMatrix pars, DataFrame data,
           idx.fill(0);
           idx[j] = 1;
           pc = f_integrate(pi, idx, dfun, pfun, min_ll, UC, UT, is_ok);
-          if (pc[2] != 0 || traits::is_nan<REALSXP>(pc[0])) {
+          if (pc[2] > 2 || traits::is_nan<REALSXP>(pc[0])) {
             p = NA_REAL;
             break;
           }
@@ -891,7 +924,7 @@ double c_log_likelihood_race_missing(NumericMatrix pars, DataFrame data,
 
   // original code
 
-//  Rcpp::Rcout << "lds 2 = " << lds.length() << " " << lds << std::endl;
+// Rcpp::Rcout << "lds 3 = " << lds.length() << " " << lds << std::endl;
 
 //  Rcpp::Rcout << "expand = " << expand.length() << " " << expand << std::endl;
 
@@ -914,6 +947,9 @@ double c_log_likelihood_race_missing(NumericMatrix pars, DataFrame data,
         ll_out[z] = ll_out[z] + sum(lds_los[seq( z * (n_acc -1), (z+1) * (n_acc -1) -1)]);
       }
     }
+
+    Rcpp::Rcout << "ll_out = " << ll_out.length() << " " << ll_out << std::endl;
+
     ll_out[is_na(ll_out)] = min_ll;
     ll_out[is_infinite(ll_out)] = min_ll;
     ll_out[ll_out < min_ll] = min_ll;
