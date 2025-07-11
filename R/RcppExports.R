@@ -73,22 +73,6 @@ dEXG_RDEX <- function(x, mu = 5., sigma = 1., tau = 1., log_d = FALSE) {
     .Call(`_EMC2_dEXG_RDEX`, x, mu, sigma, tau, log_d)
 }
 
-pigt0_RDEX <- function(t, k = 1., l = 1.) {
-    .Call(`_EMC2_pigt0_RDEX`, t, k, l)
-}
-
-digt0_RDEX <- function(t, k = 1., l = 1.) {
-    .Call(`_EMC2_digt0_RDEX`, t, k, l)
-}
-
-pigt_RDEX <- function(t, k = 1, l = 1, a = .1, threshold = 1e-10) {
-    .Call(`_EMC2_pigt_RDEX`, t, k, l, a, threshold)
-}
-
-digt_RDEX <- function(t, k = 1., l = 1., a = .1, threshold = 1e-10) {
-    .Call(`_EMC2_digt_RDEX`, t, k, l, a, threshold)
-}
-
 dWald_RDEX <- function(t, v, B, A, t0) {
     .Call(`_EMC2_dWald_RDEX`, t, v, B, A, t0)
 }

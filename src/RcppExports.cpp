@@ -294,62 +294,6 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
-// pigt0_RDEX
-double pigt0_RDEX(double t, double k, double l);
-RcppExport SEXP _EMC2_pigt0_RDEX(SEXP tSEXP, SEXP kSEXP, SEXP lSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< double >::type t(tSEXP);
-    Rcpp::traits::input_parameter< double >::type k(kSEXP);
-    Rcpp::traits::input_parameter< double >::type l(lSEXP);
-    rcpp_result_gen = Rcpp::wrap(pigt0_RDEX(t, k, l));
-    return rcpp_result_gen;
-END_RCPP
-}
-// digt0_RDEX
-double digt0_RDEX(double t, double k, double l);
-RcppExport SEXP _EMC2_digt0_RDEX(SEXP tSEXP, SEXP kSEXP, SEXP lSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< double >::type t(tSEXP);
-    Rcpp::traits::input_parameter< double >::type k(kSEXP);
-    Rcpp::traits::input_parameter< double >::type l(lSEXP);
-    rcpp_result_gen = Rcpp::wrap(digt0_RDEX(t, k, l));
-    return rcpp_result_gen;
-END_RCPP
-}
-// pigt_RDEX
-double pigt_RDEX(double t, double k, double l, double a, double threshold);
-RcppExport SEXP _EMC2_pigt_RDEX(SEXP tSEXP, SEXP kSEXP, SEXP lSEXP, SEXP aSEXP, SEXP thresholdSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< double >::type t(tSEXP);
-    Rcpp::traits::input_parameter< double >::type k(kSEXP);
-    Rcpp::traits::input_parameter< double >::type l(lSEXP);
-    Rcpp::traits::input_parameter< double >::type a(aSEXP);
-    Rcpp::traits::input_parameter< double >::type threshold(thresholdSEXP);
-    rcpp_result_gen = Rcpp::wrap(pigt_RDEX(t, k, l, a, threshold));
-    return rcpp_result_gen;
-END_RCPP
-}
-// digt_RDEX
-double digt_RDEX(double t, double k, double l, double a, double threshold);
-RcppExport SEXP _EMC2_digt_RDEX(SEXP tSEXP, SEXP kSEXP, SEXP lSEXP, SEXP aSEXP, SEXP thresholdSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< double >::type t(tSEXP);
-    Rcpp::traits::input_parameter< double >::type k(kSEXP);
-    Rcpp::traits::input_parameter< double >::type l(lSEXP);
-    Rcpp::traits::input_parameter< double >::type a(aSEXP);
-    Rcpp::traits::input_parameter< double >::type threshold(thresholdSEXP);
-    rcpp_result_gen = Rcpp::wrap(digt_RDEX(t, k, l, a, threshold));
-    return rcpp_result_gen;
-END_RCPP
-}
 // dWald_RDEX
 NumericVector dWald_RDEX(NumericVector t, double v, double B, double A, double t0);
 RcppExport SEXP _EMC2_dWald_RDEX(SEXP tSEXP, SEXP vSEXP, SEXP BSEXP, SEXP ASEXP, SEXP t0SEXP) {
@@ -586,10 +530,6 @@ static const R_CallMethodDef CallEntries[] = {
     {"_EMC2_stopfn_texg", (DL_FUNC) &_EMC2_stopfn_texg, 6},
     {"_EMC2_pEXG_RDEX", (DL_FUNC) &_EMC2_pEXG_RDEX, 6},
     {"_EMC2_dEXG_RDEX", (DL_FUNC) &_EMC2_dEXG_RDEX, 5},
-    {"_EMC2_pigt0_RDEX", (DL_FUNC) &_EMC2_pigt0_RDEX, 3},
-    {"_EMC2_digt0_RDEX", (DL_FUNC) &_EMC2_digt0_RDEX, 3},
-    {"_EMC2_pigt_RDEX", (DL_FUNC) &_EMC2_pigt_RDEX, 5},
-    {"_EMC2_digt_RDEX", (DL_FUNC) &_EMC2_digt_RDEX, 5},
     {"_EMC2_dWald_RDEX", (DL_FUNC) &_EMC2_dWald_RDEX, 5},
     {"_EMC2_pWald_RDEX", (DL_FUNC) &_EMC2_pWald_RDEX, 5},
     {"_EMC2_dRDEXrace", (DL_FUNC) &_EMC2_dRDEXrace, 9},
