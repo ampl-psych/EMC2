@@ -4,8 +4,18 @@
 #include <cmath>
 #include <Rcpp.h>
 #include "wald_functions.h"
+#include "exgaussian_functions.h"
+#include "race_integrate.h"
 using namespace Rcpp;
 
+// ----------------------------------------------------------------------------
+// TODO write new code, borrowing from model_SS_EXG.h
+// ----------------------------------------------------------------------------
+
+
+// ----------------------------------------------------------------------------
+// OLD STUFF BELOW
+// ----------------------------------------------------------------------------
 
 // [[Rcpp::export]]
 NumericVector pEXG_RDEX(NumericVector q,
@@ -88,14 +98,6 @@ NumericVector dEXG_RDEX(NumericVector x,
   return pdf;
 }
 
-// // temporary wrapper functions to avoid conflicts with "duplicate symbol 'digt'" etc
-// double digt_RDEX(double t, double k, double l, double a) {
-//   return digt(t, k, l, a);
-// }
-//
-// double pigt_RDEX(double t, double k, double l, double a) {
-//   return pigt(t, k, l, a);
-// }
 
 // [[Rcpp::export]]
 NumericVector dWald_RDEX(NumericVector t, double v,
