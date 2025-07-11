@@ -8,6 +8,7 @@
 #include "trend.h"
 #include "model_SS_EXG.h"
 #include "race_integrate.h"
+#include "model_SS_RDEX.h"
 using namespace Rcpp;
 
 LogicalVector c_do_bound(NumericMatrix pars,
