@@ -246,8 +246,6 @@ NumericVector ss_texg_lpdf(
   // loop over trials
   for (int trial = 0; trial < n_trials; trial++) {
 
-    int trial1 = trial + 1;
-
     // get indices for all accumulators corresponding to the current trial
     int start_row = trial * n_acc;
     int end_row = (trial + 1) * n_acc - 1;
@@ -302,7 +300,6 @@ NumericVector ss_texg_lpdf(
       }
     } else {
       if (stop_signal_presented) {
-        Rcpp::Rcout << "Trial: " << trial1 << std::endl;
         // stop trial with no response:
         // explained as a probabilistic mixture of
         // (i)  go failure; OR
@@ -317,12 +314,6 @@ NumericVector ss_texg_lpdf(
         stop_success_lprob = log1m(gf[trial]) + log1m(tf[trial]) + stop_success_integral;
         // likelihood = gf + [(1-gf) x (1-tf) x stop_success_integral]
         out[trial] = log_sum_exp(std::log(gf[trial]), stop_success_lprob);
-        Rcpp::Rcout << "  SSD: " << SSD[start_row] << std::endl;
-        NumericMatrix sub_pars = pars(Range(start_row, end_row), _);
-        Rcpp::Rcout << "  pars: " << sub_pars << std::endl;
-        Rcpp::Rcout << "  stop_success_integral: " << stop_success_integral << std::endl;
-        Rcpp::Rcout << "  stop_success_lprob: " << stop_success_lprob << std::endl;
-        Rcpp::Rcout << "  trial_ll: " << out[trial] << std::endl;
       } else {
         // go trial with no response:
         // explained by go failure
@@ -569,8 +560,6 @@ NumericVector ss_exg_lpdf(
   // loop over trials
   for (int trial = 0; trial < n_trials; trial++) {
 
-    int trial1 = trial + 1;
-
     // get indices for all accumulators corresponding to the current trial
     int start_row = trial * n_acc;
     int end_row = (trial + 1) * n_acc - 1;
@@ -625,7 +614,6 @@ NumericVector ss_exg_lpdf(
       }
     } else {
       if (stop_signal_presented) {
-        Rcpp::Rcout << "Trial: " << trial1 << std::endl;
         // stop trial with no response:
         // explained as a probabilistic mixture of
         // (i)  go failure; OR
@@ -641,12 +629,6 @@ NumericVector ss_exg_lpdf(
         stop_success_lprob = log1m(gf[trial]) + log1m(tf[trial]) + stop_success_integral;
         // likelihood = gf + [(1-gf) x (1-tf) x stop_success_integral]
         out[trial] = log_sum_exp(std::log(gf[trial]), stop_success_lprob);
-        Rcpp::Rcout << "  SSD: " << SSD[start_row] << std::endl;
-        NumericMatrix sub_pars = pars(Range(start_row, end_row), _);
-        Rcpp::Rcout << "  pars: " << sub_pars << std::endl;
-        Rcpp::Rcout << "  stop_success_integral: " << stop_success_integral << std::endl;
-        Rcpp::Rcout << "  stop_success_lprob: " << stop_success_lprob << std::endl;
-        Rcpp::Rcout << "  trial_ll: " << out[trial] << std::endl;
       } else {
         // go trial with no response:
         // explained by go failure

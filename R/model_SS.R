@@ -592,18 +592,11 @@ pstopEXG_old <- function(parstop,n_acc,upper=Inf,
   cells <- apply(
     cbind(SSDs,ps,upper,matrix(as.vector(aperm(pgo,c(2,1,3))),nrow=ntrials))
   ,1,paste,collapse="")
-  print(paste("cells: ", cells))
   # cells <- character(ntrials)
   # for (i in 1:ntrials)
   #   cells[i] <- paste(SSDs[i],ps[i,],pgo[,i,],upper[i],collapse="")
   uniq <- !duplicated(cells)
-  print(paste("uniq: ", uniq))
   ups <- sapply(which(uniq),function(i){
-    print(paste("SSD_i: ", SSDs[i]))
-    print(paste("upper_i: ", upper[i]))
-    print(paste("mu: ", c(ps[i,"muS"],pgo[,i,"mu"])))
-    print(paste("sigma: ", c(ps[i,"sigmaS"],pgo[,i,"sigma"])))
-    print(paste("tau: ", c(ps[i,"tauS"],pgo[,i,"tau"])))
     my.integrate_old(f=stopfn_exg_old,lower=-Inf,SSD=SSDs[i],upper=upper[i],
                            mu=c(ps[i,"muS"],pgo[,i,"mu"]),
                            sigma=c(ps[i,"sigmaS"],pgo[,i,"sigma"]),
