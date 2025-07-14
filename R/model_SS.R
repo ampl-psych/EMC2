@@ -598,7 +598,7 @@ pstopEXG_old <- function(parstop,n_acc,upper=Inf,
   #   cells[i] <- paste(SSDs[i],ps[i,],pgo[,i,],upper[i],collapse="")
   uniq <- !duplicated(cells)
   print(paste("uniq: ", uniq))
-  ups <- sapply(1:sum(uniq),function(i){
+  ups <- sapply(which(uniq),function(i){
     print(paste("SSD_i: ", SSDs[i]))
     print(paste("upper_i: ", upper[i]))
     print(paste("mu: ", c(ps[i,"muS"],pgo[,i,"mu"])))
@@ -629,7 +629,7 @@ pstopEXG <- function(parstop,n_acc,upper=Inf,
   # for (i in 1:ntrials)
   #   cells[i] <- paste(SSDs[i],ps[i,],pgo[,i,],upper[i],collapse="")
   uniq <- !duplicated(cells)
-  ups <- sapply(1:sum(uniq),function(i){
+  ups <- sapply(which(uniq),function(i){
     my.integrate(f=stopfn_exg,lower=-Inf,SSD=SSDs[i],upper=upper[i],
                            mu=c(ps[i,"muS"],pgo[,i,"mu"]),
                            sigma=c(ps[i,"sigmaS"],pgo[,i,"sigma"]),
@@ -657,7 +657,7 @@ pstopTEXG <- function(
   # for (i in 1:ntrials)
   #   cells[i] <- paste(SSDs[i],ps[i,],pgo[,i,],upper[i],collapse="")
   uniq <- !duplicated(cells)
-  ups <- sapply(1:sum(uniq),function(i){
+  ups <- sapply(which(uniq),function(i){
     my.integrate_old(f=stopfn_texg,lower=ps[i,"exgS_lb"],SSD=SSDs[i],upper=upper[i],
                      mu=c(ps[i,"muS"],pgo[,i,"mu"]),
                      sigma=c(ps[i,"sigmaS"],pgo[,i,"sigma"]),
