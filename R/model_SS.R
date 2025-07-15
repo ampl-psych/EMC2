@@ -904,15 +904,18 @@ SSexG <- function() {
 #' Several review papers provide further background on the task paradigm and modelling framework (e.g., Matzke et al., 2018; Verbruggen et al., 2019; Colonius et al., 2023).
 #'
 #' Early work on the ex-Gaussian distribution as a descriptive model of RT data includes Ratcliff & Murdock (1976), Ratcliff (1979), and Heathcote et al. (1991).
-#'
 #' Matzke et al. (2013) introduced the ex-Gaussian distribution as a parametric model of the finish time distributions of the go and stop processes.
-#' This was extended in Matzke et al. (2019) to allow for an arbitrary number of go processes.
+#' This work was extended in Matzke et al. (2019) to allow for an arbitrary number of go processes.
+#' Lastly, attentional lapse rate parameters for the stop process and go process, termed "trigger failure" (`tf`) and "go failure" (`gf`) respectively, were introduced in Matzke et al. (2017) and Matzke et al. (2019).
 #'
-#' Attentional lapse rate parameters for the stop process and go process, termed "trigger failure" and "go failure" respectively, were introduced in Matzke et al. (2017) and Matzke et al. (2019).
+#' Note that the ex-Gaussian parameters `mu`, `sigma`, and `tau` do not have clear psychological interpretations (Matzke & Wagenmakers, 2009).
+#' Inference is typically based on the mean of the ex-Gaussian distribution, which is given by `mu + tau`.
+#' The mean of the ex-Gaussian stop process finish time distribution (`muS + tauS`) is taken as the stop signal reaction time (SSRT), which is typically the primary modelling outcome of interest.
 #'
-#' Lower truncation of the ex-Gaussian finish time distributions was introduced in Tanis et al. (2024).
-#'
-#' Note that the ex-Gaussian parameters do not have unique psychological interpretations (Matzke & Wagenmakers, 2009). Parameter estimates are typically summarised in terms of the mean of the ex-Gaussian distribution, which is given by `mu + tau`.
+#' The ex-Gaussian distribution has support on the real line \eqn{\left(-\infty, \infty\right)}.
+#' To prevent evaluation of impossible (i.e., negative) or implausibly fast finish times, lower truncation is applied to both the go and stop finish time distributions, using the parameters `exg_lb` and `exgS_lb`, respectively.
+#' The default values for these lower bounds are `.05`, based on empirical estimates of the onset latency of early sensory processing (Schmolesky et al., 1998) and in line with Tanis et al. (2024).
+#' If strict replication of the "original" ex-Gaussian race models (e.g., Matzke et al., 2013; 2019) is desired, both `exg_lb` and `exgS_lb` should be set to `-Inf`, using the `constants` argument of the [design()] function.
 #'
 #' @references
 #' Colonius, H., & Diederich, A. (2023). Modeling response inhibition in the stop signal task. *F. G. Ashby, H. Colonius, & E. N. Dzhafarov (Eds.), New Handbook of Mathematical Psychology*, *3*, 311-356. \doi{10.1017/9781108902724.008}
@@ -934,6 +937,8 @@ SSexG <- function() {
 #' Ratcliff, R., & Murdock, B. B. (1976). Retrieval processes in recognition memory. *Psychological Review*, *83*(3), 190. \doi{10.1037/0033-295X.83.3.190}
 #'
 #' Ratcliff, R. (1979). Group reaction time distributions and an analysis of distribution statistics. *Psychological Bulletin*, *86*(3), 446. \doi{10.1037/0033-2909.86.3.446}
+#'
+#' Schmolesky, M. T., Wang, Y., Hanes, D. P., Thompson, K. G., Leutgeb, S., Schall, J. D., & Leventhal, A. G. (1998). Signal timing across the macaque visual system. *Journal of Neurophysiology*, *79*(6), 3272-3278. \doi{10.1152/jn.1998.79.6.3272}
 #'
 #' Tanis, C. C., Heathcote, A., Zrubka, M., & Matzke, D. (2024). A hybrid approach to dynamic cognitive psychometrics: Dynamic cognitive psychometrics. *Behavior Research Methods*, *56*(6), 5647-5666. \doi{10.3758/s13428-023-02295-y}
 #'
@@ -1014,6 +1019,7 @@ SStexG <- function() {
 
 #### RDEX SS random ----
 
+# TODO check
 rSShybrid <- function(data,pars,ok=rep(TRUE,dim(pars)[1]))
   # lR is an empty latent response factor lR with one level for each accumulator.
   # pars must contain an SSD column and an lI column indicating if an
@@ -1174,9 +1180,10 @@ rSShybrid <- function(data,pars,ok=rep(TRUE,dim(pars)[1]))
 # EMC2:::stopfn_rdex
 
 
-pstopHybrid <- function(parstop,n_acc,upper=Inf,
-  gpars=c("v","B","t0","A"),spars=c("muS","sigmaS","tauS"))
-{
+pstopHybrid <- function(
+    parstop, n_acc, upper = Inf,
+    gpars = c("v", "B", "A", "t0", "s"), spars = c("muS", "sigmaS", "tauS", "exgS_lb")
+) {
   sindex <- seq(1,nrow(parstop),by=n_acc)  # Stop accumulator index
   ps <- parstop[sindex,spars,drop=FALSE]   # Stop accumulator parameters
   SSDs <- parstop[sindex,"SSD",drop=FALSE] # SSDs
@@ -1188,11 +1195,16 @@ pstopHybrid <- function(parstop,n_acc,upper=Inf,
     cbind(SSDs,ps,upper,matrix(as.vector(aperm(pgo,c(2,1,3))),nrow=ntrials))
   ,1,paste,collapse="")
   uniq <- !duplicated(cells)
-  ups <- sapply(1:sum(uniq),function(i){
-    my.integrate_old(f=stopfn_rdex,lower=0,upper=upper[i],
-      mu=ps[i,"muS"],sigma=ps[i,"sigmaS"],tau=ps[i,"tauS"],
-      v=pgo[,i,"v"],B=pgo[,i,"B"],A=pgo[,i,"A"],t0=pgo[,i,"t0"],
-      SSD=SSDs[i],n_acc=n_acc)
+  ups <- sapply(which(uniq),function(i){
+    my.integrate_old(
+      # args passed to `my.integrate_old`
+      f = stopfn_rdex, lower = ps[i, "exgS_lb"], upper = upper[i],
+      # args passed to `stopfn_rdex`
+      n_acc = n_acc,
+      mu = ps[i, "muS"], sigma = ps[i, "sigmaS"], tau = ps[i, "tauS"], lb = ps[i, "exgS_lb"],
+      v = pgo[ , i, "v"], B = pgo[ , i, "B"], A = pgo[ , i, "A"], t0 = pgo[ , i, "t0"], s = pgo[ , i, "s"],
+      SSD = SSDs[i]
+    )
   })
   ups[as.numeric(factor(cells,levels=cells[uniq]))]
 }
@@ -1200,9 +1212,9 @@ pstopHybrid <- function(parstop,n_acc,upper=Inf,
 
 #### RDEX model list ----
 
-#' Stop-signal Hybrid (RDM go, ExGaussian stop) race
+#' The hybrid Wald / ex-Gaussian race model of the stop signal task
 #'
-#' Model file to estimate the Hybrid race model for Stop-Signal data
+#' Model file to estimate the hybrid Wald / ex-Gaussian race model of stop signal task data in EMC2.
 #'
 #' Model files are almost exclusively used in `design()`.
 #'
@@ -1211,50 +1223,133 @@ pstopHybrid <- function(parstop,n_acc,upper=Inf,
 #' Default values are used for all parameters that are not explicitly listed in the `formula`
 #' argument of `design()`.They can also be accessed with `SShybrid()$p_types`.
 #'
+#' | **Parameter** | **Transform** | **Natural scale** | **Default**   | **Mapping**                    | **Interpretation**                                            |
+#' |-----------|-----------|---------------|-----------|----------------------------|-----------------------------------------------------------|
+#' | *v*       | log       | \[0, Inf\]      | log(1)    |                  | Evidence-accumulation rate (drift rate) of the go process                       |
+#' | *A*       | log       | \[0, Inf\]      | log(0)    |                  | Between-trial variation (range) in start point of the go process                |
+#' | *B*       | log       | \[0, Inf\]      | log(1)    | *b* = *B* + *A*      | Distance from *A* to *b* (response threshold) of the go process                  |
+#' | *t0*      | log       | \[0, Inf\]      | log(0)    |                  | Non-decision time of the go process                                            |
+#' | *s*       | log       | \[0, Inf\]      | log(1)    |                  | Within-trial standard deviation of drift rate of the go process                |
+#' | *muS*       | log       | \[0, Inf\]        | log(.3)    |                            | Mean of Gaussian component of ex-Gaussian stop finish time distribution           |
+#' | *sigmaS*       | log    | \[0, Inf\]        | log(.025)|                   | Standard deviation of Gaussian component of ex-Gaussian stop finish time distribution                              |
+#' | *tauS*      | log    | \[0, Inf\]        | log(.05)  |  | Mean (inverse rate) of exponential component of ex-Gaussian stop finish time distribution       |
+#' | *tf*      | probit       | \[0, 1\]        | qnorm(0)    |                            | Attentional lapse rate for stop process ("trigger failure")           |
+#' | *gf*     | probit       | \[0, 1\]        | qnorm(0)    |                            | Attentional lapse rate for go process ("go failure")    |
+#' | *exgS_lb*     | -       | \[-Inf, Inf\]        | .05    |                            | Lower bound of ex-Gaussian stop finish time distribution    |
+#'
+#' All parameters are estimated on the log scale, with the exception of the attentional failure parameters (`tf` and `gf`), which are estimated on the probit scale.
+#'
+#' The parameterization *b* = *B* + *A* ensures that the response threshold is
+#' always higher than the between trial variation in start point.
+#'
+#' Conventionally, `s` is fixed to 1 to satisfy scaling constraints.
+#'
+#' Because the ex-Gaussian stop signal model is a race model, it has one accumulator per response option.
+#' EMC2 automatically constructs a factor representing the accumulators `lR` (i.e., the
+#' latent response) with level names taken from the `R` column in the data.
+#'
+#' For race models, the `design()` argument `matchfun` can be provided, a
+#' function that takes the `lR` factor (defined in the augmented data (d)
+#' in the following function) and returns a logical defining the correct response.
+#' In the example below, the match is simply such that the `S` factor equals the
+#' latent response factor: `matchfun=function(d)d$S==d$lR`. Then `matchfun` is
+#' used to automatically create a latent match (`lM`) factor with
+#' levels `FALSE` (i.e., the stimulus does not match the accumulator) and `TRUE`
+#' (i.e., the stimulus does match the accumulator). This is added internally
+#' and can also be used in model formula.
+#'
+#' This hybrid race model of the stop signal task was introduced in Tanis et al. (2024).
+#'
+#' Note that, in contrast to the parameters of the go process, the ex-Gaussian stop process parameters `muS`, `sigmaS`, and `tauS` do not have clear psychological interpretations (Matzke & Wagenmakers, 2009).
+#' Matzke et al. (2020) showed that evidence accumulation models of the stop process have poor psychometric properties.
+#' Thus, the current hybrid race model - with an evidence accumulation account of _going_ and a descriptive account of _stopping_ - represents a compromise between process realism and practically useful measurement properties (Tanis et al., 2024).
+#'
+#' The mean of the ex-Gaussian stop distribution (`muS + tauS`) is taken as the stop signal reaction time (SSRT).
+#'
+#' The ex-Gaussian distribution has support on the real line \eqn{\left(-\infty, \infty\right)}.
+#' To prevent evaluation of impossible (i.e., negative) or implausibly fast stop finish times, lower truncation is applied to the stop finish time distribution using the parameter `exgS_lb`.
+#' The default value for this lower bound is `.05`, based on empirical estimates of the onset latency of early sensory processing (Schmolesky et al., 1998) and in line with Tanis et al. (2024).
+#'
+#' @references
+#'
+#' Matzke, D., & Wagenmakers, E. J. (2009). Psychological interpretation of the ex-Gaussian and shifted Wald parameters: A diffusion model analysis. *Psychonomic Bulletin & Review*, *16*, 798-817. \doi{10.3758/PBR.16.5.798}
+#'
+#' Matzke, D., Logan, G. D., & Heathcote, A. (2020). A cautionary note on evidence-accumulation models of response inhibition in the stop-signal paradigm. *Computational Brain & Behavior*, *3*(3), 269-288. \doi{10.1007/s42113-020-00075-x}
+#'
+#' Tanis, C. C., Heathcote, A., Zrubka, M., & Matzke, D. (2024). A hybrid approach to dynamic cognitive psychometrics: Dynamic cognitive psychometrics. *Behavior Research Methods*, *56*(6), 5647-5666. \doi{10.3758/s13428-023-02295-y}
+#'
 #' @return A model list with all the necessary functions to sample
 #' @export
 SShybrid <- function() {
   list(
-    type="RACE",
-    p_types=c("v" = log(1),"B" = log(1),"A" = log(0),"t0" = log(0),"s" = log(1),
-              muS=log(.3),sigmaS=log(.025),tauS=log(.05),tf=qnorm(0),gf=qnorm(0)),
-    transform=list(func=c(v = "exp", B = "exp", A = "exp",t0 = "exp", s = "exp",
-                          muS = "exp", sigmaS = "exp", tauS = "exp",
-                          tf="pnorm",gf="pnorm")),
-    bound=list(minmax=cbind(v=c(1e-3,Inf), B=c(0,Inf), A=c(1e-4,Inf),t0=c(0.05,Inf),
-                            s=c(0,Inf),muS=c(0,Inf), sigmaS=c(1e-4,Inf), tauS=c(1e-4,Inf),
-                            tf=c(.001,.999),gf=c(.001,.999)),
-               exception=c(A=0, v=0,tf=0,gf=0)),
+    type = "RACE",
+    c_name = "SS_RDEX",
+    p_types = c(
+      v = log(1), B = log(1), A = log(0), t0 = log(0), s = log(1),
+      muS = log(.3), sigmaS = log(.025), tauS = log(.05),
+      tf = qnorm(0), gf = qnorm(0),
+      exgS_lb = .05
+    ),
+    transform = list(
+      func = c(
+        v = "exp", B = "exp", A = "exp", t0 = "exp", s = "exp",
+        muS = "exp", sigmaS = "exp", tauS = "exp",
+        tf = "pnorm", gf = "pnorm",
+        exgS_lb = "identity"
+      )
+    ),
+    bound = list(
+      minmax = cbind(
+        v = c(1e-3, Inf), B = c(0, Inf), A = c(1e-4, Inf), t0 = c(0.05, Inf), s = c(0, Inf),
+        muS = c(0, Inf), sigmaS = c(1e-4, Inf), tauS = c(1e-4,Inf),
+        tf = c(.001, .999), gf = c(.001, .999),
+        exgS_lb = c(-Inf, Inf)
+      ),
+      exception = c(
+        v = 0, A = 0,
+        tf = 0, gf = 0,
+        exgS_lb = -Inf
+      )
+    ),
     # Trial dependent parameter transform
-    Ttransform = function(pars,dadm) {
-      pars <- cbind(pars,b=pars[,"B"] + pars[,"A"])
-      pars <- cbind(pars,SSD=dadm$SSD)
-      pars <- cbind(pars,lI=as.numeric(dadm$lI))  # Only necessary for data generation.
-      pars
+    Ttransform = function(pars, dadm) {
+      pars <- cbind(pars, b = pars[,"B"] + pars[,"A"])
+      pars <- cbind(pars, SSD = dadm$SSD)
+      pars <- cbind(pars, lI = as.numeric(dadm$lI))  # Only necessary for data generation.
+      return(pars)
     },
     # Density function (PDF) for single go racer
-    dfunG=function(rt,pars) dRDM(rt,pars),
+    dfunG = function(rt, pars) {
+      return(dRDM(rt, pars))
+    },
     # Probability function (CDF) for single go racer
-    pfunG=function(rt,pars) pRDM(rt,pars),
+    pfunG = function(rt, pars) {
+      return(pRDM(rt, pars))
+    },
     # Density function (PDF) for single stop racer
-    dfunS=function(rt,pars) dexGaussianS(rt,
-      pars[,c("muS","sigmaS","tauS","SSD"),drop=FALSE]),
+    dfunS = function(rt, pars) {
+      parsS <- pars[ , c("muS", "sigmaS", "tauS", "SSD", "exgS_lb"), drop=FALSE]
+      return(dtexGaussianS(rt, parsS))
+    },
     # Probability function (CDF) for single stop racer
-    pfunS=function(rt,pars) pexGaussianS(rt,
-      pars[,c("muS","sigmaS","tauS","SSD"),drop=FALSE]),
+    pfunS = function(rt, pars) {
+      parsS <- pars[ , c("muS", "sigmaS", "tauS", "SSD", "exgS_lb"), drop=FALSE]
+      return(ptexGaussianS(rt, parsS))
+    },
     # Stop probability integral
-    sfun=function(pars,n_acc,upper=Inf) pstopHybrid(pars,n_acc,upper=upper),
+    sfun = function(pars, n_acc, upper = Inf) {
+      return(pstopHybrid(pars, n_acc, upper = upper))
+    },
     # Random function for SS race
-    rfun=function(data=NULL,pars) {
-      rSShybrid(data,pars,ok=attr(pars, "ok"))
+    rfun = function(data = NULL, pars) {
+      return(rSShybrid(data, pars, ok = attr(pars, "ok")))
     },
     # Race likelihood combining pfun and dfun
-    log_likelihood=function(pars,dadm,model,min_ll=log(1e-10))
-      log_likelihood_race_ss(pars, dadm, model, min_ll = min_ll)
+    log_likelihood = function(pars, dadm, model, min_ll = log(1e-10)) {
+      return(log_likelihood_race_ss_old(pars, dadm, model, min_ll = min_ll))
+    }
   )
 }
-
-
 
 
 
