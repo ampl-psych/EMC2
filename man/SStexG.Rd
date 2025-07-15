@@ -49,15 +49,18 @@ The race model of the stop signal task was first introduced by Logan & Cowan (19
 Several review papers provide further background on the task paradigm and modelling framework (e.g., Matzke et al., 2018; Verbruggen et al., 2019; Colonius et al., 2023).
 
 Early work on the ex-Gaussian distribution as a descriptive model of RT data includes Ratcliff & Murdock (1976), Ratcliff (1979), and Heathcote et al. (1991).
-
 Matzke et al. (2013) introduced the ex-Gaussian distribution as a parametric model of the finish time distributions of the go and stop processes.
-This was extended in Matzke et al. (2019) to allow for an arbitrary number of go processes.
+This work was extended in Matzke et al. (2019) to allow for an arbitrary number of go processes.
+Lastly, attentional lapse rate parameters for the stop process and go process, termed "trigger failure" (\code{tf}) and "go failure" (\code{gf}) respectively, were introduced in Matzke et al. (2017) and Matzke et al. (2019).
 
-Attentional lapse rate parameters for the stop process and go process, termed "trigger failure" and "go failure" respectively, were introduced in Matzke et al. (2017) and Matzke et al. (2019).
+Note that the ex-Gaussian parameters \code{mu}, \code{sigma}, and \code{tau} do not have clear psychological interpretations (Matzke & Wagenmakers, 2009).
+Inference is typically based on the mean of the ex-Gaussian distribution, which is given by \code{mu + tau}.
+The mean of the ex-Gaussian stop process finish time distribution (\code{muS + tauS}) is taken as the stop signal reaction time (SSRT), which is typically the primary modelling outcome of interest.
 
-Lower truncation of the ex-Gaussian finish time distributions was introduced in Tanis et al. (2024).
-
-Note that the ex-Gaussian parameters do not have unique psychological interpretations (Matzke & Wagenmakers, 2009). Parameter estimates are typically summarised in terms of the mean of the ex-Gaussian distribution, which is given by \code{mu + tau}.
+The ex-Gaussian distribution has support on the real line \eqn{\left(-\infty, \infty\right)}.
+To prevent evaluation of impossible (i.e., negative) or implausibly fast finish times, lower truncation is applied to both the go and stop finish time distributions, using the parameters \code{exg_lb} and \code{exgS_lb}, respectively.
+The default values for these lower bounds are \code{.05}, based on empirical estimates of the onset latency of early sensory processing (Schmolesky et al., 1998) and in line with Tanis et al. (2024).
+If strict replication of the "original" ex-Gaussian race models (e.g., Matzke et al., 2013; 2019) is desired, both \code{exg_lb} and \code{exgS_lb} should be set to \code{-Inf}, using the \code{constants} argument of the \code{\link[=design]{design()}} function.
 }
 \references{
 Colonius, H., & Diederich, A. (2023). Modeling response inhibition in the stop signal task. \emph{F. G. Ashby, H. Colonius, & E. N. Dzhafarov (Eds.), New Handbook of Mathematical Psychology}, \emph{3}, 311-356. \doi{10.1017/9781108902724.008}
@@ -79,6 +82,8 @@ Matzke, D., Curley, S., Gong, C. Q., & Heathcote, A. (2019). Inhibiting response
 Ratcliff, R., & Murdock, B. B. (1976). Retrieval processes in recognition memory. \emph{Psychological Review}, \emph{83}(3), 190. \doi{10.1037/0033-295X.83.3.190}
 
 Ratcliff, R. (1979). Group reaction time distributions and an analysis of distribution statistics. \emph{Psychological Bulletin}, \emph{86}(3), 446. \doi{10.1037/0033-2909.86.3.446}
+
+Schmolesky, M. T., Wang, Y., Hanes, D. P., Thompson, K. G., Leutgeb, S., Schall, J. D., & Leventhal, A. G. (1998). Signal timing across the macaque visual system. \emph{Journal of Neurophysiology}, \emph{79}(6), 3272-3278. \doi{10.1152/jn.1998.79.6.3272}
 
 Tanis, C. C., Heathcote, A., Zrubka, M., & Matzke, D. (2024). A hybrid approach to dynamic cognitive psychometrics: Dynamic cognitive psychometrics. \emph{Behavior Research Methods}, \emph{56}(6), 5647-5666. \doi{10.3758/s13428-023-02295-y}
 

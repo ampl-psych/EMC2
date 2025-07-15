@@ -317,7 +317,7 @@ double c_log_likelihood_race(NumericMatrix pars, DataFrame data,
   }
 }
 
-double c_log_likelihood_ss_exg(
+double c_log_likelihood_ss(
     String type,
     NumericMatrix pars,
     DataFrame data,
@@ -347,16 +347,19 @@ double c_log_likelihood_ss_exg(
     }
   }
   // compute log likelihoods
-  if (type == "SS_TEXG") {
+  if (type == "SS_EXG") {
+    lls = ss_exg_lpdf(RT, R, SSD, lR, winner, pars, is_ok, min_ll);
+  } else if (type == "SS_TEXG") {
     lls = ss_texg_lpdf(RT, R, SSD, lR, winner, pars, is_ok, min_ll);
   } else {
-    lls = ss_exg_lpdf(RT, R, SSD, lR, winner, pars, is_ok, min_ll);
+    lls = ss_rdex_lpdf(RT, R, SSD, lR, winner, pars, is_ok, min_ll);
   }
   // decompress
   lls_expanded = c_expand(lls, expand);
   // protect against numerical issues
   lls_expanded = check_ll(lls_expanded, min_ll);
 
+  // TODO REMOVE IF WE'RE SATISFIED WITH TESTING
   Environment global = Environment::global_env();
   global["llscpp"] = lls;
 
@@ -1032,7 +1035,7 @@ NumericVector calc_ll(NumericMatrix p_matrix, DataFrame data, NumericVector cons
         lls[i] = c_log_likelihood_MRI_white(pars, y, is_ok, n_trials, n_pars, min_ll);
       }
     }
-  } else if (type == "SS_TEXG" || type == "SS_EXG") {
+  } else if (type == "SS_TEXG" || type == "SS_EXG" || type == "SS_RDEX") {
     IntegerVector expand = data.attr("expand");
     NumericVector lR = data["lR"];
     const int n_lR = unique(lR).length();
@@ -1048,7 +1051,7 @@ NumericVector calc_ll(NumericMatrix p_matrix, DataFrame data, NumericVector cons
       }
       is_ok = c_do_bound(pars, bound_specs);
       is_ok = lr_all(is_ok, n_lR);
-      lls[i] = c_log_likelihood_ss_exg(type, pars, data, n_trials_ll, expand, min_ll, is_ok);
+      lls[i] = c_log_likelihood_ss(type, pars, data, n_trials_ll, expand, min_ll, is_ok);
     }
   } else {
     IntegerVector expand = data.attr("expand");

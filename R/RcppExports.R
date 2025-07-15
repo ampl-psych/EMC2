@@ -73,20 +73,44 @@ dEXG_RDEX <- function(x, mu = 5., sigma = 1., tau = 1., log_d = FALSE) {
     .Call(`_EMC2_dEXG_RDEX`, x, mu, sigma, tau, log_d)
 }
 
-dWald_RDEX <- function(t, v, B, A, t0) {
-    .Call(`_EMC2_dWald_RDEX`, t, v, B, A, t0)
+dWald_RDEX_old <- function(t, v, B, A, t0) {
+    .Call(`_EMC2_dWald_RDEX_old`, t, v, B, A, t0)
 }
 
-pWald_RDEX <- function(t, v, B, A, t0) {
-    .Call(`_EMC2_pWald_RDEX`, t, v, B, A, t0)
+dWald_RDEX <- function(t, v, B, A, t0, s) {
+    .Call(`_EMC2_dWald_RDEX`, t, v, B, A, t0, s)
 }
 
-dRDEXrace <- function(dt, mu, sigma, tau, v, B, A, t0, exgWinner = TRUE) {
-    .Call(`_EMC2_dRDEXrace`, dt, mu, sigma, tau, v, B, A, t0, exgWinner)
+pWald_RDEX_old <- function(t, v, B, A, t0) {
+    .Call(`_EMC2_pWald_RDEX_old`, t, v, B, A, t0)
 }
 
-stopfn_rdex <- function(t, n_acc, mu, sigma, tau, v, B, A, t0, SSD) {
-    .Call(`_EMC2_stopfn_rdex`, t, n_acc, mu, sigma, tau, v, B, A, t0, SSD)
+pWald_RDEX <- function(t, v, B, A, t0, s) {
+    .Call(`_EMC2_pWald_RDEX`, t, v, B, A, t0, s)
+}
+
+pTEXG_RDEX <- function(q, mu = 5., sigma = 1., tau = 1., lb = .05, lower_tail = TRUE, log_p = FALSE) {
+    .Call(`_EMC2_pTEXG_RDEX`, q, mu, sigma, tau, lb, lower_tail, log_p)
+}
+
+dTEXG_RDEX <- function(x, mu = 5., sigma = 1., tau = 1., lb = .05, log_d = FALSE) {
+    .Call(`_EMC2_dTEXG_RDEX`, x, mu, sigma, tau, lb, log_d)
+}
+
+dRDEXrace_old <- function(dt, mu, sigma, tau, v, B, A, t0, exgWinner = TRUE) {
+    .Call(`_EMC2_dRDEXrace_old`, dt, mu, sigma, tau, v, B, A, t0, exgWinner)
+}
+
+dRDEXrace <- function(dt, mu, sigma, tau, lb, v, B, A, t0, s, exgWinner = TRUE) {
+    .Call(`_EMC2_dRDEXrace`, dt, mu, sigma, tau, lb, v, B, A, t0, s, exgWinner)
+}
+
+stopfn_rdex_old <- function(t, n_acc, mu, sigma, tau, v, B, A, t0, SSD) {
+    .Call(`_EMC2_stopfn_rdex_old`, t, n_acc, mu, sigma, tau, v, B, A, t0, SSD)
+}
+
+stopfn_rdex <- function(t, n_acc, mu, sigma, tau, lb, v, B, A, t0, s, SSD) {
+    .Call(`_EMC2_stopfn_rdex`, t, n_acc, mu, sigma, tau, lb, v, B, A, t0, s, SSD)
 }
 
 fft_convolve_equiv_cpp <- function(x, y, conj_flag = TRUE) {
