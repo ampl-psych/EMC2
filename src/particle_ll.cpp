@@ -360,8 +360,8 @@ double c_log_likelihood_ss(
   lls_expanded = check_ll(lls_expanded, min_ll);
 
   // TODO REMOVE IF WE'RE SATISFIED WITH TESTING
-  Environment global = Environment::global_env();
-  global["llscpp"] = lls;
+//  Environment global = Environment::global_env();
+//  global["llscpp"] = lls;
 
 
   // return summed log-likelihood
@@ -914,7 +914,7 @@ double c_log_likelihood_race_missing(NumericMatrix pars, DataFrame data,
   LogicalVector isPCont = (pCont > 0);
   if (is_true(any(isPCont))) {
 
-    Rcpp::Rcout << "Contamination" << std::endl;
+    // Rcpp::Rcout << "Contamination" << std::endl;
 
     NumericVector p = exp(lds[winner]);
     NumericVector pc = pCont[winner];
@@ -957,7 +957,7 @@ double c_log_likelihood_race_missing(NumericMatrix pars, DataFrame data,
       }
     }
 
-    Rcpp::Rcout << "ll_out = " << ll_out.length() << " " << ll_out << std::endl;
+    // Rcpp::Rcout << "ll_out = " << ll_out.length() << " " << ll_out << std::endl;
 
     ll_out[is_na(ll_out)] = min_ll;
     ll_out[is_infinite(ll_out)] = min_ll;
