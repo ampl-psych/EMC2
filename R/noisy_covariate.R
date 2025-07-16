@@ -28,21 +28,29 @@ cov_noise_ll <- function(pars, dadm, model, min_ll = log(1e-10)){
   # This step adds the likelihood of the noisy covariate model.
   ll <- 0
   for(cov in model$noisy_cov){
-    # This will return a vector of names: mean, total_sd, and error_proportion
+    # This will return a vector of names: mean, total_sd, and true_variability_proportion
     latent_pars <- get_noisy_cov_pnames(cov)
 
+    # # Original parameterization: sigma_t and sigma_e directly (commented out)
+    # # True latent mean with latent variability
+    # latent_ll <- dnorm(dadm[,cov], mean = pars[,latent_pars[1]], sd = pars[,latent_pars[2]], log = TRUE)
+    # # Measurement error going from the latent mean to the measurement noise
+    # noise_ll <- dnorm(dadm$obs, mean = dadm[,cov], sd = pars[,latent_pars[3]], log = TRUE)
+
+    # Reparameterized version (now active):
     # Transform reparameterized parameters back to original scale
     sigma_total <- pars[,latent_pars[2]]  # sigma_total
-    rho <- pars[,latent_pars[3]]          # rho (measurement error proportion)
+    rho <- pars[,latent_pars[3]]          # rho (true variability proportion - reliability)
 
-    # Recover original parameters
-    sigma_e <- sigma_total * sqrt(rho)           # measurement error SD
-    tau <- sigma_total * sqrt(1 - rho)           # trial-to-trial variability SD
+    # Recover original parameters (rho is now true variability proportion)
+    tau <- sigma_total * sqrt(rho)           # trial-to-trial variability SD
+    sigma_e <- sigma_total * sqrt(1 - rho)   # measurement error SD
 
     # True latent mean with latent variability
     latent_ll <- dnorm(dadm[,cov], mean = pars[,latent_pars[1]], sd = tau, log = TRUE)
     # Measurement error going from the latent mean to the measurement noise
     noise_ll <- dnorm(dadm$obs, mean = dadm[,cov], sd = sigma_e, log = TRUE)
+
     ll <- ll + pmax(min_ll, latent_ll + noise_ll)
   }
   return(ll)
@@ -82,7 +90,7 @@ update_latent_cov <- function(pars, dadm, model){
   # We can use the proposal density to weight the likelihood of each proposal
   # and then sample from the weighted likelihoods to get the new latent states.
   n_particles <- 25 # Number of particles per proposal distribution
-  n_dists <- 3 # Number of proposal distributions
+  n_dists <- 4 # Number of proposal distributions
 
   weights <- matrix(NA, nrow = nrow(dadm), ncol = n_particles*n_dists + 1)
   latents <- matrix(NA, nrow = nrow(dadm), ncol = n_particles*n_dists +1)
@@ -94,19 +102,35 @@ update_latent_cov <- function(pars, dadm, model){
     noisy_cov <- attr(dadm, "noisy_cov")[[cov]]
     prev_latent <- noisy_cov$latent
 
-    # Transform reparameterized parameters back to original scale
-    # mu_z       <- pars[latent_pars[1]]                    # μ_z
-    # sigma_total <- pars[latent_pars[2]]                   # total SD
-    # rho        <- pars[latent_pars[3]]                    # error proportion
-    # sigma_e    <- sigma_total * sqrt(rho)                 # σ_error  > 0
-    # tau        <- sigma_total * sqrt(1 - rho)             # σ_true   > 0
-    #
-    # prec_true <- 1 / tau^2
-    # prec_err  <- 1 / sigma_e^2
-    # post_prec <- prec_true + prec_err
-    # post_sd   <- 1 / sqrt(post_prec)
-    # post_mu   <- (prec_true * mu_z + prec_err * noisy_cov$obs) / post_prec
-    #
+    # Reparameterized version (now active):
+    mu_z       <- pars[latent_pars[1]]                    # μ_z
+    sigma_total <- exp(pars[latent_pars[2]])             # total SD
+    rho        <- pnorm(pars[latent_pars[3]])            # reliability (true variability proportion)
+    tau        <- sigma_total * sqrt(rho)                # σ_true   > 0
+    sigma_e    <- sigma_total * sqrt(1 - rho)            # σ_error  > 0
+
+    # # Original parameterization (commented out for easy switching):
+    # # mu_z    <- pars[latent_pars[1]]       # μ_z
+    # # tau     <- exp(pars[latent_pars[2]])     # σ_true   > 0
+    # # sigma_e <- exp(pars[latent_pars[3]])     # σ_error  > 0
+
+    prec_true <- 1 / tau^2
+    prec_err  <- 1 / sigma_e^2
+    post_prec <- prec_true + prec_err
+
+    cur_sd <- noisy_cov$epsilon * noisy_cov$running_sd
+
+    if(noisy_cov$idx[1] > 250){
+      # post_sd   <- 1 / sqrt(post_prec)
+      # if(any(post_sd < .5*noisy_cov$running_sd)){
+      #   post_sd <- cur_sd
+      # }
+      post_sd <- cur_sd
+    } else{
+      post_sd <- noisy_cov$running_sd
+    }
+    post_mu   <- (prec_true * mu_z + prec_err * noisy_cov$obs) / post_prec
+
 
     # Now for k proposals we evaluate the likelihood given the new latent states
     # For now we'll sample from 3 densities.
@@ -114,7 +138,6 @@ update_latent_cov <- function(pars, dadm, model){
     # 2. Density centered on previous z_i, with same adaptive covariance
     # 3. Density centered on running z_i mean, with some adaptive covariance
     # 4. Density centered on approximate posterior mean giving measurement and error normal-modeled
-    cur_sd <- noisy_cov$epsilon * noisy_cov$running_sd
     # For now we'll just assume that each distributions carries 1/3 of the particles
     for(i in 1:(n_particles*n_dists + 1)){
       if(i != 1){ # The old state is particle 1
@@ -122,21 +145,20 @@ update_latent_cov <- function(pars, dadm, model){
           noisy_cov$latent <- rnorm(nrow(noisy_cov), mean = noisy_cov$obs, sd = cur_sd)
         } else if(i < (1 + 2*n_particles)){
           noisy_cov$latent <- rnorm(nrow(noisy_cov), mean = prev_latent, sd = cur_sd)
-        } else {#if(i < (1 + 3*n_particles)){
-          noisy_cov$latent <- rnorm(nrow(noisy_cov), mean = noisy_cov$running_mu, cur_sd)
+        } else if(i < (1 + 3*n_particles)){
+          noisy_cov$latent <- rnorm(nrow(noisy_cov), mean = noisy_cov$running_mu, sd = cur_sd)
+        } else{
+          noisy_cov$latent <- rnorm(nrow(noisy_cov), mean = post_mu, sd = post_sd)
         }
-        # } else{
-        #   noisy_cov$latent <- rnorm(nrow(noisy_cov), mean = post_mu, post_sd)
-        # }
       }
       # Calculate the likelihood
       ll <- calc_ll_R(pars, model, fill_dadm(dadm, noisy_cov, cov), return_sum = FALSE)
       # For now assign each distribution a 1/3 weight
       lm <- 1/n_dists*dnorm(noisy_cov$latent, mean = noisy_cov$obs, sd = cur_sd) +
         1/n_dists*dnorm(noisy_cov$latent, mean = prev_latent, sd = cur_sd) +
-        1/n_dists*dnorm(noisy_cov$latent, mean = noisy_cov$running_mu, sd = cur_sd) #+
-        # 1/n_dists*dnorm(noisy_cov$latent, mean = post_mu, sd = post_sd)
-        # 1/n_dists*dnorm(noisy_cov$latent, mean = noisy_cov$obs, sd = exp(pars[latent_pars[3]]))
+        1/n_dists*dnorm(noisy_cov$latent, mean = noisy_cov$running_mu, sd = cur_sd) +
+        1/n_dists*dnorm(noisy_cov$latent, mean = post_mu, sd = post_sd)
+      # 1/n_dists*dnorm(noisy_cov$latent, mean = noisy_cov$obs, sd = exp(pars[latent_pars[3]]))
       # Importance correction of all proposal densities
       l <- ll - log(lm)
       latents[,i] <- noisy_cov$latent
@@ -149,6 +171,7 @@ update_latent_cov <- function(pars, dadm, model){
     mh_idx <- apply(weights, 1, function(logw) {        # loop over rows
       p <- exp(logw - max(logw))                     # stabilise & exponentiate
       p <- p / sum(p)                                # normalise to probabilities
+      if(any(is.na(p))) browser()
       sample.int(length(p), 1, prob = p)             # draw a single column index
     })
     # Sample each row of latents based on weight and replace
@@ -158,14 +181,14 @@ update_latent_cov <- function(pars, dadm, model){
     noisy_cov$acceptance <- calc_acceptance(weights, noisy_cov$acceptance, noisy_cov$idx)
     # Scaling parameter
     noisy_cov$epsilon <- update_epsilon_continuous(noisy_cov$epsilon, noisy_cov$acceptance, target = .1,
-                                              iter =noisy_cov$idx, d = 1, alphaStar = 3,
-                                              clamp = c(.5, 15))
+                                                   iter =noisy_cov$idx, d = 1, alphaStar = 3,
+                                                   clamp = c(.5, 15))
 
     noisy_cov$is1[mh_idx ==1] <- noisy_cov$is1[mh_idx ==1] + 1
     noisy_cov$is2[mh_idx %in% (2:(1+n_particles))] <- noisy_cov$is2[mh_idx %in% (2:(1+n_particles))] + 1
     noisy_cov$is3[mh_idx %in% (n_particles+2):(2*n_particles+1)] <- noisy_cov$is3[mh_idx %in% (n_particles+2):(2*n_particles+1)] + 1
     noisy_cov$is4[mh_idx %in% (2*n_particles+2):(3*n_particles+1)] <- noisy_cov$is4[mh_idx %in% (2*n_particles+2):(3*n_particles+1)] + 1
-    # noisy_cov$is5[mh_idx %in% (3*n_particles+2):(4*n_particles+1)] <- noisy_cov$is5[mh_idx %in% (3*n_particles+2):(4*n_particles+1)] + 1
+    noisy_cov$is5[mh_idx %in% (3*n_particles+2):(4*n_particles+1)] <- noisy_cov$is5[mh_idx %in% (3*n_particles+2):(4*n_particles+1)] + 1
     # Running mean:
     new_moments <- running_moments(noisy_cov$latent, noisy_cov$running_mu, noisy_cov$running_sd, noisy_cov$idx)
     noisy_cov$running_mu <- new_moments$mu
@@ -301,7 +324,7 @@ running_moments <- function(new_latent, old_mu, old_sd, idx){
   new_var <- ((idx - 1)*(old_sd^2) + (delta^2 * idx / n_new)) / (n_new - 1)
   list(
     mu = meanNew,
-    sd   = pmax(sqrt(new_var), 0.01)
+    sd   = pmax(sqrt(new_var), 0.025)
   )
 }
 
@@ -327,6 +350,10 @@ add_noisy_cov_dadm <- function(dadm, model, noisy_cov){
 
 
 get_noisy_cov_pnames <- function(noisy_cov){
+  # # Original parameterization (commented out for easy switching):
+  # return(paste0(c("mu.t", "sigma.t", "sigma.e"), "_", noisy_cov))
+
+  # Reparameterized version (now active):
   return(paste0(c("mu.t", "sigma.total", "rho"), "_", noisy_cov))
 }
 
@@ -337,10 +364,17 @@ update_model_noisy_cov <- function(noisy_cov, model) {
   # For each noisy_covariate
   for (cov in noisy_cov) {
     p_names <- get_noisy_cov_pnames(cov)
-    # Transforms: identity for mean, exp for total_sd, pnorm for proportion
+
+    # # Original parameterization: sigma_t and sigma_e directly (commented out)
+    # transforms <- setNames(c("identity", "exp", "exp"), p_names)
+    # minmax <- setNames(list(mu = c(-Inf,Inf), st = c(0.01,Inf), se = c(0.01,Inf)), p_names)
+
+    # Reparameterized version (now active):
+    # Transforms: identity for mean, exp for total_sd, pnorm for reliability
     transforms <- setNames(c("identity", "exp", "pnorm"), p_names)
-    # Bounds: mean unrestricted, total_sd > 0, proportion in (0,1)
+    # Bounds: mean unrestricted, total_sd > 0, reliability in (0,1)
     minmax <- setNames(list(mu = c(-Inf,Inf), st = c(0.01,Inf), rho = c(0.01,0.99)), p_names)
+
     model_list$transform$func <- c(model_list$transform$func, transforms)
     model_list$bound$minmax <- cbind(model_list$bound$minmax, do.call(cbind, minmax))
 
