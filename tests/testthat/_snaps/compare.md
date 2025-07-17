@@ -4,7 +4,7 @@
       compare(list(samples_LNR), cores_for_props = 1)
     Output
           MD wMD  DIC wDIC BPIC wBPIC EffectiveN meanD Dmean minD
-      1 -566   1 -610    1 -571     1         39  -648  -656 -687
+      1 -571   1 -610    1 -571     1         39  -648  -656 -687
 
 # savage-dickey
 
