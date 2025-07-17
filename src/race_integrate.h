@@ -93,7 +93,16 @@ public:
     NumericVector t(accumulators);
     t.fill(x);
     Rcpp::NumericVector d = dfun(t, pars, winner, exp(min_ll), is_ok);
-    double out = Rcpp::as<double>(d);
+//CHATGPT
+//    double out = Rcpp::as<double>(d);
+// ---- new guard: empty 'd' means no winner selected ----
+    double out;
+    if (d.size() == 0) {
+        out = 1.0;                    // neutral multiplicative factor
+    } else {
+        out = Rcpp::as<double>(d);
+    }
+//CHATGPT
 
     if (accumulators > 1) {
       Rcpp::NumericVector p = 1 - pfun(t, pars, !winner, exp(min_ll), is_ok);

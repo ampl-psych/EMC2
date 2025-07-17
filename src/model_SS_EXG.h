@@ -80,6 +80,82 @@ NumericVector texg_go_lccdf(
   return(out);
 }
 
+//CHATGPT
+/* ================================================================
+     Fast scalar integrand  f(t)  for STOP–SUCCESS (truncated ex-G)
+       f(t) =  d_stop(t)  ×  ∏ S_go(t + SSD)
+   ================================================================= */
+class texg_stop_success_scalar : public Numer::Func
+{
+private:
+    const double        SSD;
+    const NumericMatrix pars;          // go rows
+    const int           n_go;
+    const double        min_ll;
+
+public:
+    texg_stop_success_scalar(double        SSD_,
+                             NumericMatrix pars_,
+                             double        min_ll_)
+        : SSD(SSD_), pars(pars_), n_go(pars_.nrow()), min_ll(min_ll_) {}
+
+    double operator()(const double& t) const
+    {
+        /* ----- stop-process density (winner) ---------------------- */
+        const double muS = pars(0, 3),
+                     sdS = pars(0, 4),
+                     tauS= pars(0, 5),
+                     lbS = pars(0, 9);          // stop lower bound
+
+        double ds = dtexg(t, muS, sdS, tauS, lbS,
+                          R_PosInf, /*log_d=*/false);
+        if (!R_FINITE(ds)) ds = std::exp(min_ll);
+
+        /* ----- product of go survivors --------------------------- */
+        double surv_prod = 1.0;
+
+        for (int i = 0; i < n_go; ++i) {
+            double s_i = ptexg(t + SSD,
+                               pars(i, 0),       // μ
+                               pars(i, 1),       // σ
+                               pars(i, 2),       // τ
+                               pars(i, 8),       // go lower bound
+                               R_PosInf,
+                               /*lower_tail=*/false,
+                               /*log_p=*/false);
+            if (!R_FINITE(s_i)) s_i = std::exp(min_ll);
+            surv_prod *= s_i;
+        }
+        return ds * surv_prod;       // likelihood scale
+    }
+};
+
+/* Fast stop-success log-likelihood (truncated ex-G) */
+static inline double
+ss_texg_stop_success_lpdf_fast(double        SSD,
+                               NumericMatrix pars,
+                               double        min_ll)
+{
+    texg_stop_success_scalar f(SSD, pars, min_ll);
+
+    double err_est, res;
+    int    err_code;
+
+    res = Numer::integrate(f,
+                           R_NegInf, R_PosInf,
+                           err_est, err_code,
+                           /*subdiv*/  100,
+                           /*eps_abs*/ 1e-8,
+                           /*eps_rel*/ 1e-6);
+
+    bool bad = (err_code != 0) || !R_FINITE(res) || (res <= 0.0);
+
+    return bad ? min_ll : std::log(res);
+}
+
+//CHATGPT
+
+
 // go race log likelihood function, not accounting for go failure
 double ss_texg_go_lpdf(
     // single RT
@@ -305,12 +381,20 @@ NumericVector ss_texg_lpdf(
         // (i)  go failure; OR
         // (ii) stop process beat go process in fair race (i.e., without go
         //      failure and without trigger failure)
-        stop_success_integral = ss_texg_stop_success_lpdf(
-          SSD[start_row],
-          pars(Range(start_row, end_row), _),
-          min_ll,
-          R_PosInf
-        );
+
+//CHATGPT
+        // stop_success_integral = ss_texg_stop_success_lpdf(
+        //   SSD[start_row],
+        //   pars(Range(start_row, end_row), _),
+        //   min_ll,
+        //   R_PosInf
+        // );
+        stop_success_integral = ss_texg_stop_success_lpdf_fast(
+           SSD[start_row],
+           pars(Range(start_row, end_row), _),
+           min_ll);             // new, fast
+//CHATGPT
+
         stop_success_lprob = log1m(gf[trial]) + log1m(tf[trial]) + stop_success_integral;
         // likelihood = gf + [(1-gf) x (1-tf) x stop_success_integral]
         out[trial] = log_sum_exp(std::log(gf[trial]), stop_success_lprob);
@@ -330,6 +414,48 @@ NumericVector ss_texg_lpdf(
 // ----------------------------------------------------------------------------
 // REGULAR EX-GAUSSIAN FUNCTIONS
 // ----------------------------------------------------------------------------
+
+//CHATGPT
+/* ------------------------------------------------------------------
+   Fast stop-success integrand   f(t) =
+       d_stop(t) · ∏_{go acc}  S_go(t + SSD)
+   ------------------------------------------------------------------ */
+class exg_stop_success_scalar : public Numer::Func
+{
+private:
+    const double SSD;
+    const NumericMatrix pars;   // rows = go accs, columns (μ,σ,τ, μS,σS,τS)
+    const int n_go;
+    const double min_ll;
+
+public:
+    exg_stop_success_scalar(double SSD_, NumericMatrix pars_, double min_ll_)
+        : SSD(SSD_), pars(pars_), n_go(pars_.nrow()), min_ll(min_ll_) {}
+
+    double operator()(const double &t) const
+    {
+        /* ---- stop density (winner) ---- */
+        double ds = dexg(t,
+                         pars(0, 3), pars(0, 4), pars(0, 5),
+                         /*log_d =*/ false);          // scalar, no loops
+        if (!R_FINITE(ds)) ds = std::exp(min_ll);
+
+        /* ---- product of go survivors ---- */
+        double surv_prod = 1.0;
+        for (int i = 0; i < n_go; ++i) {
+            double s_i = pexg(t + SSD,
+                              pars(i, 0), pars(i, 1), pars(i, 2),
+                              /*lower_tail =*/ false,
+                              /*log_p      =*/ false);
+            if (!R_FINITE(s_i)) s_i = std::exp(min_ll);
+            surv_prod *= s_i;
+        }
+        return ds * surv_prod;      // likelihood scale
+    }
+};
+
+// CHATGPT
+
 
 // wrapper around ex-Gaussian log PDF for race function
 NumericVector exg_go_lpdf(
@@ -395,6 +521,26 @@ NumericVector exg_go_lccdf(
   return(out);
 }
 
+//CHATGPT
+/* 5-argument shims so they match f_integrate()'s signature */
+static inline NumericVector exg_go_lpdf5(NumericVector  rt,
+                                         NumericMatrix  pars,
+                                         LogicalVector  idx,
+                                         double         min_ll,
+                                         LogicalVector  /*is_ok*/)
+{
+    return exg_go_lpdf(rt, pars, idx, min_ll);
+}
+
+static inline NumericVector exg_go_lccdf5(NumericVector  rt,
+                                          NumericMatrix  pars,
+                                          LogicalVector  idx,
+                                          double         min_ll,
+                                          LogicalVector  /*is_ok*/)
+{
+    return exg_go_lccdf(rt, pars, idx, min_ll);
+}
+//CHATGPT
 
 // go race log likelihood function, not accounting for go failure
 double ss_exg_go_lpdf(
@@ -500,57 +646,81 @@ public:
   }
 };
 
+
 // function to compute the stop success integral, not accounting for trigger
 // failure and go failure
-double ss_exg_stop_success_lpdf(
-    // single stop signal delay
-    double SSD,
-    // parameter values: rows = accumulators, columns = parameters
-    NumericMatrix pars,
-    // minimal log likelihood, to protect against numerical issues
-    double min_ll,
-    // lower limit for integration
-    double lower,
-    // upper limit for integration
-    double upper
-) {
-  // set up an instance of a stop success integrand
-  exg_ss_integrand race_integrand(SSD, pars, min_ll);
-  // perform integration: likelihood of stop process winning
-  IntegrationResult out = my_integrate(race_integrand, lower, upper);
-  // check for numerical issues
-  bool bad_out = out.error_code != 0 || !traits::is_finite<REALSXP>(out.value);
-  // return *log* likelihood
-  // NB in the original R code from the DMC toolbox (`my.integrate`), -Inf was
-  // returned in case of failed integration
-  return bad_out ? min_ll : std::log(out.value);
+// double ss_exg_stop_success_lpdf(
+//     // single stop signal delay
+//     double SSD,
+//     // parameter values: rows = accumulators, columns = parameters
+//     NumericMatrix pars,
+//     // minimal log likelihood, to protect against numerical issues
+//     double min_ll,
+//     // lower limit for integration
+//     double lower,
+//     // upper limit for integration
+//     double upper
+// ) {
+//   // set up an instance of a stop success integrand
+//   exg_ss_integrand race_integrand(SSD, pars, min_ll);
+//   // perform integration: likelihood of stop process winning
+//   IntegrationResult out = my_integrate(race_integrand, lower, upper);
+//   // check for numerical issues
+//   bool bad_out = out.error_code != 0 || !traits::is_finite<REALSXP>(out.value);
+//   // return *log* likelihood
+//   // NB in the original R code from the DMC toolbox (`my.integrate`), -Inf was
+//   // returned in case of failed integration
+//   return bad_out ? min_ll : std::log(out.value);
+// }
+
+//CHATGPT
+/* Log-likelihood that stop wins (fast, scalar integrand) */
+static inline double
+ss_exg_stop_success_lpdf_fast(double        SSD,
+                              NumericMatrix pars,
+                              double        min_ll)
+{
+    exg_stop_success_scalar f(SSD, pars, min_ll);
+
+    double err_est, res;
+    int    err_code;
+
+    res = Numer::integrate(f,      /* integrand */
+                           R_NegInf, R_PosInf,
+                           err_est, err_code,
+                           /*subdiv*/   100,
+                           /*eps_abs*/  1e-8,
+                           /*eps_rel*/  1e-6);
+
+    bool bad = (err_code != 0) || !R_FINITE(res) || (res <= 0.0);
+
+    return bad ? min_ll : std::log(res);
 }
+//CHATGPT
 
-
-
-double ss_exg_stop_success_pdf(
-    // single stop signal delay
-    double SSD,
-    // parameter values: rows = accumulators, columns = parameters
-    NumericMatrix pars,
-    // minimal log likelihood, to protect against numerical issues
-    double min_ll,
-    // lower limit for integration
-    double lower,
-    // upper limit for integration
-    double upper
-) {
-  // set up an instance of a stop success integrand
-  exg_ss_integrand race_integrand(SSD, pars, min_ll);
-  // perform integration: likelihood of stop process winning
-  IntegrationResult out = my_integrate(race_integrand, lower, upper);
-  // check for numerical issues
-  bool bad_out = out.error_code != 0 || !traits::is_finite<REALSXP>(out.value);
-  // return *log* likelihood
-  // NB in the original R code from the DMC toolbox (`my.integrate`), -Inf was
-  // returned in case of failed integration
-  return bad_out ? min_ll : out.value;
-}
+// double ss_exg_stop_success_pdf(
+//     // single stop signal delay
+//     double SSD,
+//     // parameter values: rows = accumulators, columns = parameters
+//     NumericMatrix pars,
+//     // minimal log likelihood, to protect against numerical issues
+//     double min_ll,
+//     // lower limit for integration
+//     double lower,
+//     // upper limit for integration
+//     double upper
+// ) {
+//   // set up an instance of a stop success integrand
+//   exg_ss_integrand race_integrand(SSD, pars, min_ll);
+//   // perform integration: likelihood of stop process winning
+//   IntegrationResult out = my_integrate(race_integrand, lower, upper);
+//   // check for numerical issues
+//   bool bad_out = out.error_code != 0 || !traits::is_finite<REALSXP>(out.value);
+//   // return *log* likelihood
+//   // NB in the original R code from the DMC toolbox (`my.integrate`), -Inf was
+//   // returned in case of failed integration
+//   return bad_out ? min_ll : out.value;
+// }
 
 
 // top-level log-likelihood function for the stop signal task
@@ -653,13 +823,20 @@ NumericVector ss_exg_lpdf(
 //        Rcpp::Rcout << "start_row = " << start_row << std::endl;
 //        Rcpp::Rcout << "end_row = " << start_row << std::endl;
 
-        stop_success_integral = ss_exg_stop_success_lpdf(
-          SSD[start_row],
-          pars(Range(start_row, end_row), _),
-          min_ll,
-          R_NegInf,
-          R_PosInf
-        );
+//CHATGPT
+        // stop_success_integral = ss_exg_stop_success_lpdf(
+        //   SSD[start_row],
+        //   pars(Range(start_row, end_row), _),
+        //   min_ll,
+        //   R_NegInf,
+        //   R_PosInf
+        // );
+
+        stop_success_integral =
+          ss_exg_stop_success_lpdf_fast(SSD[start_row],
+                                        pars(Range(start_row, end_row), _),
+                                        min_ll);
+//CHATGPT
 
  //       stop_success_integral = ss_exg_stop_success_pdf(
 //          SSD[start_row],
