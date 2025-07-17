@@ -761,7 +761,7 @@ SSexG_old <- function() {
     pfunS=function(rt,pars)
       pexGaussianS(rt,pars[,c("muS","sigmaS","tauS","SSD"),drop=FALSE]),
     # Stop probability integral
-    sfun=function(pars,n_acc,upper=Inf) pstopEXG_old(pars,n_acc,upper=upper),
+    sfun=function(pars,n_acc,upper=Inf) pstopEXG(pars,n_acc,upper=upper),
     # Random function for SS race
     rfun=function(data=NULL,pars) {
       rSSexGaussian(data,pars,ok=attr(pars, "ok"))
