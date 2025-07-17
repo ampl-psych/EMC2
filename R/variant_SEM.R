@@ -58,7 +58,7 @@ add_info_SEM <- function(sampler, prior = NULL, ...){
   n_cov <- if (!is.null(sem_settings$covariates)) ncol(sem_settings$covariates) else 0
 
   if (is.null(sem_settings$K_mat)) {
-    sem_settings$K_mat <- matrix(0, nrow = n_subjects, ncol = n_cov)
+    sem_settings$K_mat <- matrix(0, nrow = n_pars, ncol = n_cov)
   }
 
   if (is.null(sem_settings$G_mat) && n_factors > 0) {
