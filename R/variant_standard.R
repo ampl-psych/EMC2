@@ -420,12 +420,22 @@ filtered_samples_standard <- function(sampler, filter, ...){
 
 
 calc_log_jac_chol <- function(x) {
-  n <- floor(sqrt(2 * length(x) + 0.25) - 0.5)
-  mat <- matrix(NA, n, n)
-  mat[lower.tri(mat, diag = TRUE)] <- x
-  diagL <- exp(diag(mat))            # L_ii on the natural scale
-  # full Jacobian: d*log(2) + Σ (d - i + 2) * log L_ii
+  ## work out dimension -------------------------------------------------
+  n <- floor(sqrt(2 * length(x) + 0.25) - 0.5)   # solves n(n+1)/2 = length(x)
+
+  ## rebuild the raw lower‑triangular matrix ----------------------------
+  mat <- matrix(NA_real_, n, n)
+  mat[lower.tri(mat, diag = TRUE)] <- x          # raw params (diag on log‑scale)
+
+  ## step 1: create L ---------------------------------------------------
+  L <- mat
+  diag(L) <- exp(diag(mat))                      # positive diagonal
+  # (off‑diagonals stay on natural scale)
+
+  ## log‑Jacobian -------------------------------------------------------
+  logL <- diag(mat)                              # log of L_ii
   log_jac <- n * log(2) + sum((n - seq_len(n) + 2) * logL)
+
   return(log_jac)
 }
 

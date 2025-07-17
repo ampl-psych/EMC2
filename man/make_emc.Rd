@@ -14,7 +14,6 @@ make_emc(
   rt_resolution = 0.02,
   prior_list = NULL,
   group_design = NULL,
-  SEM_settings,
   par_groups = NULL,
   ...
 )

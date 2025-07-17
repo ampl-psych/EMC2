@@ -660,11 +660,13 @@ make_emc <- function(data,design,model=NULL,
                     type="standard",
                     n_chains=3,compress=TRUE,rt_resolution=0.02,
                     prior_list = NULL, group_design = NULL,
-                    SEM_settings, par_groups=NULL, ...){
+                    par_groups=NULL, ...){
   # arguments for future compatibility
   n_factors <- NULL
   nuisance <- NULL
   nuisance_non_hyper <- NULL
+  sem_settings <- NULL
+  Lambda_mat <- NULL
   # overwrite those that were supplied
   optionals <- list(...)
   for (name in names(optionals) ) {

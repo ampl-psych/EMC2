@@ -156,7 +156,7 @@ get_prior_SEM <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, s
     if(selection %in% c("regressors", "alpha", "mu_implied", "Sigma", "correlation", "covariance", "sigma2")){
       K <- array(0, dim = c(n_pars, n_cov, N))
       for(i in 1:n_cov){
-        K[,i,] <- t(mvtnorm::rmvnorm(N, sigma = diag(prior$K_var)))
+        K[,i,] <- t(mvtnorm::rmvnorm(N, sigma = diag(prior$K_var, n_cov)))
       }
       K <- constrain_lambda(K, K_mat)
       rownames(K) <- par_names
@@ -168,7 +168,7 @@ get_prior_SEM <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, s
     if(selection %in% c("factor_regressors", "alpha", "mu_implied", "Sigma", "correlation", "covariance", "sigma2")){
       G <- array(0, dim = c(n_factors, n_cov, N))
       for(i in 1:n_cov){
-        G[,i,] <- t(mvtnorm::rmvnorm(N, sigma = diag(prior$G_var)))
+        G[,i,] <- t(mvtnorm::rmvnorm(N, sigma = diag(prior$G_var, n_cov)))
       }
       G <- constrain_lambda(G, G_mat)
 
@@ -181,7 +181,7 @@ get_prior_SEM <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, s
     if(selection %in% c("structural_regressors", "alpha", "mu_implied", "Sigma", "correlation", "covariance", "sigma2")){
       B <- array(0, dim = c(n_factors, n_factors, N))
       for(i in 1:n_factors){
-        B[,i,] <- t(mvtnorm::rmvnorm(N, sigma = diag(prior$B_var)))
+        B[,i,] <- t(mvtnorm::rmvnorm(N, sigma = diag(prior$B_var[i], n_factors)))
       }
       B <- constrain_lambda(B, B_mat)
 
@@ -193,7 +193,7 @@ get_prior_SEM <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, s
     if(selection %in% c("loadings", "alpha", "mu_implied", "Sigma", "correlation", "covariance", "sigma2")){
       lambda <- array(0, dim = c(n_pars, n_factors, N))
       for(i in 1:n_factors){
-        lambda[,i,] <- t(mvtnorm::rmvnorm(N, sigma = diag(prior$lambda_var)))
+        lambda[,i,] <- t(mvtnorm::rmvnorm(N, sigma = diag(prior$lambda_var[i], n_pars)))
       }
       lambda <- constrain_lambda(lambda, Lambda_mat)
       rownames(lambda) <- par_names
@@ -376,8 +376,13 @@ gibbs_step_SEM <- function(sampler, alpha){
       lambda_y[j, isFree] <- rmvnorm(1, lam_mu, lam_sig)
     }
   }
-  K      <- lambda_y[, seq_len(n_cov),        drop = FALSE]
-  lambda <- lambda_y[, -(seq_len(n_cov)),     drop = FALSE]
+  if(n_cov > 1){
+    K      <- lambda_y[, seq_len(n_cov),        drop = FALSE]
+    lambda <- lambda_y[, -(seq_len(n_cov)),     drop = FALSE]
+  } else{
+    lambda <- lambda_y
+  }
+
 
   ## ---- correlated update for G and B --------------------------------------
   G_new <- G
@@ -400,10 +405,12 @@ gibbs_step_SEM <- function(sampler, alpha){
 
     ## 2.  Conditional target vector y*
     delta_pp <- delta_inv[p, p]
-    c_vec <- if (n_factors > 1)
-      eta_residuals[, -p, drop = FALSE] %*% delta_inv[-p, p, drop = FALSE]
-    else
-      matrix(0, n_subjects, 1)
+    if (n_factors > 1){
+      c_vec <- eta_residuals[, -p, drop = FALSE] %*% delta_inv[-p, p, drop = FALSE]
+    }
+    else{
+      c_vec <- matrix(0, n_subjects, 1)
+    }
     y_star <- delta_pp * eta[, p, drop = FALSE] + c_vec
 
     ## 3.  Prior variance vector aligned with Z_p
@@ -463,12 +470,12 @@ gibbs_step_SEM <- function(sampler, alpha){
   ## ---- derived population moments ----------------------------------------
   x_mu  <- colMeans(covariates)
   x_var <- cov(covariates)
-
-  B_0_inv  <- solve(diag(n_factors) - B)
-  pop_mean <- drop(mu + lambda %*% B_0_inv %*% G %*% x_mu + K %*% x_mu)
-  pop_var  <- lambda %*% B_0_inv %*% (G %*% x_var %*% t(G) +
+  browser()
+  B0_inv  <- solve(diag(n_factors) - B)
+  pop_mean <- drop(mu + lambda %*% B0_inv %*% G %*% x_mu + K %*% x_mu)
+  pop_var  <- lambda %*% B0_inv %*% (G %*% x_var %*% t(G) +
                                       solve(delta_inv)) %*%
-              t(B_0_inv) %*% t(lambda) +
+              t(B0_inv) %*% t(lambda) +
               K %*% x_var %*% t(K) +
               solve(epsilon_inv)
 
@@ -877,48 +884,45 @@ bridge_group_and_prior_and_jac_SEM <- function(proposals_group,
 #' This function helps create the specification matrices (Lambda, B, K, G) for an SEM.
 #' It takes a design object, data, factor names, covariate column names, and list-based
 #' specifications for the paths to be estimated.
-#' The manifest variable names for Lambda_mat and K_mat rows are derived from `sampled_pars(design)`.
+#' The subject-level parameter names for Lambda_mat and K_mat rows are derived from `sampled_pars(design)`.
 #' It validates that covariates are consistent per subject (subject column in `data` must be named "subjects")
 #' and includes an aggregated subject-level covariate data frame named `covariates` in the output list.
 #' For identifiability, the first parameter listed in `lambda_specs` for each factor is fixed to 1.
 #'
-#' @param data A data frame containing subject identifiers (in a column named "subjects")
+#' @param data A data frame containing a column named "subjects"
 #'   and any covariate columns specified in `covariate_cols`.
 #' @param design An emc.design object, as created by the `design()` function.
 #'   The parameter names for the SEM are derived from `names(sampled_pars(design))`.
-#' @param factor_names Character vector. Names of the latent factors for the SEM.
 #' @param covariate_cols Character vector or NULL. Column names in `data` to be used
 #'   as covariates for K_mat and G_mat. If NULL, no covariates are processed.
-#' @param lambda_specs A list defining `Lambda_mat` (factor loadings).
-#'   The list names should be factor names (from `factor_names`), and each element should be a
+#' @param lambda_specs A list defining factor loadings.
+#'   The list names should be factor names and each element should be a
 #'   character vector of parameter names (from `names(sampled_pars(design))`) that load onto that factor.
 #'   The first parameter listed for each factor will be fixed to 1 for identifiability.
 #'   Example: `list(Factor1 = c("v_Sleft", "a_Eneutral"), Factor2 = "t0")`
 #'   Here, `Lambda_mat["v_Sleft", "Factor1"]` would be 1.
-#' @param b_specs A list defining `B_mat` (regressions among factors).
+#' @param b_specs A list defining regressions among factors.
 #'   List names are outcome factors, elements are character vectors of predictor factors.
 #'   Example: `list(Factor2 = "Factor1", Factor3 = c("Factor1", "Factor2"))`
-#' @param k_specs A list defining `K_mat` (covariate effects on manifest design parameters).
+#' @param k_specs A list defining covariate effects on subject-level parameters.
 #'   List names are parameter names (from `names(sampled_pars(design))`), elements are character vectors of covariate names
 #'   (must be present in `covariate_cols` and thus in the processed `covariates` data frame).
 #'   Example: `list(v_Sleft = "cov1", a_Eneutral = c("cov1", "cov2"))`
-#' @param g_specs A list defining `G_mat` (covariate effects on factors).
+#' @param g_specs A list defining covariate effects on factors.
 #'   List names are factor names, elements are character vectors of covariate names.
 #'   Example: `list(Factor1 = "cov1", Factor2 = c("cov1", "cov2"))`
 #' @param fixed_value Numeric. The value used for fixed paths in the matrices that
 #'   are not set to 1 for identifiability or `Inf` for estimation. Default is 0.
 #'
-#' @return A list (intended to be used as `sem_settings`) containing:
+#' @return A list containing:
 #'   - `Lambda_mat`: The factor loading matrix.
 #'   - `B_mat`: The matrix of regressions among factors.
-#'   - `K_mat`: The matrix of covariate effects on manifest design parameters.
+#'   - `K_mat`: The matrix of covariate effects on subject-level parameters.
 #'   - `G_mat`: The matrix of covariate effects on factors.
-#'   - `par_names`: The manifest design parameter names derived from `sampled_pars(design)`.
+#'   - `par_names`: The subject-level parameter names derived from `sampled_pars(design)`.
 #'   - `factor_names`: The provided SEM factor names.
-#'   - `covariates`: A data frame with one row per unique subject (ordered by first
-#'     appearance in `data[["subjects"]]`) and columns for each validated covariate,
+#'   - `covariates`: A data frame with one row per unique subject and columns for each covariate,
 #'     containing the unique subject-level values. Column names are the covariate names.
-#'     If no covariates are processed, this will be a data frame with 0 columns and rows for each subject.
 #'
 #' @export
 #'
@@ -934,11 +938,9 @@ bridge_group_and_prior_and_jac_SEM <- function(proposals_group,
 #'   formula=list(v~lM,sv~lM,B~E+lR,A~1,t0~1),
 #'   contrasts=list(v=list(lM=ADmat)),
 #'   constants=c(sv=log(1)),
-#'   report_p_vector = FALSE
 #' )
 #'
 #' # SEM Factor names
-#' sem_factor_names <- c("Speed", "Caution")
 #'
 #' # Make a copy of forstmann for example modification
 #' forstmann_mod <- forstmann
@@ -957,10 +959,9 @@ bridge_group_and_prior_and_jac_SEM <- function(proposals_group,
 #' k_example_specs <- list(t0 = "SubjTrait") # "SubjTrait" must be in my_cov_cols
 #' g_example_specs <- list(Speed = "SubjTrait")
 #'
-#' sem_settings_definition <- define_sem_structure(
+#' sem_settings_definition <- make_sem_structure(
 #'   data = forstmann_mod,
 #'   design = example_design_obj,
-#'   factor_names = sem_factor_names,
 #'   covariate_cols = my_cov_cols,
 #'   lambda_specs = lambda_example_specs,
 #'   b_specs = b_example_specs,
@@ -974,9 +975,8 @@ bridge_group_and_prior_and_jac_SEM <- function(proposals_group,
 #' print(sem_settings_definition$G_mat)
 #' print(head(sem_settings_definition$covariates))
 #'
-define_sem_structure <- function(data,
+make_sem_structure <- function(data,
                                  design,
-                                 factor_names,
                                  covariate_cols = NULL,
                                  lambda_specs = NULL,
                                  b_specs = NULL,
@@ -987,13 +987,10 @@ define_sem_structure <- function(data,
   subjects_col_internal <- "subjects"
   free_value_internal <- Inf
   par_names <- names(sampled_pars(design))
-  if (length(par_names) == 0) stop("Could not extract parameter names from the design object. Ensure sampled_pars(design) works.")
 
   if (!is.data.frame(data)) stop("'data' must be a data frame.")
-  if (!subjects_col_internal %in% colnames(data)) stop(paste0("Subjects column '", subjects_col_internal, "' not found in data."))
-  if (!is.character(factor_names) || length(factor_names) == 0) stop("'factor_names' must be a non-empty character vector for the SEM factors.")
   if (!is.null(covariate_cols) && !is.character(covariate_cols)) stop("'covariate_cols' must be a character vector or NULL.")
-
+  factor_names <- names(lambda_specs)
   n_pars <- length(par_names)
   n_factors <- length(factor_names)
 
@@ -1091,6 +1088,13 @@ define_sem_structure <- function(data,
     }
   }
 
+  if(n_cov == 0 && !is.null(k_specs)){
+    stop("k_specs supplied, but no covariates_cols specified")
+  }
+  if(n_cov == 0 && !is.null(g_specs)){
+    stop("g_specs supplied, but no covariates_cols specified")
+  }
+
   if (n_cov > 0 && !is.null(k_specs)) {
     if (!is.list(k_specs)) stop("'k_specs' must be a list.")
     for (p_name_spec in names(k_specs)) {
@@ -1098,7 +1102,7 @@ define_sem_structure <- function(data,
       cov_names_for_p <- k_specs[[p_name_spec]]
       if (!is.character(cov_names_for_p)) stop(paste0("Values in k_specs for parameter '", p_name_spec, "' must be character vectors of covariate names."))
       for (cov_name in cov_names_for_p) {
-        if (!cov_name %in% processed_covariate_names) stop(paste0("Covariate '", cov_name, "' for parameter '", p_name_spec,"' in k_specs not in processed_covariate_names (i.e., not in covariate_cols or not found in data)."))
+        if (!cov_name %in% processed_covariate_names) stop(paste0("Covariate '", cov_name, "' for parameter '", p_name_spec,"' in k_specs not in covariate_cols"))
         K_mat[p_name_spec, cov_name] <- free_value_internal
       }
     }
@@ -1111,7 +1115,7 @@ define_sem_structure <- function(data,
       cov_names_for_f <- g_specs[[f_name]]
       if (!is.character(cov_names_for_f)) stop(paste0("Values in g_specs for factor '", f_name, "' must be character vectors of covariate names."))
       for (cov_name in cov_names_for_f) {
-        if (!cov_name %in% processed_covariate_names) stop(paste0("Covariate '", cov_name, "' for factor '", f_name,"' in g_specs not in processed_covariate_names (i.e., not in covariate_cols or not found in data)."))
+        if (!cov_name %in% processed_covariate_names) stop(paste0("Covariate '", cov_name, "' for factor '", f_name,"' in g_specs not in covariate_cols"))
         G_mat[f_name, cov_name] <- free_value_internal
       }
     }
