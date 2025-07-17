@@ -579,32 +579,6 @@ my.integrate_old <- function(...,upper=Inf,big=10)
 }
 
 
-pstopEXG_old <- function(parstop,n_acc,upper=Inf,
-                     gpars=c("mu","sigma","tau"),spars=c("muS","sigmaS","tauS"))
-{
-  sindex <- seq(1,nrow(parstop),by=n_acc)  # Stop accumulator index
-  ps <- parstop[sindex,spars,drop=FALSE]   # Stop accumulator parameters
-  SSDs <- parstop[sindex,"SSD",drop=FALSE] # SSDs
-  ntrials <- length(SSDs)
-  if (length(upper)==1) upper <- rep(upper,length.out=ntrials)
-  pgo <- array(parstop[,gpars],dim=c(n_acc,ntrials,length(gpars)),
-               dimnames=list(NULL,NULL,gpars))
-  cells <- apply(
-    cbind(SSDs,ps,upper,matrix(as.vector(aperm(pgo,c(2,1,3))),nrow=ntrials))
-  ,1,paste,collapse="")
-  # cells <- character(ntrials)
-  # for (i in 1:ntrials)
-  #   cells[i] <- paste(SSDs[i],ps[i,],pgo[,i,],upper[i],collapse="")
-  uniq <- !duplicated(cells)
-  ups <- sapply(which(uniq),function(i){
-    my.integrate_old(f=stopfn_exg_old,lower=-Inf,SSD=SSDs[i],upper=upper[i],
-                           mu=c(ps[i,"muS"],pgo[,i,"mu"]),
-                           sigma=c(ps[i,"sigmaS"],pgo[,i,"sigma"]),
-                           tau=c(ps[i,"tauS"],pgo[,i,"tau"]))
-  })
-  ups[as.numeric(factor(cells,levels=cells[uniq]))]
-}
-
 pstopEXG <- function(parstop,n_acc,upper=Inf,
                      gpars=c("mu","sigma","tau"),spars=c("muS","sigmaS","tauS"))
 {
@@ -623,13 +597,40 @@ pstopEXG <- function(parstop,n_acc,upper=Inf,
   #   cells[i] <- paste(SSDs[i],ps[i,],pgo[,i,],upper[i],collapse="")
   uniq <- !duplicated(cells)
   ups <- sapply(which(uniq),function(i){
-    my.integrate(f=stopfn_exg,lower=-Inf,SSD=SSDs[i],upper=upper[i],
+    my.integrate(f=stopfn_exg_old,lower=-Inf,SSD=SSDs[i],upper=upper[i],
                            mu=c(ps[i,"muS"],pgo[,i,"mu"]),
                            sigma=c(ps[i,"sigmaS"],pgo[,i,"sigma"]),
                            tau=c(ps[i,"tauS"],pgo[,i,"tau"]))
   })
   ups[as.numeric(factor(cells,levels=cells[uniq]))]
 }
+
+# THIS IS WRONG
+# pstopEXG <- function(parstop,n_acc,upper=Inf,
+#                      gpars=c("mu","sigma","tau"),spars=c("muS","sigmaS","tauS"))
+# {
+#   sindex <- seq(1,nrow(parstop),by=n_acc)  # Stop accumulator index
+#   ps <- parstop[sindex,spars,drop=FALSE]   # Stop accumulator parameters
+#   SSDs <- parstop[sindex,"SSD",drop=FALSE] # SSDs
+#   ntrials <- length(SSDs)
+#   if (length(upper)==1) upper <- rep(upper,length.out=ntrials)
+#   pgo <- array(parstop[,gpars],dim=c(n_acc,ntrials,length(gpars)),
+#                dimnames=list(NULL,NULL,gpars))
+#   cells <- apply(
+#     cbind(SSDs,ps,upper,matrix(as.vector(aperm(pgo,c(2,1,3))),nrow=ntrials))
+#   ,1,paste,collapse="")
+#   # cells <- character(ntrials)
+#   # for (i in 1:ntrials)
+#   #   cells[i] <- paste(SSDs[i],ps[i,],pgo[,i,],upper[i],collapse="")
+#   uniq <- !duplicated(cells)
+#   ups <- sapply(which(uniq),function(i){
+#     my.integrate(f=stopfn_exg,lower=-Inf,SSD=SSDs[i],upper=upper[i],
+#                            mu=c(ps[i,"muS"],pgo[,i,"mu"]),
+#                            sigma=c(ps[i,"sigmaS"],pgo[,i,"sigma"]),
+#                            tau=c(ps[i,"tauS"],pgo[,i,"tau"]))
+#   })
+#   ups[as.numeric(factor(cells,levels=cells[uniq]))]
+# }
 
 
 pstopTEXG <- function(
@@ -651,7 +652,7 @@ pstopTEXG <- function(
   #   cells[i] <- paste(SSDs[i],ps[i,],pgo[,i,],upper[i],collapse="")
   uniq <- !duplicated(cells)
   ups <- sapply(which(uniq),function(i){
-    my.integrate_old(f=stopfn_texg,lower=ps[i,"exgS_lb"],SSD=SSDs[i],upper=upper[i],
+    my.integrate(f=stopfn_texg,lower=ps[i,"exgS_lb"],SSD=SSDs[i],upper=upper[i],
                      mu=c(ps[i,"muS"],pgo[,i,"mu"]),
                      sigma=c(ps[i,"sigmaS"],pgo[,i,"sigma"]),
                      tau=c(ps[i,"tauS"],pgo[,i,"tau"]),
@@ -767,7 +768,7 @@ SSexG_old <- function() {
     },
     # Race likelihood combining pfun and dfun
     log_likelihood=function(pars,dadm,model,min_ll=log(1e-10))
-      log_likelihood_race_ss_old(pars, dadm, model, min_ll = min_ll)
+      log_likelihood_race_ss(pars, dadm, model, min_ll = min_ll)
   )
 }
 
@@ -1009,7 +1010,7 @@ SStexG <- function() {
     },
     # Race likelihood combining pfun and dfun
     log_likelihood = function(pars, dadm, model, min_ll = log(1e-10)) {
-      return(log_likelihood_race_ss_old(pars, dadm, model, min_ll = min_ll))
+      return(log_likelihood_race_ss(pars, dadm, model, min_ll = min_ll))
     }
   )
 }
@@ -1346,7 +1347,7 @@ SShybrid <- function() {
     },
     # Race likelihood combining pfun and dfun
     log_likelihood = function(pars, dadm, model, min_ll = log(1e-10)) {
-      return(log_likelihood_race_ss_old(pars, dadm, model, min_ll = min_ll))
+      return(log_likelihood_race_ss(pars, dadm, model, min_ll = min_ll))
     }
   )
 }
