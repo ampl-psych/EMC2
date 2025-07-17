@@ -306,14 +306,14 @@ gibbs_step_SEM <- function(sampler, alpha){
   sem_settings  <- sampler$sem_settings
   prior         <- sampler$prior
 
-  y             <- t(alpha)                     # subjects × variables
+  y             <- t(alpha)                     # subjects x variables
   n_subjects    <- sampler$n_subjects
   n_pars        <- sum(!sampler$nuisance)
   n_factors     <- sampler$n_factors
   covariates    <- as.matrix(sem_settings$covariates)
   n_cov         <- if (!is.null(covariates)) ncol(covariates) else 0
 
-  ## free‑parameter masks ----------------------------------------------------
+  ## free-parameter masks ----------------------------------------------------
   isFree_Lambda <- sem_settings$Lambda_mat == Inf
   isFree_B      <- sem_settings$B_mat     == Inf
   isFree_K      <- sem_settings$K_mat     == Inf
@@ -389,7 +389,7 @@ gibbs_step_SEM <- function(sampler, alpha){
   B_new <- B
 
   # Design matrix shared across rows
-  Z_full <- cbind(covariates, eta)   # n_subjects × (n_cov + n_factors)
+  Z_full <- cbind(covariates, eta)   # n_subjects x (n_cov + n_factors)
 
   # Start with residuals under current coefficients
   eta_residuals <- eta - eta %*% t(B_new) - covariates %*% t(G_new)
@@ -420,7 +420,7 @@ gibbs_step_SEM <- function(sampler, alpha){
     B_sig <- solve(delta_pp * crossprod(Z_p) +
                      diag(1 / prior_vec, length(prior_vec)))
     B_mu  <- B_sig %*% crossprod(Z_p, y_star)
-    coef_sample <- mvtnorm::rmvnorm(1, B_mu, B_sig)      # 1 × ncol(Z_p)
+    coef_sample <- mvtnorm::rmvnorm(1, B_mu, B_sig)      # 1 x ncol(Z_p)
 
     ## 5.  Split the draw into G-part and B-part -------------------
     n_free_G <- sum(free_Gp)          # could be 0
@@ -454,7 +454,7 @@ gibbs_step_SEM <- function(sampler, alpha){
     S_iw  <- diag(prior$b_d, d_block)
     df_iw <- prior$a_d + n_subjects
     if(df_iw <= d_block - 1)
-      stop("Inverse‑Wishart degrees‑of‑freedom too small for factor group ", group_id)
+      stop("Inverse-Wishart degrees-of-freedom too small for factor group ", group_id)
 
     if(d_block > 1){
       sampled_cov <- riwish(df_iw, S_iw + cov_block)
@@ -700,7 +700,7 @@ bridge_group_and_prior_and_jac_SEM <- function(proposals_group,
   x_mu  <- colMeans(covariates)
   x_var <- cov(covariates)
 
-  ## posterior samples of subject-level α stacked row-wise
+  ## posterior samples of subject-level alpha stacked row-wise
   proposals <- do.call(cbind, proposals_list)
 
   ## --------------------------------------------------------------------- ##
@@ -725,7 +725,7 @@ bridge_group_and_prior_and_jac_SEM <- function(proposals_group,
 
   eps_log  <- grab(n_pars)           # log-precision for manifest residuals
 
-  ## δ-blocks: list indexed by factor-group id
+  ## delta-blocks: list indexed by factor-group id
   delta_vec_list <- lapply(unique_fg, function(fg_id)
   {
     d  <- sum(factor_groups == fg_id)
@@ -764,7 +764,7 @@ bridge_group_and_prior_and_jac_SEM <- function(proposals_group,
     ## manifest residual precisions
     eps_prec_i <- exp( eps_log[i,] )          # size n_pars
 
-    ## -------- 2b. Factor-level precision matrix δ_inv -------------------
+    ## -------- 2b. Factor-level precision matrix delta_inv -------------------
     delta_inv_i <- matrix(0, n_factors, n_factors)
     lp_delta    <- 0          # prior part
     jac_delta   <- 0          # Jacobian part
@@ -777,7 +777,7 @@ bridge_group_and_prior_and_jac_SEM <- function(proposals_group,
 
       if (d_blk > 1) {
 
-        ##   multivariate block – v_blk holds the *lower-triangular*
+        ##   multivariate block - v_blk holds the *lower-triangular*
         ##   elements (diag on log scale) of the precision Cholesky.
         L_prec          <- unwind_chol(v_blk, reverse = TRUE)  # precision
         delta_inv_i[fg_idx, fg_idx] <- L_prec
@@ -836,7 +836,7 @@ bridge_group_and_prior_and_jac_SEM <- function(proposals_group,
               sigma = diag(rep(prior$G_var, length.out = length(v_G[i, ]))),
               log   = TRUE) else 0
 
-    ## ε-prior + Jacobian on log scale
+    ## epsilon-prior + Jacobian on log scale
     lp_eps <- sum( dgamma(eps_prec_i,
                           shape = prior$a_e,
                           rate  = prior$b_e,
@@ -856,7 +856,7 @@ bridge_group_and_prior_and_jac_SEM <- function(proposals_group,
       K_i %*% x_var %*% t(K_i) +
       diag(1 / eps_prec_i)
 
-    ##  subject-level rows  ×  parameter columns
+    ##  subject-level rows  x  parameter columns
     alpha_mat <- matrix(proposals[i, ],
                         ncol = n_pars,
                         byrow = TRUE)
