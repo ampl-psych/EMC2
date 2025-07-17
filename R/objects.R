@@ -385,6 +385,7 @@ get_pars <- function(emc,selection= "mu", stage=get_last_stage(emc),thin=1,filte
                     remove_constants = TRUE, use_par = NULL, type = NULL,
                     true_pars = NULL, chain = NULL, covariates = NULL)
 {
+  if(!is.null(emc[[1]]$n_subjects)) emc <- restore_duplicates(emc)
   if(add_recalculated) map <- TRUE
   if(!(selection %in% c("mu", "alpha"))) map <- FALSE
   if(is.null(type)) type <- emc[[1]]$type

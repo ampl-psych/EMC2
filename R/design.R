@@ -154,7 +154,7 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
     model_list <- model()
     model <- function(){return(model_list)}
   }
-  p_vector <- sampled_pars(design,model)
+  p_vector <- sampled_pars(design)
   lhs_terms <- unlist(lapply(formula, function(x) as.character(stats::terms(x)[[2]])))
 
   # Check if any terms are not in model parameters
@@ -621,7 +621,10 @@ make_full_dm <- function(form, Clist, da) {
   da[[pnam]] <- 1
   # Check if there are any nested CList entries to only contrast for this parameter
   if(any(names(Clist) == pnam)){
-    Clist[[names(Clist[[pnam]])]] <- Clist[[pnam]][[1]]
+    replac <- Clist[[pnam]]
+    for(i in 1:length(replac)){
+      Clist[[names(replac)[i]]] <- replac[[i]]
+    }
     Clist[[pnam]] <- NULL
   }
   for (i in names(Clist)) {
@@ -835,6 +838,13 @@ update2version <- function(emc){
   }
 
   design_list <- get_design(emc)
+  design_list <- lapply(design_list, function(x){
+    if(!is.null(x$Fcovariates)){
+      x$Fcovariates <- names(x$Fcovariates)
+    }
+    return(x)
+  })
+
   if(is.null(emc[[1]]$type)){
     type <- attr(emc[[1]], "variant_funs")$type
     emc <- lapply(emc, FUN = function(x){
@@ -876,6 +886,8 @@ update2version <- function(emc){
       emc[[1]]$model <- new_model
     }
   }
+
+
   prior_new <- emc[[1]]$prior
   attr(prior_new, "type") <- type
   prior_new <- prior(design_list, type, update = prior_new)
@@ -961,7 +973,7 @@ mapped_pars.emc.design <- function(x, p_vector = NULL, model=NULL,
                                       do_functions = F),
                        design,model,rt_check=FALSE,compress=FALSE, verbose = FALSE)
   ok <- !(names(dadm) %in% c("subjects","trials","R","rt","winner"))
-  out <- cbind(dadm[,ok],round(get_pars_matrix(p_vector,dadm, design$model()),digits))
+  out <- cbind(dadm[,ok, drop = F],round(get_pars_matrix(p_vector,dadm, design$model()),digits))
   if (model()$type=="SDT")  out <- out[dadm$lR!=levels(dadm$lR)[length(levels(dadm$lR))],]
   if (model()$type=="DDM")  out <- out[,!(names(out) %in% c("lR","lM"))]
   if (any(names(out)=="RACE") && remove_RACE)
@@ -978,7 +990,7 @@ mapped_pars.emc.design <- function(x, p_vector = NULL, model=NULL,
 #' model parameters of the design.
 #'
 #' @param x an `emc.design` object made with `design()` or an `emc` object.
-#' @param model a model list. Defaults to the model specified in the design list.
+#' @param group_design an `emc.group_design` object made with `group_design()`
 #' @param doMap logical. If `TRUE` will also include an attribute `map`
 #' with the design matrices that perform the mapping back to the design
 #' @param add_da Boolean. Whether to include the relevant data columns in the map attribute
@@ -997,14 +1009,14 @@ mapped_pars.emc.design <- function(x, p_vector = NULL, model=NULL,
 #' sampled_pars(design_DDMaE)
 #'
 #' @export
-sampled_pars <- function(x,model=NULL,doMap=FALSE, add_da = FALSE, all_cells_dm = FALSE, data = NULL)
+sampled_pars <- function(x,group_design=NULL,doMap=FALSE, add_da = FALSE, all_cells_dm = FALSE, data = NULL)
 {
   UseMethod("sampled_pars")
 }
 
 #' @rdname sampled_pars
 #' @export
-sampled_pars.emc.design <- function(x,model=NULL,doMap=FALSE, add_da = FALSE, all_cells_dm = FALSE, data = NULL){
+sampled_pars.emc.design <- function(x,group_design=NULL,doMap=FALSE, add_da = FALSE, all_cells_dm = FALSE, data = NULL){
   design <- x
   if(is.null(design)) return(NULL)
   if("Flist" %in% names(design)){
@@ -1061,6 +1073,13 @@ sampled_pars.emc.design <- function(x,model=NULL,doMap=FALSE, add_da = FALSE, al
   }
   if(length(design) != 1) attr(out, "map") <- map_list
   if(!add_da & any(duplicated(names(out)))) stop("duplicate parameter names found! Usually this happens when joint designs share indicator names")
+  if(!is.null(group_design)){
+    map <- attr(out, "map")
+    par_names <- names(out)
+    par_names <- add_group_par_names(par_names, group_design)
+    out <- setNames(numeric(length(par_names)), par_names)
+    attr(out, "map") <- map
+  }
   return(out)
 }
 
@@ -1094,7 +1113,7 @@ summary.emc.design <- function(object, ...){
   cat("\n Sampled Parameters: \n")
   print(names(p_vector))
   cat("\n Design Matrices: \n")
-  map_out <- sampled_pars(object,object$model, add_da = TRUE, doMap = TRUE, data = list(...)$data)
+  map_out <- sampled_pars(object,add_da = TRUE, doMap = TRUE, data = list(...)$data)
   print_map <-
   print(lapply(attr(map_out, "map"), unique_rows_by_index,
                c(names(object$Ffactors), names(object$Ffunctions), 'lM', 'lR')), row.names = FALSE)
@@ -1177,7 +1196,7 @@ plot.emc.design <- function(x, p_vector, data = NULL, factors = NULL, plot_facto
 
 
 #' @exportS3Method
-sampled_pars.default <- function(x,model=NULL,doMap=FALSE, add_da = FALSE, all_cells_dm = FALSE, data = NULL){
+sampled_pars.default <- function(x,group_design=NULL,doMap=FALSE, add_da = FALSE, all_cells_dm = FALSE, data = NULL){
   if(is.null(x)) return(NULL)
   if(!is.null(attr(x, "custom_ll"))){
     pars <- numeric(length(attr(x,"sampled_p_names")))
@@ -1188,6 +1207,6 @@ sampled_pars.default <- function(x,model=NULL,doMap=FALSE, add_da = FALSE, all_c
     x <- list(x)
     class(x) <- "emc.design"
   }
-  out <- sampled_pars.emc.design(x, model = model, doMap = doMap, add_da = add_da, all_cells_dm = all_cells_dm, data = data)
+  out <- sampled_pars.emc.design(x, group_design = group_design, doMap = doMap, add_da = add_da, all_cells_dm = all_cells_dm, data = data)
   return(out)
 }

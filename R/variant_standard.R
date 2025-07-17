@@ -31,9 +31,10 @@ add_info_standard <- function(sampler, prior = NULL, ...){
   sampler$par_names_all <- add_group_par_names(sampler$par_names, group_design)
 
   sampler$par_group <- list(...)$par_groups
+  if(is.null(sampler$par_group)) sampler$par_group <- rep(1, n_pars)
   sampler$is_blocked <- sampler$par_group %in% which(table(sampler$par_group) > 1)
   sampler$prior <- get_prior_standard(prior, n_pars, sample = F,
-                                      group_des = group_design)
+                                      group_design = group_design)
   sampler$group_designs <- group_design
   return(sampler)
 }
@@ -82,7 +83,7 @@ calculate_implied_means <- function(mean_designs, beta_params, n_pars) {
   return(mu_implied)
 }
 
-get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, selection = "mu", design = NULL, group_des = NULL,
+get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, selection = "mu", design = NULL, group_design = NULL,
                                par_groups = NULL){
   # Checking and default priors
   if(is.null(prior)){
@@ -96,8 +97,8 @@ get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1
   }
 
   # Number of additional parameters from design matrices
-  if(!is.null(group_des)){
-    n_additional <- n_additional_group_pars(group_des)
+  if(!is.null(group_design)){
+    n_additional <- n_additional_group_pars(group_design)
   } else{
     n_additional <- 0
   }
@@ -126,32 +127,13 @@ get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1
       # Sample beta (all parameters including regressors)
       beta <- t(mvtnorm::rmvnorm(N, mean = prior$theta_mu_mean,
                              sigma = prior$theta_mu_var))
-      rownames(beta) <- par_names
-
-      # Calculate mu (implied means) if we have group designs
-      if(!is.null(group_des)) {
-        # Prepare group designs in proper format
-        group_designs <- add_group_design(par_names, group_des, N)
-
-        # Calculate mean design matrices
-        mean_designs <- calculate_mean_design(group_designs, n_pars)
-
-        # Calculate implied means for each sample
-        mu <- matrix(0, nrow = n_pars, ncol = N)
-        for (i in 1:N) {
-          mu[, i] <- calculate_implied_means(mean_designs, beta[, i], n_pars)
+      rownames(beta) <- add_group_par_names(par_names, group_design)
+      if(selection %in% c("beta", "mu", "alpha")){
+        samples$theta_mu <- beta
+        if(selection %in% c("mu", "alpha")){
+          samples$par_names <- par_names
+          samples$group_designs <- group_design
         }
-        rownames(mu) <- par_names
-      } else {
-        # If no group designs, mu and beta are the same
-        mu <- beta
-      }
-
-      if(selection %in% c("mu")){
-        samples$theta_mu <- mu
-      }
-      if(selection %in% c("beta")){
-        samples$theta_beta <- beta
       }
     }
     if(selection %in% c("sigma2", "covariance", "correlation", "Sigma", "alpha")) {
@@ -178,6 +160,8 @@ get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1
       if(selection != "alpha") samples$theta_var <- vars
     }
     if(selection %in% "alpha"){
+      mu <-implied_mean(sampler = list(samples = samples), 1:N)
+      samples <- list()
       samples$alpha <- get_alphas(mu, vars, "alpha")
     }
     out <- samples
@@ -518,7 +502,7 @@ bridge_group_and_prior_and_jac_standard <- function(
   prior_mu_log <- dmvnorm(theta_mu,
                           mean  = prior$theta_mu_mean,
                           sigma = prior$theta_mu_var,
-                          logd   = TRUE)
+                          log   = TRUE)
 
   # For the Jacobian of var1 => rowSums(theta_var1)
   # For the Jacobian of a    => rowSums(theta_a)
@@ -577,7 +561,7 @@ bridge_group_and_prior_and_jac_standard <- function(
         par_idx <- par_idx + ncol(group_designs[[k]])
       }
       # Now alpha_s ~ N(mu_s, var_curr)
-      group_ll <- group_ll + dmvnorm(alpha_s, mu_s, var_curr, logd = TRUE)
+      group_ll <- group_ll + dmvnorm(alpha_s, mu_s, var_curr, log = TRUE)
     }
 
     # 4) Prior on var1, var2, and a => same partial-block logic
@@ -663,14 +647,6 @@ bridge_add_group_standard <- function(all_samples, samples, idx){
   return(all_samples)
 }
 
-dmvnorm <- function(x, mean, sigma, logd = FALSE)
-{
-  if (is.null(dim(x)))            # plain numeric vector?
-    x <- matrix(x, nrow = 1)      # → 1 × p
-
-  dmvnorm_cpp(x, mean, sigma, logd)
-}
-
 # for IC ------------------------------------------------------------------
 
 group__IC_standard <- function(emc, stage="sample", filter=NULL) {
@@ -694,9 +670,9 @@ group__IC_standard <- function(emc, stage="sample", filter=NULL) {
   if(is.null(emc[[1]]$group_designs)){
     lls <- numeric(N)
     for(i in 1:N){
-      lls[i] <- sum(dmvnorm(t(alpha[,,i]), theta_mu[,i], theta_var[,,i], logd = T))
+      lls[i] <- sum(dmvnorm(t(alpha[,,i]), theta_mu[,i], theta_var[,,i], log = T))
     }
-    mean_pars_ll <-  sum(dmvnorm(t(mean_alpha), mean_mu, mean_var, logd = TRUE))
+    mean_pars_ll <-  sum(dmvnorm(t(mean_alpha), mean_mu, mean_var, log = TRUE))
   } else{
     # 3) Build design matrices
     group_designs <- add_group_design(emc[[1]]$par_names, emc[[1]]$group_designs, n_subj)
@@ -708,7 +684,7 @@ group__IC_standard <- function(emc, stage="sample", filter=NULL) {
     mean_pars_ll <- 0
     for(s in seq_len(n_subj)) {
       mean_pars_ll <- mean_pars_ll +
-        dmvnorm(mean_alpha[, s], mean_subj_means[, s], mean_var, logd=TRUE)
+        dmvnorm(mean_alpha[, s], mean_subj_means[, s], mean_var, log=TRUE)
     }
 
   }
@@ -717,4 +693,26 @@ group__IC_standard <- function(emc, stage="sample", filter=NULL) {
   mean_ll <- mean(lls)
   Dmean <- -2*mean_pars_ll
   list(mean_ll = mean_ll, Dmean = Dmean, minD = minD)
+}
+
+standard_subj_ll <- function(theta_var, theta_mu, alpha, n_subj, group_designs)
+{
+  N <- dim(theta_var)[3];  p <- nrow(theta_mu)
+  log2pi <- log(2*pi)
+
+  # pre‑allocate
+  ll <- numeric(N)
+
+  for (i in seq_len(N)) {
+
+    Sigma <- theta_var[,,i]
+    U     <- chol(Sigma)              # will error if non‑PD
+    rooti <- backsolve(U, diag(p))
+    log_const <- sum(log(diag(rooti))) - 0.5 * p * log2pi
+
+    mu  <- calculate_subject_means(group_designs, theta_mu[,i], n_subj, p)
+    z   <- t(alpha[,,i] - mu) %*% rooti      # n_subj × p
+    ll[i] <- -0.5 * sum(z^2) + n_subj*log_const
+  }
+  ll
 }

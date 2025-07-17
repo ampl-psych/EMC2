@@ -10,6 +10,7 @@
 #' @param design Design list for which a prior is constructed, typically the output of `design()`
 #' @param update Prior list from which to copy values
 #' @param type Character. What type of group-level model you plan on using i.e. `diagonal`
+#' @param group_design An `emc.group_design` object created with `group_design()`
 #' @param do_ask Character. For which parameter types or hyperparameters to ask for prior specification,
 #' i.e. `Sigma`, `mu` or `loadings` for factor models, but `theta_mu_mean` or `A` also works.
 #' @param fill_default Boolean, If `TRUE` will fill all non-specified parameters, and parameters outside of `do_ask`, to default values
@@ -39,21 +40,21 @@
 #' # We can easily update the prior
 #' prior_DDMat0E <- prior(design_DDMat0E, update = prior_DDMaE)
 #' @export
-prior <- function(design, type = NULL, update = NULL,
+prior <- function(design, type = NULL, group_design = NULL, update = NULL,
                       do_ask = NULL, fill_default = TRUE, ...){
   if(!is.null(update) && is.null(type)){
     type <- attr(update, "type")
   }
   if(is.null(type)) type <- 'standard'
   if(type %in% c("diagonal", "blocked")) type <- "standard"
-
-  input <- do.call(get_objects, c(list(design = design, type = type), update, list(...)))
+  args <- list(...)
+  args$group_design <- group_design
+  input <- do.call(get_objects, c(list(design = design, type = type), update, args))
   descriptions <- input$descriptions
   groups <- input$types
   group_descriptions <- input$type_descriptions
   orig <- input <- input$prior
   input <- input[names(input) %in% names(descriptions)]
-  args <- list(...)
   input <- check_var_prior(input)
   args <- check_var_prior(args)
   update <- check_var_prior(update)
@@ -94,7 +95,7 @@ prior <- function(design, type = NULL, update = NULL,
     return(x)
   })
   attr(prior, "design") <- design
-  attr(prior, "group_design") <- list(...)$group_design
+  attr(prior, "group_design") <- group_design
   class(prior) <- "emc.prior"
   return(prior)
 }
@@ -237,7 +238,8 @@ prompt_for_prior_updates <- function(input, updated_flags, descriptions) {
 }
 
 
-check_prior <- function(prior, sampled_p_names){
+check_prior <- function(prior, sampled_p_names, group_design = NULL){
+  sampled_p_names <- add_group_par_names(sampled_p_names, group_design)
   if (is.null(names(prior$theta_mu_mean)))
     names(prior$theta_mu_mean) <- sampled_p_names
   if(length(prior$theta_mu_mean) != length(sampled_p_names))
@@ -245,13 +247,13 @@ check_prior <- function(prior, sampled_p_names){
   if (!all(sort(names(prior$theta_mu_mean)) == sort(sampled_p_names)))
     stop("theta_mu_mean names not the same as sampled paramter names")
   # Make sure theta_mu_mean has same order as sampled parameters
-  pnams <- names(prior$theta_mu_mean)
   prior$theta_mu_mean <- prior$theta_mu_mean[sampled_p_names]
+  pnams <- names(prior$theta_mu_mean)
   if(!is.matrix(prior$theta_mu_var)) {
     if(length(prior$theta_mu_var) != length(sampled_p_names))
       stop("prior theta should be same length as estimated parameters (p_vector)")
     # Make sure theta_mu_var has same order as sampled parameters
-    names(prior$theta_mu_var) <- pnams
+    names(prior$theta_mu_var) <- sampled_p_names
     prior$theta_mu_var <- prior$theta_mu_var[sampled_p_names]
   } else {
     if(nrow(prior$theta_mu_var) != length(sampled_p_names))
@@ -605,8 +607,8 @@ mapped_pars.emc.prior <- function(x, p_vector = NULL, model = NULL, digits=3,rem
 
 #' @rdname sampled_pars
 #' @export
-sampled_pars.emc.prior <- function(x,model=NULL,doMap=FALSE, add_da = FALSE, all_cells_dm = FALSE, data=NULL){
-  return(sampled_pars(get_design(x), model = model, doMap = doMap,
+sampled_pars.emc.prior <- function(x,group_design=NULL,doMap=FALSE, add_da = FALSE, all_cells_dm = FALSE, data=NULL){
+  return(sampled_pars(get_design(x), group_design = group_design, doMap = doMap,
                           add_da = add_da, all_cells_dm = all_cells_dm, data = data))
 }
 

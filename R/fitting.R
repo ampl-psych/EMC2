@@ -154,9 +154,7 @@ run_emc <- function(emc, stage, stop_criteria,
 run_stages <- function(sampler, stage = "preburn", iter=0, verbose = TRUE, verboseProgress = TRUE,
                        particle_factor=50, search_width= NULL, n_cores=1)
 {
-
-  max_pars <- max(table(attr(sampler[[1]], "components")))
-  particles <- round(particle_factor*sqrt(max_pars))
+  particles <- round(particle_factor*sqrt(sampler$n_pars))
   if (!sampler$init) {
     sampler <- init(sampler, n_cores = n_cores)
   }
@@ -737,7 +735,7 @@ make_emc <- function(data,design,model=NULL,
     }
     if(length(prior_list) == length(data)){
       if(!is.null(prior_list[[i]])){
-        prior_list[[i]] <- check_prior(prior_list[[i]], sampled_p_names)
+        prior_list[[i]] <- check_prior(prior_list[[i]], sampled_p_names, group_design)
       }
     }
   }
@@ -819,9 +817,12 @@ check_duplicate_designs <- function(out){
   if(is.data.frame(out$data[[1]])) return(out)
   for(i in 1:length(out$data)){ # loop over subjects
     designs <- lapply(out$data[[i]], function(y) attr(y, "designs"))
-    # Find duplicate designs to replace
-    unq_idx <- match(designs, designs)
-    duplicacy <- duplicated(unq_idx)
+    duplicacy <- duplicated(designs)
+    unq_idx <-   sapply(seq_along(designs), function(i) {
+      for (j in seq_along(designs)) {
+        if (identical(designs[[i]], designs[[j]])) return(j)
+      }
+    })
     for(j in 1:length(out$data[[i]])){# Loop over data sets in this sub
       if(is.null(designs[[j]])) next
       if(duplicacy[j]){

@@ -217,7 +217,7 @@ convolve_design_matrix <- function(timeseries, events, factors = NULL, contrasts
     undershoot <- 12 # When does the negative time point occur
     dispersion <- .9 # Width of positive gamma
     u_dispersion <- .9 # Width of negative gamma
-    ratio <- .35 # Relative size of undershoot compared to overshoot
+    ratio <- .48 # Relative size of undershoot compared to overshoot
   } else{ # Different settings for SPM models
     undershoot <- 16
     dispersion <- 1

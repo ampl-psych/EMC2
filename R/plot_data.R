@@ -350,13 +350,13 @@ plot_stat <- function(input, post_predict = NULL, prior_predict = NULL, stat_fun
       }
     }
     if(length(stat_names) > 1){
-      if(!is.null(legendpos[1])) legend(x = legendpos[1], legend = stat_names, lty = lty, col = "black", bty = "n")
+      if(!is.na(legendpos[1])) legend(x = legendpos[1], legend = stat_names, lty = lty, col = "black", bty = "n")
     }
     if (length(data_sources) > 1) {
-      if(!is.null(legendpos[2])) legend(legendpos[2], legend = names(legend_map), lty = 1, col = legend_map, title = "Source", bty = "n", lwd = lwd_map)
+      if(!is.na(legendpos[2])) legend(legendpos[2], legend = names(legend_map), lty = 1, col = legend_map, title = "Source", bty = "n", lwd = lwd_map)
     }
   }
-  return(invisible(summary_df[,!grepl("group_key", colnames(summary_df))]))
+  return(invisible(lapply(summary_sources, function(x) x[,colnames(x) != "group_key"])))
 }
 
 
@@ -531,23 +531,6 @@ plot_density <- function(input, post_predict = NULL, prior_predict = NULL,
   get_range_args <- function(dargs) {
     c(dargs$from, dargs$to)
   }
-
-  # We'll define a small function to figure out the x-grid used for each data source
-  # We do that at plotting time to keep the same 512 points
-  build_x_grid <- function(src_type, src_name, group_key = NULL) {
-    # for postn or single data we found a from/to in a dictionary
-    if (src_type %in% c("data", 'posterior')) {
-      # if data was used, dens_list[['data']][[group_key]] => each level => length=512
-      # but we didn't store the x's. We'll reconstruct from the dots or from
-      rng <- quantile(data_sources[[src_name]]$rt, c(0, 0.99))
-      return(seq(rng[1], rng[2], length.out = 512))
-    } else if (src_type == "prior") {
-      rng2 <- quantile(data_sources[[src_name]]$rt, c(0.001, 0.975))
-      return(seq(rng2[1], rng2[2], length.out = 512))
-    }
-  }
-
-
   for (group_key in unique_group_keys) {
     tmp_dots <- dots
     tmp_posterior_args <- posterior_args
@@ -559,6 +542,8 @@ plot_density <- function(input, post_predict = NULL, prior_predict = NULL,
     do.call(plot, c(list(NA), plot_args))
     legend_map <- c()
     lwd_map <- numeric()
+    x_grid <- seq(xlim[1], xlim[2], length.out = 512)
+
     for (k in 1:length(data_sources)) {
       src_type <- sources[k]
       src_data <- data_sources[[k]]
@@ -580,7 +565,6 @@ plot_density <- function(input, post_predict = NULL, prior_predict = NULL,
         # dens_list[[src_name]][[group_key]] => list of defective_levels => vector of length=512
         cur_dens <- dens_list[[src_name]][[group_key]]
         if (!is.null(cur_dens)) {
-          x_grid <- build_x_grid(src_type, src_name, group_key)
           for (i in seq_along(defective_levels)) {
             lev <- defective_levels[i]
             yvals <- cur_dens[[lev]]
@@ -595,7 +579,6 @@ plot_density <- function(input, post_predict = NULL, prior_predict = NULL,
         # we have postn => look up dens_quants_list
         cur_quants <- dens_quants_list[[src_name]][[group_key]]
         if (!is.null(cur_quants)) {
-          x_grid <- build_x_grid(src_type, src_name, group_key)
           for (i in seq_along(defective_levels)) {
             lev <- defective_levels[i]
             m <- cur_quants[[lev]]
@@ -627,12 +610,12 @@ plot_density <- function(input, post_predict = NULL, prior_predict = NULL,
       }
     }
     # Add legends
-    if(!is.null(legendpos[1])){
+    if(!is.na(legendpos[1])){
       legend(legendpos[1], legend = defective_levels, lty = line_types, col = "black",
              title = defective_factor, bty = "n")
     }
     if (length(data_sources) > 1) {
-      if(!is.null(legendpos[2])){
+      if(!is.na(legendpos[2])){
         legend(legendpos[2], legend = names(legend_map), lty = 1, col = legend_map, title = "Source", bty = "n",
                lwd = lwd_map)
       }
@@ -950,7 +933,7 @@ plot_cdf <- function(input,
     }
 
     # Factor-level legend
-    if(!is.null(legendpos[1])){
+    if(!is.na(legendpos[1])){
       legend(legendpos[1], legend=defective_levels, lty=line_types, col="black",
              title=defective_factor, bty="n")
     }
@@ -958,7 +941,7 @@ plot_cdf <- function(input,
 
     # If multiple data sources, show source legend
     if (length(data_sources) > 1) {
-      if(!is.null(legendpos[2])){
+      if(!is.na(legendpos[2])){
         legend(legendpos[2], legend=names(legend_map), lty=1, col=legend_map,
                title="Source", bty="n", lwd = lwd_map)
       }
