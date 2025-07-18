@@ -17,24 +17,32 @@ suppress_output <- function(expr) {
 
 rDDM <- function(R,pars,ok=rep(TRUE,length(R)), precision=5e-3)
 {
-  bad <- rep(NA,nrow(pars))
-  out <- data.frame(response=bad,rt=bad)
-  out_ok <- out[ok,]
   pars <- pars[ok,]
   R <- R[ok]
   pars <- as.matrix(pars);
-  idx <- find_duplicate_indices(pars)
-  for(id in unique(idx)){
-    is_id <- which(idx == id)
-    cur_pars <- pars[is_id[1],]
-    tmp <- suppress_output(rWDM(N = length(is_id), a = cur_pars["a"]/cur_pars[ "s"], v = cur_pars["v"]/cur_pars[ "s"], t0 = cur_pars["t0"],
-                       w = cur_pars["Z"], sw = cur_pars["SZ"], sv = cur_pars["sv"]/cur_pars[ "s"],
-                       st0 = cur_pars["st0"], precision = precision))
-    tmp <- data.frame(response = tmp$response, rt = tmp$q)
-    out_ok[is_id,] <- tmp[sample(nrow(tmp)),]
+  # DDM gets rusty with large trial numbers so split them into separate lists
+  split_idx <- rep(1:ceiling(nrow(pars)/1e4), each = 1e4)
+  split_idx <- split_idx[1:nrow(pars)]
+  out_list <- vector("list", length(unique(split_idx)))
+  for(j in 1:length(unique(split_idx))){
+    pars_tmp <- pars[split_idx == j,]
+    idx <- find_duplicate_indices(pars_tmp)
+    out <- vector("list", length(unique(idx)))
+    for(id in unique(idx)){
+      is_id <- which(idx == id)
+      cur_pars <- pars_tmp[is_id[1],]
+      tmp <- suppress_output(rWDM(N = length(is_id), a = cur_pars["a"]/cur_pars[ "s"], v = cur_pars["v"]/cur_pars[ "s"], t0 = cur_pars["t0"],
+                                  w = cur_pars["Z"], sw = cur_pars["SZ"], sv = cur_pars["sv"]/cur_pars[ "s"],
+                                  st0 = cur_pars["st0"], precision = precision))
+      tmp <- data.frame(R = tmp$response, rt = tmp$q)
+      tmp <- tmp[sample(nrow(tmp)),] # probably not necessary
+      out[[id]] <- tmp
+    }
+    out_list[[j]] <- do.call(rbind, out)
   }
-  out[ok,] <- out_ok
-  cbind.data.frame(R=factor(out[,"response"], labels = levels(R), levels = c("lower", "upper")),rt=out[,"rt"])
+  out <- do.call(rbind, out_list)
+  out$R <- factor(out$R, labels = levels(R), levels = c("lower", "upper"))
+  return(out)
 }
 
 
