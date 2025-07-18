@@ -195,7 +195,7 @@ MDDM <- function(){
     # Probability function (CDF)
     pfun=function(rt,R,pars) pDDM(rt,R,pars),
     log_likelihood=function(pars,dadm,model,min_ll=log(1e-10)){
-      log_likelihood_ddm_missing(pars=pars, dadm = dadm, model = model, min_ll = min_ll)
+      log_likelihood_ddm_missing(p_vector=pars, dadm = dadm, model = model, min_ll = min_ll)
     }
   )
 }
