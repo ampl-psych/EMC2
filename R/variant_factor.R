@@ -5,8 +5,9 @@ sample_store_factor <- function(data, par_names, iters = 1, stage = "init", inte
   if(is.null(n_factors)){
     n_factors <- ncol(Lambda_mat)
   }
-  f_names <- colnames(Lambda_mat)
-  if(is.null(f_names)){
+  if(!is.null(Lambda_mat)){
+    f_names <- colnames(Lambda_mat)
+  } else{
     f_names <- paste0("F", 1:n_factors)
   }
   subject_ids <- unique(data$subjects)
