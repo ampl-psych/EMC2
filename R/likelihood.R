@@ -1170,8 +1170,8 @@ log_likelihood_race_ss <- function(pars,dadm,model,min_ll=log(1e-10))
     allLL[is.na(allLL)|is.nan(allLL)] <- min_ll
     allLL <- pmax(min_ll,allLL)
 
-    # TODO remove when we're happy with testing
-    llR <<- allLL
+    # # TODO remove when we're happy with testing
+    # llR <<- allLL
 
     sum(allLL[attr(dadm,"expand")])
 }
