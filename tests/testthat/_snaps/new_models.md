@@ -18,8 +18,8 @@
       [1] "init"
       
       $subj_ll
-             [,1]
-      1 -34.14854
+            [,1]
+      1 -13.6954
       
       $idx
       [1] 1
@@ -41,16 +41,16 @@
       8       8        1  left  left        NA
       9       9        1  left  left        NA
       10     10        1  left  left        NA
-      11     11        1 right  left        NA
-      12     12        1 right right 0.7486671
-      13     13        1 right right 1.0350038
-      14     14        1 right right 0.4898115
-      15     15        1 right right 0.7117752
+      11     11        1 right right 1.2853401
+      12     12        1 right right 0.5337337
+      13     13        1 right right 0.5287350
+      14     14        1 right right 0.4991414
+      15     15        1 right right 0.5803559
       16     16        1 right  left        NA
-      17     17        1 right right 1.2646380
-      18     18        1 right right 0.4848544
-      19     19        1 right right 0.4545908
-      20     20        1 right right 0.5352639
+      17     17        1 right  left        NA
+      18     18        1 right  left        NA
+      19     19        1 right  left        NA
+      20     20        1 right  left        NA
 
 # probit
 
@@ -61,16 +61,16 @@
       , , 1
       
                            1
-      mean_Sleft  -1.8345288
-      mean_Sright  0.5068369
+      mean_Sleft  -0.5126331
+      mean_Sright  0.8401962
       
       
       $stage
       [1] "init"
       
       $subj_ll
-             [,1]
-      1 -7.266329
+            [,1]
+      1 -9.45741
       
       $idx
       [1] 1
@@ -83,22 +83,22 @@
     Output
          trials subjects     S     R rt
       1       1        1  left  left NA
-      3       2        1  left  left NA
-      5       3        1  left right NA
+      3       2        1  left right NA
+      5       3        1  left  left NA
       7       4        1  left  left NA
-      9       5        1  left right NA
+      9       5        1  left  left NA
       11      6        1  left  left NA
       13      7        1  left  left NA
-      15      8        1  left  left NA
-      17      9        1  left right NA
+      15      8        1  left right NA
+      17      9        1  left  left NA
       19     10        1  left  left NA
-      21     11        1 right  left NA
-      23     12        1 right  left NA
-      25     13        1 right  left NA
+      21     11        1 right right NA
+      23     12        1 right right NA
+      25     13        1 right right NA
       27     14        1 right right NA
-      29     15        1 right  left NA
-      31     16        1 right  left NA
-      33     17        1 right right NA
+      29     15        1 right right NA
+      31     16        1 right right NA
+      33     17        1 right  left NA
       35     18        1 right right NA
       37     19        1 right right NA
       39     20        1 right right NA
