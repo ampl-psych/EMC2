@@ -1027,7 +1027,12 @@ make_sem_structure <- function(data = NULL,
     processed_covariate_names <- temp_processed_cov_names
     processed_covariates_df <- as.data.frame(subject_cov_list, stringsAsFactors = FALSE)
   } else {
-    processed_covariates_df <- data.frame(matrix(ncol = 0, nrow = 0))
+    if(is.null(design$Ffactors$subjects)){
+      n_sub <- designs[[1]]$Ffactors$subjects
+    } else{
+      n_sub <- designs$Ffactors$subjects
+    }
+    processed_covariates_df <- data.frame(matrix(ncol = 0, nrow = n_sub))
   }
   n_cov <- length(processed_covariate_names)
 
