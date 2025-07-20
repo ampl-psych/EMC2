@@ -1281,7 +1281,7 @@ pstopHybrid <- function(
 #'
 #' @return A model list with all the necessary functions to sample
 #' @export
-SShybrid <- function() {
+SSRDEX <- function() {
   list(
     type = "RACE",
     c_name = "SS_RDEX",
@@ -1353,5 +1353,74 @@ SShybrid <- function() {
 }
 
 
+SSRDEXnoC <- function() {
+  list(
+    type = "RACE",
+    p_types = c(
+      v = log(1), B = log(1), A = log(0), t0 = log(0), s = log(1),
+      muS = log(.3), sigmaS = log(.025), tauS = log(.05),
+      tf = qnorm(0), gf = qnorm(0),
+      exgS_lb = .05
+    ),
+    transform = list(
+      func = c(
+        v = "exp", B = "exp", A = "exp", t0 = "exp", s = "exp",
+        muS = "exp", sigmaS = "exp", tauS = "exp",
+        tf = "pnorm", gf = "pnorm",
+        exgS_lb = "identity"
+      )
+    ),
+    bound = list(
+      minmax = cbind(
+        v = c(1e-3, Inf), B = c(0, Inf), A = c(1e-4, Inf), t0 = c(0.05, Inf), s = c(0, Inf),
+        muS = c(0, Inf), sigmaS = c(1e-4, Inf), tauS = c(1e-4,Inf),
+        tf = c(.001, .999), gf = c(.001, .999),
+        exgS_lb = c(-Inf, Inf)
+      ),
+      exception = c(
+        v = 0, A = 0,
+        tf = 0, gf = 0,
+        exgS_lb = -Inf
+      )
+    ),
+    # Trial dependent parameter transform
+    Ttransform = function(pars, dadm) {
+      pars <- cbind(pars, b = pars[,"B"] + pars[,"A"])
+      pars <- cbind(pars, SSD = dadm$SSD)
+      pars <- cbind(pars, lI = as.numeric(dadm$lI))  # Only necessary for data generation.
+      return(pars)
+    },
+    # Density function (PDF) for single go racer
+    dfunG = function(rt, pars) {
+      return(dRDM(rt, pars))
+    },
+    # Probability function (CDF) for single go racer
+    pfunG = function(rt, pars) {
+      return(pRDM(rt, pars))
+    },
+    # Density function (PDF) for single stop racer
+    dfunS = function(rt, pars) {
+      parsS <- pars[ , c("muS", "sigmaS", "tauS", "SSD", "exgS_lb"), drop=FALSE]
+      return(dtexGaussianS(rt, parsS))
+    },
+    # Probability function (CDF) for single stop racer
+    pfunS = function(rt, pars) {
+      parsS <- pars[ , c("muS", "sigmaS", "tauS", "SSD", "exgS_lb"), drop=FALSE]
+      return(ptexGaussianS(rt, parsS))
+    },
+    # Stop probability integral
+    sfun = function(pars, n_acc, upper = Inf) {
+      return(pstopHybrid(pars, n_acc, upper = upper))
+    },
+    # Random function for SS race
+    rfun = function(data = NULL, pars) {
+      return(rSShybrid(data, pars, ok = attr(pars, "ok")))
+    },
+    # Race likelihood combining pfun and dfun
+    log_likelihood = function(pars, dadm, model, min_ll = log(1e-10)) {
+      return(log_likelihood_race_ss(pars, dadm, model, min_ll = min_ll))
+    }
+  )
+}
 
 
