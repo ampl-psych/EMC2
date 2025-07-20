@@ -1027,11 +1027,7 @@ make_sem_structure <- function(data = NULL,
     processed_covariate_names <- temp_processed_cov_names
     processed_covariates_df <- as.data.frame(subject_cov_list, stringsAsFactors = FALSE)
   } else {
-    processed_covariates_df <- data.frame(matrix(ncol = 0, nrow = length(unique_subject_ids)))
-    if (length(unique_subject_ids) > 0 && !is.null(rownames(data))) {
-        # This part is tricky if unique_subject_ids isn't directly usable as rownames
-        # For simplicity, if rownames are needed, user should ensure `data` has them or handle post-hoc
-    }
+    processed_covariates_df <- data.frame(matrix(ncol = 0, nrow = 0))
   }
   n_cov <- length(processed_covariate_names)
 
