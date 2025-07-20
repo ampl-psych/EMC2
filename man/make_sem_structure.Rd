@@ -5,7 +5,7 @@
 \title{Define Structural Equation Model (SEM) Matrices}
 \usage{
 make_sem_structure(
-  data,
+  data = NULL,
   design,
   covariate_cols = NULL,
   lambda_specs = NULL,

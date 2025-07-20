@@ -700,6 +700,19 @@ merge_group_level <- function(tmu, tmu_nuis, tvar, tvar_nuis, is_nuisance, subj_
 }
 
 
+#' Run a Group-level Model.
+#'
+#' Separate function for running only the group-level model. This can be useful in a
+#' two-step analysis. Works similar in functionality to make_emc,
+#' except also does the fitting and returns an emc object that works with
+#' most posterior checking tests (but not the data generation/posterior predictives).
+#'
+#' @param prior an emc.prior object.
+#' @param iter Number of MCMC samples to collect.
+#' @inheritParams make_emc
+#'
+#' @returns an emc object with only group-level samples
+#' @export
 run_hyper <- function(type, data, prior = NULL, iter = 1000, n_chains =3, ...){
   args <- list(...)
   if(length(dim(data)) == 3){

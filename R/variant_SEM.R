@@ -975,7 +975,7 @@ bridge_group_and_prior_and_jac_SEM <- function(proposals_group,
 #' print(sem_settings_definition$G_mat)
 #' print(head(sem_settings_definition$covariates))
 #'
-make_sem_structure <- function(data,
+make_sem_structure <- function(data = NULL,
                                  design,
                                  covariate_cols = NULL,
                                  lambda_specs = NULL,
@@ -988,7 +988,6 @@ make_sem_structure <- function(data,
   free_value_internal <- Inf
   par_names <- names(sampled_pars(design))
 
-  if (!is.data.frame(data)) stop("'data' must be a data frame.")
   if (!is.null(covariate_cols) && !is.character(covariate_cols)) stop("'covariate_cols' must be a character vector or NULL.")
   factor_names <- names(lambda_specs)
   n_pars <- length(par_names)
@@ -996,9 +995,11 @@ make_sem_structure <- function(data,
 
   processed_covariate_names <- character(0)
   processed_covariates_df <- NULL
-  unique_subject_ids <- unique(data[[subjects_col_internal]])
 
   if (!is.null(covariate_cols) && length(covariate_cols) > 0) {
+    if (!is.data.frame(data)) stop("'data' must be a data frame.")
+    unique_subject_ids <- unique(data[[subjects_col_internal]])
+
     subject_cov_list <- vector("list", length(covariate_cols))
     names(subject_cov_list) <- covariate_cols
     temp_processed_cov_names <- character(length(covariate_cols))
