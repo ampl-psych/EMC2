@@ -470,7 +470,6 @@ gibbs_step_SEM <- function(sampler, alpha){
   ## ---- derived population moments ----------------------------------------
   x_mu  <- colMeans(covariates)
   x_var <- cov(covariates)
-  browser()
   B0_inv  <- solve(diag(n_factors) - B)
   pop_mean <- drop(mu + lambda %*% B0_inv %*% G %*% x_mu + K %*% x_mu)
   pop_var  <- lambda %*% B0_inv %*% (G %*% x_var %*% t(G) +
