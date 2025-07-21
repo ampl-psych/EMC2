@@ -244,11 +244,11 @@ double pLU(Rcpp::NumericMatrix pars,
            double UT,
            LogicalVector is_ok) {
   NumericVector pL = f_integrate(pars, winner, dfun, pfun, min_ll, LT, LC, is_ok);
-  if ((pL[2] != 0) | traits::is_nan<REALSXP>(pL[0])) {
+  if ((pL[2] != 0) || traits::is_nan<REALSXP>(pL[0])) {
     return NA_REAL;
   }
   NumericVector pU = f_integrate(pars, winner, dfun, pfun, min_ll, UC, UT, is_ok);
-  if ((pU[2] != 0) | traits::is_nan<REALSXP>(pU[0])) {
+  if ((pU[2] != 0) || traits::is_nan<REALSXP>(pU[0])) {
     return NA_REAL;
   }
   double out = std::max(0.0, std::min(pL[0], 1.0)) + std::max(0.0, std::min(pU[0], 1.0));

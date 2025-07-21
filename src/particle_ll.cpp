@@ -419,7 +419,7 @@ double c_log_likelihood_race_missing(NumericMatrix pars, DataFrame data,
 
   Nullable<double> LT_ = data.attr("LT");
   Nullable<double> UT_ = data.attr("UT");
-  bool dotrunc = LT_.isNotNull() | UT_.isNotNull();
+  bool dotrunc = LT_.isNotNull() || UT_.isNotNull();
 
   if (LT_.isNotNull()) {
     LT = as<double>(LT_);
