@@ -376,7 +376,7 @@ gibbs_step_SEM <- function(sampler, alpha){
       lambda_y[j, isFree] <- rmvnorm(1, lam_mu, lam_sig)
     }
   }
-  if(n_cov > 1){
+  if(n_cov > 0){
     K      <- lambda_y[, seq_len(n_cov),        drop = FALSE]
     lambda <- lambda_y[, -(seq_len(n_cov)),     drop = FALSE]
   } else{
