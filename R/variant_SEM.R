@@ -25,7 +25,7 @@ sample_store_SEM <- function(data, par_names, iters = 1, stage = "init", integra
     theta_var = array(NA_real_,dim = c(n_pars, n_pars, iters),dimnames = list(par_names, par_names, NULL)),
     lambda = array(NA_real_,dim = c(n_pars, n_factors, iters),dimnames = list(par_names, factor_names, NULL)),
     B = array(NA_real_,dim = c(n_factors, n_factors, iters),dimnames = list(factor_names, factor_names, NULL)),
-    epsilon_inv = array(NA_real_,dim = c(n_pars, n_pars, iters),dimnames = list(par_names, par_names, NULL)),
+    epsilon_inv = array(NA_real_,dim = c(n_pars, iters),dimnames = list(par_names, NULL)),
     delta_inv = array(NA_real_, dim = c(n_factors, n_factors, iters), dimnames = list(factor_names, factor_names, NULL)),
     eta = array(NA_real_, dim = c(n_subjects, n_factors, iters), dimnames = list(subject_ids, factor_names, NULL)),
     K = array(NA_real_, dim = c(n_pars, n_cov, iters), dimnames = list(par_names, x_names, NULL)),
@@ -190,7 +190,7 @@ get_prior_SEM <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, s
         samples$B <- B
       }
     }
-    if(selection %in% c("loadings", "alpha", "mu_implied", "Sigma", "correlation", "covariance", "sigma2")){
+    if(selection %in% c("loadings", "std_loadings", "alpha", "mu_implied", "Sigma", "correlation", "covariance", "sigma2")){
       lambda <- array(0, dim = c(n_pars, n_factors, N))
       for(i in 1:n_factors){
         lambda[,i,] <- t(mvtnorm::rmvnorm(N, sigma = diag(prior$lambda_var[i], n_pars)))
@@ -198,15 +198,15 @@ get_prior_SEM <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, s
       lambda <- constrain_lambda(lambda, Lambda_mat)
       rownames(lambda) <- par_names
       colnames(lambda) <- factor_names
-      if(selection %in% "loadings"){
+      if(selection %in% c("loadings", "std_loadings")){
         samples$lambda <- lambda
       }
     }
-    if(selection %in% c("residuals", "alpha", "correlation", "Sigma", "covariance", "sigma2")) {
+    if(selection %in% c("residuals", "std_loadings", "alpha", "correlation", "Sigma", "covariance", "sigma2")) {
       epsilon_inv <- t(matrix(rgamma(n_pars*N, shape = prior$a_e, rate = prior$b_e),
                             ncol = n_pars, byrow = T))
       rownames(epsilon_inv) <- par_names
-      if(selection %in% "residuals"){
+      if(selection %in% c("residuals", "std_loadings")){
         samples$epsilon_inv <- epsilon_inv
       }
     }
@@ -263,7 +263,7 @@ get_startpoints_SEM<- function(pmwgs, start_mu, start_var){
   if (is.null(start_mu)) start_mu <- rnorm(pmwgs$prior$theta_mu_mean, sd = sqrt(pmwgs$prior$theta_mu_var))
   if (is.null(start_var)) start_var <- riwish(n_pars * 3,diag(n_pars))
   start_delta_inv <- diag(1, pmwgs$n_factors)
-  start_epsilon_inv <- diag(1, n_pars)
+  start_epsilon_inv <- rep(1, n_pars)
   start_eta <- matrix(0, nrow = pmwgs$n_subjects, ncol = pmwgs$n_factors)
 
   start_lambda <- matrix(0, nrow = n_pars, ncol = pmwgs$n_factors)
@@ -294,7 +294,7 @@ fill_samples_SEM <- function(samples, group_level, proposals, j = 1, n_pars){
   samples$B[,,j] <- group_level$B
   samples$K[,,j] <- group_level$K
   samples$G[,,j] <- group_level$G
-  samples$epsilon_inv[,,j] <- group_level$epsilon_inv
+  samples$epsilon_inv[,j] <- group_level$epsilon_inv
   samples$delta_inv[,,j] <- group_level$delta_inv
   samples$eta[,,j] <- group_level$eta
   samples <- fill_samples_base(samples, group_level, proposals, j = j, n_pars)
@@ -325,7 +325,7 @@ gibbs_step_SEM <- function(sampler, alpha){
   ## current state -----------------------------------------------------------
   eta         <- matrix(last$eta,     n_subjects, n_factors)
   delta_inv   <- matrix(last$delta_inv, n_factors, n_factors)
-  epsilon_inv <- last$epsilon_inv
+  epsilon_inv <- diag(last$epsilon_inv)
   lambda      <- matrix(last$lambda,  n_pars,    n_factors)
   B           <- matrix(last$B,       n_factors, n_factors)
   K           <- matrix(last$K,       n_pars,    n_cov)
@@ -485,7 +485,7 @@ gibbs_step_SEM <- function(sampler, alpha){
        B           = B,
        K           = K,
        G           = G,
-       epsilon_inv = epsilon_inv,
+       epsilon_inv = diag(epsilon_inv),
        delta_inv   = delta_inv,
        alpha       = t(y),
        subj_mu         = pop_mean,
@@ -503,7 +503,7 @@ last_sample_SEM <- function(store) {
     K = store$K[,,store$idx],
     G = store$G[,,store$idx],
     delta_inv = store$delta_inv[,,store$idx],
-    epsilon_inv = store$epsilon_inv[,,store$idx]
+    epsilon_inv = store$epsilon_inv[,store$idx]
   )
 }
 
@@ -517,7 +517,7 @@ get_group_level_SEM <- function(parameters, s){
 get_conditionals_SEM <- function(s, samples, n_pars, iteration = NULL, idx = NULL){
   iteration <- ifelse(is.null(iteration), samples$iteration, iteration)
   if(is.null(idx)) idx <- 1:n_pars
-  epsilon_inv <- log(apply(samples$epsilon_inv[idx,idx,],3 , diag))
+  epsilon_inv <- log(samples$epsilon_inv[idx,])
   eta <- matrix(samples$eta[s,,], nrow = samples$n_factors)
   Lambda_mat <- samples$sem_settings$Lambda_mat
   lambda <- apply(samples$lambda[idx,,,drop = F], 3, unwind_lambda, Lambda_mat[idx,])
@@ -529,7 +529,7 @@ get_conditionals_SEM <- function(s, samples, n_pars, iteration = NULL, idx = NUL
                      dependent.ind = 1:n_pars, given.ind = (n_pars + 1):length(mu_tilde),
                      X.given = c(samples$theta_mu[idx,iteration],
                                  samples$eta[s,,iteration],
-                                 log(diag(samples$epsilon_inv[idx,idx, iteration])),
+                                 log(samples$epsilon_inv[idx, iteration]),
                                  unwind_lambda(samples$lambda[idx,, iteration], Lambda_mat[idx,])))
   return(list(eff_mu = condmvn$condMean, eff_var = condmvn$condVar))
 }
@@ -538,7 +538,7 @@ filtered_samples_SEM <- function(sampler, filter){
   out <- list(
     theta_mu = sampler$samples$theta_mu[, filter],
     lambda = sampler$samples$lambda[, , filter, drop = F],
-    epsilon_inv = sampler$samples$epsilon_inv[,, filter],
+    epsilon_inv = sampler$samples$epsilon_inv[, filter],
     eta = sampler$samples$eta[, , filter, drop = F],
     alpha = sampler$samples$alpha[, , filter],
     n_factors = sampler$n_factors,
@@ -649,7 +649,7 @@ bridge_add_group_SEM <- function(all_samples, samples, idx){
   all_samples <- cbind(all_samples, t(matrix(apply(samples$samples$K[,,idx,drop = F], 3, unwind_lambda, K_mat), ncol = nrow(all_samples))))
   all_samples <- cbind(all_samples, t(matrix(apply(samples$samples$G[,,idx,drop = F], 3, unwind_lambda, G_mat), ncol = nrow(all_samples))))
 
-  all_samples <- cbind(all_samples, t(log(matrix(apply(samples$samples$epsilon_inv[,,idx, drop = F], 3, diag), ncol = nrow(all_samples)))))
+  all_samples <- cbind(all_samples, t(log(samples$samples$epsilon_inv[,idx])))
 
   if (is.null(factor_groups_bs_add)) {
       factor_groups_bs_add <- 1:samples$n_factors
