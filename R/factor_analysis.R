@@ -233,6 +233,20 @@ rearrange_loadings <- function(lambda, metric = c("ssq", "absmean"))
   return(lambda_re)
 }
 
+
+standardize_loadings_SEM <- function(loadings, variances, psi_inv){
+  new_loadings <- loadings
+  n_pars <- nrow(loadings)
+  for(i in 1:dim(loadings)[3]){
+    Dinv <- 1/sqrt(diag(variances[,,i]))
+    psi <- solve(psi_inv[,,i])
+    Deta   <-  sqrt(diag(psi))     # length‑k vector
+    new_loadings[,,i] <- (loadings[,,i]*Dinv)*rep(Deta, each = n_pars)
+  }
+  return(new_loadings)
+}
+
+
 standardize_loadings <- function(loadings, residuals){
   stdize_set <- function(samples = NULL, idx = NULL, loadings = NULL, residuals = NULL){
     if(is.null(loadings)) loadings <- samples$samples$lambda[,,idx, drop = F]

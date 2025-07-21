@@ -202,15 +202,15 @@ get_prior_SEM <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, s
         samples$lambda <- lambda
       }
     }
-    if(selection %in% c("residuals", "std_loadings", "alpha", "correlation", "Sigma", "covariance", "sigma2")) {
+    if(selection %in% c("residuals", "alpha", "correlation", "Sigma", "covariance", "sigma2")) {
       epsilon_inv <- t(matrix(rgamma(n_pars*N, shape = prior$a_e, rate = prior$b_e),
                             ncol = n_pars, byrow = T))
       rownames(epsilon_inv) <- par_names
-      if(selection %in% c("residuals", "std_loadings")){
+      if(selection %in% c("residuals")){
         samples$epsilon_inv <- epsilon_inv
       }
     }
-    if(selection %in% c("factor_residuals", "alpha", "correlation", "Sigma", "covariance", "sigma2")) {
+    if(selection %in% c("factor_residuals", "std_loadings", "alpha", "correlation", "Sigma", "covariance", "sigma2")) {
       delta_inv <- array(0, dim = c(n_factors, n_factors, N))
       for(i in 1:N){
         for (group_id in unique_factor_groups_prior) {
@@ -227,7 +227,7 @@ get_prior_SEM <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, s
         }
       }
       rownames(delta_inv) <- colnames(delta_inv) <- factor_names
-      if(selection %in% "factor_residuals"){
+      if(selection %in% c("factor_residuals", "std_loadings")){
         samples$delta_inv <- delta_inv
       }
     }
@@ -239,7 +239,7 @@ get_prior_SEM <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, s
       }
       if(selection != "alpha") samples$mu_implied <- mu_implied
     }
-    if(selection %in% c("sigma2", "covariance", "correlation", "Sigma", "alpha")) {
+    if(selection %in% c("sigma2", "covariance", "correlation", "Sigma", "alpha", "std_loadings")) {
       vars <- array(NA_real_, dim = c(n_pars, n_pars, N))
       colnames(vars) <- rownames(vars) <- par_names
       for(i in 1:N){

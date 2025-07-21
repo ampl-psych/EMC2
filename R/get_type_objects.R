@@ -465,7 +465,9 @@ get_objects_SEM <- function(selection, sample_prior, return_prior, design = NULL
       return(lapply(sampler, FUN = get_mu_implied, idx))
     }
     if(selection == "std_loadings"){
-      return(lapply(sampler, FUN = function(x) standardize_loadings(x$samples$lambda[,,idx, drop = F], 1/x$samples$epsilon_inv[,idx,drop = F])))
+      return(lapply(sampler, FUN = function(x) standardize_loadings_SEM(x$samples$lambda[,,idx, drop = F],
+                                                                        x$samples$theta_var[,,idx, drop = F],
+                                                                        x$samples$delta_inv[,,idx, drop = F])))
     }
     return(get_base(sampler, idx, selection))
   }
