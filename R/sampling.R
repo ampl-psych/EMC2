@@ -713,7 +713,7 @@ merge_group_level <- function(tmu, tmu_nuis, tvar, tvar_nuis, is_nuisance, subj_
 #'
 #' @returns an emc object with only group-level samples
 #' @export
-run_hyper <- function(type, data, prior = NULL, iter = 1000, n_chains =3, ...){
+run_hyper <- function(type = "standard", data, prior = NULL, iter = 1000, n_chains =3, ...){
   args <- list(...)
   if(length(dim(data)) == 3){
     data_input <- data

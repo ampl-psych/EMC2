@@ -4,7 +4,14 @@
 \alias{run_hyper}
 \title{Run a Group-level Model.}
 \usage{
-run_hyper(type, data, prior = NULL, iter = 1000, n_chains = 3, ...)
+run_hyper(
+  type = "standard",
+  data,
+  prior = NULL,
+  iter = 1000,
+  n_chains = 3,
+  ...
+)
 }
 \arguments{
 \item{type}{A string indicating whether to run a \code{standard} group-level, \code{blocked}, \code{diagonal}, \code{factor}, or \code{single} (i.e., non-hierarchical) model.}
