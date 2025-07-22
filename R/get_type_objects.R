@@ -424,9 +424,7 @@ get_objects_SEM <- function(selection, sample_prior, return_prior, design = NULL
       } else{
         dots <- list(...)
         if(!is.null(sampler)){
-          dots <- add_defaults(dots, K_mat = attr(sampler[[1]], "K_mat"), B_mat = attr(sampler[[1]], "B_mat"),
-                               covariates = sampler[[1]]$covariates,
-                               Lambda_mat = attr(sampler[[1]], "Lambda_mat"), G_mat = attr(sampler[[1]], "G_mat"))
+          dots <- add_defaults(dots, sem_settings = sampler[[1]]$sem_settings)
         }
         sampler <- list(list(samples = do.call(get_prior_SEM,
                                                c(list(prior = prior, design = design,
