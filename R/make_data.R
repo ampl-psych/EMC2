@@ -1,5 +1,6 @@
 make_missing <- function(data,LT=0,UT=Inf,LC=0,UC=Inf,
-                         LCresponse=TRUE,UCresponse=TRUE,LCdirection=TRUE,UCdirection=TRUE)
+                         LCresponse=TRUE,UCresponse=TRUE,LCdirection=TRUE,UCdirection=TRUE,pc=NULL,
+                         verbose=TRUE)
 {
 
   censor <- function(data,L=0,U=Inf,Ld=TRUE,Ud=TRUE,Lr=TRUE,Ur=TRUE)
@@ -23,12 +24,14 @@ make_missing <- function(data,LT=0,UT=Inf,LC=0,UC=Inf,
   }
 
   pick <- is.infinite(data$rt) | (data$rt>LT & data$rt<UT)
+  if (verbose & (!any(pick))) message("Proportion of data truncated: ",mean(pick))
   pick[is.na(pick)] <- TRUE
   out <- censor(data[pick,],L=LC,U=UC,Lr=LCresponse,Ur=UCresponse,Ld=LCdirection,Ud=UCdirection)
-  if (!all(LC == 0)) attr(out,"LC") <- LC
-  if (!all(UC == Inf)) attr(out,"UC") <- UC
-  if (!all(LT == 0)) attr(out,"LT") <- LT
-  if (!all(UT == Inf)) attr(out,"UT") <- UT
+  if (any(LC != 0)) attr(out,"LC") <- LC
+  if (any(UC != Inf)) attr(out,"UC") <- UC
+  if (any(LT != 0)) attr(out,"LT") <- LT
+  if (any(UT != Inf)) attr(out,"UT") <- UT
+  if (!is.null(pc)) attr(out,"pc") <- pc[pick]
   out
 }
 
@@ -273,21 +276,23 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
   for (i in dimnames(Rrt)[[2]]) data[[i]] <- Rrt[,i]
   data <- make_missing(data[,names(data)!="winner"],LT,UT,LC,UC,
     LCresponse,UCresponse,LCdirection,UCdirection)
+
   if ( !is.null(pc) ) {
     if (!any(is.infinite(data$rt)) & any(is.na(data$R)))
       stop("Cannot have contamination and censoring with no direction and response")
     contam <- runif(length(pc)) < pc
     data[contam,"R"] <- NA
-    if ( LC!=0 | is.finite(UC) ) { # censoring
+    if ( any(LC!=0) | any(is.finite(UC)) ) { # censoring
       if ( (LCdirection & UCdirection) &  !rtContaminantNA)
         stop("Cannot have contamination with a mixture of censor directions")
-      if (rtContaminantNA & ((is.finite(LC) & !LCresponse & !LCdirection) |
-                              (is.finite(UC) & !UCresponse & !UCdirection)))
+      if (rtContaminantNA & ((any(is.finite(LC)) & !LCresponse & !LCdirection) |
+                             (any(is.finite(UC)) & !UCresponse & !UCdirection)))
         stop("Cannot have contamination and censoring with no direction and response")
       if (rtContaminantNA | (!LCdirection & !UCdirection)) data[contam,"rt"] <- NA else
         if (LCdirection) data[contam,"rt"] <- -Inf  else data[contam,"rt"] <- Inf
     } else data[contam,"rt"] <- NA
   }
+
   attr(data,"p_vector") <- parameters;
   data
 }
