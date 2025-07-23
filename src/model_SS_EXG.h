@@ -971,12 +971,12 @@ NumericVector pEXG_old(NumericVector q,
 
   for (int i = 0; i < n; i++){
     if (!traits::is_infinite<REALSXP>(q[i])){
-      if (tau > .05 * sigma){
+//      if (tau > .05 * sigma){
         double z_i = q[i] - mu - (sigma * sigma) / tau;
         cdf[i] = R::pnorm((q[i] - mu) / sigma, 0., 1., true, false) - std::exp(std::log(R::pnorm(z_i / sigma, 0., 1., true, false)) + (std::pow((mu + (sigma * sigma / tau)), 2) - mu * mu - 2. * q[i] * (sigma * sigma / tau)) / (2. * sigma * sigma));
-      } else {
-        cdf[i] = R::pnorm(q[i], mu, sigma, true, false);
-      }
+//      } else {
+//        cdf[i] = R::pnorm(q[i], mu, sigma, true, false);
+//      }
     } else {
       if (q[i] < 0) {
         cdf[i] = 0.;
@@ -1017,12 +1017,12 @@ NumericVector dEXG_old(NumericVector x,
   }
 
   for (int i = 0; i < n; i++){
-    if (tau > .05 * sigma){
+//    if (tau > .05 * sigma){
       double z_i = x[i] - mu - (sigma * sigma) / tau;
       pdf[i] = - std::log(tau) - (z_i + (sigma * sigma)/(2. * tau)) / tau + std::log(R::pnorm(z_i / sigma, 0., 1., true, false));
-    } else {
-      pdf[i] = R::dnorm(x[i], mu, sigma, true);
-    }
+//    } else {
+//      pdf[i] = R::dnorm(x[i], mu, sigma, true);
+//    }
   }
   if (!log_d){
     for(int i = 0; i < n; i++){
