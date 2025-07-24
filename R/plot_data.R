@@ -174,7 +174,7 @@ prep_data_plot <- function(input, post_predict, prior_predict, to_plot, limits,
   # Compute xlim based on quantiles and perform checks
   for(j in 1:length(datasets)){
     datasets[[j]] <- calc_functions(functions, datasets[[j]])
-    datasets[[j]] <- check_data_plot(datasets[[j]], defective_factor, subject, factors, remove_na = FALSE)
+    datasets[[j]] <- check_data_plot(datasets[[j]], defective_factor, subject, factors, remove_na)
     if(sources[j] %in% limits){
       if(sources[j] == "prior"){
         x_lim_probs <- c(0, 0.95)
