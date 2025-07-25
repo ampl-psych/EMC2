@@ -101,7 +101,11 @@ SBC_single <- function(design_in, prior_in, replicates = 250, trials = 100,
   # Draw prior samples
   prior_alpha <- parameters(prior_in, N = replicates, selection = "alpha")
   rank_alpha <- data.frame()
-  if(!is.null(fileName)) save(prior_alpha, file = fileName)
+
+  # DEBUG
+  #  if(!is.null(fileName)) save(prior_alpha, file = fileName)
+  save(prior_alpha,file=paste0("alpha",fileName))
+
   i <- 1
   if(dots$cores_per_chain > 1 & verbose) print("Since cores_per_chain > 1, estimating multiple data sets simultaneously")
   par_names <- names(sampled_pars(design_in))
@@ -117,6 +121,10 @@ SBC_single <- function(design_in, prior_in, replicates = 250, trials = 100,
       data <- rbind(data, tmp)
       i <- i + 1
     }
+
+    # DEBUG
+    save(data,file=paste0("dat",i,fileName))
+
     if(plot_data){
       plot_density(data, factors = names(design_in$Ffactors)[names(design_in$Ffactors) != "subjects"])
     }
