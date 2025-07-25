@@ -1,6 +1,5 @@
 make_missing <- function(data,LT=0,UT=Inf,LC=0,UC=Inf,
-                         LCresponse=TRUE,UCresponse=TRUE,LCdirection=TRUE,UCdirection=TRUE,pc=NULL,
-                         verbose=TRUE)
+                         LCresponse=TRUE,UCresponse=TRUE,LCdirection=TRUE,UCdirection=TRUE)
 {
 
   censor <- function(data,L=0,U=Inf,Ld=TRUE,Ud=TRUE,Lr=TRUE,Ur=TRUE)
@@ -24,14 +23,12 @@ make_missing <- function(data,LT=0,UT=Inf,LC=0,UC=Inf,
   }
 
   pick <- is.infinite(data$rt) | (data$rt>LT & data$rt<UT)
-  if (verbose & (!any(pick))) message("Proportion of data truncated: ",mean(pick))
   pick[is.na(pick)] <- TRUE
   out <- censor(data[pick,],L=LC,U=UC,Lr=LCresponse,Ur=UCresponse,Ld=LCdirection,Ud=UCdirection)
-  if (any(LC != 0)) attr(out,"LC") <- LC
-  if (any(UC != Inf)) attr(out,"UC") <- UC
-  if (any(LT != 0)) attr(out,"LT") <- LT
-  if (any(UT != Inf)) attr(out,"UT") <- UT
-  if (!is.null(pc)) attr(out,"pc") <- pc[pick]
+  if (!all(LC == 0)) attr(out,"LC") <- LC
+  if (!all(UC == Inf)) attr(out,"UC") <- UC
+  if (!all(LT == 0)) attr(out,"LT") <- LT
+  if (!all(UT == Inf)) attr(out,"UT") <- UT
   out
 }
 
