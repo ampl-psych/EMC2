@@ -326,7 +326,7 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
   }
   if('return_trialwise_parameters' %in% names(list(...))) {
     return_trialwise_parameters <- list(...)$return_trialwise_parameters
-    if(return_trialwise_parameters&!simulate_unconditional_on_data) stop('Cannot return trialwise parameters when simulating conditional on data')
+    # if(return_trialwise_parameters&!simulate_unconditional_on_data) stop('Cannot return trialwise parameters when simulating conditional on data')
   }
 
   ## For both conditional and unconditional simulations...
@@ -372,6 +372,9 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
     }
 
     pars <- add_bound(pars, model()$bound, data$lR)
+
+    ## SM: maybe of interest
+    if(return_trialwise_parameters) trialwise_parameters <- pars
     pars_ok <- attr(pars, 'ok')
     if(mean(!pars_ok) > .1){
       warning("More than 10% of parameter values fall out of model bounds, see <model_name>$bounds()")
