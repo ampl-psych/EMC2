@@ -392,7 +392,7 @@ get_response_probability_by_individual_ssd_quantile <- function(x, group_factor,
     subj_stats <- lapply(unique(data_subset$subjects), function(s) {
       df <- data_subset[data_subset$subject == s, ]
 
-      ssd_quants <- quantile(df$SSD, probs = probs, na.rm = TRUE, type = 1)
+      ssd_quants <- quantile(df$SSD, probs = probs, na.rm = TRUE)
       if (anyDuplicated(ssd_quants)) {
         stop("Duplicate quantile values detected. Please use fewer bins.")
       }
@@ -931,7 +931,7 @@ get_srrt_by_individual_ssd_quantile <- function(x, group_factor, probs, dots) {
     subj_stats <- lapply(unique(data_subset$subjects), function(s) {
       df <- data_subset[data_subset$subject == s, ]
 
-      ssd_quants <- quantile(df$SSD, probs = probs, na.rm = TRUE, type = 1)
+      ssd_quants <- quantile(df$SSD, probs = probs, na.rm = TRUE)
       if (anyDuplicated(ssd_quants)) {
         stop("Duplicate quantile values detected. Please use fewer bins.")
       }
