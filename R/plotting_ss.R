@@ -35,7 +35,7 @@
 #'
 #' @return Returns NULL invisibly
 #'
-plot_pr <- function(input,
+plot_ss_if <- function(input,
                     probs = seq(0,1, length.out=5),
                     post_predict = NULL,
                     prior_predict = NULL,
@@ -577,7 +577,7 @@ get_response_probability_by_global_ssd_quantile <- function(x, group_factor, pro
 #'
 #' @return Returns NULL invisibly
 #'
-plot_srrt <- function(input,
+plot_ss_srrt <- function(input,
                       probs = seq(0,1, length.out=5),
                       factors = NULL,
                       within_plot = NULL,
@@ -1065,9 +1065,6 @@ get_srrt_by_global_ssd_quantile <- function(x, group_factor, probs, dots) {
       summary_stats <- summary_stats[order(summary_stats$x_plot), ]
     }
 
-
-
-
     return(summary_stats)
   }
 
@@ -1083,4 +1080,83 @@ get_srrt_by_global_ssd_quantile <- function(x, group_factor, probs, dots) {
 
   names(out) <- group_names
   return(out)
+}
+
+compare_obs_vs_postpred <- function(obs_df, pred_df) {
+
+  # Only stop trials
+  obs_df <- obs_df[is.finite(obs_df$SSD), ]
+  pred_df <- pred_df[is.finite(pred_df$SSD), ]
+
+  # Compute observed response rates (using proportion of missing R as inhibition)
+  obs_rates <- aggregate(is.na(R) ~ subjects + SSD, data = obs_df, FUN = mean)
+  names(obs_rates)[names(obs_rates) == "is.na(R)"] <- "obs_resp_rate"
+
+  # Compute observed mean RTs
+  mean_rts <- aggregate(rt ~ subjects + SSD, data = obs_df, FUN = function(x) mean(x, na.rm = TRUE),
+                        na.action = na.pass)
+  names(mean_rts)[names(mean_rts) == "rt"] <- "obs_mean_rt"
+
+  # Compute posterior predictive response rates per sample
+  pred_df$sample_id <- pred_df$postn
+  pred_rates <- aggregate(is.na(R) ~ subjects + SSD + sample_id, data = pred_df, FUN = mean,
+                          na.action = na.pass)
+  names(pred_rates)[names(pred_rates) == "is.na(R)"] <- "pred_resp_rate"
+
+  # Compute posterior predictive mean RTs per sample
+  pred_rts <- aggregate(rt ~ subjects + SSD + sample_id, data = pred_df, FUN = function(x) mean(x, na.rm = TRUE),
+                        na.action = na.pass)
+  names(pred_rts)[names(pred_rts) == "rt"] <- "pred_mean_rt"
+
+  # Ensure consistent types
+  obs_rates$subjects <- as.character(obs_rates$subjects)
+  obs_rates$SSD <- as.character(obs_rates$SSD)
+  mean_rts$subjects <- as.character(mean_rts$subjects)
+  mean_rts$SSD <- as.character(mean_rts$SSD)
+  pred_rates$subjects <- as.character(pred_rates$subjects)
+  pred_rates$SSD <- as.character(pred_rates$SSD)
+  pred_rts$subjects <- as.character(pred_rts$subjects)
+  pred_rts$SSD <- as.character(pred_rts$SSD)
+
+  # Unique combinations
+  unique_combos <- unique(obs_rates[, c("subjects", "SSD")])
+
+  results <- do.call(rbind, lapply(1:nrow(unique_combos), function(i) {
+    subj <- unique_combos$subjects[i]
+    ssd  <- unique_combos$SSD[i]
+
+    # Observed values
+    obs_resp_rate <- obs_rates$obs_resp_rate[obs_rates$subjects == subj & obs_rates$SSD == ssd]
+    obs_rt <- mean_rts$obs_mean_rt[mean_rts$subjects == subj & mean_rts$SSD == ssd]
+
+    # Posterior predicted values
+    pred_resp_vals <- pred_rates$pred_resp_rate[pred_rates$subjects == subj & pred_rates$SSD == ssd]
+    pred_rt_vals <- pred_rts$pred_mean_rt[pred_rts$subjects == subj & pred_rts$SSD == ssd]
+
+    # Misfit calculations
+    p_gt_resp <- mean(obs_resp_rate > pred_resp_vals)
+    p_lt_resp <- mean(obs_resp_rate < pred_resp_vals)
+    misfit_resp <- 2 * min(p_gt_resp, p_lt_resp)
+
+    p_gt_rt <- mean(obs_rt > pred_rt_vals)
+    p_lt_rt <- mean(obs_rt < pred_rt_vals)
+    misfit_rt <- 2 * min(p_gt_rt, p_lt_rt)
+
+    data.frame(
+      subject = subj,
+      SSD = ssd,
+      obs_resp_rate = obs_resp_rate,
+      obs_mean_rt = obs_rt,
+      prob_obs_gt_pred_resp = p_gt_resp,
+      prob_obs_lt_pred_resp = p_lt_resp,
+      misfit_resp = misfit_resp,
+      prob_obs_gt_pred_rt = p_gt_rt,
+      prob_obs_lt_pred_rt = p_lt_rt,
+      misfit_rt = misfit_rt
+    )
+  }))
+
+  # remove only NA rows
+
+  return(results)
 }
