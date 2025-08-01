@@ -34,7 +34,7 @@
 #' @param ... Other graphical parameters for the real data lines.
 #'
 #' @return Returns NULL invisibly
-#'
+#' @export
 plot_ss_if <- function(input,
                     probs = seq(0,1, length.out=5),
                     post_predict = NULL,
@@ -579,7 +579,7 @@ get_response_probability_by_global_ssd_quantile <- function(x, group_factor, pro
 #' @param ... Other graphical parameters for the real data lines.
 #'
 #' @return Returns NULL invisibly
-#'
+#' @export
 plot_ss_srrt <- function(input,
                       probs = seq(0,1, length.out=5),
                       factors = NULL,
