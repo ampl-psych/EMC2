@@ -114,6 +114,9 @@ plot_ss_if <- function(input,
       global_ssd_pool <- df$SSD[is.finite(df$SSD)]
       global_ssd_breaks <- quantile(global_ssd_pool, probs = probs, na.rm = TRUE)
       dots$global_ssd_breaks <- global_ssd_breaks
+      if(any(duplicated(global_ssd_breaks))){
+        stop("Duplicate quantile values detected. Please use fewer bins.")
+      }
     } else {
       quantile_fun <- get_response_probability_by_individual_ssd_quantile
     }
@@ -930,7 +933,6 @@ get_srrt_by_individual_ssd_quantile <- function(x, group_factor, probs, dots) {
   compute_group_stats <- function(data_subset) {
     subj_stats <- lapply(unique(data_subset$subjects), function(s) {
       df <- data_subset[data_subset$subject == s, ]
-
       ssd_quants <- quantile(df$SSD, probs = probs, na.rm = TRUE)
       if (anyDuplicated(ssd_quants)) {
         stop("Duplicate quantile values detected. Please use fewer bins.")
