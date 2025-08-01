@@ -11,6 +11,7 @@
 #'
 #' @return A vector of SSDs with the same length as the number of rows in 'd'.
 #'         Trials without a stop signal are assigned Inf.
+#' @export
 SSD_function <- function(d,SSD=NA,pSSD=.25) {
   if (sum(pSSD)>1) stop("pSSD sum cannot exceed 1.")
   if (length(pSSD)==length(SSD)-1) pSSD <- c(pSSD,1-sum(pSSD))
