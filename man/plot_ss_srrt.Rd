@@ -9,7 +9,7 @@ plot_ss_srrt(
   probs = seq(0, 1, length.out = 5),
   factors = NULL,
   within_plot = NULL,
-  use_global_quantiles = FALSE,
+  use_global_quantiles = TRUE,
   post_predict = NULL,
   prior_predict = NULL,
   subject = NULL,
