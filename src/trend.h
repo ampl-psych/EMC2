@@ -138,6 +138,16 @@ NumericVector run_trend_rcpp(DataFrame data, List trend, NumericVector param, Nu
     // Get covariate data and handle NAs
     NumericVector covariate = as<NumericVector>(data[cur_cov]);
     LogicalVector NA_idx = is_na(covariate);
+
+    // In delta rules, the first trial should always be 'updated' with the q0-value, even when it is set to NA. Otherwise
+    // the first NA-trials will have an updated_covariate value of 0, which is incorrect.
+    if(kernel != "delta" && kernel != "delta2" && kernel != "deltab") {
+      if(NA_idx[0]) {
+        covariate[0] = trend_pars(0,1);
+        NA_idx[0] = false;
+      }
+    }
+
     // Create temporary vectors excluding NAs
     NumericVector cov_tmp = covariate[!NA_idx];
     NumericMatrix trend_pars_tmp = submat_rcpp(trend_pars, !NA_idx);
