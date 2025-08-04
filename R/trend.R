@@ -318,7 +318,6 @@ run_trend <- function(dadm, trend, param, trend_pars){
                         identity = 0)
   out <- numeric(nrow(dadm))
   updated_covariate <- matrix(nrow=nrow(dadm), ncol=length(trend$covariate))
-  #colnames(output_return) <-
   # fix, otherwise indexing will fail
   if(is.null(dim(trend_pars))) trend_pars <- t(t(trend_pars))
 
@@ -331,7 +330,11 @@ run_trend <- function(dadm, trend, param, trend_pars){
     if(trend$kernel %in% c('delta', 'delta2', 'deltab')) {
       # set to NA -- only trials where q0 == NA should be updated
       trend_pars[dadm$trials>min(dadm$trials),2] <- NA
+
+      # and the first trial should *always* be updated, even if NA.
+      if(is.na(dadm[1,cov_name])) dadm[1,cov_name] <- trend_pars[1,2]  # = q0
     }
+
     # Loop over covariates, first filter out NAs
     NA_idx <- is.na(dadm[,cov_name])
     if(sum(!NA_idx)==0) next # if all covariates are NA, nothing to update.
@@ -374,10 +377,12 @@ run_trend <- function(dadm, trend, param, trend_pars){
         out[NA_idx] <- NA
 
         ## except where the q0 value was assigned -- overwrite these with q0 such that this value will be fed forward
-        out[!is.na(trend_pars[,2])] <- trend_pars[!is.na(trend_pars[,2]),2]
-
+#        out[!is.na(trend_pars[,2])] <- trend_pars[!is.na(trend_pars[,2]),2]
         out <- na.locf(na.locf(out, na.rm = FALSE), na.rm = FALSE)
+
+#        updated_covariate[!is.na(trend_pars[,2]),] <- trend_pars[!is.na(trend_pars[,2]),2]  #?
         updated_covariate <- na.locf(na.locf(updated_covariate, na.rm = FALSE), na.rm = FALSE)
+
       }
     }
   }
