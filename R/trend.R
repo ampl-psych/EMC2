@@ -372,8 +372,8 @@ run_trend <- function(dadm, trend, param, trend_pars){
       if(trend$filter_lR) {
         ## not sure how to best solve this yet. Forward fill maybe?
         out[NA_idx] <- NA
-        out <- na.locf(na.locf(out), fromLast = FALSE)
-        updated_covariate <- na.locf(na.locf(updated_covariate), fromLast=FALSE)
+        out <- na.locf(na.locf(out), fromLast = FALSE, na.rm = FALSE)
+        updated_covariate <- na.locf(na.locf(updated_covariate), fromLast=FALSE, na.rm = FALSE)
       }
     }
   }
