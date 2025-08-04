@@ -370,8 +370,12 @@ run_trend <- function(dadm, trend, param, trend_pars){
 
     if('filter_lR' %in% names(trend)) {
       if(trend$filter_lR) {
-        ## not sure how to best solve this yet. Forward fill maybe?
+        ## not sure how to best solve this yet. First fill all outputs where the covariate was NA with NA
         out[NA_idx] <- NA
+
+        ## except where the q0 value was assigned -- overwrite these with q0 such that this value will be fed forward
+        out[!is.na(trend_pars[,2])] <- trend_pars[!is.na(trend_pars[,2]),2]
+
         out <- na.locf(na.locf(out, na.rm = FALSE), na.rm = FALSE)
         updated_covariate <- na.locf(na.locf(updated_covariate, na.rm = FALSE), na.rm = FALSE)
       }
