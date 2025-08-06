@@ -537,8 +537,8 @@ make_SEM_diagram <- function(emc,
   if(plot_values){
     L_vals <- credint(emc, selection = "std_loadings", remove_constants = FALSE, digits = 2)
     if(any(B_mat != 0)) B_vals <- credint(emc, selection = "structural_regressors", remove_constants = FALSE, digits = 2)
-    if(ncol(K_mat) > 1) K_vals <- credint(emc, selection = "regressors", remove_constants = FALSE, digits = 2)
-    if(ncol(G_mat) > 1) G_vals <- credint(emc, selection = "factor_regressors", remove_constants = FALSE, digits = 2)
+    if(ncol(K_mat) > 0 && any(G_mat !=0)) K_vals <- credint(emc, selection = "regressors", remove_constants = FALSE, digits = 2)
+    if(ncol(G_mat) > 0 && any(G_mat !=0)) G_vals <- credint(emc, selection = "factor_regressors", remove_constants = FALSE, digits = 2)
   }
 
   for(i in 1:ncol(Lambda_mat)){
@@ -594,7 +594,7 @@ make_SEM_diagram <- function(emc,
     }
   }
 
-  if(any(G_mat) != 0){
+  if(any(G_mat != 0)){
     for(i in 1:ncol(G_mat)){
       is_free <- G_mat[,i] != 0
       if(cred_only) is_free <- is_free &
