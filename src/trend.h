@@ -132,20 +132,33 @@ NumericVector run_trend_rcpp(DataFrame data, List trend, NumericVector param, Nu
       n_base_pars = 0;
     }
   }
+
+  // SM: For RL
+  CharacterVector lRS;
+  if(data.containsElementNamed("lRS")) {
+    lRS = data["lRS"];
+  }
+
   // Loop through covariates
   for(int i = 0; i < covnames.length(); i++) {
     String cur_cov = covnames[i];
     // Get covariate data and handle NAs
     NumericVector covariate = as<NumericVector>(data[cur_cov]);
     LogicalVector NA_idx = is_na(covariate);
-
-    // In delta rules, the first trial should always be 'updated' with the q0-value, even when it is set to NA. Otherwise
-    // the first NA-trials will have an updated_covariate value of 0, which is incorrect.
-    if(kernel == "delta" || kernel == "delta2" || kernel == "deltab") {
-      if(NA_idx[0]) {
-        covariate[0] = trend_pars(0,1);
-        NA_idx[0] = false;
+    // Anything to update?
+    int n_non_NA = sum(!NA_idx);
+    if(n_non_NA == 0) {
+      // if not, check if this is an RL design where the accumulator should be assigned
+      // the q0-value
+      if(data.containsElementNamed("lRS")) {
+        for(int k = 0; k < n_trials; k ++){
+          if(lRS[k] == cur_cov) {
+            out[k] = out[k] + trend_pars(0,1);
+          }
+        }
       }
+      // skip the rest of this iteration of this loop - no need to update this covariate.
+      continue;
     }
 
     // Create temporary vectors excluding NAs
@@ -164,23 +177,14 @@ NumericVector run_trend_rcpp(DataFrame data, List trend, NumericVector param, Nu
       filter = !duplicated_matrix(together);
     } else {
       filter = LogicalVector(cov_tmp.length(), true);
-
-      // // SM: filter only first lR levels in dadm
-      // bool filter_lR = as<bool>(trend["filter_lR"]);
-      // if(filter_lR) {
-      //   IntegerVector lRcol = data["lR"];
-      //   for(int tr = 0; tr < lRcol.length(); tr++) {
-      //     if(lRcol[tr] != 1) {
-      //       filter[tr] = false;
-      //     }
-      //   }
-      // }
     }
+
     // Run kernel on unique entries
     NumericVector output = run_kernel_rcpp(submat_rcpp(trend_pars_tmp, filter), kernel, cov_tmp[filter], n_base_pars, param_tmp[filter]);
     // // Create index for expanding back to full size
     IntegerVector unq_idx = cumsum_logical(filter); // Is 1-based
     NumericVector expanded_output = c_expand(output, unq_idx); //This assumes 1-based as well
+
     // Add to cumulative output
     for(int k = 0, l = 0; k < n_trials; k ++){
       // put back values, expanded output could be shorter, since NAs are excluded
@@ -188,10 +192,32 @@ NumericVector run_trend_rcpp(DataFrame data, List trend, NumericVector param, Nu
         out[k] = out[k] + expanded_output[l];
         l++;
       } else {
+        // covariate was NA in the data. In some cases, we still need to change the output
         if(filter_lR) {
           // If covariates were filtered on lR, forward fill the covariates
-          if(k > 0) {
+          if(k == 0) {
+            out[k] = out[k] + trend_pars(0,1);
+          } else {
             out[k] = out[k-1];
+          }
+        }
+        if(data.containsElementNamed("lRS")) {
+          // in RL designs, we need to add the Q-value of the accumulator to output even if there was no reward given -- i.e., the updated covariate on this trial is NA.
+          // Will this behave well though, if we're simultaneously applying another trend? what if there's an lRS
+          // column that is NOT related to the RL part? stuff to think about...
+          if(lRS[k] == cur_cov) {
+            if(k == 0) {
+              // first trial, and the covariate was NA, so out must be updated with q0
+              out[k] = out[k] + trend_pars(0,1);
+            } else {
+              if(l == 0) {
+                // not the first trial, but cannot update out with the last-known value of expected_output because that has not been updated yet
+                out[k] = out[k] + trend_pars(0,1);
+              } else {
+                // update with last-known output
+                out[k] = out[k] + expanded_output[l-1];
+              }
+            }
           }
         }
       }
@@ -222,7 +248,8 @@ NumericMatrix prep_trend(DataFrame data, List trend, NumericMatrix pars) {
   // Apply trends
   for(unsigned int i = 0; i < trend_names.length(); i ++) {
     String par = trend_names[i];
-    List cur_trend = trend[par];
+    List cur_trend = trend[i];
+
     // Get trend parameter names
     CharacterVector trend_pnames = cur_trend["trend_pnames"];
     all_trend_names = c_add_charvectors(all_trend_names, trend_pnames);

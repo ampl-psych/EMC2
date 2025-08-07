@@ -38,9 +38,12 @@ make_data_unconditional <- function(data, pars, design, model, return_covariates
 
   ## loop over trials, save covariates
   if(!is.null(model()$trend)) {
-    covariate_names = covariates = NULL
+    covariate_par_names <- covariate_names <- covariates <- NULL
     for(trend in model()$trend) {
-      if(trend$kernel %in% c('delta', 'deltab')) covariate_names <- c(covariate_names, trend$trend_pnames[2])
+      if(trend$kernel %in% c('delta', 'deltab')) {
+        covariate_names <- trend$covariate
+        covariate_par_names <- c(covariate_par_names, trend$trend_pnames[2])
+      }
       if(trend$kernel == 'deltab') data$rt <- 0  # ensure RT is not NA, so it won't be ignored because it's set to NA
     }
     if(return_covariates) {
@@ -63,7 +66,7 @@ make_data_unconditional <- function(data, pars, design, model, return_covariates
       # Remove pars from subjects that have fewer than this_trial trials
       this_pars <- this_pars[as.character(unique(this_data$subjects)),]
       # set Q-values to previous one
-      this_pars[,covariate_names] <- this_covariates
+      this_pars[,covariate_par_names] <- this_covariates
     } else {
       prev_trial <- NULL
     }
@@ -108,11 +111,11 @@ make_data_unconditional <- function(data, pars, design, model, return_covariates
 
     if(!is.null(model()$trend)) {
       # save covariates if requested
-      if(return_covariates) {
-        covariates[data$trials==this_trial,covariate_names] <- this_pars[,covariate_names]
-      }
-      this_covariates <- this_pars[this_data$lR==levels(this_data$lR)[1],covariate_names,drop=FALSE]
-      this_pars <- this_pars[,!colnames(this_pars) %in% covariate_names]
+      # if(return_covariates) {
+      #   covariates[data$trials==this_trial,covariate_names] <- this_pars[,covariate_par_names]
+      # }
+      this_covariates <- this_pars[this_data$lR==levels(this_data$lR)[1],covariate_par_names,drop=FALSE]
+      this_pars <- this_pars[,!colnames(this_pars) %in% covariate_par_names]
     }
 
     this_pars <- add_bound(this_pars, model()$bound, this_data$lR)
