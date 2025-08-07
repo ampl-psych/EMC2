@@ -340,7 +340,7 @@ log_likelihood_race_ss <- function(pars,dadm,model,min_ll=log(1e-10))
 
 #### BE and TE (mt = multiple threshold) ----
 
-log_likelihood_mt <- function(pars,dadm,model,min_ll=log(1e-10),n_cores=2)
+log_likelihood_mt <- function(pars,dadm,model,min_ll=log(1e-10),n_cores=1)
   # Multiple threshold (BE or TC) summed log likelihood
   # attr(dadm,"dL")
 {
