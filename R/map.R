@@ -113,8 +113,12 @@ map_p <- function(p,dadm,model)
       trend <- model$trend
       isin <- names(trend) %in% colnames(pm)
       if (any(isin)){ # At this point the trend has already been mapped and transformed
-        for (j in names(trend)[isin]) {
-          cur_trend <- trend[[j]]
+
+        # for (j_i in names(trend)[isin]) {
+        # SM: loop over trends by index, not by name
+        for (j_i in which(isin)) {
+          j = names(trends)[isin][j_i]
+          cur_trend <- trend[[j_i]]
           # We can select the trend pars from the already update pars matrix
           trend_pars <- pars[,cur_trend$trend_pnames]
 
@@ -126,6 +130,7 @@ map_p <- function(p,dadm,model)
 
           pm[, j] <- output[[1]]
           if(cur_trend$kernel %in% c('delta', 'deltab')) {
+            if(ncol(output[[2]])>1) output[[2]] <- apply(output[[2]],1,sum,na.rm=TRUE)
             pars[,cur_trend$trend_pnames[2]] <- output[[2]]  # assign updated Q-values to pars
             ## also return this one
             premap_idx[which(colnames(pars) == cur_trend$trend_pnames[2])] <- FALSE
