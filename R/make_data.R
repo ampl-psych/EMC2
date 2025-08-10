@@ -39,19 +39,24 @@ make_data_unconditional <- function(data, pars, design, model, return_covariates
   ## loop over trials, save covariates
   if(!is.null(model()$trend)) {
     covariate_par_names <- covariate_names <- covariates <- NULL
-    for(trend in model()$trend) {
+    covariate_trend_idx <- c()
+    trends <- model()$trend
+    for(trend_idx in 1:length(trends)) {
+      trend <- trends[[trend_idx]]
       if(trend$kernel %in% c('delta', 'deltab')) {
-        covariate_names <- trend$covariate
+        covariate_names <- c(covariate_names, trend$covariate)
         covariate_par_names <- c(covariate_par_names, trend$trend_pnames[2])
+        covariate_trend_idx <- c(covariate_trend_idx, rep(trend_idx, length(covariate_names)))
       }
       if(trend$kernel == 'deltab') data$rt <- 0  # ensure RT is not NA, so it won't be ignored because it's set to NA
     }
-    if(return_covariates) {
-      covariates <- matrix(NA, nrow=nrow(data), ncol=length(covariate_names))
-      colnames(covariates) <- covariate_names
-    }
+    #if(return_covariates) {
+    covariates <- matrix(NA, nrow=nrow(data), ncol=length(covariate_names))
+    colnames(covariates) <- covariate_names
+    #}
   }
 
+  model_ <- model()
   includeColumns <- !colnames(data) %in% c('lR', 'lM', names(design$Ffunctions))
   if(!'lR' %in% colnames(data)) data$lR <- factor(rep(1, nrow(data)))  # for simulations of the DDM, assume all rows are lR==1
   all_trials <- sort(unique(data[,'trials']))
@@ -66,10 +71,13 @@ make_data_unconditional <- function(data, pars, design, model, return_covariates
       # Remove pars from subjects that have fewer than this_trial trials
       this_pars <- this_pars[as.character(unique(this_data$subjects)),]
       # set Q-values to previous one
-      this_pars[,covariate_par_names] <- this_covariates
+      # this_pars[,covariate_par_names] <- this_covariates
+      # this_covariates <- na.locf(covariates[data$trials%in%c(prev_trial,this_trial),],na.rm=FALSE)
     } else {
       prev_trial <- NULL
+    #  this_covariates <- covariates[data$trials%in%c(prev_trial,this_trial),]
     }
+    this_covariates <- na.locf(covariates[data$trials%in%c(prev_trial,this_trial),], na.rm=FALSE)
 
     this_data <- design_model(
       add_accumulators(data[data$trials%in%c(prev_trial, this_trial)&data$lR==levels(data$lR)[1],includeColumns],
@@ -79,20 +87,40 @@ make_data_unconditional <- function(data, pars, design, model, return_covariates
 
     # drop unused levels
     this_data$subjects <- droplevels(this_data$subjects)
-    # Ensure trials are sorted
-    this_data <- this_data[order(this_data$subjects,this_data$trials),]
 
-    # Map single trial's parameters
-    this_pars <- map_p(this_pars, this_data, model())
+    # Map single trial's parameters. Pass current state of covariates to trends
+    for(i in 1:length(trends)) {
+      trends[[i]]$covariates_states <- this_covariates[,covariate_trend_idx==i]
+    }
+    model_$trend <- trends
+    out <- map_p(this_pars, this_data, model_, return_updated_covariate=TRUE)
+    this_pars <- out[[1]]
+    if(!is.null(out[[2]])) {
+      for(i in 1:length(trends)) {
+        this_covariates[,covariate_trend_idx==i] <- out[[2]]
+      }
+    }
 
     if(!is.null(model()$trend) && attr(model()$trend, "pretransform")){
       # This runs the trend and afterwards removes the trend parameters
-      this_pars <- prep_trend(this_data, model()$trend, this_pars)
+      out  <- prep_trend(this_data, trends, this_pars, return_updated_covariate=TRUE)
+      this_pars <- out[[1]]
+      if(!is.null(out[[2]])) {
+        for(i in 1:length(trends)) {
+          this_covariates[,covariate_trend_idx==i] <- out[[2]]
+        }
+      }
     }
     this_pars <- do_transform(this_pars, model()$transform)
     if(!is.null(model()$trend) && attr(model()$trend, "posttransform")){
       # This runs the trend and afterwards removes the trend parameters
-      this_pars <- prep_trend(this_data, model()$trend, this_pars)
+      out <- prep_trend(this_data, trends, this_pars, return_updated_covariate=TRUE)
+      this_pars <- out[[1]]
+      if(!is.null(out[[2]])) {
+        for(i in 1:length(trends)) {
+          this_covariates[,covariate_trend_idx==i] <- out[[2]]
+        }
+      }
     }
     this_pars <- model()$Ttransform(this_pars, this_data)
 
@@ -111,23 +139,36 @@ make_data_unconditional <- function(data, pars, design, model, return_covariates
 
     if(!is.null(model()$trend)) {
       # save covariates if requested
-      # if(return_covariates) {
-      #   covariates[data$trials==this_trial,covariate_names] <- this_pars[,covariate_par_names]
-      # }
+      if(return_covariates) {
+        covariates[data$trials%in%c(prev_trial,this_trial),] <- this_covariates
+        # for(covariate_name in covariate_names) {
+        #   covariates[data$trials==this_trial,covariate_name] <- this_pars[,covariate_par_names]
+        # }
+        # covariates[data$trials==this_trial,covariate_names] <- this_pars[,covariate_par_names]
+      }
       this_covariates <- this_pars[this_data$lR==levels(this_data$lR)[1],covariate_par_names,drop=FALSE]
       this_pars <- this_pars[,!colnames(this_pars) %in% covariate_par_names]
     }
 
     this_pars <- add_bound(this_pars, model()$bound, this_data$lR)
 
+    # Simulate R, rt
     Rrt <- model()$rfun(this_data,this_pars)
+    if('lR' %in% names(this_data)) Rrt <- Rrt[rep(1:nrow(Rrt), each=length(unique(this_data$lR))),]
+    for (i in dimnames(Rrt)[[2]]) this_data[[i]] <- Rrt[,i]
+
+    # check for feedback generators
+    for(i in 1:length(trends)) {
+      if(!is.null(trends[[i]]$feedback_generator)) {
+        this_data$reward <- trends[[i]]$feedback_generator(this_data)
+      }
+    }
+
+    ## re-apply Ffunctions to new data
+    if(!is.null(design$Ffunctions)) for(i in names(design$Ffunctions)) this_data[,i] <- design$Ffunctions[[i]](this_data)
 
     # drop lR
     if(!is.null(this_data$lR)) this_data <- this_data[this_data$lR == levels(this_data$lR)[1],!names(this_data) %in% c('lR', 'lM', 'winner')]
-    for (i in dimnames(Rrt)[[2]]) this_data[[i]] <- Rrt[,i]
-
-    ## re-apply Ffunctions to new data
-    if(!is.null(design$Ffunctions)) for(i in names(design$Ffunctions)) this_data[,i] <- design$Ffunctions[[1]](this_data)
 
     # add to data
     match_idx <- with(data, data$trials == this_trial & data$subjects %in% this_data$subjects)

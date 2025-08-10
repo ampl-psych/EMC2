@@ -295,21 +295,26 @@ run_kernel <- function(trend_pars = NULL, kernel, covariate, param) {
   return(out)
 }
 
-prep_trend <- function(dadm, trend, pars){
+prep_trend <- function(dadm, trend, pars, return_updated_covariate=FALSE){
   remove_idx <- colnames(pars) %in% get_trend_pnames(trend)
+  updated_covariate <- NULL
   for(par_n in 1:length(trend)){
     # loop over trend by index, not by parameter name
     par <- names(trend)[par_n]
     output <- run_trend(dadm, trend[[par_n]], pars[,par], pars[,trend[[par_n]]$trend_pnames, drop = FALSE])
     pars[,par] <- output[[1]]
+    updated_covariate <- cbind(updated_covariate, output[[2]])
     if(trend[[par_n]]$kernel %in% c('delta','deltab')) {
       if(ncol(output[[2]]>1)) output[[2]] <- apply(output[[2]],1,sum,na.rm=TRUE)
       pars[,trend[[par_n]]$trend_pnames[[2]]] <- output[[2]]
       remove_idx[which(colnames(pars) == trend[[par_n]]$trend_pnames[2])] <- FALSE
     }
   }
-  pars[,!remove_idx]
-  # return(pars)
+  if(return_updated_covariate) {
+    return(list(pars=pars[,!remove_idx], updated_covariate=updated_covariate))
+  } else {
+    return(pars[,!remove_idx])
+  }
 }
 
 run_trend <- function(dadm, trend, param, trend_pars){
@@ -323,12 +328,22 @@ run_trend <- function(dadm, trend, param, trend_pars){
   updated_covariate <- matrix(nrow=nrow(dadm), ncol=length(trend$covariate))
   # fix, otherwise indexing will fail
   if(is.null(dim(trend_pars))) trend_pars <- t(t(trend_pars))
+  if(!is.null(trend$covariates_states)) {
+    q0 <- trend$covariates_states  # of shape [nrow(dadm), ncovariates]
+    q0[is.na(q0)] <- trend_pars[1,2]
+  } else {
+    ## Set all to q0
+    q0 <- matrix(trend_pars[,2], nrow=nrow(dadm), ncol=length(trend$covariate))
+    colnames(q0) <- trend$covariate
+  }
 
   trend_pars_orig <- trend_pars
   for(i in 1:length(trend$covariate)){
     trend_pars <- trend_pars_orig
     cov_name <- trend$covariate[i]
     covariate <- dadm[,cov_name]
+    NA_idx <- is.na(covariate)
+
     # If trend is deltab, add param to trend pars
     if(trend$kernel == 'deltab') {
       n_base_pars <- 0   # add base weight to trend pars
@@ -337,39 +352,26 @@ run_trend <- function(dadm, trend, param, trend_pars){
       # Note that dadm contains all participants. Therefore, with each new participant, we need to
       # reset the covariate. We do this by setting the covariate at trial 1 to q0 (so it's not NA)
       # and by setting q0 in all trials but trial 1 to NA. Updating only happens when q0 != NA.
-      secretly_NA <- dadm$trials==min(dadm$trials)&is.na(dadm[,cov_name])&dadm$lR==levels(dadm$lR)[1]
-      trend_pars[dadm$trials>min(dadm$trials)&!is.na(dadm[,cov_name]),2] <- NA
-      covariate[secretly_NA] <- trend_pars[1,2]   ## ensure not NA
+      is_first_trial <- dadm$trials==min(dadm$trials)
+      reset_idx <- is_first_trial
 
-      # if(sum(!NA_idx)>0) {
-      #   for(subject in unique(dadm$subjects)) {
-      #     subj_idx <- dadm$subjects==subject
-      #     first_trial <- min(dadm[!NA_idx&subj_idx, 'trials'])
-      #     trend_pars[(dadm$trials>first_trial)&subj_idx,2] <- NA
-      #
-      #     ## and the covariate on the first trial must be overwritten by the q0 value
-      #     dadm
-      #   }
-      # }
-      #
-      # if('filter_lR' %in% names(trend)) {
-      #   if(trend$filter_lR) {
-      #     # if the covariate on trial 1 is NA, it should be set to q0 to ensure that all trials prior to the first
-      #     # measured covariate are set to q0, not 0
-      #     NA_idx2 <- dadm$trials==min(dadm$trials)&dadm$lR==levels(dadm$lR)[1]&is.na(dadm[,cov_name])
-      #     dadm[NA_idx2,cov_name] <- trend_pars[1,2]
-      #     NA_idx <- is.na(dadm[,cov_name])
-      #   }
-      # }
+      trend_pars[reset_idx,2] <- q0[reset_idx,cov_name]
+      covariate[reset_idx] <- 1 # set to arbitrary non-NA value so the trial is not filtered out
+      trend_pars[!reset_idx,2] <- NA
+#      secretly_NA <- is_first_trial&NA_idx&dadm$lR==levels(dadm$lR)[1]
+
+#      trend_pars[is_first_trial&NA_idx,2] <- q0[is_first_trial&NA_idx,cov_name]
+#      trend_pars[!is_first_trial|!NA_idx,2] <- NA
+#      covariate[secretly_NA] <- q0[secretly_NA, cov_name]
+      NA_idx <- is.na(covariate)
     }
 
     # Loop over covariates, first filter out NAs
-    NA_idx <- is.na(covariate)
     if(sum(!NA_idx)==0) {
       # if all covariates are NA, nothing to update.
-      if('lRS' %in% colnames(dadm)) {
+      if('lS' %in% colnames(dadm)) {
         ## no updates, assign q0 value
-        out[dadm$lRS==cov_name] <- out[dadm$lRS==cov_name] + trend_pars[1,2]
+        out[dadm$lS==cov_name] <- out[dadm$lS==cov_name] + trend_pars[1,2]
       }
       next
     }
@@ -397,7 +399,7 @@ run_trend <- function(dadm, trend, param, trend_pars){
     updated_covariate[!NA_idx,i] <- output[unq_idx]
 
     to_update <- updated_covariate[,i]
-    to_update[secretly_NA] <- NA      # back to NA. These were not actually updated, only used to re-set Q-values.
+    # to_update[reset_idx] <- NA      # back to NA. These were not actually updated, only used to re-set Q-values.
     ## handle NA-cases:
     if('filter_lR' %in% names(trend)) {
       if(trend$filter_lR) {
@@ -407,45 +409,20 @@ run_trend <- function(dadm, trend, param, trend_pars){
         updated_covariate[,i] <- to_update
       }
     }
-    if('lRS' %in% colnames(dadm)) {
-        is_lRS = dadm$lRS==cov_name
-        to_update[is_lRS] <- na.locf(to_update[is_lRS], na.rm=FALSE)
-        to_update[is_lRS][is.na(to_update[is_lRS])] <- trend_pars[1,2]
+    if('lS' %in% colnames(dadm)) {
+        is_lS = dadm$lS==cov_name
+        to_update[is_lS] <- na.locf(to_update[is_lS], na.rm=FALSE)
+        to_update[is_lS][is.na(to_update[is_lS])] <- trend_pars[1,2]
     }
     ## any remaining NAs are trials in which nothing should be updated.
     to_update[is.na(to_update)] <- 0
     out <- out + to_update
 
+    # not sure here yet
+    updated_covariate[,i] <- to_update
+
 #     # Decompress output and map back based on non-NA
 #     out[!NA_idx] <- out[!NA_idx] + output[unq_idx]
-#
-#     # For RL designs, we also need to add the non-updated Q-values to out
-#     if('lRS' %in% colnames(dadm)) {
-#       ## in which rows is the accumulator's latent response symbol set to NA?
-#       ## in this case, the response was not chosen so there's no reward,
-#       ## but its Q-value should still be mapped onto the accumulator
-#       idx1 <- dadm$lRS==cov_name & NA_idx
-#
-#       ## what were the previous Q-values of this covariate?
-#       tmp <- updated_covariate[,i]
-#       if(is.na(tmp[1])) tmp[1] <- trend_pars[1,2]
-#       ff_qvals <- na.locf(tmp, na.rm = FALSE)[idx1]
-#       out[idx1] <- out[idx1]+ff_qvals
-#     }
-#
-#     if('filter_lR' %in% names(trend)) {
-#       if(trend$filter_lR) {
-#         ## not sure how to best solve this yet. First fill all outputs where the covariate was NA with NA
-#         out[NA_idx] <- NA
-#
-#         ## except where the q0 value was assigned -- overwrite these with q0 such that this value will be fed forward
-# #        out[!is.na(trend_pars[,2])] <- trend_pars[!is.na(trend_pars[,2]),2]
-#         out <- na.locf(out, na.rm = FALSE)#, na.rm = FALSE)
-#
-# #        updated_covariate[!is.na(trend_pars[,2]),] <- trend_pars[!is.na(trend_pars[,2]),2]  #?
-#         updated_covariate <- na.locf(updated_covariate, na.rm = FALSE)#, na.rm = FALSE)
-#       }
-#     }
   }
   # Do the mapping
   out <- switch(trend$base,
@@ -558,14 +535,18 @@ run_delta2 <- function(q0,alphaFast,propSlow,dSwitch,covariate) {
   q[1] <- qFast[1] <- qSlow[1] <- q0[1]
   alphaSlow <- propSlow*alphaFast
   for (i in 2:length(covariate)) {
-    peFast[i-1] <- covariate[i-1]-qFast[i-1]
-    peSlow[i-1] <- covariate[i-1]-qSlow[i-1]
-    qFast[i] <- qFast[i-1] + alphaFast[i-1]*peFast[i-1]
-    qSlow[i] <- qSlow[i-1] + alphaSlow[i-1]*peSlow[i-1]
-    if (abs(qFast[i]-qSlow[i])>dSwitch[i]){
-      q[i] <- qFast[i]
-    } else{
-      q[i] <- qSlow[i]
+    if(!is.na(q0[i])) {
+      qFast[i] <- qSlow[i] <- q[i] <- q0[i]
+    } else {
+      peFast[i-1] <- covariate[i-1]-qFast[i-1]
+      peSlow[i-1] <- covariate[i-1]-qSlow[i-1]
+      qFast[i] <- qFast[i-1] + alphaFast[i-1]*peFast[i-1]
+      qSlow[i] <- qSlow[i-1] + alphaSlow[i-1]*peSlow[i-1]
+      if (abs(qFast[i]-qSlow[i])>dSwitch[i]){
+        q[i] <- qFast[i]
+      } else{
+        q[i] <- qSlow[i]
+      }
     }
   }
   return(q)
