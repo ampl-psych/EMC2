@@ -124,7 +124,7 @@ make_data_unconditional <- function(data, pars, design, model, return_covariates
     for (i in dimnames(Rrt)[[2]]) this_data[[i]] <- Rrt[,i]
 
     ## re-apply Ffunctions to new data
-    if(!is.null(design$Ffunctions)) for(i in names(design$Ffunctions)) this_data[,i] <- design$Ffunctions[[1]](this_data)
+    if(!is.null(design$Ffunctions)) for(i in names(design$Ffunctions)) this_data[,i] <- design$Ffunctions[[i]](this_data)
 
     # add to data
     match_idx <- with(data, data$trials == this_trial & data$subjects %in% this_data$subjects)
