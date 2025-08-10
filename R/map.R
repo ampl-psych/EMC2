@@ -60,7 +60,7 @@ add_bound <- function(pars,bound, lR = NULL) {
 
 #### Functions to look at parameters ----
 
-map_p <- function(p,dadm,model)
+map_p <- function(p,dadm,model,return_updated_covariate=FALSE)
   # Map p to dadm and returns matrix of mapped parameters
   # p is either a vector or a matrix (ncol = number of subjects) of p_vectors
   # dadm is a design matrix with attributes containing model information
@@ -79,6 +79,7 @@ map_p <- function(p,dadm,model)
   # Get parameter names from model and create output matrix
   do_p <- names(model$p_types)
   pars <- matrix(nrow=nrow(dadm),ncol=length(do_p),dimnames=list(NULL,do_p))
+  updated_covariate <- NULL
 
   # If there are any trends do these first, they might be used later in mapping
   # Otherwise we're not applying the trend premap, but we are doing it pre-transform
@@ -122,13 +123,11 @@ map_p <- function(p,dadm,model)
           # We can select the trend pars from the already update pars matrix
           trend_pars <- pars[,cur_trend$trend_pnames]
 
-          #pm[,j] <- run_trend(dadm, cur_trend, pm[,j], trend_pars)
-
-          ## SM
-          ## output Q-value as well, use Q-value slot. TO DO: how to identify the Q-value parameter??
+          ## SM: output Q-value as well, use Q-value slot in pars, and a separate covariate matrix.
           output <- run_trend(dadm, cur_trend, pm[,j], trend_pars)
 
           pm[, j] <- output[[1]]
+          updated_covariate <- cbind(updated_covariate, output[[2]])
           if(cur_trend$kernel %in% c('delta', 'deltab')) {
             if(ncol(output[[2]])>1) output[[2]] <- apply(output[[2]],1,sum,na.rm=TRUE)
             pars[,cur_trend$trend_pnames[2]] <- output[[2]]  # assign updated Q-values to pars
@@ -154,11 +153,13 @@ map_p <- function(p,dadm,model)
     pars[,i] <- tmp
   }
 
-  # SM: Return all parameters, including Q-values
-  # return(pars)
-
-  # Return only non-trend parameters
-   return(pars[,!premap_idx,drop=FALSE])
+  if(return_updated_covariate) {
+    # SM: Return all parameters, including Q-values
+    return(list(pars=pars[,!premap_idx,drop=FALSE], updated_covariate=updated_covariate))
+  } else {
+    # Return only non-trend parameters
+    return(pars[,!premap_idx,drop=FALSE])
+  }
 }
 
 

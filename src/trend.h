@@ -134,9 +134,9 @@ NumericVector run_trend_rcpp(DataFrame data, List trend, NumericVector param, Nu
   }
 
   // SM: For RL
-  CharacterVector lRS;
-  if(data.containsElementNamed("lRS")) {
-    lRS = data["lRS"];
+  CharacterVector lS;
+  if(data.containsElementNamed("lS")) {
+    lS = data["lS"];
   }
 
   // Loop through covariates
@@ -150,9 +150,9 @@ NumericVector run_trend_rcpp(DataFrame data, List trend, NumericVector param, Nu
     if(n_non_NA == 0) {
       // if not, check if this is an RL design where the accumulator should be assigned
       // the q0-value
-      if(data.containsElementNamed("lRS")) {
+      if(data.containsElementNamed("lS")) {
         for(int k = 0; k < n_trials; k ++){
-          if(lRS[k] == cur_cov) {
+          if(lS[k] == cur_cov) {
             out[k] = out[k] + trend_pars(0,1);
           }
         }
@@ -201,11 +201,11 @@ NumericVector run_trend_rcpp(DataFrame data, List trend, NumericVector param, Nu
             out[k] = out[k-1];
           }
         }
-        if(data.containsElementNamed("lRS")) {
+        if(data.containsElementNamed("lS")) {
           // in RL designs, we need to add the Q-value of the accumulator to output even if there was no reward given -- i.e., the updated covariate on this trial is NA.
           // Will this behave well though, if we're simultaneously applying another trend? what if there's an lRS
           // column that is NOT related to the RL part? stuff to think about...
-          if(lRS[k] == cur_cov) {
+          if(lS[k] == cur_cov) {
             if(k == 0) {
               // first trial, and the covariate was NA, so out must be updated with q0
               out[k] = out[k] + trend_pars(0,1);
