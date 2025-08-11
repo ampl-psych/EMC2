@@ -84,7 +84,8 @@ run_emc <- function(emc, stage, stop_criteria,
                     search_width = 1, step_size = 100, verbose = FALSE, verboseProgress = FALSE,
                     fileName = NULL,particle_factor=50, cores_per_chain = 1,
                     cores_for_chains = length(emc), max_tries = 20, n_blocks = 1,
-                    thin = FALSE, trim = TRUE){
+                    thin = FALSE, trim = TRUE,
+                    r_cores=1){
   emc <- restore_duplicates(emc)
   if(Sys.info()[1] == "Windows" & cores_per_chain > 1) stop("only cores_for_chains can be set on Windows")
   if (verbose) message(paste0("Running ", stage, " stage"))
@@ -119,7 +120,8 @@ run_emc <- function(emc, stage, stop_criteria,
     sub_emc <- auto_mclapply(sub_emc,run_stages, stage = stage, iter= progress$step_size*max(1,cur_thin),
                              verbose=verbose,  verboseProgress = verboseProgress,
                              particle_factor=particle_factor,search_width=search_width,
-                             n_cores=cores_per_chain, mc.cores = cores_for_chains)
+                             n_cores=cores_per_chain, mc.cores = cores_for_chains,
+                             r_cores=r_cores)
 
     class(sub_emc) <- "emc"
     if(stage != 'preburn'){
@@ -152,18 +154,20 @@ run_emc <- function(emc, stage, stop_criteria,
 }
 
 run_stages <- function(sampler, stage = "preburn", iter=0, verbose = TRUE, verboseProgress = TRUE,
-                       particle_factor=50, search_width= NULL, n_cores=1)
+                       particle_factor=50, search_width= NULL,
+                       n_cores=1,r_cores=1)
 {
 
   max_pars <- max(table(attr(sampler[[1]], "components")))
   particles <- round(particle_factor*sqrt(max_pars))
   if (!sampler$init) {
-    sampler <- init(sampler, n_cores = n_cores)
+    sampler <- init(sampler, n_cores = n_cores, r_cores = r_cores)
   }
   if (iter == 0) return(sampler)
   tune <- list(search_width = search_width)
   sampler <- run_stage(sampler, stage = stage,iter = iter, particles = particles,
-                       n_cores = n_cores, tune = tune, verbose = verbose, verboseProgress = verboseProgress)
+                       n_cores = n_cores, tune = tune, verbose = verbose,
+                       verboseProgress = verboseProgress,r_cores=r_cores)
   return(sampler)
 }
 

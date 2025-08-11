@@ -54,7 +54,8 @@ pmwgs <- function(dadm, type, pars = NULL, prior = NULL,
 }
 
 init <- function(pmwgs, start_mu = NULL, start_var = NULL,
-                 verbose = FALSE, particles = 1000, n_cores = 1) {
+                 verbose = FALSE, particles = 1000, n_cores = 1,
+                 r_cores=1) {
   # Gets starting points for the mcmc process
   # If no starting point for group mean just use zeros
   type <- pmwgs$type
@@ -74,7 +75,7 @@ init <- function(pmwgs, start_mu = NULL, start_var = NULL,
   }
   proposals <- parallel::mclapply(X=1:pmwgs$n_subjects,FUN=start_proposals,
                                   parameters = startpoints_comb, n_particles = particles,
-                                  pmwgs = pmwgs, type = type,
+                                  pmwgs = pmwgs, type = type,r_cores=r_cores,
                                   mc.cores = n_cores)
   proposals <- array(unlist(proposals), dim = c(pmwgs$n_pars + 1, pmwgs$n_subjects))
 
@@ -130,13 +131,14 @@ init_chains <- function(emc, start_mu = NULL, start_var = NULL, particles = 1000
   return(emc)
 }
 
-start_proposals <- function(s, parameters, n_particles, pmwgs, type){
+start_proposals <- function(s, parameters, n_particles, pmwgs, type,
+                            n_cores=1){
   #Draw the first start point
   group_pars <- get_group_level(parameters, s, type)
   proposals <- particle_draws(n_particles, group_pars$mu, group_pars$var)
   colnames(proposals) <- rownames(pmwgs$samples$alpha) # preserve par names
   lw <- calc_ll_manager(proposals, dadm = pmwgs$data[[which(pmwgs$subjects == s)]],
-                        model = pmwgs$model)
+                        model = pmwgs$model,n_cores=n_cores)
   weight <- exp(lw - max(lw))
   idx <- sample(x = n_particles, size = 1, prob = weight)
   return(list(proposal = proposals[idx,], ll = lw[idx]))
@@ -185,7 +187,8 @@ run_stage <- function(pmwgs,
                       n_cores = 1,
                       tune = NULL,
                       verbose = TRUE,
-                      verboseProgress = TRUE) {
+                      verboseProgress = TRUE,
+                      r_cores=1) {
   # Set defaults for NULL values
   # Set necessary local variables
   # Set stable (fixed) new_sample argument for this run
@@ -248,7 +251,7 @@ run_stage <- function(pmwgs,
     }
     # Particle step
     proposals <- parallel::mcmapply(new_particle, 1:pmwgs$n_subjects, data, pm_settings, eff_mu, eff_var,
-                                    chains_mu, chains_var, pmwgs$samples$subj_ll[,j-1],
+                                    chains_mu, chains_var, pmwgs$samples$subj_ll[,j-1],n_cores=r_cores,
                                     MoreArgs = list(pars_comb, pmwgs$model, stage,
                                                     pmwgs$type,
                                                     tune),
@@ -270,7 +273,7 @@ new_particle <- function (s, data, pm_settings, eff_mu = NULL,
                           eff_var = NULL, chains_mu = NULL,
                           chains_var = NULL, prev_ll,
                           parameters, model = NULL, stage,
-                          type, tune)
+                          type, tune,n_cores=1)
 {
   group_pars <- get_group_level(parameters, s, type)
   unq_components <- unique(tune$components)
@@ -330,9 +333,11 @@ new_particle <- function (s, data, pm_settings, eff_mu = NULL,
 
     # Calculate likelihoods
     if(tune$components[length(tune$components)] > 1){
-      lw <- calc_ll_manager(proposals[,is_shared], dadm = data, model, component = shared_idx)
+      lw <- calc_ll_manager(proposals[,is_shared], dadm = data, model,
+                            component = shared_idx,n_cores=n_cores)
     } else{
-      lw <- calc_ll_manager(proposals[,is_shared], dadm = data, model)
+      lw <- calc_ll_manager(proposals[,is_shared], dadm = data, model,
+                            n_cores=n_cores)
     }
     lw_total <- lw + prev_ll - lw[1] # make sure lls from other components are included
     # Prior density
@@ -362,6 +367,9 @@ new_particle <- function (s, data, pm_settings, eff_mu = NULL,
     proposal_out[idx] <- proposals[idx_ll,idx]
     pm_settings[[i]] <- update_pm_settings(pm_settings[[i]], idx_ll, weights, particle_numbers, tune, sum(idx))
   }
+#
+#   message(out_lls)
+#
   return(list(proposal = proposal_out, ll = sum(out_lls), pm_settings = pm_settings))
 }
 
@@ -662,13 +670,17 @@ check_prop_performance <- function(prop_performance, stage){
   return(round(prop_performance))
 }
 
-calc_ll_manager <- function(proposals, dadm, model, component = NULL){
+calc_ll_manager <- function(proposals, dadm, model, component = NULL,
+                            n_cores=1){
   if(!is.data.frame(dadm)){
     lls <- log_likelihood_joint(proposals, dadm, model, component)
   } else{
     model <- model()
     if(is.null(model$c_name)){ # use the R implementation
-      lls <- apply(proposals,1, calc_ll_R, model, dadm = dadm)
+      lls <- unlist(mclapply(1:nrow(proposals),
+          \(i) calc_ll_R(proposals[i,], model=model, dadm = dadm),
+         mc.cores=n_cores))
+      # lls <- apply(proposals,1, calc_ll_R, model, dadm = dadm)
     } else{
       p_types <- names(model$p_types)
       designs <- list()

@@ -377,7 +377,7 @@ fit.emc <- function(emc, stage = NULL, iter = 1000, stop_criteria = NULL,
                     search_width = 1, step_size = 100, verbose = TRUE, fileName = NULL,
                     particle_factor=50, cores_per_chain = 1,
                     cores_for_chains = length(emc), max_tries = 20,
-                    thin = FALSE,
+                    thin = FALSE,r_cores=1,
                     ...){
 
   dots <- add_defaults(list(...), n_blocks = 1, verboseProgress = FALSE, trim = TRUE)
@@ -414,7 +414,8 @@ fit.emc <- function(emc, stage = NULL, iter = 1000, stop_criteria = NULL,
     emc <- run_emc(emc, stage = stage, stop_criteria[[stage]], cores_for_chains = cores_for_chains, search_width = search_width,
                    step_size = step_size,  verbose = verbose, verboseProgress = dots$verboseProgress,
                    fileName = fileName, particle_factor =  particle_factor, trim = dots$trim,
-                   cores_per_chain = cores_per_chain, max_tries = max_tries, thin = thin, n_blocks = dots$n_blocks)
+                   cores_per_chain = cores_per_chain, max_tries = max_tries, thin = thin, n_blocks = dots$n_blocks,
+                   r_cores=r_cores)
   }
   if (verbose) print(Sys.time()-start_time)
   return(emc)
