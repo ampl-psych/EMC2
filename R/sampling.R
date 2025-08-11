@@ -132,13 +132,13 @@ init_chains <- function(emc, start_mu = NULL, start_var = NULL, particles = 1000
 }
 
 start_proposals <- function(s, parameters, n_particles, pmwgs, type,
-                            n_cores=1){
+                            r_cores=1){
   #Draw the first start point
   group_pars <- get_group_level(parameters, s, type)
   proposals <- particle_draws(n_particles, group_pars$mu, group_pars$var)
   colnames(proposals) <- rownames(pmwgs$samples$alpha) # preserve par names
   lw <- calc_ll_manager(proposals, dadm = pmwgs$data[[which(pmwgs$subjects == s)]],
-                        model = pmwgs$model,n_cores=n_cores)
+                        model = pmwgs$model,n_cores=r_cores)
   weight <- exp(lw - max(lw))
   idx <- sample(x = n_particles, size = 1, prob = weight)
   return(list(proposal = proposals[idx,], ll = lw[idx]))
