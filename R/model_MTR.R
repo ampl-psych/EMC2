@@ -420,6 +420,7 @@ n1PDF_MTR_1 <- function(rt, pars,dl,du,b)
 }
 
 
+#### 2 confidence levels ----
 
 #' Balance of Evidence 2 Threshold LBA model
 #'
@@ -472,22 +473,21 @@ BE2PLBA <- function(){
   list(
     type="BE",
     p_types=c("v" = 1,"sv" = log(1),"B" = log(1),"A" = log(0),"t0" = log(0),
-              r=qnorm(.5),DT1=pnorm(.5),
+              r=qnorm(.5),DT1=qnorm(.5),
               gB=log(1),gp=qnorm(0),pg1=qnorm(1)),
     transform=list(func=c(v = "identity",sv = "exp", B = "exp", A = "exp",t0 = "exp",
                           r="pnorm",DT1="pnorm",
                           gB="exp",gp="pnorm",pg1="pnorm")),
     bound=list(minmax=cbind(v=c(-Inf,Inf),sv = c(0, Inf), A=c(1e-4,Inf),b=c(0,Inf),
-      t0=c(0.05,Inf),r=c(-1,1),DT1=c(0,1),
+      t0=c(0.05,Inf),r=c(-1,1),DT1=c(0,Inf),
       gb=c(0,Inf),gp=c(0,.2),pg1=c(0,1)),
       exception=list(c(A=0,gp=0,pg1=1),c(pg1=0))),
     # Trial dependent parameter transform
     Ttransform = function(pars,dadm) {
       pars[,"r"] <- 2*pars[,"r"]-1
-      pars <- cbind(pars,b=pars[,"B"] + pars[,"A"],gb=pars[,"gB"] + pars[,"A"])
       isDT <- substr(dimnames(pars)[[2]],1,2)=="DT"
-      pars[,isDT] <- pars[,isDT]*pars[,"b"]
-      dimnames(pars)[[2]][dimnames(pars)[[2]]=="B"] <- "b"
+      pars[,isDT] <- pars[,"A"] + pars[,isDT]*pars[,"B"]
+      pars <- cbind(pars,b=pars[,"B"] + pars[,"A"],gb=pars[,"gB"] + pars[,"A"])
       pars
     },
     # Random function for racing accumulator
@@ -541,6 +541,8 @@ TC2LBA <- function(){
   )
 }
 
+
+#### 3 confidence levels ----
 
 #' Balance of Evidence 3 Threshold LBA model
 #'
@@ -597,16 +599,15 @@ BE3PLBA <- function(){
                           r="pnorm",DT1="pnorm",DT2="pnorm",
                           gB="exp",gp="pnorm",pg1="pnorm",pg2="pnorm")),
     bound=list(minmax=cbind(v=c(-Inf,Inf),sv = c(0, Inf), A=c(1e-4,Inf),b=c(0,Inf),
-      t0=c(0.05,Inf),r=c(-1,1),DT1=c(0,1),DT2=c(0,1),
+      t0=c(0.05,Inf),r=c(-1,1),DT1=c(0,Inf),DT2=c(0,Inf),
       gb=c(0,Inf),gp=c(0,.2),pg1=c(0,1),pg2=c(0,1)),
       exception=list(c(A=0,gp=0,pg1=1,pg2=1),c(pg1=0,pg2=0))),
     # Trial dependent parameter transform
     Ttransform = function(pars,dadm) {
       pars[,"r"] <- 2*pars[,"r"]-1
-      pars <- cbind(pars,b=pars[,"B"] + pars[,"A"],gb=pars[,"gB"] + pars[,"A"])
       isDT <- substr(dimnames(pars)[[2]],1,2)=="DT"
-      pars[,isDT] <- pars[,isDT]*pars[,"b"]
-      dimnames(pars)[[2]][dimnames(pars)[[2]]=="B"] <- "b"
+      pars[,isDT] <- pars[,"A"] + pars[,isDT]*pars[,"B"]
+      pars <- cbind(pars,b=pars[,"B"] + pars[,"A"],gb=pars[,"gB"] + pars[,"A"])
       pars
     },
     # Random function for racing accumulator
@@ -659,6 +660,7 @@ TC3LBA <- function(){
   )
 }
 
+#### 4 confidence levels ----
 
 #' Balance of Evidence 4 Threshold LBA model
 #'
@@ -715,16 +717,15 @@ BE4PLBA <- function(){
                           r="pnorm",DT1="pnorm",DT2="pnorm",DT3="pnorm",
                           gB="exp",gp="pnorm",pg1="pnorm",pg2="pnorm",pg3="pnorm")),
     bound=list(minmax=cbind(v=c(-Inf,Inf),sv = c(0, Inf), A=c(1e-4,Inf),b=c(0,Inf),
-      t0=c(0.05,Inf),r=c(-1,1),DT1=c(0,1),DT2=c(0,1),DT3=c(0,1),
+      t0=c(0.05,Inf),r=c(-1,1),DT1=c(0,Inf),DT2=c(0,Inf),DT3=c(0,Inf),
       gb=c(0,Inf),gp=c(0,.2),pg1=c(0,1),pg2=c(0,1),pg3=c(0,1)),
       exception=list(c(A=0,gp=0,pg1=1,pg2=1,pg3=1),c(pg1=0,pg2=0,pg3=0))),
     # Trial dependent parameter transform
     Ttransform = function(pars,dadm) {
       pars[,"r"] <- 2*pars[,"r"]-1
-      pars <- cbind(pars,b=pars[,"B"] + pars[,"A"],gb=pars[,"gB"] + pars[,"A"])
       isDT <- substr(dimnames(pars)[[2]],1,2)=="DT"
-      pars[,isDT] <- pars[,isDT]*pars[,"b"]
-      dimnames(pars)[[2]][dimnames(pars)[[2]]=="B"] <- "b"
+      pars[,isDT] <- pars[,"A"] + pars[,isDT]*pars[,"B"]
+      pars <- cbind(pars,b=pars[,"B"] + pars[,"A"],gb=pars[,"gB"] + pars[,"A"])
       pars
     },
     # Random function for racing accumulator
