@@ -428,8 +428,8 @@ get_pars <- function(emc,selection= "mu", stage=get_last_stage(emc),thin=1,filte
     samples <- lapply(samples, function(x) out <- apply(x,3,function(y){c(y)}))
     samples <- lapply(samples, function(x) {rownames(x) <- pnams; return(x)})
   }
-  samples <- filter_const_and_dup(samples, remove_dup, remove_constants)
-
+  if (selection != "LL")
+    samples <- filter_const_and_dup(samples, remove_dup, remove_constants)
 
   samples <- lapply(samples, filter_sub_and_par, subject, subnames, use_par)
   samples <- lapply(samples, filter_emc, thin, length.out, filter)
