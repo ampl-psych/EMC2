@@ -107,9 +107,9 @@ plot.emc <- function(x, stage = "sample", selection = c("mu", "sigma2", "alpha")
     plot(get_prior(x))
     return(invisible(prior(x)))
   }
-  if(x[[1]]$type == "single" & !(selection %in% c("LL","alpha"))){
+  if(x[[1]]$type == "single" & selection[1] != "LL")
     selection <- "alpha"
-  }
+
   for(select in selection){
     plot_mcmc_list(x, stage = stage, selection = select, layout = layout, ...)
   }
