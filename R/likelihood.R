@@ -415,6 +415,6 @@ log_likelihood_mt <- function(pars,dadm,model,min_ll=log(1e-10),n_cores=1)
     ll <- (1-pars[is2,"gp"])*ll + pars[is2,"gp"]*LBAll*pR
   }
   ll <- log(ll)
-  ll[is.na(ll) | is.nan(ll) | ll == Inf] <- -Inf
-  return(sum(pmax(min_ll,ll[attr(dadm,"expand")])))
+  ll[is.na(ll) | is.nan(ll) | ll == Inf] <- min_ll
+  return(sum(pmax(min_ll,ll)[attr(dadm,"expand")]))
 }
