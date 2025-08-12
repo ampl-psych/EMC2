@@ -46,7 +46,7 @@ make_data_unconditional <- function(data, pars, design, model, return_covariates
       if(trend$kernel %in% c('delta', 'deltab')) {
         covariate_names <- c(covariate_names, trend$covariate)
         covariate_par_names <- c(covariate_par_names, trend$trend_pnames[2])
-        covariate_trend_idx <- c(covariate_trend_idx, rep(trend_idx, length(covariate_names)))
+        covariate_trend_idx <- c(covariate_trend_idx, rep(trend_idx, length(trend$covariate)))
       }
       if(trend$kernel == 'deltab') data$rt <- 0  # ensure RT is not NA, so it won't be ignored because it's set to NA
     }
@@ -98,9 +98,9 @@ make_data_unconditional <- function(data, pars, design, model, return_covariates
     this_pars <- out[[1]]
     if(!is.null(out[[2]])) {
       for(i in 1:length(trends)) {
-        this_covariates[,covariate_trend_idx==i] <- out[[2]]
         trends[[i]]$covariates_states <- this_covariates[,covariate_trend_idx==i,drop=FALSE]
       }
+      this_covariates[,colnames(out[[2]])] <- out[[2]]
       model_$trend <- trends
     }
 
@@ -110,9 +110,9 @@ make_data_unconditional <- function(data, pars, design, model, return_covariates
       this_pars <- out[[1]]
       if(!is.null(out[[2]])) {
         for(i in 1:length(trends)) {
-          this_covariates[,covariate_trend_idx==i] <- out[[2]]
           trends[[i]]$covariates_states <- this_covariates[,covariate_trend_idx==i,drop=FALSE]
         }
+        this_covariates[,colnames(out[[2]])] <- out[[2]]
         model_$trend <- trends
       }
     }
@@ -122,9 +122,8 @@ make_data_unconditional <- function(data, pars, design, model, return_covariates
       out <- prep_trend(this_data, trends, this_pars, return_updated_covariate=TRUE)
       this_pars <- out[[1]]
       if(!is.null(out[[2]])) {
-        for(i in 1:length(trends)) {
-          this_covariates[,covariate_trend_idx==i] <- out[[2]]
-        }
+
+        this_covariates[,colnames(out[[2]])] <- out[[2]]
       }
     }
     this_pars <- model()$Ttransform(this_pars, this_data)
