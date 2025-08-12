@@ -330,11 +330,17 @@ run_trend <- function(dadm, trend, param, trend_pars){
   if(is.null(dim(trend_pars))) trend_pars <- t(t(trend_pars))
   if(!is.null(trend$covariates_states)) {
     q0 <- trend$covariates_states  # of shape [nrow(dadm), ncovariates]
-    q0[is.na(q0)] <- trend_pars[1,2]
+
+    # if no covariate state is known yet, set to q0 in pars
+    first_trials <- (dadm$trials==min(dadm$trials)&dadm$lR==levels(dadm$lR)[1])
+    q0[first_trials][is.na(q0[first_trials,])] <- trend_pars[first_trials,2]
   } else {
     ## Set all to q0
     q0 <- matrix(trend_pars[,2], nrow=nrow(dadm), ncol=length(trend$covariate))
     colnames(q0) <- trend$covariate
+    # Only set q0 for first trial, first lR of each subject
+    q0[!(dadm$trials==min(dadm$trials)&dadm$lR==levels(dadm$lR)[1]),] <- NA
+
   }
 
   trend_pars_orig <- trend_pars
@@ -350,19 +356,12 @@ run_trend <- function(dadm, trend, param, trend_pars){
     }
     if(trend$kernel %in% c('delta', 'delta2', 'deltab')) {
       # Note that dadm contains all participants. Therefore, with each new participant, we need to
-      # reset the covariate. We do this by setting the covariate at trial 1 to q0 (so it's not NA)
-      # and by setting q0 in all trials but trial 1 to NA. Updating only happens when q0 != NA.
-      is_first_trial <- dadm$trials==min(dadm$trials)
-      reset_idx <- is_first_trial
-
-      trend_pars[reset_idx,2] <- q0[reset_idx,cov_name]
-      covariate[reset_idx] <- 1 # set to arbitrary non-NA value so the trial is not filtered out
-      trend_pars[!reset_idx,2] <- NA
-#      secretly_NA <- is_first_trial&NA_idx&dadm$lR==levels(dadm$lR)[1]
-
-#      trend_pars[is_first_trial&NA_idx,2] <- q0[is_first_trial&NA_idx,cov_name]
-#      trend_pars[!is_first_trial|!NA_idx,2] <- NA
-#      covariate[secretly_NA] <- q0[secretly_NA, cov_name]
+      # reset the covariate. We do this by setting:
+      # (a) ensuring the covariate is NOT NA at each trial 1 -- overwrite with q0 (must be q0 so PE=0, so no update is triggered); and
+      # (b) by setting q0 in all trials but trial 1 to NA. Updating only happens when q0 != NA.
+      reset_with_q0 <- !is.na(q0[,cov_name])
+      covariate[NA_idx&reset_with_q0] <- q0[reset_with_q0,cov_name]
+      trend_pars[,2] <- q0[,cov_name]
       NA_idx <- is.na(covariate)
     }
 
@@ -371,7 +370,7 @@ run_trend <- function(dadm, trend, param, trend_pars){
       # if all covariates are NA, nothing to update.
       if('lS' %in% colnames(dadm)) {
         ## no updates, assign q0 value
-        out[dadm$lS==cov_name] <- out[dadm$lS==cov_name] + trend_pars[1,2]
+        out[dadm$lS==cov_name] <- out[dadm$lS==cov_name] + q0[dadm$lS==cov_name,cov_name] #trend_pars[1,2]
       }
       next
     }
@@ -399,7 +398,7 @@ run_trend <- function(dadm, trend, param, trend_pars){
     updated_covariate[!NA_idx,i] <- output[unq_idx]
 
     to_update <- updated_covariate[,i]
-    # to_update[reset_idx] <- NA      # back to NA. These were not actually updated, only used to re-set Q-values.
+
     ## handle NA-cases:
     if('filter_lR' %in% names(trend)) {
       if(trend$filter_lR) {
@@ -410,16 +409,18 @@ run_trend <- function(dadm, trend, param, trend_pars){
       }
     }
     if('lS' %in% colnames(dadm)) {
-        is_lS = dadm$lS==cov_name
-        to_update[is_lS] <- na.locf(to_update[is_lS], na.rm=FALSE)
-        to_update[is_lS][is.na(to_update[is_lS])] <- trend_pars[1,2]
+      # not sure here yet
+      updated_covariate[,i] <- na.locf(to_update, na.rm=FALSE)
+
+      ## find trials in which the accumulator matches the covariate.
+      ## If so, the current or last-known state needs to be added to the accumulator
+      is_lS = dadm$lS==cov_name
+      to_update[is_lS] <- na.locf(to_update[is_lS], na.rm=FALSE)
+      to_update[!is_lS] <- NA   # don't add to output unless it's the matching accumulator
     }
     ## any remaining NAs are trials in which nothing should be updated.
     to_update[is.na(to_update)] <- 0
     out <- out + to_update
-
-    # not sure here yet
-    updated_covariate[,i] <- to_update
 
 #     # Decompress output and map back based on non-NA
 #     out[!NA_idx] <- out[!NA_idx] + output[unq_idx]
@@ -433,7 +434,6 @@ run_trend <- function(dadm, trend, param, trend_pars){
                 identity = out
   )
   ## SM: return both the trend itself and the mapping
-  #return(out)
   return(list(out=out, updated_covariate=updated_covariate))
 }
 
