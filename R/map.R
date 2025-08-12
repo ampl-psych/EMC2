@@ -118,7 +118,7 @@ map_p <- function(p,dadm,model,return_updated_covariate=FALSE)
         # for (j_i in names(trend)[isin]) {
         # SM: loop over trends by index, not by name
         for (j_i in which(isin)) {
-          j = names(trends)[isin][j_i]
+          j = names(trend)[isin][j_i]
           cur_trend <- trend[[j_i]]
           # We can select the trend pars from the already update pars matrix
           trend_pars <- pars[,cur_trend$trend_pnames]
