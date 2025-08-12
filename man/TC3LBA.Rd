@@ -10,5 +10,5 @@ TC3LBA()
 A model list with all the necessary functions to sample
 }
 \description{
-All thresholds greater than A, DT1 <- A+DT1, DT2 <- DT1 + DT2, b <- DT2 + B
+All thresholds greater than A, DT1 <- A+DT1, DT2 <- DT1+DT2, b <- DT2+B, gb=gB+A
 }

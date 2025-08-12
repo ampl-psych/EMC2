@@ -10,5 +10,5 @@ BE2LBA()
 A model list with all the necessary functions to sample
 }
 \description{
-All thresholds greater than A, DT1 <- A+DT1, b <- DT1 + B
+All thresholds greater than A, DT1 <- A+DT1, b <- DT1 + B, pb <- A + gB
 }

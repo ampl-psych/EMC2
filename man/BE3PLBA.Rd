@@ -10,5 +10,5 @@ BE3PLBA()
 A model list with all the necessary functions to sample
 }
 \description{
-Intermediate thresholds proportional to b, can be less than A
+Intermediate thresholds and gB proportional to B, can be less than A
 }
