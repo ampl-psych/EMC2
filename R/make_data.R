@@ -73,7 +73,7 @@ make_data_unconditional <- function(data, pars, design, model, return_covariates
     } else {
       prev_trial <- NULL
     }
-    this_covariates <- covariates[data$trials%in%c(prev_trial,this_trial),]
+    this_covariates <- covariates[data$trials%in%c(prev_trial,this_trial),,drop=FALSE]
 
     this_data <- design_model(
       add_accumulators(data[data$trials%in%c(prev_trial, this_trial)&data$lR==levels(data$lR)[1],includeColumns],
@@ -86,12 +86,12 @@ make_data_unconditional <- function(data, pars, design, model, return_covariates
     if(trial_idx > 1) {
       # set last (and only last) row of covariates to non-NA value to enforce updating
       this_data[this_data$trials==this_trial,covariate_names] <- NA
-      this_data[this_data$trials==this_trial&this_data$lR==max(levels(this_data$lR)),covariate_names] <- 999
+      this_data[this_data$trials==this_trial&this_data$lR==min(levels(this_data$lR)),covariate_names] <- 999  # on FIRST LR?
     }
 
     # Map single trial's parameters. Pass current state of covariates to trends
     for(i in 1:length(trends)) {
-      trends[[i]]$covariates_states <- this_covariates[,covariate_trend_idx==i]
+      trends[[i]]$covariates_states <- this_covariates[,covariate_trend_idx==i,drop=FALSE]
     }
     model_$trend <- trends
     out <- map_p(this_pars, this_data, model_, return_updated_covariate=TRUE)
@@ -99,7 +99,7 @@ make_data_unconditional <- function(data, pars, design, model, return_covariates
     if(!is.null(out[[2]])) {
       for(i in 1:length(trends)) {
         this_covariates[,covariate_trend_idx==i] <- out[[2]]
-        trends[[i]]$covariates_states <- this_covariates[,covariate_trend_idx==i]
+        trends[[i]]$covariates_states <- this_covariates[,covariate_trend_idx==i,drop=FALSE]
       }
       model_$trend <- trends
     }
@@ -111,7 +111,7 @@ make_data_unconditional <- function(data, pars, design, model, return_covariates
       if(!is.null(out[[2]])) {
         for(i in 1:length(trends)) {
           this_covariates[,covariate_trend_idx==i] <- out[[2]]
-          trends[[i]]$covariates_states <- this_covariates[,covariate_trend_idx==i]
+          trends[[i]]$covariates_states <- this_covariates[,covariate_trend_idx==i,drop=FALSE]
         }
         model_$trend <- trends
       }
@@ -130,7 +130,7 @@ make_data_unconditional <- function(data, pars, design, model, return_covariates
     this_pars <- model()$Ttransform(this_pars, this_data)
 
     # drop previous trial from covariates, pars, data
-    this_covariates <- this_covariates[this_data$trials==this_trial,]
+    this_covariates <- this_covariates[this_data$trials==this_trial,,drop=FALSE]
     this_pars <- this_pars[this_data$trials==this_trial,]
     this_data <- this_data[this_data$trials==this_trial,]
 
@@ -145,7 +145,7 @@ make_data_unconditional <- function(data, pars, design, model, return_covariates
 
     if(!is.null(model()$trend)) {
       # save covariates if requested
-      covariates[data$trials==this_trial&data$lR==min(levels(data$lR)),] <- this_covariates[this_data$lR==max(levels(this_data$R)),]  # only use last row == most updated
+      covariates[data$trials==this_trial&data$lR==min(levels(data$lR)),] <- this_covariates[this_data$lR==max(levels(this_data$R)),,drop=FALSE]  # only use last row == most updated
       this_pars <- this_pars[,!colnames(this_pars) %in% covariate_par_names]
     }
 
@@ -159,6 +159,7 @@ make_data_unconditional <- function(data, pars, design, model, return_covariates
     # check for feedback generators
     for(i in 1:length(trends)) {
       if(!is.null(trends[[i]]$feedback_generator)) {
+        ## TO DO: make more generic. Pass *and return* entire data frame.
         this_data_tmp <- this_data[this_data$lR == levels(this_data$lR)[1],]
         fb <- trends[[i]]$feedback_generator(this_data_tmp)
         this_data$reward <- rep(fb, each=length(levels(this_data$lR)))
