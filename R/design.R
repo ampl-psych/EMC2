@@ -605,12 +605,14 @@ design_model <- function(data,design,model=NULL,
       for(trend_name in names(trend)) {
         if('filter_lR' %in% names(trend[[trend_name]])) {
           if(trend[[trend_name]]$filter_lR) {
-            cov_name <- gsub('_lRfiltered', '', trend[[trend_name]]$covariate)
-            # copy to new column, filter
-            if(cov_name %in% colnames(dadm)) {
-              ## Needed: In case or `rt`, the covariate is not present in minimal_design.. But this is an ugly solution.
-              dadm[,trend[[trend_name]]$covariate] <- dadm[,cov_name]
-              dadm[dadm$lR!=levels(dadm$lR)[1],trend[[trend_name]]$covariate] <- NA
+            cov_names <- gsub('_lRfiltered', '', trend[[trend_name]]$covariate)
+            for(cov_name in cov_names) {
+              # copy to new column, filter
+              if(cov_name %in% colnames(dadm)) {
+                ## Needed: In case or `rt`, the covariate is not present in minimal_design.. But this is an ugly solution.
+                dadm[,trend[[trend_name]]$covariate] <- dadm[,cov_name]
+                dadm[dadm$lR!=levels(dadm$lR)[1],trend[[trend_name]]$covariate] <- NA
+              }
             }
           }
         }
