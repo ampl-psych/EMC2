@@ -90,6 +90,7 @@
 #' @importFrom WienR dWDM
 #' @importFrom WienR pWDM
 #' @importFrom WienR rWDM
+#' @importFrom tmvtnorm rtmvnorm
 #' @useDynLib EMC2, .registration = TRUE
 ## usethis namespace: end
 NULL

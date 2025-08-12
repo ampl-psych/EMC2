@@ -54,6 +54,7 @@ Imports:
     methods,
     msm,
     mvtnorm,
+    tmvtnorm,
     parallel,
     stats,
     Matrix,
