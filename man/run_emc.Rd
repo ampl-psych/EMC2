@@ -19,7 +19,8 @@ run_emc(
   max_tries = 20,
   n_blocks = 1,
   thin = FALSE,
-  trim = TRUE
+  trim = TRUE,
+  r_cores = 1
 )
 }
 \arguments{
