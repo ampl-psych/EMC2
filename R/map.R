@@ -115,10 +115,9 @@ map_p <- function(p,dadm,model,return_updated_covariate=FALSE)
       isin <- names(trend) %in% colnames(pm)
       if (any(isin)){ # At this point the trend has already been mapped and transformed
 
-        # for (j_i in names(trend)[isin]) {
         # SM: loop over trends by index, not by name
         for (j_i in which(isin)) {
-          j = names(trend)[isin][j_i]
+          j = names(trend)[j_i]
           cur_trend <- trend[[j_i]]
           # We can select the trend pars from the already update pars matrix
           trend_pars <- pars[,cur_trend$trend_pnames]
@@ -127,6 +126,7 @@ map_p <- function(p,dadm,model,return_updated_covariate=FALSE)
           output <- run_trend(dadm, cur_trend, pm[,j], trend_pars)
 
           pm[, j] <- output[[1]]
+          colnames(output[[2]]) <- cur_trend$covariate
           updated_covariate <- cbind(updated_covariate, output[[2]])
           if(cur_trend$kernel %in% c('delta', 'deltab')) {
             if(ncol(output[[2]])>1) output[[2]] <- apply(output[[2]],1,sum,na.rm=TRUE)
