@@ -328,22 +328,23 @@ run_trend <- function(dadm, trend, param, trend_pars){
   updated_covariate <- matrix(nrow=nrow(dadm), ncol=length(trend$covariate))
   # fix, otherwise indexing will fail
   if(is.null(dim(trend_pars))) trend_pars <- t(t(trend_pars))
+
+  # to do: make a generic function that merges trend$covariate_state with q0. Probably only for delta(2) etc.
   if(!is.null(trend$covariates_states)) {
     q0 <- trend$covariates_states  # of shape [nrow(dadm), ncovariates]
 
-    # if no covariate state is known yet, set to q0 in pars
+    # if no covariate state is known yet, set to q0 obtained from trend_pars
     first_trials <- (dadm$trials==min(dadm$trials)&dadm$lR==levels(dadm$lR)[1])
     q0[first_trials][is.na(q0[first_trials,])] <- trend_pars[first_trials,2]
   } else {
-    ## Set all to q0
+    # Set all to q0
     q0 <- matrix(trend_pars[,2], nrow=nrow(dadm), ncol=length(trend$covariate))
     colnames(q0) <- trend$covariate
     # Only set q0 for first trial, first lR of each subject
     q0[!(dadm$trials==min(dadm$trials)&dadm$lR==levels(dadm$lR)[1]),] <- NA
-
   }
 
-  trend_pars_orig <- trend_pars
+  trend_pars_orig <- trend_pars  # save a copy since q0 will be repeatedly overwritten
   for(i in 1:length(trend$covariate)){
     trend_pars <- trend_pars_orig
     cov_name <- trend$covariate[i]
@@ -370,11 +371,11 @@ run_trend <- function(dadm, trend, param, trend_pars){
       # if all covariates are NA, nothing to update.
       if('lS' %in% colnames(dadm)) {
         ## no updates, assign q0 value
-        out[dadm$lS==cov_name] <- out[dadm$lS==cov_name] + q0[dadm$lS==cov_name,cov_name] #trend_pars[1,2]
+        out[dadm$lS==cov_name] <- out[dadm$lS==cov_name] + q0[dadm$lS==cov_name,cov_name]
       }
       next
     }
-    cov_tmp <- covariate[!NA_idx] #dadm[!NA_idx, cov_name]
+    cov_tmp <- covariate[!NA_idx]
     param_tmp <- param[!NA_idx]
     trend_pars_tmp <- trend_pars[!NA_idx,, drop = FALSE]
     if(trend$kernel %in% c("delta", "delta2", "deltab")){
@@ -402,9 +403,10 @@ run_trend <- function(dadm, trend, param, trend_pars){
     ## handle NA-cases:
     if('filter_lR' %in% names(trend)) {
       if(trend$filter_lR) {
-        ## forward fill updated covariates. Remaining NAs (initial trials) should be set to q0
+        ## forward fill updated covariates. Remaining NAs (initial trials) should be set to q0 -- should never happen though
         to_update <- na.locf(to_update, na.rm = FALSE)
-        to_update[is.na(to_update)] <- trend_pars[1,2]
+        if(any(is.na(to_update))) stop('Found NA. This shouldnt happen')
+        # to_update[is.na(to_update)] <- q0[is.na(to_update),cov_name] # Should never happen. Comment out so it throws an error
         updated_covariate[,i] <- to_update
       }
     }
