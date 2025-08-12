@@ -206,17 +206,13 @@ NumericVector run_trend_rcpp(DataFrame data, List trend, NumericVector param, Nu
           // Will this behave well though, if we're simultaneously applying another trend? what if there's an lRS
           // column that is NOT related to the RL part? stuff to think about...
           if(lS[k] == cur_cov) {
-            if(k == 0) {
+            if(k == 0 || l == 0) {
               // first trial, and the covariate was NA, so out must be updated with q0
+              // OR not the first trial, but cannot update out with the last-known value of expected_output because that has not been updated yet
               out[k] = out[k] + trend_pars(0,1);
             } else {
-              if(l == 0) {
-                // not the first trial, but cannot update out with the last-known value of expected_output because that has not been updated yet
-                out[k] = out[k] + trend_pars(0,1);
-              } else {
-                // update with last-known output
-                out[k] = out[k] + expanded_output[l-1];
-              }
+              // update with last-known output
+              out[k] = out[k] + expanded_output[l-1];
             }
           }
         }
