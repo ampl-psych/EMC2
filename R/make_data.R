@@ -50,15 +50,15 @@ make_data_unconditional <- function(data, pars, design, model, return_covariates
       }
       if(trend$kernel == 'deltab') data$rt <- 0  # ensure RT is not NA, so it won't be ignored because it's set to NA
     }
-    #if(return_covariates) {
     covariates <- matrix(NA, nrow=nrow(data), ncol=length(covariate_names))
     colnames(covariates) <- covariate_names
-    #}
   }
 
   model_ <- model()
   includeColumns <- !colnames(data) %in% c('lR', 'lM', names(design$Ffunctions))
+  if('reward' %in% colnames(data)) data$reward <- NA
   if(!'lR' %in% colnames(data)) data$lR <- factor(rep(1, nrow(data)))  # for simulations of the DDM, assume all rows are lR==1
+
   all_trials <- sort(unique(data[,'trials']))
   for(trial_idx in 1:length(all_trials)) {
     this_pars <- pars
@@ -70,14 +70,10 @@ make_data_unconditional <- function(data, pars, design, model, return_covariates
       prev_trial <- all_trials[trial_idx-1]
       # Remove pars from subjects that have fewer than this_trial trials
       this_pars <- this_pars[as.character(unique(this_data$subjects)),]
-      # set Q-values to previous one
-      # this_pars[,covariate_par_names] <- this_covariates
-      # this_covariates <- na.locf(covariates[data$trials%in%c(prev_trial,this_trial),],na.rm=FALSE)
     } else {
       prev_trial <- NULL
-    #  this_covariates <- covariates[data$trials%in%c(prev_trial,this_trial),]
     }
-    this_covariates <- na.locf(covariates[data$trials%in%c(prev_trial,this_trial),], na.rm=FALSE)
+    this_covariates <- covariates[data$trials%in%c(prev_trial,this_trial),]
 
     this_data <- design_model(
       add_accumulators(data[data$trials%in%c(prev_trial, this_trial)&data$lR==levels(data$lR)[1],includeColumns],
@@ -87,6 +83,11 @@ make_data_unconditional <- function(data, pars, design, model, return_covariates
 
     # drop unused levels
     this_data$subjects <- droplevels(this_data$subjects)
+    if(trial_idx > 1) {
+      # set last (and only last) row of covariates to non-NA value to enforce updating
+      this_data[this_data$trials==this_trial,covariate_names] <- NA
+      this_data[this_data$trials==this_trial&this_data$lR==max(levels(this_data$lR)),covariate_names] <- 999
+    }
 
     # Map single trial's parameters. Pass current state of covariates to trends
     for(i in 1:length(trends)) {
@@ -98,7 +99,9 @@ make_data_unconditional <- function(data, pars, design, model, return_covariates
     if(!is.null(out[[2]])) {
       for(i in 1:length(trends)) {
         this_covariates[,covariate_trend_idx==i] <- out[[2]]
+        trends[[i]]$covariates_states <- this_covariates[,covariate_trend_idx==i]
       }
+      model_$trend <- trends
     }
 
     if(!is.null(model()$trend) && attr(model()$trend, "pretransform")){
@@ -108,7 +111,9 @@ make_data_unconditional <- function(data, pars, design, model, return_covariates
       if(!is.null(out[[2]])) {
         for(i in 1:length(trends)) {
           this_covariates[,covariate_trend_idx==i] <- out[[2]]
+          trends[[i]]$covariates_states <- this_covariates[,covariate_trend_idx==i]
         }
+        model_$trend <- trends
       }
     }
     this_pars <- do_transform(this_pars, model()$transform)
@@ -124,7 +129,8 @@ make_data_unconditional <- function(data, pars, design, model, return_covariates
     }
     this_pars <- model()$Ttransform(this_pars, this_data)
 
-    # drop previous trial from pars, data
+    # drop previous trial from covariates, pars, data
+    this_covariates <- this_covariates[this_data$trials==this_trial,]
     this_pars <- this_pars[this_data$trials==this_trial,]
     this_data <- this_data[this_data$trials==this_trial,]
 
@@ -139,14 +145,7 @@ make_data_unconditional <- function(data, pars, design, model, return_covariates
 
     if(!is.null(model()$trend)) {
       # save covariates if requested
-      if(return_covariates) {
-        covariates[data$trials%in%c(prev_trial,this_trial),] <- this_covariates
-        # for(covariate_name in covariate_names) {
-        #   covariates[data$trials==this_trial,covariate_name] <- this_pars[,covariate_par_names]
-        # }
-        # covariates[data$trials==this_trial,covariate_names] <- this_pars[,covariate_par_names]
-      }
-      this_covariates <- this_pars[this_data$lR==levels(this_data$lR)[1],covariate_par_names,drop=FALSE]
+      covariates[data$trials==this_trial&data$lR==min(levels(data$lR)),] <- this_covariates[this_data$lR==max(levels(this_data$R)),]  # only use last row == most updated
       this_pars <- this_pars[,!colnames(this_pars) %in% covariate_par_names]
     }
 
@@ -154,13 +153,15 @@ make_data_unconditional <- function(data, pars, design, model, return_covariates
 
     # Simulate R, rt
     Rrt <- model()$rfun(this_data,this_pars)
-    if('lR' %in% names(this_data)) Rrt <- Rrt[rep(1:nrow(Rrt), each=length(unique(this_data$lR))),]
+    Rrt <- Rrt[rep(1:nrow(Rrt), each=length(unique(this_data$lR))),]
     for (i in dimnames(Rrt)[[2]]) this_data[[i]] <- Rrt[,i]
 
     # check for feedback generators
     for(i in 1:length(trends)) {
       if(!is.null(trends[[i]]$feedback_generator)) {
-        this_data$reward <- trends[[i]]$feedback_generator(this_data)
+        this_data_tmp <- this_data[this_data$lR == levels(this_data$lR)[1],]
+        fb <- trends[[i]]$feedback_generator(this_data_tmp)
+        this_data$reward <- rep(fb, each=length(levels(this_data$lR)))
       }
     }
 
@@ -168,17 +169,19 @@ make_data_unconditional <- function(data, pars, design, model, return_covariates
     if(!is.null(design$Ffunctions)) for(i in names(design$Ffunctions)) this_data[,i] <- design$Ffunctions[[i]](this_data)
 
     # drop lR
-    if(!is.null(this_data$lR)) this_data <- this_data[this_data$lR == levels(this_data$lR)[1],!names(this_data) %in% c('lR', 'lM', 'winner')]
+    this_data <- this_data[this_data$lR == levels(this_data$lR)[1],!names(this_data) %in% c('lR', 'lM', 'winner')]
 
     # add to data
     match_idx <- with(data, data$trials == this_trial & data$subjects %in% this_data$subjects)
     data[match_idx, colnames(this_data)] <- this_data[match(data$subjects[match_idx], this_data$subjects), ]
   }
 
+
   # remove lR, lM
   data <- data[data$lR == levels(data$lR)[1],!names(data) %in% c('lR', 'lM')]
   return(list(data=data, covariates=covariates, trialwise_parameters=trialwise_parameters))
 }
+
 
 #' Simulate Data
 #'
