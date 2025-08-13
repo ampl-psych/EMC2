@@ -118,6 +118,10 @@ NumericVector run_trend_rcpp(DataFrame data, List trend, NumericVector param, Nu
   String kernel = as<String>(trend["kernel"]);
   String base = as<String>(trend["base"]);
   CharacterVector covnames = trend["covariate"];
+  bool filter_lR = false;
+  if(trend.containsElementNamed("filter_lR")) {
+    filter_lR = as<bool>(trend["filter_lR"]);
+  }
   // Initialize output vector with zeros
   int n_trials = param.length();
   NumericVector out(n_trials);
@@ -126,20 +130,6 @@ NumericVector run_trend_rcpp(DataFrame data, List trend, NumericVector param, Nu
     n_base_pars = 1;
     if(kernel == "deltab") {
       n_base_pars = 0;
-    //   // Create a new matrix that extends trend_pars so the last column is param
-    //   int m = trend_pars.ncol();
-    //   NumericMatrix trend_pars_with_param(n_trials, m + 1);
-    //   // Copy existing data from trend_pars to updated_trend_pars
-    //   for (int i = 0; i < n_trials; ++i) {
-    //     for (int j = 0; j < m; ++j) {
-    //       trend_pars_with_param(i, j) = trend_pars(i, j);
-    //     }
-    //     // Add the param vector as the new column
-    //     trend_pars_with_param(i, m) = param[i];
-    //   }
-    //   // Now clone back to the original matrix
-    //   trend_pars = trend_pars_with_param;
-    //   Rf_PrintValue(trend_pars);
     }
   }
   // Loop through covariates
@@ -187,6 +177,13 @@ NumericVector run_trend_rcpp(DataFrame data, List trend, NumericVector param, Nu
       if(NA_idx[k] == FALSE){
         out[k] = out[k] + expanded_output[l];
         l++;
+      } else {
+        if(filter_lR) {
+          // If covariates were filtered on lR, forward fill the covariates
+          if(k > 0) {
+            out[k] = out[k-1];
+          }
+        }
       }
     }
   }

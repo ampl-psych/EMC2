@@ -95,6 +95,7 @@
 #' @importFrom stats varimax
 #' @importFrom utils combn
 #' @importFrom utils head
+#' @importFrom zoo na.locf
 #' @importFrom WienR dWDM
 #' @importFrom WienR pWDM
 #' @importFrom WienR rWDM

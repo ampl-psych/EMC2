@@ -367,6 +367,15 @@ run_trend <- function(dadm, trend, param, trend_pars){
     # Decompress output and map back based on non-NA
     out[!NA_idx] <- out[!NA_idx] + output[unq_idx]
     updated_covariate[!NA_idx,i] <- output[unq_idx]
+
+    if('filter_lR' %in% names(trend)) {
+      if(trend$filter_lR) {
+        ## not sure how to best solve this yet. Forward fill maybe?
+        out[NA_idx] <- NA
+        out <- na.locf(na.locf(out), fromLast = FALSE)
+        updated_covariate <- na.locf(na.locf(updated_covariate), fromLast=FALSE)
+      }
+    }
   }
   # Do the mapping
   out <- switch(trend$base,
