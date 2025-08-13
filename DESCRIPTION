@@ -65,7 +65,7 @@ Imports:
     utils,
     lpSolve,
     WienR,
-    DiagrammeR
+    DiagrammeR,
     zoo
 LinkingTo: 
     Rcpp, RcppArmadillo

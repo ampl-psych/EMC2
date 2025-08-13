@@ -303,7 +303,7 @@ prep_trend <- function(dadm, trend, pars, return_updated_covariate=FALSE){
     par <- names(trend)[par_n]
     output <- run_trend(dadm, trend[[par_n]], pars[,par], pars[,trend[[par_n]]$trend_pnames, drop = FALSE])
     pars[,par] <- output[[1]]
-    colnames(output[[2]]) <- trend[[par_n]]$covariates
+    colnames(output[[2]]) <- trend[[par_n]]$covariate
     updated_covariate <- cbind(updated_covariate, output[[2]])
     if(trend[[par_n]]$kernel %in% c('delta','deltab')) {
       if(ncol(output[[2]]>1)) output[[2]] <- apply(output[[2]],1,sum,na.rm=TRUE)
