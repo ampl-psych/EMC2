@@ -581,8 +581,7 @@ static inline double ss_exg_stop_success_lpdf(
   double err_est, res;
   int err_code;
   // perform numerical integration
-  // IS WRITING THE NAMESPACE Numer:: NECESSARY?
-  res = Numer::integrate(
+  res = integrate(
     f,        // integrand
     R_NegInf, // lower limit of integration
     R_PosInf, // upper limit of integration
