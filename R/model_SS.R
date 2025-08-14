@@ -703,6 +703,8 @@ pstopTEXG <- function(
 
 #### SSexG Model list ----
 
+# TODO remove this model file after we're fully satisfied with SStexG
+
 #' Stop-signal ex-Gaussian race
 #'
 #' Model file to estimate the ex-Gaussian race model for Stop-Signal data
@@ -772,6 +774,8 @@ SSexG_old <- function() {
   )
 }
 
+
+# TODO remove this model file after we're fully satisfied with SStexG
 
 #' Stop-signal ex-Gaussian race
 #'
@@ -1263,7 +1267,7 @@ pstopHybrid <- function(
 #'
 #' Note that, in contrast to the parameters of the go process, the ex-Gaussian stop process parameters `muS`, `sigmaS`, and `tauS` do not have clear psychological interpretations (Matzke & Wagenmakers, 2009).
 #' Matzke et al. (2020) showed that evidence accumulation models of the stop process have poor psychometric properties.
-#' Thus, the current hybrid race model - with an evidence accumulation account of _going_ and a descriptive account of _stopping_ - represents a compromise between process realism and practically useful measurement properties (Tanis et al., 2024).
+#' Thus, this hybrid race model - with an evidence accumulation account of _going_ and a descriptive account of _stopping_ - represents a compromise between process realism and practically useful measurement properties (Tanis et al., 2024).
 #'
 #' The mean of the ex-Gaussian stop distribution (`muS + tauS`) is taken as the stop signal reaction time (SSRT).
 #'
@@ -1352,7 +1356,7 @@ SSRDEX <- function() {
   )
 }
 
-
+# TODO remove after we're fully satisfied with SSRDEX
 SSRDEXnoC <- function() {
   list(
     type = "RACE",

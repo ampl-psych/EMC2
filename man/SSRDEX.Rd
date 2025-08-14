@@ -57,7 +57,7 @@ This hybrid race model of the stop signal task was introduced in Tanis et al. (2
 
 Note that, in contrast to the parameters of the go process, the ex-Gaussian stop process parameters \code{muS}, \code{sigmaS}, and \code{tauS} do not have clear psychological interpretations (Matzke & Wagenmakers, 2009).
 Matzke et al. (2020) showed that evidence accumulation models of the stop process have poor psychometric properties.
-Thus, the current hybrid race model - with an evidence accumulation account of \emph{going} and a descriptive account of \emph{stopping} - represents a compromise between process realism and practically useful measurement properties (Tanis et al., 2024).
+Thus, this hybrid race model - with an evidence accumulation account of \emph{going} and a descriptive account of \emph{stopping} - represents a compromise between process realism and practically useful measurement properties (Tanis et al., 2024).
 
 The mean of the ex-Gaussian stop distribution (\code{muS + tauS}) is taken as the stop signal reaction time (SSRT).
 
