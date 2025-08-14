@@ -415,59 +415,6 @@ NumericVector ss_texg_lpdf(
 // REGULAR EX-GAUSSIAN FUNCTIONS
 // ----------------------------------------------------------------------------
 
-//Claude
-// // Work in log space but convert efficiently
-// double log_ds = dexg(t, pars(0,3), pars(0,4), pars(0,5), true);
-// double log_surv_sum = 0.0;
-// for (int i = 0; i < n_go; ++i) {
-//   log_surv_sum += pexg(t + SSD, pars(i,0), pars(i,1), pars(i,2),
-//                        false, true); // log scale
-// }
-// return std::exp(log_ds + log_surv_sum); // Convert once at the end
-
-
-//CHATGPT
-/* ------------------------------------------------------------------
-   Fast stop-success integrand   f(t) =
-       d_stop(t) · ∏_{go acc}  S_go(t + SSD)
-   ------------------------------------------------------------------ */
-class exg_stop_success_scalar : public Numer::Func
-{
-private:
-    const double SSD;
-    const NumericMatrix pars;   // rows = go accs, columns (μ,σ,τ, μS,σS,τS)
-    const int n_go;
-    const double min_ll;
-
-public:
-    exg_stop_success_scalar(double SSD_, NumericMatrix pars_, double min_ll_)
-        : SSD(SSD_), pars(pars_), n_go(pars_.nrow()), min_ll(min_ll_) {}
-
-    double operator()(const double &t) const
-    {
-        /* ---- stop density (winner) ---- */
-        double ds = dexg(t,
-                         pars(0, 3), pars(0, 4), pars(0, 5),
-                         /*log_d =*/ false);          // scalar, no loops
-        if (!R_FINITE(ds)) ds = std::exp(min_ll);
-
-        /* ---- product of go survivors ---- */
-        double surv_prod = 1.0;
-        for (int i = 0; i < n_go; ++i) {
-            double s_i = pexg(t + SSD,
-                              pars(i, 0), pars(i, 1), pars(i, 2),
-                              /*lower_tail =*/ false,
-                              /*log_p      =*/ false);
-            if (!R_FINITE(s_i)) s_i = std::exp(min_ll);
-            surv_prod *= s_i;
-        }
-        return ds * surv_prod;      // likelihood scale
-    }
-};
-
-// CHATGPT
-
-
 // wrapper around ex-Gaussian log PDF for race function
 NumericVector exg_go_lpdf(
     // single RT, broadcast to repped vector (one per accumulator)
@@ -579,33 +526,76 @@ double ss_exg_stop_fail_lpdf(
   return go_lprob + stop_survivor_lprob;
 }
 
-// INSERT CHATGPT STUFF HERE
+// go vs stop race likelihood function, for the case of stop trials with
+// successful inhibition (i.e., stop process winning). not accounting for
+// trigger failure and go failure.
+// this function is an integrand (quantity to be integrated)
+class exg_stop_success_integrand : public Numer::Func {
+private:
+  const double SSD;
+  const NumericMatrix pars;
+  const int n_go;
+  const double min_ll;
 
+public:
+  exg_stop_success_integrand(
+    double SSD_,
+    NumericMatrix pars_,
+    double min_ll_
+  ) :
+  SSD(SSD_),
+  pars(pars_),
+  n_go(pars_.nrow()),
+  min_ll(min_ll_) {}
 
-//CHATGPT
-/* Log-likelihood that stop wins (fast, scalar integrand) */
-static inline double
-ss_exg_stop_success_lpdf_fast(double        SSD,
-                              NumericMatrix pars,
-                              double        min_ll)
-{
-    exg_stop_success_scalar f(SSD, pars, min_ll);
+  double operator()(const double &x) const {
+    // log density of stop process winning at time x
+    // input args: x, muS, sigmaS, tauS, log_d = TRUE
+    double log_d = dexg(x, pars(0, 3), pars(0, 4), pars(0, 5), true);
+    if (!R_FINITE(log_d)) log_d = min_ll;
+    // summed log probability of go accumulators not yet having finished by time x
+    double summed_log_s = 0.0;
+    for (int i = 0; i < n_go; ++i) {
+      // NB stop signal delay added to finish time x, to account for earlier start of go process
+      // input args: q, mu, sigma, tau, lower_tail = FALSE, log_p = TRUE
+      double log_s_i = pexg(x + SSD, pars(i, 0), pars(i, 1), pars(i, 2), false, true);
+      if (!R_FINITE(log_s_i)) log_s_i = min_ll;
+      summed_log_s += log_s_i;
+    }
+    // return sum of (1) log winner density and (2) sum of log survivor densities,
+    // exponentiated to put on likelihood scale so integrator can work with it
+    return std::exp(log_d + summed_log_s);
+  }
+};
 
-    double err_est, res;
-    int    err_code;
-
-    res = Numer::integrate(f,      /* integrand */
-                           R_NegInf, R_PosInf,
-                           err_est, err_code,
-                           /*subdiv*/   100,
-                           /*eps_abs*/  1e-8,
-                           /*eps_rel*/  1e-6);
-
-    bool bad = (err_code != 0) || !R_FINITE(res) || (res <= 0.0);
-
-    return bad ? min_ll : std::log(res);
+// function to compute the stop success integral, not accounting for trigger
+// failure and go failure
+static inline double ss_exg_stop_success_lpdf(
+    double SSD,
+    NumericMatrix pars,
+    double min_ll
+) {
+  // set up the integrand
+  exg_stop_success_integrand f(SSD, pars, min_ll);
+  // declare local variables for the integrator
+  double err_est, res;
+  int err_code;
+  // perform numerical integration
+  // IS WRITING THE NAMESPACE Numer:: NECESSARY?
+  res = Numer::integrate(
+    f,        // integrand
+    R_NegInf, // lower limit of integration
+    R_PosInf, // upper limit of integration
+    err_est,  // placeholder for estimation error
+    err_code, // placeholder for failed integration error code
+    100,      // maximum number of subdivisions
+    1e-8,     // absolute tolerance
+    1e-6      // relative tolerance
+  );
+  // check for issues with result, and return
+  bool bad = (err_code != 0) || !R_FINITE(res) || (res <= 0.0);
+  return bad ? min_ll : std::log(res);
 }
-//CHATGPT
 
 // top-level log-likelihood function for the stop signal task
 NumericVector ss_exg_lpdf(
@@ -702,47 +692,14 @@ NumericVector ss_exg_lpdf(
         // (i)  go failure; OR
         // (ii) stop process beat go process in fair race (i.e., without go
         //      failure and without trigger failure)
-
-//        Rcpp::Rcout << "SSD[start_row] = " << SSD[start_row] << std::endl;
-//        Rcpp::Rcout << "start_row = " << start_row << std::endl;
-//        Rcpp::Rcout << "end_row = " << start_row << std::endl;
-
-//CHATGPT
-        // stop_success_integral = ss_exg_stop_success_lpdf(
-        //   SSD[start_row],
-        //   pars(Range(start_row, end_row), _),
-        //   min_ll,
-        //   R_NegInf,
-        //   R_PosInf
-        // );
-
-        stop_success_integral =
-          ss_exg_stop_success_lpdf_fast(SSD[start_row],
-                                        pars(Range(start_row, end_row), _),
-                                        min_ll);
-//CHATGPT
-
- //       stop_success_integral = ss_exg_stop_success_pdf(
-//          SSD[start_row],
- //         pars(Range(start_row, end_row), _),
-//          min_ll,
-//          R_NegInf,
-//          R_PosInf
-//        );
-
-
-//        Rcpp::Rcout << "gf[trial] = " << gf[trial] << std::endl;
-//        Rcpp::Rcout << "tf[trial] = " << tf[trial] << std::endl;
-//        Rcpp::Rcout << "pStop = " << stop_success_integral << std::endl;
-
+        stop_success_integral = ss_exg_stop_success_lpdf(
+          SSD[start_row],
+          pars(Range(start_row, end_row), _),
+          min_ll
+        );
         stop_success_lprob = log1m(gf[trial]) + log1m(tf[trial]) + stop_success_integral;
         // likelihood = gf + [(1-gf) x (1-tf) x stop_success_integral]
         out[trial] = log_sum_exp(std::log(gf[trial]), stop_success_lprob);
-
-//        out[trial] = log( gf[trial] + (1-gf[trial])*(1-tf[trial])*stop_success_integral );
-
-//        Rcpp::Rcout << "out = " << out[trial] << std::endl;
-
       } else {
         // go trial with no response:
         // explained by go failure
