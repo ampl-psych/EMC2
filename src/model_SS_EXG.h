@@ -415,6 +415,17 @@ NumericVector ss_texg_lpdf(
 // REGULAR EX-GAUSSIAN FUNCTIONS
 // ----------------------------------------------------------------------------
 
+//Claude
+// // Work in log space but convert efficiently
+// double log_ds = dexg(t, pars(0,3), pars(0,4), pars(0,5), true);
+// double log_surv_sum = 0.0;
+// for (int i = 0; i < n_go; ++i) {
+//   log_surv_sum += pexg(t + SSD, pars(i,0), pars(i,1), pars(i,2),
+//                        false, true); // log scale
+// }
+// return std::exp(log_ds + log_surv_sum); // Convert once at the end
+
+
 //CHATGPT
 /* ------------------------------------------------------------------
    Fast stop-success integrand   f(t) =
@@ -520,27 +531,6 @@ NumericVector exg_go_lccdf(
 
   return(out);
 }
-
-//CHATGPT
-/* 5-argument shims so they match f_integrate()'s signature */
-static inline NumericVector exg_go_lpdf5(NumericVector  rt,
-                                         NumericMatrix  pars,
-                                         LogicalVector  idx,
-                                         double         min_ll,
-                                         LogicalVector  /*is_ok*/)
-{
-    return exg_go_lpdf(rt, pars, idx, min_ll);
-}
-
-static inline NumericVector exg_go_lccdf5(NumericVector  rt,
-                                          NumericMatrix  pars,
-                                          LogicalVector  idx,
-                                          double         min_ll,
-                                          LogicalVector  /*is_ok*/)
-{
-    return exg_go_lccdf(rt, pars, idx, min_ll);
-}
-//CHATGPT
 
 // go race log likelihood function, not accounting for go failure
 double ss_exg_go_lpdf(
