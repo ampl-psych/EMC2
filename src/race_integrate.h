@@ -9,12 +9,6 @@
 using namespace Rcpp;
 using namespace Numer;
 
-struct IntegrationResult {
-  double value;
-  double error_estimate;
-  int error_code;
-};
-
 class race_f : public Func {
 private:
   NumericVector (*lpdf)(NumericVector, NumericMatrix, LogicalVector, double);
@@ -115,6 +109,16 @@ public:
 };
 
 
+// --------------------------
+// NB following code is currently unused; Frank originally developed this for
+// the stop signal models, but we ended up using a more lightweight implementation,
+// directly calling Numer::integrate instead of the following elaborate wrapper.
+struct IntegrationResult {
+  double value;
+  double error_estimate;
+  int error_code;
+};
+
 IntegrationResult my_integrate(
     const Func& race_pdf,
     double lower,
@@ -164,6 +168,7 @@ IntegrationResult my_integrate(
 
   return {res, err_est, err_code};
 }
+// --------------------------
 
 //Jeroen
 NumericVector f_integrate(Rcpp::NumericMatrix pars,
