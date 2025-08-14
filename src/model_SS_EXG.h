@@ -579,89 +579,8 @@ double ss_exg_stop_fail_lpdf(
   return go_lprob + stop_survivor_lprob;
 }
 
+// INSERT CHATGPT STUFF HERE
 
-
-// go vs stop race likelihood function, for the case of stop trials with
-// successful inhibition (i.e., stop process winning). not accounting for
-// trigger failure and go failure.
-// this function is an integrand (quantity to be integrated)
-double exg_stop_success_integrand(
-    // stop finish time
-    double x,
-    // stop signal delay
-    double SSD,
-    // parameter values: rows = accumulators, columns = parameters
-    NumericMatrix pars,
-    // minimal log likelihood, to protect against numerical issues
-    double min_ll
-) {
-  // create local LogicalVector with all FALSE values (since the go accumulators
-  // by definition are all losers)
-  LogicalVector winner(pars.nrow(), false);
-  // obtain the go race process log likelihood (since the go accumulators are
-  // losers, this will just be the summed log survivor probability)
-  // NB SSD added to stop finish time to get go RT
-  double go_lprob = ss_exg_go_lpdf(x + SSD, pars, winner, min_ll);
-  // obtain the winner log probability of the stop process
-  // input args: x, muS, sigmaS, tauS, log_d = TRUE
-  double stop_winner_lprob = dexg(x, pars(0, 3), pars(0, 4), pars(0, 5), true);
-  if (!traits::is_finite<REALSXP>(stop_winner_lprob)) {
-    stop_winner_lprob = min_ll;
-  }
-  // final output of race model is summed log likelihood, exponentiated to the
-  // likelihood to enable numerical integration
-  return std::exp(go_lprob + stop_winner_lprob);
-}
-
-// wrapper class to make exg_stop_success_integrand compatible with Func
-// interface for integration
-class exg_ss_integrand : public Func {
-private:
-  const double SSD;
-  const NumericMatrix pars;
-  const double min_ll;
-
-public:
-  exg_ss_integrand(
-    double SSD_,
-    NumericMatrix pars_,
-    double min_ll_
-  ) :
-  SSD(SSD_),
-  pars(pars_),
-  min_ll(min_ll_) {}
-
-  double operator()(const double& x) const {
-    return exg_stop_success_integrand(x, SSD, pars, min_ll);
-  }
-};
-
-
-// function to compute the stop success integral, not accounting for trigger
-// failure and go failure
-// double ss_exg_stop_success_lpdf(
-//     // single stop signal delay
-//     double SSD,
-//     // parameter values: rows = accumulators, columns = parameters
-//     NumericMatrix pars,
-//     // minimal log likelihood, to protect against numerical issues
-//     double min_ll,
-//     // lower limit for integration
-//     double lower,
-//     // upper limit for integration
-//     double upper
-// ) {
-//   // set up an instance of a stop success integrand
-//   exg_ss_integrand race_integrand(SSD, pars, min_ll);
-//   // perform integration: likelihood of stop process winning
-//   IntegrationResult out = my_integrate(race_integrand, lower, upper);
-//   // check for numerical issues
-//   bool bad_out = out.error_code != 0 || !traits::is_finite<REALSXP>(out.value);
-//   // return *log* likelihood
-//   // NB in the original R code from the DMC toolbox (`my.integrate`), -Inf was
-//   // returned in case of failed integration
-//   return bad_out ? min_ll : std::log(out.value);
-// }
 
 //CHATGPT
 /* Log-likelihood that stop wins (fast, scalar integrand) */
@@ -687,31 +606,6 @@ ss_exg_stop_success_lpdf_fast(double        SSD,
     return bad ? min_ll : std::log(res);
 }
 //CHATGPT
-
-// double ss_exg_stop_success_pdf(
-//     // single stop signal delay
-//     double SSD,
-//     // parameter values: rows = accumulators, columns = parameters
-//     NumericMatrix pars,
-//     // minimal log likelihood, to protect against numerical issues
-//     double min_ll,
-//     // lower limit for integration
-//     double lower,
-//     // upper limit for integration
-//     double upper
-// ) {
-//   // set up an instance of a stop success integrand
-//   exg_ss_integrand race_integrand(SSD, pars, min_ll);
-//   // perform integration: likelihood of stop process winning
-//   IntegrationResult out = my_integrate(race_integrand, lower, upper);
-//   // check for numerical issues
-//   bool bad_out = out.error_code != 0 || !traits::is_finite<REALSXP>(out.value);
-//   // return *log* likelihood
-//   // NB in the original R code from the DMC toolbox (`my.integrate`), -Inf was
-//   // returned in case of failed integration
-//   return bad_out ? min_ll : out.value;
-// }
-
 
 // top-level log-likelihood function for the stop signal task
 NumericVector ss_exg_lpdf(
