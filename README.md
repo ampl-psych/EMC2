@@ -3,7 +3,6 @@
 <!-- badges: start -->
 [![R-CMD-check](https://github.com/ampl-psych/EMC2/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/ampl-psych/EMC2/actions/workflows/R-CMD-check.yaml)
 [![CRAN status](https://www.r-pkg.org/badges/version/EMC2)](https://CRAN.R-project.org/package=EMC2)
-[![](https://cranlogs.r-pkg.org/badges/EMC2)](https://cran.r-project.org/package=EMC2)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 <!-- badges: end -->
 
