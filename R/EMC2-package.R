@@ -39,6 +39,7 @@
 #' @importFrom matrixcalc is.negative.semi.definite
 #' @importFrom methods is
 #' @importFrom mvtnorm dmvnorm
+#' @importFrom mvtnorm pmvnorm
 #' @importFrom mvtnorm rmvnorm
 #' @importFrom parallel mclapply
 #' @importFrom psych fa.diagram

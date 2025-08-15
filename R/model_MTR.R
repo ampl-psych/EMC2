@@ -261,8 +261,7 @@ recintab0 <- function (kappa, a, b, mu, Sigma)
       for (i in seq_len(kappa - 1) + 1) {
         pdfa = pdfa * a
         pdfb = pdfb * b
-        M[i + 1] = mu * M[i] + (i - 1) * Sigma * M[i -
-                                                     1] + pdfa - pdfb
+        M[i + 1] = mu * M[i] + (i - 1) * Sigma * M[i - 1] + pdfa - pdfb
       }
     }
   }
@@ -290,18 +289,15 @@ recintab0 <- function (kappa, a, b, mu, Sigma)
       bi = b[ind2]
       mui = mu[ind2]
       Si = Sigma[ind2, i]
-      SSi = Sigma[ind2, ind2] - Si %*% t(Si)/Sigma[i,
-                                                   i]
+      SSi = Sigma[ind2, ind2] - Si %*% t(Si)/Sigma[i,i]
       ind = (begind[i] + 1):begind[i + 1]
       if (a[i] != -Inf) {
         mai = mui + Si/Sigma[i, i] * (a[i] - mu[i])
-        G[ind] = pdfa[i] * recintab0(kappai, ai, bi,
-                                     mai, SSi)
+        G[ind] = pdfa[i] * recintab0(kappai, ai, bi, mai, SSi)
       }
       if (b[i] != Inf) {
         mbi = mui + Si/Sigma[i, i] * (b[i] - mu[i])
-        H[ind] = pdfb[i] * recintab0(kappai, ai, bi,
-                                     mbi, SSi)
+        H[ind] = pdfb[i] * recintab0(kappai, ai, bi, mbi, SSi)
       }
     }
     M[1] = pmvnorm(lower = a, upper = b, mean = mu, sigma = Sigma)
@@ -321,13 +317,10 @@ recintab0 <- function (kappa, a, b, mu, Sigma)
       for (j in seqq) {
         kk2 = kk1[j] - 1
         if (kk2 > 0) {
-          M[ii] = M[ii] + Sigma[i1, j] * kk2 * M[ind3 -
-                                                   cp1[j]]
+          M[ii] = M[ii] + Sigma[i1, j] * kk2 * M[ind3 - cp1[j]]
         }
-        ind4 = as.numeric(begind[j] + sum(cp[j, ] *
-                                            (kk1 - 1)) - cp[j, j] * kk2 + 1)
-        M[ii] = M[ii] + Sigma[i1, j] * (a[j]^kk2 * G[ind4] -
-                                          b[j]^kk2 * H[ind4])
+        ind4 = as.numeric(begind[j] + sum(cp[j, ] * (kk1 - 1)) - cp[j, j] * kk2 + 1)
+        M[ii] = M[ii] + Sigma[i1, j] * (a[j]^kk2 * G[ind4] - b[j]^kk2 * H[ind4])
       }
     }
   }
