@@ -1,5 +1,12 @@
 # EMC2: Extended Models of Choice 2:
 
+<!-- badges: start -->
+[![R-CMD-check](https://github.com/ampl-psych/EMC2/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/ampl-psych/EMC2/actions/workflows/R-CMD-check.yaml)
+[![CRAN status](https://www.r-pkg.org/badges/version/EMC2)](https://CRAN.R-project.org/package=EMC2)
+[![](https://cranlogs.r-pkg.org/badges/EMC2)](https://cran.r-project.org/package=EMC2)
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
+<!-- badges: end -->
+
 The `R` package `EMC2` provides tools to perform Bayesian hierarchical analyses of cognitive models of speeded decision-making.
 Core models include the Diffusion Decision Model (DDM), Linear Ballistic Accumulator Model (LBA), Racing Diffusion Model (RDM), and Lognormal Racing Model (LNR).
 In addition, specialised models are provided for the stop signal task of response inhibition, namely the ex-Gaussian race model and the hybrid Racing Diffusion/ex-Gaussian model.
@@ -42,10 +49,3 @@ If you come across any bugs, or have ideas for extensions of `EMC2`, you can add
 Stevenson, N., Donzallaz, M. C., Innes, R. J., Forstmann, B., Matzke, D., & Heathcote, A. (2025). Bayesian Hierarchical Cognitive Modelling with the **EMC2** package. https://doi.org/10.31234/osf.io/2e4dq
 
 Gunawan, D., Hawkins, G. E., Tran, M. N., Kohn, R., & Brown, S. D. (2020). New estimation approaches for the hierarchical Linear Ballistic Accumulator model. *Journal of Mathematical Psychology*, *96*, 102368. https://doi.org/10.1016/j.jmp.2020.102368
-
-
-<!-- badges: start -->
-
-[![R-CMD-check](https://github.com/ampl-psych/EMC2/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/ampl-psych/EMC2/actions/workflows/R-CMD-check.yaml)
-
-<!-- badges: end -->
