@@ -131,7 +131,7 @@ double ss_texg_stop_fail_lpdf(
 // successful inhibition (i.e., stop process winning). not accounting for
 // trigger failure and go failure.
 // this function is an integrand (quantity to be integrated)
-class texg_stop_success_integrand : public Numer::Func {
+class texg_stop_success_integrand : public Func {
 private:
   const double SSD;
   const NumericMatrix pars;
@@ -156,7 +156,7 @@ public:
       x, pars(0, 3), pars(0, 4), pars(0, 5), pars(0, 9), R_PosInf, true
     );
     if (!R_FINITE(log_d)) log_d = min_ll;
-    // summed log probability of go accumulators not yet having finished by time x
+    // summed log density of go accumulators not yet having finished by time x
     double summed_log_s = 0.0;
     for (int i = 0; i < n_go; ++i) {
       // NB stop signal delay added to finish time x, to account for earlier start of go process
@@ -436,7 +436,7 @@ double ss_exg_stop_fail_lpdf(
 // successful inhibition (i.e., stop process winning). not accounting for
 // trigger failure and go failure.
 // this function is an integrand (quantity to be integrated)
-class exg_stop_success_integrand : public Numer::Func {
+class exg_stop_success_integrand : public Func {
 private:
   const double SSD;
   const NumericMatrix pars;
@@ -459,7 +459,7 @@ public:
     // input args: x, muS, sigmaS, tauS, log_d = TRUE
     double log_d = dexg(x, pars(0, 3), pars(0, 4), pars(0, 5), true);
     if (!R_FINITE(log_d)) log_d = min_ll;
-    // summed log probability of go accumulators not yet having finished by time x
+    // summed log density of go accumulators not yet having finished by time x
     double summed_log_s = 0.0;
     for (int i = 0; i < n_go; ++i) {
       // NB stop signal delay added to finish time x, to account for earlier start of go process
