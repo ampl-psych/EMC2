@@ -380,8 +380,8 @@ fit.emc <- function(emc, stage = NULL, iter = 1000, stop_criteria = NULL,
                     thin = FALSE,
                     ...){
 
-  dots <- add_defaults(list(...), n_blocks = 1, verboseProgress = FALSE, trim = TRUE)
-  if (is.null(dots$r_cores)) r_cores <- 1 else r_cores <- dots$r_cores
+  dots <- add_defaults(list(...), n_blocks = 1, verboseProgress = FALSE,
+                       trim = TRUE, r_cores = 1)
   start_time <- Sys.time()
   stages_names <- c("preburn", "burn", "adapt", "sample")
   if(!is.null(stop_criteria) & !any(names(stop_criteria) %in% stages_names)){

@@ -10,7 +10,8 @@ init_chains(
   start_var = NULL,
   particles = 1000,
   cores_per_chain = 1,
-  cores_for_chains = length(emc)
+  cores_for_chains = length(emc),
+  ...
 )
 }
 \arguments{

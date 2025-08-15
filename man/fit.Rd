@@ -19,7 +19,6 @@
   cores_for_chains = length(emc),
   max_tries = 20,
   thin = FALSE,
-  r_cores = 1,
   ...
 )
 
