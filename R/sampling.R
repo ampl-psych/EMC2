@@ -99,6 +99,7 @@ init <- function(pmwgs, start_mu = NULL, start_var = NULL,
 #' @param cores_per_chain An integer. How many cores to use per chain. Parallelizes across participant calculations.
 #' @param cores_for_chains An integer. How many cores to use to parallelize across chains. Default is the number of chains.
 #' @param particles An integer. Number of starting values
+#' @param ... optional additional arguments
 #'
 #' @return An emc object
 #' @examples \donttest{
@@ -675,9 +676,8 @@ calc_ll_manager <- function(proposals, dadm, model, component = NULL, r_cores = 
     model <- model()
     if(is.null(model$c_name)){ # use the R implementation
       lls <- unlist(parallel::mclapply(1:nrow(proposals),
-          \(i) calc_ll_R(proposals[i,], model=model, dadm = dadm),
+          function(i) calc_ll_R(proposals[i,], model=model, dadm = dadm),
          mc.cores=r_cores))
-      # lls <- apply(proposals,1, calc_ll_R, model, dadm = dadm)
     } else{
       p_types <- names(model$p_types)
       designs <- list()

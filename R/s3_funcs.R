@@ -416,7 +416,7 @@ fit.emc <- function(emc, stage = NULL, iter = 1000, stop_criteria = NULL,
                    step_size = step_size,  verbose = verbose, verboseProgress = dots$verboseProgress,
                    fileName = fileName, particle_factor =  particle_factor, trim = dots$trim,
                    cores_per_chain = cores_per_chain, max_tries = max_tries, thin = thin, n_blocks = dots$n_blocks,
-                   r_cores = r_cores)
+                   r_cores = dots$r_cores)
   }
   if (verbose) print(Sys.time()-start_time)
   return(emc)
