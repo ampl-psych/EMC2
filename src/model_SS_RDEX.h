@@ -149,83 +149,83 @@ double ss_rdex_stop_fail_lpdf(
 // successful inhibition (i.e., stop process winning). not accounting for
 // trigger failure and go failure.
 // this function is an integrand (quantity to be integrated)
-double rdex_stop_success_integrand(
-    // stop finish time
-    double x,
-    // stop signal delay
-    double SSD,
-    // parameter values: rows = accumulators, columns = parameters
-    NumericMatrix pars,
-    // minimal log likelihood, to protect against numerical issues
-    double min_ll
-) {
-  // create local LogicalVector with all FALSE values (since the go accumulators
-  // by definition are all losers)
-  LogicalVector winner(pars.nrow(), false);
-  // obtain the go race process log likelihood (since the go accumulators are
-  // losers, this will just be the summed log survivor probability)
-  // NB SSD added to stop finish time to get go RT
-  double go_lprob = ss_rdex_go_lpdf(x + SSD, pars, winner, min_ll);
-  // obtain the winner log probability of the stop process
-  // input args: x, muS, sigmaS, tauS, exgS_lb, upper = Inf, log_d = TRUE
-  double stop_winner_lprob = dtexg(
-    x, pars(0, 5), pars(0, 6), pars(0, 7), pars(0, 10), R_PosInf, true
-  );
-  if (!traits::is_finite<REALSXP>(stop_winner_lprob)) {
-    stop_winner_lprob = min_ll;
-  }
-  // final output of race model is summed log likelihood, exponentiated to the
-  // likelihood to enable numerical integration
-  return std::exp(go_lprob + stop_winner_lprob);
-}
-
-// wrapper class to make rdex_stop_success_integrand compatible with Func
-// interface for integration
-class rdex_ss_integrand : public Func {
+class rdex_stop_success_integrand : public Func {
 private:
   const double SSD;
   const NumericMatrix pars;
+  const int n_go;
   const double min_ll;
 
 public:
-  rdex_ss_integrand(
+  rdex_stop_success_integrand(
     double SSD_,
     NumericMatrix pars_,
     double min_ll_
   ) :
   SSD(SSD_),
   pars(pars_),
+  n_go(pars_.nrow()),
   min_ll(min_ll_) {}
 
   double operator()(const double& x) const {
-    return rdex_stop_success_integrand(x, SSD, pars, min_ll);
+    // log density of stop process winning at time x
+    // input args: x, muS, sigmaS, tauS, exgS_lb, upper = Inf, log_d = TRUE
+    double log_d = dtexg(
+      x, pars(0, 5), pars(0, 6), pars(0, 7), pars(0, 10), R_PosInf, true
+    );
+    if (!R_FINITE(log_d)) log_d = min_ll;
+    // summed log density of go accumulators not yet having finished by time x
+    double summed_log_s = 0.0;
+    for (int i = 0; i < n_go; ++i) {
+      // NB stop signal delay added to finish time x, to account for earlier start of go process
+      double dt_i = (x + SSD) - pars(i, 3);
+      double log_s_i = 0.; // log(1)
+      if (dt_i > 0.) {
+        log_s_i = log1m(
+          pigt(
+            dt_i,
+            // go pars columns: v=0, B=1, A=2, t0=3, s=4
+            (pars(i, 1) / pars(i, 4)) + .5 * (pars(i, 2) / pars(i, 4)),
+            pars(i, 0) / pars(i, 4),
+            .5 * (pars(i, 2) / pars(i, 4))
+          )
+        );
+      }
+      if (!R_FINITE(log_s_i)) log_s_i = min_ll;
+      summed_log_s += log_s_i;
+    }
+    // return sum of (1) log winner density and (2) sum of log survivor densities,
+    // exponentiated to put on likelihood scale so integrator can work with it
+    return std::exp(log_d + summed_log_s);
   }
 };
 
 // function to compute the stop success integral, not accounting for trigger
 // failure and go failure
-double ss_rdex_stop_success_lpdf(
-    // single stop signal delay
+static inline double ss_rdex_stop_success_lpdf(
     double SSD,
-    // parameter values: rows = accumulators, columns = parameters
     NumericMatrix pars,
-    // minimal log likelihood, to protect against numerical issues
-    double min_ll,
-    // upper limit for integration
-    double upper
+    double min_ll
 ) {
-  // set up an instance of a stop success integrand
-  rdex_ss_integrand race_integrand(SSD, pars, min_ll);
-  // lower limit of integration set to the lower bound of stop process distribution
-  double lower = pars(0, 10);
-  // perform integration: likelihood of stop process winning
-  IntegrationResult out = my_integrate(race_integrand, lower, upper);
-  // check for numerical issues
-  bool bad_out = out.error_code != 0 || !traits::is_finite<REALSXP>(out.value);
-  // return *log* likelihood
-  // NB in the original R code from the DMC toolbox (`my.integrate`), -Inf was
-  // returned in case of failed integration
-  return bad_out ? min_ll : std::log(out.value);
+  // set up the integrand
+  rdex_stop_success_integrand f(SSD, pars, min_ll);
+  // declare local variables for the integrator
+  double err_est, res;
+  int err_code;
+  // perform numerical integration
+  res = integrate(
+    f,            // integrand
+    pars(0, 10),  // lower limit of integration (= lower bound of stop process)
+    R_PosInf,     // upper limit of integration
+    err_est,      // placeholder for estimation error
+    err_code,     // placeholder for failed integration error code
+    100,          // maximum number of subdivisions
+    1e-8,         // absolute tolerance
+    1e-6          // relative tolerance
+  );
+  // check for issues with result, and return
+  bool bad = (err_code != 0) || !R_FINITE(res) || (res <= 0.0);
+  return bad ? min_ll : std::log(res);
 }
 
 // top-level log-likelihood function for the stop signal task
@@ -326,8 +326,7 @@ NumericVector ss_rdex_lpdf(
         stop_success_integral = ss_rdex_stop_success_lpdf(
           SSD[start_row],
           pars(Range(start_row, end_row), _),
-          min_ll,
-          R_PosInf
+          min_ll
         );
         stop_success_lprob = log1m(gf[trial]) + log1m(tf[trial]) + stop_success_integral;
         // likelihood = gf + [(1-gf) x (1-tf) x stop_success_integral]
