@@ -1,6 +1,13 @@
 # EMC2: Extended Models of Choice 2:
 
-The `R` package `EMC2` provides tools to perform Bayesian hierarchical analyses of the following cognitive models: Diffusion Decision Model (DDM), Linear Ballistic Accumulator Model (LBA), Racing Diffusion Model (RDM), and Lognormal Racing Model (LNR). Specifically, the package provides functionality for specifying individual model designs, estimating the models, examining convergence as well as model fit through posterior prediction methods. It also includes various plotting functions and relative model comparison methods such as Bayes factors. In addition, users can specify their own likelihood function and perform non-hierarchical estimation. The package uses particle metropolis Markov chain Monte Carlo sampling. For hierarchical models, it uses efficient Gibbs sampling at the population level and supports a variety of covariance structures, extending the work of Gunawan and colleagues (2020).  
+The `R` package `EMC2` provides tools to perform Bayesian hierarchical analyses of cognitive models of speeded decision-making.
+Core models include the Diffusion Decision Model (DDM), Linear Ballistic Accumulator Model (LBA), Racing Diffusion Model (RDM), and Lognormal Racing Model (LNR).
+In addition, specialised models are provided for the stop signal task of response inhibition, namely the ex-Gaussian race model and the hybrid Racing Diffusion/ex-Gaussian model.
+
+The package provides functionality for specifying individual model designs, estimating the models, examining convergence as well as model fit through posterior prediction methods.
+It also includes various plotting functions and relative model comparison methods such as Bayes factors.
+In addition, users can specify their own likelihood function and perform non-hierarchical estimation.
+The package uses particle metropolis Markov chain Monte Carlo sampling. For hierarchical models, it uses efficient Gibbs sampling at the population level and supports a variety of covariance structures, extending the work of Gunawan and colleagues (2020).  
 
 ## Installation
 
@@ -24,7 +31,7 @@ Pictured below are the four phases of an `EMC2`cognitive model analysis with ass
 
 For details, please see: 
 
-Stevenson, N., Donzallaz, M. C., Innes, R. J., Forstmann, B., Matzke, D., & Heathcote, A. (2024, January 30). EMC2: An R Package for cognitive models of choice. https://doi.org/10.31234/osf.io/2e4dq
+Stevenson, N., Donzallaz, M. C., Innes, R. J., Forstmann, B., Matzke, D., & Heathcote, A. (2025). Bayesian Hierarchical Cognitive Modelling with the **EMC2** package. https://doi.org/10.31234/osf.io/2e4dq
 
 ## Bug Reports, Contributing, and Feature Requests
 
@@ -32,9 +39,9 @@ If you come across any bugs, or have ideas for extensions of `EMC2`, you can add
 
 ## References
 
-Stevenson, N., Donzallaz, M. C., Innes, R. J., Forstmann, B., Matzke, D., & Heathcote, A. (2024, January 30). EMC2: An R Package for cognitive models of choice. https://doi.org/10.31234/osf.io/2e4dq
+Stevenson, N., Donzallaz, M. C., Innes, R. J., Forstmann, B., Matzke, D., & Heathcote, A. (2025). Bayesian Hierarchical Cognitive Modelling with the **EMC2** package. https://doi.org/10.31234/osf.io/2e4dq
 
-Gunawan, D., Hawkins, G. E., Tran, M. N., Kohn, R., & Brown, S. D. (2020). New estimation approaches for the hierarchical Linear Ballistic Accumulator model. *Journal of Mathematical Psychology, 96,* 102368. https://doi.org/10.1016/j.jmp.2020.102368
+Gunawan, D., Hawkins, G. E., Tran, M. N., Kohn, R., & Brown, S. D. (2020). New estimation approaches for the hierarchical Linear Ballistic Accumulator model. *Journal of Mathematical Psychology*, *96*, 102368. https://doi.org/10.1016/j.jmp.2020.102368
 
 
 <!-- badges: start -->
