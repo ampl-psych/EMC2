@@ -687,9 +687,17 @@ calc_ll_manager <- function(proposals, dadm, model, component = NULL, r_cores = 
       }
       constants <- attr(dadm, "constants")
       if(is.null(constants)) constants <- NA
-      lls <- calc_ll(proposals, dadm, constants = constants, designs = designs, type = model$c_name,
+      if (nrow(proposals) <= r_cores)
+        lls <- calc_ll(proposals, dadm, constants = constants, designs = designs, type = model$c_name,
                      model$bound, model$transform, model$pre_transform, p_types = p_types, min_ll = log(1e-10),
-                     model$trend)
+                     model$trend) else {
+        idx <- rep_len(1:r_cores,nrow(proposals))
+        lls <- unlist(auto_mclapply(1:r_cores,function(i) {
+          calc_ll(proposals[idx==i,,drop=FALSE], dadm, constants = constants,
+            designs = designs, type = model$c_name, model$bound, model$transform,
+            model$pre_transform, p_types = p_types, min_ll = log(1e-10),model$trend)
+          },mc.cores=r_cores))
+      }
     }
   }
   return(lls)
