@@ -675,7 +675,8 @@ calc_ll_manager <- function(proposals, dadm, model, component = NULL, r_cores = 
   } else{
     model <- model()
     if(is.null(model$c_name)){ # use the R implementation
-      lls <- unlist(parallel::mclapply(1:nrow(proposals),
+      lls <- unlist(
+        auto_mclapply(1:nrow(proposals),
           function(i) calc_ll_R(proposals[i,], model=model, dadm = dadm),
          mc.cores=r_cores))
     } else{
