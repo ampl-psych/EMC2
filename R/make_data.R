@@ -156,6 +156,11 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
   if(is.null(dim(parameters))){
     if(is.null(names(parameters))) names(parameters) <- sampled_p_names
   } else{
+    if(!is.null(data)){
+      if(nrow(parameters) == length(unique(data$subjects))){
+        design$Ffactors$subjects <- unique(data$subjects)
+      }
+    }
     if(length(rownames(parameters)) != length(design$Ffactors$subjects)){
       stop("input parameter matrix must have number of rows equal to number of subjects specified in design")
     }

@@ -374,9 +374,9 @@ get_objects_infnt_factor <- function(selection, sample_prior, return_prior, desi
 
 get_objects_SEM <- function(selection, sample_prior, return_prior, design = NULL,
                                prior = NULL, stage = 'sample', N = 1e5, sampler = NULL, ...){
-  acc_selection <- c("mu", "sigma2", "covariance", "alpha", "correlation", "Sigma", "loadings", "residuals",
-                     "factor_residuals", "regressors", "factor_regressors", "structural_regressors",
-                     "mu_implied", "LL")
+  acc_selection <- c("mu", "sigma2", "covariance", "alpha", "correlation", "Sigma",
+                     "std_loadings", "loadings", "residuals","factor_residuals", "regressors",
+                     "factor_regressors", "structural_regressors","mu_implied", "LL")
   if(return_prior & !sample_prior){
     if(is.null(list(...)$return_info)) prior$prior <- do.call(get_prior_SEM, c(list(design = design, sample = F, prior = prior), fix_dots(list(...), get_prior_SEM)))
     prior$descriptions <- list(
@@ -424,9 +424,7 @@ get_objects_SEM <- function(selection, sample_prior, return_prior, design = NULL
       } else{
         dots <- list(...)
         if(!is.null(sampler)){
-          dots <- add_defaults(dots, K_mat = attr(sampler[[1]], "K_mat"), B_mat = attr(sampler[[1]], "B_mat"),
-                               covariates = sampler[[1]]$covariates,
-                               Lambda_mat = attr(sampler[[1]], "Lambda_mat"), G_mat = attr(sampler[[1]], "G_mat"))
+          dots <- add_defaults(dots, sem_settings = sampler[[1]]$sem_settings)
         }
         sampler <- list(list(samples = do.call(get_prior_SEM,
                                                c(list(prior = prior, design = design,
@@ -438,13 +436,7 @@ get_objects_SEM <- function(selection, sample_prior, return_prior, design = NULL
     }
     idx <- get_idx(sampler, stage)
     if(selection == "residuals"){
-      return(lapply(sampler, FUN = function(x){
-        resids <- x$samples$epsilon_inv[,,idx]
-        for(i in 1:dim(resids)[3]){
-          resids[,,i] <- solve(resids[,,i])
-        }
-        return(resids)
-      }))
+      return(lapply(sampler, FUN = function(x) return(1/x$samples$epsilon_inv[,idx])))
     }
     if(selection == "factor_residuals"){
       return(lapply(sampler, FUN = function(x){
@@ -469,6 +461,11 @@ get_objects_SEM <- function(selection, sample_prior, return_prior, design = NULL
     }
     if(selection == "mu_implied"){
       return(lapply(sampler, FUN = get_mu_implied, idx))
+    }
+    if(selection == "std_loadings"){
+      return(lapply(sampler, FUN = function(x) standardize_loadings_SEM(x$samples$lambda[,,idx, drop = F],
+                                                                        x$samples$theta_var[,,idx, drop = F],
+                                                                        x$samples$delta_inv[,,idx, drop = F])))
     }
     return(get_base(sampler, idx, selection))
   }

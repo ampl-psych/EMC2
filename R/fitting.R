@@ -655,20 +655,16 @@ loadRData <- function(fileName){
 #' @export
 
 make_emc <- function(data,design,model=NULL,
-                          type="standard",
-                          n_chains=3,compress=TRUE,rt_resolution=0.02,
-                          prior_list = NULL, group_design = NULL,
-                          par_groups=NULL, ...){
+                    type="standard",
+                    n_chains=3,compress=TRUE,rt_resolution=0.02,
+                    prior_list = NULL, group_design = NULL,
+                    par_groups=NULL, ...){
   # arguments for future compatibility
   n_factors <- NULL
-  formula <- NULL
-  Lambda_mat <- NULL
-  B_mat <- NULL
-  K_mat <- NULL
-  G_mat <- NULL
-  covariates <- NULL
   nuisance <- NULL
   nuisance_non_hyper <- NULL
+  sem_settings <- NULL
+  Lambda_mat <- NULL
   # overwrite those that were supplied
   optionals <- list(...)
   for (name in names(optionals) ) {
@@ -794,9 +790,7 @@ make_emc <- function(data,design,model=NULL,
                  nuisance_non_hyper = nuisance_non_hyper,
                  Lambda_mat = Lambda_mat)
   } else if (type == "SEM"){
-    out <- pmwgs(dadm_list, type, Lambda_mat = Lambda_mat,
-                 B_mat = B_mat, K_mat = K_mat, G_mat = G_mat,
-                 covariates = covariates, nuisance = nuisance,
+    out <- pmwgs(dadm_list, type, sem_settings = sem_settings, nuisance = nuisance,
                  nuisance_non_hyper = nuisance_non_hyper)
   }
   out$model <- lapply(design, function(x) x$model)
@@ -830,6 +824,7 @@ check_duplicate_designs <- function(out){
       }
     })
     for(j in 1:length(out$data[[i]])){# Loop over data sets in this sub
+      if(is.null(designs[[j]])) next
       if(duplicacy[j]){
         attr(out$data[[i]][[j]], "designs") <- unq_idx[j]
       }

@@ -233,6 +233,20 @@ rearrange_loadings <- function(lambda, metric = c("ssq", "absmean"))
   return(lambda_re)
 }
 
+
+standardize_loadings_SEM <- function(loadings, variances, psi_inv){
+  new_loadings <- loadings
+  n_pars <- nrow(loadings)
+  for(i in 1:dim(loadings)[3]){
+    Dinv <- 1/sqrt(diag(variances[,,i]))
+    psi <- solve(psi_inv[,,i])
+    Deta   <-  sqrt(diag(psi))     # length‑k vector
+    new_loadings[,,i] <- (loadings[,,i]*Dinv)*rep(Deta, each = n_pars)
+  }
+  return(new_loadings)
+}
+
+
 standardize_loadings <- function(loadings, residuals){
   stdize_set <- function(samples = NULL, idx = NULL, loadings = NULL, residuals = NULL){
     if(is.null(loadings)) loadings <- samples$samples$lambda[,,idx, drop = F]
@@ -442,5 +456,174 @@ factor_diagram <- function(emc = NULL, stage = "sample",
   fa.diagram(means, cut = cut, simple = simple, sort = sort, adj = adj,
              main = main, cex = cex)
 }
+
+
+is_double_decimals <- function(x) {
+  decimals <- abs(x - round(x, 2))
+  return(decimals > .Machine$double.eps^0.5)
+}
+
+
+#' Make SEM Diagram
+#'
+#' @param emc an emc object
+#' @param plot_values whether to plot the values or just the nodes/edges
+#' @param cred_only whether to only plot credible values
+#' @param par_names optional, if specified will overwrite the parameter names with
+#' user-defined names
+#' @param cut optional. A numeric value factor loadings smaller than this value will be omitted.
+#' @param ... optional additional arguments passed to render_graph from DiagrammeR
+#'
+#' @returns Invisibly returns a DiagrammeR graph object
+#' @export
+
+make_SEM_diagram <- function(emc,
+                          plot_values = TRUE,
+                          cred_only = FALSE,
+                          par_names = NULL,
+                          cut = NULL,
+                          ...){
+  sem_settings <- emc[[1]]$sem_settings
+  Lambda_mat <- sem_settings$Lambda_mat
+  B_mat <- sem_settings$B_mat
+  K_mat <- sem_settings$K_mat
+  G_mat <- sem_settings$G_mat
+
+  if(is.null(Lambda_mat)){
+    if(!is.null(emc[[1]]$samples$lambda)){
+      Lambda_mat <- emc[[1]]$samples$lambda[,,2]
+      Lambda_mat[is_double_decimals(Lambda_mat)] <- Inf
+    } else{
+      stop("No loading matrix defined in your emc object")
+    }
+  }
+  if(is.null(colnames(Lambda_mat))){
+    colnames(Lambda_mat) <- paste0("F", 1:ncol(Lambda_mat))
+  }
+
+  n_pars <- nrow(Lambda_mat)
+  n_factors <- ncol(Lambda_mat)
+
+  if(is.null(B_mat)){
+    B_mat <- matrix(0, nrow = n_factors, ncol = n_factors)
+  }
+  if(is.null(K_mat)){
+    K_mat <- matrix(0, nrow = n_pars, ncol = 0)
+  }
+  if(is.null(G_mat)){
+    G_mat <- matrix(0, nrow = n_factors, ncol = 0)
+  }
+
+  if(!is.null(par_names)){
+    rownames(Lambda_mat) <- par_names
+    rownames(K_mat) <- par_names
+  }
+
+  if(all(chain_n(emc) == 0)) plot_values <- FALSE
+
+  n_cov <- max(ncol(K_mat), ncol(G_mat))
+  covnames <- unique(c(colnames(K_mat), colnames(G_mat)))
+  all_names <- c(rownames(Lambda_mat), colnames(Lambda_mat), covnames)
+  all_shapes <- c(rep("circle", nrow(Lambda_mat[rowSums(abs(Lambda_mat) != 0),]) + ncol(Lambda_mat)),
+                  rep("square", n_cov))
+  n <- length(all_shapes)
+  ndf <- DiagrammeR::create_node_df(n = n, shape = all_shapes, fontsize = 14, fixedsize = F,
+                        label = all_names,color = "black", fillcolor = "white",
+                        style = "filled")
+
+  from <- c()
+  to <- c()
+  label <- c()
+  if(plot_values){
+    L_vals <- credint(emc, selection = "std_loadings", remove_constants = FALSE, digits = 2)
+    if(any(B_mat != 0)) B_vals <- credint(emc, selection = "structural_regressors", remove_constants = FALSE, digits = 2)
+    if(ncol(K_mat) > 1) K_vals <- credint(emc, selection = "regressors", remove_constants = FALSE, digits = 2)
+    if(ncol(G_mat) > 1) G_vals <- credint(emc, selection = "factor_regressors", remove_constants = FALSE, digits = 2)
+  }
+
+  for(i in 1:ncol(Lambda_mat)){
+    is_free <- Lambda_mat[,i] != 0
+    if(cred_only){
+      is_free <- is_free & apply(apply(L_vals[[i]], 1, sign), 2, FUN = function(x) return(length(unique(x)))) == 1
+    }
+    if(!is.null(cut)){
+      is_free <- is_free & (abs(L_vals[[i]][,2]) > cut)
+    }
+    from <- c(from, rep(n_pars + i, sum(is_free)))
+    to <- c(to, which(is_free))
+    if(plot_values){
+      label <- c(label, L_vals[[i]][,2][is_free])
+    } else{
+      label_tmp <- rep("*", sum(is_free))
+      label_tmp[which(Lambda_mat[is_free,i] != Inf)] <- Lambda_mat[is_free & Lambda_mat[,i] != Inf,i]
+      label <- c(label, label_tmp)
+    }
+  }
+
+  if(any(B_mat != 0)){
+    for(i in 1:ncol(B_mat)){
+      is_free <- B_mat[,i] != 0
+      if(cred_only) is_free <- is_free &
+          apply(apply(B_vals[[i]], 1, sign), 2, FUN = function(x) return(length(unique(x)))) == 1
+      from <- c(from, rep(n_pars + i, sum(is_free)))
+      to <- c(to, n_pars + which(is_free))
+      if(plot_values){
+        label <- c(label, B_vals[[i]][,2][is_free])
+      } else{
+        label_tmp <- rep("*", sum(is_free))
+        label_tmp[which(B_mat[is_free,i] != Inf)] <- B_mat[is_free & B_mat[,i] != Inf,i]
+        label <- c(label, label_tmp)
+      }
+    }
+  }
+
+  if(any(K_mat != 0)){
+    for(i in 1:ncol(K_mat)){
+      is_free <- K_mat[,i] != 0
+      if(cred_only) is_free <- is_free &
+          apply(apply(K_vals[[i]], 1, sign), 2, FUN = function(x) return(length(unique(x)))) == 1
+      from <- c(from, rep(n_pars + n_factors + i, sum(is_free)))
+      to <- c(to, which(is_free))
+      if(plot_values){
+        label <- c(label, K_vals[[i]][,2][is_free])
+      } else{
+        label_tmp <- rep("*", sum(is_free))
+        label_tmp[which(K_mat[is_free,i] != Inf)] <- K_mat[is_free & K_mat[,i] != Inf,i]
+        label <- c(label, label_tmp)
+      }
+    }
+  }
+
+  if(any(G_mat) != 0){
+    for(i in 1:ncol(G_mat)){
+      is_free <- G_mat[,i] != 0
+      if(cred_only) is_free <- is_free &
+          apply(apply(G_vals[[i]], 1, sign), 2, FUN = function(x) return(length(unique(x)))) == 1
+      from <- c(from, rep(n_pars + n_factors + i, sum(is_free)))
+      to <- c(to, n_pars + which(is_free))
+      if(plot_values){
+        label <- c(label, G_vals[[i]][,2][is_free])
+      } else{
+        label_tmp <- rep("*", sum(is_free))
+        label_tmp[which(G_mat[is_free,i] != Inf)] <- G_mat[is_free & G_mat[,i] != Inf,i]
+        label <- c(label, label_tmp)
+      }
+    }
+  }
+
+  edf <- DiagrammeR::create_edge_df(from = from, to = to,
+                        color = "#9B9999", fontsize = 14, label = label)
+
+  all_incl <- unique(c(edf$from, edf$to))
+  ndf$style[!ndf$id %in% all_incl] <- "invisible"
+  graph <-DiagrammeR::create_graph(
+      nodes_df = ndf,
+      edges_df = edf,
+      attr_theme = "tb")
+
+  print(DiagrammeR::render_graph(graph, ...))
+  return(invisible(graph))
+}
+
 
 
