@@ -512,8 +512,8 @@ plot_density <- function(input, post_predict = NULL, prior_predict = NULL,
     # If there's absolutely no data, just return
     return(invisible(NULL))
   }
-  unique_group_keys <- unique(first_data$group_key)
-
+  # unique_group_keys <- unique(first_data$group_key)
+  unique_group_keys <- names(splitted)
   if (any(is.na(layout))) {
     par(mfrow = coda_setmfrow(Nchains = 1, Nparms = length(unique_group_keys), nplots = 1))
   } else {
