@@ -4,7 +4,7 @@
 \alias{plot_sbc_hist}
 \title{Plot the Histogram of the Observed Rank Statistics of SBC}
 \usage{
-plot_sbc_hist(ranks, bins = 10, layout = NA)
+plot_sbc_hist(ranks, bins = 10, layout = NA, add_stats = TRUE)
 }
 \arguments{
 \item{ranks}{A list of named dataframes of the rank statistic}
@@ -12,6 +12,8 @@ plot_sbc_hist(ranks, bins = 10, layout = NA)
 \item{bins}{An integer specifying the number of bins to use when plotting the histogram}
 
 \item{layout}{Optional. A numeric vector specifying the layout using \code{par(mfrow = layout)}}
+
+\item{add_stats}{Boolean. Should coverage, bias and precision be included in the figure.}
 }
 \value{
 No returns
