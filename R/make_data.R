@@ -120,6 +120,7 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
   force_response<-FALSE
   rtContaminantNA<-FALSE
   return_Ffunctions <- FALSE
+  post_functions <- NULL
   optionals <- list(...)
   for (name in names(optionals) ) {
     assign(name, optionals[[name]])
@@ -267,6 +268,11 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
     } else data[contam,"rt"] <- NA
   }
   attr(data,"p_vector") <- parameters;
+  if(!is.null(post_functions)){
+    for(i in 1:length(post_functions)){
+      data[[names(post_functions)[i]]] <- post_functions[[i]](data)
+    }
+  }
   data
 }
 

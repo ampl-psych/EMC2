@@ -90,22 +90,55 @@ SBC_hierarchical <- function(design_in, prior_in, replicates = 250, trials = 100
 
 
 run_SBC_subject <- function(rep, design_in, prior_alpha, trials, prior_in, dots){
-  p_in <- prior_alpha[rep,]
-  data <- do.call(make_data, c(list(parameters = p_in, design = design_in, n_trials = trials), fix_dots(dots, make_data)))
+  p_vector <- prior_alpha[rep,]
+  data <- do.call(make_data, c(list(parameters = p_vector, design = design_in, n_trials = trials), fix_dots(dots, make_data)))
   emc <-  do.call(make_emc, c(list(data = data, design = design_in, prior_list = prior_in, type = "single"), fix_dots(dots, make_emc)))
-  emc <-  do.call(fit, c(list(emc = emc), fix_dots(dots, fit)))
+  
+  # Protection wrapper for the fit call
+  fit_result <- tryCatch({
+    do.call(fit, c(list(emc = emc), fix_dots(dots, fit)))
+  }, warning = function(w) {
+    # Save the problematic p_vector
+    filename <- paste0("p_vector_rep", rep, ".Rdata")
+    save(p_vector, file = filename)
+    warning("A warning occurred during fitting for replication ", rep, 
+            ". The input parameters have been saved as ", filename, 
+            ". Warning message: ", w$message)
+    # Re-throw the warning
+    warning(w)
+    # Return NULL to indicate failure
+    return(NULL)
+  }, error = function(e) {
+    # Save the problematic p_vector
+    filename <- paste0("p_vector_rep", rep, ".Rdata")
+    save(p_vector, file = filename)
+    warning("An error occurred during fitting for replication ", rep, 
+            ". The input parameters have been saved as ", filename, 
+            ". Error message: ", e$message)
+    # Return NULL to indicate failure
+    return(NULL)
+  })
+  
+  # Check if fitting failed
+  if (is.null(fit_result)) {
+    # Return a structure that indicates failure but doesn't break the overall process
+    return(list(rank = NULL, med = NULL, bias = NULL, coverage = NULL, failed = TRUE))
+  }
+  
+  emc <- fit_result
+  
   # Return ESS
   ESS <- ess_summary(emc, stat = NULL)[[1]]
   # Rank
   alpha_rec <- get_pars(emc, selection = "alpha", return_mcmc = F, merge_chains = T, flatten = T)[,1,]
-  rank <- mapply(get_ranks_ESS, split(alpha_rec, row(alpha_rec)), t(ESS), p_in)
+  rank <- mapply(get_ranks_ESS, split(alpha_rec, row(alpha_rec)), t(ESS), p_vector)
   names(rank) <- names(sampled_pars(design_in))
   # For Bias
   CI <- credint(emc)[[1]]
   med <- CI[,2] # And return this for precision
-  bias <- abs(p_in - med)
+  bias <- abs(p_vector - med)
   # For coverage
-  coverage <- p_in > CI[,1] & p_in < CI[,3]
+  coverage <- p_vector > CI[,1] & p_vector < CI[,3]
   return(list(rank = rank, med = med, bias = bias, coverage = coverage))
 }
 
