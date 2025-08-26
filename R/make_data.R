@@ -227,8 +227,8 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
   pars <- add_bound(pars, model()$bound, data$lR)
   pars_ok <- attr(pars, 'ok')
   if (model()$type=="DDM") trials_ok <- pars_ok else {
-    trials_ok <- pars_ok[rep(design$Rlevels==design$Rlevels[1],length.out=length(pars_ok))]
-  }
+      trials_ok <- pars_ok[rep(design$Rlevels==design$Rlevels[1],length.out=length(pars_ok))]
+    }
   if(any(!trials_ok)){
     warning(round(100*mean(!trials_ok),2)," % of parameter values fall out of model bounds, see <model_name>$bounds()")
   }
@@ -251,7 +251,7 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
   if(!is.null(data$lR)) data <- data[data$lR == levels(data$lR)[1],]
   data <- data[,!(names(data) %in% dropNames)]
   for (i in dimnames(Rrt)[[2]]) {
-    data[trials_ok,i] <- Rrt[,i]
+    data[trials_ok,i] <- Rrt[trials_ok,i]
     if (any(!trials_ok)) data[!trials_ok,i] <- NA
   }
   data <- make_missing(data[,names(data)!="winner"],LT,UT,LC,UC,
