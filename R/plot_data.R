@@ -93,8 +93,8 @@ prep_data_plot <- function(input, post_predict, prior_predict, to_plot, limits,
   # Check for regular input
   if(!is.data.frame(input) && !inherits(input, "emc")){
     if(is.null(names(input))) stop("If input is a list, it must have names")
-    is_emc <- lapply(input, function(x) inherits(x, "emc"))
-    if(!all(is_emc) || all(is_emc)){
+    is_emc <- unlist(lapply(input, function(x) inherits(x, "emc")))
+    if(!(all(is_emc) || all(!is_emc))){
       stop("Input must be either all emc objects or no emc objects")
     }
   } else{
