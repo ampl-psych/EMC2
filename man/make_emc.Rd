@@ -11,7 +11,7 @@ make_emc(
   type = "standard",
   n_chains = 3,
   compress = TRUE,
-  rt_resolution = 0.02,
+  rt_resolution = 1/60,
   prior_list = NULL,
   group_design = NULL,
   par_groups = NULL,
