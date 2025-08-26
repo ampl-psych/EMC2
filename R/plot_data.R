@@ -676,6 +676,7 @@ get_def_cdf <- function(x, defective_factor, dots) {
 #' @param legendpos Character vector controlling the positions of the legends
 #' @param posterior_args Optional list of graphical parameters for posterior lines/ribbons.
 #' @param prior_args Optional list of graphical parameters for prior lines/ribbons.
+#' @param add_percentiles Vector of integers giving percentiles to plot as points, NULL stops plotting.
 #' @param ... Other graphical parameters for the real data lines.
 #'
 #' @return Returns `NULL` invisibly.
@@ -703,9 +704,14 @@ plot_cdf <- function(input,
                      legendpos = c('top', 'topright'),
                      posterior_args = list(),
                      prior_args = list(),
+                     add_percentiles=c(10,50,90),
                      ...) {
 
   # 1) prep_data_plot
+  if (!is.null(add_percentiles)) {
+    if (!all(add_percentiles %in% 1:99))
+      stop("add_percentiles must be a vector of integers from 1:99")
+  }
   check <- prep_data_plot(input, post_predict, prior_predict, to_plot, use_lim,
                           factors, defective_factor, subject, n_cores, n_post, functions)
   data_sources <- check$datasets
@@ -889,6 +895,10 @@ plot_cdf <- function(input,
                 lines_args <- fix_dots_plot(lines_args)
                 do.call(lines, c(list(x=cmat[,"x"], y=cmat[,"y"]), lines_args))
               }
+              if (!is.null(add_percentiles)) {
+                points(cmat[add_percentiles,"x"][],cmat[add_percentiles,"y"],
+                       pch=16,col=lines_args$col[1])
+              }
               ilev <- ilev+1
             }
           }
@@ -923,6 +933,10 @@ plot_cdf <- function(input,
                     y = c(y_median, rev(y_median)),
                     border = NA
                   ), poly_args))
+                  if (!is.null(add_percentiles)) {
+                     points(x_med[add_percentiles],y_median[add_percentiles],
+                           pch=1,col=lines_args$col[1])
+                  }
                 }
                 ilev <- ilev+1
               }

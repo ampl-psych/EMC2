@@ -21,6 +21,7 @@ plot_cdf(
   legendpos = c("top", "topright"),
   posterior_args = list(),
   prior_args = list(),
+  add_percentiles = c(10, 50, 90),
   ...
 )
 }
@@ -57,6 +58,8 @@ defaults to plotting full data set ungrouped by factors if \code{NULL}.}
 \item{posterior_args}{Optional list of graphical parameters for posterior lines/ribbons.}
 
 \item{prior_args}{Optional list of graphical parameters for prior lines/ribbons.}
+
+\item{add_percentiles}{Vector of integers giving percentiles to plot as points, NULL stops plotting.}
 
 \item{...}{Other graphical parameters for the real data lines.}
 }
