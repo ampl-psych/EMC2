@@ -18,7 +18,7 @@ plot_caf(
   layout = NA,
   to_plot = c("data", "posterior", "prior")[1:2],
   use_lim = c("data", "posterior", "prior")[1:2],
-  legendpos = c("bottom", "topright"),
+  legendpos = c("bottomleft", "bottomright"),
   posterior_args = list(),
   prior_args = list(),
   accuracy_function = function(d) d$S == d$R,
@@ -82,9 +82,6 @@ overlaid.
 # fortsmann_speed_accuracy <- forstmann[forstmann$E!="neutral",]
 # fortsmann_speed_accuracy$E <- droplevels(fortsmann_speed_accuracy$E)
 # plot_caf(fortsmann_speed_accuracy, caf_factor="E",factors="S", smooth_window=10)
-#
-# Plot with posterior predictions
-# plot_delta(samples_LNR, to_plot = c("data","posterior"), n_post=10)
 #
 # Or a list of multiple emc objects ...
 }

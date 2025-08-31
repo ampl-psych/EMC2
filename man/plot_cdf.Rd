@@ -18,7 +18,7 @@ plot_cdf(
   layout = NA,
   to_plot = c("data", "posterior", "prior")[1:2],
   use_lim = c("data", "posterior", "prior")[1:2],
-  legendpos = c("top", "topright"),
+  legendpos = c("topleft", "right"),
   posterior_args = list(),
   prior_args = list(),
   add_percentiles = c(10, 50, 90),
