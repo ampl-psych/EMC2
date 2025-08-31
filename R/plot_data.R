@@ -701,7 +701,7 @@ plot_cdf <- function(input,
                      layout = NA,
                      to_plot = c('data','posterior','prior')[1:2],
                      use_lim = c('data','posterior','prior')[1:2],
-                     legendpos = c('top', 'topright'),
+                     legendpos = c('topleft', 'right'),
                      posterior_args = list(),
                      prior_args = list(),
                      add_percentiles=c(10,50,90),
@@ -1283,9 +1283,6 @@ get_caf <- function(x, delta_factor, smooth_window, accuracy_function, dots) {
 #' # fortsmann_speed_accuracy <- forstmann[forstmann$E!="neutral",]
 #' # fortsmann_speed_accuracy$E <- droplevels(fortsmann_speed_accuracy$E)
 #' # plot_caf(fortsmann_speed_accuracy, caf_factor="E",factors="S", smooth_window=10)
-#' #
-#' # Plot with posterior predictions
-#' # plot_delta(samples_LNR, to_plot = c("data","posterior"), n_post=10)
 #' #
 #' # Or a list of multiple emc objects ...
 #' @export
