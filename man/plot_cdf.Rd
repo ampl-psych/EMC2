@@ -22,6 +22,7 @@ plot_cdf(
   posterior_args = list(),
   prior_args = list(),
   add_percentiles = c(10, 50, 90),
+  raw_data = NULL,
   ...
 )
 }
@@ -60,6 +61,8 @@ defaults to plotting full data set ungrouped by factors if \code{NULL}.}
 \item{prior_args}{Optional list of graphical parameters for prior lines/ribbons.}
 
 \item{add_percentiles}{Vector of integers giving percentiles to plot as points, NULL stops plotting.}
+
+\item{raw_data}{if NULL data taken from input, supplied as a data frame here to remove rt_resolution artefacts}
 
 \item{...}{Other graphical parameters for the real data lines.}
 }

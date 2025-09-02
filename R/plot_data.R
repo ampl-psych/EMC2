@@ -81,7 +81,7 @@ calc_functions <- function(functions, input){
 
 prep_data_plot <- function(input, post_predict, prior_predict, to_plot, limits,
                            factors = NULL, defective_factor = NULL, subject = NULL,
-                           n_cores, n_post, functions){
+                           n_cores, n_post, functions,raw_data=NULL){
   if(!is.data.frame(input) && !inherits(input, "emc") && !is.null(post_predict) && length(input) != length(post_predict)){
     stop("If input is a list, post_predict must be a list of the same length")
   }
@@ -127,11 +127,11 @@ prep_data_plot <- function(input, post_predict, prior_predict, to_plot, limits,
   for(k in 1:length(input)){
     # Prepare data
     if (inherits(input[[k]], "emc")) {
-      all_data[[names(input)[k]]] <- get_data(input[[k]])
+      if (!is.null(raw_data))
+        all_data[names(input)[k]] <- list(raw_data) else
+        all_data[[names(input)[k]]] <- get_data(input[[k]])
       functions <- c(get_emc_functions(input[[k]]), functions)
-    } else{
-      all_data[names(input)[k]] <- input[k]
-    }
+    } else all_data[names(input)[k]] <- input[k]
   }
   if(length(unique(all_data)) == 1){
     all_data <- all_data[1]
@@ -214,6 +214,7 @@ plot_stat <- function(input, post_predict = NULL, prior_predict = NULL, stat_fun
                       quants = c(0.025, 0.5, 0.975), functions = NULL,
                       layout = NA, to_plot = c('data', 'posterior', 'prior')[1:2], use_lim = c('data', 'posterior', 'prior')[1:2],
                       legendpos = c('topleft', 'top'), posterior_args = list(), prior_args = list(), ...) {
+
   check <- prep_data_plot(input, post_predict, prior_predict, to_plot, use_lim,
                           factors, defective_factor = NULL, subject, n_cores, n_post, functions)
   data_sources <- check$datasets
@@ -677,6 +678,7 @@ get_def_cdf <- function(x, defective_factor, dots) {
 #' @param posterior_args Optional list of graphical parameters for posterior lines/ribbons.
 #' @param prior_args Optional list of graphical parameters for prior lines/ribbons.
 #' @param add_percentiles Vector of integers giving percentiles to plot as points, NULL stops plotting.
+#' @param raw_data if NULL data taken from input, supplied as a data frame here to remove rt_resolution artefacts
 #' @param ... Other graphical parameters for the real data lines.
 #'
 #' @return Returns `NULL` invisibly.
@@ -705,6 +707,7 @@ plot_cdf <- function(input,
                      posterior_args = list(),
                      prior_args = list(),
                      add_percentiles=c(10,50,90),
+                     raw_data=NULL,
                      ...) {
 
   # 1) prep_data_plot
@@ -713,7 +716,8 @@ plot_cdf <- function(input,
       stop("add_percentiles must be a vector of integers from 1:99")
   }
   check <- prep_data_plot(input, post_predict, prior_predict, to_plot, use_lim,
-                          factors, defective_factor, subject, n_cores, n_post, functions)
+                          factors, defective_factor, subject, n_cores, n_post,
+                          functions, raw_data=raw_data)
   data_sources <- check$datasets
   sources <- check$sources
   xlim <- check$xlim
@@ -1019,6 +1023,7 @@ plot_delta <- function(input,
                      prior_args = list(),
                      add_percentiles=c(1:9)*10,
                      rev_delta=FALSE,
+                     raw_data=NULL,
                      ...) {
 
   delta <- function(z) {
@@ -1034,7 +1039,7 @@ plot_delta <- function(input,
     n_cores = n_cores, n_post = n_post, layout = layout,
     to_plot = to_plot, use_lim = use_lim, legendpos = legendpos,
     posterior_args = list(), prior_args = prior_args,
-    add_percentiles = add_percentiles, return_cdf=TRUE)
+    add_percentiles = add_percentiles, return_cdf=TRUE,raw_data=raw_data)
 
   # Basic definitions
   unique_group_keys <- attr(cdf_list,"unique_group_keys")
@@ -1078,15 +1083,15 @@ plot_delta <- function(input,
       # quantile of x at each index, and median of y at each index
       # We'll include 50% in quants to do median for x as well.
       # Then we combine them in a matrix with 4 rows => x_lower, x_median, x_upper, y_median
-    qx <- apply(x_mat, 1, quantile, probs = sort(c(quants, 0.5)), na.rm = TRUE)
-    ym <- apply(y_mat, 1, median, na.rm=TRUE)
+    qy <- apply(y_mat, 1, quantile, probs = sort(c(quants, 0.5)), na.rm = TRUE)
+    xm <- apply(x_mat, 1, median, na.rm=TRUE)
       # rbind them
-      # row 1 => x_lower
-      # row 2 => x_mid (0.5)
-      # row 3 => x_upper
-      # row 4 => y_median
+      # row 1 => y_lower
+      # row 2 => y_mid (0.5)
+      # row 3 => y_upper
+      # row 4 => x_median
       # (If you used 3 quantiles, that's 3 rows for x, plus 1 for y.)
-    out[[1]] <- rbind(qx, ym)
+    out[[1]] <- rbind(qy,xm)
     out
     })
     xlimp <- c(min(unlist(lapply(cdf_list[["posterior"]],function(x) lapply(x,function(y) min(y[,"x"]))))),
@@ -1181,14 +1186,14 @@ plot_delta <- function(input,
               mat4 <- cdf_quants_for_group[[lev]]
               if (!is.null(mat4)) {
                 # mat4 => e.g. 4 rows x (length(probs)) columns: row1 => x_lower, row2 => x_mid, row3 => x_upper, row4 => y_median
-                x_lower <- mat4[1,]
-                x_med   <- mat4[2,]
-                x_upper <- mat4[3,]
-                y_median<- mat4[4,]
+                y_lower <- mat4[1,]
+                y_median <- mat4[2,]
+                y_upper <- mat4[3,]
+                x_median <- mat4[4,]
 
                 lines_args <- add_defaults(src_args, lty=1)
                 lines_args <- fix_dots_plot(lines_args)
-                do.call(lines, c(list(x=x_med, y=y_median), lines_args))
+                do.call(lines, c(list(x=x_median, y=y_median), lines_args))
 
                 # polygon for the ribbon
                 adj_color <- do.call(adjustcolor,
@@ -1199,12 +1204,12 @@ plot_delta <- function(input,
                   # We connect (x_lower, y_median) -> (x_upper, rev(y_median))
                   # (the original code uses horizontal ribbons).
                 do.call(polygon, c(list(
-                  x = c(x_lower, rev(x_upper)),
-                  y = c(y_median, rev(y_median)),
+                  x = c(x_median, rev(x_median)),
+                  y = c(y_lower, rev(y_upper)),
                   border = NA
                 ), poly_args))
                 if (!is.null(add_percentiles)) {
-                    points(x_med[add_percentiles],y_median[add_percentiles],
+                    points(x_median[add_percentiles],y_median[add_percentiles],
                          pch=1,col=lines_args$col[1])
                 }
               }
@@ -1274,7 +1279,9 @@ get_caf <- function(x, delta_factor, smooth_window, accuracy_function, dots) {
 #' @inheritParams plot_cdf
 #' @param caf_factor The name of within-panel factor
 #' @param accuracy_function Accuracy score, default: function(d) d$S==d$R,
-#' @param smooth_window, range of RT over which calculate accuracy, default 20
+#' @param smooth_window, range of RT over which calculate accuracy, default 10
+#' @param which_plot which of levels of caf_factor to plot, default is both
+#' i.e,. which_plot = 1:2
 #'
 #' @return Returns `NULL` invisibly.
 #' @examples
@@ -1302,7 +1309,8 @@ plot_caf <- function(input,
                      posterior_args = list(),
                      prior_args = list(),
                      accuracy_function = function(d) d$S==d$R,
-                     smooth_window = 20,
+                     smooth_window = 10,
+                     which_plot=1:2,
                      ...) {
 
   smooth_window <- round(smooth_window)
@@ -1486,7 +1494,8 @@ plot_caf <- function(input,
           if (!is.null(cdf_for_group)) {
             # cdf_for_group => e.g. list( factor-level => matrix of x,y )
             ilev <- 1
-            for (lev in defective_levels) {
+            dl <- defective_levels[which_plot]
+            for (lev in dl) {
               cmat <- cdf_for_group[[lev]]
               if (!is.null(cmat)) {
                 # lines
@@ -1503,7 +1512,8 @@ plot_caf <- function(input,
             cdf_quants_for_group <- cdf_quants_list[[sname]][[group_key]]
             if (!is.null(cdf_quants_for_group)) {
               ilev <- 1
-              for (lev in defective_levels) {
+              dl <- defective_levels[which_plot]
+              for (lev in dl) {
                 mat4 <- cdf_quants_for_group[[lev]]
                 if (!is.null(mat4)) {
                   # mat4 => e.g. 4 rows x (length(probs)) columns: row1 => x_lower, row2 => x_mid, row3 => x_upper, row4 => y_median
@@ -1539,7 +1549,8 @@ plot_caf <- function(input,
 
     # Factor-level legend
     if(!is.na(legendpos[1])){
-      legend(legendpos[1], legend=defective_levels, lty=line_types, col="black",
+      legend(legendpos[1], legend=defective_levels[which_plot],
+             lty=line_types[which_plot], col="black",
              title=caf_factor, bty="n")
     }
 

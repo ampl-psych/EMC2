@@ -22,7 +22,8 @@ plot_caf(
   posterior_args = list(),
   prior_args = list(),
   accuracy_function = function(d) d$S == d$R,
-  smooth_window = 20,
+  smooth_window = 10,
+  which_plot = 1:2,
   ...
 )
 }
@@ -62,7 +63,10 @@ defaults to plotting full data set ungrouped by factors if \code{NULL}.}
 
 \item{accuracy_function}{Accuracy score, default: function(d) d$S==d$R,}
 
-\item{smooth_window, }{range of RT over which calculate accuracy, default 20}
+\item{smooth_window, }{range of RT over which calculate accuracy, default 10}
+
+\item{which_plot}{which of levels of caf_factor to plot, default is both
+i.e,. which_plot = 1:2}
 
 \item{...}{Other graphical parameters for the real data lines.}
 }

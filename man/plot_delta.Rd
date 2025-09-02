@@ -23,6 +23,7 @@ plot_delta(
   prior_args = list(),
   add_percentiles = c(1:9) * 10,
   rev_delta = FALSE,
+  raw_data = NULL,
   ...
 )
 }
@@ -64,6 +65,8 @@ defaults to plotting full data set ungrouped by factors if \code{NULL}.}
 
 \item{rev_delta}{If FALSE (the default) the first level of the defective
 factor is subtracted from the second, if TRUE this is reversed.}
+
+\item{raw_data}{if NULL data taken from input, supplied as a data frame here to remove rt_resolution artefacts}
 
 \item{...}{Other graphical parameters for the real data lines.}
 }
