@@ -331,18 +331,20 @@ run_trend <- function(dadm, trend, param, trend_pars){
   if(is.null(dim(trend_pars))) trend_pars <- t(t(trend_pars))
 
   # to do: make a generic function that merges trend$covariate_state with q0. Probably only for delta(2) etc.
-  if(!is.null(trend$covariates_states)) {
-    q0 <- trend$covariates_states  # of shape [nrow(dadm), ncovariates]
+  if(trend$kernel %in% c('delta', 'delta2', 'deltab')) {
+    if(!is.null(trend$covariates_states)) {
+      q0 <- trend$covariates_states  # of shape [nrow(dadm), ncovariates]
 
-    # if no covariate state is known yet, set to q0 obtained from trend_pars
-    first_trials <- (dadm$trials==min(dadm$trials)&dadm$lR==levels(dadm$lR)[1])
-    q0[first_trials][is.na(q0[first_trials,])] <- trend_pars[first_trials,2]
-  } else {
-    # Set all to q0
-    q0 <- matrix(trend_pars[,2], nrow=nrow(dadm), ncol=length(trend$covariate))
-    colnames(q0) <- trend$covariate
-    # Only set q0 for first trial, first lR of each subject
-    q0[!(dadm$trials==min(dadm$trials)&dadm$lR==levels(dadm$lR)[1]),] <- NA
+      # if no covariate state is known yet, set to q0 obtained from trend_pars
+      first_trials <- (dadm$trials==min(dadm$trials)&dadm$lR==levels(dadm$lR)[1])
+      q0[first_trials][is.na(q0[first_trials,])] <- trend_pars[first_trials,2]
+    } else {
+      # Set all to q0
+      q0 <- matrix(trend_pars[,2], nrow=nrow(dadm), ncol=length(trend$covariate))
+      colnames(q0) <- trend$covariate
+      # Only set q0 for first trial, first lR of each subject
+      q0[!(dadm$trials==min(dadm$trials)&dadm$lR==levels(dadm$lR)[1]),] <- NA
+    }
   }
 
   trend_pars_orig <- trend_pars  # save a copy since q0 will be repeatedly overwritten
