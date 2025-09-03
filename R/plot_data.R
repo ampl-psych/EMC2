@@ -81,7 +81,7 @@ calc_functions <- function(functions, input){
 
 prep_data_plot <- function(input, post_predict, prior_predict, to_plot, limits,
                            factors = NULL, defective_factor = NULL, subject = NULL,
-                           n_cores, n_post, functions,raw_data=NULL){
+                           n_cores, n_post, functions){
   if(!is.data.frame(input) && !inherits(input, "emc") && !is.null(post_predict) && length(input) != length(post_predict)){
     stop("If input is a list, post_predict must be a list of the same length")
   }
@@ -127,9 +127,7 @@ prep_data_plot <- function(input, post_predict, prior_predict, to_plot, limits,
   for(k in 1:length(input)){
     # Prepare data
     if (inherits(input[[k]], "emc")) {
-      if (!is.null(raw_data))
-        all_data[names(input)[k]] <- list(raw_data) else
-        all_data[[names(input)[k]]] <- get_data(input[[k]])
+      all_data[[names(input)[k]]] <- get_data(input[[k]])
       functions <- c(get_emc_functions(input[[k]]), functions)
     } else all_data[names(input)[k]] <- input[k]
   }
@@ -678,7 +676,6 @@ get_def_cdf <- function(x, defective_factor, dots) {
 #' @param posterior_args Optional list of graphical parameters for posterior lines/ribbons.
 #' @param prior_args Optional list of graphical parameters for prior lines/ribbons.
 #' @param add_percentiles Vector of integers giving percentiles to plot as points, NULL stops plotting.
-#' @param raw_data if NULL data taken from input, supplied as a data frame here to remove rt_resolution artefacts
 #' @param ... Other graphical parameters for the real data lines.
 #'
 #' @return Returns `NULL` invisibly.
@@ -707,7 +704,6 @@ plot_cdf <- function(input,
                      posterior_args = list(),
                      prior_args = list(),
                      add_percentiles=c(10,50,90),
-                     raw_data=NULL,
                      ...) {
 
   # 1) prep_data_plot
@@ -717,7 +713,7 @@ plot_cdf <- function(input,
   }
   check <- prep_data_plot(input, post_predict, prior_predict, to_plot, use_lim,
                           factors, defective_factor, subject, n_cores, n_post,
-                          functions, raw_data=raw_data)
+                          functions)
   data_sources <- check$datasets
   sources <- check$sources
   xlim <- check$xlim
@@ -1023,7 +1019,6 @@ plot_delta <- function(input,
                      prior_args = list(),
                      add_percentiles=c(1:9)*10,
                      rev_delta=FALSE,
-                     raw_data=NULL,
                      ...) {
 
   delta <- function(z) {
@@ -1039,7 +1034,7 @@ plot_delta <- function(input,
     n_cores = n_cores, n_post = n_post, layout = layout,
     to_plot = to_plot, use_lim = use_lim, legendpos = legendpos,
     posterior_args = list(), prior_args = prior_args,
-    add_percentiles = add_percentiles, return_cdf=TRUE,raw_data=raw_data)
+    add_percentiles = add_percentiles, return_cdf=TRUE)
 
   # Basic definitions
   unique_group_keys <- attr(cdf_list,"unique_group_keys")
