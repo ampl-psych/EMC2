@@ -22,7 +22,7 @@ plot_caf(
   posterior_args = list(),
   prior_args = list(),
   accuracy_function = function(d) d$S == d$R,
-  smooth_window = 10,
+  smooth_window = 5,
   which_plot = 1:2,
   ...
 )
@@ -63,7 +63,7 @@ defaults to plotting full data set ungrouped by factors if \code{NULL}.}
 
 \item{accuracy_function}{Accuracy score, default: function(d) d$S==d$R,}
 
-\item{smooth_window, }{range of RT over which calculate accuracy, default 10}
+\item{smooth_window, }{range of RT over which calculate accuracy, default 5}
 
 \item{which_plot}{which of levels of caf_factor to plot, default is both
 i.e,. which_plot = 1:2}
@@ -81,11 +81,11 @@ filter on percentile ranges, 0..X, 1..(X+1), ... , (100-X+1).. Inf, where
 overlaid.
 }
 \examples{
-# Plot delta function for data only, not that the delta_factor must have two
-# levels.
-# fortsmann_speed_accuracy <- forstmann[forstmann$E!="neutral",]
-# fortsmann_speed_accuracy$E <- droplevels(fortsmann_speed_accuracy$E)
-# plot_caf(fortsmann_speed_accuracy, caf_factor="E",factors="S", smooth_window=10)
+# Plot conditional accuracy function for data only,
+# NB: the caf_factor must have two levels levels.
+# forstmann_speed_accuracy <- forstmann[forstmann$E!="neutral",]
+# forstmann_speed_accuracy$E <- droplevels(forstmann_speed_accuracy$E)
+# plot_caf(forstmann_speed_accuracy, caf_factor="E",factors="S", smooth_window=10)
 #
 # Or a list of multiple emc objects ...
 }

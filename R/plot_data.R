@@ -1229,15 +1229,15 @@ plot_delta <- function(input,
 ## Plot conditional accuracy functions
 ###############################################################################
 
-get_caf <- function(x, delta_factor, smooth_window, accuracy_function, dots) {
+get_caf <- function(x, caf_factor, smooth_window, accuracy_function, dots) {
   # Computes a single defective CDF for each level of 'defective_factor'
   # across the RT distribution (0.01 to 0.99).
   probs <- seq(0.01, 0.99, by = 0.01)
-  p_defective <- prop.table(table(x[[delta_factor]]))
+  p_defective <- prop.table(table(x[[caf_factor]]))
 
   # For each level, compute the empirical CDF and scale by that level's proportion
   out <- mapply(
-    split(x, x[[delta_factor]]),
+    split(x, x[[caf_factor]]),
     p_defective,
     FUN = function(inp, prop_share) {
       # quantile of RTs
@@ -1251,15 +1251,18 @@ get_caf <- function(x, delta_factor, smooth_window, accuracy_function, dots) {
   bp <- matrix(nrow=100-smooth_window+1,ncol=2,
                dimnames=list(NULL,c("x","y")))
   # 'out' is now a list whose names are the factor levels; each entry is a 2-col matrix (x,y).
-  caf <- lapply(out,function(m) {
-    m <- rbind(c(0,NA),m,c(Inf,NA))
+  clevs <- levels(x[[caf_factor]])
+  caf <- setNames(vector(mode="list",length=length(clevs)),clevs)
+  for (cond in names(caf)) {
+    m <- rbind(c(0,NA),out[[cond]],c(Inf,NA))
+    d <- x[x[[caf_factor]]==cond,]
     for (i in 1:(100-smooth_window+1)) {
       bp[i,"y"] <- 100*mean(accuracy_function(
-        x[x$rt >= m[i,"x"] & x$rt < m[i+smooth_window-1,"x"],]))
+        d[d$rt >= m[i,"x"] & d$rt < m[i+smooth_window,"x"],]))
       bp[i,"x"] <- i - 1 + smooth_window/2
     }
-    return(bp)
-  })
+    caf[[cond]] <- bp
+  }
   return(caf)
 }
 
@@ -1274,17 +1277,17 @@ get_caf <- function(x, delta_factor, smooth_window, accuracy_function, dots) {
 #' @inheritParams plot_cdf
 #' @param caf_factor The name of within-panel factor
 #' @param accuracy_function Accuracy score, default: function(d) d$S==d$R,
-#' @param smooth_window, range of RT over which calculate accuracy, default 10
+#' @param smooth_window, range of RT over which calculate accuracy, default 5
 #' @param which_plot which of levels of caf_factor to plot, default is both
 #' i.e,. which_plot = 1:2
 #'
 #' @return Returns `NULL` invisibly.
 #' @examples
-#' # Plot delta function for data only, not that the delta_factor must have two
-#' # levels.
-#' # fortsmann_speed_accuracy <- forstmann[forstmann$E!="neutral",]
-#' # fortsmann_speed_accuracy$E <- droplevels(fortsmann_speed_accuracy$E)
-#' # plot_caf(fortsmann_speed_accuracy, caf_factor="E",factors="S", smooth_window=10)
+#' # Plot conditional accuracy function for data only,
+#' # NB: the caf_factor must have two levels levels.
+#' # forstmann_speed_accuracy <- forstmann[forstmann$E!="neutral",]
+#' # forstmann_speed_accuracy$E <- droplevels(forstmann_speed_accuracy$E)
+#' # plot_caf(forstmann_speed_accuracy, caf_factor="E",factors="S", smooth_window=10)
 #' #
 #' # Or a list of multiple emc objects ...
 #' @export
@@ -1304,7 +1307,7 @@ plot_caf <- function(input,
                      posterior_args = list(),
                      prior_args = list(),
                      accuracy_function = function(d) d$S==d$R,
-                     smooth_window = 10,
+                     smooth_window = 5,
                      which_plot=1:2,
                      ...) {
 
