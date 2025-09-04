@@ -80,6 +80,7 @@ make_data_unconditional <- function(data, pars, design, model, return_covariates
                        design$matchfun,simulate=FALSE,type=model()$type,Fcovariates=design$Fcovariates),
       design,model,add_acc=FALSE,compress=FALSE,verbose=FALSE,
       rt_check=FALSE)
+    if(!'lR' %in% colnames(this_data)) this_data$lR <- factor(rep(1, nrow(this_data)))  # for simulations of the DDM, assume all rows are lR==1
 
     # drop unused levels
     this_data$subjects <- droplevels(this_data$subjects)
