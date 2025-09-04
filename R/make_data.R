@@ -144,7 +144,7 @@ make_data_unconditional <- function(data, pars, design, model, return_covariates
 
     if(!is.null(model()$trend)) {
       # save covariates if requested
-      covariates[data$trials==this_trial&data$lR==min(levels(data$lR)),] <- this_covariates[this_data$lR==max(levels(this_data$R)),,drop=FALSE]  # only use last row == most updated
+      covariates[data$trials==this_trial&data$lR==min(levels(data$lR)),] <- this_covariates[this_data$lR==max(levels(this_data$lR)),,drop=FALSE]  # only use last row == most updated
       this_pars <- this_pars[,!colnames(this_pars) %in% covariate_par_names]
     }
 
