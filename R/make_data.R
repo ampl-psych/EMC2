@@ -55,9 +55,9 @@ make_data_unconditional <- function(data, pars, design, model, return_covariates
   }
 
   model_ <- model()
-  includeColumns <- !colnames(data) %in% c('lR', 'lM', names(design$Ffunctions))
   if('reward' %in% colnames(data)) data$reward <- NA
   if(!'lR' %in% colnames(data)) data$lR <- factor(rep(1, nrow(data)))  # for simulations of the DDM, assume all rows are lR==1
+  includeColumns <- !colnames(data) %in% c('lR', 'lM', names(design$Ffunctions))
 
   all_trials <- sort(unique(data[,'trials']))
   for(trial_idx in 1:length(all_trials)) {
