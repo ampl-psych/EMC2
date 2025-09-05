@@ -19,7 +19,7 @@
 #'   cov_names = "strial",
 #'   kernels = c("exp_incr", "poly3"),
 #'   premap = TRUE,
-#'   shared = list(shrd = list("B.B0", "v.d1"))
+#'   shared = list(shrd = list("B.w", "v.d1"))
 #' )
 #' get_trend_pnames(trend)
 #'
@@ -131,15 +131,15 @@ get_trend_pnames <- function(trend){
 trend_help <- function(kernel = NULL, base = NULL, ...){
   dots <- add_defaults(list(...), do_return = FALSE, return_types = FALSE)
   bases <- list(
-    lin = list(description = "Linear base: parameter + b * k",
-               transforms = list(func = list("B0" = "identity")),
-               default_pars = "B0"),
-    exp_lin = list(description = "Exponential linear base: exp(parameter) + exp(b) * k",
-                   transforms = list(func = list("B0" = "exp")),
-                   default_pars = "B0"),
-    centered = list(description = "Centered mapping: parameter + b*(k - 0.5)",
-                    transforms = list(func = list("B0" = "identity")),
-                    default_pars = "B0"),
+    lin = list(description = "Linear base: parameter + w * k",
+               transforms = list(func = list("w" = "identity")),
+               default_pars = "w"),
+    exp_lin = list(description = "Exponential linear base: exp(parameter) + exp(w) * k",
+                   transforms = list(func = list("w" = "exp")),
+                   default_pars = "w"),
+    centered = list(description = "Centered mapping: parameter + w*(k - 0.5)",
+                    transforms = list(func = list("w" = "identity")),
+                    default_pars = "w"),
     add = list(description = "Additive base: parameter + k",
                transforms = NULL),
     identity = list(description = "Identity base: k",
@@ -184,14 +184,6 @@ trend_help <- function(kernel = NULL, base = NULL, ...){
                  transforms = list(func = list("d1" = "identity", "d2" = "identity", "d3" = "identity", "d4" = "identity")),
                  default_pars = c("d1", "d2", "d3", "d4"),
                  bases = base_1p),
-    deltab = list(description = paste(
-      "Threshold learning delta rule kernel:",
-      "Updates q[i] = q[i-1] + alpha * (B[i]/c[i-1] - q[i-1]).",
-      "Parameters: q0 (initial value), alpha (learning rate)."
-    ),
-    default_pars = c("q0", "alpha"),
-    transforms = list(func = list("q0" = "identity", "alpha" = "pnorm")),
-    bases = 'lin'),  ## must be linear
     delta = list(description = paste(
         "Standard delta rule kernel:",
         "Updates q[i] = q[i-1] + alpha * (c[i-1] - q[i-1]).",
@@ -210,7 +202,16 @@ trend_help <- function(kernel = NULL, base = NULL, ...){
     default_pars = c("q0", "alphaFast", "propSlow", "dSwitch"),
     transforms = list(func = list("q0" = "identity", "alphaFast" = "pnorm",
                                   "propSlow" = "pnorm", "dSwitch" = "pnorm")),
-    bases = base_2p)
+    bases = base_2p),
+
+    deltab = list(description = paste(
+        "Threshold learning delta rule kernel:",
+        "Updates q[i] = q[i-1] + alpha * (B[i]/c[i-1] - q[i-1]).",
+        "Parameters: q0 (initial value), alpha (learning rate)."
+      ),
+      default_pars = c("q0", "alpha"),
+      transforms = list(func = list("q0" = "identity", "alpha" = "pnorm")),
+      bases = 'lin')  ## must be linear
   )
   if(dots$return_types){
     return(list(kernels = kernels, bases = bases))
