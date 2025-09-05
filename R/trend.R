@@ -573,6 +573,7 @@ has_delta_rules <- function(model) {
   for(trend_n in 1:length(trend)) {
     if(trend[[trend_n]]$kernel %in% c('delta', 'delta2', 'deltab')) return(TRUE)
   }
+  return(FALSE)
 }
 
 has_conditional_covariates <- function(design) {
