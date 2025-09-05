@@ -565,7 +565,7 @@ run_delta2 <- function(q0,alphaFast,propSlow,dSwitch,covariate) {
 #   d
 # }
 
-find_delta_rules <- function(model) {
+has_delta_rules <- function(model) {
   trend <- model()$trend
   if(is.null(trend)) return(FALSE)
 
@@ -574,4 +574,19 @@ find_delta_rules <- function(model) {
   }
 }
 
+has_conditional_covariates <- function(design) {
+  # find define covariates that depend on behavior -- these are rt, R, or any of the outputs of the functions provided.
+  # they can be lRfiltered or not
+  function_output_columns <- names(design$Ffunctions)
+  behavioral_covariates <- c('rt', 'R', function_output_columns)
+  behavioral_covariates <- c(behavioral_covariates, paste0(behavioral_covariates, '_lRfiltered'))
 
+  # find actual covariates, look for a match
+  trend <- design$model()$trend
+  for(trend_n in 1:length(trend)) {
+    for(cov in trend[[trend_n]]$covariate) {
+      if(cov  %in% behavioral_covariates) return(TRUE)
+    }
+  }
+  return(FALSE)
+}
