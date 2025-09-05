@@ -48,7 +48,7 @@ trend <- make_trend(
   cov_names = "strial",
   kernels = c("exp_incr", "poly3"),
   premap = TRUE,
-  shared = list(shrd = list("B.B0", "v.d1"))
+  shared = list(shrd = list("B.w", "v.d1"))
 )
 get_trend_pnames(trend)
 

@@ -82,7 +82,7 @@ trend_pretrans <- make_trend(
 design_pretrans <- design(
   data = dat,
   trend = trend_pretrans,
-  formula = list(m ~ lM, s ~ 1, t0 ~ 1, s.B0 ~ lR),
+  formula = list(m ~ lM, s ~ 1, t0 ~ 1, s.w ~ lR),
   contrasts = list(lM = ADmat),
   matchfun = matchfun,
   model = LNR
@@ -105,7 +105,7 @@ trend_posttrans <- make_trend(
 design_posttrans <- design(
   data = dat,
   trend = trend_posttrans,
-  formula = list(m ~ lM, s ~ 1, t0 ~ 1, s.B0 ~ lR),
+  formula = list(m ~ lM, s ~ 1, t0 ~ 1, s.w ~ lR),
   contrasts = list(lM = ADmat),
   matchfun = matchfun,
   model = LNR
