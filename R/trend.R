@@ -393,10 +393,11 @@ run_trend <- function(dadm, trend, param, trend_pars){
       together <- cbind(cov_tmp, trend_pars_tmp)
       filter <- !duplicated(together)
 
-      unique_rows <- together[filter]
+      unique_rows <- together[filter,]
       row_keys <- interaction(together, drop = TRUE)
       unique_keys <- interaction(unique_rows, drop = TRUE)
       unq_index <- match(row_keys, unique_keys)
+    }
     if(ncol(trend_pars)>n_base_pars) {
       # Prep trend parameters to filter out base parameters.
       kernel_pars <- trend_pars_tmp[filter,(n_base_pars+1):ncol(trend_pars), drop = FALSE]
