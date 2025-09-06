@@ -167,17 +167,20 @@ NumericVector run_trend_rcpp(DataFrame data, List trend, NumericVector param, Nu
     NumericVector param_tmp = param[!NA_idx];
     // For non-delta kernels, filter duplicates
     LogicalVector filter;
-    if(kernel != "delta" && kernel != "delta2" && kernel != "deltab") {
-      // Create matrix of covariate and trend parameters for duplicate checking
-      NumericMatrix together(cov_tmp.length(), trend_pars_tmp.ncol() + 1);
-      together(_, 0) = cov_tmp;
-      for(int j = 0; j < trend_pars_tmp.ncol(); j++) {
-        together(_, j + 1) = trend_pars_tmp(_, j);
-      }
-      filter = !duplicated_matrix(together);
-    } else {
-      filter = LogicalVector(cov_tmp.length(), true);
-    }
+    // if(kernel != "delta" && kernel != "delta2" && kernel != "deltab") {
+    //   // Create matrix of covariate and trend parameters for duplicate checking
+    //   NumericMatrix together(cov_tmp.length(), trend_pars_tmp.ncol() + 1);
+    //   together(_, 0) = cov_tmp;
+    //   for(int j = 0; j < trend_pars_tmp.ncol(); j++) {
+    //     together(_, j + 1) = trend_pars_tmp(_, j);
+    //   }
+    //   filter = !duplicated_matrix(together);
+    // } else {
+    //   filter = LogicalVector(cov_tmp.length(), true);
+    // }
+
+    // SM: TEMPORARILY TURNED OFF FILTER - UNFILTERING IS WRONG OTHERWISE
+    filter = LogicalVector(cov_tmp.length(), true);
 
     // Run kernel on unique entries
     NumericVector output = run_kernel_rcpp(submat_rcpp(trend_pars_tmp, filter), kernel, cov_tmp[filter], n_base_pars, param_tmp[filter]);
