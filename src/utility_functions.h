@@ -7,6 +7,17 @@
 #include <functional>
 using namespace Rcpp;
 
+// Helper: safely read a logical attribute; default to false if missing/invalid
+static bool get_bool_attr_or_false(const Rcpp::List& lst, const char* name) {
+  SEXP s = lst.attr(name);
+  if (s == R_NilValue) return false;
+  try {
+    return Rcpp::as<bool>(s);
+  } catch (...) {
+    return false;
+  }
+}
+
 LogicalVector contains(CharacterVector sv, std::string txt) {
   LogicalVector res(sv.size());
   for (int i = 0; i < sv.size(); i ++) {
@@ -536,6 +547,107 @@ std::vector<PreTransformSpec> make_pretransform_specs(NumericVector p_vector, Li
   }
   return specs;
 }
+
+
+LogicalVector c_do_bound(NumericMatrix pars,
+                         const std::vector<BoundSpec>& specs)
+{
+  int nrows = pars.nrow();
+  LogicalVector result(nrows, true);
+
+  // For each parameter that has bounds
+  for (size_t j = 0; j < specs.size(); j++) {
+    const BoundSpec& bs = specs[j];
+    int col_idx   = bs.col_idx;
+    double min_v  = bs.min_val;
+    double max_v  = bs.max_val;
+    bool has_exc  = bs.has_exception;
+    double exc_val= bs.exception_val;
+
+    // Check each row
+    for (int i = 0; i < nrows; i++) {
+      double val = pars(i, col_idx);
+      bool ok = (val > min_v && val < max_v);
+      if (!ok && has_exc) {
+        // If out of range, see if exception matches
+        ok = (val == exc_val);
+      }
+      // Merge with existing result (like result = result & ok_col)
+      if (result[i] && !ok) {
+        result[i] = false;
+      }
+    }
+  }
+  return result;
+}
+
+NumericVector c_do_pre_transform(NumericVector p_vector,
+                                 const std::vector<PreTransformSpec>& specs)
+{
+  for (size_t i = 0; i < specs.size(); i++) {
+    const PreTransformSpec& s = specs[i];
+    double val = p_vector[s.index];
+
+    switch (s.code) {
+    case PTF_EXP: {
+      // lower + exp(real)
+      p_vector[s.index] = s.lower + std::exp(val);
+      break;
+    }
+    case PTF_PNORM: {
+      double range = s.upper - s.lower;
+      // lower + range * Φ(real)
+      p_vector[s.index] = s.lower +
+        range * R::pnorm(val, 0.0, 1.0, /*lower_tail=*/1, /*log_p=*/0);
+      break;
+    }
+    default:
+      // no transform
+      break;
+    }
+  }
+  return p_vector;
+}
+
+NumericMatrix c_do_transform(NumericMatrix pars,
+                             const std::vector<TransformSpec>& specs)
+{
+  int nrow = pars.nrow();
+
+  for (size_t j = 0; j < specs.size(); j++) {
+    const TransformSpec& sp = specs[j];
+    int          col_idx = sp.col_idx;
+    TransformCode c      = sp.code;
+    double        lw     = sp.lower;
+    double        up     = sp.upper;
+
+    switch (c) {
+    case EXP: {
+      for (int i = 0; i < nrow; i++) {
+      // lower + exp(real)
+      pars(i, col_idx) = lw + std::exp(pars(i, col_idx));
+    }
+      break;
+    }
+    case PNORM: {
+      double range = up - lw;
+      for (int i = 0; i < nrow; i++) {
+        // lower + range * Φ(real)
+        pars(i, col_idx) = lw +
+          range * R::pnorm(pars(i, col_idx), 0.0, 1.0,
+                           /*lower_tail=*/1, /*log_p=*/0);
+      }
+      break;
+    }
+    case IDENTITY:
+    default:
+      // do nothing
+      break;
+    }
+  }
+  return pars;
+}
+
 
 #endif
 

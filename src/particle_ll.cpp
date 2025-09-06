@@ -1,4 +1,5 @@
 #include <Rcpp.h>
+#include <unordered_map>
 #include "utility_functions.h"
 #include "model_lnr.h"
 #include "model_LBA.h"
@@ -8,104 +9,7 @@
 #include "trend.h"
 using namespace Rcpp;
 
-LogicalVector c_do_bound(NumericMatrix pars,
-                              const std::vector<BoundSpec>& specs)
-{
-  int nrows = pars.nrow();
-  LogicalVector result(nrows, true);
 
-  // For each parameter that has bounds
-  for (size_t j = 0; j < specs.size(); j++) {
-    const BoundSpec& bs = specs[j];
-    int col_idx   = bs.col_idx;
-    double min_v  = bs.min_val;
-    double max_v  = bs.max_val;
-    bool has_exc  = bs.has_exception;
-    double exc_val= bs.exception_val;
-
-    // Check each row
-    for (int i = 0; i < nrows; i++) {
-      double val = pars(i, col_idx);
-      bool ok = (val > min_v && val < max_v);
-      if (!ok && has_exc) {
-        // If out of range, see if exception matches
-        ok = (val == exc_val);
-      }
-      // Merge with existing result (like result = result & ok_col)
-      if (result[i] && !ok) {
-        result[i] = false;
-      }
-    }
-  }
-  return result;
-}
-
-NumericVector c_do_pre_transform(NumericVector p_vector,
-                                 const std::vector<PreTransformSpec>& specs)
-{
-  for (size_t i = 0; i < specs.size(); i++) {
-    const PreTransformSpec& s = specs[i];
-    double val = p_vector[s.index];
-
-    switch (s.code) {
-    case PTF_EXP: {
-      // lower + exp(real)
-      p_vector[s.index] = s.lower + std::exp(val);
-      break;
-    }
-    case PTF_PNORM: {
-      double range = s.upper - s.lower;
-      // lower + range * Φ(real)
-      p_vector[s.index] = s.lower +
-        range * R::pnorm(val, 0.0, 1.0, /*lower_tail=*/1, /*log_p=*/0);
-      break;
-    }
-    default:
-      // no transform
-      break;
-    }
-  }
-  return p_vector;
-}
-
-NumericMatrix c_do_transform(NumericMatrix pars,
-                             const std::vector<TransformSpec>& specs)
-{
-  int nrow = pars.nrow();
-
-  for (size_t j = 0; j < specs.size(); j++) {
-    const TransformSpec& sp = specs[j];
-    int          col_idx = sp.col_idx;
-    TransformCode c      = sp.code;
-    double        lw     = sp.lower;
-    double        up     = sp.upper;
-
-    switch (c) {
-    case EXP: {
-      for (int i = 0; i < nrow; i++) {
-      // lower + exp(real)
-      pars(i, col_idx) = lw + std::exp(pars(i, col_idx));
-    }
-      break;
-    }
-    case PNORM: {
-      double range = up - lw;
-      for (int i = 0; i < nrow; i++) {
-        // lower + range * Φ(real)
-        pars(i, col_idx) = lw +
-          range * R::pnorm(pars(i, col_idx), 0.0, 1.0,
-                           /*lower_tail=*/1, /*log_p=*/0);
-      }
-      break;
-    }
-    case IDENTITY:
-    default:
-      // do nothing
-      break;
-    }
-  }
-  return pars;
-}
 
 
 NumericMatrix c_map_p(NumericVector p_vector,
@@ -117,122 +21,83 @@ NumericMatrix c_map_p(NumericVector p_vector,
                       List transforms) {
 
   // Extract information about trends
-  bool has_trend = (trend.length() > 0); // or another condition
+  const bool has_trend = (trend.length() > 0);
   bool premap = false;
   bool pretransform = false;
   CharacterVector trend_names;
-  // If trend has these flags
   if (has_trend) {
-    premap = trend.attr("premap");
-    pretransform = trend.attr("pretransform");
+    premap = get_bool_attr_or_false(trend, "premap");
+    pretransform = get_bool_attr_or_false(trend, "pretransform");
     trend_names = trend.names();
   }
-  NumericVector p_mult_design;
-  int n_params = p_types.size();
+
+  const int n_params = p_types.size();
   NumericMatrix pars(n_trials, n_params);
   colnames(pars) = p_types;
+
+  // Prepare trend parameter columns when needed
   NumericMatrix trend_pars;
-  // Identify trend parameters if any
-  CharacterVector trend_pnames;
   LogicalVector trend_index(n_params, FALSE);
+  CharacterVector trend_pnames;
   if (has_trend && (premap || pretransform)) {
-    // first loop over trends to get all trend pnames
-    // But only for trends that are premap or pretransform
-    for(unsigned int q = 0; q < trend.length(); q++){
-      List cur_trend = trend[q];
-      trend_pnames = c_add_charvectors(trend_pnames, as<CharacterVector>(cur_trend["trend_pnames"]));
-      // Takes care of shared parameters
-      trend_pnames = unique(trend_pnames);
-    }
-    // index which p_types are trends
-    LogicalVector trend_index = contains_multiple(p_types,trend_pnames);
-    for(unsigned int j = 0; j < trend_index.length(); j ++){
-      // If we are a trend parameter:
-      if(trend_index[j] == TRUE){
-        NumericMatrix cur_design_trend = designs[j];
-        CharacterVector cur_names_trend = colnames(cur_design_trend);
-        // Take the current design and loop over columns
-        // Multiply by design matrix
-        for(int k = 0; k < cur_design_trend.ncol(); k ++){
-          String cur_name_trend(cur_names_trend[k]);
-          p_mult_design =  p_vector[cur_name_trend] * cur_design_trend(_, k);
-          p_mult_design[is_nan(p_mult_design)] = 0;
-          pars(_, j) = pars(_, j) + p_mult_design;
-        }
-      }
-    }
-    trend_pars = submat_rcpp_col_by_names(pars, trend_pnames);
-    std::vector<TransformSpec> t_specs = make_transform_specs(trend_pars, transforms);
-    trend_pars = c_do_transform(trend_pars, t_specs);
+    // Fill in trend columns first so that they can be used in premapped trend
+    trend_pars = build_trend_columns_from_design(p_vector, p_types, designs, n_trials, trend, transforms);
+    trend_pnames = colnames(trend_pars);
     trend_index = contains_multiple(p_types, trend_pnames);
   }
-  for(int i = 0, t = 0; i < n_params; i++){
-    if(trend_index[i] == FALSE){
-      NumericMatrix cur_design = designs[i];
-      CharacterVector cur_names = colnames(cur_design);
 
-      for(int j = 0; j < cur_design.ncol(); j ++){
-        String cur_name(cur_names[j]);
-        NumericVector p_mult_design(n_trials, p_vector[cur_name]);
-        // at this point we're multiplying by specific parameters (e.g. v_lMd)
-        // So first apply trend to this parameter, then multiply by design matrix;
-        if(has_trend && premap){
-          // Check if trend is on current parameter
-          LogicalVector cur_has_trend = contains(trend_names, cur_name);
-          // This is a bit tricky and arguable.
-          // Here we first fill a p_mult_design vector, then apply a trend then multiply with design matrix
-          // Arguably you could also multiply parameter with design matrix and then apply trend
-          // But that results in weird effects that if a parameter is set at 0, it could no longer be 0 post-trend
-          for(unsigned int w = 0; w < cur_has_trend.length(); w ++){
-            if(cur_has_trend[w] == TRUE){ // if so apply trend
-              List cur_trend = trend[cur_name];
-              CharacterVector cur_trend_pnames = cur_trend["trend_pnames"];
-              p_mult_design = run_trend_rcpp(data, cur_trend, p_mult_design,
-                                             submat_rcpp_col_by_names(trend_pars,cur_trend_pnames));
-
-            }
-          }
-        }
-        p_mult_design = p_mult_design * cur_design(_, j);
-        p_mult_design[is_nan(p_mult_design)] = 0;
-        pars(_, i) = pars(_, i) + p_mult_design;
-      };
-    } else if(pretransform){
-      // These trends aren't applied here, but rather after mapping,
-      // But they are transformed here already, so input them here.
-      pars(_, i) = trend_pars(_, t);
-      t++;
+  // Map non-trend parameters from designs, applying premap trends if requested
+  for (int i = 0; i < n_params; i++) {
+    if (trend_index[i] == TRUE) continue; // skip trend parameters here
+    NumericMatrix cur_design = designs[i];
+    CharacterVector cur_names = colnames(cur_design);
+    for (int j = 0; j < cur_design.ncol(); j++) {
+      String cur_name(cur_names[j]);
+      NumericVector p_mult_design(n_trials, p_vector[cur_name]);
+      if (has_trend && premap) {
+        p_mult_design = apply_premap_trends(data, trend, trend_names, cur_name, p_mult_design, trend_pars);
+      }
+      p_mult_design = p_mult_design * cur_design(_, j);
+      LogicalVector bad = is_na(p_mult_design) | is_nan(p_mult_design);
+      p_mult_design[bad] = 0;
+      pars(_, i) = pars(_, i) + p_mult_design;
     }
-  };
-  if(has_trend && premap){
+  }
+
+  // If using pretransform trends, copy the pre-transformed trend cols into pars by name
+  if (has_trend && pretransform) {
+    fill_trend_columns_for_pretransform(pars, p_types, trend_pars);
+  }
+
+  // If premap, trend parameter columns are not part of the final matrix
+  if (has_trend && premap) {
     pars = submat_rcpp_col(pars, !contains_multiple(p_types, trend_pnames));
   }
-  return(pars);
+  return pars;
 }
 
 NumericMatrix get_pars_matrix(NumericVector p_vector, NumericVector constants, List transforms, const std::vector<PreTransformSpec>& p_specs,
                               CharacterVector p_types, List designs, int n_trials, DataFrame data, List trend){
-  bool has_trend = (trend.length() > 0);
+  const bool has_trend = (trend.length() > 0);
   bool pretransform = false;
   bool posttransform = false;
   // If trend has these flags
   if (has_trend) {
-    pretransform = trend.attr("pretransform");
-    posttransform = trend.attr("posttransform");
+    pretransform = get_bool_attr_or_false(trend, "pretransform");
+    posttransform = get_bool_attr_or_false(trend, "posttransform");
   }
   NumericVector p_vector_updtd(clone(p_vector));
-  CharacterVector par_names = p_vector_updtd.names();
   p_vector_updtd = c_do_pre_transform(p_vector_updtd, p_specs);
   p_vector_updtd = c_add_vectors(p_vector_updtd, constants);
   NumericMatrix pars = c_map_p(p_vector_updtd, p_types, designs, n_trials, data, trend, transforms);
   // // Check if pretransform trend applies
-  if(pretransform){ // automatically only applies if trend
+  if(pretransform){
     pars = prep_trend(data, trend, pars);
   }
   std::vector<TransformSpec> t_specs = make_transform_specs(pars, transforms);
   pars = c_do_transform(pars, t_specs);
   // Check if posttransform trend applies
-  if(posttransform){ // automatically only applies if trend
+  if(posttransform){
     pars = prep_trend(data, trend, pars);
   }
   // ok is calculated afterwards and Ttransform applied in the function
@@ -324,7 +189,7 @@ NumericVector calc_ll(NumericMatrix p_matrix, DataFrame data, NumericVector cons
   NumericVector p_vector(p_matrix.ncol());
   CharacterVector p_names = colnames(p_matrix);
   p_vector.names() = p_names;
-  NumericMatrix pars(n_trials, p_types.length());
+  NumericMatrix pars;
   LogicalVector is_ok(n_trials);
 
   // Once (outside the main loop over particles):

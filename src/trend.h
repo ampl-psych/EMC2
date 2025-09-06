@@ -3,6 +3,7 @@
 
 #include "utility_functions.h"
 #include <Rcpp.h>
+#include <unordered_map>
 using namespace Rcpp;
 
 
@@ -128,11 +129,12 @@ NumericVector run_trend_rcpp(DataFrame data, List trend, NumericVector param, Nu
     // Run kernel on unique entries
     NumericVector output = run_kernel_rcpp(submat_rcpp(trend_pars_tmp, filter), kernel, cov_tmp[filter], n_base_pars);
     // // Create index for expanding back to full size
-    IntegerVector unq_idx = cumsum_logical(filter); // Is 1-based
-    NumericVector expanded_output = c_expand(output, unq_idx); //This assumes 1-based as well
+    IntegerVector unq_idx = cumsum_logical(filter); // This function is 1-based
+    NumericVector expanded_output = c_expand(output, unq_idx); //This function assumes 1-based as well
     // Add to cumulative output
     for(int k = 0, l = 0; k < n_trials; k ++){
       // put back values, expanded output could be shorter, since NAs are excluded
+      // hence the loop.
       if(NA_idx[k] == FALSE){
         out[k] = out[k] + expanded_output[l];
         l++;
@@ -179,6 +181,104 @@ NumericMatrix prep_trend(DataFrame data, List trend, NumericMatrix pars) {
   all_trend_names = unique(all_trend_names);
   pars = submat_rcpp_col(pars, !contains_multiple(par_names, all_trend_names));
   return(pars);
+}
+
+// ---- Trend helpers for mapping pipeline ----
+
+// Collect all unique trend parameter names across trend list entries
+inline CharacterVector collect_trend_param_names(const List& trend) {
+  CharacterVector trend_pnames;
+  for (int i = 0; i < trend.size(); ++i) {
+    List cur_trend = trend[i];
+    CharacterVector cur_names = cur_trend["trend_pnames"];
+    trend_pnames = c_add_charvectors(trend_pnames, cur_names);
+  }
+  return unique(trend_pnames);
+}
+
+// Build per-trial columns for trend parameters from designs and p_vector, and apply transforms
+inline NumericMatrix build_trend_columns_from_design(NumericVector p_vector,
+                                                     CharacterVector p_types,
+                                                     List designs,
+                                                     int n_trials,
+                                                     const List& trend,
+                                                     const List& transforms) {
+  CharacterVector trend_pnames = collect_trend_param_names(trend);
+  if (trend_pnames.size() == 0) {
+    return NumericMatrix(n_trials, 0); // empty
+  }
+
+  // Map parameter name -> index in p_types/designs
+  std::unordered_map<std::string,int> name_to_idx;
+  for (int i = 0; i < p_types.size(); ++i) {
+    name_to_idx[ Rcpp::as<std::string>(p_types[i]) ] = i;
+  }
+
+  // Allocate output matrix with columns strictly in trend_pnames order
+  NumericMatrix trend_pars(n_trials, trend_pnames.size());
+  colnames(trend_pars) = trend_pnames;
+
+  for (int c = 0; c < trend_pnames.size(); ++c) {
+    std::string pname = Rcpp::as<std::string>(trend_pnames[c]);
+    auto it = name_to_idx.find(pname);
+    int idx = it->second;
+    NumericMatrix cur_design = designs[idx];
+    CharacterVector cur_names = colnames(cur_design);
+
+    // Accumulate p_vector * design columns
+    NumericVector acc(n_trials, 0.0);
+    for (int j = 0; j < cur_design.ncol(); ++j) {
+      String cur_name(cur_names[j]);
+      NumericVector tmp = p_vector[cur_name] * cur_design(_, j);
+      LogicalVector bad = is_na(tmp) | is_nan(tmp);
+      tmp[bad] = 0;
+      acc = acc + tmp;
+    }
+    trend_pars(_, c) = acc;
+  }
+
+  // Transform trend parameter columns
+  std::vector<TransformSpec> t_specs = make_transform_specs(trend_pars, transforms);
+  trend_pars = c_do_transform(trend_pars, t_specs);
+  return trend_pars;
+}
+
+// Apply premap trend for a single parameter vector if a trend is defined
+inline NumericVector apply_premap_trends(const DataFrame& data,
+                                         const List& trend,
+                                         const CharacterVector& trend_names,
+                                         const String& param_name,
+                                         NumericVector param_values,
+                                         const NumericMatrix& trend_pars) {
+  // Quick check if a trend exists for param_name
+  if (!is_true(any(contains(trend_names, param_name)))) {
+    return param_values;
+  }
+  // Fetch specific trend and its parameter subset
+  List cur_trend = trend[param_name];
+  CharacterVector cur_trend_pnames = cur_trend["trend_pnames"];
+  NumericMatrix cur_trend_pars = submat_rcpp_col_by_names(trend_pars, cur_trend_pnames);
+  return run_trend_rcpp(data, cur_trend, param_values, cur_trend_pars);
+}
+
+// Fill columns for trend parameters into the output matrix by name (for pretransform case)
+inline void fill_trend_columns_for_pretransform(NumericMatrix& pars,
+                                                const CharacterVector& p_types,
+                                                const NumericMatrix& trend_pars) {
+  if (trend_pars.ncol() == 0) return;
+  CharacterVector tnames = colnames(trend_pars);
+  // Build a name->col map for trend_pars
+  std::unordered_map<std::string,int> tmap;
+  for (int c = 0; c < tnames.size(); ++c) {
+    tmap[Rcpp::as<std::string>(tnames[c])] = c;
+  }
+  for (int i = 0; i < p_types.size(); ++i) {
+    std::string pname = Rcpp::as<std::string>(p_types[i]);
+    auto it = tmap.find(pname);
+    if (it != tmap.end()) {
+      pars(_, i) = trend_pars(_, it->second);
+    }
+  }
 }
 
 #endif
