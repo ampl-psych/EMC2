@@ -18,7 +18,7 @@ NumericMatrix c_map_p(NumericVector p_vector,
                       int n_trials,
                       DataFrame data,
                       List trend,
-                      List transforms) {
+                      const std::vector<TransformSpec>& full_specs) {
 
   // Extract information about trends
   const bool has_trend = (trend.length() > 0);
@@ -41,7 +41,12 @@ NumericMatrix c_map_p(NumericVector p_vector,
   CharacterVector trend_pnames;
   if (has_trend && (premap || pretransform)) {
     // Fill in trend columns first so that they can be used in premapped trend
-    trend_pars = build_trend_columns_from_design(p_vector, p_types, designs, n_trials, trend, transforms);
+    // This function also applies transformations to the trend parameters
+    // to ensure real-lines support.
+    // The pre-transform trends are also included here, they are used after map_p
+    // but they need to be transformed already (before the other trend parameters)
+    // are transformed.
+    trend_pars = build_trend_columns_from_design(p_vector, p_types, designs, n_trials, trend, full_specs);
     trend_pnames = colnames(trend_pars);
     trend_index = contains_multiple(p_types, trend_pnames);
   }
@@ -76,8 +81,9 @@ NumericMatrix c_map_p(NumericVector p_vector,
   return pars;
 }
 
-NumericMatrix get_pars_matrix(NumericVector p_vector, NumericVector constants, List transforms, const std::vector<PreTransformSpec>& p_specs,
-                              CharacterVector p_types, List designs, int n_trials, DataFrame data, List trend){
+NumericMatrix get_pars_matrix(NumericVector p_vector, NumericVector constants, const std::vector<PreTransformSpec>& p_specs,
+                              CharacterVector p_types, List designs, int n_trials, DataFrame data, List trend,
+                              const std::vector<TransformSpec>& full_specs){
   const bool has_trend = (trend.length() > 0);
   bool pretransform = false;
   bool posttransform = false;
@@ -89,12 +95,12 @@ NumericMatrix get_pars_matrix(NumericVector p_vector, NumericVector constants, L
   NumericVector p_vector_updtd(clone(p_vector));
   p_vector_updtd = c_do_pre_transform(p_vector_updtd, p_specs);
   p_vector_updtd = c_add_vectors(p_vector_updtd, constants);
-  NumericMatrix pars = c_map_p(p_vector_updtd, p_types, designs, n_trials, data, trend, transforms);
+  NumericMatrix pars = c_map_p(p_vector_updtd, p_types, designs, n_trials, data, trend, full_specs);
   // // Check if pretransform trend applies
   if(pretransform){
     pars = prep_trend(data, trend, pars);
   }
-  std::vector<TransformSpec> t_specs = make_transform_specs(pars, transforms);
+  std::vector<TransformSpec> t_specs = make_transform_specs_from_full(pars, p_types, full_specs);
   pars = c_do_transform(pars, t_specs);
   // Check if posttransform trend applies
   if(posttransform){
@@ -197,6 +203,7 @@ NumericVector calc_ll(NumericMatrix p_matrix, DataFrame data, NumericVector cons
   CharacterVector mm_names = colnames(minmax);
   std::vector<PreTransformSpec> p_specs;
   std::vector<BoundSpec> bound_specs;
+  std::vector<TransformSpec> full_t_specs; // precomputed transform specs for p_types
 
   if(type == "DDM"){
     IntegerVector expand = data.attr("expand");
@@ -204,8 +211,12 @@ NumericVector calc_ll(NumericMatrix p_matrix, DataFrame data, NumericVector cons
       p_vector = p_matrix(i, _);
       if(i == 0){
         p_specs = make_pretransform_specs(p_vector, pretransforms);
+        // Precompute transform specs for all p_types using a one-time dummy
+        NumericMatrix dummy(1, p_types.size());
+        colnames(dummy) = p_types;
+        full_t_specs = make_transform_specs(dummy, transforms);
       }
-      pars = get_pars_matrix(p_vector, constants, transforms, p_specs, p_types, designs, n_trials, data, trend);
+      pars = get_pars_matrix(p_vector, constants, p_specs, p_types, designs, n_trials, data, trend, full_t_specs);
       // Precompute specs
       if (i == 0) {                            // first particle only, just to get colnames
         bound_specs = make_bound_specs(minmax,mm_names,pars,bounds);
@@ -220,8 +231,12 @@ NumericVector calc_ll(NumericMatrix p_matrix, DataFrame data, NumericVector cons
       p_vector = p_matrix(i, _);
       if(i == 0){
         p_specs = make_pretransform_specs(p_vector, pretransforms);
+        // Precompute transform specs for all p_types using a one-time dummy
+        NumericMatrix dummy(1, p_types.size());
+        colnames(dummy) = p_types;
+        full_t_specs = make_transform_specs(dummy, transforms);
       }
-      pars = get_pars_matrix(p_vector, constants, transforms, p_specs, p_types, designs, n_trials, data, trend);
+      pars = get_pars_matrix(p_vector, constants, p_specs, p_types, designs, n_trials, data, trend, full_t_specs);
       // Precompute specs
       if (i == 0) {                            // first particle only, just to get colnames
         bound_specs = make_bound_specs(minmax,mm_names,pars,bounds);
@@ -255,8 +270,12 @@ NumericVector calc_ll(NumericMatrix p_matrix, DataFrame data, NumericVector cons
       p_vector = p_matrix(i, _);
       if(i == 0){
         p_specs = make_pretransform_specs(p_vector, pretransforms);
+        // Precompute transform specs for all p_types using a one-time dummy
+        NumericMatrix dummy(1, p_types.size());
+        colnames(dummy) = p_types;
+        full_t_specs = make_transform_specs(dummy, transforms);
       }
-      pars = get_pars_matrix(p_vector, constants, transforms, p_specs, p_types, designs, n_trials, data, trend);
+      pars = get_pars_matrix(p_vector, constants, p_specs, p_types, designs, n_trials, data, trend, full_t_specs);
       if (i == 0) {                            // first particle only, just to get colnames
         bound_specs = make_bound_specs(minmax,mm_names,pars,bounds);
       }

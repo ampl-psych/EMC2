@@ -202,7 +202,7 @@ inline NumericMatrix build_trend_columns_from_design(NumericVector p_vector,
                                                      List designs,
                                                      int n_trials,
                                                      const List& trend,
-                                                     const List& transforms) {
+                                                     const std::vector<TransformSpec>& full_specs) {
   CharacterVector trend_pnames = collect_trend_param_names(trend);
   if (trend_pnames.size() == 0) {
     return NumericMatrix(n_trials, 0); // empty
@@ -237,8 +237,8 @@ inline NumericMatrix build_trend_columns_from_design(NumericVector p_vector,
     trend_pars(_, c) = acc;
   }
 
-  // Transform trend parameter columns
-  std::vector<TransformSpec> t_specs = make_transform_specs(trend_pars, transforms);
+  // Transform trend parameter columns using precomputed specs
+  std::vector<TransformSpec> t_specs = make_transform_specs_from_full(trend_pars, p_types, full_specs);
   trend_pars = c_do_transform(trend_pars, t_specs);
   return trend_pars;
 }

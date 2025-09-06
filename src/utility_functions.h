@@ -3,6 +3,7 @@
 
 #include <Rcpp.h>
 #include <unordered_set>
+#include <unordered_map>
 #include <vector>
 #include <functional>
 using namespace Rcpp;
@@ -479,6 +480,41 @@ std::vector<TransformSpec> make_transform_specs(NumericMatrix pars, List transfo
   return specs;
 }
 
+// Build TransformSpec for any matrix using precomputed full specs for all p_types
+inline std::vector<TransformSpec> make_transform_specs_from_full(
+    NumericMatrix pars,
+    CharacterVector full_names,
+    const std::vector<TransformSpec>& full_specs)
+{
+  // Create a quick lookup name -> index in full_names/specs
+  std::unordered_map<std::string,int> name_to_idx;
+  for (int i = 0; i < full_names.size(); ++i) {
+    name_to_idx[Rcpp::as<std::string>(full_names[i])] = i;
+  }
+
+  int ncol = pars.ncol();
+  std::vector<TransformSpec> specs(ncol);
+  CharacterVector cparnames = colnames(pars);
+  for (int j = 0; j < ncol; j++) {
+    std::string colname = Rcpp::as<std::string>(cparnames[j]);
+    auto it = name_to_idx.find(colname);
+    TransformSpec sp;
+    sp.col_idx = j;
+    if (it != name_to_idx.end()) {
+      const TransformSpec& base = full_specs[it->second];
+      sp.code  = base.code;
+      sp.lower = base.lower;
+      sp.upper = base.upper;
+    } else {
+      sp.code  = IDENTITY;
+      sp.lower = 0.0;
+      sp.upper = 1.0;
+    }
+    specs[j] = sp;
+  }
+  return specs;
+}
+
 
 // For pretransform
 enum PreTFCode { PTF_EXP = 1, PTF_PNORM = 2, PTF_NONE = 0 };
@@ -650,5 +686,4 @@ NumericMatrix c_do_transform(NumericMatrix pars,
 
 
 #endif
-
 
