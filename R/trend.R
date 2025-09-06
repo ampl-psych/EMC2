@@ -387,11 +387,16 @@ run_trend <- function(dadm, trend, param, trend_pars){
     if(trend$kernel %in% c("delta", "delta2", "deltab")){
       # These trends have a sequential nature, don't filter duplicate entries
       filter <- rep(T, length(cov_tmp))
+      map_index <- 1:length(cov_tmp)
     } else {
       # Else filter out duplicated entries
       together <- cbind(cov_tmp, trend_pars_tmp)
       filter <- !duplicated(together)
-    }
+
+      unique_rows <- together[filter]
+      row_keys <- interaction(together, drop = TRUE)
+      unique_keys <- interaction(unique_rows, drop = TRUE)
+      map_index <- match(row_keys, unique_keys)
     if(ncol(trend_pars)>n_base_pars) {
       # Prep trend parameters to filter out base parameters.
       kernel_pars <- trend_pars_tmp[filter,(n_base_pars+1):ncol(trend_pars), drop = FALSE]
@@ -399,10 +404,10 @@ run_trend <- function(dadm, trend, param, trend_pars){
       kernel_pars <- trend_pars_tmp[filter,, drop = FALSE]
     }
     # Keep an expansion index
-    unq_idx <- cumsum(filter)
+    #unq_idx <- cumsum(filter)
     # Run trend
     output <- run_kernel(kernel_pars, trend$kernel, cov_tmp[filter], param_tmp[filter])
-    updated_covariate[!NA_idx,i] <- output[unq_idx]
+    updated_covariate[!NA_idx,i] <- output[map_index] #output[unq_idx]
 
     to_update <- updated_covariate[,i]
 
