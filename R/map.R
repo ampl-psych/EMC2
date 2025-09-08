@@ -349,7 +349,8 @@ generate_design_equations <- function(design_matrix,
                                       factor_cols = NULL,
                                       numeric_cols = NULL,
                                       transform,
-                                      pre_transform) {
+                                      pre_transform,
+                                      trend) {
   # 1. If user hasn't specified which columns are factors or numeric, guess:
   if (is.null(factor_cols)) {
     # We'll assume anything that is a factor or character is a "factor column"
@@ -367,6 +368,7 @@ generate_design_equations <- function(design_matrix,
   # 2. Build the "equation" strings from numeric cols
   make_equation_string <- function(row_i) {
     eq_terms <- c()
+    trend_terms <- c()
     for (colname in numeric_cols) {
       new_name <- colname
       if(colname %in% names(pre_transform)){
@@ -391,6 +393,7 @@ generate_design_equations <- function(design_matrix,
         sign_str <- ifelse(val >= 0, "+ ", "- ")
         term_str <- paste0(sign_str, format(abs(val), digits = 3), " * ", new_name)
       }
+      # if(colname %in% names(formatted_trends)) trend_terms <- c(trend_terms, formatted_trends[[colname]])
       eq_terms <- c(eq_terms, term_str)
     }
 
@@ -401,6 +404,7 @@ generate_design_equations <- function(design_matrix,
 
     # Combine eq_terms
     eq_string <- paste(eq_terms, collapse = " ")
+    # for(i in trend_terms) eq_string <- paste0(eq_string, '; ', i)
     # Remove the leading '+ ' if present
     sub("^\\+ ", "", eq_string)
   }
@@ -426,6 +430,13 @@ generate_design_equations <- function(design_matrix,
   collapse = "  ")
 
   cat("  ", factor_header_str, "  ", eq_header, "\n", sep="")
+
+  ## SM: Add trend info
+  formatted_trends <- verbal_trend(design_matrix, trend)
+  ## If premap, then the design matrix column name has been replace.
+  ## else: add a component to the end of the equation string, either before or after the
+  ## closing parentheses depending on the transform factor
+
   # 6. Print each row: factor columns in their spaces, then ": <equation>"
   for (i in seq_len(nrow(design_matrix))) {
     row_factor_str <- paste(mapply(function(fc, w) {
@@ -433,12 +444,34 @@ generate_design_equations <- function(design_matrix,
       sprintf("%-*s", w, as.character(design_matrix[[fc]][i]))
     }, factor_cols, col_widths),
     collapse = "  ")
-    if(transform == "identity"){
-      cat(" ", row_factor_str, "  : ", eq_strings[i], "\n", sep="")
-    } else{
-      cat(" ", row_factor_str, "  : ", transform, "(", eq_strings[i], ")", "\n", sep="")
+
+    if(!attr(trend, 'premap')) {
+      if(transform == 'identity' || attr(trend, 'pretransform')) {
+        for(trend_name in names(trend)) {
+          eq_strings[i] <- paste0(eq_strings[i], ' + ', trend_name)
+        }
+      }
     }
 
+    closing_parenthesis <- ')'
+    if(!attr(trend, 'pretransform') & !attr(trend, 'premap')) {
+      for(trend_name in names(trend)) {
+        closing_parenthesis <- paste0(closing_parenthesis, ' + ', trend_name)
+      }
+    }
+
+    if(transform == "identity") {
+      cat(" ", row_factor_str, "  : ", eq_strings[i], "\n", sep="")
+    } else {
+      cat(" ", row_factor_str, "  : ", transform, "(", eq_strings[i], closing_parenthesis, "\n", sep="")
+    }
+  }
+
+  if(length(formatted_trends)>0) {
+    cat("Trends: ", '\n', sep='')
+    for(formatted_trend in formatted_trends) {
+      cat(" ", formatted_trend, '\n', sep='')
+    }
   }
 }
 
@@ -448,19 +481,103 @@ verbal_dm <- function(design){
   map_no_da <- attr(sampled_pars(design, doMap = TRUE), "map")
   transforms <- design$model()$transform$func
   pre_transforms <- design$model()$pre_transform$func
+  trend <- design$model()$trend
   for(i in 1:length(map)){
     m <- map[[i]]
-    if(ncol(m) == 1) next
+    if((ncol(m) == 1) & !any(colnames(m) %in% names(trend))) next
+
+    # add trial subscript
+    trend_idx <- names(trend) %in% colnames(m)
+    if(attr(trend, 'premap')) {
+      factor_has_trend <- colnames(m) %in% names(trend)
+      colnames(m)[factor_has_trend] <- paste0(colnames(m)[factor_has_trend],'_t')
+    }
     cat(paste0("$", names(map)[i]), "\n")
+
     mnd <- map_no_da[[i]]
+    if(attr(trend, 'premap')) {
+      factor_has_trend <- colnames(mnd) %in% names(trend)
+      trend_in_mnd <- names(trend) %in% colnames(mnd)
+      colnames(mnd)[factor_has_trend] <- paste0(colnames(mnd)[factor_has_trend],'_t')
+
+      names(trend)[trend_in_mnd] <- paste0(names(trend)[trend_in_mnd], '_t')
+    }
+
+    trends_to_pass <- trend[trend_idx]
+    attr(trends_to_pass, 'premap') <- attr(trend, 'premap')
+    attr(trends_to_pass, 'pretransform') <- attr(trend, 'pretransform')
+
     par_idx <- colnames(m) %in% colnames(mnd)
     generate_design_equations(m, colnames(m)[!par_idx], colnames(m)[par_idx],
                               transform = transforms[names(map)[i]],
-                              pre_transform = pre_transforms)
+                              pre_transform = pre_transforms,
+                              trend = trends_to_pass)
     cat("\n")
   }
 }
 
 
 
+verbal_trend <- function(design_matrix, trend) {
+  dm_cn <- colnames(design_matrix)
+  trend_par_names <- dm_cn[dm_cn %in% names(trend)]
+  trend_str <- c()
+  for(trend_par_name in trend_par_names) {
+    base <- trend[[trend_par_name]]$base
+    kernel <- trend[[trend_par_name]]$kernel
+    covariate <- gsub('_lRfiltered', '', trend[[trend_par_name]]$covariate)
+    trend_pnames <- trend[[trend_par_name]]$trend_pnames
+    n_base_pars <- switch(base,
+                          lin = 1,
+                          exp_lin = 1,
+                          centered = 1,
+                          add = 0,
+                          identity = 0)
+    kernel_pars <- trend_pnames[(n_base_pars+1):length(trend_pnames)]
+    base_pars=NULL
+    if(n_base_pars > 0) base_pars <- trend_pnames[1:n_base_pars]
 
+    # format kernel and base
+    kernel_formatted <- format_kernel(kernel)
+    base_formatted <- format_base(base)
+    if(attr(trend, 'premap')) trend_par_name <- gsub('_t', '', trend_par_name)
+    base_formatted <- paste0(trend_par_name, '_t = ', base_formatted)
+
+
+    # replace all in one go, use placeholders to prevent cascading replacements
+    replacements <- c('k'=gsub('c', covariate[1], kernel_formatted), 'w'=base_pars[1], 'parameter'=trend_par_name)
+    patterns <- names(replacements)
+    placeholders <- paste0("___PLACEHOLDER", seq_along(patterns), "___")
+    for (i in seq_along(patterns)) {
+      base_formatted <- gsub(patterns[i], placeholders[i], base_formatted, fixed = TRUE)
+    }
+    for (i in seq_along(placeholders)) {
+      base_formatted <- gsub(placeholders[i], replacements[i], base_formatted, fixed = TRUE)
+    }
+
+    # Add additional covariates
+    if(length(covariate) > 1) {
+      for(cov_n in 1:length(covariate)) {
+        kernel_formatted <- format_kernel(kernel)
+        additional_base <- format_base(base)
+
+        replacements <- c('k'=gsub('c', covariate[cov_n], kernel_formatted), 'w'=base_pars[1], 'parameter + ' = '')
+        patterns <- names(replacements)
+        placeholders <- paste0("___PLACEHOLDER", seq_along(patterns), "___")
+        for (i in seq_along(patterns)) {
+          additional_base <- gsub(patterns[i], placeholders[i], additional_base, fixed = TRUE)
+        }
+        for (i in seq_along(placeholders)) {
+          additional_base <- gsub(placeholders[i], replacements[i], additional_base, fixed = TRUE)
+        }
+
+        base_formatted <- paste0(base_formatted, ' + ', additional_base)
+      }
+    }
+    trend_str <- c(trend_str, base_formatted)
+  }
+  if(length(trend_str) > 0) {
+    trend_str <- setNames(trend_str, trend_par_names)
+  }
+  trend_str
+}

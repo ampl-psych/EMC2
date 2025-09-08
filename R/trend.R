@@ -130,89 +130,11 @@ get_trend_pnames <- function(trend){
 #' trend_help()
 trend_help <- function(kernel = NULL, base = NULL, ...){
   dots <- add_defaults(list(...), do_return = FALSE, return_types = FALSE)
-  bases <- list(
-    lin = list(description = "Linear base: parameter + w * k",
-               transforms = list(func = list("w" = "identity")),
-               default_pars = "w"),
-    exp_lin = list(description = "Exponential linear base: exp(parameter) + exp(w) * k",
-                   transforms = list(func = list("w" = "exp")),
-                   default_pars = "w"),
-    centered = list(description = "Centered mapping: parameter + w*(k - 0.5)",
-                    transforms = list(func = list("w" = "identity")),
-                    default_pars = "w"),
-    add = list(description = "Additive base: parameter + k",
-               transforms = NULL),
-    identity = list(description = "Identity base: k",
-                    transforms = NULL)
-  )
+  bases <- get_bases()
   base_2p <- names(bases)[1:3]
   base_1p <- names(bases)[4:5]
-  kernels <- list(
-    lin_decr = list(description = "Decreasing linear kernel: k = -c",
-                    transforms = NULL,
-                    default_pars = NULL,
-                    bases = base_2p),
-    lin_incr = list(description = "Increasing linear kernel: k = c",
-                    transforms = NULL,
-                    default_pars = NULL,
-                    bases = base_2p),
-    exp_decr = list(description = "Decreasing exponential kernel: k = exp(-d * c)",
-                    transforms = list(func =list("d_ed" = "exp")),
-                    default_pars = "d_ed",
-                    bases = base_2p),
-    exp_incr = list(description = "Increasing exponential kernel: k = 1 - exp(-d * c)",
-                    transforms = list(func =list("d_ei" = "exp")),
-                    default_pars = "d_ei",
-                    bases = base_2p),
-    pow_decr = list(description = "Decreasing power kernel: k = (1 + c)^(-d)",
-                    transforms = list(func =list("d_pd" = "exp")),
-                    default_pars = "d_pd",
-                    bases = base_2p),
-    pow_incr = list(description = "Increasing power kernel: k = 1 - (1 + c)^(-d)",
-                    transforms = list(func =list("d_pi" = "exp")),
-                    default_pars = "d_pi",
-                    bases = base_2p),
-    poly2 = list(description = "Quadratic polynomial: k = d1 * c + d2 * c^2",
-                 transforms = list(func = list("d1" = "identity", "d2" = "identity")),
-                 default_pars = c("d1", "d2"),
-                 bases = base_1p),
-    poly3 = list(description = "Cubic polynomial: k = d1 * c + d2 * c^2 + d3 * c^3",
-                 transforms = list(func = list("d1" = "identity", "d2" = "identity", "d3" = "identity")),
-                 default_pars = c("d1", "d2", "d3"),
-                 bases = base_1p),
-    poly4 = list(description = "Quartic polynomial: k = d1 * c + d2 * c^2 + d3 * c^3 + d4 * c^4",
-                 transforms = list(func = list("d1" = "identity", "d2" = "identity", "d3" = "identity", "d4" = "identity")),
-                 default_pars = c("d1", "d2", "d3", "d4"),
-                 bases = base_1p),
-    delta = list(description = paste(
-        "Standard delta rule kernel:",
-        "Updates q[i] = q[i-1] + alpha * (c[i-1] - q[i-1]).",
-        "Parameters: q0 (initial value), alpha (learning rate)."
-      ),
-      default_pars = c("q0", "alpha"),
-      transforms = list(func = list("q0" = "identity", "alpha" = "pnorm")),
-      bases = base_2p),
-    delta2 = list(description = paste(
-      "Dual kernel delta rule:",
-      "Combines fast and slow learning rates",
-      "and switches between them based on dSwitch.",
-      "Parameters: q0 (initial value), alphaFast (fast learning rate),",
-      "propSlow (alphaSlow = propSlow * alphaFast), dSwitch (switch threshold)."
-    ),
-    default_pars = c("q0", "alphaFast", "propSlow", "dSwitch"),
-    transforms = list(func = list("q0" = "identity", "alphaFast" = "pnorm",
-                                  "propSlow" = "pnorm", "dSwitch" = "pnorm")),
-    bases = base_2p),
+  kernels <- get_kernels()
 
-    deltab = list(description = paste(
-        "Threshold learning delta rule kernel:",
-        "Updates q[i] = q[i-1] + alpha * (B[i]/c[i-1] - q[i-1]).",
-        "Parameters: q0 (initial value), alpha (learning rate)."
-      ),
-      default_pars = c("q0", "alpha"),
-      transforms = list(func = list("q0" = "identity", "alpha" = "pnorm")),
-      bases = 'lin')  ## must be linear
-  )
   if(dots$return_types){
     return(list(kernels = kernels, bases = bases))
   }
@@ -599,4 +521,150 @@ has_conditional_covariates <- function(design) {
     }
   }
   return(FALSE)
+}
+
+
+###
+# format_base <- function(base, trend_par_name, kernel_formatted, base_pars=NULL, first=TRUE) {
+#   if(first) {
+#     switch(base,
+#            lin = paste0(trend_par_name,' = ', gsub('_t', '', trend_par_name), ' + ', base_pars[1], ' * ', kernel_formatted),
+#            exp_lin = paste0(trend_par_name,' = exp(', gsub('_t', '', trend_par_name), ') + exp(', base_pars[1], ') * ', kernel_formatted),
+#            centered = paste0(trend_par_name,' = ', gsub('_t', '', trend_par_name), ' + ', base_pars[1], ' * (', kernel_formatted, ' - 0.5)'),
+#            add = paste0(trend_par_name,' = ', gsub('_t', '', trend_par_name), ' + ', kernel_formatted),
+#            identity = paste0(trend_par_name,' = ', kernel_formatted))
+#   } else {
+#     switch(base,
+#            lin = paste0(' + ', base_pars[1], ' * ', kernel_formatted),
+#            exp_lin = paste0(' + exp(', base_pars[1], ') * ', kernel_formatted),
+#            centered = paste0(' + ', base_pars[1], ' * (', kernel_formatted, ' - 0.5)'),
+#            add = paste0(' + ', kernel_formatted)
+#     )
+#   }
+# }
+# format_kernel <- function(kernel) {
+#   switch(kernel,
+#          lin_decr = '-XCOVARIATEX',
+#          lin_incr = 'XCOVARIATEX',
+#          exp_decr = 'exp(-d_ed * XCOVARIATEX)',
+#          exp_incr = '1 - exp(-d_ei * XCOVARIATEX)',
+#          pow_decr = '(1 + XCOVARIATEX)^(-d_pd)',
+#          pow_incr = '1 - (1 + XCOVARIATEX)^(-d_pi)',
+#          poly1 = 'd1 * XCOVARIATEX',
+#          poly2 = 'd1 * XCOVARIATEX + d2 * XCOVARIATEX^2',
+#          poly3 = 'd1 * XCOVARIATEX + d2 * XCOVARIATEX^2 + d3 * XCOVARIATEX^3',
+#          poly4 = 'd1 * XCOVARIATEX + d2 * XCOVARIATEX^2 + d3 * XCOVARIATEX^3 + d4 * XCOVARIATEX^4',
+#          delta = 'Q_{XCOVARIATEX,t}',
+#          delta2 = 'Q_{XCOVARIATEX,t}',
+#          deltab = 'Q_{B/rt,t}')
+# }
+###
+
+get_bases <- function() {
+  bases <- list(
+    lin = list(description = "Linear base: parameter + w * k",
+               transforms = list(func = list("w" = "identity")),
+               default_pars = "w"),
+    exp_lin = list(description = "Exponential linear base: exp(parameter) + exp(w) * k",
+                   transforms = list(func = list("w" = "exp")),
+                   default_pars = "w"),
+    centered = list(description = "Centered mapping: parameter + w*(k - 0.5)",
+                    transforms = list(func = list("w" = "identity")),
+                    default_pars = "w"),
+    add = list(description = "Additive base: parameter + k",
+               transforms = NULL),
+    identity = list(description = "Identity base: k",
+                    transforms = NULL)
+  )
+  bases
+}
+
+get_kernels <- function() {
+
+  base_2p <- names(get_bases())[1:3]
+  base_1p <- names(get_bases())[4:5]
+
+  kernels <- list(
+    lin_decr = list(description = "Decreasing linear kernel: k = -c",
+                    transforms = NULL,
+                    default_pars = NULL,
+                    bases = base_2p),
+    lin_incr = list(description = "Increasing linear kernel: k = c",
+                    transforms = NULL,
+                    default_pars = NULL,
+                    bases = base_2p),
+    exp_decr = list(description = "Decreasing exponential kernel: k = exp(-d * c)",
+                    transforms = list(func =list("d_ed" = "exp")),
+                    default_pars = "d_ed",
+                    bases = base_2p),
+    exp_incr = list(description = "Increasing exponential kernel: k = 1 - exp(-d * c)",
+                    transforms = list(func =list("d_ei" = "exp")),
+                    default_pars = "d_ei",
+                    bases = base_2p),
+    pow_decr = list(description = "Decreasing power kernel: k = (1 + c)^(-d)",
+                    transforms = list(func =list("d_pd" = "exp")),
+                    default_pars = "d_pd",
+                    bases = base_2p),
+    pow_incr = list(description = "Increasing power kernel: k = 1 - (1 + c)^(-d)",
+                    transforms = list(func =list("d_pi" = "exp")),
+                    default_pars = "d_pi",
+                    bases = base_2p),
+    poly2 = list(description = "Quadratic polynomial: k = d1 * c + d2 * c^2",
+                 transforms = list(func = list("d1" = "identity", "d2" = "identity")),
+                 default_pars = c("d1", "d2"),
+                 bases = base_1p),
+    poly3 = list(description = "Cubic polynomial: k = d1 * c + d2 * c^2 + d3 * c^3",
+                 transforms = list(func = list("d1" = "identity", "d2" = "identity", "d3" = "identity")),
+                 default_pars = c("d1", "d2", "d3"),
+                 bases = base_1p),
+    poly4 = list(description = "Quartic polynomial: k = d1 * c + d2 * c^2 + d3 * c^3 + d4 * c^4",
+                 transforms = list(func = list("d1" = "identity", "d2" = "identity", "d3" = "identity", "d4" = "identity")),
+                 default_pars = c("d1", "d2", "d3", "d4"),
+                 bases = base_1p),
+    delta = list(description = paste(
+      "Standard delta rule kernel: k = q[i].",
+      "Updates q[i] = q[i-1] + alpha * (c[i-1] - q[i-1]).",
+      "Parameters: q0 (initial value), alpha (learning rate)."
+    ),
+    default_pars = c("q0", "alpha"),
+    transforms = list(func = list("q0" = "identity", "alpha" = "pnorm")),
+    bases = base_2p),
+    delta2 = list(description = paste(
+      "Dual kernel delta rule: k = q[i].",
+      "Combines fast and slow learning rates",
+      "and switches between them based on dSwitch.",
+      "Parameters: q0 (initial value), alphaFast (fast learning rate),",
+      "propSlow (alphaSlow = propSlow * alphaFast), dSwitch (switch threshold)."
+    ),
+    default_pars = c("q0", "alphaFast", "propSlow", "dSwitch"),
+    transforms = list(func = list("q0" = "identity", "alphaFast" = "pnorm",
+                                  "propSlow" = "pnorm", "dSwitch" = "pnorm")),
+    bases = base_2p),
+
+    deltab = list(description = paste(
+      "Threshold learning delta rule kernel: k = q_[FM,i].",
+      "Updates q[i] = q[i-1] + alpha * (B[i]/c[i-1] - q[i-1]).",
+      "Parameters: q0 (initial value), alpha (learning rate)."
+    ),
+    default_pars = c("q0", "alpha"),
+    transforms = list(func = list("q0" = "identity", "alpha" = "pnorm")),
+    bases = 'lin')  ## must be linear
+  )
+  kernels
+}
+
+
+format_kernel <- function(kernel) {
+  kernels <- get_kernels()
+  eq_string <- kernels[[kernel]]$description
+  eq_string <- strsplit(eq_string, ': k = ')[[1]][[2]]
+  if(kernel %in% c('delta', 'delta2', 'deltab')) eq_string <- strsplit(eq_string, '\\.')[[1]][[1]]
+  eq_string
+}
+
+format_base <- function(base) {
+  bases <- get_bases()
+  eq_string <- bases[[base]]$description
+  eq_string <- strsplit(eq_string, ': ')[[1]][[2]]
+  eq_string
 }
