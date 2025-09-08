@@ -660,7 +660,7 @@ get_kernels <- function() {
     deltab = list(description = paste(
       "Threshold learning delta rule kernel: k = q_[FM,i].\n",
       "         Updates q[i] = q[i-1] + alpha * (B[i]/c[i-1] - q[i-1]).\n",
-      "         Parameters: q0 (initial value), alpha (learning rate).\n"
+      "         Parameters: q0 (initial value), alpha (learning rate)."
     ),
     default_pars = c("q0", "alpha"),
     transforms = list(func = list("q0" = "identity", "alpha" = "pnorm")),
