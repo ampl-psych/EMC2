@@ -597,7 +597,7 @@ verbal_trend <- function(design_matrix, trend) {
 
     # Add additional covariates
     if(length(covariate) > 1) {
-      for(cov_n in 1:length(covariate)) {
+      for(cov_n in 2:length(covariate)) {
         kernel_formatted <- format_kernel(kernel, kernel_pars=kernel_pars)
         additional_base <- format_base(base)
 
