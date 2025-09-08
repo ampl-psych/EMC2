@@ -2,9 +2,28 @@
 #define dynamic_h
 
 #include "utility_functions.h"
+#include "EMC2/userfun.hpp"
 #include <Rcpp.h>
 #include <unordered_map>
 using namespace Rcpp;
+
+// Call a user-supplied custom trend kernel
+// [[Rcpp::export]]
+NumericVector EMC2_call_custom_trend(NumericMatrix trend_pars,
+                                     NumericMatrix input,
+                                     SEXP funptrSEXP) {
+  XPtr<userfun_t> funptr(funptrSEXP);
+  if (funptr.get() == nullptr) stop("Null function pointer.");
+  userfun_t f = *funptr;
+  if (!f) stop("Invalid function pointer.");
+  NumericVector res = f(trend_pars, input);
+  if (res.size() != input.nrow()) {
+    stop("Custom trend function must return a vector of length nrow(input).");
+  }
+  return res;
+}
+
+
 
 
 NumericVector run_delta_rcpp(NumericVector q0, NumericVector alpha, NumericVector covariate) {
@@ -51,11 +70,41 @@ NumericVector run_delta2_rcpp(NumericVector q0, NumericVector alphaFast,
 }
 
 
-NumericVector run_kernel_rcpp(NumericMatrix trend_pars, String kernel, NumericMatrix input, int n_base_pars) {
+NumericVector run_kernel_rcpp(NumericMatrix trend_pars, String kernel, NumericMatrix input, int n_base_pars, SEXP funptrSEXP = R_NilValue) {
   // Kernels accept any number of input columns; apply per column and sum.
   const int n = input.nrow();
   const int p = input.ncol();
   NumericVector out(n, 0.0);
+
+  if (kernel == "custom") {
+    // pass only the kernel parameter columns (exclude base columns)
+    NumericMatrix kernel_pars;
+    if (trend_pars.ncol() > n_base_pars) {
+      // Build logical keep vector for columns > n_base_pars-1
+      LogicalVector keep(trend_pars.ncol(), false);
+      for (int j = n_base_pars; j < trend_pars.ncol(); ++j) keep[j] = true;
+      kernel_pars = submat_rcpp_col(trend_pars, keep);
+    } else {
+      kernel_pars = NumericMatrix(n, 0); // no kernel params
+    }
+
+    if (Rf_isNull(funptrSEXP)) {
+      stop("Missing function pointer for custom kernel.");
+    }
+    Rcpp::XPtr<userfun_t> funptr(funptrSEXP);
+    if (funptr.get() == nullptr) {
+      stop("Null function pointer for custom kernel.");
+    }
+    userfun_t f = *funptr;
+    if (!f) stop("Invalid function pointer for custom kernel.");
+    NumericVector contrib = f(kernel_pars, input);
+    if (contrib.size() != n) {
+      stop("Custom kernel returned wrong length (expected nrow(input)).");
+    }
+    // Replace NA by 0 as with built-ins
+    for (int i = 0; i < n; ++i) if (NumericVector::is_na(contrib[i])) contrib[i] = 0.0;
+    return contrib;
+  }
 
   for (int c = 0; c < p; ++c) {
     NumericVector covariate = input(_, c);
@@ -140,6 +189,11 @@ NumericVector run_kernel_rcpp(NumericMatrix trend_pars, String kernel, NumericMa
 NumericVector run_trend_rcpp(DataFrame data, List trend, NumericVector param, NumericMatrix trend_pars, NumericMatrix pars_full) {
   String kernel = as<String>(trend["kernel"]);
   String base = as<String>(trend["base"]);
+  // Extract optional custom pointer attribute if present
+  SEXP custom_ptr = R_NilValue;
+  if (kernel == "custom") {
+    custom_ptr = trend.attr("custom_ptr");
+  }
   CharacterVector covnames;
   if (trend.containsElementNamed("covariate") && !Rf_isNull(trend["covariate"])) {
     covnames = trend["covariate"];
@@ -195,7 +249,7 @@ NumericVector run_trend_rcpp(DataFrame data, List trend, NumericVector param, Nu
     }
 
     // Call kernel once with all inputs; kernel sums across columns and ignores NA
-    NumericVector kernel_out = run_kernel_rcpp(trend_pars, kernel, input_all, n_base_pars);
+    NumericVector kernel_out = run_kernel_rcpp(trend_pars, kernel, input_all, n_base_pars, custom_ptr);
 
     out = out + kernel_out;
   }

@@ -26,7 +26,8 @@
 make_trend <- function(par_names, cov_names = NULL, kernels, bases = NULL,
                        shared = NULL, trend_pnames = NULL,
                        par_input = NULL,
-                       phase = "premap"){
+                       phase = "premap",
+                       custom_trend = NULL){
   if(!(length(par_names) == length(kernels))){
     stop("Make sure that par_names and kernels have the same length")
   }
@@ -59,6 +60,21 @@ make_trend <- function(par_names, cov_names = NULL, kernels, bases = NULL,
       stop("If bases not is NULL make sure you specify as many bases as kernels")
     }
   }
+  # Normalize custom_trend to a per-parameter list if provided
+  if (!is.null(custom_trend)) {
+    if (inherits(custom_trend, "emc2_custom_trend")) {
+      custom_trend <- rep(list(custom_trend), length(par_names))
+    } else if (is.list(custom_trend)) {
+      if (length(custom_trend) == 1) custom_trend <- rep(custom_trend, length(par_names))
+      if (length(custom_trend) != length(par_names))
+        stop("custom_trend must be a single registered trend or a list aligned with par_names")
+      if (!all(vapply(custom_trend, inherits, logical(1), what = "emc2_custom_trend")))
+        stop("Items in custom_trend must be created by register_trend()")
+    } else {
+      stop("custom_trend must be NULL, a single registered trend, or a list of them")
+    }
+  }
+
   trends_out <- list()
   for(i in 1:length(par_names)){
     trend <- list()
@@ -70,17 +86,45 @@ make_trend <- function(par_names, cov_names = NULL, kernels, bases = NULL,
     }
 
     # base
-    if(is.null(bases)){
-      trend$base <- trend_help(kernels[i], do_return = TRUE)$bases[1]
-    } else{
-      if(bases[i] %in% names(trend_help(kernels[i], do_return = TRUE)$bases)){
-        stop("base type not supported with kernel, see `trend_help(<kernel>)`")
+    if (is.null(bases)) {
+      if (identical(kernels[i], "custom")) {
+        if (is.null(custom_trend)) stop("custom_trend must be provided when using kernel='custom'")
+        ct <- custom_trend[[i]]
+        trend$base <- ct$base
+      } else {
+        trend$base <- trend_help(kernels[i], do_return = TRUE)$bases[1]
       }
-      trend$base <- bases[i]
+    } else {
+      if (identical(kernels[i], "custom")) {
+        # For custom kernels, accept any of the standard bases the user specifies.
+        base_ok <- c("lin","exp_lin","centered","add","identity")
+        if (!(bases[i] %in% base_ok)) stop("Unknown base '", bases[i], "' for custom kernel. Pick one of ", paste(base_ok, collapse = ", "))
+        trend$base <- bases[i]
+      } else {
+        if(bases[i] %in% names(trend_help(kernels[i], do_return = TRUE)$bases)){
+          stop("base type not supported with kernel, see `trend_help(<kernel>)`")
+        }
+        trend$base <- bases[i]
+      }
     }
     # add par names
     trend_pnames <- trend_help(base = trend$base, do_return = TRUE)$default_pars
-    trend_pnames <- c(trend_pnames, trend_help(kernel = kernels[i], do_return = TRUE)$default_pars)
+    # Kernel parameter names:
+    if (identical(kernels[i], "custom")) {
+      if (is.null(custom_trend)) stop("custom_trend must be provided when using kernel='custom'")
+      ct <- custom_trend[[i]]
+      trend_pnames <- c(trend_pnames, ct$trend_pnames)
+      # Attach the external pointer and optional transforms to this trend entry
+      attr(trend, "custom_ptr") <- attr(ct, "custom_ptr")
+      if (!is.null(attr(ct, "custom_transforms"))) {
+        # ensure order matches ct$trend_pnames
+        ctf <- attr(ct, "custom_transforms")
+        if (!is.null(names(ctf))) ctf <- ctf[ct$trend_pnames]
+        attr(trend, "custom_transforms") <- unname(ctf)
+      }
+    } else {
+      trend_pnames <- c(trend_pnames, trend_help(kernel = kernels[i], do_return = TRUE)$default_pars)
+    }
     trend$trend_pnames <- paste0(par_names[i], ".", trend_pnames)
     trend$covariate <- unlist(cov_names[i])
     trend$par_input <- unlist(par_input[[i]])
@@ -160,6 +204,10 @@ trend_help <- function(kernel = NULL, base = NULL, ...){
   base_2p <- names(bases)[1:3]
   base_1p <- names(bases)[4:5]
   kernels <- list(
+    custom = list(description = "Custom C++ kernel: provided via register_trend().",
+                  transforms = NULL,
+                  default_pars = NULL,
+                  bases = names(bases)),
     lin_decr = list(description = "Decreasing linear kernel: k = -c",
                     transforms = NULL,
                     default_pars = NULL,
@@ -269,11 +317,18 @@ trend_help <- function(kernel = NULL, base = NULL, ...){
   }
 }
 
-run_kernel <- function(trend_pars = NULL, kernel, input) {
+run_kernel <- function(trend_pars = NULL, kernel, input, funptr = NULL) {
   # input: vector or matrix; apply per column and sum contributions; ignore NA contributions
   if (!is.matrix(input)) input <- matrix(input, ncol = 1)
   n <- nrow(input)
   out <- rep(0.0, n)
+  if (identical(kernel, "custom")) {
+    # trend_pars provided here should already exclude base parameter columns
+    if (is.null(funptr)) stop("Missing function pointer for custom kernel. Pass 'funptr'.")
+    contrib <- EMC2_call_custom_trend(trend_pars, input, funptr)
+    contrib[is.na(contrib)] <- 0
+    return(contrib)
+  }
   for (j in seq_len(ncol(input))) {
     covariate <- input[, j]
     contrib <- switch(kernel,
@@ -343,7 +398,8 @@ run_trend <- function(dadm, trend, param, trend_pars, pars_full = NULL){
     } else {
       kernel_pars <- trend_pars[, 0, drop = FALSE]
     }
-    out <- out + run_kernel(kernel_pars, trend$kernel, input_all)
+    funptr <- if (identical(trend$kernel, "custom")) attr(trend, "custom_ptr") else NULL
+    out <- out + run_kernel(kernel_pars, trend$kernel, input_all, funptr = funptr)
   }
   # Do the mapping
   out <- switch(trend$base,
@@ -403,7 +459,12 @@ update_model_trend <- function(trend, model) {
 
     # Get default transforms from base and kernel
     base_transforms <- trend_help(base = cur_trend$base, do_return = TRUE)$transforms
-    kernel_transforms <- trend_help(cur_trend$kernel, do_return = TRUE)$transforms
+    if (identical(cur_trend$kernel, "custom")) {
+      ctf <- attr(cur_trend, "custom_transforms")
+      kernel_transforms <- if (is.null(ctf)) NULL else list(func = ctf)
+    } else {
+      kernel_transforms <- trend_help(cur_trend$kernel, do_return = TRUE)$transforms
+    }
 
     # Combine transforms
     if (!is.null(kernel_transforms) || !is.null(base_transforms)) {
@@ -449,3 +510,86 @@ run_delta2 <- function(q0,alphaFast,propSlow,dSwitch,covariate) {
   }
   return(q)
 }
+
+
+##' Register a custom C++ trend kernel
+##'
+##' Compiles and registers a user-provided C++ function that maps per-trial
+##' kernel parameters and inputs to a numeric vector. The C++ function must have
+##' signature:
+##'   NumericVector f(NumericMatrix trend_pars, NumericMatrix input)
+##' and provide an exported pointer creator using EMC2_MAKE_PTR.
+##'
+##' @param trend_parameters Character vector of kernel parameter names (in order).
+##' @param file Path to the C++ file implementing the custom kernel. The file
+##'   should include EMC2/userfun.hpp and define a pointer creator (via
+##'   EMC2_MAKE_PTR) that is exported to R.
+##' @param transforms Optional named character vector or list mapping each custom
+##'   kernel parameter name to a transform name (e.g., "identity", "exp", "pnorm").
+##'   Length must match `trend_parameters`. If unnamed but the correct length,
+##'   the order is assumed to match `trend_parameters`.
+##' @param base Default base to use when creating trends with this custom kernel
+##'   if no `bases` argument is supplied to `make_trend`. One of
+##'   c("lin","exp_lin","centered","add","identity"). Default "add".
+##' @return An object to pass to `make_trend(custom_trend=...)`, carrying the
+##'   pointer, parameter names, default base, and optional transform mapping.
+##' @export
+register_trend <- function(trend_parameters, file, transforms = NULL, base = "add"){
+  if (!is.character(trend_parameters) || length(trend_parameters) == 0)
+    stop("trend_parameters must be a non-empty character vector")
+  if (!file.exists(file)) stop("C++ file not found: ", file)
+  base_ok <- c("lin","exp_lin","centered","add","identity")
+  if (!is.character(base) || length(base) != 1L || !(base %in% base_ok))
+    stop("base must be one of ", paste(base_ok, collapse = ", "))
+
+  # Normalize transforms to a character vector in the order of trend_parameters
+  trf_vec <- NULL
+  if (!is.null(transforms)) {
+    if (is.list(transforms)) transforms <- unlist(transforms, recursive = FALSE, use.names = TRUE)
+    transforms <- unlist(transforms, use.names = TRUE)
+    if (length(transforms) != length(trend_parameters)) {
+      stop("length(transforms) must match length(trend_parameters)")
+    }
+    if (is.null(names(transforms))) {
+      names(transforms) <- trend_parameters
+      trf_vec <- as.character(transforms)
+    } else {
+      # Reorder to match trend_parameters
+      if (!all(sort(names(transforms)) == sort(trend_parameters))) {
+        stop("names(transforms) must match trend_parameters if names are supplied")
+      }
+      trf_vec <- as.character(transforms[trend_parameters])
+    }
+  }
+
+  # Compile and load user code
+  Rcpp::sourceCpp(file)
+  maker <- "EMC2_make_custom_trend_ptr"
+  if (!exists(maker, mode = "function", inherits = TRUE)) {
+    # Try to derive maker name from macro usage in the file
+    lines <- tryCatch(readLines(file), error = function(e) character(0))
+    m <- regmatches(lines, regexpr("EMC2_MAKE_PTR\\(([^)]+)\\)", lines))
+    if (length(m) == 1) {
+      sym <- sub(".*EMC2_MAKE_PTR\\(([^)]+)\\).*", "\\1", m)
+      cand <- paste0("EMC2_make_", sym, "_ptr")
+      if (exists(cand, mode = "function", inherits = TRUE)) maker <- cand
+    }
+  }
+  if (!exists(maker, mode = "function", inherits = TRUE)) {
+    stop("Could not find exported pointer maker function. Expected '", maker,
+         "' or a function generated by EMC2_MAKE_PTR(name).")
+  }
+  ptr <- do.call(maker, list())
+
+  obj <- list(trend_pnames = as.character(trend_parameters),
+              base = base,
+              maker = maker,
+              file = normalizePath(file))
+  class(obj) <- "emc2_custom_trend"
+  attr(obj, "custom_ptr") <- ptr
+  if (!is.null(trf_vec)) attr(obj, "custom_transforms") <- trf_vec
+  obj
+}
+
+
+

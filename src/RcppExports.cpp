@@ -11,19 +11,6 @@ Rcpp::Rostream<true>&  Rcpp::Rcout = Rcpp::Rcpp_cout_get();
 Rcpp::Rostream<false>& Rcpp::Rcerr = Rcpp::Rcpp_cerr_get();
 #endif
 
-// apply_and_square
-double apply_and_square(double a, double b, SEXP funptrSEXP);
-RcppExport SEXP _EMC2_apply_and_square(SEXP aSEXP, SEXP bSEXP, SEXP funptrSEXPSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< double >::type a(aSEXP);
-    Rcpp::traits::input_parameter< double >::type b(bSEXP);
-    Rcpp::traits::input_parameter< SEXP >::type funptrSEXP(funptrSEXPSEXP);
-    rcpp_result_gen = Rcpp::wrap(apply_and_square(a, b, funptrSEXP));
-    return rcpp_result_gen;
-END_RCPP
-}
 // sp_new
 Rcpp::List sp_new(const int iter, const arma::cube& lambda_varimax, const int q, const int p, const int dim_all_c, const arma::mat& all_c, const arma::mat& lambda_hat, const arma::uvec& st, arma::mat cost_matrix, arma::mat perm);
 RcppExport SEXP _EMC2_sp_new(SEXP iterSEXP, SEXP lambda_varimaxSEXP, SEXP qSEXP, SEXP pSEXP, SEXP dim_all_cSEXP, SEXP all_cSEXP, SEXP lambda_hatSEXP, SEXP stSEXP, SEXP cost_matrixSEXP, SEXP permSEXP) {
@@ -471,6 +458,19 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// EMC2_call_custom_trend
+NumericVector EMC2_call_custom_trend(NumericMatrix trend_pars, NumericMatrix input, SEXP funptrSEXP);
+RcppExport SEXP _EMC2_EMC2_call_custom_trend(SEXP trend_parsSEXP, SEXP inputSEXP, SEXP funptrSEXPSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericMatrix >::type trend_pars(trend_parsSEXP);
+    Rcpp::traits::input_parameter< NumericMatrix >::type input(inputSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type funptrSEXP(funptrSEXPSEXP);
+    rcpp_result_gen = Rcpp::wrap(EMC2_call_custom_trend(trend_pars, input, funptrSEXP));
+    return rcpp_result_gen;
+END_RCPP
+}
 // c_add_charvectors
 CharacterVector c_add_charvectors(CharacterVector x, CharacterVector y);
 RcppExport SEXP _EMC2_c_add_charvectors(SEXP xSEXP, SEXP ySEXP) {
@@ -485,7 +485,6 @@ END_RCPP
 }
 
 static const R_CallMethodDef CallEntries[] = {
-    {"_EMC2_apply_and_square", (DL_FUNC) &_EMC2_apply_and_square, 3},
     {"_EMC2_sp_new", (DL_FUNC) &_EMC2_sp_new, 10},
     {"_EMC2_calculate_subject_means", (DL_FUNC) &_EMC2_calculate_subject_means, 4},
     {"_EMC2_dlba", (DL_FUNC) &_EMC2_dlba, 6},
@@ -513,6 +512,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_EMC2_build_hrf_kernel", (DL_FUNC) &_EMC2_build_hrf_kernel, 10},
     {"_EMC2_construct_design_matrix", (DL_FUNC) &_EMC2_construct_design_matrix, 13},
     {"_EMC2_calc_ll", (DL_FUNC) &_EMC2_calc_ll, 11},
+    {"_EMC2_EMC2_call_custom_trend", (DL_FUNC) &_EMC2_EMC2_call_custom_trend, 3},
     {"_EMC2_c_add_charvectors", (DL_FUNC) &_EMC2_c_add_charvectors, 2},
     {NULL, NULL, 0}
 };
