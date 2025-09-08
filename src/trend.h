@@ -51,95 +51,153 @@ NumericVector run_delta2_rcpp(NumericVector q0, NumericVector alphaFast,
 }
 
 
-NumericVector run_kernel_rcpp(NumericMatrix trend_pars, String kernel, NumericVector covariate, int n_base_pars) {
-  NumericVector out(covariate.length());
-  if(kernel == "lin_decr") {
-    out = -1 * covariate;
-  }
-  else if(kernel == "lin_incr") {
-    out = covariate;
-  }
-  else if(kernel == "exp_decr") {
-    out = exp(-trend_pars(_, 0 + n_base_pars) * covariate);
-  }
-  else if(kernel == "exp_incr") {
-    out = 1 - exp(-trend_pars(_, 0 + n_base_pars) * covariate);
-  }
-  else if(kernel == "pow_decr") {
-    out = vector_pow(1 + covariate, -trend_pars(_, 0 + n_base_pars));
-  }
-  else if(kernel == "pow_incr") {
-    out = 1 - vector_pow(1 + covariate, -trend_pars(_, 0 + n_base_pars));
-  }
-  else if(kernel == "poly2") {
-    out = trend_pars(_, 0 + n_base_pars) * covariate + trend_pars(_, 1 + n_base_pars) * pow(covariate, 2);
-  }
-  else if(kernel == "poly3") {
-    out = trend_pars(_, 0 + n_base_pars) * covariate + trend_pars(_, 1 + n_base_pars) * pow(covariate, 2) +
-      trend_pars(_, 2 + n_base_pars) * pow(covariate, 3);
-  }
-  else if(kernel == "poly4") {
-    out = trend_pars(_, 0 + n_base_pars) * covariate + trend_pars(_, 1 + n_base_pars) * pow(covariate, 2) +
-      trend_pars(_, 2 + n_base_pars) * pow(covariate, 3) + trend_pars(_, 3 + n_base_pars) * pow(covariate, 4);
-  }
-  else if(kernel == "delta") {
-    out = run_delta_rcpp(trend_pars(_, 0 + n_base_pars), trend_pars(_, 1 + n_base_pars), covariate);
-  }
-  else if(kernel == "delta2") {
-    out = run_delta2_rcpp(trend_pars(_, 0 + n_base_pars), trend_pars(_, 1 + n_base_pars), trend_pars(_, 2 + n_base_pars),
-                          trend_pars(_, 3 + n_base_pars), covariate);
+NumericVector run_kernel_rcpp(NumericMatrix trend_pars, String kernel, NumericMatrix input, int n_base_pars) {
+  // Kernels accept any number of input columns; apply per column and sum.
+  const int n = input.nrow();
+  const int p = input.ncol();
+  NumericVector out(n, 0.0);
+
+  for (int c = 0; c < p; ++c) {
+    NumericVector covariate = input(_, c);
+    NumericVector contrib(n);
+
+    if(kernel == "lin_decr") {
+      contrib = -1 * covariate;
+    }
+    else if(kernel == "lin_incr") {
+      contrib = covariate;
+    }
+    else if(kernel == "exp_decr") {
+      contrib = exp(-trend_pars(_, 0 + n_base_pars) * covariate);
+    }
+    else if(kernel == "exp_incr") {
+      contrib = 1 - exp(-trend_pars(_, 0 + n_base_pars) * covariate);
+    }
+    else if(kernel == "pow_decr") {
+      contrib = vector_pow(1 + covariate, -trend_pars(_, 0 + n_base_pars));
+    }
+    else if(kernel == "pow_incr") {
+      contrib = 1 - vector_pow(1 + covariate, -trend_pars(_, 0 + n_base_pars));
+    }
+    else if(kernel == "poly2") {
+      contrib = trend_pars(_, 0 + n_base_pars) * covariate + trend_pars(_, 1 + n_base_pars) * pow(covariate, 2);
+    }
+    else if(kernel == "poly3") {
+      contrib = trend_pars(_, 0 + n_base_pars) * covariate + trend_pars(_, 1 + n_base_pars) * pow(covariate, 2) +
+        trend_pars(_, 2 + n_base_pars) * pow(covariate, 3);
+    }
+    else if(kernel == "poly4") {
+      contrib = trend_pars(_, 0 + n_base_pars) * covariate + trend_pars(_, 1 + n_base_pars) * pow(covariate, 2) +
+        trend_pars(_, 2 + n_base_pars) * pow(covariate, 3) + trend_pars(_, 3 + n_base_pars) * pow(covariate, 4);
+    }
+    else if(kernel == "delta") {
+      // For sequential kernels, ignore rows where the covariate is NA by operating on compressed series
+      LogicalVector good = !is_na(covariate);
+      NumericVector cov_tmp = covariate[good];
+      NumericMatrix pars_tmp = submat_rcpp(trend_pars, good);
+      NumericVector tmp_out = run_delta_rcpp(pars_tmp(_, 0 + n_base_pars), pars_tmp(_, 1 + n_base_pars), cov_tmp);
+      // expand back
+      int pos = 0;
+      for (int i = 0; i < n; ++i) {
+        if (good[i]) {
+          contrib[i] = tmp_out[pos++];
+        } else {
+          contrib[i] = 0.0; // ignore NAs
+        }
+      }
+    }
+    else if(kernel == "delta2") {
+      LogicalVector good = !is_na(covariate);
+      NumericVector cov_tmp = covariate[good];
+      NumericMatrix pars_tmp = submat_rcpp(trend_pars, good);
+      NumericVector tmp_out = run_delta2_rcpp(pars_tmp(_, 0 + n_base_pars), pars_tmp(_, 1 + n_base_pars), pars_tmp(_, 2 + n_base_pars),
+                            pars_tmp(_, 3 + n_base_pars), cov_tmp);
+      int pos = 0;
+      for (int i = 0; i < n; ++i) {
+        if (good[i]) {
+          contrib[i] = tmp_out[pos++];
+        } else {
+          contrib[i] = 0.0;
+        }
+      }
+    } else {
+      // Unknown kernel
+      stop("Unknown kernel type");
+    }
+
+    // Replace NA by 0 in contrib (ignore NA values)
+    for (int i = 0; i < n; ++i) {
+      if (NumericVector::is_na(contrib[i])) contrib[i] = 0.0;
+      out[i] += contrib[i];
+    }
   }
 
   return out;
 }
 
-NumericVector run_trend_rcpp(DataFrame data, List trend, NumericVector param, NumericMatrix trend_pars) {
+// Now accepts the full parameter matrix `pars_full` so we can use par_input columns as inputs too.
+// Passes all inputs (covariates + par_input) to kernel in one call; kernel sums across columns.
+NumericVector run_trend_rcpp(DataFrame data, List trend, NumericVector param, NumericMatrix trend_pars, NumericMatrix pars_full) {
   String kernel = as<String>(trend["kernel"]);
   String base = as<String>(trend["base"]);
-  CharacterVector covnames = trend["covariate"];
+  CharacterVector covnames;
+  if (trend.containsElementNamed("covariate") && !Rf_isNull(trend["covariate"])) {
+    covnames = trend["covariate"];
+  } else {
+    covnames = CharacterVector(0);
+  }
+  CharacterVector par_input;
+  if (trend.containsElementNamed("par_input") && !Rf_isNull(trend["par_input"])) {
+    par_input = trend["par_input"];
+  } else {
+    par_input = CharacterVector(0);
+  }
   // Initialize output vector with zeros
   int n_trials = param.length();
-  NumericVector out(n_trials);
+  NumericVector out(n_trials, 0.0);
   int n_base_pars = 0;
   if(base == "lin" || base == "exp_lin" || base == "centered") {
     n_base_pars = 1;
   }
-  // Loop through covariates
-  for(int i = 0; i < covnames.length(); i++) {
-    String cur_cov = covnames[i];
-    // Get covariate data and handle NAs
-    NumericVector covariate = as<NumericVector>(data[cur_cov]);
-    LogicalVector NA_idx = is_na(covariate);
-    // Create temporary vectors excluding NAs
-    NumericVector cov_tmp = covariate[!NA_idx];
-    NumericMatrix trend_pars_tmp = submat_rcpp(trend_pars, !NA_idx);
-    // For non-delta kernels, filter duplicates
-    LogicalVector filter;
-    if(kernel != "delta" && kernel != "delta2") {
-      // Create matrix of covariate and trend parameters for duplicate checking
-      NumericMatrix together(cov_tmp.length(), trend_pars_tmp.ncol() + 1);
-      together(_, 0) = cov_tmp;
-      for(int j = 0; j < trend_pars_tmp.ncol(); j++) {
-        together(_, j + 1) = trend_pars_tmp(_, j);
-      }
-      filter = !duplicated_matrix(together);
-    } else {
-      filter = LogicalVector(cov_tmp.length(), true);
+  // Build input matrix from covariates and par_input columns
+  int n_cov = covnames.size();
+  // Keep only par_input columns that actually exist in pars_full (if provided)
+  CharacterVector pars_full_names = colnames(pars_full);
+  std::vector<std::string> par_in_keep;
+  for (int i = 0; i < par_input.size(); i++) {
+    std::string nm = Rcpp::as<std::string>(par_input[i]);
+    bool found = false;
+    for (int j = 0; j < pars_full_names.size(); j++) {
+      if (nm == Rcpp::as<std::string>(pars_full_names[j])) { found = true; break; }
     }
-    // Run kernel on unique entries
-    NumericVector output = run_kernel_rcpp(submat_rcpp(trend_pars_tmp, filter), kernel, cov_tmp[filter], n_base_pars);
-    // // Create index for expanding back to full size
-    IntegerVector unq_idx = cumsum_logical(filter); // This function is 1-based
-    NumericVector expanded_output = c_expand(output, unq_idx); //This function assumes 1-based as well
-    // Add to cumulative output
-    for(int k = 0, l = 0; k < n_trials; k ++){
-      // put back values, expanded output could be shorter, since NAs are excluded
-      // hence the loop.
-      if(NA_idx[k] == FALSE){
-        out[k] = out[k] + expanded_output[l];
-        l++;
+    if (found) par_in_keep.push_back(nm);
+  }
+  int n_par_in = (int)par_in_keep.size();
+
+  int n_inputs = n_cov + n_par_in;
+  // If no inputs provided, keep out as zeros (base will handle accordingly)
+  if (n_inputs > 0) {
+    NumericMatrix input_all(n_trials, n_inputs);
+    // Fill covariate columns first
+    for (int i = 0; i < n_cov; i++) {
+      String cur_cov = covnames[i];
+      NumericVector covariate = as<NumericVector>(data[cur_cov]);
+      input_all(_, i) = covariate;
+    }
+    // Then par_input columns
+    if (n_par_in > 0) {
+      CharacterVector par_in_keep_cv(n_par_in);
+      for (int i = 0; i < n_par_in; i++) par_in_keep_cv[i] = par_in_keep[i];
+      NumericMatrix pin = submat_rcpp_col_by_names(pars_full, par_in_keep_cv);
+      for (int j = 0; j < n_par_in; j++) {
+        input_all(_, n_cov + j) = pin(_, j);
       }
     }
+
+    // Call kernel once with all inputs; kernel sums across columns and ignores NA
+    NumericVector kernel_out = run_kernel_rcpp(trend_pars, kernel, input_all, n_base_pars);
+
+    out = out + kernel_out;
   }
   // Apply base transformation to final summed output
   if(base == "lin") {
@@ -158,28 +216,56 @@ NumericVector run_trend_rcpp(DataFrame data, List trend, NumericVector param, Nu
 }
 
 // A few unneccessary loops in here, but seems reasonably efficient
-NumericMatrix prep_trend(DataFrame data, List trend, NumericMatrix pars) {
-  // Get parameter names
+inline NumericMatrix prep_trend_phase(DataFrame data, List trend, NumericMatrix pars, String phase) {
   CharacterVector trend_names = trend.names();
-  CharacterVector all_trend_names;
   CharacterVector par_names = colnames(pars);
-  // Apply trends
-  for(unsigned int i = 0; i < trend_names.length(); i ++) {
+  CharacterVector all_remove;
+  for (int i = 0; i < trend.size(); ++i) {
+    List cur_trend = trend[i];
+    std::string cur_ph = Rcpp::as<std::string>(cur_trend["phase"]);
+    std::string phase_s = Rcpp::as<std::string>(Rcpp::wrap(phase));
+    if (cur_ph != phase_s) continue;
     String par = trend_names[i];
-    List cur_trend = trend[par];
-    // Get trend parameter names
     CharacterVector trend_pnames = cur_trend["trend_pnames"];
-    all_trend_names = c_add_charvectors(all_trend_names, trend_pnames);
-    LogicalVector idx = contains_multiple(par_names, trend_pnames);
+    all_remove = c_add_charvectors(all_remove, trend_pnames);
     LogicalVector par_idx = contains(par_names, par);
-    // Extract parameter and trend parameter columns
     NumericVector param = as<NumericVector>(submat_rcpp_col(pars, par_idx));
-    NumericMatrix trend_pars = submat_rcpp_col(pars, idx);
-    // Run trend
-    pars(_, as<int>(which_rcpp(par_idx))) = run_trend_rcpp(data, cur_trend, param, trend_pars);
+    NumericMatrix trend_pars = submat_rcpp_col_by_names(pars, trend_pnames);
+    pars(_, as<int>(which_rcpp(par_idx))) = run_trend_rcpp(data, cur_trend, param, trend_pars, pars);
   }
-  all_trend_names = unique(all_trend_names);
-  pars = submat_rcpp_col(pars, !contains_multiple(par_names, all_trend_names));
+  all_remove = unique(all_remove);
+  if (all_remove.size() > 0) {
+    CharacterVector pnames = colnames(pars);
+    LogicalVector keep = !contains_multiple(pnames, all_remove);
+    pars = submat_rcpp_col(pars, keep);
+  }
+  return(pars);
+}
+
+inline NumericMatrix prep_trend_phase_with_pars(DataFrame data, List trend, NumericMatrix pars, String phase, const NumericMatrix& trend_pars_override) {
+  CharacterVector trend_names = trend.names();
+  CharacterVector par_names = colnames(pars);
+  CharacterVector all_remove;
+  for (int i = 0; i < trend.size(); ++i) {
+    List cur_trend = trend[i];
+    // Simple cast to std::string for comparison
+    std::string cur_ph = Rcpp::as<std::string>(cur_trend["phase"]);
+    std::string phase_s = Rcpp::as<std::string>(Rcpp::wrap(phase));
+    if (cur_ph != phase_s) continue;
+    String par = trend_names[i];
+    CharacterVector trend_pnames = cur_trend["trend_pnames"];
+    all_remove = c_add_charvectors(all_remove, trend_pnames);
+    LogicalVector par_idx = contains(par_names, par);
+    NumericVector param = as<NumericVector>(submat_rcpp_col(pars, par_idx));
+    NumericMatrix cur_tp = submat_rcpp_col_by_names(trend_pars_override, trend_pnames);
+    pars(_, as<int>(which_rcpp(par_idx))) = run_trend_rcpp(data, cur_trend, param, cur_tp, pars);
+  }
+  all_remove = unique(all_remove);
+  if (all_remove.size() > 0) {
+    CharacterVector pnames = colnames(pars);
+    LogicalVector keep = !contains_multiple(pnames, all_remove);
+    pars = submat_rcpp_col(pars, keep);
+  }
   return(pars);
 }
 
@@ -190,6 +276,18 @@ inline CharacterVector collect_trend_param_names(const List& trend) {
   CharacterVector trend_pnames;
   for (int i = 0; i < trend.size(); ++i) {
     List cur_trend = trend[i];
+    CharacterVector cur_names = cur_trend["trend_pnames"];
+    trend_pnames = c_add_charvectors(trend_pnames, cur_names);
+  }
+  return unique(trend_pnames);
+}
+
+inline CharacterVector collect_trend_param_names_phase(const List& trend, const std::string& phase) {
+  CharacterVector trend_pnames;
+  for (int i = 0; i < trend.size(); ++i) {
+    List cur_trend = trend[i];
+    std::string ph = Rcpp::as<std::string>(cur_trend["phase"]);
+    if (ph != phase) continue;
     CharacterVector cur_names = cur_trend["trend_pnames"];
     trend_pnames = c_add_charvectors(trend_pnames, cur_names);
   }
@@ -250,15 +348,20 @@ inline NumericVector apply_premap_trends(const DataFrame& data,
                                          const String& param_name,
                                          NumericVector param_values,
                                          const NumericMatrix& trend_pars) {
-  // Quick check if a trend exists for param_name
-  if (!is_true(any(contains(trend_names, param_name)))) {
-    return param_values;
+  // Apply all premap trend entries for this param_name sequentially, in order
+  NumericVector result = clone(param_values);
+  for (int i = 0; i < trend.size(); ++i) {
+    if (trend_names[i] == param_name) {
+      List cur_trend = trend[i];
+      std::string ph = Rcpp::as<std::string>(cur_trend["phase"]);
+      if (ph != "premap") continue;
+      CharacterVector cur_trend_pnames = cur_trend["trend_pnames"];
+      NumericMatrix cur_trend_pars = submat_rcpp_col_by_names(trend_pars, cur_trend_pnames);
+      NumericMatrix empty_full(result.size(), 0);
+      result = run_trend_rcpp(data, cur_trend, result, cur_trend_pars, empty_full);
+    }
   }
-  // Fetch specific trend and its parameter subset
-  List cur_trend = trend[param_name];
-  CharacterVector cur_trend_pnames = cur_trend["trend_pnames"];
-  NumericMatrix cur_trend_pars = submat_rcpp_col_by_names(trend_pars, cur_trend_pnames);
-  return run_trend_rcpp(data, cur_trend, param_values, cur_trend_pars);
+  return result;
 }
 
 // Fill columns for trend parameters into the output matrix by name (for pretransform case)

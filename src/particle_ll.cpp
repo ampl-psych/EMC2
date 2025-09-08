@@ -26,9 +26,13 @@ NumericMatrix c_map_p(NumericVector p_vector,
   bool pretransform = false;
   CharacterVector trend_names;
   if (has_trend) {
-    premap = get_bool_attr_or_false(trend, "premap");
-    pretransform = get_bool_attr_or_false(trend, "pretransform");
     trend_names = trend.names();
+    for (int i = 0; i < trend.size(); ++i) {
+      List cur = trend[i];
+      std::string ph = Rcpp::as<std::string>(cur["phase"]);
+      if (ph == "premap") premap = true;
+      if (ph == "pretransform") pretransform = true;
+    }
   }
 
   const int n_params = p_types.size();
@@ -71,12 +75,18 @@ NumericMatrix c_map_p(NumericVector p_vector,
 
   // If using pretransform trends, copy the pre-transformed trend cols into pars by name
   if (has_trend && pretransform) {
-    fill_trend_columns_for_pretransform(pars, p_types, trend_pars);
+    // Only fill columns for pretransform entries
+    CharacterVector tf_names = collect_trend_param_names_phase(trend, "pretransform");
+    NumericMatrix trend_pars_tf = (tf_names.size() > 0) ? submat_rcpp_col_by_names(trend_pars, tf_names) : NumericMatrix(n_trials, 0);
+    fill_trend_columns_for_pretransform(pars, p_types, trend_pars_tf);
   }
 
   // If premap, trend parameter columns are not part of the final matrix
   if (has_trend && premap) {
-    pars = submat_rcpp_col(pars, !contains_multiple(p_types, trend_pnames));
+    CharacterVector names_premap = collect_trend_param_names_phase(trend, "premap");
+    if (names_premap.size() > 0) {
+      pars = submat_rcpp_col(pars, !contains_multiple(p_types, names_premap));
+    }
   }
   return pars;
 }
@@ -87,10 +97,13 @@ NumericMatrix get_pars_matrix(NumericVector p_vector, NumericVector constants, c
   const bool has_trend = (trend.length() > 0);
   bool pretransform = false;
   bool posttransform = false;
-  // If trend has these flags
   if (has_trend) {
-    pretransform = get_bool_attr_or_false(trend, "pretransform");
-    posttransform = get_bool_attr_or_false(trend, "posttransform");
+    for (int i = 0; i < trend.size(); ++i) {
+      List cur = trend[i];
+      std::string ph = Rcpp::as<std::string>(cur["phase"]);
+      if (ph == "pretransform") pretransform = true;
+      if (ph == "posttransform") posttransform = true;
+    }
   }
   NumericVector p_vector_updtd(clone(p_vector));
   p_vector_updtd = c_do_pre_transform(p_vector_updtd, p_specs);
@@ -98,13 +111,17 @@ NumericMatrix get_pars_matrix(NumericVector p_vector, NumericVector constants, c
   NumericMatrix pars = c_map_p(p_vector_updtd, p_types, designs, n_trials, data, trend, full_specs);
   // // Check if pretransform trend applies
   if(pretransform){
-    pars = prep_trend(data, trend, pars);
+    pars = prep_trend_phase(data, trend, pars, "pretransform");
   }
   std::vector<TransformSpec> t_specs = make_transform_specs_from_full(pars, p_types, full_specs);
   pars = c_do_transform(pars, t_specs);
   // Check if posttransform trend applies
   if(posttransform){
-    pars = prep_trend(data, trend, pars);
+    // Build trend parameter columns once (transformed) and pass override
+    NumericMatrix trend_pars_all = build_trend_columns_from_design(p_vector_updtd, p_types, designs, n_trials, trend, full_specs);
+    CharacterVector names_post = collect_trend_param_names_phase(trend, "posttransform");
+    NumericMatrix trend_pars_post = (names_post.size() > 0) ? submat_rcpp_col_by_names(trend_pars_all, names_post) : NumericMatrix(n_trials, 0);
+    pars = prep_trend_phase_with_pars(data, trend, pars, "posttransform", trend_pars_post);
   }
   // ok is calculated afterwards and Ttransform applied in the function
   return(pars);

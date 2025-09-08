@@ -80,23 +80,22 @@ map_p <- function(p,dadm,model)
   do_p <- names(model$p_types)
   pars <- matrix(nrow=nrow(dadm),ncol=length(do_p),dimnames=list(NULL,do_p))
 
-  # If there are any trends do these first, they might be used later in mapping
-  # Otherwise we're not applying the trend premap, but we are doing it pre-transform
-  # So these trend parameters are post-map, pre-transform and have to be included in the pars output
+  # If there are any trends for premap or pretransform do these first
+  # Trend parameters used premap will be removed after mapping; pretransform ones retained
   premap_idx <- rep(F, length(do_p))
-  if(!is.null(model$trend) &&
-     (attr(model$trend, "premap") || attr(model$trend, "pretransform"))){
+  pretrend_idx <- rep(F, length(do_p))
+  if (!is.null(model$trend)){
     trend_names <- get_trend_pnames(model$trend)
-    pretrend_idx <- do_p %in% trend_names
-    if((attr(model$trend, "premap"))){
-      # These can be removed from the pars matrix at the end
-      # Since they are already used before the mapping
-      premap_idx <- pretrend_idx
+    phases <- vapply(model$trend, function(x) x$phase, character(1))
+    has_pre <- any(phases %in% c("premap","pretransform"))
+    if (has_pre) {
+      pretrend_idx <- do_p %in% trend_names
+      # remove only premap trend parameter columns at the end
+      premap_names <- unique(unlist(lapply(model$trend, function(x) if (identical(x$phase, "premap")) x$trend_pnames else character(0))))
+      if (length(premap_names)) premap_idx <- do_p %in% premap_names
+      # Reorder parameters to make design matrix for trends first
+      do_p <- c(do_p[pretrend_idx], do_p[!pretrend_idx])
     }
-    # Reorder parameters to make design matrix for trends first
-    do_p <- c(do_p[pretrend_idx], do_p[!pretrend_idx])
-  } else{
-    pretrend_idx <- rep(F, length(do_p))
   }
   k <- 1
   # Loop through each parameter
@@ -108,16 +107,18 @@ map_p <- function(p,dadm,model)
       pm <- pm[rep(1,nrow(pars)),,drop=FALSE]
     } else pm <- p[,colnames(cur_design),drop=FALSE]
 
-    # Apply pre-mapped trends if they exist
-    if (!is.null(model$trend) && attr(model$trend, "premap")) {
+    # Apply pre-mapped trends (only entries with phase == 'premap')
+    if (!is.null(model$trend)) {
       trend <- model$trend
-      isin <- names(trend) %in% colnames(pm)
-      if (any(isin)){ # At this point the trend has already been mapped and transformed
-        for (j in names(trend)[isin]) {
-          cur_trend <- trend[[j]]
-          # We can select the trend pars from the already update pars matrix
-          trend_pars <- pars[,cur_trend$trend_pnames]
-          pm[,j] <- run_trend(dadm, cur_trend, pm[,j], trend_pars)
+      tnames <- names(trend)
+      if (any(tnames %in% colnames(pm))) {
+        for (idx in seq_along(trend)) {
+          cur_trend <- trend[[idx]]
+          if (!identical(cur_trend$phase, "premap")) next
+          par_name <- tnames[idx]
+          if (!(par_name %in% colnames(pm))) next
+          trend_pars <- pars[, cur_trend$trend_pnames, drop = FALSE]
+          pm[, par_name] <- run_trend(dadm, cur_trend, pm[, par_name], trend_pars, pars)
         }
       }
     }
@@ -162,14 +163,18 @@ get_pars_matrix <- function(p_vector,dadm,model) {
   p_vector <- do_pre_transform(p_vector, model$pre_transform)
   # If there's any premap trends, they're done in map_p
   pars <- map_p(add_constants(p_vector,attr(dadm,"constants")),dadm, model)
-  if(!is.null(model$trend) && attr(model$trend, "pretransform")){
-    # This runs the trend and afterwards removes the trend parameters
-    pars <- prep_trend(dadm, model$trend, pars)
+  if(!is.null(model$trend)){
+    phases <- vapply(model$trend, function(x) x$phase, character(1))
+    if (any(phases == "pretransform")){
+      pars <- prep_trend_phase(dadm, model$trend, pars, "pretransform")
+    }
   }
   pars <- do_transform(pars, model$transform)
-  if(!is.null(model$trend) && attr(model$trend, "posttransform")){
-    # This runs the trend and afterwards removes the trend parameters
-    pars <- prep_trend(dadm, model$trend, pars)
+  if(!is.null(model$trend)){
+    phases <- vapply(model$trend, function(x) x$phase, character(1))
+    if (any(phases == "posttransform")){
+      pars <- prep_trend_phase(dadm, model$trend, pars, "posttransform")
+    }
   }
   pars <- model$Ttransform(pars, dadm)
   pars <- add_bound(pars, model$bound, dadm$lR)
@@ -438,7 +443,4 @@ verbal_dm <- function(design){
     cat("\n")
   }
 }
-
-
-
 

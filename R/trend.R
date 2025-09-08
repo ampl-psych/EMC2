@@ -6,8 +6,9 @@
 #' @param bases Optional character vector specifying which base function to use for each trend
 #' @param shared Named list with entries the parameter names to be shared and the names the new names of the shared parameter.
 #' @param trend_pnames Optional character vector specifying custom parameter names
-#' @param premap Logical indicating if trend should be applied before or after parameter mapping
-#' @param pretransform If !premap, logical indicating if trend should be applied before or after parameter transformation
+#' @param phase Character vector (length 1 or `length(par_names)`) specifying the phase for each trend entry;
+#'        one of "premap", "pretransform", or "posttransform". Defaults to "premap".
+#' @param par_input Optional character vector(s) of parameter names to use as additional inputs for the trend
 #' @return A list containing the trend specifications for each parameter
 #' @export
 #'
@@ -17,26 +18,41 @@
 #'   par_names = c("B", "v"),
 #'   cov_names = "strial",
 #'   kernels = c("exp_incr", "poly3"),
-#'   premap = TRUE,
+#'   phase = "premap",
 #'   shared = list(shrd = list("B.B0", "v.d1"))
 #' )
 #' get_trend_pnames(trend)
 #'
-make_trend <- function(par_names, cov_names, kernels, bases = NULL,
-                       shared = NULL, trend_pnames = NULL, premap = TRUE,
-                       pretransform = FALSE){
-  if(pretransform & premap){
-    warning("Setting pretransform has no effect if premap = TRUE")
-  }
+make_trend <- function(par_names, cov_names = NULL, kernels, bases = NULL,
+                       shared = NULL, trend_pnames = NULL,
+                       par_input = NULL,
+                       phase = "premap"){
   if(!(length(par_names) == length(kernels))){
     stop("Make sure that par_names and kernels have the same length")
   }
-  if(length(cov_names) != length(par_names)){
+  if (is.null(cov_names)) {
+    cov_names <- rep(list(character(0)), length(par_names))
+  } else if(length(cov_names) != length(par_names)){
     if(length(cov_names) == 1){
       cov_names <- rep(cov_names, length(par_names))
     } else{
       stop("Make sure that cov_names and par_names have the same length")
     }
+  }
+  # normalize par_input to align with par_names (each entry vector of names or character(0))
+  if (is.null(par_input)) {
+    par_input <- rep(list(character(0)), length(par_names))
+  } else if (length(par_input) != length(par_names)) {
+    if (length(par_input) == 1) {
+      par_input <- rep(par_input, length(par_names))
+    } else {
+      stop("Make sure that par_input and par_names have the same length or par_input is NULL/length 1")
+    }
+  }
+  # normalize phase
+  if (length(phase) != length(par_names)) phase <- rep(phase, length(par_names))
+  if (!all(phase %in% c("premap","pretransform","posttransform"))) {
+    stop("phase must be one of 'premap', 'pretransform', 'posttransform'")
   }
   if(!is.null(bases)){
     if(length(kernels) != length(bases)){
@@ -67,6 +83,8 @@ make_trend <- function(par_names, cov_names, kernels, bases = NULL,
     trend_pnames <- c(trend_pnames, trend_help(kernel = kernels[i], do_return = TRUE)$default_pars)
     trend$trend_pnames <- paste0(par_names[i], ".", trend_pnames)
     trend$covariate <- unlist(cov_names[i])
+    trend$par_input <- unlist(par_input[[i]])
+    trend$phase <- phase[i]
     trends_out[[par_names[i]]] <- trend
   }
   if(!is.null(shared)){
@@ -87,9 +105,6 @@ make_trend <- function(par_names, cov_names, kernels, bases = NULL,
   }
 
   attr(trends_out, "sequential") <- any(kernels %in% c("delta", "delta2"))
-  attr(trends_out, "premap") <- premap
-  attr(trends_out, "pretransform") <- pretransform & !premap
-  attr(trends_out, "posttransform") <- !pretransform & !premap
   return(trends_out)
 }
 
@@ -254,43 +269,56 @@ trend_help <- function(kernel = NULL, base = NULL, ...){
   }
 }
 
-run_kernel <- function(trend_pars = NULL, kernel, covariate) {
-  # Covariate
-  out <- switch(kernel, # kernel
-                # Linear decreasing, linear base type
-                lin_decr = -covariate,
-                # Linear increasing, linear base type
-                lin_incr = covariate,
-                # Exponential decreasing, linear base type
-                exp_decr = exp(-trend_pars[,1]*covariate),
-                # Exponential increasing
-                exp_incr = 1-exp(-trend_pars[,1]*covariate),
-                # Decreasing power
-                pow_decr = (1+covariate)^(-trend_pars[,1]),
-                # Increasing power
-                pow_incr = (1-(1+covariate)^(-trend_pars[,1])),
-                # Second to fourth order polynomials, for these base is default none? Or linear?
-                poly2 =  trend_pars[,1]*covariate + trend_pars[,2]*covariate^2,
-                poly3 = trend_pars[,1]*covariate + trend_pars[,2]*covariate^2 + trend_pars[,3]*covariate^3,
-                poly4 = trend_pars[,1]*covariate + trend_pars[,2]*covariate^2 + trend_pars[,3]*covariate^3 + trend_pars[,4]*covariate^4,
-                # Single and dual kernel learning rule
-                delta = run_delta(trend_pars[,1],trend_pars[,2],
-                                  covariate),
-                delta2 = run_delta2(trend_pars[,1],trend_pars[,2], trend_pars[,3], trend_pars[,4],
-                                    covariate),
-  )
-  return(out)
+run_kernel <- function(trend_pars = NULL, kernel, input) {
+  # input: vector or matrix; apply per column and sum contributions; ignore NA contributions
+  if (!is.matrix(input)) input <- matrix(input, ncol = 1)
+  n <- nrow(input)
+  out <- rep(0.0, n)
+  for (j in seq_len(ncol(input))) {
+    covariate <- input[, j]
+    contrib <- switch(kernel,
+      lin_decr = -covariate,
+      lin_incr = covariate,
+      exp_decr = exp(-trend_pars[,1]*covariate),
+      exp_incr = 1-exp(-trend_pars[,1]*covariate),
+      pow_decr = (1+covariate)^(-trend_pars[,1]),
+      pow_incr = (1-(1+covariate)^(-trend_pars[,1])),
+      poly2 =  trend_pars[,1]*covariate + trend_pars[,2]*covariate^2,
+      poly3 =  trend_pars[,1]*covariate + trend_pars[,2]*covariate^2 + trend_pars[,3]*covariate^3,
+      poly4 =  trend_pars[,1]*covariate + trend_pars[,2]*covariate^2 + trend_pars[,3]*covariate^3 + trend_pars[,4]*covariate^4,
+      delta = {
+        good <- !is.na(covariate)
+        tmp <- run_delta(trend_pars[good,1], trend_pars[good,2], covariate[good])
+        z <- rep(0.0, n); z[good] <- tmp; z
+      },
+      delta2 = {
+        good <- !is.na(covariate)
+        tmp <- run_delta2(trend_pars[good,1], trend_pars[good,2], trend_pars[good,3], trend_pars[good,4], covariate[good])
+        z <- rep(0.0, n); z[good] <- tmp; z
+      }
+    )
+    contrib[is.na(contrib)] <- 0
+    out <- out + contrib
+  }
+  out
 }
 
-prep_trend <- function(dadm, trend, pars){
-  for(par in names(trend)){
-    pars[,par] <- run_trend(dadm, trend[[par]], pars[,par], pars[,trend[[par]]$trend_pnames, drop = FALSE])
+prep_trend_phase <- function(dadm, trend, pars, phase){
+  # Apply only trends in the requested phase, sequentially
+  tnames <- names(trend)
+  all_remove <- character(0)
+  for (idx in seq_along(trend)){
+    cur_trend <- trend[[idx]]
+    if (!identical(cur_trend$phase, phase)) next
+    par <- tnames[idx]
+    all_remove <- c(all_remove, cur_trend$trend_pnames)
+    pars[, par] <- run_trend(dadm, cur_trend, pars[, par], pars[, cur_trend$trend_pnames, drop = FALSE], pars)
   }
-  pars <- pars[,!colnames(pars) %in% get_trend_pnames(trend)]
+  if (length(all_remove)) pars <- pars[, !(colnames(pars) %in% unique(all_remove)), drop = FALSE]
   return(pars)
 }
 
-run_trend <- function(dadm, trend, param, trend_pars){
+run_trend <- function(dadm, trend, param, trend_pars, pars_full = NULL){
   n_base_pars <- switch(trend$base,
                         lin = 1,
                         exp_lin = 1,
@@ -298,28 +326,24 @@ run_trend <- function(dadm, trend, param, trend_pars){
                         add = 0,
                         identity = 0)
   out <- numeric(nrow(dadm))
-  for(cov_name in trend$covariate){
-    # Loop over covariates, first filter out NAs
-    NA_idx <- is.na(dadm[,cov_name])
-    cov_tmp <- dadm[!NA_idx, cov_name]
-    param_tmp <- param[!NA_idx]
-    trend_pars_tmp <- trend_pars[!NA_idx,, drop = FALSE]
-    if(trend$kernel %in% c("delta", "delta2")){
-      # These trends have a sequential nature, don't filter duplicate entries
-      filter <- rep(T, length(cov_tmp))
-    } else{
-      # Else filter out duplicated entries
-      together <- cbind(cov_tmp, trend_pars_tmp)
-      filter <- !duplicated(together)
+  # Build combined input matrix: covariates + par_input
+  cov_cols <- trend$covariate
+  par_in_cols <- if (!is.null(trend$par_input)) trend$par_input else character(0)
+  n_inputs <- length(cov_cols) + length(par_in_cols)
+  if (n_inputs > 0) {
+    input_all <- matrix(NA_real_, nrow(dadm), n_inputs)
+    if (length(cov_cols) > 0) {
+      for (i in seq_along(cov_cols)) input_all[, i] <- dadm[, cov_cols[i]]
     }
-    # Prep trend parameters to filter out base parameters
-    kernel_pars <- trend_pars_tmp[filter,(n_base_pars+1):ncol(trend_pars), drop = FALSE]
-    # Keep an expansion index
-    unq_idx <- cumsum(filter)
-    # Run trend
-    output <- run_kernel(kernel_pars, trend$kernel, cov_tmp[filter])
-    # Decompress output and map back based on non-NA
-    out[!NA_idx] <- out[!NA_idx] + output[unq_idx]
+    if (length(par_in_cols) > 0) {
+      for (j in seq_along(par_in_cols)) input_all[, length(cov_cols) + j] <- pars_full[, par_in_cols[j]]
+    }
+    if (ncol(trend_pars) > n_base_pars) {
+      kernel_pars <- trend_pars[, seq.int(n_base_pars + 1, ncol(trend_pars)), drop = FALSE]
+    } else {
+      kernel_pars <- trend_pars[, 0, drop = FALSE]
+    }
+    out <- out + run_kernel(kernel_pars, trend$kernel, input_all)
   }
   # Do the mapping
   out <- switch(trend$base,
@@ -334,18 +358,26 @@ run_trend <- function(dadm, trend, param, trend_pars){
 
 check_trend <- function(trend, covariates = NULL, model = NULL, formula = NULL) {
   if(!is.null(model)){
-    if(!attr(trend, "premap")){
-      if (!all(names(trend) %in% names(model()$p_types))){
-        stop("pretransform or posttransform trend has a parameter type name not in the model")
-      }
-    }
+    # non-premap trend targets must be model parameters
+    tnames <- names(trend)
+    ok <- vapply(seq_along(trend), function(i){
+      if (identical(trend[[i]]$phase, "premap")) return(TRUE)
+      tnames[i] %in% names(model()$p_types)
+    }, logical(1))
+    if (!all(ok)) stop("pretransform/posttransform trend has a parameter name not in the model")
   }
   if (is.null(covariates)) stop("must specify covariates when using trend")
-  covnames <- unlist(lapply(trend,function(x)x$covnames))
-  if (!all(covnames %in% names(covariates))){
+  covnames <- unlist(lapply(trend,function(x)x$covariate))
+  if (!all(covnames %in% covariates)){
     stop("trend has covnames not in covariates")
   }
-  if (any(duplicated(names(trend)))) stop("Duplicate target cognitive model parameter in trend")
+  # Premap + par_input not supported (no full parameter matrix yet)
+  for (i in seq_along(trend)) {
+    if (identical(trend[[i]]$phase, "premap") && length(trend[[i]]$par_input) > 0) {
+      warning("par_input is ignored for premap trends in current implementation")
+      break
+    }
+  }
   trend_pnames <- get_trend_pnames(trend)
   if (!is.null(formula)) {
     isin <-  trend_pnames %in% unlist(lapply(formula,function(x)all.vars(x)[1]))
@@ -364,8 +396,10 @@ update_model_trend <- function(trend, model) {
   model_list <- model()
 
   # For each parameter in the trend
-  for (par in names(trend)) {
-    cur_trend <- trend[[par]]
+  tnames <- names(trend)
+  for (i in seq_along(trend)) {
+    par <- tnames[i]
+    cur_trend <- trend[[i]]
 
     # Get default transforms from base and kernel
     base_transforms <- trend_help(base = cur_trend$base, do_return = TRUE)$transforms

@@ -54,7 +54,7 @@ trend_premap <- make_trend(
   par_names = c("m", "lMd"),
   cov_names = list("covariate1", "covariate2"),
   kernels = c("exp_incr", "poly2"),
-  premap = TRUE
+  phase = "premap"
 )
 
 design_premap <- design(
@@ -75,8 +75,7 @@ trend_pretrans <- make_trend(
   par_names = c("m", "s"),
   cov_names = list("covariate1", "covariate2"),
   kernels = c("delta", "exp_decr"),
-  premap = FALSE,
-  pretransform = TRUE
+  phase = "pretransform"
 )
 
 design_pretrans <- design(
@@ -98,8 +97,7 @@ trend_posttrans <- make_trend(
   par_names = c("m", "s"),
   cov_names = list("covariate1", "covariate2"),
   kernels = c("pow_decr", "pow_incr"),
-  premap = FALSE,
-  pretransform = FALSE
+  phase = "posttransform"
 )
 
 design_posttrans <- design(
@@ -158,6 +156,55 @@ test_that("polynomial trends work", {
   expect_snapshot(init_chains(LNR_poly, particles = 10, cores_per_chain = 1)[[1]]$samples)
 })
 
+## New tests: phase-specific trends and par_input trends
+
+# Three trends on different phases for LNR
+trend_phases <- make_trend(
+  par_names = c("m", "s", "t0"),
+  cov_names = list("covariate1", "covariate1", "covariate2"),
+  kernels = c("lin_incr", "exp_decr", "pow_incr"),
+  phase = c("premap", "pretransform", "posttransform")
+)
+
+design_phases <- design(
+  data = dat,
+  trend = trend_phases,
+  formula = list(m ~ lM, s ~ 1, t0 ~ 1),
+  contrasts = list(lM = ADmat),
+  matchfun = matchfun,
+  model = LNR
+)
+
+LNR_phases <- make_emc(dat, design_phases, compress = FALSE, n_chains = 1, type = "single")
+
+test_that("phase-specific trends work (premap, pretransform, posttransform)", {
+  expect_snapshot(init_chains(LNR_phases, particles = 10, cores_per_chain = 1)[[1]]$samples)
+})
+
+# Trend where input is another parameter: use t0 as input to a trend on m
+trend_par_input <- make_trend(
+  par_names = c("m"),
+  cov_names = NULL,
+  kernels = c("lin_incr"),
+  par_input = list(c("t0")),
+  phase = "pretransform"
+)
+
+design_par_input <- design(
+  data = dat,
+  trend = trend_par_input,
+  formula = list(m ~ lM, s ~ 1, t0 ~ 1),
+  contrasts = list(lM = ADmat),
+  matchfun = matchfun,
+  model = LNR
+)
+
+LNR_par_input <- make_emc(dat, design_par_input, compress = FALSE, n_chains = 1, type = "single")
+
+test_that("par_input trend uses t0 as input to m trend", {
+  expect_snapshot(init_chains(LNR_par_input, particles = 10, cores_per_chain = 1)[[1]]$samples)
+})
+
 trend_shared_premap <- make_trend(
   par_names = c("m", "s"),
   cov_names = list("covariate1", "covariate2"),
@@ -186,8 +233,7 @@ trend_shared_posttransform <- make_trend(
   cov_names = list("covariate1", "covariate2"),
   kernels = c("poly3", "poly4"),
   shared = list(shrd = list("m.d1", "s.d1")),
-  premap = FALSE,
-  pretransform = FALSE
+  phase = "posttransform"
 )
 
 design_shared_posttransform <- design(
