@@ -450,14 +450,14 @@ generate_design_equations <- function(design_matrix,
       if(!attr(trend, 'premap')) {
         if(transform == 'identity' || attr(trend, 'pretransform')) {
           for(trend_name in names(trend)) {
-            eq_strings[i] <- paste0(eq_strings[i], ' + ', trend_name)
+            eq_strings[i] <- paste0(eq_strings[i], ' + ', paste0(trend_name, '_t'))
           }
         }
       }
 
       if(!attr(trend, 'pretransform') & !attr(trend, 'premap')) {
         for(trend_name in names(trend)) {
-          closing_parenthesis <- paste0(closing_parenthesis, ' + ', trend_name)
+          closing_parenthesis <- paste0(closing_parenthesis, ' + ', paste0(trend_name, '_t'))
         }
       }
     }
@@ -548,12 +548,16 @@ verbal_trend <- function(design_matrix, trend) {
     # format kernel and base
     kernel_formatted <- format_kernel(kernel)
     base_formatted <- format_base(base)
-    if(attr(trend, 'premap')) trend_par_name <- gsub('_t', '', trend_par_name)
+    if(attr(trend, 'premap')) {
+      trend_par_name <- gsub('_t', '', trend_par_name)
+    }
     base_formatted <- paste0(trend_par_name, '_t = ', base_formatted)
-
 
     # replace all in one go, use placeholders to prevent cascading replacements
     replacements <- c('k'=gsub('c', covariate[1], kernel_formatted), 'w'=base_pars[1], 'parameter'=trend_par_name)
+    if(!attr(trend, 'premap')) {
+      replacements <- c('k'=gsub('c', covariate[1], kernel_formatted), 'w'=base_pars[1], 'parameter + ' = '')
+    }
     patterns <- names(replacements)
     placeholders <- paste0("___PLACEHOLDER", seq_along(patterns), "___")
     for (i in seq_along(patterns)) {
