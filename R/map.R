@@ -477,6 +477,29 @@ generate_design_equations <- function(design_matrix,
   }
 }
 
+add_transforms_to_trend_pnames <- function(trend, transforms, pre_transforms) {
+  ## bit hacky, but change trend par names by adding pre_transforms and transforms here
+  for(trend_n in 1:length(trend)) {
+    idx <- trend[[trend_n]]$trend_pnames %in% names(pre_transforms)
+    for(i in which(idx)) {
+      pname <- trend[[trend_n]]$trend_pnames[i]
+      this_transform <- pre_transforms[pname]
+      if(this_transform != 'identity') {
+        ## also update name of transform
+        if(pname %in% names(transforms)) names(transforms)[names(transforms)==pname] <- paste0(this_transform, '(', pname, ')')
+        trend[[trend_n]]$trend_pnames[i] <- paste0(this_transform, '(', pname, ')')
+      }
+    }
+    # same trick
+    idx <- trend[[trend_n]]$trend_pnames %in% names(transforms)
+    for(i in which(idx)) {
+      this_transform <- (transforms)[trend[[trend_n]]$trend_pnames[i]]
+      if(this_transform != 'identity') trend[[trend_n]]$trend_pnames[i] <- paste0(this_transform, '(', trend[[trend_n]]$trend_pnames[i], ')')
+    }
+  }
+
+  return(trend)
+}
 
 verbal_dm <- function(design){
   map <- attr(sampled_pars(design, add_da = TRUE, doMap = TRUE), "map")
@@ -485,6 +508,7 @@ verbal_dm <- function(design){
   pre_transforms <- design$model()$pre_transform$func
   trend <- design$model()$trend
   trends_to_pass <- NULL
+  if(!is.null(trend)) trend <- add_transforms_to_trend_pnames(trend, transforms=transforms, pre_transforms=pre_transforms)
 
   for(i in 1:length(map)){
     m <- map[[i]]
