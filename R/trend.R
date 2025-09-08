@@ -149,11 +149,14 @@ trend_help <- function(kernel = NULL, base = NULL, ...){
     }
     cat("\nTrend options:\n")
     cat("  premap: Trend is applied before parameter mapping. This means the trend parameters\n")
-    cat("          are mapped first, then used to transform cognitive model parameters before their mapping.\n")
+    cat("          are mapped first, then used to transform cognitive model parameters before \n")
+    cat("          their mapping.\n")
     cat("  pretransform: Trend is applied after parameter mapping but before transformations.\n")
-    cat("                Cognitive model parameters are mapped first, then trend is applied, followed by transformations.\n")
+    cat("                Cognitive model parameters are mapped first, then trend is applied, \n")
+    cat("                followed by transformations.\n")
     cat("  posttransform: Trend is applied after both mapping and transformations.\n")
-    cat("                 Cognitive model parameters are mapped and transformed first, then trend is applied.\n")
+    cat("                 Cognitive model parameters are mapped and transformed first, \n")
+    cat("                 then trend is applied.\n")
   } else {
     if (!is.null(kernel)) {
       if(dots$do_return) return(kernels[[kernel]])
@@ -635,19 +638,19 @@ get_kernels <- function() {
                  default_pars = c("d1", "d2", "d3", "d4"),
                  bases = base_1p),
     delta = list(description = paste(
-      "Standard delta rule kernel: k = q[i].",
-      "Updates q[i] = q[i-1] + alpha * (c[i-1] - q[i-1]).",
-      "Parameters: q0 (initial value), alpha (learning rate)."
+      "Standard delta rule kernel: k = q[i].\n",
+      "        Updates q[i] = q[i-1] + alpha * (c[i-1] - q[i-1]).\n",
+      "        Parameters: q0 (initial value), alpha (learning rate)."
     ),
     default_pars = c("q0", "alpha"),
     transforms = list(func = list("q0" = "identity", "alpha" = "pnorm")),
     bases = base_2p),
     delta2 = list(description = paste(
-      "Dual kernel delta rule: k = q[i].",
-      "Combines fast and slow learning rates",
-      "and switches between them based on dSwitch.",
-      "Parameters: q0 (initial value), alphaFast (fast learning rate),",
-      "propSlow (alphaSlow = propSlow * alphaFast), dSwitch (switch threshold)."
+      "Dual kernel delta rule: k = q[i].\n",
+      "         Combines fast and slow learning rates\n",
+      "         and switches between them based on dSwitch.\n",
+      "         Parameters: q0 (initial value), alphaFast (fast learning rate),\n",
+      "         propSlow (alphaSlow = propSlow * alphaFast), dSwitch (switch threshold)."
     ),
     default_pars = c("q0", "alphaFast", "propSlow", "dSwitch"),
     transforms = list(func = list("q0" = "identity", "alphaFast" = "pnorm",
@@ -655,9 +658,9 @@ get_kernels <- function() {
     bases = base_2p),
 
     deltab = list(description = paste(
-      "Threshold learning delta rule kernel: k = q_[FM,i].",
-      "Updates q[i] = q[i-1] + alpha * (B[i]/c[i-1] - q[i-1]).",
-      "Parameters: q0 (initial value), alpha (learning rate)."
+      "Threshold learning delta rule kernel: k = q_[FM,i].\n",
+      "         Updates q[i] = q[i-1] + alpha * (B[i]/c[i-1] - q[i-1]).\n",
+      "         Parameters: q0 (initial value), alpha (learning rate).\n"
     ),
     default_pars = c("q0", "alpha"),
     transforms = list(func = list("q0" = "identity", "alpha" = "pnorm")),
