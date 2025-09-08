@@ -565,7 +565,11 @@ verbal_trend <- function(design_matrix, trend) {
                           centered = 1,
                           add = 0,
                           identity = 0)
-    kernel_pars <- trend_pnames[(n_base_pars+1):length(trend_pnames)]
+    if(length(trend_pnames) > n_base_pars) {
+      kernel_pars <- trend_pnames[(n_base_pars+1):length(trend_pnames)]
+    } else {
+      kernel_pars <- NULL
+    }
     base_pars=NULL
     if(n_base_pars > 0) base_pars <- trend_pnames[1:n_base_pars]
 
