@@ -312,13 +312,26 @@ run_trend <- function(dadm, trend, param, trend_pars){
       unq_index <- 1:length(cov_tmp)
     } else {
       # Else filter out duplicated entries
-      together <- cbind(cov_tmp, trend_pars_tmp)
+      together <- data.frame(cov_tmp, trend_pars_tmp, stringsAsFactors = FALSE)
+
+      # Find unique rows
       filter <- !duplicated(together)
 
-      # Create row "group keys" using interaction. Force data frame, otherwise it works column-wise
-      group_key <- interaction(as.data.frame(together), drop = TRUE)
-      # Get one row per unique group
-      unq_index <- as.integer(group_key)
+      # Create index: for each row in `together`, get the index of the matching unique row
+      ## SM: option1: works, but probably slow...
+      # unique_rows <- together[filter,,drop=FALSE]
+      # unq_index <- match(do.call(paste, together), do.call(paste, unique_rows))
+
+      ## SM: alternative option2. Also seems to work, haven't speed-tested but feels like it should be faster than pasting...
+      # Turn each column into a factor with unique levels in order of appearance
+      factor_cols <- lapply(together, function(col) factor(col, levels = unique(col)))
+
+      # Use interaction to generate a unique row ID (factor, unsorted)
+      group_factor <- interaction(factor_cols, drop = TRUE, lex.order = FALSE)
+
+      # This will give the correct sequential group IDs: 1 1 2 2 3 3 ...
+      unq_index <- as.integer(group_factor)
+
     }
     if(ncol(trend_pars)>n_base_pars) {
       # Prep trend parameters to filter out base parameters.
