@@ -570,7 +570,7 @@ verbal_trend <- function(design_matrix, trend) {
     if(n_base_pars > 0) base_pars <- trend_pnames[1:n_base_pars]
 
     # format kernel and base
-    kernel_formatted <- format_kernel(kernel)
+    kernel_formatted <- format_kernel(kernel, kernel_pars=kernel_pars)
     base_formatted <- format_base(base)
     if(attr(trend, 'premap')) {
       trend_par_name <- gsub('_t', '', trend_par_name)
@@ -594,7 +594,7 @@ verbal_trend <- function(design_matrix, trend) {
     # Add additional covariates
     if(length(covariate) > 1) {
       for(cov_n in 1:length(covariate)) {
-        kernel_formatted <- format_kernel(kernel)
+        kernel_formatted <- format_kernel(kernel, kernel_pars=kernel_pars)
         additional_base <- format_base(base)
 
         replacements <- c('k'=gsub('c', covariate[cov_n], kernel_formatted), 'w'=base_pars[1], 'parameter + ' = '')

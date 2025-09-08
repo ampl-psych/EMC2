@@ -654,12 +654,21 @@ get_kernels <- function() {
 }
 
 
-format_kernel <- function(kernel) {
+format_kernel <- function(kernel, kernel_pars=NULL) {
   kernels <- get_kernels()
   eq_string <- kernels[[kernel]]$description
   eq_string <- strsplit(eq_string, ': k = ')[[1]][[2]]
   if(kernel %in% c('delta', 'delta2', 'deltab')) eq_string <- strsplit(eq_string, '\\.')[[1]][[1]]
   if(kernel %in% c('exp_incr', 'pow_incr', 'poly1', 'poly2', 'poly3', 'poly4')) eq_string <- paste0('(', eq_string, ')')
+
+  # add placeholders
+  if(!is.null(kernel_pars)) {
+    for(kernel_par_n in 1:length(kernel_pars)) {
+      old_name <- kernels[[kernel]]$default_pars[kernel_par_n]
+      eq_string <- gsub(old_name, kernel_pars[kernel_par_n], eq_string)
+    }
+  }
+
   eq_string
 }
 
