@@ -1,6 +1,8 @@
 RNGkind("L'Ecuyer-CMRG")
 set.seed(123)
 
+#remotes::install_github("ampl-psych/EMC2@6941e167bc0142ea71f484208ae1d92da54bb2c1",dependencies=TRUE, Ncpus=8); .rs.restartR()
+
 # When working with lM it is useful to design  an "average and difference"
 # contrast matrix, which for binary responses has a simple canonical from:
 ADmat <- matrix(c(-1/2,1/2),ncol=1,dimnames=list(NULL,"d"))
@@ -23,7 +25,7 @@ design_base <- design(factors = list(subjects = 1, S = 1:2),
                       formula = list(m ~ lM, s ~ 1, t0 ~ 1),
                       contrasts = list(lM = ADmat),
                       model = LNR)
-
+##mapped_pars(design_base)
 p_vector <- sampled_pars(design_base, doMap = FALSE)
 p_vector[1:6] <- c(-1, 1.5, log(1), log(.2), log(.2), log(.2))
 
@@ -65,6 +67,7 @@ design_premap <- design(
   matchfun = matchfun,
   model = LNR
 )
+#mapped_pars(design_premap)
 
 LNR_premap <- make_emc(dat, design_premap, compress = FALSE, n_chains = 1, type = "single")
 test_that("premap trend works", {
@@ -87,6 +90,7 @@ design_pretrans <- design(
   matchfun = matchfun,
   model = LNR
 )
+#mapped_pars(design_pretrans)
 
 LNR_pretrans <- make_emc(dat, design_pretrans, compress = FALSE, n_chains = 1, type = "single")
 
@@ -110,6 +114,8 @@ design_posttrans <- design(
   matchfun = matchfun,
   model = LNR
 )
+#mapped_pars(design_posttrans)
+
 LNR_posttrans <- make_emc(dat, design_posttrans, compress = FALSE, n_chains = 1, type = "single")
 
 test_that("posttransform trend works", {
@@ -131,6 +137,8 @@ design_bases <- design(
   matchfun = matchfun,
   model = LNR
 )
+#mapped_pars(design_bases)
+
 LNR_bases <- make_emc(dat, design_bases, compress = FALSE, n_chains = 1, type = "single")
 
 test_that("different trend base functions work", {
@@ -151,6 +159,7 @@ design_poly <- design(
   matchfun = matchfun,
   model = LNR
 )
+#mapped_pars(design_poly)
 
 LNR_poly <- make_emc(dat, design_poly, compress = FALSE, n_chains = 1, type = "single")
 
@@ -173,6 +182,7 @@ design_shared_premap <- design(
   matchfun = matchfun,
   model = LNR
 )
+#mapped_pars(design_shared_premap)
 
 LNR_shared_premap <- make_emc(dat, design_shared_premap, compress = FALSE, n_chains = 1, type = "single")
 
