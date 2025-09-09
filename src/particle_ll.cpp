@@ -5,6 +5,9 @@
 #include "model_RDM.h"
 #include "model_DDM.h"
 #include "model_MRI.h"
+#include "model_SS_EXG.h"
+#include "model_SS_RDEX.h"
+#include "composite_functions.h"
 #include "trend.h"
 using namespace Rcpp;
 
@@ -239,6 +242,212 @@ NumericMatrix get_pars_matrix(NumericVector p_vector, NumericVector constants, L
   return(pars);
 }
 
+// SS helper pointer types
+using ss_go_pdf_fn = NumericVector (*)(NumericVector, NumericMatrix, LogicalVector, double);
+using ss_stop_surv_fn = double (*)(double, NumericMatrix);
+using ss_stop_success_fn = double (*)(double, NumericMatrix, double, double);
+
+// Model-specific stop survivor wrappers (read fixed columns)
+static inline double stop_logsurv_texg_fn(double q, NumericMatrix P) {
+  // EXG stop: muS=3, sigmaS=4, tauS=5, exgS_lb=9
+  return ptexg(q, P(0, 3), P(0, 4), P(0, 5), P(0, 9), R_PosInf, false, true);
+}
+static inline double stop_logsurv_rdex_fn(double q, NumericMatrix P) {
+  // RDEX stop: muS=5, sigmaS=6, tauS=7, exgS_lb=10
+  return ptexg(q, P(0, 5), P(0, 6), P(0, 7), P(0, 10), R_PosInf, false, true);
+}
+
+double c_log_likelihood_ss(
+    NumericMatrix pars,
+    DataFrame data,
+    const int n_trials,
+    IntegerVector expand,
+    double min_ll,
+    LogicalVector is_ok,
+    ss_go_pdf_fn go_lpdf_ptr,
+    ss_go_pdf_fn go_lccdf_ptr,
+    ss_stop_surv_fn stop_logsurv_ptr,
+    ss_stop_success_fn stop_success_ptr,
+    int idx_tf,
+    int idx_gf
+) {
+  // initialise local variables
+  const int n_out = expand.length();
+  if (is_true(all(!is_ok))) {
+    NumericVector lls_expanded(n_out, min_ll);
+    return(sum(lls_expanded));
+  }
+  NumericVector lls(n_trials);
+  NumericVector lls_expanded(n_out);
+  // extract data
+  NumericVector RT = data["rt"];
+  IntegerVector R = data["R"];
+  NumericVector SSD = data["SSD"];
+  NumericVector lR = data["lR"];
+  LogicalVector winner = data["winner"];
+  bool has_lI = data.containsElementNamed("lI");
+  IntegerVector lI = has_lI ? as<IntegerVector>(data["lI"]) : IntegerVector(lR.size(), 2);
+
+  // compute log likelihoods (generalized, matching R's log_likelihood_race_ss)
+  NumericVector unique_lR = unique(lR);
+  const int n_acc = unique_lR.length();
+  // n_trials equals data rows grouped by accumulators
+  for (int trial = 0; trial < n_trials; trial++) {
+    if (is_ok[trial] != 1) { lls[trial] = min_ll; continue; }
+
+    int start_row = trial * n_acc;
+    int end_row   = (trial + 1) * n_acc - 1;
+    NumericMatrix P = pars(Range(start_row, end_row), _);
+    IntegerVector lI_trial = lI[Range(start_row, end_row)];
+    LogicalVector is_go(n_acc, true), is_st(n_acc, false);
+    // determine go/ST accumulators if present
+    if (has_lI) {
+      int go_code = max(lI_trial);
+      for (int i = 0; i < n_acc; i++) {
+        is_go[i] = (lI_trial[i] == go_code);
+        is_st[i] = !is_go[i];
+      }
+    } else {
+      for (int i = 0; i < n_acc; i++) is_st[i] = false;
+    }
+    int n_accG = sum(is_go);
+    int n_accST = sum(is_st);
+
+    double tf = P(0, idx_tf);
+    double gf = P(0, idx_gf);
+
+    double rt = RT[start_row];
+    bool response_observed = R[start_row] != NA_INTEGER;
+    bool stop_signal_presented = std::isfinite(SSD[start_row]);
+
+    // Identify whether observed response is GO or ST (when response observed)
+    bool response_is_go = false;
+    if (response_observed) {
+      int r_obs = R[start_row];
+      for (int i = 0; i < n_acc; i++) {
+        if (lR[start_row + i] == r_obs) {
+          response_is_go = is_go[i];
+          break;
+        }
+      }
+    }
+
+    // Build rt vectors for go and st contexts
+    NumericVector rt_go(n_acc, rt);
+    NumericVector rt_st(n_acc, rt - SSD[start_row]);
+
+    // GO masks for current trial
+    LogicalVector win_mask = winner[Range(start_row, end_row)];
+    LogicalVector go_win_mask(n_acc); // winner and go
+    LogicalVector go_loss_mask(n_acc);
+    for (int i = 0; i < n_acc; i++) {
+      go_win_mask[i] = (win_mask[i] && is_go[i]);
+      go_loss_mask[i] = (!win_mask[i] && is_go[i]);
+    }
+
+    if (!response_observed) {
+      // No response
+      if (!stop_signal_presented) {
+        lls[trial] = std::log(gf);
+      } else if (n_accST == 0) {
+        // Stop trial, no ST accumulators: gf + (1-gf)*(1-tf)*pStop
+        NumericMatrix P_go = submat_rcpp(P, is_go);
+        double log_pstop = stop_success_ptr(SSD[start_row], P_go, min_ll, R_PosInf);
+        // mixture: gf OR ((1-gf)*(1-tf) * pStop)
+        double comp1 = std::log(gf);
+        double comp2 = log1m(gf) + log1m(tf) + log_pstop;
+        lls[trial] = log_sum_exp(comp1, comp2);
+      } else {
+        // Not handled in R either; keep minimal ll
+        lls[trial] = min_ll;
+      }
+      continue;
+    }
+
+    // Response observed
+    if (!stop_signal_presented) {
+      // GO trial with response: (1-gf) * GO race ll
+      double go_lprob = 0.0;
+      NumericVector lw = go_lpdf_ptr(rt_go, P, go_win_mask, min_ll);
+      go_lprob = (lw.size() > 0) ? sum(lw) : min_ll;
+      if (n_accG > 1) {
+        NumericVector ls = go_lccdf_ptr(rt_go, P, go_loss_mask, min_ll);
+        for (int i = 0; i < ls.size(); i++) go_lprob += (R_FINITE(ls[i]) ? ls[i] : min_ll);
+      }
+      lls[trial] = log1m(gf) + go_lprob;
+      continue;
+    }
+
+    // Stop trial with response
+    if (response_is_go) {
+      // GO wins on stop trial: (1-gf) * [ tf * go + (1-tf) * (go + stop_surv + st_loss) ]
+      // go race ll at observed rt
+      double go_lprob = 0.0;
+      NumericVector lw = go_lpdf_ptr(rt_go, P, go_win_mask, min_ll);
+      go_lprob = (lw.size() > 0) ? sum(lw) : min_ll;
+      if (n_accG > 1) {
+        NumericVector ls = go_lccdf_ptr(rt_go, P, go_loss_mask, min_ll);
+        for (int i = 0; i < ls.size(); i++) go_lprob += (R_FINITE(ls[i]) ? ls[i] : min_ll);
+      }
+      // stop survivor at observed rt (rt - SSD)
+      double log_stop_surv = stop_logsurv_ptr(rt - SSD[start_row], P);
+      if (!R_FINITE(log_stop_surv)) log_stop_surv = min_ll;
+      // ST losers survivors (if any)
+      double st_loss_sum = 0.0;
+      if (n_accST > 0) {
+        LogicalVector st_loss_mask(n_acc);
+        for (int i = 0; i < n_acc; i++) st_loss_mask[i] = (is_st[i] && !win_mask[i]);
+        NumericVector ls_st = go_lccdf_ptr(rt_st, P, st_loss_mask, min_ll);
+        for (int i = 0; i < ls_st.size(); i++) st_loss_sum += (R_FINITE(ls_st[i]) ? ls_st[i] : min_ll);
+      }
+      double comp_tf = go_lprob; // only go
+      double comp_notf = go_lprob + log_stop_surv + st_loss_sum; // fair race (stop loses)
+      lls[trial] = log1m(gf) + log_mix(tf, comp_tf, comp_notf);
+      continue;
+    } else {
+      // ST wins on stop trial
+      // ST winner log pdf at rt - SSD
+      LogicalVector st_win_mask(n_acc);
+      for (int i = 0; i < n_acc; i++) st_win_mask[i] = (win_mask[i] && is_st[i]);
+      NumericVector lw_st = go_lpdf_ptr(rt_st, P, st_win_mask, min_ll);
+      double st_winner_logpdf = (lw_st.size() > 0) ? sum(lw_st) : min_ll;
+      // ST losers survivors
+      double st_loss_sum = 0.0;
+      if (n_accST > 1) {
+        LogicalVector st_loss_mask(n_acc);
+        for (int i = 0; i < n_acc; i++) st_loss_mask[i] = (!win_mask[i] && is_st[i]);
+        NumericVector ls_st = go_lccdf_ptr(rt_st, P, st_loss_mask, min_ll);
+        for (int i = 0; i < ls_st.size(); i++) st_loss_sum += (R_FINITE(ls_st[i]) ? ls_st[i] : min_ll);
+      }
+      // GO losers survivors
+      double go_loss_sum = 0.0;
+      if (n_accG > 0) {
+        NumericVector ls_go = go_lccdf_ptr(rt_go, P, is_go, min_ll);
+        for (int i = 0; i < ls_go.size(); i++) go_loss_sum += (R_FINITE(ls_go[i]) ? ls_go[i] : min_ll);
+      }
+      // Stop success probability up to observed rt (only go racers influence integral)
+      NumericMatrix P_go = submat_rcpp(P, is_go);
+      double log_pstop = stop_success_ptr(SSD[start_row], P_go, min_ll, rt);
+
+      double st_base = st_winner_logpdf + st_loss_sum;
+      // mixture over gf and pStop, never tf when ST wins
+      double term_gf = std::log(gf) + st_base; // go failure -> only ST race
+      double term_stop_win = log1m(gf) + log_pstop + st_base; // stop beats go -> only ST race
+      double term_stop_lose = log1m(gf) + log1m_exp(log_pstop) + st_base + go_loss_sum; // all race, no stop win
+      lls[trial] = log1m(tf) + log_sum_exp(term_gf, log_sum_exp(term_stop_win, term_stop_lose));
+      continue;
+    }
+  }
+
+  // decompress
+  lls_expanded = c_expand(lls, expand);
+  // protect against numerical issues
+  lls_expanded = check_ll(lls_expanded, min_ll);
+  // return summed log-likelihood
+  return(sum(lls_expanded));
+}
+
+
 double c_log_likelihood_DDM(NumericMatrix pars, DataFrame data,
                             const int n_trials, IntegerVector expand,
                             double min_ll, LogicalVector is_ok){
@@ -367,6 +576,33 @@ NumericVector calc_ll(NumericMatrix p_matrix, DataFrame data, NumericVector cons
       } else{
         lls[i] = c_log_likelihood_MRI_white(pars, y, is_ok, n_trials, n_pars, min_ll);
       }
+    }
+  } else if(type == "SS_TEXG" || type == "SS_RDEX"){
+    IntegerVector expand = data.attr("expand");
+    NumericVector lR = data["lR"];
+    int n_lR = unique(lR).length();
+    // Pick function pointers and indices based on type
+    ss_go_pdf_fn go_lpdf_ptr = (type == "SS_TEXG") ? texg_go_lpdf : rdex_go_lpdf;
+    ss_go_pdf_fn go_lccdf_ptr = (type == "SS_TEXG") ? texg_go_lccdf : rdex_go_lccdf;
+    ss_stop_surv_fn stop_logsurv_ptr = (type == "SS_TEXG") ? stop_logsurv_texg_fn : stop_logsurv_rdex_fn;
+    ss_stop_success_fn stop_success_ptr = (type == "SS_TEXG") ? ss_texg_stop_success_lpdf : ss_rdex_stop_success_lpdf;
+    int idx_tf = (type == "SS_TEXG") ? 6 : 8;
+    int idx_gf = (type == "SS_TEXG") ? 7 : 9;
+    for (int i = 0; i < n_particles; ++i) {
+      p_vector = p_matrix(i, _);
+      if(i == 0){
+        p_specs = make_pretransform_specs(p_vector, pretransforms);
+      }
+      pars = get_pars_matrix(p_vector, constants, transforms, p_specs, p_types, designs, n_trials, data, trend);
+      if (i == 0) {                            // first particle only, just to get colnames
+        bound_specs = make_bound_specs(minmax,mm_names,pars,bounds);
+      }
+      is_ok = c_do_bound(pars, bound_specs);
+      is_ok = lr_all(is_ok, n_lR); // reduce to per-trial ok
+      lls[i] = c_log_likelihood_ss(pars, data, n_trials, expand, min_ll, is_ok,
+                                   go_lpdf_ptr, go_lccdf_ptr,
+                                   stop_logsurv_ptr, stop_success_ptr,
+                                   idx_tf, idx_gf);
     }
   } else{
     IntegerVector expand = data.attr("expand");

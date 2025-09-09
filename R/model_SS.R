@@ -1,3 +1,5 @@
+# Lower bound truncation not implemented for rfun I think?
+
 #### Staircase ----
 #' Assign Stop-Signal Delays (SSDs) to trials
 #'
@@ -61,41 +63,6 @@ check_staircase <- function(staircase){
 
 
 
-ST_staircase_function <- function(dts,staircase) {
-  ns <- ncol(dts)
-  SSD <- sR <- srt <- numeric()
-  SSD[1] <- staircase$SSD0
-  if (is.null(staircase$accST))  # Indices for accumulator with SSD
-    iSSD <- 1 else               # Only stop accumulator
-      iSSD <- c(1,staircase$accST) # NB: accST refers to rows in dts
-  for (i in 1:ns) {
-    if (SSD[i]<staircase$stairmin) SSD[i] <- staircase$stairmin
-    if (SSD[i]>staircase$stairmax) SSD[i] <- staircase$stairmax
-    dts[iSSD,i] <- dts[iSSD,i] + SSD[i]
-    if (all(is.infinite(dts[-1,i]))) { # GF (no ST) or GF & TF
-      sR[i] <- srt[i] <- NA
-      SSD[i+1] <- round(SSD[i] + staircase$stairstep,3)
-    } else {
-      Ri <- which.min(dts[,i])
-      if (Ri==1) {
-        if (!is.null(staircase$accST)) { # ST present
-          sR[i] <- staircase$accST[which.min(dts[staircase$accST,i])]-1
-          srt[i] <- dts[sR[i]+1,i]
-        } else sR[i] <- srt[i] <- NA
-        if (i<ns) SSD[i+1] <- round(SSD[i] + staircase$stairstep,3)
-      } else {
-        sR[i] <- Ri-1
-        srt[i] <- dts[Ri,i]
-        if (i<ns) {
-          if (Ri %in% iSSD) # Stop-triggered response
-            SSD[i+1] <- round(SSD[i] + staircase$stairstep,3) else
-              SSD[i+1] <- round(SSD[i] - staircase$stairstep,3)
-        }
-      }
-    }
-  }
-  list(sR=sR,srt=srt,SSD=SSD)
-}
 
 #### Single exGaussian functions ----
 
@@ -211,29 +178,6 @@ ptexGaussianG <- function(rt,pars)
 
 
 #### Stop Single ExGaussian ----
-
-# Stop cdf/pdf, subtracts SSD and uses muS/sigmaS/tauS by renaming
-
-dexGaussianS <- function(rt,pars)
-{
-  rt <- rt - pars[,"SSD"]
-  dimnames(pars)[[2]][dimnames(pars)[[2]]=="muS"] <- "mu"
-  dimnames(pars)[[2]][dimnames(pars)[[2]]=="sigmaS"] <- "sigma"
-  dimnames(pars)[[2]][dimnames(pars)[[2]]=="tauS"] <- "tau"
-  dexGaussian(rt,pars)
-}
-
-
-pexGaussianS <- function(rt,pars)
-{
-  rt <- rt - pars[,"SSD"]
-  dimnames(pars)[[2]][dimnames(pars)[[2]]=="muS"] <- "mu"
-  dimnames(pars)[[2]][dimnames(pars)[[2]]=="sigmaS"] <- "sigma"
-  dimnames(pars)[[2]][dimnames(pars)[[2]]=="tauS"] <- "tau"
-  pexGaussian(rt,pars)
-}
-
-
 dtexGaussianS <- function(rt,pars)
 {
   rt <- rt - pars[,"SSD"]
@@ -284,39 +228,7 @@ ptexGaussianS <- function(rt,pars)
 
 #### ExGaussian random ----
 
-rexG <- function(n,mu,sigma,tau) {
-  rnorm(n,mean=mu,sd=sigma) + rexp(n,rate=1/tau)
-}
-
-# following copied directly from Tanis et al. 2024 (https://osf.io/u3k5f/)
-rTEXG <- function(n,mu=.5,sigma=.05,tau=.1,a=-Inf,b=Inf)
-{
-  out <- rnorm(n=n, mean=mu,sd=sigma) + rexp(n=n,rate=1/tau)
-  ok <- (out > a) & (out < b)
-  if (any(!ok)) {
-    nneed <- sum(!ok)
-    nget <- ceiling(1.1*nneed/mean(ok))
-    rtok <- numeric(nneed)
-    full <- logical(nneed)
-    repeat {
-      tmp <- rnorm(n=nget, mean=mu,sd=sigma) + rexp(n=nget,rate=1/tau)
-      okrt <- (tmp > a) & (tmp < b)
-      if ( sum(okrt)>=nneed ) {
-        rtok[!full] <- tmp[okrt][1:nneed]
-        break
-      }
-      ngot <- sum(okrt)
-      if (ngot>0) {
-        rtok[!full][1:ngot] <- tmp[okrt]
-        full[!full][1:ngot] <- TRUE
-      }
-      nneed <- nneed - ngot
-      nget <- ceiling(nneed*2/mean(ok))
-    }
-    out[!ok] <- rtok
-  }
-  out
-}
+rexG <- function(n,mu,sigma,tau) rnorm(n,mean=mu,sd=sigma) + rexp(n,rate=1/tau)
 
 
 
@@ -345,6 +257,7 @@ rexGaussian <- function(lR,pars,p_types=c("mu","sigma","tau"),
 #### EXG Stop signal random -----
 
 # FIX ME ok NOT IMPLEMENTED
+
 
 rSSexGaussian <- function(data,pars,ok=rep(TRUE,dim(pars)[1]))
   # lR is an empty latent response factor lR with one level for each accumulator.
@@ -515,61 +428,6 @@ my.integrate_old <- function(...,upper=Inf,big=10)
   }
 }
 
-
-pstopEXG <- function(parstop,n_acc,upper=Inf,
-                     gpars=c("mu","sigma","tau"),spars=c("muS","sigmaS","tauS"))
-{
-  sindex <- seq(1,nrow(parstop),by=n_acc)  # Stop accumulator index
-  ps <- parstop[sindex,spars,drop=FALSE]   # Stop accumulator parameters
-  SSDs <- parstop[sindex,"SSD",drop=FALSE] # SSDs
-  ntrials <- length(SSDs)
-  if (length(upper)==1) upper <- rep(upper,length.out=ntrials)
-  pgo <- array(parstop[,gpars],dim=c(n_acc,ntrials,length(gpars)),
-               dimnames=list(NULL,NULL,gpars))
-  cells <- apply(
-    cbind(SSDs,ps,upper,matrix(as.vector(aperm(pgo,c(2,1,3))),nrow=ntrials))
-    ,1,paste,collapse="")
-  # cells <- character(ntrials)
-  # for (i in 1:ntrials)
-  #   cells[i] <- paste(SSDs[i],ps[i,],pgo[,i,],upper[i],collapse="")
-  uniq <- !duplicated(cells)
-  ups <- sapply(which(uniq),function(i){
-    my.integrate(f=stopfn_exg_old,lower=-Inf,SSD=SSDs[i],upper=upper[i],
-                 mu=c(ps[i,"muS"],pgo[,i,"mu"]),
-                 sigma=c(ps[i,"sigmaS"],pgo[,i,"sigma"]),
-                 tau=c(ps[i,"tauS"],pgo[,i,"tau"]))
-  })
-  ups[as.numeric(factor(cells,levels=cells[uniq]))]
-}
-
-# THIS IS WRONG
-# pstopEXG <- function(parstop,n_acc,upper=Inf,
-#                      gpars=c("mu","sigma","tau"),spars=c("muS","sigmaS","tauS"))
-# {
-#   sindex <- seq(1,nrow(parstop),by=n_acc)  # Stop accumulator index
-#   ps <- parstop[sindex,spars,drop=FALSE]   # Stop accumulator parameters
-#   SSDs <- parstop[sindex,"SSD",drop=FALSE] # SSDs
-#   ntrials <- length(SSDs)
-#   if (length(upper)==1) upper <- rep(upper,length.out=ntrials)
-#   pgo <- array(parstop[,gpars],dim=c(n_acc,ntrials,length(gpars)),
-#                dimnames=list(NULL,NULL,gpars))
-#   cells <- apply(
-#     cbind(SSDs,ps,upper,matrix(as.vector(aperm(pgo,c(2,1,3))),nrow=ntrials))
-#   ,1,paste,collapse="")
-#   # cells <- character(ntrials)
-#   # for (i in 1:ntrials)
-#   #   cells[i] <- paste(SSDs[i],ps[i,],pgo[,i,],upper[i],collapse="")
-#   uniq <- !duplicated(cells)
-#   ups <- sapply(which(uniq),function(i){
-#     my.integrate(f=stopfn_exg,lower=-Inf,SSD=SSDs[i],upper=upper[i],
-#                            mu=c(ps[i,"muS"],pgo[,i,"mu"]),
-#                            sigma=c(ps[i,"sigmaS"],pgo[,i,"sigma"]),
-#                            tau=c(ps[i,"tauS"],pgo[,i,"tau"]))
-#   })
-#   ups[as.numeric(factor(cells,levels=cells[uniq]))]
-# }
-
-
 pstopTEXG <- function(
     parstop, n_acc, upper=Inf,
     gpars=c("mu","sigma","tau","exg_lb"), spars=c("muS","sigmaS","tauS","exgS_lb")
@@ -589,218 +447,13 @@ pstopTEXG <- function(
   #   cells[i] <- paste(SSDs[i],ps[i,],pgo[,i,],upper[i],collapse="")
   uniq <- !duplicated(cells)
   ups <- sapply(which(uniq),function(i){
-    my.integrate(f=stopfn_texg,lower=ps[i,"exgS_lb"],SSD=SSDs[i],upper=upper[i],
+    my.integrate_old(f=stopfn_texg,lower=ps[i,"exgS_lb"],SSD=SSDs[i],upper=upper[i],
                  mu=c(ps[i,"muS"],pgo[,i,"mu"]),
                  sigma=c(ps[i,"sigmaS"],pgo[,i,"sigma"]),
                  tau=c(ps[i,"tauS"],pgo[,i,"tau"]),
                  lb=c(ps[i,"exgS_lb"],pgo[,i,"exg_lb"]))
   })
   ups[as.numeric(factor(cells,levels=cells[uniq]))]
-}
-
-# #### Stop probability stop triggered ----
-#
-#
-# stopfn_exgST <- function(t,mu,sigma,tau,SSD,st=1)
-#   # Used by my.integrate, t = vector of times, SSD is a scalar stop-signal delay.
-#   # st is a vector of indices for the stop and stop-triggered accumulators
-# {
-#   dt <- matrix(rep(t+SSD,each=length(mu)),nrow=length(mu))
-#   dt[st,] <- dt[st,]-SSD
-#   dEXGrace(dt,mu,sigma,tau)
-# }
-#
-#
-# pstopEXGST <- function(parstop,n_acc,upper=Inf,st=1,
-#                      gpars=c("mu","sigma","tau"),spars=c("muS","sigmaS","tauS"))
-# {
-#   sindex <- seq(1,nrow(parstop),by=n_acc)
-#   ps <- parstop[sindex,spars,drop=FALSE]
-#   SSDs <- parstop[sindex,"SSD",drop=FALSE]
-#   ntrials <- length(SSDs)
-#   if (length(upper)==1) upper <- rep(upper,length.out=ntrials)
-#   pgo <- array(parstop[,gpars],dim=c(n_acc,ntrials,length(gpars)),
-#                dimnames=list(NULL,NULL,gpars))
-#   cells <- apply(cbind(SSDs,ps,upper,
-#     matrix(as.vector(aperm(pgo,c(2,1,3))),nrow=ntrials)),1,paste,collapse="")
-#   # cells <- character(ntrials)
-#   # for (i in 1:ntrials)
-#   #   cells[i] <- paste(SSDs[i],ps[i,],pgo[,i,],upper[i],collapse="")
-#   uniq <- !duplicated(cells)
-#   ups <- sapply(1:sum(uniq),function(i){
-#     my.integrate(f=stopfn_exgST,lower=-Inf,SSD=SSDs[i],upper=upper[i],
-#                            mu=c(ps[i,"muS"],pgo[,i,"mu"]),
-#                            sigma=c(ps[i,"sigmaS"],pgo[,i,"sigma"]),
-#                            tau=c(ps[i,"tauS"],pgo[,i,"tau"]),st=st)
-#   })
-#   ups[as.numeric(factor(cells,levels=cells[uniq]))]
-# }
-
-
-
-#### SSexG Model list ----
-
-# TODO remove this model file after we're fully satisfied with SStexG
-
-#' Stop-signal ex-Gaussian race
-#'
-#' Model file to estimate the ex-Gaussian race model for Stop-Signal data
-#'
-#' Model files are almost exclusively used in `design()`.
-#'
-#' @details
-#'
-#' Default values are used for all parameters that are not explicitly listed in the `formula`
-#' argument of `design()`.They can also be accessed with `SSexG()$p_types`.
-#'
-#' @details
-#' | **Parameter** | **Transform** | **Natural scale** | **Default**   | **Mapping**                    | **Interpretation**                                            |
-#' |-----------|-----------|---------------|-----------|----------------------------|-----------------------------------------------------------|
-#' | *mu*       | log         | \[0, Inf\]     | log(.4)         |                            | mu parameter of ex-Gaussian go finishing time distribution              |
-#' | *sigma*       | log       | \[0, Inf\]        | log(.05)    |                            | sigma parameter of ex-Gaussian go finishing time distribution                                        |
-#' | *tau*      | log       | \[0, Inf\]        | log(.1)    |                            | tau parameter of ex-Gaussian go finishing time distribution                                          |
-#' | *muS*       | log       | \[0, Inf\]        | log(.3)    |                            | mu parameter of ex-Gaussian stopping finishing time distribution           |
-#' | *sigmaS*       | log    | \[0, Inf\]        | log(.025)|                   | sigma parameter of ex-Gaussian stopping finishing time distribution                              |
-#' | *tauS*      | log    | \[0, Inf\]        | log(.05)  |  | tau parameter of ex-Gaussian stopping finishing time distribution       |
-#' | *tf*      | probit       | \[0, 1\]        | qnorm(0)    |                            | Trigger failure probability           |
-#' | *gf*     | probit       | \[0, 1\]        | qnorm(0)    |                            | Go failure probability    |
-#'
-#'
-#'
-#' @return A model list with all the necessary functions to sample
-#' @export
-SSexG_old <- function() {
-  list(
-    type="RACE",
-    p_types=c(mu=log(.4),sigma=log(.05),tau=log(.1),
-              muS=log(.3),sigmaS=log(.025),tauS=log(.05),tf=qnorm(0),gf=qnorm(0)),
-    transform=list(func=c( mu = "exp",  sigma = "exp",  tau = "exp",
-                           muS = "exp", sigmaS = "exp", tauS = "exp",
-                           tf="pnorm",gf="pnorm")),
-    bound=list(minmax=cbind( mu=c(0,Inf),  sigma=c(1e-4,Inf),  tau=c(1e-4,Inf),
-                             muS=c(0,Inf), sigmaS=c(1e-4,Inf), tauS=c(1e-4,Inf),
-                             tf=c(.001,.999),gf=c(.001,.999)),
-               exception=c(tf=0,gf=0)),
-    # Trial dependent parameter transform
-    Ttransform = function(pars,dadm) {
-      # if (any(names(dadm)=="SSD")) pars <- cbind(pars,SSD=dadm$SSD) else
-      #   pars <- cbind(pars,SSD=rep(Inf,dim(pars)[1]))
-      pars <- cbind(pars,SSD=dadm$SSD)
-      pars <- cbind(pars,lI=as.numeric(dadm$lI))  # Only necessary for data generation.
-      pars
-    },
-    # Density function (PDF) for single go racer
-    dfunG=function(rt,pars) dexGaussianG(rt,pars),
-    # Probability function (CDF) for single go racer
-    pfunG=function(rt,pars) pexGaussianG(rt,pars),
-    # Density function (PDF) for single stop racer
-    dfunS=function(rt,pars)
-      dexGaussianS(rt,pars[,c("muS","sigmaS","tauS","SSD"),drop=FALSE]),
-    # Probability function (CDF) for single stop racer
-    pfunS=function(rt,pars)
-      pexGaussianS(rt,pars[,c("muS","sigmaS","tauS","SSD"),drop=FALSE]),
-    # Stop probability integral
-    sfun=function(pars,n_acc,upper=Inf) pstopEXG(pars,n_acc,upper=upper),
-    # Random function for SS race
-    rfun=function(data=NULL,pars) {
-      rSSexGaussian(data,pars,ok=attr(pars, "ok"))
-    },
-    # Race likelihood combining pfun and dfun
-    log_likelihood=function(pars,dadm,model,min_ll=log(1e-10))
-      log_likelihood_race_ss(pars, dadm, model, min_ll = min_ll)
-  )
-}
-
-
-# TODO remove this model file after we're fully satisfied with SStexG
-
-#' Stop-signal ex-Gaussian race
-#'
-#' Model file to estimate the ex-Gaussian race model for Stop-Signal data
-#'
-#' Model files are almost exclusively used in `design()`.
-#'
-#' @details
-#'
-#' Default values are used for all parameters that are not explicitly listed in the `formula`
-#' argument of `design()`.They can also be accessed with `SSexG()$p_types`.
-#'
-#' @details
-#' | **Parameter** | **Transform** | **Natural scale** | **Default**   | **Mapping**                    | **Interpretation**                                            |
-#' |-----------|-----------|---------------|-----------|----------------------------|-----------------------------------------------------------|
-#' | *mu*       | log         | \[0, Inf\]     | log(.4)         |                            | mu parameter of ex-Gaussian go finishing time distribution              |
-#' | *sigma*       | log       | \[0, Inf\]        | log(.05)    |                            | sigma parameter of ex-Gaussian go finishing time distribution                                        |
-#' | *tau*      | log       | \[0, Inf\]        | log(.1)    |                            | tau parameter of ex-Gaussian go finishing time distribution                                          |
-#' | *muS*       | log       | \[0, Inf\]        | log(.3)    |                            | mu parameter of ex-Gaussian stopping finishing time distribution           |
-#' | *sigmaS*       | log    | \[0, Inf\]        | log(.025)|                   | sigma parameter of ex-Gaussian stopping finishing time distribution                              |
-#' | *tauS*      | log    | \[0, Inf\]        | log(.05)  |  | tau parameter of ex-Gaussian stopping finishing time distribution       |
-#' | *tf*      | probit       | \[0, 1\]        | qnorm(0)    |                            | Trigger failure probability           |
-#' | *gf*     | probit       | \[0, 1\]        | qnorm(0)    |                            | Go failure probability    |
-#'
-#'
-#' @return A model list with all the necessary functions to sample
-#' @export
-SSexG <- function() {
-  list(
-    type = "RACE",
-    c_name = "SS_EXG",
-    p_types = c(
-      mu = log(.4), sigma = log(.05), tau = log(.1),
-      muS = log(.3), sigmaS = log(.025), tauS = log(.05),
-      tf = qnorm(0), gf = qnorm(0)
-    ),
-    transform = list(
-      func = c(
-        mu = "exp", sigma = "exp", tau = "exp",
-        muS = "exp", sigmaS = "exp", tauS = "exp",
-        tf = "pnorm", gf = "pnorm"
-      )
-    ),
-    bound = list(
-      minmax = cbind(
-        mu = c(0, Inf), sigma = c(1e-4, Inf), tau = c(1e-4, Inf),
-        muS = c(0, Inf), sigmaS = c(1e-4, Inf), tauS = c(1e-4, Inf),
-        tf = c(.001, .999), gf = c(.001, .999)
-      ),
-      exception = c(
-        tf = 0, gf = 0
-      )
-    ),
-    # Trial dependent parameter transform
-    Ttransform = function(pars,dadm) {
-      # if (any(names(dadm)=="SSD")) pars <- cbind(pars,SSD=dadm$SSD) else
-      #   pars <- cbind(pars,SSD=rep(Inf,dim(pars)[1]))
-      pars <- cbind(pars, SSD = dadm$SSD)
-      pars <- cbind(pars, lI = as.numeric(dadm$lI))  # Only necessary for data generation.
-      return(pars)
-    },
-    # Density function (PDF) for single go racer
-    dfunG = function(rt, pars) return(dexGaussianG(rt, pars)),
-    # Probability function (CDF) for single go racer
-    pfunG = function(rt, pars) return(pexGaussianG(rt, pars)),
-    # Density function (PDF) for single stop racer
-    dfunS = function(rt, pars) {
-      parsS <- pars[ , c("muS", "sigmaS", "tauS", "SSD"), drop = FALSE]
-      return(dexGaussianS(rt, parsS))
-    },
-    # Probability function (CDF) for single stop racer
-    pfunS = function(rt, pars) {
-      parsS <- pars[ , c("muS", "sigmaS", "tauS", "SSD"), drop = FALSE]
-      return(pexGaussianS(rt, parsS))
-    },
-    # Stop probability integral
-    sfun = function(pars, n_acc, upper = Inf) {
-      return(pstopEXG(pars, n_acc, upper = upper))
-    },
-    # Random function for SS race
-    rfun = function(data = NULL, pars) {
-      return(rSSexGaussian(data, pars, ok = attr(pars, "ok")))
-    },
-    # Race likelihood combining pfun and dfun
-    log_likelihood = function(pars, dadm, model, min_ll = log(1e-10)) {
-      return(log_likelihood_race_ss(pars, dadm, model, min_ll = min_ll))
-    }
-  )
 }
 
 
@@ -1289,4 +942,196 @@ SSRDEX <- function() {
       return(log_likelihood_race_ss(pars, dadm, model, min_ll = min_ll))
     }
   )
+}
+
+
+log_likelihood_race_ss <- function(pars,dadm,model,min_ll=log(1e-10))
+{
+  # All bad?
+  if (is.null(attr(pars,"ok")))
+    ok <- !logical(dim(pars)[1]) else ok <- attr(pars,"ok")
+    if (!any(ok)) return(min_ll*length(attr(dadm, "expand")))
+
+    # Nomenclature for indices:
+    # "is" = logical, "isp" pars/dadm index,
+    # "t" trials index, "ist" logical on trial index
+    # "n_" number of integer
+
+    # Counts
+    n_acc <- length(levels(dadm$lR))                   # total number of accumulators
+    n_trials <- nrow(dadm)/n_acc                       # number of trials
+    n_accG <- sum(as.numeric(dadm[1:n_acc,"lI"])==2)   # go accumulators
+    n_accST <- sum(as.numeric(dadm[1:n_acc,"lI"])==1)
+
+    # Likelihood for all trials and for ok trials
+    allLL <- rep(min_ll,n_trials)
+    # used to put results into allLL[allok]
+    allok <- ok[dadm$lR==levels(dadm$lR)[1]]
+
+    # Remove trials not ok
+    pars <- pars[ok,,drop=FALSE]
+    dadm <- dadm[ok,,drop=FALSE]
+
+    # Only keep OK trials for stop trial computations
+    n_trials <- nrow(dadm)/n_acc # number of trials
+    trials <- 1:n_trials         # trial number
+
+    # Booleans for ok pars/dadm
+    isp1 <- dadm$lR==levels(dadm$lR)[1]      # 1st accumulator rows
+    ispGOacc <- dadm$lI==levels(dadm$lI)[2]  # Go accumulator rows
+    ispStop <- is.finite(dadm$SSD)           # Stop-trial rows
+
+    # Failure parameters for each trial
+    gf <- pars[isp1,"gf"]
+    tf <- pars[isp1,"tf"]
+
+    # Go response names
+    GoR <- as.character(dadm[1:n_acc,"lR"][dadm[1:n_acc,"lI"]==2])
+
+    # No response
+    ispNR <- is.na(dadm$R)
+    if ( any(ispNR) ) {  # Note by definition no ST present
+
+      # Go failures
+      ispgoNR <- ispNR & !ispStop            # No response and no stop signal
+      tgoNR <- c(1:sum(isp1))[ispgoNR[isp1]] # trial number
+      if (any(ispgoNR))
+        allLL[allok][tgoNR] <- log(gf[tgoNR])
+
+      # Stop trial with no response and no ST accumulator
+      ispstopNR <- ispNR & ispStop & (n_accST == 0)
+      if ( any(ispstopNR) ) { # Stop trial probability
+        # Non-response and stop trial & go/stop accumulator parameters
+        pStop <- pmin(1,pmax(0,  # protection to keep in 0-1
+                             model$sfun(
+                               pars[ispNR & ispStop & ispGOacc,,drop=FALSE],n_acc=n_accG)
+        ))
+        # Fill in stop-trial non-response probabilities, either 1) go failure
+        # 2) not go failure and not trigger failure and stop wins
+        tstopNR <- trials[ispstopNR[isp1]]  # trial number
+        allLL[allok][tstopNR] <- log(gf[tstopNR] + (1-gf[tstopNR])*(1-tf[tstopNR])*pStop)
+      }
+    }
+
+    # Response made
+    if (any(!ispNR)) {
+      # Only keep response trials for further computation
+      allr <- !ispNR[isp1] # used to put back into allLL[allok]
+      pars <- pars[!ispNR,,drop=FALSE]
+      dadm <- dadm[!ispNR,,drop=FALSE]
+      n_trials <- nrow(dadm)/n_acc # number of trials
+      trials <- 1:n_trials
+      ptrials <- rep(trials,each=n_acc) # trial number for pars/dadm
+
+      isp1 <- dadm$lR==levels(dadm$lR)[1]      # 1st accumulator rows
+      ispGOacc <- dadm$lI==levels(dadm$lI)[2]  # Go accumulator rows
+      ispStop <- is.finite(dadm$SSD)           # stop-trial rows with a response
+      gf <- pars[isp1,"gf"]
+      tf <- pars[isp1,"tf"]
+
+      # likelihoods for trials with a response (eventually, intermediately probabilities)
+      like <- numeric(n_trials)
+      lds <- numeric(nrow(dadm)) # log density and survivor, used for both go and stop trials
+
+      # Go trials with response
+      if (any(!ispStop)) {
+        ispGOwin <-  !ispStop & dadm$winner # Winner go accumulator rows
+        tGO <- ptrials[ispGOwin]  # Go trials
+        # Winner density
+        like[tGO] <- log(model$dfunG(
+          rt=dadm$rt[ispGOwin],pars=pars[ispGOwin,,drop=FALSE]))
+        if (n_accG >1) {  # Looser survivor go accumulator(s)
+          ispGOloss <- !ispStop & !dadm$winner & ispGOacc # Looser go accumulator rows
+          like[tGO] <- like[tGO] + apply(matrix(log(1-model$pfunG(
+            rt=dadm$rt[ispGOloss],pars=pars[ispGOloss,,drop=FALSE])),nrow=n_accG-1),2,sum)
+        }
+        # Transform back to densities to include go failure
+        like[tGO] <- (1-gf[tGO])*exp(like[tGO])
+      }
+
+      # Stop trials with a response, occurs if
+      # 1) All triggered
+      #   a) Stop does not beat go before rt, produces go and ST
+      #   b) Stop beats go before rt, produces ST only
+      # 2) go failure, stop triggered, produces ST only
+      # 3) go triggered, stop failure, produces go only
+      # NB: cant have both go and stop failure as then no response
+
+      if (any(ispStop)) {                       # Stop trials
+        ispSGO <- ispStop & (dadm$R %in% GoR)   # Go responses
+        ispSST <- ispStop & !(dadm$R %in% GoR)  # ST responses
+        # Go beats stop and ST (if any)
+        if (any(ispSGO)) {
+          ispGOwin <-  ispSGO & dadm$winner # Winner go accumulator rows
+          tGO <- ptrials[ispGOwin]          # Go trials
+          like[tGO] <- log(model$dfunG(
+            rt=dadm$rt[ispGOwin],pars=pars[ispGOwin,,drop=FALSE]))
+          if (n_accG > 1) {  # Looser survivor gp accumulators
+            ispGOloss <- ispSGO & !dadm$winner & ispGOacc
+            like[tGO] <- like[tGO] + apply(matrix(log(1-model$pfunG(
+              rt=dadm$rt[ispGOloss],pars=pars[ispGOloss,,drop=FALSE])),
+              nrow=n_accG-1),2,sum)
+          }
+          # trigger stop, add in stop survivor
+          ts <- like[tGO] + log(1-model$pfunS(
+            rt=dadm$rt[ispGOwin],pars=pars[ispGOwin,,drop=FALSE]))
+          # ST loosers
+          if (n_accST == 0) stl <- 0 else {
+            ispSTloss <- ispSGO & !ispGOacc
+            stl <- apply(matrix(log(1-model$pfunG(
+              rt=dadm$rt[ispSTloss]-pars[ispSTloss,"SSD"], # correct for SSD
+              pars=pars[ispSTloss,,drop=FALSE])),
+              nrow=n_accST),2,sum)
+          }
+
+          # Transform back to densities to include failures
+          like[tGO] <- (1-gf[tGO])*(tf[tGO]*exp(like[tGO]) +
+                                      (1-tf[tGO])*exp(ts+stl))
+        }
+
+        # ST WINS (never tf)
+        if (any(ispSST)) { # Go triggered 1a) with (1-pStop), all race,
+          #              1b) with pStop, only ST races
+          # Go failure    2) Only ST races
+          # ST winner rows
+          ispSSTwin <-  dadm$winner &  ispSST
+          # Stop probability on ST win trials, only needs go accumulators
+          pStop <- model$sfun(pars[ispSST & ispGOacc,,drop=FALSE],n_acc=n_accG,
+                              upper=dadm$rt[ispSSTwin]) # pStop before observed RT
+          # ST win ll
+          tST <- ptrials[ispSSTwin]
+          like[tST] <- log(model$dfunG(
+            rt=dadm$rt[ispSSTwin]-dadm$SSD[ispSSTwin], # correct ST racers for SSD delay
+            pars=pars[ispSSTwin,,drop=FALSE]))
+          # ST looser survivors
+          if (n_accST > 1) {  # Survivor for looser for ST accumulator(s)
+            ispSSTloss <-  !dadm$winner &  ispSST & !ispGOacc
+            llST <-  log(1-model$pfunG(
+              rt=dadm$rt[ispSSTloss]-dadm$SSD[ispSSTloss],
+              pars=pars[ispSSTloss,,drop=FALSE]))
+            if (n_accST == 2) # Could remove branch, maybe faster as no matrix sum?
+              like[tST] <- like[tST] + llST else
+                like[tST] <- like[tST] + apply(matrix(llST,nrow=n_accST-1),2,sum)
+          }
+          # Go looser survivor
+          ispSGloss <- ispSST & ispGOacc
+          llG <- apply(matrix(log(1-model$pfunG(
+            rt=dadm$rt[ispSGloss],pars=pars[ispSGloss,,drop=FALSE])),
+            nrow=n_accG),2,sum)
+          like[tST] <- (1-tf[tST])*(                 # Never trigger failure
+            gf[tST]*exp(like[tST]) +             # Case 2, gf only ST race
+              (1-gf[tST])*(pStop*exp(like[tST]) +      # Case 1b, no gf, stop beats go, ST race
+                             (1-pStop)*exp(like[tST]+llG))) # Case 1a, no  gf, all race (no stop win)
+        }
+      }
+      allLL[allok][allr] <- log(like)
+    }
+
+    allLL[is.na(allLL)|is.nan(allLL)] <- min_ll
+    allLL <- pmax(min_ll,allLL)
+
+    # # TODO remove when we're happy with testing
+    # llR <<- allLL
+
+    sum(allLL[attr(dadm,"expand")])
 }
