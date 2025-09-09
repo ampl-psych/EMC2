@@ -472,7 +472,7 @@ generate_design_equations <- function(design_matrix,
   }
 
   if(length(formatted_trends)>0) {
-    cat("Trends: ", '\n', sep='')
+    cat(" Trends: ", '\n', sep='')
     for(formatted_trend in formatted_trends) {
       cat(" ", formatted_trend, '\n', sep='')
     }
