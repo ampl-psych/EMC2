@@ -414,7 +414,7 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
         if(trend$kernel == 'delta') covariate_names <- c(covariate_names, trend$trend_pnames[2])
       }
       if(return_covariates) {
-        covariates <- pars[,covariate_names]
+        covariates <- pars[,covariate_names,drop=FALSE]
       }
       pars <- pars[,!colnames(pars) %in% covariate_names]
     }
