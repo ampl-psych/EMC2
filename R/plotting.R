@@ -741,14 +741,13 @@ coda_setmfrow <- function (Nchains = 1, Nparms = 1, nplots = 1, sepplot = FALSE)
 #' p_vector <- c('B'=1, 'v'=1, 'v_lMTRUE'=1, 't0'=0.1, 'B.w'=1, 'B.d_ei'=1)
 #'
 #' # Visualize trend
-#' plot_trend(p_vector, samplers=emc,
+#' plot_trend(p_vector, emc=emc,
 #'            par_name='B', subject='as1t',
 #'            lR_filter='right', main='Threshold for right')
 plot_trend <- function(input_data, emc, par_name, subject=1,
                        lM_filter=NULL, lR_filter=NULL, on_x_axis='trials',
                        pp_shaded=TRUE,
                        ...) {
-
 
   if(!is.list(input_data)) {
     # user supplied p_vector
