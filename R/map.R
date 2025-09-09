@@ -445,6 +445,8 @@ generate_design_equations <- function(design_matrix,
     }, factor_cols, col_widths),
     collapse = "  ")
 
+    if(row_factor_str == '') row_factor_str = 'intercept'
+
     closing_parenthesis <- ')'
     if(length(formatted_trends) > 0) {
       if(!attr(trend, 'premap')) {
