@@ -178,7 +178,8 @@ public:
 static inline double ss_texg_stop_success_lpdf(
     double SSD,
     NumericMatrix pars,
-    double min_ll
+    double min_ll,
+    double upper = R_PosInf
 ) {
   // set up the integrand
   texg_stop_success_integrand f(SSD, pars, min_ll);
@@ -189,7 +190,7 @@ static inline double ss_texg_stop_success_lpdf(
   res = integrate(
     f,          // integrand
     pars(0, 9), // lower limit of integration (= lower bound of stop process)
-    R_PosInf,   // upper limit of integration
+    upper,      // upper limit of integration
     err_est,    // placeholder for estimation error
     err_code,   // placeholder for failed integration error code
     100,        // maximum number of subdivisions

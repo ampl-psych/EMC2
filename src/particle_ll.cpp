@@ -577,34 +577,33 @@ NumericVector calc_ll(NumericMatrix p_matrix, DataFrame data, NumericVector cons
         lls[i] = c_log_likelihood_MRI_white(pars, y, is_ok, n_trials, n_pars, min_ll);
       }
     }
-
-  // } else if(type == "SSEXG" || type == "SSRDEX"){
-  //   IntegerVector expand = data.attr("expand");
-  //   NumericVector lR = data["lR"];
-  //   int n_lR = unique(lR).length();
-  //   // Pick function pointers and indices based on type
-  //   ss_go_pdf_fn go_lpdf_ptr = (type == "SSEXG") ? texg_go_lpdf : rdex_go_lpdf;
-  //   ss_go_pdf_fn go_lccdf_ptr = (type == "SSEXG") ? texg_go_lccdf : rdex_go_lccdf;
-  //   ss_stop_surv_fn stop_logsurv_ptr = (type == "SSEXG") ? stop_logsurv_texg_fn : stop_logsurv_rdex_fn;
-  //   ss_stop_success_fn stop_success_ptr = (type == "SSEXG") ? ss_texg_stop_success_lpdf : ss_rdex_stop_success_lpdf;
-  //   int idx_tf = (type == "SSEXG") ? 6 : 8;
-  //   int idx_gf = (type == "SSEXG") ? 7 : 9;
-  //   for (int i = 0; i < n_particles; ++i) {
-  //     p_vector = p_matrix(i, _);
-  //     if(i == 0){
-  //       p_specs = make_pretransform_specs(p_vector, pretransforms);
-  //     }
-  //     pars = get_pars_matrix(p_vector, constants, transforms, p_specs, p_types, designs, n_trials, data, trend);
-  //     if (i == 0) {                            // first particle only, just to get colnames
-  //       bound_specs = make_bound_specs(minmax,mm_names,pars,bounds);
-  //     }
-  //     is_ok = c_do_bound(pars, bound_specs);
-  //     is_ok = lr_all(is_ok, n_lR); // reduce to per-trial ok
-  //     lls[i] = c_log_likelihood_ss(pars, data, n_trials, expand, min_ll, is_ok,
-  //                                  go_lpdf_ptr, go_lccdf_ptr,
-  //                                  stop_logsurv_ptr, stop_success_ptr,
-  //                                  idx_tf, idx_gf);
-  //   }
+  } else if(type == "SSEXG" || type == "SSRDEX"){
+    IntegerVector expand = data.attr("expand");
+    NumericVector lR = data["lR"];
+    int n_lR = unique(lR).length();
+    // Pick function pointers and indices based on type
+    ss_go_pdf_fn go_lpdf_ptr = (type == "SSEXG") ? texg_go_lpdf : rdex_go_lpdf;
+    ss_go_pdf_fn go_lccdf_ptr = (type == "SSEXG") ? texg_go_lccdf : rdex_go_lccdf;
+    ss_stop_surv_fn stop_logsurv_ptr = (type == "SSEXG") ? stop_logsurv_texg_fn : stop_logsurv_rdex_fn;
+    ss_stop_success_fn stop_success_ptr = (type == "SSEXG") ? ss_texg_stop_success_lpdf : ss_rdex_stop_success_lpdf;
+    int idx_tf = (type == "SSEXG") ? 6 : 8;
+    int idx_gf = (type == "SSEXG") ? 7 : 9;
+    for (int i = 0; i < n_particles; ++i) {
+      p_vector = p_matrix(i, _);
+      if(i == 0){
+        p_specs = make_pretransform_specs(p_vector, pretransforms);
+      }
+      pars = get_pars_matrix(p_vector, constants, transforms, p_specs, p_types, designs, n_trials, data, trend);
+      if (i == 0) {                            // first particle only, just to get colnames
+        bound_specs = make_bound_specs(minmax,mm_names,pars,bounds);
+      }
+      is_ok = c_do_bound(pars, bound_specs);
+      is_ok = lr_all(is_ok, n_lR); // reduce to per-trial ok
+      lls[i] = c_log_likelihood_ss(pars, data, n_trials, expand, min_ll, is_ok,
+                                   go_lpdf_ptr, go_lccdf_ptr,
+                                   stop_logsurv_ptr, stop_success_ptr,
+                                   idx_tf, idx_gf);
+    }
   } else{
     IntegerVector expand = data.attr("expand");
     LogicalVector winner = data["winner"];
