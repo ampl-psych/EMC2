@@ -794,8 +794,16 @@ check_CR <- function(emc, p_vector, range = .2, N = 500){
   modelRlist <- model()
   modelRlist$c_name <- NULL
   modelR <- function()return(modelRlist)
-  R <- EMC2:::calc_ll_manager(props, dat, modelR)
-  C <- EMC2:::calc_ll_manager(props, dat, model)
+  t1 <- system.time(
+    R <- calc_ll_manager(props, dat, modelR)
+  )
+  t2 <- system.time(
+    C <- calc_ll_manager(props, dat, model)
+  )
+  print(paste0("C ", t1$elapsed/t2$elapsed, " times faster"))
+  if(!identical(C, R)){
+    warning("C and R results differ")
+  }
   return(list(C = C, R = R))
 }
 
