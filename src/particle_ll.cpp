@@ -577,17 +577,17 @@ NumericVector calc_ll(NumericMatrix p_matrix, DataFrame data, NumericVector cons
         lls[i] = c_log_likelihood_MRI_white(pars, y, is_ok, n_trials, n_pars, min_ll);
       }
     }
-  } else if(type == "SS_TEXG" || type == "SS_RDEX"){
+  } else if(type == "SSEXG" || type == "SSRDEX"){
     IntegerVector expand = data.attr("expand");
     NumericVector lR = data["lR"];
     int n_lR = unique(lR).length();
     // Pick function pointers and indices based on type
-    ss_go_pdf_fn go_lpdf_ptr = (type == "SS_TEXG") ? texg_go_lpdf : rdex_go_lpdf;
-    ss_go_pdf_fn go_lccdf_ptr = (type == "SS_TEXG") ? texg_go_lccdf : rdex_go_lccdf;
-    ss_stop_surv_fn stop_logsurv_ptr = (type == "SS_TEXG") ? stop_logsurv_texg_fn : stop_logsurv_rdex_fn;
-    ss_stop_success_fn stop_success_ptr = (type == "SS_TEXG") ? ss_texg_stop_success_lpdf : ss_rdex_stop_success_lpdf;
-    int idx_tf = (type == "SS_TEXG") ? 6 : 8;
-    int idx_gf = (type == "SS_TEXG") ? 7 : 9;
+    ss_go_pdf_fn go_lpdf_ptr = (type == "SSEXG") ? texg_go_lpdf : rdex_go_lpdf;
+    ss_go_pdf_fn go_lccdf_ptr = (type == "SSEXG") ? texg_go_lccdf : rdex_go_lccdf;
+    ss_stop_surv_fn stop_logsurv_ptr = (type == "SSEXG") ? stop_logsurv_texg_fn : stop_logsurv_rdex_fn;
+    ss_stop_success_fn stop_success_ptr = (type == "SSEXG") ? ss_texg_stop_success_lpdf : ss_rdex_stop_success_lpdf;
+    int idx_tf = (type == "SSEXG") ? 6 : 8;
+    int idx_gf = (type == "SSEXG") ? 7 : 9;
     for (int i = 0; i < n_particles; ++i) {
       p_vector = p_matrix(i, _);
       if(i == 0){

@@ -541,10 +541,10 @@ pstopTEXG <- function(
 #'
 #' @return A model list with all the necessary functions to sample
 #' @export
-SStexG <- function() {
+SSEXG <- function() {
   list(
     type = "RACE",
-    c_name = "SS_TEXG",
+    c_name = "SSEXG",
     p_types = c(
       mu = log(.4), sigma = log(.05), tau = log(.1),
       muS = log(.3), sigmaS = log(.025), tauS = log(.05),
@@ -876,7 +876,7 @@ pstopHybrid <- function(
 SSRDEX <- function() {
   list(
     type = "RACE",
-    c_name = "SS_RDEX",
+    c_name = "SSRDEX",
     p_types = c(
       v = log(1), B = log(1), A = log(0), t0 = log(0), s = log(1),
       muS = log(.3), sigmaS = log(.025), tauS = log(.05),
