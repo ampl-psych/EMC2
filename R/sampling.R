@@ -804,7 +804,7 @@ check_CR <- function(emc, p_vector, range = .2, N = 500){
   print(paste0("C ", round(t1['elapsed']/t2['elapsed'],3), " times faster"))
 
   cat("C and R identical: ")
-  cat(all.equal(CR$C, CR$R))
+  cat(all.equal(C, R))
   return(list(C = C, R = R))
 }
 
