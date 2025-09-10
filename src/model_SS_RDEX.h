@@ -214,15 +214,24 @@ static inline double ss_rdex_stop_success_lpdf(
   double err_est, res;
   int err_code;
   // perform numerical integration
+  // optionally cap the upper limit to a finite tail if requested
+  double ub = upper;
+  if (!std::isfinite(ub) && (SS_INT_TAIL_SIGMA_MULT > 0.0)) {
+    double muS = pars(0, 5);
+    double sigS = pars(0, 6);
+    double tauS = pars(0, 7);
+    double sdS = std::sqrt(sigS * sigS + tauS * tauS);
+    ub = muS + SS_INT_TAIL_SIGMA_MULT * sdS;
+  }
   res = integrate(
-    f,            // integrand
-    pars(0, 10),  // lower limit of integration (= lower bound of stop process)
-    upper,        // upper limit of integration
-    err_est,      // placeholder for estimation error
-    err_code,     // placeholder for failed integration error code
-    100,          // maximum number of subdivisions
-    1e-8,         // absolute tolerance
-    1e-6          // relative tolerance
+    f,                // integrand
+    pars(0, 10),      // lower limit of integration (= lower bound of stop process)
+    ub,               // upper limit of integration (possibly capped)
+    err_est,          // placeholder for estimation error
+    err_code,         // placeholder for failed integration error code
+    SS_INT_MAX_SUBDIV, // maximum number of subdivisions (eval budget proxy)
+    SS_INT_ABS_TOL,   // absolute tolerance
+    SS_INT_REL_TOL    // relative tolerance
   );
   // check for issues with result, and return
   bool bad = (err_code != 0) || !R_FINITE(res) || (res <= 0.0);

@@ -10,6 +10,34 @@
 
 using namespace Rcpp;
 
+// ---------------------------------------------------------------------------
+// SS integrator defaults (compile-time tunables)
+// You can override these via compiler -D flags or by editing here.
+// They are used by SS model headers when calling integrate(...).
+//
+// - SS_INT_MAX_SUBDIV: evaluation budget proxy; total evals ~= 64*max_subdiv in 1D
+// - SS_INT_ABS_TOL   : absolute tolerance passed to integrator
+// - SS_INT_REL_TOL   : relative tolerance passed to integrator
+// - SS_INT_TAIL_SIGMA_MULT: when >0 and upper bound is +Inf, cap upper to
+//   muS + SS_INT_TAIL_SIGMA_MULT * sqrt(sigmaS^2 + tauS^2) (EXG stop only)
+// - SS_INT_SKIP_WEIGHT_THRESH: when >0, particle_ll.cpp may skip computing the
+//   stop-success integral on no-response stop trials if (1-gf)*(1-tf) <= thresh
+#ifndef SS_INT_MAX_SUBDIV
+#define SS_INT_MAX_SUBDIV 100
+#endif
+#ifndef SS_INT_ABS_TOL
+#define SS_INT_ABS_TOL 1e-8
+#endif
+#ifndef SS_INT_REL_TOL
+#define SS_INT_REL_TOL 1e-6
+#endif
+#ifndef SS_INT_TAIL_SIGMA_MULT
+#define SS_INT_TAIL_SIGMA_MULT 0.0
+#endif
+#ifndef SS_INT_SKIP_WEIGHT_THRESH
+#define SS_INT_SKIP_WEIGHT_THRESH 0.0
+#endif
+
 // Lightweight functor interface for 1D integrands
 class Func {
 public:

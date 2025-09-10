@@ -351,12 +351,17 @@ double c_log_likelihood_ss(
         lls[trial] = std::log(gf);
       } else if (n_accST == 0) {
         // Stop trial, no ST accumulators: gf + (1-gf)*(1-tf)*pStop
-        NumericMatrix P_go = submat_rcpp(P, is_go);
-        double log_pstop = stop_success_ptr(SSD[start_row], P_go, min_ll, R_PosInf);
-        // mixture: gf OR ((1-gf)*(1-tf) * pStop)
+        // Optional early-skip: if mixture weight (1-gf)*(1-tf) is tiny, skip integral
+        double mix_w = (1.0 - gf) * (1.0 - tf);
         double comp1 = std::log(gf);
-        double comp2 = log1m(gf) + log1m(tf) + log_pstop;
-        lls[trial] = log_sum_exp(comp1, comp2);
+        if (mix_w <= SS_INT_SKIP_WEIGHT_THRESH) {
+          lls[trial] = comp1; // effectively just gf component
+        } else {
+          NumericMatrix P_go = submat_rcpp(P, is_go);
+          double log_pstop = stop_success_ptr(SSD[start_row], P_go, min_ll, R_PosInf);
+          double comp2 = log1m(gf) + log1m(tf) + log_pstop;
+          lls[trial] = log_sum_exp(comp1, comp2);
+        }
       } else {
         // Not handled in R either; keep minimal ll
         lls[trial] = min_ll;
