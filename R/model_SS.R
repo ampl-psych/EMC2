@@ -143,22 +143,6 @@ ptexGaussian <- function(rt,pars) {
 # Go cdf/pdf (strips out NAs and calls d/pexGaussian)
 # Is stripping out rt NAs really necessary?
 
-dexGaussianG <- function(rt,pars)
-{
-  out <- numeric(length(rt))
-  ok <- !is.na(rt)
-  out[ok] <- dexGaussian(rt[ok],pars[ok,,drop=FALSE])
-  out
-}
-
-pexGaussianG <- function(rt,pars)
-{
-  out <- numeric(length(rt))
-  ok <- !is.na(rt)
-  out[ok] <- pexGaussian(rt[ok],pars[ok,,drop=FALSE])
-  out
-}
-
 dtexGaussianG <- function(rt,pars)
 {
   out <- numeric(length(rt))
@@ -410,22 +394,24 @@ rSSexGaussian <- function(data,pars,ok=rep(TRUE,dim(pars)[1]))
 
 #### ExG stop probability (no stop triggered) ----
 
-my.integrate_old <- function(...,upper=Inf,big=10)
-  # Avoids bug in integrate upper=Inf that uses only 1  subdivision
-  # Use of  big=10 is arbitrary ...
-{
-  out <- try(integrate(...,upper=upper),silent=TRUE)
-  if (inherits(out, "try-error")) 0 else
-  {
-    if (upper==Inf & out$subdivisions==1)
-    {
-      out <- try(integrate(...,upper=big),silent=TRUE)
-      if (inherits(out, "try-error")) 0 else
-      {
-        if (out$subdivisions==1) 0 else out$value
-      }
-    } else out$value
+my.integrate <- function(..., upper = Inf, big = 10) {
+  out <- try(
+    integrate(..., upper = upper, rel.tol = 1e-6, abs.tol = 1e-8),
+    silent = TRUE
+  )
+  if (inherits(out, "try-error")) {
+    return(0)
   }
+  if (upper == Inf && out$subdivisions == 1) {
+    out <- try(
+      integrate(..., upper = big, rel.tol = 1e-6, abs.tol = 1e-8),
+      silent = TRUE
+    )
+    if (inherits(out, "try-error") || out$subdivisions == 1) {
+      return(0)
+    }
+  }
+  return(out$value)
 }
 
 pstopTEXG <- function(
@@ -447,7 +433,7 @@ pstopTEXG <- function(
   #   cells[i] <- paste(SSDs[i],ps[i,],pgo[,i,],upper[i],collapse="")
   uniq <- !duplicated(cells)
   ups <- sapply(which(uniq),function(i){
-    my.integrate_old(f=stopfn_texg,lower=ps[i,"exgS_lb"],SSD=SSDs[i],upper=upper[i],
+    my.integrate(f=stopfn_texg,lower=ps[i,"exgS_lb"],SSD=SSDs[i],upper=upper[i],
                  mu=c(ps[i,"muS"],pgo[,i,"mu"]),
                  sigma=c(ps[i,"sigmaS"],pgo[,i,"sigma"]),
                  tau=c(ps[i,"tauS"],pgo[,i,"tau"]),
@@ -789,8 +775,8 @@ pstopHybrid <- function(
     ,1,paste,collapse="")
   uniq <- !duplicated(cells)
   ups <- sapply(which(uniq),function(i){
-    my.integrate_old(
-      # args passed to `my.integrate_old`
+    my.integrate(
+      # args passed to `my.integrate`
       f = stopfn_rdex, lower = ps[i, "exgS_lb"], upper = upper[i],
       # args passed to `stopfn_rdex`
       n_acc = n_acc,
