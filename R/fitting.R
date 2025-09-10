@@ -65,6 +65,7 @@ get_stop_criteria <- function(stage, stop_criteria, type){
 #' @param thin A boolean. If `TRUE` will automatically thin the MCMC samples, closely matched to the ESS.
 #' Can also be set to a double, in which case 1/thin of the chain will be removed (does not have to be an integer).
 #' @param trim A boolean. If `TRUE` will automatically remove redundant samples (i.e. from preburn, burn, adapt).
+#' @param r_cores An integer for number of cores to use in R-based likelihood calculations, default 1.
 #' @export
 #' @return An emc object
 #' @examples \donttest{
@@ -84,7 +85,7 @@ run_emc <- function(emc, stage, stop_criteria,
                     search_width = 1, step_size = 100, verbose = FALSE, verboseProgress = FALSE,
                     fileName = NULL,particle_factor=50, cores_per_chain = 1,
                     cores_for_chains = length(emc), max_tries = 20, n_blocks = 1,
-                    thin = FALSE, trim = TRUE){
+                    thin = FALSE, trim = TRUE, r_cores=1){
   emc <- restore_duplicates(emc)
   if(Sys.info()[1] == "Windows" & cores_per_chain > 1) stop("only cores_for_chains can be set on Windows")
   if (verbose) message(paste0("Running ", stage, " stage"))
@@ -119,7 +120,8 @@ run_emc <- function(emc, stage, stop_criteria,
     sub_emc <- auto_mclapply(sub_emc,run_stages, stage = stage, iter= progress$step_size*max(1,cur_thin),
                              verbose=verbose,  verboseProgress = verboseProgress,
                              particle_factor=particle_factor,search_width=search_width,
-                             n_cores=cores_per_chain, mc.cores = cores_for_chains)
+                             n_cores=cores_per_chain, mc.cores = cores_for_chains,
+                             r_cores = r_cores)
 
     class(sub_emc) <- "emc"
     if(stage != 'preburn'){
@@ -152,16 +154,17 @@ run_emc <- function(emc, stage, stop_criteria,
 }
 
 run_stages <- function(sampler, stage = "preburn", iter=0, verbose = TRUE, verboseProgress = TRUE,
-                       particle_factor=50, search_width= NULL, n_cores=1)
+                       particle_factor=50, search_width= NULL, n_cores=1, r_cores = 1)
 {
   particles <- round(particle_factor*sqrt(sampler$n_pars))
   if (!sampler$init) {
-    sampler <- init(sampler, n_cores = n_cores)
+    sampler <- init(sampler, n_cores = n_cores, r_cores = r_cores)
   }
   if (iter == 0) return(sampler)
   tune <- list(search_width = search_width)
   sampler <- run_stage(sampler, stage = stage,iter = iter, particles = particles,
-                       n_cores = n_cores, tune = tune, verbose = verbose, verboseProgress = verboseProgress)
+                       n_cores = n_cores, tune = tune, verbose = verbose,
+                       verboseProgress = verboseProgress, r_cores = r_cores)
   return(sampler)
 }
 
@@ -656,7 +659,7 @@ loadRData <- function(fileName){
 
 make_emc <- function(data,design,model=NULL,
                     type="standard",
-                    n_chains=3,compress=TRUE,rt_resolution=0.02,
+                    n_chains=3,compress=TRUE,rt_resolution=1/60,
                     prior_list = NULL, group_design = NULL,
                     par_groups=NULL, ...){
   # arguments for future compatibility

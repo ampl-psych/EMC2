@@ -9,6 +9,7 @@ make_SEM_diagram(
   plot_values = TRUE,
   cred_only = FALSE,
   par_names = NULL,
+  cut = NULL,
   ...
 )
 }
@@ -21,6 +22,8 @@ make_SEM_diagram(
 
 \item{par_names}{optional, if specified will overwrite the parameter names with
 user-defined names}
+
+\item{cut}{optional. A numeric value factor loadings smaller than this value will be omitted.}
 
 \item{...}{optional additional arguments passed to render_graph from DiagrammeR}
 }

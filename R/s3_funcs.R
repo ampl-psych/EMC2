@@ -380,7 +380,8 @@ fit.emc <- function(emc, stage = NULL, iter = 1000, stop_criteria = NULL,
                     thin = FALSE,
                     ...){
 
-  dots <- add_defaults(list(...), n_blocks = 1, verboseProgress = FALSE, trim = TRUE)
+  dots <- add_defaults(list(...), n_blocks = 1, verboseProgress = FALSE,
+                       trim = TRUE, r_cores = 1)
   start_time <- Sys.time()
   stages_names <- c("preburn", "burn", "adapt", "sample")
   if(!is.null(stop_criteria) & !any(names(stop_criteria) %in% stages_names)){
@@ -414,7 +415,8 @@ fit.emc <- function(emc, stage = NULL, iter = 1000, stop_criteria = NULL,
     emc <- run_emc(emc, stage = stage, stop_criteria[[stage]], cores_for_chains = cores_for_chains, search_width = search_width,
                    step_size = step_size,  verbose = verbose, verboseProgress = dots$verboseProgress,
                    fileName = fileName, particle_factor =  particle_factor, trim = dots$trim,
-                   cores_per_chain = cores_per_chain, max_tries = max_tries, thin = thin, n_blocks = dots$n_blocks)
+                   cores_per_chain = cores_per_chain, max_tries = max_tries, thin = thin, n_blocks = dots$n_blocks,
+                   r_cores = dots$r_cores)
   }
   if (verbose) print(Sys.time()-start_time)
   return(emc)

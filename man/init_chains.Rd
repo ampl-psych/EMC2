@@ -10,7 +10,8 @@ init_chains(
   start_var = NULL,
   particles = 1000,
   cores_per_chain = 1,
-  cores_for_chains = length(emc)
+  cores_for_chains = length(emc),
+  ...
 )
 }
 \arguments{
@@ -26,6 +27,8 @@ Smaller values will lead to less deviation around the mean.}
 \item{cores_per_chain}{An integer. How many cores to use per chain. Parallelizes across participant calculations.}
 
 \item{cores_for_chains}{An integer. How many cores to use to parallelize across chains. Default is the number of chains.}
+
+\item{...}{optional additional arguments}
 }
 \value{
 An emc object
