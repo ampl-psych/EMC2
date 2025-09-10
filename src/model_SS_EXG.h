@@ -2,6 +2,7 @@
 #define ss_exg_h
 
 #include <cmath>
+#include <vector>
 #include <Rcpp.h>
 #include "utility_functions.h"
 #include "exgaussian_functions.h"
@@ -134,9 +135,15 @@ double ss_texg_stop_fail_lpdf(
 class texg_stop_success_integrand : public Func {
 private:
   const double SSD;
-  const NumericMatrix pars;
-  const int n_go;
   const double min_ll;
+  // stop params (truncated EXG)
+  const double muS;
+  const double sigS;
+  const double tauS;
+  const double lbS;
+  // go params per accumulator (truncated EXG)
+  const int n_go;
+  std::vector<double> muG, sigG, tauG, lbG;
 
 public:
   texg_stop_success_integrand(
@@ -145,25 +152,30 @@ public:
     double min_ll_
   ) :
   SSD(SSD_),
-  pars(pars_),
+  min_ll(min_ll_),
+  muS(pars_(0, 3)), sigS(pars_(0, 4)), tauS(pars_(0, 5)), lbS(pars_(0, 9)),
   n_go(pars_.nrow()),
-  min_ll(min_ll_) {}
+  muG(n_go), sigG(n_go), tauG(n_go), lbG(n_go)
+  {
+    for (int i = 0; i < n_go; ++i) {
+      muG[i]  = pars_(i, 0);
+      sigG[i] = pars_(i, 1);
+      tauG[i] = pars_(i, 2);
+      lbG[i]  = pars_(i, 8);
+    }
+  }
 
   double operator()(const double& x) const {
     // log density of stop process winning at time x
     // input args: x, muS, sigmaS, tauS, exgS_lb, upper = Inf, log_d = TRUE
-    double log_d = dtexg(
-      x, pars(0, 3), pars(0, 4), pars(0, 5), pars(0, 9), R_PosInf, true
-    );
+    double log_d = dtexg(x, muS, sigS, tauS, lbS, R_PosInf, true);
     if (!R_FINITE(log_d)) log_d = min_ll;
     // summed log density of go accumulators not yet having finished by time x
     double summed_log_s = 0.0;
     for (int i = 0; i < n_go; ++i) {
       // NB stop signal delay added to finish time x, to account for earlier start of go process
       // input args: q, mu, sigma, tau, exg_lb, upper = Inf, lower_tail = FALSE, log_p = TRUE
-      double log_s_i = ptexg(
-        x + SSD, pars(i, 0), pars(i, 1), pars(i, 2), pars(i, 8), R_PosInf, false, true
-      );
+      double log_s_i = ptexg(x + SSD, muG[i], sigG[i], tauG[i], lbG[i], R_PosInf, false, true);
       if (!R_FINITE(log_s_i)) log_s_i = min_ll;
       summed_log_s += log_s_i;
     }
@@ -179,7 +191,12 @@ static inline double ss_texg_stop_success_lpdf(
     double SSD,
     NumericMatrix pars,
     double min_ll,
-    double upper = R_PosInf
+    double upper = R_PosInf,
+    int max_subdiv = 30,
+    double abs_tol = 1e-5,
+    double rel_tol = 1e-4,
+    double k_sigma = 6.0,
+    double k_tau = 12.0
 ) {
   // set up the integrand
   texg_stop_success_integrand f(SSD, pars, min_ll);
@@ -187,24 +204,23 @@ static inline double ss_texg_stop_success_lpdf(
   double err_est, res;
   int err_code;
   // perform numerical integration
-  // optionally cap the upper limit to a finite tail if requested
-  double ub = upper;
-  if (!std::isfinite(ub) && (SS_INT_TAIL_SIGMA_MULT > 0.0)) {
-    double muS = pars(0, 3);
-    double sigS = pars(0, 4);
-    double tauS = pars(0, 5);
-    double sdS = std::sqrt(sigS * sigS + tauS * tauS);
-    ub = muS + SS_INT_TAIL_SIGMA_MULT * sdS;
-  }
+  // Heuristic upper bound when not provided: muS + k_sigma*sigmaS + k_tau*tauS
+  double muS = pars(0, 3);
+  double sigS = pars(0, 4);
+  double tauS = pars(0, 5);
+  double ub_heur = muS + k_sigma * sigS + k_tau * tauS;
+  double ub = std::isfinite(upper) ? upper : ub_heur;
+  double lb = pars(0, 9);
+  if (!(ub > lb)) ub = lb + 1e-12;
   res = integrate(
     f,              // integrand
-    pars(0, 9),     // lower limit of integration (= lower bound of stop process)
-    ub,             // upper limit of integration (possibly capped)
+    lb,             // lower limit of integration (= lower bound of stop process)
+    ub,             // upper limit of integration (heuristic or provided)
     err_est,        // placeholder for estimation error
     err_code,       // placeholder for failed integration error code
-    SS_INT_MAX_SUBDIV, // maximum number of subdivisions (eval budget proxy)
-    SS_INT_ABS_TOL, // absolute tolerance
-    SS_INT_REL_TOL  // relative tolerance
+    max_subdiv,     // maximum number of subdivisions (eval budget proxy)
+    abs_tol,        // absolute tolerance
+    rel_tol         // relative tolerance
   );
   // check for issues with result, and return
   bool bad = (err_code != 0) || !R_FINITE(res) || (res <= 0.0);
@@ -302,18 +318,20 @@ NumericVector ss_texg_lpdf(
     } else {
       if (stop_signal_presented) {
         // stop trial with no response:
-        // explained as a probabilistic mixture of
-        // (i)  go failure; OR
-        // (ii) stop process beat go process in fair race (i.e., without go
-        //      failure and without trigger failure)
-        stop_success_integral = ss_texg_stop_success_lpdf(
-          SSD[start_row],
-             pars(Range(start_row, end_row), _),
-             min_ll
-        );
-        stop_success_lprob = log1m(gf[trial]) + log1m(tf[trial]) + stop_success_integral;
-        // likelihood = gf + [(1-gf) x (1-tf) x stop_success_integral]
-        out[trial] = log_sum_exp(std::log(gf[trial]), stop_success_lprob);
+        // explain as gf OR (1-gf)*(1-tf)*pStop, but skip integral when weight tiny
+        double mix_w = (1.0 - gf[trial]) * (1.0 - tf[trial]);
+        if (mix_w <= 1e-6) {
+          out[trial] = std::log(gf[trial]);
+        } else {
+          stop_success_integral = ss_texg_stop_success_lpdf(
+            SSD[start_row],
+               pars(Range(start_row, end_row), _),
+               min_ll, R_PosInf, 30, 1e-5, 1e-4, 6.0, 12.0
+          );
+          stop_success_lprob = log1m(gf[trial]) + log1m(tf[trial]) + stop_success_integral;
+          // likelihood = gf + [(1-gf) x (1-tf) x stop_success_integral]
+          out[trial] = log_sum_exp(std::log(gf[trial]), stop_success_lprob);
+        }
       } else {
         // go trial with no response:
         // explained by go failure
@@ -449,9 +467,12 @@ double ss_exg_stop_fail_lpdf(
 class exg_stop_success_integrand : public Func {
 private:
   const double SSD;
-  const NumericMatrix pars;
-  const int n_go;
   const double min_ll;
+  // stop params (EXG)
+  const double muS, sigS, tauS;
+  // go params per accumulator (EXG)
+  const int n_go;
+  std::vector<double> muG, sigG, tauG;
 
 public:
   exg_stop_success_integrand(
@@ -460,21 +481,29 @@ public:
     double min_ll_
   ) :
   SSD(SSD_),
-  pars(pars_),
+  min_ll(min_ll_),
+  muS(pars_(0, 3)), sigS(pars_(0, 4)), tauS(pars_(0, 5)),
   n_go(pars_.nrow()),
-  min_ll(min_ll_) {}
+  muG(n_go), sigG(n_go), tauG(n_go)
+  {
+    for (int i = 0; i < n_go; ++i) {
+      muG[i]  = pars_(i, 0);
+      sigG[i] = pars_(i, 1);
+      tauG[i] = pars_(i, 2);
+    }
+  }
 
   double operator()(const double &x) const {
     // log density of stop process winning at time x
     // input args: x, muS, sigmaS, tauS, log_d = TRUE
-    double log_d = dexg(x, pars(0, 3), pars(0, 4), pars(0, 5), true);
+    double log_d = dexg(x, muS, sigS, tauS, true);
     if (!R_FINITE(log_d)) log_d = min_ll;
     // summed log density of go accumulators not yet having finished by time x
     double summed_log_s = 0.0;
     for (int i = 0; i < n_go; ++i) {
       // NB stop signal delay added to finish time x, to account for earlier start of go process
       // input args: q, mu, sigma, tau, lower_tail = FALSE, log_p = TRUE
-      double log_s_i = pexg(x + SSD, pars(i, 0), pars(i, 1), pars(i, 2), false, true);
+      double log_s_i = pexg(x + SSD, muG[i], sigG[i], tauG[i], false, true);
       if (!R_FINITE(log_s_i)) log_s_i = min_ll;
       summed_log_s += log_s_i;
     }
@@ -489,7 +518,13 @@ public:
 static inline double ss_exg_stop_success_lpdf(
     double SSD,
     NumericMatrix pars,
-    double min_ll
+    double min_ll,
+    double upper = R_PosInf,
+    int max_subdiv = 30,
+    double abs_tol = 1e-5,
+    double rel_tol = 1e-4,
+    double k_sigma = 6.0,
+    double k_tau = 12.0
 ) {
   // set up the integrand
   exg_stop_success_integrand f(SSD, pars, min_ll);
@@ -497,24 +532,22 @@ static inline double ss_exg_stop_success_lpdf(
   double err_est, res;
   int err_code;
   // perform numerical integration
-  double a = R_NegInf, b = R_PosInf;
-  if (SS_INT_TAIL_SIGMA_MULT > 0.0) {
-    double muS = pars(0, 3);
-    double sigS = pars(0, 4);
-    double tauS = pars(0, 5);
-    double sdS = std::sqrt(sigS * sigS + tauS * tauS);
-    a = muS - SS_INT_TAIL_SIGMA_MULT * sdS;
-    b = muS + SS_INT_TAIL_SIGMA_MULT * sdS;
-  }
+  // Symmetric heuristic window around stop mean: muS ± (k_sigma*sigmaS + k_tau*tauS)
+  double muS = pars(0, 3);
+  double sigS = pars(0, 4);
+  double tauS = pars(0, 5);
+  double halfw = k_sigma * sigS + k_tau * tauS;
+  double a = muS - halfw;
+  double b = muS + halfw;
   res = integrate(
     f,              // integrand
-    a,              // lower limit of integration (possibly capped)
-    b,              // upper limit of integration (possibly capped)
+    a,              // lower limit (heuristic)
+    b,              // upper limit (heuristic)
     err_est,        // placeholder for estimation error
     err_code,       // placeholder for failed integration error code
-    SS_INT_MAX_SUBDIV, // maximum number of subdivisions (eval budget proxy)
-    SS_INT_ABS_TOL, // absolute tolerance
-    SS_INT_REL_TOL  // relative tolerance
+    max_subdiv,     // maximum number of subdivisions (eval budget proxy)
+    abs_tol,        // absolute tolerance
+    rel_tol         // relative tolerance
   );
   // check for issues with result, and return
   bool bad = (err_code != 0) || !R_FINITE(res) || (res <= 0.0);
@@ -611,19 +644,20 @@ NumericVector ss_exg_lpdf(
       }
     } else {
       if (stop_signal_presented) {
-        // stop trial with no response:
-        // explained as a probabilistic mixture of
-        // (i)  go failure; OR
-        // (ii) stop process beat go process in fair race (i.e., without go
-        //      failure and without trigger failure)
-        stop_success_integral = ss_exg_stop_success_lpdf(
-          SSD[start_row],
-             pars(Range(start_row, end_row), _),
-             min_ll
-        );
-        stop_success_lprob = log1m(gf[trial]) + log1m(tf[trial]) + stop_success_integral;
-        // likelihood = gf + [(1-gf) x (1-tf) x stop_success_integral]
-        out[trial] = log_sum_exp(std::log(gf[trial]), stop_success_lprob);
+        // stop trial with no response: skip integral when mixture weight tiny
+        double mix_w = (1.0 - gf[trial]) * (1.0 - tf[trial]);
+        if (mix_w <= 1e-6) {
+          out[trial] = std::log(gf[trial]);
+        } else {
+          stop_success_integral = ss_exg_stop_success_lpdf(
+            SSD[start_row],
+               pars(Range(start_row, end_row), _),
+               min_ll, R_PosInf, 30, 1e-5, 1e-4, 6.0, 12.0
+          );
+          stop_success_lprob = log1m(gf[trial]) + log1m(tf[trial]) + stop_success_integral;
+          // likelihood = gf + [(1-gf) x (1-tf) x stop_success_integral]
+          out[trial] = log_sum_exp(std::log(gf[trial]), stop_success_lprob);
+        }
       } else {
         // go trial with no response:
         // explained by go failure

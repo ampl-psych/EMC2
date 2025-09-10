@@ -245,7 +245,7 @@ NumericMatrix get_pars_matrix(NumericVector p_vector, NumericVector constants, L
 // SS helper pointer types
 using ss_go_pdf_fn = NumericVector (*)(NumericVector, NumericMatrix, LogicalVector, double);
 using ss_stop_surv_fn = double (*)(double, NumericMatrix);
-using ss_stop_success_fn = double (*)(double, NumericMatrix, double, double);
+using ss_stop_success_fn = double (*)(double, NumericMatrix, double, double, int, double, double, double, double);
 
 // Model-specific stop survivor wrappers (read fixed columns)
 static inline double stop_logsurv_texg_fn(double q, NumericMatrix P) {
@@ -351,14 +351,15 @@ double c_log_likelihood_ss(
         lls[trial] = std::log(gf);
       } else if (n_accST == 0) {
         // Stop trial, no ST accumulators: gf + (1-gf)*(1-tf)*pStop
-        // Optional early-skip: if mixture weight (1-gf)*(1-tf) is tiny, skip integral
+        // Early-skip: if mixture weight (1-gf)*(1-tf) is tiny, skip integral
         double mix_w = (1.0 - gf) * (1.0 - tf);
         double comp1 = std::log(gf);
-        if (mix_w <= SS_INT_SKIP_WEIGHT_THRESH) {
+        if (mix_w <= 1e-6) {
           lls[trial] = comp1; // effectively just gf component
         } else {
           NumericMatrix P_go = submat_rcpp(P, is_go);
-          double log_pstop = stop_success_ptr(SSD[start_row], P_go, min_ll, R_PosInf);
+          double log_pstop = stop_success_ptr(SSD[start_row], P_go, min_ll, R_PosInf,
+                                              30, 1e-5, 1e-4, 6.0, 12.0);
           double comp2 = log1m(gf) + log1m(tf) + log_pstop;
           lls[trial] = log_sum_exp(comp1, comp2);
         }
@@ -432,7 +433,8 @@ double c_log_likelihood_ss(
       }
       // Stop success probability up to observed rt (only go racers influence integral)
       NumericMatrix P_go = submat_rcpp(P, is_go);
-      double log_pstop = stop_success_ptr(SSD[start_row], P_go, min_ll, rt);
+      double log_pstop = stop_success_ptr(SSD[start_row], P_go, min_ll, rt,
+                                          30, 1e-5, 1e-4, 6.0, 12.0);
 
       double st_base = st_winner_logpdf + st_loss_sum;
       // mixture over gf and pStop, never tf when ST wins

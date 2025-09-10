@@ -2,6 +2,7 @@
 #define ss_rdex_h
 
 #include <cmath>
+#include <vector>
 #include <Rcpp.h>
 #include "wald_functions.h"
 #include "exgaussian_functions.h"
@@ -152,9 +153,12 @@ double ss_rdex_stop_fail_lpdf(
 class rdex_stop_success_integrand : public Func {
 private:
   const double SSD;
-  const NumericMatrix pars;
-  const int n_go;
   const double min_ll;
+  // stop params (truncated EXG)
+  const double muS, sigS, tauS, lbS;
+  // precomputed GO Wald params
+  const int n_go;
+  std::vector<double> alpha, nu, gamma, t0;
 
 public:
   rdex_stop_success_integrand(
@@ -163,33 +167,34 @@ public:
     double min_ll_
   ) :
   SSD(SSD_),
-  pars(pars_),
+  min_ll(min_ll_),
+  muS(pars_(0, 5)), sigS(pars_(0, 6)), tauS(pars_(0, 7)), lbS(pars_(0, 10)),
   n_go(pars_.nrow()),
-  min_ll(min_ll_) {}
+  alpha(n_go), nu(n_go), gamma(n_go), t0(n_go)
+  {
+    for (int i = 0; i < n_go; ++i) {
+      // go pars columns: v=0, B=1, A=2, t0=3, s=4
+      double s = pars_(i, 4);
+      alpha[i] = (pars_(i, 1) / s) + .5 * (pars_(i, 2) / s);
+      nu[i]    =  pars_(i, 0) / s;
+      gamma[i] = .5 * (pars_(i, 2) / s);
+      t0[i]    =  pars_(i, 3);
+    }
+  }
 
   double operator()(const double& x) const {
     // log density of stop process winning at time x
     // input args: x, muS, sigmaS, tauS, exgS_lb, upper = Inf, log_d = TRUE
-    double log_d = dtexg(
-      x, pars(0, 5), pars(0, 6), pars(0, 7), pars(0, 10), R_PosInf, true
-    );
+    double log_d = dtexg(x, muS, sigS, tauS, lbS, R_PosInf, true);
     if (!R_FINITE(log_d)) log_d = min_ll;
     // summed log density of go accumulators not yet having finished by time x
     double summed_log_s = 0.0;
     for (int i = 0; i < n_go; ++i) {
       // NB stop signal delay added to finish time x, to account for earlier start of go process
-      double dt_i = (x + SSD) - pars(i, 3);
+      double dt_i = (x + SSD) - t0[i];
       double log_s_i = 0.; // log(1)
       if (dt_i > 0.) {
-        log_s_i = log1m(
-          pigt(
-            dt_i,
-            // go pars columns: v=0, B=1, A=2, t0=3, s=4
-            (pars(i, 1) / pars(i, 4)) + .5 * (pars(i, 2) / pars(i, 4)),
-            pars(i, 0) / pars(i, 4),
-            .5 * (pars(i, 2) / pars(i, 4))
-          )
-        );
+        log_s_i = log1m(pigt(dt_i, alpha[i], nu[i], gamma[i]));
       }
       if (!R_FINITE(log_s_i)) log_s_i = min_ll;
       summed_log_s += log_s_i;
@@ -206,7 +211,12 @@ static inline double ss_rdex_stop_success_lpdf(
     double SSD,
     NumericMatrix pars,
     double min_ll,
-    double upper = R_PosInf
+    double upper = R_PosInf,
+    int max_subdiv = 30,
+    double abs_tol = 1e-5,
+    double rel_tol = 1e-4,
+    double k_sigma = 6.0,
+    double k_tau = 12.0
 ) {
   // set up the integrand
   rdex_stop_success_integrand f(SSD, pars, min_ll);
@@ -214,24 +224,23 @@ static inline double ss_rdex_stop_success_lpdf(
   double err_est, res;
   int err_code;
   // perform numerical integration
-  // optionally cap the upper limit to a finite tail if requested
-  double ub = upper;
-  if (!std::isfinite(ub) && (SS_INT_TAIL_SIGMA_MULT > 0.0)) {
-    double muS = pars(0, 5);
-    double sigS = pars(0, 6);
-    double tauS = pars(0, 7);
-    double sdS = std::sqrt(sigS * sigS + tauS * tauS);
-    ub = muS + SS_INT_TAIL_SIGMA_MULT * sdS;
-  }
+  // Heuristic upper bound when not provided: muS + k_sigma*sigmaS + k_tau*tauS
+  double muS = pars(0, 5);
+  double sigS = pars(0, 6);
+  double tauS = pars(0, 7);
+  double ub_heur = muS + k_sigma * sigS + k_tau * tauS;
+  double ub = std::isfinite(upper) ? upper : ub_heur;
+  double lb = pars(0, 10);
+  if (!(ub > lb)) ub = lb + 1e-12;
   res = integrate(
     f,                // integrand
-    pars(0, 10),      // lower limit of integration (= lower bound of stop process)
-    ub,               // upper limit of integration (possibly capped)
+    lb,               // lower limit of integration (= lower bound of stop process)
+    ub,               // upper limit of integration (heuristic or provided)
     err_est,          // placeholder for estimation error
     err_code,         // placeholder for failed integration error code
-    SS_INT_MAX_SUBDIV, // maximum number of subdivisions (eval budget proxy)
-    SS_INT_ABS_TOL,   // absolute tolerance
-    SS_INT_REL_TOL    // relative tolerance
+    max_subdiv,       // maximum number of subdivisions (eval budget proxy)
+    abs_tol,          // absolute tolerance
+    rel_tol           // relative tolerance
   );
   // check for issues with result, and return
   bool bad = (err_code != 0) || !R_FINITE(res) || (res <= 0.0);
@@ -328,19 +337,20 @@ NumericVector ss_rdex_lpdf(
       }
     } else {
       if (stop_signal_presented) {
-        // stop trial with no response:
-        // explained as a probabilistic mixture of
-        // (i)  go failure; OR
-        // (ii) stop process beat go process in fair race (i.e., without go
-        //      failure and without trigger failure)
-        stop_success_integral = ss_rdex_stop_success_lpdf(
-          SSD[start_row],
-             pars(Range(start_row, end_row), _),
-             min_ll
-        );
-        stop_success_lprob = log1m(gf[trial]) + log1m(tf[trial]) + stop_success_integral;
-        // likelihood = gf + [(1-gf) x (1-tf) x stop_success_integral]
-        out[trial] = log_sum_exp(std::log(gf[trial]), stop_success_lprob);
+        // stop trial with no response: use early exit when mixture weight tiny
+        double mix_w = (1.0 - gf[trial]) * (1.0 - tf[trial]);
+        if (mix_w <= 1e-6) {
+          out[trial] = std::log(gf[trial]);
+        } else {
+          stop_success_integral = ss_rdex_stop_success_lpdf(
+            SSD[start_row],
+               pars(Range(start_row, end_row), _),
+               min_ll, R_PosInf, 30, 1e-5, 1e-4, 6.0, 12.0
+          );
+          stop_success_lprob = log1m(gf[trial]) + log1m(tf[trial]) + stop_success_integral;
+          // likelihood = gf + [(1-gf) x (1-tf) x stop_success_integral]
+          out[trial] = log_sum_exp(std::log(gf[trial]), stop_success_lprob);
+        }
       } else {
         // go trial with no response:
         // explained by go failure
