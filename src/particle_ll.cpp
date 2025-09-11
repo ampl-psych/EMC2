@@ -362,7 +362,7 @@ double c_log_likelihood_ss(
         } else {
           NumericMatrix P_go = submat_rcpp(P, is_go);
           double log_pstop = stop_success_ptr(SSD[start_row], P_go, min_ll, R_PosInf,
-                                              30, 1e-5, 1e-4, 6.0, 12.0);
+                                              50, 1e-6, 1e-5, 8.0, 16.0);
           double comp2 = log1m(gf) + log1m(tf) + log_pstop;
           lls[trial] = log_sum_exp(comp1, comp2);
         }
@@ -437,7 +437,7 @@ double c_log_likelihood_ss(
       // Stop success probability up to observed rt (only go racers influence integral)
       NumericMatrix P_go = submat_rcpp(P, is_go);
       double log_pstop = stop_success_ptr(SSD[start_row], P_go, min_ll, rt,
-                                          30, 1e-5, 1e-4, 6.0, 12.0);
+                                          50, 1e-6, 1e-5, 8.0, 16.0);
 
       double st_base = st_winner_logpdf + st_loss_sum;
       // mixture over gf and pStop, never tf when ST wins
