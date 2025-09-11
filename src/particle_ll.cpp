@@ -288,6 +288,8 @@ double c_log_likelihood_ss(
   bool has_lI = data.containsElementNamed("lI");
   IntegerVector lI = has_lI ? as<IntegerVector>(data["lI"]) : IntegerVector(lR.size(), 2);
 
+  // dimensional expectations: pars has one row per accumulator per trial
+
   // compute log likelihoods (generalized, matching R's log_likelihood_race_ss)
   NumericVector unique_lR = unique(lR);
   const int n_acc = unique_lR.length();
@@ -297,6 +299,7 @@ double c_log_likelihood_ss(
 
     int start_row = trial * n_acc;
     int end_row   = (trial + 1) * n_acc - 1;
+    // basic bounds are guaranteed by correct n_trials passed into this function
     NumericMatrix P = pars(Range(start_row, end_row), _);
     IntegerVector lI_trial = lI[Range(start_row, end_row)];
     LogicalVector is_go(n_acc, true), is_st(n_acc, false);
@@ -445,12 +448,10 @@ double c_log_likelihood_ss(
       continue;
     }
   }
-
-  // decompress
-  lls_expanded = c_expand(lls, expand);
-  // protect against numerical issues
-  lls_expanded = check_ll(lls_expanded, min_ll);
-  // return summed log-likelihood
+  lls[is_na(lls)] = min_ll;
+  lls[is_infinite(lls)] = min_ll;
+  lls[lls < min_ll] = min_ll;
+  lls_expanded = c_expand(lls, expand); // decompress
   return(sum(lls_expanded));
 }
 
@@ -588,6 +589,7 @@ NumericVector calc_ll(NumericMatrix p_matrix, DataFrame data, NumericVector cons
     IntegerVector expand = data.attr("expand");
     NumericVector lR = data["lR"];
     int n_lR = unique(lR).length();
+    int n_trials_ss = (n_lR > 0) ? (n_trials / n_lR) : n_trials;
     // Pick function pointers and indices based on type
     ss_go_pdf_fn go_lpdf_ptr = (type == "SSEXG") ? texg_go_lpdf : rdex_go_lpdf;
     ss_go_pdf_fn go_lccdf_ptr = (type == "SSEXG") ? texg_go_lccdf : rdex_go_lccdf;
@@ -606,7 +608,7 @@ NumericVector calc_ll(NumericMatrix p_matrix, DataFrame data, NumericVector cons
       }
       is_ok = c_do_bound(pars, bound_specs);
       is_ok = lr_all(is_ok, n_lR); // reduce to per-trial ok
-      lls[i] = c_log_likelihood_ss(pars, data, n_trials, expand, min_ll, is_ok,
+      lls[i] = c_log_likelihood_ss(pars, data, n_trials_ss, expand, min_ll, is_ok,
                                    go_lpdf_ptr, go_lccdf_ptr,
                                    stop_logsurv_ptr, stop_success_ptr,
                                    idx_tf, idx_gf);
