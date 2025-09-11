@@ -1,5 +1,3 @@
-# Lower bound truncation not implemented for rfun I think?
-
 #### Staircase ----
 #' Assign Stop-Signal Delays (SSDs) to trials
 #'
@@ -214,6 +212,27 @@ ptexGaussianS <- function(rt,pars)
 
 rexG <- function(n,mu,sigma,tau) rnorm(n,mean=mu,sd=sigma) + rexp(n,rate=1/tau)
 
+# Truncated (lower) ex-Gaussian sampler matching likelihood's lower bound handling
+rtexG <- function(n, mu, sigma, tau, lb) {
+  # Vectorized over parameters; draws from exG truncated at lb
+  # n should equal length(mu)==length(sigma)==length(tau)==length(lb)
+  out <- numeric(n)
+  need <- rep(TRUE, n)
+  if (length(mu) != n || length(sigma) != n || length(tau) != n || length(lb) != n)
+    stop("rtexG parameter lengths must equal n")
+  while (any(need)) {
+    k <- sum(need)
+    x <- rnorm(k, mean = mu[need], sd = sigma[need]) + rexp(k, rate = 1/tau[need])
+    ok <- x > lb[need]
+    if (any(ok)) {
+      idx <- which(need)[ok]
+      out[idx] <- x[ok]
+      need[idx] <- FALSE
+    }
+  }
+  out
+}
+
 
 
 rexGaussian <- function(lR,pars,p_types=c("mu","sigma","tau"),
@@ -239,9 +258,6 @@ rexGaussian <- function(lR,pars,p_types=c("mu","sigma","tau"),
 
 
 #### EXG Stop signal random -----
-
-# FIX ME ok NOT IMPLEMENTED
-
 
 rSSexGaussian <- function(data,pars,ok=rep(TRUE,dim(pars)[1]))
   # lR is an empty latent response factor lR with one level for each accumulator.
@@ -271,9 +287,12 @@ rSSexGaussian <- function(data,pars,ok=rep(TRUE,dim(pars)[1]))
   isGO <- !isgf & !isST
   ngo <- sum(isGO)
 
-  # Fill in go accumulators
-  if (any(isGO)) dt[-1,][isGO] <- rexG(ngo,pars[isGO,"mu"],pars[isGO,"sigma"],
-                                       pars[isGO,"tau"])
+  # Fill in go accumulators (apply lower bound exg_lb)
+  if (any(isGO)) dt[-1,][isGO] <- rtexG(
+    ngo,
+    mu = pars[isGO, "mu"], sigma = pars[isGO, "sigma"], tau = pars[isGO, "tau"],
+    lb = pars[isGO, "exg_lb"]
+  )
 
   # pick out stop trials and races with SSD that is not Inf (i.e., finite or
   # NA, the latter so a staircase can be filled in)
@@ -291,18 +310,24 @@ rSSexGaussian <- function(data,pars,ok=rep(TRUE,dim(pars)[1]))
   isSTT[isSrace][rep(isT,each=nacc) & isST[isSrace]] <- TRUE
   nst <- sum(isSTT) # Number of triggered ST accumulators
 
-  # Fill in stop-triggered accumulators
-  if (any(isSTT)) dt[-1,][isSTT] <- rexG(nst,pars[isSTT,"mu"],
-                                         pars[isSTT,"sigma"],pars[isSTT,"tau"])
+  # Fill in stop-triggered accumulators (apply lower bound exg_lb)
+  if (any(isSTT)) dt[-1,][isSTT] <- rtexG(
+    nst,
+    mu = pars[isSTT, "mu"], sigma = pars[isSTT, "sigma"], tau = pars[isSTT, "tau"],
+    lb = pars[isSTT, "exg_lb"]
+  )
 
   # pick out triggered stop racers
   isTS <- logical(ntrials)
   isTS[isStrial][isT] <- TRUE
   ns <- sum(isTS)
 
-  # Fill in stop accumulators
-  if (any(isTS)) dt[1,isTS] <- rexG(ns,pars[is1,"muS"][isTS],
-                                    pars[is1,"sigmaS"][isTS],pars[is1,"tauS"][isTS])
+  # Fill in stop accumulators (apply lower bound exgS_lb)
+  if (any(isTS)) dt[1, isTS] <- rtexG(
+    ns,
+    mu = pars[is1, "muS"][isTS], sigma = pars[is1, "sigmaS"][isTS], tau = pars[is1, "tauS"][isTS],
+    lb = pars[is1, "exgS_lb"][isTS]
+  )
 
   # staircase algorithm
   pstair <- is.na(pars[,"SSD"])
@@ -649,18 +674,21 @@ rSShybrid <- function(data,pars,ok=rep(TRUE,dim(pars)[1]))
   isSTT[isSrace][rep(isT,each=nacc) & isST[isSrace]] <- TRUE
   nst <- sum(isSTT)
 
-  # Fill in stop-triggered accumulators
+  # Fill in stop-triggered accumulators (ST; Wald go process)
   if (any(isSTT)) dt[-1,][isSTT] <-
-    pars[isSTT,"t0"] + rWald(ngo,pars[isSTT,"B"],pars[isSTT,"v"],pars[isSTT,"A"])
+    pars[isSTT, "t0"] + rWald(nst, pars[isSTT, "B"], pars[isSTT, "v"], pars[isSTT, "A"])
 
   # pick out triggered stop racers
   isTS <- logical(ntrials)
   isTS[isStrial][isT] <- TRUE
   ns <- sum(isTS)
 
-  # Fill in stop accumulators
-  if (any(isTS)) dt[1,isTS] <- rexG(ns,pars[is1,"muS"][isTS],
-                                    pars[is1,"sigmaS"][isTS],pars[is1,"tauS"][isTS])
+  # Fill in stop accumulators (apply lower bound exgS_lb)
+  if (any(isTS)) dt[1, isTS] <- rtexG(
+    ns,
+    mu = pars[is1, "muS"][isTS], sigma = pars[is1, "sigmaS"][isTS], tau = pars[is1, "tauS"][isTS],
+    lb = pars[is1, "exgS_lb"][isTS]
+  )
 
   # staircase algorithm
   pstair <- is.na(pars[,"SSD"])
