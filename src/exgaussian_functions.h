@@ -5,6 +5,9 @@
 using namespace Rcpp;
 #include <cmath>
 #include "composite_functions.h"
+#ifndef M_PI
+#define M_PI 3.141592653589793238462643383279502884
+#endif
 
 const double SIG_TAU_EPS = 1e-12;
 
@@ -23,6 +26,22 @@ double dexg(
   // protect against numerical issues due to extremely small sigma or tau values
   double tau_p = std::max(tau, SIG_TAU_EPS);
   double sig_p = std::max(sigma, SIG_TAU_EPS);
+
+  // Numerically stable branch for extreme tails where z = (x-mu)/sigma - sigma/tau is very negative.
+  // In this regime, naive log formulation suffers catastrophic cancellation between
+  // +sigma^2/(2 tau^2) and log Phi(z) ≈ -(sigma/tau)^2/2 + ...
+  // Using Mills ratio, one can simplify to a stable expression:
+  // log f(x) ≈ -log(tau) - 0.5*log(2*pi) - 0.5*((x-mu)/sigma)^2 - log(-( (x-mu)/sigma - sigma/tau ))
+  {
+    double y = (x - mu) / sig_p;
+    double a = sig_p / tau_p;
+    double z = y - a;
+    if (z < -8.0) {
+      double log_out_stable = -std::log(tau_p) - 0.5*std::log(2.0 * M_PI)
+                              - 0.5 * y * y - std::log(-z);
+      return log_d ? log_out_stable : std::exp(log_out_stable);
+    }
+  }
 
   // compute Phi term
   double z = (x - mu) / sig_p - sig_p / tau_p;
