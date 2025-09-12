@@ -7,6 +7,13 @@
 #include <functional>
 using namespace Rcpp;
 
+NumericVector check_ll(NumericVector& ll, const double min_ll) {
+  ll[is_na(ll)] = min_ll;
+  ll[is_infinite(ll)] = min_ll;
+  ll[ll < min_ll] = min_ll;
+  return ll;
+}
+
 LogicalVector contains(CharacterVector sv, std::string txt) {
   LogicalVector res(sv.size());
   for (int i = 0; i < sv.size(); i ++) {
@@ -538,5 +545,3 @@ std::vector<PreTransformSpec> make_pretransform_specs(NumericVector p_vector, Li
 }
 
 #endif
-
-

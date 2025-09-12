@@ -692,8 +692,8 @@ calc_ll_manager <- function(proposals, dadm, model, component = NULL, r_cores = 
                      model$bound, model$transform, model$pre_transform, p_types = p_types, min_ll = log(1e-10),
                      model$trend) else {
         idx <- rep(1:r_cores,each=1+(nrow(proposals) %/% r_cores))[1:nrow(proposals)]
-        lls <- unlist(auto_mclapply(1:r_cores,function(i) {
-          calc_ll(proposals[idx==i,,drop=FALSE], dadm, constants = constants,
+        lls <- unlist(auto_mclapply(1:r_cores,function(q) {
+          calc_ll(proposals[idx==q,,drop=FALSE], dadm, constants = constants,
             designs = designs, type = model$c_name, model$bound, model$transform,
             model$pre_transform, p_types = p_types, min_ll = log(1e-10),model$trend)
           },mc.cores=r_cores))
@@ -784,3 +784,27 @@ run_hyper <- function(type = "standard", data, prior = NULL, iter = 1000, n_chai
   emc <- subset(emc, filter = 1)
   return(emc)
 }
+
+
+check_CR <- function(emc, p_vector, range = .2, N = 500){
+  covs <- diag(length(p_vector)) * range
+  props <- mvtnorm::rmvnorm(N, mean = p_vector, sigma = covs)
+  model <- emc[[1]]$model
+  if(is.null(model()$c_name)) stop("C not implemented yet for this model")
+  dat <- emc[[1]]$data[[1]]
+  modelRlist <- model()
+  modelRlist$c_name <- NULL
+  modelR <- function()return(modelRlist)
+  t1 <- system.time(
+    R <- calc_ll_manager(props, dat, modelR)
+  )
+  t2 <- system.time(
+    C <- calc_ll_manager(props, dat, model)
+  )
+  print(paste0("C ", round(t1['elapsed']/t2['elapsed'],3), " times faster"))
+
+  cat("C and R identical: ")
+  cat(all.equal(C, R))
+  return(list(C = C, R = R))
+}
+
