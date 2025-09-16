@@ -557,23 +557,23 @@ SSEXG <- function() {
     type = "RACE",
     c_name = "SSEXG",
     p_types = c(
-      mu = log(.4), sigma = log(.05), tau = log(.1),
-      muS = log(.3), sigmaS = log(.025), tauS = log(.05),
+      m = log(.4), sigma = log(.05), k = qnorm(0.5),
+      mS = log(.3), sigmaS = log(.025), kS = qnorm(0.5),
       tf = qnorm(0), gf = qnorm(0),
       exg_lb = .05, exgS_lb = .05
     ),
     transform = list(
       func = c(
-        mu = "exp", sigma = "exp", tau = "exp",
-        muS = "exp", sigmaS = "exp", tauS = "exp",
+        m = "exp", sigma = "exp", k = "pnorm",
+        mS = "exp", sigmaS = "exp", kS = "pnorm",
         tf = "pnorm", gf = "pnorm",
         exg_lb = "identity", exgS_lb = "identity"
       )
     ),
     bound = list(
       minmax = cbind(
-        mu = c(0, Inf), sigma = c(1e-4, Inf), tau = c(1e-4, Inf),
-        muS = c(0, Inf), sigmaS = c(1e-4, Inf), tauS = c(1e-4, Inf),
+        m = c(1e-4, Inf), sigma = c(1e-4, Inf), k = c(1e-6, 1 - 1e-6),
+        mS = c(1e-4, Inf), sigmaS = c(1e-4, Inf), kS = c(1e-6, 1 - 1e-6),
         tf = c(.001, .999), gf = c(.001, .999),
         exg_lb = c(-Inf, Inf), exgS_lb = c(-Inf, Inf)
       ),
@@ -596,12 +596,13 @@ SSEXG <- function() {
     pfunG = function(rt, pars) return(ptexGaussianG(rt, pars)),
     # Density function (PDF) for single stop racer
     dfunS = function(rt, pars) {
-      parsS <- pars[ , c("muS", "sigmaS", "tauS", "SSD", "exgS_lb"), drop=FALSE]
+      # pass through; C++ interprets mS,kS,sigmaS directly
+      parsS <- pars[ , c("mS", "sigmaS", "kS", "SSD", "exgS_lb"), drop=FALSE]
       return(dtexGaussianS(rt, parsS))
     },
     # Probability function (CDF) for single stop racer
     pfunS = function(rt, pars) {
-      parsS <- pars[ , c("muS", "sigmaS", "tauS", "SSD", "exgS_lb"), drop=FALSE]
+      parsS <- pars[ , c("mS", "sigmaS", "kS", "SSD", "exgS_lb"), drop=FALSE]
       return(ptexGaussianS(rt, parsS))
     },
     # Stop probability integral
@@ -893,14 +894,14 @@ SSRDEX <- function() {
     c_name = "SSRDEX",
     p_types = c(
       v = log(1), B = log(1), A = log(0), t0 = log(0), s = log(1),
-      muS = log(.3), sigmaS = log(.025), tauS = log(.05),
+      mS = log(.3), sigmaS = log(.025), kS = qnorm(0.5),
       tf = qnorm(0), gf = qnorm(0),
       exgS_lb = .05
     ),
     transform = list(
       func = c(
         v = "exp", B = "exp", A = "exp", t0 = "exp", s = "exp",
-        muS = "exp", sigmaS = "exp", tauS = "exp",
+        mS = "exp", sigmaS = "exp", kS = "pnorm",
         tf = "pnorm", gf = "pnorm",
         exgS_lb = "identity"
       )
@@ -908,7 +909,7 @@ SSRDEX <- function() {
     bound = list(
       minmax = cbind(
         v = c(1e-3, Inf), B = c(0, Inf), A = c(1e-4, Inf), t0 = c(0.05, Inf), s = c(0, Inf),
-        muS = c(0, Inf), sigmaS = c(1e-4, Inf), tauS = c(1e-4,Inf),
+        mS = c(1e-4, Inf), sigmaS = c(1e-4, Inf), kS = c(1e-6, 1-1e-6),
         tf = c(.001, .999), gf = c(.001, .999),
         exgS_lb = c(-Inf, Inf)
       ),
@@ -935,12 +936,12 @@ SSRDEX <- function() {
     },
     # Density function (PDF) for single stop racer
     dfunS = function(rt, pars) {
-      parsS <- pars[ , c("muS", "sigmaS", "tauS", "SSD", "exgS_lb"), drop=FALSE]
+      parsS <- pars[ , c("mS", "sigmaS", "kS", "SSD", "exgS_lb"), drop=FALSE]
       return(dtexGaussianS(rt, parsS))
     },
     # Probability function (CDF) for single stop racer
     pfunS = function(rt, pars) {
-      parsS <- pars[ , c("muS", "sigmaS", "tauS", "SSD", "exgS_lb"), drop=FALSE]
+      parsS <- pars[ , c("mS", "sigmaS", "kS", "SSD", "exgS_lb"), drop=FALSE]
       return(ptexGaussianS(rt, parsS))
     },
     # Stop probability integral

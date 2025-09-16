@@ -168,7 +168,8 @@ public:
   ) :
   SSD(SSD_),
   min_ll(min_ll_),
-  muS(pars_(0, 5)), sigS(pars_(0, 6)), tauS(pars_(0, 7)), lbS(pars_(0, 10)),
+  // reparam stop: mS=5, sigmaS=6, kS=7
+  muS(pars_(0, 5) * (1.0 - pars_(0, 7))), sigS(pars_(0, 6)), tauS(pars_(0, 5) * pars_(0, 7)), lbS(pars_(0, 10)),
   n_go(pars_.nrow()),
   alpha(n_go), nu(n_go), gamma(n_go), t0(n_go)
   {
@@ -225,9 +226,10 @@ static inline double ss_rdex_stop_success_lpdf(
   int err_code;
   // perform numerical integration
   // Heuristic upper bound when not provided: muS + k_sigma*sigmaS + k_tau*tauS
-  double muS = pars(0, 5);
+  // reparam stop: mS=5, sigmaS=6, kS=7
+  double muS = pars(0, 5) * (1.0 - pars(0, 7));
   double sigS = pars(0, 6);
-  double tauS = pars(0, 7);
+  double tauS = pars(0, 5) * pars(0, 7);
   double ub_heur = muS + k_sigma * sigS + k_tau * tauS;
   double ub = std::isfinite(upper) ? upper : ub_heur;
   double lb = pars(0, 10);
