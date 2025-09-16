@@ -44,7 +44,7 @@ des <- design_fmri(design_matrices)
 
 # Test whether prior plotting works
 test_that("prior_fmri", {
-  vdiffr::expect_doppelganger("prior_fmri",plot(prior(des)))
+  vdiffr::expect_doppelganger("prior_fmri",plot(prior(des),map=FALSE))
 })
 
 # Test whether sampling works
