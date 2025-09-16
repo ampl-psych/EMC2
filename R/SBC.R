@@ -202,10 +202,12 @@ calc_sbc_stats <- function(stats){
 #' @param ranks A list of named dataframes of the rank statistic
 #' @param bins An integer specifying the number of bins to use when plotting the histogram
 #' @param layout Optional. A numeric vector specifying the layout using `par(mfrow = layout)`
-#' @param add_stats Boolean. Should coverage, bias and precision be included in the figure.
+#' @param add_stats Boolean. Should coverage and bias be included in the figure.
+#' @param ... optional arguments passed to `hist`
 #' @return No returns
 #' @export
-plot_sbc_hist <- function(ranks, bins = 10, layout = NA, add_stats = TRUE){
+plot_sbc_hist <- function(ranks, bins = 10, layout = NA, add_stats = TRUE,
+                          ...){
   if(!is.null(ranks$rank)) stats <- calc_sbc_stats(ranks)
   if(!is.null(ranks$rank)) ranks <- ranks$rank
   selects <- names(ranks)
@@ -226,7 +228,9 @@ plot_sbc_hist <- function(ranks, bins = 10, layout = NA, add_stats = TRUE){
     stat <- stats[[j]]
 
     for(i in 1:ncol(rank)){
-      hist(rank[,i], main = paste0(selects[j], " - ", par_names[i]), breaks = bins, ylim = c(0, high + 2), xlab = "rank")
+      dots <- add_defaults(list(...), main = paste0(selects[j], " - ", par_names[i]),
+                           breaks = bins, ylim = c(0, high + 2), xlab = "rank")
+      do.call(hist, c(list(rank[,i]), dots))
       abline(h = low, lty = 2)
       abline(h = mid, lty = 2)
       abline(h = high, lty = 2)
@@ -297,10 +301,11 @@ make_smooth <- function(x, y, N = 1000){
 #'
 #' @param ranks A list of named dataframes of the rank statistic
 #' @param layout Optional. A numeric vector specifying the layout using `par(mfrow = layout)`
-#' @param add_stats Boolean. Should coverage, bias and precision be included in the figure.
+#' @param add_stats Boolean. Should coverage and bias be included in the figure.
+#' @param ... optional arguments passed to `plot`
 #' @return No returns
 #' @export
-plot_sbc_ecdf <- function(ranks, layout = NA, add_stats = TRUE){
+plot_sbc_ecdf <- function(ranks, layout = NA, add_stats = TRUE, ...){
   if(!is.null(ranks$rank)) stats <- calc_sbc_stats(ranks)
   if(!is.null(ranks$rank)) ranks <- ranks$rank
   selects <- names(ranks)
@@ -321,8 +326,9 @@ plot_sbc_ecdf <- function(ranks, layout = NA, add_stats = TRUE){
     par_names <- colnames(rank)
     res$x <- apply(rank, 2, function(x) sort(x) - res$z)
     for(i in 1:ncol(rank)){
-      plot(res$z, res$x[,i], type = "l", ylim = c(min(res$lower, res$x[,i]) - 0.01, max(res$upper,res$x[,i]) + 0.01), xlim = c(0, 1),
-           lwd = 2, ylab = "ECDF Difference", xlab = "Normalized Rank Statistic", main = paste0(selects[j], " - ", par_names[i]))
+      dots <- add_defaults(list(...), type = "l", ylim = c(min(res$lower, res$x[,i]) - 0.01, max(res$upper,res$x[,i]) + 0.01), xlim = c(0, 1),
+                           lwd = 2, ylab = "ECDF Difference", xlab = "Normalized Rank Statistic", main = paste0(selects[j], " - ", par_names[i]))
+      do.call(plot, c(list(res$z, res$x[,i]), fix_dots_plot(dots)))
       polygon(c(res$z, rev(res$z)), c(res$lower, rev(res$upper)), col = adjustcolor("cornflowerblue", 0.2))
       if(!is.null(stat)){
         legend("topleft",legend=paste0("coverage : ",round(stat$coverage[i],2)), bty = "n")
