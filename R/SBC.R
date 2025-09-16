@@ -186,7 +186,7 @@ calc_sbc_stats <- function(stats){
   for(i in 1:length(stats[[1]])){
     out[[out_names[i]]] <- list(
       coverage = apply(stats$coverage[[i]], 2, mean),
-      precision = apply(stats$med[[i]], 2, sd),
+      # precision = apply(stats$med[[i]], 2, sd),
       bias = apply(stats$bias[[i]], 2, mean)
     )
   }
@@ -232,8 +232,8 @@ plot_sbc_hist <- function(ranks, bins = 10, layout = NA, add_stats = TRUE){
       abline(h = high, lty = 2)
       if(!is.null(stat)){
         legend("topleft",legend=paste0("coverage : ",round(stat$coverage[i],2)), bty = "n")
-        legend("top",legend=paste0("bias : ",round(stat$bias[i],3)), bty = "n")
-        legend("topright",legend=paste0("precision : ",round(stat$precision[i],3)), bty = "n")
+        legend("topright",legend=paste0("bias : ",round(stat$bias[i],3)), bty = "n")
+        # legend("topright",legend=paste0("precision : ",round(stat$precision[i],3)), bty = "n")
       }
     }
 
@@ -326,8 +326,8 @@ plot_sbc_ecdf <- function(ranks, layout = NA, add_stats = TRUE){
       polygon(c(res$z, rev(res$z)), c(res$lower, rev(res$upper)), col = adjustcolor("cornflowerblue", 0.2))
       if(!is.null(stat)){
         legend("topleft",legend=paste0("coverage : ",round(stat$coverage[i],2)), bty = "n")
-        legend("bottomright",legend=paste0("bias : ",round(stat$bias[i],3)), bty = "n")
-        legend("topright",legend=paste0("precision : ",round(stat$precision[i],3)), bty = "n")
+        legend("topright",legend=paste0("bias : ",round(stat$bias[i],3)), bty = "n")
+        # legend("topright",legend=paste0("precision : ",round(stat$precision[i],3)), bty = "n")
       }
     }
   }
