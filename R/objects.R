@@ -389,6 +389,10 @@ get_pars <- function(emc,selection= "mu", stage=get_last_stage(emc),thin=1,filte
   if(add_recalculated) map <- TRUE
   if(!(selection %in% c("mu", "alpha"))) map <- FALSE
   if(is.null(type)) type <- emc[[1]]$type
+  # Centralized guard: mapped population-level parameters not yet correct for hierarchical models
+  if(type != "single" && isTRUE(map) && selection %in% c("mu")){
+    warning("map=TRUE is not yet correctly implemented for population-level parameters (i.e., `mu`, `sigma2`, `covariances` and `correlation`). See https://github.com/ampl-psych/EMC2/issues/119 Please use map = FALSE until this issue is fixed.")
+  }
   if(type == "single" & !(selection %in% c("LL", "alpha"))) selection <- "alpha"
   samples <- get_objects(type = type, sampler = emc, stage = stage,
                          selection = selection)
