@@ -249,12 +249,16 @@ using ss_stop_success_fn = double (*)(double, NumericMatrix, double, double, int
 
 // Model-specific stop survivor wrappers (read fixed columns)
 static inline double stop_logsurv_texg_fn(double q, NumericMatrix P) {
-  // EXG stop: muS=3, sigmaS=4, tauS=5, exgS_lb=9
-  return ptexg(q, P(0, 3), P(0, 4), P(0, 5), P(0, 9), R_PosInf, false, true);
+  // EXG stop reparam: mS=3, sigmaS=4, kS=5, exgS_lb=9
+  double mS = P(0,3), sigS = P(0,4), kS = P(0,5);
+  double muS = mS * (1.0 - kS), tauS = mS * kS;
+  return ptexg(q, muS, sigS, tauS, P(0, 9), R_PosInf, false, true);
 }
 static inline double stop_logsurv_rdex_fn(double q, NumericMatrix P) {
-  // RDEX stop: muS=5, sigmaS=6, tauS=7, exgS_lb=10
-  return ptexg(q, P(0, 5), P(0, 6), P(0, 7), P(0, 10), R_PosInf, false, true);
+  // RDEX stop reparam: mS=5, sigmaS=6, kS=7, exgS_lb=10
+  double mS = P(0,5), sigS = P(0,6), kS = P(0,7);
+  double muS = mS * (1.0 - kS), tauS = mS * kS;
+  return ptexg(q, muS, sigS, tauS, P(0, 10), R_PosInf, false, true);
 }
 
 double c_log_likelihood_ss(

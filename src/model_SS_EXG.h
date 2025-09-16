@@ -35,10 +35,11 @@ NumericVector texg_go_lpdf(
   for (int i = 0; i < n_acc; i++) {
     if (!idx[i]) continue;
 
-    // input args: x, mu, sigma, tau, exg_lb, upper = Inf, log_d = TRUE
-    double log_d = dtexg(
-      rt[i], pars(i, 0), pars(i, 1), pars(i, 2), pars(i, 8), R_PosInf, true
-    );
+  // reparam: m=0, sigma=1, k=2, exg_lb=8
+  double m = pars(i, 0), sig = pars(i, 1), k = pars(i, 2);
+  double mu = m * (1.0 - k), tau = m * k;
+  // input args: x, mu, sigma, tau, exg_lb, upper = Inf, log_d = TRUE
+  double log_d = dtexg(rt[i], mu, sig, tau, pars(i, 8), R_PosInf, true);
     out[k] = std::isfinite(log_d) ? log_d : min_ll;
 
     k++;
@@ -69,10 +70,11 @@ NumericVector texg_go_lccdf(
   for (int i = 0; i < n_acc; i++) {
     if (!idx[i]) continue;
 
-    // input args: q, mu, sigma, tau, exg_lb, upper = Inf, lower_tail = FALSE, log_p = TRUE
-    double log_s = ptexg(
-      rt[i], pars(i, 0), pars(i, 1), pars(i, 2), pars(i, 8), R_PosInf, false, true
-    );
+  // reparam: m=0, sigma=1, k=2, exg_lb=8
+  double m = pars(i, 0), sig = pars(i, 1), k = pars(i, 2);
+  double mu = m * (1.0 - k), tau = m * k;
+  // input args: q, mu, sigma, tau, exg_lb, upper = Inf, lower_tail = FALSE, log_p = TRUE
+  double log_s = ptexg(rt[i], mu, sig, tau, pars(i, 8), R_PosInf, false, true);
     out[k] = std::isfinite(log_s) ? log_s : min_ll;
 
     k++;
@@ -117,10 +119,11 @@ double ss_texg_stop_fail_lpdf(
   double go_lprob = ss_texg_go_lpdf(RT, pars, winner, min_ll);
   // obtain the survivor log probability of the stop process
   // NB SSD subtracted from observed RT to get stop finish time
+  // reparam: mS=3, sigmaS=4, kS=5, exgS_lb=9
+  double mS = pars(0, 3), sigS = pars(0, 4), kS = pars(0, 5);
+  double muS = mS * (1.0 - kS), tauS = mS * kS;
   // input args: q, muS, sigmaS, tauS, exgS_lb, upper = Inf, lower_tail = FALSE, log_p = TRUE
-  double stop_survivor_lprob = ptexg(
-    RT - SSD, pars(0, 3), pars(0, 4), pars(0, 5), pars(0, 9), R_PosInf, false, true
-  );
+  double stop_survivor_lprob = ptexg(RT - SSD, muS, sigS, tauS, pars(0, 9), R_PosInf, false, true);
   if (!traits::is_finite<REALSXP>(stop_survivor_lprob)) {
     stop_survivor_lprob = min_ll;
   }
@@ -205,9 +208,9 @@ static inline double ss_texg_stop_success_lpdf(
   int err_code;
   // perform numerical integration
   // Heuristic upper bound when not provided: muS + k_sigma*sigmaS + k_tau*tauS
-  double muS = pars(0, 3);
+  double muS = pars(0, 3) * (1.0 - pars(0, 5));
   double sigS = pars(0, 4);
-  double tauS = pars(0, 5);
+  double tauS = pars(0, 3) * pars(0, 5);
   double ub_heur = muS + k_sigma * sigS + k_tau * tauS;
   double ub = std::isfinite(upper) ? upper : ub_heur;
   double lb = pars(0, 9);
@@ -482,14 +485,16 @@ public:
   ) :
   SSD(SSD_),
   min_ll(min_ll_),
-  muS(pars_(0, 3)), sigS(pars_(0, 4)), tauS(pars_(0, 5)),
+  // reparam stop: mS=3, sigmaS=4, kS=5
+  muS(pars_(0, 3) * (1.0 - pars_(0, 5))), sigS(pars_(0, 4)), tauS(pars_(0, 3) * pars_(0, 5)),
   n_go(pars_.nrow()),
   muG(n_go), sigG(n_go), tauG(n_go)
   {
     for (int i = 0; i < n_go; ++i) {
-      muG[i]  = pars_(i, 0);
+      double mG = pars_(i, 0), kG = pars_(i, 2);
+      muG[i]  = mG * (1.0 - kG);
       sigG[i] = pars_(i, 1);
-      tauG[i] = pars_(i, 2);
+      tauG[i] = mG * kG;
     }
   }
 
