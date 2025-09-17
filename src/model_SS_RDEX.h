@@ -30,7 +30,7 @@ NumericVector rdex_go_lpdf(
   if (n_acc_selected == 0) return NA_REAL;
 
   NumericVector out(n_acc_selected);
-  int k = 0;
+  int out_idx = 0;
 
   for (int i = 0; i < n_acc; i++) {
     if (!idx[i]) continue;
@@ -48,9 +48,9 @@ NumericVector rdex_go_lpdf(
       );
     }
 
-    out[k] = std::isfinite(log_d) ? log_d : min_ll;
+    out[out_idx] = std::isfinite(log_d) ? log_d : min_ll;
 
-    k++;
+    out_idx++;
   }
 
   return(out);
@@ -73,7 +73,7 @@ NumericVector rdex_go_lccdf(
   if (n_acc_selected == 0) return NA_REAL;
 
   NumericVector out(n_acc_selected);
-  int k = 0;
+  int out_idx = 0;
 
   for (int i = 0; i < n_acc; i++) {
     if (!idx[i]) continue;
@@ -91,9 +91,9 @@ NumericVector rdex_go_lccdf(
       );
     }
 
-    out[k] = std::isfinite(log_s) ? log_s : min_ll;
+    out[out_idx] = std::isfinite(log_s) ? log_s : min_ll;
 
-    k++;
+    out_idx++;
   }
 
   return(out);
@@ -135,9 +135,15 @@ double ss_rdex_stop_fail_lpdf(
   double go_lprob = ss_rdex_go_lpdf(RT, pars, winner, min_ll);
   // obtain the survivor log probability of the stop process
   // NB SSD subtracted from observed RT to get stop finish time
+  // reparam stop: mS=5, sigmaS=6, kS=7, exgS_lb=10
+  double mS = pars(0, 5);
+  double sigS = pars(0, 6);
+  double kS = pars(0, 7);
+  double muS = mS * (1.0 - kS);
+  double tauS = mS * kS;
   // input args: q, muS, sigmaS, tauS, exgS_lb, upper = Inf, lower_tail = FALSE, log_p = TRUE
   double stop_survivor_lprob = ptexg(
-    RT - SSD, pars(0, 5), pars(0, 6), pars(0, 7), pars(0, 10), R_PosInf, false, true
+    RT - SSD, muS, sigS, tauS, pars(0, 10), R_PosInf, false, true
   );
   if (!traits::is_finite<REALSXP>(stop_survivor_lprob)) {
     stop_survivor_lprob = min_ll;
@@ -215,9 +221,7 @@ static inline double ss_rdex_stop_success_lpdf(
     double upper = R_PosInf,
     int max_subdiv = 30,
     double abs_tol = 1e-5,
-    double rel_tol = 1e-4,
-    double k_sigma = 6.0,
-    double k_tau = 12.0
+    double rel_tol = 1e-4
 ) {
   // set up the integrand
   rdex_stop_success_integrand f(SSD, pars, min_ll);
@@ -225,19 +229,13 @@ static inline double ss_rdex_stop_success_lpdf(
   double err_est, res;
   int err_code;
   // perform numerical integration
-  // Heuristic upper bound when not provided: muS + k_sigma*sigmaS + k_tau*tauS
-  // reparam stop: mS=5, sigmaS=6, kS=7
-  double muS = pars(0, 5) * (1.0 - pars(0, 7));
-  double sigS = pars(0, 6);
-  double tauS = pars(0, 5) * pars(0, 7);
-  double ub_heur = muS + k_sigma * sigS + k_tau * tauS;
-  double ub = std::isfinite(upper) ? upper : ub_heur;
   double lb = pars(0, 10);
+  double ub = upper;
   if (!(ub > lb)) ub = lb + 1e-12;
   res = integrate(
     f,                // integrand
     lb,               // lower limit of integration (= lower bound of stop process)
-    ub,               // upper limit of integration (heuristic or provided)
+    ub,               // upper limit of integration
     err_est,          // placeholder for estimation error
     err_code,         // placeholder for failed integration error code
     max_subdiv,       // maximum number of subdivisions (eval budget proxy)
@@ -347,7 +345,7 @@ NumericVector ss_rdex_lpdf(
           stop_success_integral = ss_rdex_stop_success_lpdf(
             SSD[start_row],
                pars(Range(start_row, end_row), _),
-               min_ll, R_PosInf, 30, 1e-5, 1e-4, 6.0, 12.0
+               min_ll
           );
           stop_success_lprob = log1m(gf[trial]) + log1m(tf[trial]) + stop_success_integral;
           // likelihood = gf + [(1-gf) x (1-tf) x stop_success_integral]

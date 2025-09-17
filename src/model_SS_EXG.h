@@ -30,19 +30,19 @@ NumericVector texg_go_lpdf(
   if (n_acc_selected == 0) return NA_REAL;
 
   NumericVector out(n_acc_selected);
-  int k = 0;
+  int out_idx = 0;
 
   for (int i = 0; i < n_acc; i++) {
     if (!idx[i]) continue;
 
   // reparam: m=0, sigma=1, k=2, exg_lb=8
-  double m = pars(i, 0), sig = pars(i, 1), k = pars(i, 2);
-  double mu = m * (1.0 - k), tau = m * k;
+  double m = pars(i, 0), sig = pars(i, 1), k_param = pars(i, 2);
+  double mu = m * (1.0 - k_param), tau = m * k_param;
   // input args: x, mu, sigma, tau, exg_lb, upper = Inf, log_d = TRUE
   double log_d = dtexg(rt[i], mu, sig, tau, pars(i, 8), R_PosInf, true);
-    out[k] = std::isfinite(log_d) ? log_d : min_ll;
+    out[out_idx] = std::isfinite(log_d) ? log_d : min_ll;
 
-    k++;
+    out_idx++;
   }
 
   return(out);
@@ -65,19 +65,19 @@ NumericVector texg_go_lccdf(
   if (n_acc_selected == 0) return NA_REAL;
 
   NumericVector out(n_acc_selected);
-  int k = 0;
+  int out_idx = 0;
 
   for (int i = 0; i < n_acc; i++) {
     if (!idx[i]) continue;
 
   // reparam: m=0, sigma=1, k=2, exg_lb=8
-  double m = pars(i, 0), sig = pars(i, 1), k = pars(i, 2);
-  double mu = m * (1.0 - k), tau = m * k;
+  double m = pars(i, 0), sig = pars(i, 1), k_param = pars(i, 2);
+  double mu = m * (1.0 - k_param), tau = m * k_param;
   // input args: q, mu, sigma, tau, exg_lb, upper = Inf, lower_tail = FALSE, log_p = TRUE
   double log_s = ptexg(rt[i], mu, sig, tau, pars(i, 8), R_PosInf, false, true);
-    out[k] = std::isfinite(log_s) ? log_s : min_ll;
+    out[out_idx] = std::isfinite(log_s) ? log_s : min_ll;
 
-    k++;
+    out_idx++;
   }
 
   return(out);
@@ -156,14 +156,19 @@ public:
   ) :
   SSD(SSD_),
   min_ll(min_ll_),
-  muS(pars_(0, 3)), sigS(pars_(0, 4)), tauS(pars_(0, 5)), lbS(pars_(0, 9)),
+  muS(pars_(0, 3) * (1.0 - pars_(0, 5))),
+  sigS(pars_(0, 4)),
+  tauS(pars_(0, 3) * pars_(0, 5)),
+  lbS(pars_(0, 9)),
   n_go(pars_.nrow()),
   muG(n_go), sigG(n_go), tauG(n_go), lbG(n_go)
   {
     for (int i = 0; i < n_go; ++i) {
-      muG[i]  = pars_(i, 0);
+      double mG = pars_(i, 0);
+      double kG = pars_(i, 2);
+      muG[i]  = mG * (1.0 - kG);
       sigG[i] = pars_(i, 1);
-      tauG[i] = pars_(i, 2);
+      tauG[i] = mG * kG;
       lbG[i]  = pars_(i, 8);
     }
   }
@@ -197,9 +202,7 @@ static inline double ss_texg_stop_success_lpdf(
     double upper = R_PosInf,
     int max_subdiv = 30,
     double abs_tol = 1e-5,
-    double rel_tol = 1e-4,
-    double k_sigma = 6.0,
-    double k_tau = 12.0
+    double rel_tol = 1e-4
 ) {
   // set up the integrand
   texg_stop_success_integrand f(SSD, pars, min_ll);
@@ -207,18 +210,13 @@ static inline double ss_texg_stop_success_lpdf(
   double err_est, res;
   int err_code;
   // perform numerical integration
-  // Heuristic upper bound when not provided: muS + k_sigma*sigmaS + k_tau*tauS
-  double muS = pars(0, 3) * (1.0 - pars(0, 5));
-  double sigS = pars(0, 4);
-  double tauS = pars(0, 3) * pars(0, 5);
-  double ub_heur = muS + k_sigma * sigS + k_tau * tauS;
-  double ub = std::isfinite(upper) ? upper : ub_heur;
   double lb = pars(0, 9);
+  double ub = upper;
   if (!(ub > lb)) ub = lb + 1e-12;
   res = integrate(
     f,              // integrand
     lb,             // lower limit of integration (= lower bound of stop process)
-    ub,             // upper limit of integration (heuristic or provided)
+    ub,             // upper limit of integration
     err_est,        // placeholder for estimation error
     err_code,       // placeholder for failed integration error code
     max_subdiv,     // maximum number of subdivisions (eval budget proxy)
@@ -329,7 +327,7 @@ NumericVector ss_texg_lpdf(
           stop_success_integral = ss_texg_stop_success_lpdf(
             SSD[start_row],
                pars(Range(start_row, end_row), _),
-               min_ll, R_PosInf, 30, 1e-5, 1e-4, 6.0, 12.0
+               min_ll
           );
           stop_success_lprob = log1m(gf[trial]) + log1m(tf[trial]) + stop_success_integral;
           // likelihood = gf + [(1-gf) x (1-tf) x stop_success_integral]
@@ -527,9 +525,7 @@ static inline double ss_exg_stop_success_lpdf(
     double upper = R_PosInf,
     int max_subdiv = 30,
     double abs_tol = 1e-5,
-    double rel_tol = 1e-4,
-    double k_sigma = 6.0,
-    double k_tau = 12.0
+    double rel_tol = 1e-4
 ) {
   // set up the integrand
   exg_stop_success_integrand f(SSD, pars, min_ll);
@@ -537,17 +533,13 @@ static inline double ss_exg_stop_success_lpdf(
   double err_est, res;
   int err_code;
   // perform numerical integration
-  // Symmetric heuristic window around stop mean: muS ± (k_sigma*sigmaS + k_tau*tauS)
-  double muS = pars(0, 3);
-  double sigS = pars(0, 4);
-  double tauS = pars(0, 5);
-  double halfw = k_sigma * sigS + k_tau * tauS;
-  double a = muS - halfw;
-  double b = muS + halfw;
+  double ub = upper;
+  // ensure finite upper bound exceeds lower bound to avoid zero-length interval
+  if (!std::isfinite(ub)) ub = R_PosInf;
   res = integrate(
     f,              // integrand
-    a,              // lower limit (heuristic)
-    b,              // upper limit (heuristic)
+    R_NegInf,       // lower limit (entire support)
+    ub,             // upper limit (specified or Inf)
     err_est,        // placeholder for estimation error
     err_code,       // placeholder for failed integration error code
     max_subdiv,     // maximum number of subdivisions (eval budget proxy)
@@ -657,7 +649,7 @@ NumericVector ss_exg_lpdf(
           stop_success_integral = ss_exg_stop_success_lpdf(
             SSD[start_row],
                pars(Range(start_row, end_row), _),
-               min_ll, R_PosInf, 30, 1e-5, 1e-4, 6.0, 12.0
+               min_ll
           );
           stop_success_lprob = log1m(gf[trial]) + log1m(tf[trial]) + stop_success_integral;
           // likelihood = gf + [(1-gf) x (1-tf) x stop_success_integral]

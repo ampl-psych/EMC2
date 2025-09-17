@@ -18,12 +18,12 @@ Model files are almost exclusively used in \code{design()}.
 Default values are used for all parameters that are not explicitly listed in the \code{formula}
 argument of \code{design()}.They can also be accessed with \code{SSexG()$p_types}.\tabular{llllll}{
    \strong{Parameter} \tab \strong{Transform} \tab \strong{Natural scale} \tab \strong{Default} \tab \strong{Mapping} \tab \strong{Interpretation} \cr
-   \emph{mu} \tab log \tab [0, Inf] \tab log(.4) \tab  \tab Mean of Gaussian component of ex-Gaussian go finish time distribution \cr
+   \emph{m} \tab log \tab [0, Inf] \tab log(.4) \tab  \tab Mean of ex-Gaussian go finish time distribution \cr
    \emph{sigma} \tab log \tab [0, Inf] \tab log(.05) \tab  \tab Standard deviation of Gaussian component of ex-Gaussian go finish time distribution \cr
-   \emph{tau} \tab log \tab [0, Inf] \tab log(.1) \tab  \tab Mean (inverse rate) of exponential component of ex-Gaussian go finish time distribution \cr
-   \emph{muS} \tab log \tab [0, Inf] \tab log(.3) \tab  \tab Mean of Gaussian component of ex-Gaussian stop finish time distribution \cr
+   \emph{k} \tab probit \tab [0, 1] \tab qnorm(0.5) \tab  \tab Proportion of go mean contributed by the exponential component (\eqn{\tau = m k}) \cr
+   \emph{mS} \tab log \tab [0, Inf] \tab log(.3) \tab  \tab Mean of ex-Gaussian stop finish time distribution \cr
    \emph{sigmaS} \tab log \tab [0, Inf] \tab log(.025) \tab  \tab Standard deviation of Gaussian component of ex-Gaussian stop finish time distribution \cr
-   \emph{tauS} \tab log \tab [0, Inf] \tab log(.05) \tab  \tab Mean (inverse rate) of exponential component of ex-Gaussian stop finish time distribution \cr
+   \emph{kS} \tab probit \tab [0, 1] \tab qnorm(0.5) \tab  \tab Proportion of stop mean contributed by the exponential component (\eqn{\tau_S = m_S k_S}) \cr
    \emph{tf} \tab probit \tab [0, 1] \tab qnorm(0) \tab  \tab Attentional lapse rate for stop process ("trigger failure") \cr
    \emph{gf} \tab probit \tab [0, 1] \tab qnorm(0) \tab  \tab Attentional lapse rate for go process ("go failure") \cr
    \emph{exg_lb} \tab - \tab [-Inf, Inf] \tab .05 \tab  \tab Lower bound of ex-Gaussian go finish time distribution \cr
@@ -34,6 +34,10 @@ argument of \code{design()}.They can also be accessed with \code{SSexG()$p_types
 Because the ex-Gaussian stop signal model is a race model, it has one accumulator per response option.
 EMC2 automatically constructs a factor representing the accumulators \code{lR} (i.e., the
 latent response) with level names taken from the \code{R} column in the data.
+
+The ex-Gaussian go and stop processes are parameterized via \verb{m = \\mu + \\tau} and \verb{k = \\tau / m},
+where \code{m} denotes the mean finish time and \code{k} captures the proportion of that mean governed by
+the exponential component. On the natural scale, \code{m} is positive and \code{k} lies in the open interval (0, 1).
 
 For race models, the \code{design()} argument \code{matchfun} can be provided, a
 function that takes the \code{lR} factor (defined in the augmented data (d)
@@ -55,7 +59,7 @@ Lastly, attentional lapse rate parameters for the stop process and go process, t
 
 Note that the ex-Gaussian parameters \code{mu}, \code{sigma}, and \code{tau} do not have clear psychological interpretations (Matzke & Wagenmakers, 2009).
 Inference is typically based on the mean of the ex-Gaussian distribution, which is given by \code{mu + tau}.
-The mean of the ex-Gaussian stop process finish time distribution (\code{muS + tauS}) is taken as the stop signal reaction time (SSRT), which is typically the primary modelling outcome of interest.
+The mean of the ex-Gaussian stop process finish time distribution (\code{mS}) is taken as the stop signal reaction time (SSRT), which is typically the primary modelling outcome of interest.
 
 The ex-Gaussian distribution has support on the real line \eqn{\left(-\infty, \infty\right)}.
 To prevent evaluation of impossible (i.e., negative) or implausibly fast finish times, lower truncation is applied to both the go and stop finish time distributions, using the parameters \code{exg_lb} and \code{exgS_lb}, respectively.

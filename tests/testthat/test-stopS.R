@@ -11,13 +11,21 @@ designSSexG <- design(model=SSEXG,
                       matchfun=function(d) as.numeric(d$S)==as.numeric(d$lR),
                       functions=list(lI=lIfun),
                       covariates = "SSD",
-                      formula=list(mu~lM,sigma~1,tau~1,muS~1,sigmaS~1,tauS~1, gf~1,tf~1)
+                      formula=list(m~lM,sigma~1,k~1,mS~1,sigmaS~1,kS~1, gf~1,tf~1)
 )
 
 p_vector <- sampled_pars(designSSexG,doMap = FALSE)
-p_vector[1:length(p_vector)] <- c(log(.6), log(.8), log(0.05), log(0.2),
-                                  log(0.2),log(0.03), log(0.05),
-                                  qnorm(.1),qnorm(.1))
+p_values <- c(
+  m = log(0.65),
+  sigma = log(0.8),
+  k = qnorm(0.07),
+  mS = log(0.23),
+  sigmaS = log(0.2),
+  kS = qnorm(0.13),
+  gf = qnorm(.1),
+  tf = qnorm(.1)
+)
+p_vector[names(p_values)] <- p_values
 
 
 dat <- make_data(p_vector, designSSexG, n_trials = 10,staircase=TRUE, functions = list(SSD = mySSD_function))

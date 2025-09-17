@@ -68,19 +68,24 @@ check_staircase <- function(staircase){
 dexGaussian <- function(rt,pars)
   # exGaussian pdf (returns normal or exponential for small tau/sigma)
 {
-  isexp <- pars[,"sigma"] < 1e-4 # shifted exponential
-  rt[isexp] <- dexp(rt[isexp]-pars[isexp,"mu"],1/pars[isexp,"tau"])
-  isnorm <- !isexp & pars[,"tau"] < 0.05 * pars[,"sigma"] # normal
-  rt[isnorm] <- dnorm(rt[isnorm], mean = pars[isnorm,"mu"],
-                      sd = pars[isnorm,"sigma"])
+  m <- pars[,"m"]
+  sigma <- pars[,"sigma"]
+  k <- pars[,"k"]
+  mu <- m * (1 - k)
+  tau <- m * k
+  isexp <- sigma < 1e-4 # shifted exponential
+  rt[isexp] <- dexp(rt[isexp]-mu[isexp],1/tau[isexp])
+  isnorm <- !isexp & (tau < 0.05 * sigma) # normal
+  rt[isnorm] <- dnorm(rt[isnorm], mean = mu[isnorm],
+                      sd = sigma[isnorm])
   isexg <- !(isexp | isnorm)
   if (any(isexg)) {
-    s2 <- pars[isexg,"sigma"]^2
-    z <- rt[isexg] - pars[isexg,"mu"] - (s2/pars[isexg,"tau"])
+    s2 <- sigma[isexg]^2
+    z <- rt[isexg] - mu[isexg] - (s2/tau[isexg])
     rt[isexg] <- exp(
-      log(pnorm(z/pars[isexg,"sigma"])) -
-        log(pars[isexg,"tau"]) -
-        (z + (s2/(2 *  pars[isexg,"tau"])))/pars[isexg,"tau"]
+      log(pnorm(z/sigma[isexg])) -
+        log(tau[isexg]) -
+        (z + (s2/(2 *  tau[isexg])))/tau[isexg]
     )
   }
   rt
@@ -89,20 +94,25 @@ dexGaussian <- function(rt,pars)
 pexGaussian <- function(rt,pars)
   # exGaussian cdf (returns normal or exponential for small tau/sigma)
 {
-  isexp <- pars[,"sigma"] < 1e-4 # shifted exponential
-  rt[isexp] <- pexp(rt[isexp]-pars[isexp,"mu"],1/pars[isexp,"tau"])
-  isnorm <- !isexp & pars[,"tau"] < 0.05 * pars[,"sigma"] # normal
-  rt[isnorm] <- pnorm(rt[isnorm], mean = pars[isnorm,"mu"],
-                      sd = pars[isnorm,"sigma"])
+  m <- pars[,"m"]
+  sigma <- pars[,"sigma"]
+  k <- pars[,"k"]
+  mu <- m * (1 - k)
+  tau <- m * k
+  isexp <- sigma < 1e-4 # shifted exponential
+  rt[isexp] <- pexp(rt[isexp]-mu[isexp],1/tau[isexp])
+  isnorm <- !isexp & (tau < 0.05 * sigma) # normal
+  rt[isnorm] <- pnorm(rt[isnorm], mean = mu[isnorm],
+                      sd = sigma[isnorm])
   isexg <- !(isexp | isnorm)
   if (any(isexg)) {
-    s2 <- pars[isexg,"sigma"]^2
-    z <- rt[isexg] - pars[isexg,"mu"] - (s2/pars[isexg,"tau"])
+    s2 <- sigma[isexg]^2
+    z <- rt[isexg] - mu[isexg] - (s2/tau[isexg])
     rt[isexg] <-
-      pnorm((rt[isexg] - pars[isexg,"mu"])/pars[isexg,"sigma"]) -
-      exp(log(pnorm(z/pars[isexg,"sigma"])) +
-            ((pars[isexg,"mu"] + (s2/pars[isexg,"tau"]))^2 - (pars[isexg,"mu"]^2) -
-               2 * rt[isexg] * (s2/pars[isexg,"tau"]))/(2 * s2))
+      pnorm((rt[isexg] - mu[isexg])/sigma[isexg]) -
+      exp(log(pnorm(z/sigma[isexg])) +
+            (((mu[isexg] + (s2/tau[isexg]))^2 - (mu[isexg]^2)) -
+               2 * rt[isexg] * (s2/tau[isexg]))/(2 * s2))
   }
   rt
 }
@@ -163,22 +173,26 @@ ptexGaussianG <- function(rt,pars)
 dtexGaussianS <- function(rt,pars)
 {
   rt <- rt - pars[,"SSD"]
-  dimnames(pars)[[2]][dimnames(pars)[[2]]=="muS"] <- "mu"
-  dimnames(pars)[[2]][dimnames(pars)[[2]]=="sigmaS"] <- "sigma"
-  dimnames(pars)[[2]][dimnames(pars)[[2]]=="tauS"] <- "tau"
-  dimnames(pars)[[2]][dimnames(pars)[[2]]=="exgS_lb"] <- "exg_lb"
-  dtexGaussian(rt,pars)
+  parsS <- cbind(
+    m = pars[,"mS"],
+    sigma = pars[,"sigmaS"],
+    k = pars[,"kS"],
+    exg_lb = pars[,"exgS_lb"]
+  )
+  dtexGaussian(rt,parsS)
 }
 
 
 ptexGaussianS <- function(rt,pars)
 {
   rt <- rt - pars[,"SSD"]
-  dimnames(pars)[[2]][dimnames(pars)[[2]]=="muS"] <- "mu"
-  dimnames(pars)[[2]][dimnames(pars)[[2]]=="sigmaS"] <- "sigma"
-  dimnames(pars)[[2]][dimnames(pars)[[2]]=="tauS"] <- "tau"
-  dimnames(pars)[[2]][dimnames(pars)[[2]]=="exgS_lb"] <- "exg_lb"
-  ptexGaussian(rt,pars)
+  parsS <- cbind(
+    m = pars[,"mS"],
+    sigma = pars[,"sigmaS"],
+    k = pars[,"kS"],
+    exg_lb = pars[,"exgS_lb"]
+  )
+  ptexGaussian(rt,parsS)
 }
 
 
@@ -210,16 +224,22 @@ ptexGaussianS <- function(rt,pars)
 
 #### ExGaussian random ----
 
-rexG <- function(n,mu,sigma,tau) rnorm(n,mean=mu,sd=sigma) + rexp(n,rate=1/tau)
+rexG <- function(n,m,sigma,k) {
+  tau <- m * k
+  mu <- m - tau
+  rnorm(n,mean=mu,sd=sigma) + rexp(n,rate=1/tau)
+}
 
 # Truncated (lower) ex-Gaussian sampler matching likelihood's lower bound handling
-rtexG <- function(n, mu, sigma, tau, lb) {
+rtexG <- function(n, m, sigma, k, lb) {
   # Vectorized over parameters; draws from exG truncated at lb
-  # n should equal length(mu)==length(sigma)==length(tau)==length(lb)
+  # n should equal length(m)==length(sigma)==length(k)==length(lb)
   out <- numeric(n)
   need <- rep(TRUE, n)
-  if (length(mu) != n || length(sigma) != n || length(tau) != n || length(lb) != n)
+  if (length(m) != n || length(sigma) != n || length(k) != n || length(lb) != n)
     stop("rtexG parameter lengths must equal n")
+  tau <- m * k
+  mu <- m - tau
   while (any(need)) {
     k <- sum(need)
     x <- rnorm(k, mean = mu[need], sd = sigma[need]) + rexp(k, rate = 1/tau[need])
@@ -235,7 +255,7 @@ rtexG <- function(n, mu, sigma, tau, lb) {
 
 
 
-rexGaussian <- function(lR,pars,p_types=c("mu","sigma","tau"),
+rexGaussian <- function(lR,pars,p_types=c("m","sigma","k"),
                         ok=rep(TRUE,dim(pars)[1]))
   # lR is an empty latent response factor lR with one level for each accumulator.
   # pars is a matrix of corresponding parameter values named as in p_types
@@ -247,7 +267,7 @@ rexGaussian <- function(lR,pars,p_types=c("mu","sigma","tau"),
 {
   if (!all(p_types %in% dimnames(pars)[[2]]))
     stop("pars must have columns ",paste(p_types,collapse = " "))
-  dt <- matrix(rexG(dim(pars)[1],pars[,"mu"],pars[,"sigma"],pars[,"tau"]),
+  dt <- matrix(rexG(dim(pars)[1],pars[,"m"],pars[,"sigma"],pars[,"k"]),
                nrow=length(levels(lR)))
   R <- apply(dt,2,which.min)
   pick <- cbind(R,1:dim(dt)[2]) # Matrix to pick winner
@@ -290,7 +310,7 @@ rSSexGaussian <- function(data,pars,ok=rep(TRUE,dim(pars)[1]))
   # Fill in go accumulators (apply lower bound exg_lb)
   if (any(isGO)) dt[-1,][isGO] <- rtexG(
     ngo,
-    mu = pars[isGO, "mu"], sigma = pars[isGO, "sigma"], tau = pars[isGO, "tau"],
+    m = pars[isGO, "m"], sigma = pars[isGO, "sigma"], k = pars[isGO, "k"],
     lb = pars[isGO, "exg_lb"]
   )
 
@@ -313,7 +333,7 @@ rSSexGaussian <- function(data,pars,ok=rep(TRUE,dim(pars)[1]))
   # Fill in stop-triggered accumulators (apply lower bound exg_lb)
   if (any(isSTT)) dt[-1,][isSTT] <- rtexG(
     nst,
-    mu = pars[isSTT, "mu"], sigma = pars[isSTT, "sigma"], tau = pars[isSTT, "tau"],
+    m = pars[isSTT, "m"], sigma = pars[isSTT, "sigma"], k = pars[isSTT, "k"],
     lb = pars[isSTT, "exg_lb"]
   )
 
@@ -325,7 +345,7 @@ rSSexGaussian <- function(data,pars,ok=rep(TRUE,dim(pars)[1]))
   # Fill in stop accumulators (apply lower bound exgS_lb)
   if (any(isTS)) dt[1, isTS] <- rtexG(
     ns,
-    mu = pars[is1, "muS"][isTS], sigma = pars[is1, "sigmaS"][isTS], tau = pars[is1, "tauS"][isTS],
+    m = pars[is1, "mS"][isTS], sigma = pars[is1, "sigmaS"][isTS], k = pars[is1, "kS"][isTS],
     lb = pars[is1, "exgS_lb"][isTS]
   )
 
@@ -441,7 +461,7 @@ my.integrate <- function(..., upper = Inf, big = 10) {
 
 pstopTEXG <- function(
     parstop, n_acc, upper=Inf,
-    gpars=c("mu","sigma","tau","exg_lb"), spars=c("muS","sigmaS","tauS","exgS_lb")
+    gpars=c("m","sigma","k","exg_lb"), spars=c("mS","sigmaS","kS","exgS_lb")
 ) {
   sindex <- seq(1,nrow(parstop),by=n_acc)  # Stop accumulator index
   ps <- parstop[sindex,spars,drop=FALSE]   # Stop accumulator parameters
@@ -458,10 +478,18 @@ pstopTEXG <- function(
   #   cells[i] <- paste(SSDs[i],ps[i,],pgo[,i,],upper[i],collapse="")
   uniq <- !duplicated(cells)
   ups <- sapply(which(uniq),function(i){
+    mS <- ps[i,"mS"]
+    kS <- ps[i,"kS"]
+    mu_stop <- mS * (1 - kS)
+    tau_stop <- mS * kS
+    m_go <- pgo[,i,"m"]
+    k_go <- pgo[,i,"k"]
+    mu_go <- m_go * (1 - k_go)
+    tau_go <- m_go * k_go
     my.integrate(f=stopfn_texg,lower=ps[i,"exgS_lb"],SSD=SSDs[i],upper=upper[i],
-                 mu=c(ps[i,"muS"],pgo[,i,"mu"]),
+                 mu=c(mu_stop,mu_go),
                  sigma=c(ps[i,"sigmaS"],pgo[,i,"sigma"]),
-                 tau=c(ps[i,"tauS"],pgo[,i,"tau"]),
+                 tau=c(tau_stop,tau_go),
                  lb=c(ps[i,"exgS_lb"],pgo[,i,"exg_lb"]))
   })
   ups[as.numeric(factor(cells,levels=cells[uniq]))]
@@ -481,12 +509,12 @@ pstopTEXG <- function(
 #'
 #' | **Parameter** | **Transform** | **Natural scale** | **Default**   | **Mapping**                    | **Interpretation**                                            |
 #' |-----------|-----------|---------------|-----------|----------------------------|-----------------------------------------------------------|
-#' | *mu*       | log         | \[0, Inf\]     | log(.4)         |                            | Mean of Gaussian component of ex-Gaussian go finish time distribution              |
+#' | *m*       | log         | \[0, Inf\]     | log(.4)         |                            | Mean of ex-Gaussian go finish time distribution              |
 #' | *sigma*       | log       | \[0, Inf\]        | log(.05)    |                            | Standard deviation of Gaussian component of ex-Gaussian go finish time distribution                                        |
-#' | *tau*      | log       | \[0, Inf\]        | log(.1)    |                            | Mean (inverse rate) of exponential component of ex-Gaussian go finish time distribution                                          |
-#' | *muS*       | log       | \[0, Inf\]        | log(.3)    |                            | Mean of Gaussian component of ex-Gaussian stop finish time distribution           |
+#' | *k*      | probit       | \[0, 1\]        | qnorm(0.5)    |                            | Proportion of go mean contributed by the exponential component (\eqn{\tau = m k})                                          |
+#' | *mS*       | log       | \[0, Inf\]        | log(.3)    |                            | Mean of ex-Gaussian stop finish time distribution           |
 #' | *sigmaS*       | log    | \[0, Inf\]        | log(.025)|                   | Standard deviation of Gaussian component of ex-Gaussian stop finish time distribution                              |
-#' | *tauS*      | log    | \[0, Inf\]        | log(.05)  |  | Mean (inverse rate) of exponential component of ex-Gaussian stop finish time distribution       |
+#' | *kS*      | probit    | \[0, 1\]        | qnorm(0.5)  |  | Proportion of stop mean contributed by the exponential component (\eqn{\tau_S = m_S k_S})       |
 #' | *tf*      | probit       | \[0, 1\]        | qnorm(0)    |                            | Attentional lapse rate for stop process ("trigger failure")           |
 #' | *gf*     | probit       | \[0, 1\]        | qnorm(0)    |                            | Attentional lapse rate for go process ("go failure")    |
 #' | *exg_lb*      | -       | \[-Inf, Inf\]        | .05    |                            | Lower bound of ex-Gaussian go finish time distribution           |
@@ -495,6 +523,10 @@ pstopTEXG <- function(
 #' Because the ex-Gaussian stop signal model is a race model, it has one accumulator per response option.
 #' EMC2 automatically constructs a factor representing the accumulators `lR` (i.e., the
 #' latent response) with level names taken from the `R` column in the data.
+#'
+#' The ex-Gaussian go and stop processes are parameterized via `m = \mu + \tau` and `k = \tau / m`,
+#' where `m` denotes the mean finish time and `k` captures the proportion of that mean governed by
+#' the exponential component. On the natural scale, `m` is positive and `k` lies in the open interval (0, 1).
 #'
 #' For race models, the `design()` argument `matchfun` can be provided, a
 #' function that takes the `lR` factor (defined in the augmented data (d)
@@ -516,7 +548,7 @@ pstopTEXG <- function(
 #'
 #' Note that the ex-Gaussian parameters `mu`, `sigma`, and `tau` do not have clear psychological interpretations (Matzke & Wagenmakers, 2009).
 #' Inference is typically based on the mean of the ex-Gaussian distribution, which is given by `mu + tau`.
-#' The mean of the ex-Gaussian stop process finish time distribution (`muS + tauS`) is taken as the stop signal reaction time (SSRT), which is typically the primary modelling outcome of interest.
+#' The mean of the ex-Gaussian stop process finish time distribution (`mS`) is taken as the stop signal reaction time (SSRT), which is typically the primary modelling outcome of interest.
 #'
 #' The ex-Gaussian distribution has support on the real line \eqn{\left(-\infty, \infty\right)}.
 #' To prevent evaluation of impossible (i.e., negative) or implausibly fast finish times, lower truncation is applied to both the go and stop finish time distributions, using the parameters `exg_lb` and `exgS_lb`, respectively.
@@ -610,7 +642,6 @@ SSEXG <- function() {
       return(pstopTEXG(pars, n_acc, upper = upper))
     },
     # Random function for SS race
-    # TODO
     rfun = function(data = NULL, pars) {
       return(rSSexGaussian(data, pars, ok = attr(pars, "ok")))
     },
@@ -687,7 +718,7 @@ rSShybrid <- function(data,pars,ok=rep(TRUE,dim(pars)[1]))
   # Fill in stop accumulators (apply lower bound exgS_lb)
   if (any(isTS)) dt[1, isTS] <- rtexG(
     ns,
-    mu = pars[is1, "muS"][isTS], sigma = pars[is1, "sigmaS"][isTS], tau = pars[is1, "tauS"][isTS],
+    m = pars[is1, "mS"][isTS], sigma = pars[is1, "sigmaS"][isTS], k = pars[is1, "kS"][isTS],
     lb = pars[is1, "exgS_lb"][isTS]
   )
 
@@ -790,7 +821,7 @@ rSShybrid <- function(data,pars,ok=rep(TRUE,dim(pars)[1]))
 
 pstopHybrid <- function(
     parstop, n_acc, upper = Inf,
-    gpars = c("v", "B", "A", "t0", "s"), spars = c("muS", "sigmaS", "tauS", "exgS_lb")
+    gpars = c("v", "B", "A", "t0", "s"), spars = c("mS", "sigmaS", "kS", "exgS_lb")
 ) {
   sindex <- seq(1,nrow(parstop),by=n_acc)  # Stop accumulator index
   ps <- parstop[sindex,spars,drop=FALSE]   # Stop accumulator parameters
@@ -804,12 +835,16 @@ pstopHybrid <- function(
     ,1,paste,collapse="")
   uniq <- !duplicated(cells)
   ups <- sapply(which(uniq),function(i){
+    mS <- ps[i,"mS"]
+    kS <- ps[i,"kS"]
+    mu_stop <- mS * (1 - kS)
+    tau_stop <- mS * kS
     my.integrate(
       # args passed to `my.integrate`
       f = stopfn_rdex, lower = ps[i, "exgS_lb"], upper = upper[i],
       # args passed to `stopfn_rdex`
       n_acc = n_acc,
-      mu = ps[i, "muS"], sigma = ps[i, "sigmaS"], tau = ps[i, "tauS"], lb = ps[i, "exgS_lb"],
+      mu = mu_stop, sigma = ps[i, "sigmaS"], tau = tau_stop, lb = ps[i, "exgS_lb"],
       v = pgo[ , i, "v"], B = pgo[ , i, "B"], A = pgo[ , i, "A"], t0 = pgo[ , i, "t0"], s = pgo[ , i, "s"],
       SSD = SSDs[i]
     )
@@ -838,9 +873,9 @@ pstopHybrid <- function(
 #' | *B*       | log       | \[0, Inf\]      | log(1)    | *b* = *B* + *A*      | Distance from *A* to *b* (response threshold) of the go process                  |
 #' | *t0*      | log       | \[0, Inf\]      | log(0)    |                  | Non-decision time of the go process                                            |
 #' | *s*       | log       | \[0, Inf\]      | log(1)    |                  | Within-trial standard deviation of drift rate of the go process                |
-#' | *muS*       | log       | \[0, Inf\]        | log(.3)    |                            | Mean of Gaussian component of ex-Gaussian stop finish time distribution           |
+#' | *mS*       | log       | \[0, Inf\]        | log(.3)    |                            | Mean of ex-Gaussian stop finish time distribution           |
 #' | *sigmaS*       | log    | \[0, Inf\]        | log(.025)|                   | Standard deviation of Gaussian component of ex-Gaussian stop finish time distribution                              |
-#' | *tauS*      | log    | \[0, Inf\]        | log(.05)  |  | Mean (inverse rate) of exponential component of ex-Gaussian stop finish time distribution       |
+#' | *kS*      | probit    | \[0, 1\]        | qnorm(0.5)  |  | Proportion of stop mean contributed by the exponential component (\eqn{\tau_S = m_S k_S})       |
 #' | *tf*      | probit       | \[0, 1\]        | qnorm(0)    |                            | Attentional lapse rate for stop process ("trigger failure")           |
 #' | *gf*     | probit       | \[0, 1\]        | qnorm(0)    |                            | Attentional lapse rate for go process ("go failure")    |
 #' | *exgS_lb*     | -       | \[-Inf, Inf\]        | .05    |                            | Lower bound of ex-Gaussian stop finish time distribution    |
@@ -856,6 +891,10 @@ pstopHybrid <- function(
 #' EMC2 automatically constructs a factor representing the accumulators `lR` (i.e., the
 #' latent response) with level names taken from the `R` column in the data.
 #'
+#' The ex-Gaussian stop process is parameterized via `mS = \mu_S + \tau_S` and `kS = \tau_S / mS`.
+#' The parameter `mS` denotes the mean finish time of the stop process, whereas `kS` is the
+#' proportion of that mean governed by the exponential component. Consequently, `mS` is positive and `kS` lies in the open interval (0, 1).
+#'
 #' For race models, the `design()` argument `matchfun` can be provided, a
 #' function that takes the `lR` factor (defined in the augmented data (d)
 #' in the following function) and returns a logical defining the correct response.
@@ -868,11 +907,11 @@ pstopHybrid <- function(
 #'
 #' This hybrid race model of the stop signal task was introduced in Tanis et al. (2024).
 #'
-#' Note that, in contrast to the parameters of the go process, the ex-Gaussian stop process parameters `muS`, `sigmaS`, and `tauS` do not have clear psychological interpretations (Matzke & Wagenmakers, 2009).
+#' Note that, in contrast to the parameters of the go process, the ex-Gaussian stop process parameters `mS`, `sigmaS`, and `kS` do not have clear psychological interpretations (Matzke & Wagenmakers, 2009).
 #' Matzke et al. (2020) showed that evidence accumulation models of the stop process have poor psychometric properties.
 #' Thus, this hybrid race model - with an evidence accumulation account of _going_ and a descriptive account of _stopping_ - represents a compromise between process realism and practically useful measurement properties (Tanis et al., 2024).
 #'
-#' The mean of the ex-Gaussian stop distribution (`muS + tauS`) is taken as the stop signal reaction time (SSRT).
+#' The mean of the ex-Gaussian stop distribution (`mS`) is taken as the stop signal reaction time (SSRT).
 #'
 #' The ex-Gaussian distribution has support on the real line \eqn{\left(-\infty, \infty\right)}.
 #' To prevent evaluation of impossible (i.e., negative) or implausibly fast stop finish times, lower truncation is applied to the stop finish time distribution using the parameter `exgS_lb`.

@@ -23,9 +23,9 @@ argument of \code{design()}.They can also be accessed with \code{SShybrid()$p_ty
    \emph{B} \tab log \tab [0, Inf] \tab log(1) \tab \emph{b} = \emph{B} + \emph{A} \tab Distance from \emph{A} to \emph{b} (response threshold) of the go process \cr
    \emph{t0} \tab log \tab [0, Inf] \tab log(0) \tab  \tab Non-decision time of the go process \cr
    \emph{s} \tab log \tab [0, Inf] \tab log(1) \tab  \tab Within-trial standard deviation of drift rate of the go process \cr
-   \emph{muS} \tab log \tab [0, Inf] \tab log(.3) \tab  \tab Mean of Gaussian component of ex-Gaussian stop finish time distribution \cr
+   \emph{mS} \tab log \tab [0, Inf] \tab log(.3) \tab  \tab Mean of ex-Gaussian stop finish time distribution \cr
    \emph{sigmaS} \tab log \tab [0, Inf] \tab log(.025) \tab  \tab Standard deviation of Gaussian component of ex-Gaussian stop finish time distribution \cr
-   \emph{tauS} \tab log \tab [0, Inf] \tab log(.05) \tab  \tab Mean (inverse rate) of exponential component of ex-Gaussian stop finish time distribution \cr
+   \emph{kS} \tab probit \tab [0, 1] \tab qnorm(0.5) \tab  \tab Proportion of stop mean contributed by the exponential component (\eqn{\tau_S = m_S k_S}) \cr
    \emph{tf} \tab probit \tab [0, 1] \tab qnorm(0) \tab  \tab Attentional lapse rate for stop process ("trigger failure") \cr
    \emph{gf} \tab probit \tab [0, 1] \tab qnorm(0) \tab  \tab Attentional lapse rate for go process ("go failure") \cr
    \emph{exgS_lb} \tab - \tab [-Inf, Inf] \tab .05 \tab  \tab Lower bound of ex-Gaussian stop finish time distribution \cr
@@ -43,6 +43,10 @@ Because the ex-Gaussian stop signal model is a race model, it has one accumulato
 EMC2 automatically constructs a factor representing the accumulators \code{lR} (i.e., the
 latent response) with level names taken from the \code{R} column in the data.
 
+The ex-Gaussian stop process is parameterized via \verb{mS = \\mu_S + \\tau_S} and \verb{kS = \\tau_S / mS}.
+The parameter \code{mS} denotes the mean finish time of the stop process, whereas \code{kS} is the
+proportion of that mean governed by the exponential component. Consequently, \code{mS} is positive and \code{kS} lies in the open interval (0, 1).
+
 For race models, the \code{design()} argument \code{matchfun} can be provided, a
 function that takes the \code{lR} factor (defined in the augmented data (d)
 in the following function) and returns a logical defining the correct response.
@@ -55,11 +59,11 @@ and can also be used in model formula.
 
 This hybrid race model of the stop signal task was introduced in Tanis et al. (2024).
 
-Note that, in contrast to the parameters of the go process, the ex-Gaussian stop process parameters \code{muS}, \code{sigmaS}, and \code{tauS} do not have clear psychological interpretations (Matzke & Wagenmakers, 2009).
+Note that, in contrast to the parameters of the go process, the ex-Gaussian stop process parameters \code{mS}, \code{sigmaS}, and \code{kS} do not have clear psychological interpretations (Matzke & Wagenmakers, 2009).
 Matzke et al. (2020) showed that evidence accumulation models of the stop process have poor psychometric properties.
 Thus, this hybrid race model - with an evidence accumulation account of \emph{going} and a descriptive account of \emph{stopping} - represents a compromise between process realism and practically useful measurement properties (Tanis et al., 2024).
 
-The mean of the ex-Gaussian stop distribution (\code{muS + tauS}) is taken as the stop signal reaction time (SSRT).
+The mean of the ex-Gaussian stop distribution (\code{mS}) is taken as the stop signal reaction time (SSRT).
 
 The ex-Gaussian distribution has support on the real line \eqn{\left(-\infty, \infty\right)}.
 To prevent evaluation of impossible (i.e., negative) or implausibly fast stop finish times, lower truncation is applied to the stop finish time distribution using the parameter \code{exgS_lb}.
