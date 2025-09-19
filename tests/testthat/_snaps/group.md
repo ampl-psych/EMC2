@@ -32,16 +32,16 @@
 ---
 
     Code
-      credint(pri, group_design = group_des)
+      credint(pri, group_design = group_des, map = FALSE)
     Output
       $mu
-                    2.5%    50%  97.5%
-      v_Sleft     -2.935 -0.048  2.635
-      v_Sright    -2.703 -0.103  2.763
-      a_Espeed     0.134  1.028  7.300
-      a_Eneutral   0.068  1.041 14.773
-      a_Eaccuracy  0.065  1.080 19.877
-      t0           0.134  1.012  6.364
+                    2.5%    50% 97.5%
+      v           -1.915 -0.075 2.013
+      v_S1        -1.919 -0.023 1.920
+      a           -2.013  0.028 1.988
+      a_Eneutral  -1.734 -0.014 1.840
+      a_Eaccuracy -1.878  0.076 1.935
+      t0          -2.013  0.012 1.851
       
 
 ---
