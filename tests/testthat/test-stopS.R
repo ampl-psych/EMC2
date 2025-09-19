@@ -4,7 +4,7 @@ set.seed(123)
 lIfun <- function(d) factor(rep(2,nrow(d)),levels=1:2)
 
 # All staircase (indicated by NA)
-mySSD_function <- function(d)SSD_function(d,SSD=NA,p=.25)
+mySSD_function <- make_ssd()
 
 designSSexG <- design(model=SSEXG,
                       factors=list(subjects=1,S=c("left","right")),Rlevels=c("left","right"),

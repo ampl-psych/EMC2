@@ -51,11 +51,82 @@ staircase_function <- function(dts,staircase) {
 }
 
 
+apply_staircase_trials <- function(dts, staircase, accST = NULL) {
+  if (inherits(staircase, "emc_staircase") && !is.null(staircase$specs)) {
+    return(apply_grouped_staircase(dts, staircase, accST))
+  }
+
+  stair_fun <- attr(staircase, "staircase_function")
+  if (length(accST) > 0) {
+    staircase$accST <- 1 + accST
+    if (is.null(stair_fun)) {
+      stop("Do not use default staircase function with stop-triggered accumulators")
+    }
+  }
+  if (is.null(stair_fun)) {
+    stair_fun <- staircase_function
+  }
+  stair_fun(dts, staircase)
+}
+
+
+apply_grouped_staircase <- function(dts, staircase, accST = NULL) {
+  specs <- staircase$specs
+  group_id <- staircase$group_id
+  data_meta <- staircase$data
+  if (is.null(specs) || is.null(group_id)) {
+    stop("Grouped staircase specifications are incomplete.")
+  }
+  if (length(group_id) != ncol(dts)) {
+    stop("Grouped staircase information does not match the number of staircase trials.")
+  }
+
+  res <- list(
+    sR = rep(NA_real_, ncol(dts)),
+    srt = rep(NA_real_, ncol(dts)),
+    SSD = rep(NA_real_, ncol(dts))
+  )
+
+  base_fun <- attr(staircase, "staircase_function")
+  specs_fun <- attr(specs, "staircase_function")
+
+  for (lvl in names(specs)) {
+    idx <- which(group_id == lvl)
+    if (!length(idx)) next
+    spec <- specs[[lvl]]
+    stair_fun <- spec$staircase_function %||% attr(spec, "staircase_function") %||%
+      specs_fun %||% base_fun
+    if (length(accST) > 0) {
+      spec$accST <- 1 + accST
+      if (is.null(stair_fun)) {
+        stop("Do not use default staircase function with stop-triggered accumulators")
+      }
+    }
+    if (is.null(stair_fun)) {
+      stair_fun <- staircase_function
+    }
+    if (!is.null(data_meta)) {
+      spec$data <- data_meta[idx, , drop = FALSE]
+    }
+    res_group <- stair_fun(dts[, idx, drop = FALSE], spec)
+    if (!is.null(res_group$sR)) res$sR[idx] <- res_group$sR
+    if (!is.null(res_group$srt)) res$srt[idx] <- res_group$srt
+    if (!is.null(res_group$SSD)) res$SSD[idx] <- res_group$SSD
+  }
+
+  res
+}
+
+
 check_staircase <- function(staircase){
   if (!is.list(staircase)){
     staircase <- list(SSD0=.25,stairstep=.05,stairmin=0,stairmax=Inf)
   }
   return(staircase)
+}
+
+`%||%` <- function(x, y) {
+  if (is.null(x)) y else x
 }
 
 
@@ -336,13 +407,6 @@ rSSexGaussian <- function(data,pars,ok=rep(TRUE,dim(pars)[1]))
     if (is.null(attr(data,"staircase")))
       stop("When SSD has NAs a staircase list must be supplied!")
     staircase <- attr(data,"staircase")
-    if (length(accST)>0)
-      staircase$accST <- 1+accST
-    if (is.null(attr(staircase,"staircase_function"))) {
-      if (length(accST)>0)
-        stop("Do not use default starircase function with stop-triggered accumulators")
-      attr(staircase,"staircase_function") <- staircase_function
-    }
 
     allR <- allrt <- numeric(ncol(dt))  # to store unified results
     dts <- dt[,stair,drop=F]
@@ -356,7 +420,7 @@ rSSexGaussian <- function(data,pars,ok=rep(TRUE,dim(pars)[1]))
     isST <- isST[!pstair]
     ntrials <- sum(!stair)
     is1 <- is1[!pstair]
-    stair_res <- attr(staircase,"staircase_function")(dts,staircase)
+    stair_res <- apply_staircase_trials(dts, staircase, accST)
     allR[stair] <- stair_res$sR
     allrt[stair] <- stair_res$srt
   }
@@ -698,11 +762,6 @@ rSShybrid <- function(data,pars,ok=rep(TRUE,dim(pars)[1]))
       stop("When SSD has NAs a staircase list must be supplied!")
 
     staircase <- attr(pars,"staircase")
-    data <- data[is1,]
-    if (length(accST)>0)
-      staircase$accST <- 1+accST
-    if (is.null(attr(staircase,"staircase_function")))
-      attr(staircase,"staircase_function") <- staircase_function
 
     allR <- allrt <- numeric(ncol(dt))  # to store unified results
     dts <- dt[,stair,drop=F]
@@ -716,9 +775,7 @@ rSShybrid <- function(data,pars,ok=rep(TRUE,dim(pars)[1]))
     isST <- isST[!pstair]
     ntrials <- sum(!stair)
     is1 <- is1[!pstair]
-    data <- data[stair,]
-
-    stair_res <- attr(staircase,"staircase_function")(dts,staircase)
+    stair_res <- apply_staircase_trials(dts, staircase, accST)
     allR[stair] <- stair_res$sR
     allrt[stair] <- stair_res$srt
   }

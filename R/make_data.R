@@ -197,9 +197,17 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
     }
     data <- add_trials(data[order(data$subjects),])
   }
+  ssd_meta <- NULL
   if(!is.null(functions)){
     for(i in 1:length(functions)){
-      data[[names(functions)[i]]] <- functions[[i]](data)
+      fun <- functions[[i]]
+      value <- fun(data)
+      meta <- attr(value, "emc_ssd")
+      if (!is.null(meta)) {
+        attr(value, "emc_ssd") <- NULL
+        ssd_meta <- meta$staircase
+      }
+      data[[names(functions)[i]]] <- value
     }
   }
   if (!is.factor(data$subjects)) data$subjects <- factor(data$subjects)
@@ -240,8 +248,14 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
                   data.frame(lapply(data,rep,times=expand)))
     pars <- apply(pars,2,rep,times=expand)
   }
-  if (!is.null(staircase)) {
-    attr(data, "staircase") <- staircase
+  staircase_obj <- NULL
+  if (!is.null(ssd_meta)) staircase_obj <- ssd_meta
+  if (is.null(staircase_obj) && !is.null(staircase)) staircase_obj <- staircase
+  if (!is.null(staircase_obj)) {
+    attr(data, "staircase") <- staircase_obj
+  }
+  if (!is.null(attr(data, "staircase"))) {
+    attr(pars, "staircase") <- attr(data, "staircase")
   }
   if (any(names(data)=="RACE")) {
     Rrt <- RACE_rfun(data, pars, model)
@@ -354,5 +368,4 @@ make_random_effects <- function(design, group_means, n_subj = NULL, variance_pro
   rownames(random_effects) <- subnames
   return(random_effects)
 }
-
 
