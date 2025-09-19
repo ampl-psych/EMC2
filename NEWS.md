@@ -1,3 +1,9 @@
+# EMC2 3.2.1
+
+## Bug fix 
+
+* Added a warning that in hierarchical models, using `map = TRUE` in functions like `map = TRUE` or `map = TRUE` does not return the population-level marginal mean and variances on the original scale for group-level parameters. See issue #119
+
 # EMC2 3.2.0
 
 ## New features
