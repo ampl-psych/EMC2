@@ -11,6 +11,7 @@
 #'
 #' @return A vector of SSDs with the same length as the number of rows in 'd'.
 #'         Trials without a stop signal are assigned Inf.
+#' @export
 SSD_function <- function(d,SSD=NA,pSSD=.25) {
   if (sum(pSSD)>1) stop("pSSD sum cannot exceed 1.")
   if (length(pSSD)==length(SSD)-1) pSSD <- c(pSSD,1-sum(pSSD))
@@ -273,6 +274,13 @@ rSSexGaussian <- function(data,pars,ok=rep(TRUE,dim(pars)[1]))
   is1 <- lR==levels(lR)[1]     # First go accumulator
   acc <- 1:nacc                # choice (go and ST) accumulator index
   allSSD <- data$SSD[is1]
+
+  # set default for latent inhibitor: simple stop-signal task
+  if(!"lI" %in% colnames(pars)){
+    pars <- cbind(pars, lI = 2)
+  }
+
+
   # stop-triggered racers
   isST <- pars[,"lI"]==1              # Boolean for all pars
   accST <- acc[pars[1:nacc,"lI"]==1]  # Index of ST accumulator, from 1st trial
@@ -970,6 +978,11 @@ log_likelihood_race_ss <- function(pars,dadm,model,min_ll=log(1e-10))
     # "is" = logical, "isp" pars/dadm index,
     # "t" trials index, "ist" logical on trial index
     # "n_" number of integer
+
+    # Default for lI is simple stop signal paradigm
+    if(is.null(dadm$lI)){
+      dadm$lI <- factor(rep(2,nrow(dadm)),levels=1:2)
+    }
 
     # Counts
     n_acc <- length(levels(dadm$lR))                   # total number of accumulators
