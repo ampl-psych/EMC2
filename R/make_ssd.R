@@ -86,10 +86,6 @@ make_ssd <- function(values = NULL,
     factors %||% character(),
     ssd_parse_formula(formula)
   ))
-  if (!isFALSE(staircase) && is.list(staircase) && !length(group_cols) && is.null(values)) {
-    stop("When supplying multiple staircase specifications you must specify `factors` or `formula` to identify groups.")
-  }
-
   base_spec <- list(
     SSD0 = SSD0,
     stairstep = stairstep,
@@ -97,6 +93,13 @@ make_ssd <- function(values = NULL,
     stairmax = stairmax,
     p = p_stop
   )
+
+  if (!isFALSE(staircase) && is.list(staircase) && !length(group_cols) && is.null(values)) {
+    extra_entries <- setdiff(names(staircase), names(base_spec))
+    if (length(extra_entries) > 1) {
+      stop("When supplying multiple staircase specifications you must specify `factors` or `formula` to identify groups.")
+    }
+  }
 
   assign_fun <- function(d) {
     if (!is.data.frame(d)) {
@@ -110,8 +113,8 @@ make_ssd <- function(values = NULL,
 
     SSD <- rep(Inf, n_trial)
     group_cols_local <- group_cols
-    if ("subjects" %in% names(d) && !("subjects" %in% group_cols_local)) {
-      group_cols_local <- c("subjects", group_cols_local)
+    if ("subjects" %in% names(d)) {
+      group_cols_local <- c("subjects", setdiff(group_cols_local, "subjects"))
     }
 
     if (length(group_cols_local)) {
@@ -256,44 +259,17 @@ build_staircase_specs <- function(group_id, data, staircase, base_spec, group_co
   for (lvl in levels_id) {
     spec <- base_spec
     matched_override <- FALSE
-
-    if (length(staircase_list) && !is.null(staircase_list[[lvl]])) {
-      spec <- utils::modifyList(spec, staircase_list[[lvl]])
-      matched_override <- TRUE
+    level_vals <- strsplit(lvl, "::", fixed = TRUE)[[1]]
+    if (length(level_vals) < length(group_cols)) {
+      level_vals <- c(level_vals, rep("", length(group_cols) - length(level_vals)))
     }
 
-    if (length(group_cols)) {
-      first_row <- data[which(group_id == lvl)[1], group_cols, drop = FALSE]
-      path_lists <- list(staircase_list)
-      if (!is.null(spec[["subjects"]])) path_lists <- c(path_lists, list(spec[["subjects"]]))
+    res <- resolve_staircase_overrides(spec, staircase_list, group_cols, level_vals)
+    spec <- res$spec
+    matched_override <- matched_override || res$matched
 
-      for (col in group_cols) {
-        value <- as.character(first_row[[col]])
-
-        for (p in path_lists) {
-          if (!is.list(p)) next
-          overrides <- p[[col]]
-          if (is.list(overrides) && !is.null(overrides[[value]])) {
-            spec <- utils::modifyList(spec, overrides[[value]])
-            matched_override <- TRUE
-          }
-        }
-
-        for (p in path_lists) {
-          if (!is.list(p)) next
-          direct_override <- p[[value]]
-          if (is.list(direct_override)) {
-            spec <- utils::modifyList(spec, direct_override)
-            matched_override <- TRUE
-          }
-        }
-
-        if (is.list(spec[[col]])) spec[[col]] <- NULL
-      }
-    }
-
-    if (length(staircase_list) && !matched_override && !isFALSE(staircase)) {
-      stop("No staircase specification found for group level '", lvl, "'.")
+    for (col in group_cols) {
+      if (is.list(spec[[col]])) spec[[col]] <- NULL
     }
 
     specs[[lvl]] <- spec
@@ -339,4 +315,55 @@ ssd_parse_formula <- function(formula) {
 
 `%||%` <- function(x, y) {
   if (is.null(x)) y else x
+}
+
+
+resolve_staircase_overrides <- function(spec, overrides, cols, vals) {
+  matched <- FALSE
+  if (is.null(overrides) || !is.list(overrides)) {
+    return(list(spec = spec, matched = matched))
+  }
+
+  full_key <- paste(vals, collapse = "::")
+  if (nzchar(full_key) && !is.null(overrides[[full_key]]) && is.list(overrides[[full_key]])) {
+    spec <- utils::modifyList(spec, overrides[[full_key]])
+    matched <- TRUE
+  }
+
+  if (!length(cols)) {
+    return(list(spec = spec, matched = matched))
+  }
+
+  current_lists <- list(overrides)
+  for (i in seq_along(cols)) {
+    col <- cols[[i]]
+    val <- vals[[i]]
+    next_lists <- list()
+    for (lst in current_lists) {
+      if (!is.list(lst)) next
+      by_col <- lst[[col]]
+      if (is.list(by_col) && !is.null(by_col[[val]])) {
+        next_lists <- c(next_lists, list(by_col[[val]]))
+      }
+      by_val <- lst[[val]]
+      if (is.list(by_val)) {
+        next_lists <- c(next_lists, list(by_val))
+      }
+    }
+    if (!length(next_lists)) {
+      next_lists <- current_lists
+    }
+    current_lists <- next_lists
+  }
+
+  if (length(current_lists)) {
+    for (lst in current_lists) {
+      if (is.list(lst)) {
+        spec <- utils::modifyList(spec, lst)
+        matched <- TRUE
+      }
+    }
+  }
+
+  list(spec = spec, matched = matched)
 }
