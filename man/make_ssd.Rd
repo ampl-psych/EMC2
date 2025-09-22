@@ -7,7 +7,9 @@ Returns a function that can be supplied to the \code{functions} argument of
 \code{\link{make_data}} to generate the \code{SSD} column for stop-signal
 simulations. The generator can sample fixed SSD values or drive staircase
 procedures, optionally stratified by grouping factors such as subjects or
-stimulus categories.
+stimulus categories. By default, every subject runs an independent staircase
+(identified via the \code{subjects} column) so each participant starts at
+\code{SSD0}.
 }
 \usage{
 make_ssd(

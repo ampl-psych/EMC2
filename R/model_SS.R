@@ -109,20 +109,21 @@ apply_grouped_staircase <- function(dts, staircase, accST = NULL) {
       spec$data <- data_meta[idx, , drop = FALSE]
     }
     res_group <- stair_fun(dts[, idx, drop = FALSE], spec)
+    if (!is.null(res_group$SSD) && length(res_group$SSD)) {
+      SSD0 <- spec$SSD0
+      if (is.null(SSD0)) {
+        SSD0 <- attr(specs, "base_spec")$SSD0
+      }
+      if (!is.null(SSD0)) {
+        res_group$SSD[1] <- SSD0
+      }
+    }
     if (!is.null(res_group$sR)) res$sR[idx] <- res_group$sR
     if (!is.null(res_group$srt)) res$srt[idx] <- res_group$srt
     if (!is.null(res_group$SSD)) res$SSD[idx] <- res_group$SSD
   }
 
   res
-}
-
-
-check_staircase <- function(staircase){
-  if (!is.list(staircase)){
-    staircase <- list(SSD0=.25,stairstep=.05,stairmin=0,stairmax=Inf)
-  }
-  return(staircase)
 }
 
 `%||%` <- function(x, y) {
@@ -423,6 +424,24 @@ rSSexGaussian <- function(data,pars,ok=rep(TRUE,dim(pars)[1]))
     stair_res <- apply_staircase_trials(dts, staircase, accST)
     allR[stair] <- stair_res$sR
     allrt[stair] <- stair_res$srt
+    if (inherits(staircase, "emc_staircase") && !is.null(staircase$specs)) {
+      stair_idx <- which(stair)
+      gid <- as.character(staircase$group_id)
+      base_spec <- attr(staircase$specs, "base_spec")
+      for (lvl in names(staircase$specs)) {
+        cols <- which(gid == lvl)
+        if (!length(cols)) next
+        pos <- stair_idx[cols[1]]
+        spec <- staircase$specs[[lvl]]
+        ssd0 <- spec$SSD0
+        if (is.null(ssd0) && !is.null(base_spec)) ssd0 <- base_spec$SSD0
+        if (!is.null(ssd0)) {
+          stair_res$SSD[cols[1]] <- ssd0
+          allSSD[pos] <- ssd0
+        }
+      }
+    }
+    allSSD[stair] <- stair_res$SSD
   }
 
 
@@ -776,8 +795,26 @@ rSShybrid <- function(data,pars,ok=rep(TRUE,dim(pars)[1]))
     ntrials <- sum(!stair)
     is1 <- is1[!pstair]
     stair_res <- apply_staircase_trials(dts, staircase, accST)
+    if (inherits(staircase, "emc_staircase") && !is.null(staircase$specs)) {
+      stair_idx <- which(stair)
+      gid <- as.character(staircase$group_id)
+      base_spec <- attr(staircase$specs, "base_spec")
+      for (lvl in names(staircase$specs)) {
+        cols <- which(gid == lvl)
+        if (!length(cols)) next
+        pos <- stair_idx[cols[1]]
+        spec <- staircase$specs[[lvl]]
+        ssd0 <- spec$SSD0
+        if (is.null(ssd0) && !is.null(base_spec)) ssd0 <- base_spec$SSD0
+        if (!is.null(ssd0)) {
+          stair_res$SSD[cols[1]] <- ssd0
+          allSSD[pos] <- ssd0
+        }
+      }
+    }
     allR[stair] <- stair_res$sR
     allrt[stair] <- stair_res$srt
+    allSSD[stair] <- stair_res$SSD
   }
 
 

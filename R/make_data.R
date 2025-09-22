@@ -51,9 +51,6 @@ make_missing <- function(data,LT=0,UT=Inf,LC=0,UC=Inf,
 #' @param n_trials Integer. If ``data`` is not supplied, number of trials to create per design cell
 #' @param data Data frame. If supplied, the factors are taken from the data. Determines the number of trials per level of the design factors and can thus allow for unbalanced designs
 #' @param expand Integer. Replicates the ``data`` (if supplied) expand times to increase number of trials per cell.
-#' @param staircase Default NULL, used with stop-signal paradigm simulation to specify a staircase
-#' algorithm. If non-null and a list then passed through as is, if not it is assigned the
-#' default list structure: list(p=.25,SSD0=.25,stairstep=.05,stairmin=0,stairmax=Inf)
 #' @param functions List of functions you want to apply to the data generation.
 #' @param ... Additional optional arguments
 #' @return A data frame with simulated data
@@ -82,7 +79,7 @@ make_missing <- function(data,LT=0,UT=Inf,LC=0,UC=Inf,
 #' data <- make_data(parameters, design_DDMaE, data = forstmann)
 #' @export
 
-make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1, staircase = NULL,
+make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
                       functions = NULL, ...)
 {
   # #' @param LT lower truncation bound below which data are removed (scalar or subject named vector)
@@ -100,9 +97,6 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
   # #' if both of these are false an error occurs as then contamination is not identifiable).
   # #' @param return_Ffunctions if false covariates are not returned
 
-  if (!is.null(staircase)){
-    staircase <- check_staircase(staircase)
-  }
   # #' @param Fcovariates either a data frame of covariate values with the same
   # #' number of rows as the data or a list of functions specifying covariates for
   # #' each trial. Must have names specified in the design Fcovariates argument.
@@ -248,14 +242,9 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
                   data.frame(lapply(data,rep,times=expand)))
     pars <- apply(pars,2,rep,times=expand)
   }
-  staircase_obj <- NULL
-  if (!is.null(ssd_meta)) staircase_obj <- ssd_meta
-  if (is.null(staircase_obj) && !is.null(staircase)) staircase_obj <- staircase
-  if (!is.null(staircase_obj)) {
-    attr(data, "staircase") <- staircase_obj
-  }
-  if (!is.null(attr(data, "staircase"))) {
-    attr(pars, "staircase") <- attr(data, "staircase")
+  if (!is.null(ssd_meta)) {
+    attr(data, "staircase") <- ssd_meta
+    attr(pars, "staircase") <- ssd_meta
   }
   if (any(names(data)=="RACE")) {
     Rrt <- RACE_rfun(data, pars, model)
@@ -271,6 +260,10 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
   }
   data <- make_missing(data[,names(data)!="winner"],LT,UT,LC,UC,
     LCresponse,UCresponse,LCdirection,UCdirection)
+  if (!is.null(ssd_meta)) {
+    attr(data, "staircase") <- ssd_meta
+    attr(pars, "staircase") <- ssd_meta
+  }
   if ( !is.null(pc) ) {
     if (!any(is.infinite(data$rt)) & any(is.na(data$R)))
       stop("Cannot have contamination and censoring with no direction and response")
@@ -368,4 +361,3 @@ make_random_effects <- function(design, group_means, n_subj = NULL, variance_pro
   rownames(random_effects) <- subnames
   return(random_effects)
 }
-

@@ -10,7 +10,6 @@ make_data(
   n_trials = NULL,
   data = NULL,
   expand = 1,
-  staircase = NULL,
   functions = NULL,
   ...
 )
@@ -28,10 +27,6 @@ or an emc object with sampled parameters
 \item{data}{Data frame. If supplied, the factors are taken from the data. Determines the number of trials per level of the design factors and can thus allow for unbalanced designs}
 
 \item{expand}{Integer. Replicates the \code{data} (if supplied) expand times to increase number of trials per cell.}
-
-\item{staircase}{Default NULL, used with stop-signal paradigm simulation to specify a staircase
-algorithm. If non-null and a list then passed through as is, if not it is assigned the
-default list structure: list(p=.25,SSD0=.25,stairstep=.05,stairmin=0,stairmax=Inf)}
 
 \item{functions}{List of functions you want to apply to the data generation.}
 
