@@ -75,7 +75,9 @@ minimal_design <- function(design, covariates = NULL, drop_subjects = TRUE,
         fac_df[[nm]] <- res
       }
     }
-
+    if(!is.null(fac_df$subjects)){
+      fac_df <- fac_df[order(fac_df$subjects),]
+    }
     out[[i]] <- fac_df
   }
   if(length(out) == 1) out <- out[[1]]
