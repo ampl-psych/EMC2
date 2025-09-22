@@ -86,6 +86,9 @@ make_ssd <- function(values = NULL,
     factors %||% character(),
     ssd_parse_formula(formula)
   ))
+  if (!isFALSE(staircase) && is.list(staircase) && !length(group_cols) && is.null(values)) {
+    stop("When supplying multiple staircase specifications you must specify `factors` or `formula` to identify groups.")
+  }
 
   base_spec <- list(
     SSD0 = SSD0,
@@ -252,29 +255,45 @@ build_staircase_specs <- function(group_id, data, staircase, base_spec, group_co
 
   for (lvl in levels_id) {
     spec <- base_spec
-    if (length(staircase_list)) {
-      if (!is.null(staircase_list[[lvl]])) {
-        spec <- utils::modifyList(spec, staircase_list[[lvl]])
-      }
+    matched_override <- FALSE
 
-      if (length(group_cols)) {
-        # Use the first row for this group to look up factor-specific overrides
-        first_row <- data[which(group_id == lvl)[1], group_cols, drop = FALSE]
-        for (col in group_cols) {
-          overrides <- staircase_list[[col]]
-          if (is.list(overrides)) {
-            value <- as.character(first_row[[col]])
-            if (!is.null(overrides[[value]])) {
-              spec <- utils::modifyList(spec, overrides[[value]])
-            }
-          }
-          value <- as.character(first_row[[col]])
-          direct_override <- staircase_list[[value]]
-          if (is.list(direct_override)) {
-            spec <- utils::modifyList(spec, direct_override)
+    if (length(staircase_list) && !is.null(staircase_list[[lvl]])) {
+      spec <- utils::modifyList(spec, staircase_list[[lvl]])
+      matched_override <- TRUE
+    }
+
+    if (length(group_cols)) {
+      first_row <- data[which(group_id == lvl)[1], group_cols, drop = FALSE]
+      path_lists <- list(staircase_list)
+      if (!is.null(spec[["subjects"]])) path_lists <- c(path_lists, list(spec[["subjects"]]))
+
+      for (col in group_cols) {
+        value <- as.character(first_row[[col]])
+
+        for (p in path_lists) {
+          if (!is.list(p)) next
+          overrides <- p[[col]]
+          if (is.list(overrides) && !is.null(overrides[[value]])) {
+            spec <- utils::modifyList(spec, overrides[[value]])
+            matched_override <- TRUE
           }
         }
+
+        for (p in path_lists) {
+          if (!is.list(p)) next
+          direct_override <- p[[value]]
+          if (is.list(direct_override)) {
+            spec <- utils::modifyList(spec, direct_override)
+            matched_override <- TRUE
+          }
+        }
+
+        if (is.list(spec[[col]])) spec[[col]] <- NULL
       }
+    }
+
+    if (length(staircase_list) && !matched_override && !isFALSE(staircase)) {
+      stop("No staircase specification found for group level '", lvl, "'.")
     }
 
     specs[[lvl]] <- spec
