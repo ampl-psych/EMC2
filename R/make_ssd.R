@@ -268,6 +268,11 @@ build_staircase_specs <- function(group_id, data, staircase, base_spec, group_co
               spec <- utils::modifyList(spec, overrides[[value]])
             }
           }
+          value <- as.character(first_row[[col]])
+          direct_override <- staircase_list[[value]]
+          if (is.list(direct_override)) {
+            spec <- utils::modifyList(spec, direct_override)
+          }
         }
       }
     }
