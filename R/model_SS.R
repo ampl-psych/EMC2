@@ -722,6 +722,7 @@ rSShybrid <- function(data,pars,ok=rep(TRUE,dim(pars)[1]))
   ntrials <- dim(pars)[1]/nacc # Number of trials to simulate
   is1 <- lR==levels(lR)[1]     # First go accumulator
   acc <- 1:nacc                # choice (go and ST) accumulator index
+  allSSD <- data$SSD[is1]
 
   # stop-triggered racers
   isST <- pars[,"lI"]==1              # Boolean for all pars
