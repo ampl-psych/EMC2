@@ -409,7 +409,8 @@ rSSexGaussian <- function(data,pars,ok=rep(TRUE,dim(pars)[1]))
       stop("When SSD has NAs a staircase list must be supplied!")
     staircase <- attr(data,"staircase")
 
-    allR <- allrt <- numeric(ncol(dt))  # to store unified results
+    allR <- allrt <- allSSD <- numeric(ncol(dt))  # to store unified results
+    allSSD[] <- Inf
     dts <- dt[,stair,drop=F]
 
     # Non-staircase trials
@@ -865,8 +866,6 @@ rSShybrid <- function(data,pars,ok=rep(TRUE,dim(pars)[1]))
   if (any(stair)) {
     allrt[!stair] <- rt
     allR[!stair] <- R
-    allSSD <- NA
-    allSSD[stair] <- stair_res$SSD
     out <- cbind.data.frame(R=factor(allR,levels=1:nacc,labels=levels(lR)),
                             rt=allrt, SSD = allSSD)
     return(out)
