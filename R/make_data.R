@@ -215,6 +215,7 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
     add_accumulators(data,design$matchfun,simulate=TRUE,type=model()$type,Fcovariates=design$Fcovariates),
     design,model,add_acc=FALSE,compress=FALSE,verbose=FALSE,
     rt_check=FALSE)
+  lR_levels <- if (!is.null(data$lR)) levels(data$lR) else NULL
   pars <- t(apply(parameters, 1, do_pre_transform, model()$pre_transform))
   pars <- map_p(add_constants(pars,design$constants),data, model())
   if(!is.null(model()$trend) && attr(model()$trend, "pretransform")){
@@ -243,6 +244,14 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
     pars <- apply(pars,2,rep,times=expand)
   }
   if (!is.null(ssd_meta)) {
+    ssd_meta$labels <- lR_levels
+    if (!is.null(ssd_meta$specs)) {
+      for (nm in names(ssd_meta$specs)) {
+        if (is.list(ssd_meta$specs[[nm]])) {
+          ssd_meta$specs[[nm]]$labels <- lR_levels
+        }
+      }
+    }
     attr(data, "staircase") <- ssd_meta
     attr(pars, "staircase") <- ssd_meta
   }
