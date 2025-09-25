@@ -49,19 +49,20 @@ staircase_function <- function(dts,staircase) {
   for (i in 1:ns) {
     if (SSD[i]<staircase$stairmin) SSD[i] <- staircase$stairmin
     if (SSD[i]>staircase$stairmax) SSD[i] <- staircase$stairmax
-    dts[iSSD,i] <- dts[iSSD,i] + SSD[i]
-    if (all(is.infinite(dts[-1,i]))) {
+    trial <- dts[,i]
+    trial[iSSD] <- trial[iSSD] + SSD[i]
+    if (all(is.infinite(trial[-1]))) {
       Ri <- 1
     } else {
-      Ri <- which.min(dts[,i])
+      Ri <- which.min(trial)
     }
     if (Ri==1) {
       if (!is.null(accST) && length(accST) > 0) {
         st_cols <- accST
-        st_finish <- dts[st_cols,i]
+        st_finish <- trial[st_cols]
         st_idx <- st_cols[which.min(st_finish)]
         sR[i] <- st_idx - 1
-        srt[i] <- dts[st_idx,i]
+        srt[i] <- st_finish[which.min(st_finish)]
         label <- if (!is.null(labels) && (st_idx-1) <= length(labels)) labels[st_idx-1] else NA_character_
       } else {
         sR[i] <- srt[i] <- NA
@@ -69,7 +70,11 @@ staircase_function <- function(dts,staircase) {
       }
     } else {
       sR[i] <- Ri-1
-      srt[i] <- min(dts[-1,i])
+      if (Ri==1) {
+        srt[i] <- NA
+      } else {
+        srt[i] <- trial[Ri]
+      }
       label <- if (!is.null(labels) && (Ri-1) <= length(labels)) labels[Ri-1] else NA_character_
     }
     step_dir <- NULL
