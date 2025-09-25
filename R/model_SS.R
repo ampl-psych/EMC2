@@ -35,6 +35,9 @@ staircase_function <- function(dts,staircase) {
   rules <- staircase$rules
   if (is.null(rules)) rules <- list(up = NULL, down = NULL)
   labels <- staircase$labels
+  accST <- staircase$accST
+  iSSD <- 1
+  if (!is.null(accST)) iSSD <- c(iSSD, accST)
   match_rule <- function(label, rule) {
     if (is.null(rule) || !length(rule)) return(FALSE)
     if (is.na(label)) {
@@ -46,20 +49,28 @@ staircase_function <- function(dts,staircase) {
   for (i in 1:ns) {
     if (SSD[i]<staircase$stairmin) SSD[i] <- staircase$stairmin
     if (SSD[i]>staircase$stairmax) SSD[i] <- staircase$stairmax
-    dts[1,i] <- dts[1,i] + SSD[i]
+    dts[iSSD,i] <- dts[iSSD,i] + SSD[i]
     if (all(is.infinite(dts[-1,i]))) {
       Ri <- 1
     } else {
       Ri <- which.min(dts[,i])
     }
     if (Ri==1) {
-      sR[i] <- srt[i] <- NA
+      if (!is.null(accST) && length(accST) > 0) {
+        st_cols <- accST
+        st_finish <- dts[st_cols,i]
+        st_idx <- st_cols[which.min(st_finish)]
+        sR[i] <- st_idx - 1
+        srt[i] <- dts[st_idx,i]
+        label <- if (!is.null(labels) && (st_idx-1) <= length(labels)) labels[st_idx-1] else NA_character_
+      } else {
+        sR[i] <- srt[i] <- NA
+        label <- NA_character_
+      }
     } else {
       sR[i] <- Ri-1
       srt[i] <- min(dts[-1,i])
-    }
-    label <- if (Ri==1) NA_character_ else {
-      if (!is.null(labels) && (Ri-1) <= length(labels)) labels[Ri-1] else NA_character_
+      label <- if (!is.null(labels) && (Ri-1) <= length(labels)) labels[Ri-1] else NA_character_
     }
     step_dir <- NULL
     if (!is.null(rules$up) || !is.null(rules$down)) {
