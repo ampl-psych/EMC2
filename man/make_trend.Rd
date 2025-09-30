@@ -13,7 +13,7 @@ make_trend(
   trend_pnames = NULL,
   premap = TRUE,
   pretransform = FALSE,
-  filter_lR = FALSE
+  at = NULL
 )
 }
 \arguments{
@@ -33,7 +33,7 @@ make_trend(
 
 \item{pretransform}{If !premap, logical indicating if trend should be applied before or after parameter transformation}
 
-\item{filter_lR}{If TRUE, does updating only once each trial (by filtering the dadm on the first level of lR). Only relevant for delta and delta2 kernels.}
+\item{at}{If NULL (default), trend is applied everywhere. If a factor name (e.g., "lR"), trend is applied only to entries corresponding to the first level of that factor.}
 }
 \value{
 A list containing the trend specifications for each parameter
