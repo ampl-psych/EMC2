@@ -40,6 +40,7 @@ make_data_unconditional <- function(data, pars, design, model, return_covariates
   if(!is.null(model()$trend)) {
     covariate_par_names <- covariate_names <- covariates <- NULL
     covariate_trend_idx <- c()
+    feedback_columns <- c()
     trends <- model()$trend
     for(trend_idx in 1:length(trends)) {
       trend <- trends[[trend_idx]]
@@ -49,13 +50,28 @@ make_data_unconditional <- function(data, pars, design, model, return_covariates
         covariate_trend_idx <- c(covariate_trend_idx, rep(trend_idx, length(trend$covariate)))
       }
       if(trend$kernel == 'deltab') data$rt <- 0  # ensure RT is not NA, so it won't be ignored because it's set to NA
+      # Collect feedback-generated column names
+      if(!is.null(trend$feedback_generator)) {
+        if(!is.null(trend$feedback_columns)) {
+          feedback_columns <- c(feedback_columns, trend$feedback_columns)
+        } else {
+          # Default to 'reward' for backward compatibility
+          feedback_columns <- c(feedback_columns, 'reward')
+        }
+      }
     }
     covariates <- matrix(NA, nrow=nrow(data), ncol=length(covariate_names))
     colnames(covariates) <- covariate_names
+  } else {
+    feedback_columns <- c()
+  }
+
+  # Initialize feedback columns to NA
+  for(col in unique(feedback_columns)) {
+    if(col %in% colnames(data)) data[[col]] <- NA
   }
 
   model_ <- model()
-  if('reward' %in% colnames(data)) data$reward <- NA
   if(!'lR' %in% colnames(data)) data$lR <- factor(rep(1, nrow(data)))  # for simulations of the DDM, assume all rows are lR==1
   includeColumns <- !colnames(data) %in% c('lR', 'lM', names(design$Ffunctions))
 
@@ -156,13 +172,27 @@ make_data_unconditional <- function(data, pars, design, model, return_covariates
     Rrt <- Rrt[rep(1:nrow(Rrt), each=length(unique(this_data$lR))),]
     for (i in dimnames(Rrt)[[2]]) this_data[[i]] <- Rrt[,i]
 
-    # check for feedback generators
+    # Apply feedback generators
     for(i in 1:length(trends)) {
       if(!is.null(trends[[i]]$feedback_generator)) {
-        ## TO DO: make more generic. Pass *and return* entire data frame.
         this_data_tmp <- this_data[this_data$lR == levels(this_data$lR)[1],]
-        fb <- trends[[i]]$feedback_generator(this_data_tmp)
-        this_data$reward <- rep(fb, each=length(levels(this_data$lR)))
+        fb_output <- trends[[i]]$feedback_generator(this_data_tmp)
+        
+        # Handle different return types from feedback_generator
+        if(is.data.frame(fb_output) || is.list(fb_output)) {
+          # If it's a data frame or named list, assign each column
+          for(col_name in names(fb_output)) {
+            this_data[[col_name]] <- rep(fb_output[[col_name]], each=length(levels(this_data$lR)))
+          }
+        } else {
+          # If it's a vector, determine column name
+          if(!is.null(trends[[i]]$feedback_columns)) {
+            col_name <- trends[[i]]$feedback_columns[1]  # Use first if multiple specified
+          } else {
+            col_name <- 'reward'  # Default for backward compatibility
+          }
+          this_data[[col_name]] <- rep(fb_output, each=length(levels(this_data$lR)))
+        }
       }
     }
 
@@ -176,8 +206,6 @@ make_data_unconditional <- function(data, pars, design, model, return_covariates
     match_idx <- with(data, data$trials == this_trial & data$subjects %in% this_data$subjects)
     data[match_idx, colnames(this_data)] <- this_data[match(data$subjects[match_idx], this_data$subjects), ]
   }
-
-
   # remove lR, lM
   data <- data[data$lR == levels(data$lR)[1],!names(data) %in% c('lR', 'lM')]
   return(list(data=data, covariates=covariates, trialwise_parameters=trialwise_parameters))

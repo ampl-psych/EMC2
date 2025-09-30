@@ -118,9 +118,10 @@ NumericVector run_trend_rcpp(DataFrame data, List trend, NumericVector param, Nu
   String kernel = as<String>(trend["kernel"]);
   String base = as<String>(trend["base"]);
   CharacterVector covnames = trend["covariate"];
-  bool filter_lR = false;
-  if(trend.containsElementNamed("filter_lR")) {
-    filter_lR = as<bool>(trend["filter_lR"]);
+  bool filter_at = false;
+  if(trend.containsElementNamed("at")) {
+    SEXP at_val = trend["at"];
+    filter_at = !Rf_isNull(at_val);
   }
   // Initialize output vector with zeros
   int n_trials = param.length();
@@ -196,8 +197,8 @@ NumericVector run_trend_rcpp(DataFrame data, List trend, NumericVector param, Nu
         l++;
       } else {
         // covariate was NA in the data. In some cases, we still need to change the output
-        if(filter_lR) {
-          // If covariates were filtered on lR, forward fill the covariates
+        if(filter_at) {
+          // If covariates were filtered by a factor, forward fill the covariates
           if(k == 0) {
             out[k] = out[k] + trend_pars(0,1);
           } else {
