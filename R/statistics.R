@@ -49,8 +49,10 @@ compare <- function(sList,stage="sample",filter=NULL,use_best_fit=TRUE,
                         print_summary=TRUE,digits=0,digits_p=3, ...) {
   if(is(sList, "emc")) sList <- list(sList)
   getp <- function(IC) {
-    IC <- -(IC - min(IC))/2
-    exp(IC)/sum(exp(IC))
+    IC_delta <- -(IC - min(IC)) / 2
+    log_denom <- log_sum_exp(IC_delta)
+    result <- exp(IC_delta - log_denom)
+    return(result)
   }
   if (is.numeric(filter)) defaultsf <- filter[1] else defaultsf <- 0
   sflist <- as.list(setNames(rep(defaultsf,length(sList)),names(sList)))
@@ -410,8 +412,9 @@ compare_MLL <- function(mll,nboot=1e5,digits=2,print_summary=TRUE)
   pmp <- function(x)
     # posterior model probability for a vector of marginal log-likelihoods
   {
-    x <- exp(x-max(x))
-    x/sum(x)
+    log_denom <- log_sum_exp(x)
+    result <- exp(x - log_denom)
+    return(result)
   }
 
   out <- sort(apply(apply(do.call(rbind,lapply(mll,function(x){
@@ -576,23 +579,19 @@ model_averaging <- function(IC_for, IC_against) {
   # Combine the IC values from both groups
   all_IC <- c(IC_for, IC_against)
 
-  # Find the smallest IC value (for numerical stability)
-  min_IC <- min(all_IC)
+  # shifted log-weights
+  logw <- -0.5 * (all_IC - min(all_IC))
+  log_denom <- log_sum_exp(logw)
 
-  # Compute the unnormalized weights
-  unnorm_weights <- exp(-0.5 * (all_IC - min_IC))
+  # normalised weights
+  weights <- exp(logw - log_denom)
 
-  # Normalize weights so they sum to 1
-  weights <- unnorm_weights / sum(unnorm_weights)
-
-  # Separate the weights for the two groups
+  # group sums
   weight_for <- sum(weights[seq_along(IC_for)])
   weight_against <- sum(weights[(length(IC_for) + 1):length(all_IC)])
 
-  # Compute the Bayes factor: evidence in favor relative to against
   bayes_factor <- weight_for / weight_against
 
-  # Return the results as a data frame
   return(data.frame(
     wFor = weight_for,
     wAgainst = weight_against,
@@ -600,3 +599,17 @@ model_averaging <- function(IC_for, IC_against) {
   ))
 }
 
+# numerically stable version of log(sum(exp(x))), based on matrixStats::logSumExp
+#' @noRd
+log_sum_exp <- function(x) {
+  if (length(x) == 0) return(-Inf)
+  if (any(is.na(x))) return(NA_real_)
+  if (any(x == Inf)) return(Inf)
+  if (all(x == -Inf)) return(-Inf)
+  max_x <- max(x)
+  # accumulate only the terms smaller than max_x
+  nomax_sum <- sum(exp(x[x != max_x] - max_x))
+  # add back the "1" for the max element via log1p
+  result <- max_x + log1p(nomax_sum)
+  return(result)
+}
