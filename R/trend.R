@@ -9,6 +9,7 @@
 #' @param phase Character vector (length 1 or `length(par_names)`) specifying the phase for each trend entry;
 #'        one of "premap", "pretransform", or "posttransform". Defaults to "premap".
 #' @param par_input Optional character vector(s) of parameter names to use as additional inputs for the trend
+#' @param at If NULL (default), trend is applied everywhere. If a factor name (e.g., "lR"), trend is applied only to entries corresponding to the first level of that factor.
 #' @return A list containing the trend specifications for each parameter
 #' @export
 #'
@@ -25,8 +26,8 @@
 #'
 make_trend <- function(par_names, cov_names = NULL, kernels, bases = NULL,
                        shared = NULL, trend_pnames = NULL,
-                       par_input = NULL,
                        phase = "premap",
+                       par_input = NULL, at = NULL,
                        custom_trend = NULL){
   if(!(length(par_names) == length(kernels))){
     stop("Make sure that par_names and kernels have the same length")
@@ -81,8 +82,9 @@ make_trend <- function(par_names, cov_names = NULL, kernels, bases = NULL,
     # Kernel
     if(!kernels[i] %in% names(trend_help(kernels[i], return_types = TRUE)$kernels)){
       stop("Kernel type not support see `trend_help()`")
-    } else{
+    } else  {
       trend$kernel <- kernels[i]
+      if(kernels[i] %in% c('delta', 'delta2')) trend$at <- at
     }
 
     # base
@@ -186,84 +188,10 @@ get_trend_pnames <- function(trend){
 #' trend_help()
 trend_help <- function(kernel = NULL, base = NULL, ...){
   dots <- add_defaults(list(...), do_return = FALSE, return_types = FALSE)
-  bases <- list(
-    lin = list(description = "Linear base: parameter + b * k",
-               transforms = list(func = list("B0" = "identity")),
-               default_pars = "B0"),
-    exp_lin = list(description = "Exponential linear base: exp(parameter) + exp(b) * k",
-                   transforms = list(func = list("B0" = "exp")),
-                   default_pars = "B0"),
-    centered = list(description = "Centered mapping: parameter + b*(k - 0.5)",
-                    transforms = list(func = list("B0" = "identity")),
-                    default_pars = "B0"),
-    add = list(description = "Additive base: parameter + k",
-               transforms = NULL),
-    identity = list(description = "Identity base: k",
-                    transforms = NULL)
-  )
+  bases <- get_bases()
   base_2p <- names(bases)[1:3]
   base_1p <- names(bases)[4:5]
-  kernels <- list(
-    custom = list(description = "Custom C++ kernel: provided via register_trend().",
-                  transforms = NULL,
-                  default_pars = NULL,
-                  bases = names(bases)),
-    lin_decr = list(description = "Decreasing linear kernel: k = -c",
-                    transforms = NULL,
-                    default_pars = NULL,
-                    bases = base_2p),
-    lin_incr = list(description = "Increasing linear kernel: k = c",
-                    transforms = NULL,
-                    default_pars = NULL,
-                    bases = base_2p),
-    exp_decr = list(description = "Decreasing exponential kernel: k = exp(-d * c)",
-                    transforms = list(func =list("d_ed" = "exp")),
-                    default_pars = "d_ed",
-                    bases = base_2p),
-    exp_incr = list(description = "Increasing exponential kernel: k = 1 - exp(-d * c)",
-                    transforms = list(func =list("d_ei" = "exp")),
-                    default_pars = "d_ei",
-                    bases = base_2p),
-    pow_decr = list(description = "Decreasing power kernel: k = (1 + c)^(-d)",
-                    transforms = list(func =list("d_pd" = "exp")),
-                    default_pars = "d_pd",
-                    bases = base_2p),
-    pow_incr = list(description = "Increasing power kernel: k = 1 - (1 + c)^(-d)",
-                    transforms = list(func =list("d_pi" = "exp")),
-                    default_pars = "d_pi",
-                    bases = base_2p),
-    poly2 = list(description = "Quadratic polynomial: k = d1 * c + d2 * c^2",
-                 transforms = list(func = list("d1" = "identity", "d2" = "identity")),
-                 default_pars = c("d1", "d2"),
-                 bases = base_1p),
-    poly3 = list(description = "Cubic polynomial: k = d1 * c + d2 * c^2 + d3 * c^3",
-                 transforms = list(func = list("d1" = "identity", "d2" = "identity", "d3" = "identity")),
-                 default_pars = c("d1", "d2", "d3"),
-                 bases = base_1p),
-    poly4 = list(description = "Quartic polynomial: k = d1 * c + d2 * c^2 + d3 * c^3 + d4 * c^4",
-                 transforms = list(func = list("d1" = "identity", "d2" = "identity", "d3" = "identity", "d4" = "identity")),
-                 default_pars = c("d1", "d2", "d3", "d4"),
-                 bases = base_1p),
-    delta = list(description = paste(
-      "Standard delta rule kernel:",
-      "Updates q[i] = q[i-1] + alpha * (c[i-1] - q[i-1]).",
-      "Parameters: q0 (initial value), alpha (learning rate)."
-    ),
-    default_pars = c("q0", "alpha"),
-    transforms = list(func = list("q0" = "identity", "alpha" = "pnorm")),
-    bases = base_2p),
-    delta2 = list(description = paste(
-      "Dual kernel delta rule:",
-      "Combines fast and slow learning rates",
-      "and switches between them based on dSwitch.",
-      "Parameters: q0 (initial value), alphaFast (fast learning rate),",
-      "propSlow (alphaSlow = propSlow * alphaFast), dSwitch (switch threshold)."
-    ),
-    default_pars = c("q0", "alphaFast", "propSlow", "dSwitch"),
-    transforms = list(func = list("q0" = "identity", "alphaFast" = "pnorm",
-                                  "propSlow" = "pnorm", "dSwitch" = "pnorm")),
-    bases = base_2p)
-  )
+  kernels <- get_kernels()
   if(dots$return_types){
     return(list(kernels = kernels, bases = bases))
   }
@@ -278,11 +206,14 @@ trend_help <- function(kernel = NULL, base = NULL, ...){
     }
     cat("\nTrend options:\n")
     cat("  premap: Trend is applied before parameter mapping. This means the trend parameters\n")
-    cat("          are mapped first, then used to transform cognitive model parameters before their mapping.\n")
+    cat("          are mapped first, then used to transform cognitive model parameters before \n")
+    cat("          their mapping.\n")
     cat("  pretransform: Trend is applied after parameter mapping but before transformations.\n")
-    cat("                Cognitive model parameters are mapped first, then trend is applied, followed by transformations.\n")
+    cat("                Cognitive model parameters are mapped first, then trend is applied, \n")
+    cat("                followed by transformations.\n")
     cat("  posttransform: Trend is applied after both mapping and transformations.\n")
-    cat("                 Cognitive model parameters are mapped and transformed first, then trend is applied.\n")
+    cat("                 Cognitive model parameters are mapped and transformed first, \n")
+    cat("                 then trend is applied.\n")
   } else {
     if (!is.null(kernel)) {
       if(dots$do_return) return(kernels[[kernel]])
@@ -322,7 +253,7 @@ run_kernel <- function(trend_pars = NULL, kernel, input, funptr = NULL) {
   if (!is.matrix(input)) input <- matrix(input, ncol = 1)
   n <- nrow(input)
   out <- rep(0.0, n)
-  if (identical(kernel, "custom")) {
+  if (kernel == "custom") {
     # trend_pars provided here should already exclude base parameter columns
     if (is.null(funptr)) stop("Missing function pointer for custom kernel. Pass 'funptr'.")
     contrib <- EMC2_call_custom_trend(trend_pars, input, funptr)
@@ -344,18 +275,60 @@ run_kernel <- function(trend_pars = NULL, kernel, input, funptr = NULL) {
       delta = {
         good <- !is.na(covariate)
         tmp <- run_delta(trend_pars[good,1], trend_pars[good,2], covariate[good])
-        z <- rep(0.0, n); z[good] <- tmp; z
+        z <- rep(0, n); z[good] <- tmp; z
       },
       delta2 = {
         good <- !is.na(covariate)
         tmp <- run_delta2(trend_pars[good,1], trend_pars[good,2], trend_pars[good,3], trend_pars[good,4], covariate[good])
-        z <- rep(0.0, n); z[good] <- tmp; z
+        z <- rep(0, n); z[good] <- tmp; z
       }
     )
     contrib[is.na(contrib)] <- 0
     out <- out + contrib
   }
   out
+}
+
+# Helper: Initialize Q0 values for delta-rule kernels
+# Returns a matrix of Q0 values with proper handling of the 'at' filter
+initialize_q0 <- function(dadm, trend, trend_pars, cov_names) {
+  n_rows <- nrow(dadm)
+  n_covs <- length(cov_names)
+
+  # Determine first trials based on 'at' parameter
+  first_trials <- dadm$trials == min(dadm$trials)
+  if (!is.null(trend$at)) {
+    if (trend$at %in% colnames(dadm)) {
+      # Apply filter: only first level of the 'at' factor
+      first_trials <- first_trials & (dadm[[trend$at]] == levels(dadm[[trend$at]])[1])
+    }
+  }
+
+  # Initialize Q0 matrix
+  if (!is.null(trend$covariates_states)) {
+    # Use existing covariate states if provided
+    q0 <- trend$covariates_states
+    # Fill in missing Q0 values on first trials with trend parameter values
+    q0[first_trials & is.na(q0)] <- trend_pars[first_trials, 2][is.na(q0[first_trials])]
+  } else {
+    # Create new Q0 matrix from trend parameters
+    q0 <- matrix(trend_pars[, 2], nrow = n_rows, ncol = n_covs)
+    colnames(q0) <- cov_names
+    # Only valid on first trials; rest are NA
+    q0[!first_trials, ] <- NA
+  }
+
+  return(q0)
+}
+
+# Helper: Apply forward-fill to covariates when using 'at' filtering
+apply_forward_fill <- function(values, use_fill = FALSE) {
+  if (!use_fill) return(values)
+  filled <- na_locf(values, na.rm = FALSE)
+  if (any(is.na(filled))) {
+    stop("Found NA after forward-fill. This should not happen.")
+  }
+  return(filled)
 }
 
 prep_trend_phase <- function(dadm, trend, pars, phase){
@@ -380,27 +353,80 @@ run_trend <- function(dadm, trend, param, trend_pars, pars_full = NULL){
                         centered = 1,
                         add = 0,
                         identity = 0)
+
+  # Fix dimension for single-column trend_pars
+  if(is.null(dim(trend_pars))) trend_pars <- t(t(trend_pars))
+
   out <- numeric(nrow(dadm))
-  # Build combined input matrix: covariates + par_input
   cov_cols <- trend$covariate
-  par_in_cols <- if (!is.null(trend$par_input)) trend$par_input else character(0)
-  n_inputs <- length(cov_cols) + length(par_in_cols)
-  if (n_inputs > 0) {
-    input_all <- matrix(NA_real_, nrow(dadm), n_inputs)
-    if (length(cov_cols) > 0) {
-      for (i in seq_along(cov_cols)) input_all[, i] <- dadm[, cov_cols[i]]
-    }
-    if (length(par_in_cols) > 0) {
-      for (j in seq_along(par_in_cols)) input_all[, length(cov_cols) + j] <- pars_full[, par_in_cols[j]]
-    }
-    if (ncol(trend_pars) > n_base_pars) {
-      kernel_pars <- trend_pars[, seq.int(n_base_pars + 1, ncol(trend_pars)), drop = FALSE]
-    } else {
-      kernel_pars <- trend_pars[, 0, drop = FALSE]
-    }
-    funptr <- if (identical(trend$kernel, "custom")) attr(trend, "custom_ptr") else NULL
-    out <- out + run_kernel(kernel_pars, trend$kernel, input_all, funptr = funptr)
+
+  # Check if this is a delta-rule kernel requiring special handling
+  is_delta_kernel <- trend$kernel %in% c('delta', 'delta2')
+  use_at_filter <- !is.null(trend$at)
+
+  # Initialize Q0 for delta kernels
+  q0 <- NULL
+  if (is_delta_kernel) {
+    q0 <- initialize_q0(dadm, trend, trend_pars, cov_cols)
   }
+
+  # Build par_input columns if needed
+  par_in_cols <- if (!is.null(trend$par_input)) trend$par_input else character(0)
+  par_input_matrix <- NULL
+  if (length(par_in_cols) > 0) {
+    par_input_matrix <- matrix(NA_real_, nrow(dadm), length(par_in_cols))
+    for (j in seq_along(par_in_cols)) {
+      par_input_matrix[, j] <- pars_full[, par_in_cols[j]]
+    }
+  }
+
+  # Process each covariate (required for separate Q0 per covariate)
+  if (length(cov_cols) > 0) {
+    for (i in seq_along(cov_cols)) {
+      cov_name <- cov_cols[i]
+      covariate <- dadm[, cov_name]
+
+      # For delta kernels, handle Q0 initialization
+      if (is_delta_kernel) {
+        NA_idx <- is.na(covariate)
+        reset_with_q0 <- !is.na(q0[, cov_name])
+        covariate[NA_idx & reset_with_q0] <- q0[NA_idx & reset_with_q0, cov_name]
+      }
+
+      # Build input matrix: this covariate + par_input
+      if (is.null(par_input_matrix)) {
+        input_matrix <- matrix(covariate, ncol = 1)
+      } else {
+        input_matrix <- cbind(covariate, par_input_matrix)
+      }
+
+      # Extract kernel parameters (excluding base parameters)
+      if (ncol(trend_pars) > n_base_pars) {
+        kernel_pars <- trend_pars[, seq.int(n_base_pars + 1, ncol(trend_pars)), drop = FALSE]
+      } else {
+        kernel_pars <- matrix(nrow = nrow(trend_pars), ncol = 0)
+      }
+
+      # For delta kernels, update Q0 parameter in kernel_pars
+      if (is_delta_kernel && ncol(kernel_pars) >= 1) {
+        # First kernel parameter is q0; replace with values from q0 matrix
+        kernel_pars[, 1] <- q0[, cov_name]
+      }
+
+      funptr <- if (identical(trend$kernel, "custom")) attr(trend, "custom_ptr") else NULL
+      kernel_out <- run_kernel(kernel_pars, trend$kernel, input_matrix, funptr = funptr)
+
+      # Apply forward-fill if 'at' filter is used
+      if (use_at_filter) {
+        kernel_out <- apply_forward_fill(kernel_out, use_fill = TRUE)
+      }
+
+      # Add contribution (NAs are already handled by run_kernel returning 0 for NA inputs)
+      kernel_out[is.na(kernel_out)] <- 0
+      out <- out + kernel_out
+    }
+  }
+
   # Do the mapping
   out <- switch(trend$base,
                 lin = param + trend_pars[,1]*out,
@@ -409,6 +435,7 @@ run_trend <- function(dadm, trend, param, trend_pars, pars_full = NULL){
                 add = param + out,
                 identity = out
   )
+
   return(out)
 }
 
@@ -486,9 +513,15 @@ update_model_trend <- function(trend, model) {
 run_delta <- function(q0,alpha,covariate) {
   q <- pe <- numeric(length(covariate))
   q[1] <- q0[1]
+  if(length(q) == 1) return(q)  # only 1 trial, cannot be updated
+
   for (i in 2:length(q)) {
-    pe[i-1] <- covariate[i-1]-q[i-1]
-    q[i] <- q[i-1] + alpha[i-1]*pe[i-1]
+    if(is.na(q0[i])) {
+      pe[i-1] <- covariate[i-1]-q[i-1]
+      q[i] <- q[i-1] + alpha[i-1]*pe[i-1]
+    } else {
+      q[i] <- q0[i]
+    }
   }
   return(q)
 }
@@ -498,19 +531,22 @@ run_delta2 <- function(q0,alphaFast,propSlow,dSwitch,covariate) {
   q[1] <- qFast[1] <- qSlow[1] <- q0[1]
   alphaSlow <- propSlow*alphaFast
   for (i in 2:length(covariate)) {
-    peFast[i-1] <- covariate[i-1]-qFast[i-1]
-    peSlow[i-1] <- covariate[i-1]-qSlow[i-1]
-    qFast[i] <- qFast[i-1] + alphaFast[i-1]*peFast[i-1]
-    qSlow[i] <- qSlow[i-1] + alphaSlow[i-1]*peSlow[i-1]
-    if (abs(qFast[i]-qSlow[i])>dSwitch[i]){
-      q[i] <- qFast[i]
-    } else{
-      q[i] <- qSlow[i]
+    if(!is.na(q0[i])) {
+      qFast[i] <- qSlow[i] <- q[i] <- q0[i]
+    } else {
+      peFast[i-1] <- covariate[i-1]-qFast[i-1]
+      peSlow[i-1] <- covariate[i-1]-qSlow[i-1]
+      qFast[i] <- qFast[i-1] + alphaFast[i-1]*peFast[i-1]
+      qSlow[i] <- qSlow[i-1] + alphaSlow[i-1]*peSlow[i-1]
+      if (abs(qFast[i]-qSlow[i])>dSwitch[i]){
+        q[i] <- qFast[i]
+      } else{
+        q[i] <- qSlow[i]
+      }
     }
   }
   return(q)
 }
-
 
 ##' Register a custom C++ trend kernel
 ##'
@@ -591,5 +627,257 @@ register_trend <- function(trend_parameters, file, transforms = NULL, base = "ad
   obj
 }
 
+# apply_lR_filter <- function(d, cov_name) {
+#   if(!lR %in% colnames(d)) {
+#     d[levels(d$lR)!=levels(d$lR)[1],cov_name] <- NA
+#   }
+#   d
+# }
 
+has_delta_rules <- function(model) {
+  trend <- model()$trend
+  if(is.null(trend)) return(FALSE)
+
+  for(trend_n in 1:length(trend)) {
+    if(trend[[trend_n]]$kernel %in% c('delta', 'delta2')) return(TRUE)
+  }
+  return(FALSE)
+}
+
+has_conditional_covariates <- function(design) {
+  # find define covariates that depend on behavior -- these are rt, R, or any of the outputs of the functions provided.
+  # they can be lRfiltered or not
+  function_output_columns <- names(design$Ffunctions)
+  behavioral_covariates <- c('rt', 'R', function_output_columns)
+  behavioral_covariates <- c(behavioral_covariates, paste0(behavioral_covariates, '_lRfiltered'))
+
+  # find actual covariates, look for a match
+  trend <- design$model()$trend
+  for(trend_n in 1:length(trend)) {
+    for(cov in trend[[trend_n]]$covariate) {
+      if(cov  %in% behavioral_covariates) return(TRUE)
+    }
+  }
+  return(FALSE)
+}
+
+
+###
+# format_base <- function(base, trend_par_name, kernel_formatted, base_pars=NULL, first=TRUE) {
+#   if(first) {
+#     switch(base,
+#            lin = paste0(trend_par_name,' = ', gsub('_t', '', trend_par_name), ' + ', base_pars[1], ' * ', kernel_formatted),
+#            exp_lin = paste0(trend_par_name,' = exp(', gsub('_t', '', trend_par_name), ') + exp(', base_pars[1], ') * ', kernel_formatted),
+#            centered = paste0(trend_par_name,' = ', gsub('_t', '', trend_par_name), ' + ', base_pars[1], ' * (', kernel_formatted, ' - 0.5)'),
+#            add = paste0(trend_par_name,' = ', gsub('_t', '', trend_par_name), ' + ', kernel_formatted),
+#            identity = paste0(trend_par_name,' = ', kernel_formatted))
+#   } else {
+#     switch(base,
+#            lin = paste0(' + ', base_pars[1], ' * ', kernel_formatted),
+#            exp_lin = paste0(' + exp(', base_pars[1], ') * ', kernel_formatted),
+#            centered = paste0(' + ', base_pars[1], ' * (', kernel_formatted, ' - 0.5)'),
+#            add = paste0(' + ', kernel_formatted)
+#     )
+#   }
+# }
+# format_kernel <- function(kernel) {
+#   switch(kernel,
+#          lin_decr = '-XCOVARIATEX',
+#          lin_incr = 'XCOVARIATEX',
+#          exp_decr = 'exp(-d_ed * XCOVARIATEX)',
+#          exp_incr = '1 - exp(-d_ei * XCOVARIATEX)',
+#          pow_decr = '(1 + XCOVARIATEX)^(-d_pd)',
+#          pow_incr = '1 - (1 + XCOVARIATEX)^(-d_pi)',
+#          poly1 = 'd1 * XCOVARIATEX',
+#          poly2 = 'd1 * XCOVARIATEX + d2 * XCOVARIATEX^2',
+#          poly3 = 'd1 * XCOVARIATEX + d2 * XCOVARIATEX^2 + d3 * XCOVARIATEX^3',
+#          poly4 = 'd1 * XCOVARIATEX + d2 * XCOVARIATEX^2 + d3 * XCOVARIATEX^3 + d4 * XCOVARIATEX^4',
+#          delta = 'Q_{XCOVARIATEX,t}',
+#          delta2 = 'Q_{XCOVARIATEX,t}')
+# }
+###
+
+get_bases <- function() {
+  bases <- list(
+    lin = list(description = "Linear base: parameter + w * k",
+               transforms = list(func = list("w" = "identity")),
+               default_pars = "w"),
+    exp_lin = list(description = "Exponential linear base: exp(parameter) + exp(w) * k",
+                   transforms = list(func = list("w" = "exp")),
+                   default_pars = "w"),
+    centered = list(description = "Centered mapping: parameter + w*(k - 0.5)",
+                    transforms = list(func = list("w" = "identity")),
+                    default_pars = "w"),
+    add = list(description = "Additive base: parameter + k",
+               transforms = NULL),
+    identity = list(description = "Identity base: k",
+                    transforms = NULL)
+  )
+  bases
+}
+
+get_kernels <- function() {
+
+  base_2p <- names(get_bases())[1:3]
+  base_1p <- names(get_bases())[4:5]
+
+  kernels <- list(
+    lin_decr = list(description = "Decreasing linear kernel: k = -c",
+                    transforms = NULL,
+                    default_pars = NULL,
+                    bases = base_2p),
+    lin_incr = list(description = "Increasing linear kernel: k = c",
+                    transforms = NULL,
+                    default_pars = NULL,
+                    bases = base_2p),
+    exp_decr = list(description = "Decreasing exponential kernel: k = exp(-d_ed * c)",
+                    transforms = list(func =list("d_ed" = "exp")),
+                    default_pars = "d_ed",
+                    bases = base_2p),
+    exp_incr = list(description = "Increasing exponential kernel: k = 1 - exp(-d_ei * c)",
+                    transforms = list(func =list("d_ei" = "exp")),
+                    default_pars = "d_ei",
+                    bases = base_2p),
+    pow_decr = list(description = "Decreasing power kernel: k = (1 + c)^(-d_pd)",
+                    transforms = list(func =list("d_pd" = "exp")),
+                    default_pars = "d_pd",
+                    bases = base_2p),
+    pow_incr = list(description = "Increasing power kernel: k = 1 - (1 + c)^(-d_pi)",
+                    transforms = list(func =list("d_pi" = "exp")),
+                    default_pars = "d_pi",
+                    bases = base_2p),
+    poly2 = list(description = "Quadratic polynomial: k = d1 * c + d2 * c^2",
+                 transforms = list(func = list("d1" = "identity", "d2" = "identity")),
+                 default_pars = c("d1", "d2"),
+                 bases = base_1p),
+    poly3 = list(description = "Cubic polynomial: k = d1 * c + d2 * c^2 + d3 * c^3",
+                 transforms = list(func = list("d1" = "identity", "d2" = "identity", "d3" = "identity")),
+                 default_pars = c("d1", "d2", "d3"),
+                 bases = base_1p),
+    poly4 = list(description = "Quartic polynomial: k = d1 * c + d2 * c^2 + d3 * c^3 + d4 * c^4",
+                 transforms = list(func = list("d1" = "identity", "d2" = "identity", "d3" = "identity", "d4" = "identity")),
+                 default_pars = c("d1", "d2", "d3", "d4"),
+                 bases = base_1p),
+    delta = list(description = paste(
+      "Standard delta rule kernel: k = q[i].\n",
+      "        Updates q[i] = q[i-1] + alpha * (c[i-1] - q[i-1]).\n",
+      "        Parameters: q0 (initial value), alpha (learning rate)."
+    ),
+    default_pars = c("q0", "alpha"),
+    transforms = list(func = list("q0" = "identity", "alpha" = "pnorm")),
+    bases = base_2p),
+    delta2 = list(description = paste(
+      "Dual kernel delta rule: k = q[i].\n",
+      "         Combines fast and slow learning rates\n",
+      "         and switches between them based on dSwitch.\n",
+      "         Parameters: q0 (initial value), alphaFast (fast learning rate),\n",
+      "         propSlow (alphaSlow = propSlow * alphaFast), dSwitch (switch threshold)."
+    ),
+    default_pars = c("q0", "alphaFast", "propSlow", "dSwitch"),
+    transforms = list(func = list("q0" = "identity", "alphaFast" = "pnorm",
+                                  "propSlow" = "pnorm", "dSwitch" = "pnorm")),
+    bases = base_2p)
+  )
+  kernels
+}
+
+
+format_kernel <- function(kernel, kernel_pars=NULL) {
+  kernels <- get_kernels()
+  eq_string <- kernels[[kernel]]$description
+  eq_string <- strsplit(eq_string, ': k = ')[[1]][[2]]
+  if(kernel %in% c('delta', 'delta2')) eq_string <- strsplit(eq_string, '\\.')[[1]][[1]]
+  if(kernel %in% c('exp_incr', 'pow_incr', 'poly1', 'poly2', 'poly3', 'poly4')) eq_string <- paste0('(', eq_string, ')')
+
+  # add placeholders
+  if(!is.null(kernel_pars)) {
+    for(kernel_par_n in 1:length(kernel_pars)) {
+      old_name <- kernels[[kernel]]$default_pars[kernel_par_n]
+      eq_string <- gsub(old_name, kernel_pars[kernel_par_n], eq_string)
+    }
+  }
+
+  eq_string
+}
+
+format_base <- function(base) {
+  bases <- get_bases()
+  eq_string <- bases[[base]]$description
+  eq_string <- strsplit(eq_string, ': ')[[1]][[2]]
+  eq_string
+}
+
+
+
+verbal_trend <- function(design_matrix, trend) {
+  dm_cn <- colnames(design_matrix)
+  trend_par_names <- dm_cn[dm_cn %in% names(trend)]
+  trend_str <- c()
+  for(trend_par_name in trend_par_names) {
+    base <- trend[[trend_par_name]]$base
+    kernel <- trend[[trend_par_name]]$kernel
+    covariate <- gsub('_lRfiltered', '', trend[[trend_par_name]]$covariate)
+    trend_pnames <- trend[[trend_par_name]]$trend_pnames
+    n_base_pars <- switch(base,
+                          lin = 1,
+                          exp_lin = 1,
+                          centered = 1,
+                          add = 0,
+                          identity = 0)
+    if(length(trend_pnames) > n_base_pars) {
+      kernel_pars <- trend_pnames[(n_base_pars+1):length(trend_pnames)]
+    } else {
+      kernel_pars <- NULL
+    }
+    base_pars=NULL
+    if(n_base_pars > 0) base_pars <- trend_pnames[1:n_base_pars]
+
+    # format kernel and base
+    kernel_formatted <- format_kernel(kernel, kernel_pars=kernel_pars)
+    base_formatted <- format_base(base)
+    if(attr(trend, 'premap')) {
+      trend_par_name <- gsub('_t', '', trend_par_name)
+    }
+    base_formatted <- paste0(trend_par_name, '_t = ', base_formatted)
+
+    # replace all in one go, use placeholders to prevent cascading replacements
+    replacements <- c('k'=gsub('c', covariate[1], kernel_formatted), 'w'=base_pars[1], 'parameter'=trend_par_name)
+    if(!attr(trend, 'premap')) {
+      replacements <- c('k'=gsub('c', covariate[1], kernel_formatted), 'w'=base_pars[1], 'parameter + ' = '')
+    }
+    patterns <- names(replacements)
+    placeholders <- paste0("___PLACEHOLDER", seq_along(patterns), "___")
+    for (i in seq_along(patterns)) {
+      base_formatted <- gsub(patterns[i], placeholders[i], base_formatted, fixed = TRUE)
+    }
+    for (i in seq_along(placeholders)) {
+      base_formatted <- gsub(placeholders[i], replacements[i], base_formatted, fixed = TRUE)
+    }
+
+    # Add additional covariates
+    if(length(covariate) > 1) {
+      for(cov_n in 2:length(covariate)) {
+        kernel_formatted <- format_kernel(kernel, kernel_pars=kernel_pars)
+        additional_base <- format_base(base)
+
+        replacements <- c('k'=gsub('c', covariate[cov_n], kernel_formatted), 'w'=base_pars[1], 'parameter + ' = '')
+        patterns <- names(replacements)
+        placeholders <- paste0("___PLACEHOLDER", seq_along(patterns), "___")
+        for (i in seq_along(patterns)) {
+          additional_base <- gsub(patterns[i], placeholders[i], additional_base, fixed = TRUE)
+        }
+        for (i in seq_along(placeholders)) {
+          additional_base <- gsub(placeholders[i], replacements[i], additional_base, fixed = TRUE)
+        }
+
+        base_formatted <- paste0(base_formatted, ' + ', additional_base)
+      }
+    }
+    trend_str <- c(trend_str, base_formatted)
+  }
+  if(length(trend_str) > 0) {
+    trend_str <- setNames(trend_str, trend_par_names)
+  }
+  trend_str
+}
 

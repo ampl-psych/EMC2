@@ -160,7 +160,7 @@ NumericVector run_kernel_rcpp(NumericMatrix trend_pars, String kernel, NumericMa
       NumericVector cov_tmp = covariate[good];
       NumericMatrix pars_tmp = submat_rcpp(trend_pars, good);
       NumericVector tmp_out = run_delta2_rcpp(pars_tmp(_, 0 + n_base_pars), pars_tmp(_, 1 + n_base_pars), pars_tmp(_, 2 + n_base_pars),
-                            pars_tmp(_, 3 + n_base_pars), cov_tmp);
+                                              pars_tmp(_, 3 + n_base_pars), cov_tmp);
       int pos = 0;
       for (int i = 0; i < n; ++i) {
         if (good[i]) {

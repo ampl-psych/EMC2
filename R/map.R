@@ -60,7 +60,7 @@ add_bound <- function(pars,bound, lR = NULL) {
 
 #### Functions to look at parameters ----
 
-map_p <- function(p,dadm,model)
+map_p <- function(p,dadm,model,return_updated_covariate=FALSE)
   # Map p to dadm and returns matrix of mapped parameters
   # p is either a vector or a matrix (ncol = number of subjects) of p_vectors
   # dadm is a design matrix with attributes containing model information
@@ -79,6 +79,7 @@ map_p <- function(p,dadm,model)
   # Get parameter names from model and create output matrix
   do_p <- names(model$p_types)
   pars <- matrix(nrow=nrow(dadm),ncol=length(do_p),dimnames=list(NULL,do_p))
+  updated_covariate <- NULL
 
   # If there are any trends for premap or pretransform do these first
   # Trend parameters used premap will be removed after mapping; pretransform ones retained
@@ -137,8 +138,14 @@ map_p <- function(p,dadm,model)
     k <- k + 1
     pars[,i] <- tmp
   }
-  # Return only non-trend parameters
-  return(pars[,!premap_idx,drop=FALSE])
+
+  if(return_updated_covariate) {
+    # SM: Return all parameters, including Q-values
+    return(list(pars=pars[,!premap_idx,drop=FALSE], updated_covariate=updated_covariate))
+  } else {
+    # Return only non-trend parameters
+    return(pars[,!premap_idx,drop=FALSE])
+  }
 }
 
 
@@ -332,7 +339,8 @@ generate_design_equations <- function(design_matrix,
                                       factor_cols = NULL,
                                       numeric_cols = NULL,
                                       transform,
-                                      pre_transform) {
+                                      pre_transform,
+                                      trend) {
   # 1. If user hasn't specified which columns are factors or numeric, guess:
   if (is.null(factor_cols)) {
     # We'll assume anything that is a factor or character is a "factor column"
@@ -350,6 +358,7 @@ generate_design_equations <- function(design_matrix,
   # 2. Build the "equation" strings from numeric cols
   make_equation_string <- function(row_i) {
     eq_terms <- c()
+    trend_terms <- c()
     for (colname in numeric_cols) {
       new_name <- colname
       if(colname %in% names(pre_transform)){
@@ -374,6 +383,7 @@ generate_design_equations <- function(design_matrix,
         sign_str <- ifelse(val >= 0, "+ ", "- ")
         term_str <- paste0(sign_str, format(abs(val), digits = 3), " * ", new_name)
       }
+      # if(colname %in% names(formatted_trends)) trend_terms <- c(trend_terms, formatted_trends[[colname]])
       eq_terms <- c(eq_terms, term_str)
     }
 
@@ -384,6 +394,7 @@ generate_design_equations <- function(design_matrix,
 
     # Combine eq_terms
     eq_string <- paste(eq_terms, collapse = " ")
+    # for(i in trend_terms) eq_string <- paste0(eq_string, '; ', i)
     # Remove the leading '+ ' if present
     sub("^\\+ ", "", eq_string)
   }
@@ -409,6 +420,13 @@ generate_design_equations <- function(design_matrix,
   collapse = "  ")
 
   cat("  ", factor_header_str, "  ", eq_header, "\n", sep="")
+
+  ## SM: Add trend info
+  formatted_trends <- verbal_trend(design_matrix, trend)
+  ## If premap, then the design matrix column name has been replace.
+  ## else: add a component to the end of the equation string, either before or after the
+  ## closing parentheses depending on the transform factor
+
   # 6. Print each row: factor columns in their spaces, then ": <equation>"
   for (i in seq_len(nrow(design_matrix))) {
     row_factor_str <- paste(mapply(function(fc, w) {
@@ -416,31 +434,108 @@ generate_design_equations <- function(design_matrix,
       sprintf("%-*s", w, as.character(design_matrix[[fc]][i]))
     }, factor_cols, col_widths),
     collapse = "  ")
-    if(transform == "identity"){
-      cat(" ", row_factor_str, "  : ", eq_strings[i], "\n", sep="")
-    } else{
-      cat(" ", row_factor_str, "  : ", transform, "(", eq_strings[i], ")", "\n", sep="")
+
+    if(row_factor_str == '') row_factor_str = 'intercept'
+
+    closing_parenthesis <- ')'
+    if(length(formatted_trends) > 0) {
+      if(!attr(trend, 'premap')) {
+        if(transform == 'identity' || attr(trend, 'pretransform')) {
+          for(trend_name in names(trend)) {
+            eq_strings[i] <- paste0(eq_strings[i], ' + ', paste0(trend_name, '_t'))
+          }
+        }
+      }
+
+      if(!attr(trend, 'pretransform') & !attr(trend, 'premap')) {
+        for(trend_name in names(trend)) {
+          closing_parenthesis <- paste0(closing_parenthesis, ' + ', paste0(trend_name, '_t'))
+        }
+      }
     }
 
+    if(transform == "identity") {
+      cat(" ", row_factor_str, "  : ", eq_strings[i], "\n", sep="")
+    } else {
+      cat(" ", row_factor_str, "  : ", transform, "(", eq_strings[i], closing_parenthesis, "\n", sep="")
+    }
+  }
+
+  if(length(formatted_trends)>0) {
+    cat(" Trends: ", '\n', sep='')
+    for(formatted_trend in formatted_trends) {
+      cat(" ", formatted_trend, '\n', sep='')
+    }
   }
 }
 
+add_transforms_to_trend_pnames <- function(trend, transforms, pre_transforms) {
+  ## bit hacky, but change trend par names by adding pre_transforms and transforms here
+  for(trend_n in 1:length(trend)) {
+    idx <- trend[[trend_n]]$trend_pnames %in% names(pre_transforms)
+    for(i in which(idx)) {
+      pname <- trend[[trend_n]]$trend_pnames[i]
+      this_transform <- pre_transforms[pname]
+      if(this_transform != 'identity') {
+        ## also update name of transform
+        if(pname %in% names(transforms)) names(transforms)[names(transforms)==pname] <- paste0(this_transform, '(', pname, ')')
+        trend[[trend_n]]$trend_pnames[i] <- paste0(this_transform, '(', pname, ')')
+      }
+    }
+    # same trick
+    idx <- trend[[trend_n]]$trend_pnames %in% names(transforms)
+    for(i in which(idx)) {
+      this_transform <- (transforms)[trend[[trend_n]]$trend_pnames[i]]
+      if(this_transform != 'identity') trend[[trend_n]]$trend_pnames[i] <- paste0(this_transform, '(', trend[[trend_n]]$trend_pnames[i], ')')
+    }
+  }
+
+  return(trend)
+}
 
 verbal_dm <- function(design){
   map <- attr(sampled_pars(design, add_da = TRUE, doMap = TRUE), "map")
   map_no_da <- attr(sampled_pars(design, doMap = TRUE), "map")
   transforms <- design$model()$transform$func
   pre_transforms <- design$model()$pre_transform$func
+  trend <- design$model()$trend
+  trends_to_pass <- NULL
+  if(!is.null(trend)) trend <- add_transforms_to_trend_pnames(trend, transforms=transforms, pre_transforms=pre_transforms)
+
   for(i in 1:length(map)){
     m <- map[[i]]
-    if(ncol(m) == 1) next
+    if((ncol(m) == 1) & !any(colnames(m) %in% names(trend))) next
+
+    if(!is.null(trend)) {
+      # add trial subscript
+      trend_idx <- names(trend) %in% colnames(m)
+      if(attr(trend, 'premap')) {
+        factor_has_trend <- colnames(m) %in% names(trend)
+        colnames(m)[factor_has_trend] <- paste0(colnames(m)[factor_has_trend],'_t')
+      }
+    }
     cat(paste0("$", names(map)[i]), "\n")
+
     mnd <- map_no_da[[i]]
+    if(!is.null(trend)) {
+      if(attr(trend, 'premap')) {
+        factor_has_trend <- colnames(mnd) %in% names(trend)
+        trend_in_mnd <- names(trend) %in% colnames(mnd)
+        colnames(mnd)[factor_has_trend] <- paste0(colnames(mnd)[factor_has_trend],'_t')
+
+        names(trend)[trend_in_mnd] <- paste0(names(trend)[trend_in_mnd], '_t')
+      }
+
+      trends_to_pass <- trend[trend_idx]
+      attr(trends_to_pass, 'premap') <- attr(trend, 'premap')
+      attr(trends_to_pass, 'pretransform') <- attr(trend, 'pretransform')
+    }
+
     par_idx <- colnames(m) %in% colnames(mnd)
     generate_design_equations(m, colnames(m)[!par_idx], colnames(m)[par_idx],
                               transform = transforms[names(map)[i]],
-                              pre_transform = pre_transforms)
+                              pre_transform = pre_transforms,
+                              trend = trends_to_pass)
     cat("\n")
   }
 }
-

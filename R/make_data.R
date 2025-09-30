@@ -32,6 +32,272 @@ make_missing <- function(data,LT=0,UT=Inf,LC=0,UC=Inf,
   out
 }
 
+# Detect if trial-wise stepping is required (RL/feedback/behavioral covariates)
+needs_trialwise_parameters <- function(design, model) {
+  if (has_delta_rules(model)) return(TRUE)
+  tr <- model()$trend
+  if (!is.null(tr)) {
+    has_fb <- vapply(tr, function(x) !is.null(x$feedback_generator), logical(1))
+    if (any(has_fb)) return(TRUE)
+  }
+  if (has_conditional_covariates(design)) return(TRUE)
+  FALSE
+}
+
+# One-step delta updates (used to carry Q state between trials)
+delta_next <- function(q_prev, alpha_prev, cov_prev) {
+  # q_t = q_{t-1} + alpha * (c_{t-1} - q_{t-1})
+  q_prev + alpha_prev * (cov_prev - q_prev)
+}
+delta2_next <- function(q_prev, q_fast_prev, q_slow_prev, alpha_fast_prev, prop_slow_prev, d_switch_prev, cov_prev) {
+  pe_fast <- cov_prev - q_fast_prev
+  pe_slow <- cov_prev - q_slow_prev
+  qf <- q_fast_prev + alpha_fast_prev * pe_fast
+  qs <- q_slow_prev + (prop_slow_prev * alpha_fast_prev) * pe_slow
+  if (abs(qf - qs) > d_switch_prev) qf else qs
+}
+
+# Extract and transform per-subject trend parameters needed for delta kernels
+get_trend_kernel_pars <- function(trend, p_subj, model) {
+  tp <- trend$trend_pnames
+  have <- tp[tp %in% names(p_subj)]
+  if (!length(have)) return(NULL)
+  tmp <- matrix(p_subj[have], nrow = 1)
+  colnames(tmp) <- have
+  out <- do_transform(tmp, model()$transform)
+  as.numeric(out[1, ]) |> setNames(colnames(out))
+}
+
+# Simulate data by looping over trials (with vectorized fallback when possible)
+make_data_unconditional <- function(data, pars, design, model, return_covariates, return_trialwise_parameters) {
+  trialwise_parameters <- covariates <- NULL
+
+  ## loop over trials, save covariates
+  if(!is.null(model()$trend)) {
+    covariate_par_names <- covariate_names <- covariates <- NULL
+    covariate_trend_idx <- c()
+    feedback_columns <- c()
+    trends <- model()$trend
+    for(trend_idx in 1:length(trends)) {
+      trend <- trends[[trend_idx]]
+      if(trend$kernel %in% c('delta', 'delta2')) {
+        covariate_names <- c(covariate_names, trend$covariate)
+        covariate_par_names <- c(covariate_par_names, trend$trend_pnames[2])
+        covariate_trend_idx <- c(covariate_trend_idx, rep(trend_idx, length(trend$covariate)))
+      }
+      # Collect feedback-generated column names
+      if(!is.null(trend$feedback_generator)) {
+        if(!is.null(trend$feedback_columns)) {
+          feedback_columns <- c(feedback_columns, trend$feedback_columns)
+        } else {
+          # Default to 'reward' for backward compatibility
+          feedback_columns <- c(feedback_columns, 'reward')
+        }
+      }
+    }
+    covariates <- matrix(NA, nrow=nrow(data), ncol=length(covariate_names))
+    colnames(covariates) <- covariate_names
+  } else {
+    feedback_columns <- c()
+  }
+
+  # Initialize feedback columns to NA
+  for(col in unique(feedback_columns)) {
+    if(col %in% colnames(data)) data[[col]] <- NA
+  }
+
+  model_ <- model()
+  if(!'lR' %in% colnames(data)) data$lR <- factor(rep(1, nrow(data)))  # for simulations of the DDM, assume all rows are lR==1
+  includeColumns <- !colnames(data) %in% c('lR', 'lM', names(design$Ffunctions))
+
+  # If we don't need trial-wise stepping, do a vectorized pass and return
+  if (!needs_trialwise_parameters(design, model)) {
+    # Map, apply phase-specific trends, transform, bounds, simulate in one go
+    pars_vec <- map_p(pars, data, model_)
+    if(!is.null(model_ $trend)) {
+      phases <- vapply(model_$trend, function(x) x$phase, character(1))
+      if (any(phases == "pretransform")) pars_vec <- prep_trend_phase(data, model_$trend, pars_vec, "pretransform")
+    }
+    pars_vec <- do_transform(pars_vec, model_$transform)
+    if(!is.null(model_ $trend)) {
+      phases <- vapply(model_$trend, function(x) x$phase, character(1))
+      if (any(phases == "posttransform")) pars_vec <- prep_trend_phase(data, model_$trend, pars_vec, "posttransform")
+    }
+    pars_vec <- model_$Ttransform(pars_vec, data)
+    pars_vec <- add_bound(pars_vec, model_$bound, data$lR)
+    if (return_trialwise_parameters) trialwise_parameters <- pars_vec
+
+    # Simulate
+    if (any(names(data) == "RACE")) {
+      Rrt <- RACE_rfun(data, pars_vec, model)
+    } else {
+      Rrt <- model_$rfun(data, pars_vec)
+    }
+    dropNames <- c("lR","lM","lSmagnitude")
+    if (!return_covariates && !is.null(design$Ffunctions)) dropNames <- c(dropNames, names(design$Ffunctions))
+    if(!is.null(data$lR)) data <- data[data$lR == levels(data$lR)[1],]
+    data <- data[,!(names(data) %in% dropNames)]
+    for (i in dimnames(Rrt)[[2]]) data[[i]] <- Rrt[,i]
+    return(list(data=data, covariates=NULL, trialwise_parameters=trialwise_parameters))
+  }
+
+  all_trials <- sort(unique(data[,'trials']))
+  for(trial_idx in 1:length(all_trials)) {
+    this_pars <- pars
+
+    # simulate *two* trials at the same time, to capture update of Q-value from previous trial
+    this_trial <- all_trials[trial_idx]
+
+    if(trial_idx > 1) {
+      prev_trial <- all_trials[trial_idx-1]
+      # Remove pars from subjects that have fewer than this_trial trials
+      this_pars <- this_pars[as.character(unique(this_data$subjects)),]
+    } else {
+      prev_trial <- NULL
+    }
+    this_covariates <- covariates[data$trials%in%c(prev_trial,this_trial),,drop=FALSE]
+
+    this_data <- design_model(
+      add_accumulators(data[data$trials%in%c(prev_trial, this_trial)&data$lR==levels(data$lR)[1],includeColumns],
+                       design$matchfun,simulate=FALSE,type=model()$type,Fcovariates=design$Fcovariates),
+      design,model,add_acc=FALSE,compress=FALSE,verbose=FALSE,
+      rt_check=FALSE)
+    if(!'lR' %in% colnames(this_data)) this_data$lR <- factor(rep(1, nrow(this_data)))  # for simulations of the DDM, assume all rows are lR==1
+
+    # drop unused levels
+    this_data$subjects <- droplevels(this_data$subjects)
+    if(trial_idx > 1) {
+      # ensure kernel produces an output for the current row by copying previous covariate values
+      prev_mask <- this_data$trials==prev_trial & this_data$lR==levels(this_data$lR)[1]
+      curr_mask <- this_data$trials==this_trial
+      if (any(prev_mask) && any(curr_mask) && length(covariate_names) > 0) {
+        this_data[curr_mask, covariate_names] <- this_data[which(prev_mask)[1], covariate_names]
+      }
+    }
+
+    # Map single trial's parameters. Pass current state of covariates to trends
+    for(i in 1:length(trends)) {
+      trends[[i]]$covariates_states <- this_covariates[,covariate_trend_idx==i,drop=FALSE]
+    }
+    model_$trend <- trends
+    this_pars <- map_p(this_pars, this_data, model_)
+
+    if(!is.null(model()$trend) && attr(model()$trend, "pretransform")){
+      this_pars  <- prep_trend_phase(this_data, trends, this_pars, "pretransform")
+    }
+    this_pars <- do_transform(this_pars, model()$transform)
+    if(!is.null(model()$trend) && attr(model()$trend, "posttransform")){
+      this_pars <- prep_trend_phase(this_data, trends, this_pars, "posttransform")
+    }
+    this_pars <- model()$Ttransform(this_pars, this_data)
+
+    # drop previous trial from covariates, pars, data
+    this_covariates <- this_covariates[this_data$trials==this_trial,,drop=FALSE]
+    this_pars <- this_pars[this_data$trials==this_trial,]
+    this_data <- this_data[this_data$trials==this_trial,]
+
+    ## save parameters if requested
+    if(return_trialwise_parameters) {
+      if(is.null(trialwise_parameters)) {
+        trialwise_parameters <- matrix(NA, nrow=nrow(data), ncol=ncol(this_pars))
+        colnames(trialwise_parameters) <- colnames(this_pars)
+      }
+      trialwise_parameters[data$trials==this_trial,] <- this_pars
+    }
+
+    if(!is.null(model()$trend)) {
+      # update and persist RL covariate state (Q) ourselves
+      # get per-subject, transformed kernel parameters for each trend
+      subj_name <- as.character(this_data$subjects[this_data$trials==this_trial][1])
+      p_subj <- pars[subj_name, ]
+      for (i in seq_along(trends)) {
+        tr_i <- trends[[i]]
+        if (!(tr_i$kernel %in% c('delta','delta2'))) next
+        # transformed kernel parameters
+        kpars <- get_trend_kernel_pars(tr_i, p_subj, model)
+        if (is.null(kpars)) next
+        # for each covariate in this trend
+        for (cv in tr_i$covariate) {
+          prev_row_mask <- this_data$trials == if (is.null(prev_trial)) this_trial else prev_trial
+          prev_row_mask <- prev_row_mask & this_data$lR==levels(this_data$lR)[1]
+          curr_row_mask <- this_data$trials == this_trial & this_data$lR==levels(this_data$lR)[1]
+          # determine q_prev
+          if (is.null(prev_trial)) {
+            # first trial: start from q0
+            q_prev <- kpars[paste0(names(trends)[i], ".q0")]
+          } else {
+            q_prev <- covariates[data$trials==prev_trial & data$lR==levels(data$lR)[1], cv]
+            if (is.na(q_prev)) q_prev <- kpars[paste0(names(trends)[i], ".q0")]
+          }
+          # covariate value from previous trial
+          cov_prev <- this_data[prev_row_mask, cv][1]
+          if (is.na(cov_prev)) next
+          # compute next Q based on kernel
+          if (tr_i$kernel == 'delta') {
+            a <- kpars[paste0(names(trends)[i], ".alpha")]
+            q_curr <- delta_next(q_prev, a, cov_prev)
+          } else {
+            aF <- kpars[paste0(names(trends)[i], ".alphaFast")]
+            pS <- kpars[paste0(names(trends)[i], ".propSlow")]
+            dS <- kpars[paste0(names(trends)[i], ".dSwitch")]
+            # maintain fast/slow separately using previous as both when unknown
+            q_curr <- delta2_next(q_prev, q_prev, q_prev, aF, pS, dS, cov_prev)
+          }
+          # store Q state for current trial row
+          covariates[data$trials==this_trial & data$lR==levels(data$lR)[1], cv] <- q_curr
+        }
+      }
+      # Remove trend kernel parameters from simulation matrix
+      this_pars <- this_pars[,!colnames(this_pars) %in% covariate_par_names]
+    }
+
+    this_pars <- add_bound(this_pars, model()$bound, this_data$lR)
+
+    # Simulate R, rt
+    Rrt <- model()$rfun(this_data,this_pars)
+    Rrt <- Rrt[rep(1:nrow(Rrt), each=length(unique(this_data$lR))),]
+    for (i in dimnames(Rrt)[[2]]) this_data[[i]] <- Rrt[,i]
+
+    # Apply feedback generators
+    for(i in 1:length(trends)) {
+      if(!is.null(trends[[i]]$feedback_generator)) {
+        this_data_tmp <- this_data[this_data$lR == levels(this_data$lR)[1],]
+        fb_output <- trends[[i]]$feedback_generator(this_data_tmp)
+
+        # Handle different return types from feedback_generator
+        if(is.data.frame(fb_output) || is.list(fb_output)) {
+          # If it's a data frame or named list, assign each column
+          for(col_name in names(fb_output)) {
+            this_data[[col_name]] <- rep(fb_output[[col_name]], each=length(levels(this_data$lR)))
+          }
+        } else {
+          # If it's a vector, determine column name
+          if(!is.null(trends[[i]]$feedback_columns)) {
+            col_name <- trends[[i]]$feedback_columns[1]  # Use first if multiple specified
+          } else {
+            col_name <- 'reward'  # Default for backward compatibility
+          }
+          this_data[[col_name]] <- rep(fb_output, each=length(levels(this_data$lR)))
+        }
+      }
+    }
+
+    ## re-apply Ffunctions to new data
+    if(!is.null(design$Ffunctions)) for(i in names(design$Ffunctions)) this_data[,i] <- design$Ffunctions[[i]](this_data)
+
+    # drop lR
+    this_data <- this_data[this_data$lR == levels(this_data$lR)[1],!names(this_data) %in% c('lR', 'lM', 'winner')]
+
+    # add to data
+    match_idx <- with(data, data$trials == this_trial & data$subjects %in% this_data$subjects)
+    data[match_idx, colnames(this_data)] <- this_data[match(data$subjects[match_idx], this_data$subjects), ]
+  }
+  # remove lR, lM
+  data <- data[data$lR == levels(data$lR)[1],!names(data) %in% c('lR', 'lM')]
+  return(list(data=data, covariates=covariates, trialwise_parameters=trialwise_parameters))
+}
+
+
 #' Simulate Data
 #'
 #' Simulates data based on a model design and a parameter vector (`p_vector`) by one of two methods:
@@ -213,72 +479,88 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
     add_accumulators(data,design$matchfun,simulate=TRUE,type=model()$type,Fcovariates=design$Fcovariates),
     design,model,add_acc=FALSE,compress=FALSE,verbose=FALSE,
     rt_check=FALSE)
+
+  simulate_unconditional_on_data <- return_covariates <- return_trialwise_parameters <- FALSE
+  if('conditional_on_data' %in% names(list(...))) {
+    simulate_unconditional_on_data <- !list(...)$conditional_on_data
+  }
+  if('return_covariates' %in% names(list(...))) {
+    return_covariates <- list(...)$return_covariates
+  }
+  if('return_trialwise_parameters' %in% names(list(...))) {
+    return_trialwise_parameters <- list(...)$return_trialwise_parameters
+    # if(return_trialwise_parameters&!simulate_unconditional_on_data) stop('Cannot return trialwise parameters when simulating conditional on data')
+  }
+
+  ## For both conditional and unconditional simulations...
   pars <- t(apply(parameters, 1, do_pre_transform, model()$pre_transform))
-  pars <- map_p(add_constants(pars,design$constants),data, model())
-  if(!is.null(model()$trend)){
-    phases <- vapply(model()$trend, function(x) x$phase, character(1))
-    if (any(phases == "pretransform")){
-      # apply only pretransform trends and remove their trend parameters
-      pars <- prep_trend_phase(data, model()$trend, pars, "pretransform")
+  pars <- add_constants(pars,design$constants)
+  if(simulate_unconditional_on_data) {
+    out <- make_data_unconditional(data=data, pars=pars, design=design, model=model,
+                                   return_covariates=return_covariates,
+                                   return_trialwise_parameters=return_trialwise_parameters)
+    data <- out$data
+    covariates <- out$covariates
+    trialwise_parameters <- out$trialwise_parameters
+
+    # add contamination
+    if ( any(dimnames(pars)[[2]]=="pContaminant") && any(pars[,"pContaminant"]>0) )
+      pc <- pars[data$lR==levels(data$lR)[1],"pContaminant"] else pc <- NULL
+
+  } else{
+    pars <- map_p(pars,data, model())
+
+    if(!is.null(model()$trend)){
+      phases <- vapply(model()$trend, function(x) x$phase, character(1))
+      if (any(phases == "pretransform")){
+        # apply only pretransform trends and remove their trend parameters
+        pars <- prep_trend_phase(data, model()$trend, pars, "pretransform")
+      }
     }
-  }
-  pars <- do_transform(pars, model()$transform)
-  if(!is.null(model()$trend)){
-    phases <- vapply(model()$trend, function(x) x$phase, character(1))
-    if (any(phases == "posttransform")){
-      # apply only posttransform trends and remove their trend parameters
-      pars <- prep_trend_phase(data, model()$trend, pars, "posttransform")
+    pars <- do_transform(pars, model()$transform)
+    if(!is.null(model()$trend)){
+      phases <- vapply(model()$trend, function(x) x$phase, character(1))
+      if (any(phases == "posttransform")){
+        # apply only posttransform trends and remove their trend parameters
+        pars <- prep_trend_phase(data, model()$trend, pars, "posttransform")
+      }
     }
+    pars <- model()$Ttransform(pars, data)
+    pars <- add_bound(pars, model()$bound, data$lR)
+    if(return_trialwise_parameters) trialwise_parameters <- pars
+
+    pars_ok <- attr(pars, 'ok')
+    if(mean(!pars_ok) > .1){
+      warning("More than 10% of parameter values fall out of model bounds, see <model_name>$bounds()")
+      return(FALSE)
+    }
+    if ( any(dimnames(pars)[[2]]=="pContaminant") && any(pars[,"pContaminant"]>0) )
+      pc <- pars[data$lR==levels(data$lR)[1],"pContaminant"] else pc <- NULL
+    if (expand>1) {
+      data <- cbind(rep=rep(1:expand,each=dim(data)[1]),
+                    data.frame(lapply(data,rep,times=expand)))
+      pars <- apply(pars,2,rep,times=expand)
+    }
+    if (!is.null(staircase)) {
+      attr(data, "staircase") <- staircase
+    }
+    if (any(names(data)=="RACE")) {
+      Rrt <- RACE_rfun(data, pars, model)
+    } else Rrt <- model()$rfun(data,pars)
+    dropNames <- c("lR","lM","lSmagnitude")
+    if (!return_Ffunctions && !is.null(design$Ffunctions))
+      dropNames <- c(dropNames,names(design$Ffunctions))
+    if(!is.null(data$lR)) data <- data[data$lR == levels(data$lR)[1],]
+    data <- data[,!(names(data) %in% dropNames)]
+    for (i in dimnames(Rrt)[[2]]) data[[i]] <- Rrt[,i]
   }
-  pars <- model()$Ttransform(pars, data)
-  pars <- add_bound(pars, model()$bound, data$lR)
-  pars_ok <- attr(pars, 'ok')
-  if(mean(!pars_ok) > .1){
-    warning("More than 10% of parameter values fall out of model bounds, see <model_name>$bounds()")
-    return(FALSE)
-  }
-  if ( any(dimnames(pars)[[2]]=="pContaminant") && any(pars[,"pContaminant"]>0) )
-    pc <- pars[data$lR==levels(data$lR)[1],"pContaminant"] else pc <- NULL
-  if (expand>1) {
-    data <- cbind(rep=rep(1:expand,each=dim(data)[1]),
-                  data.frame(lapply(data,rep,times=expand)))
-    pars <- apply(pars,2,rep,times=expand)
-  }
-  if (!is.null(staircase)) {
-    attr(data, "staircase") <- staircase
-  }
-  if (any(names(data)=="RACE")) {
-    Rrt <- RACE_rfun(data, pars, model)
-  } else Rrt <- model()$rfun(data,pars)
-  dropNames <- c("lR","lM","lSmagnitude")
-  if (!return_Ffunctions && !is.null(design$Ffunctions))
-    dropNames <- c(dropNames,names(design$Ffunctions))
-  if(!is.null(data$lR)) data <- data[data$lR == levels(data$lR)[1],]
-  data <- data[,!(names(data) %in% dropNames)]
-  for (i in dimnames(Rrt)[[2]]) data[[i]] <- Rrt[,i]
-  data <- make_missing(data[,names(data)!="winner"],LT,UT,LC,UC,
-    LCresponse,UCresponse,LCdirection,UCdirection)
-  if ( !is.null(pc) ) {
-    if (!any(is.infinite(data$rt)) & any(is.na(data$R)))
-      stop("Cannot have contamination and censoring with no direction and response")
-    contam <- runif(length(pc)) < pc
-    data[contam,"R"] <- NA
-    if ( LC!=0 | is.finite(UC) ) { # censoring
-      if ( (LCdirection & UCdirection) &  !rtContaminantNA)
-        stop("Cannot have contamination with a mixture of censor directions")
-      if (rtContaminantNA & ((is.finite(LC) & !LCresponse & !LCdirection) |
-                              (is.finite(UC) & !UCresponse & !UCdirection)))
-        stop("Cannot have contamination and censoring with no direction and response")
-      if (rtContaminantNA | (!LCdirection & !UCdirection)) data[contam,"rt"] <- NA else
-        if (LCdirection) data[contam,"rt"] <- -Inf  else data[contam,"rt"] <- Inf
-    } else data[contam,"rt"] <- NA
-  }
-  attr(data,"p_vector") <- parameters;
   if(!is.null(post_functions)){
     for(i in 1:length(post_functions)){
       data[[names(post_functions)[i]]] <- post_functions[[i]](data)
     }
   }
+  if(return_covariates) attr(data,'covariates') <- covariates
+  if(return_trialwise_parameters) attr(data, 'trialwise_parameters') <- trialwise_parameters
   data
 }
 
