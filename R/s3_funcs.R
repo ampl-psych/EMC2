@@ -167,12 +167,13 @@ predict.emc <- function(object,hyper=FALSE,n_post=50,n_cores=1,
       }
     }
     if (hyper) {
-      pars <- vector(mode="list",length=n_post)
-      # for (i in 1:n_post) {
-      #   pars[[i]] <- get_prior_samples(emc,selection="alpha",
-      #                                  stage=stage,thin=thin,filter=filter,n_prior=length(subjects))
-      #   row.names(pars[[i]]) <- subjects
-      # }
+      mu <- do.call(get_pars, c(list(emc, selection = "mu", map = FALSE, return_mcmc = FALSE, merge_chains = TRUE,
+                    length.out = ceiling(n_post/length(emc))), fix_dots(list(...), get_pars)))
+      Sigma <- do.call(get_pars, c(list(emc, selection = "Sigma", map = FALSE, return_mcmc = FALSE, merge_chains = TRUE,
+                     remove_dup = FALSE, remove_constants = FALSE, length.out = ceiling(n_post/length(emc))), fix_dots(list(...), get_pars)))
+      pars <- get_alphas(mu, Sigma, subjects)
+      pars <- pars[,,1:n_post] # With non-equally divisible n_post you get some remainder
+      pars <- lapply(seq_len(dim(pars)[3]), function(i) t(pars[,,i]))
     } else {
       dots$selection <- "alpha"; dots$merge_chains <- TRUE; dots$by_subject <- TRUE
       samps <- do.call(get_pars, c(list(emc), fix_dots(dots, get_pars)))

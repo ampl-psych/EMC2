@@ -514,9 +514,10 @@ get_base <- function(sampler, idx, selection){
 
 get_alphas <- function(mu, var, sub_names, N = ncol(mu)){
   n_pars <- nrow(mu)
-  alpha <- array(NA_real_, dim = c(n_pars, length(sub_names), N))
+  n_subs <- length(sub_names)
+  alpha <- array(NA_real_, dim = c(n_pars, n_subs, N))
   for(i in 1:N){
-    alpha[,,i] <- t(rmvnorm(1, mu[,i], var[,,i]))
+    alpha[,,i] <- t(rmvnorm(n_subs, mu[,i], var[,,i]))
   }
   rownames(alpha) <- rownames(mu)
   colnames(alpha) <- sub_names
