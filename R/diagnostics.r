@@ -1,3 +1,56 @@
+# Old Rhat convergence diagnostic ---------------------------------------------
+
+gelman_diag_robust <- function(
+    mcl,
+    autoburnin = FALSE,
+    transform = TRUE,
+    omit_mpsrf = TRUE
+) {
+  mcl <- split_mcl(mcl)
+  gd <- try(
+    coda::gelman.diag(
+      mcl,
+      autoburnin = autoburnin,
+      transform = transform,
+      multivariate = !omit_mpsrf
+    ),
+    silent = TRUE
+  )
+  if (is(gd, "try-error")) {
+    if (omit_mpsrf) {
+      return(list(psrf = matrix(Inf)))
+    } else {
+      return(list(psrf = matrix(Inf), mpsrf = Inf))
+    }
+  }
+  gd_out <- gd[[1]][ , 1] # Remove CI
+  if (!omit_mpsrf) {
+    gd_out <- c(gd_out, gd[["mpsrf"]])
+    names(gd_out)[length(gd_out)] <- "mpsrf"
+  }
+  return(gd_out)
+}
+
+split_mcl <- function(mcl) {
+  if (!is.list(mcl)) {
+    mcl <- list(mcl)
+  }
+  mcl2 <- mcl
+  half <- floor(unlist(lapply(mcl, nrow))/2)
+  for (i in 1:length(half)) {
+    mcl[[i]] <- coda::as.mcmc(
+      mcl[[i]][1:half[i], ]
+    )
+    mcl2[[i]] <- coda::as.mcmc(
+      mcl2[[i]][c((half[i]+1):(2*half[i])), ]
+    )
+  }
+  result <- coda::as.mcmc.list(c(mcl, mcl2))
+  return(result)
+}
+
+# -----------------------------------------------------------------------------
+
 # All of the following code was adapted from the `posterior` package
 # (specifically `posterior/R/convergence.R`), corresponding to methods described
 # in Vehtari et al. (2021), https://doi.org/10.1214/20-BA1221

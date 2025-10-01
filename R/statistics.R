@@ -43,249 +43,212 @@
 #' # compare(sList, cores_per_prop = 3)
 #' }
 #' @export
-
-compare <- function(sList,stage="sample",filter=NULL,use_best_fit=TRUE,
-                        BayesFactor = TRUE, cores_for_props =4, cores_per_prop = 1,
-                        print_summary=TRUE,digits=0,digits_p=3, ...) {
-  if(is(sList, "emc")) sList <- list(sList)
-  getp <- function(IC) {
-    IC_delta <- -(IC - min(IC)) / 2
-    log_denom <- log_sum_exp(IC_delta)
-    result <- exp(IC_delta - log_denom)
-    return(result)
+compare <- function(
+    sList,
+    stage = "sample",
+    filter = NULL,
+    use_best_fit = TRUE,
+    BayesFactor = TRUE,
+    cores_for_props = 4,
+    cores_per_prop = 1,
+    print_summary = TRUE,
+    digits = 0,
+    digits_p = 3,
+    ...
+) {
+  if(is(sList, "emc")) {
+    sList <- list(sList)
   }
-  if (is.numeric(filter)) defaultsf <- filter[1] else defaultsf <- 0
-  sflist <- as.list(setNames(rep(defaultsf,length(sList)),names(sList)))
-  if (is.list(filter)) for (i in names(filter))
-    if (i %in% names(sflist)) sflist[[i]] <- filter[[i]]
-  dots <- add_defaults(list(...), group_only = FALSE)
-  ICs <- setNames(vector(mode="list",length=length(sList)),names(sList))
-  for (i in 1:length(ICs)) ICs[[i]] <- IC(sList[[i]],stage=stage,
-                                          filter=sflist[[i]],use_best_fit=use_best_fit,subject=list(...)$subject,print_summary=FALSE,
-                                          group_only = dots$group_only)
-  ICs <- data.frame(do.call(rbind,ICs))
-  DICp <- getp(ICs$DIC)
-  BPICp <- getp(ICs$BPIC)
-  out <- cbind.data.frame(DIC=ICs$DIC,wDIC=DICp,BPIC=ICs$BPIC,wBPIC=BPICp,ICs[,-c(1:2)])
-
-  if(BayesFactor){
-    MLLs <- numeric(length(sList))
-    for(i in 1:length(MLLs)){
-      MLLs[i] <- run_bridge_sampling(sList[[i]], stage = stage, filter = sflist[[i]], both_splits = FALSE,
-                                     cores_for_props = cores_for_props, cores_per_prop = cores_per_prop)
+  defaultsf <- 0
+  if (is.numeric(filter)) {
+    defaultsf <- filter[1]
+  }
+  sflist <- as.list(
+    setNames(
+      rep(defaultsf, length(sList)),
+      names(sList)
+    )
+  )
+  if (is.list(filter)) {
+    for (i in names(filter)) {
+      if (i %in% names(sflist)) {
+        sflist[[i]] <- filter[[i]]
+      }
     }
-    MD <- -2*MLLs
-    modelProbability <- getp(MD)
-    out <- cbind.data.frame(MD = MD, wMD = modelProbability, out)
+  }
+  dots <- add_defaults(list(...), group_only = FALSE)
+  ICs <- setNames(
+    vector(mode = "list", length = length(sList)),
+    names(sList)
+  )
+  for (i in 1:length(ICs)) {
+    ICs[[i]] <- IC(
+      sList[[i]],
+      stage = stage,
+      filter = sflist[[i]],
+      use_best_fit = use_best_fit,
+      subject = dots[["subject"]],
+      print_summary = FALSE,
+      group_only = dots[["group_only"]])
+  }
+  ICs <- data.frame(do.call(rbind, ICs))
+  DICp <- model_weights(ICs[["DIC"]])
+  BPICp <- model_weights(ICs[["BPIC"]])
+  out <- cbind.data.frame(
+    DIC = ICs[["DIC"]],
+    wDIC = DICp,
+    BPIC = ICs[["BPIC"]],
+    wBPIC = BPICp,
+    ICs[ , -c(1:2)]
+  )
+  if (BayesFactor) {
+    MLLs <- numeric(length(sList))
+    for (i in 1:length(MLLs)) {
+      MLLs[i] <- run_bridge_sampling(
+        sList[[i]],
+        stage = stage,
+        filter = sflist[[i]],
+        both_splits = FALSE,
+        cores_for_props = cores_for_props,
+        cores_per_prop = cores_per_prop
+      )
+    }
+    MD <- -2 * MLLs
+    modelProbability <- model_weights(MD)
+    out <- cbind.data.frame(
+      MD = MD,
+      wMD = modelProbability,
+      out
+    )
   }
   if (print_summary) {
     tmp <- out
-    tmp$wDIC <- round(tmp$wDIC,digits_p)
-    tmp$wBPIC <- round(tmp$wBPIC,digits_p)
-    if(BayesFactor){
-      tmp$wMD <- round(tmp$wMD, digits_p)
-      tmp[,-c(2,4,6)] <- round(tmp[,-c(2,4,6)],digits=digits)
-    } else{
-      tmp[,-c(2,4)] <- round(tmp[,-c(2,4)],digits=digits)
+    digits_p_cols <- c("wDIC", "wBPIC")
+    if (BayesFactor) {
+      digits_p_cols <- c("wMD", digits_p_cols)
     }
+    digits_cols <- setdiff(colnames(tmp), digits_p_cols)
+    tmp[ , digits_cols] <- round(tmp[ , digits_cols], digits = digits)
+    tmp[ , digits_p_cols] <- round(tmp[ , digits_p_cols], digits = digits_p)
     print(tmp)
   }
   invisible(out)
 }
 
-std_error_IS2 <- function(IS_samples, n_bootstrap = 50000){
-  log_marglik_boot= array(dim = n_bootstrap)
-  for (i in 1:n_bootstrap){
-    log_weight_boot = sample(IS_samples, length(IS_samples), replace = TRUE) #resample with replacement from the lw
-    log_marglik_boot[i] <- median(log_weight_boot)
-  }
-  return(sd(log_marglik_boot))
+#' @noRd
+model_weights <- function(IC) {
+  IC_delta <- -(IC - min(IC)) / 2
+  log_denom <- log_sum_exp(IC_delta)
+  result <- exp(IC_delta - log_denom)
+  return(result)
+}
+
+# numerically stable version of log(sum(exp(x))), based on matrixStats::logSumExp
+#' @noRd
+log_sum_exp <- function(x) {
+  if (length(x) == 0) return(-Inf)
+  if (any(is.na(x))) return(NA_real_)
+  if (any(x == Inf)) return(Inf)
+  if (all(x == -Inf)) return(-Inf)
+  max_x <- max(x)
+  # accumulate only the terms smaller than max_x
+  nomax_sum <- sum(exp(x[x != max_x] - max_x))
+  # add back the "1" for the max element via log1p
+  result <- max_x + log1p(nomax_sum)
+  return(result)
 }
 
 
-# robust_diwish <- function (W, v, S) { #RJI_change: this function is to protect against weird proposals in the diwish function, where sometimes matrices weren't pos def
-#   if (!is.matrix(S)) S <- matrix(S)
-#   if (!is.matrix(W)) W <- matrix(W)
-#   p <- nrow(S)
-#   gammapart <- sum(lgamma((v + 1 - 1:p)/2))
-#   ldenom <- gammapart + 0.5 * v * p * log(2) + 0.25 * p * (p - 1) * log(pi)
-#   if (corpcor::is.positive.definite(W, tol=1e-8)){
-#     cholW<-base::chol(W)
-#   }else{
-#     return(1e-10)
-#   }
-#   if (corpcor::is.positive.definite(S, tol=1e-8)){
-#     cholS <- base::chol(S)
-#   }else{
-#     return(1e-10)
-#   }
-#   halflogdetS <- sum(log(diag(cholS)))
-#   halflogdetW <- sum(log(diag(cholW)))
-#   invW <- chol2inv(cholW)
-#   exptrace <- sum(S * invW)
-#   lnum <- v * halflogdetS - (v + p + 1) * halflogdetW - 0.5 * exptrace
-#   lpdf <- lnum - ldenom
-#   out <- exp(lpdf)
-#   if(!is.finite(out)) return(1e-100)
-#   if(out < 1e-10) return(1e-100)
-#   return(exp(lpdf))
-# }
 
-robust_diwish <- function (W, v, S) { #RJI_change: this function is to protect against weird proposals in the diwish function, where sometimes matrices weren't pos def
-  if (!is.matrix(S)) S <- matrix(S)
-  if (!is.matrix(W)) W <- matrix(W)
-  p <- nrow(S)
-  gammapart <- sum(lgamma((v + 1 - 1:p)/2))
-  ldenom <- gammapart + 0.5 * v * p * log(2) + 0.25 * p * (p - 1) * log(pi)
-  cholW <- base::chol(nearPD(W)$mat)
-  cholS <- base::chol(nearPD(S)$mat)
-  halflogdetS <- sum(log(diag(cholS)))
-  halflogdetW <- sum(log(diag(cholW)))
-  invW <- chol2inv(cholW)
-  exptrace <- sum(S * invW)
-  lnum <- v * halflogdetS - (v + p + 1) * halflogdetW - 0.5 * exptrace
-  lpdf <- lnum - ldenom
-  out <- exp(lpdf)
-  if(!is.finite(out)) return(1e-100)
-  return(out)
-}
-
-dhalft <- function (x, scale = 25, nu = 1, log = FALSE)
-{
-  x <- as.vector(x)
-  scale <- as.vector(scale)
-  nu <- as.vector(nu)
-  if (any(scale <= 0))
-    stop("The scale parameter must be positive.")
-  NN <- max(length(x), length(scale), length(nu))
-  x <- rep(x, len = NN)
-  scale <- rep(scale, len = NN)
-  nu <- rep(nu, len = NN)
-  dens <- log(2) - log(scale) + lgamma((nu + 1)/2) - lgamma(nu/2) -
-    0.5 * log(pi * nu) - (nu + 1)/2 * log(1 + (1/nu) * (x/scale) *
-                                            (x/scale))
-  if (log == FALSE)
-    dens <- exp(dens)
-  return(dens)
-}
-
-rwish <- function(v, S){
-  if (!is.matrix(S))
-    S <- matrix(S)
-  if (nrow(S) != ncol(S)) {
-    stop(message = "S not square in rwish().\n")
-  }
-  if (v < nrow(S)) {
-    stop(message = "v is less than the dimension of S in rwish().\n")
-  }
-  p <- nrow(S)
-  CC <- chol(S)
-  Z <- matrix(0, p, p)
-  diag(Z) <- sqrt(rchisq(p, v:(v - p + 1)))
-  if (p > 1) {
-    pseq <- 1:(p - 1)
-    Z[rep(p * pseq, pseq) + unlist(lapply(pseq, seq))] <- rnorm(p * (p - 1)/2)
-  }
-  return(crossprod(Z %*% CC))
-}
-
-
-riwish <- function(v, S){
-  return(solve(rwish(v, solve(S))))
-}
-
-logdinvGamma <- function(x, shape, rate){
-  dgamma(1/x, shape, rate, log = TRUE) - 2 * log(x)
-}
-
-split_mcl <- function(mcl)
-  # Doubles chains by splitting into first and secon half
-{
-  if (!is.list(mcl)) mcl <- list(mcl)
-  mcl2 <- mcl
-  half <- floor(unlist(lapply(mcl,nrow))/2)
-  for (i in 1:length(half)) {
-    mcl2[[i]] <- coda::as.mcmc(mcl2[[i]][c((half[i]+1):(2*half[i])),])
-    mcl[[i]] <- coda::as.mcmc(mcl[[i]][1:half[i],])
-  }
-  coda::as.mcmc.list(c(mcl,mcl2))
-}
-
-gelman_diag_robust <- function(mcl,autoburnin = FALSE,transform = TRUE, omit_mpsrf = TRUE)
-{
-  mcl <- split_mcl(mcl)
-  gd <- try(gelman.diag(mcl,autoburnin=autoburnin,transform=transform, multivariate = !omit_mpsrf),silent=TRUE)
-  gd_out <- gd[[1]][,1] # Remove CI
-  if(!omit_mpsrf){
-    gd_out <- c(gd_out, gd$mpsrf)
-    names(gd_out)[length(gd_out)] <- "mpsrf"
-  }
-
-  if (is(gd, "try-error")){
-    if(omit_mpsrf){
-      return(list(psrf=matrix(Inf)))
-    } else{
-      return(list(psrf=matrix(Inf),mpsrf=Inf))
-    }
-  } else{
-    return(gd_out)
-  }
-}
-
-# #' Calculate information criteria (DIC, BPIC), effective number of parameters and
-# #' constituent posterior deviance (D) summaries (meanD = mean of D, Dmean = D
-# #' for mean of posterior parameters and minD = minimum of D).
-# #'
-# #' @param emc emc object or list of these
-# #' @param stage A string. Specifies which stage you want to plot.
-# #' @param filter An integer or vector. If it's an integer, iterations up until the value set by `filter` will be excluded.
-# #' If a vector is supplied, only the iterations in the vector will be considered.
-# #' @param use_best_fit Boolean, default TRUE use best of minD and Dmean in
-# #' calculation otherwise always use Dmean
-# #' @param print_summary Boolean (default TRUE) print table of results
-# #' @param digits Integer, significant digits in printed table
-# #' @param subject Integer or string selecting a single subject, default NULL
-# #' returns sums over all subjects
-# #' @param group_only Boolean. If `TRUE` will calculate the IC for the group-level only
-# #'
-# #' @return Table of DIC, BPIC, EffectiveN, meanD, Dmean, and minD
-
-IC <- function(emc,stage="sample",filter=0,use_best_fit=TRUE,
-               print_summary=TRUE,digits=0,subject=NULL,
-               group_only = FALSE)
-  # Gets DIC, BPIC, effective parameters, mean deviance, and deviance of mean
-{
+#' Calculate information criteria (DIC, BPIC), effective number of parameters and
+#' constituent posterior deviance (D) summaries (meanD = mean of D, Dmean = D
+#' for mean of posterior parameters and minD = minimum of D).
+#'
+#' @param emc emc object or list of these
+#' @param stage A string. Specifies which stage you want to plot.
+#' @param filter An integer or vector. If it's an integer, iterations up until the value set by `filter` will be excluded.
+#' If a vector is supplied, only the iterations in the vector will be considered.
+#' @param use_best_fit Boolean, default TRUE use best of minD and Dmean in
+#' calculation otherwise always use Dmean
+#' @param print_summary Boolean (default TRUE) print table of results
+#' @param digits Integer, significant digits in printed table
+#' @param subject Integer or string selecting a single subject, default NULL
+#' returns sums over all subjects
+#' @param group_only Boolean. If `TRUE` will calculate the IC for the group-level only
+#'
+#' @return Table of DIC, BPIC, EffectiveN, meanD, Dmean, and minD
+#' @noRd
+IC <- function(
+    emc,
+    stage = "sample",
+    filter = 0,
+    use_best_fit = TRUE,
+    print_summary = TRUE,
+    digits = 0,
+    subject = NULL,
+    group_only = FALSE
+) {
   # Mean log-likelihood for each subject
-  ll <- get_pars(emc, stage = stage, filter = filter, selection = "LL", merge_chains = TRUE)
-  minDs <- -2*apply(ll[[1]][[1]], 2, min)
+  ll <- get_pars(
+    emc,
+    stage = stage,
+    filter = filter,
+    selection = "LL",
+    merge_chains = TRUE
+  )
+  minDs <- -2 * apply(ll[[1]][[1]], 2, min)
   mean_lls <- apply(ll[[1]][[1]], 2, mean)
-  alpha <- get_pars(emc,selection="alpha",stage=stage,filter=filter, by_subject = TRUE, merge_chains = TRUE)
-  mean_pars <- lapply(alpha,function(x){apply(do.call(rbind,x),2,mean)})
+  alpha <- get_pars(
+    emc,
+    selection = "alpha",
+    stage = stage,
+    filter = filter,
+    by_subject = TRUE,
+    merge_chains = TRUE
+  )
+  mean_pars <- lapply(
+    alpha,
+    function(x) {return(apply(do.call(rbind, x), 2, mean))}
+  )
   # log-likelihood for each subject using their mean parameter vector
-  data <- emc[[1]]$data
-  mean_pars_lls <- setNames(numeric(length(mean_pars)),names(mean_pars))
-  for (sub in names(mean_pars)){
-    mean_pars_lls[sub] <- calc_ll_manager(t(mean_pars[[sub]]),dadm = data[[sub]], emc[[1]]$model)
+  data <- emc[[1]][["data"]]
+  mean_pars_lls <- setNames(
+    numeric(length(mean_pars)),
+    names(mean_pars)
+  )
+  for (sub in names(mean_pars)) {
+    mean_pars_lls[sub] <- calc_ll_manager(
+      t(mean_pars[[sub]]),
+      dadm = data[[sub]],
+      emc[[1]][["model"]]
+    )
   }
-  Dmeans <- -2*mean_pars_lls
+  Dmeans <- -2 * mean_pars_lls
 
   if (!is.null(subject)) {
     Dmeans <- Dmeans[subject[1]]
     mean_lls <- mean_lls[subject[1]]
     minDs <- minDs[subject[1]]
-  } else{
-    group_stats <- group_IC(emc, stage=stage,filter=filter, type = emc[[1]]$type)
-    if(group_only){
-      mean_lls <- group_stats$mean_ll
-      minDs <- group_stats$minD
-      Dmeans <- group_stats$Dmean
-    } else{
-      mean_lls <- c(mean_lls, group_stats$mean_ll)
-      minDs <- c(minDs, group_stats$minD)
-      Dmeans <- c(Dmeans, group_stats$Dmean)
+  } else {
+    group_stats <- group_IC(
+      emc,
+      stage = stage,
+      filter = filter,
+      type = emc[[1]][["type"]]
+    )
+    if (group_only) {
+      mean_lls <- group_stats[["mean_ll"]]
+      minDs <- group_stats[["minD"]]
+      Dmeans <- group_stats[["Dmean"]]
+    } else {
+      mean_lls <- c(mean_lls, group_stats[["mean_ll"]])
+      minDs <- c(minDs, group_stats[["minD"]])
+      Dmeans <- c(Dmeans, group_stats[["Dmean"]])
     }
   }
-  if (use_best_fit) minDs <- pmin(minDs,Dmeans)
+  if (use_best_fit) {
+    minDs <- pmin(minDs, Dmeans)
+  }
 
   # mean deviance(-2*ll of all data)
   mD <- sum(-2 * mean_lls)
@@ -295,7 +258,11 @@ IC <- function(emc,stage="sample",filter=0,use_best_fit=TRUE,
   minD <- sum(minDs)
 
   # Use deviance of mean as best fit or use actual best fit
-  if (!use_best_fit) Dm <- Dmean else Dm <- minD
+  if (!use_best_fit) {
+    Dm <- Dmean
+  } else {
+    Dm <- minD
+  }
 
   # effective number of parameters
   pD <- mD - Dm
@@ -303,10 +270,20 @@ IC <- function(emc,stage="sample",filter=0,use_best_fit=TRUE,
   DIC <- mD + pD
   # BPIC = mean deviance + 2*effective number of parameters
   # Note this is the "easy" BPIC, instead of the complex 2007 one
-  BPIC <- mD + 2*pD
-  out <- c(DIC = DIC, BPIC = BPIC, EffectiveN = pD,meanD=mD,Dmean=Dmean,minD=minD)
-  names(out) <- c("DIC","BPIC","EffectiveN","meanD","Dmean","minD")
-  if (print_summary) print(round(out,digits))
+  BPIC <- mD + 2 * pD
+
+  out <- c(
+    DIC = DIC,
+    BPIC = BPIC,
+    EffectiveN = pD,
+    meanD = mD,
+    Dmean = Dmean,
+    minD = minD
+  )
+  names(out) <- c("DIC", "BPIC", "EffectiveN", "meanD", "Dmean", "minD")
+  if (print_summary) {
+    print(round(out, digits))
+  }
   invisible(out)
 }
 
@@ -326,7 +303,7 @@ IC <- function(emc,stage="sample",filter=0,use_best_fit=TRUE,
 #' get_BayesFactor(M1, M0)
 #' }
 #' @export
-get_BayesFactor <- function(MLL1, MLL2){
+get_BayesFactor <- function(MLL1, MLL2) {
   exp(MLL1 - MLL2)
 }
 
@@ -351,41 +328,79 @@ get_BayesFactor <- function(MLL1, MLL2){
 #' # different models
 #' compare_subject(list(m0 = samples_LNR, m1 = samples_LNR))
 #' @export
-compare_subject <- function(sList,stage="sample",filter=0,use_best_fit=TRUE,
-                            print_summary=TRUE,digits=3) {
-  if(is(sList, "emc")) sList <- list(sList)
-  subjects <- names(sList[[1]][[1]]$data)
-  is_single <- sapply(sList, function(x) return(x[[1]]$type == "single"))
-  if(any(!is_single)) warning("subject-by-subject comparison is best done with models of type `single`")
-  out <- setNames(vector(mode="list",length=length(subjects)),subjects)
-  for (i in subjects) out[[i]] <- compare(sList,subject=i,BayesFactor=FALSE,
-                                          stage=stage,filter=filter,use_best_fit=use_best_fit,print_summary=FALSE)
+compare_subject <- function(
+    sList,
+    stage = "sample",
+    filter = 0,
+    use_best_fit = TRUE,
+    print_summary = TRUE,
+    digits = 3
+) {
+  if (is(sList, "emc")) {
+    sList <- list(sList)
+  }
+  subjects <- names(sList[[1]][[1]][["data"]])
+  is_single <- sapply(
+    sList,
+    function(x) {return(x[[1]][["type"]] == "single")}
+  )
+  if (any(!is_single)) {
+    warning("subject-by-subject comparison is best done with models of type `single`")
+  }
+  out <- setNames(
+    vector(mode = "list", length = length(subjects)),
+    subjects
+  )
+  for (i in subjects) {
+    out[[i]] <- compare(
+      sList,
+      subject = i,
+      BayesFactor = FALSE,
+      stage = stage,
+      filter = filter,
+      use_best_fit = use_best_fit,
+      print_summary = FALSE
+    )
+  }
   if (print_summary) {
-    wDIC <- lapply(out,function(x)x["wDIC"])
-    wBPIC <- lapply(out,function(x)x["wBPIC"])
-    pDIC <- do.call(rbind,lapply(wDIC,function(x){
-      setNames(data.frame(t(x)),paste("wDIC",rownames(x),sep="_"))}))
-    pBPIC <- do.call(rbind,lapply(wBPIC,function(x){
-      setNames(data.frame(t(x)),paste("wBPIC",rownames(x),sep="_"))}))
-    # if (BayesFactor) {
-    #   pMD <- do.call(rbind,lapply(wMD,function(x){
-    #   setNames(data.frame(t(x)),paste("wMD",rownames(x),sep="_"))}))
-    #   print(round(cbind(pDIC,pBPIC,pMD),digits))
-    #   mnams <- unlist(lapply(strsplit(dimnames(pDIC)[[2]],"_"),function(x){x[[2]]}))
-    #   cat("\nWinners\n")
-    #   print(rbind(DIC=table(mnams[apply(pDIC,1,which.max)]),
-    #               BPIC=table(mnams[apply(pBPIC,1,which.max)]),
-    #               MD=table(mnams[apply(pMD,1,which.max)])))
-    #
-    # } else {
-    print(round(cbind(pDIC,pBPIC),digits))
-    mnams <- unlist(lapply(strsplit(dimnames(pDIC)[[2]],"_"),function(x){x[[2]]}))
+    pDIC <- curate_model_weights(out, "wDIC")
+    pBPIC <- curate_model_weights(out, "wBPIC")
+    print(
+      round(cbind(pDIC, pBPIC), digits = digits)
+    )
+    mnams <- unlist(
+      lapply(
+        strsplit(dimnames(pDIC)[[2]], "_"),
+        function(x) {return(x[[2]])}
+      )
+    )
     cat("\nWinners\n")
-    print(rbind(DIC=table(mnams[apply(pDIC,1,which.max)]),
-                BPIC=table(mnams[apply(pBPIC,1,which.max)])))
-    # }
+    print(
+      rbind(
+        DIC = table(mnams[apply(pDIC, 1, which.max)]),
+        BPIC = table(mnams[apply(pBPIC, 1, which.max)])
+      )
+    )
   }
   invisible(out)
+}
+
+#' @noRd
+curate_model_weights <- function(out, type = c("wDIC", "wBPIC")) {
+  result <- lapply(out, function(x) {return(x[type])})
+  result <- lapply(
+    result,
+    function(x) {
+      return(
+        setNames(
+          data.frame(t(x)),
+          paste(type, rownames(x), sep = "_")
+        )
+      )
+    }
+  )
+  result <- do.call(rbind, result)
+  return(result)
 }
 
 
@@ -404,58 +419,44 @@ compare_subject <- function(sList,stage="sample",filter=0,use_best_fit=TRUE,
 # #'
 # #' @return Vector of model probabilities with names from samples list.
 
-compare_MLL <- function(mll,nboot=1e5,digits=2,print_summary=TRUE)
-  # mll is a list of vectors of marginal log-likelihoods for a set of models
-  # picks a vector of mlls for each model in the list randomly with replacement
-  # nboot times, calculates model probabilities and averages.
-{
-  pmp <- function(x)
-    # posterior model probability for a vector of marginal log-likelihoods
-  {
-    log_denom <- log_sum_exp(x)
-    result <- exp(x - log_denom)
-    return(result)
-  }
-
-  out <- sort(apply(apply(do.call(rbind,lapply(mll,function(x){
-    attr(x,"IS_samples")[sample(length(attr(x,"IS_samples")),nboot,replace=TRUE)]
-  })),2,pmp),1,mean),decreasing=TRUE)
-  print(round(out,digits))
+# mll is a list of vectors of marginal log-likelihoods for a set of models
+# picks a vector of mlls for each model in the list randomly with replacement
+# nboot times, calculates model probabilities and averages.
+compare_MLL <- function(
+    mll,
+    nboot = 1e5,
+    digits = 2,
+    print_summary = TRUE
+) {
+  mll_samples <- lapply(
+    mll,
+    function(x) {
+      IS_samples <- attr(x, "IS_samples")
+      result <- IS_samples[sample(length(IS_samples), nboot, replace = TRUE)]
+      return(result)
+    }
+  )
+  mll_samples <- do.call(rbind, mll_samples)
+  model_probs <- apply(
+    mll_samples, 2, pmp
+  )
+  mean_model_probs <- apply(
+    model_probs, 1, mean
+  )
+  out <- sort(mean_model_probs, decreasing = TRUE)
+  print(round(out, digits = digits))
   invisible(out)
 }
 
-
-
-
-
-condMVN <- function (mean, sigma, dependent.ind, given.ind, X.given, check.sigma = TRUE)
-{
-  if (missing(dependent.ind))
-    return("You must specify the indices of dependent random variables in `dependent.ind'")
-  if (missing(given.ind) & missing(X.given))
-    return(list(condMean = mean[dependent.ind], condVar = as.matrix(sigma[dependent.ind,
-                                                                          dependent.ind])))
-  if (length(given.ind) == 0)
-    return(list(condMean = mean[dependent.ind], condVar = as.matrix(sigma[dependent.ind,
-                                                                          dependent.ind])))
-  if (length(X.given) != length(given.ind))
-    stop("lengths of `X.given' and `given.ind' must be same")
-  if (check.sigma) {
-    if (!isSymmetric(sigma))
-      stop("sigma is not a symmetric matrix")
-    eigenvalues <- eigen(sigma, only.values = TRUE)$values
-    if (any(eigenvalues < 1e-08)){
-      sigma <- sigma + abs(diag(rnorm(nrow(sigma), sd = 1e-3)))
-    }
-  }
-  B <- sigma[dependent.ind, dependent.ind]
-  C <- sigma[dependent.ind, given.ind, drop = FALSE]
-  D <- sigma[given.ind, given.ind]
-  CDinv <- C %*% chol2inv(chol(D))
-  cMu <- c(mean[dependent.ind] + CDinv %*% (X.given - mean[given.ind]))
-  cVar <- B - CDinv %*% t(C)
-  list(condMean = cMu, condVar = cVar)
+# posterior model probability for a vector of marginal log-likelihoods
+#' @noRd
+pmp <- function(x) {
+  log_denom <- log_sum_exp(x)
+  result <- exp(x - log_denom)
+  return(result)
 }
+
+
 
 
 make_nice_summary <- function(object, stat = "max", stat_only = FALSE, stat_name = NULL, ...){
@@ -599,17 +600,137 @@ model_averaging <- function(IC_for, IC_against) {
   ))
 }
 
-# numerically stable version of log(sum(exp(x))), based on matrixStats::logSumExp
-#' @noRd
-log_sum_exp <- function(x) {
-  if (length(x) == 0) return(-Inf)
-  if (any(is.na(x))) return(NA_real_)
-  if (any(x == Inf)) return(Inf)
-  if (all(x == -Inf)) return(-Inf)
-  max_x <- max(x)
-  # accumulate only the terms smaller than max_x
-  nomax_sum <- sum(exp(x[x != max_x] - max_x))
-  # add back the "1" for the max element via log1p
-  result <- max_x + log1p(nomax_sum)
+
+# -----------------------------------------------------------------------------
+# Various distribution functions used internally ------------------------------
+
+std_error_IS2 <- function(IS_samples, n_bootstrap = 5e4) {
+  log_marglik_boot <- array(dim = n_bootstrap)
+  for (i in 1:n_bootstrap) {
+    #resample with replacement from the lw
+    log_weight_boot <- sample(IS_samples, length(IS_samples), replace = TRUE)
+    log_marglik_boot[i] <- stats::median(log_weight_boot)
+  }
+  result <- stats::sd(log_marglik_boot)
   return(result)
 }
+
+robust_diwish <- function (W, v, S) {
+  if (!is.matrix(S)) {
+    S <- matrix(S)
+  }
+  if (!is.matrix(W)) {
+    W <- matrix(W)
+  }
+  p <- nrow(S)
+  gammapart <- sum(lgamma((v + 1 - 1:p) / 2))
+  ldenom <- gammapart + 0.5 * v * p * log(2) + 0.25 * p * (p - 1) * log(pi)
+  cholW <- base::chol(Matrix::nearPD(W)[["mat"]])
+  cholS <- base::chol(Matrix::nearPD(S)[["mat"]])
+  halflogdetS <- sum(log(diag(cholS)))
+  halflogdetW <- sum(log(diag(cholW)))
+  invW <- chol2inv(cholW)
+  exptrace <- sum(S * invW)
+  lnum <- v * halflogdetS - (v + p + 1) * halflogdetW - 0.5 * exptrace
+  lpdf <- lnum - ldenom
+  out <- exp(lpdf)
+  if (!is.finite(out)) {
+    return(1e-100)
+  }
+  return(out)
+}
+
+dhalft <- function (x, scale = 25, nu = 1, log = FALSE) {
+  x <- as.vector(x)
+  scale <- as.vector(scale)
+  nu <- as.vector(nu)
+  if (any(scale <= 0)) {
+    stop("The scale parameter must be positive.")
+  }
+  NN <- max(length(x), length(scale), length(nu))
+  x <- rep(x, len = NN)
+  scale <- rep(scale, len = NN)
+  nu <- rep(nu, len = NN)
+  dens <- log(2) - log(scale) + lgamma((nu + 1)/2) - lgamma(nu/2) -
+    0.5 * log(pi * nu) - (nu + 1)/2 * log(1 + (1/nu) * (x/scale) * (x/scale))
+  if (!log) {
+    return(exp(dens))
+  }
+  return(dens)
+}
+
+rwish <- function(v, S) {
+  if (!is.matrix(S)) {
+    S <- matrix(S)
+  }
+  if (nrow(S) != ncol(S)) {
+    stop("S not square in rwish().\n")
+  }
+  if (v < nrow(S)) {
+    stop("v is less than the dimension of S in rwish().\n")
+  }
+  p <- nrow(S)
+  CC <- chol(S)
+  Z <- matrix(0, p, p)
+  diag(Z) <- sqrt(stats::rchisq(p, v:(v - p + 1)))
+  if (p > 1) {
+    pseq <- 1:(p - 1)
+    Z_idx <- rep(p * pseq, pseq) + unlist(lapply(pseq, seq))
+    Z[Z_idx] <- stats::rnorm(p * (p - 1)/2)
+  }
+  result <- crossprod(Z %*% CC)
+  return(result)
+}
+
+riwish <- function(v, S){
+  result <- solve(rwish(v, solve(S)))
+  return(result)
+}
+
+logdinvGamma <- function(x, shape, rate){
+  result <- stats::dgamma(1/x, shape, rate, log = TRUE) - 2 * log(x)
+  return(result)
+}
+
+condMVN <- function(
+    mean, sigma, dependent.ind, given.ind, X.given, check.sigma = TRUE
+) {
+  if (missing(dependent.ind)) {
+    stop("You must specify the indices of dependent random variables in `dependent.ind'")
+  }
+  if (missing(given.ind) & missing(X.given)) {
+    result <- list(
+      condMean = mean[dependent.ind],
+      condVar = as.matrix(sigma[dependent.ind, dependent.ind])
+    )
+    return(result)
+  }
+  if (length(given.ind) == 0) {
+    result <- list(
+        condMean = mean[dependent.ind],
+        condVar = as.matrix(sigma[dependent.ind, dependent.ind])
+    )
+    return(result)
+  }
+  if (length(X.given) != length(given.ind)) {
+    stop("lengths of `X.given' and `given.ind' must be same")
+  }
+  if (check.sigma) {
+    if (!isSymmetric(sigma)) {
+      stop("sigma is not a symmetric matrix")
+    }
+    eigenvalues <- eigen(sigma, only.values = TRUE)[["values"]]
+    if (any(eigenvalues < 1e-08)) {
+      sigma <- sigma + abs(diag(stats::rnorm(nrow(sigma), sd = 1e-3)))
+    }
+  }
+  B <- sigma[dependent.ind, dependent.ind]
+  C <- sigma[dependent.ind, given.ind, drop = FALSE]
+  D <- sigma[given.ind, given.ind]
+  CDinv <- C %*% chol2inv(chol(D))
+  cMu <- c(mean[dependent.ind] + CDinv %*% (X.given - mean[given.ind]))
+  cVar <- B - CDinv %*% t(C)
+  result <- list(condMean = cMu, condVar = cVar)
+  return(result)
+}
+
