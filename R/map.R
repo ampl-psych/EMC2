@@ -262,13 +262,13 @@ fill_transform <- function(transform, model, p_vector,
       stop("Only ", paste(supported, collapse = ", "), " transforms supported")
     }
     if(!is_pre){
-      if (!all(names(transform$func) %in% names(model()$p_types)))stop("transform on parameter not in the model p_types")
-      if (!all(names(transform$lower) %in% names(model()$p_types)))stop("transform on parameter not in the model p_types")
-      if (!all(names(transform$upper) %in% names(model()$p_types)))stop("transform on parameter not in the model p_types")
+      if (!all(names(transform$func) %in% names(model()$p_types)))stop("func transform on parameter not in the model p_types")
+      if (!all(names(transform$lower) %in% names(model()$p_types)))stop("lower transform on parameter not in the model p_types")
+      if (!all(names(transform$upper) %in% names(model()$p_types)))stop("upper transform on parameter not in the model p_types")
     } else{
       if (!all(names(transform$func) %in% names(p_vector))) stop("pre_transform on parameter not in the sampled_pars")
-      if (!all(names(transform$lower) %in% names(p_vector))) stop("transform on parameter not in the model p_types")
-      if (!all(names(transform$upper) %in% names(p_vector))) stop("transform on parameter not in the model p_types")
+      if (!all(names(transform$lower) %in% names(p_vector))) stop("pre_transform lower on parameter not in the model p_types")
+      if (!all(names(transform$upper) %in% names(p_vector))) stop("pre_transform upper on parameter not in the model p_types")
     }
   }
   model_list <- model()
