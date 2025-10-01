@@ -41,7 +41,8 @@ needs_trialwise_parameters <- function(design, model) {
     if (any(has_fb)) return(TRUE)
   }
   if (has_conditional_covariates(design)) return(TRUE)
-  FALSE
+  # If none of these things return False
+  return(FALSE)
 }
 
 # One-step delta updates (used to carry Q state between trials)
@@ -90,7 +91,7 @@ make_data_unconditional <- function(data, pars, design, model, return_covariates
         if(!is.null(trend$feedback_columns)) {
           feedback_columns <- c(feedback_columns, trend$feedback_columns)
         } else {
-          # Default to 'reward' for backward compatibility
+          # Backwards compatibility for SM
           feedback_columns <- c(feedback_columns, 'reward')
         }
       }
