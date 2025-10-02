@@ -81,7 +81,7 @@ compare <- function(
     vector(mode = "list", length = length(sList)),
     names(sList)
   )
-  for (i in 1:length(ICs)) {
+  for (i in seq_along(ICs)) {
     ICs[[i]] <- IC(
       sList[[i]],
       stage = stage,
@@ -103,7 +103,7 @@ compare <- function(
   )
   if (BayesFactor) {
     MLLs <- numeric(length(sList))
-    for (i in 1:length(MLLs)) {
+    for (i in seq_along(MLLs)) {
       MLLs[i] <- run_bridge_sampling(
         sList[[i]],
         stage = stage,
@@ -307,6 +307,7 @@ get_BayesFactor <- function(MLL1, MLL2) {
   exp(MLL1 - MLL2)
 }
 
+
 #' Information Criteria For Each Participant
 #'
 #' Returns the BPIC/DIC based model weights for each participant in a list of samples objects
@@ -457,77 +458,6 @@ pmp <- function(x) {
 }
 
 
-
-
-make_nice_summary <- function(object, stat = "max", stat_only = FALSE, stat_name = NULL, ...){
-  if(is.null(stat_name)) stat_name <- stat
-  row_names <- names(object)
-  col_names <- unique(unlist(lapply(object, names)))
-  if(all(row_names %in% col_names)){
-    col_names <- row_names
-  }
-  out_mat <- matrix(NA, nrow = length(row_names), ncol = length(col_names))
-  for(i in 1:length(object)){
-    idx <- col_names %in% names(object[[i]])
-    out_mat[i,idx] <- object[[i]]
-  }
-  row_stat <- apply(out_mat, 1, FUN = get(stat), na.rm = T)
-  out_mat <- cbind(out_mat, row_stat)
-
-  if(nrow(out_mat) > 1){
-    col_stat <- apply(out_mat, 2, FUN = get(stat), na.rm = T)
-    col_stat[length(col_stat)] <- get(stat)(unlist(object))
-    out_mat <- rbind(out_mat, c(col_stat))
-    rownames(out_mat) <- c(row_names, stat_name)
-  } else{
-    rownames(out_mat) <- row_names
-  }
-  colnames(out_mat) <- c(col_names, stat_name)
-  if(stat_only){
-    out_mat <- out_mat[nrow(out_mat), ncol(out_mat)]
-  }
-  return(out_mat)
-}
-
-
-get_summary_stat <- function(emc, selection = "mu", fun, stat = NULL,
-                             stat_only = FALSE, stat_name = NULL, digits = 3, ...){
-  dots <- list(...)
-  if(is.null(emc[[1]]$n_subjects) || length(dots$subject) == 1 || emc[[1]]$n_subjects == 1) dots$by_subject <- TRUE
-  MCMC_samples <- do.call(get_pars, c(list(emc = emc, selection = selection), fix_dots(dots, get_pars)))
-  out <- vector("list", length = length(MCMC_samples))
-  for(i in 1:length(MCMC_samples)){
-    # cat("\n", names(MCMC_samples)[[i]], "\n")
-    if(length(fun) > 1){
-      outputs <- list()
-      for(j in 1:length(fun)){
-        outputs[[j]] <- do.call(fun[[j]], c(list(MCMC_samples[[i]]), fix_dots(dots, fun[[j]])))
-      }
-      out[[i]] <- do.call(cbind, outputs)
-      if(!is.null(stat_name)){
-        if(ncol(out[[i]]) != length(stat_name)) stop("make sure stat_name is the same length as function output")
-        colnames(out[[i]]) <- stat_name
-      }
-    } else{
-      out[[i]] <- do.call(fun, c(list(MCMC_samples[[i]]), fix_dots(dots, fun)))#fun(MCMC_samples[[i]], ...)
-    }
-  }
-  names(out) <- names(MCMC_samples)
-  if(length(fun) == 1 & !is.matrix(out[[i]]) & !is.null(stat)){
-    out <- make_nice_summary(out, stat, stat_only, stat_name)
-    out <- round(out, digits)
-  } else{
-    out <- lapply(out, round, digits)
-  }
-  return(out)
-}
-
-
-get_posterior_quantiles <- function(x, probs = c(0.025, .5, .975)){
-  summ <- summary(x, probs)
-  return(summ$quantiles)
-}
-
 #' Model Averaging
 #'
 #' Computes model weights and a Bayes factor by comparing two groups of models based on their
@@ -568,36 +498,145 @@ get_posterior_quantiles <- function(x, probs = c(0.025, .5, .975)){
 #'
 #' @export
 model_averaging <- function(IC_for, IC_against) {
-  if(is.null(IC_for)) return(NULL)
-
-  if(is.data.frame(IC_for)){
-    # Recursive call to make it work with the output of compare
-    MD <- model_averaging(IC_for$MD, IC_against$MD)
-    BPIC <- model_averaging(IC_for$BPIC, IC_against$BPIC)
-    DIC <- model_averaging(IC_for$DIC, IC_against$DIC)
-    return(rbind(MD = MD, BPIC = BPIC, DIC = DIC))
+  if(is.null(IC_for)) {
+    return(NULL)
   }
-  # Combine the IC values from both groups
-  all_IC <- c(IC_for, IC_against)
 
-  # shifted log-weights
+  # case: data frame input (from `compare`) - extract vectors, then recursive call
+  if(is.data.frame(IC_for)) {
+    MD <- model_averaging(IC_for[["MD"]], IC_against[["MD"]])
+    BPIC <- model_averaging(IC_for[["BPIC"]], IC_against[["BPIC"]])
+    DIC <- model_averaging(IC_for[["DIC"]], IC_against[["DIC"]])
+    result <- rbind(MD = MD, BPIC = BPIC, DIC = DIC)
+    return(result)
+  }
+
+  # case: numeric vector input
+  all_IC <- c(IC_for, IC_against)
   logw <- -0.5 * (all_IC - min(all_IC))
   log_denom <- log_sum_exp(logw)
-
-  # normalised weights
   weights <- exp(logw - log_denom)
 
-  # group sums
   weight_for <- sum(weights[seq_along(IC_for)])
   weight_against <- sum(weights[(length(IC_for) + 1):length(all_IC)])
-
   bayes_factor <- weight_for / weight_against
 
-  return(data.frame(
+  result <- data.frame(
     wFor = weight_for,
     wAgainst = weight_against,
     Factor = bayes_factor
-  ))
+  )
+  return(result)
+}
+
+
+# -----------------------------------------------------------------------------
+# Summary statistic functions used internally ---------------------------------
+
+get_summary_stat <- function(
+    emc,
+    selection = "mu",
+    fun,
+    stat = NULL,
+    stat_only = FALSE,
+    stat_name = NULL,
+    digits = 3,
+    ...
+) {
+  dots <- list(...)
+  if (
+    is.null(emc[[1]][["n_subjects"]]) || length(dots[["subject"]]) == 1 ||
+    emc[[1]][["n_subjects"]] == 1
+  ) {
+    dots[["by_subject"]] <- TRUE
+  }
+  MCMC_samples <- do.call(
+    get_pars,
+    c(list(emc = emc, selection = selection), fix_dots(dots, get_pars))
+  )
+  out <- vector("list", length = length(MCMC_samples))
+  for (i in seq_along(MCMC_samples)) {
+    if (length(fun) > 1) {
+      outputs <- vector("list", length = length(fun))
+      for (j in seq_along(fun)) {
+        outputs[[j]] <- do.call(
+          fun[[j]],
+          c(list(MCMC_samples[[i]]), fix_dots(dots, fun[[j]]))
+        )
+      }
+      out[[i]] <- do.call(cbind, outputs)
+      if (!is.null(stat_name)) {
+        if (ncol(out[[i]]) != length(stat_name)) {
+          stop("`stat_name` must be the same length as function output")
+        }
+        colnames(out[[i]]) <- stat_name
+      }
+    } else {
+      out[[i]] <- do.call(
+        fun,
+        c(list(MCMC_samples[[i]]), fix_dots(dots, fun))
+      )
+    }
+  }
+  names(out) <- names(MCMC_samples)
+  if (length(fun) == 1 & !is.matrix(out[[i]]) & !is.null(stat)) {
+    out <- make_nice_summary(
+      object = out, stat = stat, stat_only = stat_only, stat_name = stat_name
+    )
+    out <- round(out, digits)
+  } else {
+    out <- lapply(out, round, digits)
+  }
+  return(out)
+}
+
+
+make_nice_summary <- function(
+    object,
+    stat = "max",
+    stat_only = FALSE,
+    stat_name = NULL,
+    ...
+) {
+  if (is.null(stat_name)) {
+    stat_name <- stat
+  }
+  row_names <- names(object)
+  col_names <- unique(unlist(lapply(object, names)))
+  if (all(row_names %in% col_names)) {
+    col_names <- row_names
+  }
+  out_mat <- matrix(NA, nrow = length(row_names), ncol = length(col_names))
+  for (i in seq_along(object)) {
+    idx <- col_names %in% names(object[[i]])
+    out_mat[i, idx] <- object[[i]]
+  }
+  row_stat <- apply(
+    out_mat, 1, get(stat), na.rm = TRUE
+  )
+  out_mat <- cbind(out_mat, row_stat)
+
+  if (nrow(out_mat) > 1) {
+    col_stat <- apply(
+      out_mat, 2, get(stat), na.rm = TRUE
+    )
+    col_stat[length(col_stat)] <- get(stat)(unlist(object))
+    out_mat <- rbind(out_mat, c(col_stat))
+    rownames(out_mat) <- c(row_names, stat_name)
+  } else {
+    rownames(out_mat) <- row_names
+  }
+  colnames(out_mat) <- c(col_names, stat_name)
+  if (stat_only) {
+    out_mat <- out_mat[nrow(out_mat), ncol(out_mat)]
+  }
+  return(out_mat)
+}
+
+
+get_posterior_quantiles <- function(x, probs = c(0.025, .5, .975)) {
+  result <- summary(x, probs)[["quantiles"]]
+  return(result)
 }
 
 
