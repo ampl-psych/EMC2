@@ -174,7 +174,7 @@ SBC_single <- function(design_in, prior_in, replicates = 250, trials = 100,
   res <- auto_mclapply(X = 1:replicates, FUN = run_SBC_subject, design_in, prior_alpha, trials, prior_in, dots, mc.cores = dots$cores_per_chain)
   SBC <- split_list_to_dfs(res)
   if(!is.null(fileName)){
-    save(SBC, file = fileName)
+    save(SBC, prior_alpha, file = fileName)
   }
   return(SBC)
 }
