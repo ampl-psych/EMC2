@@ -607,7 +607,7 @@ rSShybrid <- function(data,pars,ok=rep(TRUE,dim(pars)[1]))
   # NB1: Go failures will only apply to accumulators where lI = TRUE
   #      and can still have a stop-triggered response on a go-failure trial.
 {
-  lR <- data$lR # For Michelle as an example
+  lR <- data$lR
   pars[,c("A","B","v")] <- pars[,c("A","B","v")]/pars[ok,"s"]
 
   nacc <- length(levels(lR))   # Does not include stop runner
