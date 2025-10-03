@@ -1,3 +1,119 @@
+# Wrapper functions for internal summary methods ------------------------------
+
+#' R-hat convergence diagnostic
+#'
+#' Computes the potential scale reduction factor (R-hat) for each parameter
+#' from an MCMC run. Supports both the legacy [coda::gelman.diag()] implementation
+#' and the rank-normalized split-\eqn{\hat{R}} diagnostic of Vehtari et al. (2021).
+#'
+#' The `"new"` method is adapted directly from the \pkg{posterior} package's
+#' [`rhat()`](https://mc-stan.org/posterior/reference/rhat.html) implementation,
+#' but included here to avoid introducing an additional package dependency.
+#' The substantive computation is identical, though some internal details
+#' have been simplified.
+#'
+#' @param mcmc_list A `coda::mcmc.list` object containing MCMC draws.
+#' @param version Character string, either `"old"` or `"new"`. `"old"` (default)
+#'    calls `gelman_diag_robust()` (based on [coda::gelman.diag()]), while
+#'    `"new"` uses a vendored implementation of `posterior::rhat()`.
+#'
+#' @return A named numeric vector of \eqn{\hat{R}} values, with names
+#'   corresponding to parameters.
+#'
+#' @references
+#' Vehtari, A., Gelman, A., Simpson, D., Carpenter, B., & Bürkner, P.-C. (2021).
+#' Rank-normalization, folding, and localization: An improved \eqn{\hat{R}} for
+#' assessing convergence of MCMC. *Bayesian Analysis*, *16*(2), 667–718.
+#'
+#' @keywords internal
+r_hat <- function(mcmc_list, version = c("old", "new")) {
+  version <- match.arg(version)
+  if (version == "old") {
+    result <- gelman_diag_robust(mcmc_list)
+  } else {
+    mcmc_mats <- prep_mcmc_diagnostics(mcmc_list)
+    result <- vapply(
+      X = mcmc_mats,
+      FUN = function(x) {
+        out <- try(rhat_new(x), silent = TRUE)
+        if (is(out, "try-error")) {return(Inf)}
+        return(out)
+      },
+      FUN.VALUE = numeric(1)
+    )
+  }
+  return(result)
+}
+
+#' Effective sample size (ESS)
+#'
+#' Computes the effective sample size (ESS) for each parameter from an MCMC run.
+#' Supports both the legacy [coda::effectiveSize()] implementation and the
+#' improved version based on Vehtari et al. (2021).
+#'
+#' The `"new"` method is adapted directly from the \pkg{posterior} package's
+#' [`ess_basic()`](https://mc-stan.org/posterior/reference/ess_basic.html)
+#' implementation, but included here to avoid introducing an additional
+#' package dependency. The substantive computation is identical, though some
+#' internal details have been simplified.
+#'
+#' @param mcmc_list A `coda::mcmc.list` object containing MCMC draws.
+#' @param version Character string, either `"old"` or `"new"`. `"old"` (default)
+#'    calls [coda::effectiveSize()], while `"new"` uses a vendored implementation
+#'    of `posterior::ess_basic()`.
+#'
+#' @return A named numeric vector of effective sample sizes, with names
+#'   corresponding to parameters.
+#'
+#' @references
+#' Vehtari, A., Gelman, A., Simpson, D., Carpenter, B., & Bürkner, P.-C. (2021).
+#' Rank-normalization, folding, and localization: An improved \eqn{\hat{R}} for
+#' assessing convergence of MCMC. *Bayesian Analysis*, *16*(2), 667–718.
+#'
+#' @keywords internal
+n_eff <- function(mcmc_list, version = c("old", "new")) {
+  version <- match.arg(version)
+  if (version == "old") {
+    result <- coda::effectiveSize(mcmc_list)
+  } else {
+    mcmc_mats <- prep_mcmc_diagnostics(mcmc_list)
+    result <- vapply(
+      X = mcmc_mats,
+      FUN = function(x) {
+        out <- try(ess_basic(x), silent = TRUE)
+        if (is(out, "try-error")) {return(0)}
+        return(out)
+      },
+      FUN.VALUE = numeric(1)
+    )
+  }
+  return(result)
+}
+
+#' @noRd
+prep_mcmc_diagnostics <- function(mcmc_list) {
+  stopifnot(is(mcmc_list, "mcmc.list"))
+  n_chains <- length(mcmc_list)
+  n_iter <- unique(vapply(mcmc_list, nrow, integer(1)))
+  if (length(n_iter) > 1L) {
+    stop("Chains have unequal numbers of iterations; please trim or pad first.")
+  }
+  n_iter <- n_iter[1]
+  param_names <- colnames(mcmc_list[[1]])
+  result <- setNames(
+    vector("list", length(param_names)),
+    param_names
+  )
+  for (param in param_names) {
+    mat <- matrix(NA_real_, nrow = n_iter, ncol = n_chains)
+    for (chain in seq_len(n_chains)) {
+      mat[ , chain] <- mcmc_list[[chain]][ , param]
+    }
+    result[[param]] <- mat
+  }
+  return(result)
+}
+
 # Old Rhat convergence diagnostic ---------------------------------------------
 
 gelman_diag_robust <- function(
@@ -116,7 +232,7 @@ rhat_basic <- function(x) {
   }
   n_iter <- NROW(x)
   chain_mean <- colMeans(x)
-  chain_var <- apply(x, 2, function(chain) mean((chain - mean(chain))^2))
+  chain_var <- apply(x, 2, stats::var)
   var_between <- n_iter * stats::var(chain_mean)
   var_within <- mean(chain_var)
   result <- sqrt((var_between / var_within + n_iter - 1) / n_iter)
@@ -125,6 +241,12 @@ rhat_basic <- function(x) {
 
 
 # Effective Sample Size (ESS) diagnostics -------------------------------------
+
+#' @noRd
+ess_basic <- function(x) {
+  result <- ess(split_chains(x))
+  return(result)
+}
 
 #' @noRd
 ess_bulk <- function(x) {
