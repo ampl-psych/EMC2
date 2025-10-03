@@ -36,34 +36,50 @@ print.emc <- function(x, ...){
 #'
 #' @return A list of summary output.
 #' @export
-summary.emc <- function(object, selection = c("mu", "sigma2", "alpha"), probs = c(0.025, .5, 0.975),
-                        digits = 3, ...){
+summary.emc <- function(
+    object,
+    selection = c("mu", "sigma2", "alpha"),
+    probs = c(0.025, .5, 0.975),
+    digits = 3,
+    ...
+) {
   dots <- list(...)
   dots <- add_defaults(dots, by_subject = TRUE)
-  if(object[[1]]$type == "single"){
+  if(object[[1]][["type"]] == "single") {
     selection <- "alpha"
   }
-  if(!object[[1]]$init){
+  if(!object[[1]][["init"]]) {
     warning("emc object has not been run with `fit` yet, design summary is returned.")
     summary(get_design(object))
     return(invisible(get_design(object)))
   }
   out_list <- list()
-  for(select in selection){
-    stats <- do.call(get_summary_stat, c(list(object, fun = c(get_posterior_quantiles, gelman_diag_robust, effectiveSize), probs = probs,
-                     stat_name = c(paste0(probs*100, "%"), "Rhat", "ESS"), selection = select), dots))
-    for(i in 1:length(stats)){
+  for(select in selection) {
+    stats <- do.call(
+      get_summary_stat,
+      c(
+        list(
+          object,
+          fun = c(get_posterior_quantiles, r_hat, n_eff),
+          probs = probs,
+          stat_name = c(paste0(probs*100, "%"), "Rhat", "ESS"),
+          selection = select
+        ),
+        dots
+      )
+    )
+    for (i in seq_along(stats)) {
       stat <- round(stats[[i]], digits)
-      stat[,ncol(stat)] <- round(stat[,ncol(stat)])
-      if(select == "alpha" & dots$by_subject){
-        if(i == 1){
+      stat[ , ncol(stat)] <- round(stat[ , ncol(stat)])
+      if (select == "alpha" & dots[["by_subject"]]) {
+        if (i == 1) {
           cat("\n", paste0(select, " ", names(stats)[i]), "\n")
           print(stat)
         }
-      } else{
-        if(length(stats) > 1){
+      } else {
+        if(length(stats) > 1) {
           cat("\n", paste0(select, " ", names(stats)[i]), "\n")
-        } else{
+        } else {
           cat("\n", names(stats)[i], "\n")
         }
         print(stat)
