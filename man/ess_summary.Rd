@@ -11,6 +11,7 @@
   stat = "min",
   stat_only = FALSE,
   digits = 1,
+  version = "old",
   ...
 )
 
@@ -28,6 +29,11 @@ which will be performed on the vector/rows or columns of the matrix of the param
 otherwise returns both the stat result and the result of the function on all parameters.}
 
 \item{digits}{Integer. How many digits to round the output to}
+
+\item{version}{Character string, either \code{"old"} or \code{"new"}. \code{"old"} (default)
+calls a legacy implementation from the \code{coda} package while \code{"new"} uses a
+more up-to-date implementation from the \code{posterior} package. See \code{\link[=r_hat]{r_hat()}}
+and \code{\link[=n_eff]{n_eff()}} for details.}
 
 \item{...}{Optional additional arguments that can be passed to \code{get_pars}}
 }

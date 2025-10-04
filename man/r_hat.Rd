@@ -24,7 +24,7 @@ the last element of the returned vector is named \code{"mpsrf"}, corresponding
 to the multivariate potential scale reduction factor.
 }
 \description{
-Computes the potential scale reduction factor (R-hat) for each parameter
+Computes the potential scale reduction factor (\eqn{\hat{R}}) for each parameter
 from an MCMC run. Supports both the legacy \code{\link[coda:gelman.diag]{coda::gelman.diag()}} implementation
 based on Gelman & Rubin (1992) and Brooks & Gelman (1998), as well as the more
 up-to-date \code{\link[posterior:rhat]{posterior::rhat()}} implementation based on recent improvements

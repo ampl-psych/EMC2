@@ -2,7 +2,7 @@
 
 #' R-hat convergence diagnostic
 #'
-#' Computes the potential scale reduction factor (R-hat) for each parameter
+#' Computes the potential scale reduction factor (\eqn{\hat{R}}) for each parameter
 #' from an MCMC run. Supports both the legacy [coda::gelman.diag()] implementation
 #' based on Gelman & Rubin (1992) and Brooks & Gelman (1998), as well as the more
 #' up-to-date [posterior::rhat()] implementation based on recent improvements

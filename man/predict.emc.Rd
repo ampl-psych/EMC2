@@ -12,7 +12,7 @@
   hyper = FALSE,
   n_post = 50,
   n_cores = 1,
-  stat = c("random", "mean", "median")[1],
+  stat = c("random", "mean", "median"),
   ...
 )
 }

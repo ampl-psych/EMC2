@@ -3,15 +3,18 @@ print.emc <- function(x, ...){
   n_chain <- chain_n(x)
   cat("Iterations: \n")
   print(chain_n(x))
-  sub_names <- names(x[[1]]$data)
+  sub_names <- names(x[[1]][["data"]])
   cat("\n")
   cat("Subjects: \n")
   print(sub_names)
-  par_names <- x[[1]]$par_names
+  par_names <- x[[1]][["par_names"]]
   cat("\n")
   cat("Parameters: \n")
   print(par_names)
-  return(invisible(list(iterations = n_chain, subjects = sub_names, parameters = par_names)))
+  result <- list(
+    iterations = n_chain, subjects = sub_names, parameters = par_names
+  )
+  return(invisible(result))
 }
 
 #' Summary Statistics for emc Objects
@@ -115,18 +118,22 @@ summary.emc <- function(
 #'
 #' # Can also plot the trace of for example the group-level correlation:
 #' plot(samples_LNR, selection = "correlation", col = c("green", "purple", "orange"), lwd = 2)
-
-plot.emc <- function(x, stage = "sample", selection = c("mu", "sigma2", "alpha"),
-                     layout=NA, ...){
-  if(!x[[1]]$init){
+plot.emc <- function(
+    x,
+    stage = "sample",
+    selection = c("mu", "sigma2", "alpha"),
+    layout = NA,
+    ...
+) {
+  if (!x[[1]][["init"]]) {
     warning("emc object has not been run with `fit` yet, prior plots are returned.")
     plot(get_prior(x))
     return(invisible(prior(x)))
   }
-  if(x[[1]]$type == "single" & selection[1] != "LL"){
+  if (x[[1]][["type"]] == "single" && selection[1] != "LL") {
     selection <- "alpha"
   }
-  for(select in selection){
+  for (select in selection) {
     plot_mcmc_list(x, stage = stage, selection = select, layout = layout, ...)
   }
 }
@@ -151,9 +158,14 @@ plot.emc <- function(x, stage = "sample", selection = c("mu", "sigma2", "alpha")
 #' predict(samples_LNR, n_cores = 1, n_post = 10)
 #' }
 #' @export
-predict.emc <- function(object,hyper=FALSE,n_post=50,n_cores=1,
-                        stat=c("random","mean","median")[1], ...)
-{
+predict.emc <- function(
+    object,
+    hyper = FALSE,
+    n_post = 50,
+    n_cores = 1,
+    stat = c("random", "mean", "median"),
+    ...
+) {
   # #' @param force_direction Boolean, take censor direction from argument not samples (default FALSE)
   # #' @param force_response Boolean, take censor response from argument not samples (default FALSE)
   # #' @param LCresponse Boolean, default TRUE, if false set LC response to NA
@@ -161,67 +173,146 @@ predict.emc <- function(object,hyper=FALSE,n_post=50,n_cores=1,
   # #' @param LCdirection Boolean, default TRUE, set LC rt to 0, else to NA
   # #' @param UCdirection Boolean, default TRUE, set LC rt to Inf, else to NA
   # #' @param expand Integer. Default is 1, exact same design for each subject. Larger values will replicate designs, so more trials per subject.
+  stat <- match.arg(stat)
   emc <- object
   dots <- list(...)
   data <- get_data(emc)
   design <- get_design(emc)
-  if(is.null(data$subjects)){
+  if (is.null(data[["subjects"]])) {
     jointModel <- TRUE
     all_samples <- emc
-  } else{
+  } else {
     jointModel <- FALSE
     data <- list(data)
   }
   post_out <- vector("list", length = length(data))
-  for(j in 1:length(data)){
-    if(jointModel) emc <- single_out_joint(all_samples, j)
-    subjects <- levels(data[[j]]$subjects)
-    if(grepl("MRI", design[[j]]$model()$type)) {
+  for (j in seq_along(data)) {
+    if (jointModel) {
+      emc <- single_out_joint(all_samples, j)
+    }
+    subjects <- levels(data[[j]][["subjects"]])
+    if (grepl("MRI", design[[j]][["model"]]()[["type"]])) {
       design[[j]] <- add_design_fMRI_predict(design[[j]], emc)
-      if(is.integer(design[[j]]$fMRI_design[[1]])){
-        design[[j]] <- design[[design[[j]]$fMRI_design[[1]]]]
+      if (is.integer(design[[j]][["fMRI_design"]][[1]])) {
+        design[[j]] <- design[[design[[j]][["fMRI_design"]][[1]]]]
       }
     }
     if (hyper) {
-      mu <- do.call(get_pars, c(list(emc, selection = "mu", map = FALSE, return_mcmc = FALSE, merge_chains = TRUE,
-                    length.out = ceiling(n_post/length(emc))), fix_dots(list(...), get_pars)))
-      Sigma <- do.call(get_pars, c(list(emc, selection = "Sigma", map = FALSE, return_mcmc = FALSE, merge_chains = TRUE,
-                     remove_dup = FALSE, remove_constants = FALSE, length.out = ceiling(n_post/length(emc))), fix_dots(list(...), get_pars)))
+      mu <- do.call(
+        get_pars,
+        c(
+          list(
+            emc,
+            selection = "mu",
+            map = FALSE,
+            return_mcmc = FALSE,
+            merge_chains = TRUE,
+            length.out = ceiling(n_post / length(emc))
+          ),
+          fix_dots(dots, get_pars)
+        )
+      )
+      Sigma <- do.call(
+        get_pars,
+        c(
+          list(
+            emc,
+            selection = "Sigma",
+            map = FALSE,
+            return_mcmc = FALSE,
+            merge_chains = TRUE,
+            remove_dup = FALSE,
+            remove_constants = FALSE,
+            length.out = ceiling(n_post / length(emc))
+          ),
+          fix_dots(dots, get_pars) # TODO
+        )
+      )
       pars <- get_alphas(mu, Sigma, subjects)
-      pars <- pars[,,1:n_post] # With non-equally divisible n_post you get some remainder
-      pars <- lapply(seq_len(dim(pars)[3]), function(i) t(pars[,,i]))
+      pars <- pars[ , , 1:n_post] # With non-equally divisible n_post you get some remainder
+      pars <- lapply(
+        seq_len(dim(pars)[3]),
+        function(i) {return(t(pars[ , , i]))}
+      )
     } else {
-      dots$selection <- "alpha"; dots$merge_chains <- TRUE; dots$by_subject <- TRUE
-      samps <- do.call(get_pars, c(list(emc), fix_dots(dots, get_pars)))
+      dots[["selection"]] <- "alpha"
+      dots[["merge_chains"]] <- TRUE
+      dots[["by_subject"]] <- TRUE
+      samps <- do.call(
+        get_pars,
+        c(list(emc), fix_dots(dots, get_pars))
+      )
       if (stat != "random") {
-        p <- do.call(rbind, lapply(samps, function(x) apply(x[[1]], 2, stat)))
+        p <- do.call(
+          rbind,
+          lapply(samps, function(x) {return(apply(x[[1]], 2, stat))})
+        )
       }
-      pars <- vector(mode="list",length=n_post)
-      for (i in 1:n_post) {
-        if (stat != "random") pars[[i]] <- p else {
-          pars[[i]] <- do.call(rbind,lapply(samps,function(x){x[[1]][sample(1:nrow(x[[1]]),1),]}))
+      pars <- vector(mode = "list", length = n_post)
+      for (i in seq_len(n_post)) {
+        if (stat != "random") {
+          pars[[i]] <- p
+        } else {
+          pars[[i]] <- do.call(
+            rbind,
+            lapply(samps, function(x) {return(x[[1]][sample(1:nrow(x[[1]]), 1), ])})
+          )
         }
       }
     }
-    simDat <- suppressWarnings(mclapply(1:n_post,function(i){
-      do.call(make_data, c(list(pars[[i]],design=design[[j]],data=data[[j]]), fix_dots(dots, make_data)))
-    },mc.cores=n_cores))
+    simDat <- suppressWarnings(
+      mclapply(
+        seq_len(n_post),
+        function(i) {
+          do.call(
+            make_data,
+            c(
+              list(pars[[i]], design = design[[j]], data = data[[j]]),
+              fix_dots(dots, make_data)
+            )
+          )
+        },
+        mc.cores = n_cores
+      )
+    )
     in_bounds <- !sapply(simDat, is.logical)
-    if(all(!in_bounds)) stop("All samples fall outside of model bounds")
-    if(any(!in_bounds)){
-      good_post <- sample(1:n_post, sum(!in_bounds))
-      simDat[!in_bounds] <- suppressWarnings(mclapply(good_post,function(i){
-        do.call(make_data, c(list(pars[[i]],design=design[[j]],data=data[[j]], check_bounds = TRUE), fix_dots(dots, make_data)))
-      },mc.cores=n_cores))
+    if (all(!in_bounds)) {
+      stop("All samples fall outside of model bounds")
     }
-    out <- cbind(postn=rep(1:n_post,times=unlist(lapply(simDat,function(x)dim(x)[1]))),do.call(rbind,simDat))
-    if (n_post==1) pars <- pars[[1]]
-    attr(out,"pars") <- pars
+    if (any(!in_bounds)) {
+      good_post <- sample(seq_len(n_post), sum(!in_bounds))
+      simDat[!in_bounds] <- suppressWarnings(
+        mclapply(
+          good_post,
+          function(i) {
+            do.call(
+              make_data,
+              c(
+                list(pars[[i]], design = design[[j]], data = data[[j]], check_bounds = TRUE),
+                fix_dots(dots, make_data)
+              )
+            )
+          },
+          mc.cores = n_cores
+        )
+      )
+    }
+    out <- cbind(
+      postn = rep(
+        seq_len(n_post),
+        times = unlist(lapply(simDat, function(x) {return(dim(x)[1])}))
+      ),
+      do.call(rbind, simDat)
+    )
+    if (n_post == 1) {
+      pars <- pars[[1]]
+    }
+    attr(out, "pars") <- pars
     post_out[[j]] <- out
   }
-  if(!jointModel){
+  if(!jointModel) {
     post_out <- post_out[[1]]
-  } else{
+  } else {
     joint_names <- get_joint_names(all_samples)
     names(post_out) <- joint_names
   }
@@ -232,59 +323,108 @@ predict.emc <- function(object,hyper=FALSE,n_post=50,n_cores=1,
 # custom s3 funcs ---------------------------------------------------------
 #' @rdname check
 #' @export
-check.emc <- function(emc, selection = c('mu', 'sigma2', 'alpha'), digits = 3,
-                      plot_worst = TRUE, ...){
+check.emc <- function(
+    emc,
+    selection = c("mu", "sigma2", "alpha"),
+    digits = 3,
+    plot_worst = TRUE,
+    version = c("old", "new"),
+    ...
+) {
   oldpar <- par(no.readonly = TRUE) # code line i
   on.exit(par(oldpar)) # code line i + 1
+  version <- match.arg(version)
   dots <- list(...)
   out_list <- list()
   cat("Iterations:\n")
   print(chain_n(emc))
-  if(emc[[1]]$type == "single") selection <- "alpha"
-  if(plot_worst){
-    mfrow <- coda_setmfrow(Nchains = length(emc), Nparms = length(selection),nplots = 1)
+  if (emc[[1]][["type"]] == "single") {
+    selection <- "alpha"
+  }
+  if (plot_worst) {
+    mfrow <- coda_setmfrow(
+      Nchains = length(emc),
+      Nparms = length(selection),
+      nplots = 1
+    )
     par(mfrow = mfrow)
   }
-  for(select in selection){
-    dots$flatten <- ifelse(select == "alpha", FALSE, TRUE)
-    dots$by_subject <- TRUE
-    ESS <- do.call(ess_summary, c(list(emc, selection = select, stat= NULL), fix_dots(dots, ess_summary)))
-    gds <- do.call(gd_summary, c(list(emc, selection = select, stat= NULL), fix_dots(dots, gd_summary)))
+  for (select in selection) {
+    dots[["flatten"]] <- ifelse(select == "alpha", FALSE, TRUE)
+    dots[["by_subject"]] <- TRUE
+    ESS <- do.call(
+      ess_summary,
+      c(
+        list(emc, selection = select, stat = NULL, version = version),
+        fix_dots(dots, ess_summary)
+      )
+    )
+    gds <- do.call(
+      gd_summary,
+      c(
+        list(emc, selection = select, stat = NULL, version = version),
+        fix_dots(dots, gd_summary)
+      )
+    )
     out <- list()
     max_gd <- -Inf
-    for(name in names(ESS)){
-      combined <- rbind(round(gds[[name]], digits), round(ESS[[name]]))
+    for (name in names(ESS)) {
+      combined <- rbind(
+        round(gds[[name]], digits),
+        round(ESS[[name]])
+      )
       rownames(combined) <- c("Rhat", "ESS")
       out[[name]] <- combined
-      if(max(gds[[name]]) > max_gd){
+      if (max(gds[[name]]) > max_gd) {
         max_gd <- max(gds[[name]])
         cur_max <- name
         max_par <- names(gds[[name]])[which.max(gds[[name]])]
       }
     }
-    if(length(ESS) > 1){
+    if (length(ESS) > 1) {
       cat("\n", paste0(select, " highest Rhat : ", cur_max), "\n")
-    } else{
+    } else {
       cat("\n", cur_max, "\n")
     }
     print(out[[cur_max]])
-    if(plot_worst){
+    if (plot_worst) {
       cur_dots <- dots
-      if(select == "alpha"){
-        cur_dots$subject <- cur_max
-        cur_dots$use_par <- max_par
-        cur_dots$by_subject <- TRUE
-        MCMCs <- do.call(get_pars, c(list(emc, selection = select), fix_dots(cur_dots, get_pars)))
+      if (select == "alpha") {
+        cur_dots[["subject"]] <- cur_max
+        cur_dots[["use_par"]] <- max_par
+        cur_dots[["by_subject"]] <- TRUE
+        MCMCs <- do.call(
+          get_pars,
+          c(
+            list(emc, selection = select),
+            fix_dots(cur_dots, get_pars)
+          )
+        )
         names(MCMCs) <- paste0("alpha : ", names(MCMCs))
-      } else{
-        cur_dots$use_par <- max_par
-        MCMCs <- do.call(get_pars, c(list(emc, selection = select), fix_dots(cur_dots, get_pars)))
+      } else {
+        cur_dots[["use_par"]] <- max_par
+        MCMCs <- do.call(
+          get_pars,
+          c(
+            list(emc, selection = select),
+            fix_dots(cur_dots, get_pars)
+          )
+        )
       }
-      cur_dots <- add_defaults(cur_dots, xlab = names(MCMCs)[1], ylab = "Highest Rhat parameter")
-      do.call(plot, c(list(MCMCs[[1]], auto.layout = FALSE, density = FALSE, ask = FALSE,smooth = FALSE),
-                      fix_dots_plot(cur_dots)))
-      legend("topleft",legend=paste0("Rhat : ",round(max_gd,digits)), bty = "n")
-      legend("topright",legend=paste0("ESS : ", round(ESS[[cur_max]][max_par])), bty = "n")
+      cur_dots <- add_defaults(
+        cur_dots,
+        xlab = names(MCMCs)[1],
+        ylab = "Highest Rhat parameter"
+      )
+      do.call(
+        plot,
+        c(
+          list(MCMCs[[1]], auto.layout = FALSE, density = FALSE, ask = FALSE, smooth = FALSE),
+          fix_dots_plot(cur_dots)
+        )
+      )
+      legend("topleft", legend = paste0("Rhat : ", round(max_gd, digits)), bty = "n")
+      legend("topright", legend = paste0("ESS : ", round(ESS[[cur_max]][max_par])), bty = "n")
     }
     out_list[[select]] <- out
   }
@@ -293,22 +433,36 @@ check.emc <- function(emc, selection = c('mu', 'sigma2', 'alpha'), digits = 3,
 
 #' Convergence Checks for an emc Object
 #'
-#' Runs a series of convergence checks, prints statistics to the console, and
-#' makes traceplots of the worst converged parameter per selection.
+#' Runs a series of MCMC diagnostic checks, prints those statistics to the
+#' console, and makes traceplots of the worst converged parameter per selection.
 #'
-#' Note that the `Rhat` is calculated by doubling the number of chains by
-#' first splitting chains into first and second half, so it also a test of
-#' stationarity.
+#' The potential scale reduction statistic \eqn{\hat{R}} is computed by [r_hat()],
+#' and the effective sample size (ESS) is computed by [n_eff()]. In both cases,
+#' by default the legacy implementations from the `coda` package are used,
+#' ([coda::gelman.diag()] and [coda::effectiveSize()], respectively), but more
+#' up-to-date implementations from the `posterior` package are also supported,
+#' by specifying `version = "new"` (see below).
 #'
-#' Efficiency of sampling is indicated by the effective
-#' sample size (ESS) (from the `coda` R package).
-#' Full range of possible samples manipulations described in `get_pars`.
+#' Full range of possible samples manipulations are described in `get_pars`.
 #'
 #' @param emc An emc object
 #' @param selection A Character vector. Indicates which parameter types to check (e.g., `alpha`, `mu`, `sigma2`, `correlation`).
 #' @param digits Integer. How many digits to round the ESS and Rhat to in the plots
 #' @param plot_worst Boolean. If `TRUE` also plots the chain plots for the worst parameter
+#' @param version Character string, either `"old"` or `"new"`. `"old"` (default)
+#'    calls [coda::gelman.diag()]) and [coda::effectiveSize()], while `"new"`
+#'    uses more up-to-date implementations from the `posterior` package. See
+#'    [r_hat()] and [n_eff()] for details.
 #' @param ... Optional arguments that can be passed to `get_pars` or `plot.default` (see `par()`)
+#'
+#' @details The potential scale reduction statistic, \eqn{\hat{R}}, indicates
+#' whether the chains are stationary and have converged to a common distribution
+#' for a given parameter. If chains have not converged, \eqn{\hat{R}} will be
+#' greater than 1; values above 1.1 are generally considered problematic.
+#'
+#' The effective sample size, ESS, indicates the number of independent draws from
+#' a parameter's posterior distribution, which can be interpreted as the efficiency
+#' of sampling.
 #'
 #' @return a list with the statistics for the worst converged parameter per selection
 #' @examples
@@ -902,19 +1056,40 @@ subset.emc <- function(x, stage = "sample", filter = NULL, thin = 1, keep_stages
 
 #' @rdname gd_summary
 #' @export
-gd_summary.emc <- function(emc,selection="mu", omit_mpsrf = TRUE,
-                           stat = "max", stat_only = FALSE, digits = 3, ...){
-  out <- get_summary_stat(emc, selection, gelman_diag_robust, stat = stat,
-                          stat_only = stat_only, digits = digits, omit_mpsrf = omit_mpsrf, ...)
+gd_summary.emc <- function(
+    emc,
+    selection = "mu",
+    omit_mpsrf = TRUE,
+    stat = "max",
+    stat_only = FALSE,
+    digits = 3,
+    version = "old",
+    ...
+) {
+  out <- get_summary_stat(
+    emc, selection, r_hat,
+    stat = stat, stat_only = stat_only, digits = digits,
+    omit_mpsrf = omit_mpsrf, version = version, ...
+  )
   return(out)
 }
 
 #' @rdname ess_summary
 #' @export
-ess_summary.emc <- function(emc,selection="mu", stat = "min", stat_only = FALSE,
-                           digits = 1, ...){
-  out <- get_summary_stat(emc, selection, effectiveSize,
-                          stat = stat, stat_only = stat_only, digits = digits, ...)
+ess_summary.emc <- function(
+    emc,
+    selection = "mu",
+    stat = "min",
+    stat_only = FALSE,
+    digits = 1,
+    version = "old",
+    ...
+) {
+  out <- get_summary_stat(
+    emc, selection, n_eff,
+    stat = stat, stat_only = stat_only, digits = digits,
+    version = version, ...
+  )
   return(out)
 }
 
@@ -945,6 +1120,10 @@ credint.emc <- function(x, selection="mu", probs = c(0.025, .5, .975),
 #' @param stat_only Boolean. If `TRUE` will only return the result of the applied stat function,
 #' otherwise returns both the stat result and the result of the function on all parameters.
 #' @param digits Integer. How many digits to round the output to
+#' @param version Character string, either `"old"` or `"new"`. `"old"` (default)
+#'    calls a legacy implementation from the `coda` package while `"new"` uses a
+#'    more up-to-date implementation from the `posterior` package. See [r_hat()]
+#'    and [n_eff()] for details.
 #' @param ... Optional additional arguments that can be passed to `get_pars`
 #'
 #' @return A matrix or vector of R-hat values for the selected parameter type.
