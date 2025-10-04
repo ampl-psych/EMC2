@@ -939,7 +939,7 @@ credint.emc <- function(x, selection="mu", probs = c(0.025, .5, .975),
 #'
 #' @param emc An emc object
 #' @param selection A Character vector. Indicates which parameter types to check (e.g., `alpha`, `mu`, `sigma2`, `correlation`).
-#' @param omit_mpsrf Boolean. If `TRUE` also returns the multivariate point scale reduction factor (see `?coda::gelman.diag`).
+#' @param omit_mpsrf Boolean. If `TRUE` (default) the multivariate point scale reduction factor (MPSRF) is *not* returned (see `?coda::gelman.diag`).
 #' @param stat A string. Should correspond to a function that can be applied to a vector,
 #' which will be performed on the vector/rows or columns of the matrix of the parameters
 #' @param stat_only Boolean. If `TRUE` will only return the result of the applied stat function,

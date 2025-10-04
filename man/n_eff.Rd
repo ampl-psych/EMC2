@@ -11,7 +11,7 @@ n_eff(mcmc_list, version = c("old", "new"))
 
 \item{version}{Character string, either \code{"old"} or \code{"new"}. \code{"old"} (default)
 calls \code{\link[coda:effectiveSize]{coda::effectiveSize()}}, while \code{"new"} uses a vendored implementation
-of \code{posterior::ess_basic()}.}
+of \code{\link[posterior:ess_basic]{posterior::ess_basic()}}.}
 }
 \value{
 A named numeric vector of effective sample sizes, with names
@@ -23,10 +23,9 @@ Supports both the legacy \code{\link[coda:effectiveSize]{coda::effectiveSize()}}
 improved version based on Vehtari et al. (2021).
 }
 \details{
-The \code{"new"} method is adapted directly from the \pkg{posterior} package's
-\href{https://mc-stan.org/posterior/reference/ess_basic.html}{\code{ess_basic()}}
-implementation, but included here to avoid introducing an additional
-package dependency. The substantive computation is identical, though some
+The \code{"new"} method is adapted directly from the \pkg{posterior}
+package's implementation, but included here to avoid introducing additional
+package dependencies. The substantive computation is identical, though some
 internal details have been simplified.
 }
 \references{

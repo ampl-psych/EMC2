@@ -4,32 +4,46 @@
 #'
 #' Computes the potential scale reduction factor (R-hat) for each parameter
 #' from an MCMC run. Supports both the legacy [coda::gelman.diag()] implementation
-#' and the rank-normalized split-\eqn{\hat{R}} diagnostic of Vehtari et al. (2021).
-#'
-#' The `"new"` method is adapted directly from the \pkg{posterior} package's
-#' [`rhat()`](https://mc-stan.org/posterior/reference/rhat.html) implementation,
-#' but included here to avoid introducing an additional package dependency.
-#' The substantive computation is identical, though some internal details
-#' have been simplified.
+#' based on Gelman & Rubin (1992) and Brooks & Gelman (1998), as well as the more
+#' up-to-date [posterior::rhat()] implementation based on recent improvements
+#' discussed in Vehtari et al. (2021).
 #'
 #' @param mcmc_list A `coda::mcmc.list` object containing MCMC draws.
 #' @param version Character string, either `"old"` or `"new"`. `"old"` (default)
-#'    calls `gelman_diag_robust()` (based on [coda::gelman.diag()]), while
-#'    `"new"` uses a vendored implementation of `posterior::rhat()`.
+#'    calls [coda::gelman.diag()]), while `"new"` uses a vendored implementation
+#'    of [posterior::rhat()].
+#' @param omit_mpsrf Boolean, only relevant if `version = "old"`.
+#'    If `TRUE` (default) the multivariate point scale reduction factor (MPSRF)
+#'    is *not* returned (see [coda::gelman.diag()] for details).
+#'
+#' @details The `"new"` method is adapted directly from the \pkg{posterior}
+#' package's implementation, but included here to avoid introducing additional
+#' package dependencies. The substantive computation is identical, though some
+#' internal details have been simplified.
+#'
 #'
 #' @return A named numeric vector of \eqn{\hat{R}} values, with names
-#'   corresponding to parameters.
+#'   corresponding to parameters. If `version = "old"` and `omit_mpsrf = FALSE`,
+#'   the last element of the returned vector is named `"mpsrf"`, corresponding
+#'   to the multivariate potential scale reduction factor.
 #'
 #' @references
+#' Gelman, A., & Rubin, D.B. (1992). Inference from iterative simulation using
+#' multiple sequences. *Statistical Science*, *7*, 457-511.
+#'
+#' Brooks, S.P., & Gelman, A. (1998). General methods for monitoring convergence
+#' of iterative simulations. *Journal of Computational and Graphical Statistics*,
+#' *7*, 434-455.
+#'
 #' Vehtari, A., Gelman, A., Simpson, D., Carpenter, B., & Bürkner, P.-C. (2021).
 #' Rank-normalization, folding, and localization: An improved \eqn{\hat{R}} for
 #' assessing convergence of MCMC. *Bayesian Analysis*, *16*(2), 667–718.
 #'
 #' @keywords internal
-r_hat <- function(mcmc_list, version = c("old", "new")) {
+r_hat <- function(mcmc_list, version = c("old", "new"), omit_mpsrf = TRUE) {
   version <- match.arg(version)
   if (version == "old") {
-    result <- gelman_diag_robust(mcmc_list)
+    result <- gelman_diag_robust(mcmc_list, omit_mpsrf = omit_mpsrf)
   } else {
     mcmc_mats <- prep_mcmc_diagnostics(mcmc_list)
     result <- vapply(
@@ -51,16 +65,15 @@ r_hat <- function(mcmc_list, version = c("old", "new")) {
 #' Supports both the legacy [coda::effectiveSize()] implementation and the
 #' improved version based on Vehtari et al. (2021).
 #'
-#' The `"new"` method is adapted directly from the \pkg{posterior} package's
-#' [`ess_basic()`](https://mc-stan.org/posterior/reference/ess_basic.html)
-#' implementation, but included here to avoid introducing an additional
-#' package dependency. The substantive computation is identical, though some
-#' internal details have been simplified.
-#'
 #' @param mcmc_list A `coda::mcmc.list` object containing MCMC draws.
 #' @param version Character string, either `"old"` or `"new"`. `"old"` (default)
 #'    calls [coda::effectiveSize()], while `"new"` uses a vendored implementation
-#'    of `posterior::ess_basic()`.
+#'    of [posterior::ess_basic()].
+#'
+#' @details The `"new"` method is adapted directly from the \pkg{posterior}
+#' package's implementation, but included here to avoid introducing additional
+#' package dependencies. The substantive computation is identical, though some
+#' internal details have been simplified.
 #'
 #' @return A named numeric vector of effective sample sizes, with names
 #'   corresponding to parameters.

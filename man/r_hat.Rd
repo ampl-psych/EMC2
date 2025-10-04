@@ -4,32 +4,46 @@
 \alias{r_hat}
 \title{R-hat convergence diagnostic}
 \usage{
-r_hat(mcmc_list, version = c("old", "new"))
+r_hat(mcmc_list, version = c("old", "new"), omit_mpsrf = TRUE)
 }
 \arguments{
 \item{mcmc_list}{A \code{coda::mcmc.list} object containing MCMC draws.}
 
 \item{version}{Character string, either \code{"old"} or \code{"new"}. \code{"old"} (default)
-calls \code{gelman_diag_robust()} (based on \code{\link[coda:gelman.diag]{coda::gelman.diag()}}), while
-\code{"new"} uses a vendored implementation of \code{posterior::rhat()}.}
+calls \code{\link[coda:gelman.diag]{coda::gelman.diag()}}), while \code{"new"} uses a vendored implementation
+of \code{\link[posterior:rhat]{posterior::rhat()}}.}
+
+\item{omit_mpsrf}{Boolean, only relevant if \code{version = "old"}.
+If \code{TRUE} (default) the multivariate point scale reduction factor (MPSRF)
+is \emph{not} returned (see \code{\link[coda:gelman.diag]{coda::gelman.diag()}} for details).}
 }
 \value{
 A named numeric vector of \eqn{\hat{R}} values, with names
-corresponding to parameters.
+corresponding to parameters. If \code{version = "old"} and \code{omit_mpsrf = FALSE},
+the last element of the returned vector is named \code{"mpsrf"}, corresponding
+to the multivariate potential scale reduction factor.
 }
 \description{
 Computes the potential scale reduction factor (R-hat) for each parameter
 from an MCMC run. Supports both the legacy \code{\link[coda:gelman.diag]{coda::gelman.diag()}} implementation
-and the rank-normalized split-\eqn{\hat{R}} diagnostic of Vehtari et al. (2021).
+based on Gelman & Rubin (1992) and Brooks & Gelman (1998), as well as the more
+up-to-date \code{\link[posterior:rhat]{posterior::rhat()}} implementation based on recent improvements
+discussed in Vehtari et al. (2021).
 }
 \details{
-The \code{"new"} method is adapted directly from the \pkg{posterior} package's
-\href{https://mc-stan.org/posterior/reference/rhat.html}{\code{rhat()}} implementation,
-but included here to avoid introducing an additional package dependency.
-The substantive computation is identical, though some internal details
-have been simplified.
+The \code{"new"} method is adapted directly from the \pkg{posterior}
+package's implementation, but included here to avoid introducing additional
+package dependencies. The substantive computation is identical, though some
+internal details have been simplified.
 }
 \references{
+Gelman, A., & Rubin, D.B. (1992). Inference from iterative simulation using
+multiple sequences. \emph{Statistical Science}, \emph{7}, 457-511.
+
+Brooks, S.P., & Gelman, A. (1998). General methods for monitoring convergence
+of iterative simulations. \emph{Journal of Computational and Graphical Statistics},
+\emph{7}, 434-455.
+
 Vehtari, A., Gelman, A., Simpson, D., Carpenter, B., & Bürkner, P.-C. (2021).
 Rank-normalization, folding, and localization: An improved \eqn{\hat{R}} for
 assessing convergence of MCMC. \emph{Bayesian Analysis}, \emph{16}(2), 667–718.

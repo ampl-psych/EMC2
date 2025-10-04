@@ -22,7 +22,7 @@ gd_summary(emc, ...)
 
 \item{selection}{A Character vector. Indicates which parameter types to check (e.g., \code{alpha}, \code{mu}, \code{sigma2}, \code{correlation}).}
 
-\item{omit_mpsrf}{Boolean. If \code{TRUE} also returns the multivariate point scale reduction factor (see \code{?coda::gelman.diag}).}
+\item{omit_mpsrf}{Boolean. If \code{TRUE} (default) the multivariate point scale reduction factor (MPSRF) is \emph{not} returned (see \code{?coda::gelman.diag}).}
 
 \item{stat}{A string. Should correspond to a function that can be applied to a vector,
 which will be performed on the vector/rows or columns of the matrix of the parameters}
