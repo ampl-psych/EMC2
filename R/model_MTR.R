@@ -235,7 +235,7 @@ rLBA_TC <- function(lR,pars,ok=rep(TRUE,dim(pars)[1]),return_activation = FALSE)
   out
 }
 
-#### Density (cdf implict as multi-variate) ----
+#### Density (cdf implicit as multivariate) ----
 
 # Taken from MomTrunc
 recintab0 <- function (kappa, a, b, mu, Sigma)
@@ -415,6 +415,9 @@ n1PDF_MTR_1 <- function(rt, pars,dl,du,b)
 
 #### 2 confidence levels ----
 
+# gp = guessing probability, gB = guessing threshold, default always guess low
+# gp1 = probability of guessing low confidence (level 1), else high (level 2)
+
 #' Balance of Evidence 2 Threshold LBA model
 #'
 #' All thresholds greater than A, DT1 <- A+DT1, b <- DT1 + B, pb <- A + gB
@@ -578,6 +581,9 @@ TC2PLBA <- function(){
 
 #### 3 confidence levels ----
 
+# gp = guessing probability, gB = guessing threshold, default always guess low
+# gp1/2 = probability of guessing low/medium confidence (level 1/2), else high (level 3)
+
 #' Balance of Evidence 3 Threshold LBA model
 #'
 #' All thresholds greater than A, DT1 <- A+DT1, DT2 <- DT1 + DT2, b <- DT2 + B
@@ -621,7 +627,7 @@ BE3LBA <- function(){
 
 #' Balance of Evidence 3 Threshold LBA model
 #'
-#' Intermediate thresholds and gB proportional to B, can be less than A
+#' Intermediate thresholds and gB proportional to B
 #'
 #' @return A model list with all the necessary functions to sample
 #' @export
@@ -702,7 +708,7 @@ TC3LBA <- function(){
 
 #' Threshold count 3 Threshold LBA model
 #'
-#' Intermediate thresholds and gB proportional to B, can be less than A
+#' Intermediate thresholds and gB proportional to B
 #'
 #' @return A model list with all the necessary functions to sample
 #' @export
@@ -740,6 +746,10 @@ TC3PLBA <- function(){
 }
 
 #### 4 confidence levels ----
+
+# gp = guessing probability, gB = guessing threshold, default always guess low
+# gp1/2/3 = probability of guessing low/med lo/med hi confidence (level 1/2/3), else high (level 4)
+
 
 #' Balance of Evidence 4 Threshold LBA model
 #'
@@ -784,7 +794,7 @@ BE4LBA <- function(){
 
 #' Balance of Evidence 4 Threshold LBA model
 #'
-#' Intermediate thresholds and gb proportional to b, can be less than A
+#' Intermediate thresholds and gb proportional to b
 #'
 #' @return A model list with all the necessary functions to sample
 #' @export
@@ -865,7 +875,7 @@ TC4LBA <- function(){
 
 #' Threshold count 4 Threshold LBA model
 #'
-#' Intermediate thresholds and gb proportional to b, can be less than A
+#' Intermediate thresholds and gb proportional to b
 #'
 #' @return A model list with all the necessary functions to sample
 #' @export
