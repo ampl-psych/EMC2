@@ -23,10 +23,12 @@ Supports both the legacy \code{\link[coda:effectiveSize]{coda::effectiveSize()}}
 improved version based on Vehtari et al. (2021).
 }
 \details{
-The \code{"new"} method is adapted directly from the \pkg{posterior}
-package's implementation, but included here to avoid introducing additional
-package dependencies. The substantive computation is identical, though some
-internal details have been simplified.
+The \code{"new"} ESS follows the recommendations of Vehtari et al. (2021), using
+rank-normalization and spectral variance estimation for improved accuracy in
+the presence of autocorrelation or heavy tails. This method is adapted
+directly from the \pkg{posterior} package's implementation, included here to
+avoid introducing additional package dependencies. The substantive
+computation is identical, though some internal details have been simplified.
 }
 \references{
 Vehtari, A., Gelman, A., Simpson, D., Carpenter, B., & Bürkner, P.-C. (2021).

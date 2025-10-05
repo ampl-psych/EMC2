@@ -10,8 +10,8 @@ r_hat(mcmc_list, version = c("old", "new"), omit_mpsrf = TRUE)
 \item{mcmc_list}{A \code{coda::mcmc.list} object containing MCMC draws.}
 
 \item{version}{Character string, either \code{"old"} or \code{"new"}. \code{"old"} (default)
-calls \code{\link[coda:gelman.diag]{coda::gelman.diag()}}), while \code{"new"} uses a vendored implementation
-of \code{\link[posterior:rhat]{posterior::rhat()}}.}
+calls \code{\link[coda:gelman.diag]{coda::gelman.diag()}}) with split chains, while \code{"new"} uses a
+vendored implementation of \code{\link[posterior:rhat]{posterior::rhat()}}.}
 
 \item{omit_mpsrf}{Boolean, only relevant if \code{version = "old"}.
 If \code{TRUE} (default) the multivariate point scale reduction factor (MPSRF)
@@ -31,10 +31,17 @@ up-to-date \code{\link[posterior:rhat]{posterior::rhat()}} implementation based 
 discussed in Vehtari et al. (2021).
 }
 \details{
-The \code{"new"} method is adapted directly from the \pkg{posterior}
-package's implementation, but included here to avoid introducing additional
-package dependencies. The substantive computation is identical, though some
-internal details have been simplified.
+The \code{"old"} method produces the traditional Gelman–Rubin diagnostic, but uses
+split chains for improved detection of (non-)convergence in case of non-
+stationarity.
+
+The \code{"new"} method implements the rank-normalized, folded, and localized
+R-hat as described by Vehtari et al. (2021), which offers improved detection
+of (non-)convergence in case of heavy tails and non-stationarity. This method
+is adapted directly from the \pkg{posterior} package's implementation,
+included here to avoid introducing additional package dependencies. The
+substantive computation is identical, though some internal details have been
+simplified.
 }
 \references{
 Gelman, A., & Rubin, D.B. (1992). Inference from iterative simulation using

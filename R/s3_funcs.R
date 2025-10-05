@@ -438,7 +438,7 @@ check.emc <- function(
 #'
 #' The potential scale reduction statistic \eqn{\hat{R}} is computed by [r_hat()],
 #' and the effective sample size (ESS) is computed by [n_eff()]. In both cases,
-#' by default the legacy implementations from the `coda` package are used,
+#' by default implementations from the `coda` package are used
 #' ([coda::gelman.diag()] and [coda::effectiveSize()], respectively), but more
 #' up-to-date implementations from the `posterior` package are also supported,
 #' by specifying `version = "new"` (see below).
@@ -1102,50 +1102,88 @@ credint.emc <- function(x, selection="mu", probs = c(0.025, .5, .975),
   return(out)
 }
 
-#' Gelman-Rubin Statistic
+#' R-hat convergence diagnostic
 #'
-#' Returns the Gelman-Rubin diagnostics (otherwise known as the R-hat) of the selected parameter type;
-#' i.e. the ratio of between to within MCMC chain variance.
+#' Computes the potential scale reduction factor (\eqn{\hat{R}}) for a selected
+#' model parameter type in an `emc` object. Supports both the legacy Gelman–Rubin
+#' diagnostic (Gelman & Rubin, 1992; Brooks & Gelman, 1998), and the more
+#' up-to-date implementation proposed by Vehtari et al. (2021).
 #'
-#' See: Gelman, A and Rubin, DB (1992)
-#' Inference from iterative simulation using multiple sequences, *Statistical Science*, 7, 457-511.
-#'
-#' Full range of possible samples manipulations described in `get_pars`.
-#'
-#' @param emc An emc object
-#' @param selection A Character vector. Indicates which parameter types to check (e.g., `alpha`, `mu`, `sigma2`, `correlation`).
-#' @param omit_mpsrf Boolean. If `TRUE` (default) the multivariate point scale reduction factor (MPSRF) is *not* returned (see `?coda::gelman.diag`).
-#' @param stat A string. Should correspond to a function that can be applied to a vector,
-#' which will be performed on the vector/rows or columns of the matrix of the parameters
-#' @param stat_only Boolean. If `TRUE` will only return the result of the applied stat function,
-#' otherwise returns both the stat result and the result of the function on all parameters.
-#' @param digits Integer. How many digits to round the output to
+#' @param emc An emc object.
+#' @param selection A Character vector. Indicates which parameter types to check
+#'    (e.g., `alpha`, `mu`, `sigma2`, `correlation`).
+#' @param omit_mpsrf Boolean. If `TRUE` (default) the multivariate point scale
+#'    reduction factor (MPSRF) is *not* returned (see [coda::gelman.diag()] for
+#'    details). Only relevant if `version = "old"` (see below).
+#' @param stat A string. Should correspond to a function that can be applied to
+#'    a vector, which will be performed on the vector/rows or columns of the
+#'    matrix of the parameters
+#' @param stat_only Boolean. If `TRUE` will only return the result of the
+#'    applied `stat` function, otherwise returns both the stat result and the
+#'    result of the function on all parameters.
+#' @param digits Integer. How many digits to round the output to.
 #' @param version Character string, either `"old"` or `"new"`. `"old"` (default)
-#'    calls a legacy implementation from the `coda` package while `"new"` uses a
-#'    more up-to-date implementation from the `posterior` package. See [r_hat()]
-#'    and [n_eff()] for details.
+#'    calls [coda::gelman.diag()] with split chains, while `"new"` uses a vendored
+#'    implementation of [posterior::rhat()] based on Vehtari et al. (2021).
+#'    See [r_hat()] for details.
 #' @param ... Optional additional arguments that can be passed to `get_pars`
 #'
 #' @return A matrix or vector of R-hat values for the selected parameter type.
-#' @export
+#'
+#' @references
+#' Gelman, A., & Rubin, D.B. (1992). Inference from iterative simulation using
+#' multiple sequences. *Statistical Science*, *7*, 457–511.
+#'
+#' Brooks, S.P., & Gelman, A. (1998). General methods for monitoring convergence
+#' of iterative simulations. *Journal of Computational and Graphical Statistics*,
+#' *7*, 434–455.
+#'
+#' Vehtari, A., Gelman, A., Simpson, D., Carpenter, B., & Bürkner, P.-C. (2021).
+#' Rank-normalization, folding, and localization: An improved \eqn{\hat{R}} for
+#' assessing convergence of MCMC. *Bayesian Analysis*, *16*(2), 667–718.
 #'
 #' @examples
 #' gd_summary(samples_LNR, selection = "correlation", stat = "mean", flatten = TRUE)
+#'
+#' @export
 gd_summary <- function(emc, ...){
   UseMethod("gd_summary")
 }
 
 #' Effective Sample Size
 #'
-#' Returns the effective sample size (ESS) of the selected parameter type.
-#' Full range of possible samples manipulations described in `get_pars`.
+#' Computes the effective sample size (ESS) for a selected model parameter type
+#' in an `emc` object. Supports both the legacy [coda::effectiveSize()] calculation
+#' and a more modern implementation adapted from [posterior::ess_basic()] based
+#' on Vehtari et al. (2021).
 #'
-#' @inheritParams gd_summary.emc
+#' @param emc An emc object.
+#' @param selection A Character vector. Indicates which parameter types to check
+#'    (e.g., `alpha`, `mu`, `sigma2`, `correlation`).
+#' @param stat A string. Should correspond to a function that can be applied to
+#'    a vector, which will be performed on the vector/rows or columns of the
+#'    matrix of the parameters
+#' @param stat_only Boolean. If `TRUE` will only return the result of the
+#'    applied `stat` function, otherwise returns both the stat result and the
+#'    result of the function on all parameters.
+#' @param digits Integer. How many digits to round the output to.
+#' @param version Character string, either `"old"` or `"new"`. `"old"` (default)
+#'    calls [coda::effectiveSize()], while `"new"` uses a vendored implementation
+#'    of [posterior::ess_basic()] based on Vehtari et al. (2021).
+#'    See [n_eff()] for details.
+#' @param ... Optional additional arguments that can be passed to `get_pars`
+#'
 #' @return A matrix or vector of ESS values for the selected parameter type.
-#' @export
 #'
 #' @examples
 #' ess_summary(samples_LNR, selection = "alpha")
+#'
+#' @references
+#' Vehtari, A., Gelman, A., Simpson, D., Carpenter, B., & Bürkner, P.-C. (2021).
+#' Rank-normalization, folding, and localization: An improved \eqn{\hat{R}} for
+#' assessing convergence of MCMC. *Bayesian Analysis*, *16*(2), 667–718.
+#'
+#' @export
 ess_summary <- function(emc, ...){
   UseMethod("ess_summary")
 }

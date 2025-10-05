@@ -42,7 +42,7 @@ console, and makes traceplots of the worst converged parameter per selection.
 \details{
 The potential scale reduction statistic \eqn{\hat{R}} is computed by \code{\link[=r_hat]{r_hat()}},
 and the effective sample size (ESS) is computed by \code{\link[=n_eff]{n_eff()}}. In both cases,
-by default the legacy implementations from the \code{coda} package are used,
+by default implementations from the \code{coda} package are used
 (\code{\link[coda:gelman.diag]{coda::gelman.diag()}} and \code{\link[coda:effectiveSize]{coda::effectiveSize()}}, respectively), but more
 up-to-date implementations from the \code{posterior} package are also supported,
 by specifying \code{version = "new"} (see below).

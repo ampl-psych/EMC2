@@ -10,17 +10,24 @@
 #'
 #' @param mcmc_list A `coda::mcmc.list` object containing MCMC draws.
 #' @param version Character string, either `"old"` or `"new"`. `"old"` (default)
-#'    calls [coda::gelman.diag()]), while `"new"` uses a vendored implementation
-#'    of [posterior::rhat()].
+#'    calls [coda::gelman.diag()]) with split chains, while `"new"` uses a
+#'    vendored implementation of [posterior::rhat()].
 #' @param omit_mpsrf Boolean, only relevant if `version = "old"`.
 #'    If `TRUE` (default) the multivariate point scale reduction factor (MPSRF)
 #'    is *not* returned (see [coda::gelman.diag()] for details).
 #'
-#' @details The `"new"` method is adapted directly from the \pkg{posterior}
-#' package's implementation, but included here to avoid introducing additional
-#' package dependencies. The substantive computation is identical, though some
-#' internal details have been simplified.
+#' @details
+#' The `"old"` method produces the traditional Gelman–Rubin diagnostic, but uses
+#' split chains for improved detection of (non-)convergence in case of non-
+#' stationarity.
 #'
+#' The `"new"` method implements the rank-normalized, folded, and localized
+#' R-hat as described by Vehtari et al. (2021), which offers improved detection
+#' of (non-)convergence in case of heavy tails and non-stationarity. This method
+#' is adapted directly from the \pkg{posterior} package's implementation,
+#' included here to avoid introducing additional package dependencies. The
+#' substantive computation is identical, though some internal details have been
+#' simplified.
 #'
 #' @return A named numeric vector of \eqn{\hat{R}} values, with names
 #'   corresponding to parameters. If `version = "old"` and `omit_mpsrf = FALSE`,
@@ -70,10 +77,13 @@ r_hat <- function(mcmc_list, version = c("old", "new"), omit_mpsrf = TRUE) {
 #'    calls [coda::effectiveSize()], while `"new"` uses a vendored implementation
 #'    of [posterior::ess_basic()].
 #'
-#' @details The `"new"` method is adapted directly from the \pkg{posterior}
-#' package's implementation, but included here to avoid introducing additional
-#' package dependencies. The substantive computation is identical, though some
-#' internal details have been simplified.
+#' @details
+#' The `"new"` ESS follows the recommendations of Vehtari et al. (2021), using
+#' rank-normalization and spectral variance estimation for improved accuracy in
+#' the presence of autocorrelation or heavy tails. This method is adapted
+#' directly from the \pkg{posterior} package's implementation, included here to
+#' avoid introducing additional package dependencies. The substantive
+#' computation is identical, though some internal details have been simplified.
 #'
 #' @return A named numeric vector of effective sample sizes, with names
 #'   corresponding to parameters.
