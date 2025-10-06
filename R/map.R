@@ -498,37 +498,41 @@ verbal_dm <- function(design){
   map_no_da <- attr(sampled_pars(design, doMap = TRUE), "map")
   transforms <- design$model()$transform$func
   pre_transforms <- design$model()$pre_transform$func
-  trend <- design$model()$trend
-  trends_to_pass <- NULL
-  if(!is.null(trend)) trend <- add_transforms_to_trend_pnames(trend, transforms=transforms, pre_transforms=pre_transforms)
+  trend_all <- design$model()$trend
+  if(!is.null(trend_all)) trend_all <- add_transforms_to_trend_pnames(trend_all, transforms=transforms, pre_transforms=pre_transforms)
 
   for(i in 1:length(map)){
     m <- map[[i]]
-    if((ncol(m) == 1) & !any(colnames(m) %in% names(trend))) next
+    # Skip if single-column and no trend references this parameter
+    if ((ncol(m) == 1) && (is.null(trend_all) || !any(colnames(m) %in% names(trend_all)))) next
 
-    if(!is.null(trend)) {
-      # add trial subscript
-      trend_idx <- names(trend) %in% colnames(m)
-      if(attr(trend, 'premap')) {
-        factor_has_trend <- colnames(m) %in% names(trend)
-        colnames(m)[factor_has_trend] <- paste0(colnames(m)[factor_has_trend],'_t')
-      }
-    }
     cat(paste0("$", names(map)[i]), "\n")
 
     mnd <- map_no_da[[i]]
-    if(!is.null(trend)) {
-      if(attr(trend, 'premap')) {
-        factor_has_trend <- colnames(mnd) %in% names(trend)
-        trend_in_mnd <- names(trend) %in% colnames(mnd)
-        colnames(mnd)[factor_has_trend] <- paste0(colnames(mnd)[factor_has_trend],'_t')
 
-        names(trend)[trend_in_mnd] <- paste0(names(trend)[trend_in_mnd], '_t')
+    trends_to_pass <- NULL
+    if(!is.null(trend_all)) {
+      # Select trends targeting this parameter (by name in map_no_da)
+      trend_idx <- names(trend_all) %in% colnames(mnd)
+      if (any(trend_idx)) {
+        trends_to_pass <- trend_all[trend_idx]
+        phases <- vapply(trends_to_pass, function(x) x$phase, character(1))
+        has_premap <- any(phases == "premap")
+        has_pretransform <- any(phases == "pretransform")
+
+        # If any trend is premap, suffix the parameter names in the design matrices
+        if (has_premap) {
+          in_m <- colnames(m) %in% names(trends_to_pass)
+          if (any(in_m)) colnames(m)[in_m] <- paste0(colnames(m)[in_m], '_t')
+          in_mnd <- colnames(mnd) %in% names(trends_to_pass)
+          if (any(in_mnd)) colnames(mnd)[in_mnd] <- paste0(colnames(mnd)[in_mnd], '_t')
+          names(trends_to_pass) <- paste0(names(trends_to_pass), '_t')
+        }
+
+        # Attach concise flags used downstream
+        attr(trends_to_pass, 'premap') <- has_premap
+        attr(trends_to_pass, 'pretransform') <- has_pretransform
       }
-
-      trends_to_pass <- trend[trend_idx]
-      attr(trends_to_pass, 'premap') <- attr(trend, 'premap')
-      attr(trends_to_pass, 'pretransform') <- attr(trend, 'pretransform')
     }
 
     par_idx <- colnames(m) %in% colnames(mnd)

@@ -401,7 +401,8 @@ inline NumericVector apply_premap_trends(const DataFrame& data,
                                          const CharacterVector& trend_names,
                                          const String& param_name,
                                          NumericVector param_values,
-                                         const NumericMatrix& trend_pars) {
+                                         const NumericMatrix& trend_pars,
+                                         const NumericVector& p_vector) {
   // Apply all premap trend entries for this param_name sequentially, in order
   NumericVector result = clone(param_values);
   for (int i = 0; i < trend.size(); ++i) {
@@ -411,8 +412,29 @@ inline NumericVector apply_premap_trends(const DataFrame& data,
       if (ph != "premap") continue;
       CharacterVector cur_trend_pnames = cur_trend["trend_pnames"];
       NumericMatrix cur_trend_pars = submat_rcpp_col_by_names(trend_pars, cur_trend_pnames);
-      NumericMatrix empty_full(result.size(), 0);
-      result = run_trend_rcpp(data, cur_trend, result, cur_trend_pars, empty_full);
+      // Build a small pars_full matrix for par_input: replicate scalars from p_vector across trials
+      CharacterVector par_input;
+      if (cur_trend.containsElementNamed("par_input") && !Rf_isNull(cur_trend["par_input"])) {
+        par_input = cur_trend["par_input"];
+      } else {
+        par_input = CharacterVector(0);
+      }
+      NumericMatrix pars_full(result.size(), par_input.size());
+      if (par_input.size() > 0) {
+        colnames(pars_full) = par_input;
+        CharacterVector pnames = p_vector.names();
+        for (int c = 0; c < par_input.size(); ++c) {
+          std::string nm = Rcpp::as<std::string>(par_input[c]);
+          // find scalar in p_vector by name
+          int idx = -1;
+          for (int k = 0; k < pnames.size(); ++k) {
+            if (nm == Rcpp::as<std::string>(pnames[k])) { idx = k; break; }
+          }
+          double val = (idx >= 0) ? (double)p_vector[idx] : NA_REAL;
+          for (int r = 0; r < pars_full.nrow(); ++r) pars_full(r, c) = val;
+        }
+      }
+      result = run_trend_rcpp(data, cur_trend, result, cur_trend_pars, pars_full);
     }
   }
   return result;

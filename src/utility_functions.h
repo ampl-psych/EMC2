@@ -8,17 +8,6 @@
 #include <functional>
 using namespace Rcpp;
 
-// Helper: safely read a logical attribute; default to false if missing/invalid
-static bool get_bool_attr_or_false(const Rcpp::List& lst, const char* name) {
-  SEXP s = lst.attr(name);
-  if (s == R_NilValue) return false;
-  try {
-    return Rcpp::as<bool>(s);
-  } catch (...) {
-    return false;
-  }
-}
-
 LogicalVector contains(CharacterVector sv, std::string txt) {
   LogicalVector res(sv.size());
   for (int i = 0; i < sv.size(); i ++) {

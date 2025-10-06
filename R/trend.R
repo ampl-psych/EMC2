@@ -454,13 +454,7 @@ check_trend <- function(trend, covariates = NULL, model = NULL, formula = NULL) 
   if (!all(covnames %in% covariates)){
     stop("trend has covnames not in covariates")
   }
-  # Premap + par_input not supported (no full parameter matrix yet)
-  for (i in seq_along(trend)) {
-    if (identical(trend[[i]]$phase, "premap") && length(trend[[i]]$par_input) > 0) {
-      warning("par_input is ignored for premap trends in current implementation")
-      break
-    }
-  }
+  # Premap + par_input: allowed. Scalars will be replicated to vector length in C++ mapping
   trend_pnames <- get_trend_pnames(trend)
   if (!is.null(formula)) {
     isin <-  trend_pnames %in% unlist(lapply(formula,function(x)all.vars(x)[1]))
@@ -660,42 +654,6 @@ has_conditional_covariates <- function(design) {
   }
   return(FALSE)
 }
-
-
-###
-# format_base <- function(base, trend_par_name, kernel_formatted, base_pars=NULL, first=TRUE) {
-#   if(first) {
-#     switch(base,
-#            lin = paste0(trend_par_name,' = ', gsub('_t', '', trend_par_name), ' + ', base_pars[1], ' * ', kernel_formatted),
-#            exp_lin = paste0(trend_par_name,' = exp(', gsub('_t', '', trend_par_name), ') + exp(', base_pars[1], ') * ', kernel_formatted),
-#            centered = paste0(trend_par_name,' = ', gsub('_t', '', trend_par_name), ' + ', base_pars[1], ' * (', kernel_formatted, ' - 0.5)'),
-#            add = paste0(trend_par_name,' = ', gsub('_t', '', trend_par_name), ' + ', kernel_formatted),
-#            identity = paste0(trend_par_name,' = ', kernel_formatted))
-#   } else {
-#     switch(base,
-#            lin = paste0(' + ', base_pars[1], ' * ', kernel_formatted),
-#            exp_lin = paste0(' + exp(', base_pars[1], ') * ', kernel_formatted),
-#            centered = paste0(' + ', base_pars[1], ' * (', kernel_formatted, ' - 0.5)'),
-#            add = paste0(' + ', kernel_formatted)
-#     )
-#   }
-# }
-# format_kernel <- function(kernel) {
-#   switch(kernel,
-#          lin_decr = '-XCOVARIATEX',
-#          lin_incr = 'XCOVARIATEX',
-#          exp_decr = 'exp(-d_ed * XCOVARIATEX)',
-#          exp_incr = '1 - exp(-d_ei * XCOVARIATEX)',
-#          pow_decr = '(1 + XCOVARIATEX)^(-d_pd)',
-#          pow_incr = '1 - (1 + XCOVARIATEX)^(-d_pi)',
-#          poly1 = 'd1 * XCOVARIATEX',
-#          poly2 = 'd1 * XCOVARIATEX + d2 * XCOVARIATEX^2',
-#          poly3 = 'd1 * XCOVARIATEX + d2 * XCOVARIATEX^2 + d3 * XCOVARIATEX^3',
-#          poly4 = 'd1 * XCOVARIATEX + d2 * XCOVARIATEX^2 + d3 * XCOVARIATEX^3 + d4 * XCOVARIATEX^4',
-#          delta = 'Q_{XCOVARIATEX,t}',
-#          delta2 = 'Q_{XCOVARIATEX,t}')
-# }
-###
 
 get_bases <- function() {
   bases <- list(

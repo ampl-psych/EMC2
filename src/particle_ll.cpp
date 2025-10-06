@@ -64,7 +64,7 @@ NumericMatrix c_map_p(NumericVector p_vector,
       String cur_name(cur_names[j]);
       NumericVector p_mult_design(n_trials, p_vector[cur_name]);
       if (has_trend && premap) {
-        p_mult_design = apply_premap_trends(data, trend, trend_names, cur_name, p_mult_design, trend_pars);
+        p_mult_design = apply_premap_trends(data, trend, trend_names, cur_name, p_mult_design, trend_pars, p_vector);
       }
       p_mult_design = p_mult_design * cur_design(_, j);
       LogicalVector bad = is_na(p_mult_design) | is_nan(p_mult_design);
