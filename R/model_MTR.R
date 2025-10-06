@@ -453,7 +453,7 @@ BE2LBA <- function(){
     },
     # Race likelihood combining pfun and dfun
     log_likelihood=function(p_vector,dadm,model,min_ll=log(1e-10)){
-      log_likelihood_mt(pars=p_vector, dadm = dadm, model=model, min_ll = min_ll,n_cores=1)
+      log_likelihood_mt(pars=p_vector, dadm = dadm, model=model, min_ll = min_ll)
     }
   )
 }
@@ -493,7 +493,7 @@ BE2PLBA <- function(){
     },
     # Race likelihood combining pfun and dfun
     log_likelihood=function(p_vector,dadm,model,min_ll=log(1e-10)){
-      log_likelihood_mt(pars=p_vector, dadm = dadm, model=model, min_ll = min_ll,n_cores=1)
+      log_likelihood_mt(pars=p_vector, dadm = dadm, model=model, min_ll = min_ll)
     }
   )
 }
@@ -534,7 +534,7 @@ TC2LBA <- function(){
     },
     # Race likelihood combining pfun and dfun
     log_likelihood=function(p_vector,dadm,model,min_ll=log(1e-10)){
-      log_likelihood_mt(pars=p_vector, dadm = dadm, model=model, min_ll = min_ll,n_cores=1)
+      log_likelihood_mt(pars=p_vector, dadm = dadm, model=model, min_ll = min_ll)
     }
   )
 }
@@ -574,7 +574,7 @@ TC2PLBA <- function(){
     },
     # Race likelihood combining pfun and dfun
     log_likelihood=function(p_vector,dadm,model,min_ll=log(1e-10)){
-      log_likelihood_mt(pars=p_vector, dadm = dadm, model=model, min_ll = min_ll,n_cores=1)
+      log_likelihood_mt(pars=p_vector, dadm = dadm, model=model, min_ll = min_ll)
     }
   )
 }
@@ -619,7 +619,7 @@ BE3LBA <- function(){
     },
     # Race likelihood combining pfun and dfun
     log_likelihood=function(p_vector,dadm,model,min_ll=log(1e-10)){
-      log_likelihood_mt(pars=p_vector, dadm = dadm, model=model, min_ll = min_ll,n_cores=1)
+      log_likelihood_mt(pars=p_vector, dadm = dadm, model=model, min_ll = min_ll)
     }
   )
 }
@@ -659,7 +659,7 @@ BE3PLBA <- function(){
     },
     # Race likelihood combining pfun and dfun
     log_likelihood=function(p_vector,dadm,model,min_ll=log(1e-10)){
-      log_likelihood_mt(pars=p_vector, dadm = dadm, model=model, min_ll = min_ll,n_cores=1)
+      log_likelihood_mt(pars=p_vector, dadm = dadm, model=model, min_ll = min_ll)
     }
   )
 }
@@ -700,7 +700,7 @@ TC3LBA <- function(){
     },
     # Race likelihood combining pfun and dfun
     log_likelihood=function(p_vector,dadm,model,min_ll=log(1e-10)){
-      log_likelihood_mt(pars=p_vector, dadm = dadm, model=model, min_ll = min_ll,n_cores=1)
+      log_likelihood_mt(pars=p_vector, dadm = dadm, model=model, min_ll = min_ll)
     }
   )
 }
@@ -740,7 +740,7 @@ TC3PLBA <- function(){
     },
     # Race likelihood combining pfun and dfun
     log_likelihood=function(p_vector,dadm,model,min_ll=log(1e-10)){
-      log_likelihood_mt(pars=p_vector, dadm = dadm, model=model, min_ll = min_ll,n_cores=1)
+      log_likelihood_mt(pars=p_vector, dadm = dadm, model=model, min_ll = min_ll)
     }
   )
 }
@@ -786,7 +786,7 @@ BE4LBA <- function(){
     },
     # Race likelihood combining pfun and dfun
     log_likelihood=function(p_vector,dadm,model,min_ll=log(1e-10)){
-      log_likelihood_mt(pars=p_vector, dadm = dadm, model=model, min_ll = min_ll,n_cores=1)
+      log_likelihood_mt(pars=p_vector, dadm = dadm, model=model, min_ll = min_ll)
     }
   )
 }
@@ -826,7 +826,7 @@ BE4PLBA <- function(){
     },
     # Race likelihood combining pfun and dfun
     log_likelihood=function(p_vector,dadm,model,min_ll=log(1e-10)){
-      log_likelihood_mt(pars=p_vector, dadm = dadm, model=model, min_ll = min_ll,n_cores=1)
+      log_likelihood_mt(pars=p_vector, dadm = dadm, model=model, min_ll = min_ll)
     }
   )
 }
@@ -867,7 +867,7 @@ TC4LBA <- function(){
     },
     # Race likelihood combining pfun and dfun
     log_likelihood=function(p_vector,dadm,model,min_ll=log(1e-10)){
-      log_likelihood_mt(pars=p_vector, dadm = dadm, model=model, min_ll = min_ll,n_cores=1)
+      log_likelihood_mt(pars=p_vector, dadm = dadm, model=model, min_ll = min_ll)
     }
   )
 }
@@ -907,7 +907,7 @@ TC4PLBA <- function(){
     },
     # Race likelihood combining pfun and dfun
     log_likelihood=function(p_vector,dadm,model,min_ll=log(1e-10)){
-      log_likelihood_mt(pars=p_vector, dadm = dadm, model=model, min_ll = min_ll,n_cores=1)
+      log_likelihood_mt(pars=p_vector, dadm = dadm, model=model, min_ll = min_ll)
     }
   )
 }
