@@ -675,11 +675,15 @@ get_bases <- function() {
 }
 
 get_kernels <- function() {
-
-  base_2p <- names(get_bases())[1:3]
-  base_1p <- names(get_bases())[4:5]
+  bases <- get_bases()
+  base_2p <- names(bases)[1:3]
+  base_1p <- names(bases)[4:5]
 
   kernels <- list(
+    custom = list(description = "Custom C++ kernel: provided via register_trend().",
+                  transforms = NULL,
+                  default_pars = NULL,
+                  bases = names(bases)),
     lin_decr = list(description = "Decreasing linear kernel: k = -c",
                     transforms = NULL,
                     default_pars = NULL,

@@ -1,8 +1,6 @@
 RNGkind("L'Ecuyer-CMRG")
 set.seed(123)
 
-#remotes::install_github("ampl-psych/EMC2@6941e167bc0142ea71f484208ae1d92da54bb2c1",dependencies=TRUE, Ncpus=8); .rs.restartR()
-
 # When working with lM it is useful to design  an "average and difference"
 # contrast matrix, which for binary responses has a simple canonical from:
 ADmat <- matrix(c(-1/2,1/2),ncol=1,dimnames=list(NULL,"d"))
@@ -10,6 +8,7 @@ ADmat <- matrix(c(-1/2,1/2),ncol=1,dimnames=list(NULL,"d"))
 matchfun=function(d)d$S==d$lR
 
 n_trials <- 10
+
 covariate1 <- rnorm(n_trials*2)
 covariate2 <- rnorm(n_trials*2)
 # Ensure that NAs are handled correctly in trend
@@ -257,4 +256,42 @@ design_shared_posttransform <- design(
 LNR_shared_posttransform <- make_emc(dat, design_shared_posttransform, compress = FALSE, n_chains = 1, type = "single")
 test_that("share works posttransform trend", {
   expect_snapshot(init_chains(LNR_shared_posttransform, particles = 10, cores_per_chain = 1)[[1]]$samples)
+})
+
+
+n_trials <- 10
+
+# Trend uses behavioral covariate rt with delta kernel (forces trial-wise path)
+trend_cond <- make_trend(
+  par_names = "m",
+  cov_names = "trial2",
+  kernels = "delta",
+  phase = "pretransform"
+)
+
+design_cond <- design(
+  factors = list(subjects = 1, S = 1:2),
+  Rlevels = 1:2,
+  covariates = c("trial2"),
+  matchfun = matchfun,
+  trend = trend_cond,
+  formula = list(m ~ lM, s ~ 1, t0 ~ 1),
+  contrasts = list(lM = ADmat),
+  model = LNR
+)
+
+p_vec <- sampled_pars(design_cond, doMap = FALSE)
+# Set basic LNR params and trend params (base weight w, delta q0/alpha)
+p_vec[c("m", "s", "t0")] <- c(-0.5, log(0.3), log(0.2))
+p_vec[c("m.w", "m.q0", "m.alpha")] <- c(0.5, 0.0, qnorm(0.2))
+
+
+
+test_that("trend_conditional", {
+  expect_snapshot(attributes(make_data(
+    p_vec, design_cond, n_trials = n_trials,
+    conditional_on_data = FALSE,                 # force unconditional-on-data stepping
+    return_covariates = TRUE,
+    return_trialwise_parameters = TRUE
+  )))
 })

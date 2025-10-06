@@ -150,13 +150,11 @@ predict.emc <- function(object,hyper=FALSE,n_post=50,n_cores=1,
   data <- get_data(emc)
   design <- get_design(emc)
 
-  if(!'conditional_on_data' %in% names(dots)) {
-    if(has_conditional_covariates(design[[1]])) {
-      dots$conditional_on_data <- FALSE
-      message('One of the covariates in the model trends is either rt, R, or the output of a function provided to design.
+  if (is.null(dots$conditional_on_data) && has_conditional_covariates(design[[1]])) {
+    dots$conditional_on_data <- FALSE
+    message('One of the covariates in the model trends is either rt, R, or the output of a function provided to design.
 Since the covariate depends on behavior, the data will be simulated trial-by-trial, reapplying the functions after each trial.
 To override this behavior, pass `conditional_on_data=TRUE` to predict().')
-    }
   }
 
   if(is.null(data$subjects)){
