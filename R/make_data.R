@@ -66,7 +66,8 @@ get_trend_kernel_pars <- function(trend, p_subj, model) {
   tmp <- matrix(p_subj[have], nrow = 1)
   colnames(tmp) <- have
   out <- do_transform(tmp, model()$transform)
-  as.numeric(out[1, ]) |> setNames(colnames(out))
+  tmp <- as.numeric(out[1,])
+  return(setNames(tmp, colnames(out)))
 }
 
 # Simulate data by looping over trials (with vectorized fallback when possible)
