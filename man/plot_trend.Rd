@@ -9,7 +9,8 @@ plot_trend(
   emc,
   par_name,
   subject = 1,
-  filter = NULL,
+  lM_filter = NULL,
+  lR_filter = NULL,
   on_x_axis = "trials",
   pp_shaded = TRUE,
   ...
@@ -24,7 +25,9 @@ plot_trend(
 
 \item{subject}{Subject number to plot}
 
-\item{filter}{Optional function that takes a data frame and returns a logical vector indicating which rows to include in the plot}
+\item{lM_filter}{If provided, plot only parameters corresponding to the accumulator that matches (\code{TRUE}) or does not match (\code{FALSE}) the stimulus}
+
+\item{lR_filter}{If provided, plot only parameters corresponding to the accumulator that corresponds to the response \code{lR_filter}}
 
 \item{on_x_axis}{Column name in the \code{dadm} to plot on the x-axis. By default 'trials'.}
 
@@ -61,7 +64,7 @@ emc <- make_emc(dat, design=design_RDM_lin_B)
 p_vector <- c('B'=1, 'v'=1, 'v_lMTRUE'=1, 't0'=0.1, 'B.w'=1, 'B.d_ei'=1)
 
 # Visualize trend
-plot_trend(p_vector, emc=emc,
+plot_trend(p_vector, samplers=emc,
            par_name='B', subject='as1t',
-           filter=function(d) d$lR=='right', main='Threshold for right')
+           lR_filter='right', main='Threshold for right')
 }

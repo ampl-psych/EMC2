@@ -354,7 +354,7 @@ run_trend <- function(dadm, trend, param, trend_pars){
     if('at' %in% names(trend)) {
       if(!is.null(trend$at)) {
         ## forward fill updated covariates. Remaining NAs (initial trials) should be set to q0 -- should never happen though
-        to_update <- na_locf(to_update, na.rm = FALSE)
+        to_update <- na.locf(to_update, na.rm = FALSE)
         if(any(is.na(to_update))) stop('Found NA. This shouldnt happen')
         # to_update[is.na(to_update)] <- q0[is.na(to_update),cov_name] # Should never happen. Comment out so it throws an error
         updated_covariate[,i] <- to_update
@@ -362,12 +362,12 @@ run_trend <- function(dadm, trend, param, trend_pars){
     }
     if('lS' %in% colnames(dadm)) {
       # not sure here yet
-      updated_covariate[,i] <- na_locf(to_update, na.rm=FALSE)
+      updated_covariate[,i] <- na.locf(to_update, na.rm=FALSE)
 
       ## find trials in which the accumulator matches the covariate.
       ## If so, the current or last-known state needs to be added to the accumulator
       is_lS = dadm$lS==cov_name
-      to_update[is_lS] <- na_locf(to_update[is_lS], na.rm=FALSE)
+      to_update[is_lS] <- na.locf(to_update[is_lS], na.rm=FALSE)
       to_update[!is_lS] <- NA   # don't add to output unless it's the matching accumulator
     }
     ## any remaining NAs are trials in which nothing should be updated.
