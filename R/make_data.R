@@ -73,13 +73,32 @@ make_data_unconditional <- function(data, pars, design, model, return_covariates
     } else {
       prev_trial <- NULL
     }
+    prev_trial2 <- prev_trial3 <- prev_trial4 <- NULL
+    if(trial_idx > 2) prev_trial2 <- prev_trial-1
+    if(trial_idx > 3) prev_trial3 <- prev_trial2-1
+    if(trial_idx > 4) prev_trial4 <- prev_trial3-1
+
     this_covariates <- covariates[data$trials%in%c(prev_trial,this_trial),,drop=FALSE]
 
-    this_data <- design_model(
-      add_accumulators(data[data$trials%in%c(prev_trial, this_trial)&data$lR==levels(data$lR)[1],includeColumns],
+    ## Need one with more rows for Ffunctions, unfortunately enough
+    this_data_full <- design_model(
+      add_accumulators(data[data$trials%in%c(prev_trial4,prev_trial3,prev_trial2,prev_trial,this_trial)&data$lR==levels(data$lR)[1],includeColumns],
                        design$matchfun,simulate=FALSE,type=model()$type,Fcovariates=design$Fcovariates),
       design,model,add_acc=FALSE,compress=FALSE,verbose=FALSE,
       rt_check=FALSE)
+
+    this_data <- design_model(
+      add_accumulators(data[data$trials%in%c(prev_trial,this_trial)&data$lR==levels(data$lR)[1],includeColumns],
+                       design$matchfun,simulate=FALSE,type=model()$type,Fcovariates=design$Fcovariates),
+      design,model,add_acc=FALSE,compress=FALSE,verbose=FALSE,
+      rt_check=FALSE)
+
+    # copy output of Ffunctions to this_data. Yes, really extremely ugly, I know!
+    for(i in names(design$Ffunctions)) {
+      this_data[this_data$trials==prev_trial,i] <- this_data_full[this_data_full$trials==prev_trial,i]
+      this_data[this_data$trials==this_trial,i] <- this_data_full[this_data_full$trials==this_trial,i]
+    }
+
     if(!'lR' %in% colnames(this_data)) this_data$lR <- factor(rep(1, nrow(this_data)))  # for simulations of the DDM, assume all rows are lR==1
 
     # drop unused levels
@@ -130,7 +149,6 @@ make_data_unconditional <- function(data, pars, design, model, return_covariates
     this_pars <- model()$Ttransform(this_pars, this_data)
 
     # drop previous trial from covariates, pars, data
-    prev_trial_data <- this_data[this_data$trials!=this_trial,]
     this_covariates <- this_covariates[this_data$trials==this_trial,,drop=FALSE]
     this_pars <- this_pars[this_data$trials==this_trial,]
     this_data <- this_data[this_data$trials==this_trial,]
@@ -156,6 +174,8 @@ make_data_unconditional <- function(data, pars, design, model, return_covariates
     Rrt <- model()$rfun(this_data,this_pars)
     Rrt <- Rrt[rep(1:nrow(Rrt), each=length(unique(this_data$lR))),]
     for (i in dimnames(Rrt)[[2]]) this_data[[i]] <- Rrt[,i]
+    this_data_full[this_data_full$trials==this_trial,'R'] <- this_data['R']
+    this_data_full[this_data_full$trials==this_trial,'rt'] <- this_data['rt']
 
     # check for feedback generators
     for(i in 1:length(trends)) {
@@ -164,16 +184,17 @@ make_data_unconditional <- function(data, pars, design, model, return_covariates
         this_data_tmp <- this_data[this_data$lR == levels(this_data$lR)[1],]
         fb <- trends[[i]]$feedback_generator(this_data_tmp)
         this_data$reward <- rep(fb, each=length(levels(this_data$lR)))
+
+        this_data_full[this_data_full$trials==this_trial,'reward'] <- this_data['R']
       }
     }
 
     ## re-apply Ffunctions to new data
     if(!is.null(design$Ffunctions)) {
       for(i in names(design$Ffunctions)) {
-        ## apply function to both rows at the same time. Reason is that some functions might look back at the previous trial
-        tmp_data <- rbind(prev_trial_data, this_data)
-        tmp_data[,i] <- design$Ffunctions[[i]](tmp_data)
-        this_data[,i] <- tmp_data[tmp_data$trials==this_trial,i]
+        ## apply function to multiple both rows at the same time. Reason is that some functions might look back at the previous trial
+        this_data_full[,i] <- design$Ffunctions[[i]](this_data_full)
+        this_data[,i] <- this_data_full[this_data_full$trials==this_trial,i]
       }
     }
 
