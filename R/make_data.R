@@ -130,6 +130,7 @@ make_data_unconditional <- function(data, pars, design, model, return_covariates
     this_pars <- model()$Ttransform(this_pars, this_data)
 
     # drop previous trial from covariates, pars, data
+    prev_trial_data <- this_data[this_data$trials!=this_trial,]
     this_covariates <- this_covariates[this_data$trials==this_trial,,drop=FALSE]
     this_pars <- this_pars[this_data$trials==this_trial,]
     this_data <- this_data[this_data$trials==this_trial,]
@@ -167,7 +168,14 @@ make_data_unconditional <- function(data, pars, design, model, return_covariates
     }
 
     ## re-apply Ffunctions to new data
-    if(!is.null(design$Ffunctions)) for(i in names(design$Ffunctions)) this_data[,i] <- design$Ffunctions[[i]](this_data)
+    if(!is.null(design$Ffunctions)) {
+      for(i in names(design$Ffunctions)) {
+        ## apply function to both rows at the same time. Reason is that some functions might look back at the previous trial
+        tmp_data <- rbind(prev_trial_data, this_data)
+        tmp_data[,i] <- design$Ffunctions[[i]](tmp_data)
+        this_data[,i] <- tmp_data[tmp_data$trials==this_trial,i]
+      }
+    }
 
     # drop lR
     this_data <- this_data[this_data$lR == levels(this_data$lR)[1],!names(this_data) %in% c('lR', 'lM', 'winner')]
