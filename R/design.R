@@ -130,11 +130,11 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
   }
   if (!is.null(trend)) {
     formula <- check_trend(trend,covariates, model, formula)
-    ## fix covariate name if at is specified
+    ## fix covariate name if filter_lR
     for(trend_name in names(trend)) {
-      if('at' %in% names(trend[[trend_name]])) {
-        if(!is.null(trend[[trend_name]]$at)) {
-          trend[[trend_name]]$covariate <- paste0(trend[[trend_name]]$covariate,'_',trend[[trend_name]]$at,'filtered')
+      if('filter_lR' %in% names(trend[[trend_name]])) {
+        if(trend[[trend_name]]$filter_lR) {
+          trend[[trend_name]]$covariate <- paste0(trend[[trend_name]]$covariate,'_lRfiltered')
         }
       }
     }
@@ -600,20 +600,18 @@ design_model <- function(data,design,model=NULL,
     } else{
       attr(dadm,"expand") <- 1:(nrow(dadm)/length(unique(dadm$lR)))
 
-      ## at filtering
+      ## SM: lR-filter
       trend <- design$model()$trend
       for(trend_name in names(trend)) {
-        if('at' %in% names(trend[[trend_name]])) {
-          if(!is.null(trend[[trend_name]]$at)) {
-            at_factor <- trend[[trend_name]]$at
-            # Extract original covariate name by removing the suffix
-            cov_names <- gsub(paste0('_',at_factor,'filtered'), '', trend[[trend_name]]$covariate)
+        if('filter_lR' %in% names(trend[[trend_name]])) {
+          if(trend[[trend_name]]$filter_lR) {
+            cov_names <- gsub('_lRfiltered', '', trend[[trend_name]]$covariate)
             for(cov_name in cov_names) {
-              # copy to new column, filter by first level of the specified factor
+              # copy to new column, filter
               if(cov_name %in% colnames(dadm)) {
                 ## Needed: In case or `rt`, the covariate is not present in minimal_design.. But this is an ugly solution.
                 dadm[,trend[[trend_name]]$covariate] <- dadm[,cov_name]
-                dadm[dadm[[at_factor]]!=levels(dadm[[at_factor]])[1],trend[[trend_name]]$covariate] <- NA
+                dadm[dadm$lR!=levels(dadm$lR)[1],trend[[trend_name]]$covariate] <- NA
               }
             }
           }

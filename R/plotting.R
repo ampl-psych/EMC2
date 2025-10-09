@@ -710,7 +710,8 @@ coda_setmfrow <- function (Nchains = 1, Nparms = 1, nplots = 1, sepplot = FALSE)
 #' @param emc An emc object
 #' @param par_name Parameter name (or covariate name) to plot
 #' @param subject Subject number to plot
-#' @param filter Optional function that takes a data frame and returns a logical vector indicating which rows to include in the plot
+#' @param lM_filter If provided, plot only parameters corresponding to the accumulator that matches (`TRUE`) or does not match (`FALSE`) the stimulus
+#' @param lR_filter If provided, plot only parameters corresponding to the accumulator that corresponds to the response `lR_filter`
 #' @param on_x_axis Column name in the `dadm` to plot on the x-axis. By default 'trials'.
 #' @param pp_shaded Boolean. If `TRUE` will plot 95% credible interval as a shaded area. Otherwise plots separate lines for each iteration of the posterior predictives. Only applicable if `input_data` are posterior predictives.
 #' @param ... Optional arguments that can be passed to `plots`.
@@ -742,9 +743,9 @@ coda_setmfrow <- function (Nchains = 1, Nparms = 1, nplots = 1, sepplot = FALSE)
 #' # Visualize trend
 #' plot_trend(p_vector, emc=emc,
 #'            par_name='B', subject='as1t',
-#'            filter=function(d) d$lR=='right', main='Threshold for right')
+#'            lR_filter='right', main='Threshold for right')
 plot_trend <- function(input_data, emc, par_name, subject=1,
-                       filter=NULL, on_x_axis='trials',
+                       lM_filter=NULL, lR_filter=NULL, on_x_axis='trials',
                        pp_shaded=TRUE,
                        ...) {
 
@@ -754,27 +755,22 @@ plot_trend <- function(input_data, emc, par_name, subject=1,
   } else {
     dadm <- do.call(rbind, emc[[1]]$data)
   }
-  row_filter <- dadm$subjects==subject
-  if(!is.null(filter)) {
-    if(is.function(filter)) {
-      row_filter <- row_filter & filter(dadm)
-    } else {
-      stop("filter must be a function that takes a data frame and returns a logical vector")
-    }
-  }
+  filter <- rep(TRUE, nrow(dadm)) & dadm$subjects==subject
+  if(!is.null(lM_filter)) filter <- filter & dadm$lM==lM_filter
+  if(!is.null(lR_filter)) filter <- filter & dadm$lR==lR_filter
   if(!is.list(input_data)) {
     updated <- get_pars_matrix(p_vector=input_data,
                                dadm=dadm,
                                model=emc[[1]]$model())
-    trend <- updated[row_filter, par_name]
+    trend <- updated[filter, par_name]
     credible_interval <- NULL
     ylim <- range(trend)
-    x <- dadm[row_filter, on_x_axis]
+    x <- dadm[filter, on_x_axis]
     trend <- trend[order(x)]
     x <- x[order(x)]
   } else {
     # user supplied posterior predictives
-    updated <- lapply(seq_along(input_data), function(i) data.frame(input_data[[i]][row_filter,par_name,drop=FALSE], x=dadm[row_filter,on_x_axis]))
+    updated <- lapply(seq_along(input_data), function(i) data.frame(input_data[[i]][filter,par_name,drop=FALSE], x=dadm[filter,on_x_axis]))
     credible_interval <- aggregate(.~x, do.call(rbind, updated), quantile, c(0.025, .5, .9))
 
     ## order

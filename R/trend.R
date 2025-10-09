@@ -8,7 +8,7 @@
 #' @param trend_pnames Optional character vector specifying custom parameter names
 #' @param premap Logical indicating if trend should be applied before or after parameter mapping
 #' @param pretransform If !premap, logical indicating if trend should be applied before or after parameter transformation
-#' @param at If NULL (default), trend is applied everywhere. If a factor name (e.g., "lR"), trend is applied only to entries corresponding to the first level of that factor. 
+#' @param filter_lR If TRUE, does updating only once each trial (by filtering the dadm on the first level of lR). Only relevant for delta and delta2 kernels.
 #' @return A list containing the trend specifications for each parameter
 #' @export
 #'
@@ -25,7 +25,7 @@
 #'
 make_trend <- function(par_names, cov_names, kernels, bases = NULL,
                        shared = NULL, trend_pnames = NULL, premap = TRUE,
-                       pretransform = FALSE, at=NULL){
+                       pretransform = FALSE, filter_lR=FALSE){
   if(pretransform & premap){
     warning("Setting pretransform has no effect if premap = TRUE")
   }
@@ -52,7 +52,7 @@ make_trend <- function(par_names, cov_names, kernels, bases = NULL,
       stop("Kernel type not support see `trend_help()`")
     } else  {
       trend$kernel <- kernels[i]
-      if(kernels[i] %in% c('delta', 'delta2', 'deltab')) trend$at <- at
+      if(kernels[i] %in% c('delta', 'delta2', 'deltab')) trend$filter_lR <- filter_lR
     }
 
     # base
@@ -351,8 +351,8 @@ run_trend <- function(dadm, trend, param, trend_pars){
     to_update <- updated_covariate[,i]
 
     ## handle NA-cases:
-    if('at' %in% names(trend)) {
-      if(!is.null(trend$at)) {
+    if('filter_lR' %in% names(trend)) {
+      if(trend$filter_lR) {
         ## forward fill updated covariates. Remaining NAs (initial trials) should be set to q0 -- should never happen though
         to_update <- na.locf(to_update, na.rm = FALSE)
         if(any(is.na(to_update))) stop('Found NA. This shouldnt happen')
