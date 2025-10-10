@@ -60,7 +60,7 @@ add_bound <- function(pars,bound, lR = NULL) {
 
 #### Functions to look at parameters ----
 
-map_p <- function(p,dadm,model,return_updated_covariate=FALSE)
+map_p <- function(p,dadm,model,return_trialwise_parameters=FALSE)
   # Map p to dadm and returns matrix of mapped parameters
   # p is either a vector or a matrix (ncol = number of subjects) of p_vectors
   # dadm is a design matrix with attributes containing model information
@@ -79,7 +79,6 @@ map_p <- function(p,dadm,model,return_updated_covariate=FALSE)
   # Get parameter names from model and create output matrix
   do_p <- names(model$p_types)
   pars <- matrix(nrow=nrow(dadm),ncol=length(do_p),dimnames=list(NULL,do_p))
-  updated_covariate <- NULL
 
   # If there are any trends for premap or pretransform do these first
   # Trend parameters used premap will be removed after mapping; pretransform ones retained
@@ -139,9 +138,8 @@ map_p <- function(p,dadm,model,return_updated_covariate=FALSE)
     pars[,i] <- tmp
   }
 
-  if(return_updated_covariate) {
-    # SM: Return all parameters, including Q-values
-    return(list(pars=pars[,!premap_idx,drop=FALSE], updated_covariate=updated_covariate))
+  if(return_trialwise_parameters) {
+    return(pars)
   } else {
     # Return only non-trend parameters
     return(pars[,!premap_idx,drop=FALSE])

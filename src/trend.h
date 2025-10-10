@@ -184,6 +184,30 @@ NumericVector run_kernel_rcpp(NumericMatrix trend_pars, String kernel, NumericMa
   return out;
 }
 
+// Apply forward-fill so that values are updated only where mask is true (first-level of factor)
+// and carried forward elsewhere. Errors if initial entries are undefined (no prior value).
+inline NumericVector forward_fill_with_mask(const NumericVector& values, const LogicalVector& first_level_mask) {
+  const int n = values.size();
+  NumericVector filled(n);
+  double last = NA_REAL;
+  for (int i = 0; i < n; ++i) {
+    if (first_level_mask[i]) {
+      double v = values[i];
+      filled[i] = v;
+      last = v;
+    } else {
+      filled[i] = last;
+    }
+  }
+  // Match R behavior: bail out if any NA remains after LOCF
+  for (int i = 0; i < n; ++i) {
+    if (NumericVector::is_na(filled[i])) {
+      stop("Found NA after forward-fill. This should not happen.");
+    }
+  }
+  return filled;
+}
+
 // Now accepts the full parameter matrix `pars_full` so we can use par_input columns as inputs too.
 // Passes all inputs (covariates + par_input) to kernel in one call; kernel sums across columns.
 NumericVector run_trend_rcpp(DataFrame data, List trend, NumericVector param, NumericMatrix trend_pars, NumericMatrix pars_full) {
@@ -248,8 +272,36 @@ NumericVector run_trend_rcpp(DataFrame data, List trend, NumericVector param, Nu
       }
     }
 
+    // If 'at' provided, only allow updates at first level by masking others to NA (for any kernel)
+    if (trend.containsElementNamed("at") && !Rf_isNull(trend["at"])) {
+      String at_name = trend["at"]; 
+      SEXP at_col = data[at_name];
+      if (!Rf_inherits(at_col, "factor")) {
+        stop("'at' column must be a factor");
+      }
+      IntegerVector f = as<IntegerVector>(at_col);
+      for (int r = 0; r < n_trials; ++r) {
+        if (f[r] != 1) {
+          for (int c = 0; c < n_inputs; ++c) input_all(r, c) = NA_REAL; // mask all inputs (covariates + par_input)
+        }
+      }
+    }
+
     // Call kernel once with all inputs; kernel sums across columns and ignores NA
     NumericVector kernel_out = run_kernel_rcpp(trend_pars, kernel, input_all, n_base_pars, custom_ptr);
+
+    // If an 'at' factor is provided, update only at first level and carry forward elsewhere (R parity)
+    if (trend.containsElementNamed("at") && !Rf_isNull(trend["at"])) {
+      String at_name = trend["at"];
+      SEXP at_col = data[at_name];
+      // Require a factor column (matches R code expectation)
+      if (!Rf_inherits(at_col, "factor")) {
+        stop("'at' column must be a factor");
+      }
+      IntegerVector f = as<IntegerVector>(at_col);
+      LogicalVector first_level = (f == 1);
+      kernel_out = forward_fill_with_mask(kernel_out, first_level);
+    }
 
     out = out + kernel_out;
   }

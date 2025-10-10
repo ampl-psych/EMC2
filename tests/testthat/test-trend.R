@@ -291,7 +291,6 @@ test_that("trend_conditional", {
   expect_snapshot(attributes(make_data(
     p_vec, design_cond, n_trials = n_trials,
     conditional_on_data = FALSE,                 # force unconditional-on-data stepping
-    return_covariates = TRUE,
     return_trialwise_parameters = TRUE
   )))
 })

@@ -71,7 +71,7 @@ get_trend_kernel_pars <- function(trend, p_subj, model) {
 }
 
 # Simulate data by looping over trials (with vectorized fallback when possible)
-make_data_unconditional <- function(data, pars, design, model, return_covariates, return_trialwise_parameters) {
+make_data_unconditional <- function(data, pars, design, model, return_trialwise_parameters) {
   trialwise_parameters <- covariates <- NULL
 
   ## loop over trials, save covariates
@@ -115,15 +115,15 @@ make_data_unconditional <- function(data, pars, design, model, return_covariates
   # If we don't need trial-wise stepping, do a vectorized pass and return
   if (!needs_trialwise_parameters(design, model)) {
     # Map, apply phase-specific trends, transform, bounds, simulate in one go
-    pars_vec <- map_p(pars, data, model_)
+    pars_vec <- map_p(pars, data, model_, return_trialwise_parameters)
     if(!is.null(model_ $trend)) {
       phases <- vapply(model_$trend, function(x) x$phase, character(1))
-      if (any(phases == "pretransform")) pars_vec <- prep_trend_phase(data, model_$trend, pars_vec, "pretransform")
+      if (any(phases == "pretransform")) pars_vec <- prep_trend_phase(data, model_$trend, pars_vec, "pretransform",return_trialwise_parameters)
     }
     pars_vec <- do_transform(pars_vec, model_$transform)
     if(!is.null(model_ $trend)) {
       phases <- vapply(model_$trend, function(x) x$phase, character(1))
-      if (any(phases == "posttransform")) pars_vec <- prep_trend_phase(data, model_$trend, pars_vec, "posttransform")
+      if (any(phases == "posttransform")) pars_vec <- prep_trend_phase(data, model_$trend, pars_vec, "posttransform",return_trialwise_parameters)
     }
     pars_vec <- model_$Ttransform(pars_vec, data)
     pars_vec <- add_bound(pars_vec, model_$bound, data$lR)
@@ -135,12 +135,12 @@ make_data_unconditional <- function(data, pars, design, model, return_covariates
     } else {
       Rrt <- model_$rfun(data, pars_vec)
     }
-    dropNames <- c("lR","lM","lSmagnitude")
-    if (!return_covariates && !is.null(design$Ffunctions)) dropNames <- c(dropNames, names(design$Ffunctions))
+    dropNames <- c("lR","lM")
+    if (!is.null(design$Ffunctions)) dropNames <- c(dropNames, names(design$Ffunctions))
     if(!is.null(data$lR)) data <- data[data$lR == levels(data$lR)[1],]
     data <- data[,!(names(data) %in% dropNames)]
     for (i in dimnames(Rrt)[[2]]) data[[i]] <- Rrt[,i]
-    return(list(data=data, covariates=NULL, trialwise_parameters=trialwise_parameters))
+    return(list(data=data, trialwise_parameters=trialwise_parameters))
   }
 
   all_trials <- sort(unique(data[,'trials']))
@@ -483,28 +483,21 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
     design,model,add_acc=FALSE,compress=FALSE,verbose=FALSE,
     rt_check=FALSE)
 
-  simulate_unconditional_on_data <- return_covariates <- return_trialwise_parameters <- FALSE
+  simulate_unconditional_on_data <- return_trialwise_parameters <- FALSE
   dots_local <- list(...)
   if (isFALSE(dots_local$conditional_on_data)) {
     simulate_unconditional_on_data <- TRUE
   } else if (!is.null(dots_local$conditional_on_data)) {
     simulate_unconditional_on_data <- !isTRUE(dots_local$conditional_on_data)
   }
-  if (isTRUE(dots_local$return_covariates)){
-    return_covariates <- TRUE
-    if(!simulate_unconditional_on_data){
-      stop("Cannot set return covariates with conditional_on_data = FALSE")
-    }
-  }
-  if (isTRUE(dots_local$return_trialwise_parameters)) return_trialwise_parameters <- TRUE
+  return_trialwise_parameters <- isTRUE(dots_local$return_trialwise_parameters)
 
   ## For both conditional and unconditional simulations...
   pars <- t(apply(parameters, 1, do_pre_transform, model()$pre_transform))
   pars <- add_constants(pars,design$constants)
   if(simulate_unconditional_on_data) {
     out <- make_data_unconditional(data=data, pars=pars, design=design, model=model,
-                                   return_covariates=return_covariates,
-                                   return_trialwise_parameters=return_trialwise_parameters)
+                                   return_trialwise_parameters)
     data <- out$data
     covariates <- out$covariates
     trialwise_parameters <- out$trialwise_parameters
@@ -514,13 +507,14 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
       pc <- pars[data$lR==levels(data$lR)[1],"pContaminant"] else pc <- NULL
 
   } else{
-    pars <- map_p(pars,data, model())
+    pars <- map_p(pars,data, model(), return_trialwise_parameters)
 
     if(!is.null(model()$trend)){
       phases <- vapply(model()$trend, function(x) x$phase, character(1))
       if (any(phases == "pretransform")){
         # apply only pretransform trends and remove their trend parameters
-        pars <- prep_trend_phase(data, model()$trend, pars, "pretransform")
+        pars <- prep_trend_phase(data, model()$trend, pars, "pretransform",
+                                 return_trialwise_parameters)
       }
     }
     pars <- do_transform(pars, model()$transform)
@@ -528,7 +522,8 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
       phases <- vapply(model()$trend, function(x) x$phase, character(1))
       if (any(phases == "posttransform")){
         # apply only posttransform trends and remove their trend parameters
-        pars <- prep_trend_phase(data, model()$trend, pars, "posttransform")
+        pars <- prep_trend_phase(data, model()$trend, pars, "posttransform",
+                                 return_trialwise_parameters)
       }
     }
     pars <- model()$Ttransform(pars, data)
@@ -565,7 +560,6 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
       data[[names(post_functions)[i]]] <- post_functions[[i]](data)
     }
   }
-  if(return_covariates) attr(data,'covariates') <- covariates
   if(return_trialwise_parameters) attr(data, 'trialwise_parameters') <- trialwise_parameters
   data
 }

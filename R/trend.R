@@ -84,7 +84,7 @@ make_trend <- function(par_names, cov_names = NULL, kernels, bases = NULL,
       stop("Kernel type not support see `trend_help()`")
     } else  {
       trend$kernel <- kernels[i]
-      if(kernels[i] %in% c('delta', 'delta2')) trend$at <- at
+      trend$at <- at
     }
 
     # base
@@ -290,48 +290,52 @@ run_kernel <- function(trend_pars = NULL, kernel, input, funptr = NULL) {
 }
 
 # Helper: Initialize Q0 values for delta-rule kernels
-# Returns a matrix of Q0 values with proper handling of the 'at' filter
+# - Reinitialize Q0 at the first trial of each subject (independent of 'at')
+# - Return a matrix with non-NA entries only on those first-trial rows
 initialize_q0 <- function(dadm, trend, trend_pars, cov_names) {
   n_rows <- nrow(dadm)
   n_covs <- length(cov_names)
 
-  # Determine first trials based on 'at' parameter
-  first_trials <- dadm$trials == min(dadm$trials)
-  if (!is.null(trend$at)) {
-    if (trend$at %in% colnames(dadm)) {
-      # Apply filter: only first level of the 'at' factor
-      first_trials <- first_trials & (dadm[[trend$at]] == levels(dadm[[trend$at]])[1])
-    }
-  }
+  # Identify the first trial row per subject
+  subj <- dadm$subjects
+  first_by_subj <- ave(dadm$trials, subj, FUN = function(x) x == min(x))
+  first_rows <- as.logical(first_by_subj)
 
-  # Initialize Q0 matrix
+  # Initialize Q0 matrix (one column per covariate)
   if (!is.null(trend$covariates_states)) {
-    # Use existing covariate states if provided
+    # Use existing covariate states if provided, but seed first rows if missing
     q0 <- trend$covariates_states
-    # Fill in missing Q0 values on first trials with trend parameter values
-    q0[first_trials & is.na(q0)] <- trend_pars[first_trials, 2][is.na(q0[first_trials])]
+    seed_vals <- trend_pars[, 2]
+    q0[first_rows & is.na(q0)] <- seed_vals[first_rows][is.na(q0[first_rows])]
   } else {
-    # Create new Q0 matrix from trend parameters
     q0 <- matrix(trend_pars[, 2], nrow = n_rows, ncol = n_covs)
     colnames(q0) <- cov_names
-    # Only valid on first trials; rest are NA
-    q0[!first_trials, ] <- NA
+    # Only first subject-rows carry q0; others NA
+    q0[!first_rows, ] <- NA
   }
 
   return(q0)
 }
 
 # Helper: Apply forward-fill to covariates when using 'at' filtering
-apply_forward_fill <- function(values, use_fill = FALSE) {
-  if (!use_fill) return(values)
-  filled <- na_locf(values, na.rm = FALSE)
+apply_forward_fill <- function(values, dadm,at) {
+  idx <- dadm[,at] == levels(dadm[,at])[1] # assumes first level occurs first within each subject
+  values[!idx] <- NA
+  # Forward-fill within each subject separately
+  filled <- values
+  subs <- levels(dadm$subjects)
+  for (s in subs) {
+    m <- dadm$subjects == s
+    if (!any(m)) next
+    filled[m] <- na_locf(filled[m], na.rm = FALSE)
+  }
   if (any(is.na(filled))) {
     stop("Found NA after forward-fill. This should not happen.")
   }
   return(filled)
 }
 
-prep_trend_phase <- function(dadm, trend, pars, phase){
+prep_trend_phase <- function(dadm, trend, pars, phase, return_trialwise_parameters = FALSE){
   # Apply only trends in the requested phase, sequentially
   tnames <- names(trend)
   all_remove <- character(0)
@@ -342,11 +346,14 @@ prep_trend_phase <- function(dadm, trend, pars, phase){
     all_remove <- c(all_remove, cur_trend$trend_pnames)
     pars[, par] <- run_trend(dadm, cur_trend, pars[, par], pars[, cur_trend$trend_pnames, drop = FALSE], pars)
   }
-  if (length(all_remove)) pars <- pars[, !(colnames(pars) %in% unique(all_remove)), drop = FALSE]
+  if(!return_trialwise_parameters){
+    if (length(all_remove)) pars <- pars[, !(colnames(pars) %in% unique(all_remove)), drop = FALSE]
+  }
   return(pars)
 }
 
-run_trend <- function(dadm, trend, param, trend_pars, pars_full = NULL){
+run_trend <- function(dadm, trend, param, trend_pars, pars_full = NULL,
+                      return_updated_pars = FALSE){
   n_base_pars <- switch(trend$base,
                         lin = 1,
                         exp_lin = 1,
@@ -364,10 +371,8 @@ run_trend <- function(dadm, trend, param, trend_pars, pars_full = NULL){
   is_delta_kernel <- trend$kernel %in% c('delta', 'delta2')
   use_at_filter <- !is.null(trend$at)
 
-  # Initialize Q0 for delta kernels
-  q0 <- NULL
   if (is_delta_kernel) {
-    q0 <- initialize_q0(dadm, trend, trend_pars, cov_cols)
+    trend_pars$reset <- dadm$subjects != lag(dadm$subjects)
   }
 
   # Build par_input columns if needed
@@ -380,51 +385,41 @@ run_trend <- function(dadm, trend, param, trend_pars, pars_full = NULL){
     }
   }
 
-  # Process each covariate (required for separate Q0 per covariate)
+  # Build a single input matrix across covariates and par_input (match C++ behavior)
+  cov_mat <- NULL
   if (length(cov_cols) > 0) {
-    for (i in seq_along(cov_cols)) {
-      cov_name <- cov_cols[i]
-      covariate <- dadm[, cov_name]
-
-      # For delta kernels, handle Q0 initialization
-      if (is_delta_kernel) {
-        NA_idx <- is.na(covariate)
-        reset_with_q0 <- !is.na(q0[, cov_name])
-        covariate[NA_idx & reset_with_q0] <- q0[NA_idx & reset_with_q0, cov_name]
-      }
-
-      # Build input matrix: this covariate + par_input
-      if (is.null(par_input_matrix)) {
-        input_matrix <- matrix(covariate, ncol = 1)
-      } else {
-        input_matrix <- cbind(covariate, par_input_matrix)
-      }
-
-      # Extract kernel parameters (excluding base parameters)
-      if (ncol(trend_pars) > n_base_pars) {
-        kernel_pars <- trend_pars[, seq.int(n_base_pars + 1, ncol(trend_pars)), drop = FALSE]
-      } else {
-        kernel_pars <- matrix(nrow = nrow(trend_pars), ncol = 0)
-      }
-
-      # For delta kernels, update Q0 parameter in kernel_pars
-      if (is_delta_kernel && ncol(kernel_pars) >= 1) {
-        # First kernel parameter is q0; replace with values from q0 matrix
-        kernel_pars[, 1] <- q0[, cov_name]
-      }
-
-      funptr <- if (identical(trend$kernel, "custom")) attr(trend, "custom_ptr") else NULL
-      kernel_out <- run_kernel(kernel_pars, trend$kernel, input_matrix, funptr = funptr)
-
-      # Apply forward-fill if 'at' filter is used
-      if (use_at_filter) {
-        kernel_out <- apply_forward_fill(kernel_out, use_fill = TRUE)
-      }
-
-      # Add contribution (NAs are already handled by run_kernel returning 0 for NA inputs)
-      kernel_out[is.na(kernel_out)] <- 0
-      out <- out + kernel_out
+    cov_mat <- matrix(NA_real_, nrow(dadm), length(cov_cols))
+    for (j in seq_along(cov_cols)) cov_mat[, j] <- dadm[, cov_cols[j]]
+  }
+  input_matrix <- cov_mat
+  if (!is.null(par_input_matrix)) {
+    input_matrix <- if (is.null(input_matrix)) par_input_matrix else cbind(input_matrix, par_input_matrix)
+  }
+  # If nothing to input, keep out as zeros (base will handle)
+  if (!is.null(input_matrix)) {
+    # Apply 'at' masking uniformly for any kernel: only first level contributes; others NA
+    if (use_at_filter) {
+      idx <- dadm[, trend$at] == levels(dadm[, trend$at])[1]
+      input_matrix[!idx, ] <- NA_real_
     }
+
+    # Extract kernel parameters (excluding base parameters)
+    if (ncol(trend_pars) > n_base_pars) {
+      kernel_pars <- trend_pars[, seq.int(n_base_pars + 1, ncol(trend_pars)), drop = FALSE]
+    } else {
+      kernel_pars <- matrix(nrow = nrow(trend_pars), ncol = 0)
+    }
+
+    funptr <- if (identical(trend$kernel, "custom")) attr(trend, "custom_ptr") else NULL
+    kernel_out <- run_kernel(kernel_pars, trend$kernel, input_matrix, funptr = funptr)
+
+    # After kernel, forward-fill result across subjects based on 'at' if used
+    if (use_at_filter) {
+      kernel_out <- apply_forward_fill(kernel_out, at = trend$at, dadm)
+    }
+
+    kernel_out[is.na(kernel_out)] <- 0
+    out <- out + kernel_out
   }
 
   # Do the mapping
@@ -643,7 +638,6 @@ has_conditional_covariates <- function(design) {
   # they can be lRfiltered or not
   function_output_columns <- names(design$Ffunctions)
   behavioral_covariates <- c('rt', 'R', function_output_columns)
-  behavioral_covariates <- c(behavioral_covariates, paste0(behavioral_covariates, '_lRfiltered'))
 
   # find actual covariates, look for a match
   trend <- design$model()$trend
@@ -778,7 +772,7 @@ verbal_trend <- function(design_matrix, trend) {
   for(trend_par_name in trend_par_names) {
     base <- trend[[trend_par_name]]$base
     kernel <- trend[[trend_par_name]]$kernel
-    covariate <- gsub('_lRfiltered', '', trend[[trend_par_name]]$covariate)
+    covariate <- trend[[trend_par_name]]$covariate
     trend_pnames <- trend[[trend_par_name]]$trend_pnames
     n_base_pars <- switch(base,
                           lin = 1,
@@ -842,4 +836,3 @@ verbal_trend <- function(design_matrix, trend) {
   }
   trend_str
 }
-
