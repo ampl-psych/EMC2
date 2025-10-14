@@ -477,7 +477,7 @@ pstopTEXG <- function(
 #' @details
 #'
 #' Default values are used for all parameters that are not explicitly listed in the `formula`
-#' argument of `design()`.They can also be accessed with `SSexG()$p_types`.
+#' argument of `design()`.They can also be accessed with `SSEXG()$p_types`.
 #'
 #' | **Parameter** | **Transform** | **Natural scale** | **Default**   | **Mapping**                    | **Interpretation**                                            |
 #' |-----------|-----------|---------------|-----------|----------------------------|-----------------------------------------------------------|
@@ -828,7 +828,7 @@ pstopHybrid <- function(
 #' @details
 #'
 #' Default values are used for all parameters that are not explicitly listed in the `formula`
-#' argument of `design()`.They can also be accessed with `SShybrid()$p_types`.
+#' argument of `design()`.They can also be accessed with `SSRDEX()$p_types`.
 #'
 #' | **Parameter** | **Transform** | **Natural scale** | **Default**   | **Mapping**                    | **Interpretation**                                            |
 #' |-----------|-----------|---------------|-----------|----------------------------|-----------------------------------------------------------|
@@ -844,9 +844,9 @@ pstopHybrid <- function(
 #' | *gf*     | probit       | \[0, 1\]        | qnorm(0)    |                            | Attentional lapse rate for go process ("go failure")    |
 #' | *exgS_lb*     | -       | \[-Inf, Inf\]        | .05    |                            | Lower bound of ex-Gaussian stop finish time distribution    |
 #'
-#' All parameters are estimated on the log scale, with the exception of the attentional failure parameters (`tf` and `gf`), which are estimated on the probit scale.
+#' All parameters are estimated on the log scale, with the exception of `tf` and `gf` which are estimated on the probit scale, and `exgS_lb` which is estimated on the natural scale.
 #'
-#' The parameterization *b* = *B* + *A* ensures that the response threshold is
+#' The parameterization *b* = *B* + *A* ensures that the response threshold *b* is
 #' always higher than the between trial variation in start point.
 #'
 #' Conventionally, `s` is fixed to 1 to satisfy scaling constraints.

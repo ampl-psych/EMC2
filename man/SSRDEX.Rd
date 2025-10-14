@@ -16,7 +16,7 @@ Model file to estimate the hybrid Wald / ex-Gaussian race model of stop signal t
 Model files are almost exclusively used in \code{design()}.
 
 Default values are used for all parameters that are not explicitly listed in the \code{formula}
-argument of \code{design()}.They can also be accessed with \code{SShybrid()$p_types}.\tabular{llllll}{
+argument of \code{design()}.They can also be accessed with \code{SSRDEX()$p_types}.\tabular{llllll}{
    \strong{Parameter} \tab \strong{Transform} \tab \strong{Natural scale} \tab \strong{Default} \tab \strong{Mapping} \tab \strong{Interpretation} \cr
    \emph{v} \tab log \tab [0, Inf] \tab log(1) \tab  \tab Evidence-accumulation rate (drift rate) of the go process \cr
    \emph{A} \tab log \tab [0, Inf] \tab log(0) \tab  \tab Between-trial variation (range) in start point of the go process \cr
@@ -32,9 +32,9 @@ argument of \code{design()}.They can also be accessed with \code{SShybrid()$p_ty
 }
 
 
-All parameters are estimated on the log scale, with the exception of the attentional failure parameters (\code{tf} and \code{gf}), which are estimated on the probit scale.
+All parameters are estimated on the log scale, with the exception of \code{tf} and \code{gf} which are estimated on the probit scale, and \code{exgS_lb} which is estimated on the natural scale.
 
-The parameterization \emph{b} = \emph{B} + \emph{A} ensures that the response threshold is
+The parameterization \emph{b} = \emph{B} + \emph{A} ensures that the response threshold \emph{b} is
 always higher than the between trial variation in start point.
 
 Conventionally, \code{s} is fixed to 1 to satisfy scaling constraints.

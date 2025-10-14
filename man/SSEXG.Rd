@@ -16,7 +16,7 @@ Model file to estimate the ex-Gaussian race model of stop signal task data in EM
 Model files are almost exclusively used in \code{design()}.
 
 Default values are used for all parameters that are not explicitly listed in the \code{formula}
-argument of \code{design()}.They can also be accessed with \code{SSexG()$p_types}.\tabular{llllll}{
+argument of \code{design()}.They can also be accessed with \code{SSEXG()$p_types}.\tabular{llllll}{
    \strong{Parameter} \tab \strong{Transform} \tab \strong{Natural scale} \tab \strong{Default} \tab \strong{Mapping} \tab \strong{Interpretation} \cr
    \emph{mu} \tab log \tab [0, Inf] \tab log(.4) \tab  \tab Mean of Gaussian component of ex-Gaussian go finish time distribution \cr
    \emph{sigma} \tab log \tab [0, Inf] \tab log(.05) \tab  \tab Standard deviation of Gaussian component of ex-Gaussian go finish time distribution \cr
