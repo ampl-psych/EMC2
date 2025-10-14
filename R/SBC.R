@@ -246,11 +246,7 @@ plot_sbc_hist <- function(ranks, bins = 10, layout = NA, add_stats = TRUE){
   par_names <- colnames(ranks[[1]])
   for (j in seq_along(ranks)) {
     if (any(is.na(layout))) {
-      par(
-        mfrow = coda_setmfrow(
-          Nchains = 1, Nparms = ncol(ranks[[1]]), nplots = 1
-        )
-      )
+      par(mfrow = coda_setmfrow(Nparms = ncol(ranks[[1]])))
     } else {
       par(mfrow = layout)
     }
@@ -268,21 +264,12 @@ plot_sbc_hist <- function(ranks, bins = 10, layout = NA, add_stats = TRUE){
       abline(h = mid, lty = 2)
       abline(h = high, lty = 2)
       if (!is.null(stat) && add_stats) {
-        legend(
-          x = "topleft",
-          legend = paste0("coverage : ", round(stat[["coverage"]][i], 2)),
-          bty = "n"
-        )
-        legend(
-          x = "top",
-          legend = paste0("bias : ", round(stat[["bias"]][i], 3)),
-          bty = "n"
-        )
-        legend(
-          x = "topright",
-          legend = paste0("precision : ", round(stat[["precision"]][i], 3)),
-          bty = "n"
-        )
+        coverage_print <- paste0("coverage : ", round(stat[["coverage"]][i], 2))
+        bias_print <- paste0("bias : ", round(stat[["bias"]][i], 3))
+        precision_print <- paste0("precision : ", round(stat[["precision"]][i], 3))
+        legend(x = "topleft", legend = coverage_print, bty = "n")
+        legend(x = "top", legend = bias_print, bty = "n")
+        legend(x = "topright", legend = precision_print, bty = "n")
       }
     }
   }
@@ -364,11 +351,7 @@ plot_sbc_ecdf <- function(ranks, layout = NA, add_stats = TRUE){
   res <- get_lims(N, K, gamma)
   for (j in seq_along(ranks)) {
     if (any(is.na(layout))) {
-      par(
-        mfrow = coda_setmfrow(
-          Nchains = 1, Nparms = ncol(ranks[[1]]), nplots = length(ranks)
-        )
-      )
+      par(mfrow = coda_setmfrow(Nparms = ncol(ranks[[1]]), nplots = length(ranks)))
     } else {
       par(mfrow = layout)
     }
@@ -397,21 +380,12 @@ plot_sbc_ecdf <- function(ranks, layout = NA, add_stats = TRUE){
         col = adjustcolor("cornflowerblue", 0.2)
       )
       if (!is.null(stat) && add_stats) {
-        legend(
-          x = "topleft",
-          legend = paste0("coverage : ", round(stat[["coverage"]][i], 2)),
-          bty = "n"
-        )
-        legend(
-          x = "bottomright",
-          legend = paste0("bias : ", round(stat[["bias"]][i], 3)),
-          bty = "n"
-        )
-        legend(
-          x = "topright",
-          legend = paste0("precision : ", round(stat[["precision"]][i], 3)),
-          bty = "n"
-        )
+        coverage_print <- paste0("coverage : ", round(stat[["coverage"]][i], 2))
+        bias_print <- paste0("bias : ", round(stat[["bias"]][i], 3))
+        precision_print <- paste0("precision : ", round(stat[["precision"]][i], 3))
+        legend(x = "topleft", legend = coverage_print, bty = "n")
+        legend(x = "bottomright", legend = bias_print, bty = "n")
+        legend(x = "topright", legend = precision_print, bty = "n")
       }
     }
   }
