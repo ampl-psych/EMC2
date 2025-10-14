@@ -2,28 +2,28 @@ get_objects <- function(type, selection = NULL, sample_prior = F, design = NULL,
                         prior = NULL, stage = 'sample', N = 1e5, ...){
   return_prior <- ifelse(is.null(sampler), TRUE, FALSE)
   if(type %in% c("standard", "blocked", "diagonal")){
-    out <- get_objects_standard(selection, sample_prior, return_prior, design, prior, stage, N = N,
-                                sampler, ...)
+    out <- get_objects_standard(selection, sample_prior, return_prior, design, prior, stage = stage, N = N,
+                                sampler = sampler, ...)
   }
   else if(type == "single"){
-    out <- get_objects_single(selection, sample_prior, return_prior, design, prior, stage, N = N,
-                                sampler, ...)
+    out <- get_objects_single(selection, sample_prior, return_prior, design, prior, stage = stage, N = N,
+                                sampler = sampler, ...)
   }
   else if(type == "diagonal-gamma"){
-    out <- get_objects_diag_gamma(selection, sample_prior, return_prior, design, prior, stage, N = N,
-                            sampler, ...)
+    out <- get_objects_diag_gamma(selection, sample_prior, return_prior, design, prior, stage = stage, N = N,
+                            sampler = sampler, ...)
   }
   else if(type == "infnt_factor"){
-    out <- get_objects_infnt_factor(selection, sample_prior, return_prior, design, prior, stage, N = N,
-                               sampler, ...)
+    out <- get_objects_infnt_factor(selection, sample_prior, return_prior, design, prior, stage = stage, N = N,
+                               sampler = sampler, ...)
   }
   else if(type == "factor"){
-    out <- get_objects_factor(selection, sample_prior, return_prior, design, prior, stage, N = N,
-                                    sampler,...)
+    out <- get_objects_factor(selection, sample_prior, return_prior, design, prior, stage = stage, N = N,
+                                    sampler = sampler,...)
   }
   else if(type == "SEM"){
-    out <- get_objects_SEM(selection, sample_prior, return_prior, design, prior, stage, N = N,
-                              sampler,...)
+    out <- get_objects_SEM(selection, sample_prior, return_prior, design, prior, stage = stage, N = N,
+                              sampler = sampler,...)
   }
   else{
     stop("make sure type is supported!")
