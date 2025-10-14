@@ -484,6 +484,9 @@ make_SEM_diagram <- function(emc,
                           par_names = NULL,
                           cut = NULL,
                           ...){
+  if (!requireNamespace("DiagrammeR", quietly = TRUE)) {
+    stop("Package 'DiagrammeR' is required for this function. Please install it.")
+  }
   sem_settings <- emc[[1]]$sem_settings
   Lambda_mat <- sem_settings$Lambda_mat
   B_mat <- sem_settings$B_mat
