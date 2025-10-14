@@ -155,25 +155,48 @@ split_list_to_dfs <- function(lst, type = "alpha") {
 
 
 
-SBC_single <- function(design_in, prior_in, replicates = 250, trials = 100,
-                             plot_data = FALSE, verbose = TRUE,
-                             fileName = NULL, ...){
-  dots <- add_defaults(list(...), max_tries = 50, compress = FALSE, rt_resolution = 1e-12,
-                       stop_criteria = list(min_es = 100, max_gd = 1.1,
-                                            selection = c("alpha", "mu", "Sigma")))
-  dots$verbose <- verbose
-  type <- attr(prior_in, "type")
-  if(type != "single") stop("can only use `type = single`")
+SBC_single <- function(
+  design_in,
+  prior_in,
+  replicates = 250,
+  trials = 100,
+  plot_data = FALSE,
+  verbose = TRUE,
+  fileName = NULL,
+  ...
+) {
+  if (attr(prior_in, "type") != "single") {
+    stop("can only use `type = single`")
+  }
+  dots <- add_defaults(
+    list(...),
+    max_tries = 50,
+    compress = FALSE, rt_resolution = 1e-12,
+    stop_criteria = list(
+      min_es = 100, max_gd = 1.1, selection = c("alpha", "mu", "Sigma")
+    ),
+    cores_per_chain = 1
+  )
+  dots[["verbose"]] <- verbose
   # Draw prior samples
   prior_alpha <- parameters(prior_in, N = replicates, selection = "alpha")
   rank_alpha <- data.frame()
-  if(!is.null(fileName)) save(prior_alpha, file = fileName)
+  if (!is.null(fileName)) {
+    save(prior_alpha, file = fileName)
+  }
   i <- 1
-  if(dots$cores_per_chain > 1 & verbose) print("Since cores_per_chain > 1, estimating multiple data sets simultaneously")
+  if (dots[["cores_per_chain"]] > 1 && verbose) {
+    print("Since cores_per_chain > 1, estimating multiple data sets simultaneously")
+  }
   par_names <- names(sampled_pars(design_in))
-  res <- auto_mclapply(X = 1:replicates, FUN = run_SBC_subject, design_in, prior_alpha, trials, prior_in, dots, mc.cores = dots$cores_per_chain)
+  res <- auto_mclapply(
+    X = 1:replicates,
+    FUN = run_SBC_subject,
+    design_in, prior_alpha, trials, prior_in, dots,
+    mc.cores = dots[["cores_per_chain"]]
+  )
   SBC <- split_list_to_dfs(res)
-  if(!is.null(fileName)){
+  if(!is.null(fileName)) {
     save(SBC, prior_alpha, file = fileName)
   }
   return(SBC)
