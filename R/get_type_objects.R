@@ -118,8 +118,11 @@ get_objects_diag_gamma <- function(selection, sample_prior, return_prior, design
 get_objects_standard <- function(selection, sample_prior, return_prior, design = NULL,
                                  prior = NULL, stage = 'sample', N = 1e5, sampler = NULL, ...){
   acc_selection <- c("mu", "sigma2", "beta", "covariance", "correlation", "alpha", "Sigma", "LL")
+  group_design <- sampler[[1]]$group_designs
+  if(!is.null(attr(prior, "group_design"))) group_design <- attr(prior, "group_design")
+  dots <- add_defaults(list(...), group_design = group_design)
   if(return_prior & !sample_prior){
-    if(is.null(list(...)$return_info)) prior$prior <- get_prior_standard(design = design, sample = F, prior = prior, group_design = list(...)$group_design)
+    if(is.null(dots$return_info)) prior$prior <- get_prior_standard(design = design, sample = F, prior = prior, group_design = dots$group_design)
     prior$descriptions <- list(
       theta_mu_mean = "mean of the group-level mean prior",
       theta_mu_var = "variance of the group-level mean prior",
@@ -134,13 +137,12 @@ get_objects_standard <- function(selection, sample_prior, return_prior, design =
       mu = "Group-level mean",
       Sigma = 'Group-level covariance matrix'
     )
-    if(!is.null(list(...)$return_info)) return(prior[c("types", "type_descriptions", "descriptions")])
+    if(!is.null(dots$return_info)) return(prior[c("types", "type_descriptions", "descriptions")])
     prior$prior <- add_prior_names(prior$prior, design, ...)
     return(prior)
   } else{
     if(!selection %in% acc_selection) stop(paste0("selection must be in : ", paste(acc_selection, collapse = ", ")))
     if(sample_prior){
-      dots <- list(...)
       if(!is.null(sampler$par_groups)){
         dots$par_groups <- sampler$par_groups
         dots$group_design <- sampler$group_design
