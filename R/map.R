@@ -158,7 +158,6 @@ get_pars_matrix <- function(p_vector,dadm,model) {
   # 7 trial-wise transform
   # 8 bound
 
-  # Niek should constants be included in pre_transform? I think not?
   p_vector <- do_pre_transform(p_vector, model$pre_transform)
   # If there's any premap trends, they're done in map_p
   pars <- map_p(add_constants(p_vector,attr(dadm,"constants")),dadm, model)
