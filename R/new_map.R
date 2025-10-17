@@ -102,9 +102,7 @@ do_map <- function(draws, design, add_recalculated = FALSE, ...) {
     par_idx <- max(cur_idx)
     cur_draws <- draws[,cur_idx]
     if(grepl("MRI", cur_des$model()$type)){
-      cur_draws[,grepl("sd", colnames(cur_draws))] <- exp(cur_draws[,grepl("sd", colnames(cur_draws))])
-      cur_draws[,grepl("rho", colnames(cur_draws))] <- pnorm(cur_draws[,grepl("rho", colnames(cur_draws))])
-      all_out[[i]] <- cur_draws
+      all_out[[i]] <- map_MRI(cur_draws)
       next
     }
 
@@ -252,3 +250,62 @@ do_map <- function(draws, design, add_recalculated = FALSE, ...) {
   }
   return(out)
 }
+
+par_data_map <- function(par_mcmc, design, n_trials = NULL, data = NULL,
+                         functions = NULL, ...){
+  design <- design[[1]]
+  model <- design$model
+  if ( is.null(data) ) {
+    design$Ffactors$subjects <- rownames(parameters)
+    if ( is.null(n_trials) )
+      stop("If data is not provided need to specify number of trials")
+    design$Fcovariates <- design$Fcovariates[!design$Fcovariates %in% names(functions)]
+    data <- minimal_design(design, covariates = list(...)$covariates,
+                           drop_subjects = F, n_trials = n_trials, add_acc=F,
+                           drop_R = F)
+  } else {
+    data <- add_trials(data[order(data$subjects),])
+  }
+  if(!is.null(functions)){
+    for(i in 1:length(functions)){
+      data[[names(functions)[i]]] <- functions[[i]](data)
+    }
+  }
+  if (!is.factor(data$subjects)) data$subjects <- factor(data$subjects)
+  if (!is.null(model)) {
+    if (!is.function(model)) stop("model argument must  be a function")
+    if ( is.null(model()$p_types) ) stop("model()$p_types must be specified")
+    if ( is.null(model()$Ttransform) ) stop("model()$Ttransform must be specified")
+  }
+  model <- design$model
+  data <- design_model(
+    add_accumulators(data,design$matchfun,simulate=TRUE,type=model()$type,Fcovariates=design$Fcovariates),
+    design,model,add_acc=FALSE,compress=FALSE,verbose=FALSE,
+    rt_check=FALSE)
+  n_mcmc <- dim(par_mcmc)[3]
+  n_pars <- length(model()$p_types)
+  n_subs <- ncol(par_mcmc)
+  for(i in 1:n_mcmc){
+    parameters <- t(as.matrix(par_mcmc[,,i], nrow = n_pars, ncol = n_subs))
+    pars <- t(apply(parameters, 1, do_pre_transform, model()$pre_transform))
+    pars <- map_p(add_constants(pars,design$constants),data, model())
+    if(!is.null(model()$trend) && attr(model()$trend, "pretransform")){
+      # This runs the trend and afterwards removes the trend parameters
+      pars <- prep_trend(data, model()$trend, pars)
+    }
+    pars <- do_transform(pars, model()$transform)
+    if(!is.null(model()$trend) && attr(model()$trend, "posttransform")){
+      # This runs the trend and afterwards removes the trend parameters
+      pars <- prep_trend(data, model()$trend, pars)
+    }
+    pars <- model()$Ttransform(pars, data)
+    if(i == 1){
+      # Ttransform could add unwanted friends, so safest to just
+      # figure out the dimensions here
+      out <- array(NA, dim = c(nrow(pars), ncol(pars), n_mcmc))
+    }
+    out[,,i] <- pars
+  }
+  return(out)
+}
+
