@@ -148,7 +148,7 @@ DDM <- function(){
                             sv=c(.01,10),s=c(0,Inf),SZ=c(.01,.99),st0=c(0,.5)),
                exception=c(sv=0,SZ=0,st0=0)),
     Ttransform = function(pars,dadm) {
-      pars[,"SZ"] <- 2*pars[,"SZ"]*apply(cbind(pars[,"Z"],1-pars[,"Z"]),1,min)
+      pars[,"SZ"] <- 2*pars[,"SZ"]*pmin(pars[,"Z"], 1 - pars[,"Z"])
       pars <- cbind(pars,z=pars[,"Z"]*pars[,"a"], sz = pars[,"SZ"]*pars[,"a"])
       pars
     },

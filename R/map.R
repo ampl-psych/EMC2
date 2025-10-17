@@ -125,7 +125,7 @@ map_p <- function(p,dadm,model)
     # Apply design matrix and sum parameter effects
     tmp <- pm*cur_design[attr(cur_design,"expand"),,drop=FALSE]
     tmp[is.nan(tmp)] <- 0 # Handle 0 weight x Inf parameter cases
-    tmp <- apply(tmp,1,sum)
+    tmp <- rowSums(tmp)
     # If this is a premap trend parameter, transform it here already
     # We'll need it transformed later in this loop (for trending other parameters)
     if(k <= sum(pretrend_idx)){
