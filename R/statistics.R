@@ -75,7 +75,7 @@ compare <- function(sList,stage="sample",filter=NULL,use_best_fit=TRUE,
 
   if(BayesFactor){
     MLLs <- numeric(length(sList))
-    for(i in 1:length(MLLs)){
+    for(i in 1:length(MLLs)) {
       if('MLL' %in% names(attributes(sList[[i]]))) {
         MLLs[i] <- attr(sList[[i]], 'MLL')
       } else {
