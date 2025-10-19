@@ -578,7 +578,10 @@ design_model <- function(data,design,model=NULL,
       }
     }
   }
-  for (i in pnames) attr(design$Flist[[i]],"Clist") <- design$Clist[[i]]
+
+  # for (i in pnames) attr(design$Flist[[i]],"Clist") <- design$Clist[[i]]
+  ## include trend parameters?
+  for (i in names(design$Flist)) attr(design$Flist[[i]],"Clist") <- design$Clist[[i]]
 
   out <- lapply(design$Flist,make_dm,da=da,Fcovariates=design$Fcovariates, add_da = add_da, all_cells_dm = all_cells_dm)
   if (!is.null(rt_resolution) & !is.null(da$rt)) da$rt <- round(da$rt/rt_resolution)*rt_resolution

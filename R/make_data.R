@@ -105,8 +105,10 @@ make_data_unconditional <- function(data, pars, design, model, return_covariates
     this_data$subjects <- droplevels(this_data$subjects)
     if(trial_idx > 1) {
       # set last (and only last) row of covariates to non-NA value to enforce updating
-      this_data[this_data$trials==this_trial,covariate_names] <- NA
-      this_data[this_data$trials==this_trial&this_data$lR==min(levels(this_data$lR)),covariate_names] <- 999  # on FIRST LR?
+      for(covariate_name in covariate_names) {
+        this_data[this_data$trials==this_trial,covariate_name] <- NA
+        this_data[this_data$trials==this_trial&this_data$lR==min(levels(this_data$lR)),covariate_name] <- 999  # on FIRST LR?
+      }
     }
 
     # Map single trial's parameters. Pass current state of covariates to trends

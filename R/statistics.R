@@ -58,9 +58,16 @@ compare <- function(sList,stage="sample",filter=NULL,use_best_fit=TRUE,
     if (i %in% names(sflist)) sflist[[i]] <- filter[[i]]
   dots <- add_defaults(list(...), group_only = FALSE)
   ICs <- setNames(vector(mode="list",length=length(sList)),names(sList))
-  for (i in 1:length(ICs)) ICs[[i]] <- IC(sList[[i]],stage=stage,
-                                          filter=sflist[[i]],use_best_fit=use_best_fit,subject=list(...)$subject,print_summary=FALSE,
-                                          group_only = dots$group_only)
+  for (i in 1:length(ICs)) {
+    if('ICs' %in% names(attributes(sList[[i]]))) {
+      ICs[[i]] <- attr(sList[[i]], 'ICs')
+    } else {
+      ICs[[i]] <- IC(sList[[i]],stage=stage,
+                     filter=sflist[[i]],use_best_fit=use_best_fit,
+                     subject=list(...)$subject,print_summary=FALSE,
+                     group_only = dots$group_only)
+    }
+  }
   ICs <- data.frame(do.call(rbind,ICs))
   DICp <- getp(ICs$DIC)
   BPICp <- getp(ICs$BPIC)
@@ -69,8 +76,12 @@ compare <- function(sList,stage="sample",filter=NULL,use_best_fit=TRUE,
   if(BayesFactor){
     MLLs <- numeric(length(sList))
     for(i in 1:length(MLLs)){
-      MLLs[i] <- run_bridge_sampling(sList[[i]], stage = stage, filter = sflist[[i]], both_splits = FALSE,
-                                     cores_for_props = cores_for_props, cores_per_prop = cores_per_prop)
+      if('MLL' %in% names(attributes(sList[[i]]))) {
+        MLLs[i] <- attr(sList[[i]], 'MLL')
+      } else {
+        MLLs[i] <- run_bridge_sampling(sList[[i]], stage = stage, filter = sflist[[i]], both_splits = FALSE,
+                                       cores_for_props = cores_for_props, cores_per_prop = cores_per_prop)
+      }
     }
     MD <- -2*MLLs
     modelProbability <- getp(MD)
