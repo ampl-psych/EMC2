@@ -82,7 +82,110 @@ minimal_design <- function(design, covariates = NULL, drop_subjects = TRUE,
   return(out)
 }
 
-do_map <- function(draws, design, add_recalculated = FALSE, ...) {
+do_map <- function(draws, design,
+                   n_trials = 30, data = NULL, functions = NULL,
+                   add_recalculated = FALSE,...){
+  par_idx <- 0
+  all_out <- list()
+  for(i in 1:length(design)){
+    cur_des <- design[[i]]
+    # See which design we have to get out
+    cur_idx <- par_idx + seq_len(length(sampled_pars(cur_des)))
+    par_idx <- max(cur_idx)
+    cur_draws <- draws[,cur_idx]
+    if(grepl("MRI", cur_des$model()$type)){
+      # MRI mapping is rudimentary for now
+      all_out[[i]] <- map_MRI(cur_draws)
+      next
+    }
+    joint <- FALSE
+    if(any(grepl("|", colnames(cur_draws), fixed =  T))){
+      # Get out joint
+      joint <- TRUE
+      prefix <- unique(gsub("[|].*", "", colnames(cur_draws)))
+      colnames(cur_draws) <- sub("^[^|]*\\|", "", colnames(cur_draws))
+    }
+
+    combined <- par_data_map(cur_draws, cur_des, n_trials = n_trials,
+                             data = data, functions = functions,
+                             add_recalculated = add_recalculated, ...)
+    # Now I have the data, and the parameters mapped to them.
+    # Next we loop over the columns of the parameters and calculate their mappings
+    # An open question is how to deal with added recalculated pars.
+    # For the other parameters I can simply identify if they come up in a formula
+    # and if so include that column in the mapping (otherwise don't)
+    # That's less trivial for recalculated parameters
+    if(joint){
+      colnames(out) <- paste0(prefix, "|", colnames(out))
+    }
+    all_out[[i]] <- out
+  }
+}
+
+
+
+par_data_map <- function(par_mcmc, design, n_trials = NULL, data = NULL,
+                         functions = NULL, add_recalculated = FALSE, ...){
+  design <- design[[1]]
+  model <- design$model
+  if ( is.null(data) ) {
+    design$Ffactors$subjects <- rownames(parameters)
+    if ( is.null(n_trials) )
+      stop("If data is not provided need to specify number of trials")
+    design$Fcovariates <- design$Fcovariates[!design$Fcovariates %in% names(functions)]
+    data <- minimal_design(design, covariates = list(...)$covariates,
+                           drop_subjects = F, n_trials = n_trials, add_acc=F,
+                           drop_R = F)
+  } else {
+    data <- add_trials(data[order(data$subjects),])
+  }
+  if(!is.null(functions)){
+    for(i in 1:length(functions)){
+      data[[names(functions)[i]]] <- functions[[i]](data)
+    }
+  }
+  if (!is.factor(data$subjects)) data$subjects <- factor(data$subjects)
+  if (!is.null(model)) {
+    if (!is.function(model)) stop("model argument must  be a function")
+    if ( is.null(model()$p_types) ) stop("model()$p_types must be specified")
+    if ( is.null(model()$Ttransform) ) stop("model()$Ttransform must be specified")
+  }
+  model <- design$model
+  data <- design_model(
+    add_accumulators(data,design$matchfun,simulate=TRUE,type=model()$type,Fcovariates=design$Fcovariates),
+    design,model,add_acc=FALSE,compress=FALSE,verbose=FALSE,
+    rt_check=FALSE)
+
+  n_mcmc <- dim(par_mcmc)[3]
+  n_pars <- length(model()$p_types)
+  n_subs <- ncol(par_mcmc)
+  for(i in 1:n_mcmc){
+    parameters <- t(as.matrix(par_mcmc[,,i], nrow = n_pars, ncol = n_subs))
+    pars <- t(apply(parameters, 1, do_pre_transform, model()$pre_transform))
+    pars <- map_p(add_constants(pars,design$constants),data, model())
+    if(!is.null(model()$trend) && attr(model()$trend, "pretransform")){
+      # This runs the trend and afterwards removes the trend parameters
+      pars <- prep_trend(data, model()$trend, pars)
+    }
+    pars <- do_transform(pars, model()$transform)
+    if(!is.null(model()$trend) && attr(model()$trend, "posttransform")){
+      # This runs the trend and afterwards removes the trend parameters
+      pars <- prep_trend(data, model()$trend, pars)
+    }
+    if(add_recalculated) pars <- model()$Ttransform(pars, data)
+    if(i == 1){
+      # Ttransform could add unwanted friends, so safest to just
+      # figure out the dimensions here
+      out <- array(NA, dim = c(nrow(pars), n_mcmc, ncol(pars)),
+                   dimnames = list(NULL, NULL, colnames(pars)))
+    }
+    out[,i,] <- pars
+  }
+  return(list(data = data, pars = out))
+}
+
+
+do_map_old <- function(draws, design, add_recalculated = FALSE, ...) {
   if(!is.matrix(draws)){
     draws <- draws[,1,]
     is_array <- TRUE
@@ -250,62 +353,3 @@ do_map <- function(draws, design, add_recalculated = FALSE, ...) {
   }
   return(out)
 }
-
-par_data_map <- function(par_mcmc, design, n_trials = NULL, data = NULL,
-                         functions = NULL, ...){
-  design <- design[[1]]
-  model <- design$model
-  if ( is.null(data) ) {
-    design$Ffactors$subjects <- rownames(parameters)
-    if ( is.null(n_trials) )
-      stop("If data is not provided need to specify number of trials")
-    design$Fcovariates <- design$Fcovariates[!design$Fcovariates %in% names(functions)]
-    data <- minimal_design(design, covariates = list(...)$covariates,
-                           drop_subjects = F, n_trials = n_trials, add_acc=F,
-                           drop_R = F)
-  } else {
-    data <- add_trials(data[order(data$subjects),])
-  }
-  if(!is.null(functions)){
-    for(i in 1:length(functions)){
-      data[[names(functions)[i]]] <- functions[[i]](data)
-    }
-  }
-  if (!is.factor(data$subjects)) data$subjects <- factor(data$subjects)
-  if (!is.null(model)) {
-    if (!is.function(model)) stop("model argument must  be a function")
-    if ( is.null(model()$p_types) ) stop("model()$p_types must be specified")
-    if ( is.null(model()$Ttransform) ) stop("model()$Ttransform must be specified")
-  }
-  model <- design$model
-  data <- design_model(
-    add_accumulators(data,design$matchfun,simulate=TRUE,type=model()$type,Fcovariates=design$Fcovariates),
-    design,model,add_acc=FALSE,compress=FALSE,verbose=FALSE,
-    rt_check=FALSE)
-  n_mcmc <- dim(par_mcmc)[3]
-  n_pars <- length(model()$p_types)
-  n_subs <- ncol(par_mcmc)
-  for(i in 1:n_mcmc){
-    parameters <- t(as.matrix(par_mcmc[,,i], nrow = n_pars, ncol = n_subs))
-    pars <- t(apply(parameters, 1, do_pre_transform, model()$pre_transform))
-    pars <- map_p(add_constants(pars,design$constants),data, model())
-    if(!is.null(model()$trend) && attr(model()$trend, "pretransform")){
-      # This runs the trend and afterwards removes the trend parameters
-      pars <- prep_trend(data, model()$trend, pars)
-    }
-    pars <- do_transform(pars, model()$transform)
-    if(!is.null(model()$trend) && attr(model()$trend, "posttransform")){
-      # This runs the trend and afterwards removes the trend parameters
-      pars <- prep_trend(data, model()$trend, pars)
-    }
-    pars <- model()$Ttransform(pars, data)
-    if(i == 1){
-      # Ttransform could add unwanted friends, so safest to just
-      # figure out the dimensions here
-      out <- array(NA, dim = c(nrow(pars), ncol(pars), n_mcmc))
-    }
-    out[,,i] <- pars
-  }
-  return(out)
-}
-
