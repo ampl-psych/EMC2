@@ -1,21 +1,21 @@
-do_transform <- function(pars, transform)
-{
-  isexp    <- transform$func[colnames(pars)] == "exp"
-  isprobit <- transform$func[colnames(pars)] == "pnorm"
-
-  ## exp link:  lower + exp(real)
-  pars[, isexp] <- sweep(
-    exp(pars[, isexp, drop = FALSE]), 2,
-    transform$lower[colnames(pars)[isexp]], "+")
-
-  ## probit link: lower + (upper‑lower) * pnorm(real)
-  pars[, isprobit] <- sweep(
-    sweep(pnorm(pars[, isprobit, drop = FALSE]), 2,
-          transform$upper[colnames(pars)[isprobit]] -
-            transform$lower[colnames(pars)[isprobit]], "*"),
-    2, transform$lower[colnames(pars)[isprobit]], "+")
-  pars
-}
+# do_transform <- function(pars, transform)
+# {
+#   isexp    <- transform$func[colnames(pars)] == "exp"
+#   isprobit <- transform$func[colnames(pars)] == "pnorm"
+#
+#   ## exp link:  lower + exp(real)
+#   pars[, isexp] <- sweep(
+#     exp(pars[, isexp, drop = FALSE]), 2,
+#     transform$lower[colnames(pars)[isexp]], "+")
+#
+#   ## probit link: lower + (upper‑lower) * pnorm(real)
+#   pars[, isprobit] <- sweep(
+#     sweep(pnorm(pars[, isprobit, drop = FALSE]), 2,
+#           transform$upper[colnames(pars)[isprobit]] -
+#             transform$lower[colnames(pars)[isprobit]], "*"),
+#     2, transform$lower[colnames(pars)[isprobit]], "+")
+#   pars
+# }
 
 do_pre_transform <- function(p_vector, transform)
 {

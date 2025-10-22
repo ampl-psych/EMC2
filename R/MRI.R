@@ -147,8 +147,8 @@ reshape_events <- function(events, event_types, duration = 0.001, modulation = N
 }
 
 map_MRI <- function(cur_draws){
-  cur_draws[,grepl("sd", colnames(cur_draws))] <- exp(cur_draws[,grepl("sd", colnames(cur_draws))])
-  cur_draws[,grepl("rho", colnames(cur_draws))] <- pnorm(cur_draws[,grepl("rho", colnames(cur_draws))])
+  cur_draws[grepl("sd", rownames(cur_draws)),,] <- exp(cur_draws[grepl("sd", rownames(cur_draws)),,])
+  cur_draws[grepl("rho", rownames(cur_draws)),,] <- pnorm(cur_draws[grepl("rho", rownames(cur_draws)),,])
   return(cur_draws)
 }
 

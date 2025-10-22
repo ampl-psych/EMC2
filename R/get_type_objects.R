@@ -1,5 +1,6 @@
 get_objects <- function(type, selection = NULL, sample_prior = F, design = NULL, sampler = NULL,
-                        prior = NULL, stage = 'sample', N = 1e5, ...){
+                        prior = NULL, stage = 'sample', N = 1e5, map = FALSE, ...){
+  selection <- map_selecter(map, selection)
   return_prior <- ifelse(is.null(sampler), TRUE, FALSE)
   if(type %in% c("standard", "blocked", "diagonal")){
     out <- get_objects_standard(selection, sample_prior, return_prior, design, prior, stage = stage, N = N,
@@ -148,11 +149,11 @@ get_objects_standard <- function(selection, sample_prior, return_prior, design =
         dots$group_design <- sampler$group_design
       }
       if(selection == "alpha" & !is.null(sampler)){
-        mu <- get_pars(sampler, selection = "mu", stage = stage, map = FALSE, return_mcmc = FALSE, merge_chains = TRUE, ...)
+        mu <- get_pars(sampler, selection = "beta", stage = stage, map = FALSE, return_mcmc = FALSE, merge_chains = TRUE, ...)
         var <- get_pars(sampler, selection = "Sigma", stage = stage, map = FALSE, return_mcmc = FALSE, merge_chains = TRUE,
                         remove_dup = FALSE, remove_constants = FALSE, ...)
         sub_names <- names(sampler[[1]]$data)
-        sampler <- list(list(samples =  list(alpha = get_alphas(mu, var, sub_names))))
+        sampler <- list(list(samples =  list(alpha = get_alphas(mu, var, sub_names, group_design = group_design))))
       } else{
         sampler <- list(list(samples = do.call(get_prior_standard, c(list(prior = prior, design = design, selection = selection,N = N),
                                                                      fix_dots(dots, get_prior_standard)))))
@@ -507,23 +508,39 @@ get_base <- function(sampler, idx, selection){
     return(lapply(sampler, FUN = function(x) return(x$samples$theta_var[,,idx, drop = F])))
   }
   else if(selection == "correlation"){
-    return(lapply(sampler, FUN = function(x) return(
+    return(suppressWarnings(lapply(sampler, FUN = function(x) return(
       array(apply(x$samples$theta_var[,,idx],3,cov2cor),dim=dim(x$samples$theta_var[,,idx, drop = F]),
-            dimnames=dimnames(x$samples$theta_var)))))
+            dimnames=dimnames(x$samples$theta_var))))))
   }
 }
 
 
-get_alphas <- function(mu, var, sub_names, N = ncol(mu)){
-  n_pars <- nrow(mu)
+get_alphas <- function(mu, var, sub_names = NULL, N = ncol(mu),
+                       group_design = NULL){
+
+  if (is.null(sub_names)) sub_names <- "alpha"
   n_subs <- length(sub_names)
-  alpha <- array(NA_real_, dim = c(n_pars, n_subs, N))
-  for(i in 1:N){
-    alpha[,,i] <- t(rmvnorm(n_subs, mu[,i], var[,,i]))
+
+  if (is.null(group_design)) {
+    # Simple mode: mu is (p x N), same mean for all subjects within draw i
+    p <- nrow(mu)
+    alpha <- array(NA_real_, dim = c(p, n_subs, N))
+    for (i in 1:N) {
+      alpha[,,i] <- t(rmvnorm(n_subs, mu[, i], var[,, i]))
+    }
+    rownames(alpha) <- rownames(mu)
+
+  } else {
+    # Design mode: mu is (M x N) where M = sum_k m_k (intercept + effects per param)
+    # Build subject-specific means, then draw per subject
+    group_design <- add_group_design(rownames(var), group_design, n_subs)
+    p <- length(group_design)
+    alpha <- draw_alpha_from_design(group_design, mu, var)
+    dimnames(alpha) <- list(names(group_design),sub_names,NULL)
   }
-  rownames(alpha) <- rownames(mu)
+
   colnames(alpha) <- sub_names
-  return(alpha)
+  alpha
 }
 
 

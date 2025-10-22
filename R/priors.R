@@ -449,14 +449,14 @@ print.emc.prior <- function(x, ...){
 #' }
 
 plot.emc.prior <- function(x, selection = "mu", do_plot = TRUE, covariates = NULL,
-                       layout = NA, N = 5e4, ...){
+                       layout = NA, N = 5e3, ...){
   prior <- x
   design <- get_design(prior)
   dots <- add_defaults(list(...), breaks = 30, cut_off = 0.0015, prob = TRUE, by_subject = TRUE, map = TRUE)
   oldpar <- par(no.readonly = TRUE) # code line i
   on.exit(par(oldpar)) # code line i + 1
   if(is.null(design[[1]]$Ffactors)){
-    if(selection %in% c('alpha', 'mu') & dots$map){
+    if(selection %in% c('alpha', 'mu', "sigma2", "Sigma", "correlation", "covariance") & dots$map){
       warning("For this type of design, map = TRUE is not yet implemented")
     }
     dots$map <- FALSE
@@ -584,6 +584,17 @@ get_design.emc.prior <- function(x)
   }
   return(design)
 }
+
+#' @rdname get_group_design
+#' @export
+get_group_design.emc.prior <- function(x)
+{
+  design <- attr(x, "group_design")
+  if(!is.null(design))  class(design) <- "emc.group_design"
+  return(design)
+}
+
+
 
 #' @rdname plot_design
 #' @export

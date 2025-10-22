@@ -887,10 +887,11 @@ update2version <- function(emc){
     }
   }
 
+  group_design <- attr(emc[[1]]$prior, "group_design")
 
   prior_new <- emc[[1]]$prior
   attr(prior_new, "type") <- type
-  prior_new <- prior(design_list, type, update = prior_new)
+  prior_new <- prior(design_list, type, update = prior_new, group_design = group_design)
   class(prior_new) <- "emc.prior"
   emc <- lapply(emc, function(x){
     x$prior <- prior_new
