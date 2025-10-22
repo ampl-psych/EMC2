@@ -24,7 +24,7 @@ emc <- make_emc(forstmann, subj_design, group_design = group_des, prior_list = p
 test_that("groups", {
   expect_snapshot(print(group_des))
   expect_snapshot(summary(group_des))
-  expect_snapshot(credint(pri, group_design = group_des))
+  expect_snapshot(credint(pri, group_design = group_des, map = FALSE))
   expect_snapshot(credint(pri, group_design = group_des, selection = "beta"))
   expect_snapshot(init_chains(emc, particles = 10, cores_per_chain = 1)[[1]]$samples)
 })

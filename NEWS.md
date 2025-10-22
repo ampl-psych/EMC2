@@ -1,3 +1,28 @@
+# EMC2 3.2.1
+
+## Bug fix 
+
+* Added a warning that in hierarchical models, using `map = TRUE` in functions like `map = TRUE` or `map = TRUE` does not return the population-level marginal mean and variances on the original scale for group-level parameters. See issue #119
+
+# EMC2 3.2.0
+
+## New features
+
+* group_design specification (tutorial coming up)
+
+* trends specification (tutorial also coming up)
+
+* broader continuous covariates support with `map = TRUE`
+
+* fMRI joint modelling (tutorial on https://osf.io/preprints/psyarxiv/rhfk3_v1)
+
+* Made changes to how lR was used in compressed likelihood for race models. Run `update2version` to reuse older samples
+
+
+## Bug fixes
+
+* Made legend including or excluding more flexible for `plot_cdf`, `plot_density` and `plot_stat`
+
 # EMC2 3.1.1
 
 ## New features
@@ -9,8 +34,6 @@
 ## Bug fixes
 
 * Rare bug in sampling removed
-
-## Bug fixes
 
 * Small bug fixes in plot_data to make it more flexible
 

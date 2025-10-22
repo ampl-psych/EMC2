@@ -190,7 +190,8 @@ align_loadings <- function (emc = NULL, lambda = NULL, n_cores = 1, verbose = TR
   }
   lambda_reordered <- rearrange_loadings(lambda_reordered)
   if(!is.null(emc)){
-    n_iter <- emc[[1]]$samples$idx
+    emc <- subset(emc, stage = get_last_stage(emc))
+    n_iter <- chain_n(emc)[1,get_last_stage(emc)]
     for(i in 1:length(emc)){
       emc[[i]]$samples$lambda <- lambda_reordered[,,((i-1)*(n_iter)+ 1):(i*n_iter), drop = FALSE]
     }
@@ -483,6 +484,9 @@ make_SEM_diagram <- function(emc,
                           par_names = NULL,
                           cut = NULL,
                           ...){
+  if (!requireNamespace("DiagrammeR", quietly = TRUE)) {
+    stop("Package 'DiagrammeR' is required for this function. Please install it.")
+  }
   sem_settings <- emc[[1]]$sem_settings
   Lambda_mat <- sem_settings$Lambda_mat
   B_mat <- sem_settings$B_mat

@@ -16,10 +16,6 @@
 #' @importFrom colorspace diverging_hcl
 #' @importFrom corrplot colorlegend
 #' @importFrom corrplot corrplot
-#' @importFrom DiagrammeR create_edge_df
-#' @importFrom DiagrammeR create_graph
-#' @importFrom DiagrammeR create_node_df
-#' @importFrom DiagrammeR render_graph
 #' @importFrom graphics abline
 #' @importFrom graphics arrows
 #' @importFrom graphics hist pairs rect text
