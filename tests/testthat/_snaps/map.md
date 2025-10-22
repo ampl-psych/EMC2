@@ -1,4 +1,4 @@
-# map
+# mapped_pars
 
     Code
       mapped_pars(des)
@@ -109,5 +109,63 @@
         lM     
        TRUE   : m + 0.5 * m_lMd
        FALSE  : m - 0.5 * m_lMd
+      
+
+# map
+
+    Code
+      credint(samples_LNR, selection = "mu", map = "E")
+    Output
+      $mu
+                     2.5%    50%  97.5%
+      m_Eaccuracy  -1.008 -0.964 -0.919
+      m_Eneutral   -1.008 -0.964 -0.919
+      m_Espeed     -1.008 -0.964 -0.919
+      s_Eaccuracy   0.554  0.583  0.619
+      s_Eneutral    0.554  0.583  0.619
+      s_Espeed      0.554  0.583  0.619
+      t0_Eaccuracy  0.177  0.193  0.206
+      t0_Eneutral   0.177  0.193  0.206
+      t0_Espeed     0.177  0.193  0.206
+      
+
+---
+
+    Code
+      credint(samples_LNR, selection = "mu", map = list(~ E * S))
+    Output
+      $mu
+                            2.5%    50%  97.5%
+      m_(Intercept)       -1.008 -0.964 -0.919
+      m_Eneutral          -1.008 -0.964 -0.919
+      m_Eaccuracy         -1.008 -0.964 -0.919
+      m_Sright            -1.008 -0.964 -0.919
+      m_Eneutral:Sright   -1.008 -0.964 -0.919
+      m_Eaccuracy:Sright  -1.008 -0.964 -0.919
+      s_(Intercept)        0.554  0.583  0.619
+      s_Eneutral           0.554  0.583  0.619
+      s_Eaccuracy          0.554  0.583  0.619
+      s_Sright             0.554  0.583  0.619
+      s_Eneutral:Sright    0.554  0.583  0.619
+      s_Eaccuracy:Sright   0.554  0.583  0.619
+      t0_(Intercept)       0.177  0.193  0.206
+      t0_Eneutral          0.177  0.193  0.206
+      t0_Eaccuracy         0.177  0.193  0.206
+      t0_Sright            0.177  0.193  0.206
+      t0_Eneutral:Sright   0.177  0.193  0.206
+      t0_Eaccuracy:Sright  0.177  0.193  0.206
+      
+
+---
+
+    Code
+      credint(samples_LNR, selection = "mu", map = TRUE)
+    Output
+      $mu
+                  2.5%    50%  97.5%
+      m_lMFALSE -0.752 -0.700 -0.655
+      m_lMTRUE  -1.271 -1.228 -1.167
+      s          0.554  0.583  0.619
+      t0         0.177  0.193  0.206
       
 
