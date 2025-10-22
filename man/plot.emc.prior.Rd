@@ -10,7 +10,7 @@
   do_plot = TRUE,
   covariates = NULL,
   layout = NA,
-  N = 50000,
+  N = 5000,
   ...
 )
 }

@@ -1,3 +1,7 @@
+RNGkind("L'Ecuyer-CMRG")
+set.seed(123)
+
+
 # Create subject-level design
 subj_design <- design(data = forstmann, model = DDM,
                       formula = list(v ~ S, a ~ E, t0 ~ 1),
