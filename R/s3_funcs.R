@@ -975,6 +975,7 @@ credint <- function(x, ...){
 #' @rdname get_data
 #' @export
 get_data.emc <- function(emc) {
+  if(is.null(emc[[1]]$data)) return(NULL) # Prior samples
   if(is.null(emc[[1]]$data[[1]]$subjects)){ # Joint model
     dat <- vector("list", length(emc[[1]]$data[[1]]))
     for(i in 1:length(dat)){
@@ -1061,6 +1062,16 @@ get_design.emc <- function(x){
   return(emc_design)
 }
 
+#' @rdname get_group_design
+#' @export
+get_group_design.emc <- function(x){
+  group_design <- get_group_design(get_prior(x))
+  if(!is.null(group_design))  class(group_design) <- "emc.group_design"
+  return(group_design)
+}
+
+
+
 #' Plot Design
 #'
 #' Makes design illustration by plotting simulated data based on the design
@@ -1113,6 +1124,16 @@ get_design <- function(x){
   UseMethod("get_design")
 }
 
+#' Get Group Design
+#'
+#' Extracts group design from an emc object
+#'
+#' @param x an `emc` or `emc.prior` object
+#' @return A design with class emc.group_design
+#' @export
+get_group_design <- function(x){
+  UseMethod("get_group_design")
+}
 
 
 

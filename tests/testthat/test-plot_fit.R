@@ -11,3 +11,4 @@ test_that("plot_fit", {
   vdiffr::expect_doppelganger("stat_plot_fit", plot_stat(samples_LNR, to_plot = c('data', 'posterior'), stat_fun=drt,stat_name="RT diff Left vs Right",
                                                          n_post = 10))
 })
+
