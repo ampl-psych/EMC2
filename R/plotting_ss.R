@@ -12,9 +12,9 @@
 #' (plus/minus the standard error per SSD bin/category)
 #'
 #' @param input Either an emc object or a stop-signal data frame, or a *list* of such objects. SSD column in data required.
-#' @param probs Numeric vector of probabilities with values in [0,1] that defines SSD bins/categories.
 #' @param post_predict Optional posterior predictive data (matching columns) or *list* thereof.
 #' @param prior_predict Optional prior predictive data (matching columns) or list thereof.
+#' @param probs Numeric vector of probabilities with values in [0,1] that defines SSD bins/categories.
 #' @param factors Character vector of factor names to aggregate over; defaults to plotting full data set ungrouped by factors if NULL.
 #' @param within_plot Character indicating factor for which inhibition functions are plotted in the same panel
 #' @param use_global_quantiles If set to `TRUE`, SSDs are pooled over participants before calculating percentiles, so
@@ -36,9 +36,9 @@
 #' @return Returns NULL invisibly
 #' @export
 plot_ss_if <- function(input,
-                    probs = seq(0,1, length.out=5),
                     post_predict = NULL,
                     prior_predict = NULL,
+                    probs = seq(0,1, length.out=5),
                     factors = NULL,
                     within_plot = NULL,
                     use_global_quantiles = FALSE,
@@ -558,13 +558,13 @@ get_response_probability_by_global_ssd_quantile <- function(x, group_factor, pro
 #' (plus/minus the standard error per SSD bin/category)
 #'
 #' @param input Either an emc object or a stop-signal data frame, or a list of such objects. SSD column in data required.
+#' @param post_predict Optional posterior predictive data (matching columns) or list thereof.
+#' @param prior_predict Optional prior predictive data (matching columns) or list thereof.
 #' @param probs Numeric vector of probabilities with values in 0,1 that defines SSD bins/categories.
 #' @param factors Character vector of factor names to aggregate over; defaults to plotting full data set ungrouped by factors if NULL.
 #' @param within_plot Character indicating factor for which inhibition functions are plotted in the same panel
 #' @param use_global_quantiles If set to FALSE, the SSD-categories are defined in terms of the percentiles of the
 #' SSD distribution for each participant, and then averaged over participants.
-#' @param post_predict Optional posterior predictive data (matching columns) or list thereof.
-#' @param prior_predict Optional prior predictive data (matching columns) or list thereof.
 #' @param subject Subset the data to a single subject (by index or name).
 #' @param quants Numeric vector of credible interval bounds (e.g. c(0.025, 0.975)).
 #' @param functions A function (or list of functions) that create new columns in the datasets or predictives
@@ -581,12 +581,12 @@ get_response_probability_by_global_ssd_quantile <- function(x, group_factor, pro
 #' @return Returns NULL invisibly
 #' @export
 plot_ss_srrt <- function(input,
+                      post_predict = NULL,
+                      prior_predict = NULL,
                       probs = seq(0,1, length.out=5),
                       factors = NULL,
                       within_plot = NULL,
                       use_global_quantiles = TRUE,
-                      post_predict = NULL,
-                      prior_predict = NULL,
                       subject = NULL,
                       quants = c(0.025, 0.975), functions = NULL,
                       n_cores = 1,
