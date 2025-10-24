@@ -9,6 +9,13 @@
 #include "trend.h"
 using namespace Rcpp;
 
+// [[Rcpp::export]]
+Rcpp::NumericMatrix do_transform(Rcpp::NumericMatrix pars, Rcpp::List transform) {
+  // Build the specs for these parameters
+  std::vector<TransformSpec> specs = make_transform_specs(pars, transform);
+  // Apply transformation in place and return
+  return c_do_transform(pars, specs);
+}
 
 
 

@@ -1,21 +1,21 @@
-do_transform <- function(pars, transform)
-{
-  isexp    <- transform$func[colnames(pars)] == "exp"
-  isprobit <- transform$func[colnames(pars)] == "pnorm"
-
-  ## exp link:  lower + exp(real)
-  pars[, isexp] <- sweep(
-    exp(pars[, isexp, drop = FALSE]), 2,
-    transform$lower[colnames(pars)[isexp]], "+")
-
-  ## probit link: lower + (upper‑lower) * pnorm(real)
-  pars[, isprobit] <- sweep(
-    sweep(pnorm(pars[, isprobit, drop = FALSE]), 2,
-          transform$upper[colnames(pars)[isprobit]] -
-            transform$lower[colnames(pars)[isprobit]], "*"),
-    2, transform$lower[colnames(pars)[isprobit]], "+")
-  pars
-}
+# do_transform <- function(pars, transform)
+# {
+#   isexp    <- transform$func[colnames(pars)] == "exp"
+#   isprobit <- transform$func[colnames(pars)] == "pnorm"
+#
+#   ## exp link:  lower + exp(real)
+#   pars[, isexp] <- sweep(
+#     exp(pars[, isexp, drop = FALSE]), 2,
+#     transform$lower[colnames(pars)[isexp]], "+")
+#
+#   ## probit link: lower + (upper‑lower) * pnorm(real)
+#   pars[, isprobit] <- sweep(
+#     sweep(pnorm(pars[, isprobit, drop = FALSE]), 2,
+#           transform$upper[colnames(pars)[isprobit]] -
+#             transform$lower[colnames(pars)[isprobit]], "*"),
+#     2, transform$lower[colnames(pars)[isprobit]], "+")
+#   pars
+# }
 
 do_pre_transform <- function(p_vector, transform)
 {
@@ -126,7 +126,7 @@ map_p <- function(p,dadm,model,return_trialwise_parameters=FALSE)
     # Apply design matrix and sum parameter effects
     tmp <- pm*cur_design[attr(cur_design,"expand"),,drop=FALSE]
     tmp[is.nan(tmp)] <- 0 # Handle 0 weight x Inf parameter cases
-    tmp <- apply(tmp,1,sum)
+    tmp <- rowSums(tmp)
     # If this is a premap trend parameter, transform it here already
     # We'll need it transformed later in this loop (for trending other parameters)
     if(k <= sum(pretrend_idx)){
@@ -164,7 +164,6 @@ get_pars_matrix <- function(p_vector,dadm,model) {
   # 7 trial-wise transform
   # 8 bound
 
-  # Niek should constants be included in pre_transform? I think not?
   p_vector <- do_pre_transform(p_vector, model$pre_transform)
   # If there's any premap trends, they're done in map_p
   pars <- map_p(add_constants(p_vector,attr(dadm,"constants")),dadm, model)
@@ -272,13 +271,13 @@ fill_transform <- function(transform, model, p_vector,
       stop("Only ", paste(supported, collapse = ", "), " transforms supported")
     }
     if(!is_pre){
-      if (!all(names(transform$func) %in% names(model()$p_types)))stop("transform on parameter not in the model p_types")
-      if (!all(names(transform$lower) %in% names(model()$p_types)))stop("transform on parameter not in the model p_types")
-      if (!all(names(transform$upper) %in% names(model()$p_types)))stop("transform on parameter not in the model p_types")
+      if (!all(names(transform$func) %in% names(model()$p_types)))stop("func transform on parameter not in the model p_types")
+      if (!all(names(transform$lower) %in% names(model()$p_types)))stop("lower transform on parameter not in the model p_types")
+      if (!all(names(transform$upper) %in% names(model()$p_types)))stop("upper transform on parameter not in the model p_types")
     } else{
       if (!all(names(transform$func) %in% names(p_vector))) stop("pre_transform on parameter not in the sampled_pars")
-      if (!all(names(transform$lower) %in% names(p_vector))) stop("transform on parameter not in the model p_types")
-      if (!all(names(transform$upper) %in% names(p_vector))) stop("transform on parameter not in the model p_types")
+      if (!all(names(transform$lower) %in% names(p_vector))) stop("pre_transform lower on parameter not in the model p_types")
+      if (!all(names(transform$upper) %in% names(p_vector))) stop("pre_transform upper on parameter not in the model p_types")
     }
   }
   model_list <- model()

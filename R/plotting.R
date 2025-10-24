@@ -448,10 +448,10 @@ plot_pars <- function(emc,layout=NA, selection="mu", show_chains = FALSE, plot_p
     MCMC_samples <- list(lapply(MCMC_samples, function(x) do.call(rbind, x)))
     names(MCMC_samples) <- "subjects"
   }
-  psamples <-  get_objects(sampler = emc, design = get_design(emc),
+  psamples <-  do.call(get_objects, c(list(sampler = emc, design = get_design(emc),
                            type = type, sample_prior = T,
                            selection = selection, N = N,
-                           prior = get_prior(emc))
+                           prior = get_prior(emc)), fix_dots(dots, get_objects,consider_dots = F)))
   pMCMC_samples <- do.call(get_pars, c(list(psamples, selection = selection, type = type),
                                        fix_dots(dots, get_pars, exclude = c("thin", "filter", "chain", "subject"))))
   if(length(pMCMC_samples) != length(MCMC_samples)) pMCMC_samples <- rep(pMCMC_samples, length(MCMC_samples))

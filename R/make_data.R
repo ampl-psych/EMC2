@@ -555,6 +555,60 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
     data <- data[,!(names(data) %in% dropNames)]
     for (i in dimnames(Rrt)[[2]]) data[[i]] <- Rrt[,i]
   }
+  pars <- do_transform(pars, model()$transform)
+  if(!is.null(model()$trend) && attr(model()$trend, "posttransform")){
+    # This runs the trend and afterwards removes the trend parameters
+    pars <- prep_trend(data, model()$trend, pars)
+  }
+  pars <- model()$Ttransform(pars, data)
+  pars <- add_bound(pars, model()$bound, data$lR)
+  pars_ok <- attr(pars, 'ok')
+  if (model()$type=="DDM") trials_ok <- pars_ok else {
+      trials_ok <- pars_ok[rep(design$Rlevels==design$Rlevels[1],length.out=length(pars_ok))]
+    }
+  if(any(!trials_ok)){
+    warning(round(100*mean(!trials_ok),2)," % of parameter values fall out of model bounds, see <model_name>$bounds()")
+  }
+  if ( any(dimnames(pars)[[2]]=="pContaminant") && any(pars[,"pContaminant"]>0) )
+    pc <- pars[data$lR==levels(data$lR)[1],"pContaminant"] else pc <- NULL
+  if (expand>1) {
+    data <- cbind(rep=rep(1:expand,each=dim(data)[1]),
+                  data.frame(lapply(data,rep,times=expand)))
+    pars <- apply(pars,2,rep,times=expand)
+  }
+  if (!is.null(staircase)) {
+    attr(data, "staircase") <- staircase
+  }
+  if (any(names(data)=="RACE")) {
+    Rrt <- RACE_rfun(data, pars, model)
+  } else Rrt <- model()$rfun(data,pars)
+  dropNames <- c("lR","lM","lSmagnitude")
+  if (!return_Ffunctions && !is.null(design$Ffunctions))
+    dropNames <- c(dropNames,names(design$Ffunctions))
+  if(!is.null(data$lR)) data <- data[data$lR == levels(data$lR)[1],]
+  data <- data[,!(names(data) %in% dropNames)]
+  for (i in dimnames(Rrt)[[2]]) {
+    data[trials_ok,i] <- Rrt[trials_ok,i]
+    if (any(!trials_ok)) data[!trials_ok,i] <- NA
+  }
+  data <- make_missing(data[,names(data)!="winner"],LT,UT,LC,UC,
+    LCresponse,UCresponse,LCdirection,UCdirection)
+  if ( !is.null(pc) ) {
+    if (!any(is.infinite(data$rt)) & any(is.na(data$R)))
+      stop("Cannot have contamination and censoring with no direction and response")
+    contam <- runif(length(pc)) < pc
+    data[contam,"R"] <- NA
+    if ( LC!=0 | is.finite(UC) ) { # censoring
+      if ( (LCdirection & UCdirection) &  !rtContaminantNA)
+        stop("Cannot have contamination with a mixture of censor directions")
+      if (rtContaminantNA & ((is.finite(LC) & !LCresponse & !LCdirection) |
+                              (is.finite(UC) & !UCresponse & !UCdirection)))
+        stop("Cannot have contamination and censoring with no direction and response")
+      if (rtContaminantNA | (!LCdirection & !UCdirection)) data[contam,"rt"] <- NA else
+        if (LCdirection) data[contam,"rt"] <- -Inf  else data[contam,"rt"] <- Inf
+    } else data[contam,"rt"] <- NA
+  }
+  attr(data,"p_vector") <- parameters;
   if(!is.null(post_functions)){
     for(i in 1:length(post_functions)){
       data[[names(post_functions)[i]]] <- post_functions[[i]](data)

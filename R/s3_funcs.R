@@ -175,12 +175,13 @@ To override this behavior, pass `conditional_on_data=TRUE` to predict().')
       }
     }
     if (hyper) {
-      pars <- vector(mode="list",length=n_post)
-      # for (i in 1:n_post) {
-      #   pars[[i]] <- get_prior_samples(emc,selection="alpha",
-      #                                  stage=stage,thin=thin,filter=filter,n_prior=length(subjects))
-      #   row.names(pars[[i]]) <- subjects
-      # }
+      mu <- do.call(get_pars, c(list(emc, selection = "mu", map = FALSE, return_mcmc = FALSE, merge_chains = TRUE,
+                    length.out = ceiling(n_post/length(emc))), fix_dots(list(...), get_pars)))
+      Sigma <- do.call(get_pars, c(list(emc, selection = "Sigma", map = FALSE, return_mcmc = FALSE, merge_chains = TRUE,
+                     remove_dup = FALSE, remove_constants = FALSE, length.out = ceiling(n_post/length(emc))), fix_dots(list(...), get_pars)))
+      pars <- get_alphas(mu, Sigma, subjects)
+      pars <- pars[,,1:n_post] # With non-equally divisible n_post you get some remainder
+      pars <- lapply(seq_len(dim(pars)[3]), function(i) t(pars[,,i]))
     } else {
       dots$selection <- "alpha"; dots$merge_chains <- TRUE; dots$by_subject <- TRUE
       samps <- do.call(get_pars, c(list(emc), fix_dots(dots, get_pars)))
@@ -990,6 +991,7 @@ credint <- function(x, ...){
 #' @rdname get_data
 #' @export
 get_data.emc <- function(emc) {
+  if(is.null(emc[[1]]$data)) return(NULL) # Prior samples
   if(is.null(emc[[1]]$data[[1]]$subjects)){ # Joint model
     dat <- vector("list", length(emc[[1]]$data[[1]]))
     for(i in 1:length(dat)){
@@ -1076,6 +1078,16 @@ get_design.emc <- function(x){
   return(emc_design)
 }
 
+#' @rdname get_group_design
+#' @export
+get_group_design.emc <- function(x){
+  group_design <- get_group_design(get_prior(x))
+  if(!is.null(group_design))  class(group_design) <- "emc.group_design"
+  return(group_design)
+}
+
+
+
 #' Plot Design
 #'
 #' Makes design illustration by plotting simulated data based on the design
@@ -1128,6 +1140,16 @@ get_design <- function(x){
   UseMethod("get_design")
 }
 
+#' Get Group Design
+#'
+#' Extracts group design from an emc object
+#'
+#' @param x an `emc` or `emc.prior` object
+#' @return A design with class emc.group_design
+#' @export
+get_group_design <- function(x){
+  UseMethod("get_group_design")
+}
 
 
 

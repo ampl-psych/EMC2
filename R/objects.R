@@ -387,16 +387,34 @@ get_pars <- function(emc,selection= "mu", stage=get_last_stage(emc),thin=1,filte
 {
   if(!is.null(emc[[1]]$n_subjects)) emc <- restore_duplicates(emc)
   if(add_recalculated) map <- TRUE
-  if(!(selection %in% c("mu", "alpha"))) map <- FALSE
+  if(!(selection %in% c("mu", "alpha", "Sigma", "sigma2", "covariance", "correlation"))){
+    map <- FALSE
+  }
   if(is.null(type)) type <- emc[[1]]$type
+
   if(type == "single" & !(selection %in% c("LL", "alpha"))) selection <- "alpha"
+  if(!isFALSE(map)){
+    true_selection <- selection
+    selection <- "alpha"
+  }
   samples <- get_objects(type = type, sampler = emc, stage = stage,
                          selection = selection)
 
-  if(map){
-    samples <- lapply(samples, do_map, get_design(emc), include_constants = FALSE,
+  if(!isFALSE(map)){
+    # First map them to subject level parameters
+    samples <- lapply(samples, do_map, map =  map, by_subject = TRUE,
+                      get_design(emc), include_constants = FALSE,
                       add_recalculated = add_recalculated, covariates = covariates,
-                      emc = emc)
+                      emc = emc, data = get_data(emc),
+                      group_design = get_group_design(emc),
+                      selection = true_selection)
+    # Then if required calculate implied group-level parameters
+    if(true_selection != "alpha"){
+      idx <- 1:(dim(samples[[1]])[3])
+      samples <- lapply(samples, group_mapping, selection = true_selection)
+      samples <- get_objects(type, selection = true_selection, sampler = samples)
+    }
+    selection <- true_selection
   }
   if(flatten) remove_dup <- TRUE
   if(!is.null(true_pars)){ # Kluge to make sure the right object dimensions/filtering is performed on simulated parameters
