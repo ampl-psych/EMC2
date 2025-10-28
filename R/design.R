@@ -602,8 +602,11 @@ design_model <- function(data,design,model=NULL,
   sampled_p_names <- p_names[!(p_names %in% names(design$constants))]
   attr(dadm,"p_names") <- p_names
   attr(dadm,"sampled_p_names") <- sampled_p_names
-  if (model()$type=="DDM") nunique <- dim(dadm)[1] else
+  if(is.null(dadm$lR)){
+    nunique <- dim(dadm)[1]
+  } else{
     nunique <- dim(dadm)[1]/length(levels(dadm$lR))
+  }
   if (verbose & compress) message("Likelihood speedup factor: ",
   round(dim(da)[1]/dim(dadm)[1],1)," (",nunique," unique trials)")
 

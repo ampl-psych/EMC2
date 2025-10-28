@@ -227,9 +227,11 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
   pars <- model()$Ttransform(pars, data)
   pars <- add_bound(pars, model()$bound, data$lR)
   pars_ok <- attr(pars, 'ok')
-  if (model()$type=="DDM") trials_ok <- pars_ok else {
-      trials_ok <- pars_ok[rep(design$Rlevels==design$Rlevels[1],length.out=length(pars_ok))]
-    }
+  if(is.null(design$Rlevels)){
+    trials_ok <- pars_ok
+  }  else {
+    trials_ok <- pars_ok[rep(design$Rlevels==design$Rlevels[1],length.out=length(pars_ok))]
+  }
   if(any(!trials_ok)){
     warning(round(100*mean(!trials_ok),2)," % of parameter values fall out of model bounds, see <model_name>$bounds()")
   }

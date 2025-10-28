@@ -59,114 +59,253 @@ load_bessel_values <- function() {
     -0.04600401472786514, 0.045765650353301025, -0.045530953163457046, 0.045299830081161785, -0.04507219130337835
   ))
 }
-
-# First-passage time density for zero-drift 2D diffusion to a circular boundary
+# --- First-passage time density for zero-drift 2D diffusion to a circular boundary
 series_bessel_fpt <- function(t, a = 1, sigma = 1, bessel = NULL) {
+  if (is.null(bessel)) bessel <- load_bessel_values()
+  if (length(t) == 0L) return(numeric(0))
+
+  t <- pmax(as.numeric(t), 0)
+
+  zeros      <- bessel$zeros
+  JVZ        <- bessel$JVZ
+  weights    <- zeros / JVZ
+  base_rates <- (zeros * zeros) / 2  # lambda_n
+
+  v_scale <- (sigma * sigma) / (a * a)
+  s <- t * v_scale
+
+  # Classical eigen-sum for FPT density (zero drift, marginal over angle)
+  # f0(t) = v_scale * sum_{n>=1} (z_n/J1(z_n)) * (1 - e^{-lambda_n s})
+  # use -expm1 for numerical stability in small s
+  delta <- -expm1(-outer(s, base_rates, "*"))
+  out <- as.vector(v_scale * (delta %*% weights))
+  out[out < 0] <- 0
+  out
+}
+
+# --- Small-t safeguard approximation for zero-drift FPT (kept as provided)
+small_t_fpt <- function(t_scaled, x_scaled, bessel = NULL) {
   if (is.null(bessel)) {
     bessel <- load_bessel_values()
   }
+  zeros1 <- bessel$zeros[1]
+  t <- pmax(as.numeric(t_scaled), 0)
+  x <- as.numeric(x_scaled)
+  term1 <- ((1 - x) * (1 + t)) / (sqrt(x + t) * (t^(1.5)))
+  term2 <- exp(-0.5 * (1 - x)^2 / t - 0.5 * zeros1 * zeros1 * t)
+  out <- term1 * term2
+  out[!is.finite(out)] <- 0
+  out
+}
 
-  # Handle empty input
-  if (length(t) == 0L) {
-    return(numeric(0))
-  }
+# --- Interpolate first hit on a circle along a straight segment p -> q
+interpolate_circle_hit <- function(px, py, qx, qy, a) {
+  dx <- qx - px
+  dy <- qy - py
+  A <- dx * dx + dy * dy
+  B <- 2 * (px * dx + py * dy)
+  C <- (px * px + py * py) - (a * a)
+  disc <- B * B - 4 * A * C
 
-  t <- pmax(as.numeric(t), 0)
-  n <- length(t)
+  ok <- is.finite(A) & (A > 0) & is.finite(disc) & (disc >= 0)
+  s <- rep(NA_real_, length(A))
+  s[ok] <- (-B[ok] + sqrt(pmax(disc[ok], 0))) / (2 * A[ok])
 
-  # Pre-compute constants (avoiding repeated arithmetic)
-  zeros <- bessel$zeros
-  JVZ <- bessel$JVZ
-  weights <- zeros / JVZ
-  base_rates <- (zeros * zeros) / 2
+  r0 <- sqrt(px * px + py * py)
+  r1 <- sqrt(qx * qx + qy * qy)
+  denom <- (r1 - r0)
+  s_rad <- ifelse(denom != 0, (a - r0) / denom, 1)
 
-  # Row-specific scaling v = sigma^2 / a^2, and s = t * v
-  v <- (sigma * sigma) / (a * a)
-  s <- t * v
+  bad <- !ok | !is.finite(s) | (s < 0) | (s > 1)
+  s[bad] <- s_rad[bad]
+  s <- pmin(pmax(s, 0), 1)
 
-  # exp(- s_i * base_rates_j) and then row-wise dot with weights, scaled by v_i
-  exp_mat <- exp(-outer(s, base_rates, "*"))
-  as.vector(v * (exp_mat %*% weights))
+  xi <- px + s * dx
+  yi <- py + s * dy
+  angle <- atan2(yi, xi)
+  list(s = s, angle = angle)
 }
 
 ## Joint density of (RT, R) under the Circular Diffusion Model
 #
-# Vectorized over trials via a per-trial parameter matrix `pars` (columns:
-# mu_x, mu_y, a, t0, sigma). Returns a vector of densities/log-densities of
-# the same length as `rt`.
+# Uses per-trial parameter matrix `pars` (columns: v, theta, a, t0, sigma, sv [optional]).
 dCDM <- function(rt, R, pars) {
 
   n <- length(rt)
-  rt    <- as.numeric(rt)
-  R <- as.numeric(R)
-  t0 <- pars[,"t0"]
-  a <- pars[,"a"]
-  mu_x <- pars[,"mu_x"]
-  mu_y <- pars[,"mu_y"]
+  rt <- as.numeric(rt)
+  R  <- as.numeric(R)
+
+  t0    <- pars[,"t0"]
+  a     <- pars[,"a"]
+  v     <- pars[,"v"]
+  theta <- pars[,"theta"]
+  # map theta from (0,1) to [-pi, pi]
+  theta <- (theta - 0.5) * 2 * pi
+
   sigma <- pars[,"sigma"]
+  sv    <- if ("sv" %in% colnames(pars)) as.numeric(pars[,"sv"]) else rep(0, n)
 
-  # First-passage time density per-trial
+  # Guard rail: kappa = a * |mu| / sigma^2 < 5
+  kappa <- (a * v) / (sigma * sigma)
+  ok_kappa <- is.finite(kappa) & (kappa < 5)
+
+  # Precompute zero-drift FPT with a *robust* small-s switch
   bessel <- load_bessel_values()
-  fpt_z <- series_bessel_fpt(rt - t0, a = a, sigma = sigma, bessel = bessel)
+  zeros  <- bessel$zeros
+  lambda_max <- (max(zeros) * max(zeros)) / 2  # last eigen used
+  tt <- pmax(rt - t0, 0)
 
-  cos_theta <- cos(R)
-  sin_theta <- sin(R)
-  mu_sq <- mu_x * mu_x + mu_y * mu_y
-  term1 <- a * (mu_x * cos_theta + mu_y * sin_theta)
-  term2 <- 0.5 * mu_sq * (rt - t0)
+  # scale s = t * sigma^2 / a^2; smooth small-t handling using blending window
+  v_scale <- (sigma * sigma) / (a * a)
+  s <- tt * v_scale
+  s0 <- 0.002
+  s1 <- 0.02
+  fpt_series <- series_bessel_fpt(tt, a = a, sigma = sigma, bessel = bessel)
+  fpt_small  <- v_scale * small_t_fpt(t_scaled = s,
+                                      x_scaled = 1e-8 / (a*a),
+                                      bessel = bessel)
+  w <- pmin(pmax((s - s0) / (s1 - s0), 0), 1)
+  fpt <- (1 - w) * fpt_small + w * fpt_series
 
-  raw_density <- exp(term1 - term2) * fpt_z
-  raw_density[raw_density < 0] <- 0
-  return(raw_density)
+  # safety: nonnegative and finite
+  fpt[!is.finite(fpt) | (fpt < 0)] <- 0
+  log_fpt <- log(pmax(fpt, .Machine$double.xmin))
+
+  # Angle stuff
+  cosR <- cos(R)
+  sinR <- sin(R)
+  cosT <- cos(theta)
+  sinT <- sin(theta)
+  cosRth <- cosR * cosT + sinR * sinT
+
+  v2 <- v * v
+  log_raw <- rep(-Inf, n)
+
+  # sv == 0 : constant-drift likelihood (Girsanov at stopping time)
+  idx0 <- (sv <= 0)
+  if (any(idx0)) {
+    sig2_0 <- sigma[idx0]^2
+    log_time0 <- -0.5 * (v2[idx0] * tt[idx0]) / sig2_0
+    ang0 <- (a[idx0] * v[idx0] * cosRth[idx0]) / sig2_0
+    log_raw[idx0] <- log_fpt[idx0] + log_time0 + ang0 - log(2*pi)
+  }
+
+  # sv > 0 : integrated Gaussian drift variability (dimensionally correct)
+  idxv <- (sv > 0)
+  if (any(idxv)) {
+    tt_v <- pmax(tt[idxv], .Machine$double.eps)
+    sig2 <- sigma[idxv]^2
+    sv2  <- sv[idxv]^2
+    D    <- sig2 + sv2 * tt_v
+
+    # determinant constant for 2D
+    log_det <- -log(D) + log(sig2 * sv2)
+    # radius, angular, time terms
+    log_rad <- 0.5 * (a[idxv]^2 * sv2) / (sig2 * D)
+    log_ang <- (a[idxv] * v[idxv] * cosRth[idxv]) / D
+    log_tim <- -0.5 * (v2[idxv] * tt_v) / D
+
+    log_raw[idxv] <- log_fpt[idxv] + log_det + log_rad + log_ang + log_tim - log(2*pi)
+  }
+
+  # Apply SNR guard rail
+  log_raw[!ok_kappa] <- -Inf
+
+  dens <- exp(log_raw)
+  dens[!is.finite(dens)] <- 0
+  return(dens)
 }
 
 ## Generator for the Circular Diffusion Model
-#
-# Simulates one (rt, R) per row of `pars` (columns: mu_x, mu_y, a, t0, sigma).
 rCDM <- function(pars, ok = rep(TRUE, nrow(pars)), dt = 0.001, max_steps = 1e7L) {
-  if (!is.matrix(pars)) stop("'pars' must be a matrix with columns mu_x, mu_y, a, t0, sigma")
   n <- nrow(pars)
   out <- data.frame(rt = rep(NA_real_, n), R = rep(NA_real_, n))
   if (n == 0L) return(out)
-  if (!is.numeric(dt) || length(dt) != 1L || !is.finite(dt) || dt <= 0) stop("'dt' must be a single positive finite number.")
 
-  mu_x <- as.numeric(pars[,"mu_x"]) ; mu_y <- as.numeric(pars[,"mu_y"]) ;
-  a    <- as.numeric(pars[,"a"])    ; t0   <- as.numeric(pars[,"t0"])   ;
-  sigma<- as.numeric(pars[,"sigma"]) ;
+  v     <- as.numeric(pars[,"v"])
+  theta <- as.numeric(pars[,"theta"])
+  # map theta from (0,1) to [-pi, pi]
+  theta <- (theta - 0.5) * 2 * pi
+  a     <- as.numeric(pars[,"a"])
+  t0    <- as.numeric(pars[,"t0"])
+  sigma <- as.numeric(pars[,"sigma"])
+  sv    <- if ("sv" %in% colnames(pars)) as.numeric(pars[,"sv"]) else rep(0, n)
 
   idx <- which(ok)
   if (length(idx) == 0L) return(out)
 
-  for (i in idx) {
-    ax   <- a[i]; t0_i <- t0[i]; sig_i <- sigma[i]
-    muxy <- c(mu_x[i], mu_y[i])
-    if (!is.finite(ax) || ax <= 0) next
-    if (!is.finite(t0_i) || t0_i < 0) next
-    if (!is.finite(sig_i) || sig_i <= 0) next
+  # Filter valid trials up-front (preserve NA for invalid)
+  ax <- a[idx]; t0_i <- t0[idx]; sig_i <- sigma[idx]
+  valid <- is.finite(ax) & (ax > 0) & is.finite(t0_i) & (t0_i >= 0) & is.finite(sig_i) & (sig_i > 0)
+  if (!any(valid)) return(out)
 
-    x <- c(0.0, 0.0)
-    rt_i <- 0.0
-    steps <- 0L
-    sqrt_dt_sigma <- sqrt(dt) * sig_i
-    drift_inc <- muxy * dt
-    a_sq <- ax * ax
-    repeat {
-      r_sq <- x[1] * x[1] + x[2] * x[2]
-      if (r_sq >= a_sq) break
+  sel <- idx[valid]
+  n_act <- length(sel)
 
-      # Euler-Maruyama step: dx = mu*dt + sigma*sqrt(dt)*dW
-      x <- x + drift_inc + sqrt_dt_sigma * stats::rnorm(2L)
-      rt_i <- rt_i + dt
-      steps <- steps + 1L
-      if (steps >= max_steps) stop("Maximum number of steps reached; consider increasing 'a' or 'dt'.")
+  ax   <- a[sel]
+  t0_i <- t0[sel]
+  sig_i<- sigma[sel]
+  sv_i <- sv[sel]
+
+  # Per-trial drift with between-trial variability (if sv > 0)
+  mu_x <- v * cos(theta)
+  mu_y <- v * sin(theta)
+  mu_mat <- cbind(mu_x[sel], mu_y[sel])
+  if (any(is.finite(sv_i) & (sv_i > 0))) {
+    idx_sv <- is.finite(sv_i) & (sv_i > 0)
+    k <- sum(idx_sv)
+    if (k > 0) {
+      noise <- matrix(stats::rnorm(k * 2L), nrow = k, ncol = 2L)
+      mu_mat[idx_sv, ] <- mu_mat[idx_sv, ] + noise * sv_i[idx_sv]
     }
-    out$R[i] <- atan2(x[2], x[1])
-    out$rt[i]    <- t0_i + rt_i
   }
+
+  # Initialize state
+  x <- matrix(0.0, nrow = n_act, ncol = 2L)
+  rt_vec <- rep(0.0, n_act)
+  done <- rep(FALSE, n_act)
+  R_out <- rep(NA_real_, n_act)
+  rt_out <- rep(NA_real_, n_act)
+
+  drift_inc <- mu_mat * dt
+  sqrt_dt_sigma <- sqrt(dt) * sig_i
+  a_sq <- ax * ax
+
+  steps <- 0L
+  repeat {
+    if (all(done)) break
+    steps <- steps + 1L
+    if (steps >= max_steps) stop("Maximum number of steps reached; consider increasing 'a' or 'dt'.")
+
+    active <- !done
+    k <- sum(active)
+    # Euler-Maruyama step
+    if (k > 0) {
+      x_prev <- x
+      noise <- matrix(stats::rnorm(k * 2L), nrow = k, ncol = 2L)
+      x[active, ] <- x[active, ] + drift_inc[active, ] + sweep(noise, 1L, sqrt_dt_sigma[active], "*")
+      rt_vec[active] <- rt_vec[active] + dt
+    }
+
+    r_sq <- x[,1] * x[,1] + x[,2] * x[,2]
+    newly <- (!done) & (r_sq >= a_sq)
+    if (any(newly)) {
+      ii <- which(newly)
+      hit <- interpolate_circle_hit(
+        px = x_prev[ii, 1L], py = x_prev[ii, 2L],
+        qx = x[ii, 1L],      qy = x[ii, 2L],
+        a = ax[ii]
+      )
+      R_out[ii] <- hit$angle
+      rt_out[ii] <- t0_i[ii] + (rt_vec[ii] - (1 - hit$s) * dt)
+      done[ii] <- TRUE
+    }
+  }
+
+  out$R[sel] <- R_out
+  out$rt[sel] <- rt_out
   out
 }
-
-
 
 #' The Circular Diffusion Model (CDM)
 #'
@@ -179,35 +318,39 @@ rCDM <- function(pars, ok = rep(TRUE, nrow(pars)), dt = 0.001, max_steps = 1e7L)
 #'
 #' | Parameter | Transform | Natural scale | Default   | Interpretation |
 #' |-----------|-----------|---------------|-----------|----------------|
-#' | mu_x      | identity  | (-Inf, Inf)   | 0         | Drift x-component |
-#' | mu_y      | identity  | (-Inf, Inf)   | 0         | Drift y-component |
+#' | v         | exp       | (0, Inf)      | exp(0)=1  | Drift magnitude |
+#' | theta     | pnorm     | (-Inf, Inf)   | qnorm(0.5)=0 | Drift direction (probit-transformed, mapped to [-pi, pi]) |
 #' | a         | log       | (0, Inf)      | log(1)    | Boundary radius |
-#' | t0       | log       | [0, Inf)      | log(0)    | Non-decision time |
+#' | t0        | log       | [0, Inf)      | log(0)    | Non-decision time |
 #' | sigma     | log       | (0, Inf)      | log(1)    | Diffusion scale |
+#' | sv        | log       | [0, Inf)      | log(0)    | Drift SD across trials |
 #'
 #'
 #' @return A model list compatible with `design()` and EMC2 fitting routines.
 #' @export
 CDM <- function(){
   list(
-    type = "DDM",
+    type = "CDM",
     p_types = c(
-      "mu_x" = 0,
-      "mu_y" = 0,
+      "v"     = 0,
+      "theta" = qnorm(0.5),
       "a"    = log(1),
       "t0"  = log(0),
-      "sigma"= log(1)
+      "sigma"= log(1),
+      "sv"   = log(0)
     ),
-    transform = list(func = c(mu_x = "identity", mu_y = "identity",
-                              a = "exp", t0 = "exp", sigma = "exp")),
+    transform = list(func = c(v = "exp", theta = "pnorm",
+                              a = "exp", t0 = "exp", sigma = "exp", sv = "exp")),
     bound = list(
       minmax = cbind(
-        mu_x = c(-10, 10),
-        mu_y = c(-10, 10),
-        a    = c(1e-4, 10),
+        v     = c(0, 10),
+        theta = c(1e-4, 1-1e-4),
+        a    = c(1e-4, 7),
         t0  = c(0.05, Inf),
-        sigma= c(1e-4, Inf)
-      )
+        sigma= c(1e-4, Inf),
+        sv   = c(0, 2)
+      ),
+      exception = c(sv = 0)
     ),
     Ttransform = function(pars, dadm) { pars },
     # Random function: directly call rCDM with per-trial parameters

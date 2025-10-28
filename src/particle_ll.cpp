@@ -4,6 +4,7 @@
 #include "model_LBA.h"
 #include "model_RDM.h"
 #include "model_DDM.h"
+#include "model_CDM.h"
 #include "model_MRI.h"
 #include "trend.h"
 using namespace Rcpp;
@@ -250,6 +251,24 @@ NumericMatrix get_pars_matrix(NumericVector p_vector, NumericVector constants, L
   return(pars);
 }
 
+
+
+// Mirror of c_log_likelihood_DDM but for CDM (R is numeric angle)
+double c_log_likelihood_CDM(NumericMatrix pars, DataFrame data,
+                                   const int n_trials, IntegerVector expand,
+                                   double min_ll, LogicalVector is_ok){
+  NumericVector rts = data["rt"]; // numeric
+  NumericVector Rs  = data["R"];  // numeric angles
+  NumericVector lls(n_trials);
+  NumericVector lls_exp(expand.length());
+  lls = c_dCDM(rts, Rs, pars, is_ok);
+  lls_exp = c_expand(lls, expand); // decompress
+  lls_exp[is_na(lls_exp)] = min_ll;
+  lls_exp[is_infinite(lls_exp)] = min_ll;
+  lls_exp[lls_exp < min_ll] = min_ll;
+  return sum(lls_exp);
+}
+
 double c_log_likelihood_DDM(NumericMatrix pars, DataFrame data,
                             const int n_trials, IntegerVector expand,
                             double min_ll, LogicalVector is_ok){
@@ -358,6 +377,20 @@ NumericVector calc_ll(NumericMatrix p_matrix, DataFrame data, NumericVector cons
       }
       is_ok = c_do_bound(pars, bound_specs);
       lls[i] = c_log_likelihood_DDM(pars, data, n_trials, expand, min_ll, is_ok);
+    }
+  } else if(type == "CDM"){
+    IntegerVector expand = data.attr("expand");
+    for(int i = 0; i < n_particles; i++){
+      p_vector = p_matrix(i, _);
+      if(i == 0){
+        p_specs = make_pretransform_specs(p_vector, pretransforms);
+      }
+      pars = get_pars_matrix(p_vector, constants, transforms, p_specs, p_types, designs, n_trials, data, trend);
+      if (i == 0) {
+        bound_specs = make_bound_specs(minmax,mm_names,pars,bounds);
+      }
+      is_ok = c_do_bound(pars, bound_specs);
+      lls[i] = c_log_likelihood_CDM(pars, data, n_trials, expand, min_ll, is_ok);
     }
   } else if(type == "MRI" || type == "MRI_AR1"){
     int n_pars = p_types.length();
