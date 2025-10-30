@@ -599,27 +599,6 @@ design_model <- function(data,design,model=NULL,
       attr(dadm,"expand") <- 1:nrow(dadm)
     } else{
       attr(dadm,"expand") <- 1:(nrow(dadm)/length(unique(dadm$lR)))
-
-      ## at filtering
-      trend <- design$model()$trend
-      for(trend_name in names(trend)) {
-        if('at' %in% names(trend[[trend_name]])) {
-          if(!is.null(trend[[trend_name]]$at)) {
-            at_factor <- trend[[trend_name]]$at
-            # Extract original covariate name by removing the suffix
-            cov_names <- gsub(paste0('_',at_factor,'filtered'), '', trend[[trend_name]]$covariate)
-            for(cov_name in cov_names) {
-              # copy to new column, filter by first level of the specified factor
-              if(cov_name %in% colnames(dadm)) {
-                ## Needed: In case or `rt`, the covariate is not present in minimal_design.. But this is an ugly solution.
-                dadm[,trend[[trend_name]]$covariate] <- dadm[,cov_name]
-                dadm[dadm[[at_factor]]!=levels(dadm[[at_factor]])[1],trend[[trend_name]]$covariate] <- NA
-              }
-            }
-          }
-        }
-      }
-      ## end SM
     }
   }
   p_names <-  unlist(lapply(out,function(x){dimnames(x)[[2]]}),use.names=FALSE)

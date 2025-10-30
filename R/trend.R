@@ -413,9 +413,7 @@ run_trend <- function(dadm, trend, param, trend_pars, pars_full = NULL,
         subset_input[!idx_at, ] <- NA_real_
       }
       kernel_out <- run_kernel(kernel_pars[s_idx,], trend$kernel, subset_input, funptr = funptr)
-      if (use_at_filter) {
-        kernel_out <- apply_forward_fill(kernel_out, dat, trend$at)
-      }
+      kernel_out <- apply_forward_fill(kernel_out, dat, trend$at)
     }
     kernel_out[is.na(kernel_out)] <- 0
     out[s_idx] <- out[s_idx] + kernel_out
@@ -505,12 +503,8 @@ run_delta <- function(q0,alpha,covariate) {
   if(length(q) == 1) return(q)  # only 1 trial, cannot be updated
 
   for (i in 2:length(q)) {
-    if(is.na(q0[i])) {
-      pe[i-1] <- covariate[i-1]-q[i-1]
-      q[i] <- q[i-1] + alpha[i-1]*pe[i-1]
-    } else {
-      q[i] <- q0[i]
-    }
+    pe[i-1] <- covariate[i-1]-q[i-1]
+    q[i] <- q[i-1] + alpha[i-1]*pe[i-1]
   }
   return(q)
 }
@@ -520,18 +514,14 @@ run_delta2 <- function(q0,alphaFast,propSlow,dSwitch,covariate) {
   q[1] <- qFast[1] <- qSlow[1] <- q0[1]
   alphaSlow <- propSlow*alphaFast
   for (i in 2:length(covariate)) {
-    if(!is.na(q0[i])) {
-      qFast[i] <- qSlow[i] <- q[i] <- q0[i]
-    } else {
-      peFast[i-1] <- covariate[i-1]-qFast[i-1]
-      peSlow[i-1] <- covariate[i-1]-qSlow[i-1]
-      qFast[i] <- qFast[i-1] + alphaFast[i-1]*peFast[i-1]
-      qSlow[i] <- qSlow[i-1] + alphaSlow[i-1]*peSlow[i-1]
-      if (abs(qFast[i]-qSlow[i])>dSwitch[i]){
-        q[i] <- qFast[i]
-      } else{
-        q[i] <- qSlow[i]
-      }
+    peFast[i-1] <- covariate[i-1]-qFast[i-1]
+    peSlow[i-1] <- covariate[i-1]-qSlow[i-1]
+    qFast[i] <- qFast[i-1] + alphaFast[i-1]*peFast[i-1]
+    qSlow[i] <- qSlow[i-1] + alphaSlow[i-1]*peSlow[i-1]
+    if (abs(qFast[i]-qSlow[i])>dSwitch[i]){
+      q[i] <- qFast[i]
+    } else{
+      q[i] <- qSlow[i]
     }
   }
   return(q)
@@ -836,106 +826,94 @@ verbal_trend <- function(design_matrix, trend) {
   }
   trend_str
 }
-# One-step delta updates (used to carry Q state between trials)
-delta_next <- function(q_prev, alpha_prev, cov_prev) {
-  # q_t = q_{t-1} + alpha * (c_{t-1} - q_{t-1})
-  q_prev + alpha_prev * (cov_prev - q_prev)
-}
-delta2_next <- function(q_prev, q_fast_prev, q_slow_prev, alpha_fast_prev, prop_slow_prev, d_switch_prev, cov_prev) {
-  pe_fast <- cov_prev - q_fast_prev
-  pe_slow <- cov_prev - q_slow_prev
-  qf <- q_fast_prev + alpha_fast_prev * pe_fast
-  qs <- q_slow_prev + (prop_slow_prev * alpha_fast_prev) * pe_slow
-  if (abs(qf - qs) > d_switch_prev) qf else qs
-}
 
-# Overridden sequential unconditional simulator (always sequential per-subject, per-trial)
+
 make_data_unconditional <- function(data, pars, design, model, return_trialwise_parameters) {
-  model_ <- model()
-  if(!'lR' %in% colnames(data)) data$lR <- factor(rep(1, nrow(data)))
-  # Build design scaffolding without simulating outcomes
+  model_fun <- model
+  model_list <- model()
+  includeColumns <- colnames(data)
+
+  # Initial scaffolding (attributes and factor setup)
   data <- design_model(
-    add_accumulators(data, design$matchfun, simulate = FALSE, type = model_ $type, Fcovariates = design$Fcovariates),
-    design, model, add_acc = FALSE, compress = FALSE, verbose = FALSE, rt_check = FALSE)
-  
+    add_accumulators(data,design$matchfun,simulate=TRUE,type=model_list$type,Fcovariates=design$Fcovariates),
+    design,model_fun,add_acc=FALSE,compress=FALSE,verbose=FALSE,
+    rt_check=FALSE)
+
   # Prepare trialwise parameters store if requested (one row per data row)
   trialwise_parameters <- NULL
   if (isTRUE(return_trialwise_parameters)) {
-    trialwise_parameters <- matrix(NA_real_, nrow = nrow(data), ncol = length(model_ $p_types))
-    colnames(trialwise_parameters) <- names(model_ $p_types)
+    trialwise_parameters <- matrix(NA_real_, nrow = nrow(data), ncol = length(model_list$p_types))
+    colnames(trialwise_parameters) <- names(model_list$p_types)
   }
 
-  # Iterate per subject, then per trial 
+  # Iterate per subject, then per trial
   subj_levels <- levels(data$subjects)
   for (subj in subj_levels) {
     idx_subj_all <- which(data$subjects == subj)
     if (!length(idx_subj_all)) next
     trials_subj <- data$trials[idx_subj_all]
     trial_vals <- sort(unique(trials_subj))
-    # baseline row per trial (first lR level if present)
-    baseline_rows <- integer(0)
-    for (tv in trial_vals) {
-      rows_t <- idx_subj_all[trials_subj == tv]
-      if (length(rows_t) == 1 || !('lR' %in% names(data))) {
-        baseline_rows <- c(baseline_rows, rows_t[1])
-      } else {
-        lr_levels <- levels(data$lR)
-        first_level <- lr_levels[1]
-        pick <- rows_t[data$lR[rows_t] == first_level]
-        if (length(pick)) baseline_rows <- c(baseline_rows, pick[1]) else baseline_rows <- c(baseline_rows, rows_t[1])
-      }
-    }
 
-    for (j in seq_along(baseline_rows)) {
-      irow <- baseline_rows[j]
-      prefix <- baseline_rows[seq_len(j)]
-      # Standard pipeline on the subject prefix so stateful and outcome-based covariates update correctly
-      pm <- map_p(pars, data[prefix, , drop = FALSE], model_, FALSE)
-      tr <- model_ $trend
+    for (j in seq_along(trial_vals)) {
+
+
+      current_trial <- trial_vals[j]
+      prefix_rows <- idx_subj_all[trials_subj %in% trial_vals[seq_len(j)]]
+      current_rows <- idx_subj_all[trials_subj == current_trial]
+
+      # Rebuild design for the current prefix so that map_p uses updated designs
+      dm <- design_model(data[prefix_rows, ],design, model_fun, add_acc = FALSE, compress = FALSE, verbose = FALSE, rt_check = FALSE)
+
+      mask_current <- dm$subjects == subj & dm$trials == current_trial
+      if (!any(mask_current)) next
+
+      # Standard mapping + trends + transforms on the prefix
+      pm <- map_p(pars, dm, model_list, TRUE)
+      tr <- model_list$trend
       if (!is.null(tr)) {
         phases <- vapply(tr, function(x) x$phase, character(1))
-        if (any(phases == "pretransform")) pm <- prep_trend_phase(data[prefix, , drop = FALSE], tr, pm, "pretransform", FALSE)
+        if (any(phases == "pretransform")) pm <- prep_trend_phase(dm, tr, pm, "pretransform", TRUE)
       }
-      pm <- do_transform(pm, model_ $transform)
-      if (!is.null(tr) && any(phases == "posttransform")) pm <- prep_trend_phase(data[prefix, , drop = FALSE], tr, pm, "posttransform", FALSE)
-      pr_all <- model_ $Ttransform(pm, data[prefix, , drop = FALSE])
-      pr_all <- add_bound(pr_all, model_ $bound, data$lR[prefix])
-      pr <- pr_all[j, , drop = FALSE]
+      pm <- do_transform(pm, model_list$transform)
+      if (!is.null(tr) && any(phases == "posttransform")) pm <- prep_trend_phase(dm, tr, pm, "posttransform", TRUE)
+      cur_dm <- dm[mask_current, , drop = FALSE]
+      pr <- model_list$Ttransform(pm[mask_current, , drop = FALSE], cur_dm)
+      pr <- add_bound(pr, model_list$bound, cur_dm$lR)
 
-      # Simulate current trial only (write into baseline row)
-      if (any(names(data) == "RACE")) {
-        Rrt <- RACE_rfun(data[irow, , drop = FALSE], pr, model)
+      # Identify current-trial rows inside the prefix design
+
+
+      # Simulate current trial rows
+      if (any(names(dm) == "RACE")) {
+        Rrt <- RACE_rfun(cur_dm, pr, model_fun)
       } else {
-        Rrt <- model_ $rfun(data[irow, , drop = FALSE], pr)
+        Rrt <- model_list$rfun(cur_dm, pr)
       }
-      for (nm in dimnames(Rrt)[[2]]) data[irow, nm] <- Rrt[, nm]
+      # Write outputs back to original data rows for the current trial
+      target_rows <- prefix_rows[mask_current]
+      for (nm in dimnames(Rrt)[[2]]) data[target_rows, nm] <- Rrt[, nm]
 
       # Optional per-trend feedback → next trial for this subject
-      if (!is.null(tr) && j < length(baseline_rows)) {
-        for (ti in seq_along(tr)) if (!is.null(tr[[ti]]$feedback_generator)) {
-          row_win <- data[irow, , drop = FALSE]
-          row_win <- row_win[row_win$lR == levels(row_win$lR)[1], , drop = FALSE]
-          fb <- tr[[ti]]$feedback_generator(row_win)
-          if (is.data.frame(fb) || is.list(fb)) {
-            for (cn in names(fb)) data[baseline_rows[j+1], cn] <- fb[[cn]]
-          } else {
-            cn <- if (is.null(tr[[ti]]$feedback_columns)) "reward" else tr[[ti]]$feedback_columns[1]
-            data[baseline_rows[j+1], cn] <- fb
-          }
+      if(!is.null(tr) && !is.null(tr$feedback_fun)){
+        nams <- names(tr$feedback_fun)
+        # Build the window: current prefix plus next-trial rows (if any)
+        if (j < length(trial_vals)) {
+          next_rows <- idx_subj_all[trials_subj == trial_vals[j+1]]
+          window_rows <- c(prefix_rows, next_rows)
+        } else {
+          window_rows <- prefix_rows
+        }
+        for(i in 1:length(nams)){
+          fb_vec <- tr$feedback_fun[[i]](data[window_rows,,drop=FALSE])
+          data[window_rows, nams[i]] <- fb_vec
         }
       }
 
-      # Recompute Ffunctions for next-row if any depend on updated columns
-      if (!is.null(design$Ffunctions) && j < length(baseline_rows)) {
-        next_row <- baseline_rows[j+1]
-        for (nm in names(design$Ffunctions)) {
-          data[next_row, nm] <- design$Ffunctions[[nm]](data[next_row, , drop = FALSE])
-        }
-      }
-
-      if (!is.null(trialwise_parameters)) trialwise_parameters[irow, ] <- pr[1, , drop = FALSE]
+      # Store trialwise parameters if requested
+      if (!is.null(trialwise_parameters)) trialwise_parameters[target_rows, ] <- pr
     }
   }
-
+  data <- data[data$lR == 1, includeColumns]
+  data <- data[,!colnames(data) %in% c('lR', 'lM')]
   return(list(data = data, covariates = NULL, trialwise_parameters = trialwise_parameters))
 }

@@ -209,11 +209,6 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
     if ( is.null(model()$Ttransform) ) stop("model()$Ttransform must be specified")
   }
 
-  data <- design_model(
-    add_accumulators(data,design$matchfun,simulate=TRUE,type=model()$type,Fcovariates=design$Fcovariates),
-    design,model,add_acc=FALSE,compress=FALSE,verbose=FALSE,
-    rt_check=FALSE)
-
   simulate_unconditional_on_data <- return_trialwise_parameters <- FALSE
   dots_local <- list(...)
   if (isFALSE(dots_local$conditional_on_data)) {
@@ -227,17 +222,13 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
   pars <- t(apply(parameters, 1, do_pre_transform, model()$pre_transform))
   pars <- add_constants(pars,design$constants)
   if(simulate_unconditional_on_data) {
-    out <- make_data_unconditional(data=data, pars=pars, design=design, model=model,
+    data <- make_data_unconditional(data=data, pars=pars, design=design, model=model,
                                    return_trialwise_parameters)
-    data <- out$data
-    covariates <- out$covariates
-    trialwise_parameters <- out$trialwise_parameters
-
-    # add contamination
-    if ( any(dimnames(pars)[[2]]=="pContaminant") && any(pars[,"pContaminant"]>0) )
-      pc <- pars[data$lR==levels(data$lR)[1],"pContaminant"] else pc <- NULL
-
   } else{
+    data <- design_model(
+      add_accumulators(data,design$matchfun,simulate=TRUE,type=model()$type,Fcovariates=design$Fcovariates),
+      design,model,add_acc=FALSE,compress=FALSE,verbose=FALSE,
+      rt_check=FALSE)
     pars <- map_p(pars,data, model(), return_trialwise_parameters)
 
     if(!is.null(model()$trend)){
@@ -266,8 +257,6 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
       warning("More than 10% of parameter values fall out of model bounds, see <model_name>$bounds()")
       return(FALSE)
     }
-    if ( any(dimnames(pars)[[2]]=="pContaminant") && any(pars[,"pContaminant"]>0) )
-      pc <- pars[data$lR==levels(data$lR)[1],"pContaminant"] else pc <- NULL
     if (expand>1) {
       data <- cbind(rep=rep(1:expand,each=dim(data)[1]),
                     data.frame(lapply(data,rep,times=expand)))
@@ -279,7 +268,7 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
     if (any(names(data)=="RACE")) {
       Rrt <- RACE_rfun(data, pars, model)
     } else Rrt <- model()$rfun(data,pars)
-    dropNames <- c("lR","lM","lSmagnitude")
+    dropNames <- c("lR","lM")
     if (!return_Ffunctions && !is.null(design$Ffunctions))
       dropNames <- c(dropNames,names(design$Ffunctions))
     if(!is.null(data$lR)) data <- data[data$lR == levels(data$lR)[1],]
