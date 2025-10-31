@@ -454,7 +454,7 @@ plot_pars <- function(emc,layout=NA, selection="mu", show_chains = FALSE, plot_p
                            prior = get_prior(emc)), fix_dots(dots, get_objects,consider_dots = F)))
   pMCMC_samples <- do.call(get_pars, c(list(psamples, selection = selection, type = type),
                                        fix_dots(dots, get_pars, exclude = c("thin", "filter", "chain", "subject"))))
-  if(length(pMCMC_samples) != length(MCMC_samples)) pMCMC_samples <- rep(pMCMC_samples, length(MCMC_samples))
+  if(length(pMCMC_samples) < length(MCMC_samples)) pMCMC_samples <- rep(pMCMC_samples, length(MCMC_samples))
 
   true_MCMC_samples <- NULL
   if(!is.null(true_pars)){
@@ -472,7 +472,14 @@ plot_pars <- function(emc,layout=NA, selection="mu", show_chains = FALSE, plot_p
   contraction_list <- list()
   for(i in 1:n_objects){
     cur_mcmc <- MCMC_samples[[i]]
-    merged <- do.call(rbind, cur_mcmc) # Need for contraction calculation
+    all_cols <- unique(unlist(lapply(cur_mcmc, colnames)))
+    cur_mcmc <- lapply(cur_mcmc, function(m) {
+      m <- cbind(m, matrix(NA_real_, nrow(m), length(setdiff(all_cols, colnames(m))),
+                           dimnames = list(NULL, setdiff(all_cols, colnames(m)))))
+      m[, all_cols, drop = FALSE]
+    })
+    merged <- do.call(rbind, cur_mcmc)
+    # merged <- do.call(rbind, cur_mcmc_filled)
     if(!show_chains) {
       cur_mcmc <- list(merged)
       if(!is.null(true_MCMC_samples)) true_MCMC_samples[[i]] <- list(do.call(rbind, true_MCMC_samples[[i]]))
@@ -486,8 +493,15 @@ plot_pars <- function(emc,layout=NA, selection="mu", show_chains = FALSE, plot_p
       par(mfrow=layout)
     }
     for(l in 1:n_pars){
-      denses <- lapply(cur_mcmc, function(x) do.call(density, c(list(x[,l]), fix_dots(dots, density.default, consider_dots = FALSE))))
-      xlim <- range(c(sapply(cur_mcmc, function(x) return(range(x[,l]))), true_pars[[i]][[1]][,l]))
+      denses <- lapply(cur_mcmc, function(x){
+        if(is.na(x[1,l])) return(NULL)
+        do.call(density, c(list(x[,l]), fix_dots(dots, density.default, consider_dots = FALSE)))
+      })
+      denses <- denses[!sapply(denses, is.null)]
+      xlim <- range(c(sapply(cur_mcmc, function(x) {
+        if(is.na(x[1,l])) return(NA)
+        range(x[,l])
+        }), true_pars[[i]][[1]][,l]), na.rm = TRUE)
       ylim <- range(sapply(denses, function(x) return(range(x$y))))
       if(ncol(pMCMC_samples[[i]][[1]]) != n_pars){
         p_idx <- 1
@@ -503,10 +517,17 @@ plot_pars <- function(emc,layout=NA, selection="mu", show_chains = FALSE, plot_p
         }
       }
       if(!is.null(true_MCMC_samples)){
-        true_denses <- lapply(true_MCMC_samples[[i]], function(x) do.call(density, c(list(x[,l]), fix_dots(dots, density.default, consider_dots = FALSE))))
-        xlim <- range(c(sapply(true_MCMC_samples[[i]], function(x) return(range(x[,l]))), xlim))
+        true_denses <- lapply(true_MCMC_samples[[i]], function(x){
+          if(is.na(x[1,l])) return(NULL)
+          do.call(density, c(list(x[,l]), fix_dots(dots, density.default, consider_dots = FALSE)))
+        })
+        xlim <- range(c(sapply(true_MCMC_samples[[i]], function(x) {
+          if(is.na(x[1,l])) return(NULL)
+          range(x[,l])
+        }), true_pars[[i]][[1]][,l]))
         ylim <- range(c(sapply(true_denses, function(x) return(range(x$y))), ylim))
       }
+      n_chains <- length(denses)
       for(k in 1:n_chains){
         x_name <- ifelse(n_objects == 1, names(MCMC_samples)[i], paste0(selection, ": ", names(MCMC_samples)[i]))
         if(k == 1){
@@ -525,7 +546,7 @@ plot_pars <- function(emc,layout=NA, selection="mu", show_chains = FALSE, plot_p
         cur_true_args <- add_defaults(true_args, col = "darkgreen", lwd = 1.5, lty = 2)
         do.call(abline, c(list(v = true_pars[[i]][[1]][,l]), fix_dots_plot(cur_true_args)))
       }
-      cur_contraction[l] <- 1-(var(merged[,l])/var(pMCMC_samples[[i]][[1]][,p_idx]))
+      cur_contraction[l] <- 1-(var(merged[,l], na.rm = TRUE)/var(pMCMC_samples[[i]][[1]][,p_idx]))
       if(plot_prior){
         cur_prior_args <- add_defaults(prior_args, col = "red")
         do.call(lines, c(list(pdenses), fix_dots_plot(cur_prior_args)))
