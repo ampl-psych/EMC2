@@ -894,13 +894,11 @@ make_data_unconditional <- function(data, pars, design, model, return_trialwise_
   model_fun <- model
   model_list <- model()
   includeColumns <- colnames(data)
-
   # Initial scaffolding (attributes and factor setup)
   data <- design_model(
-    add_accumulators(data,design$matchfun,simulate=TRUE,type=model_list$type,Fcovariates=design$Fcovariates),
+    add_accumulators(data,design$matchfun,simulate=FALSE,type=model_list$type,Fcovariates=design$Fcovariates),
     design,model_fun,add_acc=FALSE,compress=FALSE,verbose=FALSE,
     rt_check=FALSE)
-
   # Prepare trialwise parameters store if requested (one row per data row)
   trialwise_parameters <- NULL
   if (isTRUE(return_trialwise_parameters)) {
@@ -977,7 +975,7 @@ make_data_unconditional <- function(data, pars, design, model, return_trialwise_
       if (!is.null(trialwise_parameters)) trialwise_parameters[target_rows, ] <- pr
     }
   }
-  data <- data[data$lR == 1, includeColumns]
+  data <- data[data$lR == 1, unique(c(includeColumns, "R", "rt"))]
   data <- data[,!colnames(data) %in% c('lR', 'lM')]
-  return(list(data = data, covariates = NULL, trialwise_parameters = trialwise_parameters))
+  return(list(data = data, trialwise_parameters = trialwise_parameters))
 }
