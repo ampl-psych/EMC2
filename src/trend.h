@@ -70,142 +70,188 @@ NumericVector run_delta2_rcpp(NumericVector q0, NumericVector alphaFast,
 }
 
 
-NumericVector run_kernel_rcpp(NumericMatrix trend_pars, String kernel, NumericMatrix input, int n_base_pars, SEXP funptrSEXP = R_NilValue) {
-  // Kernels accept any number of input columns; apply per column and sum.
+// Build expand indices for compress/expand logic from a first-level mask
+inline IntegerVector build_expand_idx_rcpp(const LogicalVector& first_level) {
+  const int n = first_level.size();
+  IntegerVector expand_idx(n);
+  int count = 0;
+  for (int i = 0; i < n; ++i) {
+    if (first_level[i]) ++count;
+    expand_idx[i] = count;
+  }
+  for (int i = 0; i < n; ++i) {
+    if (expand_idx[i] == 0) {
+      stop("Found rows before first 'at' level within subject. Cannot anchor expansion.");
+    }
+  }
+  return expand_idx;
+}
+
+
+NumericVector run_kernel_rcpp(NumericMatrix trend_pars,
+                              String kernel,
+                              NumericMatrix input,
+                              int n_base_pars,
+                              SEXP funptrSEXP = R_NilValue,
+                              LogicalVector first_level_mask = LogicalVector(),
+                              NumericMatrix map_input = NumericMatrix(0,0)) {
+  // Kernels accept any number of input columns; apply per column and sum contributions.
   const int n = input.nrow();
   const int p = input.ncol();
   NumericVector out(n, 0.0);
 
-  if (kernel == "custom") {
-    // pass only the kernel parameter columns (exclude base columns)
-    NumericMatrix kernel_pars;
-    if (trend_pars.ncol() > n_base_pars) {
-      // Build logical keep vector for columns > n_base_pars-1
-      LogicalVector keep(trend_pars.ncol(), false);
-      for (int j = n_base_pars; j < trend_pars.ncol(); ++j) keep[j] = true;
-      kernel_pars = submat_rcpp_col(trend_pars, keep);
-    } else {
-      kernel_pars = NumericMatrix(n, 0); // no kernel params
-    }
+  const bool use_at = (first_level_mask.size() == n);
+  IntegerVector expand_idx;
+  LogicalVector comp_rows;
+  if (use_at) {
+    comp_rows = first_level_mask;
+    expand_idx = build_expand_idx_rcpp(first_level_mask);
+  } else {
+    comp_rows = LogicalVector(n, true);
+    expand_idx = seq(1, n);
+  }
 
-    if (Rf_isNull(funptrSEXP)) {
-      stop("Missing function pointer for custom kernel.");
+  // Compressed inputs/params if at is used
+  NumericMatrix input_comp = submat_rcpp(input, comp_rows);
+  NumericMatrix tp_comp = submat_rcpp(trend_pars, comp_rows);
+  bool has_map = (map_input.size() > 0);
+  NumericMatrix map_comp = has_map ? submat_rcpp(map_input, comp_rows) : NumericMatrix(0,0);
+  const int n_comp = input_comp.nrow();
+
+  // Custom kernel path: take all inputs at once (matrix), exclude rows with any NA, no map
+  if (kernel == "custom") {
+    if (Rf_isNull(funptrSEXP)) stop("Missing function pointer for custom kernel.");
+    // Row-wise NA check
+    LogicalVector good(n_comp, true);
+    for (int i = 0; i < n_comp; ++i) {
+      for (int c = 0; c < p; ++c) {
+        if (NumericVector::is_na(input_comp(i, c))) { good[i] = false; break; }
+      }
     }
-    Rcpp::XPtr<userfun_t> funptr(funptrSEXP);
-    if (funptr.get() == nullptr) {
-      stop("Null function pointer for custom kernel.");
+    const int n_good = sum(good);
+    NumericVector comp_out(n_comp); // zeros by default
+    if (n_good > 0) {
+      NumericMatrix in_good(n_good, p);
+      int rg = 0;
+      for (int i = 0; i < n_comp; ++i) if (good[i]) {
+        for (int c = 0; c < p; ++c) in_good(rg, c) = input_comp(i, c);
+        ++rg;
+      }
+      NumericMatrix tp_good = submat_rcpp(tp_comp, good);
+      NumericVector contrib = EMC2_call_custom_trend(tp_good, in_good, funptrSEXP);
+      if (contrib.size() != n_good) stop("Custom kernel returned wrong length (expected n_good).");
+      rg = 0;
+      for (int i = 0; i < n_comp; ++i) if (good[i]) comp_out[i] = NumericVector::is_na(contrib[rg]) ? 0.0 : contrib[rg++];
     }
-    userfun_t f = *funptr;
-    if (!f) stop("Invalid function pointer for custom kernel.");
-    NumericVector contrib = f(kernel_pars, input);
-    if (contrib.size() != n) {
-      stop("Custom kernel returned wrong length (expected nrow(input)).");
+    // expand back and return
+    for (int i = 0; i < n; ++i) {
+      int idx = expand_idx[i] - 1;
+      out[i] += comp_out[idx];
     }
-    // Replace NA by 0 as with built-ins
-    for (int i = 0; i < n; ++i) if (NumericVector::is_na(contrib[i])) contrib[i] = 0.0;
-    return contrib;
+    return out;
   }
 
   for (int c = 0; c < p; ++c) {
-    NumericVector covariate = input(_, c);
-    NumericVector contrib(n);
+    NumericVector cov_comp = input_comp(_, c);
+    NumericVector comp_out(n_comp); // zeros by default
 
-    if(kernel == "lin_decr") {
-      contrib = -1 * covariate;
-    }
-    else if(kernel == "lin_incr") {
-      contrib = covariate;
-    }
-    else if(kernel == "exp_decr") {
-      contrib = exp(-trend_pars(_, 0 + n_base_pars) * covariate);
-    }
-    else if(kernel == "exp_incr") {
-      contrib = 1 - exp(-trend_pars(_, 0 + n_base_pars) * covariate);
-    }
-    else if(kernel == "pow_decr") {
-      contrib = vector_pow(1 + covariate, -trend_pars(_, 0 + n_base_pars));
-    }
-    else if(kernel == "pow_incr") {
-      contrib = 1 - vector_pow(1 + covariate, -trend_pars(_, 0 + n_base_pars));
-    }
-    else if(kernel == "poly2") {
-      contrib = trend_pars(_, 0 + n_base_pars) * covariate + trend_pars(_, 1 + n_base_pars) * pow(covariate, 2);
-    }
-    else if(kernel == "poly3") {
-      contrib = trend_pars(_, 0 + n_base_pars) * covariate + trend_pars(_, 1 + n_base_pars) * pow(covariate, 2) +
-        trend_pars(_, 2 + n_base_pars) * pow(covariate, 3);
-    }
-    else if(kernel == "poly4") {
-      contrib = trend_pars(_, 0 + n_base_pars) * covariate + trend_pars(_, 1 + n_base_pars) * pow(covariate, 2) +
-        trend_pars(_, 2 + n_base_pars) * pow(covariate, 3) + trend_pars(_, 3 + n_base_pars) * pow(covariate, 4);
-    }
-    else if(kernel == "delta") {
-      // For sequential kernels, ignore rows where the covariate is NA by operating on compressed series
-      LogicalVector good = !is_na(covariate);
-      NumericVector cov_tmp = covariate[good];
-      NumericMatrix pars_tmp = submat_rcpp(trend_pars, good);
-      NumericVector tmp_out = run_delta_rcpp(pars_tmp(_, 0 + n_base_pars), pars_tmp(_, 1 + n_base_pars), cov_tmp);
-      // expand back
-      int pos = 0;
-      for (int i = 0; i < n; ++i) {
-        if (good[i]) {
-          contrib[i] = tmp_out[pos++];
+    LogicalVector good = !is_na(cov_comp);
+    const int n_good = sum(good);
+    if (n_good > 0) {
+      // Build param subset for good rows (can be 0 columns)
+      NumericMatrix tp_good = submat_rcpp(tp_comp, good);
+      // Map from comp row index -> position within good subset
+      std::vector<int> good_pos(n_comp, -1);
+      for (int i = 0, pos = 0; i < n_comp; ++i) if (good[i]) good_pos[i] = pos++;
+
+      {
+        // Built-in kernels on good rows only
+        if (kernel == "lin_decr") {
+          for (int i = 0; i < n_comp; ++i) if (good[i]) comp_out[i] = -cov_comp[i];
+        } else if (kernel == "lin_incr") {
+          for (int i = 0; i < n_comp; ++i) if (good[i]) comp_out[i] = cov_comp[i];
+        } else if (kernel == "exp_decr") {
+          for (int i = 0; i < n_comp; ++i) if (good[i]) {
+            int r = good_pos[i];
+            comp_out[i] = std::exp(-tp_good(r, 0 + n_base_pars) * cov_comp[i]);
+          }
+        } else if (kernel == "exp_incr") {
+          for (int i = 0; i < n_comp; ++i) if (good[i]) {
+            int r = good_pos[i];
+            comp_out[i] = 1 - std::exp(-tp_good(r, 0 + n_base_pars) * cov_comp[i]);
+          }
+        } else if (kernel == "pow_decr") {
+          for (int i = 0; i < n_comp; ++i) if (good[i]) {
+            int r = good_pos[i];
+            comp_out[i] = std::pow(1 + cov_comp[i], -tp_good(r, 0 + n_base_pars));
+          }
+        } else if (kernel == "pow_incr") {
+          for (int i = 0; i < n_comp; ++i) if (good[i]) {
+            int r = good_pos[i];
+            comp_out[i] = 1 - std::pow(1 + cov_comp[i], -tp_good(r, 0 + n_base_pars));
+          }
+        } else if (kernel == "poly2") {
+          for (int i = 0; i < n_comp; ++i) if (good[i]) {
+            int r = good_pos[i];
+            comp_out[i] = tp_good(r, 0 + n_base_pars) * cov_comp[i] + tp_good(r, 1 + n_base_pars) * std::pow(cov_comp[i], 2);
+          }
+        } else if (kernel == "poly3") {
+          for (int i = 0; i < n_comp; ++i) if (good[i]) {
+            int r = good_pos[i];
+            comp_out[i] = tp_good(r, 0 + n_base_pars) * cov_comp[i] + tp_good(r, 1 + n_base_pars) * std::pow(cov_comp[i], 2) + tp_good(r, 2 + n_base_pars) * std::pow(cov_comp[i], 3);
+          }
+        } else if (kernel == "poly4") {
+          for (int i = 0; i < n_comp; ++i) if (good[i]) {
+            int r = good_pos[i];
+            comp_out[i] = tp_good(r, 0 + n_base_pars) * cov_comp[i] + tp_good(r, 1 + n_base_pars) * std::pow(cov_comp[i], 2) + tp_good(r, 2 + n_base_pars) * std::pow(cov_comp[i], 3) + tp_good(r, 3 + n_base_pars) * std::pow(cov_comp[i], 4);
+          }
+        } else if (kernel == "delta") {
+          // Build vectors for q0, alpha on good rows
+          NumericVector q0(n_good), alpha(n_good), covg(n_good);
+          int pos = 0;
+          for (int i = 0; i < n_comp; ++i) if (good[i]) {
+            q0[pos] = tp_good(pos, 0 + n_base_pars);
+            alpha[pos] = tp_good(pos, 1 + n_base_pars);
+            covg[pos] = cov_comp[i];
+            ++pos;
+          }
+          NumericVector tmp = run_delta_rcpp(q0, alpha, covg);
+          pos = 0;
+          for (int i = 0; i < n_comp; ++i) if (good[i]) comp_out[i] = tmp[pos++];
+        } else if (kernel == "delta2") {
+          NumericVector q0(n_good), aF(n_good), pS(n_good), dS(n_good), covg(n_good);
+          int pos = 0;
+          for (int i = 0; i < n_comp; ++i) if (good[i]) {
+            q0[pos] = tp_good(pos, 0 + n_base_pars);
+            aF[pos] = tp_good(pos, 1 + n_base_pars);
+            pS[pos] = tp_good(pos, 2 + n_base_pars);
+            dS[pos] = tp_good(pos, 3 + n_base_pars);
+            covg[pos] = cov_comp[i];
+            ++pos;
+          }
+          NumericVector tmp = run_delta2_rcpp(q0, aF, pS, dS, covg);
+          pos = 0;
+          for (int i = 0; i < n_comp; ++i) if (good[i]) comp_out[i] = tmp[pos++];
         } else {
-          contrib[i] = 0.0; // ignore NAs
+          stop("Unknown kernel type");
         }
       }
     }
-    else if(kernel == "delta2") {
-      LogicalVector good = !is_na(covariate);
-      NumericVector cov_tmp = covariate[good];
-      NumericMatrix pars_tmp = submat_rcpp(trend_pars, good);
-      NumericVector tmp_out = run_delta2_rcpp(pars_tmp(_, 0 + n_base_pars), pars_tmp(_, 1 + n_base_pars), pars_tmp(_, 2 + n_base_pars),
-                                              pars_tmp(_, 3 + n_base_pars), cov_tmp);
-      int pos = 0;
-      for (int i = 0; i < n; ++i) {
-        if (good[i]) {
-          contrib[i] = tmp_out[pos++];
-        } else {
-          contrib[i] = 0.0;
-        }
-      }
-    } else {
-      // Unknown kernel
-      stop("Unknown kernel type");
+
+    // Optional map weighting per column (elementwise per row in compressed space)
+    if (has_map) {
+      NumericVector w = map_comp(_, c);
+      for (int i = 0; i < n_comp; ++i) comp_out[i] *= w[i];
     }
 
-    // Replace NA by 0 in contrib (ignore NA values)
+    // expand comp_out back to full n rows and add
     for (int i = 0; i < n; ++i) {
-      if (NumericVector::is_na(contrib[i])) contrib[i] = 0.0;
-      out[i] += contrib[i];
+      int idx = expand_idx[i] - 1; // 0-based
+      out[i] += comp_out[idx];
     }
   }
 
   return out;
-}
-
-// Apply forward-fill so that values are updated only where mask is true (first-level of factor)
-// and carried forward elsewhere. Errors if initial entries are undefined (no prior value).
-inline NumericVector forward_fill_with_mask(const NumericVector& values, const LogicalVector& first_level_mask) {
-  const int n = values.size();
-  NumericVector filled(n);
-  double last = NA_REAL;
-  for (int i = 0; i < n; ++i) {
-    if (first_level_mask[i]) {
-      double v = values[i];
-      filled[i] = v;
-      last = v;
-    } else {
-      filled[i] = last;
-    }
-  }
-  // Match R behavior: bail out if any NA remains after LOCF
-  for (int i = 0; i < n; ++i) {
-    if (NumericVector::is_na(filled[i])) {
-      stop("Found NA after forward-fill. This should not happen.");
-    }
-  }
-  return filled;
 }
 
 // Now accepts the full parameter matrix `pars_full` so we can use par_input columns as inputs too.
@@ -272,37 +318,25 @@ NumericVector run_trend_rcpp(DataFrame data, List trend, NumericVector param, Nu
       }
     }
 
-    // If 'at' provided, only allow updates at first level by masking others to NA (for any kernel)
+    // Build optional first-level mask and call kernel (handles compression/expansion internally)
+    LogicalVector first_level;
     if (trend.containsElementNamed("at") && !Rf_isNull(trend["at"])) {
       String at_name = trend["at"]; 
       SEXP at_col = data[at_name];
-      if (!Rf_inherits(at_col, "factor")) {
-        stop("'at' column must be a factor");
-      }
+      if (!Rf_inherits(at_col, "factor")) stop("'at' column must be a factor");
       IntegerVector f = as<IntegerVector>(at_col);
-      for (int r = 0; r < n_trials; ++r) {
-        if (f[r] != 1) {
-          for (int c = 0; c < n_inputs; ++c) input_all(r, c) = NA_REAL; // mask all inputs (covariates + par_input)
-        }
-      }
+      first_level = (f == 1);
+    } else {
+      first_level = LogicalVector(0);
     }
-
-    // Call kernel once with all inputs; kernel sums across columns and ignores NA
-    NumericVector kernel_out = run_kernel_rcpp(trend_pars, kernel, input_all, n_base_pars, custom_ptr);
-
-    // If an 'at' factor is provided, update only at first level and carry forward elsewhere (R parity)
-    if (trend.containsElementNamed("at") && !Rf_isNull(trend["at"])) {
-      String at_name = trend["at"];
-      SEXP at_col = data[at_name];
-      // Require a factor column (matches R code expectation)
-      if (!Rf_inherits(at_col, "factor")) {
-        stop("'at' column must be a factor");
-      }
-      IntegerVector f = as<IntegerVector>(at_col);
-      LogicalVector first_level = (f == 1);
-      kernel_out = forward_fill_with_mask(kernel_out, first_level);
+    // Optional per-column map weights passed to kernel
+    NumericMatrix map_in;
+    if (trend.containsElementNamed("map") && !Rf_isNull(trend["map"])) {
+      map_in = as<NumericMatrix>(trend["map"]);
+    } else {
+      map_in = NumericMatrix(0,0);
     }
-
+    NumericVector kernel_out = run_kernel_rcpp(trend_pars, kernel, input_all, n_base_pars, custom_ptr, first_level, map_in);
     out = out + kernel_out;
   }
   // Apply base transformation to final summed output

@@ -1,3 +1,36 @@
+# Custom kernel: operate on all input columns at once; compress by at; exclude rows with any NA; expand back
+run_kernel_custom <- function(trend_pars = NULL, input, funptr, at_factor = NULL) {
+  if (!is.matrix(input)) input <- matrix(input, ncol = 1)
+  n <- nrow(input)
+  if (is.null(trend_pars)) trend_pars <- matrix(nrow = n, ncol = 0)
+
+  # Compress to first-level rows when at provided
+  if (!is.null(at_factor)) {
+    if (!is.factor(at_factor)) stop("'at' column must be a factor")
+    first_level <- at_factor == levels(at_factor)[1]
+    expand_idx <- make_expand_idx(first_level)
+    input_comp <- input[first_level, , drop = FALSE]
+    tpars_comp <- if (nrow(trend_pars)) trend_pars[first_level, , drop = FALSE] else matrix(nrow = sum(first_level), ncol = 0)
+  } else {
+    expand_idx <- seq_len(n)
+    input_comp <- input
+    tpars_comp <- trend_pars
+  }
+
+  # Exclude any rows with at least one NA across columns
+  good <- rowSums(is.na(input_comp)) == 0
+  comp_out <- numeric(nrow(input_comp))
+  if (any(good)) {
+    in_good <- input_comp[good, , drop = FALSE]
+    tp_good <- if (ncol(tpars_comp)) tpars_comp[good, , drop = FALSE] else matrix(nrow = sum(good), ncol = 0)
+    contrib <- EMC2_call_custom_trend(tp_good, in_good, funptr)
+    contrib[is.na(contrib)] <- 0
+    comp_out[good] <- contrib
+  }
+  # Expand back to full rows
+  comp_out[expand_idx]
+}
+
 #' Create a trend specification for model parameters
 #'
 #' @param par_names Character vector specifying which parameters to apply trend to
@@ -248,73 +281,106 @@ trend_help <- function(kernel = NULL, base = NULL, ...){
   }
 }
 
-run_kernel <- function(trend_pars = NULL, kernel, input, funptr = NULL) {
-  # input: vector or matrix; apply per column and sum contributions; ignore NA contributions
-  if (!is.matrix(input)) input <- matrix(input, ncol = 1)
-  n <- nrow(input)
-  out <- rep(0.0, n)
-  if (kernel == "custom") {
-    # trend_pars provided here should already exclude base parameter columns
-    if (is.null(funptr)) stop("Missing function pointer for custom kernel. Pass 'funptr'.")
-    contrib <- EMC2_call_custom_trend(trend_pars, input, funptr)
-    contrib[is.na(contrib)] <- 0
-    return(contrib)
-  }
-  for (j in seq_len(ncol(input))) {
-    covariate <- input[, j]
-    contrib <- switch(kernel,
-      lin_decr = -covariate,
-      lin_incr = covariate,
-      exp_decr = exp(-trend_pars[,1]*covariate),
-      exp_incr = 1-exp(-trend_pars[,1]*covariate),
-      pow_decr = (1+covariate)^(-trend_pars[,1]),
-      pow_incr = (1-(1+covariate)^(-trend_pars[,1])),
-      poly2 =  trend_pars[,1]*covariate + trend_pars[,2]*covariate^2,
-      poly3 =  trend_pars[,1]*covariate + trend_pars[,2]*covariate^2 + trend_pars[,3]*covariate^3,
-      poly4 =  trend_pars[,1]*covariate + trend_pars[,2]*covariate^2 + trend_pars[,3]*covariate^3 + trend_pars[,4]*covariate^4,
-      delta = {
-        good <- !is.na(covariate)
-        tmp <- run_delta(trend_pars[good,1], trend_pars[good,2], covariate[good])
-        z <- rep(0, n); z[good] <- tmp; z
-      },
-      delta2 = {
-        good <- !is.na(covariate)
-        tmp <- run_delta2(trend_pars[good,1], trend_pars[good,2], trend_pars[good,3], trend_pars[good,4], covariate[good])
-        z <- rep(0, n); z[good] <- tmp; z
-      }
-    )
-    contrib[is.na(contrib)] <- 0
-    out <- out + contrib
-  }
-  out
+# Helper to compute expand index from first-level mask
+make_expand_idx <- function(first_level) {
+  idx <- cumsum(first_level)
+  if (any(idx == 0)) stop("Found rows before first 'at' level within subject. Cannot anchor expansion.")
+  idx
 }
 
-# Helper: Initialize Q0 values for delta-rule kernels
-# - Reinitialize Q0 at the first trial of each subject (independent of 'at')
-# - Return a matrix with non-NA entries only on those first-trial rows
-initialize_q0 <- function(dadm, trend, trend_pars, cov_names) {
-  n_rows <- nrow(dadm)
-  n_covs <- length(cov_names)
 
-  # Identify the first trial row per subject
-  subj <- dadm$subjects
-  first_by_subj <- ave(dadm$trials, subj, FUN = function(x) x == min(x))
-  first_rows <- as.logical(first_by_subj)
+run_kernel <- function(trend_pars = NULL, kernel, input, funptr = NULL, at_factor = NULL, map = NULL) {
+  # input: vector or matrix; apply per column and sum contributions; handle NA by zeroing; optional at compression/expansion
+  if (!is.matrix(input)) input <- matrix(input, ncol = 1)
+  n <- nrow(input)
+  if (is.null(trend_pars)) trend_pars <- matrix(nrow = n, ncol = 0)
+  out <- rep(0.0, n)
 
-  # Initialize Q0 matrix (one column per covariate)
-  if (!is.null(trend$covariates_states)) {
-    # Use existing covariate states if provided, but seed first rows if missing
-    q0 <- trend$covariates_states
-    seed_vals <- trend_pars[, 2]
-    q0[first_rows & is.na(q0)] <- seed_vals[first_rows][is.na(q0[first_rows])]
-  } else {
-    q0 <- matrix(trend_pars[, 2], nrow = n_rows, ncol = n_covs)
-    colnames(q0) <- cov_names
-    # Only first subject-rows carry q0; others NA
-    q0[!first_rows, ] <- NA
+  # Custom kernels: operate on full matrix at once; no map support here
+  if (identical(kernel, "custom")) {
+    if (is.null(funptr)) stop("Missing function pointer for custom kernel. Pass 'funptr'.")
+    return(run_kernel_custom(trend_pars, input, funptr, at_factor))
   }
 
-  return(q0)
+  # Precompute at compression/expansion and compressed trend parameters
+  if (!is.null(at_factor)) {
+    if (!is.factor(at_factor)) stop("'at' column must be a factor")
+    first_level <- at_factor == levels(at_factor)[1]
+    expand_idx <- make_expand_idx(first_level)
+    tpars_comp <- if (nrow(trend_pars)) trend_pars[first_level, , drop = FALSE] else matrix(nrow = sum(first_level), ncol = 0)
+    use_at <- TRUE
+  } else {
+    first_level <- rep(TRUE, n)
+    expand_idx <- seq_len(n)
+    tpars_comp <- trend_pars
+    use_at <- FALSE
+  }
+  # Per-column contribution, then sum
+  for (j in seq_len(ncol(input))) {
+    covariate_full <- input[, j]
+    # 1) Compress to first-level rows if at_factor provided
+    covariate_comp <- covariate_full[first_level]
+
+    # 2) Initialize compressed output with zeros
+    comp_len <- length(covariate_comp)
+    comp_out <- numeric(comp_len)
+
+    # 3) Exclude NAs
+    good <- !is.na(covariate_comp)
+    if (any(good)) {
+      # 4) Run kernel on good subset only
+      if (kernel == "custom") {
+        if (is.null(funptr)) stop("Missing function pointer for custom kernel. Pass 'funptr'.")
+        # Build 1-col input matrix for custom kernel
+        in_good <- matrix(covariate_comp[good], ncol = 1)
+        tp_good <- if (ncol(tpars_comp)) tpars_comp[good, , drop = FALSE] else matrix(nrow = sum(good), ncol = 0)
+        contrib <- EMC2_call_custom_trend(tp_good, in_good, funptr)
+        contrib[is.na(contrib)] <- 0
+        comp_out[good] <- contrib
+      } else {
+        # Built-in kernels (use only rows in 'good')
+        # Access parameters by column index as before
+        if (kernel == "lin_decr") {
+          comp_out[good] <- -covariate_comp[good]
+        } else if (kernel == "lin_incr") {
+          comp_out[good] <- covariate_comp[good]
+        } else if (kernel == "exp_decr") {
+          comp_out[good] <- exp(-tpars_comp[good, 1] * covariate_comp[good])
+        } else if (kernel == "exp_incr") {
+          comp_out[good] <- 1 - exp(-tpars_comp[good, 1] * covariate_comp[good])
+        } else if (kernel == "pow_decr") {
+          comp_out[good] <- (1 + covariate_comp[good])^(-tpars_comp[good, 1])
+        } else if (kernel == "pow_incr") {
+          comp_out[good] <- 1 - (1 + covariate_comp[good])^(-tpars_comp[good, 1])
+        } else if (kernel == "poly2") {
+          comp_out[good] <- tpars_comp[good, 1] * covariate_comp[good] + tpars_comp[good, 2] * covariate_comp[good]^2
+        } else if (kernel == "poly3") {
+          comp_out[good] <- tpars_comp[good, 1] * covariate_comp[good] + tpars_comp[good, 2] * covariate_comp[good]^2 + tpars_comp[good, 3] * covariate_comp[good]^3
+        } else if (kernel == "poly4") {
+          comp_out[good] <- tpars_comp[good, 1] * covariate_comp[good] + tpars_comp[good, 2] * covariate_comp[good]^2 + tpars_comp[good, 3] * covariate_comp[good]^3 + tpars_comp[good, 4] * covariate_comp[good]^4
+        } else if (kernel == "delta") {
+          tmp <- run_delta(tpars_comp[good, 1], tpars_comp[good, 2], covariate_comp[good])
+          comp_out[good] <- tmp
+        } else if (kernel == "delta2") {
+          tmp <- run_delta2(tpars_comp[good, 1], tpars_comp[good, 2], tpars_comp[good, 3], tpars_comp[good, 4], covariate_comp[good])
+          comp_out[good] <- tmp
+        } else {
+          stop("Unknown kernel type")
+        }
+      }
+    }
+
+    # Optional map weighting per column (elementwise per row)
+    if (!is.null(map)) {
+      map_col_full <- map[, j]
+      map_comp <- if (use_at) map_col_full[first_level] else map_col_full
+      comp_out <- comp_out * map_comp
+    }
+
+    # 5) Expand back to full subject rows and add into output
+    out <- out + comp_out[expand_idx]
+  }
+  out
 }
 
 # Helper: Apply forward-fill to covariates when using 'at' filtering
@@ -408,14 +474,10 @@ run_trend <- function(dadm, trend, param, trend_pars, pars_full = NULL,
       kernel_out <- rep(0, sum(s_idx))
     } else {
       subset_input <- input_matrix[s_idx,, drop = FALSE]
-      if (use_at_filter) {
-        idx_at <- dat[, trend$at] == levels(dat[, trend$at])[1]
-        subset_input[!idx_at, ] <- NA_real_
-      }
-      kernel_out <- run_kernel(kernel_pars[s_idx,], trend$kernel, subset_input, funptr = funptr)
-      kernel_out <- apply_forward_fill(kernel_out, dat, trend$at)
+      at_fac <- if (use_at_filter) dat[, trend$at] else NULL
+      map_mat <- if (!is.null(trend$map)) trend$map[s_idx,, drop = FALSE] else NULL
+      kernel_out <- run_kernel(kernel_pars[s_idx,], trend$kernel, subset_input, funptr = funptr, at_factor = at_fac, map = map_mat)
     }
-    kernel_out[is.na(kernel_out)] <- 0
     out[s_idx] <- out[s_idx] + kernel_out
   }
 
@@ -893,21 +955,23 @@ make_data_unconditional <- function(data, pars, design, model, return_trialwise_
       target_rows <- prefix_rows[mask_current]
       for (nm in dimnames(Rrt)[[2]]) data[target_rows, nm] <- Rrt[, nm]
 
-      # Optional per-trend feedback → next trial for this subject
-      if(!is.null(tr) && !is.null(tr$feedback_fun)){
-        nams <- names(tr$feedback_fun)
-        # Build the window: current prefix plus next-trial rows (if any)
-        if (j < length(trial_vals)) {
-          next_rows <- idx_subj_all[trials_subj == trial_vals[j+1]]
-          window_rows <- c(prefix_rows, next_rows)
-        } else {
-          window_rows <- prefix_rows
-        }
-        for(i in 1:length(nams)){
-          fb_vec <- tr$feedback_fun[[i]](data[window_rows,,drop=FALSE])
-          data[window_rows, nams[i]] <- fb_vec
-        }
-      }
+      # NS I don't actually think this is necessary couldn't this be specified
+      # As a standard function in the design?
+      # # Optional per-trend feedback → next trial for this subject
+      # if(!is.null(tr) && !is.null(tr$feedback_fun)){
+      #   nams <- names(tr$feedback_fun)
+      #   # Build the window: current prefix plus next-trial rows (if any)
+      #   if (j < length(trial_vals)) {
+      #     next_rows <- idx_subj_all[trials_subj == trial_vals[j+1]]
+      #     window_rows <- c(prefix_rows, next_rows)
+      #   } else {
+      #     window_rows <- prefix_rows
+      #   }
+      #   for(i in 1:length(nams)){
+      #     fb_vec <- tr$feedback_fun[[i]](data[window_rows,,drop=FALSE])
+      #     data[window_rows, nams[i]] <- fb_vec
+      #   }
+      # }
 
       # Store trialwise parameters if requested
       if (!is.null(trialwise_parameters)) trialwise_parameters[target_rows, ] <- pr
