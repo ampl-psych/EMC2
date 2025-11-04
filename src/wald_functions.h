@@ -204,13 +204,14 @@ double pigt(
     return 0.;
   }
   double cdf;
-  double out;
 
   if (a < threshold){
     // return pwald(t, l, k, lower_tail, log_p);
     cdf = pigt0(t, k, l);
-    out = lower_tail? cdf : (1.0 - cdf);
-    return log_p? std::log(out) : out;
+    if (!lower_tail) {
+      return log_p? log1m(cdf) : (1.0 - cdf);
+    }
+    return log_p? std::log(cdf) : cdf;
   }
 
   double sqt = std::sqrt(t);
@@ -243,8 +244,11 @@ double pigt(
   if (cdf < 0. || std::isnan(cdf)) {
     cdf = 0.;
   }
-  out = lower_tail? cdf : (1.0 - cdf);
-  return log_p? std::log(out) : out;
+
+  if (!lower_tail) {
+    return log_p? log1m(cdf) : (1.0 - cdf);
+  }
+  return log_p? std::log(cdf) : cdf;
 }
 
 // PDF for single-boundary diffusion process with random across-trial variability
