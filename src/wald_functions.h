@@ -4,11 +4,161 @@
 #define _USE_MATH_DEFINES
 #include <cmath>
 #include <Rcpp.h>
-
+#include "composite_functions.h"
 using namespace Rcpp;
 
 const double L_PI = 1.1447298858494001741434;  // std::log(M_PI)
 
+// helper functions to check for bad parameters / edge cases of Wald distribution
+static inline bool wald_bad_params(
+    const double x,
+    const double mu,
+    const double lambda
+) {
+  return(
+    std::isnan(x) || std::isnan(mu) || std::isnan(lambda) ||
+    (mu < 0.0) || (lambda < 0.0)
+  );
+}
+
+static inline bool wald_lower_limit(
+    const double x,
+    const double mu,
+    const double lambda
+) {
+  return(
+    (x < 0.0) || (x == 0.0 && mu > 0.0 && lambda > 0.0) ||
+    (x < mu && std::isinf(lambda))
+  );
+}
+
+static inline bool wald_upper_limit(
+    const double x,
+    const double mu,
+    const double lambda
+) {
+  return(
+    (std::isinf(x)) || (x > 0.0 && lambda == 0.0) ||
+    (x > mu && (mu == 0.0 || std::isinf(lambda)))
+  );
+}
+
+static inline bool wald_spike(
+    const double x,
+    const double mu,
+    const double lambda
+) {
+  return(
+    (x == 0.0 && lambda == 0.0) || (x == mu && (mu == 0.0 || std::isinf(lambda)))
+  );
+}
+
+// PDF and (C)CDF of Wald distribution, parameterised in terms of drift
+// coefficient v and threshold b. Assumes v and b have already been scaled by
+// diffusive noise s. Parameters v and b are then used to determine the mean
+// (mu = b / v) and shape (lambda = b^2) of the Wald distribution.
+
+// Wald PDF
+static double dwald(
+    const double x,
+    const double v = 1.0,
+    const double b = 1.0,
+    const bool log_d = false
+) {
+  double mu = b / v;
+  double lambda = b * b;
+
+  if (wald_bad_params(x, mu, lambda)) {
+    return NA_REAL;
+  }
+  if (wald_lower_limit(x, mu, lambda) || wald_upper_limit(x, mu, lambda)) {
+    return R_NegInf;
+  }
+  if (wald_spike(x, mu, lambda)) {
+    return R_PosInf;
+  }
+
+  double lprob;
+  if (std::isinf(mu)) {
+    // accurate approximation of Wald LPDF when mu == Inf:
+    // Levy distribution with parameters location = 0 and scale = lambda
+    lprob = -0.5 * (
+      (lambda / x) - std::log(lambda) + std::log(2.0 * M_PI) + 3.0 * std::log(x)
+    );
+  } else {
+    // otherwise, density is given by Wald distribution function with parameters
+    // mean = mu, shape = lambda
+    double term1 = 0.5 * std::log(lambda / (2.0 * M_PI));
+    double term2 = std::pow((x - mu), 2.0) / std::pow((x * mu * mu), 2.0);
+    lprob = term1 -1.5 * std::log(x) - 0.5 * lambda * term2;
+  }
+
+  return log_d ? lprob : std::exp(lprob);
+}
+
+// Wald (C)CDF
+static double pwald(
+    const double q,
+    const double v = 1.0,
+    const double b = 1.0,
+    const bool lower_tail = true,
+    const bool log_p = false
+) {
+  double mu = b / v;
+  double lambda = b * b;
+  double out;
+
+  if (wald_bad_params(q, mu, lambda)) {
+    return NA_REAL;
+  }
+  if (wald_lower_limit(q, mu, lambda)) {
+    out = lower_tail? R_NegInf : 0.0;
+    return log_p? out : std::exp(out);
+  }
+  if (wald_upper_limit(q, mu, lambda)) {
+    out = lower_tail? 0.0 : R_NegInf;
+    return log_p? out : std::exp(out);
+  }
+  if (wald_spike(q, mu, lambda)) {
+    return log_p? 0.0 : R_PosInf;
+  }
+
+  if (std::isinf(mu)) {
+    // accurate approximation of Wald L(C)CDF when mu == Inf:
+    // Chi-Squared distribution with df = 1
+    out = R::pchisq((lambda / q), 1.0, !lower_tail, true);
+  } else if ((mu / lambda) < 1e-14) {
+    // accurate approximation of Wald L(C)CDF when ratio mu / lambda is tiny:
+    // Gamma distribution with shape = lambda / mu and scale (inverse rate) =
+    // mu^2 / lambda
+    out = R::pgamma(q, (lambda / mu), ((mu * mu) / lambda), lower_tail, true);
+  } else {
+    // otherwise, Wald distribution with parameters mean = mu, shape = lambda
+    double q_mu = q / mu;
+    double phi_mu = mu / lambda;
+    double r = std::sqrt(q_mu * phi_mu);
+    double a = R::pnorm(((q_mu - 1.0) / r), 0.0, 1.0, lower_tail, true);
+    double b = (2.0 / phi_mu) +
+      R::pnorm((-(q_mu + 1.0) / r), 0.0, 1.0, true, true);
+    if (lower_tail) {
+      out = a + log1p_exp(b - a);
+    } else {
+      double q_phi_mu = q_mu / (2.0 * phi_mu);
+      // if input value q is extremely large, use asymptotic expression given by
+      // Giner & Smyth (2016)
+      if (q_mu > 1e6 || q_phi_mu > 5e5) {
+        out = (1 / phi_mu) - 0.5 * L_PI - std::log(2 * phi_mu) - q_phi_mu -
+          1.5 * std::log1p(q_phi_mu);
+      } else {
+        out = a + log1m_exp(b - a);
+      }
+    }
+  }
+
+  return log_p? out : std::exp(out);
+}
+
+// original Wald CDF
 double pigt0(double t, double k = 1., double l = 1.){
   //if (t <= 0.){
   //  return 0.;
@@ -22,6 +172,7 @@ double pigt0(double t, double k = 1., double l = 1.){
   return std::exp(std::exp(std::log(2. * lambda) - std::log(mu)) + std::log(p1)) + p2;
 }
 
+// original Wald PDF
 double digt0(double t, double k = 1., double l = 1.){
   //if (t <= 0.) {
   //  return 0.;
@@ -37,6 +188,8 @@ double digt0(double t, double k = 1., double l = 1.){
   return std::exp(e + .5 * std::log(lambda) - .5 * std::log(2. * t * t * t * M_PI));
 }
 
+// CDF for single-boundary diffusion process with random across-trial variability
+// in threshold, based on Logan et al. (2014)
 double pigt(double t, double k = 1, double l = 1, double a = .1, double threshold = 1e-10){
   if (t <= 0.){
     return 0.;
@@ -78,6 +231,8 @@ double pigt(double t, double k = 1, double l = 1, double a = .1, double threshol
   return cdf;
 }
 
+// PDF for single-boundary diffusion process with random across-trial variability
+// in threshold, based on Logan et al. (2014)
 double digt(double t, double k = 1., double l = 1., double a = .1, double threshold= 1e-10){
   if (t <= 0.){
     return 0.;
