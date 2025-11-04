@@ -27,8 +27,8 @@ run_kernel_custom <- function(trend_pars = NULL, input, funptr, at_factor = NULL
     contrib[is.na(contrib)] <- 0
     comp_out[good] <- contrib
   }
-  # Expand back to full rows
-  comp_out[expand_idx]
+  # Expand back to full rows, return as single-column matrix
+  matrix(comp_out[expand_idx], ncol = 1)
 }
 
 #' Create a trend specification for model parameters
@@ -43,6 +43,8 @@ run_kernel_custom <- function(trend_pars = NULL, input, funptr, at_factor = NULL
 #'        one of "premap", "pretransform", or "posttransform". Defaults to "premap".
 #' @param par_input Optional character vector(s) of parameter names to use as additional inputs for the trend
 #' @param at If NULL (default), trend is applied everywhere. If a factor name (e.g., "lR"), trend is applied only to entries corresponding to the first level of that factor.
+#' @param custom_trend A trend registered with `register_trend`
+#'
 #' @return A list containing the trend specifications for each parameter
 #' @export
 #'
@@ -289,14 +291,14 @@ make_expand_idx <- function(first_level) {
 }
 
 
-run_kernel <- function(trend_pars = NULL, kernel, input, funptr = NULL, at_factor = NULL, map = NULL) {
+run_kernel <- function(trend_pars = NULL, kernel, input, funptr = NULL, at_factor = NULL) {
   # input: vector or matrix; apply per column and sum contributions; handle NA by zeroing; optional at compression/expansion
   if (!is.matrix(input)) input <- matrix(input, ncol = 1)
   n <- nrow(input)
   if (is.null(trend_pars)) trend_pars <- matrix(nrow = n, ncol = 0)
   out <- rep(0.0, n)
 
-  # Custom kernels: operate on full matrix at once; no map support here
+  # Custom kernels: operate on full matrix at once; returns n x 1 matrix
   if (identical(kernel, "custom")) {
     if (is.null(funptr)) stop("Missing function pointer for custom kernel. Pass 'funptr'.")
     return(run_kernel_custom(trend_pars, input, funptr, at_factor))
@@ -315,7 +317,9 @@ run_kernel <- function(trend_pars = NULL, kernel, input, funptr = NULL, at_facto
     tpars_comp <- trend_pars
     use_at <- FALSE
   }
-  # Per-column contribution, then sum
+  # Per-column contribution, then return matrix with one column per input
+  cols <- ncol(input)
+  out_mat <- matrix(0, nrow = n, ncol = cols)
   for (j in seq_len(ncol(input))) {
     covariate_full <- input[, j]
     # 1) Compress to first-level rows if at_factor provided
@@ -370,17 +374,10 @@ run_kernel <- function(trend_pars = NULL, kernel, input, funptr = NULL, at_facto
       }
     }
 
-    # Optional map weighting per column (elementwise per row)
-    if (!is.null(map)) {
-      map_col_full <- map[, j]
-      map_comp <- if (use_at) map_col_full[first_level] else map_col_full
-      comp_out <- comp_out * map_comp
-    }
-
-    # 5) Expand back to full subject rows and add into output
-    out <- out + comp_out[expand_idx]
+    # 5) Expand back to full subject rows and store into output matrix column
+    out_mat[, j] <- comp_out[expand_idx]
   }
-  out
+  out_mat
 }
 
 # Helper: Apply forward-fill to covariates when using 'at' filtering
@@ -405,21 +402,31 @@ prep_trend_phase <- function(dadm, trend, pars, phase, return_trialwise_paramete
   # Apply only trends in the requested phase, sequentially
   tnames <- names(trend)
   all_remove <- character(0)
+  if(return_trialwise_parameters) tpars <- list()
   for (idx in seq_along(trend)){
     cur_trend <- trend[[idx]]
     if (!identical(cur_trend$phase, phase)) next
     par <- tnames[idx]
     all_remove <- c(all_remove, cur_trend$trend_pnames)
-    pars[, par] <- run_trend(dadm, cur_trend, pars[, par], pars[, cur_trend$trend_pnames, drop = FALSE], pars)
+    updated <- run_trend(dadm, cur_trend, pars[, par], pars[, cur_trend$trend_pnames, drop = FALSE], pars,
+                             return_trialwise_parameters = return_trialwise_parameters)
+    if(return_trialwise_parameters){
+      trialwise_parameters <- attr(updated, "trialwise_parameters")
+      colnames(trialwise_parameters) <- paste0(par, "_", c(cur_trend$covariate, cur_trend$par_input))
+      tpars[[par]] <- trialwise_parameters
+    }
+
+    pars[,par] <- updated
+
   }
-  if(!return_trialwise_parameters){
-    if (length(all_remove)) pars <- pars[, !(colnames(pars) %in% unique(all_remove)), drop = FALSE]
-  }
+  if (length(all_remove)) pars <- pars[, !(colnames(pars) %in% unique(all_remove)), drop = FALSE]
+  if(return_trialwise_parameters) attr(pars, "trialwise_parameters") <- do.call(cbind, tpars)
   return(pars)
 }
 
+# Probably no need to loop and idx subjects
 run_trend <- function(dadm, trend, param, trend_pars, pars_full = NULL,
-                      return_updated_pars = FALSE){
+                      return_trialwise_parameters = FALSE){
   n_base_pars <- switch(trend$base,
                         lin = 1,
                         exp_lin = 1,
@@ -471,16 +478,29 @@ run_trend <- function(dadm, trend, param, trend_pars, pars_full = NULL,
     s_idx <- dadm$subjects == unique(dadm$subjects)[s]
     dat <- dadm[s_idx,]
     if (is.null(input_matrix)) {
-      kernel_out <- rep(0, sum(s_idx))
+      k_sum <- rep(0, sum(s_idx))
     } else {
       subset_input <- input_matrix[s_idx,, drop = FALSE]
       at_fac <- if (use_at_filter) dat[, trend$at] else NULL
-      map_mat <- if (!is.null(trend$map)) trend$map[s_idx,, drop = FALSE] else NULL
-      kernel_out <- run_kernel(kernel_pars[s_idx,], trend$kernel, subset_input, funptr = funptr, at_factor = at_fac, map = map_mat)
+      kern_mat <- run_kernel(kernel_pars[s_idx,,drop = FALSE], trend$kernel, subset_input,
+                             funptr = funptr, at_factor = at_fac)
+      # Optional per-column map weighting prior to summing
+      if(return_trialwise_parameters){
+        trialwise_parameters <- kern_mat
+      }
+      if (!is.null(trend$map)) {
+        map_mat <- trend$map[s_idx,, drop = FALSE]
+        kern_mat <- kern_mat * map_mat
+      }
+      # Sum across columns
+      if (ncol(kern_mat) == 0) {
+        k_sum <- rep(0, nrow(kern_mat))
+      } else {
+        k_sum <- rowSums(kern_mat)
+      }
     }
-    out[s_idx] <- out[s_idx] + kernel_out
+    out[s_idx] <- out[s_idx] + k_sum
   }
-
 
   # Do the mapping
   out <- switch(trend$base,
@@ -490,7 +510,7 @@ run_trend <- function(dadm, trend, param, trend_pars, pars_full = NULL,
                 add = param + out,
                 identity = out
   )
-
+  if(return_trialwise_parameters) attr(out, "trialwise_parameters") <- trialwise_parameters
   return(out)
 }
 
@@ -899,13 +919,7 @@ make_data_unconditional <- function(data, pars, design, model, return_trialwise_
     add_accumulators(data,design$matchfun,simulate=FALSE,type=model_list$type,Fcovariates=design$Fcovariates),
     design,model_fun,add_acc=FALSE,compress=FALSE,verbose=FALSE,
     rt_check=FALSE)
-  # Prepare trialwise parameters store if requested (one row per data row)
   trialwise_parameters <- NULL
-  if (isTRUE(return_trialwise_parameters)) {
-    trialwise_parameters <- matrix(NA_real_, nrow = nrow(data), ncol = length(model_list$p_types))
-    colnames(trialwise_parameters) <- names(model_list$p_types)
-  }
-
   # Iterate per subject, then per trial
   subj_levels <- levels(data$subjects)
   for (subj in subj_levels) {
@@ -915,7 +929,7 @@ make_data_unconditional <- function(data, pars, design, model, return_trialwise_
     trial_vals <- sort(unique(trials_subj))
 
     for (j in seq_along(trial_vals)) {
-
+      tmp_return_trialwise <- ifelse(j == length(trial_vals) & return_trialwise_parameters, TRUE, FALSE)
 
       current_trial <- trial_vals[j]
       prefix_rows <- idx_subj_all[trials_subj %in% trial_vals[seq_len(j)]]
@@ -928,14 +942,14 @@ make_data_unconditional <- function(data, pars, design, model, return_trialwise_
       if (!any(mask_current)) next
 
       # Standard mapping + trends + transforms on the prefix
-      pm <- map_p(pars, dm, model_list, TRUE)
+      pm <- map_p(pars, dm, model_list, tmp_return_trialwise)
       tr <- model_list$trend
       if (!is.null(tr)) {
         phases <- vapply(tr, function(x) x$phase, character(1))
-        if (any(phases == "pretransform")) pm <- prep_trend_phase(dm, tr, pm, "pretransform", TRUE)
+        if (any(phases == "pretransform")) pm <- prep_trend_phase(dm, tr, pm, "pretransform", tmp_return_trialwise)
       }
       pm <- do_transform(pm, model_list$transform)
-      if (!is.null(tr) && any(phases == "posttransform")) pm <- prep_trend_phase(dm, tr, pm, "posttransform", TRUE)
+      if (!is.null(tr) && any(phases == "posttransform")) pm <- prep_trend_phase(dm, tr, pm, "posttransform", tmp_return_trialwise)
       cur_dm <- dm[mask_current, , drop = FALSE]
       pr <- model_list$Ttransform(pm[mask_current, , drop = FALSE], cur_dm)
       pr <- add_bound(pr, model_list$bound, cur_dm$lR)
@@ -972,7 +986,10 @@ make_data_unconditional <- function(data, pars, design, model, return_trialwise_
       # }
 
       # Store trialwise parameters if requested
-      if (!is.null(trialwise_parameters)) trialwise_parameters[target_rows, ] <- pr
+      # if (!is.null(trialwise_parameters)) trialwise_parameters[target_rows, ] <- pr
+      if(tmp_return_trialwise){
+        trialwise_parameters <- cbind(pm, attr(pm, "trialwise_parameters"))
+      }
     }
   }
   data <- data[data$lR == 1, unique(c(includeColumns, "R", "rt"))]

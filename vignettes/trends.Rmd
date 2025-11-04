@@ -39,26 +39,31 @@ trend_help()
 Below is a minimal pipeline using an existing dataset (`samples_LNR`) to demonstrate where a trend fits in. We create a trend, attach it in the design, and show how it plugs into `make_emc()` and `fit()` (calls not evaluated here).
 
 ```{r}
-# Example trend: drift increases linearly with trial
+# Example trend: log-mean increases linearly with trial
 trend_quick <- make_trend(
-  par_names = "v",
-  cov_names = "trial",
+  par_names = "m",
+  cov_names = "trial_nr",
   kernels   = "lin_incr",
   bases     = "lin",
   phase     = "pretransform"
 )
 
+data <- get_data(samples_LNR)
+# This does not take subject id into account
+data$trial_nr <- 1:nrow(data)
+
 # Build a design with the trend
 design_trend <- design(
-  data     = get_data(samples_LNR),
+  data     = data,
   trend    = trend_quick,
+  matchfun = function(d) d$S == d$lR,
   formula  = list(m ~ lM, s ~ 1, t0 ~ 1),
   contrasts = list(lM = matrix(c(-1/2, 1/2), ncol = 1, dimnames = list(NULL, "d"))),
   model    = LNR
 )
 
 # How you would run (not executed here)
-# emc <- make_emc(get_data(samples_LNR), design_trend, type = "single")
+# emc <- make_emc(data, design_trend, type = "single")
 # fit <- fit(emc)
 ```
 

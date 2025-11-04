@@ -36,6 +36,8 @@ one of "premap", "pretransform", or "posttransform". Defaults to "premap".}
 \item{par_input}{Optional character vector(s) of parameter names to use as additional inputs for the trend}
 
 \item{at}{If NULL (default), trend is applied everywhere. If a factor name (e.g., "lR"), trend is applied only to entries corresponding to the first level of that factor.}
+
+\item{custom_trend}{A trend registered with \code{register_trend}}
 }
 \value{
 A list containing the trend specifications for each parameter

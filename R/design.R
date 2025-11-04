@@ -130,14 +130,6 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
   }
   if (!is.null(trend)) {
     formula <- check_trend(trend,covariates, model, formula)
-    ## fix covariate name if at is specified
-    for(trend_name in names(trend)) {
-      if('at' %in% names(trend[[trend_name]])) {
-        if(!is.null(trend[[trend_name]]$at)) {
-          trend[[trend_name]]$covariate <- paste0(trend[[trend_name]]$covariate,'_',trend[[trend_name]]$at,'filtered')
-        }
-      }
-    }
   }
 
   # Check if all parameters in the model are specified in the formula

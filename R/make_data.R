@@ -225,7 +225,7 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
     res <- make_data_unconditional(data=data, pars=pars, design=design, model=model,
                                    return_trialwise_parameters)
     data <- res$data
-    trialwise_parameters <- res$trial_wise_parameters
+    trialwise_parameters <- res$trialwise_parameters
   } else{
     data <- design_model(
       add_accumulators(data,design$matchfun,simulate=TRUE,type=model()$type,Fcovariates=design$Fcovariates),
@@ -252,7 +252,7 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
     }
     pars <- model()$Ttransform(pars, data)
     pars <- add_bound(pars, model()$bound, data$lR)
-    if(return_trialwise_parameters) trialwise_parameters <- pars
+    if(return_trialwise_parameters) trialwise_parameters <- attr(pars, "trialwise_parameters")
 
     pars_ok <- attr(pars, 'ok')
     if(mean(!pars_ok) > .1){

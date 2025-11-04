@@ -47,7 +47,7 @@ lin_trend <- make_trend(cov_names='trials2',
                         kernels = 'exp_incr',
                         par_names='B',
                         bases='lin',
-                        premap=TRUE)
+                        phase = "premap")
 
 design_RDM_lin_B <- design(model=RDM,
                            data=dat,
