@@ -206,12 +206,12 @@ double pigt(
   double cdf;
 
   if (a < threshold){
-    // return pwald(t, l, k, lower_tail, log_p);
-    cdf = pigt0(t, k, l);
-    if (!lower_tail) {
-      return log_p? log1m(cdf) : (1.0 - cdf);
-    }
-    return log_p? std::log(cdf) : cdf;
+    return pwald(t, l, k, lower_tail, log_p);
+    // cdf = pigt0(t, k, l);
+    // if (!lower_tail) {
+    //   return log_p? log1m(cdf) : (1.0 - cdf);
+    // }
+    // return log_p? std::log(cdf) : cdf;
   }
 
   double sqt = std::sqrt(t);
@@ -268,9 +268,9 @@ double digt(
   double pdf;
 
   if (a < threshold){
-    // return dwald(t, l, k, log_d);
-    pdf = digt0(t, k, l);
-    return log_d? std::log(pdf) : pdf;
+    return dwald(t, l, k, log_d);
+    // pdf = digt0(t, k, l);
+    // return log_d? std::log(pdf) : pdf;
   }
 
   if (l < threshold){
