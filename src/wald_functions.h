@@ -89,7 +89,7 @@ static double dwald(
     // otherwise, density is given by Wald distribution function with parameters
     // mean = mu, shape = lambda
     double term1 = 0.5 * std::log(lambda / (2.0 * M_PI));
-    double term2 = std::pow((x - mu), 2.0) / std::pow((x * mu * mu), 2.0);
+    double term2 = ((x - mu) * (x - mu)) / (x * mu * mu);
     lprob = term1 -1.5 * std::log(x) - 0.5 * lambda * term2;
   }
 
@@ -120,7 +120,7 @@ static double pwald(
     return log_p? out : std::exp(out);
   }
   if (wald_spike(q, mu, lambda)) {
-    return log_p? 0.0 : R_PosInf;
+    return log_p? 0.0 : 1.0;
   }
 
   if (std::isinf(mu)) {
