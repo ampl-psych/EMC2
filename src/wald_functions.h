@@ -158,7 +158,7 @@ static double pwald(
   return log_p? out : std::exp(out);
 }
 
-// original Wald CDF
+// original Wald CDF, parameterised in terms of drift coefficient l and threshold k
 double pigt0(double t, double k = 1., double l = 1.){
   //if (t <= 0.){
   //  return 0.;
@@ -172,7 +172,7 @@ double pigt0(double t, double k = 1., double l = 1.){
   return std::exp(std::exp(std::log(2. * lambda) - std::log(mu)) + std::log(p1)) + p2;
 }
 
-// original Wald PDF
+// original Wald PDF, parameterised in terms of drift coefficient l and threshold k
 double digt0(double t, double k = 1., double l = 1.){
   //if (t <= 0.) {
   //  return 0.;
@@ -189,18 +189,32 @@ double digt0(double t, double k = 1., double l = 1.){
 }
 
 // CDF for single-boundary diffusion process with random across-trial variability
-// in threshold, based on Logan et al. (2014)
-double pigt(double t, double k = 1, double l = 1, double a = .1, double threshold = 1e-10){
+// in threshold, based on Logan et al. (2014). Parameterised in terms of drift
+// coefficient l, threshold k, and uniform variability in threshold +- a.
+double pigt(
+    double t,
+    double k = 1,
+    double l = 1,
+    double a = .1,
+    double threshold = 1e-10,
+    bool lower_tail = true,
+    bool log_p = false
+){
   if (t <= 0.){
     return 0.;
   }
+  double cdf;
+  double out;
+
   if (a < threshold){
-    return pigt0(t, k, l);
+    // return pwald(t, l, k, lower_tail, log_p);
+    cdf = pigt0(t, k, l);
+    out = lower_tail? cdf : (1.0 - cdf);
+    return log_p? std::log(out) : out;
   }
 
   double sqt = std::sqrt(t);
   double lgt = std::log(t);
-  double cdf;
 
   if (l < threshold){
     double t5a = 2. * R::pnorm((k + a) / sqt, 0., 1., true, false) - 1;
@@ -225,22 +239,36 @@ double pigt(double t, double k = 1, double l = 1, double a = .1, double threshol
 
     cdf = .5 * (t4 + t2 + t1) / a;
   }
+
   if (cdf < 0. || std::isnan(cdf)) {
-    return 0.;
+    cdf = 0.;
   }
-  return cdf;
+  out = lower_tail? cdf : (1.0 - cdf);
+  return log_p? std::log(out) : out;
 }
 
 // PDF for single-boundary diffusion process with random across-trial variability
-// in threshold, based on Logan et al. (2014)
-double digt(double t, double k = 1., double l = 1., double a = .1, double threshold= 1e-10){
+// in threshold, based on Logan et al. (2014). Parameterised in terms of drift
+// coefficient l, threshold k, and uniform variability in threshold +- a.
+double digt(
+    double t,
+    double k = 1.,
+    double l = 1.,
+    double a = .1,
+    double threshold= 1e-10,
+    bool log_d = false
+){
   if (t <= 0.){
     return 0.;
   }
-  if (a < threshold){
-    return digt0(t, k, l);
-  }
   double pdf;
+
+  if (a < threshold){
+    // return dwald(t, l, k, log_d);
+    pdf = digt0(t, k, l);
+    return log_d? std::log(pdf) : pdf;
+  }
+
   if (l < threshold){
     double term = std::exp(- (k - a) * (k - a) / (2. * t)) - std::exp(- (k + a) * (k + a) / (2. * t));
     pdf = std::exp(-.5 * (M_LN2 + L_PI + std::log(t)) + std::log(term) - M_LN2 - std::log(a));
@@ -257,10 +285,11 @@ double digt(double t, double k = 1., double l = 1., double a = .1, double thresh
 
     pdf = std::exp(std::log(t1 + t2) - M_LN2 - std::log(a));
   }
+
   if (pdf < 0. || std::isnan(pdf)) {
-    return 0.;
+    pdf = 0.;
   }
-  return pdf;
+  return log_d? std::log(pdf) : pdf;
 }
 
 #endif
