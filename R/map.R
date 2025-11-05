@@ -119,7 +119,7 @@ map_p <- function(p,dadm,model,return_trialwise_parameters=FALSE)
           par_name <- tnames[idx]
           if (!(par_name %in% colnames(pm))) next
           trend_pars <- pars[, cur_trend$trend_pnames, drop = FALSE]
-          updated <- run_trend(dadm, cur_trend, pm[, par_name], trend_pars, pars)
+          updated <- run_trend(dadm, cur_trend, pm[, par_name], trend_pars, pars, return_trialwise_parameters)
           if(return_trialwise_parameters){
             trialwise_parameters <- attr(updated, "trialwise_parameters")
             colnames(trialwise_parameters) <- paste0(par_name, "_", c(cur_trend$covariate, cur_trend$par_input))
@@ -144,8 +144,9 @@ map_p <- function(p,dadm,model,return_trialwise_parameters=FALSE)
     k <- k + 1
     pars[,i] <- tmp
   }
+  pars <- pars[,!premap_idx,drop=FALSE]
   if(return_trialwise_parameters) attr(pars, "trialwise_parameters") <- do.call(cbind, tpars)
-  return(pars[,!premap_idx,drop=FALSE])
+  return(pars)
 }
 
 

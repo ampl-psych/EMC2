@@ -473,7 +473,7 @@ run_trend <- function(dadm, trend, param, trend_pars, pars_full = NULL,
   }
   funptr <- if (identical(trend$kernel, "custom")) attr(trend, "custom_ptr") else NULL
 
-
+  if(return_trialwise_parameters) tlist <- list()
   for(s in 1:length(unique(dadm$subjects))){
     s_idx <- dadm$subjects == unique(dadm$subjects)[s]
     dat <- dadm[s_idx,]
@@ -484,10 +484,10 @@ run_trend <- function(dadm, trend, param, trend_pars, pars_full = NULL,
       at_fac <- if (use_at_filter) dat[, trend$at] else NULL
       kern_mat <- run_kernel(kernel_pars[s_idx,,drop = FALSE], trend$kernel, subset_input,
                              funptr = funptr, at_factor = at_fac)
-      # Optional per-column map weighting prior to summing
       if(return_trialwise_parameters){
-        trialwise_parameters <- kern_mat
+        tlist[[s]] <- kern_mat
       }
+      # Optional per-column map weighting prior to summing
       if (!is.null(trend$map)) {
         map_mat <- trend$map[s_idx,, drop = FALSE]
         kern_mat <- kern_mat * map_mat
@@ -510,7 +510,7 @@ run_trend <- function(dadm, trend, param, trend_pars, pars_full = NULL,
                 add = param + out,
                 identity = out
   )
-  if(return_trialwise_parameters) attr(out, "trialwise_parameters") <- trialwise_parameters
+  if(return_trialwise_parameters) attr(out, "trialwise_parameters") <- do.call(rbind, tlist)
   return(out)
 }
 
@@ -992,7 +992,8 @@ make_data_unconditional <- function(data, pars, design, model, return_trialwise_
       }
     }
   }
-  data <- data[data$lR == 1, unique(c(includeColumns, "R", "rt"))]
+  if(is.null(data$lR)) data$lR <- 1
+  data <- data[data$lR == unique(data$lR)[1], unique(c(includeColumns, "R", "rt"))]
   data <- data[,!colnames(data) %in% c('lR', 'lM')]
   return(list(data = data, trialwise_parameters = trialwise_parameters))
 }

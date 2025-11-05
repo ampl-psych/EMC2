@@ -129,7 +129,7 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
     # factors <- factors[names(factors) %in% c(all_preds, "subjects")]
   }
   if (!is.null(trend)) {
-    formula <- check_trend(trend,covariates, model, formula)
+    formula <- check_trend(trend,c(names(functions), covariates), model, formula)
   }
 
   # Check if all parameters in the model are specified in the formula
