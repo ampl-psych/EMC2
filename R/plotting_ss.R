@@ -14,7 +14,7 @@
 #' @param input Either an emc object or a stop-signal data frame, or a *list* of such objects. SSD column in data required.
 #' @param post_predict Optional posterior predictive data (matching columns) or *list* thereof.
 #' @param prior_predict Optional prior predictive data (matching columns) or list thereof.
-#' @param probs Numeric vector of probabilities with values in [0,1] that defines SSD bins/categories.
+#' @param probs Numeric vector of probabilities with values on the unit interval that defines SSD bins/categories.
 #' @param factors Character vector of factor names to aggregate over; defaults to plotting full data set ungrouped by factors if NULL.
 #' @param within_plot Character indicating factor for which inhibition functions are plotted in the same panel
 #' @param use_global_quantiles If set to `TRUE`, SSDs are pooled over participants before calculating percentiles, so
