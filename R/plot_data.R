@@ -81,7 +81,7 @@ calc_functions <- function(functions, input){
 
 prep_data_plot <- function(input, post_predict, prior_predict, to_plot, limits,
                            factors = NULL, defective_factor = NULL, subject = NULL,
-                           n_cores, n_post, functions){
+                           n_cores, n_post, functions, remove_na = TRUE){
   if(!is.data.frame(input) && !inherits(input, "emc") && !is.null(post_predict) && length(input) != length(post_predict)){
     stop("If input is a list, post_predict must be a list of the same length")
   }
@@ -170,7 +170,7 @@ prep_data_plot <- function(input, post_predict, prior_predict, to_plot, limits,
   # Compute xlim based on quantiles and perform checks
   for(j in 1:length(datasets)){
     datasets[[j]] <- calc_functions(functions, datasets[[j]])
-    datasets[[j]] <- check_data_plot(datasets[[j]], defective_factor, subject, factors)
+    datasets[[j]] <- check_data_plot(datasets[[j]], defective_factor, subject, factors, remove_na)
     if(sources[j] %in% limits){
       if(sources[j] == "prior"){
         x_lim_probs <- c(0, 0.95)
@@ -181,10 +181,14 @@ prep_data_plot <- function(input, post_predict, prior_predict, to_plot, limits,
       xlim <- range(xlim, unlist(quants$rt))
     }
   }
-  datasets <- lapply(datasets, function(x){
-    x <- x[x$rt > xlim[1] & x$rt < xlim[2],]
-    return(x)
-  })
+
+  if(remove_na){
+    datasets <- lapply(datasets, function(x){
+      x <- x[x$rt > xlim[1] & x$rt < xlim[2],]
+      return(x)
+    })
+  }
+
   return(list(datasets = datasets, sources = sources, xlim = xlim))
 }
 
