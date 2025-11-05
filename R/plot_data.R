@@ -4,7 +4,7 @@ create_group_key <- function(df, factors) {
 }
 
 
-check_data_plot <- function(data, defective_factor, subject, factors) {
+check_data_plot <- function(data, defective_factor, subject, factors, remove_na = TRUE) {
 
   # Check required columns
   required_cols_post <- c("rt", "subjects", defective_factor)
@@ -37,8 +37,10 @@ check_data_plot <- function(data, defective_factor, subject, factors) {
     data$subjects <- factor(data$subjects)
   }
 
-  # Remove missing or infinite rt
-  data <- data[is.finite(data$rt), ]
+  if(remove_na){
+    # Remove missing or infinite rt
+    data <- data[is.finite(data$rt), ]
+  }
 
   # --- Faster group_key creation when postn is present ---
   grp_cols <- unique(c("subjects", defective_factor, factors))
@@ -60,6 +62,7 @@ check_data_plot <- function(data, defective_factor, subject, factors) {
   )
   return(data)
 }
+
 
 get_emc_functions <- function(emc){
   out <- list()
