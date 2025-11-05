@@ -20,7 +20,7 @@ plot_ss_if(
   layout = NA,
   to_plot = c("data", "posterior", "prior")[1:2],
   use_lim = c("data", "posterior", "prior")[1:2],
-  legendpos = c("top", "topright"),
+  legendpos = c("topleft", "bottomright"),
   posterior_args = list(),
   prior_args = list(),
   ...
@@ -40,7 +40,7 @@ plot_ss_if(
 \item{within_plot}{Character indicating factor for which inhibition functions are plotted in the same panel}
 
 \item{use_global_quantiles}{If set to \code{TRUE}, SSDs are pooled over participants before calculating percentiles, so
-the same absolute SSD range is used to get P(R) for each participant,
+the same absolute SSD range is used to get Pr(R) for each participant,
 and then these probabilities are averaged over participants.}
 
 \item{subject}{Subset the data to a single subject (by index or name).}
@@ -71,7 +71,7 @@ and then these probabilities are averaged over participants.}
 Returns NULL invisibly
 }
 \description{
-Plots panels of the inhibition functions (probability of responding; P(R)) for each
+Plots panels of the inhibition functions (probability of responding; Pr(R)) for each
 level of specified factors of stop-signal data as a function of user-defined
 SSD bins/categories. Optionally, posterior and/or prior predictive
 inhibition functions can be overlaid.
@@ -80,6 +80,6 @@ inhibition functions can be overlaid.
 Per default, the SSD-categories are defined in terms of the percentiles of the
 SSD distribution for each participant, and then averaged over participants (see \code{use_global_quantiles}).
 
-If no data posterior predictives are supplied, the data is plotted with error bars
+If credible regions are not plotted, the data is plotted with error bars
 (plus/minus the standard error per SSD bin/category)
 }

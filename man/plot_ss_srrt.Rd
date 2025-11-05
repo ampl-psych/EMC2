@@ -20,7 +20,7 @@ plot_ss_srrt(
   layout = NA,
   to_plot = c("data", "posterior", "prior")[1:2],
   use_lim = c("data", "posterior", "prior")[1:2],
-  legendpos = c("top", "topright"),
+  legendpos = c("topleft", "bottomright"),
   posterior_args = list(),
   prior_args = list(),
   ...
@@ -79,6 +79,6 @@ Per default, SSDs are pooled over participants before calculating percentiles, s
 the same absolute SSD range is used to get mean SRRT for each participant,
 and then these probabilities are averaged over participants (see \code{use_global_quantiles}).
 
-If no data posterior predictives are supplied, the data is plotted with error bars
+If credible regions are not plotted, the data is plotted with error bars
 (plus/minus the standard error per SSD bin/category)
 }
