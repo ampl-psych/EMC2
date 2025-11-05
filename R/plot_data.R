@@ -543,7 +543,7 @@ plot_density <- function(input, post_predict = NULL, prior_predict = NULL,
     tmp_prior_args <- prior_args
     # empty plot
     plot_args <- add_defaults(dots, xlim = xlim, ylim = ylim_global,
-                              main = group_key, xlab = "RT (sec.)", ylab = "Defective Density")
+                              main = group_key, xlab = "RT", ylab = "Defective Density")
     plot_args <- fix_dots_plot(plot_args)
     do.call(plot, c(list(NA), plot_args))
     legend_map <- c()
@@ -868,7 +868,7 @@ plot_cdf <- function(input,
 
     # blank plot
     plot_args <- add_defaults(dots, xlim=xlim, ylim=ylim,
-                              main=group_key, xlab="RT (sec.)", ylab="Defective CDF")
+                              main=group_key, xlab="RT", ylab="Defective CDF")
     plot_args <- fix_dots_plot(plot_args)
     do.call(plot, c(list(NA), plot_args))
 
