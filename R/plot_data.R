@@ -63,6 +63,7 @@ check_data_plot <- function(data, defective_factor, subject, factors, remove_na 
   return(data)
 }
 
+
 get_emc_functions <- function(emc){
   out <- list()
   design <- get_design(emc)[[1]]

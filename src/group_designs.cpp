@@ -2,6 +2,99 @@
 // [[Rcpp::plugins(cpp17)]]
 #include <RcppArmadillo.h>
 
+// Numerically safe dot for partial rows: sum_{k<j} L(i,k)*L(j,k)
+inline double dot_partial(const arma::mat& L, arma::uword i, arma::uword j) {
+  const arma::uword len = std::min(i, j);
+  // Simple summation; for small p this is fine. If you expect large p and ill conditioning,
+  // you can switch to Kahan summation.
+  double s = 0.0;
+  //const double* Li = L.memptr() + i;               // row-major access is not ideal in Armadillo,
+  //const double* Lj = L.memptr() + j;               // but p is typically small here.
+  //const arma::uword n_cols = L.n_cols;
+  for (arma::uword k = 0; k < len; ++k) {
+    // L(i,k) and L(j,k); column-major layout => access via (k*n_rows + i), so use L() API:
+    s += L(i, k) * L(j, k);
+  }
+  return s;
+}
+
+// Lower-triangular Cholesky without LAPACK.
+// On success: returns true and sets L (strictly lower + positive diag). On failure: returns false.
+inline bool chol_lower_nolapack(const arma::mat& Ain,
+                                arma::mat& L,
+                                bool symmetrize = true,
+                                double base_jitter = 0.0,   // if > 0, start by adding this jitter
+                                int    max_tries  = 3)      // total attempts: base + adaptive
+{
+  if (Ain.n_rows != Ain.n_cols) return false;
+  const arma::uword p = Ain.n_rows;
+
+  // Start from a working copy; optionally symmetrise
+  arma::mat A = Ain;
+  if (symmetrize) {
+    A = 0.5 * (A + A.t());
+  }
+
+  // Scale for jitter based on diagonal magnitude
+  auto diag = A.diag();
+  const double scale = arma::mean(arma::abs(diag)) + 1e-16;
+
+  // Adaptive jitter schedule: 0, 1e-12, 1e-10, 1e-8 (scaled), unless base_jitter provided
+  std::vector<double> jitters;
+  if (base_jitter > 0.0) {
+    jitters.push_back(base_jitter);
+  } else {
+    jitters = {0.0, 1e-12, 1e-10, 1e-8};
+  }
+  // keep only max_tries entries
+  if ((int)jitters.size() > max_tries) jitters.resize(max_tries);
+
+  L.zeros(p, p);
+  for (size_t att = 0; att < jitters.size(); ++att) {
+    const double jitter = jitters[att] * scale;
+
+    // If jitter > 0, add to diagonal
+    if (jitter > 0.0) {
+      A.diag() = diag + jitter;
+    } else if (att > 0) {
+      // reset in case previous attempt modified diag
+      A.diag() = diag;
+    }
+
+    bool ok = true;
+    L.zeros();
+
+    for (arma::uword i = 0; i < p && ok; ++i) {
+      // Diagonal
+      double s = 0.0;
+      for (arma::uword k = 0; k < i; ++k) s += L(i, k) * L(i, k);
+      double d = A(i, i) - s;
+      if (!(d > 0.0) || !std::isfinite(d)) { ok = false; break; }
+      double lii = std::sqrt(d);
+      if (!std::isfinite(lii) || lii <= 0.0) { ok = false; break; }
+      L(i, i) = lii;
+
+      // Off-diagonals below the diagonal: j = i+1..p-1 (but we fill as "row i" in lower form),
+      // equivalently iterate rows r=i+1..p-1 and set L(r,i).
+      for (arma::uword r = i + 1; r < p; ++r) {
+        double s2 = 0.0;
+        for (arma::uword k = 0; k < i; ++k) s2 += L(r, k) * L(i, k);
+        double num = A(r, i) - s2;
+        double val = num / lii;
+        if (!std::isfinite(val)) { ok = false; break; }
+        L(r, i) = val;
+      }
+    }
+
+    if (ok) return true;
+  }
+
+  // all attempts failed
+  L.reset();
+  return false;
+}
+
+
 // Multiply xb = X * beta without BLAS (manual loops).
 // X: (n_subjects x p_k), beta: (p_k), xb: (n_subjects)
 // Assumes column-major storage; loops over columns outermost to keep cache-friendly axpy style.
@@ -74,26 +167,22 @@ arma::cube draw_alpha_from_design(const Rcpp::List& group_designs,
 
   arma::cube alpha(p, n_subjects, N, arma::fill::none);
 
+
   for (int i = 0; i < N; ++i) {
-    // 1) subject means for draw i (no BLAS)
     arma::mat subj_mu = calculate_subject_means(group_designs, mu.col(i)); // (p x n_subjects)
 
-    // 2) Cholesky once for this draw
-    arma::mat L;
     arma::mat Vi = var.slice(i);
-    if (!arma::chol(L, Vi, "lower")) {
-      double eps = 1e-10 * arma::mean(Vi.diag());
-      if (!(eps > 0)) eps = 1e-10;
-      if (!arma::chol(L, Vi + eps * arma::eye(p, p), "lower")) {
-        eps = std::max(eps, 1e-8);
-        if (!arma::chol(L, Vi + eps * arma::eye(p, p), "lower"))
-          Rcpp::stop("Cholesky failed on slice %d.", i + 1);
-      }
+    arma::mat L;
+
+    // Try no-LAPACK Cholesky with small adaptive jitter
+    if (!chol_lower_nolapack(Vi, L, /*symmetrize=*/true,
+                             /*base_jitter=*/0.0,
+                             /*max_tries=*/4)) {
+                             Rcpp::stop("Cholesky (no-LAPACK) failed on slice %d after jitter attempts.", i + 1);
     }
 
-    // 3) Sample all subjects: L * Z + subj_mu (this multiply is Armadillo's internal loops)
     arma::mat Z = arma::randn(p, n_subjects);
-    arma::mat draw = L * Z;      // no BLAS required; falls back to internal loops if BLAS is unavailable
+    arma::mat draw = L * Z;      // OK without BLAS; Armadillo falls back to internal loops
     draw += subj_mu;
 
     alpha.slice(i) = std::move(draw);
