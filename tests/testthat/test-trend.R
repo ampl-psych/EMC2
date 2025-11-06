@@ -220,6 +220,7 @@ trend_shared_premap <- make_trend(
   shared = list(shrd = list("m.d1", "s.d1"))
 )
 
+devtools::load_all()
 design_shared_premap <- design(
   data = dat,
   trend = trend_shared_premap,
@@ -294,3 +295,30 @@ test_that("trend_conditional", {
     return_trialwise_parameters = TRUE
   )))
 })
+
+# Trend uses multiple same parameters and multiple inputs
+trend_mult <- make_trend(
+  par_names = c("m", "m"),
+  cov_names = list("covariate1", c("t0", "covariate2")),
+  kernels = c("exp_incr", "delta"),
+  phase = "pretransform",
+  at = "lR"
+)
+
+design_mult <- design(
+  factors = list(subjects = 1, S = 1:2),
+  Rlevels = 1:2,
+  covariates = c("trial2", "trial3"),
+  matchfun = matchfun,
+  trend = trend_mult,
+  formula = list(m ~ lM, s ~ 1, t0 ~ 1),
+  contrasts = list(lM = ADmat),
+  model = LNR
+)
+
+LNR_multi <- make_emc(dat, design_mult, compress = FALSE, n_chains = 1, type = "single")
+
+test_that("trend_multiple", {
+  expect_snapshot(init_chains(LNR_multi, particles = 10, cores_per_chain = 1)[[1]]$samples)
+})
+

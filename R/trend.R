@@ -112,6 +112,7 @@ make_trend <- function(par_names, cov_names = NULL, kernels, bases = NULL,
   }
 
   trends_out <- list()
+  all_trend_pnames <- c()
   for(i in 1:length(par_names)){
     trend <- list()
     # Kernel
@@ -162,12 +163,18 @@ make_trend <- function(par_names, cov_names = NULL, kernels, bases = NULL,
     } else {
       trend_pnames <- c(trend_pnames, trend_help(kernel = kernels[i], do_return = TRUE)$default_pars)
     }
-    trend$trend_pnames <- paste0(par_names[i], ".", trend_pnames)
+    cur_trend_pnames <- paste0(par_names[i], ".", trend_pnames)
+    if(any(cur_trend_pnames %in% all_trend_pnames)){
+      cur_trend_pnames[cur_trend_pnames %in% all_trend_pnames] <- paste0(cur_trend_pnames[cur_trend_pnames %in% all_trend_pnames], ".", trend$kernel)
+    }
+    all_trend_pnames <- c(all_trend_pnames, cur_trend_pnames)
+    trend$trend_pnames <- cur_trend_pnames
     trend$covariate <- unlist(cov_names[i])
     trend$par_input <- unlist(par_input[[i]])
     trend$phase <- phase[i]
-    trends_out[[par_names[i]]] <- trend
+    trends_out[[i]] <- trend
   }
+  names(trends_out) <- par_names
   if(!is.null(shared)){
     # For each group of shared parameters
     for (main_par in names(shared)) {
@@ -184,7 +191,7 @@ make_trend <- function(par_names, cov_names = NULL, kernels, bases = NULL,
       }
     }
   }
-
+  attr(trends_out, "shared") <- shared
   attr(trends_out, "sequential") <- any(kernels %in% c("delta", "delta2"))
   return(trends_out)
 }
@@ -202,7 +209,12 @@ make_trend <- function(par_names, cov_names = NULL, kernels, bases = NULL,
 get_trend_pnames <- function(trend){
   out <- unlist(lapply(trend, function(x) x$trend_pnames))
   names(out) <- NULL
-  return(unique(out))
+  if(!is.null(attr(trend, "shared"))){
+    shared <- attr(trend, "shared")
+    out <- out[!out %in% names(shared)] # Gets rid of duplicates
+    out <- c(out, names(shared))
+  }
+  return(out)
 }
 
 #' Get help information for trend kernels and bases
@@ -526,9 +538,9 @@ check_trend <- function(trend, covariates = NULL, model = NULL, formula = NULL) 
   }
   if (is.null(covariates)) stop("must specify covariates when using trend")
   covnames <- unlist(lapply(trend,function(x)x$covariate))
-  if (!all(covnames %in% covariates)){
-    stop("trend has covnames not in covariates")
-  }
+  # if (!all(covnames %in% covariates)){
+  #   stop("trend has covnames not in covariates")
+  # }
   # Premap + par_input: allowed. Scalars will be replicated to vector length in C++ mapping
   trend_pnames <- get_trend_pnames(trend)
   if (!is.null(formula)) {
