@@ -626,6 +626,7 @@ model_averaging <- function(IC_for, IC_against) {
 #' Usually takes a minute per model added to calculate
 #' @param cores_for_props Integer, how many cores to use for the Bayes factor calculation, here 4 is the default for the 4 different proposal densities to evaluate, only 1, 2 and 4 are sensible.
 #' @param cores_per_prop Integer, how many cores to use for the Bayes factor calculation if you have more than 4 cores available. Cores used will be cores_for_props * cores_per_prop. Best to prioritize cores_for_props being 4 or 2
+#' @param ... Additional, optional arguments
 #'
 #' @return An \code{emc} object with new attributes 'ICs' and 'MLL':
 #'
