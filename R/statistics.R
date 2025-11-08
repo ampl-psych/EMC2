@@ -628,7 +628,7 @@ model_averaging <- function(IC_for, IC_against) {
 #' @param cores_per_prop Integer, how many cores to use for the Bayes factor calculation if you have more than 4 cores available. Cores used will be cores_for_props * cores_per_prop. Best to prioritize cores_for_props being 4 or 2
 #' @param ... Additional, optional arguments
 #'
-#' @return An \code{emc} object with new attributes 'ICs' and 'MLL':
+#' @return An \code{emc} object with new attributes 'ICs' and 'MLL'
 #'
 #' @examples \donttest{
 #' samples_with_ICs <- add_ICs_MLL(samples_LNR, cores_for_props = 1)
@@ -637,9 +637,11 @@ model_averaging <- function(IC_for, IC_against) {
 #'
 #' # Pre-computed MLLs and ICs are extracted when using compare():
 #' compare(sList=list(samples_with_ICs, samples_LNR), cores_for_props=1)
-#' # Returns the same MD (barring noise), BPIC, DIC for both emc objects, as expected - but the first is extracted, the second computed in compare().
+#' # Returns the same MD (barring noise), BPIC, DIC for both emc objects, as expected -
+#' # but the first is extracted, the second computed in compare().
 #' }
-#' #' @export
+#'
+#' @export
 add_ICs_MLL <- function(emc, stage='sample', filter=NULL, use_best_fit=TRUE, BayesFactor=TRUE, cores_for_props=4, cores_per_prop=1, ...) {
   if (is.numeric(filter)) filter <- filter[1] else filter <- 0
   dots <- add_defaults(list(...), group_only = FALSE)

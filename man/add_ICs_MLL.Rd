@@ -32,11 +32,26 @@ Usually takes a minute per model added to calculate}
 \item{cores_for_props}{Integer, how many cores to use for the Bayes factor calculation, here 4 is the default for the 4 different proposal densities to evaluate, only 1, 2 and 4 are sensible.}
 
 \item{cores_per_prop}{Integer, how many cores to use for the Bayes factor calculation if you have more than 4 cores available. Cores used will be cores_for_props * cores_per_prop. Best to prioritize cores_for_props being 4 or 2}
+
+\item{...}{Additional, optional arguments}
 }
 \value{
-An \code{emc} object with new attributes 'ICs' and 'MLL':
+An \code{emc} object with new attributes 'ICs' and 'MLL'
 }
 \description{
 Adds DIC, BPIC, and optionally MLL values as attributes to an emc object. Can be useful to offload
 computational burden.
+}
+\examples{
+\donttest{
+samples_with_ICs <- add_ICs_MLL(samples_LNR, cores_for_props = 1)
+attr(samples_with_ICs, 'MLL')
+attr(samples_with_ICs, 'ICs')
+
+# Pre-computed MLLs and ICs are extracted when using compare():
+compare(sList=list(samples_with_ICs, samples_LNR), cores_for_props=1)
+# Returns the same MD (barring noise), BPIC, DIC for both emc objects, as expected -
+# but the first is extracted, the second computed in compare().
+}
+
 }
