@@ -39,9 +39,9 @@ NumericVector run_delta_rcpp(NumericVector q0, NumericVector alpha, NumericVecto
   return q;
 }
 
-NumericVector run_delta2_rcpp(NumericVector q0, NumericVector alphaFast,
-                              NumericVector propSlow, NumericVector dSwitch,
-                              NumericVector covariate) {
+NumericVector run_delta2kernel_rcpp(NumericVector q0, NumericVector alphaFast,
+                                    NumericVector propSlow, NumericVector dSwitch,
+                                    NumericVector covariate) {
   int n = covariate.length();
   NumericVector q(n);
   NumericVector qFast(n);
@@ -69,6 +69,22 @@ NumericVector run_delta2_rcpp(NumericVector q0, NumericVector alphaFast,
   return q;
 }
 
+NumericVector run_delta2lr_rcpp(NumericVector q0, NumericVector alphaPos,
+                                NumericVector alphaNeg,
+                                NumericVector covariate) {
+  int n = covariate.length();
+  NumericVector q(n);
+  NumericVector pe(n);
+  double learning_rate;
+  q[0] = q0[0];
+  for(int i = 1; i < n; i++) {
+    pe[i-1] = covariate[i-1] - q[i-1];
+    learning_rate = (pe[i-1] > 0) ? alphaPos[i-1] : alphaNeg[i-1];
+    q[i] = q[i-1] + learning_rate * pe[i-1];
+  }
+
+  return q;
+}
 
 NumericVector run_kernel_rcpp(NumericMatrix trend_pars, String kernel, NumericMatrix input, int n_base_pars, SEXP funptrSEXP = R_NilValue) {
   // Kernels accept any number of input columns; apply per column and sum.
@@ -155,12 +171,28 @@ NumericVector run_kernel_rcpp(NumericMatrix trend_pars, String kernel, NumericMa
         }
       }
     }
-    else if(kernel == "delta2") {
+    else if(kernel == "delta2lr") {
+      // For sequential kernels, ignore rows where the covariate is NA by operating on compressed series
       LogicalVector good = !is_na(covariate);
       NumericVector cov_tmp = covariate[good];
       NumericMatrix pars_tmp = submat_rcpp(trend_pars, good);
-      NumericVector tmp_out = run_delta2_rcpp(pars_tmp(_, 0 + n_base_pars), pars_tmp(_, 1 + n_base_pars), pars_tmp(_, 2 + n_base_pars),
-                                              pars_tmp(_, 3 + n_base_pars), cov_tmp);
+      NumericVector tmp_out = run_delta2lr_rcpp(pars_tmp(_, 0 + n_base_pars), pars_tmp(_, 1 + n_base_pars), pars_tmp(_, 2 + n_base_pars), cov_tmp);
+      // expand back
+      int pos = 0;
+      for (int i = 0; i < n; ++i) {
+        if (good[i]) {
+          contrib[i] = tmp_out[pos++];
+        } else {
+          contrib[i] = 0.0; // ignore NAs
+        }
+      }
+    }
+    else if(kernel == "delta2kernel") {
+      LogicalVector good = !is_na(covariate);
+      NumericVector cov_tmp = covariate[good];
+      NumericMatrix pars_tmp = submat_rcpp(trend_pars, good);
+      NumericVector tmp_out = run_delta2kernel_rcpp(pars_tmp(_, 0 + n_base_pars), pars_tmp(_, 1 + n_base_pars), pars_tmp(_, 2 + n_base_pars),
+                                                   pars_tmp(_, 3 + n_base_pars), cov_tmp);
       int pos = 0;
       for (int i = 0; i < n; ++i) {
         if (good[i]) {
