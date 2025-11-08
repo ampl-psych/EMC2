@@ -239,7 +239,7 @@ trend_help <- function(kernel = NULL, base = NULL, ...){
     for (m in names(bases)) {
       cat(paste0("  ", m, ": ", bases[[m]]$description, "\n"))
     }
-    cat("\nTrend options:\n")
+    cat("\nPhase options:\n")
     cat("  premap: Trend is applied before parameter mapping. This means the trend parameters\n")
     cat("          are mapped first, then used to transform cognitive model parameters before \n")
     cat("          their mapping.\n")
