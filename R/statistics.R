@@ -58,9 +58,16 @@ compare <- function(sList,stage="sample",filter=NULL,use_best_fit=TRUE,
     if (i %in% names(sflist)) sflist[[i]] <- filter[[i]]
   dots <- add_defaults(list(...), group_only = FALSE)
   ICs <- setNames(vector(mode="list",length=length(sList)),names(sList))
-  for (i in 1:length(ICs)) ICs[[i]] <- IC(sList[[i]],stage=stage,
-                                          filter=sflist[[i]],use_best_fit=use_best_fit,subject=list(...)$subject,print_summary=FALSE,
-                                          group_only = dots$group_only)
+  for (i in 1:length(ICs)) {
+    if('ICs' %in% names(attributes(sList[[i]]))) {
+      ICs[[i]] <- attr(sList[[i]], 'ICs')
+    } else {
+      ICs[[i]] <- IC(sList[[i]],stage=stage,
+                     filter=sflist[[i]],use_best_fit=use_best_fit,
+                     subject=list(...)$subject,print_summary=FALSE,
+                     group_only = dots$group_only)
+    }
+  }
   ICs <- data.frame(do.call(rbind,ICs))
   DICp <- getp(ICs$DIC)
   BPICp <- getp(ICs$BPIC)
@@ -68,9 +75,13 @@ compare <- function(sList,stage="sample",filter=NULL,use_best_fit=TRUE,
 
   if(BayesFactor){
     MLLs <- numeric(length(sList))
-    for(i in 1:length(MLLs)){
-      MLLs[i] <- run_bridge_sampling(sList[[i]], stage = stage, filter = sflist[[i]], both_splits = FALSE,
-                                     cores_for_props = cores_for_props, cores_per_prop = cores_per_prop)
+    for(i in 1:length(MLLs)) {
+      if('MLL' %in% names(attributes(sList[[i]]))) {
+        MLLs[i] <- attr(sList[[i]], 'MLL')
+      } else {
+        MLLs[i] <- run_bridge_sampling(sList[[i]], stage = stage, filter = sflist[[i]], both_splits = FALSE,
+                                       cores_for_props = cores_for_props, cores_per_prop = cores_per_prop)
+      }
     }
     MD <- -2*MLLs
     modelProbability <- getp(MD)
@@ -600,3 +611,55 @@ model_averaging <- function(IC_for, IC_against) {
   ))
 }
 
+#' Add information criteria to emc object
+#'
+#' Adds DIC, BPIC, and optionally MLL values as attributes to an emc object. Can be useful to offload
+#' computational burden.
+#'
+#' @param emc List of samples objects
+#' @param stage A string. Specifies which stage the samples are to be taken from `"preburn"`, `"burn"`, `"adapt"`, or `"sample"`
+#' @param filter An integer or vector. If it's an integer, iterations up until the value set by `filter` will be excluded.
+#' If a vector is supplied, only the iterations in the vector will be considered.
+#' @param use_best_fit Boolean, defaults to `TRUE`, uses the minimal or mean likelihood (whichever is better) in the
+#' calculation, otherwise always uses the mean likelihood.
+#' @param BayesFactor Boolean, defaults to `TRUE`. Include marginal likelihoods as estimated using WARP-III bridge sampling.
+#' Usually takes a minute per model added to calculate
+#' @param cores_for_props Integer, how many cores to use for the Bayes factor calculation, here 4 is the default for the 4 different proposal densities to evaluate, only 1, 2 and 4 are sensible.
+#' @param cores_per_prop Integer, how many cores to use for the Bayes factor calculation if you have more than 4 cores available. Cores used will be cores_for_props * cores_per_prop. Best to prioritize cores_for_props being 4 or 2
+#'
+#' @return An \code{emc} object with new attributes 'ICs' and 'MLL':
+#'
+#' @examples \donttest{
+#' samples_with_ICs <- add_ICs_MLL(samples_LNR, cores_for_props = 1)
+#' attr(samples_with_ICs, 'MLL')
+#' attr(samples_with_ICs, 'ICs')
+#'
+#' # Pre-computed MLLs and ICs are extracted when using compare():
+#' compare(sList=list(samples_with_ICs, samples_LNR), cores_for_props=1)
+#' # Returns the same MD (barring noise), BPIC, DIC for both emc objects, as expected - but the first is extracted, the second computed in compare().
+#' }
+#' #' @export
+add_ICs_MLL <- function(emc, stage='sample', filter=NULL, use_best_fit=TRUE, BayesFactor=TRUE, cores_for_props=4, cores_per_prop=1, ...) {
+  if (is.numeric(filter)) filter <- filter[1] else filter <- 0
+  dots <- add_defaults(list(...), group_only = FALSE)
+  attr(emc, 'ICs') <- IC(emc,
+                         stage=stage,
+                         filter=filter,
+                         use_best_fit=use_best_fit,
+                         group_only = dots$group_only,
+                         print_summary=FALSE)
+
+  if(BayesFactor) {
+    MLL <- tryCatch({
+      # Code that may produce an error
+      run_bridge_sampling(emc, stage = stage, filter = filter, both_splits = FALSE,
+                          cores_for_props = cores_for_props, cores_per_prop = cores_per_prop)
+    }, error = function(e) {
+      # Handle the error
+      cat("An error occurred while running bridge sampling:", conditionMessage(e), "\n")
+      NA
+    })
+    if(!is.na(MLL)) attr(emc, 'MLL') <- MLL
+  }
+  return(emc)
+}
