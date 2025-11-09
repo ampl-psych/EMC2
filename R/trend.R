@@ -363,7 +363,9 @@ run_trend <- function(dadm, trend, param, trend_pars, pars_full = NULL){
   # Check if this is a delta-rule kernel requiring special handling
   is_delta_kernel <- trend$kernel %in% c('delta', 'delta2')
   use_at_filter <- !is.null(trend$at)
-  at_NA = is.na(dadm[,trend$covariate]) & !is.na(dadm[,gsub(paste0('_',trend$at, 'filtered'), '', trend$covariate)])
+  if(use_at_filter) {
+    at_NA = is.na(dadm[,trend$covariate]) & !is.na(dadm[,gsub(paste0('_',trend$at, 'filtered'), '', trend$covariate)])
+  }
 
   # Initialize Q0 for delta kernels
   q0 <- NULL
