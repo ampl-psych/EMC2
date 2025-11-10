@@ -121,6 +121,14 @@ EMC2_call_custom_trend <- function(trend_pars, input, funptrSEXP) {
     .Call(`_EMC2_EMC2_call_custom_trend`, trend_pars, input, funptrSEXP)
 }
 
+run_kernel_rcpp <- function(trend_pars, kernel, input, n_base_pars, funptrSEXP = NULL) {
+    .Call(`_EMC2_run_kernel_rcpp`, trend_pars, kernel, input, n_base_pars, funptrSEXP)
+}
+
+run_trend_rcpp <- function(data, trend, param, trend_pars, pars_full) {
+    .Call(`_EMC2_run_trend_rcpp`, data, trend, param, trend_pars, pars_full)
+}
+
 c_add_charvectors <- function(x, y) {
     .Call(`_EMC2_c_add_charvectors`, x, y)
 }
