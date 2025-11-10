@@ -39,9 +39,9 @@ NumericVector run_delta_rcpp(NumericVector q0, NumericVector alpha, NumericVecto
   return q;
 }
 
-NumericVector run_delta2_rcpp(NumericVector q0, NumericVector alphaFast,
-                              NumericVector propSlow, NumericVector dSwitch,
-                              NumericVector covariate) {
+NumericVector run_delta2kernel_rcpp(NumericVector q0, NumericVector alphaFast,
+                                    NumericVector propSlow, NumericVector dSwitch,
+                                    NumericVector covariate) {
   int n = covariate.length();
   NumericVector q(n);
   NumericVector qFast(n);
@@ -69,6 +69,22 @@ NumericVector run_delta2_rcpp(NumericVector q0, NumericVector alphaFast,
   return q;
 }
 
+NumericVector run_delta2lr_rcpp(NumericVector q0, NumericVector alphaPos,
+                                NumericVector alphaNeg,
+                                NumericVector covariate) {
+  int n = covariate.length();
+  NumericVector q(n);
+  NumericVector pe(n);
+  double alpha;
+  q[0] = q0[0];
+  for(int i = 1; i < n; i++) {
+    pe[i-1] = covariate[i-1] - q[i-1];
+    alpha = (pe[i-1] > 0) ? alphaPos[i-1] : alphaNeg[i-1];
+    q[i] = q[i-1] + alpha * pe[i-1];
+  }
+
+  return q;
+}
 
 // Build expand indices for compress/expand logic from a first-level mask
 inline IntegerVector build_expand_idx_rcpp(const LogicalVector& first_level) {
@@ -218,7 +234,7 @@ NumericVector run_kernel_rcpp(NumericMatrix trend_pars,
           NumericVector tmp = run_delta_rcpp(q0, alpha, covg);
           pos = 0;
           for (int i = 0; i < n_comp; ++i) if (good[i]) comp_out[i] = tmp[pos++];
-        } else if (kernel == "delta2") {
+        } else if (kernel == "delta2kernel") {
           NumericVector q0(n_good), aF(n_good), pS(n_good), dS(n_good), covg(n_good);
           int pos = 0;
           for (int i = 0; i < n_comp; ++i) if (good[i]) {
@@ -229,7 +245,20 @@ NumericVector run_kernel_rcpp(NumericMatrix trend_pars,
             covg[pos] = cov_comp[i];
             ++pos;
           }
-          NumericVector tmp = run_delta2_rcpp(q0, aF, pS, dS, covg);
+          NumericVector tmp = run_delta2kernel_rcpp(q0, aF, pS, dS, covg);
+          pos = 0;
+          for (int i = 0; i < n_comp; ++i) if (good[i]) comp_out[i] = tmp[pos++];
+        } else if (kernel == "delta2lr") {
+          NumericVector q0(n_good), alphaPos(n_good), alphaNeg(n_good), covg(n_good);
+          int pos = 0;
+          for (int i = 0; i < n_comp; ++i) if (good[i]) {
+            q0[pos] = tp_good(pos, 0 + n_base_pars);
+            alphaPos[pos] = tp_good(pos, 1 + n_base_pars);
+            alphaNeg[pos] = tp_good(pos, 2 + n_base_pars);
+            covg[pos] = cov_comp[i];
+            ++pos;
+          }
+          NumericVector tmp = run_delta2lr_rcpp(q0, alphaPos, alphaNeg, covg);
           pos = 0;
           for (int i = 0; i < n_comp; ++i) if (good[i]) comp_out[i] = tmp[pos++];
         } else {
@@ -321,7 +350,7 @@ NumericVector run_trend_rcpp(DataFrame data, List trend, NumericVector param, Nu
     // Build optional first-level mask and call kernel (handles compression/expansion internally)
     LogicalVector first_level;
     if (trend.containsElementNamed("at") && !Rf_isNull(trend["at"])) {
-      String at_name = trend["at"]; 
+      String at_name = trend["at"];
       SEXP at_col = data[at_name];
       if (!Rf_inherits(at_col, "factor")) stop("'at' column must be a factor");
       IntegerVector f = as<IntegerVector>(at_col);

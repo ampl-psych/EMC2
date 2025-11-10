@@ -185,7 +185,7 @@ make_trend <- function(par_names, cov_names = NULL, kernels, bases = NULL,
     }
   }
 
-  attr(trends_out, "sequential") <- any(kernels %in% c("delta", "delta2"))
+  attr(trends_out, "sequential") <- any(kernels %in% c("delta", "delta2kernel", "delta2lr"))
   return(trends_out)
 }
 
@@ -365,8 +365,11 @@ run_kernel <- function(trend_pars = NULL, kernel, input, funptr = NULL, at_facto
         } else if (kernel == "delta") {
           tmp <- run_delta(tpars_comp[good, 1], tpars_comp[good, 2], covariate_comp[good])
           comp_out[good] <- tmp
-        } else if (kernel == "delta2") {
-          tmp <- run_delta2(tpars_comp[good, 1], tpars_comp[good, 2], tpars_comp[good, 3], tpars_comp[good, 4], covariate_comp[good])
+        } else if (kernel == "delta2kernel") {
+          tmp <- run_delta2kernel(tpars_comp[good, 1], tpars_comp[good, 2], tpars_comp[good, 3], tpars_comp[good, 4], covariate_comp[good])
+          comp_out[good] <- tmp
+        } else if (kernel == "delta2lr") {
+          tmp <- run_delta2lr(tpars_comp[good, 1], tpars_comp[good, 2], tpars_comp[good, 3], covariate_comp[good])
           comp_out[good] <- tmp
         } else {
           stop("Unknown kernel type")
@@ -441,7 +444,7 @@ run_trend <- function(dadm, trend, param, trend_pars, pars_full = NULL,
   cov_cols <- trend$covariate
 
   # Check if this is a delta-rule kernel requiring special handling
-  is_delta_kernel <- trend$kernel %in% c('delta', 'delta2')
+  is_delta_kernel <- trend$kernel %in% c('delta', 'delta2kernel','delta2lr')
   use_at_filter <- !is.null(trend$at)
 
   # Build par_input columns if needed
@@ -591,7 +594,7 @@ run_delta <- function(q0,alpha,covariate) {
   return(q)
 }
 
-run_delta2 <- function(q0,alphaFast,propSlow,dSwitch,covariate) {
+run_delta2kernel <- function(q0,alphaFast,propSlow,dSwitch,covariate) {
   q <- qFast <- qSlow <- peFast <- peSlow <- numeric(length(covariate))
   q[1] <- qFast[1] <- qSlow[1] <- q0[1]
   alphaSlow <- propSlow*alphaFast
@@ -608,6 +611,20 @@ run_delta2 <- function(q0,alphaFast,propSlow,dSwitch,covariate) {
   }
   return(q)
 }
+
+run_delta2lr <- function(q0,alphaPos,alphaNeg,covariate) {
+  q <- pe <- numeric(length(covariate))
+  q[1] <- q0[1]
+  if(length(q) == 1) return(q)  # only 1 trial, cannot be updated
+
+  for (i in 2:length(q)) {
+    pe[i-1] <- covariate[i-1]-q[i-1]
+    alpha <- ifelse(pe[i-1]>0, alphaPos[i-1], alphaNeg[i-1])
+    q[i] <- q[i-1] + alpha*pe[i-1]
+  }
+  return(q)
+}
+
 
 ##' Register a custom C++ trend kernel
 ##'
@@ -700,7 +717,7 @@ has_delta_rules <- function(model) {
   if(is.null(trend)) return(FALSE)
 
   for(trend_n in 1:length(trend)) {
-    if(trend[[trend_n]]$kernel %in% c('delta', 'delta2')) return(TRUE)
+    if(trend[[trend_n]]$kernel %in% c('delta', 'delta2kernel', 'delta2lr')) return(TRUE)
   }
   return(FALSE)
 }
@@ -787,25 +804,37 @@ get_kernels <- function() {
                  default_pars = c("d1", "d2", "d3", "d4"),
                  bases = base_1p),
     delta = list(description = paste(
-      "Standard delta rule kernel: k = q[i].\n",
-      "        Updates q[i] = q[i-1] + alpha * (c[i-1] - q[i-1]).\n",
-      "        Parameters: q0 (initial value), alpha (learning rate)."
-    ),
-    default_pars = c("q0", "alpha"),
-    transforms = list(func = list("q0" = "identity", "alpha" = "pnorm")),
-    bases = base_2p),
-    delta2 = list(description = paste(
-      "Dual kernel delta rule: k = q[i].\n",
-      "         Combines fast and slow learning rates\n",
-      "         and switches between them based on dSwitch.\n",
-      "         Parameters: q0 (initial value), alphaFast (fast learning rate),\n",
-      "         propSlow (alphaSlow = propSlow * alphaFast), dSwitch (switch threshold)."
-    ),
-    default_pars = c("q0", "alphaFast", "propSlow", "dSwitch"),
-    transforms = list(func = list("q0" = "identity", "alphaFast" = "pnorm",
-                                  "propSlow" = "pnorm", "dSwitch" = "pnorm")),
-    bases = base_2p)
-  )
+                 "Standard delta rule kernel: k = q[i].\n",
+                 "        Updates q[i] = q[i-1] + alpha * (c[i-1] - q[i-1]).\n",
+                 "        Parameters: q0 (initial value), alpha (learning rate)."
+                 ),
+                 default_pars = c("q0", "alpha"),
+                 transforms = list(func = list("q0" = "identity", "alpha" = "pnorm")),
+                 bases = base_2p),
+    delta2kernel = list(description = paste(
+                "Dual kernel delta rule: k = q[i].\n",
+                  "         Combines fast and slow learning rates\n",
+                  "         and switches between them based on dSwitch.\n",
+                  "         Parameters: q0 (initial value), alphaFast (fast learning rate),\n",
+                  "         propSlow (alphaSlow = propSlow * alphaFast), dSwitch (switch threshold)."
+                ),
+                default_pars = c("q0", "alphaFast", "propSlow", "dSwitch"),
+                transforms = list(func = list("q0" = "identity", "alphaFast" = "pnorm",
+                                              "propSlow" = "pnorm", "dSwitch" = "pnorm")),
+                bases = base_2p),
+    delta2lr = list(description = paste(
+                "Dual learning rate delta rule: k = q[i].\n",
+                "         Like the standard delta rule, but with separate\n",
+                "         learning rates for positive and negative prediction errors.\n",
+                "         Parameters: q0 (initial value), alphaPos (learning rate for positive PEs),\n",
+                "         alphaNeg (learning rate for negative PEs)."
+               ),
+              default_pars = c("q0", "alphaPos", "alphaNeg"),
+              transforms = list(func = list("q0" = "identity",
+                                            "alphaPos" = "pnorm",
+                                            "alphaNeg" = "pnorm")),
+              bases = base_2p)
+             )
   kernels
 }
 
@@ -814,7 +843,7 @@ format_kernel <- function(kernel, kernel_pars=NULL) {
   kernels <- get_kernels()
   eq_string <- kernels[[kernel]]$description
   eq_string <- strsplit(eq_string, ': k = ')[[1]][[2]]
-  if(kernel %in% c('delta', 'delta2')) eq_string <- strsplit(eq_string, '\\.')[[1]][[1]]
+  if(kernel %in% c('delta', 'delta2kernel', 'delta2lr')) eq_string <- strsplit(eq_string, '\\.')[[1]][[1]]
   if(kernel %in% c('exp_incr', 'pow_incr', 'poly1', 'poly2', 'poly3', 'poly4')) eq_string <- paste0('(', eq_string, ')')
 
   # add placeholders
