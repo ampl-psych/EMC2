@@ -285,7 +285,6 @@ NumericVector run_kernel_rcpp(NumericMatrix trend_pars,
 
 // Now accepts the full parameter matrix `pars_full` so we can use par_input columns as inputs too.
 // Passes all inputs (covariates + par_input) to kernel in one call; kernel sums across columns.
-// [[Rcpp::export]]
 NumericVector run_trend_rcpp(DataFrame data, List trend, NumericVector param, NumericMatrix trend_pars, NumericMatrix pars_full) {
   String kernel = as<String>(trend["kernel"]);
   String base = as<String>(trend["base"]);

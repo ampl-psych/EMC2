@@ -494,36 +494,6 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
-// run_kernel_rcpp
-NumericVector run_kernel_rcpp(NumericMatrix trend_pars, String kernel, NumericMatrix input, int n_base_pars, SEXP funptrSEXP);
-RcppExport SEXP _EMC2_run_kernel_rcpp(SEXP trend_parsSEXP, SEXP kernelSEXP, SEXP inputSEXP, SEXP n_base_parsSEXP, SEXP funptrSEXPSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< NumericMatrix >::type trend_pars(trend_parsSEXP);
-    Rcpp::traits::input_parameter< String >::type kernel(kernelSEXP);
-    Rcpp::traits::input_parameter< NumericMatrix >::type input(inputSEXP);
-    Rcpp::traits::input_parameter< int >::type n_base_pars(n_base_parsSEXP);
-    Rcpp::traits::input_parameter< SEXP >::type funptrSEXP(funptrSEXPSEXP);
-    rcpp_result_gen = Rcpp::wrap(run_kernel_rcpp(trend_pars, kernel, input, n_base_pars, funptrSEXP));
-    return rcpp_result_gen;
-END_RCPP
-}
-// run_trend_rcpp
-NumericVector run_trend_rcpp(DataFrame data, List trend, NumericVector param, NumericMatrix trend_pars, NumericMatrix pars_full);
-RcppExport SEXP _EMC2_run_trend_rcpp(SEXP dataSEXP, SEXP trendSEXP, SEXP paramSEXP, SEXP trend_parsSEXP, SEXP pars_fullSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< DataFrame >::type data(dataSEXP);
-    Rcpp::traits::input_parameter< List >::type trend(trendSEXP);
-    Rcpp::traits::input_parameter< NumericVector >::type param(paramSEXP);
-    Rcpp::traits::input_parameter< NumericMatrix >::type trend_pars(trend_parsSEXP);
-    Rcpp::traits::input_parameter< NumericMatrix >::type pars_full(pars_fullSEXP);
-    rcpp_result_gen = Rcpp::wrap(run_trend_rcpp(data, trend, param, trend_pars, pars_full));
-    return rcpp_result_gen;
-END_RCPP
-}
 // c_add_charvectors
 CharacterVector c_add_charvectors(CharacterVector x, CharacterVector y);
 RcppExport SEXP _EMC2_c_add_charvectors(SEXP xSEXP, SEXP ySEXP) {
@@ -568,8 +538,6 @@ static const R_CallMethodDef CallEntries[] = {
     {"_EMC2_do_transform", (DL_FUNC) &_EMC2_do_transform, 2},
     {"_EMC2_calc_ll", (DL_FUNC) &_EMC2_calc_ll, 11},
     {"_EMC2_EMC2_call_custom_trend", (DL_FUNC) &_EMC2_EMC2_call_custom_trend, 3},
-    {"_EMC2_run_kernel_rcpp", (DL_FUNC) &_EMC2_run_kernel_rcpp, 5},
-    {"_EMC2_run_trend_rcpp", (DL_FUNC) &_EMC2_run_trend_rcpp, 5},
     {"_EMC2_c_add_charvectors", (DL_FUNC) &_EMC2_c_add_charvectors, 2},
     {NULL, NULL, 0}
 };
