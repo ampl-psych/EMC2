@@ -363,7 +363,7 @@ writeLines(c(
   "",
   "// Export pointer maker for registration",
   "// [[Rcpp::export]]",
-  "SEXP EMC2_make_custom_trend_ptr();",
+  "SEXP EMC2_make_custom_kernel_ptr();",
   "EMC2_MAKE_PTR(custom_kernel)"
 ), tf)
 
