@@ -4,16 +4,14 @@
 \alias{plot_sbc_ecdf}
 \title{Plot the ECDF Difference in SBC Ranks}
 \usage{
-plot_sbc_ecdf(ranks, layout = NA, add_stats = TRUE, ...)
+plot_sbc_ecdf(ranks, layout = NA, add_stats = TRUE)
 }
 \arguments{
 \item{ranks}{A list of named dataframes of the rank statistic}
 
 \item{layout}{Optional. A numeric vector specifying the layout using \code{par(mfrow = layout)}}
 
-\item{add_stats}{Boolean. Should coverage and bias be included in the figure.}
-
-\item{...}{optional arguments passed to \code{plot}}
+\item{add_stats}{Boolean. Should coverage, bias and precision be included in the figure.}
 }
 \value{
 No returns

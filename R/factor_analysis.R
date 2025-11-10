@@ -630,4 +630,68 @@ make_SEM_diagram <- function(emc,
 }
 
 
+rotater <- function(L_array, rot_fun, sign_convention = TRUE) {
+  stopifnot(length(dim(L_array)) == 3)
+  p <- dim(L_array)[1]; m <- dim(L_array)[2]; iters <- dim(L_array)[3]
+
+  # Posterior mean loadings
+  Abar <- apply(L_array, c(1, 2), mean)
+
+  # Fit rotation once on the center matrix
+  fit <- rot_fun(Abar)
+
+  # Get rotated mean and the orthogonal transform T
+  Abar_rot <- if (!is.null(fit$loadings)) unclass(fit$loadings) else
+    if (!is.null(fit$L))        unclass(fit$L)        else
+      stop("Rotation result missing $loadings/$L.")
+  Tmat <- if (!is.null(fit$Th)) fit$Th else
+    if (!is.null(fit$Tmat)) fit$Tmat else
+      if (!is.null(fit$rotmat)) fit$rotmat else
+        stop("Rotation result missing $Th/$Tmat/$rotmat (orthogonal transform).")
+
+  # Optional: deterministic column sign (largest |loading| positive)
+  if (sign_convention) {
+    s <- rep(1, m)
+    for (j in seq_len(m)) {
+      idx <- which.max(abs(Abar_rot[, j]))
+      s[j] <- if (Abar_rot[idx, j] < 0) -1 else 1
+    }
+    S <- diag(s, m, m)
+    Tmat     <- Tmat %*% S
+    Abar_rot <- Abar_rot %*% S
+  }
+
+  # Apply the SAME orthogonal T to every draw
+  L_rot <- array(NA_real_, dim = c(p, m, iters), dimnames = dimnames(L_array))
+  for (k in seq_len(iters)) {
+    L_rot[, , k] <- L_array[, , k] %*% Tmat
+  }
+  return(L_rot)
+}
+
+
+#' Rotate loadings based on posterior median
+#'
+#' This function rotates factor loadings using a rotation function
+#' based on the posterior median.
+#'
+#' @param emc An 'emc' object containing factor analysis results
+#' @param rot_fun a rotation function for factor loadings, see also `GPArotation`W
+#'
+#' @return An 'emc' object with rotated factor loadings
+#'
+#' @export
+rotate_loadings <- function(emc, rot_fun) {
+  L_rot <- rotater(do.call(abind, lapply(emc, function(x) x$samples$lambda)), rot_fun)
+  iters <- dim(L_rot)[3]
+  start <- 0
+  for(i in 1:length(emc)){
+    end <-i*(iters/length(emc))
+    emc[[i]]$samples$lambda <- L_rot[,,(start + 1):end]
+    start <- end
+  }
+  class(emc) <- "emc"
+  return(emc)
+}
+
 

@@ -1,6 +1,7 @@
 #' Plot Inhibition Functions
 #'
-#' Plots panels of the inhibition functions (probability of responding; P(R)) for each
+
+#' Plots panels of the inhibition functions (probability of responding; Pr(R)) for each
 #' level of specified factors of stop-signal data as a function of user-defined
 #' SSD bins/categories. Optionally, posterior and/or prior predictive
 #' inhibition functions can be overlaid.
@@ -8,17 +9,17 @@
 #' Per default, the SSD-categories are defined in terms of the percentiles of the
 #' SSD distribution for each participant, and then averaged over participants (see `use_global_quantiles`).
 #'
-#' If no data posterior predictives are supplied, the data is plotted with error bars
+#' If credible regions are not plotted, the data is plotted with error bars
 #' (plus/minus the standard error per SSD bin/category)
 #'
 #' @param input Either an emc object or a stop-signal data frame, or a *list* of such objects. SSD column in data required.
 #' @param post_predict Optional posterior predictive data (matching columns) or *list* thereof.
 #' @param prior_predict Optional prior predictive data (matching columns) or list thereof.
-#' @param probs Numeric vector of probabilities with values in \eqn{\left[0, 1\right]} that defines SSD bins/categories.
+#' @param probs Numeric vector of probabilities with values on the unit interval that defines SSD bins/categories.
 #' @param factors Character vector of factor names to aggregate over; defaults to plotting full data set ungrouped by factors if NULL.
 #' @param within_plot Character indicating factor for which inhibition functions are plotted in the same panel
 #' @param use_global_quantiles If set to `TRUE`, SSDs are pooled over participants before calculating percentiles, so
-#' the same absolute SSD range is used to get P(R) for each participant,
+#' the same absolute SSD range is used to get Pr(R) for each participant,
 #' and then these probabilities are averaged over participants.
 #' @param subject Subset the data to a single subject (by index or name).
 #' @param quants Numeric vector of credible interval bounds (e.g. c(0.025, 0.975)).
@@ -49,7 +50,7 @@ plot_ss_if <- function(input,
                     layout = NA,
                     to_plot = c('data','posterior','prior')[1:2],
                     use_lim = c('data','posterior','prior')[1:2],
-                    legendpos = c('top', 'topright'),
+                    legendpos = c('topleft', 'bottomright'),
                     posterior_args = list(),
                     prior_args = list(),
                     ...) {
@@ -244,7 +245,7 @@ plot_ss_if <- function(input,
     # Draw y-axis manually (left side)
     axis(2)
 
-    mtext("P(R)", side=2, line=3)
+    mtext("Pr(R)", side=2, line=3)
 
     # draw lines for each dataset
     legend_map <- character(0)  # to store source name -> color
@@ -283,8 +284,8 @@ plot_ss_if <- function(input,
               do.call(lines, c(list(x = df$x_plot, y = df$p_response), lines_args))
               do.call(points, c(list(x = df$x_plot, y = df$p_response), lines_args))
 
-              if(is.null(post_predict)){
-                # Add confidence intervals
+              if(!any(names(data_sources)=="posterior")){
+                # Add standard errors
                 arrows(x0 = df$x_plot, y0 = df$p_response - df$se,
                        x1 = df$x_plot, y1 = df$p_response + df$se,
                        angle = 90, code = 3, length = 0.05)
@@ -303,19 +304,25 @@ plot_ss_if <- function(input,
             if (!is.null(tick_data) && "x_plot" %in% names(tick_data)) {
               if (use_global_quantiles) {
                 # Global bins → label with SSD values
-                axis(1,
-                     at = tick_data$x_plot,
-                     labels = tick_data$ssd,
-                     cex.axis = 0.8)
-                title(xlab = "SSD Bin (global SSD values)", line = 2.5)
-              } else {
-                # Subject-specific quantiles → label with percentages
-                quantile_labels <- paste0(round(tick_data$x_plot * 100), "%")
+                quantile_labels <- unlist(lapply(strsplit(tick_data$ssd,","),
+                                          function(x) paste0(x[1],",\n",x[2])))
                 axis(1,
                      at = tick_data$x_plot,
                      labels = quantile_labels,
-                     cex.axis = 0.8)
-                title(xlab = "SSD Quantile (subject-specific)", line = 2.5)
+                     cex.axis = 0.7,line = )
+                title(xlab = "Global SSD Bin (sec.)", line = 2)
+
+              } else {
+                # Subject-specific quantiles → label with percentages
+                up <- round(tick_data$x_plot * 100)
+                quantile_labels <- unlist(lapply(strsplit(
+                  paste0("(",paste(c(0,up[-length(up)]),up,sep=","),"]"),","),
+                                          function(x) paste0(x[1],",\n",x[2])))
+                axis(1,
+                     at = tick_data$x_plot,
+                     labels = quantile_labels,
+                     cex.axis = 0.7)
+                title(xlab = "Participant SSD Bin (%)", line = 2)
               }
             }
           }
@@ -554,7 +561,7 @@ get_response_probability_by_global_ssd_quantile <- function(x, group_factor, pro
 #' the same absolute SSD range is used to get mean SRRT for each participant,
 #' and then these probabilities are averaged over participants (see `use_global_quantiles`).
 #'
-#' If no data posterior predictives are supplied, the data is plotted with error bars
+#' If credible regions are not plotted, the data is plotted with error bars
 #' (plus/minus the standard error per SSD bin/category)
 #'
 #' @param input Either an emc object or a stop-signal data frame, or a list of such objects. SSD column in data required.
@@ -594,7 +601,7 @@ plot_ss_srrt <- function(input,
                       layout = NA,
                       to_plot = c('data','posterior','prior')[1:2],
                       use_lim = c('data','posterior','prior')[1:2],
-                      legendpos = c('top', 'topright'),
+                      legendpos = c('topleft', 'bottomright'),
                       posterior_args = list(),
                       prior_args = list(),
                       ...) {
@@ -784,7 +791,7 @@ plot_ss_srrt <- function(input,
     do.call(plot, c(list(NA), plot_args))
     # Draw y-axis manually (left side)
     axis(2)
-    mtext("Mean SRRT", side=2, line=3)
+    mtext("Mean SRRT (sec.)", side=2, line=3)
 
     # draw lines for each dataset
     legend_map <- character(0)  # to store source name -> color
@@ -823,8 +830,8 @@ plot_ss_srrt <- function(input,
               do.call(lines, c(list(x = df$x_plot, y = df$srrt), lines_args))
               do.call(points, c(list(x = df$x_plot, y = df$srrt), lines_args))
 
-              if(is.null(post_predict)){
-                # Add confidence intervals (error bars)
+              if(!any(names(data_sources)=="posterior")){
+                # Add standard errors
                 arrows(x0 = df$x_plot, y0 = df$srrt - df$se,
                        x1 = df$x_plot, y1 = df$srrt + df$se,
                        angle = 90, code = 3, length = 0.05)
@@ -843,19 +850,24 @@ plot_ss_srrt <- function(input,
             if (!is.null(tick_data) && "x_plot" %in% names(tick_data)) {
               if (use_global_quantiles) {
                 # Global bins --> label with SSD values
-                axis(1,
-                     at = tick_data$x_plot,
-                     labels = tick_data$ssd,
-                     cex.axis = 0.8)
-                title(xlab = "SSD Bin (global SSD values)", line = 2.5)
-              } else {
-                # Subject-specific quantiles --> label with percentages
-                quantile_labels <- paste0(round(tick_data$x_plot * 100), "%")
+                quantile_labels <- unlist(lapply(strsplit(tick_data$ssd,","),
+                                          function(x) paste0(x[1],",\n",x[2])))
                 axis(1,
                      at = tick_data$x_plot,
                      labels = quantile_labels,
-                     cex.axis = 0.8)
-                title(xlab = "SSD Quantile (subject-specific)", line = 2.5)
+                     cex.axis = 0.7,line = )
+                title(xlab = "Global SSD Bin (sec.)", line = 2)
+              } else {
+                # Subject-specific quantiles --> label with percentages
+                up <- round(tick_data$x_plot * 100)
+                quantile_labels <- unlist(lapply(strsplit(
+                  paste0("(",paste(c(0,up[-length(up)]),up,sep=","),"]"),","),
+                                          function(x) paste0(x[1],",\n",x[2])))
+                axis(1,
+                     at = tick_data$x_plot,
+                     labels = quantile_labels,
+                     cex.axis = 0.7)
+                title(xlab = "Participant SSD Percentile Bin (%)", line = 2)
               }
             }
           }

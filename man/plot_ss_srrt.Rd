@@ -6,12 +6,12 @@
 \usage{
 plot_ss_srrt(
   input,
+  post_predict = NULL,
+  prior_predict = NULL,
   probs = seq(0, 1, length.out = 5),
   factors = NULL,
   within_plot = NULL,
   use_global_quantiles = TRUE,
-  post_predict = NULL,
-  prior_predict = NULL,
   subject = NULL,
   quants = c(0.025, 0.975),
   functions = NULL,
@@ -20,7 +20,7 @@ plot_ss_srrt(
   layout = NA,
   to_plot = c("data", "posterior", "prior")[1:2],
   use_lim = c("data", "posterior", "prior")[1:2],
-  legendpos = c("top", "topright"),
+  legendpos = c("topleft", "bottomright"),
   posterior_args = list(),
   prior_args = list(),
   ...
@@ -28,6 +28,10 @@ plot_ss_srrt(
 }
 \arguments{
 \item{input}{Either an emc object or a stop-signal data frame, or a list of such objects. SSD column in data required.}
+
+\item{post_predict}{Optional posterior predictive data (matching columns) or list thereof.}
+
+\item{prior_predict}{Optional prior predictive data (matching columns) or list thereof.}
 
 \item{probs}{Numeric vector of probabilities with values in 0,1 that defines SSD bins/categories.}
 
@@ -37,10 +41,6 @@ plot_ss_srrt(
 
 \item{use_global_quantiles}{If set to FALSE, the SSD-categories are defined in terms of the percentiles of the
 SSD distribution for each participant, and then averaged over participants.}
-
-\item{post_predict}{Optional posterior predictive data (matching columns) or list thereof.}
-
-\item{prior_predict}{Optional prior predictive data (matching columns) or list thereof.}
 
 \item{subject}{Subset the data to a single subject (by index or name).}
 
@@ -79,6 +79,6 @@ Per default, SSDs are pooled over participants before calculating percentiles, s
 the same absolute SSD range is used to get mean SRRT for each participant,
 and then these probabilities are averaged over participants (see \code{use_global_quantiles}).
 
-If no data posterior predictives are supplied, the data is plotted with error bars
+If credible regions are not plotted, the data is plotted with error bars
 (plus/minus the standard error per SSD bin/category)
 }
