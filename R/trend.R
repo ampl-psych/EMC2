@@ -423,6 +423,7 @@ run_trend <- function(dadm, trend, param, trend_pars, pars_full = NULL){
 
       # Apply forward-fill if 'at' filter is used
       if (use_at_filter) {
+        kernel_out[as.numeric(dadm[,trend$at])>1] <- NA
         kernel_out <- apply_forward_fill(kernel_out, use_fill = TRUE)
       }
 

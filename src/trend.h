@@ -86,6 +86,7 @@ NumericVector run_delta2lr_rcpp(NumericVector q0, NumericVector alphaPos,
   return q;
 }
 
+// [[Rcpp::export]]
 NumericVector run_kernel_rcpp(NumericMatrix trend_pars, String kernel, NumericMatrix input, int n_base_pars, SEXP funptrSEXP = R_NilValue) {
   // Kernels accept any number of input columns; apply per column and sum.
   const int n = input.nrow();
@@ -218,6 +219,7 @@ NumericVector run_kernel_rcpp(NumericMatrix trend_pars, String kernel, NumericMa
 
 // Now accepts the full parameter matrix `pars_full` so we can use par_input columns as inputs too.
 // Passes all inputs (covariates + par_input) to kernel in one call; kernel sums across columns.
+// [[Rcpp::export]]
 NumericVector run_trend_rcpp(DataFrame data, List trend, NumericVector param, NumericMatrix trend_pars, NumericMatrix pars_full) {
   String kernel = as<String>(trend["kernel"]);
   String base = as<String>(trend["base"]);
