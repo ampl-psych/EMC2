@@ -209,7 +209,7 @@ trend_delta <- make_trend(
 trend_delta2 <- make_trend(
   par_names = "v",
   cov_names = "trial_nr",
-  kernels = "delta2"
+  kernels = "delta2kernel"
 )
 ```
 

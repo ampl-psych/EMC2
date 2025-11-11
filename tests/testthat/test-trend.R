@@ -220,7 +220,6 @@ trend_shared_premap <- make_trend(
   shared = list(shrd = list("m.d1", "s.d1"))
 )
 
-devtools::load_all()
 design_shared_premap <- design(
   data = dat,
   trend = trend_shared_premap,
