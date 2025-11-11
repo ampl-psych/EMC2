@@ -331,7 +331,11 @@ add_accumulators <- function(data,matchfun=NULL,simulate=FALSE, type = "RACE", F
     }
   }
   row.names(datar) <- NULL
-  if (simulate) datar$rt <- NA else {
+  if (simulate) {
+    if(!'rt' %in% Fcovariates) {
+      datar$rt <- NA
+    }
+  } else {
     R <- datar$R
     R[is.na(R)] <- levels(datar$lR)[1]
 
