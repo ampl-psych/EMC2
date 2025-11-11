@@ -481,7 +481,7 @@ design_pretrans <- design(
 
 Posttransform example: again vary `s.w` by `lR`
 
-```{r, eval = FALSE}
+```{r}
 trend_posttrans <- make_trend(
   par_names = c("m", "s"),
   cov_names = list("covariate1", "covariate2"),
@@ -506,7 +506,7 @@ Notes:
 
 You can register your own C++ kernel function. The function takes per‑trial kernel parameters `trend_pars` (base params excluded) and an input matrix, and returns a vector of outputs. To keep this vignette fast and portable, we show the code and how to register it but do not actually compile or run it here.
 
-```{r, eval = FALSE}
+```{r}
 library(EMC2)
 
 # Write a custom kernel to a separate file
@@ -554,6 +554,13 @@ trend_custom <- make_trend(
   phase      = "pretransform",
   bases      = NULL,         # uses ct$base (here: add)
   custom_trend = ct
+)
+
+design_custom_trend <- design(
+  data = data,
+  trend = trend_custom,
+  formula = list(m ~ 1, s ~ 1, t0 ~ 1, m.a ~ lR),
+  model = LNR
 )
 ```
 
