@@ -1009,8 +1009,8 @@ make_data_unconditional <- function(data, pars, design, model, return_trialwise_
 ##' @return A list of custom pointers. The list is of the same size as total number of trends; trends without a custom kernel return NULL.
 ##' @export
 get_custom_kernel_pointers <- function(input_data) {
-  if(class(input_data) == 'emc') {
-    trend <- emc[[1]]$model()$trend
+  if(inherits(input_data, 'emc')) {
+    trend <- input_data[[1]]$model()$trend
   } else {
     trend <- input_data
   }
