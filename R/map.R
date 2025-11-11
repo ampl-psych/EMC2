@@ -116,6 +116,12 @@ map_p <- function(p,dadm,model,return_trialwise_parameters=FALSE)
         for (idx in seq_along(trend)) {
           cur_trend <- trend[[idx]]
           if (!identical(cur_trend$phase, "premap")) next
+
+          # if parameter inputs requested but not yet mapped, pass raw value
+          for(par_input_name in cur_trend$par_input) {
+            if(all(is.na(pars[,par_input_name]))) pars[,par_input_name] <- p[,par_input_name]
+          }
+
           par_name <- tnames[idx]
           if (!(par_name %in% colnames(pm))) next
           trend_pars <- pars[, cur_trend$trend_pnames, drop = FALSE]
