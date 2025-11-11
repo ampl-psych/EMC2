@@ -154,7 +154,20 @@ NumericVector run_kernel_rcpp(NumericMatrix trend_pars,
         ++rg;
       }
       NumericMatrix tp_good = submat_rcpp(tp_comp, good);
-      NumericVector contrib = EMC2_call_custom_trend(tp_good, in_good, funptrSEXP);
+
+      NumericVector contrib;
+      if(n_base_pars > 0) {
+        // extract kernel parameters
+        int ncol = tp_good.ncol();
+        NumericMatrix kp_good(n_comp, ncol- n_base_pars);
+        // Copy all columns except the first few (those are base_pars)
+        for (int j = n_base_pars; j < ncol; j++) {
+          kp_good(_, j - n_base_pars) = tp_good(_, j);
+        }
+        contrib = EMC2_call_custom_trend(kp_good, in_good, funptrSEXP);
+      } else {
+        contrib = EMC2_call_custom_trend(tp_good, in_good, funptrSEXP);
+      }
       if (contrib.size() != n_good) stop("Custom kernel returned wrong length (expected n_good).");
       rg = 0;
       for (int i = 0; i < n_comp; ++i) if (good[i]) comp_out[i] = NumericVector::is_na(contrib[rg]) ? 0.0 : contrib[rg++];
