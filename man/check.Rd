@@ -10,6 +10,7 @@
   selection = c("mu", "sigma2", "alpha"),
   digits = 3,
   plot_worst = TRUE,
+  version = c("old", "new"),
   ...
 )
 
@@ -24,23 +25,38 @@ check(emc, ...)
 
 \item{plot_worst}{Boolean. If \code{TRUE} also plots the chain plots for the worst parameter}
 
+\item{version}{Character string, either \code{"old"} or \code{"new"}. \code{"old"} (default)
+calls \code{\link[coda:gelman.diag]{coda::gelman.diag()}}) and \code{\link[coda:effectiveSize]{coda::effectiveSize()}}, while \code{"new"}
+uses more up-to-date implementations from the \code{posterior} package. See
+\code{\link[=r_hat]{r_hat()}} and \code{\link[=n_eff]{n_eff()}} for details.}
+
 \item{...}{Optional arguments that can be passed to \code{get_pars} or \code{plot.default} (see \code{par()})}
 }
 \value{
 a list with the statistics for the worst converged parameter per selection
 }
 \description{
-Runs a series of convergence checks, prints statistics to the console, and
-makes traceplots of the worst converged parameter per selection.
+Runs a series of MCMC diagnostic checks, prints those statistics to the
+console, and makes traceplots of the worst converged parameter per selection.
 }
 \details{
-Note that the \code{Rhat} is calculated by doubling the number of chains by
-first splitting chains into first and second half, so it also a test of
-stationarity.
+The potential scale reduction statistic \eqn{\hat{R}} is computed by \code{\link[=r_hat]{r_hat()}},
+and the effective sample size (ESS) is computed by \code{\link[=n_eff]{n_eff()}}. In both cases,
+by default implementations from the \code{coda} package are used
+(\code{\link[coda:gelman.diag]{coda::gelman.diag()}} and \code{\link[coda:effectiveSize]{coda::effectiveSize()}}, respectively), but more
+up-to-date implementations from the \code{posterior} package are also supported,
+by specifying \code{version = "new"} (see below).
 
-Efficiency of sampling is indicated by the effective
-sample size (ESS) (from the \code{coda} R package).
-Full range of possible samples manipulations described in \code{get_pars}.
+Full range of possible samples manipulations are described in \code{get_pars}.
+
+The potential scale reduction statistic, \eqn{\hat{R}}, indicates
+whether the chains are stationary and have converged to a common distribution
+for a given parameter. If chains have not converged, \eqn{\hat{R}} will be
+greater than 1; values above 1.1 are generally considered problematic.
+
+The effective sample size, ESS, indicates the number of independent draws from
+a parameter's posterior distribution, which can be interpreted as the efficiency
+of sampling.
 }
 \examples{
 check(samples_LNR)

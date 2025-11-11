@@ -3,7 +3,7 @@
 \name{gd_summary.emc}
 \alias{gd_summary.emc}
 \alias{gd_summary}
-\title{Gelman-Rubin Statistic}
+\title{R-hat convergence diagnostic}
 \usage{
 \method{gd_summary}{emc}(
   emc,
@@ -12,25 +12,36 @@
   stat = "max",
   stat_only = FALSE,
   digits = 3,
+  version = "old",
   ...
 )
 
 gd_summary(emc, ...)
 }
 \arguments{
-\item{emc}{An emc object}
+\item{emc}{An emc object.}
 
-\item{selection}{A Character vector. Indicates which parameter types to check (e.g., \code{alpha}, \code{mu}, \code{sigma2}, \code{correlation}).}
+\item{selection}{A Character vector. Indicates which parameter types to check
+(e.g., \code{alpha}, \code{mu}, \code{sigma2}, \code{correlation}).}
 
-\item{omit_mpsrf}{Boolean. If \code{TRUE} also returns the multivariate point scale reduction factor (see \code{?coda::gelman.diag}).}
+\item{omit_mpsrf}{Boolean. If \code{TRUE} (default) the multivariate point scale
+reduction factor (MPSRF) is \emph{not} returned (see \code{\link[coda:gelman.diag]{coda::gelman.diag()}} for
+details). Only relevant if \code{version = "old"} (see below).}
 
-\item{stat}{A string. Should correspond to a function that can be applied to a vector,
-which will be performed on the vector/rows or columns of the matrix of the parameters}
+\item{stat}{A string. Should correspond to a function that can be applied to
+a vector, which will be performed on the vector/rows or columns of the
+matrix of the parameters}
 
-\item{stat_only}{Boolean. If \code{TRUE} will only return the result of the applied stat function,
-otherwise returns both the stat result and the result of the function on all parameters.}
+\item{stat_only}{Boolean. If \code{TRUE} will only return the result of the
+applied \code{stat} function, otherwise returns both the stat result and the
+result of the function on all parameters.}
 
-\item{digits}{Integer. How many digits to round the output to}
+\item{digits}{Integer. How many digits to round the output to.}
+
+\item{version}{Character string, either \code{"old"} or \code{"new"}. \code{"old"} (default)
+calls \code{\link[coda:gelman.diag]{coda::gelman.diag()}} with split chains, while \code{"new"} uses a vendored
+implementation of \code{\link[posterior:rhat]{posterior::rhat()}} based on Vehtari et al. (2021).
+See \code{\link[=r_hat]{r_hat()}} for details.}
 
 \item{...}{Optional additional arguments that can be passed to \code{get_pars}}
 }
@@ -38,15 +49,24 @@ otherwise returns both the stat result and the result of the function on all par
 A matrix or vector of R-hat values for the selected parameter type.
 }
 \description{
-Returns the Gelman-Rubin diagnostics (otherwise known as the R-hat) of the selected parameter type;
-i.e. the ratio of between to within MCMC chain variance.
-}
-\details{
-See: Gelman, A and Rubin, DB (1992)
-Inference from iterative simulation using multiple sequences, \emph{Statistical Science}, 7, 457-511.
-
-Full range of possible samples manipulations described in \code{get_pars}.
+Computes the potential scale reduction factor (\eqn{\hat{R}}) for a selected
+model parameter type in an \code{emc} object. Supports both the legacy Gelman–Rubin
+diagnostic (Gelman & Rubin, 1992; Brooks & Gelman, 1998), and the more
+up-to-date implementation proposed by Vehtari et al. (2021).
 }
 \examples{
 gd_summary(samples_LNR, selection = "correlation", stat = "mean", flatten = TRUE)
+
+}
+\references{
+Gelman, A., & Rubin, D.B. (1992). Inference from iterative simulation using
+multiple sequences. \emph{Statistical Science}, \emph{7}, 457–511.
+
+Brooks, S.P., & Gelman, A. (1998). General methods for monitoring convergence
+of iterative simulations. \emph{Journal of Computational and Graphical Statistics},
+\emph{7}, 434–455.
+
+Vehtari, A., Gelman, A., Simpson, D., Carpenter, B., & Bürkner, P.-C. (2021).
+Rank-normalization, folding, and localization: An improved \eqn{\hat{R}} for
+assessing convergence of MCMC. \emph{Bayesian Analysis}, \emph{16}(2), 667–718.
 }

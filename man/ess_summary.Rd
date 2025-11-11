@@ -11,23 +11,32 @@
   stat = "min",
   stat_only = FALSE,
   digits = 1,
+  version = "old",
   ...
 )
 
 ess_summary(emc, ...)
 }
 \arguments{
-\item{emc}{An emc object}
+\item{emc}{An emc object.}
 
-\item{selection}{A Character vector. Indicates which parameter types to check (e.g., \code{alpha}, \code{mu}, \code{sigma2}, \code{correlation}).}
+\item{selection}{A Character vector. Indicates which parameter types to check
+(e.g., \code{alpha}, \code{mu}, \code{sigma2}, \code{correlation}).}
 
-\item{stat}{A string. Should correspond to a function that can be applied to a vector,
-which will be performed on the vector/rows or columns of the matrix of the parameters}
+\item{stat}{A string. Should correspond to a function that can be applied to
+a vector, which will be performed on the vector/rows or columns of the
+matrix of the parameters}
 
-\item{stat_only}{Boolean. If \code{TRUE} will only return the result of the applied stat function,
-otherwise returns both the stat result and the result of the function on all parameters.}
+\item{stat_only}{Boolean. If \code{TRUE} will only return the result of the
+applied \code{stat} function, otherwise returns both the stat result and the
+result of the function on all parameters.}
 
-\item{digits}{Integer. How many digits to round the output to}
+\item{digits}{Integer. How many digits to round the output to.}
+
+\item{version}{Character string, either \code{"old"} or \code{"new"}. \code{"old"} (default)
+calls \code{\link[coda:effectiveSize]{coda::effectiveSize()}}, while \code{"new"} uses a vendored implementation
+of \code{\link[posterior:ess_basic]{posterior::ess_basic()}} based on Vehtari et al. (2021).
+See \code{\link[=n_eff]{n_eff()}} for details.}
 
 \item{...}{Optional additional arguments that can be passed to \code{get_pars}}
 }
@@ -35,9 +44,17 @@ otherwise returns both the stat result and the result of the function on all par
 A matrix or vector of ESS values for the selected parameter type.
 }
 \description{
-Returns the effective sample size (ESS) of the selected parameter type.
-Full range of possible samples manipulations described in \code{get_pars}.
+Computes the effective sample size (ESS) for a selected model parameter type
+in an \code{emc} object. Supports both the legacy \code{\link[coda:effectiveSize]{coda::effectiveSize()}} calculation
+and a more modern implementation adapted from \code{\link[posterior:ess_basic]{posterior::ess_basic()}} based
+on Vehtari et al. (2021).
 }
 \examples{
 ess_summary(samples_LNR, selection = "alpha")
+
+}
+\references{
+Vehtari, A., Gelman, A., Simpson, D., Carpenter, B., & Bürkner, P.-C. (2021).
+Rank-normalization, folding, and localization: An improved \eqn{\hat{R}} for
+assessing convergence of MCMC. \emph{Bayesian Analysis}, \emph{16}(2), 667–718.
 }

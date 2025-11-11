@@ -23,11 +23,12 @@ credint(x, ...)
 \arguments{
 \item{x}{An emc or emc.prior object}
 
-\item{selection}{A Character vector. Indicates which parameter types to check (e.g., \code{alpha}, \code{mu}, \code{sigma2}, \code{correlation}).}
+\item{selection}{A Character vector. Indicates which parameter types to check
+(e.g., \code{alpha}, \code{mu}, \code{sigma2}, \code{correlation}).}
 
 \item{probs}{A vector. Indicates which quantiles to return from the posterior.}
 
-\item{digits}{Integer. How many digits to round the output to}
+\item{digits}{Integer. How many digits to round the output to.}
 
 \item{N}{An integer. Number of samples to use for the quantile calculation (only for prior.emc objects)}
 
