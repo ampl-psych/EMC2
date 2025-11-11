@@ -391,7 +391,7 @@ Note that, when loading an emc object from disk, the pointers to the custom kern
 
 ```{r, eval = FALSE}
 load('./emc_samples_with_custom_trend.RData')
-emc <- set_custom_kernel_pointers(emc, get_custom_kernel_pointers(trend_custom))
+emc <- fix_custom_kernel_pointers(emc, trend_custom)
 ```
 
 Interpretation: the base controls how the custom kernel’s output enters the parameter (e.g., `add` means additive). The `transforms` declared in `register_trend()` are attached to the model so custom kernel parameters can be estimated under appropriate constraints.
