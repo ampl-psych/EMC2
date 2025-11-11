@@ -1079,15 +1079,28 @@ set_custom_kernel_pointers <- function(emc, ptrs) {
   }
 
   for(chain_ in 1:length(emc)) {
-    if(!'model' %in% names(emc[[chain_]])) next
-
-    model_list <- emc[[chain_]]$model()
-    trend <- model_list$trend
-    for(i in 1:length(trend)) {
-      if(!is.null(ptrs[[i]])) attr(trend[[i]], 'custom_ptr') <- ptrs[[i]]
+    # update model() function in emc
+    if('model' %in% names(emc[[chain_]])) {
+      model_list <- emc[[chain_]]$model()
+      trend <- model_list$trend
+      for(i in 1:length(trend)) {
+        if(!is.null(ptrs[[i]])) attr(trend[[i]], 'custom_ptr') <- ptrs[[i]]
+      }
+      model_list$trend <- trend
+      emc[[chain_]]$model <- function() return(model_list)
     }
-    model_list$trend <- trend
-    emc[[chain_]]$model <- function() return(model_list)
+    ## Update model() function hidden in the design hidden in the prior
+    if('prior' %in% names(emc[[chain_]])) {
+      for(design_n in 1:length(emc[[chain_n]]$prior, 'design')) {
+        model_list <- attr(emc[[chain_n]]$prior, 'design')[[design_n]]$model()
+        trend <- model_list$trend
+        for(i in 1:length(trend)) {
+          if(!is.null(ptrs[[i]])) attr(trend[[i]], 'custom_ptr') <- ptrs[[i]]
+        }
+        model_list$trend <- trend
+        attr(emc[[chain_n]]$prior, 'design')[[design_n]]$model <- function() return(model_list)
+      }
+    }
   }
   return(emc)
 }
