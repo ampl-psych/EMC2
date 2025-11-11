@@ -299,7 +299,8 @@ test_that("trend_conditional", {
 # Trend uses multiple same parameters and multiple inputs
 trend_mult <- make_trend(
   par_names = c("m", "m"),
-  cov_names = list("covariate1", c("t0", "covariate2")),
+  cov_names = list("covariate1", c("covariate1", "covariate2")),
+  par_input = list(NULL, "t0"),
   kernels = c("exp_incr", "delta"),
   phase = "pretransform",
   at = "lR"

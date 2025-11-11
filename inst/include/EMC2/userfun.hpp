@@ -11,7 +11,7 @@ using userfun_t = Rcpp::NumericVector (*)(Rcpp::NumericMatrix /*trend_pars*/,
 
 // Helper macro to create and return an external pointer to the given function.
 // Ensure you also add `// [[Rcpp::export]]` before the declaration line created by this macro
-// in your user file so that R can call it (see userfun_example.cpp for a template).
+// in your user file so that R can call it
 
 #define EMC2_MAKE_PTR(FUNCNAME)                                       \
 SEXP EMC2_make_##FUNCNAME##_ptr() {                                   \
