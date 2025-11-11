@@ -6,13 +6,15 @@
 \usage{
 make_trend(
   par_names,
-  cov_names,
+  cov_names = NULL,
   kernels,
   bases = NULL,
   shared = NULL,
   trend_pnames = NULL,
-  premap = TRUE,
-  pretransform = FALSE
+  phase = "premap",
+  par_input = NULL,
+  at = NULL,
+  custom_trend = NULL
 )
 }
 \arguments{
@@ -28,9 +30,14 @@ make_trend(
 
 \item{trend_pnames}{Optional character vector specifying custom parameter names}
 
-\item{premap}{Logical indicating if trend should be applied before or after parameter mapping}
+\item{phase}{Character vector (length 1 or \code{length(par_names)}) specifying the phase for each trend entry;
+one of "premap", "pretransform", or "posttransform". Defaults to "premap".}
 
-\item{pretransform}{If !premap, logical indicating if trend should be applied before or after parameter transformation}
+\item{par_input}{Optional character vector(s) of parameter names to use as additional inputs for the trend}
+
+\item{at}{If NULL (default), trend is applied everywhere. If a factor name (e.g., "lR"), trend is applied only to entries corresponding to the first level of that factor.}
+
+\item{custom_trend}{A trend registered with \code{register_trend}}
 }
 \value{
 A list containing the trend specifications for each parameter
@@ -44,7 +51,7 @@ trend <- make_trend(
   par_names = c("B", "v"),
   cov_names = "strial",
   kernels = c("exp_incr", "poly3"),
-  premap = TRUE,
+  phase = "premap",
   shared = list(shrd = list("B.B0", "v.d1"))
 )
 get_trend_pnames(trend)

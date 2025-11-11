@@ -129,7 +129,7 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
     # factors <- factors[names(factors) %in% c(all_preds, "subjects")]
   }
   if (!is.null(trend)) {
-    formula <- check_trend(trend,covariates, model, formula)
+    formula <- check_trend(trend,c(names(functions), covariates), model, formula)
   }
 
   # Check if all parameters in the model are specified in the formula
@@ -545,7 +545,7 @@ design_model <- function(data,design,model=NULL,
 
   if (!is.null(design$Ffunctions)) for (i in names(design$Ffunctions)) {
     newF <- stats::setNames(data.frame(design$Ffunctions[[i]](da)),i)
-    da <- cbind.data.frame(da,newF)
+    da[,i] <- newF
   }
 
   if (is.null(model()$p_types) | is.null(model()$Ttransform))

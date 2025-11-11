@@ -3,6 +3,7 @@
 
 #include <Rcpp.h>
 #include <unordered_set>
+#include <unordered_map>
 #include <vector>
 #include <functional>
 using namespace Rcpp;
@@ -468,6 +469,41 @@ std::vector<TransformSpec> make_transform_specs(NumericMatrix pars, List transfo
   return specs;
 }
 
+// Build TransformSpec for any matrix using precomputed full specs for all p_types
+inline std::vector<TransformSpec> make_transform_specs_from_full(
+    NumericMatrix pars,
+    CharacterVector full_names,
+    const std::vector<TransformSpec>& full_specs)
+{
+  // Create a quick lookup name -> index in full_names/specs
+  std::unordered_map<std::string,int> name_to_idx;
+  for (int i = 0; i < full_names.size(); ++i) {
+    name_to_idx[Rcpp::as<std::string>(full_names[i])] = i;
+  }
+
+  int ncol = pars.ncol();
+  std::vector<TransformSpec> specs(ncol);
+  CharacterVector cparnames = colnames(pars);
+  for (int j = 0; j < ncol; j++) {
+    std::string colname = Rcpp::as<std::string>(cparnames[j]);
+    auto it = name_to_idx.find(colname);
+    TransformSpec sp;
+    sp.col_idx = j;
+    if (it != name_to_idx.end()) {
+      const TransformSpec& base = full_specs[it->second];
+      sp.code  = base.code;
+      sp.lower = base.lower;
+      sp.upper = base.upper;
+    } else {
+      sp.code  = IDENTITY;
+      sp.lower = 0.0;
+      sp.upper = 1.0;
+    }
+    specs[j] = sp;
+  }
+  return specs;
+}
+
 
 // For pretransform
 enum PreTFCode { PTF_EXP = 1, PTF_PNORM = 2, PTF_NONE = 0 };
@@ -536,7 +572,106 @@ std::vector<PreTransformSpec> make_pretransform_specs(NumericVector p_vector, Li
   }
   return specs;
 }
+LogicalVector c_do_bound(NumericMatrix pars,
+                         const std::vector<BoundSpec>& specs)
+{
+  int nrows = pars.nrow();
+  LogicalVector result(nrows, true);
+
+  // For each parameter that has bounds
+  for (size_t j = 0; j < specs.size(); j++) {
+    const BoundSpec& bs = specs[j];
+    int col_idx   = bs.col_idx;
+    double min_v  = bs.min_val;
+    double max_v  = bs.max_val;
+    bool has_exc  = bs.has_exception;
+    double exc_val= bs.exception_val;
+
+    // Check each row
+    for (int i = 0; i < nrows; i++) {
+      double val = pars(i, col_idx);
+      bool ok = (val > min_v && val < max_v);
+      if (!ok && has_exc) {
+        // If out of range, see if exception matches
+        ok = (val == exc_val);
+      }
+      // Merge with existing result (like result = result & ok_col)
+      if (result[i] && !ok) {
+        result[i] = false;
+      }
+    }
+  }
+  return result;
+}
+
+NumericVector c_do_pre_transform(NumericVector p_vector,
+                                 const std::vector<PreTransformSpec>& specs)
+{
+  for (size_t i = 0; i < specs.size(); i++) {
+    const PreTransformSpec& s = specs[i];
+    double val = p_vector[s.index];
+
+    switch (s.code) {
+    case PTF_EXP: {
+      // lower + exp(real)
+      p_vector[s.index] = s.lower + std::exp(val);
+      break;
+    }
+    case PTF_PNORM: {
+      double range = s.upper - s.lower;
+      // lower + range * Φ(real)
+      p_vector[s.index] = s.lower +
+        range * R::pnorm(val, 0.0, 1.0, /*lower_tail=*/1, /*log_p=*/0);
+      break;
+    }
+    default:
+      // no transform
+      break;
+    }
+  }
+  return p_vector;
+}
+
+NumericMatrix c_do_transform(NumericMatrix pars,
+                             const std::vector<TransformSpec>& specs)
+{
+  int nrow = pars.nrow();
+
+  for (size_t j = 0; j < specs.size(); j++) {
+    const TransformSpec& sp = specs[j];
+    int          col_idx = sp.col_idx;
+    TransformCode c      = sp.code;
+    double        lw     = sp.lower;
+    double        up     = sp.upper;
+
+    switch (c) {
+    case EXP: {
+      for (int i = 0; i < nrow; i++) {
+      // lower + exp(real)
+      pars(i, col_idx) = lw + std::exp(pars(i, col_idx));
+    }
+      break;
+    }
+    case PNORM: {
+      double range = up - lw;
+      for (int i = 0; i < nrow; i++) {
+        // lower + range * Φ(real)
+        pars(i, col_idx) = lw +
+          range * R::pnorm(pars(i, col_idx), 0.0, 1.0,
+                           /*lower_tail=*/1, /*log_p=*/0);
+      }
+      break;
+    }
+    case IDENTITY:
+    default:
+      // do nothing
+      break;
+    }
+  }
+  return pars;
+}
+
+
 
 #endif
-
 
