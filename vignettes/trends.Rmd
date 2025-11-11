@@ -387,6 +387,13 @@ trend_custom <- make_trend(
 )
 ```
 
+Note that, when loading an emc object from disk, the pointers to the custom kernels need to be re-added before the emc object can be used for sampling or posterior data generation, which can be done as follows:
+
+```{r, eval = FALSE}
+load('./emc_samples_with_custom_trend.RData')
+emc <- set_custom_kernel_pointers(emc, get_custom_kernel_pointers(trend_custom))
+```
+
 Interpretation: the base controls how the custom kernel’s output enters the parameter (e.g., `add` means additive). The `transforms` declared in `register_trend()` are attached to the model so custom kernel parameters can be estimated under appropriate constraints.
 
 ## Tips for Choosing Trends
