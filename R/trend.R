@@ -1085,6 +1085,8 @@ set_custom_kernel_pointers <- function(emc, ptrs) {
   }
 
   for(chain_ in 1:length(emc)) {
+    if(!'model' %in% names(emc[[chain_]])) next
+
     model_list <- emc[[chain_]]$model()
     trend <- model_list$trend
     for(i in 1:length(trend)) {
