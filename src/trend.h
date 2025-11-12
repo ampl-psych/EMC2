@@ -131,7 +131,7 @@ NumericVector run_kernel_rcpp(NumericMatrix trend_pars,
   NumericMatrix input_comp = submat_rcpp(input, comp_rows);
   NumericMatrix tp_comp = submat_rcpp(trend_pars, comp_rows);
   bool has_map = (map_input.size() > 0);
-  NumericMatrix map_comp = has_map ? submat_rcpp(map_input, comp_rows) : NumericMatrix(0,0);
+  // NumericMatrix map_comp = has_map ? submat_rcpp(map_input, comp_rows) : NumericMatrix(0,0);
   const int n_comp = input_comp.nrow();
 
   // Custom kernel path: take all inputs at once (matrix), exclude rows with any NA, no map
@@ -280,16 +280,20 @@ NumericVector run_kernel_rcpp(NumericMatrix trend_pars,
       }
     }
 
-    // Optional map weighting per column (elementwise per row in compressed space)
-    if (has_map) {
-      NumericVector w = map_comp(_, c);
-      for (int i = 0; i < n_comp; ++i) comp_out[i] *= w[i];
-    }
+    // // Optional map weighting per column (elementwise per row in compressed space)
+    // if (has_map) {
+    //   NumericVector w = map_comp(_, c);
+    //   for (int i = 0; i < n_comp; ++i) comp_out[i] *= w[i];
+    // }
 
     // expand comp_out back to full n rows and add
     for (int i = 0; i < n; ++i) {
       int idx = expand_idx[i] - 1; // 0-based
-      out[i] += comp_out[idx];
+      if (has_map) {
+        out[i] += comp_out[idx] * map_input(i,c);
+      } else {
+        out[i] += comp_out[idx];
+      }
     }
   }
 
