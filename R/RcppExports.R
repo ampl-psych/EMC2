@@ -117,6 +117,10 @@ calc_ll <- function(p_matrix, data, constants, designs, type, bounds, transforms
     .Call(`_EMC2_calc_ll`, p_matrix, data, constants, designs, type, bounds, transforms, pretransforms, p_types, min_ll, trend)
 }
 
+EMC2_call_custom_trend <- function(trend_pars, input, funptrSEXP) {
+    .Call(`_EMC2_EMC2_call_custom_trend`, trend_pars, input, funptrSEXP)
+}
+
 c_add_charvectors <- function(x, y) {
     .Call(`_EMC2_c_add_charvectors`, x, y)
 }

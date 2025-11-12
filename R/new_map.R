@@ -348,14 +348,14 @@ par_data_map <- function(par_mcmc, design, n_trials = NULL, data = NULL,
     pars <- do_transform(parameters, model()$pre_transform) #t(apply(parameters, 1, do_pre_transform, model()$pre_transform))
     rownames(pars) <- design$Ffactors$subjects
     pars <- map_p(add_constants(pars,design$constants),data, model())
-    if(!is.null(model()$trend) && attr(model()$trend, "pretransform")){
-      # This runs the trend and afterwards removes the trend parameters
-      pars <- prep_trend(data, model()$trend, pars)
+
+    if (!is.null(model()$trend)) {
+      phases <- vapply(model()$trend, function(x) x$phase, character(1))
+      if (any(phases == "pretransform")) pars <- prep_trend_phase(data, model()$trend, pars, "pretransform")
     }
     pars <- do_transform(pars, model()$transform)
-    if(!is.null(model()$trend) && attr(model()$trend, "posttransform")){
-      # This runs the trend and afterwards removes the trend parameters
-      pars <- prep_trend(data, model()$trend, pars)
+    if (!is.null(model()$trend)) {
+      if (any(phases == "posttransform")) pars <- prep_trend_phase(data, model()$trend, pars, "posttransform")
     }
     if(add_recalculated) pars <- model()$Ttransform(pars, data)
     if(i == 1){
