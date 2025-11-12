@@ -428,7 +428,7 @@ prep_trend_phase <- function(dadm, trend, pars, phase, return_trialwise_paramete
                              return_trialwise_parameters = return_trialwise_parameters)
     if(return_trialwise_parameters){
       trialwise_parameters <- attr(updated, "trialwise_parameters")
-      colnames(trialwise_parameters) <- paste0(par_name, '_', paste0(c(cur_trend$covariate, cur_trend$par_input), collapse='_'))
+      colnames(trialwise_parameters) <- paste0(par, '_', paste0(c(cur_trend$covariate, cur_trend$par_input), collapse='_'))
       tpars[[par]] <- trialwise_parameters
     }
 
@@ -984,14 +984,29 @@ make_data_unconditional <- function(data, pars, design, model, return_trialwise_
       if (!any(mask_current)) next
 
       # Standard mapping + trends + transforms on the prefix
-      pm <- map_p(pars, dm, model_list, tmp_return_trialwise)
-      tr <- model_list$trend
-      if (!is.null(tr)) {
-        phases <- vapply(tr, function(x) x$phase, character(1))
-        if (any(phases == "pretransform")) pm <- prep_trend_phase(dm, tr, pm, "pretransform", tmp_return_trialwise)
+      if(!tmp_return_trialwise) {
+        # call C. C cannot return trialwise parameters as of yet, so revert to R otherwise
+        p_types <- names(model_list$p_types)
+        designs <- list()
+        for(p in p_types){
+          designs[[p]] <- attr(dm,"designs")[[p]][attr(attr(dm,"designs")[[p]],"expand"),,drop=FALSE]
+        }
+        constants <- attr(dm, "constants")
+        if(is.null(constants)) constants <- NA
+        pm <- get_pars_c_wrapper(pars[which(subj == subj_levels),,drop=FALSE], dm, constants = constants, designs = designs, #type = model_list$c_name,
+                                 model_list$bound, model_list$transform, model_list$pre_transform, p_types = p_types,
+                                 model_list$trend)
+      } else {
+        # Work in R
+        pm <- map_p(pars, dm, model_list, tmp_return_trialwise)
+        tr <- model_list$trend
+        if (!is.null(tr)) {
+          phases <- vapply(tr, function(x) x$phase, character(1))
+          if (any(phases == "pretransform")) pm <- prep_trend_phase(dm, tr, pm, "pretransform", tmp_return_trialwise)
+        }
+        pm <- do_transform(pm, model_list$transform)
+        if (!is.null(tr) && any(phases == "posttransform")) pm <- prep_trend_phase(dm, tr, pm, "posttransform", tmp_return_trialwise)
       }
-      pm <- do_transform(pm, model_list$transform)
-      if (!is.null(tr) && any(phases == "posttransform")) pm <- prep_trend_phase(dm, tr, pm, "posttransform", tmp_return_trialwise)
       cur_dm <- dm[mask_current, , drop = FALSE]
       pr <- model_list$Ttransform(pm[mask_current, , drop = FALSE], cur_dm)
       pr <- add_bound(pr, model_list$bound, cur_dm$lR)
