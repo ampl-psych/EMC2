@@ -378,7 +378,25 @@ NumericVector run_trend_rcpp(DataFrame data, List trend, NumericVector param, Nu
     // Optional per-column map weights passed to kernel
     NumericMatrix map_in;
     if (trend.containsElementNamed("map") && !Rf_isNull(trend["map"])) {
-      map_in = as<NumericMatrix>(trend["map"]);
+      // Collect map, select only rows that match subject number
+      NumericMatrix map_provided = as<NumericMatrix>(trend["map"]);
+      int full_map_size = map_provided.nrow();
+      LogicalVector is_subject(full_map_size, false);
+
+      // Get subject. Note that it's a factor...
+      IntegerVector subject_factor = data["subjects"];              // codes (all 1)
+      CharacterVector subject_char = subject_factor.attr("levels"); // level is stored as character...
+      int subject_number = std::stoi(std::string(subject_char[0])); // and this should be the number stored as number
+      for(int r=0; r < full_map_size; r++) {
+        if(map_provided(r,0) == subject_number) is_subject[r] = true;
+      }
+      map_in = submat_rcpp(map_provided, is_subject);
+
+      // drop first column
+      LogicalVector not_subject_column(map_provided.ncol(), true);
+      not_subject_column[0] = false;
+      map_in = submat_rcpp_col(map_in, not_subject_column);
+
     } else {
       map_in = NumericMatrix(0,0);
     }
@@ -593,3 +611,29 @@ inline void fill_trend_columns_for_pretransform(NumericMatrix& pars,
 }
 
 #endif
+
+
+// Rprintf("Subject %d", subject_number);
+// Rprintf("Data shape (nrow) %d", n_trials);
+// int n_show = std::min(5, map_in.nrow());  // show first 5 rows
+// Rcout << "First " << n_show << " rows of map_in:\n";
+//
+// for (int i = 0; i < n_show; i++) {
+//   for (int j = 0; j < map_in.ncol(); j++) {
+//     Rcout << map_in(i, j) << "\t";
+//   }
+//   Rcout << "\n";
+// }
+// Rcout << std::endl;
+
+// int subject_number = as<IntegerVector>(data["subjects"])[0];
+// NumericMatrix map_in(n_trials, n_cov);
+// int data_r = 0;
+// for(int r = 0; r < map_provided.nrow(); r++) {
+//   if(map_provided(r,0) == subject_number) {
+//     for(int c = 0; c < n_cov; c++) {
+//       map_in(data_r, c) = map_provided(r, c+1);
+//     }
+//     data_r++;
+//   }
+// }
