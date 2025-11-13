@@ -452,7 +452,12 @@ prep_trend_phase <- function(dadm, trend, pars, phase, return_trialwise_paramete
                              return_trialwise_parameters = return_trialwise_parameters)
     if(return_trialwise_parameters){
       trialwise_parameters <- attr(updated, "trialwise_parameters")
-      colnames(trialwise_parameters) <- paste0(par, '_', paste0(c(cur_trend$covariate, cur_trend$par_input), collapse='_'))
+      # Return size is always of covariates -- but perhaps additional par_input was passed as well
+      if(length(cur_trend$covariate) > 1) {
+        colnames(trialwise_parameters) <- paste0(par, '_', c(cur_trend$covariate, cur_trend$par_input))
+      } else {
+        colnames(trialwise_parameters) <- paste0(par, '_', paste0(c(cur_trend$covariate, cur_trend$par_input), collapse='_'))
+      }
       tpars[[par]] <- trialwise_parameters
     }
 

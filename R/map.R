@@ -128,7 +128,14 @@ map_p <- function(p,dadm,model,return_trialwise_parameters=FALSE)
           updated <- run_trend(dadm, cur_trend, pm[, par_name], trend_pars, pars, return_trialwise_parameters)
           if(return_trialwise_parameters){
             trialwise_parameters <- attr(updated, "trialwise_parameters")
-            colnames(trialwise_parameters) <- paste0(par_name, '_', paste0(c(cur_trend$covariate, cur_trend$par_input), collapse='_'))
+            # Return size is always of covariates -- but perhaps additional par_input was passed as well
+            # this needs more thinking - how do we know the exact number of updated covariates? Why par_input here? to check with Niek
+            if(length(cur_trend$covariate) > 1) {
+              colnames(trialwise_parameters) <- paste0(par_name, '_', c(cur_trend$covariate, cur_trend$par_input))
+            } else {
+              colnames(trialwise_parameters) <- paste0(par_name, '_', paste0(c(cur_trend$covariate, cur_trend$par_input), collapse='_'))
+            }
+            # colnames(trialwise_parameters) <- paste0(par_name, '_', paste0(c(cur_trend$covariate, cur_trend$par_input), collapse='_'))
             tpars[[par_name]] <- trialwise_parameters
           }
           pm[, par_name] <- updated
