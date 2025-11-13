@@ -395,12 +395,15 @@ run_kernel <- function(trend_pars = NULL, kernel, input, funptr = NULL, at_facto
           comp_out[good] <- tpars_comp[good, 1] * covariate_comp[good] + tpars_comp[good, 2] * covariate_comp[good]^2 + tpars_comp[good, 3] * covariate_comp[good]^3 + tpars_comp[good, 4] * covariate_comp[good]^4
         } else if (kernel == "delta") {
           tmp <- run_delta(tpars_comp[good, 1], tpars_comp[good, 2], covariate_comp[good])
+          comp_out[1] = trend_pars[1,1]  # first value is *always* q0
           comp_out[good] <- tmp
         } else if (kernel == "delta2kernel") {
           tmp <- run_delta2kernel(tpars_comp[good, 1], tpars_comp[good, 2], tpars_comp[good, 3], tpars_comp[good, 4], covariate_comp[good])
+          comp_out[1] = trend_pars[1,1]  # first value is *always* q0
           comp_out[good] <- tmp
         } else if (kernel == "delta2lr") {
           tmp <- run_delta2lr(tpars_comp[good, 1], tpars_comp[good, 2], tpars_comp[good, 3], covariate_comp[good])
+          comp_out[1] = trend_pars[1,1]  # first value is *always* q0
           comp_out[good] <- tmp
         } else {
           stop("Unknown kernel type")

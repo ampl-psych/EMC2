@@ -260,6 +260,8 @@ NumericVector run_kernel_rcpp(NumericMatrix trend_pars,
             ++pos;
           }
           NumericVector tmp = run_delta_rcpp(q0, alpha, covg);
+          // first value is *always* q0
+          comp_out[0] = trend_pars(0, 0 + n_base_pars);
           pos = 0;
           for (int i = 0; i < n_comp; ++i) if (good[i]) comp_out[i] = tmp[pos++];
         } else if (kernel == "delta2kernel") {
@@ -274,8 +276,10 @@ NumericVector run_kernel_rcpp(NumericMatrix trend_pars,
             ++pos;
           }
           NumericVector tmp = run_delta2kernel_rcpp(q0, aF, pS, dS, covg);
+          // first value is *always* q0
+          comp_out[0] = trend_pars(0, 0 + n_base_pars);
           pos = 0;
-          // for (int i = 0; i < n_comp; ++i) if (good[i]) comp_out[i] = tmp[pos++];
+          for (int i = 0; i < n_comp; ++i) if (good[i]) comp_out[i] = tmp[pos++];
         } else if (kernel == "delta2lr") {
           NumericVector q0(n_good), alphaPos(n_good), alphaNeg(n_good), covg(n_good);
           int pos = 0;
@@ -287,8 +291,10 @@ NumericVector run_kernel_rcpp(NumericMatrix trend_pars,
             ++pos;
           }
           NumericVector tmp = run_delta2lr_rcpp(q0, alphaPos, alphaNeg, covg);
+          // first value is *always* q0
+          comp_out[0] = trend_pars(0, 0 + n_base_pars);
           pos = 0;
-          // for (int i = 0; i < n_comp; ++i) if (good[i]) comp_out[i] = tmp[pos++];
+          for (int i = 0; i < n_comp; ++i) if (good[i]) comp_out[i] = tmp[pos++];
         } else {
           stop("Unknown kernel type");
         }
