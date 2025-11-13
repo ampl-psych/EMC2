@@ -1,5 +1,5 @@
 # Custom kernel: operate on all input columns at once; compress by at; exclude rows with any NA; expand back
-run_kernel_custom <- function(trend_pars = NULL, input, funptr, at_factor = NULL) {
+run_kernel_custom <- function(trend_pars = NULL, input, funptr, at_factor = NULL, ffill_na=FALSE) {
   if (!is.matrix(input)) input <- matrix(input, ncol = 1)
   n <- nrow(input)
   if (is.null(trend_pars)) trend_pars <- matrix(nrow = n, ncol = 0)
@@ -18,14 +18,17 @@ run_kernel_custom <- function(trend_pars = NULL, input, funptr, at_factor = NULL
   }
 
   # Exclude any rows with at least one NA across columns
+  # SM - why..? Maybe handle this in the kernel?
   good <- rowSums(is.na(input_comp)) == 0
   comp_out <- numeric(nrow(input_comp))
+  if(isTRUE(ffill_na)) comp_out[!good,] <- NA
   if (any(good)) {
     in_good <- input_comp[good, , drop = FALSE]
     tp_good <- if (ncol(tpars_comp)) tpars_comp[good, , drop = FALSE] else matrix(nrow = sum(good), ncol = 0)
     contrib <- EMC2_call_custom_trend(tp_good, in_good, funptr)
     contrib[is.na(contrib)] <- 0
     comp_out[good] <- contrib
+    if(isTRUE(ffill_na)) comp_out <- na_locf(comp_out, na.rm=FALSE)
   }
   # Expand back to full rows, return as single-column matrix
   matrix(comp_out[expand_idx], ncol = 1)
@@ -44,6 +47,10 @@ run_kernel_custom <- function(trend_pars = NULL, input, funptr, at_factor = NULL
 #' @param par_input Optional character vector(s) of parameter names to use as additional inputs for the trend
 #' @param at If NULL (default), trend is applied everywhere. If a factor name (e.g., "lR"), trend is applied only to entries corresponding to the first level of that factor.
 #' @param custom_trend A trend registered with `register_trend`
+#' @param ffill_na Determines how missing covariate values are handled.
+#'        If `TRUE`, missing values are forward-filled using the last known non-`NA` value after
+#'        applying the kernel. If `FALSE`, trials with missing covariates contribute `0` instead.
+#'        The default is `TRUE` for delta-rule models and `FALSE` otherwise.
 #'
 #' @return A list containing the trend specifications for each parameter
 #' @export
@@ -63,7 +70,8 @@ make_trend <- function(par_names, cov_names = NULL, kernels, bases = NULL,
                        shared = NULL, trend_pnames = NULL,
                        phase = "premap",
                        par_input = NULL, at = NULL,
-                       custom_trend = NULL){
+                       custom_trend = NULL,
+                       ffill_na = NULL){
   if(!(length(par_names) == length(kernels))){
     stop("Make sure that par_names and kernels have the same length")
   }
@@ -110,6 +118,9 @@ make_trend <- function(par_names, cov_names = NULL, kernels, bases = NULL,
       stop("custom_trend must be NULL, a single registered trend, or a list of them")
     }
   }
+  # Normalize forward filling options
+  if (length(ffill_na) != length(par_names)) ffill_na <- rep(ffill_na, length(par_names))
+
 
   trends_out <- list()
   all_trend_pnames <- c()
@@ -172,6 +183,11 @@ make_trend <- function(par_names, cov_names = NULL, kernels, bases = NULL,
     trend$covariate <- unlist(cov_names[i])
     trend$par_input <- unlist(par_input[[i]])
     trend$phase <- phase[i]
+    if(is.null(ffill_na[i])) {
+      if(trend$kernel %in% c('delta', 'delta2kernel', 'delta2lr')) trend$ffill_na <- TRUE else trend$ffill_na <- FALSE
+    } else {
+      trend$ffill_na <- ffill_na[i]
+    }
     trends_out[[i]] <- trend
   }
   names(trends_out) <- par_names
@@ -304,7 +320,7 @@ make_expand_idx <- function(first_level) {
 }
 
 
-run_kernel <- function(trend_pars = NULL, kernel, input, funptr = NULL, at_factor = NULL) {
+run_kernel <- function(trend_pars = NULL, kernel, input, funptr = NULL, at_factor = NULL, ffill_na=FALSE) {
   # input: vector or matrix; apply per column and sum contributions; handle NA by zeroing; optional at compression/expansion
   if (!is.matrix(input)) input <- matrix(input, ncol = 1)
   n <- nrow(input)
@@ -314,7 +330,7 @@ run_kernel <- function(trend_pars = NULL, kernel, input, funptr = NULL, at_facto
   # Custom kernels: operate on full matrix at once; returns n x 1 matrix
   if (identical(kernel, "custom")) {
     if (is.null(funptr)) stop("Missing function pointer for custom kernel. Pass 'funptr'.")
-    return(run_kernel_custom(trend_pars, input, funptr, at_factor))
+    return(run_kernel_custom(trend_pars, input, funptr, at_factor, ffill_na))
   }
 
   # Precompute at compression/expansion and compressed trend parameters
@@ -344,6 +360,8 @@ run_kernel <- function(trend_pars = NULL, kernel, input, funptr = NULL, at_facto
 
     # 3) Exclude NAs
     good <- !is.na(covariate_comp)
+    if(isTRUE(ffill_na)) comp_out[is.na(covariate_comp)] <- NA
+
     if (any(good)) {
       # 4) Run kernel on good subset only
       if (kernel == "custom") {
@@ -389,6 +407,9 @@ run_kernel <- function(trend_pars = NULL, kernel, input, funptr = NULL, at_facto
         }
       }
     }
+
+    # SM: forward fill values with missing covariate
+    if(isTRUE(ffill_na)) comp_out <- na_locf(comp_out, na.rm = FALSE)
 
     # 5) Expand back to full subject rows and store into output matrix column
     out_mat[, j] <- comp_out[expand_idx]
@@ -499,7 +520,7 @@ run_trend <- function(dadm, trend, param, trend_pars, pars_full = NULL,
       subset_input <- input_matrix[s_idx,, drop = FALSE]
       at_fac <- if (use_at_filter) dat[, trend$at] else NULL
       kern_mat <- run_kernel(kernel_pars[s_idx,,drop = FALSE], trend$kernel, subset_input,
-                             funptr = funptr, at_factor = at_fac)
+                             funptr = funptr, at_factor = at_fac, ffill_na=trend$ffill_na)
       if(return_trialwise_parameters){
         tlist[[s]] <- kern_mat
       }

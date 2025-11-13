@@ -110,7 +110,8 @@ NumericVector run_kernel_rcpp(NumericMatrix trend_pars,
                               int n_base_pars,
                               SEXP funptrSEXP = R_NilValue,
                               LogicalVector first_level_mask = LogicalVector(),
-                              NumericMatrix map_input = NumericMatrix(0,0)) {
+                              NumericMatrix map_input = NumericMatrix(0,0),
+                              bool ffill_na = false) {
   // Kernels accept any number of input columns; apply per column and sum contributions.
   const int n = input.nrow();
   const int p = input.ncol();
@@ -170,7 +171,21 @@ NumericVector run_kernel_rcpp(NumericMatrix trend_pars,
       }
       if (contrib.size() != n_good) stop("Custom kernel returned wrong length (expected n_good).");
       rg = 0;
-      for (int i = 0; i < n_comp; ++i) if (good[i]) comp_out[i] = NumericVector::is_na(contrib[rg]) ? 0.0 : contrib[rg++];
+      // for (int i = 0; i < n_comp; ++i) if (good[i]) comp_out[i] = NumericVector::is_na(contrib[rg]) ? 0.0 : contrib[rg++];
+      // Fill
+      double last_val = 0.0;
+      for (int i = 0; i < n_comp; ++i) {
+        if (good[i]) {
+          // Take next contrib, replace NA with 0
+          double val = NumericVector::is_na(contrib[rg]) ? 0.0 : contrib[rg];
+          comp_out[i] = val;
+          if (ffill_na) last_val = val;  // remember for forward fill
+          rg++;
+        } else if (ffill_na) {
+          // Forward-fill from last known value
+          comp_out[i] = last_val;
+        }
+      }
     }
     // expand back and return
     for (int i = 0; i < n; ++i) {
@@ -260,7 +275,7 @@ NumericVector run_kernel_rcpp(NumericMatrix trend_pars,
           }
           NumericVector tmp = run_delta2kernel_rcpp(q0, aF, pS, dS, covg);
           pos = 0;
-          for (int i = 0; i < n_comp; ++i) if (good[i]) comp_out[i] = tmp[pos++];
+          // for (int i = 0; i < n_comp; ++i) if (good[i]) comp_out[i] = tmp[pos++];
         } else if (kernel == "delta2lr") {
           NumericVector q0(n_good), alphaPos(n_good), alphaNeg(n_good), covg(n_good);
           int pos = 0;
@@ -273,10 +288,17 @@ NumericVector run_kernel_rcpp(NumericMatrix trend_pars,
           }
           NumericVector tmp = run_delta2lr_rcpp(q0, alphaPos, alphaNeg, covg);
           pos = 0;
-          for (int i = 0; i < n_comp; ++i) if (good[i]) comp_out[i] = tmp[pos++];
+          // for (int i = 0; i < n_comp; ++i) if (good[i]) comp_out[i] = tmp[pos++];
         } else {
           stop("Unknown kernel type");
         }
+      }
+    }
+
+    // Fill
+    if(ffill_na) {
+      for (int i = 1; i < n_comp; ++i) {
+        if(!good[i]) comp_out[i] = comp_out[i-1];
       }
     }
 
@@ -322,6 +344,14 @@ NumericVector run_trend_rcpp(DataFrame data, List trend, NumericVector param, Nu
   } else {
     par_input = CharacterVector(0);
   }
+
+  bool ffill_na;
+  if (trend.containsElementNamed("ffill_na") && !Rf_isNull(trend["ffill_na"])) {
+    ffill_na = as<bool>(trend["ffill_na"]);
+  } else {
+    ffill_na = false;
+  }
+
   // Initialize output vector with zeros
   int n_trials = param.length();
   NumericVector out(n_trials, 0.0);
@@ -397,7 +427,7 @@ NumericVector run_trend_rcpp(DataFrame data, List trend, NumericVector param, Nu
     } else {
       map_in = NumericMatrix(0,0);
     }
-    NumericVector kernel_out = run_kernel_rcpp(trend_pars, kernel, input_all, n_base_pars, custom_ptr, first_level, map_in);
+    NumericVector kernel_out = run_kernel_rcpp(trend_pars, kernel, input_all, n_base_pars, custom_ptr, first_level, map_in, ffill_na);
     out = out + kernel_out;
   }
   // Apply base transformation to final summed output

@@ -14,7 +14,8 @@ make_trend(
   phase = "premap",
   par_input = NULL,
   at = NULL,
-  custom_trend = NULL
+  custom_trend = NULL,
+  ffill_na = NULL
 )
 }
 \arguments{
@@ -38,6 +39,11 @@ one of "premap", "pretransform", or "posttransform". Defaults to "premap".}
 \item{at}{If NULL (default), trend is applied everywhere. If a factor name (e.g., "lR"), trend is applied only to entries corresponding to the first level of that factor.}
 
 \item{custom_trend}{A trend registered with \code{register_trend}}
+
+\item{ffill_na}{Determines how missing covariate values are handled.
+If \code{TRUE}, missing values are forward-filled using the last known non-\code{NA} value after
+applying the kernel. If \code{FALSE}, trials with missing covariates contribute \code{0} instead.
+The default is \code{TRUE} for delta-rule models and \code{FALSE} otherwise.}
 }
 \value{
 A list containing the trend specifications for each parameter
