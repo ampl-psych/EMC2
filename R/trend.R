@@ -1018,6 +1018,8 @@ make_data_unconditional <- function(data, pars, design, model, return_trialwise_
       mask_current <- dm$subjects == subj & dm$trials == current_trial
       if (!any(mask_current)) next
 
+      tr <- model_list$trend
+
       # Standard mapping + trends + transforms on the prefix
       if(!tmp_return_trialwise) {
         # call C. C cannot return trialwise parameters as of yet, so revert to R otherwise
@@ -1034,7 +1036,6 @@ make_data_unconditional <- function(data, pars, design, model, return_trialwise_
       } else {
         # Work in R
         pm <- map_p(pars, dm, model_list, tmp_return_trialwise)
-        tr <- model_list$trend
         if (!is.null(tr)) {
           phases <- vapply(tr, function(x) x$phase, character(1))
           if (any(phases == "pretransform")) pm <- prep_trend_phase(dm, tr, pm, "pretransform", tmp_return_trialwise)
@@ -1061,21 +1062,31 @@ make_data_unconditional <- function(data, pars, design, model, return_trialwise_
 
       # NS I don't actually think this is necessary couldn't this be specified
       # As a standard function in the design?
+
+      # SM I don't know how to otherwise overwrite the 'rewards' column in such a way that
+      # the rewards on the previous trials aren't overwritten each trial... would be happy
+      # to leave it out if not needed!
       # # Optional per-trend feedback → next trial for this subject
-      # if(!is.null(tr) && !is.null(tr$feedback_fun)){
-      #   nams <- names(tr$feedback_fun)
-      #   # Build the window: current prefix plus next-trial rows (if any)
-      #   if (j < length(trial_vals)) {
-      #     next_rows <- idx_subj_all[trials_subj == trial_vals[j+1]]
-      #     window_rows <- c(prefix_rows, next_rows)
-      #   } else {
-      #     window_rows <- prefix_rows
-      #   }
-      #   for(i in 1:length(nams)){
-      #     fb_vec <- tr$feedback_fun[[i]](data[window_rows,,drop=FALSE])
-      #     data[window_rows, nams[i]] <- fb_vec
-      #   }
-      # }
+      if(!is.null(tr)) {
+        for(trend_n in 1:length(tr)) {
+          if(!is.null(tr[[trend_n]]$feedback_fun)) {
+            nams <- names(tr[[trend_n]]$feedback_fun)
+            # Build the window: current prefix plus next-trial rows (if any) --
+            # SM: why *next* rows?
+            # if (j < length(trial_vals)) {
+            #   next_rows <- idx_subj_all[trials_subj == trial_vals[j+1]]
+            #   window_rows <- c(prefix_rows, next_rows)
+            # } else {
+            #   window_rows <- prefix_rows
+            # }
+            window_rows <- prefix_rows  # I think this should suffice?
+            for(i in 1:length(nams)){
+              fb_vec <- tr[[trend_n]]$feedback_fun[[i]](data[window_rows,,drop=FALSE])
+              data[window_rows, nams[i]] <- fb_vec
+            }
+          }
+        }
+      }
 
       # Store trialwise parameters if requested
       # if (!is.null(trialwise_parameters)) trialwise_parameters[target_rows, ] <- pr
@@ -1084,6 +1095,9 @@ make_data_unconditional <- function(data, pars, design, model, return_trialwise_
       }
     }
   }
+  # Re-run with newly updated data to ensure Ffunctions correspond to the simulated data
+  data <- design_model(data, design, model_fun, add_acc = FALSE, compress = FALSE, verbose = FALSE, rt_check = FALSE)
+
   if(is.null(data$lR)) data$lR <- 1
   data <- data[data$lR == unique(data$lR)[1], unique(c(includeColumns, "R", "rt"))]
   data <- data[,!colnames(data) %in% c('lR', 'lM')]
