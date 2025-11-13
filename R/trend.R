@@ -409,6 +409,11 @@ run_kernel <- function(trend_pars = NULL, kernel, input, funptr = NULL, at_facto
           stop("Unknown kernel type")
         }
       }
+    } else {
+      # no good found, but for delta rules should still be set to q0
+      if(kernel %in% c('delta', 'delta2kernel', 'delta2lr')) {
+        comp_out[1] = trend_pars[1,1]  # first value is *always* q0
+      }
     }
 
     # SM: forward fill values with missing covariate

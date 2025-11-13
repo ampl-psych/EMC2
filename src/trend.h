@@ -299,6 +299,11 @@ NumericVector run_kernel_rcpp(NumericMatrix trend_pars,
           stop("Unknown kernel type");
         }
       }
+    } else {
+      // even without good values, should be set to q0
+      if (kernel == "delta" || kernel == "delta2lr" || kernel == "delta2kernel") {
+        comp_out[0] = trend_pars(0, 0 + n_base_pars);
+      }
     }
 
     // Fill
