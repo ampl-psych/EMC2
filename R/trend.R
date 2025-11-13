@@ -645,6 +645,7 @@ run_delta <- function(q0,alpha,covariate) {
 run_delta2kernel <- function(q0,alphaFast,propSlow,dSwitch,covariate) {
   q <- qFast <- qSlow <- peFast <- peSlow <- numeric(length(covariate))
   q[1] <- qFast[1] <- qSlow[1] <- q0[1]
+  if(length(q) == 1) return(q)  # only 1 trial, cannot be updated
   alphaSlow <- propSlow*alphaFast
   for (i in 2:length(covariate)) {
     peFast[i-1] <- covariate[i-1]-qFast[i-1]
