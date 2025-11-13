@@ -1000,6 +1000,7 @@ make_data_unconditional <- function(data, pars, design, model, return_trialwise_
   # Iterate per subject, then per trial
   subj_levels <- levels(data$subjects)
   for (subj in subj_levels) {
+    sub_trialwise_parameters <- NULL
     idx_subj_all <- which(data$subjects == subj)
     if (!length(idx_subj_all)) next
     trials_subj <- data$trials[idx_subj_all]
@@ -1091,8 +1092,12 @@ make_data_unconditional <- function(data, pars, design, model, return_trialwise_
       # Store trialwise parameters if requested
       # if (!is.null(trialwise_parameters)) trialwise_parameters[target_rows, ] <- pr
       if(tmp_return_trialwise){
-        trialwise_parameters <- cbind(pm, attr(pm, "trialwise_parameters"))
+        # trialwise_parameters <- cbind(pm, attr(pm, "trialwise_parameters"))
+        sub_trialwise_parameters <- cbind(pm, attr(pm, "trialwise_parameters"))
       }
+    }
+    if(return_trialwise_parameters) {
+      trialwise_parameters <- rbind(trialwise_parameters, sub_trialwise_parameters)
     }
   }
   # Re-run with newly updated data to ensure Ffunctions correspond to the simulated data
