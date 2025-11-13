@@ -552,6 +552,22 @@ design_model <- function(data,design,model=NULL,
     da[,i] <- newF
   }
 
+  # Add covariate_map as attribute to da
+  if(!is.null(model()$trend)) {
+    trend_list <- model()$trend
+    for(i in 1:length(trend_list)) {
+      if(!is.null(trend_list[[i]]$map)) {
+        if(!'covariate_maps' %in% names(attributes(da))) attr(da, 'covariate_maps') <- list()
+        covariate_map_names <- names(trend_list[[i]]$map)
+        covariate_map_functions <- trend_list[[i]]$map
+        for(map_n in 1:length(covariate_map_names)) {
+          covs <- trend_list[[i]]$covariate
+          attr(da, 'covariate_maps')[[covariate_map_names[map_n]]] <- covariate_map_functions[[map_n]](dadm=da, covs)
+        }
+      }
+    }
+  }
+
   if (is.null(model()$p_types) | is.null(model()$Ttransform))
     stop("p_types and Ttransform must be supplied")
   if (!all(unlist(lapply(design$Flist,class))=="formula"))
@@ -760,6 +776,13 @@ dm_list <- function(dadm)
     isin <- dadm$subjects==i         # dadm
     dl[[i]] <- dadm[isin,]
     dl[[i]]$subjects <- factor(as.character(dl[[i]]$subjects))
+
+    if(!is.null(attr(dadm, 'covariate_maps'))) {
+      covariate_maps <- attr(dadm, 'covariate_maps')
+      for(ii in 1:length(covariate_maps)) covariate_maps[[ii]] <- covariate_maps[[ii]][isin,]
+      attr(dl[[i]], 'covariate_maps') <- covariate_maps
+    }
+
     if(is.null(attr(dadm, "custom_ll"))){
 
       isin1 <- s_expand==i             # da

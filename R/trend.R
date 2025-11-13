@@ -505,6 +505,7 @@ run_trend <- function(dadm, trend, param, trend_pars, pars_full = NULL,
       }
       # Optional per-column map weighting prior to summing
       if (!is.null(trend$map)) {
+        map_mat <- attr(dadm, 'covariate_maps')[[trend$map]]
         map_mat <- trend$map[s_idx,, drop = FALSE]
         kern_mat <- kern_mat * map_mat
       }

@@ -379,25 +379,21 @@ NumericVector run_trend_rcpp(DataFrame data, List trend, NumericVector param, Nu
     NumericMatrix map_in;
     if (trend.containsElementNamed("map") && !Rf_isNull(trend["map"])) {
       // Collect map, select only rows that match subject number
-      map_in = as<NumericMatrix>(trend["map"]);
-      // NumericMatrix map_provided = as<NumericMatrix>(trend["map"]);
-      // int full_map_size = map_provided.nrow();
-      // LogicalVector is_subject(full_map_size, false);
-      //
-      // // Get subject. Note that it's a factor...
-      // IntegerVector subject_factor = data["subjects"];              // codes (all 1)
-      // CharacterVector subject_char = subject_factor.attr("levels"); // level is stored as character...
-      // int subject_number = std::stoi(std::string(subject_char[0])); // and this should be the number stored as number
-      // for(int r=0; r < full_map_size; r++) {
-      //   if(map_provided(r,0) == subject_number) is_subject[r] = true;
-      // }
-      // map_in = submat_rcpp(map_provided, is_subject);
-      //
-      // // drop first column
-      // LogicalVector not_subject_column(map_provided.ncol(), true);
-      // not_subject_column[0] = false;
-      // map_in = submat_rcpp_col(map_in, not_subject_column);
+      // map_in = as<NumericMatrix>(trend["map"]);
 
+      // Straight from chat
+      List map_list = trend["map"];
+      CharacterVector map_names = map_list.names();
+      if (map_names.size() == 0)
+        stop("trend$map has no named elements");
+      std::string map_name = as<std::string>(map_names[0]);
+      ///CharacterVector map_name = as<CharacterVector>(trend["map"]);
+      List covariate_maps = data.attr("covariate_maps");
+      if (Rf_isNull(covariate_maps[map_name]))
+        stop("No map named '%s' found in covariate_maps", map_name.c_str());
+
+      // SEXP covariate_map = covariate_maps[map_name];
+      map_in = as<NumericMatrix>(covariate_maps[map_name]);
     } else {
       map_in = NumericMatrix(0,0);
     }
