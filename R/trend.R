@@ -178,7 +178,7 @@ make_trend <- function(par_names, cov_names = NULL, kernels, bases = NULL,
     if(!is.null(user_trend_pnames)) {
       if(length(user_trend_pnames) != length(default_trend_pnames)) {
         msg <- paste0("For trend ", i, ", you provided ", length(user_trend_pnames), " parameter names, while ", length(default_trend_pnames), " are needed. The default parameter names would be: ")
-        msg <- paste0(msg, paste0(trend_pnames, collapse = ', '))
+        msg <- paste0(msg, paste0(default_trend_pnames, collapse = ', '))
         stop(msg)
       } else {
         final_trend_pnames <- user_trend_pnames
