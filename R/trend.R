@@ -157,12 +157,13 @@ make_trend <- function(par_names, cov_names = NULL, kernels, bases = NULL,
       }
     }
     # add par names
-    trend_pnames <- trend_help(base = trend$base, do_return = TRUE)$default_pars
+    user_trend_pnames <- trend_pnames[[i]]
+    default_trend_pnames <- trend_help(base = trend$base, do_return = TRUE)$default_pars
     # Kernel parameter names:
     if (identical(kernels[i], "custom")) {
       if (is.null(custom_trend)) stop("custom_trend must be provided when using kernel='custom'")
       ct <- custom_trend[[i]]
-      trend_pnames <- c(trend_pnames, ct$trend_pnames)
+      default_trend_pnames <- c(default_trend_pnames, ct$trend_pnames)
       # Attach the external pointer and optional transforms to this trend entry
       attr(trend, "custom_ptr") <- attr(ct, "custom_ptr")
       if (!is.null(attr(ct, "custom_transforms"))) {
@@ -172,9 +173,21 @@ make_trend <- function(par_names, cov_names = NULL, kernels, bases = NULL,
         attr(trend, "custom_transforms") <- unname(ctf)
       }
     } else {
-      trend_pnames <- c(trend_pnames, trend_help(kernel = kernels[i], do_return = TRUE)$default_pars)
+      default_trend_pnames <- c(default_trend_pnames, trend_help(kernel = kernels[i], do_return = TRUE)$default_pars)
     }
-    cur_trend_pnames <- paste0(par_names[i], ".", trend_pnames)
+    if(!is.null(user_trend_pnames)) {
+      if(length(user_trend_pnames) != length(default_trend_pnames)) {
+        msg <- paste0("For trend ", i, ", you provided ", length(user_trend_pnames), " parameter names, while ", length(default_trend_pnames), " are needed. The default parameter names would be: ")
+        msg <- paste0(msg, paste0(trend_pnames, collapse = ', '))
+        stop(msg)
+      } else {
+        final_trend_pnames <- user_trend_pnames
+      }
+    } else {
+      final_trend_pnames <- default_trend_pnames
+    }
+
+    cur_trend_pnames <- paste0(par_names[i], ".", final_trend_pnames)
     if(any(cur_trend_pnames %in% all_trend_pnames)){
       cur_trend_pnames[cur_trend_pnames %in% all_trend_pnames] <- paste0(cur_trend_pnames[cur_trend_pnames %in% all_trend_pnames], ".", trend$kernel)
     }
@@ -197,13 +210,13 @@ make_trend <- function(par_names, cov_names = NULL, kernels, bases = NULL,
       # Get the parameters to be replaced
       to_replace <- shared[[main_par]]
       # Loop through all trends
-      for (trend_name in names(trends_out)) {
+      for (trend_n in 1:length(trends_out)) {
         # Get current trend parameter names
-        curr_pnames <- trends_out[[trend_name]]$trend_pnames
+        curr_pnames <- trends_out[[trend_n]]$trend_pnames
 
         # Check if any of the parameters to be replaced exist
         curr_pnames[curr_pnames %in% to_replace] <- main_par
-        trends_out[[trend_name]]$trend_pnames <- curr_pnames
+        trends_out[[trend_n]]$trend_pnames <- curr_pnames
       }
     }
   }
