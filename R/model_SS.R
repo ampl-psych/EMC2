@@ -33,30 +33,156 @@ staircase_function <- function(dts,staircase) {
   ns <- ncol(dts)
   SSD <- sR <- srt <- numeric()
   SSD[1] <- staircase$SSD0
+  rules <- staircase$rules
+  if (is.null(rules)) rules <- list(up = NULL, down = NULL)
+  labels <- staircase$labels
+  accST <- staircase$accST
+  iSSD <- 1
+  if (!is.null(accST)) iSSD <- c(iSSD, accST)
+  match_rule <- function(label, rule) {
+    if (is.null(rule) || !length(rule)) return(FALSE)
+    if (is.na(label)) {
+      any(is.na(rule))
+    } else {
+      label %in% rule[!is.na(rule)]
+    }
+  }
   for (i in 1:ns) {
     if (SSD[i]<staircase$stairmin) SSD[i] <- staircase$stairmin
     if (SSD[i]>staircase$stairmax) SSD[i] <- staircase$stairmax
-    dts[1,i] <- dts[1,i] + SSD[i]
-    if (all(is.infinite(dts[-1,i]))) Ri <- 1 else # GF or GF & TF
-      Ri <- which.min(dts[,i])
+    trial <- dts[,i]
+    trial[iSSD] <- trial[iSSD] + SSD[i]
+    if (all(is.infinite(trial[-1]))) {
+      Ri <- 1
+    } else {
+      Ri <- which.min(trial)
+    }
     if (Ri==1) {
-      sR[i] <- srt[i] <- NA
-      if (i<ns) SSD[i+1] <- round(SSD[i] + staircase$stairstep,3)
+      if (!is.null(accST) && length(accST) > 0) {
+        st_cols <- accST
+        st_finish <- trial[st_cols]
+        st_idx <- st_cols[which.min(st_finish)]
+        sR[i] <- st_idx - 1
+        srt[i] <- st_finish[which.min(st_finish)]
+        label <- if (!is.null(labels) && (st_idx-1) <= length(labels)) labels[st_idx-1] else NA_character_
+      } else {
+        sR[i] <- srt[i] <- NA
+        label <- NA_character_
+      }
     } else {
       sR[i] <- Ri-1
-      srt[i] <- min(dts[-1,i])
-      if (i<ns) SSD[i+1] <- round(SSD[i] - staircase$stairstep,3)
+      if (Ri==1) {
+        srt[i] <- NA
+      } else {
+        srt[i] <- trial[Ri]
+      }
+      label <- if (!is.null(labels) && (Ri-1) <= length(labels)) labels[Ri-1] else NA_character_
+    }
+    step_dir <- NULL
+    if (!is.null(rules$up) || !is.null(rules$down)) {
+      success <- match_rule(label, rules$up)
+      failure <- match_rule(label, rules$down)
+      if (!is.null(rules$down) && !is.null(rules$up) && success && failure) {
+        stop("`staircase_up` and `staircase_down` overlap for label ", label)
+      }
+      if (is.null(rules$down) && !is.null(rules$up)) {
+        failure <- !success
+      }
+      if (success) {
+        step_dir <- "up"
+      } else if (failure) {
+        step_dir <- "down"
+      }
+    }
+    if (is.null(step_dir)) {
+      if (Ri==1) step_dir <- "up" else step_dir <- "down"
+    }
+    if (i<ns) {
+      if (identical(step_dir, "up")) {
+        SSD[i+1] <- round(SSD[i] + staircase$stairstep,3)
+      } else if (identical(step_dir, "down")) {
+        SSD[i+1] <- round(SSD[i] - staircase$stairstep,3)
+      }
     }
   }
   list(sR=sR,srt=srt,SSD=SSD)
 }
 
 
-check_staircase <- function(staircase){
-  if (!is.list(staircase)){
-    staircase <- list(SSD0=.25,stairstep=.05,stairmin=0,stairmax=Inf)
+apply_staircase_trials <- function(dts, staircase, accST = NULL) {
+  if (inherits(staircase, "emc_staircase") && !is.null(staircase$specs)) {
+    return(apply_grouped_staircase(dts, staircase, accST))
   }
-  return(staircase)
+
+  stair_fun <- attr(staircase, "staircase_function")
+  if (length(accST) > 0) {
+    staircase$accST <- 1 + accST
+  }
+  if (is.null(stair_fun)) {
+    stair_fun <- staircase_function
+  }
+  stair_fun(dts, staircase)
+}
+
+
+apply_grouped_staircase <- function(dts, staircase, accST = NULL) {
+  specs <- staircase$specs
+  group_id <- staircase$group_id
+  data_meta <- staircase$data
+  if (is.null(staircase$rules)) staircase$rules <- attr(specs, "rules")
+  if (is.null(specs) || is.null(group_id)) {
+    stop("Grouped staircase specifications are incomplete.")
+  }
+  if (length(group_id) != ncol(dts)) {
+    stop("Grouped staircase information does not match the number of staircase trials.")
+  }
+
+  res <- list(
+    sR = rep(NA_real_, ncol(dts)),
+    srt = rep(NA_real_, ncol(dts)),
+    SSD = rep(NA_real_, ncol(dts))
+  )
+
+  base_fun <- attr(staircase, "staircase_function")
+  specs_fun <- attr(specs, "staircase_function")
+
+  for (lvl in names(specs)) {
+    idx <- which(group_id == lvl)
+    if (!length(idx)) next
+    spec <- specs[[lvl]]
+    spec$rules <- spec$rules %||% staircase$rules
+    spec$labels <- spec$labels %||% staircase$labels
+    stair_fun <- spec$staircase_function %||% attr(spec, "staircase_function") %||%
+      specs_fun %||% base_fun
+    if (length(accST) > 0) {
+      spec$accST <- 1 + accST
+    }
+    if (is.null(stair_fun)) {
+      stair_fun <- staircase_function
+    }
+    if (!is.null(data_meta)) {
+      spec$data <- data_meta[idx, , drop = FALSE]
+    }
+    res_group <- stair_fun(dts[, idx, drop = FALSE], spec)
+    if (!is.null(res_group$SSD) && length(res_group$SSD)) {
+      SSD0 <- spec$SSD0
+      if (is.null(SSD0)) {
+        SSD0 <- attr(specs, "base_spec")$SSD0
+      }
+      if (!is.null(SSD0)) {
+        res_group$SSD[1] <- SSD0
+      }
+    }
+    if (!is.null(res_group$sR)) res$sR[idx] <- res_group$sR
+    if (!is.null(res_group$srt)) res$srt[idx] <- res_group$srt
+    if (!is.null(res_group$SSD)) res$SSD[idx] <- res_group$SSD
+  }
+
+  res
+}
+
+`%||%` <- function(x, y) {
+  if (is.null(x)) y else x
 }
 
 
@@ -344,15 +470,9 @@ rSSexGaussian <- function(data,pars,ok=rep(TRUE,dim(pars)[1]))
     if (is.null(attr(data,"staircase")))
       stop("When SSD has NAs a staircase list must be supplied!")
     staircase <- attr(data,"staircase")
-    if (length(accST)>0)
-      staircase$accST <- 1+accST
-    if (is.null(attr(staircase,"staircase_function"))) {
-      if (length(accST)>0)
-        stop("Do not use default starircase function with stop-triggered accumulators")
-      attr(staircase,"staircase_function") <- staircase_function
-    }
 
-    allR <- allrt <- numeric(ncol(dt))  # to store unified results
+    allR <- allrt <- allSSD <- numeric(ncol(dt))  # to store unified results
+    allSSD[] <- Inf
     dts <- dt[,stair,drop=F]
 
     # Non-staircase trials
@@ -364,9 +484,27 @@ rSSexGaussian <- function(data,pars,ok=rep(TRUE,dim(pars)[1]))
     isST <- isST[!pstair]
     ntrials <- sum(!stair)
     is1 <- is1[!pstair]
-    stair_res <- attr(staircase,"staircase_function")(dts,staircase)
+    stair_res <- apply_staircase_trials(dts, staircase, accST)
     allR[stair] <- stair_res$sR
     allrt[stair] <- stair_res$srt
+    if (inherits(staircase, "emc_staircase") && !is.null(staircase$specs)) {
+      stair_idx <- which(stair)
+      gid <- as.character(staircase$group_id)
+      base_spec <- attr(staircase$specs, "base_spec")
+      for (lvl in names(staircase$specs)) {
+        cols <- which(gid == lvl)
+        if (!length(cols)) next
+        pos <- stair_idx[cols[1]]
+        spec <- staircase$specs[[lvl]]
+        ssd0 <- spec$SSD0
+        if (is.null(ssd0) && !is.null(base_spec)) ssd0 <- base_spec$SSD0
+        if (!is.null(ssd0)) {
+          stair_res$SSD[cols[1]] <- ssd0
+          allSSD[pos] <- ssd0
+        }
+      }
+    }
+    allSSD[stair] <- stair_res$SSD
   }
 
 
@@ -647,6 +785,7 @@ rSShybrid <- function(data,pars,ok=rep(TRUE,dim(pars)[1]))
   ntrials <- dim(pars)[1]/nacc # Number of trials to simulate
   is1 <- lR==levels(lR)[1]     # First go accumulator
   acc <- 1:nacc                # choice (go and ST) accumulator index
+  allSSD <- data$SSD[is1]
 
   # stop-triggered racers
   isST <- pars[,"lI"]==1              # Boolean for all pars
@@ -706,11 +845,6 @@ rSShybrid <- function(data,pars,ok=rep(TRUE,dim(pars)[1]))
       stop("When SSD has NAs a staircase list must be supplied!")
 
     staircase <- attr(pars,"staircase")
-    data <- data[is1,]
-    if (length(accST)>0)
-      staircase$accST <- 1+accST
-    if (is.null(attr(staircase,"staircase_function")))
-      attr(staircase,"staircase_function") <- staircase_function
 
     allR <- allrt <- numeric(ncol(dt))  # to store unified results
     dts <- dt[,stair,drop=F]
@@ -724,11 +858,27 @@ rSShybrid <- function(data,pars,ok=rep(TRUE,dim(pars)[1]))
     isST <- isST[!pstair]
     ntrials <- sum(!stair)
     is1 <- is1[!pstair]
-    data <- data[stair,]
-
-    stair_res <- attr(staircase,"staircase_function")(dts,staircase)
+    stair_res <- apply_staircase_trials(dts, staircase, accST)
+    if (inherits(staircase, "emc_staircase") && !is.null(staircase$specs)) {
+      stair_idx <- which(stair)
+      gid <- as.character(staircase$group_id)
+      base_spec <- attr(staircase$specs, "base_spec")
+      for (lvl in names(staircase$specs)) {
+        cols <- which(gid == lvl)
+        if (!length(cols)) next
+        pos <- stair_idx[cols[1]]
+        spec <- staircase$specs[[lvl]]
+        ssd0 <- spec$SSD0
+        if (is.null(ssd0) && !is.null(base_spec)) ssd0 <- base_spec$SSD0
+        if (!is.null(ssd0)) {
+          stair_res$SSD[cols[1]] <- ssd0
+          allSSD[pos] <- ssd0
+        }
+      }
+    }
     allR[stair] <- stair_res$sR
     allrt[stair] <- stair_res$srt
+    allSSD[stair] <- stair_res$SSD
   }
 
 
@@ -778,8 +928,6 @@ rSShybrid <- function(data,pars,ok=rep(TRUE,dim(pars)[1]))
   if (any(stair)) {
     allrt[!stair] <- rt
     allR[!stair] <- R
-    allSSD <- NA
-    allSSD[stair] <- stair_res$SSD
     out <- cbind.data.frame(R=factor(allR,levels=1:nacc,labels=levels(lR)),
                             rt=allrt, SSD = allSSD)
     return(out)
