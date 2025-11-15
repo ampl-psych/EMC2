@@ -104,10 +104,9 @@ inline IntegerVector build_expand_idx_rcpp(const LogicalVector& first_level) {
 }
 
 
-NumericVector run_kernel_rcpp(NumericMatrix trend_pars,
+NumericVector run_kernel_rcpp(NumericMatrix kernel_pars,
                               String kernel,
                               NumericMatrix input,
-                              int n_base_pars,
                               SEXP funptrSEXP = R_NilValue,
                               LogicalVector first_level_mask = LogicalVector(),
                               NumericMatrix map_input = NumericMatrix(0,0),
@@ -130,7 +129,7 @@ NumericVector run_kernel_rcpp(NumericMatrix trend_pars,
 
   // Compressed inputs/params if at is used
   NumericMatrix input_comp = submat_rcpp(input, comp_rows);
-  NumericMatrix tp_comp = submat_rcpp(trend_pars, comp_rows);
+  NumericMatrix kp_comp = submat_rcpp(kernel_pars, comp_rows);
   bool has_map = (map_input.size() > 0);
   // NumericMatrix map_comp = has_map ? submat_rcpp(map_input, comp_rows) : NumericMatrix(0,0);
   const int n_comp = input_comp.nrow();
@@ -154,21 +153,10 @@ NumericVector run_kernel_rcpp(NumericMatrix trend_pars,
         for (int c = 0; c < p; ++c) in_good(rg, c) = input_comp(i, c);
         ++rg;
       }
-      NumericMatrix tp_good = submat_rcpp(tp_comp, good);
+      NumericMatrix kp_good = submat_rcpp(kp_comp, good);
 
       NumericVector contrib;
-      if(n_base_pars > 0) {
-        // extract kernel parameters
-        int ncol = tp_good.ncol();
-        NumericMatrix kp_good(n_comp, ncol- n_base_pars);
-        // Copy all columns except the first few (those are base_pars)
-        for (int j = n_base_pars; j < ncol; j++) {
-          kp_good(_, j - n_base_pars) = tp_good(_, j);
-        }
-        contrib = EMC2_call_custom_trend(kp_good, in_good, funptrSEXP);
-      } else {
-        contrib = EMC2_call_custom_trend(tp_good, in_good, funptrSEXP);
-      }
+      contrib = EMC2_call_custom_trend(kp_good, in_good, funptrSEXP);
       if (contrib.size() != n_good) stop("Custom kernel returned wrong length (expected n_good).");
       rg = 0;
       // for (int i = 0; i < n_comp; ++i) if (good[i]) comp_out[i] = NumericVector::is_na(contrib[rg]) ? 0.0 : contrib[rg++];
@@ -203,7 +191,7 @@ NumericVector run_kernel_rcpp(NumericMatrix trend_pars,
     const int n_good = sum(good);
     if (n_good > 0) {
       // Build param subset for good rows (can be 0 columns)
-      NumericMatrix tp_good = submat_rcpp(tp_comp, good);
+      NumericMatrix kp_good = submat_rcpp(kp_comp, good);
       // Map from comp row index -> position within good subset
       std::vector<int> good_pos(n_comp, -1);
       for (int i = 0, pos = 0; i < n_comp; ++i) if (good[i]) good_pos[i] = pos++;
@@ -217,82 +205,82 @@ NumericVector run_kernel_rcpp(NumericMatrix trend_pars,
         } else if (kernel == "exp_decr") {
           for (int i = 0; i < n_comp; ++i) if (good[i]) {
             int r = good_pos[i];
-            comp_out[i] = std::exp(-tp_good(r, 0 + n_base_pars) * cov_comp[i]);
+            comp_out[i] = std::exp(-kp_good(r, 0) * cov_comp[i]);
           }
         } else if (kernel == "exp_incr") {
           for (int i = 0; i < n_comp; ++i) if (good[i]) {
             int r = good_pos[i];
-            comp_out[i] = 1 - std::exp(-tp_good(r, 0 + n_base_pars) * cov_comp[i]);
+            comp_out[i] = 1 - std::exp(-kp_good(r, 0) * cov_comp[i]);
           }
         } else if (kernel == "pow_decr") {
           for (int i = 0; i < n_comp; ++i) if (good[i]) {
             int r = good_pos[i];
-            comp_out[i] = std::pow(1 + cov_comp[i], -tp_good(r, 0 + n_base_pars));
+            comp_out[i] = std::pow(1 + cov_comp[i], -kp_good(r, 0));
           }
         } else if (kernel == "pow_incr") {
           for (int i = 0; i < n_comp; ++i) if (good[i]) {
             int r = good_pos[i];
-            comp_out[i] = 1 - std::pow(1 + cov_comp[i], -tp_good(r, 0 + n_base_pars));
+            comp_out[i] = 1 - std::pow(1 + cov_comp[i], -kp_good(r, 0));
           }
         } else if (kernel == "poly2") {
           for (int i = 0; i < n_comp; ++i) if (good[i]) {
             int r = good_pos[i];
-            comp_out[i] = tp_good(r, 0 + n_base_pars) * cov_comp[i] + tp_good(r, 1 + n_base_pars) * std::pow(cov_comp[i], 2);
+            comp_out[i] = kp_good(r, 0) * cov_comp[i] + kp_good(r, 1) * std::pow(cov_comp[i], 2);
           }
         } else if (kernel == "poly3") {
           for (int i = 0; i < n_comp; ++i) if (good[i]) {
             int r = good_pos[i];
-            comp_out[i] = tp_good(r, 0 + n_base_pars) * cov_comp[i] + tp_good(r, 1 + n_base_pars) * std::pow(cov_comp[i], 2) + tp_good(r, 2 + n_base_pars) * std::pow(cov_comp[i], 3);
+            comp_out[i] = kp_good(r, 0) * cov_comp[i] + kp_good(r, 1) * std::pow(cov_comp[i], 2) + kp_good(r, 2) * std::pow(cov_comp[i], 3);
           }
         } else if (kernel == "poly4") {
           for (int i = 0; i < n_comp; ++i) if (good[i]) {
             int r = good_pos[i];
-            comp_out[i] = tp_good(r, 0 + n_base_pars) * cov_comp[i] + tp_good(r, 1 + n_base_pars) * std::pow(cov_comp[i], 2) + tp_good(r, 2 + n_base_pars) * std::pow(cov_comp[i], 3) + tp_good(r, 3 + n_base_pars) * std::pow(cov_comp[i], 4);
+            comp_out[i] = kp_good(r, 0) * cov_comp[i] + kp_good(r, 1) * std::pow(cov_comp[i], 2) + kp_good(r, 2) * std::pow(cov_comp[i], 3) + kp_good(r, 3) * std::pow(cov_comp[i], 4);
           }
         } else if (kernel == "delta") {
           // Build vectors for q0, alpha on good rows
           NumericVector q0(n_good), alpha(n_good), covg(n_good);
           int pos = 0;
           for (int i = 0; i < n_comp; ++i) if (good[i]) {
-            q0[pos] = tp_good(pos, 0 + n_base_pars);
-            alpha[pos] = tp_good(pos, 1 + n_base_pars);
+            q0[pos] = kp_good(pos, 0);
+            alpha[pos] = kp_good(pos, 1);
             covg[pos] = cov_comp[i];
             ++pos;
           }
           NumericVector tmp = run_delta_rcpp(q0, alpha, covg);
           // first value is *always* q0
-          comp_out[0] = trend_pars(0, 0 + n_base_pars);
+          comp_out[0] = kernel_pars(0, 0);
           pos = 0;
           for (int i = 0; i < n_comp; ++i) if (good[i]) comp_out[i] = tmp[pos++];
         } else if (kernel == "delta2kernel") {
           NumericVector q0(n_good), aF(n_good), pS(n_good), dS(n_good), covg(n_good);
           int pos = 0;
           for (int i = 0; i < n_comp; ++i) if (good[i]) {
-            q0[pos] = tp_good(pos, 0 + n_base_pars);
-            aF[pos] = tp_good(pos, 1 + n_base_pars);
-            pS[pos] = tp_good(pos, 2 + n_base_pars);
-            dS[pos] = tp_good(pos, 3 + n_base_pars);
+            q0[pos] = kp_good(pos, 0);
+            aF[pos] = kp_good(pos, 1);
+            pS[pos] = kp_good(pos, 2);
+            dS[pos] = kp_good(pos, 3);
             covg[pos] = cov_comp[i];
             ++pos;
           }
           NumericVector tmp = run_delta2kernel_rcpp(q0, aF, pS, dS, covg);
           // first value is *always* q0
-          comp_out[0] = trend_pars(0, 0 + n_base_pars);
+          comp_out[0] = kernel_pars(0, 0);
           pos = 0;
           for (int i = 0; i < n_comp; ++i) if (good[i]) comp_out[i] = tmp[pos++];
         } else if (kernel == "delta2lr") {
           NumericVector q0(n_good), alphaPos(n_good), alphaNeg(n_good), covg(n_good);
           int pos = 0;
           for (int i = 0; i < n_comp; ++i) if (good[i]) {
-            q0[pos] = tp_good(pos, 0 + n_base_pars);
-            alphaPos[pos] = tp_good(pos, 1 + n_base_pars);
-            alphaNeg[pos] = tp_good(pos, 2 + n_base_pars);
+            q0[pos] = kp_good(pos, 0);
+            alphaPos[pos] = kp_good(pos, 1);
+            alphaNeg[pos] = kp_good(pos, 2);
             covg[pos] = cov_comp[i];
             ++pos;
           }
           NumericVector tmp = run_delta2lr_rcpp(q0, alphaPos, alphaNeg, covg);
           // first value is *always* q0
-          comp_out[0] = trend_pars(0, 0 + n_base_pars);
+          comp_out[0] = kernel_pars(0, 0);
           pos = 0;
           for (int i = 0; i < n_comp; ++i) if (good[i]) comp_out[i] = tmp[pos++];
         } else {
@@ -302,7 +290,7 @@ NumericVector run_kernel_rcpp(NumericMatrix trend_pars,
     } else {
       // even without good values, should be set to q0
       if (kernel == "delta" || kernel == "delta2lr" || kernel == "delta2kernel") {
-        comp_out[0] = trend_pars(0, 0 + n_base_pars);
+        comp_out[0] = kernel_pars(0, 0);
       }
     }
 
@@ -405,6 +393,14 @@ NumericVector run_trend_rcpp(DataFrame data, List trend, NumericVector param, Nu
       }
     }
 
+    // extract kernel parameters
+    int n_trend_pars = trend_pars.ncol();
+    NumericMatrix kernel_pars(n_trials, n_trend_pars- n_base_pars);
+    for (int j = n_base_pars; j < n_trend_pars; j++) {
+      kernel_pars(_, j - n_base_pars) = trend_pars(_, j);
+    }
+
+
     // Build optional first-level mask and call kernel (handles compression/expansion internally)
     LogicalVector first_level;
     if (trend.containsElementNamed("at") && !Rf_isNull(trend["at"])) {
@@ -438,7 +434,7 @@ NumericVector run_trend_rcpp(DataFrame data, List trend, NumericVector param, Nu
     } else {
       map_in = NumericMatrix(0,0);
     }
-    NumericVector kernel_out = run_kernel_rcpp(trend_pars, kernel, input_all, n_base_pars, custom_ptr, first_level, map_in, ffill_na);
+    NumericVector kernel_out = run_kernel_rcpp(kernel_pars, kernel, input_all, custom_ptr, first_level, map_in, ffill_na);
     out = out + kernel_out;
   }
   // Apply base transformation to final summed output
