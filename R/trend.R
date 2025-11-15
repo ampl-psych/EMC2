@@ -596,9 +596,9 @@ run_trend <- function(dadm, trend, param, trend_pars, pars_full = NULL,
 
   # Do the mapping
   out <- switch(trend$base,
-                lin = param + out,# + trend_pars[,1]*out,
-                exp_lin = exp(param) + out,# + trend_pars[,1]*out,
-                centered = param + out,# + trend_pars[,1]*(out-.5),
+                lin = param + out,
+                exp_lin = exp(param) + out,
+                centered = param + out,
                 add = param + out,
                 identity = out
   )
