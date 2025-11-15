@@ -104,17 +104,24 @@ inline IntegerVector build_expand_idx_rcpp(const LogicalVector& first_level) {
 }
 
 
-NumericVector run_kernel_rcpp(NumericMatrix kernel_pars,
+NumericMatrix run_kernel_rcpp(NumericMatrix kernel_pars,
                               String kernel,
                               NumericMatrix input,
                               SEXP funptrSEXP = R_NilValue,
                               LogicalVector first_level_mask = LogicalVector(),
-                              NumericMatrix map_input = NumericMatrix(0,0),
+                              bool has_map = false,
+                              // NumericMatrix map_input = NumericMatrix(0,0),
                               bool ffill_na = false) {
   // Kernels accept any number of input columns; apply per column and sum contributions.
   const int n = input.nrow();
   const int p = input.ncol();
-  NumericVector out(n, 0.0);
+  NumericMatrix out;
+  if (kernel == "custom" || has_map == false) {
+    out = NumericMatrix(n, 1);
+  } else {
+    out = NumericMatrix(n, p);
+  }
+  out.fill(0.0);
 
   const bool use_at = (first_level_mask.size() == n);
   IntegerVector expand_idx;
@@ -130,7 +137,7 @@ NumericVector run_kernel_rcpp(NumericMatrix kernel_pars,
   // Compressed inputs/params if at is used
   NumericMatrix input_comp = submat_rcpp(input, comp_rows);
   NumericMatrix kp_comp = submat_rcpp(kernel_pars, comp_rows);
-  bool has_map = (map_input.size() > 0);
+  // bool has_map = (map_input.size() > 0);
   // NumericMatrix map_comp = has_map ? submat_rcpp(map_input, comp_rows) : NumericMatrix(0,0);
   const int n_comp = input_comp.nrow();
 
@@ -178,7 +185,7 @@ NumericVector run_kernel_rcpp(NumericMatrix kernel_pars,
     // expand back and return
     for (int i = 0; i < n; ++i) {
       int idx = expand_idx[i] - 1;
-      out[i] += comp_out[idx];
+      out(i,0) += comp_out[idx];
     }
     return out;
   }
@@ -301,19 +308,14 @@ NumericVector run_kernel_rcpp(NumericMatrix kernel_pars,
       }
     }
 
-    // // Optional map weighting per column (elementwise per row in compressed space)
-    // if (has_map) {
-    //   NumericVector w = map_comp(_, c);
-    //   for (int i = 0; i < n_comp; ++i) comp_out[i] *= w[i];
-    // }
-
     // expand comp_out back to full n rows and add
     for (int i = 0; i < n; ++i) {
       int idx = expand_idx[i] - 1; // 0-based
-      if (has_map) {
-        out[i] += comp_out[idx] * map_input(i,c);
+      if(has_map == false) {
+        // if no covariate map needs to be applied, immediately sum across columns
+        out(i,0) += comp_out[idx];
       } else {
-        out[i] += comp_out[idx];
+        out(i,c) += comp_out[idx];
       }
     }
   }
@@ -358,6 +360,14 @@ NumericVector run_trend_rcpp(DataFrame data, List trend, NumericVector param, Nu
   if(base == "lin" || base == "exp_lin" || base == "centered") {
     n_base_pars = 1;
   }
+
+  // extract kernel parameters
+  int n_trend_pars = trend_pars.ncol();
+  NumericMatrix kernel_pars(n_trials, n_trend_pars- n_base_pars);
+  for (int j = n_base_pars; j < n_trend_pars; j++) {
+    kernel_pars(_, j - n_base_pars) = trend_pars(_, j);
+  }
+
   // Build input matrix from covariates and par_input columns
   int n_cov = covnames.size();
   // Keep only par_input columns that actually exist in pars_full (if provided)
@@ -393,14 +403,6 @@ NumericVector run_trend_rcpp(DataFrame data, List trend, NumericVector param, Nu
       }
     }
 
-    // extract kernel parameters
-    int n_trend_pars = trend_pars.ncol();
-    NumericMatrix kernel_pars(n_trials, n_trend_pars- n_base_pars);
-    for (int j = n_base_pars; j < n_trend_pars; j++) {
-      kernel_pars(_, j - n_base_pars) = trend_pars(_, j);
-    }
-
-
     // Build optional first-level mask and call kernel (handles compression/expansion internally)
     LogicalVector first_level;
     if (trend.containsElementNamed("at") && !Rf_isNull(trend["at"])) {
@@ -412,31 +414,41 @@ NumericVector run_trend_rcpp(DataFrame data, List trend, NumericVector param, Nu
     } else {
       first_level = LogicalVector(0);
     }
-    // Optional per-column map weights passed to kernel
-    NumericMatrix map_in;
-    if (trend.containsElementNamed("map") && !Rf_isNull(trend["map"])) {
-      // Collect map, select only rows that match subject number
-      // map_in = as<NumericMatrix>(trend["map"]);
 
+    // Check for covariate maps
+    bool has_map = trend.containsElementNamed("map") && !Rf_isNull(trend["map"]);
+
+    NumericMatrix kernel_out = run_kernel_rcpp(kernel_pars, kernel, input_all, custom_ptr, first_level,
+                                               has_map, ffill_na);
+
+    NumericMatrix map_in;
+    if(has_map) {
       // Straight from chat
       List map_list = trend["map"];
       CharacterVector map_names = map_list.names();
-      if (map_names.size() == 0)
+      if (map_names.size() == 0) {
         stop("trend$map has no named elements");
+      }
       std::string map_name = as<std::string>(map_names[0]);
-      ///CharacterVector map_name = as<CharacterVector>(trend["map"]);
       List covariate_maps = data.attr("covariate_maps");
-      if (Rf_isNull(covariate_maps[map_name]))
+      if (Rf_isNull(covariate_maps[map_name])) {
         stop("No map named '%s' found in covariate_maps", map_name.c_str());
-
-      // SEXP covariate_map = covariate_maps[map_name];
+      }
       map_in = as<NumericMatrix>(covariate_maps[map_name]);
+      for (int r = 0; r < kernel_out.nrow(); ++r) {
+        for (int c = 0; c < kernel_out.ncol(); ++c) {
+          out[r] += kernel_out(r, c) * map_in(r, c);
+        }
+      }
     } else {
-      map_in = NumericMatrix(0,0);
+      for (int r = 0; r < kernel_out.nrow(); ++r) {
+        for (int c = 0; c < kernel_out.ncol(); ++c) {
+          out[r] += kernel_out(r, c);
+        }
+      }
     }
-    NumericVector kernel_out = run_kernel_rcpp(kernel_pars, kernel, input_all, custom_ptr, first_level, map_in, ffill_na);
-    out = out + kernel_out;
   }
+
   // Apply base transformation to final summed output
   if(base == "lin") {
     out = param + trend_pars(_, 0) * out;
