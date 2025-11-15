@@ -46,6 +46,7 @@ run_kernel_custom <- function(trend_pars = NULL, input, funptr, at_factor = NULL
 #'        one of "premap", "pretransform", or "posttransform". Defaults to "premap".
 #' @param par_input Optional character vector(s) of parameter names to use as additional inputs for the trend
 #' @param at If NULL (default), trend is applied everywhere. If a factor name (e.g., "lR"), trend is applied only to entries corresponding to the first level of that factor.
+#' @param maps List of functions that create matrices with which to multiply the covariates before applying the base.
 #' @param custom_trend A trend registered with `register_trend`
 #' @param ffill_na Determines how missing covariate values are handled.
 #'        If `TRUE`, missing values are forward-filled using the last known non-`NA` value after
@@ -70,6 +71,7 @@ make_trend <- function(par_names, cov_names = NULL, kernels, bases = NULL,
                        shared = NULL, trend_pnames = NULL,
                        phase = "premap",
                        par_input = NULL, at = NULL,
+                       maps = NULL,
                        custom_trend = NULL,
                        ffill_na = NULL){
   if(!(length(par_names) == length(kernels))){
@@ -121,6 +123,13 @@ make_trend <- function(par_names, cov_names = NULL, kernels, bases = NULL,
   # Normalize forward filling options
   if (length(ffill_na) != length(par_names)) ffill_na <- rep(ffill_na, length(par_names))
 
+  # normalize maps. Maps is either a list with list(name1=function1, name2=function2) or a list of such lists
+  if(length(maps) > 0) {
+    if(length(par_names) > 1) {
+      ## which map should be matched to which par name?
+      if(!inherits(maps[[1]], 'list')) stop('For >1 par_names, provide a list of mapping lists to avoid ambiguity.')
+    } else maps <- list(maps)
+  }
 
   trends_out <- list()
   all_trend_pnames <- c()
@@ -158,7 +167,13 @@ make_trend <- function(par_names, cov_names = NULL, kernels, bases = NULL,
     }
     # add par names
     user_trend_pnames <- trend_pnames[[i]]
-    default_trend_pnames <- trend_help(base = trend$base, do_return = TRUE)$default_pars
+    if(length(maps[[i]]) > 1) {
+      if(trend$base == 'identity') stop('Cannot use multiple maps in combination with an identity kernel (which map should be used..?)')
+      else if(trend$base == 'add') default_trend_pnames <- c()
+      else default_trend_pnames <- paste0(rep(trend_help(base = trend$base, do_return = TRUE)$default_pars, each=length(maps[[i]])), 1:length(maps[[i]]))
+    } else {
+      default_trend_pnames <- trend_help(base = trend$base, do_return = TRUE)$default_pars
+    }
     # Kernel parameter names:
     if (identical(kernels[i], "custom")) {
       if (is.null(custom_trend)) stop("custom_trend must be provided when using kernel='custom'")
@@ -201,6 +216,7 @@ make_trend <- function(par_names, cov_names = NULL, kernels, bases = NULL,
     } else {
       trend$ffill_na <- ffill_na[i]
     }
+    trend$map <- maps[[i]]
     trends_out[[i]] <- trend
   }
   names(trends_out) <- par_names
@@ -373,7 +389,10 @@ run_kernel <- function(trend_pars = NULL, kernel, input, funptr = NULL, at_facto
 
     # 3) Exclude NAs
     good <- !is.na(covariate_comp)
-    if(isTRUE(ffill_na)) comp_out[is.na(covariate_comp)] <- NA
+    if(isTRUE(ffill_na)) {
+      comp_out[is.na(covariate_comp)] <- NA
+      if(is.na(covariate_full[1] & (!kernel %in% c('delta', 'delta2kernel', 'delta2lr')))) stop("The first value of a covariate is NA, so it is impossible to forward fill.")
+    }
 
     if (any(good)) {
       # 4) Run kernel on good subset only
@@ -550,27 +569,35 @@ run_trend <- function(dadm, trend, param, trend_pars, pars_full = NULL,
       if(return_trialwise_parameters){
         tlist[[s]] <- kern_mat
       }
-      # Optional per-column map weighting prior to summing
-      if (!is.null(trend$map)) {
-        map_mat <- attr(dadm, 'covariate_maps')[[names(trend$map)[1]]]
-        map_mat <- map_mat[s_idx,, drop = FALSE]
-        kern_mat <- kern_mat * map_mat
-      }
-      # Sum across columns
-      if (ncol(kern_mat) == 0) {
-        k_sum <- rep(0, nrow(kern_mat))
-      } else {
-        k_sum <- rowSums(kern_mat)
+      n_maps = length(trend$map)
+      map_names = names(trend$map)
+      n_loops <- ifelse(n_maps>1, n_maps, 1)
+      for(map_n in 1:n_loops) {
+        if(n_maps > 0) {
+          map_mat <- attr(dadm, 'covariate_maps')[[names(trend$map)[map_n]]]
+          map_mat <- map_mat[s_idx,, drop = FALSE]
+          kern_mat <- kern_mat * map_mat
+        }
+        # Sum across columns
+        if (ncol(kern_mat) == 0) {
+          k_sum <- rep(0, nrow(kern_mat))
+        } else {
+          k_sum <- rowSums(kern_mat)
+        }
+        # multiply
+        if(trend$base %in% c('lin', 'exp_lin')) k_sum <- k_sum*trend_pars[s_idx,map_n]
+        if(trend$base == 'centered') k_sum <- (k_sum-0.5)*trend_pars[s_idx,map_n]
+        out[s_idx] <- out[s_idx] + k_sum
       }
     }
-    out[s_idx] <- out[s_idx] + k_sum
+    # out[s_idx] <- out[s_idx] + k_sum
   }
 
   # Do the mapping
   out <- switch(trend$base,
-                lin = param + trend_pars[,1]*out,
-                exp_lin = exp(param) + trend_pars[,1]*out,
-                centered = param + trend_pars[,1]*(out-.5),
+                lin = param + out,# + trend_pars[,1]*out,
+                exp_lin = exp(param) + out,# + trend_pars[,1]*out,
+                centered = param + out,# + trend_pars[,1]*(out-.5),
                 add = param + out,
                 identity = out
   )
@@ -619,6 +646,7 @@ update_model_trend <- function(trend, model) {
 
     # Get default transforms from base and kernel
     base_transforms <- trend_help(base = cur_trend$base, do_return = TRUE)$transforms
+    if(length(cur_trend$map)>1) base_transforms$func <- rep(base_transforms$func, length(cur_trend$map))
     if (identical(cur_trend$kernel, "custom")) {
       ctf <- attr(cur_trend, "custom_transforms")
       kernel_transforms <- if (is.null(ctf)) NULL else list(func = ctf)

@@ -356,9 +356,21 @@ NumericVector run_trend_rcpp(DataFrame data, List trend, NumericVector param, Nu
   // Initialize output vector with zeros
   int n_trials = param.length();
   NumericVector out(n_trials, 0.0);
+
   int n_base_pars = 0;
   if(base == "lin" || base == "exp_lin" || base == "centered") {
     n_base_pars = 1;
+  }
+  // Check for covariate maps
+  CharacterVector map_names;
+  List map_list;
+  int n_maps = 0;
+  bool has_maps = trend.containsElementNamed("map") && !Rf_isNull(trend["map"]);
+  if(has_maps) {
+    map_list = trend["map"];
+    map_names = map_list.names();
+    n_maps = map_names.size();
+    n_base_pars = n_maps*n_base_pars; // find n maps
   }
 
   // extract kernel parameters
@@ -415,52 +427,92 @@ NumericVector run_trend_rcpp(DataFrame data, List trend, NumericVector param, Nu
       first_level = LogicalVector(0);
     }
 
-    // Check for covariate maps
-    bool has_map = trend.containsElementNamed("map") && !Rf_isNull(trend["map"]);
-
+    // Run kernel
     NumericMatrix kernel_out = run_kernel_rcpp(kernel_pars, kernel, input_all, custom_ptr, first_level,
-                                               has_map, ffill_na);
+                                               has_maps, ffill_na);
+    int n_rows = kernel_out.nrow();
+    int n_cols = kernel_out.ncol();
 
-    NumericMatrix map_in;
-    if(has_map) {
-      // Straight from chat
-      List map_list = trend["map"];
-      CharacterVector map_names = map_list.names();
-      if (map_names.size() == 0) {
-        stop("trend$map has no named elements");
-      }
-      std::string map_name = as<std::string>(map_names[0]);
-      List covariate_maps = data.attr("covariate_maps");
-      if (Rf_isNull(covariate_maps[map_name])) {
-        stop("No map named '%s' found in covariate_maps", map_name.c_str());
-      }
-      map_in = as<NumericMatrix>(covariate_maps[map_name]);
-      for (int r = 0; r < kernel_out.nrow(); ++r) {
-        for (int c = 0; c < kernel_out.ncol(); ++c) {
-          out[r] += kernel_out(r, c) * map_in(r, c);
+    // Outer loop over maps
+    List covariate_maps = data.attr("covariate_maps");
+    int n_loops = has_maps ? n_maps : 1;
+    for (int map_n = 0; map_n < n_loops; ++map_n) {
+
+      NumericMatrix covariate_map;
+      if (has_maps) {
+        std::string map_name = as<std::string>(map_names[map_n]);
+        if (Rf_isNull(covariate_maps[map_name])) {
+          stop("No map named '%s' found in covariate_maps", map_name.c_str());
         }
+        covariate_map = as<NumericMatrix>(covariate_maps[map_name]);
       }
-    } else {
-      for (int r = 0; r < kernel_out.nrow(); ++r) {
-        for (int c = 0; c < kernel_out.ncol(); ++c) {
-          out[r] += kernel_out(r, c);
+
+      // Loop over columns
+      for (int c = 0; c < n_cols; ++c) {
+        // Loop over rows
+        for (int r = 0; r < n_rows; ++r) {
+          double contrib = kernel_out(r, c);
+
+          // Multiply by covariate map if it exists
+          if (has_maps) contrib *= covariate_map(r, c);
+
+          // Apply base parameter
+          if (base == "lin" || base == "exp_lin") {
+            contrib *= trend_pars(r, map_n);
+          } else if (base == "centered") {
+            contrib = (contrib - 0.5) * trend_pars(r, map_n);
+          } // "add" leaves contrib unchanged
+
+          // Accumulate into output
+          out(r) += contrib;
         }
       }
     }
+
+    // // handle mappings
+    // List covariate_maps = data.attr("covariate_maps");
+    // // Loop over covariate maps or a single default
+    // int n_loops = has_map ? n_maps : 1;
+    // for (int map_n = 0; map_n < n_loops; ++map_n) {
+    //   NumericMatrix covariate_map;
+    //   if (has_map) {
+    //     std::string map_name = as<std::string>(map_names[map_n]);
+    //     if (Rf_isNull(covariate_maps[map_name])) {
+    //       stop("No map named '%s' found in covariate_maps", map_name.c_str());
+    //     }
+    //     covariate_map = as<NumericMatrix>(covariate_maps[map_name]);
+    //   }
+    //
+    //   for (int c = 0; c < kernel_out.ncol(); ++c) {
+    //     NumericVector contrib = kernel_out(_, c);
+    //
+    //     // Multiply contibution with covariate map, if exists
+    //     if (has_map) contrib = contrib * covariate_map(_, c);
+    //
+    //     // Apply base parameter to contribution
+    //     if (base == "lin" || base == "exp_lin") {
+    //       contrib = contrib * trend_pars(_, 0 + map_n);
+    //     } else if (base == "centered") {
+    //       contrib = (contrib - 0.5) * trend_pars(_, 0 + map_n);
+    //     } // "add" just leaves contrib as is
+    //
+    //     out += contrib;
+    //   }
+    // }
   }
 
-  // Apply base transformation to final summed output
+  // Add parameter to obtain final summed input
   if(base == "lin") {
-    out = param + trend_pars(_, 0) * out;
+    out += param;
   }
   else if(base == "exp_lin") {
-    out = exp(param) + trend_pars(_, 0) * out;
+    out += exp(param);
   }
   else if(base == "centered") {
-    out = param + trend_pars(_, 0) * (out - 0.5);
+    out += param;
   }
   else if(base == "add") {
-    out = param + out;
+    out += param;
   }
   return out;
 }
@@ -681,5 +733,46 @@ inline void fill_trend_columns_for_pretransform(NumericMatrix& pars,
 //       map_in(data_r, c) = map_provided(r, c+1);
 //     }
 //     data_r++;
+//   }
+// }
+
+// NumericMatrix covariate_map;
+// if(has_map) {
+//   // find all maps to be applied
+//   List map_list = trend["map"];
+//   CharacterVector map_names = map_list.names();
+//   int n_maps = map_names.size();
+//   if (n_maps == 0) {
+//     stop("trend$map has no named elements");
+//   }
+//
+//   // Loop over covariate_maps to be applied to this kernel
+//   List covariate_maps = data.attr("covariate_maps");
+//   for(int map_n = 0; map_n < n_maps; map_n++) {
+//     std::string map_name = as<std::string>(map_names[map_n]);
+//     if (Rf_isNull(covariate_maps[map_name])) {
+//       stop("No map named '%s' found in covariate_maps", map_name.c_str());
+//     }
+//     covariate_map = as<NumericMatrix>(covariate_maps[map_name]);
+//     for (int c = 0; c < kernel_out.ncol(); ++c) {
+//       if(base == "lin" || base == "exp_lin") {
+//         out += kernel_out(_, c) * covariate_map(_, c) * trend_pars(_,c);
+//       } else if(base == "centered") {
+//         out += ((kernel_out(_, c) * covariate_map(_, c)) - 0.5) * trend_pars(_,c);
+//       } else if(base == "add") {
+//         out += kernel_out(_, c) * covariate_map(_, c);
+//       }
+//     }
+//   }
+// } else {
+//   // No maps provided
+//   for (int c = 0; c < kernel_out.ncol(); ++c) {
+//     if(base == "lin" || base == "exp_lin") {
+//       out += kernel_out(_, c) * trend_pars(_,c);
+//     } else if(base == "centered") {
+//       out += (kernel_out(_, c) - 0.5) * trend_pars(_,c);
+//     } else if(base == "add") {
+//       out += kernel_out(_, c);
+//     }
 //   }
 // }
