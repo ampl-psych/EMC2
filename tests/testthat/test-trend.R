@@ -323,3 +323,77 @@ test_that("trend_multiple", {
   expect_snapshot(init_chains(LNR_multi, particles = 10, cores_per_chain = 1)[[1]]$samples)
 })
 
+
+
+# Test handling of NA -----------------------------------------------------
+trend <- make_trend(par_names = "m", cov_names = list(c("covariate1", "covariate2")), kernels = "exp_incr", ffill_na=FALSE)
+design_base <- design(factors = list(subjects = 1, S = 1:2),
+                      Rlevels = 1:2,
+                      covariates = c('covariate1', 'covariate2'),
+                      matchfun = matchfun,
+                      trend = trend,
+                      formula = list(m ~ lM, s ~ 1, t0 ~ 1),
+                      contrasts = list(lM = ADmat),
+                      model = LNR)
+##mapped_pars(design_base)
+p_vector <- sampled_pars(design_base, doMap = FALSE)
+p_vector[1:6] <- c(-1, 1.5, log(1), log(.2), log(.2), log(.2))
+
+covariate1 <- rnorm(n_trials*2)
+covariate2 <- rnorm(n_trials*2)
+# Ensure that NAs are handled correctly in trend
+covariate2[c(1:5, 8)] <- NA
+
+dat <- make_data(p_vector, design_base, n_trials = n_trials, covariates = data.frame(covariate1 = covariate1, covariate2 = covariate2), return_trialwise_parameters=TRUE)
+
+test_that("trend_ffillnafalse", {
+  expect_snapshot(attr(dat, 'trialwise_parameters'))
+})
+
+# with ffill_na
+trend <- make_trend(par_names = "m", cov_names = list(c("covariate1", "covariate2")), kernels = "exp_incr", ffill_na=TRUE)
+design_base <- design(factors = list(subjects = 1, S = 1:2),
+                      Rlevels = 1:2,
+                      covariates = c('covariate1', 'covariate2'),
+                      matchfun = matchfun,
+                      trend = trend,
+                      formula = list(m ~ lM, s ~ 1, t0 ~ 1),
+                      contrasts = list(lM = ADmat),
+                      model = LNR)
+##mapped_pars(design_base)
+p_vector <- sampled_pars(design_base, doMap = FALSE)
+p_vector[1:6] <- c(-1, 1.5, log(1), log(.2), log(.2), log(.2))
+
+covariate1 <- rnorm(n_trials*2)
+covariate2 <- rnorm(n_trials*2)
+# Ensure that NAs are handled correctly in trend
+covariate2[c(2:5, 8)] <- NA
+
+dat <- make_data(p_vector, design_base, n_trials = n_trials, covariates = data.frame(covariate1 = covariate1, covariate2 = covariate2), return_trialwise_parameters=TRUE)
+test_that("trend_ffillnatrue", {
+  expect_snapshot(attr(dat, 'trialwise_parameters'))
+})
+
+# Delta rule - always set initial trial to q0
+trend <- make_trend(par_names = "m", cov_names = list(c("covariate1", "covariate2")), kernels = "delta", ffill_na=TRUE)
+design_base <- design(factors = list(subjects = 1, S = 1:2),
+                      Rlevels = 1:2,
+                      covariates = c('covariate1', 'covariate2'),
+                      matchfun = matchfun,
+                      trend = trend,
+                      formula = list(m ~ lM, s ~ 1, t0 ~ 1),
+                      contrasts = list(lM = ADmat),
+                      model = LNR)
+##mapped_pars(design_base)
+p_vector <- sampled_pars(design_base, doMap = FALSE)
+p_vector[1:7] <- c(-1, 1.5, log(1), log(.2), 1, .5, qnorm(.2))
+
+covariate1 <- rnorm(n_trials*2)
+covariate2 <- rnorm(n_trials*2)
+# Ensure that NAs are handled correctly in trend
+covariate2[c(1:5, 8)] <- NA
+
+dat <- make_data(p_vector, design_base, n_trials = n_trials, covariates = data.frame(covariate1 = covariate1, covariate2 = covariate2), return_trialwise_parameters=TRUE)
+test_that("trend_ffillnatrue", {
+  expect_snapshot(attr(dat, 'trialwise_parameters'))
+})
