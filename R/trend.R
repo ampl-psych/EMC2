@@ -515,6 +515,7 @@ run_trend <- function(dadm, trend, param, trend_pars, pars_full = NULL,
                         centered = 1,
                         add = 0,
                         identity = 0)
+  if(length(trend$maps)>1) n_base_pars <- n_base_pars * length(trend$maps)
 
   # Fix dimension for single-column trend_pars
   if(is.null(dim(trend_pars))) trend_pars <- t(t(trend_pars))
