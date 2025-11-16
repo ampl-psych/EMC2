@@ -18,6 +18,7 @@
 #' @importFrom corrplot corrplot
 #' @importFrom graphics abline
 #' @importFrom graphics arrows
+#' @importFrom graphics axis
 #' @importFrom graphics hist pairs rect text
 #' @importFrom graphics legend
 #' @importFrom graphics lines
@@ -65,6 +66,7 @@
 #' @importFrom stats median
 #' @importFrom stats model.frame
 #' @importFrom stats model.matrix
+#' @importFrom stats na.pass
 #' @importFrom stats optimize
 #' @importFrom stats pexp
 #' @importFrom stats pnorm
