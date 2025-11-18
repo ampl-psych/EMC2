@@ -5,8 +5,10 @@ create_group_key <- function(df, factors) {
   levs <- lapply(df[,factors],levels)
   for (i in 1:length(factors)) levs[[i]] <- paste(factors[i],levs[[i]],sep="=")
   lev <- levs[[1]]
-  for (i in 2:length(factors)) lev <- outer(lev,levs[[i]],paste)
-  lev <- as.vector(aperm(lev,length(factors):1))
+  if (length(factors)>1) {
+    for (i in 2:length(factors)) lev <- outer(lev,levs[[i]],paste)
+    lev <- as.vector(aperm(lev,length(factors):1))
+  }
   factor(key,levels=lev)
 }
 
