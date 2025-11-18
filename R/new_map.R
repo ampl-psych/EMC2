@@ -264,7 +264,8 @@ mapper_wrapper <- function(map, by_subject = FALSE, par_mcmc, design, n_trials =
           res <- rowsum(pars[idx,,i], cells) / ng            # (g x k)
 
         } else{
-          res <- colMeans(pars[idx,,i])
+          if (sum(idx)==1) res <- pars[idx,,i] else
+            res <- colMeans(pars[idx,,i])
         }
       } else{ # Third case map is a formula
         S  <- model.matrix(map[[i]], data = data[idx,])
