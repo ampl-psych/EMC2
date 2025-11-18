@@ -347,6 +347,10 @@ par_data_map <- function(par_mcmc, design, n_trials = NULL, data = NULL,
   for(i in 1:n_mcmc){
     parameters <- t(as.matrix(par_mcmc[,,i], nrow = n_pars, ncol = n_subs))
     pars <- do_transform(parameters, model()$pre_transform) #t(apply(parameters, 1, do_pre_transform, model()$pre_transform))
+    if(nrow(parameters) == length(unique(data$subjects))){
+      design$Ffactors$subjects <- unique(data$subjects)
+    }
+
     rownames(pars) <- design$Ffactors$subjects
     pars <- map_p(add_constants(pars,design$constants),data, model())
 

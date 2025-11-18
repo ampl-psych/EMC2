@@ -333,6 +333,7 @@ make_smooth <- function(x, y, N = 1000){
 #' @param ranks A list of named dataframes of the rank statistic
 #' @param layout Optional. A numeric vector specifying the layout using `par(mfrow = layout)`
 #' @param add_stats Boolean. Should coverage, bias and precision be included in the figure.
+#' @param main Optional. A character specifying plot title.
 #' @return No returns
 #' @export
 plot_sbc_ecdf <- function(ranks, layout = NA, add_stats = TRUE, main = ""){
