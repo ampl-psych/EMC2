@@ -46,7 +46,7 @@ run_kernel_custom <- function(trend_pars = NULL, input, funptr, at_factor = NULL
 #'        one of "premap", "pretransform", or "posttransform". Defaults to "premap".
 #' @param par_input Optional character vector(s) of parameter names to use as additional inputs for the trend
 #' @param at If NULL (default), trend is applied everywhere. If a factor name (e.g., "lR"), trend is applied only to entries corresponding to the first level of that factor.
-#' @param maps List of functions that create matrices with which to multiply the covariates before applying the base.
+#' @param maps List of functions that create matrices with which to multiply the covariates before applying the base. See details.
 #' @param custom_trend A trend registered with `register_trend`
 #' @param ffill_na Determines how missing covariate values are handled.
 #'        If `TRUE`, missing values are forward-filled using the last known non-`NA` value after
@@ -55,6 +55,26 @@ run_kernel_custom <- function(trend_pars = NULL, input, funptr, at_factor = NULL
 #'
 #' @return A list containing the trend specifications for each parameter
 #' @export
+#'
+#' @details
+#' The `maps` argument accepts one or more functions that translate trial-level
+#' covariates into accumulator-specific predictors.
+#'
+#' Example of a minimal map function:
+#'
+#' ```r
+#' advantage_map <- function(dadm, cov_names) {
+#'   lS      <- paste0('cov', ifelse(dadm$lR == 'left',  dadm$cov_left,  dadm$cov_right))
+#'   lSother <- paste0('cov', ifelse(dadm$lR == 'right', dadm$cov_left,  dadm$cov_right))
+#'   plus  <- sapply(cov_names, function(x) ifelse(lS      == x,  1, 0))
+#'   minus <- sapply(cov_names, function(x) ifelse(lSother == x, -1, 0))
+#'   plus + minus
+#' }
+#' ```
+#'
+#' Multiple maps may be supplied, in which case the model will create a separate
+#' base parameter for each map. See more examples below.
+#
 #'
 #' @examples
 #' # Put trend on B and v parameters
@@ -66,6 +86,114 @@ run_kernel_custom <- function(trend_pars = NULL, input, funptr, at_factor = NULL
 #'   shared = list(shrd = list("B.B0", "v.d1"))
 #' )
 #' get_trend_pnames(trend)
+#'
+#'
+#' # Using covariate maps
+#'
+#' # Covariate maps allow you to specify how trial-by-trial covariates influence
+#' # model parameters for each accumulator. The example below uses a simple data
+#' # frame with two trials. `cov_left` and `cov_right` specify which covariates
+#' # correspond to the left and right accumulators on each trial. `S` indicates the
+#' # correct response, and `cov1`–`cov4` contain the actual covariate values.
+#'
+#' data <- data.frame(
+#'   subjects = rep(1, 2),
+#'   S        = c('left', 'right'),
+#'   cov_left = c('1', '4'),
+#'   cov_right= c('3', '2'),
+#'   rt       = c(1.2, 0.8),
+#'   R        = factor(c('left', 'right')),
+#'   cov1     = c(1, NA),
+#'   cov2     = c(NA, 1),
+#'   cov3     = c(NA, 1),
+#'   cov4     = c(1, 1)
+#' )
+#'
+#' # A covariate map function must take `dadm` and `cov_names` as inputs and return
+#' # a matrix of size (nrow(dadm), length(cov_names)), coding how each covariate
+#' # contributes to each accumulator.
+#'
+#' advantage_map <- function(dadm, cov_names) {
+#'
+#'   # Which stimulus does the accumulator correspond to on each trial?
+#'   lS <- paste0('cov', ifelse(dadm$lR == 'left', dadm$cov_left, dadm$cov_right))
+#'
+#'   # Which stimulus does the *other* accumulator correspond to?
+#'   lSother <- paste0('cov', ifelse(dadm$lR == 'right', dadm$cov_left, dadm$cov_right))
+#'
+#'   # Build indicator matrices
+#'   map_plus1 <- sapply(cov_names, function(col) ifelse(lS     == col,  1, 0))
+#'   map_minus1<- sapply(cov_names, function(col) ifelse(lSother == col, -1, 0))
+#'
+#'   map_plus1 + map_minus1
+#' }
+#'
+#' # A covariate map function can be supplied to make_trend(), which creates the mapping
+#' # specification for the model for each participant. Here, a single map ('differences') is provided.
+#'
+#' trend <- make_trend(
+#'   par_names = 'v',
+#'   kernels   = 'delta',
+#'   bases     = 'lin',
+#'   cov_names = list(c('cov1', 'cov2', 'cov3', 'cov4')),
+#'   maps      = list('differences' = advantage_map),
+#'   at        = 'lR'
+#' )
+#'
+#' design_RDM <- design(
+#'   model  = RDM,
+#'   data   = data,
+#'   formula= list(B ~ 1, v ~ 1, t0 ~ 1),
+#'   trend  = trend
+#' )
+#'
+#' emc <- make_emc(data, design_RDM, type = 'single')
+#'
+#' # The resulting covariate maps for each subject are attached to the `dadm`:
+#' attr(emc[[1]]$data[[1]], 'covariate_maps')
+#' # And to confirm that this mapping is correct, compare with the corresponding `dadm`
+#' emc[[1]]$data[[1]]
+#'
+#' # You can also provide multiple covariate maps. Each additional map introduces
+#' # a separate base parameter. For example, the following `sum_map` is suitable
+#' # for RL-ARD–type models:
+#'
+#' sum_map <- function(dadm, cov_names) {
+#'   # Which stimulus does the accumulator correspond to on each trial?
+#'   lS <- paste0('cov', ifelse(dadm$lR == 'left', dadm$cov_left, dadm$cov_right))
+#'   # Which stimulus does the *other* accumulator correspond to?
+#'   lSother <- paste0('cov', ifelse(dadm$lR == 'right', dadm$cov_left, dadm$cov_right))
+#'
+#'   # Indicator matrices (note: both are added rather than subtracted)
+#'   map_this  <- sapply(cov_names, function(col) ifelse(lS      == col, 1, 0))
+#'   map_other <- sapply(cov_names, function(col) ifelse(lSother == col, 1, 0))
+#'
+#'   map_this + map_other
+#' }
+#'
+#' trend <- make_trend(
+#'   par_names = 'v',
+#'   kernels   = 'delta',
+#'   bases     = 'lin',
+#'   cov_names = list(c('cov1', 'cov2', 'cov3', 'cov4')),
+#'   maps      = list('differences' = advantage_map,
+#'                    'sums'        = sum_map),
+#'   at        = 'lR'
+#' )
+#'
+#' design_RDM <- design(
+#'   model  = RDM,
+#'   data   = data,
+#'   formula= list(B ~ 1, v ~ 1, t0 ~ 1),
+#'   trend  = trend
+#' )
+#'
+#' emc <- make_emc(data, design_RDM, type = 'single')
+#'
+#' # Now the dadm contains two covariate maps, and the model includes two
+#' # corresponding base parameters (e.g., v.w1 and v.w2):
+#' attr(emc[[1]]$data[[1]], 'covariate_maps')
+#'
 #'
 make_trend <- function(par_names, cov_names = NULL, kernels, bases = NULL,
                        shared = NULL, trend_pnames = NULL,
