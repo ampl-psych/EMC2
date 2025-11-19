@@ -61,8 +61,8 @@ covariates into accumulator-specific predictors.
 Example of a minimal map function:
 
 \if{html}{\out{<div class="sourceCode r">}}\preformatted{advantage_map <- function(dadm, cov_names) \{
-  lS      <- paste0('cov', ifelse(dadm$lR == 'left',  dadm$s_left,  dadm$s_right))
-  lSother <- paste0('cov', ifelse(dadm$lR == 'right', dadm$s_left,  dadm$s_right))
+  lS      <- paste0('cov', ifelse(dadm$lR == 'left',  dadm$cov_left,  dadm$cov_right))
+  lSother <- paste0('cov', ifelse(dadm$lR == 'right', dadm$cov_left,  dadm$cov_right))
   plus  <- sapply(cov_names, function(x) ifelse(lS      == x,  1, 0))
   minus <- sapply(cov_names, function(x) ifelse(lSother == x, -1, 0))
   plus + minus

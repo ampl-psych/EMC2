@@ -253,10 +253,7 @@ make_trend <- function(par_names, cov_names = NULL, kernels, bases = NULL,
 
   # normalize maps. Maps is either a list with list(name1=function1, name2=function2) or a list of such lists
   if(length(maps) > 0) {
-    if(length(par_names) > 1) {
-      ## which map should be matched to which par name?
-      if(!inherits(maps[[1]], 'list')) stop('For >1 par_names, provide a list of mapping lists to avoid ambiguity.')
-    } else maps <- list(maps)
+    maps <- normalize_maps(maps, par_names)
   }
 
   trends_out <- list()
@@ -295,13 +292,8 @@ make_trend <- function(par_names, cov_names = NULL, kernels, bases = NULL,
     }
     # add par names
     user_trend_pnames <- trend_pnames[[i]]
-    if(length(maps[[i]]) > 1) {
-      if(trend$base == 'identity') stop('Cannot use multiple maps in combination with an identity kernel (which map should be used..?)')
-      else if(trend$base == 'add') default_trend_pnames <- c()
-      else default_trend_pnames <- paste0(rep(trend_help(base = trend$base, do_return = TRUE)$default_pars, each=length(maps[[i]])), 1:length(maps[[i]]))
-    } else {
-      default_trend_pnames <- trend_help(base = trend$base, do_return = TRUE)$default_pars
-    }
+    if(length(maps[[i]]) > 1 & trend$base == 'identity') stop('Cannot use multiple maps in combination with an identity kernel (which map should be used..?)')
+    default_trend_pnames <- trend_help(base = trend$base, do_return = TRUE, maps=maps[[i]])$default_pars
     # Kernel parameter names:
     if (identical(kernels[i], "custom")) {
       if (is.null(custom_trend)) stop("custom_trend must be provided when using kernel='custom'")
@@ -453,7 +445,13 @@ trend_help <- function(kernel = NULL, base = NULL, ...){
       }
     }
     if (!is.null(base)) {
-      if(dots$do_return) return(bases[[base]])
+      if(dots$do_return) {
+        if(!is.null(dots$maps) & base != 'add') {
+          # default pars should be updated
+          bases[[base]]$default_pars <- paste0(bases[[base]]$default_pars, '_', names(dots$maps))
+        }
+        return(bases[[base]])
+      }
       if (base %in% names(bases)) {
         cat("Description: \n")
         cat(bases[[base]]$description, "\n \n")
@@ -1359,5 +1357,87 @@ set_custom_kernel_pointers <- function(emc, ptrs) {
 ##' @export
 fix_custom_kernel_pointers <- function(emc, pointer_source) {
   return(set_custom_kernel_pointers(emc, get_custom_kernel_pointers(pointer_source)))
+}
+
+
+## utility function
+normalize_maps <- function(maps, par_names) {
+
+  n_par <- length(par_names)
+
+  # Helper: is this a list of functions?
+  is_function_list <- function(x) {
+    is.list(x) && all(vapply(x, is.function, logical(1)))
+  }
+
+  # Helper: is this a list-of-function-lists?
+  is_list_of_function_lists <- function(x) {
+    is.list(x) && all(vapply(x, is_function_list, logical(1)))
+  }
+
+  # Assign global names only to unnamed elements, preserving existing names
+  assign_global_names <- function(maps) {
+    counter <- 1
+
+    lapply(maps, function(m) {
+      # Ensure names vector exists
+      nm <- names(m)
+      if (is.null(nm)) nm <- rep("", length(m))
+
+      for (i in seq_along(m)) {
+        if (nm[i] == "" || is.na(nm[i])) {
+          nm[i] <- paste0("map", counter)
+          counter <- counter + 1
+        }
+      }
+
+      names(m) <- nm
+      m
+    })
+  }
+
+  if (length(maps) == 0) {
+    stop("`maps` must not be empty.")
+  }
+
+  ## Case 1: One par_name — allow a single list of functions
+  if (n_par == 1) {
+
+    # Already list-of-lists
+    if (is_list_of_function_lists(maps)) {
+
+      if (length(maps) != 1) {
+        warning("Multiple maps supplied but only one par_name. Using first.")
+      }
+
+      maps <- list(assign_global_names(list(maps[[1]]))[[1]])
+      return(maps)
+    }
+
+    # Single list of functions
+    if (is_function_list(maps)) {
+      maps <- list(assign_global_names(list(maps))[[1]])
+      return(maps)
+    }
+
+    stop("For one par_name, `maps` must be a list of functions or a list-of-lists.")
+  }
+
+  ## Case 2: Multiple par_names — require list-of-lists
+  if (!is_list_of_function_lists(maps)) {
+    stop("For multiple par_names, `maps` must be a list of lists of functions.")
+  }
+
+  if (length(maps) != n_par) {
+    stop(sprintf(
+      "`maps` must have one mapping-list per par_name: expected %d, got %d.",
+      n_par, length(maps)
+    ))
+  }
+
+  # Apply global naming inside each map
+  maps <- assign_global_names(maps)
+
+  maps
 }
 
