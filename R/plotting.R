@@ -1001,7 +1001,7 @@ get_power_spectra <- function(data,
   interp_mat <- res$power         # matrix: subjects × freq bins
   mean_power <- colMeans(interp_mat)
 
-  data.frame(freq = freq_grid, power = mean_power)
+  return(data.frame(freq = freq_grid, power = mean_power))
 }
 
 
@@ -1084,7 +1084,7 @@ plot_spectrum <- function(dat, pp = NULL,
     plot_args <- dots
     plot_args$x <- freq_t
     plot_args$y <- pow_t
-    do.call(plot, dots)
+    do.call(plot, plot_args)
 
     axis(1,
          at     = tick_x,
