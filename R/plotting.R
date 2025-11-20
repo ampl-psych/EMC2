@@ -899,7 +899,7 @@ get_power_spectra <- function(data,
     detrend = TRUE,
     demean  = FALSE,
     log     = FALSE,
-    taper   = 0.1  # default from spec.pgram
+    taper   = 0.1,  # default from spec.pgram
     fast    = TRUE
   )
 
