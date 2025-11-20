@@ -164,13 +164,16 @@ NumericVector run_beta_binomial(
     const bool return_map = false,
     const bool return_surprise = false
 ) {
+  const int n_trials = covariate.length();
+  if (n_trials < 1) {
+    stop("`covariate` should consist of at least one observation.");
+  }
   if (a0 <= 0.0 || b0 <= 0.0) {
     stop("Both shape parameters `a0` and `b0` must be positive.");
   }
   if (decay > 0 && window > 0) {
     stop("Cannot use both `decay` and `window`. Choose only one memory constraint.");
   }
-  const int n_trials = covariate.length();
   NumericVector out(n_trials);
   if (decay > 0) {
     out = run_beta_binomial_decay(covariate, a0, b0, decay, return_map);
@@ -227,9 +230,12 @@ NumericVector run_dbm(
     const bool return_map = false,
     const bool return_surprise = false,
     const int grid_res = 1e3,
-    const double cp_eps = 1e-10
+    const double cp_eps = 1e-12
 ) {
-
+  const int n_trials = covariate.length();
+  if (n_trials < 1) {
+    stop("`covariate` should consist of at least one observation.");
+  }
   if (cp < 0 || cp > 1) {
     stop("Change point probability `cp` must be in the range [0, 1].");
   }
@@ -256,7 +262,6 @@ NumericVector run_dbm(
     return run_beta_binomial(covariate, a, b, 0, 0, return_map, return_surprise);
   }
 
-  const int n_trials = covariate.length();
   NumericVector out(n_trials);
 
   // if cp is (practically) equal to 1 (i.e., pure volatility), there is no

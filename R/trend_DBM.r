@@ -22,6 +22,9 @@ normalise <- function(x) {
 run_beta_binomial <- function(
     covariate, a0 = 1, b0 = 1, decay = 0, window = 0, return_map = FALSE, return_surprise = FALSE
 ) {
+  if (length(covariate) < 1) {
+    stop("`covariate` should consist of at least one observation.")
+  }
   if (a0 <= 0 || b0 <= 0) {
     stop("Both shape parameters `a0` and `b0` must be positive.")
   }
@@ -74,8 +77,11 @@ run_beta_binomial <- function(
 
 run_dbm <- function(
     covariate, cp, mu0, s0,
-    return_map = FALSE, return_surprise = FALSE, grid_res = 1e3, cp_eps = 1e-10
+    return_map = FALSE, return_surprise = FALSE, grid_res = 1e3, cp_eps = 1e-12
 ) {
+  if (length(covariate) < 1) {
+    stop("`covariate` should consist of at least one observation.")
+  }
   if (cp < 0 || cp > 1) {
     stop("Change point probability `cp` must be in the range [0, 1].")
   }
@@ -85,12 +91,15 @@ run_dbm <- function(
   if (s0 <= 0) {
     stop("Prior scale `s0` must be strictly positive.")
   }
+
   a <- mu0 * s0
   b <- (1 - mu0) * s0
+
   # when cp = 0, DBM is actually fixed belief model a.k.a. beta-binomial
   if (cp < cp_eps) {
     return(run_beta_binomial(covariate, a, b, 0, 0, return_map, return_surprise))
   }
+
   # when cp = 1, predictions are constant, determined purely by fixed prior
   if ((1 - cp) < cp_eps) {
     if (return_map) {
@@ -103,6 +112,7 @@ run_dbm <- function(
     }
     return(out)
   }
+
   # actual DBM
   out <- numeric(length(covariate))
   prob_grid <- (0:grid_res) / grid_res
@@ -111,6 +121,7 @@ run_dbm <- function(
   y_like <- 1 - prob_grid
   DBM_pred <- DBM_prior
   DBM_post <- numeric(length(DBM_prior))
+
   for (t in seq_along(covariate)) {
     if (t > 1) {
       DBM_pred <- normalise((1 - cp) * DBM_post + cp * DBM_prior)
@@ -126,6 +137,7 @@ run_dbm <- function(
       DBM_post <- normalise(DBM_pred * y_like)
     }
   }
+
   if (return_surprise) {
     out <- -log2(out)
   }
