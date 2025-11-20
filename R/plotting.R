@@ -828,3 +828,297 @@ plot_trend <- function(input_data, emc, par_name, subject=1,
     }
   }
 }
+
+
+# Spectrum plotting -------------------------------------------------------
+order_pp <- function(df) {
+  df[order(df$subjects, df$postn, df$trials), ]
+}
+
+## Returns a function that interpolates power at common frequencies
+make_interpolator <- function(freqs, power) {
+  approxfun(x = freqs, y = power, rule = 2)
+}
+
+## Given a list of (freq, power) per subject, align in common frequency space
+interpolate_to_common_grid <- function(freqs_list, power_list) {
+  # use the subject with fewest frequency bins
+  idx_min <- which.min(lengths(freqs_list))
+  common_f <- freqs_list[[idx_min]]
+
+  interpolators <- mapply(make_interpolator, freqs_list, power_list, SIMPLIFY = FALSE)
+  interpolated  <- t(sapply(interpolators, function(f) f(common_f)))
+
+  list(freq = common_f, power = interpolated)
+}
+
+#' Compute Power Spectra With Optional Subject-Level Aggregation
+#'
+#' Computes power spectral density estimates using \code{\link{spectrum}},
+#' optionally aggregated across subjects or posterior predictive samples.
+#' All arguments intended for the underlying spectral estimator should be
+#' supplied through \code{spectrum.args}.
+#'
+#' @param data A data frame with reaction time data. Must contain
+#'   \code{subjects} and \code{rt}, and for posterior predictive data
+#'   optionally \code{postn} and \code{trials}.
+#'
+#' @param by.postn Logical. If \code{TRUE}, compute a separate spectrum
+#'   for each posterior predictive draw and each posterior sample index.
+#'
+#' @param spectrum.args A named list of arguments passed directly to
+#'   \code{\link{spectrum}}. These override the defaults internally used
+#'   in this function. Useful for customizing smoothing spans, detrending,
+#'   tapering, and so on.
+#'   Defaults: `list(spans=c(3, 5), detrend=TRUE, demean=FALSE, log=FALSE)`.
+#'   By default, we run `spectrum` without `log`, and log-transform while plotting
+#'
+#' @details
+#' The function organizes the data by subject (and optionally posterior
+#' sample index), computes spectra individually, interpolates spectra to
+#' a common frequency grid if needed, and averages them appropriately.
+#'
+#' @importFrom utils modifyList
+#'
+#' @return
+#' Either a data frame with columns \code{freq} and \code{power}, or (if
+#' \code{by.postn = TRUE}) a list with frequency vector and a matrix of
+#' spectra across posterior samples.
+#'
+#' @export
+get_power_spectra <- function(data,
+                              by.postn = FALSE,
+                              spectrum.args = list()) {
+
+  # Default spectrum parameters (user may override any of them)
+  # Default from Wagenmakers et al., (2004), except demean,
+  # which we set to FALSE to capture the power at f=0.
+  # We don't get the log, we transform the log later.
+  default_spec_args <- list(
+    plot    = FALSE,
+    spans   = c(3, 5),
+    detrend = TRUE,
+    demean  = FALSE,
+    log     = FALSE
+  )
+
+  spec_args <- modifyList(default_spec_args, spectrum.args)
+
+  # Helper to compute a spectrum for vector x
+  compute_spec <- function(x, spec_args) {
+    x2 <- if (isTRUE(spec_args$demean)) x - mean(x) else x
+    stats::spec.pgram(
+      x = x2,
+      spans   = spec_args$spans,
+      taper   = if (!is.null(spec_args$taper)) spec_args$taper else 0,
+      detrend = spec_args$detrend,
+      log     = FALSE,
+      plot    = FALSE,
+      fast    = TRUE   # FFT acceleration
+    )
+  }
+
+  # --------------------------
+  # Case 1: Mean posterior predictive spectra
+  # --------------------------
+  # if (mean.pp) {
+  #   pp <- data[order(data$subjects, data$postn, data$trials), ]
+  #
+  #   power_df <- aggregate(rt ~ postn * subjects, pp, function(x) compute_spec(x, spec_args=spec_args)$spec)
+  #   freq_df  <- aggregate(rt ~ postn * subjects, pp, function(x) compute_spec(x, spec_args=spec_args)$freq)
+  #
+  #   # Unlist spectra & frequencies into matrices
+  #   if (is.list(power_df$rt)) power_df$rt <- do.call(rbind, power_df$rt)
+  #   if (is.list(freq_df$rt))  freq_df$rt  <- do.call(rbind, freq_df$rt)
+  #
+  #   power_by_subj <- lapply(unique(power_df$subjects),
+  #                           function(s) colMeans(power_df[power_df$subjects == s, "rt"]))
+  #
+  #   freq_by_subj  <- lapply(unique(freq_df$subjects),
+  #                           function(s) colMeans(freq_df[freq_df$subjects == s, "rt"]))
+  #
+  #   mean_power <- colMeans(do.call(rbind, power_by_subj))
+  #   mean_freq  <- colMeans(do.call(rbind, freq_by_subj))
+  #
+  #   return(data.frame(freq = mean_freq, power = mean_power))
+  # }
+
+  # --------------------------
+  # Case 2: Posterior predictive spectra by postn
+  # --------------------------
+  if (by.postn) {
+    pp <- data[order(data$subjects, data$postn, data$trials), ]
+    subjects <- unique(pp$subjects)
+
+    spectra_by_subj <- lapply(subjects, function(s) {
+      lapply(unique(pp[pp$subjects == s, "postn"]),
+             function(pn) compute_spec(pp[pp$subjects == s & pp$postn == pn, "rt"], spec_args=spec_args))
+    })
+
+    # Extract frequencies (one per subject)
+    freq_by_subj <- lapply(spectra_by_subj, function(lst) lst[[1]]$freq)
+    power_by_subj <- lapply(spectra_by_subj,
+                            function(lst) lapply(lst, function(s) s$spec))
+
+    n_postn <- length(power_by_subj[[1]])
+    n_subj  <- length(power_by_subj)
+
+    # Interpolate if subjects differ in trial count
+    min_len <- min(sapply(freq_by_subj, length))
+    freq_grid <- freq_by_subj[[which.min(sapply(freq_by_subj, length))]]
+
+    interp <- function(freqs, powers) {
+      sapply(powers, function(pwr) approxfun(freqs, pwr)(freq_grid))
+    }
+
+    power_interp <- lapply(1:n_subj, function(i) {
+      interp(freq_by_subj[[i]], power_by_subj[[i]])
+    })
+
+    mean_power <- do.call(rbind,
+                          lapply(1:n_postn, function(pn) {
+                            colMeans(do.call(rbind, lapply(power_interp,
+                                                           function(m) m[, pn])))
+                          }))
+
+    return(list(freq = freq_grid, power = mean_power))
+  }
+
+  # --------------------------
+  # Case 3: Simple subject-averaged spectrum
+  # --------------------------
+  spectra <- lapply(unique(data$subjects),
+                    function(s) compute_spec(data[data$subjects == s, "rt"], spec_args=spec_args))
+
+  freqs <- lapply(spectra, function(s) s$freq)
+  specs <- lapply(spectra, function(s) s$spec)
+
+  # Interpolate to common frequency grid (shortest)
+  res <- interpolate_to_common_grid(freqs, specs)
+
+  freq_grid  <- res$freq
+  interp_mat <- res$power         # matrix: subjects × freq bins
+  mean_power <- colMeans(interp_mat)
+
+  data.frame(freq = freq_grid, power = mean_power)
+}
+
+
+
+#' Plot Empirical and Posterior Predictive Power Spectra
+#'
+#' Computes and plots the empirical power spectrum, with optional overlay
+#' of spectra from posterior predictive simulations. All customization of
+#' the spectral estimator is done through \code{spectrum.args}, while plot
+#' appearance is controlled via \code{...}.
+#'
+#' @param dat A data frame containing empirical reaction time data, with
+#'   at least columns \code{subjects} and \code{rt}.
+#'
+#' @param pp Optional posterior predictive data in the same format as
+#'   \code{dat}, including \code{subjects}, \code{postn}, and \code{trials}.
+#'
+#' @param plot.log Logical. Whether to log-transform frequencies and
+#'   power before plotting. This does not affect the call to
+#'   \code{\link{spectrum}}: use \code{spectrum.args$list(log = TRUE)}
+#'   to request log spectral density from the estimator itself.
+#'
+#' @param spectrum.args A named list of arguments forwarded directly to
+#'   \code{\link{spectrum}} inside \code{\link{get_power_spectra}}.
+#'
+#' @param trial_duration Optional duration of a trial in seconds. If
+#'   supplied, the x-axis is labeled in human-readable time units. Otherwise
+#'   the x-axis is in frequencies of 1/trial.
+#'
+#' @param ... Additional graphical parameters passed to \code{\link{plot}}.
+#'
+#' @importFrom graphics axis
+#' @return Invisibly returns a list containing the empirical spectrum
+#'   and, if posterior predictive data is supplied, the posterior
+#'   predictive spectra and their mean.
+#'
+#' @export
+plot_spectrum <- function(dat, pp = NULL,
+                          plot.log = TRUE,
+                          spectrum.args = list(),
+                          trial_duration = NULL,
+                          ...) {
+
+  # Compute spectrum
+  sp_dat <- get_power_spectra(dat, spectrum.args = spectrum.args)
+
+  f <- if (plot.log) log else identity
+  freq_t <- f(sp_dat$freq)
+  pow_t  <- f(sp_dat$power)
+
+  if(plot.log) {
+    dots <- add_defaults(list(...),
+                         'xlab'='Log frequency (1/trial)',
+                         'ylab'='Log power',
+                         'type'='n')
+  } else {
+    dots <- add_defaults(list(...),
+                         'xlab'='Frequency (1/trial)',
+                         'ylab'='Power',
+                         'type'='n')
+  }
+
+  # Base plot
+  if (is.null(trial_duration)) {
+
+    plot_args <- dots
+    plot_args$x <- freq_t
+    plot_args$y <- pow_t
+    do.call(plot, plot_args)
+
+  } else {
+    ticks_sec <- c(7200, 3600, 1800, 900, 300, 120, 60, 30, 5, 1)
+    ticks_rel <- (1 / ticks_sec) * trial_duration
+    tick_x    <- f(ticks_rel)
+
+    labels <- c("2 hr", "1 hr", "30 m", "15 m", "5 m",
+                "2 m", "1 m", "30 s", "5 s", "1 s")
+
+    if(!'xaxt' %in% names(dots)) dots$xaxt <- 'n'
+    plot_args <- dots
+    plot_args$x <- freq_t
+    plot_args$y <- pow_t
+    do.call(plot, dots)
+
+    axis(1,
+         at     = tick_x,
+         labels = labels,
+         las    = 2)
+  }
+  result <- list(dat = sp_dat)
+
+  # Overlay posterior predictive spectra
+  if (!is.null(pp)) {
+    sp_pp <- get_power_spectra(pp, by.postn = TRUE,
+                               spectrum.args = spectrum.args)
+
+    freqs_pp <- f(sp_pp$freq)
+    power_pp <- sp_pp$power
+
+    # Individual PP spectra
+    for (i in 1:nrow(power_pp)) {
+      lines(freqs_pp, f(power_pp[i, ]),
+            col = adjustcolor("darkgreen", alpha.f = 0.1))
+    }
+
+    # Posterior predictive mean
+    lines(freqs_pp, f(colMeans(power_pp)),
+          col = "darkgreen")
+
+    result$pp      <- sp_pp
+    result$pp_mean <- data.frame(freq = sp_pp$freq,
+                                 power = colMeans(sp_pp$power))
+  }
+
+  # Empirical spectrum trace
+  lines(freq_t, pow_t, col = par()$col)
+
+  invisible(result)
+}
+
+

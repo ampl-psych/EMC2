@@ -45,13 +45,14 @@ run_kernel_custom <- function(trend_pars = NULL, input, funptr, at_factor = NULL
 #' @param phase Character vector (length 1 or `length(par_names)`) specifying the phase for each trend entry;
 #'        one of "premap", "pretransform", or "posttransform". Defaults to "premap".
 #' @param par_input Optional character vector(s) of parameter names to use as additional inputs for the trend
-#' @param at If NULL (default), trend is applied everywhere. If a factor name (e.g., "lR"), trend is applied only to entries corresponding to the first level of that factor.
+#' @param at If NULL, trend is applied to every row in the `dadm`. If a factor name (e.g., "lR"), trend is applied only to entries
+#'        corresponding to the first level of that factor, and fed forward to the other levels of that factor. Defaults to "lR". For DDMs, `at` should be set to NULL.
 #' @param maps List of functions that create matrices with which to multiply the covariates before applying the base. See details.
 #' @param custom_trend A trend registered with `register_trend`
 #' @param ffill_na Determines how missing covariate values are handled.
 #'        If `TRUE`, missing values are forward-filled using the last known non-`NA` value after
 #'        applying the kernel. If `FALSE`, trials with missing covariates contribute `0` instead.
-#'        The default is `TRUE` for delta-rule models and `FALSE` otherwise.
+#'        The default (NULL) is interpreted as `TRUE` for delta-rule models and `FALSE` otherwise.
 #'
 #' @return A list containing the trend specifications for each parameter
 #' @export
@@ -198,7 +199,7 @@ run_kernel_custom <- function(trend_pars = NULL, input, funptr, at_factor = NULL
 make_trend <- function(par_names, cov_names = NULL, kernels, bases = NULL,
                        shared = NULL, trend_pnames = NULL,
                        phase = "premap",
-                       par_input = NULL, at = NULL,
+                       par_input = NULL, at = 'lR',
                        maps = NULL,
                        custom_trend = NULL,
                        ffill_na = NULL){
