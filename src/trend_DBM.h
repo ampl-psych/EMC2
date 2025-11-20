@@ -262,14 +262,12 @@ NumericVector run_dbm(
     return run_beta_binomial(covariate, a, b, 0, 0, return_map, return_surprise);
   }
 
-  NumericVector out(n_trials);
-
   // if cp is (practically) equal to 1 (i.e., pure volatility), there is no
   // actual learning from observations; the beliefs are purely driven by the
   // fixed prior, hence the output is constant (mean / mode of fixed prior)
   if ((1 - cp) < cp_eps) {
     const double out_val = return_map ? beta_mode(a, b) : beta_mean(a, b);
-    std::fill(out.begin(), out.end(), out_val);
+    NumericVector out(n_trials, out_val);
     if (return_surprise) {
       shannon_surprise(out);
     }
@@ -277,6 +275,7 @@ NumericVector run_dbm(
   }
 
   // declare local variables
+  NumericVector out(n_trials);
   NumericVector prob_grid(grid_res + 1);
   NumericVector DBM_prior(grid_res + 1);
   NumericVector DBM_post(grid_res + 1);
@@ -321,6 +320,103 @@ NumericVector run_dbm(
     }
     normalise_inplace(DBM_post);
   }
+
+  if (return_surprise) {
+    shannon_surprise(out);
+  }
+  return out;
+}
+
+
+// ----- Transition Probability Model -----------------------------------------
+
+NumericVector run_tpm_nocp(
+    const NumericVector covariate,
+    const double a0 = 1.0,
+    const double b0 = 1.0,
+    const bool return_map = false,
+    const bool return_surprise = false
+) {
+  const int n_trials = covariate.length();
+  NumericVector out(n_trials);
+  double a_XX = a0;
+  double b_XX = b0;
+  double a_YX = a0;
+  double b_YX = b0;
+  out[0] = return_map ? beta_mode(a0, b0) : beta_mean(a0, b0);
+
+  for (int t = 1; t < n_trials; t++) {
+    const double prev = covariate[(t - 1)];
+    const double curr = covariate[t];
+    // prediction
+    if (prev == 1.0) {
+      out[t] = return_map? beta_mode(a_XX, b_XX) : beta_mean(a_XX, b_XX);
+    } else {
+      out[t] = return_map? beta_mode(a_YX, b_YX) : beta_mean(a_YX, b_YX);
+    }
+    // update
+    if (prev == 1.0) {
+      if (curr == 1.0) {
+        a_XX += 1.0;
+      } else {
+        b_XX += 1.0;
+      }
+    } else {
+      if (curr == 1.0) {
+        a_YX += 1.0;
+      } else {
+        b_YX += 1.0;
+      }
+    }
+  }
+
+  if (return_surprise) {
+    shannon_surprise(out);
+  }
+  return out;
+}
+
+NumericVector run_tpm(
+    const NumericVector covariate,
+    const double cp,
+    const double a0 = 1.0,
+    const double b0 = 1.0,
+    const bool return_map = false,
+    const bool return_surprise = false,
+    const int grid_res = 1e3,
+    const double cp_eps = 1e-12
+) {
+  const int n_trials = covariate.length();
+  if (n_trials < 1) {
+    stop("`covariate` should consist of at least one observation.");
+  }
+  if (cp < 0 || cp > 1) {
+    stop("Change point probability `cp` must be in the range [0, 1].");
+  }
+  if (a0 <= 0.0 || b0 <= 0.0) {
+    stop("Both prior shape parameters `a0` and `b0` must be positive.");
+  }
+
+  // if cp is (practically) equal to 0 (i.e., no volatility), fallback to simple
+  // Beta-Binomial over transitions.
+  if (cp < cp_eps) {
+    return run_tpm_nocp(covariate, a0, b0, return_map, return_surprise);
+  }
+
+  // if cp is (practically) equal to 1 (i.e., pure volatility), beliefs are given
+  // by fixed prior
+  if ((1 - cp) < cp_eps) {
+    const double out_val = return_map ? beta_mode(a0, b0) : beta_mean(a0, b0);
+    NumericVector out(n_trials, out_val);
+    if (return_surprise) {
+      shannon_surprise(out);
+    }
+    return out;
+  }
+
+  // declare local variables
+  NumericVector out(n_trials);
+  // TODO
 
   if (return_surprise) {
     shannon_surprise(out);
