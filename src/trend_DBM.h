@@ -221,7 +221,7 @@ inline double mode_discrete(const NumericVector &x, const NumericVector &w) {
 // Based on Yu & Cohen (2008) and Ide et al. (2013).
 NumericVector run_dbm(
     const NumericVector covariate,
-    const double cp = 0.8,
+    const double cp = 0.1,
     const double mu0 = 0.25,
     const double s0 = 10.0,
     const bool return_map = false,
@@ -248,19 +248,21 @@ NumericVector run_dbm(
   const double a = mu0 * s0;
   const double b = (1.0 - mu0) * s0;
 
-  // if cp is (practically) equal to 1, the DBM reduces to a standard
-  // Beta-Binomial model, for which exact analytic updates are available, which
-  // are cheaper to compute than the discretised grid approach of the DBM.
-  if ((1.0 - cp) < cp_eps) {
+  // if cp is (practically) equal to 0 (i.e., no volatility), the DBM reduces to
+  // a standard Beta-Binomial model, for which exact analytic updates are
+  // available, which are cheaper to compute than the discretised grid approach
+  // of the DBM.
+  if (cp < cp_eps) {
     return run_beta_binomial(covariate, a, b, 0, 0, return_map, return_surprise);
   }
 
   const int n_trials = covariate.length();
   NumericVector out(n_trials);
 
-  // if cp is (practically) equal to 0, there is no updating of the fixed
-  // prior, hence the output is constant (mean / mode of fixed prior)
-  if (cp < cp_eps) {
+  // if cp is (practically) equal to 1 (i.e., pure volatility), there is no
+  // actual learning from observations; the beliefs are purely driven by the
+  // fixed prior, hence the output is constant (mean / mode of fixed prior)
+  if ((1 - cp) < cp_eps) {
     const double out_val = return_map ? beta_mode(a, b) : beta_mean(a, b);
     std::fill(out.begin(), out.end(), out_val);
     if (return_surprise) {
@@ -295,7 +297,7 @@ NumericVector run_dbm(
     // and fixed prior
     if (t > 0) {
       for (int i = 0; i < grid_size; i++) {
-        DBM_pred[i] = cp * DBM_post[i] + (1.0 - cp) * DBM_prior[i];
+        DBM_pred[i] = (1.0 - cp) * DBM_post[i] + cp * DBM_prior[i];
       }
       normalise_inplace(DBM_pred);
     }

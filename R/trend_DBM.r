@@ -87,12 +87,12 @@ run_dbm <- function(
   }
   a <- mu0 * s0
   b <- (1 - mu0) * s0
-  # when cp = 1, DBM is actually fixed belief model a.k.a. beta-binomial
-  if ((1 - cp) < cp_eps) {
+  # when cp = 0, DBM is actually fixed belief model a.k.a. beta-binomial
+  if (cp < cp_eps) {
     return(run_beta_binomial(covariate, a, b, 0, 0, return_map, return_surprise))
   }
-  # when cp = 0, predictions are constant, determined purely by fixed prior
-  if (cp < cp_eps) {
+  # when cp = 1, predictions are constant, determined purely by fixed prior
+  if ((1 - cp) < cp_eps) {
     if (return_map) {
       out <- rep(beta_mode(a, b), length(covariate))
     } else {
@@ -113,7 +113,7 @@ run_dbm <- function(
   DBM_post <- numeric(length(DBM_prior))
   for (t in seq_along(covariate)) {
     if (t > 1) {
-      DBM_pred <- normalise(cp * DBM_post + (1 - cp) * DBM_prior)
+      DBM_pred <- normalise((1 - cp) * DBM_post + cp * DBM_prior)
     }
     if (return_map) {
       out[t] <- prob_grid[which.max(DBM_pred)]
