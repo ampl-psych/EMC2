@@ -870,7 +870,7 @@ interpolate_to_common_grid <- function(freqs_list, power_list) {
 #'   \code{\link{spectrum}}. These override the defaults internally used
 #'   in this function. Useful for customizing smoothing spans, detrending,
 #'   tapering, and so on.
-#'   Defaults: `list(spans=c(3, 5), detrend=TRUE, demean=FALSE, log=FALSE)`.
+#'   Defaults: `list(spans=c(3, 5), detrend=FALSE, demean=TRUE, log=FALSE, taper=0)`.
 #'   By default, we run `spectrum` without `log`, and log-transform while plotting
 #'
 #' @details
@@ -891,15 +891,15 @@ get_power_spectra <- function(data,
                               spectrum.args = list()) {
 
   # Default spectrum parameters (user may override any of them)
-  # Default from Wagenmakers et al., (2004), except demean,
-  # which we set to FALSE to capture the power at f=0.
+  # Default from Wagenmakers et al., (2004), except detrend,
+  # which we set to FALSE to capture the power of linear trends.
   # We don't get the log, we transform the log later.
   default_spec_args <- list(
     spans   = c(3, 5),
-    detrend = TRUE,
-    demean  = FALSE,
+    detrend = FALSE,
+    demean  = TRUE,
     log     = FALSE,
-    taper   = 0.1,  # default from spec.pgram
+    taper   = 0,
     fast    = TRUE
   )
 
