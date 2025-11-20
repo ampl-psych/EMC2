@@ -879,7 +879,7 @@ interpolate_to_common_grid <- function(freqs_list, power_list) {
 #' a common frequency grid if needed, and averages them appropriately.
 #'
 #' @importFrom utils modifyList
-#'
+#' @importFrom stats spec.pgram
 #' @return
 #' Either a data frame with columns \code{freq} and \code{power}, or (if
 #' \code{by.postn = TRUE}) a list with frequency vector and a matrix of
@@ -895,26 +895,26 @@ get_power_spectra <- function(data,
   # which we set to FALSE to capture the power at f=0.
   # We don't get the log, we transform the log later.
   default_spec_args <- list(
-    plot    = FALSE,
     spans   = c(3, 5),
     detrend = TRUE,
     demean  = FALSE,
-    log     = FALSE
+    log     = FALSE,
+    taper   = 0.1  # default from spec.pgram
   )
 
   spec_args <- modifyList(default_spec_args, spectrum.args)
 
   # Helper to compute a spectrum for vector x
   compute_spec <- function(x, spec_args) {
-    x2 <- if (isTRUE(spec_args$demean)) x - mean(x) else x
-    stats::spec.pgram(
-      x = x2,
+    spec.pgram(
+      x = x,
+      deamean = spec_args$demean,
       spans   = spec_args$spans,
-      taper   = if (!is.null(spec_args$taper)) spec_args$taper else 0,
+      taper   = spec_args$taper,
       detrend = spec_args$detrend,
-      log     = FALSE,
+      log     = spec_args$log,
       plot    = FALSE,
-      fast    = TRUE   # FFT acceleration
+      fast    = spec_args$fast   # FFT acceleration
     )
   }
 
@@ -1028,7 +1028,7 @@ get_power_spectra <- function(data,
 #'
 #' @param trial_duration Optional duration of a trial in seconds. If
 #'   supplied, the x-axis is labeled in human-readable time units. Otherwise
-#'   the x-axis is in frequencies of 1/trial.
+#'   the x-axis is in (log) frequencies of 1/trial.
 #'
 #' @param ... Additional graphical parameters passed to \code{\link{plot}}.
 #'

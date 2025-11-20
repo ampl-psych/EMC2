@@ -30,7 +30,7 @@ to request log spectral density from the estimator itself.}
 
 \item{trial_duration}{Optional duration of a trial in seconds. If
 supplied, the x-axis is labeled in human-readable time units. Otherwise
-the x-axis is in frequencies of 1/trial.}
+the x-axis is in (log) frequencies of 1/trial.}
 
 \item{...}{Additional graphical parameters passed to \code{\link{plot}}.}
 }
