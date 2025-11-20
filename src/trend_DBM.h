@@ -48,13 +48,13 @@ inline void shannon_surprise(NumericVector &x) {
 // ----- Beta-Binomial model --------------------------------------------------
 
 // Input `covariate` assumed to be binary data vector represented as reals;
-// Inputs `a` and `b` correspond to Beta shape parameters.
+// Inputs `a0` and `b0` correspond to Beta shape parameters.
 // By default returns the trial-wise posterior mean, but can also return the
 // posterior mode if `return_map` is true.
 NumericVector run_beta_binomial_basic(
     const NumericVector &covariate,
-    const double a,
-    const double b,
+    const double a0,
+    const double b0,
     const bool return_map
 ) {
   const int n_trials = covariate.length();
@@ -68,8 +68,8 @@ NumericVector run_beta_binomial_basic(
 
   for (int t = 0; t < n_trials; ++t) {
     // prediction before observing trial t
-    a_t = a + n_hit;
-    b_t = b + (n_trial - n_hit);
+    a_t = a0 + n_hit;
+    b_t = b0 + (n_trial - n_hit);
     out[t] = return_map ? beta_mode(a_t, b_t) : beta_mean(a_t, b_t);
     // update after observing trial t
     n_hit += covariate[t];
@@ -91,8 +91,8 @@ NumericVector run_beta_binomial_basic(
 // by `exp(-1/decay)` at each trial.
 NumericVector run_beta_binomial_decay(
     const NumericVector &covariate,
-    const double a,
-    const double b,
+    const double a0,
+    const double b0,
     const int decay,
     const bool return_map
 ) {
@@ -105,8 +105,8 @@ NumericVector run_beta_binomial_decay(
   double b_t;
 
   for (int t = 0; t < n_trials; ++t) {
-    a_t = a + n_hit;
-    b_t = b + (n_trial - n_hit);
+    a_t = a0 + n_hit;
+    b_t = b0 + (n_trial - n_hit);
     out[t] = return_map ? beta_mode(a_t, b_t) : beta_mean(a_t, b_t);
     // decayed update
     n_hit = decay_factor * (n_hit + covariate[t]);
@@ -120,8 +120,8 @@ NumericVector run_beta_binomial_decay(
 // a fixed window
 NumericVector run_beta_binomial_window(
     const NumericVector &covariate,
-    const double a,
-    const double b,
+    const double a0,
+    const double b0,
     const int window,
     const bool return_map
 ) {
@@ -135,8 +135,8 @@ NumericVector run_beta_binomial_window(
   double b_t;
 
   for (int t = 0; t < n_trials; ++t) {
-    a_t = a + n_hit;
-    b_t = b + (n_trial - n_hit);
+    a_t = a0 + n_hit;
+    b_t = b0 + (n_trial - n_hit);
     out[t] = return_map ? beta_mode(a_t, b_t) : beta_mean(a_t, b_t);
     // update with most recent observation
     n_hit += covariate[t];
@@ -157,27 +157,27 @@ NumericVector run_beta_binomial_window(
 // top-level dispatcher of Beta-Binomial model
 NumericVector run_beta_binomial(
     const NumericVector covariate,
-    const double a,
-    const double b,
+    const double a0,
+    const double b0,
     const int decay = 0,
     const int window = 0,
     const bool return_map = false,
     const bool return_surprise = false
 ) {
-  if (a <= 0.0 || b <= 0.0) {
-    stop("Both shape parameters a and b must be positive.");
+  if (a0 <= 0.0 || b0 <= 0.0) {
+    stop("Both shape parameters `a0` and `b0` must be positive.");
   }
   if (decay > 0 && window > 0) {
-    stop("Cannot use both decay and window. Choose only one memory constraint.");
+    stop("Cannot use both `decay` and `window`. Choose only one memory constraint.");
   }
   const int n_trials = covariate.length();
   NumericVector out(n_trials);
   if (decay > 0) {
-    out = run_beta_binomial_decay(covariate, a, b, decay, return_map);
+    out = run_beta_binomial_decay(covariate, a0, b0, decay, return_map);
   } else if (window > 0) {
-    out = run_beta_binomial_window(covariate, a, b, window, return_map);
+    out = run_beta_binomial_window(covariate, a0, b0, window, return_map);
   } else {
-    out = run_beta_binomial_basic(covariate, a, b, return_map);
+    out = run_beta_binomial_basic(covariate, a0, b0, return_map);
   }
 
   if (return_surprise) {
@@ -221,46 +221,46 @@ inline double mode_discrete(const NumericVector &x, const NumericVector &w) {
 // Based on Yu & Cohen (2008) and Ide et al. (2013).
 NumericVector run_dbm(
     const NumericVector covariate,
-    const double alpha = 0.8,
-    const double pmean = 0.25,
-    const double pscale = 10.0,
+    const double cp = 0.8,
+    const double mu0 = 0.25,
+    const double s0 = 10.0,
     const bool return_map = false,
     const bool return_surprise = false,
     const int grid_res = 1e3,
-    const double alpha_eps = 1e-10
+    const double cp_eps = 1e-10
 ) {
 
-  if (alpha < 0 || alpha > 1) {
-    stop("Mixing coefficient alpha must be in the range [0, 1].");
+  if (cp < 0 || cp > 1) {
+    stop("Change point probability `cp` must be in the range [0, 1].");
   }
-  if (pmean <= 0 || pmean >= 1) {
-    stop("Prior mean must be in the range (0, 1).");
+  if (mu0 <= 0 || mu0 >= 1) {
+    stop("Prior mean `mu0` must be in the range (0, 1).");
   }
-  if (pscale <= 0) {
-    stop("Prior scale must be strictly positive.");
+  if (s0 <= 0) {
+    stop("Prior scale `s0` must be strictly positive.");
   }
 
   // shape parameters of Beta prior
   // NB in original Matlab code from Jaime Ide, the parameterisation
-  // a = pmean * pscale + 1; b = (1 - pmean) * pscale + 1
+  // a = mu0 * s0 + 1; b = (1 - mu0) * s0 + 1
   // was used. The +1 shift was presumably a pragmatic tweak to avoid the shape
   // parameters ever being <= 1.
-  const double a = pmean * pscale;
-  const double b = (1.0 - pmean) * pscale;
+  const double a = mu0 * s0;
+  const double b = (1.0 - mu0) * s0;
 
-  // if alpha is (practically) equal to 1, the DBM reduces to a standard
+  // if cp is (practically) equal to 1, the DBM reduces to a standard
   // Beta-Binomial model, for which exact analytic updates are available, which
   // are cheaper to compute than the discretised grid approach of the DBM.
-  if ((1.0 - alpha) < alpha_eps) {
+  if ((1.0 - cp) < cp_eps) {
     return run_beta_binomial(covariate, a, b, 0, 0, return_map, return_surprise);
   }
 
   const int n_trials = covariate.length();
   NumericVector out(n_trials);
 
-  // if alpha is (practically) equal to 0, there is no updating of the fixed
+  // if cp is (practically) equal to 0, there is no updating of the fixed
   // prior, hence the output is constant (mean / mode of fixed prior)
-  if (alpha < alpha_eps) {
+  if (cp < cp_eps) {
     const double out_val = return_map ? beta_mode(a, b) : beta_mean(a, b);
     std::fill(out.begin(), out.end(), out_val);
     if (return_surprise) {
@@ -295,7 +295,7 @@ NumericVector run_dbm(
     // and fixed prior
     if (t > 0) {
       for (int i = 0; i < grid_size; i++) {
-        DBM_pred[i] = alpha * DBM_post[i] + (1.0 - alpha) * DBM_prior[i];
+        DBM_pred[i] = cp * DBM_post[i] + (1.0 - cp) * DBM_prior[i];
       }
       normalise_inplace(DBM_pred);
     }
