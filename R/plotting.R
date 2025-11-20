@@ -900,6 +900,7 @@ get_power_spectra <- function(data,
     demean  = FALSE,
     log     = FALSE,
     taper   = 0.1  # default from spec.pgram
+    fast    = TRUE
   )
 
   spec_args <- modifyList(default_spec_args, spectrum.args)
