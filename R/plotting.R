@@ -1084,6 +1084,7 @@ plot_spectrum <- function(dat, pp = NULL,
     plot_args <- dots
     plot_args$x <- freq_t
     plot_args$y <- pow_t
+    if(!'xlab' %in% names(list(...))) plot_args$xlab = 'Period'
     do.call(plot, plot_args)
 
     axis(1,
