@@ -20,7 +20,7 @@ normalise <- function(x) {
 }
 
 run_beta_binomial <- function(
-    covariate, a = 1, b = 1, decay = 0, window = 0, return_map = FALSE
+    covariate, a = 1, b = 1, decay = 0, window = 0, return_map = FALSE, return_surprise = FALSE
 ) {
   if (a <= 0 || b <= 0) {
     stop("Both shape parameters a and b must be positive.")
@@ -66,13 +66,19 @@ run_beta_binomial <- function(
     }
   }
 
+  if (return_surprise) {
+    out <- -log2(out)
+  }
   return(out)
 }
 
 run_dbm <- function(
     covariate, alpha, pmean, pscale,
-    Nbins = 1e3, return_map = FALSE, alpha_eps = 1e-10
+    return_map = FALSE, return_surprise = FALSE, grid_res = 1e3, alpha_eps = 1e-10
 ) {
+  if (alpha < 0 || alpha > 1) {
+    stop("Mixing coefficient alpha must be in the range [0, 1].")
+  }
   if (pmean <= 0 || pmean >= 1) {
     stop("Prior mean must be in the range (0, 1).")
   }
@@ -83,18 +89,23 @@ run_dbm <- function(
   b <- (1 - pmean) * pscale
   # when alpha = 1, DBM is actually fixed belief model a.k.a. beta-binomial
   if ((1 - alpha) < alpha_eps) {
-    return(run_beta_binomial(covariate, a, b, 0, 0, return_map))
+    return(run_beta_binomial(covariate, a, b, 0, 0, return_map, return_surprise))
   }
   # when alpha = 0, predictions are constant, determined purely by fixed prior
   if (alpha < alpha_eps) {
     if (return_map) {
-      return(rep(beta_mode(a, b), length(covariate)))
+      out <- rep(beta_mode(a, b), length(covariate))
+    } else {
+      out <- rep(beta_mean(a, b), length(covariate))
     }
-    return(rep(beta_mean(a, b), length(covariate)))
+    if (return_surprise) {
+      out <- -log2(out)
+    }
+    return(out)
   }
   # actual DBM
   out <- numeric(length(covariate))
-  prob_grid <- (0:Nbins) / Nbins
+  prob_grid <- (0:grid_res) / grid_res
   DBM_prior <- normalise(stats::dbeta(prob_grid, a, b))
   x_like <- prob_grid
   y_like <- 1 - prob_grid
@@ -114,6 +125,9 @@ run_dbm <- function(
     } else {
       DBM_post <- normalise(DBM_pred * y_like)
     }
+  }
+  if (return_surprise) {
+    out <- -log2(out)
   }
   return(out)
 }

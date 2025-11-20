@@ -2,6 +2,7 @@
 #define trend_DBM_h
 
 #include <Rcpp.h>
+#include <limits>
 #include <deque>
 using namespace Rcpp;
 
@@ -31,6 +32,19 @@ inline double beta_mean(const double a, const double b) {
 }
 
 
+// ----- Shannon surprise (bits) ----------------------------------------------
+
+inline void shannon_surprise(NumericVector &x) {
+  static const double inv_ln2 = 1.0 / std::log(2.0);
+  static const double tiny = std::numeric_limits<double>::min();
+  const int n = x.length();
+  for (int i = 0; i < n; i++) {
+    const double safe_x = (x[i] > 0.0) ? x[i] : tiny;
+    x[i] = -std::log(safe_x) * inv_ln2;
+  }
+}
+
+
 // ----- Beta-Binomial model --------------------------------------------------
 
 // Input `covariate` assumed to be binary data vector represented as reals;
@@ -43,7 +57,7 @@ NumericVector run_beta_binomial_basic(
     const double b,
     const bool return_map
 ) {
-  int n_trials = covariate.length();
+  const int n_trials = covariate.length();
   NumericVector out(n_trials);
   // local count variables
   double n_hit = 0.0;
@@ -82,11 +96,11 @@ NumericVector run_beta_binomial_decay(
     const int decay,
     const bool return_map
 ) {
-  int n_trials = covariate.length();
+  const int n_trials = covariate.length();
   NumericVector out(n_trials);
   double n_hit = 0.0;
   double n_trial = 0.0;
-  double decay_factor = std::exp(-1.0 / decay);
+  const double decay_factor = std::exp(-1.0 / decay);
   double a_t;
   double b_t;
 
@@ -111,7 +125,7 @@ NumericVector run_beta_binomial_window(
     const int window,
     const bool return_map
 ) {
-  int n_trials = covariate.length();
+  const int n_trials = covariate.length();
   NumericVector out(n_trials);
   double n_hit = 0.0;
   double n_trial = 0.0;
@@ -147,7 +161,8 @@ NumericVector run_beta_binomial(
     const double b,
     const int decay = 0,
     const int window = 0,
-    const bool return_map = false
+    const bool return_map = false,
+    const bool return_surprise = false
 ) {
   if (a <= 0.0 || b <= 0.0) {
     stop("Both shape parameters a and b must be positive.");
@@ -155,13 +170,20 @@ NumericVector run_beta_binomial(
   if (decay > 0 && window > 0) {
     stop("Cannot use both decay and window. Choose only one memory constraint.");
   }
+  const int n_trials = covariate.length();
+  NumericVector out(n_trials);
   if (decay > 0) {
-    return run_beta_binomial_decay(covariate, a, b, decay, return_map);
+    out = run_beta_binomial_decay(covariate, a, b, decay, return_map);
+  } else if (window > 0) {
+    out = run_beta_binomial_window(covariate, a, b, window, return_map);
+  } else {
+    out = run_beta_binomial_basic(covariate, a, b, return_map);
   }
-  if (window > 0) {
-    return run_beta_binomial_window(covariate, a, b, window, return_map);
+
+  if (return_surprise) {
+    shannon_surprise(out);
   }
-  return run_beta_binomial_basic(covariate, a, b, return_map);
+  return out;
 }
 
 
@@ -196,54 +218,62 @@ inline double mode_discrete(const NumericVector &x, const NumericVector &w) {
 
 // ------ Dynamic Belief Model ------------------------------------------------
 
-// Based on Yu & Cohen (2008) and Ide et al. (2013)
+// Based on Yu & Cohen (2008) and Ide et al. (2013).
 NumericVector run_dbm(
-    NumericVector covariate,
-    double alpha = 0.8,
-    double pmean = 0.25,
-    double pscale = 10.0,
-    int Nbins = 1e3,
-    bool return_map = false,
-    double alpha_eps = 1e-10
+    const NumericVector covariate,
+    const double alpha = 0.8,
+    const double pmean = 0.25,
+    const double pscale = 10.0,
+    const bool return_map = false,
+    const bool return_surprise = false,
+    const int grid_res = 1e3,
+    const double alpha_eps = 1e-10
 ) {
 
-  // shape parameters of Beta prior
-  // NB in original Matlab code from Jaime Ide, the parameterisation
-  // a = pmean * pscale + 1; b = (1 - pmean) * pscale + 1
-  // was used. The +1 shift was presumably a pragmatic tweak to avoid the shape
-  // parameters ever being <= 1.
+  if (alpha < 0 || alpha > 1) {
+    stop("Mixing coefficient alpha must be in the range [0, 1].");
+  }
   if (pmean <= 0 || pmean >= 1) {
     stop("Prior mean must be in the range (0, 1).");
   }
   if (pscale <= 0) {
     stop("Prior scale must be strictly positive.");
   }
-  double a = pmean * pscale;
-  double b = (1.0 - pmean) * pscale;
+
+  // shape parameters of Beta prior
+  // NB in original Matlab code from Jaime Ide, the parameterisation
+  // a = pmean * pscale + 1; b = (1 - pmean) * pscale + 1
+  // was used. The +1 shift was presumably a pragmatic tweak to avoid the shape
+  // parameters ever being <= 1.
+  const double a = pmean * pscale;
+  const double b = (1.0 - pmean) * pscale;
 
   // if alpha is (practically) equal to 1, the DBM reduces to a standard
   // Beta-Binomial model, for which exact analytic updates are available, which
   // are cheaper to compute than the discretised grid approach of the DBM.
   if ((1.0 - alpha) < alpha_eps) {
-    return run_beta_binomial_basic(covariate, a, b, return_map);
+    return run_beta_binomial(covariate, a, b, 0, 0, return_map, return_surprise);
   }
 
-  int n_trials = covariate.length();
+  const int n_trials = covariate.length();
   NumericVector out(n_trials);
 
   // if alpha is (practically) equal to 0, there is no updating of the fixed
   // prior, hence the output is constant (mean / mode of fixed prior)
   if (alpha < alpha_eps) {
-    double out_val = return_map ? beta_mode(a, b) : beta_mean(a, b);
+    const double out_val = return_map ? beta_mode(a, b) : beta_mean(a, b);
     std::fill(out.begin(), out.end(), out_val);
+    if (return_surprise) {
+      shannon_surprise(out);
+    }
     return out;
   }
 
   // declare local variables
-  NumericVector prob_grid(Nbins + 1);
-  NumericVector DBM_prior(Nbins + 1);
-  NumericVector DBM_post(Nbins + 1);
-  int grid_size = prob_grid.size();
+  NumericVector prob_grid(grid_res + 1);
+  NumericVector DBM_prior(grid_res + 1);
+  NumericVector DBM_post(grid_res + 1);
+  const int grid_size = prob_grid.size();
 
   // compute discretised density of fixed Beta prior
   for (int i = 0; i < grid_size; i++) {
@@ -253,8 +283,8 @@ NumericVector run_dbm(
   normalise_inplace(DBM_prior);
 
   // Bernoulli likelihoods for binary observation X vs. Y
-  NumericVector x_like = clone(prob_grid);
-  NumericVector y_like = 1.0 - prob_grid;
+  const NumericVector x_like = clone(prob_grid);
+  const NumericVector y_like = 1.0 - prob_grid;
 
   // initialise predicted probability of observation X with fixed prior
   NumericVector DBM_pred = clone(DBM_prior);
@@ -285,6 +315,9 @@ NumericVector run_dbm(
     normalise_inplace(DBM_post);
   }
 
+  if (return_surprise) {
+    shannon_surprise(out);
+  }
   return out;
 }
 
