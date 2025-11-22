@@ -18,7 +18,7 @@ for each posterior predictive draw and each posterior sample index.}
 \code{\link{spectrum}}. These override the defaults internally used
 in this function. Useful for customizing smoothing spans, detrending,
 tapering, and so on.
-Defaults: \code{list(spans=c(3, 5), detrend=TRUE, demean=FALSE, log=FALSE)}.
+Defaults: \code{list(spans=c(3, 5), detrend=FALSE, demean=TRUE, log=FALSE, taper=0)}.
 By default, we run \code{spectrum} without \code{log}, and log-transform while plotting}
 }
 \value{
