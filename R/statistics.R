@@ -373,7 +373,7 @@ compare_subject <- function(sList,stage="sample",filter=0,use_best_fit=TRUE,
   # is_single <- sapply(sList, function(x) return(x[[1]]$type == "single"))
   # if(any(!is_single)) warning("subject-by-subject comparison is best done with models of type `single`")
   if (n_cores>1) {
-    out <- mclapply(subjects,compare_one,sList=sList,stage=stage,filter=filter,
+    out <- auto_mclapply(subjects,compare_one,sList=sList,stage=stage,filter=filter,
                    use_best_fit=use_best_fit,mc.cores=n_cores)
     names(out) <- subjects
   } else {
