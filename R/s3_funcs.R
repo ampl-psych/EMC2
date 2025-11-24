@@ -178,6 +178,7 @@ predict.emc <- function(
   dots <- list(...)
   data <- get_data(emc)
   design <- get_design(emc)
+  return_trialwise_parameters <- isTRUE(dots[["return_trialwise_parameters"]])
   if (is.null(data[["subjects"]])) {
     jointModel <- TRUE
     all_samples <- emc
@@ -308,6 +309,12 @@ predict.emc <- function(
       pars <- pars[[1]]
     }
     attr(out, "pars") <- pars
+    if (return_trialwise_parameters) {
+      attr(out, "trialwise_parameters") <- lapply(
+        simDat,
+        function(x) {return(attr(x, "trialwise_parameters"))}
+      )
+    }
     post_out[[j]] <- out
   }
   if(!jointModel) {
