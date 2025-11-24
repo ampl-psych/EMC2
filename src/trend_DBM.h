@@ -236,6 +236,11 @@ NumericVector run_dbm(
   if (n_trials < 1) {
     stop("`covariate` should consist of at least one observation.");
   }
+  for (int i = 0; i < n_trials; i++) {
+    if (!(covariate[i] == 0.0 || covariate[i] == 1.0)) {
+      stop("All `covariate` entries must be 0.0 or 1.0.");
+    }
+  }
   if (cp < 0 || cp > 1) {
     stop("Change point probability `cp` must be in the range [0, 1].");
   }
@@ -244,6 +249,12 @@ NumericVector run_dbm(
   }
   if (s0 <= 0) {
     stop("Prior scale `s0` must be strictly positive.");
+  }
+  if (grid_res < 1) {
+    stop("`grid_res` must be greater than or equal to 1.");
+  }
+  if (cp_eps <= 0) {
+    stop("`cp_eps` must be strictly positive.");
   }
 
   // shape parameters of Beta prior
@@ -392,7 +403,7 @@ inline tpm_grid build_tpm_grid(const int grid_res) {
   const int n_combi = resol * resol;
 
   NumericVector grid(resol);
-  for (int i = 0; i < resol; ++i) {
+  for (int i = 0; i < resol; i++) {
     grid[i] = static_cast<double>(i) / (resol - 1);
   }
 
@@ -406,9 +417,9 @@ inline tpm_grid build_tpm_grid(const int grid_res) {
   };
 
   int idx = 0;
-  for (int i0 = 0; i0 < resol; ++i0) {
+  for (int i0 = 0; i0 < resol; i0++) {
     const double p_XY_val = grid[i0];
-    for (int i1 = 0; i1 < resol; ++i1) {
+    for (int i1 = 0; i1 < resol; i1++) {
       const double p_XX_val = grid[i1];
       // p(X|X), i.e., prob of current obs = 1 given previous obs = 1
       out.p_XX[idx] = p_XX_val;
@@ -444,12 +455,24 @@ NumericVector run_tpm(
   if (n_trials < 1) {
     stop("`covariate` should consist of at least one observation.");
   }
+  for (int i = 0; i < n_trials; i++) {
+    if (!(covariate[i] == 0.0 || covariate[i] == 1.0)) {
+      stop("All `covariate` entries must be 0.0 or 1.0.");
+    }
+  }
   if (cp < 0 || cp > 1) {
     stop("Change point probability `cp` must be in the range [0, 1].");
   }
   if (a0 <= 0.0 || b0 <= 0.0) {
     stop("Both prior shape parameters `a0` and `b0` must be positive.");
   }
+  if (grid_res < 1) {
+    stop("`grid_res` must be greater than or equal to 1.");
+  }
+  if (cp_eps <= 0) {
+    stop("`cp_eps` must be strictly positive.");
+  }
+
 
   // if cp is (practically) equal to 0 (i.e., no volatility), fallback to simple
   // Beta-Binomial over transitions.
@@ -471,12 +494,124 @@ NumericVector run_tpm(
   // declare local variables
   NumericVector out(n_trials);
   tpm_grid grid = build_tpm_grid(grid_res);
-  // grid.p_XX, grid.p_XY, grid.like_XX, grid.like_XY, grid.like_YX, grid.like_YY
+  const int resol = grid_res + 1;
+  const int n_combi = resol * resol;
+  const double inv_n_minus_1 = 1.0 / (n_combi - 1.0);
+  NumericVector grid_1(resol);
+  for (int i = 0; i < resol; i++) {
+    grid_1[i] = static_cast<double>(i) / static_cast<double>(resol - 1);
+  }
+  NumericVector mass_by_grid(resol);
+  NumericVector TPM_post(n_combi);
+  NumericVector TPM_pred(n_combi);
+  NumericVector TPM_update(n_combi);
+  IntegerVector idx_XY(n_combi);
+  IntegerVector idx_XX(n_combi);
 
+  // get indices for previous obs = 0 and previous obs = 1
+  for (int j = 0; j < n_combi; j++) {
+    idx_XY[j] = j / resol;
+    idx_XX[j] = j % resol;
+  }
 
+  // loop over trials
+  for (int t = 0; t < n_trials; t++) {
 
+    const int curr = static_cast<int>(covariate[t]);
+    const int prev = t > 0 ? static_cast<int>(covariate[t - 1]) : NA_INTEGER;
+    std::fill(mass_by_grid.begin(), mass_by_grid.end(), 0.0);
 
-  // TODO
+    if (t == 0) {
+      // initialise posterior with Beta prior
+      for (int j = 0; j < n_combi; j++) {
+        TPM_post[j] = R::dbeta(grid.p_XX[j], a0, b0, false) *
+          R::dbeta(grid.p_XY[j], a0, b0, false);
+      }
+      normalise_inplace(TPM_post);
+    }
+
+    // Build predictive distribution from previous posterior.
+    // - With prob 1-cp: environment is stable -> posterior propagates.
+    // - With prob cp: change point -> new transition probs independent of old ones,
+    //   so posterior mass is redistributed uniformly over all *other* grid points.
+
+    double summed_post = std::accumulate(TPM_post.begin(), TPM_post.end(), 0.0);
+
+    for (int j = 0; j < n_combi; j++) {
+      TPM_pred[j] = (1.0 - cp) * TPM_post[j] +
+        cp * (summed_post - TPM_post[j]) * inv_n_minus_1;
+    }
+    normalise_inplace(TPM_pred);
+
+    // Before observing trial t, compute marginal predictive probability of
+    // observing X - that is, predictive probability of covariate[t] == 1.0
+
+    if (t == 0) {
+      // compute mean of trans probs (i.e., (p(X|X) + p(X|Y)) / 2) for every
+      // possible joint combination
+      NumericVector mean_p(n_combi);
+      for (int j = 0; j < n_combi; j++) {
+        mean_p[j] = 0.5 * (grid.p_XX[j] + grid.p_XY[j]);
+      }
+
+      if (!return_map) {
+        out[t] = mean_discrete(mean_p, TPM_pred);
+      } else {
+        for (int j = 0; j < n_combi; j++) {
+          int g_idx = static_cast<int>(std::round(mean_p[j] * (resol - 1)));
+          if (g_idx < 0) {
+            g_idx = 0;
+          } else if (g_idx > (resol - 1)) {
+            g_idx = resol - 1;
+          }
+          mass_by_grid[g_idx] += TPM_pred[j];
+        }
+        out[t] = mode_discrete(grid_1, mass_by_grid);
+      }
+
+    } else {
+      if (!return_map) {
+        out[t] = prev == 1 ? mean_discrete(grid.p_XX, TPM_pred) : mean_discrete(grid.p_XY, TPM_pred);
+      } else {
+        if (prev == 1) {
+          for (int j = 0; j < n_combi; j++) {
+            mass_by_grid[idx_XX[j]] += TPM_pred[j];
+          }
+        } else {
+          for (int j = 0; j < n_combi; j++) {
+            mass_by_grid[idx_XY[j]] += TPM_pred[j];
+          }
+        }
+        out[t] = mode_discrete(grid_1, mass_by_grid);
+      }
+    }
+
+    // After observing trial t, update posterior distribution
+    if (t > 0) {
+      const NumericVector *like_ptr = nullptr;
+      if (prev == 0 && curr == 0) {
+        like_ptr = &grid.like_YY;
+      } else if (prev == 0 && curr == 1) {
+        like_ptr = &grid.like_XY;
+      } else if (prev == 1 && curr == 0) {
+        like_ptr = &grid.like_YX;
+      } else {
+        like_ptr = &grid.like_XX;
+      }
+
+      for (int j = 0; j < n_combi; j++) {
+        const double like_j = (*like_ptr)[j];
+        TPM_update[j] = ((1.0 - cp) * like_j * TPM_post[j]) +
+          (cp * like_j * (summed_post - TPM_post[j]) * inv_n_minus_1);
+      }
+      normalise_inplace(TPM_update);
+
+      for (int j = 0; j < n_combi; j++) {
+        TPM_post[j] = TPM_update[j];
+      }
+    }
+
+  }
 
   if (return_surprise) {
     shannon_surprise(out);
