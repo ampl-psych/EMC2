@@ -376,6 +376,54 @@ NumericVector run_tpm_nocp(
   return out;
 }
 
+// pre-computed grid of transition probabilities and all four possible single-
+// trial likelihoods
+struct tpm_grid {
+  NumericVector p_XX;
+  NumericVector p_XY;
+  NumericVector like_XX;
+  NumericVector like_XY;
+  NumericVector like_YX;
+  NumericVector like_YY;
+};
+
+inline tpm_grid build_tpm_grid(const int grid_res) {
+  const int resol = grid_res + 1;
+  const int n_combi = resol * resol;
+
+  NumericVector grid(resol);
+  for (int i = 0; i < resol; ++i) {
+    grid[i] = static_cast<double>(i) / (resol - 1);
+  }
+
+  tpm_grid out{
+    NumericVector(n_combi),
+    NumericVector(n_combi),
+    NumericVector(n_combi),
+    NumericVector(n_combi),
+    NumericVector(n_combi),
+    NumericVector(n_combi)
+  };
+
+  int idx = 0;
+  for (int i0 = 0; i0 < resol; ++i0) {
+    const double p_XY_val = grid[i0];
+    for (int i1 = 0; i1 < resol; ++i1) {
+      const double p_XX_val = grid[i1];
+      out.p_XX[idx] = p_XX_val;
+      out.p_XY[idx] = p_XY_val;
+      out.like_XY[idx] = p_XY_val;
+      out.like_XX[idx] = 1.0 - p_XY_val;
+      out.like_YY[idx] = p_XX_val;
+      out.like_YX[idx] = 1.0 - p_XX_val;
+      ++idx;
+    }
+  }
+
+  return out;
+}
+
+
 NumericVector run_tpm(
     const NumericVector covariate,
     const double cp,
@@ -416,6 +464,8 @@ NumericVector run_tpm(
 
   // declare local variables
   NumericVector out(n_trials);
+  tpm_grid grid = build_tpm_grid(grid_res);
+  // grid.p_XX, grid.p_XY, grid.like_XX, grid.like_XY, grid.like_YX, grid.like_YY
   // TODO
 
   if (return_surprise) {
