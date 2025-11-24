@@ -410,11 +410,17 @@ inline tpm_grid build_tpm_grid(const int grid_res) {
     const double p_XY_val = grid[i0];
     for (int i1 = 0; i1 < resol; ++i1) {
       const double p_XX_val = grid[i1];
+      // p(X|X), i.e., prob of current obs = 1 given previous obs = 1
       out.p_XX[idx] = p_XX_val;
+      // p(X|Y), i.e., prob of current obs = 1 given previous obs = 0
       out.p_XY[idx] = p_XY_val;
+      // likelihood of current obs = 1 given previous obs = 0
       out.like_XY[idx] = p_XY_val;
-      out.like_XX[idx] = 1.0 - p_XY_val;
-      out.like_YY[idx] = p_XX_val;
+      // likelihood of current obs = 1 given previous obs = 1
+      out.like_XX[idx] = p_XX_val;
+      // likelihood of current obs = 0 given previous obs = 0
+      out.like_YY[idx] = 1.0 - p_XY_val;
+      // likelihood of current obs = 0 given previous obs = 1
       out.like_YX[idx] = 1.0 - p_XX_val;
       ++idx;
     }
@@ -466,6 +472,10 @@ NumericVector run_tpm(
   NumericVector out(n_trials);
   tpm_grid grid = build_tpm_grid(grid_res);
   // grid.p_XX, grid.p_XY, grid.like_XX, grid.like_XY, grid.like_YX, grid.like_YY
+
+
+
+
   // TODO
 
   if (return_surprise) {
