@@ -39,6 +39,7 @@
 #' parameters to be estimated.
 #' @param custom_p_vector A character vector. If specified, a custom likelihood
 #' function can be supplied.
+#' @param trend A trend list, as made by \code{\link{make_trend}}
 #' @param transform A list with custom transformations to be applied to the parameters of the model,
 #' if the conventional transformations aren't desired.
 #' See `DDM()` for an example of such transformations
@@ -74,16 +75,17 @@
 #'
 #'
 design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
-                       contrasts=NULL,matchfun=NULL,constants=NULL,covariates=NULL,
-                       functions=NULL,report_p_vector=TRUE, custom_p_vector = NULL,
+                   contrasts=NULL,matchfun=NULL,constants=NULL,covariates=NULL,
+                   functions=NULL,report_p_vector=TRUE, custom_p_vector = NULL,
+                   trend=NULL,
                    transform = NULL, bound = NULL, ...){
 
   optionals <- list(...)
-  if(!is.null(optionals$trend)){
-    trend <- optionals$trend
-  } else {
-    trend <- NULL
-  }
+  # if(!is.null(optionals$trend)){
+  #   trend <- optionals$trend
+  # } else {
+  #   trend <- NULL
+  # }
   if(!is.null(optionals$pre_transform)){
     pre_transform <- optionals$pre_transform
   } else {

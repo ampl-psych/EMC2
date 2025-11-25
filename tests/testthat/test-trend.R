@@ -14,7 +14,9 @@ covariate2 <- rnorm(n_trials*2)
 # Ensure that NAs are handled correctly in trend
 covariate2[1:5] <- NA
 
-trend <- make_trend(par_names = "m", cov_names = list(c("covariate1", "covariate2")), kernels = "exp_incr")
+trend <- make_trend(par_names = "m",
+                    cov_names = list(c("covariate1", "covariate2")),
+                    kernels = "exp_incr")
 
 design_base <- design(factors = list(subjects = 1, S = 1:2),
                       Rlevels = 1:2,
@@ -28,7 +30,8 @@ design_base <- design(factors = list(subjects = 1, S = 1:2),
 p_vector <- sampled_pars(design_base, doMap = FALSE)
 p_vector[1:6] <- c(-1, 1.5, log(1), log(.2), log(.2), log(.2))
 
-dat <- make_data(p_vector, design_base, n_trials = n_trials, covariates = data.frame(covariate1 = covariate1, covariate2 = covariate2))
+dat <- make_data(p_vector, design_base, n_trials = n_trials,
+                 covariates = data.frame(covariate1 = covariate1, covariate2 = covariate2))
 
 LNR2cov <- make_emc(dat, design_base, compress = F, n_chains = 1, type = "single")
 
@@ -36,7 +39,9 @@ test_that("trend", {
   expect_snapshot(init_chains(LNR2cov, particles = 10, cores_per_chain = 1)[[1]]$samples)
 })
 
-trend_2types <- make_trend(par_names = c("m", "m_lMd"), cov_names = list(c("covariate1", "covariate2"), "covariate1"), kernels = c("exp_incr", "pow_decr"))
+trend_2types <- make_trend(par_names = c("m", "m_lMd"),
+                           cov_names = list(c("covariate1", "covariate2"), "covariate1"),
+                           kernels = c("exp_incr", "pow_decr"))
 
 design_base_shared <- design(data = dat,
                              trend = trend_2types,
@@ -77,7 +82,7 @@ trend_pretrans <- make_trend(
   par_names = c("m", "s"),
   cov_names = list("covariate1", "covariate2"),
   kernels = c("delta", "exp_decr"),
-  phase = "pretransform"
+  phase = "pretransform", at=NULL  # should be at='lR' in realistic cases but just for this test, set to NULL
 )
 
 design_pretrans <- design(
@@ -266,7 +271,7 @@ trend_cond <- make_trend(
   par_names = "m",
   cov_names = "trial2",
   kernels = "delta",
-  phase = "pretransform"
+  phase = "pretransform", at=NULL  # should be at='lR' for realistic cases
 )
 
 design_cond <- design(
@@ -302,7 +307,7 @@ trend_mult <- make_trend(
   par_input = list(NULL, "t0"),
   kernels = c("exp_incr", "delta"),
   phase = "pretransform",
-  at = "lR",
+#  at = "lR",
   ffill_na = FALSE
 )
 
@@ -351,7 +356,8 @@ test_that("trend_ffillnafalse", {
 })
 
 # with ffill_na
-trend <- make_trend(par_names = "m", cov_names = list(c("covariate1", "covariate2")), kernels = "exp_incr", ffill_na=TRUE)
+trend <- make_trend(par_names = "m", cov_names = list(c("covariate1", "covariate2")),
+                    kernels = "exp_incr", ffill_na=TRUE, at=NULL)
 design_base <- design(factors = list(subjects = 1, S = 1:2),
                       Rlevels = 1:2,
                       covariates = c('covariate1', 'covariate2'),
@@ -375,7 +381,8 @@ test_that("trend_ffillnatrue", {
 })
 
 # Delta rule - always set initial trial to q0
-trend <- make_trend(par_names = "m", cov_names = list(c("covariate1", "covariate2")), kernels = "delta", ffill_na=TRUE)
+trend <- make_trend(par_names = "m", cov_names = list(c("covariate1", "covariate2")),
+                    kernels = "delta", ffill_na=TRUE)
 design_base <- design(factors = list(subjects = 1, S = 1:2),
                       Rlevels = 1:2,
                       covariates = c('covariate1', 'covariate2'),
@@ -394,6 +401,6 @@ covariate2 <- rnorm(n_trials*2)
 covariate2[c(1:5, 8)] <- NA
 
 dat <- make_data(p_vector, design_base, n_trials = n_trials, covariates = data.frame(covariate1 = covariate1, covariate2 = covariate2), return_trialwise_parameters=TRUE)
-test_that("trend_ffillnatrue", {
+test_that("trend_ffillnatrue_delta", {
   expect_snapshot(attr(dat, 'trialwise_parameters'))
 })
