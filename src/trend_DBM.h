@@ -229,7 +229,7 @@ NumericVector run_dbm(
     const double s0 = 10.0,
     const bool return_map = false,
     const bool return_surprise = false,
-    const int grid_res = 1e3,
+    const int grid_res = 100,
     const double cp_eps = 1e-12
 ) {
   const int n_trials = covariate.length();
@@ -287,10 +287,10 @@ NumericVector run_dbm(
 
   // declare local variables
   NumericVector out(n_trials);
-  NumericVector prob_grid(grid_res + 1);
-  NumericVector DBM_prior(grid_res + 1);
-  NumericVector DBM_post(grid_res + 1);
-  const int grid_size = prob_grid.size();
+  const int grid_size = grid_res + 1;
+  NumericVector prob_grid(grid_size);
+  NumericVector DBM_prior(grid_size);
+  NumericVector DBM_post(grid_size);
 
   // compute discretised density of fixed Beta prior
   for (int i = 0; i < grid_size; i++) {
@@ -356,23 +356,23 @@ NumericVector run_tpm_nocp(
   out[0] = beta_mean(a0, b0);
 
   for (int t = 1; t < n_trials; t++) {
-    const double prev = covariate[(t - 1)];
-    const double curr = covariate[t];
+    const int prev = static_cast<int>(covariate[(t - 1)]);
+    const int curr = static_cast<int>(covariate[t]);
     // prediction
-    if (prev == 1.0) {
+    if (prev == 1) {
       out[t] = beta_mean(a_XX, b_XX);
     } else {
       out[t] = beta_mean(a_YX, b_YX);
     }
     // update
-    if (prev == 1.0) {
-      if (curr == 1.0) {
+    if (prev == 1) {
+      if (curr == 1) {
         a_XX += 1.0;
       } else {
         b_XX += 1.0;
       }
     } else {
-      if (curr == 1.0) {
+      if (curr == 1) {
         a_YX += 1.0;
       } else {
         b_YX += 1.0;
@@ -446,7 +446,7 @@ NumericVector run_tpm(
     const double a0 = 1.0,
     const double b0 = 1.0,
     const bool return_surprise = false,
-    const int grid_res = 1e3,
+    const int grid_res = 100,
     const double cp_eps = 1e-12
 ) {
   const int n_trials = covariate.length();
@@ -512,7 +512,7 @@ NumericVector run_tpm(
   for (int t = 0; t < n_trials; t++) {
 
     const int curr = static_cast<int>(covariate[t]);
-    const int prev = t > 0 ? static_cast<int>(covariate[t - 1]) : NA_INTEGER;
+    const int prev = t > 0 ? static_cast<int>(covariate[(t - 1)]) : NA_INTEGER;
 
     // Build predictive distribution from previous posterior.
     // - With prob 1-cp: environment is stable -> posterior propagates.

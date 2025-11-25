@@ -77,7 +77,7 @@ run_beta_binomial <- function(
 
 run_dbm <- function(
     covariate, cp, mu0, s0,
-    return_map = FALSE, return_surprise = FALSE, grid_res = 1e3, cp_eps = 1e-12
+    return_map = FALSE, return_surprise = FALSE, grid_res = 100, cp_eps = 1e-12
 ) {
   if (length(covariate) < 1) {
     stop("`covariate` should consist of at least one observation.")
