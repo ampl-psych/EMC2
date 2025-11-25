@@ -5,6 +5,7 @@
 #include "EMC2/userfun.hpp"
 #include <Rcpp.h>
 #include <unordered_map>
+#include "trend_DBM.h"
 using namespace Rcpp;
 
 // Call a user-supplied custom trend kernel
@@ -290,6 +291,12 @@ NumericMatrix run_kernel_rcpp(NumericMatrix kernel_pars,
           comp_out[0] = kernel_pars(0, 0);
           pos = 0;
           for (int i = 0; i < n_comp; ++i) if (good[i]) comp_out[i] = tmp[pos++];
+        } else if (kernel == "beta_binomial") {
+          //
+        } else if (kernel == "dbm") {
+          //
+        } else if (kernel == "tpm") {
+          //
         } else {
           stop("Unknown kernel type");
         }
