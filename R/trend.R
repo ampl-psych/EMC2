@@ -448,8 +448,40 @@ trend_help <- function(kernel = NULL, base = NULL, ...){
     if (!is.null(base)) {
       if(dots$do_return) {
         if(!is.null(dots$maps) & base != 'add') {
-          # default pars should be updated
-          bases[[base]]$default_pars <- paste0(bases[[base]]$default_pars, '_', names(dots$maps))
+          # Update default parameters
+          old_base_pars <- bases[[base]]$default_pars
+          suffixes <- names(dots$maps)
+          new_base_pars <- paste0(old_base_pars, "_", suffixes)
+
+          bases[[base]]$default_pars <- new_base_pars
+
+          # Update transforms
+          transforms <- bases[[base]]$transforms
+          new_transforms <- list()
+
+          updated <- FALSE
+          for (arg in c("func", "lower", "upper")) {
+
+            # Skip if this transform component doesn't exist
+            if (!arg %in% names(transforms)) next
+
+            tr_arg <- transforms[[arg]]
+            new_tr_arg <- list()
+
+            # Only keep old parameters that actually exist in the transform list
+            valid_pars <- intersect(old_base_pars, names(tr_arg))
+
+            # Replicate each old transform value across all new parameter names
+            for (p in valid_pars) {
+              for (p_new in new_base_pars) {
+                new_tr_arg[[p_new]] <- tr_arg[[p]]
+                if(!updated) updated <- TRUE
+              }
+            }
+
+            new_transforms[[arg]] <- new_tr_arg
+          }
+          if(updated) bases[[base]]$transforms <- new_transforms
         }
         return(bases[[base]])
       }
@@ -773,8 +805,8 @@ update_model_trend <- function(trend, model) {
     cur_trend <- trend[[i]]
 
     # Get default transforms from base and kernel
-    base_transforms <- trend_help(base = cur_trend$base, do_return = TRUE)$transforms
-    if(length(cur_trend$map)>1) base_transforms$func <- rep(base_transforms$func, length(cur_trend$map))
+    base_transforms <- trend_help(base = cur_trend$base, do_return = TRUE, maps=cur_trend$map)$transforms
+    # if(length(cur_trend$map)>1) base_transforms$func <- rep(base_transforms$func, length(cur_trend$map))
     if (identical(cur_trend$kernel, "custom")) {
       ctf <- attr(cur_trend, "custom_transforms")
       kernel_transforms <- if (is.null(ctf)) NULL else list(func = ctf)
