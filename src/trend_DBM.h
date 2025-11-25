@@ -63,8 +63,7 @@ NumericVector run_beta_binomial_basic(
   double n_hit = 0.0;
   double n_trial = 0.0;
   // trial-wise shape parameters of Beta distribution
-  double a_t;
-  double b_t;
+  double a_t, b_t;
 
   for (int t = 0; t < n_trials; ++t) {
     // prediction before observing trial t
@@ -101,8 +100,7 @@ NumericVector run_beta_binomial_decay(
   double n_hit = 0.0;
   double n_trial = 0.0;
   const double decay_factor = std::exp(-1.0 / decay);
-  double a_t;
-  double b_t;
+  double a_t, b_t;
 
   for (int t = 0; t < n_trials; ++t) {
     a_t = a0 + n_hit;
@@ -131,8 +129,7 @@ NumericVector run_beta_binomial_window(
   double n_trial = 0.0;
   // use double-ended queue for fast addition at back & removal at front
   std::deque<double> buf;
-  double a_t;
-  double b_t;
+  double a_t, b_t;
 
   for (int t = 0; t < n_trials; ++t) {
     a_t = a0 + n_hit;
@@ -288,9 +285,7 @@ NumericVector run_dbm(
   // declare local variables
   NumericVector out(n_trials);
   const int grid_size = grid_res + 1;
-  NumericVector prob_grid(grid_size);
-  NumericVector DBM_prior(grid_size);
-  NumericVector DBM_post(grid_size);
+  NumericVector prob_grid(grid_size), DBM_prior(grid_size), DBM_post(grid_size);
 
   // compute discretised density of fixed Beta prior
   for (int i = 0; i < grid_size; i++) {
@@ -492,10 +487,8 @@ NumericVector run_tpm(
   const int resol = grid_res + 1;
   const int n_combi = resol * resol;
   const double inv_n_minus_1 = 1.0 / (n_combi - 1.0);
-  NumericVector TPM_post(n_combi);
-  NumericVector TPM_pred(n_combi);
-  NumericVector TPM_update(n_combi);
-  NumericVector mean_p(n_combi);
+  NumericVector TPM_post(n_combi), TPM_pred(n_combi), TPM_update(n_combi), mean_p(n_combi);
+
   // pre-compute:
   for (int j = 0; j < n_combi; j++) {
     // mean trans probs (i.e., (p(X|X) + p(X|Y)) / 2) for every possible joint
