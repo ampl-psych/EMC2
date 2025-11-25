@@ -439,7 +439,6 @@ inline tpm_grid build_tpm_grid(const int grid_res) {
   return out;
 }
 
-// TODO: double-check below implementation against Meyniel et al original Matlab code, not just Python
 NumericVector run_tpm(
     const NumericVector covariate,
     const double cp,
