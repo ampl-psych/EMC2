@@ -55,7 +55,7 @@ rDDM <- function(R,pars,ok=rep(TRUE,length(R)), precision=5e-3)
       cur_pars <- pars_tmp[is_id[1],]
       tmp <- suppress_output(rWDM(N = length(is_id), a = cur_pars["a"]/cur_pars[ "s"], v = cur_pars["v"]/cur_pars[ "s"], t0 = cur_pars["t0"],
                                   w = cur_pars["Z"], sw = cur_pars["SZ"], sv = cur_pars["sv"]/cur_pars[ "s"],
-                                  st0 = cur_pars["st0"], precision = precision))
+                                  st0 = cur_pars["st0"], precision = precision,method="p-ars"))
       tmp <- data.frame(R = tmp$response, rt = tmp$q)
       out[is_id,] <- tmp
     }
