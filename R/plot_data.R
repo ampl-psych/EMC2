@@ -750,7 +750,10 @@ plot_cdf <- function(input,
   if (is.null(defective_levels) || length(defective_levels) == 0) {
     defective_levels <- "Level1"  # fallback
   }
-  line_types <- seq_along(defective_levels)
+
+  if (is.null(dots$line_types))
+     line_types <- seq_along(defective_levels) else
+     line_types <- dots$line_types
 
   # We'll store single-CDF results or multi-postn quantile results in these:
   cdf_list        <- list() # single
@@ -794,7 +797,7 @@ plot_cdf <- function(input,
           # gather all x and y columns across draws
           x_mat <- do.call(cbind, lapply(postn_list, function(lst) lst[[lev]][,"x"]))
           y_mat <- do.call(cbind, lapply(postn_list, function(lst) lst[[lev]][,"y"]))
-
+          if (!is.null(dots$y_rescale)) y_mat <- y_mat*dots$y_rescale
           # row-wise quantiles for x, plus median for y
           # Just as in your older code: we do quantiles on x across draws, median on y
           # Or you might do quantiles on both x and y.
@@ -832,7 +835,8 @@ plot_cdf <- function(input,
     } else {
       # single dataset => cdf_list[[sname]] => group_key => get_def_cdf => named list by factor level
       cdf_list[[sname]] <- lapply(splitted, get_def_cdf, defective_factor, dots)
-
+      if (!is.null(dots$y_rescale)) cdf_list[[sname]] <- lapply(cdf_list[[sname]],function(x)
+        lapply(x,function(y){y[,"y"] <- y[,"y"]*dots$y_rescale; y}))
       # If we use this dataset for y-limit, find max
       if (styp %in% use_lim) {
         # find max y across all group_keys & factor-levels
@@ -978,8 +982,11 @@ plot_cdf <- function(input,
 
     # Factor-level legend
     if(!is.na(legendpos[1])){
-      legend(legendpos[1], legend=defective_levels, lty=line_types, col="black",
-             title=defective_factor, bty="n")
+      if (is.null(dots$defective_legend))
+        legend(legendpos[1], legend=defective_levels, lty=line_types, col="black",
+                title=defective_factor, bty="n") else
+        legend(legendpos[1], legend=dots$defective_legend$legend, lty=dots$defective_legend$lty, col="black",
+                title=dots$defective_legend$title, bty="n")
     }
 
 
