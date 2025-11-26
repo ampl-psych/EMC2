@@ -166,15 +166,15 @@ NumericVector run_beta_binomial(
     stop("`covariate` should consist of at least one observation.");
   }
   if (a0 <= 0.0 || b0 <= 0.0) {
-    stop("Both shape parameters `a0` and `b0` must be positive.");
+    stop("Both prior shape parameters `a0` and `b0` must be positive.");
   }
   if (decay > 0 && window > 0) {
     stop("Cannot use both `decay` and `window`. Choose only one memory constraint.");
   }
   NumericVector out(n_trials);
-  if (decay > 0) {
+  if (decay > 0 && decay < R_PosInf) {
     out = run_beta_binomial_decay(covariate, a0, b0, decay, return_map);
-  } else if (window > 0) {
+  } else if (window > 0 && window < n_trials) {
     out = run_beta_binomial_window(covariate, a0, b0, window, return_map);
   } else {
     out = run_beta_binomial_basic(covariate, a0, b0, return_map);
@@ -346,31 +346,30 @@ NumericVector run_tpm_nocp(
   NumericVector out(n_trials);
   double a_XX = a0;
   double b_XX = b0;
-  double a_YX = a0;
-  double b_YX = b0;
+  double a_XY = a0;
+  double b_XY = b0;
   out[0] = beta_mean(a0, b0);
 
   for (int t = 1; t < n_trials; t++) {
     const int prev = static_cast<int>(covariate[(t - 1)]);
     const int curr = static_cast<int>(covariate[t]);
-    // prediction
     if (prev == 1) {
+      // prediction of p(X|X)
       out[t] = beta_mean(a_XX, b_XX);
-    } else {
-      out[t] = beta_mean(a_YX, b_YX);
-    }
-    // update
-    if (prev == 1) {
+      // update
       if (curr == 1) {
         a_XX += 1.0;
       } else {
         b_XX += 1.0;
       }
     } else {
+      // prediction of p(X|Y)
+      out[t] = beta_mean(a_XY, b_XY);
+      // update
       if (curr == 1) {
-        a_YX += 1.0;
+        a_XY += 1.0;
       } else {
-        b_YX += 1.0;
+        b_XY += 1.0;
       }
     }
   }
@@ -419,10 +418,10 @@ inline tpm_grid build_tpm_grid(const int grid_res) {
       out.p_XX[idx] = p_XX_val;
       // p(X|Y), i.e., prob of current obs = 1 given previous obs = 0
       out.p_XY[idx] = p_XY_val;
-      // likelihood of current obs = 1 given previous obs = 0
-      out.like_XY[idx] = p_XY_val;
       // likelihood of current obs = 1 given previous obs = 1
       out.like_XX[idx] = p_XX_val;
+      // likelihood of current obs = 1 given previous obs = 0
+      out.like_XY[idx] = p_XY_val;
       // likelihood of current obs = 0 given previous obs = 0
       out.like_YY[idx] = 1.0 - p_XY_val;
       // likelihood of current obs = 0 given previous obs = 1
@@ -528,19 +527,23 @@ NumericVector run_tpm(
     // After observing trial t, update posterior distribution
     if (t > 0) {
       const NumericVector *like_ptr = nullptr;
-      if (prev == 0 && curr == 0) {
-        like_ptr = &grid.like_YY;
-      } else if (prev == 0 && curr == 1) {
-        like_ptr = &grid.like_XY;
-      } else if (prev == 1 && curr == 0) {
-        like_ptr = &grid.like_YX;
+      if (prev == 0) {
+        if (curr == 0) {
+          like_ptr = &grid.like_YY;
+        } else {
+          like_ptr = &grid.like_XY;
+        }
       } else {
-        like_ptr = &grid.like_XX;
+        if (curr == 0) {
+          like_ptr = &grid.like_YX;
+        } else {
+          like_ptr = &grid.like_XX;
+        }
       }
       for (int j = 0; j < n_combi; j++) {
         const double like_j = (*like_ptr)[j];
-        TPM_update[j] = ((1.0 - cp) * like_j * TPM_post[j]) +
-          (cp * like_j * (summed_post - TPM_post[j]) * inv_n_minus_1);
+        TPM_update[j] = (1.0 - cp) * like_j * TPM_post[j] +
+          cp * like_j * (summed_post - TPM_post[j]) * inv_n_minus_1;
       }
       normalise_inplace(TPM_update);
       std::swap(TPM_post, TPM_update);
