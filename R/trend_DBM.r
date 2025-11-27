@@ -78,9 +78,15 @@ run_beta_binomial <- function(
 }
 
 run_dbm <- function(
-    covariate, cp, mu0, s0,
-    return_map = FALSE, return_surprise = FALSE, grid_res = 100, cp_eps = 1e-12
+    covariate, cp, mu0, s0, return_map = FALSE, return_surprise = FALSE
 ) {
+  if (return_map) {
+    grid_res <- 500
+  } else {
+    grid_res <- 100
+  }
+  cp_eps <- 1e-10
+
   n_total <- length(covariate)
   if (cp < 0 || cp > 1) {
     stop("Change point probability `cp` must be in the range [0, 1].")
@@ -90,12 +96,6 @@ run_dbm <- function(
   }
   if (s0 <= 0) {
     stop("Prior scale `s0` must be strictly positive.")
-  }
-  if (grid_res < 1) {
-    stop("`grid_res` must be greater than or equal to 1.")
-  }
-  if (cp_eps <= 0) {
-    stop("`cp_eps` must be strictly positive.")
   }
 
   a <- mu0 * s0
@@ -151,21 +151,17 @@ run_dbm <- function(
 }
 
 run_tpm <- function(
-    covariate, cp, a0, b0,
-    return_surprise = FALSE, grid_res = 100, cp_eps = 1e-12
+    covariate, cp, a0, b0, return_surprise = FALSE
 ) {
+  grid_res <- 100
+  cp_eps <- 1e-10
+
   n_total <- length(covariate)
   if (cp < 0 || cp > 1) {
     stop("Change point probability `cp` must be in the range [0, 1].")
   }
   if (a0 <= 0 || b0 <= 0) {
     stop("Both prior shape parameters `a0` and `b0` must be positive.")
-  }
-  if (grid_res < 1) {
-    stop("`grid_res` must be greater than or equal to 1.")
-  }
-  if (cp_eps <= 0) {
-    stop("`cp_eps` must be strictly positive.")
   }
 
   out <- numeric(n_total)

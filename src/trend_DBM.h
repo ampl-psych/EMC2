@@ -231,10 +231,15 @@ NumericVector run_dbm(
     const double mu0 = 0.25,
     const double s0 = 10.0,
     const bool return_map = false,
-    const bool return_surprise = false,
-    const int grid_res = 100,
-    const double cp_eps = 1e-12
+    const bool return_surprise = false
 ) {
+  // resolution of grid for discretising probability distributions.
+  // exact setting doesn't seem to matter much for final outcome - mean/mode of
+  // the trial-wise predictive distribution - but has huge effect on memory use
+  const int grid_res = return_map ? 500 : 100;
+  // tolerance for treating cp parameter as practically equal to 0 or 1
+  const double cp_eps = 1e-10;
+
   const int n_trials = covariate.length();
   for (int i = 0; i < n_trials; i++) {
     if (!(covariate[i] == 0.0 || covariate[i] == 1.0)) {
@@ -249,12 +254,6 @@ NumericVector run_dbm(
   }
   if (s0 <= 0) {
     stop("Prior scale `s0` must be strictly positive.");
-  }
-  if (grid_res < 1) {
-    stop("`grid_res` must be greater than or equal to 1.");
-  }
-  if (cp_eps <= 0) {
-    stop("`cp_eps` must be strictly positive.");
   }
 
   // shape parameters of Beta prior
@@ -441,10 +440,11 @@ NumericVector run_tpm(
     const double cp,
     const double a0 = 1.0,
     const double b0 = 1.0,
-    const bool return_surprise = false,
-    const int grid_res = 100,
-    const double cp_eps = 1e-12
+    const bool return_surprise = false
 ) {
+  const int grid_res = 100;
+  const double cp_eps = 1e-10;
+
   const int n_trials = covariate.length();
   for (int i = 0; i < n_trials; i++) {
     if (!(covariate[i] == 0.0 || covariate[i] == 1.0)) {
@@ -456,12 +456,6 @@ NumericVector run_tpm(
   }
   if (a0 <= 0.0 || b0 <= 0.0) {
     stop("Both prior shape parameters `a0` and `b0` must be positive.");
-  }
-  if (grid_res < 1) {
-    stop("`grid_res` must be greater than or equal to 1.");
-  }
-  if (cp_eps <= 0) {
-    stop("`cp_eps` must be strictly positive.");
   }
 
   // if cp is (practically) equal to 0 (i.e., no volatility), fallback to simple
