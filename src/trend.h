@@ -179,6 +179,10 @@ NumericMatrix run_kernel_rcpp(NumericMatrix kernel_pars,
         } else if (ffill_na) {
           // Forward-fill from last known value
           comp_out[i] = last_val;
+          // SM: This needs a rethink.
+          // Probably best to just let the user handle NA-values in the custom kernel?
+          // We cannot know whether there's some sort of delta-rule logic where a backward fill would be needed
+          // or forward fill logic...
         }
       }
     }
@@ -193,6 +197,14 @@ NumericMatrix run_kernel_rcpp(NumericMatrix kernel_pars,
   for (int c = 0; c < p; ++c) {
     NumericVector cov_comp = input_comp(_, c);
     NumericVector comp_out(n_comp); // zeros by default
+
+    // SM: Ensure that delta rule is applied to last trial, so that
+    // the result of the second-last update can be carried forward
+    if (kernel == "delta" || kernel == "delta2lr" || kernel == "delta2kernel") {
+      if(NumericVector::is_na(cov_comp[n_comp-1])) {
+        cov_comp[n_comp-1] = 0;
+      }
+    }
 
     LogicalVector good = !is_na(cov_comp);
     const int n_good = sum(good);
@@ -303,8 +315,17 @@ NumericMatrix run_kernel_rcpp(NumericMatrix kernel_pars,
 
     // Fill
     if(ffill_na) {
-      for (int i = 1; i < n_comp; ++i) {
-        if(!good[i]) comp_out[i] = comp_out[i-1];
+      if (kernel == "delta" || kernel == "delta2lr" || kernel == "delta2kernel") {
+        // for these kernels we need to backward fill
+        for (int i = n_comp-2; i > 0; --i) {
+          // the last value (comp_out[n_comp]) is always valid, since it was forced to be updated
+          if(!good[i]) comp_out[i] = comp_out[i+1];
+        }
+      } else {
+        // otherwise, apply forward fill
+        for (int i = 1; i < n_comp; ++i) {
+          if(!good[i]) comp_out[i] = comp_out[i-1];
+        }
       }
     }
 

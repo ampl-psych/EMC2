@@ -500,6 +500,7 @@ trend_help <- function(kernel = NULL, base = NULL, ...){
   }
 }
 
+
 # Helper to compute expand index from first-level mask
 make_expand_idx <- function(first_level) {
   idx <- cumsum(first_level)
@@ -541,6 +542,11 @@ run_kernel <- function(trend_pars = NULL, kernel, input, funptr = NULL, at_facto
     covariate_full <- input[, j]
     # 1) Compress to first-level rows if at_factor provided
     covariate_comp <- covariate_full[first_level]
+
+    # SM: For delta rules, it must be ensured that the last trial is not-NA. This is because the last update *must* be carried forward
+    if(kernel %in% c('delta', 'delta2kernel', 'delta2lr')) {
+      if(is.na(covariate_comp[length(covariate_comp)])) covariate_comp[length(covariate_comp)] <- 0
+    }
 
     # 2) Initialize compressed output with zeros
     comp_len <- length(covariate_comp)
@@ -608,7 +614,19 @@ run_kernel <- function(trend_pars = NULL, kernel, input, funptr = NULL, at_facto
     }
 
     # SM: forward fill values with missing covariate
-    if(isTRUE(ffill_na)) comp_out <- na_locf(comp_out, na.rm = FALSE)
+    if(isTRUE(ffill_na)) {
+      if(kernel %in% c('delta', 'delta2kernel', 'delta2lr')) {
+        # This is counterintuitive, but we actually need to backward-fill here.
+        # this is because delta-rule updates on trial t only affect Q-values on the *next*
+        # non-NA trial. I.e., if an update takes place on trial 1, and the next non-NA trial is trial 10,
+        # the result of trial 1's update is only visible in trial 10, whereas it should be
+        # clear in trial 2, 3, 4, etc.
+        comp_out <- rev(na_locf(rev(comp_out), na.rm = FALSE))
+        # last trial is wrong, unfortunately. Not sure if we can fix that?
+      } else {
+        comp_out <- na_locf(comp_out, na.rm=FALSE)
+      }
+    }
 
     # 5) Expand back to full subject rows and store into output matrix column
     out_mat[, j] <- comp_out[expand_idx]
@@ -674,7 +692,7 @@ run_trend <- function(dadm, trend, param, trend_pars, pars_full = NULL,
                         centered = 1,
                         add = 0,
                         identity = 0)
-  if(length(trend$maps)>1) n_base_pars <- n_base_pars * length(trend$maps)
+  if(length(trend$map)>1) n_base_pars <- n_base_pars * length(trend$map)
 
   # Fix dimension for single-column trend_pars
   if(is.null(dim(trend_pars))) trend_pars <- t(t(trend_pars))

@@ -400,7 +400,62 @@ covariate2 <- rnorm(n_trials*2)
 # Ensure that NAs are handled correctly in trend
 covariate2[c(1:5, 8)] <- NA
 
+debug(EMC2:::run_kernel)
 dat <- make_data(p_vector, design_base, n_trials = n_trials, covariates = data.frame(covariate1 = covariate1, covariate2 = covariate2), return_trialwise_parameters=TRUE)
 test_that("trend_ffillnatrue_delta", {
   expect_snapshot(attr(dat, 'trialwise_parameters'))
 })
+
+
+# trend <- make_trend(par_names = "m", cov_names = list(c("covariate1")),
+#                     kernels = "delta", ffill_na=TRUE)
+# design_base <- design(factors = list(subjects = 1, S = 1:2),
+#                       Rlevels = 1:2,
+#                       covariates = c('covariate1'),
+#                       matchfun = matchfun,
+#                       trend = trend,
+#                       formula = list(m ~ lM, s ~ 1, t0 ~ 1),
+#                       contrasts = list(lM = ADmat),
+#                       model = LNR)
+# ##mapped_pars(design_base)
+# p_vector <- sampled_pars(design_base, doMap = FALSE)
+# p_vector[1:7] <- c(-1, 1.5, log(1), log(.2), 1, .5, qnorm(.2))
+#
+# covariate1 <- c(NA, 1, NA, NA, NA, 1, NA, 1, 1, NA, rep(NA, 10))
+# covariate1 <- rnorm(n_trials*2)
+# covariate1[c(1:5, 8)] <- NA
+# covariate1[c(10:20)] <- NA
+# covariate2 <- rnorm(n_trials*2)
+
+#debug(EMC2:::run_kernel)
+# dat <- make_data(p_vector, design_base, n_trials = n_trials, covariates = data.frame(covariate1 = covariate1), return_trialwise_parameters=TRUE)
+# cbind(attr(dat, 'trialwise_parameters'), rep(covariate1, each=2))
+
+
+## Test code for comparing the output of run_trend between R and Rcpp
+# signature:
+# NumericVector run_trend_rcpp(DataFrame data, List trend, NumericVector param, NumericMatrix trend_pars, NumericMatrix pars_full) {
+# emc <- make_emc(dat, design_base, type='single')
+# dadm <- emc[[1]]$data[[1]]
+# trend <- emc[[1]]$model()$trend$m
+# param <- rep(0,  nrow(dadm))
+# trend_pars <- matrix(rep(c(p_vector[5:7]), each=nrow(dadm)), ncol=3, byrow=FALSE)
+# trend_pars[,3] <- pnorm(trend_pars[,3])
+# pars_full <- matrix(rep(p_vector, each=nrow(dadm)), ncol=length(p_vector), byrow=FALSE)
+# pars_full[,ncol(pars_full)] <- pnorm(pars_full[,ncol(pars_full)])
+# cv1_updated <- EMC2:::run_trend_rcpp(data = dadm, trend=trend, param=param, trend_pars=trend_pars, pars_full = pars_full)
+#
+#
+# # NumericMatrix run_kernel_rcpp(NumericMatrix kernel_pars,
+# #                               String kernel,
+# #                               NumericMatrix input,
+# #                               SEXP funptrSEXP = R_NilValue,
+# #                               LogicalVector first_level_mask = LogicalVector(),
+# #                               bool has_map = false,
+# #                               // NumericMatrix map_input = NumericMatrix(0,0),
+# #                               bool ffill_na = false) {
+# kernel_pars <- trend_pars[,2:3]
+# input <- dadm[,c('covariate1'), drop=FALSE]
+# first_level_mask <- as.numeric(dadm$lR)==1
+#
+# #EMC2:::run_kernel_rcpp(kernel_pars, 'delta', input, NULL, ifrst_level_maps, has_map=FALSE, ffill_na=FALSE)
