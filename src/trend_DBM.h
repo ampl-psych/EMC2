@@ -411,7 +411,12 @@ NumericVector run_tpm_nocp(
     const double a_XY = a0[t] + n_hit_XY;
     const double b_XY = b0[t] + (n_trial_XY - n_hit_XY);
 
-    const int prev = t > 0 ? static_cast<int>(covariate[(t - 1)]) : 1;
+    if (t == 0) {
+      out[t] = beta_mean(a_XX, b_XX);
+      continue;
+    }
+
+    const int prev = static_cast<int>(covariate[(t - 1)]);
     const int curr = static_cast<int>(covariate[t]);
 
     out[t] = prev == 1 ? beta_mean(a_XX, b_XX) : beta_mean(a_XY, b_XY);
