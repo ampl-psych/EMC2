@@ -27,9 +27,6 @@ run_beta_binomial <- function(
     covariate, a0 = 1, b0 = 1, decay = 0, window = 0, return_map = FALSE, return_surprise = FALSE
 ) {
   n_total <- length(covariate)
-  if (n_trials < 1) {
-    stop("`covariate` should consist of at least one observation.")
-  }
   if (a0 <= 0 || b0 <= 0) {
     stop("Both prior shape parameters `a0` and `b0` must be positive.")
   }
@@ -85,9 +82,6 @@ run_dbm <- function(
     return_map = FALSE, return_surprise = FALSE, grid_res = 100, cp_eps = 1e-12
 ) {
   n_total <- length(covariate)
-  if (n_total < 1) {
-    stop("`covariate` should consist of at least one observation.")
-  }
   if (cp < 0 || cp > 1) {
     stop("Change point probability `cp` must be in the range [0, 1].")
   }
@@ -161,9 +155,6 @@ run_tpm <- function(
     return_surprise = FALSE, grid_res = 100, cp_eps = 1e-12
 ) {
   n_total <- length(covariate)
-  if (n_total < 1) {
-    stop("`covariate` should consist of at least one observation.")
-  }
   if (cp < 0 || cp > 1) {
     stop("Change point probability `cp` must be in the range [0, 1].")
   }

@@ -171,9 +171,6 @@ NumericVector run_beta_binomial(
     const bool return_surprise = false
 ) {
   const int n_trials = covariate.length();
-  if (n_trials < 1) {
-    stop("`covariate` should consist of at least one observation.");
-  }
   if (a0 <= 0.0 || b0 <= 0.0) {
     stop("Both prior shape parameters `a0` and `b0` must be positive.");
   }
@@ -239,9 +236,6 @@ NumericVector run_dbm(
     const double cp_eps = 1e-12
 ) {
   const int n_trials = covariate.length();
-  if (n_trials < 1) {
-    stop("`covariate` should consist of at least one observation.");
-  }
   for (int i = 0; i < n_trials; i++) {
     if (!(covariate[i] == 0.0 || covariate[i] == 1.0)) {
       stop("All `covariate` entries must be 0.0 or 1.0.");
@@ -452,9 +446,6 @@ NumericVector run_tpm(
     const double cp_eps = 1e-12
 ) {
   const int n_trials = covariate.length();
-  if (n_trials < 1) {
-    stop("`covariate` should consist of at least one observation.");
-  }
   for (int i = 0; i < n_trials; i++) {
     if (!(covariate[i] == 0.0 || covariate[i] == 1.0)) {
       stop("All `covariate` entries must be 0.0 or 1.0.");
