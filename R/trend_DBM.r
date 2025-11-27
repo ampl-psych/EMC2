@@ -19,6 +19,10 @@ normalise <- function(x) {
   return(x / sum(x))
 }
 
+shannon_surprise <- function(pred, obs) {
+  return(-log2(ifelse(obs == 1, pred, (1 - pred))))
+}
+
 run_beta_binomial <- function(
     covariate, a0 = 1, b0 = 1, decay = 0, window = 0, return_map = FALSE, return_surprise = FALSE
 ) {
@@ -71,7 +75,7 @@ run_beta_binomial <- function(
   }
 
   if (return_surprise) {
-    out <- -log2(out)
+    out <- shannon_surprise(out, covariate)
   }
   return(out)
 }
@@ -147,7 +151,7 @@ run_dbm <- function(
   }
 
   if (return_surprise) {
-    out <- -log2(out)
+    out <- shannon_surprise(out, covariate)
   }
   return(out)
 }
@@ -200,7 +204,7 @@ run_tpm <- function(
       }
     }
     if (return_surprise) {
-      out <- -log2(out)
+      out <- shannon_surprise(out, covariate)
     }
     return(out)
   }
@@ -209,7 +213,7 @@ run_tpm <- function(
   if ((1 - cp) < cp_eps) {
     out <- rep(beta_mean(a0, b0), n_total)
     if (return_surprise) {
-      out <- -log2(out)
+      out <- shannon_surprise(out, covariate)
     }
     return(out)
   }
@@ -279,7 +283,7 @@ run_tpm <- function(
   }
 
   if (return_surprise) {
-    out <- -log2(out)
+    out <- shannon_surprise(out, covariate)
   }
   return(out)
 }
