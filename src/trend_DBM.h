@@ -217,7 +217,7 @@ NumericVector run_beta_binomial(
 // ----- discretised density helpers ------------------------------------------
 
 // normalise a vector in place and return its sum
-inline double normalise_inplace(NumericVector &v) {
+inline double normalise_inplace(std::vector<double> &v) {
   double s = 0.0;
   for (double x : v) s += x;
   if (s > 0.0) {
@@ -228,16 +228,23 @@ inline double normalise_inplace(NumericVector &v) {
 }
 
 // compute mean for discretised probability distribution
-inline double mean_discrete(const NumericVector &x, const NumericVector &w) {
+inline double mean_discrete(
+    const std::vector<double> &x,
+    const std::vector<double> &w
+) {
   double s = 0.0;
-  for (int i = 0; i < x.size(); i++) {
+  static const int n = x.size();
+  for (int i = 0; i < n; i++) {
     s += x[i] * w[i];
   }
   return s;
 }
 
 // compute mode for discretised probability distribution
-inline double mode_discrete(const NumericVector &x, const NumericVector &w) {
+inline double mode_discrete(
+    const std::vector<double> &x,
+    const std::vector<double> &w
+) {
   int max_idx = std::distance(w.begin(), std::max_element(w.begin(), w.end()));
   return x[max_idx];
 }
@@ -316,40 +323,53 @@ NumericVector run_dbm(
     return out;
   }
 
-  // declare local variables
+  // main DBM code
+
   const int grid_size = grid_res + 1;
-  NumericVector prob_grid(grid_size), DBM_prior(grid_size), DBM_pred(grid_size), DBM_post(grid_size);
+  // NB using std::vector instead of NumericVector to reduce memory overhead
+  std::vector<double> prob_grid(grid_size);
+  std::vector<double> DBM_prior(grid_size);
+  std::vector<double> DBM_pred(grid_size);
+  std::vector<double> DBM_post(grid_size);
+  std::vector<double> x_like(grid_size);
+  std::vector<double> y_like(grid_size);
 
+  // pre-compute
   for (int i = 0; i < grid_size; i++) {
+    // fill probability grid
     prob_grid[i] = static_cast<double>(i) / (grid_size - 1);
+    // Bernoulli likelihoods for binary observation X vs. Y
+    x_like[i] = prob_grid[i];
+    y_like[i] = 1.0 - prob_grid[i];
   }
-
-  // Bernoulli likelihoods for binary observation X vs. Y
-  const NumericVector x_like = clone(prob_grid);
-  const NumericVector y_like = 1.0 - prob_grid;
 
   // trial-wise belief updating
   for (int t = 0; t < n_trials; t++) {
-    // compute discretised density of fixed Beta prior
+
+    // compute discretised Beta prior for trial t
     for (int i = 0; i < grid_size; i++) {
       DBM_prior[i] = R::dbeta(prob_grid[i], a[t], b[t], false);
     }
     normalise_inplace(DBM_prior);
+
     // compute predictive distribution
     if (t == 0) {
       // initialise predicted probability of observation X with fixed prior
-      DBM_pred = clone(DBM_prior);
+      DBM_pred = DBM_prior;
     } else {
       // update predictive distribution: mixture of previous trial's posterior
       // and fixed prior
+      const double mix_old = (1.0 - cp[t]);
+      const double mix_new = cp[t];
       for (int i = 0; i < grid_size; i++) {
-        DBM_pred[i] = (1.0 - cp[t]) * DBM_post[i] + cp[t] * DBM_prior[i];
+        DBM_pred[i] = mix_old * DBM_post[i] + mix_new * DBM_prior[i];
       }
       normalise_inplace(DBM_pred);
     }
     // main trial-wise output: predicted probability of observation X,
     // operationalised as either the mean or mode of the predictive distribution
     out[t] = return_map ? mode_discrete(prob_grid, DBM_pred) : mean_discrete(prob_grid, DBM_pred);
+
     // update posterior distribution
     if (covariate[t] == 1.0) {
       for (int i = 0; i < grid_size; i++) {
@@ -418,30 +438,30 @@ NumericVector run_tpm_nocp(
 // pre-computed grid of transition probabilities and all four possible single-
 // trial likelihoods
 struct tpm_grid {
-  NumericVector p_XX;
-  NumericVector p_XY;
-  NumericVector like_XX;
-  NumericVector like_XY;
-  NumericVector like_YX;
-  NumericVector like_YY;
+  std::vector<double> p_XX;
+  std::vector<double> p_XY;
+  std::vector<double> like_XX;
+  std::vector<double> like_XY;
+  std::vector<double> like_YX;
+  std::vector<double> like_YY;
 };
 
 inline tpm_grid build_tpm_grid(const int grid_res) {
   const int resol = grid_res + 1;
   const int n_combi = resol * resol;
 
-  NumericVector grid(resol);
+  std::vector<double> grid(resol);
   for (int i = 0; i < resol; i++) {
     grid[i] = static_cast<double>(i) / (resol - 1);
   }
 
   tpm_grid out{
-    NumericVector(n_combi),
-    NumericVector(n_combi),
-    NumericVector(n_combi),
-    NumericVector(n_combi),
-    NumericVector(n_combi),
-    NumericVector(n_combi)
+    std::vector<double>(n_combi),
+    std::vector<double>(n_combi),
+    std::vector<double>(n_combi),
+    std::vector<double>(n_combi),
+    std::vector<double>(n_combi),
+    std::vector<double>(n_combi)
   };
 
   int idx = 0;
@@ -449,6 +469,7 @@ inline tpm_grid build_tpm_grid(const int grid_res) {
     const double p_XY_val = grid[i0];
     for (int i1 = 0; i1 < resol; i1++) {
       const double p_XX_val = grid[i1];
+
       // p(X|X), i.e., prob of current obs = 1 given previous obs = 1
       out.p_XX[idx] = p_XX_val;
       // p(X|Y), i.e., prob of current obs = 1 given previous obs = 0
@@ -461,6 +482,7 @@ inline tpm_grid build_tpm_grid(const int grid_res) {
       out.like_YY[idx] = 1.0 - p_XY_val;
       // likelihood of current obs = 0 given previous obs = 1
       out.like_YX[idx] = 1.0 - p_XX_val;
+
       ++idx;
     }
   }
@@ -524,7 +546,8 @@ NumericVector run_tpm(
   const int resol = grid_res + 1;
   const int n_combi = resol * resol;
   const double inv_n_minus_1 = 1.0 / (n_combi - 1.0);
-  NumericVector TPM_post(n_combi), TPM_pred(n_combi), TPM_update(n_combi), mean_p(n_combi);
+
+  std::vector<double> TPM_post(n_combi), TPM_pred(n_combi), TPM_update(n_combi), mean_p(n_combi);
 
   // pre-compute:
   for (int j = 0; j < n_combi; j++) {
@@ -543,14 +566,17 @@ NumericVector run_tpm(
     const int curr = static_cast<int>(covariate[t]);
     const int prev = (t > 0) ? static_cast<int>(covariate[(t - 1)]) : NA_INTEGER;
 
+    const double mix_old = (1.0 - cp[t]);
+    const double mix_new = cp[t];
+
     // Build predictive distribution from previous posterior.
     // - With prob 1-cp: environment is stable -> posterior propagates.
     // - With prob cp: change point -> new transition probs independent of old ones,
     //   so posterior mass is redistributed uniformly over all *other* grid points.
     double summed_post = std::accumulate(TPM_post.begin(), TPM_post.end(), 0.0);
     for (int j = 0; j < n_combi; j++) {
-      TPM_pred[j] = (1.0 - cp[t]) * TPM_post[j] +
-        cp[t] * (summed_post - TPM_post[j]) * inv_n_minus_1;
+      TPM_pred[j] = mix_old * TPM_post[j] +
+        mix_new * (summed_post - TPM_post[j]) * inv_n_minus_1;
     }
     normalise_inplace(TPM_pred);
 
@@ -564,24 +590,15 @@ NumericVector run_tpm(
 
     // After observing trial t, update posterior distribution
     if (t > 0) {
-      const NumericVector *like_ptr = nullptr;
+      const std::vector<double> *like_ptr = nullptr;
       if (prev == 0) {
-        if (curr == 0) {
-          like_ptr = &grid.like_YY;
-        } else {
-          like_ptr = &grid.like_XY;
-        }
+        like_ptr = (curr == 0) ? &grid.like_YY : &grid.like_XY;
       } else {
-        if (curr == 0) {
-          like_ptr = &grid.like_YX;
-        } else {
-          like_ptr = &grid.like_XX;
-        }
+        like_ptr = (curr == 0) ? &grid.like_YX : &grid.like_XX;
       }
       for (int j = 0; j < n_combi; j++) {
-        const double like_j = (*like_ptr)[j];
-        TPM_update[j] = (1.0 - cp[t]) * like_j * TPM_post[j] +
-          cp[t] * like_j * (summed_post - TPM_post[j]) * inv_n_minus_1;
+        TPM_update[j] = mix_old * (*like_ptr)[j] * TPM_post[j] +
+          mix_new * (*like_ptr)[j] * (summed_post - TPM_post[j]) * inv_n_minus_1;
       }
       normalise_inplace(TPM_update);
       std::swap(TPM_post, TPM_update);
