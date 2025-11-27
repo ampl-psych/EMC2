@@ -1,14 +1,20 @@
 beta_mode <- function(a, b) {
-  if (a == b) {
-    return(0.5)
-  }
-  if (a < 1 || b < 1) {
-    if (a < b) {
-      return(0)
-    }
-    return(1)
-  }
-  return((a - 1) / (a + b - 2))
+  out <- numeric(length(a))
+  # case 1: a == b -> mode = 0.5
+  idx_equal <- a == b
+  out[idx_equal] <- 0.5
+  # case 2: a < 1 or b < 1
+  idx_boundary <- (a < 1 | b < 1) & !idx_equal
+  #   within that: if a < b -> mode = 0, else -> mode = 1
+  idx_left <- idx_boundary & (a < b)
+  idx_right <- idx_boundary & !idx_left
+  out[idx_left] <- 0
+  out[idx_right] <- 1
+  # case 3: mode = (a - 1) / (a + b - 2)
+  idx_regular <- !(idx_equal | idx_boundary)
+  out[idx_regular] <- (a[idx_regular] - 1) /
+    (a[idx_regular] + b[idx_regular] - 2)
+  return(out)
 }
 
 beta_mean <- function(a, b) {
@@ -20,50 +26,57 @@ normalise <- function(x) {
 }
 
 shannon_surprise <- function(pred, obs) {
-  return(-log2(ifelse(obs == 1, pred, (1 - pred))))
+  pred_safe <- pmin(pmax(pred, .Machine$double.eps), (1 - .Machine$double.neg.eps))
+  return(-log2(ifelse(obs == 1, pred_safe, (1 - pred_safe))))
 }
 
 run_beta_binomial <- function(
-    covariate, a0 = 1, b0 = 1, decay = 0, window = 0, return_map = FALSE, return_surprise = FALSE
+    covariate, a0, b0, decay, window, return_map = FALSE, return_surprise = FALSE
 ) {
   n_total <- length(covariate)
-  if (a0 <= 0 || b0 <= 0) {
-    stop("Both prior shape parameters `a0` and `b0` must be positive.")
+  if (!all(covariate) %in% c(0, 1)) {
+    stop("All `covariate` entries must be 0 or 1.")
   }
-  if (decay > 0 && window > 0) {
-    stop("Cannot use both `decay` and `window`. Choose at most one memory constraint.")
+  use_decay <- any(decay > 0)
+  use_window <- any(window > 0)
+  if (use_decay && use_window) {
+    stop("Cannot use both `decay` and `window`. Choose only one memory constraint.")
   }
 
   out <- numeric(n_total)
   n_hit <- 0
   n_trial <- 0
-  decay_factor <- exp(-1 / decay)
-  event_memory <- numeric(0)
+  buf <- list(obs = numeric(0), idx = integer(0))
 
   for (t in seq_len(n_total)) {
+    # if applicable, prune memory based on current memory window
+    if (use_window) {
+      while (length(buf[["obs"]]) > 0 && (t - buf[["idx"]][1]) >= window[t]) {
+        n_hit <- n_hit - buf[["obs"]][1]
+        n_trial <- n_trial - 1
+        buf[["obs"]] <- buf[["obs"]][-1]
+        buf[["idx"]] <- buf[["idx"]][-1]
+      }
+    }
     # prediction before observing trial t
-    a_t <- a0 + n_hit
-    b_t <- b0 + (n_trial - n_hit)
+    a_t <- a0[t] + n_hit
+    b_t <- b0[t] + (n_trial - n_hit)
     if (return_map) {
       out[t] <- beta_mode(a_t, b_t)
     } else {
       out[t] <- beta_mean(a_t, b_t)
     }
     # update after observing trial t depends on decay / window memory constraints
-    if (decay > 0 && decay < Inf) {
+    if (use_decay) {
       # exponential decay
-      n_hit <- decay_factor * (n_hit + covariate[t])
-      n_trial <- decay_factor * (n_trial + 1)
-    } else if (window > 0 && window < n_total) {
-      # limited memory
+      n_hit <- exp(-1 / decay[t]) * (n_hit + covariate[t])
+      n_trial <- exp(-1 / decay[t]) * (n_trial + 1)
+    } else if (use_window) {
+      # add to limited memory
+      buf[["obs"]] <- c(buf[["obs"]], covariate[t])
+      buf[["idx"]] <- c(buf[["idx"]], t)
       n_hit <- n_hit + covariate[t]
       n_trial <- n_trial + 1
-      event_memory <- c(event_memory, covariate[t])
-      if (length(event_memory) > window) {
-        n_hit <- n_hit - event_memory[1]
-        n_trial <- n_trial - 1
-        event_memory <- event_memory[-1]
-      }
     } else {
       # standard beta-binomial
       n_hit <- n_hit + covariate[t]
@@ -88,49 +101,43 @@ run_dbm <- function(
   cp_eps <- 1e-10
 
   n_total <- length(covariate)
-  if (cp < 0 || cp > 1) {
-    stop("Change point probability `cp` must be in the range [0, 1].")
-  }
-  if (mu0 <= 0 || mu0 >= 1) {
-    stop("Prior mean `mu0` must be in the range (0, 1).")
-  }
-  if (s0 <= 0) {
-    stop("Prior scale `s0` must be strictly positive.")
+  if (!all(covariate) %in% c(0, 1)) {
+    stop("All `covariate` entries must be 0 or 1.")
   }
 
   a <- mu0 * s0
   b <- (1 - mu0) * s0
 
   # when cp = 0, DBM is actually fixed belief model a.k.a. beta-binomial
-  if (cp < cp_eps) {
+  if (all(cp < cp_eps)) {
     return(run_beta_binomial(covariate, a, b, 0, 0, return_map, return_surprise))
   }
 
-  out <- numeric(n_total)
-
   # when cp = 1, predictions are constant, determined purely by fixed prior
-  if ((1 - cp) < cp_eps) {
+  if (all((1 - cp) < cp_eps)) {
     if (return_map) {
-      out <- rep(beta_mode(a, b), n_total)
+      out <- beta_mode(a, b)
     } else {
-      out <- rep(beta_mean(a, b), n_total)
+      out <- beta_mean(a, b)
     }
     if (return_surprise) {
-      out <- -log2(out)
+      out <- shannon_surprise(out, covariate)
     }
     return(out)
   }
 
   # actual DBM
+  out <- numeric(n_total)
   prob_grid <- (0:grid_res) / grid_res
-  DBM_prior <- normalise(stats::dbeta(prob_grid, a, b))
   x_like <- prob_grid
   y_like <- 1 - prob_grid
-  DBM_pred <- DBM_prior
 
   for (t in seq_len(n_total)) {
-    if (t > 1) {
-      DBM_pred <- normalise((1 - cp) * DBM_post + cp * DBM_prior)
+    DBM_prior <- normalise(stats::dbeta(prob_grid, a[t], b[t]))
+    if (t == 1) {
+      DBM_pred <- DBM_prior
+    } else {
+      DBM_pred <- normalise((1 - cp[t]) * DBM_post + cp[t] * DBM_prior)
     }
     if (return_map) {
       out[t] <- prob_grid[which.max(DBM_pred)]
@@ -157,36 +164,40 @@ run_tpm <- function(
   cp_eps <- 1e-10
 
   n_total <- length(covariate)
-  if (cp < 0 || cp > 1) {
-    stop("Change point probability `cp` must be in the range [0, 1].")
-  }
-  if (a0 <= 0 || b0 <= 0) {
-    stop("Both prior shape parameters `a0` and `b0` must be positive.")
+  if (!all(covariate) %in% c(0, 1)) {
+    stop("All `covariate` entries must be 0 or 1.")
   }
 
   out <- numeric(n_total)
 
   # when cp = 0, fallback to simple beta-binomial over transitions
-  if (cp < cp_eps) {
-    a_XX <- a_XY <- a0
-    b_XX <- b_XY <- b0
-    out[1] <- beta_mean(a0, b0)
-    for (t in 2:n_total) {
+  if (all(cp < cp_eps)) {
+    n_hit_XX <- n_trial_XX <- n_hit_XY <- n_trial_XY <- 0
+    for (t in seq_len(n_total)) {
+      a_XX <- a0[t] + n_hit_XX
+      b_XX <- b0[t] + (n_trial_XX - n_hit_XX)
+      a_XY <- a0[t] + n_hit_XY
+      b_XY <- b0[t] + (n_trial_XY - n_hit_XY)
+      if (t == 1) {
+        out[t] <- beta_mean(a_XX, b_XX)
+        next
+      }
       prev <- covariate[(t - 1)]
       curr <- covariate[t]
       if (prev == 1) {
         out[t] <- beta_mean(a_XX, b_XX)
-        if (curr == 1) {
-          a_XX <- a_XX + 1
-        } else {
-          b_XX <- b_XX + 1
-        }
       } else {
         out[t] <- beta_mean(a_XY, b_XY)
+      }
+      if (prev == 1) {
+        n_trial_XX <- n_trial_XX + 1
         if (curr == 1) {
-          a_XY <- a_XY + 1
-        } else {
-          b_XY <- b_XY + 1
+          n_hit_XX <- n_hit_XX + 1
+        }
+      } else {
+        n_trial_XY <- n_trial_XY + 1
+        if (curr == 1) {
+          n_hit_XY <- n_hit_XY + 1
         }
       }
     }
@@ -197,8 +208,8 @@ run_tpm <- function(
   }
 
   # when cp = 1, predictions are constant, determined purely by fixed prior
-  if ((1 - cp) < cp_eps) {
-    out <- rep(beta_mean(a0, b0), n_total)
+  if (all((1 - cp) < cp_eps)) {
+    out <- beta_mean(a0, b0)
     if (return_surprise) {
       out <- shannon_surprise(out, covariate)
     }
@@ -225,7 +236,9 @@ run_tpm <- function(
   }
 
   mean_p <- 0.5 * (p_XX + p_XY)
-  TPM_post <- normalise(stats::dbeta(p_XX, a0, b0) * stats::dbeta(p_XY, a0, b0))
+  TPM_post <- normalise(
+    stats::dbeta(p_XX, a0[1], b0[1]) * stats::dbeta(p_XY, a0[1], b0[1])
+  )
   inv_n_min_1 <- 1 / (length(TPM_post) - 1)
 
   for (t in seq_len(n_total)) {
@@ -237,7 +250,7 @@ run_tpm <- function(
     sum_TPM_post <- sum(TPM_post)
 
     TPM_pred <- normalise(
-      (1 - cp) * TPM_post + cp * (sum_TPM_post - TPM_post) * inv_n_min_1
+      (1 - cp[t]) * TPM_post + cp[t] * (sum_TPM_post - TPM_post) * inv_n_min_1
     )
     if (t == 1) {
       out[t] <- sum(mean_p * TPM_pred)
@@ -263,8 +276,8 @@ run_tpm <- function(
         }
       }
       TPM_post <- normalise(
-        (1 - cp) * like_curr * TPM_post +
-          cp * like_curr * (sum_TPM_post - TPM_post) * inv_n_min_1
+        (1 - cp[t]) * like_curr * TPM_post +
+          cp[t] * like_curr * (sum_TPM_post - TPM_post) * inv_n_min_1
       )
     }
   }
