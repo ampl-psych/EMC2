@@ -34,14 +34,23 @@ inline double beta_mean(const double a, const double b) {
 
 // ----- Shannon surprise (bits) ----------------------------------------------
 
-inline void shannon_surprise(NumericVector &x) {
+inline NumericVector shannon_surprise(
+    const NumericVector &pred,
+    const NumericVector &obs
+) {
   static const double inv_ln2 = 1.0 / std::log(2.0);
   static const double tiny = std::numeric_limits<double>::min();
-  const int n = x.length();
+  const int n = pred.length();
+  NumericVector out(n);
   for (int i = 0; i < n; i++) {
-    const double safe_x = (x[i] > 0.0) ? x[i] : tiny;
-    x[i] = -std::log(safe_x) * inv_ln2;
+    // clamp predictive probability away from exactly 0 or 1
+    const double pred_safe = std::min(std::max(pred[i], tiny), (1.0 - tiny));
+    // likelihood of observation
+    const double like = (obs[i] == 1.0) ? pred_safe : (1.0 - pred_safe);
+    // Shannon surprise
+    out[i] = -std::log(like) * inv_ln2;
   }
+  return out;
 }
 
 
@@ -181,7 +190,7 @@ NumericVector run_beta_binomial(
   }
 
   if (return_surprise) {
-    shannon_surprise(out);
+    out = shannon_surprise(out, covariate);
   }
   return out;
 }
@@ -277,7 +286,7 @@ NumericVector run_dbm(
     const double out_val = return_map ? beta_mode(a, b) : beta_mean(a, b);
     NumericVector out(n_trials, out_val);
     if (return_surprise) {
-      shannon_surprise(out);
+      out = shannon_surprise(out, covariate);
     }
     return out;
   }
@@ -328,7 +337,7 @@ NumericVector run_dbm(
   }
 
   if (return_surprise) {
-    shannon_surprise(out);
+    out = shannon_surprise(out, covariate);
   }
   return out;
 }
@@ -375,7 +384,7 @@ NumericVector run_tpm_nocp(
   }
 
   if (return_surprise) {
-    shannon_surprise(out);
+    out = shannon_surprise(out, covariate);
   }
   return out;
 }
@@ -475,7 +484,7 @@ NumericVector run_tpm(
   if ((1 - cp) < cp_eps) {
     NumericVector out(n_trials, beta_mean(a0, b0));
     if (return_surprise) {
-      shannon_surprise(out);
+      out = shannon_surprise(out, covariate);
     }
     return out;
   }
@@ -503,7 +512,7 @@ NumericVector run_tpm(
   for (int t = 0; t < n_trials; t++) {
 
     const int curr = static_cast<int>(covariate[t]);
-    const int prev = t > 0 ? static_cast<int>(covariate[(t - 1)]) : NA_INTEGER;
+    const int prev = (t > 0) ? static_cast<int>(covariate[(t - 1)]) : NA_INTEGER;
 
     // Build predictive distribution from previous posterior.
     // - With prob 1-cp: environment is stable -> posterior propagates.
@@ -521,7 +530,7 @@ NumericVector run_tpm(
     if (t == 0) {
       out[t] = mean_discrete(mean_p, TPM_pred);
     } else {
-      out[t] = prev == 1 ? mean_discrete(grid.p_XX, TPM_pred) : mean_discrete(grid.p_XY, TPM_pred);
+      out[t] = (prev == 1) ? mean_discrete(grid.p_XX, TPM_pred) : mean_discrete(grid.p_XY, TPM_pred);
     }
 
     // After observing trial t, update posterior distribution
@@ -551,7 +560,7 @@ NumericVector run_tpm(
   }
 
   if (return_surprise) {
-    shannon_surprise(out);
+    out = shannon_surprise(out, covariate);
   }
   return out;
 }
