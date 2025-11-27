@@ -291,12 +291,71 @@ NumericMatrix run_kernel_rcpp(NumericMatrix kernel_pars,
           comp_out[0] = kernel_pars(0, 0);
           pos = 0;
           for (int i = 0; i < n_comp; ++i) if (good[i]) comp_out[i] = tmp[pos++];
-        } else if (kernel == "beta_binomial") {
-          //
-        } else if (kernel == "dbm") {
-          //
-        } else if (kernel == "tpm") {
-          //
+        } else if (
+            kernel == "beta_binom" || kernel == "beta_binom_surprise" ||
+              kernel == "beta_binom_map" || kernel == "beta_binom_map_surprise"
+        ) {
+          NumericVector covg(n_good), a0(n_good), b0(n_good), decay(n_good), window(n_good);
+          int pos = 0;
+          for (int i = 0; i < n_comp; ++i) if (good[i]) {
+            covg[pos] = cov_comp[i];
+            a0[pos] = kp_good(pos, 0);
+            b0[pos] = kp_good(pos, 1);
+            decay[pos] = kp_good(pos, 2);
+            window[pos] = kp_good(pos, 3);
+            ++pos;
+          }
+          bool return_map = false, return_surprise = false;
+          if (kernel == "beta_binom_surprise" || kernel == "beta_binom_map_surprise") {
+            return_surprise = true;
+          }
+          if (kernel == "beta_binom_map" || kernel == "beta_binom_map_surprise") {
+            return_map = true;
+          }
+          NumericVector tmp = run_beta_binomial(
+            covg, a0, b0, decay, window, return_map, return_surprise
+          );
+          pos = 0;
+          for (int i = 0; i < n_comp; ++i) if (good[i]) comp_out[i] = tmp[pos++];
+        } else if (
+            kernel == "dbm" || kernel == "dbm_surprise" ||
+              kernel == "dbm_map" || kernel == "dbm_map_surprise"
+        ) {
+          NumericVector covg(n_good), cp(n_good), mu0(n_good), s0(n_good);
+          int pos = 0;
+          for (int i = 0; i < n_comp; ++i) if (good[i]) {
+            covg[pos] = cov_comp[i];
+            cp[pos] = kp_good(pos, 0);
+            mu0[pos] = kp_good(pos, 1);
+            s0[pos] = kp_good(pos, 2);
+            ++pos;
+          }
+          bool return_map = false, return_surprise = false;
+          if (kernel == "dbm_surprise" || kernel == "dbm_map_surprise") {
+            return_surprise = true;
+          }
+          if (kernel == "dbm_map" || kernel == "dbm_map_surprise") {
+            return_map = true;
+          }
+          NumericVector tmp = run_dbm(
+            covg, cp, mu0, s0, return_map, return_surprise
+          );
+          pos = 0;
+          for (int i = 0; i < n_comp; ++i) if (good[i]) comp_out[i] = tmp[pos++];
+        } else if (kernel == "tpm" || kernel == "tpm_surprise") {
+          NumericVector covg(n_good), cp(n_good), a0(n_good), b0(n_good);
+          int pos = 0;
+          for (int i = 0; i < n_comp; ++i) if (good[i]) {
+            covg[pos] = cov_comp[i];
+            cp[pos] = kp_good(pos, 0);
+            a0[pos] = kp_good(pos, 1);
+            b0[pos] = kp_good(pos, 2);
+            ++pos;
+          }
+          const bool return_surprise = (kernel == "tpm_surprise") ? true : false;
+          NumericVector tmp = run_tpm(covg, cp, a0, b0, return_surprise);
+          pos = 0;
+          for (int i = 0; i < n_comp; ++i) if (good[i]) comp_out[i] = tmp[pos++];
         } else {
           stop("Unknown kernel type");
         }
