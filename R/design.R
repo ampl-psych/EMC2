@@ -152,6 +152,11 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
                  Fcovariates=covariates,Ffunctions=functions,model=model)
   class(design) <- "emc.design"
   if (!is.null(trend)) {
+    # check for at = 'lR'
+    if(any(sapply(trend, function(x) x$at)=='lR') & model()$type!='RACE') {
+      warning('A trend has `at="lR"`, but this is not a race model. Setting `at` to NULL')
+      for(i in 1:length(trend)) if(trend[[i]]$at=='lR') trend[[i]]$at <- NULL
+    }
     model <- update_model_trend(trend, model)
     model_list <- model()
     model <- function(){return(model_list)}
