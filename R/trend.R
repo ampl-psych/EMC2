@@ -853,14 +853,18 @@ run_delta2kernel <- function(q0,alphaFast,propSlow,dSwitch,covariate) {
   alphaSlow <- propSlow*alphaFast
 
   for (i in 1:(length(covariate)-1)) {
-    peFast[i] <- covariate[i]-qFast[i]
-    peSlow[i] <- covariate[i]-qSlow[i]
-    qFast[i+1] <- qFast[i] + alphaFast[i]*peFast[i]
-    qSlow[i+1] <- qSlow[i] + alphaSlow[i]*peSlow[i]
-    if (abs(qFast[i+1]-qSlow[i+1])>dSwitch[i+1]){
-      q[i+1] <- qFast[i+1]
-    } else{
-      q[i+1] <- qSlow[i+1]
+    if(is.na(covariate[i])) {
+      q[i+1] <- q[i]
+    } else {
+      peFast[i] <- covariate[i]-qFast[i]
+      peSlow[i] <- covariate[i]-qSlow[i]
+      qFast[i+1] <- qFast[i] + alphaFast[i]*peFast[i]
+      qSlow[i+1] <- qSlow[i] + alphaSlow[i]*peSlow[i]
+      if (abs(qFast[i+1]-qSlow[i+1])>dSwitch[i+1]){
+        q[i+1] <- qFast[i+1]
+      } else{
+        q[i+1] <- qSlow[i+1]
+      }
     }
   }
   return(q)
@@ -873,9 +877,13 @@ run_delta2lr <- function(q0,alphaPos,alphaNeg,covariate) {
 
 
   for (i in 1:(length(q)-1)) {
-    pe[i] <- covariate[i]-q[i]
-    alpha <- ifelse(pe[i]>0, alphaPos[i], alphaNeg[i])
-    q[i+1] <- q[i] + alpha*pe[i]
+    if(is.na(covariate[i])) {
+      q[i+1] <- q[i]
+    } else {
+      pe[i] <- covariate[i]-q[i]
+      alpha <- ifelse(pe[i]>0, alphaPos[i], alphaNeg[i])
+      q[i+1] <- q[i] + alpha*pe[i]
+    }
   }
   return(q)
 }
