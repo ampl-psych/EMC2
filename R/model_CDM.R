@@ -213,7 +213,7 @@ dCDM <- function(rt, R, pars) {
 }
 
 ## Generator for the Circular Diffusion Model
-rCDM <- function(pars, ok = rep(TRUE, nrow(pars)), dt = 1e-4, max_steps = 1e7L) {
+rCDM <- function(pars, ok = rep(TRUE, nrow(pars)), dt = 1e-5, max_steps = 1e8L) {
   n <- nrow(pars)
   out <- data.frame(rt = rep(NA_real_, n), R = rep(NA_real_, n))
   if (n == 0L) return(out)
