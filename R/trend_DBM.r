@@ -66,6 +66,10 @@ run_beta_binomial <- function(
     } else {
       out[t] <- beta_mean(a_t, b_t)
     }
+    # if current trial is NA, there is nothing to learn, so move on
+    if (is.na(covariate[t])) {
+      next
+    }
     # update after observing trial t depends on decay / window memory constraints
     if (use_decay) {
       # exponential decay
@@ -144,7 +148,10 @@ run_dbm <- function(
     } else {
       out[t] <- sum(prob_grid * DBM_pred)
     }
-    if (covariate[t] == 1) {
+    if (is.na(covariate[t])) {
+      # perhaps controversial, needs more thought
+      DBM_post <- DBM_pred
+    } else if (covariate[t] == 1) {
       DBM_post <- normalise(DBM_pred * x_like)
     } else {
       DBM_post <- normalise(DBM_pred * y_like)
@@ -173,10 +180,17 @@ run_tpm_nocp <- function(
     }
     prev <- covariate[(t - 1)]
     curr <- covariate[t]
+    if (is.na(prev)) {
+      out[t] <- out[(t - 1)]
+      next
+    }
     if (prev == 1) {
       out[t] <- beta_mean(a_XX, b_XX)
     } else {
       out[t] <- beta_mean(a_XY, b_XY)
+    }
+    if (is.na(curr)) {
+      next
     }
     if (prev == 1) {
       n_trial_XX <- n_trial_XX + 1
@@ -262,6 +276,10 @@ run_tpm <- function(
     if (t == 1) {
       out[t] <- sum(mean_p * TPM_pred)
     } else {
+      if (is.na(prev)) {
+        out[t] <- out[(t - 1)]
+        next
+      }
       if (prev == 1) {
         out[t] <- sum(p_XX * TPM_pred)
       } else {
@@ -269,6 +287,11 @@ run_tpm <- function(
       }
     }
     if (t > 1) {
+      if (is.na(curr)) {
+        # perhaps controversial, needs more discussion
+        TPM_post <- TPM_pred
+        next
+      }
       if (prev == 0) {
         if (curr == 0) {
           like_curr <- like_YY
