@@ -117,6 +117,10 @@ calc_ll <- function(p_matrix, data, constants, designs, type, bounds, transforms
     .Call(`_EMC2_calc_ll`, p_matrix, data, constants, designs, type, bounds, transforms, pretransforms, p_types, min_ll, trend)
 }
 
+rCDM <- function(pars, ok = NULL, dt = 1e-5, max_steps = 100000000L) {
+    .Call(`_EMC2_rCDM`, pars, ok, dt, max_steps)
+}
+
 c_add_charvectors <- function(x, y) {
     .Call(`_EMC2_c_add_charvectors`, x, y)
 }
