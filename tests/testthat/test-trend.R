@@ -380,6 +380,7 @@ test_that("trend_ffillnatrue", {
   expect_snapshot(attr(dat, 'trialwise_parameters'))
 })
 
+
 # Delta rule - always set initial trial to q0
 trend <- make_trend(par_names = "m", cov_names = list(c("covariate1", "covariate2")),
                     kernels = "delta", ffill_na=TRUE)
@@ -400,13 +401,14 @@ covariate2 <- rnorm(n_trials*2)
 # Ensure that NAs are handled correctly in trend
 covariate2[c(1:5, 8)] <- NA
 
-debug(EMC2:::run_kernel)
 dat <- make_data(p_vector, design_base, n_trials = n_trials, covariates = data.frame(covariate1 = covariate1, covariate2 = covariate2), return_trialwise_parameters=TRUE)
 test_that("trend_ffillnatrue_delta", {
   expect_snapshot(attr(dat, 'trialwise_parameters'))
 })
 
 
+
+# ##
 # trend <- make_trend(par_names = "m", cov_names = list(c("covariate1")),
 #                     kernels = "delta", ffill_na=TRUE)
 # design_base <- design(factors = list(subjects = 1, S = 1:2),
@@ -419,22 +421,19 @@ test_that("trend_ffillnatrue_delta", {
 #                       model = LNR)
 # ##mapped_pars(design_base)
 # p_vector <- sampled_pars(design_base, doMap = FALSE)
+#
 # p_vector[1:7] <- c(-1, 1.5, log(1), log(.2), 1, .5, qnorm(.2))
 #
-# covariate1 <- c(NA, 1, NA, NA, NA, 1, NA, 1, 1, NA, rep(NA, 10))
-# covariate1 <- rnorm(n_trials*2)
-# covariate1[c(1:5, 8)] <- NA
-# covariate1[c(10:20)] <- NA
-# covariate2 <- rnorm(n_trials*2)
-
-#debug(EMC2:::run_kernel)
-# dat <- make_data(p_vector, design_base, n_trials = n_trials, covariates = data.frame(covariate1 = covariate1), return_trialwise_parameters=TRUE)
-# cbind(attr(dat, 'trialwise_parameters'), rep(covariate1, each=2))
-
-
-## Test code for comparing the output of run_trend between R and Rcpp
-# signature:
-# NumericVector run_trend_rcpp(DataFrame data, List trend, NumericVector param, NumericMatrix trend_pars, NumericMatrix pars_full) {
+# covariate1 <- c(NA, 1, NA, NA, 1, NA, NA, NA, NA, NA)#, 1, NA, 1, 1, NA, rep(NA, 10))
+#
+# #debug(EMC2:::run_kernel)
+# dat <- make_data(p_vector, design_base, n_trials = 5, covariates = data.frame(covariate1 = covariate1), return_trialwise_parameters=TRUE)
+# # cbind(attr(dat, 'trialwise_parameters'), rep(covariate1, each=2))
+#
+#
+# ## Test code for comparing the output of run_trend between R and Rcpp
+# # signature:
+# # NumericVector run_trend_rcpp(DataFrame data, List trend, NumericVector param, NumericMatrix trend_pars, NumericMatrix pars_full) {
 # emc <- make_emc(dat, design_base, type='single')
 # dadm <- emc[[1]]$data[[1]]
 # trend <- emc[[1]]$model()$trend$m
@@ -443,19 +442,14 @@ test_that("trend_ffillnatrue_delta", {
 # trend_pars[,3] <- pnorm(trend_pars[,3])
 # pars_full <- matrix(rep(p_vector, each=nrow(dadm)), ncol=length(p_vector), byrow=FALSE)
 # pars_full[,ncol(pars_full)] <- pnorm(pars_full[,ncol(pars_full)])
-# cv1_updated <- EMC2:::run_trend_rcpp(data = dadm, trend=trend, param=param, trend_pars=trend_pars, pars_full = pars_full)
+# cv1_updated <- EMC2:::run_trend_rcpp(data = dadm, trend=trend, param=param, trend_pars=trend_pars, pars_full = pars_full, return_kernel = TRUE)
 #
 #
-# # NumericMatrix run_kernel_rcpp(NumericMatrix kernel_pars,
-# #                               String kernel,
-# #                               NumericMatrix input,
-# #                               SEXP funptrSEXP = R_NilValue,
-# #                               LogicalVector first_level_mask = LogicalVector(),
-# #                               bool has_map = false,
-# #                               // NumericMatrix map_input = NumericMatrix(0,0),
-# #                               bool ffill_na = false) {
-# kernel_pars <- trend_pars[,2:3]
-# input <- dadm[,c('covariate1'), drop=FALSE]
-# first_level_mask <- as.numeric(dadm$lR)==1
+# old_behavior <- c(0,0,0.5,0.5,0,0,0,0,.6,.6,0,0,0,0,0,0,0,0,0,0)
+# ffill_behavior <- c(rep(.5, 8), rep(.6, 12))
+# bfill_behavior <- c(rep(.5, 4), rep(.6, 6), rep(0, 10))
+# cbind(dadm[,c('trials', 'covariate1')], target=cv1_updated, old_behavior=old_behavior, ffill=ffill_behavior, bfill=bfill_behavior)
 #
-# #EMC2:::run_kernel_rcpp(kernel_pars, 'delta', input, NULL, ifrst_level_maps, has_map=FALSE, ffill_na=FALSE)
+# # 3 points of failure in the future: 1. hard-coded that the first trial must be q0; 2. "ffill" is actually a "bfill", 3. hard-coded that the last trial must be updated
+#
+#

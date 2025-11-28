@@ -535,6 +535,7 @@ run_kernel <- function(trend_pars = NULL, kernel, input, funptr = NULL, at_facto
     tpars_comp <- trend_pars
     use_at <- FALSE
   }
+
   # Per-column contribution, then return matrix with one column per input
   cols <- ncol(input)
   out_mat <- matrix(0, nrow = n, ncol = cols)
@@ -543,87 +544,67 @@ run_kernel <- function(trend_pars = NULL, kernel, input, funptr = NULL, at_facto
     # 1) Compress to first-level rows if at_factor provided
     covariate_comp <- covariate_full[first_level]
 
-    # SM: For delta rules, it must be ensured that the last trial is not-NA. This is because the last update *must* be carried forward
-    if(kernel %in% c('delta', 'delta2kernel', 'delta2lr')) {
-      if(is.na(covariate_comp[length(covariate_comp)])) covariate_comp[length(covariate_comp)] <- 0
-    }
-
     # 2) Initialize compressed output with zeros
     comp_len <- length(covariate_comp)
     comp_out <- numeric(comp_len)
 
-    # 3) Exclude NAs
-    good <- !is.na(covariate_comp)
-    if(isTRUE(ffill_na)) {
-      comp_out[is.na(covariate_comp)] <- NA
-      if(is.na(covariate_full[1] & (!kernel %in% c('delta', 'delta2kernel', 'delta2lr')))) stop("The first value of a covariate is NA, so it is impossible to forward fill.")
-    }
-
-    if (any(good)) {
-      # 4) Run kernel on good subset only
-      if (kernel == "custom") {
-        if (is.null(funptr)) stop("Missing function pointer for custom kernel. Pass 'funptr'.")
-        # Build 1-col input matrix for custom kernel
-        in_good <- matrix(covariate_comp[good], ncol = 1)
-        tp_good <- if (ncol(tpars_comp)) tpars_comp[good, , drop = FALSE] else matrix(nrow = sum(good), ncol = 0)
-        contrib <- EMC2_call_custom_trend(tp_good, in_good, funptr)
-        contrib[is.na(contrib)] <- 0
-        comp_out[good] <- contrib
-      } else {
-        # Built-in kernels (use only rows in 'good')
-        # Access parameters by column index as before
-        if (kernel == "lin_decr") {
-          comp_out[good] <- -covariate_comp[good]
-        } else if (kernel == "lin_incr") {
-          comp_out[good] <- covariate_comp[good]
-        } else if (kernel == "exp_decr") {
-          comp_out[good] <- exp(-tpars_comp[good, 1] * covariate_comp[good])
-        } else if (kernel == "exp_incr") {
-          comp_out[good] <- 1 - exp(-tpars_comp[good, 1] * covariate_comp[good])
-        } else if (kernel == "pow_decr") {
-          comp_out[good] <- (1 + covariate_comp[good])^(-tpars_comp[good, 1])
-        } else if (kernel == "pow_incr") {
-          comp_out[good] <- 1 - (1 + covariate_comp[good])^(-tpars_comp[good, 1])
-        } else if (kernel == "poly2") {
-          comp_out[good] <- tpars_comp[good, 1] * covariate_comp[good] + tpars_comp[good, 2] * covariate_comp[good]^2
-        } else if (kernel == "poly3") {
-          comp_out[good] <- tpars_comp[good, 1] * covariate_comp[good] + tpars_comp[good, 2] * covariate_comp[good]^2 + tpars_comp[good, 3] * covariate_comp[good]^3
-        } else if (kernel == "poly4") {
-          comp_out[good] <- tpars_comp[good, 1] * covariate_comp[good] + tpars_comp[good, 2] * covariate_comp[good]^2 + tpars_comp[good, 3] * covariate_comp[good]^3 + tpars_comp[good, 4] * covariate_comp[good]^4
-        } else if (kernel == "delta") {
-          tmp <- run_delta(tpars_comp[good, 1], tpars_comp[good, 2], covariate_comp[good])
-          comp_out[1] = trend_pars[1,1]  # first value is *always* q0
-          comp_out[good] <- tmp
-        } else if (kernel == "delta2kernel") {
-          tmp <- run_delta2kernel(tpars_comp[good, 1], tpars_comp[good, 2], tpars_comp[good, 3], tpars_comp[good, 4], covariate_comp[good])
-          comp_out[1] = trend_pars[1,1]  # first value is *always* q0
-          comp_out[good] <- tmp
-        } else if (kernel == "delta2lr") {
-          tmp <- run_delta2lr(tpars_comp[good, 1], tpars_comp[good, 2], tpars_comp[good, 3], covariate_comp[good])
-          comp_out[1] = trend_pars[1,1]  # first value is *always* q0
-          comp_out[good] <- tmp
-        } else {
-          stop("Unknown kernel type")
-        }
+    if(kernel %in% c('delta', 'delta2lr', 'delta2kernel')) {
+      # No NA-filtering - handle NA within kernel
+      if (kernel == "delta") {
+        comp_out <- run_delta(tpars_comp[, 1], tpars_comp[, 2], covariate_comp)
+      } else if (kernel == "delta2kernel") {
+        comp_out <- run_delta2kernel(tpars_comp[, 1], tpars_comp[, 2], tpars_comp[, 3], tpars_comp[, 4], covariate_comp)
+      } else if (kernel == "delta2lr") {
+        comp_out <- run_delta2lr(tpars_comp[, 1], tpars_comp[, 2], tpars_comp[, 3], covariate_comp)
+      }
+      if(!ffill_na) {
+        # If, for whatever reason, the user wants NA-covaraites to be set to 0, we can still do this
+        comp_out[is.na(covariate_comp)] <- 0
       }
     } else {
-      # no good found, but for delta rules should still be set to q0
-      if(kernel %in% c('delta', 'delta2kernel', 'delta2lr')) {
-        comp_out[1] = trend_pars[1,1]  # first value is *always* q0
-      }
-    }
+      # 3) Exclude NAs
+      good <- !is.na(covariate_comp)
 
-    # SM: forward fill values with missing covariate
-    if(isTRUE(ffill_na)) {
-      if(kernel %in% c('delta', 'delta2kernel', 'delta2lr')) {
-        # This is counterintuitive, but we actually need to backward-fill here.
-        # this is because delta-rule updates on trial t only affect Q-values on the *next*
-        # non-NA trial. I.e., if an update takes place on trial 1, and the next non-NA trial is trial 10,
-        # the result of trial 1's update is only visible in trial 10, whereas it should be
-        # clear in trial 2, 3, 4, etc.
-        comp_out <- rev(na_locf(rev(comp_out), na.rm = FALSE))
-        # last trial is wrong, unfortunately. Not sure if we can fix that?
-      } else {
+      if (any(good)) {
+        # 4) Run kernel on good subset only
+        if (kernel == "custom") {
+          if (is.null(funptr)) stop("Missing function pointer for custom kernel. Pass 'funptr'.")
+          # Build 1-col input matrix for custom kernel
+          in_good <- matrix(covariate_comp[good], ncol = 1)
+          tp_good <- if (ncol(tpars_comp)) tpars_comp[good, , drop = FALSE] else matrix(nrow = sum(good), ncol = 0)
+          contrib <- EMC2_call_custom_trend(tp_good, in_good, funptr)
+          contrib[is.na(contrib)] <- 0
+          comp_out[good] <- contrib
+        } else {
+          # Built-in kernels (use only rows in 'good')
+          # Access parameters by column index as before
+          if (kernel == "lin_decr") {
+            comp_out[good] <- -covariate_comp[good]
+          } else if (kernel == "lin_incr") {
+            comp_out[good] <- covariate_comp[good]
+          } else if (kernel == "exp_decr") {
+            comp_out[good] <- exp(-tpars_comp[good, 1] * covariate_comp[good])
+          } else if (kernel == "exp_incr") {
+            comp_out[good] <- 1 - exp(-tpars_comp[good, 1] * covariate_comp[good])
+          } else if (kernel == "pow_decr") {
+            comp_out[good] <- (1 + covariate_comp[good])^(-tpars_comp[good, 1])
+          } else if (kernel == "pow_incr") {
+            comp_out[good] <- 1 - (1 + covariate_comp[good])^(-tpars_comp[good, 1])
+          } else if (kernel == "poly2") {
+            comp_out[good] <- tpars_comp[good, 1] * covariate_comp[good] + tpars_comp[good, 2] * covariate_comp[good]^2
+          } else if (kernel == "poly3") {
+            comp_out[good] <- tpars_comp[good, 1] * covariate_comp[good] + tpars_comp[good, 2] * covariate_comp[good]^2 + tpars_comp[good, 3] * covariate_comp[good]^3
+          } else if (kernel == "poly4") {
+            comp_out[good] <- tpars_comp[good, 1] * covariate_comp[good] + tpars_comp[good, 2] * covariate_comp[good]^2 + tpars_comp[good, 3] * covariate_comp[good]^3 + tpars_comp[good, 4] * covariate_comp[good]^4
+          } else {
+            stop("Unknown kernel type")
+          }
+        }
+      }
+
+      # SM: forward fill values with missing covariate
+      if(isTRUE(ffill_na)) {
+        comp_out[!good] <- NA
         comp_out <- na_locf(comp_out, na.rm=FALSE)
       }
     }
@@ -852,11 +833,15 @@ update_model_trend <- function(trend, model) {
 run_delta <- function(q0,alpha,covariate) {
   q <- pe <- numeric(length(covariate))
   q[1] <- q0[1]
-  if(length(q) == 1) return(q)  # only 1 trial, cannot be updated
 
-  for (i in 2:length(q)) {
-    pe[i-1] <- covariate[i-1]-q[i-1]
-    q[i] <- q[i-1] + alpha[i-1]*pe[i-1]
+  if(length(q) == 1) return(q)
+  for(i in 1:(length(q)-1)) {
+    if(is.na(covariate[i])) {
+      q[i+1] = q[i]
+    } else {
+      pe[i] <- covariate[i]-q[i]
+      q[i+1] <- q[i] + alpha[i]*pe[i]
+    }
   }
   return(q)
 }
@@ -866,15 +851,16 @@ run_delta2kernel <- function(q0,alphaFast,propSlow,dSwitch,covariate) {
   q[1] <- qFast[1] <- qSlow[1] <- q0[1]
   if(length(q) == 1) return(q)  # only 1 trial, cannot be updated
   alphaSlow <- propSlow*alphaFast
-  for (i in 2:length(covariate)) {
-    peFast[i-1] <- covariate[i-1]-qFast[i-1]
-    peSlow[i-1] <- covariate[i-1]-qSlow[i-1]
-    qFast[i] <- qFast[i-1] + alphaFast[i-1]*peFast[i-1]
-    qSlow[i] <- qSlow[i-1] + alphaSlow[i-1]*peSlow[i-1]
-    if (abs(qFast[i]-qSlow[i])>dSwitch[i]){
-      q[i] <- qFast[i]
+
+  for (i in 1:(length(covariate)-1)) {
+    peFast[i] <- covariate[i]-qFast[i]
+    peSlow[i] <- covariate[i]-qSlow[i]
+    qFast[i+1] <- qFast[i] + alphaFast[i]*peFast[i]
+    qSlow[i+1] <- qSlow[i] + alphaSlow[i]*peSlow[i]
+    if (abs(qFast[i+1]-qSlow[i+1])>dSwitch[i+1]){
+      q[i+1] <- qFast[i+1]
     } else{
-      q[i] <- qSlow[i]
+      q[i+1] <- qSlow[i+1]
     }
   }
   return(q)
@@ -885,10 +871,11 @@ run_delta2lr <- function(q0,alphaPos,alphaNeg,covariate) {
   q[1] <- q0[1]
   if(length(q) == 1) return(q)  # only 1 trial, cannot be updated
 
-  for (i in 2:length(q)) {
-    pe[i-1] <- covariate[i-1]-q[i-1]
-    alpha <- ifelse(pe[i-1]>0, alphaPos[i-1], alphaNeg[i-1])
-    q[i] <- q[i-1] + alpha*pe[i-1]
+
+  for (i in 1:(length(q)-1)) {
+    pe[i] <- covariate[i]-q[i]
+    alpha <- ifelse(pe[i]>0, alphaPos[i], alphaNeg[i])
+    q[i+1] <- q[i] + alpha*pe[i]
   }
   return(q)
 }
