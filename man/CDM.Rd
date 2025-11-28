@@ -7,7 +7,7 @@
 CDM()
 }
 \value{
-A model list compatible with \code{design()} and EMC2 fitting routines.
+A model list with all the necessary functions for EMC2 to sample.
 }
 \description{
 Model file to estimate the Circular Diffusion Model (CDM) in EMC2.
@@ -17,10 +17,11 @@ Parameters and defaults are on the transformed scale.
 All parameters not specified in the \code{formula} of \code{design()} are
 assumed constant with the defaults in \code{p_types}.\tabular{lllll}{
    Parameter \tab Transform \tab Natural scale \tab Default \tab Interpretation \cr
-   mu_x \tab identity \tab (-Inf, Inf) \tab 0 \tab Drift x-component \cr
-   mu_y \tab identity \tab (-Inf, Inf) \tab 0 \tab Drift y-component \cr
-   a \tab log \tab (0, Inf) \tab log(1) \tab Boundary radius \cr
+   v \tab log \tab [0, Inf) \tab log(1) \tab Drift magnitude \cr
+   theta \tab pnorm \tab [0, 1) \tab qnorm(.5) \tab Drift direction, mapped to -pi, pi \cr
+   a \tab log \tab [0, Inf) \tab log(1) \tab Boundary radius \cr
    t0 \tab log \tab [0, Inf) \tab log(0) \tab Non-decision time \cr
-   sigma \tab log \tab (0, Inf) \tab log(1) \tab Diffusion scale \cr
+   sigma \tab log \tab [0, Inf) \tab log(1) \tab Diffusion scale \cr
+   sv \tab log \tab [0, Inf) \tab log(0) \tab Drift SD across trials \cr
 }
 }

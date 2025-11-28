@@ -1,18 +1,7 @@
-# Circular Diffusion Model (CDM) - R implementation
+# Circular Diffusion Model (CDM)
 #
-# Provides:
-# - rCDM: generator function to simulate RT and angle R
-# - dCDM: joint density of (RT, R)
-# - series_bessel_fpt: helper for the zero-drift first-passage time density
-# - CDM_nll: convenience negative log-likelihood matching the notebook API
-#
-#
-# ============================================================================
-
 # Load built-in Bessel zeros and J1(zeros) values
-#
 # Returns embedded constants for zeros of J0 and J1 evaluated at those zeros.
-#
 load_bessel_values <- function() {
   list(zeros = c(
     2.404825557695773, 5.520078110286311, 8.653727912911013, 11.791534439014281, 14.930917708487787,
@@ -335,22 +324,22 @@ rCDM <- function(pars, ok = rep(TRUE, nrow(pars)), dt = 0.001, max_steps = 1e7L)
 #'
 #' | Parameter | Transform | Natural scale | Default   | Interpretation |
 #' |-----------|-----------|---------------|-----------|----------------|
-#' | v         | exp       | (0, Inf)      | exp(0)=1  | Drift magnitude |
-#' | theta     | pnorm     | (-Inf, Inf)   | qnorm(0.5)=0 | Drift direction (probit-transformed, mapped to [-pi, pi]) |
-#' | a         | log       | (0, Inf)      | log(1)    | Boundary radius |
+#' | v         | log       | [0, Inf)      | log(1)    | Drift magnitude |
+#' | theta     | pnorm     | [0, 1)        | qnorm(.5) | Drift direction, mapped to -pi, pi |
+#' | a         | log       | [0, Inf)      | log(1)    | Boundary radius |
 #' | t0        | log       | [0, Inf)      | log(0)    | Non-decision time |
-#' | sigma     | log       | (0, Inf)      | log(1)    | Diffusion scale |
+#' | sigma     | log       | [0, Inf)      | log(1)    | Diffusion scale |
 #' | sv        | log       | [0, Inf)      | log(0)    | Drift SD across trials |
 #'
 #'
-#' @return A model list compatible with `design()` and EMC2 fitting routines.
+#' @return A model list with all the necessary functions for EMC2 to sample.
 #' @export
 CDM <- function(){
   list(
     type = "CDM",
     c_name = "CDM",
     p_types = c(
-      "v"     = 0,
+      "v"     = log(1),
       "theta" = qnorm(0.5),
       "a"    = log(1),
       "t0"  = log(0),
