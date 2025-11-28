@@ -5,6 +5,7 @@
 #include "EMC2/userfun.hpp"
 #include <Rcpp.h>
 #include <unordered_map>
+#include <regex>
 #include "trend_DBM.h"
 using namespace Rcpp;
 
@@ -195,13 +196,27 @@ NumericMatrix run_kernel_rcpp(NumericMatrix kernel_pars,
     return out;
   }
 
+  // for convenience, define some regular expressions for matching input kernel
+  // against specific classes of kernels
+  static const std::string kern_c = kernel.get_cstring();
+  static const std::regex delta_kerns_re("^delta(2lr|2kernel)?$");
+  static const std::regex beta_binom_kerns_re("^beta_binom(_map)?(_surprise)?$");
+  static const std::regex dbm_kerns_re("^dbm(_map)?(_surprise)?$");
+  static const std::regex tpm_kerns_re("^tpm(_surprise)?$");
+  static const std::regex learning_kerns_re(
+      "^(delta(2lr|2kernel)?|"
+      "beta_binom(_map)?(_surprise)?|"
+      "dbm(_map)?(_surprise)?|"
+      "tpm(_surprise)?)$"
+  );
+
   for (int c = 0; c < p; ++c) {
     NumericVector cov_comp = input_comp(_, c);
     NumericVector comp_out(n_comp); // zeros by default
 
     // SM: Ensure that delta rule is applied to last trial, so that
     // the result of the second-last update can be carried forward
-    if (kernel == "delta" || kernel == "delta2lr" || kernel == "delta2kernel") {
+    if (std::regex_match(kern_c, learning_kerns_re)) {
       if(NumericVector::is_na(cov_comp[n_comp-1])) {
         cov_comp[n_comp-1] = 0;
       }
@@ -303,10 +318,8 @@ NumericMatrix run_kernel_rcpp(NumericMatrix kernel_pars,
           comp_out[0] = kernel_pars(0, 0);
           pos = 0;
           for (int i = 0; i < n_comp; ++i) if (good[i]) comp_out[i] = tmp[pos++];
-        } else if (
-            kernel == "beta_binom" || kernel == "beta_binom_surprise" ||
-              kernel == "beta_binom_map" || kernel == "beta_binom_map_surprise"
-        ) {
+        } else if (std::regex_match(kern_c, beta_binom_kerns_re)) {
+          // beta binomial learning model variants
           NumericVector covg(n_good), a0(n_good), b0(n_good), decay(n_good), window(n_good);
           int pos = 0;
           for (int i = 0; i < n_comp; ++i) if (good[i]) {
@@ -318,10 +331,10 @@ NumericMatrix run_kernel_rcpp(NumericMatrix kernel_pars,
             ++pos;
           }
           bool return_map = false, return_surprise = false;
-          if (kernel == "beta_binom_surprise" || kernel == "beta_binom_map_surprise") {
+          if (std::regex_match(kern_c, std::regex("_surprise$"))) {
             return_surprise = true;
           }
-          if (kernel == "beta_binom_map" || kernel == "beta_binom_map_surprise") {
+          if (std::regex_match(kern_c, std::regex("^beta_binom_map"))) {
             return_map = true;
           }
           NumericVector tmp = run_beta_binomial(
@@ -329,10 +342,8 @@ NumericMatrix run_kernel_rcpp(NumericMatrix kernel_pars,
           );
           pos = 0;
           for (int i = 0; i < n_comp; ++i) if (good[i]) comp_out[i] = tmp[pos++];
-        } else if (
-            kernel == "dbm" || kernel == "dbm_surprise" ||
-              kernel == "dbm_map" || kernel == "dbm_map_surprise"
-        ) {
+        } else if (std::regex_match(kern_c, dbm_kerns_re)) {
+          // Dynamic Belief Model variants
           NumericVector covg(n_good), cp(n_good), mu0(n_good), s0(n_good);
           int pos = 0;
           for (int i = 0; i < n_comp; ++i) if (good[i]) {
@@ -343,10 +354,10 @@ NumericMatrix run_kernel_rcpp(NumericMatrix kernel_pars,
             ++pos;
           }
           bool return_map = false, return_surprise = false;
-          if (kernel == "dbm_surprise" || kernel == "dbm_map_surprise") {
+          if (std::regex_match(kern_c, std::regex("_surprise$"))) {
             return_surprise = true;
           }
-          if (kernel == "dbm_map" || kernel == "dbm_map_surprise") {
+          if (std::regex_match(kern_c, std::regex("^dbm_map"))) {
             return_map = true;
           }
           NumericVector tmp = run_dbm(
@@ -354,7 +365,8 @@ NumericMatrix run_kernel_rcpp(NumericMatrix kernel_pars,
           );
           pos = 0;
           for (int i = 0; i < n_comp; ++i) if (good[i]) comp_out[i] = tmp[pos++];
-        } else if (kernel == "tpm" || kernel == "tpm_surprise") {
+        } else if (std::regex_match(kern_c, tpm_kerns_re)) {
+          // Transition Probability Model variants
           NumericVector covg(n_good), cp(n_good), a0(n_good), b0(n_good);
           int pos = 0;
           for (int i = 0; i < n_comp; ++i) if (good[i]) {
@@ -374,14 +386,14 @@ NumericMatrix run_kernel_rcpp(NumericMatrix kernel_pars,
       }
     } else {
       // even without good values, should be set to q0
-      if (kernel == "delta" || kernel == "delta2lr" || kernel == "delta2kernel") {
+      if (std::regex_match(kern_c, delta_kerns_re)) {
         comp_out[0] = kernel_pars(0, 0);
       }
     }
 
     // Fill
     if(ffill_na) {
-      if (kernel == "delta" || kernel == "delta2lr" || kernel == "delta2kernel") {
+      if (std::regex_match(kern_c, learning_kerns_re)) {
         // for these kernels we need to backward fill
         for (int i = n_comp-2; i > 0; --i) {
           // the last value (comp_out[n_comp]) is always valid, since it was forced to be updated
