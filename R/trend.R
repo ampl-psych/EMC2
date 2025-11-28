@@ -40,14 +40,12 @@ is_kernel_type <- function(
     type = c("delta", "beta_binom", "dbm", "tpm", "learning")
 ) {
   type <- match.arg(type)
-
   delta_variants <- c("delta", "delta2lr", "delta2kernel")
   beta_binom_variants <- c(
     "beta_binom", "beta_binom_map", "beta_binom_surprise", "beta_binom_map_surprise"
   )
   dbm_variants <- c("dbm", "dbm_map", "dbm_surprise", "dbm_map_surprise")
   tpm_variants <- c("tpm", "tpm_surprise")
-
   valid <- switch(
     type,
     delta = delta_variants,
