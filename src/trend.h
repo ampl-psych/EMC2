@@ -24,6 +24,110 @@ NumericVector EMC2_call_custom_trend(NumericMatrix trend_pars,
 }
 
 
+inline void run_delta_kernel(
+    double* q_out,
+    const int* comp_index,
+    int n_comp,
+    const double* q0,
+    const double* alpha,
+    const double* cov)
+{
+  // find row 0, assign q0
+  int r0 = comp_index[0];
+  q_out[0] = q0[r0];
+
+  // loop over trials in compressed space
+  for (int k = 0; k < (n_comp - 1); ++k) {
+    int r = comp_index[k];
+    // int r_next = comp_index[k+1];
+    double x = cov[r];   // find covariate value
+
+    if (ISNAN(x)) {
+      q_out[k+1] = q_out[k];
+    } else {
+      double pe = x - q_out[k];
+      q_out[k+1] = q_out[k] + alpha[r] * pe;
+    }
+  }
+}
+
+inline void run_delta2lr_kernel(
+    double* q_out,
+    const int* comp_index,
+    int n_comp,
+    const double* q0,
+    const double* alphaPos,
+    const double* alphaNeg,
+    const double* cov)
+{
+  int r0 = comp_index[0];
+  q_out[0] = q0[r0];
+
+  for (int k = 0; k < n_comp - 1; ++k) {
+    int r = comp_index[k];
+    // int r_next = comp_index[k+1];
+    double x = cov[r];
+
+    if (ISNAN(x)) {
+      q_out[k+1] = q_out[k];
+    } else {
+      double pe = x - q_out[k];
+      double a = (pe > 0) ? alphaPos[r] : alphaNeg[r];
+      q_out[k+1] = q_out[k] + a * pe;
+    }
+  }
+}
+
+inline void run_delta2kernel_kernel(
+    double* q_out,
+    const int* comp_index,
+    int n_comp,
+    const double* q0,
+    const double* alphaFast,
+    const double* propSlow,
+    const double* dSwitch,
+    const double* cov)
+{
+  int r0 = comp_index[0];
+
+  // internal states
+  double qFast = q0[r0];
+  double qSlow = q0[r0];
+
+  q_out[0] = q0[r0];
+
+  for (int k = 0; k < n_comp - 1; ++k) {
+    int r = comp_index[k];
+    double x = cov[r];
+
+    if (ISNAN(x)) {
+      // carry forward both components
+      q_out[k+1] = q_out[k];
+      // also update internal components
+      // so next update uses last values
+      continue;
+    }
+
+    double peF = x - qFast;
+    double peS = x - qSlow;
+
+    double aF = alphaFast[r];
+    double aS = propSlow[r] * aF;
+
+    qFast = qFast + aF * peF;
+    qSlow = qSlow + aS * peS;
+
+    double diff = std::abs(qFast - qSlow);
+
+    if (diff > dSwitch[r]) {
+      q_out[k+1] = qFast;
+    } else {
+      q_out[k+1] = qSlow;
+    }
+  }
+}
+
+
 NumericVector run_delta_rcpp(NumericVector q0, NumericVector alpha, NumericVector covariate) {
   int n = covariate.length();
   NumericVector q(n);
@@ -308,11 +412,164 @@ NumericMatrix run_kernel_rcpp(NumericMatrix kernel_pars,
   return out;
 }
 
+NumericMatrix run_kernel_rcpp_ptrs(NumericMatrix kernel_pars,
+                              String kernel,
+                              NumericMatrix input,
+                              SEXP funptrSEXP = R_NilValue,
+                              LogicalVector first_level_mask = LogicalVector(),
+                              bool has_map = false,
+                              // NumericMatrix map_input = NumericMatrix(0,0),
+                              bool ffill_na = false) {
+  // Kernels accept any number of input columns; apply per column and sum contributions.
+  const int n = input.nrow();
+  const int p = input.ncol();
+  NumericMatrix out;
+  if (kernel == "custom" || has_map == false) {
+    out = NumericMatrix(n, 1);
+  } else {
+    out = NumericMatrix(n, p);
+  }
+  out.fill(0.0);
+
+  const bool use_at = (first_level_mask.size() == n);
+  IntegerVector expand_idx;
+  LogicalVector comp_rows;
+  if (use_at) {
+    comp_rows = first_level_mask;
+    expand_idx = build_expand_idx_rcpp(first_level_mask);
+  } else {
+    comp_rows = LogicalVector(n, true);
+    expand_idx = seq(1, n);
+  }
+
+  // Precompute compact row indices
+  std::vector<int> comp_index;
+  comp_index.reserve(n);
+  for (int i = 0; i < n; ++i) {
+    if (comp_rows[i]) comp_index.push_back(i);
+  }
+  int n_comp = comp_index.size();
+
+  // ---------------------------------------------------------------------
+  // Preload column pointers for kernel_pars
+  // ---------------------------------------------------------------------
+  const int kp_cols = kernel_pars.ncol();
+  std::vector<const double*> kp_ptrs(kp_cols);
+  for (int j = 0; j < kp_cols; ++j)
+    kp_ptrs[j] = kernel_pars.column(j).begin();
+
+  for (int c = 0; c < p; ++c) {
+    const double* cov_ptr = input.column(c).begin();
+    NumericVector comp_out(n_comp);      // output in compressed space
+    double* out_ptr = comp_out.begin();  // pointer to first row of output
+
+    if(kernel == "delta" || kernel == "delta2lr" || kernel == "delta2kernel") {
+      // Sequential kernels: No pre-filtering of NA, handle NA values in kernel
+      if (kernel == "delta") {
+        const double* q0_ptr = kp_ptrs[0];
+        const double* alpha_ptr = kp_ptrs[1];
+        run_delta_kernel(out_ptr, comp_index.data(), n_comp, q0_ptr, alpha_ptr, cov_ptr);
+      } else if (kernel == "delta2kernel") {
+        const double* q0_ptr = kp_ptrs[0];
+        const double* alphaFast_ptr = kp_ptrs[1];
+        const double* propSlow_ptr = kp_ptrs[2];
+        const double* dSwitch_ptr = kp_ptrs[3];
+        run_delta2kernel_kernel(out_ptr, comp_index.data(), n_comp, q0_ptr, alphaFast_ptr, propSlow_ptr, dSwitch_ptr, cov_ptr);
+        } else if (kernel == "delta2lr") {
+        const double* q0_ptr = kp_ptrs[0];
+        const double* alphaPos_ptr = kp_ptrs[1];
+        const double* alphaNeg_ptr = kp_ptrs[2];
+        run_delta2lr_kernel(out_ptr, comp_index.data(), n_comp, q0_ptr, alphaPos_ptr, alphaNeg_ptr, cov_ptr);
+      }
+      // backfill-to-zero if requested
+      if (!ffill_na) {
+        for (int k = 1; k < n_comp; ++k) {
+          int r = comp_index[k];
+          if (ISNAN(cov_ptr[r]))
+            out_ptr[k] = 0.0;
+        }
+      }
+    } else {
+      // non-sequential kernels: Apply NA filtering and ffill logic if needed
+      // good rows = non-NA covariate within compressed rows
+      std::vector<char> good(n_comp, 1);
+      int n_good = 0;
+      for (int k = 0; k < n_comp; ++k) {
+        int r = comp_index[k];
+        if (ISNAN(cov_ptr[r])) {
+          good[k] = 0;
+        } else {
+          n_good++;
+        }
+      }
+
+      if (n_good > 0) {
+        for (int k = 0; k < n_comp; ++k) {
+          if (!good[k]) continue;
+          int r = comp_index[k];
+
+          double x = cov_ptr[r];  // Covariate value
+          double val = 0.0;
+
+          if (kernel == "lin_decr") {
+            val = -x;
+          } else if (kernel == "lin_incr") {
+            val = x;
+          } else if (kernel == "exp_decr") {
+            val = std::exp(-kp_ptrs[0][r] * x);
+          } else if (kernel == "exp_incr") {
+            val = 1 - std::exp(-kp_ptrs[0][r] * x);
+          } else if (kernel == "pow_decr") {
+            val = std::pow(1 + x, -kp_ptrs[0][r]);
+          } else if (kernel == "pow_incr") {
+            val = 1 - std::pow(1 + x, -kp_ptrs[0][r]);
+          } else if (kernel == "poly2") {
+            val = kp_ptrs[0][r] * x + kp_ptrs[1][r] * x * x;
+          } else if (kernel == "poly3") {
+            val = kp_ptrs[0][r] * x + kp_ptrs[1][r] * x * x + kp_ptrs[2][r] * x * x * x;
+          } else if (kernel == "poly4") {
+            double x2 = x * x;
+            val = kp_ptrs[0][r] * x +
+              kp_ptrs[1][r] * x2 +
+              kp_ptrs[2][r] * x2 * x +
+              kp_ptrs[3][r] * x2 * x2;
+          } else {
+            stop("Unknown kernel type");
+          }
+
+          out_ptr[k] = val;
+        }
+      }
+
+      // forward-fill NA if requested
+      if (ffill_na) {
+        for (int k = 1; k < n_comp; ++k)
+          if (!good[k])
+            out_ptr[k] = out_ptr[k - 1];
+      }
+    }
+
+    // ============================================================
+    // Expand compact results back to full size
+    // ============================================================
+    for (int i = 0; i < n; ++i) {
+      int k = expand_idx[i] - 1;
+      if (!has_map) {
+        out(i, 0) += out_ptr[k];
+      } else {
+        out(i, c) += out_ptr[k];
+      }
+    }
+  }
+
+  return out;
+}
+
 // Now accepts the full parameter matrix `pars_full` so we can use par_input columns as inputs too.
 // Passes all inputs (covariates + par_input) to kernel in one call; kernel sums across columns.
 // [[Rcpp::export]]
 NumericVector run_trend_rcpp(DataFrame data, List trend, NumericVector param, NumericMatrix trend_pars, NumericMatrix pars_full,
-                             bool return_kernel = false) {
+                             bool return_kernel = false, bool use_ptrs = false) {
   String kernel = as<String>(trend["kernel"]);
   String base = as<String>(trend["base"]);
   // Extract optional custom pointer attribute if present
@@ -415,8 +672,14 @@ NumericVector run_trend_rcpp(DataFrame data, List trend, NumericVector param, Nu
     }
 
     // Run kernel
-    NumericMatrix kernel_out = run_kernel_rcpp(kernel_pars, kernel, input_all, custom_ptr, first_level,
-                                               has_maps, ffill_na);
+    NumericMatrix kernel_out;
+    if(use_ptrs) {
+      kernel_out = run_kernel_rcpp_ptrs(kernel_pars, kernel, input_all, custom_ptr, first_level,
+                                        has_maps, ffill_na);
+    } else {
+      kernel_out = run_kernel_rcpp(kernel_pars, kernel, input_all, custom_ptr, first_level,
+                                   has_maps, ffill_na);
+    }
     if(return_kernel) return kernel_out;
 
     int n_rows = kernel_out.nrow();
