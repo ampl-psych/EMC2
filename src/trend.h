@@ -59,6 +59,7 @@ NumericVector run_delta2kernel_rcpp(NumericVector q0, NumericVector alphaFast,
     if(NumericVector::is_na(covariate[i])) {
       qFast[i+1] = qFast[i];
       qSlow[i+1] = qSlow[i];
+      q[i+1] = q[i];
     } else {
       peFast[i] = covariate[i] - qFast[i];
       peSlow[i] = covariate[i] - qSlow[i];
