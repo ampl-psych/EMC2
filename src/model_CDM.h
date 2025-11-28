@@ -4,6 +4,8 @@
 #include <Rcpp.h>
 #include <algorithm>
 #include <vector>
+#include <cmath>
+#include <cfloat>
 
 using namespace Rcpp;
 
@@ -61,7 +63,16 @@ inline const std::vector<double>& weights() {
   if (w.empty()) {
     const size_t M = sizeof(ZEROS)/sizeof(ZEROS[0]);
     w.resize(M);
-    for (size_t j = 0; j < M; ++j) w[j] = ZEROS[j] / JVZ[j];
+    double norm_const = 0.0;
+    for (size_t j = 0; j < M; ++j) {
+      const double raw = ZEROS[j] / JVZ[j];
+      const double lambda = 0.5 * ZEROS[j] * ZEROS[j];
+      norm_const += raw / lambda;
+      w[j] = raw;
+    }
+    if (norm_const > 0.0) {
+      for (size_t j = 0; j < M; ++j) w[j] /= norm_const;
+    }
   }
   return w;
 }
@@ -77,15 +88,14 @@ inline const std::vector<double>& base_rates() {
 }
 
 inline double series_bessel_fpt_scalar(double t, double a, double sigma) {
-  if (!(t > 0.0)) return 0.0;
+  if (!(t >= 0.0)) return 0.0;
   const std::vector<double>& w = weights();
   const std::vector<double>& br = base_rates();
   const double v_scale = (sigma * sigma) / (a * a);
   const double s = t * v_scale;
   double sum = 0.0;
   for (size_t j = 0; j < w.size(); ++j) {
-    // Centered (e^{-λ s} - 1) to enforce f_T(0)=0 under truncation
-    sum += w[j] * (std::exp(-br[j] * s) - 1.0);
+    sum += w[j] * std::exp(-br[j] * s);
   }
   return v_scale * sum;
 }
@@ -103,16 +113,6 @@ inline double small_t_fpt_scalar(double t_scaled, double x_scaled) {
   const double out = term1 * term2;
   if (!R_finite(out)) return 0.0;
   return out;
-}
-
-inline double percentile10(NumericVector v) {
-  std::vector<double> vv;
-  vv.reserve(v.size());
-  for (int i = 0; i < v.size(); ++i) if (R_finite(v[i])) vv.push_back(v[i]);
-  if (vv.empty()) return NA_REAL;
-  std::sort(vv.begin(), vv.end());
-  size_t idx = (size_t) std::floor(0.1 * (vv.size() - 1));
-  return vv[idx];
 }
 
 } // namespace cdm_internal
@@ -137,82 +137,66 @@ inline NumericVector c_dCDM(NumericVector rts, NumericVector Rs, NumericMatrix p
     th[i] = (th[i] - 0.5) * 2.0 * PI;
   }
 
-  // Compute tt and FPT series
-  NumericVector tt(N);
-  for (int i = 0; i < N; ++i) {
-    double d = rts[i] - t0[i];
-    tt[i] = (R_finite(d) && d > 0.0) ? d : 0.0;
-  }
-
-  // Base FPT
-  NumericVector fpt(N);
-  for (int i = 0; i < N; ++i) {
-    fpt[i] = series_bessel_fpt_scalar(tt[i], a[i], sig[i]);
-  }
-
-  // Small-tt safeguard: replace lowest 10% tt by small-t approximation (scaled by v)
-  double t_min = percentile10(tt);
-  if (R_finite(t_min)) {
-    for (int i = 0; i < N; ++i) {
-      if (tt[i] < t_min) {
-        const double ai = a[i];
-        const double sigi = sig[i];
-        const double vi = (sigi * sigi) / (ai * ai);
-        const double a_sq = ai * ai;
-        const double fsm = vi * small_t_fpt_scalar(tt[i] * vi, 0.001 / a_sq);
-        fpt[i] = fsm;
-      }
-    }
-  }
+  const double s0 = 0.002;
+  const double s1 = 0.02;
+  const double two_pi = 2.0 * PI;
 
   // Joint density computation
   for (int i = 0; i < N; ++i) {
     if (!is_ok[i]) { out[i] = R_NegInf; continue; }
 
-    const double tti = tt[i];
-    if (!(tti > 0.0)) { out[i] = R_NegInf; continue; }
-
     const double ai = a[i];
+    const double sigi = sig[i];
     const double vi = v[i];
     const double thi = th[i];
     const double svi = sv[i];
+    const double rti = rts[i];
+    const double t0i = t0[i];
+
+    if (!R_finite(ai) || !R_finite(sigi) || ai <= 0.0 || sigi <= 0.0 ||
+        !R_finite(vi) || !R_finite(thi) || !R_finite(rti) || !R_finite(t0i)) {
+      out[i] = R_NegInf; continue;
+    }
+
+    const double tt = std::max(0.0, rti - t0i);
+    const double sig2 = sigi * sigi;
+    const double v2 = vi * vi;
+
     const double cosR = std::cos(Rs[i]);
     const double sinR = std::sin(Rs[i]);
-    const double x0 = ai * cosR;
-    const double x1 = ai * sinR;
+    const double cosT = std::cos(thi);
+    const double sinT = std::sin(thi);
+    const double cosRth = cosR * cosT + sinR * sinT;
 
-    const double mu_x = vi * std::cos(thi);
-    const double mu_y = vi * std::sin(thi);
-    const double mu_sq = vi * vi;
+    // Zero-drift FPT with small-t blend (matches R implementation)
+    const double v_scale = sig2 / (ai * ai);
+    const double s = tt * v_scale;
+    const double fpt_series = series_bessel_fpt_scalar(tt, ai, sigi);
+    const double fpt_small = v_scale * small_t_fpt_scalar(s, 1e-8 / (ai * ai));
+    const double w = std::min(std::max((s - s0) / (s1 - s0), 0.0), 1.0);
+    double fpt = (1.0 - w) * fpt_small + w * fpt_series;
+    if (!R_finite(fpt) || fpt < 0.0) fpt = 0.0;
+    const double log_fpt = std::log(std::max(fpt, DBL_MIN));
 
-    // Guard rail: kappa = a * |mu| / sigma^2 < 5
-    const double kappa = (ai * std::sqrt(mu_sq)) / (sig[i] * sig[i]);
-    if (!(kappa < 4.0)) { out[i] = R_NegInf; continue; }
-
-    double dens = 0.0;
-    if (!(svi > 0.0)) {
+    double log_raw = R_NegInf;
+    if (svi <= 0.0) {
       // Constant drift
-      const double term1 = ai * (mu_x * cosR + mu_y * sinR);
-      const double term2 = 0.5 * mu_sq * tti;
-      dens = std::exp(term1 - term2) * fpt[i];
+      const double log_time = -0.5 * (v2 * tt) / sig2;
+      const double log_ang = (ai * vi * cosRth) / sig2;
+      log_raw = log_fpt + log_time + log_ang - std::log(two_pi);
     } else {
-      // Integrated over Gaussian drift variability
-      const double eta2 = svi * svi;
-      const double denom = eta2 * tti + 1.0;
-      const double fixed = 1.0 / std::sqrt(denom);
-
-      const double exp0 = -0.5 * (mu_x * mu_x) / eta2 + 0.5 * (x0 * eta2 + mu_x) * (x0 * eta2 + mu_x) / (eta2 * denom);
-      const double exp1 = -0.5 * (mu_y * mu_y) / eta2 + 0.5 * (x1 * eta2 + mu_y) * (x1 * eta2 + mu_y) / (eta2 * denom);
-      dens = (fixed * std::exp(exp0)) * (fixed * std::exp(exp1)) * fpt[i];
+      // Integrated Gaussian drift variability
+      const double sv2 = svi * svi;
+      const double tt_v = std::max(tt, DBL_EPSILON);
+      const double D = sig2 + sv2 * tt_v;
+      const double log_det = -std::log(D) + std::log(sig2);
+      const double log_rad = 0.5 * (ai * ai * sv2) / (sig2 * D);
+      const double log_ang = (ai * vi * cosRth) / D;
+      const double log_tim = -0.5 * (v2 * tt_v) / D;
+      log_raw = log_fpt + log_det + log_rad + log_ang + log_tim - std::log(two_pi);
     }
 
-    // Normalize by angle support 2*pi and guard
-    dens *= (1.0 / (2.0 * PI));
-    if (!(dens > 0.0) || !R_finite(dens)) {
-      out[i] = R_NegInf;
-    } else {
-      out[i] = std::log(dens);
-    }
+    out[i] = log_raw;
   }
 
   return out;
@@ -220,5 +204,4 @@ inline NumericVector c_dCDM(NumericVector rts, NumericVector Rs, NumericMatrix p
 
 
 #endif // MODEL_CDM_H
-
 
