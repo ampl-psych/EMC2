@@ -852,7 +852,7 @@ run_delta2kernel <- function(q0,alphaFast,propSlow,dSwitch,covariate) {
   if(length(q) == 1) return(q)  # only 1 trial, cannot be updated
   alphaSlow <- propSlow*alphaFast
 
-  for (i in 1:(length(covariate)-1)) {
+  for (i in 1:(length(q)-1)) {
     if(is.na(covariate[i])) {
       q[i+1] <- q[i]
     } else {
