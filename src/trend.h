@@ -228,11 +228,22 @@ NumericMatrix run_kernel_rcpp(NumericMatrix kernel_pars,
     if(std::regex_match(kern_c, learning_kerns_re)) {
       // Sequential kernels: No pre-filtering of NA, handle NA values in kernel
       if (kernel == "delta") {
-        comp_out = run_delta_rcpp(/*q0*/kp_comp(_,0), /*alpha*/kp_comp(_,1), cov_comp);
+        comp_out = run_delta_rcpp(
+          // q0, alpha
+          kp_comp(_,0), kp_comp(_,1),
+          cov_comp
+        );
       } else if (kernel == "delta2kernel") {
-        comp_out = run_delta2kernel_rcpp(/*q0*/kp_comp(_,0), /*alphaSlow*/kp_comp(_,1), /*propSlow*/kp_comp(_,2), /*dSwitch*/kp_comp(_,3), cov_comp);
+        comp_out = run_delta2kernel_rcpp(
+          // q0, alphaSlow, propSlow, dSwitch
+          kp_comp(_,0), kp_comp(_,1), kp_comp(_,2), kp_comp(_,3),
+          cov_comp
+        );
       } else if (kernel == "delta2lr") {
-        comp_out = run_delta2lr_rcpp(/*q0*/kp_comp(_,0), /*alphaPos*/kp_comp(_,1), /*alphaNeg*/kp_comp(_,2), cov_comp);
+        comp_out = run_delta2lr_rcpp(
+          // q0, alphaPos, alphaNeg
+          kp_comp(_,0), kp_comp(_,1), kp_comp(_,2),
+          cov_comp);
       } else if (std::regex_match(kern_c, beta_binom_kerns_re)) {
         // beta binomial learning model variants
         bool return_map = false, return_surprise = false;
