@@ -727,11 +727,11 @@ make_emc <- function(data,design,model=NULL,
   ## SM: check for delta rules in trend, and override/turn off compression if the user supplied compress=TRUE.
   compress_passed <- compress
   compress <- rep(compress, length(model))
-  has_delta_rule <- sapply(model, has_delta_rules)
-  compress[has_delta_rule] <- FALSE
-  if(compress_passed & any(has_delta_rule)) {
-    if(length(model) == 1) message('Because the model contains a delta rule, data will not be compressed.')
-    else message(paste0('Models ', which(has_delta_rule), ' contain a delta rule; the corresponding data will not be compressed.'))
+  has_learning_rule <- sapply(model, has_learning_rules)
+  compress[has_learning_rule] <- FALSE
+  if(compress_passed & any(has_learning_rule)) {
+    if(length(model) == 1) message('Because the model contains a learning rule, data will not be compressed.')
+    else message(paste0('Models ', which(has_learning_rule), ' contain a learning rule; the corresponding data will not be compressed.'))
   }
   ## SM END
 
