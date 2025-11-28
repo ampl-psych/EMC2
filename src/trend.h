@@ -33,11 +33,15 @@ NumericVector run_delta_rcpp(NumericVector q0, NumericVector alpha, NumericVecto
   NumericVector q(n);
   NumericVector pe(n);
   q[0] = q0[0];
-  for(int i = 1; i < n; i++) {
-    pe[i-1] = covariate[i-1] - q[i-1];
-    q[i] = q[i-1] + alpha[i-1] * pe[i-1];
+  // forward-looking
+  for(int i = 0; i < n-1; i++) {
+    if(NumericVector::is_na(covariate[i])) {
+      q[i+1] = q[i];
+    } else {
+      pe[i] = covariate[i]-q[i];
+      q[i+1] = q[i] + alpha[i] * pe[i];
+    }
   }
-
   return q;
 }
 
@@ -54,17 +58,20 @@ NumericVector run_delta2kernel_rcpp(NumericVector q0, NumericVector alphaFast,
   q[0] = qFast[0] = qSlow[0] = q0[0];
   NumericVector alphaSlow = propSlow * alphaFast;
 
-  for(int i = 1; i < n; i++) {
-    peFast[i-1] = covariate[i-1] - qFast[i-1];
-    peSlow[i-1] = covariate[i-1] - qSlow[i-1];
-
-    qFast[i] = qFast[i-1] + alphaFast[i-1] * peFast[i-1];
-    qSlow[i] = qSlow[i-1] + alphaSlow[i-1] * peSlow[i-1];
-
-    if(std::abs(qFast[i] - qSlow[i]) > dSwitch[i]) {
-      q[i] = qFast[i];
+  for(int i = 0; i < n-1; i++) {
+    if(NumericVector::is_na(covariate[i])) {
+      qFast[i+1] = qFast[i];
+      qSlow[i+1] = qSlow[i];
     } else {
-      q[i] = qSlow[i];
+      peFast[i] = covariate[i] - qFast[i];
+      peSlow[i] = covariate[i] - qSlow[i];
+      qFast[i+1] = qFast[i] + alphaFast[i] * peFast[i];
+      qSlow[i+1] = qSlow[i] + alphaSlow[i] * peSlow[i];
+    }
+    if(std::abs(qFast[i+1] - qSlow[i+1]) > dSwitch[i+1]) {
+      q[i+1] = qFast[i+1];
+    } else {
+      q[i+1] = qSlow[i+1];
     }
   }
 
@@ -79,10 +86,14 @@ NumericVector run_delta2lr_rcpp(NumericVector q0, NumericVector alphaPos,
   NumericVector pe(n);
   double alpha;
   q[0] = q0[0];
-  for(int i = 1; i < n; i++) {
-    pe[i-1] = covariate[i-1] - q[i-1];
-    alpha = (pe[i-1] > 0) ? alphaPos[i-1] : alphaNeg[i-1];
-    q[i] = q[i-1] + alpha * pe[i-1];
+  for(int i = 1; i < n-1; i++) {
+    if(NumericVector::is_na(covariate[i])) {
+      q[i+1] = q[i];
+    } else {
+      pe[i] = covariate[i] - q[i];
+      alpha = (pe[i] > 0) ? alphaPos[i] : alphaNeg[i];
+      q[i+1] = q[i] + alpha * pe[i];
+    }
   }
 
   return q;
@@ -214,24 +225,76 @@ NumericMatrix run_kernel_rcpp(NumericMatrix kernel_pars,
     NumericVector cov_comp = input_comp(_, c);
     NumericVector comp_out(n_comp); // zeros by default
 
-    // SM: Ensure that delta rule is applied to last trial, so that
-    // the result of the second-last update can be carried forward
-    if (std::regex_match(kern_c, learning_kerns_re)) {
-      if(NumericVector::is_na(cov_comp[n_comp-1])) {
-        cov_comp[n_comp-1] = 0;
+    if(std::regex_match(kern_c, learning_kerns_re)) {
+      // Sequential kernels: No pre-filtering of NA, handle NA values in kernel
+      if (kernel == "delta") {
+        comp_out = run_delta_rcpp(/*q0*/kp_comp(_,0), /*alpha*/kp_comp(_,1), cov_comp);
+      } else if (kernel == "delta2kernel") {
+        comp_out = run_delta2kernel_rcpp(/*q0*/kp_comp(_,0), /*alphaSlow*/kp_comp(_,1), /*propSlow*/kp_comp(_,2), /*dSwitch*/kp_comp(_,3), cov_comp);
+      } else if (kernel == "delta2lr") {
+        comp_out = run_delta2lr_rcpp(/*q0*/kp_comp(_,0), /*alphaPos*/kp_comp(_,1), /*alphaNeg*/kp_comp(_,2), cov_comp);
+      } else if (std::regex_match(kern_c, beta_binom_kerns_re)) {
+        // beta binomial learning model variants
+        bool return_map = false, return_surprise = false;
+        if (std::regex_match(kern_c, std::regex("_surprise$"))) {
+          return_surprise = true;
+        }
+        if (std::regex_match(kern_c, std::regex("^beta_binom_map"))) {
+          return_map = true;
+        }
+        comp_out = run_beta_binomial(
+          cov_comp,
+          // a0, b0, decay, window
+          kp_comp(_,0), kp_comp(_,1), kp_comp(_,2), kp_comp(_,3),
+          return_map, return_surprise
+        );
+      } else if (std::regex_match(kern_c, dbm_kerns_re)) {
+        // Dynamic Belief Model variants
+        bool return_map = false, return_surprise = false;
+        if (std::regex_match(kern_c, std::regex("_surprise$"))) {
+          return_surprise = true;
+        }
+        if (std::regex_match(kern_c, std::regex("^dbm_map"))) {
+          return_map = true;
+        }
+        comp_out = run_dbm(
+          cov_comp,
+          // cp, mu0, s0
+          kp_comp(_,0), kp_comp(_,1), kp_comp(_,2),
+          return_map, return_surprise
+        );
+      } else if (std::regex_match(kern_c, tpm_kerns_re)) {
+        // Transition Probability Model variants
+        const bool return_surprise = (kernel == "tpm_surprise") ? true : false;
+        comp_out = run_tpm(
+          cov_comp,
+          // cp, a0, b0
+          kp_comp(_,0), kp_comp(_,1), kp_comp(_,2),
+          return_surprise
+        );
       }
-    }
 
-    LogicalVector good = !is_na(cov_comp);
-    const int n_good = sum(good);
-    if (n_good > 0) {
-      // Build param subset for good rows (can be 0 columns)
-      NumericMatrix kp_good = submat_rcpp(kp_comp, good);
-      // Map from comp row index -> position within good subset
-      std::vector<int> good_pos(n_comp, -1);
-      for (int i = 0, pos = 0; i < n_comp; ++i) if (good[i]) good_pos[i] = pos++;
+      if(!ffill_na) {
+        // If, for whatever reason, the user wants NA-values to be set to 0, we can still do this.
+        LogicalVector good = !is_na(cov_comp);
+        // otherwise, apply forward fill
+        for (int i = 1; i < n_comp; ++i) {
+          if(!good[i]) comp_out[i] = 0;
+        }
+      }
 
-      {
+    } else {
+
+      // non-sequential kernels: Apply NA filtering and ffill logic if needed
+      LogicalVector good = !is_na(cov_comp);
+      const int n_good = sum(good);
+      if (n_good > 0) {
+        // Build param subset for good rows (can be 0 columns)
+        NumericMatrix kp_good = submat_rcpp(kp_comp, good);
+        // Map from comp row index -> position within good subset
+        std::vector<int> good_pos(n_comp, -1);
+        for (int i = 0, pos = 0; i < n_comp; ++i) if (good[i]) good_pos[i] = pos++;
+
         // Built-in kernels on good rows only
         if (kernel == "lin_decr") {
           for (int i = 0; i < n_comp; ++i) if (good[i]) comp_out[i] = -cov_comp[i];
@@ -272,137 +335,16 @@ NumericMatrix run_kernel_rcpp(NumericMatrix kernel_pars,
             int r = good_pos[i];
             comp_out[i] = kp_good(r, 0) * cov_comp[i] + kp_good(r, 1) * std::pow(cov_comp[i], 2) + kp_good(r, 2) * std::pow(cov_comp[i], 3) + kp_good(r, 3) * std::pow(cov_comp[i], 4);
           }
-        } else if (kernel == "delta") {
-          // Build vectors for q0, alpha on good rows
-          NumericVector q0(n_good), alpha(n_good), covg(n_good);
-          int pos = 0;
-          for (int i = 0; i < n_comp; ++i) if (good[i]) {
-            q0[pos] = kp_good(pos, 0);
-            alpha[pos] = kp_good(pos, 1);
-            covg[pos] = cov_comp[i];
-            ++pos;
-          }
-          NumericVector tmp = run_delta_rcpp(q0, alpha, covg);
-          // first value is *always* q0
-          comp_out[0] = kernel_pars(0, 0);
-          pos = 0;
-          for (int i = 0; i < n_comp; ++i) if (good[i]) comp_out[i] = tmp[pos++];
-        } else if (kernel == "delta2kernel") {
-          NumericVector q0(n_good), aF(n_good), pS(n_good), dS(n_good), covg(n_good);
-          int pos = 0;
-          for (int i = 0; i < n_comp; ++i) if (good[i]) {
-            q0[pos] = kp_good(pos, 0);
-            aF[pos] = kp_good(pos, 1);
-            pS[pos] = kp_good(pos, 2);
-            dS[pos] = kp_good(pos, 3);
-            covg[pos] = cov_comp[i];
-            ++pos;
-          }
-          NumericVector tmp = run_delta2kernel_rcpp(q0, aF, pS, dS, covg);
-          // first value is *always* q0
-          comp_out[0] = kernel_pars(0, 0);
-          pos = 0;
-          for (int i = 0; i < n_comp; ++i) if (good[i]) comp_out[i] = tmp[pos++];
-        } else if (kernel == "delta2lr") {
-          NumericVector q0(n_good), alphaPos(n_good), alphaNeg(n_good), covg(n_good);
-          int pos = 0;
-          for (int i = 0; i < n_comp; ++i) if (good[i]) {
-            q0[pos] = kp_good(pos, 0);
-            alphaPos[pos] = kp_good(pos, 1);
-            alphaNeg[pos] = kp_good(pos, 2);
-            covg[pos] = cov_comp[i];
-            ++pos;
-          }
-          NumericVector tmp = run_delta2lr_rcpp(q0, alphaPos, alphaNeg, covg);
-          // first value is *always* q0
-          comp_out[0] = kernel_pars(0, 0);
-          pos = 0;
-          for (int i = 0; i < n_comp; ++i) if (good[i]) comp_out[i] = tmp[pos++];
-        } else if (std::regex_match(kern_c, beta_binom_kerns_re)) {
-          // beta binomial learning model variants
-          NumericVector covg(n_good), a0(n_good), b0(n_good), decay(n_good), window(n_good);
-          int pos = 0;
-          for (int i = 0; i < n_comp; ++i) if (good[i]) {
-            covg[pos] = cov_comp[i];
-            a0[pos] = kp_good(pos, 0);
-            b0[pos] = kp_good(pos, 1);
-            decay[pos] = kp_good(pos, 2);
-            window[pos] = kp_good(pos, 3);
-            ++pos;
-          }
-          bool return_map = false, return_surprise = false;
-          if (std::regex_match(kern_c, std::regex("_surprise$"))) {
-            return_surprise = true;
-          }
-          if (std::regex_match(kern_c, std::regex("^beta_binom_map"))) {
-            return_map = true;
-          }
-          NumericVector tmp = run_beta_binomial(
-            covg, a0, b0, decay, window, return_map, return_surprise
-          );
-          pos = 0;
-          for (int i = 0; i < n_comp; ++i) if (good[i]) comp_out[i] = tmp[pos++];
-        } else if (std::regex_match(kern_c, dbm_kerns_re)) {
-          // Dynamic Belief Model variants
-          NumericVector covg(n_good), cp(n_good), mu0(n_good), s0(n_good);
-          int pos = 0;
-          for (int i = 0; i < n_comp; ++i) if (good[i]) {
-            covg[pos] = cov_comp[i];
-            cp[pos] = kp_good(pos, 0);
-            mu0[pos] = kp_good(pos, 1);
-            s0[pos] = kp_good(pos, 2);
-            ++pos;
-          }
-          bool return_map = false, return_surprise = false;
-          if (std::regex_match(kern_c, std::regex("_surprise$"))) {
-            return_surprise = true;
-          }
-          if (std::regex_match(kern_c, std::regex("^dbm_map"))) {
-            return_map = true;
-          }
-          NumericVector tmp = run_dbm(
-            covg, cp, mu0, s0, return_map, return_surprise
-          );
-          pos = 0;
-          for (int i = 0; i < n_comp; ++i) if (good[i]) comp_out[i] = tmp[pos++];
-        } else if (std::regex_match(kern_c, tpm_kerns_re)) {
-          // Transition Probability Model variants
-          NumericVector covg(n_good), cp(n_good), a0(n_good), b0(n_good);
-          int pos = 0;
-          for (int i = 0; i < n_comp; ++i) if (good[i]) {
-            covg[pos] = cov_comp[i];
-            cp[pos] = kp_good(pos, 0);
-            a0[pos] = kp_good(pos, 1);
-            b0[pos] = kp_good(pos, 2);
-            ++pos;
-          }
-          const bool return_surprise = (kernel == "tpm_surprise") ? true : false;
-          NumericVector tmp = run_tpm(covg, cp, a0, b0, return_surprise);
-          pos = 0;
-          for (int i = 0; i < n_comp; ++i) if (good[i]) comp_out[i] = tmp[pos++];
         } else {
           stop("Unknown kernel type");
         }
-      }
-    } else {
-      // even without good values, should be set to q0
-      if (std::regex_match(kern_c, delta_kerns_re)) {
-        comp_out[0] = kernel_pars(0, 0);
-      }
-    }
 
-    // Fill
-    if(ffill_na) {
-      if (std::regex_match(kern_c, learning_kerns_re)) {
-        // for these kernels we need to backward fill
-        for (int i = n_comp-2; i > 0; --i) {
-          // the last value (comp_out[n_comp]) is always valid, since it was forced to be updated
-          if(!good[i]) comp_out[i] = comp_out[i+1];
-        }
-      } else {
-        // otherwise, apply forward fill
-        for (int i = 1; i < n_comp; ++i) {
-          if(!good[i]) comp_out[i] = comp_out[i-1];
+        // Fill
+        if(ffill_na) {
+          // otherwise, apply forward fill
+          for (int i = 1; i < n_comp; ++i) {
+            if(!good[i]) comp_out[i] = comp_out[i-1];
+          }
         }
       }
     }
@@ -424,7 +366,8 @@ NumericMatrix run_kernel_rcpp(NumericMatrix kernel_pars,
 
 // Now accepts the full parameter matrix `pars_full` so we can use par_input columns as inputs too.
 // Passes all inputs (covariates + par_input) to kernel in one call; kernel sums across columns.
-NumericVector run_trend_rcpp(DataFrame data, List trend, NumericVector param, NumericMatrix trend_pars, NumericMatrix pars_full) {
+// [[Rcpp::export]]
+NumericVector run_trend_rcpp(DataFrame data, List trend, NumericVector param, NumericMatrix trend_pars, NumericMatrix pars_full, bool return_kernel = false) {
   String kernel = as<String>(trend["kernel"]);
   String base = as<String>(trend["base"]);
   // Extract optional custom pointer attribute if present
@@ -529,6 +472,8 @@ NumericVector run_trend_rcpp(DataFrame data, List trend, NumericVector param, Nu
     // Run kernel
     NumericMatrix kernel_out = run_kernel_rcpp(kernel_pars, kernel, input_all, custom_ptr, first_level,
                                                has_maps, ffill_na);
+    if (return_kernel) return kernel_out;
+
     int n_rows = kernel_out.nrow();
     int n_cols = kernel_out.ncol();
 
