@@ -157,6 +157,45 @@ run_dbm <- function(
   return(out)
 }
 
+run_tpm_nocp <- function(
+    covariate, a0, b0, return_surprise
+) {
+  n_total <- length(covariate)
+  n_hit_XX <- n_trial_XX <- n_hit_XY <- n_trial_XY <- 0
+  for (t in seq_len(n_total)) {
+    a_XX <- a0[t] + n_hit_XX
+    b_XX <- b0[t] + (n_trial_XX - n_hit_XX)
+    a_XY <- a0[t] + n_hit_XY
+    b_XY <- b0[t] + (n_trial_XY - n_hit_XY)
+    if (t == 1) {
+      out[t] <- beta_mean(a_XX, b_XX)
+      next
+    }
+    prev <- covariate[(t - 1)]
+    curr <- covariate[t]
+    if (prev == 1) {
+      out[t] <- beta_mean(a_XX, b_XX)
+    } else {
+      out[t] <- beta_mean(a_XY, b_XY)
+    }
+    if (prev == 1) {
+      n_trial_XX <- n_trial_XX + 1
+      if (curr == 1) {
+        n_hit_XX <- n_hit_XX + 1
+      }
+    } else {
+      n_trial_XY <- n_trial_XY + 1
+      if (curr == 1) {
+        n_hit_XY <- n_hit_XY + 1
+      }
+    }
+  }
+  if (return_surprise) {
+    out <- shannon_surprise(out, covariate)
+  }
+  return(out)
+}
+
 run_tpm <- function(
     covariate, cp, a0, b0, return_surprise = FALSE
 ) {
@@ -172,39 +211,7 @@ run_tpm <- function(
 
   # when cp = 0, fallback to simple beta-binomial over transitions
   if (all(cp < cp_eps)) {
-    n_hit_XX <- n_trial_XX <- n_hit_XY <- n_trial_XY <- 0
-    for (t in seq_len(n_total)) {
-      a_XX <- a0[t] + n_hit_XX
-      b_XX <- b0[t] + (n_trial_XX - n_hit_XX)
-      a_XY <- a0[t] + n_hit_XY
-      b_XY <- b0[t] + (n_trial_XY - n_hit_XY)
-      if (t == 1) {
-        out[t] <- beta_mean(a_XX, b_XX)
-        next
-      }
-      prev <- covariate[(t - 1)]
-      curr <- covariate[t]
-      if (prev == 1) {
-        out[t] <- beta_mean(a_XX, b_XX)
-      } else {
-        out[t] <- beta_mean(a_XY, b_XY)
-      }
-      if (prev == 1) {
-        n_trial_XX <- n_trial_XX + 1
-        if (curr == 1) {
-          n_hit_XX <- n_hit_XX + 1
-        }
-      } else {
-        n_trial_XY <- n_trial_XY + 1
-        if (curr == 1) {
-          n_hit_XY <- n_hit_XY + 1
-        }
-      }
-    }
-    if (return_surprise) {
-      out <- shannon_surprise(out, covariate)
-    }
-    return(out)
+    return(run_tpm_nocp(covariate, a0, b0, return_surprise))
   }
 
   # when cp = 1, predictions are constant, determined purely by fixed prior
