@@ -182,6 +182,7 @@ mapper_wrapper <- function(map, by_subject = FALSE, par_mcmc, design, n_trials =
 
   pars <- res$pars
   data <- res$data
+
   if(!by_subject){
     data$subjects <- 1
     factor(data$subjects)
@@ -248,6 +249,7 @@ mapper_wrapper <- function(map, by_subject = FALSE, par_mcmc, design, n_trials =
     out <- list()
     idx <- data$subjects == sub
     for(i in 1:n_pars){
+      cur_pars <- matrix(pars[idx,,i], nrow = sum(idx))
       # First case, map = TRUE
       if(isTRUE(map[i]) || is.character(map[[i]])){
         if(isTRUE(map[i])){
@@ -261,16 +263,16 @@ mapper_wrapper <- function(map, by_subject = FALSE, par_mcmc, design, n_trials =
           cells <- interaction(df[idx,vars], sep = "_", drop = TRUE, lex.order = TRUE)
           g <- nlevels(cells)
           ng <- as.vector(table(cells))
-          res <- rowsum(pars[idx,,i], cells) / ng            # (g x k)
+          res <- rowsum(cur_pars, cells) / ng            # (g x k)
 
         } else{
-          res <- colMeans(pars[idx,,i])
+          res <- colMeans(cur_pars)
         }
       } else{ # Third case map is a formula
         S  <- model.matrix(map[[i]], data = data[idx,])
         ng <- colSums(S)
         # g x k means:
-        res <- (t(S) %*% pars[idx,,i]) / ng
+        res <- (t(S) %*% cur_pars) / ng
       }
       if(is.vector(res)){
         res <- t(res)
@@ -327,11 +329,13 @@ par_data_map <- function(par_mcmc, design, n_trials = NULL, data = NULL,
     if ( is.null(model()$p_types) ) stop("model()$p_types must be specified")
     if ( is.null(model()$Ttransform) ) stop("model()$Ttransform must be specified")
   }
-  data <- do.call(rbind, lapply(split(data, data$subjects), function(x){
-    x <- x[!duplicated(x[,colnames(x) != "rt"]),]
-    return(x)
-  }))
-  data <- add_trials(data[order(data$subjects),])
+  if(ncol(data) > 1){
+    data <- do.call(rbind, lapply(split(data, data$subjects), function(x){
+      x <- x[!duplicated(x[,colnames(x) != "rt"]),]
+      return(x)
+    }))
+  }
+  data <- add_trials(data[order(data$subjects),, drop = F])
 
 
   model <- design$model
