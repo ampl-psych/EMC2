@@ -121,14 +121,12 @@ NumericMatrix run_kernel_rcpp(NumericMatrix kernel_pars,
                               NumericMatrix input,
                               SEXP funptrSEXP = R_NilValue,
                               LogicalVector first_level_mask = LogicalVector(),
-                              bool has_map = false,
-                              // NumericMatrix map_input = NumericMatrix(0,0),
                               bool ffill_na = false) {
   // Kernels accept any number of input columns; apply per column and sum contributions.
   const int n = input.nrow();
   const int p = input.ncol();
   NumericMatrix out;
-  if (kernel == "custom" || has_map == false) {
+  if (kernel == "custom") {
     out = NumericMatrix(n, 1);
   } else {
     out = NumericMatrix(n, p);
@@ -149,8 +147,6 @@ NumericMatrix run_kernel_rcpp(NumericMatrix kernel_pars,
   // Compressed inputs/params if at is used
   NumericMatrix input_comp = submat_rcpp(input, comp_rows);
   NumericMatrix kp_comp = submat_rcpp(kernel_pars, comp_rows);
-  // bool has_map = (map_input.size() > 0);
-  // NumericMatrix map_comp = has_map ? submat_rcpp(map_input, comp_rows) : NumericMatrix(0,0);
   const int n_comp = input_comp.nrow();
 
   // Custom kernel path: take all inputs at once (matrix), exclude rows with any NA, no map
@@ -297,12 +293,7 @@ NumericMatrix run_kernel_rcpp(NumericMatrix kernel_pars,
     // expand comp_out back to full n rows and add
     for (int i = 0; i < n; ++i) {
       int idx = expand_idx[i] - 1; // 0-based
-      if(has_map == false) {
-        // if no covariate map needs to be applied, immediately sum across columns
-        out(i,0) += comp_out[idx];
-      } else {
-        out(i,c) += comp_out[idx];
-      }
+      out(i,c) += comp_out[idx];
     }
   }
 
@@ -416,8 +407,7 @@ NumericVector run_trend_rcpp(DataFrame data, List trend, NumericVector param, Nu
     }
 
     // Run kernel
-    NumericMatrix kernel_out = run_kernel_rcpp(kernel_pars, kernel, input_all, custom_ptr, first_level,
-                                               has_maps, ffill_na);
+    NumericMatrix kernel_out = run_kernel_rcpp(kernel_pars, kernel, input_all, custom_ptr, first_level, ffill_na);
     if(return_kernel) return kernel_out;
 
     int n_rows = kernel_out.nrow();
@@ -458,37 +448,6 @@ NumericVector run_trend_rcpp(DataFrame data, List trend, NumericVector param, Nu
         }
       }
     }
-
-    // // handle mappings
-    // List covariate_maps = data.attr("covariate_maps");
-    // // Loop over covariate maps or a single default
-    // int n_loops = has_map ? n_maps : 1;
-    // for (int map_n = 0; map_n < n_loops; ++map_n) {
-    //   NumericMatrix covariate_map;
-    //   if (has_map) {
-    //     std::string map_name = as<std::string>(map_names[map_n]);
-    //     if (Rf_isNull(covariate_maps[map_name])) {
-    //       stop("No map named '%s' found in covariate_maps", map_name.c_str());
-    //     }
-    //     covariate_map = as<NumericMatrix>(covariate_maps[map_name]);
-    //   }
-    //
-    //   for (int c = 0; c < kernel_out.ncol(); ++c) {
-    //     NumericVector contrib = kernel_out(_, c);
-    //
-    //     // Multiply contibution with covariate map, if exists
-    //     if (has_map) contrib = contrib * covariate_map(_, c);
-    //
-    //     // Apply base parameter to contribution
-    //     if (base == "lin" || base == "exp_lin") {
-    //       contrib = contrib * trend_pars(_, 0 + map_n);
-    //     } else if (base == "centered") {
-    //       contrib = (contrib - 0.5) * trend_pars(_, 0 + map_n);
-    //     } // "add" just leaves contrib as is
-    //
-    //     out += contrib;
-    //   }
-    // }
   }
 
   // Add parameter to obtain final summed input
