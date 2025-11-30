@@ -33,10 +33,11 @@ shannon_surprise <- function(pred, obs) {
 run_beta_binomial <- function(
     covariate, a0, b0, decay, window, return_map = FALSE, return_surprise = FALSE
 ) {
-  n_total <- length(covariate)
-  if (!all(covariate) %in% c(0, 1)) {
-    stop("All `covariate` entries must be 0 or 1.")
+  if (!all(covariate %in% c(0, 1) | is.na(covariate))) {
+    stop("All `covariate` entries that are not NA must be 0 or 1.")
   }
+
+  n_total <- length(covariate)
   use_decay <- any(decay > 0)
   use_window <- any(window > 0)
   if (use_decay && use_window) {
@@ -51,7 +52,7 @@ run_beta_binomial <- function(
   for (t in seq_len(n_total)) {
     # if applicable, prune memory based on current memory window
     if (use_window) {
-      while (length(buf[["obs"]]) > 0 && (t - buf[["idx"]][1]) >= window[t]) {
+      while (length(buf[["obs"]]) > 0 && (t - buf[["idx"]][1]) > window[t]) {
         n_hit <- n_hit - buf[["obs"]][1]
         n_trial <- n_trial - 1
         buf[["obs"]] <- buf[["obs"]][-1]
@@ -66,8 +67,18 @@ run_beta_binomial <- function(
     } else {
       out[t] <- beta_mean(a_t, b_t)
     }
-    # if current trial is NA, there is nothing to learn, so move on
+    # if current trial is NA, special handling of update
     if (is.na(covariate[t])) {
+      # since exponential decay can be thought of as time-based forgetting,
+      # we still apply decay to n_hit and n_trial to account for passage of time
+      if (use_decay) {
+        n_hit <- exp(-1 / decay[t]) * n_hit
+        n_trial <- exp(-1 / decay[t]) * n_trial
+      }
+      # since sliding window is modelling memory capacity for actual observed
+      # evidence, not time-based decay, we do not update anything in case of
+      # missing observation
+      # Same for basic Beta-Binomial model
       next
     }
     # update after observing trial t depends on decay / window memory constraints
@@ -97,17 +108,17 @@ run_beta_binomial <- function(
 run_dbm <- function(
     covariate, cp, mu0, s0, return_map = FALSE, return_surprise = FALSE
 ) {
+  if (!all(covariate %in% c(0, 1) | is.na(covariate))) {
+    stop("All `covariate` entries that are not NA must be 0 or 1.")
+  }
+
   if (return_map) {
     grid_res <- 500
   } else {
     grid_res <- 100
   }
   cp_eps <- 1e-10
-
   n_total <- length(covariate)
-  if (!all(covariate) %in% c(0, 1)) {
-    stop("All `covariate` entries must be 0 or 1.")
-  }
 
   a <- mu0 * s0
   b <- (1 - mu0) * s0
@@ -213,14 +224,13 @@ run_tpm_nocp <- function(
 run_tpm <- function(
     covariate, cp, a0, b0, return_surprise = FALSE
 ) {
-  grid_res <- 100
-  cp_eps <- 1e-10
-
-  n_total <- length(covariate)
-  if (!all(covariate) %in% c(0, 1)) {
-    stop("All `covariate` entries must be 0 or 1.")
+  if (!all(covariate %in% c(0, 1) | is.na(covariate))) {
+    stop("All `covariate` entries that are not NA must be 0 or 1.")
   }
 
+  grid_res <- 100
+  cp_eps <- 1e-10
+  n_total <- length(covariate)
   out <- numeric(n_total)
 
   # when cp = 0, fallback to simple beta-binomial over transitions
