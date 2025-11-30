@@ -1569,14 +1569,12 @@ apply_kernel <- function(kernel_pars, emc, subject=1, input_pars=NULL, trend_n=1
   }
 
 
-  out_c <- out_R <- NULL
-  if(mode %in% c('Rcpp', 'compare')) {
-    out_c <- run_trend_rcpp(data = dadm, trend=trend, param=param, trend_pars=trend_pars, pars_full = pars_full, return_kernel = TRUE)
-  } else if(mode %in% c('R', 'compare')) {
-    out_R <- run_trend(dadm = dadm, trend=trend, param=param, trend_pars=trend_pars, pars_full = pars_full, return_kernel = TRUE)
+  if(mode %in% c('Rcpp')) {
+    out <- run_trend_rcpp(data = dadm, trend=trend, param=param, trend_pars=trend_pars, pars_full = pars_full, return_kernel = TRUE)
+  } else if(mode %in% c('R')) {
+    out <- run_trend(dadm = dadm, trend=trend, param=param, trend_pars=trend_pars, pars_full = pars_full, return_kernel = TRUE)
   }
-
-  if(mode == 'Rcpp') return(out_c)
-  if(mode == 'R') return(out_R)
+  colnames(out) <- trend$covariates
+  out
 }
 

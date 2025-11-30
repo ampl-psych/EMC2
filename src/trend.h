@@ -86,7 +86,7 @@ NumericVector run_delta2lr_rcpp(NumericVector q0, NumericVector alphaPos,
   NumericVector pe(n);
   double alpha;
   q[0] = q0[0];
-  for(int i = 1; i < n-1; i++) {
+  for(int i = 0; i < n-1; i++) {
     if(NumericVector::is_na(covariate[i])) {
       q[i+1] = q[i];
     } else {
