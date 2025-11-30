@@ -160,7 +160,11 @@ run_dbm <- function(
       out[t] <- sum(prob_grid * DBM_pred)
     }
     if (is.na(covariate[t])) {
-      # perhaps controversial, needs more thought
+      # NB for missing observation, the predictive distribution is pushed forward
+      # as the next trial's "posterior". This essentially results in slight forgeting
+      # of past observations: After a streak of missing observations, the posterior
+      # will converge to the fixed prior.
+      # See Zhou, Guo, & Yu, 2020, Cogsci, for earlier work on this.
       DBM_post <- DBM_pred
     } else if (covariate[t] == 1) {
       DBM_post <- normalise(DBM_pred * x_like)
