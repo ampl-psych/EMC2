@@ -111,14 +111,7 @@ run_dbm <- function(
   if (!all(covariate %in% c(0, 1) | is.na(covariate))) {
     stop("All `covariate` entries that are not NA must be 0 or 1.")
   }
-
-  if (return_map) {
-    grid_res <- 500
-  } else {
-    grid_res <- 100
-  }
   cp_eps <- 1e-10
-  n_total <- length(covariate)
 
   a <- mu0 * s0
   b <- (1 - mu0) * s0
@@ -142,6 +135,12 @@ run_dbm <- function(
   }
 
   # actual DBM
+  if (return_map) {
+    grid_res <- 500
+  } else {
+    grid_res <- 100
+  }
+  n_total <- length(covariate)
   out <- numeric(n_total)
   prob_grid <- (0:grid_res) / grid_res
   x_like <- prob_grid
@@ -183,6 +182,7 @@ run_tpm_nocp <- function(
     covariate, a0, b0, return_surprise
 ) {
   n_total <- length(covariate)
+  out <- numeric(n_total)
   n_hit_XX <- n_trial_XX <- n_hit_XY <- n_trial_XY <- 0
   for (t in seq_len(n_total)) {
     a_XX <- a0[t] + n_hit_XX
@@ -232,10 +232,7 @@ run_tpm <- function(
     stop("All `covariate` entries that are not NA must be 0 or 1.")
   }
 
-  grid_res <- 100
   cp_eps <- 1e-10
-  n_total <- length(covariate)
-  out <- numeric(n_total)
 
   # when cp = 0, fallback to simple beta-binomial over transitions
   if (all(cp < cp_eps)) {
@@ -252,6 +249,9 @@ run_tpm <- function(
   }
 
   # actual TPM
+  grid_res <- 100
+  n_total <- length(covariate)
+  out <- numeric(n_total)
   prob_grid <- (0:grid_res) / grid_res
   n_grid <- length(prob_grid)
   p_XX <- p_XY <- like_XX <- like_XY <- like_YY <- like_YX <- numeric(n_grid^2)
@@ -302,7 +302,6 @@ run_tpm <- function(
     }
     if (t > 1) {
       if (is.na(curr)) {
-        # perhaps controversial, needs more discussion
         TPM_post <- TPM_pred
         next
       }
