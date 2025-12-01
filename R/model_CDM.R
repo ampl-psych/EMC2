@@ -91,7 +91,7 @@ small_t_fpt <- function(t_scaled, x_scaled, bessel = NULL) {
   t <- pmax(as.numeric(t_scaled), 0)
   x <- as.numeric(x_scaled)
 
-  term1 <- ((1 - x) * (1 + t)) / (sqrt(x + t) * (t^(1.5)))
+  term1 <- ((1 - x) * (1 + t)^2) / (sqrt(x + t) * (t^(1.5)))
   term2 <- exp(-0.5 * (1 - x)^2 / t - 0.5 * zeros1 * zeros1 * t)
   out <- term1 * term2
   out[!is.finite(out)] <- 0
@@ -228,7 +228,7 @@ CDM <- function(){
         sigma= c(1e-4, Inf),
         sv   = c(0, 2)
       ),
-      exception = c(sv = 0)
+      exception = c(sv = 0, t0 = 0)
     ),
     Ttransform = function(pars, dadm) { pars },
     # Random function: directly call rCDM with per-trial parameters
