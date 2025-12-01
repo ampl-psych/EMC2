@@ -14,6 +14,8 @@ reference:
   - RDM
   - DDMGNG
   - SDT
+  - SSexG
+  - SShybrid
 - title: Design and Mapping
 - contents:
   - design
@@ -23,6 +25,29 @@ reference:
   - plot.emc.design
   - summary.emc.design
   - get_design
+- title: fMRI
+- contents:
+  - reshape_events
+  - convolve_design_matrix
+  - split_timeseries
+  - high_pass_filter
+  - design_fmri
+  - MRI
+  - MRI_AR1
+  - plot_design_fmri
+  - plot_fmri
+- title: Latent Variable Modelling
+- contents:
+  - align_loadings
+  - rotate_loadings
+  - make_SEM_diagram
+  - make_sem_structure
+- title: Group Design
+- contents:
+  - group_design
+  - get_group_design
+  - summary.emc.group_design
+  - sampled_pars.emc.group_design
 - title: Prior Specification
 - contents:
   - prior
@@ -32,12 +57,19 @@ reference:
   - get_prior
   - prior_help
   - credint.emc.prior
+- title: Trends
+- contents:
+  - make_trend
+  - trend_help
+  - get_trend_pnames
+  - register_trend
 - title: Estimation
 - contents:
   - init_chains
   - make_emc
   - fit
   - run_emc
+  - run_hyper
 - title: Model checking
 - contents:
   - check
@@ -57,6 +89,7 @@ reference:
   - plot_relations
   - merge_chains
   - subset.emc
+  - auto_thin
   - auto_thin.emc
 - title: Data Generation and Recovery
 - contents:
@@ -65,6 +98,7 @@ reference:
   - make_data
   - make_random_effects
   - recovery
+  - get_data
   - get_data.emc
   - profile_plot
 - title: Model Fit
@@ -72,6 +106,19 @@ reference:
   - plot_density
   - plot_cdf
   - plot_stat
+  - plot_caf
+  - plot_delta
+  - plot_ss_if
+  - plot_ss_srrt
+  - plot_trend
+  - plot_design
+  - plot.emc.design
+  - plot.emc.prior
+  - plot.emc
+  - plot_pars
+  - plot_relations
+  - plot_design_fmri
+  - plot_fmri
 - title: Model Comparison
 - contents:
   - compare

@@ -4,7 +4,7 @@
 
 * Addressed a major issue in `map = TRUE`, so that now mapping of population level parameters is now done correctly. See issue #119
 
-# New features
+## New features
 
 * More general support for `group_design` (tutorial on the way), also using `map = TRUE`
 
