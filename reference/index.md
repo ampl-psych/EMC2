@@ -1,0 +1,300 @@
+# Package index
+
+## Models
+
+- [`DDM()`](https://ampl-psych.github.io/EMC2/reference/DDM.md) : The
+  Diffusion Decision Model
+- [`LBA()`](https://ampl-psych.github.io/EMC2/reference/LBA.md) : The
+  Linear Ballistic Accumulator model
+- [`LNR()`](https://ampl-psych.github.io/EMC2/reference/LNR.md) : The
+  Log-Normal Race Model
+- [`RDM()`](https://ampl-psych.github.io/EMC2/reference/RDM.md) : The
+  Racing Diffusion Model
+- [`DDMGNG()`](https://ampl-psych.github.io/EMC2/reference/DDMGNG.md) :
+  The GNG (go/nogo) Diffusion Decision Model
+- [`SDT()`](https://ampl-psych.github.io/EMC2/reference/SDT.md) :
+  Gaussian Signal Detection Theory Model for Binary Responses
+
+## Design and Mapping
+
+- [`design()`](https://ampl-psych.github.io/EMC2/reference/design.md) :
+  Specify a Design and Model
+- [`mapped_pars()`](https://ampl-psych.github.io/EMC2/reference/mapped_pars.md)
+  : Parameter Mapping Back to the Design Factors
+- [`sampled_pars()`](https://ampl-psych.github.io/EMC2/reference/sampled_pars.md)
+  : Get Model Parameters from a Design
+- [`plot_design()`](https://ampl-psych.github.io/EMC2/reference/plot_design.md)
+  : Plot Design
+- [`plot(`*`<emc.design>`*`)`](https://ampl-psych.github.io/EMC2/reference/plot.emc.design.md)
+  : Plot method for emc.design objects
+- [`summary(`*`<emc.design>`*`)`](https://ampl-psych.github.io/EMC2/reference/summary.emc.design.md)
+  : Summary method for emc.design objects
+- [`get_design()`](https://ampl-psych.github.io/EMC2/reference/get_design.md)
+  : Get Design
+
+## fMRI
+
+- [`reshape_events()`](https://ampl-psych.github.io/EMC2/reference/reshape_events.md)
+  : Reshape events data for fMRI analysis
+- [`convolve_design_matrix()`](https://ampl-psych.github.io/EMC2/reference/convolve_design_matrix.md)
+  : Convolve Events with HRF to Construct Design Matrices
+- [`split_timeseries()`](https://ampl-psych.github.io/EMC2/reference/split_timeseries.md)
+  : Split fMRI Timeseries Data by ROI Columns
+- [`high_pass_filter()`](https://ampl-psych.github.io/EMC2/reference/high_pass_filter.md)
+  : Apply High-Pass Filtering to fMRI Data
+- [`design_fmri()`](https://ampl-psych.github.io/EMC2/reference/design_fmri.md)
+  : Create fMRI Design for EMC2 Sampling
+- [`MRI()`](https://ampl-psych.github.io/EMC2/reference/MRI.md) : GLM
+  model for fMRI data
+- [`MRI_AR1()`](https://ampl-psych.github.io/EMC2/reference/MRI_AR1.md)
+  : Create an AR(1) GLM model for fMRI data
+- [`plot_design_fmri()`](https://ampl-psych.github.io/EMC2/reference/plot_design_fmri.md)
+  : Plot fMRI Design Matrix
+- [`plot_fmri()`](https://ampl-psych.github.io/EMC2/reference/plot_fmri.md)
+  : Plot fMRI peri-stimulus time courses
+
+## Latent Variable Modelling
+
+- [`align_loadings()`](https://ampl-psych.github.io/EMC2/reference/align_loadings.md)
+  : Reorder MCMC Samples of Factor Loadings
+- [`rotate_loadings()`](https://ampl-psych.github.io/EMC2/reference/rotate_loadings.md)
+  : Rotate loadings based on posterior median
+- [`make_SEM_diagram()`](https://ampl-psych.github.io/EMC2/reference/make_SEM_diagram.md)
+  : Make SEM Diagram
+- [`make_sem_structure()`](https://ampl-psych.github.io/EMC2/reference/make_sem_structure.md)
+  : Define Structural Equation Model (SEM) Matrices
+
+## Group Design
+
+- [`group_design()`](https://ampl-psych.github.io/EMC2/reference/group_design.md)
+  : Create Group-Level Design Matrices
+- [`get_group_design()`](https://ampl-psych.github.io/EMC2/reference/get_group_design.md)
+  : Get Group Design
+- [`summary(`*`<emc.group_design>`*`)`](https://ampl-psych.github.io/EMC2/reference/summary.emc.group_design.md)
+  : Summary method for emc.group_design objects
+- [`sampled_pars()`](https://ampl-psych.github.io/EMC2/reference/sampled_pars.md)
+  : Get Model Parameters from a Design
+
+## Prior Specification
+
+- [`prior()`](https://ampl-psych.github.io/EMC2/reference/prior.md) :
+  Specify Priors for the Chosen Model
+- [`summary(`*`<emc.prior>`*`)`](https://ampl-psych.github.io/EMC2/reference/summary.emc.prior.md)
+  : Summary method for emc.prior objects
+- [`plot(`*`<emc.prior>`*`)`](https://ampl-psych.github.io/EMC2/reference/plot.emc.prior.md)
+  : Plot a prior
+- [`predict(`*`<emc.prior>`*`)`](https://ampl-psych.github.io/EMC2/reference/predict.emc.md)
+  [`predict(`*`<emc>`*`)`](https://ampl-psych.github.io/EMC2/reference/predict.emc.md)
+  : Generate Posterior/Prior Predictives
+- [`get_prior()`](https://ampl-psych.github.io/EMC2/reference/get_prior.md)
+  : Get Prior
+- [`prior_help()`](https://ampl-psych.github.io/EMC2/reference/prior_help.md)
+  : Prior Specification Information
+- [`credint()`](https://ampl-psych.github.io/EMC2/reference/credint.md)
+  : Posterior Quantiles
+
+## Trends
+
+- [`make_trend()`](https://ampl-psych.github.io/EMC2/reference/make_trend.md)
+  : Create a trend specification for model parameters
+- [`trend_help()`](https://ampl-psych.github.io/EMC2/reference/trend_help.md)
+  : Get help information for trend kernels and bases
+- [`get_trend_pnames()`](https://ampl-psych.github.io/EMC2/reference/get_trend_pnames.md)
+  : Get parameter types from trend object
+- [`register_trend()`](https://ampl-psych.github.io/EMC2/reference/register_trend.md)
+  : Register a custom C++ trend kernel
+
+## Estimation
+
+- [`init_chains()`](https://ampl-psych.github.io/EMC2/reference/init_chains.md)
+  : Initialize Chains
+- [`make_emc()`](https://ampl-psych.github.io/EMC2/reference/make_emc.md)
+  : Make an emc Object
+- [`fit()`](https://ampl-psych.github.io/EMC2/reference/fit.md) : Model
+  Estimation in EMC2
+- [`run_emc()`](https://ampl-psych.github.io/EMC2/reference/run_emc.md)
+  : Fine-Tuned Model Estimation
+- [`run_hyper()`](https://ampl-psych.github.io/EMC2/reference/run_hyper.md)
+  : Run a Group-level Model.
+
+## Model checking
+
+- [`check()`](https://ampl-psych.github.io/EMC2/reference/check.md) :
+  Convergence Checks for an emc Object
+- [`summary(`*`<emc>`*`)`](https://ampl-psych.github.io/EMC2/reference/summary.emc.md)
+  : Summary Statistics for emc Objects
+- [`credint()`](https://ampl-psych.github.io/EMC2/reference/credint.md)
+  : Posterior Quantiles
+- [`ess_summary()`](https://ampl-psych.github.io/EMC2/reference/ess_summary.md)
+  : Effective Sample Size
+- [`gd_summary()`](https://ampl-psych.github.io/EMC2/reference/gd_summary.md)
+  : Gelman-Rubin Statistic
+- [`chain_n()`](https://ampl-psych.github.io/EMC2/reference/chain_n.md)
+  : MCMC Chain Iterations
+- [`plot(`*`<emc>`*`)`](https://ampl-psych.github.io/EMC2/reference/plot.emc.md)
+  : Plot Function for emc Objects
+- [`pairs_posterior()`](https://ampl-psych.github.io/EMC2/reference/pairs_posterior.md)
+  : Plot Within-Chain Correlations
+
+## Posterior Inference
+
+- [`credint()`](https://ampl-psych.github.io/EMC2/reference/credint.md)
+  : Posterior Quantiles
+- [`parameters()`](https://ampl-psych.github.io/EMC2/reference/parameters.md)
+  : Return Data Frame of Parameters
+- [`get_pars()`](https://ampl-psych.github.io/EMC2/reference/get_pars.md)
+  : Filter/Manipulate Parameters from emc Object
+- [`plot_pars()`](https://ampl-psych.github.io/EMC2/reference/plot_pars.md)
+  : Plots Density for Parameters
+- [`plot_relations()`](https://ampl-psych.github.io/EMC2/reference/plot_relations.md)
+  : Plot Group-Level Relations
+- [`merge_chains()`](https://ampl-psych.github.io/EMC2/reference/merge_chains.md)
+  : Merge Samples
+- [`subset(`*`<emc>`*`)`](https://ampl-psych.github.io/EMC2/reference/subset.emc.md)
+  : Shorten an emc Object
+- [`auto_thin()`](https://ampl-psych.github.io/EMC2/reference/auto_thin.md)
+  : Automatically Thin an emc Object
+
+## Data Generation and Recovery
+
+- [`predict(`*`<emc.prior>`*`)`](https://ampl-psych.github.io/EMC2/reference/predict.emc.md)
+  [`predict(`*`<emc>`*`)`](https://ampl-psych.github.io/EMC2/reference/predict.emc.md)
+  : Generate Posterior/Prior Predictives
+- [`recovery()`](https://ampl-psych.github.io/EMC2/reference/recovery.md)
+  : Recovery Plots
+- [`make_data()`](https://ampl-psych.github.io/EMC2/reference/make_data.md)
+  : Simulate Data
+- [`make_random_effects()`](https://ampl-psych.github.io/EMC2/reference/make_random_effects.md)
+  : Generate Subject-Level Parameters
+- [`get_data()`](https://ampl-psych.github.io/EMC2/reference/get_data.md)
+  : Get Data
+- [`profile_plot()`](https://ampl-psych.github.io/EMC2/reference/profile_plot.md)
+  : Likelihood Profile Plots
+
+## Model Fit
+
+- [`plot_density()`](https://ampl-psych.github.io/EMC2/reference/plot_density.md)
+  : Plot Defective Densities
+- [`plot_cdf()`](https://ampl-psych.github.io/EMC2/reference/plot_cdf.md)
+  : Plot Defective Cumulative Distribution Functions
+- [`plot_stat()`](https://ampl-psych.github.io/EMC2/reference/plot_stat.md)
+  : Plot Statistics on Data
+- [`plot_caf()`](https://ampl-psych.github.io/EMC2/reference/plot_caf.md)
+  : Plot conditional accuracy functions
+- [`plot_delta()`](https://ampl-psych.github.io/EMC2/reference/plot_delta.md)
+  : Plot Difference of Cumulative Distribution Functions
+- [`plot_ss_if()`](https://ampl-psych.github.io/EMC2/reference/plot_ss_if.md)
+  : Plot Inhibition Functions
+- [`plot_ss_srrt()`](https://ampl-psych.github.io/EMC2/reference/plot_ss_srrt.md)
+  : Plot Mean SRRT
+- [`plot_trend()`](https://ampl-psych.github.io/EMC2/reference/plot_trend.md)
+  : Plots trends over time
+- [`plot_design()`](https://ampl-psych.github.io/EMC2/reference/plot_design.md)
+  : Plot Design
+- [`plot(`*`<emc.design>`*`)`](https://ampl-psych.github.io/EMC2/reference/plot.emc.design.md)
+  : Plot method for emc.design objects
+- [`plot(`*`<emc.prior>`*`)`](https://ampl-psych.github.io/EMC2/reference/plot.emc.prior.md)
+  : Plot a prior
+- [`plot(`*`<emc>`*`)`](https://ampl-psych.github.io/EMC2/reference/plot.emc.md)
+  : Plot Function for emc Objects
+- [`plot_pars()`](https://ampl-psych.github.io/EMC2/reference/plot_pars.md)
+  : Plots Density for Parameters
+- [`plot_relations()`](https://ampl-psych.github.io/EMC2/reference/plot_relations.md)
+  : Plot Group-Level Relations
+- [`plot_design_fmri()`](https://ampl-psych.github.io/EMC2/reference/plot_design_fmri.md)
+  : Plot fMRI Design Matrix
+- [`plot_fmri()`](https://ampl-psych.github.io/EMC2/reference/plot_fmri.md)
+  : Plot fMRI peri-stimulus time courses
+
+## Model Comparison
+
+- [`compare()`](https://ampl-psych.github.io/EMC2/reference/compare.md)
+  : Information Criteria and Marginal Likelihoods
+- [`compare_subject()`](https://ampl-psych.github.io/EMC2/reference/compare_subject.md)
+  : Information Criteria For Each Participant
+- [`model_averaging()`](https://ampl-psych.github.io/EMC2/reference/model_averaging.md)
+  : Model Averaging
+- [`run_bridge_sampling()`](https://ampl-psych.github.io/EMC2/reference/run_bridge_sampling.md)
+  : Estimating Marginal Likelihoods Using WARP-III Bridge Sampling
+- [`get_BayesFactor()`](https://ampl-psych.github.io/EMC2/reference/get_BayesFactor.md)
+  : Bayes Factors
+- [`credible()`](https://ampl-psych.github.io/EMC2/reference/credible.md)
+  : Posterior Credible Interval Tests
+- [`hypothesis()`](https://ampl-psych.github.io/EMC2/reference/hypothesis.md)
+  : Within-Model Hypothesis Testing
+
+## Contrasts
+
+- [`contr.anova()`](https://ampl-psych.github.io/EMC2/reference/contr.anova.md)
+  : Anova Style Contrast Matrix
+- [`contr.bayes()`](https://ampl-psych.github.io/EMC2/reference/contr.bayes.md)
+  : Contrast Enforcing Equal Prior Variance on each Level
+- [`contr.decreasing()`](https://ampl-psych.github.io/EMC2/reference/contr.decreasing.md)
+  : Contrast Enforcing Decreasing Estimates
+- [`contr.increasing()`](https://ampl-psych.github.io/EMC2/reference/contr.increasing.md)
+  : Contrast Enforcing Increasing Estimates
+
+## Simulation-based calibration
+
+- [`plot_sbc_ecdf()`](https://ampl-psych.github.io/EMC2/reference/plot_sbc_ecdf.md)
+  : Plot the ECDF Difference in SBC Ranks
+- [`plot_sbc_hist()`](https://ampl-psych.github.io/EMC2/reference/plot_sbc_hist.md)
+  : Plot the Histogram of the Observed Rank Statistics of SBC
+- [`run_sbc()`](https://ampl-psych.github.io/EMC2/reference/run_sbc.md)
+  : Simulation-Based Calibration
+
+## fMRI modelling
+
+- [`MRI()`](https://ampl-psych.github.io/EMC2/reference/MRI.md) : GLM
+  model for fMRI data
+- [`MRI_AR1()`](https://ampl-psych.github.io/EMC2/reference/MRI_AR1.md)
+  : Create an AR(1) GLM model for fMRI data
+- [`convolve_design_matrix()`](https://ampl-psych.github.io/EMC2/reference/convolve_design_matrix.md)
+  : Convolve Events with HRF to Construct Design Matrices
+- [`design_fmri()`](https://ampl-psych.github.io/EMC2/reference/design_fmri.md)
+  : Create fMRI Design for EMC2 Sampling
+- [`high_pass_filter()`](https://ampl-psych.github.io/EMC2/reference/high_pass_filter.md)
+  : Apply High-Pass Filtering to fMRI Data
+- [`plot_design_fmri()`](https://ampl-psych.github.io/EMC2/reference/plot_design_fmri.md)
+  : Plot fMRI Design Matrix
+- [`plot_fmri()`](https://ampl-psych.github.io/EMC2/reference/plot_fmri.md)
+  : Plot fMRI peri-stimulus time courses
+- [`reshape_events()`](https://ampl-psych.github.io/EMC2/reference/reshape_events.md)
+  : Reshape events data for fMRI analysis
+- [`split_timeseries()`](https://ampl-psych.github.io/EMC2/reference/split_timeseries.md)
+  : Split fMRI Timeseries Data by ROI Columns
+
+## trend modelling
+
+- [`make_trend()`](https://ampl-psych.github.io/EMC2/reference/make_trend.md)
+  : Create a trend specification for model parameters
+- [`trend_help()`](https://ampl-psych.github.io/EMC2/reference/trend_help.md)
+  : Get help information for trend kernels and bases
+- [`get_trend_pnames()`](https://ampl-psych.github.io/EMC2/reference/get_trend_pnames.md)
+  : Get parameter types from trend object
+
+## Latent variable modelling
+
+- [`align_loadings()`](https://ampl-psych.github.io/EMC2/reference/align_loadings.md)
+  : Reorder MCMC Samples of Factor Loadings
+
+- [`cut_factors()`](https://ampl-psych.github.io/EMC2/reference/cut_factors.md)
+  : Cut Factors Based on Credible Loadings
+
+- [`factor_diagram()`](https://ampl-psych.github.io/EMC2/reference/factor_diagram.md)
+  :
+
+  Factor diagram plot \#Makes a factor diagram plot. Heavily based on
+  the fa.diagram function of the `psych` package.
+
+## miscellaneous
+
+- [`update2version()`](https://ampl-psych.github.io/EMC2/reference/update2version.md)
+  : Update EMC Objects to the Current Version
+
+## Included data
+
+- [`forstmann`](https://ampl-psych.github.io/EMC2/reference/forstmann.md)
+  : Forstmann et al.'s Data
+- [`samples_LNR`](https://ampl-psych.github.io/EMC2/reference/samples_LNR.md)
+  : LNR Model of Forstmann Data (First 3 Subjects)

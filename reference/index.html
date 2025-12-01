@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">EMC2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">3.2.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">3.3.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -19,6 +19,7 @@
 <li class="nav-item dropdown">
   <button class="nav-link dropdown-toggle" type="button" id="dropdown-articles" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Articles</button>
   <ul class="dropdown-menu" aria-labelledby="dropdown-articles"><li><a class="dropdown-item" href="../articles/Simulation-based-Calibration.html">Simulation-based Calibration</a></li>
+    <li><a class="dropdown-item" href="../articles/trends.html">Trends</a></li>
   </ul></li>
 <li class="nav-item"><a class="nav-link" href="../news/index.html">Changelog</a></li>
       </ul><ul class="navbar-nav"><li class="nav-item"><form class="form-inline" role="search">
@@ -46,8 +47,7 @@
 
 
 
-
-    </div><div class="section level2">
+      <dl></dl></div><div class="section level2">
 
 
 
@@ -58,31 +58,36 @@
 
         </dt>
         <dd>The Diffusion Decision Model</dd>
-      </dl><dl><dt>
+
+        <dt>
 
           <code><a href="LBA.html">LBA()</a></code>
 
         </dt>
         <dd>The Linear Ballistic Accumulator model</dd>
-      </dl><dl><dt>
+
+        <dt>
 
           <code><a href="LNR.html">LNR()</a></code>
 
         </dt>
         <dd>The Log-Normal Race Model</dd>
-      </dl><dl><dt>
+
+        <dt>
 
           <code><a href="RDM.html">RDM()</a></code>
 
         </dt>
         <dd>The Racing Diffusion Model</dd>
-      </dl><dl><dt>
+
+        <dt>
 
           <code><a href="DDMGNG.html">DDMGNG()</a></code>
 
         </dt>
         <dd>The GNG (go/nogo) Diffusion Decision Model</dd>
-      </dl><dl><dt>
+
+        <dt>
 
           <code><a href="SDT.html">SDT()</a></code>
 
@@ -93,8 +98,7 @@
 
 
 
-
-    </div><div class="section level2">
+      <dl></dl></div><div class="section level2">
 
 
 
@@ -105,548 +109,126 @@
 
         </dt>
         <dd>Specify a Design and Model</dd>
-      </dl><dl><dt>
+
+        <dt>
 
           <code><a href="mapped_pars.html">mapped_pars()</a></code>
 
         </dt>
         <dd>Parameter Mapping Back to the Design Factors</dd>
-      </dl><dl><dt>
+
+        <dt>
 
           <code><a href="sampled_pars.html">sampled_pars()</a></code>
 
         </dt>
         <dd>Get Model Parameters from a Design</dd>
-      </dl><dl><dt>
+
+        <dt>
 
           <code><a href="plot_design.html">plot_design()</a></code>
 
         </dt>
         <dd>Plot Design</dd>
-      </dl><dl><dt>
+
+        <dt>
 
           <code><a href="plot.emc.design.html">plot(<i>&lt;emc.design&gt;</i>)</a></code>
 
         </dt>
         <dd>Plot method for emc.design objects</dd>
-      </dl><dl><dt>
+
+        <dt>
 
           <code><a href="summary.emc.design.html">summary(<i>&lt;emc.design&gt;</i>)</a></code>
 
         </dt>
         <dd>Summary method for emc.design objects</dd>
-      </dl><dl><dt>
+
+        <dt>
 
           <code><a href="get_design.html">get_design()</a></code>
 
         </dt>
         <dd>Get Design</dd>
-      </dl><dl><dt>
-
-          <code><a href="group_design.html">group_design()</a></code>
-
-        </dt>
-        <dd>Create Group-Level Design Matrices</dd>
       </dl></div><div class="section level2">
-      <h2 id="prior-specification">Prior Specification<a class="anchor" aria-label="anchor" href="#prior-specification"></a></h2>
+      <h2 id="fmri">fMRI<a class="anchor" aria-label="anchor" href="#fmri"></a></h2>
 
 
 
-
-    </div><div class="section level2">
+      <dl></dl></div><div class="section level2">
 
 
 
 
       <dl><dt>
-
-          <code><a href="prior.html">prior()</a></code>
-
-        </dt>
-        <dd>Specify Priors for the Chosen Model</dd>
-      </dl><dl><dt>
-
-          <code><a href="summary.emc.prior.html">summary(<i>&lt;emc.prior&gt;</i>)</a></code>
-
-        </dt>
-        <dd>Summary method for emc.prior objects</dd>
-      </dl><dl><dt>
-
-          <code><a href="plot.emc.prior.html">plot(<i>&lt;emc.prior&gt;</i>)</a></code>
-
-        </dt>
-        <dd>Plot a prior</dd>
-      </dl><dl><dt>
-
-          <code><a href="predict.emc.html">predict(<i>&lt;emc.prior&gt;</i>)</a></code> <code><a href="predict.emc.html">predict(<i>&lt;emc&gt;</i>)</a></code>
-
-        </dt>
-        <dd>Generate Posterior/Prior Predictives</dd>
-      </dl><dl><dt>
-
-          <code><a href="get_prior.html">get_prior()</a></code>
-
-        </dt>
-        <dd>Get Prior</dd>
-      </dl><dl><dt>
-
-          <code><a href="prior_help.html">prior_help()</a></code>
-
-        </dt>
-        <dd>Prior Specification Information</dd>
-      </dl><dl><dt>
-
-          <code><a href="credint.html">credint()</a></code>
-
-        </dt>
-        <dd>Posterior Quantiles</dd>
-      </dl></div><div class="section level2">
-      <h2 id="estimation">Estimation<a class="anchor" aria-label="anchor" href="#estimation"></a></h2>
-
-
-
-
-    </div><div class="section level2">
-
-
-
-
-      <dl><dt>
-
-          <code><a href="init_chains.html">init_chains()</a></code>
-
-        </dt>
-        <dd>Initialize Chains</dd>
-      </dl><dl><dt>
-
-          <code><a href="make_emc.html">make_emc()</a></code>
-
-        </dt>
-        <dd>Make an emc Object</dd>
-      </dl><dl><dt>
-
-          <code><a href="fit.html">fit()</a></code>
-
-        </dt>
-        <dd>Model Estimation in EMC2</dd>
-      </dl><dl><dt>
-
-          <code><a href="run_emc.html">run_emc()</a></code>
-
-        </dt>
-        <dd>Fine-Tuned Model Estimation</dd>
-      </dl></div><div class="section level2">
-      <h2 id="model-checking">Model checking<a class="anchor" aria-label="anchor" href="#model-checking"></a></h2>
-
-
-
-
-    </div><div class="section level2">
-
-
-
-
-      <dl><dt>
-
-          <code><a href="check.html">check()</a></code>
-
-        </dt>
-        <dd>Convergence Checks for an emc Object</dd>
-      </dl><dl><dt>
-
-          <code><a href="summary.emc.html">summary(<i>&lt;emc&gt;</i>)</a></code>
-
-        </dt>
-        <dd>Summary Statistics for emc Objects</dd>
-      </dl><dl><dt>
-
-          <code><a href="credint.html">credint()</a></code>
-
-        </dt>
-        <dd>Posterior Quantiles</dd>
-      </dl><dl><dt>
-
-          <code><a href="ess_summary.html">ess_summary()</a></code>
-
-        </dt>
-        <dd>Effective Sample Size</dd>
-      </dl><dl><dt>
-
-          <code><a href="gd_summary.html">gd_summary()</a></code>
-
-        </dt>
-        <dd>Gelman-Rubin Statistic</dd>
-      </dl><dl><dt>
-
-          <code><a href="chain_n.html">chain_n()</a></code>
-
-        </dt>
-        <dd>MCMC Chain Iterations</dd>
-      </dl><dl><dt>
-
-          <code><a href="plot.emc.html">plot(<i>&lt;emc&gt;</i>)</a></code>
-
-        </dt>
-        <dd>Plot Function for emc Objects</dd>
-      </dl><dl><dt>
-
-          <code><a href="pairs_posterior.html">pairs_posterior()</a></code>
-
-        </dt>
-        <dd>Plot Within-Chain Correlations</dd>
-      </dl></div><div class="section level2">
-      <h2 id="posterior-inference">Posterior Inference<a class="anchor" aria-label="anchor" href="#posterior-inference"></a></h2>
-
-
-
-
-    </div><div class="section level2">
-
-
-
-
-      <dl><dt>
-
-          <code><a href="credint.html">credint()</a></code>
-
-        </dt>
-        <dd>Posterior Quantiles</dd>
-      </dl><dl><dt>
-
-          <code><a href="parameters.html">parameters()</a></code>
-
-        </dt>
-        <dd>Return Data Frame of Parameters</dd>
-      </dl><dl><dt>
-
-          <code><a href="get_pars.html">get_pars()</a></code>
-
-        </dt>
-        <dd>Filter/Manipulate Parameters from emc Object</dd>
-      </dl><dl><dt>
-
-          <code><a href="plot_pars.html">plot_pars()</a></code>
-
-        </dt>
-        <dd>Plots Density for Parameters</dd>
-      </dl><dl><dt>
-
-          <code><a href="plot_relations.html">plot_relations()</a></code>
-
-        </dt>
-        <dd>Plot Group-Level Relations</dd>
-      </dl><dl><dt>
-
-          <code><a href="merge_chains.html">merge_chains()</a></code>
-
-        </dt>
-        <dd>Merge Samples</dd>
-      </dl><dl><dt>
-
-          <code><a href="subset.emc.html">subset(<i>&lt;emc&gt;</i>)</a></code>
-
-        </dt>
-        <dd>Shorten an emc Object</dd>
-      </dl><dl><dt>
-
-          <code><a href="auto_thin.html">auto_thin()</a></code>
-
-        </dt>
-        <dd>Automatically Thin an emc Object</dd>
-      </dl></div><div class="section level2">
-      <h2 id="data-generation-and-recovery">Data Generation and Recovery<a class="anchor" aria-label="anchor" href="#data-generation-and-recovery"></a></h2>
-
-
-
-
-    </div><div class="section level2">
-
-
-
-
-      <dl><dt>
-
-          <code><a href="predict.emc.html">predict(<i>&lt;emc.prior&gt;</i>)</a></code> <code><a href="predict.emc.html">predict(<i>&lt;emc&gt;</i>)</a></code>
-
-        </dt>
-        <dd>Generate Posterior/Prior Predictives</dd>
-      </dl><dl><dt>
-
-          <code><a href="recovery.html">recovery()</a></code>
-
-        </dt>
-        <dd>Recovery Plots</dd>
-      </dl><dl><dt>
-
-          <code><a href="make_data.html">make_data()</a></code>
-
-        </dt>
-        <dd>Simulate Data</dd>
-      </dl><dl><dt>
-
-          <code><a href="make_random_effects.html">make_random_effects()</a></code>
-
-        </dt>
-        <dd>Generate Subject-Level Parameters</dd>
-      </dl><dl><dt>
-
-          <code><a href="get_data.html">get_data()</a></code>
-
-        </dt>
-        <dd>Get Data</dd>
-      </dl><dl><dt>
-
-          <code><a href="profile_plot.html">profile_plot()</a></code>
-
-        </dt>
-        <dd>Likelihood Profile Plots</dd>
-      </dl></div><div class="section level2">
-      <h2 id="model-fit">Model Fit<a class="anchor" aria-label="anchor" href="#model-fit"></a></h2>
-
-
-
-
-    </div><div class="section level2">
-
-
-
-
-      <dl><dt>
-
-          <code><a href="plot_density.html">plot_density()</a></code>
-
-        </dt>
-        <dd>Plot Defective Densities</dd>
-      </dl><dl><dt>
-
-          <code><a href="plot_cdf.html">plot_cdf()</a></code>
-
-        </dt>
-        <dd>Plot Defective Cumulative Distribution Functions</dd>
-      </dl><dl><dt>
-
-          <code><a href="plot_stat.html">plot_stat()</a></code>
-
-        </dt>
-        <dd>Plot Statistics on Data</dd>
-      </dl></div><div class="section level2">
-      <h2 id="model-comparison">Model Comparison<a class="anchor" aria-label="anchor" href="#model-comparison"></a></h2>
-
-
-
-
-    </div><div class="section level2">
-
-
-
-
-      <dl><dt>
-
-          <code><a href="compare.html">compare()</a></code>
-
-        </dt>
-        <dd>Information Criteria and Marginal Likelihoods</dd>
-      </dl><dl><dt>
-
-          <code><a href="compare_subject.html">compare_subject()</a></code>
-
-        </dt>
-        <dd>Information Criteria For Each Participant</dd>
-      </dl><dl><dt>
-
-          <code><a href="model_averaging.html">model_averaging()</a></code>
-
-        </dt>
-        <dd>Model Averaging</dd>
-      </dl><dl><dt>
-
-          <code><a href="run_bridge_sampling.html">run_bridge_sampling()</a></code>
-
-        </dt>
-        <dd>Estimating Marginal Likelihoods Using WARP-III Bridge Sampling</dd>
-      </dl><dl><dt>
-
-          <code><a href="get_BayesFactor.html">get_BayesFactor()</a></code>
-
-        </dt>
-        <dd>Bayes Factors</dd>
-      </dl><dl><dt>
-
-          <code><a href="credible.html">credible()</a></code>
-
-        </dt>
-        <dd>Posterior Credible Interval Tests</dd>
-      </dl><dl><dt>
-
-          <code><a href="hypothesis.html">hypothesis()</a></code>
-
-        </dt>
-        <dd>Within-Model Hypothesis Testing</dd>
-      </dl></div><div class="section level2">
-      <h2 id="contrasts">Contrasts<a class="anchor" aria-label="anchor" href="#contrasts"></a></h2>
-
-
-
-
-    </div><div class="section level2">
-
-
-
-
-      <dl><dt>
-
-          <code><a href="contr.anova.html">contr.anova()</a></code>
-
-        </dt>
-        <dd>Anova Style Contrast Matrix</dd>
-      </dl><dl><dt>
-
-          <code><a href="contr.bayes.html">contr.bayes()</a></code>
-
-        </dt>
-        <dd>Contrast Enforcing Equal Prior Variance on each Level</dd>
-      </dl><dl><dt>
-
-          <code><a href="contr.decreasing.html">contr.decreasing()</a></code>
-
-        </dt>
-        <dd>Contrast Enforcing Decreasing Estimates</dd>
-      </dl><dl><dt>
-
-          <code><a href="contr.increasing.html">contr.increasing()</a></code>
-
-        </dt>
-        <dd>Contrast Enforcing Increasing Estimates</dd>
-      </dl></div><div class="section level2">
-      <h2 id="simulation-based-calibration">Simulation-based calibration<a class="anchor" aria-label="anchor" href="#simulation-based-calibration"></a></h2>
-
-
-
-
-    </div><div class="section level2">
-
-
-
-
-      <dl><dt>
-
-          <code><a href="plot_sbc_ecdf.html">plot_sbc_ecdf()</a></code>
-
-        </dt>
-        <dd>Plot the ECDF Difference in SBC Ranks</dd>
-      </dl><dl><dt>
-
-          <code><a href="plot_sbc_hist.html">plot_sbc_hist()</a></code>
-
-        </dt>
-        <dd>Plot the Histogram of the Observed Rank Statistics of SBC</dd>
-      </dl><dl><dt>
-
-          <code><a href="run_sbc.html">run_sbc()</a></code>
-
-        </dt>
-        <dd>Simulation-Based Calibration</dd>
-      </dl></div><div class="section level2">
-      <h2 id="fmri-modelling">fMRI modelling<a class="anchor" aria-label="anchor" href="#fmri-modelling"></a></h2>
-
-
-
-
-    </div><div class="section level2">
-
-
-
-
-      <dl><dt>
-
-          <code><a href="MRI.html">MRI()</a></code>
-
-        </dt>
-        <dd>GLM model for fMRI data</dd>
-      </dl><dl><dt>
-
-          <code><a href="MRI_AR1.html">MRI_AR1()</a></code>
-
-        </dt>
-        <dd>Create an AR(1) GLM model for fMRI data</dd>
-      </dl><dl><dt>
-
-          <code><a href="convolve_design_matrix.html">convolve_design_matrix()</a></code>
-
-        </dt>
-        <dd>Convolve Events with HRF to Construct Design Matrices</dd>
-      </dl><dl><dt>
-
-          <code><a href="design_fmri.html">design_fmri()</a></code>
-
-        </dt>
-        <dd>Create fMRI Design for EMC2 Sampling</dd>
-      </dl><dl><dt>
-
-          <code><a href="high_pass_filter.html">high_pass_filter()</a></code>
-
-        </dt>
-        <dd>Apply High-Pass Filtering to fMRI Data</dd>
-      </dl><dl><dt>
-
-          <code><a href="plot_design_fmri.html">plot_design_fmri()</a></code>
-
-        </dt>
-        <dd>Plot fMRI Design Matrix</dd>
-      </dl><dl><dt>
-
-          <code><a href="plot_fmri.html">plot_fmri()</a></code>
-
-        </dt>
-        <dd>Plot fMRI peri-stimulus time courses</dd>
-      </dl><dl><dt>
 
           <code><a href="reshape_events.html">reshape_events()</a></code>
 
         </dt>
         <dd>Reshape events data for fMRI analysis</dd>
-      </dl><dl><dt>
+
+        <dt>
+
+          <code><a href="convolve_design_matrix.html">convolve_design_matrix()</a></code>
+
+        </dt>
+        <dd>Convolve Events with HRF to Construct Design Matrices</dd>
+
+        <dt>
 
           <code><a href="split_timeseries.html">split_timeseries()</a></code>
 
         </dt>
         <dd>Split fMRI Timeseries Data by ROI Columns</dd>
+
+        <dt>
+
+          <code><a href="high_pass_filter.html">high_pass_filter()</a></code>
+
+        </dt>
+        <dd>Apply High-Pass Filtering to fMRI Data</dd>
+
+        <dt>
+
+          <code><a href="design_fmri.html">design_fmri()</a></code>
+
+        </dt>
+        <dd>Create fMRI Design for EMC2 Sampling</dd>
+
+        <dt>
+
+          <code><a href="MRI.html">MRI()</a></code>
+
+        </dt>
+        <dd>GLM model for fMRI data</dd>
+
+        <dt>
+
+          <code><a href="MRI_AR1.html">MRI_AR1()</a></code>
+
+        </dt>
+        <dd>Create an AR(1) GLM model for fMRI data</dd>
+
+        <dt>
+
+          <code><a href="plot_design_fmri.html">plot_design_fmri()</a></code>
+
+        </dt>
+        <dd>Plot fMRI Design Matrix</dd>
+
+        <dt>
+
+          <code><a href="plot_fmri.html">plot_fmri()</a></code>
+
+        </dt>
+        <dd>Plot fMRI peri-stimulus time courses</dd>
       </dl></div><div class="section level2">
-      <h2 id="trend-modelling">trend modelling<a class="anchor" aria-label="anchor" href="#trend-modelling"></a></h2>
+      <h2 id="latent-variable-modelling">Latent Variable Modelling<a class="anchor" aria-label="anchor" href="#latent-variable-modelling"></a></h2>
 
 
 
-
-    </div><div class="section level2">
-
-
-
-
-      <dl><dt>
-
-          <code><a href="make_trend.html">make_trend()</a></code>
-
-        </dt>
-        <dd>Create a trend specification for model parameters</dd>
-      </dl><dl><dt>
-
-          <code><a href="trend_help.html">trend_help()</a></code>
-
-        </dt>
-        <dd>Get help information for trend kernels and bases</dd>
-      </dl><dl><dt>
-
-          <code><a href="get_trend_pnames.html">get_trend_pnames()</a></code>
-
-        </dt>
-        <dd>Get parameter types from trend object</dd>
-      </dl></div><div class="section level2">
-      <h2 id="latent-variable-modelling">Latent variable modelling<a class="anchor" aria-label="anchor" href="#latent-variable-modelling"></a></h2>
-
-
-
-
-    </div><div class="section level2">
+      <dl></dl></div><div class="section level2">
 
 
 
@@ -657,13 +239,757 @@
 
         </dt>
         <dd>Reorder MCMC Samples of Factor Loadings</dd>
-      </dl><dl><dt>
+
+        <dt>
+
+          <code><a href="rotate_loadings.html">rotate_loadings()</a></code>
+
+        </dt>
+        <dd>Rotate loadings based on posterior median</dd>
+
+        <dt>
+
+          <code><a href="make_SEM_diagram.html">make_SEM_diagram()</a></code>
+
+        </dt>
+        <dd>Make SEM Diagram</dd>
+
+        <dt>
+
+          <code><a href="make_sem_structure.html">make_sem_structure()</a></code>
+
+        </dt>
+        <dd>Define Structural Equation Model (SEM) Matrices</dd>
+      </dl></div><div class="section level2">
+      <h2 id="group-design">Group Design<a class="anchor" aria-label="anchor" href="#group-design"></a></h2>
+
+
+
+      <dl></dl></div><div class="section level2">
+
+
+
+
+      <dl><dt>
+
+          <code><a href="group_design.html">group_design()</a></code>
+
+        </dt>
+        <dd>Create Group-Level Design Matrices</dd>
+
+        <dt>
+
+          <code><a href="get_group_design.html">get_group_design()</a></code>
+
+        </dt>
+        <dd>Get Group Design</dd>
+
+        <dt>
+
+          <code><a href="summary.emc.group_design.html">summary(<i>&lt;emc.group_design&gt;</i>)</a></code>
+
+        </dt>
+        <dd>Summary method for emc.group_design objects</dd>
+
+        <dt>
+
+          <code><a href="sampled_pars.html">sampled_pars()</a></code>
+
+        </dt>
+        <dd>Get Model Parameters from a Design</dd>
+      </dl></div><div class="section level2">
+      <h2 id="prior-specification">Prior Specification<a class="anchor" aria-label="anchor" href="#prior-specification"></a></h2>
+
+
+
+      <dl></dl></div><div class="section level2">
+
+
+
+
+      <dl><dt>
+
+          <code><a href="prior.html">prior()</a></code>
+
+        </dt>
+        <dd>Specify Priors for the Chosen Model</dd>
+
+        <dt>
+
+          <code><a href="summary.emc.prior.html">summary(<i>&lt;emc.prior&gt;</i>)</a></code>
+
+        </dt>
+        <dd>Summary method for emc.prior objects</dd>
+
+        <dt>
+
+          <code><a href="plot.emc.prior.html">plot(<i>&lt;emc.prior&gt;</i>)</a></code>
+
+        </dt>
+        <dd>Plot a prior</dd>
+
+        <dt>
+
+          <code><a href="predict.emc.html">predict(<i>&lt;emc.prior&gt;</i>)</a></code> <code><a href="predict.emc.html">predict(<i>&lt;emc&gt;</i>)</a></code>
+
+        </dt>
+        <dd>Generate Posterior/Prior Predictives</dd>
+
+        <dt>
+
+          <code><a href="get_prior.html">get_prior()</a></code>
+
+        </dt>
+        <dd>Get Prior</dd>
+
+        <dt>
+
+          <code><a href="prior_help.html">prior_help()</a></code>
+
+        </dt>
+        <dd>Prior Specification Information</dd>
+
+        <dt>
+
+          <code><a href="credint.html">credint()</a></code>
+
+        </dt>
+        <dd>Posterior Quantiles</dd>
+      </dl></div><div class="section level2">
+      <h2 id="trends">Trends<a class="anchor" aria-label="anchor" href="#trends"></a></h2>
+
+
+
+      <dl></dl></div><div class="section level2">
+
+
+
+
+      <dl><dt>
+
+          <code><a href="make_trend.html">make_trend()</a></code>
+
+        </dt>
+        <dd>Create a trend specification for model parameters</dd>
+
+        <dt>
+
+          <code><a href="trend_help.html">trend_help()</a></code>
+
+        </dt>
+        <dd>Get help information for trend kernels and bases</dd>
+
+        <dt>
+
+          <code><a href="get_trend_pnames.html">get_trend_pnames()</a></code>
+
+        </dt>
+        <dd>Get parameter types from trend object</dd>
+
+        <dt>
+
+          <code><a href="register_trend.html">register_trend()</a></code>
+
+        </dt>
+        <dd>Register a custom C++ trend kernel</dd>
+      </dl></div><div class="section level2">
+      <h2 id="estimation">Estimation<a class="anchor" aria-label="anchor" href="#estimation"></a></h2>
+
+
+
+      <dl></dl></div><div class="section level2">
+
+
+
+
+      <dl><dt>
+
+          <code><a href="init_chains.html">init_chains()</a></code>
+
+        </dt>
+        <dd>Initialize Chains</dd>
+
+        <dt>
+
+          <code><a href="make_emc.html">make_emc()</a></code>
+
+        </dt>
+        <dd>Make an emc Object</dd>
+
+        <dt>
+
+          <code><a href="fit.html">fit()</a></code>
+
+        </dt>
+        <dd>Model Estimation in EMC2</dd>
+
+        <dt>
+
+          <code><a href="run_emc.html">run_emc()</a></code>
+
+        </dt>
+        <dd>Fine-Tuned Model Estimation</dd>
+
+        <dt>
+
+          <code><a href="run_hyper.html">run_hyper()</a></code>
+
+        </dt>
+        <dd>Run a Group-level Model.</dd>
+      </dl></div><div class="section level2">
+      <h2 id="model-checking">Model checking<a class="anchor" aria-label="anchor" href="#model-checking"></a></h2>
+
+
+
+      <dl></dl></div><div class="section level2">
+
+
+
+
+      <dl><dt>
+
+          <code><a href="check.html">check()</a></code>
+
+        </dt>
+        <dd>Convergence Checks for an emc Object</dd>
+
+        <dt>
+
+          <code><a href="summary.emc.html">summary(<i>&lt;emc&gt;</i>)</a></code>
+
+        </dt>
+        <dd>Summary Statistics for emc Objects</dd>
+
+        <dt>
+
+          <code><a href="credint.html">credint()</a></code>
+
+        </dt>
+        <dd>Posterior Quantiles</dd>
+
+        <dt>
+
+          <code><a href="ess_summary.html">ess_summary()</a></code>
+
+        </dt>
+        <dd>Effective Sample Size</dd>
+
+        <dt>
+
+          <code><a href="gd_summary.html">gd_summary()</a></code>
+
+        </dt>
+        <dd>Gelman-Rubin Statistic</dd>
+
+        <dt>
+
+          <code><a href="chain_n.html">chain_n()</a></code>
+
+        </dt>
+        <dd>MCMC Chain Iterations</dd>
+
+        <dt>
+
+          <code><a href="plot.emc.html">plot(<i>&lt;emc&gt;</i>)</a></code>
+
+        </dt>
+        <dd>Plot Function for emc Objects</dd>
+
+        <dt>
+
+          <code><a href="pairs_posterior.html">pairs_posterior()</a></code>
+
+        </dt>
+        <dd>Plot Within-Chain Correlations</dd>
+      </dl></div><div class="section level2">
+      <h2 id="posterior-inference">Posterior Inference<a class="anchor" aria-label="anchor" href="#posterior-inference"></a></h2>
+
+
+
+      <dl></dl></div><div class="section level2">
+
+
+
+
+      <dl><dt>
+
+          <code><a href="credint.html">credint()</a></code>
+
+        </dt>
+        <dd>Posterior Quantiles</dd>
+
+        <dt>
+
+          <code><a href="parameters.html">parameters()</a></code>
+
+        </dt>
+        <dd>Return Data Frame of Parameters</dd>
+
+        <dt>
+
+          <code><a href="get_pars.html">get_pars()</a></code>
+
+        </dt>
+        <dd>Filter/Manipulate Parameters from emc Object</dd>
+
+        <dt>
+
+          <code><a href="plot_pars.html">plot_pars()</a></code>
+
+        </dt>
+        <dd>Plots Density for Parameters</dd>
+
+        <dt>
+
+          <code><a href="plot_relations.html">plot_relations()</a></code>
+
+        </dt>
+        <dd>Plot Group-Level Relations</dd>
+
+        <dt>
+
+          <code><a href="merge_chains.html">merge_chains()</a></code>
+
+        </dt>
+        <dd>Merge Samples</dd>
+
+        <dt>
+
+          <code><a href="subset.emc.html">subset(<i>&lt;emc&gt;</i>)</a></code>
+
+        </dt>
+        <dd>Shorten an emc Object</dd>
+
+        <dt>
+
+          <code><a href="auto_thin.html">auto_thin()</a></code>
+
+        </dt>
+        <dd>Automatically Thin an emc Object</dd>
+      </dl></div><div class="section level2">
+      <h2 id="data-generation-and-recovery">Data Generation and Recovery<a class="anchor" aria-label="anchor" href="#data-generation-and-recovery"></a></h2>
+
+
+
+      <dl></dl></div><div class="section level2">
+
+
+
+
+      <dl><dt>
+
+          <code><a href="predict.emc.html">predict(<i>&lt;emc.prior&gt;</i>)</a></code> <code><a href="predict.emc.html">predict(<i>&lt;emc&gt;</i>)</a></code>
+
+        </dt>
+        <dd>Generate Posterior/Prior Predictives</dd>
+
+        <dt>
+
+          <code><a href="recovery.html">recovery()</a></code>
+
+        </dt>
+        <dd>Recovery Plots</dd>
+
+        <dt>
+
+          <code><a href="make_data.html">make_data()</a></code>
+
+        </dt>
+        <dd>Simulate Data</dd>
+
+        <dt>
+
+          <code><a href="make_random_effects.html">make_random_effects()</a></code>
+
+        </dt>
+        <dd>Generate Subject-Level Parameters</dd>
+
+        <dt>
+
+          <code><a href="get_data.html">get_data()</a></code>
+
+        </dt>
+        <dd>Get Data</dd>
+
+        <dt>
+
+          <code><a href="profile_plot.html">profile_plot()</a></code>
+
+        </dt>
+        <dd>Likelihood Profile Plots</dd>
+      </dl></div><div class="section level2">
+      <h2 id="model-fit">Model Fit<a class="anchor" aria-label="anchor" href="#model-fit"></a></h2>
+
+
+
+      <dl></dl></div><div class="section level2">
+
+
+
+
+      <dl><dt>
+
+          <code><a href="plot_density.html">plot_density()</a></code>
+
+        </dt>
+        <dd>Plot Defective Densities</dd>
+
+        <dt>
+
+          <code><a href="plot_cdf.html">plot_cdf()</a></code>
+
+        </dt>
+        <dd>Plot Defective Cumulative Distribution Functions</dd>
+
+        <dt>
+
+          <code><a href="plot_stat.html">plot_stat()</a></code>
+
+        </dt>
+        <dd>Plot Statistics on Data</dd>
+
+        <dt>
+
+          <code><a href="plot_caf.html">plot_caf()</a></code>
+
+        </dt>
+        <dd>Plot conditional accuracy functions</dd>
+
+        <dt>
+
+          <code><a href="plot_delta.html">plot_delta()</a></code>
+
+        </dt>
+        <dd>Plot Difference of Cumulative Distribution Functions</dd>
+
+        <dt>
+
+          <code><a href="plot_ss_if.html">plot_ss_if()</a></code>
+
+        </dt>
+        <dd>Plot Inhibition Functions</dd>
+
+        <dt>
+
+          <code><a href="plot_ss_srrt.html">plot_ss_srrt()</a></code>
+
+        </dt>
+        <dd>Plot Mean SRRT</dd>
+
+        <dt>
+
+          <code><a href="plot_trend.html">plot_trend()</a></code>
+
+        </dt>
+        <dd>Plots trends over time</dd>
+
+        <dt>
+
+          <code><a href="plot_design.html">plot_design()</a></code>
+
+        </dt>
+        <dd>Plot Design</dd>
+
+        <dt>
+
+          <code><a href="plot.emc.design.html">plot(<i>&lt;emc.design&gt;</i>)</a></code>
+
+        </dt>
+        <dd>Plot method for emc.design objects</dd>
+
+        <dt>
+
+          <code><a href="plot.emc.prior.html">plot(<i>&lt;emc.prior&gt;</i>)</a></code>
+
+        </dt>
+        <dd>Plot a prior</dd>
+
+        <dt>
+
+          <code><a href="plot.emc.html">plot(<i>&lt;emc&gt;</i>)</a></code>
+
+        </dt>
+        <dd>Plot Function for emc Objects</dd>
+
+        <dt>
+
+          <code><a href="plot_pars.html">plot_pars()</a></code>
+
+        </dt>
+        <dd>Plots Density for Parameters</dd>
+
+        <dt>
+
+          <code><a href="plot_relations.html">plot_relations()</a></code>
+
+        </dt>
+        <dd>Plot Group-Level Relations</dd>
+
+        <dt>
+
+          <code><a href="plot_design_fmri.html">plot_design_fmri()</a></code>
+
+        </dt>
+        <dd>Plot fMRI Design Matrix</dd>
+
+        <dt>
+
+          <code><a href="plot_fmri.html">plot_fmri()</a></code>
+
+        </dt>
+        <dd>Plot fMRI peri-stimulus time courses</dd>
+      </dl></div><div class="section level2">
+      <h2 id="model-comparison">Model Comparison<a class="anchor" aria-label="anchor" href="#model-comparison"></a></h2>
+
+
+
+      <dl></dl></div><div class="section level2">
+
+
+
+
+      <dl><dt>
+
+          <code><a href="compare.html">compare()</a></code>
+
+        </dt>
+        <dd>Information Criteria and Marginal Likelihoods</dd>
+
+        <dt>
+
+          <code><a href="compare_subject.html">compare_subject()</a></code>
+
+        </dt>
+        <dd>Information Criteria For Each Participant</dd>
+
+        <dt>
+
+          <code><a href="model_averaging.html">model_averaging()</a></code>
+
+        </dt>
+        <dd>Model Averaging</dd>
+
+        <dt>
+
+          <code><a href="run_bridge_sampling.html">run_bridge_sampling()</a></code>
+
+        </dt>
+        <dd>Estimating Marginal Likelihoods Using WARP-III Bridge Sampling</dd>
+
+        <dt>
+
+          <code><a href="get_BayesFactor.html">get_BayesFactor()</a></code>
+
+        </dt>
+        <dd>Bayes Factors</dd>
+
+        <dt>
+
+          <code><a href="credible.html">credible()</a></code>
+
+        </dt>
+        <dd>Posterior Credible Interval Tests</dd>
+
+        <dt>
+
+          <code><a href="hypothesis.html">hypothesis()</a></code>
+
+        </dt>
+        <dd>Within-Model Hypothesis Testing</dd>
+      </dl></div><div class="section level2">
+      <h2 id="contrasts">Contrasts<a class="anchor" aria-label="anchor" href="#contrasts"></a></h2>
+
+
+
+      <dl></dl></div><div class="section level2">
+
+
+
+
+      <dl><dt>
+
+          <code><a href="contr.anova.html">contr.anova()</a></code>
+
+        </dt>
+        <dd>Anova Style Contrast Matrix</dd>
+
+        <dt>
+
+          <code><a href="contr.bayes.html">contr.bayes()</a></code>
+
+        </dt>
+        <dd>Contrast Enforcing Equal Prior Variance on each Level</dd>
+
+        <dt>
+
+          <code><a href="contr.decreasing.html">contr.decreasing()</a></code>
+
+        </dt>
+        <dd>Contrast Enforcing Decreasing Estimates</dd>
+
+        <dt>
+
+          <code><a href="contr.increasing.html">contr.increasing()</a></code>
+
+        </dt>
+        <dd>Contrast Enforcing Increasing Estimates</dd>
+      </dl></div><div class="section level2">
+      <h2 id="simulation-based-calibration">Simulation-based calibration<a class="anchor" aria-label="anchor" href="#simulation-based-calibration"></a></h2>
+
+
+
+      <dl></dl></div><div class="section level2">
+
+
+
+
+      <dl><dt>
+
+          <code><a href="plot_sbc_ecdf.html">plot_sbc_ecdf()</a></code>
+
+        </dt>
+        <dd>Plot the ECDF Difference in SBC Ranks</dd>
+
+        <dt>
+
+          <code><a href="plot_sbc_hist.html">plot_sbc_hist()</a></code>
+
+        </dt>
+        <dd>Plot the Histogram of the Observed Rank Statistics of SBC</dd>
+
+        <dt>
+
+          <code><a href="run_sbc.html">run_sbc()</a></code>
+
+        </dt>
+        <dd>Simulation-Based Calibration</dd>
+      </dl></div><div class="section level2">
+      <h2 id="fmri-modelling">fMRI modelling<a class="anchor" aria-label="anchor" href="#fmri-modelling"></a></h2>
+
+
+
+      <dl></dl></div><div class="section level2">
+
+
+
+
+      <dl><dt>
+
+          <code><a href="MRI.html">MRI()</a></code>
+
+        </dt>
+        <dd>GLM model for fMRI data</dd>
+
+        <dt>
+
+          <code><a href="MRI_AR1.html">MRI_AR1()</a></code>
+
+        </dt>
+        <dd>Create an AR(1) GLM model for fMRI data</dd>
+
+        <dt>
+
+          <code><a href="convolve_design_matrix.html">convolve_design_matrix()</a></code>
+
+        </dt>
+        <dd>Convolve Events with HRF to Construct Design Matrices</dd>
+
+        <dt>
+
+          <code><a href="design_fmri.html">design_fmri()</a></code>
+
+        </dt>
+        <dd>Create fMRI Design for EMC2 Sampling</dd>
+
+        <dt>
+
+          <code><a href="high_pass_filter.html">high_pass_filter()</a></code>
+
+        </dt>
+        <dd>Apply High-Pass Filtering to fMRI Data</dd>
+
+        <dt>
+
+          <code><a href="plot_design_fmri.html">plot_design_fmri()</a></code>
+
+        </dt>
+        <dd>Plot fMRI Design Matrix</dd>
+
+        <dt>
+
+          <code><a href="plot_fmri.html">plot_fmri()</a></code>
+
+        </dt>
+        <dd>Plot fMRI peri-stimulus time courses</dd>
+
+        <dt>
+
+          <code><a href="reshape_events.html">reshape_events()</a></code>
+
+        </dt>
+        <dd>Reshape events data for fMRI analysis</dd>
+
+        <dt>
+
+          <code><a href="split_timeseries.html">split_timeseries()</a></code>
+
+        </dt>
+        <dd>Split fMRI Timeseries Data by ROI Columns</dd>
+      </dl></div><div class="section level2">
+      <h2 id="trend-modelling">trend modelling<a class="anchor" aria-label="anchor" href="#trend-modelling"></a></h2>
+
+
+
+      <dl></dl></div><div class="section level2">
+
+
+
+
+      <dl><dt>
+
+          <code><a href="make_trend.html">make_trend()</a></code>
+
+        </dt>
+        <dd>Create a trend specification for model parameters</dd>
+
+        <dt>
+
+          <code><a href="trend_help.html">trend_help()</a></code>
+
+        </dt>
+        <dd>Get help information for trend kernels and bases</dd>
+
+        <dt>
+
+          <code><a href="get_trend_pnames.html">get_trend_pnames()</a></code>
+
+        </dt>
+        <dd>Get parameter types from trend object</dd>
+      </dl></div><div class="section level2">
+      <h2 id="latent-variable-modelling-1">Latent variable modelling<a class="anchor" aria-label="anchor" href="#latent-variable-modelling-1"></a></h2>
+
+
+
+      <dl></dl></div><div class="section level2">
+
+
+
+
+      <dl><dt>
+
+          <code><a href="align_loadings.html">align_loadings()</a></code>
+
+        </dt>
+        <dd>Reorder MCMC Samples of Factor Loadings</dd>
+
+        <dt>
 
           <code><a href="cut_factors.html">cut_factors()</a></code>
 
         </dt>
         <dd>Cut Factors Based on Credible Loadings</dd>
-      </dl><dl><dt>
+
+        <dt>
 
           <code><a href="factor_diagram.html">factor_diagram()</a></code>
 
@@ -674,8 +1000,7 @@
 
 
 
-
-    </div><div class="section level2">
+      <dl></dl></div><div class="section level2">
 
 
 
@@ -691,8 +1016,7 @@
 
 
 
-
-    </div><div class="section level2">
+      <dl></dl></div><div class="section level2">
 
 
 
@@ -703,7 +1027,8 @@
 
         </dt>
         <dd>Forstmann et al.'s Data</dd>
-      </dl><dl><dt>
+
+        <dt>
 
           <code><a href="samples_LNR.html">samples_LNR</a></code>
 
@@ -719,7 +1044,7 @@
 </div>
 
 <div class="pkgdown-footer-right">
-  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.1.3.</p>
+  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.2.0.</p>
 </div>
 
     </footer></div>

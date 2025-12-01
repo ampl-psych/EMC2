@@ -1,0 +1,983 @@
+# Trends
+
+## Introduction
+
+Trends in EMC2 allow you to model how parameters change as a function of
+covariates or other parameters. They provide a flexible way to capture
+systematic changes in model parameters across conditions or over time.
+This vignette shows:
+
+- How to specify trends with kernels and bases
+- How to attach trends to models via
+  [`design()`](https://ampl-psych.github.io/EMC2/reference/design.md)
+  and run via
+  [`make_emc()`](https://ampl-psych.github.io/EMC2/reference/make_emc.md)
+  and [`fit()`](https://ampl-psych.github.io/EMC2/reference/fit.md)
+- How to control when a trend is applied (premap, pretransform,
+  posttransform)
+- How to share trend parameters
+- How to use other parameters as trend inputs (`par_input`)
+- How to register and use a custom C++ trend kernel
+
+## Trend Composition
+
+A trend is composed of a kernel and a base. The kernel maps inputs to a
+per‑trial value `k`; the base then maps `k` into the parameter scale.
+Use
+[`trend_help()`](https://ampl-psych.github.io/EMC2/reference/trend_help.md)
+to list kernels and bases. The timing of when a trend is applied is
+controlled by `phase` (see [Phases](#phases) below).
+
+``` r
+trend_help()
+```
+
+    ## Available kernels:
+    ##   custom: Custom C++ kernel: provided via register_trend().
+    ##   lin_decr: Decreasing linear kernel: k = -c
+    ##   lin_incr: Increasing linear kernel: k = c
+    ##   exp_decr: Decreasing exponential kernel: k = exp(-d_ed * c)
+    ##   exp_incr: Increasing exponential kernel: k = 1 - exp(-d_ei * c)
+    ##   pow_decr: Decreasing power kernel: k = (1 + c)^(-d_pd)
+    ##   pow_incr: Increasing power kernel: k = 1 - (1 + c)^(-d_pi)
+    ##   poly2: Quadratic polynomial: k = d1 * c + d2 * c^2
+    ##   poly3: Cubic polynomial: k = d1 * c + d2 * c^2 + d3 * c^3
+    ##   poly4: Quartic polynomial: k = d1 * c + d2 * c^2 + d3 * c^3 + d4 * c^4
+    ##   delta: Standard delta rule kernel: k = q[i].
+    ##          Updates q[i] = q[i-1] + alpha * (c[i-1] - q[i-1]).
+    ##          Parameters: q0 (initial value), alpha (learning rate).
+    ##   delta2kernel: Dual kernel delta rule: k = q[i].
+    ##           Combines fast and slow learning rates
+    ##           and switches between them based on dSwitch.
+    ##           Parameters: q0 (initial value), alphaFast (fast learning rate),
+    ##           propSlow (alphaSlow = propSlow * alphaFast), dSwitch (switch threshold).
+    ##   delta2lr: Dual learning rate delta rule: k = q[i].
+    ##           Like the standard delta rule, but with separate
+    ##           learning rates for positive and negative prediction errors.
+    ##           Parameters: q0 (initial value), alphaPos (learning rate for positive PEs),
+    ##           alphaNeg (learning rate for negative PEs).
+    ## 
+    ## Available base types:
+    ##   lin: Linear base: parameter + w * k
+    ##   exp_lin: Exponential linear base: exp(parameter) + exp(w) * k
+    ##   centered: Centered mapping: parameter + w*(k - 0.5)
+    ##   add: Additive base: parameter + k
+    ##   identity: Identity base: k
+    ## 
+    ## Phase options:
+    ##   premap: Trend is applied before parameter mapping. This means the trend parameters
+    ##           are mapped first, then used to transform cognitive model parameters before 
+    ##           their mapping.
+    ##   pretransform: Trend is applied after parameter mapping but before transformations.
+    ##                 Cognitive model parameters are mapped first, then trend is applied, 
+    ##                 followed by transformations.
+    ##   posttransform: Trend is applied after both mapping and transformations.
+    ##                  Cognitive model parameters are mapped and transformed first, 
+    ##                  then trend is applied.
+
+## Quick Start: From trend to model
+
+Below is a minimal pipeline using the data in `samples_LNR` (three
+subjects from Forstmann 2008) to demonstrate where a trend fits in. We
+create a trend, attach it in the design, and show how it plugs into
+[`make_emc()`](https://ampl-psych.github.io/EMC2/reference/make_emc.md)
+and [`fit()`](https://ampl-psych.github.io/EMC2/reference/fit.md) (calls
+not evaluated here).
+
+``` r
+# Example trend: log-mean increases linearly with trial
+trend_quick <- make_trend(
+  par_names = "m",
+  cov_names = "trial_nr",
+  kernels   = "lin_incr",
+  bases     = "lin",
+  phase     = "pretransform"
+)
+
+data <- get_data(samples_LNR)
+# This does not take subject id into account
+data$trial_nr <- 1:nrow(data)
+data$covariate1 <- rnorm(nrow(data))
+data$covariate2 <- rnorm(nrow(data))
+
+
+# Build a design with the trend
+design_trend <- design(
+  data     = data,
+  trend    = trend_quick,
+  matchfun = function(d) d$S == d$lR,
+  formula  = list(m ~ lM, s ~ 1, t0 ~ 1),
+  contrasts = list(lM = matrix(c(-1/2, 1/2), ncol = 1, dimnames = list(NULL, "d"))),
+  model    = LNR
+)
+```
+
+    ## Intercept formula added for trend_pars: m.w
+
+    ## 
+    ##  Sampled Parameters: 
+    ## [1] "m"     "m_lMd" "s"     "t0"    "m.w"  
+    ## 
+    ##  Design Matrices: 
+    ## $m
+    ##     lM m m_lMd
+    ##   TRUE 1   0.5
+    ##  FALSE 1  -0.5
+    ## 
+    ## $s
+    ##  s
+    ##  1
+    ## 
+    ## $t0
+    ##  t0
+    ##   1
+    ## 
+    ## $m.w
+    ##  m.w
+    ##    1
+
+``` r
+# How you would run (not executed here)
+# emc <- make_emc(data, design_trend, type = "single")
+# fit <- fit(emc)
+```
+
+## Defining a Trend
+
+A trend is created using the
+[`make_trend()`](https://ampl-psych.github.io/EMC2/reference/make_trend.md)
+function with the following main arguments:
+
+- `par_names`: Which cognitive model parameters to apply the trend to
+- `cov_names`: Which covariates to use for each trend
+- `kernels`: Which kernel function to use for each trend
+- `bases`: Optional base functions for each trend
+
+Let’s take the following example:
+
+``` r
+trend_lin_decr <- make_trend(
+  par_names = "v",
+  cov_names = "trial_nr",
+  kernels = "lin_incr",
+  bases = "lin"
+)
+```
+
+This trend applies a linear increasing kernel to `v` using `trial` as
+input. This captures a hypothesis that the drift rate (`v`) increases
+over trials. To see how the trend is formulated use
+[`trend_help()`](https://ampl-psych.github.io/EMC2/reference/trend_help.md).
+
+``` r
+trend_help(kernel = "lin_incr")
+```
+
+    ## Description: 
+    ## Increasing linear kernel: k = c 
+    ##  
+    ## Available bases, first is the default: 
+    ## lin, exp_lin, centered 
+    ## 
+
+The function tells us how the kernel maps the covariate to the kernel
+`k`. In this case the kernel `k` is just the covariate `c`. The kernel
+is then used in the base function. The
+[`trend_help()`](https://ampl-psych.github.io/EMC2/reference/trend_help.md)
+function also shows us the available base functions for this kernel. In
+this case we will use the `lin` base function. To see how this base
+function is formulated we can use the
+[`trend_help()`](https://ampl-psych.github.io/EMC2/reference/trend_help.md)
+function again.
+
+``` r
+trend_help(base = "lin")
+```
+
+    ## Description: 
+    ## Linear base: parameter + w * k 
+    ##  
+    ## Default transformations: 
+    ## list(w = "identity")
+    ## 
+
+Together these specify how the trend affects the model parameter. With
+base `lin`, the mapping is `v <- v + B0 * k`, where `B0` is the base
+parameter and `k` comes from the kernel (here `k = c`, the covariate).
+Although this separation may seem verbose for simple cases, it makes
+more complex specifications clear and composable.
+
+EMC2 automatically creates parameter names for the trend, which can be
+accessed using the
+[`get_trend_pnames()`](https://ampl-psych.github.io/EMC2/reference/get_trend_pnames.md)
+function.
+
+``` r
+get_trend_pnames(trend_lin_decr)
+```
+
+    ## [1] "v.w"
+
+These parameter names are now included in the parameter types of the
+model.
+
+## Available Kernel Types
+
+EMC2 provides several kernel functions for modeling how cognitive model
+parameters change as a function of covariates.
+
+### Linear Trends
+
+``` r
+# Linear decreasing trend
+trend_lin_decr <- make_trend(
+  par_names = "v",
+  cov_names = "trial_nr",
+  kernels = "lin_decr"
+)
+
+# Linear increasing trend
+trend_lin_incr <- make_trend(
+  par_names = "v",
+  cov_names = "trial",
+  kernels = "lin_incr"
+)
+```
+
+Linear trends model straight‑line relationships between parameters and
+covariates. They are often a good starting point. You could encode
+linear effects via
+[`design()`](https://ampl-psych.github.io/EMC2/reference/design.md)
+covariates, but bundling them into a trend enables shared control via
+bases and phases and keeps specifications local to parameters.
+
+### Exponential Trends
+
+``` r
+# Exponential decreasing trend
+trend_exp_decr <- make_trend(
+  par_names = "v",
+  cov_names = "trial_nr",
+  kernels = "exp_decr"
+)
+
+# Exponential increasing trend
+trend_exp_incr <- make_trend(
+  par_names = "v",
+  cov_names = "trial_nr",
+  kernels = "exp_incr"
+)
+```
+
+Exponential trends are useful for rapid initial changes that level off.
+`exp_decr` captures decay; `exp_incr` captures learning.
+
+### Power Trends
+
+``` r
+# Power decreasing trend
+trend_pow_decr <- make_trend(
+  par_names = "v",
+  cov_names = "trial_nr",
+  kernels = "pow_decr"
+)
+
+# Power increasing trend
+trend_pow_incr <- make_trend(
+  par_names = "v",
+  cov_names = "trial_nr",
+  kernels = "pow_incr"
+)
+```
+
+Power trends provide another way to model non‑linear relationships,
+often used for practice effects.
+
+### Polynomial Trends
+
+``` r
+# Quadratic trend
+trend_poly2 <- make_trend(
+  par_names = "v",
+  cov_names = "trial_nr",
+  kernels = "poly2"
+)
+
+# Cubic trend
+trend_poly3 <- make_trend(
+  par_names = "v",
+  cov_names = "trial_nr",
+  kernels = "poly3"
+)
+
+# Quartic trend
+trend_poly4 <- make_trend(
+  par_names = "v",
+  cov_names = "trial_nr",
+  kernels = "poly4"
+)
+```
+
+Polynomial trends allow for complex relationships, including multiple
+turning points. Use higher orders cautiously to avoid overfitting.
+
+### Learning Rule Trends
+
+``` r
+# Standard delta learning rule
+trend_delta <- make_trend(
+  par_names = "v",
+  cov_names = "trial_nr",
+  kernels = "delta"
+)
+
+# Dual learning rate delta rule
+trend_delta2 <- make_trend(
+  par_names = "v",
+  cov_names = "trial_nr",
+  kernels = "delta2kernel"
+)
+```
+
+Delta rules are useful for learning processes. The standard delta rule
+updates based on prediction error. The dual‑rate rule uses fast and slow
+learning rates, switching between them based on discrepancies.
+
+Each kernel has supported bases. You can leave bases to defaults or set
+them explicitly. Changing bases can reflect different interpretations of
+how `k` enters the parameter:
+
+``` r
+trend_exp_incr <- make_trend(
+  par_names = "v",
+  cov_names = "trial_nr",
+  kernels = "exp_incr",
+  bases =  "exp_lin"
+)
+```
+
+For example with base `lin`: `v <- v + B0 * k`. With base `exp_lin`:
+`v <- exp(v) + exp(B0) * k`. The latter can be useful when the parameter
+operates on a multiplicative or positively constrained scale.
+
+## Multiple Trends
+
+Some models have multiple parameters that are affected by the same
+covariate. In this case, we can specify multiple trends for the same
+covariate. Note that with the kernels argument, we can specify different
+kernels for each parameter.
+
+``` r
+# Applying different trends to multiple parameters
+trend_multi <- make_trend(
+  par_names = c("v", "t0"),
+  cov_names = c("trial_nr"),
+  kernels = c("exp_incr", "poly2")
+)
+```
+
+Alternatively, different parameters may be affected by different
+covariates:
+
+``` r
+# Specifying different covariates for each trend
+trend_multi <- make_trend(
+  par_names = c("v", "t0"),
+  cov_names = c("trial_nr", "covariate1"),
+  kernels = c("exp_incr", "poly2")
+)
+```
+
+Lastly, a single parameter may be affected by multiple covariates:
+
+``` r
+# Specifying multiple covariates for a trend
+trend_multi <- make_trend(
+  par_names = c("v", "t0"),
+  cov_names = list(c("trial", "covariate1"), "covariate1"),
+  kernels = c("exp_incr", "poly2")
+)
+```
+
+### Sharing Parameters
+
+Sometimes multiple trend entries should use the same parameter(s). For
+example, share a base parameter across different target parameters:
+
+``` r
+# Sharing parameters between trends
+trend_shared <- make_trend(
+  par_names = c("v", "a"),
+  cov_names = "trial_nr",
+  kernels = c("exp_incr", "exp_incr"),
+  shared = list(intercept = list("v.B0", "a.B0"))
+)
+```
+
+This shares `B0` between `v` and `a` trends. Instead of two `B0`
+parameters, there is one named `intercept`. Use
+[`get_trend_pnames()`](https://ampl-psych.github.io/EMC2/reference/get_trend_pnames.md)
+to inspect the generated names:
+
+``` r
+get_trend_pnames(trend_shared)
+```
+
+    ## [1] "v.w"       "v.d_ei"    "a.w"       "a.d_ei"    "intercept"
+
+We can also specify multiple shared parameters, for example
+`shared = list(intercept = list("v.B0", "a.B0"), slope = list("v.d_ei", "a.d_ei"))`.
+
+## Phases
+
+Control when a trend is applied via the `phase` argument:
+
+- `premap`: before parameter mapping (i.e., modifies raw parameter
+  vectors)
+- `pretransform`: after mapping but before transforms
+- `posttransform`: after transforms
+
+``` r
+# Pre-mapping trend
+trend_premap <- make_trend(
+  par_names = "v",
+  cov_names = "trial_nr",
+  kernels   = "exp_incr",
+  phase     = "premap"
+)
+
+# Pre-transform trend
+trend_pretrans <- make_trend(
+  par_names = "v",
+  cov_names = "trial_nr",
+  kernels   = "exp_incr",
+  phase     = "pretransform"
+)
+
+# Post-transform trend
+trend_posttrans <- make_trend(
+  par_names = "v",
+  cov_names = "trial_nr",
+  kernels   = "exp_incr",
+  phase     = "posttransform"
+)
+```
+
+Phases change how trends interact with mapping and transformations. For
+example, a `premap` trend can feed transformed outputs into parameter
+mapping, while `posttransform` trends act on the final, transformed
+parameter scale.
+
+## Parameter Inputs (`par_input`)
+
+Trends can also depend on other parameters via `par_input`. For example,
+use `t0` as an input to a trend on `m`:
+
+``` r
+trend_par_input <- make_trend(
+  par_names = "m",
+  cov_names = NULL,
+  kernels   = "lin_incr",
+  par_input = list("t0"),
+  phase     = "pretransform"
+)
+```
+
+This example mirrors the tests: the input matrix provided to the kernel
+will contain the covariate columns (none here) followed by the
+`par_input` columns (here `t0`).
+
+### Apply a trend only at a factor level (`at`)
+
+Use `at` to apply a trend only for rows at a specific factor level
+(e.g., first level of `lR`) and expand its contribution to the other
+levels within the same subject.
+
+``` r
+trend_at <- make_trend(
+  par_names = c("m"),
+  cov_names = list("covariate1"),
+  kernels   = c("exp_incr"),
+  phase     = "pretransform",
+  at        = "lR"   # apply only at first level of lR, then expand within subject
+)
+```
+
+This is useful when a covariate (or its effect) should only be applied
+to a specific level of a factor (most commonly lR), so that if the
+design is replicated across levels of the factor, the trend is only
+applied to the first level of the factor.
+
+### Multiple contributions to the same parameter
+
+You can place multiple trend entries on the same target parameter. Their
+kernel outputs will be summed (after any optional per‑column map
+weights) before the base is applied.
+
+``` r
+trend_multi_same_par <- make_trend(
+  par_names = c("m", "m"),
+  cov_names = list("covariate1", c("covariate2")),  # second entry could also use par_input
+  kernels   = c("exp_incr", "delta"),
+  phase     = "pretransform",
+  at        = "lR"
+)
+```
+
+In the internal input matrix, covariate columns come first, followed by
+any `par_input` columns. The per‑column kernel contributions are summed
+row‑wise.
+
+### Phase per trend entry
+
+Instead of one `phase` for all entries, you can provide a vector
+matching `par_names`:
+
+``` r
+trend_phases <- make_trend(
+  par_names = c("m", "s", "t0"),
+  cov_names = list("covariate1", "covariate1", "covariate2"),
+  kernels   = c("lin_incr", "exp_decr", "pow_incr"),
+  phase     = c("premap", "pretransform", "posttransform")
+)
+```
+
+Non‑`premap` targets must be actual model parameter names (checked in
+the code), since these act after mapping.
+
+### Sharing kernel parameters (not only base weights)
+
+Sharing can also target kernel parameters, not just the base weight. For
+example, share `d1` across two parameters:
+
+``` r
+trend_shared_kernel <- make_trend(
+  par_names = c("m", "s"),
+  cov_names = list("covariate1", "covariate2"),
+  kernels   = c("poly3", "poly4"),
+  shared    = list(shrd = list("m.d1", "s.d1"))
+)
+```
+
+After sharing,
+[`get_trend_pnames()`](https://ampl-psych.github.io/EMC2/reference/get_trend_pnames.md)
+will include the shared name once (here `shrd`) and remove duplicates.
+
+### Missing input values (NA handling)
+
+Trend kernels ignore rows where any input used by the kernel is `NA`.
+For those rows, the kernel contributes zero. This applies to both
+built‑in and custom kernels. In effect:
+
+- Built‑in kernels evaluate only on “good” rows and expand results back;
+  NA rows contribute 0.
+- Custom kernels receive only the subset of non‑NA rows; any `NA` in
+  their outputs is coerced to 0 before being expanded back.
+
+This behavior makes trends robust when covariates are intermittently
+missing (as exercised in tests that set some covariate entries to `NA`).
+
+### Trial‑wise evaluation and conditional covariates
+
+- Delta‑rule kernels (`delta`, `delta2`) are sequential by construction;
+  they update across trials within a subject.
+- Using behavioral covariates (e.g., `rt`, response `R`, or outputs of
+  functions in the design) can force a trial‑wise evaluation path so
+  that data generation is not conditional on the observed data, but
+  rather on the simulated outcomes.
+
+``` r
+# Example delta trend, capturing trial-wise dynamics
+trend_delta <- make_trend(
+  par_names = "m",
+  cov_names = "trial_nr",
+  kernels   = "delta",
+  phase     = "pretransform"
+)
+
+design_delta <- design(
+  factors    = list(subjects = 1, S = 1:2),
+  Rlevels    = 1:2,
+  covariates = "trial_nr",
+  matchfun   = function(d) d$S == d$lR,
+  trend      = trend_delta,
+  formula    = list(m ~ lM, s ~ 1, t0 ~ 1),
+  contrasts  = list(lM = matrix(c(-1/2, 1/2), ncol = 1, dimnames = list(NULL, "d"))),
+  model      = LNR
+)
+```
+
+    ## Intercept formula added for trend_pars: m.w, m.q0, m.alpha
+
+    ## 
+    ##  Sampled Parameters: 
+    ## [1] "m"       "m_lMd"   "s"       "t0"      "m.w"     "m.q0"    "m.alpha"
+    ## 
+    ##  Design Matrices: 
+    ## $m
+    ##     lM m m_lMd
+    ##   TRUE 1   0.5
+    ##  FALSE 1  -0.5
+    ## 
+    ## $s
+    ##  s
+    ##  1
+    ## 
+    ## $t0
+    ##  t0
+    ##   1
+    ## 
+    ## $m.w
+    ##  m.w
+    ##    1
+    ## 
+    ## $m.q0
+    ##  m.q0
+    ##     1
+    ## 
+    ## $m.alpha
+    ##  m.alpha
+    ##        1
+
+``` r
+# Retrieve trial-wise parameters alongside generated data
+# (not executed here)
+# res <- make_data(p_vector, design_delta, n_trials = 10,
+#                  conditional_on_data = FALSE,
+#                  return_trialwise_parameters = TRUE)
+# str(attr(res, "trialwise_parameters"))
+```
+
+Column names in the returned trial‑wise matrix are formed as
+`parameter_inputName`, where `inputName` comes from `cov_names` followed
+by any `par_input` names.
+
+### Vary trend parameters via the design formula
+
+Trend parameters (base and kernel parameters) can vary by experimental
+factors using the `formula` argument of
+[`design()`](https://ampl-psych.github.io/EMC2/reference/design.md). Use
+`get_trend_pnames(trend)` to get the full names to place on the
+left-hand side of a formula. Names follow:
+
+- Base parameter: `<targetParam>.w` (for bases like `lin`, `exp_lin`,
+  `centered`)
+- Kernel parameters: `<targetParam>.<default_par_name>` (e.g., `d1`,
+  `d2`, … for `poly*`; `q0`, `alpha` for `delta`)
+
+Premap example: vary a kernel parameter (`d1`) by `lR`
+
+``` r
+trend_premap <- make_trend(
+  par_names = c("m", "lMd"),
+  cov_names = list("covariate1", "covariate2"),
+  kernels   = c("exp_incr", "poly2"),
+  phase     = "premap"
+)
+
+design_premap <- design(
+  data     = data,                   
+  trend    = trend_premap,
+  formula  = list(m ~ 1, s ~ 1, t0 ~ 1, lMd.d1 ~ lR),
+  model    = LNR
+)
+```
+
+    ## Intercept formula added for trend_pars: m.w, m.d_ei, lMd.d2
+
+    ## 
+    ##  Sampled Parameters: 
+    ## [1] "m"              "s"              "t0"             "lMd.d1"        
+    ## [5] "lMd.d1_lRright" "m.w"            "m.d_ei"         "lMd.d2"        
+    ## 
+    ##  Design Matrices: 
+    ## $m
+    ##  m
+    ##  1
+    ## 
+    ## $s
+    ##  s
+    ##  1
+    ## 
+    ## $t0
+    ##  t0
+    ##   1
+    ## 
+    ## $lMd.d1
+    ##     lR lMd.d1 lMd.d1_lRright
+    ##   left      1              0
+    ##  right      1              1
+    ## 
+    ## $m.w
+    ##  m.w
+    ##    1
+    ## 
+    ## $m.d_ei
+    ##  m.d_ei
+    ##       1
+    ## 
+    ## $lMd.d2
+    ##  lMd.d2
+    ##       1
+
+``` r
+# mapped_pars(design_premap)  # inspect mapped parameter structure
+```
+
+Pretransform example: vary the base weight (`w`) for `s` by `lR`
+
+``` r
+trend_pretrans <- make_trend(
+  par_names = c("m", "s"),
+  cov_names = list("covariate1", "covariate2"),
+  kernels   = c("delta", "exp_decr"),
+  phase     = "pretransform"
+)
+
+design_pretrans <- design(
+  data     = data,
+  trend    = trend_pretrans,
+  formula  = list(m ~ 1, s ~ 1, t0 ~ 1, s.w ~ lR),
+  model    = LNR
+)
+```
+
+    ## Intercept formula added for trend_pars: m.w, m.q0, m.alpha, s.d_ed
+
+    ## 
+    ##  Sampled Parameters: 
+    ## [1] "m"           "s"           "t0"          "s.w"         "s.w_lRright"
+    ## [6] "m.w"         "m.q0"        "m.alpha"     "s.d_ed"     
+    ## 
+    ##  Design Matrices: 
+    ## $m
+    ##  m
+    ##  1
+    ## 
+    ## $s
+    ##  s
+    ##  1
+    ## 
+    ## $t0
+    ##  t0
+    ##   1
+    ## 
+    ## $s.w
+    ##     lR s.w s.w_lRright
+    ##   left   1           0
+    ##  right   1           1
+    ## 
+    ## $m.w
+    ##  m.w
+    ##    1
+    ## 
+    ## $m.q0
+    ##  m.q0
+    ##     1
+    ## 
+    ## $m.alpha
+    ##  m.alpha
+    ##        1
+    ## 
+    ## $s.d_ed
+    ##  s.d_ed
+    ##       1
+
+``` r
+# mapped_pars(design_pretrans)
+```
+
+Posttransform example: again vary `s.w` by `lR`
+
+``` r
+trend_posttrans <- make_trend(
+  par_names = c("m", "s"),
+  cov_names = list("covariate1", "covariate2"),
+  kernels   = c("pow_decr", "pow_incr"),
+  phase     = "posttransform"
+)
+
+design_posttrans <- design(
+  data     = data,
+  trend    = trend_posttrans,
+  formula  = list(m ~ 1, s ~ 1, t0 ~ 1, s.w ~ lR),
+  model    = LNR
+)
+```
+
+    ## Intercept formula added for trend_pars: m.w, m.d_pd, s.d_pi
+
+    ## 
+    ##  Sampled Parameters: 
+    ## [1] "m"           "s"           "t0"          "s.w"         "s.w_lRright"
+    ## [6] "m.w"         "m.d_pd"      "s.d_pi"     
+    ## 
+    ##  Design Matrices: 
+    ## $m
+    ##  m
+    ##  1
+    ## 
+    ## $s
+    ##  s
+    ##  1
+    ## 
+    ## $t0
+    ##  t0
+    ##   1
+    ## 
+    ## $s.w
+    ##     lR s.w s.w_lRright
+    ##   left   1           0
+    ##  right   1           1
+    ## 
+    ## $m.w
+    ##  m.w
+    ##    1
+    ## 
+    ## $m.d_pd
+    ##  m.d_pd
+    ##       1
+    ## 
+    ## $s.d_pi
+    ##  s.d_pi
+    ##       1
+
+``` r
+# mapped_pars(design_posttrans)
+```
+
+Notes: - If a trend parameter is not listed in `formula`, an
+intercept-only formula is added automatically so it can still be
+estimated. - For non-`premap` phases, the target parameter names must
+exist in the cognitive model (e.g., `m`, `s`, `t0` for LNR).
+
+## Custom C++ Trends
+
+You can register your own C++ kernel function. The function takes
+per‑trial kernel parameters `trend_pars` (base params excluded) and an
+input matrix, and returns a vector of outputs. To keep this vignette
+fast and portable, we show the code and how to register it but do not
+actually compile or run it here.
+
+``` r
+library(EMC2)
+
+# Write a custom kernel to a separate file
+tf <- tempfile(fileext = ".cpp")
+writeLines(c(
+  "// [[Rcpp::depends(EMC2)]]",
+  "#include <Rcpp.h>",
+  "#include \"EMC2/userfun.hpp\"",
+  "",
+  "// Example: two params (a, b) and two inputs (covariate1, t0)",
+  "Rcpp::NumericVector custom_kernel(Rcpp::NumericMatrix trend_pars, Rcpp::NumericMatrix input) {",
+  "  int n = input.nrow();",
+  "  Rcpp::NumericVector out(n, 0.0);",
+  "  for (int i = 0; i < n; ++i) {",
+  "    double a = (trend_pars.ncol() > 0) ? trend_pars(i, 0) : 0.0;",
+  "    double b = (trend_pars.ncol() > 1) ? trend_pars(i, 1) : 0.0;",
+  "    double in1 = input(i, 0);  // covariate1",
+  "    double in2 = input(i, 1);  // t0",
+  "    if ((i % 2) == 0) out[i] = (Rcpp::NumericVector::is_na(in1) ? 0.0 : in1) + a;",
+  "    else             out[i] = (Rcpp::NumericVector::is_na(in2) ? 0.0 : in2) * b;",
+  "  }",
+  "  return out;",
+  "}",
+  "",
+  "// Export pointer maker for registration",
+  "// [[Rcpp::export]]",
+  "SEXP EMC2_make_custom_kernel_ptr();",
+  "EMC2_MAKE_PTR(custom_kernel)"
+), tf)
+
+# Register with parameter names, transforms, and a default base
+ct <- register_trend(
+  trend_parameters = c("a", "b"),
+  file = tf,
+  transforms = c(a = "identity", b = "pnorm"),
+  base = "add"
+)
+
+# Use in a trend (note par_input to add t0 as an input column)
+trend_custom <- make_trend(
+  par_names  = "m",
+  cov_names  = "covariate1",
+  kernels    = "custom",
+  par_input  = list("t0"),
+  phase      = "pretransform",
+  bases      = NULL,         # uses ct$base (here: add)
+  custom_trend = ct
+)
+
+design_custom_trend <- design(
+  data = data,
+  trend = trend_custom,
+  formula = list(m ~ 1, s ~ 1, t0 ~ 1, m.a ~ lR),
+  model = LNR
+)
+```
+
+    ## Intercept formula added for trend_pars: m.b
+
+    ## 
+    ##  Sampled Parameters: 
+    ## [1] "m"           "s"           "t0"          "m.a"         "m.a_lRright"
+    ## [6] "m.b"        
+    ## 
+    ##  Design Matrices: 
+    ## $m
+    ##  m
+    ##  1
+    ## 
+    ## $s
+    ##  s
+    ##  1
+    ## 
+    ## $t0
+    ##  t0
+    ##   1
+    ## 
+    ## $m.a
+    ##     lR m.a m.a_lRright
+    ##   left   1           0
+    ##  right   1           1
+    ## 
+    ## $m.b
+    ##  m.b
+    ##    1
+
+Interpretation: the base controls how the custom kernel’s output enters
+the parameter (e.g., `add` means additive). The `transforms` declared in
+[`register_trend()`](https://ampl-psych.github.io/EMC2/reference/register_trend.md)
+are attached to the model so custom kernel parameters can be estimated
+under appropriate constraints.
+
+## Tips for Choosing Trends
+
+1.  Start simple: Begin with linear trends before moving to more complex
+    options
+2.  Match theory: Choose trends that align with theoretical expectations
+3.  Consider interpretability: Simpler trends are often easier to
+    interpret
+4.  Watch for overfitting: More complex trends (like high-order
+    polynomials) may overfit
+5.  Use shared parameters when you expect related processes
+6.  Choose `phase` based on how the trend should interact with mapping
+    and transformations
+
+## Interpreting Bases and Transforms
+
+- `lin`: additive on the parameter scale (`θ <- θ + B0 * k`)
+- `exp_lin`: additive on an exponentialized parameter
+  (`θ <- exp(θ) + exp(B0) * k`)
+- `centered`: centers `k` at 0.5 before scaling
+  (`θ <- θ + B0*(k - 0.5)`)
+- `add`: parameter is `θ <- θ + k` (no base parameter)
+- `identity`: parameter is `θ <- k` (no base parameter)
+
+Trend parameters can have default transforms (from
+[`trend_help()`](https://ampl-psych.github.io/EMC2/reference/trend_help.md)),
+and custom kernels can declare their own transforms via
+[`register_trend()`](https://ampl-psych.github.io/EMC2/reference/register_trend.md).
+These transforms feed into the model’s transform pipeline, ensuring
+parameters respect intended bounds.

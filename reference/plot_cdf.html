@@ -13,7 +13,7 @@ Optionally, posterior and/or prior predictive CDFs can be overlaid."></head><bod
 
     <a class="navbar-brand me-2" href="../index.html">EMC2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">3.2.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">3.3.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -25,6 +25,7 @@ Optionally, posterior and/or prior predictive CDFs can be overlaid."></head><bod
 <li class="nav-item dropdown">
   <button class="nav-link dropdown-toggle" type="button" id="dropdown-articles" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Articles</button>
   <ul class="dropdown-menu" aria-labelledby="dropdown-articles"><li><a class="dropdown-item" href="../articles/Simulation-based-Calibration.html">Simulation-based Calibration</a></li>
+    <li><a class="dropdown-item" href="../articles/trends.html">Trends</a></li>
   </ul></li>
 <li class="nav-item"><a class="nav-link" href="../news/index.html">Changelog</a></li>
       </ul><ul class="navbar-nav"><li class="nav-item"><form class="form-inline" role="search">
@@ -45,7 +46,7 @@ Optionally, posterior and/or prior predictive CDFs can be overlaid."></head><bod
   <main id="main" class="col-md-9"><div class="page-header">
 
       <h1>Plot Defective Cumulative Distribution Functions</h1>
-      <small class="dont-index">Source: <a href="https://github.com/ampl-psych/EMC2/blob/v3.2.1/R/plot_data.R" class="external-link"><code>R/plot_data.R</code></a></small>
+      <small class="dont-index">Source: <a href="https://github.com/ampl-psych/EMC2/blob/main/R/plot_data.R" class="external-link"><code>R/plot_data.R</code></a></small>
       <div class="d-none name"><code>plot_cdf.Rd</code></div>
     </div>
 
@@ -72,9 +73,10 @@ Optionally, posterior and/or prior predictive CDFs can be overlaid.</p>
 <span>  layout <span class="op">=</span> <span class="cn">NA</span>,</span>
 <span>  to_plot <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"data"</span>, <span class="st">"posterior"</span>, <span class="st">"prior"</span><span class="op">)</span><span class="op">[</span><span class="fl">1</span><span class="op">:</span><span class="fl">2</span><span class="op">]</span>,</span>
 <span>  use_lim <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"data"</span>, <span class="st">"posterior"</span>, <span class="st">"prior"</span><span class="op">)</span><span class="op">[</span><span class="fl">1</span><span class="op">:</span><span class="fl">2</span><span class="op">]</span>,</span>
-<span>  legendpos <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"top"</span>, <span class="st">"topright"</span><span class="op">)</span>,</span>
+<span>  legendpos <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"topleft"</span>, <span class="st">"right"</span><span class="op">)</span>,</span>
 <span>  posterior_args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="op">)</span>,</span>
 <span>  prior_args <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="op">)</span>,</span>
+<span>  add_percentiles <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">10</span>, <span class="fl">50</span>, <span class="fl">90</span><span class="op">)</span>,</span>
 <span>  <span class="va">...</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
@@ -148,6 +150,10 @@ defaults to plotting full data set ungrouped by factors if <code>NULL</code>.</p
 <dd><p>Optional list of graphical parameters for prior lines/ribbons.</p></dd>
 
 
+<dt id="arg-add-percentiles">add_percentiles<a class="anchor" aria-label="anchor" href="#arg-add-percentiles"></a></dt>
+<dd><p>Vector of integers giving percentiles to plot as points, NULL stops plotting.</p></dd>
+
+
 <dt id="arg--">...<a class="anchor" aria-label="anchor" href="#arg--"></a></dt>
 <dd><p>Other graphical parameters for the real data lines.</p></dd>
 
@@ -177,7 +183,7 @@ defaults to plotting full data set ungrouped by factors if <code>NULL</code>.</p
 </div>
 
 <div class="pkgdown-footer-right">
-  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.1.3.</p>
+  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.2.0.</p>
 </div>
 
     </footer></div>

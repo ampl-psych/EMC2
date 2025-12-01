@@ -11,7 +11,7 @@ options to customize the visualization."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">EMC2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">3.2.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">3.3.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -23,6 +23,7 @@ options to customize the visualization."></head><body>
 <li class="nav-item dropdown">
   <button class="nav-link dropdown-toggle" type="button" id="dropdown-articles" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Articles</button>
   <ul class="dropdown-menu" aria-labelledby="dropdown-articles"><li><a class="dropdown-item" href="../articles/Simulation-based-Calibration.html">Simulation-based Calibration</a></li>
+    <li><a class="dropdown-item" href="../articles/trends.html">Trends</a></li>
   </ul></li>
 <li class="nav-item"><a class="nav-link" href="../news/index.html">Changelog</a></li>
       </ul><ul class="navbar-nav"><li class="nav-item"><form class="form-inline" role="search">
@@ -43,7 +44,7 @@ options to customize the visualization."></head><body>
   <main id="main" class="col-md-9"><div class="page-header">
 
       <h1>Plot fMRI Design Matrix</h1>
-      <small class="dont-index">Source: <a href="https://github.com/ampl-psych/EMC2/blob/v3.2.1/R/MRI.R" class="external-link"><code>R/MRI.R</code></a></small>
+      <small class="dont-index">Source: <a href="https://github.com/ampl-psych/EMC2/blob/main/R/MRI.R" class="external-link"><code>R/MRI.R</code></a></small>
       <div class="d-none name"><code>plot_design_fmri.Rd</code></div>
     </div>
 
@@ -139,11 +140,12 @@ all non-nuisance regressors will be plotted.</p></dd>
 <span class="r-out co"><span class="r-pr">#&gt;</span>     event_type subjects run onset modulation  duration regressor</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> 1  condition_A        1   1     0 -1.0000000 0.5000000     cond1</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> 11    accuracy        1   1     0  1.0000000 0.2000000  accuracy</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 21          rt        1   1     0  1.1012426 1.1012426        rt</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 21          rt        1   1     0  1.3176617 1.3176617        rt</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> 2  condition_B        1   1    10  1.0000000 0.5000000     cond1</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 12    accuracy        1   1    10  0.0000000 0.2000000  accuracy</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 22          rt        1   1    10  0.9598868 0.9598868        rt</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 23          rt        1   1    20  1.3605504 1.3605504        rt</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 22          rt        1   1    10  0.8005737 0.8005737        rt</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 13    accuracy        1   1    20  0.0000000 0.2000000  accuracy</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 23          rt        1   1    20  0.5225522 0.5225522        rt</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 25          rt        1   1    40  1.0684747 1.0684747        rt</span>
 <span class="r-msg co"><span class="r-pr">#&gt;</span> Filtering out high_pass noise, make sure you also use high_pass_filter(&lt;timeseries&gt;)</span>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="co"># Plot the design matrix</span></span></span>
@@ -160,7 +162,7 @@ all non-nuisance regressors will be plotted.</p></dd>
 </div>
 
 <div class="pkgdown-footer-right">
-  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.1.3.</p>
+  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.2.0.</p>
 </div>
 
     </footer></div>
