@@ -1,9 +1,10 @@
-pandoc: '3.2'
+pandoc: '3.8'
 pkgdown: 2.1.2
 pkgdown_sha: ~
 articles:
   Simulation-based-Calibration: Simulation-based-Calibration.html
-last_built: 2025-06-27T11:24Z
+  trends: trends.html
+last_built: 2025-12-01T08:25Z
 urls:
   reference: https://ampl-psych.github.io/EMC2/reference
   article: https://ampl-psych.github.io/EMC2/articles

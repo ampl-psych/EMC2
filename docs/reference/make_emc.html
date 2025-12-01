@@ -9,7 +9,7 @@ and model specification into a emc object that is needed in fit()."></head><body
 
     <a class="navbar-brand me-2" href="../index.html">EMC2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">3.1.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">3.3.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -21,6 +21,7 @@ and model specification into a emc object that is needed in fit()."></head><body
 <li class="nav-item dropdown">
   <button class="nav-link dropdown-toggle" type="button" id="dropdown-articles" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Articles</button>
   <ul class="dropdown-menu" aria-labelledby="dropdown-articles"><li><a class="dropdown-item" href="../articles/Simulation-based-Calibration.html">Simulation-based Calibration</a></li>
+    <li><a class="dropdown-item" href="../articles/trends.html">Trends</a></li>
   </ul></li>
 <li class="nav-item"><a class="nav-link" href="../news/index.html">Changelog</a></li>
       </ul><ul class="navbar-nav"><li class="nav-item"><form class="form-inline" role="search">
@@ -59,7 +60,7 @@ and model specification into a <code>emc</code> object that is needed in <code><
 <span>  type <span class="op">=</span> <span class="st">"standard"</span>,</span>
 <span>  n_chains <span class="op">=</span> <span class="fl">3</span>,</span>
 <span>  compress <span class="op">=</span> <span class="cn">TRUE</span>,</span>
-<span>  rt_resolution <span class="op">=</span> <span class="fl">0.02</span>,</span>
+<span>  rt_resolution <span class="op">=</span> <span class="fl">1</span><span class="op">/</span><span class="fl">60</span>,</span>
 <span>  prior_list <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  group_design <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  par_groups <span class="op">=</span> <span class="cn">NULL</span>,</span>
@@ -182,7 +183,7 @@ of the first three and of the last two parameters are estimated as two separate 
 <span class="r-in"><span><span class="co"># create emc object</span></span></span>
 <span class="r-in"><span><span class="va">LBABE</span> <span class="op">&lt;-</span> <span class="fu">make_emc</span><span class="op">(</span><span class="va">dat</span>,<span class="va">design_LBABE</span>,type<span class="op">=</span><span class="st">"standard"</span>,  prior<span class="op">=</span><span class="va">prior_LBABE</span><span class="op">)</span></span></span>
 <span class="r-msg co"><span class="r-pr">#&gt;</span> Processing data set 1</span>
-<span class="r-msg co"><span class="r-pr">#&gt;</span> Likelihood speedup factor: 4 (3955 unique trials)</span>
+<span class="r-msg co"><span class="r-pr">#&gt;</span> Likelihood speedup factor: 3.6 (4433 unique trials)</span>
 <span class="r-in"><span></span></span>
 </code></pre></div>
     </div>

@@ -13,7 +13,7 @@ More details can be found in the fit help files (?fit).'></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">EMC2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">3.1.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">3.3.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -25,6 +25,7 @@ More details can be found in the fit help files (?fit).'></head><body>
 <li class="nav-item dropdown">
   <button class="nav-link dropdown-toggle" type="button" id="dropdown-articles" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Articles</button>
   <ul class="dropdown-menu" aria-labelledby="dropdown-articles"><li><a class="dropdown-item" href="../articles/Simulation-based-Calibration.html">Simulation-based Calibration</a></li>
+    <li><a class="dropdown-item" href="../articles/trends.html">Trends</a></li>
   </ul></li>
 <li class="nav-item"><a class="nav-link" href="../news/index.html">Changelog</a></li>
       </ul><ul class="navbar-nav"><li class="nav-item"><form class="form-inline" role="search">
@@ -73,7 +74,8 @@ More details can be found in the <code>fit</code> help files (<code><a href="fit
 <span>  max_tries <span class="op">=</span> <span class="fl">20</span>,</span>
 <span>  n_blocks <span class="op">=</span> <span class="fl">1</span>,</span>
 <span>  thin <span class="op">=</span> <span class="cn">FALSE</span>,</span>
-<span>  trim <span class="op">=</span> <span class="cn">TRUE</span></span>
+<span>  trim <span class="op">=</span> <span class="cn">TRUE</span>,</span>
+<span>  r_cores <span class="op">=</span> <span class="fl">1</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
 
@@ -148,6 +150,10 @@ Can also be set to a double, in which case 1/thin of the chain will be removed (
 <dt id="arg-trim">trim<a class="anchor" aria-label="anchor" href="#arg-trim"></a></dt>
 <dd><p>A boolean. If <code>TRUE</code> will automatically remove redundant samples (i.e. from preburn, burn, adapt).</p></dd>
 
+
+<dt id="arg-r-cores">r_cores<a class="anchor" aria-label="anchor" href="#arg-r-cores"></a></dt>
+<dd><p>An integer for number of cores to use in R-based likelihood calculations, default 1.</p></dd>
+
 </dl></div>
     <div class="section level2">
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
@@ -206,7 +212,7 @@ Can also be set to a double, in which case 1/thin of the chain will be removed (
 <span class="r-in"><span><span class="co"># Then make the emc, we've omitted a prior here for brevity so default priors will be used.</span></span></span>
 <span class="r-in"><span><span class="va">emc</span> <span class="op">&lt;-</span> <span class="fu"><a href="make_emc.html">make_emc</a></span><span class="op">(</span><span class="va">forstmann</span>, <span class="va">design_in</span><span class="op">)</span></span></span>
 <span class="r-msg co"><span class="r-pr">#&gt;</span> Processing data set 1</span>
-<span class="r-msg co"><span class="r-pr">#&gt;</span> Likelihood speedup factor: 4 (3955 unique trials)</span>
+<span class="r-msg co"><span class="r-pr">#&gt;</span> Likelihood speedup factor: 3.6 (4433 unique trials)</span>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="co"># Now for example we can specify that we only want to run the "preburn" phase</span></span></span>
 <span class="r-in"><span><span class="co"># for MCMC 10 iterations</span></span></span>
