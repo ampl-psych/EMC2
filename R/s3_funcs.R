@@ -149,6 +149,14 @@ predict.emc <- function(object,hyper=FALSE,n_post=50,n_cores=1,
   dots <- list(...)
   data <- get_data(emc)
   design <- get_design(emc)
+  return_trialwise_parameters <- isTRUE(dots$return_trialwise_parameters)
+#   if (is.null(dots$conditional_on_data) && has_conditional_covariates(design[[1]])) {
+#     dots$conditional_on_data <- FALSE
+#     message('One of the covariates in the model trends is either rt, R, or the output of a function provided to design.
+# Since the covariate depends on behavior, the data will be simulated trial-by-trial, reapplying the functions after each trial.
+# To override this behavior, pass `conditional_on_data=TRUE` to predict().')
+#   }
+
   if(is.null(data$subjects)){
     jointModel <- TRUE
     all_samples <- emc
@@ -167,12 +175,13 @@ predict.emc <- function(object,hyper=FALSE,n_post=50,n_cores=1,
       }
     }
     if (hyper) {
-      pars <- vector(mode="list",length=n_post)
-      # for (i in 1:n_post) {
-      #   pars[[i]] <- get_prior_samples(emc,selection="alpha",
-      #                                  stage=stage,thin=thin,filter=filter,n_prior=length(subjects))
-      #   row.names(pars[[i]]) <- subjects
-      # }
+      mu <- do.call(get_pars, c(list(emc, selection = "mu", map = FALSE, return_mcmc = FALSE, merge_chains = TRUE,
+                    length.out = ceiling(n_post/length(emc))), fix_dots(list(...), get_pars)))
+      Sigma <- do.call(get_pars, c(list(emc, selection = "Sigma", map = FALSE, return_mcmc = FALSE, merge_chains = TRUE,
+                     remove_dup = FALSE, remove_constants = FALSE, length.out = ceiling(n_post/length(emc))), fix_dots(list(...), get_pars)))
+      pars <- get_alphas(mu, Sigma, subjects)
+      pars <- pars[,,1:n_post] # With non-equally divisible n_post you get some remainder
+      pars <- lapply(seq_len(dim(pars)[3]), function(i) t(pars[,,i]))
     } else {
       dots$selection <- "alpha"; dots$merge_chains <- TRUE; dots$by_subject <- TRUE
       samps <- do.call(get_pars, c(list(emc), fix_dots(dots, get_pars)))
@@ -200,6 +209,7 @@ predict.emc <- function(object,hyper=FALSE,n_post=50,n_cores=1,
     out <- cbind(postn=rep(1:n_post,times=unlist(lapply(simDat,function(x)dim(x)[1]))),do.call(rbind,simDat))
     if (n_post==1) pars <- pars[[1]]
     attr(out,"pars") <- pars
+    if(return_trialwise_parameters) attr(out, 'trialwise_parameters') <- lapply(simDat, function(x) attr(x, "trialwise_parameters"))
     post_out[[j]] <- out
   }
   if(!jointModel){
@@ -380,7 +390,8 @@ fit.emc <- function(emc, stage = NULL, iter = 1000, stop_criteria = NULL,
                     thin = FALSE,
                     ...){
 
-  dots <- add_defaults(list(...), n_blocks = 1, verboseProgress = FALSE, trim = TRUE)
+  dots <- add_defaults(list(...), n_blocks = 1, verboseProgress = FALSE,
+                       trim = TRUE, r_cores = 1)
   start_time <- Sys.time()
   stages_names <- c("preburn", "burn", "adapt", "sample")
   if(!is.null(stop_criteria) & !any(names(stop_criteria) %in% stages_names)){
@@ -414,7 +425,8 @@ fit.emc <- function(emc, stage = NULL, iter = 1000, stop_criteria = NULL,
     emc <- run_emc(emc, stage = stage, stop_criteria[[stage]], cores_for_chains = cores_for_chains, search_width = search_width,
                    step_size = step_size,  verbose = verbose, verboseProgress = dots$verboseProgress,
                    fileName = fileName, particle_factor =  particle_factor, trim = dots$trim,
-                   cores_per_chain = cores_per_chain, max_tries = max_tries, thin = thin, n_blocks = dots$n_blocks)
+                   cores_per_chain = cores_per_chain, max_tries = max_tries, thin = thin, n_blocks = dots$n_blocks,
+                   r_cores = dots$r_cores)
   }
   if (verbose) print(Sys.time()-start_time)
   return(emc)
@@ -972,6 +984,7 @@ credint <- function(x, ...){
 #' @rdname get_data
 #' @export
 get_data.emc <- function(emc) {
+  if(is.null(emc[[1]]$data)) return(NULL) # Prior samples
   if(is.null(emc[[1]]$data[[1]]$subjects)){ # Joint model
     dat <- vector("list", length(emc[[1]]$data[[1]]))
     for(i in 1:length(dat)){
@@ -1058,6 +1071,16 @@ get_design.emc <- function(x){
   return(emc_design)
 }
 
+#' @rdname get_group_design
+#' @export
+get_group_design.emc <- function(x){
+  group_design <- get_group_design(get_prior(x))
+  if(!is.null(group_design))  class(group_design) <- "emc.group_design"
+  return(group_design)
+}
+
+
+
 #' Plot Design
 #'
 #' Makes design illustration by plotting simulated data based on the design
@@ -1110,6 +1133,16 @@ get_design <- function(x){
   UseMethod("get_design")
 }
 
+#' Get Group Design
+#'
+#' Extracts group design from an emc object
+#'
+#' @param x an `emc` or `emc.prior` object
+#' @return A design with class emc.group_design
+#' @export
+get_group_design <- function(x){
+  UseMethod("get_group_design")
+}
 
 
 

@@ -19,7 +19,8 @@ run_emc(
   max_tries = 20,
   n_blocks = 1,
   thin = FALSE,
-  trim = TRUE
+  trim = TRUE,
+  r_cores = 1
 )
 }
 \arguments{
@@ -60,6 +61,8 @@ conditions as specified by stop_criteria? Defaults to 20. max_tries is ignored i
 Can also be set to a double, in which case 1/thin of the chain will be removed (does not have to be an integer).}
 
 \item{trim}{A boolean. If \code{TRUE} will automatically remove redundant samples (i.e. from preburn, burn, adapt).}
+
+\item{r_cores}{An integer for number of cores to use in R-based likelihood calculations, default 1.}
 }
 \value{
 An emc object

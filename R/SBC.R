@@ -58,7 +58,7 @@ SBC_hierarchical <- function(design_in, prior_in, replicates = 250, trials = 100
     if(verbose) print(paste0("Sample ", i, " out of ", replicates))
     rand_effects <- make_random_effects(design_in, prior_mu[,i], n_subj = n_subjects, covariances = prior_var[,,i])
     all_rand_effects[[i]] <- rand_effects
-    data <- make_data(rand_effects,design_in, trials, model = design_in$model)
+    data <- make_data(rand_effects,design_in, trials, model = design_in$model, ...)
     if(plot_data){
       plot_density(data, factors = names(design_in$Ffactors)[names(design_in$Ffactors) != "subjects"])
     }
@@ -89,57 +89,133 @@ SBC_hierarchical <- function(design_in, prior_in, replicates = 250, trials = 100
 }
 
 
-SBC_single <- function(design_in, prior_in, replicates = 250, trials = 100,
-                             plot_data = FALSE, verbose = TRUE,
-                             fileName = NULL, ...){
-  dots <- add_defaults(list(...), max_tries = 50, compress = FALSE, rt_resolution = 1e-12,
-                       stop_criteria = list(min_es = 100, max_gd = 1.1,
-                                            selection = c("alpha", "mu", "Sigma")))
-  dots$verbose <- verbose
-  type <- attr(prior_in, "type")
-  if(type != "single") stop("can only use `type = single`")
+run_SBC_subject <- function(rep, design_in, prior_alpha, trials, prior_in, dots){
+  p_vector <- prior_alpha[rep,]
+  data <- do.call(make_data, c(list(parameters = p_vector, design = design_in, n_trials = trials), fix_dots(dots, make_data)))
+  emc <-  do.call(make_emc, c(list(data = data, design = design_in, prior_list = prior_in, type = "single"), fix_dots(dots, make_emc)))
+
+  # Protection wrapper for the fit call
+  fit_result <- tryCatch({
+    do.call(fit, c(list(emc = emc), fix_dots(dots, fit)))
+  }, warning = function(w) {
+    # Save the problematic p_vector
+    filename <- paste0("p_vector_rep", rep, ".Rdata")
+    save(p_vector, file = filename)
+    warning("A warning occurred during fitting for replication ", rep,
+            ". The input parameters have been saved as ", filename,
+            ". Warning message: ", w$message)
+    # Re-throw the warning
+    warning(w)
+    # Return NULL to indicate failure
+    return(NULL)
+  }, error = function(e) {
+    # Save the problematic p_vector
+    filename <- paste0("p_vector_rep", rep, ".Rdata")
+    save(p_vector, file = filename)
+    warning("An error occurred during fitting for replication ", rep,
+            ". The input parameters have been saved as ", filename,
+            ". Error message: ", e$message)
+    # Return NULL to indicate failure
+    return(NULL)
+  })
+
+  # Check if fitting failed
+  if (is.null(fit_result)) {
+    # Return a structure that indicates failure but doesn't break the overall process
+    return(list(rank = NULL, med = NULL, bias = NULL, coverage = NULL, failed = TRUE))
+  }
+
+  emc <- fit_result
+
+  # Return ESS
+  ESS <- ess_summary(emc, stat = NULL)[[1]]
+  # Rank
+  alpha_rec <- get_pars(emc, selection = "alpha", return_mcmc = F, merge_chains = T, flatten = T)[,1,]
+  rank <- mapply(get_ranks_ESS, split(alpha_rec, row(alpha_rec)), t(ESS), p_vector)
+  names(rank) <- names(sampled_pars(design_in))
+  # For Bias
+  CI <- credint(emc)[[1]]
+  med <- CI[,2] # And return this for precision
+  bias <- p_vector - med
+  # For coverage
+  coverage <- p_vector > CI[,1] & p_vector < CI[,3]
+  return(list(rank = rank, med = med, bias = bias, coverage = coverage))
+}
+
+split_list_to_dfs <- function(lst, type = "alpha") {
+  comps <- names(lst[[1]])   # get component names from the first element
+  out <- lapply(comps, function(nm) {
+    res <- list()
+    res[[type]] <- do.call(rbind, lapply(lst, `[[`, nm))
+    return(res)
+  })
+  names(out) <- comps
+  out
+}
+
+
+
+SBC_single <- function(
+  design_in,
+  prior_in,
+  replicates = 250,
+  trials = 100,
+  plot_data = FALSE,
+  verbose = TRUE,
+  fileName = NULL,
+  ...
+) {
+  if (attr(prior_in, "type") != "single") {
+    stop("can only use `type = single`")
+  }
+  dots <- add_defaults(
+    list(...),
+    max_tries = 50,
+    compress = FALSE, rt_resolution = 1e-12,
+    stop_criteria = list(
+      min_es = 100, max_gd = 1.1, selection = c("alpha", "mu", "Sigma")
+    ),
+    cores_per_chain = 1
+  )
+  dots[["verbose"]] <- verbose
   # Draw prior samples
   prior_alpha <- parameters(prior_in, N = replicates, selection = "alpha")
   rank_alpha <- data.frame()
-  if(!is.null(fileName)) save(prior_alpha, file = fileName)
-  i <- 1
-  if(dots$cores_per_chain > 1 & verbose) print("Since cores_per_chain > 1, estimating multiple data sets simultaneously")
-  par_names <- names(sampled_pars(design_in))
-  while(i < replicates){
-    if(verbose) print(paste0("Sample ", i, " out of ", replicates))
-    data <- data.frame()
-    start <- i
-    for(j in 1:dots$cores_per_chain){
-      if(i > replicates) next
-      design_in$Ffactors$subjects <- j
-      tmp <- make_data(prior_alpha[i,],design_in, trials, model = design_in$model)
-      tmp$subjects <- j
-      data <- rbind(data, tmp)
-      i <- i + 1
-    }
-    if(plot_data){
-      plot_density(data, factors = names(design_in$Ffactors)[names(design_in$Ffactors) != "subjects"])
-    }
-    emc <-  do.call(make_emc, c(list(data = data, design = design_in, prior_list = prior_in, type = type), fix_dots(dots, make_emc)))
-    emc <-  do.call(fit, c(list(emc = emc), fix_dots(dots, fit)))
-    ESS <- round(pmin(do.call(cbind, ess_summary(emc, selection = "alpha", stat = NULL)), chain_n(emc)[1,"sample"]))
-    alpha_rec <- get_pars(emc, selection = "alpha", return_mcmc = F, merge_chains = T, flatten = T)
-    for(j in 1:dots$cores_per_chain){
-      if(start > replicates) next
-      tmp_rec <- alpha_rec[,j,]
-      rank_alpha <- rbind(rank_alpha, mapply(get_ranks_ESS, split(tmp_rec, row(tmp_rec)), t(ESS[j,]), prior_alpha[start,]))
-      start <- start + 1
-    }
-    colnames(rank_alpha) <- par_names
-    if(!is.null(fileName)){
-      SBC_temp <- list(rank = list(alpha = rank_alpha),
-                       prior = list(alpha = prior_alpha), emc = emc)
-      save(SBC_temp, file = fileName)
-    }
+  if (!is.null(fileName)) {
+    save(prior_alpha, file = fileName)
   }
-  return(list(rank = list(alpha = rank_alpha),
-              prior = list(alpha = prior_alpha)))
+  i <- 1
+  if (dots[["cores_per_chain"]] > 1 && verbose) {
+    print("Since cores_per_chain > 1, estimating multiple data sets simultaneously")
+  }
+  par_names <- names(sampled_pars(design_in))
+  res <- auto_mclapply(
+    X = 1:replicates,
+    FUN = run_SBC_subject,
+    design_in, prior_alpha, trials, prior_in, dots,
+    mc.cores = dots[["cores_per_chain"]]
+  )
+  SBC <- split_list_to_dfs(res)
+  if(!is.null(fileName)) {
+    save(SBC, prior_alpha, file = fileName)
+  }
+  return(SBC)
 }
+
+calc_sbc_stats <- function(stats){
+  if(is.null(stats$coverage)) return(NULL)
+  out <- list()
+  out_names <- names(stats[[1]])
+  for(i in 1:length(stats[[1]])){
+    out[[out_names[i]]] <- list(
+      coverage = apply(stats$coverage[[i]], 2, mean),
+      # precision = apply(stats$med[[i]], 2, sd),
+      bias = apply(stats$bias[[i]], 2, mean)
+    )
+  }
+  return(out)
+}
+
 
 #' Plot the Histogram of the Observed Rank Statistics of SBC
 #'
@@ -149,11 +225,16 @@ SBC_single <- function(design_in, prior_in, replicates = 250, trials = 100,
 #' @param ranks A list of named dataframes of the rank statistic
 #' @param bins An integer specifying the number of bins to use when plotting the histogram
 #' @param layout Optional. A numeric vector specifying the layout using `par(mfrow = layout)`
-#'
+#' @param add_stats Boolean. Should coverage, bias and precision be included in the figure.
 #' @return No returns
 #' @export
-plot_sbc_hist <- function(ranks, bins = 10, layout = NA){
-  if(!is.null(ranks$rank)) ranks <- ranks$rank
+plot_sbc_hist <- function(ranks, bins = 10, layout = NA, add_stats = TRUE){
+  if (!is.null(ranks[["rank"]])) {
+    stats <- calc_sbc_stats(ranks)
+  }
+  if (!is.null(ranks[["rank"]])) {
+    ranks <- ranks[["rank"]]
+  }
   selects <- names(ranks)
   oldpar <- par(no.readonly = TRUE) # code line i
   on.exit(par(oldpar)) # code line i + 1
@@ -163,17 +244,33 @@ plot_sbc_hist <- function(ranks, bins = 10, layout = NA){
   mid <- qbinom(0.5, n_sample, 1/bins)
   high <- qbinom(0.975, n_sample, 1/bins)
   par_names <- colnames(ranks[[1]])
-  for(j in 1:length(ranks)){
-    if(any(is.na(layout))){
-      par(mfrow = coda_setmfrow(Nchains = 1, Nparms = ncol(ranks[[1]]),
-                                       nplots = 1))
-    } else{par(mfrow=layout)}
+  for (j in seq_along(ranks)) {
+    if (any(is.na(layout))) {
+      par(mfrow = coda_setmfrow(Nparms = ncol(ranks[[1]])))
+    } else {
+      par(mfrow = layout)
+    }
     rank <- ranks[[j]]
-    for(i in 1:ncol(rank)){
-      hist(rank[,i], main = paste0(selects[j], " - ", par_names[i]), breaks = bins, ylim = c(0, high + 2))
+    stat <- stats[[j]]
+    for (i in 1:ncol(rank)) {
+      hist(
+        x = rank[ , i],
+        main = paste0(selects[j], " - ", par_names[i]),
+        breaks = bins,
+        ylim = c(0, high + 2),
+        xlab = "rank"
+      )
       abline(h = low, lty = 2)
       abline(h = mid, lty = 2)
       abline(h = high, lty = 2)
+      if (!is.null(stat) && add_stats) {
+        coverage_print <- paste0("coverage : ", round(stat[["coverage"]][i], 2))
+        bias_print <- paste0("bias : ", round(stat[["bias"]][i], 3))
+        # precision_print <- paste0("precision : ", round(stat[["precision"]][i], 3))
+        legend(x = "topleft", legend = coverage_print, bty = "n")
+        legend(x = "topright", legend = bias_print, bty = "n")
+        # legend(x = "topright", legend = precision_print, bty = "n")
+      }
     }
   }
 }
@@ -235,11 +332,17 @@ make_smooth <- function(x, y, N = 1000){
 #'
 #' @param ranks A list of named dataframes of the rank statistic
 #' @param layout Optional. A numeric vector specifying the layout using `par(mfrow = layout)`
-#'
+#' @param add_stats Boolean. Should coverage, bias and precision be included in the figure.
+#' @param main Optional. A character specifying plot title.
 #' @return No returns
 #' @export
-plot_sbc_ecdf <- function(ranks, layout = NA){
-  if(!is.null(ranks$rank)) ranks <- ranks$rank
+plot_sbc_ecdf <- function(ranks, layout = NA, add_stats = TRUE, main = ""){
+  if (!is.null(ranks[["rank"]])) {
+    stats <- calc_sbc_stats(ranks)
+  }
+  if (!is.null(ranks[["rank"]])) {
+    ranks <- ranks[["rank"]]
+  }
   selects <- names(ranks)
   oldpar <- par(no.readonly = TRUE) # code line i
   on.exit(par(oldpar)) # code line i + 1
@@ -247,19 +350,44 @@ plot_sbc_ecdf <- function(ranks, layout = NA){
   K <- N <- nrow(ranks[[1]])
   gamma <- get_gamma(N, K)
   res <- get_lims(N, K, gamma)
-  for(j in 1:length(ranks)){
-    if(any(is.na(layout))){
-      par(mfrow = coda_setmfrow(Nchains = 1, Nparms = ncol(ranks[[1]]),
-                                nplots = length(ranks)))
-    } else{par(mfrow=layout)}
-
+  for (j in seq_along(ranks)) {
+    if (any(is.na(layout))) {
+      par(mfrow = coda_setmfrow(Nparms = ncol(ranks[[1]]), nplots = length(ranks)))
+    } else {
+      par(mfrow = layout)
+    }
     rank <- ranks[[j]]
+    stat <- stats[[j]]
     par_names <- colnames(rank)
-    res$x <- apply(rank, 2, function(x) sort(x) - res$z)
-    for(i in 1:ncol(rank)){
-      plot(res$z, res$x[,i], type = "l", ylim = c(min(res$lower, res$x[,i]) - 0.01, max(res$upper,res$x[,i]) + 0.01), xlim = c(0, 1),
-           lwd = 2, ylab = "ECDF Difference", xlab = "Normalized Rank Statistic", main = paste0(selects[j], " - ", par_names[i]))
-      polygon(c(res$z, rev(res$z)), c(res$lower, rev(res$upper)), col = adjustcolor("cornflowerblue", 0.2))
+    res[["x"]] <- apply(rank, 2, function(x) {sort(x) - res[["z"]]})
+    for (i in 1:ncol(rank)) {
+      plot(
+        x = res[["z"]],
+        y = res[["x"]][ , i],
+        type = "l",
+        lwd = 2,
+        ylim = c(
+          min(res[["lower"]], res[["x"]][ , i]) - 0.01,
+          max(res[["upper"]], res[["x"]][ , i]) + 0.01
+        ),
+        xlim = c(0, 1),
+        ylab = "ECDF Difference",
+        xlab = "Normalized Rank Statistic",
+        main = paste0(selects[j], " - ", par_names[i])
+      )
+      polygon(
+        x = c(res[["z"]], rev(res[["z"]])),
+        y = c(res[["lower"]], rev(res[["upper"]])),
+        col = adjustcolor("cornflowerblue", 0.2)
+      )
+      if (!is.null(stat) && add_stats) {
+        coverage_print <- paste0("coverage : ", round(stat[["coverage"]][i], 2))
+        bias_print <- paste0("bias : ", round(stat[["bias"]][i], 3))
+        # precision_print <- paste0("precision : ", round(stat[["precision"]][i], 3))
+        legend(x = "topleft", legend = coverage_print, bty = "n")
+        legend(x = "topright", legend = bias_print, bty = "n")
+        # legend(x = "topright", legend = precision_print, bty = "n")
+      }
     }
   }
 }

@@ -129,7 +129,7 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
     # factors <- factors[names(factors) %in% c(all_preds, "subjects")]
   }
   if (!is.null(trend)) {
-    formula <- check_trend(trend,covariates, model, formula)
+    formula <- check_trend(trend,c(names(functions), covariates), model, formula)
   }
 
   # Check if all parameters in the model are specified in the formula
@@ -510,7 +510,7 @@ rt_check_function <- function(data){
 
 
 design_model <- function(data,design,model=NULL,
-                         add_acc=TRUE,rt_resolution=0.02,verbose=TRUE,
+                         add_acc=TRUE,rt_resolution=1/60,verbose=TRUE,
                          compress=TRUE,rt_check=TRUE, add_da = FALSE, all_cells_dm = FALSE)
 {
   if (is.null(model)) {
@@ -545,7 +545,7 @@ design_model <- function(data,design,model=NULL,
 
   if (!is.null(design$Ffunctions)) for (i in names(design$Ffunctions)) {
     newF <- stats::setNames(data.frame(design$Ffunctions[[i]](da)),i)
-    da <- cbind.data.frame(da,newF)
+    da[,i] <- newF
   }
 
   if (is.null(model()$p_types) | is.null(model()$Ttransform))
@@ -573,7 +573,7 @@ design_model <- function(data,design,model=NULL,
   for (i in pnames) attr(design$Flist[[i]],"Clist") <- design$Clist[[i]]
 
   out <- lapply(design$Flist,make_dm,da=da,Fcovariates=design$Fcovariates, add_da = add_da, all_cells_dm = all_cells_dm)
-  if (!is.null(rt_resolution) & !is.null(da$rt)) da$rt <- round(da$rt/rt_resolution)*rt_resolution
+  if (!is.null(rt_resolution) & !is.null(da$rt)) da$rt <- floor(da$rt/rt_resolution)*rt_resolution
   if (compress){
     dadm <- compress_dadm(da,designs=out, Fcov=design$Fcovariates,Ffun=names(design$Ffunctions))
     # Change expansion names
@@ -917,10 +917,11 @@ update2version <- function(emc){
     }
   }
 
+  group_design <- attr(emc[[1]]$prior, "group_design")
 
   prior_new <- emc[[1]]$prior
   attr(prior_new, "type") <- type
-  prior_new <- prior(design_list, type, update = prior_new)
+  prior_new <- prior(design_list, type, update = prior_new, group_design = group_design)
   class(prior_new) <- "emc.prior"
   emc <- lapply(emc, function(x){
     x$prior <- prior_new

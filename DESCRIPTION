@@ -1,6 +1,6 @@
 Package: EMC2
 Title: Bayesian Hierarchical Analysis of Cognitive Models of Choice
-Version: 3.2.1
+Version: 3.3.0
 Authors@R: 
     c(person("Niek", "Stevenson", email = "niek.stevenson@gmail.com", 
            role = c("aut", "cre"), comment = c(ORCID = "0000-0003-3206-7544")),
@@ -35,13 +35,14 @@ URL: https://ampl-psych.github.io/EMC2/, https://github.com/ampl-psych/EMC2
 BugReports: https://github.com/ampl-psych/EMC2/issues 
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
-RoxygenNote: 7.3.2
+RoxygenNote: 7.3.3
 VignetteBuilder: knitr
 Suggests: 
     testthat (>= 3.0.0),
     vdiffr,
     knitr,
-    rmarkdown
+    rmarkdown,
+    DiagrammeR
 Config/testthat/edition: 3
 Imports: 
     abind,
@@ -64,7 +65,7 @@ Imports:
     psych,
     utils,
     lpSolve,
-    WienR
+    WienR,
 LinkingTo: 
     Rcpp, RcppArmadillo
 Depends: 

@@ -32,16 +32,27 @@ BEGIN_RCPP
 END_RCPP
 }
 // calculate_subject_means
-arma::mat calculate_subject_means(const Rcpp::List& group_designs, const arma::colvec& params, const int n_subjects, const int n_pars);
-RcppExport SEXP _EMC2_calculate_subject_means(SEXP group_designsSEXP, SEXP paramsSEXP, SEXP n_subjectsSEXP, SEXP n_parsSEXP) {
+arma::mat calculate_subject_means(const Rcpp::List& group_designs, const arma::colvec& params);
+RcppExport SEXP _EMC2_calculate_subject_means(SEXP group_designsSEXP, SEXP paramsSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< const Rcpp::List& >::type group_designs(group_designsSEXP);
     Rcpp::traits::input_parameter< const arma::colvec& >::type params(paramsSEXP);
-    Rcpp::traits::input_parameter< const int >::type n_subjects(n_subjectsSEXP);
-    Rcpp::traits::input_parameter< const int >::type n_pars(n_parsSEXP);
-    rcpp_result_gen = Rcpp::wrap(calculate_subject_means(group_designs, params, n_subjects, n_pars));
+    rcpp_result_gen = Rcpp::wrap(calculate_subject_means(group_designs, params));
+    return rcpp_result_gen;
+END_RCPP
+}
+// draw_alpha_from_design
+arma::cube draw_alpha_from_design(const Rcpp::List& group_designs, const arma::mat& mu, const arma::cube& var);
+RcppExport SEXP _EMC2_draw_alpha_from_design(SEXP group_designsSEXP, SEXP muSEXP, SEXP varSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const Rcpp::List& >::type group_designs(group_designsSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type mu(muSEXP);
+    Rcpp::traits::input_parameter< const arma::cube& >::type var(varSEXP);
+    rcpp_result_gen = Rcpp::wrap(draw_alpha_from_design(group_designs, mu, var));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -437,6 +448,18 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// do_transform
+Rcpp::NumericMatrix do_transform(Rcpp::NumericMatrix pars, Rcpp::List transform);
+RcppExport SEXP _EMC2_do_transform(SEXP parsSEXP, SEXP transformSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type pars(parsSEXP);
+    Rcpp::traits::input_parameter< Rcpp::List >::type transform(transformSEXP);
+    rcpp_result_gen = Rcpp::wrap(do_transform(pars, transform));
+    return rcpp_result_gen;
+END_RCPP
+}
 // calc_ll
 NumericVector calc_ll(NumericMatrix p_matrix, DataFrame data, NumericVector constants, List designs, String type, List bounds, List transforms, List pretransforms, CharacterVector p_types, double min_ll, List trend);
 RcppExport SEXP _EMC2_calc_ll(SEXP p_matrixSEXP, SEXP dataSEXP, SEXP constantsSEXP, SEXP designsSEXP, SEXP typeSEXP, SEXP boundsSEXP, SEXP transformsSEXP, SEXP pretransformsSEXP, SEXP p_typesSEXP, SEXP min_llSEXP, SEXP trendSEXP) {
@@ -458,6 +481,19 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// EMC2_call_custom_trend
+NumericVector EMC2_call_custom_trend(NumericMatrix trend_pars, NumericMatrix input, SEXP funptrSEXP);
+RcppExport SEXP _EMC2_EMC2_call_custom_trend(SEXP trend_parsSEXP, SEXP inputSEXP, SEXP funptrSEXPSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericMatrix >::type trend_pars(trend_parsSEXP);
+    Rcpp::traits::input_parameter< NumericMatrix >::type input(inputSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type funptrSEXP(funptrSEXPSEXP);
+    rcpp_result_gen = Rcpp::wrap(EMC2_call_custom_trend(trend_pars, input, funptrSEXP));
+    return rcpp_result_gen;
+END_RCPP
+}
 // c_add_charvectors
 CharacterVector c_add_charvectors(CharacterVector x, CharacterVector y);
 RcppExport SEXP _EMC2_c_add_charvectors(SEXP xSEXP, SEXP ySEXP) {
@@ -473,7 +509,8 @@ END_RCPP
 
 static const R_CallMethodDef CallEntries[] = {
     {"_EMC2_sp_new", (DL_FUNC) &_EMC2_sp_new, 10},
-    {"_EMC2_calculate_subject_means", (DL_FUNC) &_EMC2_calculate_subject_means, 4},
+    {"_EMC2_calculate_subject_means", (DL_FUNC) &_EMC2_calculate_subject_means, 2},
+    {"_EMC2_draw_alpha_from_design", (DL_FUNC) &_EMC2_draw_alpha_from_design, 3},
     {"_EMC2_dlba", (DL_FUNC) &_EMC2_dlba, 6},
     {"_EMC2_plba", (DL_FUNC) &_EMC2_plba, 6},
     {"_EMC2_dWald", (DL_FUNC) &_EMC2_dWald, 5},
@@ -498,7 +535,9 @@ static const R_CallMethodDef CallEntries[] = {
     {"_EMC2_compute_time_derivative", (DL_FUNC) &_EMC2_compute_time_derivative, 10},
     {"_EMC2_build_hrf_kernel", (DL_FUNC) &_EMC2_build_hrf_kernel, 10},
     {"_EMC2_construct_design_matrix", (DL_FUNC) &_EMC2_construct_design_matrix, 13},
+    {"_EMC2_do_transform", (DL_FUNC) &_EMC2_do_transform, 2},
     {"_EMC2_calc_ll", (DL_FUNC) &_EMC2_calc_ll, 11},
+    {"_EMC2_EMC2_call_custom_trend", (DL_FUNC) &_EMC2_EMC2_call_custom_trend, 3},
     {"_EMC2_c_add_charvectors", (DL_FUNC) &_EMC2_c_add_charvectors, 2},
     {NULL, NULL, 0}
 };

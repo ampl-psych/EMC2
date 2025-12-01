@@ -1,3 +1,17 @@
+# EMC2 3.3.0
+
+## Bug fixes
+
+* Addressed a major issue in `map = TRUE`, so that now mapping of population level parameters is now done correctly. See issue #119
+
+## New features
+
+* More general support for `group_design` (tutorial on the way), also using `map = TRUE`
+
+* Start of a more general trends implementation (stay tuned; tutorial still on the way)
+
+* Some more SEM/FA functionality added i.e. `rotate_loadings`
+
 # EMC2 3.2.1
 
 ## Bug fix 

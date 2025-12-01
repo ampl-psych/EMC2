@@ -65,6 +65,7 @@ get_stop_criteria <- function(stage, stop_criteria, type){
 #' @param thin A boolean. If `TRUE` will automatically thin the MCMC samples, closely matched to the ESS.
 #' Can also be set to a double, in which case 1/thin of the chain will be removed (does not have to be an integer).
 #' @param trim A boolean. If `TRUE` will automatically remove redundant samples (i.e. from preburn, burn, adapt).
+#' @param r_cores An integer for number of cores to use in R-based likelihood calculations, default 1.
 #' @export
 #' @return An emc object
 #' @examples \donttest{
@@ -84,7 +85,7 @@ run_emc <- function(emc, stage, stop_criteria,
                     search_width = 1, step_size = 100, verbose = FALSE, verboseProgress = FALSE,
                     fileName = NULL,particle_factor=50, cores_per_chain = 1,
                     cores_for_chains = length(emc), max_tries = 20, n_blocks = 1,
-                    thin = FALSE, trim = TRUE){
+                    thin = FALSE, trim = TRUE, r_cores=1){
   emc <- restore_duplicates(emc)
   if(Sys.info()[1] == "Windows" & cores_per_chain > 1) stop("only cores_for_chains can be set on Windows")
   if (verbose) message(paste0("Running ", stage, " stage"))
@@ -119,7 +120,8 @@ run_emc <- function(emc, stage, stop_criteria,
     sub_emc <- auto_mclapply(sub_emc,run_stages, stage = stage, iter= progress$step_size*max(1,cur_thin),
                              verbose=verbose,  verboseProgress = verboseProgress,
                              particle_factor=particle_factor,search_width=search_width,
-                             n_cores=cores_per_chain, mc.cores = cores_for_chains)
+                             n_cores=cores_per_chain, mc.cores = cores_for_chains,
+                             r_cores = r_cores)
 
     class(sub_emc) <- "emc"
     if(stage != 'preburn'){
@@ -152,16 +154,17 @@ run_emc <- function(emc, stage, stop_criteria,
 }
 
 run_stages <- function(sampler, stage = "preburn", iter=0, verbose = TRUE, verboseProgress = TRUE,
-                       particle_factor=50, search_width= NULL, n_cores=1)
+                       particle_factor=50, search_width= NULL, n_cores=1, r_cores = 1)
 {
   particles <- round(particle_factor*sqrt(sampler$n_pars))
   if (!sampler$init) {
-    sampler <- init(sampler, n_cores = n_cores)
+    sampler <- init(sampler, n_cores = n_cores, r_cores = r_cores)
   }
   if (iter == 0) return(sampler)
   tune <- list(search_width = search_width)
   sampler <- run_stage(sampler, stage = stage,iter = iter, particles = particles,
-                       n_cores = n_cores, tune = tune, verbose = verbose, verboseProgress = verboseProgress)
+                       n_cores = n_cores, tune = tune, verbose = verbose,
+                       verboseProgress = verboseProgress, r_cores = r_cores)
   return(sampler)
 }
 
@@ -655,20 +658,16 @@ loadRData <- function(fileName){
 #' @export
 
 make_emc <- function(data,design,model=NULL,
-                          type="standard",
-                          n_chains=3,compress=TRUE,rt_resolution=0.02,
-                          prior_list = NULL, group_design = NULL,
-                          par_groups=NULL, ...){
+                    type="standard",
+                    n_chains=3,compress=TRUE,rt_resolution=1/60,
+                    prior_list = NULL, group_design = NULL,
+                    par_groups=NULL, ...){
   # arguments for future compatibility
   n_factors <- NULL
-  formula <- NULL
-  Lambda_mat <- NULL
-  B_mat <- NULL
-  K_mat <- NULL
-  G_mat <- NULL
-  covariates <- NULL
   nuisance <- NULL
   nuisance_non_hyper <- NULL
+  sem_settings <- NULL
+  Lambda_mat <- NULL
   # overwrite those that were supplied
   optionals <- list(...)
   for (name in names(optionals) ) {
@@ -724,13 +723,24 @@ make_emc <- function(data,design,model=NULL,
   if (length(model)!=length(data))
     model <- rep(model,length(data))
 
+  ## SM: check for delta rules in trend, and override/turn off compression if the user supplied compress=TRUE.
+  compress_passed <- compress
+  compress <- rep(compress, length(model))
+  has_delta_rule <- sapply(model, has_delta_rules)
+  compress[has_delta_rule] <- FALSE
+  if(compress_passed & any(has_delta_rule)) {
+    if(length(model) == 1) message('Because the model contains a delta rule, data will not be compressed.')
+    else message(paste0('Models ', which(has_delta_rule), ' contain a delta rule; the corresponding data will not be compressed.'))
+  }
+  ## SM END
+
   dadm_list <- vector(mode="list",length=length(data))
   rt_resolution <- rep(rt_resolution,length.out=length(data))
   for (i in 1:length(dadm_list)) {
     message("Processing data set ",i)
     if(is.null(attr(design[[i]], "custom_ll"))){
       dadm_list[[i]] <- design_model(data=data[[i]],design=design[[i]],
-                                     compress=compress,model=model[[i]],rt_resolution=rt_resolution[i])
+                                     compress=compress[[i]],model=model[[i]],rt_resolution=rt_resolution[i])
       sampled_p_names <- names(attr(design[[i]],"p_vector"))
     } else{
       dadm_list[[i]] <- design_model_custom_ll(data = data[[i]],
@@ -794,9 +804,7 @@ make_emc <- function(data,design,model=NULL,
                  nuisance_non_hyper = nuisance_non_hyper,
                  Lambda_mat = Lambda_mat)
   } else if (type == "SEM"){
-    out <- pmwgs(dadm_list, type, Lambda_mat = Lambda_mat,
-                 B_mat = B_mat, K_mat = K_mat, G_mat = G_mat,
-                 covariates = covariates, nuisance = nuisance,
+    out <- pmwgs(dadm_list, type, sem_settings = sem_settings, nuisance = nuisance,
                  nuisance_non_hyper = nuisance_non_hyper)
   }
   out$model <- lapply(design, function(x) x$model)
@@ -830,6 +838,7 @@ check_duplicate_designs <- function(out){
       }
     })
     for(j in 1:length(out$data[[i]])){# Loop over data sets in this sub
+      if(is.null(designs[[j]])) next
       if(duplicacy[j]){
         attr(out$data[[i]][[j]], "designs") <- unq_idx[j]
       }

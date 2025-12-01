@@ -78,8 +78,8 @@ get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1
   if(!is.null(design)){
     n_pars <- length(sampled_pars(design, doMap = F))
   }
-  if (!is.null(prior$theta_mu_mean)) {
-    n_pars <- length(prior$theta_mu_mean)
+  if (!is.null(prior$A) & is.null(n_pars)) {
+    n_pars <- length(prior$A)
   }
 
   # Number of additional parameters from design matrices
@@ -146,9 +146,9 @@ get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1
       if(selection != "alpha") samples$theta_var <- vars
     }
     if(selection %in% "alpha"){
-      mu <-implied_mean(sampler = list(samples = samples), 1:N)
       samples <- list()
-      samples$alpha <- get_alphas(mu, vars, "alpha")
+      samples$alpha <- get_alphas(beta, vars, design[[1]]$Ffactors$subjects,
+                                  group_design = group_design)
     }
     out <- samples
   }
@@ -164,9 +164,8 @@ get_startpoints_standard <- function(pmwgs, start_mu, start_var){
   start_a_half <- 1 / rgamma(n = n_pars, shape = 2, rate = 1)
 
   # Calculate subject-specific means using design matrices
-  group_designs <- add_group_design(pmwgs$par_names, pmwgs$group_designs, pmwgs$n_subjects)
-  subj_mu <- calculate_subject_means(group_designs, start_mu, pmwgs$n_subjects, n_pars)
-
+  group_designs <- add_group_design(pmwgs$par_names[!pmwgs$nuisance], pmwgs$group_designs, pmwgs$n_subjects)
+  subj_mu <- calculate_subject_means(group_designs, start_mu)
   return(list(tmu = start_mu, tvar = start_var, tvinv = ginv(start_var),
               a_half = start_a_half, subj_mu = subj_mu))
 }
@@ -208,8 +207,8 @@ gibbs_step_standard <- function(sampler, alpha) {
 
 
   group_designs <- sampler$group_designs
-  is_blocked    <- sampler$is_blocked
-  par_group     <- sampler$par_group
+  is_blocked    <- sampler$is_blocked[!sampler$nuisance]
+  par_group     <- sampler$par_group[!sampler$nuisance]
   prior         <- sampler$prior
 
   last    <- last_sample_standard(sampler$samples)
@@ -229,7 +228,7 @@ gibbs_step_standard <- function(sampler, alpha) {
     par_group <- rep(1, p)
   }
 
-  group_designs <- add_group_design(sampler$par_names, group_designs, n)
+  group_designs <- add_group_design(sampler$par_names[!sampler$nuisance], group_designs, n)
 
   # Calculate total parameters (including regressors)
   M <- length(tmu)  # Total parameters (former mu + beta)
@@ -270,7 +269,7 @@ gibbs_step_standard <- function(sampler, alpha) {
   resid <- matrix(0, nrow=p, ncol=n)
 
   # Calculate subject-level means using the new parameters
-  subj_mu <- calculate_subject_means(group_designs, tmu_new, n, p)
+  subj_mu <- calculate_subject_means(group_designs, tmu_new)
 
   # Compute residuals
   for (i in seq_len(n)) {
@@ -390,20 +389,21 @@ filtered_samples_standard <- function(sampler, filter, ...){
 
 
 calc_log_jac_chol <- function(x) {
-  # x: a vector of length n*(n+1)/2 representing the lower-triangular
-  # matrix with its diagonal stored on the log-scale.
-  # Determine n from the length of x.
-  n <- floor(sqrt(2 * length(x) + 0.25) - 0.5)
+  ## work out dimension -------------------------------------------------
+  n <- floor(sqrt(2 * length(x) + 0.25) - 0.5)   # solves n(n+1)/2 = length(x)
 
-  # Reconstruct the lower-triangular matrix in "parameter space"
-  mat <- matrix(NA, n, n)
-  mat[lower.tri(mat, diag = TRUE)] <- x
+  ## rebuild the raw lower‑triangular matrix ----------------------------
+  mat <- matrix(NA_real_, n, n)
+  mat[lower.tri(mat, diag = TRUE)] <- x          # raw params (diag on log‑scale)
 
-  # The diagonal of the actual Cholesky factor is exp(x_diag),
-  # so log(diag(L)) = x_diag.
-  # The log-Jacobian is then:
-  #   sum_{i=1}^{n} (n - i + 2) * x_diag[i]
-  log_jac <- sum( (n - seq_len(n) + 2) * diag(mat) )
+  ## step 1: create L ---------------------------------------------------
+  L <- mat
+  diag(L) <- exp(diag(mat))                      # positive diagonal
+  # (off‑diagonals stay on natural scale)
+
+  ## log‑Jacobian -------------------------------------------------------
+  logL <- diag(mat)                              # log of L_ii
+  log_jac <- n * log(2) + sum((n - seq_len(n) + 2) * logL)
 
   return(log_jac)
 }
@@ -665,7 +665,7 @@ group__IC_standard <- function(emc, stage="sample", filter=NULL) {
     lls <- standard_subj_ll(group_designs, theta_var, theta_mu, alpha, n_subj)
     # 5) Likelihood at posterior mean
     # Calculate subject-level means using the mean parameters
-    mean_subj_means <- calculate_subject_means(group_designs, mean_mu, n_subj, p)
+    mean_subj_means <- calculate_subject_means(group_designs, mean_mu)
     mean_pars_ll <- 0
     for(s in seq_len(n_subj)) {
       mean_pars_ll <- mean_pars_ll +
@@ -695,7 +695,7 @@ standard_subj_ll <- function(theta_var, theta_mu, alpha, n_subj, group_designs)
     rooti <- backsolve(U, diag(p))
     log_const <- sum(log(diag(rooti))) - 0.5 * p * log2pi
 
-    mu  <- calculate_subject_means(group_designs, theta_mu[,i], n_subj, p)
+    mu  <- calculate_subject_means(group_designs, theta_mu[,i])
     z   <- t(alpha[,,i] - mu) %*% rooti      # n_subj × p
     ll[i] <- -0.5 * sum(z^2) + n_subj*log_const
   }

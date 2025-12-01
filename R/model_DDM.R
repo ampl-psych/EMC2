@@ -15,26 +15,55 @@ suppress_output <- function(expr) {
   invisible(force(expr))  # Run the expression
 }
 
+# rDDM <- function(R,pars,ok=rep(TRUE,length(R)), precision=5e-3)
+# {
+#   bad <- rep(NA,nrow(pars))
+#   out <- data.frame(response=bad,rt=bad)
+#   out_ok <- out[ok,]
+#   pars <- pars[ok,]
+#   R <- R[ok]
+#   pars <- as.matrix(pars);
+#   idx <- find_duplicate_indices(pars)
+#   for(id in unique(idx)){
+#     is_id <- which(idx == id)
+#     cur_pars <- pars[is_id[1],]
+#     tmp <- suppress_output(rWDM(N = length(is_id), a = cur_pars["a"]/cur_pars[ "s"], v = cur_pars["v"]/cur_pars[ "s"], t0 = cur_pars["t0"],
+#                                 w = cur_pars["Z"], sw = cur_pars["SZ"], sv = cur_pars["sv"]/cur_pars[ "s"],
+#                                 st0 = cur_pars["st0"], precision = precision))
+#     tmp <- data.frame(response = tmp$response, rt = tmp$q)
+#     out_ok[is_id,] <- tmp[sample(nrow(tmp)),]
+#   }
+#   out[ok,] <- out_ok
+#   cbind.data.frame(R=factor(out[,"response"], labels = levels(R), levels = c("lower", "upper")),rt=out[,"rt"])
+# }
+
 rDDM <- function(R,pars,ok=rep(TRUE,length(R)), precision=5e-3)
 {
-  bad <- rep(NA,nrow(pars))
-  out <- data.frame(response=bad,rt=bad)
-  out_ok <- out[ok,]
   pars <- pars[ok,]
   R <- R[ok]
   pars <- as.matrix(pars);
-  idx <- find_duplicate_indices(pars)
-  for(id in unique(idx)){
-    is_id <- which(idx == id)
-    cur_pars <- pars[is_id[1],]
-    tmp <- suppress_output(rWDM(N = length(is_id), a = cur_pars["a"]/cur_pars[ "s"], v = cur_pars["v"]/cur_pars[ "s"], t0 = cur_pars["t0"],
-                       w = cur_pars["Z"], sw = cur_pars["SZ"], sv = cur_pars["sv"]/cur_pars[ "s"],
-                       st0 = cur_pars["st0"], precision = precision))
-    tmp <- data.frame(response = tmp$response, rt = tmp$q)
-    out_ok[is_id,] <- tmp[sample(nrow(tmp)),]
+  # DDM gets unhappy with large trial numbers so split them into separate lists
+  split_idx <- rep(1:ceiling(nrow(pars)/5e3), each = 5e3)
+  split_idx <- split_idx[1:nrow(pars)]
+  out_list <- vector("list", length(unique(split_idx)))
+  for(j in 1:length(unique(split_idx))){
+    pars_tmp <- pars[split_idx == j,]
+    idx <- find_duplicate_indices(pars_tmp)
+    out <- data.frame(R = rep(NA,nrow(pars_tmp)), rt = rep(NA,nrow(pars_tmp)))
+    for(id in unique(idx)){
+      is_id <- which(idx == id)
+      cur_pars <- pars_tmp[is_id[1],]
+      tmp <- suppress_output(rWDM(N = length(is_id), a = cur_pars["a"]/cur_pars[ "s"], v = cur_pars["v"]/cur_pars[ "s"], t0 = cur_pars["t0"],
+                                  w = cur_pars["Z"], sw = cur_pars["SZ"], sv = cur_pars["sv"]/cur_pars[ "s"],
+                                  st0 = cur_pars["st0"], precision = precision))
+      tmp <- data.frame(R = tmp$response, rt = tmp$q)
+      out[is_id,] <- tmp
+    }
+    out_list[[j]] <- out
   }
-  out[ok,] <- out_ok
-  cbind.data.frame(R=factor(out[,"response"], labels = levels(R), levels = c("lower", "upper")),rt=out[,"rt"])
+  out <- do.call(rbind, out_list)
+  out$R <- factor(out$R, labels = levels(R), levels = c("lower", "upper"))
+  return(out)
 }
 
 
@@ -119,7 +148,7 @@ DDM <- function(){
                             sv=c(.01,10),s=c(0,Inf),SZ=c(.01,.99),st0=c(0,.5)),
                exception=c(sv=0,SZ=0,st0=0)),
     Ttransform = function(pars,dadm) {
-      pars[,"SZ"] <- 2*pars[,"SZ"]*apply(cbind(pars[,"Z"],1-pars[,"Z"]),1,min)
+      pars[,"SZ"] <- 2*pars[,"SZ"]*pmin(pars[,"Z"], 1 - pars[,"Z"])
       pars <- cbind(pars,z=pars[,"Z"]*pars[,"a"], sz = pars[,"SZ"]*pars[,"a"])
       pars
     },

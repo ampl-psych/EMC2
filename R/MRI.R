@@ -146,6 +146,13 @@ reshape_events <- function(events, event_types, duration = 0.001, modulation = N
   return(out)
 }
 
+map_MRI <- function(cur_draws){
+  cur_draws[grepl("sd", rownames(cur_draws)),,] <- exp(cur_draws[grepl("sd", rownames(cur_draws)),,])
+  cur_draws[grepl("rho", rownames(cur_draws)),,] <- pnorm(cur_draws[grepl("rho", rownames(cur_draws)),,])
+  return(cur_draws)
+}
+
+
 
 #' Convolve Events with HRF to Construct Design Matrices
 #'
