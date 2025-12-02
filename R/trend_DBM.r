@@ -196,15 +196,15 @@ run_tpm_nocp <- function(
     prev <- covariate[(t - 1)]
     curr <- covariate[t]
     if (is.na(prev)) {
-      out[t] <- out[(t - 1)]
-      next
-    }
-    if (prev == 1) {
-      out[t] <- beta_mean(a_XX, b_XX)
+      out[t] <- 0.5 * (beta_mean(a_XX, b_XX) + beta_mean(a_XY, b_XY))
     } else {
-      out[t] <- beta_mean(a_XY, b_XY)
+      if (prev == 1) {
+        out[t] <- beta_mean(a_XX, b_XX)
+      } else {
+        out[t] <- beta_mean(a_XY, b_XY)
+      }
     }
-    if (is.na(curr)) {
+    if (is.na(curr) || is.na(prev)) {
       next
     }
     if (prev == 1) {
@@ -276,8 +276,12 @@ run_tpm <- function(
   )
   inv_n_min_1 <- 1 / (length(TPM_post) - 1)
 
+  prev <- NA
+
   for (t in seq_len(n_total)) {
-    if (t > 1) {
+    if (t == 1) {
+      prev <- NA
+    } else {
       prev <- covariate[(t - 1)]
     }
     curr <- covariate[t]
@@ -287,42 +291,39 @@ run_tpm <- function(
     TPM_pred <- normalise(
       (1 - cp[t]) * TPM_post + cp[t] * (sum_TPM_post - TPM_post) * inv_n_min_1
     )
-    if (t == 1) {
+    if (is.na(prev)) {
       out[t] <- sum(mean_p * TPM_pred)
     } else {
-      if (is.na(prev)) {
-        out[t] <- out[(t - 1)]
-        next
-      }
       if (prev == 1) {
         out[t] <- sum(p_XX * TPM_pred)
       } else {
         out[t] <- sum(p_XY * TPM_pred)
       }
     }
-    if (t > 1) {
-      if (is.na(curr)) {
-        TPM_post <- TPM_pred
-        next
-      }
-      if (prev == 0) {
-        if (curr == 0) {
-          like_curr <- like_YY
-        } else {
-          like_curr <- like_XY
-        }
-      } else {
-        if (curr == 0) {
-          like_curr <- like_YX
-        } else {
-          like_curr <- like_XX
-        }
-      }
-      TPM_post <- normalise(
-        (1 - cp[t]) * like_curr * TPM_post +
-          cp[t] * like_curr * (sum_TPM_post - TPM_post) * inv_n_min_1
-      )
+
+    if (is.na(curr) || is.na(prev)) {
+      TPM_post <- TPM_pred
+      next
     }
+
+    if (prev == 0) {
+      if (curr == 0) {
+        like_curr <- like_YY
+      } else {
+        like_curr <- like_XY
+      }
+    } else {
+      if (curr == 0) {
+        like_curr <- like_YX
+      } else {
+        like_curr <- like_XX
+      }
+    }
+    TPM_post <- normalise(
+      (1 - cp[t]) * like_curr * TPM_post +
+        cp[t] * like_curr * (sum_TPM_post - TPM_post) * inv_n_min_1
+    )
+
   }
 
   if (return_surprise) {
