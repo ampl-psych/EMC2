@@ -1172,7 +1172,8 @@ get_kernels <- function() {
     beta_binom = list(
       description = paste(
         "Beta-Binomial learning kernel:\n",
-        "        k[i] = predicted probability of the upcoming observation being X as opposed to Y.\n",
+        "        k[i] = predicted probability of the current trial's observation\n",
+        "        being X as opposed to Y.\n",
         "        Assumes a binary (Bernoulli) sequence of observations.\n",
         "        Returns the trial-wise mean of the posterior predictive distribution\n",
         "        of the latent probability that the observation is X.\n",
@@ -1194,10 +1195,10 @@ get_kernels <- function() {
     beta_binom_map = list(
       description = paste(
         "Beta-Binomial learning kernel (MAP):\n",
-        "        k[i] = predicted probability of the upcoming observation being X as opposed to Y.\n",
+        "        k[i] = predicted probability of the current trial's observation\n",
+        "        being X as opposed to Y.\n",
         "        Same as the standard Beta-Binomial learning kernel, but returns the\n",
-        "        trial-wise mode (rather than mean) of the posterior predictive distribution\n",
-        "        of the latent probability that the observation is X.\n",
+        "        trial-wise mode (rather than mean).\n",
         "        Parameters: a0, b0 (shape parameters of the Beta prior),\n",
         "        decay (optional exponential memory decay), window (optional memory window)."
       ),
@@ -1210,8 +1211,8 @@ get_kernels <- function() {
     beta_binom_surprise = list(
       description = paste(
         "Beta-Binomial learning kernel (surprise):\n",
-        "        k[i] = Shannon surprise of the observation,\n",
-        "        computed from the predictive mean probability of the upcoming observation.\n",
+        "        k[i] = Shannon surprise of the current trial's observation,\n",
+        "        computed from the predictive mean probability of the observation.\n",
         "        Parameters: a0, b0 (shape parameters of the Beta prior),\n",
         "        decay (optional exponential memory decay), window (optional memory window)."
       ),
@@ -1224,8 +1225,8 @@ get_kernels <- function() {
     beta_binom_map_surprise = list(
       description = paste(
         "Beta-Binomial learning kernel (MAP + surprise):\n",
-        "        k[i] = Shannon surprise of the observation,\n",
-        "        computed from the predictive mode probability of the upcoming observation.\n",
+        "        k[i] = Shannon surprise of the current trial's observation,\n",
+        "        computed from the predictive mode probability of the observation.\n",
         "        Parameters: a0, b0 (shape parameters of the Beta prior),\n",
         "        decay (optional exponential memory decay), window (optional memory window)."
       ),
@@ -1238,9 +1239,10 @@ get_kernels <- function() {
     dbm = list(
       description = paste(
         "Dynamic Belief Model (DBM) kernel:\n",
-        "        k[i] = predicted probability of the upcoming observation being X as opposed to Y.\n",
+        "        k[i] = predicted probability of the current trial's observation\n",
+        "        being X as opposed to Y.\n",
         "        Assumes a binary (Bernoulli) sequence of observations.\n",
-        "        Returns the trial-wise mean of the posterior predictive distribution\n",
+        "        Returns the trial-wise mean of the predictive distribution\n",
         "        of the latent probability that the observation is X.\n",
         "        Assumes that this latent probability is a mixture of the previous\n",
         "        trial's probability and a 'reset' probability drawn from a fixed Beta prior.\n",
@@ -1257,10 +1259,10 @@ get_kernels <- function() {
     dbm_map = list(
       description = paste(
         "Dynamic Belief Model (DBM) kernel (MAP):\n",
-        "        k[i] = predicted probability of the upcoming observation being X as opposed to Y.\n",
+        "        k[i] = predicted probability of the current trial's observation\n",
+        "        being X as opposed to Y.\n",
         "        Same as the standard DBM kernel, but returns the trial-wise mode\n",
-        "        (rather than mean) of the posterior predictive distribution\n",
-        "        of the latent probability that the observation is X.\n",
+        "        (rather than mean) of the predictive distribution.\n",
         "        Parameters: cp (change-point probability), mu0 (mean of Beta prior), s0 (scale of Beta prior)."
       ),
       default_pars = c("cp", "mu0", "s0"),
@@ -1272,8 +1274,8 @@ get_kernels <- function() {
     dbm_surprise = list(
       description = paste(
         "Dynamic Belief Model (DBM) kernel (surprise):\n",
-        "        k[i] = Shannon surprise of the observation,\n",
-        "        computed from the predictive mean probability of the upcoming observation.\n",
+        "        k[i] = Shannon surprise of the current trial's observation,\n",
+        "        computed from the predictive mean probability of the observation.\n",
         "        Parameters: cp (change-point probability), mu0 (mean of Beta prior), s0 (scale of Beta prior)."
       ),
       default_pars = c("cp", "mu0", "s0"),
@@ -1285,8 +1287,8 @@ get_kernels <- function() {
     dbm_map_surprise = list(
       description = paste(
         "Dynamic Belief Model (DBM) kernel (MAP + surprise):\n",
-        "        k[i] = Shannon surprise of the observation,\n",
-        "        computed from the predictive mode probability of the upcoming observation.\n",
+        "        k[i] = Shannon surprise of the current trial's observation,\n",
+        "        computed from the predictive mode probability of the observation.\n",
         "        Parameters: cp (change-point probability), mu0 (mean of Beta prior), s0 (scale of Beta prior)."
       ),
       default_pars = c("cp", "mu0", "s0"),
@@ -1298,10 +1300,13 @@ get_kernels <- function() {
     tpm = list(
       description = paste(
         "Transition Probability Model (TPM) kernel:\n",
-        "        k[i] = predicted probability of the upcoming observation being X as opposed to Y,\n",
-        "        conditional on the previous trial's observation.\n",
+        "        k[i] = predicted probability of the current trial's observation\n",
+        "        being X as opposed to Y, conditional on the previous trial's observation.\n",
         "        Assumes a binary (Bernoulli) sequence of observations and\n",
         "        estimates first-order transition probabilities.\n",
+        "        Returns the trial-wise mean of the predictive distribution\n",
+        "        of the latent transition probability that the observation is X,\n",
+        "        given that the previous trial's observation was either X or Y.\n",
         "        Incorporates a trial-wise change-point probability cp[i] controlling belief volatility.\n",
         "        Parameters: cp (change-point probability), a0, b0 (shape parameters of Beta priors over transition probabilities)."
       ),
@@ -1314,9 +1319,9 @@ get_kernels <- function() {
     tpm_surprise = list(
       description = paste(
         "Transition Probability Model (TPM) kernel:\n",
-        "        k[i] = Shannon surprise of the observation,\n",
-        "        computed from the predicted probability of the upcoming trial\n",
-        "        conditional on the previous trial.\n",
+        "        k[i] = Shannon surprise of the current trial's observation,\n",
+        "        computed from the predictive mean probability of the observation,\n",
+        "        conditional on the previous trial's observation.\n",
         "        Parameters: cp (change-point probability), a0, b0 (shape parameters of Beta priors over transition probabilities)."
       ),
       default_pars = c("cp", "a0", "b0"),
@@ -1334,7 +1339,7 @@ format_kernel <- function(kernel, kernel_pars=NULL) {
   kernels <- get_kernels()
   eq_string <- kernels[[kernel]]$description
   eq_string <- strsplit(eq_string, ': k = ')[[1]][[2]]
-  if(kernel %in% c('delta', 'delta2kernel', 'delta2lr')) eq_string <- strsplit(eq_string, '\\.')[[1]][[1]]
+  if(is_kernel_type(kernel, "learning")) eq_string <- strsplit(eq_string, '\\.')[[1]][[1]]
   if(kernel %in% c('exp_incr', 'pow_incr', 'poly1', 'poly2', 'poly3', 'poly4')) eq_string <- paste0('(', eq_string, ')')
 
   # add placeholders
