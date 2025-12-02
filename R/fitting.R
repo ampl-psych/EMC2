@@ -653,7 +653,8 @@ loadRData <- function(fileName){
 #' prior_LBABE <- prior(design_LBABE, type = 'standard',pmean=pmean,psd=psd)
 #'
 #' # create emc object
-#' LBABE <- make_emc(dat,design_LBABE,type="standard",  prior=prior_LBABE)
+#' LBABE <- make_emc(dat,design_LBABE,type="standard",  prior=prior_LBABE,
+#'                   compress = FALSE)
 #'
 #' @export
 

@@ -28,16 +28,24 @@
       s     0.00000000 0.00000000 0.03923812 0.000000
       t0    0.00000000 0.00000000 0.00000000 0.106451
 
+---
+
+    Code
+      compare(list(diag = LNR_diag), stage = "preburn", cores_for_props = 1)
+    Output
+             MD wMD  DIC wDIC BPIC wBPIC EffectiveN meanD Dmean minD
+      diag -579   1 1066    1 1916     1        851   215  -607 -635
+
 # run_blocked
 
     Code
       LNR_blocked[[1]]$samples$alpha[, , idx]
     Output
                   as1t       bd6t
-      m     -0.9722393 -0.9902785
-      m_lMd -0.3535471 -0.6376234
-      s     -0.8799747 -0.5240860
-      t0    -1.9649581 -1.7118019
+      m     -0.9668625 -1.0003825
+      m_lMd -0.2819924 -0.5445420
+      s     -0.8501189 -0.5963007
+      t0    -1.9733013 -1.7466873
 
 ---
 
@@ -45,18 +53,26 @@
       LNR_blocked[[1]]$samples$theta_mu[, idx]
     Output
                m      m_lMd          s         t0 
-      -0.9862506 -0.7445712 -0.1982309 -2.1982936 
+      -1.0052941 -1.5321301 -0.9540201 -1.8960213 
 
 ---
 
     Code
       LNR_blocked[[1]]$samples$theta_var[, , idx]
     Output
-                       m      m_lMd          s         t0
-      m     0.0002440168 0.00000000  0.0000000  0.0000000
-      m_lMd 0.0000000000 0.05788441  0.0000000  0.0000000
-      s     0.0000000000 0.00000000  0.2532656 -0.1998045
-      t0    0.0000000000 0.00000000 -0.1998045  0.1911231
+                      m     m_lMd          s         t0
+      m     0.003426314 0.0000000 0.00000000 0.00000000
+      m_lMd 0.000000000 0.7972991 0.00000000 0.00000000
+      s     0.000000000 0.0000000 0.02009918 0.02058433
+      t0    0.000000000 0.0000000 0.02058433 0.04993745
+
+---
+
+    Code
+      compare(list(blocked = LNR_blocked), stage = "preburn", cores_for_props = 1)
+    Output
+                MD wMD  DIC wDIC BPIC wBPIC EffectiveN meanD Dmean minD
+      blocked -527   1 6444    1 9984     1       3540  2904  -611 -636
 
 # run_single
 
@@ -64,19 +80,16 @@
       LNR_single[[1]]$samples$alpha[, , idx]
     Output
                   as1t       bd6t
-      m     -1.0126139 -0.5952710
-      m_lMd -0.6268864 -0.5299123
-      s     -0.5883318 -0.9124103
-      t0    -1.7063384 -2.8790704
+      m     -1.0064461 -0.7239915
+      m_lMd -0.3903504 -0.8186065
+      s     -0.5314815 -0.2610311
+      t0    -1.6904537 -1.8390487
 
-# run_bridge
+---
 
     Code
-      compare(list(single = LNR_single, diag = LNR_diag, blocked = LNR_blocked),
-      stage = "preburn", cores_for_props = 1)
+      compare(list(single = LNR_single), stage = "preburn", cores_for_props = 1)
     Output
-                MD   wMD  DIC wDIC BPIC wBPIC EffectiveN meanD Dmean minD
-      single  -243 0.000  248    0  649     0        401  -153  -555 -555
-      diag    -535 0.055 1066    0 1916     0        851   215  -607 -635
-      blocked -541 0.945 -144    1   79     1        223  -367  -564 -590
+               MD wMD DIC wDIC BPIC wBPIC EffectiveN meanD Dmean minD
+      single -390   1 245    1  599     1        354  -109  -463 -463
 
