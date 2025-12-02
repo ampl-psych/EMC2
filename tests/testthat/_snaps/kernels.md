@@ -1,7 +1,7 @@
 # lin_incr_R
 
     Code
-      apply_kernel(kernel_pars, emc, mode = "R")
+      matrix(apply_kernel(kernel_pars, emc, mode = "R"))
     Output
            [,1]
       [1,]    1
@@ -13,7 +13,7 @@
 # lin_incr_Rcpp
 
     Code
-      apply_kernel(kernel_pars, emc, mode = "Rcpp")
+      matrix(apply_kernel(kernel_pars, emc, mode = "Rcpp"))
     Output
            [,1]
       [1,]    1
@@ -25,7 +25,7 @@
 # lin_decr_R
 
     Code
-      apply_kernel(kernel_pars, emc, mode = "R")
+      matrix(apply_kernel(kernel_pars, emc, mode = "R"))
     Output
            [,1]
       [1,]   -1
@@ -37,7 +37,7 @@
 # lin_decr_Rcpp
 
     Code
-      apply_kernel(kernel_pars, emc, mode = "Rcpp")
+      matrix(apply_kernel(kernel_pars, emc, mode = "Rcpp"))
     Output
            [,1]
       [1,]   -1
@@ -49,7 +49,7 @@
 # exp_decr_R
 
     Code
-      apply_kernel(kernel_pars, emc, mode = "R")
+      matrix(apply_kernel(kernel_pars, emc, mode = "R"))
     Output
                   [,1]
       [1,] 0.367879441
@@ -61,7 +61,7 @@
 # exp_decr_Rcpp
 
     Code
-      apply_kernel(kernel_pars, emc, mode = "Rcpp")
+      matrix(apply_kernel(kernel_pars, emc, mode = "Rcpp"))
     Output
                   [,1]
       [1,] 0.367879441
@@ -73,7 +73,7 @@
 # exp_incr_R
 
     Code
-      apply_kernel(kernel_pars, emc, mode = "R")
+      matrix(apply_kernel(kernel_pars, emc, mode = "R"))
     Output
                 [,1]
       [1,] 0.6321206
@@ -85,7 +85,7 @@
 # exp_incr_Rcpp
 
     Code
-      apply_kernel(kernel_pars, emc, mode = "Rcpp")
+      matrix(apply_kernel(kernel_pars, emc, mode = "Rcpp"))
     Output
                 [,1]
       [1,] 0.6321206
@@ -97,7 +97,7 @@
 # pow_decr_R
 
     Code
-      apply_kernel(kernel_pars, emc, mode = "R")
+      matrix(apply_kernel(kernel_pars, emc, mode = "R"))
     Output
                 [,1]
       [1,] 0.5000000
@@ -109,7 +109,7 @@
 # pow_decr_Rcpp
 
     Code
-      apply_kernel(kernel_pars, emc, mode = "Rcpp")
+      matrix(apply_kernel(kernel_pars, emc, mode = "Rcpp"))
     Output
                 [,1]
       [1,] 0.5000000
@@ -121,7 +121,7 @@
 # pow_incr_R
 
     Code
-      apply_kernel(kernel_pars, emc, mode = "R")
+      matrix(apply_kernel(kernel_pars, emc, mode = "R"))
     Output
                 [,1]
       [1,] 0.5000000
@@ -133,7 +133,7 @@
 # pow_incr_Rcpp
 
     Code
-      apply_kernel(kernel_pars, emc, mode = "Rcpp")
+      matrix(apply_kernel(kernel_pars, emc, mode = "Rcpp"))
     Output
                 [,1]
       [1,] 0.5000000
@@ -145,7 +145,7 @@
 # poly2_R
 
     Code
-      apply_kernel(kernel_pars, emc, mode = "R")
+      matrix(apply_kernel(kernel_pars, emc, mode = "R"))
     Output
            [,1]
       [1,]    2
@@ -157,7 +157,7 @@
 # poly2_Rcpp
 
     Code
-      apply_kernel(kernel_pars, emc, mode = "Rcpp")
+      matrix(apply_kernel(kernel_pars, emc, mode = "Rcpp"))
     Output
            [,1]
       [1,]    2
@@ -169,7 +169,7 @@
 # poly3_R
 
     Code
-      apply_kernel(kernel_pars, emc, mode = "R")
+      matrix(apply_kernel(kernel_pars, emc, mode = "R"))
     Output
            [,1]
       [1,]    3
@@ -181,7 +181,7 @@
 # poly3_Rcpp
 
     Code
-      apply_kernel(kernel_pars, emc, mode = "Rcpp")
+      matrix(apply_kernel(kernel_pars, emc, mode = "Rcpp"))
     Output
            [,1]
       [1,]    3
@@ -193,7 +193,7 @@
 # poly4_R
 
     Code
-      apply_kernel(kernel_pars, emc, mode = "R")
+      matrix(apply_kernel(kernel_pars, emc, mode = "R"))
     Output
             [,1]
       [1,]   3.1
@@ -205,7 +205,7 @@
 # poly4_Rcpp
 
     Code
-      apply_kernel(kernel_pars, emc, mode = "Rcpp")
+      matrix(apply_kernel(kernel_pars, emc, mode = "Rcpp"))
     Output
             [,1]
       [1,]   3.1
@@ -217,7 +217,7 @@
 # delta_R
 
     Code
-      apply_kernel(kernel_pars, emc, mode = "R")
+      matrix(apply_kernel(kernel_pars, emc, mode = "R"))
     Output
            [,1]
       [1,] 0.50
@@ -229,7 +229,7 @@
 # delta_Rcpp
 
     Code
-      apply_kernel(kernel_pars, emc, mode = "Rcpp")
+      matrix(apply_kernel(kernel_pars, emc, mode = "Rcpp"))
     Output
            [,1]
       [1,] 0.50
@@ -241,7 +241,7 @@
 # delta2lr_R
 
     Code
-      apply_kernel(kernel_pars, emc, mode = "R")
+      matrix(apply_kernel(kernel_pars, emc, mode = "R"))
     Output
              [,1]
       [1,] 0.5000
@@ -253,7 +253,7 @@
 # delta2lr_Rcpp
 
     Code
-      apply_kernel(kernel_pars, emc, mode = "Rcpp")
+      matrix(apply_kernel(kernel_pars, emc, mode = "Rcpp"))
     Output
              [,1]
       [1,] 0.5000
@@ -265,7 +265,7 @@
 # delta2kernel_R
 
     Code
-      apply_kernel(kernel_pars, emc, mode = "R")
+      matrix(apply_kernel(kernel_pars, emc, mode = "R"))
     Output
                 [,1]
       [1,] 0.8000000
@@ -280,7 +280,7 @@
 # delta2kernel_Rcpp
 
     Code
-      apply_kernel(kernel_pars, emc, mode = "Rcpp")
+      matrix(apply_kernel(kernel_pars, emc, mode = "Rcpp"))
     Output
                 [,1]
       [1,] 0.8000000

@@ -394,15 +394,20 @@ trend_shared_kernel <- make_trend(
 After sharing, `get_trend_pnames()` will include the shared name once (here `shrd`) and remove duplicates.
 
 ### Missing input values (NA handling)
-Trend kernels ignore rows where any input used by the kernel is `NA`. For those rows, the kernel contributes zero. This applies to both built‑in and custom kernels. In effect:
+For sequential kernels (learning rules), when a covariate value is `NA` on trial t, the last-known updated covariate value is carried over (in delta rules, this may be the `q0` value if no update has taken place yet). For non-sequential kernels (`lin`, `exp`, `pow`, `poly`), `NA`-values contribute 0.
 
-- Built‑in kernels evaluate only on “good” rows and expand results back; NA rows contribute 0.
-- Custom kernels receive only the subset of non‑NA rows; any `NA` in their outputs is coerced to 0 before being expanded back.
+In custom kernels, the user needs to handle `NA` values (e.g., it is good practice to check for `ISNAN()` on each trial) themselves. EMC2 cannot know whether the last-known value should be carried forward, or whether the covariate should be set to 0 or some other value.
 
-This behavior makes trends robust when covariates are intermittently missing (as exercised in tests that set some covariate entries to `NA`).
+
+<!-- Trend kernels ignore rows where any input used by the kernel is `NA`. For those rows, the kernel contributes zero. This applies to both built‑in and custom kernels. In effect: -->
+
+<!-- - Built‑in kernels evaluate only on “good” rows and expand results back; NA rows contribute 0. -->
+<!-- - Custom kernels receive only the subset of non‑NA rows; any `NA` in their outputs is coerced to 0 before being expanded back. -->
+
+<!-- This behavior makes trends robust when covariates are intermittently missing (as exercised in tests that set some covariate entries to `NA`). -->
 
 ### Trial‑wise evaluation and conditional covariates
-- Delta‑rule kernels (`delta`, `delta2`) are sequential by construction; they update across trials within a subject.
+- Delta‑rule kernels (`delta`, `delta2kernel`, `delta2lr`) are sequential by construction; they update across trials within a subject.
 - Using behavioral covariates (e.g., `rt`, response `R`, or outputs of functions in the design) can force a trial‑wise evaluation path so that data generation is not conditional on the observed data, but rather on the simulated outcomes. 
 
 ```{r}

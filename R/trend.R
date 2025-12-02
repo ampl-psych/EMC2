@@ -1,5 +1,5 @@
 # Custom kernel: operate on all input columns at once; compress by at; exclude rows with any NA; expand back
-run_kernel_custom <- function(trend_pars = NULL, input, funptr, at_factor = NULL, ffill_na=FALSE) {
+run_kernel_custom <- function(trend_pars = NULL, input, funptr, at_factor = NULL) {
   if (!is.matrix(input)) input <- matrix(input, ncol = 1)
   n <- nrow(input)
   if (is.null(trend_pars)) trend_pars <- matrix(nrow = n, ncol = 0)
@@ -19,17 +19,21 @@ run_kernel_custom <- function(trend_pars = NULL, input, funptr, at_factor = NULL
 
   # Exclude any rows with at least one NA across columns
   # SM - why..? Maybe handle this in the kernel?
-  good <- rowSums(is.na(input_comp)) == 0
-  comp_out <- numeric(nrow(input_comp))
-  if(isTRUE(ffill_na)) comp_out[!good,] <- NA
-  if (any(good)) {
-    in_good <- input_comp[good, , drop = FALSE]
-    tp_good <- if (ncol(tpars_comp)) tpars_comp[good, , drop = FALSE] else matrix(nrow = sum(good), ncol = 0)
-    contrib <- EMC2_call_custom_trend(tp_good, in_good, funptr)
-    contrib[is.na(contrib)] <- 0
-    comp_out[good] <- contrib
-    if(isTRUE(ffill_na)) comp_out <- na_locf(comp_out, na.rm=FALSE)
-  }
+  # good <- rowSums(is.na(input_comp)) == 0
+  # comp_out <- numeric(nrow(input_comp))
+  # if(isTRUE(ffill_na)) comp_out[!good,] <- NA
+  # if (any(good)) {
+  #   in_good <- input_comp[good, , drop = FALSE]
+  #   tp_good <- if (ncol(tpars_comp)) tpars_comp[good, , drop = FALSE] else matrix(nrow = sum(good), ncol = 0)
+  #   contrib <- EMC2_call_custom_trend(tp_good, in_good, funptr)
+  #   contrib[is.na(contrib)] <- 0
+  #   comp_out[good] <- contrib
+  #   if(isTRUE(ffill_na)) comp_out <- na_locf(comp_out, na.rm=FALSE)
+  # }
+
+  # SM: No NA filtering, handle in kernel
+  comp_out <- EMC2_call_custom_trend(tpars_comp, input_comp, funptr)
+
   # Expand back to full rows, return as single-column matrix
   matrix(comp_out[expand_idx], ncol = 1)
 }
@@ -517,9 +521,10 @@ run_kernel <- function(trend_pars = NULL, kernel, input, funptr = NULL, at_facto
   out <- rep(0.0, n)
 
   # Custom kernels: operate on full matrix at once; returns n x 1 matrix
+  # SM - why is this here, not just part of the list of kernels below?
   if (identical(kernel, "custom")) {
     if (is.null(funptr)) stop("Missing function pointer for custom kernel. Pass 'funptr'.")
-    return(run_kernel_custom(trend_pars, input, funptr, at_factor, ffill_na))
+    return(run_kernel_custom(trend_pars, input, funptr, at_factor))
   }
 
   # Precompute at compression/expansion and compressed trend parameters
@@ -548,7 +553,7 @@ run_kernel <- function(trend_pars = NULL, kernel, input, funptr = NULL, at_facto
     comp_len <- length(covariate_comp)
     comp_out <- numeric(comp_len)
 
-    if(kernel %in% c('delta', 'delta2lr', 'delta2kernel')) {
+    if(kernel %in% c('delta', 'delta2lr', 'delta2kernel', 'custom')) {
       # No NA-filtering - handle NA within kernel
       if (kernel == "delta") {
         comp_out <- run_delta(tpars_comp[, 1], tpars_comp[, 2], covariate_comp)
@@ -556,6 +561,9 @@ run_kernel <- function(trend_pars = NULL, kernel, input, funptr = NULL, at_facto
         comp_out <- run_delta2kernel(tpars_comp[, 1], tpars_comp[, 2], tpars_comp[, 3], tpars_comp[, 4], covariate_comp)
       } else if (kernel == "delta2lr") {
         comp_out <- run_delta2lr(tpars_comp[, 1], tpars_comp[, 2], tpars_comp[, 3], covariate_comp)
+      } else if(kernel == 'custom') {
+        if (is.null(funptr)) stop("Missing function pointer for custom kernel. Pass 'funptr'.")
+        comp_out <- EMC2_call_custom_trend(tpars_comp, covariate_comp, funptr)
       }
       if(!ffill_na) {
         # If, for whatever reason, the user wants NA-covaraites to be set to 0, we can still do this
@@ -567,40 +575,41 @@ run_kernel <- function(trend_pars = NULL, kernel, input, funptr = NULL, at_facto
 
       if (any(good)) {
         # 4) Run kernel on good subset only
-        if (kernel == "custom") {
-          if (is.null(funptr)) stop("Missing function pointer for custom kernel. Pass 'funptr'.")
+        # if (kernel == "custom") {
+          # if (is.null(funptr)) stop("Missing function pointer for custom kernel. Pass 'funptr'.")
           # Build 1-col input matrix for custom kernel
-          in_good <- matrix(covariate_comp[good], ncol = 1)
-          tp_good <- if (ncol(tpars_comp)) tpars_comp[good, , drop = FALSE] else matrix(nrow = sum(good), ncol = 0)
-          contrib <- EMC2_call_custom_trend(tp_good, in_good, funptr)
-          contrib[is.na(contrib)] <- 0
-          comp_out[good] <- contrib
-        } else {
+          # in_good <- matrix(covariate_comp[good], ncol = 1)
+          # tp_good <- if (ncol(tpars_comp)) tpars_comp[good, , drop = FALSE] else matrix(nrow = sum(good), ncol = 0)
+          # contrib <- EMC2_call_custom_trend(tp_good, in_good, funptr)
+          # contrib[is.na(contrib)] <- 0
+          # comp_out[good] <- contrib
+          # comp_out <- EMC2_call_custom_trend(tp_good, in_good, funptr)
+        # } else {
           # Built-in kernels (use only rows in 'good')
           # Access parameters by column index as before
-          if (kernel == "lin_decr") {
-            comp_out[good] <- -covariate_comp[good]
-          } else if (kernel == "lin_incr") {
-            comp_out[good] <- covariate_comp[good]
-          } else if (kernel == "exp_decr") {
-            comp_out[good] <- exp(-tpars_comp[good, 1] * covariate_comp[good])
-          } else if (kernel == "exp_incr") {
-            comp_out[good] <- 1 - exp(-tpars_comp[good, 1] * covariate_comp[good])
-          } else if (kernel == "pow_decr") {
-            comp_out[good] <- (1 + covariate_comp[good])^(-tpars_comp[good, 1])
-          } else if (kernel == "pow_incr") {
-            comp_out[good] <- 1 - (1 + covariate_comp[good])^(-tpars_comp[good, 1])
-          } else if (kernel == "poly2") {
-            comp_out[good] <- tpars_comp[good, 1] * covariate_comp[good] + tpars_comp[good, 2] * covariate_comp[good]^2
-          } else if (kernel == "poly3") {
-            comp_out[good] <- tpars_comp[good, 1] * covariate_comp[good] + tpars_comp[good, 2] * covariate_comp[good]^2 + tpars_comp[good, 3] * covariate_comp[good]^3
-          } else if (kernel == "poly4") {
-            comp_out[good] <- tpars_comp[good, 1] * covariate_comp[good] + tpars_comp[good, 2] * covariate_comp[good]^2 + tpars_comp[good, 3] * covariate_comp[good]^3 + tpars_comp[good, 4] * covariate_comp[good]^4
-          } else {
-            stop("Unknown kernel type")
-          }
+        if (kernel == "lin_decr") {
+          comp_out[good] <- -covariate_comp[good]
+        } else if (kernel == "lin_incr") {
+          comp_out[good] <- covariate_comp[good]
+        } else if (kernel == "exp_decr") {
+          comp_out[good] <- exp(-tpars_comp[good, 1] * covariate_comp[good])
+        } else if (kernel == "exp_incr") {
+          comp_out[good] <- 1 - exp(-tpars_comp[good, 1] * covariate_comp[good])
+        } else if (kernel == "pow_decr") {
+          comp_out[good] <- (1 + covariate_comp[good])^(-tpars_comp[good, 1])
+        } else if (kernel == "pow_incr") {
+          comp_out[good] <- 1 - (1 + covariate_comp[good])^(-tpars_comp[good, 1])
+        } else if (kernel == "poly2") {
+          comp_out[good] <- tpars_comp[good, 1] * covariate_comp[good] + tpars_comp[good, 2] * covariate_comp[good]^2
+        } else if (kernel == "poly3") {
+          comp_out[good] <- tpars_comp[good, 1] * covariate_comp[good] + tpars_comp[good, 2] * covariate_comp[good]^2 + tpars_comp[good, 3] * covariate_comp[good]^3
+        } else if (kernel == "poly4") {
+          comp_out[good] <- tpars_comp[good, 1] * covariate_comp[good] + tpars_comp[good, 2] * covariate_comp[good]^2 + tpars_comp[good, 3] * covariate_comp[good]^3 + tpars_comp[good, 4] * covariate_comp[good]^4
+        } else {
+          stop("Unknown kernel type")
         }
       }
+      # }
 
       # SM: forward fill values with missing covariate
       if(isTRUE(ffill_na)) {
@@ -1574,7 +1583,7 @@ apply_kernel <- function(kernel_pars, emc, subject=1, input_pars=NULL, trend_n=1
   } else if(mode %in% c('R')) {
     out <- run_trend(dadm = dadm, trend=trend, param=param, trend_pars=trend_pars, pars_full = pars_full, return_kernel = TRUE)
   }
-  colnames(out) <- trend$covariates
+  colnames(out) <- trend$covariate
   out
 }
 
