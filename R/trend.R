@@ -612,20 +612,20 @@ run_kernel <- function(trend_pars = NULL, kernel, input, funptr = NULL, at_facto
         comp_out[is.na(covariate_comp)] <- 0
       }
     } else {
-
       # 3) Exclude NAs
       good <- !is.na(covariate_comp)
 
       if (any(good)) {
         # 4) Run kernel on good subset only
         # if (kernel == "custom") {
-        #   if (is.null(funptr)) stop("Missing function pointer for custom kernel. Pass 'funptr'.")
-        #   # Build 1-col input matrix for custom kernel
-        #   in_good <- matrix(covariate_comp[good], ncol = 1)
-        #   tp_good <- if (ncol(tpars_comp)) tpars_comp[good, , drop = FALSE] else matrix(nrow = sum(good), ncol = 0)
-        #   contrib <- EMC2_call_custom_trend(tp_good, in_good, funptr)
-        #   contrib[is.na(contrib)] <- 0
-        #   comp_out[good] <- contrib
+          # if (is.null(funptr)) stop("Missing function pointer for custom kernel. Pass 'funptr'.")
+          # Build 1-col input matrix for custom kernel
+          # in_good <- matrix(covariate_comp[good], ncol = 1)
+          # tp_good <- if (ncol(tpars_comp)) tpars_comp[good, , drop = FALSE] else matrix(nrow = sum(good), ncol = 0)
+          # contrib <- EMC2_call_custom_trend(tp_good, in_good, funptr)
+          # contrib[is.na(contrib)] <- 0
+          # comp_out[good] <- contrib
+          # comp_out <- EMC2_call_custom_trend(tp_good, in_good, funptr)
         # } else {
           # Built-in kernels (use only rows in 'good')
           # Access parameters by column index as before
@@ -885,6 +885,7 @@ update_model_trend <- function(trend, model) {
 run_delta <- function(q0,alpha,covariate) {
   q <- pe <- numeric(length(covariate))
   q[1] <- q0[1]
+
   if(length(q) == 1) return(q)
   for(i in 1:(length(q)-1)) {
     if(is.na(covariate[i])) {
@@ -902,6 +903,7 @@ run_delta2kernel <- function(q0,alphaFast,propSlow,dSwitch,covariate) {
   q[1] <- qFast[1] <- qSlow[1] <- q0[1]
   if(length(q) == 1) return(q)  # only 1 trial, cannot be updated
   alphaSlow <- propSlow*alphaFast
+
   for (i in 1:(length(q)-1)) {
     if(is.na(covariate[i])) {
       q[i+1] <- q[i]
@@ -924,6 +926,7 @@ run_delta2lr <- function(q0,alphaPos,alphaNeg,covariate) {
   q <- pe <- numeric(length(covariate))
   q[1] <- q0[1]
   if(length(q) == 1) return(q)  # only 1 trial, cannot be updated
+
 
   for (i in 1:(length(q)-1)) {
     if(is.na(covariate[i])) {
@@ -1727,7 +1730,6 @@ normalize_maps <- function(maps, par_names) {
 
   maps
 }
-
 
 
 #' Apply a kernel implied in an emc object
