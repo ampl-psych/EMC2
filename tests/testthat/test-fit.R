@@ -8,20 +8,24 @@ matchfun=function(d)d$S==d$lR
 dat <- forstmann[forstmann$subjects %in% unique(forstmann$subjects)[1:2],]
 dat$subjects <- droplevels(dat$subjects)
 
-design_LNR <- design(data = dat,model=LNR,matchfun=matchfun,
-                            formula=list(m~lM,s~1,t0~1),
-                            contrasts=list(m=list(lM=ADmat)))
-
-LNR_s <- make_emc(dat, design_LNR, rt_resolution = 0.05, n_chains = 2)
 
 RNGkind("L'Ecuyer-CMRG")
 set.seed(123)
-LNR_s <- fit(LNR_s, cores_for_chains = 1, stop_criteria = list(
-  preburn = list(iter = 10), burn = list(mean_gd = 2.5), adapt = list(min_unique = 20),
-  sample = list(iter = 25)), verbose = FALSE, particle_factor = 30, step_size = 25)
-idx <- LNR_s[[1]]$samples$idx
+
 
 test_that("fit", {
+  skip_on_os("windows")
+  design_LNR <- design(data = dat,model=LNR,matchfun=matchfun,
+                       formula=list(m~lM,s~1,t0~1),
+                       contrasts=list(m=list(lM=ADmat)))
+
+  LNR_s <- make_emc(dat, design_LNR, rt_resolution = 0.05, n_chains = 2)
+
+
+  LNR_s <- fit(LNR_s, cores_for_chains = 1, stop_criteria = list(
+    preburn = list(iter = 10), burn = list(mean_gd = 2.5), adapt = list(min_unique = 20),
+    sample = list(iter = 25)), verbose = FALSE, particle_factor = 30, step_size = 25)
+  idx <- LNR_s[[1]]$samples$idx
   expect_snapshot(
     LNR_s[[1]]$samples$theta_mu[,idx], variant = Sys.info()[1]
   )

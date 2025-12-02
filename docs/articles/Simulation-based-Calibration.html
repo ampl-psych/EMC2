@@ -8,8 +8,8 @@
 <title>Simulation-based Calibration • EMC2</title>
 <script src="../lightswitch.js"></script><script src="../deps/jquery-3.6.0/jquery-3.6.0.min.js"></script><meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
 <link href="../deps/bootstrap-5.3.1/bootstrap.min.css" rel="stylesheet">
-<script src="../deps/bootstrap-5.3.1/bootstrap.bundle.min.js"></script><link href="../deps/font-awesome-6.4.2/css/all.min.css" rel="stylesheet">
-<link href="../deps/font-awesome-6.4.2/css/v4-shims.min.css" rel="stylesheet">
+<script src="../deps/bootstrap-5.3.1/bootstrap.bundle.min.js"></script><link href="../deps/font-awesome-6.5.2/css/all.min.css" rel="stylesheet">
+<link href="../deps/font-awesome-6.5.2/css/v4-shims.min.css" rel="stylesheet">
 <script src="../deps/headroom-0.11.0/headroom.min.js"></script><script src="../deps/headroom-0.11.0/jQuery.headroom.min.js"></script><script src="../deps/bootstrap-toc-1.0.1/bootstrap-toc.min.js"></script><script src="../deps/clipboard.js-2.0.11/clipboard.min.js"></script><script src="../deps/search-1.0.0/autocomplete.jquery.min.js"></script><script src="../deps/search-1.0.0/fuse.min.js"></script><script src="../deps/search-1.0.0/mark.min.js"></script><!-- pkgdown --><script src="../pkgdown.js"></script><meta property="og:title" content="Simulation-based Calibration">
 <meta name="description" content="A guide to SBC in EMC2">
 <meta property="og:description" content="A guide to SBC in EMC2">
@@ -22,7 +22,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">EMC2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">3.0.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">3.3.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -36,6 +36,7 @@
   <button class="nav-link dropdown-toggle" type="button" id="dropdown-articles" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Articles</button>
   <ul class="dropdown-menu" aria-labelledby="dropdown-articles">
 <li><a class="dropdown-item" href="../articles/Simulation-based-Calibration.html">Simulation-based Calibration</a></li>
+    <li><a class="dropdown-item" href="../articles/trends.html">Trends</a></li>
   </ul>
 </li>
 <li class="nav-item"><a class="nav-link" href="../news/index.html">Changelog</a></li>
@@ -106,9 +107,9 @@ function that connects the data to the parameters.</li>
 and observed data
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>y</mi><annotation encoding="application/x-tex">y</annotation></semantics></math>
 such that
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>y</mi><mo>∼</mo><mi>p</mi><mrow><mo stretchy="true" form="prefix">(</mo><mi>y</mi><mo stretchy="false" form="prefix">|</mo><mi>α</mi><mo stretchy="true" form="postfix">)</mo></mrow></mrow><annotation encoding="application/x-tex">y \sim p(y|\alpha)</annotation></semantics></math>
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>y</mi><mo>∼</mo><mi>p</mi><mo stretchy="false" form="prefix">(</mo><mi>y</mi><mo stretchy="false" form="prefix">|</mo><mi>α</mi><mo stretchy="false" form="postfix">)</mo></mrow><annotation encoding="application/x-tex">y \sim p(y|\alpha)</annotation></semantics></math>
 and
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>α</mi><mo>∼</mo><mi>p</mi><mrow><mo stretchy="true" form="prefix">(</mo><mi>α</mi><mo stretchy="true" form="postfix">)</mo></mrow></mrow><annotation encoding="application/x-tex">\alpha \sim p(\alpha)</annotation></semantics></math>.</li>
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>α</mi><mo>∼</mo><mi>p</mi><mo stretchy="false" form="prefix">(</mo><mi>α</mi><mo stretchy="false" form="postfix">)</mo></mrow><annotation encoding="application/x-tex">\alpha \sim p(\alpha)</annotation></semantics></math>.</li>
 </ul>
 </div>
 <div class="section level3">
@@ -118,16 +119,16 @@ and
 <li>
 <strong>Sample Parameters</strong>: Draw a large number of sets of
 parameters
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msup><mi>α</mi><mrow><mo stretchy="true" form="prefix">(</mo><mi>i</mi><mo stretchy="true" form="postfix">)</mo></mrow></msup><annotation encoding="application/x-tex">\alpha^{(i)}</annotation></semantics></math>
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msup><mi>α</mi><mrow><mo stretchy="false" form="prefix">(</mo><mi>i</mi><mo stretchy="false" form="postfix">)</mo></mrow></msup><annotation encoding="application/x-tex">\alpha^{(i)}</annotation></semantics></math>
 from the prior distribution
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>p</mi><mrow><mo stretchy="true" form="prefix">(</mo><mi>α</mi><mo stretchy="true" form="postfix">)</mo></mrow></mrow><annotation encoding="application/x-tex">p(\alpha)</annotation></semantics></math>.</li>
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>p</mi><mo stretchy="false" form="prefix">(</mo><mi>α</mi><mo stretchy="false" form="postfix">)</mo></mrow><annotation encoding="application/x-tex">p(\alpha)</annotation></semantics></math>.</li>
 <li>
 <strong>Simulate Data</strong>: For each set of parameters
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msup><mi>α</mi><mrow><mo stretchy="true" form="prefix">(</mo><mi>i</mi><mo stretchy="true" form="postfix">)</mo></mrow></msup><annotation encoding="application/x-tex">\alpha^{(i)}</annotation></semantics></math>,
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msup><mi>α</mi><mrow><mo stretchy="false" form="prefix">(</mo><mi>i</mi><mo stretchy="false" form="postfix">)</mo></mrow></msup><annotation encoding="application/x-tex">\alpha^{(i)}</annotation></semantics></math>,
 simulate a dataset
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msup><mi>y</mi><mrow><mo stretchy="true" form="prefix">(</mo><mi>i</mi><mo stretchy="true" form="postfix">)</mo></mrow></msup><annotation encoding="application/x-tex">y^{(i)}</annotation></semantics></math>
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msup><mi>y</mi><mrow><mo stretchy="false" form="prefix">(</mo><mi>i</mi><mo stretchy="false" form="postfix">)</mo></mrow></msup><annotation encoding="application/x-tex">y^{(i)}</annotation></semantics></math>
 from the likelihood
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>p</mi><mrow><mo stretchy="true" form="prefix">(</mo><mi>y</mi><mo stretchy="false" form="prefix">|</mo><msup><mi>α</mi><mrow><mo stretchy="true" form="prefix">(</mo><mi>i</mi><mo stretchy="true" form="postfix">)</mo></mrow></msup><mo stretchy="true" form="postfix">)</mo></mrow></mrow><annotation encoding="application/x-tex">p(y|\alpha^{(i)})</annotation></semantics></math>.</li>
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>p</mi><mo stretchy="false" form="prefix">(</mo><mi>y</mi><mo stretchy="false" form="prefix">|</mo><msup><mi>α</mi><mrow><mo stretchy="false" form="prefix">(</mo><mi>i</mi><mo stretchy="false" form="postfix">)</mo></mrow></msup><mo stretchy="false" form="postfix">)</mo></mrow><annotation encoding="application/x-tex">p(y|\alpha^{(i)})</annotation></semantics></math>.</li>
 </ul>
 </div>
 <div class="section level3">
@@ -135,9 +136,9 @@ from the likelihood
 </h3>
 <ul>
 <li>For each simulated dataset
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msup><mi>y</mi><mrow><mo stretchy="true" form="prefix">(</mo><mi>i</mi><mo stretchy="true" form="postfix">)</mo></mrow></msup><annotation encoding="application/x-tex">y^{(i)}</annotation></semantics></math>,
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msup><mi>y</mi><mrow><mo stretchy="false" form="prefix">(</mo><mi>i</mi><mo stretchy="false" form="postfix">)</mo></mrow></msup><annotation encoding="application/x-tex">y^{(i)}</annotation></semantics></math>,
 compute the posterior distribution
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>p</mi><mrow><mo stretchy="true" form="prefix">(</mo><mi>α</mi><mo stretchy="false" form="prefix">|</mo><msup><mi>y</mi><mrow><mo stretchy="true" form="prefix">(</mo><mi>i</mi><mo stretchy="true" form="postfix">)</mo></mrow></msup><mo stretchy="true" form="postfix">)</mo></mrow></mrow><annotation encoding="application/x-tex">p(\alpha | y^{(i)})</annotation></semantics></math>
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>p</mi><mo stretchy="false" form="prefix">(</mo><mi>α</mi><mo stretchy="false" form="prefix">|</mo><msup><mi>y</mi><mrow><mo stretchy="false" form="prefix">(</mo><mi>i</mi><mo stretchy="false" form="postfix">)</mo></mrow></msup><mo stretchy="false" form="postfix">)</mo></mrow><annotation encoding="application/x-tex">p(\alpha | y^{(i)})</annotation></semantics></math>
 using your Bayesian model.</li>
 </ul>
 </div>
@@ -147,13 +148,13 @@ using your Bayesian model.</li>
 <ul>
 <li>For each simulated dataset, determine where the set of true
 parameters
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msup><mi>α</mi><mrow><mo stretchy="true" form="prefix">(</mo><mi>i</mi><mo stretchy="true" form="postfix">)</mo></mrow></msup><annotation encoding="application/x-tex">\alpha^{(i)}</annotation></semantics></math>
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msup><mi>α</mi><mrow><mo stretchy="false" form="prefix">(</mo><mi>i</mi><mo stretchy="false" form="postfix">)</mo></mrow></msup><annotation encoding="application/x-tex">\alpha^{(i)}</annotation></semantics></math>
 ranks in the posterior samples of
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>α</mi><annotation encoding="application/x-tex">\alpha</annotation></semantics></math>.
 In <em>EMC2</em> we thin the posterior to be equal to the effective
 sample size. The rank is essentially the number of posterior samples
 that are less than the true
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msup><mi>α</mi><mrow><mo stretchy="true" form="prefix">(</mo><mi>i</mi><mo stretchy="true" form="postfix">)</mo></mrow></msup><annotation encoding="application/x-tex">\alpha^{(i)}</annotation></semantics></math>.</li>
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msup><mi>α</mi><mrow><mo stretchy="false" form="prefix">(</mo><mi>i</mi><mo stretchy="false" form="postfix">)</mo></mrow></msup><annotation encoding="application/x-tex">\alpha^{(i)}</annotation></semantics></math>.</li>
 <li>Normalize the ranks to lie between 0 and 1. This is your
 <strong>rank statistic</strong>.</li>
 </ul>
@@ -324,20 +325,20 @@ far more computationally efficient.</p>
 non-hierarchical SBC. However we can now write the model of data
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>y</mi><annotation encoding="application/x-tex">y</annotation></semantics></math>
 as
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>y</mi><mo>∼</mo><mi>p</mi><mrow><mo stretchy="true" form="prefix">(</mo><mi>y</mi><mo stretchy="false" form="prefix">|</mo><mi>α</mi><mo stretchy="true" form="postfix">)</mo></mrow><mi>p</mi><mrow><mo stretchy="true" form="prefix">(</mo><mi>α</mi><mo stretchy="false" form="prefix">|</mo><mi>θ</mi><mo stretchy="true" form="postfix">)</mo></mrow><mi>p</mi><mrow><mo stretchy="true" form="prefix">(</mo><mi>θ</mi><mo stretchy="true" form="postfix">)</mo></mrow></mrow><annotation encoding="application/x-tex">y \sim p(y|\alpha)p(\alpha|\theta)p(\theta)</annotation></semantics></math>.
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>y</mi><mo>∼</mo><mi>p</mi><mo stretchy="false" form="prefix">(</mo><mi>y</mi><mo stretchy="false" form="prefix">|</mo><mi>α</mi><mo stretchy="false" form="postfix">)</mo><mi>p</mi><mo stretchy="false" form="prefix">(</mo><mi>α</mi><mo stretchy="false" form="prefix">|</mo><mi>θ</mi><mo stretchy="false" form="postfix">)</mo><mi>p</mi><mo stretchy="false" form="prefix">(</mo><mi>θ</mi><mo stretchy="false" form="postfix">)</mo></mrow><annotation encoding="application/x-tex">y \sim p(y|\alpha)p(\alpha|\theta)p(\theta)</annotation></semantics></math>.
 Here
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>p</mi><mrow><mo stretchy="true" form="prefix">(</mo><mi>θ</mi><mo stretchy="true" form="postfix">)</mo></mrow></mrow><annotation encoding="application/x-tex">p(\theta)</annotation></semantics></math>
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>p</mi><mo stretchy="false" form="prefix">(</mo><mi>θ</mi><mo stretchy="false" form="postfix">)</mo></mrow><annotation encoding="application/x-tex">p(\theta)</annotation></semantics></math>
 is the prior on the group-level parameters. The generated data for one
 sample
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msup><mi>y</mi><mrow><mo stretchy="true" form="prefix">(</mo><mi>i</mi><mo stretchy="true" form="postfix">)</mo></mrow></msup><annotation encoding="application/x-tex">y^{(i)}</annotation></semantics></math>
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msup><mi>y</mi><mrow><mo stretchy="false" form="prefix">(</mo><mi>i</mi><mo stretchy="false" form="postfix">)</mo></mrow></msup><annotation encoding="application/x-tex">y^{(i)}</annotation></semantics></math>
 is still generated from
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msup><mi>α</mi><mrow><mo stretchy="true" form="prefix">(</mo><mi>i</mi><mo stretchy="true" form="postfix">)</mo></mrow></msup><annotation encoding="application/x-tex">\alpha^{(i)}</annotation></semantics></math>,
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msup><mi>α</mi><mrow><mo stretchy="false" form="prefix">(</mo><mi>i</mi><mo stretchy="false" form="postfix">)</mo></mrow></msup><annotation encoding="application/x-tex">\alpha^{(i)}</annotation></semantics></math>,
 but with
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msup><mi>α</mi><mrow><mo stretchy="true" form="prefix">(</mo><mi>i</mi><mo stretchy="true" form="postfix">)</mo></mrow></msup><annotation encoding="application/x-tex">\alpha^{(i)}</annotation></semantics></math>
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msup><mi>α</mi><mrow><mo stretchy="false" form="prefix">(</mo><mi>i</mi><mo stretchy="false" form="postfix">)</mo></mrow></msup><annotation encoding="application/x-tex">\alpha^{(i)}</annotation></semantics></math>
 generated from
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msup><mi>θ</mi><mrow><mo stretchy="true" form="prefix">(</mo><mi>i</mi><mo stretchy="true" form="postfix">)</mo></mrow></msup><annotation encoding="application/x-tex">\theta^{(i)}</annotation></semantics></math>,
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msup><mi>θ</mi><mrow><mo stretchy="false" form="prefix">(</mo><mi>i</mi><mo stretchy="false" form="postfix">)</mo></mrow></msup><annotation encoding="application/x-tex">\theta^{(i)}</annotation></semantics></math>,
 with
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msup><mi>θ</mi><mrow><mo stretchy="true" form="prefix">(</mo><mi>i</mi><mo stretchy="true" form="postfix">)</mo></mrow></msup><mo>∼</mo><mi>p</mi><mrow><mo stretchy="true" form="prefix">(</mo><mi>θ</mi><mo stretchy="true" form="postfix">)</mo></mrow></mrow><annotation encoding="application/x-tex">\theta^{(i)} \sim p(\theta)</annotation></semantics></math>.</p>
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msup><mi>θ</mi><mrow><mo stretchy="false" form="prefix">(</mo><mi>i</mi><mo stretchy="false" form="postfix">)</mo></mrow></msup><mo>∼</mo><mi>p</mi><mo stretchy="false" form="prefix">(</mo><mi>θ</mi><mo stretchy="false" form="postfix">)</mo></mrow><annotation encoding="application/x-tex">\theta^{(i)} \sim p(\theta)</annotation></semantics></math>.</p>
 <div class="section level3">
 <h3 id="prior-structure">Prior structure<a class="anchor" aria-label="anchor" href="#prior-structure"></a>
 </h3>
@@ -393,7 +394,7 @@ through the prior on the group-level variance.</p>
 parameters:</p>
 <div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/graphics/plot.default.html" class="external-link">plot</a></span><span class="op">(</span><span class="va">prior_LBA</span>, selection <span class="op">=</span> <span class="st">"alpha"</span><span class="op">)</span></span></code></pre></div>
-<p><img src="Simulation-based-Calibration_files/figure-html/unnamed-chunk-13-1.png" alt="Prior for LBA hierarchical model" width="700"></p>
+<p><img src="Simulation-based-Calibration_files/figure-html/unnamed-chunk-13-1.png" alt="Prior for LBA hierarchical model" width="700"><img src="Simulation-based-Calibration_files/figure-html/unnamed-chunk-13-2.png" alt="Prior for LBA hierarchical model" width="700"><img src="Simulation-based-Calibration_files/figure-html/unnamed-chunk-13-3.png" alt="Prior for LBA hierarchical model" width="700"><img src="Simulation-based-Calibration_files/figure-html/unnamed-chunk-13-4.png" alt="Prior for LBA hierarchical model" width="700"><img src="Simulation-based-Calibration_files/figure-html/unnamed-chunk-13-5.png" alt="Prior for LBA hierarchical model" width="700"><img src="Simulation-based-Calibration_files/figure-html/unnamed-chunk-13-6.png" alt="Prior for LBA hierarchical model" width="700"><img src="Simulation-based-Calibration_files/figure-html/unnamed-chunk-13-7.png" alt="Prior for LBA hierarchical model" width="700"><img src="Simulation-based-Calibration_files/figure-html/unnamed-chunk-13-8.png" alt="Prior for LBA hierarchical model" width="700"><img src="Simulation-based-Calibration_files/figure-html/unnamed-chunk-13-9.png" alt="Prior for LBA hierarchical model" width="700"><img src="Simulation-based-Calibration_files/figure-html/unnamed-chunk-13-10.png" alt="Prior for LBA hierarchical model" width="700"><img src="Simulation-based-Calibration_files/figure-html/unnamed-chunk-13-11.png" alt="Prior for LBA hierarchical model" width="700"><img src="Simulation-based-Calibration_files/figure-html/unnamed-chunk-13-12.png" alt="Prior for LBA hierarchical model" width="700"><img src="Simulation-based-Calibration_files/figure-html/unnamed-chunk-13-13.png" alt="Prior for LBA hierarchical model" width="700"><img src="Simulation-based-Calibration_files/figure-html/unnamed-chunk-13-14.png" alt="Prior for LBA hierarchical model" width="700"><img src="Simulation-based-Calibration_files/figure-html/unnamed-chunk-13-15.png" alt="Prior for LBA hierarchical model" width="700"><img src="Simulation-based-Calibration_files/figure-html/unnamed-chunk-13-16.png" alt="Prior for LBA hierarchical model" width="700"><img src="Simulation-based-Calibration_files/figure-html/unnamed-chunk-13-17.png" alt="Prior for LBA hierarchical model" width="700"><img src="Simulation-based-Calibration_files/figure-html/unnamed-chunk-13-18.png" alt="Prior for LBA hierarchical model" width="700"><img src="Simulation-based-Calibration_files/figure-html/unnamed-chunk-13-19.png" alt="Prior for LBA hierarchical model" width="700"><img src="Simulation-based-Calibration_files/figure-html/unnamed-chunk-13-20.png" alt="Prior for LBA hierarchical model" width="700"><img src="Simulation-based-Calibration_files/figure-html/unnamed-chunk-13-21.png" alt="Prior for LBA hierarchical model" width="700"><img src="Simulation-based-Calibration_files/figure-html/unnamed-chunk-13-22.png" alt="Prior for LBA hierarchical model" width="700"><img src="Simulation-based-Calibration_files/figure-html/unnamed-chunk-13-23.png" alt="Prior for LBA hierarchical model" width="700"><img src="Simulation-based-Calibration_files/figure-html/unnamed-chunk-13-24.png" alt="Prior for LBA hierarchical model" width="700"><img src="Simulation-based-Calibration_files/figure-html/unnamed-chunk-13-25.png" alt="Prior for LBA hierarchical model" width="700"><img src="Simulation-based-Calibration_files/figure-html/unnamed-chunk-13-26.png" alt="Prior for LBA hierarchical model" width="700"><img src="Simulation-based-Calibration_files/figure-html/unnamed-chunk-13-27.png" alt="Prior for LBA hierarchical model" width="700"><img src="Simulation-based-Calibration_files/figure-html/unnamed-chunk-13-28.png" alt="Prior for LBA hierarchical model" width="700"><img src="Simulation-based-Calibration_files/figure-html/unnamed-chunk-13-29.png" alt="Prior for LBA hierarchical model" width="700"><img src="Simulation-based-Calibration_files/figure-html/unnamed-chunk-13-30.png" alt="Prior for LBA hierarchical model" width="700"></p>
 <p>To actually run SBC, we can use the same function as before, now also
 specifying how many subjects we want to have in the hierarchical
 model</p>
@@ -510,7 +511,7 @@ specification</p>
 </div>
 <div class="section level3 unnumbered">
 <h3 class="unnumbered" id="section"></h3>
-<div id="refs" class="references csl-bib-body hanging-indent" entry-spacing="0">
+<div id="refs" class="references csl-bib-body hanging-indent">
 <div id="ref-Gelman2006Sep" class="csl-entry">
 Gelman, Andrew. 2006. <span>“<span class="nocase">Prior distributions
 for variance parameters in hierarchical models (comment on article by
@@ -552,7 +553,7 @@ arXiv:1804.06788</em>.
 </div>
 
 <div class="pkgdown-footer-right">
-  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.1.0.</p>
+  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.1.2.</p>
 </div>
 
     </footer>

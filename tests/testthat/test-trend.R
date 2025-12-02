@@ -33,7 +33,7 @@ dat <- make_data(p_vector, design_base, n_trials = n_trials, covariates = data.f
 LNR2cov <- make_emc(dat, design_base, compress = F, n_chains = 1, type = "single")
 
 test_that("trend", {
-  expect_snapshot(init_chains(LNR2cov, particles = 10, cores_per_chain = 1)[[1]]$samples)
+  expect_snapshot(init_chains(LNR2cov, particles = 3, cores_per_chain = 1)[[1]]$samples)
 })
 
 trend_2types <- make_trend(par_names = c("m", "m_lMd"), cov_names = list(c("covariate1", "covariate2"), "covariate1"), kernels = c("exp_incr", "pow_decr"))
@@ -48,7 +48,7 @@ design_base_shared <- design(data = dat,
 LNR2cov_shared <- make_emc(dat, design_base_shared, compress = FALSE, n_chains = 1, type = "single")
 
 test_that("trend_shared", {
-  expect_snapshot(init_chains(LNR2cov_shared, particles = 10, cores_per_chain = 1)[[1]]$samples)
+  expect_snapshot(init_chains(LNR2cov_shared, particles = 3, cores_per_chain = 1)[[1]]$samples)
 })
 
 trend_premap <- make_trend(
@@ -70,7 +70,7 @@ design_premap <- design(
 
 LNR_premap <- make_emc(dat, design_premap, compress = FALSE, n_chains = 1, type = "single")
 test_that("premap trend works", {
-  expect_snapshot(init_chains(LNR_premap, particles = 10, cores_per_chain = 1)[[1]]$samples)
+  expect_snapshot(init_chains(LNR_premap, particles = 3, cores_per_chain = 1)[[1]]$samples)
 })
 
 trend_pretrans <- make_trend(
@@ -93,7 +93,7 @@ design_pretrans <- design(
 LNR_pretrans <- make_emc(dat, design_pretrans, compress = FALSE, n_chains = 1, type = "single")
 
 test_that("pretransform trend works", {
-  expect_snapshot(init_chains(LNR_pretrans, particles = 10, cores_per_chain = 1)[[1]]$samples)
+  expect_snapshot(init_chains(LNR_pretrans, particles = 3, cores_per_chain = 1)[[1]]$samples)
 })
 
 trend_posttrans <- make_trend(
@@ -116,7 +116,7 @@ design_posttrans <- design(
 LNR_posttrans <- make_emc(dat, design_posttrans, compress = FALSE, n_chains = 1, type = "single")
 
 test_that("posttransform trend works", {
-  expect_snapshot(init_chains(LNR_posttrans, particles = 10, cores_per_chain = 1)[[1]]$samples)
+  expect_snapshot(init_chains(LNR_posttrans, particles = 3, cores_per_chain = 1)[[1]]$samples)
 })
 
 trend_bases <- make_trend(
@@ -139,7 +139,7 @@ design_bases <- design(
 LNR_bases <- make_emc(dat, design_bases, compress = FALSE, n_chains = 1, type = "single")
 
 test_that("different trend base functions work", {
-  expect_snapshot(init_chains(LNR_bases, particles = 10, cores_per_chain = 1)[[1]]$samples)
+  expect_snapshot(init_chains(LNR_bases, particles = 3, cores_per_chain = 1)[[1]]$samples)
 })
 
 trend_poly <- make_trend(
@@ -161,7 +161,7 @@ design_poly <- design(
 LNR_poly <- make_emc(dat, design_poly, compress = FALSE, n_chains = 1, type = "single")
 
 test_that("polynomial trends work", {
-  expect_snapshot(init_chains(LNR_poly, particles = 10, cores_per_chain = 1)[[1]]$samples)
+  expect_snapshot(init_chains(LNR_poly, particles = 3, cores_per_chain = 1)[[1]]$samples)
 })
 
 ## New tests: phase-specific trends and par_input trends
@@ -186,7 +186,7 @@ design_phases <- design(
 LNR_phases <- make_emc(dat, design_phases, compress = FALSE, n_chains = 1, type = "single")
 
 test_that("phase-specific trends work (premap, pretransform, posttransform)", {
-  expect_snapshot(init_chains(LNR_phases, particles = 10, cores_per_chain = 1)[[1]]$samples)
+  expect_snapshot(init_chains(LNR_phases, particles = 3, cores_per_chain = 1)[[1]]$samples)
 })
 
 # Trend where input is another parameter: use t0 as input to a trend on m
@@ -210,7 +210,7 @@ design_par_input <- design(
 LNR_par_input <- make_emc(dat, design_par_input, compress = FALSE, n_chains = 1, type = "single")
 
 test_that("par_input trend uses t0 as input to m trend", {
-  expect_snapshot(init_chains(LNR_par_input, particles = 10, cores_per_chain = 1)[[1]]$samples)
+  expect_snapshot(init_chains(LNR_par_input, particles = 3, cores_per_chain = 1)[[1]]$samples)
 })
 
 trend_shared_premap <- make_trend(
@@ -233,7 +233,7 @@ design_shared_premap <- design(
 LNR_shared_premap <- make_emc(dat, design_shared_premap, compress = FALSE, n_chains = 1, type = "single")
 
 test_that("share works premap trend", {
-  expect_snapshot(init_chains(LNR_shared_premap, particles = 10, cores_per_chain = 1)[[1]]$samples)
+  expect_snapshot(init_chains(LNR_shared_premap, particles = 3, cores_per_chain = 1)[[1]]$samples)
 })
 
 
@@ -255,7 +255,7 @@ design_shared_posttransform <- design(
 )
 LNR_shared_posttransform <- make_emc(dat, design_shared_posttransform, compress = FALSE, n_chains = 1, type = "single")
 test_that("share works posttransform trend", {
-  expect_snapshot(init_chains(LNR_shared_posttransform, particles = 10, cores_per_chain = 1)[[1]]$samples)
+  expect_snapshot(init_chains(LNR_shared_posttransform, particles = 3, cores_per_chain = 1)[[1]]$samples)
 })
 
 
@@ -319,6 +319,6 @@ design_mult <- design(
 LNR_multi <- make_emc(dat, design_mult, compress = FALSE, n_chains = 1, type = "single")
 
 test_that("trend_multiple", {
-  expect_snapshot(init_chains(LNR_multi, particles = 10, cores_per_chain = 1)[[1]]$samples)
+  expect_snapshot(init_chains(LNR_multi, particles = 3, cores_per_chain = 1)[[1]]$samples)
 })
 

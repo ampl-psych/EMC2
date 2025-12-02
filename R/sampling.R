@@ -108,7 +108,7 @@ init <- function(pmwgs, start_mu = NULL, start_var = NULL,
 #'                            formula =list(v~0+S,a~E, t0~1, s~1),
 #'                            constants=c(s=log(1)))
 #'
-#' DDMaE <- make_emc(forstmann, design_DDMaE)
+#' DDMaE <- make_emc(forstmann, design_DDMaE, compress = FALSE)
 #' # set up our mean starting points (same used across subjects).
 #' mu <- c(v_Sleft=-2,v_Sright=2,a=log(1),a_Eneutral=log(1.5),a_Eaccuracy=log(2),
 #'        t0=log(.2))
@@ -117,7 +117,7 @@ init <- function(pmwgs, start_mu = NULL, start_var = NULL,
 #' # Initialize chains, 4 cores per chain, and parallelizing across our 3 chains as well
 #' # so 4*3 cores used.
 #' DDMaE <- init_chains(DDMaE, start_mu = mu, start_var = var,
-#'                      cores_per_chain = 1, cores_for_chains = 1, particles = 10)
+#'                      cores_per_chain = 1, cores_for_chains = 1, particles = 3)
 #' # Afterwards we can just use fit
 #' # DDMaE <- fit(DDMaE, cores_per_chain = 4)
 #' }
