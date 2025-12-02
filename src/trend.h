@@ -154,52 +154,59 @@ NumericMatrix run_kernel_rcpp(NumericMatrix kernel_pars,
   // Custom kernel path: take all inputs at once (matrix), exclude rows with any NA, no map
   if (kernel == "custom") {
     if (Rf_isNull(funptrSEXP)) stop("Missing function pointer for custom kernel.");
-    // Row-wise NA check
-    LogicalVector good(n_comp, true);
-    for (int i = 0; i < n_comp; ++i) {
-      for (int c = 0; c < p; ++c) {
-        if (NumericVector::is_na(input_comp(i, c))) { good[i] = false; break; }
-      }
-    }
-    const int n_good = sum(good);
-    NumericVector comp_out(n_comp); // zeros by default
-    if (n_good > 0) {
-      NumericMatrix in_good(n_good, p);
-      int rg = 0;
-      for (int i = 0; i < n_comp; ++i) if (good[i]) {
-        for (int c = 0; c < p; ++c) in_good(rg, c) = input_comp(i, c);
-        ++rg;
-      }
-      NumericMatrix kp_good = submat_rcpp(kp_comp, good);
+    // // Row-wise NA check
+    // LogicalVector good(n_comp, true);
+    // for (int i = 0; i < n_comp; ++i) {
+    //   for (int c = 0; c < p; ++c) {
+    //     if (NumericVector::is_na(input_comp(i, c))) { good[i] = false; break; }
+    //   }
+    // }
+    // const int n_good = sum(good);
+    // NumericVector comp_out(n_comp); // zeros by default
+    // if (n_good > 0) {
+    //   NumericMatrix in_good(n_good, p);
+    //   int rg = 0;
+    //   for (int i = 0; i < n_comp; ++i) if (good[i]) {
+    //     for (int c = 0; c < p; ++c) in_good(rg, c) = input_comp(i, c);
+    //     ++rg;
+    //   }
+    //   NumericMatrix kp_good = submat_rcpp(kp_comp, good);
+    //
+    //   NumericVector contrib;
+    //   contrib = EMC2_call_custom_trend(kp_good, in_good, funptrSEXP);
+    //   if (contrib.size() != n_good) stop("Custom kernel returned wrong length (expected n_good).");
+    //   rg = 0;
+    //   // for (int i = 0; i < n_comp; ++i) if (good[i]) comp_out[i] = NumericVector::is_na(contrib[rg]) ? 0.0 : contrib[rg++];
+    //   // Fill
+    //   double last_val = 0.0;
+    //   for (int i = 0; i < n_comp; ++i) {
+    //     if (good[i]) {
+    //       // Take next contrib, replace NA with 0
+    //       double val = NumericVector::is_na(contrib[rg]) ? 0.0 : contrib[rg];
+    //       comp_out[i] = val;
+    //       if (ffill_na) last_val = val;  // remember for forward fill
+    //       rg++;
+    //     } else if (ffill_na) {
+    //       // Forward-fill from last known value
+    //       comp_out[i] = last_val;
+    //       // SM: This needs a rethink.
+    //       // Probably best to just let the user handle NA-values in the custom kernel?
+    //       // We cannot know whether there's some sort of delta-rule logic where a backward fill would be needed
+    //       // or forward fill logic...
+    //     }
+    //   }
+    // }
 
-      NumericVector contrib;
-      contrib = EMC2_call_custom_trend(kp_good, in_good, funptrSEXP);
-      if (contrib.size() != n_good) stop("Custom kernel returned wrong length (expected n_good).");
-      rg = 0;
-      // for (int i = 0; i < n_comp; ++i) if (good[i]) comp_out[i] = NumericVector::is_na(contrib[rg]) ? 0.0 : contrib[rg++];
-      // Fill
-      double last_val = 0.0;
-      for (int i = 0; i < n_comp; ++i) {
-        if (good[i]) {
-          // Take next contrib, replace NA with 0
-          double val = NumericVector::is_na(contrib[rg]) ? 0.0 : contrib[rg];
-          comp_out[i] = val;
-          if (ffill_na) last_val = val;  // remember for forward fill
-          rg++;
-        } else if (ffill_na) {
-          // Forward-fill from last known value
-          comp_out[i] = last_val;
-          // SM: This needs a rethink.
-          // Probably best to just let the user handle NA-values in the custom kernel?
-          // We cannot know whether there's some sort of delta-rule logic where a backward fill would be needed
-          // or forward fill logic...
-        }
-      }
-    }
+    // No NA-check, handle NAs in custom kernel
+    NumericVector contrib;
+    contrib = EMC2_call_custom_trend(kp_comp, input_comp, funptrSEXP);
+    if (contrib.size() != n_comp) stop("Custom kernel returned wrong length (expected n_good).");
+
     // expand back and return
     for (int i = 0; i < n; ++i) {
       int idx = expand_idx[i] - 1;
-      out(i,0) += comp_out[idx];
+      out(i,0) += contrib[idx];
+      // out(i,0) += comp_out[idx];
     }
     return out;
   }
