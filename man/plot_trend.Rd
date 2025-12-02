@@ -57,7 +57,7 @@ design_RDM_lin_B <- design(model=RDM,
                            formula=list(B ~ 1, v ~ lM, t0 ~ 1),
                            trend=lin_trend)       # add trend
 
-emc <- make_emc(dat, design=design_RDM_lin_B)
+emc <- make_emc(dat, design=design_RDM_lin_B, compress = FALSE)
 p_vector <- c('B'=1, 'v'=1, 'v_lMTRUE'=1, 't0'=0.1, 'B.w'=1, 'B.d_ei'=1)
 
 # Visualize trend

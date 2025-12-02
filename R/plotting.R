@@ -331,9 +331,9 @@ pairs_posterior <- function(emc, selection="alpha", scale_subjects=TRUE,
 #' p_vector=c(v_Sleft=-2,v_Sright=2,a=log(.95),a_Eneutral=log(1.5),a_Eaccuracy=log(2),
 #'           t0=log(.25),Z=qnorm(.5),sv=log(.5),SZ=qnorm(.5))
 #' # Make a profile plot for some parameters. Specifying a custom range for t0.
-#' profile_plot(p_vector = p_vector, p_min = c(t0 = -1.35),
-#'              p_max = c(t0 = -1.45), use_par = c("a", "t0", "SZ"),
-#'              data = forstmann, design = design_DDMaE, n_point = 10)
+#' # profile_plot(p_vector = p_vector, p_min = c(t0 = -1.35),
+#' #              p_max = c(t0 = -1.45), use_par = c("a", "t0", "SZ"),
+#' #              data = forstmann, design = design_DDMaE, n_point = 10)
 #' }
 #' @export
 
@@ -757,7 +757,7 @@ coda_setmfrow <- function (Nchains = 1, Nparms = 1, nplots = 1, sepplot = FALSE)
 #'                            formula=list(B ~ 1, v ~ lM, t0 ~ 1),
 #'                            trend=lin_trend)       # add trend
 #'
-#' emc <- make_emc(dat, design=design_RDM_lin_B)
+#' emc <- make_emc(dat, design=design_RDM_lin_B, compress = FALSE)
 #' p_vector <- c('B'=1, 'v'=1, 'v_lMTRUE'=1, 't0'=0.1, 'B.w'=1, 'B.d_ei'=1)
 #'
 #' # Visualize trend

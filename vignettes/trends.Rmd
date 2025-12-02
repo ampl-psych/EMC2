@@ -506,7 +506,7 @@ Notes:
 
 You can register your own C++ kernel function. The function takes per‑trial kernel parameters `trend_pars` (base params excluded) and an input matrix, and returns a vector of outputs. To keep this vignette fast and portable, we show the code and how to register it but do not actually compile or run it here.
 
-```{r}
+```{r, eval=FALSE}
 library(EMC2)
 
 # Write a custom kernel to a separate file
