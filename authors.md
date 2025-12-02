@@ -32,7 +32,7 @@
 ## Citation
 
 Source:
-[`DESCRIPTION`](https://github.com/ampl-psych/EMC2/blob/main/DESCRIPTION)
+[`DESCRIPTION`](https://github.com/ampl-psych/EMC2/blob/v3.3.0/DESCRIPTION)
 
 Stevenson N, Donzallaz M, Heathcote A (2025). *EMC2: Bayesian
 Hierarchical Analysis of Cognitive Models of Choice*. R package version
