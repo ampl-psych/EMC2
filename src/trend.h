@@ -66,8 +66,10 @@ NumericVector run_delta2kernel_rcpp(NumericVector q0, NumericVector alphaFast,
     } else {
       peFast[i] = covariate[i] - qFast[i];
       peSlow[i] = covariate[i] - qSlow[i];
+
       qFast[i+1] = qFast[i] + alphaFast[i] * peFast[i];
       qSlow[i+1] = qSlow[i] + alphaSlow[i] * peSlow[i];
+
       if(std::abs(qFast[i+1] - qSlow[i+1]) > dSwitch[i+1]) {
         q[i+1] = qFast[i+1];
       } else {
@@ -299,7 +301,6 @@ NumericMatrix run_kernel_rcpp(NumericMatrix kernel_pars,
       }
 
     } else {
-
       // non-sequential kernels: Apply NA filtering and ffill logic if needed
       LogicalVector good = !is_na(cov_comp);
       const int n_good = sum(good);
@@ -377,7 +378,8 @@ NumericMatrix run_kernel_rcpp(NumericMatrix kernel_pars,
 // Now accepts the full parameter matrix `pars_full` so we can use par_input columns as inputs too.
 // Passes all inputs (covariates + par_input) to kernel in one call; kernel sums across columns.
 // [[Rcpp::export]]
-NumericVector run_trend_rcpp(DataFrame data, List trend, NumericVector param, NumericMatrix trend_pars, NumericMatrix pars_full, bool return_kernel = false) {
+NumericVector run_trend_rcpp(DataFrame data, List trend, NumericVector param, NumericMatrix trend_pars, NumericMatrix pars_full,
+                             bool return_kernel = false) {
   String kernel = as<String>(trend["kernel"]);
   String base = as<String>(trend["base"]);
   // Extract optional custom pointer attribute if present
@@ -481,7 +483,7 @@ NumericVector run_trend_rcpp(DataFrame data, List trend, NumericVector param, Nu
 
     // Run kernel
     NumericMatrix kernel_out = run_kernel_rcpp(kernel_pars, kernel, input_all, custom_ptr, first_level, ffill_na);
-    if (return_kernel) return kernel_out;
+    if(return_kernel) return kernel_out;
 
     int n_rows = kernel_out.nrow();
     int n_cols = kernel_out.ncol();
