@@ -709,7 +709,7 @@ prep_trend_phase <- function(dadm, trend, pars, phase, return_trialwise_paramete
 
 # Probably no need to loop and idx subjects
 run_trend <- function(dadm, trend, param, trend_pars, pars_full = NULL,
-                      return_trialwise_parameters = FALSE){
+                      return_trialwise_parameters = FALSE, return_kernel=FALSE){
   n_base_pars <- switch(trend$base,
                         lin = 1,
                         exp_lin = 1,
@@ -768,6 +768,7 @@ run_trend <- function(dadm, trend, param, trend_pars, pars_full = NULL,
       at_fac <- if (use_at_filter) dat[, trend$at] else NULL
       kern_mat <- run_kernel(kernel_pars[s_idx,,drop = FALSE], trend$kernel, subset_input,
                              funptr = funptr, at_factor = at_fac, ffill_na=trend$ffill_na)
+      if(return_kernel) return(kern_mat)
       if(return_trialwise_parameters){
         tlist[[s]] <- kern_mat
       }
@@ -1714,3 +1715,93 @@ normalize_maps <- function(maps, par_names) {
   maps
 }
 
+
+
+#' Apply a kernel implied in an emc object
+#'
+#' Applies the trend-specific kernel associated with an `emc` model to the
+#' a subject's data and returns the resulting kernel matrix.
+#'
+#' @description
+#' This function extracts the appropriate trend, and applies its implied kernel
+#' using either the pure R implementation or the Rcpp version.
+#' When `mode = "compare"`, the function checks whether the
+#' two implementations produce identical output.
+#'
+#' @param kernel_pars A named vector of kernel parameters on the natural scale.
+#'   Use `NULL` for kernels that do not require parameters.
+#'
+#' @param emc An `emc`.
+#'
+#' @param subject Subject index for which to apply the kernel. Defaults to `1`.
+#'
+#' @param input_pars Optional parameter matrix containing externally supplied
+#'   parameter values (e.g., trend parameters). Only needed for custom kernels.
+#'
+#' @param trend_n Integer specifying which trend to apply when multiple trends
+#'   exist in the model. Defaults to `1`. A warning is issued if the model
+#'   contains more than one trend.
+#'
+#' @param mode Character string specifying which implementation to use:
+#'   \describe{
+#'     \item{`"R"`}{Use the pure R implementation.}
+#'     \item{`"Rcpp"`}{Use the Rcpp implementation (default).}
+#'   }
+#'
+#' @return
+#' Returns a kernel matrix produced by the corresponding implementation.
+#' @export
+apply_kernel <- function(kernel_pars, emc, subject=1, input_pars=NULL, trend_n=1, mode='Rcpp') {
+  ##
+  dadm <- emc[[1]]$data[[subject]]
+  trend_list <- emc[[1]]$model()$trend
+  if(length(trend_list) > 1) {
+    warning(paste0('Multiple trends found - applying trend number ', trend_n))
+  }
+  trend <- trend_list[[trend_n]]
+  trend_par <- names(trend_list)[[trend_n]]
+
+  # extract kernel pars
+  if(trend$kernel %in% c("lin_incr", "lin_decr")) {
+    trend_pars <- matrix(0, nrow=nrow(dadm))
+    colnames(trend_pars) <- 'PLACEHOLDER'
+  } else {
+    trend_pars <- matrix(rep(kernel_pars, each=nrow(dadm)), ncol=length(kernel_pars), byrow=FALSE)
+    colnames(trend_pars) <- names(kernel_pars)
+  }
+
+  # Add base par -- first check if part of input_pars
+  if(trend_par %in% colnames(input_pars)) {
+    trend_pars <- cbind(input_pars[trend_par], trend_pars)
+    colnames(trend_pars)[1] <- trend_par
+  } else {
+    base_par <- trend_help(base=trend$base, do_return=TRUE)$default_pars
+    if(length(base_par) > 0) {
+      trend_pars <- cbind(0, trend_pars)
+      colnames(trend_pars)[1] <- trend$trend_pnames[1]
+    }
+  }
+
+
+  # all pars
+  pars_full <- trend_pars
+  if(!is.null(input_pars)) {
+    pars_full <- cbind(pars_full[,!colnames(pars_full)%in%colnames(input_pars)], input_pars)
+  }
+
+  # Define output parameter - 0 except when it's part of pars_full
+  if(trend_par %in% colnames(pars_full)) {
+    param <- pars_full[,trend_par]
+  } else {
+    param <- rep(0, nrow(dadm))
+  }
+
+
+  if(mode %in% c('Rcpp')) {
+    out <- run_trend_rcpp(data = dadm, trend=trend, param=param, trend_pars=trend_pars, pars_full = pars_full, return_kernel = TRUE)
+  } else if(mode %in% c('R')) {
+    out <- run_trend(dadm = dadm, trend=trend, param=param, trend_pars=trend_pars, pars_full = pars_full, return_kernel = TRUE)
+  }
+  colnames(out) <- trend$covariates
+  out
+}
