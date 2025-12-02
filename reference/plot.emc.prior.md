@@ -113,12 +113,12 @@ psd <- c(v_Sleft=1,v_Sright=1,a=.3,a_Eneutral=.3,a_Eaccuracy=.3,
 # Here we left the variance prior at default
 prior_DDMaE <- prior(design_DDMaE,mu_mean=p_vector,mu_sd=psd)
 # Now we can plot all sorts of (implied) priors
-plot(prior_DDMaE, selection = "mu", N = 1e3)
+plot(prior_DDMaE, selection = "mu", N = 1e2)
 
-plot(prior_DDMaE, selection = "mu", mapped = FALSE, N=1e3)
+plot(prior_DDMaE, selection = "mu", mapped = FALSE, N=1e2)
 
 # We can also plot the implied prior on the participant level effects.
-plot(prior_DDMaE, selection = "alpha", col = "green", N = 1e3)
+plot(prior_DDMaE, selection = "alpha", col = "green", N = 1e2)
 
 
 

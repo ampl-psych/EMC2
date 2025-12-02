@@ -115,7 +115,7 @@ Now we plot the prior, with `map = TRUE` (the default) to see the
 implied prior on the transformed parameters.
 
 ``` r
-plot(prior_LBA)
+plot(prior_LBA, N = 1e3)
 ```
 
 ![Prior for LBA non-hierarchical
@@ -298,7 +298,7 @@ We can also plot what the implied prior range is of the subject-level
 parameters:
 
 ``` r
-plot(prior_LBA, selection = "alpha")
+plot(prior_LBA, selection = "alpha", N = 1e3)
 ```
 
 ![Prior for LBA hierarchical

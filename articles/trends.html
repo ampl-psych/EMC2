@@ -936,33 +936,6 @@ but do not actually compile or run it here.</p>
 <span>  formula <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="va">m</span> <span class="op">~</span> <span class="fl">1</span>, <span class="va">s</span> <span class="op">~</span> <span class="fl">1</span>, <span class="va">t0</span> <span class="op">~</span> <span class="fl">1</span>, <span class="va">m.a</span> <span class="op">~</span> <span class="va">lR</span><span class="op">)</span>,</span>
 <span>  model <span class="op">=</span> <span class="va">LNR</span></span>
 <span><span class="op">)</span></span></code></pre></div>
-<pre><code><span><span class="co">## Intercept formula added for trend_pars: m.b</span></span></code></pre>
-<pre><code><span><span class="co">## </span></span>
-<span><span class="co">##  Sampled Parameters: </span></span>
-<span><span class="co">## [1] "m"           "s"           "t0"          "m.a"         "m.a_lRright"</span></span>
-<span><span class="co">## [6] "m.b"        </span></span>
-<span><span class="co">## </span></span>
-<span><span class="co">##  Design Matrices: </span></span>
-<span><span class="co">## $m</span></span>
-<span><span class="co">##  m</span></span>
-<span><span class="co">##  1</span></span>
-<span><span class="co">## </span></span>
-<span><span class="co">## $s</span></span>
-<span><span class="co">##  s</span></span>
-<span><span class="co">##  1</span></span>
-<span><span class="co">## </span></span>
-<span><span class="co">## $t0</span></span>
-<span><span class="co">##  t0</span></span>
-<span><span class="co">##   1</span></span>
-<span><span class="co">## </span></span>
-<span><span class="co">## $m.a</span></span>
-<span><span class="co">##     lR m.a m.a_lRright</span></span>
-<span><span class="co">##   left   1           0</span></span>
-<span><span class="co">##  right   1           1</span></span>
-<span><span class="co">## </span></span>
-<span><span class="co">## $m.b</span></span>
-<span><span class="co">##  m.b</span></span>
-<span><span class="co">##    1</span></span></code></pre>
 <p>Interpretation: the base controls how the custom kernel’s output
 enters the parameter (e.g., <code>add</code> means additive). The
 <code>transforms</code> declared in <code><a href="../reference/register_trend.html">register_trend()</a></code> are

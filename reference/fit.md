@@ -183,12 +183,11 @@ design_LNR <- design(data = dat,model=LNR,matchfun=matchfun,
 #>   1
 #> 
 # Before fit can be called, we first need to make an emc object
-LNR_s <- make_emc(dat, design_LNR, rt_resolution = 0.05, n_chains = 2)
+LNR_s <- make_emc(dat, design_LNR, rt_resolution = 0.05, n_chains = 2, compress = FALSE)
 #> Processing data set 1
-#> Likelihood speedup factor: 16 (104 unique trials)
 # Run fit, here illustrating how to use stop_criteria (also for speed purposes)
-LNR_s <- fit(LNR_s, cores_for_chains = 1, stop_criteria = list(
-  preburn = list(iter = 10), burn = list(mean_gd = 2.5), adapt = list(min_unique = 20),
-  sample = list(iter = 25, max_gd = 2)), verbose = FALSE, particle_factor = 30, step_size = 25)
+# LNR_s <- fit(LNR_s, cores_for_chains = 1, stop_criteria = list(
+#   preburn = list(iter = 10), burn = list(mean_gd = 2.5), adapt = list(min_unique = 20),
+#   sample = list(iter = 25, max_gd = 2)), verbose = FALSE, particle_factor = 30, step_size = 25)
 # }
 ```

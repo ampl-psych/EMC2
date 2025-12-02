@@ -177,12 +177,11 @@ design_in <- design(data = forstmann,model=DDM,
 #>   1
 #> 
 # Then make the emc, we've omitted a prior here for brevity so default priors will be used.
-emc <- make_emc(forstmann, design_in)
+emc <- make_emc(forstmann, design_in, compress = FALSE)
 #> Processing data set 1
-#> Likelihood speedup factor: 3.6 (4433 unique trials)
 
 # Now for example we can specify that we only want to run the "preburn" phase
 # for MCMC 10 iterations
-emc <- run_emc(emc, stage = "preburn", stop_criteria = list(iter = 10), cores_for_chains = 1)
+# emc <- run_emc(emc, stage = "preburn", stop_criteria = list(iter = 10), cores_for_chains = 1)
 # }
 ```

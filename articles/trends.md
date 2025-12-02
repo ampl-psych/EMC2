@@ -917,35 +917,6 @@ design_custom_trend <- design(
 )
 ```
 
-    ## Intercept formula added for trend_pars: m.b
-
-    ## 
-    ##  Sampled Parameters: 
-    ## [1] "m"           "s"           "t0"          "m.a"         "m.a_lRright"
-    ## [6] "m.b"        
-    ## 
-    ##  Design Matrices: 
-    ## $m
-    ##  m
-    ##  1
-    ## 
-    ## $s
-    ##  s
-    ##  1
-    ## 
-    ## $t0
-    ##  t0
-    ##   1
-    ## 
-    ## $m.a
-    ##     lR m.a m.a_lRright
-    ##   left   1           0
-    ##  right   1           1
-    ## 
-    ## $m.b
-    ##  m.b
-    ##    1
-
 Interpretation: the base controls how the custom kernel’s output enters
 the parameter (e.g., `add` means additive). The `transforms` declared in
 [`register_trend()`](https://ampl-psych.github.io/EMC2/reference/register_trend.md)

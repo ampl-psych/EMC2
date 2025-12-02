@@ -118,9 +118,8 @@ design_RDM_lin_B <- design(model=RDM,
 #>  1
 #> 
 
-emc <- make_emc(dat, design=design_RDM_lin_B)
+emc <- make_emc(dat, design=design_RDM_lin_B, compress = FALSE)
 #> Processing data set 1
-#> Likelihood speedup factor: 1 (15818 unique trials)
 p_vector <- c('B'=1, 'v'=1, 'v_lMTRUE'=1, 't0'=0.1, 'B.w'=1, 'B.d_ei'=1)
 
 # Visualize trend

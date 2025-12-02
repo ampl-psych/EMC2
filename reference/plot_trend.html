@@ -161,9 +161,8 @@ from predict()</p>
 <span class="r-out co"><span class="r-pr">#&gt;</span>  1</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> </span>
 <span class="r-in"><span></span></span>
-<span class="r-in"><span><span class="va">emc</span> <span class="op">&lt;-</span> <span class="fu"><a href="make_emc.html">make_emc</a></span><span class="op">(</span><span class="va">dat</span>, design<span class="op">=</span><span class="va">design_RDM_lin_B</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="va">emc</span> <span class="op">&lt;-</span> <span class="fu"><a href="make_emc.html">make_emc</a></span><span class="op">(</span><span class="va">dat</span>, design<span class="op">=</span><span class="va">design_RDM_lin_B</span>, compress <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span></span>
 <span class="r-msg co"><span class="r-pr">#&gt;</span> Processing data set 1</span>
-<span class="r-msg co"><span class="r-pr">#&gt;</span> Likelihood speedup factor: 1 (15818 unique trials)</span>
 <span class="r-in"><span><span class="va">p_vector</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">'B'</span><span class="op">=</span><span class="fl">1</span>, <span class="st">'v'</span><span class="op">=</span><span class="fl">1</span>, <span class="st">'v_lMTRUE'</span><span class="op">=</span><span class="fl">1</span>, <span class="st">'t0'</span><span class="op">=</span><span class="fl">0.1</span>, <span class="st">'B.w'</span><span class="op">=</span><span class="fl">1</span>, <span class="st">'B.d_ei'</span><span class="op">=</span><span class="fl">1</span><span class="op">)</span></span></span>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="co"># Visualize trend</span></span></span>
