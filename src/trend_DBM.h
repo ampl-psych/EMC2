@@ -77,9 +77,11 @@ NumericVector run_beta_binomial_basic(
     const double a_t = a0[t] + n_hit;
     const double b_t = b0[t] + (n_trial - n_hit);
     out[t] = return_map ? beta_mode(a_t, b_t) : beta_mean(a_t, b_t);
-    // update after observing trial t
-    n_hit += covariate[t];
-    n_trial += 1.0;
+    // update after observing trial t, only if observation is present
+    if (!NumericVector::is_na(covariate[t])) {
+      n_hit += covariate[t];
+      n_trial += 1.0;
+    }
   }
 
   return out;
@@ -113,8 +115,15 @@ NumericVector run_beta_binomial_decay(
     out[t] = return_map ? beta_mode(a_t, b_t) : beta_mean(a_t, b_t);
     // decayed update
     const double decay_factor = std::exp(-1.0 / decay[t]);
-    n_hit = decay_factor * (n_hit + covariate[t]);
-    n_trial = decay_factor * (n_trial + 1.0);
+    if (!NumericVector::is_na(covariate[t])) {
+      n_hit = decay_factor * (n_hit + covariate[t]);
+      n_trial = decay_factor * (n_trial + 1.0);
+    } else {
+      // NB still apply decay if no observation was present, to account for
+      // effect of passage of time on memory
+      n_hit = decay_factor * n_hit;
+      n_trial = decay_factor * n_trial;
+    }
   }
 
   return out;
@@ -143,8 +152,8 @@ NumericVector run_beta_binomial_window(
 
   for (int t = 0; t < n_trials; ++t) {
     // prune buffer based on current window[t]
-    int w = static_cast<int>(window[t]);
-    while (!buf.empty() && (t - buf.front().idx) >= w) {
+    const int w = static_cast<int>(window[t]);
+    while (!buf.empty() && (t - buf.front().idx) > w) {
       n_hit -= buf.front().obs;
       n_trial -= 1.0;
       buf.pop_front();
@@ -153,11 +162,13 @@ NumericVector run_beta_binomial_window(
     const double a_t = a0[t] + n_hit;
     const double b_t = b0[t] + (n_trial - n_hit);
     out[t] = return_map ? beta_mode(a_t, b_t) : beta_mean(a_t, b_t);
-    // update with most recent observation
-    const double obs = covariate[t];
-    buf.push_back({obs, t});
-    n_hit += obs;
-    n_trial += 1.0;
+    // update with most recent observation, only if observation is present
+    if (!NumericVector::is_na(covariate[t])) {
+      const double obs = covariate[t];
+      buf.push_back({obs, t});
+      n_hit += obs;
+      n_trial += 1.0;
+    }
   }
 
   return out;
@@ -175,8 +186,8 @@ NumericVector run_beta_binomial(
 ) {
   const int n_trials = covariate.length();
   for (int t = 0; t < n_trials; ++t) {
-    if (!(covariate[t] == 0.0 || covariate[t] == 1.0)) {
-      stop("All `covariate` entries must be 0.0 or 1.0.");
+    if (!NumericVector::is_na(covariate[t]) && !(covariate[t] == 0.0 || covariate[t] == 1.0)) {
+        stop("All non-missing `covariate` entries must be 0.0 or 1.0.");
     }
   }
 
@@ -261,17 +272,10 @@ NumericVector run_dbm(
     const bool return_map = false,
     const bool return_surprise = false
 ) {
-  // resolution of grid for discretising probability distributions.
-  // exact setting doesn't seem to matter much for final outcome - mean/mode of
-  // the trial-wise predictive distribution - but has huge effect on memory use
-  const int grid_res = return_map ? 500 : 100;
-  // tolerance for treating cp parameter as practically equal to 0 or 1
-  const double cp_eps = 1e-10;
-
   const int n_trials = covariate.length();
-  for (int t = 0; t < n_trials; t++) {
-    if (!(covariate[t] == 0.0 || covariate[t] == 1.0)) {
-      stop("All `covariate` entries must be 0.0 or 1.0.");
+  for (int t = 0; t < n_trials; ++t) {
+    if (!NumericVector::is_na(covariate[t]) && !(covariate[t] == 0.0 || covariate[t] == 1.0)) {
+      stop("All non-missing `covariate` entries must be 0.0 or 1.0.");
     }
   }
 
@@ -285,6 +289,9 @@ NumericVector run_dbm(
     a[t] = mu0[t] * s0[t];
     b[t] = (1.0 - mu0[t]) * s0[t];
   }
+
+  // tolerance for treating cp parameter as practically equal to 0 or 1
+  const double cp_eps = 1e-10;
 
   // if cp is (practically) equal to 0 (i.e., no volatility), the DBM reduces to
   // a standard Beta-Binomial model, for which exact analytic updates are
@@ -325,6 +332,10 @@ NumericVector run_dbm(
 
   // main DBM code
 
+  // resolution of grid for discretising probability distributions.
+  // exact setting doesn't seem to matter much for final outcome - mean/mode of
+  // the trial-wise predictive distribution - but has huge effect on memory use
+  const int grid_res = return_map ? 500 : 100;
   const int grid_size = grid_res + 1;
   // NB using std::vector instead of NumericVector to reduce memory overhead
   std::vector<double> prob_grid(grid_size);
@@ -371,16 +382,22 @@ NumericVector run_dbm(
     out[t] = return_map ? mode_discrete(prob_grid, DBM_pred) : mean_discrete(prob_grid, DBM_pred);
 
     // update posterior distribution
-    if (covariate[t] == 1.0) {
-      for (int i = 0; i < grid_size; i++) {
-        DBM_post[i] = DBM_pred[i] * x_like[i];
-      }
+    if (NumericVector::is_na(covariate[t])) {
+      // NA handling: predictive distribution pushed forward as "posterior" for
+      // next trial, effectively causing slight forgetting of past observations
+      DBM_post = DBM_pred;
     } else {
-      for (int i = 0; i < grid_size; i++) {
-        DBM_post[i] = DBM_pred[i] * y_like[i];
+      if (covariate[t] == 1.0) {
+        for (int i = 0; i < grid_size; i++) {
+          DBM_post[i] = DBM_pred[i] * x_like[i];
+        }
+      } else {
+        for (int i = 0; i < grid_size; i++) {
+          DBM_post[i] = DBM_pred[i] * y_like[i];
+        }
       }
+      normalise_inplace(DBM_post);
     }
-    normalise_inplace(DBM_post);
   }
 
   if (return_surprise) {
@@ -400,10 +417,7 @@ NumericVector run_tpm_nocp(
 ) {
   const int n_trials = covariate.length();
   NumericVector out(n_trials);
-  double n_hit_XX = 0.0;
-  double n_trial_XX = 0.0;
-  double n_hit_XY = 0.0;
-  double n_trial_XY = 0.0;
+  double n_hit_XX = 0.0, n_trial_XX = 0.0, n_hit_XY = 0.0, n_trial_XY = 0.0;
 
   for (int t = 0; t < n_trials; t++) {
     const double a_XX = a0[t] + n_hit_XX;
@@ -412,15 +426,32 @@ NumericVector run_tpm_nocp(
     const double b_XY = b0[t] + (n_trial_XY - n_hit_XY);
 
     if (t == 0) {
+      // since shape parameters are initialised identically for _XX and _XY,
+      // beta_mean(a_XX, b_XX) and beta_mean(a_XY, b_XY) are identical for t == 0
       out[t] = beta_mean(a_XX, b_XX);
       continue;
     }
 
-    const int prev = static_cast<int>(covariate[(t - 1)]);
-    const int curr = static_cast<int>(covariate[t]);
+    const bool prev_is_na = NumericVector::is_na(covariate[t - 1]);
+    const bool curr_is_na = NumericVector::is_na(covariate[t]);
+    const int prev = prev_is_na ? NA_INTEGER : static_cast<int>(covariate[t - 1]);
+    const int curr = curr_is_na ? NA_INTEGER : static_cast<int>(covariate[t]);
 
-    out[t] = prev == 1 ? beta_mean(a_XX, b_XX) : beta_mean(a_XY, b_XY);
+    if (prev_is_na) {
+      // if observation was missing for previous trial, the model has no basis
+      // for condition transition; a principled choice is to use the unconditional
+      // predictive mean
+      out[t] = 0.5 * (beta_mean(a_XX, b_XX) + beta_mean(a_XY, b_XY));
+    } else {
+      out[t] = prev == 1 ? beta_mean(a_XX, b_XX) : beta_mean(a_XY, b_XY);
+    }
 
+    // skip update if either prev or curr is NA
+    if (prev_is_na || curr_is_na) {
+      continue;
+    }
+
+    // transition probability updates
     if (prev == 1) {
       n_trial_XX += 1.0;
       if (curr == 1) {
@@ -507,8 +538,8 @@ NumericVector run_tpm(
 
   const int n_trials = covariate.length();
   for (int i = 0; i < n_trials; i++) {
-    if (!(covariate[i] == 0.0 || covariate[i] == 1.0)) {
-      stop("All `covariate` entries must be 0.0 or 1.0.");
+    if (!(covariate[i] == 0.0 || covariate[i] == 1.0 || NumericVector::is_na(covariate[i]))) {
+      stop("All `covariate` entries must be 0.0, 1.0, or NA.");
     }
   }
 
@@ -568,6 +599,8 @@ NumericVector run_tpm(
   // loop over trials
   for (int t = 0; t < n_trials; t++) {
 
+    const bool curr_is_na = NumericVector::is_na(covariate[t]);
+    const bool prev_is_na = (t == 0) ? true : NumericVector::is_na(covariate[t - 1]);
     const int curr = static_cast<int>(covariate[t]);
     const int prev = (t > 0) ? static_cast<int>(covariate[(t - 1)]) : NA_INTEGER;
 
@@ -587,27 +620,33 @@ NumericVector run_tpm(
 
     // Before observing trial t, compute marginal predictive probability of
     // observing X - that is, predictive probability of covariate[t] == 1.0
-    if (t == 0) {
+    if (prev_is_na) {
       out[t] = mean_discrete(mean_p, TPM_pred);
     } else {
       out[t] = (prev == 1) ? mean_discrete(grid.p_XX, TPM_pred) : mean_discrete(grid.p_XY, TPM_pred);
     }
 
-    // After observing trial t, update posterior distribution
-    if (t > 0) {
-      const std::vector<double> *like_ptr = nullptr;
-      if (prev == 0) {
-        like_ptr = (curr == 0) ? &grid.like_YY : &grid.like_XY;
-      } else {
-        like_ptr = (curr == 0) ? &grid.like_YX : &grid.like_XX;
-      }
-      for (int j = 0; j < n_combi; j++) {
-        TPM_update[j] = mix_old * (*like_ptr)[j] * TPM_post[j] +
-          mix_new * (*like_ptr)[j] * (summed_post - TPM_post[j]) * inv_n_minus_1;
-      }
-      normalise_inplace(TPM_update);
-      std::swap(TPM_post, TPM_update);
+    // skip likelihood update if missing obs; predictive distribution nevertheless
+    // pushed forward as "posterior" for next trial
+    if (curr_is_na || prev_is_na) {
+      TPM_post = TPM_pred;
+      continue;
     }
+
+    // After observing trial t, update posterior distribution
+    const std::vector<double> *like_ptr = nullptr;
+    if (prev == 0) {
+      like_ptr = (curr == 0) ? &grid.like_YY : &grid.like_XY;
+    } else {
+      like_ptr = (curr == 0) ? &grid.like_YX : &grid.like_XX;
+    }
+    for (int j = 0; j < n_combi; j++) {
+      TPM_update[j] = mix_old * (*like_ptr)[j] * TPM_post[j] +
+        mix_new * (*like_ptr)[j] * (summed_post - TPM_post[j]) * inv_n_minus_1;
+    }
+    normalise_inplace(TPM_update);
+    std::swap(TPM_post, TPM_update);
+
   }
 
   if (return_surprise) {
