@@ -39,6 +39,7 @@
 #' parameters to be estimated.
 #' @param custom_p_vector A character vector. If specified, a custom likelihood
 #' function can be supplied.
+#' @param trend A trend list, as made by \code{\link{make_trend}}
 #' @param transform A list with custom transformations to be applied to the parameters of the model,
 #' if the conventional transformations aren't desired.
 #' See `DDM()` for an example of such transformations
@@ -74,16 +75,17 @@
 #'
 #'
 design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
-                       contrasts=NULL,matchfun=NULL,constants=NULL,covariates=NULL,
-                       functions=NULL,report_p_vector=TRUE, custom_p_vector = NULL,
+                   contrasts=NULL,matchfun=NULL,constants=NULL,covariates=NULL,
+                   functions=NULL,report_p_vector=TRUE, custom_p_vector = NULL,
+                   trend=NULL,
                    transform = NULL, bound = NULL, ...){
 
   optionals <- list(...)
-  if(!is.null(optionals$trend)){
-    trend <- optionals$trend
-  } else {
-    trend <- NULL
-  }
+  # if(!is.null(optionals$trend)){
+  #   trend <- optionals$trend
+  # } else {
+  #   trend <- NULL
+  # }
   if(!is.null(optionals$pre_transform)){
     pre_transform <- optionals$pre_transform
   } else {
@@ -150,6 +152,11 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
                  Fcovariates=covariates,Ffunctions=functions,model=model)
   class(design) <- "emc.design"
   if (!is.null(trend)) {
+    # check for at = 'lR'
+    if(any(sapply(trend, function(x) x$at)=='lR') & model()$type!='RACE') {
+      warning('A trend has `at="lR"`, but this is not a race model. Setting `at` to NULL')
+      for(i in 1:length(trend)) if(trend[[i]]$at=='lR') trend[[i]]$at <- NULL
+    }
     model <- update_model_trend(trend, model)
     model_list <- model()
     model <- function(){return(model_list)}
@@ -331,7 +338,11 @@ add_accumulators <- function(data,matchfun=NULL,simulate=FALSE, type = "RACE", F
     }
   }
   row.names(datar) <- NULL
-  if (simulate) datar$rt <- NA else {
+  if (simulate) {
+    if(!'rt' %in% Fcovariates) {
+      datar$rt <- NA
+    }
+  } else {
     R <- datar$R
     R[is.na(R)] <- levels(datar$lR)[1]
 
@@ -548,6 +559,22 @@ design_model <- function(data,design,model=NULL,
     da[,i] <- newF
   }
 
+  # Add covariate_map as attribute to da
+  if(!is.null(model()$trend)) {
+    trend_list <- model()$trend
+    for(i in 1:length(trend_list)) {
+      if(!is.null(trend_list[[i]]$map)) {
+        if(!'covariate_maps' %in% names(attributes(da))) attr(da, 'covariate_maps') <- list()
+        covariate_map_names <- names(trend_list[[i]]$map)
+        covariate_map_functions <- trend_list[[i]]$map
+        for(map_n in 1:length(covariate_map_names)) {
+          covs <- trend_list[[i]]$covariate
+          attr(da, 'covariate_maps')[[covariate_map_names[map_n]]] <- covariate_map_functions[[map_n]](dadm=da, covs)
+        }
+      }
+    }
+  }
+
   if (is.null(model()$p_types) | is.null(model()$Ttransform))
     stop("p_types and Ttransform must be supplied")
   if (!all(unlist(lapply(design$Flist,class))=="formula"))
@@ -756,6 +783,13 @@ dm_list <- function(dadm)
     isin <- dadm$subjects==i         # dadm
     dl[[i]] <- dadm[isin,]
     dl[[i]]$subjects <- factor(as.character(dl[[i]]$subjects))
+
+    if(!is.null(attr(dadm, 'covariate_maps'))) {
+      covariate_maps <- attr(dadm, 'covariate_maps')
+      for(ii in 1:length(covariate_maps)) covariate_maps[[ii]] <- covariate_maps[[ii]][isin,]
+      attr(dl[[i]], 'covariate_maps') <- covariate_maps
+    }
+
     if(is.null(attr(dadm, "custom_ll"))){
 
       isin1 <- s_expand==i             # da

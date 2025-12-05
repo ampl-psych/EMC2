@@ -481,6 +481,25 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// get_pars_c_wrapper
+NumericMatrix get_pars_c_wrapper(NumericMatrix p_matrix, DataFrame data, NumericVector constants, List designs, List bounds, List transforms, List pretransforms, CharacterVector p_types, List trend);
+RcppExport SEXP _EMC2_get_pars_c_wrapper(SEXP p_matrixSEXP, SEXP dataSEXP, SEXP constantsSEXP, SEXP designsSEXP, SEXP boundsSEXP, SEXP transformsSEXP, SEXP pretransformsSEXP, SEXP p_typesSEXP, SEXP trendSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericMatrix >::type p_matrix(p_matrixSEXP);
+    Rcpp::traits::input_parameter< DataFrame >::type data(dataSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type constants(constantsSEXP);
+    Rcpp::traits::input_parameter< List >::type designs(designsSEXP);
+    Rcpp::traits::input_parameter< List >::type bounds(boundsSEXP);
+    Rcpp::traits::input_parameter< List >::type transforms(transformsSEXP);
+    Rcpp::traits::input_parameter< List >::type pretransforms(pretransformsSEXP);
+    Rcpp::traits::input_parameter< CharacterVector >::type p_types(p_typesSEXP);
+    Rcpp::traits::input_parameter< List >::type trend(trendSEXP);
+    rcpp_result_gen = Rcpp::wrap(get_pars_c_wrapper(p_matrix, data, constants, designs, bounds, transforms, pretransforms, p_types, trend));
+    return rcpp_result_gen;
+END_RCPP
+}
 // EMC2_call_custom_trend
 NumericVector EMC2_call_custom_trend(NumericMatrix trend_pars, NumericMatrix input, SEXP funptrSEXP);
 RcppExport SEXP _EMC2_EMC2_call_custom_trend(SEXP trend_parsSEXP, SEXP inputSEXP, SEXP funptrSEXPSEXP) {
@@ -491,6 +510,22 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< NumericMatrix >::type input(inputSEXP);
     Rcpp::traits::input_parameter< SEXP >::type funptrSEXP(funptrSEXPSEXP);
     rcpp_result_gen = Rcpp::wrap(EMC2_call_custom_trend(trend_pars, input, funptrSEXP));
+    return rcpp_result_gen;
+END_RCPP
+}
+// run_trend_rcpp
+NumericVector run_trend_rcpp(DataFrame data, List trend, NumericVector param, NumericMatrix trend_pars, NumericMatrix pars_full, bool return_kernel);
+RcppExport SEXP _EMC2_run_trend_rcpp(SEXP dataSEXP, SEXP trendSEXP, SEXP paramSEXP, SEXP trend_parsSEXP, SEXP pars_fullSEXP, SEXP return_kernelSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< DataFrame >::type data(dataSEXP);
+    Rcpp::traits::input_parameter< List >::type trend(trendSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type param(paramSEXP);
+    Rcpp::traits::input_parameter< NumericMatrix >::type trend_pars(trend_parsSEXP);
+    Rcpp::traits::input_parameter< NumericMatrix >::type pars_full(pars_fullSEXP);
+    Rcpp::traits::input_parameter< bool >::type return_kernel(return_kernelSEXP);
+    rcpp_result_gen = Rcpp::wrap(run_trend_rcpp(data, trend, param, trend_pars, pars_full, return_kernel));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -537,7 +572,9 @@ static const R_CallMethodDef CallEntries[] = {
     {"_EMC2_construct_design_matrix", (DL_FUNC) &_EMC2_construct_design_matrix, 13},
     {"_EMC2_do_transform", (DL_FUNC) &_EMC2_do_transform, 2},
     {"_EMC2_calc_ll", (DL_FUNC) &_EMC2_calc_ll, 11},
+    {"_EMC2_get_pars_c_wrapper", (DL_FUNC) &_EMC2_get_pars_c_wrapper, 9},
     {"_EMC2_EMC2_call_custom_trend", (DL_FUNC) &_EMC2_EMC2_call_custom_trend, 3},
+    {"_EMC2_run_trend_rcpp", (DL_FUNC) &_EMC2_run_trend_rcpp, 6},
     {"_EMC2_c_add_charvectors", (DL_FUNC) &_EMC2_c_add_charvectors, 2},
     {NULL, NULL, 0}
 };
