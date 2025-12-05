@@ -119,7 +119,11 @@ map_p <- function(p,dadm,model,return_trialwise_parameters=FALSE)
 
           # if parameter inputs requested but not yet mapped, pass raw value
           for(par_input_name in cur_trend$par_input) {
-            if(all(is.na(pars[,par_input_name]))) pars[,par_input_name] <- p[,par_input_name]
+            if(!par_input_name %in% colnames(pars)) {
+              pars[,par_input_name] <- p[,par_input_name]
+            } else if(all(is.na(pars[,par_input_name]))) {
+              pars[,par_input_name] <- p[,par_input_name]
+            }
           }
 
           par_name <- tnames[idx]
