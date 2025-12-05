@@ -734,9 +734,9 @@ run_trend <- function(dadm, trend, param, trend_pars, pars_full = NULL,
       at_fac <- if (use_at_filter) dat[, trend$at] else NULL
       kern_mat0 <- run_kernel(kernel_pars[s_idx,,drop = FALSE], trend$kernel, subset_input,
                              funptr = funptr, at_factor = at_fac, ffill_na=trend$ffill_na)
-      if(return_kernel) return(kern_mat)
+      if(return_kernel) return(kern_mat0)
       if(return_trialwise_parameters){
-        tlist[[s]] <- kern_mat
+        tlist[[s]] <- kern_mat0
       }
       n_maps = length(trend$map)
       map_names = names(trend$map)
