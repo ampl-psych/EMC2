@@ -674,19 +674,6 @@ calc_ll_manager <- function(proposals, dadm, model, component = NULL, r_cores = 
     lls <- log_likelihood_joint(proposals, dadm, model, component)
   } else{
     model <- model()
-
-    # # weird place to do this I know - but within the trend code it's evaluated many many more times.
-    # # make this an attribute of dadm instead?
-    # if(!is.null(model$trend)) {
-    #   for(i in 1:length(model$trend)) {
-    #     if(!is.null(model$trend[[i]]$map)) {
-    #       trend_map <- model$trend[[i]]$map
-    #       trend_map <- trend_map[as.character(trend_map[,1])==as.character(dadm$subjects[1]),2:ncol(trend_map)]
-    #       model$trend[[i]]$map <- as.matrix(trend_map)
-    #     }
-    #   }
-    # }
-
     if(is.null(model$c_name)){ # use the R implementation
       lls <- unlist(
         auto_mclapply(1:nrow(proposals),
