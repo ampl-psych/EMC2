@@ -136,7 +136,7 @@ run_SBC_subject <- function(rep, design_in, prior_alpha, trials, prior_in, dots)
   # For Bias
   CI <- credint(emc)[[1]]
   med <- CI[,2] # And return this for precision
-  bias <- p_vector - med
+  bias <- med - p_vector
   # For coverage
   coverage <- p_vector > CI[,1] & p_vector < CI[,3]
   return(list(rank = rank, med = med, bias = bias, coverage = coverage))
@@ -336,7 +336,7 @@ make_smooth <- function(x, y, N = 1000){
 #' @param main Optional. A character specifying plot title.
 #' @return No returns
 #' @export
-plot_sbc_ecdf <- function(ranks, layout = NA, add_stats = TRUE, main = ""){
+plot_sbc_ecdf <- function(ranks, layout = NA, add_stats = TRUE, main = NULL){
   if (!is.null(ranks[["rank"]])) {
     stats <- calc_sbc_stats(ranks)
   }
@@ -361,6 +361,7 @@ plot_sbc_ecdf <- function(ranks, layout = NA, add_stats = TRUE, main = ""){
     par_names <- colnames(rank)
     res[["x"]] <- apply(rank, 2, function(x) {sort(x) - res[["z"]]})
     for (i in 1:ncol(rank)) {
+      if(is.null(main)) main <- paste0(selects[j], " - ", par_names[i])
       plot(
         x = res[["z"]],
         y = res[["x"]][ , i],
@@ -368,12 +369,12 @@ plot_sbc_ecdf <- function(ranks, layout = NA, add_stats = TRUE, main = ""){
         lwd = 2,
         ylim = c(
           min(res[["lower"]], res[["x"]][ , i]) - 0.01,
-          max(res[["upper"]], res[["x"]][ , i]) + 0.01
+          max(res[["upper"]], res[["x"]][ , i]) + 0.03
         ),
         xlim = c(0, 1),
         ylab = "ECDF Difference",
         xlab = "Normalized Rank Statistic",
-        main = paste0(selects[j], " - ", par_names[i])
+        main = main
       )
       polygon(
         x = c(res[["z"]], rev(res[["z"]])),
