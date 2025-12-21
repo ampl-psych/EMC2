@@ -7,6 +7,7 @@
 #include "model_DDM.h"
 #include "model_MRI.h"
 #include "trend.h"
+#include <AccumulatR/api.hpp>
 using namespace Rcpp;
 
 // [[Rcpp::export]]
@@ -15,6 +16,24 @@ Rcpp::NumericMatrix do_transform(Rcpp::NumericMatrix pars, Rcpp::List transform)
   std::vector<TransformSpec> specs = make_transform_specs(pars, transform);
   // Apply transformation in place and return
   return c_do_transform(pars, specs);
+}
+
+// Collapse per-row ok (parameter rows) to per-trial ok using layout row_trial
+static inline Rcpp::LogicalVector ok_accumulatR(const Rcpp::LogicalVector& ok_row,
+                                                const SEXP layout_opt) {
+  Rcpp::List layout(layout_opt);
+  Rcpp::IntegerVector row_trial = layout["row_trial"];
+  int n_trials = 0;
+  for (int t : row_trial) if (t > n_trials) n_trials = t;
+  Rcpp::LogicalVector out(n_trials, true);
+  const int n_rows = ok_row.size();
+  for (int i = 0; i < n_rows; ++i) {
+    if (ok_row[i] == FALSE) {
+      int trial_idx = row_trial[i] - 1;
+      if (trial_idx >= 0 && trial_idx < n_trials) out[trial_idx] = false;
+    }
+  }
+  return out;
 }
 
 
@@ -211,8 +230,8 @@ double c_log_likelihood_race(NumericMatrix pars, DataFrame data,
 
 // [[Rcpp::export]]
 NumericVector calc_ll(NumericMatrix p_matrix, DataFrame data, NumericVector constants,
-            List designs, String type, List bounds, List transforms, List pretransforms,
-            CharacterVector p_types, double min_ll, List trend){
+                      List designs, String type, List bounds, List transforms, List pretransforms,
+                      CharacterVector p_types, double min_ll, List trend){
   const int n_particles = p_matrix.nrow();
   const int n_trials = data.nrow();
   NumericVector lls(n_particles);
@@ -307,6 +326,89 @@ NumericVector calc_ll(NumericMatrix p_matrix, DataFrame data, NumericVector cons
       is_ok = lr_all(is_ok, n_lR);
       lls[i] = c_log_likelihood_race(pars, data, dfun, pfun, n_trials, winner, expand, min_ll, is_ok);
     }
+  }
+  return(lls);
+}
+
+
+// [[Rcpp::export]]
+NumericVector calc_ll_AccR(NumericMatrix p_matrix,
+                           DataFrame data,
+                           NumericVector constants,
+                           List designs,
+                           String type,
+                           List bounds,
+                           List transforms,
+                           List pretransforms,
+                           CharacterVector p_types,
+                           double min_ll,
+                           List trend,
+                           List likelihood_context) {
+  const int n_particles = p_matrix.nrow();
+  const int n_trials = data.nrow();
+  NumericVector lls(n_particles);
+  NumericVector p_vector(p_matrix.ncol());
+  CharacterVector p_names = colnames(p_matrix);
+  p_vector.names() = p_names;
+  NumericMatrix pars;
+  LogicalVector is_ok(n_trials);
+
+  // Static AccumulatR bits pulled once from the supplied context list
+  SEXP native_ctx = likelihood_context["native_ctx"];
+  List structure = likelihood_context["structure"];
+  double rel_tol = likelihood_context.containsElementNamed("rel_tol")
+    ? as<double>(likelihood_context["rel_tol"])
+      : 1e-5;
+  double abs_tol = likelihood_context.containsElementNamed("abs_tol")
+    ? as<double>(likelihood_context["abs_tol"])
+      : 1e-6;
+  int max_depth = likelihood_context.containsElementNamed("max_depth")
+    ? as<int>(likelihood_context["max_depth"])
+      : 12;
+  SEXP layout_opt = likelihood_context.containsElementNamed("param_layout")
+    ? likelihood_context["param_layout"]
+  : R_NilValue;
+  // TODO: provide data with columns trial/R/rt/(component) matching the context (right number of rows)
+  // TODO: reshape `pars` into AccumulatR's q/w/t0/p1.. matrix using the provided layout_opt
+
+  // Once (outside the main loop over particles):
+  NumericMatrix minmax = bounds["minmax"];
+  CharacterVector mm_names = colnames(minmax);
+  std::vector<PreTransformSpec> p_specs;
+  std::vector<BoundSpec> bound_specs;
+  std::vector<TransformSpec> full_t_specs; // precomputed transform specs for p_types
+  SEXP expand_attr = data.attr("expand");
+  IntegerVector expand = Rf_isNull(expand_attr) ? IntegerVector() : IntegerVector(expand_attr);
+  IntegerVector expand_arg = expand.size() > 0 ? expand : Rcpp::seq(1, n_trials);
+  for(int i = 0; i < n_particles; i++){
+    p_vector = p_matrix(i, _);
+    if(i == 0){
+      p_specs = make_pretransform_specs(p_vector, pretransforms);
+      // Precompute transform specs for all p_types using a one-time dummy
+      NumericMatrix dummy(1, p_types.size());
+      colnames(dummy) = p_types;
+      full_t_specs = make_transform_specs(dummy, transforms);
+    }
+    pars = get_pars_matrix(p_vector, constants, p_specs, p_types, designs, n_trials, data, trend, full_t_specs);
+    // Precompute specs
+    if (i == 0) {                            // first particle only, just to get colnames
+      bound_specs = make_bound_specs(minmax,mm_names,pars,bounds);
+    }
+    is_ok = c_do_bound(pars, bound_specs); // This needs to be equal to the number of original data rows
+    is_ok = ok_accumulatR(is_ok, layout_opt);
+    LogicalVector ok_arg = clone(is_ok); // ok length must match data rows
+    // AccumulatR likelihood (context-managed; params still need AccumulatR layout)
+    lls[i] = accumulatr::cpp_loglik(native_ctx,
+                                    structure,
+                                    pars,
+                                    data,
+                                    layout_opt,
+                                    ok_arg,
+                                    expand_arg,
+                                    min_ll,
+                                    rel_tol,
+                                    abs_tol,
+                                    max_depth);
   }
   return(lls);
 }

@@ -3,6 +3,7 @@
 
 ## usethis namespace: start
 #' @importFrom abind abind
+#' @importFrom AccumulatR nest_accumulators
 #' @importFrom Brobdingnag as.brob
 #' @importFrom coda acfplot
 #' @importFrom coda as.mcmc

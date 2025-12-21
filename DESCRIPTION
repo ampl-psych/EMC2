@@ -66,8 +66,9 @@ Imports:
     utils,
     lpSolve,
     WienR,
+    AccumulatR
 LinkingTo: 
-    Rcpp, RcppArmadillo
+    Rcpp, RcppArmadillo, AccumulatR
 Depends: 
     R (>= 3.5.0)
 LazyData: true

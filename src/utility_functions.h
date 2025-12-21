@@ -572,6 +572,8 @@ std::vector<PreTransformSpec> make_pretransform_specs(NumericVector p_vector, Li
   }
   return specs;
 }
+
+
 LogicalVector c_do_bound(NumericMatrix pars,
                          const std::vector<BoundSpec>& specs)
 {

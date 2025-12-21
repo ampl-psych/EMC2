@@ -117,6 +117,10 @@ calc_ll <- function(p_matrix, data, constants, designs, type, bounds, transforms
     .Call(`_EMC2_calc_ll`, p_matrix, data, constants, designs, type, bounds, transforms, pretransforms, p_types, min_ll, trend)
 }
 
+calc_ll_AccR <- function(p_matrix, data, constants, designs, type, bounds, transforms, pretransforms, p_types, min_ll, trend, likelihood_context) {
+    .Call(`_EMC2_calc_ll_AccR`, p_matrix, data, constants, designs, type, bounds, transforms, pretransforms, p_types, min_ll, trend, likelihood_context)
+}
+
 EMC2_call_custom_trend <- function(trend_pars, input, funptrSEXP) {
     .Call(`_EMC2_EMC2_call_custom_trend`, trend_pars, input, funptrSEXP)
 }
