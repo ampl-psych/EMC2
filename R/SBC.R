@@ -326,71 +326,117 @@ make_smooth <- function(x, y, N = 1000){
 
 #' Plot the ECDF Difference in SBC Ranks
 #'
-#' Plots the difference in observed cumulative rank statistics and the
-#' expected cumulative distribution of a uniform distribution. The blue
-#' shaded areas indicate the 95% credible interval.
+#' Plots  F_hat(z) - z  where F_hat is the
+#' empirical CDF of the (normalized) ranks and z is the Uniform(0,1) CDF.
+#' The shaded band is the simultaneous (1 - gamma) envelope for F_hat(z) - z.
 #'
-#' @param ranks A list of named dataframes of the rank statistic
+#' @param ranks A list of named dataframes of the rank statistic (raw or normalized)
 #' @param layout Optional. A numeric vector specifying the layout using `par(mfrow = layout)`
 #' @param add_stats Boolean. Should coverage, bias and precision be included in the figure.
 #' @param main Optional. A character specifying plot title.
+#' @param K Optional. Number of rank bins (= ESS + 1).
 #' @return No returns
 #' @export
-plot_sbc_ecdf <- function(ranks, layout = NA, add_stats = TRUE, main = NULL){
+plot_sbc_ecdf <- function(ranks, layout = NA, add_stats = TRUE, main = NULL, K = 500) {
+
+  # stats extraction (keep existing behaviour)
+  stats <- NULL
   if (!is.null(ranks[["rank"]])) {
     stats <- calc_sbc_stats(ranks)
-  }
-  if (!is.null(ranks[["rank"]])) {
     ranks <- ranks[["rank"]]
   }
-  selects <- names(ranks)
-  oldpar <- par(no.readonly = TRUE) # code line i
-  on.exit(par(oldpar)) # code line i + 1
 
-  K <- N <- nrow(ranks[[1]])
+  selects <- names(ranks)
+
+  oldpar <- par(no.readonly = TRUE)
+  on.exit(par(oldpar))
+
+  # N = number of SBC simulations (rows)
+  N <- nrow(ranks[[1]])
+
+  # Envelope for F_hat(z) - z
   gamma <- get_gamma(N, K)
-  res <- get_lims(N, K, gamma)
+  res <- get_lims(N, K, gamma)  # res$z, res$lower, res$upper
+
   for (j in seq_along(ranks)) {
+
     if (any(is.na(layout))) {
-      par(mfrow = coda_setmfrow(Nparms = ncol(ranks[[1]]), nplots = length(ranks)))
+      par(mfrow = coda_setmfrow(Nparms = ncol(ranks[[j]]), nplots = length(ranks)))
     } else {
       par(mfrow = layout)
     }
+
     rank <- ranks[[j]]
-    stat <- stats[[j]]
+    stat <- if (!is.null(stats)) stats[[j]] else NULL
     par_names <- colnames(rank)
-    res[["x"]] <- apply(rank, 2, function(x) {sort(x) - res[["z"]]})
-    for (i in 1:ncol(rank)) {
-      if(is.null(main)) main <- paste0(selects[j], " - ", par_names[i])
+
+    for (i in seq_len(ncol(rank))) {
+
+      r <- rank[, i]
+      r <- r[is.finite(r)]
+
+      # Convert to normalized ranks in [0,1] if needed
+      r_norm <- r
+      r_min <- suppressWarnings(min(r_norm, na.rm = TRUE))
+      r_max <- suppressWarnings(max(r_norm, na.rm = TRUE))
+
+      if (!(r_max <= 1 && r_min >= 0)) {
+        # If looks 1-based integer ranks: 1..K
+        if (r_min >= 1 && r_max <= K) {
+          r_norm <- (r_norm - 1) / K
+        } else if (r_min >= 0 && r_max <= (K - 1)) {
+          # If looks 0-based: 0..(K-1)
+          r_norm <- r_norm / K
+        } else {
+          # Fallback: scale by K (keeps it in a reasonable range if ranks are 0..ESS)
+          r_norm <- r_norm / K
+        }
+      }
+
+      # ECDF difference: F_hat(z) - z
+      Fn <- ecdf(r_norm)
+      z <- res[["z"]]
+      y <- Fn(z) - z
+
+      main_i <- if (is.null(main)) paste0(selects[j], " - ", par_names[i]) else main
+
+      ylim_lo <- min(res[["lower"]], y, na.rm = TRUE) - 0.01
+      ylim_hi <- max(res[["upper"]], y, na.rm = TRUE) + 0.03
+
       plot(
-        x = res[["z"]],
-        y = res[["x"]][ , i],
-        type = "l",
+        x = z,
+        y = y,
+        type = "s",
         lwd = 2,
-        ylim = c(
-          min(res[["lower"]], res[["x"]][ , i]) - 0.01,
-          max(res[["upper"]], res[["x"]][ , i]) + 0.03
-        ),
+        ylim = c(ylim_lo, ylim_hi),
         xlim = c(0, 1),
-        ylab = "ECDF Difference",
-        xlab = "Normalized Rank Statistic",
-        main = main
+        ylab = "ECDF Difference  F(z) - z",
+        xlab = "Normalized Rank Statistic (z)",
+        main = main_i
       )
+
       polygon(
-        x = c(res[["z"]], rev(res[["z"]])),
+        x = c(z, rev(z)),
         y = c(res[["lower"]], rev(res[["upper"]])),
-        col = adjustcolor("cornflowerblue", 0.2)
+        col = adjustcolor("cornflowerblue", 0.2),
+        border = NA
       )
+
+      # redraw ECDF diff on top of ribbon
+      lines(z, y, type = "s", lwd = 2)
+
+      abline(h = 0, lty = 2, col = "gray50")
+
       if (!is.null(stat) && add_stats) {
         coverage_print <- paste0("coverage : ", round(stat[["coverage"]][i], 2))
         bias_print <- paste0("bias : ", round(stat[["bias"]][i], 3))
-        # precision_print <- paste0("precision : ", round(stat[["precision"]][i], 3))
         legend(x = "topleft", legend = coverage_print, bty = "n")
         legend(x = "topright", legend = bias_print, bty = "n")
-        # legend(x = "topright", legend = precision_print, bty = "n")
       }
     }
   }
+
+  invisible(NULL)
 }
 
 get_ranks_ESS <- function(posterior, ESS, prior){
