@@ -679,7 +679,21 @@ calc_ll_manager <- function(proposals, dadm, model, component = NULL, r_cores = 
         auto_mclapply(1:nrow(proposals),
           function(i) calc_ll_R(proposals[i,], model=model, dadm = dadm),
          mc.cores=r_cores))
-    } else{
+    } else if(model$c_name == "AccumulatR"){
+      p_types <- names(model$p_types)
+      designs <- list()
+      for(p in p_types){
+        designs[[p]] <- attr(dadm,"designs")[[p]][attr(attr(dadm,"designs")[[p]],"expand"),,drop=FALSE]
+      }
+      constants <- attr(dadm, "constants")
+      context <- attr(dadm, "AccumulatR_context")
+      original_data <- context$data_df
+      # context$layout not in the right shape at all!
+      lls <- calc_ll_AccR(proposals, dadm, constants = constants, designs = designs,
+                     model$bound, model$transform, model$pre_transform, p_types = p_types, min_ll = log(1e-10),
+                     model$trend, context, original_data)
+    }
+    else{
       p_types <- names(model$p_types)
       designs <- list()
       for(p in p_types){
@@ -687,15 +701,17 @@ calc_ll_manager <- function(proposals, dadm, model, component = NULL, r_cores = 
       }
       constants <- attr(dadm, "constants")
       if(is.null(constants)) constants <- NA
-      if (nrow(proposals) <= r_cores)
+      if (nrow(proposals) <= r_cores){
         lls <- calc_ll(proposals, dadm, constants = constants, designs = designs, type = model$c_name,
-                     model$bound, model$transform, model$pre_transform, p_types = p_types, min_ll = log(1e-10),
-                     model$trend) else {
+                       model$bound, model$transform, model$pre_transform, p_types = p_types, min_ll = log(1e-10),
+                       model$trend)
+      } else {
         idx <- rep(1:r_cores,each=1+(nrow(proposals) %/% r_cores))[1:nrow(proposals)]
         lls <- unlist(auto_mclapply(1:r_cores,function(i) {
           calc_ll(proposals[idx==i,,drop=FALSE], dadm, constants = constants,
             designs = designs, type = model$c_name, model$bound, model$transform,
-            model$pre_transform, p_types = p_types, min_ll = log(1e-10),model$trend)
+            model$pre_transform, p_types = p_types, min_ll = log(1e-10),model$trend,
+            model$context)
           },mc.cores=r_cores))
       }
     }

@@ -228,7 +228,8 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
     trialwise_parameters <- res$trialwise_parameters
   } else{
     data <- design_model(
-      add_accumulators(data,design$matchfun,simulate=TRUE,type=model()$type,Fcovariates=design$Fcovariates),
+      add_accumulators(data,design$matchfun,simulate=TRUE,type=model()$type,
+                       Fcovariates=design$Fcovariates, acr_spec = model()$spec),
       design,model,add_acc=FALSE,compress=FALSE,verbose=FALSE,
       rt_check=FALSE)
     pars <- map_p(pars,data, model(), return_trialwise_parameters)

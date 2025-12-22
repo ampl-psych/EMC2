@@ -482,8 +482,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // calc_ll_AccR
-NumericVector calc_ll_AccR(NumericMatrix p_matrix, DataFrame data, NumericVector constants, List designs, String type, List bounds, List transforms, List pretransforms, CharacterVector p_types, double min_ll, List trend, List likelihood_context);
-RcppExport SEXP _EMC2_calc_ll_AccR(SEXP p_matrixSEXP, SEXP dataSEXP, SEXP constantsSEXP, SEXP designsSEXP, SEXP typeSEXP, SEXP boundsSEXP, SEXP transformsSEXP, SEXP pretransformsSEXP, SEXP p_typesSEXP, SEXP min_llSEXP, SEXP trendSEXP, SEXP likelihood_contextSEXP) {
+NumericVector calc_ll_AccR(NumericMatrix p_matrix, DataFrame data, NumericVector constants, List designs, List bounds, List transforms, List pretransforms, CharacterVector p_types, double min_ll, List trend, List likelihood_context, DataFrame original_data);
+RcppExport SEXP _EMC2_calc_ll_AccR(SEXP p_matrixSEXP, SEXP dataSEXP, SEXP constantsSEXP, SEXP designsSEXP, SEXP boundsSEXP, SEXP transformsSEXP, SEXP pretransformsSEXP, SEXP p_typesSEXP, SEXP min_llSEXP, SEXP trendSEXP, SEXP likelihood_contextSEXP, SEXP original_dataSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -491,7 +491,6 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< DataFrame >::type data(dataSEXP);
     Rcpp::traits::input_parameter< NumericVector >::type constants(constantsSEXP);
     Rcpp::traits::input_parameter< List >::type designs(designsSEXP);
-    Rcpp::traits::input_parameter< String >::type type(typeSEXP);
     Rcpp::traits::input_parameter< List >::type bounds(boundsSEXP);
     Rcpp::traits::input_parameter< List >::type transforms(transformsSEXP);
     Rcpp::traits::input_parameter< List >::type pretransforms(pretransformsSEXP);
@@ -499,7 +498,8 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< double >::type min_ll(min_llSEXP);
     Rcpp::traits::input_parameter< List >::type trend(trendSEXP);
     Rcpp::traits::input_parameter< List >::type likelihood_context(likelihood_contextSEXP);
-    rcpp_result_gen = Rcpp::wrap(calc_ll_AccR(p_matrix, data, constants, designs, type, bounds, transforms, pretransforms, p_types, min_ll, trend, likelihood_context));
+    Rcpp::traits::input_parameter< DataFrame >::type original_data(original_dataSEXP);
+    rcpp_result_gen = Rcpp::wrap(calc_ll_AccR(p_matrix, data, constants, designs, bounds, transforms, pretransforms, p_types, min_ll, trend, likelihood_context, original_data));
     return rcpp_result_gen;
 END_RCPP
 }

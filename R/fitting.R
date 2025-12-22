@@ -170,9 +170,6 @@ run_stages <- function(sampler, stage = "preburn", iter=0, verbose = TRUE, verbo
 
 add_proposals <- function(emc, stage, n_cores, n_blocks){
   if(stage != "preburn"){
-    # if(!is.null(emc[[1]]$g_map_fixed)){
-    #   emc <- create_chain_proposals_lm(emc)
-    # } else{    }
     emc <- create_chain_proposals(emc, do_block = stage != "sample")
     if(!is.null(n_blocks)){
       if(n_blocks > 1){
@@ -184,9 +181,6 @@ add_proposals <- function(emc, stage, n_cores, n_blocks){
     }
   }
   if(stage == "sample"){
-    # if(!is.null(emc[[1]]$g_map_fixed)){
-    #   emc <- create_eff_proposals_lm(emc, n_cores)
-    # } else{    }
     emc <- create_eff_proposals(emc, n_cores)
   }
   return(emc)

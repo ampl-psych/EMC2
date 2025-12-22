@@ -281,8 +281,9 @@ contr.anova <- function(n) {
   contr/rep(2*apply(abs(contr),2,max),each=dim(contr)[1])
 }
 
-add_accumulators <- function(data,matchfun=NULL,simulate=FALSE, type = "RACE", Fcovariates=NULL) {
-  if(is.null(type) || !type %in% c("RACE", "SDT", "MT", "TC")) return(data)
+add_accumulators <- function(data,matchfun=NULL,simulate=FALSE, type = "RACE", Fcovariates=NULL,
+                             acr_spec = NULL){ # AccumulatR specification
+  if(is.null(type) || !type %in% c("RACE", "SDT", "MT", "TC", "AccumulatR")) return(data)
   if (!is.factor(data$R)) stop("data must have a factor R")
   factors <- names(data)[!names(data) %in% c("R","rt","trials",Fcovariates)]
   if (type %in% c("RACE","SDT")) {
@@ -298,27 +299,6 @@ add_accumulators <- function(data,matchfun=NULL,simulate=FALSE, type = "RACE", F
         datar$lM <- factor(lM,levels=levels(lM))
       }
     }
-    # Advantage NAFC
-    nam <- unlist(lapply(strsplit(dimnames(datar)[[2]],"lS"),function(x)x[[1]]))
-    islS <- nam ==""
-    if (any(islS)) {
-      if (sum(islS) != length(levels(data$R)))
-        stop("The number of lS columns in the data must equal the length of Rlevels")
-      lR <- unlist(lapply(strsplit(dimnames(datar)[[2]],"lS"),function(x){
-        if (length(x)==2) x[[2]] else NULL}))
-      if (!all(lR %in% levels(data$R)))
-        stop("x  in lSx must be in Rlevels")
-      if (any(names(datar=="lSmagnitude")))
-        stop("Do not use lSmagnitude as a factor name")
-      lSmagnitude <- as.character(datar$lR)
-      for (i in levels(datar$lR)) {
-        isin <- datar$lR==i
-        lSmagnitude[isin] <- as.character(datar[isin,paste0("lS",i)])
-      }
-      factors <- factors[!(factors %in% dimnames(datar)[[2]][islS])]
-      # datar <- datar[,!islS]
-      datar$lSmagnitude <- as.numeric(lSmagnitude)
-    }
   }
   if (type %in% c("MT","TC")) {
     datar <- cbind(do.call(rbind,lapply(1:2,function(x){data})),
@@ -330,13 +310,20 @@ add_accumulators <- function(data,matchfun=NULL,simulate=FALSE, type = "RACE", F
       datar$lM <- factor(lM)
     }
   }
+  if (type %in% "AccumulatR"){
+    if(is.null(acr_spec)) stop("model_specification needs to be made for AccumulatR models")
+    datar <- nest_accumulators(acr_spec, data)
+  }
   row.names(datar) <- NULL
   if (simulate) datar$rt <- NA else {
     R <- datar$R
-    R[is.na(R)] <- levels(datar$lR)[1]
+    if(!type %in% "AccumulatR"){
+      R[is.na(R)] <- levels(datar$lR)[1]
 
-    if (type %in% c("MT","TC")) datar$winner <- NA else
-      datar$winner <- datar$lR==R
+      if (type %in% c("MT","TC")) datar$winner <- NA else
+        datar$winner <- datar$lR==R
+    }
+
   }
   datar
 }
@@ -362,12 +349,16 @@ compress_dadm <- function(da,designs,Fcov,Ffun)
     # out keeps only unique rows in terms of all parameters design matrices
     # R, lR and rt (at given resolution) from full data set
   {
-    nacc <- length(unique(da$lR))
+    if(is.null(da$lR)) {
+      da$lR <- da$accumulator
+    }
+    accumulator <- factor(da$lR)
+    nacc <- length(unique(accumulator))
     # contract output
     cells <- paste(
       apply(do.call(cbind,lapply(designs,function(x){
         apply(x[attr(x,"expand"),,drop=FALSE],1,paste,collapse="_")})
-      ),1,paste,collapse="+"),da$subjects,da$R,da$lR,da$rt,sep="+")
+      ),1,paste,collapse="+"),da$subjects,da$R,accumulator,da$rt,sep="+")
     # Make sure that if row is included for a trial so are other rows
     if (!is.null(Fcov)) {
       if (is.null(names(Fcov))) nFcov <- Fcov else nFcov <- names(Fcov)
@@ -383,7 +374,7 @@ compress_dadm <- function(da,designs,Fcov,Ffun)
     out <- da[contract,,drop=FALSE]
     attr(out,"contract") <- contract
     attr(out,"expand") <- as.numeric(factor(cells,levels=unique(cells)))
-    lR1 <- da$lR==levels(da$lR)[[1]]
+    lR1 <- accumulator==levels(accumulator)[[1]]
     attr(out,"expand_winner") <- as.numeric(factor(cells[lR1],levels=unique(cells[lR1])))
     attr(out,"s_expand") <- da$subjects
     attr(out,"designs") <- lapply(designs,function(x){
@@ -393,17 +384,17 @@ compress_dadm <- function(da,designs,Fcov,Ffun)
     cells_nort <- paste(
       apply(do.call(cbind,lapply(designs,function(x){
         apply(x[attr(x,"expand"),,drop=FALSE],1,paste,collapse="_")})
-      ),1,paste,collapse="+"),da$subjects,da$R,da$lR,sep="+")[contract]
+      ),1,paste,collapse="+"),da$subjects,da$R,accumulator,sep="+")[contract]
     attr(out,"unique_nort") <- !duplicated(cells_nort)
     attr(out,"expand_nort") <- as.numeric(factor(cells_nort,levels=unique(cells_nort)))
 
     # cells_nort <- paste(
     #   apply(do.call(cbind,lapply(designs,function(x){
     #     apply(x[attr(x,"expand"),,drop=FALSE],1,paste,collapse="_")})
-    #   ),1,paste,collapse="+"),da$subjects,da$R,da$lR,sep="+")[contract]
+    #   ),1,paste,collapse="+"),da$subjects,da$R,accumulator,sep="+")[contract]
     # attr(out,"unique_nort") <- !duplicated(cells_nort)
     # # Only first level WHY????
-    # cells <- cells[da$lR==levels(da$lR)[1]]
+    # cells <- cells[accumulator==levels(accumulator)[1]]
     # cells_nort <- cells_nort[out$lR==levels(out$lR)[1]]
     # attr(out,"expand_nort") <- as.numeric(factor(cells_nort,
     #    levels=unique(cells_nort)))[as.numeric(factor(cells,levels=unique(cells)))]
@@ -411,14 +402,14 @@ compress_dadm <- function(da,designs,Fcov,Ffun)
     # indices to use to contract ignoring rt and response (R), then expand back
     cells_nortR <- paste(apply(do.call(cbind,lapply(designs,function(x){
       apply(x[attr(x,"expand"),,drop=FALSE],1,paste,collapse="_")})),1,paste,collapse="+"),
-      da$subjects,da$lR,sep="+")[contract]
+      da$subjects,accumulator,sep="+")[contract]
     attr(out,"unique_nortR") <- !duplicated(cells_nortR)
     attr(out,"expand_nortR") <- as.numeric(factor(cells_nortR,levels=unique(cells_nortR)))
 
     # # indices to use to contract ignoring rt and response (R), then expand back
     # cells_nortR <- paste(apply(do.call(cbind,lapply(designs,function(x){
     #   apply(x[attr(x,"expand"),,drop=FALSE],1,paste,collapse="_")})),1,paste,collapse="+"),
-    #   da$subjects,da$lR,sep="+")[contract]
+    #   da$subjects,accumulator,sep="+")[contract]
     # attr(out,"unique_nortR") <- !duplicated(cells_nortR)
     # # Only first level WHY????
     # cells_nortR <- cells_nortR[out$lR==levels(out$lR)[1]]
@@ -539,7 +530,8 @@ design_model <- function(data,design,model=NULL,
   if (!any(names(data)=="trials")) data$trials <- 1:dim(data)[1]
   if(rt_check){rt_check_function(data)}
   if (!add_acc) da <- data else
-    da <- add_accumulators(data,design$matchfun,type=model()$type,Fcovariates=design$Fcovariates)
+    da <- add_accumulators(data,design$matchfun,type=model()$type,Fcovariates=design$Fcovariates,
+                           acr_spec = model()$spec)
   order_idx <- order(da$subjects)
   da <- da[order_idx,] # fixes different sort in add_accumulators depending on subject type
 
@@ -593,6 +585,7 @@ design_model <- function(data,design,model=NULL,
       attr(dadm,"expand") <- 1:(nrow(dadm)/length(unique(dadm$lR)))
     }
   }
+
   p_names <-  unlist(lapply(out,function(x){dimnames(x)[[2]]}),use.names=FALSE)
   bad_constants <- names(design$constants)[!(names(design$constants) %in% p_names)]
   if (length(bad_constants) > 0)
@@ -602,11 +595,11 @@ design_model <- function(data,design,model=NULL,
   sampled_p_names <- p_names[!(p_names %in% names(design$constants))]
   attr(dadm,"p_names") <- p_names
   attr(dadm,"sampled_p_names") <- sampled_p_names
-  if (model()$type=="DDM") nunique <- dim(dadm)[1] else
-    nunique <- dim(dadm)[1]/length(levels(dadm$lR))
-  if (verbose & compress) message("Likelihood speedup factor: ",
-  round(dim(da)[1]/dim(dadm)[1],1)," (",nunique," unique trials)")
-
+  if (verbose & compress){
+    expand <- attr(dadm, "expand")
+    nunique <- length(unique(expand))
+    message("Likelihood speedup factor: ",round(nrow(data)/nunique, 1)," (",nunique," unique trials)")
+  }
   attr(dadm,"model") <- model
   attr(dadm,"constants") <- design$constants
   attr(dadm,"ok_trials") <- is.finite(data$rt)
@@ -763,6 +756,7 @@ dm_list <- function(dadm)
       if(length(isin2) > 0){
         attr(dl[[i]],"expand") <- expand_winner[isin2]-min(expand_winner[isin2]) + 1
       }
+      dl[[i]] <- AccumulatR_add_context(dl[[i]])
       attr(dl[[i]],"model") <- NULL
       attr(dl[[i]],"p_names") <- p_names
       attr(dl[[i]],"sampled_p_names") <- sampled_p_names
