@@ -918,6 +918,12 @@ plot_cdf <- function(input,
     plot_args <- add_defaults(dots, xlim=xlim, ylim=ylim,
                               main=group_key, xlab="RT", ylab="Defective CDF")
     plot_args <- fix_dots_plot(plot_args)
+    if (!is.null(dots$main)) {
+      if (dots$main=="") plot_args$main <- "" else {
+        if (group_key=="All Data")  gk <- "" else gk <- group_key
+        plot_args$main <- paste0(dots$main, gk)
+      }
+    }
     do.call(plot, c(list(NA), plot_args))
 
     # draw lines for each dataset
@@ -1185,6 +1191,12 @@ plot_delta <- function(input,
       main=group_key,"\n", xlab=paste0("Average RT (seconds)"),
       ylab=paste0("RT(",delta_name,")"))
     plot_args <- fix_dots_plot(plot_args)
+    if (!is.null(dots$main)) {
+      if (dots$main=="") plot_args$main <- "" else {
+        if (group_key=="All Data")  gk <- "" else gk <- group_key
+        plot_args$main <- paste0(dots$main, gk)
+      }
+    }
     do.call(plot, c(list(NA), plot_args))
 
     # draw lines for each dataset
@@ -1518,8 +1530,12 @@ plot_caf <- function(input,
     plot_args <- add_defaults(dots, xlim=xlim, ylim=ylim,
                               main=group_key, xlab="Bin Centre (%)", ylab="CAF (%)")
     plot_args <- fix_dots_plot(plot_args)
-    if (dots$main=="") plot_args$main <- "" else
-      plot_args$main <- paste0(dots$main, group_key)
+    if (!is.null(dots$main)) {
+      if (dots$main=="") plot_args$main <- "" else {
+        if (group_key=="All Data")  gk <- "" else gk <- group_key
+        plot_args$main <- paste0(dots$main, gk)
+      }
+    }
     do.call(plot, c(list(NA), plot_args))
 
     # draw lines for each dataset
