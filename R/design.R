@@ -311,8 +311,7 @@ add_accumulators <- function(data,matchfun=NULL,simulate=FALSE, type = "RACE", F
     }
   }
   if (type %in% "AccumulatR"){
-    if(is.null(acr_spec)) stop("model_specification needs to be made for AccumulatR models")
-    datar <- nest_accumulators(acr_spec, data)
+    datar <- AccumulatR_expand_data(acr_spec, data)
   }
   row.names(datar) <- NULL
   if (simulate) datar$rt <- NA else {
@@ -367,15 +366,15 @@ compress_dadm <- function(da,designs,Fcov,Ffun)
     if (!is.null(Ffun))
       cells <- paste(cells,apply(da[,Ffun,drop=FALSE],1,paste,collapse="+"),sep="+")
 
-    if (nacc>1) cells <- paste0(rep(apply(matrix(cells,nrow=nacc),2,paste0,collapse="_"),
-                                    each=nacc),rep(1:nacc,times=length(cells)/nacc),sep="_")
-
+    # if (nacc>1) cells <- paste0(rep(apply(matrix(cells,nrow=nacc),2,paste0,collapse="_"),
+    #                                 each=nacc),rep(1:nacc,times=length(cells)/nacc),sep="_")
+    cells <- cells[!duplicated(da$trials)] # This gets rid of excess accumulators more cleanly then filtering by lR
     contract <- !duplicated(cells)
     out <- da[contract,,drop=FALSE]
     attr(out,"contract") <- contract
     attr(out,"expand") <- as.numeric(factor(cells,levels=unique(cells)))
-    lR1 <- accumulator==levels(accumulator)[[1]]
-    attr(out,"expand_winner") <- as.numeric(factor(cells[lR1],levels=unique(cells[lR1])))
+    # lR1 <- accumulator==levels(accumulator)[[1]]
+    # attr(out,"expand_winner") <- as.numeric(factor(cells[lR1],levels=unique(cells[lR1])))
     attr(out,"s_expand") <- da$subjects
     attr(out,"designs") <- lapply(designs,function(x){
       attr(x,"expand") <- attr(x,"expand")[contract]; x})
@@ -568,12 +567,7 @@ design_model <- function(data,design,model=NULL,
   if (!is.null(rt_resolution) & !is.null(da$rt)) da$rt <- floor(da$rt/rt_resolution)*rt_resolution
   if (compress){
     dadm <- compress_dadm(da,designs=out, Fcov=design$Fcovariates,Ffun=names(design$Ffunctions))
-    # Change expansion names
-    # attr(dadm,"expand_all") <- attr(dadm,"expand")
-    if(!is.null(dadm$lR)){
-      attr(dadm,"expand") <- attr(dadm,"expand_winner")
-      attr(dadm,"expand_winner") <- NULL
-    }
+    # attr(dadm, "expand") <- attr(dadm, "expand_winner") # I don't think this breaks stuff?
   }  else {
     dadm <- da
     attr(dadm,"designs") <- out

@@ -343,7 +343,8 @@ NumericVector calc_ll_AccR(NumericMatrix p_matrix,
                            double min_ll,
                            List trend,
                            List likelihood_context,
-                           DataFrame original_data) {
+                           DataFrame original_data,
+                           List param_layout) {
   const int n_particles = p_matrix.nrow();
   const int n_trials = data.nrow();
   NumericVector lls(n_particles);
@@ -360,16 +361,9 @@ NumericVector calc_ll_AccR(NumericMatrix p_matrix,
   double abs_tol = 1e-6;
   int max_depth = 12;
 
-  SEXP layout_opt = likelihood_context.containsElementNamed("param_layout")
-    ? likelihood_context["param_layout"]
-  : R_NilValue;
-  // TODO: provide data with columns trial/R/rt/(component) matching the context (right number of rows)
-  // TODO: reshape `pars` into AccumulatR's q/w/t0/p1.. matrix using the provided layout_opt
-
   // Once (outside the main loop over particles):
   NumericMatrix minmax = bounds["minmax"];
   CharacterVector mm_names = colnames(minmax);
-
   std::vector<PreTransformSpec> p_specs;
   std::vector<BoundSpec> bound_specs;
   std::vector<TransformSpec> full_t_specs; // precomputed transform specs for p_types
@@ -393,14 +387,14 @@ NumericVector calc_ll_AccR(NumericMatrix p_matrix,
       // Rcout << "\n";
     }
     is_ok = c_do_bound(pars, bound_specs); // This needs to be equal to the number of original data rows
-    is_ok = ok_accumulatR(is_ok, layout_opt);
+    is_ok = ok_accumulatR(is_ok, param_layout);
     LogicalVector ok_arg = clone(is_ok); // ok length must match data rows
     // AccumulatR likelihood (context-managed; params still need AccumulatR layout)
     lls[i] = accumulatr::cpp_loglik(native_ctx,
                                     structure,
                                     pars,
                                     original_data,
-                                    layout_opt,
+                                    param_layout,
                                     ok_arg,
                                     expand,
                                     min_ll,

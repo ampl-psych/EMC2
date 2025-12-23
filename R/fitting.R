@@ -124,6 +124,7 @@ run_emc <- function(emc, stage, stop_criteria,
                              r_cores = r_cores)
 
     class(sub_emc) <- "emc"
+    if(cores_for_chains > 1) sub_emc <- AccumulatR_check_context(sub_emc)
     if(stage != 'preburn'){
       if(is.numeric(thin)){
         sub_emc <- subset(sub_emc, stage = c("preburn", "burn", "adapt", "sample"), thin = thin)

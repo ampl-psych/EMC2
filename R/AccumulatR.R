@@ -15,10 +15,27 @@ AccumulatR_model <- function(model_spec){
   return(function() {return(model_list)})
 }
 
+AccumulatR_expand_data <- function(model_spec, data){
+  if(is.null(model_spec)) stop("model_specification needs to be made for AccumulatR models")
+  if(nrow(model_spec$component) > 1){
+    if(is.null(data$component)){
+      warning("The AccumulatR model contains multiple components. Specify the components
+              column in your data if you do not want to treat them as mixtures
+              marginalized in the likelihood")
+      cat("expected components :", model_spec$components$component_id)
+    }
+  }
+  datar <- nest_accumulators(model_spec, data)
+  return(datar)
+}
+
+
+
 
 AccumulatR_add_context <- function(dadm){
   model <- attr(dadm, "model")
   if(is.null(model)) return(dadm)
+  if(model()$type != "AccumulatR") return(dadm)
   nacc <- unique
   data <- dadm[!duplicated(dadm$trial),]
   model_list <- model()
@@ -34,7 +51,34 @@ AccumulatR_add_context <- function(dadm){
     abs_tol    = ctx$abs_tol,
     max_depth  = ctx$max_depth
   )
+
+
   attr(dadm, "AccumulatR_context") <- context
   return(dadm)
-
 }
+
+AccumulatR_check_context <- function(emc){
+  if(!emc[[1]]$model()$type == "AccumulatR") return(emc)
+  for(i in 1:length(emc)){
+    for(j in 1:length(emc[[i]]$data)){
+      dat <- emc[[i]]$data[[j]] # Looping over chains, and subjects
+      if(is.data.frame(dat)){
+        ctx <- ensure_native_ctx(attr(dat, "AccumulatR_context"))
+        context <- list(
+          native_ctx = ctx$native_ctx,  # externalptr (the “real” native context)
+          structure  = ctx$structure,   # model structure (R list)
+          param_layout = ctx$param_layout,
+          data_df    = ctx$data_df,     # observed data
+          rel_tol    = ctx$rel_tol,
+          abs_tol    = ctx$abs_tol,
+          max_depth  = ctx$max_depth
+        )
+        attr(dat, "AccumulatR_context") <- context
+        emc[[i]]$data[[j]] <- dat
+      }
+    }
+  }
+  return(emc)
+}
+
+

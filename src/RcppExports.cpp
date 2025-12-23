@@ -482,8 +482,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // calc_ll_AccR
-NumericVector calc_ll_AccR(NumericMatrix p_matrix, DataFrame data, NumericVector constants, List designs, List bounds, List transforms, List pretransforms, CharacterVector p_types, double min_ll, List trend, List likelihood_context, DataFrame original_data);
-RcppExport SEXP _EMC2_calc_ll_AccR(SEXP p_matrixSEXP, SEXP dataSEXP, SEXP constantsSEXP, SEXP designsSEXP, SEXP boundsSEXP, SEXP transformsSEXP, SEXP pretransformsSEXP, SEXP p_typesSEXP, SEXP min_llSEXP, SEXP trendSEXP, SEXP likelihood_contextSEXP, SEXP original_dataSEXP) {
+NumericVector calc_ll_AccR(NumericMatrix p_matrix, DataFrame data, NumericVector constants, List designs, List bounds, List transforms, List pretransforms, CharacterVector p_types, double min_ll, List trend, List likelihood_context, DataFrame original_data, List param_layout);
+RcppExport SEXP _EMC2_calc_ll_AccR(SEXP p_matrixSEXP, SEXP dataSEXP, SEXP constantsSEXP, SEXP designsSEXP, SEXP boundsSEXP, SEXP transformsSEXP, SEXP pretransformsSEXP, SEXP p_typesSEXP, SEXP min_llSEXP, SEXP trendSEXP, SEXP likelihood_contextSEXP, SEXP original_dataSEXP, SEXP param_layoutSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -499,7 +499,8 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< List >::type trend(trendSEXP);
     Rcpp::traits::input_parameter< List >::type likelihood_context(likelihood_contextSEXP);
     Rcpp::traits::input_parameter< DataFrame >::type original_data(original_dataSEXP);
-    rcpp_result_gen = Rcpp::wrap(calc_ll_AccR(p_matrix, data, constants, designs, bounds, transforms, pretransforms, p_types, min_ll, trend, likelihood_context, original_data));
+    Rcpp::traits::input_parameter< List >::type param_layout(param_layoutSEXP);
+    rcpp_result_gen = Rcpp::wrap(calc_ll_AccR(p_matrix, data, constants, designs, bounds, transforms, pretransforms, p_types, min_ll, trend, likelihood_context, original_data, param_layout));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -559,7 +560,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_EMC2_construct_design_matrix", (DL_FUNC) &_EMC2_construct_design_matrix, 13},
     {"_EMC2_do_transform", (DL_FUNC) &_EMC2_do_transform, 2},
     {"_EMC2_calc_ll", (DL_FUNC) &_EMC2_calc_ll, 11},
-    {"_EMC2_calc_ll_AccR", (DL_FUNC) &_EMC2_calc_ll_AccR, 12},
+    {"_EMC2_calc_ll_AccR", (DL_FUNC) &_EMC2_calc_ll_AccR, 13},
     {"_EMC2_EMC2_call_custom_trend", (DL_FUNC) &_EMC2_EMC2_call_custom_trend, 3},
     {"_EMC2_c_add_charvectors", (DL_FUNC) &_EMC2_c_add_charvectors, 2},
     {NULL, NULL, 0}
