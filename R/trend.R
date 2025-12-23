@@ -642,7 +642,8 @@ apply_forward_fill <- function(values, dadm,at) {
   return(filled)
 }
 
-prep_trend_phase <- function(dadm, trend, pars, phase, return_trialwise_parameters = FALSE){
+prep_trend_phase <- function(dadm, trend, pars, phase, return_trialwise_parameters = FALSE,
+                             return_trend_pars = FALSE){
   # Apply only trends in the requested phase, sequentially
   tnames <- names(trend)
   all_remove <- character(0)
@@ -668,7 +669,9 @@ prep_trend_phase <- function(dadm, trend, pars, phase, return_trialwise_paramete
     pars[,par] <- updated
 
   }
-  if (length(all_remove)) pars <- pars[, !(colnames(pars) %in% unique(all_remove)), drop = FALSE]
+  if(!return_trend_pars){
+    if (length(all_remove)) pars <- pars[, !(colnames(pars) %in% unique(all_remove)), drop = FALSE]
+  }
   if(return_trialwise_parameters) attr(pars, "trialwise_parameters") <- do.call(cbind, tpars)
   return(pars)
 }

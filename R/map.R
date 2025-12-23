@@ -60,7 +60,8 @@ add_bound <- function(pars,bound, lR = NULL) {
 
 #### Functions to look at parameters ----
 
-map_p <- function(p,dadm,model,return_trialwise_parameters=FALSE)
+map_p <- function(p,dadm,model,return_trialwise_parameters=FALSE,
+                  return_trend_pars = FALSE)
   # Map p to dadm and returns matrix of mapped parameters
   # p is either a vector or a matrix (ncol = number of subjects) of p_vectors
   # dadm is a design matrix with attributes containing model information
@@ -163,7 +164,9 @@ map_p <- function(p,dadm,model,return_trialwise_parameters=FALSE)
     k <- k + 1
     pars[,i] <- tmp
   }
-  pars <- pars[,!premap_idx,drop=FALSE]
+  if(!return_trend_pars){
+    pars <- pars[,!premap_idx,drop=FALSE]
+  }
   if(return_trialwise_parameters) attr(pars, "trialwise_parameters") <- do.call(cbind, tpars)
   return(pars)
 }
