@@ -368,7 +368,7 @@ compress_dadm <- function(da,designs,Fcov,Ffun)
 
     # if (nacc>1) cells <- paste0(rep(apply(matrix(cells,nrow=nacc),2,paste0,collapse="_"),
     #                                 each=nacc),rep(1:nacc,times=length(cells)/nacc),sep="_")
-    cells <- cells[!duplicated(da$trials)] # This gets rid of excess accumulators more cleanly then filtering by lR
+    cells <- cells[!duplicated(cbind(da$trials, da$subjects))] # This gets rid of excess accumulators more cleanly then filtering by lR
     contract <- !duplicated(cells)
     out <- da[contract,,drop=FALSE]
     attr(out,"contract") <- contract
