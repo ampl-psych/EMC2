@@ -332,7 +332,7 @@ trend_par_input <- make_trend(
   phase     = "pretransform"
 )
 ```
-This example mirrors the tests: the input matrix provided to the kernel will contain the covariate columns (none here) followed by the `par_input` columns (here `t0`).
+The input matrix provided to the kernel will contain the covariate columns (none here) followed by the `par_input` columns (here `t0`).
 
 
 ### Apply a trend only at a factor level (`at`)

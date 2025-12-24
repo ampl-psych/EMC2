@@ -22,7 +22,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">EMC2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">3.3.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">3.4.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -227,7 +227,7 @@ parameter transformations we use <code><a href="../reference/LBA.html">?LBA</a><
 <p>Now we plot the prior, with <code>map = TRUE</code> (the default) to
 see the implied prior on the transformed parameters.</p>
 <div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/graphics/plot.default.html" class="external-link">plot</a></span><span class="op">(</span><span class="va">prior_LBA</span><span class="op">)</span></span></code></pre></div>
+<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/graphics/plot.default.html" class="external-link">plot</a></span><span class="op">(</span><span class="va">prior_LBA</span>, N <span class="op">=</span> <span class="fl">1e3</span><span class="op">)</span></span></code></pre></div>
 <p><img src="Simulation-based-Calibration_files/figure-html/unnamed-chunk-4-1.png" alt="Prior for LBA non-hierarchical model" width="700"></p>
 <p>Next we can simply call <code>run_sbc</code> with our specified
 design and prior. We can use <code><a href="../reference/run_sbc.html">?run_sbc</a></code> to see the
@@ -393,8 +393,8 @@ through the prior on the group-level variance.</p>
 <p>We can also plot what the implied prior range is of the subject-level
 parameters:</p>
 <div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/graphics/plot.default.html" class="external-link">plot</a></span><span class="op">(</span><span class="va">prior_LBA</span>, selection <span class="op">=</span> <span class="st">"alpha"</span><span class="op">)</span></span></code></pre></div>
-<p><img src="Simulation-based-Calibration_files/figure-html/unnamed-chunk-13-1.png" alt="Prior for LBA hierarchical model" width="700"><img src="Simulation-based-Calibration_files/figure-html/unnamed-chunk-13-2.png" alt="Prior for LBA hierarchical model" width="700"><img src="Simulation-based-Calibration_files/figure-html/unnamed-chunk-13-3.png" alt="Prior for LBA hierarchical model" width="700"><img src="Simulation-based-Calibration_files/figure-html/unnamed-chunk-13-4.png" alt="Prior for LBA hierarchical model" width="700"><img src="Simulation-based-Calibration_files/figure-html/unnamed-chunk-13-5.png" alt="Prior for LBA hierarchical model" width="700"><img src="Simulation-based-Calibration_files/figure-html/unnamed-chunk-13-6.png" alt="Prior for LBA hierarchical model" width="700"><img src="Simulation-based-Calibration_files/figure-html/unnamed-chunk-13-7.png" alt="Prior for LBA hierarchical model" width="700"><img src="Simulation-based-Calibration_files/figure-html/unnamed-chunk-13-8.png" alt="Prior for LBA hierarchical model" width="700"><img src="Simulation-based-Calibration_files/figure-html/unnamed-chunk-13-9.png" alt="Prior for LBA hierarchical model" width="700"><img src="Simulation-based-Calibration_files/figure-html/unnamed-chunk-13-10.png" alt="Prior for LBA hierarchical model" width="700"><img src="Simulation-based-Calibration_files/figure-html/unnamed-chunk-13-11.png" alt="Prior for LBA hierarchical model" width="700"><img src="Simulation-based-Calibration_files/figure-html/unnamed-chunk-13-12.png" alt="Prior for LBA hierarchical model" width="700"><img src="Simulation-based-Calibration_files/figure-html/unnamed-chunk-13-13.png" alt="Prior for LBA hierarchical model" width="700"><img src="Simulation-based-Calibration_files/figure-html/unnamed-chunk-13-14.png" alt="Prior for LBA hierarchical model" width="700"><img src="Simulation-based-Calibration_files/figure-html/unnamed-chunk-13-15.png" alt="Prior for LBA hierarchical model" width="700"><img src="Simulation-based-Calibration_files/figure-html/unnamed-chunk-13-16.png" alt="Prior for LBA hierarchical model" width="700"><img src="Simulation-based-Calibration_files/figure-html/unnamed-chunk-13-17.png" alt="Prior for LBA hierarchical model" width="700"><img src="Simulation-based-Calibration_files/figure-html/unnamed-chunk-13-18.png" alt="Prior for LBA hierarchical model" width="700"><img src="Simulation-based-Calibration_files/figure-html/unnamed-chunk-13-19.png" alt="Prior for LBA hierarchical model" width="700"><img src="Simulation-based-Calibration_files/figure-html/unnamed-chunk-13-20.png" alt="Prior for LBA hierarchical model" width="700"><img src="Simulation-based-Calibration_files/figure-html/unnamed-chunk-13-21.png" alt="Prior for LBA hierarchical model" width="700"><img src="Simulation-based-Calibration_files/figure-html/unnamed-chunk-13-22.png" alt="Prior for LBA hierarchical model" width="700"><img src="Simulation-based-Calibration_files/figure-html/unnamed-chunk-13-23.png" alt="Prior for LBA hierarchical model" width="700"><img src="Simulation-based-Calibration_files/figure-html/unnamed-chunk-13-24.png" alt="Prior for LBA hierarchical model" width="700"><img src="Simulation-based-Calibration_files/figure-html/unnamed-chunk-13-25.png" alt="Prior for LBA hierarchical model" width="700"><img src="Simulation-based-Calibration_files/figure-html/unnamed-chunk-13-26.png" alt="Prior for LBA hierarchical model" width="700"><img src="Simulation-based-Calibration_files/figure-html/unnamed-chunk-13-27.png" alt="Prior for LBA hierarchical model" width="700"><img src="Simulation-based-Calibration_files/figure-html/unnamed-chunk-13-28.png" alt="Prior for LBA hierarchical model" width="700"><img src="Simulation-based-Calibration_files/figure-html/unnamed-chunk-13-29.png" alt="Prior for LBA hierarchical model" width="700"><img src="Simulation-based-Calibration_files/figure-html/unnamed-chunk-13-30.png" alt="Prior for LBA hierarchical model" width="700"></p>
+<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/graphics/plot.default.html" class="external-link">plot</a></span><span class="op">(</span><span class="va">prior_LBA</span>, selection <span class="op">=</span> <span class="st">"alpha"</span>, N <span class="op">=</span> <span class="fl">1e3</span>, subject <span class="op">=</span> <span class="fl">1</span><span class="op">)</span></span></code></pre></div>
+<p><img src="Simulation-based-Calibration_files/figure-html/unnamed-chunk-13-1.png" alt="Prior for LBA hierarchical model" width="700"></p>
 <p>To actually run SBC, we can use the same function as before, now also
 specifying how many subjects we want to have in the hierarchical
 model</p>
@@ -549,7 +549,7 @@ arXiv:1804.06788</em>.
 
 
     <footer><div class="pkgdown-footer-left">
-  <p>Developed by Niek Stevenson, Michelle Donzallaz, Andrew Heathcote.</p>
+  <p>Developed by Niek Stevenson, Michelle Donzallaz, Andrew Heathcote, Steven Miletić.</p>
 </div>
 
 <div class="pkgdown-footer-right">

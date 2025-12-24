@@ -189,7 +189,7 @@ prior_LBA <- prior(design_LBA, type = "diagonal-gamma",
 We can also plot what the implied prior range is of the subject-level parameters:
 
 ```{r, fig.alt = "Prior for LBA hierarchical model", fig.height = 5}
-plot(prior_LBA, selection = "alpha", N = 1e3)
+plot(prior_LBA, selection = "alpha", N = 1e3, subject = 1)
 ```
 
 To actually run SBC, we can use the same function as before, now also specifying how many subjects we want to have in the hierarchical model

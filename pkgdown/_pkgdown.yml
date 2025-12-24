@@ -153,6 +153,8 @@ reference:
   - get_trend_pnames
   - apply_kernel
   - fix_custom_kernel_pointers
+  - get_custom_kernel_pointers
+  - set_custom_kernel_pointers
   - get_power_spectra
   - plot_spectrum
 - title: Latent variable modelling

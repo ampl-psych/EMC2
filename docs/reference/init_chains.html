@@ -9,7 +9,7 @@ normal across subjects."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">EMC2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">3.3.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">3.4.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -152,9 +152,8 @@ Smaller values will lead to less deviation around the mean.</p></dd>
 <span class="r-out co"><span class="r-pr">#&gt;</span>   1</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> </span>
 <span class="r-in"><span></span></span>
-<span class="r-in"><span><span class="va">DDMaE</span> <span class="op">&lt;-</span> <span class="fu"><a href="make_emc.html">make_emc</a></span><span class="op">(</span><span class="va">forstmann</span>, <span class="va">design_DDMaE</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="va">DDMaE</span> <span class="op">&lt;-</span> <span class="fu"><a href="make_emc.html">make_emc</a></span><span class="op">(</span><span class="va">forstmann</span>, <span class="va">design_DDMaE</span>, compress <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span></span>
 <span class="r-msg co"><span class="r-pr">#&gt;</span> Processing data set 1</span>
-<span class="r-msg co"><span class="r-pr">#&gt;</span> Likelihood speedup factor: 3.6 (4433 unique trials)</span>
 <span class="r-in"><span><span class="co"># set up our mean starting points (same used across subjects).</span></span></span>
 <span class="r-in"><span><span class="va">mu</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>v_Sleft<span class="op">=</span><span class="op">-</span><span class="fl">2</span>,v_Sright<span class="op">=</span><span class="fl">2</span>,a<span class="op">=</span><span class="fu"><a href="https://rdrr.io/r/base/Log.html" class="external-link">log</a></span><span class="op">(</span><span class="fl">1</span><span class="op">)</span>,a_Eneutral<span class="op">=</span><span class="fu"><a href="https://rdrr.io/r/base/Log.html" class="external-link">log</a></span><span class="op">(</span><span class="fl">1.5</span><span class="op">)</span>,a_Eaccuracy<span class="op">=</span><span class="fu"><a href="https://rdrr.io/r/base/Log.html" class="external-link">log</a></span><span class="op">(</span><span class="fl">2</span><span class="op">)</span>,</span></span>
 <span class="r-in"><span>       t0<span class="op">=</span><span class="fu"><a href="https://rdrr.io/r/base/Log.html" class="external-link">log</a></span><span class="op">(</span><span class="fl">.2</span><span class="op">)</span><span class="op">)</span></span></span>
@@ -163,7 +162,7 @@ Smaller values will lead to less deviation around the mean.</p></dd>
 <span class="r-in"><span><span class="co"># Initialize chains, 4 cores per chain, and parallelizing across our 3 chains as well</span></span></span>
 <span class="r-in"><span><span class="co"># so 4*3 cores used.</span></span></span>
 <span class="r-in"><span><span class="va">DDMaE</span> <span class="op">&lt;-</span> <span class="fu">init_chains</span><span class="op">(</span><span class="va">DDMaE</span>, start_mu <span class="op">=</span> <span class="va">mu</span>, start_var <span class="op">=</span> <span class="va">var</span>,</span></span>
-<span class="r-in"><span>                     cores_per_chain <span class="op">=</span> <span class="fl">1</span>, cores_for_chains <span class="op">=</span> <span class="fl">1</span>, particles <span class="op">=</span> <span class="fl">10</span><span class="op">)</span></span></span>
+<span class="r-in"><span>                     cores_per_chain <span class="op">=</span> <span class="fl">1</span>, cores_for_chains <span class="op">=</span> <span class="fl">1</span>, particles <span class="op">=</span> <span class="fl">3</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="co"># Afterwards we can just use fit</span></span></span>
 <span class="r-in"><span><span class="co"># DDMaE &lt;- fit(DDMaE, cores_per_chain = 4)</span></span></span>
 <span class="r-in"><span><span class="co"># }</span></span></span>
@@ -174,7 +173,7 @@ Smaller values will lead to less deviation around the mean.</p></dd>
 
 
     <footer><div class="pkgdown-footer-left">
-  <p>Developed by Niek Stevenson, Michelle Donzallaz, Andrew Heathcote.</p>
+  <p>Developed by Niek Stevenson, Michelle Donzallaz, Andrew Heathcote, Steven Miletić.</p>
 </div>
 
 <div class="pkgdown-footer-right">
