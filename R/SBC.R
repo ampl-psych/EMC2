@@ -334,7 +334,7 @@ make_smooth <- function(x, y, N = 1000){
 #' @param layout Optional. A numeric vector specifying the layout using `par(mfrow = layout)`
 #' @param add_stats Boolean. Should coverage, bias and precision be included in the figure.
 #' @param main Optional. A character specifying plot title.
-#' @param K Optional. Number of rank bins (= ESS + 1).
+#' @param K Optional. Effective sample size of the MCMC that produced the ranks.
 #' @return No returns
 #' @export
 plot_sbc_ecdf <- function(ranks, layout = NA, add_stats = TRUE, main = NULL, K = 500) {
