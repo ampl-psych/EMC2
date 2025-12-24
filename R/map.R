@@ -60,7 +60,8 @@ add_bound <- function(pars,bound, lR = NULL) {
 
 #### Functions to look at parameters ----
 
-map_p <- function(p,dadm,model,return_trialwise_parameters=FALSE)
+map_p <- function(p,dadm,model,return_trialwise_parameters=FALSE,
+                  return_trend_pars = FALSE)
   # Map p to dadm and returns matrix of mapped parameters
   # p is either a vector or a matrix (ncol = number of subjects) of p_vectors
   # dadm is a design matrix with attributes containing model information
@@ -116,13 +117,32 @@ map_p <- function(p,dadm,model,return_trialwise_parameters=FALSE)
         for (idx in seq_along(trend)) {
           cur_trend <- trend[[idx]]
           if (!identical(cur_trend$phase, "premap")) next
+
+          # if parameter inputs requested but not yet mapped, pass raw value
+          for(par_input_name in cur_trend$par_input) {
+            if(!par_input_name %in% colnames(pars)) {
+              pars <- cbind(pars, p[,par_input_name])
+              colnames(pars)[ncol(pars)] <- par_input_name
+              # pars[,par_input_name] <- p[,par_input_name]
+            } else if(all(is.na(pars[,par_input_name]))) {
+              pars[,par_input_name] <- p[,par_input_name]
+            }
+          }
+
           par_name <- tnames[idx]
           if (!(par_name %in% colnames(pm))) next
           trend_pars <- pars[, cur_trend$trend_pnames, drop = FALSE]
           updated <- run_trend(dadm, cur_trend, pm[, par_name], trend_pars, pars, return_trialwise_parameters)
           if(return_trialwise_parameters){
             trialwise_parameters <- attr(updated, "trialwise_parameters")
-            colnames(trialwise_parameters) <- paste0(par_name, "_", c(cur_trend$covariate, cur_trend$par_input))
+            # Return size is always of covariates -- but perhaps additional par_input was passed as well
+            # this needs more thinking - how do we know the exact number of updated covariates? Why par_input here? to check with Niek
+            if(length(cur_trend$covariate) > 1) {
+              colnames(trialwise_parameters) <- paste0(par_name, '_', c(cur_trend$covariate, cur_trend$par_input))
+            } else {
+              colnames(trialwise_parameters) <- paste0(par_name, '_', paste0(c(cur_trend$covariate, cur_trend$par_input), collapse='_'))
+            }
+            # colnames(trialwise_parameters) <- paste0(par_name, '_', paste0(c(cur_trend$covariate, cur_trend$par_input), collapse='_'))
             tpars[[par_name]] <- trialwise_parameters
           }
           pm[, par_name] <- updated
@@ -144,7 +164,9 @@ map_p <- function(p,dadm,model,return_trialwise_parameters=FALSE)
     k <- k + 1
     pars[,i] <- tmp
   }
-  pars <- pars[,!premap_idx,drop=FALSE]
+  if(!return_trend_pars){
+    pars <- pars[,!premap_idx,drop=FALSE]
+  }
   if(return_trialwise_parameters) attr(pars, "trialwise_parameters") <- do.call(cbind, tpars)
   return(pars)
 }
