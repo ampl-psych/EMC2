@@ -310,3 +310,57 @@ NumericVector calc_ll(NumericMatrix p_matrix, DataFrame data, NumericVector cons
   }
   return(lls);
 }
+
+
+
+// [[Rcpp::export]]
+NumericMatrix get_pars_c_wrapper(NumericMatrix p_matrix, DataFrame data, NumericVector constants,
+                                 List designs, List bounds, List transforms, List pretransforms,
+                                 CharacterVector p_types, List trend){
+  // const int n_particles = p_matrix.nrow();
+  const int n_trials = data.nrow();
+  // NumericVector lls(n_particles);
+  NumericVector p_vector(p_matrix.ncol());
+  CharacterVector p_names = colnames(p_matrix);
+  p_vector.names() = p_names;
+  NumericMatrix pars;
+
+  // Once (outside the main loop over particles):
+  // NumericMatrix minmax = bounds["minmax"];
+  // CharacterVector mm_names = colnames(minmax);
+  std::vector<PreTransformSpec> p_specs;
+  std::vector<TransformSpec> full_t_specs; // precomputed transform specs for p_types
+
+  // Extract
+  p_vector = p_matrix(0, _);
+  p_specs = make_pretransform_specs(p_vector, pretransforms);
+  NumericMatrix dummy(1, p_types.size());
+  colnames(dummy) = p_types;
+  full_t_specs = make_transform_specs(dummy, transforms);
+  pars = get_pars_matrix(p_vector, constants, p_specs, p_types, designs, n_trials, data, trend, full_t_specs);
+
+  // if(type == "DDM"){
+  //   p_vector = p_matrix(0, _);
+  //   p_specs = make_pretransform_specs(p_vector, pretransforms);
+  //   NumericMatrix dummy(1, p_types.size());
+  //   colnames(dummy) = p_types;
+  //   full_t_specs = make_transform_specs(dummy, transforms);
+  //   pars = get_pars_matrix(p_vector, constants, p_specs, p_types, designs, n_trials, data, trend, full_t_specs);
+  // } else if(type == "MRI" || type == "MRI_AR1"){
+  //   p_vector = p_matrix(0, _);
+  //   p_specs = make_pretransform_specs(p_vector, pretransforms);
+  //   // Precompute transform specs for all p_types using a one-time dummy
+  //   NumericMatrix dummy(1, p_types.size());
+  //   colnames(dummy) = p_types;
+  //   full_t_specs = make_transform_specs(dummy, transforms);
+  //   pars = get_pars_matrix(p_vector, constants, p_specs, p_types, designs, n_trials, data, trend, full_t_specs);
+  // } else {
+  //   p_vector = p_matrix(0, _);
+  //   p_specs = make_pretransform_specs(p_vector, pretransforms);
+  //   NumericMatrix dummy(1, p_types.size());
+  //   colnames(dummy) = p_types;
+  //   full_t_specs = make_transform_specs(dummy, transforms);
+  //   pars = get_pars_matrix(p_vector, constants, p_specs, p_types, designs, n_trials, data, trend, full_t_specs);
+  // }
+  return(pars);
+}

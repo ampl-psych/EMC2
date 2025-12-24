@@ -679,7 +679,7 @@ calc_ll_manager <- function(proposals, dadm, model, component = NULL, r_cores = 
         auto_mclapply(1:nrow(proposals),
           function(i) calc_ll_R(proposals[i,], model=model, dadm = dadm),
          mc.cores=r_cores))
-    } else{
+    } else {
       p_types <- names(model$p_types)
       designs <- list()
       for(p in p_types){

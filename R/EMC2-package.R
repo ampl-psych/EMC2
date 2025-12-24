@@ -60,6 +60,7 @@
 #' @importFrom stats dexp
 #' @importFrom stats dgamma
 #' @importFrom stats dnorm
+#' @importFrom stats ecdf
 #' @importFrom stats hclust
 #' @importFrom stats integrate
 #' @importFrom stats lm
