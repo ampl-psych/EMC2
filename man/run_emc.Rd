@@ -80,10 +80,10 @@ design_in <- design(data = forstmann,model=DDM,
                            formula =list(v~0+S,a~E, t0~1, s~1, Z~1),
                            constants=c(s=log(1)))
 # Then make the emc, we've omitted a prior here for brevity so default priors will be used.
-emc <- make_emc(forstmann, design_in)
+emc <- make_emc(forstmann, design_in, compress = FALSE)
 
 # Now for example we can specify that we only want to run the "preburn" phase
 # for MCMC 10 iterations
-emc <- run_emc(emc, stage = "preburn", stop_criteria = list(iter = 10), cores_for_chains = 1)
+# emc <- run_emc(emc, stage = "preburn", stop_criteria = list(iter = 10), cores_for_chains = 1)
 }
 }

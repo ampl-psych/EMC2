@@ -871,6 +871,36 @@ update2version <- function(emc){
     return(model)
   }
 
+  new_expand <- function(x){
+    if(!is.null(x$winner)){
+      old_exp <- attr(x, "expand")
+      if(length(unique(old_exp) != length(unique(x$winner)))){
+        # In older versions we were working with a different expand version
+        new_x <- x[old_exp,]
+        new_x <- new_x[new_x$winner,]
+
+        reduced <- unique(new_x)       # keeps the first appearance of every row
+
+        ## ——— 2. create the “expand” index ———
+        key_full    <- do.call(paste, c(new_x,      sep = "\r"))   # one string per row
+        key_reduced <- do.call(paste, c(reduced, sep = "\r"))   # the same for reduced
+        attr(x, "expand") <- match(key_full, key_reduced)
+      }
+    }
+    return(x)
+  }
+  update_expand <- function(emc){
+    first_data <- emc[[1]]$data[[1]]
+    if(is.data.frame(first_data)){
+      emc[[1]]$data <- lapply(emc[[1]]$data, new_expand)
+    } else{
+      emc[[1]]$data <- lapply(emc[[1]]$data, function(y){
+        y <- lapply(y, new_expand)})
+    }
+    return(emc)
+  }
+
+  emc <- update_expand(emc)
   design_list <- get_design(emc)
   design_list <- lapply(design_list, function(x){
     if(!is.null(x$Fcovariates)){

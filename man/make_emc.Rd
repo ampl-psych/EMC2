@@ -74,6 +74,7 @@ psd <- c(v=1,v_lMdiff=0.5,sv_lMTRUE=.5,
 prior_LBABE <- prior(design_LBABE, type = 'standard',pmean=pmean,psd=psd)
 
 # create emc object
-LBABE <- make_emc(dat,design_LBABE,type="standard",  prior=prior_LBABE)
+LBABE <- make_emc(dat,design_LBABE,type="standard",  prior=prior_LBABE,
+                  compress = FALSE)
 
 }

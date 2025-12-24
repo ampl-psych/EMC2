@@ -2,7 +2,7 @@
 % Please edit documentation in R/model_SDT.R
 \name{SDT}
 \alias{SDT}
-\title{Gaussian Signal Detection Theory Model for Binary Responses (probit)}
+\title{Gaussian Signal Detection Theory Model for Binary Responses}
 \usage{
 SDT()
 }

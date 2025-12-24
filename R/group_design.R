@@ -174,6 +174,14 @@ print.emc.group_design <- function(x, ...){
   }
 }
 
+#' Summary method for emc.group_design objects
+#'
+#' Prints a summary of the group_design object
+#' For continuous covariates just prints one row, instead of all covariates.
+#'
+#' @param object An object of class `emc.group_design` containing the design to summarize
+#' @param ... Additional arguments (not used)
+#' @return Invisibly returns the design matrices
 #' @export
 summary.emc.group_design <- function(object, ...){
   p_vector <- sampled_pars(object)

@@ -1,6 +1,6 @@
 Package: EMC2
 Title: Bayesian Hierarchical Analysis of Cognitive Models of Choice
-Version: 3.2.1
+Version: 3.3.0
 Authors@R: 
     c(person("Niek", "Stevenson", email = "niek.stevenson@gmail.com", 
            role = c("aut", "cre"), comment = c(ORCID = "0000-0003-3206-7544")),
@@ -28,14 +28,14 @@ Description: Fit Bayesian (hierarchical) cognitive models
     A wide range of plotting functions assist in assessing model convergence and
     posterior inference. Models can be easily evaluated using functions
     that plot posterior predictions or using relative model comparison metrics 
-    such as information criteria or Bayes factors.    
+    such as information criteria or Bayes factors.
     References: Stevenson et al. (2024) <doi:10.31234/osf.io/2e4dq>.
 License: GPL (>= 3)
 URL: https://ampl-psych.github.io/EMC2/, https://github.com/ampl-psych/EMC2
 BugReports: https://github.com/ampl-psych/EMC2/issues 
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
-RoxygenNote: 7.3.2
+RoxygenNote: 7.3.3
 VignetteBuilder: knitr
 Suggests: 
     testthat (>= 3.0.0),

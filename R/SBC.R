@@ -209,7 +209,7 @@ calc_sbc_stats <- function(stats){
   for(i in 1:length(stats[[1]])){
     out[[out_names[i]]] <- list(
       coverage = apply(stats$coverage[[i]], 2, mean),
-      precision = apply(stats$med[[i]], 2, sd),
+      # precision = apply(stats$med[[i]], 2, sd),
       bias = apply(stats$bias[[i]], 2, mean)
     )
   }
@@ -266,10 +266,10 @@ plot_sbc_hist <- function(ranks, bins = 10, layout = NA, add_stats = TRUE){
       if (!is.null(stat) && add_stats) {
         coverage_print <- paste0("coverage : ", round(stat[["coverage"]][i], 2))
         bias_print <- paste0("bias : ", round(stat[["bias"]][i], 3))
-        precision_print <- paste0("precision : ", round(stat[["precision"]][i], 3))
+        # precision_print <- paste0("precision : ", round(stat[["precision"]][i], 3))
         legend(x = "topleft", legend = coverage_print, bty = "n")
-        legend(x = "top", legend = bias_print, bty = "n")
-        legend(x = "topright", legend = precision_print, bty = "n")
+        legend(x = "topright", legend = bias_print, bty = "n")
+        # legend(x = "topright", legend = precision_print, bty = "n")
       }
     }
   }
@@ -333,9 +333,10 @@ make_smooth <- function(x, y, N = 1000){
 #' @param ranks A list of named dataframes of the rank statistic
 #' @param layout Optional. A numeric vector specifying the layout using `par(mfrow = layout)`
 #' @param add_stats Boolean. Should coverage, bias and precision be included in the figure.
+#' @param main Optional. A character specifying plot title.
 #' @return No returns
 #' @export
-plot_sbc_ecdf <- function(ranks, layout = NA, add_stats = TRUE){
+plot_sbc_ecdf <- function(ranks, layout = NA, add_stats = TRUE, main = ""){
   if (!is.null(ranks[["rank"]])) {
     stats <- calc_sbc_stats(ranks)
   }
@@ -382,10 +383,10 @@ plot_sbc_ecdf <- function(ranks, layout = NA, add_stats = TRUE){
       if (!is.null(stat) && add_stats) {
         coverage_print <- paste0("coverage : ", round(stat[["coverage"]][i], 2))
         bias_print <- paste0("bias : ", round(stat[["bias"]][i], 3))
-        precision_print <- paste0("precision : ", round(stat[["precision"]][i], 3))
+        # precision_print <- paste0("precision : ", round(stat[["precision"]][i], 3))
         legend(x = "topleft", legend = coverage_print, bty = "n")
-        legend(x = "bottomright", legend = bias_print, bty = "n")
-        legend(x = "topright", legend = precision_print, bty = "n")
+        legend(x = "topright", legend = bias_print, bty = "n")
+        # legend(x = "topright", legend = precision_print, bty = "n")
       }
     }
   }

@@ -45,6 +45,6 @@ Simulate \code{n_post} data sets using the posterior/prior parameter estimates
 \examples{
 \donttest{
 # based on an emc object ran by fit() we can generate posterior predictives
-predict(samples_LNR, n_cores = 1, n_post = 10)
+predict(samples_LNR, n_cores = 1, n_post = 2)
 }
 }
