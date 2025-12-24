@@ -7,6 +7,8 @@ Authors@R:
       person("Michelle", "Donzallaz", role = c("aut")),
       person("Andrew", "Heathcote", role = c("aut")),
       person("Steven", "Miletić", role = c("aut")),
+      person("Luke", "Strickland", role = c("ctb")),
+      person("Frank", "Hezemans", role = c("ctb")),
       person("Raphael", "Hartmann", role = c("ctb")),
       person("Karl C.", "Klauer", role=c("ctb")),
       person("Steven G.", "Johnson", role=c("ctb")),
