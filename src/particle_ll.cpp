@@ -18,23 +18,41 @@ Rcpp::NumericMatrix do_transform(Rcpp::NumericMatrix pars, Rcpp::List transform)
   return c_do_transform(pars, specs);
 }
 
-// Collapse per-row ok (parameter rows) to per-trial ok using layout row_trial
+// Collapse per-row ok (parameter rows) to per-trial ok using data$trial
 static inline Rcpp::LogicalVector ok_accumulatR(const Rcpp::LogicalVector& ok_row,
-                                                const SEXP layout_opt) {
-  Rcpp::List layout(layout_opt);
-  Rcpp::IntegerVector row_trial = layout["row_trial"];
-  int n_trials = 0;
-  for (int t : row_trial) if (t > n_trials) n_trials = t;
-  Rcpp::LogicalVector out(n_trials, true);
+                                                const Rcpp::DataFrame& data) {
+  Rcpp::IntegerVector trial = data["trial"];
   const int n_rows = ok_row.size();
+  int unique_trials = 0;
+  int last_label = NA_INTEGER;
   for (int i = 0; i < n_rows; ++i) {
-    if (ok_row[i] == FALSE) {
-      int trial_idx = row_trial[i] - 1;
-      if (trial_idx >= 0 && trial_idx < n_trials) out[trial_idx] = false;
+    int t = trial[i];
+    if (t == NA_INTEGER) continue;
+    if (i == 0 || t != last_label) {
+      ++unique_trials;
+      last_label = t;
+    }
+  }
+  Rcpp::LogicalVector out(unique_trials, true);
+  int current_label = NA_INTEGER;
+  int trial_idx = -1;
+  for (int i = 0; i < n_rows; ++i) {
+    int t = trial[i];
+    if (t == NA_INTEGER) continue;
+    if (i == 0 || t != current_label) {
+      current_label = t;
+      ++trial_idx;
+    }
+    if (ok_row[i] == FALSE && trial_idx >= 0 && trial_idx < out.size()) {
+      out[trial_idx] = false;
     }
   }
   return out;
 }
+
+
+
+
 
 
 
@@ -342,9 +360,7 @@ NumericVector calc_ll_AccR(NumericMatrix p_matrix,
                            CharacterVector p_types,
                            double min_ll,
                            List trend,
-                           List likelihood_context,
-                           DataFrame original_data,
-                           List param_layout) {
+                           List likelihood_context) {
   const int n_particles = p_matrix.nrow();
   const int n_trials = data.nrow();
   NumericVector lls(n_particles);
@@ -355,7 +371,6 @@ NumericVector calc_ll_AccR(NumericMatrix p_matrix,
   LogicalVector is_ok(n_trials);
   // Static AccumulatR bits pulled once from the supplied context list
   SEXP native_ctx = likelihood_context["native_ctx"];
-  List structure = likelihood_context["structure"];
 
   double rel_tol = 1e-5;
   double abs_tol = 1e-6;
@@ -381,20 +396,16 @@ NumericVector calc_ll_AccR(NumericMatrix p_matrix,
     // Precompute specs
     if (i == 0) {                            // first particle only, just to get colnames
       bound_specs = make_bound_specs(minmax,mm_names,pars,bounds);
-      // Rcout << minmax;
-      // Rcout << "\n";
-      // Rcout << pars;
-      // Rcout << "\n";
     }
     is_ok = c_do_bound(pars, bound_specs); // This needs to be equal to the number of original data rows
-    is_ok = ok_accumulatR(is_ok, param_layout);
+    is_ok = ok_accumulatR(is_ok, data);
+    int ok_length = is_ok.length();
+    int data_length = data.nrow();
     LogicalVector ok_arg = clone(is_ok); // ok length must match data rows
     // AccumulatR likelihood (context-managed; params still need AccumulatR layout)
     lls[i] = accumulatr::cpp_loglik(native_ctx,
-                                    structure,
                                     pars,
-                                    original_data,
-                                    param_layout,
+                                    data,
                                     ok_arg,
                                     expand,
                                     min_ll,

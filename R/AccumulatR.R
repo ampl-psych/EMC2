@@ -40,13 +40,11 @@ AccumulatR_add_context <- function(dadm){
   data <- dadm[!duplicated(dadm$trial),]
   model_list <- model()
   model_spec <- model_list$spec
+  data$accumulator <- NULL
   ctx <- build_likelihood_context(model_spec, data)
 
   context <- list(
     native_ctx = ctx$native_ctx,  # externalptr (the “real” native context)
-    structure  = ctx$structure,   # model structure (R list)
-    param_layout = ctx$param_layout,
-    data_df    = ctx$data_df,     # observed data
     rel_tol    = ctx$rel_tol,
     abs_tol    = ctx$abs_tol,
     max_depth  = ctx$max_depth
@@ -66,9 +64,6 @@ AccumulatR_check_context <- function(emc){
         ctx <- ensure_native_ctx(attr(dat, "AccumulatR_context"))
         context <- list(
           native_ctx = ctx$native_ctx,  # externalptr (the “real” native context)
-          structure  = ctx$structure,   # model structure (R list)
-          param_layout = ctx$param_layout,
-          data_df    = ctx$data_df,     # observed data
           rel_tol    = ctx$rel_tol,
           abs_tol    = ctx$abs_tol,
           max_depth  = ctx$max_depth

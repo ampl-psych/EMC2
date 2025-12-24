@@ -687,12 +687,10 @@ calc_ll_manager <- function(proposals, dadm, model, component = NULL, r_cores = 
       }
       constants <- attr(dadm, "constants")
       context <- attr(dadm, "AccumulatR_context")
-      original_data <- context$data_df
-      param_layout <- context$param_layout
       # context$layout not in the right shape at all!
       lls <- calc_ll_AccR(proposals, dadm, constants = constants, designs = designs,
                      model$bound, model$transform, model$pre_transform, p_types = p_types, min_ll = log(1e-10),
-                     model$trend, context, original_data, param_layout)
+                     model$trend, context)
     }
     else{
       p_types <- names(model$p_types)
