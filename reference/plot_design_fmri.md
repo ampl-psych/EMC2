@@ -90,12 +90,12 @@ design_matrices <-  convolve_design_matrix(
 #>     event_type subjects run onset modulation  duration regressor
 #> 1  condition_A        1   1     0 -1.0000000 0.5000000     cond1
 #> 11    accuracy        1   1     0  1.0000000 0.2000000  accuracy
-#> 21          rt        1   1     0  1.0417361 1.0417361        rt
+#> 21          rt        1   1     0  0.7917898 0.7917898        rt
 #> 2  condition_B        1   1    10  1.0000000 0.5000000     cond1
 #> 12    accuracy        1   1    10  0.0000000 0.2000000  accuracy
-#> 22          rt        1   1    10  1.3367497 1.3367497        rt
-#> 26          rt        1   1    50  0.5968558 0.5968558        rt
-#> 28          rt        1   1    70  0.9220631 0.9220631        rt
+#> 22          rt        1   1    10  1.1241730 1.1241730        rt
+#> 23          rt        1   1    20  1.4753640 1.4753640        rt
+#> 26          rt        1   1    50  0.5281012 0.5281012        rt
 #> Filtering out high_pass noise, make sure you also use high_pass_filter(<timeseries>)
 
 # Plot the design matrix

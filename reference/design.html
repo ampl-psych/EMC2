@@ -9,7 +9,7 @@ the model specification."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">EMC2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">3.3.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">3.4.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -42,7 +42,7 @@ the model specification."></head><body>
   <main id="main" class="col-md-9"><div class="page-header">
 
       <h1>Specify a Design and Model</h1>
-      <small class="dont-index">Source: <a href="https://github.com/ampl-psych/EMC2/blob/v3.3.0/R/design.R" class="external-link"><code>R/design.R</code></a></small>
+      <small class="dont-index">Source: <a href="https://github.com/ampl-psych/EMC2/blob/main/R/design.R" class="external-link"><code>R/design.R</code></a></small>
       <div class="d-none name"><code>design.Rd</code></div>
     </div>
 
@@ -66,6 +66,7 @@ the model specification.</p>
 <span>  functions <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  report_p_vector <span class="op">=</span> <span class="cn">TRUE</span>,</span>
 <span>  custom_p_vector <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  trend <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  transform <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  bound <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  <span class="va">...</span></span>
@@ -144,6 +145,10 @@ parameters to be estimated.</p></dd>
 <dt id="arg-custom-p-vector">custom_p_vector<a class="anchor" aria-label="anchor" href="#arg-custom-p-vector"></a></dt>
 <dd><p>A character vector. If specified, a custom likelihood
 function can be supplied.</p></dd>
+
+
+<dt id="arg-trend">trend<a class="anchor" aria-label="anchor" href="#arg-trend"></a></dt>
+<dd><p>A trend list, as made by <code><a href="make_trend.html">make_trend</a></code></p></dd>
 
 
 <dt id="arg-transform">transform<a class="anchor" aria-label="anchor" href="#arg-transform"></a></dt>
@@ -230,7 +235,7 @@ the likelihood landscape that cannot reasonable be achieved with <code>transform
 
 
     <footer><div class="pkgdown-footer-left">
-  <p>Developed by Niek Stevenson, Michelle Donzallaz, Andrew Heathcote.</p>
+  <p>Developed by Niek Stevenson, Michelle Donzallaz, Andrew Heathcote, Steven Miletić.</p>
 </div>
 
 <div class="pkgdown-footer-right">

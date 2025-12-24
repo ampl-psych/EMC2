@@ -1,20 +1,20 @@
 # Plot the ECDF Difference in SBC Ranks
 
-Plots the difference in observed cumulative rank statistics and the
-expected cumulative distribution of a uniform distribution. The blue
-shaded areas indicate the 95% credible interval.
+Plots F_hat(z) - z where F_hat is the empirical CDF of the (normalized)
+ranks and z is the Uniform(0,1) CDF. The shaded band is the simultaneous
+(1 - gamma) envelope for F_hat(z) - z.
 
 ## Usage
 
 ``` r
-plot_sbc_ecdf(ranks, layout = NA, add_stats = TRUE, main = "")
+plot_sbc_ecdf(ranks, layout = NA, add_stats = TRUE, main = NULL, K = 500)
 ```
 
 ## Arguments
 
 - ranks:
 
-  A list of named dataframes of the rank statistic
+  A list of named dataframes of the rank statistic (raw or normalized)
 
 - layout:
 
@@ -29,6 +29,10 @@ plot_sbc_ecdf(ranks, layout = NA, add_stats = TRUE, main = "")
 - main:
 
   Optional. A character specifying plot title.
+
+- K:
+
+  Optional. Effective sample size of the MCMC that produced the ranks.
 
 ## Value
 

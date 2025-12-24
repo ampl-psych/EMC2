@@ -19,6 +19,7 @@ design(
   functions = NULL,
   report_p_vector = TRUE,
   custom_p_vector = NULL,
+  trend = NULL,
   transform = NULL,
   bound = NULL,
   ...
@@ -102,6 +103,11 @@ design(
 
   A character vector. If specified, a custom likelihood function can be
   supplied.
+
+- trend:
+
+  A trend list, as made by
+  [`make_trend`](https://ampl-psych.github.io/EMC2/reference/make_trend.md)
 
 - transform:
 

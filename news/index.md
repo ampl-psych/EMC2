@@ -1,6 +1,19 @@
 # Changelog
 
+## EMC2 3.4.0
+
+### Bug fixes
+
+- Fixed some maths that was wrong about the ECDF plot for SBC
+
+### New features
+
+- Finished general trends implementation (stay tuned; tutorial still on
+  the way)
+
 ## EMC2 3.3.0
+
+CRAN release: 2025-12-02
 
 ### Bug fixes
 

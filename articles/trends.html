@@ -22,7 +22,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">EMC2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">3.3.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">3.4.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -72,7 +72,7 @@
 &amp; Steven Miletić</h4>
             
       
-      <small class="dont-index">Source: <a href="https://github.com/ampl-psych/EMC2/blob/v3.3.0/vignettes/trends.Rmd" class="external-link"><code>vignettes/trends.Rmd</code></a></small>
+      <small class="dont-index">Source: <a href="https://github.com/ampl-psych/EMC2/blob/main/vignettes/trends.Rmd" class="external-link"><code>vignettes/trends.Rmd</code></a></small>
       <div class="d-none name"><code>trends.Rmd</code></div>
     </div>
 
@@ -526,9 +526,9 @@ a trend on <code>m</code>:</p>
 <span>  par_input <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="st">"t0"</span><span class="op">)</span>,</span>
 <span>  phase     <span class="op">=</span> <span class="st">"pretransform"</span></span>
 <span><span class="op">)</span></span></code></pre></div>
-<p>This example mirrors the tests: the input matrix provided to the
-kernel will contain the covariate columns (none here) followed by the
-<code>par_input</code> columns (here <code>t0</code>).</p>
+<p>The input matrix provided to the kernel will contain the covariate
+columns (none here) followed by the <code>par_input</code> columns (here
+<code>t0</code>).</p>
 <div class="section level3">
 <h3 id="apply-a-trend-only-at-a-factor-level-at">Apply a trend only at a factor level (<code>at</code>)<a class="anchor" aria-label="anchor" href="#apply-a-trend-only-at-a-factor-level-at"></a>
 </h3>
@@ -599,27 +599,29 @@ shared name once (here <code>shrd</code>) and remove duplicates.</p>
 <div class="section level3">
 <h3 id="missing-input-values-na-handling">Missing input values (NA handling)<a class="anchor" aria-label="anchor" href="#missing-input-values-na-handling"></a>
 </h3>
-<p>Trend kernels ignore rows where any input used by the kernel is
-<code>NA</code>. For those rows, the kernel contributes zero. This
-applies to both built‑in and custom kernels. In effect:</p>
-<ul>
-<li>Built‑in kernels evaluate only on “good” rows and expand results
-back; NA rows contribute 0.</li>
-<li>Custom kernels receive only the subset of non‑NA rows; any
-<code>NA</code> in their outputs is coerced to 0 before being expanded
-back.</li>
-</ul>
-<p>This behavior makes trends robust when covariates are intermittently
-missing (as exercised in tests that set some covariate entries to
-<code>NA</code>).</p>
+<p>For sequential kernels (learning rules), when a covariate value is
+<code>NA</code> on trial t, the last-known updated covariate value is
+carried over (in delta rules, this may be the <code>q0</code> value if
+no update has taken place yet). For non-sequential kernels
+(<code>lin</code>, <code>exp</code>, <code>pow</code>,
+<code>poly</code>), <code>NA</code>-values contribute 0.</p>
+<p>In custom kernels, the user needs to handle <code>NA</code> values
+(e.g., it is good practice to check for <code>ISNAN()</code> on each
+trial) themselves. EMC2 cannot know whether the last-known value should
+be carried forward, or whether the covariate should be set to 0 or some
+other value.</p>
+<!-- Trend kernels ignore rows where any input used by the kernel is `NA`. For those rows, the kernel contributes zero. This applies to both built‑in and custom kernels. In effect: -->
+<!-- - Built‑in kernels evaluate only on “good” rows and expand results back; NA rows contribute 0. -->
+<!-- - Custom kernels receive only the subset of non‑NA rows; any `NA` in their outputs is coerced to 0 before being expanded back. -->
+<!-- This behavior makes trends robust when covariates are intermittently missing (as exercised in tests that set some covariate entries to `NA`). -->
 </div>
 <div class="section level3">
 <h3 id="trialwise-evaluation-and-conditional-covariates">Trial‑wise evaluation and conditional covariates<a class="anchor" aria-label="anchor" href="#trialwise-evaluation-and-conditional-covariates"></a>
 </h3>
 <ul>
-<li>Delta‑rule kernels (<code>delta</code>, <code>delta2</code>) are
-sequential by construction; they update across trials within a
-subject.</li>
+<li>Delta‑rule kernels (<code>delta</code>, <code>delta2kernel</code>,
+<code>delta2lr</code>) are sequential by construction; they update
+across trials within a subject.</li>
 <li>Using behavioral covariates (e.g., <code>rt</code>, response
 <code>R</code>, or outputs of functions in the design) can force a
 trial‑wise evaluation path so that data generation is not conditional on
@@ -936,6 +938,12 @@ but do not actually compile or run it here.</p>
 <span>  formula <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="va">m</span> <span class="op">~</span> <span class="fl">1</span>, <span class="va">s</span> <span class="op">~</span> <span class="fl">1</span>, <span class="va">t0</span> <span class="op">~</span> <span class="fl">1</span>, <span class="va">m.a</span> <span class="op">~</span> <span class="va">lR</span><span class="op">)</span>,</span>
 <span>  model <span class="op">=</span> <span class="va">LNR</span></span>
 <span><span class="op">)</span></span></code></pre></div>
+<p>Note that, when loading an emc object from disk, the pointers to the
+custom kernels need to be re-added before the emc object can be used for
+sampling or posterior data generation, which can be done as follows:</p>
+<div class="sourceCode" id="cb49"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/load.html" class="external-link">load</a></span><span class="op">(</span><span class="st">'./emc_samples_with_custom_trend.RData'</span><span class="op">)</span></span>
+<span><span class="va">emc</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/fix_custom_kernel_pointers.html">fix_custom_kernel_pointers</a></span><span class="op">(</span><span class="va">emc</span>, <span class="va">trend_custom</span><span class="op">)</span></span></code></pre></div>
 <p>Interpretation: the base controls how the custom kernel’s output
 enters the parameter (e.g., <code>add</code> means additive). The
 <code>transforms</code> declared in <code><a href="../reference/register_trend.html">register_trend()</a></code> are
@@ -992,7 +1000,7 @@ bounds.</p>
 
 
     <footer><div class="pkgdown-footer-left">
-  <p>Developed by Niek Stevenson, Michelle Donzallaz, Andrew Heathcote.</p>
+  <p>Developed by Niek Stevenson, Michelle Donzallaz, Andrew Heathcote, Steven Miletić.</p>
 </div>
 
 <div class="pkgdown-footer-right">

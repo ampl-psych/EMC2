@@ -298,69 +298,11 @@ We can also plot what the implied prior range is of the subject-level
 parameters:
 
 ``` r
-plot(prior_LBA, selection = "alpha", N = 1e3)
+plot(prior_LBA, selection = "alpha", N = 1e3, subject = 1)
 ```
 
 ![Prior for LBA hierarchical
-model](Simulation-based-Calibration_files/figure-html/unnamed-chunk-13-1.png)![Prior
-for LBA hierarchical
-model](Simulation-based-Calibration_files/figure-html/unnamed-chunk-13-2.png)![Prior
-for LBA hierarchical
-model](Simulation-based-Calibration_files/figure-html/unnamed-chunk-13-3.png)![Prior
-for LBA hierarchical
-model](Simulation-based-Calibration_files/figure-html/unnamed-chunk-13-4.png)![Prior
-for LBA hierarchical
-model](Simulation-based-Calibration_files/figure-html/unnamed-chunk-13-5.png)![Prior
-for LBA hierarchical
-model](Simulation-based-Calibration_files/figure-html/unnamed-chunk-13-6.png)![Prior
-for LBA hierarchical
-model](Simulation-based-Calibration_files/figure-html/unnamed-chunk-13-7.png)![Prior
-for LBA hierarchical
-model](Simulation-based-Calibration_files/figure-html/unnamed-chunk-13-8.png)![Prior
-for LBA hierarchical
-model](Simulation-based-Calibration_files/figure-html/unnamed-chunk-13-9.png)![Prior
-for LBA hierarchical
-model](Simulation-based-Calibration_files/figure-html/unnamed-chunk-13-10.png)![Prior
-for LBA hierarchical
-model](Simulation-based-Calibration_files/figure-html/unnamed-chunk-13-11.png)![Prior
-for LBA hierarchical
-model](Simulation-based-Calibration_files/figure-html/unnamed-chunk-13-12.png)![Prior
-for LBA hierarchical
-model](Simulation-based-Calibration_files/figure-html/unnamed-chunk-13-13.png)![Prior
-for LBA hierarchical
-model](Simulation-based-Calibration_files/figure-html/unnamed-chunk-13-14.png)![Prior
-for LBA hierarchical
-model](Simulation-based-Calibration_files/figure-html/unnamed-chunk-13-15.png)![Prior
-for LBA hierarchical
-model](Simulation-based-Calibration_files/figure-html/unnamed-chunk-13-16.png)![Prior
-for LBA hierarchical
-model](Simulation-based-Calibration_files/figure-html/unnamed-chunk-13-17.png)![Prior
-for LBA hierarchical
-model](Simulation-based-Calibration_files/figure-html/unnamed-chunk-13-18.png)![Prior
-for LBA hierarchical
-model](Simulation-based-Calibration_files/figure-html/unnamed-chunk-13-19.png)![Prior
-for LBA hierarchical
-model](Simulation-based-Calibration_files/figure-html/unnamed-chunk-13-20.png)![Prior
-for LBA hierarchical
-model](Simulation-based-Calibration_files/figure-html/unnamed-chunk-13-21.png)![Prior
-for LBA hierarchical
-model](Simulation-based-Calibration_files/figure-html/unnamed-chunk-13-22.png)![Prior
-for LBA hierarchical
-model](Simulation-based-Calibration_files/figure-html/unnamed-chunk-13-23.png)![Prior
-for LBA hierarchical
-model](Simulation-based-Calibration_files/figure-html/unnamed-chunk-13-24.png)![Prior
-for LBA hierarchical
-model](Simulation-based-Calibration_files/figure-html/unnamed-chunk-13-25.png)![Prior
-for LBA hierarchical
-model](Simulation-based-Calibration_files/figure-html/unnamed-chunk-13-26.png)![Prior
-for LBA hierarchical
-model](Simulation-based-Calibration_files/figure-html/unnamed-chunk-13-27.png)![Prior
-for LBA hierarchical
-model](Simulation-based-Calibration_files/figure-html/unnamed-chunk-13-28.png)![Prior
-for LBA hierarchical
-model](Simulation-based-Calibration_files/figure-html/unnamed-chunk-13-29.png)![Prior
-for LBA hierarchical
-model](Simulation-based-Calibration_files/figure-html/unnamed-chunk-13-30.png)
+model](Simulation-based-Calibration_files/figure-html/unnamed-chunk-13-1.png)
 
 To actually run SBC, we can use the same function as before, now also
 specifying how many subjects we want to have in the hierarchical model

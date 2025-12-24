@@ -483,9 +483,8 @@ trend_par_input <- make_trend(
 )
 ```
 
-This example mirrors the tests: the input matrix provided to the kernel
-will contain the covariate columns (none here) followed by the
-`par_input` columns (here `t0`).
+The input matrix provided to the kernel will contain the covariate
+columns (none here) followed by the `par_input` columns (here `t0`).
 
 ### Apply a trend only at a factor level (`at`)
 
@@ -565,22 +564,22 @@ will include the shared name once (here `shrd`) and remove duplicates.
 
 ### Missing input values (NA handling)
 
-Trend kernels ignore rows where any input used by the kernel is `NA`.
-For those rows, the kernel contributes zero. This applies to both
-built‑in and custom kernels. In effect:
+For sequential kernels (learning rules), when a covariate value is `NA`
+on trial t, the last-known updated covariate value is carried over (in
+delta rules, this may be the `q0` value if no update has taken place
+yet). For non-sequential kernels (`lin`, `exp`, `pow`, `poly`),
+`NA`-values contribute 0.
 
-- Built‑in kernels evaluate only on “good” rows and expand results back;
-  NA rows contribute 0.
-- Custom kernels receive only the subset of non‑NA rows; any `NA` in
-  their outputs is coerced to 0 before being expanded back.
-
-This behavior makes trends robust when covariates are intermittently
-missing (as exercised in tests that set some covariate entries to `NA`).
+In custom kernels, the user needs to handle `NA` values (e.g., it is
+good practice to check for `ISNAN()` on each trial) themselves. EMC2
+cannot know whether the last-known value should be carried forward, or
+whether the covariate should be set to 0 or some other value.
 
 ### Trial‑wise evaluation and conditional covariates
 
-- Delta‑rule kernels (`delta`, `delta2`) are sequential by construction;
-  they update across trials within a subject.
+- Delta‑rule kernels (`delta`, `delta2kernel`, `delta2lr`) are
+  sequential by construction; they update across trials within a
+  subject.
 - Using behavioral covariates (e.g., `rt`, response `R`, or outputs of
   functions in the design) can force a trial‑wise evaluation path so
   that data generation is not conditional on the observed data, but
@@ -915,6 +914,15 @@ design_custom_trend <- design(
   formula = list(m ~ 1, s ~ 1, t0 ~ 1, m.a ~ lR),
   model = LNR
 )
+```
+
+Note that, when loading an emc object from disk, the pointers to the
+custom kernels need to be re-added before the emc object can be used for
+sampling or posterior data generation, which can be done as follows:
+
+``` r
+load('./emc_samples_with_custom_trend.RData')
+emc <- fix_custom_kernel_pointers(emc, trend_custom)
 ```
 
 Interpretation: the base controls how the custom kernel’s output enters

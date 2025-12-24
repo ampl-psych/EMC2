@@ -272,6 +272,19 @@
   : Get help information for trend kernels and bases
 - [`get_trend_pnames()`](https://ampl-psych.github.io/EMC2/reference/get_trend_pnames.md)
   : Get parameter types from trend object
+- [`apply_kernel()`](https://ampl-psych.github.io/EMC2/reference/apply_kernel.md)
+  : Apply a kernel implied in an emc object
+- [`fix_custom_kernel_pointers()`](https://ampl-psych.github.io/EMC2/reference/fix_custom_kernel_pointers.md)
+  : Reset pointers of custom C++ trend kernels to an emc object
+- [`get_custom_kernel_pointers()`](https://ampl-psych.github.io/EMC2/reference/get_custom_kernel_pointers.md)
+  : Extract pointers of custom C++ trend kernels from trend list or emc
+  object
+- [`set_custom_kernel_pointers()`](https://ampl-psych.github.io/EMC2/reference/set_custom_kernel_pointers.md)
+  : (Re-)Set pointers of custom C++ trend kernels to an emc object
+- [`get_power_spectra()`](https://ampl-psych.github.io/EMC2/reference/get_power_spectra.md)
+  : Compute Power Spectra With Optional Subject-Level Aggregation
+- [`plot_spectrum()`](https://ampl-psych.github.io/EMC2/reference/plot_spectrum.md)
+  : Plot Empirical and Posterior Predictive Power Spectra
 
 ## Latent variable modelling
 

@@ -37,9 +37,13 @@ Authors:
 
 - Andrew Heathcote
 
+- Steven Miletić
+
 Other contributors:
 
-- Steven Miletić \[contributor\]
+- Luke Strickland \[contributor\]
+
+- Frank Hezemans \[contributor\]
 
 - Raphael Hartmann \[contributor\]
 
