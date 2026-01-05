@@ -7,9 +7,9 @@ AccumulatR_model <- function(model_spec){
     transform=list(func=c(q = "pnorm", w = "pnorm", t0 = "exp",
                           p1 = "identity",p2 = "exp", p3 = "exp")),
     Ttransform = function(pars,dadm) pars,
-    bound=list(minmax=cbind(q=c(0,1), w = c(0, 1), t0=c(0.05,Inf),
+    bound=list(minmax=cbind(q=c(0,1), w = c(0, 1), t0=c(0,Inf),
                             p1=c(-Inf, Inf), p2 = c(0, Inf), p3 = c(0, Inf)),
-               exception=c(q=0,w=1,t0=0.05, p2 = 0, p3 = 0)),
+               exception=c(q=0,w=1,t0=0, p2 = 0, p3 = 0)),
     spec = model_spec
   )
   return(function() {return(model_list)})
@@ -57,11 +57,12 @@ AccumulatR_add_context <- function(dadm){
 
 AccumulatR_check_context <- function(emc){
   if(!emc[[1]]$model()$type == "AccumulatR") return(emc)
+  model_spec <- emc[[1]]$model()$spec
   for(i in 1:length(emc)){
     for(j in 1:length(emc[[i]]$data)){
       dat <- emc[[i]]$data[[j]] # Looping over chains, and subjects
       if(is.data.frame(dat)){
-        ctx <- ensure_native_ctx(attr(dat, "AccumulatR_context"))
+        ctx <- ensure_native_ctx(attr(dat, "AccumulatR_context"), model_spec$model_spec)
         context <- list(
           native_ctx = ctx$native_ctx,  # externalptr (the “real” native context)
           rel_tol    = ctx$rel_tol,

@@ -397,10 +397,9 @@ NumericVector calc_ll_AccR(NumericMatrix p_matrix,
     if (i == 0) {                            // first particle only, just to get colnames
       bound_specs = make_bound_specs(minmax,mm_names,pars,bounds);
     }
-    is_ok = c_do_bound(pars, bound_specs); // This needs to be equal to the number of original data rows
+    is_ok = c_do_bound(pars, bound_specs);
+    // This makes it equal to the number of original data rows
     is_ok = ok_accumulatR(is_ok, data);
-    int ok_length = is_ok.length();
-    int data_length = data.nrow();
     LogicalVector ok_arg = clone(is_ok); // ok length must match data rows
     // AccumulatR likelihood (context-managed; params still need AccumulatR layout)
     lls[i] = accumulatr::cpp_loglik(native_ctx,

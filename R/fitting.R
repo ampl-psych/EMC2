@@ -101,6 +101,7 @@ run_emc <- function(emc, stage, stop_criteria,
   # We need to multiply step_size by thin to make an accurate guess for good step_size.
   cur_thin <- ifelse(is.numeric(thin), thin, 1)
   while(!progress$done){
+
     emc <- reset_pm_settings(emc, stage)
     # Remove redundant samples
     if(trim){
@@ -116,6 +117,7 @@ run_emc <- function(emc, stage, stop_criteria,
     } else{
       sub_emc <- subset(emc, filter = chain_n(emc)[1,stage] - 1, stage = stage)
     }
+
     # Actual sampling
     sub_emc <- auto_mclapply(sub_emc,run_stages, stage = stage, iter= progress$step_size*max(1,cur_thin),
                              verbose=verbose,  verboseProgress = verboseProgress,
@@ -125,6 +127,8 @@ run_emc <- function(emc, stage, stop_criteria,
 
     class(sub_emc) <- "emc"
     if(cores_for_chains > 1) sub_emc <- AccumulatR_check_context(sub_emc)
+
+
     if(stage != 'preburn'){
       if(is.numeric(thin)){
         sub_emc <- subset(sub_emc, stage = c("preburn", "burn", "adapt", "sample"), thin = thin)
