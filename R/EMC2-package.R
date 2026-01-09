@@ -6,6 +6,7 @@
 #' @importFrom AccumulatR build_likelihood_context
 #' @importFrom AccumulatR ensure_native_ctx
 #' @importFrom AccumulatR nest_accumulators
+#' @importFrom AccumulatR simulate
 #' @importFrom Brobdingnag as.brob
 #' @importFrom coda acfplot
 #' @importFrom coda as.mcmc

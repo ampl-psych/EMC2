@@ -687,7 +687,6 @@ calc_ll_manager <- function(proposals, dadm, model, component = NULL, r_cores = 
       }
       constants <- attr(dadm, "constants")
       context <- attr(dadm, "AccumulatR_context")
-      # context$layout not in the right shape at all!
       lls <- calc_ll_AccR(proposals, dadm, constants = constants, designs = designs,
                      model$bound, model$transform, model$pre_transform, p_types = p_types, min_ll = log(1e-10),
                      model$trend, context)
@@ -709,8 +708,7 @@ calc_ll_manager <- function(proposals, dadm, model, component = NULL, r_cores = 
         lls <- unlist(auto_mclapply(1:r_cores,function(i) {
           calc_ll(proposals[idx==i,,drop=FALSE], dadm, constants = constants,
             designs = designs, type = model$c_name, model$bound, model$transform,
-            model$pre_transform, p_types = p_types, min_ll = log(1e-10),model$trend,
-            model$context)
+            model$pre_transform, p_types = p_types, min_ll = log(1e-10),model$trend)
           },mc.cores=r_cores))
       }
     }

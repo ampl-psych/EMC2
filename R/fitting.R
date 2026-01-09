@@ -117,6 +117,7 @@ run_emc <- function(emc, stage, stop_criteria,
     } else{
       sub_emc <- subset(emc, filter = chain_n(emc)[1,stage] - 1, stage = stage)
     }
+    sub_emc <- AccumulatR_check_context(sub_emc)
 
     # Actual sampling
     sub_emc <- auto_mclapply(sub_emc,run_stages, stage = stage, iter= progress$step_size*max(1,cur_thin),
@@ -126,7 +127,6 @@ run_emc <- function(emc, stage, stop_criteria,
                              r_cores = r_cores)
 
     class(sub_emc) <- "emc"
-    if(cores_for_chains > 1) sub_emc <- AccumulatR_check_context(sub_emc)
 
 
     if(stage != 'preburn'){

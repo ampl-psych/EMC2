@@ -10,6 +10,7 @@ AccumulatR_model <- function(model_spec){
     bound=list(minmax=cbind(q=c(0,1), w = c(0, 1), t0=c(0,Inf),
                             p1=c(-Inf, Inf), p2 = c(0, Inf), p3 = c(0, Inf)),
                exception=c(q=0,w=1,t0=0, p2 = 0, p3 = 0)),
+    rfun = function(model_spec, component, pars) AccumulatR::simulate(model_spec, pars, component = component, keep_component = TRUE),
     spec = model_spec
   )
   return(function() {return(model_list)})

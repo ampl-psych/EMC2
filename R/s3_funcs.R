@@ -991,6 +991,9 @@ get_data.emc <- function(emc) {
       design <- get_design(emc)[[i]]
       tmp <- do.call(rbind,lapply(emc[[1]]$data,function(x){
         cur <- x[[i]]
+        if(!is.null(cur$accumulator)){
+          cur <- cur[!duplicated(cur$trial),]
+        }
         if(!is.null(cur$winner) && (length(unique(cur$lR)) > 1)){
           cur <- cur[cur$winner,]
         }
@@ -999,13 +1002,17 @@ get_data.emc <- function(emc) {
         return(cur[expand,])
       }))
       row.names(tmp) <- NULL
-      tmp <- tmp[,!(colnames(tmp) %in% c("trials","lR","lM", "winner", "SlR", "RACE", names(design$Ffunctions)))]
+      tmp <- tmp[,!(colnames(tmp) %in% c("trials","lR","lM","winner", "SlR", "RACE", "trial", "accumulator", names(design$Ffunctions)))]
       dat[[i]] <- tmp
     }
     names(dat) <- get_joint_names(emc)
   } else{
     design <- get_design(emc)[[1]]
     dat <- do.call(rbind,lapply(emc[[1]]$data,function(x){
+      if(!is.null(x$accumulator)){
+        x <- x[!duplicated(x$trial),]
+      }
+
       if(!is.null(x$winner) && (length(unique(x$lR)) > 1)){
         # Only expand winner for race models
         x <- x[x$winner,]
@@ -1016,7 +1023,7 @@ get_data.emc <- function(emc) {
       return(x[expand,])
     }))
     row.names(dat) <- NULL
-    dat <- dat[,!(colnames(dat) %in% c("trials","lR","lM","winner", "SlR", "RACE", names(design$Ffunctions)))]
+    dat <- dat[,!(colnames(dat) %in% c("trials","lR","lM","winner", "SlR", "RACE", "trial", "accumulator", names(design$Ffunctions)))]
   }
   return(dat)
 }

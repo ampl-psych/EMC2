@@ -344,13 +344,9 @@ profile_plot <- function(data, design, p_vector, range = .5, layout = NA,
                          ...)
 
 {
-  oldpar <- par(no.readonly = TRUE) # code line i
-  on.exit(par(oldpar)) # code line i + 1
+  oldpar <- par(no.readonly = TRUE)
+  on.exit(par(oldpar))
   dots <- list(...)
-  lfun <- function(i,x,p_vector,pname,dadm) {
-    p_vector[pname] <- x[i]
-    calc_ll_R(p_vector, attr(dadm, "model")(), dadm)
-  }
   if(!identical(names(p_min), names(p_max))) stop("p_min and p_max should be specified for the same parameters")
   if(!is.null(names(p_min)) & length(p_min) == length(use_par)) names(p_min) <- use_par
   if(!is.null(names(p_max)) & length(p_max) == length(use_par)) names(p_max) <- use_par
@@ -364,8 +360,10 @@ profile_plot <- function(data, design, p_vector, range = .5, layout = NA,
   } else{
     dadm <- dots$dadm
   }
-  out <- data.frame(true = rep(NA, length(use_par)), max = rep(NA, length(use_par)), miss = rep(NA, length(use_par)))
-  rownames(out) <- use_par
+
+  p_vector <- p_vector[names(sampled_pars(design))]
+  pars <- data.frame()
+  idx <- c()
   for(p in 1:length(p_vector)){
     cur_name <- names(p_vector)[p]
     if(cur_name %in% use_par){
@@ -385,10 +383,28 @@ profile_plot <- function(data, design, p_vector, range = .5, layout = NA,
       x <- seq(pmin_cur,pmax_cur,length.out=n_point)
       x <- c(x, cur_par)
       x <- unique(sort(x))
-      ll <- unlist(mclapply(1:length(x),lfun,dadm=dadm,x=x,p_vector=p_vector,pname=cur_name,mc.cores = n_cores))
-      do.call(plot, c(list(x,ll), fix_dots_plot(add_defaults(dots, type="l",xlab=cur_name,ylab="LL"))))
-      do.call(abline, c(list(v=cur_par), fix_dots_plot(add_defaults(true_args, lty = 2))))
+      idx <- c(idx, rep(cur_name, length(x)))
+      par_in <- t(replicate(length(x), p_vector[names(p_vector) != cur_name]))
+      par_in <- cbind(x, par_in)
+      colnames(par_in)[1] = cur_name
+      pars <- rbind(pars, par_in[,names(p_vector)])
+    }
+  }
+  pars <- as.matrix(pars)
+  dadm <- dm_list(dadm)[[1]]
+
+  lls <- calc_ll_manager(pars, dadm, design$model, component = NULL, r_cores = n_cores)
+  # Now the plot
+  out <- data.frame(true = rep(NA, length(use_par)), max = rep(NA, length(use_par)), miss = rep(NA, length(use_par)))
+  rownames(out) <- use_par
+  for(p in 1:length(p_vector)){
+    cur_name <- names(p_vector)[p]
+    if(cur_name %in% use_par){
+      ll <- lls[idx == cur_name]
+      x <- pars[idx == cur_name, cur_name]
       out[cur_name,] <- c(p_vector[cur_name], x[which.max(ll)], p_vector[cur_name] - x[which.max(ll)])
+      do.call(plot, c(list(x,ll), fix_dots_plot(add_defaults(dots, type="l",xlab=cur_name,ylab="LL"))))
+      do.call(abline, c(list(v=p_vector[p]), fix_dots_plot(add_defaults(true_args, lty = 2))))
     }
   }
   return(round(out, 3))

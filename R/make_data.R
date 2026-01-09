@@ -271,15 +271,28 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
     if (!is.null(staircase)) {
       attr(data, "staircase") <- staircase
     }
-    if (any(names(data)=="RACE")) {
-      Rrt <- RACE_rfun(data, pars, model)
-    } else Rrt <- model()$rfun(data,pars)
-    dropNames <- c("lR","lM")
-    if (!return_Ffunctions && !is.null(design$Ffunctions))
-      dropNames <- c(dropNames,names(design$Ffunctions))
-    if(!is.null(data$lR)) data <- data[data$lR == levels(data$lR)[1],]
-    data <- data[,!(names(data) %in% dropNames)]
-    for (i in dimnames(Rrt)[[2]]) data[[i]] <- Rrt[,i]
+    if(model()$type == "AccumulatR"){
+      model_list <- model()
+      data <- data[!duplicated(data$trial),]
+      dropNames <- c("accumulator")
+      if (!return_Ffunctions && !is.null(design$Ffunctions))
+        dropNames <- c(dropNames,names(design$Ffunctions))
+      data <- data[,!(names(data) %in% dropNames)]
+      res <- model_list$rfun(model_list$spec, data$component, pars)
+      res$component <- data$component
+      for (i in dimnames(res)[[2]]) data[[i]] <- res[,i]
+    } else{
+      if (any(names(data)=="RACE")) {
+        Rrt <- RACE_rfun(data, pars, model)
+      } else Rrt <- model()$rfun(data,pars)
+      dropNames <- c("lR","lM")
+      if (!return_Ffunctions && !is.null(design$Ffunctions))
+        dropNames <- c(dropNames,names(design$Ffunctions))
+      if(!is.null(data$lR)) data <- data[data$lR == levels(data$lR)[1],]
+      data <- data[,!(names(data) %in% dropNames)]
+      for (i in dimnames(Rrt)[[2]]) data[[i]] <- Rrt[,i]
+    }
+
   }
   attr(data,"p_vector") <- parameters;
   if(!is.null(post_functions)){
