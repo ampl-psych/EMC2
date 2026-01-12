@@ -32,27 +32,6 @@
 - [`get_design()`](https://ampl-psych.github.io/EMC2/reference/get_design.md)
   : Get Design
 
-## fMRI
-
-- [`reshape_events()`](https://ampl-psych.github.io/EMC2/reference/reshape_events.md)
-  : Reshape events data for fMRI analysis
-- [`convolve_design_matrix()`](https://ampl-psych.github.io/EMC2/reference/convolve_design_matrix.md)
-  : Convolve Events with HRF to Construct Design Matrices
-- [`split_timeseries()`](https://ampl-psych.github.io/EMC2/reference/split_timeseries.md)
-  : Split fMRI Timeseries Data by ROI Columns
-- [`high_pass_filter()`](https://ampl-psych.github.io/EMC2/reference/high_pass_filter.md)
-  : Apply High-Pass Filtering to fMRI Data
-- [`design_fmri()`](https://ampl-psych.github.io/EMC2/reference/design_fmri.md)
-  : Create fMRI Design for EMC2 Sampling
-- [`MRI()`](https://ampl-psych.github.io/EMC2/reference/MRI.md) : GLM
-  model for fMRI data
-- [`MRI_AR1()`](https://ampl-psych.github.io/EMC2/reference/MRI_AR1.md)
-  : Create an AR(1) GLM model for fMRI data
-- [`plot_design_fmri()`](https://ampl-psych.github.io/EMC2/reference/plot_design_fmri.md)
-  : Plot fMRI Design Matrix
-- [`plot_fmri()`](https://ampl-psych.github.io/EMC2/reference/plot_fmri.md)
-  : Plot fMRI peri-stimulus time courses
-
 ## Latent Variable Modelling
 
 - [`align_loadings()`](https://ampl-psych.github.io/EMC2/reference/align_loadings.md)
@@ -183,10 +162,6 @@
   : Plot conditional accuracy functions
 - [`plot_delta()`](https://ampl-psych.github.io/EMC2/reference/plot_delta.md)
   : Plot Difference of Cumulative Distribution Functions
-- [`plot_ss_if()`](https://ampl-psych.github.io/EMC2/reference/plot_ss_if.md)
-  : Plot Inhibition Functions
-- [`plot_ss_srrt()`](https://ampl-psych.github.io/EMC2/reference/plot_ss_srrt.md)
-  : Plot Mean SRRT
 - [`plot_trend()`](https://ampl-psych.github.io/EMC2/reference/plot_trend.md)
   : Plots trends over time
 - [`plot_design()`](https://ampl-psych.github.io/EMC2/reference/plot_design.md)

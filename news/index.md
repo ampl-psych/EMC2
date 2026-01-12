@@ -1,5 +1,15 @@
 # Changelog
 
+## EMC2 3.4.1
+
+### Bug fixes
+
+- Small makevars corrections for new CRAN checks
+
+### New features
+
+- Trend parameters are now also returned with map = TRUE
+
 ## EMC2 3.4.0
 
 ### Bug fixes

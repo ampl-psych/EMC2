@@ -38,14 +38,14 @@
 Source:
 [`DESCRIPTION`](https://github.com/ampl-psych/EMC2/blob/main/DESCRIPTION)
 
-Stevenson N, Donzallaz M, Heathcote A, Miletić S (2025). *EMC2: Bayesian
+Stevenson N, Donzallaz M, Heathcote A, Miletić S (2026). *EMC2: Bayesian
 Hierarchical Analysis of Cognitive Models of Choice*. R package version
-3.4.0, <https://ampl-psych.github.io/EMC2/>.
+3.4.1, <https://ampl-psych.github.io/EMC2/>.
 
     @Manual{,
       title = {EMC2: Bayesian Hierarchical Analysis of Cognitive Models of Choice},
       author = {Niek Stevenson and Michelle Donzallaz and Andrew Heathcote and Steven Miletić},
-      year = {2025},
-      note = {R package version 3.4.0},
+      year = {2026},
+      note = {R package version 3.4.1},
       url = {https://ampl-psych.github.io/EMC2/},
     }
