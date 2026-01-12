@@ -31,52 +31,54 @@
 #' @param legendpos Character vector controlling the positions of the legends
 #' @param posterior_args Optional list of graphical parameters for posterior lines/ribbons.
 #' @param prior_args Optional list of graphical parameters for prior lines/ribbons.
+#' @param success_R_fun A function that returns a logical vector indicating which rows of the data frame correspond to successful responses.
 #' @param ... Other graphical parameters for the real data lines.
 #'
 #' @return Returns NULL invisibly
 #' @export
 plot_ss_if <- function(input,
-                    post_predict = NULL,
-                    prior_predict = NULL,
-                    probs = seq(0,1, length.out=5),
-                    factors = NULL,
-                    within_plot = NULL,
-                    use_global_quantiles = FALSE,
-                    subject = NULL,
-                    quants = c(0.025, 0.975), functions = NULL,
-                    n_cores = 1,
-                    n_post = 50,
-                    layout = NA,
-                    to_plot = c('data','posterior','prior')[1:2],
-                    use_lim = c('data','posterior','prior')[1:2],
-                    legendpos = c('topleft', 'bottomright'),
-                    posterior_args = list(),
-                    prior_args = list(),
-                    ...) {
-
+                       post_predict = NULL,
+                       prior_predict = NULL,
+                       probs = seq(0, 1, length.out = 5),
+                       factors = NULL,
+                       within_plot = NULL,
+                       use_global_quantiles = FALSE,
+                       subject = NULL,
+                       quants = c(0.025, 0.975), functions = NULL,
+                       n_cores = 1,
+                       n_post = 50,
+                       layout = NA,
+                       to_plot = c("data", "posterior", "prior")[1:2],
+                       use_lim = c("data", "posterior", "prior")[1:2],
+                       legendpos = c("topleft", "bottomright"),
+                       posterior_args = list(),
+                       prior_args = list(),
+                       success_R_fun = function(d) !is.na(d$R),
+                       ...) {
   # 1) prep_data_plot
   check <- prep_data_plot(input, post_predict, prior_predict, to_plot, use_lim,
-                          factors, within_plot, subject, n_cores, n_post, remove_na = FALSE, functions)
+    factors, within_plot, subject, n_cores, n_post,
+    remove_na = FALSE, functions
+  )
   data_sources <- check$datasets
   sources <- check$sources
 
   # Basic definitions
-  dots <- add_defaults(list(...), col = c("black",  "#A9A9A9", "#666666"))
-  posterior_args <- add_defaults(posterior_args, col = c("darkgreen",  "#0000FF", "#008B8B"))
+  dots <- add_defaults(list(...), col = c("black", "#A9A9A9", "#666666"))
+  posterior_args <- add_defaults(posterior_args, col = c("darkgreen", "#0000FF", "#008B8B"))
   prior_args <- add_defaults(prior_args, col = c("red", "#800080", "#CC00FF"))
 
   unique_group_keys <- levels(factor(data_sources[[1]]$group_key))
 
   if (is.null(within_plot)) {
-    within_levels <- "All"  # fallback
+    within_levels <- "All" # fallback
   } else {
     within_levels <- levels(factor(data_sources[[1]][[within_plot]]))
-
   }
   line_types <- seq_along(within_levels)
 
   # Single-p_resp results or multi-postn quantile results are stored in these:
-  p_resp_list        <- list() # single
+  p_resp_list <- list() # single
   p_resp_quants_list <- list() # multi
 
   # keep track of a global maximum in the vertical dimension
@@ -91,9 +93,9 @@ plot_ss_if <- function(input,
   # 2) FIRST BIG LOOP: compute p_resp or p_resp-quantiles for each dataset
   # -------------------------------------------------------------------
   for (k in seq_along(data_sources)) {
-    df   <- data_sources[[k]]
-    styp <- sources[k]       # "data","posterior","prior"
-    sname <- names(sources)[k]  # the name of this dataset in the list
+    df <- data_sources[[k]]
+    styp <- sources[k] # "data","posterior","prior"
+    sname <- names(sources)[k] # the name of this dataset in the list
 
     if (is.null(df) || !nrow(df)) {
       # skip empty
@@ -104,17 +106,17 @@ plot_ss_if <- function(input,
     splitted <- split(df, df$group_key)
 
     # Check if stop-signal dataset
-    if(is.null(df$SSD)){
+    if (is.null(df$SSD)) {
       stop("No SSD column in data.")
     }
 
     # set type of SSD binning method
-    if(use_global_quantiles){
+    if (use_global_quantiles) {
       quantile_fun <- get_response_probability_by_global_ssd_quantile
       global_ssd_pool <- df$SSD[is.finite(df$SSD)]
       global_ssd_breaks <- quantile(global_ssd_pool, probs = probs, na.rm = TRUE)
       dots$global_ssd_breaks <- global_ssd_breaks
-      if(any(duplicated(global_ssd_breaks))){
+      if (any(duplicated(global_ssd_breaks))) {
         stop("Duplicate quantile values detected. Please use fewer bins.")
       }
     } else {
@@ -128,7 +130,8 @@ plot_ss_if <- function(input,
         #  further split by postn
         postn_splits <- split(sub_grp, sub_grp$postn)
         lapply(postn_splits, quantile_fun,
-               group_factor = within_plot, probs = probs, dots = dots)
+          group_factor = within_plot, probs = probs, dots = dots, success_R_fun = success_R_fun
+        )
       })
 
       # derive p_resp_quants_list from p_resp_list
@@ -137,12 +140,12 @@ plot_ss_if <- function(input,
         out <- list()
         for (lev in within_levels) {
           # gather all x and y columns across draws
-          x_mat <- do.call(cbind, lapply(postn_list, function(lst) lst[[lev]][,"x_plot"]))
-          y_mat <- do.call(cbind, lapply(postn_list, function(lst) lst[[lev]][,"p_response"]))
+          x_mat <- do.call(cbind, lapply(postn_list, function(lst) lst[[lev]][, "x_plot"]))
+          y_mat <- do.call(cbind, lapply(postn_list, function(lst) lst[[lev]][, "p_response"]))
 
           # Combine them in a matrix with 4 rows => y_lower, y_upper, y_median, x_plot
           qy <- apply(y_mat, 1, quantile, probs = sort(c(quants, 0.5)), na.rm = TRUE)
-          xm <- apply(x_mat, 1, unique, na.rm=TRUE)
+          xm <- apply(x_mat, 1, unique, na.rm = TRUE)
           out[[lev]] <- rbind(qy, xm)
         }
         out
@@ -154,28 +157,31 @@ plot_ss_if <- function(input,
         possible_vals <- unlist(lapply(p_resp_quants_list[[sname]], function(group_val) {
           # group_val => list( factor_level => matrix(4 x length-of-probs) )
           sapply(group_val, function(mat4) {
-            if (is.null(mat4)) return(0)
-            max(mat4[nrow(mat4), ], na.rm=TRUE)
+            if (is.null(mat4)) {
+              return(0)
+            }
+            max(mat4[nrow(mat4), ], na.rm = TRUE)
           })
         }))
-        x_max <- max(x_max, possible_vals, na.rm=TRUE)
+        x_max <- max(x_max, possible_vals, na.rm = TRUE)
 
         # y-limits (min/max across y_lower and y_upper)
         y_vals <- unlist(lapply(p_resp_quants_list[[sname]], function(group_val) {
           lapply(group_val, function(mat4) {
-            if (is.null(mat4)) return(NULL)
-            range(c(mat4[1, ], mat4[3, ]), na.rm = TRUE)  # y_lower and y_upper
+            if (is.null(mat4)) {
+              return(NULL)
+            }
+            range(c(mat4[1, ], mat4[3, ]), na.rm = TRUE) # y_lower and y_upper
           })
         }))
         y_min <- max(y_min, y_vals, na.rm = TRUE)
         y_max <- max(y_max, y_vals, na.rm = TRUE)
       }
-
     } else {
-
       # single dataset => p_resp_list[[sname]] => group_key => get_def_cdf => named list by factor level
       p_resp_list[[sname]] <- lapply(splitted, quantile_fun,
-                                     group_factor = within_plot, probs = probs, dots = dots)
+        group_factor = within_plot, probs = probs, dots = dots, success_R_fun = success_R_fun
+      )
 
       # If this dataset is used for y-limit, find max
       if (styp %in% use_lim) {
@@ -208,23 +214,23 @@ plot_ss_if <- function(input,
   # -------------------------------------------------------------------
   # 3) SECOND BIG LOOP: Plot one panel per group_key
   # -------------------------------------------------------------------
-  if(!is.null(layout)){
+  if (!is.null(layout)) {
     oldpar <- par(no.readonly = TRUE)
     on.exit(par(oldpar))
   }
   # layout
   if (any(is.na(layout))) {
-    par(mfrow = coda_setmfrow(Nchains=1, Nparms=length(unique_group_keys), nplots=1))
+    par(mfrow = coda_setmfrow(Nchains = 1, Nparms = length(unique_group_keys), nplots = 1))
   } else {
     par(mfrow = layout)
   }
 
   # define a global y-limit (with a bit of headroom)
   if (!is.finite(y_max) || y_max <= 0) y_max <- 1
-  ylim <- c(0, y_max*1.5)
+  ylim <- c(0, y_max * 1.5)
 
   if (!is.finite(x_min) || !is.finite(x_max) || x_min >= x_max) {
-    xlim <- NULL  # let R handle it if bad limits
+    xlim <- NULL # let R handle it if bad limits
   } else {
     x_buffer <- 0.05 * (x_max - x_min)
     xlim <- c(x_min - x_buffer, x_max + x_buffer)
@@ -236,23 +242,25 @@ plot_ss_if <- function(input,
     tmp_prior_args <- prior_args
 
     # blank plot
-    plot_args <- add_defaults(dots, ylim=ylim, xlim=xlim,
-                              main=group_key, xlab="", ylab="")
+    plot_args <- add_defaults(dots,
+      ylim = ylim, xlim = xlim,
+      main = group_key, xlab = "", ylab = ""
+    )
     plot_args <- fix_dots_plot(plot_args)
-    plot_args$axes <- FALSE  # prevent auto-drawing axes
+    plot_args$axes <- FALSE # prevent auto-drawing axes
     do.call(plot, c(list(NA), plot_args))
     # Draw y-axis manually (left side)
     axis(2)
 
-    mtext("Pr(R)", side=2, line=3)
+    mtext("Pr(R)", side = 2, line = 3)
 
     # draw lines for each dataset
-    legend_map <- character(0)  # to store source name -> color
+    legend_map <- character(0) # to store source name -> color
     lwd_map <- numeric()
     for (k in seq_along(data_sources)) {
-      styp  <- sources[k]       # "data","posterior","prior"
+      styp <- sources[k] # "data","posterior","prior"
       sname <- names(sources)[k]
-      if(styp == "data") {
+      if (styp == "data") {
         src_args <- tmp_dots
         tmp_dots$col <- tmp_dots$col[-1]
       } else if (styp == "posterior") {
@@ -283,11 +291,13 @@ plot_ss_if <- function(input,
               do.call(lines, c(list(x = df$x_plot, y = df$p_response), lines_args))
               do.call(points, c(list(x = df$x_plot, y = df$p_response), lines_args))
 
-              if(!any(names(data_sources)=="posterior")){
+              if (!any(names(data_sources) == "posterior")) {
                 # Add standard errors
-                arrows(x0 = df$x_plot, y0 = df$p_response - df$se,
-                       x1 = df$x_plot, y1 = df$p_response + df$se,
-                       angle = 90, code = 3, length = 0.05)
+                arrows(
+                  x0 = df$x_plot, y0 = df$p_response - df$se,
+                  x1 = df$x_plot, y1 = df$p_response + df$se,
+                  angle = 90, code = 3, length = 0.05
+                )
               }
 
 
@@ -303,29 +313,34 @@ plot_ss_if <- function(input,
             if (!is.null(tick_data) && "x_plot" %in% names(tick_data)) {
               if (use_global_quantiles) {
                 # Global bins → label with SSD values
-                quantile_labels <- unlist(lapply(strsplit(tick_data$ssd,","),
-                                          function(x) paste0(x[1],",\n",x[2])))
+                quantile_labels <- unlist(lapply(
+                  strsplit(tick_data$ssd, ","),
+                  function(x) paste0(x[1], ",\n", x[2])
+                ))
                 axis(1,
-                     at = tick_data$x_plot,
-                     labels = quantile_labels,
-                     cex.axis = 0.7,line = )
+                  at = tick_data$x_plot,
+                  labels = quantile_labels,
+                  cex.axis = 0.7, line =
+                  )
                 title(xlab = "Global SSD Bin (sec.)", line = 2)
-
               } else {
                 # Subject-specific quantiles → label with percentages
                 up <- round(tick_data$x_plot * 100)
-                quantile_labels <- unlist(lapply(strsplit(
-                  paste0("(",paste(c(0,up[-length(up)]),up,sep=","),"]"),","),
-                                          function(x) paste0(x[1],",\n",x[2])))
+                quantile_labels <- unlist(lapply(
+                  strsplit(
+                    paste0("(", paste(c(0, up[-length(up)]), up, sep = ","), "]"), ","
+                  ),
+                  function(x) paste0(x[1], ",\n", x[2])
+                ))
                 axis(1,
-                     at = tick_data$x_plot,
-                     labels = quantile_labels,
-                     cex.axis = 0.7)
+                  at = tick_data$x_plot,
+                  labels = quantile_labels,
+                  cex.axis = 0.7
+                )
                 title(xlab = "Participant SSD Bin (%)", line = 2)
               }
             }
           }
-
         } else {
           # multi draws => p_resp_quants_list
           if (!is.null(p_resp_quants_list[[sname]])) {
@@ -336,17 +351,17 @@ plot_ss_if <- function(input,
                 mat4 <- p_resp_quants_for_group[[lev]]
                 if (!is.null(mat4)) {
                   # mat4 => e.g. 4 rows x (length(probs)) columns
-                  y_lower <- mat4[1,]
-                  y_med   <- mat4[2,]
-                  y_upper <- mat4[3,]
-                  x_plot<- mat4[4,]
+                  y_lower <- mat4[1, ]
+                  y_med <- mat4[2, ]
+                  y_upper <- mat4[3, ]
+                  x_plot <- mat4[4, ]
 
-                  lines_args <- add_defaults(src_args, lty=line_types[ilev])
+                  lines_args <- add_defaults(src_args, lty = line_types[ilev])
                   lines_args <- fix_dots_plot(lines_args)
-                  do.call(lines, c(list(x=x_plot, y=y_med), lines_args))
+                  do.call(lines, c(list(x = x_plot, y = y_med), lines_args))
 
                   # polygon for the ribbon
-                  adj_color <- do.call(adjustcolor, fix_dots(add_defaults(src_args, alpha.f=0.2), adjustcolor))
+                  adj_color <- do.call(adjustcolor, fix_dots(add_defaults(src_args, alpha.f = 0.2), adjustcolor))
                   poly_args <- src_args
                   poly_args$col <- adj_color
                   poly_args <- fix_dots_plot(poly_args)
@@ -356,7 +371,7 @@ plot_ss_if <- function(input,
                     border = NA
                   ), poly_args))
                 }
-                ilev <- ilev+1
+                ilev <- ilev + 1
               }
             }
           }
@@ -366,16 +381,20 @@ plot_ss_if <- function(input,
 
     # Factor-level legend, only if more than one defective level
     if (!is.na(legendpos[1]) && !(length(within_levels) == 1 && within_levels == "All")) {
-      legend(legendpos[1], legend=within_levels, lty=line_types, col="black",
-             title=within_plot, bty="n")
+      legend(legendpos[1],
+        legend = within_levels, lty = line_types, col = "black",
+        title = within_plot, bty = "n"
+      )
     }
 
 
     # If multiple data sources, show source legend
     if (length(data_sources) > 1) {
-      if(!is.na(legendpos[2])){
-        legend(legendpos[2], legend=names(legend_map), lty=1, col=legend_map,
-               title="Source", bty="n", lwd = lwd_map)
+      if (!is.na(legendpos[2])) {
+        legend(legendpos[2],
+          legend = names(legend_map), lty = 1, col = legend_map,
+          title = "Source", bty = "n", lwd = lwd_map
+        )
       }
     }
   } # end for each group_key
@@ -383,7 +402,7 @@ plot_ss_if <- function(input,
   invisible(NULL)
 }
 
-get_response_probability_by_individual_ssd_quantile <- function(x, group_factor, probs, dots) {
+get_response_probability_by_individual_ssd_quantile <- function(x, group_factor, probs, dots, success_R_fun) {
   # Filter: only rows with finite SSD and subject info
   x <- x[is.finite(x[["SSD"]]) & !is.na(x[["subjects"]]), ]
   subjects <- unique(x$subjects)
@@ -409,7 +428,10 @@ get_response_probability_by_individual_ssd_quantile <- function(x, group_factor,
 
       df$ssd_bin <- cut(df$SSD, breaks = ssd_quants, include.lowest = TRUE, right = TRUE)
 
-      bin_stats <- aggregate(I(!is.na(R)) ~ ssd_bin, data = df, FUN = function(v) {
+
+      df$response_indicator <- success_R_fun(df)
+
+      bin_stats <- aggregate(response_indicator ~ ssd_bin, data = df, FUN = function(v) {
         n <- sum(!is.na(v))
         mean_p <- mean(v, na.rm = TRUE)
         se_p <- sqrt(mean_p * (1 - mean_p) / n)
@@ -428,16 +450,18 @@ get_response_probability_by_individual_ssd_quantile <- function(x, group_factor,
       return(bin_stats)
     })
 
-    if(length(subj_stats) > 1){
+    if (length(subj_stats) > 1) {
       all_stats <- do.call(rbind, subj_stats)
-      summary_stats <- aggregate(p_response ~ x_plot, data = all_stats,
-                                 FUN = function(v) {
-                                   n <- length(v)
-                                   mean_p <- mean(v, na.rm = TRUE)
-                                   se_p <- sd(v, na.rm = TRUE)/sqrt(n)
-                                   c(mean = mean_p, se = se_p, n = n)
-                                 },
-                                 na.action = na.pass)
+      summary_stats <- aggregate(p_response ~ x_plot,
+        data = all_stats,
+        FUN = function(v) {
+          n <- length(v)
+          mean_p <- mean(v, na.rm = TRUE)
+          se_p <- sd(v, na.rm = TRUE) / sqrt(n)
+          c(mean = mean_p, se = se_p, n = n)
+        },
+        na.action = na.pass
+      )
       summary_stats <- do.call(data.frame, summary_stats)
 
       summary_stats <- summary_stats[order(summary_stats$x_plot), ]
@@ -447,7 +471,6 @@ get_response_probability_by_individual_ssd_quantile <- function(x, group_factor,
     }
 
     return(summary_stats)
-
   }
 
   # Loop over group levels (or just "All")
@@ -464,7 +487,7 @@ get_response_probability_by_individual_ssd_quantile <- function(x, group_factor,
   return(out)
 }
 
-get_response_probability_by_global_ssd_quantile <- function(x, group_factor, probs, dots) {
+get_response_probability_by_global_ssd_quantile <- function(x, group_factor, probs, dots, success_R_fun) {
   # Check global SSD breaks
   if (!"global_ssd_breaks" %in% names(dots)) {
     stop("Missing 'global_ssd_breaks' in dots")
@@ -494,7 +517,10 @@ get_response_probability_by_global_ssd_quantile <- function(x, group_factor, pro
 
       df$ssd_bin <- cut(df$SSD, breaks = global_ssd_breaks, include.lowest = TRUE, right = TRUE)
 
-      bin_stats <- aggregate(I(!is.na(R)) ~ ssd_bin, data = df, FUN = function(v) {
+
+      df$response_indicator <- success_R_fun(df)
+
+      bin_stats <- aggregate(response_indicator ~ ssd_bin, data = df, FUN = function(v) {
         n <- sum(!is.na(v))
         mean_p <- mean(v, na.rm = TRUE)
         se_p <- sqrt(mean_p * (1 - mean_p) / n)
@@ -512,16 +538,18 @@ get_response_probability_by_global_ssd_quantile <- function(x, group_factor, pro
       return(bin_stats)
     })
 
-    if(length(subj_stats) > 1){
+    if (length(subj_stats) > 1) {
       all_stats <- do.call(rbind, subj_stats)
-      summary_stats <- aggregate(p_response ~ ssd, data = all_stats,
-                                 FUN = function(v) {
-                                   n <- sum(!is.na(v))
-                                   mean_p <- mean(v, na.rm = TRUE)
-                                   se_p <- sqrt(mean_p * (1 - mean_p) / n)
-                                   c(mean = mean_p, se = se_p, n = n)
-                                 },
-                                 na.action = na.pass)
+      summary_stats <- aggregate(p_response ~ ssd,
+        data = all_stats,
+        FUN = function(v) {
+          n <- sum(!is.na(v))
+          mean_p <- mean(v, na.rm = TRUE)
+          se_p <- sqrt(mean_p * (1 - mean_p) / n)
+          c(mean = mean_p, se = se_p, n = n)
+        },
+        na.action = na.pass
+      )
       summary_stats <- do.call(data.frame, summary_stats)
 
       # Add x_plot by matching back from all_stats
@@ -587,47 +615,48 @@ get_response_probability_by_global_ssd_quantile <- function(x, group_factor, pro
 #' @return Returns NULL invisibly
 #' @export
 plot_ss_srrt <- function(input,
-                      post_predict = NULL,
-                      prior_predict = NULL,
-                      probs = seq(0,1, length.out=5),
-                      factors = NULL,
-                      within_plot = NULL,
-                      use_global_quantiles = TRUE,
-                      subject = NULL,
-                      quants = c(0.025, 0.975), functions = NULL,
-                      n_cores = 1,
-                      n_post = 50,
-                      layout = NA,
-                      to_plot = c('data','posterior','prior')[1:2],
-                      use_lim = c('data','posterior','prior')[1:2],
-                      legendpos = c('topleft', 'bottomright'),
-                      posterior_args = list(),
-                      prior_args = list(),
-                      ...) {
-
+                         post_predict = NULL,
+                         prior_predict = NULL,
+                         probs = seq(0, 1, length.out = 5),
+                         factors = NULL,
+                         within_plot = NULL,
+                         use_global_quantiles = TRUE,
+                         subject = NULL,
+                         quants = c(0.025, 0.975), functions = NULL,
+                         n_cores = 1,
+                         n_post = 50,
+                         layout = NA,
+                         to_plot = c("data", "posterior", "prior")[1:2],
+                         use_lim = c("data", "posterior", "prior")[1:2],
+                         legendpos = c("topleft", "bottomright"),
+                         posterior_args = list(),
+                         prior_args = list(),
+                         success_R_fun = function(d) !is.na(d$R),
+                         ...) {
   # 1) prep_data_plot
   check <- prep_data_plot(input, post_predict, prior_predict, to_plot, use_lim,
-                          factors, within_plot, subject, n_cores, n_post, remove_na = FALSE, functions)
+    factors, within_plot, subject, n_cores, n_post,
+    remove_na = FALSE, functions
+  )
   data_sources <- check$datasets
   sources <- check$sources
 
   # Basic definitions
-  dots <- add_defaults(list(...), col = c("black",  "#A9A9A9", "#666666"))
-  posterior_args <- add_defaults(posterior_args, col = c("darkgreen",  "#0000FF", "#008B8B"))
+  dots <- add_defaults(list(...), col = c("black", "#A9A9A9", "#666666"))
+  posterior_args <- add_defaults(posterior_args, col = c("darkgreen", "#0000FF", "#008B8B"))
   prior_args <- add_defaults(prior_args, col = c("red", "#800080", "#CC00FF"))
 
   unique_group_keys <- levels(factor(data_sources[[1]]$group_key))
 
   if (is.null(within_plot)) {
-    within_levels <- "All"  # fallback
+    within_levels <- "All" # fallback
   } else {
     within_levels <- levels(factor(data_sources[[1]][[within_plot]]))
-
   }
   line_types <- seq_along(within_levels)
 
   # store single-p_resp results or multi-postn quantile results in these:
-  p_resp_list        <- list() # single
+  p_resp_list <- list() # single
   p_resp_quants_list <- list() # multi
 
   # keep track of a global maximum in the vertical dimension
@@ -642,9 +671,9 @@ plot_ss_srrt <- function(input,
   # 2) FIRST BIG LOOP: compute p_resp or p_resp-quantiles for each dataset
   # -------------------------------------------------------------------
   for (k in seq_along(data_sources)) {
-    df   <- data_sources[[k]]
-    styp <- sources[k]       # "data","posterior","prior"
-    sname <- names(sources)[k]  # the name of this dataset in the list
+    df <- data_sources[[k]]
+    styp <- sources[k] # "data","posterior","prior"
+    sname <- names(sources)[k] # the name of this dataset in the list
 
     if (is.null(df) || !nrow(df)) {
       # skip empty
@@ -655,12 +684,12 @@ plot_ss_srrt <- function(input,
     splitted <- split(df, df$group_key)
 
     # Check if it is a stop-signal dataset
-    if(is.null(df$SSD)){
+    if (is.null(df$SSD)) {
       stop("No SSD column in data.")
     }
 
     # type of SSD binning method
-    if(use_global_quantiles){
+    if (use_global_quantiles) {
       quantile_fun <- get_srrt_by_global_ssd_quantile
       global_ssd_pool <- df$SSD[is.finite(df$SSD)]
       global_ssd_breaks <- quantile(global_ssd_pool, probs = probs, na.rm = TRUE)
@@ -677,7 +706,8 @@ plot_ss_srrt <- function(input,
         # further split by postn
         postn_splits <- split(sub_grp, sub_grp$postn)
         lapply(postn_splits, quantile_fun,
-               group_factor = within_plot, probs = probs, dots = dots)
+          group_factor = within_plot, probs = probs, dots = dots, success_R_fun = success_R_fun
+        )
       })
 
       # derive p_resp_quants_list from p_resp_list
@@ -686,11 +716,11 @@ plot_ss_srrt <- function(input,
         out <- list()
         for (lev in within_levels) {
           # gather all x and y columns across draws
-          x_mat <- do.call(cbind, lapply(postn_list, function(lst) lst[[lev]][,"x_plot"]))
-          y_mat <- do.call(cbind, lapply(postn_list, function(lst) lst[[lev]][,"srrt"]))
+          x_mat <- do.call(cbind, lapply(postn_list, function(lst) lst[[lev]][, "x_plot"]))
+          y_mat <- do.call(cbind, lapply(postn_list, function(lst) lst[[lev]][, "srrt"]))
 
           qy <- apply(y_mat, 1, quantile, probs = sort(c(quants, 0.5)), na.rm = TRUE)
-          xm <- apply(x_mat, 1, unique, na.rm=TRUE)
+          xm <- apply(x_mat, 1, unique, na.rm = TRUE)
           out[[lev]] <- rbind(qy, xm)
         }
         out
@@ -701,28 +731,31 @@ plot_ss_srrt <- function(input,
         possible_vals <- unlist(lapply(p_resp_quants_list[[sname]], function(group_val) {
           # group_val => list( factor_level => matrix(4 x length-of-probs) )
           sapply(group_val, function(mat4) {
-            if (is.null(mat4)) return(0)
-            max(mat4[nrow(mat4), ], na.rm=TRUE)
+            if (is.null(mat4)) {
+              return(0)
+            }
+            max(mat4[nrow(mat4), ], na.rm = TRUE)
           })
         }))
-        x_max <- max(x_max, possible_vals, na.rm=TRUE)
+        x_max <- max(x_max, possible_vals, na.rm = TRUE)
 
         # y-limits (min/max across y_lower and y_upper)
         y_vals <- unlist(lapply(p_resp_quants_list[[sname]], function(group_val) {
           lapply(group_val, function(mat4) {
-            if (is.null(mat4)) return(NULL)
-            range(c(mat4[1, ], mat4[3, ]), na.rm = TRUE)  # y_lower and y_upper
+            if (is.null(mat4)) {
+              return(NULL)
+            }
+            range(c(mat4[1, ], mat4[3, ]), na.rm = TRUE) # y_lower and y_upper
           })
         }))
         y_min <- min(y_min, y_vals, na.rm = TRUE)
         y_max <- max(y_max, y_vals, na.rm = TRUE)
       }
-
     } else {
-
       # single dataset => p_resp_list[[sname]] => group_key => get_def_cdf => named list by factor level
       p_resp_list[[sname]] <- lapply(splitted, quantile_fun,
-                                     group_factor = within_plot, probs = probs, dots = dots)
+        group_factor = within_plot, probs = probs, dots = dots, success_R_fun = success_R_fun
+      )
 
       # If this dataset for y-limit, find max
       if (styp %in% use_lim) {
@@ -755,23 +788,23 @@ plot_ss_srrt <- function(input,
   # -------------------------------------------------------------------
   # 3) SECOND BIG LOOP: Plot one panel per group_key
   # -------------------------------------------------------------------
-  if(!is.null(layout)){
+  if (!is.null(layout)) {
     oldpar <- par(no.readonly = TRUE)
     on.exit(par(oldpar))
   }
   # layout
   if (any(is.na(layout))) {
-    par(mfrow = coda_setmfrow(Nchains=1, Nparms=length(unique_group_keys), nplots=1))
+    par(mfrow = coda_setmfrow(Nchains = 1, Nparms = length(unique_group_keys), nplots = 1))
   } else {
     par(mfrow = layout)
   }
 
   # define a global y-limit (with a bit of headroom)
   if (!is.finite(y_max) || y_max <= 0) y_max <- 1
-  ylim <- c(0, y_max*1.1)
+  ylim <- c(0, y_max * 1.1)
 
   if (!is.finite(x_min) || !is.finite(x_max) || x_min >= x_max) {
-    xlim <- NULL  # let R handle it if bad limits
+    xlim <- NULL # let R handle it if bad limits
   } else {
     x_buffer <- 0.05 * (x_max - x_min)
     xlim <- c(x_min - x_buffer, x_max + x_buffer)
@@ -783,22 +816,24 @@ plot_ss_srrt <- function(input,
     tmp_prior_args <- prior_args
 
     # blank plot
-    plot_args <- add_defaults(dots, ylim=ylim, xlim=xlim,
-                              main=group_key, xlab="", ylab="")
+    plot_args <- add_defaults(dots,
+      ylim = ylim, xlim = xlim,
+      main = group_key, xlab = "", ylab = ""
+    )
     plot_args <- fix_dots_plot(plot_args)
-    plot_args$axes <- FALSE  # prevent auto-drawing axes
+    plot_args$axes <- FALSE # prevent auto-drawing axes
     do.call(plot, c(list(NA), plot_args))
     # Draw y-axis manually (left side)
     axis(2)
-    mtext("Mean SRRT (sec.)", side=2, line=3)
+    mtext("Mean SRRT (sec.)", side = 2, line = 3)
 
     # draw lines for each dataset
-    legend_map <- character(0)  # to store source name -> color
+    legend_map <- character(0) # to store source name -> color
     lwd_map <- numeric()
     for (k in seq_along(data_sources)) {
-      styp  <- sources[k]       # "data","posterior","prior"
+      styp <- sources[k] # "data","posterior","prior"
       sname <- names(sources)[k]
-      if(styp == "data") {
+      if (styp == "data") {
         src_args <- tmp_dots
         tmp_dots$col <- tmp_dots$col[-1]
       } else if (styp == "posterior") {
@@ -829,11 +864,13 @@ plot_ss_srrt <- function(input,
               do.call(lines, c(list(x = df$x_plot, y = df$srrt), lines_args))
               do.call(points, c(list(x = df$x_plot, y = df$srrt), lines_args))
 
-              if(!any(names(data_sources)=="posterior")){
+              if (!any(names(data_sources) == "posterior")) {
                 # Add standard errors
-                arrows(x0 = df$x_plot, y0 = df$srrt - df$se,
-                       x1 = df$x_plot, y1 = df$srrt + df$se,
-                       angle = 90, code = 3, length = 0.05)
+                arrows(
+                  x0 = df$x_plot, y0 = df$srrt - df$se,
+                  x1 = df$x_plot, y1 = df$srrt + df$se,
+                  angle = 90, code = 3, length = 0.05
+                )
               }
 
 
@@ -849,28 +886,34 @@ plot_ss_srrt <- function(input,
             if (!is.null(tick_data) && "x_plot" %in% names(tick_data)) {
               if (use_global_quantiles) {
                 # Global bins --> label with SSD values
-                quantile_labels <- unlist(lapply(strsplit(tick_data$ssd,","),
-                                          function(x) paste0(x[1],",\n",x[2])))
+                quantile_labels <- unlist(lapply(
+                  strsplit(tick_data$ssd, ","),
+                  function(x) paste0(x[1], ",\n", x[2])
+                ))
                 axis(1,
-                     at = tick_data$x_plot,
-                     labels = quantile_labels,
-                     cex.axis = 0.7,line = )
+                  at = tick_data$x_plot,
+                  labels = quantile_labels,
+                  cex.axis = 0.7, line =
+                  )
                 title(xlab = "Global SSD Bin (sec.)", line = 2)
               } else {
                 # Subject-specific quantiles --> label with percentages
                 up <- round(tick_data$x_plot * 100)
-                quantile_labels <- unlist(lapply(strsplit(
-                  paste0("(",paste(c(0,up[-length(up)]),up,sep=","),"]"),","),
-                                          function(x) paste0(x[1],",\n",x[2])))
+                quantile_labels <- unlist(lapply(
+                  strsplit(
+                    paste0("(", paste(c(0, up[-length(up)]), up, sep = ","), "]"), ","
+                  ),
+                  function(x) paste0(x[1], ",\n", x[2])
+                ))
                 axis(1,
-                     at = tick_data$x_plot,
-                     labels = quantile_labels,
-                     cex.axis = 0.7)
+                  at = tick_data$x_plot,
+                  labels = quantile_labels,
+                  cex.axis = 0.7
+                )
                 title(xlab = "Participant SSD Percentile Bin (%)", line = 2)
               }
             }
           }
-
         } else {
           # multi draws => p_resp_quants_list
           if (!is.null(p_resp_quants_list[[sname]])) {
@@ -880,17 +923,17 @@ plot_ss_srrt <- function(input,
               for (lev in within_levels) {
                 mat4 <- p_resp_quants_for_group[[lev]]
                 if (!is.null(mat4)) {
-                  y_lower <- mat4[1,]
-                  y_med   <- mat4[2,]
-                  y_upper <- mat4[3,]
-                  x_plot<- mat4[4,]
+                  y_lower <- mat4[1, ]
+                  y_med <- mat4[2, ]
+                  y_upper <- mat4[3, ]
+                  x_plot <- mat4[4, ]
 
-                  lines_args <- add_defaults(src_args, lty=line_types[ilev])
+                  lines_args <- add_defaults(src_args, lty = line_types[ilev])
                   lines_args <- fix_dots_plot(lines_args)
-                  do.call(lines, c(list(x=x_plot, y=y_med), lines_args))
+                  do.call(lines, c(list(x = x_plot, y = y_med), lines_args))
 
                   # polygon for the ribbon
-                  adj_color <- do.call(adjustcolor, fix_dots(add_defaults(src_args, alpha.f=0.2), adjustcolor))
+                  adj_color <- do.call(adjustcolor, fix_dots(add_defaults(src_args, alpha.f = 0.2), adjustcolor))
                   poly_args <- src_args
                   poly_args$col <- adj_color
                   poly_args <- fix_dots_plot(poly_args)
@@ -900,7 +943,7 @@ plot_ss_srrt <- function(input,
                     border = NA
                   ), poly_args))
                 }
-                ilev <- ilev+1
+                ilev <- ilev + 1
               }
             }
           }
@@ -910,16 +953,20 @@ plot_ss_srrt <- function(input,
 
     # Factor-level legend, only if more than one defective level
     if (!is.na(legendpos[1]) && !(length(within_levels) == 1 && within_levels == "All")) {
-      legend(legendpos[1], legend=within_levels, lty=line_types, col="black",
-             title=within_plot, bty="n")
+      legend(legendpos[1],
+        legend = within_levels, lty = line_types, col = "black",
+        title = within_plot, bty = "n"
+      )
     }
 
 
     # If multiple data sources, show source legend
     if (length(data_sources) > 1) {
-      if(!is.na(legendpos[2])){
-        legend(legendpos[2], legend=names(legend_map), lty=1, col=legend_map,
-               title="Source", bty="n", lwd = lwd_map)
+      if (!is.na(legendpos[2])) {
+        legend(legendpos[2],
+          legend = names(legend_map), lty = 1, col = legend_map,
+          title = "Source", bty = "n", lwd = lwd_map
+        )
       }
     }
   } # end for each group_key
@@ -927,7 +974,7 @@ plot_ss_srrt <- function(input,
   invisible(NULL)
 }
 
-get_srrt_by_individual_ssd_quantile <- function(x, group_factor, probs, dots) {
+get_srrt_by_individual_ssd_quantile <- function(x, group_factor, probs, dots, success_R_fun) {
   # Filter: only rows with finite SSD and subject info
   x <- x[is.finite(x[["SSD"]]) & !is.na(x[["subjects"]]), ]
   subjects <- unique(x$subjects)
@@ -944,23 +991,27 @@ get_srrt_by_individual_ssd_quantile <- function(x, group_factor, probs, dots) {
   compute_group_stats <- function(data_subset) {
     subj_stats <- lapply(unique(data_subset$subjects), function(s) {
       df <- data_subset[data_subset$subject == s, ]
+      df <- df[success_R_fun(df), ]
       ssd_quants <- quantile(df$SSD, probs = probs, na.rm = TRUE)
       if (anyDuplicated(ssd_quants)) {
         stop("Duplicate quantile values detected. Please use fewer bins.")
       }
       ssd_quants <- unique(ssd_quants)
-
       df$ssd_bin <- cut(df$SSD, breaks = ssd_quants, include.lowest = TRUE, right = TRUE)
 
+      # Filter for successful responses
+
       # Compute mean RT (srrt), count (n), and SD (rt_sd)
-      bin_stats <- aggregate(rt ~ ssd_bin, data = df,
-                             FUN = function(v) {
-                               n <- sum(!is.na(v))
-                               mean_rt <- mean(v, na.rm = TRUE)
-                               se_rt <- sd(v, na.rm = TRUE) / sqrt(n)
-                               c(mean = mean_rt, se = se_rt, n = n)
-                             },
-                             na.action = na.pass)
+      bin_stats <- aggregate(rt ~ ssd_bin,
+        data = df,
+        FUN = function(v) {
+          n <- sum(!is.na(v))
+          mean_rt <- mean(v, na.rm = TRUE)
+          se_rt <- sd(v, na.rm = TRUE) / sqrt(n)
+          c(mean = mean_rt, se = se_rt, n = n)
+        },
+        na.action = na.pass
+      )
       # Convert matrix columns to individual columns
       bin_stats <- do.call(data.frame, bin_stats)
       names(bin_stats)[2:4] <- c("srrt", "se", "n")
@@ -972,15 +1023,17 @@ get_srrt_by_individual_ssd_quantile <- function(x, group_factor, probs, dots) {
       return(bin_stats)
     })
 
-    if(length(subj_stats) > 1){
+    if (length(subj_stats) > 1) {
       all_stats <- do.call(rbind, subj_stats)
-      summary_stats <- aggregate(srrt ~ x_plot, data = all_stats, FUN = function(v) {
-        n <- sum(!is.na(v))
-        mean_rt <- mean(v, na.rm = TRUE)
-        se_rt <- sd(v, na.rm = TRUE) / sqrt(n)
-        c(mean = mean_rt, se = se_rt, n = n)
-      },
-      na.action = na.pass)
+      summary_stats <- aggregate(srrt ~ x_plot,
+        data = all_stats, FUN = function(v) {
+          n <- sum(!is.na(v))
+          mean_rt <- mean(v, na.rm = TRUE)
+          se_rt <- sd(v, na.rm = TRUE) / sqrt(n)
+          c(mean = mean_rt, se = se_rt, n = n)
+        },
+        na.action = na.pass
+      )
       summary_stats <- do.call(data.frame, summary_stats)
       names(summary_stats) <- c("x_plot", "srrt", "se", "n")
     } else {
@@ -1004,7 +1057,7 @@ get_srrt_by_individual_ssd_quantile <- function(x, group_factor, probs, dots) {
   return(out)
 }
 
-get_srrt_by_global_ssd_quantile <- function(x, group_factor, probs, dots) {
+get_srrt_by_global_ssd_quantile <- function(x, group_factor, probs, dots, success_R_fun) {
   # Check global SSD breaks
   if (!"global_ssd_breaks" %in% names(dots)) {
     stop("Missing 'global_ssd_breaks' in dots")
@@ -1031,19 +1084,25 @@ get_srrt_by_global_ssd_quantile <- function(x, group_factor, probs, dots) {
   compute_group_stats <- function(data_subset) {
     subj_stats <- lapply(unique(data_subset$subjects), function(s) {
       df <- data_subset[data_subset$subjects == s, ]
+      # Filter for successful responses
+      df <- df[success_R_fun(df), ]
 
       df$ssd_bin <- cut(df$SSD, breaks = global_ssd_breaks, include.lowest = TRUE, right = TRUE)
 
 
+
       # Compute mean RT (srrt), count (n), and SD (rt_sd)
-      bin_stats <- aggregate(rt ~ ssd_bin, data = df,
-                             FUN = function(v) {
-                               n <- sum(!is.na(v))
-                               mean_rt <- mean(v, na.rm = TRUE)
-                               se_rt <- sd(v, na.rm = TRUE) / sqrt(n)
-                               c(mean = mean_rt, se = se_rt, n = n)
-                             },
-                             na.action = na.pass)
+
+      bin_stats <- aggregate(rt ~ ssd_bin,
+        data = df,
+        FUN = function(v) {
+          n <- sum(!is.na(v))
+          mean_rt <- mean(v, na.rm = TRUE)
+          se_rt <- sd(v, na.rm = TRUE) / sqrt(n)
+          c(mean = mean_rt, se = se_rt, n = n)
+        },
+        na.action = na.pass
+      )
       # Convert matrix columns to individual columns
       bin_stats <- do.call(data.frame, bin_stats)
       names(bin_stats)[2:4] <- c("srrt", "se", "n")
@@ -1056,15 +1115,17 @@ get_srrt_by_global_ssd_quantile <- function(x, group_factor, probs, dots) {
       return(bin_stats)
     })
 
-    if(length(subj_stats) > 1){
+    if (length(subj_stats) > 1) {
       all_stats <- do.call(rbind, subj_stats)
-      summary_stats <- aggregate(srrt ~ ssd, data = all_stats, FUN = function(v) {
-        n <- sum(!is.na(v))
-        mean_rt <- mean(v, na.rm = TRUE)
-        se_rt <- sd(v, na.rm = TRUE) / sqrt(n)
-        c(mean = mean_rt, se = se_rt, n = n)
-      },
-      na.action = na.pass)
+      summary_stats <- aggregate(srrt ~ ssd,
+        data = all_stats, FUN = function(v) {
+          n <- sum(!is.na(v))
+          mean_rt <- mean(v, na.rm = TRUE)
+          se_rt <- sd(v, na.rm = TRUE) / sqrt(n)
+          c(mean = mean_rt, se = se_rt, n = n)
+        },
+        na.action = na.pass
+      )
       summary_stats <- do.call(data.frame, summary_stats)
       names(summary_stats) <- c("ssd", "srrt", "se", "n")
 
@@ -1096,7 +1157,6 @@ get_srrt_by_global_ssd_quantile <- function(x, group_factor, probs, dots) {
 }
 
 compare_obs_vs_postpred <- function(obs_df, pred_df) {
-
   # Only stop trials
   obs_df <- obs_df[is.finite(obs_df$SSD), ]
   pred_df <- pred_df[is.finite(pred_df$SSD), ]
@@ -1106,19 +1166,25 @@ compare_obs_vs_postpred <- function(obs_df, pred_df) {
   names(obs_rates)[names(obs_rates) == "is.na(R)"] <- "obs_resp_rate"
 
   # Compute observed mean RTs
-  mean_rts <- aggregate(rt ~ subjects + SSD, data = obs_df, FUN = function(x) mean(x, na.rm = TRUE),
-                        na.action = na.pass)
+  mean_rts <- aggregate(rt ~ subjects + SSD,
+    data = obs_df, FUN = function(x) mean(x, na.rm = TRUE),
+    na.action = na.pass
+  )
   names(mean_rts)[names(mean_rts) == "rt"] <- "obs_mean_rt"
 
   # Compute posterior predictive response rates per sample
   pred_df$sample_id <- pred_df$postn
-  pred_rates <- aggregate(is.na(R) ~ subjects + SSD + sample_id, data = pred_df, FUN = mean,
-                          na.action = na.pass)
+  pred_rates <- aggregate(is.na(R) ~ subjects + SSD + sample_id,
+    data = pred_df, FUN = mean,
+    na.action = na.pass
+  )
   names(pred_rates)[names(pred_rates) == "is.na(R)"] <- "pred_resp_rate"
 
   # Compute posterior predictive mean RTs per sample
-  pred_rts <- aggregate(rt ~ subjects + SSD + sample_id, data = pred_df, FUN = function(x) mean(x, na.rm = TRUE),
-                        na.action = na.pass)
+  pred_rts <- aggregate(rt ~ subjects + SSD + sample_id,
+    data = pred_df, FUN = function(x) mean(x, na.rm = TRUE),
+    na.action = na.pass
+  )
   names(pred_rts)[names(pred_rts) == "rt"] <- "pred_mean_rt"
 
   # Ensure consistent types
@@ -1136,7 +1202,7 @@ compare_obs_vs_postpred <- function(obs_df, pred_df) {
 
   results <- do.call(rbind, lapply(1:nrow(unique_combos), function(i) {
     subj <- unique_combos$subjects[i]
-    ssd  <- unique_combos$SSD[i]
+    ssd <- unique_combos$SSD[i]
 
     # Observed values
     obs_resp_rate <- obs_rates$obs_resp_rate[obs_rates$subjects == subj & obs_rates$SSD == ssd]
