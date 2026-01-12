@@ -358,8 +358,16 @@ par_data_map <- function(par_mcmc, design, n_trials = NULL, data = NULL,
       phases <- vapply(model()$trend, function(x) x$phase, character(1))
       if (any(phases == "pretransform")) pars <- prep_trend_phase(data, model()$trend, pars, "pretransform",
                                                                   return_trend_pars = TRUE)
+      exclude_transform <- unlist(lapply(model()$trend, function(x){
+        if(x$phase != "posttransform"){
+          return(x$trend_pnames)
+        } else{
+          return(NULL)
+        }
+      }))
+      exclude_transform <- colnames(pars) %in% exclude_transform
     }
-    pars <- do_transform(pars, model()$transform)
+    pars[,!exclude_transform] <- do_transform(pars[,!exclude_transform], model()$transform)
     if (!is.null(model()$trend)) {
       if (any(phases == "posttransform")) pars <- prep_trend_phase(data, model()$trend, pars, "posttransform",
                                                                    return_trend_pars = TRUE)
