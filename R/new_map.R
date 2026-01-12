@@ -353,7 +353,7 @@ par_data_map <- function(par_mcmc, design, n_trials = NULL, data = NULL,
 
     rownames(pars) <- design$Ffactors$subjects
     pars <- map_p(add_constants(pars,design$constants),data, model(), return_trend_pars = TRUE)
-
+    exclude_transform <- rep(FALSE, ncol(pars))
     if (!is.null(model()$trend)) {
       phases <- vapply(model()$trend, function(x) x$phase, character(1))
       if (any(phases == "pretransform")) pars <- prep_trend_phase(data, model()$trend, pars, "pretransform",
