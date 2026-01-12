@@ -273,13 +273,12 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
     }
     if(model()$type == "AccumulatR"){
       model_list <- model()
+      res <- AccumulatR::simulate(model_list$spec, pars, trial_df = data, keep_component = TRUE)
       data <- data[!duplicated(data$trial),]
       dropNames <- c("accumulator")
       if (!return_Ffunctions && !is.null(design$Ffunctions))
         dropNames <- c(dropNames,names(design$Ffunctions))
       data <- data[,!(names(data) %in% dropNames)]
-      res <- model_list$rfun(model_list$spec, data$component, pars)
-      res$component <- data$component
       for (i in dimnames(res)[[2]]) data[[i]] <- res[,i]
     } else{
       if (any(names(data)=="RACE")) {
