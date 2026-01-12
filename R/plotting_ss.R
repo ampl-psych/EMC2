@@ -1,58 +1,57 @@
-#' Plot Inhibition Functions
-#'
-#' Plots panels of the inhibition functions (probability of responding; Pr(R)) for each
-#' level of specified factors of stop-signal data as a function of user-defined
-#' SSD bins/categories. Optionally, posterior and/or prior predictive
-#' inhibition functions can be overlaid.
-#'
-#' Per default, the SSD-categories are defined in terms of the percentiles of the
-#' SSD distribution for each participant, and then averaged over participants (see `use_global_quantiles`).
-#'
-#' If credible regions are not plotted, the data is plotted with error bars
-#' (plus/minus the standard error per SSD bin/category)
-#'
-#' @param input Either an emc object or a stop-signal data frame, or a *list* of such objects. SSD column in data required.
-#' @param post_predict Optional posterior predictive data (matching columns) or *list* thereof.
-#' @param prior_predict Optional prior predictive data (matching columns) or list thereof.
-#' @param probs Numeric vector of probabilities with values on the unit interval that defines SSD bins/categories.
-#' @param factors Character vector of factor names to aggregate over; defaults to plotting full data set ungrouped by factors if NULL.
-#' @param within_plot Character indicating factor for which inhibition functions are plotted in the same panel
-#' @param use_global_quantiles If set to `TRUE`, SSDs are pooled over participants before calculating percentiles, so
-#' the same absolute SSD range is used to get Pr(R) for each participant,
-#' and then these probabilities are averaged over participants.
-#' @param subject Subset the data to a single subject (by index or name).
-#' @param quants Numeric vector of credible interval bounds (e.g. c(0.025, 0.975)).
-#' @param functions A function (or list of functions) that create new columns in the datasets or predictives
-#' @param n_cores Number of CPU cores to use if generating predictives from an emc object.
-#' @param n_post Number of posterior draws to simulate if needed for predictives.
-#' @param layout Numeric vector used in par(mfrow=...); use NA for auto-layout.
-#' @param to_plot Character vector: any of "data", "posterior", "prior".
-#' @param use_lim Character vector controlling which source(s) define axis limits
-#' @param legendpos Character vector controlling the positions of the legends
-#' @param posterior_args Optional list of graphical parameters for posterior lines/ribbons.
-#' @param prior_args Optional list of graphical parameters for prior lines/ribbons.
-#' @param ... Other graphical parameters for the real data lines.
-#'
-#' @return Returns NULL invisibly
-#' @export
+# #' Plot Inhibition Functions
+# #'
+# #' Plots panels of the inhibition functions (probability of responding; Pr(R)) for each
+# #' level of specified factors of stop-signal data as a function of user-defined
+# #' SSD bins/categories. Optionally, posterior and/or prior predictive
+# #' inhibition functions can be overlaid.
+# #'
+# #' Per default, the SSD-categories are defined in terms of the percentiles of the
+# #' SSD distribution for each participant, and then averaged over participants (see `use_global_quantiles`).
+# #'
+# #' If credible regions are not plotted, the data is plotted with error bars
+# #' (plus/minus the standard error per SSD bin/category)
+# #'
+# #' @param input Either an emc object or a stop-signal data frame, or a *list* of such objects. SSD column in data required.
+# #' @param post_predict Optional posterior predictive data (matching columns) or *list* thereof.
+# #' @param prior_predict Optional prior predictive data (matching columns) or list thereof.
+# #' @param probs Numeric vector of probabilities with values on the unit interval that defines SSD bins/categories.
+# #' @param factors Character vector of factor names to aggregate over; defaults to plotting full data set ungrouped by factors if NULL.
+# #' @param within_plot Character indicating factor for which inhibition functions are plotted in the same panel
+# #' @param use_global_quantiles If set to `TRUE`, SSDs are pooled over participants before calculating percentiles, so
+# #' the same absolute SSD range is used to get Pr(R) for each participant,
+# #' and then these probabilities are averaged over participants.
+# #' @param subject Subset the data to a single subject (by index or name).
+# #' @param quants Numeric vector of credible interval bounds (e.g. c(0.025, 0.975)).
+# #' @param functions A function (or list of functions) that create new columns in the datasets or predictives
+# #' @param n_cores Number of CPU cores to use if generating predictives from an emc object.
+# #' @param n_post Number of posterior draws to simulate if needed for predictives.
+# #' @param layout Numeric vector used in par(mfrow=...); use NA for auto-layout.
+# #' @param to_plot Character vector: any of "data", "posterior", "prior".
+# #' @param use_lim Character vector controlling which source(s) define axis limits
+# #' @param legendpos Character vector controlling the positions of the legends
+# #' @param posterior_args Optional list of graphical parameters for posterior lines/ribbons.
+# #' @param prior_args Optional list of graphical parameters for prior lines/ribbons.
+# #' @param ... Other graphical parameters for the real data lines.
+# #' @return Returns NULL invisibly
+# #' @export
 plot_ss_if <- function(input,
-                    post_predict = NULL,
-                    prior_predict = NULL,
-                    probs = seq(0,1, length.out=5),
-                    factors = NULL,
-                    within_plot = NULL,
-                    use_global_quantiles = FALSE,
-                    subject = NULL,
-                    quants = c(0.025, 0.975), functions = NULL,
-                    n_cores = 1,
-                    n_post = 50,
-                    layout = NA,
-                    to_plot = c('data','posterior','prior')[1:2],
-                    use_lim = c('data','posterior','prior')[1:2],
-                    legendpos = c('topleft', 'bottomright'),
-                    posterior_args = list(),
-                    prior_args = list(),
-                    ...) {
+                       post_predict = NULL,
+                       prior_predict = NULL,
+                       probs = seq(0,1, length.out=5),
+                       factors = NULL,
+                       within_plot = NULL,
+                       use_global_quantiles = FALSE,
+                       subject = NULL,
+                       quants = c(0.025, 0.975), functions = NULL,
+                       n_cores = 1,
+                       n_post = 50,
+                       layout = NA,
+                       to_plot = c('data','posterior','prior')[1:2],
+                       use_lim = c('data','posterior','prior')[1:2],
+                       legendpos = c('topleft', 'bottomright'),
+                       posterior_args = list(),
+                       prior_args = list(),
+                       ...) {
 
   # 1) prep_data_plot
   check <- prep_data_plot(input, post_predict, prior_predict, to_plot, use_lim,
@@ -304,7 +303,7 @@ plot_ss_if <- function(input,
               if (use_global_quantiles) {
                 # Global bins → label with SSD values
                 quantile_labels <- unlist(lapply(strsplit(tick_data$ssd,","),
-                                          function(x) paste0(x[1],",\n",x[2])))
+                                                 function(x) paste0(x[1],",\n",x[2])))
                 axis(1,
                      at = tick_data$x_plot,
                      labels = quantile_labels,
@@ -316,7 +315,7 @@ plot_ss_if <- function(input,
                 up <- round(tick_data$x_plot * 100)
                 quantile_labels <- unlist(lapply(strsplit(
                   paste0("(",paste(c(0,up[-length(up)]),up,sep=","),"]"),","),
-                                          function(x) paste0(x[1],",\n",x[2])))
+                  function(x) paste0(x[1],",\n",x[2])))
                 axis(1,
                      at = tick_data$x_plot,
                      labels = quantile_labels,
@@ -550,60 +549,60 @@ get_response_probability_by_global_ssd_quantile <- function(x, group_factor, pro
   return(out)
 }
 
-#' Plot Mean SRRT
-#'
-#' Plots panels of the mean signal-respond response time (SRRT) as a function of user-defined
-#' SSD bins/categories for each level of specified factors of stop-signal data.
-#' Optionally, posterior and/or prior predictive inhibition functions can be overlaid.
-#'
-#' Per default, SSDs are pooled over participants before calculating percentiles, so
-#' the same absolute SSD range is used to get mean SRRT for each participant,
-#' and then these probabilities are averaged over participants (see `use_global_quantiles`).
-#'
-#' If credible regions are not plotted, the data is plotted with error bars
-#' (plus/minus the standard error per SSD bin/category)
-#'
-#' @param input Either an emc object or a stop-signal data frame, or a list of such objects. SSD column in data required.
-#' @param post_predict Optional posterior predictive data (matching columns) or list thereof.
-#' @param prior_predict Optional prior predictive data (matching columns) or list thereof.
-#' @param probs Numeric vector of probabilities with values in 0,1 that defines SSD bins/categories.
-#' @param factors Character vector of factor names to aggregate over; defaults to plotting full data set ungrouped by factors if NULL.
-#' @param within_plot Character indicating factor for which inhibition functions are plotted in the same panel
-#' @param use_global_quantiles If set to FALSE, the SSD-categories are defined in terms of the percentiles of the
-#' SSD distribution for each participant, and then averaged over participants.
-#' @param subject Subset the data to a single subject (by index or name).
-#' @param quants Numeric vector of credible interval bounds (e.g. c(0.025, 0.975)).
-#' @param functions A function (or list of functions) that create new columns in the datasets or predictives
-#' @param n_cores Number of CPU cores to use if generating predictives from an emc object.
-#' @param n_post Number of posterior draws to simulate if needed for predictives.
-#' @param layout Numeric vector used in par(mfrow=...); use NA for auto-layout.
-#' @param to_plot Character vector: any of "data", "posterior", "prior".
-#' @param use_lim Character vector controlling which source(s) define axis limits
-#' @param legendpos Character vector controlling the positions of the legends
-#' @param posterior_args Optional list of graphical parameters for posterior lines/ribbons.
-#' @param prior_args Optional list of graphical parameters for prior lines/ribbons.
-#' @param ... Other graphical parameters for the real data lines.
-#'
-#' @return Returns NULL invisibly
-#' @export
+# #' Plot Mean SRRT
+# #'
+# #' Plots panels of the mean signal-respond response time (SRRT) as a function of user-defined
+# #' SSD bins/categories for each level of specified factors of stop-signal data.
+# #' Optionally, posterior and/or prior predictive inhibition functions can be overlaid.
+# #'
+# #' Per default, SSDs are pooled over participants before calculating percentiles, so
+# #' the same absolute SSD range is used to get mean SRRT for each participant,
+# #' and then these probabilities are averaged over participants (see `use_global_quantiles`).
+# #'
+# #' If credible regions are not plotted, the data is plotted with error bars
+# #' (plus/minus the standard error per SSD bin/category)
+# #'
+# #' @param input Either an emc object or a stop-signal data frame, or a list of such objects. SSD column in data required.
+# #' @param post_predict Optional posterior predictive data (matching columns) or list thereof.
+# #' @param prior_predict Optional prior predictive data (matching columns) or list thereof.
+# #' @param probs Numeric vector of probabilities with values in 0,1 that defines SSD bins/categories.
+# #' @param factors Character vector of factor names to aggregate over; defaults to plotting full data set ungrouped by factors if NULL.
+# #' @param within_plot Character indicating factor for which inhibition functions are plotted in the same panel
+# #' @param use_global_quantiles If set to FALSE, the SSD-categories are defined in terms of the percentiles of the
+# #' SSD distribution for each participant, and then averaged over participants.
+# #' @param subject Subset the data to a single subject (by index or name).
+# #' @param quants Numeric vector of credible interval bounds (e.g. c(0.025, 0.975)).
+# #' @param functions A function (or list of functions) that create new columns in the datasets or predictives
+# #' @param n_cores Number of CPU cores to use if generating predictives from an emc object.
+# #' @param n_post Number of posterior draws to simulate if needed for predictives.
+# #' @param layout Numeric vector used in par(mfrow=...); use NA for auto-layout.
+# #' @param to_plot Character vector: any of "data", "posterior", "prior".
+# #' @param use_lim Character vector controlling which source(s) define axis limits
+# #' @param legendpos Character vector controlling the positions of the legends
+# #' @param posterior_args Optional list of graphical parameters for posterior lines/ribbons.
+# #' @param prior_args Optional list of graphical parameters for prior lines/ribbons.
+# #' @param ... Other graphical parameters for the real data lines.
+# #'
+# #' @return Returns NULL invisibly
+# #' @export
 plot_ss_srrt <- function(input,
-                      post_predict = NULL,
-                      prior_predict = NULL,
-                      probs = seq(0,1, length.out=5),
-                      factors = NULL,
-                      within_plot = NULL,
-                      use_global_quantiles = TRUE,
-                      subject = NULL,
-                      quants = c(0.025, 0.975), functions = NULL,
-                      n_cores = 1,
-                      n_post = 50,
-                      layout = NA,
-                      to_plot = c('data','posterior','prior')[1:2],
-                      use_lim = c('data','posterior','prior')[1:2],
-                      legendpos = c('topleft', 'bottomright'),
-                      posterior_args = list(),
-                      prior_args = list(),
-                      ...) {
+                         post_predict = NULL,
+                         prior_predict = NULL,
+                         probs = seq(0,1, length.out=5),
+                         factors = NULL,
+                         within_plot = NULL,
+                         use_global_quantiles = TRUE,
+                         subject = NULL,
+                         quants = c(0.025, 0.975), functions = NULL,
+                         n_cores = 1,
+                         n_post = 50,
+                         layout = NA,
+                         to_plot = c('data','posterior','prior')[1:2],
+                         use_lim = c('data','posterior','prior')[1:2],
+                         legendpos = c('topleft', 'bottomright'),
+                         posterior_args = list(),
+                         prior_args = list(),
+                         ...) {
 
   # 1) prep_data_plot
   check <- prep_data_plot(input, post_predict, prior_predict, to_plot, use_lim,
@@ -850,7 +849,7 @@ plot_ss_srrt <- function(input,
               if (use_global_quantiles) {
                 # Global bins --> label with SSD values
                 quantile_labels <- unlist(lapply(strsplit(tick_data$ssd,","),
-                                          function(x) paste0(x[1],",\n",x[2])))
+                                                 function(x) paste0(x[1],",\n",x[2])))
                 axis(1,
                      at = tick_data$x_plot,
                      labels = quantile_labels,
@@ -861,7 +860,7 @@ plot_ss_srrt <- function(input,
                 up <- round(tick_data$x_plot * 100)
                 quantile_labels <- unlist(lapply(strsplit(
                   paste0("(",paste(c(0,up[-length(up)]),up,sep=","),"]"),","),
-                                          function(x) paste0(x[1],",\n",x[2])))
+                  function(x) paste0(x[1],",\n",x[2])))
                 axis(1,
                      at = tick_data$x_plot,
                      labels = quantile_labels,
