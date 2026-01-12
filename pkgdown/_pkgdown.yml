@@ -23,17 +23,7 @@ reference:
   - plot.emc.design
   - summary.emc.design
   - get_design
-- title: fMRI
-- contents:
-  - reshape_events
-  - convolve_design_matrix
-  - split_timeseries
-  - high_pass_filter
-  - design_fmri
-  - MRI
-  - MRI_AR1
-  - plot_design_fmri
-  - plot_fmri
+
 - title: Latent Variable Modelling
 - contents:
   - align_loadings
@@ -106,8 +96,6 @@ reference:
   - plot_stat
   - plot_caf
   - plot_delta
-  - plot_ss_if
-  - plot_ss_srrt
   - plot_trend
   - plot_design
   - plot.emc.design
@@ -146,6 +134,7 @@ reference:
   - plot_fmri
   - reshape_events
   - split_timeseries
+
 - title: trend modelling
 - contents:
   - make_trend
