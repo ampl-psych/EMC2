@@ -31,7 +31,7 @@
 #' @param legendpos Character vector controlling the positions of the legends
 #' @param posterior_args Optional list of graphical parameters for posterior lines/ribbons.
 #' @param prior_args Optional list of graphical parameters for prior lines/ribbons.
-#' @param success_R_fun A function that returns a logical vector indicating which rows of the data frame correspond to successful responses.
+#' @param fail_R_fun A function that returns a logical vector indicating which rows of the data frame correspond to successful responses.
 #' @param ... Other graphical parameters for the real data lines.
 #'
 #' @return Returns NULL invisibly
@@ -53,7 +53,7 @@ plot_ss_if <- function(input,
                        legendpos = c("topleft", "bottomright"),
                        posterior_args = list(),
                        prior_args = list(),
-                       success_R_fun = function(d) !is.na(d$R),
+                       fail_R_fun = function(d) !is.na(d$R),
                        ...) {
   # 1) prep_data_plot
   check <- prep_data_plot(input, post_predict, prior_predict, to_plot, use_lim,
@@ -115,10 +115,9 @@ plot_ss_if <- function(input,
       quantile_fun <- get_response_probability_by_global_ssd_quantile
       global_ssd_pool <- df$SSD[is.finite(df$SSD)]
       global_ssd_breaks <- quantile(global_ssd_pool, probs = probs, na.rm = TRUE)
+      # Relax check: use unique breaks instead of stopping
+      global_ssd_breaks <- unique(global_ssd_breaks)
       dots$global_ssd_breaks <- global_ssd_breaks
-      if (any(duplicated(global_ssd_breaks))) {
-        stop("Duplicate quantile values detected. Please use fewer bins.")
-      }
     } else {
       quantile_fun <- get_response_probability_by_individual_ssd_quantile
     }
@@ -130,7 +129,7 @@ plot_ss_if <- function(input,
         #  further split by postn
         postn_splits <- split(sub_grp, sub_grp$postn)
         lapply(postn_splits, quantile_fun,
-          group_factor = within_plot, probs = probs, dots = dots, success_R_fun = success_R_fun
+          group_factor = within_plot, probs = probs, dots = dots, fail_R_fun = fail_R_fun
         )
       })
 
@@ -180,7 +179,7 @@ plot_ss_if <- function(input,
     } else {
       # single dataset => p_resp_list[[sname]] => group_key => get_def_cdf => named list by factor level
       p_resp_list[[sname]] <- lapply(splitted, quantile_fun,
-        group_factor = within_plot, probs = probs, dots = dots, success_R_fun = success_R_fun
+        group_factor = within_plot, probs = probs, dots = dots, fail_R_fun = fail_R_fun
       )
 
       # If this dataset is used for y-limit, find max
@@ -402,7 +401,7 @@ plot_ss_if <- function(input,
   invisible(NULL)
 }
 
-get_response_probability_by_individual_ssd_quantile <- function(x, group_factor, probs, dots, success_R_fun) {
+get_response_probability_by_individual_ssd_quantile <- function(x, group_factor, probs, dots, fail_R_fun) {
   # Filter: only rows with finite SSD and subject info
   x <- x[is.finite(x[["SSD"]]) & !is.na(x[["subjects"]]), ]
   subjects <- unique(x$subjects)
@@ -429,7 +428,7 @@ get_response_probability_by_individual_ssd_quantile <- function(x, group_factor,
       df$ssd_bin <- cut(df$SSD, breaks = ssd_quants, include.lowest = TRUE, right = TRUE)
 
 
-      df$response_indicator <- success_R_fun(df)
+      df$response_indicator <- fail_R_fun(df)
 
       bin_stats <- aggregate(response_indicator ~ ssd_bin, data = df, FUN = function(v) {
         n <- sum(!is.na(v))
@@ -487,7 +486,7 @@ get_response_probability_by_individual_ssd_quantile <- function(x, group_factor,
   return(out)
 }
 
-get_response_probability_by_global_ssd_quantile <- function(x, group_factor, probs, dots, success_R_fun) {
+get_response_probability_by_global_ssd_quantile <- function(x, group_factor, probs, dots, fail_R_fun) {
   # Check global SSD breaks
   if (!"global_ssd_breaks" %in% names(dots)) {
     stop("Missing 'global_ssd_breaks' in dots")
@@ -518,7 +517,7 @@ get_response_probability_by_global_ssd_quantile <- function(x, group_factor, pro
       df$ssd_bin <- cut(df$SSD, breaks = global_ssd_breaks, include.lowest = TRUE, right = TRUE)
 
 
-      df$response_indicator <- success_R_fun(df)
+      df$response_indicator <- fail_R_fun(df)
 
       bin_stats <- aggregate(response_indicator ~ ssd_bin, data = df, FUN = function(v) {
         n <- sum(!is.na(v))
@@ -610,6 +609,7 @@ get_response_probability_by_global_ssd_quantile <- function(x, group_factor, pro
 #' @param legendpos Character vector controlling the positions of the legends
 #' @param posterior_args Optional list of graphical parameters for posterior lines/ribbons.
 #' @param prior_args Optional list of graphical parameters for prior lines/ribbons.
+#' @param fail_R_fun A function that returns a logical vector indicating which rows of the data frame correspond to successful responses.
 #' @param ... Other graphical parameters for the real data lines.
 #'
 #' @return Returns NULL invisibly
@@ -631,7 +631,7 @@ plot_ss_srrt <- function(input,
                          legendpos = c("topleft", "bottomright"),
                          posterior_args = list(),
                          prior_args = list(),
-                         success_R_fun = function(d) !is.na(d$R),
+                         fail_R_fun = function(d) !is.na(d$R),
                          ...) {
   # 1) prep_data_plot
   check <- prep_data_plot(input, post_predict, prior_predict, to_plot, use_lim,
@@ -693,9 +693,22 @@ plot_ss_srrt <- function(input,
       quantile_fun <- get_srrt_by_global_ssd_quantile
       global_ssd_pool <- df$SSD[is.finite(df$SSD)]
       global_ssd_breaks <- quantile(global_ssd_pool, probs = probs, na.rm = TRUE)
+      global_ssd_breaks <- unique(global_ssd_breaks)
       dots$global_ssd_breaks <- global_ssd_breaks
     } else {
       quantile_fun <- get_srrt_by_individual_ssd_quantile
+    }
+
+    # If individual quantiles, pre-calculate breaks from DATA ONLY to ensure consistency
+    if (!use_global_quantiles) {
+      # Extract data for this subject (assuming check$datasets$data exists)
+      # We need the full data for this subject to define the breaks
+      s_data <- check$datasets$data[check$datasets$data$subjects == sname, ]
+      if (!is.null(s_data) && nrow(s_data) > 0) {
+        s_breaks <- quantile(s_data$SSD, probs = probs, na.rm = TRUE)
+        s_breaks <- unique(s_breaks) # Handle duplicates once here
+        dots$individual_ssd_breaks <- s_breaks
+      }
     }
 
     # If there's a "postn" column => multiple draws => compute quantiles
@@ -706,7 +719,7 @@ plot_ss_srrt <- function(input,
         # further split by postn
         postn_splits <- split(sub_grp, sub_grp$postn)
         lapply(postn_splits, quantile_fun,
-          group_factor = within_plot, probs = probs, dots = dots, success_R_fun = success_R_fun
+          group_factor = within_plot, probs = probs, dots = dots, fail_R_fun = fail_R_fun
         )
       })
 
@@ -720,7 +733,7 @@ plot_ss_srrt <- function(input,
           y_mat <- do.call(cbind, lapply(postn_list, function(lst) lst[[lev]][, "srrt"]))
 
           qy <- apply(y_mat, 1, quantile, probs = sort(c(quants, 0.5)), na.rm = TRUE)
-          xm <- apply(x_mat, 1, unique, na.rm = TRUE)
+          xm <- apply(x_mat, 1, mean, na.rm = TRUE)
           out[[lev]] <- rbind(qy, xm)
         }
         out
@@ -754,7 +767,7 @@ plot_ss_srrt <- function(input,
     } else {
       # single dataset => p_resp_list[[sname]] => group_key => get_def_cdf => named list by factor level
       p_resp_list[[sname]] <- lapply(splitted, quantile_fun,
-        group_factor = within_plot, probs = probs, dots = dots, success_R_fun = success_R_fun
+        group_factor = within_plot, probs = probs, dots = dots, fail_R_fun = fail_R_fun
       )
 
       # If this dataset for y-limit, find max
@@ -974,7 +987,7 @@ plot_ss_srrt <- function(input,
   invisible(NULL)
 }
 
-get_srrt_by_individual_ssd_quantile <- function(x, group_factor, probs, dots, success_R_fun) {
+get_srrt_by_individual_ssd_quantile <- function(x, group_factor, probs, dots, fail_R_fun) {
   # Filter: only rows with finite SSD and subject info
   x <- x[is.finite(x[["SSD"]]) & !is.na(x[["subjects"]]), ]
   subjects <- unique(x$subjects)
@@ -991,15 +1004,21 @@ get_srrt_by_individual_ssd_quantile <- function(x, group_factor, probs, dots, su
   compute_group_stats <- function(data_subset) {
     subj_stats <- lapply(unique(data_subset$subjects), function(s) {
       df <- data_subset[data_subset$subject == s, ]
-      df <- df[success_R_fun(df), ]
-      ssd_quants <- quantile(df$SSD, probs = probs, na.rm = TRUE)
-      if (anyDuplicated(ssd_quants)) {
-        stop("Duplicate quantile values detected. Please use fewer bins.")
+      if (!is.null(dots$individual_ssd_breaks)) {
+        ssd_quants <- dots$individual_ssd_breaks
+      } else {
+        ssd_quants <- quantile(df$SSD, probs = probs, na.rm = TRUE)
+        ssd_quants <- unique(ssd_quants)
       }
-      ssd_quants <- unique(ssd_quants)
+
       df$ssd_bin <- cut(df$SSD, breaks = ssd_quants, include.lowest = TRUE, right = TRUE)
+      # Create reference levels for ensuring consistent output rows
+      ref_levels <- levels(df$ssd_bin)
 
       # Filter for successful responses
+      keep <- fail_R_fun(df)
+      keep[is.na(keep)] <- FALSE
+      df <- df[keep, ]
 
       # Compute mean RT (srrt), count (n), and SD (rt_sd)
       bin_stats <- aggregate(rt ~ ssd_bin,
@@ -1015,6 +1034,12 @@ get_srrt_by_individual_ssd_quantile <- function(x, group_factor, probs, dots, su
       # Convert matrix columns to individual columns
       bin_stats <- do.call(data.frame, bin_stats)
       names(bin_stats)[2:4] <- c("srrt", "se", "n")
+
+      # FILL MISSING BINS
+      if (!is.null(ref_levels)) {
+        res_df <- data.frame(ssd_bin = factor(ref_levels, levels = ref_levels))
+        bin_stats <- merge(res_df, bin_stats, by = "ssd_bin", all.x = TRUE)
+      }
 
       bin_stats$ssd <- as.numeric(gsub(".*,", "", gsub("\\[|\\]|\\(|\\)", "", bin_stats$ssd_bin)))
       bin_stats$subject <- s
@@ -1057,7 +1082,7 @@ get_srrt_by_individual_ssd_quantile <- function(x, group_factor, probs, dots, su
   return(out)
 }
 
-get_srrt_by_global_ssd_quantile <- function(x, group_factor, probs, dots, success_R_fun) {
+get_srrt_by_global_ssd_quantile <- function(x, group_factor, probs, dots, fail_R_fun) {
   # Check global SSD breaks
   if (!"global_ssd_breaks" %in% names(dots)) {
     stop("Missing 'global_ssd_breaks' in dots")
@@ -1084,15 +1109,18 @@ get_srrt_by_global_ssd_quantile <- function(x, group_factor, probs, dots, succes
   compute_group_stats <- function(data_subset) {
     subj_stats <- lapply(unique(data_subset$subjects), function(s) {
       df <- data_subset[data_subset$subjects == s, ]
-      # Filter for successful responses
-      df <- df[success_R_fun(df), ]
+
 
       df$ssd_bin <- cut(df$SSD, breaks = global_ssd_breaks, include.lowest = TRUE, right = TRUE)
+      ref_levels <- levels(df$ssd_bin)
+      # Filter for successful responses
+      keep <- fail_R_fun(df)
+      keep[is.na(keep)] <- FALSE
+      df <- df[keep, ]
 
 
 
       # Compute mean RT (srrt), count (n), and SD (rt_sd)
-
       bin_stats <- aggregate(rt ~ ssd_bin,
         data = df,
         FUN = function(v) {
@@ -1107,6 +1135,17 @@ get_srrt_by_global_ssd_quantile <- function(x, group_factor, probs, dots, succes
       bin_stats <- do.call(data.frame, bin_stats)
       names(bin_stats)[2:4] <- c("srrt", "se", "n")
 
+      # FILL MISSING BINS to ensure consistent row count for cbind
+      if (!is.null(ref_levels)) {
+        res_df <- data.frame(ssd_bin = factor(ref_levels, levels = ref_levels))
+        # Merge stats in
+        # bin_stats has 'ssd_bin' as character from aggregation? No, factor.
+        # aggregate returns factor if grouping by factor.
+
+        # Merge logic
+        bin_stats <- merge(res_df, bin_stats, by = "ssd_bin", all.x = TRUE)
+      }
+
       bin_stats$ssd <- as.character(bin_stats$ssd_bin)
       bin_stats$x_plot <- as.numeric(gsub(".*,", "", gsub("\\[|\\]|\\(|\\)", "", bin_stats$ssd_bin)))
 
@@ -1114,6 +1153,7 @@ get_srrt_by_global_ssd_quantile <- function(x, group_factor, probs, dots, succes
 
       return(bin_stats)
     })
+
 
     if (length(subj_stats) > 1) {
       all_stats <- do.call(rbind, subj_stats)
