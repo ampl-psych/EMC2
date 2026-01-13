@@ -351,14 +351,16 @@ plot_relations <- function(emc = NULL, stage = "sample",  plot_cred = FALSE,
   # Only add this if you want credible intervals
   if(plot_cred || only_cred){
     cred <- aperm(apply(values, 1:2, quantile, probs = dots$probs))
-    conf <- paste0("[", format(cred[,,1,drop = F], digits=1), ":", format(cred[,,2,drop = F], digits=1), "]")
     if(only_cred){
       is_cred <- unique(c(which(cred[,,1] > 0), which(cred[,,2] < 0)))
-      conf[!1:length(conf) %in% is_cred] <- ""
       is_cred <- unique(c(which(t(cred[,,1] > 0)), which(t(cred[,,2] < 0))))
       means[!1:length(means) %in% is_cred] <- NA
     }
     cred <- round(cred, 2)
+    conf <- paste0("[", format(cred[,,1,drop = F], digits=1), ":", format(cred[,,2,drop = F], digits=1), "]")
+    if(only_cred){
+      conf[!1:length(conf) %in% is_cred] <- ""
+    }
   }
   if(do_corr){
     if(!is.null(nice_names)) colnames(means) <- rownames(means) <- nice_names
@@ -401,7 +403,9 @@ plot_relations <- function(emc = NULL, stage = "sample",  plot_cred = FALSE,
     xs <- row(matrix(cred[,,1], nrow = ncol(means)))
     ys <- (ncol(matrix(cred[,,1], nrow = ncol(means)))+1) - col(matrix(cred[,,2], nrow = ncol(means))) - 0.05
     conf[conf == "[ 1.0:1.0]"] <- ""
+    conf[conf == "[ 1.0: 1.0]"] <- ""
     conf[conf == "[ 1.00:1.0]"] <- ""
+    conf[conf == "[ 1.00: 1.00]"] <- ""
     if(plot_means){
       ys <- ys - 0.1
       text(xs, ys, conf, pos=1, cex=0.55, font = 2)
