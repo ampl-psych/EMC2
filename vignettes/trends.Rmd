@@ -213,7 +213,7 @@ trend_delta2 <- make_trend(
 )
 ```
 
-Delta rules are useful for learning processes. The standard delta rule updates based on prediction error. The dual‑rate rule uses fast and slow learning rates, switching between them based on discrepancies.
+Delta rules are useful for modelling learning processes. The standard delta rule updates each trial based on prediction error. The dual‑kernel rule uses fast and slow learning rates, switching between them based on discrepancies.
 
 Each kernel has supported bases. You can leave bases to defaults or set them explicitly. Changing bases can reflect different interpretations of how `k` enters the parameter:
 
