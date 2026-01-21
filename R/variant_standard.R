@@ -87,6 +87,7 @@ calculate_implied_means <- function(mean_designs, beta_params, n_pars) {
   return(mu_implied)
 }
 
+
 get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, selection = "mu", design = NULL, group_design = NULL,
                                par_groups = NULL) {
   # Checking and default priors
@@ -120,10 +121,12 @@ get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1
   if (is.null(prior$A)) {
     prior$A <- rep(.3, n_pars)
   }
+  n_s <- 0
   if (!is.null(group_design)) {
     # Use parameter names from design or group_design to count random effects
     pnames <- if (!is.null(design)) names(sampled_pars(design, doMap = FALSE)) else names(group_design)
     n_s <- get_n_random_variance(pnames, group_design)
+    n_rand <- get_n_random(pnames, group_design)
 
     if (n_s > 0) {
       if (is.null(prior$v_Z)) {
@@ -185,10 +188,93 @@ get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1
       vars <- constrain_lambda(vars, constraintMat)
       if (selection != "alpha") samples$theta_var <- vars
     }
+
+    # Sample random effects if present
+    u <- NULL
+    random_designs <- NULL
+    random_maps <- NULL
+    if (n_s > 0) {
+      if (selection %in% c("s", "u", "alpha")) {
+        # Sample s (variances)
+        # s2 ~ IG(v_Z, A_z)
+        # Actually s2_j ~ IG((v_Z+1)/2, A_z_j^2 * v_Z / 2)? No wait.
+        # Gibbs step: s2 ~ IG((v+n)/2, (v*A^2 + sum(u^2))/2) ?
+        # Prior for s2 implies:
+        # We generally use similar to Sigma prior?
+        # But here it's univariate variance per component.
+        # Let's match the bridge sampler: prior_s <- dinvgamma(s2, shape = (v_Z + 1)/2, scale = (v_Z * A_z^2)/2)
+
+        s2 <- matrix(NA, nrow = n_s, ncol = N)
+        a_half_s <- matrix(NA, nrow = n_s, ncol = N)
+        rand_names <- get_random_names(par_names, group_design)
+        rownames(s2) <- rand_names$s_names
+        rownames(a_half_s) <- rand_names$s_names
+
+        for (j in 1:n_s) {
+          # a_half_s ~ IG(1/2, 1/A_z^2)
+          # shape = 1/2, rate = 1/(A_z^2)
+          # R's rgamma uses rate, so IG sample is 1/rgamma(shape, rate)
+          a_half_s[j, ] <- 1 / rgamma(N, shape = 1 / 2, rate = 1 / (prior$A_z[j]^2))
+
+          # s2 | a_half_s ~ IG(v_Z/2, v_Z/a_half_s)
+          # shape = v_Z/2, rate = v_Z/a_half_s
+          # Note: rate for 1/rgamma is (v_Z / a_half_s)
+          # s2 = 1 / rgamma(..., rate = v_Z / a_half_s)
+          s2[j, ] <- 1 / rgamma(N, shape = prior$v_Z / 2, rate = prior$v_Z / a_half_s[j, ])
+        }
+        if (selection == "s") {
+          samples$theta_s <- s2
+          samples$a_half_s <- a_half_s
+        }
+
+        # Sample u
+        # u ~ N(0, s2)
+        if (selection %in% c("u", "alpha")) {
+          # u is n_rand x N
+          u <- matrix(NA, nrow = n_rand, ncol = N)
+          rownames(u) <- rand_names$u_names
+
+          # Map s2 to u components
+          # Need to know which s corresponds to which u
+          # get_random_names iterates same way
+          idx_u <- 1
+          idx_s <- 1
+
+          # Re-iterate structure to check sizes
+          for (p in names(group_design)) {
+            if (is.list(group_design[[p]]) && !is.null(group_design[[p]]$random)) {
+              for (gname in names(group_design[[p]]$random)) {
+                z <- group_design[[p]]$random[[gname]]
+                k_z <- ncol(z)
+                # s2[idx_s, ] is the variance for this block
+                sd_vec <- sqrt(s2[idx_s, ])
+
+                # For each of k_z levels, sample N times
+                # u_block: k_z x N
+                for (k in 1:k_z) {
+                  u[idx_u + k - 1, ] <- rnorm(N, mean = 0, sd = sd_vec)
+                }
+
+                idx_u <- idx_u + k_z
+                idx_s <- idx_s + 1
+              }
+            }
+          }
+          if (selection == "u") samples$theta_u <- u
+
+          # Prepare for alpha
+          if (selection == "alpha") {
+            random_designs <- add_group_design_random(names(group_design), group_design)
+            random_maps <- add_group_design_map(names(group_design), group_design)
+          }
+        }
+      }
+    }
+
     if (selection %in% "alpha") {
       samples <- list()
       samples$alpha <- get_alphas(beta, vars, design[[1]]$Ffactors$subjects,
-        group_design = group_design
+        group_design = group_design, u = u, random_designs = random_designs, random_maps = random_maps
       )
     }
     out <- samples
@@ -216,10 +302,33 @@ get_startpoints_standard <- function(pmwgs, start_mu, start_var) {
   a_half_s <- NULL
   if (n_rand > 0) {
     n_s <- get_n_random_variance(pmwgs$par_names, pmwgs$group_designs)
-    # Randomly sample s from prior or small value
-    s <- rep(0.5, n_s) # Initialize as Variance
-    u <- rnorm(n_rand, 0, sqrt(mean(s))) # Start u consistent with s scale
-    a_half_s <- 1 / rgamma(n_s, shape = 2, rate = 1)
+
+    # Initialize a_half_s from prior: IG(1/2, 1/A_z^2)
+    # A_z might be scalar or vector in prior.
+    A_z <- if (is.null(pmwgs$prior$A_z)) rep(0.3, n_s) else rep(pmwgs$prior$A_z, length.out = n_s)
+    a_half_s <- 1 / rgamma(n_s, shape = 1 / 2, rate = 1 / (A_z^2))
+
+    # Initialize s (variance) from prior: IG(v_Z/2, v_Z/a_half_s)
+    v_Z <- if (is.null(pmwgs$prior$v_Z)) 2 else pmwgs$prior$v_Z
+    s <- 1 / rgamma(n_s, shape = v_Z / 2, rate = v_Z / a_half_s)
+
+    # Re-using logic from get_prior_standard for u generation
+    u <- numeric(n_rand)
+    idx_u <- 1
+    idx_s <- 1
+    # Iterate group designs to match s to u
+    for (p in names(pmwgs$group_designs)) {
+      if (is.list(pmwgs$group_designs[[p]]) && !is.null(pmwgs$group_designs[[p]]$random)) {
+        for (gname in names(pmwgs$group_designs[[p]]$random)) {
+          z <- pmwgs$group_designs[[p]]$random[[gname]]
+          k_z <- ncol(z)
+          sd_val <- sqrt(s[idx_s])
+          u[idx_u:(idx_u + k_z - 1)] <- rnorm(k_z, 0, sd_val)
+          idx_u <- idx_u + k_z
+          idx_s <- idx_s + 1
+        }
+      }
+    }
   }
 
   random_designs <- add_group_design_random(pmwgs$par_names[!pmwgs$nuisance], pmwgs$group_designs)

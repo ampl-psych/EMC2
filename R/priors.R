@@ -491,6 +491,7 @@ plot.emc.prior <- function(x, selection = "mu", do_plot = TRUE, covariates = NUL
     selection = selection, N = N
   ), fix_dots(dots, get_objects, consider_dots = F)))
   MCMC_samples <- do.call(get_pars, c(list(samples, selection = selection, type = type, covariates = covariates, stage = "sample"), fix_dots(dots, get_pars)))
+  if (inherits(MCMC_samples, "mcmc.list")) MCMC_samples <- list(MCMC_samples)
   if (do_plot) {
     for (i in 1:length(MCMC_samples)) {
       xlab <- ifelse(is.null(names(MCMC_samples)[i]), selection, names(MCMC_samples)[i])

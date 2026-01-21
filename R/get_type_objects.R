@@ -176,12 +176,11 @@ get_objects_standard <- function(selection, sample_prior, return_prior, design =
         )
 
         # Try to get u if available
-        u <- tryCatch(get_pars(sampler, selection = "u", stage = stage, map = FALSE, return_mcmc = FALSE, merge_chains = TRUE, ...), error = function(e) NULL)
-
-        # Prepare random designs/maps
+        u <- NULL
         random_designs <- NULL
         random_maps <- NULL
-        if (!is.null(u)) {
+        if (has_random(group_design)) {
+          u <- get_pars(sampler, selection = "u", stage = stage, map = FALSE, return_mcmc = FALSE, merge_chains = TRUE, ...)
           random_designs <- add_group_design_random(names(group_design), sampler$group_designs)
           random_maps <- add_group_design_map(names(group_design), sampler$group_designs)
         }
@@ -598,6 +597,14 @@ get_base <- function(sampler, idx, selection) {
       out <- x$samples$theta_var[, , idx, drop = F]
       out <- apply(out, 3, diag)
       return(out)
+    }))
+  } else if (selection == "u") {
+    return(lapply(sampler, FUN = function(x) {
+      return(x$samples$theta_u[, idx, drop = F])
+    }))
+  } else if (selection == "s") {
+    return(lapply(sampler, FUN = function(x) {
+      return(x$samples$theta_s[, idx, drop = F])
     }))
   } else if (selection == "Sigma") {
     return(lapply(sampler, FUN = function(x) {
