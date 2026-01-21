@@ -372,7 +372,7 @@ build_design <- function(formula, data, contrasts.arg = NULL) {
     gname <- deparse(bar[[3]])
     g <- as.factor(mf[[gname]])
     J <- model.matrix(~ 0 + g)
-    colnames(J) <- paste0(gname, levels(g)) # idA, idB, …
+    colnames(J) <- paste0(gname, "_", levels(g)) # id_A, id_B, …
 
     ## -- 3b. slope design ---------------------------------------------
     lhs <- bar[[2]]
@@ -404,7 +404,7 @@ build_design <- function(formula, data, contrasts.arg = NULL) {
           function(k) sweep(J, 1, mm[, k], `*`)
         )
       )
-      colnames(Zs) <- outer(paste0(gname, levels(g)),
+      colnames(Zs) <- outer(paste0(gname, "_", levels(g)),
         colnames(mm),
         paste,
         sep = ":"
@@ -412,6 +412,7 @@ build_design <- function(formula, data, contrasts.arg = NULL) {
       Z <- if (is.null(Z)) Zs else cbind(Z, Zs)
     }
     Z_parts[[length(Z_parts) + 1]] <- Z
+    names(Z_parts)[length(Z_parts)] <- gname
     # Store mapping info
     # We need to reuse this in sampling to know which u's belong to which variance group
     Z_map[[length(Z_map) + 1]] <- list(
@@ -422,29 +423,16 @@ build_design <- function(formula, data, contrasts.arg = NULL) {
       dim = ncol(Z)
     )
   }
-  if (length(Z_parts) > 0) {
-    # Naming and mapping for random effects
-    # We need to clean this up potentially.
-    # For now, keep Z_parts as a list, don't cbind yet?
-    # The user request implies: "to introduce a group variance cleanly... alpha_i ~ N( X beta + Z u, Sigma)"
-    # So we need specific Z blocks.
-
-    # Map each Z block to its variance component
-    # The grouping factor name: deparse(bar[[3]])
-    # The terms: ...
-  }
 
   ## ---------- 4. Return components ---------------------------------
   # If no random effects, Z_parts is empty
 
   if (length(Z_parts) == 0) {
     return(list(fixed = X, random = NULL, map = NULL))
-  } else {
-    return(list(fixed = X, random = Z_parts, map = Z_map))
   }
+  return(list(fixed = X, random = Z_parts, map = Z_map))
 }
 
-#' @export
 add_group_design_random <- function(par_names, group_designs) {
   out_list <- vector("list", length(par_names))
   names(out_list) <- par_names
@@ -457,7 +445,6 @@ add_group_design_random <- function(par_names, group_designs) {
   return(out_list)
 }
 
-#' @export
 add_group_design_map <- function(par_names, group_designs) {
   out_list <- vector("list", length(par_names))
   names(out_list) <- par_names
@@ -470,7 +457,6 @@ add_group_design_map <- function(par_names, group_designs) {
   return(out_list)
 }
 
-#' @export
 get_n_random <- function(par_names, group_designs) {
   if (is.null(group_designs)) {
     return(0)
@@ -487,7 +473,6 @@ get_n_random <- function(par_names, group_designs) {
   return(n)
 }
 
-#' @export
 get_n_random_variance <- function(par_names, group_designs) {
   if (is.null(group_designs)) {
     return(0)
@@ -499,4 +484,28 @@ get_n_random_variance <- function(par_names, group_designs) {
     }
   }
   return(n)
+}
+
+
+
+get_random_names <- function(par_names, group_designs) {
+  if (is.null(group_designs)) {
+    return(0)
+  }
+  s_names <- c()
+  u_names <- c()
+  for (p in par_names) {
+    if (!is.null(group_designs[[p]]) && is.list(group_designs[[p]]) && !is.data.frame(group_designs[[p]])) {
+      if (!is.null(group_designs[[p]]$random)) {
+        for (gname in names(group_designs[[p]]$random)) {
+          z <- group_designs[[p]]$random[[gname]]
+          # s_names: p_gname (e.g. a_uni)
+          s_names <- c(s_names, paste0(p, "_", gname))
+          # u_names: p_colname (e.g. a_uni_1)
+          u_names <- c(u_names, paste0(p, "_", colnames(z)))
+        }
+      }
+    }
+  }
+  return(list(u_names = u_names, s_names = s_names))
 }

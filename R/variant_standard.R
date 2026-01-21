@@ -29,9 +29,10 @@ sample_store_standard <- function(data, par_names, iters = 1, stage = "init", in
     )
   )
   if (n_rand > 0) {
-    samples$theta_u <- array(NA_real_, dim = c(n_rand, iters)) # Random effects
-    samples$theta_s <- array(NA_real_, dim = c(n_s, iters)) # Variance components
-    samples$a_half_s <- array(NA_real_, dim = c(n_s, iters)) # Auxiliary for s
+    rand_names <- get_random_names(par_names, group_designs)
+    samples$theta_u <- array(NA_real_, dim = c(n_rand, iters), dimnames = list(rand_names$u_names, NULL)) # Random effects
+    samples$theta_s <- array(NA_real_, dim = c(n_s, iters), dimnames = list(rand_names$s_names, NULL)) # Variance components
+    samples$a_half_s <- array(NA_real_, dim = c(n_s, iters), dimnames = list(rand_names$s_names, NULL)) # Auxiliary for s
   }
 
   if (integrate) samples <- c(samples, base_samples)
