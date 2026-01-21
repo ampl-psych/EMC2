@@ -22,10 +22,10 @@ minimal_design <- function(design, covariates = NULL, drop_subjects = TRUE,
     } else{
       if(is.null(cur_des$Ffactors$subjects))cur_des$Ffactors$subjects <- factor(1)
     }
-    if(!is.null(group_design)){
-      cur_des$Ffactors <- cur_des$Ffactors[!names(cur_des$Ffactors) %in% group_factors]
-      cur_des$Fcovariates <- cur_des$Fcovariates[!names(cur_des$Fcovariates) %in% group_factors]
-    }
+    # if(!is.null(group_design)){
+    #   cur_des$Ffactors <- cur_des$Ffactors[!names(cur_des$Ffactors) %in% group_factors]
+    #   cur_des$Fcovariates <- cur_des$Fcovariates[!names(cur_des$Fcovariates) %in% group_factors]
+    # }
 
 
     if(n_trials > 1){
@@ -238,10 +238,9 @@ mapper_wrapper <- function(map, by_subject = FALSE, par_mcmc, design, n_trials =
   }
 
   df <- data
-  df[colnames(df)] <- lapply(colnames(df), function(v) {
-    f <- df[[v]]
-    factor(paste0(v, f))
-  })
+  for(i in 1:ncol(df)){
+    df[,i] <- factor(paste0(colnames(df)[i], df[,i]))
+  }
   subjects <- unique(data$subjects)
   all_pars <- setNames(vector("list", length(subjects)), subjects)
   for(sub in subjects){
