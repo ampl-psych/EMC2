@@ -22,10 +22,10 @@ minimal_design <- function(design, covariates = NULL, drop_subjects = TRUE,
     } else{
       if(is.null(cur_des$Ffactors$subjects))cur_des$Ffactors$subjects <- factor(1)
     }
-    if(!is.null(group_design)){
-      cur_des$Ffactors <- cur_des$Ffactors[!names(cur_des$Ffactors) %in% group_factors]
-      cur_des$Fcovariates <- cur_des$Fcovariates[!names(cur_des$Fcovariates) %in% group_factors]
-    }
+    # if(!is.null(group_design)){
+    #   cur_des$Ffactors <- cur_des$Ffactors[!names(cur_des$Ffactors) %in% group_factors]
+    #   cur_des$Fcovariates <- cur_des$Fcovariates[!names(cur_des$Fcovariates) %in% group_factors]
+    # }
 
 
     if(n_trials > 1){
