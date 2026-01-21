@@ -137,7 +137,9 @@ sampler <- list(
         theta_mu_mean = rep(0, 2),
         theta_mu_invar = diag(0.1, 2), # Weak
         v = 2,
-        A = rep(0.5, 2)
+        A = rep(0.5, 2),
+        v_Z = 2,
+        A_z = 0.5
     )
 )
 

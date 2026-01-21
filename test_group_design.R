@@ -30,8 +30,14 @@ group_des <- group_design(formula = list(v_Sd ~ age, `v_Sd:log_freq` ~ age,
                                          t0 ~ age + (1|uni), a ~ age + (1|uni)),
                           data = data, subject_design = full_design)
 
-sampled_pars(group_des)
+
+pri <- prior(design = full_design, group_design = group_des)
+
+
 emc <- make_emc(data, design = full_design, group_design = group_des)
 
-emc <- init_chains(emc, cores_for_chains = 1)
-emc[[1]]$samples$theta_s
+
+
+emc <- init_chains(emc, cores_for_chains = 3, cores_per_chain = 3)
+
+fit(emc, cores_for_chains = 1, cores_per_chain = 5)

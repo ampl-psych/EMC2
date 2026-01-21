@@ -120,6 +120,20 @@ get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1
   if (is.null(prior$A)) {
     prior$A <- rep(.3, n_pars)
   }
+  if (!is.null(group_design)) {
+    # Use parameter names from design or group_design to count random effects
+    pnames <- if (!is.null(design)) names(sampled_pars(design, doMap = FALSE)) else names(group_design)
+    n_s <- get_n_random_variance(pnames, group_design)
+
+    if (n_s > 0) {
+      if (is.null(prior$v_Z)) {
+        prior$v_Z <- 2
+      }
+      if (is.null(prior$A_z)) {
+        prior$A_z <- rep(0.15, n_s)
+      }
+    }
+  }
   # Things I save rather than re-compute inside the loops.
   prior$theta_mu_invar <- ginv(prior$theta_mu_var) # Inverse of the matrix
   attr(prior, "type") <- "standard"
@@ -478,8 +492,8 @@ gibbs_step_standard <- function(sampler, alpha) {
           # We sample the Variance (s^2) from the Inverse Gamma posterior.
 
           J_dim <- n_u
-          shape_s <- (prior$v + J_dim) / 2
-          rate_s <- prior$v / a_half_s_new[s_ptr] + 0.5 * sum(u_drawn^2)
+          shape_s <- (prior$v_Z + J_dim) / 2
+          rate_s <- prior$v_Z / a_half_s_new[s_ptr] + 0.5 * sum(u_drawn^2)
 
           s2_new <- 1 / rgamma(1, shape = shape_s, rate = rate_s)
 
@@ -488,11 +502,11 @@ gibbs_step_standard <- function(sampler, alpha) {
 
           # Update a_half_s (auxiliary variable for s variance)
           # Uses Inverse Gamma sampler (via 1/rgamma)
-          # Selects A based on parameter index k, defaulting to first element
-          val_A <- if (length(prior$A) >= k) prior$A[k] else prior$A[1]
-          shape_a <- (prior$v + 1) / 2
+          # Selects A_z based on component index s_ptr
+          val_A <- if (length(prior$A_z) >= s_ptr) prior$A_z[s_ptr] else prior$A_z[1]
+          shape_a <- (prior$v_Z + 1) / 2
 
-          a_half_s_new[s_ptr] <- 1 / rgamma(1, shape = shape_a, rate = prior$v * (1 / s2_new) + 1 / (val_A^2))
+          a_half_s_new[s_ptr] <- 1 / rgamma(1, shape = shape_a, rate = prior$v_Z * (1 / s2_new) + 1 / (val_A^2))
 
 
           u_ptr <- u_ptr + n_u
@@ -839,22 +853,22 @@ bridge_group_and_prior_and_jac_standard <- function(
       a_s_val <- exp(theta_a_s[i, ]) # vector of a_half_s
       u_val <- theta_u[i, ]
 
-      # prior_a_s: a_s ~ InverseGamma(1/2, 1/A^2)
+      # prior_a_s: a_s ~ InverseGamma(1/2, 1/A_z^2)
       # calculated using logdinvGamma
       prior_a_s <- sum(logdinvGamma(
         x = a_s_val,
         shape = 1 / 2,
-        rate = 1 / (prior$A[1]^2)
+        rate = 1 / (prior$A_z^2)
       ))
 
-      # prior_s: s^2 | a_s ~ InverseGamma(v/2, v/a_s)
+      # prior_s: s^2 | a_s ~ InverseGamma(v_Z/2, v_Z/a_s)
       # s^2 is the parameter. We work with log(s^2).
       # The Jacobian for log(s^2) -> s^2 change of variable is handled by sum(theta_s).
       # So we calculate density of s^2 directly.
       prior_s <- sum(logdinvGamma(
         x = s2_val,
-        shape = prior$v / 2,
-        rate = prior$v / a_s_val
+        shape = prior$v_Z / 2,
+        rate = prior$v_Z / a_s_val
       ))
 
       # prior_u: u_k ~ N(0, s_k^2)

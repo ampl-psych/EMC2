@@ -18,35 +18,45 @@
 #' @return A prior list object
 #' @examples
 #' # First define a design for the model
-#' design_DDMaE <- design(data = forstmann,model=DDM,
-#'                            formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
-#'                            constants=c(s=log(1)))
+#' design_DDMaE <- design(
+#'   data = forstmann, model = DDM,
+#'   formula = list(v ~ 0 + S, a ~ E, t0 ~ 1, s ~ 1, Z ~ 1, sv ~ 1, SZ ~ 1),
+#'   constants = c(s = log(1))
+#' )
 #' # Then set up a prior using prior
-#' p_vector=c(v_Sleft=-2,v_Sright=2,a=log(1),a_Eneutral=log(1.5),a_Eaccuracy=log(2),
-#'                      t0=log(.2),Z=qnorm(.5),sv=log(.5),SZ=qnorm(.5))
-#' psd <- c(v_Sleft=1,v_Sright=1,a=.3,a_Eneutral=.3,a_Eaccuracy=.3,
-#'                      t0=.4,Z=1,sv=.4,SZ=1)
+#' p_vector <- c(
+#'   v_Sleft = -2, v_Sright = 2, a = log(1), a_Eneutral = log(1.5), a_Eaccuracy = log(2),
+#'   t0 = log(.2), Z = qnorm(.5), sv = log(.5), SZ = qnorm(.5)
+#' )
+#' psd <- c(
+#'   v_Sleft = 1, v_Sright = 1, a = .3, a_Eneutral = .3, a_Eaccuracy = .3,
+#'   t0 = .4, Z = 1, sv = .4, SZ = 1
+#' )
 #' # Here we left the variance prior at default
-#' prior_DDMaE <- prior(design_DDMaE,mu_mean=p_vector,mu_sd=psd)
+#' prior_DDMaE <- prior(design_DDMaE, mu_mean = p_vector, mu_sd = psd)
 #' # Also add a group-level variance prior:
-#' pscale <- c(v_Sleft=.6,v_Sright=.6,a=.3,a_Eneutral=.3,a_Eaccuracy=.3,
-#'                              t0=.2,Z=.5,sv=.4,SZ=.3)
+#' pscale <- c(
+#'   v_Sleft = .6, v_Sright = .6, a = .3, a_Eneutral = .3, a_Eaccuracy = .3,
+#'   t0 = .2, Z = .5, sv = .4, SZ = .3
+#' )
 #' df <- .4
-#' prior_DDMaE <- prior(design_DDMaE,mu_mean=p_vector,mu_sd=psd, A = pscale, df = df)
+#' prior_DDMaE <- prior(design_DDMaE, mu_mean = p_vector, mu_sd = psd, A = pscale, df = df)
 #' # If we specify a new design
-#' design_DDMat0E <- design(data = forstmann,model=DDM,
-#'                            formula =list(v~0+S,a~E, t0~E, s~1, Z~1, sv~1, SZ~1),
-#'                            constants=c(s=log(1)))
+#' design_DDMat0E <- design(
+#'   data = forstmann, model = DDM,
+#'   formula = list(v ~ 0 + S, a ~ E, t0 ~ E, s ~ 1, Z ~ 1, sv ~ 1, SZ ~ 1),
+#'   constants = c(s = log(1))
+#' )
 #' # We can easily update the prior
 #' prior_DDMat0E <- prior(design_DDMat0E, update = prior_DDMaE)
 #' @export
 prior <- function(design, type = NULL, group_design = NULL, update = NULL,
-                      do_ask = NULL, fill_default = TRUE, ...){
-  if(!is.null(update) && is.null(type)){
+                  do_ask = NULL, fill_default = TRUE, ...) {
+  if (!is.null(update) && is.null(type)) {
     type <- attr(update, "type")
   }
-  if(is.null(type)) type <- 'standard'
-  if(type %in% c("diagonal", "blocked")) type <- "standard"
+  if (is.null(type)) type <- "standard"
+  if (type %in% c("diagonal", "blocked")) type <- "standard"
   args <- list(...)
   args$group_design <- group_design
   input <- do.call(get_objects, c(list(design = design, type = type), update, args))
@@ -59,10 +69,10 @@ prior <- function(design, type = NULL, group_design = NULL, update = NULL,
   args <- check_var_prior(args)
   update <- check_var_prior(update)
   # First check if mu_mean, mu_sd, pmean or psd are filled in
-  if(!is.null(args$psd)) args$mu_sd <- args$psd
-  if(!is.null(args$pmean)) args$mu_mean <- args$pmean
-  if(!is.null(args$mu_mean)) args$theta_mu_mean <- args$mu_mean
-  if(!is.null(args$mu_sd)) args$theta_mu_var <- args$mu_sd^2
+  if (!is.null(args$psd)) args$mu_sd <- args$psd
+  if (!is.null(args$pmean)) args$mu_mean <- args$pmean
+  if (!is.null(args$mu_mean)) args$theta_mu_mean <- args$mu_mean
+  if (!is.null(args$mu_sd)) args$theta_mu_var <- args$mu_sd^2
   # Initialize updated_flags
   updated_flags <- lapply(input, make_prior_idx)
 
@@ -77,20 +87,22 @@ prior <- function(design, type = NULL, group_design = NULL, update = NULL,
   updated_flags <- result$flags
 
   # Now, prompt user for un-updated elements
-  if(!fill_default) do_ask <- names(input)
+  if (!fill_default) do_ask <- names(input)
   do_ask <- unique(c(do_ask, unlist(groups[names(groups) %in% do_ask])))
-  input[names(input) %in% do_ask] <- prompt_for_prior_updates(input[names(input) %in% do_ask],
-                                                              updated_flags[names(updated_flags) %in% do_ask],
-                                                              descriptions[names(descriptions) %in% do_ask])
-  if(!is.null(input$theta_mu_var)){
-    if(!is.matrix(input$theta_mu_var) & is.matrix(orig$theta_mu_var)) input$theta_mu_var <- diag(input$theta_mu_var)
+  input[names(input) %in% do_ask] <- prompt_for_prior_updates(
+    input[names(input) %in% do_ask],
+    updated_flags[names(updated_flags) %in% do_ask],
+    descriptions[names(descriptions) %in% do_ask]
+  )
+  if (!is.null(input$theta_mu_var)) {
+    if (!is.matrix(input$theta_mu_var) & is.matrix(orig$theta_mu_var)) input$theta_mu_var <- diag(input$theta_mu_var)
   }
   prior <- get_objects(design = design, type = type, prior = input, ...)$prior
-  if("Ffactors" %in% names(design)){
+  if ("Ffactors" %in% names(design)) {
     design <- list(design)
   }
   # For fMRI models, design matrices are stored in design until dadm creation
-  design <- lapply(design, function(x){
+  design <- lapply(design, function(x) {
     attr(x, "design_matrix") <- NULL
     return(x)
   })
@@ -100,9 +112,9 @@ prior <- function(design, type = NULL, group_design = NULL, update = NULL,
   return(prior)
 }
 
-check_var_prior <- function(inp){
-  if(!is.null(inp$theta_mu_var)){
-    if(is.matrix(inp$theta_mu_var)){
+check_var_prior <- function(inp) {
+  if (!is.null(inp$theta_mu_var)) {
+    if (is.matrix(inp$theta_mu_var)) {
       tmp <- diag(inp$theta_mu_var)
       names(tmp) <- colnames(inp$theta_mu_var)
       inp$theta_mu_var <- tmp
@@ -140,7 +152,7 @@ update_prior_element <- function(input_element, update_value, updated_flags_elem
     }
     # If there are names, but they do not match and the length is the same
     # still update
-    if(!any(updated_flags_element) && length(update_value) == length(input_element)){
+    if (!any(updated_flags_element) && length(update_value) == length(input_element)) {
       input_element[] <- update_value
       updated_flags_element[] <- TRUE
     }
@@ -195,7 +207,7 @@ convert_prior_input <- function(user_input, current_value) {
 prompt_for_prior_updates <- function(input, updated_flags, descriptions) {
   for (name in names(input)) {
     flags <- updated_flags[[name]]
-    if(all(flags)) next
+    if (all(flags)) next
     element <- input[[name]]
     cat("Specify", descriptions[[name]], "\n")
     cat("Press enter to use default value (", element[1], ")")
@@ -238,45 +250,51 @@ prompt_for_prior_updates <- function(input, updated_flags, descriptions) {
 }
 
 
-check_prior <- function(prior, sampled_p_names, group_design = NULL){
+check_prior <- function(prior, sampled_p_names, group_design = NULL) {
   sampled_p_names <- add_group_par_names(sampled_p_names, group_design)
-  if (is.null(names(prior$theta_mu_mean)))
+  if (is.null(names(prior$theta_mu_mean))) {
     names(prior$theta_mu_mean) <- sampled_p_names
-  if(length(prior$theta_mu_mean) != length(sampled_p_names))
+  }
+  if (length(prior$theta_mu_mean) != length(sampled_p_names)) {
     stop("prior mu should be same length as estimated parameters (p_vector)")
-  if (!all(sort(names(prior$theta_mu_mean)) == sort(sampled_p_names)))
+  }
+  if (!all(sort(names(prior$theta_mu_mean)) == sort(sampled_p_names))) {
     stop("theta_mu_mean names not the same as sampled paramter names")
+  }
   # Make sure theta_mu_mean has same order as sampled parameters
   prior$theta_mu_mean <- prior$theta_mu_mean[sampled_p_names]
   pnams <- names(prior$theta_mu_mean)
-  if(!is.matrix(prior$theta_mu_var)) {
-    if(length(prior$theta_mu_var) != length(sampled_p_names))
+  if (!is.matrix(prior$theta_mu_var)) {
+    if (length(prior$theta_mu_var) != length(sampled_p_names)) {
       stop("prior theta should be same length as estimated parameters (p_vector)")
+    }
     # Make sure theta_mu_var has same order as sampled parameters
     names(prior$theta_mu_var) <- sampled_p_names
     prior$theta_mu_var <- prior$theta_mu_var[sampled_p_names]
   } else {
-    if(nrow(prior$theta_mu_var) != length(sampled_p_names))
+    if (nrow(prior$theta_mu_var) != length(sampled_p_names)) {
       stop("prior theta should have same number of rows as estimated parameters (p_vector)")
-    if(ncol(prior$theta_mu_var) != length(sampled_p_names))
+    }
+    if (ncol(prior$theta_mu_var) != length(sampled_p_names)) {
       stop("prior theta should have same number of columns as estimated parameters (p_vector)")
+    }
     # Make sure theta_mu_var has same order as sampled parameters
-    dimnames(prior$theta_mu_var) <- list(pnams,pnams)
-    prior$theta_mu_var <- prior$theta_mu_var[sampled_p_names,sampled_p_names]
+    dimnames(prior$theta_mu_var) <- list(pnams, pnams)
+    prior$theta_mu_var <- prior$theta_mu_var[sampled_p_names, sampled_p_names]
   }
   return(prior)
 }
 
-merge_priors <- function(prior_list){
+merge_priors <- function(prior_list) {
   out <- prior_list[[1]]
-  if(length(prior_list) > 1){
+  if (length(prior_list) > 1) {
     out_names <- names(out)
-    for(j in 2:length(prior_list)){
-      for(hyper in out_names){
-        if(length(out[[hyper]]) > 1){
-          if(length(dim(out[[hyper]])) == 2){
+    for (j in 2:length(prior_list)) {
+      for (hyper in out_names) {
+        if (length(out[[hyper]]) > 1) {
+          if (length(dim(out[[hyper]])) == 2) {
             out[[hyper]] <- adiag(out[[hyper]], prior_list[[j]][[hyper]])
-          } else{
+          } else {
             out[[hyper]] <- c(out[[hyper]], prior_list[[j]][[hyper]])
           }
         }
@@ -296,8 +314,8 @@ merge_priors <- function(prior_list){
 #' @export
 #'
 #' @examples
-#' prior_help('diagonal')
-prior_help <- function(type){
+#' prior_help("diagonal")
+prior_help <- function(type) {
   prior <- get_objects(type, return_prior = TRUE, return_info = TRUE)
   # Loop through each type
   for (type in names(prior$types)) {
@@ -344,10 +362,10 @@ prior_help <- function(type){
 #'
 #' @seealso \code{\link{prior}} for creating prior objects
 #' @export
-summary.emc.prior <- function(object, ...){
+summary.emc.prior <- function(object, ...) {
   type <- attr(object, "type")
-  prior_info <- get_objects(type, return_prior = TRUE, return_info = TRUE)
-  for(type in names(prior_info$types)){
+  prior_info <- get_objects(type, return_prior = TRUE, return_info = TRUE, prior = list(prior = object))
+  for (type in names(prior_info$types)) {
     cat(paste(type, " - ", prior_info$type_descriptions[[type]], "\n\n"))
     for (param in prior_info$types[[type]]) {
       # Get the hyperparameter description
@@ -355,7 +373,7 @@ summary.emc.prior <- function(object, ...){
       # Display hyperparameter and description
       cat(paste(param_desc, ": \n"))
       tmp <- object[[param]]
-      if(is.matrix(tmp)) tmp <- diag(tmp)
+      if (is.matrix(tmp)) tmp <- diag(tmp)
       print(object[[param]])
     }
     cat("\n")
@@ -364,15 +382,15 @@ summary.emc.prior <- function(object, ...){
 
 
 #' @export
-print.emc.prior <- function(x, ...){
+print.emc.prior <- function(x, ...) {
   # Check that the required entries exist
   if (!"theta_mu_mean" %in% names(x) || !"theta_mu_var" %in% names(x)) {
     stop("The object must contain 'theta_mu_mean' and 'theta_mu_var' entries.")
   }
   cat("Mean and variance of the prior on the transformed parameters: \n")
   means <- x$theta_mu_mean
-  vars  <- x$theta_mu_var
-  if(is.matrix(vars)) vars <- diag(vars)
+  vars <- x$theta_mu_var
+  if (is.matrix(vars)) vars <- diag(vars)
   if (length(means) != length(vars)) {
     stop("Lengths of 'theta_mu_mean' and 'theta_mu_var' must match.")
   }
@@ -431,55 +449,68 @@ print.emc.prior <- function(x, ...){
 #'
 #' @examples \donttest{
 #' # First define a design for the model
-#' design_DDMaE <- design(data = forstmann,model=DDM,
-#'                            formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
-#'                            constants=c(s=log(1)))
+#' design_DDMaE <- design(
+#'   data = forstmann, model = DDM,
+#'   formula = list(v ~ 0 + S, a ~ E, t0 ~ 1, s ~ 1, Z ~ 1, sv ~ 1, SZ ~ 1),
+#'   constants = c(s = log(1))
+#' )
 #' # Then set up a prior using make_prior
-#' p_vector=c(v_Sleft=-2,v_Sright=2,a=log(1),a_Eneutral=log(1.5),a_Eaccuracy=log(2),
-#'           t0=log(.2),Z=qnorm(.5),sv=log(.5),SZ=qnorm(.5))
-#' psd <- c(v_Sleft=1,v_Sright=1,a=.3,a_Eneutral=.3,a_Eaccuracy=.3,
-#'           t0=.4,Z=1,sv=.4,SZ=1)
+#' p_vector <- c(
+#'   v_Sleft = -2, v_Sright = 2, a = log(1), a_Eneutral = log(1.5), a_Eaccuracy = log(2),
+#'   t0 = log(.2), Z = qnorm(.5), sv = log(.5), SZ = qnorm(.5)
+#' )
+#' psd <- c(
+#'   v_Sleft = 1, v_Sright = 1, a = .3, a_Eneutral = .3, a_Eaccuracy = .3,
+#'   t0 = .4, Z = 1, sv = .4, SZ = 1
+#' )
 #' # Here we left the variance prior at default
-#' prior_DDMaE <- prior(design_DDMaE,mu_mean=p_vector,mu_sd=psd)
+#' prior_DDMaE <- prior(design_DDMaE, mu_mean = p_vector, mu_sd = psd)
 #' # Now we can plot all sorts of (implied) priors
 #' plot(prior_DDMaE, selection = "mu", N = 1e2)
-#' plot(prior_DDMaE, selection = "mu", mapped = FALSE, N=1e2)
+#' plot(prior_DDMaE, selection = "mu", mapped = FALSE, N = 1e2)
 #' # We can also plot the implied prior on the participant level effects.
 #' plot(prior_DDMaE, selection = "alpha", col = "green", N = 1e2)
 #' }
-
 plot.emc.prior <- function(x, selection = "mu", do_plot = TRUE, covariates = NULL,
-                       layout = NA, N = 5e3, ...){
+                           layout = NA, N = 5e3, ...) {
   prior <- x
   design <- get_design(prior)
   dots <- add_defaults(list(...), breaks = 30, cut_off = 0.0015, prob = TRUE, by_subject = TRUE, map = TRUE)
   oldpar <- par(no.readonly = TRUE) # code line i
   on.exit(par(oldpar)) # code line i + 1
-  if(is.null(design[[1]]$Ffactors)){
-    if(selection %in% c('alpha', 'mu', "sigma2", "Sigma", "correlation", "covariance") & dots$map){
+  if (is.null(design[[1]]$Ffactors)) {
+    if (selection %in% c("alpha", "mu", "sigma2", "Sigma", "correlation", "covariance") & dots$map) {
       warning("For this type of design, map = TRUE is not yet implemented")
     }
     dots$map <- FALSE
   }
   type <- attr(prior, "type")
-  if(type == "single") selection <- "alpha"
-  samples <-  do.call(get_objects, c(list(design = design, prior = prior, type = type, sample_prior = T,
-                          selection = selection, N = N), fix_dots(dots, get_objects, consider_dots = F)))
+  if (type == "single") selection <- "alpha"
+  samples <- do.call(get_objects, c(list(
+    design = design, prior = prior, type = type, sample_prior = T,
+    selection = selection, N = N
+  ), fix_dots(dots, get_objects, consider_dots = F)))
   MCMC_samples <- do.call(get_pars, c(list(samples, selection = selection, type = type, covariates = covariates, stage = "sample"), fix_dots(dots, get_pars)))
-  if(do_plot){
-    for(i in 1:length(MCMC_samples)){
+  if (do_plot) {
+    for (i in 1:length(MCMC_samples)) {
       xlab <- ifelse(is.null(names(MCMC_samples)[i]), selection, names(MCMC_samples)[i])
-      if(any(is.na(layout))){
-        par(mfrow = coda_setmfrow(Nchains = length(MCMC_samples[[1]]),
-                                  Nparms = ncol(MCMC_samples[[1]][[1]]), nplots = 1))
-      } else{
-        par(mfrow=layout)
+      if (any(is.na(layout))) {
+        par(mfrow = coda_setmfrow(
+          Nchains = length(MCMC_samples[[1]]),
+          Nparms = ncol(MCMC_samples[[1]][[1]]), nplots = 1
+        ))
+      } else {
+        par(mfrow = layout)
       }
-      for(j in 1:ncol(MCMC_samples[[i]][[1]])){
-        do.call(robust_hist, c(list(MCMC_samples[[i]][[1]][,j], dots$breaks, dots$cut_off, dots$prob),
-                               fix_dots_plot(add_defaults(dots, ylab = "Density", xlab = xlab,
-                                                          main = colnames(MCMC_samples[[i]][[1]])[j],
-                                                          cex.lab = 1.25, cex.main = 1.5))))
+      for (j in 1:ncol(MCMC_samples[[i]][[1]])) {
+        do.call(robust_hist, c(
+          list(MCMC_samples[[i]][[1]][, j], dots$breaks, dots$cut_off, dots$prob),
+          fix_dots_plot(add_defaults(dots,
+            ylab = "Density", xlab = xlab,
+            main = colnames(MCMC_samples[[i]][[1]])[j],
+            cex.lab = 1.25, cex.main = 1.5
+          ))
+        ))
       }
     }
   }
@@ -491,28 +522,38 @@ plot.emc.prior <- function(x, selection = "mu", do_plot = TRUE, covariates = NUL
 #' @examples
 #' # For prior inference:
 #' # First set up a prior
-#' design_DDMaE <- design(data = forstmann,model=DDM,
-#'                        formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
-#'                        constants=c(s=log(1)))
+#' design_DDMaE <- design(
+#'   data = forstmann, model = DDM,
+#'   formula = list(v ~ 0 + S, a ~ E, t0 ~ 1, s ~ 1, Z ~ 1, sv ~ 1, SZ ~ 1),
+#'   constants = c(s = log(1))
+#' )
 #' # Then set up a prior using make_prior
-#' p_vector=c(v_Sleft=-2,v_Sright=2,a=log(1),a_Eneutral=log(1.5),a_Eaccuracy=log(2),
-#'            t0=log(.2),Z=qnorm(.5),sv=log(.5),SZ=qnorm(.5))
-#' psd <- c(v_Sleft=1,v_Sright=1,a=.3,a_Eneutral=.3,a_Eaccuracy=.3,
-#'          t0=.4,Z=1,sv=.4,SZ=1)
+#' p_vector <- c(
+#'   v_Sleft = -2, v_Sright = 2, a = log(1), a_Eneutral = log(1.5), a_Eaccuracy = log(2),
+#'   t0 = log(.2), Z = qnorm(.5), sv = log(.5), SZ = qnorm(.5)
+#' )
+#' psd <- c(
+#'   v_Sleft = 1, v_Sright = 1, a = .3, a_Eneutral = .3, a_Eaccuracy = .3,
+#'   t0 = .4, Z = 1, sv = .4, SZ = 1
+#' )
 #' # Here we left the variance prior at default
-#' prior_DDMaE <- prior(design_DDMaE,mu_mean=p_vector,mu_sd=psd)
+#' prior_DDMaE <- prior(design_DDMaE, mu_mean = p_vector, mu_sd = psd)
 #' # Get our prior samples
 #' parameters(prior_DDMaE, N = 100)
-parameters.emc.prior <- function(x,selection = "mu", N = 1000, covariates = NULL, ...){
+parameters.emc.prior <- function(x, selection = "mu", N = 1000, covariates = NULL, ...) {
   prior <- x
   dots <- add_defaults(list(...), by_subject = TRUE, map = FALSE, return_mcmc = FALSE, merge_chains = TRUE)
   type <- attr(prior, "type")
-  if(type == "single") selection <- "alpha"
-  samples <-   do.call(get_objects, c(list(design = get_design(prior), type = type, sample_prior = T,
-                                           selection = selection, prior = prior, N = N), fix_dots(dots, get_objects, consider_dots = FALSE)))
-  samples <-  do.call(get_pars, c(list(samples, selection = selection,
-                                       type = type, covariates = covariates), fix_dots(dots, get_pars)))
-  if(selection == "alpha") samples <- samples[,1,]
+  if (type == "single") selection <- "alpha"
+  samples <- do.call(get_objects, c(list(
+    design = get_design(prior), type = type, sample_prior = T,
+    selection = selection, prior = prior, N = N
+  ), fix_dots(dots, get_objects, consider_dots = FALSE)))
+  samples <- do.call(get_pars, c(list(samples,
+    selection = selection,
+    type = type, covariates = covariates
+  ), fix_dots(dots, get_pars)))
+  if (selection == "alpha") samples <- samples[, 1, ]
   return(as.data.frame(t(samples)))
 }
 
@@ -520,16 +561,19 @@ parameters.emc.prior <- function(x,selection = "mu", N = 1000, covariates = NULL
 #' @param N An integer. Number of samples to use for the quantile calculation (only for prior.emc objects)
 #' @param covariates A list of covariates to use for the quantile calculation (only for prior.emc objects)
 #' @export
-credint.emc.prior <- function(x, selection="mu", probs = c(0.025, .5, .975),
-                        digits = 3, N = 1000, covariates = NULL, ...){
+credint.emc.prior <- function(x, selection = "mu", probs = c(0.025, .5, .975),
+                              digits = 3, N = 1000, covariates = NULL, ...) {
   prior <- x
   dots <- add_defaults(list(...), by_subject = TRUE, map = TRUE)
   type <- attr(prior, "type")
-  if(type == "single") selection <- "alpha"
-  samples <-  do.call(get_objects, c(list(design = get_design(prior), type = type, sample_prior = T,
-                          selection = selection, prior = prior, N = N), fix_dots(dots, get_objects, consider_dots = FALSE)))
+  if (type == "single") selection <- "alpha"
+  samples <- do.call(get_objects, c(list(
+    design = get_design(prior), type = type, sample_prior = T,
+    selection = selection, prior = prior, N = N
+  ), fix_dots(dots, get_objects, consider_dots = FALSE)))
   out <- do.call(get_summary_stat, c(list(samples, selection, get_posterior_quantiles,
-                          probs = probs, digits = digits, type = type), fix_dots(dots, get_summary_stat)))
+    probs = probs, digits = digits, type = type
+  ), fix_dots(dots, get_summary_stat)))
   return(out)
 }
 
@@ -538,47 +582,46 @@ credint.emc.prior <- function(x, selection="mu", probs = c(0.025, .5, .975),
 #' can generate data based on `n_trials` per cell of `design`
 #' @rdname predict.emc
 #' @export
-predict.emc.prior <- function(object,data = NULL,n_post=50,n_cores=1,
-                               n_trials = NULL, ...)
-{
-  if(is.data.frame(data)) data <- list(data)
+predict.emc.prior <- function(object, data = NULL, n_post = 50, n_cores = 1,
+                              n_trials = NULL, ...) {
+  if (is.data.frame(data)) data <- list(data)
   prior <- object
   design <- get_design(prior)
   dots <- add_defaults(list(...), selection = "alpha")
-  post_out <- vector('list', length(design))
-  for(k in 1:length(design)){
+  post_out <- vector("list", length(design))
+  for (k in 1:length(design)) {
     subjects <- design[[k]]$Ffactors$subjects
     n_subjects <- length(subjects)
-    dots$merge_chains <- TRUE; dots$by_subject <- TRUE
-    samps <- do.call(parameters, c(list(object, N = n_subjects*n_post), dots))
-    simDat <- suppressWarnings(mclapply(1:n_post,function(i){
-      do.call(make_data, c(list(samps[(1+((i-1)*n_subjects)):(i*n_subjects),],design = design[[k]], data = data[[k]], n_trials = n_trials, check_bounds = TRUE), fix_dots(dots, make_data)))
-    },mc.cores=n_cores))
+    dots$merge_chains <- TRUE
+    dots$by_subject <- TRUE
+    samps <- do.call(parameters, c(list(object, N = n_subjects * n_post), dots))
+    simDat <- suppressWarnings(mclapply(1:n_post, function(i) {
+      do.call(make_data, c(list(samps[(1 + ((i - 1) * n_subjects)):(i * n_subjects), ], design = design[[k]], data = data[[k]], n_trials = n_trials, check_bounds = TRUE), fix_dots(dots, make_data)))
+    }, mc.cores = n_cores))
     # These were returned as FALSE since their parameter values fell outside of model bounds
     in_bounds <- !sapply(simDat, is.logical)
-    if(all(!in_bounds)) stop("All prior samples fall outside of model bounds, choose a more informative prior")
-    if(sum(!in_bounds) > (length(in_bounds)/2)) warning("Most prior samples fall outside of model bounds, choose a more informative prior")
-    if(any(!in_bounds)){
+    if (all(!in_bounds)) stop("All prior samples fall outside of model bounds, choose a more informative prior")
+    if (sum(!in_bounds) > (length(in_bounds) / 2)) warning("Most prior samples fall outside of model bounds, choose a more informative prior")
+    if (any(!in_bounds)) {
       good_post <- sample(1:n_post, sum(!in_bounds))
-      simDat[!in_bounds] <- suppressWarnings(mclapply(good_post,function(i){
-        do.call(make_data, c(list(samps[(1+((i-1)*n_subjects)):(i*n_subjects),],design = design[[k]], data = data[[k]], n_trials = n_trials), fix_dots(dots, make_data)))
-      },mc.cores=n_cores))
+      simDat[!in_bounds] <- suppressWarnings(mclapply(good_post, function(i) {
+        do.call(make_data, c(list(samps[(1 + ((i - 1) * n_subjects)):(i * n_subjects), ], design = design[[k]], data = data[[k]], n_trials = n_trials), fix_dots(dots, make_data)))
+      }, mc.cores = n_cores))
     }
-    out <- cbind(postn=rep(1:n_post,times=unlist(lapply(simDat,function(x)dim(x)[1]))),do.call(rbind,simDat))
-    attr(out,"pars") <- samps
+    out <- cbind(postn = rep(1:n_post, times = unlist(lapply(simDat, function(x) dim(x)[1]))), do.call(rbind, simDat))
+    attr(out, "pars") <- samps
     post_out[[k]] <- out
   }
-  if(length(post_out) == 1) post_out <- post_out[[1]]
+  if (length(post_out) == 1) post_out <- post_out[[1]]
   return(post_out)
 }
 
 #' @rdname get_design
 #' @export
-get_design.emc.prior <- function(x)
-{
+get_design.emc.prior <- function(x) {
   design <- attr(x, "design")
   class(design) <- "emc.design"
-  if(is.null(design)){
+  if (is.null(design)) {
     stop("You are likely using samples ran with an old version of EMC2,
          unfortunately this function only works with samples from a newer version of EMC2")
   }
@@ -587,10 +630,9 @@ get_design.emc.prior <- function(x)
 
 #' @rdname get_group_design
 #' @export
-get_group_design.emc.prior <- function(x)
-{
+get_group_design.emc.prior <- function(x) {
   design <- attr(x, "group_design")
-  if(!is.null(design))  class(design) <- "emc.group_design"
+  if (!is.null(design)) class(design) <- "emc.group_design"
   return(design)
 }
 
@@ -599,28 +641,32 @@ get_group_design.emc.prior <- function(x)
 #' @rdname plot_design
 #' @export
 plot_design.emc.prior <- function(x, data = NULL, factors = NULL, plot_factor = NULL, n_data_sim = 10,
-                                  p_vector = NULL, functions = NULL, ...){
-  if(is.null(p_vector)) p_vector <- x$theta_mu_mean
+                                  p_vector = NULL, functions = NULL, ...) {
+  if (is.null(p_vector)) p_vector <- x$theta_mu_mean
   design <- get_design(x)
-  plot(design, p_vector, data = data, factors = factors, plot_factor = plot_factor, n_data_sim = n_data_sim,
-       functions = functions, ...)
+  plot(design, p_vector,
+    data = data, factors = factors, plot_factor = plot_factor, n_data_sim = n_data_sim,
+    functions = functions, ...
+  )
 }
 
 #' @rdname mapped_pars
 #' @export
-mapped_pars.emc.prior <- function(x, p_vector = NULL, model = NULL, digits=3,remove_subjects=TRUE,
-                                   covariates=NULL,...){
-  if(is.null(p_vector)) p_vector <- x$theta_mu_mean
+mapped_pars.emc.prior <- function(x, p_vector = NULL, model = NULL, digits = 3, remove_subjects = TRUE,
+                                  covariates = NULL, ...) {
+  if (is.null(p_vector)) p_vector <- x$theta_mu_mean
   design <- get_design(x)
-  mapped_pars(design, p_vector, digits = digits, remove_subjects=remove_subjects,
-              covariates=covariates,...)
+  mapped_pars(design, p_vector,
+    digits = digits, remove_subjects = remove_subjects,
+    covariates = covariates, ...
+  )
 }
 
 #' @rdname sampled_pars
 #' @export
-sampled_pars.emc.prior <- function(x,group_design=NULL,doMap=FALSE, add_da = FALSE, all_cells_dm = FALSE, data=NULL){
-  return(sampled_pars(get_design(x), group_design = group_design, doMap = doMap,
-                          add_da = add_da, all_cells_dm = all_cells_dm, data = data))
+sampled_pars.emc.prior <- function(x, group_design = NULL, doMap = FALSE, add_da = FALSE, all_cells_dm = FALSE, data = NULL) {
+  return(sampled_pars(get_design(x),
+    group_design = group_design, doMap = doMap,
+    add_da = add_da, all_cells_dm = all_cells_dm, data = data
+  ))
 }
-
-

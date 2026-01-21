@@ -3,7 +3,8 @@ get_objects <- function(type, selection = NULL, sample_prior = F, design = NULL,
   selection <- map_selecter(map, selection)
   return_prior <- ifelse(is.null(sampler), TRUE, FALSE)
   if (type %in% c("standard", "blocked", "diagonal")) {
-    out <- get_objects_standard(selection, sample_prior, return_prior, design, prior,
+    out <- get_objects_standard(selection, sample_prior, return_prior, design,
+      prior = prior,
       stage = stage, N = N,
       sampler = sampler, ...
     )
@@ -148,6 +149,13 @@ get_objects_standard <- function(selection, sample_prior, return_prior, design =
       mu = "Group-level mean",
       Sigma = "Group-level covariance matrix"
     )
+
+    if (!is.null(prior$prior$v_Z)) {
+      prior$descriptions$v_Z <- "degrees of freedom on the subgroup variance prior"
+      prior$descriptions$A_z <- "scale on the subgroup variance prior"
+      prior$types$Sigma_Z <- c("v_Z", "A_z")
+      prior$type_descriptions$Sigma_Z <- "Subgroup-level random effect variances"
+    }
     if (!is.null(dots$return_info)) {
       return(prior[c("types", "type_descriptions", "descriptions")])
     }
