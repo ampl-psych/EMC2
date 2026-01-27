@@ -29,15 +29,14 @@ data$age <- data$age - mean(data$age)
 group_des <- group_design(formula = list(v_Sd ~ age, `v_Sd:log_freq` ~ age,
                                          t0 ~ age + (1|uni), a ~ age + (1|uni)),
                           data = data, subject_design = full_design)
-
-
 pri <- prior(design = full_design, group_design = group_des)
-
-
+plot(pri, selection = "s")
+#
 emc <- make_emc(data, design = full_design, group_design = group_des)
+#
+#
+#
+debug(get_startpoints_standard)
+emc <- init_chains(emc, cores_for_chains = 1, cores_per_chain = 3)
 
-
-
-emc <- init_chains(emc, cores_for_chains = 3, cores_per_chain = 3)
-
-fit(emc, cores_for_chains = 1, cores_per_chain = 5)
+emc <- fit(emc, cores_for_chains = 1, cores_per_chain = 5)
