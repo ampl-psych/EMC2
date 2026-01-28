@@ -60,13 +60,9 @@ series_bessel_fpt <- function(t, a = 1, sigma = 1, bessel = NULL) {
   lambda  <- (zeros * zeros) / 2   # eigenvalues in s = t * sigma^2 / a^2 units
 
   # Raw spectral weights from J0/J1 structure
-  raw_weights <- zeros / JVZ
-
-  # Normalise so that ∫_0^∞ f0(t) dt = 1 for zero drift
-  # f0(t) = v_scale * sum_n w_n exp(-lambda_n s), s = v_scale * t
-  # ⇒ ∫ f0 dt = sum_n w_n / lambda_n, so we enforce sum_n w_n / lambda_n = 1
-  norm_const <- sum(raw_weights / lambda)
-  weights    <- raw_weights / norm_const
+  weights <- zeros / JVZ
+  # norm_const <- sum(raw_weights / lambda)
+  # weights    <- raw_weights / norm_const
 
   # Per-trial scaling: s = t * (sigma^2 / a^2)
   v_scale <- (sigma * sigma) / (a * a)

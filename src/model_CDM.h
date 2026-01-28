@@ -63,15 +63,8 @@ inline const std::vector<double>& weights() {
   if (w.empty()) {
     const size_t M = sizeof(ZEROS)/sizeof(ZEROS[0]);
     w.resize(M);
-    double norm_const = 0.0;
     for (size_t j = 0; j < M; ++j) {
-      const double raw = ZEROS[j] / JVZ[j];
-      const double lambda = 0.5 * ZEROS[j] * ZEROS[j];
-      norm_const += raw / lambda;
-      w[j] = raw;
-    }
-    if (norm_const > 0.0) {
-      for (size_t j = 0; j < M; ++j) w[j] /= norm_const;
+      w[j] = ZEROS[j] / JVZ[j];
     }
   }
   return w;
@@ -108,7 +101,7 @@ inline double small_t_fpt_scalar(double t_scaled, double x_scaled) {
   const double t = t_scaled;
   const double denom = std::sqrt(x + t) * std::pow(t, 1.5);
   if (!(denom > 0.0)) return 0.0;
-  const double term1 = ((1.0 - x) * (1.0 + t)) / denom;
+  const double term1 = ((1.0 - x) * (1.0 + t) * (1.0 + t)) / denom;
   const double term2 = std::exp(-0.5 * (1.0 - x) * (1.0 - x) / t - 0.5 * z1 * z1 * t);
   const double out = term1 * term2;
   if (!R_finite(out)) return 0.0;
@@ -204,4 +197,3 @@ inline NumericVector c_dCDM(NumericVector rts, NumericVector Rs, NumericMatrix p
 
 
 #endif // MODEL_CDM_H
-
