@@ -17,6 +17,7 @@ design(
   functions = NULL,
   report_p_vector = TRUE,
   custom_p_vector = NULL,
+  trend = NULL,
   transform = NULL,
   bound = NULL,
   ...
@@ -69,6 +70,8 @@ parameters to be estimated.}
 
 \item{custom_p_vector}{A character vector. If specified, a custom likelihood
 function can be supplied.}
+
+\item{trend}{A trend list, as made by \code{\link{make_trend}}}
 
 \item{transform}{A list with custom transformations to be applied to the parameters of the model,
 if the conventional transformations aren't desired.

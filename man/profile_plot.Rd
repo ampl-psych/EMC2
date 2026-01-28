@@ -67,8 +67,8 @@ design_DDMaE <- design(data = forstmann,model=DDM,
 p_vector=c(v_Sleft=-2,v_Sright=2,a=log(.95),a_Eneutral=log(1.5),a_Eaccuracy=log(2),
           t0=log(.25),Z=qnorm(.5),sv=log(.5),SZ=qnorm(.5))
 # Make a profile plot for some parameters. Specifying a custom range for t0.
-profile_plot(p_vector = p_vector, p_min = c(t0 = -1.35),
-             p_max = c(t0 = -1.45), use_par = c("a", "t0", "SZ"),
-             data = forstmann, design = design_DDMaE, n_point = 10)
+# profile_plot(p_vector = p_vector, p_min = c(t0 = -1.35),
+#              p_max = c(t0 = -1.45), use_par = c("a", "t0", "SZ"),
+#              data = forstmann, design = design_DDMaE, n_point = 10)
 }
 }

@@ -2,7 +2,7 @@
 % Please edit documentation in R/model_DDM.R
 \name{DDMGNG}
 \alias{DDMGNG}
-\title{The GNG (go/nogo) Diffusion Decision Model (DDMGNGnoC)}
+\title{The GNG (go/nogo) Diffusion Decision Model}
 \usage{
 DDMGNG()
 }

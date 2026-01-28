@@ -22,10 +22,10 @@ minimal_design <- function(design, covariates = NULL, drop_subjects = TRUE,
     } else{
       if(is.null(cur_des$Ffactors$subjects))cur_des$Ffactors$subjects <- factor(1)
     }
-    if(!is.null(group_design)){
-      cur_des$Ffactors <- cur_des$Ffactors[!names(cur_des$Ffactors) %in% group_factors]
-      cur_des$Fcovariates <- cur_des$Fcovariates[!names(cur_des$Fcovariates) %in% group_factors]
-    }
+    # if(!is.null(group_design)){
+    #   cur_des$Ffactors <- cur_des$Ffactors[!names(cur_des$Ffactors) %in% group_factors]
+    #   cur_des$Fcovariates <- cur_des$Fcovariates[!names(cur_des$Fcovariates) %in% group_factors]
+    # }
 
 
     if(n_trials > 1){
@@ -264,7 +264,8 @@ mapper_wrapper <- function(map, by_subject = FALSE, par_mcmc, design, n_trials =
           res <- rowsum(pars[idx,,i], cells) / ng            # (g x k)
 
         } else{
-          res <- colMeans(pars[idx,,i])
+          if (sum(idx)==1) res <- pars[idx,,i] else
+            res <- colMeans(pars[idx,,i])
         }
       } else{ # Third case map is a formula
         S  <- model.matrix(map[[i]], data = data[idx,])
@@ -346,16 +347,30 @@ par_data_map <- function(par_mcmc, design, n_trials = NULL, data = NULL,
   for(i in 1:n_mcmc){
     parameters <- t(as.matrix(par_mcmc[,,i], nrow = n_pars, ncol = n_subs))
     pars <- do_transform(parameters, model()$pre_transform) #t(apply(parameters, 1, do_pre_transform, model()$pre_transform))
-    rownames(pars) <- design$Ffactors$subjects
-    pars <- map_p(add_constants(pars,design$constants),data, model())
-    if(!is.null(model()$trend) && attr(model()$trend, "pretransform")){
-      # This runs the trend and afterwards removes the trend parameters
-      pars <- prep_trend(data, model()$trend, pars)
+    if(nrow(parameters) == length(unique(data$subjects))){
+      design$Ffactors$subjects <- unique(data$subjects)
     }
-    pars <- do_transform(pars, model()$transform)
-    if(!is.null(model()$trend) && attr(model()$trend, "posttransform")){
-      # This runs the trend and afterwards removes the trend parameters
-      pars <- prep_trend(data, model()$trend, pars)
+
+    rownames(pars) <- design$Ffactors$subjects
+    pars <- map_p(add_constants(pars,design$constants),data, model(), return_trend_pars = TRUE)
+    exclude_transform <- rep(FALSE, ncol(pars))
+    if (!is.null(model()$trend)) {
+      phases <- vapply(model()$trend, function(x) x$phase, character(1))
+      if (any(phases == "pretransform")) pars <- prep_trend_phase(data, model()$trend, pars, "pretransform",
+                                                                  return_trend_pars = TRUE)
+      exclude_transform <- unlist(lapply(model()$trend, function(x){
+        if(x$phase != "posttransform"){
+          return(x$trend_pnames)
+        } else{
+          return(NULL)
+        }
+      }))
+      exclude_transform <- colnames(pars) %in% exclude_transform
+    }
+    pars[,!exclude_transform] <- do_transform(pars[,!exclude_transform], model()$transform)
+    if (!is.null(model()$trend)) {
+      if (any(phases == "posttransform")) pars <- prep_trend_phase(data, model()$trend, pars, "posttransform",
+                                                                   return_trend_pars = TRUE)
     }
     if(add_recalculated) pars <- model()$Ttransform(pars, data)
     if(i == 1){

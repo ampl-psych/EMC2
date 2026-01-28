@@ -1,7 +1,21 @@
 create_group_key <- function(df, factors) {
   if (length(factors) == 0) return(rep("All Data", nrow(df)))
-  apply(df[, factors, drop = FALSE], 1, function(x) paste(paste(factors, x, sep = "="), collapse = " "))
+  key <- apply(df[, factors, drop = FALSE], 1, function(x)
+    paste(paste(factors, x, sep = "="), collapse = " "))
+  levs <- lapply(df[,factors],levels)
+  for (i in 1:length(factors)) levs[[i]] <- paste(factors[i],levs[[i]],sep="=")
+  lev <- levs[[1]]
+  if (length(factors)>1) {
+    for (i in 2:length(factors)) lev <- outer(lev,levs[[i]],paste)
+    lev <- as.vector(aperm(lev,length(factors):1))
+  }
+  factor(key,levels=lev)
 }
+
+# create_group_key <- function(df, factors) {
+#   if (length(factors) == 0) return(rep("All Data", nrow(df)))
+#   apply(df[, factors, drop = FALSE], 1, function(x) paste(paste(factors, x, sep = "="), collapse = " "))
+# }
 
 
 check_data_plot <- function(data, defective_factor, subject, factors, remove_na = TRUE) {
