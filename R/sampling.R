@@ -108,7 +108,7 @@ init <- function(pmwgs, start_mu = NULL, start_var = NULL,
 #'                            formula =list(v~0+S,a~E, t0~1, s~1),
 #'                            constants=c(s=log(1)))
 #'
-#' DDMaE <- make_emc(forstmann, design_DDMaE)
+#' DDMaE <- make_emc(forstmann, design_DDMaE, compress = FALSE)
 #' # set up our mean starting points (same used across subjects).
 #' mu <- c(v_Sleft=-2,v_Sright=2,a=log(1),a_Eneutral=log(1.5),a_Eaccuracy=log(2),
 #'        t0=log(.2))
@@ -117,7 +117,7 @@ init <- function(pmwgs, start_mu = NULL, start_var = NULL,
 #' # Initialize chains, 4 cores per chain, and parallelizing across our 3 chains as well
 #' # so 4*3 cores used.
 #' DDMaE <- init_chains(DDMaE, start_mu = mu, start_var = var,
-#'                      cores_per_chain = 1, cores_for_chains = 1, particles = 10)
+#'                      cores_per_chain = 1, cores_for_chains = 1, particles = 3)
 #' # Afterwards we can just use fit
 #' # DDMaE <- fit(DDMaE, cores_per_chain = 4)
 #' }
@@ -679,7 +679,7 @@ calc_ll_manager <- function(proposals, dadm, model, component = NULL, r_cores = 
         auto_mclapply(1:nrow(proposals),
           function(i) calc_ll_R(proposals[i,], model=model, dadm = dadm),
          mc.cores=r_cores))
-    } else{
+    } else {
       p_types <- names(model$p_types)
       designs <- list()
       for(p in p_types){
@@ -784,3 +784,26 @@ run_hyper <- function(type = "standard", data, prior = NULL, iter = 1000, n_chai
   emc <- subset(emc, filter = 1)
   return(emc)
 }
+
+check_CR <- function(emc, p_vector, range = .2, N = 500){
+  covs <- diag(length(p_vector)) * range
+  props <- mvtnorm::rmvnorm(N, mean = p_vector, sigma = covs)
+  model <- emc[[1]]$model
+  if(is.null(model()$c_name)) stop("C not implemented yet for this model")
+  dat <- emc[[1]]$data[[1]]
+  modelRlist <- model()
+  modelRlist$c_name <- NULL
+  modelR <- function()return(modelRlist)
+  t1 <- system.time(
+    R <- calc_ll_manager(props, dat, modelR)
+  )
+  t2 <- system.time(
+    C <- calc_ll_manager(props, dat, model)
+  )
+  print(paste0("C ", t1$elapsed/t2$elapsed, " times faster"))
+  if(!identical(C, R)){
+    warning("C and R results differ")
+  }
+  return(list(C = C, R = R))
+}
+

@@ -39,7 +39,7 @@ suppress_output <- function(expr) {
 
 rDDM <- function(R,pars,ok=rep(TRUE,length(R)), precision=5e-3)
 {
-  pars <- pars[ok,]
+  pars <- pars[ok,,drop=FALSE]
   R <- R[ok]
   pars <- as.matrix(pars);
   # DDM gets unhappy with large trial numbers so split them into separate lists
@@ -47,7 +47,7 @@ rDDM <- function(R,pars,ok=rep(TRUE,length(R)), precision=5e-3)
   split_idx <- split_idx[1:nrow(pars)]
   out_list <- vector("list", length(unique(split_idx)))
   for(j in 1:length(unique(split_idx))){
-    pars_tmp <- pars[split_idx == j,]
+    pars_tmp <- pars[split_idx == j,,drop=FALSE]
     idx <- find_duplicate_indices(pars_tmp)
     out <- data.frame(R = rep(NA,nrow(pars_tmp)), rt = rep(NA,nrow(pars_tmp)))
     for(id in unique(idx)){
@@ -166,7 +166,7 @@ DDM <- function(){
 
 #### GNG ----
 
-#' The GNG (go/nogo) Diffusion Decision Model (DDMGNGnoC)
+#' The GNG (go/nogo) Diffusion Decision Model
 #'
 #' In the GNG paradigm one of the two possible choices results in a response
 #' being withheld (a non-response), which is indicated in the data by an NA for

@@ -117,8 +117,20 @@ calc_ll <- function(p_matrix, data, constants, designs, type, bounds, transforms
     .Call(`_EMC2_calc_ll`, p_matrix, data, constants, designs, type, bounds, transforms, pretransforms, p_types, min_ll, trend)
 }
 
+get_pars_c_wrapper <- function(p_matrix, data, constants, designs, bounds, transforms, pretransforms, p_types, trend) {
+    .Call(`_EMC2_get_pars_c_wrapper`, p_matrix, data, constants, designs, bounds, transforms, pretransforms, p_types, trend)
+}
+
 rCDM <- function(pars, ok = NULL, dt = 1e-5, max_steps = 100000000L) {
     .Call(`_EMC2_rCDM`, pars, ok, dt, max_steps)
+}
+
+EMC2_call_custom_trend <- function(trend_pars, input, funptrSEXP) {
+    .Call(`_EMC2_EMC2_call_custom_trend`, trend_pars, input, funptrSEXP)
+}
+
+run_trend_rcpp <- function(data, trend, param, trend_pars, pars_full, return_kernel = FALSE) {
+    .Call(`_EMC2_run_trend_rcpp`, data, trend, param, trend_pars, pars_full, return_kernel)
 }
 
 c_add_charvectors <- function(x, y) {

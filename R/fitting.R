@@ -74,11 +74,11 @@ get_stop_criteria <- function(stage, stop_criteria, type){
 #'                            formula =list(v~0+S,a~E, t0~1, s~1, Z~1),
 #'                            constants=c(s=log(1)))
 #' # Then make the emc, we've omitted a prior here for brevity so default priors will be used.
-#' emc <- make_emc(forstmann, design_in)
+#' emc <- make_emc(forstmann, design_in, compress = FALSE)
 #'
 #' # Now for example we can specify that we only want to run the "preburn" phase
 #' # for MCMC 10 iterations
-#' emc <- run_emc(emc, stage = "preburn", stop_criteria = list(iter = 10), cores_for_chains = 1)
+#' # emc <- run_emc(emc, stage = "preburn", stop_criteria = list(iter = 10), cores_for_chains = 1)
 #'}
 
 run_emc <- function(emc, stage, stop_criteria,
@@ -124,6 +124,7 @@ run_emc <- function(emc, stage, stop_criteria,
                              r_cores = r_cores)
 
     class(sub_emc) <- "emc"
+    if(cores_for_chains > 1) sub_emc <- set_custom_kernel_pointers(sub_emc, get_custom_kernel_pointers(emc))
     if(stage != 'preburn'){
       if(is.numeric(thin)){
         sub_emc <- subset(sub_emc, stage = c("preburn", "burn", "adapt", "sample"), thin = thin)
@@ -653,7 +654,8 @@ loadRData <- function(fileName){
 #' prior_LBABE <- prior(design_LBABE, type = 'standard',pmean=pmean,psd=psd)
 #'
 #' # create emc object
-#' LBABE <- make_emc(dat,design_LBABE,type="standard",  prior=prior_LBABE)
+#' LBABE <- make_emc(dat,design_LBABE,type="standard",  prior=prior_LBABE,
+#'                   compress = FALSE)
 #'
 #' @export
 
@@ -723,13 +725,24 @@ make_emc <- function(data,design,model=NULL,
   if (length(model)!=length(data))
     model <- rep(model,length(data))
 
+  ## SM: check for delta rules in trend, and override/turn off compression if the user supplied compress=TRUE.
+  compress_passed <- compress
+  compress <- rep(compress, length(model))
+  has_delta_rule <- sapply(model, has_delta_rules)
+  compress[has_delta_rule] <- FALSE
+  if(compress_passed & any(has_delta_rule)) {
+    if(length(model) == 1) message('Because the model contains a delta rule, data will not be compressed.')
+    else message(paste0('Models ', which(has_delta_rule), ' contain a delta rule; the corresponding data will not be compressed.'))
+  }
+  ## SM END
+
   dadm_list <- vector(mode="list",length=length(data))
   rt_resolution <- rep(rt_resolution,length.out=length(data))
   for (i in 1:length(dadm_list)) {
     message("Processing data set ",i)
     if(is.null(attr(design[[i]], "custom_ll"))){
       dadm_list[[i]] <- design_model(data=data[[i]],design=design[[i]],
-                                     compress=compress,model=model[[i]],rt_resolution=rt_resolution[i])
+                                     compress=compress[[i]],model=model[[i]],rt_resolution=rt_resolution[i])
       sampled_p_names <- names(attr(design[[i]],"p_vector"))
     } else{
       dadm_list[[i]] <- design_model_custom_ll(data = data[[i]],
