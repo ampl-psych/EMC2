@@ -375,17 +375,17 @@ compress_dadm <- function(da,designs,Fcov,Ffun)
   {
     nacc <- length(unique(da$lR))
     # contract output
-    cells <- paste(
-      apply(do.call(cbind,lapply(designs,function(x){
-        apply(x[attr(x,"expand"),,drop=FALSE],1,paste,collapse="_")})
-      ),1,paste,collapse="+"),da$subjects,da$R,da$lR,da$rt,sep="+")
+    design_expands <- lapply(designs, function(x) attr(x, "expand"))
+    cells_design <- do.call(paste, c(design_expands, list(sep = "+")))
+    cells <- paste(cells_design, da$subjects, da$R, da$lR, da$rt, sep = "+")
     # Make sure that if row is included for a trial so are other rows
     if (!is.null(Fcov)) {
       if (is.null(names(Fcov))) nFcov <- Fcov else nFcov <- names(Fcov)
-      cells <- paste(cells,apply(da[,nFcov,drop=FALSE],1,paste,collapse="+"),sep="+")
+      cov_cells <- do.call(paste, c(da[, nFcov, drop = FALSE], list(sep = "+")))
+      cells <- paste(cells, cov_cells, sep = "+")
     }
     if (!is.null(Ffun))
-      cells <- paste(cells,apply(da[,Ffun,drop=FALSE],1,paste,collapse="+"),sep="+")
+      cells <- paste(cells, do.call(paste, c(da[, Ffun, drop = FALSE], list(sep = "+"))), sep = "+")
 
     if (nacc>1) cells <- paste0(rep(apply(matrix(cells,nrow=nacc),2,paste0,collapse="_"),
                                     each=nacc),rep(1:nacc,times=length(cells)/nacc),sep="_")
@@ -393,20 +393,17 @@ compress_dadm <- function(da,designs,Fcov,Ffun)
     contract <- !duplicated(cells)
     out <- da[contract,,drop=FALSE]
     attr(out,"contract") <- contract
-    attr(out,"expand") <- as.numeric(factor(cells,levels=unique(cells)))
+    attr(out,"expand") <- as.integer(factor(cells,levels=unique(cells)))
     lR1 <- da$lR==levels(da$lR)[[1]]
-    attr(out,"expand_winner") <- as.numeric(factor(cells[lR1],levels=unique(cells[lR1])))
+    attr(out,"expand_winner") <- as.integer(factor(cells[lR1],levels=unique(cells[lR1])))
     attr(out,"s_expand") <- da$subjects
     attr(out,"designs") <- lapply(designs,function(x){
       attr(x,"expand") <- attr(x,"expand")[contract]; x})
 
     # indices to use to contract further ignoring rt then expand back
-    cells_nort <- paste(
-      apply(do.call(cbind,lapply(designs,function(x){
-        apply(x[attr(x,"expand"),,drop=FALSE],1,paste,collapse="_")})
-      ),1,paste,collapse="+"),da$subjects,da$R,da$lR,sep="+")[contract]
+    cells_nort <- paste(cells_design, da$subjects, da$R, da$lR, sep = "+")[contract]
     attr(out,"unique_nort") <- !duplicated(cells_nort)
-    attr(out,"expand_nort") <- as.numeric(factor(cells_nort,levels=unique(cells_nort)))
+    attr(out,"expand_nort") <- as.integer(factor(cells_nort,levels=unique(cells_nort)))
 
     # cells_nort <- paste(
     #   apply(do.call(cbind,lapply(designs,function(x){
@@ -420,11 +417,9 @@ compress_dadm <- function(da,designs,Fcov,Ffun)
     #    levels=unique(cells_nort)))[as.numeric(factor(cells,levels=unique(cells)))]
 
     # indices to use to contract ignoring rt and response (R), then expand back
-    cells_nortR <- paste(apply(do.call(cbind,lapply(designs,function(x){
-      apply(x[attr(x,"expand"),,drop=FALSE],1,paste,collapse="_")})),1,paste,collapse="+"),
-      da$subjects,da$lR,sep="+")[contract]
+    cells_nortR <- paste(cells_design, da$subjects, da$lR, sep = "+")[contract]
     attr(out,"unique_nortR") <- !duplicated(cells_nortR)
-    attr(out,"expand_nortR") <- as.numeric(factor(cells_nortR,levels=unique(cells_nortR)))
+    attr(out,"expand_nortR") <- as.integer(factor(cells_nortR,levels=unique(cells_nortR)))
 
     # # indices to use to contract ignoring rt and response (R), then expand back
     # cells_nortR <- paste(apply(do.call(cbind,lapply(designs,function(x){
@@ -522,7 +517,8 @@ rt_check_function <- function(data){
 
 design_model <- function(data,design,model=NULL,
                          add_acc=TRUE,rt_resolution=1/60,verbose=TRUE,
-                         compress=TRUE,rt_check=TRUE, add_da = FALSE, all_cells_dm = FALSE)
+                         compress=TRUE,rt_check=TRUE, add_da = FALSE, all_cells_dm = FALSE,
+                         memory_saver = FALSE, keep_cols = NULL)
 {
   if (is.null(model)) {
     if (is.null(design$model))
@@ -615,9 +611,9 @@ design_model <- function(data,design,model=NULL,
     attr(dadm,"s_expand") <- da$subjects
     # attr(dadm,"expand_all") <- 1:nrow(dadm)
     if(is.null(dadm$lR)){
-      attr(dadm,"expand") <- 1:nrow(dadm)
+      attr(dadm,"expand") <- seq_len(nrow(dadm))
     } else{
-      attr(dadm,"expand") <- 1:(nrow(dadm)/length(unique(dadm$lR)))
+      attr(dadm,"expand") <- seq_len(nrow(dadm)/length(unique(dadm$lR)))
     }
   }
   p_names <-  unlist(lapply(out,function(x){dimnames(x)[[2]]}),use.names=FALSE)
@@ -638,6 +634,29 @@ design_model <- function(data,design,model=NULL,
   attr(dadm,"constants") <- design$constants
   attr(dadm,"ok_trials") <- is.finite(data$rt)
   attr(dadm,"s_data") <- data$subjects
+  if (memory_saver) {
+    if (!is.null(attr(dadm, "custom_ll"))) {
+      warning("memory_saver not supported for custom likelihoods; ignored")
+      return(dadm)
+    }
+    designs <- attr(dadm, "designs")
+    pool <- build_design_pool(dadm, designs)
+    if (!is.null(pool)) {
+      attr(dadm, "design_pool") <- pool$pool
+      attr(dadm, "design_pool_map") <- pool$map
+      attr(dadm, "designs") <- NULL
+    }
+    model_list <- model()
+    if (!has_trend_map(model_list)) attr(dadm, "covariate_maps") <- NULL
+    keep <- resolve_memory_keep_cols(dadm, model_list, keep_cols = keep_cols)
+    if (length(keep) > 0) {
+      attrs <- attributes(dadm)
+      dadm <- dadm[, keep, drop = FALSE]
+      for (nm in setdiff(names(attrs), c("names", "row.names", "class"))) {
+        attr(dadm, nm) <- attrs[[nm]]
+      }
+    }
+  }
   dadm
 }
 
@@ -717,7 +736,7 @@ make_dm <- function(form,da,Clist=NULL,Fcovariates=NULL, add_da = FALSE, all_cel
         out <- cbind(da[!dups,colnames(da) != "subjects",drop=FALSE], out)
       }
     }
-    attr(out,"expand") <- as.numeric(factor(cells,levels=unique(cells)))
+    attr(out,"expand") <- as.integer(factor(cells,levels=unique(cells)))
     attr(out,"assign") <- ass
     attr(out,"contrasts") <- contr
     out
@@ -795,12 +814,19 @@ dm_list <- function(dadm)
       isin1 <- s_expand==i             # da
       isin2 <- attr(dadm,"s_data")==i  # data
       if(length(isin2) > 0){
-        attr(dl[[i]],"expand") <- expand_winner[isin2]-min(expand_winner[isin2]) + 1
+        attr(dl[[i]],"expand") <- as.integer(expand_winner[isin2]-min(expand_winner[isin2]) + 1)
       }
       attr(dl[[i]],"model") <- NULL
       attr(dl[[i]],"p_names") <- p_names
       attr(dl[[i]],"sampled_p_names") <- sampled_p_names
-      attr(dl[[i]],"designs") <- sub_design(designs,isin)
+      if (!is.null(attr(dadm, "design_pool"))) {
+        pool <- attr(dadm, "design_pool")
+        attr(dl[[i]], "design_pool") <- pool[isin, , drop = FALSE]
+        attr(dl[[i]], "design_pool_map") <- attr(dadm, "design_pool_map")
+        attr(dl[[i]], "designs") <- NULL
+      } else{
+        attr(dl[[i]],"designs") <- sub_design(designs,isin)
+      }
       # if(!is.null(expand)) attr(dl[[i]],"expand_all") <- expand[isin1]-min(expand[isin1]) + 1
       attr(dl[[i]],"contract") <- NULL
       attr(dl[[i]],"expand_winner") <- NULL

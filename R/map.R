@@ -79,6 +79,7 @@ map_p <- function(p,dadm,model,return_trialwise_parameters=FALSE,
 
   # Get parameter names from model and create output matrix
   do_p <- names(model$p_types)
+  designs <- get_designs_expanded(dadm, model)
   pars <- matrix(nrow=nrow(dadm),ncol=length(do_p),dimnames=list(NULL,do_p))
 
   # If there are any trends for premap or pretransform do these first
@@ -102,7 +103,7 @@ map_p <- function(p,dadm,model,return_trialwise_parameters=FALSE,
   if(return_trialwise_parameters) tpars <- list()
   # Loop through each parameter
   for (i in do_p) {
-    cur_design <- attr(dadm,"designs")[[i]]
+    cur_design <- designs[[i]]
     # Handle vector vs matrix input differently
     if ( !is.matrix(p) ) {
       pm <- t(as.matrix(p[colnames(cur_design)]))
@@ -151,7 +152,7 @@ map_p <- function(p,dadm,model,return_trialwise_parameters=FALSE,
     }
 
     # Apply design matrix and sum parameter effects
-    tmp <- pm*cur_design[attr(cur_design,"expand"),,drop=FALSE]
+    tmp <- pm * cur_design
     tmp[is.nan(tmp)] <- 0 # Handle 0 weight x Inf parameter cases
     tmp <- rowSums(tmp)
     # If this is a premap trend parameter, transform it here already

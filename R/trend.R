@@ -1255,10 +1255,7 @@ make_data_unconditional <- function(data, pars, design, model, return_trialwise_
       if(!tmp_return_trialwise) {
         # call C. C cannot return trialwise parameters as of yet, so revert to R otherwise
         p_types <- names(model_list$p_types)
-        designs <- list()
-        for(p in p_types){
-          designs[[p]] <- attr(dm,"designs")[[p]][attr(attr(dm,"designs")[[p]],"expand"),,drop=FALSE]
-        }
+        designs <- get_designs_expanded(dm, model_list)
         constants <- attr(dm, "constants")
         if(is.null(constants)) constants <- NA
         pm <- get_pars_c_wrapper(pars[which(subj == subj_levels),,drop=FALSE], dm, constants = constants, designs = designs, #type = model_list$c_name,
@@ -1591,4 +1588,3 @@ apply_kernel <- function(kernel_pars, emc, subject=1, input_pars=NULL, trend_n=1
   colnames(out) <- trend$covariate
   out
 }
-

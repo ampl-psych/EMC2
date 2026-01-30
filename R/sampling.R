@@ -681,10 +681,7 @@ calc_ll_manager <- function(proposals, dadm, model, component = NULL, r_cores = 
          mc.cores=r_cores))
     } else {
       p_types <- names(model$p_types)
-      designs <- list()
-      for(p in p_types){
-        designs[[p]] <- attr(dadm,"designs")[[p]][attr(attr(dadm,"designs")[[p]],"expand"),,drop=FALSE]
-      }
+      designs <- get_designs_expanded(dadm, model)
       constants <- attr(dadm, "constants")
       if(is.null(constants)) constants <- NA
       if (nrow(proposals) <= r_cores)
@@ -806,4 +803,3 @@ check_CR <- function(emc, p_vector, range = .2, N = 500){
   }
   return(list(C = C, R = R))
 }
-
