@@ -16,5 +16,5 @@ Invisible return with a list of all the information that is also printed
 Prints information associated with the prior for certain 'type'
 }
 \examples{
-prior_help('diagonal')
+prior_help("diagonal")
 }

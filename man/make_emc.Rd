@@ -15,6 +15,8 @@ make_emc(
   prior_list = NULL,
   group_design = NULL,
   par_groups = NULL,
+  memory_saver = FALSE,
+  keep_cols = NULL,
   ...
 )
 }
@@ -40,6 +42,10 @@ make_emc(
 \item{par_groups}{A vector. Indicates which parameters are allowed to correlate. Could either be a list of character vectors of covariance blocks. Or
 a numeric vector, e.g., \code{c(1,1,1,2,2)} means the covariances
 of the first three and of the last two parameters are estimated as two separate blocks.}
+
+\item{memory_saver}{A Boolean. If \code{TRUE}, store a pooled design representation and drop per-parameter designs from data to reduce memory usage.}
+
+\item{keep_cols}{A character vector of data columns to always retain in \code{data} when \code{memory_saver = TRUE}.}
 
 \item{...}{Additional, optional arguments.}
 }

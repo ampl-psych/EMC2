@@ -629,6 +629,8 @@ loadRData <- function(fileName){
 #' a numeric vector, e.g., `c(1,1,1,2,2)` means the covariances
 #' of the first three and of the last two parameters are estimated as two separate blocks.
 #' @param prior_list A named list containing the prior. Default prior created if `NULL`. For the default priors, see `?get_prior_{type}`.
+#' @param memory_saver A Boolean. If `TRUE`, store a pooled design representation and drop per-parameter designs from data to reduce memory usage.
+#' @param keep_cols A character vector of data columns to always retain in `data` when `memory_saver = TRUE`.
 #' @param ... Additional, optional arguments.
 #' @return An uninitialized emc object
 #' @examples dat <- forstmann

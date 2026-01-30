@@ -43,25 +43,35 @@ To get the prior help use \code{prior_help(type)}. With \code{type} e.g. 'diagon
 }
 \examples{
 # First define a design for the model
-design_DDMaE <- design(data = forstmann,model=DDM,
-                           formula =list(v~0+S,a~E, t0~1, s~1, Z~1, sv~1, SZ~1),
-                           constants=c(s=log(1)))
+design_DDMaE <- design(
+  data = forstmann, model = DDM,
+  formula = list(v ~ 0 + S, a ~ E, t0 ~ 1, s ~ 1, Z ~ 1, sv ~ 1, SZ ~ 1),
+  constants = c(s = log(1))
+)
 # Then set up a prior using prior
-p_vector=c(v_Sleft=-2,v_Sright=2,a=log(1),a_Eneutral=log(1.5),a_Eaccuracy=log(2),
-                     t0=log(.2),Z=qnorm(.5),sv=log(.5),SZ=qnorm(.5))
-psd <- c(v_Sleft=1,v_Sright=1,a=.3,a_Eneutral=.3,a_Eaccuracy=.3,
-                     t0=.4,Z=1,sv=.4,SZ=1)
+p_vector <- c(
+  v_Sleft = -2, v_Sright = 2, a = log(1), a_Eneutral = log(1.5), a_Eaccuracy = log(2),
+  t0 = log(.2), Z = qnorm(.5), sv = log(.5), SZ = qnorm(.5)
+)
+psd <- c(
+  v_Sleft = 1, v_Sright = 1, a = .3, a_Eneutral = .3, a_Eaccuracy = .3,
+  t0 = .4, Z = 1, sv = .4, SZ = 1
+)
 # Here we left the variance prior at default
-prior_DDMaE <- prior(design_DDMaE,mu_mean=p_vector,mu_sd=psd)
+prior_DDMaE <- prior(design_DDMaE, mu_mean = p_vector, mu_sd = psd)
 # Also add a group-level variance prior:
-pscale <- c(v_Sleft=.6,v_Sright=.6,a=.3,a_Eneutral=.3,a_Eaccuracy=.3,
-                             t0=.2,Z=.5,sv=.4,SZ=.3)
+pscale <- c(
+  v_Sleft = .6, v_Sright = .6, a = .3, a_Eneutral = .3, a_Eaccuracy = .3,
+  t0 = .2, Z = .5, sv = .4, SZ = .3
+)
 df <- .4
-prior_DDMaE <- prior(design_DDMaE,mu_mean=p_vector,mu_sd=psd, A = pscale, df = df)
+prior_DDMaE <- prior(design_DDMaE, mu_mean = p_vector, mu_sd = psd, A = pscale, df = df)
 # If we specify a new design
-design_DDMat0E <- design(data = forstmann,model=DDM,
-                           formula =list(v~0+S,a~E, t0~E, s~1, Z~1, sv~1, SZ~1),
-                           constants=c(s=log(1)))
+design_DDMat0E <- design(
+  data = forstmann, model = DDM,
+  formula = list(v ~ 0 + S, a ~ E, t0 ~ E, s ~ 1, Z ~ 1, sv ~ 1, SZ ~ 1),
+  constants = c(s = log(1))
+)
 # We can easily update the prior
 prior_DDMat0E <- prior(design_DDMat0E, update = prior_DDMaE)
 }
