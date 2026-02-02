@@ -7,6 +7,7 @@
 #include "model_DDM.h"
 #include "model_MRI.h"
 #include "trend.h"
+#include "transform_utils.h"
 using namespace Rcpp;
 
 // [[Rcpp::export]]
