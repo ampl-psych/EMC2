@@ -241,7 +241,7 @@ get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1
           idx_s <- 1
 
           # Re-iterate structure to check sizes
-          for (p in names(group_design)) {
+          for (p in par_names) {
             if (is.list(group_design[[p]]) && !is.null(group_design[[p]]$random)) {
               for (gname in names(group_design[[p]]$random)) {
                 z <- group_design[[p]]$random[[gname]]
@@ -264,8 +264,8 @@ get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1
 
           # Prepare for alpha
           if (selection == "alpha") {
-            random_designs <- add_group_design_random(names(group_design), group_design)
-            random_maps <- add_group_design_map(names(group_design), group_design)
+            random_designs <- add_group_design_random(par_names, group_design)
+            random_maps <- add_group_design_map(par_names, group_design)
           }
         }
       }
@@ -317,7 +317,7 @@ get_startpoints_standard <- function(pmwgs, start_mu, start_var) {
     idx_u <- 1
     idx_s <- 1
     # Iterate group designs to match s to u
-    for (p in names(pmwgs$group_designs)) {
+    for (p in pmwgs$par_names[!pmwgs$nuisance]) {
       if (is.list(pmwgs$group_designs[[p]]) && !is.null(pmwgs$group_designs[[p]]$random)) {
         for (gname in names(pmwgs$group_designs[[p]]$random)) {
           z <- pmwgs$group_designs[[p]]$random[[gname]]
@@ -543,34 +543,38 @@ gibbs_step_standard <- function(sampler, alpha) {
         # Prior precision in parameter space
         prec_noise <- tvinv[k, k]
 
-        # Calculate total random effect contribution for this parameter
-        total_rand_offset <- numeric(n)
-        u_temp_ptr <- u_ptr
-        for (z in random_designs[[pname]]) {
-          n_u <- ncol(z)
-          total_rand_offset <- total_rand_offset + as.vector(z %*% u_new[u_temp_ptr:(u_temp_ptr + n_u - 1)])
-          u_temp_ptr <- u_temp_ptr + n_u
-        }
-
-        # Calculate cross-correlation adjustment offset
-        # This accounts for correlations with other parameters in the blocked covariance structure
-        mu_full <- calculate_subject_means_RE(fixed_designs, tmu_new, random_designs, u_new, random_maps)
-        devs <- alpha - mu_full
-
-        weighted_devs <- (tvinv %*% devs)[k, ]
-        other_terms <- weighted_devs - tvinv[k, k] * devs[k, ]
-        adjustment <- -other_terms / tvinv[k, k]
-
-        # Base target for this parameter is the residual after removing fixed effects,
-        # total random effects, and the cross-correlation adjustment.
-        base_target <- alpha[k, ] - mu_fixed[k, ] - total_rand_offset - adjustment
+        # Track component sizes and indices for this parameter
+        z_list <- random_designs[[pname]]
+        comp_sizes <- vapply(z_list, ncol, integer(1))
+        comp_starts <- u_ptr + c(0, cumsum(comp_sizes))[seq_along(comp_sizes)]
 
         # Now iterate over components for THIS parameter k
-        for (z in random_designs[[pname]]) {
-          n_u <- ncol(z)
+        for (j in seq_along(z_list)) {
+          z <- z_list[[j]]
+          n_u <- comp_sizes[j]
+          curr_idx <- comp_starts[j]:(comp_starts[j] + n_u - 1)
           curr_s2 <- s_new[s_ptr]
 
-          current_u_segment <- u_new[u_ptr:(u_ptr + n_u - 1)]
+          # Recompute total random effect contribution with current u_new
+          total_rand_offset <- numeric(n)
+          for (jj in seq_along(z_list)) {
+            idx_jj <- comp_starts[jj]:(comp_starts[jj] + comp_sizes[jj] - 1)
+            total_rand_offset <- total_rand_offset + as.vector(z_list[[jj]] %*% u_new[idx_jj])
+          }
+
+          # Recompute cross-correlation adjustment with current u_new
+          mu_full <- calculate_subject_means_RE(fixed_designs, tmu_new, random_designs, u_new, random_maps)
+          devs <- alpha - mu_full
+
+          weighted_devs <- (tvinv %*% devs)[k, ]
+          other_terms <- weighted_devs - tvinv[k, k] * devs[k, ]
+          adjustment <- -other_terms / tvinv[k, k]
+
+          # Base target for this component is the residual after removing fixed effects,
+          # total random effects, and the cross-correlation adjustment.
+          base_target <- alpha[k, ] - mu_fixed[k, ] - total_rand_offset - adjustment
+
+          current_u_segment <- u_new[curr_idx]
 
           # Isolate the current random effect component (u_curr) from the residuals.
           # base_target excludes all random effects, so we add back the current
@@ -594,7 +598,7 @@ gibbs_step_standard <- function(sampler, alpha) {
           u_drawn <- as.vector(post_mean + L_u %*% rnorm(n_u))
 
           # Update u_new
-          u_new[u_ptr:(u_ptr + n_u - 1)] <- u_drawn
+          u_new[curr_idx] <- u_drawn
 
           # Update s for this component
           # s^2 | u ~ IG( v/2 + J/2, v/a_half_s + sum(u^2)/2 )
@@ -617,10 +621,9 @@ gibbs_step_standard <- function(sampler, alpha) {
 
           a_half_s_new[s_ptr] <- 1 / rgamma(1, shape = shape_a, rate = prior$v_Z * (1 / s2_new) + 1 / (val_A^2))
 
-
-          u_ptr <- u_ptr + n_u
           s_ptr <- s_ptr + 1
         }
+        u_ptr <- u_ptr + sum(comp_sizes)
       }
     }
 
@@ -1041,7 +1044,14 @@ bridge_add_info_standard <- function(info, samples) {
   # Base counts
   n_mu <- n_total_pars
   n_a <- samples$n_pars
-  n_var <- sum(!has_cov) + (sum(has_cov) * (sum(has_cov) + 1)) / 2
+  n_var <- sum(!has_cov)
+  if (any(has_cov)) {
+    block_groups <- unique(info$par_group[has_cov])
+    for (g in block_groups) {
+      d <- sum(has_cov & info$par_group == g)
+      n_var <- n_var + (d * (d + 1)) / 2
+    }
+  }
 
   # Random effects counts
   n_u <- get_n_random(samples$par_names, samples$group_designs)
