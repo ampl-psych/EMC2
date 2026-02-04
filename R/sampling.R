@@ -669,7 +669,7 @@ check_prop_performance <- function(prop_performance, stage){
   return(round(prop_performance))
 }
 
-calc_ll_manager <- function(proposals, dadm, model, component = NULL, r_cores = 1, use_new=TRUE){
+calc_ll_manager <- function(proposals, dadm, model, component = NULL, r_cores = 1, use_new=FALSE){
   if(!is.data.frame(dadm)){
     lls <- log_likelihood_joint(proposals, dadm, model, component)
   } else{
