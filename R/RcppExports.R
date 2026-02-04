@@ -109,80 +109,20 @@ construct_design_matrix <- function(frame_times, events, has_derivative, min_ons
     .Call(`_EMC2_construct_design_matrix`, frame_times, events, has_derivative, min_onset, oversampling, time_length, onset, delay, undershoot, dispersion, u_dispersion, ratio, add_intercept)
 }
 
-ParamTable_create_from_p_types <- function(n_trials, p_types) {
-    .Call(`_EMC2_ParamTable_create_from_p_types`, n_trials, p_types)
-}
-
-ParamTable_create_from_matrix <- function(base, names) {
-    .Call(`_EMC2_ParamTable_create_from_matrix`, base, names)
-}
-
-ParamTable_materialize <- function(pt_xptr) {
-    .Call(`_EMC2_ParamTable_materialize`, pt_xptr)
-}
-
-ParamTable_drop <- function(pt_xptr, drop_names) {
-    invisible(.Call(`_EMC2_ParamTable_drop`, pt_xptr, drop_names))
-}
-
-ParamTable_set_column <- function(pt_xptr, name, col) {
-    invisible(.Call(`_EMC2_ParamTable_set_column`, pt_xptr, name, col))
-}
-
-ParamTable_create_from_pvector_designs <- function(p_vector, designs, n_trials) {
-    .Call(`_EMC2_ParamTable_create_from_pvector_designs`, p_vector, designs, n_trials)
-}
-
-ParamTable_map_designs <- function(pt_xptr, designs, include_param) {
-    invisible(.Call(`_EMC2_ParamTable_map_designs`, pt_xptr, designs, include_param))
-}
-
-TrendEngine_create <- function(trend, data) {
-    .Call(`_EMC2_TrendEngine_create`, trend, data)
-}
-
-TrendEngine_premap_mask <- function(engine_ptr, designs) {
-    .Call(`_EMC2_TrendEngine_premap_mask`, engine_ptr, designs)
-}
-
-ParamTable_get_n_trials <- function(pt_xptr) {
-    .Call(`_EMC2_ParamTable_get_n_trials`, pt_xptr)
-}
-
-ParamTable_do_transform_all <- function(param_table_ptr, transform) {
-    invisible(.Call(`_EMC2_ParamTable_do_transform_all`, param_table_ptr, transform))
-}
-
-ParamTable_do_transform_premap <- function(param_table_ptr, trend_engine_ptr, transform) {
-    invisible(.Call(`_EMC2_ParamTable_do_transform_premap`, param_table_ptr, trend_engine_ptr, transform))
-}
-
-ParamTable_do_transform_postmap <- function(param_table_ptr, trend_engine_ptr, transform) {
-    invisible(.Call(`_EMC2_ParamTable_do_transform_postmap`, param_table_ptr, trend_engine_ptr, transform))
-}
-
-ParamTable_bind_trendops <- function(param_table_ptr, trend_engine_ptr) {
-    invisible(.Call(`_EMC2_ParamTable_bind_trendops`, param_table_ptr, trend_engine_ptr))
-}
-
-TrendEngine_run_premap_kernels_debug <- function(param_table_ptr, trend_engine_ptr) {
-    .Call(`_EMC2_TrendEngine_run_premap_kernels_debug`, param_table_ptr, trend_engine_ptr)
-}
-
-TrendEngine_apply_premap_bases <- function(param_table_ptr, trend_engine_ptr) {
-    invisible(.Call(`_EMC2_TrendEngine_apply_premap_bases`, param_table_ptr, trend_engine_ptr))
-}
-
 do_transform <- function(pars, transform) {
     .Call(`_EMC2_do_transform`, pars, transform)
 }
 
-calc_ll <- function(p_matrix, data, constants, designs, type, bounds, transforms, pretransforms, p_types, min_ll, trend) {
-    .Call(`_EMC2_calc_ll`, p_matrix, data, constants, designs, type, bounds, transforms, pretransforms, p_types, min_ll, trend)
+calc_ll <- function(p_matrix, data, constants, designs, type, bounds, transforms, pretransforms, p_types, min_ll, trend = NULL, use_new = FALSE) {
+    .Call(`_EMC2_calc_ll`, p_matrix, data, constants, designs, type, bounds, transforms, pretransforms, p_types, min_ll, trend, use_new)
 }
 
-get_pars_c_wrapper <- function(p_matrix, data, constants, designs, bounds, transforms, pretransforms, p_types, trend) {
+get_pars_c_wrapper <- function(p_matrix, data, constants, designs, bounds, transforms, pretransforms, p_types, trend = NULL) {
     .Call(`_EMC2_get_pars_c_wrapper`, p_matrix, data, constants, designs, bounds, transforms, pretransforms, p_types, trend)
+}
+
+get_pars_c_wrapper_new <- function(p_matrix, data, constants, designs, bounds, transforms, pretransforms, p_types, trend = NULL) {
+    .Call(`_EMC2_get_pars_c_wrapper_new`, p_matrix, data, constants, designs, bounds, transforms, pretransforms, p_types, trend)
 }
 
 EMC2_call_custom_trend <- function(trend_pars, input, funptrSEXP) {

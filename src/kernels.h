@@ -28,38 +28,43 @@ enum class KernelType {
 };
 
 // ---- Base + hierarchy ----
-
 struct BaseKernel {
 protected:
-  std::vector<double> out_;    // last run's trajectory
+  std::vector<double> out_;
   bool has_run_ = false;
 
 public:
   virtual ~BaseKernel() {}
 
-  // kp: kernel_pars (compressed, n_comp x K)
-  // covariate: compressed covariate vector (length n_comp)
-  // comp_idx: 0-based indices into kp/covariate defining the block
   virtual void run(const KernelParsView& kernel_pars,
                    const Rcpp::NumericVector& covariate,
-                   const Rcpp::IntegerVector& comp_idx) = 0;
+                   const std::vector<int>& comp_idx) = 0;
 
   virtual void reset() {
     out_.clear();
     has_run_ = false;
   }
 
-  bool has_run() const {
-    return has_run_;
-  }
+  bool has_run() const { return has_run_; }
 
-  const std::vector<double>& get_output() const {
-    return out_;
+  const std::vector<double>& get_output() const { return out_; }
+
+  // Expand compressed out_ (length n_comp) into full length using expand_idx
+  void do_expand(const std::vector<int>& expand_idx) {
+    const int n_full = static_cast<int>(expand_idx.size());
+
+    out_.resize(n_full);  // keeps compressed data in [0..n_comp-1]
+
+    for (int i = n_full - 1; i >= 0; --i) {
+      int k = expand_idx[i] - 1;  // 1-based -> 0-based
+      out_[i] = out_[k];
+    }
   }
 
 protected:
   void mark_run_complete() { has_run_ = true; }
 };
+
 
 // For sequential kernels: currently same as BaseKernel -- just included to allow for other types (e.g. Bayesian ideal observer, autoregressive) in the future
 struct SequentialKernel : BaseKernel {
@@ -88,35 +93,42 @@ public:
 struct LinIncrKernel : BaseKernel {
   void run(const KernelParsView& kernel_pars,
            const Rcpp::NumericVector& covariate,
-           const Rcpp::IntegerVector& comp_idx) override {
-             int n = comp_idx.size();
-             out_.assign(n, 0.0);  // zeros, as in original code
+           const std::vector<int>& comp_idx) override {
 
-             for (int j = 0; j < n; ++j) {
-               int row = comp_idx[j];
-               double cov_i = covariate[row];
-               if (!Rcpp::NumericVector::is_na(cov_i)) {
-                 out_[j] = cov_i;
+             int n_comp = comp_idx.size();
+             out_.assign(n_comp, NA_REAL);    // compressed output
+
+             double last = NA_REAL;
+             for (int j = 0; j < n_comp; ++j) {
+               int r = comp_idx[j];
+               double x = covariate[r];
+               if (!ISNAN(x)) {
+                 last = x;
                }
+               out_[j] = last;  // compressed index
              }
 
              mark_run_complete();
            }
 };
 
+
 struct LinDecrKernel : BaseKernel {
   void run(const KernelParsView& kernel_pars,
            const Rcpp::NumericVector& covariate,
-           const Rcpp::IntegerVector& comp_idx) override {
-             int n = comp_idx.size();
-             out_.assign(n, 0.0);
+           const std::vector<int>& comp_idx) override {
 
-             for (int j = 0; j < n; ++j) {
-               int row = comp_idx[j];
-               double cov_i = covariate[row];
-               if (!Rcpp::NumericVector::is_na(cov_i)) {
-                 out_[j] = -cov_i;
+             int n_comp = comp_idx.size();
+             out_.assign(n_comp, NA_REAL);
+
+             double last = NA_REAL;
+             for (int j = 0; j < n_comp; ++j) {
+               int r = comp_idx[j];
+               double x = covariate[r];
+               if (!ISNAN(x)) {
+                 last = -x;
                }
+               out_[j] = last;
              }
 
              mark_run_complete();
@@ -126,18 +138,21 @@ struct LinDecrKernel : BaseKernel {
 struct ExpDecrKernel : BaseKernel {
   void run(const KernelParsView& kernel_pars,
            const Rcpp::NumericVector& covariate,
-           const Rcpp::IntegerVector& comp_idx) override {
-             int n = comp_idx.size();
-             out_.assign(n, 0.0);
+           const std::vector<int>& comp_idx) override {
+
+             int n_comp = comp_idx.size();
+             out_.assign(n_comp, NA_REAL);
 
              const double* lambda_col = kernel_pars.cols[0];
-             for (int j = 0; j < n; ++j) {
-               int row = comp_idx[j];
-               double cov_i = covariate[row];
-               if (!Rcpp::NumericVector::is_na(cov_i)) {
-                 double lambda = lambda_col[row];
-                 out_[j] = std::exp(-lambda * cov_i);
+             double last = NA_REAL;
+             for (int j = 0; j < n_comp; ++j) {
+               int r = comp_idx[j];
+               double x = covariate[r];
+               if (!ISNAN(x)) {
+                 double lambda = lambda_col[r];
+                 last = std::exp(-lambda * x);
                }
+               out_[j] = last;
              }
 
              mark_run_complete();
@@ -147,18 +162,21 @@ struct ExpDecrKernel : BaseKernel {
 struct ExpIncrKernel : BaseKernel {
   void run(const KernelParsView& kernel_pars,
            const Rcpp::NumericVector& covariate,
-           const Rcpp::IntegerVector& comp_idx) override {
-             int n = comp_idx.size();
-             out_.assign(n, 0.0);
-             const double* lambda_col = kernel_pars.cols[0];
+           const std::vector<int>& comp_idx) override {
 
-             for (int j = 0; j < n; ++j) {
-               int row = comp_idx[j];
-               double cov_i = covariate[row];
-               if (!Rcpp::NumericVector::is_na(cov_i)) {
-                 double lambda = lambda_col[row];
-                 out_[j] = 1.0 - std::exp(-lambda * cov_i);
+             int n_comp = comp_idx.size();
+             out_.assign(n_comp, NA_REAL);
+
+             const double* lambda_col = kernel_pars.cols[0];
+             double last = NA_REAL;
+             for (int j = 0; j < n_comp; ++j) {
+               int r = comp_idx[j];
+               double x = covariate[r];
+               if (!ISNAN(x)) {
+                 double lambda = lambda_col[r];
+                 last = 1.0 - std::exp(-lambda * x);
                }
+               out_[j] = last;
              }
 
              mark_run_complete();
@@ -168,19 +186,21 @@ struct ExpIncrKernel : BaseKernel {
 struct PowDecrKernel : BaseKernel {
   void run(const KernelParsView& kernel_pars,
            const Rcpp::NumericVector& covariate,
-           const Rcpp::IntegerVector& comp_idx) override {
-             int n = comp_idx.size();
-             out_.assign(n, 0.0);
+           const std::vector<int>& comp_idx) override {
+
+             int n_comp = comp_idx.size();
+             out_.assign(n_comp, NA_REAL);
 
              const double* alpha_col = kernel_pars.cols[0];
-
-             for (int j = 0; j < n; ++j) {
-               int row = comp_idx[j];
-               double cov_i = covariate[row];
-               if (!Rcpp::NumericVector::is_na(cov_i)) {
-                 double alpha = alpha_col[row];
-                 out_[j] = std::pow(1.0 + cov_i, -alpha);
+             double last = NA_REAL;
+             for (int j = 0; j < n_comp; ++j) {
+               int r = comp_idx[j];
+               double x = covariate[r];
+               if (!ISNAN(x)) {
+                 double alpha = alpha_col[r];
+                 last = std::pow(1.0 + x, -alpha);
                }
+               out_[j] = last;
              }
 
              mark_run_complete();
@@ -190,19 +210,21 @@ struct PowDecrKernel : BaseKernel {
 struct PowIncrKernel : BaseKernel {
   void run(const KernelParsView& kernel_pars,
            const Rcpp::NumericVector& covariate,
-           const Rcpp::IntegerVector& comp_idx) override {
-             int n = comp_idx.size();
-             out_.assign(n, 0.0);
+           const std::vector<int>& comp_idx) override {
+
+             int n_comp = comp_idx.size();
+             out_.assign(n_comp, NA_REAL);
 
              const double* alpha_col = kernel_pars.cols[0];
-
-             for (int j = 0; j < n; ++j) {
-               int row = comp_idx[j];
-               double cov_i = covariate[row];
-               if (!Rcpp::NumericVector::is_na(cov_i)) {
-                 double alpha = alpha_col[row];
-                 out_[j] = 1.0 - std::pow(1.0 + cov_i, -alpha);
+             double last = NA_REAL;
+             for (int j = 0; j < n_comp; ++j) {
+               int r = comp_idx[j];
+               double x = covariate[r];
+               if (!ISNAN(x)) {
+                 double alpha = alpha_col[r];
+                 last = 1.0 - std::pow(1.0 + x, -alpha);
                }
+               out_[j] = last;
              }
 
              mark_run_complete();
@@ -212,21 +234,25 @@ struct PowIncrKernel : BaseKernel {
 struct Poly2Kernel : BaseKernel {
   void run(const KernelParsView& kernel_pars,
            const Rcpp::NumericVector& covariate,
-           const Rcpp::IntegerVector& comp_idx) override {
-             int n = comp_idx.size();
-             out_.assign(n, 0.0);
+           const std::vector<int>& comp_idx) override {
+
+             int n_comp = comp_idx.size();
+             out_.assign(n_comp, NA_REAL);
 
              const double* a1_col = kernel_pars.cols[0];
              const double* a2_col = kernel_pars.cols[1];
 
-             for (int j = 0; j < n; ++j) {
-               int row = comp_idx[j];
-               double cov_i = covariate[row];
-               if (!Rcpp::NumericVector::is_na(cov_i)) {
-                 double a1 = a1_col[row];
-                 double a2 = a2_col[row];
-                 out_[j] = a1 * cov_i + a2 * std::pow(cov_i, 2.0);
+             double last = NA_REAL;
+             for (int j = 0; j < n_comp; ++j) {
+               int r = comp_idx[j];
+               double x = covariate[r];
+               if (!ISNAN(x)) {
+                 double a1 = a1_col[r];
+                 double a2 = a2_col[r];
+                 double x2 = x * x;
+                 last = a1 * x + a2 * x2;
                }
+               out_[j] = last;
              }
 
              mark_run_complete();
@@ -236,24 +262,28 @@ struct Poly2Kernel : BaseKernel {
 struct Poly3Kernel : BaseKernel {
   void run(const KernelParsView& kernel_pars,
            const Rcpp::NumericVector& covariate,
-           const Rcpp::IntegerVector& comp_idx) override {
-             int n = comp_idx.size();
-             out_.assign(n, 0.0);
+           const std::vector<int>& comp_idx) override {
+
+             int n_comp = comp_idx.size();
+             out_.assign(n_comp, NA_REAL);
 
              const double* a1_col = kernel_pars.cols[0];
              const double* a2_col = kernel_pars.cols[1];
              const double* a3_col = kernel_pars.cols[2];
 
-             for (int j = 0; j < n; ++j) {
-               int row = comp_idx[j];
-               double cov_i = covariate[row];
-               if (!Rcpp::NumericVector::is_na(cov_i)) {
-                 double a1 = a1_col[row];
-                 double a2 = a2_col[row];
-                 double a3 = a3_col[row];
-                 double cov2 = cov_i * cov_i;
-                 out_[j] = a1 * cov_i + a2 * cov2 + a3 * cov2 * cov_i; // cov^3
+             double last = NA_REAL;
+             for (int j = 0; j < n_comp; ++j) {
+               int r = comp_idx[j];
+               double x = covariate[r];
+               if (!ISNAN(x)) {
+                 double a1 = a1_col[r];
+                 double a2 = a2_col[r];
+                 double a3 = a3_col[r];
+                 double x2 = x * x;
+                 double x3 = x2 * x;
+                 last = a1 * x + a2 * x2 + a3 * x3;
                }
+               out_[j] = last;
              }
 
              mark_run_complete();
@@ -263,29 +293,32 @@ struct Poly3Kernel : BaseKernel {
 struct Poly4Kernel : BaseKernel {
   void run(const KernelParsView& kernel_pars,
            const Rcpp::NumericVector& covariate,
-           const Rcpp::IntegerVector& comp_idx) override {
-             int n = comp_idx.size();
-             out_.assign(n, 0.0);
+           const std::vector<int>& comp_idx) override {
+
+             int n_comp = comp_idx.size();
+             out_.assign(n_comp, NA_REAL);
 
              const double* a1_col = kernel_pars.cols[0];
              const double* a2_col = kernel_pars.cols[1];
              const double* a3_col = kernel_pars.cols[2];
              const double* a4_col = kernel_pars.cols[3];
 
-             for (int j = 0; j < n; ++j) {
-               int row = comp_idx[j];
-               double cov_i = covariate[row];
-               if (!Rcpp::NumericVector::is_na(cov_i)) {
-                 double a1 = a1_col[row];
-                 double a2 = a2_col[row];
-                 double a3 = a3_col[row];
-                 double a4 = a4_col[row];
+             double last = NA_REAL;
+             for (int j = 0; j < n_comp; ++j) {
+               int r = comp_idx[j];
+               double x = covariate[r];
+               if (!ISNAN(x)) {
+                 double a1 = a1_col[r];
+                 double a2 = a2_col[r];
+                 double a3 = a3_col[r];
+                 double a4 = a4_col[r];
 
-                 double cov2 = cov_i * cov_i;
-                 double cov3 = cov2 * cov_i;
-                 double cov4 = cov2 * cov2;
-                 out_[j] = a1 * cov_i + a2 * cov2 + a3 * cov3 + a4 * cov4;
+                 double x2 = x * x;
+                 double x3 = x2 * x;
+                 double x4 = x2 * x2;
+                 last = a1 * x + a2 * x2 + a3 * x3 + a4 * x4;
                }
+               out_[j] = last;
              }
 
              mark_run_complete();
@@ -299,34 +332,62 @@ struct SimpleDelta : DeltaKernel {
 
   void run(const KernelParsView& kernel_pars,
            const Rcpp::NumericVector& covariate,
-           const Rcpp::IntegerVector& comp_idx) override {
+           const std::vector<int>& comp_idx) override {
 
-             int n_trials = comp_idx.size();
+             using namespace Rcpp;
 
-             out_.assign(n_trials, NA_REAL);
-             pes_.assign(n_trials, NA_REAL);
+             const int n_comp = static_cast<int>(comp_idx.size());
+             if (n_comp <= 0) {
+               out_.clear();
+               pes_.clear();
+               mark_run_complete();
+               return;
+             }
 
-             const double* q0_col = kernel_pars.cols[0];
+             // Sanity: kernel_pars should have at least 2 columns
+             if (kernel_pars.cols.size() < 2) {
+               stop("SimpleDelta::run: kernel_pars has %d columns, expected >= 2",
+                    (int)kernel_pars.cols.size());
+             }
+
+             out_.assign(n_comp, NA_REAL);
+             pes_.assign(n_comp, NA_REAL);
+
+             const double* q0_col    = kernel_pars.cols[0];
              const double* alpha_col = kernel_pars.cols[1];
 
+             // Initial compressed element
+             int row0 = comp_idx[0];             // full-data row index
+             if (row0 < 0 || row0 >= covariate.size()) {
+               stop("SimpleDelta::run: comp_idx[0] = %d out of range [0,%d)",
+                    row0, covariate.size());
+             }
 
-             int row0 = comp_idx[0];
-             double q0 = q0_col[row0];
-             q_ = q0;
+             q_      = q0_col[row0];
+             out_[0] = q_;
 
-             for (int j = 0; j < n_trials; ++j) {
-               int row      = comp_idx[j];
-               double cov_i = covariate[row];
-               double alpha = alpha_col[row];
+             double pe = NA_REAL;
 
-               double pe = NA_REAL;
-               if (!Rcpp::NumericVector::is_na(cov_i)) {
-                 pe = cov_i - q_;
-                 q_ += alpha * pe;
+             // j runs over COMPRESSED indices: 0..n_comp-2
+             for (int j = 0; j < n_comp - 1; ++j) {
+               int r = comp_idx[j];            // full-data row index
+               if (r < 0 || r >= covariate.size()) {
+                 stop("SimpleDelta::run: comp_idx[%d] = %d out of range [0,%d)",
+                      j, r, covariate.size());
                }
 
-               pes_[j] = pe;
-               out_[j] = q_;
+               double x = covariate[r];
+               if (!ISNAN(x)) {
+                 double alpha = alpha_col[r];
+                 pe = x - q_;
+                 q_ += alpha * pe;
+               } else {
+                 pe = NA_REAL;
+               }
+               pes_[j] = pe;                   // compressed index
+
+               int next_j = j + 1;
+               out_[next_j] = q_;
              }
 
              mark_run_complete();
@@ -338,38 +399,36 @@ struct Delta2LR : DeltaKernel {
 
   void run(const KernelParsView& kernel_pars,
            const Rcpp::NumericVector& covariate,
-           const Rcpp::IntegerVector& comp_idx) override {
+           const std::vector<int>& comp_idx) override {
 
-             int n_trials = comp_idx.size();
+             int n_comp = comp_idx.size();
+             out_.assign(n_comp, NA_REAL);
+             pes_.assign(n_comp, NA_REAL);
 
-             out_.assign(n_trials, NA_REAL);
-             pes_.assign(n_trials, NA_REAL);
-
-             const double* q0_col = kernel_pars.cols[0];
+             const double* q0_col       = kernel_pars.cols[0];
              const double* alphaPos_col = kernel_pars.cols[1];
              const double* alphaNeg_col = kernel_pars.cols[2];
 
              int row0 = comp_idx[0];
-             double q0 = q0_col[row0];
-             q_ = q0;
+             out_[0] = q_ = q0_col[row0];
 
-             for (int j = 0; j < n_trials; ++j) {
-               int row          = comp_idx[j];
-               double cov_i     = covariate[row];
-               double alphaPos  = alphaPos_col[row];
-               double alphaNeg  = alphaNeg_col[row];
+             double pe = NA_REAL;
 
-               double pe = NA_REAL;
-               if (!Rcpp::NumericVector::is_na(cov_i)) {
-                 pe = cov_i - q_;
+             for (int j = 0; j < n_comp - 1; ++j) {
+               int r = comp_idx[j];
+               double x = covariate[r];
+               if (!ISNAN(x)) {
+                 double alphaPos = alphaPos_col[r];
+                 double alphaNeg = alphaNeg_col[r];
+                 pe = x - q_;
                  double alpha = (pe > 0.0) ? alphaPos : alphaNeg;
                  q_ += alpha * pe;
                } else {
-                 pe = 0;
+                 pe = NA_REAL;
                }
 
-               pes_[j] = pe;
-               out_[j] = q_;
+               pes_[j] = pe;           // compressed index
+               out_[j + 1] = q_;
              }
 
              mark_run_complete();
@@ -382,43 +441,41 @@ struct Delta2Kernel : SequentialKernel {
   double qSlow_ = NA_REAL;
   double q_     = NA_REAL;
 
-  // [trial][0 = fast PE, 1 = slow PE]
+  // [compressed trial][0 = fast PE, 1 = slow PE]
   std::vector<std::array<double, 2>> pes2_;
 
   Delta2Kernel() {}
 
   void run(const KernelParsView& kernel_pars,
            const Rcpp::NumericVector& covariate,
-           const Rcpp::IntegerVector& comp_idx) override {
+           const std::vector<int>& comp_idx) override {
 
-             int n_trials = comp_idx.size();
+             int n_comp = comp_idx.size();
+             out_.assign(n_comp, NA_REAL);
+             pes2_.assign(n_comp, std::array<double,2>{NA_REAL, NA_REAL});
 
-             out_.assign(n_trials, NA_REAL);
-             pes2_.assign(n_trials, std::array<double,2>{NA_REAL, NA_REAL});
-
-             const double* q0_col = kernel_pars.cols[0];
+             const double* q0_col        = kernel_pars.cols[0];
              const double* alphaFast_col = kernel_pars.cols[1];
-             const double* propSlow_col = kernel_pars.cols[3];
-             const double* dSwitch_col = kernel_pars.cols[4];
+             const double* propSlow_col  = kernel_pars.cols[3];
+             const double* dSwitch_col   = kernel_pars.cols[4];
 
              int row0 = comp_idx[0];
-             double q0 = q0_col[row0];
-             qFast_ = qSlow_ = q_ = q0;
+             out_[0] = qFast_ = qSlow_ = q_ = q0_col[row0];
 
-             for (int j = 0; j < n_trials; ++j) {
-               int row = comp_idx[j];
-               double cov_i     = covariate[row];
-               double alphaFast = alphaFast_col[row];
-               double propSlow  = propSlow_col[row];
-               double dSwitch   = dSwitch_col[row];
-               double alphaSlow = propSlow * alphaFast;
-
+             for (int j = 0; j < n_comp - 1; ++j) {
+               int r = comp_idx[j];
+               double x = covariate[r];
                double peFast = NA_REAL;
                double peSlow = NA_REAL;
 
-               if (!Rcpp::NumericVector::is_na(cov_i)) {
-                 peFast = cov_i - qFast_;
-                 peSlow = cov_i - qSlow_;
+               if (!ISNAN(x)) {
+                 double alphaFast = alphaFast_col[r];
+                 double propSlow  = propSlow_col[r];
+                 double dSwitch   = dSwitch_col[r];
+                 double alphaSlow = propSlow * alphaFast;
+
+                 peFast = x - qFast_;
+                 peSlow = x - qSlow_;
 
                  qFast_ += alphaFast * peFast;
                  qSlow_ += alphaSlow * peSlow;
@@ -427,9 +484,9 @@ struct Delta2Kernel : SequentialKernel {
                  q_ = (diff > dSwitch) ? qFast_ : qSlow_;
                }
 
-               pes2_[j][0] = peFast;
+               pes2_[j][0] = peFast;  // compressed index
                pes2_[j][1] = peSlow;
-               out_[j]     = q_;
+               out_[j + 1] = q_;
              }
 
              mark_run_complete();
@@ -444,86 +501,3 @@ std::unique_ptr<BaseKernel> make_kernel(KernelType kt);
 
 
 
-
-
-// Kernel handler
-// class KernelHandler {
-// public:
-//   using Id = std::string;
-//
-//   KernelHandler() = default;
-//
-//   // Create a new kernel instance under a given ID (no run yet).
-//   void create_instance(const Id& id, KernelType type) {
-//     if (kernels_.count(id) > 0) {
-//       Rcpp::stop("KernelHandler: ID '%s' already exists", id.c_str());
-//     }
-//     kernels_.emplace(id, make_kernel(type));
-//   }
-//
-//   // Create and run in one step; return reference to output.
-//   // If the ID already exists, throws.
-//   const std::vector<double>& create_and_run(const Id& id,
-//                                             KernelType type,
-//                                             const Rcpp::NumericMatrix& kp,
-//                                             const Rcpp::NumericVector& cov,
-//                                             const Rcpp::IntegerVector& comp_idx) {
-//     if (kernels_.count(id) > 0) {
-//       Rcpp::stop("KernelHandler: ID '%s' already exists", id.c_str());
-//     }
-//     auto k = make_kernel(type);
-//     k->reset();
-//     k->run(kp, cov, comp_idx);
-//
-//     BaseKernel* raw = k.get();                 // keep raw pointer before move
-//     kernels_.emplace(id, std::move(k));        // move into map
-//     return raw->get_output();                  // safe: raw still valid
-//   }
-//
-//   // Get cached output (no re-run).
-//   const std::vector<double>& get_output(const Id& id) const {
-//     const BaseKernel& k = get_kernel_const(id);
-//     if (!k.has_run()) {
-//       Rcpp::stop("KernelHandler: Kernel '%s' has not been run yet", id.c_str());
-//     }
-//     return k.get_output();
-//   }
-//
-//   // Optional: get PEs for *1D* delta kernels only (SimpleDelta, Delta2LR)
-//   Rcpp::NumericVector get_pes(const Id& id) const {
-//     const BaseKernel& base = get_kernel_const(id);
-//     if (!base.has_run()) {
-//       Rcpp::stop("KernelHandler: Kernel '%s' has not been run yet", id.c_str());
-//     }
-//
-//     const DeltaKernel* dk = dynamic_cast<const DeltaKernel*>(&base);
-//     if (!dk) {
-//       Rcpp::stop("KernelHandler: Kernel '%s' does not expose 1D PEs", id.c_str());
-//     }
-//
-//     const std::vector<double>& pes_cpp = dk->get_pes();
-//     Rcpp::NumericVector pes_R(pes_cpp.size());
-//     for (int i = 0; i < (int)pes_cpp.size(); ++i)
-//       pes_R[i] = pes_cpp[i];
-//     return pes_R;
-//   }
-//
-// private:
-//   std::unordered_map<Id, std::unique_ptr<BaseKernel>> kernels_;
-//
-//   BaseKernel& get_kernel(const Id& id) {
-//     auto it = kernels_.find(id);
-//     if (it == kernels_.end()) {
-//       Rcpp::stop("KernelHandler: No kernel with ID '%s'", id.c_str());
-//     }
-//     return *(it->second);
-//   }
-//
-//   const BaseKernel& get_kernel_const(const Id& id) const {
-//     auto it = kernels_.find(id);
-//     if (it == kernels_.end()) {
-//       Rcpp::stop("KernelHandler: No kernel with ID '%s'", id.c_str());
-//     }
-//     return *(it->second);
-//   }
-// };

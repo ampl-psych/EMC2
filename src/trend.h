@@ -2,6 +2,7 @@
 #define dynamic_h
 
 #include "utility_functions.h"
+#include "transform_utils.h"
 #include "EMC2/userfun.hpp"
 #include <Rcpp.h>
 #include <unordered_map>

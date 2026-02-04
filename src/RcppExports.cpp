@@ -448,193 +448,6 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
-// ParamTable_create_from_p_types
-SEXP ParamTable_create_from_p_types(int n_trials, CharacterVector p_types);
-RcppExport SEXP _EMC2_ParamTable_create_from_p_types(SEXP n_trialsSEXP, SEXP p_typesSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< int >::type n_trials(n_trialsSEXP);
-    Rcpp::traits::input_parameter< CharacterVector >::type p_types(p_typesSEXP);
-    rcpp_result_gen = Rcpp::wrap(ParamTable_create_from_p_types(n_trials, p_types));
-    return rcpp_result_gen;
-END_RCPP
-}
-// ParamTable_create_from_matrix
-SEXP ParamTable_create_from_matrix(NumericMatrix base, CharacterVector names);
-RcppExport SEXP _EMC2_ParamTable_create_from_matrix(SEXP baseSEXP, SEXP namesSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< NumericMatrix >::type base(baseSEXP);
-    Rcpp::traits::input_parameter< CharacterVector >::type names(namesSEXP);
-    rcpp_result_gen = Rcpp::wrap(ParamTable_create_from_matrix(base, names));
-    return rcpp_result_gen;
-END_RCPP
-}
-// ParamTable_materialize
-NumericMatrix ParamTable_materialize(SEXP pt_xptr);
-RcppExport SEXP _EMC2_ParamTable_materialize(SEXP pt_xptrSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< SEXP >::type pt_xptr(pt_xptrSEXP);
-    rcpp_result_gen = Rcpp::wrap(ParamTable_materialize(pt_xptr));
-    return rcpp_result_gen;
-END_RCPP
-}
-// ParamTable_drop
-void ParamTable_drop(SEXP pt_xptr, CharacterVector drop_names);
-RcppExport SEXP _EMC2_ParamTable_drop(SEXP pt_xptrSEXP, SEXP drop_namesSEXP) {
-BEGIN_RCPP
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< SEXP >::type pt_xptr(pt_xptrSEXP);
-    Rcpp::traits::input_parameter< CharacterVector >::type drop_names(drop_namesSEXP);
-    ParamTable_drop(pt_xptr, drop_names);
-    return R_NilValue;
-END_RCPP
-}
-// ParamTable_set_column
-void ParamTable_set_column(SEXP pt_xptr, std::string name, NumericVector col);
-RcppExport SEXP _EMC2_ParamTable_set_column(SEXP pt_xptrSEXP, SEXP nameSEXP, SEXP colSEXP) {
-BEGIN_RCPP
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< SEXP >::type pt_xptr(pt_xptrSEXP);
-    Rcpp::traits::input_parameter< std::string >::type name(nameSEXP);
-    Rcpp::traits::input_parameter< NumericVector >::type col(colSEXP);
-    ParamTable_set_column(pt_xptr, name, col);
-    return R_NilValue;
-END_RCPP
-}
-// ParamTable_create_from_pvector_designs
-SEXP ParamTable_create_from_pvector_designs(NumericVector p_vector, List designs, int n_trials);
-RcppExport SEXP _EMC2_ParamTable_create_from_pvector_designs(SEXP p_vectorSEXP, SEXP designsSEXP, SEXP n_trialsSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< NumericVector >::type p_vector(p_vectorSEXP);
-    Rcpp::traits::input_parameter< List >::type designs(designsSEXP);
-    Rcpp::traits::input_parameter< int >::type n_trials(n_trialsSEXP);
-    rcpp_result_gen = Rcpp::wrap(ParamTable_create_from_pvector_designs(p_vector, designs, n_trials));
-    return rcpp_result_gen;
-END_RCPP
-}
-// ParamTable_map_designs
-void ParamTable_map_designs(SEXP pt_xptr, Rcpp::List designs, Rcpp::LogicalVector include_param);
-RcppExport SEXP _EMC2_ParamTable_map_designs(SEXP pt_xptrSEXP, SEXP designsSEXP, SEXP include_paramSEXP) {
-BEGIN_RCPP
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< SEXP >::type pt_xptr(pt_xptrSEXP);
-    Rcpp::traits::input_parameter< Rcpp::List >::type designs(designsSEXP);
-    Rcpp::traits::input_parameter< Rcpp::LogicalVector >::type include_param(include_paramSEXP);
-    ParamTable_map_designs(pt_xptr, designs, include_param);
-    return R_NilValue;
-END_RCPP
-}
-// TrendEngine_create
-SEXP TrendEngine_create(List trend, DataFrame data);
-RcppExport SEXP _EMC2_TrendEngine_create(SEXP trendSEXP, SEXP dataSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< List >::type trend(trendSEXP);
-    Rcpp::traits::input_parameter< DataFrame >::type data(dataSEXP);
-    rcpp_result_gen = Rcpp::wrap(TrendEngine_create(trend, data));
-    return rcpp_result_gen;
-END_RCPP
-}
-// TrendEngine_premap_mask
-LogicalVector TrendEngine_premap_mask(SEXP engine_ptr, List designs);
-RcppExport SEXP _EMC2_TrendEngine_premap_mask(SEXP engine_ptrSEXP, SEXP designsSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< SEXP >::type engine_ptr(engine_ptrSEXP);
-    Rcpp::traits::input_parameter< List >::type designs(designsSEXP);
-    rcpp_result_gen = Rcpp::wrap(TrendEngine_premap_mask(engine_ptr, designs));
-    return rcpp_result_gen;
-END_RCPP
-}
-// ParamTable_get_n_trials
-int ParamTable_get_n_trials(SEXP pt_xptr);
-RcppExport SEXP _EMC2_ParamTable_get_n_trials(SEXP pt_xptrSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< SEXP >::type pt_xptr(pt_xptrSEXP);
-    rcpp_result_gen = Rcpp::wrap(ParamTable_get_n_trials(pt_xptr));
-    return rcpp_result_gen;
-END_RCPP
-}
-// ParamTable_do_transform_all
-void ParamTable_do_transform_all(SEXP param_table_ptr, Rcpp::List transform);
-RcppExport SEXP _EMC2_ParamTable_do_transform_all(SEXP param_table_ptrSEXP, SEXP transformSEXP) {
-BEGIN_RCPP
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< SEXP >::type param_table_ptr(param_table_ptrSEXP);
-    Rcpp::traits::input_parameter< Rcpp::List >::type transform(transformSEXP);
-    ParamTable_do_transform_all(param_table_ptr, transform);
-    return R_NilValue;
-END_RCPP
-}
-// ParamTable_do_transform_premap
-void ParamTable_do_transform_premap(SEXP param_table_ptr, SEXP trend_engine_ptr, Rcpp::List transform);
-RcppExport SEXP _EMC2_ParamTable_do_transform_premap(SEXP param_table_ptrSEXP, SEXP trend_engine_ptrSEXP, SEXP transformSEXP) {
-BEGIN_RCPP
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< SEXP >::type param_table_ptr(param_table_ptrSEXP);
-    Rcpp::traits::input_parameter< SEXP >::type trend_engine_ptr(trend_engine_ptrSEXP);
-    Rcpp::traits::input_parameter< Rcpp::List >::type transform(transformSEXP);
-    ParamTable_do_transform_premap(param_table_ptr, trend_engine_ptr, transform);
-    return R_NilValue;
-END_RCPP
-}
-// ParamTable_do_transform_postmap
-void ParamTable_do_transform_postmap(SEXP param_table_ptr, SEXP trend_engine_ptr, Rcpp::List transform);
-RcppExport SEXP _EMC2_ParamTable_do_transform_postmap(SEXP param_table_ptrSEXP, SEXP trend_engine_ptrSEXP, SEXP transformSEXP) {
-BEGIN_RCPP
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< SEXP >::type param_table_ptr(param_table_ptrSEXP);
-    Rcpp::traits::input_parameter< SEXP >::type trend_engine_ptr(trend_engine_ptrSEXP);
-    Rcpp::traits::input_parameter< Rcpp::List >::type transform(transformSEXP);
-    ParamTable_do_transform_postmap(param_table_ptr, trend_engine_ptr, transform);
-    return R_NilValue;
-END_RCPP
-}
-// ParamTable_bind_trendops
-void ParamTable_bind_trendops(SEXP param_table_ptr, SEXP trend_engine_ptr);
-RcppExport SEXP _EMC2_ParamTable_bind_trendops(SEXP param_table_ptrSEXP, SEXP trend_engine_ptrSEXP) {
-BEGIN_RCPP
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< SEXP >::type param_table_ptr(param_table_ptrSEXP);
-    Rcpp::traits::input_parameter< SEXP >::type trend_engine_ptr(trend_engine_ptrSEXP);
-    ParamTable_bind_trendops(param_table_ptr, trend_engine_ptr);
-    return R_NilValue;
-END_RCPP
-}
-// TrendEngine_run_premap_kernels_debug
-Rcpp::List TrendEngine_run_premap_kernels_debug(SEXP param_table_ptr, SEXP trend_engine_ptr);
-RcppExport SEXP _EMC2_TrendEngine_run_premap_kernels_debug(SEXP param_table_ptrSEXP, SEXP trend_engine_ptrSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< SEXP >::type param_table_ptr(param_table_ptrSEXP);
-    Rcpp::traits::input_parameter< SEXP >::type trend_engine_ptr(trend_engine_ptrSEXP);
-    rcpp_result_gen = Rcpp::wrap(TrendEngine_run_premap_kernels_debug(param_table_ptr, trend_engine_ptr));
-    return rcpp_result_gen;
-END_RCPP
-}
-// TrendEngine_apply_premap_bases
-void TrendEngine_apply_premap_bases(SEXP param_table_ptr, SEXP trend_engine_ptr);
-RcppExport SEXP _EMC2_TrendEngine_apply_premap_bases(SEXP param_table_ptrSEXP, SEXP trend_engine_ptrSEXP) {
-BEGIN_RCPP
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< SEXP >::type param_table_ptr(param_table_ptrSEXP);
-    Rcpp::traits::input_parameter< SEXP >::type trend_engine_ptr(trend_engine_ptrSEXP);
-    TrendEngine_apply_premap_bases(param_table_ptr, trend_engine_ptr);
-    return R_NilValue;
-END_RCPP
-}
 // do_transform
 Rcpp::NumericMatrix do_transform(Rcpp::NumericMatrix pars, Rcpp::List transform);
 RcppExport SEXP _EMC2_do_transform(SEXP parsSEXP, SEXP transformSEXP) {
@@ -648,8 +461,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // calc_ll
-NumericVector calc_ll(NumericMatrix p_matrix, DataFrame data, NumericVector constants, List designs, String type, List bounds, List transforms, List pretransforms, CharacterVector p_types, double min_ll, List trend);
-RcppExport SEXP _EMC2_calc_ll(SEXP p_matrixSEXP, SEXP dataSEXP, SEXP constantsSEXP, SEXP designsSEXP, SEXP typeSEXP, SEXP boundsSEXP, SEXP transformsSEXP, SEXP pretransformsSEXP, SEXP p_typesSEXP, SEXP min_llSEXP, SEXP trendSEXP) {
+NumericVector calc_ll(NumericMatrix p_matrix, DataFrame data, NumericVector constants, List designs, String type, List bounds, List transforms, List pretransforms, CharacterVector p_types, double min_ll, Rcpp::Nullable<Rcpp::List> trend, bool use_new);
+RcppExport SEXP _EMC2_calc_ll(SEXP p_matrixSEXP, SEXP dataSEXP, SEXP constantsSEXP, SEXP designsSEXP, SEXP typeSEXP, SEXP boundsSEXP, SEXP transformsSEXP, SEXP pretransformsSEXP, SEXP p_typesSEXP, SEXP min_llSEXP, SEXP trendSEXP, SEXP use_newSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -663,13 +476,14 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< List >::type pretransforms(pretransformsSEXP);
     Rcpp::traits::input_parameter< CharacterVector >::type p_types(p_typesSEXP);
     Rcpp::traits::input_parameter< double >::type min_ll(min_llSEXP);
-    Rcpp::traits::input_parameter< List >::type trend(trendSEXP);
-    rcpp_result_gen = Rcpp::wrap(calc_ll(p_matrix, data, constants, designs, type, bounds, transforms, pretransforms, p_types, min_ll, trend));
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type trend(trendSEXP);
+    Rcpp::traits::input_parameter< bool >::type use_new(use_newSEXP);
+    rcpp_result_gen = Rcpp::wrap(calc_ll(p_matrix, data, constants, designs, type, bounds, transforms, pretransforms, p_types, min_ll, trend, use_new));
     return rcpp_result_gen;
 END_RCPP
 }
 // get_pars_c_wrapper
-NumericMatrix get_pars_c_wrapper(NumericMatrix p_matrix, DataFrame data, NumericVector constants, List designs, List bounds, List transforms, List pretransforms, CharacterVector p_types, List trend);
+NumericMatrix get_pars_c_wrapper(NumericMatrix p_matrix, DataFrame data, NumericVector constants, List designs, List bounds, List transforms, List pretransforms, CharacterVector p_types, Rcpp::Nullable<Rcpp::List> trend);
 RcppExport SEXP _EMC2_get_pars_c_wrapper(SEXP p_matrixSEXP, SEXP dataSEXP, SEXP constantsSEXP, SEXP designsSEXP, SEXP boundsSEXP, SEXP transformsSEXP, SEXP pretransformsSEXP, SEXP p_typesSEXP, SEXP trendSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
@@ -682,8 +496,27 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< List >::type transforms(transformsSEXP);
     Rcpp::traits::input_parameter< List >::type pretransforms(pretransformsSEXP);
     Rcpp::traits::input_parameter< CharacterVector >::type p_types(p_typesSEXP);
-    Rcpp::traits::input_parameter< List >::type trend(trendSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type trend(trendSEXP);
     rcpp_result_gen = Rcpp::wrap(get_pars_c_wrapper(p_matrix, data, constants, designs, bounds, transforms, pretransforms, p_types, trend));
+    return rcpp_result_gen;
+END_RCPP
+}
+// get_pars_c_wrapper_new
+NumericMatrix get_pars_c_wrapper_new(NumericMatrix p_matrix, DataFrame data, NumericVector constants, List designs, List bounds, List transforms, List pretransforms, CharacterVector p_types, Rcpp::Nullable<Rcpp::List> trend);
+RcppExport SEXP _EMC2_get_pars_c_wrapper_new(SEXP p_matrixSEXP, SEXP dataSEXP, SEXP constantsSEXP, SEXP designsSEXP, SEXP boundsSEXP, SEXP transformsSEXP, SEXP pretransformsSEXP, SEXP p_typesSEXP, SEXP trendSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericMatrix >::type p_matrix(p_matrixSEXP);
+    Rcpp::traits::input_parameter< DataFrame >::type data(dataSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type constants(constantsSEXP);
+    Rcpp::traits::input_parameter< List >::type designs(designsSEXP);
+    Rcpp::traits::input_parameter< List >::type bounds(boundsSEXP);
+    Rcpp::traits::input_parameter< List >::type transforms(transformsSEXP);
+    Rcpp::traits::input_parameter< List >::type pretransforms(pretransformsSEXP);
+    Rcpp::traits::input_parameter< CharacterVector >::type p_types(p_typesSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type trend(trendSEXP);
+    rcpp_result_gen = Rcpp::wrap(get_pars_c_wrapper_new(p_matrix, data, constants, designs, bounds, transforms, pretransforms, p_types, trend));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -757,25 +590,10 @@ static const R_CallMethodDef CallEntries[] = {
     {"_EMC2_compute_time_derivative", (DL_FUNC) &_EMC2_compute_time_derivative, 10},
     {"_EMC2_build_hrf_kernel", (DL_FUNC) &_EMC2_build_hrf_kernel, 10},
     {"_EMC2_construct_design_matrix", (DL_FUNC) &_EMC2_construct_design_matrix, 13},
-    {"_EMC2_ParamTable_create_from_p_types", (DL_FUNC) &_EMC2_ParamTable_create_from_p_types, 2},
-    {"_EMC2_ParamTable_create_from_matrix", (DL_FUNC) &_EMC2_ParamTable_create_from_matrix, 2},
-    {"_EMC2_ParamTable_materialize", (DL_FUNC) &_EMC2_ParamTable_materialize, 1},
-    {"_EMC2_ParamTable_drop", (DL_FUNC) &_EMC2_ParamTable_drop, 2},
-    {"_EMC2_ParamTable_set_column", (DL_FUNC) &_EMC2_ParamTable_set_column, 3},
-    {"_EMC2_ParamTable_create_from_pvector_designs", (DL_FUNC) &_EMC2_ParamTable_create_from_pvector_designs, 3},
-    {"_EMC2_ParamTable_map_designs", (DL_FUNC) &_EMC2_ParamTable_map_designs, 3},
-    {"_EMC2_TrendEngine_create", (DL_FUNC) &_EMC2_TrendEngine_create, 2},
-    {"_EMC2_TrendEngine_premap_mask", (DL_FUNC) &_EMC2_TrendEngine_premap_mask, 2},
-    {"_EMC2_ParamTable_get_n_trials", (DL_FUNC) &_EMC2_ParamTable_get_n_trials, 1},
-    {"_EMC2_ParamTable_do_transform_all", (DL_FUNC) &_EMC2_ParamTable_do_transform_all, 2},
-    {"_EMC2_ParamTable_do_transform_premap", (DL_FUNC) &_EMC2_ParamTable_do_transform_premap, 3},
-    {"_EMC2_ParamTable_do_transform_postmap", (DL_FUNC) &_EMC2_ParamTable_do_transform_postmap, 3},
-    {"_EMC2_ParamTable_bind_trendops", (DL_FUNC) &_EMC2_ParamTable_bind_trendops, 2},
-    {"_EMC2_TrendEngine_run_premap_kernels_debug", (DL_FUNC) &_EMC2_TrendEngine_run_premap_kernels_debug, 2},
-    {"_EMC2_TrendEngine_apply_premap_bases", (DL_FUNC) &_EMC2_TrendEngine_apply_premap_bases, 2},
     {"_EMC2_do_transform", (DL_FUNC) &_EMC2_do_transform, 2},
-    {"_EMC2_calc_ll", (DL_FUNC) &_EMC2_calc_ll, 11},
+    {"_EMC2_calc_ll", (DL_FUNC) &_EMC2_calc_ll, 12},
     {"_EMC2_get_pars_c_wrapper", (DL_FUNC) &_EMC2_get_pars_c_wrapper, 9},
+    {"_EMC2_get_pars_c_wrapper_new", (DL_FUNC) &_EMC2_get_pars_c_wrapper_new, 9},
     {"_EMC2_EMC2_call_custom_trend", (DL_FUNC) &_EMC2_EMC2_call_custom_trend, 3},
     {"_EMC2_run_trend_rcpp", (DL_FUNC) &_EMC2_run_trend_rcpp, 6},
     {"_EMC2_c_add_charvectors", (DL_FUNC) &_EMC2_c_add_charvectors, 2},

@@ -116,13 +116,14 @@ run_emc <- function(emc, stage, stop_criteria,
     } else{
       sub_emc <- subset(emc, filter = chain_n(emc)[1,stage] - 1, stage = stage)
     }
+    t0 <- Sys.time()
     # Actual sampling
     sub_emc <- auto_mclapply(sub_emc,run_stages, stage = stage, iter= progress$step_size*max(1,cur_thin),
                              verbose=verbose,  verboseProgress = verboseProgress,
                              particle_factor=particle_factor,search_width=search_width,
                              n_cores=cores_per_chain, mc.cores = cores_for_chains,
                              r_cores = r_cores)
-
+    print(Sys.time()-t0)
     class(sub_emc) <- "emc"
     if(cores_for_chains > 1) sub_emc <- set_custom_kernel_pointers(sub_emc, get_custom_kernel_pointers(emc))
     if(stage != 'preburn'){

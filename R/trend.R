@@ -1260,7 +1260,7 @@ make_data_unconditional <- function(data, pars, design, model, return_trialwise_
         if(is.null(constants)) constants <- NA
         pm <- get_pars_c_wrapper(pars[which(subj == subj_levels),,drop=FALSE], dm, constants = constants, designs = designs, #type = model_list$c_name,
                                  model_list$bound, model_list$transform, model_list$pre_transform, p_types = p_types,
-                                 model_list$trend)
+                                 model_list$trend, use_new = FALSE)
       } else {
         # Work in R
         pm <- map_p(pars, dm, model_list, tmp_return_trialwise)

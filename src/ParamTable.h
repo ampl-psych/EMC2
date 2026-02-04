@@ -7,11 +7,19 @@
 using Rcpp::_;
 
 // View-based ParamTable: one base matrix + active column indices
+// Invariants:
+// - base contains all parameters (never shrinks)
+// - active_cols is a view into base (ordering may change)
+// - name_to_base_idx maps ALL base columns, active or not
 struct ParamTable {
   Rcpp::NumericMatrix base;     // underlying matrix (all columns)
   Rcpp::CharacterVector base_names; // colnames for base
-  std::vector<int> active_cols; // indices into base/base_names
   int n_trials = 0;
+
+  // I was thinking of including some logic that keeps track of which columns are still 'active'
+  // but that's not actually used at this point..
+  std::vector<int> active_cols;  // indices into base/base_names
+  std::vector<char> is_active;  // size = base.ncol()
 
   // fast look-up map
   std::unordered_map<std::string,int> name_to_base_idx;
@@ -57,17 +65,21 @@ struct ParamTable {
     return base(_, active_cols[j]);  // view
   }
 
+  bool is_active_base_idx(int base_idx) const {
+    return std::find(active_cols.begin(), active_cols.end(), base_idx) != active_cols.end();
+  }
+
   // Column view by parameter name
   Rcpp::NumericVector column_by_name(const std::string& nm) const {
     int base_idx = base_index_for(nm); // O(1) from map
     // Ensure it's currently active; if you need this check:
     // (If you know all base cols are always active, you can skip this loop.)
-    for (int j = 0; j < (int)active_cols.size(); ++j) {
-      if (active_cols[j] == base_idx) {
+    // for (int j = 0; j < (int)active_cols.size(); ++j) {
+      // if (active_cols[j] == base_idx) {
         return base(_, base_idx);  // view
-      }
-    }
-    Rcpp::stop("ParamTable: parameter '%s' not active", nm.c_str());
+      // }
+    // }
+    // Rcpp::stop("ParamTable: parameter '%s' not active", nm.c_str());
   }
 
   // Assign into existing column (writes into base)
@@ -75,31 +87,66 @@ struct ParamTable {
                           const Rcpp::NumericVector& col) {
     int base_idx = base_index_for(nm);
     // Optional: ensure active
-    for (int j = 0; j < (int)active_cols.size(); ++j) {
-      if (active_cols[j] == base_idx) {
+    // for (int j = 0; j < (int)active_cols.size(); ++j) {
+      // if (active_cols[j] == base_idx) {
         base(_, base_idx) = col;
         return;
-      }
-    }
-    Rcpp::stop("ParamTable: parameter '%s' not active", nm.c_str());
+      // }
+    // }
+    // Rcpp::stop("ParamTable: parameter '%s' not active", nm.c_str());
   }
 
   // Drop columns by name: only adjust active_cols
-  void drop(const Rcpp::CharacterVector& drop_names) {
-    std::unordered_set<std::string> drop_set;
-    for (int i = 0; i < drop_names.size(); ++i)
-      drop_set.insert(Rcpp::as<std::string>(drop_names[i]));
+  // void drop(const Rcpp::CharacterVector& drop_names) {
+  //   std::unordered_set<std::string> drop_set;
+  //   for (int i = 0; i < drop_names.size(); ++i)
+  //     drop_set.insert(Rcpp::as<std::string>(drop_names[i]));
+  //
+  //   std::vector<int> new_active;
+  //   new_active.reserve(active_cols.size());
+  //   for (int idx : active_cols) {
+  //     std::string nm = Rcpp::as<std::string>(base_names[idx]);
+  //     if (!drop_set.count(nm)) new_active.push_back(idx);
+  //   }
+  //   active_cols.swap(new_active);
+  // }
 
-    std::vector<int> new_active;
-    new_active.reserve(active_cols.size());
-    for (int idx : active_cols) {
-      std::string nm = Rcpp::as<std::string>(base_names[idx]);
-      if (!drop_set.count(nm)) new_active.push_back(idx);
+  Rcpp::NumericMatrix materialize_by_param_names(const Rcpp::CharacterVector& param_names) const {
+    using namespace Rcpp;
+    const int k = param_names.size();
+    NumericMatrix out(n_trials, k);
+    CharacterVector out_names(k);
+
+    for (int j = 0; j < k; ++j) {
+      std::string nm = as<std::string>(param_names[j]);
+      int base_idx = base_index_for(nm);  // throws if unknown
+
+      // Ensure this column is active (if you care about active_cols)
+      bool is_active = false;
+      for (int a : active_cols) {
+        if (a == base_idx) {
+          is_active = true;
+          break;
+        }
+      }
+      if (!is_active) {
+        stop("ParamTable::materialize_by_param_names: parameter '%s' not active", nm.c_str());
+      }
+
+      // Copy base(:, base_idx) → out(:, j)
+      double* out_col        = &out(0, j);
+      const double* base_col = &base(0, base_idx);
+      for (int r = 0; r < n_trials; ++r) {
+        out_col[r] = base_col[r];
+      }
+      out_names[j] = base_names[base_idx];
     }
-    active_cols.swap(new_active);
+
+    colnames(out) = out_names;
+    return out;
   }
 
-  // Materialize compact matrix (n_trials x n_active) with colnames
+  // Materialize matrix (n_trials x n_active) with all columns
   Rcpp::NumericMatrix materialize() const {
     const int p = (int)active_cols.size();
     Rcpp::NumericMatrix out(n_trials, p);
@@ -240,118 +287,263 @@ struct ParamTable {
       stop("ParamTable::map_from_designs: designs must be a named list");
     }
 
-    // Decide which parameters to map
-    LogicalVector use;
-    if (include_param.size() == n_params) {
-      use = include_param;
-    } else {
-      use = LogicalVector(n_params, true); // default: map all
-    }
+    LogicalVector use =
+      (include_param.size() == n_params)
+      ? include_param
+    : LogicalVector(n_params, true);
 
-    const int n_trials_local = n_trials;
+    const int T = n_trials;
 
     for (int i = 0; i < n_params; ++i) {
       if (!use[i]) continue;
+      if (designs[i] == R_NilValue) continue;
 
-      string out_pname = as<string>(design_names[i]);
+      const string out_name = as<string>(design_names[i]);
 
-      if (designs[i] == R_NilValue) {
-        // No design for this parameter → leave as-is
-        continue;
-      }
-
-      NumericMatrix cur_design = designs[i];
-      const int n_rows_comp = cur_design.nrow();
-      CharacterVector cur_names = colnames(cur_design);
-      const int n_cols = cur_design.ncol();
-
-      // Output column index (must exist)
-      auto out_it = name_to_base_idx.find(out_pname);
+      // --- Resolve output column ---
+      auto out_it = name_to_base_idx.find(out_name);
       if (out_it == name_to_base_idx.end()) {
         stop("ParamTable::map_from_designs: output parameter '%s' not in table",
-             out_pname.c_str());
+             out_name.c_str());
       }
       const int out_idx = out_it->second;
 
-      // "expand" attribute (assumed present & valid)
-      IntegerVector expand_idx = cur_design.attr("expand");
-      if (expand_idx.size() != n_trials_local) {
-        stop("ParamTable::map_from_designs: length(expand) != n_trials for parameter '%s'",
-             out_pname.c_str());
+      NumericMatrix design = designs[i];
+      if (design.nrow() != T) {
+        stop("ParamTable::map_from_designs: design for '%s' must have n_trials rows",
+             out_name.c_str());
       }
 
-      // --- Pre-compute coefficient indices and detect self-coefficient use ---
-      std::vector<int> coef_indices(n_cols, -1);
+      const int K = design.ncol();
+      CharacterVector coef_names = colnames(design);
+
+      // --- Resolve coefficient indices ---
+      std::vector<int> coef_idx(K, -1);
       bool uses_self = false;
-      for (int j = 0; j < n_cols; ++j) {
-        string col_name = as<string>(cur_names[j]);
-        auto coef_it = name_to_base_idx.find(col_name);
-        if (coef_it == name_to_base_idx.end()) {
-          coef_indices[j] = -1;  // "missing" => contributes 0
-          continue;
-        }
-        int coef_idx = coef_it->second;
-        coef_indices[j] = coef_idx;
-        if (coef_idx == out_idx) {
-          uses_self = true;
-        }
+
+      for (int j = 0; j < K; ++j) {
+        auto it = name_to_base_idx.find(as<string>(coef_names[j]));
+        if (it == name_to_base_idx.end()) continue;
+        coef_idx[j] = it->second;
+        if (coef_idx[j] == out_idx) uses_self = true;
       }
 
-      // If the design uses out_pname itself as a coefficient, copy its
-      // original values BEFORE we clear the output column.
-      std::vector<double> self_coef;
+      // --- Preserve self column if needed ---
+      std::vector<double> self_copy;
       if (uses_self) {
-        self_coef.resize(n_trials_local);
+        self_copy.resize(T);
         const double* src = &base(0, out_idx);
-        for (int r = 0; r < n_trials_local; ++r) {
-          self_coef[r] = src[r];
-        }
+        std::copy(src, src + T, self_copy.begin());
       }
 
-      // Clear output column and get raw pointer to it
-      double* out_ptr = &base(0, out_idx);
-      for (int r = 0; r < n_trials_local; ++r) {
-        out_ptr[r] = 0.0;
-      }
+      // --- Clear output ---
+      double* out = &base(0, out_idx);
+      std::fill(out, out + T, 0.0);
 
-      // Reusable buffer for expanded design column
-      NumericVector design_col(n_trials_local);
+      // --- Main accumulation loop ---
+      for (int j = 0; j < K; ++j) {
+        int cidx = coef_idx[j];
+        if (cidx < 0) continue;
 
-      // --- Main loop over design columns ---
-      for (int j = 0; j < n_cols; ++j) {
-        int coef_idx = coef_indices[j];
-        if (coef_idx < 0) continue;  // no such coefficient -> contributes 0
+        const double* coef =
+          (cidx == out_idx && uses_self)
+          ? self_copy.data()
+            : &base(0, cidx);
 
-        // Choose coefficient pointer:
-        const double* coef_ptr = nullptr;
-        if (coef_idx == out_idx && uses_self) {
-          // Use the saved original column if it's the self-coefficient
-          coef_ptr = self_coef.data();
-        } else {
-          coef_ptr = &base(0, coef_idx);
-        }
+        const double* d = &design(0, j);
 
-        // Expand compressed design column j into design_col
-        for (int r = 0; r < n_trials_local; ++r) {
-          int row_idx = expand_idx[r] - 1; // R 1-based → C++ 0-based
-          if (row_idx < 0 || row_idx >= n_rows_comp) {
-            stop("ParamTable::map_from_designs: 'expand' index out of range for parameter '%s'",
-                 out_pname.c_str());
-          }
-          design_col[r] = cur_design(row_idx, j);
-        }
-        const double* d_ptr = design_col.begin();
-
-        // Accumulate in-place: out_ptr += coef * design_col, NA/NaN -> 0
-        for (int r = 0; r < n_trials_local; ++r) {
-          double v = coef_ptr[r] * d_ptr[r];
-          if (NumericVector::is_na(v) || std::isnan(v)) {
-            v = 0.0;
-          }
-          out_ptr[r] += v;
+        for (int r = 0; r < T; ++r) {
+          double v = coef[r] * d[r];
+          // if (!std::isfinite(v)) continue;
+          out[r] += v;
         }
       }
     }
   }
+  // void map_from_designs(const Rcpp::List& designs,
+  //                       const Rcpp::LogicalVector& include_param = Rcpp::LogicalVector()) {
+  //   using namespace Rcpp;
+  //   using std::string;
+  //
+  //   const int n_params = designs.size();
+  //   if (n_params == 0) return;
+  //
+  //   CharacterVector design_names = designs.names();
+  //   if (design_names.size() != n_params) {
+  //     stop("ParamTable::map_from_designs: designs must be a named list");
+  //   }
+  //
+  //   // Decide which parameters to map
+  //   LogicalVector use;
+  //   if (include_param.size() == n_params) {
+  //     use = include_param;
+  //   } else {
+  //     use = LogicalVector(n_params, true); // default: map all
+  //   }
+  //
+  //   const int n_trials_local = n_trials;
+  //
+  //   for (int i = 0; i < n_params; ++i) {
+  //     if (!use[i]) continue;
+  //
+  //     string out_pname = as<string>(design_names[i]);
+  //
+  //     if (designs[i] == R_NilValue) {
+  //       // No design for this parameter → leave as-is
+  //       continue;
+  //     }
+  //
+  //     NumericMatrix cur_design = designs[i];
+  //     const int n_rows_comp = cur_design.nrow();
+  //     CharacterVector cur_names = colnames(cur_design);
+  //     const int n_cols = cur_design.ncol();
+  //
+  //     // Output column index (must exist)
+  //     auto out_it = name_to_base_idx.find(out_pname);
+  //     if (out_it == name_to_base_idx.end()) {
+  //       stop("ParamTable::map_from_designs: output parameter '%s' not in table",
+  //            out_pname.c_str());
+  //     }
+  //     const int out_idx = out_it->second;
+  //
+  //     // --- Handle "expand" attribute: may be NULL ---
+  //     IntegerVector expand_idx;
+  //     {
+  //       SEXP exp_attr = cur_design.attr("expand");
+  //       if (exp_attr == R_NilValue) {
+  //         // No expand attribute: require full-length design
+  //         if (n_rows_comp != n_trials_local) {
+  //           stop("ParamTable::map_from_designs: design for '%s' has no 'expand' "
+  //                  "attribute and nrow(design) != n_trials (%d != %d)",
+  //                  out_pname.c_str(), n_rows_comp, n_trials_local);
+  //         }
+  //         // identity expand: trial r uses row r
+  //         expand_idx = IntegerVector(n_trials_local);
+  //         for (int r = 0; r < n_trials_local; ++r) {
+  //           expand_idx[r] = r + 1;  // R is 1-based
+  //         }
+  //       } else {
+  //         expand_idx = exp_attr;   // will throw if not integer-like
+  //         if (expand_idx.size() != n_trials_local) {
+  //           stop("ParamTable::map_from_designs: length(expand) != n_trials for parameter '%s'",
+  //                out_pname.c_str());
+  //         }
+  //       }
+  //     }
+  //     // --- Pre-compute coefficient indices and detect self-coefficient use ---
+  //     std::vector<int> coef_indices(n_cols, -1);
+  //     bool uses_self = false;
+  //     for (int j = 0; j < n_cols; ++j) {
+  //       string col_name = as<string>(cur_names[j]);
+  //       auto coef_it = name_to_base_idx.find(col_name);
+  //       if (coef_it == name_to_base_idx.end()) {
+  //         coef_indices[j] = -1;  // "missing" => contributes 0
+  //         continue;
+  //       }
+  //       int coef_idx = coef_it->second;
+  //       coef_indices[j] = coef_idx;
+  //       if (coef_idx == out_idx) {
+  //         uses_self = true;
+  //       }
+  //     }
+  //
+  //     // If the design uses out_pname itself as a coefficient, copy its
+  //     // original values BEFORE we clear the output column.
+  //     std::vector<double> self_coef;
+  //     if (uses_self) {
+  //       self_coef.resize(n_trials_local);
+  //       const double* src = &base(0, out_idx);
+  //       for (int r = 0; r < n_trials_local; ++r) {
+  //         self_coef[r] = src[r];
+  //       }
+  //     }
+  //
+  //     // Clear output column and get raw pointer to it
+  //     double* out_ptr = &base(0, out_idx);
+  //     for (int r = 0; r < n_trials_local; ++r) {
+  //       out_ptr[r] = 0.0;
+  //     }
+  //
+  //     // Reusable buffer for expanded design column
+  //     NumericVector design_col(n_trials_local);
+  //
+  //     // --- Main loop over design columns ---
+  //     for (int j = 0; j < n_cols; ++j) {
+  //       int coef_idx = coef_indices[j];
+  //       if (coef_idx < 0) continue;  // no such coefficient -> contributes 0
+  //
+  //       // Choose coefficient pointer:
+  //       const double* coef_ptr = nullptr;
+  //       if (coef_idx == out_idx && uses_self) {
+  //         // Use the saved original column if it's the self-coefficient
+  //         coef_ptr = self_coef.data();
+  //       } else {
+  //         coef_ptr = &base(0, coef_idx);
+  //       }
+  //
+  //       // Expand compressed design column j into design_col
+  //       for (int r = 0; r < n_trials_local; ++r) {
+  //         int row_idx = expand_idx[r] - 1; // R 1-based → C++ 0-based
+  //         if (row_idx < 0 || row_idx >= n_rows_comp) {
+  //           stop("ParamTable::map_from_designs: 'expand' index out of range for parameter '%s'",
+  //                out_pname.c_str());
+  //         }
+  //         design_col[r] = cur_design(row_idx, j);
+  //       }
+  //       const double* d_ptr = design_col.begin();
+  //
+  //       // Accumulate in-place: out_ptr += coef * design_col, NA/NaN -> 0
+  //       for (int r = 0; r < n_trials_local; ++r) {
+  //         double v = coef_ptr[r] * d_ptr[r];
+  //         if (NumericVector::is_na(v) || std::isnan(v)) {
+  //           v = 0.0;
+  //         }
+  //         out_ptr[r] += v;
+  //       }
+  //     }
+  //   }
+  // }
+
+  // Zero the entire base matrix
+  void reset_base_to_zero() {
+    const int n = n_trials;
+    const int p = base.ncol();
+    for (int j = 0; j < p; ++j) {
+      double* col = &base(0, j);
+      for (int r = 0; r < n; ++r) {
+        col[r] = 0.0;
+      }
+    }
+  }
+
+  // Fill columns corresponding to names(p_vector) with that scalar value
+  void fill_from_p_vector(const Rcpp::NumericVector& p_vector) {
+    using std::string;
+    using Rcpp::as;
+
+    Rcpp::CharacterVector pv_names = p_vector.names();
+    const int n_names = pv_names.size();
+
+    for (int i = 0; i < n_names; ++i) {
+      string nm = as<string>(pv_names[i]);
+      auto it = name_to_base_idx.find(nm);
+      if (it == name_to_base_idx.end()) {
+        // p_vector may contain names that weren't used in designs, ignore them
+        continue;
+      }
+      int j = it->second;
+      double val = p_vector[i];
+      double* col = &base(0, j);
+      for (int r = 0; r < n_trials; ++r) {
+        col[r] = val;
+      }
+    }
+  }
 };
+
+
+// Helper: all parameter names in pt that are NOT in premap_trend_params
+std::unordered_set<std::string>
+  make_non_premap_param_set(const ParamTable& pt,
+                            const std::unordered_set<std::string>& premap_trend_params);
 

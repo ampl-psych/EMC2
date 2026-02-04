@@ -3,7 +3,7 @@
 #include "kernels.h"
 #include "ParamTable.h"
 
-// Phase enum
+// Phase enum (reuse existing)
 enum class TrendPhase { Premap, Pretransform, Posttransform };
 
 inline TrendPhase parse_phase(const std::string& ph) {
@@ -13,121 +13,54 @@ inline TrendPhase parse_phase(const std::string& ph) {
   Rcpp::stop("Unknown trend phase: '%s'", ph.c_str());
 }
 
-// One trend operation, built from one element of the R 'trend' list
-struct TrendOp {
+// ---- Specification side ----
+
+// One trend operation spec, built from one element of the R 'trend' list
+struct TrendOpSpec {
   TrendPhase phase;
   std::string kernel;                 // e.g. "lin_incr"
   std::string base_type;              // e.g. "lin"
   std::string target_param;
+
+  bool has_at = false;
+  std::string at;
+  Rcpp::LogicalVector first_level;
+  std::vector<int> expand_idx;        // length = n_trials
+  std::vector<int> comp_index;        // compressed row indices
+
   Rcpp::CharacterVector trend_pnames;
   Rcpp::CharacterVector par_input;
-  Rcpp::List spec;
+  Rcpp::List spec;                    // original R spec
 
-  // Kernel & base - ptr and parameters
   KernelType kernel_type;
-  std::unique_ptr<BaseKernel> kernel_ptr;
-  int base_par_idx = -1;                 // column in ParamTable::base, or -1 if none
-  std::vector<int> kernel_par_indices;   // columns in ParamTable::base
 
-  TrendOp(const Rcpp::List& cur, const std::string& name_from_list)
-    : spec(cur) {
-    using Rcpp::as;
+  // Cached covariate. Since it's now in the spec, it can be re-used across particles
+  Rcpp::NumericVector covariate;
 
-    phase        = parse_phase(as<std::string>(cur["phase"]));
-    kernel       = as<std::string>(cur["kernel"]);
-    base_type    = as<std::string>(cur["base"]);
-    target_param = name_from_list;
+  TrendOpSpec(const Rcpp::List& cur, const std::string& name_from_list);
 
-    if (cur.containsElementNamed("trend_pnames")) {
-      trend_pnames = cur["trend_pnames"];
-    } else {
-      trend_pnames = Rcpp::CharacterVector(0);
-    }
-
-    if (cur.containsElementNamed("par_input")) {
-      par_input = cur["par_input"];
-    } else {
-      par_input = Rcpp::CharacterVector(0);
-    }
-
-    // init kernel
-    kernel_type = to_kernel_type(Rcpp::String(kernel));
-    kernel_ptr  = make_kernel(kernel_type);
-  }
-
-  bool has_base_par() const { return base_par_idx >= 0; }
+  void make_first_level(const Rcpp::DataFrame& data);
 };
 
-
-inline void bind_trend_op_to_paramtable(TrendOp& op,
-                                        const ParamTable& pt)
-{
-  using Rcpp::as;
-  using std::string;
-
-  // Determine base type (if any)
-  string base_type;
-  if (op.spec.containsElementNamed("base")) {
-    base_type = as<string>(op.spec["base"]);
-  } else {
-    base_type = "";   // no special base
-  }
-
-  const int n_tp = op.trend_pnames.size();
-
-  op.base_par_idx = -1;
-  op.kernel_par_indices.clear();
-
-  int kernel_start = 0;
-
-  if (op.base_type == "lin" || op.base_type == "lin_exp") {
-    if (n_tp < 1) {
-      Rcpp::stop("TrendOp '%s': base = '%s' but trend_pnames is empty",
-                 op.target_param.c_str(), op.base_type.c_str());
-    }
-    string base_nm = as<string>(op.trend_pnames[0]);
-    op.base_par_idx = pt.base_index_for(base_nm);
-    kernel_start = 1;
-  }
-
-  for (int k = kernel_start; k < n_tp; ++k) {
-    string kn = as<string>(op.trend_pnames[k]);
-    int idx   = pt.base_index_for(kn);
-    op.kernel_par_indices.push_back(idx);
-  }
-}
-
-struct TrendEngine {
-  Rcpp::List trend;
+// Plan: all spec operations + parameter sets
+struct TrendPlan {
+  Rcpp::List trend;       // original trend list or R_NilValue
   Rcpp::DataFrame data;
 
-  std::vector<TrendOp> premap_ops;
-  std::vector<TrendOp> pretransform_ops;
-  std::vector<TrendOp> posttransform_ops;
+  std::vector<TrendOpSpec> premap_ops;
+  std::vector<TrendOpSpec> pretransform_ops;
+  std::vector<TrendOpSpec> posttransform_ops;
 
   std::unordered_set<std::string> premap_trend_params;
+  std::unordered_set<std::string> all_trend_params;
 
-  TrendEngine(const Rcpp::List& trend_, const Rcpp::DataFrame& data_)
-    : trend(trend_), data(data_) {
-    initialize_from_trend();
-  }
+  TrendPlan(Rcpp::Nullable<Rcpp::List> trend_, const Rcpp::DataFrame& data_);
 
-  void initialize_from_trend();
-
-  bool has_premap() const;
-  bool has_pretransform() const;
-  bool has_posttransform() const;
+  bool has_premap()        const { return !premap_ops.empty(); }
+  bool has_pretransform()  const { return !pretransform_ops.empty(); }
+  bool has_posttransform() const { return !posttransform_ops.empty(); }
 
   Rcpp::LogicalVector premap_design_mask(const Rcpp::List& designs) const;
-
-  void bind_all_ops_to_paramtable(const ParamTable& pt);
-
-  void run_kernel_for_op(TrendOp& op, ParamTable& pt);
-
-  void apply_base_for_op(TrendOp& op,
-                         ParamTable& pt);
-  // e.g. helper that runs all premap kernels
-  void run_premap_kernels(ParamTable& pt);
 };
 
 
@@ -143,4 +76,84 @@ inline KernelParsView make_kernel_pars_view(const ParamTable& pt,
   }
   return view;
 }
+
+
+inline std::vector<std::string> covariate_names_from_spec(const Rcpp::List& tr) {
+  std::vector<std::string> out;
+
+  if (!tr.containsElementNamed("covariate")) {
+    return out; // no covariate; will be handled as error later
+  }
+
+  SEXP cov_spec = tr["covariate"];
+
+  // Case 1: single string: "cov1"
+  if (Rf_isString(cov_spec) && Rf_length(cov_spec) == 1) {
+    out.push_back(Rcpp::as<std::string>(cov_spec));
+    return out;
+  }
+
+  // Case 2: character vector: c("cov1", "cov2", ...)
+  if (TYPEOF(cov_spec) == STRSXP) {
+    Rcpp::CharacterVector cv(cov_spec);
+    out.reserve(cv.size());
+    for (int i = 0; i < cv.size(); ++i) {
+      out.push_back(Rcpp::as<std::string>(cv[i]));
+    }
+    return out;
+  }
+
+  // Case 3: non‑string covariate (e.g. numeric vector supplied inline):
+  // treat as "inline covariate", not multiple columns
+  return out;  // empty => we will keep the original spec as a single TrendOp
+}
+
+
+
+// ---- Runtime side ----
+
+// Runtime info for a single trend op: binds spec to ParamTable and kernel
+struct TrendOpRuntime {
+  const TrendOpSpec* spec;              // non-owning pointer into TrendPlan
+  std::unique_ptr<BaseKernel> kernel_ptr;
+  int base_par_idx = -1;                // column in ParamTable::base, or -1 if none
+  std::vector<int> kernel_par_indices;  // columns in ParamTable::base
+
+  TrendOpRuntime(const TrendOpSpec* s)
+    : spec(s),
+      kernel_ptr(make_kernel(s->kernel_type)) {}
+};
+
+struct TrendRuntime {
+  const TrendPlan* plan;  // non-owning pointer
+
+  std::vector<TrendOpRuntime> premap_ops;
+  std::vector<TrendOpRuntime> pretransform_ops;
+  std::vector<TrendOpRuntime> posttransform_ops;
+
+  TrendRuntime(const TrendPlan& plan_);
+
+  bool has_premap()        const { return plan->has_premap(); }
+  bool has_pretransform()  const { return plan->has_pretransform(); }
+  bool has_posttransform() const { return plan->has_posttransform(); }
+
+  const std::unordered_set<std::string>& premap_trend_params() const {
+    return plan->premap_trend_params;
+  }
+  const std::unordered_set<std::string>& all_trend_params() const {
+    return plan->all_trend_params;
+  }
+
+  Rcpp::LogicalVector premap_design_mask(const Rcpp::List& designs) const {
+    return plan->premap_design_mask(designs);
+  }
+
+  void bind_all_ops_to_paramtable(const ParamTable& pt);
+  void run_kernel_for_op(TrendOpRuntime& op, ParamTable& pt);
+  void apply_base_for_op(TrendOpRuntime& op, ParamTable& pt);
+};
+
+// helper to bind one op at runtime
+inline void bind_trend_op_to_paramtable(TrendOpRuntime& op,
+                                        const ParamTable& pt);
 
