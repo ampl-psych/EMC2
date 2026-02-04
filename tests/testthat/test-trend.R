@@ -57,7 +57,7 @@ test_that("trend_shared", {
 })
 
 trend_premap <- make_trend(
-  par_names = c("m", "lMd"),
+  par_names = c("m", "m_lMd"),
   cov_names = list("covariate1", "covariate2"),
   kernels = c("exp_incr", "poly2"),
   phase = "premap"
@@ -66,7 +66,7 @@ trend_premap <- make_trend(
 design_premap <- design(
   data = dat,
   trend = trend_premap,
-  formula = list(m ~ lM, s ~ 1, t0 ~ 1, lMd.d1 ~ lR),
+  formula = list(m ~ lM, s ~ 1, t0 ~ 1, m_lMd.d1 ~ lR),
   contrasts = list(lM = ADmat),
   matchfun = matchfun,
   model = LNR

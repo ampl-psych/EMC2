@@ -148,6 +148,10 @@ NumericMatrix get_pars_matrix_new(NumericVector p_vector,
                                   TrendRuntime* tr,
                                   const std::vector<TransformSpec>& full_specs,
                                   const Rcpp::CharacterVector& keep_names) {
+  // Reset kernels if needed
+  if (tr) {
+    tr->reset_all_kernels();
+  }
 
   // 1) Pre-transform + constants
   NumericVector p_vector_updtd(clone(p_vector));
@@ -182,8 +186,7 @@ NumericMatrix get_pars_matrix_new(NumericVector p_vector,
   if (tr && tr->has_premap()) {
     pt.map_from_designs(designs, include_params);
 
-    auto premap_specs = filter_specs_by_param_set(pt, full_specs,
-                                                  tr->premap_trend_params());
+    auto premap_specs = filter_specs_by_param_set(pt, full_specs, tr->premap_trend_params());
     c_do_transform_pt(pt, premap_specs);
 
     std::size_t n_ops = tr->premap_ops.size();
@@ -201,8 +204,11 @@ NumericMatrix get_pars_matrix_new(NumericVector p_vector,
   }
   pt.map_from_designs(designs, include_nontrend);
 
-  // 7) Pretransform trends
+  // 7) Pretransform trends. Transform the trend parameters first
   if (tr && tr->has_pretransform()) {
+    auto pretransform_specs = filter_specs_by_param_set(pt, full_specs, tr->pretransform_trend_params());
+    c_do_transform_pt(pt, pretransform_specs);
+
     std::size_t n_ops = tr->pretransform_ops.size();
     for (std::size_t i = 0; i < n_ops; ++i) {
       TrendOpRuntime& op = tr->pretransform_ops[i];
@@ -218,8 +224,11 @@ NumericMatrix get_pars_matrix_new(NumericVector p_vector,
   auto postmap_specs   = filter_specs_by_param_set(pt, full_specs, nontrend_params);
   c_do_transform_pt(pt, postmap_specs);
 
-  // 9) Posttransform trends
+  // 9) Posttransform trends. Transform the trend parameters first
   if (tr && tr->has_posttransform()) {
+    auto posttransform_specs = filter_specs_by_param_set(pt, full_specs, tr->posttransform_trend_params());
+    c_do_transform_pt(pt, posttransform_specs);
+
     std::size_t n_ops = tr->posttransform_ops.size();
     for (std::size_t i = 0; i < n_ops; ++i) {
       TrendOpRuntime& op = tr->posttransform_ops[i];

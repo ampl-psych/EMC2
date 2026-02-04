@@ -52,6 +52,8 @@ struct TrendPlan {
   std::vector<TrendOpSpec> posttransform_ops;
 
   std::unordered_set<std::string> premap_trend_params;
+  std::unordered_set<std::string> pretransform_trend_params;   // NEW
+  std::unordered_set<std::string> posttransform_trend_params;   // NEW
   std::unordered_set<std::string> all_trend_params;
 
   TrendPlan(Rcpp::Nullable<Rcpp::List> trend_, const Rcpp::DataFrame& data_);
@@ -61,6 +63,17 @@ struct TrendPlan {
   bool has_posttransform() const { return !posttransform_ops.empty(); }
 
   Rcpp::LogicalVector premap_design_mask(const Rcpp::List& designs) const;
+
+  const std::unordered_set<std::string>& premap_trend_params_set() const {
+    return premap_trend_params;
+  }
+  const std::unordered_set<std::string>& pretransform_trend_params_set() const {
+    return pretransform_trend_params;
+  }
+
+  const std::unordered_set<std::string>& posttransform_trend_params_set() const {
+    return posttransform_trend_params;
+  }
 };
 
 
@@ -140,6 +153,12 @@ struct TrendRuntime {
   const std::unordered_set<std::string>& premap_trend_params() const {
     return plan->premap_trend_params;
   }
+  const std::unordered_set<std::string>& pretransform_trend_params() const {
+    return plan->pretransform_trend_params_set();
+  }
+  const std::unordered_set<std::string>& posttransform_trend_params() const {
+    return plan->posttransform_trend_params_set();
+  }
   const std::unordered_set<std::string>& all_trend_params() const {
     return plan->all_trend_params;
   }
@@ -151,6 +170,7 @@ struct TrendRuntime {
   void bind_all_ops_to_paramtable(const ParamTable& pt);
   void run_kernel_for_op(TrendOpRuntime& op, ParamTable& pt);
   void apply_base_for_op(TrendOpRuntime& op, ParamTable& pt);
+  void reset_all_kernels();
 };
 
 // helper to bind one op at runtime

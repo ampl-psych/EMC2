@@ -185,6 +185,16 @@ TrendPlan::TrendPlan(Rcpp::Nullable<Rcpp::List> trend_, const Rcpp::DataFrame& d
         premap_trend_params.insert(Rcpp::as<std::string>(tmp.trend_pnames[k]));
       }
     }
+    if (tmp.phase == TrendPhase::Pretransform) {
+      for (int k = 0; k < tmp.trend_pnames.size(); ++k) {
+        pretransform_trend_params.insert(Rcpp::as<std::string>(tmp.trend_pnames[k]));
+      }
+    }
+    if (tmp.phase == TrendPhase::Posttransform) {
+      for (int k = 0; k < tmp.trend_pnames.size(); ++k) {
+        posttransform_trend_params.insert(Rcpp::as<std::string>(tmp.trend_pnames[k]));
+      }
+    }
 
     // 0 or 1 covariate name: keep spec as-is
     if (cov_names.size() <= 1) {
@@ -375,6 +385,17 @@ void TrendRuntime::apply_base_for_op(TrendOpRuntime& op,
          spec.target_param.c_str(), (int)traj.size(), n);
   }
 
+  // // SM TEMP
+  // // DEBUG: print a few trajectory values for pretransform ops
+  // if (spec.phase == TrendPhase::Pretransform) {
+  //   Rcout << "apply_base_for_op[pretransform] target=" << spec.target_param
+  //         << " traj[0..4]=";
+  //   for (int k = 0; k < std::min(n, 5); ++k) {
+  //     Rcout << traj[k] << " ";
+  //   }
+  //   Rcout << "\n";
+  // }
+
   const std::string& base = spec.base_type;
 
   // Target parameter column
@@ -429,3 +450,8 @@ void TrendRuntime::apply_base_for_op(TrendOpRuntime& op,
   }
 }
 
+void TrendRuntime::reset_all_kernels() {
+  for (auto& op : premap_ops)        op.kernel_ptr->reset();
+  for (auto& op : pretransform_ops)  op.kernel_ptr->reset();
+  for (auto& op : posttransform_ops) op.kernel_ptr->reset();
+}
