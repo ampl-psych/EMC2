@@ -39,9 +39,17 @@ test_that("trend", {
   expect_snapshot(init_chains(LNR2cov, particles = 10, cores_per_chain = 1)[[1]]$samples)
 })
 
-trend_2types <- make_trend(par_names = c("m", "m_lMd"),
-                           cov_names = list(c("covariate1", "covariate2"), "covariate1"),
-                           kernels = c("exp_incr", "pow_decr"))
+
+# SM: I AM NOT SURE THESE RESULTS ARE CORRECT! ----------------------------
+trend_2types <- make_trend(par_names = c("m",
+                                         "m_lMd"
+                                         ),
+                           cov_names = list(c("covariate1", "covariate2"),
+                                            "covariate1"),
+                           kernels = c("exp_incr",
+                                       "pow_decr")
+                           )
+# SM: I AM NOT SURE THESE RESULTS ARE CORRECT! ----------------------------
 
 design_base_shared <- design(data = dat,
                              trend = trend_2types,
@@ -50,12 +58,15 @@ design_base_shared <- design(data = dat,
                              matchfun = matchfun,
                              model = LNR)
 
+# SM: I AM NOT SURE THESE RESULTS ARE CORRECT! ----------------------------
 LNR2cov_shared <- make_emc(dat, design_base_shared, compress = FALSE, n_chains = 1, type = "single")
 
+# SM: I AM NOT SURE THESE RESULTS ARE CORRECT! ----------------------------
 test_that("trend_shared", {
   expect_snapshot(init_chains(LNR2cov_shared, particles = 10, cores_per_chain = 1)[[1]]$samples)
 })
 
+# SM: THERE WAS DEFINITELY AN ERORR IN THIS ONE!
 trend_premap <- make_trend(
   par_names = c("m", "m_lMd"),
   cov_names = list("covariate1", "covariate2"),

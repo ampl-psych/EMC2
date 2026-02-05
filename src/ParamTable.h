@@ -24,6 +24,9 @@ struct ParamTable {
   // fast look-up map
   std::unordered_map<std::string,int> name_to_base_idx;
 
+  // keep track of parameters that have an intercept-only design
+  std::vector<char> design_is_self_intercept;
+
   ParamTable() = default;
 
   ParamTable(Rcpp::NumericMatrix base_,
@@ -259,7 +262,51 @@ struct ParamTable {
     }
 
     // 5) Construct ParamTable
-    return ParamTable(base, base_names);
+    // return ParamTable(base, base_names);
+
+    // 5) Construct ParamTable
+    ParamTable pt(base, base_names);
+    pt.n_trials = n_trials;  // (already set in ctor, but fine to be explicit)
+
+    // cache "self-intercept-only" designs
+    const int n_designs = designs.size();
+    pt.design_is_self_intercept.assign(n_designs, 0);
+
+    for (int i = 0; i < n_designs; ++i) {
+      if (designs[i] == R_NilValue) continue;
+
+      NumericMatrix dm = designs[i];
+
+      // Must have the right number of rows
+      if (dm.nrow() != n_trials) continue;
+
+      // Exactly 1 column
+      if (dm.ncol() != 1) continue;
+
+      CharacterVector cn = Rcpp::colnames(dm);
+      if (cn.size() != 1) continue;
+
+      // Column name must match the design/output name
+      string out_name  = as<string>(design_names[i]);
+      string coef_name = as<string>(cn[0]);
+      if (coef_name != out_name) continue;
+
+      // Column must be all ones
+      bool all_ones = true;
+      const double* dcol = &dm(0, 0);
+      for (int r = 0; r < n_trials; ++r) {
+        if (dcol[r] != 1.0) {
+          all_ones = false;
+          break;
+        }
+      }
+
+      if (all_ones) {
+        pt.design_is_self_intercept[i] = 1;
+      }
+    }
+
+    return pt;
   }
 
   // Map parameters from designs into this table, ignoring trends.
@@ -272,8 +319,6 @@ struct ParamTable {
   //          - else, require nrow(design) == n_trials.
   // include_param: optional logical mask; if length == length(designs),
   //                decides which entries to map; if empty, all TRUE.
-  // Map parameters from designs into this table, assuming *every*
-  // non-NULL design matrix has an "expand" attribute of length n_trials.
   void map_from_designs(const Rcpp::List& designs,
                         const Rcpp::LogicalVector& include_param = Rcpp::LogicalVector()) {
     using namespace Rcpp;
@@ -297,6 +342,14 @@ struct ParamTable {
     for (int i = 0; i < n_params; ++i) {
       if (!use[i]) continue;
       if (designs[i] == R_NilValue) continue;
+
+      // skip self-intercept-only designs -- multiplying by 1 is pointless
+      if (!design_is_self_intercept.empty() &&
+          i < (int)design_is_self_intercept.size() &&
+          design_is_self_intercept[i]) {
+        // Rprintf("Skipping column as this is a self-intercept \n");
+        continue;
+      }
 
       const string out_name = as<string>(design_names[i]);
 
@@ -360,149 +413,6 @@ struct ParamTable {
       }
     }
   }
-  // void map_from_designs(const Rcpp::List& designs,
-  //                       const Rcpp::LogicalVector& include_param = Rcpp::LogicalVector()) {
-  //   using namespace Rcpp;
-  //   using std::string;
-  //
-  //   const int n_params = designs.size();
-  //   if (n_params == 0) return;
-  //
-  //   CharacterVector design_names = designs.names();
-  //   if (design_names.size() != n_params) {
-  //     stop("ParamTable::map_from_designs: designs must be a named list");
-  //   }
-  //
-  //   // Decide which parameters to map
-  //   LogicalVector use;
-  //   if (include_param.size() == n_params) {
-  //     use = include_param;
-  //   } else {
-  //     use = LogicalVector(n_params, true); // default: map all
-  //   }
-  //
-  //   const int n_trials_local = n_trials;
-  //
-  //   for (int i = 0; i < n_params; ++i) {
-  //     if (!use[i]) continue;
-  //
-  //     string out_pname = as<string>(design_names[i]);
-  //
-  //     if (designs[i] == R_NilValue) {
-  //       // No design for this parameter → leave as-is
-  //       continue;
-  //     }
-  //
-  //     NumericMatrix cur_design = designs[i];
-  //     const int n_rows_comp = cur_design.nrow();
-  //     CharacterVector cur_names = colnames(cur_design);
-  //     const int n_cols = cur_design.ncol();
-  //
-  //     // Output column index (must exist)
-  //     auto out_it = name_to_base_idx.find(out_pname);
-  //     if (out_it == name_to_base_idx.end()) {
-  //       stop("ParamTable::map_from_designs: output parameter '%s' not in table",
-  //            out_pname.c_str());
-  //     }
-  //     const int out_idx = out_it->second;
-  //
-  //     // --- Handle "expand" attribute: may be NULL ---
-  //     IntegerVector expand_idx;
-  //     {
-  //       SEXP exp_attr = cur_design.attr("expand");
-  //       if (exp_attr == R_NilValue) {
-  //         // No expand attribute: require full-length design
-  //         if (n_rows_comp != n_trials_local) {
-  //           stop("ParamTable::map_from_designs: design for '%s' has no 'expand' "
-  //                  "attribute and nrow(design) != n_trials (%d != %d)",
-  //                  out_pname.c_str(), n_rows_comp, n_trials_local);
-  //         }
-  //         // identity expand: trial r uses row r
-  //         expand_idx = IntegerVector(n_trials_local);
-  //         for (int r = 0; r < n_trials_local; ++r) {
-  //           expand_idx[r] = r + 1;  // R is 1-based
-  //         }
-  //       } else {
-  //         expand_idx = exp_attr;   // will throw if not integer-like
-  //         if (expand_idx.size() != n_trials_local) {
-  //           stop("ParamTable::map_from_designs: length(expand) != n_trials for parameter '%s'",
-  //                out_pname.c_str());
-  //         }
-  //       }
-  //     }
-  //     // --- Pre-compute coefficient indices and detect self-coefficient use ---
-  //     std::vector<int> coef_indices(n_cols, -1);
-  //     bool uses_self = false;
-  //     for (int j = 0; j < n_cols; ++j) {
-  //       string col_name = as<string>(cur_names[j]);
-  //       auto coef_it = name_to_base_idx.find(col_name);
-  //       if (coef_it == name_to_base_idx.end()) {
-  //         coef_indices[j] = -1;  // "missing" => contributes 0
-  //         continue;
-  //       }
-  //       int coef_idx = coef_it->second;
-  //       coef_indices[j] = coef_idx;
-  //       if (coef_idx == out_idx) {
-  //         uses_self = true;
-  //       }
-  //     }
-  //
-  //     // If the design uses out_pname itself as a coefficient, copy its
-  //     // original values BEFORE we clear the output column.
-  //     std::vector<double> self_coef;
-  //     if (uses_self) {
-  //       self_coef.resize(n_trials_local);
-  //       const double* src = &base(0, out_idx);
-  //       for (int r = 0; r < n_trials_local; ++r) {
-  //         self_coef[r] = src[r];
-  //       }
-  //     }
-  //
-  //     // Clear output column and get raw pointer to it
-  //     double* out_ptr = &base(0, out_idx);
-  //     for (int r = 0; r < n_trials_local; ++r) {
-  //       out_ptr[r] = 0.0;
-  //     }
-  //
-  //     // Reusable buffer for expanded design column
-  //     NumericVector design_col(n_trials_local);
-  //
-  //     // --- Main loop over design columns ---
-  //     for (int j = 0; j < n_cols; ++j) {
-  //       int coef_idx = coef_indices[j];
-  //       if (coef_idx < 0) continue;  // no such coefficient -> contributes 0
-  //
-  //       // Choose coefficient pointer:
-  //       const double* coef_ptr = nullptr;
-  //       if (coef_idx == out_idx && uses_self) {
-  //         // Use the saved original column if it's the self-coefficient
-  //         coef_ptr = self_coef.data();
-  //       } else {
-  //         coef_ptr = &base(0, coef_idx);
-  //       }
-  //
-  //       // Expand compressed design column j into design_col
-  //       for (int r = 0; r < n_trials_local; ++r) {
-  //         int row_idx = expand_idx[r] - 1; // R 1-based → C++ 0-based
-  //         if (row_idx < 0 || row_idx >= n_rows_comp) {
-  //           stop("ParamTable::map_from_designs: 'expand' index out of range for parameter '%s'",
-  //                out_pname.c_str());
-  //         }
-  //         design_col[r] = cur_design(row_idx, j);
-  //       }
-  //       const double* d_ptr = design_col.begin();
-  //
-  //       // Accumulate in-place: out_ptr += coef * design_col, NA/NaN -> 0
-  //       for (int r = 0; r < n_trials_local; ++r) {
-  //         double v = coef_ptr[r] * d_ptr[r];
-  //         if (NumericVector::is_na(v) || std::isnan(v)) {
-  //           v = 0.0;
-  //         }
-  //         out_ptr[r] += v;
-  //       }
-  //     }
-  //   }
-  // }
 
   // Zero the entire base matrix
   void reset_base_to_zero() {
@@ -547,3 +457,8 @@ std::unordered_set<std::string>
   make_non_premap_param_set(const ParamTable& pt,
                             const std::unordered_set<std::string>& premap_trend_params);
 
+// Helper: all parameter names in pt that are NOT in premap_trend_params OR in pretransform_trend_params
+std::unordered_set<std::string>
+  make_non_premap_pretransform_param_set(const ParamTable& pt,
+                                         const std::unordered_set<std::string>& premap_trend_params,
+                                         const std::unordered_set<std::string>& pretransform_trend_params);

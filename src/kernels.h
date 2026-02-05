@@ -96,16 +96,14 @@ struct LinIncrKernel : BaseKernel {
            const std::vector<int>& comp_idx) override {
 
              int n_comp = comp_idx.size();
-             out_.assign(n_comp, NA_REAL);    // compressed output
+             out_.assign(n_comp, 0);    // compressed output
 
-             double last = NA_REAL;
              for (int j = 0; j < n_comp; ++j) {
                int r = comp_idx[j];
                double x = covariate[r];
                if (!ISNAN(x)) {
-                 last = x;
+                 out_[j] = x;  // compressed index
                }
-               out_[j] = last;  // compressed index
              }
 
              mark_run_complete();
@@ -119,16 +117,16 @@ struct LinDecrKernel : BaseKernel {
            const std::vector<int>& comp_idx) override {
 
              int n_comp = comp_idx.size();
-             out_.assign(n_comp, NA_REAL);
+             out_.assign(n_comp, 0);
 
-             double last = NA_REAL;
+             // double last = NA_REAL;
              for (int j = 0; j < n_comp; ++j) {
                int r = comp_idx[j];
                double x = covariate[r];
                if (!ISNAN(x)) {
-                 last = -x;
+                 out_[j] = -x;
                }
-               out_[j] = last;
+               // out_[j] = last;
              }
 
              mark_run_complete();
@@ -140,19 +138,24 @@ struct ExpDecrKernel : BaseKernel {
            const Rcpp::NumericVector& covariate,
            const std::vector<int>& comp_idx) override {
 
+             if (kernel_pars.cols.size() != 1) {
+               Rcpp::stop("ExpDecrKernel expects 1 parameter columns, got %d",
+                          (int)kernel_pars.cols.size());
+             }
+
              int n_comp = comp_idx.size();
-             out_.assign(n_comp, NA_REAL);
+             out_.assign(n_comp, 0);
 
              const double* lambda_col = kernel_pars.cols[0];
-             double last = NA_REAL;
+             // double last = NA_REAL;
              for (int j = 0; j < n_comp; ++j) {
                int r = comp_idx[j];
                double x = covariate[r];
                if (!ISNAN(x)) {
                  double lambda = lambda_col[r];
-                 last = std::exp(-lambda * x);
+                 out_[j] = std::exp(-lambda * x);
                }
-               out_[j] = last;
+               // out_[j] = last;
              }
 
              mark_run_complete();
@@ -164,19 +167,24 @@ struct ExpIncrKernel : BaseKernel {
            const Rcpp::NumericVector& covariate,
            const std::vector<int>& comp_idx) override {
 
+             if (kernel_pars.cols.size() != 1) {
+               Rcpp::stop("ExpIncrKernel expects 1 parameter columns, got %d",
+                          (int)kernel_pars.cols.size());
+             }
+
              int n_comp = comp_idx.size();
-             out_.assign(n_comp, NA_REAL);
+             out_.assign(n_comp, 0);
 
              const double* lambda_col = kernel_pars.cols[0];
-             double last = NA_REAL;
+             // double last = NA_REAL;
              for (int j = 0; j < n_comp; ++j) {
                int r = comp_idx[j];
                double x = covariate[r];
                if (!ISNAN(x)) {
                  double lambda = lambda_col[r];
-                 last = 1.0 - std::exp(-lambda * x);
+                 out_[j] = 1.0 - std::exp(-lambda * x);
                }
-               out_[j] = last;
+               // out_[j] = last;
              }
 
              mark_run_complete();
@@ -188,19 +196,24 @@ struct PowDecrKernel : BaseKernel {
            const Rcpp::NumericVector& covariate,
            const std::vector<int>& comp_idx) override {
 
+             if (kernel_pars.cols.size() != 1) {
+               Rcpp::stop("PowDecrKernel expects 1 parameter columns, got %d",
+                          (int)kernel_pars.cols.size());
+             }
+
              int n_comp = comp_idx.size();
-             out_.assign(n_comp, NA_REAL);
+             out_.assign(n_comp, 0);
 
              const double* alpha_col = kernel_pars.cols[0];
-             double last = NA_REAL;
+             // double last = NA_REAL;
              for (int j = 0; j < n_comp; ++j) {
                int r = comp_idx[j];
                double x = covariate[r];
                if (!ISNAN(x)) {
                  double alpha = alpha_col[r];
-                 last = std::pow(1.0 + x, -alpha);
+                 out_[j] = std::pow(1.0 + x, -alpha);
                }
-               out_[j] = last;
+               // out_[j] = last;
              }
 
              mark_run_complete();
@@ -212,19 +225,24 @@ struct PowIncrKernel : BaseKernel {
            const Rcpp::NumericVector& covariate,
            const std::vector<int>& comp_idx) override {
 
+             if (kernel_pars.cols.size() != 1) {
+               Rcpp::stop("PowIncrKernel expects 1 parameter columns, got %d",
+                          (int)kernel_pars.cols.size());
+             }
+
              int n_comp = comp_idx.size();
-             out_.assign(n_comp, NA_REAL);
+             out_.assign(n_comp, 0);
 
              const double* alpha_col = kernel_pars.cols[0];
-             double last = NA_REAL;
+             // double last = NA_REAL;
              for (int j = 0; j < n_comp; ++j) {
                int r = comp_idx[j];
                double x = covariate[r];
                if (!ISNAN(x)) {
                  double alpha = alpha_col[r];
-                 last = 1.0 - std::pow(1.0 + x, -alpha);
+                 out_[j] = 1.0 - std::pow(1.0 + x, -alpha);
                }
-               out_[j] = last;
+               // out_[j] = last;
              }
 
              mark_run_complete();
@@ -235,14 +253,18 @@ struct Poly2Kernel : BaseKernel {
   void run(const KernelParsView& kernel_pars,
            const Rcpp::NumericVector& covariate,
            const std::vector<int>& comp_idx) override {
+             if (kernel_pars.cols.size() != 2) {
+               Rcpp::stop("Poly2Kernel expects 2 parameter columns, got %d",
+                          (int)kernel_pars.cols.size());
+             }
 
              int n_comp = comp_idx.size();
-             out_.assign(n_comp, NA_REAL);
+             out_.assign(n_comp, 0);
 
              const double* a1_col = kernel_pars.cols[0];
              const double* a2_col = kernel_pars.cols[1];
 
-             double last = NA_REAL;
+             // double last = NA_REAL;
              for (int j = 0; j < n_comp; ++j) {
                int r = comp_idx[j];
                double x = covariate[r];
@@ -250,9 +272,9 @@ struct Poly2Kernel : BaseKernel {
                  double a1 = a1_col[r];
                  double a2 = a2_col[r];
                  double x2 = x * x;
-                 last = a1 * x + a2 * x2;
+                 out_[j] = a1 * x + a2 * x2;
                }
-               out_[j] = last;
+               // out_[j] = last;
              }
 
              mark_run_complete();
@@ -263,15 +285,19 @@ struct Poly3Kernel : BaseKernel {
   void run(const KernelParsView& kernel_pars,
            const Rcpp::NumericVector& covariate,
            const std::vector<int>& comp_idx) override {
+             if (kernel_pars.cols.size() != 3) {
+               Rcpp::stop("Poly3Kernel expects 3 parameter columns, got %d",
+                          (int)kernel_pars.cols.size());
+             }
 
              int n_comp = comp_idx.size();
-             out_.assign(n_comp, NA_REAL);
+             out_.assign(n_comp, 0);
 
              const double* a1_col = kernel_pars.cols[0];
              const double* a2_col = kernel_pars.cols[1];
              const double* a3_col = kernel_pars.cols[2];
 
-             double last = NA_REAL;
+             // double last = NA_REAL;
              for (int j = 0; j < n_comp; ++j) {
                int r = comp_idx[j];
                double x = covariate[r];
@@ -281,9 +307,9 @@ struct Poly3Kernel : BaseKernel {
                  double a3 = a3_col[r];
                  double x2 = x * x;
                  double x3 = x2 * x;
-                 last = a1 * x + a2 * x2 + a3 * x3;
+                 out_[j] = a1 * x + a2 * x2 + a3 * x3;
                }
-               out_[j] = last;
+               // out_[j] = last;
              }
 
              mark_run_complete();
@@ -294,16 +320,20 @@ struct Poly4Kernel : BaseKernel {
   void run(const KernelParsView& kernel_pars,
            const Rcpp::NumericVector& covariate,
            const std::vector<int>& comp_idx) override {
+             if (kernel_pars.cols.size() != 4) {
+               Rcpp::stop("Poly4Kernel expects 4 parameter columns, got %d",
+                          (int)kernel_pars.cols.size());
+             }
 
              int n_comp = comp_idx.size();
-             out_.assign(n_comp, NA_REAL);
+             out_.assign(n_comp, 0);
 
              const double* a1_col = kernel_pars.cols[0];
              const double* a2_col = kernel_pars.cols[1];
              const double* a3_col = kernel_pars.cols[2];
              const double* a4_col = kernel_pars.cols[3];
 
-             double last = NA_REAL;
+             // double last = NA_REAL;
              for (int j = 0; j < n_comp; ++j) {
                int r = comp_idx[j];
                double x = covariate[r];
@@ -316,9 +346,9 @@ struct Poly4Kernel : BaseKernel {
                  double x2 = x * x;
                  double x3 = x2 * x;
                  double x4 = x2 * x2;
-                 last = a1 * x + a2 * x2 + a3 * x3 + a4 * x4;
+                 out_[j] = a1 * x + a2 * x2 + a3 * x3 + a4 * x4;
                }
-               out_[j] = last;
+               // out_[j] = last;
              }
 
              mark_run_complete();
@@ -333,6 +363,10 @@ struct SimpleDelta : DeltaKernel {
   void run(const KernelParsView& kernel_pars,
            const Rcpp::NumericVector& covariate,
            const std::vector<int>& comp_idx) override {
+             if (kernel_pars.cols.size() != 2) {
+               Rcpp::stop("SimpleDelta expects 2 parameter columns, got %d",
+                          (int)kernel_pars.cols.size());
+             }
 
              using namespace Rcpp;
 
@@ -342,12 +376,6 @@ struct SimpleDelta : DeltaKernel {
                pes_.clear();
                mark_run_complete();
                return;
-             }
-
-             // Sanity: kernel_pars should have at least 2 columns
-             if (kernel_pars.cols.size() < 2) {
-               stop("SimpleDelta::run: kernel_pars has %d columns, expected >= 2",
-                    (int)kernel_pars.cols.size());
              }
 
              out_.assign(n_comp, NA_REAL);
@@ -400,6 +428,10 @@ struct Delta2LR : DeltaKernel {
   void run(const KernelParsView& kernel_pars,
            const Rcpp::NumericVector& covariate,
            const std::vector<int>& comp_idx) override {
+             if (kernel_pars.cols.size() != 3) {
+               Rcpp::stop("Delta2LR expects 3 parameter columns, got %d",
+                          (int)kernel_pars.cols.size());
+             }
 
              int n_comp = comp_idx.size();
              out_.assign(n_comp, NA_REAL);
@@ -449,6 +481,10 @@ struct Delta2Kernel : SequentialKernel {
   void run(const KernelParsView& kernel_pars,
            const Rcpp::NumericVector& covariate,
            const std::vector<int>& comp_idx) override {
+             if (kernel_pars.cols.size() != 4) {
+               Rcpp::stop("Delta2Kernel expects 4 parameter columns, got %d",
+                          (int)kernel_pars.cols.size());
+             }
 
              int n_comp = comp_idx.size();
              out_.assign(n_comp, NA_REAL);
@@ -456,8 +492,8 @@ struct Delta2Kernel : SequentialKernel {
 
              const double* q0_col        = kernel_pars.cols[0];
              const double* alphaFast_col = kernel_pars.cols[1];
-             const double* propSlow_col  = kernel_pars.cols[3];
-             const double* dSwitch_col   = kernel_pars.cols[4];
+             const double* propSlow_col  = kernel_pars.cols[2];
+             const double* dSwitch_col   = kernel_pars.cols[3];
 
              int row0 = comp_idx[0];
              out_[0] = qFast_ = qSlow_ = q_ = q0_col[row0];

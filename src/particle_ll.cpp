@@ -28,7 +28,8 @@ NumericMatrix c_map_p(NumericVector p_vector,
                       int n_trials,
                       DataFrame data,
                       List trend,
-                      const std::vector<TransformSpec>& full_specs) {
+                      const std::vector<TransformSpec>& full_specs,
+                      bool drop_trend_pars=true) {
 
   // Extract information about trends
   const bool has_trend = (trend.length() > 0);
@@ -92,7 +93,7 @@ NumericMatrix c_map_p(NumericVector p_vector,
   }
 
   // If premap, trend parameter columns are not part of the final matrix
-  if (has_trend && premap) {
+  if (has_trend && premap && drop_trend_pars) {
     CharacterVector names_premap = collect_trend_param_names_phase(trend, "premap");
     if (names_premap.size() > 0) {
       pars = submat_rcpp_col(pars, !contains_multiple(p_types, names_premap));
@@ -103,7 +104,8 @@ NumericMatrix c_map_p(NumericVector p_vector,
 
 NumericMatrix get_pars_matrix(NumericVector p_vector, NumericVector constants, const std::vector<PreTransformSpec>& p_specs,
                               CharacterVector p_types, List designs, int n_trials, DataFrame data, List trend,
-                              const std::vector<TransformSpec>& full_specs){
+                              const std::vector<TransformSpec>& full_specs,
+                              bool drop_trend_pars=true){
   const bool has_trend = (trend.length() > 0);
   bool pretransform = false;
   bool posttransform = false;
@@ -118,7 +120,7 @@ NumericMatrix get_pars_matrix(NumericVector p_vector, NumericVector constants, c
   NumericVector p_vector_updtd(clone(p_vector));
   p_vector_updtd = c_do_pre_transform(p_vector_updtd, p_specs);
   p_vector_updtd = c_add_vectors(p_vector_updtd, constants);
-  NumericMatrix pars = c_map_p(p_vector_updtd, p_types, designs, n_trials, data, trend, full_specs);
+  NumericMatrix pars = c_map_p(p_vector_updtd, p_types, designs, n_trials, data, trend, full_specs, drop_trend_pars);
   // // Check if pretransform trend applies
   if(pretransform){
     pars = prep_trend_phase(data, trend, pars, "pretransform");
@@ -147,7 +149,9 @@ NumericMatrix get_pars_matrix_new(NumericVector p_vector,
                                   ParamTable& pt,
                                   TrendRuntime* tr,
                                   const std::vector<TransformSpec>& full_specs,
-                                  const Rcpp::CharacterVector& keep_names) {
+                                  const Rcpp::CharacterVector& keep_names,
+                                  bool return_covariate_matrix=false,
+                                  bool return_all_pars=false) {
   // Reset kernels if needed
   if (tr) {
     tr->reset_all_kernels();
@@ -216,18 +220,20 @@ NumericMatrix get_pars_matrix_new(NumericVector p_vector,
     }
   }
 
-  // 8) Transforms for non-trend parameters
+  // 8) Transforms for non-trend parameters.
   std::unordered_set<std::string> empty_set;
   const auto& premap_set = (tr ? tr->premap_trend_params() : empty_set);
+  const auto& pretransform_set = (tr ? tr->pretransform_trend_params() : empty_set);
 
-  auto nontrend_params = make_non_premap_param_set(pt, premap_set);
+  auto nontrend_params = make_non_premap_pretransform_param_set(pt, premap_set, pretransform_set);
   auto postmap_specs   = filter_specs_by_param_set(pt, full_specs, nontrend_params);
   c_do_transform_pt(pt, postmap_specs);
 
-  // 9) Posttransform trends. Transform the trend parameters first
+  // 9) Posttransform trends.
   if (tr && tr->has_posttransform()) {
-    auto posttransform_specs = filter_specs_by_param_set(pt, full_specs, tr->posttransform_trend_params());
-    c_do_transform_pt(pt, posttransform_specs);
+    // These have been transformed above
+    // auto posttransform_specs = filter_specs_by_param_set(pt, full_specs, tr->posttransform_trend_params());
+    // c_do_transform_pt(pt, posttransform_specs);
 
     std::size_t n_ops = tr->posttransform_ops.size();
     for (std::size_t i = 0; i < n_ops; ++i) {
@@ -236,6 +242,13 @@ NumericMatrix get_pars_matrix_new(NumericVector p_vector,
     }
   }
 
+  if(return_covariate_matrix) {
+    return tr->all_kernel_outputs(pt);
+  }
+
+  if(return_all_pars) {
+    return pt.materialize();
+  }
   // 10) Materialize only requested parameters
   return pt.materialize_by_param_names(keep_names);
 }
@@ -491,7 +504,9 @@ NumericVector calc_ll(NumericMatrix p_matrix, DataFrame data, NumericVector cons
 NumericMatrix get_pars_c_wrapper(NumericMatrix p_matrix, DataFrame data, NumericVector constants,
                                  List designs, List bounds, List transforms, List pretransforms,
                                  CharacterVector p_types,
-                                 Rcpp::Nullable<Rcpp::List> trend = R_NilValue)
+                                 Rcpp::Nullable<Rcpp::List> trend = R_NilValue,
+                                 bool return_kernel_matrix = false,
+                                 bool drop_trend_pars = true)
 {
   const int n_trials = data.nrow();
 
@@ -525,7 +540,7 @@ NumericMatrix get_pars_c_wrapper(NumericMatrix p_matrix, DataFrame data, Numeric
   pars = get_pars_matrix(p_vector, constants,
                          p_specs, p_types,
                          designs, n_trials, data,
-                         trend_list, full_t_specs);
+                         trend_list, full_t_specs, drop_trend_pars);
 
   return pars;
 }
@@ -534,7 +549,9 @@ NumericMatrix get_pars_c_wrapper(NumericMatrix p_matrix, DataFrame data, Numeric
 NumericMatrix get_pars_c_wrapper_new(NumericMatrix p_matrix, DataFrame data, NumericVector constants,
                                  List designs, List bounds, List transforms, List pretransforms,
                                  CharacterVector p_types,
-                                 Rcpp::Nullable<Rcpp::List> trend = R_NilValue)
+                                 Rcpp::Nullable<Rcpp::List> trend = R_NilValue,
+                                 bool return_kernel_matrix = false,
+                                 bool return_all_pars = false)
 {
   const int n_trials = data.nrow();
 
@@ -598,7 +615,8 @@ NumericMatrix get_pars_c_wrapper_new(NumericMatrix p_matrix, DataFrame data, Num
   TrendRuntime* tr_ptr = trend_runtime ? trend_runtime.get() : nullptr;
 
   pars = get_pars_matrix_new(p_vector, constants, p_specs, p_types, designs, n_trials, pt_template, tr_ptr,
-                             full_specs_new, keep_names);
+                             full_specs_new, keep_names, return_kernel_matrix, return_all_pars);
+
 
   return pars;
 }

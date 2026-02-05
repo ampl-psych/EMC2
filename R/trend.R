@@ -1535,6 +1535,42 @@ normalize_maps <- function(maps, par_names) {
 #' Returns a kernel matrix produced by the corresponding implementation.
 #' @export
 apply_kernel <- function(kernel_pars, emc, subject=1, input_pars=NULL, trend_n=1, mode='Rcpp') {
+
+  if(mode == 'Rcpp_oo') {
+    model <- emc[[1]]$model()
+    p_types <- names(model$p_types)
+    dadm <- emc[[1]]$data[[1]]
+
+    designs <- list()
+    for(p in p_types){
+      designs[[p]] <- attr(dadm,"designs")[[p]][attr(attr(dadm,"designs")[[p]],"expand"),,drop=FALSE]
+    }
+    constants <- attr(dadm, "constants")
+    if(is.null(constants)) constants <- NA
+
+    type = model$c_name
+    bound=model$bound
+    transform=model$transform
+    pre_transform=model$pre_transform
+    trend=model$trend
+
+    if(!is.null(kernel_pars)) {
+      transform$func[names(kernel_pars)] <- rep("identity", length(kernel_pars))
+      transform$lower[names(kernel_pars)] <- rep(-Inf, length(kernel_pars))
+      transform$upper[names(kernel_pars)] <- rep(Inf, length(kernel_pars))
+    }
+
+    p_vector <- sampled_pars(emc)
+    p_vector[names(p_vector) %in% names(kernel_pars)] <- kernel_pars
+    p_mat <- t(as.matrix(p_vector))
+    colnames(p_mat) <- names(p_vector)
+
+
+    return(EMC2:::get_pars_c_wrapper_new(p_matrix = p_mat, data = dadm, constants = constants, designs = designs,
+                                         bounds = bound, transforms = transform, pretransforms = pre_transform,
+                                         p_types = p_types, trend = trend, return_kernel_matrix = TRUE))
+  }
+
   ##
   dadm <- emc[[1]]$data[[subject]]
   trend_list <- emc[[1]]$model()$trend

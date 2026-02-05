@@ -31,6 +31,7 @@ emc <- make_minimal_emc(trend_lin_incr)
 expected_output <- 1:5
 all.equal(matrix(apply_kernel(kernel_pars, emc, mode="R")), matrix(expected_output))
 all.equal(matrix(apply_kernel(kernel_pars, emc, mode="Rcpp")), matrix(expected_output))
+all.equal(matrix(apply_kernel(kernel_pars, emc, mode="Rcpp_oo")), matrix(expected_output))
 test_that("lin_incr_R", {
   expect_snapshot(matrix(apply_kernel(kernel_pars, emc, mode="R")))
 })
@@ -45,6 +46,7 @@ emc <- make_minimal_emc(trend_lin_decr)
 expected_output <- -(1:5)
 all.equal(matrix(apply_kernel(kernel_pars, emc, mode="R")), matrix(expected_output))
 all.equal(matrix(apply_kernel(kernel_pars, emc, mode="Rcpp")), matrix(expected_output))
+all.equal(matrix(apply_kernel(kernel_pars, emc, mode="Rcpp_oo")), matrix(expected_output))
 test_that("lin_decr_R", {
   expect_snapshot(matrix(apply_kernel(kernel_pars, emc, mode="R")))
 })
@@ -60,6 +62,7 @@ emc <- make_minimal_emc(trend_exp_decr, covariate1 = covariate1)
 expected_output <- exp(-kernel_pars * covariate1)
 all.equal(matrix(apply_kernel(kernel_pars, emc, mode="R")), matrix(expected_output))
 all.equal(matrix(apply_kernel(kernel_pars, emc, mode="Rcpp")), matrix(expected_output))
+all.equal(matrix(apply_kernel(kernel_pars, emc, mode="Rcpp_oo")), matrix(expected_output))
 test_that("exp_decr_R", {
   expect_snapshot(matrix(apply_kernel(kernel_pars, emc, mode="R")))
 })
@@ -75,6 +78,7 @@ emc <- make_minimal_emc(trend_exp_incr, covariate1 = covariate1)
 expected_output <- 1-exp(-kernel_pars * covariate1)
 all.equal(matrix(apply_kernel(kernel_pars, emc, mode="R")), matrix(expected_output))
 all.equal(matrix(apply_kernel(kernel_pars, emc, mode="Rcpp")), matrix(expected_output))
+all.equal(matrix(apply_kernel(kernel_pars, emc, mode="Rcpp_oo")), matrix(expected_output))
 test_that("exp_incr_R", {
   expect_snapshot(matrix(apply_kernel(kernel_pars, emc, mode="R")))
 })
@@ -90,6 +94,7 @@ emc <- make_minimal_emc(trend_pow_decr, covariate1 = covariate1)
 expected_output = (1 + covariate1)^(-kernel_pars)
 all.equal(matrix(apply_kernel(kernel_pars, emc, mode="R")), matrix(expected_output))
 all.equal(matrix(apply_kernel(kernel_pars, emc, mode="Rcpp")), matrix(expected_output))
+all.equal(matrix(apply_kernel(kernel_pars, emc, mode="Rcpp_oo")), matrix(expected_output))
 test_that("pow_decr_R", {
   expect_snapshot(matrix(apply_kernel(kernel_pars, emc, mode="R")))
 })
@@ -105,6 +110,7 @@ emc <- make_minimal_emc(trend_pow_incr, covariate1 = covariate1)
 expected_output <- 1-(1 + covariate1)^(-kernel_pars)
 all.equal(matrix(apply_kernel(kernel_pars, emc, mode="R")), matrix(expected_output))
 all.equal(matrix(apply_kernel(kernel_pars, emc, mode="Rcpp")), matrix(expected_output))
+all.equal(matrix(apply_kernel(kernel_pars, emc, mode="Rcpp_oo")), matrix(expected_output))
 test_that("pow_incr_R", {
   expect_snapshot(matrix(apply_kernel(kernel_pars, emc, mode="R")))
 })
@@ -120,6 +126,7 @@ emc <- make_minimal_emc(trend_poly2, covariate1 = covariate1)
 expected_output <- kernel_pars[[1]]*covariate1+kernel_pars[[2]]*covariate1^2
 all.equal(matrix(apply_kernel(kernel_pars, emc, mode="R")), matrix(expected_output))
 all.equal(matrix(apply_kernel(kernel_pars, emc, mode="Rcpp")), matrix(expected_output))
+all.equal(matrix(apply_kernel(kernel_pars, emc, mode="Rcpp_oo")), matrix(expected_output))
 test_that("poly2_R", {
   expect_snapshot(matrix(apply_kernel(kernel_pars, emc, mode="R")))
 })
@@ -135,6 +142,7 @@ emc <- make_minimal_emc(trend_poly3, covariate1 = covariate1)
 expected_output <- kernel_pars[[1]]*covariate1+kernel_pars[[2]]*covariate1^2+kernel_pars[[3]]*covariate1^3
 all.equal(matrix(apply_kernel(kernel_pars, emc, mode="R")), matrix(expected_output))
 all.equal(matrix(apply_kernel(kernel_pars, emc, mode="Rcpp")), matrix(expected_output))
+all.equal(matrix(apply_kernel(kernel_pars, emc, mode="Rcpp_oo")), matrix(expected_output))
 test_that("poly3_R", {
   expect_snapshot(matrix(apply_kernel(kernel_pars, emc, mode="R")))
 })
@@ -150,6 +158,7 @@ emc <- make_minimal_emc(trend_poly4, covariate1 = covariate1)
 expected_output <- kernel_pars[[1]]*covariate1+kernel_pars[[2]]*covariate1^2+kernel_pars[[3]]*covariate1^3+kernel_pars[[4]]*covariate1^4
 all.equal(matrix(apply_kernel(kernel_pars, emc, mode="R")), matrix(expected_output))
 all.equal(matrix(apply_kernel(kernel_pars, emc, mode="Rcpp")), matrix(expected_output))
+all.equal(matrix(apply_kernel(kernel_pars, emc, mode="Rcpp_oo")), matrix(expected_output))
 test_that("poly4_R", {
   expect_snapshot(matrix(apply_kernel(kernel_pars, emc, mode="R")))
 })
@@ -169,6 +178,7 @@ emc <- make_minimal_emc(trend_delta, covariate1 = covariate1)
 expected_output <- matrix(c(0.5, 0.5, 0.6, 0.6, 0.68)) # manually computed for this specific covariate + parameter vector
 all.equal(matrix(apply_kernel(kernel_pars, emc, mode="R")), matrix(expected_output))
 all.equal(matrix(apply_kernel(kernel_pars, emc, mode="Rcpp")), matrix(expected_output))
+all.equal(matrix(apply_kernel(kernel_pars, emc, mode="Rcpp_oo")), matrix(expected_output))
 test_that("delta_R", {
   expect_snapshot(matrix(apply_kernel(kernel_pars, emc, mode="R")))
 })
@@ -184,7 +194,8 @@ covariate1 <- c(NA, 1, NA, 0, NA)
 emc <- make_minimal_emc(trend_delta2lr, covariate1 = covariate1)
 expected_output <- matrix(c(0.5, 0.5, 0.75, 0.75, 0.5625)) # manually computed for this specific covariate + parameter vector
 all.equal(matrix(apply_kernel(kernel_pars, emc, mode="R")), matrix(expected_output))
-all.equal(matrix(apply_kernel(kernel_pars, emc, mode="Rcpp")), matrix(expected_output)) # WRONG - but why?!
+all.equal(matrix(apply_kernel(kernel_pars, emc, mode="Rcpp")), matrix(expected_output))
+all.equal(matrix(apply_kernel(kernel_pars, emc, mode="Rcpp_oo")), matrix(expected_output))
 test_that("delta2lr_R", {
   expect_snapshot(matrix(apply_kernel(kernel_pars, emc, mode="R")))
 })
@@ -212,6 +223,7 @@ expected_output[do_switch] <- delta_fast[do_switch]
 emc <- make_minimal_emc(trend_delta2kernel, n_trials=8, covariate1 = covariate1)
 all.equal(matrix(apply_kernel(kernel_pars, emc, mode="R")), matrix(expected_output))
 all.equal(matrix(apply_kernel(kernel_pars, emc, mode="Rcpp")), matrix(expected_output))
+all.equal(matrix(apply_kernel(kernel_pars, emc, mode="Rcpp_oo")), matrix(expected_output))
 test_that("delta2kernel_R", {
   expect_snapshot(matrix(apply_kernel(kernel_pars, emc, mode="R")))
 })

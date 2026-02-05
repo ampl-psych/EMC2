@@ -171,6 +171,8 @@ struct TrendRuntime {
   void run_kernel_for_op(TrendOpRuntime& op, ParamTable& pt);
   void apply_base_for_op(TrendOpRuntime& op, ParamTable& pt);
   void reset_all_kernels();
+
+  Rcpp::NumericMatrix all_kernel_outputs(ParamTable& pt);
 };
 
 // helper to bind one op at runtime

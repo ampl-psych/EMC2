@@ -290,6 +290,7 @@ inline void bind_trend_op_to_paramtable(TrendOpRuntime& op,
     int idx   = pt.base_index_for(kn);
     op.kernel_par_indices.push_back(idx);
   }
+  // Rprintf("Binding...");
 }
 
 
@@ -342,11 +343,12 @@ void TrendRuntime::run_kernel_for_op(TrendOpRuntime& op,
   }
 
   // kernel_par_indices must be initialized
-  if (op.kernel_par_indices.empty()) {
-    stop("TrendRuntime::run_kernel_for_op('%s'): kernel_par_indices is empty; "
-           "did you call bind_all_ops_to_paramtable()?",
-           spec.target_param.c_str());
-  }
+  // actually not needed -- linear kernels have no params...
+  // if (op.kernel_par_indices.empty()) {
+  //   stop("TrendRuntime::run_kernel_for_op('%s'): kernel_par_indices is empty; "
+  //          "did you call bind_all_ops_to_paramtable()?",
+  //          spec.target_param.c_str());
+  // }
 
   const int p = pt.base.ncol();
   for (int idx : op.kernel_par_indices) {
@@ -454,4 +456,69 @@ void TrendRuntime::reset_all_kernels() {
   for (auto& op : premap_ops)        op.kernel_ptr->reset();
   for (auto& op : pretransform_ops)  op.kernel_ptr->reset();
   for (auto& op : posttransform_ops) op.kernel_ptr->reset();
+}
+
+
+Rcpp::NumericMatrix TrendRuntime::all_kernel_outputs(ParamTable& pt) {
+  using namespace Rcpp;
+
+  const int n = pt.n_trials;
+  const int n_ops =
+    static_cast<int>(premap_ops.size() +
+    pretransform_ops.size() +
+    posttransform_ops.size());
+
+  NumericMatrix out(n, n_ops);
+  CharacterVector cn(n_ops);
+
+  int col = 0;
+
+  auto fill_for_ops = [&](std::vector<TrendOpRuntime>& ops, const char* phase_label) {
+    for (size_t i = 0; i < ops.size(); ++i) {
+      TrendOpRuntime& op = ops[i];
+      const TrendOpSpec& spec = *op.spec;
+
+      // Ensure kernel has been run for this ParamTable
+      // run_kernel_for_op(op, pt);
+
+      const std::vector<double>& traj = op.kernel_ptr->get_output();
+      if (static_cast<int>(traj.size()) != n) {
+        stop("TrendRuntime::all_kernel_outputs('%s'): trajectory length (%d) "
+               "!= n_trials (%d)",
+               op.spec->target_param.c_str(), (int)traj.size(), n);
+      }
+
+      // Copy trajectory into column 'col'
+      for (int r = 0; r < n; ++r) {
+        out(r, col) = traj[r];
+      }
+
+      // --- build name: target_param.covariate_name ---
+      std::string cov_name;
+      if (spec.spec.containsElementNamed("covariate")) {
+        SEXP cov_spec = spec.spec["covariate"];
+
+        // covariate given as column name
+        if (Rf_isString(cov_spec) && Rf_length(cov_spec) == 1) {
+          cov_name = Rcpp::as<std::string>(cov_spec);
+        } else {
+          // inline numeric vector or something else
+          cov_name = "inline";
+        }
+      } else {
+        cov_name = "nocov";
+      }
+
+      std::string cname = spec.target_param + "." + cov_name;      cn[col] = cname;
+
+      ++col;
+    }
+  };
+
+  fill_for_ops(premap_ops,        "premap");
+  fill_for_ops(pretransform_ops,  "pretransform");
+  fill_for_ops(posttransform_ops, "posttransform");
+
+  colnames(out) = cn;
+  return out;
 }
