@@ -1406,6 +1406,17 @@ set_custom_kernel_pointers <- function(emc, ptrs) {
   return(emc)
 }
 
+pointer_reset_wrapper <- function(sub_emc, emc){
+  # TO FIX, make custom kernel pointers work with joint models
+  # for now just return no updates
+  if(is.list(emc[[1]]$model)){ # Joint model!!
+    return(sub_emc)
+  } else{
+    return(set_custom_kernel_pointers(sub_emc, get_custom_kernel_pointers(emc)))
+  }
+}
+
+
 
 ##' Reset pointers of custom C++ trend kernels to an emc object
 ##'
