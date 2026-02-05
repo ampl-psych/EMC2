@@ -252,37 +252,58 @@ NumericMatrix run_kernel_rcpp(NumericMatrix kernel_pars,
         } else if (kernel == "exp_decr") {
           for (int i = 0; i < n_comp; ++i) if (good[i]) {
             int r = good_pos[i];
-            comp_out[i] = std::exp(-kp_good(r, 0) * cov_comp[i]);
+            double val = std::exp(-kp_good(r, 0) * cov_comp[i]);
+            if(ISNAN(val)) { val = 0; }
+            comp_out[i] = val;
           }
         } else if (kernel == "exp_incr") {
           for (int i = 0; i < n_comp; ++i) if (good[i]) {
             int r = good_pos[i];
-            comp_out[i] = 1 - std::exp(-kp_good(r, 0) * cov_comp[i]);
+            double val = 1 - std::exp(-kp_good(r, 0) * cov_comp[i]);
+            if(ISNAN(val)) { val = 0; }
+            comp_out[i] = val;
           }
         } else if (kernel == "pow_decr") {
           for (int i = 0; i < n_comp; ++i) if (good[i]) {
             int r = good_pos[i];
-            comp_out[i] = std::pow(1 + cov_comp[i], -kp_good(r, 0));
+            double x = cov_comp[i];
+            double alpha = kp_good(r, 0);
+            double val = std::pow(1 + x, -alpha);
+            if(ISNAN(val)) { val = 0; }
+            // if (std::isnan(val)) {
+            //   Rprintf("OLD PIPELINE: Found NaN at row %d, (alpha = %.3f, covariate=%.3f)\n", r,alpha,x);
+            // }
+
+            comp_out[i] = val;
           }
         } else if (kernel == "pow_incr") {
           for (int i = 0; i < n_comp; ++i) if (good[i]) {
             int r = good_pos[i];
-            comp_out[i] = 1 - std::pow(1 + cov_comp[i], -kp_good(r, 0));
+            double val = 1 - std::pow(1 + cov_comp[i], -kp_good(r, 0));
+            if(ISNAN(val)) { val = 0; }
+            comp_out[i] = val;
+
           }
         } else if (kernel == "poly2") {
           for (int i = 0; i < n_comp; ++i) if (good[i]) {
             int r = good_pos[i];
-            comp_out[i] = kp_good(r, 0) * cov_comp[i] + kp_good(r, 1) * std::pow(cov_comp[i], 2);
+            double val = kp_good(r, 0) * cov_comp[i] + kp_good(r, 1) * std::pow(cov_comp[i], 2);
+            if(ISNAN(val)) { val = 0; }
+            comp_out[i] = val;
           }
         } else if (kernel == "poly3") {
           for (int i = 0; i < n_comp; ++i) if (good[i]) {
             int r = good_pos[i];
-            comp_out[i] = kp_good(r, 0) * cov_comp[i] + kp_good(r, 1) * std::pow(cov_comp[i], 2) + kp_good(r, 2) * std::pow(cov_comp[i], 3);
+            double val = kp_good(r, 0) * cov_comp[i] + kp_good(r, 1) * std::pow(cov_comp[i], 2) + kp_good(r, 2) * std::pow(cov_comp[i], 3);
+            if(ISNAN(val)) { val = 0; }
+            comp_out[i] = val;
           }
         } else if (kernel == "poly4") {
           for (int i = 0; i < n_comp; ++i) if (good[i]) {
             int r = good_pos[i];
-            comp_out[i] = kp_good(r, 0) * cov_comp[i] + kp_good(r, 1) * std::pow(cov_comp[i], 2) + kp_good(r, 2) * std::pow(cov_comp[i], 3) + kp_good(r, 3) * std::pow(cov_comp[i], 4);
+            double val = kp_good(r, 0) * cov_comp[i] + kp_good(r, 1) * std::pow(cov_comp[i], 2) + kp_good(r, 2) * std::pow(cov_comp[i], 3) + kp_good(r, 3) * std::pow(cov_comp[i], 4);
+            if(ISNAN(val)) { val = 0; }
+            comp_out[i] = val;
           }
         } else {
           stop("Unknown kernel type");
