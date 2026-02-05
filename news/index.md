@@ -2,6 +2,8 @@
 
 ## EMC2 3.4.1
 
+CRAN release: 2026-01-12
+
 ### Bug fixes
 
 - Small makevars corrections for new CRAN checks
