@@ -254,10 +254,15 @@ IC <- function(emc,stage="sample",filter=0,use_best_fit=TRUE,
   # Gets DIC, BPIC, effective parameters, mean deviance, and deviance of mean
 {
   # Mean log-likelihood for each subject
-  ll <- get_pars(emc, stage = stage, filter = filter, selection = "LL", merge_chains = TRUE)
+  if (length(subject)!=1) {
+    ll <- get_pars(emc, stage = stage, filter = filter, selection = "LL", merge_chains = TRUE)
+    alpha <- get_pars(emc,selection="alpha",stage=stage,filter=filter, by_subject = TRUE, merge_chains = TRUE)
+  } else {
+    ll <- get_pars(emc, stage = stage, filter = filter, selection = "LL", merge_chains = TRUE,subject=subject)
+    alpha <- get_pars(emc,selection="alpha",stage=stage,filter=filter, by_subject = TRUE, merge_chains = TRUE,subject=subject)
+  }
   minDs <- -2*apply(ll[[1]][[1]], 2, min)
   mean_lls <- apply(ll[[1]][[1]], 2, mean)
-  alpha <- get_pars(emc,selection="alpha",stage=stage,filter=filter, by_subject = TRUE, merge_chains = TRUE)
   mean_pars <- lapply(alpha,function(x){apply(do.call(rbind,x),2,mean)})
   # log-likelihood for each subject using their mean parameter vector
   data <- emc[[1]]$data
@@ -338,8 +343,11 @@ get_BayesFactor <- function(MLL1, MLL2){
 #' If a vector is supplied, only the iterations in the vector will be considered.
 #' @param use_best_fit Boolean, defaults to `TRUE`, use minimal likelihood or mean likelihood
 #' (whichever is better) in the calculation, otherwise always uses the mean likelihood.
-#' @param print_summary Boolean (defaults to `TRUE`) print table of results
+#' @param print_summary Boolean (defaults to `TRUE`) print tables of model weight results
+#' @param return_summary Return tables of model weight results
 #' @param digits Integer, significant digits in printed table
+#' @param n_cores Number of cores for parallel processing
+#' @param subject Used to select subset of subjects (integer or character vector)
 #'
 #' @return List of matrices for each subject of effective number of parameters,
 #' mean deviance, deviance of mean, DIC, BPIC and associated weights.
@@ -350,21 +358,40 @@ get_BayesFactor <- function(MLL1, MLL2){
 #' compare_subject(list(m0 = samples_LNR, m1 = samples_LNR))
 #' @export
 compare_subject <- function(sList,stage="sample",filter=0,use_best_fit=TRUE,
-                            print_summary=TRUE,digits=3) {
+  print_summary=TRUE,digits=3,return_summary=FALSE,n_cores=1,subject=NULL) {
+
+  compare_one <- function(subject,sList,stage,filter,use_best_fit)
+    compare(sList,subject=subject,stage=stage,filter=filter,use_best_fit=use_best_fit,
+            BayesFactor=FALSE,print_summary=FALSE)
+
   if(is(sList, "emc")) sList <- list(sList)
   subjects <- names(sList[[1]][[1]]$data)
-  is_single <- sapply(sList, function(x) return(x[[1]]$type == "single"))
-  if(any(!is_single)) warning("subject-by-subject comparison is best done with models of type `single`")
-  out <- setNames(vector(mode="list",length=length(subjects)),subjects)
-  for (i in subjects) out[[i]] <- compare(sList,subject=i,BayesFactor=FALSE,
-                                          stage=stage,filter=filter,use_best_fit=use_best_fit,print_summary=FALSE)
-  if (print_summary) {
-    wDIC <- lapply(out,function(x)x["wDIC"])
-    wBPIC <- lapply(out,function(x)x["wBPIC"])
-    pDIC <- do.call(rbind,lapply(wDIC,function(x){
+  if (!is.null(subject)) if (is.integer(subject)) subjects <- subjects[subject] else
+    if (is.character(subject))
+      if (!all(subject %in% subjects)) stop("subject name(s) not in subjects") else
+      subjects <- subject
+  # is_single <- sapply(sList, function(x) return(x[[1]]$type == "single"))
+  # if(any(!is_single)) warning("subject-by-subject comparison is best done with models of type `single`")
+  if (n_cores>1) {
+    out <- auto_mclapply(subjects,compare_one,sList=sList,stage=stage,filter=filter,
+                   use_best_fit=use_best_fit,mc.cores=n_cores)
+    names(out) <- subjects
+  } else {
+    out <- setNames(vector(mode="list",length=length(subjects)),subjects)
+    for (i in subjects) {
+      cat(".")
+      out[[i]] <- compare(sList,subject=i,BayesFactor=FALSE,
+        stage=stage,filter=filter,use_best_fit=use_best_fit,print_summary=FALSE)
+     }
+  }
+  wDIC <- lapply(out,function(x)x["wDIC"])
+  wBPIC <- lapply(out,function(x)x["wBPIC"])
+  pDIC <- do.call(rbind,lapply(wDIC,function(x){
       setNames(data.frame(t(x)),paste("wDIC",rownames(x),sep="_"))}))
-    pBPIC <- do.call(rbind,lapply(wBPIC,function(x){
+  pBPIC <- do.call(rbind,lapply(wBPIC,function(x){
       setNames(data.frame(t(x)),paste("wBPIC",rownames(x),sep="_"))}))
+  if (print_summary) {
+    # WILL NEED FORMAT FIXES IF REINCLUDED
     # if (BayesFactor) {
     #   pMD <- do.call(rbind,lapply(wMD,function(x){
     #   setNames(data.frame(t(x)),paste("wMD",rownames(x),sep="_"))}))
@@ -376,13 +403,16 @@ compare_subject <- function(sList,stage="sample",filter=0,use_best_fit=TRUE,
     #               MD=table(mnams[apply(pMD,1,which.max)])))
     #
     # } else {
-    print(round(cbind(pDIC,pBPIC),digits))
-    mnams <- unlist(lapply(strsplit(dimnames(pDIC)[[2]],"_"),function(x){x[[2]]}))
+    print(list(DIC=round(pDIC,digits),BPIC=round(pBPIC,digits)))
+    mnams <- unlist(lapply(strsplit(dimnames(pDIC)[[2]],"_"),function(x){
+      if (length(x)==2) x[[2]] else paste(x[-1],collapse="_")
+    }))
     cat("\nWinners\n")
     print(rbind(DIC=table(mnams[apply(pDIC,1,which.max)]),
                 BPIC=table(mnams[apply(pBPIC,1,which.max)])))
     # }
   }
+  if (return_summary) out <- list(DIC=pDIC,BPIC=pBPIC)
   invisible(out)
 }
 

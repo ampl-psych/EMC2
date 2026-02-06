@@ -603,11 +603,11 @@ run_kernel <- function(trend_pars = NULL, kernel, input, funptr = NULL, at_facto
           tpars_comp[, 1], tpars_comp[, 2], tpars_comp[, 3],
           grepl("_surprise$", kernel)
         )
-      } else if(kernel == 'custom') {
+      } else if (kernel == 'custom') {
         if (is.null(funptr)) stop("Missing function pointer for custom kernel. Pass 'funptr'.")
         comp_out <- EMC2_call_custom_trend(tpars_comp, covariate_comp, funptr)
       }
-      if(!ffill_na) {
+      if (!ffill_na) {
         # If, for whatever reason, the user wants NA-covaraites to be set to 0, we can still do this
         comp_out[is.na(covariate_comp)] <- 0
       }
@@ -684,7 +684,8 @@ apply_forward_fill <- function(values, dadm,at) {
   return(filled)
 }
 
-prep_trend_phase <- function(dadm, trend, pars, phase, return_trialwise_parameters = FALSE){
+prep_trend_phase <- function(dadm, trend, pars, phase, return_trialwise_parameters = FALSE,
+                             return_trend_pars = FALSE){
   # Apply only trends in the requested phase, sequentially
   tnames <- names(trend)
   all_remove <- character(0)
@@ -710,7 +711,9 @@ prep_trend_phase <- function(dadm, trend, pars, phase, return_trialwise_paramete
     pars[,par] <- updated
 
   }
-  if (length(all_remove)) pars <- pars[, !(colnames(pars) %in% unique(all_remove)), drop = FALSE]
+  if(!return_trend_pars){
+    if (length(all_remove)) pars <- pars[, !(colnames(pars) %in% unique(all_remove)), drop = FALSE]
+  }
   if(return_trialwise_parameters) attr(pars, "trialwise_parameters") <- do.call(cbind, tpars)
   return(pars)
 }
@@ -774,23 +777,25 @@ run_trend <- function(dadm, trend, param, trend_pars, pars_full = NULL,
     } else {
       subset_input <- input_matrix[s_idx,, drop = FALSE]
       at_fac <- if (use_at_filter) dat[, trend$at] else NULL
-      kern_mat <- run_kernel(kernel_pars[s_idx,,drop = FALSE], trend$kernel, subset_input,
+      kern_mat0 <- run_kernel(kernel_pars[s_idx,,drop = FALSE], trend$kernel, subset_input,
                              funptr = funptr, at_factor = at_fac, ffill_na=trend$ffill_na)
-      if(return_kernel) return(kern_mat)
+      if(return_kernel) return(kern_mat0)
       if(return_trialwise_parameters){
-        tlist[[s]] <- kern_mat
+        tlist[[s]] <- kern_mat0
       }
       n_maps = length(trend$map)
       map_names = names(trend$map)
       n_loops <- ifelse(n_maps>1, n_maps, 1)
       for(map_n in 1:n_loops) {
+        kern_mat <- kern_mat0
         if(n_maps > 0) {
           map_mat <- attr(dadm, 'covariate_maps')[[names(trend$map)[map_n]]]
           map_mat <- map_mat[s_idx,, drop = FALSE]
           kern_mat <- kern_mat * map_mat
-        }
+        }  # no else needed - next step is rowsums, so implicitly if n_maps == 0 then map_map equals 1 everywhere
+
         # Sum across columns
-        if (ncol(kern_mat) == 0) {
+        if (ncol(kern_mat) == 0) {  # SM: I don't understand this? No kernel?
           k_sum <- rep(0, nrow(kern_mat))
         } else {
           k_sum <- rowSums(kern_mat)

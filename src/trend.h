@@ -26,8 +26,6 @@ NumericVector EMC2_call_custom_trend(NumericMatrix trend_pars,
 }
 
 
-
-
 NumericVector run_delta_rcpp(NumericVector q0, NumericVector alpha, NumericVector covariate) {
   int n = covariate.length();
   NumericVector q(n);
@@ -98,7 +96,6 @@ NumericVector run_delta2lr_rcpp(NumericVector q0, NumericVector alphaPos,
       q[i+1] = q[i] + alpha * pe[i];
     }
   }
-
   return q;
 }
 
@@ -249,7 +246,8 @@ NumericMatrix run_kernel_rcpp(NumericMatrix kernel_pars,
         comp_out = run_delta2lr_rcpp(
           // q0, alphaPos, alphaNeg
           kp_comp(_,0), kp_comp(_,1), kp_comp(_,2),
-          cov_comp);
+          cov_comp
+        );
       } else if (std::regex_match(kern_c, beta_binom_kerns_re)) {
         // beta binomial learning model variants
         bool return_map = false, return_surprise = false;

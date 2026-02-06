@@ -60,7 +60,8 @@ add_bound <- function(pars,bound, lR = NULL) {
 
 #### Functions to look at parameters ----
 
-map_p <- function(p,dadm,model,return_trialwise_parameters=FALSE)
+map_p <- function(p,dadm,model,return_trialwise_parameters=FALSE,
+                  return_trend_pars = FALSE)
   # Map p to dadm and returns matrix of mapped parameters
   # p is either a vector or a matrix (ncol = number of subjects) of p_vectors
   # dadm is a design matrix with attributes containing model information
@@ -119,7 +120,13 @@ map_p <- function(p,dadm,model,return_trialwise_parameters=FALSE)
 
           # if parameter inputs requested but not yet mapped, pass raw value
           for(par_input_name in cur_trend$par_input) {
-            if(all(is.na(pars[,par_input_name]))) pars[,par_input_name] <- p[,par_input_name]
+            if(!par_input_name %in% colnames(pars)) {
+              pars <- cbind(pars, p[,par_input_name])
+              colnames(pars)[ncol(pars)] <- par_input_name
+              # pars[,par_input_name] <- p[,par_input_name]
+            } else if(all(is.na(pars[,par_input_name]))) {
+              pars[,par_input_name] <- p[,par_input_name]
+            }
           }
 
           par_name <- tnames[idx]
@@ -157,7 +164,9 @@ map_p <- function(p,dadm,model,return_trialwise_parameters=FALSE)
     k <- k + 1
     pars[,i] <- tmp
   }
-  pars <- pars[,!premap_idx,drop=FALSE]
+  if(!return_trend_pars){
+    pars <- pars[,!premap_idx,drop=FALSE]
+  }
   if(return_trialwise_parameters) attr(pars, "trialwise_parameters") <- do.call(cbind, tpars)
   return(pars)
 }

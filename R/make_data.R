@@ -169,8 +169,8 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
       stop("If data is not provided need to specify number of trials")
     design_in <- design
     design_in$Fcovariates <- design_in$Fcovariates[!design$Fcovariates %in% names(functions)]
-    data <- minimal_design(design_in, covariates = list(...)$covariates,
-                             drop_subjects = F, n_trials = n_trials, add_acc=F,
+    data <- minimal_design(design_in, covariates = list(...)$covariates, do_functions = FALSE,
+                             drop_subjects = F, n_trials = n_trials, add_acc=FALSE,
                            drop_R = F)
   } else {
     LT <- attr(data,"LT"); if (is.null(LT)) LT <- 0
@@ -253,7 +253,9 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
     if(return_trialwise_parameters) trialwise_parameters <- cbind(pars, attr(pars, "trialwise_parameters"))
 
     pars <- model()$Ttransform(pars, data)
-    pars <- add_bound(pars, model()$bound, data$lR)
+    if (is.null(optionals$nobound))
+      pars <- add_bound(pars, model()$bound, data$lR) else
+      attr(pars,"ok") <- rep(TRUE,nrow(pars))
 
     pars_ok <- attr(pars, 'ok')
     if(mean(!pars_ok) > .1){

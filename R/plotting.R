@@ -320,6 +320,7 @@ pairs_posterior <- function(emc, selection="alpha", scale_subjects=TRUE,
 #' @param n_cores Number of likelihood points evenly spaced between the minimum and maximum likelihood range.
 #' @param true_args A list. Optional additional arguments that can be passed to plot.default for the plotting of the true vertical line.
 #' @param round Integer. To how many digits will the output be rounded.
+#' @param use_c Logical, use C++ version of likelihood if available, default FALSE,
 #' @param ... Optional additional arguments that can be passed to plot.default.
 #' @return Vector with highest likelihood point, input and mismatch between true and highest point
 #' @examples \donttest{
@@ -331,64 +332,95 @@ pairs_posterior <- function(emc, selection="alpha", scale_subjects=TRUE,
 #' p_vector=c(v_Sleft=-2,v_Sright=2,a=log(.95),a_Eneutral=log(1.5),a_Eaccuracy=log(2),
 #'           t0=log(.25),Z=qnorm(.5),sv=log(.5),SZ=qnorm(.5))
 #' # Make a profile plot for some parameters. Specifying a custom range for t0.
-#' profile_plot(p_vector = p_vector, p_min = c(t0 = -1.35),
-#'              p_max = c(t0 = -1.45), use_par = c("a", "t0", "SZ"),
-#'              data = forstmann, design = design_DDMaE, n_point = 10)
+#' # profile_plot(p_vector = p_vector, p_min = c(t0 = -1.35),
+#' #              p_max = c(t0 = -1.45), use_par = c("a", "t0", "SZ"),
+#' #              data = forstmann, design = design_DDMaE, n_point = 10)
 #' }
 #' @export
 
-profile_plot <- function(data, design, p_vector, range = .5, layout = NA,
-                         p_min = NULL,p_max = NULL, use_par = NULL,
-                         n_point=100,n_cores=1, round = 3,
-                         true_args = list(),
-                         ...)
-
+profile_plot <- function (data, design, p_vector, range = 0.5, layout = NA, p_min = NULL,
+                          p_max = NULL, use_par = NULL, n_point = 100, n_cores = 1,use_c = FALSE,
+                          round = 3, true_args = list(), ...)
 {
-  oldpar <- par(no.readonly = TRUE) # code line i
-  on.exit(par(oldpar)) # code line i + 1
-  dots <- list(...)
-  lfun <- function(i,x,p_vector,pname,dadm) {
+
+  lfun <- function(i, x, p_vector, pname, dadm, use_c) {
     p_vector[pname] <- x[i]
-    calc_ll_R(p_vector, attr(dadm, "model")(), dadm)
+    if (use_c) {
+      p_matrix <- matrix(p_vector,nrow=1)
+      colnames(p_matrix) <- names(p_vector)
+      model <- attr(dadm, "model")()
+      p_types=names(model$p_types)
+      designs <- list()
+      for (p in p_types) {
+        designs[[p]] <- attr(dadm,"designs")[[p]][attr(attr(dadm,"designs")[[p]],"expand"),,drop=FALSE]
+      }
+      constants <- attr(dadm,"constants")
+      if (is.null(constants)) constants <- NA
+      calc_ll(p_matrix, dadm, constants,designs,model$c_name,
+              model$bound,model$transform,model$pre_transform,p_types,log(1e-10),model$trend)
+    } else calc_ll_R(p_vector, attr(dadm, "model")(), dadm)
   }
-  if(!identical(names(p_min), names(p_max))) stop("p_min and p_max should be specified for the same parameters")
-  if(!is.null(names(p_min)) & length(p_min) == length(use_par)) names(p_min) <- use_par
-  if(!is.null(names(p_max)) & length(p_max) == length(use_par)) names(p_max) <- use_par
-  if(is.null(use_par)) use_par <- names(p_vector)
-  if(any(is.na(layout))){
+
+  oldpar <- par(no.readonly = TRUE)
+  on.exit(par(oldpar))
+  dots <- list(...)
+  if (!identical(names(p_min), names(p_max)))
+    stop("p_min and p_max should be specified for the same parameters")
+  if (!is.null(names(p_min)) & length(p_min) == length(use_par))
+    names(p_min) <- use_par
+  if (!is.null(names(p_max)) & length(p_max) == length(use_par))
+    names(p_max) <- use_par
+  if (is.null(use_par))
+    use_par <- names(p_vector)
+  if (any(is.na(layout))) {
     par(mfrow = coda_setmfrow(Nchains = 1, Nparms = length(use_par),
                               nplots = 1))
-  } else{par(mfrow=layout)}
-  if(is.null(dots$dadm)){
+  }
+  else {
+    par(mfrow = layout)
+  }
+  if (is.null(dots$dadm)) {
     dadm <- design_model(data, design, verbose = FALSE)
-  } else{
+  }
+  else {
     dadm <- dots$dadm
   }
-  out <- data.frame(true = rep(NA, length(use_par)), max = rep(NA, length(use_par)), miss = rep(NA, length(use_par)))
+  model <- attr(dadm, "model")()
+  if (use_c & is.null(model$c_name)) {
+    message("Model does not have a c_name, reverting to use_c = FALSE")
+    use_c <- FALSE
+  }
+  out <- data.frame(true = rep(NA, length(use_par)), max = rep(NA,
+                                                               length(use_par)), miss = rep(NA, length(use_par)))
   rownames(out) <- use_par
-  for(p in 1:length(p_vector)){
+  for (p in 1:length(p_vector)) {
     cur_name <- names(p_vector)[p]
-    if(cur_name %in% use_par){
+    if (cur_name %in% use_par) {
       cur_par <- p_vector[p]
       pmax_cur <- cur_par + range/2
       pmin_cur <- cur_par - range/2
-      if(!is.null(p_min)){
-        if(!is.na(p_min[cur_name])){
+      if (!is.null(p_min)) {
+        if (!is.na(p_min[cur_name])) {
           pmin_cur <- p_min[cur_name]
         }
       }
-      if(!is.null(p_max)){
-        if(!is.na(p_max[cur_name])){
+      if (!is.null(p_max)) {
+        if (!is.na(p_max[cur_name])) {
           pmax_cur <- p_max[cur_name]
         }
       }
-      x <- seq(pmin_cur,pmax_cur,length.out=n_point)
+      x <- seq(pmin_cur, pmax_cur, length.out = n_point)
       x <- c(x, cur_par)
       x <- unique(sort(x))
-      ll <- unlist(mclapply(1:length(x),lfun,dadm=dadm,x=x,p_vector=p_vector,pname=cur_name,mc.cores = n_cores))
-      do.call(plot, c(list(x,ll), fix_dots_plot(add_defaults(dots, type="l",xlab=cur_name,ylab="LL"))))
-      do.call(abline, c(list(v=cur_par), fix_dots_plot(add_defaults(true_args, lty = 2))))
-      out[cur_name,] <- c(p_vector[cur_name], x[which.max(ll)], p_vector[cur_name] - x[which.max(ll)])
+      ll <- unlist(mclapply(1:length(x), lfun, dadm = dadm, use_c = use_c,
+                            x = x, p_vector = p_vector, pname = cur_name,
+                            mc.cores = n_cores))
+      do.call(plot, c(list(x, ll), fix_dots_plot(add_defaults(dots,
+                                                              type = "l", xlab = cur_name, ylab = "LL"))))
+      do.call(abline, c(list(v = cur_par), fix_dots_plot(add_defaults(true_args,
+                                                                      lty = 2))))
+      out[cur_name, ] <- c(p_vector[cur_name], x[which.max(ll)],
+                           p_vector[cur_name] - x[which.max(ll)])
     }
   }
   return(round(out, 3))
@@ -757,7 +789,7 @@ coda_setmfrow <- function (Nchains = 1, Nparms = 1, nplots = 1, sepplot = FALSE)
 #'                            formula=list(B ~ 1, v ~ lM, t0 ~ 1),
 #'                            trend=lin_trend)       # add trend
 #'
-#' emc <- make_emc(dat, design=design_RDM_lin_B)
+#' emc <- make_emc(dat, design=design_RDM_lin_B, compress = FALSE)
 #' p_vector <- c('B'=1, 'v'=1, 'v_lMTRUE'=1, 't0'=0.1, 'B.w'=1, 'B.d_ei'=1)
 #'
 #' # Visualize trend
