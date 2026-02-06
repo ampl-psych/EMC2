@@ -602,7 +602,7 @@ run_kernel <- function(trend_pars = NULL, kernel, input, funptr = NULL, at_facto
         )
       } else if (is_kernel_type(kernel, "tpm")) {
         comp_out <- run_tpm(
-          covariate,
+          covariate_comp,
           tpars_comp[, 1], tpars_comp[, 2], tpars_comp[, 3],
           grepl("_surprise$", kernel)
         )
