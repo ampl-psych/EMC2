@@ -123,7 +123,7 @@ run_emc <- function(emc, stage, stop_criteria,
                              particle_factor=particle_factor,search_width=search_width,
                              n_cores=cores_per_chain, mc.cores = cores_for_chains,
                              r_cores = r_cores)
-    print(Sys.time()-t0)
+    if(getOption("emc2.print_iteration_duration", TRUE)) { print(Sys.time()-t0) }
     class(sub_emc) <- "emc"
     if(cores_for_chains > 1) sub_emc <- set_custom_kernel_pointers(sub_emc, get_custom_kernel_pointers(emc))
     if(stage != 'preburn'){
