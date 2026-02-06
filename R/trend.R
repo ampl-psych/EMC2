@@ -1252,18 +1252,21 @@ make_data_unconditional <- function(data, pars, design, model, return_trialwise_
       if(!tmp_return_trialwise) {
         # call C. C cannot return trialwise parameters as of yet, so revert to R otherwise
         p_types <- names(model_list$p_types)
-        designs <- list()
+        designs <- vector(length=length(p_types), mode='list') #list()
         for(p in p_types){
           designs[[p]] <- attr(dm,"designs")[[p]][attr(attr(dm,"designs")[[p]],"expand"),,drop=FALSE]
         }
         constants <- attr(dm, "constants")
         if(is.null(constants)) constants <- NA
-        pm <- get_pars_c_wrapper_new(pars[which(subj == subj_levels),,drop=FALSE], dm, constants = constants, designs = designs, #type = model_list$c_name,
-                                     model_list$bound, model_list$transform, model_list$pre_transform, p_types = p_types,
-                                     model_list$trend)
-        # pm <- get_pars_c_wrapper(pars[which(subj == subj_levels),,drop=FALSE], dm, constants = constants, designs = designs, #type = model_list$c_name,
-        #                          model_list$bound, model_list$transform, model_list$pre_transform, p_types = p_types,
-        #                          model_list$trend)
+        if(getOption("emc2.use_new", TRUE)) {
+          pm <- get_pars_c_wrapper_new(pars[which(subj == subj_levels),,drop=FALSE], dm, constants = constants, designs = designs, #type = model_list$c_name,
+                                       model_list$bound, model_list$transform, model_list$pre_transform, p_types = p_types,
+                                       model_list$trend)
+        } else {
+          pm <- get_pars_c_wrapper(pars[which(subj == subj_levels),,drop=FALSE], dm, constants = constants, designs = designs, #type = model_list$c_name,
+                                   model_list$bound, model_list$transform, model_list$pre_transform, p_types = p_types,
+                                   model_list$trend)
+        }
       } else {
         # Work in R
         pm <- map_p(pars, dm, model_list, tmp_return_trialwise)
