@@ -363,7 +363,10 @@ make_trend <- function(par_names, cov_names = NULL, kernels, bases = NULL,
     trend$par_input <- unlist(par_input[[i]])
     trend$phase <- phase[i]
     if(is.null(ffill_na[i])) {
-      if (is_kernel_type(kernel, "learning")) trend$ffill_na <- TRUE else trend$ffill_na <- FALSE
+      trend$ffill_na <- FALSE
+      if (is_kernel_type(kernels[i], "learning")) {
+        trend$ffill_na <- TRUE
+      }
     } else {
       trend$ffill_na <- ffill_na[i]
     }
