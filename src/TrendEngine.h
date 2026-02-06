@@ -14,6 +14,8 @@ inline TrendPhase parse_phase(const std::string& ph) {
 }
 
 // ---- Specification side ----
+enum class InputKind { None, Covariate, ParInput };
+
 
 // One trend operation spec, built from one element of the R 'trend' list
 struct TrendOpSpec {
@@ -29,13 +31,14 @@ struct TrendOpSpec {
   std::vector<int> comp_index;        // compressed row indices
 
   Rcpp::CharacterVector trend_pnames;
-  Rcpp::CharacterVector par_input;
   Rcpp::List spec;                    // original R spec
 
   KernelType kernel_type;
 
-  // Cached covariate. Since it's now in the spec, it can be re-used across particles
-  Rcpp::NumericVector covariate;
+  // Cached covariate (or view to par_input). Since it's now in the spec, it can be re-used across particles
+  std::string par_input_name;
+  InputKind input_kind = InputKind::None;
+  Rcpp::NumericVector kernel_input;
 
   TrendOpSpec(const Rcpp::List& cur, const std::string& name_from_list);
 
@@ -95,10 +98,15 @@ inline std::vector<std::string> covariate_names_from_spec(const Rcpp::List& tr) 
   std::vector<std::string> out;
 
   if (!tr.containsElementNamed("covariate")) {
-    return out; // no covariate; will be handled as error later
+    return out; // no field at all
   }
 
   SEXP cov_spec = tr["covariate"];
+
+  // NULL => no covariate
+  if (Rf_isNull(cov_spec)) {
+    return out;
+  }
 
   // Case 1: single string: "cov1"
   if (Rf_isString(cov_spec) && Rf_length(cov_spec) == 1) {
@@ -116,11 +124,44 @@ inline std::vector<std::string> covariate_names_from_spec(const Rcpp::List& tr) 
     return out;
   }
 
-  // Case 3: non‑string covariate (e.g. numeric vector supplied inline):
+  // Case 3: non‑string covariate (e.g., numeric vector supplied inline):
   // treat as "inline covariate", not multiple columns
   return out;  // empty => we will keep the original spec as a single TrendOp
 }
 
+inline std::vector<std::string> par_input_names_from_spec(const Rcpp::List& tr) {
+  std::vector<std::string> out;
+
+  if (!tr.containsElementNamed("par_input")) {
+    return out;
+  }
+
+  SEXP par_input_spec = tr["par_input"];
+
+  // NULL => no par_input
+  if (Rf_isNull(par_input_spec)) {
+    return out;
+  }
+
+  // Case 1: single string: "p1"
+  if (Rf_isString(par_input_spec) && Rf_length(par_input_spec) == 1) {
+    out.push_back(Rcpp::as<std::string>(par_input_spec));
+    return out;
+  }
+
+  // Case 2: character vector: c("p1", "p2", ...)
+  if (TYPEOF(par_input_spec) == STRSXP) {
+    Rcpp::CharacterVector par_input(par_input_spec);
+    out.reserve(par_input.size());
+    for (int i = 0; i < par_input.size(); ++i) {
+      out.push_back(Rcpp::as<std::string>(par_input[i]));
+    }
+    return out;
+  }
+
+  // Case 3: non‑string input (e.g., numeric vector supplied inline):
+  return out;  // empty => we will keep the original spec as a single TrendOp
+}
 
 
 // ---- Runtime side ----

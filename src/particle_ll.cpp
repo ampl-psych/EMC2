@@ -331,7 +331,8 @@ double c_log_likelihood_race(NumericMatrix pars, DataFrame data,
 // [[Rcpp::export]]
 NumericVector calc_ll(NumericMatrix p_matrix, DataFrame data, NumericVector constants,
             List designs, String type, List bounds, List transforms, List pretransforms,
-            CharacterVector p_types, double min_ll, Rcpp::Nullable<Rcpp::List> trend = R_NilValue, bool use_new = false){
+            CharacterVector p_types, double min_ll, Rcpp::Nullable<Rcpp::List> trend = R_NilValue, bool use_new = false){ //,
+//            bool debug_first_particle = false){
   const int n_particles = p_matrix.nrow();
   const int n_trials = data.nrow();
   NumericVector lls(n_particles);
@@ -484,6 +485,10 @@ NumericVector calc_ll(NumericMatrix p_matrix, DataFrame data, NumericVector cons
 
         pars = get_pars_matrix_new(p_vector, constants, p_specs, p_types, designs, n_trials, pt_template, tr_ptr,
                                    full_specs_new, keep_names);
+        // if (debug_first_particle && i == 0) {
+        //   Rcpp::Rcout << "pars from calc_ll (particle 0):\n";
+        //   Rcpp::Rcout << Rcpp::as<Rcpp::NumericMatrix>(pars) << "\n";
+        // }
       } else {
         pars = get_pars_matrix(p_vector, constants, p_specs, p_types, designs, n_trials, data, trend_list, full_t_specs);
       }

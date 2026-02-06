@@ -14,25 +14,75 @@ static void init_covariate(TrendOpSpec& op, const Rcpp::DataFrame& data) {
 
   SEXP cov_spec = op.spec["covariate"];
 
-  if (Rf_isString(cov_spec)) {
-    // covariate specified by column name
-    string cov_name = as<string>(cov_spec);
-    if (!data.containsElementNamed(cov_name.c_str())) {
-      stop("TrendPlan: data has no column named '%s' for covariate",
-           cov_name.c_str());
-    }
-    op.covariate = data[cov_name];
-  } else {
-    // inline numeric vector
-    op.covariate = as<NumericVector>(cov_spec);
+  if (Rf_isNull(cov_spec)) {
+    stop("TrendOpSpec for target '%s' has NULL 'covariate' but a non-empty covariate is required",
+         op.target_param.c_str());
   }
 
-  if (op.covariate.size() != data.nrows()) {
+  if (TYPEOF(cov_spec) != STRSXP) {
+    stop("TrendOpSpec for target '%s': 'covariate' must be a character vector (names), not numeric",
+         op.target_param.c_str());
+  }
+
+  CharacterVector cv(cov_spec);
+  if (cv.size() != 1) {
+    stop("TrendOpSpec for target '%s': covariate must be a single column name after expansion",
+         op.target_param.c_str());
+  }
+
+  string cov_name = as<string>(cv[0]);
+  if (!data.containsElementNamed(cov_name.c_str())) {
+    stop("TrendPlan: data has no column named '%s' for covariate",
+         cov_name.c_str());
+  }
+
+  op.kernel_input = data[cov_name];  // view/copy from data
+
+  if (op.kernel_input.size() != data.nrows()) {
     stop("TrendPlan: covariate for target '%s' has length %d but data has %d rows",
          op.target_param.c_str(),
-         op.covariate.size(), data.nrows());
+         op.kernel_input.size(), data.nrows());
   }
 }
+
+// helper function to initialize a par_input
+// SM: dropped this. The idea was to bind a view to pt to the TrendOp,
+// but that was a bit silly since it needs to be a runtime thing (parameters change every particle)
+// static void init_par_input(TrendOpSpec& op, const ParamTable& pt) {
+//   using namespace Rcpp;
+//   using std::string;
+//
+//   if (!op.spec.containsElementNamed("par_input")) {
+//     stop("TrendOpSpec for target '%s' is missing 'par_input' field",
+//          op.target_param.c_str());
+//   }
+//
+//   SEXP par_input_spec = op.spec["par_input"];
+//
+//   if (Rf_isNull(par_input_spec)) {
+//     stop("TrendOpSpec for target '%s' has NULL 'par_input' but a non-empty par_input is required",
+//          op.target_param.c_str());
+//   }
+//
+//   if (TYPEOF(par_input_spec) != STRSXP) {
+//     stop("TrendOpSpec for target '%s': 'par_input' must be a character vector (parameter names), not numeric",
+//          op.target_param.c_str());
+//   }
+//
+//   CharacterVector cv(par_input_spec);
+//   if (cv.size() != 1) {
+//     stop("TrendOpSpec for target '%s': par_input must be a single parameter name after expansion",
+//          op.target_param.c_str());
+//   }
+//
+//   string par_input_name = as<string>(cv[0]);
+//
+//   // Just validate; don't store a view any more
+//   (void) pt.base_index_for(par_input_name); // throws if unknown
+//
+//   op.kernel_input = Rcpp::NumericVector(); // leave empty; we’ll get column at runtime
+// }
+
 
 // --- TrendOpSpec ---
 
@@ -52,11 +102,11 @@ TrendOpSpec::TrendOpSpec(const Rcpp::List& cur, const std::string& name_from_lis
     trend_pnames = Rcpp::CharacterVector(0);
   }
 
-  if (cur.containsElementNamed("par_input")) {
-    par_input = cur["par_input"];
-  } else {
-    par_input = Rcpp::CharacterVector(0);
-  }
+  // if (cur.containsElementNamed("par_input")) {
+  //   par_input = cur["par_input"];
+  // } else {
+  //   par_input = Rcpp::CharacterVector(0);
+  // }
 
   // Handle "at" being possibly NULL
   if (cur.containsElementNamed("at") && !Rf_isNull(cur["at"])) {
@@ -136,8 +186,10 @@ void TrendOpSpec::make_first_level(const Rcpp::DataFrame& data) {
 
 // helper
 extern std::vector<std::string> covariate_names_from_spec(const Rcpp::List& tr);
+extern std::vector<std::string> par_input_names_from_spec(const Rcpp::List& tr);
 
-TrendPlan::TrendPlan(Rcpp::Nullable<Rcpp::List> trend_, const Rcpp::DataFrame& data_)
+TrendPlan::TrendPlan(Rcpp::Nullable<Rcpp::List> trend_,
+                     const Rcpp::DataFrame& data_)
   : data(data_) {
 
   if (trend_.isNull()) {
@@ -150,6 +202,37 @@ TrendPlan::TrendPlan(Rcpp::Nullable<Rcpp::List> trend_, const Rcpp::DataFrame& d
   using std::string;
   using namespace Rcpp;
 
+  // helper functions to figure out whether there's covariate_inputs and/or par_inputs
+  auto uses_cov_input = [](const Rcpp::List& tr) -> bool {
+    if (!tr.containsElementNamed("covariate")) return false;
+
+    SEXP x = tr["covariate"];
+    if (Rf_isNull(x)) return false;
+
+    if (TYPEOF(x) == STRSXP) {
+      // character vector: length == 0 => no covariate
+      return Rf_length(x) > 0;
+    }
+
+    // non-string (e.g., numeric vector) => inline covariate
+    return true;
+  };
+
+  auto uses_par_input = [](const Rcpp::List& tr) -> bool {
+    if (!tr.containsElementNamed("par_input")) return false;
+
+    SEXP x = tr["par_input"];
+    if (Rf_isNull(x)) return false;
+
+    if (TYPEOF(x) == STRSXP) {
+      // empty character vector => no par_input
+      return Rf_length(x) > 0;
+    }
+
+    // non-string (e.g., numeric vector) => inline par_input
+    return true;
+  };
+
   CharacterVector tnames = trend.names();
   if (tnames.size() != trend.size()) {
     stop("TrendPlan: 'trend' must be a named list");
@@ -159,8 +242,11 @@ TrendPlan::TrendPlan(Rcpp::Nullable<Rcpp::List> trend_, const Rcpp::DataFrame& d
   pretransform_ops.clear();
   posttransform_ops.clear();
   premap_trend_params.clear();
+  pretransform_trend_params.clear();
+  posttransform_trend_params.clear();
   all_trend_params.clear();
 
+  // Loopy over trends
   for (int i = 0; i < trend.size(); ++i) {
     if (trend[i] == R_NilValue) continue;
 
@@ -170,16 +256,12 @@ TrendPlan::TrendPlan(Rcpp::Nullable<Rcpp::List> trend_, const Rcpp::DataFrame& d
     // Build once to inspect phase, trend_pnames, etc.
     TrendOpSpec tmp(tr_i, name_i);
 
-    // Extract covariate names (if the spec uses multiple columns)
-    std::vector<std::string> cov_names = covariate_names_from_spec(tr_i);
-
-    // Collect trend pnames
+    // --- collect trend_pnames into sets -- useful for transformations later on ---
     for (int k = 0; k < tmp.trend_pnames.size(); ++k) {
       std::string pn = Rcpp::as<std::string>(tmp.trend_pnames[k]);
       all_trend_params.insert(pn);
     }
 
-    // Register trend_pnames for premap
     if (tmp.phase == TrendPhase::Premap) {
       for (int k = 0; k < tmp.trend_pnames.size(); ++k) {
         premap_trend_params.insert(Rcpp::as<std::string>(tmp.trend_pnames[k]));
@@ -196,43 +278,123 @@ TrendPlan::TrendPlan(Rcpp::Nullable<Rcpp::List> trend_, const Rcpp::DataFrame& d
       }
     }
 
-    // 0 or 1 covariate name: keep spec as-is
-    if (cov_names.size() <= 1) {
-      switch (tmp.phase) {
-      case TrendPhase::Premap:
-        premap_ops.emplace_back(tr_i, name_i);
-        init_covariate(premap_ops.back(), data);
-        break;
-      case TrendPhase::Pretransform:
-        pretransform_ops.emplace_back(tr_i, name_i);
-        init_covariate(pretransform_ops.back(), data);
-        break;
-      case TrendPhase::Posttransform:
-        posttransform_ops.emplace_back(tr_i, name_i);
-        init_covariate(posttransform_ops.back(), data);
-        break;
-      }
-      continue;
+    // ---- decide which inputs are actually used in the current trend ----
+    bool has_cov_input = uses_cov_input(tr_i);
+    bool has_par_input = uses_par_input(tr_i);
+
+    if (!has_cov_input && !has_par_input) {
+      Rcpp::stop("TrendPlan: spec for '%s' must have non-empty 'covariate' or 'par_input'",
+                 name_i.c_str());
     }
 
-    // Multiple covariate columns: one TrendOpSpec per column
-    for (const std::string& cov_name : cov_names) {
-      Rcpp::List tr_copy = Rcpp::clone(tr_i);
-      tr_copy["covariate"] = cov_name;
+    // Extract names only if that input type is used
+    std::vector<std::string> cov_names;
+    std::vector<std::string> par_input_names;
+    if (has_cov_input) {
+      cov_names = covariate_names_from_spec(tr_i);
+    }
+    if (has_par_input) {
+      par_input_names = par_input_names_from_spec(tr_i);
+    }
 
-      switch (tmp.phase) {
+    // Helper: add an op to the correct phase vector and init input
+    auto add_op_for_phase = [&](TrendPhase phase,
+                                const Rcpp::List& spec_list,
+                                bool use_cov_input,
+                                bool use_par_input) {
+      switch (phase) {
       case TrendPhase::Premap:
-        premap_ops.emplace_back(tr_copy, name_i);
-        init_covariate(premap_ops.back(), data);
+        premap_ops.emplace_back(spec_list, name_i);
+        if (use_cov_input) {
+          init_covariate(premap_ops.back(), data);
+          premap_ops.back().input_kind = InputKind::Covariate;
+        } else if (use_par_input) {
+          // par_input: record name
+          Rcpp::CharacterVector cv(spec_list["par_input"]);
+          if (cv.size() != 1) {
+            Rcpp::stop("TrendOpSpec '%s': par_input must be single name after expansion",
+                       name_i.c_str());
+          }
+          premap_ops.back().input_kind = InputKind::ParInput;
+          premap_ops.back().par_input_name = Rcpp::as<std::string>(cv[0]);
+        } else {
+          premap_ops.back().input_kind = InputKind::None;
+        }
         break;
+
       case TrendPhase::Pretransform:
-        pretransform_ops.emplace_back(tr_copy, name_i);
-        init_covariate(pretransform_ops.back(), data);
+        pretransform_ops.emplace_back(spec_list, name_i);
+        if (use_cov_input) {
+          init_covariate(pretransform_ops.back(), data);
+          pretransform_ops.back().input_kind = InputKind::Covariate;
+        } else if (use_par_input) {
+          // par_input: record name
+          Rcpp::CharacterVector cv(spec_list["par_input"]);
+          if (cv.size() != 1) {
+            Rcpp::stop("TrendOpSpec '%s': par_input must be single name after expansion",
+                       name_i.c_str());
+          }
+          pretransform_ops.back().input_kind = InputKind::ParInput;
+          pretransform_ops.back().par_input_name = Rcpp::as<std::string>(cv[0]);
+        } else {
+          pretransform_ops.back().input_kind = InputKind::None;
+        }
         break;
+
       case TrendPhase::Posttransform:
-        posttransform_ops.emplace_back(tr_copy, name_i);
-        init_covariate(posttransform_ops.back(), data);
+        posttransform_ops.emplace_back(spec_list, name_i);
+        if (use_cov_input) {
+          init_covariate(posttransform_ops.back(), data);
+          posttransform_ops.back().input_kind = InputKind::Covariate;
+        } else if (use_par_input) {
+          // par_input: record name
+          Rcpp::CharacterVector cv(spec_list["par_input"]);
+          if (cv.size() != 1) {
+            Rcpp::stop("TrendOpSpec '%s': par_input must be single name after expansion",
+                       name_i.c_str());
+          }
+          posttransform_ops.back().input_kind = InputKind::ParInput;
+          posttransform_ops.back().par_input_name = Rcpp::as<std::string>(cv[0]);
+        } else {
+          posttransform_ops.back().input_kind = InputKind::None;
+        }
         break;
+      }
+    };
+
+    // ---- 1) Covariate-based ops (0, 1, or many) ----
+    if (has_cov_input) {
+      if (cov_names.empty()) {
+        // inline numeric covariate
+        add_op_for_phase(tmp.phase, tr_i, /*use_cov_input=*/true, false);
+      } else if (cov_names.size() == 1) {
+        // single named column
+        add_op_for_phase(tmp.phase, tr_i, /*use_cov_input=*/true, false);
+      } else {
+        // multiple covariate columns: clone spec per column
+        for (const std::string& cov_name : cov_names) {
+          Rcpp::List tr_copy = Rcpp::clone(tr_i);
+          tr_copy["covariate"] = cov_name;
+          add_op_for_phase(tmp.phase, tr_copy, /*use_cov_input=*/true, false);
+        }
+      }
+    }
+
+    // ---- 2) par_input-based ops (0, 1, or many) ----
+    if (has_par_input) {
+      if (par_input_names.empty()) {
+        // inline numeric par_input
+        add_op_for_phase(tmp.phase, tr_i, /*use_cov_input=*/false, true);
+      } else if (par_input_names.size() == 1) {
+        // single parameter name
+        add_op_for_phase(tmp.phase, tr_i, /*use_cov_input=*/false, true);
+      } else {
+        // multiple par_input names: clone spec per parameter
+        for (const std::string& par_name : par_input_names) {
+          Rcpp::List tr_copy = Rcpp::clone(tr_i);
+          tr_copy["par_input"] = par_name;
+          add_op_for_phase(tmp.phase, tr_copy, /*use_cov_input=*/false, true);
+        }
       }
     }
   }
@@ -241,7 +403,9 @@ TrendPlan::TrendPlan(Rcpp::Nullable<Rcpp::List> trend_, const Rcpp::DataFrame& d
   for (auto& op : premap_ops)        op.make_first_level(data);
   for (auto& op : pretransform_ops)  op.make_first_level(data);
   for (auto& op : posttransform_ops) op.make_first_level(data);
+
 }
+
 
 Rcpp::LogicalVector TrendPlan::premap_design_mask(const Rcpp::List& designs) const {
   using namespace Rcpp;
@@ -318,6 +482,26 @@ void TrendRuntime::bind_all_ops_to_paramtable(const ParamTable& pt) {
   for (auto& op : premap_ops)        bind_trend_op_to_paramtable(op, pt);
   for (auto& op : pretransform_ops)  bind_trend_op_to_paramtable(op, pt);
   for (auto& op : posttransform_ops) bind_trend_op_to_paramtable(op, pt);
+
+  // Validate par_inputs --
+  auto validate_par_inputs = [&](const TrendOpRuntime& op) {
+    const TrendOpSpec& spec = *op.spec;
+    if (spec.spec.containsElementNamed("par_input") &&
+        !Rf_isNull(spec.spec["par_input"])) {
+          SEXP par_spec = spec.spec["par_input"];
+          if (TYPEOF(par_spec) == STRSXP) {
+            Rcpp::CharacterVector cv(par_spec);
+            if (cv.size() == 1) {
+              std::string par_name = Rcpp::as<std::string>(cv[0]);
+              (void) pt.base_index_for(par_name); // throws if unknown
+            }
+        }
+    }
+  };
+
+  for (auto& op : premap_ops)        validate_par_inputs(op);
+  for (auto& op : pretransform_ops)  validate_par_inputs(op);
+  for (auto& op : posttransform_ops) validate_par_inputs(op);
 }
 
 void TrendRuntime::run_kernel_for_op(TrendOpRuntime& op,
@@ -328,27 +512,31 @@ void TrendRuntime::run_kernel_for_op(TrendOpRuntime& op,
 
   const TrendOpSpec& spec = *op.spec;
 
-  // 1) Covariate from spec + plan->data
-  if (!spec.spec.containsElementNamed("covariate")) {
-    stop("TrendOp for target '%s' is missing 'covariate' field",
-         spec.target_param.c_str());
+  NumericVector input;
+
+  // waht type of input?
+  switch (spec.input_kind) {
+  case InputKind::ParInput:
+    // Resolve from ParamTable every time (current particle)
+    input = pt.column_by_name(spec.par_input_name);
+    break;
+
+  case InputKind::Covariate:
+    // Use cached data column
+    input = spec.kernel_input;
+    break;
+
+  case InputKind::None:
+  default:
+    Rcpp::stop("TrendOp for target '%s' has neither covariate nor par_input input",
+               spec.target_param.c_str());
   }
 
-  // Look-up covariate
-  NumericVector cov = spec.covariate;
-  const int n = cov.size();
+  const int n = input.size();
   if (n != pt.n_trials) {
-    stop("TrendRuntime::run_kernel_for_op: covariate length (%d) != n_trials (%d)",
-         n, pt.n_trials);
+    Rcpp::stop("TrendRuntime::run_kernel_for_op: input length (%d) != n_trials (%d)",
+               n, pt.n_trials);
   }
-
-  // kernel_par_indices must be initialized
-  // actually not needed -- linear kernels have no params...
-  // if (op.kernel_par_indices.empty()) {
-  //   stop("TrendRuntime::run_kernel_for_op('%s'): kernel_par_indices is empty; "
-  //          "did you call bind_all_ops_to_paramtable()?",
-  //          spec.target_param.c_str());
-  // }
 
   const int p = pt.base.ncol();
   for (int idx : op.kernel_par_indices) {
@@ -361,7 +549,7 @@ void TrendRuntime::run_kernel_for_op(TrendOpRuntime& op,
   KernelParsView kp_view = make_kernel_pars_view(pt, op.kernel_par_indices);
 
   op.kernel_ptr->reset();
-  op.kernel_ptr->run(kp_view, cov, spec.comp_index);
+  op.kernel_ptr->run(kp_view, input, spec.comp_index);
 
   if (spec.has_at) {
     op.kernel_ptr->do_expand(spec.expand_idx);
@@ -493,23 +681,31 @@ Rcpp::NumericMatrix TrendRuntime::all_kernel_outputs(ParamTable& pt) {
         out(r, col) = traj[r];
       }
 
-      // --- build name: target_param.covariate_name ---
+      // --- build name: target_param.covariate_name/par_input_name ---
       std::string cov_name;
-      if (spec.spec.containsElementNamed("covariate")) {
-        SEXP cov_spec = spec.spec["covariate"];
 
-        // covariate given as column name
+      if (spec.spec.containsElementNamed("covariate") &&
+          !Rf_isNull(spec.spec["covariate"])) {
+          SEXP cov_spec = spec.spec["covariate"];
         if (Rf_isString(cov_spec) && Rf_length(cov_spec) == 1) {
           cov_name = Rcpp::as<std::string>(cov_spec);
         } else {
-          // inline numeric vector or something else
-          cov_name = "inline";
+          cov_name = "cov_inline";
+        }
+      } else if (spec.spec.containsElementNamed("par_input") &&
+        !Rf_isNull(spec.spec["par_input"])) {
+        SEXP par_spec = spec.spec["par_input"];
+        if (Rf_isString(par_spec) && Rf_length(par_spec) == 1) {
+          cov_name = Rcpp::as<std::string>(par_spec);
+        } else {
+          cov_name = "par_inline";
         }
       } else {
-        cov_name = "nocov";
+        cov_name = "noinput";
       }
 
-      std::string cname = spec.target_param + "." + cov_name;      cn[col] = cname;
+      std::string cname = spec.target_param + "." + cov_name;
+      cn[col] = cname;
 
       ++col;
     }
