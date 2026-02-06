@@ -179,6 +179,17 @@ predict.emc <- function(
   data <- get_data(emc)
   design <- get_design(emc)
   return_trialwise_parameters <- isTRUE(dots[["return_trialwise_parameters"]])
+  if (is.null(dots[["conditional_on_data"]]) && has_conditional_covariates(design[[1]])) {
+    dots[["conditional_on_data"]] <- FALSE
+    message(paste0(
+      "One of the covariates in the model trends is either rt, R, ",
+      "or the output of a function provided to design.\n",
+      "Since the covariate depends on behavior, the data will be simulated ",
+      "trial-by-trial, reapplying the functions after each trial.\n",
+      "To override this behavior, pass `conditional_on_data = TRUE` to predict()."
+    ))
+  }
+
   if (is.null(data[["subjects"]])) {
     jointModel <- TRUE
     all_samples <- emc
