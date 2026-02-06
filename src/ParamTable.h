@@ -4,7 +4,18 @@
 #include <unordered_set>
 #include <unordered_map>
 #include <numeric>
+// #include <RcppArmadillo.h>
 using Rcpp::_;
+// using arma::mat;
+// using arma::vec;
+
+struct DesignEntry {
+  bool valid;                    // does this design have a usable mapping?
+  bool skip_self_intercept;      // from design_is_self_intercept
+  int out_idx;                   // column index in base to write into
+  std::vector<int> coef_idx;     // length K; -1 for unused
+  bool uses_self;                // does any coef refer to out_idx?
+};
 
 // View-based ParamTable: one base matrix + active column indices
 // Invariants:
@@ -13,6 +24,9 @@ using Rcpp::_;
 // - name_to_base_idx maps ALL base columns, active or not
 struct ParamTable {
   Rcpp::NumericMatrix base;     // underlying matrix (all columns)
+
+  std::vector<DesignEntry> design_plan;   // cached once
+
   Rcpp::CharacterVector base_names; // colnames for base
   int n_trials = 0;
 
@@ -113,6 +127,67 @@ struct ParamTable {
   //   }
   //   active_cols.swap(new_active);
   // }
+
+  void init_design_plan(const Rcpp::List& designs) {
+    using namespace Rcpp;
+    using std::string;
+
+    const int n_params = designs.size();
+    design_plan.clear();
+    design_plan.resize(n_params);
+
+    CharacterVector design_names = designs.names();
+    if (design_names.size() != n_params) {
+      stop("ParamTable::init_design_plan: designs must be a named list");
+    }
+
+    const int T = base.nrow();
+
+    for (int i = 0; i < n_params; ++i) {
+      DesignEntry& entry = design_plan[i];
+      entry.valid = false;
+
+      if (designs[i] == R_NilValue) continue;
+
+      // self-intercept-only designs can be marked as skippable
+      bool skip_self = !design_is_self_intercept.empty() &&
+        i < (int)design_is_self_intercept.size() &&
+        design_is_self_intercept[i];
+      entry.skip_self_intercept = skip_self;
+
+      const string out_name = as<string>(design_names[i]);
+      auto out_it = name_to_base_idx.find(out_name);
+      if (out_it == name_to_base_idx.end()) {
+        // no matching output column; nothing to do
+        continue;
+      }
+      entry.out_idx = out_it->second;
+
+      NumericMatrix design = designs[i];
+      if (design.nrow() != T) {
+        stop("ParamTable::init_design_plan: design for '%s' must have n_trials rows",
+             out_name.c_str());
+      }
+
+      const int K = design.ncol();
+      CharacterVector coef_names = colnames(design);
+
+      entry.coef_idx.assign(K, -1);
+      entry.uses_self = false;
+
+      for (int j = 0; j < K; ++j) {
+        string coef_name = as<string>(coef_names[j]);
+        auto it = name_to_base_idx.find(coef_name);
+        if (it == name_to_base_idx.end()) continue;
+
+        int cidx = it->second;
+        entry.coef_idx[j] = cidx;
+        if (cidx == entry.out_idx) entry.uses_self = true;
+      }
+
+      entry.valid = true;
+    }
+  }
 
   Rcpp::NumericMatrix materialize_by_param_names(const Rcpp::CharacterVector& param_names) const {
     using namespace Rcpp;
@@ -327,15 +402,16 @@ struct ParamTable {
     const int n_params = designs.size();
     if (n_params == 0) return;
 
-    CharacterVector design_names = designs.names();
-    if (design_names.size() != n_params) {
-      stop("ParamTable::map_from_designs: designs must be a named list");
-    }
-
+    // If no include_param or wrong length, include all
     LogicalVector use =
       (include_param.size() == n_params)
       ? include_param
     : LogicalVector(n_params, true);
+
+    // Lazy initialisation of the plan
+    if (design_plan.size() != (size_t)n_params) {
+      init_design_plan(designs);
+    }
 
     const int T = n_trials;
 
@@ -343,63 +419,39 @@ struct ParamTable {
       if (!use[i]) continue;
       if (designs[i] == R_NilValue) continue;
 
-      // skip self-intercept-only designs -- multiplying by 1 is pointless
-      if (!design_is_self_intercept.empty() &&
-          i < (int)design_is_self_intercept.size() &&
-          design_is_self_intercept[i]) {
-        // Rprintf("Skipping column as this is a self-intercept \n");
+      DesignEntry& entry = design_plan[i];
+      if (!entry.valid) continue;
+
+      // skip self-intercept-only designs
+      if (entry.skip_self_intercept) {
         continue;
       }
 
-      const string out_name = as<string>(design_names[i]);
+      const int out_idx = entry.out_idx;
 
-      // --- Resolve output column ---
-      auto out_it = name_to_base_idx.find(out_name);
-      if (out_it == name_to_base_idx.end()) {
-        stop("ParamTable::map_from_designs: output parameter '%s' not in table",
-             out_name.c_str());
-      }
-      const int out_idx = out_it->second;
-
-      NumericMatrix design = designs[i];
-      if (design.nrow() != T) {
-        stop("ParamTable::map_from_designs: design for '%s' must have n_trials rows",
-             out_name.c_str());
-      }
-
+      NumericMatrix design = designs[i];   // still a light handle
       const int K = design.ncol();
-      CharacterVector coef_names = colnames(design);
 
-      // --- Resolve coefficient indices ---
-      std::vector<int> coef_idx(K, -1);
-      bool uses_self = false;
-
-      for (int j = 0; j < K; ++j) {
-        auto it = name_to_base_idx.find(as<string>(coef_names[j]));
-        if (it == name_to_base_idx.end()) continue;
-        coef_idx[j] = it->second;
-        if (coef_idx[j] == out_idx) uses_self = true;
-      }
-
-      // --- Preserve self column if needed ---
+      // Preserve self column if needed
       std::vector<double> self_copy;
-      if (uses_self) {
+      double* out = &base(0, out_idx);
+
+      if (entry.uses_self) {
         self_copy.resize(T);
-        const double* src = &base(0, out_idx);
+        const double* src = out;
         std::copy(src, src + T, self_copy.begin());
       }
 
-      // --- Clear output ---
-      double* out = &base(0, out_idx);
+      // Clear output
       std::fill(out, out + T, 0.0);
 
-      // --- Main accumulation loop ---
+      // Main accumulation loop (unchanged logic)
       for (int j = 0; j < K; ++j) {
-        int cidx = coef_idx[j];
+        int cidx = entry.coef_idx[j];
         if (cidx < 0) continue;
 
         const double* coef =
-          (cidx == out_idx && uses_self)
+          (entry.uses_self && cidx == out_idx)
           ? self_copy.data()
             : &base(0, cidx);
 
@@ -407,12 +459,54 @@ struct ParamTable {
 
         for (int r = 0; r < T; ++r) {
           double v = coef[r] * d[r];
-          // if (!std::isfinite(v)) continue;
           out[r] += v;
         }
       }
     }
   }
+
+  // superspeed hopefully
+  // void map_from_designs(const Rcpp::List& designs, const Rcpp::LogicalVector& include)
+  // {
+  //   // 1) Lazily initialise the cached plan
+  //   if (design_plan.empty()) {
+  //     init_design_plan(designs);   // builds design_plan using 'designs'
+  //   }
+  //
+  //   const int n_trials = base.nrow();
+  //   const int n_params = base.ncol();
+  //   arma::mat baseA(base.begin(), n_trials, n_params, false); // armadillo-view on base
+  //
+  //   for (const DesignEntry& entry : design_plan) {
+  //     // map this design or not?
+  //     int idx = entry.design_idx;
+  //     if (idx < 0 || idx >= include.size()) continue;
+  //     if (!include[idx]) continue;
+  //
+  //     int target_idx = entry.target_base_idx;
+  //     const arma::mat& X = entry.X;
+  //     int k = X.n_cols;
+  //
+  //     arma::vec beta(k);
+  //     for (int j = 0; j < k; ++j) {
+  //       int coef_idx = entry.coef_base_idx[j];
+  //       double bj = (coef_idx >= 0) ? base(0, coef_idx) : 0.0;
+  //       beta(j) = bj;
+  //     }
+  //
+  //     arma::vec y;
+  //     // if (k == 1) {
+  //     //   y = beta(0) * X.col(0);
+  //     // } else if (k == 2) {
+  //     //   y = beta(0) * X.col(0) + beta(1) * X.col(1);
+  //     // } else {
+  //       y = X * beta;  // matrix algebra
+  //     // }
+  //
+  //     arma::vec target_col(baseA.colptr(target_idx), n_trials, /*copy_aux_mem=*/false);
+  //     target_col += y;
+  //   }
+  // }
 
   // Zero the entire base matrix
   void reset_base_to_zero() {

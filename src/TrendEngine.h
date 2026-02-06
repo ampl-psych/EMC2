@@ -1,4 +1,5 @@
 #include <Rcpp.h>
+// #include <RcppArmadillo.h>
 #include <unordered_set>
 #include "kernels.h"
 #include "ParamTable.h"
@@ -54,6 +55,9 @@ struct TrendOpSpec {
 struct TrendPlan {
   Rcpp::List trend;       // original trend list or R_NilValue
   Rcpp::DataFrame data;
+
+  Rcpp::List data_covariate_maps;
+  bool has_data_covariate_maps = false;
 
   std::vector<TrendOpSpec> premap_ops;
   std::vector<TrendOpSpec> pretransform_ops;

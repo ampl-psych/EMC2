@@ -3,6 +3,7 @@
 #define EMC2_TRANSFORM_UTILS_H
 
 #include <Rcpp.h>
+// #include <RcppArmadillo.h>
 #include "ParamTable.h"
 
 

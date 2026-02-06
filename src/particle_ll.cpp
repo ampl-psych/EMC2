@@ -1,4 +1,5 @@
 #include <Rcpp.h>
+// #include <RcppArmadillo.h>
 #include <unordered_map>
 #include "utility_functions.h"
 #include "model_lnr.h"

@@ -84,15 +84,23 @@ static void init_covariate(TrendOpSpec& op, const Rcpp::DataFrame& data) {
 // }
 
 static void init_covariate_maps_for_op(TrendOpSpec& op,
-                                       const Rcpp::DataFrame& data) {
+                                       const Rcpp::DataFrame& data,
+                                       const Rcpp::List& data_covmaps) {
   using namespace Rcpp;
   using std::string;
 
-  if (!op.spec.containsElementNamed("covariate_maps") ||
-      Rf_isNull(op.spec["covariate_maps"])) {
+  // No covariate_maps specified in the spec
+  if (!op.spec.containsElementNamed("map") ||
+      Rf_isNull(op.spec["map"])) {
     op.has_covariate_maps = false;
     op.covariate_map_cols.clear();
     return;
+  }
+
+  if (data_covmaps.size() == 0) {
+    stop("TrendOpSpec for target '%s' uses 'covariate_maps', "
+           "but data has no 'covariate_maps' attribute",
+           op.target_param.c_str());
   }
 
   if (op.input_kind != InputKind::Covariate) {
@@ -100,6 +108,7 @@ static void init_covariate_maps_for_op(TrendOpSpec& op,
          op.target_param.c_str());
   }
 
+  // Covariate must be a single name
   SEXP cov_spec = op.spec["covariate"];
   if (!(Rf_isString(cov_spec) && Rf_length(cov_spec) == 1)) {
     stop("TrendOpSpec for target '%s': 'covariate' must be a single name when using covariate_maps",
@@ -107,24 +116,46 @@ static void init_covariate_maps_for_op(TrendOpSpec& op,
   }
   string cov_name = as<string>(cov_spec);
 
-  List maps(op.spec["covariate_maps"]);
-  const int M = maps.size();
-  if (M == 0) {
-    op.has_covariate_maps = false;
-    op.covariate_map_cols.clear();
-    return;
+  // From trend spec: which maps are requested (names only; values are functions)
+  List maps_spec(op.spec["map"]);
+  CharacterVector map_names = maps_spec.names();
+  if (map_names.size() != maps_spec.size()) {
+    stop("TrendOpSpec for target '%s': 'covariate_maps' list must be named",
+         op.target_param.c_str());
   }
 
-  const int T = data.nrows();
+  // From data attribute: numeric maps with same names
+  List maps_data(data_covmaps);
+  CharacterVector data_map_names = maps_data.names();
+
+  const int M = maps_spec.size();
   op.covariate_map_cols.resize(M);
 
+  const int T = data.nrows();
+
   for (int m = 0; m < M; ++m) {
-    NumericMatrix mat(maps[m]);  // shallow wrapper around that element
-    if (mat.nrow() != T) {
-      stop("TrendOpSpec '%s': covariate_maps[[%d]] has %d rows, expected %d",
-           op.target_param.c_str(), m + 1, mat.nrow(), T);
+    string map_nm = as<string>(map_names[m]);
+
+    // find corresponding numeric map in data_covmaps
+    int idx_data = -1;
+    for (int j = 0; j < data_map_names.size(); ++j) {
+      if (as<string>(data_map_names[j]) == map_nm) {
+        idx_data = j;
+        break;
+      }
+    }
+    if (idx_data < 0) {
+      stop("TrendOpSpec '%s': covariate_map '%s' not found in data's 'covariate_maps' attribute",
+           op.target_param.c_str(), map_nm.c_str());
     }
 
+    NumericMatrix mat(maps_data[idx_data]);  // shallow wrapper
+    if (mat.nrow() != T) {
+      stop("TrendOpSpec '%s': covariate_maps[['%s']] has %d rows, expected %d",
+           op.target_param.c_str(), map_nm.c_str(), mat.nrow(), T);
+    }
+
+    // Find the column matching cov_name
     CharacterVector cn = colnames(mat);
     int col_idx = -1;
     for (int j = 0; j < cn.size(); ++j) {
@@ -134,11 +165,11 @@ static void init_covariate_maps_for_op(TrendOpSpec& op,
       }
     }
     if (col_idx < 0) {
-      stop("TrendOpSpec '%s': covariate_maps[[%d]] has no column '%s'",
-           op.target_param.c_str(), m + 1, cov_name.c_str());
+      stop("TrendOpSpec '%s': covariate_maps[['%s']] has no column '%s'",
+           op.target_param.c_str(), map_nm.c_str(), cov_name.c_str());
     }
 
-    // Store a column view for this map
+    // Store column view
     op.covariate_map_cols[m] = mat(_, col_idx);
   }
 
@@ -263,6 +294,15 @@ TrendPlan::TrendPlan(Rcpp::Nullable<Rcpp::List> trend_,
   using std::string;
   using namespace Rcpp;
 
+  // Get numeric covariate maps from data attribute
+  if (data_.hasAttribute("covariate_maps")) {
+    SEXP cm = data_.attr("covariate_maps");
+    if (!Rf_isNull(cm)) {
+      data_covariate_maps = Rcpp::List(cm);
+      has_data_covariate_maps = data_covariate_maps.size() > 0;
+    }
+  }
+
   // helper functions to figure out whether there's covariate_inputs and/or par_inputs
   auto uses_cov_input = [](const Rcpp::List& tr) -> bool {
     if (!tr.containsElementNamed("covariate")) return false;
@@ -367,9 +407,9 @@ TrendPlan::TrendPlan(Rcpp::Nullable<Rcpp::List> trend_,
       case TrendPhase::Premap:
         premap_ops.emplace_back(spec_list, name_i);
         if (use_cov_input) {
-          init_covariate(premap_ops.back(), data);
-          init_covariate_maps_for_op(premap_ops.back(), data);
           premap_ops.back().input_kind = InputKind::Covariate;
+          init_covariate(premap_ops.back(), data);
+          init_covariate_maps_for_op(premap_ops.back(), data, data_covariate_maps);
         } else if (use_par_input) {
           // par_input: record name
           Rcpp::CharacterVector cv(spec_list["par_input"]);
@@ -387,9 +427,9 @@ TrendPlan::TrendPlan(Rcpp::Nullable<Rcpp::List> trend_,
       case TrendPhase::Pretransform:
         pretransform_ops.emplace_back(spec_list, name_i);
         if (use_cov_input) {
-          init_covariate(pretransform_ops.back(), data);
-          init_covariate_maps_for_op(pretransform_ops.back(), data);
           pretransform_ops.back().input_kind = InputKind::Covariate;
+          init_covariate(pretransform_ops.back(), data);
+          init_covariate_maps_for_op(pretransform_ops.back(), data, data_covariate_maps);
         } else if (use_par_input) {
           // par_input: record name
           Rcpp::CharacterVector cv(spec_list["par_input"]);
@@ -407,9 +447,9 @@ TrendPlan::TrendPlan(Rcpp::Nullable<Rcpp::List> trend_,
       case TrendPhase::Posttransform:
         posttransform_ops.emplace_back(spec_list, name_i);
         if (use_cov_input) {
-          init_covariate(posttransform_ops.back(), data);
-          init_covariate_maps_for_op(posttransform_ops.back(), data);
           posttransform_ops.back().input_kind = InputKind::Covariate;
+          init_covariate(posttransform_ops.back(), data);
+          init_covariate_maps_for_op(posttransform_ops.back(), data, data_covariate_maps);
         } else if (use_par_input) {
           // par_input: record name
           Rcpp::CharacterVector cv(spec_list["par_input"]);
@@ -538,6 +578,18 @@ inline void bind_trend_op_to_paramtable(TrendOpRuntime& op,
     op.kernel_par_indices.push_back(idx);
   }
   // Rprintf("Binding...");
+
+  // After building base_par_indices and kernel_par_indices:
+//#if 0
+  // Rcpp::Rcout << "TrendOp target=" << spec.target_param
+  //             << " kernel=" << spec.kernel
+  //             << " base_type=" << spec.base_type
+  //             << " has_maps=" << spec.has_covariate_maps
+  //             << " n_trend_pnames=" << n_tp
+  //             << " n_base_pars=" << op.base_par_indices.size()
+  //             << " n_kernel_pars=" << op.kernel_par_indices.size()
+  //             << "\n";
+//#endif
 }
 
 
@@ -711,7 +763,7 @@ void TrendRuntime::apply_base_for_op(TrendOpRuntime& op,
 
       for (int k = 0; k < K; ++k) {
         double base_val = pt.base(r, op.base_par_indices[k]);
-        double map_val  = spec.covariate_map_cols[k][r];
+        double map_val  = spec.covariate_map_cols[k][r]; // column view
         contrib += q * base_val * map_val;
       }
     } else {
