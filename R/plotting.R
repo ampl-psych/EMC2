@@ -448,13 +448,13 @@ plot_pars <- function(emc,layout=NA, selection="mu", show_chains = FALSE, plot_p
     MCMC_samples <- list(lapply(MCMC_samples, function(x) do.call(rbind, x)))
     names(MCMC_samples) <- "subjects"
   }
-  psamples <-  get_objects(sampler = emc, design = get_design(emc),
+  psamples <-  do.call(get_objects, c(list(sampler = emc, design = get_design(emc),
                            type = type, sample_prior = T,
                            selection = selection, N = N,
-                           prior = get_prior(emc))
+                           prior = get_prior(emc)), fix_dots(dots, get_objects,consider_dots = F)))
   pMCMC_samples <- do.call(get_pars, c(list(psamples, selection = selection, type = type),
                                        fix_dots(dots, get_pars, exclude = c("thin", "filter", "chain", "subject"))))
-  if(length(pMCMC_samples) != length(MCMC_samples)) pMCMC_samples <- rep(pMCMC_samples, length(MCMC_samples))
+  if(length(pMCMC_samples) < length(MCMC_samples)) pMCMC_samples <- rep(pMCMC_samples, length(MCMC_samples))
 
   true_MCMC_samples <- NULL
   if(!is.null(true_pars)){
@@ -472,7 +472,14 @@ plot_pars <- function(emc,layout=NA, selection="mu", show_chains = FALSE, plot_p
   contraction_list <- list()
   for(i in 1:n_objects){
     cur_mcmc <- MCMC_samples[[i]]
-    merged <- do.call(rbind, cur_mcmc) # Need for contraction calculation
+    all_cols <- unique(unlist(lapply(cur_mcmc, colnames)))
+    cur_mcmc <- lapply(cur_mcmc, function(m) {
+      m <- cbind(m, matrix(NA_real_, nrow(m), length(setdiff(all_cols, colnames(m))),
+                           dimnames = list(NULL, setdiff(all_cols, colnames(m)))))
+      m[, all_cols, drop = FALSE]
+    })
+    merged <- do.call(rbind, cur_mcmc)
+    # merged <- do.call(rbind, cur_mcmc_filled)
     if(!show_chains) {
       cur_mcmc <- list(merged)
       if(!is.null(true_MCMC_samples)) true_MCMC_samples[[i]] <- list(do.call(rbind, true_MCMC_samples[[i]]))
@@ -486,8 +493,15 @@ plot_pars <- function(emc,layout=NA, selection="mu", show_chains = FALSE, plot_p
       par(mfrow=layout)
     }
     for(l in 1:n_pars){
-      denses <- lapply(cur_mcmc, function(x) do.call(density, c(list(x[,l]), fix_dots(dots, density.default, consider_dots = FALSE))))
-      xlim <- range(c(sapply(cur_mcmc, function(x) return(range(x[,l]))), true_pars[[i]][[1]][,l]))
+      denses <- lapply(cur_mcmc, function(x){
+        if(is.na(x[1,l])) return(NULL)
+        do.call(density, c(list(x[,l]), fix_dots(dots, density.default, consider_dots = FALSE)))
+      })
+      denses <- denses[!sapply(denses, is.null)]
+      xlim <- range(c(sapply(cur_mcmc, function(x) {
+        if(is.na(x[1,l])) return(NA)
+        range(x[,l])
+        }), true_pars[[i]][[1]][,l]), na.rm = TRUE)
       ylim <- range(sapply(denses, function(x) return(range(x$y))))
       if(ncol(pMCMC_samples[[i]][[1]]) != n_pars){
         p_idx <- 1
@@ -503,10 +517,17 @@ plot_pars <- function(emc,layout=NA, selection="mu", show_chains = FALSE, plot_p
         }
       }
       if(!is.null(true_MCMC_samples)){
-        true_denses <- lapply(true_MCMC_samples[[i]], function(x) do.call(density, c(list(x[,l]), fix_dots(dots, density.default, consider_dots = FALSE))))
-        xlim <- range(c(sapply(true_MCMC_samples[[i]], function(x) return(range(x[,l]))), xlim))
+        true_denses <- lapply(true_MCMC_samples[[i]], function(x){
+          if(is.na(x[1,l])) return(NULL)
+          do.call(density, c(list(x[,l]), fix_dots(dots, density.default, consider_dots = FALSE)))
+        })
+        xlim <- range(c(sapply(true_MCMC_samples[[i]], function(x) {
+          if(is.na(x[1,l])) return(NULL)
+          range(x[,l])
+        }), true_pars[[i]][[1]][,l]))
         ylim <- range(c(sapply(true_denses, function(x) return(range(x$y))), ylim))
       }
+      n_chains <- length(denses)
       for(k in 1:n_chains){
         x_name <- ifelse(n_objects == 1, names(MCMC_samples)[i], paste0(selection, ": ", names(MCMC_samples)[i]))
         if(k == 1){
@@ -525,7 +546,7 @@ plot_pars <- function(emc,layout=NA, selection="mu", show_chains = FALSE, plot_p
         cur_true_args <- add_defaults(true_args, col = "darkgreen", lwd = 1.5, lty = 2)
         do.call(abline, c(list(v = true_pars[[i]][[1]][,l]), fix_dots_plot(cur_true_args)))
       }
-      cur_contraction[l] <- 1-(var(merged[,l])/var(pMCMC_samples[[i]][[1]][,p_idx]))
+      cur_contraction[l] <- 1-(var(merged[,l], na.rm = TRUE)/var(pMCMC_samples[[i]][[1]][,p_idx]))
       if(plot_prior){
         cur_prior_args <- add_defaults(prior_args, col = "red")
         do.call(lines, c(list(pdenses), fix_dots_plot(cur_prior_args)))
@@ -698,4 +719,112 @@ coda_setmfrow <- function (Nchains = 1, Nparms = 1, nplots = 1, sepplot = FALSE)
     }
   }
   return(mfrow)
+}
+
+
+#' Plots trends over time
+#'
+#' Plots the trend for selected parameters of a model. Can be used either with a p_vector, or trial-wise parameters or covariates obtained
+#' from predict()
+#'
+#' @param input_data a p_vector or posterior predictives compatible with the provided emc object
+#' @param emc An emc object
+#' @param par_name Parameter name (or covariate name) to plot
+#' @param subject Subject number to plot
+#' @param filter Optional function that takes a data frame and returns a logical vector indicating which rows to include in the plot
+#' @param on_x_axis Column name in the `dadm` to plot on the x-axis. By default 'trials'.
+#' @param pp_shaded Boolean. If `TRUE` will plot 95% credible interval as a shaded area. Otherwise plots separate lines for each iteration of the posterior predictives. Only applicable if `input_data` are posterior predictives.
+#' @param ... Optional arguments that can be passed to `plots`.
+#'
+#' @return A trend plot
+#' @export
+#'
+#' @examples
+#' dat <- EMC2:::add_trials(forstmann)
+#' dat$trials2 <- dat$trials/1000
+#'
+#' lin_trend <- make_trend(cov_names='trials2',
+#'                         kernels = 'exp_incr',
+#'                         par_names='B',
+#'                         bases='lin',
+#'                         phase = "premap")
+#'
+#' design_RDM_lin_B <- design(model=RDM,
+#'                            data=dat,
+#'                            covariates='trials2',   # specify relevant covariate columns
+#'                            matchfun=function(d) d$S==d$lR,
+#'                            transform=list(func=c('B'='identity')),
+#'                            formula=list(B ~ 1, v ~ lM, t0 ~ 1),
+#'                            trend=lin_trend)       # add trend
+#'
+#' emc <- make_emc(dat, design=design_RDM_lin_B)
+#' p_vector <- c('B'=1, 'v'=1, 'v_lMTRUE'=1, 't0'=0.1, 'B.w'=1, 'B.d_ei'=1)
+#'
+#' # Visualize trend
+#' plot_trend(p_vector, emc=emc,
+#'            par_name='B', subject='as1t',
+#'            filter=function(d) d$lR=='right', main='Threshold for right')
+plot_trend <- function(input_data, emc, par_name, subject=1,
+                       filter=NULL, on_x_axis='trials',
+                       pp_shaded=TRUE,
+                       ...) {
+
+  if(!is.list(input_data)) {
+    # user supplied p_vector
+    dadm <- emc[[1]]$data[[subject]]
+  } else {
+    dadm <- do.call(rbind, emc[[1]]$data)
+  }
+  row_filter <- dadm$subjects==subject
+  if(!is.null(filter)) {
+    if(is.function(filter)) {
+      row_filter <- row_filter & filter(dadm)
+    } else {
+      stop("filter must be a function that takes a data frame and returns a logical vector")
+    }
+  }
+  if(!is.list(input_data)) {
+    updated <- get_pars_matrix(p_vector=input_data,
+                               dadm=dadm,
+                               model=emc[[1]]$model())
+    trend <- updated[row_filter, par_name]
+    credible_interval <- NULL
+    ylim <- range(trend)
+    x <- dadm[row_filter, on_x_axis]
+    trend <- trend[order(x)]
+    x <- x[order(x)]
+  } else {
+    # user supplied posterior predictives
+    updated <- lapply(seq_along(input_data), function(i) data.frame(input_data[[i]][row_filter,par_name,drop=FALSE], x=dadm[row_filter,on_x_axis]))
+    credible_interval <- aggregate(.~x, do.call(rbind, updated), quantile, c(0.025, .5, .9))
+
+    ## order
+    credible_interval <- credible_interval[order(credible_interval[[1]]),]
+    trend <- credible_interval[[2]][,2]  # median
+    x <- credible_interval[[1]]
+    if(pp_shaded) {
+      ylim <- range(credible_interval[[2]])
+    } else {
+      ylim <- range(sapply(updated, function(x) range(x[,par_name])))
+    }
+  }
+
+  # parse dots for plotting arguments
+  dots <- list(...)
+  if(!'xlab' %in% names(dots)) dots$xlab=on_x_axis
+  if(!'ylim' %in% names(dots)) dots$ylim=ylim
+
+  full_args <- c(list(x=x,
+                      y=trend,
+                      type='l', ylab=par_name), dots)
+  do.call(plot, full_args)
+
+  if(!is.null(credible_interval)) {
+    if(pp_shaded) {
+      polygon(x=c(x, rev(x)),
+              y=c(credible_interval[[2]][,1], rev(credible_interval[[2]][,3])), col=adjustcolor(3, alpha.f = .3), border=adjustcolor(1, alpha.f=.4))
+    } else {
+      for(i in updated) lines(i$x, i[,par_name], lwd=.2)
+    }
+  }
 }

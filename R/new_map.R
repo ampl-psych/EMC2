@@ -1,9 +1,13 @@
 minimal_design <- function(design, covariates = NULL, drop_subjects = TRUE,
                            n_trials = 1, add_acc = TRUE, drop_R = TRUE,
-                           drop_R_levels = TRUE, do_functions = TRUE, ...) {
+                           drop_R_levels = TRUE, do_functions = TRUE,
+                           group_design = NULL, ...) {
   dots <- add_defaults(list(...), verbose = TRUE)
   if(!is.null(design$Ffactors)) design <- list(design)
   out <- list()
+  if(!is.null(group_design)){
+    group_factors <- unique(unlist(lapply(attr(group_design, "Flist"), function(x) all.vars(x[[3]]))))
+  }
   for(i in 1:length(design)){
     cur_des <- design[[i]]
     ## 1.  Check and construct the factorial backbone
@@ -15,7 +19,15 @@ minimal_design <- function(design, covariates = NULL, drop_subjects = TRUE,
     # Remove subjects
     if(drop_subjects){
       cur_des$Ffactors <- cur_des$Ffactors[names(cur_des$Ffactors) != "subjects"]
+    } else{
+      if(is.null(cur_des$Ffactors$subjects))cur_des$Ffactors$subjects <- factor(1)
     }
+    if(!is.null(group_design)){
+      cur_des$Ffactors <- cur_des$Ffactors[!names(cur_des$Ffactors) %in% group_factors]
+      cur_des$Fcovariates <- cur_des$Fcovariates[!names(cur_des$Fcovariates) %in% group_factors]
+    }
+
+
     if(n_trials > 1){
       cur_des$Ffactors <- c("trials" = list(1:n_trials), cur_des$Ffactors)
     }
@@ -75,6 +87,9 @@ minimal_design <- function(design, covariates = NULL, drop_subjects = TRUE,
         fac_df[[nm]] <- res
       }
     }
+    if(!is.null(group_design)){
+      fac_df <- minimal_group_design(fac_df, group_factors, attr(group_design, "data"))
+    }
 
     out[[i]] <- fac_df
   }
@@ -82,173 +97,307 @@ minimal_design <- function(design, covariates = NULL, drop_subjects = TRUE,
   return(out)
 }
 
-do_map <- function(draws, design, add_recalculated = FALSE, ...) {
-  if(!is.matrix(draws)){
-    draws <- draws[,1,]
-    is_array <- TRUE
-  } else{
-    is_array <- FALSE
-  }
-  draws <- t(draws)
-  n_draws <- nrow(draws)
+minimal_group_design <- function(data, group_factors, group_data){
+  if(nrow(group_data) != length(unique(data$subjects))){
+    if(length(unique(data$subjects)) != 1) stop("Group design doesn't match subject inputs")
+    input_data <- data[!duplicated(data[,colnames(data) != "trials"]),]
+    input_group <- unique(group_data)
+    out <- vector("list", nrow(input_group))
+    for(i in 1:length(out)){
+      tmp <- input_data
+      for(j in 1:length(group_factors)){
+        tmp[,group_factors[j]] <- input_group[i,j]
+      }
+      tmp$subjects <- i
+      out[[i]] <- tmp
+    }
 
-  if(!is.null(design$Ffactors)) design <- list(design)
-  all_out <- list()
+  } else{
+    unq_subjects <- unique(data$subjects)
+    out <- setNames(vector("list", length(unq_subjects)), unq_subjects)
+    k <- 0
+    for(sub in unq_subjects){
+      k <- k + 1
+      idx <- data$subjects == sub
+      group_tmp <- group_data[rep(k, each = sum(idx)), , drop = F]
+      out[[sub]] <- cbind(data[idx,], group_tmp)
+    }
+  }
+
+  data <- do.call(rbind, out)
+  rownames(data) <- NULL
+  data <- add_trials(data[order(data$subjects),])
+  return(data)
+}
+
+
+do_map <- function(draws, map, by_subject, design,
+                   n_trials = 1, data = NULL, functions = NULL,
+                   add_recalculated = FALSE, selection = "alpha",
+                   group_design = NULL,...){
   par_idx <- 0
+  all_out <- list()
+  if(!is.null(data$subjects)) data <- list(data)
   for(i in 1:length(design)){
     cur_des <- design[[i]]
-
+    # See which design we have to get out
     cur_idx <- par_idx + seq_len(length(sampled_pars(cur_des)))
     par_idx <- max(cur_idx)
-    cur_draws <- draws[,cur_idx]
+    cur_draws <- draws[cur_idx,,,drop = F]
     if(grepl("MRI", cur_des$model()$type)){
-      cur_draws[,grepl("sd", colnames(cur_draws))] <- exp(cur_draws[,grepl("sd", colnames(cur_draws))])
-      cur_draws[,grepl("rho", colnames(cur_draws))] <- pnorm(cur_draws[,grepl("rho", colnames(cur_draws))])
-      all_out[[i]] <- cur_draws
+      # MRI mapping is rudimentary for now
+      all_out[[i]] <- map_MRI(cur_draws)
       next
     }
-
-    if(any(grepl("|", colnames(cur_draws), fixed =  T))){
-      joint <- T
-      prefix <- unique(gsub("[|].*", "", colnames(cur_draws)))
-      colnames(cur_draws) <- sub("^[^|]*\\|", "", colnames(cur_draws))
-    } else joint <- FALSE
-    ## 0.  coefficient draw matrix & constants ------------------------------
-    if (!is.null(cur_des$constants)) {
-      cur_draws <- cur_draws[, !colnames(cur_draws) %in% names(cur_des$constants), drop = FALSE]
-    }
-    cur_draws <- t(apply(cur_draws, 1, do_pre_transform, cur_des$model()$pre_transform))
-    if(!is.null(cur_des$constants)){
-      constants <- matrix(rep(cur_des$constants, each = nrow(cur_draws)), nrow = nrow(cur_draws), dimnames = list(NULL, names(cur_des$constants)))
-      cur_draws <- cbind(cur_draws, constants)
+    joint <- FALSE
+    if(any(grepl("|", rownames(cur_draws), fixed =  T))){
+      # Get out joint
+      joint <- TRUE
+      prefix <- unique(gsub("[|].*", "", rownames(cur_draws)))
+      rownames(cur_draws) <- sub("^[^|]*\\|", "", rownames(cur_draws))
     }
 
-    ## 1.  formula list ------------------------------------------------------
-    fmls <- if (!is.null(cur_des$Fformula)) cur_des$Fformula else cur_des$Flist
-    if (is.null(fmls))
-      stop("`design` must contain `Fformula` or `Flist` with parameter formulas.")
-    if (is.null(names(fmls)) || any(!nzchar(names(fmls))))
-      names(fmls) <- vapply(fmls, function(f) deparse(f[[2L]]), character(1))
+    out <- mapper_wrapper(map = map, by_subject, cur_draws, cur_des, n_trials = n_trials,
+                        data = data[[i]], functions = functions,
+                        add_recalculated = add_recalculated,
+                        group_design = group_design, ...)
 
-    ## 2.  minimal experimental design --------------------------------------
-    design_df <- minimal_design(cur_des,
-                                drop_subjects = TRUE,
-                                n_trials      = 100, # sample 100 here so that covariate is semi-accurately represented
-                                add_acc       = TRUE,
-                                ...)
-
-    factor_cols    <- unique(c(names(cur_des$Ffactors), names(cur_des$Ffunctions), 'lM', 'lR'))
-    covariate_cols <- if (!is.null(cur_des$Fcovariates)) cur_des$Fcovariates else character(0)
-
-    base_cells <- unique(design_df[, colnames(design_df) %in% factor_cols, drop = FALSE])
-
-    ## covariate source rows for sampling
-    cov_source <- if (length(covariate_cols))
-      design_df[, covariate_cols, drop = FALSE] else NULL
-    n_cov_rows <- if (is.null(cov_source)) 1L else nrow(cov_source)
-
-    ## 3.  loop over parameters ---------------------------------------------
-    mapped_list <- vector("list", length(fmls))
-    names(mapped_list) <- names(fmls)
-
-    for (par in names(fmls)) {
-      ## covariates that this formula actually uses -------------------------
-      par_covs <- intersect(covariate_cols, all.vars(fmls[[par]]))
-
-      ## model‑matrix template (1 dummy row just to grab column names) -------
-      X <- make_full_dm(fmls[[par]], cur_des$Clist, design_df)
-      if (!ncol(X)) next                                  # nothing to map
-      beta <- cur_draws[, colnames(X), drop = FALSE]
-
-      ## -- build factor‑only matrix to detect unique cells -----------------
-      ##  -- build factor-only matrix & find unique cells ------------------------
-      zero_df <- base_cells
-
-      if (length(par_covs)) {
-        # add zero-filled placeholders for any covariates that appear in the formula
-        zero_df[par_covs] <- 0
-      }
-
-      # model matrix that ignores covariates by construction
-      mm_factor <- make_full_dm(fmls[[par]], cur_des$Clist, zero_df)
-
-      dup  <- duplicated(mm_factor)   # TRUE for repeated rows
-      u_df <- zero_df[!dup, , drop = FALSE]
-
-      mm_order <- colnames(mm_factor) # == colnames(X)
-      n_cell   <- nrow(u_df)
-
-      ## allocate result matrix --------------------------------------------
-      map_mat <- matrix(NA_real_, nrow = n_draws, ncol = n_cell)
-
-      ## --- mapping --------------------------------------------------------
-      if (length(par_covs)) {
-        ## covariates ARE in this formula → sample per draw
-        for (d in seq_len(n_draws)) {
-          z <- cov_source[sample.int(n_cov_rows, 1L), par_covs, drop = FALSE]
-
-          this_df <- u_df
-          this_df[, par_covs] <- z[rep(1L, n_cell), , drop = FALSE]  # overwrite 0s
-
-          mm_full <- make_full_dm(fmls[[par]], cur_des$Clist, this_df)
-          colnames(mm_full) <- colnames(X)
-          map_mat[d, ] <- beta[d, ] %*% t(mm_full[, mm_order, drop = FALSE])
-        }
-      } else {
-        ## no covariates in formula → vectorised multiply
-        mm_full <- make_full_dm(fmls[[par]], cur_des$Clist, u_df)
-        colnames(mm_full) <- colnames(X)
-        map_mat[,] <- beta %*% t(mm_full[, mm_order, drop = FALSE])
-      }
-
-      ## label columns ------------------------------------------------------
-      vary_facs <- intersect(all.vars(fmls[[par]][[3]]), factor_cols)
-
-      ## (1) factor part of the label
-      if (length(vary_facs)) {
-        fac_lbl <- apply(u_df[, vary_facs, drop = FALSE], 1,
-                         function(z) paste(paste0(names(z), z), collapse = "_"))
-      } else {
-        fac_lbl <- rep("", n_cell)
-      }
-
-      ## (2) covariate part of the label (same for every cell if present)
-      cov_lbl <- if (length(par_covs)) paste(par_covs, collapse = "_") else ""
-
-      ## (3) combine: par[_fac][_cov]
-      colnames(map_mat) <- trimws(paste(par,
-                                        ifelse(fac_lbl == "", "", paste0("_", fac_lbl)),
-                                        if (cov_lbl != "") paste0("_", cov_lbl) else "",
-                                        sep = ""), which = "right")
-      tmp_mat <- map_mat
-      colnames(tmp_mat) <- rep(par, ncol(tmp_mat))
-      map_mat[] <- do_transform(tmp_mat, cur_des$model()$transform)
-      mapped_list[[par]] <- map_mat
-    }
-
-    ## 4.  combine & drop duplicates ----------------------------------------
-    out <- do.call(cbind, mapped_list)
-    if (ncol(out) > 1){
-      out <- out[, !duplicated(colnames(out)), drop = FALSE]
-    }
-    if(add_recalculated){
-      map_names <- colnames(out)
-      tmp <- out
-      colnames(tmp) <- get_p_types(map_names)
-      tmp <- add_constants(tmp, cur_des$constants)
-      tmp[,colnames(tmp) %in% names(cur_des$constants)] <-
-        do_transform(tmp[,colnames(tmp) %in% names(cur_des$constants), drop = F], cur_des$model()$transform)
-      extra <- add_recalculated_pars(tmp, cur_des$model, map_names)
-      out <- cbind(out, extra)
-    }
     if(joint){
-      colnames(out) <- paste0(prefix, "|", colnames(out))
+      rownames(out) <- paste0(prefix, "|", rownames(out))
     }
     all_out[[i]] <- out
   }
-  out <- t(do.call(cbind, all_out))
-  if(is_array){
-    out <- array(out, dim = c(nrow(out), 1, ncol(out)), dimnames = list(rownames(out), "alpha", colnames(out)))
-  }
+  out <- abind(all_out, along = 1)
   return(out)
 }
+
+# To fix, apply add_recalculated
+mapper_wrapper <- function(map, by_subject = FALSE, par_mcmc, design, n_trials = NULL, data = NULL,
+                             functions = NULL, add_recalculated = FALSE,
+                             group_design = NULL, ...){
+  res <- par_data_map(par_mcmc, design, n_trials = n_trials,
+                      data = data, functions = functions,
+                      add_recalculated = add_recalculated,
+                      group_design = group_design, ...)
+
+  pars <- res$pars
+  data <- res$data
+  if(!by_subject){
+    data$subjects <- 1
+    factor(data$subjects)
+  }
+  n_pars <- dim(pars)[3]
+
+  fmls <- setNames(
+    lapply(design$Flist, function(f) as.formula(paste("~", deparse(f[[3]])))),
+    vapply(design$Flist, function(f) deparse(f[[2]]), character(1))
+  )
+
+  fml_names <- names(fmls)
+  par_names <- dimnames(pars)[[3]]
+
+  # Some map wrangling
+  if(!is.logical(map)){ # Not just a simple boolean
+    # Map specified as a list
+    if(is.list(map)){
+      if(is.null(names(map))){
+        # Unnamed map
+        if(length(map) != 1 & length(map) != n_pars) stop("map list length not equal to number of parameters")
+        if(length(map) == 1){
+          # Map of length 1, assume that they should all be replicated
+          map <- replicate(n_pars, map)
+        }
+      } else{ # Named map
+        if(any(!par_names %in% names(map))){
+          if(is.character(map[[1]])){ # Factor input
+            map[setdiff(par_names, names(map))] <- ""
+          } else{ # Otherwise assume it's a formula
+            map[setdiff(par_names, names(map))] <- as.formula("~ 1")
+          }
+          map <- map[par_names]
+        }
+
+      }
+    } else{
+      map <- replicate(n_pars, list(map))
+    }
+  } else{
+    map <- rep(map, n_pars)
+  }
+
+  # Before this we should compress covariates
+  colnams <- colnames(data)
+  for(i in 1:ncol(data)){
+    if(colnams[i] %in% c("subjects", "rt", "R", "trials")) next
+    cur_col <- data[,i]
+    if(!is.factor(cur_col) && length(unique(cur_col)) > 6){
+      new_col <- rep("high", length(cur_col))
+      new_col[cur_col < median(cur_col)] <- "low"
+      data[,i] <- new_col
+    }
+  }
+
+  df <- data
+  df[colnames(df)] <- lapply(colnames(df), function(v) {
+    f <- df[[v]]
+    factor(paste0(v, f))
+  })
+  subjects <- unique(data$subjects)
+  all_pars <- setNames(vector("list", length(subjects)), subjects)
+  for(sub in subjects){
+    out <- list()
+    idx <- data$subjects == sub
+    for(i in 1:n_pars){
+      # First case, map = TRUE
+      if(isTRUE(map[i]) || is.character(map[[i]])){
+        if(isTRUE(map[i])){
+          vars <- all.vars(fmls[[par_names[i]]])
+        } else{
+          vars <- map[[i]]
+          if(length(vars) == 1 && vars == "") vars <- character(0)
+        }
+
+        if(length(vars) > 0){
+          cells <- interaction(df[idx,vars], sep = "_", drop = TRUE, lex.order = TRUE)
+          g <- nlevels(cells)
+          ng <- as.vector(table(cells))
+          res <- rowsum(pars[idx,,i], cells) / ng            # (g x k)
+
+        } else{
+          if (sum(idx)==1) res <- pars[idx,,i] else
+            res <- colMeans(pars[idx,,i])
+        }
+      } else{ # Third case map is a formula
+        S  <- model.matrix(map[[i]], data = data[idx,])
+        ng <- colSums(S)
+        # g x k means:
+        res <- (t(S) %*% pars[idx,,i]) / ng
+      }
+      if(is.vector(res)){
+        res <- t(res)
+        rownames(res) <- par_names[i]
+      } else{
+        rownames(res) <- paste0(par_names[i], "_", rownames(res))
+      }
+      out[[i]] <- round(res, 8)
+    }
+    all_pars[[sub]] <- do.call(rbind, out)
+  }
+  # This is to ensure no-one is missing a cell
+  unq_rows <- unique(unlist(lapply(all_pars, rownames)))
+  res <- lapply(all_pars, function(x){
+    missing <- setdiff(unq_rows, rownames(x))
+
+    # Create NA matrix for missing rows
+    add <- matrix(NA, nrow = length(missing), ncol = ncol(x),
+                  dimnames = list(missing, colnames(x)))
+
+    # Bind and reorder
+    mat_full <- rbind(x, add)[unq_rows,]
+    return(mat_full)
+  })
+
+  arr <- abind(res, along = 3)    # rows x cols x list
+  arr <- aperm(arr, c(1, 3, 2))   # rows x list x cols
+  return(arr)
+}
+
+
+par_data_map <- function(par_mcmc, design, n_trials = NULL, data = NULL,
+                         functions = NULL, add_recalculated = FALSE,
+                         group_design = NULL,...){
+  design <- design
+  model <- design$model
+  if ( is.null(data) ) {
+    design$Ffactors$subjects <- colnames(par_mcmc)
+    if ( is.null(n_trials) )
+      stop("If data is not provided need to specify number of trials")
+    design$Fcovariates <- design$Fcovariates[!design$Fcovariates %in% names(functions)]
+    data <- minimal_design(design, covariates = list(...)$covariates,
+                           drop_subjects = F, n_trials = n_trials, add_acc=F,
+                           drop_R = F, group_design = group_design)
+  }
+  if(!is.null(functions)){
+    for(i in 1:length(functions)){
+      data[[names(functions)[i]]] <- functions[[i]](data)
+    }
+  }
+  if (!is.factor(data$subjects)) data$subjects <- factor(data$subjects)
+  if (!is.null(model)) {
+    if (!is.function(model)) stop("model argument must  be a function")
+    if ( is.null(model()$p_types) ) stop("model()$p_types must be specified")
+    if ( is.null(model()$Ttransform) ) stop("model()$Ttransform must be specified")
+  }
+  data <- do.call(rbind, lapply(split(data, data$subjects), function(x){
+    x <- x[!duplicated(x[,colnames(x) != "rt"]),]
+    return(x)
+  }))
+  data <- add_trials(data[order(data$subjects),])
+
+
+  model <- design$model
+  data <- design_model(
+    add_accumulators(data,design$matchfun,simulate=TRUE,type=model()$type,Fcovariates=design$Fcovariates),
+    design,model,add_acc=FALSE,compress=FALSE,verbose=FALSE,
+    rt_check=FALSE)
+
+  n_mcmc <- dim(par_mcmc)[3]
+  n_pars <- length(model()$p_types)
+  n_subs <- ncol(par_mcmc)
+  for(i in 1:n_mcmc){
+    parameters <- t(as.matrix(par_mcmc[,,i], nrow = n_pars, ncol = n_subs))
+    pars <- do_transform(parameters, model()$pre_transform) #t(apply(parameters, 1, do_pre_transform, model()$pre_transform))
+    if(nrow(parameters) == length(unique(data$subjects))){
+      design$Ffactors$subjects <- unique(data$subjects)
+    }
+
+    rownames(pars) <- design$Ffactors$subjects
+    pars <- map_p(add_constants(pars,design$constants),data, model())
+
+    if (!is.null(model()$trend)) {
+      phases <- vapply(model()$trend, function(x) x$phase, character(1))
+      if (any(phases == "pretransform")) pars <- prep_trend_phase(data, model()$trend, pars, "pretransform")
+    }
+    pars <- do_transform(pars, model()$transform)
+    if (!is.null(model()$trend)) {
+      if (any(phases == "posttransform")) pars <- prep_trend_phase(data, model()$trend, pars, "posttransform")
+    }
+    if(add_recalculated) pars <- model()$Ttransform(pars, data)
+    if(i == 1){
+      # Ttransform could add unwanted friends, so safest to just
+      # figure out the dimensions here
+      out <- array(NA, dim = c(nrow(pars), n_mcmc, ncol(pars)),
+                   dimnames = list(NULL, NULL, colnames(pars)))
+    }
+    out[,i,] <- pars
+  }
+  return(list(data = data, pars = out))
+}
+
+group_mapping <- function(samples, selection) {
+  if(ncol(samples) < 2) stop("Please use type = 'single' for designs with 1 subject")
+  n_params <- dim(samples)[1]
+  n_iters  <- dim(samples)[3]
+  if(selection == "mu"){
+    return(list(samples = list(theta_mu_mean = apply(samples, c(1,3), mean, na.rm = TRUE))))
+  } # Else we need theta_var
+  covs  <- array(NA_real_, dim = c(n_params, n_params, n_iters),
+                 dimnames = list(dimnames(samples)[[1]],
+                                 dimnames(samples)[[1]], NULL))
+  for (iter in seq_len(n_iters)) {
+    tmp <- t(samples[,,iter])
+    covs[,,iter] <- cov(tmp, use = "pairwise.complete.obs")
+  }
+  return(list(samples = list(theta_var = covs)))
+}
+
+map_selecter <- function(map, selection){
+  if(!isFALSE(map)){
+    if(selection %in% c("mu", "sigma2", "Sigma", "correlation", "covariance")){
+      return("alpha")
+    }
+  }
+  return(selection)
+}
+
+

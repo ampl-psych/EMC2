@@ -449,22 +449,22 @@ print.emc.prior <- function(x, ...){
 #' }
 
 plot.emc.prior <- function(x, selection = "mu", do_plot = TRUE, covariates = NULL,
-                       layout = NA, N = 5e4, ...){
+                       layout = NA, N = 5e3, ...){
   prior <- x
   design <- get_design(prior)
   dots <- add_defaults(list(...), breaks = 30, cut_off = 0.0015, prob = TRUE, by_subject = TRUE, map = TRUE)
   oldpar <- par(no.readonly = TRUE) # code line i
   on.exit(par(oldpar)) # code line i + 1
   if(is.null(design[[1]]$Ffactors)){
-    if(selection %in% c('alpha', 'mu') & dots$map){
+    if(selection %in% c('alpha', 'mu', "sigma2", "Sigma", "correlation", "covariance") & dots$map){
       warning("For this type of design, map = TRUE is not yet implemented")
     }
     dots$map <- FALSE
   }
   type <- attr(prior, "type")
   if(type == "single") selection <- "alpha"
-  samples <-  get_objects(design = design, prior = prior, type = type, sample_prior = T,
-                          selection = selection, N = N, ...)
+  samples <-  do.call(get_objects, c(list(design = design, prior = prior, type = type, sample_prior = T,
+                          selection = selection, N = N), fix_dots(dots, get_objects, consider_dots = F)))
   MCMC_samples <- do.call(get_pars, c(list(samples, selection = selection, type = type, covariates = covariates, stage = "sample"), fix_dots(dots, get_pars)))
   if(do_plot){
     for(i in 1:length(MCMC_samples)){
@@ -508,8 +508,8 @@ parameters.emc.prior <- function(x,selection = "mu", N = 1000, covariates = NULL
   dots <- add_defaults(list(...), by_subject = TRUE, map = FALSE, return_mcmc = FALSE, merge_chains = TRUE)
   type <- attr(prior, "type")
   if(type == "single") selection <- "alpha"
-  samples <-  get_objects(get_design(prior), prior = prior, type = type, sample_prior = T,
-                          selection = selection, N = N, ...)
+  samples <-   do.call(get_objects, c(list(design = get_design(prior), type = type, sample_prior = T,
+                                           selection = selection, prior = prior, N = N), fix_dots(dots, get_objects, consider_dots = FALSE)))
   samples <-  do.call(get_pars, c(list(samples, selection = selection,
                                        type = type, covariates = covariates), fix_dots(dots, get_pars)))
   if(selection == "alpha") samples <- samples[,1,]
@@ -527,7 +527,7 @@ credint.emc.prior <- function(x, selection="mu", probs = c(0.025, .5, .975),
   type <- attr(prior, "type")
   if(type == "single") selection <- "alpha"
   samples <-  do.call(get_objects, c(list(design = get_design(prior), type = type, sample_prior = T,
-                          selection = selection, prior = prior, N = N), fix_dots(dots, get_objects)))
+                          selection = selection, prior = prior, N = N), fix_dots(dots, get_objects, consider_dots = FALSE)))
   out <- do.call(get_summary_stat, c(list(samples, selection, get_posterior_quantiles,
                           probs = probs, digits = digits, type = type), fix_dots(dots, get_summary_stat)))
   return(out)
@@ -584,6 +584,17 @@ get_design.emc.prior <- function(x)
   }
   return(design)
 }
+
+#' @rdname get_group_design
+#' @export
+get_group_design.emc.prior <- function(x)
+{
+  design <- attr(x, "group_design")
+  if(!is.null(design))  class(design) <- "emc.group_design"
+  return(design)
+}
+
+
 
 #' @rdname plot_design
 #' @export

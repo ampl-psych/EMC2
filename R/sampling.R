@@ -784,3 +784,26 @@ run_hyper <- function(type = "standard", data, prior = NULL, iter = 1000, n_chai
   emc <- subset(emc, filter = 1)
   return(emc)
 }
+
+check_CR <- function(emc, p_vector, range = .2, N = 500){
+  covs <- diag(length(p_vector)) * range
+  props <- mvtnorm::rmvnorm(N, mean = p_vector, sigma = covs)
+  model <- emc[[1]]$model
+  if(is.null(model()$c_name)) stop("C not implemented yet for this model")
+  dat <- emc[[1]]$data[[1]]
+  modelRlist <- model()
+  modelRlist$c_name <- NULL
+  modelR <- function()return(modelRlist)
+  t1 <- system.time(
+    R <- calc_ll_manager(props, dat, modelR)
+  )
+  t2 <- system.time(
+    C <- calc_ll_manager(props, dat, model)
+  )
+  print(paste0("C ", t1$elapsed/t2$elapsed, " times faster"))
+  if(!identical(C, R)){
+    warning("C and R results differ")
+  }
+  return(list(C = C, R = R))
+}
+
