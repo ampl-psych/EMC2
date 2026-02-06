@@ -308,7 +308,7 @@ trend_mult <- make_trend(
   kernels = c("exp_incr", "delta"),
   phase = "pretransform",
   #  at = "lR",
-  ffill_na = FALSE
+  # ffill_na = FALSE
 )
 
 design_mult <- design(
