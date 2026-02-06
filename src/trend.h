@@ -212,7 +212,7 @@ NumericMatrix run_kernel_rcpp(NumericMatrix kernel_pars,
 
   // for convenience, define some regular expressions for matching input kernel
   // against specific classes of kernels
-  static const std::string kern_c = kernel.get_cstring();
+  const std::string kern_c = kernel.get_cstring();
   static const std::regex delta_kerns_re("^delta(2lr|2kernel)?$");
   static const std::regex beta_binom_kerns_re("^beta_binom(_map)?(_surprise)?$");
   static const std::regex dbm_kerns_re("^dbm(_map)?(_surprise)?$");
