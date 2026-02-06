@@ -573,11 +573,8 @@ design_model <- function(data,design,model=NULL,
     attr(dadm,"designs") <- out
     attr(dadm,"s_expand") <- da$subjects
     # attr(dadm,"expand_all") <- 1:nrow(dadm)
-    if(is.null(dadm$lR)){
-      attr(dadm,"expand") <- 1:nrow(dadm)
-    } else{
-      attr(dadm,"expand") <- 1:(nrow(dadm)/length(unique(dadm$lR)))
-    }
+    tmp <- dadm[!duplicated(dadm$trials),]
+    attr(dadm,"expand") <- 1:nrow(tmp)
   }
 
   p_names <-  unlist(lapply(out,function(x){dimnames(x)[[2]]}),use.names=FALSE)
