@@ -40,6 +40,11 @@ struct TrendOpSpec {
   InputKind input_kind = InputKind::None;
   Rcpp::NumericVector kernel_input;
 
+  // Covariate maps?
+  bool has_covariate_maps = false;
+  // One column per covariate_map, already restricted to the relevant covariate
+  std::vector<Rcpp::NumericVector> covariate_map_cols;
+
   TrendOpSpec(const Rcpp::List& cur, const std::string& name_from_list);
 
   void make_first_level(const Rcpp::DataFrame& data);
@@ -170,7 +175,8 @@ inline std::vector<std::string> par_input_names_from_spec(const Rcpp::List& tr) 
 struct TrendOpRuntime {
   const TrendOpSpec* spec;              // non-owning pointer into TrendPlan
   std::unique_ptr<BaseKernel> kernel_ptr;
-  int base_par_idx = -1;                // column in ParamTable::base, or -1 if none
+  int base_par_idx = -1;                // First base par
+  std::vector<int> base_par_indices;    // columns in ParamTable::base (all base pars, needed for cov maps)
   std::vector<int> kernel_par_indices;  // columns in ParamTable::base
 
   TrendOpRuntime(const TrendOpSpec* s)

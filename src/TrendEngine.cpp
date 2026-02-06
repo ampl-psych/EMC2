@@ -83,6 +83,67 @@ static void init_covariate(TrendOpSpec& op, const Rcpp::DataFrame& data) {
 //   op.kernel_input = Rcpp::NumericVector(); // leave empty; we’ll get column at runtime
 // }
 
+static void init_covariate_maps_for_op(TrendOpSpec& op,
+                                       const Rcpp::DataFrame& data) {
+  using namespace Rcpp;
+  using std::string;
+
+  if (!op.spec.containsElementNamed("covariate_maps") ||
+      Rf_isNull(op.spec["covariate_maps"])) {
+    op.has_covariate_maps = false;
+    op.covariate_map_cols.clear();
+    return;
+  }
+
+  if (op.input_kind != InputKind::Covariate) {
+    stop("TrendOpSpec for target '%s' has 'covariate_maps' but is not covariate-based",
+         op.target_param.c_str());
+  }
+
+  SEXP cov_spec = op.spec["covariate"];
+  if (!(Rf_isString(cov_spec) && Rf_length(cov_spec) == 1)) {
+    stop("TrendOpSpec for target '%s': 'covariate' must be a single name when using covariate_maps",
+         op.target_param.c_str());
+  }
+  string cov_name = as<string>(cov_spec);
+
+  List maps(op.spec["covariate_maps"]);
+  const int M = maps.size();
+  if (M == 0) {
+    op.has_covariate_maps = false;
+    op.covariate_map_cols.clear();
+    return;
+  }
+
+  const int T = data.nrows();
+  op.covariate_map_cols.resize(M);
+
+  for (int m = 0; m < M; ++m) {
+    NumericMatrix mat(maps[m]);  // shallow wrapper around that element
+    if (mat.nrow() != T) {
+      stop("TrendOpSpec '%s': covariate_maps[[%d]] has %d rows, expected %d",
+           op.target_param.c_str(), m + 1, mat.nrow(), T);
+    }
+
+    CharacterVector cn = colnames(mat);
+    int col_idx = -1;
+    for (int j = 0; j < cn.size(); ++j) {
+      if (as<string>(cn[j]) == cov_name) {
+        col_idx = j;
+        break;
+      }
+    }
+    if (col_idx < 0) {
+      stop("TrendOpSpec '%s': covariate_maps[[%d]] has no column '%s'",
+           op.target_param.c_str(), m + 1, cov_name.c_str());
+    }
+
+    // Store a column view for this map
+    op.covariate_map_cols[m] = mat(_, col_idx);
+  }
+
+  op.has_covariate_maps = true;
+}
 
 // --- TrendOpSpec ---
 
@@ -307,6 +368,7 @@ TrendPlan::TrendPlan(Rcpp::Nullable<Rcpp::List> trend_,
         premap_ops.emplace_back(spec_list, name_i);
         if (use_cov_input) {
           init_covariate(premap_ops.back(), data);
+          init_covariate_maps_for_op(premap_ops.back(), data);
           premap_ops.back().input_kind = InputKind::Covariate;
         } else if (use_par_input) {
           // par_input: record name
@@ -326,6 +388,7 @@ TrendPlan::TrendPlan(Rcpp::Nullable<Rcpp::List> trend_,
         pretransform_ops.emplace_back(spec_list, name_i);
         if (use_cov_input) {
           init_covariate(pretransform_ops.back(), data);
+          init_covariate_maps_for_op(pretransform_ops.back(), data);
           pretransform_ops.back().input_kind = InputKind::Covariate;
         } else if (use_par_input) {
           // par_input: record name
@@ -345,6 +408,7 @@ TrendPlan::TrendPlan(Rcpp::Nullable<Rcpp::List> trend_,
         posttransform_ops.emplace_back(spec_list, name_i);
         if (use_cov_input) {
           init_covariate(posttransform_ops.back(), data);
+          init_covariate_maps_for_op(posttransform_ops.back(), data);
           posttransform_ops.back().input_kind = InputKind::Covariate;
         } else if (use_par_input) {
           // par_input: record name
@@ -435,23 +499,42 @@ inline void bind_trend_op_to_paramtable(TrendOpRuntime& op,
 
   const int n_tp = spec.trend_pnames.size();
   op.base_par_idx = -1;
+  op.base_par_indices.clear();
   op.kernel_par_indices.clear();
 
   int kernel_start = 0;
 
-  if (spec.base_type == "lin" || spec.base_type == "exp_lin") {
-    if (n_tp < 1) {
-      Rcpp::stop("TrendOp '%s': base = '%s' but trend_pnames is empty",
-                 spec.target_param.c_str(), spec.base_type.c_str());
+  bool needs_base_par =
+    (spec.base_type == "lin" || spec.base_type == "exp_lin" ||
+    spec.base_type == "lin_exp" || spec.base_type == "centered");
+
+  if (needs_base_par) {
+    int n_base_pars = 0;
+    if (spec.has_covariate_maps) {
+      n_base_pars = static_cast<int>(spec.covariate_map_cols.size());  // one per map
+    } else {
+      n_base_pars = 1;
     }
-    std::string base_nm = Rcpp::as<std::string>(spec.trend_pnames[0]);
-    op.base_par_idx = pt.base_index_for(base_nm);
-    kernel_start = 1;
+
+    if (n_tp < n_base_pars) {
+      Rcpp::stop("TrendOp '%s': base_type '%s' expects at least %d trend_pnames (got %d)",
+                 spec.target_param.c_str(), spec.base_type.c_str(), n_base_pars, n_tp);
+    }
+
+    // First n_base_pars trend_pnames are base parameters
+    for (int b = 0; b < n_base_pars; ++b) {
+      std::string base_nm = Rcpp::as<std::string>(spec.trend_pnames[b]);
+      int idx = pt.base_index_for(base_nm);
+      op.base_par_indices.push_back(idx);
+    }
+    op.base_par_idx = op.base_par_indices[0];
+    kernel_start = n_base_pars;
   }
 
+  // Remaining trend_pnames are kernel parameters
   for (int k = kernel_start; k < n_tp; ++k) {
     std::string kn = Rcpp::as<std::string>(spec.trend_pnames[k]);
-    int idx   = pt.base_index_for(kn);
+    int idx = pt.base_index_for(kn);
     op.kernel_par_indices.push_back(idx);
   }
   // Rprintf("Binding...");
@@ -593,17 +676,17 @@ void TrendRuntime::apply_base_for_op(TrendOpRuntime& op,
   double* target_col = &pt.base(0, target_idx);
 
   // Base/trend parameter if needed
-  const double* trend_col = nullptr;
+  // const double* trend_col = nullptr;
   bool needs_trend_par =
     (base == "lin" || base == "exp_lin" || base == "lin_exp" || base == "centered");
 
-  if (needs_trend_par) {
+  const double* single_trend_col = nullptr;
+  if (needs_trend_par && !spec.has_covariate_maps) {
     if (op.base_par_idx < 0) {
-      stop("TrendOp '%s': base_type = '%s' but base_par_idx < 0 "
-             "(did you bind_all_ops_to_paramtable() and set trend_pnames?)",
-             spec.target_param.c_str(), base.c_str());
+      stop("TrendOp '%s': base_type = '%s' but base_par_idx < 0",
+           spec.target_param.c_str(), base.c_str());
     }
-    trend_col = &pt.base(0, op.base_par_idx);
+    single_trend_col = &pt.base(0, op.base_par_idx);
   }
 
   for (int r = 0; r < n; ++r) {
@@ -617,14 +700,31 @@ void TrendRuntime::apply_base_for_op(TrendOpRuntime& op,
       q = 0.0;
     }
 
-    double contrib = q;
+    double contrib = 0.0;
 
-    if (base == "lin" || base == "exp_lin" || base == "lin_exp") {
-      double tp = trend_col ? trend_col[r] : 1.0;
-      contrib *= tp;
-    } else if (base == "centered") {
-      double tp = trend_col ? trend_col[r] : 1.0;
-      contrib = (contrib - 0.5) * tp;
+    if (spec.has_covariate_maps) {
+      const int K = static_cast<int>(spec.covariate_map_cols.size());
+      if (K != (int)op.base_par_indices.size()) {
+        stop("TrendOp '%s': mismatch between covariate_maps (%d) and base_pars (%d)",
+             spec.target_param.c_str(), K, (int)op.base_par_indices.size());
+      }
+
+      for (int k = 0; k < K; ++k) {
+        double base_val = pt.base(r, op.base_par_indices[k]);
+        double map_val  = spec.covariate_map_cols[k][r];
+        contrib += q * base_val * map_val;
+      }
+    } else {
+      // Single base parameter behaviour
+      double tmp = q;
+      if (base == "lin" || base == "exp_lin" || base == "lin_exp") {
+        double tp = single_trend_col ? single_trend_col[r] : 1.0;
+        tmp *= tp;
+      } else if (base == "centered") {
+        double tp = single_trend_col ? single_trend_col[r] : 1.0;
+        tmp = (tmp - 0.5) * tp;
+      }
+      contrib = tmp;
     }
 
     double base_term;
