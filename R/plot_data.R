@@ -209,6 +209,7 @@ prep_data_plot <- function(input, post_predict, prior_predict, to_plot, limits,
   return(list(datasets = datasets, sources = sources, xlim = xlim))
 }
 
+
 #' Plot Statistics on Data
 #'
 #' Plots panels that contain a set of densities for each level of the specified `factor`

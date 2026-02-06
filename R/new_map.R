@@ -158,9 +158,9 @@ do_map <- function(draws, map, by_subject, design,
     }
 
     out <- mapper_wrapper(map = map, by_subject, cur_draws, cur_des, n_trials = n_trials,
-                        data = data[[i]], functions = functions,
-                        add_recalculated = add_recalculated,
-                        group_design = group_design, ...)
+                          data = data[[i]], functions = functions,
+                          add_recalculated = add_recalculated,
+                          group_design = group_design, ...)
 
     if(joint){
       rownames(out) <- paste0(prefix, "|", rownames(out))
@@ -173,8 +173,8 @@ do_map <- function(draws, map, by_subject, design,
 
 # To fix, apply add_recalculated
 mapper_wrapper <- function(map, by_subject = FALSE, par_mcmc, design, n_trials = NULL, data = NULL,
-                             functions = NULL, add_recalculated = FALSE,
-                             group_design = NULL, ...){
+                           functions = NULL, add_recalculated = FALSE,
+                           group_design = NULL, ...){
   res <- par_data_map(par_mcmc, design, n_trials = n_trials,
                       data = data, functions = functions,
                       add_recalculated = add_recalculated,
@@ -409,5 +409,4 @@ map_selecter <- function(map, selection){
   }
   return(selection)
 }
-
 
