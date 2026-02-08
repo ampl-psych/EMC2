@@ -407,27 +407,62 @@ test_that("trend_ffillnatrue_delta", {
 })
 
 
-
-##
-# When working with lM it is useful to design  an "average and difference"
-# contrast matrix, which for binary responses has a simple canonical from:
-ADmat <- matrix(c(-1/2,1/2),ncol=1,dimnames=list(NULL,"d"))
-# We also define a match function for lM
-matchfun=function(d)d$S==d$lR
-trend <- make_trend(par_names = "m", cov_names = list(c("covariate1")),
-                    kernels = "delta", ffill_na=TRUE)
+# covariate maps
+trend <- make_trend(par_names = "m", cov_names = list(c("covariate1", "covariate2")),
+                    kernels = "delta", ffill_na=TRUE,
+                    maps=list('map1'=function(dadm, covs) {
+                      d <- matrix(rnorm(nrow(dadm)*2), ncol=2)
+                      colnames(d) <- covs
+                      d
+                    },
+                    'map2'=function(dadm, covs) {
+                      d <- matrix(rnorm(nrow(dadm)*2), ncol=2)
+                      colnames(d) <- covs
+                      d
+                    }))
 design_base <- design(factors = list(subjects = 1, S = 1:2),
                       Rlevels = 1:2,
-                      covariates = c('covariate1'),
+                      covariates = c('covariate1', 'covariate2'),
                       matchfun = matchfun,
                       trend = trend,
                       formula = list(m ~ lM, s ~ 1, t0 ~ 1),
+                      contrasts = list(lM = ADmat),
                       model = LNR)
-##mapped_pars(design_base)
-p_vector <- sampled_pars(design_base, doMap = FALSE)
+covariate1 <- rnorm(n_trials*2)
+covariate2 <- rnorm(n_trials*2)
 
-p_vector[1:7] <- c(-1, 1.5, log(1), log(.2), 1, .5, qnorm(.2))
+p_vector <- sampled_pars(design_base, doMap = FALSE)
+p_vector[1:6] <- c(-1, 1.5, log(1), log(.2), log(.2), log(.2))
+
+dat <- make_data(p_vector, design_base, n_trials = n_trials, covariates = data.frame(covariate1 = covariate1, covariate2 = covariate2))
+
+LNR_covmap <- make_emc(dat, design_base, compress = FALSE, n_chains = 1, type = "single")
+
+test_that("trend_covmap", {
+  expect_snapshot(init_chains(LNR_covmap, particles = 3, cores_per_chain = 1)[[1]]$samples)
+})
 #
+#
+# ##
+# # When working with lM it is useful to design  an "average and difference"
+# # contrast matrix, which for binary responses has a simple canonical from:
+# ADmat <- matrix(c(-1/2,1/2),ncol=1,dimnames=list(NULL,"d"))
+# # We also define a match function for lM
+# matchfun=function(d)d$S==d$lR
+# trend <- make_trend(par_names = "m", cov_names = list(c("covariate1")),
+#                     kernels = "delta", ffill_na=TRUE)
+# design_base <- design(factors = list(subjects = 1, S = 1:2),
+#                       Rlevels = 1:2,
+#                       covariates = c('covariate1'),
+#                       matchfun = matchfun,
+#                       trend = trend,
+#                       formula = list(m ~ lM, s ~ 1, t0 ~ 1),
+#                       model = LNR)
+# ##mapped_pars(design_base)
+# p_vector <- sampled_pars(design_base, doMap = FALSE)
+#
+# p_vector[1:7] <- c(-1, 1.5, log(1), log(.2), 1, .5, qnorm(.2))
+# #
 # covariate1 <- c(NA, 1, NA, NA, 1, NA, NA, NA, NA, NA)#, 1, NA, 1, 1, NA, rep(NA, 10))
 #
 # #debug(EMC2:::run_kernel)

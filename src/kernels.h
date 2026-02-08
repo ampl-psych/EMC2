@@ -3,6 +3,7 @@
 #include <array>
 #include <vector>     //
 #include <Rcpp.h>    //
+// #include "EMC2/userfun.hpp"
 
 // View
 struct KernelParsView {
@@ -25,6 +26,7 @@ enum class KernelType {
   Poly2,
   Poly3,
   Poly4
+  // Custom
 };
 
 // ---- Base + hierarchy ----
@@ -65,6 +67,36 @@ protected:
   void mark_run_complete() { has_run_ = true; }
 };
 
+// struct CustomKernel {
+// protected:
+//   std::vector<double> out_;
+//   bool has_run_ = false;
+//
+// private:
+//   Rcpp::XPtr<userfun_t> fun_;
+//
+// public:
+//   CustomKernel(SEXP funptrSEXP)
+//     : fun_(funptrSEXP) {
+//     if (fun_.get() == nullptr) {
+//       Rcpp::stop("CustomKernel: null function pointer.");
+//     }
+//     if (!(*fun_)) {
+//       Rcpp::stop("CustomKernel: invalid function pointer.");
+//     }
+//   }
+//
+//   void run(const KernelParsView& kernel_pars,
+//            const Rcpp::NumericVector& covariate,
+//            const KernelParsView& par_input) {
+//
+//              // Call user function
+//              userfun_t f = *fun_;
+//              out_ = f(kernel_pars, covariate);
+//
+//              mark_run_complete();
+//            }
+// };
 
 // For sequential kernels: currently same as BaseKernel -- just included to allow for other types (e.g. Bayesian ideal observer, autoregressive) in the future
 struct SequentialKernel : BaseKernel {

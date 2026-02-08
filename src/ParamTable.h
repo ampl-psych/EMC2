@@ -546,13 +546,27 @@ struct ParamTable {
 };
 
 
-// Helper: all parameter names in pt that are NOT in premap_trend_params
-std::unordered_set<std::string>
-  make_non_premap_param_set(const ParamTable& pt,
-                            const std::unordered_set<std::string>& premap_trend_params);
+// // Helper: all parameter names in pt that are NOT in premap_trend_params
+// std::unordered_set<std::string>
+//   make_non_premap_param_set(const ParamTable& pt,
+//                             const std::unordered_set<std::string>& premap_trend_params);
+//
+// // Helper: all parameter names in pt that are NOT in premap_trend_params OR in pretransform_trend_params
+// std::unordered_set<std::string>
+//   remaining_nontrend_params(const ParamTable& pt,
+//                             const std::unordered_set<std::string>& premap_trend_params,
+//                             const std::unordered_set<std::string>& pretransform_trend_params);
+// All parameter names in pt that are NOT in any of the exclude sets.
+//
+// Usage examples:
+//   auto all_but_premap       = param_names_excluding(pt, { &premap_set });
+//   auto all_but_premap_pretr = param_names_excluding(pt, { &premap_set, &pretransform_set });
+//
+std::unordered_set<std::string> param_names_excluding(const ParamTable& pt,
+                                                      std::initializer_list<const std::unordered_set<std::string>*> excludes);
 
-// Helper: all parameter names in pt that are NOT in premap_trend_params OR in pretransform_trend_params
-std::unordered_set<std::string>
-  make_non_premap_pretransform_param_set(const ParamTable& pt,
-                                         const std::unordered_set<std::string>& premap_trend_params,
-                                         const std::unordered_set<std::string>& pretransform_trend_params);
+Rcpp::CharacterVector names_excluding(const Rcpp::CharacterVector& names,
+                                      std::initializer_list<const std::unordered_set<std::string>*> excludes);
+
+Rcpp::NumericMatrix add_constants_columns(Rcpp::NumericMatrix p_matrix,
+                                          Rcpp::NumericVector constants);

@@ -573,3 +573,33 @@
       [39,] -2.04640132 1 0.2 -0.039906714  -0.25649461
       [40,] -0.54640132 1 0.2 -0.039906714  -0.25649461
 
+# trend_covmap
+
+    Code
+      init_chains(LNR_covmap, particles = 3, cores_per_chain = 1)[[1]]$samples
+    Output
+      $alpha
+      , , 1
+      
+                        1
+      m         1.2619356
+      m_lMd     1.7117377
+      s         0.4409636
+      t0       -2.1724057
+      m.w_map1 -2.0513659
+      m.w_map2 -1.0460332
+      m.q0      0.7011591
+      m.alpha   0.8878738
+      
+      
+      $stage
+      [1] "init"
+      
+      $subj_ll
+             [,1]
+      1 -60.00768
+      
+      $idx
+      [1] 1
+      
+

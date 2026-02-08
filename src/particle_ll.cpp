@@ -141,117 +141,115 @@ NumericMatrix get_pars_matrix(NumericVector p_vector, NumericVector constants, c
 }
 
 
-NumericMatrix get_pars_matrix_new(NumericVector p_vector,
-                                  NumericVector constants,
-                                  const std::vector<PreTransformSpec>& p_specs,
-                                  const Rcpp::CharacterVector& p_types,
-                                  const Rcpp::List& designs,
-                                  int n_trials,
-                                  ParamTable& pt,
-                                  TrendRuntime* tr,
-                                  const std::vector<TransformSpec>& full_specs,
-                                  const Rcpp::CharacterVector& keep_names,
-                                  bool return_covariate_matrix=false,
-                                  bool return_all_pars=false) {
+NumericMatrix get_pars_matrix_oo(NumericVector p_vector,
+                                 const Rcpp::List& designs,
+                                 ParamTable& param_table,
+                                 TrendRuntime* trend_runtime,
+                                 const std::vector<TransformSpec>& full_specs,
+                                 const Rcpp::CharacterVector& keep_names,
+                                 bool return_covariate_matrix=false,
+                                 bool return_all_pars=false) {
   // Reset kernels if needed
-  if (tr) {
-    tr->reset_all_kernels();
+  if (trend_runtime) {
+    trend_runtime->reset_all_kernels();
   }
 
   // 1) Pre-transform + constants
-  NumericVector p_vector_updtd(clone(p_vector));
-  p_vector_updtd = c_do_pre_transform(p_vector_updtd, p_specs);
-  p_vector_updtd = c_add_vectors(p_vector_updtd, constants);
+  // NumericVector p_vector_updtd(clone(p_vector));
+  // p_vector_updtd = c_do_pre_transform(p_vector_updtd, p_specs);
+  // p_vector_updtd = c_add_vectors(p_vector_updtd, constants);
 
-  SEXP nm = p_vector_updtd.attr("names");
-  if (Rf_isNull(nm)) {
-    if (p_types.size() != p_vector_updtd.size()) {
-      stop("get_pars_matrix: p_types length (%d) != p_vector length (%d) and p_vector has no names",
-           p_types.size(), p_vector_updtd.size());
-    }
-    p_vector_updtd.attr("names") = p_types;
-  }
+  // SEXP nm = p_vector_updtd.attr("names");
+  // if (Rf_isNull(nm)) {
+  //   if (p_types.size() != p_vector_updtd.size()) {
+  //     stop("get_pars_matrix: p_types length (%d) != p_vector length (%d) and p_vector has no names",
+  //          p_types.size(), p_vector_updtd.size());
+  //   }
+  //   p_vector_updtd.attr("names") = p_types;
+  // }
 
   // 2) Re-use ParamTable layout, just refill values
-  pt.reset_base_to_zero();
-  pt.fill_from_p_vector(p_vector_updtd);
+  param_table.reset_base_to_zero();
+  param_table.fill_from_p_vector(p_vector);
 
-  // 3) Build transform specs for this pt
-  // auto full_specs = make_transform_specs_for_paramtable(pt, transform);
-
-  // 4) Mask for premap trend design entries
-  Rcpp::LogicalVector include_params;
-  if (tr && tr->has_premap()) {
-    include_params = tr->premap_design_mask(designs);
-  } else {
-    include_params = Rcpp::LogicalVector(designs.size(), false);
-  }
-
-  // 5) Premap trends
-  if (tr && tr->has_premap()) {
-    pt.map_from_designs(designs, include_params);
-
-    auto premap_specs = filter_specs_by_param_set(pt, full_specs, tr->premap_trend_params());
-    c_do_transform_pt(pt, premap_specs);
-
-    std::size_t n_ops = tr->premap_ops.size();
-    for (std::size_t i = 0; i < n_ops; ++i) {
-      TrendOpRuntime& op = tr->premap_ops[i];
-      tr->apply_base_for_op(op, pt);
-    }
-  }
-
-  // 6) Map designs for non-trend parameters (always)
+  //keep track of which parameters should be mapped & transformed next
   const int n_designs = designs.size();
-  Rcpp::LogicalVector include_nontrend(n_designs);
-  for (int i = 0; i < n_designs; ++i) {
-    include_nontrend[i] = !include_params[i];
-  }
-  pt.map_from_designs(designs, include_nontrend);
+  LogicalVector map_next(n_designs, false); // which designs we map in the *next* mapping step
+  std::unordered_set<std::string> transform_next; // which params we transform in the *next* transform step
 
-  // 7) Pretransform trends. Transform the trend parameters first
-  if (tr && tr->has_pretransform()) {
-    auto pretransform_specs = filter_specs_by_param_set(pt, full_specs, tr->pretransform_trend_params());
-    c_do_transform_pt(pt, pretransform_specs);
+  // Trend parameter sets (may be empty if no TrendRuntime)
+  std::unordered_set<std::string> empty_set;
+  const auto& premap_set       = (trend_runtime ? trend_runtime->premap_trend_params()       : empty_set);
+  const auto& pretransform_set = (trend_runtime ? trend_runtime->pretransform_trend_params() : empty_set);
 
-    std::size_t n_ops = tr->pretransform_ops.size();
+  // 3) Premap trends: MAP premap trend parameters, TRANSFORM them, RUN kernels+bases
+  if (trend_runtime && trend_runtime->has_premap()) {
+    // MAP: only designs whose outputs are premap trend parameters
+    map_next = trend_runtime->premap_design_mask(designs);
+    param_table.map_from_designs(designs, map_next);
+
+    // TRANSFORM: only premap trend parameters
+    transform_next = premap_set;
+    if (!transform_next.empty()) {
+      auto specs_premap = filter_specs_by_param_set(param_table, full_specs, transform_next);
+      c_do_transform_pt(param_table, specs_premap);
+    }
+
+    // RUN: apply all premap trend operations
+    std::size_t n_ops = trend_runtime->premap_ops.size();
     for (std::size_t i = 0; i < n_ops; ++i) {
-      TrendOpRuntime& op = tr->pretransform_ops[i];
-      tr->apply_base_for_op(op, pt);
+      TrendOpRuntime& op = trend_runtime->premap_ops[i];
+      trend_runtime->apply_base_for_op(op, param_table);
     }
   }
 
-  // 8) Transforms for non-trend parameters.
-  std::unordered_set<std::string> empty_set;
-  const auto& premap_set = (tr ? tr->premap_trend_params() : empty_set);
-  const auto& pretransform_set = (tr ? tr->pretransform_trend_params() : empty_set);
+  // 4) Map designs for remaining parameters. Invert map_next
+  for (int i = 0; i < n_designs; ++i) {
+    bool is_premap = (trend_runtime && trend_runtime->has_premap()) ? map_next[i] : false;
+    map_next[i] = !is_premap;
+  }
+  param_table.map_from_designs(designs, map_next);
 
-  auto nontrend_params = make_non_premap_pretransform_param_set(pt, premap_set, pretransform_set);
-  auto postmap_specs   = filter_specs_by_param_set(pt, full_specs, nontrend_params);
-  c_do_transform_pt(pt, postmap_specs);
+  // 5) Pretransform trends: TRANSFORM pretransform trend parameters, RUN kernels+bases
+  if (trend_runtime && trend_runtime->has_pretransform()) {
+    // Transform
+    transform_next = pretransform_set;
+    if (!transform_next.empty()) {
+      auto specs_pretransform = filter_specs_by_param_set(param_table, full_specs, transform_next);
+      c_do_transform_pt(param_table, specs_pretransform);
+    }
 
-  // 9) Posttransform trends.
-  if (tr && tr->has_posttransform()) {
-    // These have been transformed above
-    // auto posttransform_specs = filter_specs_by_param_set(pt, full_specs, tr->posttransform_trend_params());
-    // c_do_transform_pt(pt, posttransform_specs);
-
-    std::size_t n_ops = tr->posttransform_ops.size();
+    // Trend
+    std::size_t n_ops = trend_runtime->pretransform_ops.size();
     for (std::size_t i = 0; i < n_ops; ++i) {
-      TrendOpRuntime& op = tr->posttransform_ops[i];
-      tr->apply_base_for_op(op, pt);
+      TrendOpRuntime& op = trend_runtime->pretransform_ops[i];
+      trend_runtime->apply_base_for_op(op, param_table);
+    }
+  }
+
+  // 6) Transforms for all parameters excluding the trend pars used so far.
+  transform_next = param_names_excluding(param_table, { &premap_set, &pretransform_set });
+  auto postmap_specs = filter_specs_by_param_set(param_table, full_specs, transform_next);
+  c_do_transform_pt(param_table, postmap_specs);
+
+  // 7) Posttransform trends.
+  if (trend_runtime && trend_runtime->has_posttransform()) {
+    std::size_t n_ops = trend_runtime->posttransform_ops.size();
+    for (std::size_t i = 0; i < n_ops; ++i) {
+      TrendOpRuntime& op = trend_runtime->posttransform_ops[i];
+      trend_runtime->apply_base_for_op(op, param_table);
     }
   }
 
   if(return_covariate_matrix) {
-    return tr->all_kernel_outputs(pt);
+    return trend_runtime->all_kernel_outputs(param_table);
   }
 
   if(return_all_pars) {
-    return pt.materialize();
+    return param_table.materialize();
   }
-  // 10) Materialize only requested parameters
-  return pt.materialize_by_param_names(keep_names);
+  // 8) Materialize only requested parameters
+  return param_table.materialize_by_param_names(keep_names);
 }
 
 double c_log_likelihood_DDM(NumericMatrix pars, DataFrame data,
@@ -331,8 +329,8 @@ double c_log_likelihood_race(NumericMatrix pars, DataFrame data,
 
 // [[Rcpp::export]]
 NumericVector calc_ll(NumericMatrix p_matrix, DataFrame data, NumericVector constants,
-            List designs, String type, List bounds, List transforms, List pretransforms,
-            CharacterVector p_types, double min_ll, Rcpp::Nullable<Rcpp::List> trend = R_NilValue, bool use_new = false){ //,
+                      List designs, String type, List bounds, List transforms, List pretransforms,
+                      CharacterVector p_types, double min_ll, Rcpp::Nullable<Rcpp::List> trend = R_NilValue){ //,
 //            bool debug_first_particle = false){
   const int n_particles = p_matrix.nrow();
   const int n_trials = data.nrow();
@@ -355,47 +353,12 @@ NumericVector calc_ll(NumericMatrix p_matrix, DataFrame data, NumericVector cons
   ParamTable pt_template = ParamTable::from_p_vector_and_designs(dummy_p, designs, data.nrow());
   std::vector<TransformSpec> full_specs_new;
 
-  // Trend objects and keep_names
-  std::unique_ptr<TrendPlan>    trend_plan;
-  std::unique_ptr<TrendRuntime> trend_runtime;
-  Rcpp::CharacterVector keep_names;
   Rcpp::List trend_list;
 
-  if (use_new) {
-    full_specs_new = make_transform_specs_for_paramtable(pt_template, transforms);
-    if (!trend.isNull()) {
-      // trend is present
-      trend_plan.reset(new TrendPlan(trend, data));
-      trend_runtime.reset(new TrendRuntime(*trend_plan));
-
-      // Bind once to the template ParamTable
-      trend_runtime->bind_all_ops_to_paramtable(pt_template);
-
-      // Only non-trend design parameters
-      Rcpp::CharacterVector dnames = designs.names();
-      std::vector<std::string> keep;
-      keep.reserve(dnames.size());
-      for (int i = 0; i < dnames.size(); ++i) {
-        std::string nm = Rcpp::as<std::string>(dnames[i]);
-        if (trend_runtime->all_trend_params().count(nm) == 0) {
-          keep.push_back(nm);
-        }
-      }
-      keep_names = Rcpp::CharacterVector(keep.size());
-      for (int i = 0; i < (int)keep.size(); ++i) {
-        keep_names[i] = keep[i];
-      }
-    } else {
-      // no trend at all: keep all design parameters
-      keep_names = designs.names();
-      // trend_runtime stays null
-    }
+  if (!trend.isNull()) {
+    trend_list = Rcpp::List(trend);   // safe: wraps the underlying SEXP
   } else {
-    if (!trend.isNull()) {
-      trend_list = Rcpp::List(trend);   // safe: wraps the underlying SEXP
-    } else {
-      trend_list = Rcpp::List::create();  // or Rcpp::List(); empty list
-    }
+    trend_list = Rcpp::List::create();  // or Rcpp::List(); empty list
   }
   if(type == "DDM"){
     IntegerVector expand = data.attr("expand");
@@ -408,14 +371,7 @@ NumericVector calc_ll(NumericMatrix p_matrix, DataFrame data, NumericVector cons
         colnames(dummy) = p_types;
         full_t_specs = make_transform_specs(dummy, transforms);
       }
-      if(use_new) {
-        TrendRuntime* tr_ptr = trend_runtime ? trend_runtime.get() : nullptr;
-
-        pars = get_pars_matrix_new(p_vector, constants, p_specs, p_types, designs, n_trials, pt_template, tr_ptr,
-                                   full_specs_new, keep_names);
-        } else {
         pars = get_pars_matrix(p_vector, constants, p_specs, p_types, designs, n_trials, data, trend_list, full_t_specs);
-      }
       // Precompute specs
       if (i == 0) {                            // first particle only, just to get colnames
         bound_specs = make_bound_specs(minmax,mm_names,pars,bounds);
@@ -435,14 +391,7 @@ NumericVector calc_ll(NumericMatrix p_matrix, DataFrame data, NumericVector cons
         colnames(dummy) = p_types;
         full_t_specs = make_transform_specs(dummy, transforms);
       }
-      if(use_new) {
-        TrendRuntime* tr_ptr = trend_runtime ? trend_runtime.get() : nullptr;
-
-        pars = get_pars_matrix_new(p_vector, constants, p_specs, p_types, designs, n_trials, pt_template, tr_ptr,
-                                   full_specs_new, keep_names);
-      } else {
         pars = get_pars_matrix(p_vector, constants, p_specs, p_types, designs, n_trials, data, trend_list, full_t_specs);
-      }
       // Precompute specs
       if (i == 0) {                            // first particle only, just to get colnames
         bound_specs = make_bound_specs(minmax,mm_names,pars,bounds);
@@ -481,18 +430,8 @@ NumericVector calc_ll(NumericMatrix p_matrix, DataFrame data, NumericVector cons
         colnames(dummy) = p_types;
         full_t_specs = make_transform_specs(dummy, transforms);
       }
-      if(use_new) {
-        TrendRuntime* tr_ptr = trend_runtime ? trend_runtime.get() : nullptr;
 
-        pars = get_pars_matrix_new(p_vector, constants, p_specs, p_types, designs, n_trials, pt_template, tr_ptr,
-                                   full_specs_new, keep_names);
-        // if (debug_first_particle && i == 0) {
-        //   Rcpp::Rcout << "pars from calc_ll (particle 0):\n";
-        //   Rcpp::Rcout << Rcpp::as<Rcpp::NumericMatrix>(pars) << "\n";
-        // }
-      } else {
-        pars = get_pars_matrix(p_vector, constants, p_specs, p_types, designs, n_trials, data, trend_list, full_t_specs);
-      }
+      pars = get_pars_matrix(p_vector, constants, p_specs, p_types, designs, n_trials, data, trend_list, full_t_specs);
       if (i == 0) {                            // first particle only, just to get colnames
         bound_specs = make_bound_specs(minmax,mm_names,pars,bounds);
       }
@@ -504,6 +443,147 @@ NumericVector calc_ll(NumericMatrix p_matrix, DataFrame data, NumericVector cons
   return(lls);
 }
 
+
+// [[Rcpp::export]]
+NumericVector calc_ll_oo(NumericMatrix p_matrix, DataFrame data, NumericVector constants,
+                      List designs, String type, List bounds, List transforms, List pretransforms,
+                      CharacterVector p_types, double min_ll, Rcpp::Nullable<Rcpp::List> trend = R_NilValue) {
+  //            bool debug_first_particle = false){
+
+  const int n_particles = p_matrix.nrow();
+  const int n_trials = data.nrow();
+  NumericMatrix pars;
+  LogicalVector is_ok(n_trials);
+
+  // output vector
+  NumericVector lls(n_particles);
+
+  // Once (outside the main loop over particles):
+  NumericMatrix minmax = bounds["minmax"];
+  CharacterVector mm_names = colnames(minmax);
+  std::vector<BoundSpec> bound_specs;
+
+  // 1. Pre-transform
+  std::vector<TransformSpec> t_specs = make_transform_specs(p_matrix, pretransforms);
+  p_matrix = c_do_transform(p_matrix, t_specs);
+
+  // 2. Add constants. Makes a copy - somewhat slow... but only once
+  // constants: NumericVector (may be a single NA meaning "no constants")
+  bool has_constants = !(constants.size() == 1 &&
+                         Rcpp::NumericVector::is_na(constants[0]));
+  if (has_constants) {
+    p_matrix = add_constants_columns(p_matrix, constants);
+  }
+
+  // 3. Start building objects needed for get_pars_matrix.
+  // 3.1 Param_table
+  NumericVector p_vector = p_matrix(0, _);   // this is a bit ugly - can we pass a NumericMatrix::row? Then we also need to pass the corresponding names
+  p_vector.attr("names") = colnames(p_matrix);
+  ParamTable param_table_template = ParamTable::from_p_vector_and_designs(p_vector, designs, n_trials);
+
+  // 3.2 Transform specs
+  std::vector<TransformSpec> transform_specs;
+  transform_specs = make_transform_specs_for_paramtable(param_table_template, transforms);
+
+  // 3.3 Trend objects and keep_names (which parameters to return)
+  std::unique_ptr<TrendPlan>    trend_plan;
+  std::unique_ptr<TrendRuntime> trend_runtime;
+  Rcpp::CharacterVector keep_names;
+
+  if (!trend.isNull()) {
+    // Build TrendPlan/TrendRuntime only if trend is provided
+    trend_plan.reset(new TrendPlan(trend, data));
+    trend_runtime.reset(new TrendRuntime(*trend_plan));
+
+    // Bind ops to the fixed ParamTable layout once
+    trend_runtime->bind_all_ops_to_paramtable(param_table_template);
+
+    // keep_names = design names minus trend params
+    Rcpp::CharacterVector dnames = designs.names();
+    const auto& trend_params = trend_runtime->all_trend_params();
+    keep_names = names_excluding(dnames, { &trend_params });
+  } else {
+    // No trend: keep all design parameters
+    keep_names = designs.names();
+    // trend_runtime stays null
+  }
+
+  TrendRuntime* tend_runtime_ptr = trend_runtime ? trend_runtime.get() : nullptr;
+
+  // Ready for looping
+  if(type == "DDM"){
+    IntegerVector expand = data.attr("expand");
+    for(int i = 0; i < n_particles; i++){
+      p_vector = p_matrix(i, _);
+      p_vector.attr("names") = colnames(p_matrix);
+      pars = get_pars_matrix_oo(p_vector, //constants, p_specs, p_types,
+                                designs, //n_trials,
+                                param_table_template, tend_runtime_ptr,
+                                transform_specs, keep_names);
+      // Precompute specs
+      if (i == 0) {                            // first particle only, just to get colnames
+        bound_specs = make_bound_specs(minmax,mm_names,pars,bounds);
+      }
+      is_ok = c_do_bound(pars, bound_specs);
+      lls[i] = c_log_likelihood_DDM(pars, data, n_trials, expand, min_ll, is_ok);
+    }
+  } else if(type == "MRI" || type == "MRI_AR1"){
+    int n_pars = p_types.length();
+    NumericVector y = extract_y(data);
+    for(int i = 0; i < n_particles; i++){
+      p_vector = p_matrix(i, _);
+      p_vector.attr("names") = colnames(p_matrix);
+      pars = get_pars_matrix_oo(p_vector, //constants, p_specs, p_types,
+                                designs, //n_trials,
+                                param_table_template, tend_runtime_ptr,
+                                transform_specs, keep_names);
+      // Precompute specs
+      if (i == 0) {                            // first particle only, just to get colnames
+        bound_specs = make_bound_specs(minmax,mm_names,pars,bounds);
+      }
+      is_ok = c_do_bound(pars, bound_specs);
+      if(type == "MRI"){
+        lls[i] = c_log_likelihood_MRI(pars, y, is_ok, n_trials, n_pars, min_ll);
+      } else{
+        lls[i] = c_log_likelihood_MRI_white(pars, y, is_ok, n_trials, n_pars, min_ll);
+      }
+    }
+  } else{
+    IntegerVector expand = data.attr("expand");
+    LogicalVector winner = data["winner"];
+    // Love me some good old ugly but fast c++ pointers
+    NumericVector (*dfun)(NumericVector, NumericMatrix, LogicalVector, double, LogicalVector);
+    NumericVector (*pfun)(NumericVector, NumericMatrix, LogicalVector, double, LogicalVector);
+    if(type == "LBA"){
+      dfun = dlba_c;
+      pfun = plba_c;
+    } else if(type == "RDM"){
+      dfun = drdm_c;
+      pfun = prdm_c;
+    } else{
+      dfun = dlnr_c;
+      pfun = plnr_c;
+    }
+    NumericVector lR = data["lR"];
+    int n_lR = unique(lR).length();
+    for (int i = 0; i < n_particles; ++i) {
+      p_vector = p_matrix(i, _);
+      p_vector.attr("names") = colnames(p_matrix);
+      pars = get_pars_matrix_oo(p_vector, //constants, p_specs, p_types,
+                                designs, //n_trials,
+                                param_table_template, tend_runtime_ptr,
+                                transform_specs, keep_names);
+
+      if (i == 0) {                            // first particle only, just to get colnames
+        bound_specs = make_bound_specs(minmax,mm_names,pars,bounds);
+      }
+      is_ok = c_do_bound(pars, bound_specs);
+      is_ok = lr_all(is_ok, n_lR);
+      lls[i] = c_log_likelihood_race(pars, data, dfun, pfun, n_trials, winner, expand, min_ll, is_ok);
+    }
+  }
+  return(lls);
+}
 
 
 // [[Rcpp::export]]
@@ -552,43 +632,49 @@ NumericMatrix get_pars_c_wrapper(NumericMatrix p_matrix, DataFrame data, Numeric
 }
 
 // [[Rcpp::export]]
-NumericMatrix get_pars_c_wrapper_new(NumericMatrix p_matrix, DataFrame data, NumericVector constants,
-                                 List designs, List bounds, List transforms, List pretransforms,
-                                 CharacterVector p_types,
-                                 Rcpp::Nullable<Rcpp::List> trend = R_NilValue,
-                                 bool return_kernel_matrix = false,
-                                 bool return_all_pars = false)
+NumericMatrix get_pars_c_wrapper_oo(NumericMatrix p_matrix,
+                                    DataFrame data,
+                                    NumericVector constants,
+                                    List designs,
+                                    List bounds,
+                                    List transforms,
+                                    List pretransforms,
+                                    Rcpp::Nullable<Rcpp::List> trend = R_NilValue,
+                                    bool return_kernel_matrix = false,
+                                    bool return_all_pars = false)
 {
   const int n_trials = data.nrow();
 
-  // take first row as in your original code
-  NumericVector p_vector(p_matrix.ncol());
-  CharacterVector p_names = colnames(p_matrix);
-  p_vector.names() = p_names;
-  p_vector = p_matrix(0, _);
+  if (Rf_isNull(colnames(p_matrix))) {
+    stop("p_matrix must have column names for pretransforms/transform specs");
+  }
 
-  NumericMatrix pars;
+  // 1. Pre-transform p_matrix - using old pipeline
+  std::vector<TransformSpec> t_specs = make_transform_specs(p_matrix, pretransforms);
+  p_matrix = c_do_transform(p_matrix, t_specs);
 
-  // Pretransform specs and transform specs (once)
-  std::vector<PreTransformSpec> p_specs;
-  std::vector<TransformSpec> full_t_specs;
+  // 2. Add constants. Makes a copy - not ideal but hopefully just a minor little bit of overhead
+  // constants: NumericVector (may be a single NA meaning "no constants")
+  bool has_constants = !(constants.size() == 1 &&
+                         Rcpp::NumericVector::is_na(constants[0]));
+  if (has_constants) {
+    p_matrix = add_constants_columns(p_matrix, constants);
+  }
 
-  p_specs = make_pretransform_specs(p_vector, pretransforms);
+  // 3. Start building objects needed for get_pars_matrix.
+  // 3.1 Param_table
+  NumericVector p_vector = p_matrix(0, _);
+  p_vector.attr("names") = colnames(p_matrix);
+  ParamTable param_table_template = ParamTable::from_p_vector_and_designs(p_vector, designs, n_trials);
 
-  NumericMatrix dummy(1, p_types.size());
-  colnames(dummy) = p_types;
-  full_t_specs = make_transform_specs(dummy, transforms);
+  // 3.2 Transform specs
+  std::vector<TransformSpec> full_specs;
+  full_specs = make_transform_specs_for_paramtable(param_table_template, transforms);
 
-  // Build template ParamTable (structure + name map)
-  NumericVector dummy_p = clone(p_vector);
-  ParamTable pt_template = ParamTable::from_p_vector_and_designs(dummy_p, designs, data.nrow());
-  std::vector<TransformSpec> full_specs_new;
-  full_specs_new = make_transform_specs_for_paramtable(pt_template, transforms);
-
-  // Trend objects and keep_names
+  // 3.3 Trend objects and return_param_names (which parameters to return)
   std::unique_ptr<TrendPlan>    trend_plan;
   std::unique_ptr<TrendRuntime> trend_runtime;
-  Rcpp::CharacterVector keep_names;
+  Rcpp::CharacterVector return_param_names;
 
   if (!trend.isNull()) {
     // Build TrendPlan/TrendRuntime only if trend is provided
@@ -596,33 +682,33 @@ NumericMatrix get_pars_c_wrapper_new(NumericMatrix p_matrix, DataFrame data, Num
     trend_runtime.reset(new TrendRuntime(*trend_plan));
 
     // Bind ops to the fixed ParamTable layout once
-    trend_runtime->bind_all_ops_to_paramtable(pt_template);
+    trend_runtime->bind_all_ops_to_paramtable(param_table_template);
 
-    // keep_names = design names minus trend params
+    // return_param_names = design names minus trend params
     Rcpp::CharacterVector dnames = designs.names();
-    std::vector<std::string> keep;
-    keep.reserve(dnames.size());
-    for (int i = 0; i < dnames.size(); ++i) {
-      std::string nm = Rcpp::as<std::string>(dnames[i]);
-      if (trend_runtime->all_trend_params().count(nm) == 0) {
-        keep.push_back(nm);
-      }
-    }
-    keep_names = Rcpp::CharacterVector(keep.size());
-    for (int i = 0; i < (int)keep.size(); ++i) {
-      keep_names[i] = keep[i];
-    }
+    const auto& trend_params = trend_runtime->all_trend_params();
+    return_param_names = names_excluding(dnames, { &trend_params });
   } else {
     // No trend: keep all design parameters
-    keep_names = designs.names();
+    Rcpp::CharacterVector dnames = designs.names();
+    if (Rf_isNull(dnames)) {
+      // Either keep nothing, or better, derive from ParamTable
+      // e.g. keep all parameters that come from designs:
+      // keep_names = param_table_template.design_param_names();
+      return_param_names = Rcpp::CharacterVector(0);  // at least STRSXP, not NULL
+    } else {
+      return_param_names = dnames;
+    }
     // trend_runtime stays null
   }
 
-  TrendRuntime* tr_ptr = trend_runtime ? trend_runtime.get() : nullptr;
+  TrendRuntime* tend_runtime_ptr = trend_runtime ? trend_runtime.get() : nullptr;
 
-  pars = get_pars_matrix_new(p_vector, constants, p_specs, p_types, designs, n_trials, pt_template, tr_ptr,
-                             full_specs_new, keep_names, return_kernel_matrix, return_all_pars);
-
+  NumericMatrix pars = get_pars_matrix_oo(p_vector, // constants, p_specs, p_types,
+                            designs,                // n_trials,
+                            param_table_template, tend_runtime_ptr,
+                            full_specs, return_param_names,
+                            return_kernel_matrix, return_all_pars);
 
   return pars;
 }

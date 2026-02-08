@@ -185,24 +185,24 @@ TrendEngine_apply_posttransform_bases <- function(param_table_ptr, trend_engine_
     invisible(.Call(`_EMC2_TrendEngine_apply_posttransform_bases`, param_table_ptr, trend_engine_ptr))
 }
 
-ParamTable_run_pipeline <- function(p_vector, designs, n_trials, trend, data, transform) {
-    .Call(`_EMC2_ParamTable_run_pipeline`, p_vector, designs, n_trials, trend, data, transform)
-}
-
 do_transform <- function(pars, transform) {
     .Call(`_EMC2_do_transform`, pars, transform)
 }
 
-calc_ll <- function(p_matrix, data, constants, designs, type, bounds, transforms, pretransforms, p_types, min_ll, trend = NULL, use_new = FALSE) {
-    .Call(`_EMC2_calc_ll`, p_matrix, data, constants, designs, type, bounds, transforms, pretransforms, p_types, min_ll, trend, use_new)
+calc_ll <- function(p_matrix, data, constants, designs, type, bounds, transforms, pretransforms, p_types, min_ll, trend = NULL) {
+    .Call(`_EMC2_calc_ll`, p_matrix, data, constants, designs, type, bounds, transforms, pretransforms, p_types, min_ll, trend)
+}
+
+calc_ll_oo <- function(p_matrix, data, constants, designs, type, bounds, transforms, pretransforms, p_types, min_ll, trend = NULL) {
+    .Call(`_EMC2_calc_ll_oo`, p_matrix, data, constants, designs, type, bounds, transforms, pretransforms, p_types, min_ll, trend)
 }
 
 get_pars_c_wrapper <- function(p_matrix, data, constants, designs, bounds, transforms, pretransforms, p_types, trend = NULL, return_kernel_matrix = FALSE, drop_trend_pars = TRUE) {
     .Call(`_EMC2_get_pars_c_wrapper`, p_matrix, data, constants, designs, bounds, transforms, pretransforms, p_types, trend, return_kernel_matrix, drop_trend_pars)
 }
 
-get_pars_c_wrapper_new <- function(p_matrix, data, constants, designs, bounds, transforms, pretransforms, p_types, trend = NULL, return_kernel_matrix = FALSE, return_all_pars = FALSE) {
-    .Call(`_EMC2_get_pars_c_wrapper_new`, p_matrix, data, constants, designs, bounds, transforms, pretransforms, p_types, trend, return_kernel_matrix, return_all_pars)
+get_pars_c_wrapper_oo <- function(p_matrix, data, constants, designs, bounds, transforms, pretransforms, trend = NULL, return_kernel_matrix = FALSE, return_all_pars = FALSE) {
+    .Call(`_EMC2_get_pars_c_wrapper_oo`, p_matrix, data, constants, designs, bounds, transforms, pretransforms, trend, return_kernel_matrix, return_all_pars)
 }
 
 EMC2_call_custom_trend <- function(trend_pars, input, funptrSEXP) {

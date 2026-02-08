@@ -297,103 +297,103 @@ void TrendEngine_apply_posttransform_bases(SEXP param_table_ptr,
 //     return out;
 //   }
 
-// [[Rcpp::export]]
-Rcpp::NumericMatrix ParamTable_run_pipeline(Rcpp::NumericVector p_vector,
-                                            Rcpp::List designs,
-                                            int n_trials,
-                                            Rcpp::List trend,
-                                            Rcpp::DataFrame data,
-                                            Rcpp::List transform)
-{
-  using namespace Rcpp;
-
-  // 1) Create ParamTable from p_vector + designs
-  ParamTable pt = ParamTable::from_p_vector_and_designs(p_vector, designs, n_trials);
-
-  // 2) Create TrendEngine
-  TrendEngine te(trend, data);
-  te.runtime.bind_all_ops_to_paramtable(pt);
-
-  // 3) Create TransformSpecs
-  auto full_specs = make_transform_specs_for_paramtable(pt, transform);
-
-  // 4) Mask for premap trend *design* entries
-  LogicalVector include_params;
-  if (te.runtime.has_premap()) {
-    include_params = te.plan.premap_design_mask(designs);
-  } else {
-    include_params = LogicalVector(designs.size(), false);
-  }
-
-  if (te.runtime.has_premap()) {
-    // 5) Map these premap-trend parameters
-    pt.map_from_designs(designs, include_params);
-
-    // 6) Filter specs to only premap trend parameters
-    auto premap_specs = filter_specs_by_param_set(pt, full_specs,
-                                                  te.plan.premap_trend_params);
-
-    // 7) Apply transforms in-place to those premap trend columns
-    c_do_transform_pt(pt, premap_specs);
-
-    // 9) Run premap kernels and apply bases (in-place on pt)
-    std::size_t n_ops = te.runtime.premap_ops.size();
-    for (std::size_t i = 0; i < n_ops; ++i) {
-      TrendOpRuntime& op = te.runtime.premap_ops[i];
-      te.runtime.apply_base_for_op(op, pt);  // will run kernel if needed and apply base in-place
-    }
-  }
-
-  // 10) Map designs for non-trend parameters (complement of include_params)
-  const int n_designs = designs.size();
-  LogicalVector include_nontrend(n_designs);
-  for (int i = 0; i < n_designs; ++i) {
-    include_nontrend[i] = !include_params[i];
-  }
-  pt.map_from_designs(designs, include_nontrend);
-
-  // 11) Apply pretransform trends
-  if (te.plan.has_pretransform()) {
-    std::size_t n_ops = te.runtime.pretransform_ops.size();
-    for (std::size_t i = 0; i < n_ops; ++i) {
-      TrendOpRuntime& op = te.runtime.pretransform_ops[i];
-      te.runtime.apply_base_for_op(op, pt);  // will run kernel if needed and apply base in-place
-    }
-  }
-
-  // 12) Apply transforms for non-trend parameters
-  auto nontrend_params = make_non_premap_param_set(pt, te.plan.premap_trend_params);
-  auto postmap_specs   = filter_specs_by_param_set(pt, full_specs, nontrend_params);
-  c_do_transform_pt(pt, postmap_specs);
-
-  // 13) Apply posttransform trends
-  if (te.plan.has_posttransform()) {
-    std::size_t n_ops = te.runtime.posttransform_ops.size();
-    for (std::size_t i = 0; i < n_ops; ++i) {
-      TrendOpRuntime& op = te.runtime.posttransform_ops[i];
-      te.runtime.apply_base_for_op(op, pt);  // will run kernel if needed and apply base in-place
-    }
-  }
-
-
-  // Only parameters from names(designs), but drop all trend_pnames
-  CharacterVector dnames = designs.names();
-  std::vector<std::string> keep;
-  keep.reserve(dnames.size());
-
-  for (int i = 0; i < dnames.size(); ++i) {
-    std::string nm = Rcpp::as<std::string>(dnames[i]);
-    if (te.plan.all_trend_params.find(nm) == te.plan.all_trend_params.end()) {
-      keep.push_back(nm);
-    }
-  }
-
-  CharacterVector keep_names(keep.size());
-  for (int i = 0; i < (int)keep.size(); ++i) {
-    keep_names[i] = keep[i];
-  }
-
-  return pt.materialize_by_param_names(keep_names);
-  // 14) Return final materialized matrix
-  // return pt.materialize();
-}
+// // [[Rcpp::export]]
+// Rcpp::NumericMatrix ParamTable_run_pipeline(Rcpp::NumericVector p_vector,
+//                                             Rcpp::List designs,
+//                                             int n_trials,
+//                                             Rcpp::List trend,
+//                                             Rcpp::DataFrame data,
+//                                             Rcpp::List transform)
+// {
+//   using namespace Rcpp;
+//
+//   // 1) Create ParamTable from p_vector + designs
+//   ParamTable pt = ParamTable::from_p_vector_and_designs(p_vector, designs, n_trials);
+//
+//   // 2) Create TrendEngine
+//   TrendEngine te(trend, data);
+//   te.runtime.bind_all_ops_to_paramtable(pt);
+//
+//   // 3) Create TransformSpecs
+//   auto full_specs = make_transform_specs_for_paramtable(pt, transform);
+//
+//   // 4) Mask for premap trend *design* entries
+//   LogicalVector include_params;
+//   if (te.runtime.has_premap()) {
+//     include_params = te.plan.premap_design_mask(designs);
+//   } else {
+//     include_params = LogicalVector(designs.size(), false);
+//   }
+//
+//   if (te.runtime.has_premap()) {
+//     // 5) Map these premap-trend parameters
+//     pt.map_from_designs(designs, include_params);
+//
+//     // 6) Filter specs to only premap trend parameters
+//     auto premap_specs = filter_specs_by_param_set(pt, full_specs,
+//                                                   te.plan.premap_trend_params);
+//
+//     // 7) Apply transforms in-place to those premap trend columns
+//     c_do_transform_pt(pt, premap_specs);
+//
+//     // 9) Run premap kernels and apply bases (in-place on pt)
+//     std::size_t n_ops = te.runtime.premap_ops.size();
+//     for (std::size_t i = 0; i < n_ops; ++i) {
+//       TrendOpRuntime& op = te.runtime.premap_ops[i];
+//       te.runtime.apply_base_for_op(op, pt);  // will run kernel if needed and apply base in-place
+//     }
+//   }
+//
+//   // 10) Map designs for non-trend parameters (complement of include_params)
+//   const int n_designs = designs.size();
+//   LogicalVector include_nontrend(n_designs);
+//   for (int i = 0; i < n_designs; ++i) {
+//     include_nontrend[i] = !include_params[i];
+//   }
+//   pt.map_from_designs(designs, include_nontrend);
+//
+//   // 11) Apply pretransform trends
+//   if (te.plan.has_pretransform()) {
+//     std::size_t n_ops = te.runtime.pretransform_ops.size();
+//     for (std::size_t i = 0; i < n_ops; ++i) {
+//       TrendOpRuntime& op = te.runtime.pretransform_ops[i];
+//       te.runtime.apply_base_for_op(op, pt);  // will run kernel if needed and apply base in-place
+//     }
+//   }
+//
+//   // 12) Apply transforms for non-trend parameters
+//   auto nontrend_params = make_non_premap_param_set(pt, te.plan.premap_trend_params);
+//   auto postmap_specs   = filter_specs_by_param_set(pt, full_specs, nontrend_params);
+//   c_do_transform_pt(pt, postmap_specs);
+//
+//   // 13) Apply posttransform trends
+//   if (te.plan.has_posttransform()) {
+//     std::size_t n_ops = te.runtime.posttransform_ops.size();
+//     for (std::size_t i = 0; i < n_ops; ++i) {
+//       TrendOpRuntime& op = te.runtime.posttransform_ops[i];
+//       te.runtime.apply_base_for_op(op, pt);  // will run kernel if needed and apply base in-place
+//     }
+//   }
+//
+//
+//   // Only parameters from names(designs), but drop all trend_pnames
+//   CharacterVector dnames = designs.names();
+//   std::vector<std::string> keep;
+//   keep.reserve(dnames.size());
+//
+//   for (int i = 0; i < dnames.size(); ++i) {
+//     std::string nm = Rcpp::as<std::string>(dnames[i]);
+//     if (te.plan.all_trend_params.find(nm) == te.plan.all_trend_params.end()) {
+//       keep.push_back(nm);
+//     }
+//   }
+//
+//   CharacterVector keep_names(keep.size());
+//   for (int i = 0; i < (int)keep.size(); ++i) {
+//     keep_names[i] = keep[i];
+//   }
+//
+//   return pt.materialize_by_param_names(keep_names);
+//   // 14) Return final materialized matrix
+//   // return pt.materialize();
+// }
