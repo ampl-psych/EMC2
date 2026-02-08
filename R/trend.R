@@ -1258,9 +1258,9 @@ make_data_unconditional <- function(data, pars, design, model, return_trialwise_
         }
         constants <- attr(dm, "constants")
         if(is.null(constants)) constants <- NA
-        if(getOption("emc2.use_new", TRUE)) {
-          pm <- get_pars_c_wrapper_new(pars[which(subj == subj_levels),,drop=FALSE], dm, constants = constants, designs = designs, #type = model_list$c_name,
-                                       model_list$bound, model_list$transform, model_list$pre_transform, p_types = p_types,
+        if(getOption("emc2.use_oo", TRUE)) {
+          pm <- get_pars_c_wrapper_oo(pars[which(subj == subj_levels),,drop=FALSE], dm, constants = constants, designs = designs, #type = model_list$c_name,
+                                       model_list$bound, model_list$transform, model_list$pre_transform,
                                        model_list$trend)
         } else {
           pm <- get_pars_c_wrapper(pars[which(subj == subj_levels),,drop=FALSE], dm, constants = constants, designs = designs, #type = model_list$c_name,
@@ -1572,9 +1572,9 @@ apply_kernel <- function(kernel_pars, emc, subject=1, input_pars=NULL, trend_n=1
     colnames(p_mat) <- names(p_vector)
 
 
-    return(EMC2:::get_pars_c_wrapper_new(p_matrix = p_mat, data = dadm, constants = constants, designs = designs,
-                                         bounds = bound, transforms = transform, pretransforms = pre_transform,
-                                         p_types = p_types, trend = trend, return_kernel_matrix = TRUE))
+    return(get_pars_c_wrapper_oo(p_mat, data = dadm, constants = constants, designs = designs,
+                                        bounds = bound, transforms = transform, pretransforms = pre_transform,
+                                        trend = trend, return_kernel_matrix = TRUE))
   }
 
   ##

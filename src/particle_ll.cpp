@@ -142,6 +142,7 @@ NumericMatrix get_pars_matrix(NumericVector p_vector, NumericVector constants, c
 
 
 NumericMatrix get_pars_matrix_oo(NumericVector p_vector,
+                                 int particle_index,
                                  const Rcpp::List& designs,
                                  ParamTable& param_table,
                                  TrendRuntime* trend_runtime,
@@ -169,8 +170,10 @@ NumericMatrix get_pars_matrix_oo(NumericVector p_vector,
   // }
 
   // 2) Re-use ParamTable layout, just refill values
-  param_table.reset_base_to_zero();
-  param_table.fill_from_p_vector(p_vector);
+  if(particle_index > 0) {
+    param_table.reset_base_to_zero();
+    param_table.fill_from_p_vector(p_vector);
+  }
 
   //keep track of which parameters should be mapped & transformed next
   const int n_designs = designs.size();
@@ -445,12 +448,12 @@ NumericVector calc_ll(NumericMatrix p_matrix, DataFrame data, NumericVector cons
 
 
 // [[Rcpp::export]]
-NumericVector calc_ll_oo(NumericMatrix p_matrix, DataFrame data, NumericVector constants,
+NumericVector calc_ll_oo(NumericMatrix particle_matrix, DataFrame data, NumericVector constants,
                       List designs, String type, List bounds, List transforms, List pretransforms,
                       CharacterVector p_types, double min_ll, Rcpp::Nullable<Rcpp::List> trend = R_NilValue) {
   //            bool debug_first_particle = false){
 
-  const int n_particles = p_matrix.nrow();
+  const int n_particles = particle_matrix.nrow();
   const int n_trials = data.nrow();
   NumericMatrix pars;
   LogicalVector is_ok(n_trials);
@@ -464,21 +467,21 @@ NumericVector calc_ll_oo(NumericMatrix p_matrix, DataFrame data, NumericVector c
   std::vector<BoundSpec> bound_specs;
 
   // 1. Pre-transform
-  std::vector<TransformSpec> t_specs = make_transform_specs(p_matrix, pretransforms);
-  p_matrix = c_do_transform(p_matrix, t_specs);
+  std::vector<TransformSpec> t_specs = make_transform_specs(particle_matrix, pretransforms);
+  particle_matrix = c_do_transform(particle_matrix, t_specs);
 
   // 2. Add constants. Makes a copy - somewhat slow... but only once
   // constants: NumericVector (may be a single NA meaning "no constants")
   bool has_constants = !(constants.size() == 1 &&
                          Rcpp::NumericVector::is_na(constants[0]));
   if (has_constants) {
-    p_matrix = add_constants_columns(p_matrix, constants);
+    particle_matrix = add_constants_columns(particle_matrix, constants);
   }
 
   // 3. Start building objects needed for get_pars_matrix.
   // 3.1 Param_table
-  NumericVector p_vector = p_matrix(0, _);   // this is a bit ugly - can we pass a NumericMatrix::row? Then we also need to pass the corresponding names
-  p_vector.attr("names") = colnames(p_matrix);
+  NumericVector p_vector = particle_matrix(0, _);   // this is a bit ugly - can we pass a NumericMatrix::row? Then we also need to pass the corresponding names
+  p_vector.attr("names") = colnames(particle_matrix);
   ParamTable param_table_template = ParamTable::from_p_vector_and_designs(p_vector, designs, n_trials);
 
   // 3.2 Transform specs
@@ -514,9 +517,10 @@ NumericVector calc_ll_oo(NumericMatrix p_matrix, DataFrame data, NumericVector c
   if(type == "DDM"){
     IntegerVector expand = data.attr("expand");
     for(int i = 0; i < n_particles; i++){
-      p_vector = p_matrix(i, _);
-      p_vector.attr("names") = colnames(p_matrix);
+      p_vector = particle_matrix(i, _);
+      p_vector.attr("names") = colnames(particle_matrix);
       pars = get_pars_matrix_oo(p_vector, //constants, p_specs, p_types,
+                                i,
                                 designs, //n_trials,
                                 param_table_template, tend_runtime_ptr,
                                 transform_specs, keep_names);
@@ -531,9 +535,10 @@ NumericVector calc_ll_oo(NumericMatrix p_matrix, DataFrame data, NumericVector c
     int n_pars = p_types.length();
     NumericVector y = extract_y(data);
     for(int i = 0; i < n_particles; i++){
-      p_vector = p_matrix(i, _);
-      p_vector.attr("names") = colnames(p_matrix);
+      p_vector = particle_matrix(i, _);
+      p_vector.attr("names") = colnames(particle_matrix);
       pars = get_pars_matrix_oo(p_vector, //constants, p_specs, p_types,
+                                i,
                                 designs, //n_trials,
                                 param_table_template, tend_runtime_ptr,
                                 transform_specs, keep_names);
@@ -567,9 +572,10 @@ NumericVector calc_ll_oo(NumericMatrix p_matrix, DataFrame data, NumericVector c
     NumericVector lR = data["lR"];
     int n_lR = unique(lR).length();
     for (int i = 0; i < n_particles; ++i) {
-      p_vector = p_matrix(i, _);
-      p_vector.attr("names") = colnames(p_matrix);
+      p_vector = particle_matrix(i, _);
+      p_vector.attr("names") = colnames(particle_matrix);
       pars = get_pars_matrix_oo(p_vector, //constants, p_specs, p_types,
+                                i,
                                 designs, //n_trials,
                                 param_table_template, tend_runtime_ptr,
                                 transform_specs, keep_names);
@@ -632,7 +638,7 @@ NumericMatrix get_pars_c_wrapper(NumericMatrix p_matrix, DataFrame data, Numeric
 }
 
 // [[Rcpp::export]]
-NumericMatrix get_pars_c_wrapper_oo(NumericMatrix p_matrix,
+NumericMatrix get_pars_c_wrapper_oo(NumericMatrix particle_matrix,
                                     DataFrame data,
                                     NumericVector constants,
                                     List designs,
@@ -645,26 +651,26 @@ NumericMatrix get_pars_c_wrapper_oo(NumericMatrix p_matrix,
 {
   const int n_trials = data.nrow();
 
-  if (Rf_isNull(colnames(p_matrix))) {
+  if (Rf_isNull(colnames(particle_matrix))) {
     stop("p_matrix must have column names for pretransforms/transform specs");
   }
 
   // 1. Pre-transform p_matrix - using old pipeline
-  std::vector<TransformSpec> t_specs = make_transform_specs(p_matrix, pretransforms);
-  p_matrix = c_do_transform(p_matrix, t_specs);
+  std::vector<TransformSpec> t_specs = make_transform_specs(particle_matrix, pretransforms);
+  particle_matrix = c_do_transform(particle_matrix, t_specs);
 
   // 2. Add constants. Makes a copy - not ideal but hopefully just a minor little bit of overhead
   // constants: NumericVector (may be a single NA meaning "no constants")
   bool has_constants = !(constants.size() == 1 &&
                          Rcpp::NumericVector::is_na(constants[0]));
   if (has_constants) {
-    p_matrix = add_constants_columns(p_matrix, constants);
+    particle_matrix = add_constants_columns(particle_matrix, constants);
   }
 
   // 3. Start building objects needed for get_pars_matrix.
   // 3.1 Param_table
-  NumericVector p_vector = p_matrix(0, _);
-  p_vector.attr("names") = colnames(p_matrix);
+  NumericVector p_vector = particle_matrix(0, _);
+  p_vector.attr("names") = colnames(particle_matrix);
   ParamTable param_table_template = ParamTable::from_p_vector_and_designs(p_vector, designs, n_trials);
 
   // 3.2 Transform specs
@@ -705,6 +711,7 @@ NumericMatrix get_pars_c_wrapper_oo(NumericMatrix p_matrix,
   TrendRuntime* tend_runtime_ptr = trend_runtime ? trend_runtime.get() : nullptr;
 
   NumericMatrix pars = get_pars_matrix_oo(p_vector, // constants, p_specs, p_types,
+                                0, // particle_index -- just one here
                             designs,                // n_trials,
                             param_table_template, tend_runtime_ptr,
                             full_specs, return_param_names,
