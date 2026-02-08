@@ -3,7 +3,7 @@ AccumulatR_model <- function(model_spec){
     c_name = "AccumulatR",
     type = "AccumulatR",
     p_types = c("q" = qnorm(0),  "w" = qnorm(1),
-                "t0" = log(0.05), "p1" = log(.5), "p2" = log(1), "p3" = log(1)),
+                "t0" = log(0), "p1" = log(.5), "p2" = log(1), "p3" = log(1)),
     transform=list(func=c(q = "pnorm", w = "pnorm", t0 = "exp",
                           p1 = "identity",p2 = "exp", p3 = "exp")),
     Ttransform = function(pars,dadm) pars,
