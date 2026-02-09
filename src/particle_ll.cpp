@@ -155,27 +155,13 @@ NumericMatrix get_pars_matrix_oo(NumericVector p_vector,
     trend_runtime->reset_all_kernels();
   }
 
-  // 1) Pre-transform + constants
-  // NumericVector p_vector_updtd(clone(p_vector));
-  // p_vector_updtd = c_do_pre_transform(p_vector_updtd, p_specs);
-  // p_vector_updtd = c_add_vectors(p_vector_updtd, constants);
-
-  // SEXP nm = p_vector_updtd.attr("names");
-  // if (Rf_isNull(nm)) {
-  //   if (p_types.size() != p_vector_updtd.size()) {
-  //     stop("get_pars_matrix: p_types length (%d) != p_vector length (%d) and p_vector has no names",
-  //          p_types.size(), p_vector_updtd.size());
-  //   }
-  //   p_vector_updtd.attr("names") = p_types;
-  // }
-
   // 2) Re-use ParamTable layout, just refill values
   if(particle_index > 0) {
     param_table.reset_base_to_zero();
     param_table.fill_from_p_vector(p_vector);
   }
 
-  //keep track of which parameters should be mapped & transformed next
+  // keep track of which parameters should be mapped & transformed next
   const int n_designs = designs.size();
   LogicalVector map_next(n_designs, false); // which designs we map in the *next* mapping step
   std::unordered_set<std::string> transform_next; // which params we transform in the *next* transform step
@@ -711,7 +697,7 @@ NumericMatrix get_pars_c_wrapper_oo(NumericMatrix particle_matrix,
   TrendRuntime* tend_runtime_ptr = trend_runtime ? trend_runtime.get() : nullptr;
 
   NumericMatrix pars = get_pars_matrix_oo(p_vector, // constants, p_specs, p_types,
-                                0, // particle_index -- just one here
+                                0,                  // particle_index -- just one here
                             designs,                // n_trials,
                             param_table_template, tend_runtime_ptr,
                             full_specs, return_param_names,
