@@ -625,18 +625,6 @@ BEGIN_RCPP
     return R_NilValue;
 END_RCPP
 }
-// TrendEngine_run_premap_kernels_debug
-Rcpp::List TrendEngine_run_premap_kernels_debug(SEXP param_table_ptr, SEXP trend_engine_ptr);
-RcppExport SEXP _EMC2_TrendEngine_run_premap_kernels_debug(SEXP param_table_ptrSEXP, SEXP trend_engine_ptrSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< SEXP >::type param_table_ptr(param_table_ptrSEXP);
-    Rcpp::traits::input_parameter< SEXP >::type trend_engine_ptr(trend_engine_ptrSEXP);
-    rcpp_result_gen = Rcpp::wrap(TrendEngine_run_premap_kernels_debug(param_table_ptr, trend_engine_ptr));
-    return rcpp_result_gen;
-END_RCPP
-}
 // TrendEngine_apply_premap_bases
 void TrendEngine_apply_premap_bases(SEXP param_table_ptr, SEXP trend_engine_ptr);
 RcppExport SEXP _EMC2_TrendEngine_apply_premap_bases(SEXP param_table_ptrSEXP, SEXP trend_engine_ptrSEXP) {
@@ -704,12 +692,12 @@ BEGIN_RCPP
 END_RCPP
 }
 // calc_ll_oo
-NumericVector calc_ll_oo(NumericMatrix p_matrix, DataFrame data, NumericVector constants, List designs, String type, List bounds, List transforms, List pretransforms, CharacterVector p_types, double min_ll, Rcpp::Nullable<Rcpp::List> trend);
-RcppExport SEXP _EMC2_calc_ll_oo(SEXP p_matrixSEXP, SEXP dataSEXP, SEXP constantsSEXP, SEXP designsSEXP, SEXP typeSEXP, SEXP boundsSEXP, SEXP transformsSEXP, SEXP pretransformsSEXP, SEXP p_typesSEXP, SEXP min_llSEXP, SEXP trendSEXP) {
+NumericVector calc_ll_oo(NumericMatrix particle_matrix, DataFrame data, NumericVector constants, List designs, String type, List bounds, List transforms, List pretransforms, CharacterVector p_types, double min_ll, Rcpp::Nullable<Rcpp::List> trend);
+RcppExport SEXP _EMC2_calc_ll_oo(SEXP particle_matrixSEXP, SEXP dataSEXP, SEXP constantsSEXP, SEXP designsSEXP, SEXP typeSEXP, SEXP boundsSEXP, SEXP transformsSEXP, SEXP pretransformsSEXP, SEXP p_typesSEXP, SEXP min_llSEXP, SEXP trendSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< NumericMatrix >::type p_matrix(p_matrixSEXP);
+    Rcpp::traits::input_parameter< NumericMatrix >::type particle_matrix(particle_matrixSEXP);
     Rcpp::traits::input_parameter< DataFrame >::type data(dataSEXP);
     Rcpp::traits::input_parameter< NumericVector >::type constants(constantsSEXP);
     Rcpp::traits::input_parameter< List >::type designs(designsSEXP);
@@ -720,7 +708,7 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< CharacterVector >::type p_types(p_typesSEXP);
     Rcpp::traits::input_parameter< double >::type min_ll(min_llSEXP);
     Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type trend(trendSEXP);
-    rcpp_result_gen = Rcpp::wrap(calc_ll_oo(p_matrix, data, constants, designs, type, bounds, transforms, pretransforms, p_types, min_ll, trend));
+    rcpp_result_gen = Rcpp::wrap(calc_ll_oo(particle_matrix, data, constants, designs, type, bounds, transforms, pretransforms, p_types, min_ll, trend));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -746,12 +734,12 @@ BEGIN_RCPP
 END_RCPP
 }
 // get_pars_c_wrapper_oo
-NumericMatrix get_pars_c_wrapper_oo(NumericMatrix p_matrix, DataFrame data, NumericVector constants, List designs, List bounds, List transforms, List pretransforms, Rcpp::Nullable<Rcpp::List> trend, bool return_kernel_matrix, bool return_all_pars);
-RcppExport SEXP _EMC2_get_pars_c_wrapper_oo(SEXP p_matrixSEXP, SEXP dataSEXP, SEXP constantsSEXP, SEXP designsSEXP, SEXP boundsSEXP, SEXP transformsSEXP, SEXP pretransformsSEXP, SEXP trendSEXP, SEXP return_kernel_matrixSEXP, SEXP return_all_parsSEXP) {
+NumericMatrix get_pars_c_wrapper_oo(NumericMatrix particle_matrix, DataFrame data, NumericVector constants, List designs, List bounds, List transforms, List pretransforms, Rcpp::Nullable<Rcpp::List> trend, bool return_kernel_matrix, bool return_all_pars);
+RcppExport SEXP _EMC2_get_pars_c_wrapper_oo(SEXP particle_matrixSEXP, SEXP dataSEXP, SEXP constantsSEXP, SEXP designsSEXP, SEXP boundsSEXP, SEXP transformsSEXP, SEXP pretransformsSEXP, SEXP trendSEXP, SEXP return_kernel_matrixSEXP, SEXP return_all_parsSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< NumericMatrix >::type p_matrix(p_matrixSEXP);
+    Rcpp::traits::input_parameter< NumericMatrix >::type particle_matrix(particle_matrixSEXP);
     Rcpp::traits::input_parameter< DataFrame >::type data(dataSEXP);
     Rcpp::traits::input_parameter< NumericVector >::type constants(constantsSEXP);
     Rcpp::traits::input_parameter< List >::type designs(designsSEXP);
@@ -761,7 +749,7 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type trend(trendSEXP);
     Rcpp::traits::input_parameter< bool >::type return_kernel_matrix(return_kernel_matrixSEXP);
     Rcpp::traits::input_parameter< bool >::type return_all_pars(return_all_parsSEXP);
-    rcpp_result_gen = Rcpp::wrap(get_pars_c_wrapper_oo(p_matrix, data, constants, designs, bounds, transforms, pretransforms, trend, return_kernel_matrix, return_all_pars));
+    rcpp_result_gen = Rcpp::wrap(get_pars_c_wrapper_oo(particle_matrix, data, constants, designs, bounds, transforms, pretransforms, trend, return_kernel_matrix, return_all_pars));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -850,7 +838,6 @@ static const R_CallMethodDef CallEntries[] = {
     {"_EMC2_ParamTable_do_transform_posttransform", (DL_FUNC) &_EMC2_ParamTable_do_transform_posttransform, 3},
     {"_EMC2_ParamTable_do_transform_postmap", (DL_FUNC) &_EMC2_ParamTable_do_transform_postmap, 3},
     {"_EMC2_ParamTable_bind_trendops", (DL_FUNC) &_EMC2_ParamTable_bind_trendops, 2},
-    {"_EMC2_TrendEngine_run_premap_kernels_debug", (DL_FUNC) &_EMC2_TrendEngine_run_premap_kernels_debug, 2},
     {"_EMC2_TrendEngine_apply_premap_bases", (DL_FUNC) &_EMC2_TrendEngine_apply_premap_bases, 2},
     {"_EMC2_TrendEngine_apply_pretransform_bases", (DL_FUNC) &_EMC2_TrendEngine_apply_pretransform_bases, 2},
     {"_EMC2_TrendEngine_apply_posttransform_bases", (DL_FUNC) &_EMC2_TrendEngine_apply_posttransform_bases, 2},

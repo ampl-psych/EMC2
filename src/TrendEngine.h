@@ -1,10 +1,9 @@
 #include <Rcpp.h>
-// #include <RcppArmadillo.h>
 #include <unordered_set>
 #include "kernels.h"
 #include "ParamTable.h"
 
-// Phase enum (reuse existing)
+// Phase enum
 enum class TrendPhase { Premap, Pretransform, Posttransform };
 
 inline TrendPhase parse_phase(const std::string& ph) {
@@ -18,35 +17,49 @@ inline TrendPhase parse_phase(const std::string& ph) {
 enum class InputKind { None, Covariate, ParInput };
 
 
+// One TrendOp = one base + one group of kernels. Groups of kernels are combined
+struct KernelSlotSpec {
+  std::string kernel;
+  KernelType  kernel_type;
+
+  InputKind   input_kind = InputKind::None;
+
+  // For InputKind::Covariate
+  Rcpp::NumericVector kernel_input;  // data column or inline numeric covariate
+
+  // For InputKind::ParInput
+  std::string par_input_name;
+
+  // Covariate maps specific to this kernel (optional; you can move this to TrendOpSpec if you prefer)
+  bool has_covariate_maps = false;
+  std::vector<Rcpp::NumericVector> covariate_map_cols;
+};
+
 // One trend operation spec, built from one element of the R 'trend' list
 struct TrendOpSpec {
-  TrendPhase phase;
-  std::string kernel;                 // e.g. "lin_incr"
-  std::string base_type;              // e.g. "lin"
-  std::string target_param;
+  TrendPhase   phase;
+  std::string  target_param;
+  std::string  base_type;
 
+  // Shared across all kernels in this op:
   bool has_at = false;
   std::string at;
   Rcpp::LogicalVector first_level;
-  std::vector<int> expand_idx;        // length = n_trials
-  std::vector<int> comp_index;        // compressed row indices
+  std::vector<int> expand_idx; // length = n_trials
+  std::vector<int> comp_index; // compressed row indices
 
+  // Union of all trend parameter names for this op
   Rcpp::CharacterVector trend_pnames;
-  Rcpp::List spec;                    // original R spec
 
-  KernelType kernel_type;
+  // Kernels belonging to this TrendOp
+  std::vector<KernelSlotSpec> kernels;
 
-  // Cached covariate (or view to par_input). Since it's now in the spec, it can be re-used across particles
-  std::string par_input_name;
-  InputKind input_kind = InputKind::None;
-  Rcpp::NumericVector kernel_input;
-
-  // Covariate maps?
+  // maps at Op level
   bool has_covariate_maps = false;
-  // One column per covariate_map, already restricted to the relevant covariate
+  // one column per map, pre-filtered to the relevant covariate
   std::vector<Rcpp::NumericVector> covariate_map_cols;
 
-  TrendOpSpec(const Rcpp::List& cur, const std::string& name_from_list);
+  TrendOpSpec() = default;
 
   void make_first_level(const Rcpp::DataFrame& data);
 };
@@ -64,8 +77,8 @@ struct TrendPlan {
   std::vector<TrendOpSpec> posttransform_ops;
 
   std::unordered_set<std::string> premap_trend_params;
-  std::unordered_set<std::string> pretransform_trend_params;   // NEW
-  std::unordered_set<std::string> posttransform_trend_params;   // NEW
+  std::unordered_set<std::string> pretransform_trend_params;
+  std::unordered_set<std::string> posttransform_trend_params;
   std::unordered_set<std::string> all_trend_params;
 
   TrendPlan(Rcpp::Nullable<Rcpp::List> trend_, const Rcpp::DataFrame& data_);
@@ -133,9 +146,8 @@ inline std::vector<std::string> covariate_names_from_spec(const Rcpp::List& tr) 
     return out;
   }
 
-  // Case 3: non‑string covariate (e.g., numeric vector supplied inline):
-  // treat as "inline covariate", not multiple columns
-  return out;  // empty => we will keep the original spec as a single TrendOp
+  Rcpp::stop("covariate_names_from_spec: type of covariate not understood. "
+              "It should be either a string or a vector of strings");
 }
 
 inline std::vector<std::string> par_input_names_from_spec(const Rcpp::List& tr) {
@@ -168,25 +180,36 @@ inline std::vector<std::string> par_input_names_from_spec(const Rcpp::List& tr) 
     return out;
   }
 
+  Rcpp::stop("par_input_names_from_spec: type of par_input not understood. "
+               "It should be either a string or a vector of strings");
+
   // Case 3: non‑string input (e.g., numeric vector supplied inline):
-  return out;  // empty => we will keep the original spec as a single TrendOp
+  // return out;  // empty => we will keep the original spec as a single TrendOp
 }
 
 
 // ---- Runtime side ----
 
-// Runtime info for a single trend op: binds spec to ParamTable and kernel
-struct TrendOpRuntime {
-  const TrendOpSpec* spec;              // non-owning pointer into TrendPlan
-  std::unique_ptr<BaseKernel> kernel_ptr;
-  int base_par_idx = -1;                // First base par
-  std::vector<int> base_par_indices;    // columns in ParamTable::base (all base pars, needed for cov maps)
-  std::vector<int> kernel_par_indices;  // columns in ParamTable::base
-
-  TrendOpRuntime(const TrendOpSpec* s)
-    : spec(s),
-      kernel_ptr(make_kernel(s->kernel_type)) {}
+struct KernelSlotRuntime {
+  const KernelSlotSpec* spec;               // non-owning
+  std::unique_ptr<BaseKernel> kernel_ptr;   // Delta, Poly*, etc.
+  std::vector<int> kernel_par_indices;      // columns in ParamTable::base
 };
+
+
+// Runtime info for a single trend op: binds spec to ParamTable and kernel
+// One TrendOp (one base + many kernels) at runtime
+struct TrendOpRuntime {
+  const TrendOpSpec* spec;  // one base + K kernels
+
+  // base parameters for this op (from spec->trend_pnames)
+  std::vector<int> base_par_indices;
+  int base_par_idx = -1;    // convenience when only one base param
+
+  std::vector<KernelSlotRuntime> kernels; // 1..K
+};
+
+
 
 struct TrendRuntime {
   const TrendPlan* plan;  // non-owning pointer
@@ -219,7 +242,7 @@ struct TrendRuntime {
   }
 
   void bind_all_ops_to_paramtable(const ParamTable& pt);
-  void run_kernel_for_op(TrendOpRuntime& op, ParamTable& pt);
+  void run_kernels_for_op(TrendOpRuntime& op, ParamTable& pt);
   void apply_base_for_op(TrendOpRuntime& op, ParamTable& pt);
   void reset_all_kernels();
 
@@ -230,3 +253,17 @@ struct TrendRuntime {
 inline void bind_trend_op_to_paramtable(TrendOpRuntime& op,
                                         const ParamTable& pt);
 
+
+// // helpers for TrendPlan construction
+bool uses_cov_input(const Rcpp::List& tr);
+
+bool uses_par_input(const Rcpp::List& tr);
+
+void init_covariate_for_slot(KernelSlotSpec& slot,
+                                    const Rcpp::List& spec,
+                                    const Rcpp::DataFrame& data);
+
+void init_covariate_maps_for_op(TrendOpSpec& op,
+                                const Rcpp::List& tr_i,
+                                const Rcpp::DataFrame& data,
+                                const Rcpp::List& data_covmaps);

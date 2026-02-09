@@ -29,6 +29,33 @@ enum class KernelType {
   // Custom
 };
 
+// Some meta-data for kernels -- mostly for the future
+struct KernelMeta {
+  int  input_arity;          // how many *inputs* the kernel expects at once
+  bool supports_grouping;    // whether a vector of names should be expanded into separate kernels
+};
+
+inline KernelMeta kernel_meta(KernelType kt) {
+  switch (kt) {
+  case KernelType::SimpleDelta:
+  case KernelType::Delta2Kernel:
+  case KernelType::Delta2LR:
+  case KernelType::LinIncr:
+  case KernelType::LinDecr:
+  case KernelType::ExpIncr:
+  case KernelType::ExpDecr:
+  case KernelType::PowIncr:
+  case KernelType::PowDecr:
+  case KernelType::Poly2:
+  case KernelType::Poly3:
+  case KernelType::Poly4:
+    return {1, true};   // all current kernels: 1D input, grouping allowed
+  }
+
+  // default future behaviour: 1D, but no grouping
+  return {1, false};
+}
+
 // ---- Base + hierarchy ----
 struct BaseKernel {
 protected:

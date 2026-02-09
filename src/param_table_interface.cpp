@@ -192,32 +192,32 @@ void ParamTable_bind_trendops(SEXP param_table_ptr, SEXP trend_engine_ptr) {
 }
 
 
-// [[Rcpp::export]]
-Rcpp::List TrendEngine_run_premap_kernels_debug(SEXP param_table_ptr,
-                                                SEXP trend_engine_ptr) {
-  ParamTable&  pt = *Rcpp::XPtr<ParamTable>(param_table_ptr);
-  TrendEngine& te = *Rcpp::XPtr<TrendEngine>(trend_engine_ptr);
-
-  const std::size_t n_ops = te.runtime.premap_ops.size();
-  Rcpp::List out(n_ops);
-  Rcpp::CharacterVector nms(n_ops);
-
-  for (std::size_t i = 0; i < n_ops; ++i) {
-    TrendOpRuntime& op = te.runtime.premap_ops[i];
-
-    // ensure kernel is run
-    te.runtime.run_kernel_for_op(op, pt);
-
-    const std::vector<double>& traj = op.kernel_ptr->get_output();
-    Rcpp::NumericVector rtraj(traj.begin(), traj.end());
-
-    out[i] = rtraj;
-    nms[i] = op.spec->target_param;
-  }
-
-  out.attr("names") = nms;
-  return out;
-}
+// // [[Rcpp::export]]
+// Rcpp::List TrendEngine_run_premap_kernels_debug(SEXP param_table_ptr,
+//                                                 SEXP trend_engine_ptr) {
+//   ParamTable&  pt = *Rcpp::XPtr<ParamTable>(param_table_ptr);
+//   TrendEngine& te = *Rcpp::XPtr<TrendEngine>(trend_engine_ptr);
+//
+//   const std::size_t n_ops = te.runtime.premap_ops.size();
+//   Rcpp::List out(n_ops);
+//   Rcpp::CharacterVector nms(n_ops);
+//
+//   for (std::size_t i = 0; i < n_ops; ++i) {
+//     TrendOpRuntime& op = te.runtime.premap_ops[i];
+//
+//     // ensure kernel is run
+//     te.runtime.run_kernels_for_op(op, pt);
+//
+//     const std::vector<double>& traj = op.kernel_ptr->get_output();
+//     Rcpp::NumericVector rtraj(traj.begin(), traj.end());
+//
+//     out[i] = rtraj;
+//     nms[i] = op.spec->target_param;
+//   }
+//
+//   out.attr("names") = nms;
+//   return out;
+// }
 
 
 // [[Rcpp::export]]

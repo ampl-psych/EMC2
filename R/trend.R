@@ -1543,6 +1543,7 @@ normalize_maps <- function(maps, par_names) {
 apply_kernel <- function(kernel_pars, emc, subject=1, input_pars=NULL, trend_n=1, mode='Rcpp') {
 
   if(mode == 'Rcpp_oo') {
+    ## this needs to be cleaned up!
     model <- emc[[1]]$model()
     p_types <- names(model$p_types)
     dadm <- emc[[1]]$data[[1]]

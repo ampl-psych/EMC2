@@ -141,24 +141,16 @@ NumericMatrix get_pars_matrix(NumericVector p_vector, NumericVector constants, c
 }
 
 
-NumericMatrix get_pars_matrix_oo(NumericVector p_vector,
-                                 int particle_index,
+NumericMatrix get_pars_matrix_oo(ParamTable& param_table,
                                  const Rcpp::List& designs,
-                                 ParamTable& param_table,
                                  TrendRuntime* trend_runtime,
                                  const std::vector<TransformSpec>& full_specs,
                                  const Rcpp::CharacterVector& keep_names,
-                                 bool return_covariate_matrix=false,
-                                 bool return_all_pars=false) {
+                                 bool return_covariate_matrix = false,
+                                 bool return_all_pars = false) {
   // Reset kernels if needed
   if (trend_runtime) {
     trend_runtime->reset_all_kernels();
-  }
-
-  // 2) Re-use ParamTable layout, just refill values
-  if(particle_index > 0) {
-    param_table.reset_base_to_zero();
-    param_table.fill_from_p_vector(p_vector);
   }
 
   // keep track of which parameters should be mapped & transformed next
@@ -479,6 +471,17 @@ NumericVector calc_ll_oo(NumericMatrix particle_matrix, DataFrame data, NumericV
   std::unique_ptr<TrendRuntime> trend_runtime;
   Rcpp::CharacterVector keep_names;
 
+  // 3.4 Look-up to quickly map particle column indices to param_table indices
+  Rcpp::CharacterVector pm_names = colnames(particle_matrix);
+  std::vector<int> pm_col_to_base_idx(pm_names.size(), -1);
+  for (int j = 0; j < pm_names.size(); ++j) {
+    std::string nm = Rcpp::as<std::string>(pm_names[j]);
+    auto it = param_table_template.name_to_base_idx.find(nm);
+    if (it != param_table_template.name_to_base_idx.end()) {
+      pm_col_to_base_idx[j] = it->second; // base column index
+    }
+  }
+
   if (!trend.isNull()) {
     // Build TrendPlan/TrendRuntime only if trend is provided
     trend_plan.reset(new TrendPlan(trend, data));
@@ -503,13 +506,17 @@ NumericVector calc_ll_oo(NumericMatrix particle_matrix, DataFrame data, NumericV
   if(type == "DDM"){
     IntegerVector expand = data.attr("expand");
     for(int i = 0; i < n_particles; i++){
-      p_vector = particle_matrix(i, _);
-      p_vector.attr("names") = colnames(particle_matrix);
-      pars = get_pars_matrix_oo(p_vector, //constants, p_specs, p_types,
-                                i,
-                                designs, //n_trials,
-                                param_table_template, tend_runtime_ptr,
-                                transform_specs, keep_names);
+      // p_vector = particle_matrix(i, _);
+      // p_vector.attr("names") = colnames(particle_matrix);
+      if(i > 0) {
+        param_table_template.fill_from_particle_row(particle_matrix, i,
+                                                    pm_col_to_base_idx);
+      }
+      pars = get_pars_matrix_oo(param_table_template,
+                                designs,
+                                tend_runtime_ptr,
+                                transform_specs,
+                                keep_names);
       // Precompute specs
       if (i == 0) {                            // first particle only, just to get colnames
         bound_specs = make_bound_specs(minmax,mm_names,pars,bounds);
@@ -521,13 +528,15 @@ NumericVector calc_ll_oo(NumericMatrix particle_matrix, DataFrame data, NumericV
     int n_pars = p_types.length();
     NumericVector y = extract_y(data);
     for(int i = 0; i < n_particles; i++){
-      p_vector = particle_matrix(i, _);
-      p_vector.attr("names") = colnames(particle_matrix);
-      pars = get_pars_matrix_oo(p_vector, //constants, p_specs, p_types,
-                                i,
-                                designs, //n_trials,
-                                param_table_template, tend_runtime_ptr,
-                                transform_specs, keep_names);
+      if(i > 0) {
+        param_table_template.fill_from_particle_row(particle_matrix, i,
+                                                    pm_col_to_base_idx);
+      }
+      pars = get_pars_matrix_oo(param_table_template,
+                                designs,
+                                tend_runtime_ptr,
+                                transform_specs,
+                                keep_names);
       // Precompute specs
       if (i == 0) {                            // first particle only, just to get colnames
         bound_specs = make_bound_specs(minmax,mm_names,pars,bounds);
@@ -558,13 +567,15 @@ NumericVector calc_ll_oo(NumericMatrix particle_matrix, DataFrame data, NumericV
     NumericVector lR = data["lR"];
     int n_lR = unique(lR).length();
     for (int i = 0; i < n_particles; ++i) {
-      p_vector = particle_matrix(i, _);
-      p_vector.attr("names") = colnames(particle_matrix);
-      pars = get_pars_matrix_oo(p_vector, //constants, p_specs, p_types,
-                                i,
-                                designs, //n_trials,
-                                param_table_template, tend_runtime_ptr,
-                                transform_specs, keep_names);
+      if(i > 0) {
+        param_table_template.fill_from_particle_row(particle_matrix, i,
+                                                    pm_col_to_base_idx);
+      }
+      pars = get_pars_matrix_oo(param_table_template,
+                                designs,
+                                tend_runtime_ptr,
+                                transform_specs,
+                                keep_names);
 
       if (i == 0) {                            // first particle only, just to get colnames
         bound_specs = make_bound_specs(minmax,mm_names,pars,bounds);
@@ -694,14 +705,14 @@ NumericMatrix get_pars_c_wrapper_oo(NumericMatrix particle_matrix,
     // trend_runtime stays null
   }
 
-  TrendRuntime* tend_runtime_ptr = trend_runtime ? trend_runtime.get() : nullptr;
+  TrendRuntime* trend_runtime_ptr = trend_runtime ? trend_runtime.get() : nullptr;
 
-  NumericMatrix pars = get_pars_matrix_oo(p_vector, // constants, p_specs, p_types,
-                                0,                  // particle_index -- just one here
-                            designs,                // n_trials,
-                            param_table_template, tend_runtime_ptr,
-                            full_specs, return_param_names,
-                            return_kernel_matrix, return_all_pars);
-
+  NumericMatrix pars = get_pars_matrix_oo(param_table_template,
+                                          designs,
+                                          trend_runtime_ptr,
+                                          full_specs,
+                                          return_param_names,
+                                          return_kernel_matrix,
+                                          return_all_pars);
   return pars;
 }

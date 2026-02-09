@@ -200,16 +200,16 @@ struct ParamTable {
       int base_idx = base_index_for(nm);  // throws if unknown
 
       // Ensure this column is active (if you care about active_cols)
-      bool is_active = false;
-      for (int a : active_cols) {
-        if (a == base_idx) {
-          is_active = true;
-          break;
-        }
-      }
-      if (!is_active) {
-        stop("ParamTable::materialize_by_param_names: parameter '%s' not active", nm.c_str());
-      }
+      // bool is_active = false;
+      // for (int a : active_cols) {
+      //   if (a == base_idx) {
+      //     is_active = true;
+      //     break;
+      //   }
+      // }
+      // if (!is_active) {
+      //   stop("ParamTable::materialize_by_param_names: parameter '%s' not active", nm.c_str());
+      // }
 
       // Copy base(:, base_idx) → out(:, j)
       double* out_col        = &out(0, j);
@@ -465,48 +465,6 @@ struct ParamTable {
     }
   }
 
-  // superspeed hopefully
-  // void map_from_designs(const Rcpp::List& designs, const Rcpp::LogicalVector& include)
-  // {
-  //   // 1) Lazily initialise the cached plan
-  //   if (design_plan.empty()) {
-  //     init_design_plan(designs);   // builds design_plan using 'designs'
-  //   }
-  //
-  //   const int n_trials = base.nrow();
-  //   const int n_params = base.ncol();
-  //   arma::mat baseA(base.begin(), n_trials, n_params, false); // armadillo-view on base
-  //
-  //   for (const DesignEntry& entry : design_plan) {
-  //     // map this design or not?
-  //     int idx = entry.design_idx;
-  //     if (idx < 0 || idx >= include.size()) continue;
-  //     if (!include[idx]) continue;
-  //
-  //     int target_idx = entry.target_base_idx;
-  //     const arma::mat& X = entry.X;
-  //     int k = X.n_cols;
-  //
-  //     arma::vec beta(k);
-  //     for (int j = 0; j < k; ++j) {
-  //       int coef_idx = entry.coef_base_idx[j];
-  //       double bj = (coef_idx >= 0) ? base(0, coef_idx) : 0.0;
-  //       beta(j) = bj;
-  //     }
-  //
-  //     arma::vec y;
-  //     // if (k == 1) {
-  //     //   y = beta(0) * X.col(0);
-  //     // } else if (k == 2) {
-  //     //   y = beta(0) * X.col(0) + beta(1) * X.col(1);
-  //     // } else {
-  //       y = X * beta;  // matrix algebra
-  //     // }
-  //
-  //     arma::vec target_col(baseA.colptr(target_idx), n_trials, /*copy_aux_mem=*/false);
-  //     target_col += y;
-  //   }
-  // }
 
   // Zero the entire base matrix
   void reset_base_to_zero() {
@@ -543,25 +501,33 @@ struct ParamTable {
       }
     }
   }
+
+  // Or pass a matrix and the row to fill. Should be faster due to the pre-defined
+  // pm_col_to_base_idx vector
+  void fill_from_particle_row(const Rcpp::NumericMatrix& particles,
+                              int row,
+                              const std::vector<int>& pm_col_to_base_idx)
+  {
+    const int ncols = particles.ncol();
+    const int n_trials = this->n_trials; // from ParamTable
+
+    // Zero everything once per particle
+    reset_base_to_zero();
+
+    for (int j = 0; j < ncols; ++j) {
+      int base_idx = pm_col_to_base_idx[j];
+      if (base_idx < 0) continue;   // particle has a param we don't use
+      double val = particles(row, j);
+      double* col = &base(0, base_idx);
+      for (int r = 0; r < n_trials; ++r) {
+        col[r] = val;
+      }
+    }
+  }
 };
 
 
-// // Helper: all parameter names in pt that are NOT in premap_trend_params
-// std::unordered_set<std::string>
-//   make_non_premap_param_set(const ParamTable& pt,
-//                             const std::unordered_set<std::string>& premap_trend_params);
-//
-// // Helper: all parameter names in pt that are NOT in premap_trend_params OR in pretransform_trend_params
-// std::unordered_set<std::string>
-//   remaining_nontrend_params(const ParamTable& pt,
-//                             const std::unordered_set<std::string>& premap_trend_params,
-//                             const std::unordered_set<std::string>& pretransform_trend_params);
-// All parameter names in pt that are NOT in any of the exclude sets.
-//
-// Usage examples:
-//   auto all_but_premap       = param_names_excluding(pt, { &premap_set });
-//   auto all_but_premap_pretr = param_names_excluding(pt, { &premap_set, &pretransform_set });
-//
+
 std::unordered_set<std::string> param_names_excluding(const ParamTable& pt,
                                                       std::initializer_list<const std::unordered_set<std::string>*> excludes);
 
