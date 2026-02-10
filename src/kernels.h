@@ -3,7 +3,7 @@
 #include <array>
 #include <vector>     //
 #include <Rcpp.h>    //
-// #include "EMC2/userfun.hpp"
+#include "EMC2/userfun.hpp"
 
 // View
 struct KernelParsView {
@@ -25,8 +25,8 @@ enum class KernelType {
   PowDecr,
   Poly2,
   Poly3,
-  Poly4
-  // Custom
+  Poly4,
+  Custom
 };
 
 // Some meta-data for kernels -- mostly for the future
@@ -50,6 +50,7 @@ inline KernelMeta kernel_meta(KernelType kt) {
   case KernelType::Poly3:
   case KernelType::Poly4:
     return {1, true};   // all current kernels: 1D input, grouping allowed
+  case KernelType::Custom: return{1, false};
   }
 
   // default future behaviour: 1D, but no grouping
@@ -66,7 +67,7 @@ public:
   virtual ~BaseKernel() {}
 
   virtual void run(const KernelParsView& kernel_pars,
-                   const Rcpp::NumericVector& covariate,
+                   const Rcpp::NumericMatrix& covariate,
                    const std::vector<int>& comp_idx) = 0;
 
   virtual void reset() {
@@ -94,36 +95,72 @@ protected:
   void mark_run_complete() { has_run_ = true; }
 };
 
-// struct CustomKernel {
-// protected:
-//   std::vector<double> out_;
-//   bool has_run_ = false;
-//
-// private:
-//   Rcpp::XPtr<userfun_t> fun_;
-//
-// public:
-//   CustomKernel(SEXP funptrSEXP)
-//     : fun_(funptrSEXP) {
-//     if (fun_.get() == nullptr) {
-//       Rcpp::stop("CustomKernel: null function pointer.");
-//     }
-//     if (!(*fun_)) {
-//       Rcpp::stop("CustomKernel: invalid function pointer.");
-//     }
-//   }
-//
-//   void run(const KernelParsView& kernel_pars,
-//            const Rcpp::NumericVector& covariate,
-//            const KernelParsView& par_input) {
-//
-//              // Call user function
-//              userfun_t f = *fun_;
-//              out_ = f(kernel_pars, covariate);
-//
-//              mark_run_complete();
-//            }
-// };
+struct CustomKernel : BaseKernel {
+private:
+  Rcpp::XPtr<userfun_t> fun_;
+
+public:
+  // funptrSEXP is the external pointer stored in trend$custom_ptr
+  CustomKernel(SEXP funptrSEXP) : fun_(funptrSEXP) {
+    if (fun_.get() == nullptr) {
+      Rcpp::stop("CustomKernel: null function pointer.");
+    }
+    if (!(*fun_)) {
+      Rcpp::stop("CustomKernel: invalid function pointer.");
+    }
+  }
+
+  void run(const KernelParsView& kernel_pars,
+           const Rcpp::NumericMatrix& input,
+           const std::vector<int>& comp_idx) override {
+
+             const int n_comp   = static_cast<int>(comp_idx.size());
+             const int n_pars   = static_cast<int>(kernel_pars.cols.size());
+             const int n_inputs = input.ncol();
+
+             if (n_comp == 0) {
+               out_.clear();
+               mark_run_complete();
+               return;
+             }
+
+             // 1) Build compressed parameter matrix: n_comp x n_pars
+             Rcpp::NumericMatrix pars_comp(n_comp, n_pars);
+             for (int p = 0; p < n_pars; ++p) {
+               const double* col = kernel_pars.cols[p];
+               for (int j = 0; j < n_comp; ++j) {
+                 int r = comp_idx[j];        // full trial index
+                 pars_comp(j, p) = col[r];   // compressed row j
+               }
+             }
+
+             // 2) Build compressed input matrix: n_comp x n_inputs
+             Rcpp::NumericMatrix input_comp(n_comp, n_inputs);
+             for (int j = 0; j < n_comp; ++j) {
+               int r = comp_idx[j];
+               for (int c = 0; c < n_inputs; ++c) {
+                 input_comp(j, c) = input(r, c);
+               }
+             }
+
+             // 3) Call user function
+             userfun_t f = *fun_;
+             Rcpp::NumericVector res = f(pars_comp, input_comp);
+
+             if (res.size() != n_comp) {
+               Rcpp::stop("CustomKernel: user function returned length %d, expected %d (compressed trials)",
+                          res.size(), n_comp);
+             }
+
+             // 4) Copy into out_ (compressed trajectory)
+             out_.assign(n_comp, 0.0);
+             for (int j = 0; j < n_comp; ++j) {
+               out_[j] = res[j];
+             }
+
+             mark_run_complete();
+           }
+};
 
 // For sequential kernels: currently same as BaseKernel -- just included to allow for other types (e.g. Bayesian ideal observer, autoregressive) in the future
 struct SequentialKernel : BaseKernel {
@@ -151,7 +188,7 @@ public:
 
 struct LinIncrKernel : BaseKernel {
   void run(const KernelParsView& kernel_pars,
-           const Rcpp::NumericVector& covariate,
+           const Rcpp::NumericMatrix& covariate,
            const std::vector<int>& comp_idx) override {
 
              int n_comp = comp_idx.size();
@@ -159,7 +196,7 @@ struct LinIncrKernel : BaseKernel {
 
              for (int j = 0; j < n_comp; ++j) {
                int r = comp_idx[j];
-               double x = covariate[r];
+               double x = covariate(r,0);
                if (!ISNAN(x)) {
                  out_[j] = x;  // compressed index
                }
@@ -172,7 +209,7 @@ struct LinIncrKernel : BaseKernel {
 
 struct LinDecrKernel : BaseKernel {
   void run(const KernelParsView& kernel_pars,
-           const Rcpp::NumericVector& covariate,
+           const Rcpp::NumericMatrix& covariate,
            const std::vector<int>& comp_idx) override {
 
              int n_comp = comp_idx.size();
@@ -181,7 +218,7 @@ struct LinDecrKernel : BaseKernel {
              // double last = NA_REAL;
              for (int j = 0; j < n_comp; ++j) {
                int r = comp_idx[j];
-               double x = covariate[r];
+               double x = covariate(r,0);
                if (!ISNAN(x)) {
                  out_[j] = -x;
                }
@@ -194,7 +231,7 @@ struct LinDecrKernel : BaseKernel {
 
 struct ExpDecrKernel : BaseKernel {
   void run(const KernelParsView& kernel_pars,
-           const Rcpp::NumericVector& covariate,
+           const Rcpp::NumericMatrix& covariate,
            const std::vector<int>& comp_idx) override {
 
              if (kernel_pars.cols.size() != 1) {
@@ -209,7 +246,7 @@ struct ExpDecrKernel : BaseKernel {
              // double last = NA_REAL;
              for (int j = 0; j < n_comp; ++j) {
                int r = comp_idx[j];
-               double x = covariate[r];
+               double x = covariate(r,0);
                if (!ISNAN(x)) {
                  double lambda = lambda_col[r];
                  out_[j] = std::exp(-lambda * x);
@@ -223,7 +260,7 @@ struct ExpDecrKernel : BaseKernel {
 
 struct ExpIncrKernel : BaseKernel {
   void run(const KernelParsView& kernel_pars,
-           const Rcpp::NumericVector& covariate,
+           const Rcpp::NumericMatrix& covariate,
            const std::vector<int>& comp_idx) override {
 
              if (kernel_pars.cols.size() != 1) {
@@ -238,7 +275,7 @@ struct ExpIncrKernel : BaseKernel {
              // double last = NA_REAL;
              for (int j = 0; j < n_comp; ++j) {
                int r = comp_idx[j];
-               double x = covariate[r];
+               double x = covariate(r,0);
                if (!ISNAN(x)) {
                  double lambda = lambda_col[r];
                  out_[j] = 1.0 - std::exp(-lambda * x);
@@ -252,7 +289,7 @@ struct ExpIncrKernel : BaseKernel {
 
 struct PowDecrKernel : BaseKernel {
   void run(const KernelParsView& kernel_pars,
-           const Rcpp::NumericVector& covariate,
+           const Rcpp::NumericMatrix& covariate,
            const std::vector<int>& comp_idx) override {
 
              if (kernel_pars.cols.size() != 1) {
@@ -267,7 +304,7 @@ struct PowDecrKernel : BaseKernel {
              // double last = NA_REAL;
              for (int j = 0; j < n_comp; ++j) {
                int r = comp_idx[j];
-               double x = covariate[r];
+               double x = covariate(r,0);
                if (!ISNAN(x)) {
                  double alpha = alpha_col[r];
                  out_[j] = std::pow(1.0 + x, -alpha);
@@ -281,7 +318,7 @@ struct PowDecrKernel : BaseKernel {
 
 struct PowIncrKernel : BaseKernel {
   void run(const KernelParsView& kernel_pars,
-           const Rcpp::NumericVector& covariate,
+           const Rcpp::NumericMatrix& covariate,
            const std::vector<int>& comp_idx) override {
 
              if (kernel_pars.cols.size() != 1) {
@@ -296,7 +333,7 @@ struct PowIncrKernel : BaseKernel {
              // double last = NA_REAL;
              for (int j = 0; j < n_comp; ++j) {
                int r = comp_idx[j];
-               double x = covariate[r];
+               double x = covariate(r,0);
                if (!ISNAN(x)) {
                  double alpha = alpha_col[r];
                  out_[j] = 1.0 - std::pow(1.0 + x, -alpha);
@@ -310,7 +347,7 @@ struct PowIncrKernel : BaseKernel {
 
 struct Poly2Kernel : BaseKernel {
   void run(const KernelParsView& kernel_pars,
-           const Rcpp::NumericVector& covariate,
+           const Rcpp::NumericMatrix& covariate,
            const std::vector<int>& comp_idx) override {
              if (kernel_pars.cols.size() != 2) {
                Rcpp::stop("Poly2Kernel expects 2 parameter columns, got %d",
@@ -326,7 +363,7 @@ struct Poly2Kernel : BaseKernel {
              // double last = NA_REAL;
              for (int j = 0; j < n_comp; ++j) {
                int r = comp_idx[j];
-               double x = covariate[r];
+               double x = covariate(r,0);
                if (!ISNAN(x)) {
                  double a1 = a1_col[r];
                  double a2 = a2_col[r];
@@ -342,7 +379,7 @@ struct Poly2Kernel : BaseKernel {
 
 struct Poly3Kernel : BaseKernel {
   void run(const KernelParsView& kernel_pars,
-           const Rcpp::NumericVector& covariate,
+           const Rcpp::NumericMatrix& covariate,
            const std::vector<int>& comp_idx) override {
              if (kernel_pars.cols.size() != 3) {
                Rcpp::stop("Poly3Kernel expects 3 parameter columns, got %d",
@@ -359,7 +396,7 @@ struct Poly3Kernel : BaseKernel {
              // double last = NA_REAL;
              for (int j = 0; j < n_comp; ++j) {
                int r = comp_idx[j];
-               double x = covariate[r];
+               double x = covariate(r,0);
                if (!ISNAN(x)) {
                  double a1 = a1_col[r];
                  double a2 = a2_col[r];
@@ -377,7 +414,7 @@ struct Poly3Kernel : BaseKernel {
 
 struct Poly4Kernel : BaseKernel {
   void run(const KernelParsView& kernel_pars,
-           const Rcpp::NumericVector& covariate,
+           const Rcpp::NumericMatrix& covariate,
            const std::vector<int>& comp_idx) override {
              if (kernel_pars.cols.size() != 4) {
                Rcpp::stop("Poly4Kernel expects 4 parameter columns, got %d",
@@ -395,7 +432,7 @@ struct Poly4Kernel : BaseKernel {
              // double last = NA_REAL;
              for (int j = 0; j < n_comp; ++j) {
                int r = comp_idx[j];
-               double x = covariate[r];
+               double x = covariate(r,0);
                if (!ISNAN(x)) {
                  double a1 = a1_col[r];
                  double a2 = a2_col[r];
@@ -420,7 +457,7 @@ struct SimpleDelta : DeltaKernel {
   SimpleDelta() {}
 
   void run(const KernelParsView& kernel_pars,
-           const Rcpp::NumericVector& covariate,
+           const Rcpp::NumericMatrix& covariate,
            const std::vector<int>& comp_idx) override {
              if (kernel_pars.cols.size() != 2) {
                Rcpp::stop("SimpleDelta expects 2 parameter columns, got %d",
@@ -463,7 +500,7 @@ struct SimpleDelta : DeltaKernel {
                       j, r, covariate.size());
                }
 
-               double x = covariate[r];
+               double x = covariate(r,0);
                if (!ISNAN(x)) {
                  double alpha = alpha_col[r];
                  pe = x - q_;
@@ -485,7 +522,7 @@ struct Delta2LR : DeltaKernel {
   Delta2LR() {}
 
   void run(const KernelParsView& kernel_pars,
-           const Rcpp::NumericVector& covariate,
+           const Rcpp::NumericMatrix& covariate,
            const std::vector<int>& comp_idx) override {
              if (kernel_pars.cols.size() != 3) {
                Rcpp::stop("Delta2LR expects 3 parameter columns, got %d",
@@ -507,7 +544,7 @@ struct Delta2LR : DeltaKernel {
 
              for (int j = 0; j < n_comp - 1; ++j) {
                int r = comp_idx[j];
-               double x = covariate[r];
+               double x = covariate(r,0);
                if (!ISNAN(x)) {
                  double alphaPos = alphaPos_col[r];
                  double alphaNeg = alphaNeg_col[r];
@@ -538,7 +575,7 @@ struct Delta2Kernel : SequentialKernel {
   Delta2Kernel() {}
 
   void run(const KernelParsView& kernel_pars,
-           const Rcpp::NumericVector& covariate,
+           const Rcpp::NumericMatrix& covariate,
            const std::vector<int>& comp_idx) override {
              if (kernel_pars.cols.size() != 4) {
                Rcpp::stop("Delta2Kernel expects 4 parameter columns, got %d",
@@ -559,7 +596,7 @@ struct Delta2Kernel : SequentialKernel {
 
              for (int j = 0; j < n_comp - 1; ++j) {
                int r = comp_idx[j];
-               double x = covariate[r];
+               double x = covariate(r,0);
                double peFast = NA_REAL;
                double peSlow = NA_REAL;
 
@@ -592,7 +629,7 @@ struct Delta2Kernel : SequentialKernel {
 
 KernelType to_kernel_type(const Rcpp::String& k);
 
-std::unique_ptr<BaseKernel> make_kernel(KernelType kt);
-
+std::unique_ptr<BaseKernel> make_kernel(KernelType kt,
+                                        SEXP custom_fun = R_NilValue);
 
 

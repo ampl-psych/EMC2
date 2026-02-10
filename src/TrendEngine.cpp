@@ -97,8 +97,8 @@ bool uses_par_input(const Rcpp::List& tr) {
 
 // Initialize covariate for a single kernel slot when covariate is a *single* name
 void init_covariate_for_slot(KernelSlotSpec& slot,
-                                    const Rcpp::List& spec,
-                                    const Rcpp::DataFrame& data) {
+                             const Rcpp::List& spec,
+                             const Rcpp::DataFrame& data) {
   using namespace Rcpp;
   if (!spec.containsElementNamed("covariate")) {
     stop("init_covariate_for_slot: missing 'covariate' field");
@@ -114,13 +114,48 @@ void init_covariate_for_slot(KernelSlotSpec& slot,
     stop("init_covariate_for_slot: data has no column named '%s'", cov_name.c_str());
   }
 
-  slot.kernel_input = data[cov_name];  // shallow
-  if (slot.kernel_input.size() != data.nrows()) {
-    stop("init_covariate_for_slot: covariate '%s' length %d != data rows %d",
-         cov_name.c_str(), slot.kernel_input.size(), data.nrows());
-  }
+  // Wrap in 1-column matrix
+  NumericVector v = data[cov_name];
+  int n_trials = data.nrows();
+  slot.kernel_input = NumericMatrix(n_trials, 1);
+  slot.kernel_input(_, 0) = v;
 }
 
+
+// Initialize covariate for a single kernel slot when covariate is a *single* name
+void init_combined_for_slot(KernelSlotSpec& slot,
+                            const Rcpp::List& spec,
+                            const Rcpp::DataFrame& data) {
+
+  Rcpp::CharacterVector cov_spec = spec["covariate"];
+  Rcpp::CharacterVector par_input = spec["par_input"];
+
+  int n_covariates = cov_spec.size();
+  int n_par_input  = par_input.size();
+  int n_trials     = data.nrow();
+
+  slot.kernel_input = Rcpp::NumericMatrix(n_trials, n_covariates + n_par_input);
+  slot.par_input_names = par_input;
+  slot.covariate_names = cov_spec;
+
+  Rcpp::CharacterVector col_names(n_covariates + n_par_input);
+
+  // copy covariate columns
+  for (int i = 0; i < n_covariates; i++) {
+    Rcpp::String cov_name = cov_spec[i];
+    slot.kernel_input.column(i) = Rcpp::as<Rcpp::NumericVector>(data[cov_name]);
+    col_names[i] = cov_name;
+    slot.covariate_indices.push_back(i);
+  }
+
+  // set parameter-input column names (values filled later)
+  for (int i = 0; i < n_par_input; i++) {
+    col_names[n_covariates + i] = par_input[i];
+    slot.par_input_indices.push_back(n_covariates+i);
+  }
+
+  Rcpp::colnames(slot.kernel_input) = col_names;
+}
 
 void init_covariate_maps_for_slot(KernelSlotSpec& slot,
                                   const Rcpp::List& spec,    // spec with single 'covariate'
@@ -274,7 +309,6 @@ TrendPlan::TrendPlan(Rcpp::Nullable<Rcpp::List> trend_,
     }
 
     // trend_pnames from this spec
-    // std::unordered_set<std::string> tp_set;
     op.trend_pnames = Rcpp::CharacterVector(0);
     if (tr_i.containsElementNamed("trend_pnames")) {
       Rcpp::CharacterVector tp(tr_i["trend_pnames"]);
@@ -300,73 +334,95 @@ TrendPlan::TrendPlan(Rcpp::Nullable<Rcpp::List> trend_,
     KernelType ktype   = to_kernel_type(Rcpp::String(kernel_name));
     KernelMeta kmeta   = kernel_meta(ktype);
 
-    // ---- Covariate-based kernel slots ----
-    if (has_cov) {
-      SEXP cov_spec = tr_i["covariate"];
+    // Custom kernels takes *all* covariates and par_input as input
+    if(ktype == KernelType::Custom) {
+      KernelSlotSpec slot;
+      slot.kernel      = kernel_name;
+      slot.kernel_type = ktype;
+      slot.input_kind  = InputKind::Combined;
 
-      if (TYPEOF(cov_spec) == STRSXP) {
-        // character vector: one KernelSlot per covariate
-        Rcpp::CharacterVector cv(cov_spec);
-        for (int j = 0; j < cv.size(); ++j) {
-          std::string cov_name = Rcpp::as<std::string>(cv[j]);
+      if (!tr_i.containsElementNamed("custom_ptr")) {
+        Rcpp::stop("Custom kernel '%s' requires 'custom_ptr' field", name_i.c_str());
+      }
+      slot.custom_fun = tr_i["custom_ptr"]; // should be an XPtr<userfun_t2>
 
-          if (!(kmeta.supports_grouping && kmeta.input_arity == 1)) {
-            Rcpp::stop("Kernel '%s' does not support grouped covariates", kernel_name.c_str());
-          }
+      // spec copy with *single* covariate name
+      Rcpp::List tr_copy = Rcpp::clone(tr_i);
 
-          KernelSlotSpec slot;
-          slot.kernel      = kernel_name;
-          slot.kernel_type = ktype;
-          slot.input_kind  = InputKind::Covariate;
+      init_combined_for_slot(slot, tr_copy, data);
+      op.kernels.push_back(std::move(slot));
+    } else {
 
-          // spec copy with *single* covariate name
-          Rcpp::List tr_copy = Rcpp::clone(tr_i);
-          tr_copy["covariate"] = cov_name;
+      // ---- Covariate-based kernel slots ----
+      if (has_cov) {
+        SEXP cov_spec = tr_i["covariate"];
 
-          init_covariate_for_slot(slot, tr_copy, data);
+        if (TYPEOF(cov_spec) == STRSXP) {
+          // character vector: one KernelSlot per covariate
+          Rcpp::CharacterVector cv(cov_spec);
 
-          // Attach maps if present on this spec and in data
-          if (has_data_covariate_maps) {
-            init_covariate_maps_for_slot(slot, tr_copy, data, data_covariate_maps);
-          } else {
-            // If the spec has a non-NULL 'map', but data has no maps, error
-            if (tr_copy.containsElementNamed("map") && !Rf_isNull(tr_copy["map"])) {
-              Rcpp::stop("TrendPlan: spec '%s' has 'map' but data has no 'covariate_maps' attribute",
-                         name_i.c_str());
+            for (int j = 0; j < cv.size(); ++j) {
+              std::string cov_name = Rcpp::as<std::string>(cv[j]);
+
+              if (!(kmeta.supports_grouping && kmeta.input_arity == 1)) {
+                Rcpp::stop("Kernel '%s' does not support grouped covariates", kernel_name.c_str());
+              }
+
+              KernelSlotSpec slot;
+              slot.kernel      = kernel_name;
+              slot.kernel_type = ktype;
+              slot.input_kind  = InputKind::Covariate;
+
+              // spec copy with *single* covariate name
+              Rcpp::List tr_copy = Rcpp::clone(tr_i);
+              tr_copy["covariate"] = cov_name;
+
+              init_covariate_for_slot(slot, tr_copy, data);
+
+              // Attach maps if present on this spec and in data
+              if (has_data_covariate_maps) {
+                init_covariate_maps_for_slot(slot, tr_copy, data, data_covariate_maps);
+              } else {
+                // If the spec has a non-NULL 'map', but data has no maps, error
+                if (tr_copy.containsElementNamed("map") && !Rf_isNull(tr_copy["map"])) {
+                  Rcpp::stop("TrendPlan: spec '%s' has 'map' but data has no 'covariate_maps' attribute",
+                             name_i.c_str());
+                }
+              }
+
+              op.kernels.push_back(std::move(slot));
             }
           }
-
-          op.kernels.push_back(std::move(slot));
-        }
       }
-    }
 
 
-    // ---- par_input-based kernel slots ----
-    if (has_par) {
-      SEXP par_spec = tr_i["par_input"];
+      // ---- par_input-based kernel slots ----
+      if (has_par) {
+        SEXP par_spec = tr_i["par_input"];
 
-      if (TYPEOF(par_spec) == STRSXP) {
-        CharacterVector pv(par_spec);
-        for (int j = 0; j < pv.size(); ++j) {
-          std::string par_nm = Rcpp::as<std::string>(pv[j]);
+        if (TYPEOF(par_spec) == STRSXP) {
+          CharacterVector pv(par_spec);
+          for (int j = 0; j < pv.size(); ++j) {
+            std::string par_nm = Rcpp::as<std::string>(pv[j]);
 
-          if (!(kmeta.supports_grouping && kmeta.input_arity == 1)) {
-            stop("Kernel '%s' does not support grouped par_input", kernel_name.c_str());
+            if (!(kmeta.supports_grouping && kmeta.input_arity == 1)) {
+              stop("Kernel '%s' does not support grouped par_input", kernel_name.c_str());
+            }
+
+            KernelSlotSpec slot;
+            slot.kernel        = kernel_name;
+            slot.kernel_type   = ktype;
+            slot.input_kind    = InputKind::ParInput;
+            slot.par_input_name = par_nm;
+            slot.kernel_input  = NumericMatrix(data_.nrow(), 1); // initialize empty matrix
+
+            op.kernels.push_back(std::move(slot));
           }
-
-          KernelSlotSpec slot;
-          slot.kernel        = kernel_name;
-          slot.kernel_type   = ktype;
-          slot.input_kind    = InputKind::ParInput;
-          slot.par_input_name = par_nm;
-
-          op.kernels.push_back(std::move(slot));
+        } else {
+          // inline par_input (numeric) not implemented
+          stop("TrendPlan: inline numeric 'par_input' not yet supported for '%s'",
+               name_i.c_str());
         }
-      } else {
-        // inline par_input (numeric) not implemented
-        stop("TrendPlan: inline numeric 'par_input' not yet supported for '%s'",
-             name_i.c_str());
       }
     }
 
@@ -492,7 +548,7 @@ void TrendRuntime::bind_all_ops_to_paramtable(const ParamTable& pt) {
       for (const auto& kspec : spec.kernels) {
         KernelSlotRuntime k_rt;
         k_rt.spec         = &kspec;
-        k_rt.kernel_ptr   = make_kernel(kspec.kernel_type);
+        k_rt.kernel_ptr   = make_kernel(kspec.kernel_type, kspec.custom_fun);
         k_rt.kernel_par_indices = kernel_indices;
         op_rt.kernels.push_back(std::move(k_rt));
       }
@@ -527,34 +583,64 @@ void TrendRuntime::run_kernels_for_op(TrendOpRuntime& op,
   using namespace Rcpp;
 
   const TrendOpSpec& spec = *op.spec;
-  const int n = pt.n_trials;
+  const int n_trials = pt.n_trials;
 
   // since kernels are now kernelgroups, loop over the kernels
   for (auto& k_rt : op.kernels) {
     const KernelSlotSpec& kspec = *k_rt.spec;
 
-    // Select input
-    NumericVector input;
+    NumericMatrix input = kspec.kernel_input;  // shallow handle
+
     switch (kspec.input_kind) {
-    case InputKind::ParInput:
-      input = pt.column_by_name(kspec.par_input_name);
+
+    case InputKind::Combined: {
+      // Combined: covariate columns already in kernel_input,
+      //           par_input columns are filled from ParamTable at runtime.
+      for (int i = 0; i < (int)kspec.par_input_indices.size(); ++i) {
+      int col_idx = kspec.par_input_indices[i];
+      std::string name = as<std::string>(kspec.par_input_names[i]);
+
+      NumericVector v = pt.column_by_name(name);
+      if (v.size() != n_trials) {
+        stop("TrendRuntime::run_kernels_for_op('%s'): par_input '%s' length (%d) != n_trials (%d)",
+             spec.target_param.c_str(), name.c_str(), v.size(), n_trials);
+      }
+      input(_, col_idx) = v;  // overwrite column (no reallocation)
+    }
       break;
+    }
+
+    case InputKind::ParInput: {
+      // 1-column shape allocated at spec construction; fill from ParamTable.
+      NumericVector v = pt.column_by_name(kspec.par_input_name);
+      if (v.size() != n_trials) {
+        stop("TrendRuntime::run_kernels_for_op('%s'): par_input '%s' length (%d) != n_trials (%d)",
+             spec.target_param.c_str(), kspec.par_input_name.c_str(), v.size(), n_trials);
+      }
+      if (input.ncol() != 1) {
+        stop("ParInput kernel '%s' expected 1 input column, got %d",
+             kspec.kernel.c_str(), input.ncol());
+      }
+      input(_, 0) = v;
+      break;
+    }
+
     case InputKind::Covariate:
-      input = kspec.kernel_input;
+      // Covariate column already stored in kernel_input (1-column matrix)
+      // Nothing to do here.
       break;
+
     case InputKind::None:
     default:
       stop("TrendOp '%s': kernel '%s' has neither covariate nor par_input",
            spec.target_param.c_str(), kspec.kernel.c_str());
     }
 
-    if (input.size() != n) {
-      stop("TrendRuntime::run_kernels_for_op('%s'): input length (%d) != n_trials (%d)",
-           spec.target_param.c_str(), input.size(), n);
+    if (input.nrow() != n_trials) {
+      stop("TrendRuntime::run_kernels_for_op('%s'): input nrow (%d) != n_trials (%d)",
+           spec.target_param.c_str(), input.nrow(), n_trials);
     }
 
-    // Custom kernel takes a NumericMatrix that combines the covariates and par_indices
-    // and a NumericMatrix that combines the kernel_pars
 
     // Parameter columns for this kernel
     KernelParsView kp_view = make_kernel_pars_view(pt, k_rt.kernel_par_indices);

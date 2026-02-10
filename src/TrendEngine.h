@@ -14,23 +14,32 @@ inline TrendPhase parse_phase(const std::string& ph) {
 }
 
 // ---- Specification side ----
-enum class InputKind { None, Covariate, ParInput };
+enum class InputKind { None, Covariate, ParInput, MultiCovariate, MultiParInput, Combined};
 
 
 // One TrendOp = one base + one group of kernels. Groups of kernels are combined
 struct KernelSlotSpec {
   std::string kernel;
-  KernelType  kernel_type;
+  KernelType kernel_type;
 
-  InputKind   input_kind = InputKind::None;
+  InputKind input_kind = InputKind::None;
 
   // For InputKind::Covariate
-  Rcpp::NumericVector kernel_input;  // data column or inline numeric covariate
+  Rcpp::NumericMatrix kernel_input;  // data column
 
   // For InputKind::ParInput
   std::string par_input_name;
 
-  // Covariate maps specific to this kernel (optional; you can move this to TrendOpSpec if you prefer)
+  // For InputKind::Combined
+  Rcpp::CharacterVector covariate_names;
+  std::vector<int> covariate_indices;
+  Rcpp::CharacterVector par_input_names;
+  std::vector<int> par_input_indices;
+
+  // For custom kernels
+  SEXP custom_fun = R_NilValue;
+
+  // Covariate maps specific to this kernel
   bool has_covariate_maps = false;
   std::vector<Rcpp::NumericVector> covariate_map_cols;
 };
@@ -260,8 +269,12 @@ bool uses_cov_input(const Rcpp::List& tr);
 bool uses_par_input(const Rcpp::List& tr);
 
 void init_covariate_for_slot(KernelSlotSpec& slot,
-                                    const Rcpp::List& spec,
-                                    const Rcpp::DataFrame& data);
+                             const Rcpp::List& spec,
+                             const Rcpp::DataFrame& data);
+
+void init_combined_for_slot(KernelSlotSpec& slot,
+                             const Rcpp::List& spec,
+                             const Rcpp::DataFrame& data);
 
 void init_covariate_maps_for_op(TrendOpSpec& op,
                                 const Rcpp::List& tr_i,

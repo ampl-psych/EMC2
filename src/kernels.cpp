@@ -13,12 +13,13 @@ KernelType to_kernel_type(const Rcpp::String& k) {
   if (k == "poly2")        return KernelType::Poly2;
   if (k == "poly3")        return KernelType::Poly3;
   if (k == "poly4")        return KernelType::Poly4;
+  if (k == "custom")       return KernelType::Custom;
 
   Rcpp::stop("Unknown kernel type");
 }
 
 
-std::unique_ptr<BaseKernel> make_kernel(KernelType kt) {
+std::unique_ptr<BaseKernel> make_kernel(KernelType kt, SEXP custom_fun) {
   switch (kt) {
   case KernelType::SimpleDelta: return std::unique_ptr<BaseKernel>(new SimpleDelta());
   case KernelType::Delta2Kernel:return std::unique_ptr<BaseKernel>(new Delta2Kernel());
@@ -33,6 +34,13 @@ std::unique_ptr<BaseKernel> make_kernel(KernelType kt) {
   case KernelType::Poly2:       return std::unique_ptr<BaseKernel>(new Poly2Kernel());
   case KernelType::Poly3:       return std::unique_ptr<BaseKernel>(new Poly3Kernel());
   case KernelType::Poly4:       return std::unique_ptr<BaseKernel>(new Poly4Kernel());
+
+  case KernelType::Custom:
+    if (custom_fun == R_NilValue) {
+      Rcpp::stop("make_kernel: Custom kernel requested but custom_fun is NULL");
+    }
+    return std::unique_ptr<BaseKernel>(new CustomKernel(custom_fun));
   }
+
   Rcpp::stop("Unknown kernel type");
 }
