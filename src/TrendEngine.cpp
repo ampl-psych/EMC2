@@ -341,10 +341,16 @@ TrendPlan::TrendPlan(Rcpp::Nullable<Rcpp::List> trend_,
       slot.kernel_type = ktype;
       slot.input_kind  = InputKind::Combined;
 
-      if (!tr_i.containsElementNamed("custom_ptr")) {
-        Rcpp::stop("Custom kernel '%s' requires 'custom_ptr' field", name_i.c_str());
+      // custom_ptr is stored as an attribute on the trend spec entry
+      if (!tr_i.hasAttribute("custom_ptr")) {
+        Rcpp::stop("Custom kernel '%s' requires 'custom_ptr' attribute", name_i.c_str());
       }
-      slot.custom_fun = tr_i["custom_ptr"]; // should be an XPtr<userfun_t2>
+
+      SEXP custom_attr = tr_i.attr("custom_ptr");
+      if (Rf_isNull(custom_attr)) {
+        Rcpp::stop("Custom kernel '%s': 'custom_ptr' attribute is NULL", name_i.c_str());
+      }
+      slot.custom_fun = custom_attr;  // store SEXP (externalptr)
 
       // spec copy with *single* covariate name
       Rcpp::List tr_copy = Rcpp::clone(tr_i);

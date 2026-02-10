@@ -232,9 +232,9 @@ test_that("delta2kernel_Rcpp", {
 })
 
 
-
-# Custom kernel -- only C -------------------------------------------------
-# This cannot be part of that-test :-( but we can still use it for manual tests...
+#
+# # Custom kernel -- only C -------------------------------------------------
+# # This cannot be part of that-test :-( but we can still use it for manual tests...
 # # Write a custom kernel to a separate file
 # tf <- tempfile(fileext = ".cpp")
 # writeLines(c(
@@ -282,7 +282,7 @@ test_that("delta2kernel_Rcpp", {
 #   custom_trend = ct
 # )
 #
-# ##
+# # ##
 # kernel_pars <- c('m.a'=0.1, 'm.b'=1)
 # covariate1 <- c(NA, 1, 2, 0, 20, 2, 1)
 # t0 <- matrix(rep(0.2, length(covariate1)))
@@ -300,6 +300,7 @@ test_that("delta2kernel_Rcpp", {
 # }
 # all.equal(matrix(apply_kernel(kernel_pars, emc, input_pars=t0, mode="R")), matrix(expected_output))
 # all.equal(matrix(apply_kernel(kernel_pars, emc, input_pars=t0, mode="Rcpp")), matrix(expected_output))
+# all.equal(matrix(apply_kernel(kernel_pars, emc, input_pars=t0, mode="Rcpp_oo")), matrix(expected_output))
 # test_that("customkernel_R", {
 #   expect_snapshot(matrix(apply_kernel(kernel_pars, emc, input_pars=t0, mode="R")))
 # })

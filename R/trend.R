@@ -1569,6 +1569,7 @@ apply_kernel <- function(kernel_pars, emc, subject=1, input_pars=NULL, trend_n=1
 
     p_vector <- sampled_pars(emc)
     p_vector[names(p_vector) %in% names(kernel_pars)] <- kernel_pars
+    p_vector[names(p_vector) %in% colnames(input_pars)] <- input_pars[1]
     p_mat <- t(as.matrix(p_vector))
     colnames(p_mat) <- names(p_vector)
 
