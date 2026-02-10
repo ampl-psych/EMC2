@@ -465,6 +465,261 @@ is_double_decimals <- function(x) {
 }
 
 
+.extract_group_design_info <- function(group_design, par_names) {
+  random_blocks <- stats::setNames(vector("list", length(par_names)), par_names)
+
+  for (par in par_names) {
+    random <- NULL
+    map <- NULL
+
+    if (!is.null(group_design) && !is.null(group_design[[par]])) {
+      obj <- group_design[[par]]
+      if (is.list(obj) && !is.data.frame(obj)) {
+        random <- obj$random
+        map <- obj$map
+      }
+    }
+
+    blocks <- list()
+    if (is.list(random) && length(random) > 0) {
+      for (j in seq_along(random)) {
+        z <- random[[j]]
+        if (is.null(z) || is.null(dim(z))) {
+          next
+        }
+        gname <- names(random)[j]
+        if ((is.null(gname) || gname == "") && !is.null(map) && length(map) >= j) {
+          gname <- map[[j]]$gname
+        }
+        if (is.null(gname) || gname == "") {
+          gname <- paste0("random", j)
+        }
+
+        cols_random <- colnames(z)
+        if (is.null(cols_random) || length(cols_random) == 0) {
+          cols_random <- paste0(gname, "_", seq_len(ncol(z)))
+        }
+
+        blocks[[length(blocks) + 1]] <- list(
+          name = paste0(par, "_", gname),
+          gname = gname,
+          n_cols = ncol(z),
+          cols = cols_random
+        )
+      }
+    }
+    random_blocks[[par]] <- blocks
+  }
+
+  return(random_blocks)
+}
+
+
+.dot_escape <- function(x) {
+  x <- as.character(x)
+  x <- gsub("\\\\", "\\\\\\\\", x)
+  x <- gsub("\"", "\\\\\"", x)
+  return(x)
+}
+
+
+.edge_line <- function(from, to, label = NULL) {
+  if (is.null(label) || !nzchar(label)) {
+    return(paste0("  ", from, " -> ", to, ";"))
+  }
+  return(paste0("  ", from, " -> ", to, " [label=\"", .dot_escape(label), "\"];"))
+}
+
+
+#' Graphical Model
+#'
+#' Draws a probabilistic graphical model (PGM) using circles, squares, arrows,
+#' and plates for the standard EMC hierarchical model.
+#'
+#' @param emc an emc object of type `standard`, `blocked`, or `diagonal`
+#'
+#' @returns Invisibly returns a DiagrammeR `grViz` graph object
+#' @export
+graphical_model <- function(emc) {
+  if (!requireNamespace("DiagrammeR", quietly = TRUE)) {
+    stop("Package 'DiagrammeR' is required for this function. Please install it.")
+  }
+  if (is.null(emc) || !is.list(emc) || length(emc) == 0 || is.null(emc[[1]])) {
+    stop("`emc` must be a non-empty EMC object.")
+  }
+  model_type <- emc[[1]]$type
+  if (is.null(model_type) || !(model_type %in% c("standard", "blocked", "diagonal"))) {
+    stop("`graphical_model()` currently supports only standard/blocked/diagonal EMC objects.")
+  }
+
+  par_names <- emc[[1]]$par_names
+  if (is.null(par_names) || length(par_names) == 0) {
+    alpha_samples <- emc[[1]]$samples$alpha
+    if (!is.null(alpha_samples) && !is.null(dimnames(alpha_samples)[[1]])) {
+      par_names <- dimnames(alpha_samples)[[1]]
+    }
+  }
+  if (is.null(par_names) || length(par_names) == 0) {
+    stop("Could not determine parameter names from `emc`.")
+  }
+
+  n_subjects <- emc[[1]]$n_subjects
+  if (is.null(n_subjects)) {
+    n_subjects <- length(emc[[1]]$subjects)
+  }
+  if (is.null(n_subjects) || n_subjects < 1) {
+    n_subjects <- 1
+  }
+
+  raw_group_design <- emc[[1]]$group_designs
+  has_group_design <- !is.null(raw_group_design) && length(raw_group_design) > 0
+  group_design <- if (has_group_design) raw_group_design else NULL
+
+  group_info <- NULL
+  if (has_group_design) {
+    group_info <- .extract_group_design_info(group_design, par_names)
+  }
+
+  has_random <- FALSE
+  if (has_group_design) {
+    has_random <- any(vapply(group_info, length, integer(1)) > 0)
+    has_random <- has_random || tryCatch(get_n_random(par_names, group_design) > 0, error = function(e) FALSE)
+  }
+
+  prior <- emc[[1]]$prior
+  has_prior_mu <- !is.null(prior$theta_mu_mean) || !is.null(prior$theta_mu_var)
+  has_prior_sigma <- !is.null(prior$A) || !is.null(prior$v)
+  has_prior_s <- has_random && (!is.null(prior$A_z) || !is.null(prior$v_Z))
+  trial_plate_label <- "trials l = 1...L"
+
+  all_random_blocks <- list()
+  if (has_group_design) {
+    all_random_blocks <- unlist(group_info, recursive = FALSE, use.names = FALSE)
+  }
+
+  lines <- c(
+    "digraph emc_pgm {",
+    "  graph [rankdir=LR, splines=true, nodesep=0.45, ranksep=0.75, pad=0.05];",
+    "  node [fontname=\"Helvetica\", fontsize=11, color=\"#2F2F2F\", penwidth=1.2];",
+    "  edge [fontname=\"Helvetica\", fontsize=10, color=\"#4F4F4F\", arrowsize=0.8];",
+    "",
+    "  Sigma [label=\"Sigma\", shape=circle, style=\"filled\", fillcolor=\"white\"];"
+  )
+  if (has_group_design) {
+    lines <- c(lines, "  beta [label=\"beta\", shape=circle, style=\"filled\", fillcolor=\"white\"];")
+  } else {
+    lines <- c(lines, "  mu [label=\"mu\", shape=circle, style=\"filled\", fillcolor=\"white\"];")
+  }
+
+  if (has_random) {
+    lines <- c(lines, "  s_g [label=<s<SUB>k,g</SUB>>, shape=circle, style=\"filled\", fillcolor=\"white\"];")
+  }
+  if (has_prior_mu) {
+    lines <- c(lines, "  prior_mu [label=<mu<SUB>0</SUB>, Sigma<SUB>0</SUB>>, shape=box, style=\"filled\", fillcolor=\"white\"];")
+  }
+  if (has_prior_sigma) {
+    lines <- c(lines, "  prior_sigma [label=\"A, v\", shape=box, style=\"filled\", fillcolor=\"white\"];")
+  }
+  if (has_prior_s) {
+    lines <- c(lines, "  prior_s [label=<A<SUB>z</SUB>, V<SUB>z</SUB>>, shape=box, style=\"filled\", fillcolor=\"white\"];")
+  }
+
+  if (has_random) {
+    lines <- c(
+      lines,
+      "",
+      "  subgraph cluster_groups {",
+      "    label=\"random groups h = 1...H_g\";",
+      "    color=\"#9A9A9A\"; style=\"rounded,dashed\";",
+      "    u_g [label=<u<SUB>k,g,h</SUB>>, shape=circle, style=\"filled\", fillcolor=\"white\"];",
+      "  }"
+    )
+  }
+
+  lines <- c(
+    lines,
+    "",
+    "  subgraph cluster_subjects {",
+    paste0("    label=\"subjects i = 1..", n_subjects, "\";"),
+    "    color=\"#9A9A9A\"; style=\"rounded,dashed\";"
+  )
+  if (has_group_design) {
+    lines <- c(
+      lines,
+      "    W_i [label=<W<SUB>i</SUB>>, shape=box, style=\"filled\", fillcolor=\"#E6E6E6\"];"
+    )
+  }
+
+  if (has_random) {
+    lines <- c(lines, "    Z_i [label=<Z<SUB>i</SUB>>, shape=box, style=\"filled\", fillcolor=\"#E6E6E6\"];")
+  }
+
+  lines <- c(
+    lines,
+    "",
+    "    subgraph cluster_coefficients {",
+    "      label=\"coefficients k = 1..K\";",
+    "      color=\"#C8C8C8\"; style=\"rounded,dashed\";",
+    "      alpha_i [label=<alpha<SUB>i</SUB>>, shape=circle, style=\"filled\", fillcolor=\"white\"];"
+  )
+  if (has_group_design) {
+    lines <- c(lines, "      mu_i [label=<mu<SUB>i</SUB>>, shape=doublecircle, style=\"filled\", fillcolor=\"white\"];")
+  }
+  lines <- c(lines, "    }")
+
+  lines <- c(
+    lines,
+    "",
+    "    subgraph cluster_trials {",
+    paste0("      label=\"", .dot_escape(trial_plate_label), "\";"),
+    "      color=\"#BDBDBD\"; style=\"rounded,dashed\";",
+    "      X_il [label=<X<SUB>i,l</SUB>>, shape=box, style=\"filled\", fillcolor=\"#E6E6E6\"];",
+    "      theta_il [label=<theta<SUB>i,l</SUB>>, shape=doublecircle, style=\"filled\", fillcolor=\"white\"];",
+    "      R_il [label=<R<SUB>i,l</SUB>>, shape=circle, style=\"filled\", fillcolor=\"#E6E6E6\"];",
+    "      rt_il [label=<rt<SUB>i,l</SUB>>, shape=circle, style=\"filled\", fillcolor=\"#E6E6E6\"];",
+    "    }",
+    "  }",
+    ""
+  )
+
+  if (has_prior_mu) {
+    lines <- c(lines, .edge_line("prior_mu", if (has_group_design) "beta" else "mu"))
+  }
+  if (has_prior_sigma) {
+    lines <- c(lines, .edge_line("prior_sigma", "Sigma"))
+  }
+  if (has_prior_s) {
+    lines <- c(lines, .edge_line("prior_s", "s_g"))
+  }
+  if (has_random) {
+    lines <- c(lines, .edge_line("s_g", "u_g"))
+  }
+
+  if (has_group_design) {
+    lines <- c(lines, .edge_line("beta", "mu_i"))
+    lines <- c(lines, .edge_line("W_i", "mu_i"))
+    if (has_random) {
+      lines <- c(lines, .edge_line("u_g", "mu_i"))
+      lines <- c(lines, .edge_line("Z_i", "mu_i"))
+    }
+    lines <- c(lines, .edge_line("mu_i", "alpha_i"))
+  } else {
+    lines <- c(lines, .edge_line("mu", "alpha_i"))
+  }
+  lines <- c(lines, .edge_line("Sigma", "alpha_i"))
+  lines <- c(lines, .edge_line("alpha_i", "theta_il"))
+  lines <- c(lines, .edge_line("X_il", "theta_il"))
+  lines <- c(lines, .edge_line("theta_il", "R_il"))
+  lines <- c(lines, .edge_line("theta_il", "rt_il"))
+
+  lines <- c(lines, "}")
+  dot <- paste(lines, collapse = "\n")
+  graph <- DiagrammeR::grViz(dot)
+  print(graph)
+  return(invisible(graph))
+}
+
+
 #' Make SEM Diagram
 #'
 #' @param emc an emc object
@@ -693,5 +948,3 @@ rotate_loadings <- function(emc, rot_fun) {
   class(emc) <- "emc"
   return(emc)
 }
-
-
