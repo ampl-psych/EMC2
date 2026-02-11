@@ -597,11 +597,12 @@ graphical_model <- function(emc) {
     all_random_blocks <- unlist(group_info, recursive = FALSE, use.names = FALSE)
   }
 
+  # Safe compact layout knobs: rankdir, nodesep, ranksep, pad, fontsize, arrowsize.
   lines <- c(
     "digraph emc_pgm {",
-    "  graph [rankdir=LR, splines=true, nodesep=0.45, ranksep=0.75, pad=0.05];",
-    "  node [fontname=\"Helvetica\", fontsize=11, color=\"#2F2F2F\", penwidth=1.2];",
-    "  edge [fontname=\"Helvetica\", fontsize=10, color=\"#4F4F4F\", arrowsize=0.8];",
+    "  graph [rankdir=LR, splines=true, nodesep=0.05, ranksep=0.1, pad=0.02];",
+    "  node [fontname=\"Helvetica\", fontsize=14, color=\"#2F2F2F\", penwidth=1.0];",
+    "  edge [fontname=\"Helvetica\", fontsize=13, color=\"#4F4F4F\", arrowsize=0.7, penwidth=1.0];",
     "",
     "  Sigma [label=\"Sigma\", shape=circle, style=\"filled\", fillcolor=\"white\"];"
   )
