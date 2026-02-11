@@ -33,19 +33,76 @@ staircase_function <- function(dts,staircase) {
   ns <- ncol(dts)
   SSD <- sR <- srt <- numeric()
   SSD[1] <- staircase$SSD0
+  rules <- staircase$rules
+  if (is.null(rules)) rules <- list(up = NULL, down = NULL)
+  labels <- staircase$labels
+  accST <- staircase$accST
+  iSSD <- 1
+  if (!is.null(accST)) iSSD <- c(iSSD, accST)
+  match_rule <- function(label, rule) {
+    if (is.null(rule) || !length(rule)) return(FALSE)
+    if (is.na(label)) {
+      any(is.na(rule))
+    } else {
+      label %in% rule[!is.na(rule)]
+    }
+  }
   for (i in 1:ns) {
     if (SSD[i]<staircase$stairmin) SSD[i] <- staircase$stairmin
     if (SSD[i]>staircase$stairmax) SSD[i] <- staircase$stairmax
-    dts[1,i] <- dts[1,i] + SSD[i]
-    if (all(is.infinite(dts[-1,i]))) Ri <- 1 else # GF or GF & TF
-      Ri <- which.min(dts[,i])
+    trial <- dts[,i]
+    trial[iSSD] <- trial[iSSD] + SSD[i]
+    if (all(is.infinite(trial[-1]))) {
+      Ri <- 1
+    } else {
+      Ri <- which.min(trial)
+    }
     if (Ri==1) {
-      sR[i] <- srt[i] <- NA
-      if (i<ns) SSD[i+1] <- round(SSD[i] + staircase$stairstep,3)
+      if (!is.null(accST) && length(accST) > 0) {
+        st_cols <- accST
+        st_finish <- trial[st_cols]
+        st_idx <- st_cols[which.min(st_finish)]
+        sR[i] <- st_idx - 1
+        srt[i] <- st_finish[which.min(st_finish)]
+        label <- if (!is.null(labels) && (st_idx-1) <= length(labels)) labels[st_idx-1] else NA_character_
+      } else {
+        sR[i] <- srt[i] <- NA
+        label <- NA_character_
+      }
     } else {
       sR[i] <- Ri-1
-      srt[i] <- min(dts[-1,i])
-      if (i<ns) SSD[i+1] <- round(SSD[i] - staircase$stairstep,3)
+      if (Ri==1) {
+        srt[i] <- NA
+      } else {
+        srt[i] <- trial[Ri]
+      }
+      label <- if (!is.null(labels) && (Ri-1) <= length(labels)) labels[Ri-1] else NA_character_
+    }
+    step_dir <- NULL
+    if (!is.null(rules$up) || !is.null(rules$down)) {
+      success <- match_rule(label, rules$up)
+      failure <- match_rule(label, rules$down)
+      if (!is.null(rules$down) && !is.null(rules$up) && success && failure) {
+        stop("`staircase_up` and `staircase_down` overlap for label ", label)
+      }
+      if (is.null(rules$down) && !is.null(rules$up)) {
+        failure <- !success
+      }
+      if (success) {
+        step_dir <- "up"
+      } else if (failure) {
+        step_dir <- "down"
+      }
+    }
+    if (is.null(step_dir)) {
+      if (Ri==1) step_dir <- "up" else step_dir <- "down"
+    }
+    if (i<ns) {
+      if (identical(step_dir, "up")) {
+        SSD[i+1] <- round(SSD[i] + staircase$stairstep,3)
+      } else if (identical(step_dir, "down")) {
+        SSD[i+1] <- round(SSD[i] - staircase$stairstep,3)
+      }
     }
   }
   list(sR=sR,srt=srt,SSD=SSD)
@@ -60,9 +117,6 @@ apply_staircase_trials <- function(dts, staircase, accST = NULL) {
   stair_fun <- attr(staircase, "staircase_function")
   if (length(accST) > 0) {
     staircase$accST <- 1 + accST
-    if (is.null(stair_fun)) {
-      stop("Do not use default staircase function with stop-triggered accumulators")
-    }
   }
   if (is.null(stair_fun)) {
     stair_fun <- staircase_function
@@ -75,6 +129,7 @@ apply_grouped_staircase <- function(dts, staircase, accST = NULL) {
   specs <- staircase$specs
   group_id <- staircase$group_id
   data_meta <- staircase$data
+  if (is.null(staircase$rules)) staircase$rules <- attr(specs, "rules")
   if (is.null(specs) || is.null(group_id)) {
     stop("Grouped staircase specifications are incomplete.")
   }
@@ -95,13 +150,12 @@ apply_grouped_staircase <- function(dts, staircase, accST = NULL) {
     idx <- which(group_id == lvl)
     if (!length(idx)) next
     spec <- specs[[lvl]]
+    spec$rules <- spec$rules %||% staircase$rules
+    spec$labels <- spec$labels %||% staircase$labels
     stair_fun <- spec$staircase_function %||% attr(spec, "staircase_function") %||%
       specs_fun %||% base_fun
     if (length(accST) > 0) {
       spec$accST <- 1 + accST
-      if (is.null(stair_fun)) {
-        stop("Do not use default staircase function with stop-triggered accumulators")
-      }
     }
     if (is.null(stair_fun)) {
       stair_fun <- staircase_function

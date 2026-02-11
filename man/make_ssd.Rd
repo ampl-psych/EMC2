@@ -22,7 +22,9 @@ make_ssd(
   stairmax = Inf,
   p_stop = 0.25,
   factors = NULL,
-  formula = NULL
+  formula = NULL,
+  staircase_up = NA,
+  staircase_down = NULL
 )
 }
 \arguments{
@@ -58,6 +60,15 @@ staircases. When \code{NULL}, all trials share the same staircase.}
 conditioning part beyond the \code{|}) are converted into grouping factor
 names. The \code{factors} argument and the variables implied by the formula are
 combined.}
+
+\item{staircase_up}{Character vector listing the response labels (or
+\code{NA}) that should increase the staircase on the next stop trial. Defaults
+to \code{NA}, matching the classic rule where successful inhibition yields an
+\code{NA} response.}
+
+\item{staircase_down}{Character vector listing response labels that should
+decrease the staircase. If \code{NULL} (the default), any stop-trial outcome
+not matched by \code{staircase_up} will decrease the staircase.}
 }
 \value{
 A function of a data frame that returns a numeric vector of SSDs. The returned

@@ -37,6 +37,13 @@
 #'   conditioning part beyond the `|`) are converted into grouping factor
 #'   names. The `factors` argument and the variables implied by the formula
 #'   are combined.
+#' @param staircase_up Character vector listing the response labels (or `NA`)
+#'   that should increase the staircase on the next stop trial. Defaults to
+#'   `NA`, matching the classic rule where successful inhibition yields an
+#'   `NA` response.
+#' @param staircase_down Character vector listing response labels that should
+#'   decrease the staircase. If `NULL` (the default), any stop-trial outcome
+#'   not matched by `staircase_up` will decrease the staircase.
 #'
 #' @return A function of a data frame that returns a numeric vector of SSDs.
 #'   The function carries class `emc_ssd_function` so that [make_data()] can
@@ -49,6 +56,30 @@
 #' # Staircase with default parameters operating per subject and stimulus
 #' ssd_stair <- make_ssd(factors = c("subjects", "S"))
 #'
+#' # Complex paradigms with stop-triggered responses -----------------
+#'
+#' # By default `staircase_up = NA` and `staircase_down = NULL`, replicating
+#' # the classic rule in which an `NA` response indicates successful inhibition
+#' # (increase SSD) and any finite response indicates failure (decrease SSD).
+#'
+#' # You can override these rules to accommodate stop-triggered accumulators.
+#' # For example, in a stop-change paradigm, the stop-triggered responses are
+#' # recorded as "down" or "up", and the original go responses remain
+#' # "left"/"right". The following applies the staircase rules accordingly:
+#'
+#' ssd_change <- make_ssd(
+#'   staircase_up   = c("down", "up"),
+#'   staircase_down = c("left", "right")
+#' )
+#'
+#' # A mixture of NA (complete inhibition) and stop-triggered wins can be
+#' # handled by listing both the NA marker and the relevant response labels:
+#'
+#' ssd_sel <- make_ssd(
+#'   staircase_up   = c(NA, "ST_left", "ST_right"),
+#'   staircase_down = c("left", "right")
+#' )
+#'
 #' @export
 make_ssd <- function(values = NULL,
                      p = NULL,
@@ -59,7 +90,9 @@ make_ssd <- function(values = NULL,
                      stairmax = Inf,
                      p_stop = 0.25,
                      factors = NULL,
-                     formula = NULL) {
+                     formula = NULL,
+                     staircase_up = NA,
+                     staircase_down = NULL) {
 
   if (!is.null(values)) {
     if (!is.numeric(values)) {
@@ -82,6 +115,30 @@ make_ssd <- function(values = NULL,
     stop("`p_stop` must be a single numeric value between 0 and 1.")
   }
 
+  normalise_rule <- function(x) {
+    if (is.null(x)) return(NULL)
+    if (!length(x)) return(NULL)
+    nas <- is.na(x)
+    out <- as.character(x)
+    out[nas] <- NA_character_
+    out <- unique(out)
+    if (!length(out)) NULL else out
+  }
+
+  up_rule <- normalise_rule(staircase_up)
+  down_rule <- normalise_rule(staircase_down)
+  if (!is.null(up_rule) && !is.null(down_rule)) {
+    overlap <- intersect(up_rule[!is.na(up_rule)], down_rule[!is.na(down_rule)])
+    if (length(overlap)) {
+      stop("`staircase_up` and `staircase_down` cannot share response labels: ",
+           paste(overlap, collapse = ", "))
+    }
+    if (any(is.na(up_rule)) && any(is.na(down_rule))) {
+      stop("`staircase_up` and `staircase_down` cannot both match NA.")
+    }
+  }
+  staircase_rules <- list(up = up_rule, down = down_rule)
+
   group_cols <- unique(c(
     factors %||% character(),
     ssd_parse_formula(formula)
@@ -91,7 +148,8 @@ make_ssd <- function(values = NULL,
     stairstep = stairstep,
     stairmin = stairmin,
     stairmax = stairmax,
-    p = p_stop
+    p = p_stop,
+    rules = staircase_rules
   )
 
   if (!isFALSE(staircase) && is.list(staircase) && !length(group_cols) && is.null(values)) {
@@ -131,8 +189,9 @@ make_ssd <- function(values = NULL,
     if (isFALSE(staircase)) {
       assign_fixed_ssd(SSD, values, p, p_stop)
     } else {
-      specs <- build_staircase_specs(group_id, d, staircase, base_spec, group_cols_local)
-      assign_staircase_ssd(SSD, group_id, d, specs)
+      specs <- build_staircase_specs(group_id, d, staircase, base_spec, group_cols_local,
+                                     staircase_rules)
+      assign_staircase_ssd(SSD, group_id, d, specs, staircase_rules)
     }
   }
 
@@ -156,7 +215,7 @@ assign_fixed_ssd <- function(SSD, values, p, p_stop) {
 }
 
 
-assign_staircase_ssd <- function(SSD, group_id, data, specs) {
+assign_staircase_ssd <- function(SSD, group_id, data, specs, rules) {
   n <- length(SSD)
   if (!length(specs)) {
     return(SSD)
@@ -166,7 +225,8 @@ assign_staircase_ssd <- function(SSD, group_id, data, specs) {
     specs = specs,
     group_id = NULL,
     data = data[0, , drop = FALSE],
-    group_cols = attr(specs, "group_cols")
+    group_cols = attr(specs, "group_cols"),
+    rules = rules
   )
 
   is_stop_all <- rep(FALSE, n)
@@ -239,7 +299,7 @@ prepare_value_probabilities <- function(values, p, p_stop) {
 }
 
 
-build_staircase_specs <- function(group_id, data, staircase, base_spec, group_cols) {
+build_staircase_specs <- function(group_id, data, staircase, base_spec, group_cols, rules) {
   levels_id <- levels(group_id)
   specs <- stats::setNames(vector("list", length(levels_id)), levels_id)
 
@@ -272,11 +332,13 @@ build_staircase_specs <- function(group_id, data, staircase, base_spec, group_co
       if (is.list(spec[[col]])) spec[[col]] <- NULL
     }
 
+    spec$rules <- rules
     specs[[lvl]] <- spec
   }
 
   attr(specs, "base_spec") <- base_spec
   attr(specs, "group_cols") <- group_cols
+  attr(specs, "rules") <- rules
   if (!is.null(stair_fun)) {
     attr(specs, "staircase_function") <- stair_fun
   }

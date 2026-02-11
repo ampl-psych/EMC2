@@ -233,6 +233,8 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
       add_accumulators(data,design$matchfun,simulate=TRUE,type=model()$type,Fcovariates=design$Fcovariates),
       design,model,add_acc=FALSE,compress=FALSE,verbose=FALSE,
       rt_check=FALSE)
+    lR_levels <- if (!is.null(data$lR)) levels(data$lR) else NULL
+
     pars <- map_p(pars,data, model(), return_trialwise_parameters)
 
     if(!is.null(model()$trend)){
@@ -270,6 +272,14 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
       pars <- apply(pars,2,rep,times=expand)
     }
     if (!is.null(ssd_meta)) {
+      ssd_meta$labels <- lR_levels
+      if (!is.null(ssd_meta$specs)) {
+        for (nm in names(ssd_meta$specs)) {
+          if (is.list(ssd_meta$specs[[nm]])) {
+            ssd_meta$specs[[nm]]$labels <- lR_levels
+          }
+        }
+      }
       attr(data, "staircase") <- ssd_meta
       attr(pars, "staircase") <- ssd_meta
     }
@@ -281,6 +291,10 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
       dropNames <- c(dropNames,names(design$Ffunctions))
     if(!is.null(data$lR)) data <- data[data$lR == levels(data$lR)[1],]
     data <- data[,!(names(data) %in% dropNames)]
+    if (!is.null(ssd_meta)) {
+      attr(data, "staircase") <- ssd_meta
+      attr(pars, "staircase") <- ssd_meta
+    }
     for (i in dimnames(Rrt)[[2]]) data[[i]] <- Rrt[,i]
   }
   attr(data,"p_vector") <- parameters;
