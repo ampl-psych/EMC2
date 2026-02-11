@@ -51,9 +51,6 @@ make_missing <- function(data,LT=0,UT=Inf,LC=0,UC=Inf,
 #' @param n_trials Integer. If ``data`` is not supplied, number of trials to create per design cell
 #' @param data Data frame. If supplied, the factors are taken from the data. Determines the number of trials per level of the design factors and can thus allow for unbalanced designs
 #' @param expand Integer. Replicates the ``data`` (if supplied) expand times to increase number of trials per cell.
-#' @param staircase Default NULL, used with stop-signal paradigm simulation to specify a staircase
-#' algorithm. If non-null and a list then passed through as is, if not it is assigned the
-#' default list structure: list(p=.25,SSD0=.25,stairstep=.05,stairmin=0,stairmax=Inf)
 #' @param functions List of functions you want to apply to the data generation.
 #' @param ... Additional optional arguments
 #' @return A data frame with simulated data
@@ -82,7 +79,7 @@ make_missing <- function(data,LT=0,UT=Inf,LC=0,UC=Inf,
 #' data <- make_data(parameters, design_DDMaE, data = forstmann)
 #' @export
 
-make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1, staircase = NULL,
+make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
                       functions = NULL, ...)
 {
   # #' @param LT lower truncation bound below which data are removed (scalar or subject named vector)
@@ -100,9 +97,6 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
   # #' if both of these are false an error occurs as then contamination is not identifiable).
   # #' @param return_Ffunctions if false covariates are not returned
 
-  if (!is.null(staircase)){
-    staircase <- check_staircase(staircase)
-  }
   # #' @param Fcovariates either a data frame of covariate values with the same
   # #' number of rows as the data or a list of functions specifying covariates for
   # #' each trial. Must have names specified in the design Fcovariates argument.
@@ -197,9 +191,17 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
     }
     data <- add_trials(data[order(data$subjects),])
   }
+  ssd_meta <- NULL
   if(!is.null(functions)){
     for(i in 1:length(functions)){
-      data[[names(functions)[i]]] <- functions[[i]](data)
+      fun <- functions[[i]]
+      value <- fun(data)
+      meta <- attr(value, "emc_ssd")
+      if (!is.null(meta)) {
+        attr(value, "emc_ssd") <- NULL
+        ssd_meta <- meta$staircase
+      }
+      data[[names(functions)[i]]] <- value
     }
   }
   if (!is.factor(data$subjects)) data$subjects <- factor(data$subjects)
@@ -231,6 +233,8 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
       add_accumulators(data,design$matchfun,simulate=TRUE,type=model()$type,Fcovariates=design$Fcovariates),
       design,model,add_acc=FALSE,compress=FALSE,verbose=FALSE,
       rt_check=FALSE)
+    lR_levels <- if (!is.null(data$lR)) levels(data$lR) else NULL
+
     pars <- map_p(pars,data, model(), return_trialwise_parameters)
 
     if(!is.null(model()$trend)){
@@ -267,8 +271,17 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
                     data.frame(lapply(data,rep,times=expand)))
       pars <- apply(pars,2,rep,times=expand)
     }
-    if (!is.null(staircase)) {
-      attr(data, "staircase") <- staircase
+    if (!is.null(ssd_meta)) {
+      ssd_meta$labels <- lR_levels
+      if (!is.null(ssd_meta$specs)) {
+        for (nm in names(ssd_meta$specs)) {
+          if (is.list(ssd_meta$specs[[nm]])) {
+            ssd_meta$specs[[nm]]$labels <- lR_levels
+          }
+        }
+      }
+      attr(data, "staircase") <- ssd_meta
+      attr(pars, "staircase") <- ssd_meta
     }
     if (any(names(data)=="RACE")) {
       Rrt <- RACE_rfun(data, pars, model)
@@ -278,6 +291,10 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
       dropNames <- c(dropNames,names(design$Ffunctions))
     if(!is.null(data$lR)) data <- data[data$lR == levels(data$lR)[1],]
     data <- data[,!(names(data) %in% dropNames)]
+    if (!is.null(ssd_meta)) {
+      attr(data, "staircase") <- ssd_meta
+      attr(pars, "staircase") <- ssd_meta
+    }
     for (i in dimnames(Rrt)[[2]]) data[[i]] <- Rrt[,i]
   }
   attr(data,"p_vector") <- parameters;
@@ -363,4 +380,3 @@ make_random_effects <- function(design, group_means, n_subj = NULL, variance_pro
   rownames(random_effects) <- subnames
   return(random_effects)
 }
-
