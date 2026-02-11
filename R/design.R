@@ -354,10 +354,13 @@ compress_dadm <- function(da,designs,Fcov,Ffun)
     accumulator <- factor(da$lR)
     nacc <- length(unique(accumulator))
     # contract output
+    design_cells <- lapply(designs, function(x) {
+      dm_cells <- apply(x, 1, paste, collapse = "_")
+      dm_cells[attr(x, "expand")]
+    })
     cells <- paste(
-      apply(do.call(cbind,lapply(designs,function(x){
-        apply(x[attr(x,"expand"),,drop=FALSE],1,paste,collapse="_")})
-      ),1,paste,collapse="+"),da$subjects,da$R,accumulator,da$rt,sep="+")
+      do.call(paste, c(design_cells, sep = "+")),
+      da$subjects, da$R, accumulator, da$rt, sep="+")
     # Make sure that if row is included for a trial so are other rows
     if (!is.null(Fcov)) {
       if (is.null(names(Fcov))) nFcov <- Fcov else nFcov <- names(Fcov)
@@ -366,13 +369,20 @@ compress_dadm <- function(da,designs,Fcov,Ffun)
     if (!is.null(Ffun))
       cells <- paste(cells,apply(da[,Ffun,drop=FALSE],1,paste,collapse="+"),sep="+")
 
-    # if (nacc>1) cells <- paste0(rep(apply(matrix(cells,nrow=nacc),2,paste0,collapse="_"),
-    #                                 each=nacc),rep(1:nacc,times=length(cells)/nacc),sep="_")
-    contract <- !duplicated(cells)
-    cells <- cells[!duplicated(cbind(da$trials, da$subjects))] # This gets rid of excess accumulators more cleanly then filtering by lR
+    trial_id <- paste(da$subjects, da$trials, sep = "\r")
+    trial_first <- !duplicated(trial_id)
+    trial_levels <- trial_id[trial_first]
+    trial_rows <- split(cells, trial_id, drop = TRUE)
+    trial_cells <- vapply(trial_rows[trial_levels], function(x) {
+      paste(sort(x), collapse = "\r")
+    }, FUN.VALUE = character(1), USE.NAMES = FALSE)
+    trial_unique <- !duplicated(trial_cells)
+    keep_trials <- trial_levels[trial_unique]
+
+    contract <- trial_id %in% keep_trials
     out <- da[contract,,drop=FALSE]
     attr(out,"contract") <- contract
-    attr(out,"expand") <- as.numeric(factor(cells,levels=unique(cells)))
+    attr(out,"expand") <- match(trial_cells, trial_cells[trial_unique])
     # lR1 <- accumulator==levels(accumulator)[[1]]
     # attr(out,"expand_winner") <- as.numeric(factor(cells[lR1],levels=unique(cells[lR1])))
     attr(out,"s_expand") <- da$subjects
