@@ -12,6 +12,7 @@ make_sem_structure(
   b_specs = NULL,
   k_specs = NULL,
   g_specs = NULL,
+  factor_groups = NULL,
   fixed_value = 0
 )
 }
@@ -45,6 +46,13 @@ Example: \code{list(v_Sleft = "cov1", a_Eneutral = c("cov1", "cov2"))}}
 List names are factor names, elements are character vectors of covariate names.
 Example: \code{list(Factor1 = "cov1", Factor2 = c("cov1", "cov2"))}}
 
+\item{factor_groups}{Optional factor-correlation block specification.
+Can be either (1) a character vector of factor names defining one correlated block, or
+(2) a list of character vectors where each element is one correlated block.
+Factors not listed are treated as independent singleton blocks.
+Example: \code{c("Speed", "Caution", "Ability")} or
+\code{list(c("Speed", "Caution"), c("Ability", "Strategy"))}.}
+
 \item{fixed_value}{Numeric. The value used for fixed paths in the matrices that
 are not set to 1 for identifiability or \code{Inf} for estimation. Default is 0.}
 }
@@ -57,6 +65,7 @@ A list containing:
 \item \code{G_mat}: The matrix of covariate effects on factors.
 \item \code{par_names}: The subject-level parameter names derived from \code{sampled_pars(design)}.
 \item \code{factor_names}: The provided SEM factor names.
+\item \code{factor_groups}: Integer vector indicating factor-correlation blocks.
 \item \code{covariates}: A data frame with one row per unique subject and columns for each covariate,
 containing the unique subject-level values. Column names are the covariate names.
 }
