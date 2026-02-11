@@ -27,7 +27,7 @@ run_sbc <- function(design_in, prior_in, replicates = 250, trials = 100, n_subje
                       plot_data, verbose, fileName, ...)
   } else{
     out <- SBC_hierarchical(design_in, prior_in, replicates, trials, n_subjects,
-                    plot_data, verbose, fileName, ...)
+                            plot_data, verbose, fileName, ...)
   }
   return(out)
 }
@@ -48,7 +48,7 @@ SBC_hierarchical <- function(design_in, prior_in, replicates = 250, trials = 100
   # Should at a later point go to predict
   prior_mu <- plot(prior_in, design_in, do_plot = F, N = replicates, selection = "mu", return_mcmc = FALSE, map = FALSE)[[1]]
   prior_var <- plot(prior_in, design_in, do_plot = F, N = replicates, selection = "Sigma", return_mcmc = FALSE,
-                          remove_constants = FALSE)[[1]]
+                    remove_constants = FALSE)[[1]]
   rank_mu <- data.frame()
   rank_var <- data.frame()
   par_names <- names(sampled_pars(design_in))
@@ -78,8 +78,8 @@ SBC_hierarchical <- function(design_in, prior_in, replicates = 250, trials = 100
     colnames(rank_var) <- colnames(prior_var_input)
     if(!is.null(fileName)){
       SBC_temp <- list(rank = list(mu = rank_mu, var =  rank_var),
-                     prior = list(mu = prior_mu, var = prior_var),
-                     rand_effects = rand_effects, emc = emc)
+                       prior = list(mu = prior_mu, var = prior_var),
+                       rand_effects = rand_effects, emc = emc)
       save(SBC_temp, file = fileName)
     }
   }
@@ -136,7 +136,7 @@ run_SBC_subject <- function(rep, design_in, prior_alpha, trials, prior_in, dots)
   # For Bias
   CI <- credint(emc)[[1]]
   med <- CI[,2] # And return this for precision
-  bias <- p_vector - med
+  bias <- med - p_vector
   # For coverage
   coverage <- p_vector > CI[,1] & p_vector < CI[,3]
   return(list(rank = rank, med = med, bias = bias, coverage = coverage))
@@ -155,26 +155,49 @@ split_list_to_dfs <- function(lst, type = "alpha") {
 
 
 
-SBC_single <- function(design_in, prior_in, replicates = 250, trials = 100,
-                             plot_data = FALSE, verbose = TRUE,
-                             fileName = NULL, ...){
-  dots <- add_defaults(list(...), max_tries = 50, compress = FALSE, rt_resolution = 1e-12,
-                       stop_criteria = list(min_es = 100, max_gd = 1.1,
-                                            selection = c("alpha", "mu", "Sigma")))
-  dots$verbose <- verbose
-  type <- attr(prior_in, "type")
-  if(type != "single") stop("can only use `type = single`")
+SBC_single <- function(
+    design_in,
+    prior_in,
+    replicates = 250,
+    trials = 100,
+    plot_data = FALSE,
+    verbose = TRUE,
+    fileName = NULL,
+    ...
+) {
+  if (attr(prior_in, "type") != "single") {
+    stop("can only use `type = single`")
+  }
+  dots <- add_defaults(
+    list(...),
+    max_tries = 50,
+    compress = FALSE, rt_resolution = 1e-12,
+    stop_criteria = list(
+      min_es = 100, max_gd = 1.1, selection = c("alpha", "mu", "Sigma")
+    ),
+    cores_per_chain = 1
+  )
+  dots[["verbose"]] <- verbose
   # Draw prior samples
   prior_alpha <- parameters(prior_in, N = replicates, selection = "alpha")
   rank_alpha <- data.frame()
-  if(!is.null(fileName)) save(prior_alpha, file = fileName)
+  if (!is.null(fileName)) {
+    save(prior_alpha, file = fileName)
+  }
   i <- 1
-  if(dots$cores_per_chain > 1 & verbose) print("Since cores_per_chain > 1, estimating multiple data sets simultaneously")
+  if (dots[["cores_per_chain"]] > 1 && verbose) {
+    print("Since cores_per_chain > 1, estimating multiple data sets simultaneously")
+  }
   par_names <- names(sampled_pars(design_in))
-  res <- auto_mclapply(X = 1:replicates, FUN = run_SBC_subject, design_in, prior_alpha, trials, prior_in, dots, mc.cores = dots$cores_per_chain)
+  res <- auto_mclapply(
+    X = 1:replicates,
+    FUN = run_SBC_subject,
+    design_in, prior_alpha, trials, prior_in, dots,
+    mc.cores = dots[["cores_per_chain"]]
+  )
   SBC <- split_list_to_dfs(res)
-  if(!is.null(fileName)){
-    save(SBC, file = fileName)
+  if(!is.null(fileName)) {
+    save(SBC, prior_alpha, file = fileName)
   }
   return(SBC)
 }
@@ -202,14 +225,16 @@ calc_sbc_stats <- function(stats){
 #' @param ranks A list of named dataframes of the rank statistic
 #' @param bins An integer specifying the number of bins to use when plotting the histogram
 #' @param layout Optional. A numeric vector specifying the layout using `par(mfrow = layout)`
-#' @param add_stats Boolean. Should coverage and bias be included in the figure.
-#' @param ... optional arguments passed to `hist`
+#' @param add_stats Boolean. Should coverage, bias and precision be included in the figure.
 #' @return No returns
 #' @export
-plot_sbc_hist <- function(ranks, bins = 10, layout = NA, add_stats = TRUE,
-                          ...){
-  if(!is.null(ranks$rank)) stats <- calc_sbc_stats(ranks)
-  if(!is.null(ranks$rank)) ranks <- ranks$rank
+plot_sbc_hist <- function(ranks, bins = 10, layout = NA, add_stats = TRUE){
+  if (!is.null(ranks[["rank"]])) {
+    stats <- calc_sbc_stats(ranks)
+  }
+  if (!is.null(ranks[["rank"]])) {
+    ranks <- ranks[["rank"]]
+  }
   selects <- names(ranks)
   oldpar <- par(no.readonly = TRUE) # code line i
   on.exit(par(oldpar)) # code line i + 1
@@ -219,28 +244,34 @@ plot_sbc_hist <- function(ranks, bins = 10, layout = NA, add_stats = TRUE,
   mid <- qbinom(0.5, n_sample, 1/bins)
   high <- qbinom(0.975, n_sample, 1/bins)
   par_names <- colnames(ranks[[1]])
-  for(j in 1:length(ranks)){
-    if(any(is.na(layout))){
-      par(mfrow = coda_setmfrow(Nchains = 1, Nparms = ncol(ranks[[1]]),
-                                       nplots = 1))
-    } else{par(mfrow=layout)}
+  for (j in seq_along(ranks)) {
+    if (any(is.na(layout))) {
+      par(mfrow = coda_setmfrow(Nparms = ncol(ranks[[1]])))
+    } else {
+      par(mfrow = layout)
+    }
     rank <- ranks[[j]]
     stat <- stats[[j]]
-
-    for(i in 1:ncol(rank)){
-      dots <- add_defaults(list(...), main = paste0(selects[j], " - ", par_names[i]),
-                           breaks = bins, ylim = c(0, high + 2), xlab = "rank")
-      do.call(hist, c(list(rank[,i]), dots))
+    for (i in 1:ncol(rank)) {
+      hist(
+        x = rank[ , i],
+        main = paste0(selects[j], " - ", par_names[i]),
+        breaks = bins,
+        ylim = c(0, high + 2),
+        xlab = "rank"
+      )
       abline(h = low, lty = 2)
       abline(h = mid, lty = 2)
       abline(h = high, lty = 2)
-      if(!is.null(stat)){
-        legend("topleft",legend=paste0("coverage : ",round(stat$coverage[i],2)), bty = "n")
-        legend("topright",legend=paste0("bias : ",round(stat$bias[i],3)), bty = "n")
-        # legend("topright",legend=paste0("precision : ",round(stat$precision[i],3)), bty = "n")
+      if (!is.null(stat) && add_stats) {
+        coverage_print <- paste0("coverage : ", round(stat[["coverage"]][i], 2))
+        bias_print <- paste0("bias : ", round(stat[["bias"]][i], 3))
+        # precision_print <- paste0("precision : ", round(stat[["precision"]][i], 3))
+        legend(x = "topleft", legend = coverage_print, bty = "n")
+        legend(x = "topright", legend = bias_print, bty = "n")
+        # legend(x = "topright", legend = precision_print, bty = "n")
       }
     }
-
   }
 }
 
@@ -295,48 +326,117 @@ make_smooth <- function(x, y, N = 1000){
 
 #' Plot the ECDF Difference in SBC Ranks
 #'
-#' Plots the difference in observed cumulative rank statistics and the
-#' expected cumulative distribution of a uniform distribution. The blue
-#' shaded areas indicate the 95% credible interval.
+#' Plots  F_hat(z) - z  where F_hat is the
+#' empirical CDF of the (normalized) ranks and z is the Uniform(0,1) CDF.
+#' The shaded band is the simultaneous (1 - gamma) envelope for F_hat(z) - z.
 #'
-#' @param ranks A list of named dataframes of the rank statistic
+#' @param ranks A list of named dataframes of the rank statistic (raw or normalized)
 #' @param layout Optional. A numeric vector specifying the layout using `par(mfrow = layout)`
-#' @param add_stats Boolean. Should coverage and bias be included in the figure.
-#' @param ... optional arguments passed to `plot`
+#' @param add_stats Boolean. Should coverage, bias and precision be included in the figure.
+#' @param main Optional. A character specifying plot title.
+#' @param K Optional. Effective sample size of the MCMC that produced the ranks.
 #' @return No returns
 #' @export
-plot_sbc_ecdf <- function(ranks, layout = NA, add_stats = TRUE, ...){
-  if(!is.null(ranks$rank)) stats <- calc_sbc_stats(ranks)
-  if(!is.null(ranks$rank)) ranks <- ranks$rank
-  selects <- names(ranks)
-  oldpar <- par(no.readonly = TRUE) # code line i
-  on.exit(par(oldpar)) # code line i + 1
+plot_sbc_ecdf <- function(ranks, layout = NA, add_stats = TRUE, main = NULL, K = 500) {
 
-  K <- N <- nrow(ranks[[1]])
+  # stats extraction (keep existing behaviour)
+  stats <- NULL
+  if (!is.null(ranks[["rank"]])) {
+    stats <- calc_sbc_stats(ranks)
+    ranks <- ranks[["rank"]]
+  }
+
+  selects <- names(ranks)
+
+  oldpar <- par(no.readonly = TRUE)
+  on.exit(par(oldpar))
+
+  # N = number of SBC simulations (rows)
+  N <- nrow(ranks[[1]])
+
+  # Envelope for F_hat(z) - z
   gamma <- get_gamma(N, K)
-  res <- get_lims(N, K, gamma)
-  for(j in 1:length(ranks)){
-    if(any(is.na(layout))){
-      par(mfrow = coda_setmfrow(Nchains = 1, Nparms = ncol(ranks[[1]]),
-                                nplots = length(ranks)))
-    } else{par(mfrow=layout)}
+  res <- get_lims(N, K, gamma)  # res$z, res$lower, res$upper
+
+  for (j in seq_along(ranks)) {
+
+    if (any(is.na(layout))) {
+      par(mfrow = coda_setmfrow(Nparms = ncol(ranks[[j]]), nplots = length(ranks)))
+    } else {
+      par(mfrow = layout)
+    }
 
     rank <- ranks[[j]]
-    stat <- stats[[j]]
+    stat <- if (!is.null(stats)) stats[[j]] else NULL
     par_names <- colnames(rank)
-    res$x <- apply(rank, 2, function(x) sort(x) - res$z)
-    for(i in 1:ncol(rank)){
-      dots <- add_defaults(list(...), type = "l", ylim = c(min(res$lower, res$x[,i]) - 0.01, max(res$upper,res$x[,i]) + 0.01), xlim = c(0, 1),
-                           lwd = 2, ylab = "ECDF Difference", xlab = "Normalized Rank Statistic", main = paste0(selects[j], " - ", par_names[i]))
-      do.call(plot, c(list(res$z, res$x[,i]), fix_dots_plot(dots)))
-      polygon(c(res$z, rev(res$z)), c(res$lower, rev(res$upper)), col = adjustcolor("cornflowerblue", 0.2))
-      if(!is.null(stat)){
-        legend("topleft",legend=paste0("coverage : ",round(stat$coverage[i],2)), bty = "n")
-        legend("topright",legend=paste0("bias : ",round(stat$bias[i],3)), bty = "n")
-        # legend("topright",legend=paste0("precision : ",round(stat$precision[i],3)), bty = "n")
+
+    for (i in seq_len(ncol(rank))) {
+
+      r <- rank[, i]
+      r <- r[is.finite(r)]
+
+      # Convert to normalized ranks in [0,1] if needed
+      r_norm <- r
+      r_min <- suppressWarnings(min(r_norm, na.rm = TRUE))
+      r_max <- suppressWarnings(max(r_norm, na.rm = TRUE))
+
+      if (!(r_max <= 1 && r_min >= 0)) {
+        # If looks 1-based integer ranks: 1..K
+        if (r_min >= 1 && r_max <= K) {
+          r_norm <- (r_norm - 1) / K
+        } else if (r_min >= 0 && r_max <= (K - 1)) {
+          # If looks 0-based: 0..(K-1)
+          r_norm <- r_norm / K
+        } else {
+          # Fallback: scale by K (keeps it in a reasonable range if ranks are 0..ESS)
+          r_norm <- r_norm / K
+        }
+      }
+
+      # ECDF difference: F_hat(z) - z
+      Fn <- ecdf(r_norm)
+      z <- res[["z"]]
+      y <- Fn(z) - z
+
+      main_i <- if (is.null(main)) paste0(selects[j], " - ", par_names[i]) else main
+
+      ylim_lo <- min(res[["lower"]], y, na.rm = TRUE) - 0.01
+      ylim_hi <- max(res[["upper"]], y, na.rm = TRUE) + 0.03
+
+      plot(
+        x = z,
+        y = y,
+        type = "s",
+        lwd = 2,
+        ylim = c(ylim_lo, ylim_hi),
+        xlim = c(0, 1),
+        ylab = "ECDF Difference  F(z) - z",
+        xlab = "Normalized Rank Statistic (z)",
+        main = main_i
+      )
+
+      polygon(
+        x = c(z, rev(z)),
+        y = c(res[["lower"]], rev(res[["upper"]])),
+        col = adjustcolor("cornflowerblue", 0.2),
+        border = NA
+      )
+
+      # redraw ECDF diff on top of ribbon
+      lines(z, y, type = "s", lwd = 2)
+
+      abline(h = 0, lty = 2, col = "gray50")
+
+      if (!is.null(stat) && add_stats) {
+        coverage_print <- paste0("coverage : ", round(stat[["coverage"]][i], 2))
+        bias_print <- paste0("bias : ", round(stat[["bias"]][i], 3))
+        legend(x = "topleft", legend = coverage_print, bty = "n")
+        legend(x = "topright", legend = bias_print, bty = "n")
       }
     }
   }
+
+  invisible(NULL)
 }
 
 get_ranks_ESS <- function(posterior, ESS, prior){

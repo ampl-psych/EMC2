@@ -332,9 +332,9 @@ pairs_posterior <- function(emc, selection="alpha", scale_subjects=TRUE,
 #' p_vector=c(v_Sleft=-2,v_Sright=2,a=log(.95),a_Eneutral=log(1.5),a_Eaccuracy=log(2),
 #'           t0=log(.25),Z=qnorm(.5),sv=log(.5),SZ=qnorm(.5))
 #' # Make a profile plot for some parameters. Specifying a custom range for t0.
-#' profile_plot(p_vector = p_vector, p_min = c(t0 = -1.35),
-#'              p_max = c(t0 = -1.45), use_par = c("a", "t0", "SZ"),
-#'              data = forstmann, design = design_DDMaE, n_point = 10)
+#' # profile_plot(p_vector = p_vector, p_min = c(t0 = -1.35),
+#' #              p_max = c(t0 = -1.45), use_par = c("a", "t0", "SZ"),
+#' #              data = forstmann, design = design_DDMaE, n_point = 10)
 #' }
 #' @export
 
@@ -480,13 +480,13 @@ plot_pars <- function(emc,layout=NA, selection="mu", show_chains = FALSE, plot_p
     MCMC_samples <- list(lapply(MCMC_samples, function(x) do.call(rbind, x)))
     names(MCMC_samples) <- "subjects"
   }
-  psamples <-  get_objects(sampler = emc, design = get_design(emc),
+  psamples <-  do.call(get_objects, c(list(sampler = emc, design = get_design(emc),
                            type = type, sample_prior = T,
                            selection = selection, N = N,
-                           prior = get_prior(emc))
+                           prior = get_prior(emc)), fix_dots(dots, get_objects,consider_dots = F)))
   pMCMC_samples <- do.call(get_pars, c(list(psamples, selection = selection, type = type),
                                        fix_dots(dots, get_pars, exclude = c("thin", "filter", "chain", "subject"))))
-  if(length(pMCMC_samples) != length(MCMC_samples)) pMCMC_samples <- rep(pMCMC_samples, length(MCMC_samples))
+  if(length(pMCMC_samples) < length(MCMC_samples)) pMCMC_samples <- rep(pMCMC_samples, length(MCMC_samples))
 
   true_MCMC_samples <- NULL
   if(!is.null(true_pars)){
@@ -504,7 +504,14 @@ plot_pars <- function(emc,layout=NA, selection="mu", show_chains = FALSE, plot_p
   contraction_list <- list()
   for(i in 1:n_objects){
     cur_mcmc <- MCMC_samples[[i]]
-    merged <- do.call(rbind, cur_mcmc) # Need for contraction calculation
+    all_cols <- unique(unlist(lapply(cur_mcmc, colnames)))
+    cur_mcmc <- lapply(cur_mcmc, function(m) {
+      m <- cbind(m, matrix(NA_real_, nrow(m), length(setdiff(all_cols, colnames(m))),
+                           dimnames = list(NULL, setdiff(all_cols, colnames(m)))))
+      m[, all_cols, drop = FALSE]
+    })
+    merged <- do.call(rbind, cur_mcmc)
+    # merged <- do.call(rbind, cur_mcmc_filled)
     if(!show_chains) {
       cur_mcmc <- list(merged)
       if(!is.null(true_MCMC_samples)) true_MCMC_samples[[i]] <- list(do.call(rbind, true_MCMC_samples[[i]]))
@@ -518,8 +525,15 @@ plot_pars <- function(emc,layout=NA, selection="mu", show_chains = FALSE, plot_p
       par(mfrow=layout)
     }
     for(l in 1:n_pars){
-      denses <- lapply(cur_mcmc, function(x) do.call(density, c(list(x[,l]), fix_dots(dots, density.default, consider_dots = FALSE))))
-      xlim <- range(c(sapply(cur_mcmc, function(x) return(range(x[,l]))), true_pars[[i]][[1]][,l]))
+      denses <- lapply(cur_mcmc, function(x){
+        if(is.na(x[1,l])) return(NULL)
+        do.call(density, c(list(x[,l]), fix_dots(dots, density.default, consider_dots = FALSE)))
+      })
+      denses <- denses[!sapply(denses, is.null)]
+      xlim <- range(c(sapply(cur_mcmc, function(x) {
+        if(is.na(x[1,l])) return(NA)
+        range(x[,l])
+        }), true_pars[[i]][[1]][,l]), na.rm = TRUE)
       ylim <- range(sapply(denses, function(x) return(range(x$y))))
       if(ncol(pMCMC_samples[[i]][[1]]) != n_pars){
         p_idx <- 1
@@ -535,10 +549,17 @@ plot_pars <- function(emc,layout=NA, selection="mu", show_chains = FALSE, plot_p
         }
       }
       if(!is.null(true_MCMC_samples)){
-        true_denses <- lapply(true_MCMC_samples[[i]], function(x) do.call(density, c(list(x[,l]), fix_dots(dots, density.default, consider_dots = FALSE))))
-        xlim <- range(c(sapply(true_MCMC_samples[[i]], function(x) return(range(x[,l]))), xlim))
+        true_denses <- lapply(true_MCMC_samples[[i]], function(x){
+          if(is.na(x[1,l])) return(NULL)
+          do.call(density, c(list(x[,l]), fix_dots(dots, density.default, consider_dots = FALSE)))
+        })
+        xlim <- range(c(sapply(true_MCMC_samples[[i]], function(x) {
+          if(is.na(x[1,l])) return(NULL)
+          range(x[,l])
+        }), true_pars[[i]][[1]][,l]))
         ylim <- range(c(sapply(true_denses, function(x) return(range(x$y))), ylim))
       }
+      n_chains <- length(denses)
       for(k in 1:n_chains){
         x_name <- ifelse(n_objects == 1, names(MCMC_samples)[i], paste0(selection, ": ", names(MCMC_samples)[i]))
         if(k == 1){
@@ -557,7 +578,7 @@ plot_pars <- function(emc,layout=NA, selection="mu", show_chains = FALSE, plot_p
         cur_true_args <- add_defaults(true_args, col = "darkgreen", lwd = 1.5, lty = 2)
         do.call(abline, c(list(v = true_pars[[i]][[1]][,l]), fix_dots_plot(cur_true_args)))
       }
-      cur_contraction[l] <- 1-(var(merged[,l])/var(pMCMC_samples[[i]][[1]][,p_idx]))
+      cur_contraction[l] <- 1-(var(merged[,l], na.rm = TRUE)/var(pMCMC_samples[[i]][[1]][,p_idx]))
       if(plot_prior){
         cur_prior_args <- add_defaults(prior_args, col = "red")
         do.call(lines, c(list(pdenses), fix_dots_plot(cur_prior_args)))
@@ -731,3 +752,407 @@ coda_setmfrow <- function (Nchains = 1, Nparms = 1, nplots = 1, sepplot = FALSE)
   }
   return(mfrow)
 }
+
+
+#' Plots trends over time
+#'
+#' Plots the trend for selected parameters of a model. Can be used either with a p_vector, or trial-wise parameters or covariates obtained
+#' from predict()
+#'
+#' @param input_data a p_vector or posterior predictives compatible with the provided emc object
+#' @param emc An emc object
+#' @param par_name Parameter name (or covariate name) to plot
+#' @param subject Subject number to plot
+#' @param filter Optional function that takes a data frame and returns a logical vector indicating which rows to include in the plot
+#' @param on_x_axis Column name in the `dadm` to plot on the x-axis. By default 'trials'.
+#' @param pp_shaded Boolean. If `TRUE` will plot 95% credible interval as a shaded area. Otherwise plots separate lines for each iteration of the posterior predictives. Only applicable if `input_data` are posterior predictives.
+#' @param ... Optional arguments that can be passed to `plots`.
+#'
+#' @return A trend plot
+#' @export
+#'
+#' @examples
+#' dat <- EMC2:::add_trials(forstmann)
+#' dat$trials2 <- dat$trials/1000
+#'
+#' lin_trend <- make_trend(cov_names='trials2',
+#'                         kernels = 'exp_incr',
+#'                         par_names='B',
+#'                         bases='lin',
+#'                         phase = "premap")
+#'
+#' design_RDM_lin_B <- design(model=RDM,
+#'                            data=dat,
+#'                            covariates='trials2',   # specify relevant covariate columns
+#'                            matchfun=function(d) d$S==d$lR,
+#'                            transform=list(func=c('B'='identity')),
+#'                            formula=list(B ~ 1, v ~ lM, t0 ~ 1),
+#'                            trend=lin_trend)       # add trend
+#'
+#' emc <- make_emc(dat, design=design_RDM_lin_B, compress = FALSE)
+#' p_vector <- c('B'=1, 'v'=1, 'v_lMTRUE'=1, 't0'=0.1, 'B.w'=1, 'B.d_ei'=1)
+#'
+#' # Visualize trend
+#' plot_trend(p_vector, emc=emc,
+#'            par_name='B', subject='as1t',
+#'            filter=function(d) d$lR=='right', main='Threshold for right')
+plot_trend <- function(input_data, emc, par_name, subject=1,
+                       filter=NULL, on_x_axis='trials',
+                       pp_shaded=TRUE,
+                       ...) {
+
+  if(!is.list(input_data)) {
+    # user supplied p_vector
+    dadm <- emc[[1]]$data[[subject]]
+  } else {
+    dadm <- do.call(rbind, emc[[1]]$data)
+  }
+  row_filter <- dadm$subjects==subject
+  if(!is.null(filter)) {
+    if(is.function(filter)) {
+      row_filter <- row_filter & filter(dadm)
+    } else {
+      stop("filter must be a function that takes a data frame and returns a logical vector")
+    }
+  }
+  if(!is.list(input_data)) {
+    updated <- get_pars_matrix(p_vector=input_data,
+                               dadm=dadm,
+                               model=emc[[1]]$model())
+    trend <- updated[row_filter, par_name]
+    credible_interval <- NULL
+    ylim <- range(trend)
+    x <- dadm[row_filter, on_x_axis]
+    trend <- trend[order(x)]
+    x <- x[order(x)]
+  } else {
+    # user supplied posterior predictives
+    updated <- lapply(seq_along(input_data), function(i) data.frame(input_data[[i]][row_filter,par_name,drop=FALSE], x=dadm[row_filter,on_x_axis]))
+    credible_interval <- aggregate(.~x, do.call(rbind, updated), quantile, c(0.025, .5, .9))
+
+    ## order
+    credible_interval <- credible_interval[order(credible_interval[[1]]),]
+    trend <- credible_interval[[2]][,2]  # median
+    x <- credible_interval[[1]]
+    if(pp_shaded) {
+      ylim <- range(credible_interval[[2]])
+    } else {
+      ylim <- range(sapply(updated, function(x) range(x[,par_name])))
+    }
+  }
+
+  # parse dots for plotting arguments
+  dots <- list(...)
+  if(!'xlab' %in% names(dots)) dots$xlab=on_x_axis
+  if(!'ylim' %in% names(dots)) dots$ylim=ylim
+
+  full_args <- c(list(x=x,
+                      y=trend,
+                      type='l', ylab=par_name), dots)
+  do.call(plot, full_args)
+
+  if(!is.null(credible_interval)) {
+    if(pp_shaded) {
+      polygon(x=c(x, rev(x)),
+              y=c(credible_interval[[2]][,1], rev(credible_interval[[2]][,3])), col=adjustcolor(3, alpha.f = .3), border=adjustcolor(1, alpha.f=.4))
+    } else {
+      for(i in updated) lines(i$x, i[,par_name], lwd=.2)
+    }
+  }
+}
+
+
+# Spectrum plotting -------------------------------------------------------
+order_pp <- function(df) {
+  df[order(df$subjects, df$postn, df$trials), ]
+}
+
+## Returns a function that interpolates power at common frequencies
+make_interpolator <- function(freqs, power) {
+  approxfun(x = freqs, y = power, rule = 2)
+}
+
+## Given a list of (freq, power) per subject, align in common frequency space
+interpolate_to_common_grid <- function(freqs_list, power_list) {
+  # use the subject with fewest frequency bins
+  idx_min <- which.min(lengths(freqs_list))
+  common_f <- freqs_list[[idx_min]]
+
+  interpolators <- mapply(make_interpolator, freqs_list, power_list, SIMPLIFY = FALSE)
+  interpolated  <- t(sapply(interpolators, function(f) f(common_f)))
+
+  list(freq = common_f, power = interpolated)
+}
+
+#' Compute Power Spectra With Optional Subject-Level Aggregation
+#'
+#' Computes power spectral density estimates using \code{\link{spectrum}},
+#' optionally aggregated across subjects or posterior predictive samples.
+#' All arguments intended for the underlying spectral estimator should be
+#' supplied through \code{spectrum.args}.
+#'
+#' @param data A data frame with reaction time data. Must contain
+#'   \code{subjects} and \code{rt}, and for posterior predictive data
+#'   optionally \code{postn} and \code{trials}.
+#'
+#' @param by.postn Logical. If \code{TRUE}, compute a separate spectrum
+#'   for each posterior predictive draw and each posterior sample index.
+#'
+#' @param spectrum.args A named list of arguments passed directly to
+#'   \code{\link{spectrum}}. These override the defaults internally used
+#'   in this function. Useful for customizing smoothing spans, detrending,
+#'   tapering, and so on.
+#'   Defaults: `list(spans=c(3, 5), detrend=FALSE, demean=TRUE, log=FALSE, taper=0)`.
+#'   By default, we run `spectrum` without `log`, and log-transform while plotting
+#'
+#' @details
+#' The function organizes the data by subject (and optionally posterior
+#' sample index), computes spectra individually, interpolates spectra to
+#' a common frequency grid if needed, and averages them appropriately.
+#'
+#' @importFrom utils modifyList
+#' @importFrom stats spec.pgram
+#' @return
+#' Either a data frame with columns \code{freq} and \code{power}, or (if
+#' \code{by.postn = TRUE}) a list with frequency vector and a matrix of
+#' spectra across posterior samples.
+#'
+#' @export
+get_power_spectra <- function(data,
+                              by.postn = FALSE,
+                              spectrum.args = list()) {
+
+  # Default spectrum parameters (user may override any of them)
+  # Default from Wagenmakers et al., (2004), except detrend,
+  # which we set to FALSE to capture the power of linear trends.
+  # We don't get the log, we transform the log later.
+  default_spec_args <- list(
+    spans   = c(3, 5),
+    detrend = FALSE,
+    demean  = TRUE,
+    log     = FALSE,
+    taper   = 0,
+    fast    = TRUE
+  )
+
+  spec_args <- modifyList(default_spec_args, spectrum.args)
+
+  # Helper to compute a spectrum for vector x
+  compute_spec <- function(x, spec_args) {
+    spec.pgram(
+      x = x,
+      deamean = spec_args$demean,
+      spans   = spec_args$spans,
+      taper   = spec_args$taper,
+      detrend = spec_args$detrend,
+      log     = spec_args$log,
+      plot    = FALSE,
+      fast    = spec_args$fast   # FFT acceleration
+    )
+  }
+
+  # --------------------------
+  # Case 1: Mean posterior predictive spectra
+  # --------------------------
+  # if (mean.pp) {
+  #   pp <- data[order(data$subjects, data$postn, data$trials), ]
+  #
+  #   power_df <- aggregate(rt ~ postn * subjects, pp, function(x) compute_spec(x, spec_args=spec_args)$spec)
+  #   freq_df  <- aggregate(rt ~ postn * subjects, pp, function(x) compute_spec(x, spec_args=spec_args)$freq)
+  #
+  #   # Unlist spectra & frequencies into matrices
+  #   if (is.list(power_df$rt)) power_df$rt <- do.call(rbind, power_df$rt)
+  #   if (is.list(freq_df$rt))  freq_df$rt  <- do.call(rbind, freq_df$rt)
+  #
+  #   power_by_subj <- lapply(unique(power_df$subjects),
+  #                           function(s) colMeans(power_df[power_df$subjects == s, "rt"]))
+  #
+  #   freq_by_subj  <- lapply(unique(freq_df$subjects),
+  #                           function(s) colMeans(freq_df[freq_df$subjects == s, "rt"]))
+  #
+  #   mean_power <- colMeans(do.call(rbind, power_by_subj))
+  #   mean_freq  <- colMeans(do.call(rbind, freq_by_subj))
+  #
+  #   return(data.frame(freq = mean_freq, power = mean_power))
+  # }
+
+  # --------------------------
+  # Case 2: Posterior predictive spectra by postn
+  # --------------------------
+  if (by.postn) {
+    pp <- data[order(data$subjects, data$postn, data$trials), ]
+    subjects <- unique(pp$subjects)
+
+    spectra_by_subj <- lapply(subjects, function(s) {
+      lapply(unique(pp[pp$subjects == s, "postn"]),
+             function(pn) compute_spec(pp[pp$subjects == s & pp$postn == pn, "rt"], spec_args=spec_args))
+    })
+
+    # Extract frequencies (one per subject)
+    freq_by_subj <- lapply(spectra_by_subj, function(lst) lst[[1]]$freq)
+    power_by_subj <- lapply(spectra_by_subj,
+                            function(lst) lapply(lst, function(s) s$spec))
+
+    n_postn <- length(power_by_subj[[1]])
+    n_subj  <- length(power_by_subj)
+
+    # Interpolate if subjects differ in trial count
+    min_len <- min(sapply(freq_by_subj, length))
+    freq_grid <- freq_by_subj[[which.min(sapply(freq_by_subj, length))]]
+
+    interp <- function(freqs, powers) {
+      sapply(powers, function(pwr) approxfun(freqs, pwr)(freq_grid))
+    }
+
+    power_interp <- lapply(1:n_subj, function(i) {
+      interp(freq_by_subj[[i]], power_by_subj[[i]])
+    })
+
+    mean_power <- do.call(rbind,
+                          lapply(1:n_postn, function(pn) {
+                            colMeans(do.call(rbind, lapply(power_interp,
+                                                           function(m) m[, pn])))
+                          }))
+
+    return(list(freq = freq_grid, power = mean_power))
+  }
+
+  # --------------------------
+  # Case 3: Simple subject-averaged spectrum
+  # --------------------------
+  spectra <- lapply(unique(data$subjects),
+                    function(s) compute_spec(data[data$subjects == s, "rt"], spec_args=spec_args))
+
+  freqs <- lapply(spectra, function(s) s$freq)
+  specs <- lapply(spectra, function(s) s$spec)
+
+  # Interpolate to common frequency grid (shortest)
+  res <- interpolate_to_common_grid(freqs, specs)
+
+  freq_grid  <- res$freq
+  interp_mat <- res$power         # matrix: subjects × freq bins
+  mean_power <- colMeans(interp_mat)
+
+  return(data.frame(freq = freq_grid, power = mean_power))
+}
+
+
+
+#' Plot Empirical and Posterior Predictive Power Spectra
+#'
+#' Computes and plots the empirical power spectrum, with optional overlay
+#' of spectra from posterior predictive simulations. All customization of
+#' the spectral estimator is done through \code{spectrum.args}, while plot
+#' appearance is controlled via \code{...}.
+#'
+#' @param dat A data frame containing empirical reaction time data, with
+#'   at least columns \code{subjects} and \code{rt}.
+#'
+#' @param pp Optional posterior predictive data in the same format as
+#'   \code{dat}, including \code{subjects}, \code{postn}, and \code{trials}.
+#'
+#' @param plot.log Logical. Whether to log-transform frequencies and
+#'   power before plotting. This does not affect the call to
+#'   \code{\link{spectrum}}: use \code{spectrum.args$list(log = TRUE)}
+#'   to request log spectral density from the estimator itself.
+#'
+#' @param spectrum.args A named list of arguments forwarded directly to
+#'   \code{\link{spectrum}} inside \code{\link{get_power_spectra}}.
+#'
+#' @param trial_duration Optional duration of a trial in seconds. If
+#'   supplied, the x-axis is labeled in human-readable time units. Otherwise
+#'   the x-axis is in (log) frequencies of 1/trial.
+#'
+#' @param ... Additional graphical parameters passed to \code{\link{plot}}.
+#'
+#' @importFrom graphics axis
+#' @return Invisibly returns a list containing the empirical spectrum
+#'   and, if posterior predictive data is supplied, the posterior
+#'   predictive spectra and their mean.
+#'
+#' @export
+plot_spectrum <- function(dat, pp = NULL,
+                          plot.log = TRUE,
+                          spectrum.args = list(),
+                          trial_duration = NULL,
+                          ...) {
+
+  # Compute spectrum
+  sp_dat <- get_power_spectra(dat, spectrum.args = spectrum.args)
+
+  f <- if (plot.log) log else identity
+  freq_t <- f(sp_dat$freq)
+  pow_t  <- f(sp_dat$power)
+
+  if(plot.log) {
+    dots <- add_defaults(list(...),
+                         'xlab'='Log frequency (1/trial)',
+                         'ylab'='Log power',
+                         'type'='n')
+  } else {
+    dots <- add_defaults(list(...),
+                         'xlab'='Frequency (1/trial)',
+                         'ylab'='Power',
+                         'type'='n')
+  }
+
+  # Base plot
+  if (is.null(trial_duration)) {
+
+    plot_args <- dots
+    plot_args$x <- freq_t
+    plot_args$y <- pow_t
+    do.call(plot, plot_args)
+
+  } else {
+    ticks_sec <- c(7200, 3600, 1800, 900, 300, 120, 60, 30, 5, 1)
+    ticks_rel <- (1 / ticks_sec) * trial_duration
+    tick_x    <- f(ticks_rel)
+
+    labels <- c("2 hr", "1 hr", "30 m", "15 m", "5 m",
+                "2 m", "1 m", "30 s", "5 s", "1 s")
+
+    if(!'xaxt' %in% names(dots)) dots$xaxt <- 'n'
+    plot_args <- dots
+    plot_args$x <- freq_t
+    plot_args$y <- pow_t
+    if(!'xlab' %in% names(list(...))) plot_args$xlab = 'Period'
+    do.call(plot, plot_args)
+
+    axis(1,
+         at     = tick_x,
+         labels = labels,
+         las    = 2)
+  }
+  result <- list(dat = sp_dat)
+
+  # Overlay posterior predictive spectra
+  if (!is.null(pp)) {
+    sp_pp <- get_power_spectra(pp, by.postn = TRUE,
+                               spectrum.args = spectrum.args)
+
+    freqs_pp <- f(sp_pp$freq)
+    power_pp <- sp_pp$power
+
+    # Individual PP spectra
+    for (i in 1:nrow(power_pp)) {
+      lines(freqs_pp, f(power_pp[i, ]),
+            col = adjustcolor("darkgreen", alpha.f = 0.1))
+    }
+
+    # Posterior predictive mean
+    lines(freqs_pp, f(colMeans(power_pp)),
+          col = "darkgreen")
+
+    result$pp      <- sp_pp
+    result$pp_mean <- data.frame(freq = sp_pp$freq,
+                                 power = colMeans(sp_pp$power))
+  }
+
+  # Empirical spectrum trace
+  lines(freq_t, pow_t, col = par()$col)
+
+  invisible(result)
+}
+
+

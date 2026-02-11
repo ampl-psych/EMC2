@@ -5,8 +5,12 @@ sp_new <- function(iter, lambda_varimax, q, p, dim_all_c, all_c, lambda_hat, st,
     .Call(`_EMC2_sp_new`, iter, lambda_varimax, q, p, dim_all_c, all_c, lambda_hat, st, cost_matrix, perm)
 }
 
-calculate_subject_means <- function(group_designs, params, n_subjects, n_pars) {
-    .Call(`_EMC2_calculate_subject_means`, group_designs, params, n_subjects, n_pars)
+calculate_subject_means <- function(group_designs, params) {
+    .Call(`_EMC2_calculate_subject_means`, group_designs, params)
+}
+
+draw_alpha_from_design <- function(group_designs, mu, var) {
+    .Call(`_EMC2_draw_alpha_from_design`, group_designs, mu, var)
 }
 
 dlba <- function(t, A, b, v, sv, posdrift = TRUE) {
@@ -137,8 +141,24 @@ construct_design_matrix <- function(frame_times, events, has_derivative, min_ons
     .Call(`_EMC2_construct_design_matrix`, frame_times, events, has_derivative, min_onset, oversampling, time_length, onset, delay, undershoot, dispersion, u_dispersion, ratio, add_intercept)
 }
 
+do_transform <- function(pars, transform) {
+    .Call(`_EMC2_do_transform`, pars, transform)
+}
+
 calc_ll <- function(p_matrix, data, constants, designs, type, bounds, transforms, pretransforms, p_types, min_ll, trend) {
     .Call(`_EMC2_calc_ll`, p_matrix, data, constants, designs, type, bounds, transforms, pretransforms, p_types, min_ll, trend)
+}
+
+get_pars_c_wrapper <- function(p_matrix, data, constants, designs, bounds, transforms, pretransforms, p_types, trend) {
+    .Call(`_EMC2_get_pars_c_wrapper`, p_matrix, data, constants, designs, bounds, transforms, pretransforms, p_types, trend)
+}
+
+EMC2_call_custom_trend <- function(trend_pars, input, funptrSEXP) {
+    .Call(`_EMC2_EMC2_call_custom_trend`, trend_pars, input, funptrSEXP)
+}
+
+run_trend_rcpp <- function(data, trend, param, trend_pars, pars_full, return_kernel = FALSE) {
+    .Call(`_EMC2_run_trend_rcpp`, data, trend, param, trend_pars, pars_full, return_kernel)
 }
 
 c_add_charvectors <- function(x, y) {

@@ -28,7 +28,7 @@ rPROBIT <- function(lR,pars,p_types=c("mean","sd","threshold"),lt=-Inf)
   cbind.data.frame(R=R,rt=NA)
 }
 
-#' Gaussian Signal Detection Theory Model for Binary Responses (probit)
+#' Gaussian Signal Detection Theory Model for Binary Responses
 #'
 #' Discrete binary choice based on continuous Gaussian latent, with no rt (rt
 #' must be set to NA in data).

@@ -151,7 +151,7 @@ get_prior_factor <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5
       if(selection != "alpha") samples$theta_var <- vars
     }
     if(selection %in% "alpha"){
-      samples$alpha <- get_alphas(mu, vars, "alpha")
+      samples$alpha <- get_alphas(mu, vars, design[[1]]$Ffactors$subjects)
     }
     out <- samples
   }

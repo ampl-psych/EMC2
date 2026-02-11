@@ -10,7 +10,10 @@ compare_subject(
   filter = 0,
   use_best_fit = TRUE,
   print_summary = TRUE,
-  digits = 3
+  digits = 3,
+  return_summary = FALSE,
+  n_cores = 1,
+  subject = NULL
 )
 }
 \arguments{
@@ -24,9 +27,15 @@ If a vector is supplied, only the iterations in the vector will be considered.}
 \item{use_best_fit}{Boolean, defaults to \code{TRUE}, use minimal likelihood or mean likelihood
 (whichever is better) in the calculation, otherwise always uses the mean likelihood.}
 
-\item{print_summary}{Boolean (defaults to \code{TRUE}) print table of results}
+\item{print_summary}{Boolean (defaults to \code{TRUE}) print tables of model weight results}
 
 \item{digits}{Integer, significant digits in printed table}
+
+\item{return_summary}{Return tables of model weight results}
+
+\item{n_cores}{Number of cores for parallel processing}
+
+\item{subject}{Used to select subset of subjects (integer or character vector)}
 }
 \value{
 List of matrices for each subject of effective number of parameters,

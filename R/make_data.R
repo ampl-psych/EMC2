@@ -211,73 +211,77 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
     if ( is.null(model()$Ttransform) ) stop("model()$Ttransform must be specified")
   }
 
-  data <- design_model(
-    add_accumulators(data,design$matchfun,simulate=TRUE,type=model()$type,Fcovariates=design$Fcovariates),
-    design,model,add_acc=FALSE,compress=FALSE,verbose=FALSE,
-    rt_check=FALSE)
+  simulate_unconditional_on_data <- return_trialwise_parameters <- FALSE
+  dots_local <- list(...)
+  if (isFALSE(dots_local$conditional_on_data)) {
+    simulate_unconditional_on_data <- TRUE
+  } else if (!is.null(dots_local$conditional_on_data)) {
+    simulate_unconditional_on_data <- !isTRUE(dots_local$conditional_on_data)
+  }
+  return_trialwise_parameters <- isTRUE(dots_local$return_trialwise_parameters)
+
+  ## For both conditional and unconditional simulations...
   pars <- t(apply(parameters, 1, do_pre_transform, model()$pre_transform))
-  pars <- map_p(add_constants(pars,design$constants),data, model())
-  if(!is.null(model()$trend) && attr(model()$trend, "pretransform")){
-    # This runs the trend and afterwards removes the trend parameters
-    pars <- prep_trend(data, model()$trend, pars)
-  }
-  pars <- do_transform(pars, model()$transform)
-  if(!is.null(model()$trend) && attr(model()$trend, "posttransform")){
-    # This runs the trend and afterwards removes the trend parameters
-    pars <- prep_trend(data, model()$trend, pars)
-  }
-  pars <- model()$Ttransform(pars, data)
-  pars <- add_bound(pars, model()$bound, data$lR)
-  pars_ok <- attr(pars, 'ok')
-  if (model()$type=="DDM") trials_ok <- pars_ok else {
-      trials_ok <- pars_ok[rep(design$Rlevels==design$Rlevels[1],length.out=length(pars_ok))]
+  pars <- add_constants(pars,design$constants)
+  if(simulate_unconditional_on_data) {
+    res <- make_data_unconditional(data=data, pars=pars, design=design, model=model,
+                                   return_trialwise_parameters)
+    data <- res$data
+    trialwise_parameters <- res$trialwise_parameters
+  } else{
+    data <- design_model(
+      add_accumulators(data,design$matchfun,simulate=TRUE,type=model()$type,Fcovariates=design$Fcovariates),
+      design,model,add_acc=FALSE,compress=FALSE,verbose=FALSE,
+      rt_check=FALSE)
+    pars <- map_p(pars,data, model(), return_trialwise_parameters)
+
+    if(!is.null(model()$trend)){
+      phases <- vapply(model()$trend, function(x) x$phase, character(1))
+      if (any(phases == "pretransform")){
+        # apply only pretransform trends and remove their trend parameters
+        pars <- prep_trend_phase(data, model()$trend, pars, "pretransform",
+                                 return_trialwise_parameters)
+      }
     }
-  if(any(!trials_ok)){
-    warning(round(100*mean(!trials_ok),2)," % of parameter values fall out of model bounds, see <model_name>$bounds()")
-  }
-  if ( any(dimnames(pars)[[2]]=="pContaminant") && any(pars[,"pContaminant"]>0) )
-    pc <- pars[data$lR==levels(data$lR)[1],"pContaminant"] else pc <- NULL
-  if (expand>1) {
-    data <- cbind(rep=rep(1:expand,each=dim(data)[1]),
-                  data.frame(lapply(data,rep,times=expand)))
-    pars <- apply(pars,2,rep,times=expand)
-  }
-  if (!is.null(ssd_meta)) {
-    attr(data, "staircase") <- ssd_meta
-    attr(pars, "staircase") <- ssd_meta
-  }
-  if (any(names(data)=="RACE")) {
-    Rrt <- RACE_rfun(data, pars, model)
-  } else Rrt <- model()$rfun(data,pars)
-  dropNames <- c("lR","lM","lSmagnitude")
-  if (!return_Ffunctions && !is.null(design$Ffunctions))
-    dropNames <- c(dropNames,names(design$Ffunctions))
-  if(!is.null(data$lR)) data <- data[data$lR == levels(data$lR)[1],]
-  data <- data[,!(names(data) %in% dropNames)]
-  for (i in dimnames(Rrt)[[2]]) {
-    data[trials_ok,i] <- Rrt[trials_ok,i]
-    if (any(!trials_ok)) data[!trials_ok,i] <- NA
-  }
-  data <- make_missing(data[,names(data)!="winner"],LT,UT,LC,UC,
-    LCresponse,UCresponse,LCdirection,UCdirection)
-  if (!is.null(ssd_meta)) {
-    attr(data, "staircase") <- ssd_meta
-    attr(pars, "staircase") <- ssd_meta
-  }
-  if ( !is.null(pc) ) {
-    if (!any(is.infinite(data$rt)) & any(is.na(data$R)))
-      stop("Cannot have contamination and censoring with no direction and response")
-    contam <- runif(length(pc)) < pc
-    data[contam,"R"] <- NA
-    if ( LC!=0 | is.finite(UC) ) { # censoring
-      if ( (LCdirection & UCdirection) &  !rtContaminantNA)
-        stop("Cannot have contamination with a mixture of censor directions")
-      if (rtContaminantNA & ((is.finite(LC) & !LCresponse & !LCdirection) |
-                              (is.finite(UC) & !UCresponse & !UCdirection)))
-        stop("Cannot have contamination and censoring with no direction and response")
-      if (rtContaminantNA | (!LCdirection & !UCdirection)) data[contam,"rt"] <- NA else
-        if (LCdirection) data[contam,"rt"] <- -Inf  else data[contam,"rt"] <- Inf
-    } else data[contam,"rt"] <- NA
+    pars <- do_transform(pars, model()$transform)
+    if(!is.null(model()$trend)){
+      phases <- vapply(model()$trend, function(x) x$phase, character(1))
+      if (any(phases == "posttransform")){
+        # apply only posttransform trends and remove their trend parameters
+        pars <- prep_trend_phase(data, model()$trend, pars, "posttransform",
+                                 return_trialwise_parameters)
+      }
+    }
+    if(return_trialwise_parameters) trialwise_parameters <- cbind(pars, attr(pars, "trialwise_parameters"))
+
+    pars <- model()$Ttransform(pars, data)
+    if (is.null(optionals$nobound))
+      pars <- add_bound(pars, model()$bound, data$lR) else
+      attr(pars,"ok") <- rep(TRUE,nrow(pars))
+
+    pars_ok <- attr(pars, 'ok')
+    if(mean(!pars_ok) > .1){
+      warning("More than 10% of parameter values fall out of model bounds, see <model_name>$bounds()")
+      return(FALSE)
+    }
+    if (expand>1) {
+      data <- cbind(rep=rep(1:expand,each=dim(data)[1]),
+                    data.frame(lapply(data,rep,times=expand)))
+      pars <- apply(pars,2,rep,times=expand)
+    }
+    if (!is.null(ssd_meta)) {
+      attr(data, "staircase") <- ssd_meta
+      attr(pars, "staircase") <- ssd_meta
+    }
+    if (any(names(data)=="RACE")) {
+      Rrt <- RACE_rfun(data, pars, model)
+    } else Rrt <- model()$rfun(data,pars)
+    dropNames <- c("lR","lM")
+    if (!return_Ffunctions && !is.null(design$Ffunctions))
+      dropNames <- c(dropNames,names(design$Ffunctions))
+    if(!is.null(data$lR)) data <- data[data$lR == levels(data$lR)[1],]
+    data <- data[,!(names(data) %in% dropNames)]
+    for (i in dimnames(Rrt)[[2]]) data[[i]] <- Rrt[,i]
   }
   attr(data,"p_vector") <- parameters;
   if(!is.null(post_functions)){
@@ -285,6 +289,7 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
       data[[names(post_functions)[i]]] <- post_functions[[i]](data)
     }
   }
+  if(return_trialwise_parameters) attr(data, 'trialwise_parameters') <- trialwise_parameters
   data
 }
 

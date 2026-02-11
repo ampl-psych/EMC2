@@ -11,6 +11,7 @@
 #'
 #' @return A vector of SSDs with the same length as the number of rows in 'd'.
 #'         Trials without a stop signal are assigned Inf.
+#' @export
 SSD_function <- function(d,SSD=NA,pSSD=.25) {
   if (sum(pSSD)>1) stop("pSSD sum cannot exceed 1.")
   if (length(pSSD)==length(SSD)-1) pSSD <- c(pSSD,1-sum(pSSD))
@@ -345,6 +346,13 @@ rSSexGaussian <- function(data,pars,ok=rep(TRUE,dim(pars)[1]))
   is1 <- lR==levels(lR)[1]     # First go accumulator
   acc <- 1:nacc                # choice (go and ST) accumulator index
   allSSD <- data$SSD[is1]
+
+  # set default for latent inhibitor: simple stop-signal task
+  if(!"lI" %in% colnames(pars)){
+    pars <- cbind(pars, lI = 2)
+  }
+
+
   # stop-triggered racers
   isST <- pars[,"lI"]==1              # Boolean for all pars
   accST <- acc[pars[1:nacc,"lI"]==1]  # Index of ST accumulator, from 1st trial
@@ -561,7 +569,7 @@ pstopTEXG <- function(
 #' @details
 #'
 #' Default values are used for all parameters that are not explicitly listed in the `formula`
-#' argument of `design()`.They can also be accessed with `SSexG()$p_types`.
+#' argument of `design()`.They can also be accessed with `SSEXG()$p_types`.
 #'
 #' | **Parameter** | **Transform** | **Natural scale** | **Default**   | **Mapping**                    | **Interpretation**                                            |
 #' |-----------|-----------|---------------|-----------|----------------------------|-----------------------------------------------------------|
@@ -922,7 +930,7 @@ pstopHybrid <- function(
 #' @details
 #'
 #' Default values are used for all parameters that are not explicitly listed in the `formula`
-#' argument of `design()`.They can also be accessed with `SShybrid()$p_types`.
+#' argument of `design()`.They can also be accessed with `SSRDEX()$p_types`.
 #'
 #' | **Parameter** | **Transform** | **Natural scale** | **Default**   | **Mapping**                    | **Interpretation**                                            |
 #' |-----------|-----------|---------------|-----------|----------------------------|-----------------------------------------------------------|
@@ -938,9 +946,9 @@ pstopHybrid <- function(
 #' | *gf*     | probit       | \[0, 1\]        | qnorm(0)    |                            | Attentional lapse rate for go process ("go failure")    |
 #' | *exgS_lb*     | -       | \[-Inf, Inf\]        | .05    |                            | Lower bound of ex-Gaussian stop finish time distribution    |
 #'
-#' All parameters are estimated on the log scale, with the exception of the attentional failure parameters (`tf` and `gf`), which are estimated on the probit scale.
+#' All parameters are estimated on the log scale, with the exception of `tf` and `gf` which are estimated on the probit scale, and `exgS_lb` which is estimated on the natural scale.
 #'
-#' The parameterization *b* = *B* + *A* ensures that the response threshold is
+#' The parameterization *b* = *B* + *A* ensures that the response threshold *b* is
 #' always higher than the between trial variation in start point.
 #'
 #' Conventionally, `s` is fixed to 1 to satisfy scaling constraints.
@@ -1064,6 +1072,11 @@ log_likelihood_race_ss <- function(pars,dadm,model,min_ll=log(1e-10))
     # "is" = logical, "isp" pars/dadm index,
     # "t" trials index, "ist" logical on trial index
     # "n_" number of integer
+
+    # Default for lI is simple stop signal paradigm
+    if(is.null(dadm$lI)){
+      dadm$lI <- factor(rep(2,nrow(dadm)),levels=1:2)
+    }
 
     # Counts
     n_acc <- length(levels(dadm$lR))                   # total number of accumulators
@@ -1237,9 +1250,6 @@ log_likelihood_race_ss <- function(pars,dadm,model,min_ll=log(1e-10))
 
     allLL[is.na(allLL)|is.nan(allLL)] <- min_ll
     allLL <- pmax(min_ll,allLL)
-
-    # # TODO remove when we're happy with testing
-    # llR <<- allLL
 
     sum(allLL[attr(dadm,"expand")])
 }
