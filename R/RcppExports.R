@@ -125,6 +125,22 @@ rCDM <- function(pars, ok = NULL, dt = 1e-5, max_steps = 100000000L) {
     .Call(`_EMC2_rCDM`, pars, ok, dt, max_steps)
 }
 
+rSDM <- function(pars, ok = NULL, dt = 1e-5, max_steps = 100000000L) {
+    .Call(`_EMC2_rSDM`, pars, ok, dt, max_steps)
+}
+
+rPSDM <- function(pars, ok = NULL, dt = 1e-5, max_steps = 100000000L) {
+    .Call(`_EMC2_rPSDM`, pars, ok, dt, max_steps)
+}
+
+rPHSDM <- function(pars, ok = NULL, dt = 1e-5, max_steps = 100000000L) {
+    .Call(`_EMC2_rPHSDM`, pars, ok, dt, max_steps)
+}
+
+rHSDM <- function(pars, ok = NULL, dt = 1e-5, max_steps = 100000000L) {
+    .Call(`_EMC2_rHSDM`, pars, ok, dt, max_steps)
+}
+
 EMC2_call_custom_trend <- function(trend_pars, input, funptrSEXP) {
     .Call(`_EMC2_EMC2_call_custom_trend`, trend_pars, input, funptrSEXP)
 }

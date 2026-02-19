@@ -143,10 +143,53 @@ double c_log_likelihood_CDM(NumericMatrix pars, DataFrame data,
                                    double min_ll, LogicalVector is_ok){
   NumericVector rts = data["rt"]; // numeric
   NumericVector Rs  = data["R"];  // numeric angles
+  CharacterVector dnames = data.names();
+  const bool has_R2 = sum(contains(dnames, "R2")) == 1;
+  const bool has_R3 = sum(contains(dnames, "R3")) == 1;
   NumericVector lls(n_trials);
   NumericVector lls_exp(expand.length());
-  lls = c_dCDM(rts, Rs, pars, is_ok);
+  if (has_R2 && has_R3 && pars.ncol() >= 8) {
+    NumericVector R2s = data["R2"];
+    NumericVector R3s = data["R3"];
+    lls = c_dHSDM(rts, Rs, R2s, R3s, pars, is_ok);
+  } else if (has_R2 && pars.ncol() >= 7) {
+    NumericVector R2s = data["R2"];
+    lls = c_dSDM(rts, Rs, R2s, pars, is_ok);
+  } else {
+    lls = c_dCDM(rts, Rs, pars, is_ok);
+  }
   lls_exp = c_expand(lls, expand); // decompress
+  lls_exp[is_na(lls_exp)] = min_ll;
+  lls_exp[is_infinite(lls_exp)] = min_ll;
+  lls_exp[lls_exp < min_ll] = min_ll;
+  return sum(lls_exp);
+}
+
+double c_log_likelihood_PSDM(NumericMatrix pars, DataFrame data,
+                             const int n_trials, IntegerVector expand,
+                             double min_ll, LogicalVector is_ok){
+  NumericVector rts = data["rt"];
+  NumericVector Rs = data["R"];
+  NumericVector lls(n_trials);
+  NumericVector lls_exp(expand.length());
+  lls = c_dPSDM(rts, Rs, pars, is_ok);
+  lls_exp = c_expand(lls, expand);
+  lls_exp[is_na(lls_exp)] = min_ll;
+  lls_exp[is_infinite(lls_exp)] = min_ll;
+  lls_exp[lls_exp < min_ll] = min_ll;
+  return sum(lls_exp);
+}
+
+double c_log_likelihood_PHSDM(NumericMatrix pars, DataFrame data,
+                              const int n_trials, IntegerVector expand,
+                              double min_ll, LogicalVector is_ok){
+  NumericVector rts = data["rt"];
+  NumericVector Rs = data["R"];
+  NumericVector R2s = data["R2"];
+  NumericVector lls(n_trials);
+  NumericVector lls_exp(expand.length());
+  lls = c_dPHSDM(rts, Rs, R2s, pars, is_ok);
+  lls_exp = c_expand(lls, expand);
   lls_exp[is_na(lls_exp)] = min_ll;
   lls_exp[is_infinite(lls_exp)] = min_ll;
   lls_exp[lls_exp < min_ll] = min_ll;
@@ -284,6 +327,40 @@ NumericVector calc_ll(NumericMatrix p_matrix, DataFrame data, NumericVector cons
       }
       is_ok = c_do_bound(pars, bound_specs);
       lls[i] = c_log_likelihood_CDM(pars, data, n_trials, expand, min_ll, is_ok);
+    }
+  } else if(type == "PSDM"){
+    IntegerVector expand = data.attr("expand");
+    for(int i = 0; i < n_particles; i++){
+      p_vector = p_matrix(i, _);
+      if(i == 0){
+        p_specs = make_pretransform_specs(p_vector, pretransforms);
+        NumericMatrix dummy(1, p_types.size());
+        colnames(dummy) = p_types;
+        full_t_specs = make_transform_specs(dummy, transforms);
+      }
+      pars = get_pars_matrix(p_vector, constants, p_specs, p_types, designs, n_trials, data, trend, full_t_specs);
+      if (i == 0) {
+        bound_specs = make_bound_specs(minmax,mm_names,pars,bounds);
+      }
+      is_ok = c_do_bound(pars, bound_specs);
+      lls[i] = c_log_likelihood_PSDM(pars, data, n_trials, expand, min_ll, is_ok);
+    }
+  } else if(type == "PHSDM"){
+    IntegerVector expand = data.attr("expand");
+    for(int i = 0; i < n_particles; i++){
+      p_vector = p_matrix(i, _);
+      if(i == 0){
+        p_specs = make_pretransform_specs(p_vector, pretransforms);
+        NumericMatrix dummy(1, p_types.size());
+        colnames(dummy) = p_types;
+        full_t_specs = make_transform_specs(dummy, transforms);
+      }
+      pars = get_pars_matrix(p_vector, constants, p_specs, p_types, designs, n_trials, data, trend, full_t_specs);
+      if (i == 0) {
+        bound_specs = make_bound_specs(minmax,mm_names,pars,bounds);
+      }
+      is_ok = c_do_bound(pars, bound_specs);
+      lls[i] = c_log_likelihood_PHSDM(pars, data, n_trials, expand, min_ll, is_ok);
     }
   } else if(type == "MRI" || type == "MRI_AR1"){
     int n_pars = p_types.length();
