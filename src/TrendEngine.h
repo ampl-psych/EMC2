@@ -26,6 +26,7 @@ struct KernelSlotSpec {
 
   // For InputKind::Covariate
   Rcpp::NumericMatrix kernel_input;  // data column
+  std::string kernel_input_name;
 
   // For InputKind::ParInput
   std::string par_input_name;
@@ -256,6 +257,7 @@ struct TrendRuntime {
   void reset_all_kernels();
 
   Rcpp::NumericMatrix all_kernel_outputs(ParamTable& pt);
+  Rcpp::NumericMatrix all_kernel_outputs(ParamTable& pt, const std::vector<int>& codes);
 };
 
 // helper to bind one op at runtime

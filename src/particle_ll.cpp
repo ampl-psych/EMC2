@@ -147,7 +147,8 @@ NumericMatrix get_pars_matrix_oo(ParamTable& param_table,
                                  const std::vector<TransformSpec>& full_specs,
                                  const Rcpp::CharacterVector& keep_names,
                                  bool return_covariate_matrix = false,
-                                 bool return_all_pars = false) {
+                                 bool return_all_pars = false,
+                                 const std::vector<int>& kernel_output_codes = std::vector<int>{1}) {
   // Reset kernels if needed
   if (trend_runtime) {
     trend_runtime->reset_all_kernels();
@@ -222,14 +223,25 @@ NumericMatrix get_pars_matrix_oo(ParamTable& param_table,
     }
   }
 
-  if(return_covariate_matrix) {
-    return trend_runtime->all_kernel_outputs(param_table);
+  // 8) Kernel outputs, if requested
+  if (return_covariate_matrix) {
+    if (!trend_runtime) {
+      Rcpp::stop("return_kernel_matrix/return_covariate_matrix requested but no trend was provided");
+    }
+
+    std::vector<int> codes = kernel_output_codes;
+    if (codes.empty()) {
+      // reasonable default: main trajectory
+      codes.push_back(1);
+    }
+
+    return trend_runtime->all_kernel_outputs(param_table, codes);
   }
 
   if(return_all_pars) {
     return param_table.materialize();
   }
-  // 8) Materialize only requested parameters
+  // 9) Materialize only requested parameters
   return param_table.materialize_by_param_names(keep_names);
 }
 
@@ -597,6 +609,11 @@ NumericMatrix get_pars_c_wrapper(NumericMatrix p_matrix, DataFrame data, Numeric
                                  bool return_kernel_matrix = false,
                                  bool drop_trend_pars = true)
 {
+
+  if (return_kernel_matrix && trend.isNull()) {
+    stop("return_kernel_matrix=TRUE requires a non-NULL 'trend' specification");
+  }
+
   const int n_trials = data.nrow();
 
   // take first row as in your original code
@@ -644,7 +661,8 @@ NumericMatrix get_pars_c_wrapper_oo(NumericMatrix particle_matrix,
                                     List pretransforms,
                                     Rcpp::Nullable<Rcpp::List> trend = R_NilValue,
                                     bool return_kernel_matrix = false,
-                                    bool return_all_pars = false)
+                                    bool return_all_pars = false,
+                                    IntegerVector kernel_output_codes = 1)
 {
   const int n_trials = data.nrow();
 
@@ -707,12 +725,22 @@ NumericMatrix get_pars_c_wrapper_oo(NumericMatrix particle_matrix,
 
   TrendRuntime* trend_runtime_ptr = trend_runtime ? trend_runtime.get() : nullptr;
 
+
+
+  // Convert IntegerVector -> std::vector<int>
+  std::vector<int> kernel_codes;
+  kernel_codes.reserve(kernel_output_codes.size());
+  for (int i = 0; i < kernel_output_codes.size(); ++i) {
+    kernel_codes.push_back(kernel_output_codes[i]);
+  }
+
   NumericMatrix pars = get_pars_matrix_oo(param_table_template,
                                           designs,
                                           trend_runtime_ptr,
                                           full_specs,
                                           return_param_names,
                                           return_kernel_matrix,
-                                          return_all_pars);
+                                          return_all_pars,
+                                          kernel_codes);
   return pars;
 }

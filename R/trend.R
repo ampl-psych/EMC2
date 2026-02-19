@@ -1097,6 +1097,17 @@ get_kernels <- function() {
                 transforms = list(func = list("q0" = "identity", "alphaFast" = "pnorm",
                                               "propSlow" = "pnorm", "dSwitch" = "pnorm")),
                 bases = base_2p),
+    # delta2kernel2 = list(description = paste(
+    #   "Steven fucking around with the delta2kernel. You shouldn't see this! Dual kernel delta rule: k = q[i].\n",
+    #   "         Combines fast and slow learning rates\n",
+    #   "         and switches between them based on dSwitch.\n",
+    #   "         Parameters: q0 (initial value), alphaFast (fast learning rate),\n",
+    #   "         propSlow (alphaSlow = propSlow * alphaFast), dSwitch (switch threshold)."
+    # ),
+    # default_pars = c("q0", "alphaFast", "propSlow", "dSwitch"),
+    # transforms = list(func = list("q0" = "identity", "alphaFast" = "pnorm",
+    #                               "propSlow" = "pnorm", "dSwitch" = "pnorm")),
+    # bases = base_2p),
     delta2lr = list(description = paste(
                 "Dual learning rate delta rule: k = q[i].\n",
                 "         Like the standard delta rule, but with separate\n",
@@ -1214,7 +1225,7 @@ verbal_trend <- function(design_matrix, trend) {
 }
 
 
-make_data_unconditional <- function(data, pars, design, model, return_trialwise_parameters) {
+make_data_unconditional <- function(data, pars, design, model, return_trialwise_parameters, kernel_output_codes=c(1L)) {
   model_fun <- model
   model_list <- model()
   includeColumns <- colnames(data)
@@ -1261,7 +1272,7 @@ make_data_unconditional <- function(data, pars, design, model, return_trialwise_
         if(tmp_return_trialwise) {
           covariates <- get_pars_c_wrapper_oo(pars[which(subj == subj_levels),,drop=FALSE], dm, constants = constants, designs = designs,
                                               model_list$bound, model_list$transform, model_list$pre_transform,
-                                              model_list$trend, return_kernel_matrix = TRUE)
+                                              model_list$trend, return_kernel_matrix = TRUE, kernel_output_codes=kernel_output_codes)
           attr(pm, 'trialwise_parameters') <- covariates
         }
       }
@@ -1322,7 +1333,147 @@ make_data_unconditional <- function(data, pars, design, model, return_trialwise_
 }
 
 
-make_data_unconditional_vectorised <- function(data, pars, design, model, return_trialwise_parameters) {
+# make_data_unconditional_c <- function(data, pars, design, model, return_trialwise_parameters) {
+#   model_fun <- model
+#   model_list <- model()
+#   includeColumns <- colnames(data)
+#   # Initial scaffolding (attributes and factor setup)
+#   data <- design_model(
+#     add_accumulators(data,design$matchfun,simulate=FALSE,type=model_list$type,Fcovariates=design$Fcovariates),
+#     design,model_fun,add_acc=FALSE,compress=FALSE,verbose=FALSE,
+#     rt_check=FALSE)
+#   trialwise_parameters <- NULL
+#   # Iterate per subject, then per trial
+#   subj_levels <- levels(data$subjects)
+#
+#   # Create one Simulator per subject
+#   simulators <- lapply(subj_levels, function(subj) {
+#     idx_subj <- which(data$subjects == subj)
+#     if (!length(idx_subj)) return(NULL)
+#
+#     pars_subj <- pars[which(subj == subj_levels), , drop = FALSE]
+#     create_simulator(
+#       pars_subj   = pars_subj,
+#       model_fun   = model_fun,
+#       model_list  = model_list,
+#       design      = design
+#     )
+#   })
+#   names(simulators) <- subj_levels
+#
+#   for (subj in subj_levels) {
+#     sim <- simulators[[subj]]
+#     if (is.null(sim)) next
+#
+#     sub_trialwise_parameters <- NULL
+#     idx_subj_all <- which(data$subjects == subj)
+#     if (!length(idx_subj_all)) next
+#     trials_subj <- data$trials[idx_subj_all]
+#     trial_vals <- sort(unique(trials_subj))
+#
+#     for (j in seq_along(trial_vals)) {
+#       tmp_return_trialwise <- ifelse(j == length(trial_vals) & return_trialwise_parameters, TRUE, FALSE)
+#
+#       current_trial <- trial_vals[j]
+#       prefix_rows <- idx_subj_all[trials_subj %in% trial_vals[seq_len(j)]]
+#       current_rows <- idx_subj_all[trials_subj == current_trial]
+#
+#       data_prefix <- data[prefix_rows, , drop = FALSE]
+#
+#       # # Rebuild design for the current prefix via Simulator
+#       # data_prefix contains full prefix for this subject,
+#       # including any feedback columns updated so far
+#       data_prefix <- data[prefix_rows, , drop = FALSE]
+#
+#       if (getOption("emc2.use_oo", TRUE)) {
+#         pm <- simulator_step_with_cache(
+#           sim,
+#           data_prefix,
+#           return_kernel_matrix = FALSE,
+#           return_all_pars      = FALSE
+#         )
+#
+#         if (tmp_return_trialwise) {
+#           covariates <- simulator_step_with_cache(
+#             sim,
+#             data_prefix,
+#             return_kernel_matrix = TRUE,
+#             return_all_pars      = FALSE
+#           )
+#           attr(pm, "trialwise_parameters") <- covariates
+#         }
+#       } else {
+#         # optional: legacy path
+#       }
+#
+#       # We still need dm-like object for indexing (subjects/trials):
+#       # simplest is to rebuild a "light" dm, or you can reuse data_prefix
+#       dm <- design_model(
+#         data_prefix, design, model_fun,
+#         add_acc = FALSE, compress = FALSE,
+#         verbose = FALSE, rt_check = FALSE,
+#         compress_dms = FALSE
+#       )
+#
+#       mask_current <- dm$subjects == subj & dm$trials == current_trial
+#       if (!any(mask_current)) next
+#
+#       cur_dm <- dm[mask_current, , drop = FALSE]
+#       pr <- model_list$Ttransform(pm[mask_current, , drop = FALSE], cur_dm)
+#       pr <- add_bound(pr, model_list$bound, cur_dm$lR)
+#       # Identify current-trial rows inside the prefix design
+#
+#
+#       # Simulate current trial rows
+#       if (any(names(dm) == "RACE")) {
+#         Rrt <- RACE_rfun(cur_dm, pr, model_fun)
+#       } else {
+#         Rrt <- model_list$rfun(cur_dm, pr)
+#       }
+#       # Write outputs back to original data rows for the current trial
+#       target_rows <- prefix_rows[mask_current]
+#       for (nm in dimnames(Rrt)[[2]]) data[target_rows, nm] <- Rrt[, nm]
+#
+#       # NS I don't actually think this is necessary couldn't this be specified
+#       # As a standard function in the design?
+#
+#       # SM I don't know how to otherwise overwrite the 'rewards' column in such a way that
+#       # the rewards on the previous trials aren't overwritten each trial... would be happy
+#       # to leave it out if not needed!
+#       # # Optional per-trend feedback → next trial for this subject
+#       if(!is.null(tr)) {
+#         for(trend_n in 1:length(tr)) {
+#           if(!is.null(tr[[trend_n]]$feedback_fun)) {
+#             nams <- names(tr[[trend_n]]$feedback_fun)
+#             window_rows <- prefix_rows
+#             for(i in 1:length(nams)){
+#               fb_vec <- tr[[trend_n]]$feedback_fun[[i]](data[window_rows,,drop=FALSE])
+#               data[window_rows, nams[i]] <- fb_vec
+#             }
+#           }
+#         }
+#       }
+#
+#       # Store trialwise parameters if requested
+#       if(tmp_return_trialwise){
+#         sub_trialwise_parameters <- cbind(pm, attr(pm, "trialwise_parameters"))
+#       }
+#     }
+#     if(return_trialwise_parameters) {
+#       trialwise_parameters <- rbind(trialwise_parameters, sub_trialwise_parameters)
+#     }
+#   }
+#   # Re-run with newly updated data to ensure Ffunctions correspond to the simulated data
+#   data <- design_model(data, design, model_fun, add_acc = FALSE, compress = FALSE, verbose = FALSE, rt_check = FALSE)
+#
+#   if(is.null(data$lR)) data$lR <- 1
+#   data <- data[data$lR == unique(data$lR)[1], unique(c(includeColumns, "R", "rt"))]
+#   data <- data[,!colnames(data) %in% c('lR', 'lM')]
+#   return(list(data = data, trialwise_parameters = trialwise_parameters))
+# }
+
+
+make_data_unconditional_vectorised <- function(data, pars, design, model, return_trialwise_parameters, kernel_output_codes=c(1L)) {
   model_fun <- model
   model_list <- model()
   includeColumns <- colnames(data)
@@ -1375,7 +1526,7 @@ make_data_unconditional_vectorised <- function(data, pars, design, model, return
       if(tmp_return_trialwise) {
         covariates <- get_pars_c_wrapper_oo(pars[which(subj == subj_levels),,drop=FALSE], cur_dm, constants = constants, designs = designs,
                                             model_list$bound, model_list$transform, model_list$pre_transform,
-                                            model_list$trend, return_kernel_matrix = TRUE)
+                                            model_list$trend, return_kernel_matrix = TRUE, kernel_output_codes=kernel_output_codes)
         trialwise_parameters <- rbind(trialwise_parameters, cbind(pm, covariates))
       }
 

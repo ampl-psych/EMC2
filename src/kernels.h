@@ -16,6 +16,7 @@ struct KernelParsView {
 enum class KernelType {
   SimpleDelta,
   Delta2Kernel,
+  // Delta2Kernel2,
   Delta2LR,
   LinIncr,
   LinDecr,
@@ -39,6 +40,7 @@ inline KernelMeta kernel_meta(KernelType kt) {
   switch (kt) {
   case KernelType::SimpleDelta:
   case KernelType::Delta2Kernel:
+  // case KernelType::Delta2Kernel2:
   case KernelType::Delta2LR:
   case KernelType::LinIncr:
   case KernelType::LinDecr:
@@ -63,6 +65,10 @@ protected:
   std::vector<double> out_;
   bool has_run_ = false;
 
+  // Remember expansion mapping (for 'at')
+  std::vector<int> expand_idx_;   // 1-based indices
+  bool has_expand_idx_ = false;
+
 public:
   virtual ~BaseKernel() {}
 
@@ -73,11 +79,21 @@ public:
   virtual void reset() {
     out_.clear();
     has_run_ = false;
+    expand_idx_.clear();
+    has_expand_idx_ = false;
   }
 
   bool has_run() const { return has_run_; }
 
   const std::vector<double>& get_output() const { return out_; }
+
+  void set_expand_idx(const std::vector<int>& idx) {
+    expand_idx_ = idx;
+    has_expand_idx_ = !expand_idx_.empty();
+  }
+
+  const std::vector<int>& expand_idx() const { return expand_idx_; }
+  bool has_expand_idx() const { return has_expand_idx_; }
 
   // Expand compressed out_ (length n_comp) into full length using expand_idx
   void do_expand(const std::vector<int>& expand_idx) {
@@ -90,6 +106,28 @@ public:
       out_[i] = out_[k];
     }
   }
+
+  // does this kernel have a stream for this code?
+  virtual bool has_output_stream(int code) const {
+    return (code == 1);  // default: only main trajectory
+  }
+
+  // single-stream getter, code=1 for main trajectory by default. code=2 for pes in delta, code=3 for xx in new kernels
+  virtual Rcpp::NumericVector get_output_stream(int code) const {
+    using namespace Rcpp;
+    if (code != 1) {
+      stop("BaseKernel::get_output_stream: unsupported code %d (only 1)", code);
+    }
+    // out_ is already full-length at this point
+    return wrap(out_);  // copies to NumericVector
+  }
+
+  // Optional: name for each stream
+  virtual std::string output_stream_name(int code) const {
+    if (code == 1) return "covariate";
+    throw std::runtime_error("BaseKernel::output_stream_name: unsupported code");
+  }
+
 
 protected:
   void mark_run_complete() { has_run_ = true; }
@@ -179,6 +217,50 @@ public:
 
   const std::vector<double>& get_pes() const {
     return pes_;
+  }
+
+  bool has_output_stream(int code) const override {
+    return (code >= 1 && code <= 2);
+  }
+
+  Rcpp::NumericVector get_output_stream(int code) const override {
+    using namespace Rcpp;
+
+    const int n_full = static_cast<int>(out_.size());
+
+    if (code == 1) {
+      // main trajectory: already full-length
+      return wrap(out_);
+    }
+
+    if (code == 2) {
+      NumericVector res(n_full);
+
+      if (!has_expand_idx_) {
+        // no 'at': one-to-one
+        if ((int)pes_.size() != n_full)
+          stop("DeltaKernel: pes_ length mismatch");
+        for (int i = 0; i < n_full; ++i) res[i] = pes_[i];
+      } else {
+        // with 'at': expand from compressed index
+        const auto& idx = expand_idx_;
+        if ((int)idx.size() != n_full)
+          stop("DeltaKernel: expand_idx length mismatch");
+        for (int i = 0; i < n_full; ++i) {
+          int k = idx[i] - 1;  // compressed index
+          res[i] = pes_[k];
+        }
+      }
+      return res;
+    }
+
+    stop("DeltaKernel::get_output_stream: unsupported code %d (1=Q,2=PE)", code);
+  }
+
+  std::string output_stream_name(int code) const override {
+    if (code == 1) return "Qvalue";
+    if (code == 2) return "PE";
+    throw std::runtime_error("DeltaKernel::output_stream_name: unsupported code");
   }
 };
 
@@ -570,7 +652,10 @@ struct Delta2Kernel : SequentialKernel {
   double q_     = NA_REAL;
 
   // [compressed trial][0 = fast PE, 1 = slow PE]
-  std::vector<std::array<double, 2>> pes2_;
+  std::vector<double> pes_fast_;
+  std::vector<double> pes_slow_;
+  std::vector<double> q_fast_;
+  std::vector<double> q_slow_;
 
   Delta2Kernel() {}
 
@@ -584,7 +669,10 @@ struct Delta2Kernel : SequentialKernel {
 
              int n_comp = comp_idx.size();
              out_.assign(n_comp, NA_REAL);
-             pes2_.assign(n_comp, std::array<double,2>{NA_REAL, NA_REAL});
+             q_fast_.assign(n_comp, NA_REAL);
+             q_slow_.assign(n_comp, NA_REAL);
+             pes_fast_.assign(n_comp, NA_REAL);
+             pes_slow_.assign(n_comp, NA_REAL);
 
              const double* q0_col        = kernel_pars.cols[0];
              const double* alphaFast_col = kernel_pars.cols[1];
@@ -615,15 +703,166 @@ struct Delta2Kernel : SequentialKernel {
                  double diff = std::abs(qFast_ - qSlow_);
                  q_ = (diff > dSwitch) ? qFast_ : qSlow_;
                }
+               q_fast_[j+1] = qFast_;  // compressed index
+               q_slow_[j+1] = qSlow_;
 
-               pes2_[j][0] = peFast;  // compressed index
-               pes2_[j][1] = peSlow;
+               pes_fast_[j] = peFast;  // compressed index
+               pes_slow_[j] = peSlow;
                out_[j + 1] = q_;
              }
 
              mark_run_complete();
            }
+
+  bool has_output_stream(int code) const override {
+    return (code >= 1 && code <= 5);
+  }
+
+  Rcpp::NumericVector get_output_stream(int code) const override {
+    using namespace Rcpp;
+
+    const int n_full = static_cast<int>(out_.size());
+
+    if (code == 1) {
+      // main trajectory: already full-length
+      return wrap(out_);
+    }
+
+    // For other codes, choose the compressed source vector
+    const std::vector<double>* src = nullptr;
+    if (code == 2) {            // Qfast
+      src = &q_fast_;
+    } else if (code == 3) {     // Qslow
+      src = &q_slow_;
+    } else if (code == 4) {     // PEfast
+      src = &pes_fast_;
+    } else if (code == 5) {     // PEslow
+      src = &pes_slow_;
+    } else {
+      stop("Delta2Kernel::get_output_stream: unsupported code %d "
+             "(1=Q,2=Qfast,3=Qslow,4=PEfast,5=PEslow)", code);
+    }
+
+    NumericVector res(n_full);
+
+    if (!has_expand_idx_) {
+      // no 'at': compressed and full coincide
+      if ((int)src->size() != n_full) {
+        stop("Delta2Kernel::get_output_stream: source length (%d) != n_full (%d)",
+             (int)src->size(), n_full);
+      }
+      for (int i = 0; i < n_full; ++i) {
+        res[i] = (*src)[i];
+      }
+    } else {
+      // with 'at': expand from compressed to full using expand_idx_
+      const auto& idx = expand_idx_;
+      if ((int)idx.size() != n_full) {
+        stop("Delta2Kernel::get_output_stream: expand_idx length (%d) != n_full (%d)",
+             (int)idx.size(), n_full);
+      }
+      const int n_comp = static_cast<int>(src->size());
+      for (int i = 0; i < n_full; ++i) {
+        int k = idx[i] - 1;  // 1-based -> 0-based compressed index
+        if (k < 0 || k >= n_comp) {
+          stop("Delta2Kernel::get_output_stream: index %d out of range [0,%d)", k, n_comp);
+        }
+        res[i] = (*src)[k];
+      }
+
+      return res;
+    }
+
+    stop("Delta2Kernel::get_output_stream: unsupported code %d (1=Q,2=Qfast,3=Qslow,4=PEfast,5=PEslow)", code);
+  }
+
+  std::string output_stream_name(int code) const override {
+    if (code == 1) return "Qvalue";
+    if (code == 2) return "Qfast";
+    if (code == 3) return "Qslow";
+    if (code == 4) return "PEfast";
+    if (code == 5) return "PEslow";
+    throw std::runtime_error("Delta2Kernel::output_stream_name: unsupported code");
+  }
 };
+
+
+// // 2kernel adjusted
+// struct Delta2Kernel2 : Delta2Kernel {
+//   double qFast_ = NA_REAL;
+//   double qSlow_ = NA_REAL;
+//   double q_     = NA_REAL;
+//
+//   Delta2Kernel2() {}
+//
+//   void run(const KernelParsView& kernel_pars,
+//            const Rcpp::NumericMatrix& covariate,
+//            const std::vector<int>& comp_idx) override {
+//              if (kernel_pars.cols.size() != 4) {
+//                Rcpp::stop("Delta2Kernel expects 4 parameter columns, got %d",
+//                           (int)kernel_pars.cols.size());
+//              }
+//
+//              int n_comp = comp_idx.size();
+//              out_.assign(n_comp, NA_REAL);
+//              q_fast_.assign(n_comp, NA_REAL);
+//              q_slow_.assign(n_comp, NA_REAL);
+//              pes_fast_.assign(n_comp, NA_REAL);
+//              pes_slow_.assign(n_comp, NA_REAL);
+//
+//              const double* q0_col        = kernel_pars.cols[0];
+//              const double* alphaFast_col = kernel_pars.cols[1];
+//              const double* propSlow_col  = kernel_pars.cols[2];
+//              const double* dSwitch_col   = kernel_pars.cols[3];
+//
+//              int row0 = comp_idx[0];
+//              out_[0] = qFast_ = qSlow_ = q_ = q0_col[row0];
+//              int current_kernel = 0; // 0 = fast, 1 = slow
+//
+//              for (int j = 0; j < n_comp - 1; ++j) {
+//                int r = comp_idx[j];
+//                double x = covariate(r,0);
+//                double peFast = NA_REAL;
+//                double peSlow = NA_REAL;
+//
+//                if (!ISNAN(x)) {
+//                  double alphaFast = alphaFast_col[r];
+//                  double propSlow  = propSlow_col[r];
+//                  double dSwitch   = dSwitch_col[r];
+//                  double alphaSlow = propSlow * alphaFast;
+//
+//                  peFast = x - qFast_;
+//                  peSlow = x - qSlow_;
+//
+//                  qFast_ += alphaFast * peFast;
+//                  qSlow_ += alphaSlow * peSlow;
+//
+//                  double diff = std::abs(qFast_ - qSlow_);
+//                  if(diff > dSwitch) {
+//                    current_kernel = 0; // fast kernel
+//                    q_ = qFast_;
+//                  } else {
+//                    if(current_kernel == 0) {
+//                      // was in fast mode, now moving to slow mode. Override Q-value of slow
+//                      qSlow_ = qFast_;
+//                    }
+//                    current_kernel = 1;
+//                    q_ = qSlow_;
+//                  }
+//                  // q_ = (diff > dSwitch) ? qFast_ : qSlow_;
+//                }
+//
+//                q_fast_[j+1] = qFast_;  // compressed index
+//                q_slow_[j+1] = qSlow_;
+//
+//                pes_fast_[j] = peFast;  // compressed index
+//                pes_slow_[j] = peSlow;
+//                out_[j + 1] = q_;
+//              }
+//
+//              mark_run_complete();
+//            }
+// };
 
 // ---- Type mapping + factory ----
 

@@ -118,6 +118,7 @@ void init_covariate_for_slot(KernelSlotSpec& slot,
   NumericVector v = data[cov_name];
   int n_trials = data.nrows();
   slot.kernel_input = NumericMatrix(n_trials, 1);
+  slot.kernel_input_name = cov_name;
   slot.kernel_input(_, 0) = v;
 }
 
@@ -655,7 +656,9 @@ void TrendRuntime::run_kernels_for_op(TrendOpRuntime& op,
     k_rt.kernel_ptr->run(kp_view, input, spec.comp_index);
 
     if (spec.has_at) {
-      k_rt.kernel_ptr->do_expand(spec.expand_idx);
+      // record and expand
+      k_rt.kernel_ptr->set_expand_idx(spec.expand_idx);
+      k_rt.kernel_ptr->do_expand(spec.expand_idx);  // expands out_
     }
   }
 }
@@ -797,20 +800,32 @@ void TrendRuntime::reset_all_kernels() {
   reset_vec(posttransform_ops);
 }
 
-
-Rcpp::NumericMatrix TrendRuntime::all_kernel_outputs(ParamTable& pt) {
+Rcpp::NumericMatrix TrendRuntime::all_kernel_outputs(ParamTable& pt,
+                                                     const std::vector<int>& codes) {
   using namespace Rcpp;
 
   const int n = pt.n_trials;
 
-  // Count total number of kernel slots
-  int n_slots = 0;
-  for (const auto& op : premap_ops)        n_slots += op.kernels.size();
-  for (const auto& op : pretransform_ops)  n_slots += op.kernels.size();
-  for (const auto& op : posttransform_ops) n_slots += op.kernels.size();
+  // count total columns
+  int n_cols_total = 0;
+  auto count_cols = [&](const std::vector<TrendOpRuntime>& ops) {
+    for (const auto& op : ops) {
+      for (const auto& k_rt : op.kernels) {
+        for (int code : codes) {
+          if (k_rt.kernel_ptr->has_output_stream(code)) {
+            ++n_cols_total;
+          }
+        }
+      }
+    }
+  };
 
-  NumericMatrix out(n, n_slots);
-  CharacterVector cn(n_slots);
+  count_cols(premap_ops);
+  count_cols(pretransform_ops);
+  count_cols(posttransform_ops);
+
+  NumericMatrix out(n, n_cols_total);
+  CharacterVector cn(n_cols_total);
 
   int col = 0;
 
@@ -820,38 +835,45 @@ Rcpp::NumericMatrix TrendRuntime::all_kernel_outputs(ParamTable& pt) {
 
       for (auto& k_rt : op.kernels) {
         const KernelSlotSpec& kspec = *k_rt.spec;
-        const std::vector<double>& traj = k_rt.kernel_ptr->get_output();
 
-        if ((int)traj.size() != n) {
-          stop("TrendRuntime::all_kernel_outputs('%s'): trajectory length (%d) != n_trials (%d)",
-               spec.target_param.c_str(), (int)traj.size(), n);
+        // ensure kernel has run
+        if (!k_rt.kernel_ptr->has_run()) {
+          run_kernels_for_op(op, pt);
         }
 
-        for (int r = 0; r < n; ++r) {
-          out(r, col) = traj[r];
-        }
-
-        // Build a column name: target_param + "." + input_name
+        // base stem for names: target_param + "." + input_name + '.' + kernel stream name
         std::string input_name;
         if (kspec.input_kind == InputKind::Covariate) {
-          // try to get column name from attributes if available
-          if (kspec.kernel_input.hasAttribute("names")) {
-            // optional; often covariate is directly from data[cov_name],
-            // so we don't have the name here. You can store the cov_name in KernelSlotSpec if needed.
-            input_name = "cov";
-          } else {
-            input_name = "cov";
-          }
+          input_name = kspec.kernel_input_name;
         } else if (kspec.input_kind == InputKind::ParInput) {
           input_name = kspec.par_input_name;
+        } else if (kspec.input_kind == InputKind::Combined) {
+          input_name = "combined";
         } else {
           input_name = "noinput";
         }
 
-        std::string cname = spec.target_param + "." + input_name;
-        cn[col] = cname;
+        for (int code : codes) {
+          if (!k_rt.kernel_ptr->has_output_stream(code)) {
+            continue;  // silently skip unsupported codes for this kernel
+          }
 
-        ++col;
+          NumericVector v = k_rt.kernel_ptr->get_output_stream(code);
+          if (v.size() != n) {
+            stop("TrendRuntime::all_kernel_outputs('%s'): stream length (%d) != n_trials (%d)",
+                 spec.target_param.c_str(), v.size(), n);
+          }
+
+          for (int r = 0; r < n; ++r) {
+            out(r, col) = v[r];
+          }
+
+          std::string suffix = k_rt.kernel_ptr->output_stream_name(code);
+          std::string cname = spec.target_param + "." + input_name + "." + suffix;
+          cn[col] = cname;
+
+          ++col;
+        }
       }
     }
   };
@@ -863,3 +885,73 @@ Rcpp::NumericMatrix TrendRuntime::all_kernel_outputs(ParamTable& pt) {
   colnames(out) = cn;
   return out;
 }
+
+Rcpp::NumericMatrix TrendRuntime::all_kernel_outputs(ParamTable& pt) {
+  return all_kernel_outputs(pt, std::vector<int>{1}); // only main trajectories
+}
+
+// Rcpp::NumericMatrix TrendRuntime::all_kernel_outputs(ParamTable& pt) {
+//   using namespace Rcpp;
+//
+//   const int n = pt.n_trials;
+//
+//   // Count total number of kernel slots
+//   int n_slots = 0;
+//   for (const auto& op : premap_ops)        n_slots += op.kernels.size();
+//   for (const auto& op : pretransform_ops)  n_slots += op.kernels.size();
+//   for (const auto& op : posttransform_ops) n_slots += op.kernels.size();
+//
+//   NumericMatrix out(n, n_slots);
+//   CharacterVector cn(n_slots);
+//
+//   int col = 0;
+//
+//   auto fill_for_ops = [&](std::vector<TrendOpRuntime>& ops) {
+//     for (auto& op : ops) {
+//       const TrendOpSpec& spec = *op.spec;
+//
+//       for (auto& k_rt : op.kernels) {
+//         const KernelSlotSpec& kspec = *k_rt.spec;
+//         const std::vector<double>& traj = k_rt.kernel_ptr->get_output();
+//
+//         if ((int)traj.size() != n) {
+//           stop("TrendRuntime::all_kernel_outputs('%s'): trajectory length (%d) != n_trials (%d)",
+//                spec.target_param.c_str(), (int)traj.size(), n);
+//         }
+//
+//         for (int r = 0; r < n; ++r) {
+//           out(r, col) = traj[r];
+//         }
+//
+//         // Build a column name: target_param + "." + input_name
+//         std::string input_name;
+//         if (kspec.input_kind == InputKind::Covariate) {
+//           // try to get column name from attributes if available
+//           if (kspec.kernel_input.hasAttribute("names")) {
+//             // optional; often covariate is directly from data[cov_name],
+//             // so we don't have the name here. You can store the cov_name in KernelSlotSpec if needed.
+//             input_name = "cov";
+//           } else {
+//             input_name = "cov";
+//           }
+//         } else if (kspec.input_kind == InputKind::ParInput) {
+//           input_name = kspec.par_input_name;
+//         } else {
+//           input_name = "noinput";
+//         }
+//
+//         std::string cname = spec.target_param + "." + input_name;
+//         cn[col] = cname;
+//
+//         ++col;
+//       }
+//     }
+//   };
+//
+//   fill_for_ops(premap_ops);
+//   fill_for_ops(pretransform_ops);
+//   fill_for_ops(posttransform_ops);
+//
+//   colnames(out) = cn;
+//   return out;
+// }

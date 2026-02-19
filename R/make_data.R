@@ -213,13 +213,17 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
   dots_local <- list(...)
   if (isFALSE(dots_local$conditional_on_data)) {
     simulate_unconditional_on_data <- TRUE
+    use_vectorised <- isTRUE(dots_local$use_vectorised)
   } else if (!is.null(dots_local$conditional_on_data)) {
     simulate_unconditional_on_data <- !isTRUE(dots_local$conditional_on_data)
-    if(!is.null(dots_local$use_vectorised)) {
-      use_vectorised <- !isTRUE(dots_local$use_vectorised)
-    }
+    use_vectorised <- isTRUE(dots_local$use_vectorised)
   }
   return_trialwise_parameters <- isTRUE(dots_local$return_trialwise_parameters)
+  if('kernel_output_codes' %in% names(dots_local)) {
+    kernel_output_codes <- dots_local$kernel_output_codes
+  } else {
+    kernel_output_codes <- c(1L)
+  }
 
   ## For both conditional and unconditional simulations...
   pars <- t(apply(parameters, 1, do_pre_transform, model()$pre_transform))
@@ -227,10 +231,10 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
   if(simulate_unconditional_on_data) {
     if(use_vectorised) {
       res <- make_data_unconditional_vectorised(data=data, pars=pars, design=design, model=model,
-                                                return_trialwise_parameters)
+                                                return_trialwise_parameters, kernel_output_codes)
     } else {
       res <- make_data_unconditional(data=data, pars=pars, design=design, model=model,
-                                     return_trialwise_parameters)
+                                     return_trialwise_parameters, kernel_output_codes)
 
     }
     data <- res$data
