@@ -19,6 +19,7 @@ enum class KernelType {
   // Delta2Kernel2,
   Delta2LR,
   PierceHall,
+  DeltaRisk,
   LinIncr,
   LinDecr,
   ExpIncr,
@@ -42,7 +43,8 @@ inline KernelMeta kernel_meta(KernelType kt) {
   case KernelType::SimpleDelta:
   case KernelType::Delta2Kernel:
   case KernelType::PierceHall:
-  // case KernelType::Delta2Kernel2:
+  case KernelType::DeltaRisk:
+    // case KernelType::Delta2Kernel2:
   case KernelType::Delta2LR:
   case KernelType::LinIncr:
   case KernelType::LinDecr:
@@ -769,6 +771,149 @@ struct PierceHall : DeltaKernel {
     throw std::runtime_error("PierceHall::output_stream_name: unsupported code");
   }
 };
+
+
+struct DeltaRisk : DeltaKernel {
+  // Based on d'Acremont et al, 2009: doi.org/10.1016/j.neuroimage.2009.04.096
+  // PE_t = cov - Q_{t}
+  // Q_t+1 = Q_{t} + alpha * PE/sqrt(h_t)
+
+  // h_t is an estimate of "risk" (i.e., variance); learnt via delta rule learning:
+  // Risk prediction error xi_t:
+  // xi_t = (PE_t)^2 - h_t
+  // h_t+t = h_{t} + alpha_risk * xi_t
+
+  // Four parameters: q0, alpha, xi_0, alpha_risk
+
+  std::vector<double> xis_;  // risk PEs
+  double xi; // risk PE
+  std::vector<double> hs_;  // risk estimates
+  double h_; // risk estimate
+
+  DeltaRisk() {}
+
+  void run(const KernelParsView& kernel_pars,
+           const Rcpp::NumericMatrix& covariate,
+           const std::vector<int>& comp_idx) override {
+             if (kernel_pars.cols.size() != 4) {
+               Rcpp::stop("DeltaRisk expects 4 parameter columns, got %d",
+                          (int)kernel_pars.cols.size());
+             }
+
+             int n_comp = comp_idx.size();
+             out_.assign(n_comp, NA_REAL);
+             pes_.assign(n_comp, NA_REAL);
+             hs_.assign(n_comp, NA_REAL);   // risk estimates
+             xis_.assign(n_comp, NA_REAL);  // risk prediction errors
+
+             const double* q0_col       = kernel_pars.cols[0];
+             const double* alpha_col    = kernel_pars.cols[1];
+             const double* h0_col       = kernel_pars.cols[2];
+             const double* alpha_risk_col = kernel_pars.cols[3];
+
+             int row0 = comp_idx[0];
+             out_[0] = q_ = q0_col[row0];
+             hs_[0] = h_ = h0_col[row0];
+
+             double pe = NA_REAL;
+
+             for (int j = 0; j < n_comp - 1; ++j) {
+               int r = comp_idx[j];
+               double x = covariate(r,0);
+               if (!ISNAN(x)) {
+                 double alpha_ = alpha_col[r];
+                 double alpha_risk = alpha_risk_col[r];
+
+                 pe = x - q_;
+                 q_ += alpha_ * pe / std::sqrt(h_);
+
+                 // Risk prediction error
+                 xi = (pe * pe) - h_;
+                 h_ += alpha_risk * xi;
+
+               } else {
+                 pe = NA_REAL;
+                 xi = NA_REAL;
+               }
+
+               pes_[j] = pe;           // compressed index
+               xis_[j] = xi;           // compressed index
+               hs_[j+1] = h_;            // compressed index
+               out_[j+1] = q_;
+             }
+
+             mark_run_complete();
+           }
+
+  bool has_output_stream(int code) const override {
+    return (code >= 1 && code <= 4);
+  }
+
+  Rcpp::NumericVector get_output_stream(int code) const override {
+    using namespace Rcpp;
+
+    const int n_full = static_cast<int>(out_.size());
+
+    if (code == 1) {
+      // main trajectory: already full-length
+      return wrap(out_);
+    }
+
+    // For other codes, choose the compressed source vector
+    const std::vector<double>* src = nullptr;
+    if (code == 2) {            // PE
+      src = &pes_;
+    } else if (code == 3) {     // risk estimates
+      src = &hs_;
+    } else if (code == 4) {     // risk PEs
+      src = &xis_;
+    } else {
+      stop("DeltaRisk::get_output_stream: unsupported code %d "
+             "(1=Q,2=PE,3=alpha)", code);
+    }
+
+    NumericVector res(n_full);
+
+    if (!has_expand_idx_) {
+      // no 'at': compressed and full coincide
+      if ((int)src->size() != n_full) {
+        stop("DeltaRisk::get_output_stream: source length (%d) != n_full (%d)",
+             (int)src->size(), n_full);
+      }
+      for (int i = 0; i < n_full; ++i) {
+        res[i] = (*src)[i];
+      }
+    } else {
+      // with 'at': expand from compressed to full using expand_idx_
+      const auto& idx = expand_idx_;
+      if ((int)idx.size() != n_full) {
+        stop("DeltaRisk::get_output_stream: expand_idx length (%d) != n_full (%d)",
+             (int)idx.size(), n_full);
+      }
+      const int n_comp = static_cast<int>(src->size());
+      for (int i = 0; i < n_full; ++i) {
+        int k = idx[i] - 1;  // 1-based -> 0-based compressed index
+        if (k < 0 || k >= n_comp) {
+          stop("DeltaRisk::get_output_stream: index %d out of range [0,%d)", k, n_comp);
+        }
+        res[i] = (*src)[k];
+      }
+
+      return res;
+    }
+
+    stop("PierceHall::get_output_stream: unsupported code %d (1=Q,2=PEs,3=risk estimate,4=risk PE)", code);
+  }
+
+  std::string output_stream_name(int code) const override {
+    if (code == 1) return "Qvalue";
+    if (code == 2) return "PEs";
+    if (code == 3) return "riskvalue";
+    if (code == 4) return "riskPE";
+    throw std::runtime_error("PierceHall::output_stream_name: unsupported code");
+  }
+};
+
 
 // 2D PE kernel: separate from DeltaKernel
 struct Delta2Kernel : SequentialKernel {

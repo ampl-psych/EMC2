@@ -992,7 +992,7 @@ has_delta_rules <- function(model) {
   if(is.null(trend)) return(FALSE)
 
   for(trend_n in 1:length(trend)) {
-    if(trend[[trend_n]]$kernel %in% c('delta', 'delta2kernel', 'delta2lr', 'piercehall')) return(TRUE)
+    if(trend[[trend_n]]$kernel %in% c('delta', 'delta2kernel', 'delta2lr', 'piercehall', 'deltarisk')) return(TRUE)
   }
   return(FALSE)
 }
@@ -1132,8 +1132,23 @@ get_kernels <- function() {
             transforms = list(func = list("q0" = "identity",
                                           "alpha0" = "pnorm",
                                           "eta" = "pnorm")),
-            bases = base_2p)
-            )
+            bases = base_2p),
+  deltarisk = list(description = paste(
+    "Delta delta rule with risk: k = q[i].\n",
+    "         Like the standard delta rule, but with learning rates\n",
+    "         that depend on a risk estimate according to:\n",
+    "         Q_{t+1}=Q_{t} + alpha_{t}*PE_{t}/sqrt(h_{t}).\n",
+    "         h_{t+1}=h_{t} + alpha_risk_{t}*(PE_{t}^2-h_{t})).\n",
+    "         Parameters: q0 (initial value), alpha (learning rate),\n",
+    "         h0 (initial risk value), alpha_risk (risk learning rate)."
+  ),
+  default_pars = c("q0", "alpha", "h0", "alpha_risk"),
+  transforms = list(func = list("q0" = "identity",
+                                "alpha" = "pnorm",
+                                "h0" = "identity",
+                                "alpha_risk" = "pnorm")),
+  bases = base_2p)
+  )
   kernels
 }
 
@@ -1142,7 +1157,7 @@ format_kernel <- function(kernel, kernel_pars=NULL) {
   kernels <- get_kernels()
   eq_string <- kernels[[kernel]]$description
   eq_string <- strsplit(eq_string, ': k = ')[[1]][[2]]
-  if(kernel %in% c('delta', 'delta2kernel', 'delta2lr', 'piercehall')) eq_string <- strsplit(eq_string, '\\.')[[1]][[1]]
+  if(kernel %in% c('delta', 'delta2kernel', 'delta2lr', 'piercehall', 'deltarisk')) eq_string <- strsplit(eq_string, '\\.')[[1]][[1]]
   if(kernel %in% c('exp_incr', 'pow_incr', 'poly1', 'poly2', 'poly3', 'poly4')) eq_string <- paste0('(', eq_string, ')')
 
   # add placeholders
