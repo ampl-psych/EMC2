@@ -749,7 +749,8 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type trend(trendSEXP);
     Rcpp::traits::input_parameter< bool >::type return_kernel_matrix(return_kernel_matrixSEXP);
     Rcpp::traits::input_parameter< bool >::type return_all_pars(return_all_parsSEXP);
-    rcpp_result_gen = Rcpp::wrap(get_pars_c_wrapper_oo(particle_matrix, data, constants, designs, bounds, transforms, pretransforms, trend, return_kernel_matrix, return_all_pars));
+    Rcpp::traits::input_parameter< IntegerVector >::type kernel_output_codes(kernel_output_codesSEXP);
+    rcpp_result_gen = Rcpp::wrap(get_pars_c_wrapper_oo(particle_matrix, data, constants, designs, bounds, transforms, pretransforms, trend, return_kernel_matrix, return_all_pars, kernel_output_codes));
     return rcpp_result_gen;
 END_RCPP
 }
