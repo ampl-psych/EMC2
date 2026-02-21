@@ -734,8 +734,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // get_pars_c_wrapper_oo
-NumericMatrix get_pars_c_wrapper_oo(NumericMatrix particle_matrix, DataFrame data, NumericVector constants, List designs, List bounds, List transforms, List pretransforms, Rcpp::Nullable<Rcpp::List> trend, bool return_kernel_matrix, bool return_all_pars);
-RcppExport SEXP _EMC2_get_pars_c_wrapper_oo(SEXP particle_matrixSEXP, SEXP dataSEXP, SEXP constantsSEXP, SEXP designsSEXP, SEXP boundsSEXP, SEXP transformsSEXP, SEXP pretransformsSEXP, SEXP trendSEXP, SEXP return_kernel_matrixSEXP, SEXP return_all_parsSEXP) {
+NumericMatrix get_pars_c_wrapper_oo(NumericMatrix particle_matrix, DataFrame data, NumericVector constants, List designs, List bounds, List transforms, List pretransforms, Rcpp::Nullable<Rcpp::List> trend, bool return_kernel_matrix, bool return_all_pars, IntegerVector kernel_output_codes);
+RcppExport SEXP _EMC2_get_pars_c_wrapper_oo(SEXP particle_matrixSEXP, SEXP dataSEXP, SEXP constantsSEXP, SEXP designsSEXP, SEXP boundsSEXP, SEXP transformsSEXP, SEXP pretransformsSEXP, SEXP trendSEXP, SEXP return_kernel_matrixSEXP, SEXP return_all_parsSEXP, SEXP kernel_output_codesSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -845,7 +845,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_EMC2_calc_ll", (DL_FUNC) &_EMC2_calc_ll, 11},
     {"_EMC2_calc_ll_oo", (DL_FUNC) &_EMC2_calc_ll_oo, 11},
     {"_EMC2_get_pars_c_wrapper", (DL_FUNC) &_EMC2_get_pars_c_wrapper, 11},
-    {"_EMC2_get_pars_c_wrapper_oo", (DL_FUNC) &_EMC2_get_pars_c_wrapper_oo, 10},
+    {"_EMC2_get_pars_c_wrapper_oo", (DL_FUNC) &_EMC2_get_pars_c_wrapper_oo, 11},
     {"_EMC2_EMC2_call_custom_trend", (DL_FUNC) &_EMC2_EMC2_call_custom_trend, 3},
     {"_EMC2_run_trend_rcpp", (DL_FUNC) &_EMC2_run_trend_rcpp, 6},
     {"_EMC2_c_add_charvectors", (DL_FUNC) &_EMC2_c_add_charvectors, 2},
