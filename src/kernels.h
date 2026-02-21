@@ -18,6 +18,7 @@ enum class KernelType {
   Delta2Kernel,
   // Delta2Kernel2,
   Delta2LR,
+  PierceHall,
   LinIncr,
   LinDecr,
   ExpIncr,
@@ -40,6 +41,7 @@ inline KernelMeta kernel_meta(KernelType kt) {
   switch (kt) {
   case KernelType::SimpleDelta:
   case KernelType::Delta2Kernel:
+  case KernelType::PierceHall:
   // case KernelType::Delta2Kernel2:
   case KernelType::Delta2LR:
   case KernelType::LinIncr:
@@ -643,6 +645,129 @@ struct Delta2LR : DeltaKernel {
 
              mark_run_complete();
            }
+};
+
+//
+struct PierceHall : DeltaKernel {
+  // Based on https://pmc.ncbi.nlm.nih.gov/articles/PMC4563025/#FD2
+  // alpha_t+1 = alpha_t*abs(PE_t)*eta + (1-eta)*alpha_t
+  // Three parameters: q0, alpha0, and eta
+
+  // Only works if PEs are in range (-1, 1)!
+  std::vector<double> alphas_;
+  double alpha_;
+
+  PierceHall() {}
+
+  void run(const KernelParsView& kernel_pars,
+           const Rcpp::NumericMatrix& covariate,
+           const std::vector<int>& comp_idx) override {
+             if (kernel_pars.cols.size() != 3) {
+               Rcpp::stop("PierceHall expects 3 parameter columns, got %d",
+                          (int)kernel_pars.cols.size());
+             }
+
+             int n_comp = comp_idx.size();
+             out_.assign(n_comp, NA_REAL);
+             pes_.assign(n_comp, NA_REAL);
+             alphas_.assign(n_comp, NA_REAL);
+
+             const double* q0_col       = kernel_pars.cols[0];
+             const double* alpha0_col   = kernel_pars.cols[1];
+             const double* eta_col      = kernel_pars.cols[2];
+
+             int row0 = comp_idx[0];
+             out_[0] = q_ = q0_col[row0];
+             alphas_[0] = alpha_ = alpha0_col[row0];
+
+             double pe = NA_REAL;
+
+             for (int j = 0; j < n_comp - 1; ++j) {
+               int r = comp_idx[j];
+               double x = covariate(r,0);
+               if (!ISNAN(x)) {
+                 pe = x - q_;
+                 q_ += alpha_ * pe;
+
+                 // update alpha for next trial
+                 double eta = eta_col[r];
+                 alpha_ = std::abs(pe) * eta + (1-eta) * alpha_;
+               } else {
+                 pe = NA_REAL;
+               }
+
+               pes_[j] = pe;           // compressed index
+               alphas_[j+1] = alpha_;
+               out_[j+1] = q_;
+             }
+
+             mark_run_complete();
+           }
+
+  bool has_output_stream(int code) const override {
+    return (code >= 1 && code <= 3);
+  }
+
+  Rcpp::NumericVector get_output_stream(int code) const override {
+    using namespace Rcpp;
+
+    const int n_full = static_cast<int>(out_.size());
+
+    if (code == 1) {
+      // main trajectory: already full-length
+      return wrap(out_);
+    }
+
+    // For other codes, choose the compressed source vector
+    const std::vector<double>* src = nullptr;
+    if (code == 2) {            // PE
+      src = &pes_;
+    } else if (code == 3) {     // learning rates
+      src = &alphas_;
+    } else {
+      stop("PierceHall::get_output_stream: unsupported code %d "
+             "(1=Q,2=PE,3=alpha)", code);
+    }
+
+    NumericVector res(n_full);
+
+    if (!has_expand_idx_) {
+      // no 'at': compressed and full coincide
+      if ((int)src->size() != n_full) {
+        stop("PierceHall::get_output_stream: source length (%d) != n_full (%d)",
+             (int)src->size(), n_full);
+      }
+      for (int i = 0; i < n_full; ++i) {
+        res[i] = (*src)[i];
+      }
+    } else {
+      // with 'at': expand from compressed to full using expand_idx_
+      const auto& idx = expand_idx_;
+      if ((int)idx.size() != n_full) {
+        stop("PierceHall::get_output_stream: expand_idx length (%d) != n_full (%d)",
+             (int)idx.size(), n_full);
+      }
+      const int n_comp = static_cast<int>(src->size());
+      for (int i = 0; i < n_full; ++i) {
+        int k = idx[i] - 1;  // 1-based -> 0-based compressed index
+        if (k < 0 || k >= n_comp) {
+          stop("PierceHall::get_output_stream: index %d out of range [0,%d)", k, n_comp);
+        }
+        res[i] = (*src)[k];
+      }
+
+      return res;
+    }
+
+    stop("PierceHall::get_output_stream: unsupported code %d (1=Q,2=PEs,3=alpha)", code);
+  }
+
+  std::string output_stream_name(int code) const override {
+    if (code == 1) return "Qvalue";
+    if (code == 2) return "PEs";
+    if (code == 3) return "alpha";
+    throw std::runtime_error("PierceHall::output_stream_name: unsupported code");
+  }
 };
 
 // 2D PE kernel: separate from DeltaKernel

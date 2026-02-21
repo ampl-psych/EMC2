@@ -5,6 +5,7 @@ KernelType to_kernel_type(const Rcpp::String& k) {
   // if (k == "delta2kernel2") return KernelType::Delta2Kernel2;
   if (k == "delta")        return KernelType::SimpleDelta;
   if (k == "delta2lr")     return KernelType::Delta2LR;
+  if (k == "piercehall")   return KernelType::PierceHall;
   if (k == "lin_incr")     return KernelType::LinIncr;
   if (k == "lin_decr")     return KernelType::LinDecr;
   if (k == "exp_incr")     return KernelType::ExpIncr;
@@ -26,6 +27,7 @@ std::unique_ptr<BaseKernel> make_kernel(KernelType kt, SEXP custom_fun) {
   case KernelType::Delta2Kernel: return std::unique_ptr<BaseKernel>(new Delta2Kernel());
   // case KernelType::Delta2Kernel2: return std::unique_ptr<BaseKernel>(new Delta2Kernel2());
   case KernelType::Delta2LR:    return std::unique_ptr<BaseKernel>(new Delta2LR());
+  case KernelType::PierceHall:    return std::unique_ptr<BaseKernel>(new PierceHall());
 
   case KernelType::LinIncr:     return std::unique_ptr<BaseKernel>(new LinIncrKernel());
   case KernelType::LinDecr:     return std::unique_ptr<BaseKernel>(new LinDecrKernel());
