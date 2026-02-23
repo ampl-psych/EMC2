@@ -1290,7 +1290,7 @@ make_data_unconditional <- function(data, pars, design, model, return_trialwise_
       # Standard mapping + trends + transforms on the prefix
       # Get the pars matrix with c
       p_types <- names(model_list$p_types)
-      designs <- sapply(p_types, function(x) attr(dm,"designs")[[x]])
+      designs <- sapply(p_types, function(x) attr(dm,"designs")[[x]], simplify=FALSE)
       constants <- attr(dm, "constants")
       if(is.null(constants)) constants <- NA
       if(getOption("emc2.use_oo", TRUE)) {
