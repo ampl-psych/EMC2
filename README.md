@@ -1,6 +1,14 @@
 # EMC2: Extended Models of Choice 2:
 
-The `R` package `EMC2` provides tools to perform Bayesian hierarchical analyses of the following cognitive models: Diffusion Decision Model (DDM), Linear Ballistic Accumulator Model (LBA), Racing Diffusion Model (RDM), and Lognormal Racing Model (LNR). Specifically, the package provides functionality for specifying individual model designs, estimating the models, examining convergence as well as model fit through posterior prediction methods. It also includes various plotting functions and relative model comparison methods such as Bayes factors. In addition, users can specify their own likelihood function and perform non-hierarchical estimation. The package uses particle metropolis Markov chain Monte Carlo sampling. For hierarchical models, it uses efficient Gibbs sampling at the population level and supports a variety of covariance structures, extending the work of Gunawan and colleagues (2020).  
+
+<!-- badges: start -->
+
+[![R-CMD-check](https://github.com/ampl-psych/EMC2/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/ampl-psych/EMC2/actions/workflows/R-CMD-check.yaml)
+[![CRAN status](https://www.r-pkg.org/badges/version/EMC2)](https://CRAN.R-project.org/package=EMC2)
+
+<!-- badges: end -->
+
+The `R` package `EMC2` provides tools to perform Bayesian hierarchical analyses of the following cognitive models: Diffusion Decision Model (DDM), Linear Ballistic Accumulator Model (LBA), Racing Diffusion Model (RDM), and Lognormal Racing Model (LNR). Specifically, the package provides functionality for specifying individual model designs, estimating the models, examining convergence as well as model fit through posterior prediction methods. It also includes various plotting functions and relative model comparison methods such as Bayes factors. In addition, users can specify their own likelihood function and perform non-hierarchical estimation. The package uses particle metropolis Markov chain Monte Carlo sampling. For hierarchical models, it uses efficient Gibbs sampling at the population level and supports a variety of covariance structures, extending the work of Gunawan and colleagues (2020).
 
 ## Installation
 
@@ -14,17 +22,40 @@ Or for the development version:
 
 ## Workflow Overview
 
-Pictured below are the four phases of an `EMC2`cognitive model analysis with associated functions:.  
+Pictured below are the four phases of an `EMC2`cognitive model analysis with associated functions:.
 
-&nbsp;
+<img src="https://github.com/user-attachments/assets/53ef4499-1cad-4ab8-8e63-a3bcba24d94d" alt="workflow-emc2" width="800"/>
 
-<img width="800" alt="workflow-emc2" src="https://github.com/user-attachments/assets/53ef4499-1cad-4ab8-8e63-a3bcba24d94d">
+## Simple DDM Example
 
-&nbsp;
+``` r
+library(EMC2)
 
-For details, please see: 
+# Keep only 2 subjects for illustrative purposes
+dat <- subset(forstmann, subjects %in% unique(forstmann$subjects)[1:2])
+dat$subjects <- droplevels(dat$subjects)
 
-Stevenson, N., Donzallaz, M. C., Innes, R. J., Forstmann, B., Matzke, D., & Heathcote, A. (2024, January 30). EMC2: An R Package for cognitive models of choice. https://doi.org/10.31234/osf.io/2e4dq
+# Basic DDM: drift varies by stimulus (S), boundary by emphasis (E), constant t0
+# EMC2 will assume that the levels of the `R` factor construct the lower and
+# upper boundary in order. By varying the drift rate by `S` we allow the drift 
+# rate to be informed by stimulus information.
+ddm_design <- design(
+  data = dat,
+  model = DDM,
+  formula = list(v ~ S, a ~ E, t0 ~ 1),
+  constants = c(s = log(1))
+)
+
+emc <- make_emc(dat, ddm_design, n_chains = 2, compress = TRUE)
+
+# Tiny run for demonstration
+fit_ddm <- fit(emc, cores_per_chain = 2, fileName = "DDM.RData")
+
+# See parameter estimates
+summary(fit_ddm)
+```
+
+For more details please see the vignettes on the [website](https://ampl-psych.github.io/EMC2/articles). Or the original paper: Stevenson, N., Donzallaz, M. C., Innes, R. J., Forstmann, B., Matzke, D., & Heathcote, A. EMC2: An R Package for cognitive models of choice. <https://doi.org/10.3758/s13428-025-02869-y>
 
 ## Bug Reports, Contributing, and Feature Requests
 
@@ -32,13 +63,7 @@ If you come across any bugs, or have ideas for extensions of `EMC2`, you can add
 
 ## References
 
-Stevenson, N., Donzallaz, M. C., Innes, R. J., Forstmann, B., Matzke, D., & Heathcote, A. (2024, January 30). EMC2: An R Package for cognitive models of choice. https://doi.org/10.31234/osf.io/2e4dq
+Stevenson, N., Donzallaz, M. C., Innes, R. J., Forstmann, B., Matzke, D., & Heathcote, A. (2024, January 30). EMC2: An R Package for cognitive models of choice. <https://doi.org/10.3758/s13428-025-02869-y>
 
-Gunawan, D., Hawkins, G. E., Tran, M. N., Kohn, R., & Brown, S. D. (2020). New estimation approaches for the hierarchical Linear Ballistic Accumulator model. *Journal of Mathematical Psychology, 96,* 102368. https://doi.org/10.1016/j.jmp.2020.102368
+Gunawan, D., Hawkins, G. E., Tran, M. N., Kohn, R., & Brown, S. D. (2020). New estimation approaches for the hierarchical Linear Ballistic Accumulator model. *Journal of Mathematical Psychology, 96,* 102368. <https://doi.org/10.1016/j.jmp.2020.102368>
 
-
-<!-- badges: start -->
-
-[![R-CMD-check](https://github.com/ampl-psych/EMC2/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/ampl-psych/EMC2/actions/workflows/R-CMD-check.yaml)
-
-<!-- badges: end -->
