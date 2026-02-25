@@ -34,7 +34,8 @@ library(EMC2)
 dat <- subset(forstmann, subjects %in% unique(forstmann$subjects)[1:2])
 dat$subjects <- droplevels(dat$subjects)
 
-# Basic DDM: drift varies by stimulus (S), boundary by emphasis (E), constant t0
+# Basic DDM: drift varies by stimulus (S), boundary by emphasis (E), and t0 is consistent across trials.
+# All other parameters are assumed constant, since they are not specified here.
 # EMC2 will assume that the levels of the `R` factor construct the lower and
 # upper boundary in order. By varying the drift rate by `S` we allow the drift 
 # rate to be informed by stimulus information.
