@@ -29,8 +29,7 @@ Or for the development version:
 
 Pictured below are the four phases of an `EMC2`cognitive model analysis
 with associated functions:.
-
-![workflow-emc2](https://github.com/user-attachments/assets/53ef4499-1cad-4ab8-8e63-a3bcba24d94d)
+![image](https://github.com/user-attachments/assets/a8f41c33-8ae4-4bec-9fa4-f7fb5b31489f)
 
 ## Simple DDM Example
 
@@ -41,7 +40,8 @@ library(EMC2)
 dat <- subset(forstmann, subjects %in% unique(forstmann$subjects)[1:2])
 dat$subjects <- droplevels(dat$subjects)
 
-# Basic DDM: drift varies by stimulus (S), boundary by emphasis (E), constant t0
+# Drift varies by stimulus (S), boundary by emphasis (E), and t0 is not varied.
+# All other parameters are assumed constant, since they are not specified here.
 # EMC2 will assume that the levels of the `R` factor construct the lower and
 # upper boundary in order. By varying the drift rate by `S` we allow the drift 
 # rate to be informed by stimulus information.
@@ -49,7 +49,6 @@ ddm_design <- design(
   data = dat,
   model = DDM,
   formula = list(v ~ S, a ~ E, t0 ~ 1),
-  constants = c(s = log(1))
 )
 
 emc <- make_emc(dat, ddm_design, n_chains = 2, compress = TRUE)

@@ -79,8 +79,7 @@
 <div class="section level2">
 <h2 id="workflow-overview">Workflow Overview<a class="anchor" aria-label="anchor" href="#workflow-overview"></a>
 </h2>
-<p>Pictured below are the four phases of an <code>EMC2</code>cognitive model analysis with associated functions:.</p>
-<p><img src="https://github.com/user-attachments/assets/53ef4499-1cad-4ab8-8e63-a3bcba24d94d" alt="workflow-emc2" width="800"></p>
+<p>Pictured below are the four phases of an <code>EMC2</code>cognitive model analysis with associated functions:. <img width="721" height="490" alt="image" src="https://github.com/user-attachments/assets/a8f41c33-8ae4-4bec-9fa4-f7fb5b31489f"></p>
 </div>
 <div class="section level2">
 <h2 id="simple-ddm-example">Simple DDM Example<a class="anchor" aria-label="anchor" href="#simple-ddm-example"></a>
@@ -92,7 +91,8 @@
 <span><span class="va">dat</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/subset.html" class="external-link">subset</a></span><span class="op">(</span><span class="va">forstmann</span>, <span class="va">subjects</span> <span class="op"><a href="https://rdrr.io/r/base/match.html" class="external-link">%in%</a></span> <span class="fu"><a href="https://rdrr.io/r/base/unique.html" class="external-link">unique</a></span><span class="op">(</span><span class="va">forstmann</span><span class="op">$</span><span class="va">subjects</span><span class="op">)</span><span class="op">[</span><span class="fl">1</span><span class="op">:</span><span class="fl">2</span><span class="op">]</span><span class="op">)</span></span>
 <span><span class="va">dat</span><span class="op">$</span><span class="va">subjects</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/droplevels.html" class="external-link">droplevels</a></span><span class="op">(</span><span class="va">dat</span><span class="op">$</span><span class="va">subjects</span><span class="op">)</span></span>
 <span></span>
-<span><span class="co"># Basic DDM: drift varies by stimulus (S), boundary by emphasis (E), constant t0</span></span>
+<span><span class="co"># Drift varies by stimulus (S), boundary by emphasis (E), and t0 is not varied.</span></span>
+<span><span class="co"># All other parameters are assumed constant, since they are not specified here.</span></span>
 <span><span class="co"># EMC2 will assume that the levels of the `R` factor construct the lower and</span></span>
 <span><span class="co"># upper boundary in order. By varying the drift rate by `S` we allow the drift </span></span>
 <span><span class="co"># rate to be informed by stimulus information.</span></span>
@@ -100,7 +100,6 @@
 <span>  data <span class="op">=</span> <span class="va">dat</span>,</span>
 <span>  model <span class="op">=</span> <span class="va">DDM</span>,</span>
 <span>  formula <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="va">v</span> <span class="op">~</span> <span class="va">S</span>, <span class="va">a</span> <span class="op">~</span> <span class="va">E</span>, <span class="va">t0</span> <span class="op">~</span> <span class="fl">1</span><span class="op">)</span>,</span>
-<span>  constants <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>s <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Log.html" class="external-link">log</a></span><span class="op">(</span><span class="fl">1</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">emc</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/make_emc.html">make_emc</a></span><span class="op">(</span><span class="va">dat</span>, <span class="va">ddm_design</span>, n_chains <span class="op">=</span> <span class="fl">2</span>, compress <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
