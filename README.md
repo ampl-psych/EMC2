@@ -31,7 +31,7 @@ Pictured below are the four phases of an `EMC2`cognitive model analysis with ass
 library(EMC2)
 
 # Keep only 2 subjects for illustrative purposes
-dat <- subset(forstmann, subjects %in% unique(forstmann$subjects)[1:2])
+dat <- subset(forstmann, subjects %in% unique(forstmann$subjects)[1:5])
 dat$subjects <- droplevels(dat$subjects)
 
 # Drift varies by stimulus (S), boundary by emphasis (E), and t0 is not varied.
@@ -45,10 +45,10 @@ ddm_design <- design(
   formula = list(v ~ S, a ~ E, t0 ~ 1),
 )
 
-emc <- make_emc(dat, ddm_design, n_chains = 2, compress = TRUE)
+emc <- make_emc(dat, ddm_design)
 
 # Tiny run for demonstration
-fit_ddm <- fit(emc, cores_per_chain = 2, fileName = "DDM.RData")
+fit_ddm <- fit(emc, cores_per_chain = 2, fileName = "DDM.RData", iter = 500)
 
 # See parameter estimates
 summary(fit_ddm)
