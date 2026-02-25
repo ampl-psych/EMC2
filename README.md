@@ -23,8 +23,7 @@ Or for the development version:
 ## Workflow Overview
 
 Pictured below are the four phases of an `EMC2`cognitive model analysis with associated functions:.
-
-<img src="https://github.com/user-attachments/assets/53ef4499-1cad-4ab8-8e63-a3bcba24d94d" alt="workflow-emc2" width="800"/>
+<img width="721" height="490" alt="image" src="https://github.com/user-attachments/assets/a8f41c33-8ae4-4bec-9fa4-f7fb5b31489f" />
 
 ## Simple DDM Example
 
