@@ -309,6 +309,9 @@ TrendPlan::TrendPlan(Rcpp::Nullable<Rcpp::List> trend_,
       op.at = Rcpp::as<std::string>(tr_i["at"]);
     }
 
+    // Is there are shared latent?
+    op.shared_latent = tr_i.containsElementNamed("shared_latent") && Rcpp::as<bool>(tr_i["shared_latent"]);
+
     // trend_pnames from this spec
     op.trend_pnames = Rcpp::CharacterVector(0);
     if (tr_i.containsElementNamed("trend_pnames")) {
@@ -559,9 +562,27 @@ void TrendRuntime::bind_all_ops_to_paramtable(const ParamTable& pt) {
         k_rt.kernel_par_indices = kernel_indices;
         op_rt.kernels.push_back(std::move(k_rt));
       }
-
       rt_ops.push_back(std::move(op_rt));
     }
+
+    // need to do a second pass -- you cannot move an object after storing an address in it
+    // Second pass: now rt_ops[i] is in its final location -- safe to take addresses
+    for (auto& op_rt : rt_ops) {
+      const TrendOpSpec& spec = *op_rt.spec;
+      if (!spec.shared_latent) continue;
+
+      const int n_comp = static_cast<int>(spec.comp_index.size());
+      op_rt.shared_alpha.assign(n_comp, NA_REAL);
+
+      for (auto& k_rt : op_rt.kernels) {
+        if (k_rt.spec->kernel_type == KernelType::PearceHall) {
+          if (auto* ph = dynamic_cast<PearceHall*>(k_rt.kernel_ptr.get())) {
+            ph->enable_shared_alpha(&op_rt.shared_alpha);  // now safe
+          }
+        }
+      }
+    }
+
   };
 
   bind_vec(premap_ops,        plan->premap_ops);
@@ -652,14 +673,61 @@ void TrendRuntime::run_kernels_for_op(TrendOpRuntime& op,
     // Parameter columns for this kernel
     KernelParsView kp_view = make_kernel_pars_view(pt, k_rt.kernel_par_indices);
 
-    k_rt.kernel_ptr->reset();
-    k_rt.kernel_ptr->run(kp_view, input, spec.comp_index);
+    const bool need_stepwise = spec.shared_latent;
+
+    if (!need_stepwise) {
+      // ---- old batch path ----
+      for (auto& k_rt : op.kernels) {
+        const KernelSlotSpec& kspec = *k_rt.spec;
+        NumericMatrix input = kspec.kernel_input;
+        k_rt.kernel_ptr->reset();
+        k_rt.kernel_ptr->run(kp_view, input, spec.comp_index);
+        if (spec.has_at) {
+          // record and expand
+          k_rt.kernel_ptr->set_expand_idx(spec.expand_idx);
+          k_rt.kernel_ptr->do_expand(spec.expand_idx); // expands out_
+        }
+      }
+      return;
+    }
+
+    // ---- shared-latent / step-wise path ----
+
+    // sanity: all kernels must support stepwise if shared_latent=TRUE
+    for (auto& k_rt : op.kernels) {
+      if (!k_rt.kernel_ptr->supports_stepwise()) {
+        stop("TrendOp '%s': shared_latent=TRUE but kernel '%s' does not support stepwise",
+             spec.target_param.c_str(), k_rt.spec->kernel.c_str());
+      }
+    }
+
+    // Orchestration: Loop over trials *here*. First initialize all kernels
+    // 1) init_stepwise on all kernels
+    for (auto& k_rt : op.kernels) {
+      const KernelSlotSpec& kspec = *k_rt.spec;
+      NumericMatrix input = kspec.kernel_input;
+      k_rt.kernel_ptr->reset();
+      k_rt.kernel_ptr->init_stepwise(kp_view, input, spec.comp_index);
+    }
+
+    // 2) loop over compressed trials
+    const int n_comp = static_cast<int>(spec.comp_index.size());
+    for (int j = 0; j < n_comp; ++j) {
+      int r = spec.comp_index[j];
+      for (auto& k_rt : op.kernels) {
+        const KernelSlotSpec& kspec = *k_rt.spec;
+        NumericMatrix input = kspec.kernel_input;
+        k_rt.kernel_ptr->step(kp_view, input, r, j);
+      }
+    }
 
     if (spec.has_at) {
-      // record and expand
-      k_rt.kernel_ptr->set_expand_idx(spec.expand_idx);
-      k_rt.kernel_ptr->do_expand(spec.expand_idx);  // expands out_
+      for (auto& k_rt : op.kernels) {
+        k_rt.kernel_ptr->set_expand_idx(spec.expand_idx);
+        k_rt.kernel_ptr->do_expand(spec.expand_idx);
+      }
     }
+
   }
 }
 

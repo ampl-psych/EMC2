@@ -992,7 +992,7 @@ has_delta_rules <- function(model) {
   if(is.null(trend)) return(FALSE)
 
   for(trend_n in 1:length(trend)) {
-    if(trend[[trend_n]]$kernel %in% c('delta', 'delta2kernel', 'delta2lr', 'piercehall', 'deltarisk')) return(TRUE)
+    if(trend[[trend_n]]$kernel %in% c('delta', 'delta2kernel', 'delta2lr', 'piercehall', 'deltarisk', 'vkf_binary', 'vkf_continuous')) return(TRUE)
   }
   return(FALSE)
 }
@@ -1147,6 +1147,49 @@ get_kernels <- function() {
                                 "alpha" = "pnorm",
                                 "h0" = "identity",
                                 "alpha_risk" = "pnorm")),
+  bases = base_2p),
+  # vkf_binary = list(description = paste(
+  #   "Volatile Kalman filter for binary outcomes: k = q[i].\n",
+  #   "         TODO.\n",
+  #   " m0 = initial latent state (not on probability scale; prob = sigmoid(m0))\n",
+  #   " v0 = initial volatility estimate (process variance of the latent state)\n",
+  #   " w0 = initial uncertainty (posterior variance over the latent state)\n",
+  #   " lambda = volatility learning rate\n",
+  #   " omega = onoise parameter for inference (acts like observation noise in Kalman gain)"
+  # ),
+  # default_pars = c("m0", "v0", "w0", "lambda", "omega"),
+  # transforms = list(func = list("q0" = "identity",
+  #                               "v0" = "exp",
+  #                               "w0" = "exp",
+  #                               "lambda" = "pnorm",
+  #                               "omega" = "exp")),
+  # bases = base_2p),
+  vkf_binary = list(description = paste(
+    "Volatile Kalman filter for binary outcomes: k = q[i].\n",
+    "         TODO.\n",
+    " m0 = initial latent state (not on probability scale; prob = sigmoid(m0))\n",
+    " v0 = initial volatility estimate (process variance of the latent state)\n",
+    " w0 = initial uncertainty (posterior variance over the latent state)\n",
+    " lambda = volatility learning rate\n",
+    " omega = onoise parameter for inference (acts like observation noise in Kalman gain)"
+  ),
+  default_pars = c("m0", "alpha0", "r", "lambda", "omega"),
+  transforms = list(func = list("m0" = "identity",
+                                "alpha0" = "pnorm",
+                                "r" = "pnorm",
+                                "lambda" = "pnorm",
+                                "omega" = "exp")),
+  bases = base_2p),
+  vkf_continuous = list(description = paste(
+    "Volatile Kalman filter for continous outcomes: k = q[i].\n",
+    "         TODO."
+  ),
+  default_pars = c("m0", "v0", "w0", "lambda"),
+  transforms = list(func = list("q0" = "identity",
+                                "v0" = "exp",
+                                "w0" = "exp",
+                                "lambda" = "pnorm",
+                                "sigma2" = "exp")),
   bases = base_2p)
   )
   kernels
@@ -1157,7 +1200,7 @@ format_kernel <- function(kernel, kernel_pars=NULL) {
   kernels <- get_kernels()
   eq_string <- kernels[[kernel]]$description
   eq_string <- strsplit(eq_string, ': k = ')[[1]][[2]]
-  if(kernel %in% c('delta', 'delta2kernel', 'delta2lr', 'piercehall', 'deltarisk')) eq_string <- strsplit(eq_string, '\\.')[[1]][[1]]
+  if(kernel %in% c('delta', 'delta2kernel', 'delta2lr', 'piercehall', 'deltarisk', 'vkf_binary')) eq_string <- strsplit(eq_string, '\\.')[[1]][[1]]
   if(kernel %in% c('exp_incr', 'pow_incr', 'poly1', 'poly2', 'poly3', 'poly4')) eq_string <- paste0('(', eq_string, ')')
 
   # add placeholders

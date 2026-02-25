@@ -64,10 +64,15 @@ struct TrendOpSpec {
   // Kernels belonging to this TrendOp
   std::vector<KernelSlotSpec> kernels;
 
+  // Do the kernels in this Op share some latent trace?
+  // Only applicable to Pearce-Hall and Delta-Risk, so far
+  bool shared_latent = false;
+
   // maps at Op level
   bool has_covariate_maps = false;
   // one column per map, pre-filtered to the relevant covariate
   std::vector<Rcpp::NumericVector> covariate_map_cols;
+
 
   TrendOpSpec() = default;
 
@@ -217,6 +222,9 @@ struct TrendOpRuntime {
   int base_par_idx = -1;    // convenience when only one base param
 
   std::vector<KernelSlotRuntime> kernels; // 1..K
+
+  // Latent trace of alpha (only for Pearce-Hall atm)
+  std::vector<double> shared_alpha;
 };
 
 
