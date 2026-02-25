@@ -30,17 +30,42 @@ Or for the development version:
 Pictured below are the four phases of an `EMC2`cognitive model analysis
 with associated functions:.
 
- 
-
 ![workflow-emc2](https://github.com/user-attachments/assets/53ef4499-1cad-4ab8-8e63-a3bcba24d94d)
 
- 
+## Simple DDM Example
 
-For details, please see:
+``` r
+library(EMC2)
 
-Stevenson, N., Donzallaz, M. C., Innes, R. J., Forstmann, B., Matzke,
-D., & Heathcote, A. (2024, January 30). EMC2: An R Package for cognitive
-models of choice. <https://doi.org/10.31234/osf.io/2e4dq>
+# Keep only 2 subjects for illustrative purposes
+dat <- subset(forstmann, subjects %in% unique(forstmann$subjects)[1:2])
+dat$subjects <- droplevels(dat$subjects)
+
+# Basic DDM: drift varies by stimulus (S), boundary by emphasis (E), constant t0
+# EMC2 will assume that the levels of the `R` factor construct the lower and
+# upper boundary in order. By varying the drift rate by `S` we allow the drift 
+# rate to be informed by stimulus information.
+ddm_design <- design(
+  data = dat,
+  model = DDM,
+  formula = list(v ~ S, a ~ E, t0 ~ 1),
+  constants = c(s = log(1))
+)
+
+emc <- make_emc(dat, ddm_design, n_chains = 2, compress = TRUE)
+
+# Tiny run for demonstration
+fit_ddm <- fit(emc, cores_per_chain = 2, fileName = "DDM.RData")
+
+# See parameter estimates
+summary(fit_ddm)
+```
+
+For more details please see the vignettes on the
+[website](https://ampl-psych.github.io/EMC2/articles). Or the original
+paper: Stevenson, N., Donzallaz, M. C., Innes, R. J., Forstmann, B.,
+Matzke, D., & Heathcote, A. EMC2: An R Package for cognitive models of
+choice. <https://doi.org/10.3758/s13428-025-02869-y>
 
 ## Bug Reports, Contributing, and Feature Requests
 
@@ -53,7 +78,7 @@ contribute to the package’s code, please submit a pull request.
 
 Stevenson, N., Donzallaz, M. C., Innes, R. J., Forstmann, B., Matzke,
 D., & Heathcote, A. (2024, January 30). EMC2: An R Package for cognitive
-models of choice. <https://doi.org/10.31234/osf.io/2e4dq>
+models of choice. <https://doi.org/10.3758/s13428-025-02869-y>
 
 Gunawan, D., Hawkins, G. E., Tran, M. N., Kohn, R., & Brown, S. D.
 (2020). New estimation approaches for the hierarchical Linear Ballistic

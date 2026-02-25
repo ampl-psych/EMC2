@@ -64,6 +64,9 @@
   <main id="main" class="col-md-9"><div class="section level1">
 <div class="page-header"><h1 id="emc2-extended-models-of-choice-2">EMC2: Extended Models of Choice 2:<a class="anchor" aria-label="anchor" href="#emc2-extended-models-of-choice-2"></a>
 </h1></div>
+<!-- badges: start -->
+
+<!-- badges: end -->
 <p>The <code>R</code> package <code>EMC2</code> provides tools to perform Bayesian hierarchical analyses of the following cognitive models: Diffusion Decision Model (DDM), Linear Ballistic Accumulator Model (LBA), Racing Diffusion Model (RDM), and Lognormal Racing Model (LNR). Specifically, the package provides functionality for specifying individual model designs, estimating the models, examining convergence as well as model fit through posterior prediction methods. It also includes various plotting functions and relative model comparison methods such as Bayes factors. In addition, users can specify their own likelihood function and perform non-hierarchical estimation. The package uses particle metropolis Markov chain Monte Carlo sampling. For hierarchical models, it uses efficient Gibbs sampling at the population level and supports a variety of covariance structures, extending the work of Gunawan and colleagues (2020).</p>
 <div class="section level2">
 <h2 id="installation">Installation<a class="anchor" aria-label="anchor" href="#installation"></a>
@@ -77,11 +80,37 @@
 <h2 id="workflow-overview">Workflow Overview<a class="anchor" aria-label="anchor" href="#workflow-overview"></a>
 </h2>
 <p>Pictured below are the four phases of an <code>EMC2</code>cognitive model analysis with associated functions:.</p>
-<p> </p>
-<p><img width="800" alt="workflow-emc2" src="https://github.com/user-attachments/assets/53ef4499-1cad-4ab8-8e63-a3bcba24d94d"></p>
-<p> </p>
-<p>For details, please see:</p>
-<p>Stevenson, N., Donzallaz, M. C., Innes, R. J., Forstmann, B., Matzke, D., &amp; Heathcote, A. (2024, January 30). EMC2: An R Package for cognitive models of choice. <a href="https://doi.org/10.31234/osf.io/2e4dq" class="external-link uri">https://doi.org/10.31234/osf.io/2e4dq</a></p>
+<p><img src="https://github.com/user-attachments/assets/53ef4499-1cad-4ab8-8e63-a3bcba24d94d" alt="workflow-emc2" width="800"></p>
+</div>
+<div class="section level2">
+<h2 id="simple-ddm-example">Simple DDM Example<a class="anchor" aria-label="anchor" href="#simple-ddm-example"></a>
+</h2>
+<div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://ampl-psych.github.io/EMC2/">EMC2</a></span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># Keep only 2 subjects for illustrative purposes</span></span>
+<span><span class="va">dat</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/subset.html" class="external-link">subset</a></span><span class="op">(</span><span class="va">forstmann</span>, <span class="va">subjects</span> <span class="op"><a href="https://rdrr.io/r/base/match.html" class="external-link">%in%</a></span> <span class="fu"><a href="https://rdrr.io/r/base/unique.html" class="external-link">unique</a></span><span class="op">(</span><span class="va">forstmann</span><span class="op">$</span><span class="va">subjects</span><span class="op">)</span><span class="op">[</span><span class="fl">1</span><span class="op">:</span><span class="fl">2</span><span class="op">]</span><span class="op">)</span></span>
+<span><span class="va">dat</span><span class="op">$</span><span class="va">subjects</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/droplevels.html" class="external-link">droplevels</a></span><span class="op">(</span><span class="va">dat</span><span class="op">$</span><span class="va">subjects</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># Basic DDM: drift varies by stimulus (S), boundary by emphasis (E), constant t0</span></span>
+<span><span class="co"># EMC2 will assume that the levels of the `R` factor construct the lower and</span></span>
+<span><span class="co"># upper boundary in order. By varying the drift rate by `S` we allow the drift </span></span>
+<span><span class="co"># rate to be informed by stimulus information.</span></span>
+<span><span class="va">ddm_design</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/design.html">design</a></span><span class="op">(</span></span>
+<span>  data <span class="op">=</span> <span class="va">dat</span>,</span>
+<span>  model <span class="op">=</span> <span class="va">DDM</span>,</span>
+<span>  formula <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="va">v</span> <span class="op">~</span> <span class="va">S</span>, <span class="va">a</span> <span class="op">~</span> <span class="va">E</span>, <span class="va">t0</span> <span class="op">~</span> <span class="fl">1</span><span class="op">)</span>,</span>
+<span>  constants <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>s <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Log.html" class="external-link">log</a></span><span class="op">(</span><span class="fl">1</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">emc</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/make_emc.html">make_emc</a></span><span class="op">(</span><span class="va">dat</span>, <span class="va">ddm_design</span>, n_chains <span class="op">=</span> <span class="fl">2</span>, compress <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># Tiny run for demonstration</span></span>
+<span><span class="va">fit_ddm</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/fit.html">fit</a></span><span class="op">(</span><span class="va">emc</span>, cores_per_chain <span class="op">=</span> <span class="fl">2</span>, fileName <span class="op">=</span> <span class="st">"DDM.RData"</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># See parameter estimates</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/summary.html" class="external-link">summary</a></span><span class="op">(</span><span class="va">fit_ddm</span><span class="op">)</span></span></code></pre></div>
+<p>For more details please see the vignettes on the <a href="https://ampl-psych.github.io/EMC2/articles">website</a>. Or the original paper: Stevenson, N., Donzallaz, M. C., Innes, R. J., Forstmann, B., Matzke, D., &amp; Heathcote, A. EMC2: An R Package for cognitive models of choice. <a href="https://doi.org/10.3758/s13428-025-02869-y" class="external-link uri">https://doi.org/10.3758/s13428-025-02869-y</a></p>
 </div>
 <div class="section level2">
 <h2 id="bug-reports-contributing-and-feature-requests">Bug Reports, Contributing, and Feature Requests<a class="anchor" aria-label="anchor" href="#bug-reports-contributing-and-feature-requests"></a>
@@ -91,11 +120,8 @@
 <div class="section level2">
 <h2 id="references">References<a class="anchor" aria-label="anchor" href="#references"></a>
 </h2>
-<p>Stevenson, N., Donzallaz, M. C., Innes, R. J., Forstmann, B., Matzke, D., &amp; Heathcote, A. (2024, January 30). EMC2: An R Package for cognitive models of choice. <a href="https://doi.org/10.31234/osf.io/2e4dq" class="external-link uri">https://doi.org/10.31234/osf.io/2e4dq</a></p>
+<p>Stevenson, N., Donzallaz, M. C., Innes, R. J., Forstmann, B., Matzke, D., &amp; Heathcote, A. (2024, January 30). EMC2: An R Package for cognitive models of choice. <a href="https://doi.org/10.3758/s13428-025-02869-y" class="external-link uri">https://doi.org/10.3758/s13428-025-02869-y</a></p>
 <p>Gunawan, D., Hawkins, G. E., Tran, M. N., Kohn, R., &amp; Brown, S. D. (2020). New estimation approaches for the hierarchical Linear Ballistic Accumulator model. <em>Journal of Mathematical Psychology, 96,</em> 102368. <a href="https://doi.org/10.1016/j.jmp.2020.102368" class="external-link uri">https://doi.org/10.1016/j.jmp.2020.102368</a></p>
-<!-- badges: start -->
-
-<!-- badges: end -->
 </div>
 </div>
   </main><aside class="col-md-3"><div class="links">
@@ -138,6 +164,7 @@
 <h2 data-toc-skip>Dev status</h2>
 <ul class="list-unstyled">
 <li><a href="https://github.com/ampl-psych/EMC2/actions/workflows/R-CMD-check.yaml" class="external-link"><img src="https://github.com/ampl-psych/EMC2/actions/workflows/R-CMD-check.yaml/badge.svg" alt="R-CMD-check"></a></li>
+<li><a href="https://CRAN.R-project.org/package=EMC2" class="external-link"><img src="https://www.r-pkg.org/badges/version/EMC2" alt="CRAN status"></a></li>
 </ul>
 </div>
 
