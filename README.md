@@ -42,7 +42,7 @@ dat$subjects <- droplevels(dat$subjects)
 ddm_design <- design(
   data = dat,
   model = DDM,
-  formula = list(v ~ S, a ~ E, t0 ~ 1, Z~1, sv ~ 1),
+  formula = list(v ~ S, a ~ E, t0 ~ 1, Z~1),
 )
 
 emc <- make_emc(dat, ddm_design)
