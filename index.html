@@ -92,14 +92,14 @@
 <span><span class="va">dat</span><span class="op">$</span><span class="va">subjects</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/droplevels.html" class="external-link">droplevels</a></span><span class="op">(</span><span class="va">dat</span><span class="op">$</span><span class="va">subjects</span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># Drift varies by stimulus (S), boundary by emphasis (E), and t0, Z and sv are consistent.</span></span>
-<span><span class="co"># SZ, st0 and s are assumed constant, since they are not specified here.</span></span>
+<span><span class="co"># SZ, st0, sv and s (for scaling constraints) are assumed constant, since they are not specified here.</span></span>
 <span><span class="co"># EMC2 will assume that the levels of the `R` factor construct the lower and</span></span>
 <span><span class="co"># upper boundary in order. By varying the drift rate by `S` we allow the drift </span></span>
 <span><span class="co"># rate to be informed by stimulus information.</span></span>
 <span><span class="va">ddm_design</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/design.html">design</a></span><span class="op">(</span></span>
 <span>  data <span class="op">=</span> <span class="va">dat</span>,</span>
 <span>  model <span class="op">=</span> <span class="va">DDM</span>,</span>
-<span>  formula <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="va">v</span> <span class="op">~</span> <span class="va">S</span>, <span class="va">a</span> <span class="op">~</span> <span class="va">E</span>, <span class="va">t0</span> <span class="op">~</span> <span class="fl">1</span>, <span class="va">Z</span><span class="op">~</span><span class="fl">1</span>, <span class="va">sv</span> <span class="op">~</span> <span class="fl">1</span><span class="op">)</span>,</span>
+<span>  formula <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="va">v</span> <span class="op">~</span> <span class="va">S</span>, <span class="va">a</span> <span class="op">~</span> <span class="va">E</span>, <span class="va">t0</span> <span class="op">~</span> <span class="fl">1</span>, <span class="va">Z</span><span class="op">~</span><span class="fl">1</span><span class="op">)</span>,</span>
 <span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">emc</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/make_emc.html">make_emc</a></span><span class="op">(</span><span class="va">dat</span>, <span class="va">ddm_design</span><span class="op">)</span></span>
