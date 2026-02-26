@@ -35,7 +35,9 @@
 <li class="active nav-item dropdown">
   <button class="nav-link dropdown-toggle" type="button" id="dropdown-articles" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Articles</button>
   <ul class="dropdown-menu" aria-labelledby="dropdown-articles">
-<li><a class="dropdown-item" href="../articles/Simulation-based-Calibration.html">Simulation-based Calibration</a></li>
+<li><a class="dropdown-item" href="../articles/DDM.html">Diffusion Decision Model (DDM)</a></li>
+    <li><a class="dropdown-item" href="../articles/race-models.html">Race Models</a></li>
+    <li><a class="dropdown-item" href="../articles/Simulation-based-Calibration.html">Simulation-based Calibration</a></li>
     <li><a class="dropdown-item" href="../articles/trends.html">Trends</a></li>
   </ul>
 </li>
@@ -240,7 +242,7 @@ effective sample size of any of the estimated parameters is larger than
 100.</p>
 <div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">SBC_LBA_single</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/run_sbc.html">run_sbc</a></span><span class="op">(</span><span class="va">design_LBA</span>, <span class="va">prior_LBA</span>, replicates <span class="op">=</span> <span class="fl">500</span>, trials <span class="op">=</span> <span class="fl">100</span>, plot_data <span class="op">=</span> <span class="cn">FALSE</span>,</span>
-<span>                  iter <span class="op">=</span> <span class="fl">1000</span>, n_post <span class="op">=</span> <span class="fl">1000</span>, fileName <span class="op">=</span> <span class="st">"SBC_data/SBC_LBA_single.RData"</span>,</span>
+<span>                  iter <span class="op">=</span> <span class="fl">1000</span>, n_post <span class="op">=</span> <span class="fl">1000</span>, fileName <span class="op">=</span> <span class="st">"data/SBC_LBA_single.RData"</span>,</span>
 <span>                  cores_per_chain <span class="op">=</span> <span class="fl">30</span><span class="op">)</span></span></code></pre></div>
 <p>In non-hierarchical models, setting <code>cores_per_chain = 30</code>
 will estimate 30 simulated data-sets simultaneously. Which is feasible
@@ -303,7 +305,7 @@ again being mindful of the required transformations.</p>
 <span>                  psd <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">.15</span>, <span class="fl">.15</span>, <span class="fl">.1</span>, <span class="fl">.05</span>, <span class="fl">.15</span>, <span class="fl">.15</span>, <span class="fl">.15</span><span class="op">)</span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">SBC_DDM_single</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/run_sbc.html">run_sbc</a></span><span class="op">(</span><span class="va">design_DDM</span>, <span class="va">prior_DDM</span>, replicates <span class="op">=</span> <span class="fl">500</span>, trials <span class="op">=</span> <span class="fl">100</span>, </span>
-<span>                          fileName <span class="op">=</span> <span class="st">"SBC_data/SBC_DDM_single.RData"</span>, cores_per_chain <span class="op">=</span> <span class="fl">30</span><span class="op">)</span></span></code></pre></div>
+<span>                          fileName <span class="op">=</span> <span class="st">"data/SBC_DDM_single.RData"</span>, cores_per_chain <span class="op">=</span> <span class="fl">30</span><span class="op">)</span></span></code></pre></div>
 <p>Next we plot the ECDF difference plot again.</p>
 <div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/plot_sbc_ecdf.html">plot_sbc_ecdf</a></span><span class="op">(</span><span class="va">SBC_DDM_single</span><span class="op">)</span></span></code></pre></div>
@@ -400,7 +402,7 @@ specifying how many subjects we want to have in the hierarchical
 model</p>
 <div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">SBC_LBA</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/run_sbc.html">run_sbc</a></span><span class="op">(</span><span class="va">design_LBA</span>, <span class="va">prior_LBA</span>, replicates <span class="op">=</span> <span class="fl">500</span>, trials <span class="op">=</span> <span class="fl">100</span>,</span>
-<span>                        n_subjects <span class="op">=</span> <span class="va">n_subjects</span>, fileName <span class="op">=</span> <span class="st">"SBC_data/SBC_LBA.RData"</span>, cores_per_chain <span class="op">=</span> <span class="fl">30</span><span class="op">)</span></span></code></pre></div>
+<span>                        n_subjects <span class="op">=</span> <span class="va">n_subjects</span>, fileName <span class="op">=</span> <span class="st">"data/SBC_LBA.RData"</span>, cores_per_chain <span class="op">=</span> <span class="fl">30</span><span class="op">)</span></span></code></pre></div>
 <p>We can also plot the results again using the
 <code>plot_sbc_ecdf</code> function. It will now generate a set of ECDF
 difference plots for the hierarchical variance ranks and the
@@ -438,7 +440,7 @@ did not converge or was very slow to converge. We also only generated
 running a full hierarchical DDM.</p>
 <div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">SBC_DDM</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/run_sbc.html">run_sbc</a></span><span class="op">(</span><span class="va">design_DDM</span>, <span class="va">prior_DDM</span>, replicates <span class="op">=</span> <span class="fl">250</span>, trials <span class="op">=</span> <span class="fl">200</span>,</span>
-<span>                        n_subjects <span class="op">=</span> <span class="va">n_subjects</span>, fileName <span class="op">=</span> <span class="st">"SBC_data/SBC_DDM.RData"</span>, cores_per_chain <span class="op">=</span> <span class="fl">30</span><span class="op">)</span></span></code></pre></div>
+<span>                        n_subjects <span class="op">=</span> <span class="va">n_subjects</span>, fileName <span class="op">=</span> <span class="st">"data/SBC_DDM.RData"</span>, cores_per_chain <span class="op">=</span> <span class="fl">30</span><span class="op">)</span></span></code></pre></div>
 <p>The group-level means look unbiased, the group-level variance of the
 between trial variability parameters is overestimated a bit. We note
 that the effective sample size for these parameters is also very small
