@@ -1,0 +1,211 @@
+---
+title: "Diffusion Decision Model (DDM)"
+description: "A step-by-step DDM workflow in EMC2"
+author: "Niek Stevenson"
+output: rmarkdown::html_document
+bibliography: refs.bib
+vignette: >
+  %\VignetteIndexEntry{"Diffusion Decision Model (DDM)"}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, echo = FALSE}
+rm(list = ls())
+library(EMC2)
+set.seed(1)
+```
+
+## Introduction
+
+This vignette shows a single-subject DDM workflow in *EMC2*:
+
+1. Specify a DDM design with factors, covariates, and parameter formulas
+2. Inspect sampled parameters and their mapping to design cells
+3. Simulate data
+4. Define priors and create an `emc` object
+5. Fit the model
+6. Summarize posterior estimates and run posterior predictive checks
+
+For details on DDM parameters, constraints, and transformations, see `?DDM`.
+
+## 1. Specify a DDM Design
+
+We set up a lexical decision design with one factor (`Lex`: Non-Word vs Word), one covariate (`Freq`), and two response levels. Drift rate `v` depends on lexicality and frequency.
+EMC2 takes the levels of the response (`R`) factor to determine what the lower
+and upper boundary is for the DDM. In this case, lower is associated with non-word
+responding, and upper with word responding. Other parameters are consistent across cells.
+For more info see `?DDM`
+
+```{r}
+LexMat <- cbind(d = c(-1, 1))
+
+design_lex <- design(
+  factors = list(Lex = c("Non-Word", "Word"), subjects = 1),
+  covariates = "Freq",
+  Rlevels = c("Non-Word", "Word"),
+  formula = list(v ~ Lex + Freq, a ~ 1, t0 ~ 1, Z ~ 1, sv ~ 1, s ~ Lex),
+  contrasts = list(Lex = LexMat),
+  constants = c(s = log(1)),
+  model = DDM
+)
+```
+
+`design()` combines model and experimental structure into an `emc.design` object.
+
+## 2. Inspect Parameters and Mapping
+
+`sampled_pars()` returns the free parameters implied by the design.
+
+```{r}
+sampled_pars(design_lex)
+```
+
+`mapped_pars()` shows how those parameters map back to model cells.
+Note that the v parameter is a drift bias parameter, positive values favor
+word responding and negative values non-word responding. The `v_Lexd` parameter
+captures general sensitivity to lexical evidence.
+```{r}
+mapped_pars(design_lex)
+```
+
+In this example we'll simulate some data, but you can of course use your own real data!
+We define true parameter values (on the transformed scale) and inspect the numeric mapping:
+
+```{r}
+p_vector <- sampled_pars(design_lex)
+p_vector[] <- c(.1, 1.5, .2, log(1.1), log(.3), qnorm(.55), log(.3), .2)
+
+mapped_pars(design_lex, p_vector)
+```
+
+To see more details on the parameters and their scales see `?DDM`.
+
+We can also visualize the implied design-level behavior:
+
+```{r, message=FALSE, fig.alt = "Design-level DDM trajectories for lexical decision"}
+plot_design(design_lex, p_vector = p_vector, factors = list(v = "Lex"))
+```
+
+## 3. Simulate Data
+
+`make_data()` simulates trial-level responses and response times from the design and parameter values.
+
+```{r, results = "hide"}
+dat <- make_data(parameters = p_vector, design = design_lex, n_trials = 100)
+```
+See the error that lexicality is randomly imputed? Let's fix that with some 
+more realistic values. Frequency is only defined for `Word` stimuli, and
+typically skewed.
+
+```{r}
+word_frequency <- rgamma(sum(dat$Lex == "Word"), shape = 5, rate = .1)
+# To make it more normally distributed we log-transform
+word_frequency <- log(word_frequency)
+# And scale it so that meaning of the intercept remains the mean drift
+word_frequency <- as.numeric(scale(word_frequency))
+
+frequency <- numeric(nrow(dat))
+frequency[dat$Lex == "Word"] <- word_frequency
+
+# Now we feed it to `make_data()`
+dat <- make_data(
+  parameters = p_vector,
+  design = design_lex,
+  n_trials = 100,
+  covariates = list(Freq = frequency)
+)
+```
+
+`plot_density()` gives a quick check of the simulated data:
+
+```{r, fig.alt = "Defective density plots for lexical decision simulated data"}
+plot_density(dat, factors = "Lex")
+```
+
+## 4. Set Prior and Build EMC Object
+
+`prior()` defines prior settings for the parameters in the chosen design.
+Be mindful of the transformations on the parameters when setting priors!
+Again see `?DDM`
+```{r, results = "hide"}
+prior_lex <- prior(
+  design = design_lex,
+  type = "single",
+  pmean = c(
+    v = 0,
+    v_Lexd = 2,
+    v_Freq = 0,
+    a = log(1),
+    t0 = log(.25),
+    Z = qnorm(.5),
+    sv = log(.3),
+    s_Lexd = 0
+  ),
+  psd = c(
+    v = 1,
+    v_Lexd = 1,
+    v_Freq = .5,
+    a = .2,
+    t0 = .15,
+    Z = .25,
+    sv = .5,
+    s_Lexd = .2
+  )
+)
+```
+
+Inspecting the implied prior is helpful to check prior settings.
+
+```{r, fig.alt = "Prior densities for DDM lexical example"}
+plot(prior_lex, N = 1e3)
+```
+
+Next we construct the `emc` object. `make_emc()` combines data, design, and prior into the object expected by `fit()`.
+
+```{r, results = "hide"}
+emc <- make_emc(dat, design_lex, prior_list = prior_lex, type = "single")
+```
+
+## 5. Fit
+
+The following call is how you can fit this model and save intermediate output:
+
+```{r, eval = FALSE}
+emc <- fit(emc, fileName = "data/DDM.RData")
+```
+
+```{r, include = FALSE}
+load("data/DDM.RData")
+```
+
+## 6. Summarize and Check Model Fit
+
+`summary()` reports quantiles, `Rhat`, and ESS for estimated parameters:
+
+```{r}
+summary(emc)
+```
+
+`plot_pars()` compares posterior densities with the generating values:
+
+```{r, fig.alt = "Posterior parameter densities against true values"}
+plot_pars(emc, true_pars = p_vector, use_prior_lim = FALSE)
+```
+
+Finally, we generate posterior predictive datasets and compare CDFs:
+
+```{r, results = "hide"}
+pp <- predict(emc)
+```
+
+```{r, fig.alt = "Posterior predictive defective CDF by lexicality"}
+plot_cdf(dat, pp, factors = "Lex")
+```
+
+```{r, fig.alt = "Posterior predictive defective CDF by frequency", fig.height = 6}
+plot_cdf(dat, pp, factors = "Freq")
+```
+
+In this example, the frequency plot is less intuitive because non-words have frequency fixed at zero.
+Consequently the second quantile is dominated by non-word responding
