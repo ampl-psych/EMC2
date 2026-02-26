@@ -134,7 +134,7 @@ larger than 100.
 
 ``` r
 SBC_LBA_single <- run_sbc(design_LBA, prior_LBA, replicates = 500, trials = 100, plot_data = FALSE,
-                  iter = 1000, n_post = 1000, fileName = "SBC_data/SBC_LBA_single.RData",
+                  iter = 1000, n_post = 1000, fileName = "data/SBC_LBA_single.RData",
                   cores_per_chain = 30)
 ```
 
@@ -210,7 +210,7 @@ prior_DDM <- prior(design_DDM, type = "single",
                   psd = c(.15, .15, .1, .05, .15, .15, .15))
 
 SBC_DDM_single <- run_sbc(design_DDM, prior_DDM, replicates = 500, trials = 100, 
-                          fileName = "SBC_data/SBC_DDM_single.RData", cores_per_chain = 30)
+                          fileName = "data/SBC_DDM_single.RData", cores_per_chain = 30)
 ```
 
 Next we plot the ECDF difference plot again.
@@ -309,7 +309,7 @@ specifying how many subjects we want to have in the hierarchical model
 
 ``` r
 SBC_LBA <- run_sbc(design_LBA, prior_LBA, replicates = 500, trials = 100,
-                        n_subjects = n_subjects, fileName = "SBC_data/SBC_LBA.RData", cores_per_chain = 30)
+                        n_subjects = n_subjects, fileName = "data/SBC_LBA.RData", cores_per_chain = 30)
 ```
 
 We can also plot the results again using the `plot_sbc_ecdf` function.
@@ -358,7 +358,7 @@ running a full hierarchical DDM.
 
 ``` r
 SBC_DDM <- run_sbc(design_DDM, prior_DDM, replicates = 250, trials = 200,
-                        n_subjects = n_subjects, fileName = "SBC_data/SBC_DDM.RData", cores_per_chain = 30)
+                        n_subjects = n_subjects, fileName = "data/SBC_DDM.RData", cores_per_chain = 30)
 ```
 
 The group-level means look unbiased, the group-level variance of the
