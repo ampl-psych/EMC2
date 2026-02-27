@@ -27,7 +27,7 @@ run_sbc <- function(design_in, prior_in, replicates = 250, trials = 100, n_subje
                       plot_data, verbose, fileName, ...)
   } else{
     out <- SBC_hierarchical(design_in, prior_in, replicates, trials, n_subjects,
-                    plot_data, verbose, fileName, ...)
+                            plot_data, verbose, fileName, ...)
   }
   return(out)
 }
@@ -48,7 +48,7 @@ SBC_hierarchical <- function(design_in, prior_in, replicates = 250, trials = 100
   # Should at a later point go to predict
   prior_mu <- plot(prior_in, design_in, do_plot = F, N = replicates, selection = "mu", return_mcmc = FALSE, map = FALSE)[[1]]
   prior_var <- plot(prior_in, design_in, do_plot = F, N = replicates, selection = "Sigma", return_mcmc = FALSE,
-                          remove_constants = FALSE)[[1]]
+                    remove_constants = FALSE)[[1]]
   rank_mu <- data.frame()
   rank_var <- data.frame()
   par_names <- names(sampled_pars(design_in))
@@ -78,8 +78,8 @@ SBC_hierarchical <- function(design_in, prior_in, replicates = 250, trials = 100
     colnames(rank_var) <- colnames(prior_var_input)
     if(!is.null(fileName)){
       SBC_temp <- list(rank = list(mu = rank_mu, var =  rank_var),
-                     prior = list(mu = prior_mu, var = prior_var),
-                     rand_effects = rand_effects, emc = emc)
+                       prior = list(mu = prior_mu, var = prior_var),
+                       rand_effects = rand_effects, emc = emc)
       save(SBC_temp, file = fileName)
     }
   }
@@ -156,14 +156,14 @@ split_list_to_dfs <- function(lst, type = "alpha") {
 
 
 SBC_single <- function(
-  design_in,
-  prior_in,
-  replicates = 250,
-  trials = 100,
-  plot_data = FALSE,
-  verbose = TRUE,
-  fileName = NULL,
-  ...
+    design_in,
+    prior_in,
+    replicates = 250,
+    trials = 100,
+    plot_data = FALSE,
+    verbose = TRUE,
+    fileName = NULL,
+    ...
 ) {
   if (attr(prior_in, "type") != "single") {
     stop("can only use `type = single`")

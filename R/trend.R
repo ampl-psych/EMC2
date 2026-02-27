@@ -38,6 +38,32 @@ run_kernel_custom <- function(trend_pars = NULL, input, funptr, at_factor = NULL
   matrix(comp_out[expand_idx], ncol = 1)
 }
 
+# helper function to check for specific class of kernel
+is_kernel_type <- function(
+    kernel,
+    type = c("delta", "beta_binom", "dbm", "tpm", "learning")
+) {
+  type <- match.arg(type)
+  delta_variants <- c("delta", "delta2lr", "delta2kernel")
+  beta_binom_variants <- c(
+    "beta_binom", "beta_binom_map", "beta_binom_surprise", "beta_binom_map_surprise"
+  )
+  dbm_variants <- c("dbm", "dbm_map", "dbm_surprise", "dbm_map_surprise")
+  tpm_variants <- c("tpm", "tpm_surprise")
+  valid <- switch(
+    type,
+    delta = delta_variants,
+    beta_binom = beta_binom_variants,
+    dbm = dbm_variants,
+    tpm = tpm_variants,
+    learning = c(
+      delta_variants, beta_binom_variants, dbm_variants, tpm_variants
+    )
+  )
+  return(kernel %in% valid)
+}
+
+
 #' Create a trend specification for model parameters
 #'
 #' @param par_names Character vector specifying which parameters to apply trend to
@@ -337,7 +363,10 @@ make_trend <- function(par_names, cov_names = NULL, kernels, bases = NULL,
     trend$par_input <- unlist(par_input[[i]])
     trend$phase <- phase[i]
     if(is.null(ffill_na[i])) {
-      if(trend$kernel %in% c('delta', 'delta2kernel', 'delta2lr')) trend$ffill_na <- TRUE else trend$ffill_na <- FALSE
+      trend$ffill_na <- FALSE
+      if (is_kernel_type(kernels[i], "learning")) {
+        trend$ffill_na <- TRUE
+      }
     } else {
       trend$ffill_na <- ffill_na[i]
     }
@@ -362,7 +391,7 @@ make_trend <- function(par_names, cov_names = NULL, kernels, bases = NULL,
     }
   }
   attr(trends_out, "shared") <- shared
-  attr(trends_out, "sequential") <- any(kernels %in% c("delta", "delta2kernel", "delta2lr"))
+  attr(trends_out, "sequential") <- any(is_kernel_type(kernels, "learning"))
 
   return(trends_out)
 }
@@ -504,14 +533,12 @@ trend_help <- function(kernel = NULL, base = NULL, ...){
   }
 }
 
-
 # Helper to compute expand index from first-level mask
 make_expand_idx <- function(first_level) {
   idx <- cumsum(first_level)
   if (any(idx == 0)) stop("Found rows before first 'at' level within subject. Cannot anchor expansion.")
   idx
 }
-
 
 run_kernel <- function(trend_pars = NULL, kernel, input, funptr = NULL, at_factor = NULL, ffill_na=FALSE) {
   # input: vector or matrix; apply per column and sum contributions; handle NA by zeroing; optional at compression/expansion
@@ -553,19 +580,37 @@ run_kernel <- function(trend_pars = NULL, kernel, input, funptr = NULL, at_facto
     comp_len <- length(covariate_comp)
     comp_out <- numeric(comp_len)
 
-    if(kernel %in% c('delta', 'delta2lr', 'delta2kernel', 'custom')) {
-      # No NA-filtering - handle NA within kernel
+    if (is_kernel_type(kernel, "learning") || kernel == "custom") {
+      # No NA-filtering for learning model kernels - handle NA within kernel
       if (kernel == "delta") {
         comp_out <- run_delta(tpars_comp[, 1], tpars_comp[, 2], covariate_comp)
       } else if (kernel == "delta2kernel") {
         comp_out <- run_delta2kernel(tpars_comp[, 1], tpars_comp[, 2], tpars_comp[, 3], tpars_comp[, 4], covariate_comp)
       } else if (kernel == "delta2lr") {
         comp_out <- run_delta2lr(tpars_comp[, 1], tpars_comp[, 2], tpars_comp[, 3], covariate_comp)
-      } else if(kernel == 'custom') {
+      } else if (is_kernel_type(kernel, "beta_binom")) {
+        comp_out <- run_beta_binomial(
+          covariate_comp,
+          tpars_comp[, 1], tpars_comp[, 2], tpars_comp[, 3], tpars_comp[, 4],
+          grepl("^beta_binom_map", kernel), grepl("_surprise$", kernel)
+        )
+      } else if (is_kernel_type(kernel, "dbm")) {
+        comp_out <- run_dbm(
+          covariate_comp,
+          tpars_comp[, 1], tpars_comp[, 2], tpars_comp[, 3],
+          grepl("^dbm_map", kernel), grepl("_surprise$", kernel)
+        )
+      } else if (is_kernel_type(kernel, "tpm")) {
+        comp_out <- run_tpm(
+          covariate_comp,
+          tpars_comp[, 1], tpars_comp[, 2], tpars_comp[, 3],
+          grepl("_surprise$", kernel)
+        )
+      } else if (kernel == 'custom') {
         if (is.null(funptr)) stop("Missing function pointer for custom kernel. Pass 'funptr'.")
         comp_out <- EMC2_call_custom_trend(tpars_comp, covariate_comp, funptr)
       }
-      if(!ffill_na) {
+      if (!ffill_na) {
         # If, for whatever reason, the user wants NA-covaraites to be set to 0, we can still do this
         comp_out[is.na(covariate_comp)] <- 0
       }
@@ -693,8 +738,8 @@ run_trend <- function(dadm, trend, param, trend_pars, pars_full = NULL,
   out <- numeric(nrow(dadm))
   cov_cols <- trend$covariate
 
-  # Check if this is a delta-rule kernel requiring special handling
-  is_delta_kernel <- trend$kernel %in% c('delta', 'delta2kernel','delta2lr')
+  # # Check if this is a delta-rule kernel requiring special handling
+  # is_delta_kernel <- trend$kernel %in% c('delta', 'delta2kernel','delta2lr')
   use_at_filter <- !is.null(trend$at)
 
   # Build par_input columns if needed
@@ -990,12 +1035,12 @@ register_trend <- function(trend_parameters, file, transforms = NULL, base = "ad
 #   d
 # }
 
-has_delta_rules <- function(model) {
+has_learning_rules <- function(model) {
   trend <- model()$trend
   if(is.null(trend)) return(FALSE)
 
   for(trend_n in 1:length(trend)) {
-    if(trend[[trend_n]]$kernel %in% c('delta', 'delta2kernel', 'delta2lr')) return(TRUE)
+    if (is_kernel_type(trend[[trend_n]]$kernel, "learning")) return(TRUE)
   }
   return(FALSE)
 }
@@ -1041,79 +1086,271 @@ get_kernels <- function() {
   base_1p <- names(bases)[4:5]
 
   kernels <- list(
-    custom = list(description = "Custom C++ kernel: provided via register_trend().",
-                  transforms = NULL,
-                  default_pars = NULL,
-                  bases = names(bases)),
-    lin_decr = list(description = "Decreasing linear kernel: k = -c",
-                    transforms = NULL,
-                    default_pars = NULL,
-                    bases = base_2p),
-    lin_incr = list(description = "Increasing linear kernel: k = c",
-                    transforms = NULL,
-                    default_pars = NULL,
-                    bases = base_2p),
-    exp_decr = list(description = "Decreasing exponential kernel: k = exp(-d_ed * c)",
-                    transforms = list(func =list("d_ed" = "exp")),
-                    default_pars = "d_ed",
-                    bases = base_2p),
-    exp_incr = list(description = "Increasing exponential kernel: k = 1 - exp(-d_ei * c)",
-                    transforms = list(func =list("d_ei" = "exp")),
-                    default_pars = "d_ei",
-                    bases = base_2p),
-    pow_decr = list(description = "Decreasing power kernel: k = (1 + c)^(-d_pd)",
-                    transforms = list(func =list("d_pd" = "exp")),
-                    default_pars = "d_pd",
-                    bases = base_2p),
-    pow_incr = list(description = "Increasing power kernel: k = 1 - (1 + c)^(-d_pi)",
-                    transforms = list(func =list("d_pi" = "exp")),
-                    default_pars = "d_pi",
-                    bases = base_2p),
-    poly2 = list(description = "Quadratic polynomial: k = d1 * c + d2 * c^2",
-                 transforms = list(func = list("d1" = "identity", "d2" = "identity")),
-                 default_pars = c("d1", "d2"),
-                 bases = base_1p),
-    poly3 = list(description = "Cubic polynomial: k = d1 * c + d2 * c^2 + d3 * c^3",
-                 transforms = list(func = list("d1" = "identity", "d2" = "identity", "d3" = "identity")),
-                 default_pars = c("d1", "d2", "d3"),
-                 bases = base_1p),
-    poly4 = list(description = "Quartic polynomial: k = d1 * c + d2 * c^2 + d3 * c^3 + d4 * c^4",
-                 transforms = list(func = list("d1" = "identity", "d2" = "identity", "d3" = "identity", "d4" = "identity")),
-                 default_pars = c("d1", "d2", "d3", "d4"),
-                 bases = base_1p),
-    delta = list(description = paste(
-                 "Standard delta rule kernel: k = q[i].\n",
-                 "        Updates q[i] = q[i-1] + alpha * (c[i-1] - q[i-1]).\n",
-                 "        Parameters: q0 (initial value), alpha (learning rate)."
-                 ),
-                 default_pars = c("q0", "alpha"),
-                 transforms = list(func = list("q0" = "identity", "alpha" = "pnorm")),
-                 bases = base_2p),
-    delta2kernel = list(description = paste(
-                "Dual kernel delta rule: k = q[i].\n",
-                  "         Combines fast and slow learning rates\n",
-                  "         and switches between them based on dSwitch.\n",
-                  "         Parameters: q0 (initial value), alphaFast (fast learning rate),\n",
-                  "         propSlow (alphaSlow = propSlow * alphaFast), dSwitch (switch threshold)."
-                ),
-                default_pars = c("q0", "alphaFast", "propSlow", "dSwitch"),
-                transforms = list(func = list("q0" = "identity", "alphaFast" = "pnorm",
-                                              "propSlow" = "pnorm", "dSwitch" = "pnorm")),
-                bases = base_2p),
-    delta2lr = list(description = paste(
-                "Dual learning rate delta rule: k = q[i].\n",
-                "         Like the standard delta rule, but with separate\n",
-                "         learning rates for positive and negative prediction errors.\n",
-                "         Parameters: q0 (initial value), alphaPos (learning rate for positive PEs),\n",
-                "         alphaNeg (learning rate for negative PEs)."
-               ),
-              default_pars = c("q0", "alphaPos", "alphaNeg"),
-              transforms = list(func = list("q0" = "identity",
-                                            "alphaPos" = "pnorm",
-                                            "alphaNeg" = "pnorm")),
-              bases = base_2p)
-             )
-  kernels
+    custom = list(
+      description = "Custom C++ kernel: provided via register_trend().",
+      transforms = NULL,
+      default_pars = NULL,
+      bases = names(bases)
+    ),
+    lin_decr = list(
+      description = "Decreasing linear kernel: k = -c",
+      transforms = NULL,
+      default_pars = NULL,
+      bases = base_2p
+    ),
+    lin_incr = list(
+      description = "Increasing linear kernel: k = c",
+      transforms = NULL,
+      default_pars = NULL,
+      bases = base_2p
+    ),
+    exp_decr = list(
+      description = "Decreasing exponential kernel: k = exp(-d_ed * c)",
+      transforms = list(func = list("d_ed" = "exp")),
+      default_pars = "d_ed",
+      bases = base_2p
+    ),
+    exp_incr = list(
+      description = "Increasing exponential kernel: k = 1 - exp(-d_ei * c)",
+      transforms = list(func =list("d_ei" = "exp")),
+      default_pars = "d_ei",
+      bases = base_2p
+    ),
+    pow_decr = list(
+      description = "Decreasing power kernel: k = (1 + c)^(-d_pd)",
+      transforms = list(func = list("d_pd" = "exp")),
+      default_pars = "d_pd",
+      bases = base_2p
+    ),
+    pow_incr = list(
+      description = "Increasing power kernel: k = 1 - (1 + c)^(-d_pi)",
+      transforms = list(func = list("d_pi" = "exp")),
+      default_pars = "d_pi",
+      bases = base_2p
+    ),
+    poly2 = list(
+      description = "Quadratic polynomial: k = d1 * c + d2 * c^2",
+      transforms = list(func = list("d1" = "identity", "d2" = "identity")),
+      default_pars = c("d1", "d2"),
+      bases = base_1p
+    ),
+    poly3 = list(
+      description = "Cubic polynomial: k = d1 * c + d2 * c^2 + d3 * c^3",
+      transforms = list(
+        func = list("d1" = "identity", "d2" = "identity", "d3" = "identity")
+      ),
+      default_pars = c("d1", "d2", "d3"),
+      bases = base_1p
+    ),
+    poly4 = list(
+      description = "Quartic polynomial: k = d1 * c + d2 * c^2 + d3 * c^3 + d4 * c^4",
+      transforms = list(
+        func = list("d1" = "identity", "d2" = "identity", "d3" = "identity", "d4" = "identity")
+      ),
+      default_pars = c("d1", "d2", "d3", "d4"),
+      bases = base_1p
+    ),
+    delta = list(
+      description = paste(
+        "Standard delta rule kernel: k = q[i].\n",
+        "        Updates q[i] = q[i-1] + alpha * (c[i-1] - q[i-1]).\n",
+        "        Parameters: q0 (initial value), alpha (learning rate)."
+      ),
+      default_pars = c("q0", "alpha"),
+      transforms = list(func = list("q0" = "identity", "alpha" = "pnorm")),
+      bases = base_2p
+    ),
+    delta2kernel = list(
+      description = paste(
+        "Dual kernel delta rule: k = q[i].\n",
+        "         Combines fast and slow learning rates\n",
+        "         and switches between them based on dSwitch.\n",
+        "         Parameters: q0 (initial value), alphaFast (fast learning rate),\n",
+        "         propSlow (alphaSlow = propSlow * alphaFast), dSwitch (switch threshold)."
+      ),
+      default_pars = c("q0", "alphaFast", "propSlow", "dSwitch"),
+      transforms = list(
+        func = list("q0" = "identity", "alphaFast" = "pnorm", "propSlow" = "pnorm", "dSwitch" = "pnorm")
+      ),
+      bases = base_2p
+    ),
+    delta2lr = list(
+      description = paste(
+        "Dual learning rate delta rule: k = q[i].\n",
+        "         Like the standard delta rule, but with separate\n",
+        "         learning rates for positive and negative prediction errors.\n",
+        "         Parameters: q0 (initial value), alphaPos (learning rate for positive PEs),\n",
+        "         alphaNeg (learning rate for negative PEs)."
+      ),
+      default_pars = c("q0", "alphaPos", "alphaNeg"),
+      transforms = list(
+        func = list("q0" = "identity", "alphaPos" = "pnorm", "alphaNeg" = "pnorm")
+      ),
+      bases = base_2p
+    ),
+    beta_binom = list(
+      description = paste(
+        "Beta-Binomial learning kernel:\n",
+        "        k[i] = predicted probability of the current trial's observation\n",
+        "        being X as opposed to Y.\n",
+        "        Assumes a binary (Bernoulli) sequence of observations.\n",
+        "        Returns the trial-wise mean of the posterior predictive distribution\n",
+        "        of the latent probability that the observation is X.\n",
+        "        Optionally applies exponential decay ('leaky integration') to the count\n",
+        "        of past observations by multiplying past accumulated counts by exp(-1/decay).\n",
+        "        Optionally limits memory of past events to a fixed window.\n",
+        "        Parameters: a0, b0 (shape parameters of the Beta prior),\n",
+        "        decay (optional exponential memory decay), window (optional memory window)."
+      ),
+      default_pars = c("a0", "b0", "decay", "window"),
+      transforms = list(
+        # TODO decay and window params are only defined on [0, Inf), but want to
+        # allow for negative values as exceptions to switch off those params.
+        # Cleaner solution would be to use exp transform, but with 0 exception
+        func = list("a0" = "exp", "b0" = "exp", "decay" = "identity", "window" = "identity")
+      ),
+      bases = base_2p
+    ),
+    beta_binom_map = list(
+      description = paste(
+        "Beta-Binomial learning kernel (MAP):\n",
+        "        k[i] = predicted probability of the current trial's observation\n",
+        "        being X as opposed to Y.\n",
+        "        Same as the standard Beta-Binomial learning kernel, but returns the\n",
+        "        trial-wise mode (rather than mean).\n",
+        "        Parameters: a0, b0 (shape parameters of the Beta prior),\n",
+        "        decay (optional exponential memory decay), window (optional memory window)."
+      ),
+      default_pars = c("a0", "b0", "decay", "window"),
+      transforms = list(
+        func = list("a0" = "exp", "b0" = "exp", "decay" = "identity", "window" = "identity")
+      ),
+      bases = base_2p
+    ),
+    beta_binom_surprise = list(
+      description = paste(
+        "Beta-Binomial learning kernel (surprise):\n",
+        "        k[i] = Shannon surprise of the current trial's observation,\n",
+        "        computed from the predictive mean probability of the observation.\n",
+        "        Parameters: a0, b0 (shape parameters of the Beta prior),\n",
+        "        decay (optional exponential memory decay), window (optional memory window)."
+      ),
+      default_pars = c("a0", "b0", "decay", "window"),
+      transforms = list(
+        func = list("a0" = "exp", "b0" = "exp", "decay" = "identity", "window" = "identity")
+      ),
+      bases = base_2p
+    ),
+    beta_binom_map_surprise = list(
+      description = paste(
+        "Beta-Binomial learning kernel (MAP + surprise):\n",
+        "        k[i] = Shannon surprise of the current trial's observation,\n",
+        "        computed from the predictive mode probability of the observation.\n",
+        "        Parameters: a0, b0 (shape parameters of the Beta prior),\n",
+        "        decay (optional exponential memory decay), window (optional memory window)."
+      ),
+      default_pars = c("a0", "b0", "decay", "window"),
+      transforms = list(
+        func = list("a0" = "exp", "b0" = "exp", "decay" = "identity", "window" = "identity")
+      ),
+      bases = base_2p
+    ),
+    dbm = list(
+      description = paste(
+        "Dynamic Belief Model (DBM) kernel:\n",
+        "        k[i] = predicted probability of the current trial's observation\n",
+        "        being X as opposed to Y.\n",
+        "        Assumes a binary (Bernoulli) sequence of observations.\n",
+        "        Returns the trial-wise mean of the predictive distribution\n",
+        "        of the latent probability that the observation is X.\n",
+        "        Assumes that this latent probability is a mixture of the previous\n",
+        "        trial's probability and a 'reset' probability drawn from a fixed Beta prior.\n",
+        "        The parameter controlling this mixture can be interpreted as the assumed\n",
+        "        probability of a change-point in the environment (i.e., volatility).\n",
+        "        Parameters: cp (change-point probability), mu0 (mean of Beta prior), s0 (scale of Beta prior)."
+      ),
+      default_pars = c("cp", "mu0", "s0"),
+      transforms = list(
+        func = list("cp" = "pnorm", "mu0" = "pnorm", "s0" = "exp")
+      ),
+      bases = base_2p
+    ),
+    dbm_map = list(
+      description = paste(
+        "Dynamic Belief Model (DBM) kernel (MAP):\n",
+        "        k[i] = predicted probability of the current trial's observation\n",
+        "        being X as opposed to Y.\n",
+        "        Same as the standard DBM kernel, but returns the trial-wise mode\n",
+        "        (rather than mean) of the predictive distribution.\n",
+        "        Parameters: cp (change-point probability), mu0 (mean of Beta prior), s0 (scale of Beta prior)."
+      ),
+      default_pars = c("cp", "mu0", "s0"),
+      transforms = list(
+        func = list("cp" = "pnorm", "mu0" = "pnorm", "s0" = "exp")
+      ),
+      bases = base_2p
+    ),
+    dbm_surprise = list(
+      description = paste(
+        "Dynamic Belief Model (DBM) kernel (surprise):\n",
+        "        k[i] = Shannon surprise of the current trial's observation,\n",
+        "        computed from the predictive mean probability of the observation.\n",
+        "        Parameters: cp (change-point probability), mu0 (mean of Beta prior), s0 (scale of Beta prior)."
+      ),
+      default_pars = c("cp", "mu0", "s0"),
+      transforms = list(
+        func = list("cp" = "pnorm", "mu0" = "pnorm", "s0" = "exp")
+      ),
+      bases = base_2p
+    ),
+    dbm_map_surprise = list(
+      description = paste(
+        "Dynamic Belief Model (DBM) kernel (MAP + surprise):\n",
+        "        k[i] = Shannon surprise of the current trial's observation,\n",
+        "        computed from the predictive mode probability of the observation.\n",
+        "        Parameters: cp (change-point probability), mu0 (mean of Beta prior), s0 (scale of Beta prior)."
+      ),
+      default_pars = c("cp", "mu0", "s0"),
+      transforms = list(
+        func = list("cp" = "pnorm", "mu0" = "pnorm", "s0" = "exp")
+      ),
+      bases = base_2p
+    ),
+    tpm = list(
+      description = paste(
+        "Transition Probability Model (TPM) kernel:\n",
+        "        k[i] = predicted probability of the current trial's observation\n",
+        "        being X as opposed to Y, conditional on the previous trial's observation.\n",
+        "        Assumes a binary (Bernoulli) sequence of observations and\n",
+        "        estimates first-order transition probabilities.\n",
+        "        Returns the trial-wise mean of the predictive distribution\n",
+        "        of the latent transition probability that the observation is X,\n",
+        "        given that the previous trial's observation was either X or Y.\n",
+        "        Incorporates a trial-wise change-point probability cp[i] controlling belief volatility.\n",
+        "        Parameters: cp (change-point probability), a0, b0 (shape parameters of Beta priors over transition probabilities)."
+      ),
+      default_pars = c("cp", "a0", "b0"),
+      transforms = list(
+        func = list("cp" = "pnorm", "a0" = "exp", "b0" = "exp")
+      ),
+      bases = base_2p
+    ),
+    tpm_surprise = list(
+      description = paste(
+        "Transition Probability Model (TPM) kernel:\n",
+        "        k[i] = Shannon surprise of the current trial's observation,\n",
+        "        computed from the predictive mean probability of the observation,\n",
+        "        conditional on the previous trial's observation.\n",
+        "        Parameters: cp (change-point probability), a0, b0 (shape parameters of Beta priors over transition probabilities)."
+      ),
+      default_pars = c("cp", "a0", "b0"),
+      transforms = list(
+        func = list("cp" = "pnorm", "a0" = "exp", "b0" = "exp")
+      ),
+      bases = base_2p
+    )
+  )
+  return(kernels)
 }
 
 
@@ -1121,7 +1358,7 @@ format_kernel <- function(kernel, kernel_pars=NULL) {
   kernels <- get_kernels()
   eq_string <- kernels[[kernel]]$description
   eq_string <- strsplit(eq_string, ': k = ')[[1]][[2]]
-  if(kernel %in% c('delta', 'delta2kernel', 'delta2lr')) eq_string <- strsplit(eq_string, '\\.')[[1]][[1]]
+  if(is_kernel_type(kernel, "learning")) eq_string <- strsplit(eq_string, '\\.')[[1]][[1]]
   if(kernel %in% c('exp_incr', 'pow_incr', 'poly1', 'poly2', 'poly3', 'poly4')) eq_string <- paste0('(', eq_string, ')')
 
   # add placeholders
@@ -1602,4 +1839,3 @@ apply_kernel <- function(kernel_pars, emc, subject=1, input_pars=NULL, trend_n=1
   colnames(out) <- trend$covariate
   out
 }
-
