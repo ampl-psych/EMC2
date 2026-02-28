@@ -531,9 +531,9 @@ NumericVector calc_ll_oo(NumericMatrix particle_matrix, DataFrame data, NumericV
                                 keep_names);
       // Precompute specs
       if (i == 0) {                            // first particle only, just to get colnames
-        bound_specs = make_bound_specs(minmax,mm_names,pars,bounds);
+        bound_specs = make_bound_specs_pt(minmax,mm_names,param_table_template,bounds);
       }
-      is_ok = c_do_bound(pars, bound_specs);
+      is_ok = c_do_bound_pt(param_table_template, bound_specs);
       lls[i] = c_log_likelihood_DDM(pars, data, n_trials, expand, min_ll, is_ok);
     }
   } else if(type == "MRI" || type == "MRI_AR1"){
@@ -551,9 +551,9 @@ NumericVector calc_ll_oo(NumericMatrix particle_matrix, DataFrame data, NumericV
                                 keep_names);
       // Precompute specs
       if (i == 0) {                            // first particle only, just to get colnames
-        bound_specs = make_bound_specs(minmax,mm_names,pars,bounds);
+        bound_specs = make_bound_specs_pt(minmax,mm_names,param_table_template,bounds);
       }
-      is_ok = c_do_bound(pars, bound_specs);
+      is_ok = c_do_bound_pt(param_table_template, bound_specs);
       if(type == "MRI"){
         lls[i] = c_log_likelihood_MRI(pars, y, is_ok, n_trials, n_pars, min_ll);
       } else{
@@ -590,9 +590,9 @@ NumericVector calc_ll_oo(NumericMatrix particle_matrix, DataFrame data, NumericV
                                 keep_names);
 
       if (i == 0) {                            // first particle only, just to get colnames
-        bound_specs = make_bound_specs(minmax,mm_names,pars,bounds);
+        bound_specs = make_bound_specs_pt(minmax,mm_names,param_table_template,bounds);
       }
-      is_ok = c_do_bound(pars, bound_specs);
+      is_ok = c_do_bound_pt(param_table_template, bound_specs);
       is_ok = lr_all(is_ok, n_lR);
       lls[i] = c_log_likelihood_race(pars, data, dfun, pfun, n_trials, winner, expand, min_ll, is_ok);
     }

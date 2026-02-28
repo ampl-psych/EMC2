@@ -388,12 +388,45 @@ c_do_bound(NumericMatrix pars,
   return result;
 }
 
+Rcpp::LogicalVector c_do_bound_pt(const ParamTable& pt,
+                                  const std::vector<BoundSpec>& specs)
+{
+  using Rcpp::LogicalVector;
+  using Rcpp::NumericMatrix;
+
+  const NumericMatrix& base = pt.base;
+  const int nrows = base.nrow();
+
+  LogicalVector result(nrows, true);
+
+  for (std::size_t j = 0; j < specs.size(); ++j) {
+    const BoundSpec& bs = specs[j];
+    const int col_idx   = bs.col_idx;   // MUST be a base-column index
+    const double min_v  = bs.min_val;
+    const double max_v  = bs.max_val;
+    const bool has_exc  = bs.has_exception;
+    const double exc_val= bs.exception_val;
+
+    for (int i = 0; i < nrows; ++i) {
+      const double val = base(i, col_idx);
+      bool ok = (val > min_v && val < max_v);
+      if (!ok && has_exc) {
+        ok = (val == exc_val);
+      }
+      if (result[i] && !ok) {
+        result[i] = false;
+      }
+    }
+  }
+
+  return result;
+}
+
 // ---------------------
 // c_do_transform_pt (ParamTable version)
 // ---------------------
 
-void
-c_do_transform_pt(ParamTable& pt,
+void c_do_transform_pt(ParamTable& pt,
                   const std::vector<TransformSpec>& specs)
 {
   const int nrow = pt.n_trials;
@@ -514,4 +547,62 @@ std::vector<BoundSpec> make_bound_specs(NumericMatrix minmax,
     specs[j] = s;
   }
   return specs;
+}
+
+// Same logic as above, but with a ParamTable instead of NumericMatrix
+std::vector<BoundSpec> make_bound_specs_pt(Rcpp::NumericMatrix minmax,
+                                           Rcpp::CharacterVector minmax_colnames,
+                                           const ParamTable& pt,
+                                           Rcpp::List bound)
+{
+  using namespace Rcpp;
+  using std::string;
+
+  // 1) Build a map from param-name -> base column index in ParamTable
+  //    (or just use pt.base_index_for(...))
+  // Here we go directly via pt.base_index_for for simplicity.
+
+  // 2) Build a map from param-name -> exception value
+  bool has_exception =
+    bound.containsElementNamed("exception") &&
+    !Rf_isNull(bound["exception"]);
+
+    std::unordered_map<string, double> exceptionMap;
+    if (has_exception) {
+      NumericVector except_vec = bound["exception"];
+      CharacterVector except_names = except_vec.names();
+      for (int i = 0; i < except_vec.size(); ++i) {
+        string nm = as<string>(except_names[i]);
+        exceptionMap[nm] = except_vec[i];
+      }
+    }
+
+    // 3) Create BoundSpec for each column in minmax
+    const int ncols = minmax_colnames.size();
+    std::vector<BoundSpec> specs(ncols);
+
+    for (int j = 0; j < ncols; ++j) {
+      string var_name = as<string>(minmax_colnames[j]);
+
+      // find base-column index for this parameter
+      int base_idx = pt.base_index_for(var_name);  // will Rcpp::stop if unknown
+
+      BoundSpec s;
+      s.col_idx = base_idx;           // index into pt.base
+      s.min_val = minmax(0, j);
+      s.max_val = minmax(1, j);
+
+      auto it = exceptionMap.find(var_name);
+      if (it != exceptionMap.end()) {
+        s.has_exception = true;
+        s.exception_val = it->second;
+      } else {
+        s.has_exception = false;
+        s.exception_val = NA_REAL;  // same as before
+      }
+
+      specs[j] = s;
+    }
+
+    return specs;
 }

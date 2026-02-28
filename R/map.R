@@ -340,14 +340,34 @@ fill_bound <- function(bound, model) {
       stop("first entry of bound must be named minmax")
     if (!all(colnames(bound$minmax) %in% names(model()$p_types)))
       stop("minmax column names must correspond to parameter types")
-    if (!is.null(bound$exception) &&
-        (!all(names(bound$exception) %in% names(model()$p_types))))
+    if (!is.null(bound$exception) && (!all(names(bound$exception) %in% names(model()$p_types)))) {
       stop("exception names must correspond to parameter types")
-    filled_bound$minmax[,colnames(bound$minmax)] <- bound$minmax
-    if (!is.null(bound$exception)) {
-      filled_bound$exception <- c(bound$exception,filled_bound$exception)
-      filled_bound$exception <- filled_bound$exception[!duplicated(names(filled_bound$exception))]
     }
+    ## minmax
+    mm_filled <- filled_bound$minmax  # existing default
+    mm_bound  <- bound$minmax         # user-specified
+    new_cols <- setdiff(colnames(mm_bound), colnames(mm_filled))
+    if (length(new_cols)) {
+      mm_filled <- cbind(mm_filled,
+                         mm_bound[, new_cols, drop = FALSE])
+    }
+    # overlapping columns: overwrite defaults with user values
+    common_cols <- intersect(colnames(mm_bound), colnames(mm_filled))
+    if (length(common_cols)) {
+      mm_filled[, common_cols] <- mm_bound[, common_cols, drop = FALSE]
+    }
+
+    filled_bound$minmax <- mm_filled
+    # exceptions
+    if (!is.null(bound$exception)) {
+      fe <- filled_bound$exception
+      be <- bound$exception
+      # override or append: user values win
+      fe[names(be)] <- be
+      filled_bound$exception <- fe
+    }
+
+    filled_bound
   }
   filled_bound
 }
