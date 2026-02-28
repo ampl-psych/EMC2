@@ -1343,7 +1343,7 @@ NumericVector calc_ll_oo(NumericMatrix particle_matrix, DataFrame data, NumericV
         else             idx_los.push_back(i);
       }
       const int n_winners = (int)idx_win.size();
-      const int n_losers  = (int)idx_los.size();
+      // const int n_losers  = (int)idx_los.size();
 
       // Scratch buffers
       NumericVector raw(n_trials);
