@@ -7,7 +7,7 @@
 #include "ParamTable.h"
 
 // Compile-time switch
-#define USE_FAST_PNORM
+// #define USE_FAST_PNORM
 #ifdef USE_FAST_PNORM
 #define PPNORM_STD(x, lower, logp) fast_pnorm_std((x), (lower), (logp))
 #else
