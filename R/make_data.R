@@ -253,10 +253,8 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
     if(return_trialwise_parameters) trialwise_parameters <- cbind(pars, attr(pars, "trialwise_parameters"))
 
     pars <- model()$Ttransform(pars, data)
-    if (is.null(optionals$nobound))
-      pars <- add_bound(pars, model()$bound, data$lR) else
-      attr(pars,"ok") <- rep(TRUE,nrow(pars))
-
+    if (!is.null(optionals$nobound)) attr(pars,"ok") <- rep(TRUE,nrow(pars)) else
+      pars <- fix_bound(pars, model()$bound, data$lR,fix=!is.null(optionals$shrink2bound))
     pars_ok <- attr(pars, 'ok')
     if(mean(!pars_ok) > .1){
       warning("More than 10% of parameter values fall out of model bounds, see <model_name>$bounds()")
