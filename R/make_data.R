@@ -234,7 +234,7 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
                                                 return_trialwise_parameters, kernel_output_codes)
     } else {
       res <- make_data_unconditional(data=data, pars=pars, design=design, model=model,
-                                     return_trialwise_parameters, kernel_output_codes)
+                                     return_trialwise_parameters, kernel_output_codes, optionals=optionals)
 
     }
     data <- res$data
@@ -266,7 +266,13 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
     if(return_trialwise_parameters) trialwise_parameters <- cbind(pars, attr(pars, "trialwise_parameters"))
 
     pars <- model()$Ttransform(pars, data)
-    pars <- add_bound(pars, model()$bound, data$lR)
+    #pars <- add_bound(pars, model()$bound, data$lR)
+
+    if (!is.null(optionals$nobound)) {
+      attr(pars,"ok") <- rep(TRUE,nrow(pars))
+    } else {
+      pars <- fix_bound(pars, model()$bound, data$lR,fix=!is.null(optionals$shrink2bound))
+    }
 
     pars_ok <- attr(pars, 'ok')
     if(mean(!pars_ok) > .1){

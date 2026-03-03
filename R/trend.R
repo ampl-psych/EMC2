@@ -1225,7 +1225,9 @@ verbal_trend <- function(design_matrix, trend) {
 }
 
 
-make_data_unconditional <- function(data, pars, design, model, return_trialwise_parameters, kernel_output_codes=c(1L)) {
+make_data_unconditional <- function(data, pars, design, model,
+                                    return_trialwise_parameters, kernel_output_codes=c(1L),
+                                    optionals=NULL) {
   model_fun <- model
   model_list <- model()
   includeColumns <- colnames(data)
@@ -1279,7 +1281,12 @@ make_data_unconditional <- function(data, pars, design, model, return_trialwise_
 
       cur_dm <- dm[mask_current, , drop = FALSE]
       pr <- model_list$Ttransform(pm[mask_current, , drop = FALSE], cur_dm)
-      pr <- add_bound(pr, model_list$bound, cur_dm$lR)
+      # pr <- add_bound(pr, model_list$bound, cur_dm$lR)
+    if (!is.null(optionals$nobound)) {
+      attr(pars,"ok") <- rep(TRUE,nrow(pars))
+    } else {
+      pars <- fix_bound(pars, model()$bound, data$lR,fix=!is.null(optionals$shrink2bound))
+    }
 
       # Identify current-trial rows inside the prefix design
 

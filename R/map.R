@@ -17,6 +17,8 @@
 #   pars
 # }
 
+
+
 do_pre_transform <- function(p_vector, transform)
 {
   isexp    <- transform$func[names(p_vector)] == "exp"
@@ -47,6 +49,35 @@ do_bound <- function(pars,bound, lR = NULL) {
     bound <- rep(colSums(matrix(bound, lvl)) == lvl, each = lvl)
   }
   return(bound)
+}
+
+
+# This form used in make_data
+fix_bound <- function(pars,bound, lR = NULL,fix=FALSE) {
+  tpars <- t(pars[,colnames(bound$minmax),drop=FALSE])
+  oklo <- tpars >= bound$minmax[1,]
+  okhi <- tpars <= bound$minmax[2,]
+  if (!is.null(bound$exception)) {
+    exception <- tpars[names(bound$exception),] == bound$exception
+    oklo[names(bound$exception),] <- oklo[names(bound$exception),] | exception
+    okhi[names(bound$exception),] <- okhi[names(bound$exception),] | exception
+  }
+  bounds <- colSums(oklo&okhi) == nrow(oklo)
+
+  if (fix) {
+    for (i in colnames(bound$minmax)) {
+      pars[!oklo[i,],i] <- bound$minmax[1,i]
+      pars[!okhi[i,],i] <- bound$minmax[2,i]
+    }
+    bounds[] <- TRUE
+  }
+
+  if(!is.null(lR)){
+    lvl <- length(unique(lR))
+    bounds <- rep(colSums(matrix(bounds, lvl)) == lvl, each = lvl)
+  }
+  attr(pars,"ok") <- bounds
+  return(pars)
 }
 
 # This form used in get_pars
