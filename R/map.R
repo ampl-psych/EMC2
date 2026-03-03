@@ -54,10 +54,18 @@ do_bound <- function(pars,bound, lR = NULL) {
 
 # This form used in make_data
 fix_bound <- function(pars,bound, lR = NULL,fix=FALSE) {
+  # SM: Only consider bounds of parameters that are actually in pars
+  # When we move to the oo_refactor we can apply the full bound to all parameters
+  bound$minmax <- bound$minmax[,colnames(bound$minmax) %in% colnames(pars), drop=FALSE]
+
   tpars <- t(pars[,colnames(bound$minmax),drop=FALSE])
   oklo <- tpars >= bound$minmax[1,]
   okhi <- tpars <= bound$minmax[2,]
   if (!is.null(bound$exception)) {
+    # SM: Only consider bounds of parameters that are actually in pars
+    # When we move to the oo_refactor we can apply the full bound to all parameters
+    bound$exception <- bound$exception[colnames(bound$exception) %in% colnames(pars)]
+
     exception <- tpars[names(bound$exception),] == bound$exception
     oklo[names(bound$exception),] <- oklo[names(bound$exception),] | exception
     okhi[names(bound$exception),] <- okhi[names(bound$exception),] | exception
