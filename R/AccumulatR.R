@@ -48,16 +48,7 @@ AccumulatR_add_context <- function(dadm){
   model_spec <- model_list$spec
   data$accumulator <- NULL
   ctx <- build_likelihood_context(model_spec, data)
-
-  context <- list(
-    native_ctx = ctx$native_ctx,  # externalptr (the “real” native context)
-    rel_tol    = ctx$rel_tol,
-    abs_tol    = ctx$abs_tol,
-    max_depth  = ctx$max_depth
-  )
-
-
-  attr(dadm, "AccumulatR_context") <- context
+  attr(dadm, "AccumulatR_context") <- ctx
   return(dadm)
 }
 
@@ -69,13 +60,7 @@ AccumulatR_check_context <- function(emc){
       dat <- emc[[i]]$data[[j]] # Looping over chains, and subjects
       if(is.data.frame(dat)){
         ctx <- ensure_native_ctx(attr(dat, "AccumulatR_context"), model_spec$model_spec)
-        context <- list(
-          native_ctx = ctx$native_ctx,  # externalptr (the “real” native context)
-          rel_tol    = ctx$rel_tol,
-          abs_tol    = ctx$abs_tol,
-          max_depth  = ctx$max_depth
-        )
-        attr(dat, "AccumulatR_context") <- context
+        attr(dat, "AccumulatR_context") <- ctx
         emc[[i]]$data[[j]] <- dat
       }
     }
