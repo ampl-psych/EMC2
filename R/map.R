@@ -64,7 +64,7 @@ fix_bound <- function(pars,bound, lR = NULL,fix=FALSE) {
   if (!is.null(bound$exception)) {
     # SM: Only consider bounds of parameters that are actually in pars
     # When we move to the oo_refactor we can apply the full bound to all parameters
-    bound$exception <- bound$exception[colnames(bound$exception) %in% colnames(pars)]
+    bound$exception <- bound$exception[names(bound$exception) %in% colnames(pars)]
 
     exception <- tpars[names(bound$exception),] == bound$exception
     oklo[names(bound$exception),] <- oklo[names(bound$exception),] | exception
