@@ -122,6 +122,8 @@ plot.emc <- function(x, stage = "sample", selection = c("mu", "sigma2", "alpha")
 #' Simulate ``n_post`` data sets using the posterior/prior parameter estimates
 #'
 #' @param object An emc or emc.prior object from which to generate predictives
+#' @param data Optional data frame or list of data frames needed to exactly match the original design.
+#' Required for `predict.emc()` when the fitted object was created with `memory_saver = TRUE`.
 #' @param hyper Boolean. Defaults to `FALSE`. If `TRUE`, simulates from the group-level (`hyper`)
 #' parameters instead of the subject-level parameters.
 #' @param n_post Integer. Number of generated datasets
@@ -147,7 +149,23 @@ predict.emc <- function(object,hyper=FALSE,n_post=50,n_cores=1,
   # #' @param expand Integer. Default is 1, exact same design for each subject. Larger values will replicate designs, so more trials per subject.
   emc <- object
   dots <- list(...)
-  data <- get_data(emc)
+  data <- dots$data
+  dots$data <- NULL
+  has_pooled_design <- function(x) {
+    if (is.data.frame(x)) {
+      return(!is.null(attr(x, "design_pool")))
+    }
+    if (is.list(x)) {
+      return(any(vapply(x, has_pooled_design, logical(1))))
+    }
+    FALSE
+  }
+  if (is.null(data)) {
+    if (has_pooled_design(emc[[1]]$data)) {
+      stop("predict() requires `data` when the model was created with memory_saver = TRUE")
+    }
+    data <- get_data(emc)
+  }
   design <- get_design(emc)
   return_trialwise_parameters <- isTRUE(dots$return_trialwise_parameters)
   if (is.null(dots$conditional_on_data) && has_conditional_covariates(design[[1]])) {
@@ -157,7 +175,17 @@ Since the covariate depends on behavior, the data will be simulated trial-by-tri
 To override this behavior, pass `conditional_on_data=TRUE` to predict().')
   }
 
-  if(is.null(data$subjects)){
+  if (is.data.frame(data)) {
+    jointModel <- FALSE
+    data <- list(data)
+    all_samples <- NULL
+  } else if (is.list(data) && length(data) > 0 && all(vapply(data, is.data.frame, logical(1)))) {
+    jointModel <- length(design) > 1
+    if (!jointModel && length(data) != 1) {
+      stop("For single-design models, `data` must be a data frame or a list of length 1")
+    }
+    all_samples <- if (jointModel) emc else NULL
+  } else if(is.null(data$subjects)){
     jointModel <- TRUE
     all_samples <- emc
   } else{
@@ -1177,4 +1205,3 @@ auto_thin.emc <- function(emc, stage = "sample", selection = c("alpha", "mu"), .
 auto_thin <- function(emc, stage = "sample", selection = c("alpha", "mu"), ...){
   UseMethod("auto_thin")
 }
-

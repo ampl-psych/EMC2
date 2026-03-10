@@ -578,7 +578,8 @@ credint.emc.prior <- function(x, selection = "mu", probs = c(0.025, .5, .975),
   return(out)
 }
 
-#' @param data A data frame needed to exactly match the original design
+#' @param data Optional data frame or list of data frames needed to exactly match the original design.
+#' Required for `predict.emc()` when the fitted object was created with `memory_saver = TRUE`.
 #' @param n_trials An integer. If `data` isn't provided (although preferred),
 #' can generate data based on `n_trials` per cell of `design`
 #' @rdname predict.emc
