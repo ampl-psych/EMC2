@@ -7,7 +7,7 @@ AccumulatR_model <- function(model_spec){
     transform=list(func=c(q = "pnorm", w = "pnorm", t0 = "exp",
                           p1 = "identity",p2 = "exp", p3 = "exp")),
     Ttransform = function(pars,dadm) pars,
-    bound=list(minmax=cbind(q=c(0,1), w = c(0, 1), t0=c(0,Inf),
+    bound=list(minmax=cbind(q=c(0,1), w = c(0, 1), t0=c(0.05,Inf),
                             p1=c(-Inf, Inf), p2 = c(0, Inf), p3 = c(0, Inf)),
                exception=c(q=0,w=1,t0=0, p2 = 0, p3 = 0)),
     rfun = function(model_spec, trial_df, pars) AccumulatR::simulate(model_spec, pars, trial_df = trial_df, keep_component = TRUE),
