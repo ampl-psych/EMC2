@@ -5,6 +5,8 @@
 #include "EMC2/userfun.hpp"
 #include <Rcpp.h>
 #include <unordered_map>
+#include <regex>
+#include "trend_DBM.h"
 using namespace Rcpp;
 
 // Call a user-supplied custom trend kernel
@@ -38,7 +40,6 @@ NumericVector run_delta_rcpp(NumericVector q0, NumericVector alpha, NumericVecto
       q[i+1] = q[i] + alpha[i] * pe[i];
     }
   }
-
   return q;
 }
 
@@ -209,18 +210,83 @@ NumericMatrix run_kernel_rcpp(NumericMatrix kernel_pars,
     return out;
   }
 
+  // for convenience, define some regular expressions for matching input kernel
+  // against specific classes of kernels
+  const std::string kern_c = kernel.get_cstring();
+  static const std::regex delta_kerns_re("^delta(2lr|2kernel)?$");
+  static const std::regex beta_binom_kerns_re("^beta_binom(_map)?(_surprise)?$");
+  static const std::regex dbm_kerns_re("^dbm(_map)?(_surprise)?$");
+  static const std::regex tpm_kerns_re("^tpm(_surprise)?$");
+  static const std::regex learning_kerns_re(
+      "^(delta(2lr|2kernel)?|"
+      "beta_binom(_map)?(_surprise)?|"
+      "dbm(_map)?(_surprise)?|"
+      "tpm(_surprise)?)$"
+  );
+
   for (int c = 0; c < p; ++c) {
     NumericVector cov_comp = input_comp(_, c);
     NumericVector comp_out(n_comp); // zeros by default
 
-    if(kernel == "delta" || kernel == "delta2lr" || kernel == "delta2kernel") {
+    if(std::regex_match(kern_c, learning_kerns_re)) {
       // Sequential kernels: No pre-filtering of NA, handle NA values in kernel
       if (kernel == "delta") {
-        comp_out = run_delta_rcpp(/*q0*/kp_comp(_,0), /*alpha*/kp_comp(_,1), cov_comp);
+        comp_out = run_delta_rcpp(
+          // q0, alpha
+          kp_comp(_,0), kp_comp(_,1),
+          cov_comp
+        );
       } else if (kernel == "delta2kernel") {
-        comp_out = run_delta2kernel_rcpp(/*q0*/kp_comp(_,0), /*alphaSlow*/kp_comp(_,1), /*propSlow*/kp_comp(_,2), /*dSwitch*/kp_comp(_,3), cov_comp);
+        comp_out = run_delta2kernel_rcpp(
+          // q0, alphaSlow, propSlow, dSwitch
+          kp_comp(_,0), kp_comp(_,1), kp_comp(_,2), kp_comp(_,3),
+          cov_comp
+        );
       } else if (kernel == "delta2lr") {
-        comp_out = run_delta2lr_rcpp(/*q0*/kp_comp(_,0), /*alphaPos*/kp_comp(_,1), /*alphaNeg*/kp_comp(_,2), cov_comp);
+        comp_out = run_delta2lr_rcpp(
+          // q0, alphaPos, alphaNeg
+          kp_comp(_,0), kp_comp(_,1), kp_comp(_,2),
+          cov_comp
+        );
+      } else if (std::regex_match(kern_c, beta_binom_kerns_re)) {
+        // beta binomial learning model variants
+        bool return_map = false, return_surprise = false;
+        if (std::regex_match(kern_c, std::regex("_surprise$"))) {
+          return_surprise = true;
+        }
+        if (std::regex_match(kern_c, std::regex("^beta_binom_map"))) {
+          return_map = true;
+        }
+        comp_out = run_beta_binomial(
+          cov_comp,
+          // a0, b0, decay, window
+          kp_comp(_,0), kp_comp(_,1), kp_comp(_,2), kp_comp(_,3),
+          return_map, return_surprise
+        );
+      } else if (std::regex_match(kern_c, dbm_kerns_re)) {
+        // Dynamic Belief Model variants
+        bool return_map = false, return_surprise = false;
+        if (std::regex_match(kern_c, std::regex("_surprise$"))) {
+          return_surprise = true;
+        }
+        if (std::regex_match(kern_c, std::regex("^dbm_map"))) {
+          return_map = true;
+        }
+        comp_out = run_dbm(
+          cov_comp,
+          // cp, mu0, s0
+          kp_comp(_,0), kp_comp(_,1), kp_comp(_,2),
+          return_map, return_surprise
+        );
+      } else if (std::regex_match(kern_c, tpm_kerns_re)) {
+        // Transition Probability Model variants
+        const bool return_surprise = (kernel == "tpm_surprise") ? true : false;
+        comp_out = run_tpm(
+          cov_comp,
+          // cp, a0, b0
+          kp_comp(_,0), kp_comp(_,1), kp_comp(_,2),
+          return_surprise
+        );
       }
 
       if(!ffill_na) {

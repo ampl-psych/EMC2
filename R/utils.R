@@ -1,3 +1,32 @@
+# #' shift a vector
+# #'
+# #' Shifts a vector by `shift`. New elements are filled by `fill`
+# #' @param x vector to be shifted
+# #' @param shift amount of elements to be shifted
+# #' @param fill filling value
+# #'
+# #/#' @export
+# shift_vector <- function(x, shift = 1, fill = NA) {
+#   # Ensure n is an integer
+#   shift <- as.integer(shift)
+#
+#   if(shift == 0) return(x)
+#
+#   # Vector length
+#   len <- length(x)
+#
+#   # If n is positive, shift right; if negative, shift left
+#   if (shift > 0) {
+#     # Shift right: prepend NAs and remove elements from the end
+#     x_shifted <- c(rep(fill, shift), x[1:(len - shift)])
+#   } else if (shift < 0) {
+#     # Shift left: append NAs and remove elements from the start
+#     x_shifted <- c(x[(abs(shift) + 1):len], rep(fill, abs(shift)))
+#   }
+#
+#   return(x_shifted)
+# }
+
 # Last observation carried forward
 # Replaces NA values with the last non-NA value
 # Mimics zoo::na.locf behavior (vectorized for speed)
