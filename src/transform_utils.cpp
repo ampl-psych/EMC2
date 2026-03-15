@@ -391,36 +391,71 @@ c_do_bound(NumericMatrix pars,
 Rcpp::LogicalVector c_do_bound_pt(const ParamTable& pt,
                                   const std::vector<BoundSpec>& specs)
 {
-  using Rcpp::LogicalVector;
-  using Rcpp::NumericMatrix;
-
-  const NumericMatrix& base = pt.base;
+  const Rcpp::NumericMatrix& base = pt.base;
   const int nrows = base.nrow();
 
-  LogicalVector result(nrows, true);
+  Rcpp::LogicalVector result(nrows, true);
+  int* res = LOGICAL(result);  // underlying int[ ]: 0=FALSE, 1=TRUE
 
-  for (std::size_t j = 0; j < specs.size(); ++j) {
-    const BoundSpec& bs = specs[j];
-    const int col_idx   = bs.col_idx;   // MUST be a base-column index
-    const double min_v  = bs.min_val;
-    const double max_v  = bs.max_val;
-    const bool has_exc  = bs.has_exception;
-    const double exc_val= bs.exception_val;
+  for (const BoundSpec& bs : specs) {
+    const int    col_idx = bs.col_idx;
+    const double min_v   = bs.min_val;
+    const double max_v   = bs.max_val;
+    const bool   has_exc = bs.has_exception;
+    const double exc_val = bs.exception_val;
 
+    const double* col = &base(0, col_idx);
+
+    #pragma omp simd
     for (int i = 0; i < nrows; ++i) {
-      const double val = base(i, col_idx);
-      bool ok = (val > min_v && val < max_v);
-      if (!ok && has_exc) {
-        ok = (val == exc_val);
+      const double v = col[i];
+      bool ok = (v > min_v && v < max_v);
+
+      if (has_exc) {
+        ok = ok || (v == exc_val);
       }
-      if (result[i] && !ok) {
-        result[i] = false;
-      }
+
+      // bitwise AND: 1 & 1 -> 1, all other -> 0
+      res[i] = res[i] & (ok ? 1 : 0);
     }
   }
 
   return result;
 }
+
+// Rcpp::LogicalVector c_do_bound_pt(const ParamTable& pt,
+//                                   const std::vector<BoundSpec>& specs)
+// {
+//   using Rcpp::LogicalVector;
+//   using Rcpp::NumericMatrix;
+//
+//   const NumericMatrix& base = pt.base;
+//   const int nrows = base.nrow();
+//
+//   LogicalVector result(nrows, true);
+//
+//   for (std::size_t j = 0; j < specs.size(); ++j) {
+//     const BoundSpec& bs = specs[j];
+//     const int col_idx   = bs.col_idx;   // MUST be a base-column index
+//     const double min_v  = bs.min_val;
+//     const double max_v  = bs.max_val;
+//     const bool has_exc  = bs.has_exception;
+//     const double exc_val= bs.exception_val;
+//
+//     for (int i = 0; i < nrows; ++i) {
+//       const double val = base(i, col_idx);
+//       bool ok = (val > min_v && val < max_v);
+//       if (!ok && has_exc) {
+//         ok = (val == exc_val);
+//       }
+//       if (result[i] && !ok) {
+//         result[i] = false;
+//       }
+//     }
+//   }
+//
+//   return result;
+// }
 
 // ---------------------
 // c_do_transform_pt (ParamTable version)

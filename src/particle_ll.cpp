@@ -252,15 +252,34 @@ double c_log_likelihood_DDM(NumericMatrix pars, DataFrame data,
   NumericVector rts = data["rt"];
   IntegerVector R = data["R"];
   NumericVector lls(n_trials);
-  NumericVector lls_exp(n_out);
   lls = d_DDM_Wien(rts, R, pars, is_ok);
-  lls_exp = c_expand(lls, expand); // decompress
-  // lls_exp = lls;
-  lls_exp[is_na(lls_exp)] = min_ll;
-  lls_exp[is_infinite(lls_exp)] = min_ll;
-  lls_exp[lls_exp < min_ll] = min_ll;
-  return(sum(lls_exp));
+
+  // lls_exp = c_expand(lls, expand); // decompress
+  // // lls_exp = lls;
+  // lls_exp[is_na(lls_exp)] = min_ll;
+  // lls_exp[is_infinite(lls_exp)] = min_ll;
+  // lls_exp[lls_exp < min_ll] = min_ll;
+  // return(sum(lls_exp));
+  // More SIMD-friendly == faster
+  // decompress
+
+  NumericVector lls_exp = c_expand(lls, expand);
+  double* x = lls_exp.begin();
+
+  double sum_ll = 0.0;
+
+  #pragma omp simd reduction(+:sum_ll)
+  for (int i = 0; i < n_out; ++i) {
+    double v = x[i];
+    if (!std::isfinite(v) || v < min_ll) {
+      v = min_ll;
+    }
+    x[i] = v;     // not sure if needed
+    sum_ll += v;
+  }
+  return sum_ll;
 }
+
 
 double c_log_likelihood_race(NumericMatrix pars, DataFrame data,
                              NumericVector (*dfun)(NumericVector, NumericMatrix, LogicalVector, double, LogicalVector),
@@ -306,17 +325,45 @@ double c_log_likelihood_race(NumericMatrix pars, DataFrame data,
       }
     }
 
-    ll_out[is_na(ll_out)] = min_ll;
-    ll_out[is_infinite(ll_out)] = min_ll;
-    ll_out[ll_out < min_ll] = min_ll;
-    ll_out = c_expand(ll_out, expand); // decompress
-    return(sum(ll_out));
+    NumericVector ll_exp = c_expand(ll_out, expand);
+    double* x = ll_exp.begin();
+    const int m = ll_exp.size();
+
+    double sum_ll = 0.0;
+    for (int i = 0; i < m; ++i) {
+      double v = x[i];
+      if (!std::isfinite(v) || v < min_ll) {
+        v = min_ll;
+      }
+      x[i] = v;
+      sum_ll += v;
+    }
+    return sum_ll;
+    // ll_out[is_na(ll_out)] = min_ll;
+    // ll_out[is_infinite(ll_out)] = min_ll;
+    // ll_out[ll_out < min_ll] = min_ll;
+    // ll_out = c_expand(ll_out, expand); // decompress
+    // return(sum(ll_out));
   } else {
-    lds_exp[is_na(lds_exp)] = min_ll;
-    lds_exp[is_infinite(lds_exp)] = min_ll;
-    lds_exp[lds_exp < min_ll] = min_ll;
-    lds_exp = c_expand(lds, expand); // decompress
-    return(sum(lds_exp));
+    NumericVector lds_exp = c_expand(lds, expand);
+    double* x = lds_exp.begin();
+    const int m = lds_exp.size();
+
+    double sum_ll = 0.0;
+    for (int i = 0; i < m; ++i) {
+      double v = x[i];
+      if (!std::isfinite(v) || v < min_ll) {
+        v = min_ll;
+      }
+      x[i] = v;
+      sum_ll += v;
+    }
+    return sum_ll;
+    // lds_exp[is_na(lds_exp)] = min_ll;
+    // lds_exp[is_infinite(lds_exp)] = min_ll;
+    // lds_exp[lds_exp < min_ll] = min_ll;
+    // lds_exp = c_expand(lds, expand); // decompress
+    // return(sum(lds_exp));
   }
 }
 

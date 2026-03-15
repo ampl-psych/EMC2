@@ -468,15 +468,29 @@ struct ParamTable {
 
   // Zero the entire base matrix
   void reset_base_to_zero() {
-    const int n = n_trials;
-    const int p = base.ncol();
-    for (int j = 0; j < p; ++j) {
-      double* col = &base(0, j);
-      for (int r = 0; r < n; ++r) {
-        col[r] = 0.0;
-      }
+    // Make use of contiguous memory - extremely fast simd usage.
+    const int T = n_trials;
+    const int P = base.ncol();
+    const int N = T * P;
+
+    double* data = base.begin();  // contiguous pointer to all elements
+
+    #pragma omp simd
+    for (int i = 0; i < N; ++i) {
+      data[i] = 0.0;
     }
   }
+  // void reset_base_to_zero() {
+  //   const int n = n_trials;
+  //   const int p = base.ncol();
+  //   for (int j = 0; j < p; ++j) {
+  //     double* col = &base(0, j);
+  //     #pragma omp simd  // tell compiler to vectorize
+  //     for (int r = 0; r < n; ++r) {
+  //       col[r] = 0.0;
+  //     }
+  //   }
+  // }
 
   // Fill columns corresponding to names(p_vector) with that scalar value
   void fill_from_p_vector(const Rcpp::NumericVector& p_vector) {
@@ -496,6 +510,7 @@ struct ParamTable {
       int j = it->second;
       double val = p_vector[i];
       double* col = &base(0, j);
+      #pragma omp simd  // hint for the compiler
       for (int r = 0; r < n_trials; ++r) {
         col[r] = val;
       }
@@ -519,6 +534,8 @@ struct ParamTable {
       if (base_idx < 0) continue;   // particle has a param we don't use
       double val = particles(row, j);
       double* col = &base(0, base_idx);
+
+      #pragma omp simd  // can be auto-vectorised
       for (int r = 0; r < n_trials; ++r) {
         col[r] = val;
       }
