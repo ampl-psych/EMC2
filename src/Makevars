@@ -1,9 +1,9 @@
 PKG_CPPFLAGS = $(RCPP_ARMA_CXXFLAGS) -I../inst/include
 
-PKG_CXXFLAGS = -O3 -march=native -ffast-math -fno-math-errno \
-               -Rpass=loop-vectorize \
-               -Rpass-missed=loop-vectorize \
-               -Rpass-analysis=loop-vectorize
+#PKG_CXXFLAGS = -O3 -march=native -ffast-math -fno-math-errno \
+#               -Rpass=loop-vectorize \
+#               -Rpass-missed=loop-vectorize \
+#               -Rpass-analysis=loop-vectorize
 
 PKG_LIBS     = $(RCPP_ARMA_LIBS)
 CXX_STD      = C++11      # uncomment only if you need to force C++11
