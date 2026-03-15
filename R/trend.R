@@ -1285,7 +1285,7 @@ make_data_unconditional <- function(data, pars, design, model,
     if (!is.null(optionals$nobound)) {
       attr(pr,"ok") <- rep(TRUE,nrow(pr))
     } else {
-      pr <- fix_bound(pr, model_list$bound, data$lR,fix=!is.null(optionals$shrink2bound))
+      pr <- fix_bound(pr, model_list$bound, cur_dm$lR,fix=!is.null(optionals$shrink2bound))
     }
 
       # Identify current-trial rows inside the prefix design
