@@ -286,7 +286,7 @@ double c_log_likelihood_race(NumericMatrix pars, DataFrame data,
   }
   NumericVector win = log(dfun(rts, pars, winner, exp(min_ll), is_ok)); //first for compressed
   lds[winner] = win;
-  if(n_acc > 1){
+  if(n_acc > 1) {
     NumericVector loss = log(1- pfun(rts, pars, !winner, exp(min_ll), is_ok)); //cdfs
     loss[is_na(loss)] = min_ll;
     loss[loss == log(1 - exp(min_ll))] = min_ll;
@@ -294,13 +294,13 @@ double c_log_likelihood_race(NumericMatrix pars, DataFrame data,
   }
   lds[is_na(lds)] = min_ll;
 
-  if(n_acc > 1){
+  if(n_acc > 1) {
     // LogicalVector winner_exp = c_bool_expand(winner, expand);
     NumericVector ll_out = lds[winner];
     NumericVector lds_los = lds[!winner];
     if(n_acc == 2){
       ll_out = ll_out + lds_los;
-    } else{
+    } else {
       for(int z = 0; z < ll_out.length(); z++){
         ll_out[z] = ll_out[z] + sum(lds_los[seq( z * (n_acc -1), (z+1) * (n_acc -1) -1)]);
       }
@@ -311,7 +311,7 @@ double c_log_likelihood_race(NumericMatrix pars, DataFrame data,
     ll_out[ll_out < min_ll] = min_ll;
     ll_out = c_expand(ll_out, expand); // decompress
     return(sum(ll_out));
-  } else{
+  } else {
     lds_exp[is_na(lds_exp)] = min_ll;
     lds_exp[is_infinite(lds_exp)] = min_ll;
     lds_exp[lds_exp < min_ll] = min_ll;

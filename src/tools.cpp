@@ -12,8 +12,8 @@ std::mutex mtx_samp, mtx_RCUI;
 
 double logsum(double xa, double xb) {
 	double temp;
-	if (xa <= -INFINITY) return xb;
-	if (xb <= -INFINITY) return xa;
+	if (xa <= R_NegInf) return xb;
+	if (xb <= R_NegInf) return xa;
 	if (xa > xb) temp = xa + log1p(exp(xb - xa));
 	else temp = xb + log1p(exp(xa - xb));
 	return temp;
@@ -21,12 +21,12 @@ double logsum(double xa, double xb) {
 
 double logdiff(double xa, double xb) {
 	double result;
-	if (xb <= -INFINITY) return(xa);
-	if (xa <= -INFINITY) return(xb);
+	if (xb <= R_NegInf) return(xa);
+	if (xa <= R_NegInf) return(xb);
 	if (xa > xb) result = (xa + log1p(-exp(xb - xa)));
 	else
 		if (xb > xa) result = (xb + log1p(-exp(xa - xb)));
-		else result = -INFINITY;
+		else result = R_NegInf;
 	return result;
 }
 
@@ -311,11 +311,11 @@ double gsl_cdf_ugaussian_Pinv(const double P) {
   double dP = P - 0.5;
   if (P == 1.0)
     {
-      return INFINITY;
+      return R_PosInf;
     }
   else if (P == 0.0)
     {
-      return -INFINITY;
+      return R_NegInf;
     }
 
   if (fabs (dP) <= 0.425)

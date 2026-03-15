@@ -28,8 +28,8 @@ double kl(double q, double v, double w, double err) {
 
 /* calculate terms of the sum for short t */
 double logfs(double t, double w, int K) {
-	if (w == 0) return -INFINITY;
-	double	fplus = -INFINITY, fminus = -INFINITY, twot = 2.0 * t;
+	if (w == 0) return R_NegInf;
+	double	fplus = R_NegInf, fminus = R_NegInf, twot = 2.0 * t;
 	if (K > 0)
 		for (int k = K; k >= 1; k--) {
 			double temp1 = w + 2.0 * k, temp2 = w - 2.0 * k;
@@ -41,10 +41,52 @@ double logfs(double t, double w, int K) {
 	return  -0.5 * M_LN2 - M_LN_SQRT_PI - 1.5 * std::log(t) + logdiff(fplus, fminus);
 }
 
+double logfs_linear(double t, double w, int K) {
+  if (w == 0.0) return R_NegInf;
+  if (K < 0) K = 0;
+
+  const double twot     = 2.0 * t;
+  const double inv_twot = 1.0 / twot;
+
+  double sum_plus  = 0.0;
+  double sum_minus = 0.0;
+
+  // Main sum over k
+  if (K > 0) {
+    #pragma omp simd reduction(+:sum_plus,sum_minus)
+    for (int k = 1; k <= K; ++k) {
+      const double temp1 = w + 2.0 * k;
+      const double temp2 = w - 2.0 * k;
+
+      const double e1 = std::exp(-temp1 * temp1 * inv_twot);
+      const double e2 = std::exp(-temp2 * temp2 * inv_twot);
+
+      sum_plus  += temp1  * e1;
+      sum_minus += (-temp2) * e2;  // -temp2 > 0
+    }
+  }
+
+  // k = 0 term (the w term)
+  {
+    const double e0 = std::exp(-w * w * inv_twot);
+    sum_plus += w * e0;
+  }
+
+  // sum_minus may be zero if K == 0
+  const double S = sum_plus - sum_minus;
+  if (!(S > 0.0)) { // guard against <=0 due to numerical issues
+    return R_NegInf;
+  }
+
+  return -0.5 * M_LN2 - M_LN_SQRT_PI - 1.5 * std::log(t) + std::log(S);
+}
+
+
+
 /* calculate terms of the sum for large t */
 double logfl(double q, double v, double w, int K) {
-	if (w == 0) return -INFINITY;
-	double fplus = -INFINITY, fminus = -INFINITY;
+	if (w == 0) return R_NegInf;
+	double fplus = R_NegInf, fminus = R_NegInf;
 	double halfq = q / 2.0;
 	for (int k = K; k >= 1; k--) {
 		double temp = k * M_PI;
@@ -55,10 +97,44 @@ double logfl(double q, double v, double w, int K) {
 	return	logdiff(fplus, fminus) + M_LNPI;
 }
 
+double logfl_linear(double q, double v, double w, int K) {
+  (void)v;  // v unused
+  if (w == 0.0) return R_NegInf;
+  if (K <= 0)   return R_NegInf;
+
+  const double halfq = q / 2.0;
+
+  double sum_plus  = 0.0;
+  double sum_minus = 0.0;
+
+  #pragma omp simd reduction(+:sum_plus,sum_minus)
+  for (int k = 1; k <= K; ++k) {
+    const double temp  = k * M_PI;
+    const double s     = std::sin(temp * w);  // can be +/-/0
+    const double e     = std::exp(- (temp * temp) * halfq);
+
+    // signed contribution
+    const double base  = k * s * e;  // might be pos/neg/zero
+
+    // add positive and negative parts separately, branchless
+    const double pos   = (base > 0.0) ? base  : 0.0;
+    const double neg   = (base < 0.0) ? -base : 0.0;
+
+    sum_plus  += pos;
+    sum_minus += neg;
+  }
+
+  const double S = sum_plus - sum_minus;
+  if (!(S > 0.0)) return R_NegInf;
+
+  return std::log(S) + M_LNPI;
+}
+
+
 /* calculate density */
 double dwiener(double q, double a, double vn, double wn, double sv, double err, int K, int epsFLAG) {
 	if (q == 0.0) {
-		return -INFINITY;
+		return R_NegInf;
 	}
 	double kll, kss, ans, v, w;
 	if(!epsFLAG && K==0) {
@@ -95,12 +171,12 @@ double dwiener(double q, double a, double vn, double wn, double sv, double err, 
 	// if small t is better
 	if (2 * kss <= kll) {
 		if((epsFLAG && kss<K) || !epsFLAG) kss = K;
-		ans = lg1 + logfs(q_asq, w, static_cast<int>(kss));
+		ans = lg1 + logfs_linear(q_asq, w, static_cast<int>(kss));
 	}
 	// if large t is better
 	else {
 		if((epsFLAG && kll<K) || !epsFLAG) kll = K;
-		ans = lg1 + logfl(q_asq, v, w, static_cast<int>(kll));
+		ans = lg1 + logfl_linear(q_asq, v, w, static_cast<int>(kll));
 	}
 
 	return ans;
