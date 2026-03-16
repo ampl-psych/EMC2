@@ -303,67 +303,145 @@ double c_log_likelihood_race(NumericMatrix pars, DataFrame data,
       }
     }
   }
-  NumericVector win = log(dfun(rts, pars, winner, exp(min_ll), is_ok)); //first for compressed
-  lds[winner] = win;
-  if(n_acc > 1) {
-    NumericVector loss = log(1- pfun(rts, pars, !winner, exp(min_ll), is_ok)); //cdfs
-    loss[is_na(loss)] = min_ll;
-    loss[loss == log(1 - exp(min_ll))] = min_ll;
-    lds[!winner] = loss;
+
+  // Precompute winner / loser indices once
+  int* win_flag = LOGICAL(winner);
+  std::vector<int> idx_win;
+  std::vector<int> idx_los;
+  idx_win.reserve(n_trials);
+  idx_los.reserve(n_trials);
+
+  for (int i = 0; i < n_trials; ++i) {
+    if (win_flag[i])
+      idx_win.push_back(i);
+    else
+      idx_los.push_back(i);
   }
-  lds[is_na(lds)] = min_ll;
 
-  if(n_acc > 1) {
-    // LogicalVector winner_exp = c_bool_expand(winner, expand);
-    NumericVector ll_out = lds[winner];
-    NumericVector lds_los = lds[!winner];
-    if(n_acc == 2){
-      ll_out = ll_out + lds_los;
+  // 1) Winner densities -> log -> into lds at winner positions
+  NumericVector win = log(dfun(rts, pars, winner, std::exp(min_ll), is_ok));
+
+  if ((int)win.size() != (int)idx_win.size()) {
+    Rcpp::stop("c_log_likelihood_race: dfun() length mismatch with winner mask");
+  }
+
+  double* lds_ptr = lds.begin();
+  double* win_ptr = win.begin();
+
+  for (int k = 0; k < (int)idx_win.size(); ++k) {
+    lds_ptr[ idx_win[k] ] = win_ptr[k];
+  }
+
+  // 2) Loser side (if more than one accumulator)
+  if (n_acc > 1) {
+    NumericVector loss = log(1 - pfun(rts, pars, !winner, std::exp(min_ll), is_ok));
+
+    if ((int)loss.size() != (int)idx_los.size()) {
+      Rcpp::stop("c_log_likelihood_race: pfun() length mismatch with !winner mask");
+    }
+
+    double* loss_ptr = loss.begin();
+    const double sentinel = std::log(1.0 - std::exp(min_ll));  // log(1 - exp(min_ll))
+
+    for (int k = 0; k < (int)idx_los.size(); ++k) {
+      double v = loss_ptr[k];
+      // original behaviour:
+      // loss[is_na(loss)] = min_ll;
+      // loss[loss == log(1 - exp(min_ll))] = min_ll;
+      if (!std::isfinite(v) || v == sentinel) {
+        v = min_ll;
+      }
+      loss_ptr[k] = v;
+      lds_ptr[ idx_los[k] ] = v;
+    }
+  }
+
+  // 3) Replace any remaining NA/Inf in lds with min_ll (from win side)
+  for (int i = 0; i < n_trials; ++i) {
+    double v = lds_ptr[i];
+    if (!std::isfinite(v)) {
+      lds_ptr[i] = min_ll;
+    }
+  }
+  // 4) Combine across accumulators and expand
+
+  if (n_acc > 1) {
+    // We expect one winner per "trial group"; n_winner == number of groups here.
+    const int n_winners = static_cast<int>(idx_win.size());
+    const int n_losers  = static_cast<int>(idx_los.size());
+
+    if (n_losers != n_winners * (n_acc - 1)) {
+      Rcpp::stop("c_log_likelihood_race: n_losers != n_winners * (n_acc - 1)");
+    }
+
+    // Build ll_out (one per winner) and lds_los (all loser entries)
+    NumericVector ll_out(n_winners);
+    NumericVector lds_los(n_losers);
+    double* ll_ptr  = ll_out.begin();
+    double* los_ptr = lds_los.begin();
+
+    // Fill winners
+    for (int t = 0; t < n_winners; ++t) {
+      ll_ptr[t] = lds_ptr[ idx_win[t] ];
+    }
+
+    // Fill losers in order
+    for (int k = 0; k < n_losers; ++k) {
+      los_ptr[k] = lds_ptr[ idx_los[k] ];
+    }
+
+    // Add loser contributions
+    if (n_acc == 2) {
+      // One loser per winner; simple pairwise add
+      for (int t = 0; t < n_winners; ++t) {
+        ll_ptr[t] += los_ptr[t];
+      }
     } else {
-      for(int z = 0; z < ll_out.length(); z++){
-        ll_out[z] = ll_out[z] + sum(lds_los[seq( z * (n_acc -1), (z+1) * (n_acc -1) -1)]);
+      const int stride = n_acc - 1;
+      for (int t = 0; t < n_winners; ++t) {
+        double s = 0.0;
+        const int base = t * stride;
+        for (int k = 0; k < stride; ++k) {
+          s += los_ptr[base + k];
+        }
+        ll_ptr[t] += s;
       }
     }
 
+    // Decompress and clamp+sum
     NumericVector ll_exp = c_expand(ll_out, expand);
-    double* x = ll_exp.begin();
-    const int m = ll_exp.size();
-
+    double* x    = ll_exp.begin();
+    const int m  = ll_exp.size();
     double sum_ll = 0.0;
+
+#pragma omp simd reduction(+:sum_ll)
     for (int i = 0; i < m; ++i) {
       double v = x[i];
       if (!std::isfinite(v) || v < min_ll) {
         v = min_ll;
       }
-      x[i] = v;
+      // x[i] = v;
       sum_ll += v;
     }
     return sum_ll;
-    // ll_out[is_na(ll_out)] = min_ll;
-    // ll_out[is_infinite(ll_out)] = min_ll;
-    // ll_out[ll_out < min_ll] = min_ll;
-    // ll_out = c_expand(ll_out, expand); // decompress
-    // return(sum(ll_out));
+
   } else {
+    // Single accumulator: just expand lds and clamp+sum
     NumericVector lds_exp = c_expand(lds, expand);
-    double* x = lds_exp.begin();
-    const int m = lds_exp.size();
-
+    double* x    = lds_exp.begin();
+    const int m  = lds_exp.size();
     double sum_ll = 0.0;
+
+#pragma omp simd reduction(+:sum_ll)
     for (int i = 0; i < m; ++i) {
       double v = x[i];
       if (!std::isfinite(v) || v < min_ll) {
         v = min_ll;
       }
-      x[i] = v;
+      // x[i] = v;
       sum_ll += v;
     }
     return sum_ll;
-    // lds_exp[is_na(lds_exp)] = min_ll;
-    // lds_exp[is_infinite(lds_exp)] = min_ll;
-    // lds_exp[lds_exp < min_ll] = min_ll;
-    // lds_exp = c_expand(lds, expand); // decompress
-    // return(sum(lds_exp));
   }
 }
 
