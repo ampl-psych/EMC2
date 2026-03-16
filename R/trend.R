@@ -1272,9 +1272,13 @@ make_data_unconditional <- function(data, pars, design, model,
                                      model_list$bound, model_list$transform, model_list$pre_transform,
                                      model_list$trend)
         if(tmp_return_trialwise) {
-          covariates <- get_pars_c_wrapper_oo(pars[which(subj == subj_levels),,drop=FALSE], dm, constants = constants, designs = designs,
-                                              model_list$bound, model_list$transform, model_list$pre_transform,
-                                              model_list$trend, return_kernel_matrix = TRUE, kernel_output_codes=kernel_output_codes)
+          if(!is.null(model_list$trend)) {
+            covariates <- get_pars_c_wrapper_oo(pars[which(subj == subj_levels),,drop=FALSE], dm, constants = constants, designs = designs,
+                                                model_list$bound, model_list$transform, model_list$pre_transform,
+                                                model_list$trend, return_kernel_matrix = TRUE, kernel_output_codes=kernel_output_codes)
+          } else {
+            covariates <- NULL
+          }
           attr(pm, 'trialwise_parameters') <- covariates
         }
       }
