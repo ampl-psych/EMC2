@@ -3,8 +3,28 @@
 
 #include <Rcpp.h>
 #include "utility_functions.h"
+#include "ParamTable.h"
 
 using namespace Rcpp;
+
+struct LBASpec {
+  int col_v;
+  int col_sv;
+  int col_B;
+  int col_A;
+  int col_t0;
+};
+
+LBASpec make_lba_spec(const ParamTable& pt) {
+  LBASpec s;
+  s.col_v   = pt.base_index_for("v");
+  s.col_sv  = pt.base_index_for("sv");
+  s.col_B   = pt.base_index_for("B");
+  s.col_A   = pt.base_index_for("A");
+  s.col_t0  = pt.base_index_for("t0");
+  return s;
+}
+
 
 double pnormP(double q, double mean = 0.0, double sd = 1.0,
               bool lower = true, bool log = false){
@@ -73,6 +93,94 @@ double dlba_norm(double t, double A,double b, double v, double sv,
     return 0.;
   }
   return pdf;
+}
+
+// LBA
+NumericVector dlba_c_pt(NumericVector rts,
+                        const ParamTable& pt,
+                        const LBASpec& spec,
+                        LogicalVector idx,
+                        double min_ll,
+                        LogicalVector is_ok)
+{
+  const int N = rts.size();
+  const int out_len = sum(idx);
+  NumericVector out(out_len);
+  double* out_ptr = out.begin();
+
+  const double* rt  = rts.begin();
+  const double* v   = &pt.base(0, spec.col_v);
+  const double* sv  = &pt.base(0, spec.col_sv);
+  const double* B   = &pt.base(0, spec.col_B);
+  const double* A   = &pt.base(0, spec.col_A);
+  const double* t0  = &pt.base(0, spec.col_t0);
+
+  int* idx_ptr   = LOGICAL(idx);
+  int* ok_ptr    = LOGICAL(is_ok);
+
+  int k = 0;
+  for (int i = 0; i < N; ++i) {
+    if (!idx_ptr[i]) continue;
+
+    if (std::isnan(v[i])) {       // matches NumericVector::is_na(pars(i,0))
+      out_ptr[k++] = 0.0;
+      continue;
+    }
+
+    const double t_eff = rt[i] - t0[i];
+    if (t_eff > 0.0 && ok_ptr[i]) {
+      // b parameter in your code is B + A
+      const double A_i = A[i];
+      const double B_i = B[i] + A_i;
+      out_ptr[k++] = dlba_norm(t_eff, A_i, B_i, v[i], sv[i], true);
+    } else {
+      out_ptr[k++] = min_ll;
+    }
+  }
+  return out;
+}
+
+NumericVector plba_c_pt(NumericVector rts,
+                        const ParamTable& pt,
+                        const LBASpec& spec,
+                        LogicalVector idx,
+                        double min_ll,
+                        LogicalVector is_ok)
+{
+  const int N = rts.size();
+  const int out_len = sum(idx);
+  NumericVector out(out_len);
+  double* out_ptr = out.begin();
+
+  const double* rt  = rts.begin();
+  const double* v   = &pt.base(0, spec.col_v);
+  const double* sv  = &pt.base(0, spec.col_sv);
+  const double* B   = &pt.base(0, spec.col_B);
+  const double* A   = &pt.base(0, spec.col_A);
+  const double* t0  = &pt.base(0, spec.col_t0);
+
+  int* idx_ptr   = LOGICAL(idx);
+  int* ok_ptr    = LOGICAL(is_ok);
+
+  int k = 0;
+  for (int i = 0; i < N; ++i) {
+    if (!idx_ptr[i]) continue;
+
+    if (std::isnan(v[i])) {
+      out_ptr[k++] = 0.0;
+      continue;
+    }
+
+    const double t_eff = rt[i] - t0[i];
+    if (t_eff > 0.0 && ok_ptr[i]) {
+      const double A_i = A[i];
+      const double B_i = B[i] + A_i;
+      out_ptr[k++] = plba_norm(t_eff, A_i, B_i, v[i], sv[i], true);
+    } else {
+      out_ptr[k++] = min_ll;
+    }
+  }
+  return out;
 }
 
 NumericVector dlba_c(NumericVector rts, NumericMatrix pars, LogicalVector idx, double min_ll, LogicalVector is_ok){
