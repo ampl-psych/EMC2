@@ -351,20 +351,23 @@ double c_log_likelihood_DDM(NumericMatrix pars, DataFrame data,
   // More SIMD-friendly == faster
   // decompress
 
-  NumericVector lls_exp = c_expand(lls, expand);
-  double* x = lls_exp.begin();
+  const double* lls_ptr    = lls.begin();
+  const int*    expand_ptr = expand.begin();
 
   double sum_ll = 0.0;
 
-  #pragma omp simd reduction(+:sum_ll)
+  // expand is 1-based, so subtract 1
+#pragma omp simd reduction(+:sum_ll)
   for (int i = 0; i < n_out; ++i) {
-    double v = x[i];
+    int idx = expand_ptr[i] - 1;
+    double v = lls_ptr[idx];
+
     if (!std::isfinite(v) || v < min_ll) {
       v = min_ll;
     }
-    x[i] = v;     // not sure if needed
     sum_ll += v;
   }
+
   return sum_ll;
 }
 
@@ -546,13 +549,14 @@ double c_log_likelihood_race_pt(ParamTable& pt,
                                 LogicalVector winner,
                                 IntegerVector expand,
                                 double min_ll,
-                                LogicalVector is_ok)
+                                LogicalVector is_ok,
+                                const int n_acc)
 {
   NumericVector lds(n_trials);
   NumericVector rts = data["rt"];
   CharacterVector R = data["R"];
   NumericVector lR = data["lR"];
-  const int n_acc = unique(lR).length();
+  // const int n_acc = unique(lR).length();
 
   NumericMatrix& base = pt.base;    // shorthand
 
@@ -631,7 +635,6 @@ double c_log_likelihood_race_pt(ParamTable& pt,
   // 4) Combine across accumulators and expand
 
   if (n_acc > 1) {
-    // We expect one winner per "trial group"; n_winner == number of groups here.
     const int n_winners = static_cast<int>(idx_win.size());
     const int n_losers  = static_cast<int>(idx_los.size());
 
@@ -673,32 +676,34 @@ double c_log_likelihood_race_pt(ParamTable& pt,
       }
     }
 
-    // Decompress and clamp+sum
-    NumericVector ll_exp = c_expand(ll_out, expand);
-    double* x    = ll_exp.begin();
-    const int m  = ll_exp.size();
+    // Decompress logically via expand and clamp+sum without materialising ll_exp
+    const int m          = expand.size();
+    const int* exp_ptr   = expand.begin();
+
     double sum_ll = 0.0;
 
 #pragma omp simd reduction(+:sum_ll)
     for (int i = 0; i < m; ++i) {
-      double v = x[i];
+      int idx = exp_ptr[i] - 1;  // expand is 1-based
+      double v = ll_ptr[idx];
       if (!std::isfinite(v) || v < min_ll) {
         v = min_ll;
       }
       sum_ll += v;
     }
     return sum_ll;
-
   } else {
-    // Single accumulator: just expand lds and clamp+sum
-    NumericVector lds_exp = c_expand(lds, expand);
-    double* x    = lds_exp.begin();
-    const int m  = lds_exp.size();
+    // Single accumulator: expand logically and clamp+sum
+    const int m        = expand.size();
+    const int* exp_ptr = expand.begin();
+    double*    lds_raw = lds_ptr;  // lds.begin();
+
     double sum_ll = 0.0;
 
 #pragma omp simd reduction(+:sum_ll)
     for (int i = 0; i < m; ++i) {
-      double v = x[i];
+      int idx = exp_ptr[i] - 1;  // 1-based -> 0-based
+      double v = lds_raw[idx];
       if (!std::isfinite(v) || v < min_ll) {
         v = min_ll;
       }
@@ -908,8 +913,6 @@ NumericVector calc_ll_oo(NumericMatrix particle_matrix, DataFrame data, NumericV
   if(type == "DDM"){
     IntegerVector expand = data.attr("expand");
     for(int i = 0; i < n_particles; i++){
-      // p_vector = particle_matrix(i, _);
-      // p_vector.attr("names") = colnames(particle_matrix);
       if(i > 0) {
         param_table_template.fill_from_particle_row(particle_matrix, i,
                                                     pm_col_to_base_idx);
@@ -1020,7 +1023,7 @@ NumericVector calc_ll_oo(NumericMatrix particle_matrix, DataFrame data, NumericV
           model_spec_ptr,
           col_na_marker,
           n_trials, winner, expand,
-          min_ll, is_ok);
+          min_ll, is_ok, n_lR);
       }
 
     } else {
