@@ -714,6 +714,127 @@ double c_log_likelihood_race_pt(ParamTable& pt,
 }
 
 
+double race_loglik_rdm_pt(ParamTable& pt,
+                          const RDMSpec& spec,
+                          const NumericVector& rts,
+                          const LogicalVector& winner,
+                          const LogicalVector& is_ok,
+                          const std::vector<int>& idx_win,
+                          const std::vector<int>& idx_los,
+                          const IntegerVector& expand,
+                          double min_ll,
+                          int n_acc,
+                          NumericVector& raw,      // length n_trials
+                          NumericVector& ll_out)   // length idx_win.size()
+{
+  const int n_trials  = rts.size();
+  const int n_winners = (int)idx_win.size();
+  const int n_losers  = (int)idx_los.size();
+
+  double* raw_ptr = raw.begin();
+  double* ll_ptr  = ll_out.begin();
+
+  // 1) Fill raw with pdfs (winners) and cdfs (losers) using contiguous loops
+  //    Note: we don't need to clear raw; we only read entries we explicitly set.
+  drdm_c_pt_fill(rts, pt, spec, winner, raw_ptr);
+  if (n_acc > 1) {
+    prdm_c_pt_fill(rts, pt, spec, winner, raw_ptr);
+  }
+
+  int* ok_ptr   = LOGICAL(is_ok);
+
+  // 2) Per-winner loglik (winner + its losers) directly into ll_out
+  if (n_acc == 1) {
+    for (int t = 0; t < n_winners; ++t) {
+      const int i_win = idx_win[t];
+
+      double ll;
+      if (!ok_ptr[i_win]) {
+        ll = min_ll;
+      } else {
+        double pdf = raw_ptr[i_win];   // pdf for this winner row
+        if (!std::isfinite(pdf) || pdf <= 0.0) {
+          ll = min_ll;
+        } else {
+          ll = std::log(pdf);
+          if (!std::isfinite(ll) || ll < min_ll) ll = min_ll;
+        }
+      }
+      ll_ptr[t] = ll;
+    }
+
+  } else {
+    const int stride = n_acc - 1;
+
+    if (n_losers != n_winners * stride) {
+      Rcpp::stop("race_loglik_rdm_pt: n_losers != n_winners * (n_acc - 1)");
+    }
+
+    for (int t = 0; t < n_winners; ++t) {
+      const int i_win = idx_win[t];
+
+      double ll;
+      if (!ok_ptr[i_win]) {
+        ll = min_ll;
+      } else {
+        // Winner part
+        double pdf = raw_ptr[i_win];
+        if (!std::isfinite(pdf) || pdf <= 0.0) {
+          ll = min_ll;
+        } else {
+          ll = std::log(pdf);
+          if (!std::isfinite(ll) || ll < min_ll) ll = min_ll;
+        }
+
+        // Loser contributions
+        const int base = t * stride;
+        for (int k = 0; k < stride; ++k) {
+          const int i_los = idx_los[base + k];
+
+          double term;
+          if (!ok_ptr[i_los]) {
+            term = min_ll;
+          } else {
+            double cdf = raw_ptr[i_los];
+            if (!std::isfinite(cdf)) {
+              term = min_ll;
+            } else {
+              double one_minus = 1.0 - cdf;
+              if (one_minus <= 0.0) {
+                term = min_ll;
+              } else {
+                term = std::log(one_minus);
+                if (!std::isfinite(term) || term < min_ll) term = min_ll;
+              }
+            }
+          }
+          ll += term;
+        }
+      }
+
+      ll_ptr[t] = ll;
+    }
+  }
+
+  // 3) Expand and clamp+sum
+  const int m        = expand.size();
+  const int* exp_ptr = expand.begin();
+
+  double sum_ll = 0.0;
+
+#pragma omp simd reduction(+:sum_ll)
+  for (int i = 0; i < m; ++i) {
+    int idx = exp_ptr[i] - 1;  // expand is 1-based over winners
+    double v = ll_ptr[idx];
+    if (!std::isfinite(v) || v < min_ll) {
+      v = min_ll;
+    }
+    sum_ll += v;
+  }
+
+  return sum_ll;
+}
+
 // [[Rcpp::export]]
 NumericVector calc_ll(NumericMatrix p_matrix, DataFrame data, NumericVector constants,
                       List designs, String type, List bounds, List transforms, List pretransforms,
@@ -909,6 +1030,8 @@ NumericVector calc_ll_oo(NumericMatrix particle_matrix, DataFrame data, NumericV
 
   TrendRuntime* tend_runtime_ptr = trend_runtime ? trend_runtime.get() : nullptr;
 
+
+
   // Ready for looping
   if(type == "DDM"){
     IntegerVector expand = data.attr("expand");
@@ -955,10 +1078,15 @@ NumericVector calc_ll_oo(NumericMatrix particle_matrix, DataFrame data, NumericV
     }
   } else {
     // Race models: RDM, LBA, LNR
-    IntegerVector expand = data.attr("expand");
+    // IntegerVector expand = data.attr("expand");
+    // LogicalVector winner = data["winner"];
+    // NumericVector lR = data["lR"];
+    // int n_lR = unique(lR).length();
+    NumericVector rts    = data["rt"];
     LogicalVector winner = data["winner"];
-    NumericVector lR = data["lR"];
-    int n_lR = unique(lR).length();
+    NumericVector lR     = data["lR"];
+    IntegerVector expand = data.attr("expand");
+    const int n_acc      = unique(lR).length();
 
     if (use_pt_pipeline) {
       // --- pt-based pipeline (ParamTable, no dfun matrix use) ---
@@ -984,7 +1112,7 @@ NumericVector calc_ll_oo(NumericMatrix particle_matrix, DataFrame data, NumericV
         dfun_pt = drdm_c_pt_dispatch;
         pfun_pt = prdm_c_pt_dispatch;
         model_spec_ptr = &rdm_spec;
-        col_na_marker  = rdm_spec.col_v;
+        col_na_marker  = rdm_spec.col_v;   // matches old pars(i,0) NA logic
       } else { // LNR
         lnr_spec = make_lnr_spec(param_table_template);
         dfun_pt = dlnr_c_pt_dispatch;
@@ -1013,7 +1141,7 @@ NumericVector calc_ll_oo(NumericMatrix particle_matrix, DataFrame data, NumericV
                                             param_table_template, bounds);
         }
         is_ok = c_do_bound_pt(param_table_template, bound_specs);
-        is_ok = lr_all(is_ok, n_lR);
+        is_ok = lr_all(is_ok, n_acc);
 
         // pt-based race likelihood
         lls[i] = c_log_likelihood_race_pt(
@@ -1023,7 +1151,7 @@ NumericVector calc_ll_oo(NumericMatrix particle_matrix, DataFrame data, NumericV
           model_spec_ptr,
           col_na_marker,
           n_trials, winner, expand,
-          min_ll, is_ok, n_lR);
+          min_ll, is_ok, n_acc);
       }
 
     } else {
@@ -1059,7 +1187,7 @@ NumericVector calc_ll_oo(NumericMatrix particle_matrix, DataFrame data, NumericV
                                             param_table_template, bounds);
         }
         is_ok = c_do_bound_pt(param_table_template, bound_specs);
-        is_ok = lr_all(is_ok, n_lR);
+        is_ok = lr_all(is_ok, n_acc);
 
         lls[i] = c_log_likelihood_race(pars, data,
                                        dfun, pfun,

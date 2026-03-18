@@ -7,22 +7,13 @@
 #include "ParamTable.h"
 
 // Compile-time switch
-#define USE_FAST_PNORM
+// #define USE_FAST_PNORM
 #ifdef USE_FAST_PNORM
 #define PPNORM_STD(x, lower, logp) fast_pnorm_std((x), (lower), (logp))
 #else
 // exact R implementation
 #define PPNORM_STD(x, lower, logp) R::pnorm((x), 0.0, 1.0, (lower), (logp))
 #endif
-
-// // [[Rcpp::export]]
-// bool rdm_using_fast_pnorm() {
-// #ifdef USE_FAST_PNORM
-//   return true;
-// #else
-//   return false;
-// #endif
-// }
 
 using namespace Rcpp;
 
@@ -49,27 +40,28 @@ RDMSpec make_rdm_spec(const ParamTable& pt) {
 // Fast pnorm
 // Approximate standard normal CDF Φ(x): taken from
 // https://stackoverflow.com/a/23119456 (CC BY-SA 3.0)
-double phi(double x)
+constexpr double RT2PI = 2.506628274631000502415765284811;
+constexpr double SPLIT = 7.07106781186547;
+
+constexpr double N0 = 220.206867912376;
+constexpr double N1 = 221.213596169931;
+constexpr double N2 = 112.079291497871;
+constexpr double N3 = 33.912866078383;
+constexpr double N4 = 6.37396220353165;
+constexpr double N5 = 0.700383064443688;
+constexpr double N6 = 3.52624965998911e-02;
+
+constexpr double M0 = 440.413735824752;
+constexpr double M1 = 793.826512519948;
+constexpr double M2 = 637.333633378831;
+constexpr double M3 = 296.564248779674;
+constexpr double M4 = 86.7807322029461;
+constexpr double M5 = 16.064177579207;
+constexpr double M6 = 1.75566716318264;
+constexpr double M7 = 8.83883476483184e-02;
+
+inline double phi(double x)
 {
-  static const double RT2PI = std::sqrt(4.0 * std::acos(0.0));
-  static const double SPLIT = 7.07106781186547;
-
-  static const double N0 = 220.206867912376;
-  static const double N1 = 221.213596169931;
-  static const double N2 = 112.079291497871;
-  static const double N3 = 33.912866078383;
-  static const double N4 = 6.37396220353165;
-  static const double N5 = 0.700383064443688;
-  static const double N6 = 3.52624965998911e-02;
-
-  static const double M0 = 440.413735824752;
-  static const double M1 = 793.826512519948;
-  static const double M2 = 637.333633378831;
-  static const double M3 = 296.564248779674;
-  static const double M4 = 86.7807322029461;
-  static const double M5 = 16.064177579207;
-  static const double M6 = 1.75566716318264;
-  static const double M7 = 8.83883476483184e-02;
 
   const double z = std::fabs(x);
   double c = 0.0;
@@ -98,7 +90,7 @@ inline double fast_pnorm_std(double x, bool lower = true, bool logp = false)
   if (logp) {
     // Guard against log(0) (underflow). For extremely small cdf, this will
     // be -inf, which your min_ll handling will clamp anyway.
-    if (cdf <= 0.0) return -INFINITY;
+    if (cdf <= 0.0) return R_NegInf;
     return std::log(cdf);
   }
   return cdf;
@@ -117,8 +109,6 @@ double pigt0(double t, double k = 1., double l = 1.){
 
   double p1 = fast_pnorm_std(z1, /*lower=*/false, /*logp=*/false);
   double p2 = fast_pnorm_std(z2, /*lower=*/false, /*logp=*/false);
-  // double p1 = 1 - R::pnorm(std::sqrt(lambda/t) * (1. + t/mu), 0., 1., true, false);
-  // double p2 = 1 - R::pnorm(std::sqrt(lambda/t) * (1. - t/mu), 0., 1., true, false);
 
   return std::exp(std::exp(std::log(2. * lambda) - std::log(mu)) + std::log(p1)) + p2;
 }
@@ -237,7 +227,7 @@ double pigt(double t, double k = 1., double l = 1., double a = .1, double thresh
     return 0.0;
   }
   if (cdf > 1.0) {
-    return 1.0;  // optional clamp, like your LBA code
+    return 1.0;
   }
   return cdf;
 }
@@ -339,42 +329,7 @@ double digt(double t, double k = 1., double l = 1., double a = .1, double thresh
   return pdf;
 }
 
-// // [[Rcpp::export]]
-// NumericVector bench_pnorm_vs_phi(int n) {
-//   double sum_exact = 0.0;
-//   double sum_approx = 0.0;
-//   double x = -5.0;
-//   double step = 10.0 / n;
-//
-//   // warm-up
-//   for (int i = 0; i < 100; ++i) {
-//     sum_exact  += R::pnorm(x, 0.0, 1.0, true, false);
-//     sum_approx += phi(x);
-//     x += step;
-//   }
-//
-//   // timing
-//   x = -5.0;
-//   clock_t t1 = clock();
-//   for (int i = 0; i < n; ++i) {
-//     sum_exact += R::pnorm(x, 0.0, 1.0, true, false);
-//     x += step;
-//   }
-//   clock_t t2 = clock();
-//   x = -5.0;
-//   for (int i = 0; i < n; ++i) {
-//     sum_approx += phi(x);
-//     x += step;
-//   }
-//   clock_t t3 = clock();
-//
-//   NumericVector out(4);
-//   out[0] = sum_exact;
-//   out[1] = sum_approx;
-//   out[2] = (double)(t2 - t1) / CLOCKS_PER_SEC;
-//   out[3] = (double)(t3 - t2) / CLOCKS_PER_SEC;
-//   return out;
-// }
+
 
 // inline, pt
 NumericVector drdm_c_pt(NumericVector rts,
@@ -777,3 +732,303 @@ NumericVector pWald(NumericVector t, NumericVector v,
 
 #endif
 
+
+//
+// NumericVector drdm_c_pt(NumericVector rts,
+//                         const ParamTable& pt,
+//                         const RDMSpec& spec,
+//                         LogicalVector idx,
+//                         double min_density,     // exp(min_ll)
+//                         LogicalVector is_ok)
+// {
+//   const int N = rts.size();
+//   NumericVector out(N);
+//   double* out_ptr = out.begin();
+//
+//   const double* rt  = rts.begin();
+//   const double* v   = &pt.base(0, spec.col_v);
+//   const double* B   = &pt.base(0, spec.col_B);
+//   const double* A   = &pt.base(0, spec.col_A);
+//   const double* t0  = &pt.base(0, spec.col_t0);
+//   const double* s   = &pt.base(0, spec.col_s);
+//
+//   int* idx_ptr = LOGICAL(idx);
+//   int* ok_ptr  = LOGICAL(is_ok);
+//
+//   for (int i = 0; i < N; ++i) {
+//     // This accumulator is not active for this row → density 0
+//     if (!idx_ptr[i]) {
+//       out_ptr[i] = 0.0;
+//       continue;
+//     }
+//
+//     // Unused accumulator (v is NA) → density 0
+//     if (std::isnan(v[i])) {
+//       out_ptr[i] = 0.0;
+//       continue;
+//     }
+//
+//     const double t_eff = rt[i] - t0[i];
+//
+//     // Valid time and within bounds
+//     if (t_eff > 0.0 && ok_ptr[i]) {
+//       const double inv_s = 1.0 / s[i];
+//
+//       // match old mapping exactly:
+//       // k_param = B/s + 0.5*A/s; l_param = v/s; a_param = 0.5*A/s
+//       const double k_param = B[i] * inv_s + 0.5 * A[i] * inv_s;
+//       const double l_param = v[i] * inv_s;
+//       const double a_param = 0.5 * A[i] * inv_s;
+//
+//       double pdf = digt(t_eff, k_param, l_param, a_param);
+//
+//       // Defensive clamp: old code didn’t explicitly clamp here, but
+//       // digt returns >=0 for valid inputs. Keep behavior as close as possible.
+//       if (pdf < 0.0 || !std::isfinite(pdf)) {
+//         pdf = 0.0;
+//       }
+//       out_ptr[i] = pdf;
+//     } else {
+//       // Invalid time or !is_ok -> density floor
+//       out_ptr[i] = min_density;
+//     }
+//   }
+//
+//   return out;
+// }
+//
+// NumericVector prdm_c_pt(NumericVector rts,
+//                         const ParamTable& pt,
+//                         const RDMSpec& spec,
+//                         LogicalVector idx,
+//                         double min_prob,       // exp(min_ll)
+//                         LogicalVector is_ok)
+// {
+//   const int N = rts.size();
+//   NumericVector out(N);
+//   double* out_ptr = out.begin();
+//
+//   const double* rt  = rts.begin();
+//   const double* v   = &pt.base(0, spec.col_v);
+//   const double* B   = &pt.base(0, spec.col_B);
+//   const double* A   = &pt.base(0, spec.col_A);
+//   const double* t0  = &pt.base(0, spec.col_t0);
+//   const double* s   = &pt.base(0, spec.col_s);
+//
+//   int* idx_ptr = LOGICAL(idx);
+//   int* ok_ptr  = LOGICAL(is_ok);
+//
+//   for (int i = 0; i < N; ++i) {
+//     // Accumulator not active → probability 0
+//     if (!idx_ptr[i]) {
+//       out_ptr[i] = 0.0;
+//       continue;
+//     }
+//
+//     // Unused accumulator (v NA) → prob 0
+//     if (std::isnan(v[i])) {
+//       out_ptr[i] = 0.0;
+//       continue;
+//     }
+//
+//     const double t_eff = rt[i] - t0[i];
+//
+//     if (t_eff > 0.0 && ok_ptr[i]) {
+//       const double inv_s = 1.0 / s[i];
+//
+//       const double k_param = B[i] * inv_s + 0.5 * A[i] * inv_s;
+//       const double l_param = v[i] * inv_s;
+//       const double a_param = 0.5 * A[i] * inv_s;
+//
+//       double cdf = pigt(t_eff, k_param, l_param, a_param);
+//
+//       // Clamp into [0,1] like your original pigt/dR code
+//       if (cdf < 0.0 || std::isnan(cdf)) {
+//         cdf = 0.0;
+//       } else if (cdf > 1.0) {
+//         cdf = 1.0;
+//       }
+//       out_ptr[i] = cdf;
+//     } else {
+//       // invalid → probability floor
+//       out_ptr[i] = min_prob;
+//     }
+//   }
+//
+//   return out;
+// }
+
+
+// Minimal values of A and v/s to avoid numerical instability.
+constexpr double A_EPS = 1e-4;   // or 1e-3
+constexpr double L_EPS = 1e-4;   // or 1e-3
+
+inline void clamp_a_l(double& a, double& l) {
+  if (a < A_EPS) a = A_EPS;
+  if (l > -L_EPS && l < L_EPS) l = (l >= 0.0 ? L_EPS : -L_EPS);
+}
+
+// Core digt and pigt
+inline double digt_core(double t, double k, double l, double a)
+{
+  if (t <= 0.0) {
+    return 0.0;
+  }
+
+  const double sqt      = std::sqrt(t);
+  const double inv_sqt  = 1.0 / sqt;
+  const double inv_t    = 1.0 / t;
+  const double inv_sqrt_2pi = 1.0 / std::sqrt(2.0 * M_PI);
+
+  // t1 part
+  const double temp1 = a - k + t * l;
+  const double temp2 = a + k - t * l;
+  const double t1a   = -0.5 * temp1 * temp1 * inv_t;
+  const double t1b   = -0.5 * temp2 * temp2 * inv_t;
+  const double t1    = inv_sqrt_2pi * (std::exp(t1a) - std::exp(t1b)) * inv_sqt;
+
+  // t2 part
+  const double arg1 = (-k + a) * inv_sqt + sqt * l;
+  const double arg2 = ( k + a) * inv_sqt - sqt * l;
+
+  const double t2a = 2.0 * PPNORM_STD(arg1, /*lower=*/true, /*logp=*/false) - 1.0;
+  const double t2b = 2.0 * PPNORM_STD(arg2, /*lower=*/true, /*logp=*/false) - 1.0;
+  const double t2  = 0.5 * l * (t2a + t2b);
+
+  const double sum = t1 + t2;
+
+  if (sum <= 0.0 || !std::isfinite(sum)) {
+    return 0.0;
+  }
+
+  double pdf = sum / (2.0 * a);
+
+  if (!std::isfinite(pdf) || pdf < 0.0) {
+    return 0.0;
+  }
+  return pdf;
+}
+
+// pigt core
+inline double pigt_core(double t, double k, double l, double a)
+{
+  if (t <= 0.0) {
+    return 0.0;
+  }
+
+  const double sqt      = std::sqrt(t);
+  const double inv_sqt  = 1.0 / sqt;
+  const double inv_t    = 1.0 / t;
+  const double inv_sqrt_2pi = 1.0 / std::sqrt(2.0 * M_PI);
+
+  // t1 term: sqt / sqrt(2π) * (exp(...) - exp(...))
+  const double tmp1 = k - a - t * l;
+  const double tmp2 = a + k - t * l;
+  const double t1a  = std::exp(-0.5 * tmp1 * tmp1 * inv_t);
+  const double t1b  = std::exp(-0.5 * tmp2 * tmp2 * inv_t);
+  const double t1   = sqt * inv_sqrt_2pi * (t1a - t1b);
+
+  // t2 term
+  const double argA = -(k - a + t * l) * inv_sqt;
+  const double argB = -(k + a + t * l) * inv_sqt;
+
+  const double t2a = std::exp(2.0 * l * (k - a) +
+                              PPNORM_STD(argA, /*lower=*/true, /*logp=*/true));
+  const double t2b = std::exp(2.0 * l * (k + a) +
+                              PPNORM_STD(argB, /*lower=*/true, /*logp=*/true));
+  const double t2  = a + (t2b - t2a) / (2.0 * l);
+
+  // t4 term
+  const double t4a = 2.0 * PPNORM_STD((k + a) * inv_sqt - sqt * l,
+                                      /*lower=*/true, /*logp=*/false) - 1.0;
+  const double t4b = 2.0 * PPNORM_STD((k - a) * inv_sqt - sqt * l,
+                                      /*lower=*/true, /*logp=*/false) - 1.0;
+  const double t4  = 0.5 * (t * l - a - k + 0.5 / l) * t4a + 0.5 * (k - a - t * l - 0.5 / l) * t4b;
+
+  double cdf = 0.5 * (t4 + t2 + t1) / a;
+
+  if (!std::isfinite(cdf) || cdf < 0.0) {
+    return 0.0;
+  }
+  if (cdf > 1.0) {
+    return 1.0;
+  }
+  return cdf;
+}
+
+// pdf for RDM, winners only
+// pdf for RDM, winners only (contiguous + mask)
+void drdm_c_pt_fill(const NumericVector& rts,
+                    const ParamTable& pt,
+                    const RDMSpec& spec,
+                    const LogicalVector& winner,
+                    double* raw /* length n_trials */)
+{
+  const int N = rts.size();
+
+  const double* rt = rts.begin();
+  const double* v  = &pt.base(0, spec.col_v);
+  const double* B  = &pt.base(0, spec.col_B);
+  const double* A  = &pt.base(0, spec.col_A);
+  const double* t0 = &pt.base(0, spec.col_t0);
+  const double* s  = &pt.base(0, spec.col_s);
+
+  int* win_ptr = LOGICAL(winner);
+
+#pragma omp simd
+  for (int i = 0; i < N; ++i) {
+    if (!win_ptr[i])
+      continue;  // only winners get pdf; others left unchanged
+
+    double t_eff = rt[i] - t0[i];
+
+    double inv_s = 1.0 / s[i];
+    double a     = 0.5 * A[i] * inv_s;
+    double l     = v[i]   * inv_s;
+    double k     = B[i]   * inv_s + a;
+
+    clamp_a_l(a, l);
+
+    double pdf = digt_core(t_eff, k, l, a);   // handles t<=0 internally
+
+    raw[i] = pdf;  // may be 0, NaN, etc.; interpreted later
+  }
+}
+
+// cdf for RDM, losers only (contiguous + mask)
+void prdm_c_pt_fill(const NumericVector& rts,
+                    const ParamTable& pt,
+                    const RDMSpec& spec,
+                    const LogicalVector& winner,
+                    double* raw /* length n_trials */)
+{
+  const int N = rts.size();
+
+  const double* rt = rts.begin();
+  const double* v  = &pt.base(0, spec.col_v);
+  const double* B  = &pt.base(0, spec.col_B);
+  const double* A  = &pt.base(0, spec.col_A);
+  const double* t0 = &pt.base(0, spec.col_t0);
+  const double* s  = &pt.base(0, spec.col_s);
+
+  int* win_ptr = LOGICAL(winner);
+
+#pragma omp simd
+  for (int i = 0; i < N; ++i) {
+    if (win_ptr[i])
+      continue;  // only losers get cdf
+
+    double t_eff = rt[i] - t0[i];
+
+    double inv_s = 1.0 / s[i];
+    double a     = 0.5 * A[i] * inv_s;
+    double l     = v[i]   * inv_s;
+    double k     = B[i]   * inv_s + a;
+
+    clamp_a_l(a, l);
+
+    double cdf = pigt_core(t_eff, k, l, a);   // handles t<=0 internally
+
+    raw[i] = cdf;  // may be NaN, 0, 1, etc.; interpreted later
+  }
+}
