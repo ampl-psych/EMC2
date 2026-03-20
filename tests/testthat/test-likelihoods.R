@@ -35,12 +35,16 @@ design_LNR <- design(data = dat,model=LNR,matchfun=matchfun,
                      formula=list(m~lM,s~1,t0~1),
                      contrasts=list(m=list(lM=ADmat)))
 LNR_s1 <- make_emc(dat, design_LNR, rt_resolution = 0.05, n_chains = 2, compress=FALSE)
-p_vector1 <- sampled_pars(LNR_s1)
 
-# calc_lls(LNR_s1)
 test_that("LNR", {
   expect_snapshot(calc_lls(LNR_s1))
 })
+
+LNR_s2 <- make_emc(dat, design_LNR, rt_resolution = 0.05, n_chains = 2, compress=TRUE)
+test_that("LNR compressed", {
+  expect_snapshot(calc_lls(LNR_s2))
+})
+
 
 
 # RDM ----------------------------------------------------------
@@ -48,21 +52,26 @@ design_RDM <- design(data = dat,model=RDM,matchfun=matchfun,
                      formula=list(v~lM,s~1,t0~1,A~1,B~1),
                      contrasts=list(v=list(lM=ADmat)))
 RDM_s <- make_emc(dat, design_RDM, rt_resolution = 0.05, n_chains = 2, compress=FALSE)
-
-# calc_lls(RDM_s)
 test_that("RDM", {
   expect_snapshot(calc_lls(RDM_s))
 })
+RDM_s2 <- make_emc(dat, design_RDM, rt_resolution = 0.05, n_chains = 2, compress=TRUE)
+test_that("RDM compressed", {
+  expect_snapshot(calc_lls(RDM_s2))
+})
+
 
 # LBA ----------------------------------------------------------
 design_LBA <- design(data = dat,model=LBA,matchfun=matchfun,
                      formula=list(v~lM,sv~1,t0~1,A~1,B~1),
                      contrasts=list(v=list(lM=ADmat)))
 LBA_s <- make_emc(dat, design_LBA, rt_resolution = 0.05, n_chains = 2, compress=FALSE)
-
-# calc_lls(LBA_s)
 test_that("LBA", {
   expect_snapshot(calc_lls(LBA_s))
+})
+LBA_s2 <- make_emc(dat, design_LBA, rt_resolution = 0.05, n_chains = 2, compress=TRUE)
+test_that("LBA compressed", {
+  expect_snapshot(calc_lls(LBA_s2))
 })
 
 
@@ -71,18 +80,20 @@ design_WDM <- design(data = dat, model=DDM,
                      formula =list(v~1,a~1, t0~1, s~1, Z~1, sv~1, SZ~1),
                      constants=c(s=1, sv=log(0), SZ=qnorm(0)))
 WDM_s <- make_emc(dat, design_WDM, rt_resolution = 0.05, n_chains = 2)
-
-# calc_lls(WDM_s)
 test_that("WDM", {
   expect_snapshot(calc_lls(WDM_s))
 })
+WDM_s2 <- make_emc(dat, design_WDM, rt_resolution = 0.05, n_chains = 2, compress=TRUE)
+test_that("WDM compressed", {
+  expect_snapshot(calc_lls(WDM_s2))
+})
+
 
 # DDM ---
 design_DDM <- design(data = dat,model=DDM,
                      formula =list(v~1,a~1, t0~1, s~1, Z~1, sv~1, SZ~1, st0~1),
                      constants=c(s=1))
 DDM_s <- make_emc(dat, design_DDM, rt_resolution = 0.05, n_chains = 2)
-# calc_lls(DDM_s)
 test_that("DDM", {
   expect_snapshot(calc_lls(DDM_s))
 })
