@@ -1,6 +1,6 @@
 PKG_CPPFLAGS = $(RCPP_ARMA_CXXFLAGS) -I../inst/include
 
-#PKG_CXXFLAGS = -O3 -march=native -ffast-math -fno-math-errno \
+PKG_CXXFLAGS = -O3 -march=native -ffast-math -fno-math-errno -DUSE_FAST_PNORM
 #               -Rpass=loop-vectorize \
 #               -Rpass-missed=loop-vectorize \
 #               -Rpass-analysis=loop-vectorize
