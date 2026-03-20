@@ -13,90 +13,90 @@
 #include "TrendEngine.h"
 using namespace Rcpp;
 
-using race_fill_fn = void (*)(const NumericVector& rts,
+using race_fast_fn = void (*)(const NumericVector& rts,
                            const ParamTable& pt,
                            const void* model_spec,
                            const LogicalVector& winner,
                            double* raw);
 
-inline void drdm_c_pt_fill_mask(const NumericVector& rts,
+inline void drdm_c_pt_dispatch(const NumericVector& rts,
                                 const ParamTable& pt,
                                 const void* model_spec,
                                 const LogicalVector& winner,
                                 double* raw)
 {
   auto* spec = static_cast<const RDMSpec*>(model_spec);
-  drdm_c_pt_fill(rts, pt, *spec, winner, raw);
+  drdm_c_fast(rts, pt, *spec, winner, raw);
 }
 
-inline void prdm_c_pt_fill_mask(const NumericVector& rts,
+inline void prdm_c_pt_dispatch(const NumericVector& rts,
                                 const ParamTable& pt,
                                 const void* model_spec,
                                 const LogicalVector& winner,
                                 double* raw)
 {
   auto* spec = static_cast<const RDMSpec*>(model_spec);
-  prdm_c_pt_fill(rts, pt, *spec, winner, raw);
+  prdm_c_fast(rts, pt, *spec, winner, raw);
 }
 
-inline void drdm_wald_pt_fill_mask(const NumericVector& rts,
+inline void drdm_wald_pt_dispatch(const NumericVector& rts,
                                    const ParamTable& pt,
                                    const void* model_spec,
                                    const LogicalVector& winner,
                                    double* raw)
 {
   auto* spec = static_cast<const RDMSpec*>(model_spec);
-  drdm_wald_pt_fill(rts, pt, *spec, winner, raw);
+  drdm_wald_fast(rts, pt, *spec, winner, raw);
 }
 
-inline void prdm_wald_pt_fill_mask(const NumericVector& rts,
+inline void prdm_wald_pt_dispatch(const NumericVector& rts,
                                    const ParamTable& pt,
                                    const void* model_spec,
                                    const LogicalVector& winner,
                                    double* raw)
 {
   auto* spec = static_cast<const RDMSpec*>(model_spec);
-  prdm_wald_pt_fill(rts, pt, *spec, winner, raw);
+  prdm_wald_fast(rts, pt, *spec, winner, raw);
 }
 
-inline void dlba_pt_fill_mask(const NumericVector& rts,
+inline void dlba_pt_dispatch(const NumericVector& rts,
                                    const ParamTable& pt,
                                    const void* model_spec,
                                    const LogicalVector& winner,
                                    double* raw)
 {
   auto* spec = static_cast<const LBASpec*>(model_spec);
-  dlba_pt_fill(rts, pt, *spec, winner, raw);
+  dlba_fast(rts, pt, *spec, winner, raw);
 }
 
-inline void plba_pt_fill_mask(const NumericVector& rts,
+inline void plba_pt_dispatch(const NumericVector& rts,
                                    const ParamTable& pt,
                                    const void* model_spec,
                                    const LogicalVector& winner,
                                    double* raw)
 {
   auto* spec = static_cast<const LBASpec*>(model_spec);
-  plba_pt_fill(rts, pt, *spec, winner, raw);
+  plba_fast(rts, pt, *spec, winner, raw);
 }
 
-inline void dlnr_pt_fill_mask(const NumericVector& rts,
+inline void dlnr_pt_dispatch(const NumericVector& rts,
                                    const ParamTable& pt,
                                    const void* model_spec,
                                    const LogicalVector& winner,
                                    double* raw)
 {
   auto* spec = static_cast<const LNRSpec*>(model_spec);
-  dlnr_pt_fill(rts, pt, *spec, winner, raw);
+  dlnr_fast(rts, pt, *spec, winner, raw);
 }
 
-inline void plnr_pt_fill_mask(const NumericVector& rts,
+inline void plnr_pt_dispatch(const NumericVector& rts,
                                    const ParamTable& pt,
                                    const void* model_spec,
                                    const LogicalVector& winner,
                                    double* raw)
 {
   auto* spec = static_cast<const LNRSpec*>(model_spec);
-  plnr_pt_fill(rts, pt, *spec, winner, raw);
+  plnr_fast(rts, pt, *spec, winner, raw);
 }
 
 
@@ -112,116 +112,8 @@ double c_log_likelihood_race_new_path(ParamTable& pt,
                                       int n_acc,
                                       NumericVector& raw,      // length n_trials
                                       NumericVector& ll_out,   // length idx_win.size()
-                                      race_fill_fn dfun_fill,  // pdf fill
-                                      race_fill_fn pfun_fill);
-
-// double race_loglik_rdm_wald_pt(ParamTable& pt,
-//                                const RDMSpec& spec,
-//                                const NumericVector& rts,
-//                                const LogicalVector& winner,
-//                                const LogicalVector& is_ok,
-//                                const std::vector<int>& idx_win,
-//                                const std::vector<int>& idx_los,
-//                                const IntegerVector& expand,
-//                                double min_ll,
-//                                int n_acc,
-//                                NumericVector& raw,
-//                                NumericVector& ll_out);
-//
-// double race_loglik_rdm_pt(ParamTable& pt,
-//                                const RDMSpec& spec,
-//                                const NumericVector& rts,
-//                                const LogicalVector& winner,
-//                                const LogicalVector& is_ok,
-//                                const std::vector<int>& idx_win,
-//                                const std::vector<int>& idx_los,
-//                                const IntegerVector& expand,
-//                                double min_ll,
-//                                int n_acc,
-//                                NumericVector& raw,
-//                                NumericVector& ll_out);
-
-//
-// using dfun_pt_type = NumericVector (*)(NumericVector rts,
-//                                     const ParamTable& pt,
-//                                     const void* model_spec,
-//                                     LogicalVector idx,
-//                                     double min_ll,
-//                                     LogicalVector is_ok);
-//
-// using pfun_pt_type = NumericVector (*)(NumericVector rts,
-//                                     const ParamTable& pt,
-//                                     const void* model_spec,
-//                                     LogicalVector idx,
-//                                     double min_ll,
-//                                     LogicalVector is_ok);
-
-// NumericVector drdm_c_pt_dispatch(NumericVector rts,
-//                                  const ParamTable& pt,
-//                                  const void* spec,
-//                                  LogicalVector idx,
-//                                  double min_ll,
-//                                  LogicalVector is_ok)
-// {
-//   auto* rdm_spec = static_cast<const RDMSpec*>(spec);
-//   return drdm_c_pt(rts, pt, *rdm_spec, idx, min_ll, is_ok);
-// }
-//
-// NumericVector prdm_c_pt_dispatch(NumericVector rts,
-//                                  const ParamTable& pt,
-//                                  const void* spec,
-//                                  LogicalVector idx,
-//                                  double min_ll,
-//                                  LogicalVector is_ok)
-// {
-//   auto* rdm_spec = static_cast<const RDMSpec*>(spec);
-//   return prdm_c_pt(rts, pt, *rdm_spec, idx, min_ll, is_ok);
-// }
-//
-// NumericVector dlba_c_pt_dispatch(NumericVector rts,
-//                                  const ParamTable& pt,
-//                                  const void* spec,
-//                                  LogicalVector idx,
-//                                  double min_ll,
-//                                  LogicalVector is_ok)
-// {
-//   auto* lba_spec = static_cast<const LBASpec*>(spec);
-//   return dlba_c_pt(rts, pt, *lba_spec, idx, min_ll, is_ok);
-// }
-//
-// NumericVector plba_c_pt_dispatch(NumericVector rts,
-//                                  const ParamTable& pt,
-//                                  const void* spec,
-//                                  LogicalVector idx,
-//                                  double min_ll,
-//                                  LogicalVector is_ok)
-// {
-//   auto* lba_spec = static_cast<const LBASpec*>(spec);
-//   return plba_c_pt(rts, pt, *lba_spec, idx, min_ll, is_ok);
-// }
-//
-// NumericVector dlnr_c_pt_dispatch(NumericVector rts,
-//                                  const ParamTable& pt,
-//                                  const void* spec,
-//                                  LogicalVector idx,
-//                                  double min_ll,
-//                                  LogicalVector is_ok)
-// {
-//   auto* lnr_spec = static_cast<const LNRSpec*>(spec);
-//   return dlnr_c_pt(rts, pt, *lnr_spec, idx, min_ll, is_ok);
-// }
-//
-// NumericVector plnr_c_pt_dispatch(NumericVector rts,
-//                                  const ParamTable& pt,
-//                                  const void* spec,
-//                                  LogicalVector idx,
-//                                  double min_ll,
-//                                  LogicalVector is_ok)
-// {
-//   auto* lnr_spec = static_cast<const LNRSpec*>(spec);
-//   return plnr_c_pt(rts, pt, *lnr_spec, idx, min_ll, is_ok);
-// }
-
+                                      race_fast_fn dfun_fill,  // pdf
+                                      race_fast_fn pfun_fill);
 
 
 // [[Rcpp::export]]
@@ -669,420 +561,6 @@ double c_log_likelihood_race(NumericMatrix pars, DataFrame data,
 
 
 
-
-// double c_log_likelihood_race_pt(ParamTable& pt,
-//                                 DataFrame data,
-//                                 dfun_pt_type dfun_pt,
-//                                 pfun_pt_type pfun_pt,
-//                                 const void* model_spec,
-//                                 int col_na_marker,
-//                                 const int n_trials,
-//                                 LogicalVector winner,
-//                                 IntegerVector expand,
-//                                 double min_ll,
-//                                 LogicalVector is_ok,
-//                                 const int n_acc)
-// {
-//   NumericVector lds(n_trials);
-//   NumericVector rts = data["rt"];
-//   CharacterVector R = data["R"];
-//   NumericVector lR = data["lR"];
-//   // const int n_acc = unique(lR).length();
-//
-//   NumericMatrix& base = pt.base;    // shorthand
-//
-//   // RACE handling: mark unused accumulators as NA in the chosen column
-//   if (sum(contains(data.names(), "RACE")) == 1) {
-//     NumericVector NACC = data["RACE"];
-//     CharacterVector vals_NACC = NACC.attr("levels");
-//     for (int x = 0; x < base.nrow(); ++x) {
-//       // subtract 1 because R is 1-coded
-//       if (lR[x] > atoi(vals_NACC[NACC[x] - 1])) {
-//         base(x, col_na_marker) = NA_REAL;
-//       }
-//     }
-//   }
-//
-//   // Precompute winner / loser indices once
-//   int* win_flag = LOGICAL(winner);
-//   std::vector<int> idx_win;
-//   std::vector<int> idx_los;
-//   idx_win.reserve(n_trials);
-//   idx_los.reserve(n_trials);
-//
-//   for (int i = 0; i < n_trials; ++i) {
-//     if (win_flag[i])
-//       idx_win.push_back(i);
-//     else
-//       idx_los.push_back(i);
-//   }
-//
-//   // 1) Winner densities -> log -> into lds at winner positions
-//   NumericVector win = log(dfun_pt(rts, pt, model_spec,
-//                                   winner, std::exp(min_ll), is_ok));
-//
-//   if ((int)win.size() != (int)idx_win.size()) {
-//     Rcpp::stop("c_log_likelihood_race_pt: dfun_pt() length mismatch with winner mask");
-//   }
-//
-//   double* lds_ptr = lds.begin();
-//   double* win_ptr = win.begin();
-//
-//   for (int k = 0; k < (int)idx_win.size(); ++k) {
-//     lds_ptr[ idx_win[k] ] = win_ptr[k];
-//   }
-//
-//   // 2) Loser side (if more than one accumulator)
-//   if (n_acc > 1) {
-//     NumericVector loss = log(1.0 - pfun_pt(rts, pt, model_spec,
-//                                            !winner, std::exp(min_ll), is_ok));
-//
-//     if ((int)loss.size() != (int)idx_los.size()) {
-//       Rcpp::stop("c_log_likelihood_race_pt: pfun_pt() length mismatch with !winner mask");
-//     }
-//
-//     double* loss_ptr = loss.begin();
-//     const double sentinel = std::log(1.0 - std::exp(min_ll));  // log(1 - exp(min_ll))
-//
-//     for (int k = 0; k < (int)idx_los.size(); ++k) {
-//       double v = loss_ptr[k];
-//       // original behaviour: loss[is_na] = min_ll; loss[== sentinel] = min_ll;
-//       if (!std::isfinite(v) || v == sentinel) {
-//         v = min_ll;
-//       }
-//       loss_ptr[k] = v;
-//       lds_ptr[ idx_los[k] ] = v;
-//     }
-//   }
-//
-//   // 3) Replace any remaining NA/Inf in lds with min_ll (from win side)
-//   for (int i = 0; i < n_trials; ++i) {
-//     double v = lds_ptr[i];
-//     if (!std::isfinite(v)) {
-//       lds_ptr[i] = min_ll;
-//     }
-//   }
-//
-//   // 4) Combine across accumulators and expand
-//
-//   if (n_acc > 1) {
-//     const int n_winners = static_cast<int>(idx_win.size());
-//     const int n_losers  = static_cast<int>(idx_los.size());
-//
-//     if (n_losers != n_winners * (n_acc - 1)) {
-//       Rcpp::stop("c_log_likelihood_race_pt: n_losers != n_winners * (n_acc - 1)");
-//     }
-//
-//     // Build ll_out (one per winner) and lds_los (all loser entries)
-//     NumericVector ll_out(n_winners);
-//     NumericVector lds_los(n_losers);
-//     double* ll_ptr  = ll_out.begin();
-//     double* los_ptr = lds_los.begin();
-//
-//     // Fill winners
-//     for (int t = 0; t < n_winners; ++t) {
-//       ll_ptr[t] = lds_ptr[ idx_win[t] ];
-//     }
-//
-//     // Fill losers in order
-//     for (int k = 0; k < n_losers; ++k) {
-//       los_ptr[k] = lds_ptr[ idx_los[k] ];
-//     }
-//
-//     // Add loser contributions
-//     if (n_acc == 2) {
-//       // One loser per winner; simple pairwise add
-//       for (int t = 0; t < n_winners; ++t) {
-//         ll_ptr[t] += los_ptr[t];
-//       }
-//     } else {
-//       const int stride = n_acc - 1;
-//       for (int t = 0; t < n_winners; ++t) {
-//         double s = 0.0;
-//         const int base = t * stride;
-//         for (int k = 0; k < stride; ++k) {
-//           s += los_ptr[base + k];
-//         }
-//         ll_ptr[t] += s;
-//       }
-//     }
-//
-//     // Decompress logically via expand and clamp+sum without materialising ll_exp
-//     const int m          = expand.size();
-//     const int* exp_ptr   = expand.begin();
-//
-//     double sum_ll = 0.0;
-//
-// #pragma omp simd reduction(+:sum_ll)
-//     for (int i = 0; i < m; ++i) {
-//       int idx = exp_ptr[i] - 1;  // expand is 1-based
-//       double v = ll_ptr[idx];
-//       if (!std::isfinite(v) || v < min_ll) {
-//         v = min_ll;
-//       }
-//       sum_ll += v;
-//     }
-//     return sum_ll;
-//   } else {
-//     // Single accumulator: expand logically and clamp+sum
-//     const int m        = expand.size();
-//     const int* exp_ptr = expand.begin();
-//     double*    lds_raw = lds_ptr;  // lds.begin();
-//
-//     double sum_ll = 0.0;
-//
-// #pragma omp simd reduction(+:sum_ll)
-//     for (int i = 0; i < m; ++i) {
-//       int idx = exp_ptr[i] - 1;  // 1-based -> 0-based
-//       double v = lds_raw[idx];
-//       if (!std::isfinite(v) || v < min_ll) {
-//         v = min_ll;
-//       }
-//       sum_ll += v;
-//     }
-//     return sum_ll;
-//   }
-// }
-
-
-// double race_loglik_rdm_pt(ParamTable& pt,
-//                           const RDMSpec& spec,
-//                           const NumericVector& rts,
-//                           const LogicalVector& winner,
-//                           const LogicalVector& is_ok,
-//                           const std::vector<int>& idx_win,
-//                           const std::vector<int>& idx_los,
-//                           const IntegerVector& expand,
-//                           double min_ll,
-//                           int n_acc,
-//                           NumericVector& raw,      // length n_trials
-//                           NumericVector& ll_out)   // length idx_win.size()
-// {
-//   const int n_trials  = rts.size();
-//   const int n_winners = (int)idx_win.size();
-//   const int n_losers  = (int)idx_los.size();
-//
-//   double* raw_ptr = raw.begin();
-//   double* ll_ptr  = ll_out.begin();
-//
-//   // 1) Fill raw with pdfs (winners) and cdfs (losers) using contiguous loops
-//   //    Note: we don't need to clear raw; we only read entries we explicitly set.
-//   drdm_c_pt_fill(rts, pt, spec, winner, raw_ptr);
-//   if (n_acc > 1) {
-//     prdm_c_pt_fill(rts, pt, spec, winner, raw_ptr);
-//   }
-//
-//   int* ok_ptr   = LOGICAL(is_ok);
-//
-//   // 2) Per-winner loglik (winner + its losers) directly into ll_out
-//   if (n_acc == 1) {
-//     for (int t = 0; t < n_winners; ++t) {
-//       const int i_win = idx_win[t];
-//
-//       double ll;
-//       if (!ok_ptr[i_win]) {
-//         ll = min_ll;
-//       } else {
-//         double pdf = raw_ptr[i_win];   // pdf for this winner row
-//         if (!std::isfinite(pdf) || pdf <= 0.0) {
-//           ll = min_ll;
-//         } else {
-//           ll = std::log(pdf);
-//           if (!std::isfinite(ll) || ll < min_ll) ll = min_ll;
-//         }
-//       }
-//       ll_ptr[t] = ll;
-//     }
-//
-//   } else {
-//     const int stride = n_acc - 1;
-//
-//     if (n_losers != n_winners * stride) {
-//       Rcpp::stop("race_loglik_rdm_pt: n_losers != n_winners * (n_acc - 1)");
-//     }
-//
-//     for (int t = 0; t < n_winners; ++t) {
-//       const int i_win = idx_win[t];
-//
-//       double ll;
-//       if (!ok_ptr[i_win]) {
-//         ll = min_ll;
-//       } else {
-//         // Winner part
-//         double pdf = raw_ptr[i_win];
-//         if (!std::isfinite(pdf) || pdf <= 0.0) {
-//           ll = min_ll;
-//         } else {
-//           ll = std::log(pdf);
-//           if (!std::isfinite(ll) || ll < min_ll) ll = min_ll;
-//         }
-//
-//         // Loser contributions
-//         const int base = t * stride;
-//         for (int k = 0; k < stride; ++k) {
-//           const int i_los = idx_los[base + k];
-//
-//           double term;
-//           if (!ok_ptr[i_los]) {
-//             term = min_ll;
-//           } else {
-//             double cdf = raw_ptr[i_los];
-//             if (!std::isfinite(cdf)) {
-//               term = min_ll;
-//             } else {
-//               double one_minus = 1.0 - cdf;
-//               if (one_minus <= 0.0) {
-//                 term = min_ll;
-//               } else {
-//                 term = std::log(one_minus);
-//                 if (!std::isfinite(term) || term < min_ll) term = min_ll;
-//               }
-//             }
-//           }
-//           ll += term;
-//         }
-//       }
-//
-//       ll_ptr[t] = ll;
-//     }
-//   }
-//
-//   // 3) Expand and clamp+sum
-//   const int m        = expand.size();
-//   const int* exp_ptr = expand.begin();
-//
-//   double sum_ll = 0.0;
-//
-// #pragma omp simd reduction(+:sum_ll)
-//   for (int i = 0; i < m; ++i) {
-//     int idx = exp_ptr[i] - 1;  // expand is 1-based over winners
-//     double v = ll_ptr[idx];
-//     if (!std::isfinite(v) || v < min_ll) {
-//       v = min_ll;
-//     }
-//     sum_ll += v;
-//   }
-//
-//   return sum_ll;
-// }
-
-// double race_loglik_rdm_generic_pt(ParamTable& pt,
-//                                   void* spec,
-//                                   const NumericVector& rts,
-//                                   const LogicalVector& winner,
-//                                   const LogicalVector& is_ok,
-//                                   const std::vector<int>& idx_win,
-//                                   const std::vector<int>& idx_los,
-//                                   const IntegerVector& expand,
-//                                   double min_ll,
-//                                   int n_acc,
-//                                   NumericVector& raw,      // length n_trials
-//                                   NumericVector& ll_out,   // length idx_win.size()
-//                                   rdm_fill_fn dfun_fill,   // pdf fill
-//                                   rdm_fill_fn pfun_fill)   // cdf fill
-// {
-//   // const int n_trials  = rts.size();
-//   const int n_winners = (int)idx_win.size();
-//   const int n_losers  = (int)idx_los.size();
-//
-//   double* raw_ptr = raw.begin();
-//   double* ll_ptr  = ll_out.begin();
-//
-//   // 1) Fill pdfs/cdfs using the winner mask
-//   dfun_fill(rts, pt, spec, winner, raw_ptr);   // winners: pdfs in raw[i]
-//   if (n_acc > 1) {
-//     pfun_fill(rts, pt, spec, winner, raw_ptr); // losers: cdfs in raw[i]
-//   }
-//
-//   int* ok_ptr = LOGICAL(is_ok);
-//
-//   // 2) Per-winner loglik (winner + its losers) into ll_out
-//   if (n_acc == 1) {
-//     for (int t = 0; t < n_winners; ++t) {
-//       const int i_win = idx_win[t];
-//       double ll;
-//       if (!ok_ptr[i_win]) {
-//         ll = min_ll;
-//       } else {
-//         double pdf = raw_ptr[i_win];
-//         if (!std::isfinite(pdf) || pdf <= 0.0) {
-//           ll = min_ll;
-//         } else {
-//           ll = std::log(pdf);
-//           if (!std::isfinite(ll) || ll < min_ll) ll = min_ll;
-//         }
-//       }
-//       ll_ptr[t] = ll;
-//     }
-//   } else {
-//     const int stride = n_acc - 1;
-//     if (n_losers != n_winners * stride) {
-//       Rcpp::stop("race_loglik_rdm_generic_pt: n_losers != n_winners * (n_acc - 1)");
-//     }
-//
-//     for (int t = 0; t < n_winners; ++t) {
-//       const int i_win = idx_win[t];
-//
-//       double ll;
-//       if (!ok_ptr[i_win]) {
-//         ll = min_ll;
-//       } else {
-//         // winner part
-//         double pdf = raw_ptr[i_win];
-//         if (!std::isfinite(pdf) || pdf <= 0.0) {
-//           ll = min_ll;
-//         } else {
-//           ll = std::log(pdf);
-//           if (!std::isfinite(ll) || ll < min_ll) ll = min_ll;
-//         }
-//
-//         // loser contributions
-//         const int base = t * stride;
-//         for (int k = 0; k < stride; ++k) {
-//           const int i_los = idx_los[base + k];
-//           double term;
-//           if (!ok_ptr[i_los]) {
-//             term = min_ll;
-//           } else {
-//             double cdf = raw_ptr[i_los];
-//             if (!std::isfinite(cdf)) {
-//               term = min_ll;
-//             } else {
-//               double one_minus = 1.0 - cdf;
-//               if (one_minus <= 0.0) {
-//                 term = min_ll;
-//               } else {
-//                 term = std::log(one_minus);
-//                 if (!std::isfinite(term) || term < min_ll) term = min_ll;
-//               }
-//             }
-//           }
-//           ll += term;
-//         }
-//       }
-//       ll_ptr[t] = ll;
-//     }
-//   }
-//
-//   // 3) Expand and clamp+sum
-//   const int m        = expand.size();
-//   const int* exp_ptr = expand.begin();
-//
-//   double sum_ll = 0.0;
-//
-// #pragma omp simd reduction(+:sum_ll)
-//   for (int i = 0; i < m; ++i) {
-//     int idx = exp_ptr[i] - 1;
-//     double v = ll_ptr[idx];
-//     if (!std::isfinite(v) || v < min_ll) {
-//       v = min_ll;
-//     }
-//     sum_ll += v;
-//   }
-//
-//   return sum_ll;
-// }
-
 // [[Rcpp::export]]
 NumericVector calc_ll(NumericMatrix p_matrix, DataFrame data, NumericVector constants,
                       List designs, String type, List bounds, List transforms, List pretransforms,
@@ -1355,34 +833,34 @@ NumericVector calc_ll_oo(NumericMatrix particle_matrix, DataFrame data, NumericV
       LNRSpec lnr_spec;
 
       const void* model_spec_ptr = nullptr;
-      race_fill_fn fill_pdf = nullptr;
-      race_fill_fn fill_cdf = nullptr;
+      race_fast_fn fill_pdf = nullptr;
+      race_fast_fn fill_cdf = nullptr;
       int col_na_marker = -1;
 
       // Choose spec + fill functions by model type
       if (type == "RDM") {
         rdm_spec       = make_rdm_spec(param_table_template);
         model_spec_ptr = &rdm_spec;
-        fill_pdf       = drdm_c_pt_fill_mask;
-        fill_cdf       = prdm_c_pt_fill_mask;
+        fill_pdf       = drdm_c_pt_dispatch;
+        fill_cdf       = prdm_c_pt_dispatch;
         col_na_marker  = rdm_spec.col_v;
       } else if (type == "RDM-A0") {
         rdm_spec       = make_rdm_spec(param_table_template);
         model_spec_ptr = &rdm_spec;
-        fill_pdf       = drdm_wald_pt_fill_mask;
-        fill_cdf       = prdm_wald_pt_fill_mask;
+        fill_pdf       = drdm_wald_pt_dispatch;
+        fill_cdf       = prdm_wald_pt_dispatch;
         col_na_marker  = rdm_spec.col_v;
       } else if (type == "LBA") {
         lba_spec       = make_lba_spec(param_table_template);
         model_spec_ptr = &lba_spec;
-        fill_pdf       = dlba_pt_fill_mask;  // to be implemented
-        fill_cdf       = plba_pt_fill_mask;
+        fill_pdf       = dlba_pt_dispatch;  // to be implemented
+        fill_cdf       = plba_pt_dispatch;
         col_na_marker  = lba_spec.col_v;
       } else { // "LNR"
         lnr_spec       = make_lnr_spec(param_table_template);
         model_spec_ptr = &lnr_spec;
-        fill_pdf       = dlnr_pt_fill_mask;  // to be implemented
-        fill_cdf       = plnr_pt_fill_mask;
+        fill_pdf       = dlnr_pt_dispatch;  // to be implemented
+        fill_cdf       = plnr_pt_dispatch;
         col_na_marker  = lnr_spec.col_m;
       }
 
@@ -1626,56 +1104,6 @@ NumericMatrix get_pars_c_wrapper_oo(NumericMatrix particle_matrix,
 }
 
 
-// // General RDM (A>0) path
-// double race_loglik_rdm_pt(ParamTable& pt,
-//                           const RDMSpec& spec,
-//                           const NumericVector& rts,
-//                           const LogicalVector& winner,
-//                           const LogicalVector& is_ok,
-//                           const std::vector<int>& idx_win,
-//                           const std::vector<int>& idx_los,
-//                           const IntegerVector& expand,
-//                           double min_ll,
-//                           int n_acc,
-//                           NumericVector& raw,
-//                           NumericVector& ll_out)
-// {
-//   return race_loglik_rdm_generic_pt(
-//     pt, spec, rts, winner, is_ok,
-//     idx_win, idx_los, expand,
-//     min_ll, n_acc,
-//     raw, ll_out,
-//     drdm_c_pt_fill,
-//     prdm_c_pt_fill
-//   );
-// }
-//
-// // Wald / RDM-A0 path (A == 0)
-// double race_loglik_rdm_wald_pt(ParamTable& pt,
-//                                const RDMSpec& spec,
-//                                const NumericVector& rts,
-//                                const LogicalVector& winner,
-//                                const LogicalVector& is_ok,
-//                                const std::vector<int>& idx_win,
-//                                const std::vector<int>& idx_los,
-//                                const IntegerVector& expand,
-//                                double min_ll,
-//                                int n_acc,
-//                                NumericVector& raw,
-//                                NumericVector& ll_out)
-// {
-//   return race_loglik_rdm_generic_pt(
-//     pt, spec, rts, winner, is_ok,
-//     idx_win, idx_los, expand,
-//     min_ll, n_acc,
-//     raw, ll_out,
-//     drdm_wald_pt_fill,
-//     prdm_wald_pt_fill
-//   );
-// }
-//
-
-
 /// New pathway
 double c_log_likelihood_race_new_path(ParamTable& pt,
                                       const void* model_spec,
@@ -1689,8 +1117,8 @@ double c_log_likelihood_race_new_path(ParamTable& pt,
                                       int n_acc,
                                       NumericVector& raw,      // length n_trials
                                       NumericVector& ll_out,   // length idx_win.size()
-                                      race_fill_fn dfun_fill,  // pdf fill
-                                      race_fill_fn pfun_fill)  // cdf fill
+                                      race_fast_fn dfun_fill,  // pdf fill
+                                      race_fast_fn pfun_fill)  // cdf fill
 {
   const int n_winners = (int)idx_win.size();
   const int n_losers  = (int)idx_los.size();
@@ -1793,48 +1221,3 @@ double c_log_likelihood_race_new_path(ParamTable& pt,
   return sum_ll;
 }
 
-double race_loglik_rdm_pt(ParamTable& pt,
-                          const RDMSpec& spec,
-                          const NumericVector& rts,
-                          const LogicalVector& winner,
-                          const LogicalVector& is_ok,
-                          const std::vector<int>& idx_win,
-                          const std::vector<int>& idx_los,
-                          const IntegerVector& expand,
-                          double min_ll,
-                          int n_acc,
-                          NumericVector& raw,
-                          NumericVector& ll_out)
-{
-  return c_log_likelihood_race_new_path(
-    pt, &spec, rts, winner, is_ok,
-    idx_win, idx_los, expand,
-    min_ll, n_acc,
-    raw, ll_out,
-    drdm_c_pt_fill_mask,
-    prdm_c_pt_fill_mask
-  );
-}
-
-double race_loglik_rdm_wald_pt(ParamTable& pt,
-                               const RDMSpec& spec,
-                               const NumericVector& rts,
-                               const LogicalVector& winner,
-                               const LogicalVector& is_ok,
-                               const std::vector<int>& idx_win,
-                               const std::vector<int>& idx_los,
-                               const IntegerVector& expand,
-                               double min_ll,
-                               int n_acc,
-                               NumericVector& raw,
-                               NumericVector& ll_out)
-{
-  return c_log_likelihood_race_new_path(
-    pt, &spec, rts, winner, is_ok,
-    idx_win, idx_los, expand,
-    min_ll, n_acc,
-    raw, ll_out,
-    drdm_wald_pt_fill_mask,
-    prdm_wald_pt_fill_mask
-  );
-}

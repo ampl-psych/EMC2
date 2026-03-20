@@ -21,90 +21,6 @@ LNRSpec make_lnr_spec(const ParamTable& pt) {
   return s;
 }
 
-NumericVector plnr_c_pt(NumericVector rts,
-                        const ParamTable& pt,
-                        const LNRSpec& spec,
-                        LogicalVector idx,
-                        double min_ll,
-                        LogicalVector is_ok)
-{
-  // 0 = m, 1 = s, 2 = t0
-  const int N       = rts.size();
-  const int out_len = sum(idx);
-
-  NumericVector out(out_len);
-  double* out_ptr = out.begin();
-
-  const double* rt  = rts.begin();
-  const double* m   = &pt.base(0, spec.col_m);
-  const double* s   = &pt.base(0, spec.col_s);
-  const double* t0  = &pt.base(0, spec.col_t0);
-
-  int* idx_ptr   = LOGICAL(idx);
-  int* ok_ptr    = LOGICAL(is_ok);
-
-  int k = 0;
-  for (int i = 0; i < N; ++i) {
-    if (!idx_ptr[i]) continue;
-
-    if (std::isnan(m[i])) {
-      // same behaviour: missing accumulator gets 0, not min_ll
-      out_ptr[k++] = 0.0;
-      continue;
-    }
-
-    const double t_eff = rt[i] - t0[i];
-    if (t_eff > 0.0 && ok_ptr[i]) {
-      out_ptr[k++] = R::plnorm(t_eff, m[i], s[i], /*lower_tail*/ true, /*log_p*/ false);
-    } else {
-      out_ptr[k++] = min_ll;
-    }
-  }
-
-  return out;
-}
-
-NumericVector dlnr_c_pt(NumericVector rts,
-                        const ParamTable& pt,
-                        const LNRSpec& spec,
-                        LogicalVector idx,
-                        double min_ll,
-                        LogicalVector is_ok)
-{
-  const int N       = rts.size();
-  const int out_len = sum(idx);
-
-  NumericVector out(out_len);
-  double* out_ptr = out.begin();
-
-  const double* rt  = rts.begin();
-  const double* m   = &pt.base(0, spec.col_m);
-  const double* s   = &pt.base(0, spec.col_s);
-  const double* t0  = &pt.base(0, spec.col_t0);
-
-  int* idx_ptr   = LOGICAL(idx);
-  int* ok_ptr    = LOGICAL(is_ok);
-
-  int k = 0;
-  for (int i = 0; i < N; ++i) {
-    if (!idx_ptr[i]) continue;
-
-    if (std::isnan(m[i])) {
-      out_ptr[k++] = 0.0;
-      continue;
-    }
-
-    const double t_eff = rt[i] - t0[i];
-    if (t_eff > 0.0 && ok_ptr[i]) {
-      out_ptr[k++] = R::dlnorm(t_eff, m[i], s[i], /*log_p*/ false);
-    } else {
-      out_ptr[k++] = min_ll;
-    }
-  }
-
-  return out;
-}
-
 NumericVector plnr_c(NumericVector rts, NumericMatrix pars, LogicalVector idx, double min_ll, LogicalVector is_ok){
   // 0 = m, 1 = s, 2 = t0
   int n = sum(idx);
@@ -151,7 +67,7 @@ NumericVector dlnr_c(NumericVector rts, NumericMatrix pars, LogicalVector idx, d
 
 
 
-void dlnr_pt_fill(const NumericVector& rts,
+void dlnr_fast(const NumericVector& rts,
                   const ParamTable& pt,
                   const LNRSpec& spec,
                   const LogicalVector& winner,
@@ -191,7 +107,7 @@ void dlnr_pt_fill(const NumericVector& rts,
   }
 }
 
-void plnr_pt_fill(const NumericVector& rts,
+void plnr_fast(const NumericVector& rts,
                   const ParamTable& pt,
                   const LNRSpec& spec,
                   const LogicalVector& winner,

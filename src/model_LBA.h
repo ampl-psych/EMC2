@@ -254,7 +254,7 @@ NumericVector plba(NumericVector t,
 }
 
 
-void dlba_pt_fill(const NumericVector& rts,
+void dlba_fast(const NumericVector& rts,
                   const ParamTable& pt,
                   const LBASpec& spec,
                   const LogicalVector& winner,
@@ -298,7 +298,7 @@ void dlba_pt_fill(const NumericVector& rts,
   }
 }
 
-void plba_pt_fill(const NumericVector& rts,
+void plba_fast(const NumericVector& rts,
                   const ParamTable& pt,
                   const LBASpec& spec,
                   const LogicalVector& winner,
