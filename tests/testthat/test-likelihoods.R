@@ -15,8 +15,8 @@ calc_lls <- function(emc, n_particles=1e3) {
 
   # make p_mat
 
-  p_mat <- matrix(rnorm(n_particles*length(p_vector)), ncol=length(p_vector))
-  colnames(p_mat) <- names(p_vector)
+  p_mat <- matrix(rnorm(n_particles*length(p_types)), ncol=length(p_types))
+  colnames(p_mat) <- p_types
 
   lls_new <- EMC2:::calc_ll_oo(p_mat, dadm, constants = constants, designs = designs, type = model$c_name,
                                model$bound, model$transform, model$pre_transform, p_types = p_types,
@@ -37,7 +37,10 @@ design_LNR <- design(data = dat,model=LNR,matchfun=matchfun,
 LNR_s1 <- make_emc(dat, design_LNR, rt_resolution = 0.05, n_chains = 2, compress=FALSE)
 p_vector1 <- sampled_pars(LNR_s1)
 
-calc_lls(LNR_s1)
+# calc_lls(LNR_s1)
+test_that("LNR", {
+  expect_snapshot(calc_lls(LNR_s1))
+})
 
 
 # RDM ----------------------------------------------------------
@@ -46,7 +49,10 @@ design_RDM <- design(data = dat,model=RDM,matchfun=matchfun,
                      contrasts=list(v=list(lM=ADmat)))
 RDM_s <- make_emc(dat, design_RDM, rt_resolution = 0.05, n_chains = 2, compress=FALSE)
 
-calc_lls(RDM_s)
+# calc_lls(RDM_s)
+test_that("RDM", {
+  expect_snapshot(calc_lls(RDM_s))
+})
 
 # LBA ----------------------------------------------------------
 design_LBA <- design(data = dat,model=LBA,matchfun=matchfun,
@@ -54,7 +60,11 @@ design_LBA <- design(data = dat,model=LBA,matchfun=matchfun,
                      contrasts=list(v=list(lM=ADmat)))
 LBA_s <- make_emc(dat, design_LBA, rt_resolution = 0.05, n_chains = 2, compress=FALSE)
 
-calc_lls(LBA_s)
+# calc_lls(LBA_s)
+test_that("LBA", {
+  expect_snapshot(calc_lls(LBA_s))
+})
+
 
 # WDM ----------------------------------------------------------
 design_WDM <- design(data = dat, model=DDM,
@@ -62,12 +72,17 @@ design_WDM <- design(data = dat, model=DDM,
                      constants=c(s=1, sv=log(0), SZ=qnorm(0)))
 WDM_s <- make_emc(dat, design_WDM, rt_resolution = 0.05, n_chains = 2)
 
-calc_lls(WDM_s)
+# calc_lls(WDM_s)
+test_that("WDM", {
+  expect_snapshot(calc_lls(WDM_s))
+})
 
 # DDM ---
 design_DDM <- design(data = dat,model=DDM,
                      formula =list(v~1,a~1, t0~1, s~1, Z~1, sv~1, SZ~1, st0~1),
                      constants=c(s=1))
 DDM_s <- make_emc(dat, design_DDM, rt_resolution = 0.05, n_chains = 2)
-calc_lls(DDM_s)
-# interesting - st0 fails!
+# calc_lls(DDM_s)
+test_that("DDM", {
+  expect_snapshot(calc_lls(DDM_s))
+})
