@@ -253,6 +253,96 @@ NumericVector plba(NumericVector t,
   return cdf;
 }
 
+
+void dlba_pt_fill(const NumericVector& rts,
+                  const ParamTable& pt,
+                  const LBASpec& spec,
+                  const LogicalVector& winner,
+                  double* raw)
+{
+  const int N = rts.size();
+
+  const double* rt  = rts.begin();
+  const double* v   = &pt.base(0, spec.col_v);
+  const double* sv  = &pt.base(0, spec.col_sv);
+  const double* B   = &pt.base(0, spec.col_B);
+  const double* A   = &pt.base(0, spec.col_A);
+  const double* t0  = &pt.base(0, spec.col_t0);
+
+  int* win_ptr = LOGICAL(winner);
+
+#pragma omp simd
+  for (int i = 0; i < N; ++i) {
+    if (!win_ptr[i])
+      continue;  // only winners get pdf
+
+    if (std::isnan(v[i])) {
+      raw[i] = 0.0;
+      continue;
+    }
+
+    const double t_eff = rt[i] - t0[i];
+    if (t_eff <= 0.0) {
+      raw[i] = 0.0;
+      continue;
+    }
+
+    const double A_i = A[i];
+    const double B_i = B[i] + A_i;  // b = B + A, as in dlba_c_pt
+
+    double pdf = dlba_norm(t_eff, A_i, B_i, v[i], sv[i], /*posdrift=*/true);
+    if (!std::isfinite(pdf) || pdf < 0.0)
+      pdf = 0.0;
+
+    raw[i] = pdf;
+  }
+}
+
+void plba_pt_fill(const NumericVector& rts,
+                  const ParamTable& pt,
+                  const LBASpec& spec,
+                  const LogicalVector& winner,
+                  double* raw)
+{
+  const int N = rts.size();
+
+  const double* rt  = rts.begin();
+  const double* v   = &pt.base(0, spec.col_v);
+  const double* sv  = &pt.base(0, spec.col_sv);
+  const double* B   = &pt.base(0, spec.col_B);
+  const double* A   = &pt.base(0, spec.col_A);
+  const double* t0  = &pt.base(0, spec.col_t0);
+
+  int* win_ptr = LOGICAL(winner);
+
+#pragma omp simd
+  for (int i = 0; i < N; ++i) {
+    if (win_ptr[i])
+      continue;  // only losers get cdf
+
+    if (std::isnan(v[i])) {
+      raw[i] = 0.0;
+      continue;
+    }
+
+    const double t_eff = rt[i] - t0[i];
+    if (t_eff <= 0.0) {
+      raw[i] = 0.0;
+      continue;
+    }
+
+    const double A_i = A[i];
+    const double B_i = B[i] + A_i;
+
+    double cdf = plba_norm(t_eff, A_i, B_i, v[i], sv[i], /*posdrift=*/true);
+    if (!std::isfinite(cdf) || cdf < 0.0)
+      cdf = 0.0;
+    else if (cdf > 1.0)
+      cdf = 1.0;
+
+    raw[i] = cdf;
+  }
+}
 #endif
 
 

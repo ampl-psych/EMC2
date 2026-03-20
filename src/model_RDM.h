@@ -7,7 +7,7 @@
 #include "ParamTable.h"
 
 // Compile-time switch
-// #define USE_FAST_PNORM
+#define USE_FAST_PNORM
 #ifdef USE_FAST_PNORM
 #define PPNORM_STD(x, lower, logp) fast_pnorm_std((x), (lower), (logp))
 #else
@@ -95,9 +95,23 @@ inline double fast_pnorm_std(double x, bool lower = true, bool logp = false)
   }
   return cdf;
 }
+// inline double fast_pnorm_std(double x, bool lower = true, bool logp = false)
+// {
+//   double cdf = phi(x);          // Φ(x)
+//   if (!lower) {
+//     cdf = 1.0 - cdf;            // upper tail
+//   }
+//   if (logp) {
+//     // Guard against log(0) (underflow). For extremely small cdf, this will
+//     // be -inf, which your min_ll handling will clamp anyway.
+//     if (cdf <= 0.0) return R_NegInf;
+//     return std::log(cdf);
+//   }
+//   return cdf;
+// }
 
 // RDM
-double pigt0(double t, double k = 1., double l = 1.){
+inline double pigt0(double t, double k = 1., double l = 1.){
   //if (t <= 0.){
   //  return 0.;
   //}
@@ -113,7 +127,7 @@ double pigt0(double t, double k = 1., double l = 1.){
   return std::exp(std::exp(std::log(2. * lambda) - std::log(mu)) + std::log(p1)) + p2;
 }
 
-double digt0(double t, double k = 1., double l = 1.){
+inline double digt0(double t, double k = 1., double l = 1.){
   //if (t <= 0.) {
   //  return 0.;
   //}
@@ -859,6 +873,71 @@ NumericVector pWald(NumericVector t, NumericVector v,
 // }
 
 
+// NEW APPROACH - split RDM-A0 from RDM as separate models. Already implicit in EMC2 anyway!
+
+// // Wald pdf: winners only via winner mask
+// void drdm_wald_pt_fill(const NumericVector& rts,
+//                        const ParamTable& pt,
+//                        const RDMSpec& spec,
+//                        const LogicalVector& winner,
+//                        double* raw)
+// {
+//   const int N = rts.size();
+//
+//   const double* rt = rts.begin();
+//   const double* v  = &pt.base(0, spec.col_v);
+//   const double* B  = &pt.base(0, spec.col_B);
+//   const double* t0 = &pt.base(0, spec.col_t0);
+//   const double* s  = &pt.base(0, spec.col_s);
+//
+//   int* win_ptr = LOGICAL(winner);
+//
+// #pragma omp simd
+//   for (int i = 0; i < N; ++i) {
+//     if (!win_ptr[i])
+//       continue; // only winners get pdf
+//
+//     double t_eff = rt[i] - t0[i];
+//     double k     = B[i] / s[i];   // A==0 → a=0 → k=B/s
+//     double l     = v[i] / s[i];
+//
+//     double pdf = digt0(t_eff, k, l);  // old small-A=0 kernel
+//     raw[i] = pdf;
+//   }
+// }
+//
+// // Wald cdf: losers only via winner mask
+// void prdm_wald_pt_fill(const NumericVector& rts,
+//                        const ParamTable& pt,
+//                        const RDMSpec& spec,
+//                        const LogicalVector& winner,
+//                        double* raw)
+// {
+//   const int N = rts.size();
+//
+//   const double* rt = rts.begin();
+//   const double* v  = &pt.base(0, spec.col_v);
+//   const double* B  = &pt.base(0, spec.col_B);
+//   const double* t0 = &pt.base(0, spec.col_t0);
+//   const double* s  = &pt.base(0, spec.col_s);
+//
+//   int* win_ptr = LOGICAL(winner);
+//
+// #pragma omp simd
+//   for (int i = 0; i < N; ++i) {
+//     if (win_ptr[i])
+//       continue; // only losers get cdf
+//
+//     double t_eff = rt[i] - t0[i];
+//     double k     = B[i] / s[i];
+//     double l     = v[i] / s[i];
+//
+//     double cdf = pigt0(t_eff, k, l);
+//     raw[i] = cdf;
+//   }
+// }
+
+// RDM model
 // Minimal values of A and v/s to avoid numerical instability.
 constexpr double A_EPS = 1e-4;   // or 1e-3
 constexpr double L_EPS = 1e-4;   // or 1e-3
@@ -1030,5 +1109,109 @@ void prdm_c_pt_fill(const NumericVector& rts,
     double cdf = pigt_core(t_eff, k, l, a);   // handles t<=0 internally
 
     raw[i] = cdf;  // may be NaN, 0, 1, etc.; interpreted later
+  }
+}
+
+
+
+inline void prdm_wald_pt_fill_one(const int i,
+                                  const double* rt,
+                                  const double* v,
+                                  const double* B,
+                                  const double* t0,
+                                  const double* s,
+                                  int* win_ptr,
+                                  double* raw)
+{
+  // losers only
+  if (win_ptr[i])
+    return;
+
+  double t_eff = rt[i] - t0[i];
+  double k     = B[i] / s[i];
+  double l     = v[i] / s[i];
+
+  double cdf = pigt0(t_eff, k, l);
+  raw[i] = cdf;
+}
+
+// Wald cdf: losers only via winner mask, 2× unrolled
+void prdm_wald_pt_fill(const NumericVector& rts,
+                       const ParamTable& pt,
+                       const RDMSpec& spec,
+                       const LogicalVector& winner,
+                       double* raw)
+{
+  const int N = rts.size();
+
+  const double* rt = rts.begin();
+  const double* v  = &pt.base(0, spec.col_v);
+  const double* B  = &pt.base(0, spec.col_B);
+  const double* t0 = &pt.base(0, spec.col_t0);
+  const double* s  = &pt.base(0, spec.col_s);
+
+  int* win_ptr = LOGICAL(winner);
+
+  int i = 0;
+
+  // Main 2× unrolled loop
+  for (; i + 1 < N; i += 2) {
+    prdm_wald_pt_fill_one(i,   rt, v, B, t0, s, win_ptr, raw);
+    prdm_wald_pt_fill_one(i+1, rt, v, B, t0, s, win_ptr, raw);
+  }
+
+  // Tail (if N is odd)
+  if (i < N) {
+    prdm_wald_pt_fill_one(i, rt, v, B, t0, s, win_ptr, raw);
+  }
+}
+
+inline void drdm_wald_pt_fill_one(const int i,
+                                  const double* rt,
+                                  const double* v,
+                                  const double* B,
+                                  const double* t0,
+                                  const double* s,
+                                  int* win_ptr,
+                                  double* raw)
+{
+  if (!win_ptr[i]) return;  // only winners get pdf
+
+  double t_eff = rt[i] - t0[i];
+  double k     = B[i] / s[i];   // A==0 → a=0 → k=B/s
+  double l     = v[i] / s[i];
+
+  double pdf = digt0(t_eff, k, l);
+  raw[i] = pdf;
+}
+
+// Wald pdf: winners only via winner mask, 2× unrolled
+void drdm_wald_pt_fill(const NumericVector& rts,
+                       const ParamTable& pt,
+                       const RDMSpec& spec,
+                       const LogicalVector& winner,
+                       double* raw)
+{
+  const int N = rts.size();
+
+  const double* rt = rts.begin();
+  const double* v  = &pt.base(0, spec.col_v);
+  const double* B  = &pt.base(0, spec.col_B);
+  const double* t0 = &pt.base(0, spec.col_t0);
+  const double* s  = &pt.base(0, spec.col_s);
+
+  int* win_ptr = LOGICAL(winner);
+
+  int i = 0;
+
+  // Main 2× unrolled loop
+  for (; i + 1 < N; i += 2) {
+    drdm_wald_pt_fill_one(i,   rt, v, B, t0, s, win_ptr, raw);
+    drdm_wald_pt_fill_one(i+1, rt, v, B, t0, s, win_ptr, raw);
+  }
+
+  // Tail (if N is odd)
+  if (i < N) {
+    drdm_wald_pt_fill_one(i, rt, v, B, t0, s, win_ptr, raw);
   }
 }
