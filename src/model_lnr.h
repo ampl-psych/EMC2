@@ -150,4 +150,88 @@ NumericVector dlnr_c(NumericVector rts, NumericMatrix pars, LogicalVector idx, d
 }
 
 
+
+void dlnr_pt_fill(const NumericVector& rts,
+                  const ParamTable& pt,
+                  const LNRSpec& spec,
+                  const LogicalVector& winner,
+                  double* raw)
+{
+  const int N = rts.size();
+
+  const double* rt  = rts.begin();
+  const double* m   = &pt.base(0, spec.col_m);
+  const double* s   = &pt.base(0, spec.col_s);
+  const double* t0  = &pt.base(0, spec.col_t0);
+
+  int* win_ptr = LOGICAL(winner);
+
+#pragma omp simd
+  for (int i = 0; i < N; ++i) {
+    if (!win_ptr[i])
+      continue;  // only winners get pdf; others left unchanged
+
+    // Unused accumulator (m is NA) → pdf 0
+    if (std::isnan(m[i])) {
+      raw[i] = 0.0;
+      continue;
+    }
+
+    const double t_eff = rt[i] - t0[i];
+    if (t_eff <= 0.0) {
+      raw[i] = 0.0;
+      continue;
+    }
+
+    double pdf = R::dlnorm(t_eff, m[i], s[i], /*log_p=*/false);
+    if (!std::isfinite(pdf) || pdf < 0.0)
+      pdf = 0.0;
+
+    raw[i] = pdf;
+  }
+}
+
+void plnr_pt_fill(const NumericVector& rts,
+                  const ParamTable& pt,
+                  const LNRSpec& spec,
+                  const LogicalVector& winner,
+                  double* raw)
+{
+  const int N = rts.size();
+
+  const double* rt  = rts.begin();
+  const double* m   = &pt.base(0, spec.col_m);
+  const double* s   = &pt.base(0, spec.col_s);
+  const double* t0  = &pt.base(0, spec.col_t0);
+
+  int* win_ptr = LOGICAL(winner);
+
+#pragma omp simd
+  for (int i = 0; i < N; ++i) {
+    if (win_ptr[i])
+      continue;  // only losers get cdf
+
+    if (std::isnan(m[i])) {
+      raw[i] = 0.0;
+      continue;
+    }
+
+    const double t_eff = rt[i] - t0[i];
+    if (t_eff <= 0.0) {
+      raw[i] = 0.0;
+      continue;
+    }
+
+    double cdf = R::plnorm(t_eff, m[i], s[i],
+                           /*lower_tail=*/true,
+                           /*log_p=*/false);
+                           if (!std::isfinite(cdf) || cdf < 0.0)
+                             cdf = 0.0;
+                           else if (cdf > 1.0)
+                             cdf = 1.0;
+
+                           raw[i] = cdf;
+  }
+}
+
 #endif
