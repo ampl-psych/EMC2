@@ -109,6 +109,11 @@ run_emc <- function(emc, stage, stop_criteria,
     iter <- stop_criteria[["iter"]] + total_iters_stage
   } else{
     iter <- stop_criteria[["iter"]]
+    if(!is.null(stop_criteria$max_sample_iter)){
+      if(iter > stop_criteria$max_sample_iter){
+        stop("Max iterations lower than requested, would trigger infinite sampling loop")
+      }
+    }
   }
   progress <- check_progress(emc, stage, iter, stop_criteria, max_tries, step_size, cores_per_chain*cores_for_chains, verbose, n_blocks = n_blocks)
   emc <- progress$emc
