@@ -152,6 +152,9 @@ run_emc <- function(emc, stage, stop_criteria,
     } else{
       emc <- sub_emc
     }
+    if(stage == "sample" && !is.null(stop_criteria$max_sample_iter)){
+      emc <- .trim_sample_stage(emc, stop_criteria$max_sample_iter)
+    }
     progress <- check_progress(emc, stage, iter, stop_criteria, max_tries, step_size, cores_per_chain*cores_for_chains,
                                verbose, progress,n_blocks)
     emc <- progress$emc
