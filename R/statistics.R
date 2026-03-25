@@ -261,7 +261,7 @@ IC <- function(emc,stage="sample",filter=0,use_best_fit=TRUE,
     ll <- get_pars(emc, stage = stage, filter = filter, selection = "LL", merge_chains = TRUE,subject=subject)
     alpha <- get_pars(emc,selection="alpha",stage=stage,filter=filter, by_subject = TRUE, merge_chains = TRUE,subject=subject)
   }
-  minDs <- -2*apply(ll[[1]][[1]], 2, min)
+  minDs <- -2*apply(ll[[1]][[1]], 2, max)
   mean_lls <- apply(ll[[1]][[1]], 2, mean)
   mean_pars <- lapply(alpha,function(x){apply(do.call(rbind,x),2,mean)})
   # log-likelihood for each subject using their mean parameter vector
