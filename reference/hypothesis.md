@@ -98,5 +98,5 @@ hypothesis(samples_LNR, parameter = "m")
 mdiff <- function(p)diff(p[c("m","m_lMd")])
 hypothesis(samples_LNR,fun=mdiff)
 
-#> [1] 4.625103
+#> [1] 4.642767
 ```
