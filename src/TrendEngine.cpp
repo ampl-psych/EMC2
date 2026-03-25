@@ -663,6 +663,60 @@ void TrendRuntime::run_kernels_for_op(TrendOpRuntime& op,
   }
 }
 
+
+// void TrendRuntime::run_kernels_one_step_for_op(TrendOpRuntime& op,
+//                                                ParamTable& pt,
+//                                                int row)
+// {
+//   using namespace Rcpp;
+//   const int n_trials = pt.n_trials;  // for sanity checks if needed
+//   (void)n_trials;
+//
+//   for (auto& k_rt : op.kernels) {
+//     const KernelSlotSpec& kspec = *k_rt.spec;
+//
+//     // Make a non-const handle to the spec's kernel_input (shallow copy)
+//     NumericMatrix input = kspec.kernel_input;
+//
+//     switch (kspec.input_kind) {
+//     case InputKind::Combined: {
+//       // covariate columns already in kernel_input,
+//       // fill par_input columns from ParamTable at this row
+//       for (int i = 0; i < (int)kspec.par_input_indices.size(); ++i) {
+//       int col_idx = kspec.par_input_indices[i];
+//       std::string name = as<std::string>(kspec.par_input_names[i]);
+//       NumericVector v = pt.column_by_name(name);
+//       input(row, col_idx) = v[row];
+//     }
+//       break;
+//     }
+//
+//     case InputKind::ParInput: {
+//       NumericVector v = pt.column_by_name(kspec.par_input_name);
+//       input(row, 0) = v[row];
+//       break;
+//     }
+//
+//     case InputKind::Covariate:
+//       // covariate already stored in kernel_input
+//       break;
+//
+//     case InputKind::None:
+//     default:
+//       stop("TrendOp '%s': kernel '%s' has neither covariate nor par_input",
+//            op.spec->target_param.c_str(), kspec.kernel.c_str());
+//     }
+//
+//     if (!k_rt.kernel_ptr->is_incremental()) {
+//       stop("run_kernels_one_step_for_op: non-incremental kernel '%s' used in incremental mode",
+//            kspec.kernel.c_str());
+//     }
+//
+//     KernelParsView kp_view = make_kernel_pars_view(pt, k_rt.kernel_par_indices);
+//     k_rt.kernel_ptr->run_one(kp_view, input, row);
+//   }
+// }
+
 void TrendRuntime::apply_base_for_op(TrendOpRuntime& op,
                                      ParamTable& pt) {
   using namespace Rcpp;
@@ -786,6 +840,225 @@ void TrendRuntime::apply_base_for_op(TrendOpRuntime& op,
   }
 }
 
+// -------------
+// Single-trial call functions for incremental use
+// -------------
+
+// First, fill the kernel inputs for a single row
+// Build a 1-row input for stepping, using local row index in this per-trial slice.
+void TrendRuntime::fill_step_input_for_row(const KernelSlotSpec& kspec,
+                                           ParamTable& pt,
+                                           const Rcpp::DataFrame& trial_data,
+                                           int row_local,
+                                           Rcpp::NumericMatrix& input)
+{
+  using namespace Rcpp;
+
+  // Precondition: input.nrow() == pt.n_trials
+
+  switch (kspec.input_kind) {
+
+  case InputKind::Combined: {
+    // 1) par_input columns from ParamTable
+    for (int i = 0; i < (int)kspec.par_input_indices.size(); ++i) {
+    int col_idx = kspec.par_input_indices[i];
+    std::string name = as<std::string>(kspec.par_input_names[i]);
+
+    NumericVector param = pt.column_by_name(name);
+    if (row_local < 0 || row_local >= param.size())
+      stop("fill_step_input_for_row('%s'): row %d out of range [0,%d)",
+           name.c_str(), row_local, param.size());
+
+    input(row_local, col_idx) = param[row_local];
+  }
+
+    // 2) covariate columns from trial_data (possibly multiple)
+    for (int i = 0; i < (int)kspec.covariate_indices.size(); ++i) {
+      int col_idx  = kspec.covariate_indices[i];
+      std::string cov_name = as<std::string>(kspec.covariate_names[i]);
+
+      if (!trial_data.containsElementNamed(cov_name.c_str())) {
+        stop("fill_step_input_for_row: data has no covariate column '%s'",
+             cov_name.c_str());
+      }
+      NumericVector cov_col = trial_data[cov_name];
+      if (row_local < 0 || row_local >= cov_col.size())
+        stop("fill_step_input_for_row('%s'): row %d out of range [0,%d)",
+             cov_name.c_str(), row_local, cov_col.size());
+
+      input(row_local, col_idx) = cov_col[row_local];
+    }
+    break;
+  }
+
+  case InputKind::ParInput: {
+    NumericVector v = pt.column_by_name(kspec.par_input_name);
+    if (row_local < 0 || row_local >= v.size())
+      stop("fill_step_input_for_row('%s'): row %d out of range [0,%d)",
+           kspec.par_input_name.c_str(), row_local, v.size());
+
+    if (input.ncol() != 1)
+      stop("ParInput kernel '%s' expected 1 input column, got %d",
+           kspec.kernel.c_str(), input.ncol());
+
+    input(row_local, 0) = v[row_local];
+    break;
+  }
+
+  case InputKind::Covariate: {
+    // Covariate-only kernels use kernel_input_name, not covariate_names
+    if (kspec.kernel_input_name.empty()) {
+    stop("Covariate kernel '%s' has empty kernel_input_name; "
+           "step mode requires a column name to read from trial_data",
+           kspec.kernel.c_str());
+  }
+
+    if (input.ncol() != 1) {
+      stop("Covariate kernel '%s' expected 1 input column, got %d",
+           kspec.kernel.c_str(), input.ncol());
+    }
+
+    std::string cov_name = kspec.kernel_input_name;
+    if (!trial_data.containsElementNamed(cov_name.c_str())) {
+      stop("fill_step_input_for_row: data has no covariate column '%s'",
+           cov_name.c_str());
+    }
+
+    NumericVector cov_col = trial_data[cov_name];
+    if (row_local < 0 || row_local >= cov_col.size())
+      stop("fill_step_input_for_row('%s'): row %d out of range [0,%d)",
+           cov_name.c_str(), row_local, cov_col.size());
+
+    input(row_local, 0) = cov_col[row_local];
+    break;
+  }
+
+  default:
+    stop("fill_step_input_for_row: unsupported input_kind in step mode");
+  }
+}
+
+
+// Run kernels for a single 'step' (row in dadm)
+void TrendRuntime::step_op_for_trial(TrendOpRuntime& op,
+                                     ParamTable& pt,
+                                     const Rcpp::DataFrame& trial_data)
+{
+  using namespace Rcpp;
+
+  const TrendOpSpec& spec = *op.spec;
+  const int n_acc = pt.n_trials;
+
+  // Optional: extract 'at' column from trial_data if this op uses 'at'
+  IntegerVector at_col;
+  bool uses_at = spec.has_at;
+  if (uses_at) {
+    if (!trial_data.containsElementNamed(spec.at.c_str())) {
+      stop("step_op_for_trial: data has no 'at' column '%s'", spec.at.c_str());
+    }
+    SEXP at_raw = trial_data[spec.at];
+    at_col = IntegerVector(at_raw);  // factor or integer
+    if (at_col.size() != n_acc) {
+      stop("step_op_for_trial: 'at' column '%s' has wrong length (%d != %d)",
+           spec.at.c_str(), at_col.size(), n_acc);
+    }
+  }
+
+  for (int row = 0; row < n_acc; ++row) {
+
+    // 1) Use current last-known Q for this row
+    apply_base_one_row(op, pt, row);
+
+    // 2) Decide whether to update Q *for the next time step*
+    bool update = true;
+    if (uses_at) {
+      // Update only if at == 1 in *this* trial_data row
+      update = (at_col[row] == 1);
+    }
+
+    if (update) {
+      // Update kernels for this row using dynamic covariates and params
+      for (auto& k_rt : op.kernels) {
+        const KernelSlotSpec& kspec = *k_rt.spec;
+        if (!k_rt.kernel_ptr->is_incremental()) {
+          stop("Kernel '%s' used in step mode but is not incremental",
+               kspec.kernel.c_str());
+        }
+
+        // Multi-row input consistent with ParamTable shape
+        NumericMatrix input(n_acc, kspec.kernel_input.ncol());
+        fill_step_input_for_row(kspec, pt, trial_data, row, input);
+
+        KernelParsView kp_view = make_kernel_pars_view(pt, k_rt.kernel_par_indices);
+        // Use row as index into both params and input
+        k_rt.kernel_ptr->run_one(kp_view, input, /*row=*/row);
+      }
+    }
+  }
+}
+
+// Apply the base for a single trial
+void TrendRuntime::apply_base_one_row(TrendOpRuntime& op, ParamTable& pt, int row)
+{
+  const TrendOpSpec& spec = *op.spec;
+  int target_idx   = pt.base_index_for(spec.target_param);
+  double* target   = &pt.base(0, target_idx);
+  const int K      = static_cast<int>(op.kernels.size());
+  const std::string& base = spec.base_type;
+
+  bool needs_base_par = (base == "lin" || base == "exp_lin" ||
+                         base == "lin_exp" || base == "centered");
+
+  double q_combined = 0.0;
+  for (int k = 0; k < K; ++k) {
+    const auto& v = op.kernels[k].kernel_ptr->get_output();
+    // last element is the current trial's output
+    double q = v.empty() ? 0.0 : v.back();  // always get last element
+    if (!ISNAN(q)) q_combined += q;
+  }
+
+  double contrib = q_combined;
+  if (needs_base_par) {
+    double tp = pt.base(row, op.base_par_indices[0]);
+    if (base == "lin" || base == "exp_lin" || base == "lin_exp")
+      contrib *= tp;
+    else if (base == "centered")
+      contrib = (contrib - 0.5) * tp;
+  }
+
+  double p = target[row];
+  double base_term = (base == "exp_lin" || base == "lin_exp") ? std::exp(p) : p;
+  target[row] = base_term + contrib;
+}
+
+// Single-trial helpers
+void TrendRuntime::premap_step(ParamTable& pt, const Rcpp::DataFrame& trial_data) {
+  for (auto& op : premap_ops) {
+    step_op_for_trial(op, pt, trial_data);
+  }
+}
+
+void TrendRuntime::pretransform_step(ParamTable& pt, const Rcpp::DataFrame& trial_data) {
+  for (auto& op : pretransform_ops) {
+    step_op_for_trial(op, pt, trial_data);
+  }
+}
+
+void TrendRuntime::posttransform_step(ParamTable& pt, const Rcpp::DataFrame& trial_data) {
+  for (auto& op : posttransform_ops) {
+    step_op_for_trial(op, pt, trial_data);
+  }
+}
+
+void TrendRuntime::run_one_trial(ParamTable& pt, const Rcpp::DataFrame& trial_data)
+{
+  premap_step(pt, trial_data);
+  pretransform_step(pt, trial_data);
+  posttransform_step(pt, trial_data);
+}
+
+
+
 void TrendRuntime::reset_all_kernels() {
   // lambda to loop over a vector of kernels
   auto reset_vec = [](std::vector<TrendOpRuntime>& ops) {
@@ -890,68 +1163,155 @@ Rcpp::NumericMatrix TrendRuntime::all_kernel_outputs(ParamTable& pt) {
   return all_kernel_outputs(pt, std::vector<int>{1}); // only main trajectories
 }
 
-// Rcpp::NumericMatrix TrendRuntime::all_kernel_outputs(ParamTable& pt) {
-//   using namespace Rcpp;
-//
-//   const int n = pt.n_trials;
-//
-//   // Count total number of kernel slots
-//   int n_slots = 0;
-//   for (const auto& op : premap_ops)        n_slots += op.kernels.size();
-//   for (const auto& op : pretransform_ops)  n_slots += op.kernels.size();
-//   for (const auto& op : posttransform_ops) n_slots += op.kernels.size();
-//
-//   NumericMatrix out(n, n_slots);
-//   CharacterVector cn(n_slots);
-//
-//   int col = 0;
-//
-//   auto fill_for_ops = [&](std::vector<TrendOpRuntime>& ops) {
-//     for (auto& op : ops) {
-//       const TrendOpSpec& spec = *op.spec;
-//
-//       for (auto& k_rt : op.kernels) {
-//         const KernelSlotSpec& kspec = *k_rt.spec;
-//         const std::vector<double>& traj = k_rt.kernel_ptr->get_output();
-//
-//         if ((int)traj.size() != n) {
-//           stop("TrendRuntime::all_kernel_outputs('%s'): trajectory length (%d) != n_trials (%d)",
-//                spec.target_param.c_str(), (int)traj.size(), n);
-//         }
-//
-//         for (int r = 0; r < n; ++r) {
-//           out(r, col) = traj[r];
-//         }
-//
-//         // Build a column name: target_param + "." + input_name
-//         std::string input_name;
-//         if (kspec.input_kind == InputKind::Covariate) {
-//           // try to get column name from attributes if available
-//           if (kspec.kernel_input.hasAttribute("names")) {
-//             // optional; often covariate is directly from data[cov_name],
-//             // so we don't have the name here. You can store the cov_name in KernelSlotSpec if needed.
-//             input_name = "cov";
-//           } else {
-//             input_name = "cov";
-//           }
-//         } else if (kspec.input_kind == InputKind::ParInput) {
-//           input_name = kspec.par_input_name;
-//         } else {
-//           input_name = "noinput";
-//         }
-//
-//         std::string cname = spec.target_param + "." + input_name;
-//         cn[col] = cname;
-//
-//         ++col;
-//       }
-//     }
-//   };
-//
-//   fill_for_ops(premap_ops);
-//   fill_for_ops(pretransform_ops);
-//   fill_for_ops(posttransform_ops);
-//
-//   colnames(out) = cn;
-//   return out;
-// }
+Rcpp::NumericMatrix TrendRuntime::all_kernel_outputs_step(const std::vector<int>& codes) {
+  using namespace Rcpp;
+
+  // 1. Determine compressed length N from the first non-empty stream
+  int N = -1;
+  auto set_N_if_needed = [&](const std::vector<TrendOpRuntime>& ops) {
+    for (const auto& op : ops) {
+      for (const auto& k_rt : op.kernels) {
+        for (int code : codes) {
+          if (!k_rt.kernel_ptr->has_output_stream(code))
+            continue;
+          NumericVector v = k_rt.kernel_ptr->get_output_stream(code);
+          if (v.size() == 0) continue;
+          if (N < 0) {
+            N = v.size();
+          } else if (N != v.size()) {
+            stop("all_kernel_outputs_step: inconsistent stream length (%d vs %d) "
+                   "for kernel '%s'", N, v.size(), k_rt.spec->kernel.c_str());
+          }
+        }
+      }
+    }
+  };
+
+  set_N_if_needed(premap_ops);
+  set_N_if_needed(pretransform_ops);
+  set_N_if_needed(posttransform_ops);
+
+  if (N < 0) {
+    // no streams at all; return empty 0x0 matrix
+    return NumericMatrix(0, 0);
+  }
+
+  // 2. Count total columns
+  int n_cols_total = 0;
+  auto count_cols = [&](const std::vector<TrendOpRuntime>& ops) {
+    for (const auto& op : ops) {
+      for (const auto& k_rt : op.kernels) {
+        for (int code : codes) {
+          if (k_rt.kernel_ptr->has_output_stream(code)) {
+            ++n_cols_total;
+          }
+        }
+      }
+    }
+  };
+  count_cols(premap_ops);
+  count_cols(pretransform_ops);
+  count_cols(posttransform_ops);
+
+  NumericMatrix out(N, n_cols_total);
+  CharacterVector cn(n_cols_total);
+  int col = 0;
+
+  auto fill_for_ops = [&](const std::vector<TrendOpRuntime>& ops) {
+    for (const auto& op : ops) {
+      const TrendOpSpec& spec = *op.spec;
+
+      for (const auto& k_rt : op.kernels) {
+        const KernelSlotSpec& kspec = *k_rt.spec;
+
+        // IMPORTANT: do NOT call run_kernels_for_op here.
+        // In step mode, kernels have been updated incrementally via run_one().
+
+        std::string input_name;
+        if (kspec.input_kind == InputKind::Covariate) {
+          input_name = kspec.kernel_input_name;
+        } else if (kspec.input_kind == InputKind::ParInput) {
+          input_name = kspec.par_input_name;
+        } else if (kspec.input_kind == InputKind::Combined) {
+          input_name = "combined";
+        } else {
+          input_name = "noinput";
+        }
+
+        for (int code : codes) {
+          if (!k_rt.kernel_ptr->has_output_stream(code))
+            continue;
+
+          NumericVector v = k_rt.kernel_ptr->get_output_stream(code);
+          if ((int)v.size() != N) {
+            stop("all_kernel_outputs_step('%s'): inconsistent stream length (%d != %d)",
+                 spec.target_param.c_str(), v.size(), N);
+          }
+
+          for (int r = 0; r < N; ++r) {
+            out(r, col) = v[r];
+          }
+
+          std::string suffix = k_rt.kernel_ptr->output_stream_name(code);
+          std::string cname  = spec.target_param + "." + input_name + "." + suffix;
+          cn[col] = cname;
+
+          ++col;
+        }
+      }
+    }
+  };
+
+  fill_for_ops(premap_ops);
+  fill_for_ops(pretransform_ops);
+  fill_for_ops(posttransform_ops);
+
+  colnames(out) = cn;
+  return out;
+}
+
+
+// R-facing wrappers
+// [[Rcpp::export]]
+SEXP make_trend_runtime(Rcpp::Nullable<Rcpp::List> trend,
+                        Rcpp::DataFrame data,
+                        Rcpp::NumericMatrix particle_matrix,
+                        Rcpp::List designs)
+{
+  auto* plan    = new TrendPlan(trend, data);
+  auto* runtime = new TrendRuntime(*plan);
+
+  // Bind to ParamTable template if needed
+  Rcpp::NumericVector p_vector = particle_matrix(0, _);
+  p_vector.attr("names") = colnames(particle_matrix);
+  ParamTable pt = ParamTable::from_p_vector_and_designs(p_vector, designs,
+                                                        data.nrow());
+  runtime->bind_all_ops_to_paramtable(pt);
+
+  Rcpp::XPtr<TrendRuntime> ptr(runtime, true);  // manage lifetime
+  return ptr;                                   // as SEXP
+}
+
+
+// [[Rcpp::export]]
+void reset_trend_runtime(SEXP ptr) {
+  Rcpp::XPtr<TrendRuntime> runtime(ptr);
+  runtime->reset_all_kernels();
+}
+
+
+// [[Rcpp::export]]
+Rcpp::NumericMatrix trend_kernel_matrix_from_runtime_step(
+    SEXP trend_runtime_xptr,
+    Rcpp::IntegerVector kernel_output_codes = 1)
+{
+  using namespace Rcpp;
+  XPtr<TrendRuntime> rt(trend_runtime_xptr);
+  if (!rt) stop("trend_runtime pointer is null");
+
+  std::vector<int> codes(kernel_output_codes.size());
+  for (int i = 0; i < kernel_output_codes.size(); ++i)
+    codes[i] = kernel_output_codes[i];
+
+  return rt->all_kernel_outputs_step(codes);
+}

@@ -11,6 +11,42 @@ Rcpp::Rostream<true>&  Rcpp::Rcout = Rcpp::Rcpp_cout_get();
 Rcpp::Rostream<false>& Rcpp::Rcerr = Rcpp::Rcpp_cerr_get();
 #endif
 
+// make_trend_runtime
+SEXP make_trend_runtime(Rcpp::Nullable<Rcpp::List> trend, Rcpp::DataFrame data, Rcpp::NumericMatrix particle_matrix, Rcpp::List designs);
+RcppExport SEXP _EMC2_make_trend_runtime(SEXP trendSEXP, SEXP dataSEXP, SEXP particle_matrixSEXP, SEXP designsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type trend(trendSEXP);
+    Rcpp::traits::input_parameter< Rcpp::DataFrame >::type data(dataSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type particle_matrix(particle_matrixSEXP);
+    Rcpp::traits::input_parameter< Rcpp::List >::type designs(designsSEXP);
+    rcpp_result_gen = Rcpp::wrap(make_trend_runtime(trend, data, particle_matrix, designs));
+    return rcpp_result_gen;
+END_RCPP
+}
+// reset_trend_runtime
+void reset_trend_runtime(SEXP ptr);
+RcppExport SEXP _EMC2_reset_trend_runtime(SEXP ptrSEXP) {
+BEGIN_RCPP
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type ptr(ptrSEXP);
+    reset_trend_runtime(ptr);
+    return R_NilValue;
+END_RCPP
+}
+// trend_kernel_matrix_from_runtime_step
+Rcpp::NumericMatrix trend_kernel_matrix_from_runtime_step(SEXP trend_runtime_xptr, Rcpp::IntegerVector kernel_output_codes);
+RcppExport SEXP _EMC2_trend_kernel_matrix_from_runtime_step(SEXP trend_runtime_xptrSEXP, SEXP kernel_output_codesSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type trend_runtime_xptr(trend_runtime_xptrSEXP);
+    Rcpp::traits::input_parameter< Rcpp::IntegerVector >::type kernel_output_codes(kernel_output_codesSEXP);
+    rcpp_result_gen = Rcpp::wrap(trend_kernel_matrix_from_runtime_step(trend_runtime_xptr, kernel_output_codes));
+    return rcpp_result_gen;
+END_RCPP
+}
 // sp_new
 Rcpp::List sp_new(const int iter, const arma::cube& lambda_varimax, const int q, const int p, const int dim_all_c, const arma::mat& all_c, const arma::mat& lambda_hat, const arma::uvec& st, arma::mat cost_matrix, arma::mat perm);
 RcppExport SEXP _EMC2_sp_new(SEXP iterSEXP, SEXP lambda_varimaxSEXP, SEXP qSEXP, SEXP pSEXP, SEXP dim_all_cSEXP, SEXP all_cSEXP, SEXP lambda_hatSEXP, SEXP stSEXP, SEXP cost_matrixSEXP, SEXP permSEXP) {
@@ -754,6 +790,26 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// get_pars_c_step_oo
+Rcpp::NumericMatrix get_pars_c_step_oo(Rcpp::NumericMatrix particle_matrix, Rcpp::DataFrame trial_data, Rcpp::NumericVector constants, Rcpp::List designs, Rcpp::List bounds, Rcpp::List transforms, Rcpp::List pretransforms, SEXP trend_runtime_xptr, bool return_all_pars, Rcpp::IntegerVector kernel_output_codes);
+RcppExport SEXP _EMC2_get_pars_c_step_oo(SEXP particle_matrixSEXP, SEXP trial_dataSEXP, SEXP constantsSEXP, SEXP designsSEXP, SEXP boundsSEXP, SEXP transformsSEXP, SEXP pretransformsSEXP, SEXP trend_runtime_xptrSEXP, SEXP return_all_parsSEXP, SEXP kernel_output_codesSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type particle_matrix(particle_matrixSEXP);
+    Rcpp::traits::input_parameter< Rcpp::DataFrame >::type trial_data(trial_dataSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type constants(constantsSEXP);
+    Rcpp::traits::input_parameter< Rcpp::List >::type designs(designsSEXP);
+    Rcpp::traits::input_parameter< Rcpp::List >::type bounds(boundsSEXP);
+    Rcpp::traits::input_parameter< Rcpp::List >::type transforms(transformsSEXP);
+    Rcpp::traits::input_parameter< Rcpp::List >::type pretransforms(pretransformsSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type trend_runtime_xptr(trend_runtime_xptrSEXP);
+    Rcpp::traits::input_parameter< bool >::type return_all_pars(return_all_parsSEXP);
+    Rcpp::traits::input_parameter< Rcpp::IntegerVector >::type kernel_output_codes(kernel_output_codesSEXP);
+    rcpp_result_gen = Rcpp::wrap(get_pars_c_step_oo(particle_matrix, trial_data, constants, designs, bounds, transforms, pretransforms, trend_runtime_xptr, return_all_pars, kernel_output_codes));
+    return rcpp_result_gen;
+END_RCPP
+}
 // EMC2_call_custom_trend
 NumericVector EMC2_call_custom_trend(NumericMatrix trend_pars, NumericMatrix input, SEXP funptrSEXP);
 RcppExport SEXP _EMC2_EMC2_call_custom_trend(SEXP trend_parsSEXP, SEXP inputSEXP, SEXP funptrSEXPSEXP) {
@@ -797,6 +853,9 @@ END_RCPP
 }
 
 static const R_CallMethodDef CallEntries[] = {
+    {"_EMC2_make_trend_runtime", (DL_FUNC) &_EMC2_make_trend_runtime, 4},
+    {"_EMC2_reset_trend_runtime", (DL_FUNC) &_EMC2_reset_trend_runtime, 1},
+    {"_EMC2_trend_kernel_matrix_from_runtime_step", (DL_FUNC) &_EMC2_trend_kernel_matrix_from_runtime_step, 2},
     {"_EMC2_sp_new", (DL_FUNC) &_EMC2_sp_new, 10},
     {"_EMC2_calculate_subject_means", (DL_FUNC) &_EMC2_calculate_subject_means, 2},
     {"_EMC2_draw_alpha_from_design", (DL_FUNC) &_EMC2_draw_alpha_from_design, 3},
@@ -847,6 +906,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_EMC2_calc_ll_oo", (DL_FUNC) &_EMC2_calc_ll_oo, 11},
     {"_EMC2_get_pars_c_wrapper", (DL_FUNC) &_EMC2_get_pars_c_wrapper, 11},
     {"_EMC2_get_pars_c_wrapper_oo", (DL_FUNC) &_EMC2_get_pars_c_wrapper_oo, 11},
+    {"_EMC2_get_pars_c_step_oo", (DL_FUNC) &_EMC2_get_pars_c_step_oo, 10},
     {"_EMC2_EMC2_call_custom_trend", (DL_FUNC) &_EMC2_EMC2_call_custom_trend, 3},
     {"_EMC2_run_trend_rcpp", (DL_FUNC) &_EMC2_run_trend_rcpp, 6},
     {"_EMC2_c_add_charvectors", (DL_FUNC) &_EMC2_c_add_charvectors, 2},

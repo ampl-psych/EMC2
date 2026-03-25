@@ -128,6 +128,17 @@ public:
     throw std::runtime_error("BaseKernel::output_stream_name: unsupported code");
   }
 
+  // For single-step updating
+  virtual bool is_incremental() const { return false; }
+
+  virtual double run_one(const KernelParsView& kp,
+                         const Rcpp::NumericMatrix& cov,
+                         int row)
+  {
+    Rcpp::stop("run_one() not implemented for this kernel");
+    return NA_REAL;
+  }
+
 
 protected:
   void mark_run_complete() { has_run_ = true; }
@@ -211,6 +222,7 @@ protected:
   double q_ = NA_REAL;             // latest value
   double pe_ = NA_REAL;            // latest PE
   std::vector<double> pes_;        // PE per trial
+  int comp_pos_ = 0;   // subject-level trial counter - only used for single-step updates
 
 public:
   virtual ~DeltaKernel() {}
@@ -261,6 +273,16 @@ public:
     if (code == 1) return "Qvalue";
     if (code == 2) return "PE";
     throw std::runtime_error("DeltaKernel::output_stream_name: unsupported code");
+  }
+
+  bool is_incremental() const override { return true; }
+
+  void reset() override {
+    BaseKernel::reset();
+    q_        = NA_REAL;
+    pe_       = NA_REAL;
+    comp_pos_ = 0;
+    pes_.clear();
   }
 };
 
@@ -538,66 +560,149 @@ struct Poly4Kernel : BaseKernel {
 struct SimpleDelta : DeltaKernel {
   SimpleDelta() {}
 
-  void run(const KernelParsView& kernel_pars,
-           const Rcpp::NumericMatrix& covariate,
-           const std::vector<int>& comp_idx) override {
-             if (kernel_pars.cols.size() != 2) {
+  // void run(const KernelParsView& kernel_pars,
+  //          const Rcpp::NumericMatrix& covariate,
+  //          const std::vector<int>& comp_idx) override {
+  //            if (kernel_pars.cols.size() != 2) {
+  //              Rcpp::stop("SimpleDelta expects 2 parameter columns, got %d",
+  //                         (int)kernel_pars.cols.size());
+  //            }
+  //
+  //            using namespace Rcpp;
+  //
+  //            const int n_comp = static_cast<int>(comp_idx.size());
+  //            if (n_comp <= 0) {
+  //              out_.clear();
+  //              pes_.clear();
+  //              mark_run_complete();
+  //              return;
+  //            }
+  //
+  //            out_.assign(n_comp, NA_REAL);
+  //            pes_.assign(n_comp, NA_REAL);
+  //
+  //            const double* q0_col    = kernel_pars.cols[0];
+  //            const double* alpha_col = kernel_pars.cols[1];
+  //
+  //            // Initial compressed element
+  //            int row0 = comp_idx[0];             // full-data row index
+  //            if (row0 < 0 || row0 >= covariate.size()) {
+  //              stop("SimpleDelta::run: comp_idx[0] = %d out of range [0,%d)",
+  //                   row0, covariate.size());
+  //            }
+  //
+  //            q_      = q0_col[row0];
+  //            out_[0] = q_;
+  //
+  //            double pe = NA_REAL;
+  //
+  //            // j runs over COMPRESSED indices: 0..n_comp-2
+  //            for (int j = 0; j < n_comp - 1; ++j) {
+  //              int r = comp_idx[j];            // full-data row index
+  //              if (r < 0 || r >= covariate.size()) {
+  //                stop("SimpleDelta::run: comp_idx[%d] = %d out of range [0,%d)",
+  //                     j, r, covariate.size());
+  //              }
+  //
+  //              double x = covariate(r,0);
+  //              if (!ISNAN(x)) {
+  //                double alpha = alpha_col[r];
+  //                pe = x - q_;
+  //                q_ += alpha * pe;
+  //              } else {
+  //                pe = NA_REAL;
+  //              }
+  //              pes_[j] = pe;                   // compressed index
+  //
+  //              int next_j = j + 1;
+  //              out_[next_j] = q_;
+  //            }
+  //
+  //            mark_run_complete();
+  //          }
+
+  // First compressed row - initialization of
+  inline double init_step(const KernelParsView& kp,
+                          const double* cov_col,
+                          int row)
+  {
+    q_  = kp.cols[0][row];  // q0
+    pe_ = NA_REAL;
+
+    out_.push_back(q_);
+    pes_.push_back(NA_REAL);
+    return q_;
+  }
+
+  // Subsequent compressed rows
+  inline double step(const KernelParsView& kp,
+                     const double* cov_col,
+                     int row)
+  {
+    double x = cov_col[row];
+    if (!ISNAN(x)) {
+      double alpha = kp.cols[1][row];
+      pe_ = x - q_;
+      q_ += alpha * pe_;
+    } else {
+      pe_ = NA_REAL;
+    }
+
+    out_.push_back(q_);
+    pes_.push_back(pe_);
+    return q_;
+  }
+
+  void run(const KernelParsView& kp,
+           const Rcpp::NumericMatrix& cov,
+           const std::vector<int>& comp_idx) override
+           {
+             if (kp.cols.size() != 2)
                Rcpp::stop("SimpleDelta expects 2 parameter columns, got %d",
-                          (int)kernel_pars.cols.size());
-             }
+                          (int)kp.cols.size());
 
-             using namespace Rcpp;
+             const int n = static_cast<int>(comp_idx.size());
+             out_.clear();  out_.reserve(n);
+             pes_.clear();  pes_.reserve(n);
+             q_  = NA_REAL;
+             pe_ = NA_REAL;
 
-             const int n_comp = static_cast<int>(comp_idx.size());
-             if (n_comp <= 0) {
-               out_.clear();
-               pes_.clear();
+             if (n == 0) {
                mark_run_complete();
                return;
              }
 
-             out_.assign(n_comp, NA_REAL);
-             pes_.assign(n_comp, NA_REAL);
+             const double* cov_col = &cov(0, 0);
 
-             const double* q0_col    = kernel_pars.cols[0];
-             const double* alpha_col = kernel_pars.cols[1];
+             // First compressed row
+             init_step(kp, cov_col, comp_idx[0]);
 
-             // Initial compressed element
-             int row0 = comp_idx[0];             // full-data row index
-             if (row0 < 0 || row0 >= covariate.size()) {
-               stop("SimpleDelta::run: comp_idx[0] = %d out of range [0,%d)",
-                    row0, covariate.size());
-             }
-
-             q_      = q0_col[row0];
-             out_[0] = q_;
-
-             double pe = NA_REAL;
-
-             // j runs over COMPRESSED indices: 0..n_comp-2
-             for (int j = 0; j < n_comp - 1; ++j) {
-               int r = comp_idx[j];            // full-data row index
-               if (r < 0 || r >= covariate.size()) {
-                 stop("SimpleDelta::run: comp_idx[%d] = %d out of range [0,%d)",
-                      j, r, covariate.size());
-               }
-
-               double x = covariate(r,0);
-               if (!ISNAN(x)) {
-                 double alpha = alpha_col[r];
-                 pe = x - q_;
-                 q_ += alpha * pe;
-               } else {
-                 pe = NA_REAL;
-               }
-               pes_[j] = pe;                   // compressed index
-
-               int next_j = j + 1;
-               out_[next_j] = q_;
-             }
+             // Compressed rows – branch-free inside the loop
+             for (int j = 0; j < n-1; ++j) step(kp, cov_col, comp_idx[j]);
 
              mark_run_complete();
            }
+
+  double run_one(const KernelParsView& kp,
+                 const Rcpp::NumericMatrix& cov,
+                 int row) override
+                 {
+                   if (kp.cols.size() != 2)
+                     Rcpp::stop("SimpleDelta expects 2 parameter columns, got %d",
+                                (int)kp.cols.size());
+
+                   const double* cov_col = &cov(0, 0);
+
+                   double v;
+                   if (comp_pos_ == 0) {
+                     v = init_step(kp, cov_col, row);   // first trial for subject
+                   }
+                   v = step(kp, cov_col, row);        // subsequent trials
+
+                   ++comp_pos_;
+                   mark_run_complete();
+                   return v;
+                 }
 };
 
 struct Delta2LR : DeltaKernel {
