@@ -1275,6 +1275,26 @@ make_data_unconditional <- function(data, pars, design, model,
   ffun_cols   <- names(design$Ffunctions)
   p_types     <- names(model_list$p_types)
 
+  # Once, before the subject/trial loop — mirror design_model's Clist preparation
+  pnames <- names(model_list$p_types)
+  if (!is.list(design$Clist[[1]])) {
+    design$Clist <- stats::setNames(
+      lapply(seq_along(pnames), function(x) design$Clist),
+      pnames
+    )
+  } else {
+    missing_p_types <- pnames[!(pnames %in% names(design$Clist))]
+    if (length(missing_p_types) > 0) {
+      nok <- length(design$Clist)
+      for (i in seq_along(missing_p_types)) {
+        design$Clist[[missing_p_types[i]]] <- list(stats::contr.treatment)
+        names(design$Clist)[nok + i] <- missing_p_types[i]
+      }
+    }
+  }
+  # Attach per-parameter Clist as attribute of each formula
+  for (i in pnames) attr(design$Flist[[i]], "Clist") <- design$Clist[[i]]
+
   # Which parameters have formulas that reference an Ffunction-derived column?
   uses_ffun <- sapply(p_types, function(x) {
     any(all.vars(design$Flist[[x]]) %in% ffun_cols)
@@ -1292,7 +1312,7 @@ make_data_unconditional <- function(data, pars, design, model,
       if (is.null(cache[[key]])) {
         cache[[key]] <<- lapply(
           stats::setNames(cached_pars, cached_pars),
-          function(x) make_dm(design$Flist[[x]], Clist=design$Clist[[x]], da = dadm_slice,
+          function(x) make_dm(design$Flist[[x]], da = dadm_slice,
                               Fcovariates = design$Fcovariates,
                               compress_dms = FALSE)
         )
@@ -1301,7 +1321,7 @@ make_data_unconditional <- function(data, pars, design, model,
       # Ffunction-dependent parameters: always recompute from current slice
       fresh <- lapply(
         stats::setNames(uncached_pars, uncached_pars),
-        function(x) make_dm(design$Flist[[x]], Clist=design$Clist[[x]], da = dadm_slice,
+        function(x) make_dm(design$Flist[[x]], da = dadm_slice,
                             Fcovariates = design$Fcovariates,
                             compress_dms = FALSE)
       )
@@ -1468,11 +1488,15 @@ make_data_unconditional <- function(data, pars, design, model,
       # -- eg., does the current R repeat last trial's S?
       # so only re-call these then in case multiple rows are required?
       if (!is.null(design$Ffunctions)) {
+        # Materialize once before the loop
+        dadm_current <- lapply(dadm_subj_list, `[`, idx_curr)
+        class(dadm_current) <- "data.frame"
+        attr(dadm_current, "row.names") <- .set_row_names(length(idx_curr))
+
         for (i in names(design$Ffunctions)) {
-          dadm_current <- lapply(dadm_subj_list, `[`, idx_curr)
-          class(dadm_current) <- "data.frame"
-          attr(dadm_current, "row.names") <- .set_row_names(length(idx_curr))
-          dadm_subj_list[[i]][idx_curr] <- design$Ffunctions[[i]](dadm_current)
+          result <- design$Ffunctions[[i]](dadm_current)
+          dadm_current[[i]] <- result          # update slice for next function
+          dadm_subj_list[[i]][idx_curr] <- result  # write back to list
         }
       }
 
