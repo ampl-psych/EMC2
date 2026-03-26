@@ -257,12 +257,11 @@ struct TrendRuntime {
   void reset_all_kernels();
 
   // single-trial calls
-  // wrapper around phase-specific steps
-  void run_one_trial(ParamTable& pt, const Rcpp::DataFrame& trial_data);
-  void premap_step(ParamTable& pt, const Rcpp::DataFrame& trial_data);
-  void pretransform_step(ParamTable& pt, const Rcpp::DataFrame& trial_data);
-  void posttransform_step(ParamTable& pt, const Rcpp::DataFrame& trial_data);
-
+  // Applying a base
+  void apply_base_one_row(TrendOpRuntime& op, ParamTable& pt, int row);
+  void apply_base_step_for_op(TrendOpRuntime& op,
+                              ParamTable& pt,
+                              const Rcpp::DataFrame& trial_data);
 
   // Each trial&kernel, the kernel inputs need to be 're-filled' from the provided data
   void fill_step_input_for_row(const KernelSlotSpec& kspec,
@@ -270,13 +269,9 @@ struct TrendRuntime {
                                const Rcpp::DataFrame& trial_data,
                                int row_local,
                                Rcpp::NumericMatrix& input);
-  // Run kernels
-  void step_op_for_trial(TrendOpRuntime& op,
-                         ParamTable& pt,
-                         const Rcpp::DataFrame& trial_data);
-
-  // Applying a base
-  void apply_base_one_row(TrendOpRuntime& op, ParamTable& pt, int row);
+  void update_kernels_for_op(TrendOpRuntime& op,
+                             ParamTable& pt,
+                             const Rcpp::DataFrame& trial_data);
 
   Rcpp::NumericMatrix all_kernel_outputs(ParamTable& pt);
   Rcpp::NumericMatrix all_kernel_outputs(ParamTable& pt, const std::vector<int>& codes);

@@ -844,7 +844,6 @@ void TrendRuntime::apply_base_for_op(TrendOpRuntime& op,
 // Single-trial call functions for incremental use
 // -------------
 
-// First, fill the kernel inputs for a single row
 // Build a 1-row input for stepping, using local row index in this per-trial slice.
 void TrendRuntime::fill_step_input_for_row(const KernelSlotSpec& kspec,
                                            ParamTable& pt,
@@ -940,64 +939,70 @@ void TrendRuntime::fill_step_input_for_row(const KernelSlotSpec& kspec,
 
 
 // Run kernels for a single 'step' (row in dadm)
-void TrendRuntime::step_op_for_trial(TrendOpRuntime& op,
-                                     ParamTable& pt,
-                                     const Rcpp::DataFrame& trial_data)
+void TrendRuntime::update_kernels_for_op(TrendOpRuntime& op,
+                                         ParamTable& pt,
+                                         const Rcpp::DataFrame& trial_data)
 {
   using namespace Rcpp;
-
   const TrendOpSpec& spec = *op.spec;
   const int n_acc = pt.n_trials;
 
-  // Optional: extract 'at' column from trial_data if this op uses 'at'
   IntegerVector at_col;
   bool uses_at = spec.has_at;
   if (uses_at) {
-    if (!trial_data.containsElementNamed(spec.at.c_str())) {
-      stop("step_op_for_trial: data has no 'at' column '%s'", spec.at.c_str());
-    }
-    SEXP at_raw = trial_data[spec.at];
-    at_col = IntegerVector(at_raw);  // factor or integer
-    if (at_col.size() != n_acc) {
-      stop("step_op_for_trial: 'at' column '%s' has wrong length (%d != %d)",
+    if (!trial_data.containsElementNamed(spec.at.c_str()))
+      stop("update_kernels_for_op: no 'at' column '%s'", spec.at.c_str());
+    at_col = IntegerVector(trial_data[spec.at]);
+    if (at_col.size() != n_acc)
+      stop("update_kernels_for_op: 'at' column '%s' wrong length (%d != %d)",
            spec.at.c_str(), at_col.size(), n_acc);
-    }
   }
 
   for (int row = 0; row < n_acc; ++row) {
+    if (uses_at && at_col[row] != 1) continue;
 
-    // 1) Use current last-known Q for this row
-    apply_base_one_row(op, pt, row);
+    for (auto& k_rt : op.kernels) {
+      const KernelSlotSpec& kspec = *k_rt.spec;
 
-    // 2) Decide whether to update Q *for the next time step*
-    bool update = true;
-    if (uses_at) {
-      // Update only if at == 1 in *this* trial_data row
-      update = (at_col[row] == 1);
-    }
-
-    if (update) {
-      // Update kernels for this row using dynamic covariates and params
-      for (auto& k_rt : op.kernels) {
-        const KernelSlotSpec& kspec = *k_rt.spec;
-        if (!k_rt.kernel_ptr->is_incremental()) {
-          stop("Kernel '%s' used in step mode but is not incremental",
-               kspec.kernel.c_str());
-        }
-
-        // Multi-row input consistent with ParamTable shape
-        NumericMatrix input(n_acc, kspec.kernel_input.ncol());
-        fill_step_input_for_row(kspec, pt, trial_data, row, input);
-
-        KernelParsView kp_view = make_kernel_pars_view(pt, k_rt.kernel_par_indices);
-        // Use row as index into both params and input
-        k_rt.kernel_ptr->run_one(kp_view, input, /*row=*/row);
+      if (!k_rt.kernel_ptr->is_incremental()) {
+        // Non-sequential: skip until run_one is implemented
+        continue;
       }
+
+      Rcpp::NumericMatrix input(n_acc, kspec.kernel_input.ncol());
+      fill_step_input_for_row(kspec, pt, trial_data, row, input);
+
+      KernelParsView kp_view = make_kernel_pars_view(pt, k_rt.kernel_par_indices);
+      k_rt.kernel_ptr->run_one(kp_view, input, row);
     }
   }
 }
 
 // Apply the base for a single trial
+void TrendRuntime::apply_base_step_for_op(TrendOpRuntime& op,
+                                          ParamTable& pt,
+                                          const Rcpp::DataFrame& trial_data)
+{
+  using namespace Rcpp;
+  const TrendOpSpec& spec = *op.spec;
+  const int n_acc = pt.n_trials;
+
+  IntegerVector at_col;
+  bool uses_at = spec.has_at;
+  if (uses_at) {
+    if (!trial_data.containsElementNamed(spec.at.c_str()))
+      stop("apply_base_step_for_op: no 'at' column '%s'", spec.at.c_str());
+    at_col = IntegerVector(trial_data[spec.at]);
+    if (at_col.size() != n_acc)
+      stop("apply_base_step_for_op: 'at' column '%s' wrong length (%d != %d)",
+           spec.at.c_str(), at_col.size(), n_acc);
+  }
+
+  for (int row = 0; row < n_acc; ++row) {
+    apply_base_one_row(op, pt, row);
+  }
+}
+
 void TrendRuntime::apply_base_one_row(TrendOpRuntime& op, ParamTable& pt, int row)
 {
   const TrendOpSpec& spec = *op.spec;
@@ -1030,33 +1035,6 @@ void TrendRuntime::apply_base_one_row(TrendOpRuntime& op, ParamTable& pt, int ro
   double base_term = (base == "exp_lin" || base == "lin_exp") ? std::exp(p) : p;
   target[row] = base_term + contrib;
 }
-
-// Single-trial helpers
-void TrendRuntime::premap_step(ParamTable& pt, const Rcpp::DataFrame& trial_data) {
-  for (auto& op : premap_ops) {
-    step_op_for_trial(op, pt, trial_data);
-  }
-}
-
-void TrendRuntime::pretransform_step(ParamTable& pt, const Rcpp::DataFrame& trial_data) {
-  for (auto& op : pretransform_ops) {
-    step_op_for_trial(op, pt, trial_data);
-  }
-}
-
-void TrendRuntime::posttransform_step(ParamTable& pt, const Rcpp::DataFrame& trial_data) {
-  for (auto& op : posttransform_ops) {
-    step_op_for_trial(op, pt, trial_data);
-  }
-}
-
-void TrendRuntime::run_one_trial(ParamTable& pt, const Rcpp::DataFrame& trial_data)
-{
-  premap_step(pt, trial_data);
-  pretransform_step(pt, trial_data);
-  posttransform_step(pt, trial_data);
-}
-
 
 
 void TrendRuntime::reset_all_kernels() {

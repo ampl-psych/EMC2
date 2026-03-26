@@ -1226,16 +1226,16 @@ verbal_trend <- function(design_matrix, trend) {
 
 
 
-subset_dadm <- function(dadm_full, rows, designs = NULL) {
-  out <- dadm_full[rows, , drop = FALSE]
-  attr(out, "designs")          <- designs
-  attr(out, "constants")        <- attr(dadm_full, "constants")
-  attr(out, "p_names")          <- attr(dadm_full, "p_names")
-  attr(out, "sampled_p_names")  <- attr(dadm_full, "sampled_p_names")
-  if (!is.null(attr(dadm_full, "covariate_maps")))
-    attr(out, "covariate_maps") <- attr(dadm_full, "covariate_maps")
-  out
-}
+# subset_dadm <- function(dadm_full, rows, designs = NULL) {
+#   out <- dadm_full[rows, , drop = FALSE]
+#   attr(out, "designs")          <- designs
+#   attr(out, "constants")        <- attr(dadm_full, "constants")
+#   attr(out, "p_names")          <- attr(dadm_full, "p_names")
+#   attr(out, "sampled_p_names")  <- attr(dadm_full, "sampled_p_names")
+#   if (!is.null(attr(dadm_full, "covariate_maps")))
+#     attr(out, "covariate_maps") <- attr(dadm_full, "covariate_maps")
+#   out
+# }
 
 make_data_unconditional <- function(data, pars, design, model,
                                     return_trialwise_parameters,
@@ -1254,6 +1254,8 @@ make_data_unconditional <- function(data, pars, design, model,
     design, model_fun, add_acc = FALSE, compress = FALSE,
     verbose = FALSE, rt_check = FALSE, compress_dms = FALSE
   )
+  if(!'R' %in% names(dadm_full)) dadm_full$R <- NA
+  if(!'rt' %in% names(dadm_full)) dadm_full$rt <- NA
 
   # Name Flist by the LHS of each formula if not already named
   if (is.null(names(design$Flist))) {
@@ -1282,9 +1284,9 @@ make_data_unconditional <- function(data, pars, design, model,
 
   make_designs_cached <- local({
     cache <- list()
-    function(dadm_slice) {
-      key <- paste(as.character(unlist(dadm_slice[1, factor_cols])),
-                   collapse = "_")
+    function(dadm_slice, key) {
+      # key <- paste(as.character(unlist(dadm_slice[1, factor_cols])),
+      #              collapse = "_")
 
       # Condition-stable parameters: cache by factor combination
       if (is.null(cache[[key]])) {
@@ -1318,80 +1320,106 @@ make_data_unconditional <- function(data, pars, design, model,
   if (is.null(constants)) constants <- NA
 
   for (subj in subj_levels) {
+    # pre-allocate everything we can
     sub_trialwise_parameters <- NULL
     subj_mask <- dadm_full$subjects == subj
     if (!any(subj_mask)) next
+    subj_rows <- which(dadm_full$subjects == subj)
+    if (!length(subj_rows)) next
 
-    trials_subj        <- dadm_full$trials[subj_mask]
-    trial_vals         <- sort(unique(trials_subj))
-    subj_idx_in_levels <- which(subj == subj_levels)
+    # single subset per subject
+    dadm_subj <- dadm_full[subj_rows, , drop = FALSE]
+    trials_subj <- dadm_subj$trials
+    trial_vals  <- sort(unique(trials_subj))
 
-    # We will build a TrendRuntime once per subject (on first trial)
-    trend_runtime <- NULL
+    # convert to list - substantially faster for lookups & writing
+    dadm_subj_list <- as.list(dadm_subj)
+
+    # Now idx_by_subj_trial
+    idx_by_trial <- split(seq_len(nrow(dadm_subj)), dadm_subj$trials)
+
+    # Before trial loop, build trial -> key map once
+    # Extract factor columns as integer vectors once
+    factor_int_cols <- lapply(factor_cols, function(fc) as.integer(dadm_subj[[fc]]))
+    names(factor_int_cols) <- factor_cols
+
+    # Build keys using first row of each trial
+    first_rows <- vapply(idx_by_trial, `[`, integer(1), 1)
+    trial_keys <- vapply(first_rows, function(r)
+      paste(vapply(factor_int_cols, `[`, integer(1), r), collapse = "_"),
+      character(1)
+    )
+
+    # Build "particle matrix" once
+    particle_matrix <- matrix(
+      as.numeric(pars[which(subj == subj_levels), , drop = FALSE]),
+      nrow = 1
+    )
+    colnames(particle_matrix) <- colnames(pars)
+
+    # Build TrendRuntime once
+    if (!is.null(model_list$trend)) {
+      trend_runtime <- make_trend_runtime(
+        trend           = model_list$trend,
+        data            = dadm_subj,
+        particle_matrix = particle_matrix,
+        designs         = attr(dadm_full, 'designs')      # only names matter
+      )
+    }
+
+    # for saving trialwise parameters
+    tw_list <- vector("list", length(trial_vals))
+
+    # indices for columns to write into
+    R_col  <- match("R",  names(dadm_subj_list))
+    rt_col <- match("rt", names(dadm_subj_list))
+    # should do the same for feedback and ffunctions
+    # fb_col_indices <- lapply(fb_col_names, function(nm) match(nm, names(dadm_subj)))
 
     for (j in seq_along(trial_vals)) {
       current_trial <- trial_vals[j]
+      idx_curr <- idx_by_trial[[as.character(current_trial)]]
       is_last_trial <- j == length(trial_vals)
 
-      current_mask <- subj_mask & dadm_full$trials == current_trial
-
       # Slice current trial (accumulator-expanded) for design/model
-      dadm_current_raw <- dadm_full[current_mask, , drop = FALSE]
+      dadm_current <- lapply(dadm_subj_list, `[`, idx_curr)
+      class(dadm_current) <- "data.frame"
+      attr(dadm_current, "row.names") <- .set_row_names(length(idx_curr))
 
-      # Get current-trial designs (cached by condition)
-      designs_current <- make_designs_cached(dadm_current_raw)
+      # Get current-trial designs (cached by condition). Not sure if sufficiently generic...
+      key <- trial_keys[[as.character(current_trial)]]
+      designs_current <- make_designs_cached(dadm_current, key)
 
-      # Parameter vector for this subject (1-row matrix)
-      particle_matrix <- matrix(
-        as.numeric(pars[subj_idx_in_levels, , drop = FALSE]),
-        nrow = 1
-      )
-      colnames(particle_matrix) <- colnames(pars)
+      if (!is.null(attr(dadm_full, "covariate_maps"))) attr(dadm_current, "covariate_maps") <- attr(dadm_full, "covariate_maps")
+      # also here, pre-split -- or alternatively, calculate here?
 
-      # Build TrendRuntime once per subject (using full subject data)
-      if (j == trial_vals[1]) {
-        trend_runtime <- make_trend_runtime(
-          trend           = model_list$trend,
-          data            = dadm_full[subj_mask, , drop = FALSE],
-          particle_matrix = particle_matrix,
-          designs         = designs_current
-          # some representative design so it builds the correct parameter names
-        )
-      }
-
-      # Attach designs/constants attributes for this trial
-      dadm_current <- subset_dadm(dadm_full, current_mask, designs = designs_current)
-
-      # -------------------------------------------------------------------
-      # NEW: step-wise parameter mapping with dynamic covariates and at
-      # -------------------------------------------------------------------
-      pm_current <- if (!is.null(model_list$trend)) {
-        # Use step wrapper that calls get_pars_matrix_step_oo + TrendRuntime
-        get_pars_c_step_oo(
-          particle_matrix       = particle_matrix,
-          trial_data            = dadm_current,
-          constants             = constants,
-          designs               = designs_current,
-          bounds                = model_list$bound,
-          transforms            = model_list$transform,
-          pretransforms         = model_list$pre_transform,
-          trend_runtime_xptr    = trend_runtime,
-          return_all_pars       = TRUE,
-          kernel_output_codes   = kernel_output_codes
+      if(!is.null(model_list$trend)) {
+        pm_current <- get_pars_c_step_oo(
+          particle_matrix     = particle_matrix,
+          trial_data          = dadm_current,
+          constants           = constants,
+          designs             = designs_current,
+          bounds              = model_list$bound,
+          transforms          = model_list$transform,
+          pretransforms       = model_list$pre_transform,
+          trend_runtime_xptr  = trend_runtime,
+          return_all_pars     = TRUE,
+          kernel_output_codes = kernel_output_codes,
+          apply_base          = TRUE,
+          update_kernels      = FALSE
         )
       } else {
-        # No trend: just map & transform for this trial using the batch path
-        get_pars_c_wrapper_oo(
-          particle_matrix       = particle_matrix,
-          data                  = dadm_current,
-          constants             = constants,
-          designs               = designs_current,
-          bounds                = model_list$bound,
-          transforms            = model_list$transform,
-          pretransforms         = model_list$pre_transform,
-          trend                 = NULL,
-          return_kernel_matrix  = FALSE,
-          return_all_pars       = TRUE
+        pm_current <- get_pars_c_wrapper_oo(
+          particle_matrix      = particle_matrix,
+          data                 = dadm_current,
+          constants            = constants,
+          designs              = designs_current,
+          bounds               = model_list$bound,
+          transforms           = model_list$transform,
+          pretransforms        = model_list$pre_transform,
+          trend                = NULL,
+          return_kernel_matrix = FALSE,
+          return_all_pars      = TRUE
         )
       }
 
@@ -1405,69 +1433,122 @@ make_data_unconditional <- function(data, pars, design, model,
       }
 
       # Sample R and rt
-      Rrt <- if (any(names(dadm_current) == "RACE")) {
-        RACE_rfun(dadm_current, pr, model_fun)
+      if (any(names(dadm_current) == "RACE")) {
+        Rrt <- RACE_rfun(dadm_current, pr, model_fun)
       } else {
-        model_list$rfun(dadm_current, pr)
+        Rrt <- model_list$rfun(dadm_current, pr)
       }
 
       # Write back into dadm_full so subsequent trials see updated history
-      for (nm in dimnames(Rrt)[[2]])
-        dadm_full[current_mask, nm] <- Rrt[, nm]
+      dadm_subj_list[[R_col]][idx_curr]  <- Rrt[, "R"]
+      dadm_subj_list[[rt_col]][idx_curr] <- Rrt[, "rt"]
 
       # Feedback functions (trend)
       if (!is.null(model_list$trend)) {
         for (trend_n in seq_along(model_list$trend)) {
           fb <- model_list$trend[[trend_n]]$feedback_fun
           if (!is.null(fb)) {
-            # Window is all rows for this subject up to and including this trial
-            window_rows <- which(subj_mask & dadm_full$trials <= current_trial)
             for (i in seq_along(fb)) {
+              # repeated materializing? Seems most general, but also slowest...
+              dadm_current <- lapply(dadm_subj_list, `[`, idx_curr)
+              class(dadm_current) <- "data.frame"
+              attr(dadm_current, "row.names") <- .set_row_names(length(idx_curr))
+
               nams <- names(fb)[i]
-              dadm_full[window_rows, nams] <-
-                fb[[i]](dadm_full[window_rows, , drop = FALSE])
+              ## also pre-index names here? might shave off a few secs
+              dadm_subj_list[[nams]][idx_curr] <- fb[[i]](dadm_current[, , drop = FALSE])
             }
           }
         }
       }
 
+      # 3. Reapply Ffunctions? Why here, why not before design?
+      # ...but if before design -- why do this at all in the loop, and not just once?
+      # I suppose it's because Ffunctions may require interdependencies between trials
+      # -- eg., does the current R repeat last trial's S?
+      # so only re-call these then in case multiple rows are required?
+      if (!is.null(design$Ffunctions)) {
+        for (i in names(design$Ffunctions)) {
+          dadm_subj[idx_curr, i] <- design$Ffunctions[[i]](dadm_subj[idx_curr, , drop = FALSE])
+        }
+      }
+
+      # update trend kernels for next trial
+      if (!is.null(model_list$trend)) {
+        # materialize again
+        dadm_current <- lapply(dadm_subj_list, `[`, idx_curr)
+        class(dadm_current) <- "data.frame"
+        attr(dadm_current, "row.names") <- .set_row_names(length(idx_curr))
+
+        if (!is.null(attr(dadm_full, "covariate_maps"))) attr(dadm_current, "covariate_maps") <- attr(dadm_full, "covariate_maps")
+        get_pars_c_step_oo(
+            particle_matrix     = particle_matrix,
+            trial_data          = dadm_current,
+            constants           = constants,
+            designs             = designs_current,
+            bounds              = model_list$bound,
+            transforms          = model_list$transform,
+            pretransforms       = model_list$pre_transform,
+            trend_runtime_xptr  = trend_runtime,
+            return_all_pars     = FALSE,
+            kernel_output_codes = kernel_output_codes,
+            apply_base          = TRUE,
+            update_kernels      = TRUE  # only kernel update
+        )
+      }
+
       # (Optional) collect trialwise parameters per trial
       if (return_trialwise_parameters) {
-        # For now, store the transformed parameters for this trial.
-        # You can post-process to pick first accumulator etc.
-        df_pr <- as.data.frame(pr)
-        df_pr$subject <- subj
-        df_pr$trial   <- current_trial
-        sub_trialwise_parameters <- rbind(sub_trialwise_parameters, df_pr)
+        # Store the transformed parameters for this trial
+        tw_list[[j]]  <- pr
       }
       if(is_last_trial) {
-        if(!is.null(model_list$trend)) {
-          # extract & expand kernel traces
-          kernel_traces <- trend_kernel_matrix_from_runtime_step(
-            trend_runtime_xptr  = trend_runtime,
-            kernel_output_codes = kernel_output_codes
-          )
-          if(!is.null(model_list$trend[[1]]$at)) {
-            # cns <- colnames(kernel_traces)
-            idx <- cumsum(as.numeric(dadm_full[subj_mask,model_list$trend[[1]]$at])==1)
-            kernel_traces <- kernel_traces[idx, ,drop=FALSE]
-            # colnames(kernel_traces) <- cns
+        dadm_subj <- as.data.frame(dadm_subj_list)
+
+        if(return_trialwise_parameters) {
+          combined <- do.call(rbind, tw_list)
+          # Add subject and trial columns once, not per-trial
+          sub_trialwise_parameters <- as.data.frame(combined)
+          sub_trialwise_parameters$subject <- rep(subj, each = nrow(combined)/length(trial_vals))
+          sub_trialwise_parameters$trial <- rep(trial_vals, each = n_acc)
+
+          if(!is.null(model_list$trend)) {
+            # extract & expand kernel traces
+            kernel_traces <- trend_kernel_matrix_from_runtime_step(
+              trend_runtime_xptr  = trend_runtime,
+              kernel_output_codes = kernel_output_codes
+            )
+            if(!is.null(model_list$trend[[1]]$at)) {
+              at_name <- model_list$trend[[1]]$at
+              idx <- cumsum(as.numeric(dadm_subj[[at_name]]) == 1)
+              kernel_traces <- kernel_traces[idx, , drop = FALSE]
+            }
+            sub_trialwise_parameters <- cbind(sub_trialwise_parameters, kernel_traces)
           }
-          sub_trialwise_parameters <- cbind(sub_trialwise_parameters, kernel_traces)
-          # attr(sub_trialwise_parameters, 'covariates') <- kernel_traces
         }
       }
     }
 
+    # post-trials, subject loop
     if (return_trialwise_parameters) {
       trialwise_parameters <- rbind(trialwise_parameters,
                                     sub_trialwise_parameters)
     }
+    # Ensure dadm_full and dadm_subj have the same columns before replacement
+    missing_in_full <- setdiff(names(dadm_subj), names(dadm_full))
+    if (length(missing_in_full)) {
+      for (nm in missing_in_full) {
+        dadm_full[[nm]] <- NA  # initialize new columns in full data
+      }
+    }
+
+    # Reorder dadm_subj columns to match dadm_full
+    dadm_subj <- dadm_subj[, names(dadm_full), drop = FALSE]
+    dadm_full[subj_rows, ] <- dadm_subj
   }
 
-  # -----------------------------------------------------------------------
-  # Step 4: Final pass + trim output columns.
-  # -----------------------------------------------------------------------
+  # Step 4: Final pass, trim output columns.
+  # is this needed, though?
   first_lR <- levels(dadm_full$lR)[1]
   data_out  <- dadm_full[dadm_full$lR == first_lR, , drop = FALSE]
 

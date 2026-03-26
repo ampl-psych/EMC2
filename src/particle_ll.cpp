@@ -746,178 +746,181 @@ NumericMatrix get_pars_c_wrapper_oo(NumericMatrix particle_matrix,
 }
 
 
-// Single-step updater: one call = one trial (with n_acc rows)
-Rcpp::NumericMatrix get_pars_matrix_step_oo(
-    ParamTable& param_table,
+
+//
+void run_phased_step(
+    ParamTable& pt,
     const Rcpp::DataFrame& trial_data,
     const Rcpp::List& designs,
     TrendRuntime* trend_runtime,
     const std::vector<TransformSpec>& full_specs,
-    const Rcpp::CharacterVector& keep_names,
-    bool return_covariate_matrix = false,
-    bool return_all_pars = false,
-    const std::vector<int>& kernel_output_codes = std::vector<int>{1})
-{
-  if (!trend_runtime) {
-    Rcpp::stop("get_pars_matrix_step_oo: trend_runtime must be non-null");
-  }
-
-  const int n_designs = designs.size();
-  Rcpp::LogicalVector map_next(n_designs, false);
-  std::unordered_set<std::string> transform_next;
-
-  const auto& premap_set       = trend_runtime->premap_trend_params();
-  const auto& pretransform_set = trend_runtime->pretransform_trend_params();
-
-  // 3) Premap trends (single-trial)
-  if (trend_runtime->has_premap()) {
-    // Map only designs needed for premap ops
-    map_next = trend_runtime->premap_design_mask(designs);
-    param_table.map_from_designs(designs, map_next);
-
-    // Transform only premap trend params
-    transform_next = premap_set;
-    if (!transform_next.empty()) {
-      auto specs_premap = filter_specs_by_param_set(param_table, full_specs, transform_next);
-      c_do_transform_pt(param_table, specs_premap);
-    }
-
-    // Run premap ops for this trial (dynamic covariates + dynamic at)
-    trend_runtime->premap_step(param_table, trial_data);
-  }
-
-  // 4) Map designs for remaining parameters
-  for (int i = 0; i < n_designs; ++i) {
-    bool is_premap = trend_runtime->has_premap() ? map_next[i] : false;
-    map_next[i] = !is_premap;
-  }
-  param_table.map_from_designs(designs, map_next);
-
-  // 5) Pretransform trends
-  if (trend_runtime->has_pretransform()) {
-    // Transform only pretransform trend params
-    transform_next = pretransform_set;
-    if (!transform_next.empty()) {
-      auto specs_pretransform = filter_specs_by_param_set(param_table, full_specs, transform_next);
-      c_do_transform_pt(param_table, specs_pretransform);
-    }
-
-    // Run pretransform ops for this trial
-    trend_runtime->pretransform_step(param_table, trial_data);
-  }
-
-  // 6) transforms for all non-trend parameters
-  transform_next = param_names_excluding(param_table, { &premap_set, &pretransform_set });
-  auto postmap_specs = filter_specs_by_param_set(param_table, full_specs, transform_next);
-  c_do_transform_pt(param_table, postmap_specs);
-
-  // 7) Posttransform trends
-  if (trend_runtime->has_posttransform()) {
-    trend_runtime->posttransform_step(param_table, trial_data);
-  }
-
-  // 8) Kernel outputs in step mode
-  if (return_covariate_matrix) {
-    Rcpp::stop("return_kernel_matrix not supported in get_pars_matrix_step_oo");
-  }
-
-  if (return_all_pars) {
-    return param_table.materialize();
-  }
-
-  return param_table.materialize_by_param_names(keep_names);
-}
-
-// [[Rcpp::export]]
-Rcpp::NumericMatrix get_pars_c_step_oo(
-    Rcpp::NumericMatrix particle_matrix,     // can be 1 row; we use row 0
-    Rcpp::DataFrame trial_data,              // this trial's n_acc rows
-    Rcpp::NumericVector constants,
-    Rcpp::List designs,
-    Rcpp::List bounds,
-    Rcpp::List transforms,
-    Rcpp::List pretransforms,
-    SEXP trend_runtime_xptr,                 // external TrendRuntime*
-    bool return_all_pars = false,
-    Rcpp::IntegerVector kernel_output_codes = 1)
+    bool do_apply_base,
+    bool do_update_kernels)
 {
   using namespace Rcpp;
 
-  const int n_trials = trial_data.nrow();
-  if (n_trials <= 0) {
-    stop("get_pars_c_step_oo: trial_data has zero rows");
+  if (!trend_runtime)
+    stop("run_phased_step: trend_runtime must be non-null");
+
+  const auto& premap_set       = trend_runtime->plan->premap_trend_params;
+  const auto& pretransform_set = trend_runtime->plan->pretransform_trend_params;
+
+  // ---- Premap phase ----
+  if (trend_runtime->has_premap()) {
+    LogicalVector map_mask = trend_runtime->premap_design_mask(designs);
+    pt.map_from_designs(designs, map_mask);
+
+    if (!premap_set.empty()) {
+      auto specs = filter_specs_by_param_set(pt, full_specs, premap_set);
+      c_do_transform_pt(pt, specs);
+    }
+
+    for (auto& op : trend_runtime->premap_ops) {
+      if (do_apply_base)     trend_runtime->apply_base_step_for_op(op, pt, trial_data);
+      if (do_update_kernels) trend_runtime->update_kernels_for_op(op, pt, trial_data);
+    }
   }
 
-  if (Rf_isNull(colnames(particle_matrix))) {
-    stop("p_matrix must have column names for pretransforms/transform specs");
+  // ---- Map remaining (non-premap) designs ----
+  {
+    const int n = designs.size();
+    LogicalVector premap_mask = trend_runtime->has_premap()
+      ? trend_runtime->premap_design_mask(designs)
+        : LogicalVector(n, false);
+    LogicalVector remaining(n);
+    for (int i = 0; i < n; ++i) remaining[i] = !premap_mask[i];
+    pt.map_from_designs(designs, remaining);
   }
 
-  // 1. Pre-transform p_matrix (like in the batch wrapper)
+  // ---- Pretransform phase ----
+  if (trend_runtime->has_pretransform()) {
+    if (!pretransform_set.empty()) {
+      auto specs = filter_specs_by_param_set(pt, full_specs, pretransform_set);
+      c_do_transform_pt(pt, specs);
+    }
+
+    for (auto& op : trend_runtime->pretransform_ops) {
+      if (do_apply_base)     trend_runtime->apply_base_step_for_op(op, pt, trial_data);
+      if (do_update_kernels) trend_runtime->update_kernels_for_op(op, pt, trial_data);
+    }
+  }
+
+  // ---- Transform all non-trend params ----
+  {
+    auto non_trend = param_names_excluding(pt, { &premap_set, &pretransform_set });
+    auto specs     = filter_specs_by_param_set(pt, full_specs, non_trend);
+    c_do_transform_pt(pt, specs);
+  }
+
+  // ---- Posttransform phase ----
+  if (trend_runtime->has_posttransform()) {
+    for (auto& op : trend_runtime->posttransform_ops) {
+      if (do_apply_base)     trend_runtime->apply_base_step_for_op(op, pt, trial_data);
+      if (do_update_kernels) trend_runtime->update_kernels_for_op(op, pt, trial_data);
+    }
+  }
+}
+
+static ParamTable build_param_table_for_step(
+    Rcpp::NumericMatrix particle_matrix,
+    const Rcpp::DataFrame& trial_data,
+    const Rcpp::NumericVector& constants,
+    const Rcpp::List& designs,
+    const Rcpp::List& pretransforms,
+    const Rcpp::List& transforms,
+    std::vector<TransformSpec>& full_specs_out)
+{
+  using namespace Rcpp;
+
+  // 1. Pre-transform
   std::vector<TransformSpec> t_specs = make_transform_specs(particle_matrix, pretransforms);
   particle_matrix = c_do_transform(particle_matrix, t_specs);
 
   // 2. Add constants
-  bool has_constants = !(constants.size() == 1 &&
-                         NumericVector::is_na(constants[0]));
+  bool has_constants = !(constants.size() == 1 && NumericVector::is_na(constants[0]));
   if (has_constants) {
     particle_matrix = add_constants_columns(particle_matrix, constants);
   }
 
-  // 3. Parameter vector for this step: use row 0
+  // 3. p_vector from row 0
   NumericVector p_vector = particle_matrix(0, _);
   p_vector.attr("names") = colnames(particle_matrix);
 
-  // 4. Build a fresh ParamTable for this trial (n_trials = n_acc)
-  ParamTable param_table =
+  // 4. Build ParamTable
+  const int n_trials = trial_data.nrows();
+  ParamTable pt =
     ParamTable::from_p_vector_and_designs(p_vector, designs, n_trials);
 
-  // 5. Transform specs for this ParamTable
-  std::vector<TransformSpec> full_specs =
-    make_transform_specs_for_paramtable(param_table, transforms);
+  // 5. Full transform specs (output for caller)
+  full_specs_out = make_transform_specs_for_paramtable(pt, transforms);
 
-  // 6. TrendRuntime from external pointer
-  if (Rf_isNull(trend_runtime_xptr)) {
+  return pt;
+}
+
+// [[Rcpp::export]]
+Rcpp::NumericMatrix get_pars_c_step_oo(
+    Rcpp::NumericMatrix particle_matrix,
+    Rcpp::DataFrame trial_data,
+    Rcpp::NumericVector constants,
+    Rcpp::List designs,
+    Rcpp::List bounds,        // kept for API symmetry; unused in step
+    Rcpp::List transforms,
+    Rcpp::List pretransforms,
+    SEXP trend_runtime_xptr,
+    bool return_all_pars      = false,
+    Rcpp::IntegerVector kernel_output_codes = 1,
+    bool apply_base           = true,   // Phase 1 default
+    bool update_kernels       = false   // Phase 2 off by default
+) {
+  using namespace Rcpp;
+
+  if (Rf_isNull(colnames(particle_matrix)))
+    stop("particle_matrix must have column names");
+
+  if (Rf_isNull(trend_runtime_xptr))
     stop("get_pars_c_step_oo: trend_runtime_xptr must be non-null");
-  }
+
   XPtr<TrendRuntime> rt(trend_runtime_xptr);
   TrendRuntime* trend_runtime_ptr = rt.get();
+  if (!trend_runtime_ptr)
+    stop("get_pars_c_step_oo: invalid TrendRuntime pointer");
 
-  // 7. Decide which parameters to return
-  CharacterVector dnames = designs.names();
-  CharacterVector return_param_names;
+  if (trial_data.nrows() <= 0)
+    stop("get_pars_c_step_oo: trial_data has zero rows");
 
-  if (!trend_runtime_ptr) {
-    // No trend (unlikely in step mode, but handle it)
-    if (Rf_isNull(dnames)) {
-      return_param_names = CharacterVector(0);
-    } else {
-      return_param_names = dnames;
-    }
-  } else {
-    // Exclude all trend parameters, like in the batch path
+  std::vector<TransformSpec> full_specs;
+  ParamTable pt = build_param_table_for_step(
+    particle_matrix, trial_data, constants,
+    designs, pretransforms, transforms, full_specs
+  );
+
+  // Decide which params to materialize if we’re returning anything
+  Rcpp::CharacterVector keep_names(0);
+  if (apply_base && !update_kernels) {
+    // Phase 1: behave as before (exclude trend params)
+    CharacterVector dnames = designs.names();
     const auto& trend_params = trend_runtime_ptr->all_trend_params();
-    if (Rf_isNull(dnames)) {
-      return_param_names = CharacterVector(0);
-    } else {
-      return_param_names = names_excluding(dnames, { &trend_params });
-    }
+    keep_names = Rf_isNull(dnames)
+      ? CharacterVector(0)
+        : names_excluding(dnames, { &trend_params });
   }
 
-  // 8. Convert kernel_output_codes to std::vector<int> (for future use; currently unused)
-  std::vector<int> kernel_codes;
-  kernel_codes.reserve(kernel_output_codes.size());
-  for (int i = 0; i < kernel_output_codes.size(); ++i) {
-    kernel_codes.push_back(kernel_output_codes[i]);
+  // Run phased logic once with the chosen behaviour
+  run_phased_step(
+    pt, trial_data, designs, trend_runtime_ptr, full_specs,
+    /*do_apply_base=*/apply_base,
+    /*do_update_kernels=*/update_kernels
+  );
+
+  // Decide what to return
+  if (!apply_base && update_kernels) {
+    // Phase 2: kernel update only → we don’t need to return params
+    return NumericMatrix(0, 0);
   }
 
-  // 9. Call the step matrix builder
-  return get_pars_matrix_step_oo(param_table,
-                                 trial_data,
-                                 designs,
-                                 trend_runtime_ptr,
-                                 full_specs,
-                                 return_param_names,
-                                 /*return_covariate_matrix=*/false,
-                                 return_all_pars,
-                                 kernel_codes);
+  if (return_all_pars) {
+    return pt.materialize();
+  }
+
+  return pt.materialize_by_param_names(keep_names);
 }

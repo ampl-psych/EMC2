@@ -791,8 +791,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // get_pars_c_step_oo
-Rcpp::NumericMatrix get_pars_c_step_oo(Rcpp::NumericMatrix particle_matrix, Rcpp::DataFrame trial_data, Rcpp::NumericVector constants, Rcpp::List designs, Rcpp::List bounds, Rcpp::List transforms, Rcpp::List pretransforms, SEXP trend_runtime_xptr, bool return_all_pars, Rcpp::IntegerVector kernel_output_codes);
-RcppExport SEXP _EMC2_get_pars_c_step_oo(SEXP particle_matrixSEXP, SEXP trial_dataSEXP, SEXP constantsSEXP, SEXP designsSEXP, SEXP boundsSEXP, SEXP transformsSEXP, SEXP pretransformsSEXP, SEXP trend_runtime_xptrSEXP, SEXP return_all_parsSEXP, SEXP kernel_output_codesSEXP) {
+Rcpp::NumericMatrix get_pars_c_step_oo(Rcpp::NumericMatrix particle_matrix, Rcpp::DataFrame trial_data, Rcpp::NumericVector constants, Rcpp::List designs, Rcpp::List bounds, Rcpp::List transforms, Rcpp::List pretransforms, SEXP trend_runtime_xptr, bool return_all_pars, Rcpp::IntegerVector kernel_output_codes, bool apply_base, bool update_kernels);
+RcppExport SEXP _EMC2_get_pars_c_step_oo(SEXP particle_matrixSEXP, SEXP trial_dataSEXP, SEXP constantsSEXP, SEXP designsSEXP, SEXP boundsSEXP, SEXP transformsSEXP, SEXP pretransformsSEXP, SEXP trend_runtime_xptrSEXP, SEXP return_all_parsSEXP, SEXP kernel_output_codesSEXP, SEXP apply_baseSEXP, SEXP update_kernelsSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -806,7 +806,9 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< SEXP >::type trend_runtime_xptr(trend_runtime_xptrSEXP);
     Rcpp::traits::input_parameter< bool >::type return_all_pars(return_all_parsSEXP);
     Rcpp::traits::input_parameter< Rcpp::IntegerVector >::type kernel_output_codes(kernel_output_codesSEXP);
-    rcpp_result_gen = Rcpp::wrap(get_pars_c_step_oo(particle_matrix, trial_data, constants, designs, bounds, transforms, pretransforms, trend_runtime_xptr, return_all_pars, kernel_output_codes));
+    Rcpp::traits::input_parameter< bool >::type apply_base(apply_baseSEXP);
+    Rcpp::traits::input_parameter< bool >::type update_kernels(update_kernelsSEXP);
+    rcpp_result_gen = Rcpp::wrap(get_pars_c_step_oo(particle_matrix, trial_data, constants, designs, bounds, transforms, pretransforms, trend_runtime_xptr, return_all_pars, kernel_output_codes, apply_base, update_kernels));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -906,7 +908,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_EMC2_calc_ll_oo", (DL_FUNC) &_EMC2_calc_ll_oo, 11},
     {"_EMC2_get_pars_c_wrapper", (DL_FUNC) &_EMC2_get_pars_c_wrapper, 11},
     {"_EMC2_get_pars_c_wrapper_oo", (DL_FUNC) &_EMC2_get_pars_c_wrapper_oo, 11},
-    {"_EMC2_get_pars_c_step_oo", (DL_FUNC) &_EMC2_get_pars_c_step_oo, 10},
+    {"_EMC2_get_pars_c_step_oo", (DL_FUNC) &_EMC2_get_pars_c_step_oo, 12},
     {"_EMC2_EMC2_call_custom_trend", (DL_FUNC) &_EMC2_EMC2_call_custom_trend, 3},
     {"_EMC2_run_trend_rcpp", (DL_FUNC) &_EMC2_run_trend_rcpp, 6},
     {"_EMC2_c_add_charvectors", (DL_FUNC) &_EMC2_c_add_charvectors, 2},
