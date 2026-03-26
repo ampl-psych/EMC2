@@ -1469,7 +1469,10 @@ make_data_unconditional <- function(data, pars, design, model,
       # so only re-call these then in case multiple rows are required?
       if (!is.null(design$Ffunctions)) {
         for (i in names(design$Ffunctions)) {
-          dadm_subj[idx_curr, i] <- design$Ffunctions[[i]](dadm_subj[idx_curr, , drop = FALSE])
+          dadm_current <- lapply(dadm_subj_list, `[`, idx_curr)
+          class(dadm_current) <- "data.frame"
+          attr(dadm_current, "row.names") <- .set_row_names(length(idx_curr))
+          dadm_subj_list[[i]][idx_curr] <- design$Ffunctions[[i]](dadm_current)
         }
       }
 
