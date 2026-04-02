@@ -346,36 +346,18 @@ par_data_map <- function(par_mcmc, design, n_trials = NULL, data = NULL,
   n_subs <- ncol(par_mcmc)
   for(i in 1:n_mcmc){
     parameters <- t(as.matrix(par_mcmc[,,i], nrow = n_pars, ncol = n_subs))
-    pars <- do_transform(parameters, model()$pre_transform) #t(apply(parameters, 1, do_pre_transform, model()$pre_transform))
     if(nrow(parameters) == length(unique(data$subjects))){
       design$Ffactors$subjects <- unique(data$subjects)
     }
 
-    rownames(pars) <- design$Ffactors$subjects
-    pars <- map_p(add_constants(pars,design$constants),data, model(), return_trend_pars = TRUE)
-    exclude_transform <- rep(FALSE, ncol(pars))
-    if (!is.null(model()$trend)) {
-      phases <- vapply(model()$trend, function(x) x$phase, character(1))
-      if (any(phases == "pretransform")) pars <- prep_trend_phase(data, model()$trend, pars, "pretransform",
-                                                                  return_trend_pars = TRUE)
-      exclude_transform <- unlist(lapply(model()$trend, function(x){
-        if(x$phase != "posttransform"){
-          return(x$trend_pnames)
-        } else{
-          return(NULL)
-        }
-      }))
-      exclude_transform <- colnames(pars) %in% exclude_transform
+    rownames(parameters) <- design$Ffactors$subjects
+    pars <- get_pars_matrix_oo(parameters, data, model())
+    if(!add_recalculated){
+      base_names <- intersect(names(model()$p_types), colnames(pars))
+      pars <- pars[, base_names, drop = FALSE]
+      attr(pars, "ok") <- NULL
     }
-    pars[,!exclude_transform] <- do_transform(pars[,!exclude_transform], model()$transform)
-    if (!is.null(model()$trend)) {
-      if (any(phases == "posttransform")) pars <- prep_trend_phase(data, model()$trend, pars, "posttransform",
-                                                                   return_trend_pars = TRUE)
-    }
-    if(add_recalculated) pars <- model()$Ttransform(pars, data)
     if(i == 1){
-      # Ttransform could add unwanted friends, so safest to just
-      # figure out the dimensions here
       out <- array(NA, dim = c(nrow(pars), n_mcmc, ncol(pars)),
                    dimnames = list(NULL, NULL, colnames(pars)))
     }
@@ -409,5 +391,3 @@ map_selecter <- function(map, selection){
   }
   return(selection)
 }
-
-

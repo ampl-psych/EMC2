@@ -650,7 +650,7 @@ MRI <- function(){
         return(y_sim)
       },
       log_likelihood=function(pars, dadm, model, min_ll=log(1e-10)){
-        # Here pars is already multiplied by design matrix in map_p
+        # Here pars already contains the mapped design contributions.
         y <- as.matrix(dadm[,!colnames(dadm) %in% c("subjects", 'run', 'time', "trials")])
         # grab the right parameters
         sigma <- pars[,ncol(pars)]
@@ -725,7 +725,7 @@ MRI_AR1 <- function(){
         return(y_sim)
       },
       log_likelihood = function(pars, dadm, model, min_ll = log(1e-10)) {
-        # Here pars is already multiplied by design matrix in map_p
+        # Here pars already contains the mapped design contributions.
 
         # Extract observed data (as a vector)
         y <- as.vector(as.matrix(dadm[, !colnames(dadm) %in% c("subjects", "run", "time", "trials")]))
@@ -1279,11 +1279,7 @@ make_data_fMRI <- function(parameters, model, data, design, ...){
   # if(is.null(attr(design, "design_matrix"))){
   #   stop("for fMRI simulation the original design needs to be passed to the simulation function")
   # }
-  pars <- t(apply(parameters, 1, do_pre_transform, model()$pre_transform))
-  pars <- map_p(add_constants(pars,design$constants),data, model())
-  pars <- do_transform(pars, model()$transform)
-  pars <- model()$Ttransform(pars, data)
-  pars <- add_bound(pars, model()$bound)
+  pars <- get_pars_matrix_oo(parameters, data, model())
   data[, !colnames(data) %in% c("subjects", "run", "time", "trials")] <- model()$rfun(pars)
   return(data)
 }
@@ -1292,4 +1288,3 @@ add_design_fMRI_predict <- function(design, emc){
   design$fMRI_design <- lapply(emc[[1]]$data, function(x) return(attr(x,"designs")))
   return(design)
 }
-
