@@ -1,13 +1,19 @@
 #' Information Criteria and Marginal Likelihoods
 #'
-#' Returns the BPIC/DIC or marginal deviance (-2*marginal likelihood) for a list of samples objects.
+#' Returns the BPIC/DIC and optionally marginal deviance (-2*marginal likelihood) for a list of samples objects.
+#'
+#' Computes DIC and BPIC using a joint deviance based on both the data likelihood and the hierarchical prior over subject-level parameters.
+#'
+#' If `use_best_fit = TRUE` (default), the deviance anchor is taken as the better
+#' of the deviance at the posterior mean parameters and the best-fitting posterior
+#' draw. If FALSE, only the deviance at the posterior mean parameters is used
+#' (standard DIC/BPIC).
 #'
 #' @param sList List of samples objects
 #' @param stage A string. Specifies which stage the samples are to be taken from `"preburn"`, `"burn"`, `"adapt"`, or `"sample"`
 #' @param filter An integer or vector. If it's an integer, iterations up until the value set by `filter` will be excluded.
 #' If a vector is supplied, only the iterations in the vector will be considered.
-#' @param use_best_fit Boolean, defaults to `TRUE`, uses the minimal or mean likelihood (whichever is better) in the
-#' calculation, otherwise always uses the mean likelihood.
+#' @param use_best_fit Boolean; defaults to `TRUE` If `TRUE`, uses the smaller of (i) the deviance at the posterior mean parameters and (ii) the lowest deviance across posterior draws (i.e., the best-fitting draw). If `FALSE`, uses only the deviance at the posterior mean parameters (i.e., standard DIC/BPIC).
 #' @param BayesFactor Boolean, defaults to `TRUE`. Include marginal likelihoods as estimated using WARP-III bridge sampling.
 #' Usually takes a minute per model added to calculate
 #' @param cores_for_props Integer, how many cores to use for the Bayes factor calculation, here 4 is the default for the 4 different proposal densities to evaluate, only 1, 2 and 4 are sensible.
@@ -261,7 +267,7 @@ IC <- function(emc,stage="sample",filter=0,use_best_fit=TRUE,
     ll <- get_pars(emc, stage = stage, filter = filter, selection = "LL", merge_chains = TRUE,subject=subject)
     alpha <- get_pars(emc,selection="alpha",stage=stage,filter=filter, by_subject = TRUE, merge_chains = TRUE,subject=subject)
   }
-  minDs <- -2*apply(ll[[1]][[1]], 2, min)
+  minDs <- -2*apply(ll[[1]][[1]], 2, max)
   mean_lls <- apply(ll[[1]][[1]], 2, mean)
   mean_pars <- lapply(alpha,function(x){apply(do.call(rbind,x),2,mean)})
   # log-likelihood for each subject using their mean parameter vector
