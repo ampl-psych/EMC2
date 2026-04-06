@@ -39,7 +39,7 @@ suppress_output <- function(expr) {
 
 rDDM <- function(R,pars,ok=rep(TRUE,length(R)), precision=5e-3)
 {
-  pars <- pars[ok,]
+  pars <- pars[ok,,drop=FALSE]
   R <- R[ok]
   pars <- as.matrix(pars);
   # DDM gets unhappy with large trial numbers so split them into separate lists
@@ -47,7 +47,7 @@ rDDM <- function(R,pars,ok=rep(TRUE,length(R)), precision=5e-3)
   split_idx <- split_idx[1:nrow(pars)]
   out_list <- vector("list", length(unique(split_idx)))
   for(j in 1:length(unique(split_idx))){
-    pars_tmp <- pars[split_idx == j,]
+    pars_tmp <- pars[split_idx == j,,drop=FALSE]
     idx <- find_duplicate_indices(pars_tmp)
     out <- data.frame(R = rep(NA,nrow(pars_tmp)), rt = rep(NA,nrow(pars_tmp)))
     for(id in unique(idx)){
@@ -55,7 +55,7 @@ rDDM <- function(R,pars,ok=rep(TRUE,length(R)), precision=5e-3)
       cur_pars <- pars_tmp[is_id[1],]
       tmp <- suppress_output(rWDM(N = length(is_id), a = cur_pars["a"]/cur_pars[ "s"], v = cur_pars["v"]/cur_pars[ "s"], t0 = cur_pars["t0"],
                                   w = cur_pars["Z"], sw = cur_pars["SZ"], sv = cur_pars["sv"]/cur_pars[ "s"],
-                                  st0 = cur_pars["st0"], precision = precision))
+                                  st0 = cur_pars["st0"], precision = precision,method="p-ars"))
       tmp <- data.frame(R = tmp$response, rt = tmp$q)
       out[is_id,] <- tmp
     }

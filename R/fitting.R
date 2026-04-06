@@ -118,17 +118,15 @@ run_emc <- function(emc, stage, stop_criteria,
       sub_emc <- subset(emc, filter = chain_n(emc)[1,stage] - 1, stage = stage)
     }
     sub_emc <- AccumulatR_check_context(sub_emc)
-
     # Actual sampling
     sub_emc <- auto_mclapply(sub_emc,run_stages, stage = stage, iter= progress$step_size*max(1,cur_thin),
                              verbose=verbose,  verboseProgress = verboseProgress,
                              particle_factor=particle_factor,search_width=search_width,
                              n_cores=cores_per_chain, mc.cores = cores_for_chains,
                              r_cores = r_cores)
-
+    if(getOption("emc2.print_iteration_duration", TRUE)) { print(Sys.time()-t0) }
     class(sub_emc) <- "emc"
-
-
+    if(cores_for_chains > 1) sub_emc <- pointer_reset_wrapper(sub_emc, emc)
     if(stage != 'preburn'){
       if(is.numeric(thin)){
         sub_emc <- subset(sub_emc, stage = c("preburn", "burn", "adapt", "sample"), thin = thin)

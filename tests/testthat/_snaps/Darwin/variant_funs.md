@@ -34,7 +34,7 @@
       compare(list(diag = LNR_diag), stage = "preburn", cores_for_props = 1)
     Output
              MD wMD  DIC wDIC BPIC wBPIC EffectiveN meanD Dmean minD
-      diag -579   1 1066    1 1916     1        851   215  -607 -635
+      diag -579   1 1112    1 2009     1        897   215  -607 -682
 
 # run_blocked
 
@@ -71,8 +71,8 @@
     Code
       compare(list(blocked = LNR_blocked), stage = "preburn", cores_for_props = 1)
     Output
-                MD wMD  DIC wDIC BPIC wBPIC EffectiveN meanD Dmean minD
-      blocked -527   1 6444    1 9984     1       3540  2904  -611 -636
+                MD wMD  DIC wDIC  BPIC wBPIC EffectiveN meanD Dmean minD
+      blocked -527   1 6489    1 10075     1       3585  2904  -611 -681
 
 # run_single
 
@@ -91,5 +91,5 @@
       compare(list(single = LNR_single), stage = "preburn", cores_for_props = 1)
     Output
                MD wMD DIC wDIC BPIC wBPIC EffectiveN meanD Dmean minD
-      single -390   1 245    1  599     1        354  -109  -463 -463
+      single -390   1 312    1  733     1        421  -109  -463 -530
 

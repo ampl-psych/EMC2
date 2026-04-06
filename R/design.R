@@ -39,6 +39,7 @@
 #' parameters to be estimated.
 #' @param custom_p_vector A character vector. If specified, a custom likelihood
 #' function can be supplied.
+#' @param trend A trend list, as made by \code{\link{make_trend}}
 #' @param transform A list with custom transformations to be applied to the parameters of the model,
 #' if the conventional transformations aren't desired.
 #' See `DDM()` for an example of such transformations
@@ -74,16 +75,17 @@
 #'
 #'
 design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
-                       contrasts=NULL,matchfun=NULL,constants=NULL,covariates=NULL,
-                       functions=NULL,report_p_vector=TRUE, custom_p_vector = NULL,
+                   contrasts=NULL,matchfun=NULL,constants=NULL,covariates=NULL,
+                   functions=NULL,report_p_vector=TRUE, custom_p_vector = NULL,
+                   trend=NULL,
                    transform = NULL, bound = NULL, ...){
 
   optionals <- list(...)
-  if(!is.null(optionals$trend)){
-    trend <- optionals$trend
-  } else {
-    trend <- NULL
-  }
+  # if(!is.null(optionals$trend)){
+  #   trend <- optionals$trend
+  # } else {
+  #   trend <- NULL
+  # }
   if(!is.null(optionals$pre_transform)){
     pre_transform <- optionals$pre_transform
   } else {
@@ -150,6 +152,11 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
                  Fcovariates=covariates,Ffunctions=functions,model=model)
   class(design) <- "emc.design"
   if (!is.null(trend)) {
+    # check for at = 'lR'
+    if(any(sapply(trend, function(x) x$at)=='lR') & model()$type!='RACE') {
+      warning('A trend has `at="lR"`, but this is not a race model. Setting `at` to NULL')
+      for(i in 1:length(trend)) if(trend[[i]]$at=='lR') trend[[i]]$at <- NULL
+    }
     model <- update_model_trend(trend, model)
     model_list <- model()
     model <- function(){return(model_list)}
@@ -314,7 +321,11 @@ add_accumulators <- function(data,matchfun=NULL,simulate=FALSE, type = "RACE", F
     datar <- AccumulatR_expand_data(acr_spec, data)
   }
   row.names(datar) <- NULL
-  if (simulate) datar$rt <- NA else {
+  if (simulate) {
+    if(!'rt' %in% Fcovariates) {
+      datar$rt <- NA
+    }
+  } else {
     R <- datar$R
     if(!type %in% "AccumulatR"){
       R[is.na(R)] <- levels(datar$lR)[1]
@@ -511,7 +522,8 @@ rt_check_function <- function(data){
 
 design_model <- function(data,design,model=NULL,
                          add_acc=TRUE,rt_resolution=1/60,verbose=TRUE,
-                         compress=TRUE,rt_check=TRUE, add_da = FALSE, all_cells_dm = FALSE)
+                         compress=TRUE,rt_check=TRUE, add_da = FALSE, all_cells_dm = FALSE,
+                         compress_dms=TRUE)
 {
   if (is.null(model)) {
     if (is.null(design$model))
@@ -549,6 +561,22 @@ design_model <- function(data,design,model=NULL,
     da[,i] <- newF
   }
 
+  # Add covariate_map as attribute to da
+  if(!is.null(model()$trend)) {
+    trend_list <- model()$trend
+    for(i in 1:length(trend_list)) {
+      if(!is.null(trend_list[[i]]$map)) {
+        if(!'covariate_maps' %in% names(attributes(da))) attr(da, 'covariate_maps') <- list()
+        covariate_map_names <- names(trend_list[[i]]$map)
+        covariate_map_functions <- trend_list[[i]]$map
+        for(map_n in 1:length(covariate_map_names)) {
+          covs <- trend_list[[i]]$covariate
+          attr(da, 'covariate_maps')[[covariate_map_names[map_n]]] <- covariate_map_functions[[map_n]](dadm=da, covs)
+        }
+      }
+    }
+  }
+
   if (is.null(model()$p_types) | is.null(model()$Ttransform))
     stop("p_types and Ttransform must be supplied")
   if (!all(unlist(lapply(design$Flist,class))=="formula"))
@@ -573,7 +601,7 @@ design_model <- function(data,design,model=NULL,
   }
   for (i in pnames) attr(design$Flist[[i]],"Clist") <- design$Clist[[i]]
 
-  out <- lapply(design$Flist,make_dm,da=da,Fcovariates=design$Fcovariates, add_da = add_da, all_cells_dm = all_cells_dm)
+  out <- lapply(design$Flist,make_dm,da=da,Fcovariates=design$Fcovariates, add_da = add_da, all_cells_dm = all_cells_dm, compress_dms=compress_dms)
   if (!is.null(rt_resolution) & !is.null(da$rt)) da$rt <- floor(da$rt/rt_resolution)*rt_resolution
   if (compress){
     dadm <- compress_dadm(da,designs=out, Fcov=design$Fcovariates,Ffun=names(design$Ffunctions))
@@ -608,6 +636,76 @@ design_model <- function(data,design,model=NULL,
   dadm
 }
 
+fast_mm <- function(form, Clist = NULL, da) {
+  # 1. Get Clist from form if needed
+  if (is.null(Clist)) Clist <- attr(form, "Clist")
+
+  # 2. Compute terms(form) only once
+  trms <- stats::terms(form)
+  pnam <- as.character(trms[[2]])  # LHS variable name
+
+  # adding a column of 1's can be expensive for very big da;
+  # if you call this many times on the same data, consider doing it once outside.
+  da[[pnam]] <- 1
+
+  # 3. Handle nested Clist entries: Clist[[pnam]] is a list of replacements
+  if (!is.null(Clist[[pnam]])) {
+    replac <- Clist[[pnam]]
+    Clist[names(replac)] <- replac
+    Clist[[pnam]] <- NULL
+  }
+
+  # 4. Prepare contrasts.list for model.matrix (no contrasts<- side effects)
+  cn <- intersect(names(Clist), names(da))
+  if (length(cn)) {
+    for (nm in cn) {
+      x <- da[[nm]]
+      if (!is.factor(x)) {
+        stop(nm, " must be a factor (design factors has a parameter name?)")
+      }
+
+      levs <- levels(x)
+      nl   <- length(levs)
+      ci   <- Clist[[nm]]
+
+      if (is.function(ci)) {
+        # leave as is; model.matrix will call it
+        next
+      }
+
+      # ci should be a matrix with rows matching the factor levels
+      if (!is.matrix(ci) || nrow(ci) != nl) {
+        rn <- rownames(ci)
+        if (!is.null(rn) && all(levs %in% rn)) {
+          ci <- ci[levs, , drop = FALSE]
+        } else {
+          stop("Clist for ", nm, " not a ", nl, " row matrix")
+        }
+      } else {
+        rownames(ci) <- levs
+      }
+
+      Clist[[nm]] <- ci
+    }
+  }
+
+  # 5. Build model matrix with precomputed terms and contrasts
+  out <- stats::model.matrix(trms, da, contrasts.arg = Clist)
+
+  # 6. Rename columns as in your original function
+  if (ncol(out) == 1L) {
+    colnames(out) <- pnam
+  } else {
+    if (attr(trms, "intercept") != 0L) {
+      cnams <- paste(pnam, colnames(out)[-1L], sep = "_")
+      colnames(out) <- c(pnam, cnams)
+    } else {
+      colnames(out) <- paste(pnam, colnames(out), sep = "_")
+    }
+  }
+
+  out
+}
 
 make_full_dm <- function(form, Clist, da) {
   if (is.null(Clist)) Clist <- attr(form, "Clist")
@@ -663,33 +761,69 @@ make_full_dm <- function(form, Clist, da) {
   return(out)
 }
 
-make_dm <- function(form,da,Clist=NULL,Fcovariates=NULL, add_da = FALSE, all_cells_dm = FALSE)
+make_dm <- function(form,da,Clist=NULL,Fcovariates=NULL, add_da = FALSE, all_cells_dm = FALSE, compress_dms=TRUE)
   # Makes a design matrix based on formula form from augmented data frame da
 {
 
-  compress_dm <- function(dm, da = NULL, all_cells_dm = FALSE)
-    # out keeps only unique rows, out[attr(out,"expand"),] gets back original.
-  {
-    cells <- apply(dm,1,paste,collapse="_")
-    ass <- attr(dm,"assign")
-    contr <- attr(dm,"contrasts")
-    if(!is.null(da)){
-      dups <- duplicated(paste0(cells, apply(da, 1, paste0, collapse = "_")))
-    } else{
-      dups <- duplicated(cells)
+  # compress_dm <- function(dm, da = NULL, all_cells_dm = FALSE)
+  #   # out keeps only unique rows, out[attr(out,"expand"),] gets back original.
+  # {
+  #   cells <- apply(dm,1,paste,collapse="_")
+  #   ass <- attr(dm,"assign")
+  #   contr <- attr(dm,"contrasts")
+  #   if(!is.null(da)){
+  #     dups <- duplicated(paste0(cells, apply(da, 1, paste0, collapse = "_")))
+  #   } else{
+  #     dups <- duplicated(cells)
+  #   }
+  #   out <- dm[!dups,,drop=FALSE]
+  #   if(!is.null(da) & !all_cells_dm){
+  #     if(nrow(da) != 0){
+  #       out <- cbind(da[!dups,colnames(da) != "subjects",drop=FALSE], out)
+  #     }
+  #   }
+  #   attr(out,"expand") <- as.numeric(factor(cells,levels=unique(cells)))
+  #   attr(out,"assign") <- ass
+  #   attr(out,"contrasts") <- contr
+  #   out
+  # }
+  compress_dm <- function(dm, da = NULL, all_cells_dm = FALSE) {
+    # vectorized row key for dm
+    dm_df  <- as.data.frame(dm, stringsAsFactors = FALSE)
+    cells  <- do.call(paste, c(dm_df, sep = "_"))
+
+    ass    <- attr(dm, "assign")
+    contr  <- attr(dm, "contrasts")
+
+    if (!is.null(da)) {
+      da_df   <- as.data.frame(da, stringsAsFactors = FALSE)
+      da_key  <- do.call(paste0, da_df)  # vectorized row key for da
+      dups    <- duplicated(paste0(cells, da_key))
+    } else {
+      dups    <- duplicated(cells)
     }
-    out <- dm[!dups,,drop=FALSE]
-    if(!is.null(da) & !all_cells_dm){
-      if(nrow(da) != 0){
-        out <- cbind(da[!dups,colnames(da) != "subjects",drop=FALSE], out)
-      }
+
+    out_dm <- dm[!dups, , drop = FALSE]
+
+    if (!is.null(da) && !all_cells_dm && nrow(da) != 0) {
+      out <- cbind(
+        da[!dups, colnames(da) != "subjects", drop = FALSE],
+        out_dm
+      )
+    } else {
+      out <- out_dm
     }
-    attr(out,"expand") <- as.numeric(factor(cells,levels=unique(cells)))
-    attr(out,"assign") <- ass
-    attr(out,"contrasts") <- contr
+
+    attr(out, "expand")    <- as.numeric(factor(cells, levels = unique(cells)))
+    attr(out, "assign")    <- ass
+    attr(out, "contrasts") <- contr
+
     out
   }
   out <- make_full_dm(form, Clist, da)
+  if(!compress_dms) {
+    return(out)
+  }
 
   if(add_da){
     da <- da[,all.vars(form)[-1], drop = F]
@@ -750,6 +884,13 @@ dm_list <- function(dadm)
     isin <- dadm$subjects==i         # dadm
     dl[[i]] <- dadm[isin,]
     dl[[i]]$subjects <- factor(as.character(dl[[i]]$subjects))
+
+    if(!is.null(attr(dadm, 'covariate_maps'))) {
+      covariate_maps <- attr(dadm, 'covariate_maps')
+      for(ii in 1:length(covariate_maps)) covariate_maps[[ii]] <- covariate_maps[[ii]][isin,]
+      attr(dl[[i]], 'covariate_maps') <- covariate_maps
+    }
+
     if(is.null(attr(dadm, "custom_ll"))){
 
       isin1 <- s_expand==i             # da
@@ -999,7 +1140,7 @@ mapped_pars.emc.design <- function(x, p_vector = NULL, model=NULL,
                                       do_functions = F),
                        design,model,rt_check=FALSE,compress=FALSE, verbose = FALSE)
   ok <- !(names(dadm) %in% c("subjects","trials","R","rt","winner"))
-  out <- cbind(dadm[,ok, drop = F],round(get_pars_matrix(p_vector,dadm, design$model()),digits))
+  out <- cbind(dadm[,ok, drop = F],round(get_pars_matrix_oo(p_vector,dadm, design$model()),digits))
   if (model()$type=="SDT")  out <- out[dadm$lR!=levels(dadm$lR)[length(levels(dadm$lR))],]
   if (model()$type=="DDM")  out <- out[,!(names(out) %in% c("lR","lM"))]
   if (any(names(out)=="RACE") && remove_RACE)

@@ -24,11 +24,13 @@ Authors:
 \itemize{
   \item Michelle Donzallaz
   \item Andrew Heathcote
+  \item Steven Miletić
 }
 
 Other contributors:
 \itemize{
-  \item Steven Miletić [contributor]
+  \item Luke Strickland [contributor]
+  \item Frank Hezemans [contributor]
   \item Raphael Hartmann [contributor]
   \item Karl C. Klauer [contributor]
   \item Steven G. Johnson [contributor]

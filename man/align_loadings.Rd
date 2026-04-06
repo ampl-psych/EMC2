@@ -41,17 +41,17 @@ algorithm proposed by Papastamoulis and Ntzoufras (2022)
 # This function works natively with emc objects, but also factor arrays:
 # Simulate a small example with 5 variables, 2 factors, and 10 MCMC iterations
 set.seed(123)
-p <- 5  # Number of variables
-q <- 2  # Number of factors
+p <- 5 # Number of variables
+q <- 2 # Number of factors
 n <- 10 # Number of MCMC iterations
 
 # Create random factor loadings with label switching
 lambda <- array(0, dim = c(p, q, n))
 for (i in 1:n) {
   # Generate base loadings
-  base_loadings <- matrix(rnorm(p*q, 0, 0.5), p, q)
-  base_loadings[1:3, 1] <- abs(base_loadings[1:3, 1]) + 0.5  # Strong loadings on factor 1
-  base_loadings[4:5, 2] <- abs(base_loadings[4:5, 2]) + 0.5  # Strong loadings on factor 2
+  base_loadings <- matrix(rnorm(p * q, 0, 0.5), p, q)
+  base_loadings[1:3, 1] <- abs(base_loadings[1:3, 1]) + 0.5 # Strong loadings on factor 1
+  base_loadings[4:5, 2] <- abs(base_loadings[4:5, 2]) + 0.5 # Strong loadings on factor 2
 
   # Randomly switch labels and signs
   if (runif(1) > 0.5) {
@@ -67,7 +67,7 @@ for (i in 1:n) {
     base_loadings[, 2] <- -base_loadings[, 2]
   }
 
-  lambda[,,i] <- base_loadings
+  lambda[, , i] <- base_loadings
 }
 
 # Align the loadings

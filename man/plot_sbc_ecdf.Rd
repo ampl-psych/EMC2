@@ -4,22 +4,24 @@
 \alias{plot_sbc_ecdf}
 \title{Plot the ECDF Difference in SBC Ranks}
 \usage{
-plot_sbc_ecdf(ranks, layout = NA, add_stats = TRUE, main = "")
+plot_sbc_ecdf(ranks, layout = NA, add_stats = TRUE, main = NULL, K = 500)
 }
 \arguments{
-\item{ranks}{A list of named dataframes of the rank statistic}
+\item{ranks}{A list of named dataframes of the rank statistic (raw or normalized)}
 
 \item{layout}{Optional. A numeric vector specifying the layout using \code{par(mfrow = layout)}}
 
 \item{add_stats}{Boolean. Should coverage, bias and precision be included in the figure.}
 
 \item{main}{Optional. A character specifying plot title.}
+
+\item{K}{Optional. Effective sample size of the MCMC that produced the ranks.}
 }
 \value{
 No returns
 }
 \description{
-Plots the difference in observed cumulative rank statistics and the
-expected cumulative distribution of a uniform distribution. The blue
-shaded areas indicate the 95\% credible interval.
+Plots  F_hat(z) - z  where F_hat is the
+empirical CDF of the (normalized) ranks and z is the Uniform(0,1) CDF.
+The shaded band is the simultaneous (1 - gamma) envelope for F_hat(z) - z.
 }

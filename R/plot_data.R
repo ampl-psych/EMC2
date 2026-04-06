@@ -777,7 +777,11 @@ plot_cdf <- function(input,
   if (is.null(defective_levels) || length(defective_levels) == 0) {
     defective_levels <- "Level1" # fallback
   }
-  line_types <- seq_along(defective_levels)
+
+  # Allow line types to be set for defective factor
+  if (is.null(dots$line_types))
+     line_types <- seq_along(defective_levels) else
+     line_types <- dots$line_types
 
   # We'll store single-CDF results or multi-postn quantile results in these:
   cdf_list <- list() # single
@@ -827,7 +831,6 @@ plot_cdf <- function(input,
 
           x_mat <- do.call(cbind, lapply(raw_mats, function(m) m[, "x"]))
           y_mat <- do.call(cbind, lapply(raw_mats, function(m) m[, "y"]))
-
           # row-wise quantiles for x, plus median for y
           # Just as in your older code: we do quantiles on x across draws, median on y
           # Or you might do quantiles on both x and y.
@@ -849,6 +852,19 @@ plot_cdf <- function(input,
         out
       })
 
+      if (!is.null(dots$panel_factor)) {
+        ns <- lapply(splitted,function(x){
+          mult <- table(x[[dots$panel_factor]])
+          sum(mult)/mult
+        })
+        for (i in 1:length(ns)) {
+          nlev <- length(cdf_quants_list[[sname]][[i]])
+          ns[[i]] <- rep(ns[[i]],length.out=nlev)
+          for (j in 1:nlev)
+            cdf_quants_list[[sname]][[i]][[j]]["ym",] <- ns[[i]][j]*cdf_quants_list[[sname]][[i]][[j]]["ym",]
+        }
+      }
+
       # If we use this dataset to define y-limit ...
       if (styp %in% use_lim) {
         # maximum of y_median row
@@ -866,7 +882,18 @@ plot_cdf <- function(input,
     } else {
       # single dataset => cdf_list[[sname]] => group_key => get_def_cdf => named list by factor level
       cdf_list[[sname]] <- lapply(splitted, get_def_cdf, defective_factor, dots)
-
+      if (!is.null(dots$panel_factor)) {
+        ns <- lapply(splitted,function(x){
+          mult <- table(x[[dots$panel_factor]])
+          sum(mult)/mult
+        })
+        for (i in 1:length(ns)) {
+          nlev <- length(cdf_list[[sname]][[i]])
+          ns[[i]] <- rep(ns[[i]],length.out=nlev)
+          for (j in 1:nlev)
+            cdf_list[[sname]][[i]][[j]][,"y"] <- ns[[i]][j]*cdf_list[[sname]][[i]][[j]][,"y"]
+        }
+      }
       # If we use this dataset for y-limit, find max
       if (styp %in% use_lim) {
         # find max y across all group_keys & factor-levels
@@ -920,6 +947,12 @@ plot_cdf <- function(input,
       main = group_key, xlab = "RT", ylab = "Defective CDF"
     )
     plot_args <- fix_dots_plot(plot_args)
+    if (!is.null(dots$main)) {
+      if (dots$main=="") plot_args$main <- "" else {
+        if (group_key=="All Data")  gk <- "" else gk <- group_key
+        plot_args$main <- paste0(dots$main, gk)
+      }
+    }
     do.call(plot, c(list(NA), plot_args))
 
     # draw lines for each dataset
@@ -1015,11 +1048,13 @@ plot_cdf <- function(input,
     }
 
     # Factor-level legend
-    if (!is.na(legendpos[1])) {
-      legend(legendpos[1],
-        legend = defective_levels, lty = line_types, col = "black",
-        title = defective_factor, bty = "n"
-      )
+    if(!is.na(legendpos[1])){
+      if (is.null(dots$defective_legend))
+        legend(legendpos[1], legend=defective_levels, lty=line_types, col="black",
+                title=defective_factor, bty="n") else
+        legend(legendpos[1], legend=dots$defective_legend$legend,
+               lty=dots$defective_legend$lty, pch=dots$defective_legend$pch,col="black",
+                title=dots$defective_legend$title, bty="n")
     }
 
 
@@ -1212,6 +1247,12 @@ plot_delta <- function(input,
       ylab = paste0("RT(", delta_name, ")")
     )
     plot_args <- fix_dots_plot(plot_args)
+    if (!is.null(dots$main)) {
+      if (dots$main=="") plot_args$main <- "" else {
+        if (group_key=="All Data")  gk <- "" else gk <- group_key
+        plot_args$main <- paste0(dots$main, gk)
+      }
+    }
     do.call(plot, c(list(NA), plot_args))
 
     # draw lines for each dataset
@@ -1558,6 +1599,12 @@ plot_caf <- function(input,
       main = group_key, xlab = "Bin Centre (%)", ylab = "CAF (%)"
     )
     plot_args <- fix_dots_plot(plot_args)
+    if (!is.null(dots$main)) {
+      if (dots$main=="") plot_args$main <- "" else {
+        if (group_key=="All Data")  gk <- "" else gk <- group_key
+        plot_args$main <- paste0(dots$main, gk)
+      }
+    }
     do.call(plot, c(list(NA), plot_args))
 
     # draw lines for each dataset

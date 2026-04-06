@@ -22,10 +22,10 @@ minimal_design <- function(design, covariates = NULL, drop_subjects = TRUE,
     } else{
       if(is.null(cur_des$Ffactors$subjects))cur_des$Ffactors$subjects <- factor(1)
     }
-    if(!is.null(group_design)){
-      cur_des$Ffactors <- cur_des$Ffactors[!names(cur_des$Ffactors) %in% group_factors]
-      cur_des$Fcovariates <- cur_des$Fcovariates[!names(cur_des$Fcovariates) %in% group_factors]
-    }
+    # if(!is.null(group_design)){
+    #   cur_des$Ffactors <- cur_des$Ffactors[!names(cur_des$Ffactors) %in% group_factors]
+    #   cur_des$Fcovariates <- cur_des$Fcovariates[!names(cur_des$Fcovariates) %in% group_factors]
+    # }
 
 
     if(n_trials > 1){
@@ -348,26 +348,18 @@ par_data_map <- function(par_mcmc, design, n_trials = NULL, data = NULL,
   n_subs <- ncol(par_mcmc)
   for(i in 1:n_mcmc){
     parameters <- t(as.matrix(par_mcmc[,,i], nrow = n_pars, ncol = n_subs))
-    pars <- do_transform(parameters, model()$pre_transform) #t(apply(parameters, 1, do_pre_transform, model()$pre_transform))
     if(nrow(parameters) == length(unique(data$subjects))){
       design$Ffactors$subjects <- unique(data$subjects)
     }
 
-    rownames(pars) <- design$Ffactors$subjects
-    pars <- map_p(add_constants(pars,design$constants),data, model())
-
-    if (!is.null(model()$trend)) {
-      phases <- vapply(model()$trend, function(x) x$phase, character(1))
-      if (any(phases == "pretransform")) pars <- prep_trend_phase(data, model()$trend, pars, "pretransform")
+    rownames(parameters) <- design$Ffactors$subjects
+    pars <- get_pars_matrix_oo(parameters, data, model())
+    if(!add_recalculated){
+      base_names <- intersect(names(model()$p_types), colnames(pars))
+      pars <- pars[, base_names, drop = FALSE]
+      attr(pars, "ok") <- NULL
     }
-    pars <- do_transform(pars, model()$transform)
-    if (!is.null(model()$trend)) {
-      if (any(phases == "posttransform")) pars <- prep_trend_phase(data, model()$trend, pars, "posttransform")
-    }
-    if(add_recalculated) pars <- model()$Ttransform(pars, data)
     if(i == 1){
-      # Ttransform could add unwanted friends, so safest to just
-      # figure out the dimensions here
       out <- array(NA, dim = c(nrow(pars), n_mcmc, ncol(pars)),
                    dimnames = list(NULL, NULL, colnames(pars)))
     }
@@ -401,5 +393,3 @@ map_selecter <- function(map, selection){
   }
   return(selection)
 }
-
-

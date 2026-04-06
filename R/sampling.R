@@ -679,37 +679,31 @@ calc_ll_manager <- function(proposals, dadm, model, component = NULL, r_cores = 
         auto_mclapply(1:nrow(proposals),
           function(i) calc_ll_R(proposals[i,], model=model, dadm = dadm),
          mc.cores=r_cores))
-    } else if(model$c_name == "AccumulatR"){
+    } else{
       p_types <- names(model$p_types)
       designs <- list()
       for(p in p_types){
         designs[[p]] <- attr(dadm,"designs")[[p]][attr(attr(dadm,"designs")[[p]],"expand"),,drop=FALSE]
       }
       constants <- attr(dadm, "constants")
-      context <- attr(dadm, "AccumulatR_context")
-      lls <- calc_ll_AccR(proposals, dadm, constants = constants, designs = designs,
-                     model$bound, model$transform, model$pre_transform, p_types = p_types, min_ll = log(1e-10),
-                     model$trend, context)
-    }
-    else{
-      p_types <- names(model$p_types)
-      designs <- list()
-      for(p in p_types){
-        designs[[p]] <- attr(dadm,"designs")[[p]][attr(attr(dadm,"designs")[[p]],"expand"),,drop=FALSE]
+      likelihood_context <- NULL
+      if (model$c_name == "AccumulatR") {
+        likelihood_context <- attr(dadm, "AccumulatR_context")
       }
-      constants <- attr(dadm, "constants")
       if(is.null(constants)) constants <- NA
       if (nrow(proposals) <= r_cores){
-        lls <- calc_ll(proposals, dadm, constants = constants, designs = designs, type = model$c_name,
-                       model$bound, model$transform, model$pre_transform, p_types = p_types, min_ll = log(1e-10),
-                       model$trend)
+        lls <- calc_ll_oo(proposals, dadm, constants = constants, designs = designs, type = model$c_name,
+                          model$bound, model$transform, model$pre_transform, p_types = p_types,
+                          min_ll = log(1e-10), trend = model$trend,
+                          likelihood_context = likelihood_context)
       } else {
         idx <- rep(1:r_cores,each=1+(nrow(proposals) %/% r_cores))[1:nrow(proposals)]
         lls <- unlist(auto_mclapply(1:r_cores,function(i) {
-          calc_ll(proposals[idx==i,,drop=FALSE], dadm, constants = constants,
-            designs = designs, type = model$c_name, model$bound, model$transform,
-            model$pre_transform, p_types = p_types, min_ll = log(1e-10),model$trend)
-          },mc.cores=r_cores))
+          calc_ll_oo(proposals[idx==i,,drop=FALSE], dadm, constants = constants,
+                     designs = designs, type = model$c_name, model$bound, model$transform,
+                     model$pre_transform, p_types = p_types, min_ll = log(1e-10),
+                     trend = model$trend, likelihood_context = likelihood_context)
+        },mc.cores=r_cores))
       }
     }
   }
@@ -819,4 +813,3 @@ check_CR <- function(emc, p_vector, range = .2, N = 500){
   }
   return(list(C = C, R = R))
 }
-
