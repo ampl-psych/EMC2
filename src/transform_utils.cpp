@@ -376,6 +376,9 @@ c_do_bound(NumericMatrix pars,
 
     for (int i = 0; i < nrows; i++) {
       double val = pars(i, col_idx);
+      if (!R_FINITE(val)) {
+        continue;
+      }
       bool ok = (val > min_v && val < max_v);
       if (!ok && has_exc) {
         ok = (val == exc_val);
@@ -409,6 +412,9 @@ Rcpp::LogicalVector c_do_bound_pt(const ParamTable& pt,
 
     for (int i = 0; i < nrows; ++i) {
       const double val = base(i, col_idx);
+      if (!R_FINITE(val)) {
+        continue;
+      }
       bool ok = (val > min_v && val < max_v);
       if (!ok && has_exc) {
         ok = (val == exc_val);

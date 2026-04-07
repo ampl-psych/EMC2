@@ -458,8 +458,11 @@ struct ParamTable {
         const double* d = &design(0, j);
 
         for (int r = 0; r < T; ++r) {
-          double v = coef[r] * d[r];
-          out[r] += v;
+          const double weight = d[r];
+          if (weight == 0.0) {
+            continue;
+          }
+          out[r] += coef[r] * weight;
         }
       }
     }

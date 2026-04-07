@@ -3,9 +3,8 @@
 
 ## usethis namespace: start
 #' @importFrom abind abind
-#' @importFrom AccumulatR build_likelihood_context
-#' @importFrom AccumulatR ensure_native_ctx
-#' @importFrom AccumulatR nest_accumulators
+#' @importFrom AccumulatR make_context
+#' @importFrom AccumulatR prepare_data
 #' @importFrom AccumulatR simulate
 #' @importFrom Brobdingnag as.brob
 #' @importFrom coda acfplot

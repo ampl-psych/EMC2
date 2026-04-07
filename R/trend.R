@@ -785,6 +785,7 @@ check_trend <- function(trend, covariates = NULL, model = NULL, formula = NULL) 
       tnames[i] %in% names(model()$p_types)
     }, logical(1))
     if (!all(ok)) stop("pretransform/posttransform trend has a parameter name not in the model")
+    AccumulatR_validate_trend_safety(trend, model())
   }
   if (is.null(covariates)) stop("must specify covariates when using trend")
   covnames <- unlist(lapply(trend,function(x)x$covariate))

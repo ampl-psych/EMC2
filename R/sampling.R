@@ -675,36 +675,28 @@ calc_ll_manager <- function(proposals, dadm, model, component = NULL, r_cores = 
   } else{
     model <- model()
     if(is.null(model$c_name)){ # use the R implementation
-      lls <- unlist(
-        auto_mclapply(1:nrow(proposals),
-          function(i) calc_ll_R(proposals[i,], model=model, dadm = dadm),
-         mc.cores=r_cores))
+      lls <- calc_ll_R(proposals[i,], model=model, dadm = dadm)
     } else{
       p_types <- names(model$p_types)
+      design_names <- p_types
+      if (model$c_name == "AccumulatR") {
+        design_names <- names(attr(dadm, "designs"))
+      }
       designs <- list()
-      for(p in p_types){
+      for(p in design_names){
         designs[[p]] <- attr(dadm,"designs")[[p]][attr(attr(dadm,"designs")[[p]],"expand"),,drop=FALSE]
       }
       constants <- attr(dadm, "constants")
       likelihood_context <- NULL
       if (model$c_name == "AccumulatR") {
         likelihood_context <- attr(dadm, "AccumulatR_context")
+        dadm$R <- as.integer(dadm$R)
       }
       if(is.null(constants)) constants <- NA
-      if (nrow(proposals) <= r_cores){
-        lls <- calc_ll_oo(proposals, dadm, constants = constants, designs = designs, type = model$c_name,
-                          model$bound, model$transform, model$pre_transform, p_types = p_types,
-                          min_ll = log(1e-10), trend = model$trend,
-                          likelihood_context = likelihood_context)
-      } else {
-        idx <- rep(1:r_cores,each=1+(nrow(proposals) %/% r_cores))[1:nrow(proposals)]
-        lls <- unlist(auto_mclapply(1:r_cores,function(i) {
-          calc_ll_oo(proposals[idx==i,,drop=FALSE], dadm, constants = constants,
-                     designs = designs, type = model$c_name, model$bound, model$transform,
-                     model$pre_transform, p_types = p_types, min_ll = log(1e-10),
-                     trend = model$trend, likelihood_context = likelihood_context)
-        },mc.cores=r_cores))
-      }
+      lls <- calc_ll_oo(proposals, dadm, constants = constants, designs = designs, type = model$c_name,
+                        model$bound, model$transform, model$pre_transform, p_types = p_types,
+                        min_ll = log(1e-10), trend = model$trend,
+                        likelihood_context = likelihood_context)
     }
   }
   return(lls)
