@@ -101,6 +101,7 @@ run_emc <- function(emc, stage, stop_criteria,
   # We need to multiply step_size by thin to make an accurate guess for good step_size.
   cur_thin <- ifelse(is.numeric(thin), thin, 1)
   while(!progress$done){
+    t0 <- Sys.time()
 
     emc <- reset_pm_settings(emc, stage)
     # Remove redundant samples

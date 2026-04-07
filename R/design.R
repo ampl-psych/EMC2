@@ -611,7 +611,8 @@ design_model <- function(data,design,model=NULL,
     attr(dadm,"designs") <- out
     attr(dadm,"s_expand") <- da$subjects
     # attr(dadm,"expand_all") <- 1:nrow(dadm)
-    tmp <- dadm[!duplicated(dadm$trials),]
+    trial_key <- paste(dadm$subjects, dadm$trials, sep = "::")
+    tmp <- dadm[!duplicated(trial_key),]
     attr(dadm,"expand") <- 1:nrow(tmp)
   }
 
@@ -894,8 +895,8 @@ dm_list <- function(dadm)
     if(is.null(attr(dadm, "custom_ll"))){
 
       isin1 <- s_expand==i             # da
-      isin2 <- attr(dadm,"s_data")==i  # data
-      if(length(isin2) > 0){
+      isin2 <- as.character(attr(dadm,"s_data")) == as.character(i)  # data
+      if(any(isin2)){
         attr(dl[[i]],"expand") <- expand_winner[isin2]-min(expand_winner[isin2]) + 1
       }
       dl[[i]] <- AccumulatR_add_context(dl[[i]])
