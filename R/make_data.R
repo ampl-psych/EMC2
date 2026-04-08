@@ -279,8 +279,7 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
       attr(data, "staircase") <- staircase
     }
     if(model()$type == "AccumulatR"){
-      model_list <- model()
-      res <- AccumulatR::simulate(model_list$spec, pars, trial_df = data, keep_component = TRUE)
+      res <- model()$rfun(data, pars)
       data <- data[!duplicated(data$trial),]
       dropNames <- c("accumulator")
       if (!return_Ffunctions && !is.null(design$Ffunctions))

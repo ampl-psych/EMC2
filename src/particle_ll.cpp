@@ -58,6 +58,65 @@ static inline Rcpp::LogicalVector ok_accumulatR(const Rcpp::LogicalVector& ok_ro
   return out;
 }
 
+struct AccumulatRBridgeRecipe {
+  Rcpp::NumericMatrix defaults;
+  Rcpp::CharacterMatrix source_names;
+  std::vector<int> source_cols;
+};
+
+static inline AccumulatRBridgeRecipe make_accumulatr_bridge_recipe(
+    const Rcpp::List& bridge,
+    const Rcpp::CharacterVector& public_names) {
+  AccumulatRBridgeRecipe recipe{
+    Rcpp::NumericMatrix(bridge["defaults"]),
+    Rcpp::CharacterMatrix(bridge["source_names"]),
+    std::vector<int>()
+  };
+  const int n_rows = recipe.defaults.nrow();
+  const int n_cols = recipe.defaults.ncol();
+  recipe.source_cols.assign(n_rows * n_cols, -1);
+
+  std::unordered_map<std::string, int> public_col;
+  public_col.reserve(public_names.size());
+  for (int j = 0; j < public_names.size(); ++j) {
+    public_col.emplace(Rcpp::as<std::string>(public_names[j]), j);
+  }
+
+  for (int r = 0; r < n_rows; ++r) {
+    for (int c = 0; c < n_cols; ++c) {
+      Rcpp::String src = recipe.source_names(r, c);
+      if (src == NA_STRING) {
+        continue;
+      }
+      auto it = public_col.find(std::string(src.get_cstring()));
+      if (it != public_col.end()) {
+        recipe.source_cols[static_cast<std::size_t>(r * n_cols + c)] = it->second;
+      }
+    }
+  }
+  return recipe;
+}
+
+static inline Rcpp::NumericMatrix accumulatr_runtime_params(
+    const Rcpp::NumericMatrix& public_pars,
+    const AccumulatRBridgeRecipe& recipe) {
+  const int n_rows = recipe.defaults.nrow();
+  const int n_cols = recipe.defaults.ncol();
+  Rcpp::NumericMatrix runtime_pars(n_rows, n_cols);
+  std::copy(recipe.defaults.begin(), recipe.defaults.end(), runtime_pars.begin());
+  Rcpp::colnames(runtime_pars) = Rcpp::colnames(recipe.defaults);
+
+  for (int r = 0; r < n_rows; ++r) {
+    for (int c = 0; c < n_cols; ++c) {
+      const int src = recipe.source_cols[static_cast<std::size_t>(r * n_cols + c)];
+      if (src >= 0) {
+        runtime_pars(r, c) = public_pars(r, src);
+      }
+    }
+  }
+  return runtime_pars;
+}
+
 NumericMatrix get_pars_matrix_oo(ParamTable& param_table,
                                  const Rcpp::List& designs,
                                  TrendRuntime* trend_runtime,
@@ -318,6 +377,8 @@ NumericVector calc_ll_oo(NumericMatrix particle_matrix, DataFrame data, NumericV
   if (type == "AccumulatR") {
     Rcpp::List likelihood_ctx(likelihood_context);
     SEXP native_ctx = likelihood_ctx["native_ctx"];
+    AccumulatRBridgeRecipe bridge_recipe =
+      make_accumulatr_bridge_recipe(Rcpp::List(likelihood_ctx["bridge"]), keep_names);
 
     IntegerVector expand = data.attr("expand");
     constexpr double rel_tol = 1e-5;
@@ -334,13 +395,15 @@ NumericVector calc_ll_oo(NumericMatrix particle_matrix, DataFrame data, NumericV
                                 tend_runtime_ptr,
                                 transform_specs,
                                 keep_names);
+      Rcpp::NumericMatrix runtime_pars =
+        accumulatr_runtime_params(pars, bridge_recipe);
       if (i == 0) {
         bound_specs = make_bound_specs_pt(minmax, mm_names, param_table_template, bounds);
       }
       is_ok = c_do_bound_pt(param_table_template, bound_specs);
       is_ok = ok_accumulatR(is_ok, data);
       lls[i] = accumulatr::cpp_loglik(native_ctx,
-                                      pars,
+                                      runtime_pars,
                                       data,
                                       is_ok,
                                       expand,
