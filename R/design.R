@@ -130,14 +130,6 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
     }
     # factors <- factors[names(factors) %in% c(all_preds, "subjects")]
   }
-  if (identical(model()$type, "AccumulatR")) {
-    if (!is.null(transform)) {
-      stop("Custom transform is not supported for AccumulatR EMC2 models; runtime transforms are derived from the AccumulatR spec")
-    }
-    if (!is.null(bound)) {
-      stop("Custom bound is not supported for AccumulatR EMC2 models; runtime bounds are derived from the AccumulatR spec")
-    }
-  }
   if (!is.null(trend)) {
     formula <- check_trend(trend,c(names(functions), covariates), model, formula)
   }
@@ -549,11 +541,7 @@ design_model <- function(data,design,model=NULL,
     attr(dadm,"sampled_p_names") <- sampled_p_names
     return(dadm)
   }
-  conflict_names <- names(model()$p_types)
-  if (model()$type == "AccumulatR" && !is.null(model()$runtime_p_types)) {
-    conflict_names <- names(model()$runtime_p_types)
-  }
-  if (any(conflict_names %in% names(data)))
+  if (any(names(model()$p_types) %in% names(data)))
     stop("Data cannot have columns with the same names as model parameters")
   if (!is.factor(data$subjects)) {
     data$subjects <- factor(data$subjects)
@@ -617,13 +605,6 @@ design_model <- function(data,design,model=NULL,
   if (!is.null(rt_resolution) & !is.null(da$rt)) da$rt <- floor(da$rt/rt_resolution)*rt_resolution
   if (compress){
     dadm <- compress_dadm(da,designs=out, Fcov=design$Fcovariates,Ffun=names(design$Ffunctions))
-    if (model()$type == "AccumulatR") {
-      public_designs <- attr(dadm, "designs")
-      dadm <- prepare_data(model()$spec, dadm)
-      compiled <- AccumulatR_compile_designs(dadm, public_designs, model()$accumulatr_bridge)
-      attr(dadm, "designs") <- compiled$designs
-      attr(dadm, "accumulatr_bridge") <- compiled$bridge
-    }
     # attr(dadm, "expand") <- attr(dadm, "expand_winner") # I don't think this breaks stuff?
   }  else {
     dadm <- da
@@ -633,15 +614,6 @@ design_model <- function(data,design,model=NULL,
     trial_key <- paste(dadm$subjects, dadm$trials, sep = "::")
     tmp <- dadm[!duplicated(trial_key),]
     attr(dadm,"expand") <- 1:nrow(tmp)
-    if (model()$type == "AccumulatR") {
-      bridge_spec <- model()$accumulatr_bridge
-      if (is.null(bridge_spec)) {
-        stop("AccumulatR model is missing compiled bridge metadata")
-      }
-      compiled <- AccumulatR_compile_designs(dadm, attr(dadm, "designs"), bridge_spec)
-      attr(dadm, "designs") <- compiled$designs
-      attr(dadm, "accumulatr_bridge") <- compiled$bridge
-    }
   }
 
   p_names <-  unlist(lapply(out,function(x){dimnames(x)[[2]]}),use.names=FALSE)
@@ -891,7 +863,6 @@ dm_list <- function(dadm)
   p_names <- attr(dadm,"p_names")
   sampled_p_names <- attr(dadm,"sampled_p_names")
   designs <- attr(dadm,"designs")
-  bridge <- attr(dadm, "accumulatr_bridge")
   expand <- attr(dadm,"expand")
   s_expand <- attr(dadm,"s_expand")
   unique_nort <- attr(dadm,"unique_nort")
@@ -933,13 +904,6 @@ dm_list <- function(dadm)
       attr(dl[[i]],"p_names") <- p_names
       attr(dl[[i]],"sampled_p_names") <- sampled_p_names
       attr(dl[[i]],"designs") <- sub_design(designs,isin)
-      if (!is.null(bridge)) {
-        public_designs <- lapply(bridge$public_designs, function(x) {
-          attr(x, "expand") <- attr(x, "expand")[isin]
-          x
-        })
-        attr(dl[[i]], "accumulatr_bridge") <- AccumulatR_subset_bridge(bridge, isin, public_designs)
-      }
       # if(!is.null(expand)) attr(dl[[i]],"expand_all") <- expand[isin1]-min(expand[isin1]) + 1
       attr(dl[[i]],"contract") <- NULL
       attr(dl[[i]],"expand_winner") <- NULL
@@ -1177,9 +1141,7 @@ mapped_pars.emc.design <- function(x, p_vector = NULL, model=NULL,
                                       do_functions = F),
                        design,model,rt_check=FALSE,compress=FALSE, verbose = FALSE)
   ok <- !(names(dadm) %in% c("subjects","trials","R","rt","winner"))
-  pars_out <- round(get_pars_matrix_oo(p_vector,dadm, design$model()),digits)
-  ok[names(dadm) %in% colnames(pars_out)] <- FALSE
-  out <- cbind(dadm[,ok, drop = F], pars_out)
+  out <- cbind(dadm[,ok, drop = F],round(get_pars_matrix_oo(p_vector,dadm, design$model()),digits))
   if (model()$type=="SDT")  out <- out[dadm$lR!=levels(dadm$lR)[length(levels(dadm$lR))],]
   if (model()$type=="DDM")  out <- out[,!(names(out) %in% c("lR","lM"))]
   if (any(names(out)=="RACE") && remove_RACE)
@@ -1268,14 +1230,13 @@ sampled_pars.emc.design <- function(x,group_design=NULL,doMap=FALSE, add_da = FA
       cur_design,model,add_acc=FALSE,verbose=FALSE,rt_check=FALSE,compress=FALSE, add_da = add_da,
       all_cells_dm = all_cells_dm)
     sampled_p_names <- attr(dadm,"sampled_p_names")
-    report_designs <- AccumulatR_bridge_reporting_designs(dadm)
     if(length(design) != 1){
-      map_list[[cur_name]] <- lapply(report_designs,function(x){x[,,drop=FALSE]})
+      map_list[[cur_name]] <- lapply(attributes(dadm)$designs,function(x){x[,,drop=FALSE]})
       sampled_p_names <- paste(cur_name, sampled_p_names, sep = "|")
     }
     out <- c(out, stats::setNames(numeric(length(sampled_p_names)),sampled_p_names))
     if(length(design) == 1){
-      if (doMap) attr(out,"map") <- lapply(report_designs,function(x){x[,,drop=FALSE]})
+      if (doMap) attr(out,"map") <- lapply(attributes(dadm)$designs,function(x){x[,,drop=FALSE]})
     }
   }
   if(length(design) != 1) attr(out, "map") <- map_list

@@ -112,12 +112,6 @@ get_pars_oo <- function(p, dadm, model,
   if (constants_included || is.null(constants)) {
     constants <- NA
   }
-  transform_spec <- model_list$transform
-  bound_spec <- model_list$bound
-  if (identical(model_list$type, "AccumulatR")) {
-    transform_spec <- model_list$runtime_transform
-    bound_spec <- model_list$runtime_bound
-  }
   pretransforms <- if (pretransformed) {
     .oo_identity_transform(colnames(particle_matrix))
   } else {
@@ -130,8 +124,8 @@ get_pars_oo <- function(p, dadm, model,
       data = cur_dadm,
       constants = constants,
       designs = .oo_expanded_designs(dadm, row_idx),
-      bounds = bound_spec,
-      transforms = transform_spec,
+      bounds = model_list$bound,
+      transforms = model_list$transform,
       pretransforms = pretransforms,
       trend = model_list$trend,
       return_kernel_matrix = return_kernel_matrix,
@@ -182,13 +176,6 @@ get_pars_matrix_oo <- function(p_vector, dadm, model) {
   model_list <- .oo_model_list(model)
   pars <- get_pars_oo(p_vector, dadm, model_list)
   pars <- model_list$Ttransform(pars, dadm)
-  bound_spec <- model_list$bound
-  if (identical(model_list$type, "AccumulatR")) {
-    bound_spec <- model_list$runtime_bound
-  }
-  pars <- add_bound(pars, bound_spec, dadm$lR)
-  if (identical(model_list$type, "AccumulatR")) {
-    pars <- AccumulatR_project_public_pars(pars, dadm, model_list)
-  }
+  pars <- add_bound(pars, model_list$bound, dadm$lR)
   .oo_reorder_public_pars(pars, model_list)
 }

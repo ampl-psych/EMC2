@@ -688,13 +688,18 @@ calc_ll_manager <- function(proposals, dadm, model, component = NULL, r_cores = 
       }
       constants <- attr(dadm, "constants")
       likelihood_context <- NULL
+      bounds <- model$bound
+      transforms <- model$transform
+      pretransforms <- model$pre_transform
       if (model$c_name == "AccumulatR") {
         likelihood_context <- attr(dadm, "AccumulatR_context")
         dadm$R <- as.integer(dadm$R)
+        bounds <- model$runtime_bound
+        transforms <- model$runtime_transform
       }
       if(is.null(constants)) constants <- NA
       lls <- calc_ll_oo(proposals, dadm, constants = constants, designs = designs, type = model$c_name,
-                        model$bound, model$transform, model$pre_transform, p_types = p_types,
+                        bounds, transforms, pretransforms, p_types = p_types,
                         min_ll = log(1e-10), trend = model$trend,
                         likelihood_context = likelihood_context)
     }
