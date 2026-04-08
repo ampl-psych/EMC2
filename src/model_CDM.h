@@ -413,7 +413,8 @@ inline NumericVector c_dSDM(NumericVector rts, NumericVector Rs, NumericVector R
     const double m2 = st1 * std::sin(t2);
     const double cos_term = x0 * m0 + x1 * m1 + x2 * m2;
 
-    out[i] = log_density_core_scalar(log_fpt, tt, ai, vi, sig2, svi, cos_term, 3, log_surface);
+    out[i] = log_density_core_scalar(log_fpt, tt, ai, vi, sig2, svi, cos_term, 3, log_surface) +
+      std::log(std::max(sr, DBL_MIN));
   }
 
   return out;
@@ -496,7 +497,9 @@ inline NumericVector c_dHSDM(NumericVector rts, NumericVector Rs, NumericVector 
     const double m3 = st1 * st2 * std::sin(t3);
     const double cos_term = x0 * m0 + x1 * m1 + x2 * m2 + x3 * m3;
 
-    out[i] = log_density_core_scalar(log_fpt, tt, ai, vi, sig2, svi, cos_term, 4, log_surface);
+    out[i] = log_density_core_scalar(log_fpt, tt, ai, vi, sig2, svi, cos_term, 4, log_surface) +
+      2.0 * std::log(std::max(sr1, DBL_MIN)) +
+      std::log(std::max(sr2, DBL_MIN));
   }
 
   return out;
@@ -571,7 +574,7 @@ inline NumericVector c_dPSDM(NumericVector rts, NumericVector Rs, NumericMatrix 
         0.5 * (v2 * tt_v) / D;
       log_raw = log_base + k * A + log_i0_stable_scalar(k * B) - log_two;
     }
-    out[i] = log_raw;
+    out[i] = log_raw + std::log(std::max(std::sin(r1), DBL_MIN));
   }
 
   return out;
@@ -660,7 +663,9 @@ inline NumericVector c_dPHSDM(NumericVector rts, NumericVector Rs, NumericVector
         0.5 * (v2 * tt_v) / D;
       log_raw = log_base + k * A + log_i0_stable_scalar(k * B) - log_pi;
     }
-    out[i] = log_raw;
+    out[i] = log_raw +
+      2.0 * std::log(std::max(std::sin(r1), DBL_MIN)) +
+      std::log(std::max(std::sin(r2), DBL_MIN));
   }
 
   return out;

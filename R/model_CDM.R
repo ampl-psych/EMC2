@@ -423,6 +423,7 @@ dSDM <- function(rt, R, R2, pars) {
     dim = 3,
     log_surface = log(4 * pi)
   )
+  log_raw <- log_raw + log(pmax(sin(R), .Machine$double.xmin))
 
   dens <- exp(log_raw)
   dens[!is.finite(dens)] <- 0
@@ -482,6 +483,9 @@ dHSDM <- function(rt, R, R2, R3, pars) {
     dim = 4,
     log_surface = log(2 * pi^2)
   )
+  log_raw <- log_raw +
+    2 * log(pmax(sin(R), .Machine$double.xmin)) +
+    log(pmax(sin(R2), .Machine$double.xmin))
 
   dens <- exp(log_raw)
   dens[!is.finite(dens)] <- 0
@@ -543,6 +547,7 @@ dPSDM <- function(rt, R, pars) {
       0.5 * (v2[idxv] * ttv) / D
     log_raw[idxv] <- log_basev + kv * A[idxv] + log_i0_stable(kv * B[idxv]) - log(2)
   }
+  log_raw <- log_raw + log(pmax(sin(R), .Machine$double.xmin))
 
   dens <- exp(log_raw)
   dens[!is.finite(dens)] <- 0
@@ -612,6 +617,9 @@ dPHSDM <- function(rt, R, R2, pars) {
       0.5 * (v2[idxv] * ttv) / D
     log_raw[idxv] <- log_basev + kv * A[idxv] + log_i0_stable(kv * B[idxv]) - log(pi)
   }
+  log_raw <- log_raw +
+    2 * log(pmax(sin(R), .Machine$double.xmin)) +
+    log(pmax(sin(R2), .Machine$double.xmin))
 
   dens <- exp(log_raw)
   dens[!is.finite(dens)] <- 0
