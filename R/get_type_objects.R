@@ -378,7 +378,8 @@ get_objects_infnt_factor <- function(selection, sample_prior, return_prior, desi
 get_objects_SEM <- function(selection, sample_prior, return_prior, design = NULL,
                                prior = NULL, stage = 'sample', N = 1e5, sampler = NULL, ...){
   acc_selection <- c("mu", "sigma2", "covariance", "alpha", "correlation", "Sigma",
-                     "std_loadings", "loadings", "residuals","factor_residuals", "regressors",
+                     "std_loadings", "loadings", "covariate_loadings",
+                     "residuals", "covariate_residuals", "factor_residuals", "regressors",
                      "factor_regressors", "structural_regressors","mu_implied", "LL")
   if(return_prior & !sample_prior){
     if(is.null(list(...)$return_info)) prior$prior <- do.call(get_prior_SEM, c(list(design = design, sample = F, prior = prior), fix_dots(list(...), get_prior_SEM)))
@@ -386,18 +387,23 @@ get_objects_SEM <- function(selection, sample_prior, return_prior, design = NULL
       theta_mu_mean = "mean of the group-level mean prior",
       theta_mu_var = "variance of the group-level mean prior",
       lambda_var = "variance of the factor loadings",
+      lambda_cov_var = "variance of the observed covariate loadings",
       K_var = "variance of the parameter regressors",
       G_var = "variance of the factor regressors",
       B_var = "variance of structural regressors",
       a_d = "shape prior of inverse gamma/inverse wishart on factor variances",
       b_d = "rate prior of inverse gamma/inverse wishart on factor variances",
       a_e = "shape prior of inverse gamma on residuals",
-      b_e = "rate prior of inverse gamma on residuals"
+      b_e = "rate prior of inverse gamma on residuals",
+      a_e_cov = "shape prior of inverse gamma on observed covariate residuals",
+      b_e_cov = "rate prior of inverse gamma on observed covariate residuals"
     )
     prior$types <- list(
       mu = c("theta_mu_mean", "theta_mu_var"),
       loadings = c("theta_lambda_var"),
+      covariate_loadings = c("lambda_cov_var"),
       residuals = c("a_e", "b_e"),
+      covariate_residuals = c("a_e_cov", "b_e_cov"),
       factor_residuals = c("a_d", "b_d"),
       regressors = c("K_var"),
       factor_regressors = c("G_var"),
@@ -406,7 +412,9 @@ get_objects_SEM <- function(selection, sample_prior, return_prior, design = NULL
     prior$type_descriptions <- list(
       mu = "group-level mean",
       loadings = "factor variances",
+      covariate_loadings = "observed covariate loadings",
       residuals = "residuals on parameter variances",
+      covariate_residuals = "residuals on observed covariate indicators",
       factor_residuals = "residuals on factor variances",
       regressors = "regressors on parameters",
       factor_regressors = "regressors on factors",
@@ -441,6 +449,9 @@ get_objects_SEM <- function(selection, sample_prior, return_prior, design = NULL
     if(selection == "residuals"){
       return(lapply(sampler, FUN = function(x) return(1/x$samples$epsilon_inv[,idx])))
     }
+    if(selection == "covariate_residuals"){
+      return(lapply(sampler, FUN = function(x) return(1/x$samples$epsilon_cov_inv[,idx, drop = FALSE])))
+    }
     if(selection == "factor_residuals"){
       return(lapply(sampler, FUN = function(x){
         resids <- x$samples$delta_inv[,,idx]
@@ -452,6 +463,9 @@ get_objects_SEM <- function(selection, sample_prior, return_prior, design = NULL
     }
     if(selection == "loadings"){
       return(lapply(sampler, FUN = function(x) return(x$samples$lambda[,,idx, drop = F])))
+    }
+    if(selection == "covariate_loadings"){
+      return(lapply(sampler, FUN = function(x) return(x$samples$lambda_cov[,,idx, drop = F])))
     }
     if(selection == "regressors"){
       return(lapply(sampler, FUN = function(x) return(x$samples$K[,,idx, drop = F])))
@@ -542,7 +556,6 @@ get_alphas <- function(mu, var, sub_names = NULL, N = ncol(mu),
   colnames(alpha) <- sub_names
   alpha
 }
-
 
 
 
