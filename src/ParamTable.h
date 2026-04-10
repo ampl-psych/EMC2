@@ -457,9 +457,19 @@ struct ParamTable {
 
         const double* d = &design(0, j);
 
+        // loop over trial rows
         for (int r = 0; r < T; ++r) {
-          double v = coef[r] * d[r];
-          out[r] += v;
+          double cr = coef[r];   // parameter coefficient
+          double dr = d[r];        // design row value
+
+          if (dr == 0.0 || cr == 0.0) {
+            // contributes 0, do nothing
+          } else {
+            out[r] += cr * dr;
+          }
+          // old code just did this:
+          // double v = coef[r] * d[r];
+          // out[r] += v;
         }
       }
     }
