@@ -649,7 +649,7 @@ MRI <- function(){
         y_sim <- y_hat + rnorm(n = length(y_hat), mean = 0, sd = sigma)
         return(y_sim)
       },
-      log_likelihood=function(pars, dadm, model, min_ll=log(1e-10)){
+      log_likelihood=function(pars, dadm, model, min_ll=log(1e-10), ...){
         # Here pars is already multiplied by design matrix in map_p
         y <- as.matrix(dadm[,!colnames(dadm) %in% c("subjects", 'run', 'time', "trials")])
         # grab the right parameters
@@ -724,7 +724,7 @@ MRI_AR1 <- function(){
         }
         return(y_sim)
       },
-      log_likelihood = function(pars, dadm, model, min_ll = log(1e-10)) {
+      log_likelihood = function(pars, dadm, model, min_ll = log(1e-10), ...) {
         # Here pars is already multiplied by design matrix in map_p
 
         # Extract observed data (as a vector)

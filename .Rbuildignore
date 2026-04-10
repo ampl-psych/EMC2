@@ -11,4 +11,5 @@
 ^\.vscode$
 ^paper$
 ^\.settings\.json$
+^\.claude$
 

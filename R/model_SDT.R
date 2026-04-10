@@ -77,7 +77,7 @@ SDT <- function(){
   # quantile function, p = probability, used in making linear ROCs
   qfun=function(p) qnorm(p),
   # Likelihood, lb is lower bound threshold for first response
-  log_likelihood=function(pars,dadm,model,min_ll=log(1e-10)){
-    log_likelihood_sdt(pars=pars, dadm = dadm, model = model, min_ll = min_ll, lb=-Inf)
+  log_likelihood=function(pars,dadm,model,min_ll=log(1e-10),...){
+    log_likelihood_sdt(pars=pars, dadm = dadm, model = model, min_ll = min_ll, lb=-Inf, ...)
   })
 }

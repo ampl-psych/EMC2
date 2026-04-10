@@ -10,6 +10,7 @@ compare(
   filter = NULL,
   use_best_fit = TRUE,
   BayesFactor = TRUE,
+  WAIC = TRUE,
   cores_for_props = 4,
   cores_per_prop = 1,
   print_summary = TRUE,
@@ -31,6 +32,9 @@ calculation, otherwise always uses the mean likelihood.}
 
 \item{BayesFactor}{Boolean, defaults to \code{TRUE}. Include marginal likelihoods as estimated using WARP-III bridge sampling.
 Usually takes a minute per model added to calculate}
+
+\item{WAIC}{Boolean, defaults to \code{TRUE}. Include WAIC (Watanabe-Akaike Information Criterion) computed
+via the \code{loo} package. Requires computing per-trial log-likelihoods across all posterior samples.}
 
 \item{cores_for_props}{Integer, how many cores to use for the Bayes factor calculation, here 4 is the default for the 4 different proposal densities to evaluate, only 1, 2 and 4 are sensible.}
 

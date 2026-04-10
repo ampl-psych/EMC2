@@ -703,6 +703,25 @@ calc_ll_manager <- function(proposals, dadm, model, component = NULL, r_cores = 
   return(lls)
 }
 
+calc_ll_manager_pw <- function(proposals, dadm, model){
+  # Returns an [n_proposals x n_trials] matrix of per-trial log-likelihoods
+  model <- model()
+  if(is.null(model$c_name)){
+    t(sapply(1:nrow(proposals), function(i)
+      calc_ll_R(proposals[i,], model=model, dadm=dadm, trialwise=TRUE)))
+  } else {
+    p_types <- names(model$p_types)
+    designs <- list()
+    for(p in p_types)
+      designs[[p]] <- attr(dadm,"designs")[[p]][attr(attr(dadm,"designs")[[p]],"expand"),,drop=FALSE]
+    constants <- attr(dadm,"constants")
+    if(is.null(constants)) constants <- NA
+    calc_ll_pw(proposals, dadm, constants=constants, designs=designs,
+               type=model$c_name, model$bound, model$transform, model$pre_transform,
+               p_types=p_types, min_ll=log(1e-10), model$trend)
+  }
+}
+
 merge_group_level <- function(tmu, tmu_nuis, tvar, tvar_nuis, is_nuisance, subj_mu){
   n_pars <- length(is_nuisance)
   tmu_out <- numeric(n_pars)

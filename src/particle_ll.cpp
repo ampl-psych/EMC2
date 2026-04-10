@@ -209,6 +209,77 @@ double c_log_likelihood_race(NumericMatrix pars, DataFrame data,
   }
 }
 
+NumericVector c_log_likelihood_DDM_pw(NumericMatrix pars, DataFrame data,
+                                      const int n_trials, IntegerVector expand,
+                                      double min_ll, LogicalVector is_ok){
+  const int n_out = expand.length();
+  NumericVector rts = data["rt"];
+  IntegerVector R = data["R"];
+  NumericVector lls(n_trials);
+  NumericVector lls_exp(n_out);
+  lls = d_DDM_Wien(rts, R, pars, is_ok);
+  lls_exp = c_expand(lls, expand);
+  lls_exp[is_na(lls_exp)] = min_ll;
+  lls_exp[is_infinite(lls_exp)] = min_ll;
+  lls_exp[lls_exp < min_ll] = min_ll;
+  return(lls_exp);
+}
+
+NumericVector c_log_likelihood_race_pw(NumericMatrix pars, DataFrame data,
+                                       NumericVector (*dfun)(NumericVector, NumericMatrix, LogicalVector, double, LogicalVector),
+                                       NumericVector (*pfun)(NumericVector, NumericMatrix, LogicalVector, double, LogicalVector),
+                                       const int n_trials, LogicalVector winner, IntegerVector expand,
+                                       double min_ll, LogicalVector is_ok){
+  const int n_out = expand.length();
+  NumericVector lds(n_trials);
+  NumericVector rts = data["rt"];
+  CharacterVector R = data["R"];
+  NumericVector lR = data["lR"];
+  NumericVector lds_exp(n_out);
+  const int n_acc = unique(lR).length();
+  if(sum(contains(data.names(), "RACE")) == 1){
+    NumericVector NACC = data["RACE"];
+    CharacterVector vals_NACC = NACC.attr("levels");
+    for(int x = 0; x < pars.nrow(); x++){
+      if(lR[x] > atoi(vals_NACC[NACC[x]-1])){
+        pars(x,0) = NA_REAL;
+      }
+    }
+  }
+  NumericVector win = log(dfun(rts, pars, winner, exp(min_ll), is_ok));
+  lds[winner] = win;
+  if(n_acc > 1){
+    NumericVector loss = log(1 - pfun(rts, pars, !winner, exp(min_ll), is_ok));
+    loss[is_na(loss)] = min_ll;
+    loss[loss == log(1 - exp(min_ll))] = min_ll;
+    lds[!winner] = loss;
+  }
+  lds[is_na(lds)] = min_ll;
+
+  if(n_acc > 1){
+    NumericVector ll_out = lds[winner];
+    NumericVector lds_los = lds[!winner];
+    if(n_acc == 2){
+      ll_out = ll_out + lds_los;
+    } else{
+      for(int z = 0; z < ll_out.length(); z++){
+        ll_out[z] = ll_out[z] + sum(lds_los[seq(z * (n_acc - 1), (z + 1) * (n_acc - 1) - 1)]);
+      }
+    }
+    ll_out[is_na(ll_out)] = min_ll;
+    ll_out[is_infinite(ll_out)] = min_ll;
+    ll_out[ll_out < min_ll] = min_ll;
+    ll_out = c_expand(ll_out, expand);
+    return(ll_out);
+  } else{
+    lds_exp = c_expand(lds, expand);
+    lds_exp[is_na(lds_exp)] = min_ll;
+    lds_exp[is_infinite(lds_exp)] = min_ll;
+    lds_exp[lds_exp < min_ll] = min_ll;
+    return(lds_exp);
+  }
+}
+
 // [[Rcpp::export]]
 NumericVector calc_ll(NumericMatrix p_matrix, DataFrame data, NumericVector constants,
             List designs, String type, List bounds, List transforms, List pretransforms,
@@ -312,6 +383,82 @@ NumericVector calc_ll(NumericMatrix p_matrix, DataFrame data, NumericVector cons
 }
 
 
+
+// [[Rcpp::export]]
+NumericMatrix calc_ll_pw(NumericMatrix p_matrix, DataFrame data, NumericVector constants,
+            List designs, String type, List bounds, List transforms, List pretransforms,
+            CharacterVector p_types, double min_ll, List trend){
+  if(type == "MRI" || type == "MRI_AR1"){
+    stop("calc_ll_pw is not yet implemented for MRI models");
+  }
+  const int n_particles = p_matrix.nrow();
+  const int n_trials = data.nrow();
+  IntegerVector expand = data.attr("expand");
+  const int n_out = expand.length();
+  NumericMatrix lls(n_particles, n_out);
+  NumericVector p_vector(p_matrix.ncol());
+  CharacterVector p_names = colnames(p_matrix);
+  p_vector.names() = p_names;
+  NumericMatrix pars;
+  LogicalVector is_ok(n_trials);
+
+  NumericMatrix minmax = bounds["minmax"];
+  CharacterVector mm_names = colnames(minmax);
+  std::vector<PreTransformSpec> p_specs;
+  std::vector<BoundSpec> bound_specs;
+  std::vector<TransformSpec> full_t_specs;
+
+  if(type == "DDM"){
+    for(int i = 0; i < n_particles; i++){
+      p_vector = p_matrix(i, _);
+      if(i == 0){
+        p_specs = make_pretransform_specs(p_vector, pretransforms);
+        NumericMatrix dummy(1, p_types.size());
+        colnames(dummy) = p_types;
+        full_t_specs = make_transform_specs(dummy, transforms);
+      }
+      pars = get_pars_matrix(p_vector, constants, p_specs, p_types, designs, n_trials, data, trend, full_t_specs);
+      if(i == 0){
+        bound_specs = make_bound_specs(minmax, mm_names, pars, bounds);
+      }
+      is_ok = c_do_bound(pars, bound_specs);
+      lls(i, _) = c_log_likelihood_DDM_pw(pars, data, n_trials, expand, min_ll, is_ok);
+    }
+  } else{
+    LogicalVector winner = data["winner"];
+    NumericVector (*dfun)(NumericVector, NumericMatrix, LogicalVector, double, LogicalVector);
+    NumericVector (*pfun)(NumericVector, NumericMatrix, LogicalVector, double, LogicalVector);
+    if(type == "LBA"){
+      dfun = dlba_c;
+      pfun = plba_c;
+    } else if(type == "RDM"){
+      dfun = drdm_c;
+      pfun = prdm_c;
+    } else{
+      dfun = dlnr_c;
+      pfun = plnr_c;
+    }
+    NumericVector lR = data["lR"];
+    int n_lR = unique(lR).length();
+    for(int i = 0; i < n_particles; i++){
+      p_vector = p_matrix(i, _);
+      if(i == 0){
+        p_specs = make_pretransform_specs(p_vector, pretransforms);
+        NumericMatrix dummy(1, p_types.size());
+        colnames(dummy) = p_types;
+        full_t_specs = make_transform_specs(dummy, transforms);
+      }
+      pars = get_pars_matrix(p_vector, constants, p_specs, p_types, designs, n_trials, data, trend, full_t_specs);
+      if(i == 0){
+        bound_specs = make_bound_specs(minmax, mm_names, pars, bounds);
+      }
+      is_ok = c_do_bound(pars, bound_specs);
+      is_ok = lr_all(is_ok, n_lR);
+      lls(i, _) = c_log_likelihood_race_pw(pars, data, dfun, pfun, n_trials, winner, expand, min_ll, is_ok);
+    }
+  }
+  return(lls);
+}
 
 // [[Rcpp::export]]
 NumericMatrix get_pars_c_wrapper(NumericMatrix p_matrix, DataFrame data, NumericVector constants,

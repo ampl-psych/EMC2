@@ -67,6 +67,7 @@ Imports:
     psych,
     utils,
     lpSolve,
+    loo,
     WienR,
 LinkingTo: 
     Rcpp, RcppArmadillo

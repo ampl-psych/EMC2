@@ -1,15 +1,17 @@
-calc_ll_R <- function(p_vector, model, dadm){
+calc_ll_R <- function(p_vector, model, dadm, trialwise=FALSE){
   if(!is.null(model$transform)){
     pars <- get_pars_matrix(p_vector, dadm, model)
   } else{
     pars <- p_vector
   }
-  ll <- model$log_likelihood(pars, dadm, model)
-  return(ll)
+  if(trialwise){
+    return(model$log_likelihood(pars, dadm, model, trialwise=TRUE))
+  }
+  model$log_likelihood(pars, dadm, model)
 }
 
 
-log_likelihood_race <- function(pars,dadm,model,min_ll=log(1e-10))
+log_likelihood_race <- function(pars,dadm,model,min_ll=log(1e-10),trialwise=FALSE)
   # Race model summed log likelihood
 {
   if (any(names(dadm)=="RACE")){# Some accumulators not present
@@ -33,13 +35,19 @@ log_likelihood_race <- function(pars,dadm,model,min_ll=log(1e-10))
       ll <- ll + apply(matrix(lds[!dadm$winner],nrow=n_acc-1),2,sum)
     }
     ll[is.na(ll)] <- min_ll
-    return(sum(pmax(min_ll,ll[attr(dadm,"expand")])))
-  } else return(sum(pmax(min_ll,lds[attr(dadm,"expand")])))
+    expanded <- pmax(min_ll,ll[attr(dadm,"expand")])
+    if (trialwise) return(expanded)
+    return(sum(expanded))
+  } else {
+    expanded <- pmax(min_ll,lds[attr(dadm,"expand")])
+    if (trialwise) return(expanded)
+    return(sum(expanded))
+  }
 }
 
 
 
-log_likelihood_ddm <- function(pars,dadm,model,min_ll=log(1e-10))
+log_likelihood_ddm <- function(pars,dadm,model,min_ll=log(1e-10),trialwise=FALSE)
   # DDM summed log likelihood, with protection against numerical issues
 {
   like <- numeric(dim(dadm)[1])
@@ -47,11 +55,13 @@ log_likelihood_ddm <- function(pars,dadm,model,min_ll=log(1e-10))
     like[attr(pars,"ok")] <- model$dfun(dadm$rt[attr(pars,"ok")],dadm$R[attr(pars,"ok")],
                                                        pars[attr(pars,"ok"),,drop=FALSE])
   like[attr(pars,"ok")][is.na(like[attr(pars,"ok")])] <- 0
-  sum(pmax(min_ll,log(like[attr(dadm,"expand")])))
+  expanded <- pmax(min_ll,log(like[attr(dadm,"expand")]))
+  if (trialwise) return(expanded)
+  sum(expanded)
 }
 
 
-log_likelihood_ddmgng <- function(pars,dadm,model,min_ll=log(1e-10))
+log_likelihood_ddmgng <- function(pars,dadm,model,min_ll=log(1e-10),trialwise=FALSE)
   # DDM summed log likelihood for go/nogo model
 {
   like <- numeric(dim(dadm)[1])
@@ -65,14 +75,16 @@ log_likelihood_ddmgng <- function(pars,dadm,model,min_ll=log(1e-10))
 
   }
   like[attr(pars,"ok")][is.na(like[attr(pars,"ok")])] <- 0
-  sum(pmax(min_ll,log(like[attr(dadm,"expand")])))
+  expanded <- pmax(min_ll,log(like[attr(dadm,"expand")]))
+  if (trialwise) return(expanded)
+  sum(expanded)
 }
 
 
 
 #### sdt choice likelihoods ----
 
-log_likelihood_sdt <- function(pars,dadm, model,lb=-Inf, min_ll=log(1e-10))
+log_likelihood_sdt <- function(pars,dadm, model,lb=-Inf, min_ll=log(1e-10),trialwise=FALSE)
   # probability of ordered discrete choices based on integrals of a continuous
   # distribution between thresholds, with fixed lower bound for first response
   # lb. Upper bound for last response is a fixed value in threshold vector
@@ -97,7 +109,9 @@ log_likelihood_sdt <- function(pars,dadm, model,lb=-Inf, min_ll=log(1e-10))
   } else ll <- log(model$pfun(lt=lt,ut=ut,pars=pars[dadm$winner,,drop=FALSE]))
   ll <- ll[attr(dadm,"expand")]
   ll[is.na(ll)] <- 0
-  sum(pmax(min_ll,ll))
+  expanded <- pmax(min_ll,ll)
+  if (trialwise) return(expanded)
+  sum(expanded)
 }
 
 # Two options:
