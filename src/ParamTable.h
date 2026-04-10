@@ -450,27 +450,21 @@ struct ParamTable {
         int cidx = entry.coef_idx[j];
         if (cidx < 0) continue;
 
-        const double* coef =
-          (entry.uses_self && cidx == out_idx)
-          ? self_copy.data()
-            : &base(0, cidx);
+        const double* coef = (entry.uses_self && cidx == out_idx) ? self_copy.data() : &base(0, cidx);
 
         const double* d = &design(0, j);
 
-        // loop over trial rows
+
 #pragma omp simd
         for (int r = 0; r < T; ++r) {
-          double cr = coef[r];   // parameter coefficient
-          double dr = d[r];        // design row value
+          double cr = coef[r];
+          double dr = d[r];
 
           if (dr == 0.0 || cr == 0.0) {
             // contributes 0, do nothing
           } else {
             out[r] += cr * dr;
           }
-          // old code just did this:
-          // double v = coef[r] * d[r];
-          // out[r] += v;
         }
       }
     }
