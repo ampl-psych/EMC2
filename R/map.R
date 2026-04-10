@@ -17,6 +17,8 @@
 #   pars
 # }
 
+
+
 do_pre_transform <- function(p_vector, transform)
 {
   isexp    <- transform$func[names(p_vector)] == "exp"
@@ -49,6 +51,40 @@ do_bound <- function(pars,bound, lR = NULL) {
   return(bound)
 }
 
+# This form used in make_data
+fix_bound <- function(pars,bound, lR = NULL,fix=FALSE) {
+  # SM: Only consider bounds of parameters that are actually in pars
+  # When we move to the oo_refactor we can apply the full bound to all parameters
+  bound$minmax <- bound$minmax[,colnames(bound$minmax) %in% colnames(pars), drop=FALSE]
+  tpars <- t(pars[,colnames(bound$minmax),drop=FALSE])
+  oklo <- tpars >= bound$minmax[1,]
+  okhi <- tpars <= bound$minmax[2,]
+  if (!is.null(bound$exception)) {
+    # SM: Only consider bounds of parameters that are actually in pars
+    # When we move to the oo_refactor we can apply the full bound to all parameters
+    bound$exception <- bound$exception[names(bound$exception) %in% colnames(pars)]
+    exception <- tpars[names(bound$exception),] == bound$exception
+    oklo[names(bound$exception),] <- oklo[names(bound$exception),] | exception
+    okhi[names(bound$exception),] <- okhi[names(bound$exception),] | exception
+  }
+  bounds <- colSums(oklo&okhi) == nrow(oklo)
+
+  if (fix) {
+    for (i in colnames(bound$minmax)) {
+      pars[!oklo[i,],i] <- bound$minmax[1,i]
+      pars[!okhi[i,],i] <- bound$minmax[2,i]
+    }
+    bounds[] <- TRUE
+  }
+
+  if(!is.null(lR)){
+    lvl <- length(unique(lR))
+    bounds <- rep(colSums(matrix(bounds, lvl)) == lvl, each = lvl)
+  }
+  attr(pars,"ok") <- bounds
+  return(pars)
+}
+
 # This form used in get_pars
 add_bound <- function(pars,bound, lR = NULL) {
   attr(pars, "ok") <- do_bound(pars,bound, lR = lR)
@@ -59,157 +95,6 @@ add_bound <- function(pars,bound, lR = NULL) {
 #### Functions to look at parameters ----
 
 #### Functions to look at parameters ----
-
-map_p <- function(p,dadm,model,return_trialwise_parameters=FALSE,
-                  return_trend_pars = FALSE)
-  # Map p to dadm and returns matrix of mapped parameters
-  # p is either a vector or a matrix (ncol = number of subjects) of p_vectors
-  # dadm is a design matrix with attributes containing model information
-{
-
-  # Check if p is a matrix and validate column names match parameter names
-  if ( is.matrix(p) ) {
-    if (!all(sort(dimnames(p)[[2]])==sort(attr(dadm,"p_names"))))
-      stop("p col.names must be: ",paste(attr(dadm,"p_names"),collapse=", "))
-    if (!all(levels(dadm$subjects) %in% dimnames(p)[[1]]))
-      stop("p must have rows named for every subject in dadm")
-    p <- p[dadm$subjects,,drop=FALSE]
-  } else if (!all(sort(names(p))==sort(attr(dadm,"p_names")))) # If p is vector, check names
-    stop("p names must be: ",paste(attr(dadm,"p_names"),collapse=", "))
-
-  # Get parameter names from model and create output matrix
-  do_p <- names(model$p_types)
-  pars <- matrix(nrow=nrow(dadm),ncol=length(do_p),dimnames=list(NULL,do_p))
-
-  # If there are any trends for premap or pretransform do these first
-  # Trend parameters used premap will be removed after mapping; pretransform ones retained
-  premap_idx <- rep(F, length(do_p))
-  pretrend_idx <- rep(F, length(do_p))
-  if (!is.null(model$trend)){
-    trend_names <- get_trend_pnames(model$trend)
-    phases <- vapply(model$trend, function(x) x$phase, character(1))
-    has_pre <- any(phases %in% c("premap","pretransform"))
-    if (has_pre) {
-      pretrend_idx <- do_p %in% trend_names
-      # remove only premap trend parameter columns at the end
-      premap_names <- unique(unlist(lapply(model$trend, function(x) if (identical(x$phase, "premap")) x$trend_pnames else character(0))))
-      if (length(premap_names)) premap_idx <- do_p %in% premap_names
-      # Reorder parameters to make design matrix for trends first
-      do_p <- c(do_p[pretrend_idx], do_p[!pretrend_idx])
-    }
-  }
-  k <- 1
-  if(return_trialwise_parameters) tpars <- list()
-  # Loop through each parameter
-  for (i in do_p) {
-    cur_design <- attr(dadm,"designs")[[i]]
-    # Handle vector vs matrix input differently
-    if ( !is.matrix(p) ) {
-      pm <- t(as.matrix(p[colnames(cur_design)]))
-      pm <- pm[rep(1,nrow(pars)),,drop=FALSE]
-    } else pm <- p[,colnames(cur_design),drop=FALSE]
-
-    # Apply pre-mapped trends (only entries with phase == 'premap')
-    if (!is.null(model$trend)) {
-      trend <- model$trend
-      tnames <- names(trend)
-      if (any(tnames %in% colnames(pm))) {
-        for (idx in seq_along(trend)) {
-          cur_trend <- trend[[idx]]
-          if (!identical(cur_trend$phase, "premap")) next
-
-          # if parameter inputs requested but not yet mapped, pass raw value
-          for(par_input_name in cur_trend$par_input) {
-            if(!par_input_name %in% colnames(pars)) {
-              pars <- cbind(pars, p[,par_input_name])
-              colnames(pars)[ncol(pars)] <- par_input_name
-              # pars[,par_input_name] <- p[,par_input_name]
-            } else if(all(is.na(pars[,par_input_name]))) {
-              pars[,par_input_name] <- p[,par_input_name]
-            }
-          }
-
-          par_name <- tnames[idx]
-          if (!(par_name %in% colnames(pm))) next
-          trend_pars <- pars[, cur_trend$trend_pnames, drop = FALSE]
-          updated <- run_trend(dadm, cur_trend, pm[, par_name], trend_pars, pars, return_trialwise_parameters)
-          if(return_trialwise_parameters){
-            trialwise_parameters <- attr(updated, "trialwise_parameters")
-            # Return size is always of covariates -- but perhaps additional par_input was passed as well
-            # this needs more thinking - how do we know the exact number of updated covariates? Why par_input here? to check with Niek
-            if(length(cur_trend$covariate) > 1) {
-              colnames(trialwise_parameters) <- paste0(par_name, '_', c(cur_trend$covariate, cur_trend$par_input))
-            } else {
-              colnames(trialwise_parameters) <- paste0(par_name, '_', paste0(c(cur_trend$covariate, cur_trend$par_input), collapse='_'))
-            }
-            # colnames(trialwise_parameters) <- paste0(par_name, '_', paste0(c(cur_trend$covariate, cur_trend$par_input), collapse='_'))
-            tpars[[par_name]] <- trialwise_parameters
-          }
-          pm[, par_name] <- updated
-        }
-      }
-    }
-
-    # Apply design matrix and sum parameter effects
-    tmp <- pm*cur_design[attr(cur_design,"expand"),,drop=FALSE]
-    tmp[is.nan(tmp)] <- 0 # Handle 0 weight x Inf parameter cases
-    tmp <- rowSums(tmp)
-    # If this is a premap trend parameter, transform it here already
-    # We'll need it transformed later in this loop (for trending other parameters)
-    if(k <= sum(pretrend_idx)){
-      tmp <- as.matrix(tmp)
-      colnames(tmp) <- i
-      tmp <- do_transform(tmp, model$transform)
-    }
-    k <- k + 1
-    pars[,i] <- tmp
-  }
-  if(!return_trend_pars){
-    pars <- pars[,!premap_idx,drop=FALSE]
-  }
-  if(return_trialwise_parameters) attr(pars, "trialwise_parameters") <- do.call(cbind, tpars)
-  return(pars)
-}
-
-
-get_pars_matrix <- function(p_vector,dadm,model) {
-  # Order:
-  # 1 pretransform
-  # 2 add constants
-  # 3 map
-  # # - if premap trend:
-  # #   First make trend pars matrix
-  # #   Apply trends premap and remove trend pars from pars matrix
-  # # - map
-  # 4 if pretransform trend:
-  # # - apply trends and remove trend pars from pars matrix
-  # 5 transform
-  # 6 if posttransform trend:
-  # # - apply trends and remove trend pars from pars matrix
-  # 7 trial-wise transform
-  # 8 bound
-
-  p_vector <- do_pre_transform(p_vector, model$pre_transform)
-  # If there's any premap trends, they're done in map_p
-  pars <- map_p(add_constants(p_vector,attr(dadm,"constants")),dadm, model)
-  if(!is.null(model$trend)){
-    phases <- vapply(model$trend, function(x) x$phase, character(1))
-    if (any(phases == "pretransform")){
-      pars <- prep_trend_phase(dadm, model$trend, pars, "pretransform")
-    }
-  }
-  pars <- do_transform(pars, model$transform)
-  if(!is.null(model$trend)){
-    phases <- vapply(model$trend, function(x) x$phase, character(1))
-    if (any(phases == "posttransform")){
-      pars <- prep_trend_phase(dadm, model$trend, pars, "posttransform")
-    }
-  }
-  pars <- model$Ttransform(pars, dadm)
-  pars <- add_bound(pars, model$bound, dadm$lR)
-  return(pars)
-}
-
 
 make_pmat <- function(p_vector,design)
   # puts vector form of p_vector into matrix form
@@ -343,14 +228,34 @@ fill_bound <- function(bound, model) {
       stop("first entry of bound must be named minmax")
     if (!all(colnames(bound$minmax) %in% names(model()$p_types)))
       stop("minmax column names must correspond to parameter types")
-    if (!is.null(bound$exception) &&
-        (!all(names(bound$exception) %in% names(model()$p_types))))
+    if (!is.null(bound$exception) && (!all(names(bound$exception) %in% names(model()$p_types)))) {
       stop("exception names must correspond to parameter types")
-    filled_bound$minmax[,colnames(bound$minmax)] <- bound$minmax
-    if (!is.null(bound$exception)) {
-      filled_bound$exception <- c(bound$exception,filled_bound$exception)
-      filled_bound$exception <- filled_bound$exception[!duplicated(names(filled_bound$exception))]
     }
+    ## minmax
+    mm_filled <- filled_bound$minmax  # existing default
+    mm_bound  <- bound$minmax         # user-specified
+    new_cols <- setdiff(colnames(mm_bound), colnames(mm_filled))
+    if (length(new_cols)) {
+      mm_filled <- cbind(mm_filled,
+                         mm_bound[, new_cols, drop = FALSE])
+    }
+    # overlapping columns: overwrite defaults with user values
+    common_cols <- intersect(colnames(mm_bound), colnames(mm_filled))
+    if (length(common_cols)) {
+      mm_filled[, common_cols] <- mm_bound[, common_cols, drop = FALSE]
+    }
+
+    filled_bound$minmax <- mm_filled
+    # exceptions
+    if (!is.null(bound$exception)) {
+      fe <- filled_bound$exception
+      be <- bound$exception
+      # override or append: user values win
+      fe[names(be)] <- be
+      filled_bound$exception <- fe
+    }
+
+    filled_bound
   }
   filled_bound
 }

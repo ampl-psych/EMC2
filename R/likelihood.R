@@ -1,6 +1,6 @@
 calc_ll_R <- function(p_vector, model, dadm){
   if(!is.null(model$transform)){
-    pars <- get_pars_matrix(p_vector, dadm, model)
+    pars <- get_pars_matrix_oo(p_vector, dadm, model)
   } else{
     pars <- p_vector
   }
