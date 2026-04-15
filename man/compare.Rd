@@ -33,7 +33,8 @@ If a vector is supplied, only the iterations in the vector will be considered.}
 for DIC/BPIC. \code{"joint"} uses the joint likelihood including the hierarchical
 prior; this option is experimental.}
 
-\item{BayesFactor}{Boolean, defaults to \code{TRUE}. Include log marginal likelihoods as estimated using WARP-III bridge sampling.
+\item{BayesFactor}{Boolean, defaults to \code{TRUE}. Include marginal deviance
+(\code{-2 * log} marginal likelihood) as estimated using WARP-III bridge sampling.
 Usually takes a minute per model added to calculate}
 
 \item{cores_for_props}{Integer, how many cores to use for the Bayes factor calculation, here 4 is the default for the 4 different proposal densities to evaluate, only 1, 2 and 4 are sensible.}
@@ -58,7 +59,7 @@ Returns the BPIC/DIC and optionally marginal deviance (-2 x log marginal likelih
 \details{
 Computes DIC and BPIC using a deviance based on either (a) the data likelihood
 only ("conditional", default) or (b) the joint likelihood including the
-hierarchical prior over subject-level parameters ("joint", experimental).
+hierarchical prior over subject-level parameters ("joint", non-standard, experimental).
 
 If \code{use_best_fit = TRUE} (default), the deviance anchor is taken as the better
 of the deviance at the posterior mean parameters and the best-fitting posterior

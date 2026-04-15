@@ -4,7 +4,7 @@
 #'
 #' Computes DIC and BPIC using a deviance based on either (a) the data likelihood
 #' only ("conditional", default) or (b) the joint likelihood including the
-#' hierarchical prior over subject-level parameters ("joint", experimental).
+#' hierarchical prior over subject-level parameters ("joint", non-standard, experimental).
 #'
 #' If `use_best_fit = TRUE` (default), the deviance anchor is taken as the better
 #' of the deviance at the posterior mean parameters and the best-fitting posterior
@@ -19,7 +19,8 @@
 #' @param type Character. `"conditional"` (default) uses only the data likelihood
 #' for DIC/BPIC. `"joint"` uses the joint likelihood including the hierarchical
 #' prior; this option is experimental.
-#' @param BayesFactor Boolean, defaults to `TRUE`. Include log marginal likelihoods as estimated using WARP-III bridge sampling.
+#' @param BayesFactor Boolean, defaults to `TRUE`. Include marginal deviance
+#' (`-2 * log` marginal likelihood) as estimated using WARP-III bridge sampling.
 #' Usually takes a minute per model added to calculate
 #' @param cores_for_props Integer, how many cores to use for the Bayes factor calculation, here 4 is the default for the 4 different proposal densities to evaluate, only 1, 2 and 4 are sensible.
 #' @param cores_per_prop Integer, how many cores to use for the Bayes factor calculation if you have more than 4 cores available. Cores used will be cores_for_props * cores_per_prop. Best to prioritize cores_for_props being 4 or 2
