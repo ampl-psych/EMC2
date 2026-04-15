@@ -410,8 +410,8 @@ get_trend_pnames <- function(trend){
 trend_help <- function(kernel = NULL, base = NULL, ...){
   dots <- add_defaults(list(...), do_return = FALSE, return_types = FALSE)
   bases <- get_bases()
-  base_2p <- names(bases)[1:3]
-  base_1p <- names(bases)[4:5]
+  base_2p <- names(bases)[1:2]
+  base_1p <- names(bases)[3:4]
   kernels <- get_kernels()
   if(dots$return_types){
     return(list(kernels = kernels, bases = bases))
@@ -1035,8 +1035,8 @@ get_bases <- function() {
 
 get_kernels <- function() {
   bases <- get_bases()
-  base_2p <- names(bases)[1:3]
-  base_1p <- names(bases)[4:5]
+  base_2p <- names(bases)[1:2]
+  base_1p <- names(bases)[3:4]
 
   kernels <- list(
     custom = list(description = "Custom C++ kernel: provided via register_trend().",

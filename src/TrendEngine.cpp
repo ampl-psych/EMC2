@@ -714,8 +714,7 @@ void TrendRuntime::apply_base_for_op(TrendOpRuntime& op,
   double* target_col = &pt.base(0, target_idx);
 
   const std::string& base = spec.base_type;
-  bool needs_base_par =
-    (base == "lin" || base == "centered");
+  bool needs_base_par = (base == "lin" || base == "centered");
 
   // Check if any slot has maps; assume all slots share same #maps if they do.
   const KernelSlotSpec& first_slot = *op.kernels[0].spec;
