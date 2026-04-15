@@ -15,12 +15,12 @@ using namespace Rcpp;
 // [[Rcpp::export]]
 Rcpp::NumericMatrix do_transform(Rcpp::NumericMatrix pars, Rcpp::List transform) {
   // Build the specs for these parameters
-  std::vector<TransformSpec> specs = make_transform_specs(pars, transform);
+  std::vector<TransformSpec> specs = make_transform_specs_matrix(pars, transform);
   // Apply transformation in place and return
-  return c_do_transform(pars, specs);
+  return c_do_transform_matrix(pars, specs);
 }
 
-NumericMatrix get_pars_matrix_oo(ParamTable& param_table,
+NumericMatrix get_pars_matrix(ParamTable& param_table,
                                  const Rcpp::List& designs,
                                  TrendRuntime* trend_runtime,
                                  const std::vector<TransformSpec>& full_specs,
@@ -200,7 +200,7 @@ double c_log_likelihood_race(NumericMatrix pars, DataFrame data,
 }
 
 // [[Rcpp::export]]
-NumericVector calc_ll_oo(NumericMatrix particle_matrix, DataFrame data, NumericVector constants,
+NumericVector calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVector constants,
                       List designs, String type, List bounds, List transforms, List pretransforms,
                       CharacterVector p_types, double min_ll, Rcpp::Nullable<Rcpp::List> trend = R_NilValue) {
   //            bool debug_first_particle = false){
@@ -219,8 +219,8 @@ NumericVector calc_ll_oo(NumericMatrix particle_matrix, DataFrame data, NumericV
   std::vector<BoundSpec> bound_specs;
 
   // 1. Pre-transform
-  std::vector<TransformSpec> t_specs = make_transform_specs(particle_matrix, pretransforms);
-  particle_matrix = c_do_transform(particle_matrix, t_specs);
+  std::vector<TransformSpec> t_specs = make_transform_specs_matrix(particle_matrix, pretransforms);
+  particle_matrix = c_do_transform_matrix(particle_matrix, t_specs);
 
   // 2. Add constants. Makes a copy - somewhat slow... but only once
   // constants: NumericVector (may be a single NA meaning "no constants")
@@ -238,7 +238,7 @@ NumericVector calc_ll_oo(NumericMatrix particle_matrix, DataFrame data, NumericV
 
   // 3.2 Transform specs
   std::vector<TransformSpec> transform_specs;
-  transform_specs = make_transform_specs_for_paramtable(param_table_template, transforms);
+  transform_specs = make_transform_specs_pt(param_table_template, transforms);
 
   // 3.3 Trend objects and keep_names (which parameters to return)
   std::unique_ptr<TrendPlan>    trend_plan;
@@ -286,7 +286,7 @@ NumericVector calc_ll_oo(NumericMatrix particle_matrix, DataFrame data, NumericV
         param_table_template.fill_from_particle_row(particle_matrix, i,
                                                     pm_col_to_base_idx);
       }
-      pars = get_pars_matrix_oo(param_table_template,
+      pars = get_pars_matrix(param_table_template,
                                 designs,
                                 tend_runtime_ptr,
                                 transform_specs,
@@ -306,7 +306,7 @@ NumericVector calc_ll_oo(NumericMatrix particle_matrix, DataFrame data, NumericV
         param_table_template.fill_from_particle_row(particle_matrix, i,
                                                     pm_col_to_base_idx);
       }
-      pars = get_pars_matrix_oo(param_table_template,
+      pars = get_pars_matrix(param_table_template,
                                 designs,
                                 tend_runtime_ptr,
                                 transform_specs,
@@ -345,11 +345,11 @@ NumericVector calc_ll_oo(NumericMatrix particle_matrix, DataFrame data, NumericV
         param_table_template.fill_from_particle_row(particle_matrix, i,
                                                     pm_col_to_base_idx);
       }
-      pars = get_pars_matrix_oo(param_table_template,
-                                designs,
-                                tend_runtime_ptr,
-                                transform_specs,
-                                keep_names);
+      pars = get_pars_matrix(param_table_template,
+                             designs,
+                             tend_runtime_ptr,
+                             transform_specs,
+                             keep_names);
 
       if (i == 0) {                            // first particle only, just to get colnames
         bound_specs = make_bound_specs_pt(minmax,mm_names,param_table_template,bounds);
@@ -364,7 +364,7 @@ NumericVector calc_ll_oo(NumericMatrix particle_matrix, DataFrame data, NumericV
 
 
 // [[Rcpp::export]]
-NumericMatrix get_pars_c_wrapper_oo(NumericMatrix particle_matrix,
+NumericMatrix get_pars_c_wrapper(NumericMatrix particle_matrix,
                                     DataFrame data,
                                     NumericVector constants,
                                     List designs,
@@ -383,8 +383,8 @@ NumericMatrix get_pars_c_wrapper_oo(NumericMatrix particle_matrix,
   }
 
   // 1. Pre-transform p_matrix - using old pipeline
-  std::vector<TransformSpec> t_specs = make_transform_specs(particle_matrix, pretransforms);
-  particle_matrix = c_do_transform(particle_matrix, t_specs);
+  std::vector<TransformSpec> t_specs = make_transform_specs_matrix(particle_matrix, pretransforms);
+  particle_matrix = c_do_transform_matrix(particle_matrix, t_specs);
 
   // 2. Add constants. Makes a copy - not ideal but hopefully just a minor little bit of overhead
   // constants: NumericVector (may be a single NA meaning "no constants")
@@ -402,7 +402,7 @@ NumericMatrix get_pars_c_wrapper_oo(NumericMatrix particle_matrix,
 
   // 3.2 Transform specs
   std::vector<TransformSpec> full_specs;
-  full_specs = make_transform_specs_for_paramtable(param_table_template, transforms);
+  full_specs = make_transform_specs_pt(param_table_template, transforms);
 
   // 3.3 Trend objects and return_param_names (which parameters to return)
   std::unique_ptr<TrendPlan>    trend_plan;
@@ -446,13 +446,13 @@ NumericMatrix get_pars_c_wrapper_oo(NumericMatrix particle_matrix,
     kernel_codes.push_back(kernel_output_codes[i]);
   }
 
-  NumericMatrix pars = get_pars_matrix_oo(param_table_template,
-                                          designs,
-                                          trend_runtime_ptr,
-                                          full_specs,
-                                          return_param_names,
-                                          return_kernel_matrix,
-                                          return_all_pars,
-                                          kernel_codes);
+  NumericMatrix pars = get_pars_matrix(param_table_template,
+                                       designs,
+                                       trend_runtime_ptr,
+                                       full_specs,
+                                       return_param_names,
+                                       return_kernel_matrix,
+                                       return_all_pars,
+                                       kernel_codes);
   return pars;
 }

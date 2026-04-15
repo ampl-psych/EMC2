@@ -18,9 +18,9 @@ calc_lls <- function(emc, n_particles=1e3) {
   p_mat <- matrix(rnorm(n_particles*length(p_types)), ncol=length(p_types))
   colnames(p_mat) <- p_types
 
-  lls_new <- EMC2:::calc_ll_oo(p_mat, dadm, constants = constants, designs = designs, type = model$c_name,
-                               model$bound, model$transform, model$pre_transform, p_types = p_types,
-                               min_ll = log(1e-10), model$trend)
+  lls_new <- EMC2:::calc_ll(p_mat, dadm, constants = constants, designs = designs, type = model$c_name,
+                            model$bound, model$transform, model$pre_transform, p_types = p_types,
+                            min_ll = log(1e-10), model$trend)
   lls_new
 }
 

@@ -335,64 +335,6 @@ LogicalVector lr_all(LogicalVector ok, int n_side)
   return out;
 }
 
-// // For do_bounds
-// struct BoundSpec {
-//   int col_idx;         // which column in 'pars'
-//   double min_val;
-//   double max_val;
-//   bool has_exception;
-//   double exception_val;
-// };
-//
-//
-// std::vector<BoundSpec> make_bound_specs(NumericMatrix minmax,
-//                                         CharacterVector minmax_colnames,
-//                                         NumericMatrix pars,
-//                                         List bound)
-// {
-//   // 1) Build a map from param-name -> column index in 'pars'
-//   CharacterVector pcolnames = colnames(pars);
-//   std::unordered_map<std::string, int> colMap;
-//   for (int j = 0; j < pcolnames.size(); j++) {
-//     colMap[ Rcpp::as<std::string>(pcolnames[j]) ] = j;
-//   }
-//
-//   // 2) Build a map from param-name -> exception value
-//   bool has_exception = bound.containsElementNamed("exception") && !Rf_isNull(bound["exception"]);
-//   std::unordered_map<std::string, double> exceptionMap;
-//   if (has_exception) {
-//     NumericVector except_vec = bound["exception"];
-//     CharacterVector except_names = except_vec.names();
-//     for (int i = 0; i < (int)except_vec.size(); i++) {
-//       exceptionMap[ Rcpp::as<std::string>(except_names[i])] = except_vec[i];
-//     }
-//   }
-//
-//   // 3) Create BoundSpec for each column in minmax
-//   int ncols = minmax_colnames.size();
-//   std::vector<BoundSpec> specs(ncols);
-//   for (int j = 0; j < ncols; j++) {
-//     std::string var_name = Rcpp::as<std::string>(minmax_colnames[j]);
-//
-//     // Fill the struct
-//     BoundSpec s;
-//     s.col_idx     = colMap[var_name];
-//     s.min_val     = minmax(0, j);
-//     s.max_val     = minmax(1, j);
-//
-//     auto it = exceptionMap.find(var_name);
-//     if (it != exceptionMap.end()) {
-//       s.has_exception = true;
-//       s.exception_val = it->second;
-//     } else {
-//       s.has_exception = false;
-//       s.exception_val = NA_REAL;  // or 0
-//     }
-//     specs[j] = s;
-//   }
-//   return specs;
-// }
-
 
 
 
