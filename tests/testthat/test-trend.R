@@ -128,7 +128,7 @@ trend_bases <- make_trend(
   par_names = c("m", "s"),
   cov_names = list("covariate1", "covariate2"),
   kernels = c("exp_incr", "exp_decr"),
-  bases = c("exp_lin", "lin")
+  bases = c("centered", "lin")
 )
 
 design_bases <- design(
