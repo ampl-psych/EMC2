@@ -516,7 +516,7 @@ void TrendRuntime::bind_all_ops_to_paramtable(const ParamTable& pt) {
       const std::string& base = spec.base_type;
       // Rprintf("Identified base = %s\n", base.c_str());
 
-      bool needs_base_par = (base == "lin" || base == "exp_lin" || base == "lin_exp" || base == "centered");
+      bool needs_base_par = (base == "lin" || base == "centered");
 
       int n_base_pars = 0;
       bool slot_has_maps = !spec.kernels.empty() && spec.kernels[0].has_covariate_maps;
@@ -715,8 +715,7 @@ void TrendRuntime::apply_base_for_op(TrendOpRuntime& op,
 
   const std::string& base = spec.base_type;
   bool needs_base_par =
-    (base == "lin" || base == "exp_lin" ||
-    base == "lin_exp" || base == "centered");
+    (base == "lin" || base == "centered");
 
   // Check if any slot has maps; assume all slots share same #maps if they do.
   const KernelSlotSpec& first_slot = *op.kernels[0].spec;
@@ -783,7 +782,7 @@ void TrendRuntime::apply_base_for_op(TrendOpRuntime& op,
       double tmp = q_combined;
       if (needs_base_par) {
         double tp = base_col0 ? base_col0[r] : 1.0;
-        if (base == "lin" || base == "exp_lin" || base == "lin_exp") {
+        if (base == "lin") {
           tmp *= tp;
         } else if (base == "centered") {
           tmp = (tmp - 0.5) * tp;
@@ -796,11 +795,7 @@ void TrendRuntime::apply_base_for_op(TrendOpRuntime& op,
       target_col[r] = contrib;
     } else {
       double base_term;
-      if (base == "exp_lin" || base == "lin_exp") {
-        base_term = std::exp(p);
-      } else {
-        base_term = p;
-      }
+      base_term = p;
 
       target_col[r] = base_term + contrib;
     }
@@ -911,68 +906,3 @@ Rcpp::NumericMatrix TrendRuntime::all_kernel_outputs(ParamTable& pt) {
   return all_kernel_outputs(pt, std::vector<int>{1}); // only main trajectories
 }
 
-// Rcpp::NumericMatrix TrendRuntime::all_kernel_outputs(ParamTable& pt) {
-//   using namespace Rcpp;
-//
-//   const int n = pt.n_trials;
-//
-//   // Count total number of kernel slots
-//   int n_slots = 0;
-//   for (const auto& op : premap_ops)        n_slots += op.kernels.size();
-//   for (const auto& op : pretransform_ops)  n_slots += op.kernels.size();
-//   for (const auto& op : posttransform_ops) n_slots += op.kernels.size();
-//
-//   NumericMatrix out(n, n_slots);
-//   CharacterVector cn(n_slots);
-//
-//   int col = 0;
-//
-//   auto fill_for_ops = [&](std::vector<TrendOpRuntime>& ops) {
-//     for (auto& op : ops) {
-//       const TrendOpSpec& spec = *op.spec;
-//
-//       for (auto& k_rt : op.kernels) {
-//         const KernelSlotSpec& kspec = *k_rt.spec;
-//         const std::vector<double>& traj = k_rt.kernel_ptr->get_output();
-//
-//         if ((int)traj.size() != n) {
-//           stop("TrendRuntime::all_kernel_outputs('%s'): trajectory length (%d) != n_trials (%d)",
-//                spec.target_param.c_str(), (int)traj.size(), n);
-//         }
-//
-//         for (int r = 0; r < n; ++r) {
-//           out(r, col) = traj[r];
-//         }
-//
-//         // Build a column name: target_param + "." + input_name
-//         std::string input_name;
-//         if (kspec.input_kind == InputKind::Covariate) {
-//           // try to get column name from attributes if available
-//           if (kspec.kernel_input.hasAttribute("names")) {
-//             // optional; often covariate is directly from data[cov_name],
-//             // so we don't have the name here. You can store the cov_name in KernelSlotSpec if needed.
-//             input_name = "cov";
-//           } else {
-//             input_name = "cov";
-//           }
-//         } else if (kspec.input_kind == InputKind::ParInput) {
-//           input_name = kspec.par_input_name;
-//         } else {
-//           input_name = "noinput";
-//         }
-//
-//         std::string cname = spec.target_param + "." + input_name;
-//         cn[col] = cname;
-//
-//         ++col;
-//       }
-//     }
-//   };
-//
-//   fill_for_ops(premap_ops);
-//   fill_for_ops(pretransform_ops);
-//   fill_for_ops(posttransform_ops);
-//
-//   colnames(out) = cn;
-//   return out;
-// }

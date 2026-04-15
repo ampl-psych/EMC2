@@ -284,13 +284,16 @@ make_trend <- function(par_names, cov_names = NULL, kernels, bases = NULL,
       }
     } else {
       if (identical(kernels[i], "custom")) {
-        # For custom kernels, accept any of the standard bases the user specifies.
-        base_ok <- c("lin","exp_lin","centered","add","identity")
-        if (!(bases[i] %in% base_ok)) stop("Unknown base '", bases[i], "' for custom kernel. Pick one of ", paste(base_ok, collapse = ", "))
+        base_ok <- c("lin", "centered", "add", "identity")
+        if (!(bases[i] %in% base_ok))
+          stop("Unknown base '", bases[i], "' for custom kernel. Pick one of ", paste(base_ok, collapse = ", "))
         trend$base <- bases[i]
       } else {
-        if(bases[i] %in% names(trend_help(kernels[i], do_return = TRUE)$bases)){
-          stop("base type not supported with kernel, see `trend_help(<kernel>)`")
+        valid_bases <- trend_help(kernels[i], do_return = TRUE)$bases
+        if (!(bases[i] %in% valid_bases)) {
+          stop("Base '", bases[i], "' is not supported with kernel '", kernels[i],
+               "'. Valid bases: ", paste(valid_bases, collapse = ", "),
+               ". See `trend_help('", kernels[i], "')`.")
         }
         trend$base <- bases[i]
       }
@@ -678,7 +681,6 @@ run_trend <- function(dadm, trend, param, trend_pars, pars_full = NULL,
                       return_trialwise_parameters = FALSE, return_kernel=FALSE){
   n_base_pars <- switch(trend$base,
                         lin = 1,
-                        exp_lin = 1,
                         centered = 1,
                         add = 0,
                         identity = 0)
@@ -756,7 +758,7 @@ run_trend <- function(dadm, trend, param, trend_pars, pars_full = NULL,
           k_sum <- rowSums(kern_mat)
         }
         # multiply
-        if(trend$base %in% c('lin', 'exp_lin')) k_sum <- k_sum*trend_pars[s_idx,map_n]
+        if(trend$base %in% c('lin')) k_sum <- k_sum*trend_pars[s_idx,map_n]
         if(trend$base == 'centered') k_sum <- (k_sum-0.5)*trend_pars[s_idx,map_n]
         out[s_idx] <- out[s_idx] + k_sum
       }
@@ -767,7 +769,6 @@ run_trend <- function(dadm, trend, param, trend_pars, pars_full = NULL,
   # Do the mapping
   out <- switch(trend$base,
                 lin = param + out,
-                exp_lin = exp(param) + out,
                 centered = param + out,
                 add = param + out,
                 identity = out
@@ -919,7 +920,7 @@ run_delta2lr <- function(q0,alphaPos,alphaNeg,covariate) {
 ##'   the order is assumed to match `trend_parameters`.
 ##' @param base Default base to use when creating trends with this custom kernel
 ##'   if no `bases` argument is supplied to `make_trend`. One of
-##'   c("lin","exp_lin","centered","add","identity"). Default "add".
+##'   c("lin","centered","add","identity"). Default "add".  "exp_lin" has been deprecated - use pre_transform instead.
 ##' @return An object to pass to `make_trend(custom_trend=...)`, carrying the
 ##'   pointer, parameter names, default base, and optional transform mapping.
 ##' @export
@@ -927,7 +928,7 @@ register_trend <- function(trend_parameters, file, transforms = NULL, base = "ad
   if (!is.character(trend_parameters) || length(trend_parameters) == 0)
     stop("trend_parameters must be a non-empty character vector")
   if (!file.exists(file)) stop("C++ file not found: ", file)
-  base_ok <- c("lin","exp_lin","centered","add","identity")
+  base_ok <- c("lin","centered","add","identity")
   if (!is.character(base) || length(base) != 1L || !(base %in% base_ok))
     stop("base must be one of ", paste(base_ok, collapse = ", "))
 
@@ -1018,9 +1019,9 @@ get_bases <- function() {
     lin = list(description = "Linear base: parameter + w * k",
                transforms = list(func = list("w" = "identity")),
                default_pars = "w"),
-    exp_lin = list(description = "Exponential linear base: exp(parameter) + exp(w) * k",
-                   transforms = list(func = list("w" = "exp")),
-                   default_pars = "w"),
+    # exp_lin = list(description = "Exponential linear base: exp(parameter) + exp(w) * k",
+    #                transforms = list(func = list("w" = "exp")),
+    #                default_pars = "w"),
     centered = list(description = "Centered mapping: parameter + w*(k - 0.5)",
                     transforms = list(func = list("w" = "identity")),
                     default_pars = "w"),
@@ -1163,7 +1164,7 @@ verbal_trend <- function(design_matrix, trend) {
     trend_pnames <- trend[[trend_par_name]]$trend_pnames
     n_base_pars <- switch(base,
                           lin = 1,
-                          exp_lin = 1,
+                          # exp_lin = 1,
                           centered = 1,
                           add = 0,
                           identity = 0)
