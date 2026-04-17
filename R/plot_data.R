@@ -18,62 +18,52 @@ create_group_key <- function(df, factors) {
 # }
 
 
-check_data_plot <- function(data, defective_factor, subject, factors, remove_na = TRUE) {
-
-  # Check required columns
+# Custom check_data_plot for go/no-go models that doesn't remove non-response NAs
+check_data_plot <- function(data, defective_factor, subject, factors) 
+{
   required_cols_post <- c("rt", "subjects", defective_factor)
   missing_cols_post <- setdiff(required_cols_post, names(data))
   if (length(missing_cols_post) > 0) {
-    stop("Ensure data has columns: ", paste(missing_cols_post, collapse = ", "))
+    stop("Ensure data has columns: ", paste(missing_cols_post, 
+                                            collapse = ", "))
   }
-
-  # Handle factors argument
   if (!is.null(factors) && !all(factors %in% names(data))) {
     stop("factors must name factors in data")
   }
   n_bins <- 4
-  for(fact in factors){
-    if(is.numeric(data[,fact])){
-      if(length(unique(data[,fact])) > 6){
-        quartile_breaks <- quantile(unique(data[,fact]), probs = seq(0, 1, length.out = n_bins + 1), na.rm = TRUE)
-        # Bin the data into quartiles using these breakpoints
-        data[,fact] <- cut(data[,fact], breaks = quartile_breaks, include.lowest = TRUE, labels = paste0("Q", 1:n_bins))
+  for (fact in factors) {
+    if (is.numeric(data[, fact])) {
+      if (length(unique(data[, fact])) > 6) {
+        quartile_breaks <- quantile(unique(data[, fact]), 
+                                    probs = seq(0, 1, length.out = n_bins + 1), 
+                                    na.rm = TRUE)
+        data[, fact] <- cut(data[, fact], breaks = quartile_breaks, 
+                            include.lowest = TRUE, labels = paste0("Q", 
+                                                                   1:n_bins))
       }
     }
   }
-  # Handle subject argument
   if (!is.null(subject)) {
-    if(is.numeric(subject)) {
-      data <- data[data$subjects %in% unique(data$subjects)[subject], ]
-    } else {
+    if (is.numeric(subject)) {
+      data <- data[data$subjects %in% unique(data$subjects)[subject], 
+      ]
+    }
+    else {
       data <- data[data$subjects %in% subject, ]
     }
     data$subjects <- factor(data$subjects)
   }
-
-  if(remove_na){
-    # Remove missing or infinite rt
-    data <- data[is.finite(data$rt), ]
-  }
-
-  # --- Faster group_key creation when postn is present ---
+  
+  # Changed: keep NA RT rows, drop only non-finite non-missing RTs
+  data <- data[is.na(data$rt) | is.finite(data$rt), , drop = FALSE]
+  
   grp_cols <- unique(c("subjects", defective_factor, factors))
-  grp_cols <- intersect(grp_cols, names(data))  # Just to be safe
-
-  # 2. Extract the rows that are unique with respect to these columns (excluding 'postn')
-  tmp_unique <- data[!duplicated(data[, grp_cols, drop = FALSE]), grp_cols, drop = FALSE]
-
-  # 3. Create one group_key per unique row
+  grp_cols <- intersect(grp_cols, names(data))
+  tmp_unique <- data[!duplicated(data[, grp_cols, drop = FALSE]), 
+                     grp_cols, drop = FALSE]
   tmp_unique$group_key <- create_group_key(tmp_unique, factors)
-
-  # 4. Merge back group_key into the full data (by the grouping columns)
-  data <- merge(
-    x = data,
-    y = tmp_unique,
-    by = grp_cols,
-    all.x = TRUE,
-    sort = FALSE
-  )
+  data <- merge(x = data, y = tmp_unique, by = grp_cols, all.x = TRUE, 
+                sort = FALSE)
   return(data)
 }
 
@@ -96,116 +86,132 @@ calc_functions <- function(functions, input){
   return(input)
 }
 
-prep_data_plot <- function(input, post_predict, prior_predict, to_plot, limits,
-                           factors = NULL, defective_factor = NULL, subject = NULL,
-                           n_cores, n_post, functions, remove_na = TRUE){
-  if(!is.data.frame(input) && !inherits(input, "emc") && !is.null(post_predict) && length(input) != length(post_predict)){
+# Custom prep_data_plot for go/no-go models that doesn't remove non-response NAs
+prep_data_plot <- function(input, post_predict, prior_predict, to_plot, limits, 
+                              factors = NULL, defective_factor = NULL, subject = NULL, 
+                              n_cores, n_post, functions) 
+{
+  if (!is.data.frame(input) && !inherits(input, "emc") && !is.null(post_predict) && 
+      length(input) != length(post_predict)) {
     stop("If input is a list, post_predict must be a list of the same length")
   }
-  if(!is.data.frame(input) && !inherits(input, "emc") && !is.null(prior_predict) && length(input) != length(prior_predict)){
+  if (!is.data.frame(input) && !inherits(input, "emc") && !is.null(prior_predict) && 
+      length(input) != length(prior_predict)) {
     stop("If input is a list, prior_predict must be a list of the same length")
   }
+  
   datasets <- list()
   sources <- c()
-  # Check for regular input
-  if(!is.data.frame(input) && !inherits(input, "emc")){
-    if(is.null(names(input))) stop("If input is a list, it must have names")
-    is_emc <- unlist(lapply(input, function(x) inherits(x, "emc")))
-    if(!(all(is_emc) || all(!is_emc))){
+  
+  if (!is.data.frame(input) && !inherits(input, "emc")) {
+    if (is.null(names(input))) 
+      stop("If input is a list, it must have names")
+    is_emc <- lapply(input, function(x) inherits(x, "emc"))
+    if (!all(is_emc) || all(is_emc)) {
       stop("Input must be either all emc objects or no emc objects")
     }
-  } else{
+  } else {
     input <- list(data = input)
   }
-  # Check for post_predict and prior_predict
-  if(!is.data.frame(post_predict) && is.list(post_predict)){
-    if(is.null(names(post_predict))) stop("If post_predict is a list, it must have names")
+  
+  if (!is.data.frame(post_predict) && is.list(post_predict)) {
+    if (is.null(names(post_predict))) 
+      stop("If post_predict is a list, it must have names")
     datasets[names(post_predict)] <- post_predict
-    sources[names(post_predict)] <- 'posterior'
-  } else if(!is.null(post_predict)){
-    datasets[['posterior']] <- post_predict
-    sources['posterior'] <- 'posterior'
-  } else{
+    sources[names(post_predict)] <- "posterior"
+  } else if (!is.null(post_predict)) {
+    datasets[["posterior"]] <- post_predict
+    sources["posterior"] <- "posterior"
+  } else {
     post_predict <- vector("list", length(input))
   }
-  if(!is.data.frame(prior_predict)  && is.list(prior_predict)){
-    if(is.null(names(prior_predict))) stop("If prior_predict is a list, it must have names")
+  
+  if (!is.data.frame(prior_predict) && is.list(prior_predict)) {
+    if (is.null(names(prior_predict))) 
+      stop("If prior_predict is a list, it must have names")
     datasets[names(prior_predict)] <- prior_predict
-    sources[names(prior_predict)] <- 'prior'
-  } else if(!is.null(prior_predict)){
-    datasets[['prior']] <- prior_predict
-    sources['prior'] <- 'prior'
-  }  else{
+    sources[names(prior_predict)] <- "prior"
+  } else if (!is.null(prior_predict)) {
+    datasets[["prior"]] <- prior_predict
+    sources["prior"] <- "prior"
+  } else {
     prior_predict <- vector("list", length(input))
   }
-
+  
   all_data <- list()
-  # Check if regular input is data or emc
-  for(k in 1:length(input)){
-    # Prepare data
+  for (k in 1:length(input)) {
     if (inherits(input[[k]], "emc")) {
       all_data[[names(input)[k]]] <- get_data(input[[k]])
       functions <- c(get_emc_functions(input[[k]]), functions)
-    } else all_data[names(input)[k]] <- input[k]
+    } else {
+      all_data[names(input)[k]] <- input[k]
+    }
   }
-  if(length(unique(all_data)) == 1){
+  
+  if (length(unique(all_data)) == 1) {
     all_data <- all_data[1]
-    datasets['data'] <- all_data
-    sources['data'] <- 'data'
-  } else{
+    datasets["data"] <- all_data
+    sources["data"] <- "data"
+  } else {
     datasets[names(input)] <- all_data
-    sources[names(input)] <- 'data'
+    sources[names(input)] <- "data"
   }
-  # Check if posterior or prior predictives need to be generated
-  for(k in 1:length(input)){
-    # Generate posterior predictives
-    if (is.null(post_predict[[k]]) & ('posterior' %in% to_plot) & inherits(input[[k]], "emc")) {
-      # In this case we provided multiple emc datasets but they have the same data
-      # Just give them the name of the emc data if there is no prior to be plotted
-      # as well.
-      if(length(all_data) > 1 && !('prior' %in% to_plot)){
-        datasets[[paste0(names(input)[k], ' - posterior')]] <- predict(input[[k]], n_post = n_post, n_cores = n_cores)
-        sources[paste0(names(input)[k], ' - posterior')] <- 'posterior'
-      } else{
-        datasets[['posterior']] <- predict(input[[k]], n_post = n_post, n_cores = n_cores)
-        sources['posterior'] <- 'posterior'
+  
+  for (k in 1:length(input)) {
+    if (is.null(post_predict[[k]]) & ("posterior" %in% to_plot) & 
+        inherits(input[[k]], "emc")) {
+      if (length(all_data) > 1 && !("prior" %in% to_plot)) {
+        datasets[[paste0(names(input)[k], " - posterior")]] <- predict(input[[k]], 
+                                                                       n_post = n_post, n_cores = n_cores)
+        sources[paste0(names(input)[k], " - posterior")] <- "posterior"
+      } else {
+        datasets[["posterior"]] <- predict(input[[k]], 
+                                           n_post = n_post, n_cores = n_cores)
+        sources["posterior"] <- "posterior"
       }
     }
-    # See if we also want to generate prior predictives
-    if (is.null(prior_predict[[k]]) & ('prior' %in% to_plot) & inherits(input[[k]], "emc")) {
-      # Same logic as for posterior
-      if(length(all_data) > 1 && !('posterior' %in% to_plot)){
-        datasets[[paste0(names(input)[k], ' - prior')]] <- predict(input[[k]], n_post = n_post, n_cores = n_cores)
-        sources[paste0(names(input)[k], ' - prior')] <- 'prior'
-      } else{
-        datasets[['prior']] <- predict(get_prior(input[[k]]), data = get_data(input[[k]]), n_post = n_post, n_cores = n_cores)
-        sources['prior'] <- 'prior'
+    
+    if (is.null(prior_predict[[k]]) & ("prior" %in% to_plot) & 
+        inherits(input[[k]], "emc")) {
+      if (length(all_data) > 1 && !("posterior" %in% to_plot)) {
+        datasets[[paste0(names(input)[k], " - prior")]] <- predict(input[[k]], 
+                                                                   n_post = n_post, n_cores = n_cores)
+        sources[paste0(names(input)[k], " - prior")] <- "prior"
+      } else {
+        datasets[["prior"]] <- predict(get_prior(input[[k]]), 
+                                       data = get_data(input[[k]]), n_post = n_post, 
+                                       n_cores = n_cores)
+        sources["prior"] <- "prior"
       }
     }
   }
+  
   xlim <- NULL
-  # Compute xlim based on quantiles and perform checks
-  for(j in 1:length(datasets)){
-    datasets[[j]] <- calc_functions(functions, datasets[[j]])
-    datasets[[j]] <- check_data_plot(datasets[[j]], defective_factor, subject, factors, remove_na)
-    if(sources[j] %in% limits){
-      if(sources[j] == "prior"){
+  for (j in 1:length(datasets)) {
+    datasets[[j]] <- EMC2:::calc_functions(functions, datasets[[j]])
+    datasets[[j]] <- EMC2:::check_data_plot(datasets[[j]], defective_factor, 
+                                            subject, factors)
+    
+    if (sources[j] %in% limits) {
+      if (sources[j] == "prior") {
         x_lim_probs <- c(0, 0.95)
-      } else{
+      } else {
         x_lim_probs <- c(0, 0.99)
       }
-      quants <- aggregate(rt ~ group_key, datasets[[j]], quantile, probs = x_lim_probs)
+      
+      quants <- aggregate(rt ~ group_key, datasets[[j]], 
+                          quantile, probs = x_lim_probs)
       xlim <- range(xlim, unlist(quants$rt))
     }
   }
-
-  if(remove_na){
-    datasets <- lapply(datasets, function(x){
-      x <- x[x$rt > xlim[1] & x$rt < xlim[2],]
-      return(x)
-    })
-  }
-
+  
+  # Changed: Keep NA RT rows so no-go/nonresponses remain in the denominator
+  datasets <- lapply(datasets, function(x) {
+    keep <- is.na(x$rt) | (x$rt > xlim[1] & x$rt < xlim[2])
+    x <- x[keep, , drop = FALSE]
+    return(x)
+  })
+  
   return(list(datasets = datasets, sources = sources, xlim = xlim))
 }
 
@@ -382,24 +388,35 @@ plot_stat <- function(input, post_predict = NULL, prior_predict = NULL, stat_fun
 
 
 
-# A small function to compute the defective densities across factor levels
-compute_def_dens <- function(dat, defective_factor, dargs, from = NULL, to = NULL) {
+# Custom compute_def_dens to compute defective density for go/no-go models
+# containing NAs (non-responses) in rt column
+compute_def_dens <- function(dat, defective_factor, dargs, from = NULL, to = NULL) 
+{
   p_defective <- prop.table(table(dat[[defective_factor]]))
-  # We'll call density() on each subset of rt, then multiply by proportion
-  # so that the sum across factor levels is 1
-  # We'll use the from/to in dargs
   by_deflev <- split(dat, dat[[defective_factor]])
   out <- list()
+  
   for (lev in names(by_deflev)) {
     subdat <- by_deflev[[lev]]
-    if (nrow(subdat) < 2) {
-      # avoid error
+    
+    # Keep only observed RTs for density estimation
+    rt <- subdat$rt[!is.na(subdat$rt)]
+    
+    if (length(rt) < 2) {
       out[[lev]] <- rep(0, 512)
-    } else {
-      dd <- do.call(density, c(list(x = subdat$rt, from = from, to = to), fix_dots(dargs, density.default, consider_dots = FALSE)))
+    }
+    else {
+      dd <- do.call(
+        density,
+        c(
+          list(x = rt, from = from, to = to),
+          fix_dots(dargs, density.default, consider_dots = FALSE)
+        )
+      )
       out[[lev]] <- dd$y * p_defective[lev]
     }
   }
+  
   out
 }
 
@@ -646,27 +663,30 @@ plot_density <- function(input, post_predict = NULL, prior_predict = NULL,
 ###############################################################################
 ## Helper: get_def_cdf
 ###############################################################################
-get_def_cdf <- function(x, defective_factor, dots) {
-  # Computes a single defective CDF for each level of 'defective_factor'
-  # across the RT distribution (0.01 to 0.99).
+# Custom get_def_cdf for go/no-go models that doesn't remove non-response NAs
+get_def_cdf <- function(x, defective_factor, dots)
+{
+  # # Diagnostic checks: Print whether no-go/NAs are getting through
+  # cat("nrow(x) =", nrow(x), "\n")
+  # cat("NA responses =", sum(is.na(x[[defective_factor]])), "\n")
+  # cat("NA rt =", sum(is.na(x$rt)), "\n")
+  # print(table(x[[defective_factor]], useNA = "ifany"))
+  
   probs <- seq(0.01, 0.99, by = 0.01)
-  p_defective <- prop.table(table(x[[defective_factor]]))
-
-  # For each level, compute the empirical CDF and scale by that level's proportion
-  out <- mapply(
-    split(x, x[[defective_factor]]),
-    p_defective,
-    FUN = function(inp, prop_share) {
-      # quantile of RTs
-      rtquants <- quantile(inp$rt, probs = probs, type = 1, na.rm = TRUE)
-      # defective cdf = empirical cdf (probs) times the proportion
-      yvals <- probs * prop_share
-      cbind(x = rtquants, y = yvals)
-    },
-    SIMPLIFY = FALSE
-  )
-  # 'out' is now a list whose names are the factor levels; each entry is a 2-col matrix (x,y).
-  return(out)
+  n_total <- nrow(x)
+  resp <- x[[defective_factor]]
+  resp_levels <- unique(resp[!is.na(resp)])
+  
+  out <- lapply(resp_levels, function(lev) {
+    inp <- x[!is.na(resp) & resp == lev, , drop = FALSE]
+    prop_share <- nrow(inp) / n_total
+    rtquants <- quantile(inp$rt, probs = probs, type = 1, na.rm = TRUE)
+    yvals <- probs * prop_share
+    cbind(x = rtquants, y = yvals)
+  })
+  
+  names(out) <- resp_levels
+  out
 }
 
 ###############################################################################
