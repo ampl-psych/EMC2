@@ -34,7 +34,9 @@ std::vector<TransformSpec> make_transform_specs_matrix(const Rcpp::NumericMatrix
 Rcpp::NumericMatrix c_do_transform_matrix(Rcpp::NumericMatrix pars,
                                           const std::vector<TransformSpec>& specs);
 
-Rcpp::LogicalVector c_do_bound_pt(const ParamTable& pt, const std::vector<BoundSpec>& specs);
+void c_do_bound_pt(const ParamTable& pt,
+                   const std::vector<BoundSpec>& specs,
+                   std::vector<int>& result);
 
 std::vector<TransformSpec> make_transform_specs_pt(const ParamTable& pt,
                                                    const Rcpp::List& transform);

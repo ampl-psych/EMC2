@@ -1,10 +1,16 @@
 // pnorm_utils.h
 // Unified pnorm/plnorm/dlnorm implementation for all race models.
 //
-// To use the fast approximation, define USE_FAST_PNORM before including
-// this header, or pass -DUSE_FAST_PNORM to the compiler (e.g. in Makevars).
+// Define USE_FAST_PNORM (e.g. -DUSE_FAST_PNORM in Makevars) to use the
+// branchless A&S approximation in the hot path.  Default: exact R::pnorm.
 //
-// Default: exact R::pnorm / R::plnorm.
+// The fast path provides two primitives:
+//   fast_phi(x)      — Φ(x), lower-tail, no log  [vectorisable: pure arithmetic]
+//   fast_log_phi(x)  — log Φ(x)                  [vectorisable: arithmetic + log]
+//
+// All PNORM_STD(x, lower, logp) call sites in digt_core / pigt_core use one
+// of exactly four combinations; each is mapped explicitly below so that
+// lower/logp are never silently ignored.
 
 #ifndef PNORM_UTILS_H
 #define PNORM_UTILS_H
@@ -12,110 +18,119 @@
 #include <cmath>
 #include <Rcpp.h>
 
-// ---------------------------------------------------------------------------
-// Implementation detail — keep out of global namespace
-// ---------------------------------------------------------------------------
-
 namespace pnorm_detail {
 
-// Fast approximation — rational approximation of Φ(x)
-// Source: https://stackoverflow.com/a/23119456 (CC BY-SA 3.0)
+// ---------------------------------------------------------------------------
+// A&S approximation core — erf via rational polynomial (Horner form)
+// No branches on the polynomial path; only one copysign + one exp.
+// Vectorisable by Apple clang when inlined into a contiguous loop.
+// Max absolute error: ~1.5e-7 over the full real line.
+// ---------------------------------------------------------------------------
 
-// static const double RT2PI = 2.506628274631000502415765284811;
-// static const double SPLIT  = 7.07106781186547;
-
-// static const double N0 = 220.206867912376;
-// static const double N1 = 221.213596169931;
-// static const double N2 = 112.079291497871;
-// static const double N3 = 33.912866078383;
-// static const double N4 = 6.37396220353165;
-// static const double N5 = 0.700383064443688;
-// static const double N6 = 3.52624965998911e-02;
-//
-// static const double M0 = 440.413735824752;
-// static const double M1 = 793.826512519948;
-// static const double M2 = 637.333633378831;
-// static const double M3 = 296.564248779674;
-// static const double M4 = 86.7807322029461;
-// static const double M5 = 16.064177579207;
-// static const double M6 = 1.75566716318264;
-// static const double M7 = 8.83883476483184e-02;
-//
-// inline double phi(double x)
-// {
-//   const double z = std::fabs(x);
-//   double c = 0.0;
-//
-//   if (z <= 37.0) {
-//     const double e = std::exp(-z * z / 2.0);
-//     if (z < SPLIT) {
-//       const double n = (((((N6*z + N5)*z + N4)*z + N3)*z + N2)*z + N1)*z + N0;
-//       const double d = ((((((M7*z + M6)*z + M5)*z + M4)*z + M3)*z + M2)*z + M1)*z + M0;
-//       c = e * n / d;
-//     } else {
-//       const double f = z + 1.0/(z + 2.0/(z + 3.0/(z + 4.0/(z + 13.0/20.0))));
-//       c = e / (RT2PI * f);
-//     }
-//   }
-//   return x <= 0.0 ? c : 1.0 - c;
-// }
-
-inline double phi(double x)
+inline double fast_erf(double x)
 {
-  return 0.5 * std::erfc(-x * M_SQRT1_2);
+  // A&S 7.1.26 — rational approximation to erf(x) for x >= 0,
+  // extended to all x via symmetry.
+  constexpr double p  = 0.3275911;
+  constexpr double a1 =  0.254829592;
+  constexpr double a2 = -0.284496736;
+  constexpr double a3 =  1.421413741;
+  constexpr double a4 = -1.453152027;
+  constexpr double a5 =  1.061405429;
+
+  const double ax = std::fabs(x);
+  const double t  = 1.0 / (1.0 + p * ax);
+  const double poly = ((((a5 * t + a4) * t + a3) * t + a2) * t + a1) * t;
+  const double e    = std::exp(-ax * ax);
+  // erf(ax) ≈ 1 - poly * e; extend to negative x via copysign
+  return std::copysign(1.0 - poly * e, x);
 }
 
-inline double fast_pnorm_std(double x, bool lower, bool logp)
+// Φ(x) = 0.5 * (1 + erf(x / sqrt(2)))
+inline double fast_phi(double x)
 {
-  double cdf = phi(x);
-  if (!lower) cdf = 1.0 - cdf;
-  if (logp) {
-    if (cdf <= 0.0) return R_NegInf;
-    return std::log(cdf);
-  }
-  return cdf;
+  constexpr double inv_sqrt2 = 0.70710678118654752440;
+  return 0.5 * (1.0 + fast_erf(x * inv_sqrt2));
 }
+
+// log Φ(x) — used in pigt_core t2 term (logp=true call site)
+// Delegates to std::log(fast_phi(x)); clamped to avoid -Inf in hot path.
+inline double fast_log_phi(double x)
+{
+  const double p = fast_phi(x);
+  // For x < -8 the approximation saturates to ~0; clamp to a finite floor.
+  return (p > 0.0) ? std::log(p) : -1000.0;
+}
+
+// ---------------------------------------------------------------------------
+// Exact fallbacks
+// ---------------------------------------------------------------------------
 
 inline double exact_pnorm_std(double x, bool lower, bool logp)
 {
   return R::pnorm(x, 0.0, 1.0, lower, logp);
 }
 
+// ---------------------------------------------------------------------------
+// Rational approximation for the upper tail — used by pigt0 (lower=false)
+// Reuses fast_phi via symmetry: Φ_upper(x) = 1 - Φ(x) = Φ(-x)
+// ---------------------------------------------------------------------------
+
+inline double fast_phi_upper(double x)
+{
+  return fast_phi(-x);
+}
+
 } // namespace pnorm_detail
 
 // ---------------------------------------------------------------------------
 // PNORM_STD(x, lower, logp)
-// Evaluates the standard normal CDF at x.
+//
+// All four (lower, logp) combinations used in the codebase are mapped
+// explicitly so that the fast path never silently ignores an argument.
+//
+//   (true,  false) — Φ(x)          — digt_core t2, pigt_core t4
+//   (true,  true)  — log Φ(x)      — pigt_core t2
+//   (false, false) — 1 - Φ(x)      — pigt0
+//   (false, true)  — log(1 - Φ(x)) — (not currently used; safe fallback)
 // ---------------------------------------------------------------------------
 
 #ifdef USE_FAST_PNORM
-#define PNORM_STD(x, lower, logp) pnorm_detail::fast_pnorm_std((x), (lower), (logp))
+
+// Dispatch at compile time on the literal bool arguments.
+// The compiler folds the dead branches away entirely.
+#define PNORM_STD(x, lower, logp)                                         \
+( (lower) && !(logp) ? pnorm_detail::fast_phi(x)                          \
+    : (lower) &&  (logp) ? pnorm_detail::fast_log_phi(x)                  \
+    : !(lower) && !(logp) ? pnorm_detail::fast_phi_upper(x)               \
+    :                       std::log(pnorm_detail::fast_phi_upper(x)) )
+
 #else
+
 #define PNORM_STD(x, lower, logp) pnorm_detail::exact_pnorm_std((x), (lower), (logp))
-#endif
 
-// ---------------------------------------------------------------------------
-// PLNORM(t, m, s) / DLNORM(t, m, s)
-// Lognormal CDF and PDF, always lower-tail, non-log scale.
-// DLNORM is always the direct formula (no pnorm involved, always fast).
-// PLNORM uses PNORM_STD so it respects the USE_FAST_PNORM switch.
-// ---------------------------------------------------------------------------
+#endif // USE_FAST_PNORM
 
-namespace pnorm_detail {
+  // ---------------------------------------------------------------------------
+  // PLNORM(t, m, s) / DLNORM(t, m, s)
+  // ---------------------------------------------------------------------------
 
-inline double fast_plnorm(double t, double m, double s)
-{
-  return PNORM_STD((std::log(t) - m) / s, /*lower=*/true, /*logp=*/false);
-}
+  namespace pnorm_detail {
+
+  inline double fast_plnorm(double t, double m, double s)
+  {
+    // Reuses PNORM_STD so it respects the USE_FAST_PNORM switch.
+    return PNORM_STD((std::log(t) - m) / s, /*lower=*/true, /*logp=*/false);
+  }
 
 inline double fast_dlnorm(double t, double m, double s)
-{
-  const double log_t = std::log(t);
-  const double z     = (log_t - m) / s;
-  return std::exp(-0.5 * z * z) / (t * s * std::sqrt(2.0 * M_PI));
-}
+  {
+    const double log_t = std::log(t);
+    const double z     = (log_t - m) / s;
+    return std::exp(-0.5 * z * z) / (t * s * std::sqrt(2.0 * M_PI));
+  }
 
-} // namespace pnorm_detail
+  } // namespace pnorm_detail
 
 #ifdef USE_FAST_PNORM
 #define PLNORM(t, m, s) pnorm_detail::fast_plnorm((t), (m), (s))
@@ -123,7 +138,7 @@ inline double fast_dlnorm(double t, double m, double s)
 #define PLNORM(t, m, s) R::plnorm((t), (m), (s), true, false)
 #endif
 
-// DLNORM: always use the direct formula — no #ifdef needed
+  // DLNORM: always the direct formula — no R call, no #ifdef needed
 #define DLNORM(t, m, s) pnorm_detail::fast_dlnorm((t), (m), (s))
 
 #endif // PNORM_UTILS_H
