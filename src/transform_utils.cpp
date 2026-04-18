@@ -1,5 +1,7 @@
 // transform_utils.cpp
+#include "math_utils.h"
 #include "transform_utils.h"
+#include "pnorm_utils.h"
 
 using namespace Rcpp;
 using std::string;
@@ -388,14 +390,16 @@ c_do_bound(NumericMatrix pars,
   return result;
 }
 
-Rcpp::LogicalVector c_do_bound_pt(const ParamTable& pt,
-                                  const std::vector<BoundSpec>& specs)
+// void, pass result to avoid repeated allocation
+void c_do_bound_pt(const ParamTable& pt,
+                   const std::vector<BoundSpec>& specs,
+                   std::vector<int>& result)
 {
   const Rcpp::NumericMatrix& base = pt.base;
   const int nrows = base.nrow();
 
-  Rcpp::LogicalVector result(nrows, true);
-  int* res = LOGICAL(result);  // underlying int[ ]: 0=FALSE, 1=TRUE
+  std::fill(result.begin(), result.begin() + nrows, 1);
+  int* res = result.data();
 
   for (const BoundSpec& bs : specs) {
     const int    col_idx = bs.col_idx;
@@ -406,21 +410,14 @@ Rcpp::LogicalVector c_do_bound_pt(const ParamTable& pt,
 
     const double* col = &base(0, col_idx);
 
-    #pragma omp simd
+#pragma omp simd
     for (int i = 0; i < nrows; ++i) {
       const double v = col[i];
       bool ok = (v > min_v && v < max_v);
-
-      if (has_exc) {
-        ok = ok || (v == exc_val);
-      }
-
-      // bitwise AND: 1 & 1 -> 1, all other -> 0
+      if (has_exc) ok = ok || (v == exc_val);
       res[i] = res[i] & (ok ? 1 : 0);
     }
   }
-
-  return result;
 }
 
 // Rcpp::LogicalVector c_do_bound_pt(const ParamTable& pt,
@@ -473,22 +470,20 @@ void c_do_transform_pt(ParamTable& pt,
     const double lw         = sp.lower;
     const double up         = sp.upper;
 
-    double* col = &pt.base(0, col_idx);
+    double* __restrict__ col = &pt.base(0, col_idx);
 
     switch (c) {
     case EXP: {
-      for (int i = 0; i < nrow; ++i) {
-      col[i] = lw + std::exp(col[i]);
-    }
+      vec_exp_offset(col, nrow, lw);
       break;
     }
     case PNORM: {
-      const double range = up - lw;
-      for (int i = 0; i < nrow; ++i) {
-        col[i] = lw + range *
-          R::pnorm(col[i], 0.0, 1.0, 1, 0);
-      }
-      break;
+    const double range = up - lw;
+    for (int i = 0; i < nrow; ++i) {
+      col[i] = lw + range * PNORM_STD(col[i], true, false);
+      // col[i] = lw + range * R::pnorm(col[i], 0.0, 1.0, 1, 0);
+    }
+    break;
     }
     case IDENTITY:
     default:

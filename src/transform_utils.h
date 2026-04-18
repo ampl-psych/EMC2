@@ -3,7 +3,6 @@
 #define EMC2_TRANSFORM_UTILS_H
 
 #include <Rcpp.h>
-// #include <RcppArmadillo.h>
 #include "ParamTable.h"
 
 
@@ -63,7 +62,9 @@ Rcpp::NumericMatrix c_do_transform(Rcpp::NumericMatrix pars,
 
 Rcpp::LogicalVector c_do_bound(Rcpp::NumericMatrix pars, const std::vector<BoundSpec>& specs);
 
-Rcpp::LogicalVector c_do_bound_pt(const ParamTable& pt, const std::vector<BoundSpec>& specs);
+void c_do_bound_pt(const ParamTable& pt,
+                   const std::vector<BoundSpec>& specs,
+                   std::vector<int>& result);
 
 // --- Declarations: ParamTable-based transforms ---
 

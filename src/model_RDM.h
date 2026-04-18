@@ -4,9 +4,10 @@
 #define _USE_MATH_DEFINES
 #include <cmath>
 #include <Rcpp.h>
-#include "ParamTable.h"
 #include "RaceSpec.h"
+#include "math_utils.h"  // must be before Rcpp
 #include "pnorm_utils.h"
+#include "ParamTable.h"
 
 using namespace Rcpp;
 
@@ -22,8 +23,8 @@ constexpr double L_EPS = 1e-4;
 
 inline void clamp_a_l(double& a, double& l)
 {
-  if (a < A_EPS) a = A_EPS;
-  if (l > -L_EPS && l < L_EPS) l = (l >= 0.0 ? L_EPS : -L_EPS);
+  a = (a < A_EPS) ? A_EPS : a;
+  l = (l > -L_EPS && l < L_EPS) ? (l >= 0.0 ? L_EPS : -L_EPS) : l;
 }
 
 // ---------------------------------------------------------------------------
@@ -36,16 +37,13 @@ inline double pigt0(double t, double k, double l)
   const double lambda = k * k;
   const double z1     = std::sqrt(lambda / t) * (1.0 + t / mu);
   const double z2     = std::sqrt(lambda / t) * (1.0 - t / mu);
-  return std::exp(2.0 * lambda / mu + std::log(PNORM_STD(z1, false, false))) +
-    PNORM_STD(z2, false, false);
+  return std::exp(2.0 * lambda / mu + std::log(PNORM_STD(z1, false, false))) + PNORM_STD(z2, false, false);
 }
 
 inline double digt0(double t, double k, double l)
 {
   const double lambda = k * k;
-  const double e = (l == 0.0)
-    ? -0.5 * lambda / t
-  : -(lambda / (2.0 * t)) * ((t * t * l * l) / (k * k) - 2.0 * t * l / k + 1.0);
+  const double e = (l == 0.0) ? -0.5 * lambda / t : -(lambda / (2.0 * t)) * ((t * t * l * l) / (k * k) - 2.0 * t * l / k + 1.0);
   return std::exp(e + 0.5 * std::log(lambda) - 0.5 * std::log(2.0 * t * t * t * M_PI));
 }
 
@@ -77,6 +75,8 @@ inline double digt_core(double t, double k, double l, double a)
 
   const double t2a = 2.0 * PNORM_STD(arg1, /*lower=*/true, /*logp=*/false) - 1.0;
   const double t2b = 2.0 * PNORM_STD(arg2, /*lower=*/true, /*logp=*/false) - 1.0;
+  // const double t2a = std::erf(arg1 * M_SQRT1_2);
+  // const double t2b = std::erf(arg2 * M_SQRT1_2);
   const double t2  = 0.5 * l * (t2a + t2b);
 
   const double sum = t1 + t2;
@@ -126,8 +126,10 @@ inline double pigt_core(double t, double k, double l, double a)
                                      /*lower=*/true, /*logp=*/false) - 1.0;
   const double t4b = 2.0 * PNORM_STD((k - a) * inv_sqt - sqt * l,
                                      /*lower=*/true, /*logp=*/false) - 1.0;
-  const double t4  = 0.5 * (t * l - a - k + 0.5 / l) * t4a
-  + 0.5 * (k - a - t * l - 0.5 / l) * t4b;
+  //  equivalent but no pnorm
+  // const double t4a = std::erf((k + a - t * l) / (sqt * M_SQRT2));
+  // const double t4b = std::erf((k - a - t * l) / (sqt * M_SQRT2));
+  const double t4  = 0.5 * (t * l - a - k + 0.5 / l) * t4a + 0.5 * (k - a - t * l - 0.5 / l) * t4b;
 
   double cdf = 0.5 * (t4 + t2 + t1) / a;
 
@@ -313,6 +315,84 @@ void prdm_fast(const NumericVector& rts,
     clamp_a_l(a, l);
     raw[i] = pigt_core(t_eff, k, l, a);
   }
+}
+
+
+void drdm_prdm_fast(const NumericVector& rts,
+                    const ParamTable& pt,
+                    const RaceSpec& spec,
+                    const std::vector<int>& idx_win,
+                    const std::vector<int>& idx_los,
+                    double* __restrict__ raw,
+                    RaceScratch& scratch)
+{
+  const double* __restrict__ rt = rts.begin();
+  const double* __restrict__ v  = &pt.base(0, spec.col_v);
+  const double* __restrict__ B  = &pt.base(0, spec.col_B);
+  const double* __restrict__ A  = &pt.base(0, spec.col_A);
+  const double* __restrict__ t0 = &pt.base(0, spec.col_t0);
+  const double* __restrict__ s  = &pt.base(0, spec.col_s);
+
+  const int n_win = (int)idx_win.size();
+  const int n_los = (int)idx_los.size();
+
+  // Restrict-qualified pointers into scratch — lets clang prove no aliasing
+  // with the input arrays during gather.
+  double* __restrict__ sc_teff = scratch.t_eff.data();
+  double* __restrict__ sc_v    = scratch.v.data();
+  double* __restrict__ sc_B    = scratch.B.data();
+  double* __restrict__ sc_A    = scratch.A.data();
+  double* __restrict__ sc_s    = scratch.s.data();
+  double* __restrict__ sc_out  = scratch.out.data();
+
+  // --- Winners: gather ---
+  for (int j = 0; j < n_win; ++j) {
+    const int i  = idx_win[j];
+    sc_teff[j]   = rt[i] - t0[i];
+    sc_v[j]      = v[i];
+    sc_B[j]      = B[i];
+    sc_A[j]      = A[i];
+    sc_s[j]      = s[i];
+  }
+
+  // --- Winners: compute (contiguous — cost-model override via simd) ---
+#pragma omp simd
+  for (int j = 0; j < n_win; ++j) {
+    const double inv_s = 1.0 / sc_s[j];
+    double a = 0.5 * sc_A[j] * inv_s;
+    double l = sc_v[j]       * inv_s;
+    double k = sc_B[j]       * inv_s + a;
+    clamp_a_l(a, l);
+    sc_out[j] = digt_core(sc_teff[j], k, l, a);
+  }
+
+  // --- Winners: scatter ---
+  for (int j = 0; j < n_win; ++j) raw[idx_win[j]] = sc_out[j];
+
+  // --- Losers: gather ---
+  for (int j = 0; j < n_los; ++j) {
+    const int i  = idx_los[j];
+    sc_teff[j]   = rt[i] - t0[i];
+    sc_v[j]      = v[i];
+    sc_B[j]      = B[i];
+    sc_A[j]      = A[i];
+    sc_s[j]      = s[i];
+  }
+
+  // --- Losers: compute (contiguous — cost-model override via simd) ---
+#pragma omp simd
+  for (int j = 0; j < n_los; ++j) {
+    const double inv_s = 1.0 / sc_s[j];
+    double a = 0.5 * sc_A[j] * inv_s;
+    double l = sc_v[j]       * inv_s;
+    double k = sc_B[j]       * inv_s + a;
+    clamp_a_l(a, l);
+    sc_out[j] = pigt_core(sc_teff[j], k, l, a);
+  }
+
+  // --- Losers: scatter ---
+  // fill in 1-CDF - survival!
+  for (int j = 0; j < n_los; ++j) raw[idx_los[j]] = 1-sc_out[j];
 }
 
 #endif // rdm_h

@@ -414,6 +414,8 @@ struct ParamTable {
     }
 
     const int T = n_trials;
+    std::vector<double> self_copy;
+    self_copy.resize(T);
 
     for (int i = 0; i < n_params; ++i) {
       if (!use[i]) continue;
@@ -433,11 +435,9 @@ struct ParamTable {
       const int K = design.ncol();
 
       // Preserve self column if needed
-      std::vector<double> self_copy;
       double* out = &base(0, out_idx);
 
       if (entry.uses_self) {
-        self_copy.resize(T);
         const double* src = out;
         std::copy(src, src + T, self_copy.begin());
       }

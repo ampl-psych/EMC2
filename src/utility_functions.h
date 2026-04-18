@@ -302,38 +302,60 @@ IntegerVector which_rcpp(LogicalVector x) {
   return out;
 }
 
-LogicalVector lr_all(LogicalVector ok, int n_side)
+
+void lr_all(std::vector<int>& ok, int n_side)
 {
-  const R_xlen_t n = ok.size();
+  const int n = (int)ok.size();
   if (n % n_side)
-    stop("Vector length is not a multiple of n_side");
+    Rcpp::stop("Vector length is not a multiple of n_side");
 
-  // Allocate without initializing for speed
-  LogicalVector out(no_init(n));
+  int* x = ok.data();
 
-  const int* x = LOGICAL(ok);   // input pointer
-  int*       o = LOGICAL(out);  // output pointer
+  for (int i = 0; i < n; i += n_side) {
+    int state = 1;  // TRUE
 
-  for (R_xlen_t i = 0; i < n; i += n_side) {
-
-    int state = TRUE;                 // optimistic
-
-    // inspect one “column”
     for (int j = 0; j < n_side; ++j) {
       const int v = x[i + j];
-      if (v == FALSE) {             // any FALSE trumps everything
-        state = FALSE;
-        break;
-      }
-      if (v == NA_LOGICAL)          // remember NA unless FALSE appears
-        state = NA_LOGICAL;
+      if (v == 0) { state = 0; break; }       // FALSE
+      if (v == NA_LOGICAL) state = NA_LOGICAL; // NA, but keep looking
     }
 
-    // replicate result to each entry of the column
-    std::fill(o + i, o + i + n_side, state);
+    std::fill(x + i, x + i + n_side, state);
   }
-  return out;
 }
+
+// LogicalVector lr_all(LogicalVector ok, int n_side)
+// {
+//   const R_xlen_t n = ok.size();
+//   if (n % n_side)
+//     stop("Vector length is not a multiple of n_side");
+//
+//   // Allocate without initializing for speed
+//   LogicalVector out(no_init(n));
+//
+//   const int* x = LOGICAL(ok);   // input pointer
+//   int*       o = LOGICAL(out);  // output pointer
+//
+//   for (R_xlen_t i = 0; i < n; i += n_side) {
+//
+//     int state = TRUE;                 // optimistic
+//
+//     // inspect one “column”
+//     for (int j = 0; j < n_side; ++j) {
+//       const int v = x[i + j];
+//       if (v == FALSE) {             // any FALSE trumps everything
+//         state = FALSE;
+//         break;
+//       }
+//       if (v == NA_LOGICAL)          // remember NA unless FALSE appears
+//         state = NA_LOGICAL;
+//     }
+//
+//     // replicate result to each entry of the column
+//     std::fill(o + i, o + i + n_side, state);
+//   }
+//   return out;
+// }
 
 // // For do_bounds
 // struct BoundSpec {
