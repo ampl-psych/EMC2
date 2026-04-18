@@ -1,3 +1,76 @@
+# Nicely format a difftime (seconds / minutes / hours)
+format_duration <- function(dt) {
+  secs <- as.numeric(dt, units = "secs")
+  if (secs < 60) {
+    sprintf("%.1f s", secs)
+  } else if (secs < 3600) {
+    sprintf("%.1f min", secs / 60)
+  } else {
+    sprintf("%.1f h", secs / 3600)
+  }
+}
+
+# Remaining time across all stages, based on the duration of the *last* try
+# Stage assumptions:
+#   preburn: 1–1
+#   burn   : 1–max_tries
+#   adapt  : 1–2
+#   sample : 10–max_tries
+estimate_remaining_total_time <- function(stage, tries_done, elapsed_dt, max_tries = 20L) {
+  stage_order <- c("preburn", "burn", "adapt", "sample")
+
+  if (!stage %in% stage_order) {
+    # Fallback: only this stage, 1–max_tries
+    min_total <- 1L
+    max_total <- max_tries
+    min_rem_tries <- max(0L, min_total - tries_done)
+    max_rem_tries <- max(0L, max_total - tries_done)
+    return(list(
+      min_time = min_rem_tries * elapsed_dt,
+      max_time = max_rem_tries * elapsed_dt
+    ))
+  }
+
+  idx <- match(stage, stage_order)
+
+  # Exact per-stage min/max tries
+  min_total <- c(
+    preburn = 1L,
+    burn    = 1L,
+    adapt   = 1L,
+    sample  = 10L
+  )
+
+  max_total <- c(
+    preburn = 1L,          # exactly 1
+    burn    = max_tries,   # 1–20
+    adapt   = 2L,          # 1–2
+    sample  = max_tries    # 10–20
+  )
+
+  # Remaining in the current stage
+  min_current_rem <- max(0L, min_total[stage] - tries_done)
+  max_current_rem <- max(0L, max_total[stage] - tries_done)
+
+  # Remaining in all later stages
+  if (idx < length(stage_order)) {
+    later_stages <- stage_order[(idx + 1L):length(stage_order)]
+    min_later_rem <- sum(min_total[later_stages])
+    max_later_rem <- sum(max_total[later_stages])
+  } else {
+    min_later_rem <- 0L
+    max_later_rem <- 0L
+  }
+
+  min_tries_rem <- min_current_rem + min_later_rem
+  max_tries_rem <- max_current_rem + max_later_rem
+
+  list(
+    min_time = min_tries_rem * elapsed_dt,
+    max_time = max_tries_rem * elapsed_dt
+  )
+}
+
 get_stop_criteria <- function(stage, stop_criteria, type){
   if(is.null(stop_criteria)){
     if(stage == "preburn"){
@@ -100,7 +173,9 @@ run_emc <- function(emc, stage, stop_criteria,
   progress <- progress[!names(progress) == 'emc']
   # We need to multiply step_size by thin to make an accurate guess for good step_size.
   cur_thin <- ifelse(is.numeric(thin), thin, 1)
+  tries_done <- 0L
   while(!progress$done){
+    tries_done <- tries_done + 1L
     emc <- reset_pm_settings(emc, stage)
     # Remove redundant samples
     if(trim){
@@ -123,7 +198,24 @@ run_emc <- function(emc, stage, stop_criteria,
                              particle_factor=particle_factor,search_width=search_width,
                              n_cores=cores_per_chain, mc.cores = cores_for_chains,
                              r_cores = r_cores)
-    if(getOption("emc2.print_iteration_duration", TRUE)) { print(Sys.time()-t0) }
+
+    if (getOption("emc2.print_iteration_duration", TRUE)) {
+      elapsed <- Sys.time() - t0
+      rem <- estimate_remaining_total_time(
+        stage      = stage,
+        tries_done = tries_done,
+        elapsed_dt = elapsed,
+        max_tries  = max_tries
+      )
+
+      message(sprintf(
+        "[stage=%s, try=%d] Try duration: %s. ETA: %s–%s.",
+        stage, tries_done,
+        format_duration(elapsed),
+        format_duration(rem$min_time),
+        format_duration(rem$max_time)
+      ))
+    }
     class(sub_emc) <- "emc"
     if(cores_for_chains > 1) sub_emc <- set_custom_kernel_pointers(sub_emc, get_custom_kernel_pointers(emc))
     if(stage != 'preburn'){
