@@ -3,7 +3,7 @@ PKG_LIBS     = $(RCPP_ARMA_LIBS)
 
 # Uncomment exactly one PKG_CXXFLAGS line below.
 #
-# PNORM_MODE controls the pnorm implementation (see inst/include/pnorm_utils.h):
+# PNORM_MODE controls the pnorm implementation (see src/pnorm_utils.h):
 #   0 — R::pnorm         exact, not thread-safe
 #   1 — Hart (1968)      near-double precision (~1.2e-15), thread-safe  [default]
 #   2 — A&S 7.1.26       single-precision quality (~1.5e-7), thread-safe, best vectorisability
