@@ -1,14 +1,36 @@
-
 PKG_CPPFLAGS = $(RCPP_ARMA_CXXFLAGS) -I../inst/include
-
-PKG_CXXFLAGS = -O3 -march=native -ffast-math -fno-math-errno -DUSE_FAST_PNORM # \
-              # -Rpass=loop-vectorize \
-              # -Rpass-missed=loop-vectorize \
-              # -Rpass-analysis=loop-vectorize
-
 PKG_LIBS     = $(RCPP_ARMA_LIBS)
-#CXX_STD      = CXX11      # uncomment only if you need to force C++11
 
+# Uncomment exactly one PKG_CXXFLAGS line below.
+#
+# PNORM_MODE controls the pnorm implementation (see inst/include/pnorm_utils.h):
+#   0 — R::pnorm         exact, not thread-safe
+#   1 — Hart (1968)      near-double precision (~1.2e-15), thread-safe  [default]
+#   2 — A&S 7.1.26       single-precision quality (~1.5e-7), thread-safe, best vectorisability
+#
+# Standard — precise Hart pnorm (default if no flag given):
+PKG_CXXFLAGS = -O3 -march=native
+#
+# Fast-math + Hart pnorm (near-double precision):
+#PKG_CXXFLAGS = -O3 -march=native -ffast-math -fno-math-errno
+#
+# Fast-math + A&S pnorm (maximum speed, reduced precision):
+#PKG_CXXFLAGS = -O3 -march=native -ffast-math -fno-math-errno -DPNORM_MODE=2
+#
+# Vectorisation report — clang/macOS:
+#PKG_CXXFLAGS = -O3 -march=native -ffast-math -fno-math-errno \
+#               -Rpass=loop-vectorize \
+#               -Rpass-missed=loop-vectorize \
+#               -Rpass-analysis=loop-vectorize
+#
+# Vectorisation report — GCC:
+#PKG_CXXFLAGS = -O3 -march=native -ffast-math -fno-math-errno \
+#               -fopt-info-vec=/tmp/vec_report.txt
+
+# Uncomment to force C++11 (rarely needed):
+#CXX_STD = CXX11
+
+# Accelerate framework — macOS only:
 ifeq ($(shell uname),Darwin)
   PKG_LIBS += -framework Accelerate
 endif
