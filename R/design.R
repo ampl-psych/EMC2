@@ -173,8 +173,9 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
   class(design) <- "emc.design"
   if (!is.null(trend)) {
     # check for at = 'lR'
-    if(any(sapply(trend, function(x) x$at)=='lR') & model()$type!='RACE') {
-      warning('A trend has `at="lR"`, but this is not a race model. Setting `at` to NULL')
+    if(any(sapply(trend, function(x) x$at) == 'lR') &&
+       !is_choice_accumulator_type(model())) {
+      warning('A trend has `at="lR"`, but this model does not use accumulator rows. Setting `at` to NULL')
       for(i in 1:length(trend)) if(trend[[i]]$at=='lR') trend[[i]]$at <- NULL
     }
     model <- update_model_trend(trend, model)

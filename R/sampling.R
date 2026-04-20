@@ -239,9 +239,9 @@ run_stage <- function(pmwgs,
     j <- start_iter + i
 
     # Gibbs step
-    pars <- pars_comb <- gibbs_step(pmwgs, pmwgs$samples$alpha[!nuisance,,j-1], pmwgs$type)
+    pars <- pars_comb <- gibbs_step(pmwgs, pmwgs$samples$alpha[!nuisance,,j-1, drop = FALSE], pmwgs$type)
     if(any(nuisance)){
-      pars_nuis <- gibbs_step(pmwgs$sampler_nuis, pmwgs$samples$alpha[nuisance,,j-1], pmwgs$sampler_nuis$type)
+      pars_nuis <- gibbs_step(pmwgs$sampler_nuis, pmwgs$samples$alpha[nuisance,,j-1, drop = FALSE], pmwgs$sampler_nuis$type)
       pars_comb <- merge_group_level(pars$tmu, pars_nuis$tmu, pars$tvar, pars_nuis$tvar, nuisance, pars$subj_mu)
       pars_comb$alpha <- pmwgs$samples$alpha[,,j-1]
       pmwgs$sampler_nuis$samples <- fill_samples(samples = pmwgs$sampler_nuis$samples,
@@ -323,7 +323,7 @@ new_particle <- function (s, data, pm_settings, eff_mu = NULL,
       colnames(proposals_other) <- names(subj_mu)[!idx]
       colnames(proposals) <- names(subj_mu)[idx]
       proposals <- cbind(proposals, proposals_other)
-      proposals <- proposals[,names(subj_mu)]
+      proposals <- proposals[, names(subj_mu), drop = FALSE]
     } else{
       colnames(proposals) <- names(subj_mu)
     }
@@ -335,15 +335,20 @@ new_particle <- function (s, data, pm_settings, eff_mu = NULL,
 
     # Calculate likelihoods
     if(tune$components[length(tune$components)] > 1){
-      lw <- calc_ll_manager(proposals[,is_shared], dadm = data, model,
+      lw <- calc_ll_manager(proposals[, is_shared, drop = FALSE], dadm = data, model,
                             component = shared_idx, r_cores = r_cores)
     } else{
-      lw <- calc_ll_manager(proposals[,is_shared], dadm = data, model,
+      lw <- calc_ll_manager(proposals[, is_shared, drop = FALSE], dadm = data, model,
                             r_cores = r_cores)
     }
     lw_total <- lw + prev_ll - lw[1] # make sure lls from other components are included
     # Prior density
-    lp <- mvtnorm::dmvnorm(x = proposals[,idx], mean = group_mu[idx], sigma = group_var[idx,idx], log = TRUE)
+    lp <- mvtnorm::dmvnorm(
+      x = proposals[, idx, drop = FALSE],
+      mean = group_mu[idx],
+      sigma = group_var[idx, idx, drop = FALSE],
+      log = TRUE
+    )
     if(length(unq_components) > 1){
       prior_density <- mvtnorm::dmvnorm(x = proposals, mean = group_mu, sigma = group_var, log = TRUE)
     } else{
@@ -353,7 +358,11 @@ new_particle <- function (s, data, pm_settings, eff_mu = NULL,
     lm <- pm_settings[[i]]$mix[1]*exp(lp)
     for(k in 2:length(Sigmas)){
       # Prior density is updated separately so start at 2
-      lm <- lm + pm_settings[[i]]$mix[k]*mvtnorm::dmvnorm(x = proposals[,idx], mean = Mus[[k]][idx], sigma = Sigmas[[k]][idx,idx]*(epsilons[k]^2))
+      lm <- lm + pm_settings[[i]]$mix[k] * mvtnorm::dmvnorm(
+        x = proposals[, idx, drop = FALSE],
+        mean = Mus[[k]][idx],
+        sigma = Sigmas[[k]][idx, idx, drop = FALSE] * (epsilons[k]^2)
+      )
     }
     # Avoid infinite values
     lm <- log(lm)
@@ -524,6 +533,9 @@ particle_draws <- function(n, mu, covar, alpha = NULL, tau= NULL) {
   if (n <= 0) {
     return(NULL)
   }
+  if (is.null(dim(covar)) && length(covar) == 1L) {
+    covar <- matrix(covar, nrow = 1L, ncol = 1L)
+  }
   if(is.null(alpha)){
     return(mvtnorm::rmvnorm(n, mu, covar))
   }
@@ -534,8 +546,16 @@ extend_sampler <- function(sampler, n_samples, stage) {
   # iterations, to ensure that we're not constantly increasing our sampled object
   # by 1. Big shout out to the rapply function
   sampler$samples$stage <- c(sampler$samples$stage, rep(stage, n_samples))
-  if(any(sampler$nuisance)) sampler$sampler_nuis$samples <- rapply(sampler$sampler_nuis$samples, f = function(x) extend_obj(x, n_samples), how = "replace")
+  last_theta_var_inv <- sampler$samples$last_theta_var_inv
+  sampler$samples$last_theta_var_inv <- NULL
+  if(any(sampler$nuisance)) {
+    last_theta_var_inv_nuis <- sampler$sampler_nuis$samples$last_theta_var_inv
+    sampler$sampler_nuis$samples$last_theta_var_inv <- NULL
+    sampler$sampler_nuis$samples <- rapply(sampler$sampler_nuis$samples, f = function(x) extend_obj(x, n_samples), how = "replace")
+    sampler$sampler_nuis$samples$last_theta_var_inv <- last_theta_var_inv_nuis
+  }
   sampler$samples <- rapply(sampler$samples, f = function(x) extend_obj(x, n_samples), how = "replace")
+  sampler$samples$last_theta_var_inv <- last_theta_var_inv
   return(sampler)
 }
 
@@ -684,24 +704,9 @@ calc_ll_manager <- function(proposals, dadm, model, component = NULL, r_cores = 
       }
       constants <- attr(dadm, "constants")
       if(is.null(constants)) constants <- NA
-<<<<<<< HEAD
-      if (nrow(proposals) <= r_cores) {
-        lls <- calc_ll(proposals, dadm, constants = constants, designs = designs, type = model$c_name,
-                       model$bound, model$transform, model$pre_transform, p_types = p_types, min_ll = log(1e-10),
-                       model$trend)
-      } else {
-        idx <- rep(1:r_cores,each=1+(nrow(proposals) %/% r_cores))[1:nrow(proposals)]
-        lls <- unlist(auto_mclapply(1:r_cores,function(i) {
-          calc_ll(proposals[idx==i,,drop=FALSE], dadm, constants = constants,
-                     designs = designs, type = model$c_name, model$bound, model$transform,
-                     model$pre_transform, p_types = p_types, min_ll = log(1e-10),model$trend)
-        },mc.cores=r_cores))
-      }
-=======
       lls <- calc_ll(proposals, dadm, constants = constants, designs = designs, type = model$c_name,
                      model$bound, model$transform, model$pre_transform, p_types = p_types, min_ll = log(1e-10),
                      model$trend)
->>>>>>> main
     }
   }
   return(lls)

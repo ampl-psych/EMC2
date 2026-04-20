@@ -69,6 +69,30 @@ calculate_implied_means <- function(mean_designs, beta_params, n_pars) {
   return(mu_implied)
 }
 
+.standard_diag_matrix <- function(x, n) {
+  if (length(x) == 1L) return(diag(n) * x)
+  diag(x)
+}
+
+.standard_square_matrix <- function(x, n, nm = NULL) {
+  out <- matrix(x, nrow = n, ncol = n)
+  if (!is.null(nm)) dimnames(out) <- list(nm, nm)
+  out
+}
+
+.standard_theta_var_draws <- function(theta_var, idx) {
+  theta_var <- theta_var[idx, idx, , drop = FALSE]
+  n_pars <- length(idx)
+  n_iter <- dim(theta_var)[3]
+  out_len <- n_pars * (n_pars + 1) / 2
+  out <- matrix(NA_real_, nrow = out_len, ncol = n_iter)
+  nm <- dimnames(theta_var)[[1]]
+  for (i in seq_len(n_iter)) {
+    out[, i] <- unwind(.standard_square_matrix(theta_var[, , i], n_pars, nm))
+  }
+  out
+}
+
 get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, selection = "mu", design = NULL, group_design = NULL,
                                par_groups = NULL){
   # Checking and default priors
@@ -89,12 +113,42 @@ get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1
     n_additional <- 0
   }
 
+  total_pars <- n_pars + n_additional
   # Set up combined theta_mu_mean to include both intercepts and slopes
-  if(is.null(prior$theta_mu_mean)) {
-    prior$theta_mu_mean <- rep(0, n_pars + n_additional)
+  if(is.null(prior$theta_mu_mean) || length(prior$theta_mu_mean) == 0L) {
+    prior$theta_mu_mean <- rep(0, total_pars)
+  } else if (length(prior$theta_mu_mean) == 1L && total_pars > 1L) {
+    prior$theta_mu_mean <- rep(prior$theta_mu_mean, total_pars)
+  } else if (length(prior$theta_mu_mean) != total_pars) {
+    stop("theta_mu_mean must be a scalar or match the number of group-level parameters")
   }
-  if(is.null(prior$theta_mu_var)){
-    prior$theta_mu_var <- diag(rep(1, n_pars + n_additional))
+  theta_mu_names <- names(prior$theta_mu_mean)
+  if (!is.null(design) && (is.null(theta_mu_names) || length(theta_mu_names) != length(prior$theta_mu_mean))) {
+    theta_mu_names <- add_group_par_names(names(sampled_pars(design, doMap = FALSE)), group_design)
+    if (length(theta_mu_names) == length(prior$theta_mu_mean)) {
+      names(prior$theta_mu_mean) <- theta_mu_names
+    }
+  }
+  if(is.null(prior$theta_mu_var) || length(prior$theta_mu_var) == 0L){
+    prior$theta_mu_var <- diag(total_pars)
+  } else if (is.matrix(prior$theta_mu_var) &&
+             (nrow(prior$theta_mu_var) != total_pars || ncol(prior$theta_mu_var) != total_pars)) {
+    if (length(prior$theta_mu_var) == 1L) {
+      prior$theta_mu_var <- diag(total_pars) * prior$theta_mu_var[1, 1]
+    } else {
+      stop("theta_mu_var matrix must match the number of group-level parameters")
+    }
+  } else if (!is.matrix(prior$theta_mu_var)) {
+    if (length(prior$theta_mu_var) == 1L) {
+      prior$theta_mu_var <- diag(total_pars) * prior$theta_mu_var
+    } else if (length(prior$theta_mu_var) == total_pars) {
+      prior$theta_mu_var <- .standard_diag_matrix(prior$theta_mu_var, total_pars)
+    } else {
+      stop("theta_mu_var must be a matrix, scalar, or vector matching the number of group-level parameters")
+    }
+  }
+  if (!is.null(theta_mu_names) && length(theta_mu_names) == nrow(prior$theta_mu_var)) {
+    dimnames(prior$theta_mu_var) <- list(theta_mu_names, theta_mu_names)
   }
   if(is.null(prior$v)){
     prior$v <- 2
@@ -217,8 +271,20 @@ gibbs_step_standard <- function(sampler, alpha) {
   tvinv   <- last$tvinv
   a_half  <- last$a_half     # length p
 
+  if (length(dim(alpha)) != 2L) {
+    alpha <- matrix(alpha, nrow = sum(!sampler$nuisance), ncol = sampler$n_subjects)
+    rownames(alpha) <- sampler$par_names[!sampler$nuisance]
+  }
+
   p <- nrow(alpha)           # number of subject-level parameters
   n <- ncol(alpha)           # number of subjects
+
+  if (is.null(p) || is.null(n)) {
+    p <- sum(!sampler$nuisance)
+    n <- sampler$n_subjects
+    alpha <- matrix(alpha, nrow = p, ncol = n)
+    rownames(alpha) <- sampler$par_names[!sampler$nuisance]
+  }
 
   # Some backwards compatibility
   if(is.null(is_blocked) || length(is_blocked) == 0){
@@ -351,10 +417,14 @@ gibbs_step_standard <- function(sampler, alpha) {
 
 
 last_sample_standard <- function(store) {
+  tmu <- store$theta_mu[, store$idx, drop = TRUE]
+  names(tmu) <- rownames(store$theta_mu)
+  p_names <- dimnames(store$theta_var)[[1]]
+  p <- length(p_names)
   list(
-    tmu = store$theta_mu[, store$idx],  # Now includes beta
-    tvar = store$theta_var[, , store$idx],
-    tvinv = store$last_theta_var_inv,
+    tmu = tmu,  # Now includes beta
+    tvar = .standard_square_matrix(store$theta_var[, , store$idx], p, p_names),
+    tvinv = .standard_square_matrix(store$last_theta_var_inv, p, p_names),
     a_half = store$a_half[, store$idx]
   )
 }
@@ -362,13 +432,25 @@ last_sample_standard <- function(store) {
 get_conditionals_standard <- function(s, samples, n_pars, iteration = NULL, idx = NULL){
   iteration <- ifelse(is.null(iteration), samples$iteration, iteration)
   if(is.null(idx)) idx <- 1:n_pars
-  pts2_unwound <- apply(samples$theta_var[idx,idx,],3,unwind)
-  all_samples <- rbind(samples$alpha[idx, s,],samples$theta_mu[idx,],pts2_unwound)
+  n_idx <- length(idx)
+  alpha_samples <- matrix(samples$alpha[idx, s, , drop = FALSE], nrow = length(idx))
+  theta_mu_samples <- matrix(samples$theta_mu[idx, , drop = FALSE], nrow = length(idx))
+  pts2_unwound <- .standard_theta_var_draws(samples$theta_var, idx)
+  all_samples <- rbind(alpha_samples, theta_mu_samples, pts2_unwound)
   mu_tilde <- rowMeans(all_samples)
-  var_tilde <- stats::cov(t(all_samples))
+  var_tilde <- if (length(mu_tilde) == 1L) {
+    matrix(stats::var(as.numeric(all_samples)), nrow = 1L, ncol = 1L)
+  } else {
+    stats::cov(t(all_samples))
+  }
+  theta_var_iteration <- .standard_square_matrix(
+    samples$theta_var[idx, idx, iteration, drop = FALSE],
+    length(idx),
+    rownames(theta_mu_samples)
+  )
   condmvn <- condMVN(mean = mu_tilde, sigma = var_tilde,
-                     dependent.ind = 1:n_pars, given.ind = (n_pars + 1):length(mu_tilde),
-                     X.given = c(samples$theta_mu[idx,iteration], unwind(samples$theta_var[idx,idx,iteration])))
+                     dependent.ind = 1:n_idx, given.ind = (n_idx + 1):length(mu_tilde),
+                     X.given = c(theta_mu_samples[, iteration], unwind(theta_var_iteration)))
   return(list(eff_mu = condmvn$condMean, eff_var = condmvn$condVar))
 }
 
@@ -638,7 +720,8 @@ group__IC_standard <- function(emc, stage="sample", filter=NULL) {
   # 1) Retrieve draws
   alpha <- get_pars(emc, selection = "alpha", stage = stage, filter = filter,
                     return_mcmc = FALSE, merge_chains = TRUE)
-  theta_mu <- get_pars(emc, selection = "mu", stage = stage, filter = filter,
+  mu_selection <- if (is.null(emc[[1]]$group_designs)) "mu" else "beta"
+  theta_mu <- get_pars(emc, selection = mu_selection, stage = stage, filter = filter,
                        return_mcmc = FALSE, merge_chains = TRUE)
   theta_var <- get_pars(emc, selection = "Sigma", stage = stage, filter = filter,
                         return_mcmc = FALSE, merge_chains = TRUE, remove_constants = F)
@@ -651,18 +734,21 @@ group__IC_standard <- function(emc, stage="sample", filter=NULL) {
   mean_alpha <- apply(alpha, c(1,2), mean)
   mean_mu <- rowMeans(theta_mu)
   mean_var <- apply(theta_var, c(1,2), mean)
+  if (is.null(dim(mean_var))) {
+    mean_var <- .standard_square_matrix(mean_var, 1L, rownames(theta_mu))
+  }
 
   if(is.null(emc[[1]]$group_designs)){
     lls <- numeric(N)
     for(i in 1:N){
-      lls[i] <- sum(dmvnorm(t(alpha[,,i]), theta_mu[,i], theta_var[,,i], log = T))
+      lls[i] <- sum(dmvnorm(t(alpha[,,i]), theta_mu[,i], .standard_square_matrix(theta_var[,,i], p, rownames(theta_mu)), log = T))
     }
     mean_pars_ll <-  sum(dmvnorm(t(mean_alpha), mean_mu, mean_var, log = TRUE))
   } else{
     # 3) Build design matrices
     group_designs <- add_group_design(emc[[1]]$par_names, emc[[1]]$group_designs, n_subj)
     # 4) Per-draw log-likelihood
-    lls <- standard_subj_ll(group_designs, theta_var, theta_mu, alpha, n_subj)
+    lls <- standard_subj_ll(theta_var, theta_mu, alpha, n_subj, group_designs)
     # 5) Likelihood at posterior mean
     # Calculate subject-level means using the mean parameters
     mean_subj_means <- calculate_subject_means(group_designs, mean_mu)
@@ -682,7 +768,8 @@ group__IC_standard <- function(emc, stage="sample", filter=NULL) {
 
 standard_subj_ll <- function(theta_var, theta_mu, alpha, n_subj, group_designs)
 {
-  N <- dim(theta_var)[3];  p <- nrow(theta_mu)
+  N <- dim(theta_var)[3]
+  p <- dim(alpha)[1]
   log2pi <- log(2*pi)
 
   # pre‑allocate
@@ -690,7 +777,7 @@ standard_subj_ll <- function(theta_var, theta_mu, alpha, n_subj, group_designs)
 
   for (i in seq_len(N)) {
 
-    Sigma <- theta_var[,,i]
+    Sigma <- .standard_square_matrix(theta_var[,,i], p, dimnames(alpha)[[1]])
     U     <- chol(Sigma)              # will error if non‑PD
     rooti <- backsolve(U, diag(p))
     log_const <- sum(log(diag(rooti))) - 0.5 * p * log2pi

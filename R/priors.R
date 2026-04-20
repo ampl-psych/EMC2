@@ -83,9 +83,16 @@ prior <- function(design, type = NULL, group_design = NULL, update = NULL,
                                                               updated_flags[names(updated_flags) %in% do_ask],
                                                               descriptions[names(descriptions) %in% do_ask])
   if(!is.null(input$theta_mu_var)){
-    if(!is.matrix(input$theta_mu_var) & is.matrix(orig$theta_mu_var)) input$theta_mu_var <- diag(input$theta_mu_var)
+    if(!is.matrix(input$theta_mu_var) & is.matrix(orig$theta_mu_var)) {
+      target_dim <- nrow(orig$theta_mu_var)
+      if(length(input$theta_mu_var) == 1L) {
+        input$theta_mu_var <- diag(target_dim) * input$theta_mu_var
+      } else {
+        input$theta_mu_var <- diag(input$theta_mu_var)
+      }
+    }
   }
-  prior <- get_objects(design = design, type = type, prior = input, ...)$prior
+  prior <- get_objects(design = design, type = type, prior = input, group_design = group_design, ...)$prior
   if("Ffactors" %in% names(design)){
     design <- list(design)
   }
@@ -622,5 +629,3 @@ sampled_pars.emc.prior <- function(x,group_design=NULL,doMap=FALSE, add_da = FAL
   return(sampled_pars(get_design(x), group_design = group_design, doMap = doMap,
                           add_da = add_da, all_cells_dm = all_cells_dm, data = data))
 }
-
-

@@ -1,0 +1,328 @@
+---
+title: "Response Models"
+description: "Ordered and multinomial response models in EMC2"
+author: "Niek Stevenson"
+output: rmarkdown::html_document
+bibliography: refs.bib
+vignette: >
+  %\VignetteIndexEntry{"Response Models"}
+  %\VignetteEncoding{UTF-8}
+  %\VignetteEngine{knitr::rmarkdown}
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+```{r, echo = FALSE}
+rm(list = ls())
+library(EMC2)
+set.seed(21)
+```
+
+## Introduction
+
+This vignette shows how to use the response-only models currently
+implemented in *EMC2*. These models fall into two different response
+geometries:
+
+1.  Ordered response models: `ordered_probit()` and `ordered_logit()`
+2.  Multinomial choice models: `multinomial_logit()` and
+    `multinomial_probit()`
+
+Ordered response models assume a single latent evidence variable and one
+or more cutpoints. In the binary case this is the same general setup as
+signal detection theory: a latent evidence value is compared against a
+criterion. With more than two ordered responses, the single criterion
+becomes a set of ordered criteria, as in rating or confidence versions
+of Signal Detection Theory (SDT). `ordered_probit()` uses a Gaussian
+latent noise distribution, which makes it the closest match to classical
+Gaussian SDT. `ordered_logit()` uses the same threshold geometry but
+with logistic noise.
+
+Multinomial response models are different. They are not threshold models
+on one evidence axis, but random-utility models over a set of
+alternatives. `multinomial_logit()` is the standard multinomial-logit or
+softmax model: each response has a latent utility and the response
+probabilities are a softmax over those utilities. `multinomial_probit()`
+uses the same utility geometry but with Gaussian noise instead of the
+softmax/logit noise assumption.
+
+The worked examples below use `ordered_probit()` and
+`multinomial_logit()`. The other two models follow the same design
+logic, but swap the latent noise distribution within the same geometry.
+
+The workflow is the same as for the DDM and race models:
+
+1.  Specify the design
+2.  Inspect sampled parameters and their mapping to design cells
+3.  Simulate data
+4.  Define priors and create an `emc` object
+5.  Fit the model
+6.  Summarize posterior estimates and compare observed and posterior
+    predictive choice proportions
+
+```{r}
+choice_summary <- function(data) {
+  out <- as.data.frame(prop.table(table(data$S, data$R), 1))
+  names(out) <- c("S", "R", "prob")
+  out
+}
+```
+
+## 1. Ordered Response Models
+
+Ordered response models place responses on a single latent evidence axis
+and use cutpoints to divide that axis into response categories. Here we
+use a 3-category task with `low`, `mid`, and `high` stimuli and
+responses. `location` depends on stimulus identity, `scale` is fixed to
+1, and `cut ~ 1` estimates the standard `K - 1` thresholds.
+
+Conceptually, this is the SDT-like response family in *EMC2*. In a
+binary yes/no task there is one criterion. In a 3-category task there
+are two ordered criteria. `location` shifts the latent evidence
+distribution, and `cut` determines where the response boundaries lie.
+
+```{r}
+matchfun <- function(d) d$S == d$lR
+
+design_ord <- design(
+  Rlevels = c("low", "mid", "high"),
+  factors = list(subjects = 1, S = c("low", "mid", "high")),
+  formula = list(location ~ 0 + S, scale ~ 1, cut ~ 1),
+  matchfun = matchfun,
+  constants = c(scale = log(1)),
+  model = ordered_probit
+)
+```
+
+`sampled_pars()` shows the free parameters, and `mapped_pars()` shows
+how they map to the latent design cells.
+
+```{r}
+sampled_pars(design_ord)
+```
+
+```{r}
+p_vector_ord <- sampled_pars(design_ord)
+p_vector_ord[] <- c(-1, 0, 1.2, -0.4, log(1.3))
+
+mapped_pars(design_ord, p_vector_ord)
+```
+
+Now we simulate data from these parameters:
+
+```{r, results = "hide"}
+dat_ord <- make_data(parameters = p_vector_ord, design = design_ord, n_trials = 80)
+```
+
+For choice-only models it is often most useful to inspect response
+proportions directly:
+
+```{r}
+choice_summary(dat_ord)
+```
+
+Next we define a prior and create the `emc` object.
+
+```{r, results = "hide"}
+prior_ord <- prior(
+  design = design_ord,
+  type = "single",
+  pmean = c(
+    location_Slow = -0.5,
+    location_Smid = 0,
+    location_Shigh = 0.5,
+    cut_lRlow = -0.2,
+    cut_lRmid = log(1.1)
+  ),
+  psd = c(
+    location_Slow = 0.8,
+    location_Smid = 0.8,
+    location_Shigh = 0.8,
+    cut_lRlow = 0.5,
+    cut_lRmid = 0.3
+  )
+)
+
+emc_ord <- make_emc(dat_ord, design_ord, prior_list = prior_ord, type = "single", n_chains = 2)
+```
+
+## 2. Fit the Ordered Model
+
+The following call fits the model and saves the result:
+
+```{r, eval = FALSE}
+emc_ord <- fit(emc_ord, fileName = "data/response-models-ordered.RData")
+```
+
+```{r, include = FALSE}
+load("data/response-models-ordered.RData")
+emc_ord <- emc
+rm(emc)
+```
+
+`summary()` reports posterior quantiles, `Rhat`, and ESS:
+
+```{r}
+summary(emc_ord)
+```
+
+`plot_pars()` compares the posterior to the generating values:
+
+```{r, fig.alt = "Posterior parameter densities against true values for the ordered probit example"}
+plot_pars(emc_ord, true_pars = p_vector_ord, use_prior_lim = FALSE)
+```
+
+Finally, `plot_fit_choice()` compares observed response probabilities to
+posterior predictive intervals:
+
+```{r}
+plot_fit_choice(emc_ord, factors = "S", style = "prob", n_post = 20)
+```
+
+For ordered responses, cumulative fits can also be useful because they
+reflect the threshold structure directly:
+
+```{r}
+plot_fit_choice(emc_ord, factors = "S", style = "cumulative", n_post = 20)
+```
+
+To switch from ordered probit to ordered logit, the design is identical
+except for the model choice. That is, the latent threshold structure
+stays the same, but the Gaussian link is replaced by a logistic one:
+
+```{r, eval = FALSE}
+design_ord_logit <- design(
+  Rlevels = c("low", "mid", "high"),
+  factors = list(subjects = 1, S = c("low", "mid", "high")),
+  formula = list(location ~ 0 + S, scale ~ 1, cut ~ 1),
+  matchfun = matchfun,
+  constants = c(scale = log(1)),
+  model = ordered_logit
+)
+```
+
+## 3. Multinomial Response Models
+
+Multinomial response models are for unordered choices among
+alternatives. Here we use a three-choice task with stimuli `left`,
+`right`, and `up`. The `matchfun` creates the latent match factor `lM`,
+so the `utility` parameter can differ between the matching and
+non-matching alternatives.
+
+This is the softmax family in *EMC2*. `multinomial_logit()` maps the
+latent utilities onto response probabilities through the
+multinomial-logit link, i.e. through a softmax over alternatives. Unlike
+the ordered models, there is no single latent evidence axis and no
+ordered criteria.
+
+Only utility differences are identified in the multinomial models. A
+common utility shift across all alternatives leaves the softmax
+probabilities unchanged, so the utility intercept must be fixed rather
+than estimated. Here we anchor it at `0` and estimate only the
+matching-versus-non-matching contrast.
+
+```{r}
+ADmat <- matrix(c(-1/2, 1/2), ncol = 1, dimnames = list(NULL, "d"))
+
+design_mnl <- design(
+  Rlevels = c("left", "right", "up"),
+  factors = list(subjects = 1, S = c("left", "right", "up")),
+  formula = list(utility ~ lM),
+  contrasts = list(utility = list(lM = ADmat)),
+  matchfun = matchfun,
+  constants = c(utility = 0),
+  model = multinomial_logit
+)
+```
+
+Again we inspect the sampled parameters and their mapping:
+
+```{r}
+sampled_pars(design_mnl)
+```
+
+```{r}
+p_vector_mnl <- sampled_pars(design_mnl)
+p_vector_mnl[] <- 2
+
+mapped_pars(design_mnl, p_vector_mnl)
+```
+
+We simulate a dataset from this multinomial-logit model:
+
+```{r, results = "hide"}
+dat_mnl <- make_data(parameters = p_vector_mnl, design = design_mnl, n_trials = 80)
+```
+
+And inspect the observed choice proportions:
+
+```{r}
+choice_summary(dat_mnl)
+```
+
+Now we specify priors and create the `emc` object.
+
+```{r, results = "hide"}
+prior_mnl <- prior(
+  design = design_mnl,
+  type = "single",
+  pmean = c(utility_lMd = 1.5),
+  psd = c(utility_lMd = 0.7)
+)
+
+emc_mnl <- make_emc(dat_mnl, design_mnl, prior_list = prior_mnl, type = "single", n_chains = 2)
+```
+
+## 4. Fit the Multinomial Model
+
+```{r, eval = FALSE}
+emc_mnl <- fit(emc_mnl, fileName = "data/response-models-multinomial.RData")
+```
+
+```{r, include = FALSE}
+load("data/response-models-multinomial.RData")
+emc_mnl <- emc
+rm(emc)
+```
+
+```{r}
+summary(emc_mnl)
+```
+
+```{r, fig.alt = "Posterior parameter densities against true values for the multinomial logit example"}
+plot_pars(emc_mnl, true_pars = p_vector_mnl, use_prior_lim = FALSE)
+```
+
+```{r}
+plot_fit_choice(emc_mnl, factors = "S", style = "prob", n_post = 20)
+```
+
+To use Gaussian utility noise instead, the design is the same and only
+the model changes:
+
+```{r, eval = FALSE}
+design_mnp <- design(
+  Rlevels = c("left", "right", "up"),
+  factors = list(subjects = 1, S = c("left", "right", "up")),
+  formula = list(utility ~ lM),
+  contrasts = list(utility = list(lM = ADmat)),
+  matchfun = matchfun,
+  constants = c(utility = 0),
+  model = multinomial_probit
+)
+```
+
+The core workflow is therefore the same for all four response models:
+`design()` -\> `prior()` -\> `make_emc()` -\> `fit()` -\> posterior
+predictive comparison of choice proportions.
+
+The main conceptual map is:
+
+-   `ordered_probit()`: SDT-like ordered responses with Gaussian latent
+    noise
+-   `ordered_logit()`: the same threshold model with logistic latent
+    noise
+-   `multinomial_logit()`: unordered choice with a softmax /
+    multinomial-logit link
+-   `multinomial_probit()`: unordered choice with Gaussian utility noise

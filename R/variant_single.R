@@ -20,7 +20,14 @@ get_prior_single <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5
   }
   if(is.null(prior$theta_mu_var)){
     prior$theta_mu_var <- diag(rep(1, n_pars))
+  } else if (!is.matrix(prior$theta_mu_var)) {
+    if (length(prior$theta_mu_var) == 1L) {
+      prior$theta_mu_var <- matrix(prior$theta_mu_var, nrow = 1L, ncol = 1L)
+    } else {
+      prior$theta_mu_var <- diag(prior$theta_mu_var)
+    }
   }
+  dimnames(prior$theta_mu_var) <- list(names(prior$theta_mu_mean), names(prior$theta_mu_mean))
   attr(prior, "type") <- "single"
   out <- prior
   if(sample){
@@ -58,9 +65,14 @@ get_conditionals_single <- function(s, samples, n_pars, iteration = NULL, idx = 
   iters <- dim(samples$alpha)[3]
   iter_idx <- sample(1:iters, min(iters, 250))
   if(is.null(idx)) idx <- 1:n_pars
-  all_samples <- samples$alpha[idx,s,iter_idx]
+  all_samples <- samples$alpha[idx, s, iter_idx, drop = FALSE]
+  all_samples <- matrix(all_samples, nrow = length(idx))
   mu_tilde <- rowMeans(all_samples)
-  var_tilde <- var(t(all_samples))
+  var_tilde <- if (length(idx) == 1L) {
+    matrix(stats::var(as.numeric(all_samples)), nrow = 1L, ncol = 1L)
+  } else {
+    var(t(all_samples))
+  }
   return(list(eff_mu = mu_tilde, eff_var = var_tilde))
 }
 

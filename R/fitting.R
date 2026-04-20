@@ -928,6 +928,9 @@ get_posterior_weights <- function(ll){
 weighted_moments <- function(chain, ll = NULL) {
   # chain: a matrix with each col as a sample, and each row as a parameter
   # weights: an optional vector of weights. If not provided, equal weighting is assumed.
+  if (is.null(dim(chain))) {
+    chain <- matrix(chain, nrow = 1L)
+  }
   n <- ncol(chain)
   d <- nrow(chain)
 
@@ -939,7 +942,7 @@ weighted_moments <- function(chain, ll = NULL) {
   }
 
   # Compute the weighted mean of the chain.
-  weighted_mean <- colSums(apply(chain, 1, function(x) x*weights))
+  weighted_mean <- drop(chain %*% weights)
   # NIEK THIS CAUSES ERRORS
   # # Compute the weighted covariance matrix.
   # cov_matrix <- matrix(0, nrow = d, ncol = d)
@@ -947,7 +950,11 @@ weighted_moments <- function(chain, ll = NULL) {
   #   diff <- chain[,i] - weighted_mean
   #   cov_matrix <- cov_matrix + weights[i] * (diff %*% t(diff))
   # }
-  cov_matrix <- cov(t(chain))
+  cov_matrix <- if (d == 1L) {
+    matrix(stats::var(as.numeric(chain)), nrow = 1L, ncol = 1L)
+  } else {
+    cov(t(chain))
+  }
   return(list(w_cov = cov_matrix, w_mu = weighted_mean))
 }
 
