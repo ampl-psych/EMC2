@@ -1,4 +1,8 @@
 #pragma once
+#ifndef PARAM_TABLE_H
+#define PARAM_TABLE_H
+
+#pragma once
 
 #include <Rcpp.h>
 #include <unordered_set>
@@ -559,3 +563,5 @@ Rcpp::CharacterVector names_excluding(const Rcpp::CharacterVector& names,
 
 Rcpp::NumericMatrix add_constants_columns(Rcpp::NumericMatrix p_matrix,
                                           Rcpp::NumericVector constants);
+
+#endif

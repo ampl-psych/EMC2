@@ -1,3 +1,6 @@
+#ifndef TREND_ENGINE_H
+#define TREND_ENGINE_H
+
 #include <Rcpp.h>
 #include <unordered_set>
 #include "kernels.h"
@@ -282,3 +285,5 @@ void init_covariate_maps_for_op(TrendOpSpec& op,
                                 const Rcpp::List& tr_i,
                                 const Rcpp::DataFrame& data,
                                 const Rcpp::List& data_covmaps);
+
+#endif  // TREND_ENGINE_H

@@ -1,3 +1,6 @@
+#ifndef KERNELS_H
+#define KERNELS_H
+
 #include <unordered_map>
 #include <memory>
 #include <array>
@@ -871,4 +874,6 @@ KernelType to_kernel_type(const Rcpp::String& k);
 std::unique_ptr<BaseKernel> make_kernel(KernelType kt,
                                         SEXP custom_fun = R_NilValue);
 
+
+#endif // KERNELS_H
 
