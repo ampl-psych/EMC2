@@ -199,6 +199,134 @@ double c_log_likelihood_race(NumericMatrix pars, DataFrame data,
   }
 }
 
+int c_col_index(const CharacterVector& names, const std::string& target) {
+  for (int i = 0; i < names.size(); ++i) {
+    if (Rcpp::as<std::string>(names[i]) == target) return i;
+  }
+  stop("Column not found: " + target);
+}
+
+NumericVector c_expand_ordered_cut(NumericVector raw_cut, int n_lR) {
+  if (raw_cut.size() % n_lR != 0) {
+    stop("cut vector length must be divisible by the number of response levels");
+  }
+
+  NumericVector cut = clone(raw_cut);
+  const int n_trials = cut.size() / n_lR;
+
+  for (int trial = 0; trial < n_trials; ++trial) {
+    const int base = trial * n_lR;
+    if (n_lR == 2) {
+      cut[base + 1] = cut[base];
+      continue;
+    }
+
+    double current = cut[base];
+    for (int r = 1; r < n_lR - 1; ++r) {
+      current += std::exp(raw_cut[base + r]);
+      cut[base + r] = current;
+    }
+    cut[base + n_lR - 1] = cut[base + n_lR - 2];
+  }
+
+  return cut;
+}
+
+double c_ordered_cdf(double x, double location, double scale, bool probit) {
+  if (x == R_NegInf) return 0.0;
+  if (x == R_PosInf) return 1.0;
+  if (probit) return R::pnorm(x, location, scale, true, false);
+  return R::plogis(x, location, scale, true, false);
+}
+
+double c_log_likelihood_ordered(NumericMatrix pars, DataFrame data,
+                                const int n_lR, IntegerVector expand,
+                                double min_ll, LogicalVector is_ok, bool probit) {
+  const int loc_idx = c_col_index(colnames(pars), "location");
+  const int scale_idx = c_col_index(colnames(pars), "scale");
+  const int cut_idx = c_col_index(colnames(pars), "cut");
+  const LogicalVector winner = data["winner"];
+  const IntegerVector lR = data["lR"];
+  const NumericVector cut = c_expand_ordered_cut(pars(_, cut_idx), n_lR);
+
+  NumericVector ll_trial(sum(winner));
+  int out_idx = 0;
+
+  for (int i = 0; i < pars.nrow(); ++i) {
+    if (!winner[i]) continue;
+
+    if (is_ok[i] != TRUE) {
+      ll_trial[out_idx++] = min_ll;
+      continue;
+    }
+
+    const int level = lR[i];
+    const double location = pars(i, loc_idx);
+    const double scale = pars(i, scale_idx);
+    const double upper = (level == n_lR) ? R_PosInf : cut[i];
+    const double lower = (level == 1) ? R_NegInf : cut[i - 1];
+    const double prob = c_ordered_cdf(upper, location, scale, probit) -
+      c_ordered_cdf(lower, location, scale, probit);
+
+    double ll = min_ll;
+    if (R_FINITE(prob) && prob > 0) {
+      ll = std::log(prob);
+      if (!R_FINITE(ll) || ll < min_ll) ll = min_ll;
+    }
+    ll_trial[out_idx++] = ll;
+  }
+
+  NumericVector ll_exp = c_expand(ll_trial, expand);
+  ll_exp[is_na(ll_exp)] = min_ll;
+  ll_exp[is_infinite(ll_exp)] = min_ll;
+  ll_exp[ll_exp < min_ll] = min_ll;
+  return sum(ll_exp);
+}
+
+double c_log_likelihood_multinomial_logit(NumericMatrix pars, DataFrame data,
+                                          const int n_lR, IntegerVector expand,
+                                          double min_ll, LogicalVector is_ok) {
+  const int utility_idx = c_col_index(colnames(pars), "utility");
+  const LogicalVector winner = data["winner"];
+  const int n_trials = pars.nrow() / n_lR;
+  NumericVector ll_trial(n_trials);
+
+  for (int trial = 0; trial < n_trials; ++trial) {
+    const int base = trial * n_lR;
+    if (is_ok[base] != TRUE) {
+      ll_trial[trial] = min_ll;
+      continue;
+    }
+
+    double max_utility = pars(base, utility_idx);
+    for (int r = 1; r < n_lR; ++r) {
+      const double value = pars(base + r, utility_idx);
+      if (value > max_utility) max_utility = value;
+    }
+
+    double denom = 0.0;
+    double chosen = NA_REAL;
+    for (int r = 0; r < n_lR; ++r) {
+      const double value = std::exp(pars(base + r, utility_idx) - max_utility);
+      denom += value;
+      if (winner[base + r]) chosen = value;
+    }
+
+    double ll = min_ll;
+    if (R_FINITE(denom) && denom > 0 && R_FINITE(chosen) && chosen > 0) {
+      ll = std::log(chosen / denom);
+      if (!R_FINITE(ll) || ll < min_ll) ll = min_ll;
+    }
+    ll_trial[trial] = ll;
+  }
+
+  NumericVector ll_exp = c_expand(ll_trial, expand);
+  ll_exp[is_na(ll_exp)] = min_ll;
+  ll_exp[is_infinite(ll_exp)] = min_ll;
+  ll_exp[ll_exp < min_ll] = min_ll;
+  return sum(ll_exp);
+}
+
 // [[Rcpp::export]]
 NumericVector calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVector constants,
                       List designs, String type, List bounds, List transforms, List pretransforms,
@@ -297,6 +425,49 @@ NumericVector calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVect
       }
       is_ok = c_do_bound_pt(param_table_template, bound_specs);
       lls[i] = c_log_likelihood_DDM(pars, data, n_trials, expand, min_ll, is_ok);
+    }
+  } else if(type == "ORDERED_PROBIT" || type == "ORDERED_LOGIT"){
+    IntegerVector expand = data.attr("expand");
+    IntegerVector lR = data["lR"];
+    const int n_lR = unique(lR).length();
+    const bool is_probit = (type == "ORDERED_PROBIT");
+    for (int i = 0; i < n_particles; ++i) {
+      if(i > 0) {
+        param_table_template.fill_from_particle_row(particle_matrix, i,
+                                                    pm_col_to_base_idx);
+      }
+      pars = get_pars_matrix(param_table_template,
+                             designs,
+                             tend_runtime_ptr,
+                             transform_specs,
+                             keep_names);
+      if (i == 0) {
+        bound_specs = make_bound_specs_pt(minmax, mm_names, param_table_template, bounds);
+      }
+      is_ok = c_do_bound_pt(param_table_template, bound_specs);
+      is_ok = lr_all(is_ok, n_lR);
+      lls[i] = c_log_likelihood_ordered(pars, data, n_lR, expand, min_ll, is_ok, is_probit);
+    }
+  } else if(type == "MULTINOMIAL_LOGIT"){
+    IntegerVector expand = data.attr("expand");
+    IntegerVector lR = data["lR"];
+    const int n_lR = unique(lR).length();
+    for (int i = 0; i < n_particles; ++i) {
+      if(i > 0) {
+        param_table_template.fill_from_particle_row(particle_matrix, i,
+                                                    pm_col_to_base_idx);
+      }
+      pars = get_pars_matrix(param_table_template,
+                             designs,
+                             tend_runtime_ptr,
+                             transform_specs,
+                             keep_names);
+      if (i == 0) {
+        bound_specs = make_bound_specs_pt(minmax, mm_names, param_table_template, bounds);
+      }
+      is_ok = c_do_bound_pt(param_table_template, bound_specs);
+      is_ok = lr_all(is_ok, n_lR);
+      lls[i] = c_log_likelihood_multinomial_logit(pars, data, n_lR, expand, min_ll, is_ok);
     }
   } else if(type == "MRI" || type == "MRI_AR1"){
     int n_pars = p_types.length();

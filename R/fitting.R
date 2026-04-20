@@ -86,6 +86,7 @@ run_emc <- function(emc, stage, stop_criteria,
                     fileName = NULL,particle_factor=50, cores_per_chain = 1,
                     cores_for_chains = length(emc), max_tries = 20, n_blocks = 1,
                     thin = FALSE, trim = TRUE, r_cores=1){
+  if(length(emc) == 1) stop("run_emc() currently requires n_chains > 1.")
   emc <- restore_duplicates(emc)
   if(Sys.info()[1] == "Windows" & cores_per_chain > 1) stop("only cores_for_chains can be set on Windows")
   if (verbose) message(paste0("Running ", stage, " stage"))

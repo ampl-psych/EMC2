@@ -68,36 +68,54 @@ log_likelihood_ddmgng <- function(pars,dadm,model,min_ll=log(1e-10))
   sum(pmax(min_ll,log(like[attr(dadm,"expand")])))
 }
 
-
-
-#### sdt choice likelihoods ----
-
-log_likelihood_sdt <- function(pars,dadm, model,lb=-Inf, min_ll=log(1e-10))
+log_likelihood_ordered <- function(pars, dadm, model, lower = -Inf, min_ll = log(1e-10))
   # probability of ordered discrete choices based on integrals of a continuous
-  # distribution between thresholds, with fixed lower bound for first response
-  # lb. Upper bound for last response is a fixed value in threshold vector
+  # distribution between cuts, with a fixed lower bound for the first response
 {
-  first <- dadm$lR==levels(dadm$lR)[1]
-  last <- dadm$lR==levels(dadm$lR)[length(levels(dadm$lR))]
-  pars[last,"threshold"] <- Inf
-  # upper threshold
-  ut <- pars[dadm$winner,"threshold"]
-  # lower threshold fixed at lb for first response
-  pars[first &  dadm$winner,"threshold"] <- lb
-  # otherwise threshold of response before one made
-  notfirst <- !first &  dadm$winner
-  pars[notfirst,"threshold"] <- pars[which(notfirst)-1,"threshold"]
-  lt <- pars[dadm$winner,"threshold"]
-  # log probability
+  cut_col <- if ("cut_expanded" %in% colnames(pars)) "cut_expanded" else "cut"
+  first <- dadm$lR == levels(dadm$lR)[1]
+  last <- dadm$lR == levels(dadm$lR)[length(levels(dadm$lR))]
+  pars[last, cut_col] <- Inf
+
+  upper <- pars[dadm$winner, cut_col]
+  pars[first & dadm$winner, cut_col] <- lower
+
+  notfirst <- !first & dadm$winner
+  pars[notfirst, cut_col] <- pars[which(notfirst) - 1, cut_col]
+  lower_cut <- pars[dadm$winner, cut_col]
+
   ll <- numeric(sum(dadm$winner))
-  if (!is.null(attr(pars,"ok"))) { # Bad parameter region
-    ok <- attr(pars,"ok")
+  if (!is.null(attr(pars, "ok"))) {
+    ok <- attr(pars, "ok")
     okw <- ok[dadm$winner]
-    ll[ok] <- log(model$pfun(lt=lt[okw],ut=ut[okw],pars=pars[dadm$winner & ok,,drop=FALSE]))
-  } else ll <- log(model$pfun(lt=lt,ut=ut,pars=pars[dadm$winner,,drop=FALSE]))
-  ll <- ll[attr(dadm,"expand")]
+    ll[ok] <- log(model$pfun(
+      lower = lower_cut[okw],
+      upper = upper[okw],
+      pars = pars[dadm$winner & ok, , drop = FALSE]
+    ))
+  } else {
+    ll <- log(model$pfun(lower = lower_cut, upper = upper, pars = pars[dadm$winner, , drop = FALSE]))
+  }
+
+  ll <- ll[attr(dadm, "expand")]
   ll[is.na(ll)] <- 0
-  sum(pmax(min_ll,ll))
+  sum(pmax(min_ll, ll))
+}
+
+log_likelihood_multinomial <- function(pars, dadm, model, min_ll = log(1e-10)) {
+  p <- model$pfun(trials = dadm$trials, pars = pars)
+  pw <- p[dadm$winner]
+
+  ll <- rep(min_ll, sum(dadm$winner))
+  if (!is.null(attr(pars, "ok"))) {
+    okw <- attr(pars, "ok")[dadm$winner]
+    ll[okw] <- log(pw[okw])
+  } else {
+    ll <- log(pw)
+  }
+
+  ll[is.na(ll) | is.infinite(ll)] <- min_ll
+  sum(pmax(min_ll, ll[attr(dadm, "expand")]))
 }
 
 # Two options:

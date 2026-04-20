@@ -286,6 +286,11 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
     if(!is.null(data$lR)) data <- data[data$lR == levels(data$lR)[1],]
     data <- data[,!(names(data) %in% dropNames)]
     for (i in dimnames(Rrt)[[2]]) data[[i]] <- Rrt[,i]
+    if (is_choice_only_model_type(model()) &&
+        "rt" %in% names(data) &&
+        all(is.na(data$rt))) {
+      data$rt <- NULL
+    }
   }
   attr(data,"p_vector") <- parameters;
   if(!is.null(post_functions)){

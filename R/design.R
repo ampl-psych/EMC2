@@ -139,13 +139,33 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
   if (!all(sort(names(model()$p_types)) %in% sort(nams)) & is.null(custom_p_vector)){
     p_types <- model()$p_types
     not_specified <- sort(names(p_types))[!sort(names(p_types)) %in% sort(nams)]
-    message(paste0("Parameter(s) ", paste0(not_specified, collapse = ", "), " not specified in formula and assumed constant."))
-    additional_constants <- p_types[not_specified]
-    names(additional_constants) <- not_specified
+    sampled_by_default <- intersect(not_specified, model_sampled_by_default(model()))
+    assumed_constant <- setdiff(not_specified, sampled_by_default)
+    if (length(assumed_constant) > 0) {
+      message(
+        paste0(
+          "Parameter(s) ",
+          paste0(assumed_constant, collapse = ", "),
+          " not specified in formula and assumed constant."
+        )
+      )
+    }
+    additional_constants <- p_types[assumed_constant]
+    names(additional_constants) <- assumed_constant
     constants <- c(constants, additional_constants[!names(additional_constants) %in% names(constants)])
     for(add_constant in not_specified) formula[[length(formula)+ 1]] <- as.formula(paste0(add_constant, "~ 1"))
   }
-
+  prepared_design <- model_prepare_design(
+    model(),
+    formula = formula,
+    constants = constants,
+    factors = factors,
+    Rlevels = Rlevels,
+    covariates = covariates,
+    functions = functions
+  )
+  formula <- prepared_design$formula
+  constants <- prepared_design$constants
 
   design <- list(Flist=formula,Ffactors=factors,Rlevels=Rlevels,
                  Clist=contrasts,matchfun=matchfun,constants=constants,
@@ -289,10 +309,10 @@ contr.anova <- function(n) {
 }
 
 add_accumulators <- function(data,matchfun=NULL,simulate=FALSE, type = "RACE", Fcovariates=NULL) {
-  if(is.null(type) || !type %in% c("RACE", "SDT", "MT", "TC")) return(data)
+  if (!is_choice_accumulator_type(type)) return(data)
   if (!is.factor(data$R)) stop("data must have a factor R")
   factors <- names(data)[!names(data) %in% c("R","rt","trials",Fcovariates)]
-  if (type %in% c("RACE","SDT")) {
+  if (type == "RACE" || is_choice_only_model_type(type)) {
     nacc <- length(levels(data$R))
     datar <- cbind(do.call(rbind,lapply(1:nacc,function(x){data})),
                    lR=factor(rep(levels(data$R),each=dim(data)[1]),levels=levels(data$R)))
@@ -338,8 +358,11 @@ add_accumulators <- function(data,matchfun=NULL,simulate=FALSE, type = "RACE", F
     }
   }
   row.names(datar) <- NULL
+  if (is_choice_only_model_type(type) && !"rt" %in% names(datar)) {
+    datar$rt <- NA_real_
+  }
   if (simulate) {
-    if(!'rt' %in% Fcovariates) {
+    if(!'rt' %in% Fcovariates && !"rt" %in% names(datar)) {
       datar$rt <- NA
     }
   } else {
@@ -530,12 +553,13 @@ design_model <- function(data,design,model=NULL,
       stop("Model must be supplied if it has not been added to design")
     model <- design$model
   }
-  if (model()$type=="SDT") rt_check <- FALSE
-  if(grepl("MRI", model()$type)){
+  model_info <- model()
+  if (is_choice_only_model_type(model_info)) rt_check <- FALSE
+  if(grepl("MRI", model_type(model_info))){
     dadm <- data
     attr(dadm, "design_matrix") <- attr(design, "design_matrix")
     # attr(design, "design_matrix") <- NULL
-    p_names <- names(model()$p_types)
+    p_names <- names(model_info$p_types)
     attr(dadm,"p_names") <- p_names
     sampled_p_names <- p_names[!(p_names %in% names(design$constants))]
     attr(dadm,"sampled_p_names") <- sampled_p_names
@@ -551,7 +575,7 @@ design_model <- function(data,design,model=NULL,
   if (!any(names(data)=="trials")) data$trials <- 1:dim(data)[1]
   if(rt_check){rt_check_function(data)}
   if (!add_acc) da <- data else
-    da <- add_accumulators(data,design$matchfun,type=model()$type,Fcovariates=design$Fcovariates)
+    da <- add_accumulators(data,design$matchfun,type=model_type(model_info),Fcovariates=design$Fcovariates)
   order_idx <- order(da$subjects)
   da <- da[order_idx,] # fixes different sort in add_accumulators depending on subject type
 
@@ -561,8 +585,8 @@ design_model <- function(data,design,model=NULL,
   }
 
   # Add covariate_map as attribute to da
-  if(!is.null(model()$trend)) {
-    trend_list <- model()$trend
+  if(!is.null(model_info$trend)) {
+    trend_list <- model_info$trend
     for(i in 1:length(trend_list)) {
       if(!is.null(trend_list[[i]]$map)) {
         if(!'covariate_maps' %in% names(attributes(da))) attr(da, 'covariate_maps') <- list()
@@ -576,7 +600,7 @@ design_model <- function(data,design,model=NULL,
     }
   }
 
-  if (is.null(model()$p_types) | is.null(model()$Ttransform))
+  if (is.null(model_info$p_types) | is.null(model_info$Ttransform))
     stop("p_types and Ttransform must be supplied")
   if (!all(unlist(lapply(design$Flist,class))=="formula"))
     stop("Flist must contain formulas")
@@ -584,7 +608,7 @@ design_model <- function(data,design,model=NULL,
   names(design$Flist) <- nams
   if (is.null(design$Clist)) design$Clist=list(stats::contr.treatment)
   if (!is.list(design$Clist)) stop("Clist must be a list")
-  pnames <- names(model()$p_types)
+  pnames <- names(model_info$p_types)
   if (!is.list(design$Clist[[1]])[1]){
     design$Clist <- stats::setNames(lapply(1:length(pnames),
                                            function(x)design$Clist),pnames)
@@ -600,7 +624,23 @@ design_model <- function(data,design,model=NULL,
   }
   for (i in pnames) attr(design$Flist[[i]],"Clist") <- design$Clist[[i]]
 
-  out <- lapply(design$Flist,make_dm,da=da,Fcovariates=design$Fcovariates, add_da = add_da, all_cells_dm = all_cells_dm, compress_dms=compress_dms)
+  out <- mapply(
+    function(form, p_name) {
+      prepared_dm <- model_prepare_dm(model_info, p_name = p_name, form = form, da = da)
+      make_dm(
+        prepared_dm$form,
+        da = prepared_dm$da,
+        Fcovariates = design$Fcovariates,
+        add_da = add_da,
+        all_cells_dm = all_cells_dm,
+        compress_dms = compress_dms
+      )
+    },
+    design$Flist,
+    names(design$Flist),
+    SIMPLIFY = FALSE
+  )
+  names(out) <- names(design$Flist)
   if (!is.null(rt_resolution) & !is.null(da$rt)) da$rt <- floor(da$rt/rt_resolution)*rt_resolution
   if (compress){
     dadm <- compress_dadm(da,designs=out, Fcov=design$Fcovariates,Ffun=names(design$Ffunctions))
@@ -630,14 +670,14 @@ design_model <- function(data,design,model=NULL,
   sampled_p_names <- p_names[!(p_names %in% names(design$constants))]
   attr(dadm,"p_names") <- p_names
   attr(dadm,"sampled_p_names") <- sampled_p_names
-  if (model()$type=="DDM") nunique <- dim(dadm)[1] else
+  if (model_type(model_info)=="DDM") nunique <- dim(dadm)[1] else
     nunique <- dim(dadm)[1]/length(levels(dadm$lR))
   if (verbose & compress) message("Likelihood speedup factor: ",
   round(dim(da)[1]/dim(dadm)[1],1)," (",nunique," unique trials)")
 
   attr(dadm,"model") <- model
   attr(dadm,"constants") <- design$constants
-  attr(dadm,"ok_trials") <- is.finite(data$rt)
+  attr(dadm,"ok_trials") <- if (!is.null(data$rt)) is.finite(data$rt) else rep(TRUE, nrow(data))
   attr(dadm,"s_data") <- data$subjects
   dadm
 }
@@ -1146,7 +1186,8 @@ mapped_pars.emc.design <- function(x, p_vector = NULL, model=NULL,
                        design,model,rt_check=FALSE,compress=FALSE, verbose = FALSE)
   ok <- !(names(dadm) %in% c("subjects","trials","R","rt","winner"))
   out <- cbind(dadm[,ok, drop = F],round(get_pars_matrix_oo(p_vector,dadm, design$model()),digits))
-  if (model()$type=="SDT")  out <- out[dadm$lR!=levels(dadm$lR)[length(levels(dadm$lR))],]
+  if (is_ordered_response_type(model()))
+    out <- out[dadm$lR!=levels(dadm$lR)[length(levels(dadm$lR))],]
   if (model()$type=="DDM")  out <- out[,!(names(out) %in% c("lR","lM"))]
   if (any(names(out)=="RACE") && remove_RACE)
     out <- out[as.numeric(out$lR) <= as.numeric(as.character(out$RACE)),,drop=FALSE]
