@@ -675,10 +675,7 @@ calc_ll_manager <- function(proposals, dadm, model, component = NULL, r_cores = 
   } else{
     model <- model()
     if(is.null(model$c_name)){ # use the R implementation
-      lls <- unlist(
-        auto_mclapply(1:nrow(proposals),
-          function(i) calc_ll_R(proposals[i,], model=model, dadm = dadm),
-         mc.cores=r_cores))
+      lls <- apply(proposals,1, calc_ll_R, model, dadm = dadm)
     } else {
       p_types <- names(model$p_types)
       designs <- list()
@@ -687,6 +684,7 @@ calc_ll_manager <- function(proposals, dadm, model, component = NULL, r_cores = 
       }
       constants <- attr(dadm, "constants")
       if(is.null(constants)) constants <- NA
+<<<<<<< HEAD
       if (nrow(proposals) <= r_cores) {
         lls <- calc_ll(proposals, dadm, constants = constants, designs = designs, type = model$c_name,
                        model$bound, model$transform, model$pre_transform, p_types = p_types, min_ll = log(1e-10),
@@ -699,6 +697,11 @@ calc_ll_manager <- function(proposals, dadm, model, component = NULL, r_cores = 
                      model$pre_transform, p_types = p_types, min_ll = log(1e-10),model$trend)
         },mc.cores=r_cores))
       }
+=======
+      lls <- calc_ll(proposals, dadm, constants = constants, designs = designs, type = model$c_name,
+                     model$bound, model$transform, model$pre_transform, p_types = p_types, min_ll = log(1e-10),
+                     model$trend)
+>>>>>>> main
     }
   }
   return(lls)

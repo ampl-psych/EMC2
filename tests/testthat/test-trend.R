@@ -306,9 +306,7 @@ trend_mult <- make_trend(
   cov_names = list("covariate1", c("covariate1", "covariate2")),
   par_input = list(NULL, "t0"),
   kernels = c("exp_incr", "delta"),
-  phase = "pretransform",
-  #  at = "lR",
-  # ffill_na = FALSE
+  phase = "pretransform"
 )
 
 design_mult <- design(
