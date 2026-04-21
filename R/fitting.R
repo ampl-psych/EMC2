@@ -1,3 +1,76 @@
+# Nicely format a difftime (seconds / minutes / hours)
+format_duration <- function(dt) {
+  secs <- as.numeric(dt, units = "secs")
+  if (secs < 60) {
+    sprintf("%.1f s", secs)
+  } else if (secs < 3600) {
+    sprintf("%.1f min", secs / 60)
+  } else {
+    sprintf("%.1f h", secs / 3600)
+  }
+}
+
+# Remaining time across all stages, based on the duration of the *last* try
+# Stage assumptions:
+#   preburn: 1–1
+#   burn   : 1–max_tries
+#   adapt  : 1–2
+#   sample : 10–max_tries
+estimate_remaining_total_time <- function(stage, tries_done, elapsed_dt, max_tries = 20L) {
+  stage_order <- c("preburn", "burn", "adapt", "sample")
+
+  if (!stage %in% stage_order) {
+    # Fallback: only this stage, 1–max_tries
+    min_total <- 1L
+    max_total <- max_tries
+    min_rem_tries <- max(0L, min_total - tries_done)
+    max_rem_tries <- max(0L, max_total - tries_done)
+    return(list(
+      min_time = min_rem_tries * elapsed_dt,
+      max_time = max_rem_tries * elapsed_dt
+    ))
+  }
+
+  idx <- match(stage, stage_order)
+
+  # Exact per-stage min/max tries
+  min_total <- c(
+    preburn = 1L,
+    burn    = 1L,
+    adapt   = 1L,
+    sample  = 10L
+  )
+
+  max_total <- c(
+    preburn = 1L,          # exactly 1
+    burn    = max_tries,   # 1–20
+    adapt   = 2L,          # 1–2 usually
+    sample  = max_tries    # 10–20
+  )
+
+  # Remaining in the current stage
+  min_current_rem <- max(0L, min_total[stage] - tries_done)
+  max_current_rem <- max(0L, max_total[stage] - tries_done)
+
+  # Remaining in all later stages
+  if (idx < length(stage_order)) {
+    later_stages <- stage_order[(idx + 1L):length(stage_order)]
+    min_later_rem <- sum(min_total[later_stages])
+    max_later_rem <- sum(max_total[later_stages])
+  } else {
+    min_later_rem <- 0L
+    max_later_rem <- 0L
+  }
+
+  min_tries_rem <- min_current_rem + min_later_rem
+  max_tries_rem <- max_current_rem + max_later_rem
+
+  list(
+    min_time = min_tries_rem * elapsed_dt,
+    max_time = max_tries_rem * elapsed_dt
+  )
+}
+
 get_stop_criteria <- function(stage, stop_criteria, type){
   if(is.null(stop_criteria)){
     if(stage == "preburn"){
@@ -124,7 +197,7 @@ run_emc <- function(emc, stage, stop_criteria,
                              particle_factor=particle_factor,search_width=search_width,
                              n_cores=cores_per_chain, mc.cores = cores_for_chains,
                              r_cores = r_cores)
-    if(getOption("emc2.print_iteration_duration", TRUE)) { print(Sys.time()-t0) }
+
     class(sub_emc) <- "emc"
     if(cores_for_chains > 1) sub_emc <- pointer_reset_wrapper(sub_emc, emc)
     if(stage != 'preburn'){
@@ -149,6 +222,23 @@ run_emc <- function(emc, stage, stop_criteria,
       class(emc) <- "emc"
       save(emc, file = fileName)
       emc <- restore_duplicates(emc)
+    }
+
+    elapsed <- Sys.time() - t0
+    if (verbose) {
+      rem <- estimate_remaining_total_time(
+        stage      = stage,
+        tries_done = progress$trys,
+        elapsed_dt = elapsed,
+        max_tries  = max_tries
+      )
+      message(sprintf(
+        "[%s | try=%d | iters=%d] Duration: %s — ETA: %s–%s",
+        stage, progress$trys, progress$total_iters,
+        format_duration(elapsed),
+        format_duration(rem$min_time),
+        format_duration(rem$max_time)
+      ))
     }
   }
   emc <- strip_duplicates(emc)
@@ -211,8 +301,9 @@ check_progress <- function (emc, stage, iter, stop_criteria,
   else {
     iters_total <- progress$iters_total + step_size
     trys <- progress$trys + 1
-    if (verbose)
-      message(trys, ": Iterations ", stage, " = ", total_iters_stage)
+    # now in run_emc
+    # if (verbose)
+    #   message(trys, ": Iterations ", stage, " = ", total_iters_stage)
   }
   gd <- check_gd(emc, stage, stop_criteria[["max_gd"]], stop_criteria[["mean_gd"]], trys, verbose,
                  iter = total_iters_stage, selection, omit_mpsrf = stop_criteria[["omit_mpsrf"]],
@@ -263,7 +354,8 @@ check_progress <- function (emc, stage, iter, stop_criteria,
     }
   }
   return(list(emc = gd$emc, done = done, step_size = step_size,
-              trys = trys, n_blocks = gd$n_blocks))
+              trys = trys, n_blocks = gd$n_blocks,
+              total_iters_stage=total_iters_stage))
 }
 
 check_gd <- function(emc, stage, max_gd, mean_gd, omit_mpsrf, trys, verbose,
