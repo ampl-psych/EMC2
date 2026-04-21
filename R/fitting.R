@@ -44,7 +44,7 @@ estimate_remaining_total_time <- function(stage, tries_done, elapsed_dt, max_tri
   max_total <- c(
     preburn = 1L,          # exactly 1
     burn    = max_tries,   # 1–20
-    adapt   = 2L,          # 1–2
+    adapt   = 2L,          # 1–2 usually
     sample  = max_tries    # 10–20
   )
 
@@ -173,9 +173,7 @@ run_emc <- function(emc, stage, stop_criteria,
   progress <- progress[!names(progress) == 'emc']
   # We need to multiply step_size by thin to make an accurate guess for good step_size.
   cur_thin <- ifelse(is.numeric(thin), thin, 1)
-  tries_done <- 0L
   while(!progress$done){
-    tries_done <- tries_done + 1L
     emc <- reset_pm_settings(emc, stage)
     # Remove redundant samples
     if(trim){
@@ -199,23 +197,23 @@ run_emc <- function(emc, stage, stop_criteria,
                              n_cores=cores_per_chain, mc.cores = cores_for_chains,
                              r_cores = r_cores)
 
-    if (getOption("emc2.print_iteration_duration", TRUE)) {
-      elapsed <- Sys.time() - t0
+    elapsed <- Sys.time() - t0
+    if (verbose) {
       rem <- estimate_remaining_total_time(
         stage      = stage,
-        tries_done = tries_done,
+        tries_done = progress$trys,
         elapsed_dt = elapsed,
         max_tries  = max_tries
       )
-
       message(sprintf(
-        "[stage=%s, try=%d] Try duration: %s. ETA: %s–%s.",
-        stage, tries_done,
+        "[%s | try=%d | iters=%d] Duration: %s — ETA: %s–%s",
+        stage, progress$trys, progress$total_iters,
         format_duration(elapsed),
         format_duration(rem$min_time),
         format_duration(rem$max_time)
       ))
     }
+
     class(sub_emc) <- "emc"
     if(cores_for_chains > 1) sub_emc <- set_custom_kernel_pointers(sub_emc, get_custom_kernel_pointers(emc))
     if(stage != 'preburn'){
@@ -302,8 +300,9 @@ check_progress <- function (emc, stage, iter, stop_criteria,
   else {
     iters_total <- progress$iters_total + step_size
     trys <- progress$trys + 1
-    if (verbose)
-      message(trys, ": Iterations ", stage, " = ", total_iters_stage)
+    # use more informative message
+    # if (verbose)
+    #   message(trys, ": Iterations ", stage, " = ", total_iters_stage)
   }
   gd <- check_gd(emc, stage, stop_criteria[["max_gd"]], stop_criteria[["mean_gd"]], trys, verbose,
                  iter = total_iters_stage, selection, omit_mpsrf = stop_criteria[["omit_mpsrf"]],
@@ -354,7 +353,8 @@ check_progress <- function (emc, stage, iter, stop_criteria,
     }
   }
   return(list(emc = gd$emc, done = done, step_size = step_size,
-              trys = trys, n_blocks = gd$n_blocks))
+              trys = trys, n_blocks = gd$n_blocks,
+              total_iters_stage=total_iters_stage))
 }
 
 check_gd <- function(emc, stage, max_gd, mean_gd, omit_mpsrf, trys, verbose,
