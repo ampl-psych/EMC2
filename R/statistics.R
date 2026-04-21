@@ -1,12 +1,14 @@
-#' Information Criteria and Marginal Likelihoods
+#' Information Criteria and Log Marginal Likelihood
 #'
-#' Returns the BPIC/DIC and optionally marginal deviance (-2*marginal likelihood) for a list of samples objects.
+#' Returns the BPIC/DIC and optionally marginal deviance (-2 x log marginal likelihood) for a list of samples objects.
 #'
-#' Computes DIC and BPIC using a joint deviance based on both the data likelihood and the hierarchical prior over subject-level parameters.
+#' Computes DIC and BPIC using a deviance based on either (a) the data likelihood
+#' only ("conditional", default) or (b) the joint likelihood including the
+#' hierarchical prior over subject-level parameters ("joint", non-standard, experimental).
 #'
 #' If `use_best_fit = TRUE` (default), the deviance anchor is taken as the better
 #' of the deviance at the posterior mean parameters and the best-fitting posterior
-#' draw. If FALSE, only the deviance at the posterior mean parameters is used
+#' draw. If `FALSE`, the deviance at the posterior mean parameters is used
 #' (standard DIC/BPIC).
 #'
 #' @param sList List of samples objects
@@ -14,7 +16,11 @@
 #' @param filter An integer or vector. If it's an integer, iterations up until the value set by `filter` will be excluded.
 #' If a vector is supplied, only the iterations in the vector will be considered.
 #' @param use_best_fit Boolean; defaults to `TRUE` If `TRUE`, uses the smaller of (i) the deviance at the posterior mean parameters and (ii) the lowest deviance across posterior draws (i.e., the best-fitting draw). If `FALSE`, uses only the deviance at the posterior mean parameters (i.e., standard DIC/BPIC).
-#' @param BayesFactor Boolean, defaults to `TRUE`. Include marginal likelihoods as estimated using WARP-III bridge sampling.
+#' @param type Character. `"conditional"` (default) uses only the data likelihood
+#' for DIC/BPIC. `"joint"` uses the joint likelihood including the hierarchical
+#' prior; this option is experimental.
+#' @param BayesFactor Boolean, defaults to `TRUE`. Include marginal deviance
+#' (`-2 * log` marginal likelihood) as estimated using WARP-III bridge sampling.
 #' Usually takes a minute per model added to calculate
 #' @param cores_for_props Integer, how many cores to use for the Bayes factor calculation, here 4 is the default for the 4 different proposal densities to evaluate, only 1, 2 and 4 are sensible.
 #' @param cores_per_prop Integer, how many cores to use for the Bayes factor calculation if you have more than 4 cores available. Cores used will be cores_for_props * cores_per_prop. Best to prioritize cores_for_props being 4 or 2
@@ -51,8 +57,10 @@
 #' @export
 
 compare <- function(sList,stage="sample",filter=NULL,use_best_fit=TRUE,
+                        type = "conditional",
                         BayesFactor = TRUE, cores_for_props =4, cores_per_prop = 1,
                         print_summary=TRUE,digits=0,digits_p=3, ...) {
+  type <- match.arg(type, c("conditional","joint"))
   if(is(sList, "emc")) sList <- list(sList)
   getp <- function(IC) {
     IC <- -(IC - min(IC))/2
@@ -66,7 +74,7 @@ compare <- function(sList,stage="sample",filter=NULL,use_best_fit=TRUE,
   ICs <- setNames(vector(mode="list",length=length(sList)),names(sList))
   for (i in 1:length(ICs)) ICs[[i]] <- IC(sList[[i]],stage=stage,
                                           filter=sflist[[i]],use_best_fit=use_best_fit,subject=list(...)$subject,print_summary=FALSE,
-                                          group_only = dots$group_only)
+                                          group_only = dots$group_only, type = type)
   ICs <- data.frame(do.call(rbind,ICs))
   DICp <- getp(ICs$DIC)
   BPICp <- getp(ICs$BPIC)
@@ -256,9 +264,10 @@ gelman_diag_robust <- function(mcl,autoburnin = FALSE,transform = TRUE, omit_mps
 
 IC <- function(emc,stage="sample",filter=0,use_best_fit=TRUE,
                print_summary=TRUE,digits=0,subject=NULL,
-               group_only = FALSE)
+               group_only = FALSE, type = "conditional")
   # Gets DIC, BPIC, effective parameters, mean deviance, and deviance of mean
 {
+  type <- match.arg(type, c("conditional","joint"))
   # Mean log-likelihood for each subject
   if (length(subject)!=1) {
     ll <- get_pars(emc, stage = stage, filter = filter, selection = "LL", merge_chains = TRUE)
@@ -282,7 +291,7 @@ IC <- function(emc,stage="sample",filter=0,use_best_fit=TRUE,
     Dmeans <- Dmeans[subject[1]]
     mean_lls <- mean_lls[subject[1]]
     minDs <- minDs[subject[1]]
-  } else{
+  } else if (type == "joint"){
     group_stats <- group_IC(emc, stage=stage,filter=filter, type = emc[[1]]$type)
     if(group_only){
       mean_lls <- group_stats$mean_ll
@@ -293,6 +302,8 @@ IC <- function(emc,stage="sample",filter=0,use_best_fit=TRUE,
       minDs <- c(minDs, group_stats$minD)
       Dmeans <- c(Dmeans, group_stats$Dmean)
     }
+  } else if (group_only) {
+    warning("group_only ignored for conditional DIC; using data likelihood only.")
   }
   if (use_best_fit) minDs <- pmin(minDs,Dmeans)
 
