@@ -463,11 +463,12 @@ create_chain_proposals <- function(emc, samples_idx = NULL, do_block = TRUE){
     idx_subtract <- min(250, emc[[1]]$samples$idx/1.5)
     samples_idx <- round(emc[[1]]$samples$idx - idx_subtract):emc[[1]]$samples$idx
   }
-  LL <- get_pars(emc, filter = samples_idx-1, selection = "LL",
+  history_idx <- unique(pmax(1, samples_idx - 1))
+  LL <- get_pars(emc, filter = history_idx, selection = "LL",
                  stage = c('preburn', 'burn', 'adapt', 'sample'),
                  merge_chains = T, return_mcmc = F, remove_constants = F,
                  remove_dup = F)
-  alpha <- get_pars(emc, filter = samples_idx-1, selection = "alpha",
+  alpha <- get_pars(emc, filter = history_idx, selection = "alpha",
                     stage = c('preburn', 'burn', 'adapt', 'sample'),
                     by_subject = T, merge_chains = T, return_mcmc = F,
                     remove_dup = F, remove_constants = F)

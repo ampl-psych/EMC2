@@ -21,9 +21,8 @@ cut (first threshold free, remaining thresholds modeled as positive increments).
 
 The \code{cut ~ 1} specification yields the standard flexible \code{K - 1} threshold
 parameterization from the ordinal regression literature. The final response
-category has an implicit upper cut at \code{Inf}, and \code{location} should be
-specified without an intercept (\code{0 + ...}) because the thresholds absorb it.
-Internally, \code{Ttransform} leaves sampled \code{cut} values unchanged and returns
+category has an implicit upper cut at \code{Inf}. Internally, \code{Ttransform} leaves
+sampled \code{cut} values unchanged and returns
 the ordered thresholds in a derived \code{cut_expanded} column used by the
 likelihood and random-number generator.
 }

@@ -4,6 +4,7 @@ filter_obj <- function(obj, idx){
   if(is.null(dims)) return(obj)
   if(length(dims) == 2){
     if(nrow(obj) == ncol(obj)){
+      if(nrow(obj) == 1) return(obj)
       if(nrow(obj) > 1){
         if(mean(abs(abs(rowSums(obj/max(obj))) - abs(colSums(obj/max(obj))))) < .01) return(obj)
       }
@@ -523,7 +524,6 @@ fit_remove_samples <- function(emc){
   }
   return(emc)
 }
-
 
 
 

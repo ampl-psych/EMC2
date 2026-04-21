@@ -50,17 +50,6 @@
   da
 }
 
-.ordered_prepare_design <- function(formula, constants, ...) {
-  lhs_terms <- vapply(formula, function(x) as.character(stats::terms(x)[[2]]), character(1))
-  loc_idx <- match("location", lhs_terms)
-  if (!is.na(loc_idx) &&
-      attr(stats::terms(formula[[loc_idx]]), "intercept") != 0 &&
-      !"location" %in% names(constants)) {
-    stop("Ordered models require `location ~ 0 + ...`; cutpoints absorb the intercept.")
-  }
-  list(formula = formula, constants = constants)
-}
-
 .ordered_prepare_dm <- function(p_name, form, da) {
   if (!identical(p_name, "cut")) {
     return(list(form = form, da = da))
@@ -133,7 +122,6 @@
     sampled_by_default = "cut",
     transform = list(func = c(location = "identity", scale = "exp", cut = "identity")),
     bound = list(minmax = cbind(location = c(-Inf, Inf), scale = c(0, Inf), cut = c(-Inf, Inf))),
-    prepare_design = .ordered_prepare_design,
     prepare_dm = .ordered_prepare_dm,
     Ttransform = function(pars, dadm) {
       cut_expanded <- .ordered_cut_transform(pars[, "cut"], dadm$lR)
@@ -167,9 +155,8 @@
 #'
 #' The `cut ~ 1` specification yields the standard flexible `K - 1` threshold
 #' parameterization from the ordinal regression literature. The final response
-#' category has an implicit upper cut at `Inf`, and `location` should be
-#' specified without an intercept (`0 + ...`) because the thresholds absorb it.
-#' Internally, `Ttransform` leaves sampled `cut` values unchanged and returns
+#' category has an implicit upper cut at `Inf`. Internally, `Ttransform` leaves
+#' sampled `cut` values unchanged and returns
 #' the ordered thresholds in a derived `cut_expanded` column used by the
 #' likelihood and random-number generator.
 #'

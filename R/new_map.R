@@ -342,10 +342,11 @@ par_data_map <- function(par_mcmc, design, n_trials = NULL, data = NULL,
     rt_check=FALSE)
 
   n_mcmc <- dim(par_mcmc)[3]
-  n_pars <- length(model()$p_types)
+  n_pars <- dim(par_mcmc)[1]
   n_subs <- ncol(par_mcmc)
   for(i in 1:n_mcmc){
-    parameters <- t(as.matrix(par_mcmc[,,i], nrow = n_pars, ncol = n_subs))
+    parameters <- t(matrix(par_mcmc[,,i, drop = FALSE], nrow = n_pars, ncol = n_subs))
+    colnames(parameters) <- dimnames(par_mcmc)[[1]]
     if(nrow(parameters) == length(unique(data$subjects))){
       design$Ffactors$subjects <- unique(data$subjects)
     }
