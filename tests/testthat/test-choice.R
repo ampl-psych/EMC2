@@ -38,24 +38,16 @@ d_mnp <- design(Rlevels = c("left", "right", "up"),
 p_mnp <- c(utility_Sleft = 1, utility_Sright = 0, utility_Sup = -1)
 
 test_that("ordered_probit", {
-  RNGkind("L'Ecuyer-CMRG")
-  set.seed(123)
   sdat <- make_data(p_ord_probit, d_ord_probit, n_trials = 10)
   ord_probit_s <- make_emc(sdat, d_ord_probit, type = "single", compress = FALSE, n_chains = 1)
-  set.seed(123)
   expect_snapshot(init_chains(ord_probit_s, particles = 10, cores_per_chain = 1)[[1]]$samples)
-  set.seed(123)
   expect_snapshot(make_data(p_ord_probit, d_ord_probit, n_trials = 10))
 })
 
 test_that("ordered_logit", {
-  RNGkind("L'Ecuyer-CMRG")
-  set.seed(123)
   sdat <- make_data(p_ord_logit, d_ord_logit, n_trials = 10)
   ord_logit_s <- make_emc(sdat, d_ord_logit, type = "single", compress = FALSE, n_chains = 1)
-  set.seed(123)
   expect_snapshot(init_chains(ord_logit_s, particles = 10, cores_per_chain = 1)[[1]]$samples)
-  set.seed(123)
   expect_snapshot(make_data(p_ord_logit, d_ord_logit, n_trials = 10))
 })
 

@@ -93,14 +93,48 @@ calculate_implied_means <- function(mean_designs, beta_params, n_pars) {
   out
 }
 
+.standard_prior_design_info <- function(design = NULL, group_design = NULL,
+                                        nuisance = NULL, nuisance_non_hyper = NULL) {
+  if (is.null(design)) {
+    return(list(par_names = NULL, group_design = group_design))
+  }
+
+  par_names <- names(sampled_pars(design, doMap = FALSE))
+  nuisance_idx <- unique(c(nuisance, nuisance_non_hyper))
+  if (length(nuisance_idx) > 0L) {
+    if (is.character(nuisance_idx)) {
+      nuisance_idx <- match(nuisance_idx, par_names)
+    }
+    nuisance_idx <- nuisance_idx[!is.na(nuisance_idx)]
+    if (length(nuisance_idx) > 0L) {
+      par_names <- par_names[!seq_along(par_names) %in% nuisance_idx]
+    }
+  }
+
+  if (!is.null(group_design)) {
+    keep <- intersect(names(group_design), par_names)
+    if (length(keep) == 0L) {
+      group_design <- NULL
+    } else {
+      group_design <- group_design[keep]
+      class(group_design) <- "emc.group_design"
+    }
+  }
+
+  list(par_names = par_names, group_design = group_design)
+}
+
 get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, selection = "mu", design = NULL, group_design = NULL,
-                               par_groups = NULL){
+                               par_groups = NULL, nuisance = NULL, nuisance_non_hyper = NULL){
   # Checking and default priors
   if(is.null(prior)){
     prior <- list()
   }
+  design_info <- .standard_prior_design_info(design, group_design, nuisance, nuisance_non_hyper)
+  par_names <- design_info$par_names
+  group_design <- design_info$group_design
   if(!is.null(design)){
-    n_pars <- length(sampled_pars(design, doMap = F))
+    n_pars <- length(par_names)
   }
   if (!is.null(prior$A) & is.null(n_pars)) {
     n_pars <- length(prior$A)
@@ -124,7 +158,7 @@ get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1
   }
   theta_mu_names <- names(prior$theta_mu_mean)
   if (!is.null(design) && (is.null(theta_mu_names) || length(theta_mu_names) != length(prior$theta_mu_mean))) {
-    theta_mu_names <- add_group_par_names(names(sampled_pars(design, doMap = FALSE)), group_design)
+    theta_mu_names <- add_group_par_names(par_names, group_design)
     if (length(theta_mu_names) == length(prior$theta_mu_mean)) {
       names(prior$theta_mu_mean) <- theta_mu_names
     }
@@ -161,7 +195,9 @@ get_prior_standard <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1
   attr(prior, "type") <- "standard"
   out <- prior
   if(sample){
-    par_names <- names(sampled_pars(design, doMap = F))
+    if (is.null(par_names) && !is.null(design)) {
+      par_names <- names(sampled_pars(design, doMap = FALSE))
+    }
     samples <- list()
     if(selection %in% c("mu", "beta", "alpha")){
       # Sample beta (all parameters including regressors)

@@ -123,7 +123,16 @@ get_objects_standard <- function(selection, sample_prior, return_prior, design =
   if(!is.null(attr(prior, "group_design"))) group_design <- attr(prior, "group_design")
   dots <- add_defaults(list(...), group_design = group_design)
   if(return_prior & !sample_prior){
-    if(is.null(dots$return_info)) prior$prior <- get_prior_standard(design = design, sample = F, prior = prior, group_design = dots$group_design)
+    if(is.null(dots$return_info)) {
+      prior$prior <- get_prior_standard(
+        design = design,
+        sample = FALSE,
+        prior = prior,
+        group_design = dots$group_design,
+        nuisance = dots$nuisance,
+        nuisance_non_hyper = dots$nuisance_non_hyper
+      )
+    }
     prior$descriptions <- list(
       theta_mu_mean = "mean of the group-level mean prior",
       theta_mu_var = "variance of the group-level mean prior",
@@ -554,5 +563,4 @@ get_alphas <- function(mu, var, sub_names = NULL, N = ncol(mu),
   colnames(alpha) <- sub_names
   alpha
 }
-
 
