@@ -102,6 +102,7 @@ sbc_running_counter <- function(i, temp_dir, offset = 0L) {
 run_SBC_hierarchical_rep <- function(i, design_in, prior_mu, prior_var, trials, n_subjects,
                                      prior_in, type, dots, temp_dir, offset = 0L) {
   dots[["cores_per_chain"]] <- 1L
+  dots[["cores_for_chains"]] <- 1L
   dots[["verbose"]] <- FALSE
   dots[["verboseProgress"]] <- FALSE
   message("Running data set ", sbc_running_counter(i, temp_dir, offset))
