@@ -159,8 +159,8 @@ get_prior_SEM <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, s
     }
     if(selection %in% c("regressors","std_loadings", "alpha", "mu_implied", "Sigma", "correlation", "covariance", "sigma2")){
       K <- array(0, dim = c(n_pars, n_cov, N))
-      for(i in 1:n_cov){
-        K[,i,] <- t(mvtnorm::rmvnorm(N, sigma = diag(prior$K_var, n_cov)))
+      for(i in seq_len(n_cov)){
+        K[,i,] <- t(mvtnorm::rmvnorm(N, sigma = diag(prior$K_var[i], n_pars)))
       }
       K <- constrain_lambda(K, K_mat)
       rownames(K) <- par_names
@@ -171,8 +171,8 @@ get_prior_SEM <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, s
     }
     if(selection %in% c("factor_regressors","std_loadings", "alpha", "mu_implied", "Sigma", "correlation", "covariance", "sigma2")){
       G <- array(0, dim = c(n_factors, n_cov, N))
-      for(i in 1:n_cov){
-        G[,i,] <- t(mvtnorm::rmvnorm(N, sigma = diag(prior$G_var, n_cov)))
+      for(i in seq_len(n_cov)){
+        G[,i,] <- t(mvtnorm::rmvnorm(N, sigma = diag(prior$G_var[i], n_factors)))
       }
       G <- constrain_lambda(G, G_mat)
 
@@ -184,7 +184,7 @@ get_prior_SEM <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, s
     }
     if(selection %in% c("structural_regressors", "std_loadings", "alpha", "mu_implied", "Sigma", "correlation", "covariance", "sigma2")){
       B <- array(0, dim = c(n_factors, n_factors, N))
-      for(i in 1:n_factors){
+      for(i in seq_len(n_factors)){
         B[,i,] <- t(mvtnorm::rmvnorm(N, sigma = diag(prior$B_var[i], n_factors)))
       }
       B <- constrain_lambda(B, B_mat)
@@ -196,7 +196,7 @@ get_prior_SEM <- function(prior = NULL, n_pars = NULL, sample = TRUE, N = 1e5, s
     }
     if(selection %in% c("loadings", "std_loadings", "alpha", "mu_implied", "Sigma", "correlation", "covariance", "sigma2")){
       lambda <- array(0, dim = c(n_pars, n_factors, N))
-      for(i in 1:n_factors){
+      for(i in seq_len(n_factors)){
         lambda[,i,] <- t(mvtnorm::rmvnorm(N, sigma = diag(prior$lambda_var[i], n_pars)))
       }
       lambda <- constrain_lambda(lambda, Lambda_mat)
