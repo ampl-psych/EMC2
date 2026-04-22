@@ -310,7 +310,7 @@ gibbs_step_SEM <- function(sampler, alpha){
   sem_settings  <- sampler$sem_settings
   prior         <- sampler$prior
 
-  y             <- t(alpha)                     # subjects x variables
+  y             <- t(alpha[,,1])                     # subjects x variables
   n_subjects    <- sampler$n_subjects
   n_pars        <- sum(!sampler$nuisance)
   n_factors     <- sampler$n_factors
