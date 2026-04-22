@@ -12,15 +12,15 @@ format_duration <- function(dt) {
 
 # Remaining time across all stages, based on the duration of the *last* try
 # Stage assumptions:
-#   preburn: 1–1
-#   burn   : 1–max_tries
-#   adapt  : 1–2
-#   sample : 10–max_tries
+#   preburn: 1-1
+#   burn   : 1-max_tries
+#   adapt  : 1-2
+#   sample : 10-max_tries
 estimate_remaining_total_time <- function(stage, tries_done, elapsed_dt, max_tries = 20L) {
   stage_order <- c("preburn", "burn", "adapt", "sample")
 
   if (!stage %in% stage_order) {
-    # Fallback: only this stage, 1–max_tries
+    # Fallback: only this stage, 1-max_tries
     min_total <- 1L
     max_total <- max_tries
     min_rem_tries <- max(0L, min_total - tries_done)
@@ -43,9 +43,9 @@ estimate_remaining_total_time <- function(stage, tries_done, elapsed_dt, max_tri
 
   max_total <- c(
     preburn = 1L,          # exactly 1
-    burn    = max_tries,   # 1–20
-    adapt   = 2L,          # 1–2 usually
-    sample  = max_tries    # 10–20
+    burn    = max_tries,   # 1-20
+    adapt   = 2L,          # 1-2 usually. It's technically max_trys but really this barely ever fails...
+    sample  = max_tries    # 10-20
   )
 
   # Remaining in the current stage
@@ -197,23 +197,6 @@ run_emc <- function(emc, stage, stop_criteria,
                              n_cores=cores_per_chain, mc.cores = cores_for_chains,
                              r_cores = r_cores)
 
-    elapsed <- Sys.time() - t0
-    if (verbose) {
-      rem <- estimate_remaining_total_time(
-        stage      = stage,
-        tries_done = progress$trys,
-        elapsed_dt = elapsed,
-        max_tries  = max_tries
-      )
-      message(sprintf(
-        "[%s | try=%d | iters=%d] Duration: %s — ETA: %s–%s",
-        stage, progress$trys, progress$total_iters,
-        format_duration(elapsed),
-        format_duration(rem$min_time),
-        format_duration(rem$max_time)
-      ))
-    }
-
     class(sub_emc) <- "emc"
     if(cores_for_chains > 1) sub_emc <- set_custom_kernel_pointers(sub_emc, get_custom_kernel_pointers(emc))
     if(stage != 'preburn'){
@@ -239,7 +222,17 @@ run_emc <- function(emc, stage, stop_criteria,
       save(emc, file = fileName)
       emc <- restore_duplicates(emc)
     }
+
+    elapsed <- Sys.time() - t0
+    if (verbose) {
+      rem <- estimate_remaining_total_time(stage=stage, tries_done=progress$trys, elapsed_dt=elapsed, max_tries=max_tries)
+      message(sprintf("[%s | try=%d | iters=%d] Duration: %s — ETA: %s-%s",
+        stage, progress$trys, progress$total_iters,
+        format_duration(elapsed), format_duration(rem$min_time), format_duration(rem$max_time)))
+    }
   }
+
+
   emc <- strip_duplicates(emc)
   class(emc) <- "emc"
   return(emc)
