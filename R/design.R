@@ -158,8 +158,7 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
       for(i in 1:length(trend)) if(trend[[i]]$at=='lR') trend[[i]]$at <- NULL
     }
     model <- update_model_trend(trend, model)
-    model_list <- model()
-    model <- function(){return(model_list)}
+    design$model <- model
   }
   p_vector <- sampled_pars(design)
   lhs_terms <- unlist(lapply(formula, function(x) as.character(stats::terms(x)[[2]])))
