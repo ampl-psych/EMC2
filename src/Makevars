@@ -14,7 +14,7 @@ PKG_CXXFLAGS = -O3 -march=native
 # Fast-math + Hart pnorm (near-double precision):
 #PKG_CXXFLAGS = -O3 -march=native -ffast-math -fno-math-errno
 #
-# Fast-math + A&S pnorm (maximum speed, reduced precision):
+# Fast-math + A&S pnorm (maximum speed on ARM64, reduced precision):
 #PKG_CXXFLAGS = -O3 -march=native -ffast-math -fno-math-errno -DPNORM_MODE=2
 #
 # Vectorisation report — clang/macOS:
