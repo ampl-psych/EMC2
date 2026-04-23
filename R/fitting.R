@@ -226,7 +226,7 @@ run_emc <- function(emc, stage, stop_criteria,
     elapsed <- Sys.time() - t0
     if (verbose) {
       rem <- estimate_remaining_total_time(stage=stage, tries_done=progress$trys, elapsed_dt=elapsed, max_tries=max_tries)
-      message(sprintf("[%s | try=%d | iters=%d] Duration: %s — ETA: %s-%s",
+      message(sprintf("[%s | try=%d | iters=%d] Duration: %s - ETA: %s-%s",
         stage, progress$trys, progress$total_iters,
         format_duration(elapsed), format_duration(rem$min_time), format_duration(rem$max_time)))
     }

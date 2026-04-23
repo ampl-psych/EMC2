@@ -244,7 +244,7 @@ void plba_fast(const NumericVector& rts,
   }
 }
 
-// Hot path: gather → compute → scatter
+// Hot path: gather -> compute -> scatter
 void dlba_plba_fast(const NumericVector& rts,
                     const ParamTable& pt,
                     const RaceSpec& spec,
