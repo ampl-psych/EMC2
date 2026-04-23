@@ -128,7 +128,7 @@ trend_bases <- make_trend(
   par_names = c("m", "s"),
   cov_names = list("covariate1", "covariate2"),
   kernels = c("exp_incr", "exp_decr"),
-  bases = c("exp_lin", "lin")
+  bases = c("centered", "lin")
 )
 
 design_bases <- design(
@@ -306,9 +306,7 @@ trend_mult <- make_trend(
   cov_names = list("covariate1", c("covariate1", "covariate2")),
   par_input = list(NULL, "t0"),
   kernels = c("exp_incr", "delta"),
-  phase = "pretransform",
-  #  at = "lR",
-  # ffill_na = FALSE
+  phase = "pretransform"
 )
 
 design_mult <- design(

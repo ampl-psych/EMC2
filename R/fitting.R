@@ -86,6 +86,7 @@ run_emc <- function(emc, stage, stop_criteria,
                     fileName = NULL,particle_factor=50, cores_per_chain = 1,
                     cores_for_chains = length(emc), max_tries = 20, n_blocks = 1,
                     thin = FALSE, trim = TRUE, r_cores=1){
+  if(length(emc) == 1) stop("run_emc() currently requires n_chains > 1.")
   emc <- restore_duplicates(emc)
   if(Sys.info()[1] == "Windows" & cores_per_chain > 1) stop("only cores_for_chains can be set on Windows")
   if (verbose) message(paste0("Running ", stage, " stage"))
@@ -458,11 +459,12 @@ create_chain_proposals <- function(emc, samples_idx = NULL, do_block = TRUE){
     idx_subtract <- min(250, emc[[1]]$samples$idx/1.5)
     samples_idx <- round(emc[[1]]$samples$idx - idx_subtract):emc[[1]]$samples$idx
   }
-  LL <- get_pars(emc, filter = samples_idx-1, selection = "LL",
+  history_idx <- unique(pmax(1, samples_idx - 1))
+  LL <- get_pars(emc, filter = history_idx, selection = "LL",
                  stage = c('preburn', 'burn', 'adapt', 'sample'),
                  merge_chains = T, return_mcmc = F, remove_constants = F,
                  remove_dup = F)
-  alpha <- get_pars(emc, filter = samples_idx-1, selection = "alpha",
+  alpha <- get_pars(emc, filter = history_idx, selection = "alpha",
                     stage = c('preburn', 'burn', 'adapt', 'sample'),
                     by_subject = T, merge_chains = T, return_mcmc = F,
                     remove_dup = F, remove_constants = F)
@@ -926,6 +928,9 @@ get_posterior_weights <- function(ll){
 weighted_moments <- function(chain, ll = NULL) {
   # chain: a matrix with each col as a sample, and each row as a parameter
   # weights: an optional vector of weights. If not provided, equal weighting is assumed.
+  if (is.null(dim(chain))) {
+    chain <- matrix(chain, nrow = 1L)
+  }
   n <- ncol(chain)
   d <- nrow(chain)
 
@@ -937,7 +942,7 @@ weighted_moments <- function(chain, ll = NULL) {
   }
 
   # Compute the weighted mean of the chain.
-  weighted_mean <- colSums(apply(chain, 1, function(x) x*weights))
+  weighted_mean <- drop(chain %*% weights)
   # NIEK THIS CAUSES ERRORS
   # # Compute the weighted covariance matrix.
   # cov_matrix <- matrix(0, nrow = d, ncol = d)
@@ -945,7 +950,11 @@ weighted_moments <- function(chain, ll = NULL) {
   #   diff <- chain[,i] - weighted_mean
   #   cov_matrix <- cov_matrix + weights[i] * (diff %*% t(diff))
   # }
-  cov_matrix <- cov(t(chain))
+  cov_matrix <- if (d == 1L) {
+    matrix(stats::var(as.numeric(chain)), nrow = 1L, ncol = 1L)
+  } else {
+    cov(t(chain))
+  }
   return(list(w_cov = cov_matrix, w_mu = weighted_mean))
 }
 

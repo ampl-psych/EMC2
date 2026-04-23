@@ -525,6 +525,14 @@ make_SEM_diagram <- function(emc,
                              par_names = NULL,
                              cut = NULL,
                              ...) {
+  get_matrix_vals <- function(vals, mat, i) {
+    nm <- colnames(mat)[i]
+    if (!is.null(nm) && !is.null(names(vals)) && nm %in% names(vals)) {
+      return(vals[[nm]])
+    }
+    vals[[i]]
+  }
+
   if (!requireNamespace("DiagrammeR", quietly = TRUE)) {
     stop("Package 'DiagrammeR' is required for this function. Please install it.")
   }
@@ -570,7 +578,7 @@ make_SEM_diagram <- function(emc,
   covnames <- unique(c(colnames(K_mat), colnames(G_mat)))
   all_names <- c(rownames(Lambda_mat), colnames(Lambda_mat), covnames)
   all_shapes <- c(
-    rep("circle", nrow(Lambda_mat[rowSums(abs(Lambda_mat) != 0), ]) + ncol(Lambda_mat)),
+    rep("circle", n_pars + n_factors),
     rep("square", n_cov)
   )
   n <- length(all_shapes)
@@ -586,24 +594,25 @@ make_SEM_diagram <- function(emc,
   if (plot_values) {
     L_vals <- credint(emc, selection = "std_loadings", remove_constants = FALSE, digits = 2)
     if (any(B_mat != 0)) B_vals <- credint(emc, selection = "structural_regressors", remove_constants = FALSE, digits = 2)
-    if (ncol(K_mat) > 1) K_vals <- credint(emc, selection = "regressors", remove_constants = FALSE, digits = 2)
-    if (ncol(G_mat) > 1) G_vals <- credint(emc, selection = "factor_regressors", remove_constants = FALSE, digits = 2)
+    if (any(K_mat != 0)) K_vals <- credint(emc, selection = "regressors", remove_constants = FALSE, digits = 2)
+    if (any(G_mat != 0)) G_vals <- credint(emc, selection = "factor_regressors", remove_constants = FALSE, digits = 2)
   }
 
   for (i in 1:ncol(Lambda_mat)) {
+    if (plot_values) cur_L_vals <- get_matrix_vals(L_vals, Lambda_mat, i)
     is_free <- Lambda_mat[, i] != 0
     if (cred_only) {
-      is_free <- is_free & apply(apply(L_vals[[i]], 1, sign), 2, FUN = function(x) {
+      is_free <- is_free & apply(apply(cur_L_vals, 1, sign), 2, FUN = function(x) {
         return(length(unique(x)))
       }) == 1
     }
     if (!is.null(cut)) {
-      is_free <- is_free & (abs(L_vals[[i]][, 2]) > cut)
+      is_free <- is_free & (abs(cur_L_vals[, 2]) > cut)
     }
     from <- c(from, rep(n_pars + i, sum(is_free)))
     to <- c(to, which(is_free))
     if (plot_values) {
-      label <- c(label, L_vals[[i]][, 2][is_free])
+      label <- c(label, cur_L_vals[, 2][is_free])
     } else {
       label_tmp <- rep("*", sum(is_free))
       label_tmp[which(Lambda_mat[is_free, i] != Inf)] <- Lambda_mat[is_free & Lambda_mat[, i] != Inf, i]
@@ -613,17 +622,18 @@ make_SEM_diagram <- function(emc,
 
   if (any(B_mat != 0)) {
     for (i in 1:ncol(B_mat)) {
+      if (plot_values) cur_B_vals <- get_matrix_vals(B_vals, B_mat, i)
       is_free <- B_mat[, i] != 0
       if (cred_only) {
         is_free <- is_free &
-          apply(apply(B_vals[[i]], 1, sign), 2, FUN = function(x) {
+          apply(apply(cur_B_vals, 1, sign), 2, FUN = function(x) {
             return(length(unique(x)))
           }) == 1
       }
       from <- c(from, rep(n_pars + i, sum(is_free)))
       to <- c(to, n_pars + which(is_free))
       if (plot_values) {
-        label <- c(label, B_vals[[i]][, 2][is_free])
+        label <- c(label, cur_B_vals[, 2][is_free])
       } else {
         label_tmp <- rep("*", sum(is_free))
         label_tmp[which(B_mat[is_free, i] != Inf)] <- B_mat[is_free & B_mat[, i] != Inf, i]
@@ -634,17 +644,18 @@ make_SEM_diagram <- function(emc,
 
   if (any(K_mat != 0)) {
     for (i in 1:ncol(K_mat)) {
+      if (plot_values) cur_K_vals <- get_matrix_vals(K_vals, K_mat, i)
       is_free <- K_mat[, i] != 0
       if (cred_only) {
         is_free <- is_free &
-          apply(apply(K_vals[[i]], 1, sign), 2, FUN = function(x) {
+          apply(apply(cur_K_vals, 1, sign), 2, FUN = function(x) {
             return(length(unique(x)))
           }) == 1
       }
       from <- c(from, rep(n_pars + n_factors + i, sum(is_free)))
       to <- c(to, which(is_free))
       if (plot_values) {
-        label <- c(label, K_vals[[i]][, 2][is_free])
+        label <- c(label, cur_K_vals[, 2][is_free])
       } else {
         label_tmp <- rep("*", sum(is_free))
         label_tmp[which(K_mat[is_free, i] != Inf)] <- K_mat[is_free & K_mat[, i] != Inf, i]
@@ -653,19 +664,20 @@ make_SEM_diagram <- function(emc,
     }
   }
 
-  if (any(G_mat) != 0) {
+  if (any(G_mat != 0)) {
     for (i in 1:ncol(G_mat)) {
+      if (plot_values) cur_G_vals <- get_matrix_vals(G_vals, G_mat, i)
       is_free <- G_mat[, i] != 0
       if (cred_only) {
         is_free <- is_free &
-          apply(apply(G_vals[[i]], 1, sign), 2, FUN = function(x) {
+          apply(apply(cur_G_vals, 1, sign), 2, FUN = function(x) {
             return(length(unique(x)))
           }) == 1
       }
       from <- c(from, rep(n_pars + n_factors + i, sum(is_free)))
       to <- c(to, n_pars + which(is_free))
       if (plot_values) {
-        label <- c(label, G_vals[[i]][, 2][is_free])
+        label <- c(label, cur_G_vals[, 2][is_free])
       } else {
         label_tmp <- rep("*", sum(is_free))
         label_tmp[which(G_mat[is_free, i] != Inf)] <- G_mat[is_free & G_mat[, i] != Inf, i]

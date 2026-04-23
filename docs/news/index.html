@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">EMC2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">3.3.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">3.4.1</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -18,7 +18,9 @@
       <ul class="navbar-nav me-auto"><li class="nav-item"><a class="nav-link" href="../reference/index.html">Reference</a></li>
 <li class="nav-item dropdown">
   <button class="nav-link dropdown-toggle" type="button" id="dropdown-articles" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Articles</button>
-  <ul class="dropdown-menu" aria-labelledby="dropdown-articles"><li><a class="dropdown-item" href="../articles/Simulation-based-Calibration.html">Simulation-based Calibration</a></li>
+  <ul class="dropdown-menu" aria-labelledby="dropdown-articles"><li><a class="dropdown-item" href="../articles/DDM.html">Diffusion Decision Model (DDM)</a></li>
+    <li><a class="dropdown-item" href="../articles/race-models.html">Race Models</a></li>
+    <li><a class="dropdown-item" href="../articles/Simulation-based-Calibration.html">Simulation-based Calibration</a></li>
     <li><a class="dropdown-item" href="../articles/trends.html">Trends</a></li>
   </ul></li>
 <li class="active nav-item"><a class="nav-link" href="../news/index.html">Changelog</a></li>
@@ -44,7 +46,29 @@
     </div>
 
     <div class="section level2">
-<h2 class="pkg-version" data-toc-text="3.3.0" id="emc2-330">EMC2 3.3.0<a class="anchor" aria-label="anchor" href="#emc2-330"></a></h2>
+<h2 class="pkg-version" data-toc-text="3.4.1" id="emc2-341">EMC2 3.4.1<a class="anchor" aria-label="anchor" href="#emc2-341"></a></h2><p class="text-muted">CRAN release: 2026-01-12</p>
+<div class="section level3">
+<h3 id="bug-fixes-3-4-1">Bug fixes<a class="anchor" aria-label="anchor" href="#bug-fixes-3-4-1"></a></h3>
+<ul><li>Small makevars corrections for new CRAN checks</li>
+</ul></div>
+<div class="section level3">
+<h3 id="new-features-3-4-1">New features<a class="anchor" aria-label="anchor" href="#new-features-3-4-1"></a></h3>
+<ul><li>Trend parameters are now also returned with map = TRUE</li>
+</ul></div>
+</div>
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="3.4.0" id="emc2-340">EMC2 3.4.0<a class="anchor" aria-label="anchor" href="#emc2-340"></a></h2>
+<div class="section level3">
+<h3 id="bug-fixes-3-4-0">Bug fixes<a class="anchor" aria-label="anchor" href="#bug-fixes-3-4-0"></a></h3>
+<ul><li>Fixed some maths that was wrong about the ECDF plot for SBC</li>
+</ul></div>
+<div class="section level3">
+<h3 id="new-features-3-4-0">New features<a class="anchor" aria-label="anchor" href="#new-features-3-4-0"></a></h3>
+<ul><li>Finished general trends implementation (stay tuned; tutorial still on the way)</li>
+</ul></div>
+</div>
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="3.3.0" id="emc2-330">EMC2 3.3.0<a class="anchor" aria-label="anchor" href="#emc2-330"></a></h2><p class="text-muted">CRAN release: 2025-12-02</p>
 <div class="section level3">
 <h3 id="bug-fixes-3-3-0">Bug fixes<a class="anchor" aria-label="anchor" href="#bug-fixes-3-3-0"></a></h3>
 <ul><li>Addressed a major issue in <code>map = TRUE</code>, so that now mapping of population level parameters is now done correctly. See issue <a href="https://github.com/ampl-psych/EMC2/issues/119" class="external-link">#119</a></li>
@@ -146,7 +170,7 @@
 
 
     <footer><div class="pkgdown-footer-left">
-  <p>Developed by Niek Stevenson, Michelle Donzallaz, Andrew Heathcote.</p>
+  <p>Developed by Niek Stevenson, Michelle Donzallaz, Andrew Heathcote, Steven Miletić.</p>
 </div>
 
 <div class="pkgdown-footer-right">

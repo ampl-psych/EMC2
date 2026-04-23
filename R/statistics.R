@@ -533,7 +533,23 @@ get_summary_stat <- function(emc, selection = "mu", fun, stat = NULL,
     if(length(fun) > 1){
       outputs <- list()
       for(j in 1:length(fun)){
-        outputs[[j]] <- do.call(fun[[j]], c(list(MCMC_samples[[i]]), fix_dots(dots, fun[[j]])))
+        out_j <- do.call(fun[[j]], c(list(MCMC_samples[[i]]), fix_dots(dots, fun[[j]])))
+        if (is.null(dim(out_j))) {
+          n_par <- if (inherits(MCMC_samples[[i]], "mcmc.list")) {
+            ncol(MCMC_samples[[i]][[1]])
+          } else if (!is.null(dim(MCMC_samples[[i]]))) {
+            dim(MCMC_samples[[i]])[1]
+          } else {
+            length(MCMC_samples[[i]])
+          }
+          if (length(out_j) == n_par) {
+            out_j <- matrix(out_j, ncol = 1L)
+            rownames(out_j) <- names(out_j)
+          } else {
+            out_j <- matrix(out_j, nrow = 1L)
+          }
+        }
+        outputs[[j]] <- out_j
       }
       out[[i]] <- do.call(cbind, outputs)
       if(!is.null(stat_name)){
@@ -635,4 +651,3 @@ model_averaging <- function(IC_for, IC_against) {
     Factor = bayes_factor
   ))
 }
-

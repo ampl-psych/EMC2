@@ -119,7 +119,7 @@ get_pars_oo <- function(p, dadm, model,
   }
 
   call_one <- function(cur_particles, cur_dadm, row_idx = NULL) {
-    get_pars_c_wrapper_oo(
+    get_pars_c_wrapper(
       particle_matrix = cur_particles,
       data = cur_dadm,
       constants = constants,

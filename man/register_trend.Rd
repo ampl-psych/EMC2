@@ -20,7 +20,7 @@ the order is assumed to match \code{trend_parameters}.}
 
 \item{base}{Default base to use when creating trends with this custom kernel
 if no \code{bases} argument is supplied to \code{make_trend}. One of
-c("lin","exp_lin","centered","add","identity"). Default "add".}
+c("lin","centered","add","identity"). Default "add".  "exp_lin" has been deprecated - use pre_transform instead.}
 }
 \value{
 An object to pass to \code{make_trend(custom_trend=...)}, carrying the

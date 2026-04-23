@@ -457,12 +457,20 @@ struct ParamTable {
 
         const double* d = &design(0, j);
 
+        // loop over trial rows
+#pragma omp simd
         for (int r = 0; r < T; ++r) {
-          const double weight = d[r];
-          if (weight == 0.0) {
-            continue;
+          double cr = coef[r];   // parameter coefficient
+          double dr = d[r];        // design row value
+
+          if (dr == 0.0 || cr == 0.0) {
+            // contributes 0, do nothing
+          } else {
+            out[r] += cr * dr;
           }
-          out[r] += coef[r] * weight;
+          // old code just did this:
+          // double v = coef[r] * d[r];
+          // out[r] += v;
         }
       }
     }

@@ -49,6 +49,10 @@ SBC_hierarchical <- function(design_in, prior_in, replicates = 250, trials = 100
   prior_mu <- plot(prior_in, design_in, do_plot = F, N = replicates, selection = "mu", return_mcmc = FALSE, map = FALSE)[[1]]
   prior_var <- plot(prior_in, design_in, do_plot = F, N = replicates, selection = "Sigma", return_mcmc = FALSE,
                           remove_constants = FALSE)[[1]]
+  mu_names <- rownames(prior_mu)
+  var_names <- rownames(prior_var[, , 1])
+  keep <- var_names %in% gsub(":", "_", mu_names)
+  prior_var <- prior_var[keep, keep, , drop = FALSE]
   rank_mu <- data.frame()
   rank_var <- data.frame()
   par_names <- names(sampled_pars(design_in))
@@ -91,59 +95,44 @@ SBC_hierarchical <- function(design_in, prior_in, replicates = 250, trials = 100
 
 run_SBC_subject <- function(rep, design_in, prior_alpha, trials, prior_in, dots){
   p_vector <- prior_alpha[rep,]
-  data <- do.call(make_data, c(list(parameters = p_vector, design = design_in, n_trials = trials), fix_dots(dots, make_data)))
-  emc <-  do.call(make_emc, c(list(data = data, design = design_in, prior_list = prior_in, type = "single"), fix_dots(dots, make_emc)))
+  tryCatch({
+    data <- do.call(make_data, c(list(parameters = p_vector, design = design_in, n_trials = trials), fix_dots(dots, make_data)))
+    emc <-  do.call(make_emc, c(list(data = data, design = design_in, prior_list = prior_in, type = "single"), fix_dots(dots, make_emc)))
+    emc <- do.call(fit, c(list(emc = emc), fix_dots(dots, fit)))
 
-  # Protection wrapper for the fit call
-  fit_result <- tryCatch({
-    do.call(fit, c(list(emc = emc), fix_dots(dots, fit)))
-  }, warning = function(w) {
-    # Save the problematic p_vector
-    filename <- paste0("p_vector_rep", rep, ".Rdata")
-    save(p_vector, file = filename)
-    warning("A warning occurred during fitting for replication ", rep,
-            ". The input parameters have been saved as ", filename,
-            ". Warning message: ", w$message)
-    # Re-throw the warning
-    warning(w)
-    # Return NULL to indicate failure
-    return(NULL)
+    # Return ESS
+    ESS <- ess_summary(emc, stat = NULL)[[1]]
+    # Rank
+    alpha_rec <- get_pars(emc, selection = "alpha", return_mcmc = F, merge_chains = T, flatten = T)[,1,]
+    rank <- mapply(get_ranks_ESS, split(alpha_rec, row(alpha_rec)), t(ESS), p_vector)
+    names(rank) <- names(sampled_pars(design_in))
+    # For Bias
+    CI <- credint(emc)[[1]]
+    med <- CI[,2] # And return this for precision
+    bias <- med - p_vector
+    # For coverage
+    coverage <- p_vector > CI[,1] & p_vector < CI[,3]
+
+    list(
+      rank = rank,
+      med = med,
+      bias = bias,
+      coverage = coverage,
+      failed = FALSE
+    )
   }, error = function(e) {
-    # Save the problematic p_vector
-    filename <- paste0("p_vector_rep", rep, ".Rdata")
-    save(p_vector, file = filename)
-    warning("An error occurred during fitting for replication ", rep,
-            ". The input parameters have been saved as ", filename,
-            ". Error message: ", e$message)
-    # Return NULL to indicate failure
-    return(NULL)
+    list(
+      rank = NULL,
+      med = NULL,
+      bias = NULL,
+      coverage = NULL,
+      failed = TRUE
+    )
   })
-
-  # Check if fitting failed
-  if (is.null(fit_result)) {
-    # Return a structure that indicates failure but doesn't break the overall process
-    return(list(rank = NULL, med = NULL, bias = NULL, coverage = NULL, failed = TRUE))
-  }
-
-  emc <- fit_result
-
-  # Return ESS
-  ESS <- ess_summary(emc, stat = NULL)[[1]]
-  # Rank
-  alpha_rec <- get_pars(emc, selection = "alpha", return_mcmc = F, merge_chains = T, flatten = T)[,1,]
-  rank <- mapply(get_ranks_ESS, split(alpha_rec, row(alpha_rec)), t(ESS), p_vector)
-  names(rank) <- names(sampled_pars(design_in))
-  # For Bias
-  CI <- credint(emc)[[1]]
-  med <- CI[,2] # And return this for precision
-  bias <- med - p_vector
-  # For coverage
-  coverage <- p_vector > CI[,1] & p_vector < CI[,3]
-  return(list(rank = rank, med = med, bias = bias, coverage = coverage))
 }
 
 split_list_to_dfs <- function(lst, type = "alpha") {
-  comps <- names(lst[[1]])   # get component names from the first element
+  comps <- c("rank", "med", "bias", "coverage")
   out <- lapply(comps, function(nm) {
     res <- list()
     res[[type]] <- do.call(rbind, lapply(lst, `[[`, nm))
@@ -195,7 +184,22 @@ SBC_single <- function(
     design_in, prior_alpha, trials, prior_in, dots,
     mc.cores = dots[["cores_per_chain"]]
   )
-  SBC <- split_list_to_dfs(res)
+  failed <- vapply(res, function(x) {
+    inherits(x, "try-error") || (is.list(x) && isTRUE(x$failed))
+  }, logical(1))
+  if (all(failed)) {
+    stop("All SBC replications failed.")
+  }
+  if (any(failed)) {
+    warning(
+      paste0(
+        sum(failed), " out of ", replicates,
+        " SBC replications failed and were omitted from the combined result."
+      ),
+      call. = FALSE
+    )
+  }
+  SBC <- split_list_to_dfs(res[!failed])
   if(!is.null(fileName)) {
     save(SBC, prior_alpha, file = fileName)
   }
@@ -380,7 +384,7 @@ plot_sbc_ecdf <- function(ranks, layout = NA, add_stats = TRUE, main = NULL, K =
       r_min <- suppressWarnings(min(r_norm, na.rm = TRUE))
       r_max <- suppressWarnings(max(r_norm, na.rm = TRUE))
 
-      if (!(r_max <= 1 && r_min >= 0)) {
+      if (!(r_max <= 1 + 1e-3 && r_min >= -1e-3)) {
         # If looks 1-based integer ranks: 1..K
         if (r_min >= 1 && r_max <= K) {
           r_norm <- (r_norm - 1) / K

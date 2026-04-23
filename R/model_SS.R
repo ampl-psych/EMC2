@@ -861,6 +861,7 @@ pstopHybrid <- function(
 # #'
 # #' @return A model list with all the necessary functions to sample
 # #' @export
+
 SShybrid <- function() {
   list(
     type = "RACE",

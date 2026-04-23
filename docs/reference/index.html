@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">EMC2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">3.3.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">3.4.1</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -18,7 +18,9 @@
       <ul class="navbar-nav me-auto"><li class="active nav-item"><a class="nav-link" href="../reference/index.html">Reference</a></li>
 <li class="nav-item dropdown">
   <button class="nav-link dropdown-toggle" type="button" id="dropdown-articles" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Articles</button>
-  <ul class="dropdown-menu" aria-labelledby="dropdown-articles"><li><a class="dropdown-item" href="../articles/Simulation-based-Calibration.html">Simulation-based Calibration</a></li>
+  <ul class="dropdown-menu" aria-labelledby="dropdown-articles"><li><a class="dropdown-item" href="../articles/DDM.html">Diffusion Decision Model (DDM)</a></li>
+    <li><a class="dropdown-item" href="../articles/race-models.html">Race Models</a></li>
+    <li><a class="dropdown-item" href="../articles/Simulation-based-Calibration.html">Simulation-based Calibration</a></li>
     <li><a class="dropdown-item" href="../articles/trends.html">Trends</a></li>
   </ul></li>
 <li class="nav-item"><a class="nav-link" href="../news/index.html">Changelog</a></li>
@@ -142,71 +144,6 @@
 
         </dt>
         <dd>Get Design</dd>
-      </dl></div><div class="section level2">
-      <h2 id="fmri">fMRI<a class="anchor" aria-label="anchor" href="#fmri"></a></h2>
-
-
-
-
-    </div><div class="section level2">
-
-
-
-
-      <dl><dt>
-
-          <code><a href="reshape_events.html">reshape_events()</a></code>
-
-        </dt>
-        <dd>Reshape events data for fMRI analysis</dd>
-      </dl><dl><dt>
-
-          <code><a href="convolve_design_matrix.html">convolve_design_matrix()</a></code>
-
-        </dt>
-        <dd>Convolve Events with HRF to Construct Design Matrices</dd>
-      </dl><dl><dt>
-
-          <code><a href="split_timeseries.html">split_timeseries()</a></code>
-
-        </dt>
-        <dd>Split fMRI Timeseries Data by ROI Columns</dd>
-      </dl><dl><dt>
-
-          <code><a href="high_pass_filter.html">high_pass_filter()</a></code>
-
-        </dt>
-        <dd>Apply High-Pass Filtering to fMRI Data</dd>
-      </dl><dl><dt>
-
-          <code><a href="design_fmri.html">design_fmri()</a></code>
-
-        </dt>
-        <dd>Create fMRI Design for EMC2 Sampling</dd>
-      </dl><dl><dt>
-
-          <code><a href="MRI.html">MRI()</a></code>
-
-        </dt>
-        <dd>GLM model for fMRI data</dd>
-      </dl><dl><dt>
-
-          <code><a href="MRI_AR1.html">MRI_AR1()</a></code>
-
-        </dt>
-        <dd>Create an AR(1) GLM model for fMRI data</dd>
-      </dl><dl><dt>
-
-          <code><a href="plot_design_fmri.html">plot_design_fmri()</a></code>
-
-        </dt>
-        <dd>Plot fMRI Design Matrix</dd>
-      </dl><dl><dt>
-
-          <code><a href="plot_fmri.html">plot_fmri()</a></code>
-
-        </dt>
-        <dd>Plot fMRI peri-stimulus time courses</dd>
       </dl></div><div class="section level2">
       <h2 id="latent-variable-modelling">Latent Variable Modelling<a class="anchor" aria-label="anchor" href="#latent-variable-modelling"></a></h2>
 
@@ -614,18 +551,6 @@
         <dd>Plot Difference of Cumulative Distribution Functions</dd>
       </dl><dl><dt>
 
-          <code><a href="plot_ss_if.html">plot_ss_if()</a></code>
-
-        </dt>
-        <dd>Plot Inhibition Functions</dd>
-      </dl><dl><dt>
-
-          <code><a href="plot_ss_srrt.html">plot_ss_srrt()</a></code>
-
-        </dt>
-        <dd>Plot Mean SRRT</dd>
-      </dl><dl><dt>
-
           <code><a href="plot_trend.html">plot_trend()</a></code>
 
         </dt>
@@ -889,6 +814,42 @@
 
         </dt>
         <dd>Get parameter types from trend object</dd>
+      </dl><dl><dt>
+
+          <code><a href="apply_kernel.html">apply_kernel()</a></code>
+
+        </dt>
+        <dd>Apply a kernel implied in an emc object</dd>
+      </dl><dl><dt>
+
+          <code><a href="fix_custom_kernel_pointers.html">fix_custom_kernel_pointers()</a></code>
+
+        </dt>
+        <dd>Reset pointers of custom C++ trend kernels to an emc object</dd>
+      </dl><dl><dt>
+
+          <code><a href="get_custom_kernel_pointers.html">get_custom_kernel_pointers()</a></code>
+
+        </dt>
+        <dd>Extract pointers of custom C++ trend kernels from trend list or emc object</dd>
+      </dl><dl><dt>
+
+          <code><a href="set_custom_kernel_pointers.html">set_custom_kernel_pointers()</a></code>
+
+        </dt>
+        <dd>(Re-)Set pointers of custom C++ trend kernels to an emc object</dd>
+      </dl><dl><dt>
+
+          <code><a href="get_power_spectra.html">get_power_spectra()</a></code>
+
+        </dt>
+        <dd>Compute Power Spectra With Optional Subject-Level Aggregation</dd>
+      </dl><dl><dt>
+
+          <code><a href="plot_spectrum.html">plot_spectrum()</a></code>
+
+        </dt>
+        <dd>Plot Empirical and Posterior Predictive Power Spectra</dd>
       </dl></div><div class="section level2">
       <h2 id="latent-variable-modelling-1">Latent variable modelling<a class="anchor" aria-label="anchor" href="#latent-variable-modelling-1"></a></h2>
 
@@ -964,7 +925,7 @@
 
 
     <footer><div class="pkgdown-footer-left">
-  <p>Developed by Niek Stevenson, Michelle Donzallaz, Andrew Heathcote.</p>
+  <p>Developed by Niek Stevenson, Michelle Donzallaz, Andrew Heathcote, Steven Miletić.</p>
 </div>
 
 <div class="pkgdown-footer-right">

@@ -123,7 +123,16 @@ get_objects_standard <- function(selection, sample_prior, return_prior, design =
   if(!is.null(attr(prior, "group_design"))) group_design <- attr(prior, "group_design")
   dots <- add_defaults(list(...), group_design = group_design)
   if(return_prior & !sample_prior){
-    if(is.null(dots$return_info)) prior$prior <- get_prior_standard(design = design, sample = F, prior = prior, group_design = dots$group_design)
+    if(is.null(dots$return_info)) {
+      prior$prior <- get_prior_standard(
+        design = design,
+        sample = FALSE,
+        prior = prior,
+        group_design = dots$group_design,
+        nuisance = dots$nuisance,
+        nuisance_non_hyper = dots$nuisance_non_hyper
+      )
+    }
     prior$descriptions <- list(
       theta_mu_mean = "mean of the group-level mean prior",
       theta_mu_var = "variance of the group-level mean prior",
@@ -171,7 +180,7 @@ get_objects_standard <- function(selection, sample_prior, return_prior, design =
 }
 
 implied_mean <- function(sampler, idx){
-  beta <- sampler$samples$theta_mu[,idx]
+  beta <- sampler$samples$theta_mu[,idx, drop = FALSE]
   N <- ncol(beta)
   group_des <- sampler$group_designs
   par_names <- sampler$par_names
@@ -500,8 +509,13 @@ get_base <- function(sampler, idx, selection){
   } else if(selection == "sigma2"){
     return(lapply(sampler, FUN = function(x){
       out <- x$samples$theta_var[,,idx, drop = F]
-      out <- apply(out,3,diag)
-      return(out)
+      n_pars <- dim(out)[1]
+      n_iter <- dim(out)[3]
+      vars <- matrix(NA_real_, nrow = n_pars, ncol = n_iter, dimnames = list(dimnames(out)[[1]], NULL))
+      for(i in seq_len(n_iter)){
+        vars[, i] <- diag(matrix(out[,,i], nrow = n_pars, ncol = n_pars))
+      }
+      return(vars)
     }))
   }
   else if(selection == "Sigma"){
@@ -509,8 +523,15 @@ get_base <- function(sampler, idx, selection){
   }
   else if(selection == "correlation"){
     return(suppressWarnings(lapply(sampler, FUN = function(x) return(
-      array(apply(x$samples$theta_var[,,idx],3,cov2cor),dim=dim(x$samples$theta_var[,,idx, drop = F]),
-            dimnames=dimnames(x$samples$theta_var))))))
+      {
+        out <- x$samples$theta_var[,,idx, drop = F]
+        n_pars <- dim(out)[1]
+        corr <- array(NA_real_, dim = dim(out), dimnames = dimnames(out))
+        for(i in seq_len(dim(out)[3])){
+          corr[,,i] <- cov2cor(matrix(out[,,i], nrow = n_pars, ncol = n_pars))
+        }
+        corr
+      }))))
   }
 }
 
@@ -542,7 +563,4 @@ get_alphas <- function(mu, var, sub_names = NULL, N = ncol(mu),
   colnames(alpha) <- sub_names
   alpha
 }
-
-
-
 
