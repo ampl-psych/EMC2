@@ -740,8 +740,24 @@ NumericVector calc_ll_oo(NumericMatrix particle_matrix, DataFrame data, NumericV
     idx_win.reserve(n_trials);
     idx_los.reserve(n_trials);
     int* win_flag = LOGICAL(winner);
+
+    // Pre-read RACE info needed for phantom filtering
+    const bool has_race_col = (sum(contains(data.names(), "RACE")) == 1);
+    NumericVector   NACC;
+    CharacterVector vals_NACC;
+    if (has_race_col) {
+      NACC      = data["RACE"];
+      vals_NACC = NACC.attr("levels");
+    }
+
     for (int i = 0; i < n_trials; ++i) {
-      (win_flag[i] ? idx_win : idx_los).push_back(i);
+      if (win_flag[i]) {
+        idx_win.push_back(i);
+      } else {
+        // skip phantom accumulators — data-dependent, built once
+        if (has_race_col && lR[i] > atoi(vals_NACC[NACC[i] - 1])) continue;
+        idx_los.push_back(i);
+      }
     }
     const int n_winners = (int)idx_win.size();
 
@@ -755,15 +771,6 @@ NumericVector calc_ll_oo(NumericMatrix particle_matrix, DataFrame data, NumericV
     // Race model setup
     RaceModelSetup setup = make_race_setup(type, param_table_template);
 
-    // Variable-accumulator (RACE column) support — hoist out of particle loop
-    const bool has_race_col = (sum(contains(data.names(), "RACE")) == 1);
-    NumericVector   NACC;
-    CharacterVector vals_NACC;
-    if (has_race_col) {
-      NACC      = data["RACE"];
-      vals_NACC = NACC.attr("levels");
-    }
-
     for (int i = 0; i < n_particles; ++i) {
       std::fill(is_ok.begin(), is_ok.end(), 1);
       if (i > 0) param_table_template.fill_from_particle_row(particle_matrix, i, pm_col_to_base_idx);
@@ -776,15 +783,19 @@ NumericVector calc_ll_oo(NumericMatrix particle_matrix, DataFrame data, NumericV
       // is_ok = c_do_bound_pt(param_table_template, bound_specs);
       lr_all(is_ok, n_acc);
 
-      if (has_race_col) {
-        NumericMatrix& base = param_table_template.base;
-        for (int x = 0; x < base.nrow(); ++x) {
-          if (lR[x] > atoi(vals_NACC[NACC[x] - 1])) {
-            base(x, setup.col_na_marker) = NA_REAL;
-            is_ok[x] = 0;
-          }
-        }
-      }
+      // fill raw with 1s. NB: log(1) = 0. All rows that are not in win_idx or los_idx will contribute 0 to the ll of that trial.
+      // Has to be done per particle because log_vec() overwrites raw
+      std::fill(raw.begin(), raw.end(), 1.0);
+
+      // if (has_race_col) {
+      //   NumericMatrix& base = param_table_template.base;
+      //   for (int x = 0; x < base.nrow(); ++x) {
+      //     if (lR[x] > atoi(vals_NACC[NACC[x] - 1])) {
+      //       base(x, setup.col_na_marker) = NA_REAL;
+      //       is_ok[x] = 0;
+      //     }
+      //   }
+      // }
 
       lls[i] = c_log_likelihood_race_new_path(
         param_table_template, setup,
@@ -986,7 +997,7 @@ double c_log_likelihood_race_new_path(ParamTable& pt,
                                       race_fast_fn pfun_fill)
 {
   const int n_winners = (int)idx_win.size();
-  const int n_losers  = (int)idx_los.size();
+  // const int n_losers  = (int)idx_los.size();
 
   double* raw_ptr = raw.begin();
   double* ll_ptr  = ll_out.begin();
@@ -1004,6 +1015,17 @@ double c_log_likelihood_race_new_path(ParamTable& pt,
   setup.fill_both(rts, pt, setup.spec, idx_win, idx_los, raw_ptr, scratch);
   vec_log(raw_ptr, raw.size());  // bulk log over entire raw buffer
 
+  // Rcpp::Rcout << "raw after vec_log:\n";
+  // for (int i = 0; i < raw.size(); ++i) {
+  //   bool is_win = std::find(idx_win.begin(), idx_win.end(), i) != idx_win.end();
+  //   bool is_los = std::find(idx_los.begin(), idx_los.end(), i) != idx_los.end();
+  //   Rcpp::Rcout << "  [" << i << "] " << raw_ptr[i]
+  //               << (is_win ? " (winner)" : "")
+  //               << (is_los ? " (loser)"  : "")
+  //               << ((!is_win && !is_los) ? " (phantom)" : "")
+  //               << "\n";
+  // }
+
   // 2) Per-trial log-likelihood into ll_out.
   //    raw now contains log(pdf) at winner indices, log(1-cdf) at loser indices.
   //    Clamp to min_ll using !(v > min_ll) which catches -inf and nan.
@@ -1018,9 +1040,9 @@ double c_log_likelihood_race_new_path(ParamTable& pt,
     }
   } else {
     const int stride = n_acc - 1;
-    if (n_losers != n_winners * stride) {
-      Rcpp::stop("c_log_likelihood_race_new_path: n_losers != n_winners * (n_acc - 1)");
-    }
+    // if (n_losers != n_winners * stride) {
+    //   Rcpp::stop("c_log_likelihood_race_new_path: n_losers != n_winners * (n_acc - 1)");
+    // }
 
     for (int t = 0; t < n_winners; ++t) {
       const int i_win = idx_win[t];
@@ -1035,21 +1057,12 @@ double c_log_likelihood_race_new_path(ParamTable& pt,
 
       const int base = t * stride;
       for (int k = 0; k < stride; ++k) {
-        const int i_los = idx_los[base + k];
-        ll += ok_ptr[i_los] ? clamp(raw_ptr[i_los]) : min_ll;  // check for ok on losers is still needed because of the RACE functionality!
-        // Rcpp::Rcout << " | los[" << k << "]"
-        //             << " i=" << i_los
-        //             << " ok=" << ok_ptr[i_los]
-        //             << " raw=" << raw_ptr[i_los];
+        // const int i_los = idx_los[base + k];
+        ll += clamp(raw_ptr[idx_los[base + k]]);  // ok_ptr check is redundant here since lr_all guarantees all accumulators per trial are either ok or not
+//        ll += ok_ptr[i_los] ? clamp(raw_ptr[i_los]) : min_ll;  // check for ok on losers is still needed because of the RACE functionality!
       }
 
       ll_ptr[t] = ll;
-      // Rcpp::Rcout << "trial " << t
-      //             << " i_win=" << i_win
-      //             << " ok=" << ok_ptr[i_win]
-      //             << " raw_win=" << raw_ptr[i_win]
-      //             << " ll=" << ll
-      //             << "\n";
     }
   }
 
