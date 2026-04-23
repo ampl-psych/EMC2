@@ -355,7 +355,7 @@ void drdm_prdm_fast(const NumericVector& rts,
     sc_s[j]      = s[i];
   }
 
-  // --- Winners: compute (contiguous — cost-model override via simd) ---
+  // --- Winners: compute (contiguous — faster on x86; ARM64 doesn't seem to care) ---
 #pragma omp simd
   for (int j = 0; j < n_win; ++j) {
     const double inv_s = 1.0 / sc_s[j];
@@ -379,7 +379,7 @@ void drdm_prdm_fast(const NumericVector& rts,
     sc_s[j]      = s[i];
   }
 
-  // --- Losers: compute (contiguous — cost-model override via simd) ---
+  // --- Losers: compute (contiguous — faster on x86; ARM64 doesn't seem to care) ---
 #pragma omp simd
   for (int j = 0; j < n_los; ++j) {
     const double inv_s = 1.0 / sc_s[j];
