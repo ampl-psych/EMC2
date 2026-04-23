@@ -697,6 +697,7 @@ NumericVector calc_ll_oo(NumericMatrix particle_matrix, DataFrame data, NumericV
   if (type == "DDM") {
     IntegerVector expand = data.attr("expand");
     for (int i = 0; i < n_particles; ++i) {
+      std::fill(is_ok.begin(), is_ok.end(), 1);
       if (i > 0) param_table_template.fill_from_particle_row(particle_matrix, i, pm_col_to_base_idx);
       pars = get_pars_matrix_oo(param_table_template, designs, trend_runtime_ptr,
                                 gp_cache, keep_names);
@@ -712,6 +713,7 @@ NumericVector calc_ll_oo(NumericMatrix particle_matrix, DataFrame data, NumericV
     int n_pars = p_types.length();
     NumericVector y = extract_y(data);
     for (int i = 0; i < n_particles; ++i) {
+      std::fill(is_ok.begin(), is_ok.end(), 1);
       if (i > 0) param_table_template.fill_from_particle_row(particle_matrix, i, pm_col_to_base_idx);
       pars = get_pars_matrix_oo(param_table_template, designs, trend_runtime_ptr,
                                 gp_cache, keep_names);
@@ -763,6 +765,7 @@ NumericVector calc_ll_oo(NumericMatrix particle_matrix, DataFrame data, NumericV
     }
 
     for (int i = 0; i < n_particles; ++i) {
+      std::fill(is_ok.begin(), is_ok.end(), 1);
       if (i > 0) param_table_template.fill_from_particle_row(particle_matrix, i, pm_col_to_base_idx);
       get_pars_matrix_oo(param_table_template, designs, trend_runtime_ptr,
                          gp_cache, keep_names,
@@ -778,6 +781,7 @@ NumericVector calc_ll_oo(NumericMatrix particle_matrix, DataFrame data, NumericV
         for (int x = 0; x < base.nrow(); ++x) {
           if (lR[x] > atoi(vals_NACC[NACC[x] - 1])) {
             base(x, setup.col_na_marker) = NA_REAL;
+            is_ok[x] = 0;
           }
         }
       }
@@ -789,7 +793,6 @@ NumericVector calc_ll_oo(NumericMatrix particle_matrix, DataFrame data, NumericV
         min_ll, n_acc, raw, ll_out,
         scratch,
         setup.fill_pdf, setup.fill_cdf);
-
     }
   }
 
@@ -1032,10 +1035,21 @@ double c_log_likelihood_race_new_path(ParamTable& pt,
 
       const int base = t * stride;
       for (int k = 0; k < stride; ++k) {
-        ll += clamp(raw_ptr[idx_los[base + k]]);  // no ok check needed, ok for winners and losers are guaranteed to match by lr_all()
+        const int i_los = idx_los[base + k];
+        ll += ok_ptr[i_los] ? clamp(raw_ptr[i_los]) : min_ll;  // check for ok on losers is still needed because of the RACE functionality!
+        // Rcpp::Rcout << " | los[" << k << "]"
+        //             << " i=" << i_los
+        //             << " ok=" << ok_ptr[i_los]
+        //             << " raw=" << raw_ptr[i_los];
       }
 
       ll_ptr[t] = ll;
+      // Rcpp::Rcout << "trial " << t
+      //             << " i_win=" << i_win
+      //             << " ok=" << ok_ptr[i_win]
+      //             << " raw_win=" << raw_ptr[i_win]
+      //             << " ll=" << ll
+      //             << "\n";
     }
   }
 
