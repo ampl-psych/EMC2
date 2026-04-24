@@ -1537,10 +1537,8 @@ make_data_unconditional <- function(data, pars, design, model,
   # -----------------------------------------------------------------------
   first_lR <- levels(dadm_full$lR)[1]
   data_out  <- dadm_full[dadm_full$lR == first_lR, , drop = FALSE]
-
-  data_out <- design_model(data_out, design, model_fun, add_acc = FALSE,
-                           compress = FALSE, verbose = FALSE, rt_check = FALSE)
-
+  # data_out <- design_model(data_out, design, model_fun, add_acc = FALSE,
+  #                          compress = FALSE, verbose = FALSE, rt_check = FALSE)
   data_out <- data_out[, unique(c(includeColumns, "R", "rt")), drop = FALSE]
   data_out <- data_out[, !colnames(data_out) %in% c("lR", "lM"), drop = FALSE]
 
