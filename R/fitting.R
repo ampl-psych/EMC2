@@ -226,19 +226,17 @@ run_emc <- function(emc, stage, stop_criteria,
 
     elapsed <- Sys.time() - t0
     if (verbose) {
-      rem <- estimate_remaining_total_time(
-        stage      = stage,
-        tries_done = progress$trys,
-        elapsed_dt = elapsed,
-        max_tries  = max_tries
-      )
-      message(sprintf(
-        "[%s | try=%d | iters=%d] Duration: %s - ETA: %s-%s",
+      gd <- progress$gd$gd
+      gd_message <- NULL
+      if(!is.null(stop_criteria$mean_gd)) gd_message <- paste0("Mean Rhat=", round(mean(gd), 3))
+      if(!is.null(stop_criteria$max_gd)) gd_message <- paste0("Max Rhat=", round(mean(gd), 3))
+      rem <- estimate_remaining_total_time(stage = stage,tries_done = progress$trys, elapsed_dt = elapsed, max_tries = max_tries)
+      message(sprintf("[%s | try=%d | iters=%d%s] Duration: %s - ETA: %s-%s",
         stage, progress$trys, progress$total_iters,
+        ifelse(!is.null(gd_message), paste0(" | ", gd_message), ""),
         format_duration(elapsed),
         format_duration(rem$min_time),
-        format_duration(rem$max_time)
-      ))
+        format_duration(rem$max_time)))
     }
   }
   emc <- strip_duplicates(emc)
@@ -305,7 +303,7 @@ check_progress <- function (emc, stage, iter, stop_criteria,
     # if (verbose)
     #   message(trys, ": Iterations ", stage, " = ", total_iters_stage)
   }
-  gd <- check_gd(emc, stage, stop_criteria[["max_gd"]], stop_criteria[["mean_gd"]], trys, verbose,
+  gd <- check_gd(emc, stage, stop_criteria[["max_gd"]], stop_criteria[["mean_gd"]], trys, verbose=FALSE,
                  iter = total_iters_stage, selection, omit_mpsrf = stop_criteria[["omit_mpsrf"]],
                  n_blocks)
   iter_done <- ifelse(is.null(iter) || length(iter) == 0, TRUE, total_iters_stage >= iter)
@@ -355,6 +353,7 @@ check_progress <- function (emc, stage, iter, stop_criteria,
   }
   return(list(emc = gd$emc, done = done, step_size = step_size,
               trys = trys, n_blocks = gd$n_blocks,
+              gd=gd,
               total_iters_stage=total_iters_stage))
 }
 
