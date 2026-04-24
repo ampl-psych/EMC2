@@ -13,18 +13,20 @@ format_duration <- function(dt) {
 # Remaining time across all stages, based on the duration of the *last* try
 # Stage assumptions:
 #   preburn: 1-1
-#   burn: 1-max_tries
-#   adapt: 1-2
-#   sample: 10-max_tries
-estimate_remaining_total_time <- function(stage, tries_done, elapsed_dt, max_tries = 20L) {
+#   burn   : 1-max_tries
+#   adapt  : 1-2
+#   sample : 10-max_tries
+estimate_remaining_total_time <- function(stage, tries_done, elapsed_dt, max_tries = 20L,
+                                          current_iters = NULL, target_iters = NULL,
+                                          step_size = NULL) {
   stage_order <- c("preburn", "burn", "adapt", "sample")
 
+  min_total <- c(preburn = 1L, burn = 1L, adapt = 1L, sample = 10L)
+  max_total <- c(preburn = 1L, burn = max_tries, adapt = 2L, sample = max_tries)
+
   if (!stage %in% stage_order) {
-    # Fallback: only this stage, 1-max_tries
-    min_total <- 1L
-    max_total <- max_tries
-    min_rem_tries <- max(0L, min_total - tries_done)
-    max_rem_tries <- max(0L, max_total - tries_done)
+    min_rem_tries <- max(0L, 1L - tries_done)
+    max_rem_tries <- max(0L, max_tries - tries_done)
     return(list(
       min_time = min_rem_tries * elapsed_dt,
       max_time = max_rem_tries * elapsed_dt
@@ -33,28 +35,9 @@ estimate_remaining_total_time <- function(stage, tries_done, elapsed_dt, max_tri
 
   idx <- match(stage, stage_order)
 
-  # Exact per-stage min/max tries
-  min_total <- c(
-    preburn = 1L,
-    burn    = 1L,
-    adapt   = 1L,
-    sample  = 10L
-  )
-
-  max_total <- c(
-    preburn= 1L,          # exactly 1
-    burn= max_tries,   # 1-20
-    adapt= 2L,          # 1-2 usually
-    sample = max_tries    # 10-20
-  )
-
-  # Remaining in the current stage
-  min_current_rem <- max(0L, min_total[stage] - tries_done)
-  max_current_rem <- max(0L, max_total[stage] - tries_done)
-
-  # Remaining in all later stages
+  # --- Remaining in later stages (always try-count based) ---
   if (idx < length(stage_order)) {
-    later_stages <- stage_order[(idx + 1L):length(stage_order)]
+    later_stages  <- stage_order[(idx + 1L):length(stage_order)]
     min_later_rem <- sum(min_total[later_stages])
     max_later_rem <- sum(max_total[later_stages])
   } else {
@@ -62,13 +45,24 @@ estimate_remaining_total_time <- function(stage, tries_done, elapsed_dt, max_tri
     max_later_rem <- 0L
   }
 
-  min_tries_rem <- min_current_rem + min_later_rem
-  max_tries_rem <- max_current_rem + max_later_rem
+  # --- Remaining in current stage ---
+  max_current_rem <- max(0L, max_total[stage] - tries_done)
 
-  list(
-    min_time = min_tries_rem * elapsed_dt,
-    max_time = max_tries_rem * elapsed_dt
-  )
+  # For sample stage: use iteration-based minimum if we have the info
+  if (stage == "sample" &&
+      !is.null(current_iters) && !is.null(target_iters) && !is.null(step_size)) {
+    iters_remaining   <- max(0L, target_iters - current_iters)
+    time_per_iter     <- elapsed_dt / step_size
+    min_current_time  <- iters_remaining * time_per_iter
+    min_time <- min_current_time + min_later_rem * elapsed_dt
+  } else {
+    min_current_rem <- max(0L, min_total[stage] - tries_done)
+    min_time <- (min_current_rem + min_later_rem) * elapsed_dt
+  }
+
+  max_time <- (max_current_rem + max_later_rem) * elapsed_dt
+
+  list(min_time = min_time, max_time = max_time)
 }
 
 get_stop_criteria <- function(stage, stop_criteria, type){
@@ -229,14 +223,21 @@ run_emc <- function(emc, stage, stop_criteria,
       gd <- progress$gd$gd
       gd_message <- NULL
       if(!is.null(stop_criteria$mean_gd)) gd_message <- paste0("Mean Rhat=", round(mean(gd), 3))
-      if(!is.null(stop_criteria$max_gd))  gd_message <- paste0("Max Rhat=", round(max(gd), 3))
-      rem <- estimate_remaining_total_time(stage=stage, tries_done=progress$trys, elapsed_dt=elapsed, max_tries=max_tries)
+      if(!is.null(stop_criteria$max_gd)) gd_message <- paste0("Max Rhat=", round(max(gd), 3))
+
+      # Get current iteration count for the sample stage
+      current_iters <- if (stage == "sample") chain_n(emc)[1, stage] else NULL
+      target_iters  <- if (stage == "sample") stop_criteria[["iter"]] else NULL
+
+      rem <- estimate_remaining_total_time(stage= stage,tries_done = progress$trys, elapsed_dt = elapsed, max_tries = max_tries,
+                                           current_iters = current_iters, target_iters = target_iters, step_size = progress$step_size)
+      #      rem <- estimate_remaining_total_time(stage=stage, tries_done=progress$trys, elapsed_dt=elapsed, max_tries=max_tries)
       message(sprintf("[%s | try=%d | iters=%d%s] Duration: %s - ETA: %s-%s",
-        stage, progress$trys, progress$total_iters,
-        ifelse(!is.null(gd_message), paste0(" | ", gd_message), ""),
-        format_duration(elapsed),
-        format_duration(rem$min_time),
-        format_duration(rem$max_time)))
+                      stage, progress$trys, progress$total_iters,
+                      ifelse(!is.null(gd_message), paste0(" | ", gd_message), ""),
+                      format_duration(elapsed),
+                      format_duration(rem$min_time),
+                      format_duration(rem$max_time)))
     }
   }
   emc <- strip_duplicates(emc)
