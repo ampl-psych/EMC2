@@ -304,7 +304,7 @@ check_progress <- function (emc, stage, iter, stop_criteria,
     # if (verbose)
     #   message(trys, ": Iterations ", stage, " = ", total_iters_stage)
   }
-  gd <- check_gd(emc, stage, stop_criteria[["max_gd"]], stop_criteria[["mean_gd"]], trys, verbose,
+  gd <- check_gd(emc, stage, stop_criteria[["max_gd"]], stop_criteria[["mean_gd"]], trys, verbose=FALSE,
                  iter = total_iters_stage, selection, omit_mpsrf = stop_criteria[["omit_mpsrf"]],
                  n_blocks)
   iter_done <- ifelse(is.null(iter) || length(iter) == 0, TRUE, total_iters_stage >= iter)
