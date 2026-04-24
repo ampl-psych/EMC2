@@ -1,4 +1,4 @@
-apply_contrasts <- function(events, contrast = NULL, cell_coding = FALSE, remove_intercept = TRUE) {
+apply_contrasts <- function(events, contrast = NULL, cell_coding = FALSE, remove_intercept = TRUE, levels=NULL) {
   factor_name <- events$factor[1]
   colnames(events)[colnames(events) == "event_type"] <- factor_name
 
@@ -8,15 +8,15 @@ apply_contrasts <- function(events, contrast = NULL, cell_coding = FALSE, remove
       if(!is.null(rownames(contrast))){
         events[[factor_name]] <- factor(events[[factor_name]], levels = rownames(contrast))
       } else{
-        events[[factor_name]] <- factor(events[[factor_name]])
+        events[[factor_name]] <- factor(events[[factor_name]], levels=levels)
       }
       stats::contrasts(events[[factor_name]], how.many = ncol(contrast)) <- contrast
     } else {
-      events[[factor_name]] <- factor(events[[factor_name]])
+      events[[factor_name]] <- factor(events[[factor_name]], levels=levels)
       stats::contrasts(events[[factor_name]]) <- do.call(contrast, list(n = length(unique(events[[factor_name]]))))
     }
   } else {
-    events[[factor_name]] <- factor(events[[factor_name]])
+    events[[factor_name]] <- factor(events[[factor_name]], levels=levels)
     # R's default contrasts will be used.
   }
 
@@ -252,7 +252,8 @@ convolve_design_matrix <- function(timeseries, events, factors = NULL, contrasts
         ev_run$factor[idx] <- fact
         tmp <- ev_run[idx, ]
         new_tmp <- apply_contrasts(tmp, contrast = contrasts[[fact]],
-                                   cell_coding = fact %in% cell_coding)
+                                   cell_coding = fact %in% cell_coding,
+                                   levels = factors[[fact]])
         rownames(new_tmp) <- NULL
         new_tmp <- cbind(event_type = ev_run$event_type[idx], new_tmp)
         ev_tmp <- rbind(ev_tmp, new_tmp)
