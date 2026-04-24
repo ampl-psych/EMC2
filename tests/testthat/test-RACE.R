@@ -22,5 +22,5 @@ dat <- make_data(p_vector,designLBA,data=template)
 emc <- make_emc(dat, designLBA, type = "single", compress = F)
 
 test_that("RACE", {
-  expect_snapshot(init_chains(emc, particles = 10, cores_for_chains = 1))
+  expect_snapshot(init_chains(emc, particles = 10, cores_for_chains = 1)[[1]]$samples)
 })
