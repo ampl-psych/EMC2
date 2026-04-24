@@ -1039,29 +1039,23 @@ double c_log_likelihood_race_new_path(ParamTable& pt,
       ll_ptr[t] = ok_ptr[i_win] ? clamp(raw_ptr[i_win]) : min_ll;
     }
   } else {
-    const int stride = n_acc - 1;
-    // if (n_losers != n_winners * stride) {
-    //   Rcpp::stop("c_log_likelihood_race_new_path: n_losers != n_winners * (n_acc - 1)");
-    // }
-
     for (int t = 0; t < n_winners; ++t) {
-      const int i_win = idx_win[t];
+      const int base = t * n_acc;
 
-      //
-      if (!ok_ptr[i_win]) {
+      if (!ok_ptr[idx_win[t]]) {
+        // lr_all guarantees that ok_ptr are the same value for all accumulators in a trial
+        // so only check here, no need to check for the other accumulators
         ll_ptr[t] = min_ll;
         continue;
       }
 
-      double ll = clamp(raw_ptr[i_win]);
-
-      const int base = t * stride;
-      for (int k = 0; k < stride; ++k) {
-        // const int i_los = idx_los[base + k];
-        ll += clamp(raw_ptr[idx_los[base + k]]);  // ok_ptr check is redundant here since lr_all guarantees all accumulators per trial are either ok or not
-//        ll += ok_ptr[i_los] ? clamp(raw_ptr[i_los]) : min_ll;  // check for ok on losers is still needed because of the RACE functionality!
+      // The current data format guarantees n_acc per trial, so we can just sum now
+      // raw_ptr contains either the log-PDF (winners) or log(1-CDF) (losers)
+      // Clamp here. There's a second clamp later on but not really needed probably
+      double ll = 0.0;
+      for (int k = 0; k < n_acc; ++k) {
+        ll += clamp(raw_ptr[base + k]);
       }
-
       ll_ptr[t] = ll;
     }
   }
@@ -1075,81 +1069,6 @@ double c_log_likelihood_race_new_path(ParamTable& pt,
   for (int i = 0; i < m; ++i) {
     sum_ll += clamp(ll_ptr[exp_ptr[i] - 1]);
   }
-
-//   // 1) Fill pdfs (winners) and cdfs (losers)
-//   // dfun_fill(rts, pt, setup.spec, winner, raw_ptr);
-//   // if (n_acc > 1) {
-//   //   pfun_fill(rts, pt, setup.spec, winner, raw_ptr);
-//   // }
-//
-//   // setup.fill_both() refers to gather-scatter implementations.
-//   // on linux/x86, this is significantly faster. macOS/arm64 doesn't care
-//   setup.fill_both(rts, pt, setup.spec, idx_win, idx_los, raw_ptr, scratch);
-//
-//   // 2) Per-trial log-likelihood into ll_out
-//   // safe_log: returns log(x) clamped to [min_ll, inf), or min_ll if x <= 0
-//   // Defined as a static helper to stay C++11 compatible (no generic lambda)
-//   struct SafeLog {
-//     double min_ll;
-//     double operator()(double x) const {
-//       if (!std::isfinite(x) || x <= 0.0) return min_ll;
-//       double v = std::log(x);
-//       return (std::isfinite(v) && v >= min_ll) ? v : min_ll;
-//     }
-//   } safe_log = { min_ll };
-//
-//   if (n_acc == 1) {
-//     for (int t = 0; t < n_winners; ++t) {
-//       const int i_win = idx_win[t];
-//       ll_ptr[t] = ok_ptr[i_win] ? safe_log(raw_ptr[i_win]) : min_ll;
-//     }
-//   } else {
-//     const int stride = n_acc - 1;
-//     if (n_losers != n_winners * stride) {
-//       Rcpp::stop("c_log_likelihood_race_new_path: n_losers != n_winners * (n_acc - 1)");
-//     }
-//
-//     for (int t = 0; t < n_winners; ++t) {
-//       const int i_win = idx_win[t];
-//
-//       if (!ok_ptr[i_win]) {
-//         ll_ptr[t] = min_ll;
-//         continue;
-//       }
-//
-//       double ll = safe_log(raw_ptr[i_win]);
-//
-//       const int base = t * stride;
-//       for (int k = 0; k < stride; ++k) {
-//         const int i_los = idx_los[base + k];
-//         if (!ok_ptr[i_los]) {
-//           ll += min_ll;
-//           continue;
-//         }
-//         double cdf = raw_ptr[i_los];
-//         if (!std::isfinite(cdf)) {
-//           ll += min_ll;
-//           continue;
-//         }
-//         double one_minus = cdf; //1.0 - cdf;
-//         ll += (one_minus <= 0.0) ? min_ll : safe_log(one_minus);
-//       }
-//
-//       ll_ptr[t] = ll;
-//     }
-//   }
-//
-//   // 3) Expand and sum
-//   const int  m       = expand.size();
-//   const int* exp_ptr = expand.begin();
-//   double sum_ll = 0.0;
-//
-// #pragma omp simd reduction(+:sum_ll)
-//   for (int i = 0; i < m; ++i) {
-//     double v = ll_ptr[exp_ptr[i] - 1];
-//     sum_ll += (std::isfinite(v) && v >= min_ll) ? v : min_ll;
-//   }
-
   return sum_ll;
 }
 // double c_log_likelihood_race_new_path(ParamTable& pt,
