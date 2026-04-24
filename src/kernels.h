@@ -574,8 +574,8 @@ struct SimpleDelta : DeltaKernel {
                int r    = comp_idx[j];
                double x = cov_ptr[r];
                // note to future self -- without --ffast-math, x == x also checks for NaN. But --ffast-math breaks that
-               // if (!ISNAN(x)) {  // do NOT replace with std::isnan or x==x: -ffast-math makes both unreliable               if (!std::isnan(x)) {
-               if(!__builtin_isnan(x)) { // this one is supposed to be thread-safe and --ffast-math safe..
+               if (!ISNAN(x)) {  // do NOT replace with std::isnan or x==x: -ffast-math makes both unreliable               if (!std::isnan(x)) {
+               // if(!__builtin_isnan(x)) { // this one is supposed to be thread-safe and --ffast-math safe.... preliminary testing fails.
                  double alpha = alpha_col[r];
                  double pe    = x - q_;
                  pes_[j]      = pe;
