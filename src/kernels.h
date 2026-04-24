@@ -564,7 +564,7 @@ struct SimpleDelta : DeltaKernel {
 
              const double* q0_col    = kernel_pars.cols[0];
              const double* alpha_col = kernel_pars.cols[1];
-             const double* cov_ptr   = covariate.begin();
+             // const double* cov_ptr   = covariate.begin();
 
              // Initial compressed element
              int row0 = comp_idx[0];             // full-data row index
@@ -586,7 +586,8 @@ struct SimpleDelta : DeltaKernel {
                //        j, r, covariate.size());
                // }
 
-               double x   = cov_ptr[r];
+               // double x   = cov_ptr[r];
+              double x = covariate(r,0);
                // if( x == x) {   // not NAN
               if (!ISNAN(x)) {
                  double alpha = alpha_col[r];
