@@ -549,8 +549,6 @@ struct SimpleDelta : DeltaKernel {
                           (int)kernel_pars.cols.size());
              }
 
-             using namespace Rcpp;
-
              const int n_comp = static_cast<int>(comp_idx.size());
              if (n_comp <= 0) {
                out_.clear();
@@ -559,47 +557,33 @@ struct SimpleDelta : DeltaKernel {
                return;
              }
 
-             out_.assign(n_comp, NA_REAL);
-             pes_.assign(n_comp, NA_REAL);
+             // slightly faster -- no-op size check, no need to write anything
+             out_.resize(n_comp);
+             pes_.resize(n_comp);
+             pes_[n_comp - 1] = NA_REAL;
 
              const double* q0_col    = kernel_pars.cols[0];
              const double* alpha_col = kernel_pars.cols[1];
              const double* cov_ptr   = covariate.begin();
 
-             // Initial compressed element
-             int row0 = comp_idx[0];             // full-data row index
-             // if (row0 < 0 || row0 >= covariate.size()) {
-             //   stop("SimpleDelta::run: comp_idx[0] = %d out of range [0,%d)",
-             //        row0, covariate.size());
-             // }
+             int row0 = comp_idx[0];
+             q_       = q0_col[row0];
+             out_[0]  = q_;
 
-             q_      = q0_col[row0];
-             out_[0] = q_;
-
-             double pe = NA_REAL;
-
-             // j runs over COMPRESSED indices: 0..n_comp-2
              for (int j = 0; j < n_comp - 1; ++j) {
-               int r = comp_idx[j];            // full-data row index
-               // if (r < 0 || r >= covariate.size()) {
-               //   stop("SimpleDelta::run: comp_idx[%d] = %d out of range [0,%d)",
-               //        j, r, covariate.size());
-               // }
-
-              double x   = cov_ptr[r];
-              // double x = covariate(r,0);
-              // if(x == x) {   // not NAN
-              if (!ISNAN(x)) {
+               int r    = comp_idx[j];
+               double x = cov_ptr[r];
+               // note to future self -- without --ffast-math, x == x also checks for NaN. But --ffast-math breaks that
+               // if (!ISNAN(x)) {  // do NOT replace with std::isnan or x==x: -ffast-math makes both unreliable               if (!std::isnan(x)) {
+               if(!__builtin_isnan(x)) { // this one is supposed to be thread-safe and --ffast-math safe..
                  double alpha = alpha_col[r];
-                 pe = x - q_;
-                 q_ += alpha * pe;
+                 double pe    = x - q_;
+                 pes_[j]      = pe;
+                 q_          += alpha * pe;
                } else {
-                 pe = NA_REAL;
+                 pes_[j] = NA_REAL;
                }
-               pes_[j] = pe;                   // compressed index
-
-               int next_j = j + 1;
-               out_[next_j] = q_;
+               out_[j + 1] = q_;
              }
 
              mark_run_complete();
