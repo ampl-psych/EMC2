@@ -1314,6 +1314,8 @@ make_data_unconditional <- function(data, pars, design, model,
   has_covariate_maps <- !is.null(model_list$trend) &&
     any(vapply(model_list$trend, function(tr) !is.null(tr$map), logical(1)))
 
+  has_ffunctions <- !is.null(design$Ffunctions)
+
   # -----------------------------------------------------------------------
   # Step 3: Per-subject, per-trial loop.
   # -----------------------------------------------------------------------
@@ -1349,8 +1351,8 @@ make_data_unconditional <- function(data, pars, design, model,
 
     # Pre-allocate covariate_maps_prefix: bootstrap structure from trial 1
     if (has_covariate_maps) {
-      idx_t1         <- idx_by_trial[[1]]
-      dadm_t1        <- dadm_subj[idx_t1, , drop = FALSE]
+      idx_t1  <- idx_by_trial[[1]]
+      dadm_t1 <- dadm_subj[idx_t1, , drop = FALSE]
 
       covariate_maps_prefix <- list()
       for (tr in model_list$trend) {
@@ -1389,8 +1391,12 @@ make_data_unconditional <- function(data, pars, design, model,
       class(dadm_current) <- "data.frame"
       attr(dadm_current, "row.names") <- .set_row_names(length(idx_curr))
 
-      # 2. Run Ffunctions on current trial, write back into dadm_subj_df
-      if (!is.null(design$Ffunctions)) {
+      # 2. Ffunction pass 1: runs before get_pars_c_wrapper_oo.
+      #    Handles Ffunctions that affect condition/design (e.g. depend on
+      #    previous trial's R/rt/feedback, or purely on design factors).
+      #    Updates dadm_current and dadm_subj_df so key + make_designs_cached
+      #    see the correct values.
+      if (has_ffunctions) {
         for (i in names(design$Ffunctions)) {
           result <- design$Ffunctions[[i]](dadm_current)
           dadm_current[[i]]           <- result
@@ -1486,14 +1492,27 @@ make_data_unconditional <- function(data, pars, design, model,
             attr(dadm_current, "row.names") <- .set_row_names(length(idx_curr))
             for (i in seq_along(fb)) {
               nams <- names(fb)[i]
-              result <- fb[[i]](dadm_current)
-              dadm_subj_df[[nams]][idx_curr] <- result
+              dadm_subj_df[[nams]][idx_curr] <- fb[[i]](dadm_current)
             }
           }
         }
       }
 
-      # 10. Collect trialwise parameters on last trial
+      # 10. Ffunction pass 2: runs after simulation and feedback.
+      #     Handles Ffunctions that depend on the current trial's R, rt, or
+      #     feedback values. Updates dadm_subj_df only (dadm_current is no
+      #     longer needed this trial); results are available to pass 1 of
+      #     the next trial.
+      if (has_ffunctions) {
+        dadm_current <- lapply(dadm_subj_df, `[`, idx_curr)
+        class(dadm_current) <- "data.frame"
+        attr(dadm_current, "row.names") <- .set_row_names(length(idx_curr))
+        for (i in names(design$Ffunctions)) {
+          dadm_subj_df[[i]][idx_curr] <- design$Ffunctions[[i]](dadm_current)
+        }
+      }
+
+      # 11. Collect trialwise parameters on last trial
       if (tmp_return_trialwise) {
         sub_trialwise_parameters <- as.data.frame(cbind(pm, attr(pm, "trialwise_parameters")))
         sub_trialwise_parameters$subject <- subj
