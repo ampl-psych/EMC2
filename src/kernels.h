@@ -587,8 +587,8 @@ struct SimpleDelta : DeltaKernel {
                // }
 
                double x   = cov_ptr[r];
-               if( x == x) {   // not NAN
-//               if (!ISNAN(x)) {
+               // if( x == x) {   // not NAN
+              if (!ISNAN(x)) {
                  double alpha = alpha_col[r];
                  pe = x - q_;
                  q_ += alpha * pe;
