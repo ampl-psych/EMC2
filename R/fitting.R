@@ -225,10 +225,16 @@ run_emc <- function(emc, stage, stop_criteria,
 
     elapsed <- Sys.time() - t0
     if (verbose) {
+      gd <- progress$gd$gd
+      gd_message <- NULL
+      if(!is.null(stop_criteria$mean_gd)) gd_message <- paste0("Mean Rhat=", round(mean(gd), 3))
+      if(!is.null(stop_criteria$max_gd)) gd_message <- paste0("Max Rhat=", round(mean(gd), 3))
       rem <- estimate_remaining_total_time(stage=stage, tries_done=progress$trys, elapsed_dt=elapsed, max_tries=max_tries)
-      message(sprintf("[%s | try=%d | iters=%d] Duration: %s - ETA: %s-%s",
-        stage, progress$trys, progress$total_iters,
-        format_duration(elapsed), format_duration(rem$min_time), format_duration(rem$max_time)))
+      message(sprintf("[%s | try=%d | iters=%d%s] Duration: %s - ETA: %s-%s",
+                      stage, progress$trys, progress$total_iters,
+                      ifelse(!is.null(gd_message), paste0(" | ", gd_message), ""),
+                      format_duration(elapsed),
+                      format_duration(rem$min_time)))
     }
   }
 
@@ -346,7 +352,7 @@ check_progress <- function (emc, stage, iter, stop_criteria,
     }
   }
   return(list(emc = gd$emc, done = done, step_size = step_size,
-              trys = trys, n_blocks = gd$n_blocks,
+              trys = trys, n_blocks = gd$n_blocks, gd=gd,
               total_iters_stage=total_iters_stage))
 }
 
