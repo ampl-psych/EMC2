@@ -229,7 +229,7 @@ run_emc <- function(emc, stage, stop_criteria,
       current_iters <- if (stage == "sample") chain_n(emc)[1, stage] else NULL
       target_iters  <- if (stage == "sample") stop_criteria[["iter"]] else NULL
 
-      rem <- estimate_remaining_total_time(stage= stage,tries_done = tries_done, elapsed_dt = mean_try_time,max_tries = max_tries,
+      rem <- estimate_remaining_total_time(stage= stage,tries_done = progress$trys, elapsed_dt = elapsed, max_tries = max_tries,
                                            current_iters = current_iters, target_iters = target_iters, step_size = progress$step_size)
 #      rem <- estimate_remaining_total_time(stage=stage, tries_done=progress$trys, elapsed_dt=elapsed, max_tries=max_tries)
       message(sprintf("[%s | try=%d | iters=%d%s] Duration: %s - ETA: %s-%s",
