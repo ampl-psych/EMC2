@@ -564,13 +564,14 @@ struct SimpleDelta : DeltaKernel {
 
              const double* q0_col    = kernel_pars.cols[0];
              const double* alpha_col = kernel_pars.cols[1];
+             const double* cov_ptr   = covariate.begin();
 
              // Initial compressed element
              int row0 = comp_idx[0];             // full-data row index
-             if (row0 < 0 || row0 >= covariate.size()) {
-               stop("SimpleDelta::run: comp_idx[0] = %d out of range [0,%d)",
-                    row0, covariate.size());
-             }
+             // if (row0 < 0 || row0 >= covariate.size()) {
+             //   stop("SimpleDelta::run: comp_idx[0] = %d out of range [0,%d)",
+             //        row0, covariate.size());
+             // }
 
              q_      = q0_col[row0];
              out_[0] = q_;
@@ -580,13 +581,14 @@ struct SimpleDelta : DeltaKernel {
              // j runs over COMPRESSED indices: 0..n_comp-2
              for (int j = 0; j < n_comp - 1; ++j) {
                int r = comp_idx[j];            // full-data row index
-               if (r < 0 || r >= covariate.size()) {
-                 stop("SimpleDelta::run: comp_idx[%d] = %d out of range [0,%d)",
-                      j, r, covariate.size());
-               }
+               // if (r < 0 || r >= covariate.size()) {
+               //   stop("SimpleDelta::run: comp_idx[%d] = %d out of range [0,%d)",
+               //        j, r, covariate.size());
+               // }
 
-               double x = covariate(r,0);
-               if (!ISNAN(x)) {
+               double x   = cov_ptr[r];
+               if( x == x) {   // not NAN
+//               if (!ISNAN(x)) {
                  double alpha = alpha_col[r];
                  pe = x - q_;
                  q_ += alpha * pe;
