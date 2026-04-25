@@ -257,7 +257,7 @@ void drdm_fast(const NumericVector& rts,
                const ParamTable& pt,
                const RaceSpec& spec,
                const LogicalVector& winner,
-               double* raw)
+               double* ll_row)
 {
   const int N = rts.size();
 
@@ -281,7 +281,7 @@ void drdm_fast(const NumericVector& rts,
     double k = B[i] * inv_s + a;
 
     clamp_a_l(a, l);
-    raw[i] = digt_core(t_eff, k, l, a);
+    ll_row[i] = digt_core(t_eff, k, l, a);
   }
 }
 
@@ -289,7 +289,7 @@ void prdm_fast(const NumericVector& rts,
                const ParamTable& pt,
                const RaceSpec& spec,
                const LogicalVector& winner,
-               double* raw)
+               double* ll_row)
 {
   const int N = rts.size();
 
@@ -313,7 +313,7 @@ void prdm_fast(const NumericVector& rts,
     double k = B[i] * inv_s + a;
 
     clamp_a_l(a, l);
-    raw[i] = pigt_core(t_eff, k, l, a);
+    ll_row[i] = pigt_core(t_eff, k, l, a);
   }
 }
 
@@ -323,7 +323,7 @@ void drdm_prdm_fast(const NumericVector& rts,
                     const RaceSpec& spec,
                     const std::vector<int>& idx_win,
                     const std::vector<int>& idx_los,
-                    double* __restrict__ raw,
+                    double* __restrict__ ll_row,
                     RaceScratch& scratch)
 {
   const double* __restrict__ rt = rts.begin();
@@ -367,7 +367,7 @@ void drdm_prdm_fast(const NumericVector& rts,
   }
 
   // --- Winners: scatter ---
-  for (int j = 0; j < n_win; ++j) raw[idx_win[j]] = sc_out[j];
+  for (int j = 0; j < n_win; ++j) ll_row[idx_win[j]] = sc_out[j];
 
   // --- Losers: gather ---
   for (int j = 0; j < n_los; ++j) {
@@ -392,7 +392,7 @@ void drdm_prdm_fast(const NumericVector& rts,
 
   // --- Losers: scatter ---
   // fill in 1-CDF - survival!
-  for (int j = 0; j < n_los; ++j) raw[idx_los[j]] = 1-sc_out[j];
+  for (int j = 0; j < n_los; ++j) ll_row[idx_los[j]] = 1-sc_out[j];
 }
 
 #endif // rdm_h

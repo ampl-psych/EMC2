@@ -40,7 +40,6 @@ struct RaceModelSetup {
   race_fast_fn     fill_pdf;
   race_fast_fn     fill_cdf;
   race_combined_fn fill_both;   // single-pass pdf+cdf — use this in hot path
-  int              col_na_marker;
 };
 
 // ---------------------------------------------------------------------------
@@ -57,7 +56,6 @@ inline RaceModelSetup make_race_setup(const String& type, const ParamTable& pt)
     s.spec.col_A        = pt.base_index_for("A");
     s.spec.col_t0       = pt.base_index_for("t0");
     s.spec.col_s        = pt.base_index_for("s");
-    s.col_na_marker     = s.spec.col_v;
     s.fill_pdf          = drdm_fast;
     s.fill_cdf          = prdm_fast;
     s.fill_both         = drdm_prdm_fast;
@@ -67,7 +65,6 @@ inline RaceModelSetup make_race_setup(const String& type, const ParamTable& pt)
     s.spec.col_B        = pt.base_index_for("B");
     s.spec.col_A        = pt.base_index_for("A");
     s.spec.col_t0       = pt.base_index_for("t0");
-    s.col_na_marker     = s.spec.col_v;
     s.fill_pdf          = dlba_fast;
     s.fill_cdf          = plba_fast;
     s.fill_both         = dlba_plba_fast;
@@ -75,7 +72,6 @@ inline RaceModelSetup make_race_setup(const String& type, const ParamTable& pt)
     s.spec.col_m        = pt.base_index_for("m");
     s.spec.col_s        = pt.base_index_for("s");
     s.spec.col_t0       = pt.base_index_for("t0");
-    s.col_na_marker     = s.spec.col_m;
     s.fill_pdf          = dlnr_fast;
     s.fill_cdf          = plnr_fast;
     s.fill_both         = dlnr_plnr_fast;

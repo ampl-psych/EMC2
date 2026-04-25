@@ -39,11 +39,9 @@ double c_log_likelihood_race_new_path(ParamTable& pt,
                                       const IntegerVector& expand,
                                       double min_ll,
                                       int n_acc,
-                                      NumericVector& raw,      // length n_trials
-                                      NumericVector& ll_out,   // length idx_win.size()
-                                      RaceScratch& scratch,
-                                      race_fast_fn dfun_fill,  // pdf
-                                      race_fast_fn pfun_fill);
+                                      NumericVector& ll_row,      // length n_trials
+                                      NumericVector& ll_trial,   // length idx_win.size()
+                                      RaceScratch& scratch);
 
 
 // [[Rcpp::export]]
@@ -662,7 +660,7 @@ NumericVector calc_ll_oo(NumericMatrix particle_matrix, DataFrame data, NumericV
 
   TrendRuntime* trend_runtime_ptr = trend_runtime ? trend_runtime.get() : nullptr;
 
-  // 6. Fast column-index lookup: particle matrix column → ParamTable base index
+  // 6. Fast column-index lookup: particle matrix column -> ParamTable base index
   Rcpp::CharacterVector pm_names = colnames(particle_matrix);
   std::vector<int> pm_col_to_base_idx(pm_names.size(), -1);
   for (int j = 0; j < pm_names.size(); ++j) {
@@ -750,6 +748,7 @@ NumericVector calc_ll_oo(NumericMatrix particle_matrix, DataFrame data, NumericV
       vals_NACC = NACC.attr("levels");
     }
 
+    // Identify which rows in the dadm correspond to winners, to losers, and which should be skipped entirely
     for (int i = 0; i < n_trials; ++i) {
       if (win_flag[i]) {
         idx_win.push_back(i);
@@ -762,8 +761,8 @@ NumericVector calc_ll_oo(NumericMatrix particle_matrix, DataFrame data, NumericV
     const int n_winners = (int)idx_win.size();
 
     // Scratch buffers (reused across particles)
-    NumericVector raw(n_trials);
-    NumericVector ll_out(n_winners);
+    NumericVector ll_row(n_trials);  // stores (log)likelihood of row in dadm
+    NumericVector ll_trial(n_winners); // stores (log)likelihood of trials
 
     RaceScratch scratch;
     scratch.reserve(std::max((int)idx_win.size(), (int)idx_los.size()));
@@ -771,6 +770,7 @@ NumericVector calc_ll_oo(NumericMatrix particle_matrix, DataFrame data, NumericV
     // Race model setup
     RaceModelSetup setup = make_race_setup(type, param_table_template);
 
+    // Begin particle loop
     for (int i = 0; i < n_particles; ++i) {
       std::fill(is_ok.begin(), is_ok.end(), 1);
       if (i > 0) param_table_template.fill_from_particle_row(particle_matrix, i, pm_col_to_base_idx);
@@ -780,30 +780,19 @@ NumericVector calc_ll_oo(NumericMatrix particle_matrix, DataFrame data, NumericV
 
       if (i == 0) bound_specs = make_bound_specs_pt(minmax, mm_names, param_table_template, bounds);
       c_do_bound_pt(param_table_template, bound_specs, is_ok);
-      // is_ok = c_do_bound_pt(param_table_template, bound_specs);
       lr_all(is_ok, n_acc);
 
-      // fill raw with 1s. NB: log(1) = 0. All rows that are not in win_idx or los_idx will contribute 0 to the ll of that trial.
-      // Has to be done per particle because log_vec() overwrites raw
-      std::fill(raw.begin(), raw.end(), 1.0);
-
-      // if (has_race_col) {
-      //   NumericMatrix& base = param_table_template.base;
-      //   for (int x = 0; x < base.nrow(); ++x) {
-      //     if (lR[x] > atoi(vals_NACC[NACC[x] - 1])) {
-      //       base(x, setup.col_na_marker) = NA_REAL;
-      //       is_ok[x] = 0;
-      //     }
-      //   }
-      // }
+      // fill ll_row with 1s. NB: log(1) = 0. All rows that are not in win_idx or los_idx
+      // will contribute 0 to the ll of that trial.
+      // Has to be done per particle because log_vec() overwrites ll_row
+      std::fill(ll_row.begin(), ll_row.end(), 1.0);
 
       lls[i] = c_log_likelihood_race_new_path(
         param_table_template, setup,
         rts, winner, is_ok,
         idx_win, idx_los, expand,
-        min_ll, n_acc, raw, ll_out,
-        scratch,
-        setup.fill_pdf, setup.fill_cdf);
+        min_ll, n_acc, ll_row, ll_trial,
+        scratch);
     }
   }
 
@@ -990,20 +979,18 @@ double c_log_likelihood_race_new_path(ParamTable& pt,
                                       const IntegerVector& expand,
                                       double min_ll,
                                       int n_acc,
-                                      NumericVector& raw,
-                                      NumericVector& ll_out,
-                                      RaceScratch& scratch,
-                                      race_fast_fn dfun_fill,
-                                      race_fast_fn pfun_fill)
+                                      NumericVector& ll_row,
+                                      NumericVector& ll_trial,
+                                      RaceScratch& scratch)
 {
   const int n_winners = (int)idx_win.size();
   // const int n_losers  = (int)idx_los.size();
 
-  double* raw_ptr = raw.begin();
-  double* ll_ptr  = ll_out.begin();
+  double* ll_row_ptr = ll_row.begin();
+  double* ll_ptr  = ll_trial.begin();
   const int* ok_ptr = is_ok.data();
 
-  // 1) Fill log(pdf) for winners and log(1-cdf) for losers into raw.
+  // 1) Fill log(pdf) for winners and log(1-cdf) for losers into ll_row.
   //    fill_both stores pdf / (1-cdf); vec_log transforms the whole array
   //    in one vectorised pass (vvlog on Apple, libmvec on Linux/x86).
   //    Invalid inputs (<=0, nan) produce -inf or nan, which the clamp below
@@ -1012,22 +999,11 @@ double c_log_likelihood_race_new_path(ParamTable& pt,
   //   // setup.fill_both() refers to gather-scatter implementations.
   //   // on linux/x86, this is significantly faster. macOS/arm64 doesn't care
 
-  setup.fill_both(rts, pt, setup.spec, idx_win, idx_los, raw_ptr, scratch);
-  vec_log(raw_ptr, raw.size());  // bulk log over entire raw buffer
+  setup.fill_both(rts, pt, setup.spec, idx_win, idx_los, ll_row_ptr, scratch);
+  vec_log(ll_row_ptr, ll_row.size());  // bulk log over entire ll_row buffer
 
-  // Rcpp::Rcout << "raw after vec_log:\n";
-  // for (int i = 0; i < raw.size(); ++i) {
-  //   bool is_win = std::find(idx_win.begin(), idx_win.end(), i) != idx_win.end();
-  //   bool is_los = std::find(idx_los.begin(), idx_los.end(), i) != idx_los.end();
-  //   Rcpp::Rcout << "  [" << i << "] " << raw_ptr[i]
-  //               << (is_win ? " (winner)" : "")
-  //               << (is_los ? " (loser)"  : "")
-  //               << ((!is_win && !is_los) ? " (phantom)" : "")
-  //               << "\n";
-  // }
-
-  // 2) Per-trial log-likelihood into ll_out.
-  //    raw now contains log(pdf) at winner indices, log(1-cdf) at loser indices.
+  // 2) Per-trial log-likelihood into ll_trial.
+  //    ll_row now contains log(pdf) at winner indices, log(1-cdf) at loser indices.
   //    Clamp to min_ll using !(v > min_ll) which catches -inf and nan.
   auto clamp = [min_ll](double v) {
     return (v > min_ll) ? v : min_ll;
@@ -1036,7 +1012,7 @@ double c_log_likelihood_race_new_path(ParamTable& pt,
   if (n_acc == 1) {
     for (int t = 0; t < n_winners; ++t) {
       const int i_win = idx_win[t];
-      ll_ptr[t] = ok_ptr[i_win] ? clamp(raw_ptr[i_win]) : min_ll;
+      ll_ptr[t] = ok_ptr[i_win] ? clamp(ll_row_ptr[i_win]) : min_ll;
     }
   } else {
     for (int t = 0; t < n_winners; ++t) {
@@ -1050,11 +1026,11 @@ double c_log_likelihood_race_new_path(ParamTable& pt,
       }
 
       // The current data format guarantees n_acc per trial, so we can just sum now
-      // raw_ptr contains either the log-PDF (winners) or log(1-CDF) (losers)
+      // ll_row_ptr contains either the log-PDF (winners) or log(1-CDF) (losers)
       // Clamp here. There's a second clamp later on but not really needed probably
       double ll = 0.0;
       for (int k = 0; k < n_acc; ++k) {
-        ll += clamp(raw_ptr[base + k]);
+        ll += clamp(ll_row_ptr[base + k]);
       }
       ll_ptr[t] = ll;
     }
@@ -1071,119 +1047,5 @@ double c_log_likelihood_race_new_path(ParamTable& pt,
   }
   return sum_ll;
 }
-// double c_log_likelihood_race_new_path(ParamTable& pt,
-//                                       const void* model_spec,
-//                                       const NumericVector& rts,
-//                                       const LogicalVector& winner,
-//                                       const LogicalVector& is_ok,
-//                                       const std::vector<int>& idx_win,
-//                                       const std::vector<int>& idx_los,
-//                                       const IntegerVector& expand,
-//                                       double min_ll,
-//                                       int n_acc,
-//                                       NumericVector& raw,      // length n_trials
-//                                       NumericVector& ll_out,   // length idx_win.size()
-//                                       race_fast_fn dfun_fill,  // pdf fill
-//                                       race_fast_fn pfun_fill)  // cdf fill
-// {
-//   const int n_winners = (int)idx_win.size();
-//   const int n_losers  = (int)idx_los.size();
-//
-//   double* raw_ptr = raw.begin();
-//   double* ll_ptr  = ll_out.begin();
-//
-//   // 1) Fill pdfs/cdfs using the winner mask
-//   dfun_fill(rts, pt, model_spec, winner, raw_ptr);   // winners: pdfs in raw[i]
-//   if (n_acc > 1) {
-//     pfun_fill(rts, pt, model_spec, winner, raw_ptr); // losers: cdfs in raw[i]
-//   }
-//
-//   int* ok_ptr = LOGICAL(is_ok);
-//
-//   // 2) Per-winner loglik (winner + its losers) into ll_out
-//   if (n_acc == 1) {
-//     for (int t = 0; t < n_winners; ++t) {
-//       const int i_win = idx_win[t];
-//       double ll;
-//       if (!ok_ptr[i_win]) {
-//         ll = min_ll;
-//       } else {
-//         double pdf = raw_ptr[i_win];
-//         if (!std::isfinite(pdf) || pdf <= 0.0) {
-//           ll = min_ll;
-//         } else {
-//           ll = std::log(pdf);
-//           if (!std::isfinite(ll) || ll < min_ll) ll = min_ll;
-//         }
-//       }
-//       ll_ptr[t] = ll;
-//     }
-//   } else {
-//     const int stride = n_acc - 1;
-//     if (n_losers != n_winners * stride) {
-//       Rcpp::stop("c_log_likelihood_race_new_path: n_losers != n_winners * (n_acc - 1)");
-//     }
-//
-//     for (int t = 0; t < n_winners; ++t) {
-//       const int i_win = idx_win[t];
-//
-//       double ll;
-//       if (!ok_ptr[i_win]) {
-//         ll = min_ll;
-//       } else {
-//         // winner part
-//         double pdf = raw_ptr[i_win];
-//         if (!std::isfinite(pdf) || pdf <= 0.0) {
-//           ll = min_ll;
-//         } else {
-//           ll = std::log(pdf);
-//           if (!std::isfinite(ll) || ll < min_ll) ll = min_ll;
-//         }
-//
-//         // loser contributions
-//         const int base = t * stride;
-//         for (int k = 0; k < stride; ++k) {
-//           const int i_los = idx_los[base + k];
-//           double term;
-//           if (!ok_ptr[i_los]) {
-//             term = min_ll;
-//           } else {
-//             double cdf = raw_ptr[i_los];
-//             if (!std::isfinite(cdf)) {
-//               term = min_ll;
-//             } else {
-//               double one_minus = 1.0 - cdf;
-//               if (one_minus <= 0.0) {
-//                 term = min_ll;
-//               } else {
-//                 term = std::log(one_minus);
-//                 if (!std::isfinite(term) || term < min_ll) term = min_ll;
-//               }
-//             }
-//           }
-//           ll += term;
-//         }
-//       }
-//       ll_ptr[t] = ll;
-//     }
-//   }
-//
-//   // 3) Expand and clamp+sum
-//   const int m        = expand.size();
-//   const int* exp_ptr = expand.begin();
-//
-//   double sum_ll = 0.0;
-//
-// #pragma omp simd reduction(+:sum_ll)
-//   for (int i = 0; i < m; ++i) {
-//     int idx = exp_ptr[i] - 1;
-//     double v = ll_ptr[idx];
-//     if (!std::isfinite(v) || v < min_ll) {
-//       v = min_ll;
-//     }
-//     sum_ll += v;
-//   }
-//
-//   return sum_ll;
-// }
+
 
