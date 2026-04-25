@@ -158,7 +158,7 @@ void dlba_fast(const NumericVector& rts,
                const ParamTable& pt,
                const RaceSpec& spec,
                const LogicalVector& winner,
-               double* raw)
+               double* ll_row)
 {
   const int N = rts.size();
 
@@ -177,13 +177,13 @@ void dlba_fast(const NumericVector& rts,
       continue;  // only winners get pdf
 
     if (std::isnan(v[i])) {
-      raw[i] = 0.0;
+      ll_row[i] = 0.0;
       continue;
     }
 
     const double t_eff = rt[i] - t0[i];
     if (t_eff <= 0.0) {
-      raw[i] = 0.0;
+      ll_row[i] = 0.0;
       continue;
     }
 
@@ -194,7 +194,7 @@ void dlba_fast(const NumericVector& rts,
     if (!std::isfinite(pdf) || pdf < 0.0)
       pdf = 0.0;
 
-    raw[i] = pdf;
+    ll_row[i] = pdf;
   }
 }
 
@@ -202,7 +202,7 @@ void plba_fast(const NumericVector& rts,
                const ParamTable& pt,
                const RaceSpec& spec,
                const LogicalVector& winner,
-               double* raw)
+               double* ll_row)
 {
   const int N = rts.size();
 
@@ -221,13 +221,13 @@ void plba_fast(const NumericVector& rts,
       continue;  // only losers get cdf
 
     if (std::isnan(v[i])) {
-      raw[i] = 0.0;
+      ll_row[i] = 0.0;
       continue;
     }
 
     const double t_eff = rt[i] - t0[i];
     if (t_eff <= 0.0) {
-      raw[i] = 0.0;
+      ll_row[i] = 0.0;
       continue;
     }
 
@@ -240,7 +240,7 @@ void plba_fast(const NumericVector& rts,
     else if (cdf > 1.0)
       cdf = 1.0;
 
-    raw[i] = cdf;
+    ll_row[i] = cdf;
   }
 }
 
@@ -250,7 +250,7 @@ void dlba_plba_fast(const NumericVector& rts,
                     const RaceSpec& spec,
                     const std::vector<int>& idx_win,
                     const std::vector<int>& idx_los,
-                    double* __restrict__ raw,
+                    double* __restrict__ ll_row,
                     RaceScratch& scratch)
 {
   const double* __restrict__ rt  = rts.begin();
@@ -287,7 +287,7 @@ void dlba_plba_fast(const NumericVector& rts,
   }
 
   // --- Winners: scatter ---
-  for (int j = 0; j < n_win; ++j) raw[idx_win[j]] = scratch.out[j];
+  for (int j = 0; j < n_win; ++j) ll_row[idx_win[j]] = scratch.out[j];
 
   // --- Losers: gather ---
   for (int j = 0; j < n_los; ++j) {
@@ -315,7 +315,7 @@ void dlba_plba_fast(const NumericVector& rts,
   }
 
   // --- Losers: scatter ---
-  for (int j = 0; j < n_los; ++j) raw[idx_los[j]] = scratch.out[j];
+  for (int j = 0; j < n_los; ++j) ll_row[idx_los[j]] = scratch.out[j];
 }
 
 

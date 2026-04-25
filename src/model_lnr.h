@@ -56,7 +56,7 @@ void dlnr_fast(const NumericVector& rts,
                const ParamTable& pt,
                const RaceSpec& spec,
                const LogicalVector& winner,
-               double* raw)
+               double* ll_row)
 {
   const int N = rts.size();
 
@@ -71,13 +71,13 @@ void dlnr_fast(const NumericVector& rts,
   for (int i = 0; i < N; ++i) {
     if (!win_ptr[i]) continue;
 
-    if (std::isnan(m[i])) { raw[i] = 0.0; continue; }
+    if (std::isnan(m[i])) { ll_row[i] = 0.0; continue; }
 
     const double t_eff = rt[i] - t0[i];
-    if (t_eff <= 0.0)    { raw[i] = 0.0; continue; }
+    if (t_eff <= 0.0)    { ll_row[i] = 0.0; continue; }
 
     double pdf = DLNORM(t_eff, m[i], s[i]);
-    raw[i] = (std::isfinite(pdf) && pdf >= 0.0) ? pdf : 0.0;
+    ll_row[i] = (std::isfinite(pdf) && pdf >= 0.0) ? pdf : 0.0;
   }
 }
 
@@ -85,7 +85,7 @@ void plnr_fast(const NumericVector& rts,
                const ParamTable& pt,
                const RaceSpec& spec,
                const LogicalVector& winner,
-               double* raw)
+               double* ll_row)
 {
   const int N = rts.size();
 
@@ -100,15 +100,15 @@ void plnr_fast(const NumericVector& rts,
   for (int i = 0; i < N; ++i) {
     if (win_ptr[i]) continue;
 
-    if (std::isnan(m[i])) { raw[i] = 0.0; continue; }
+    if (std::isnan(m[i])) { ll_row[i] = 0.0; continue; }
 
     const double t_eff = rt[i] - t0[i];
-    if (t_eff <= 0.0)    { raw[i] = 0.0; continue; }
+    if (t_eff <= 0.0)    { ll_row[i] = 0.0; continue; }
 
     double cdf = PLNORM(t_eff, m[i], s[i]);
     if      (!std::isfinite(cdf) || cdf < 0.0) cdf = 0.0;
     else if (cdf > 1.0)                         cdf = 1.0;
-    raw[i] = cdf;
+    ll_row[i] = cdf;
   }
 }
 
@@ -120,7 +120,7 @@ void dlnr_plnr_fast(const NumericVector& rts,
                     const RaceSpec& spec,
                     const std::vector<int>& idx_win,
                     const std::vector<int>& idx_los,
-                    double* __restrict__ raw,
+                    double* __restrict__ ll_row,
                     RaceScratch& scratch)
 {
   const double* __restrict__ rt = rts.begin();
@@ -150,7 +150,7 @@ void dlnr_plnr_fast(const NumericVector& rts,
   }
 
   // --- Winners: scatter ---
-  for (int j = 0; j < n_win; ++j) raw[idx_win[j]] = scratch.out[j];
+  for (int j = 0; j < n_win; ++j) ll_row[idx_win[j]] = scratch.out[j];
 
   // --- Losers: gather ---
   for (int j = 0; j < n_los; ++j) {
@@ -174,7 +174,7 @@ void dlnr_plnr_fast(const NumericVector& rts,
 
   // --- Losers: scatter ---
   // SURVIVOR! 1-CDF, not CDF
-  for (int j = 0; j < n_los; ++j) raw[idx_los[j]] = 1-scratch.out[j];
+  for (int j = 0; j < n_los; ++j) ll_row[idx_los[j]] = 1-scratch.out[j];
 }
 
 #endif
