@@ -776,7 +776,8 @@ run_trend <- function(dadm, trend, param, trend_pars, pars_full = NULL,
   return(out)
 }
 
-check_trend <- function(trend, covariates = NULL, model = NULL, formula = NULL) {
+check_trend <- function(trend, covariates = NULL, model = NULL, formula = NULL,
+                        reparameterize = NULL) {
   if(!is.null(model)){
     # non-premap trend targets must be model parameters
     tnames <- names(trend)
@@ -794,7 +795,11 @@ check_trend <- function(trend, covariates = NULL, model = NULL, formula = NULL) 
   # Premap + par_input: allowed. Scalars will be replicated to vector length in C++ mapping
   trend_pnames <- get_trend_pnames(trend)
   if (!is.null(formula)) {
-    isin <-  trend_pnames %in% unlist(lapply(formula,function(x)all.vars(x)[1]))
+    reparam_out <- names(reparameterize)
+    isin <- trend_pnames %in% unlist(lapply(formula, function(x) all.vars(x)[1]))
+    # don't auto-add intercepts for reparameterize outputs
+    isin <- isin | (trend_pnames %in% reparam_out)
+#    isin <-  trend_pnames %in% unlist(lapply(formula,function(x)all.vars(x)[1]))
     if(any(!isin)){
       # Add missing trend parameters to formula with intercept-only model
       formula <- c(formula, lapply(trend_pnames[!isin], function(x) as.formula(paste(x, "~ 1"))))
@@ -1254,16 +1259,17 @@ make_data_unconditional <- function(data, pars, design, model,
 
   # Number of accumulators (rows per trial)
   n_acc <- sum(dadm_full$trials == dadm_full$trials[1] &
-                 dadm_full$subjects == dadm_full$subjects[1])
+               dadm_full$subjects == dadm_full$subjects[1])
+
 
   # -----------------------------------------------------------------------
   # Step 2: Set up design cache.
   # -----------------------------------------------------------------------
   factor_cols <- setdiff(names(design$Ffactors), "subjects")
   ffun_cols   <- names(design$Ffunctions)
-  p_types     <- names(model_list$p_types)
+  p_types     <- names(design$Flist) #names(model_list$p_types)
 
-  pnames <- names(model_list$p_types)
+  pnames <- names(design$Flist) #names(model_list$p_types)
   if (!is.list(design$Clist[[1]])) {
     design$Clist <- stats::setNames(
       lapply(seq_along(pnames), function(x) design$Clist),
@@ -1349,6 +1355,28 @@ make_data_unconditional <- function(data, pars, design, model,
       out
     })
 
+    # Add pre-allocated reparam_designs to designs_prefix
+    reparam_dms <- design$reparameterisations
+    if (!is.null(reparam_dms)) {
+      reparam_names <- names(reparam_dms)
+      reparam_dms <- lapply(reparam_names, function(nm) {
+        dm <- reparam_dms[[nm]]
+        weights <- as.numeric(dm)
+        out <- matrix(
+          rep(weights, n_rows_subj),
+          nrow = n_rows_subj,
+          byrow = TRUE)
+        rownames(out) <- as.character(seq_len(n_rows_subj))
+        colnames(out) <- names(dm)
+        out
+      })
+      names(reparam_dms) <- reparam_names
+      designs_prefix <- c(designs_prefix, reparam_dms)
+    } else {
+      reparam_names <- character(0)
+    }
+
+
     # Pre-allocate covariate_maps_prefix: bootstrap structure from trial 1
     if (has_covariate_maps) {
       idx_t1  <- idx_by_trial[[1]]
@@ -1411,7 +1439,7 @@ make_data_unconditional <- function(data, pars, design, model,
 
       # 4. Get current-trial designs (cached by key) and write into prefix
       designs_current <- make_designs_cached(dadm_current, key)
-      for (nm in names(designs_prefix)) {
+      for (nm in names(designs_current)) {
         designs_prefix[[nm]][idx_curr, ] <- designs_current[[nm]]
       }
 
@@ -1429,6 +1457,7 @@ make_data_unconditional <- function(data, pars, design, model,
         attr(dadm_subj_df, "covariate_maps") <- covariate_maps_prefix
       }
 
+
       # 6. Get parameter matrix for full subject buffer
       #    (designs_prefix and dadm_subj_df cover all subject rows;
       #     zero-filled tail rows are ignored by the C function)
@@ -1441,6 +1470,7 @@ make_data_unconditional <- function(data, pars, design, model,
         transforms           = model_list$transform,
         pretransforms        = model_list$pre_transform,
         trend                = model_list$trend,
+        reparam_targets      = reparam_names,
         return_kernel_matrix = FALSE,
         return_all_pars      = TRUE
       )
@@ -1455,6 +1485,7 @@ make_data_unconditional <- function(data, pars, design, model,
           transforms           = model_list$transform,
           pretransforms        = model_list$pre_transform,
           trend                = model_list$trend,
+          reparam_targets      = reparam_names,
           return_kernel_matrix = TRUE,
           kernel_output_codes  = kernel_output_codes,
           return_all_pars      = TRUE

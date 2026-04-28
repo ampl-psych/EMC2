@@ -20,6 +20,7 @@ design(
   trend = NULL,
   transform = NULL,
   bound = NULL,
+  reparameterisations = NULL,
   ...
 )
 }
@@ -81,6 +82,10 @@ See \code{DDM()} for an example of such transformations}
 if the conventional bound aren't desired.
 see \code{DDM()} for an example of such bounds. Bounds are used to set limits to
 the likelihood landscape that cannot reasonable be achieved with \code{transform}}
+
+\item{reparameterisations}{Named list, e.g.
+list(v = c(new_par1=1, new_par2=0.5), B = c(new_par1=1, new_par2=-0.5)).
+Allows for linear transformations of parameters}
 
 \item{...}{Additional, optional arguments}
 }
