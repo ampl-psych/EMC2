@@ -47,7 +47,7 @@ SBC_hierarchical <- function(design_in, prior_in, replicates = 250, trials = 100
   # Draw prior samples
   # Should at a later point go to predict
   prior_mu <- plot(prior_in, design_in, do_plot = F, N = replicates, selection = "mu", return_mcmc = FALSE, map = FALSE)[[1]]
-  prior_var <- plot(prior_in, design_in, do_plot = F, N = replicates, selection = "Sigma", return_mcmc = FALSE,
+  prior_var <- plot(prior_in, design_in, do_plot = F, N = replicates, selection = "Sigma", return_mcmc = FALSE, map = FALSE,
                           remove_constants = FALSE)[[1]]
   mu_names <- rownames(prior_mu)
   var_names <- rownames(prior_var[, , 1])
