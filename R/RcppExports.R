@@ -117,23 +117,16 @@ do_transform <- function(pars, transform) {
     .Call(`_EMC2_do_transform`, pars, transform)
 }
 
-<<<<<<< HEAD
 calc_ll <- function(particle_matrix, data, constants, designs, type, bounds, transforms, pretransforms, p_types, min_ll, trend = NULL) {
     .Call(`_EMC2_calc_ll`, particle_matrix, data, constants, designs, type, bounds, transforms, pretransforms, p_types, min_ll, trend)
-}
-
-=======
->>>>>>> a94b813b (Optimisations: Use vvexp / vvlog on apple, remove redundant checks, add single-precision PNORM as option, scatter-gather structure for race models, cache transformspecs, improve do_bound_pt and lr_all to not re-assign vectors each particle, don't re-reserve a vector for map_designs)
-calc_ll_oo <- function(particle_matrix, data, constants, designs, type, bounds, transforms, pretransforms, p_types, min_ll, trend = NULL, use_pt_pipeline = TRUE) {
-    .Call(`_EMC2_calc_ll_oo`, particle_matrix, data, constants, designs, type, bounds, transforms, pretransforms, p_types, min_ll, trend, use_pt_pipeline)
 }
 
 get_pars_c_wrapper <- function(p_matrix, data, constants, designs, bounds, transforms, pretransforms, p_types, trend = NULL, return_kernel_matrix = FALSE, drop_trend_pars = TRUE) {
     .Call(`_EMC2_get_pars_c_wrapper`, p_matrix, data, constants, designs, bounds, transforms, pretransforms, p_types, trend, return_kernel_matrix, drop_trend_pars)
 }
 
-get_pars_c_wrapper_oo <- function(particle_matrix, data, constants, designs, bounds, transforms, pretransforms, trend = NULL, return_kernel_matrix = FALSE, return_all_pars = FALSE, kernel_output_codes = 1L) {
-    .Call(`_EMC2_get_pars_c_wrapper_oo`, particle_matrix, data, constants, designs, bounds, transforms, pretransforms, trend, return_kernel_matrix, return_all_pars, kernel_output_codes)
+get_pars_c_wrapper_oo <- function(particle_matrix, data, constants, designs, bounds, transforms, pretransforms, trend = NULL, return_kernel_matrix = FALSE, return_all_pars = FALSE, kernel_output_codes = 1L, reparam_targets = NULL) {
+    .Call(`_EMC2_get_pars_c_wrapper_oo`, particle_matrix, data, constants, designs, bounds, transforms, pretransforms, trend, return_kernel_matrix, return_all_pars, kernel_output_codes, reparam_targets)
 }
 
 EMC2_call_custom_trend <- function(trend_pars, input, funptrSEXP) {

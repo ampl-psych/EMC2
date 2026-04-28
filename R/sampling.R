@@ -702,6 +702,14 @@ calc_ll_manager <- function(proposals, dadm, model, component = NULL, r_cores = 
       for(p in p_types){
         designs[[p]] <- attr(dadm,"designs")[[p]][attr(attr(dadm,"designs")[[p]],"expand"),,drop=FALSE]
       }
+      reparam_dms <- attr(dadm, "reparam_designs")
+      reparam_names <- if(is.null(reparam_dms)) character(0) else names(reparam_dms)
+      # merge reparam_dms into designs here
+      if (!is.null(reparam_dms)) {
+        for(p in reparam_names) {
+          designs[[p]] <- reparam_dms[[p]][attr(reparam_dms[[p]],"expand"),,drop=FALSE]
+        }
+      }
       constants <- attr(dadm, "constants")
       if(is.null(constants)) constants <- NA
       lls <- calc_ll(proposals, dadm, constants = constants, designs = designs, type = model$c_name,

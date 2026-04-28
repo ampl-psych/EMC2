@@ -27,6 +27,11 @@ struct GetParsCache {
   std::vector<TransformSpec>      postmap_specs;
   std::vector<TransformSpec>      premap_specs;      // empty if no trend
   std::vector<TransformSpec>      pretransform_specs; // empty if no trend
+
+  Rcpp::LogicalVector mask_premap;          // regular premap designs
+  Rcpp::LogicalVector mask_premap_reparam;  // reparam targets that are premap
+  Rcpp::LogicalVector mask_map;             // regular main designs
+  Rcpp::LogicalVector mask_reparam;         // reparam in main step
 };
 
 double c_log_likelihood_race_new_path(ParamTable& pt,
@@ -68,9 +73,9 @@ NumericMatrix get_pars_matrix(ParamTable& param_table,
   }
 
   // keep track of which parameters should be mapped & transformed next
-  const int n_designs = designs.size();
-  LogicalVector map_next(n_designs, false); // which designs we map in the *next* mapping step
-  std::unordered_set<std::string> transform_next; // which params we transform in the *next* transform step
+  // const int n_designs = designs.size();
+  // LogicalVector map_next(n_designs, false); // which designs we map in the *next* mapping step
+  // std::unordered_set<std::string> transform_next; // which params we transform in the *next* transform step
 
   // Trend parameter sets (may be empty if no TrendRuntime)
   // std::unordered_set<std::string> empty_set;
@@ -79,16 +84,15 @@ NumericMatrix get_pars_matrix(ParamTable& param_table,
 
   // 3) Premap trends: MAP premap trend parameters, TRANSFORM them, RUN kernels+bases
   if (trend_runtime && trend_runtime->has_premap()) {
-    // MAP: only designs whose outputs are premap trend parameters
-    map_next = trend_runtime->premap_design_mask(designs);
-    param_table.map_from_designs(designs, map_next);
-
-    // TRANSFORM: only premap trend parameters
+    // 3.1) regular premap designs
+    param_table.map_from_designs(designs, cache.mask_premap);
+    // 3.2) reparam that target premap trend params
+    param_table.map_from_designs(designs, cache.mask_premap_reparam);
+    // 3.3) TRANSFORM: only premap trend parameters
     if (!cache.premap_specs.empty()) {
       c_do_transform_pt(param_table, cache.premap_specs);
     }
-
-    // RUN: apply all premap trend operations
+    // 3.4) RUN: apply all premap trend operations
     std::size_t n_ops = trend_runtime->premap_ops.size();
     for (std::size_t i = 0; i < n_ops; ++i) {
       TrendOpRuntime& op = trend_runtime->premap_ops[i];
@@ -96,12 +100,14 @@ NumericMatrix get_pars_matrix(ParamTable& param_table,
     }
   }
 
-  // 4) Map designs for remaining parameters. Invert map_next
-  for (int i = 0; i < n_designs; ++i) {
-    bool is_premap = (trend_runtime && trend_runtime->has_premap()) ? map_next[i] : false;
-    map_next[i] = !is_premap;
-  }
-  param_table.map_from_designs(designs, map_next);
+  // 4) Map designs for remaining parameters.
+  param_table.map_from_designs(designs, cache.mask_map);
+  param_table.map_from_designs(designs, cache.mask_reparam);
+  // for (int i = 0; i < n_designs; ++i) {
+  //   bool is_premap = (trend_runtime && trend_runtime->has_premap()) ? map_next[i] : false;
+  //   map_next[i] = !is_premap;
+  // }
+  // param_table.map_from_designs(designs, map_next);
 
   // 5) Pretransform trends: TRANSFORM pretransform trend parameters, RUN kernels+bases
   if (trend_runtime && trend_runtime->has_pretransform()) {
@@ -492,11 +498,21 @@ double c_log_likelihood_multinomial_logit(NumericMatrix pars, DataFrame data,
 
 
 // [[Rcpp::export]]
+<<<<<<< HEAD
 NumericVector calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVector constants,
                       List designs, String type, List bounds, List transforms, List pretransforms,
                       CharacterVector p_types, double min_ll, Rcpp::Nullable<Rcpp::List> trend = R_NilValue,
                       bool use_pt_pipeline = true) {
 
+=======
+NumericVector calc_ll_oo(NumericMatrix particle_matrix, DataFrame data, NumericVector constants,
+                         List designs, String type, List bounds, List transforms, List pretransforms,
+                         CharacterVector p_types, double min_ll,
+                         Rcpp::Nullable<Rcpp::List> trend = R_NilValue,
+                         Rcpp::Nullable<Rcpp::CharacterVector> reparam_targets = R_NilValue,
+                         bool use_pt_pipeline = true)
+{
+>>>>>>> 4a967b01 (Support linear reparameterisations)
   const int n_particles = particle_matrix.nrow();
   const int n_trials    = data.nrow();
 
@@ -575,7 +591,51 @@ NumericVector calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVect
     if (trend_runtime_ptr && trend_runtime_ptr->has_pretransform()) {
       gp_cache.pretransform_specs = filter_specs_by_param_set(param_table_template, transform_specs, pretransform_set);
     }
+
+    // Build cache for masks that identify when each design entry should  e applied
+    Rcpp::CharacterVector dnames = designs.names();
+    const int n_designs = dnames.size();
+
+    // identify reparam entries from reparam_targets
+    std::unordered_set<std::string> reparam_set;
+    if (!reparam_targets.isNull()) {
+      Rcpp::CharacterVector reparam_target = reparam_targets.as();
+      for (int i = 0; i < reparam_target.size(); ++i) {
+        reparam_set.insert(Rcpp::as<std::string>(reparam_target[i]));
+      }
+    }
+
+    gp_cache.mask_premap          = Rcpp::LogicalVector(n_designs, false);
+    gp_cache.mask_premap_reparam  = Rcpp::LogicalVector(n_designs, false);
+    gp_cache.mask_map             = Rcpp::LogicalVector(n_designs, false);
+    gp_cache.mask_reparam         = Rcpp::LogicalVector(n_designs, false);
+
+    if (trend_runtime_ptr && trend_runtime_ptr->has_premap()) {
+      // base premap mask from TrendPlan
+      Rcpp::LogicalVector base_premap = trend_runtime_ptr->premap_design_mask(designs);
+      const auto& premap_pars = trend_runtime_ptr->premap_trend_params();
+
+      for (int i = 0; i < n_designs; ++i) {
+        std::string nm = Rcpp::as<std::string>(dnames[i]);
+        bool is_rep = (reparam_set.count(nm) > 0);
+        bool is_pre = base_premap[i] || (is_rep && premap_pars.count(nm) > 0);   // reparam target is a premap trend param
+
+        if ( is_rep &&  is_pre) gp_cache.mask_premap_reparam[i] = true;
+        else if (!is_rep &&  is_pre) gp_cache.mask_premap[i]    = true;
+        else if ( is_rep && !is_pre) gp_cache.mask_reparam[i]   = true;
+        else                         gp_cache.mask_map[i]       = true;
+      }
+    } else {
+      // no premap: everything is map or reparam
+      for (int i = 0; i < n_designs; ++i) {
+        std::string nm = Rcpp::as<std::string>(dnames[i]);
+        bool is_rep = (reparam_set.count(nm) > 0);
+        if (is_rep) gp_cache.mask_reparam[i] = true;
+        else        gp_cache.mask_map[i]     = true;
+      }
+    }
   }
+
 
   // -----------------------------------------------------------------------
   // DDM
@@ -738,7 +798,8 @@ NumericMatrix get_pars_c_wrapper(NumericMatrix particle_matrix,
                                     Rcpp::Nullable<Rcpp::List> trend = R_NilValue,
                                     bool return_kernel_matrix = false,
                                     bool return_all_pars = false,
-                                    IntegerVector kernel_output_codes = 1)
+                                    IntegerVector kernel_output_codes = 1,
+                                    Rcpp::Nullable<Rcpp::CharacterVector> reparam_targets = R_NilValue)
 {
   const int n_trials = data.nrow();
 
@@ -811,6 +872,7 @@ NumericMatrix get_pars_c_wrapper(NumericMatrix particle_matrix,
   }
 
   // get pars cache
+  // Cache which parameters need to be transformed at which point
   static const std::unordered_set<std::string> empty_set;  // static: constructed once, never changes
   GetParsCache gp_cache;
   {
@@ -825,6 +887,49 @@ NumericMatrix get_pars_c_wrapper(NumericMatrix particle_matrix,
     }
     if (trend_runtime_ptr && trend_runtime_ptr->has_pretransform()) {
       gp_cache.pretransform_specs = filter_specs_by_param_set(param_table_template, transform_specs, pretransform_set);
+    }
+
+    // Build cache for masks that identify when each design entry should  e applied
+    Rcpp::CharacterVector dnames = designs.names();
+    const int n_designs = dnames.size();
+
+    // identify reparam entries from reparam_targets
+    std::unordered_set<std::string> reparam_set;
+    if (!reparam_targets.isNull()) {
+      Rcpp::CharacterVector reparam_target = reparam_targets.as();
+      for (int i = 0; i < reparam_target.size(); ++i) {
+        reparam_set.insert(Rcpp::as<std::string>(reparam_target[i]));
+      }
+    }
+
+    gp_cache.mask_premap          = Rcpp::LogicalVector(n_designs, false);
+    gp_cache.mask_premap_reparam  = Rcpp::LogicalVector(n_designs, false);
+    gp_cache.mask_map             = Rcpp::LogicalVector(n_designs, false);
+    gp_cache.mask_reparam         = Rcpp::LogicalVector(n_designs, false);
+
+    if (trend_runtime_ptr && trend_runtime_ptr->has_premap()) {
+      // base premap mask from TrendPlan
+      Rcpp::LogicalVector base_premap = trend_runtime_ptr->premap_design_mask(designs);
+      const auto& premap_pars = trend_runtime_ptr->premap_trend_params();
+
+      for (int i = 0; i < n_designs; ++i) {
+        std::string nm = Rcpp::as<std::string>(dnames[i]);
+        bool is_rep = (reparam_set.count(nm) > 0);
+        bool is_pre = base_premap[i] || (is_rep && premap_pars.count(nm) > 0);   // reparam target is a premap trend param
+
+        if ( is_rep &&  is_pre) gp_cache.mask_premap_reparam[i] = true;
+        else if (!is_rep &&  is_pre) gp_cache.mask_premap[i]    = true;
+        else if ( is_rep && !is_pre) gp_cache.mask_reparam[i]   = true;
+        else                         gp_cache.mask_map[i]       = true;
+      }
+    } else {
+      // no premap: everything is map or reparam
+      for (int i = 0; i < n_designs; ++i) {
+        std::string nm = Rcpp::as<std::string>(dnames[i]);
+        bool is_rep = (reparam_set.count(nm) > 0);
+        if (is_rep) gp_cache.mask_reparam[i] = true;
+        else        gp_cache.mask_map[i]     = true;
+      }
     }
   }
 
