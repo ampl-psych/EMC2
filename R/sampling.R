@@ -687,6 +687,14 @@ calc_ll_manager <- function(proposals, dadm, model, component = NULL, r_cores = 
       for(p in p_types){
         designs[[p]] <- attr(dadm,"designs")[[p]][attr(attr(dadm,"designs")[[p]],"expand"),,drop=FALSE]
       }
+      reparam_dms <- attr(dadm, "reparam_designs")
+      reparam_names <- if(is.null(reparam_dms)) character(0) else names(reparam_dms)
+      # merge reparam_dms into designs here
+      if (!is.null(reparam_dms)) {
+        for(p in reparam_names) {
+          designs[[p]] <- reparam_dms[[p]][attr(reparam_dms[[p]],"expand"),,drop=FALSE]
+        }
+      }
       constants <- attr(dadm, "constants")
       if(is.null(constants)) constants <- NA
       if (nrow(proposals) <= r_cores) {
@@ -697,7 +705,7 @@ calc_ll_manager <- function(proposals, dadm, model, component = NULL, r_cores = 
         } else {
           lls <- calc_ll_oo(proposals, dadm, constants = constants, designs = designs, type = model$c_name,
                          model$bound, model$transform, model$pre_transform, p_types = p_types, min_ll = log(1e-10),
-                         model$trend)
+                         model$trend, reparam_names)
         }
       } else {
         idx <- rep(1:r_cores,each=1+(nrow(proposals) %/% r_cores))[1:nrow(proposals)]
@@ -711,7 +719,7 @@ calc_ll_manager <- function(proposals, dadm, model, component = NULL, r_cores = 
           lls <- unlist(auto_mclapply(1:r_cores,function(i) {
             calc_ll_oo(proposals[idx==i,,drop=FALSE], dadm, constants = constants,
                     designs = designs, type = model$c_name, model$bound, model$transform,
-                    model$pre_transform, p_types = p_types, min_ll = log(1e-10),model$trend)
+                    model$pre_transform, p_types = p_types, min_ll = log(1e-10),model$trend,reparam_names)
           },mc.cores=r_cores))
         }
       }
