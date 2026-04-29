@@ -284,7 +284,7 @@ plot_ss_if <- function(input,
               do.call(lines, c(list(x = df$x_plot, y = df$p_response), lines_args))
               do.call(points, c(list(x = df$x_plot, y = df$p_response), lines_args))
 
-              if(!any(names(data_sources)=="posterior")){
+              if(!any(sources == "posterior")){
                 # Add standard errors
                 arrows(x0 = df$x_plot, y0 = df$p_response - df$se,
                        x1 = df$x_plot, y1 = df$p_response + df$se,
@@ -833,7 +833,7 @@ plot_ss_srrt <- function(input,
               do.call(lines, c(list(x = df$x_plot, y = df$srrt), lines_args))
               do.call(points, c(list(x = df$x_plot, y = df$srrt), lines_args))
 
-              if(!any(names(data_sources)=="posterior")){
+              if(!any(sources == "posterior")){
                 # Add standard errors
                 arrows(x0 = df$x_plot, y0 = df$srrt - df$se,
                        x1 = df$x_plot, y1 = df$srrt + df$se,
