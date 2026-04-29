@@ -798,8 +798,12 @@ plot_ss_srrt <- function(input,
   }
 
   # define a global y-limit (with a bit of headroom)
-  if (!is.finite(y_max) || y_max <= 0) y_max <- 1
-  ylim <- c(0, y_max*1.1)
+  if (!is.finite(y_min) || !is.finite(y_max) || y_min >= y_max) {
+    ylim <- NULL
+  } else {
+    y_buffer <- 0.05 * (y_max - y_min)
+    ylim <- c(y_min - y_buffer, y_max + y_buffer)
+  }
 
   if (!is.finite(x_min) || !is.finite(x_max) || x_min >= x_max) {
     xlim <- NULL  # let R handle it if bad limits
