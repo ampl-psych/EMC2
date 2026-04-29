@@ -130,6 +130,10 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
     }
     # factors <- factors[names(factors) %in% c(all_preds, "subjects")]
   }
+  if (!is.null(model()$c_name) && model()$c_name %in% c("SSEXG", "SSRDEX")) {
+    covariates <- unique(c(covariates, "SSD"))
+  }
+
   if (!is.null(trend)) {
     formula <- check_trend(trend,c(names(functions), covariates), model, formula)
   }

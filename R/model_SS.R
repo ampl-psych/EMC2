@@ -730,8 +730,12 @@ SSEXG <- function() {
     ),
     # Trial dependent parameter transform
     Ttransform = function(pars,dadm) {
-      # if (any(names(dadm)=="SSD")) pars <- cbind(pars,SSD=dadm$SSD) else
-      #   pars <- cbind(pars,SSD=rep(Inf,dim(pars)[1]))
+      if (is.null(dadm$SSD)) {
+        stop("SSEXG requires an `SSD` column. Use `make_ssd()` when simulating, or include `SSD` in fitted data.")
+      }
+      if (is.null(dadm$lI)) {
+        dadm$lI <- factor(rep(2, nrow(dadm)), levels = 1:2)
+      }
       pars <- cbind(pars, SSD = dadm$SSD)
       pars <- cbind(pars, lI = as.numeric(dadm$lI))  # Only necessary for data generation.
       return(pars)
@@ -1076,6 +1080,12 @@ SSRDEX <- function() {
     ),
     # Trial dependent parameter transform
     Ttransform = function(pars, dadm) {
+      if (is.null(dadm$SSD)) {
+        stop("SSRDEX requires an `SSD` column. Use `make_ssd()` when simulating, or include `SSD` in fitted data.")
+      }
+      if (is.null(dadm$lI)) {
+        dadm$lI <- factor(rep(2, nrow(dadm)), levels = 1:2)
+      }
       pars <- cbind(pars, b = pars[,"B"] + pars[,"A"])
       pars <- cbind(pars, SSD = dadm$SSD)
       pars <- cbind(pars, lI = as.numeric(dadm$lI))  # Only necessary for data generation.
