@@ -196,7 +196,7 @@ plot_ss_if <- function(input,
             range(c(mat4[1, ], mat4[3, ]), na.rm = TRUE)  # y_lower and y_upper
           })
         }))
-        y_min <- max(y_min, y_vals, na.rm = TRUE)
+        y_min <- min(y_min, y_vals, na.rm = TRUE)
         y_max <- max(y_max, y_vals, na.rm = TRUE)
       }
 
