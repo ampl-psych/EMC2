@@ -1,3 +1,33 @@
+get_stop_signal_postn_quantiles <- function(postn_list, level, value_col, quants) {
+  draw_summaries <- lapply(postn_list, function(draw) draw[[level]])
+  valid_summaries <- Filter(function(x) {
+    !is.null(x) && nrow(x) > 0 && all(c("x_plot", value_col) %in% names(x))
+  }, draw_summaries)
+
+  if (!length(valid_summaries)) return(NULL)
+
+  x_plot <- sort(unique(unlist(lapply(valid_summaries, function(x) x$x_plot))))
+  probs <- sort(c(quants, 0.5))
+
+  y_mat <- do.call(cbind, lapply(draw_summaries, function(x) {
+    y <- rep(NA_real_, length(x_plot))
+    if (!is.null(x) && nrow(x) > 0 && all(c("x_plot", value_col) %in% names(x))) {
+      y[match(x$x_plot, x_plot)] <- x[[value_col]]
+    }
+    y
+  }))
+
+  qy <- apply(y_mat, 1, function(y) {
+    if (all(is.na(y))) {
+      rep(NA_real_, length(probs))
+    } else {
+      quantile(y, probs = probs, na.rm = TRUE)
+    }
+  })
+
+  rbind(qy, x_plot)
+}
+
 #' Plot Inhibition Functions
 #'
 
@@ -137,14 +167,12 @@ plot_ss_if <- function(input,
         # postn_list => e.g. 100 draws => each draw is a named list of factor-level => cbind(x,y)
         out <- list()
         for (lev in within_levels) {
-          # gather all x and y columns across draws
-          x_mat <- do.call(cbind, lapply(postn_list, function(lst) lst[[lev]][,"x_plot"]))
-          y_mat <- do.call(cbind, lapply(postn_list, function(lst) lst[[lev]][,"p_response"]))
-
-          # Combine them in a matrix with 4 rows => y_lower, y_upper, y_median, x_plot
-          qy <- apply(y_mat, 1, quantile, probs = sort(c(quants, 0.5)), na.rm = TRUE)
-          xm <- apply(x_mat, 1, unique, na.rm=TRUE)
-          out[[lev]] <- rbind(qy, xm)
+          out[[lev]] <- get_stop_signal_postn_quantiles(
+            postn_list = postn_list,
+            level = lev,
+            value_col = "p_response",
+            quants = quants
+          )
         }
         out
       })
@@ -689,13 +717,12 @@ plot_ss_srrt <- function(input,
         # postn_list => e.g. 100 draws => each draw is a named list of factor-level => cbind(x,y)
         out <- list()
         for (lev in within_levels) {
-          # gather all x and y columns across draws
-          x_mat <- do.call(cbind, lapply(postn_list, function(lst) lst[[lev]][,"x_plot"]))
-          y_mat <- do.call(cbind, lapply(postn_list, function(lst) lst[[lev]][,"srrt"]))
-
-          qy <- apply(y_mat, 1, quantile, probs = sort(c(quants, 0.5)), na.rm = TRUE)
-          xm <- apply(x_mat, 1, unique, na.rm=TRUE)
-          out[[lev]] <- rbind(qy, xm)
+          out[[lev]] <- get_stop_signal_postn_quantiles(
+            postn_list = postn_list,
+            level = lev,
+            value_col = "srrt",
+            quants = quants
+          )
         }
         out
       })
