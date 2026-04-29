@@ -547,7 +547,7 @@ get_response_probability_by_global_ssd_quantile <- function(x, group_factor, pro
                                  FUN = function(v) {
                                    n <- sum(!is.na(v))
                                    mean_p <- mean(v, na.rm = TRUE)
-                                   se_p <- sqrt(mean_p * (1 - mean_p) / n)
+                                   se_p <- sd(v, na.rm = TRUE)/sqrt(n)
                                    c(mean = mean_p, se = se_p, n = n)
                                  },
                                  na.action = na.pass)
