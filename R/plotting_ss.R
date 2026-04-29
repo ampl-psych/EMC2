@@ -666,6 +666,9 @@ plot_ss_srrt <- function(input,
       global_ssd_pool <- df$SSD[is.finite(df$SSD)]
       global_ssd_breaks <- quantile(global_ssd_pool, probs = probs, na.rm = TRUE)
       dots$global_ssd_breaks <- global_ssd_breaks
+      if(any(duplicated(global_ssd_breaks))){
+        stop("Duplicate quantile values detected. Please use fewer bins.")
+      }
     } else {
       quantile_fun <- get_srrt_by_individual_ssd_quantile
     }
