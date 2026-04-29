@@ -309,7 +309,7 @@ plot_ss_if <- function(input,
                 axis(1,
                      at = tick_data$x_plot,
                      labels = quantile_labels,
-                     cex.axis = 0.7,line = )
+                     cex.axis = 0.7)
                 title(xlab = "Global SSD Bin (sec.)", line = 2)
 
               } else {
@@ -855,7 +855,7 @@ plot_ss_srrt <- function(input,
                 axis(1,
                      at = tick_data$x_plot,
                      labels = quantile_labels,
-                     cex.axis = 0.7,line = )
+                     cex.axis = 0.7)
                 title(xlab = "Global SSD Bin (sec.)", line = 2)
               } else {
                 # Subject-specific quantiles --> label with percentages
