@@ -662,7 +662,7 @@ plot_ss_srrt <- function(input,
   # keep track of a global maximum in the vertical dimension
   # so a consistent y-lim across all panels can be set
   y_max <- 1
-  y_min <- 0
+  y_min <- Inf
 
   x_min <- 0
   x_max <- 1
@@ -778,6 +778,7 @@ plot_ss_srrt <- function(input,
         # calculate global min/max
         x_min <- min(all_x_vals, na.rm = TRUE)
         x_max <- max(all_x_vals, na.rm = TRUE)
+        y_min <- min(all_y_vals, na.rm = TRUE)
         y_max <- max(all_y_vals, na.rm = TRUE)
       }
     }
@@ -801,14 +802,14 @@ plot_ss_srrt <- function(input,
   if (!is.finite(y_min) || !is.finite(y_max) || y_min >= y_max) {
     ylim <- NULL
   } else {
-    y_buffer <- 0.05 * (y_max - y_min)
+    y_buffer <- 0.5 * (y_max - y_min)
     ylim <- c(y_min - y_buffer, y_max + y_buffer)
   }
 
   if (!is.finite(x_min) || !is.finite(x_max) || x_min >= x_max) {
     xlim <- NULL  # let R handle it if bad limits
   } else {
-    x_buffer <- 0.05 * (x_max - x_min)
+    x_buffer <- 0.1 * (x_max - x_min)
     xlim <- c(x_min - x_buffer, x_max + x_buffer)
   }
 
