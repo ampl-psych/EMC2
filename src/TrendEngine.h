@@ -47,6 +47,23 @@ struct KernelSlotSpec {
   // Covariate maps specific to this kernel
   bool has_covariate_maps = false;
   std::vector<Rcpp::NumericVector> covariate_map_cols;
+
+  // ---- kernel_args (general extensible mechanism) ----
+  // The IntegerVector members own the R memory; KernelArgs holds raw pointers
+  // into them. Always populate KernelArgs from these after any resize.
+  Rcpp::IntegerVector q_reset_col;   // length n_trials, or length-0 if unused
+  KernelArgs kernel_args;            // raw-pointer view, built in build_kernel_args()
+
+  // Call this after setting q_reset_col (and any future fields) to sync
+  // the raw-pointer view. Must be called before the kernel is constructed.
+  void build_kernel_args() {
+    kernel_args = KernelArgs{};  // zero all fields
+    if (q_reset_col.size() > 0) {
+      kernel_args.q_reset = q_reset_col.begin();
+    }
+    // Future fields: kernel_args.some_other = some_other_col.size() > 0
+    //                                       ? some_other_col.begin() : nullptr;
+  }
 };
 
 // One trend operation spec, built from one element of the R 'trend' list
