@@ -1,4 +1,7 @@
 get_stop_signal_postn_quantiles <- function(postn_list, level, value_col, quants) {
+  # Posterior/prior draws can contain different SSD bins after simulation because
+  # response presence can vary by draw. Align draws by x position before taking
+  # quantiles so missing bins do not shift summaries into the wrong column.
   draw_summaries <- lapply(postn_list, function(draw) draw[[level]])
   valid_summaries <- Filter(function(x) {
     !is.null(x) && nrow(x) > 0 && all(c("x_plot", value_col) %in% names(x))
@@ -38,10 +41,93 @@ get_stop_signal_postn_quantiles <- function(postn_list, level, value_col, quants
   out
 }
 
-draw_stop_signal_x_axis <- function(tick_data, use_global_quantiles, global_title, participant_title) {
+round_ssd_values <- function(SSD, ssd_round = NULL) {
+  if (is.null(ssd_round)) return(SSD)
+  round(SSD / ssd_round) * ssd_round
+}
+
+format_ssd_values <- function(x) {
+  format(round(x, 4), trim = TRUE, scientific = FALSE)
+}
+
+draw_stop_signal_se <- function(x, y, se) {
+  # Base graphics warns on zero-height arrows; skip those while keeping all
+  # finite, nonzero SE intervals.
+  y0 <- y - se
+  y1 <- y + se
+  keep <- is.finite(x) & is.finite(y0) & is.finite(y1) & y0 != y1
+  if (!any(keep)) return(invisible(NULL))
+
+  arrows(x0 = x[keep], y0 = y0[keep],
+         x1 = x[keep], y1 = y1[keep],
+         angle = 90, code = 3, length = 0.05)
+  invisible(NULL)
+}
+
+has_duplicate_individual_ssd_quantiles <- function(df, probs, within_plot = NULL) {
+  # Individual percentile bins are computed separately within each panel,
+  # within-plot level, and subject. If any subject has collapsed percentile
+  # breaks, cut() cannot form the requested bins.
+  groups <- split(df, df$group_key)
+
+  any(vapply(groups, function(group_df) {
+    within_groups <- if (is.null(within_plot)) {
+      list(group_df)
+    } else {
+      split(group_df, group_df[[within_plot]])
+    }
+
+    any(vapply(within_groups, function(within_df) {
+      subjects <- unique(within_df$subjects)
+      any(vapply(subjects, function(s) {
+        SSD <- within_df$SSD[within_df$subjects == s & is.finite(within_df$SSD)]
+        if (!length(SSD)) return(FALSE)
+        any(duplicated(quantile(SSD, probs = probs, na.rm = TRUE)))
+      }, logical(1)))
+    }, logical(1)))
+  }, logical(1)))
+}
+
+has_duplicate_global_ssd_quantiles <- function(df, probs) {
+  # Global percentile bins pool SSDs within a plotted source. Duplicate breaks
+  # indicate that the requested quantile grid is too fine for the SSD design.
+  SSD <- df$SSD[is.finite(df$SSD)]
+  if (!length(SSD)) return(FALSE)
+  any(duplicated(quantile(SSD, probs = probs, na.rm = TRUE)))
+}
+
+draw_stop_signal_x_axis <- function(tick_data, bin_mode, global_title, participant_title,
+                                    value_title = "SSD Value (sec.)",
+                                    probs = NULL) {
   if (is.null(tick_data) || !"x_plot" %in% names(tick_data)) return(invisible(NULL))
 
-  if (use_global_quantiles) {
+  bin_mode <- unname(bin_mode)
+  # Unknown modes are treated as individual-quantile axes first. The check below
+  # then detects whether the supplied x values are actually SSD values.
+  if (length(bin_mode) != 1 || is.na(bin_mode) ||
+      !bin_mode %in% c("value", "global_quantile", "individual_quantile")) {
+    bin_mode <- "individual_quantile"
+  }
+
+  if (identical(bin_mode, "individual_quantile") && !is.null(probs)) {
+    # Individual quantile axes should be at probs[-1]. If the data reaching the
+    # axis has absolute SSD positions instead, draw a value axis to avoid
+    # misleading percentile labels.
+    expected_x <- probs[-1]
+    if (length(tick_data$x_plot) != length(expected_x) ||
+        !isTRUE(all.equal(unname(tick_data$x_plot), unname(expected_x), tolerance = 1e-8))) {
+      bin_mode <- "value"
+    }
+  }
+
+  if (identical(bin_mode, "value")) {
+    labels <- if ("ssd" %in% names(tick_data)) tick_data$ssd else format_ssd_values(tick_data$x_plot)
+    axis(1,
+         at = tick_data$x_plot,
+         labels = labels,
+         cex.axis = 0.7)
+    title(xlab = value_title, line = 2)
+  } else if (identical(bin_mode, "global_quantile")) {
     if (!"ssd" %in% names(tick_data)) return(invisible(NULL))
     quantile_labels <- unlist(lapply(strsplit(tick_data$ssd,","),
                                      function(x) paste0(x[1],",\n",x[2])))
@@ -89,6 +175,11 @@ draw_stop_signal_x_axis <- function(tick_data, use_global_quantiles, global_titl
 #' @param use_global_quantiles If set to `TRUE`, SSDs are pooled over participants before calculating percentiles, so
 #' the same absolute SSD range is used to get Pr(R) for each participant,
 #' and then these probabilities are averaged over participants.
+#' @param ssd_binning Character. `"quantile"` uses SSD quantile bins; `"value"` groups by SSD values.
+#' @param ssd_round Optional numeric bin width for rounding SSD values before value-based binning.
+#' @param on_duplicate_quantiles Character. What to do when quantile breaks are duplicated:
+#'   `"error"` stops with a message; `"value"` falls back to value-based SSD bins
+#'   for all plotted sources.
 #' @param subject Subset the data to a single subject (by index or name).
 #' @param quants Numeric vector of credible interval bounds (e.g. c(0.025, 0.975)).
 #' @param functions A function (or list of functions) that create new columns in the datasets or predictives
@@ -111,6 +202,9 @@ plot_ss_if <- function(input,
                     factors = NULL,
                     within_plot = NULL,
                     use_global_quantiles = FALSE,
+                    ssd_binning = c("quantile", "value"),
+                    ssd_round = NULL,
+                    on_duplicate_quantiles = c("error", "value"),
                     subject = NULL,
                     quants = c(0.025, 0.975), functions = NULL,
                     n_cores = 1,
@@ -122,6 +216,13 @@ plot_ss_if <- function(input,
                     posterior_args = list(),
                     prior_args = list(),
                     ...) {
+
+  ssd_binning <- match.arg(ssd_binning)
+  on_duplicate_quantiles <- match.arg(on_duplicate_quantiles)
+  if (!is.null(ssd_round) &&
+      (!is.numeric(ssd_round) || length(ssd_round) != 1 || is.na(ssd_round) || ssd_round <= 0)) {
+    stop("`ssd_round` must be NULL or a single positive numeric value.")
+  }
 
   # 1) prep_data_plot
   check <- prep_data_plot(input, post_predict, prior_predict, to_plot, use_lim,
@@ -147,6 +248,30 @@ plot_ss_if <- function(input,
   # Single-p_resp results or multi-postn quantile results are stored in these:
   p_resp_list        <- list() # single
   p_resp_quants_list <- list() # multi
+  source_bin_modes <- character()
+
+  # Pick one binning method for the whole plot. If any plotted source has
+  # duplicate quantile breaks and the user requested the value fallback, all
+  # sources use value bins so lines and axes stay on the same x scale.
+  effective_ssd_binning <- ssd_binning
+  if (ssd_binning == "quantile") {
+    has_duplicate_breaks <- any(vapply(data_sources, function(df) {
+      if (is.null(df) || !nrow(df) || is.null(df$SSD)) return(FALSE)
+      if (use_global_quantiles) {
+        has_duplicate_global_ssd_quantiles(df, probs)
+      } else {
+        has_duplicate_individual_ssd_quantiles(df, probs, within_plot)
+      }
+    }, logical(1)))
+
+    if (has_duplicate_breaks) {
+      if (on_duplicate_quantiles == "value") {
+        effective_ssd_binning <- "value"
+      } else {
+        stop("Duplicate quantile values detected. Please use fewer bins or set `on_duplicate_quantiles = \"value\"`.")
+      }
+    }
+  }
 
   # keep track of a global maximum in the vertical dimension
   # so that we can set a consistent y-lim across all panels
@@ -177,17 +302,21 @@ plot_ss_if <- function(input,
       stop("No SSD column in data.")
     }
 
+    dots$ssd_round <- ssd_round
+
     # set type of SSD binning method
-    if(use_global_quantiles){
+    if (effective_ssd_binning == "value") {
+      quantile_fun <- get_response_probability_by_ssd_value
+      source_bin_modes[sname] <- "value"
+    } else if(use_global_quantiles){
       quantile_fun <- get_response_probability_by_global_ssd_quantile
       global_ssd_pool <- df$SSD[is.finite(df$SSD)]
       global_ssd_breaks <- quantile(global_ssd_pool, probs = probs, na.rm = TRUE)
       dots$global_ssd_breaks <- global_ssd_breaks
-      if(any(duplicated(global_ssd_breaks))){
-        stop("Duplicate quantile values detected. Please use fewer bins.")
-      }
+      source_bin_modes[sname] <- "global_quantile"
     } else {
       quantile_fun <- get_response_probability_by_individual_ssd_quantile
+      source_bin_modes[sname] <- "individual_quantile"
     }
 
     # If there's a "postn" column => multiple draws => compute quantiles
@@ -352,9 +481,7 @@ plot_ss_if <- function(input,
 
               if(!any(sources == "posterior")){
                 # Add standard errors
-                arrows(x0 = df$x_plot, y0 = df$p_response - df$se,
-                       x1 = df$x_plot, y1 = df$p_response + df$se,
-                       angle = 90, code = 3, length = 0.05)
+                draw_stop_signal_se(df$x_plot, df$p_response, df$se)
               }
 
 
@@ -407,8 +534,9 @@ plot_ss_if <- function(input,
         tick_group <- p_resp_list[[sname]][[group_key]]
         if (!is.null(tick_group)) {
           tick_data <- tick_group[[names(tick_group)[1]]]
-          draw_stop_signal_x_axis(tick_data, use_global_quantiles,
-                                  "Global SSD Bin (sec.)", "Participant SSD Bin (%)")
+          draw_stop_signal_x_axis(tick_data, source_bin_modes[sname],
+                                  "Global SSD Bin (sec.)", "Participant SSD Bin (%)",
+                                  probs = probs)
           axis_drawn <- TRUE
           break
         }
@@ -418,11 +546,14 @@ plot_ss_if <- function(input,
           tick_mat <- tick_group[[names(tick_group)[1]]]
           if (!is.null(tick_mat)) {
             tick_data <- data.frame(x_plot = unname(tick_mat[nrow(tick_mat), ]))
-            if (use_global_quantiles) {
-              tick_data$ssd <- names(tick_mat[nrow(tick_mat), ])
+            tick_labels <- names(tick_mat[nrow(tick_mat), ])
+            if (source_bin_modes[sname] %in% c("value", "global_quantile") &&
+                !is.null(tick_labels)) {
+              tick_data$ssd <- tick_labels
             }
-            draw_stop_signal_x_axis(tick_data, use_global_quantiles,
-                                    "Global SSD Bin (sec.)", "Participant SSD Bin (%)")
+            draw_stop_signal_x_axis(tick_data, source_bin_modes[sname],
+                                    "Global SSD Bin (sec.)", "Participant SSD Bin (%)",
+                                    probs = probs)
             axis_drawn <- TRUE
             break
           }
@@ -616,6 +747,74 @@ get_response_probability_by_global_ssd_quantile <- function(x, group_factor, pro
   return(out)
 }
 
+get_response_probability_by_ssd_value <- function(x, group_factor, probs, dots) {
+  # Value binning is for discrete/staircase SSD designs. Optionally round SSDs
+  # first so near-identical staircase values collapse to interpretable bins
+  # such as 20 ms steps.
+  x <- x[is.finite(x[["SSD"]]) & !is.na(x[["subjects"]]), ]
+  x$SSD_value <- round_ssd_values(x$SSD, dots$ssd_round)
+
+  if (!is.null(group_factor)) {
+    group_vals <- unique(x[[group_factor]])
+    group_names <- as.character(group_vals)
+  } else {
+    group_names <- "All"
+  }
+
+  compute_group_stats <- function(data_subset) {
+    subj_stats <- lapply(unique(data_subset$subjects), function(s) {
+      df <- data_subset[data_subset$subjects == s, ]
+
+      bin_stats <- aggregate(I(!is.na(R)) ~ SSD_value, data = df, FUN = function(v) {
+        n <- sum(!is.na(v))
+        mean_p <- mean(v, na.rm = TRUE)
+        se_p <- sqrt(mean_p * (1 - mean_p) / n)
+        c(mean = mean_p, se = se_p, n = n)
+      }, na.action = na.pass)
+
+      bin_stats <- do.call(data.frame, bin_stats)
+      names(bin_stats) <- c("x_plot", "p_response", "se", "n")
+      bin_stats$ssd <- format_ssd_values(bin_stats$x_plot)
+      bin_stats$subject <- s
+      bin_stats <- bin_stats[order(bin_stats$x_plot), ]
+
+      bin_stats
+    })
+
+    if(length(subj_stats) > 1){
+      all_stats <- do.call(rbind, subj_stats)
+      summary_stats <- aggregate(p_response ~ x_plot, data = all_stats,
+                                 FUN = function(v) {
+                                   n <- sum(!is.na(v))
+                                   mean_p <- mean(v, na.rm = TRUE)
+                                   se_p <- sd(v, na.rm = TRUE)/sqrt(n)
+                                   c(mean = mean_p, se = se_p, n = n)
+                                 },
+                                 na.action = na.pass)
+      summary_stats <- do.call(data.frame, summary_stats)
+      names(summary_stats) <- c("x_plot", "p_response", "se", "n")
+      summary_stats$ssd <- format_ssd_values(summary_stats$x_plot)
+      summary_stats <- summary_stats[order(summary_stats$x_plot), ]
+    } else {
+      summary_stats <- subj_stats[[1]]
+    }
+
+    summary_stats
+  }
+
+  out <- lapply(group_names, function(g) {
+    if (g == "All") {
+      data_subset <- x
+    } else {
+      data_subset <- x[x[[group_factor]] == g, ]
+    }
+    compute_group_stats(data_subset)
+  })
+
+  names(out) <- group_names
+  return(out)
+}
+
 #' Plot Mean SRRT
 #'
 #' Plots panels of the mean signal-respond response time (SRRT) as a function of user-defined
@@ -637,6 +836,11 @@ get_response_probability_by_global_ssd_quantile <- function(x, group_factor, pro
 #' @param within_plot Character indicating factor for which inhibition functions are plotted in the same panel
 #' @param use_global_quantiles If set to FALSE, the SSD-categories are defined in terms of the percentiles of the
 #' SSD distribution for each participant, and then averaged over participants.
+#' @param ssd_binning Character. `"quantile"` uses SSD quantile bins; `"value"` groups by SSD values.
+#' @param ssd_round Optional numeric bin width for rounding SSD values before value-based binning.
+#' @param on_duplicate_quantiles Character. What to do when quantile breaks are duplicated:
+#'   `"error"` stops with a message; `"value"` falls back to value-based SSD bins
+#'   for all plotted sources.
 #' @param subject Subset the data to a single subject (by index or name).
 #' @param quants Numeric vector of credible interval bounds (e.g. c(0.025, 0.975)).
 #' @param functions A function (or list of functions) that create new columns in the datasets or predictives
@@ -659,6 +863,9 @@ plot_ss_srrt <- function(input,
                       factors = NULL,
                       within_plot = NULL,
                       use_global_quantiles = TRUE,
+                      ssd_binning = c("quantile", "value"),
+                      ssd_round = NULL,
+                      on_duplicate_quantiles = c("error", "value"),
                       subject = NULL,
                       quants = c(0.025, 0.975), functions = NULL,
                       n_cores = 1,
@@ -670,6 +877,13 @@ plot_ss_srrt <- function(input,
                       posterior_args = list(),
                       prior_args = list(),
                       ...) {
+
+  ssd_binning <- match.arg(ssd_binning)
+  on_duplicate_quantiles <- match.arg(on_duplicate_quantiles)
+  if (!is.null(ssd_round) &&
+      (!is.numeric(ssd_round) || length(ssd_round) != 1 || is.na(ssd_round) || ssd_round <= 0)) {
+    stop("`ssd_round` must be NULL or a single positive numeric value.")
+  }
 
   # 1) prep_data_plot
   check <- prep_data_plot(input, post_predict, prior_predict, to_plot, use_lim,
@@ -695,6 +909,30 @@ plot_ss_srrt <- function(input,
   # store single-p_resp results or multi-postn quantile results in these:
   p_resp_list        <- list() # single
   p_resp_quants_list <- list() # multi
+  source_bin_modes <- character()
+
+  # Pick one binning method for the whole plot. If any plotted source has
+  # duplicate quantile breaks and the user requested the value fallback, all
+  # sources use value bins so lines and axes stay on the same x scale.
+  effective_ssd_binning <- ssd_binning
+  if (ssd_binning == "quantile") {
+    has_duplicate_breaks <- any(vapply(data_sources, function(df) {
+      if (is.null(df) || !nrow(df) || is.null(df$SSD)) return(FALSE)
+      if (use_global_quantiles) {
+        has_duplicate_global_ssd_quantiles(df, probs)
+      } else {
+        has_duplicate_individual_ssd_quantiles(df, probs, within_plot)
+      }
+    }, logical(1)))
+
+    if (has_duplicate_breaks) {
+      if (on_duplicate_quantiles == "value") {
+        effective_ssd_binning <- "value"
+      } else {
+        stop("Duplicate quantile values detected. Please use fewer bins or set `on_duplicate_quantiles = \"value\"`.")
+      }
+    }
+  }
 
   # keep track of a global maximum in the vertical dimension
   # so a consistent y-lim across all panels can be set
@@ -725,17 +963,21 @@ plot_ss_srrt <- function(input,
       stop("No SSD column in data.")
     }
 
+    dots$ssd_round <- ssd_round
+
     # type of SSD binning method
-    if(use_global_quantiles){
+    if (effective_ssd_binning == "value") {
+      quantile_fun <- get_srrt_by_ssd_value
+      source_bin_modes[sname] <- "value"
+    } else if(use_global_quantiles){
       quantile_fun <- get_srrt_by_global_ssd_quantile
       global_ssd_pool <- df$SSD[is.finite(df$SSD)]
       global_ssd_breaks <- quantile(global_ssd_pool, probs = probs, na.rm = TRUE)
       dots$global_ssd_breaks <- global_ssd_breaks
-      if(any(duplicated(global_ssd_breaks))){
-        stop("Duplicate quantile values detected. Please use fewer bins.")
-      }
+      source_bin_modes[sname] <- "global_quantile"
     } else {
       quantile_fun <- get_srrt_by_individual_ssd_quantile
+      source_bin_modes[sname] <- "individual_quantile"
     }
 
     # If there's a "postn" column => multiple draws => compute quantiles
@@ -904,9 +1146,7 @@ plot_ss_srrt <- function(input,
 
               if(!any(sources == "posterior")){
                 # Add standard errors
-                arrows(x0 = df$x_plot, y0 = df$srrt - df$se,
-                       x1 = df$x_plot, y1 = df$srrt + df$se,
-                       angle = 90, code = 3, length = 0.05)
+                draw_stop_signal_se(df$x_plot, df$srrt, df$se)
               }
 
 
@@ -957,8 +1197,9 @@ plot_ss_srrt <- function(input,
         tick_group <- p_resp_list[[sname]][[group_key]]
         if (!is.null(tick_group)) {
           tick_data <- tick_group[[names(tick_group)[1]]]
-          draw_stop_signal_x_axis(tick_data, use_global_quantiles,
-                                  "Global SSD Bin (sec.)", "Participant SSD Percentile Bin (%)")
+          draw_stop_signal_x_axis(tick_data, source_bin_modes[sname],
+                                  "Global SSD Bin (sec.)", "Participant SSD Percentile Bin (%)",
+                                  probs = probs)
           break
         }
       } else {
@@ -967,11 +1208,14 @@ plot_ss_srrt <- function(input,
           tick_mat <- tick_group[[names(tick_group)[1]]]
           if (!is.null(tick_mat)) {
             tick_data <- data.frame(x_plot = unname(tick_mat[nrow(tick_mat), ]))
-            if (use_global_quantiles) {
-              tick_data$ssd <- names(tick_mat[nrow(tick_mat), ])
+            tick_labels <- names(tick_mat[nrow(tick_mat), ])
+            if (source_bin_modes[sname] %in% c("value", "global_quantile") &&
+                !is.null(tick_labels)) {
+              tick_data$ssd <- tick_labels
             }
-            draw_stop_signal_x_axis(tick_data, use_global_quantiles,
-                                    "Global SSD Bin (sec.)", "Participant SSD Percentile Bin (%)")
+            draw_stop_signal_x_axis(tick_data, source_bin_modes[sname],
+                                    "Global SSD Bin (sec.)", "Participant SSD Percentile Bin (%)",
+                                    probs = probs)
             break
           }
         }
@@ -1152,6 +1396,75 @@ get_srrt_by_global_ssd_quantile <- function(x, group_factor, probs, dots) {
   }
 
   # Loop over group levels (or just "All")
+  out <- lapply(group_names, function(g) {
+    if (g == "All") {
+      data_subset <- x
+    } else {
+      data_subset <- x[x[[group_factor]] == g, ]
+    }
+    compute_group_stats(data_subset)
+  })
+
+  names(out) <- group_names
+  return(out)
+}
+
+get_srrt_by_ssd_value <- function(x, group_factor, probs, dots) {
+  # Value binning is for discrete/staircase SSD designs. Optionally round SSDs
+  # first so near-identical staircase values collapse to interpretable bins
+  # such as 20 ms steps.
+  x <- x[is.finite(x[["SSD"]]) & !is.na(x[["subjects"]]), ]
+  x$SSD_value <- round_ssd_values(x$SSD, dots$ssd_round)
+
+  if (!is.null(group_factor)) {
+    group_vals <- unique(x[[group_factor]])
+    group_names <- as.character(group_vals)
+  } else {
+    group_names <- "All"
+  }
+
+  compute_group_stats <- function(data_subset) {
+    subj_stats <- lapply(unique(data_subset$subjects), function(s) {
+      df <- data_subset[data_subset$subjects == s, ]
+
+      bin_stats <- aggregate(rt ~ SSD_value, data = df,
+                             FUN = function(v) {
+                               n <- sum(!is.na(v))
+                               mean_rt <- mean(v, na.rm = TRUE)
+                               se_rt <- sd(v, na.rm = TRUE) / sqrt(n)
+                               c(mean = mean_rt, se = se_rt, n = n)
+                             },
+                             na.action = na.pass)
+
+      bin_stats <- do.call(data.frame, bin_stats)
+      names(bin_stats) <- c("x_plot", "srrt", "se", "n")
+      bin_stats$ssd <- format_ssd_values(bin_stats$x_plot)
+      bin_stats$subject <- s
+      bin_stats <- bin_stats[order(bin_stats$x_plot), ]
+
+      bin_stats
+    })
+
+    if(length(subj_stats) > 1){
+      all_stats <- do.call(rbind, subj_stats)
+      summary_stats <- aggregate(srrt ~ x_plot, data = all_stats, FUN = function(v) {
+        n <- sum(!is.na(v))
+        mean_rt <- mean(v, na.rm = TRUE)
+        se_rt <- sd(v, na.rm = TRUE) / sqrt(n)
+        c(mean = mean_rt, se = se_rt, n = n)
+      },
+      na.action = na.pass)
+      summary_stats <- do.call(data.frame, summary_stats)
+      names(summary_stats) <- c("x_plot", "srrt", "se", "n")
+      summary_stats$ssd <- format_ssd_values(summary_stats$x_plot)
+      summary_stats <- summary_stats[order(summary_stats$x_plot), ]
+    } else {
+      summary_stats <- subj_stats[[1]]
+    }
+
+    summary_stats
+  }
+
   out <- lapply(group_names, function(g) {
     if (g == "All") {
       data_subset <- x
