@@ -3,6 +3,69 @@
 using namespace Rcpp;
 
 
+// ============================================================
+// New helper: init_kernel_args_for_slot()
+// Call this during TrendPlan construction, after the slot's
+// kernel_type is known, alongside init_covariate_for_slot() etc.
+// ============================================================
+void init_kernel_args_for_slot(KernelSlotSpec& slot,
+                               const Rcpp::List& tr,       // one trend list entry
+                               const Rcpp::DataFrame& data)
+{
+  // Nothing to do if no kernel_args field in the trend spec
+  if (!tr.containsElementNamed("kernel_args")) {
+    slot.build_kernel_args();
+    return;
+  }
+
+  SEXP ka_sexp = tr["kernel_args"];
+  if (Rf_isNull(ka_sexp)) {
+    slot.build_kernel_args();
+    return;
+  }
+
+  Rcpp::List ka = Rcpp::as<Rcpp::List>(ka_sexp);
+
+  // ---- q_reset_column ----
+  if (ka.containsElementNamed("q_reset_column")) {
+    SEXP col_name_sexp = ka["q_reset_column"];
+    if (!Rf_isNull(col_name_sexp)) {
+      std::string col_name = Rcpp::as<std::string>(col_name_sexp);
+
+      if (!data.containsElementNamed(col_name.c_str())) {
+        Rcpp::stop("kernel_args$q_reset_column: column '%s' not found in data",
+                   col_name.c_str());
+      }
+
+      SEXP col = data[col_name.c_str()];
+
+      // Accept logical or integer columns; coerce to integer for raw-pointer access
+      if (TYPEOF(col) == LGLSXP) {
+        slot.q_reset_col = Rcpp::as<Rcpp::IntegerVector>(col);  // TRUE->1, FALSE->0, NA->NA_INTEGER
+      } else if (TYPEOF(col) == INTSXP) {
+        slot.q_reset_col = Rcpp::IntegerVector(col);
+      } else {
+        Rcpp::stop("kernel_args$q_reset_column: column '%s' must be logical or integer",
+                   col_name.c_str());
+      }
+
+      // Rprintf("q_reset_size=%d\n", (int)slot.q_reset_col.size());
+      // Validate length matches data
+      if (slot.q_reset_col.size() != data.nrows()) {
+        Rcpp::stop("kernel_args$q_reset_column: column '%s' has length %d, expected %d",
+                   col_name.c_str(), (int)slot.q_reset_col.size(), (int)data.nrows());
+      }
+    }
+  }
+
+  // Future kernel_args fields parsed here in the same pattern.
+
+  // Sync raw-pointer view from all populated fields
+  slot.build_kernel_args();
+}
+
+
+
 void TrendOpSpec::make_first_level(const Rcpp::DataFrame& data) {
   using namespace Rcpp;
 
@@ -385,6 +448,7 @@ TrendPlan::TrendPlan(Rcpp::Nullable<Rcpp::List> trend_,
               tr_copy["covariate"] = cov_name;
 
               init_covariate_for_slot(slot, tr_copy, data);
+              init_kernel_args_for_slot(slot, tr_copy, data);
 
               // Attach maps if present on this spec and in data
               if (has_data_covariate_maps) {
@@ -556,6 +620,7 @@ void TrendRuntime::bind_all_ops_to_paramtable(const ParamTable& pt) {
         KernelSlotRuntime k_rt;
         k_rt.spec         = &kspec;
         k_rt.kernel_ptr   = make_kernel(kspec.kernel_type, kspec.custom_fun);
+        k_rt.kernel_ptr->set_kernel_args(kspec.kernel_args);
         k_rt.kernel_par_indices = kernel_indices;
         op_rt.kernels.push_back(std::move(k_rt));
       }
