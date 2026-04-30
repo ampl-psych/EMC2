@@ -311,7 +311,7 @@ contr.anova <- function(n) {
 
 add_accumulators <- function(data,matchfun=NULL,simulate=FALSE, type = "RACE", Fcovariates=NULL,
                              acr_spec = NULL){ # AccumulatR specification
-  if (!is_choice_accumulator_type(type)) return(data)
+  if (!is_choice_accumulator_type(type) && !type %in% "AccumulatR") return(data)
   if (!is.factor(data$R)) stop("data must have a factor R")
   factors <- names(data)[!names(data) %in% c("R","rt","trials",Fcovariates)]
   if (type == "RACE" || is_choice_only_model_type(type)) {

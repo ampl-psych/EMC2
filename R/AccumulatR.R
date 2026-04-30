@@ -112,6 +112,34 @@ accumulatr_internal_lookup <- function(model_spec) {
   AccumulatR:::.parameter_name_lookup(spec)
 }
 
+accumulatr_trigger_ids <- function(model_spec) {
+  spec <- accumulatr_model_spec(model_spec)
+  ids <- vapply(spec$triggers %||% list(), function(trig) {
+    trig$id %||% NA_character_
+  }, character(1))
+  ids[!is.na(ids) & nzchar(ids)]
+}
+
+accumulatr_shared_trigger_sources <- function(model_spec) {
+  spec <- accumulatr_model_spec(model_spec)
+  out <- list()
+  for (trig in spec$triggers %||% list()) {
+    trig_id <- trig$id %||% NA_character_
+    if (is.na(trig_id) || !nzchar(trig_id)) next
+    if (!identical(trig$draw %||% "shared", "shared")) next
+    for (member in as.character(trig$members %||% character(0))) {
+      out[[member]] <- trig_id
+    }
+  }
+  out
+}
+
+accumulatr_shared_trigger_member_q_names <- function(model_spec) {
+  members <- names(accumulatr_shared_trigger_sources(model_spec))
+  if (!length(members)) return(character(0))
+  paste(members, "q", sep = ".")
+}
+
 accumulatr_internal_runtime_family <- function(model_spec, internal_name) {
   spec <- accumulatr_model_spec(model_spec)
   components <- spec$components %||% list()
@@ -120,6 +148,10 @@ accumulatr_internal_runtime_family <- function(model_spec, internal_name) {
     if (!is.null(weight_param) && identical(internal_name, weight_param)) {
       return("w")
     }
+  }
+
+  if (internal_name %in% accumulatr_trigger_ids(spec)) {
+    return("q")
   }
 
   pieces <- strsplit(internal_name, ".", fixed = TRUE)[[1]]
@@ -174,6 +206,9 @@ accumulatr_internal_profiles <- function(model_spec, internal_names) {
     family <- accumulatr_internal_runtime_family(model_spec, internal_name)
     runtime_family[[internal_name]] <- family
     param_name <- sub("^.*\\.", "", internal_name)
+    if (identical(family, "q")) {
+      param_name <- "q"
+    }
     if (identical(family, "w")) {
       param_name <- "w"
     }
@@ -189,8 +224,15 @@ AccumulatR_bridge_spec <- function(model_spec) {
   internal_to_public <- accumulatr_internal_lookup(model_spec)
   internal_names <- names(internal_to_public)
   target_info <- accumulatr_internal_profiles(model_spec, internal_names)
+  hidden_internal <- accumulatr_shared_trigger_member_q_names(model_spec)
 
   public_order <- AccumulatR::sampled_pars(model_spec)
+  if (length(hidden_internal) > 0L) {
+    public_order <- public_order[vapply(public_order, function(nm) {
+      targets <- names(internal_to_public)[unname(internal_to_public) %in% nm]
+      !(length(targets) > 0L && all(targets %in% hidden_internal))
+    }, logical(1))]
+  }
   public_to_internal <- lapply(public_order, function(nm) {
     names(internal_to_public)[unname(internal_to_public) %in% nm]
   })
@@ -280,7 +322,12 @@ accumulatr_runtime_columns <- function(model_spec) {
   max_p <- max(vapply(acc_defs, function(acc) {
     length(get("dist_param_names", envir = asNamespace("AccumulatR"))(acc$dist))
   }, integer(1)), 0L)
-  c("q", "w", "t0", paste0("p", seq_len(max_p)))
+  comp_defs <- accumulatr_model_spec(model_spec)$components %||% list()
+  weight_params <- unique(vapply(comp_defs, function(component) {
+    accumulatr_component_weight_param(component) %||% NA_character_
+  }, character(1)))
+  weight_params <- weight_params[!is.na(weight_params)]
+  c("q", "t0", paste0("p", seq_len(max_p)), weight_params)
 }
 
 accumulatr_actual_default <- function(profile) {
@@ -305,6 +352,7 @@ accumulatr_build_runtime_recipe <- function(model_spec, dadm, bridge) {
   sources <- matrix(NA_character_, nrow = nrow(dadm), ncol = length(runtime_cols))
   colnames(sources) <- runtime_cols
   comp_defs <- accumulatr_model_spec(model_spec)$components %||% list()
+  shared_trigger_sources <- accumulatr_shared_trigger_sources(model_spec)
 
   for (i in seq_len(nrow(dadm))) {
     acc_id <- as.character(dadm$accumulator[[i]])
@@ -326,30 +374,25 @@ accumulatr_build_runtime_recipe <- function(model_spec, dadm, bridge) {
     }
 
     q_name <- paste(acc_id, "q", sep = ".")
-    q_profile <- bridge$internal_profiles[[q_name]] %||% accumulatr_param_profile("q", "q")
+    q_source <- shared_trigger_sources[[acc_id]] %||% q_name
+    q_profile <- bridge$internal_profiles[[q_source]] %||%
+      bridge$internal_profiles[[q_name]] %||%
+      accumulatr_param_profile("q", "q")
     q_default <- acc$q %||% accumulatr_actual_default(q_profile)
     defaults[i, "q"] <- q_default
-    sources[i, "q"] <- accumulatr_internal_source_name(bridge, q_name)
+    sources[i, "q"] <- accumulatr_internal_source_name(bridge, q_source)
 
     t0_name <- paste(acc_id, "t0", sep = ".")
     t0_profile <- bridge$internal_profiles[[t0_name]] %||% accumulatr_param_profile("t0", "t0")
     defaults[i, "t0"] <- acc_params$t0 %||% accumulatr_actual_default(t0_profile)
     sources[i, "t0"] <- accumulatr_internal_source_name(bridge, t0_name)
-
-    defaults[i, "w"] <- NaN
   }
 
-  if (length(comp_defs) > 0) {
-    for (component in comp_defs) {
-      weight_param <- accumulatr_component_weight_param(component)
-      if (is.null(weight_param)) next
-      members <- accumulatr_component_members(component)
-      if (!length(members)) next
-      leader <- members[[1]]
-      row_idx <- which(as.character(dadm$accumulator) == leader)
-      if (!length(row_idx)) next
-      sources[row_idx, "w"] <- accumulatr_internal_source_name(bridge, weight_param)
-    }
+  for (component in comp_defs) {
+    weight_param <- accumulatr_component_weight_param(component)
+    if (is.null(weight_param) || !weight_param %in% colnames(defaults)) next
+    defaults[, weight_param] <- component$weight %||% 0
+    sources[, weight_param] <- accumulatr_internal_source_name(bridge, weight_param)
   }
 
   list(
@@ -378,6 +421,38 @@ accumulatr_runtime_params <- function(model_spec, trial_df, public_pars, bridge 
   accumulatr_apply_runtime_recipe(public_pars, recipe)
 }
 
+accumulatr_sim_runtime_params <- function(model_spec, trial_df, public_pars, bridge = NULL) {
+  runtime <- accumulatr_runtime_params(model_spec, trial_df, public_pars, bridge)
+  if ("w" %in% colnames(runtime)) return(runtime)
+
+  w <- rep(1, nrow(runtime))
+  comp_defs <- accumulatr_model_spec(model_spec)$components %||% list()
+  if (length(comp_defs) > 0L && "accumulator" %in% names(trial_df)) {
+    acc_weight <- list()
+    for (component in comp_defs) {
+      weight_param <- accumulatr_component_weight_param(component)
+      weight <- component$weight %||% 1
+      if (!is.null(weight_param) && weight_param %in% colnames(runtime)) {
+        weight <- runtime[, weight_param]
+      }
+      for (member in accumulatr_component_members(component)) {
+        acc_weight[[member]] <- weight
+      }
+    }
+    acc <- as.character(trial_df$accumulator)
+    for (i in seq_along(acc)) {
+      weight <- acc_weight[[acc[[i]]]]
+      if (!is.null(weight)) w[[i]] <- weight[[min(i, length(weight))]]
+    }
+  }
+
+  cbind(
+    runtime[, "q", drop = FALSE],
+    w = w,
+    runtime[, setdiff(colnames(runtime), "q"), drop = FALSE]
+  )
+}
+
 AccumulatR_model <- function(model_spec){
   bridge <- AccumulatR_bridge_spec(model_spec)
   model_list <- list(
@@ -388,8 +463,13 @@ AccumulatR_model <- function(model_spec){
     Ttransform = function(pars,dadm) pars,
     bound = bridge$bound,
     rfun = function(trial_df, pars) {
-      runtime_pars <- accumulatr_runtime_params(model_spec, trial_df, pars, bridge)
-      AccumulatR::simulate(model_spec, runtime_pars, trial_df = trial_df, keep_component = TRUE)
+      runtime_pars <- accumulatr_sim_runtime_params(model_spec, trial_df, pars, bridge)
+      trial_sim <- trial_df
+      if ("trial" %in% names(trial_sim) && nrow(trial_sim) > 0L) {
+        trial <- as.integer(trial_sim$trial)
+        trial_sim$trial <- cumsum(c(TRUE, trial[-1L] != trial[-length(trial)]))
+      }
+      AccumulatR::simulate(model_spec, runtime_pars, trial_df = trial_sim, keep_component = TRUE, layout = "long")
     },
     spec = model_spec,
     accumulatr_bridge = bridge
@@ -418,8 +498,15 @@ AccumulatR_add_context <- function(dadm){
   if(model()$type != "AccumulatR") return(dadm)
   model_list <- model()
   model_spec <- model_list$spec
+  expand <- attr(dadm, "expand", exact = TRUE)
+  if(is.null(dadm$accumulator) && !is.null(dadm$lR)){
+    dadm$accumulator <- as.character(dadm$lR)
+  }
+  dadm <- AccumulatR::prepare_data(model_spec, dadm)
+  if(!is.null(expand)) attr(dadm, "expand") <- expand
   ctx <- make_context(model_spec)
   bridge <- model_list$accumulatr_bridge
+  ctx$native_ctx <- ctx$cpp$native
   ctx$bridge <- accumulatr_build_runtime_recipe(model_spec, dadm, bridge)
   attr(dadm, "AccumulatR_context") <- ctx
   return(dadm)

@@ -509,9 +509,6 @@ NumericVector calc_ll_oo(NumericMatrix particle_matrix, DataFrame data, NumericV
       make_accumulatr_bridge_recipe(Rcpp::List(likelihood_ctx["bridge"]), keep_names);
 
     IntegerVector expand = data.attr("expand");
-    constexpr double rel_tol = 1e-5;
-    constexpr double abs_tol = 1e-6;
-    constexpr int max_depth = 12;
 
     for (int i = 0; i < n_particles; ++i) {
       if (i > 0) {
@@ -535,10 +532,7 @@ NumericVector calc_ll_oo(NumericMatrix particle_matrix, DataFrame data, NumericV
                                       data,
                                       is_ok,
                                       expand,
-                                      min_ll,
-                                      rel_tol,
-                                      abs_tol,
-                                      max_depth);
+                                      min_ll);
     }
   } else if(type == "DDM"){
     IntegerVector expand = data.attr("expand");
