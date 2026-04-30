@@ -178,7 +178,10 @@ gibbs_step_infnt_factor <- function(sampler, alpha){
   last <- last_sample_infnt_factor(sampler$samples)
   hyper <- attributes(sampler)
   prior <- sampler$prior
-
+  if (length(dim(alpha)) != 2L) {
+    alpha <- matrix(alpha, nrow = sum(!sampler$nuisance), ncol = sampler$n_subjects)
+    rownames(alpha) <- sampler$par_names[!sampler$nuisance]
+  }
   # extract previous values (for ease of reading)
   alpha_t <- t(alpha)
   n_subjects <- sampler$n_subjects
