@@ -258,6 +258,51 @@ test_that("delta_Rcpp", {
   expect_snapshot(matrix(apply_kernel(kernel_pars, emc, mode="Rcpp_oo")))
 })
 
+
+
+## rescorla-wagner -- ugly workaround
+trend_delta <- make_trend(par_names = "m",
+                          cov_names = list(c('covariate1','covariate2','covariate3','covariate4')),
+                          kernels = 'delta',
+                          base='add',
+                          kernel_args=list(q_reset_column='do_reset'))
+
+this_design <- make_tiny_design(trend_delta)
+p_vector <- sampled_pars(this_design, doMap = FALSE)  # no kernel pars
+covariate_matrix <- matrix(c(NA,NA,  1,  1,
+                             1,  1, NA, NA,
+                             NA, 0,  0, NA,
+                             1,  NA, NA, 1,
+                             0,  0,  0,  0), nrow=5, byrow=TRUE)
+covariates <- data.frame(covariate_matrix)
+colnames(covariates) <- paste0('covariate', 1:4)
+dat <- make_data(p_vector, this_design, n_trials = 5, covariates = covariates)
+dat$do_reset <- rep(FALSE, 5)
+trend_rw <- make_trend(par_names = "m",
+                       cov_names = list(c('covariate1','covariate2','covariate3','covariate4')),
+                       kernels = 'rescorlawagner', base='add',
+                       kernel_args=list(q_reset_column='do_reset'))
+this_design <- make_tiny_design(trend_rw)
+emc <- make_emc(dat, this_design, type='single')
+
+kernel_pars <- c('m.q0'=0, 'm.alpha'=0.2)
+apply_kernel(kernel_pars, emc, mode="Rcpp_oo")
+
+#covariate1 <- c(1, 1, 1, 1, 1)
+#emc <- make_minimal_emc(trend_delta, covariate1 = covariate1, do_reset=c(F,F,T,F,F))
+# expected_output <- matrix(c(0, 0.2, 0, 0.2, 0.36)) # manually computed for this specific covariate + parameter vector
+# all.equal(matrix(apply_kernel(kernel_pars, emc, mode="R")), matrix(expected_output))
+# all.equal(matrix(apply_kernel(kernel_pars, emc, mode="Rcpp")), matrix(expected_output))
+all.equal(matrix(apply_kernel(kernel_pars, emc, mode="Rcpp_oo")), matrix(expected_output))
+# test_that("delta_R", {
+#   expect_snapshot(matrix(apply_kernel(kernel_pars, emc, mode="R")))
+# })
+# test_that("delta_Rcpp", {
+#   expect_snapshot(matrix(apply_kernel(kernel_pars, emc, mode="Rcpp_oo")))
+# })
+
+
+
 #
 # # Custom kernel -- only C -------------------------------------------------
 # # This cannot be part of that-test :-( but we can still use it for manual tests...

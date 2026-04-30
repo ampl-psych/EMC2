@@ -290,7 +290,7 @@ make_trend <- function(par_names, cov_names = NULL, kernels, bases = NULL,
   }
 
   # ---- Validate kernel_args entries for known kernels ----
-  delta_kernels <- c("delta", "delta2kernel", "delta2lr")
+  delta_kernels <- c("delta", "delta2kernel", "delta2lr", 'rescorlawagner')
   for (i in seq_along(par_names)) {
     ka <- kernel_args[[i]]
     if (is.null(ka)) next
@@ -384,7 +384,7 @@ make_trend <- function(par_names, cov_names = NULL, kernels, bases = NULL,
     trend$phase <- phase[i]
     trend$kernel_args <- kernel_args[[i]]
     if(is.null(ffill_na[i])) {
-      if(trend$kernel %in% c('delta', 'delta2kernel', 'delta2lr')) trend$ffill_na <- TRUE else trend$ffill_na <- FALSE
+      if(trend$kernel %in% c('delta', 'delta2kernel', 'delta2lr', 'rescorlawagner')) trend$ffill_na <- TRUE else trend$ffill_na <- FALSE
     } else {
       trend$ffill_na <- ffill_na[i]
     }
@@ -1044,7 +1044,7 @@ has_delta_rules <- function(model) {
   if(is.null(trend)) return(FALSE)
 
   for(trend_n in 1:length(trend)) {
-    if(trend[[trend_n]]$kernel %in% c('delta', 'delta2kernel', 'delta2lr')) return(TRUE)
+    if(trend[[trend_n]]$kernel %in% c('delta', 'delta2kernel', 'delta2lr', 'rescorlawagner')) return(TRUE)
   }
   return(FALSE)
 }
@@ -1171,8 +1171,18 @@ get_kernels <- function() {
               transforms = list(func = list("q0" = "identity",
                                             "alphaPos" = "pnorm",
                                             "alphaNeg" = "pnorm")),
-              bases = base_2p)
-             )
+              bases = base_2p),
+  rescorlawagner = list(description = paste(
+    "Rescorla Wagner delta rule: k = q[i].\n",
+    "         Like the standard delta rule, but with compound prediction errors:\n",
+    "         PE = (r - sum(Q)) - with sum over all active covariates on a trial.\n",
+    "         Parameters: q0 (initial value), alpha (learning rate),\n"
+  ),
+  default_pars = c("q0", "alpha"),
+  transforms = list(func = list("q0" = "identity",
+                                "alpha" = "pnorm")),
+  bases = base_2p)
+  )
   kernels
 }
 
@@ -1181,7 +1191,7 @@ format_kernel <- function(kernel, kernel_pars=NULL) {
   kernels <- get_kernels()
   eq_string <- kernels[[kernel]]$description
   eq_string <- strsplit(eq_string, ': k = ')[[1]][[2]]
-  if(kernel %in% c('delta', 'delta2kernel', 'delta2lr')) eq_string <- strsplit(eq_string, '\\.')[[1]][[1]]
+  if(kernel %in% c('delta', 'delta2kernel', 'delta2lr', 'rescorlawagner')) eq_string <- strsplit(eq_string, '\\.')[[1]][[1]]
   if(kernel %in% c('exp_incr', 'pow_incr', 'poly1', 'poly2', 'poly3', 'poly4')) eq_string <- paste0('(', eq_string, ')')
 
   # add placeholders
