@@ -106,7 +106,7 @@ test_that("PHSDM simulates and initializes", {
   expect_snapshot(init_chains(phsdm_emc, particles = 10, cores_per_chain = 1)[[1]]$samples)
 })
 
-test_that("circular family likelihoods are normalized on observed angle coordinates", {
+test_that("circular family likelihoods are normalized on surface measure", {
   rt <- 0.9
   tt <- 0.7
 
@@ -123,7 +123,7 @@ test_that("circular family likelihoods are normalized on observed angle coordina
   sdm_mass <- trapz1d(sdm_r, vapply(sdm_r, function(r1) {
     dvals <- dSDM(rep(rt, length(sdm_r2)), rep(r1, length(sdm_r2)), sdm_r2, repeat_pars(sdm_nat, length(sdm_r2)))
     trapz1d(sdm_r2, dvals)
-  }, numeric(1)))
+  }, numeric(1)) * sin(sdm_r))
   expect_equal(sdm_mass, blended_sdm_fpt(tt, a = 1, sigma = 1), tolerance = 1e-4)
 
   hsdm_nat <- matrix(c(0, 0.32, 0.57, 0.66, 1.0, 0.2, 1.0, 0), nrow = 1)
@@ -135,14 +135,14 @@ test_that("circular family likelihoods are normalized on observed angle coordina
     trapz1d(hsdm_r2, vapply(hsdm_r2, function(r2) {
       dvals <- dHSDM(rep(rt, length(hsdm_r3)), rep(r1, length(hsdm_r3)), rep(r2, length(hsdm_r3)), hsdm_r3, repeat_pars(hsdm_nat, length(hsdm_r3)))
       trapz1d(hsdm_r3, dvals)
-    }, numeric(1)))
+    }, numeric(1)) * sin(r1)^2 * sin(hsdm_r2))
   }, numeric(1)))
   expect_equal(hsdm_mass, blended_hsdm_fpt(tt, a = 1, sigma = 1), tolerance = 1e-4)
 
   psdm_nat <- matrix(c(0, 0.38, 1.0, 0.2, 1.0, 0), nrow = 1)
   colnames(psdm_nat) <- c("v", "theta1", "a", "t0", "s", "sv")
   psdm_grid <- seq(0, pi, length.out = 1201)
-  psdm_mass <- trapz1d(psdm_grid, dPSDM(rep(rt, length(psdm_grid)), psdm_grid, repeat_pars(psdm_nat, length(psdm_grid))))
+  psdm_mass <- trapz1d(psdm_grid, dPSDM(rep(rt, length(psdm_grid)), psdm_grid, repeat_pars(psdm_nat, length(psdm_grid))) * sin(psdm_grid))
   expect_equal(psdm_mass, blended_sdm_fpt(tt, a = 1, sigma = 1), tolerance = 1e-4)
 
   phsdm_nat <- matrix(c(0, 0.33, 0.58, 1.0, 0.2, 1.0, 0), nrow = 1)
@@ -151,7 +151,7 @@ test_that("circular family likelihoods are normalized on observed angle coordina
   phsdm_r2 <- seq(0, pi, length.out = 100)
   phsdm_mass <- trapz1d(phsdm_r, vapply(phsdm_r, function(r1) {
     dvals <- dPHSDM(rep(rt, length(phsdm_r2)), rep(r1, length(phsdm_r2)), phsdm_r2, repeat_pars(phsdm_nat, length(phsdm_r2)))
-    trapz1d(phsdm_r2, dvals)
+    trapz1d(phsdm_r2, dvals * sin(r1)^2 * sin(phsdm_r2))
   }, numeric(1)))
   expect_equal(phsdm_mass, blended_hsdm_fpt(tt, a = 1, sigma = 1), tolerance = 1e-4)
 })
