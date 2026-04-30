@@ -12,6 +12,9 @@ plot_ss_if(
   factors = NULL,
   within_plot = NULL,
   use_global_quantiles = FALSE,
+  ssd_binning = c("quantile", "value"),
+  ssd_round = NULL,
+  on_duplicate_quantiles = c("error", "value"),
   subject = NULL,
   quants = c(0.025, 0.975),
   functions = NULL,
@@ -39,9 +42,17 @@ plot_ss_if(
 
 \item{within_plot}{Character indicating factor for which inhibition functions are plotted in the same panel}
 
-\item{use_global_quantiles}{If set to \code{TRUE}, SSDs are pooled over participants before calculating percentiles, so
+\item{use_global_quantiles}{If set to \code{TRUE}, SSDs are pooled over participants before calculating quantiles, so
 the same absolute SSD range is used to get Pr(R) for each participant,
 and then these probabilities are averaged over participants.}
+
+\item{ssd_binning}{Character. \code{"quantile"} uses SSD quantile bins; \code{"value"} groups by SSD values.}
+
+\item{ssd_round}{Optional numeric bin width for rounding SSD values before value-based binning.}
+
+\item{on_duplicate_quantiles}{Character. What to do when quantile breaks are duplicated:
+\code{"error"} stops with a message; \code{"value"} falls back to value-based SSD bins
+for all plotted sources.}
 
 \item{subject}{Subset the data to a single subject (by index or name).}
 
@@ -77,7 +88,7 @@ SSD bins/categories. Optionally, posterior and/or prior predictive
 inhibition functions can be overlaid.
 }
 \details{
-Per default, the SSD-categories are defined in terms of the percentiles of the
+Per default, the SSD-categories are defined in terms of the quantiles of the
 SSD distribution for each participant, and then averaged over participants (see \code{use_global_quantiles}).
 
 If credible regions are not plotted, the data is plotted with error bars

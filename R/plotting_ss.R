@@ -65,8 +65,8 @@ draw_stop_signal_se <- function(x, y, se) {
 }
 
 has_duplicate_individual_ssd_quantiles <- function(df, probs, within_plot = NULL) {
-  # Individual percentile bins are computed separately within each panel,
-  # within-plot level, and subject. If any subject has collapsed percentile
+  # Individual quantile bins are computed separately within each panel,
+  # within-plot level, and subject. If any subject has collapsed quantile
   # breaks, cut() cannot form the requested bins.
   groups <- split(df, df$group_key)
 
@@ -89,7 +89,7 @@ has_duplicate_individual_ssd_quantiles <- function(df, probs, within_plot = NULL
 }
 
 has_duplicate_global_ssd_quantiles <- function(df, probs) {
-  # Global percentile bins pool SSDs within a plotted source. Duplicate breaks
+  # Global quantile bins pool SSDs within a plotted source. Duplicate breaks
   # indicate that the requested quantile grid is too fine for the SSD design.
   SSD <- df$SSD[is.finite(df$SSD)]
   if (!length(SSD)) return(FALSE)
@@ -112,7 +112,7 @@ draw_stop_signal_x_axis <- function(tick_data, bin_mode, global_title, participa
   if (identical(bin_mode, "individual_quantile") && !is.null(probs)) {
     # Individual quantile axes should be at probs[-1]. If the data reaching the
     # axis has absolute SSD positions instead, draw a value axis to avoid
-    # misleading percentile labels.
+    # misleading quantile-bin labels.
     expected_x <- probs[-1]
     if (length(tick_data$x_plot) != length(expected_x) ||
         !isTRUE(all.equal(unname(tick_data$x_plot), unname(expected_x), tolerance = 1e-8))) {
@@ -160,7 +160,7 @@ draw_stop_signal_x_axis <- function(tick_data, bin_mode, global_title, participa
 #' SSD bins/categories. Optionally, posterior and/or prior predictive
 #' inhibition functions can be overlaid.
 #'
-#' Per default, the SSD-categories are defined in terms of the percentiles of the
+#' Per default, the SSD-categories are defined in terms of the quantiles of the
 #' SSD distribution for each participant, and then averaged over participants (see `use_global_quantiles`).
 #'
 #' If credible regions are not plotted, the data is plotted with error bars
@@ -172,7 +172,7 @@ draw_stop_signal_x_axis <- function(tick_data, bin_mode, global_title, participa
 #' @param probs Numeric vector of probabilities with values on the unit interval that defines SSD bins/categories.
 #' @param factors Character vector of factor names to aggregate over; defaults to plotting full data set ungrouped by factors if NULL.
 #' @param within_plot Character indicating factor for which inhibition functions are plotted in the same panel
-#' @param use_global_quantiles If set to `TRUE`, SSDs are pooled over participants before calculating percentiles, so
+#' @param use_global_quantiles If set to `TRUE`, SSDs are pooled over participants before calculating quantiles, so
 #' the same absolute SSD range is used to get Pr(R) for each participant,
 #' and then these probabilities are averaged over participants.
 #' @param ssd_binning Character. `"quantile"` uses SSD quantile bins; `"value"` groups by SSD values.
@@ -535,7 +535,7 @@ plot_ss_if <- function(input,
         if (!is.null(tick_group)) {
           tick_data <- tick_group[[names(tick_group)[1]]]
           draw_stop_signal_x_axis(tick_data, source_bin_modes[sname],
-                                  "Global SSD Bin (sec.)", "Participant SSD Bin (%)",
+                                  "Global SSD Quantile Bin (sec.)", "Participant SSD Quantile Bin (%)",
                                   probs = probs)
           axis_drawn <- TRUE
           break
@@ -552,7 +552,7 @@ plot_ss_if <- function(input,
               tick_data$ssd <- tick_labels
             }
             draw_stop_signal_x_axis(tick_data, source_bin_modes[sname],
-                                    "Global SSD Bin (sec.)", "Participant SSD Bin (%)",
+                                    "Global SSD Quantile Bin (sec.)", "Participant SSD Quantile Bin (%)",
                                     probs = probs)
             axis_drawn <- TRUE
             break
@@ -821,7 +821,7 @@ get_response_probability_by_ssd_value <- function(x, group_factor, probs, dots) 
 #' SSD bins/categories for each level of specified factors of stop-signal data.
 #' Optionally, posterior and/or prior predictive inhibition functions can be overlaid.
 #'
-#' Per default, SSDs are pooled over participants before calculating percentiles, so
+#' Per default, SSDs are pooled over participants before calculating quantiles, so
 #' the same absolute SSD range is used to get mean SRRT for each participant,
 #' and then these probabilities are averaged over participants (see `use_global_quantiles`).
 #'
@@ -834,7 +834,7 @@ get_response_probability_by_ssd_value <- function(x, group_factor, probs, dots) 
 #' @param probs Numeric vector of probabilities with values in 0,1 that defines SSD bins/categories.
 #' @param factors Character vector of factor names to aggregate over; defaults to plotting full data set ungrouped by factors if NULL.
 #' @param within_plot Character indicating factor for which inhibition functions are plotted in the same panel
-#' @param use_global_quantiles If set to FALSE, the SSD-categories are defined in terms of the percentiles of the
+#' @param use_global_quantiles If set to FALSE, the SSD-categories are defined in terms of the quantiles of the
 #' SSD distribution for each participant, and then averaged over participants.
 #' @param ssd_binning Character. `"quantile"` uses SSD quantile bins; `"value"` groups by SSD values.
 #' @param ssd_round Optional numeric bin width for rounding SSD values before value-based binning.
@@ -1198,7 +1198,7 @@ plot_ss_srrt <- function(input,
         if (!is.null(tick_group)) {
           tick_data <- tick_group[[names(tick_group)[1]]]
           draw_stop_signal_x_axis(tick_data, source_bin_modes[sname],
-                                  "Global SSD Bin (sec.)", "Participant SSD Percentile Bin (%)",
+                                  "Global SSD Quantile Bin (sec.)", "Participant SSD Quantile Bin (%)",
                                   probs = probs)
           break
         }
@@ -1214,7 +1214,7 @@ plot_ss_srrt <- function(input,
               tick_data$ssd <- tick_labels
             }
             draw_stop_signal_x_axis(tick_data, source_bin_modes[sname],
-                                    "Global SSD Bin (sec.)", "Participant SSD Percentile Bin (%)",
+                                    "Global SSD Quantile Bin (sec.)", "Participant SSD Quantile Bin (%)",
                                     probs = probs)
             break
           }
