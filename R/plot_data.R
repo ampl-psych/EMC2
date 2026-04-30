@@ -107,6 +107,9 @@ prep_data_plot <- function(input, post_predict, prior_predict, to_plot, limits,
   }
   datasets <- list()
   sources <- c()
+  plot_data <- "data" %in% to_plot
+  plot_posterior <- "posterior" %in% to_plot
+  plot_prior <- "prior" %in% to_plot
   # Check for regular input
   if(!is.data.frame(input) && !inherits(input, "emc")){
     if(is.null(names(input))) stop("If input is a list, it must have names")
@@ -118,24 +121,29 @@ prep_data_plot <- function(input, post_predict, prior_predict, to_plot, limits,
     input <- list(data = input)
   }
   # Check for post_predict and prior_predict
-  if(!is.data.frame(post_predict) && is.list(post_predict)){
+  if(plot_posterior && !is.data.frame(post_predict) && is.list(post_predict)){
     if(is.null(names(post_predict))) stop("If post_predict is a list, it must have names")
     datasets[names(post_predict)] <- post_predict
     sources[names(post_predict)] <- 'posterior'
-  } else if(!is.null(post_predict)){
+  } else if(plot_posterior && !is.null(post_predict)){
     datasets[['posterior']] <- post_predict
     sources['posterior'] <- 'posterior'
-  } else{
+    post_predict <- list(post_predict)
+  }
+  if (!plot_posterior || !is.list(post_predict) || is.data.frame(post_predict) || length(post_predict) != length(input)) {
     post_predict <- vector("list", length(input))
   }
-  if(!is.data.frame(prior_predict)  && is.list(prior_predict)){
+
+  if(plot_prior && !is.data.frame(prior_predict)  && is.list(prior_predict)){
     if(is.null(names(prior_predict))) stop("If prior_predict is a list, it must have names")
     datasets[names(prior_predict)] <- prior_predict
     sources[names(prior_predict)] <- 'prior'
-  } else if(!is.null(prior_predict)){
+  } else if(plot_prior && !is.null(prior_predict)){
     datasets[['prior']] <- prior_predict
     sources['prior'] <- 'prior'
-  }  else{
+    prior_predict <- list(prior_predict)
+  }
+  if (!plot_prior || !is.list(prior_predict) || is.data.frame(prior_predict) || length(prior_predict) != length(input)) {
     prior_predict <- vector("list", length(input))
   }
 
@@ -148,13 +156,15 @@ prep_data_plot <- function(input, post_predict, prior_predict, to_plot, limits,
       functions <- c(get_emc_functions(input[[k]]), functions)
     } else all_data[names(input)[k]] <- input[k]
   }
-  if(length(unique(all_data)) == 1){
-    all_data <- all_data[1]
-    datasets['data'] <- all_data
-    sources['data'] <- 'data'
-  } else{
-    datasets[names(input)] <- all_data
-    sources[names(input)] <- 'data'
+  if(plot_data){
+    if(length(unique(all_data)) == 1){
+      all_data <- all_data[1]
+      datasets['data'] <- all_data
+      sources['data'] <- 'data'
+    } else{
+      datasets[names(input)] <- all_data
+      sources[names(input)] <- 'data'
+    }
   }
   # Check if posterior or prior predictives need to be generated
   for(k in 1:length(input)){
@@ -1585,4 +1595,3 @@ plot_caf <- function(input,
 
   invisible(NULL)
 }
-
