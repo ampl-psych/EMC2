@@ -343,8 +343,9 @@ plot_ss_if <- function(input,
               } else {
                 # Subject-specific quantiles → label with percentages
                 up <- round(tick_data$x_plot * 100)
-                quantile_labels <- unlist(lapply(strsplit(
-                  paste0("(",paste(c(0,up[-length(up)]),up,sep=","),"]"),","),
+                intervals <- paste0("(", paste(c(0, up[-length(up)]), up, sep = ","), "]")
+                intervals[1] <- sub("^\\(", "[", intervals[1])
+                quantile_labels <- unlist(lapply(strsplit(intervals, ","),
                                           function(x) paste0(x[1],",\n",x[2])))
                 axis(1,
                      at = tick_data$x_plot,
@@ -895,8 +896,9 @@ plot_ss_srrt <- function(input,
               } else {
                 # Subject-specific quantiles --> label with percentages
                 up <- round(tick_data$x_plot * 100)
-                quantile_labels <- unlist(lapply(strsplit(
-                  paste0("(",paste(c(0,up[-length(up)]),up,sep=","),"]"),","),
+                intervals <- paste0("(", paste(c(0, up[-length(up)]), up, sep = ","), "]")
+                intervals[1] <- sub("^\\(", "[", intervals[1])
+                quantile_labels <- unlist(lapply(strsplit(intervals, ","),
                                           function(x) paste0(x[1],",\n",x[2])))
                 axis(1,
                      at = tick_data$x_plot,
