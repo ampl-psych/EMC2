@@ -7,6 +7,14 @@ get_stop_signal_postn_quantiles <- function(postn_list, level, value_col, quants
   if (!length(valid_summaries)) return(NULL)
 
   x_plot <- sort(unique(unlist(lapply(valid_summaries, function(x) x$x_plot))))
+  ssd_labels <- NULL
+  if (all(vapply(valid_summaries, function(x) "ssd" %in% names(x), logical(1)))) {
+    ssd_lookup <- do.call(rbind, lapply(valid_summaries, function(x) {
+      unique(x[, c("x_plot", "ssd"), drop = FALSE])
+    }))
+    ssd_lookup <- ssd_lookup[!duplicated(ssd_lookup$x_plot), , drop = FALSE]
+    ssd_labels <- ssd_lookup$ssd[match(x_plot, ssd_lookup$x_plot)]
+  }
   probs <- sort(c(quants, 0.5))
 
   y_mat <- do.call(cbind, lapply(draw_summaries, function(x) {
@@ -25,7 +33,37 @@ get_stop_signal_postn_quantiles <- function(postn_list, level, value_col, quants
     }
   })
 
-  rbind(qy, x_plot)
+  out <- rbind(qy, x_plot)
+  if (!is.null(ssd_labels)) colnames(out) <- ssd_labels
+  out
+}
+
+draw_stop_signal_x_axis <- function(tick_data, use_global_quantiles, global_title, participant_title) {
+  if (is.null(tick_data) || !"x_plot" %in% names(tick_data)) return(invisible(NULL))
+
+  if (use_global_quantiles) {
+    if (!"ssd" %in% names(tick_data)) return(invisible(NULL))
+    quantile_labels <- unlist(lapply(strsplit(tick_data$ssd,","),
+                                     function(x) paste0(x[1],",\n",x[2])))
+    axis(1,
+         at = tick_data$x_plot,
+         labels = quantile_labels,
+         cex.axis = 0.7)
+    title(xlab = global_title, line = 2)
+  } else {
+    up <- round(tick_data$x_plot * 100)
+    intervals <- paste0("(", paste(c(0, up[-length(up)]), up, sep = ","), "]")
+    intervals[1] <- sub("^\\(", "[", intervals[1])
+    quantile_labels <- unlist(lapply(strsplit(intervals, ","),
+                                     function(x) paste0(x[1],",\n",x[2])))
+    axis(1,
+         at = tick_data$x_plot,
+         labels = quantile_labels,
+         cex.axis = 0.7)
+    title(xlab = participant_title, line = 2)
+  }
+
+  invisible(NULL)
 }
 
 #' Plot Inhibition Functions
@@ -112,7 +150,7 @@ plot_ss_if <- function(input,
 
   # keep track of a global maximum in the vertical dimension
   # so that we can set a consistent y-lim across all panels
-  y_max <- 1
+  y_max <- 0
   y_min <- 0
 
   x_min <- 0
@@ -250,7 +288,7 @@ plot_ss_if <- function(input,
 
   # define a global y-limit (with a bit of headroom)
   if (!is.finite(y_max) || y_max <= 0) y_max <- 1
-  ylim <- c(0, y_max*1.5)
+  ylim <- c(0, min(1, y_max + 0.05))
 
   if (!is.finite(x_min) || !is.finite(x_max) || x_min >= x_max) {
     xlim <- NULL  # let R handle it if bad limits
@@ -324,38 +362,6 @@ plot_ss_if <- function(input,
             }
           }
 
-          # Add x-axis label and tick labels (after drawing data points)
-          if (styp == "data" && !is.null(p_resp_list[[sname]][[group_key]])) {
-            first_level <- names(p_resp_list[[sname]][[group_key]])[1]
-            tick_data <- p_resp_list[[sname]][[group_key]][[first_level]]
-
-            if (!is.null(tick_data) && "x_plot" %in% names(tick_data)) {
-              if (use_global_quantiles) {
-                # Global bins → label with SSD values
-                quantile_labels <- unlist(lapply(strsplit(tick_data$ssd,","),
-                                          function(x) paste0(x[1],",\n",x[2])))
-                axis(1,
-                     at = tick_data$x_plot,
-                     labels = quantile_labels,
-                     cex.axis = 0.7)
-                title(xlab = "Global SSD Bin (sec.)", line = 2)
-
-              } else {
-                # Subject-specific quantiles → label with percentages
-                up <- round(tick_data$x_plot * 100)
-                intervals <- paste0("(", paste(c(0, up[-length(up)]), up, sep = ","), "]")
-                intervals[1] <- sub("^\\(", "[", intervals[1])
-                quantile_labels <- unlist(lapply(strsplit(intervals, ","),
-                                          function(x) paste0(x[1],",\n",x[2])))
-                axis(1,
-                     at = tick_data$x_plot,
-                     labels = quantile_labels,
-                     cex.axis = 0.7)
-                title(xlab = "Participant SSD Bin (%)", line = 2)
-              }
-            }
-          }
-
         } else {
           # multi draws => p_resp_quants_list
           if (!is.null(p_resp_quants_list[[sname]])) {
@@ -389,6 +395,36 @@ plot_ss_if <- function(input,
                 ilev <- ilev+1
               }
             }
+          }
+        }
+      }
+    }
+
+    axis_drawn <- FALSE
+    for (k in seq_along(data_sources)) {
+      sname <- names(sources)[k]
+      if (!("postn" %in% names(data_sources[[k]]))) {
+        tick_group <- p_resp_list[[sname]][[group_key]]
+        if (!is.null(tick_group)) {
+          tick_data <- tick_group[[names(tick_group)[1]]]
+          draw_stop_signal_x_axis(tick_data, use_global_quantiles,
+                                  "Global SSD Bin (sec.)", "Participant SSD Bin (%)")
+          axis_drawn <- TRUE
+          break
+        }
+      } else {
+        tick_group <- p_resp_quants_list[[sname]][[group_key]]
+        if (!is.null(tick_group)) {
+          tick_mat <- tick_group[[names(tick_group)[1]]]
+          if (!is.null(tick_mat)) {
+            tick_data <- data.frame(x_plot = unname(tick_mat[nrow(tick_mat), ]))
+            if (use_global_quantiles) {
+              tick_data$ssd <- names(tick_mat[nrow(tick_mat), ])
+            }
+            draw_stop_signal_x_axis(tick_data, use_global_quantiles,
+                                    "Global SSD Bin (sec.)", "Participant SSD Bin (%)")
+            axis_drawn <- TRUE
+            break
           }
         }
       }
@@ -662,7 +698,7 @@ plot_ss_srrt <- function(input,
 
   # keep track of a global maximum in the vertical dimension
   # so a consistent y-lim across all panels can be set
-  y_max <- 1
+  y_max <- -Inf
   y_min <- Inf
 
   x_min <- 0
@@ -803,14 +839,14 @@ plot_ss_srrt <- function(input,
   if (!is.finite(y_min) || !is.finite(y_max) || y_min >= y_max) {
     ylim <- NULL
   } else {
-    y_buffer <- 0.5 * (y_max - y_min)
+    y_buffer <- 0.05 * (y_max - y_min)
     ylim <- c(y_min - y_buffer, y_max + y_buffer)
   }
 
   if (!is.finite(x_min) || !is.finite(x_max) || x_min >= x_max) {
     xlim <- NULL  # let R handle it if bad limits
   } else {
-    x_buffer <- 0.1 * (x_max - x_min)
+    x_buffer <- 0.05 * (x_max - x_min)
     xlim <- c(x_min - x_buffer, x_max + x_buffer)
   }
 
@@ -878,37 +914,6 @@ plot_ss_srrt <- function(input,
             }
           }
 
-          # Add x-axis label and tick labels (after drawing data points)
-          if (styp == "data" && !is.null(p_resp_list[[sname]][[group_key]])) {
-            first_level <- names(p_resp_list[[sname]][[group_key]])[1]
-            tick_data <- p_resp_list[[sname]][[group_key]][[first_level]]
-
-            if (!is.null(tick_data) && "x_plot" %in% names(tick_data)) {
-              if (use_global_quantiles) {
-                # Global bins --> label with SSD values
-                quantile_labels <- unlist(lapply(strsplit(tick_data$ssd,","),
-                                          function(x) paste0(x[1],",\n",x[2])))
-                axis(1,
-                     at = tick_data$x_plot,
-                     labels = quantile_labels,
-                     cex.axis = 0.7)
-                title(xlab = "Global SSD Bin (sec.)", line = 2)
-              } else {
-                # Subject-specific quantiles --> label with percentages
-                up <- round(tick_data$x_plot * 100)
-                intervals <- paste0("(", paste(c(0, up[-length(up)]), up, sep = ","), "]")
-                intervals[1] <- sub("^\\(", "[", intervals[1])
-                quantile_labels <- unlist(lapply(strsplit(intervals, ","),
-                                          function(x) paste0(x[1],",\n",x[2])))
-                axis(1,
-                     at = tick_data$x_plot,
-                     labels = quantile_labels,
-                     cex.axis = 0.7)
-                title(xlab = "Participant SSD Percentile Bin (%)", line = 2)
-              }
-            }
-          }
-
         } else {
           # multi draws => p_resp_quants_list
           if (!is.null(p_resp_quants_list[[sname]])) {
@@ -941,6 +946,33 @@ plot_ss_srrt <- function(input,
                 ilev <- ilev+1
               }
             }
+          }
+        }
+      }
+    }
+
+    for (k in seq_along(data_sources)) {
+      sname <- names(sources)[k]
+      if (!("postn" %in% names(data_sources[[k]]))) {
+        tick_group <- p_resp_list[[sname]][[group_key]]
+        if (!is.null(tick_group)) {
+          tick_data <- tick_group[[names(tick_group)[1]]]
+          draw_stop_signal_x_axis(tick_data, use_global_quantiles,
+                                  "Global SSD Bin (sec.)", "Participant SSD Percentile Bin (%)")
+          break
+        }
+      } else {
+        tick_group <- p_resp_quants_list[[sname]][[group_key]]
+        if (!is.null(tick_group)) {
+          tick_mat <- tick_group[[names(tick_group)[1]]]
+          if (!is.null(tick_mat)) {
+            tick_data <- data.frame(x_plot = unname(tick_mat[nrow(tick_mat), ]))
+            if (use_global_quantiles) {
+              tick_data$ssd <- names(tick_mat[nrow(tick_mat), ])
+            }
+            draw_stop_signal_x_axis(tick_data, use_global_quantiles,
+                                    "Global SSD Bin (sec.)", "Participant SSD Percentile Bin (%)")
+            break
           }
         }
       }
