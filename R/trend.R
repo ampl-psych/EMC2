@@ -57,6 +57,15 @@ run_kernel_custom <- function(trend_pars = NULL, input, funptr, at_factor = NULL
 #'        If `TRUE`, missing values are forward-filled using the last known non-`NA` value after
 #'        applying the kernel. If `FALSE`, trials with missing covariates contribute `0` instead.
 #'        The default (NULL) is interpreted as `TRUE` for delta-rule models and `FALSE` otherwise.
+#' @param kernel_args Optional named list of kernel-specific arguments, aligned with \code{par_names}.
+#'   Can be \code{NULL} (no arguments) or a single named list applied to all parameters.
+#'   Currently supported arguments:
+#'   \describe{
+#'     \item{\code{q_reset_column}}{For delta-family kernels (\code{"delta"}, \code{"delta2kernel"},
+#'       \code{"delta2lr"}) only. Name of a logical or integer column in \code{data} indicating
+#'       trials on which the Q-value should be reset to \code{q0} before the prediction error
+#'       is computed. \code{TRUE}/\code{1} triggers a reset; \code{FALSE}/\code{0} does not.}
+#'   }
 #'
 #' @return A list containing the trend specifications for each parameter
 #' @export
@@ -206,7 +215,8 @@ make_trend <- function(par_names, cov_names = NULL, kernels, bases = NULL,
                        par_input = NULL, at = 'lR',
                        maps = NULL,
                        custom_trend = NULL,
-                       ffill_na = NULL){
+                       ffill_na = NULL,
+                       kernel_args = NULL){
   if(!(length(par_names) == length(kernels))){
     stop("Make sure that par_names and kernels have the same length")
   }
@@ -260,6 +270,42 @@ make_trend <- function(par_names, cov_names = NULL, kernels, bases = NULL,
   if(length(maps) > 0) {
     maps <- normalize_maps(maps, par_names)
   }
+
+  # Normalize kernel_args
+  if (is.null(kernel_args)) {
+    kernel_args <- rep(list(NULL), length(par_names))
+  } else if (!is.list(kernel_args)) {
+    stop("kernel_args must be NULL or a list")
+  } else {
+    # Distinguish list(q_reset_column='x')  [flat, single-kernel args]
+    # from           list(list(...), list(...))  [already per-kernel]
+    # Heuristic: if the top-level list has any named non-list elements,
+    # or all elements are named and none are lists, treat as a single entry.
+    is_flat <- !is.null(names(kernel_args)) && !any(vapply(kernel_args, is.list, logical(1)))
+    if (is_flat) {
+      kernel_args <- rep(list(kernel_args), length(par_names))
+    } else if (length(kernel_args) != length(par_names)) {
+      stop("kernel_args must be NULL, a single named list, or a list of lists aligned with par_names")
+    }
+  }
+
+  # ---- Validate kernel_args entries for known kernels ----
+  delta_kernels <- c("delta", "delta2kernel", "delta2lr")
+  for (i in seq_along(par_names)) {
+    ka <- kernel_args[[i]]
+    if (is.null(ka)) next
+    if (!is.list(ka)) stop("Each kernel_args entry must be a named list or NULL")
+
+    # q_reset_column is only meaningful for delta-family kernels
+    if (!is.null(ka$q_reset_column) && !(kernels[i] %in% delta_kernels)) {
+      warning(sprintf(
+        "kernel_args$q_reset_column specified for par '%s' but kernel '%s' is not a delta kernel; ignored.",
+        par_names[i], kernels[i]
+      ))
+      kernel_args[[i]]$q_reset_column <- NULL
+    }
+  }
+
 
   trends_out <- list()
   all_trend_pnames <- c()
@@ -336,6 +382,7 @@ make_trend <- function(par_names, cov_names = NULL, kernels, bases = NULL,
     trend$covariate <- unlist(cov_names[i])
     trend$par_input <- unlist(par_input[[i]])
     trend$phase <- phase[i]
+    trend$kernel_args <- kernel_args[[i]]
     if(is.null(ffill_na[i])) {
       if(trend$kernel %in% c('delta', 'delta2kernel', 'delta2lr')) trend$ffill_na <- TRUE else trend$ffill_na <- FALSE
     } else {

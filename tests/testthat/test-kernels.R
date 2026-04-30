@@ -7,7 +7,7 @@ make_tiny_design <- function(trend) {
                 model = LNR))
 }
 
-make_minimal_emc <- function(trend, n_trials=5, covariate1=1:5) {
+make_minimal_emc <- function(trend, n_trials=5, covariate1=1:5, ...) {
   ## This *ONLY* creates an EMC object with the covariates. Kernel pars are ignored
   this_design <- make_tiny_design(trend)
   p_vector <- sampled_pars(this_design, doMap = FALSE)  # no kernel pars
@@ -16,7 +16,14 @@ make_minimal_emc <- function(trend, n_trials=5, covariate1=1:5) {
   #   p_vector[names(kernel_pars)] <- kernel_pars
   # }
 
+  opts <- list(...)
+
   dat <- make_data(p_vector, this_design, n_trials = n_trials, covariates = data.frame(covariate1 = covariate1))
+
+  for(nm in names(opts)) {
+    dat[,nm] <- opts[[nm]]
+  }
+
   emc <- make_emc(dat, this_design, type='single')
   return(emc)
 }
@@ -231,6 +238,25 @@ test_that("delta2kernel_Rcpp", {
   expect_snapshot(matrix(apply_kernel(kernel_pars, emc, mode="Rcpp")))
 })
 
+
+## test resetting
+trend_delta <- make_trend(par_names = "m",
+                          cov_names = 'covariate1',
+                          kernels = 'delta', base='add',
+                          kernel_args=list(q_reset_column='do_reset'))
+kernel_pars <- c('m.q0'=0, 'm.alpha'=0.2)
+covariate1 <- c(1, 1, 1, 1, 1)
+emc <- make_minimal_emc(trend_delta, covariate1 = covariate1, do_reset=c(F,F,T,F,F))
+expected_output <- matrix(c(0, 0.2, 0, 0.2, 0.36)) # manually computed for this specific covariate + parameter vector
+# all.equal(matrix(apply_kernel(kernel_pars, emc, mode="R")), matrix(expected_output))
+# all.equal(matrix(apply_kernel(kernel_pars, emc, mode="Rcpp")), matrix(expected_output))
+all.equal(matrix(apply_kernel(kernel_pars, emc, mode="Rcpp_oo")), matrix(expected_output))
+# test_that("delta_R", {
+#   expect_snapshot(matrix(apply_kernel(kernel_pars, emc, mode="R")))
+# })
+test_that("delta_Rcpp", {
+  expect_snapshot(matrix(apply_kernel(kernel_pars, emc, mode="Rcpp_oo")))
+})
 
 #
 # # Custom kernel -- only C -------------------------------------------------

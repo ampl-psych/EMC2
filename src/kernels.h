@@ -14,6 +14,13 @@ struct KernelParsView {
   std::vector<const double*> cols;  // cols[k][row] = value for param k at trial row
 };
 
+// Struct for optional kernel arguments. Currently only "q-value resetting" is supported.
+struct KernelArgs {
+  const int* q_reset = nullptr;  // raw pointer into an IntegerVector; null = no reset
+  // Future extensible fields go here, e.g.:
+  // const double* some_other_col = nullptr;
+};
+
 // ---- Types ----
 
 enum class KernelType {
@@ -85,6 +92,8 @@ public:
     expand_idx_.clear();
     has_expand_idx_ = false;
   }
+
+  virtual void set_kernel_args(const KernelArgs& /*args*/) {}
 
   bool has_run() const { return has_run_; }
 
@@ -214,9 +223,14 @@ protected:
   double q_ = NA_REAL;             // latest value
   double pe_ = NA_REAL;            // latest PE
   std::vector<double> pes_;        // PE per trial
+  const int* q_reset_ = nullptr;   // <-- ADD: null = no reset
 
 public:
   virtual ~DeltaKernel() {}
+
+  void set_kernel_args(const KernelArgs& args) override {
+    q_reset_ = args.q_reset;
+  }
 
   const std::vector<double>& get_pes() const {
     return pes_;
@@ -572,6 +586,13 @@ struct SimpleDelta : DeltaKernel {
 
              for (int j = 0; j < n_comp - 1; ++j) {
                int r    = comp_idx[j];
+
+               // --- RESET (before PE) ---
+               if (q_reset_ && q_reset_[r]) {
+                 q_ = q0_col[r];
+                 out_[j] = q_;           // overwrite with reset value
+               }
+
                double x = cov_ptr[r];
                // note to future self -- without --ffast-math, x == x also checks for NaN. But --ffast-math breaks that
                if (!ISNAN(x)) {  // do NOT replace with std::isnan or x==x: -ffast-math makes both unreliable               if (!std::isnan(x)) {
@@ -616,6 +637,13 @@ struct Delta2LR : DeltaKernel {
 
              for (int j = 0; j < n_comp - 1; ++j) {
                int r = comp_idx[j];
+
+               // --- RESET (before PE) ---
+               if (q_reset_ && q_reset_[r]) {
+                 q_ = q0_col[r];
+                 out_[j] = q_;           // overwrite with reset value
+               }
+
                double x = covariate(r,0);
                if (!ISNAN(x)) {
                  double alphaPos = alphaPos_col[r];
@@ -640,6 +668,11 @@ struct Delta2Kernel : SequentialKernel {
   double qFast_ = NA_REAL;
   double qSlow_ = NA_REAL;
   double q_     = NA_REAL;
+  const int* q_reset_ = nullptr;   // <-- ADD: null = no reset
+
+  void set_kernel_args(const KernelArgs& args) override {
+    q_reset_ = args.q_reset;
+  }
 
   // [compressed trial][0 = fast PE, 1 = slow PE]
   std::vector<double> pes_fast_;
@@ -674,6 +707,13 @@ struct Delta2Kernel : SequentialKernel {
 
              for (int j = 0; j < n_comp - 1; ++j) {
                int r = comp_idx[j];
+
+               // --- RESET (before PE): both trackers reset to q0 ---
+               if (q_reset_ && q_reset_[r]) {
+                 qFast_ = qSlow_ = q_ = q0_col[r];
+                 out_[j] = q_;           // overwrite with reset value
+               }
+
                double x = covariate(r,0);
                double peFast = NA_REAL;
                double peSlow = NA_REAL;
