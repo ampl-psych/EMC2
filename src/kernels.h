@@ -6,6 +6,7 @@
 #include <array>
 #include <vector>     //
 #include <Rcpp.h>    //
+#include "nan_check.h"
 #include "EMC2/userfun.hpp"
 
 // View
@@ -357,7 +358,7 @@ struct LinIncrKernel : BaseKernel {
              for (int j = 0; j < n_comp; ++j) {
                int r = comp_idx[j];
                double x = covariate(r,0);
-               if (!ISNAN(x)) {
+               if (!is_nan(x)) {
                  out_[j] = x;  // compressed index
                }
              }
@@ -379,7 +380,7 @@ struct LinDecrKernel : BaseKernel {
              for (int j = 0; j < n_comp; ++j) {
                int r = comp_idx[j];
                double x = covariate(r,0);
-               if (!ISNAN(x)) {
+               if (!is_nan(x)) {
                  out_[j] = -x;
                }
                // out_[j] = last;
@@ -407,7 +408,7 @@ struct ExpDecrKernel : BaseKernel {
              for (int j = 0; j < n_comp; ++j) {
                int r = comp_idx[j];
                double x = covariate(r,0);
-               if (!ISNAN(x)) {
+               if (!is_nan(x)) {
                  double lambda = lambda_col[r];
                  out_[j] = std::exp(-lambda * x);
                }
@@ -436,7 +437,7 @@ struct ExpIncrKernel : BaseKernel {
              for (int j = 0; j < n_comp; ++j) {
                int r = comp_idx[j];
                double x = covariate(r,0);
-               if (!ISNAN(x)) {
+               if (!is_nan(x)) {
                  double lambda = lambda_col[r];
                  out_[j] = 1.0 - std::exp(-lambda * x);
                }
@@ -465,7 +466,7 @@ struct PowDecrKernel : BaseKernel {
              for (int j = 0; j < n_comp; ++j) {
                int r = comp_idx[j];
                double x = covariate(r,0);
-               if (!ISNAN(x)) {
+               if (!is_nan(x)) {
                  double alpha = alpha_col[r];
                  out_[j] = std::pow(1.0 + x, -alpha);
                }
@@ -494,7 +495,7 @@ struct PowIncrKernel : BaseKernel {
              for (int j = 0; j < n_comp; ++j) {
                int r = comp_idx[j];
                double x = covariate(r,0);
-               if (!ISNAN(x)) {
+               if (!is_nan(x)) {
                  double alpha = alpha_col[r];
                  out_[j] = 1.0 - std::pow(1.0 + x, -alpha);
                }
@@ -524,7 +525,7 @@ struct Poly2Kernel : BaseKernel {
              for (int j = 0; j < n_comp; ++j) {
                int r = comp_idx[j];
                double x = covariate(r,0);
-               if (!ISNAN(x)) {
+               if (!is_nan(x)) {
                  double a1 = a1_col[r];
                  double a2 = a2_col[r];
                  double x2 = x * x;
@@ -557,7 +558,7 @@ struct Poly3Kernel : BaseKernel {
              for (int j = 0; j < n_comp; ++j) {
                int r = comp_idx[j];
                double x = covariate(r,0);
-               if (!ISNAN(x)) {
+               if (!is_nan(x)) {
                  double a1 = a1_col[r];
                  double a2 = a2_col[r];
                  double a3 = a3_col[r];
@@ -593,7 +594,7 @@ struct Poly4Kernel : BaseKernel {
              for (int j = 0; j < n_comp; ++j) {
                int r = comp_idx[j];
                double x = covariate(r,0);
-               if (!ISNAN(x)) {
+               if (!is_nan(x)) {
                  double a1 = a1_col[r];
                  double a2 = a2_col[r];
                  double a3 = a3_col[r];
@@ -647,7 +648,6 @@ struct SimpleDelta : DeltaKernel {
 
              for (int j = 0; j < n_comp - 1; ++j) {
                int r    = comp_idx[j];
-
                // --- RESET (before PE) ---
                if (q_reset_ && q_reset_[r]) {
                  q_ = q0_col[r];
@@ -655,9 +655,8 @@ struct SimpleDelta : DeltaKernel {
                }
 
                double x = cov_ptr[r];
-               // note to future self -- without --ffast-math, x == x also checks for NaN. But --ffast-math breaks that
-               if (!ISNAN(x)) {  // do NOT replace with std::isnan or x==x: -ffast-math makes both unreliable               if (!std::isnan(x)) {
-               // if(!__builtin_isnan(x)) { // this one is supposed to be thread-safe and --ffast-math safe.... preliminary testing fails.
+
+               if (!is_nan(x)) {
                  double alpha = alpha_col[r];
                  double pe    = x - q_;
                  pes_[j]      = pe;
@@ -706,7 +705,7 @@ struct Delta2LR : DeltaKernel {
                }
 
                double x = covariate(r,0);
-               if (!ISNAN(x)) {
+               if (!is_nan(x)) {
                  double alphaPos = alphaPos_col[r];
                  double alphaNeg = alphaNeg_col[r];
                  pe = x - q_;
@@ -788,7 +787,7 @@ struct Delta2Kernel : SequentialKernel {
                double peFast = NA_REAL;
                double peSlow = NA_REAL;
 
-               if (!ISNAN(x)) {
+               if (!is_nan(x)) {
                  double alphaFast = alphaFast_col[r];
                  double propSlow  = propSlow_col[r];
                  double dSwitch   = dSwitch_col[r];
@@ -935,20 +934,20 @@ public:
 
                for (int c = 0; c < n_covs_; ++c) {
                  double x = covariate(r, c);
-                 if (!ISNAN(x)) {
+                 if (!is_nan(x)) {
                    reward     = x;   // reward is the same across all active columns
                    q_active  += q_cur[c];
                    any_active = true;
                  }
                }
 
-               if (any_active && !ISNAN(reward)) {
+               if (any_active && !is_nan(reward)) {
                  double alpha       = alpha_col[r];
                  double compound_pe = reward - q_active;
 
                  for (int c = 0; c < n_covs_; ++c) {
                    double x = covariate(r, c);
-                   if (!ISNAN(x)) {
+                   if (!is_nan(x)) {
                      pe_mat_[j * n_covs_ + c] = compound_pe;
                      q_cur[c] += alpha * compound_pe;
                    }
