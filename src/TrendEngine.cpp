@@ -709,14 +709,23 @@ void TrendRuntime::bind_all_ops_to_paramtable(const ParamTable& pt) {
       const std::string& base = spec.base_type;
       // Rprintf("Identified base = %s\n", base.c_str());
 
-      bool needs_base_par = (base == "lin" || base == "exp_lin" || base == "lin_exp" || base == "centered");
+      bool needs_base_par = (base == "lin" || base == "centered");
 
       int n_base_pars = 0;
       bool slot_has_maps = !spec.kernels.empty() && spec.kernels[0].has_covariate_maps;
       if (needs_base_par) {
         if (slot_has_maps) {
-          n_base_pars = static_cast<int>(spec.kernels[0].covariate_map_cols.size());
+          const KernelSlotSpec& slot0 = spec.kernels[0];
+
+          if (!slot0.covariate_map_mats.empty()) {
+            // Variadic kernel (e.g. RescorlaWagner): one base param per map matrix
+            n_base_pars = static_cast<int>(slot0.covariate_map_mats.size());
+          } else {
+            // Single-covariate kernels: one base param per extracted map column
+            n_base_pars = static_cast<int>(slot0.covariate_map_cols.size());
+          }
         } else {
+          // No maps: a single base parameter
           n_base_pars = 1;
         }
       }
