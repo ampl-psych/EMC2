@@ -906,19 +906,6 @@ void TrendRuntime::apply_base_for_op(TrendOpRuntime& op,
   bool slots_have_maps = first_slot.has_covariate_maps;
   int n_maps = slots_have_maps ? static_cast<int>(first_slot.covariate_map_cols.size()) : 0;
 
-
-  // // Sanity check: all slots should agree on map count
-  // if (slots_have_maps) {
-  //   for (int k = 1; k < K; ++k) {
-  //     const KernelSlotSpec& s = *op.kernels[k].spec;
-  //     if (!s.has_covariate_maps ||
-  //         (int)s.covariate_map_cols.size() != n_maps) {
-  //       stop("TrendOp '%s': inconsistent map usage across kernel slots",
-  //            spec.target_param.c_str());
-  //     }
-  //   }
-  // }
-
   for (int r = 0; r < n; ++r) {
     double p = target_col[r];
     if (NumericVector::is_na(p) || std::isnan(p)) continue;
@@ -969,11 +956,12 @@ void TrendRuntime::apply_base_for_op(TrendOpRuntime& op,
                  spec.target_param.c_str(), n_base_pars, n_maps);
           }
 
-          for (int col = 0; col < n_cols; ++col) {
-            double q = traj(r, col);
-            if (NumericVector::is_na(q) || std::isnan(q)) q = 0.0;
-            double base_val = pt.base(r, op.base_par_indices[col]);
-            double map_val  = slot.covariate_map_cols[col][r];
+          double q = traj(r, 0);  // n_cols == 1 always
+          if (NumericVector::is_na(q) || std::isnan(q)) q = 0.0;
+
+          for (int m = 0; m < n_maps; ++m) {
+            double base_val = pt.base(r, op.base_par_indices[m]);
+            double map_val  = slot.covariate_map_cols[m][r];
             contrib += q * base_val * map_val;
           }
         }
