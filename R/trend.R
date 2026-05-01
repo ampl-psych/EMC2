@@ -2391,18 +2391,14 @@ set_custom_kernel_pointers <- function(emc, ptrs) {
   return(emc)
 }
 
-
-##' Reset pointers of custom C++ trend kernels to an emc object
-##'
-##' When an emc object is loaded from disk, or returned by forked processes, the pointers to custom kernels
-##' need to be re-created. This is a convenience function to do this.
-##'
-##' @param emc A target emc object with missing pointers
-##' @param pointer_source Either a trend object with correct pointers or another emc object with correct pointers
-##' @return An emc object with the custom pointers re-instated.
-##' @export
-fix_custom_kernel_pointers <- function(emc, pointer_source) {
-  return(set_custom_kernel_pointers(emc, get_custom_kernel_pointers(pointer_source)))
+pointer_reset_wrapper <- function(sub_emc, emc){
+  # TO FIX, make custom kernel pointers work with joint models
+  # for now just return no updates
+  if(is.list(emc[[1]]$model)){ # Joint model!!
+    return(sub_emc)
+  } else{
+    return(set_custom_kernel_pointers(sub_emc, get_custom_kernel_pointers(emc)))
+  }
 }
 
 
