@@ -24,7 +24,6 @@ enum class InputKind { None, Covariate, ParInput, MultiCovariate, MultiParInput,
 struct KernelSlotSpec {
   std::string kernel;
   KernelType kernel_type;
-  bool ffill_na = false;
 
   InputKind input_kind = InputKind::None;
 
@@ -47,6 +46,7 @@ struct KernelSlotSpec {
   // Covariate maps specific to this kernel
   bool has_covariate_maps = false;
   std::vector<Rcpp::NumericVector> covariate_map_cols;
+  std::vector<Rcpp::NumericMatrix> covariate_map_mats;
 
   // ---- kernel_args (general extensible mechanism) ----
   // The IntegerVector members own the R memory; KernelArgs holds raw pointers
@@ -294,6 +294,10 @@ bool uses_par_input(const Rcpp::List& tr);
 void init_covariate_for_slot(KernelSlotSpec& slot,
                              const Rcpp::List& spec,
                              const Rcpp::DataFrame& data);
+
+void init_multicovariate_for_slot(KernelSlotSpec& slot,
+                                  const Rcpp::List& spec,
+                                  const Rcpp::DataFrame& data);
 
 void init_combined_for_slot(KernelSlotSpec& slot,
                              const Rcpp::List& spec,

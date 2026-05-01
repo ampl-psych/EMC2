@@ -221,6 +221,55 @@ void init_combined_for_slot(KernelSlotSpec& slot,
   Rcpp::colnames(slot.kernel_input) = col_names;
 }
 
+// Initialize covariate for a kernel slot when covariate is a *vector* of column names.
+// Builds an n_trials x N matrix from all named columns.
+// Used by variadic kernels (e.g. RescorlaWagner) that consume all covariates at once.
+void init_multicovariate_for_slot(KernelSlotSpec& slot,
+                                  const Rcpp::List& spec,
+                                  const Rcpp::DataFrame& data) {
+  using namespace Rcpp;
+
+  if (!spec.containsElementNamed("covariate")) {
+    stop("init_multicovariate_for_slot: missing 'covariate' field");
+  }
+
+  CharacterVector cov_spec(spec["covariate"]);
+  const int n_covs   = cov_spec.size();
+  const int n_trials = data.nrow();
+
+  if (n_covs == 0) {
+    stop("init_multicovariate_for_slot: 'covariate' must name at least one column");
+  }
+
+  slot.kernel_input  = NumericMatrix(n_trials, n_covs);
+  slot.covariate_names = cov_spec;
+
+  CharacterVector col_names(n_covs);
+
+  for (int i = 0; i < n_covs; ++i) {
+    std::string cov_name = as<std::string>(cov_spec[i]);
+    if (!data.containsElementNamed(cov_name.c_str())) {
+      stop("init_multicovariate_for_slot: data has no column named '%s'",
+           cov_name.c_str());
+    }
+    slot.kernel_input(_, i) = as<NumericVector>(data[cov_name]);
+    col_names[i]             = cov_name;
+    slot.covariate_indices.push_back(i);
+  }
+
+  colnames(slot.kernel_input) = col_names;
+
+  // kernel_input_name: join all covariate names for display purposes
+  // e.g. "cov_A+cov_B+cov_C"
+  std::string combined_name;
+  for (int i = 0; i < n_covs; ++i) {
+    if (i > 0) combined_name += "+";
+    combined_name += as<std::string>(cov_spec[i]);
+  }
+  slot.kernel_input_name = combined_name;
+}
+
+
 void init_covariate_maps_for_slot(KernelSlotSpec& slot,
                                   const Rcpp::List& spec,    // spec with single 'covariate'
                                   const Rcpp::DataFrame& data,
@@ -304,6 +353,69 @@ void init_covariate_maps_for_slot(KernelSlotSpec& slot,
 }
 
 
+// Initialize covariate maps for a variadic kernel slot (e.g. RescorlaWagner).
+// Each map in data_covmaps is an [n_rows x n_covs] matrix — stored as-is,
+// no column extraction needed. apply_base_for_op indexes them directly.
+void init_multicovariate_maps_for_slot(KernelSlotSpec& slot,
+                                       const Rcpp::List& spec,
+                                       const Rcpp::DataFrame& data,
+                                       const Rcpp::List& data_covmaps) {
+  using namespace Rcpp;
+  using std::string;
+
+  if (!spec.containsElementNamed("map") || Rf_isNull(spec["map"])) {
+    slot.has_covariate_maps = false;
+    slot.covariate_map_mats.clear();
+    return;
+  }
+
+  if (data_covmaps.size() == 0) {
+    stop("Trend: 'map' specified but data has no 'covariate_maps' attribute");
+  }
+
+  List maps_spec(spec["map"]);
+  CharacterVector map_names = maps_spec.names();
+  if (map_names.size() != maps_spec.size()) {
+    stop("Trend: 'map' list must be named");
+  }
+
+  List maps_data(data_covmaps);
+  CharacterVector data_map_names = maps_data.names();
+
+  const int M = maps_spec.size();
+  const int T = data.nrows();
+
+  slot.covariate_map_mats.resize(M);
+
+  for (int m = 0; m < M; ++m) {
+    string map_nm = as<string>(map_names[m]);
+
+    int idx_data = -1;
+    for (int j = 0; j < data_map_names.size(); ++j) {
+      if (as<string>(data_map_names[j]) == map_nm) {
+        idx_data = j;
+        break;
+      }
+    }
+    if (idx_data < 0) {
+      stop("Trend: covariate_map '%s' not found in data's 'covariate_maps' attribute",
+           map_nm.c_str());
+    }
+
+    NumericMatrix mat(maps_data[idx_data]);
+    if (mat.nrow() != T) {
+      stop("Trend: covariate_maps[['%s']] has %d rows, expected %d",
+           map_nm.c_str(), mat.nrow(), T);
+    }
+
+    slot.covariate_map_mats[m] = mat;
+  }
+
+  slot.has_covariate_maps = true;
+}
+
+
+
 TrendPlan::TrendPlan(Rcpp::Nullable<Rcpp::List> trend_,
                      const Rcpp::DataFrame& data_)
   : data(data_) {
@@ -359,9 +471,6 @@ TrendPlan::TrendPlan(Rcpp::Nullable<Rcpp::List> trend_,
     TrendPhase phase = parse_phase(Rcpp::as<std::string>(tr_i["phase"]));
     std::string kernel_name = Rcpp::as<std::string>(tr_i["kernel"]);
     std::string base_name   = Rcpp::as<std::string>(tr_i["base"]);
-    bool ffill_na = tr_i.containsElementNamed("ffill_na") &&
-      !Rf_isNull(tr_i["ffill_na"]) &&
-      Rcpp::as<bool>(tr_i["ffill_na"]);
 
     // Build one TrendOpSpec for this entry. The TrendOpSpec contains one base and a group of kernels
     TrendOpSpec op;
@@ -406,7 +515,6 @@ TrendPlan::TrendPlan(Rcpp::Nullable<Rcpp::List> trend_,
       KernelSlotSpec slot;
       slot.kernel      = kernel_name;
       slot.kernel_type = ktype;
-      slot.ffill_na    = ffill_na;
       slot.input_kind  = InputKind::Combined;
 
       // custom_ptr is stored as an attribute on the trend spec entry
@@ -432,45 +540,67 @@ TrendPlan::TrendPlan(Rcpp::Nullable<Rcpp::List> trend_,
         SEXP cov_spec = tr_i["covariate"];
 
         if (TYPEOF(cov_spec) == STRSXP) {
-          // character vector: one KernelSlot per covariate
           Rcpp::CharacterVector cv(cov_spec);
 
+          if (kmeta.input_arity == -1) {
+            // Variadic kernel (e.g. RescorlaWagner): one slot receives all
+            // covariates together as a matrix. No expansion into separate slots.
+            KernelSlotSpec slot;
+            slot.kernel      = kernel_name;
+            slot.kernel_type = ktype;
+            slot.input_kind  = InputKind::Covariate;
+
+            // Pass the full covariate vector as-is; init_multicovariate_for_slot
+            init_multicovariate_for_slot(slot, tr_i, data);
+            init_kernel_args_for_slot(slot, tr_i, data);
+
+            if (has_data_covariate_maps) {
+              // no column split of covariate maps - just the entire matrix again
+              init_multicovariate_maps_for_slot(slot, tr_i, data, data_covariate_maps);
+            } else {
+              if (tr_i.containsElementNamed("map") && !Rf_isNull(tr_i["map"])) {
+                Rcpp::stop("TrendPlan: spec '%s' has 'map' but data has no "
+                             "'covariate_maps' attribute", name_i.c_str());
+              }
+            }
+
+            op.kernels.push_back(std::move(slot));
+
+          } else {
+            // Standard kernels: expand one spec into N single-covariate slots
             for (int j = 0; j < cv.size(); ++j) {
               std::string cov_name = Rcpp::as<std::string>(cv[j]);
 
               if (!(kmeta.supports_grouping && kmeta.input_arity == 1)) {
-                Rcpp::stop("Kernel '%s' does not support grouped covariates", kernel_name.c_str());
+                Rcpp::stop("Kernel '%s' does not support grouped covariates",
+                           kernel_name.c_str());
               }
 
               KernelSlotSpec slot;
               slot.kernel      = kernel_name;
               slot.kernel_type = ktype;
-              slot.ffill_na    = ffill_na;
               slot.input_kind  = InputKind::Covariate;
 
-              // spec copy with *single* covariate name
               Rcpp::List tr_copy = Rcpp::clone(tr_i);
               tr_copy["covariate"] = cov_name;
 
               init_covariate_for_slot(slot, tr_copy, data);
               init_kernel_args_for_slot(slot, tr_copy, data);
 
-              // Attach maps if present on this spec and in data
               if (has_data_covariate_maps) {
                 init_covariate_maps_for_slot(slot, tr_copy, data, data_covariate_maps);
               } else {
-                // If the spec has a non-NULL 'map', but data has no maps, error
                 if (tr_copy.containsElementNamed("map") && !Rf_isNull(tr_copy["map"])) {
-                  Rcpp::stop("TrendPlan: spec '%s' has 'map' but data has no 'covariate_maps' attribute",
-                             name_i.c_str());
+                  Rcpp::stop("TrendPlan: spec '%s' has 'map' but data has no "
+                               "'covariate_maps' attribute", name_i.c_str());
                 }
               }
 
               op.kernels.push_back(std::move(slot));
             }
           }
+        }
       }
-
 
       // ---- par_input-based kernel slots ----
       if (has_par) {
@@ -488,7 +618,6 @@ TrendPlan::TrendPlan(Rcpp::Nullable<Rcpp::List> trend_,
             KernelSlotSpec slot;
             slot.kernel        = kernel_name;
             slot.kernel_type   = ktype;
-            slot.ffill_na      = ffill_na;
             slot.input_kind    = InputKind::ParInput;
             slot.par_input_name = par_nm;
             slot.kernel_input  = NumericMatrix(data_.nrow(), 1); // initialize empty matrix
@@ -580,7 +709,7 @@ void TrendRuntime::bind_all_ops_to_paramtable(const ParamTable& pt) {
       const std::string& base = spec.base_type;
       // Rprintf("Identified base = %s\n", base.c_str());
 
-      bool needs_base_par = (base == "lin" || base == "centered");
+      bool needs_base_par = (base == "lin" || base == "exp_lin" || base == "lin_exp" || base == "centered");
 
       int n_base_pars = 0;
       bool slot_has_maps = !spec.kernels.empty() && spec.kernels[0].has_covariate_maps;
@@ -726,18 +855,6 @@ void TrendRuntime::run_kernels_for_op(TrendOpRuntime& op,
     k_rt.kernel_ptr->reset();
     k_rt.kernel_ptr->run(kp_view, input, spec.comp_index);
 
-    bool needs_output_ffill =
-      kspec.ffill_na &&
-      input.ncol() == 1 &&
-      kspec.kernel_type != KernelType::SimpleDelta &&
-      kspec.kernel_type != KernelType::Delta2Kernel &&
-      kspec.kernel_type != KernelType::Delta2LR &&
-      kspec.kernel_type != KernelType::Custom;
-
-    if (needs_output_ffill) {
-      k_rt.kernel_ptr->forward_fill_missing_outputs(input, spec.comp_index);
-    }
-
     if (spec.has_at) {
       // record and expand
       k_rt.kernel_ptr->set_expand_idx(spec.expand_idx);
@@ -764,50 +881,30 @@ void TrendRuntime::apply_base_for_op(TrendOpRuntime& op,
   const int K = static_cast<int>(op.kernels.size());
   if (K == 0) return;
 
-  // Gather trajectories
-  std::vector<const std::vector<double>*> trajs(K);
-  for (int k = 0; k < K; ++k) {
-    const auto& v = op.kernels[k].kernel_ptr->get_output();
-    if ((int)v.size() != n) {
-      stop("apply_base_for_op('%s'): trajectory length mismatch",
-           spec.target_param.c_str());
-    }
-    trajs[k] = &v;
-  }
+  // // Gather trajectories
+  // std::vector<const std::vector<double>*> trajs(K);
+  // for (int k = 0; k < K; ++k) {
+  //   const auto& v = op.kernels[k].kernel_ptr->get_output();
+  //   if ((int)v.size() != n) {
+  //     stop("apply_base_for_op('%s'): trajectory length mismatch",
+  //          spec.target_param.c_str());
+  //   }
+  //   trajs[k] = &v;
+  // }
 
   int target_idx = pt.base_index_for(spec.target_param);
   double* target_col = &pt.base(0, target_idx);
 
   const std::string& base = spec.base_type;
-  bool needs_base_par = (base == "lin" || base == "centered");
+  bool needs_base_par = (base == "lin" || base == "exp_lin" ||  base == "lin_exp" || base == "centered");
+  const int  n_base_pars = (int)op.base_par_indices.size();
+  const bool has_base_pars = n_base_pars > 0;
+  const double* base_col0 = has_base_pars ? &pt.base(0, op.base_par_indices[0]) : nullptr;
 
   // Check if any slot has maps; assume all slots share same #maps if they do.
   const KernelSlotSpec& first_slot = *op.kernels[0].spec;
   bool slots_have_maps = first_slot.has_covariate_maps;
-  int n_maps = slots_have_maps
-  ? static_cast<int>(first_slot.covariate_map_cols.size())
-    : 0;
-
-  // Sanity check: all slots should agree on map count
-  if (slots_have_maps) {
-    for (int k = 1; k < K; ++k) {
-      const KernelSlotSpec& s = *op.kernels[k].spec;
-      if (!s.has_covariate_maps ||
-          (int)s.covariate_map_cols.size() != n_maps) {
-        stop("TrendOp '%s': inconsistent map usage across kernel slots",
-             spec.target_param.c_str());
-      }
-    }
-  }
-
-  // Base params
-  const int n_base_pars = (int)op.base_par_indices.size();
-  const bool has_base_pars = n_base_pars > 0;
-
-  const double* base_col0 = nullptr;
-  if (has_base_pars) {
-    base_col0 = &pt.base(0, op.base_par_indices[0]);
-  }
+  int n_maps = slots_have_maps ? static_cast<int>(first_slot.covariate_map_cols.size()) : 0;
 
   for (int r = 0; r < n; ++r) {
     double p = target_col[r];
@@ -815,54 +912,90 @@ void TrendRuntime::apply_base_for_op(TrendOpRuntime& op,
 
     double contrib = 0.0;
 
-    if (slots_have_maps && needs_base_par) {
-      // --- maps + linear-type base: use one base param per map, shared across slots ---
-      if (n_base_pars != n_maps) {
-        stop("TrendOp '%s': #base_pars (%d) != #maps (%d)",
-             spec.target_param.c_str(), n_base_pars, n_maps);
-      }
+    // ---- Accumulate kernel contributions ----
+    // Each kernel slot k exposes a KernelOutput with n_cols columns.
+    // For all current single-covariate kernels: n_cols == 1.
+    // For RescorlaWagner: n_cols == N covariates.
+    // covariate_map_cols[col] aligns with KernelOutput column col.
 
-      for (int k = 0; k < K; ++k) {
-        const KernelSlotSpec& slot = *op.kernels[k].spec;
-        double q = (*trajs[k])[r];
-        if (NumericVector::is_na(q) || std::isnan(q)) q = 0.0;
+    for (int k = 0; k < K; ++k) {
+      KernelOutput traj = op.kernels[k].kernel_ptr->get_output_stream(1);
+      const KernelSlotSpec& slot = *op.kernels[k].spec;
+      const int n_cols = traj.n_cols;
 
-        for (int m = 0; m < n_maps; ++m) {
-          double base_val = pt.base(r, op.base_par_indices[m]);
-          double map_val  = slot.covariate_map_cols[m][r];
-          contrib += q * base_val * map_val;
+      if (slots_have_maps && needs_base_par) {
+
+        if (!slot.covariate_map_mats.empty()) {
+          // ---- Variadic kernel (e.g. RescorlaWagner) ----
+          // covariate_map_mats: one [n_rows x n_covs] matrix per map.
+          // One base param per map, applied across all covariate columns.
+          const int n_mat_maps = static_cast<int>(slot.covariate_map_mats.size());
+          if (n_base_pars != n_mat_maps) {
+            stop("TrendOp '%s': #base_pars (%d) != #covariate_map_mats (%d)",
+                 spec.target_param.c_str(), n_base_pars, n_mat_maps);
+          }
+
+          for (int m = 0; m < n_mat_maps; ++m) {
+            double base_val = pt.base(r, op.base_par_indices[m]);
+            const Rcpp::NumericMatrix& mat = slot.covariate_map_mats[m];
+
+            for (int col = 0; col < n_cols; ++col) {
+              double q = traj(r, col);
+              if (NumericVector::is_na(q) || std::isnan(q)) q = 0.0;
+              double map_val = mat(r, col);
+              contrib += q * base_val * map_val;
+            }
+          }
+
+        } else {
+          // ---- Single-covariate kernel ----
+          // covariate_map_cols: one extracted NumericVector per map/covariate.
+          // n_cols == 1 always here; one base param per map.
+          if (n_maps != n_base_pars) {
+            stop("TrendOp '%s': #base_pars (%d) != #maps (%d)",
+                 spec.target_param.c_str(), n_base_pars, n_maps);
+          }
+
+          double q = traj(r, 0);  // n_cols == 1 always
+          if (NumericVector::is_na(q) || std::isnan(q)) q = 0.0;
+
+          for (int m = 0; m < n_maps; ++m) {
+            double base_val = pt.base(r, op.base_par_indices[m]);
+            double map_val  = slot.covariate_map_cols[m][r];
+            contrib += q * base_val * map_val;
+          }
         }
-      }
 
-    } else {
-      // --- no maps: combine kernel outputs, then apply base type ---
-      double q_combined = 0.0;
-      for (int k = 0; k < K; ++k) {
-        double q = (*trajs[k])[r];
-        if (NumericVector::is_na(q) || std::isnan(q)) q = 0.0;
-        q_combined += q;
-      }
-
-      double tmp = q_combined;
-      if (needs_base_par) {
-        double tp = base_col0 ? base_col0[r] : 1.0;
-        if (base == "lin") {
-          tmp *= tp;
-        } else if (base == "centered") {
-          tmp = (tmp - 0.5) * tp;
+      } else {
+        // No maps: sum all columns into q_combined, then apply base type.
+        double q_combined = 0.0;
+        for (int col = 0; col < n_cols; ++col) {
+          double q = traj(r, col);
+          if (!NumericVector::is_na(q) && !std::isnan(q)) q_combined += q;
         }
+
+        double tmp = q_combined;
+        if (needs_base_par) {
+          double tp = base_col0 ? base_col0[r] : 1.0;
+          if (base == "lin" || base == "exp_lin" || base == "lin_exp") {
+            tmp *= tp;
+          } else if (base == "centered") {
+            tmp = (tmp - 0.5) * tp;
+          }
+        }
+        contrib += tmp;
       }
-      contrib = tmp;
     }
 
-    if (base == "identity") {
-      target_col[r] = contrib;
+    // Base term from target value
+    double base_term;
+    if (base == "exp_lin" || base == "lin_exp") {
+      base_term = std::exp(p);
     } else {
-      double base_term;
       base_term = p;
-
-      target_col[r] = base_term + contrib;
     }
+
+    target_col[r] = base_term + contrib;
   }
 }
 
@@ -886,14 +1019,33 @@ Rcpp::NumericMatrix TrendRuntime::all_kernel_outputs(ParamTable& pt,
 
   const int n = pt.n_trials;
 
-  // count total columns
+  // ---- Pass 1: ensure all kernels have run, then count total output columns ----
+  // get_output_stream() must be called after run(), so we run first, then count.
+
+  auto ensure_run = [&](std::vector<TrendOpRuntime>& ops) {
+    for (auto& op : ops) {
+      for (auto& k_rt : op.kernels) {
+        if (!k_rt.kernel_ptr->has_run()) {
+          run_kernels_for_op(op, pt);
+          break;  // run_kernels_for_op runs all slots in the op at once
+        }
+      }
+    }
+  };
+
+  ensure_run(premap_ops);
+  ensure_run(pretransform_ops);
+  ensure_run(posttransform_ops);
+
+  // Count total columns: RescorlaWagner streams contribute n_cols > 1
   int n_cols_total = 0;
   auto count_cols = [&](const std::vector<TrendOpRuntime>& ops) {
     for (const auto& op : ops) {
       for (const auto& k_rt : op.kernels) {
         for (int code : codes) {
           if (k_rt.kernel_ptr->has_output_stream(code)) {
-            ++n_cols_total;
+            KernelOutput ko = k_rt.kernel_ptr->get_output_stream(code);
+            n_cols_total += ko.n_cols;
           }
         }
       }
@@ -916,12 +1068,6 @@ Rcpp::NumericMatrix TrendRuntime::all_kernel_outputs(ParamTable& pt,
       for (auto& k_rt : op.kernels) {
         const KernelSlotSpec& kspec = *k_rt.spec;
 
-        // ensure kernel has run
-        if (!k_rt.kernel_ptr->has_run()) {
-          run_kernels_for_op(op, pt);
-        }
-
-        // base stem for names: target_param + "." + input_name + '.' + kernel stream name
         std::string input_name;
         if (kspec.input_kind == InputKind::Covariate) {
           input_name = kspec.kernel_input_name;
@@ -934,25 +1080,43 @@ Rcpp::NumericMatrix TrendRuntime::all_kernel_outputs(ParamTable& pt,
         }
 
         for (int code : codes) {
-          if (!k_rt.kernel_ptr->has_output_stream(code)) {
-            continue;  // silently skip unsupported codes for this kernel
-          }
+          if (!k_rt.kernel_ptr->has_output_stream(code)) continue;
 
-          NumericVector v = k_rt.kernel_ptr->get_output_stream(code);
-          if (v.size() != n) {
-            stop("TrendRuntime::all_kernel_outputs('%s'): stream length (%d) != n_trials (%d)",
-                 spec.target_param.c_str(), v.size(), n);
-          }
+          KernelOutput ko = k_rt.kernel_ptr->get_output_stream(code);
 
-          for (int r = 0; r < n; ++r) {
-            out(r, col) = v[r];
+          if (ko.n_rows != n) {
+            stop("TrendRuntime::all_kernel_outputs('%s'): "
+                   "stream rows (%d) != n_trials (%d)",
+                   spec.target_param.c_str(), ko.n_rows, n);
           }
 
           std::string suffix = k_rt.kernel_ptr->output_stream_name(code);
-          std::string cname = spec.target_param + "." + input_name + "." + suffix;
-          cn[col] = cname;
 
-          ++col;
+          //
+          for (int c = 0; c < ko.n_cols; ++c) {
+            const double* src = ko.data + c * ko.n_rows;
+            for (int r = 0; r < n; ++r) {
+              out(r, col) = src[r];
+            }
+
+            std::string cname;
+            if (ko.n_cols > 1) {
+              // Variadic kernel: name is target_param.covariate_name.stream
+              // e.g. "m.covariate1.Qmatrix", "m.covariate2.Qmatrix"
+              // input_name (the joined "+"-string) is dropped — redundant and verbose.
+              std::string cov_name = (c < (int)kspec.covariate_names.size())
+              ? Rcpp::as<std::string>(kspec.covariate_names[c])
+                : std::to_string(c + 1);
+              cname = spec.target_param + "." + cov_name + "." + suffix;
+            } else {
+              // Single-covariate kernel: target_param.input_name.stream
+              // e.g. "m.covariate1.Q"
+              cname = spec.target_param + "." + input_name + "." + suffix;
+            }
+
+            cn[col] = cname;
+            ++col;
+          }
         }
       }
     }
@@ -966,7 +1130,73 @@ Rcpp::NumericMatrix TrendRuntime::all_kernel_outputs(ParamTable& pt,
   return out;
 }
 
+
 Rcpp::NumericMatrix TrendRuntime::all_kernel_outputs(ParamTable& pt) {
   return all_kernel_outputs(pt, std::vector<int>{1}); // only main trajectories
 }
 
+// Rcpp::NumericMatrix TrendRuntime::all_kernel_outputs(ParamTable& pt) {
+//   using namespace Rcpp;
+//
+//   const int n = pt.n_trials;
+//
+//   // Count total number of kernel slots
+//   int n_slots = 0;
+//   for (const auto& op : premap_ops)        n_slots += op.kernels.size();
+//   for (const auto& op : pretransform_ops)  n_slots += op.kernels.size();
+//   for (const auto& op : posttransform_ops) n_slots += op.kernels.size();
+//
+//   NumericMatrix out(n, n_slots);
+//   CharacterVector cn(n_slots);
+//
+//   int col = 0;
+//
+//   auto fill_for_ops = [&](std::vector<TrendOpRuntime>& ops) {
+//     for (auto& op : ops) {
+//       const TrendOpSpec& spec = *op.spec;
+//
+//       for (auto& k_rt : op.kernels) {
+//         const KernelSlotSpec& kspec = *k_rt.spec;
+//         const std::vector<double>& traj = k_rt.kernel_ptr->get_output();
+//
+//         if ((int)traj.size() != n) {
+//           stop("TrendRuntime::all_kernel_outputs('%s'): trajectory length (%d) != n_trials (%d)",
+//                spec.target_param.c_str(), (int)traj.size(), n);
+//         }
+//
+//         for (int r = 0; r < n; ++r) {
+//           out(r, col) = traj[r];
+//         }
+//
+//         // Build a column name: target_param + "." + input_name
+//         std::string input_name;
+//         if (kspec.input_kind == InputKind::Covariate) {
+//           // try to get column name from attributes if available
+//           if (kspec.kernel_input.hasAttribute("names")) {
+//             // optional; often covariate is directly from data[cov_name],
+//             // so we don't have the name here. You can store the cov_name in KernelSlotSpec if needed.
+//             input_name = "cov";
+//           } else {
+//             input_name = "cov";
+//           }
+//         } else if (kspec.input_kind == InputKind::ParInput) {
+//           input_name = kspec.par_input_name;
+//         } else {
+//           input_name = "noinput";
+//         }
+//
+//         std::string cname = spec.target_param + "." + input_name;
+//         cn[col] = cname;
+//
+//         ++col;
+//       }
+//     }
+//   };
+//
+//   fill_for_ops(premap_ops);
+//   fill_for_ops(pretransform_ops);
+//   fill_for_ops(posttransform_ops);
+//
+//   colnames(out) = cn;
+//   return out;
+// }

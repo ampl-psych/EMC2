@@ -195,6 +195,32 @@ test_that("delta_Rcpp", {
 
 
 
+## Rescorla-wagner
+trend_rw <- make_trend(par_names = "m",
+                       cov_names = list(c('covariate1','covariate2','covariate3','covariate4')),
+                       kernels = 'rescorlawagner', base='add',
+                       kernel_args=list(q_reset_column='do_reset'))
+
+covariate_matrix <- matrix(c(NA,NA,  1,  1,
+                             1,  1, NA, NA,
+                             NA, 0,  0, NA,
+                             1,  NA, NA, 1,
+                             0,  0,  0,  0), nrow=5, byrow=TRUE)
+covariates <- data.frame(covariate_matrix)
+colnames(covariates) <- paste0('covariate', 1:4)
+covariates$do_reset <- rep(FALSE, 5)
+emc <- make_minimal_emc(trend_delta,
+                        covariate1 = covariates$covariate1,
+                        covariate2 = covariates$covariate2,
+                        covariate3 = covariates$covariate3,
+                        covariate4 = covariates$covariate4,
+                        do_reset=c(F,F,F,T,F))
+kernel_pars <- c('m.q0'=0, 'm.alpha'=0.2)
+apply_kernel(kernel_pars, emc)
+## looks ok...
+# all.equal(matrix(apply_kernel(kernel_pars, emc)), matrix(expected_output))
+
+
 # # Custom kernel -- only C -------------------------------------------------
 # # This cannot be part of that-test :-( but we can still use it for manual tests...
 # # Write a custom kernel to a separate file
