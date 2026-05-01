@@ -113,11 +113,7 @@
 //   // however you're storing/accessing ParamTable; here assume by reference.
 //   ParamTable& pt = *Rcpp::XPtr<ParamTable>(param_table_ptr);
 //
-<<<<<<< HEAD
 //   auto specs = make_transform_specs_pt(pt, transform);
-=======
-//   auto specs = make_transform_specs_for_paramtable(pt, transform);
->>>>>>> a94b813b (Optimisations: Use vvexp / vvlog on apple, remove redundant checks, add single-precision PNORM as option, scatter-gather structure for race models, cache transformspecs, improve do_bound_pt and lr_all to not re-assign vectors each particle, don't re-reserve a vector for map_designs)
 //   c_do_transform_pt(pt, specs);
 // }
 //

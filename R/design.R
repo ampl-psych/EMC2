@@ -710,7 +710,7 @@ design_model <- function(data,design,model=NULL,
   }  else {
     dadm <- da
     attr(dadm,"designs") <- out
-    attr(dadm,"reparam_designs") <- reparam_dms
+    # attr(dadm,"reparam_designs") <- reparam_dms   # SM TO DO: RECREATE FUNCTIONALITY OF LINEAR MAPPING
     attr(dadm,"s_expand") <- da$subjects
     # attr(dadm,"expand_all") <- 1:nrow(dadm)
     if(is.null(dadm$lR)){

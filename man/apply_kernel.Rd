@@ -4,14 +4,7 @@
 \alias{apply_kernel}
 \title{Apply a kernel implied in an emc object}
 \usage{
-apply_kernel(
-  kernel_pars,
-  emc,
-  subject = 1,
-  input_pars = NULL,
-  trend_n = 1,
-  mode = "Rcpp"
-)
+apply_kernel(kernel_pars, emc, subject = 1, input_pars = NULL, trend_n = 1)
 }
 \arguments{
 \item{kernel_pars}{A named vector of kernel parameters on the natural scale.
