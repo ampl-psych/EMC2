@@ -872,13 +872,29 @@ void TrendRuntime::run_kernels_for_op(TrendOpRuntime& op,
   }
 }
 
+
+
+// // Set to 1 to enable NaN guards in the inner loops (for testing).
+// // Set to 0 for production: inner loops become branch-free and vectorisable.
+// #define APPLY_BASE_NAN_GUARD 0
+//
+// #if APPLY_BASE_NAN_GUARD
+// #  define SKIP_IF_NAN(x)   if (is_nan(x)) continue;
+// #  define ZERO_IF_NAN(x)   (is_nan(x) ? 0.0 : (x))
+// #else
+// #  define SKIP_IF_NAN(x)   // no-op
+// #  define ZERO_IF_NAN(x)   (x)
+// #endif
+
 void TrendRuntime::apply_base_for_op(TrendOpRuntime& op,
-                                     ParamTable& pt) {
+                                     ParamTable& pt)
+{
   using namespace Rcpp;
 
   const TrendOpSpec& spec = *op.spec;
   const int n = pt.n_trials;
 
+  // Run kernels if not already done
   for (auto& krt : op.kernels) {
     if (!krt.kernel_ptr->has_run()) {
       run_kernels_for_op(op, pt);
@@ -889,103 +905,272 @@ void TrendRuntime::apply_base_for_op(TrendOpRuntime& op,
   const int K = static_cast<int>(op.kernels.size());
   if (K == 0) return;
 
-  int target_idx = pt.base_index_for(spec.target_param);
-  double* target_col = &pt.base(0, target_idx);
+  // --- Hoist everything loop-invariant ---
+  const int    target_idx     = pt.base_index_for(spec.target_param);
+  double*      target_col     = &pt.base(0, target_idx);
 
-  const std::string& base = spec.base_type;
-  const bool needs_base_par = (base == "lin" || base == "centered");
-  const int  n_base_pars = (int)op.base_par_indices.size();
-  const bool has_base_pars = n_base_pars > 0;
-  const double* base_col0 = has_base_pars ? &pt.base(0, op.base_par_indices[0]) : nullptr;
+  const std::string& base     = spec.base_type;
   const bool base_is_identity = (base == "identity");
+  const bool base_is_lin      = (base == "lin");
+  const bool base_is_centered = (base == "centered");
+  const bool needs_base_par   = base_is_lin || base_is_centered;
 
-  const KernelSlotSpec& first_slot = *op.kernels[0].spec;
-  const bool slots_have_maps = first_slot.has_covariate_maps;
-  const int n_maps = slots_have_maps
-  ? static_cast<int>(first_slot.covariate_map_cols.size())
-    : 0;
+  const int    n_base_pars    = (int)op.base_par_indices.size();
+  // const bool   has_base_pars  = n_base_pars > 0;
 
-  // Hoist base par column pointers out of the trial loop
   std::vector<const double*> base_par_ptrs(n_base_pars);
-  for (int i = 0; i < n_base_pars; ++i) {
+  for (int i = 0; i < n_base_pars; ++i)
     base_par_ptrs[i] = &pt.base(0, op.base_par_indices[i]);
-  }
   const double* const* bpp = base_par_ptrs.data();
 
-  // Hoist kernel outputs and map-type flags; use raw pointers to avoid
-  // std::vector::operator[] overhead in the trial loop
+  const KernelSlotSpec& first_slot  = *op.kernels[0].spec;
+  const bool slots_have_maps        = first_slot.has_covariate_maps;
+  const int  n_maps                 = slots_have_maps
+  ? (int)first_slot.covariate_map_cols.size()
+    : 0;
+
+  // Hoist kernel outputs
   std::vector<KernelOutput> ko_cache_storage(K);
-  std::vector<int> use_mat_maps_storage(K);
+  std::vector<int>          use_mat_maps_storage(K);
   for (int k = 0; k < K; ++k) {
     ko_cache_storage[k]     = op.kernels[k].kernel_ptr->get_output_stream(1);
     use_mat_maps_storage[k] = !op.kernels[k].spec->covariate_map_mats.empty() ? 1 : 0;
   }
-  const KernelOutput* ko_cache   = ko_cache_storage.data();
+  const KernelOutput* ko_cache    = ko_cache_storage.data();
   const int*          use_mat_maps = use_mat_maps_storage.data();
 
-  // Trial loop
-  for (int r = 0; r < n; ++r) {
-    double p = target_col[r];
-    if (__builtin_isnan(p)) continue;
-
-    double contrib = 0.0;
+  // -----------------------------------------------------------------------
+  // Case 1: covariate maps + base par (lin or centered)
+  //   inner loop: target[r] += q[r] * base[r] * map[r]          (lin)
+  //            or target[r] += (q[r] - 0.5) * base[r] * map[r]  (centered)
+  // -----------------------------------------------------------------------
+  if (slots_have_maps && needs_base_par) {
 
     for (int k = 0; k < K; ++k) {
-      const KernelOutput& ko = ko_cache[k];
+      const KernelOutput&   ko   = ko_cache[k];
       const KernelSlotSpec& slot = *op.kernels[k].spec;
 
-      if (slots_have_maps && needs_base_par) {
-
-        if (use_mat_maps[k]) {
-          // Variadic kernel (e.g. RescorlaWagner): one [n_rows x n_covs] matrix per map,
-          // one base param per map applied across all covariate columns.
-          // Rcpp matrices are column-major: element (r, col) = ptr[col * n_rows + r]
-          const int n_mat_maps = static_cast<int>(slot.covariate_map_mats.size());
-          for (int m = 0; m < n_mat_maps; ++m) {
-            double base_val       = bpp[m][r];
-            const double* mat_ptr = slot.covariate_map_mats[m].begin();
-            const int n_rows      = slot.covariate_map_mats[m].nrow();
-            for (int col = 0; col < ko.n_cols; ++col) {
-              double q = ko.data[col * ko.n_rows + r];
-              if (!__builtin_isnan(q)) contrib += q * base_val * mat_ptr[col * n_rows + r];
-            }
-          }
-
-        } else {
-          // Single-covariate kernel: one extracted vector per map, one base param per map.
-          // n_cols == 1, so ko.data[r] is the only element.
-          double q = ko.data[r];
-          if (!__builtin_isnan(q)) {
-            for (int m = 0; m < n_maps; ++m) {
-              const double* map_ptr = slot.covariate_map_cols[m].begin();
-              contrib += q * bpp[m][r] * map_ptr[r];
+      if (use_mat_maps[k]) {
+        const int n_mat_maps = (int)slot.covariate_map_mats.size();
+        for (int m = 0; m < n_mat_maps; ++m) {
+          const double* base_ptr = bpp[m];
+          const double* mat_ptr  = slot.covariate_map_mats[m].begin();
+          const int     n_rows   = slot.covariate_map_mats[m].nrow();
+          for (int col = 0; col < ko.n_cols; ++col) {
+            const double* q_col = ko.data + col * ko.n_rows;
+            const double* m_col = mat_ptr + col * n_rows;
+#pragma omp simd
+            for (int r = 0; r < n; ++r) {
+              double t      = target_col[r];
+              double q      = q_col[r];
+              double safe_q = is_nan(q) ? 0.0 : (base_is_centered ? q - 0.5 : q);
+              double contrib = safe_q * base_ptr[r] * m_col[r];
+              target_col[r] = is_nan(t) ? t : t + contrib;
             }
           }
         }
-
       } else {
-        // No maps: sum all columns then apply base type
-        double q_combined = 0.0;
-        for (int col = 0; col < ko.n_cols; ++col) {
-          double q = ko.data[col * ko.n_rows + r];
-          if (!__builtin_isnan(q)) q_combined += q;
-        }
-
-        if (needs_base_par) {
-          double tp = base_col0[r];
-          if (base == "lin") {
-            q_combined *= tp;
-          } else if (base == "centered") {
-            q_combined = (q_combined - 0.5) * tp;
+        const double* q_data = ko.data;  // n_cols == 1
+        for (int m = 0; m < n_maps; ++m) {
+          const double* map_ptr  = slot.covariate_map_cols[m].begin();
+          const double* base_ptr = bpp[m];
+#pragma omp simd
+          for (int r = 0; r < n; ++r) {
+            double t       = target_col[r];
+            double q       = q_data[r];
+            double safe_q  = is_nan(q) ? 0.0 : (base_is_centered ? q - 0.5 : q);
+            double contrib = safe_q * base_ptr[r] * map_ptr[r];
+            target_col[r]  = is_nan(t) ? t : t + contrib;
           }
         }
-        contrib += q_combined;
       }
     }
 
-    target_col[r] = base_is_identity ? contrib : p + contrib;
+    // -----------------------------------------------------------------------
+    // Case 2: no maps, has base par (lin or centered)
+    //   inner loop: target[r] += q[r] * base[r]             (lin)
+    //            or target[r] += (q[r] - 0.5) * base[r]    (centered)
+    // -----------------------------------------------------------------------
+  } else if (needs_base_par) {
+
+    for (int k = 0; k < K; ++k) {
+      const KernelOutput& ko = ko_cache[k];
+      for (int col = 0; col < ko.n_cols; ++col) {
+        const double* q_col    = ko.data + col * ko.n_rows;
+        const double* base_ptr = bpp[0];
+        if (base_is_lin) {
+#pragma omp simd
+          for (int r = 0; r < n; ++r) {
+            double t       = target_col[r];
+            double q       = q_col[r];
+            double contrib = (is_nan(q) ? 0.0 : q) * base_ptr[r];
+            target_col[r]  = is_nan(t) ? t : t + contrib;
+          }
+        } else { // centered
+#pragma omp simd
+          for (int r = 0; r < n; ++r) {
+            double t       = target_col[r];
+            double q       = q_col[r];
+            double contrib = (is_nan(q) ? 0.0 : q - 0.5) * base_ptr[r];
+            target_col[r]  = is_nan(t) ? t : t + contrib;
+          }
+        }
+      }
+    }
+
+    // -----------------------------------------------------------------------
+    // Case 3: no maps, no base par, identity (K == 1 guaranteed)
+    //   inner loop: target[r] = q[r]   (overwrites, does not accumulate)
+    // -----------------------------------------------------------------------
+  } else if (base_is_identity) {
+
+    const KernelOutput& ko = ko_cache[0];
+    for (int col = 0; col < ko.n_cols; ++col) {
+      const double* q_col = ko.data + col * ko.n_rows;
+#pragma omp simd
+      for (int r = 0; r < n; ++r) {
+        double t      = target_col[r];
+        double q      = q_col[r];
+        target_col[r] = is_nan(t) ? t : (is_nan(q) ? 0.0 : q);
+      }
+    }
+
+    // -----------------------------------------------------------------------
+    // Case 4: no maps, no base par, additive
+    //   inner loop: target[r] += q[r]
+    // -----------------------------------------------------------------------
+  } else {
+
+    for (int k = 0; k < K; ++k) {
+      const KernelOutput& ko = ko_cache[k];
+      for (int col = 0; col < ko.n_cols; ++col) {
+        const double* q_col = ko.data + col * ko.n_rows;
+#pragma omp simd
+        for (int r = 0; r < n; ++r) {
+          double t      = target_col[r];
+          double q      = q_col[r];
+          target_col[r] = is_nan(t) ? t : t + (is_nan(q) ? 0.0 : q);
+        }
+      }
+    }
   }
 }
+
+
+// void TrendRuntime::apply_base_for_op(TrendOpRuntime& op,
+//                                      ParamTable& pt) {
+//   using namespace Rcpp;
+//
+//   const TrendOpSpec& spec = *op.spec;
+//   const int n = pt.n_trials;
+//
+//   for (auto& krt : op.kernels) {
+//     if (!krt.kernel_ptr->has_run()) {
+//       run_kernels_for_op(op, pt);
+//       break;
+//     }
+//   }
+//
+//   const int K = static_cast<int>(op.kernels.size());
+//   if (K == 0) return;
+//
+//   int target_idx = pt.base_index_for(spec.target_param);
+//   double* target_col = &pt.base(0, target_idx);
+//
+//   const std::string& base = spec.base_type;
+//   const bool needs_base_par = (base == "lin" || base == "centered");
+//   const int  n_base_pars = (int)op.base_par_indices.size();
+//   const bool has_base_pars = n_base_pars > 0;
+//   const double* base_col0 = has_base_pars ? &pt.base(0, op.base_par_indices[0]) : nullptr;
+//   const bool base_is_identity = (base == "identity");
+//
+//   const KernelSlotSpec& first_slot = *op.kernels[0].spec;
+//   const bool slots_have_maps = first_slot.has_covariate_maps;
+//   const int n_maps = slots_have_maps
+//   ? static_cast<int>(first_slot.covariate_map_cols.size())
+//     : 0;
+//
+//   // Hoist base par column pointers out of the trial loop
+//   std::vector<const double*> base_par_ptrs(n_base_pars);
+//   for (int i = 0; i < n_base_pars; ++i) {
+//     base_par_ptrs[i] = &pt.base(0, op.base_par_indices[i]);
+//   }
+//   const double* const* bpp = base_par_ptrs.data();
+//
+//   // Hoist kernel outputs and map-type flags; use raw pointers to avoid
+//   // std::vector::operator[] overhead in the trial loop
+//   std::vector<KernelOutput> ko_cache_storage(K);
+//   std::vector<int> use_mat_maps_storage(K);
+//   for (int k = 0; k < K; ++k) {
+//     ko_cache_storage[k]     = op.kernels[k].kernel_ptr->get_output_stream(1);
+//     use_mat_maps_storage[k] = !op.kernels[k].spec->covariate_map_mats.empty() ? 1 : 0;
+//   }
+//   const KernelOutput* ko_cache   = ko_cache_storage.data();
+//   const int*          use_mat_maps = use_mat_maps_storage.data();
+//
+//   // Trial loop
+//   for (int r = 0; r < n; ++r) {
+//     double p = target_col[r];
+//     if (__builtin_isnan(p)) continue;
+//
+//     double contrib = 0.0;
+//
+//     for (int k = 0; k < K; ++k) {
+//       const KernelOutput& ko = ko_cache[k];
+//       const KernelSlotSpec& slot = *op.kernels[k].spec;
+//
+//       if (slots_have_maps && needs_base_par) {
+//
+//         if (use_mat_maps[k]) {
+//           // Variadic kernel (e.g. RescorlaWagner): one [n_rows x n_covs] matrix per map,
+//           // one base param per map applied across all covariate columns.
+//           // Rcpp matrices are column-major: element (r, col) = ptr[col * n_rows + r]
+//           const int n_mat_maps = static_cast<int>(slot.covariate_map_mats.size());
+//           for (int m = 0; m < n_mat_maps; ++m) {
+//             double base_val       = bpp[m][r];
+//             const double* mat_ptr = slot.covariate_map_mats[m].begin();
+//             const int n_rows      = slot.covariate_map_mats[m].nrow();
+//             for (int col = 0; col < ko.n_cols; ++col) {
+//               double q = ko.data[col * ko.n_rows + r];
+//               if (!__builtin_isnan(q)) contrib += q * base_val * mat_ptr[col * n_rows + r];
+//             }
+//           }
+//
+//         } else {
+//           // Single-covariate kernel: one extracted vector per map, one base param per map.
+//           // n_cols == 1, so ko.data[r] is the only element.
+//           double q = ko.data[r];
+//           if (!__builtin_isnan(q)) {
+//             for (int m = 0; m < n_maps; ++m) {
+//               const double* map_ptr = slot.covariate_map_cols[m].begin();
+//               contrib += q * bpp[m][r] * map_ptr[r];
+//             }
+//           }
+//         }
+//
+//       } else {
+//         // No maps: sum all columns then apply base type
+//         double q_combined = 0.0;
+//         for (int col = 0; col < ko.n_cols; ++col) {
+//           double q = ko.data[col * ko.n_rows + r];
+//           if (!__builtin_isnan(q)) q_combined += q;
+//         }
+//
+//         if (needs_base_par) {
+//           double tp = base_col0[r];
+//           if (base == "lin") {
+//             q_combined *= tp;
+//           } else if (base == "centered") {
+//             q_combined = (q_combined - 0.5) * tp;
+//           }
+//         }
+//         contrib += q_combined;
+//       }
+//     }
+//
+//     target_col[r] = base_is_identity ? contrib : p + contrib;
+//   }
+// }
 
 void TrendRuntime::reset_all_kernels() {
   // lambda to loop over a vector of kernels
