@@ -157,11 +157,12 @@ get_pars_oo <- function(p, dadm, model,
   for (i in seq_along(used_subjects)) {
     row_idx <- dadm$subjects == used_subjects[i]
     row_ids[[i]] <- which(row_idx)
-    pieces[[i]] <- call_one(
-      cur_particles = particle_matrix[i, , drop = FALSE],
-      cur_dadm = dadm[row_idx, , drop = FALSE],
-      row_idx = row_idx
-    )
+    cur_dadm <- dadm[row_idx, , drop = FALSE]
+    cm <- attr(dadm, "covariate_maps")
+    if (!is.null(cm)) {
+      attr(cur_dadm, "covariate_maps") <- lapply(cm, function(m) m[row_idx, , drop = FALSE])
+    }
+    pieces[[i]] <- call_one(cur_particles = particle_matrix[i, , drop = FALSE], cur_dadm = cur_dadm, row_idx = row_idx)
   }
 
   out <- matrix(NA_real_, nrow = nrow(dadm), ncol = ncol(pieces[[1]]))
