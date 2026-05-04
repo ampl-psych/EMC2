@@ -20,12 +20,6 @@ parameter values (e.g., trend parameters). Only needed for custom kernels.}
 \item{trend_n}{Integer specifying which trend to apply when multiple trends
 exist in the model. Defaults to \code{1}. A warning is issued if the model
 contains more than one trend.}
-
-\item{mode}{Character string specifying which implementation to use:
-\describe{
-\item{\code{"R"}}{Use the pure R implementation.}
-\item{\code{"Rcpp"}}{Use the Rcpp implementation (default).}
-}}
 }
 \value{
 Returns a kernel matrix produced by the corresponding implementation.

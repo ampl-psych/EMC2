@@ -1824,12 +1824,6 @@ normalize_maps <- function(maps, par_names) {
 #'   exist in the model. Defaults to `1`. A warning is issued if the model
 #'   contains more than one trend.
 #'
-#' @param mode Character string specifying which implementation to use:
-#'   \describe{
-#'     \item{`"R"`}{Use the pure R implementation.}
-#'     \item{`"Rcpp"`}{Use the Rcpp implementation (default).}
-#'   }
-#'
 #' @return
 #' Returns a kernel matrix produced by the corresponding implementation.
 #' @export
