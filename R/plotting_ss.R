@@ -106,18 +106,118 @@ validate_stop_signal_quants <- function(quants) {
   invisible(NULL)
 }
 
+validate_stop_signal_sources <- function(to_plot, use_lim) {
+  valid_sources <- c("data", "posterior", "prior")
+
+  if (!is.character(to_plot) || !length(to_plot) || anyNA(to_plot)) {
+    stop("`to_plot` must be a non-empty character vector.")
+  }
+  if (!all(to_plot %in% valid_sources)) {
+    stop("`to_plot` must contain only \"data\", \"posterior\", and/or \"prior\".")
+  }
+  if (any(duplicated(to_plot))) {
+    stop("`to_plot` must not contain duplicate values.")
+  }
+
+  if (!is.character(use_lim) || !length(use_lim) || anyNA(use_lim)) {
+    stop("`use_lim` must be a non-empty character vector.")
+  }
+  if (!all(use_lim %in% valid_sources)) {
+    stop("`use_lim` must contain only \"data\", \"posterior\", and/or \"prior\".")
+  }
+  if (any(duplicated(use_lim))) {
+    stop("`use_lim` must not contain duplicate values.")
+  }
+  if (!any(use_lim %in% to_plot)) {
+    stop("`use_lim` must include at least one source that is also in `to_plot`.")
+  }
+
+  invisible(NULL)
+}
+
+can_generate_stop_signal_predictives <- function(input) {
+  if (inherits(input, "emc")) return(TRUE)
+  if (is.data.frame(input) || !is.list(input) || !length(input)) return(FALSE)
+  all(vapply(input, inherits, logical(1), "emc"))
+}
+
+validate_stop_signal_predictive_request <- function(input, post_predict, prior_predict,
+                                                    to_plot, to_plot_missing) {
+  if (to_plot_missing) return(invisible(NULL))
+
+  can_generate <- can_generate_stop_signal_predictives(input)
+
+  if ("posterior" %in% to_plot && is.null(post_predict) && !can_generate) {
+    stop("`post_predict` must be supplied when `to_plot` includes \"posterior\" ",
+         "and `input` is not an emc object.")
+  }
+  if ("prior" %in% to_plot && is.null(prior_predict) && !can_generate) {
+    stop("`prior_predict` must be supplied when `to_plot` includes \"prior\" ",
+         "and `input` is not an emc object.")
+  }
+
+  invisible(NULL)
+}
+
+normalize_stop_signal_layout <- function(layout) {
+  if (is.null(layout)) return(NA)
+  if (length(layout) == 1 && is.na(layout)) return(layout)
+  if (!is.numeric(layout) || length(layout) != 2 ||
+      anyNA(layout) || any(!is.finite(layout)) ||
+      any(layout < 1) || any(layout != as.integer(layout))) {
+    stop("`layout` must be NA, NULL, or a length-2 positive integer vector.")
+  }
+
+  as.integer(layout)
+}
+
+normalize_stop_signal_legendpos <- function(legendpos) {
+  if (is.null(legendpos)) return(c(NA_character_, NA_character_))
+  if (!is.atomic(legendpos) || length(legendpos) < 1 || length(legendpos) > 2) {
+    stop("`legendpos` must be NULL, NA, or a character vector of length 1 or 2.")
+  }
+  if (all(is.na(legendpos))) return(c(NA_character_, NA_character_))
+  if (!is.character(legendpos)) {
+    stop("`legendpos` must be NULL, NA, or a character vector of length 1 or 2.")
+  }
+  if (length(legendpos) == 1) return(c(legendpos, NA_character_))
+
+  legendpos
+}
+
 draw_stop_signal_se <- function(x, y, se) {
   # Base graphics warns on zero-height arrows; skip those while keeping all
   # finite, nonzero SE intervals.
+  x <- as.numeric(x)
+  y <- as.numeric(y)
+  se <- as.numeric(se)
+  n <- min(length(x), length(y), length(se))
+  if (!n) return(invisible(NULL))
+
+  x <- x[seq_len(n)]
+  y <- y[seq_len(n)]
+  se <- se[seq_len(n)]
   y0 <- y - se
   y1 <- y + se
-  keep <- is.finite(x) & is.finite(y0) & is.finite(y1) & y0 != y1
+  keep <- is.finite(x) & is.finite(y0) & is.finite(y1) &
+    abs(y1 - y0) > sqrt(.Machine$double.eps)
   if (!any(keep)) return(invisible(NULL))
 
   arrows(x0 = x[keep], y0 = y0[keep],
          x1 = x[keep], y1 = y1[keep],
          angle = 90, code = 3, length = 0.05)
   invisible(NULL)
+}
+
+get_stop_signal_y_range_values <- function(df, value_col) {
+  if (is.null(df[[value_col]])) return(numeric(0))
+
+  y <- df[[value_col]]
+  if (!is.null(df$se)) {
+    y <- c(y, df[[value_col]] - df$se, df[[value_col]] + df$se)
+  }
+
+  y[is.finite(y)]
 }
 
 has_duplicate_individual_ssd_quantiles <- function(df, probs, within_plot = NULL,
@@ -155,37 +255,47 @@ has_duplicate_global_ssd_quantiles <- function(df, probs, ssd_round = NULL) {
   any(duplicated(quantile(SSD, probs = probs, na.rm = TRUE)))
 }
 
-get_reference_global_ssd_breaks <- function(data_sources, probs, ssd_round = NULL) {
+get_reference_stop_signal_source_index <- function(data_sources, sources) {
   # Global quantile plots need one absolute SSD grid for all overlaid sources.
-  # Use the first plotted source as the reference; with posterior predictives
-  # generated conditional on observed SSDs this is normally the observed data.
-  for (df in data_sources) {
+  # Prefer the observed data when it is plotted; otherwise use the first source
+  # that contains finite SSDs (posterior-only and prior-only plots).
+  candidate_idx <- seq_along(data_sources)
+  if (!is.null(sources) && "data" %in% sources) {
+    candidate_idx <- unique(c(which(sources == "data"), candidate_idx))
+  }
+
+  for (i in candidate_idx) {
+    df <- data_sources[[i]]
     if (!is.null(df) && nrow(df) && !is.null(df$SSD)) {
-      SSD <- get_stop_signal_bin_ssd(df, ssd_round)
-      SSD <- SSD[is.finite(SSD)]
-      if (length(SSD)) return(quantile(SSD, probs = probs, na.rm = TRUE))
+      SSD <- df$SSD
+      if (any(is.finite(SSD))) return(i)
     }
   }
 
   stop("No finite SSD values available for global quantile bins.")
 }
 
-get_reference_global_ssd_values <- function(data_sources, ssd_round = NULL) {
-  for (df in data_sources) {
-    if (!is.null(df) && nrow(df) && !is.null(df$SSD)) {
-      SSD <- get_stop_signal_bin_ssd(df, ssd_round)
-      SSD <- SSD[is.finite(SSD)]
-      if (length(SSD)) return(sort(unique(SSD)))
-    }
-  }
+get_reference_global_ssd_breaks <- function(data_sources, sources, probs, ssd_round = NULL) {
+  reference_idx <- get_reference_stop_signal_source_index(data_sources, sources)
+  SSD <- get_stop_signal_bin_ssd(data_sources[[reference_idx]], ssd_round)
+  SSD <- SSD[is.finite(SSD)]
 
-  stop("No finite SSD values available for global quantile bins.")
+  quantile(SSD, probs = probs, na.rm = TRUE)
 }
 
-validate_global_ssd_breaks <- function(data_sources, global_ssd_breaks, ssd_round = NULL) {
+get_reference_global_ssd_values <- function(data_sources, sources, ssd_round = NULL) {
+  reference_idx <- get_reference_stop_signal_source_index(data_sources, sources)
+  SSD <- get_stop_signal_bin_ssd(data_sources[[reference_idx]], ssd_round)
+  SSD <- SSD[is.finite(SSD)]
+
+  sort(unique(SSD))
+}
+
+validate_global_ssd_breaks <- function(data_sources, sources, global_ssd_breaks,
+                                       ssd_round = NULL) {
   if (any(duplicated(global_ssd_breaks))) return(FALSE)
 
-  reference_ssd <- get_reference_global_ssd_values(data_sources, ssd_round)
+  reference_ssd <- get_reference_global_ssd_values(data_sources, sources, ssd_round)
   all(vapply(data_sources, function(df) {
     if (is.null(df) || !nrow(df) || is.null(df$SSD)) return(TRUE)
     SSD <- get_stop_signal_bin_ssd(df, ssd_round)
@@ -195,11 +305,12 @@ validate_global_ssd_breaks <- function(data_sources, global_ssd_breaks, ssd_roun
   }, logical(1)))
 }
 
-has_duplicate_stop_signal_quantiles <- function(data_sources, probs, use_global_quantiles,
-                                                within_plot, ssd_round = NULL) {
+has_duplicate_stop_signal_quantiles <- function(data_sources, sources, probs,
+                                                use_global_quantiles, within_plot,
+                                                ssd_round = NULL) {
   if (use_global_quantiles) {
-    global_ssd_breaks <- get_reference_global_ssd_breaks(data_sources, probs, ssd_round)
-    return(!validate_global_ssd_breaks(data_sources, global_ssd_breaks, ssd_round))
+    global_ssd_breaks <- get_reference_global_ssd_breaks(data_sources, sources, probs, ssd_round)
+    return(!validate_global_ssd_breaks(data_sources, sources, global_ssd_breaks, ssd_round))
   }
 
   any(vapply(data_sources, function(df) {
@@ -208,14 +319,14 @@ has_duplicate_stop_signal_quantiles <- function(data_sources, probs, use_global_
   }, logical(1)))
 }
 
-get_reduced_stop_signal_probs <- function(data_sources, probs, use_global_quantiles,
+get_reduced_stop_signal_probs <- function(data_sources, sources, probs, use_global_quantiles,
                                           within_plot, ssd_round = NULL) {
   # The reduce fallback preserves quantile binning but uses fewer evenly spaced
   # breaks. Search downward from the requested number of breaks and keep the
   # largest grid that is valid for every plotted source.
   for (n_breaks in seq(length(probs), 2)) {
     candidate_probs <- seq(0, 1, length.out = n_breaks)
-    if (!has_duplicate_stop_signal_quantiles(data_sources, candidate_probs,
+    if (!has_duplicate_stop_signal_quantiles(data_sources, sources, candidate_probs,
                                              use_global_quantiles, within_plot,
                                              ssd_round)) {
       return(candidate_probs)
@@ -360,6 +471,11 @@ plot_ss_if <- function(input,
   if (ssd_binning == "value") message_ignored_value_binning_args()
   if (ssd_binning == "quantile") validate_stop_signal_probs(probs)
   validate_stop_signal_quants(quants)
+  validate_stop_signal_sources(to_plot, use_lim)
+  validate_stop_signal_predictive_request(input, post_predict, prior_predict,
+                                          to_plot, missing(to_plot))
+  layout <- normalize_stop_signal_layout(layout)
+  legendpos <- normalize_stop_signal_legendpos(legendpos)
 
   # 1) prep_data_plot
   check <- prep_data_plot(input, post_predict, prior_predict, to_plot, use_lim,
@@ -395,7 +511,7 @@ plot_ss_if <- function(input,
   plot_global_ssd_breaks <- NULL
   if (ssd_binning == "quantile") {
     has_duplicate_breaks <- has_duplicate_stop_signal_quantiles(
-      data_sources, probs, use_global_quantiles, within_plot, ssd_round
+      data_sources, sources, probs, use_global_quantiles, within_plot, ssd_round
     )
 
     if (has_duplicate_breaks) {
@@ -403,7 +519,7 @@ plot_ss_if <- function(input,
         effective_ssd_binning <- "value"
       } else if (on_duplicate_quantiles == "reduce") {
         effective_probs <- get_reduced_stop_signal_probs(
-          data_sources, probs, use_global_quantiles, within_plot, ssd_round
+          data_sources, sources, probs, use_global_quantiles, within_plot, ssd_round
         )
       } else {
         stop("Duplicate quantile values detected, or plotted sources have different ",
@@ -414,7 +530,7 @@ plot_ss_if <- function(input,
     }
   }
   if (effective_ssd_binning == "quantile" && use_global_quantiles) {
-    plot_global_ssd_breaks <- get_reference_global_ssd_breaks(data_sources, effective_probs,
+    plot_global_ssd_breaks <- get_reference_global_ssd_breaks(data_sources, sources, effective_probs,
                                                               ssd_round)
   }
 
@@ -530,16 +646,17 @@ plot_ss_if <- function(input,
               # extract x_plot and p_response if present
               if (!is.null(draw[["x_plot"]]) && !is.null(draw[["p_response"]])) {
                 all_x_vals <- c(all_x_vals, draw$x_plot)
-                all_y_vals <- c(all_y_vals, draw$p_response)
+                all_y_vals <- c(all_y_vals, get_stop_signal_y_range_values(draw, "p_response"))
               }
             }
           }
         }
 
         # Now calculate global min/max
-        x_min <- min(all_x_vals, na.rm = TRUE)
-        x_max <- max(all_x_vals, na.rm = TRUE)
-        y_max <- max(all_y_vals, na.rm = TRUE)
+        x_min <- min(x_min, all_x_vals, na.rm = TRUE)
+        x_max <- max(x_max, all_x_vals, na.rm = TRUE)
+        y_min <- min(y_min, all_y_vals, na.rm = TRUE)
+        y_max <- max(y_max, all_y_vals, na.rm = TRUE)
       }
     }
   }
@@ -559,8 +676,12 @@ plot_ss_if <- function(input,
   }
 
   # define a global y-limit (with a bit of headroom)
-  if (!is.finite(y_max) || y_max <= 0) y_max <- 1
-  ylim <- c(0, min(1, y_max + 0.05))
+  if (!is.finite(y_min) || !is.finite(y_max) || y_min >= y_max) {
+    ylim <- c(0, 1)
+  } else {
+    y_buffer <- 0.05 * (y_max - y_min)
+    ylim <- c(y_min - y_buffer, y_max + y_buffer)
+  }
 
   if (!is.finite(x_min) || !is.finite(x_max) || x_min >= x_max) {
     xlim <- NULL  # let R handle it if bad limits
@@ -1032,6 +1153,11 @@ plot_ss_srrt <- function(input,
   if (ssd_binning == "value") message_ignored_value_binning_args()
   if (ssd_binning == "quantile") validate_stop_signal_probs(probs)
   validate_stop_signal_quants(quants)
+  validate_stop_signal_sources(to_plot, use_lim)
+  validate_stop_signal_predictive_request(input, post_predict, prior_predict,
+                                          to_plot, missing(to_plot))
+  layout <- normalize_stop_signal_layout(layout)
+  legendpos <- normalize_stop_signal_legendpos(legendpos)
 
   # 1) prep_data_plot
   check <- prep_data_plot(input, post_predict, prior_predict, to_plot, use_lim,
@@ -1067,7 +1193,7 @@ plot_ss_srrt <- function(input,
   plot_global_ssd_breaks <- NULL
   if (ssd_binning == "quantile") {
     has_duplicate_breaks <- has_duplicate_stop_signal_quantiles(
-      data_sources, probs, use_global_quantiles, within_plot, ssd_round
+      data_sources, sources, probs, use_global_quantiles, within_plot, ssd_round
     )
 
     if (has_duplicate_breaks) {
@@ -1075,7 +1201,7 @@ plot_ss_srrt <- function(input,
         effective_ssd_binning <- "value"
       } else if (on_duplicate_quantiles == "reduce") {
         effective_probs <- get_reduced_stop_signal_probs(
-          data_sources, probs, use_global_quantiles, within_plot, ssd_round
+          data_sources, sources, probs, use_global_quantiles, within_plot, ssd_round
         )
       } else {
         stop("Duplicate quantile values detected, or plotted sources have different ",
@@ -1086,7 +1212,7 @@ plot_ss_srrt <- function(input,
     }
   }
   if (effective_ssd_binning == "quantile" && use_global_quantiles) {
-    plot_global_ssd_breaks <- get_reference_global_ssd_breaks(data_sources, effective_probs,
+    plot_global_ssd_breaks <- get_reference_global_ssd_breaks(data_sources, sources, effective_probs,
                                                               ssd_round)
   }
 
@@ -1202,17 +1328,17 @@ plot_ss_srrt <- function(input,
               # extract x_plot and srrt if present
               if (!is.null(draw[["x_plot"]]) && !is.null(draw[["srrt"]])) {
                 all_x_vals <- c(all_x_vals, draw$x_plot)
-                all_y_vals <- c(all_y_vals, draw$srrt)
+                all_y_vals <- c(all_y_vals, get_stop_signal_y_range_values(draw, "srrt"))
               }
             }
           }
         }
 
         # calculate global min/max
-        x_min <- min(all_x_vals, na.rm = TRUE)
-        x_max <- max(all_x_vals, na.rm = TRUE)
-        y_min <- min(all_y_vals, na.rm = TRUE)
-        y_max <- max(all_y_vals, na.rm = TRUE)
+        x_min <- min(x_min, all_x_vals, na.rm = TRUE)
+        x_max <- max(x_max, all_x_vals, na.rm = TRUE)
+        y_min <- min(y_min, all_y_vals, na.rm = TRUE)
+        y_max <- max(y_max, all_y_vals, na.rm = TRUE)
       }
     }
   }
