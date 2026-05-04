@@ -216,7 +216,8 @@ make_trend <- function(par_names, cov_names = NULL, kernels, bases = NULL,
                        maps = NULL,
                        custom_trend = NULL,
                        ffill_na = NULL,
-                       kernel_args = NULL){
+                       kernel_args = NULL,
+                       per_covariate_pars = NULL){
   if(!(length(par_names) == length(kernels))){
     stop("Make sure that par_names and kernels have the same length")
   }
@@ -287,6 +288,21 @@ make_trend <- function(par_names, cov_names = NULL, kernels, bases = NULL,
     } else if (length(kernel_args) != length(par_names)) {
       stop("kernel_args must be NULL, a single named list, or a list of lists aligned with par_names")
     }
+  }
+
+  if (is.null(per_covariate_pars)) {
+    per_covariate_pars <- rep(list(NULL), length(par_names))
+  } else if (is.character(per_covariate_pars)) {
+    # Single character vector: apply to all par_names
+    per_covariate_pars <- rep(list(per_covariate_pars), length(par_names))
+  } else if (is.list(per_covariate_pars)) {
+    if (length(per_covariate_pars) == 1) {
+      per_covariate_pars <- rep(per_covariate_pars, length(par_names))
+    } else if (length(per_covariate_pars) != length(par_names)) {
+      stop("per_covariate_pars must be NULL, a character vector, or a list aligned with par_names")
+    }
+  } else {
+    stop("per_covariate_pars must be NULL, a character vector, or a list of character vectors")
   }
 
   # ---- Validate kernel_args entries for known kernels ----
@@ -377,12 +393,79 @@ make_trend <- function(par_names, cov_names = NULL, kernels, bases = NULL,
     if(any(cur_trend_pnames %in% all_trend_pnames)){
       cur_trend_pnames[cur_trend_pnames %in% all_trend_pnames] <- paste0(cur_trend_pnames[cur_trend_pnames %in% all_trend_pnames], ".", trend$kernel)
     }
-    all_trend_pnames <- c(all_trend_pnames, cur_trend_pnames)
-    trend$trend_pnames <- cur_trend_pnames
-    trend$covariate <- unlist(cov_names[i])
-    trend$par_input <- unlist(par_input[[i]])
-    trend$phase <- phase[i]
-    trend$kernel_args <- kernel_args[[i]]
+
+    # ---- Build kernel_pnames data frame ----
+    # rows = covariate/par_input slots, cols = generic parameter names,
+    # values = actual (possibly covariate-expanded) parameter names.
+    # Must be done before deduplication so prefixed_generic is still the
+    # canonical form before any kernel-suffix patching.
+    cur_covs         <- unlist(cov_names[i])
+    cur_parinp       <- unlist(par_input[[i]])
+    slot_names       <- c(cur_covs, cur_parinp)
+    cur_per_cov_pars <- per_covariate_pars[[i]]  # generic names, e.g. c("alphaPos", "alphaNeg")
+    prefixed_generic <- paste0(par_names[i], ".", final_trend_pnames)
+
+    if (length(slot_names) > 1 && !is.null(cur_per_cov_pars) && length(cur_per_cov_pars) > 0) {
+
+      # Validate: all requested names must exist in final_trend_pnames
+      unknown <- cur_per_cov_pars[!cur_per_cov_pars %in% final_trend_pnames]
+      if (length(unknown) > 0) {
+        stop("per_covariate_pars for '", par_names[i], "' contains names not found in trend parameters: ",
+             paste(unknown, collapse = ", "),
+             ". Available: ", paste(final_trend_pnames, collapse = ", "))
+      }
+
+      # For each slot x generic param, resolve the actual parameter name
+      kp_mat <- do.call(rbind, lapply(slot_names, function(slot_nm) {
+        vapply(seq_along(final_trend_pnames), function(j) {
+          gp       <- final_trend_pnames[j]
+          prefixed <- prefixed_generic[j]
+          if (gp %in% cur_per_cov_pars) paste0(prefixed, ".", slot_nm) else prefixed
+        }, character(1))
+      }))
+
+    } else {
+      # All slots share the same parameter names
+      kp_mat <- do.call(rbind, lapply(slot_names, function(slot_nm) prefixed_generic))
+    }
+
+    if (length(slot_names) > 0) {
+      rownames(kp_mat) <- slot_names
+      colnames(kp_mat) <- final_trend_pnames
+      kernel_pnames_df <- as.data.frame(kp_mat, stringsAsFactors = FALSE)
+    } else {
+      kernel_pnames_df <- data.frame()
+    }
+
+    # trend_pnames = unique actual parameter names across all slots
+    cur_trend_pnames <- unique(unlist(kernel_pnames_df, use.names = FALSE))
+    # If no slots (e.g. no covariates and no par_input), fall back to prefixed_generic
+    if (length(cur_trend_pnames) == 0) cur_trend_pnames <- prefixed_generic
+
+    # Deduplicate against previously seen trend pnames (append kernel suffix if needed)
+    dups <- cur_trend_pnames %in% all_trend_pnames
+    if (any(dups)) {
+      new_names <- ifelse(dups,
+                          paste0(cur_trend_pnames, ".", trend$kernel),
+                          cur_trend_pnames)
+      # Patch kernel_pnames_df to match
+      if (nrow(kernel_pnames_df) > 0) {
+        kernel_pnames_df[] <- lapply(kernel_pnames_df, function(col) {
+          ifelse(col %in% cur_trend_pnames[dups],
+                 paste0(col, ".", trend$kernel),
+                 col)
+        })
+      }
+      cur_trend_pnames <- new_names
+    }
+
+    all_trend_pnames    <- c(all_trend_pnames, cur_trend_pnames)
+    trend$trend_pnames  <- cur_trend_pnames
+    trend$kernel_pnames <- kernel_pnames_df
+    trend$covariate     <- unlist(cov_names[i])
+    trend$par_input     <- unlist(par_input[[i]])
+    trend$phase         <- phase[i]
+    trend$kernel_args   <- kernel_args[[i]]
     if(is.null(ffill_na[i])) {
       if(trend$kernel %in% c('delta', 'delta2kernel', 'delta2lr', 'rescorlawagner')) trend$ffill_na <- TRUE else trend$ffill_na <- FALSE
     } else {
@@ -393,18 +476,23 @@ make_trend <- function(par_names, cov_names = NULL, kernels, bases = NULL,
   }
   names(trends_out) <- par_names
   if(!is.null(shared)){
-    # For each group of shared parameters
     for (main_par in names(shared)) {
-      # Get the parameters to be replaced
       to_replace <- shared[[main_par]]
-      # Loop through all trends
       for (trend_n in 1:length(trends_out)) {
-        # Get current trend parameter names
+        # Patch trend_pnames
         curr_pnames <- trends_out[[trend_n]]$trend_pnames
-
-        # Check if any of the parameters to be replaced exist
         curr_pnames[curr_pnames %in% to_replace] <- main_par
         trends_out[[trend_n]]$trend_pnames <- curr_pnames
+
+        # Patch kernel_pnames data frame
+        kp <- trends_out[[trend_n]]$kernel_pnames
+        if (nrow(kp) > 0) {
+          kp[] <- lapply(kp, function(col) {
+            col[col %in% to_replace] <- main_par
+            col
+          })
+          trends_out[[trend_n]]$kernel_pnames <- kp
+        }
       }
     }
   }
@@ -823,34 +911,46 @@ run_trend <- function(dadm, trend, param, trend_pars, pars_full = NULL,
   return(out)
 }
 
+#' Check and update formula list for trend parameters
+#'
+#' @param trend A trend list, as made by make_trend
+#' @param covariates Names of covariates, or NULL
+#' @param model A model function, or NULL
+#' @param formula List of formulas, or NULL
+#' @param parameter_design A parameter_design list, or NULL
+#' @return Updated formula list with intercept formulas added for missing trend parameters
 check_trend <- function(trend, covariates = NULL, model = NULL, formula = NULL,
-                        reparameterize = NULL) {
-  if(!is.null(model)){
+                        parameter_design = NULL) {
+  if (!is.null(model)) {
     # non-premap trend targets must be model parameters
     tnames <- names(trend)
-    ok <- vapply(seq_along(trend), function(i){
+    ok <- vapply(seq_along(trend), function(i) {
       if (identical(trend[[i]]$phase, "premap")) return(TRUE)
       tnames[i] %in% names(model()$p_types)
     }, logical(1))
     if (!all(ok)) stop("pretransform/posttransform trend has a parameter name not in the model")
   }
   if (is.null(covariates)) stop("must specify covariates when using trend")
-  covnames <- unlist(lapply(trend,function(x)x$covariate))
-  # if (!all(covnames %in% covariates)){
-  #   stop("trend has covnames not in covariates")
-  # }
-  # Premap + par_input: allowed. Scalars will be replicated to vector length in C++ mapping
+  covnames <- unlist(lapply(trend, function(x) x$covariate))
+
   trend_pnames <- get_trend_pnames(trend)
   if (!is.null(formula)) {
-    reparam_out <- names(reparameterize)
+    # Don't auto-add intercepts for parameter_design output parameters
+    pd_targets <- NULL
+    if (!is.null(parameter_design)) {
+      expand_over <- parameter_design$expand_over
+      if (!is.null(expand_over)) {
+        pd_targets <- as.vector(outer(rownames(parameter_design$weights), expand_over, paste, sep = "."))
+      } else {
+        pd_targets <- rownames(parameter_design$weights)
+      }
+    }
     isin <- trend_pnames %in% unlist(lapply(formula, function(x) all.vars(x)[1]))
-    # don't auto-add intercepts for reparameterize outputs
-    isin <- isin | (trend_pnames %in% reparam_out)
-#    isin <-  trend_pnames %in% unlist(lapply(formula,function(x)all.vars(x)[1]))
-    if(any(!isin)){
-      # Add missing trend parameters to formula with intercept-only model
+    # don't auto-add intercepts for parameter_design output parameters
+    isin <- isin | (trend_pnames %in% pd_targets)
+    if (any(!isin)) {
       formula <- c(formula, lapply(trend_pnames[!isin], function(x) as.formula(paste(x, "~ 1"))))
-      message("Intercept formula added for trend_pars: ", paste(trend_pnames[!isin],collapse=", "))
+      message("Intercept formula added for trend_pars: ", paste(trend_pnames[!isin], collapse = ", "))
     }
   }
   return(formula)
@@ -858,18 +958,16 @@ check_trend <- function(trend, covariates = NULL, model = NULL, formula = NULL,
 
 
 update_model_trend <- function(trend, model) {
-  # Get model list to modify
   model_list <- model()
 
-  # For each parameter in the trend
   tnames <- names(trend)
   for (i in seq_along(trend)) {
-    par <- tnames[i]
+    par       <- tnames[i]
     cur_trend <- trend[[i]]
 
-    # Get default transforms from base and kernel
-    base_transforms <- trend_help(base = cur_trend$base, do_return = TRUE, maps=cur_trend$map)$transforms
-    # if(length(cur_trend$map)>1) base_transforms$func <- rep(base_transforms$func, length(cur_trend$map))
+    # Get transforms for base and kernel, keyed by generic parameter name
+    base_transforms <- trend_help(base = cur_trend$base, do_return = TRUE,
+                                  maps = cur_trend$map)$transforms
     if (identical(cur_trend$kernel, "custom")) {
       ctf <- attr(cur_trend, "custom_transforms")
       kernel_transforms <- if (is.null(ctf)) NULL else list(func = ctf)
@@ -877,22 +975,49 @@ update_model_trend <- function(trend, model) {
       kernel_transforms <- trend_help(cur_trend$kernel, do_return = TRUE)$transforms
     }
 
-    # Combine transforms
     if (!is.null(kernel_transforms) || !is.null(base_transforms)) {
-      tmp <- c(base_transforms$func, kernel_transforms$func)
-      names(tmp) <- cur_trend$trend_pnames
-      # Update the appropriate transform list based on premap
-      model_list$transform$func <- c(model_list$transform$func, unlist(tmp))
+      generic_transforms <- c(base_transforms$func, kernel_transforms$func)
+
+      if (nrow(cur_trend$kernel_pnames) > 0) {
+        # colnames(kernel_pnames) are the generic parameter names — no string
+        # stripping needed. Length must match generic_transforms.
+        names(generic_transforms) <- colnames(cur_trend$kernel_pnames)
+
+        # For each unique actual parameter name in trend_pnames, find which
+        # generic column it came from and inherit that transform.
+        expanded_transforms <- vapply(cur_trend$trend_pnames, function(nm) {
+          col_idx <- which(vapply(cur_trend$kernel_pnames,
+                                  function(col) any(col == nm),
+                                  logical(1)))[1]
+          if (is.na(col_idx)) {
+            "identity"  # safety fallback; should not occur
+          } else {
+            generic_transforms[[ colnames(cur_trend$kernel_pnames)[col_idx] ]]
+          }
+        }, character(1))
+      } else {
+        # No slots (no covariates, no par_input): trend_pnames maps 1-1 to
+        # generic_transforms by position
+        names(generic_transforms) <- cur_trend$trend_pnames
+        expanded_transforms <- generic_transforms
+      }
+
+      model_list$transform$func <- c(model_list$transform$func, expanded_transforms)
     }
-    model_list$p_types <- c(model_list$p_types, setNames(numeric(length(cur_trend$trend_pnames)), cur_trend$trend_pnames))
+
+    model_list$p_types <- c(
+      model_list$p_types,
+      stats::setNames(numeric(length(cur_trend$trend_pnames)), cur_trend$trend_pnames)
+    )
   }
-  # Ensure that shared parameters are removed
+
+  # Remove duplicate p_types entries (e.g. from shared parameters)
   model_list$p_types <- model_list$p_types[unique(names(model_list$p_types))]
-  model_list$trend <- trend
-  # Return updated model function
+  model_list$trend   <- trend
   model <- function() { return(model_list) }
   return(model)
 }
+
 
 run_delta <- function(q0,alpha,covariate) {
   q <- pe <- numeric(length(covariate))
@@ -1316,17 +1441,16 @@ make_data_unconditional <- function(data, pars, design, model,
 
   # Number of accumulators (rows per trial)
   n_acc <- sum(dadm_full$trials == dadm_full$trials[1] &
-               dadm_full$subjects == dadm_full$subjects[1])
-
+                 dadm_full$subjects == dadm_full$subjects[1])
 
   # -----------------------------------------------------------------------
   # Step 2: Set up design cache.
   # -----------------------------------------------------------------------
   factor_cols <- setdiff(names(design$Ffactors), "subjects")
   ffun_cols   <- names(design$Ffunctions)
-  p_types     <- names(design$Flist) #names(model_list$p_types)
+  p_types     <- names(design$Flist)
 
-  pnames <- names(design$Flist) #names(model_list$p_types)
+  pnames <- names(design$Flist)
   if (!is.list(design$Clist[[1]])) {
     design$Clist <- stats::setNames(
       lapply(seq_along(pnames), function(x) design$Clist),
@@ -1350,26 +1474,62 @@ make_data_unconditional <- function(data, pars, design, model,
   cached_pars   <- p_types[!uses_ffun]
   uncached_pars <- p_types[ uses_ffun]
 
+  # Split parameter_design output rows into cached vs uncached
+  # (uncached if any non-zero weight column is a function)
+  cached_pd_pars   <- character(0)
+  uncached_pd_pars <- character(0)
+  if (!is.null(design$parameter_design)) {
+    pd_fun_names <- names(design$parameter_design$functions)
+    pd_uses_fun  <- apply(design$parameter_design$weights, 1, function(row) {
+      any(names(row)[row != 0] %in% pd_fun_names)
+    })
+    cached_pd_pars   <- names(pd_uses_fun)[!pd_uses_fun]
+    uncached_pd_pars <- names(pd_uses_fun)[ pd_uses_fun]
+  }
+
   make_designs_cached <- local({
     cache <- list()
     function(dadm_slice, key) {
       if (is.null(cache[[key]])) {
-        cache[[key]] <<- lapply(
+        regular <- lapply(
           stats::setNames(cached_pars, cached_pars),
           function(x) make_dm(design$Flist[[x]], da = dadm_slice,
                               Fcovariates = design$Fcovariates,
                               compress_dms = FALSE)
         )
+        pd_cached <- if (length(cached_pd_pars) > 0) {
+          expand_parameter_design(
+            list(weights     = design$parameter_design$weights[cached_pd_pars, , drop = FALSE],
+                 functions   = design$parameter_design$functions,
+                 expand_over = design$parameter_design$expand_over),
+            dadm_slice, compress = FALSE
+          )
+        } else list()
+        cache[[key]] <<- c(regular, pd_cached)
       }
-      # Short-circuit: if no uncached pars, return cache entry directly
-      if (length(uncached_pars) == 0L) return(cache[[key]])
-      fresh <- lapply(
-        stats::setNames(uncached_pars, uncached_pars),
-        function(x) make_dm(design$Flist[[x]], da = dadm_slice,
-                            Fcovariates = design$Fcovariates,
-                            compress_dms = FALSE)
-      )
-      c(cache[[key]], fresh)[p_types]
+
+      fresh_regular <- if (length(uncached_pars) > 0) {
+        lapply(
+          stats::setNames(uncached_pars, uncached_pars),
+          function(x) make_dm(design$Flist[[x]], da = dadm_slice,
+                              Fcovariates = design$Fcovariates,
+                              compress_dms = FALSE)
+        )
+      } else list()
+
+      fresh_pd <- if (length(uncached_pd_pars) > 0) {
+        expand_parameter_design(
+          list(weights     = design$parameter_design$weights[uncached_pd_pars, , drop = FALSE],
+               functions   = design$parameter_design$functions,
+               expand_over = design$parameter_design$expand_over),
+          dadm_slice, compress = FALSE
+        )
+      } else list()
+
+      all_designs <- c(cache[[key]], fresh_regular, fresh_pd)
+      # Preserve original p_types order, then append pd names
+      pd_names <- c(names(fresh_pd), cached_pd_pars)
+      all_designs[c(p_types, pd_names[pd_names %in% names(all_designs)])]
     }
   })
 
@@ -1406,33 +1566,13 @@ make_data_unconditional <- function(data, pars, design, model,
     colnames(particle_matrix) <- colnames(pars)
 
     # Pre-allocate designs_prefix from dadm_full's designs, zeroed out
+    # Includes parameter_design matrices already (appended in design_model())
     designs_prefix <- lapply(attr(dadm_full, "designs"), function(m) {
       out <- m[subj_rows, , drop = FALSE]
+      attr(out, "parameter_design") <- attr(m, "parameter_design")
       out[] <- 0
       out
     })
-
-    # Add pre-allocated reparam_designs to designs_prefix
-    reparam_dms <- design$reparameterisations
-    if (!is.null(reparam_dms)) {
-      reparam_names <- names(reparam_dms)
-      reparam_dms <- lapply(reparam_names, function(nm) {
-        dm <- reparam_dms[[nm]]
-        weights <- as.numeric(dm)
-        out <- matrix(
-          rep(weights, n_rows_subj),
-          nrow = n_rows_subj,
-          byrow = TRUE)
-        rownames(out) <- as.character(seq_len(n_rows_subj))
-        colnames(out) <- names(dm)
-        out
-      })
-      names(reparam_dms) <- reparam_names
-      designs_prefix <- c(designs_prefix, reparam_dms)
-    } else {
-      reparam_names <- character(0)
-    }
-
 
     # Pre-allocate covariate_maps_prefix: bootstrap structure from trial 1
     if (has_covariate_maps) {
@@ -1445,9 +1585,9 @@ make_data_unconditional <- function(data, pars, design, model,
           for (map_n in seq_along(tr$map)) {
             map_name      <- names(tr$map)[map_n]
             trial1_result <- tr$map[[map_n]](dadm = dadm_t1, tr$covariate)
-            ## protect against 1-row matrices that are simplified to numerics
-            if(is.null(dim(trial1_result))) {
-              trial1_result <- matrix(trial1_result, nrow = 1, dimnames = list(NULL, names(trial1_result)))
+            if (is.null(dim(trial1_result))) {
+              trial1_result <- matrix(trial1_result, nrow = 1,
+                                      dimnames = list(NULL, names(trial1_result)))
             }
             covariate_maps_prefix[[map_name]] <- matrix(
               0,
@@ -1460,8 +1600,6 @@ make_data_unconditional <- function(data, pars, design, model,
       }
     }
 
-    # dadm_subj_df is the single mutable data.frame for this subject;
-    # all trial-by-trial updates go directly into it
     dadm_subj_df <- as.list(dadm_subj)
     class(dadm_subj_df) <- "data.frame"
     attr(dadm_subj_df, "row.names") <- .set_row_names(n_rows_subj)
@@ -1480,11 +1618,7 @@ make_data_unconditional <- function(data, pars, design, model,
       class(dadm_current) <- "data.frame"
       attr(dadm_current, "row.names") <- .set_row_names(length(idx_curr))
 
-      # 2. Ffunction pass 1: runs before get_pars_c_wrapper_oo.
-      #    Handles Ffunctions that affect condition/design (e.g. depend on
-      #    previous trial's R/rt/feedback, or purely on design factors).
-      #    Updates dadm_current and dadm_subj_df so key + make_designs_cached
-      #    see the correct values.
+      # 2. Ffunction pass 1
       if (has_ffunctions) {
         for (i in names(design$Ffunctions)) {
           result <- design$Ffunctions[[i]](dadm_current)
@@ -1498,7 +1632,7 @@ make_data_unconditional <- function(data, pars, design, model,
         as.integer(dadm_subj_df[[fc]][idx_curr[1]]),
         integer(1)), collapse = "_")
 
-      # 4. Get current-trial designs (cached by key) and write into prefix
+      # 4. Get current-trial designs (cached + fresh) and write into prefix
       designs_current <- make_designs_cached(dadm_current, key)
       for (nm in names(designs_current)) {
         designs_prefix[[nm]][idx_curr, ] <- designs_current[[nm]]
@@ -1518,10 +1652,7 @@ make_data_unconditional <- function(data, pars, design, model,
         attr(dadm_subj_df, "covariate_maps") <- covariate_maps_prefix
       }
 
-
       # 6. Get parameter matrix for full subject buffer
-      #    (designs_prefix and dadm_subj_df cover all subject rows;
-      #     zero-filled tail rows are ignored by the C function)
       pm <- get_pars_c_wrapper(
         particle_matrix      = particle_matrix,
         data                 = dadm_subj_df,
@@ -1531,7 +1662,6 @@ make_data_unconditional <- function(data, pars, design, model,
         transforms           = model_list$transform,
         pretransforms        = model_list$pre_transform,
         trend                = model_list$trend,
-        reparam_targets      = reparam_names,
         return_kernel_matrix = FALSE,
         return_all_pars      = TRUE
       )
@@ -1546,7 +1676,6 @@ make_data_unconditional <- function(data, pars, design, model,
           transforms           = model_list$transform,
           pretransforms        = model_list$pre_transform,
           trend                = model_list$trend,
-          reparam_targets      = reparam_names,
           return_kernel_matrix = TRUE,
           kernel_output_codes  = kernel_output_codes,
           return_all_pars      = TRUE
@@ -1579,7 +1708,7 @@ make_data_unconditional <- function(data, pars, design, model,
         for (trend_n in seq_along(model_list$trend)) {
           fb <- model_list$trend[[trend_n]]$feedback_fun
           if (!is.null(fb)) {
-            dadm_current <- lapply(dadm_subj_df, `[`, idx_curr, drop=FALSE)
+            dadm_current <- lapply(dadm_subj_df, `[`, idx_curr, drop = FALSE)
             class(dadm_current) <- "data.frame"
             attr(dadm_current, "row.names") <- .set_row_names(length(idx_curr))
             for (i in seq_along(fb)) {
@@ -1590,13 +1719,9 @@ make_data_unconditional <- function(data, pars, design, model,
         }
       }
 
-      # 10. Ffunction pass 2: runs after simulation and feedback.
-      #     Handles Ffunctions that depend on the current trial's R, rt, or
-      #     feedback values. Updates dadm_subj_df only (dadm_current is no
-      #     longer needed this trial); results are available to pass 1 of
-      #     the next trial.
+      # 10. Ffunction pass 2
       if (has_ffunctions) {
-        dadm_current <- lapply(dadm_subj_df, `[`, idx_curr, drop=FALSE)
+        dadm_current <- lapply(dadm_subj_df, `[`, idx_curr, drop = FALSE)
         class(dadm_current) <- "data.frame"
         attr(dadm_current, "row.names") <- .set_row_names(length(idx_curr))
         for (i in names(design$Ffunctions)) {
@@ -1627,15 +1752,16 @@ make_data_unconditional <- function(data, pars, design, model,
   # -----------------------------------------------------------------------
   # Step 4: Final pass, trim output columns.
   # -----------------------------------------------------------------------
-  if(n_acc > 1) {
+  if (n_acc > 1) {
     first_lR <- levels(dadm_full$lR)[1]
-    dadm_full  <- dadm_full[dadm_full$lR == first_lR, , drop = FALSE]
+    dadm_full <- dadm_full[dadm_full$lR == first_lR, , drop = FALSE]
   }
   dadm_full <- dadm_full[, unique(c(includeColumns, "R", "rt")), drop = FALSE]
   dadm_full <- dadm_full[, !colnames(dadm_full) %in% c("lR", "lM"), drop = FALSE]
 
   list(data = dadm_full, trialwise_parameters = trialwise_parameters)
 }
+
 
 
 

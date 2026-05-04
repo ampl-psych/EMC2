@@ -40,8 +40,7 @@ PipelineCache make_pipeline_cache(
     const ParamTable& param_table,
     const Rcpp::List& designs,
     const std::vector<TransformSpec>& transform_specs,
-    TrendRuntime* trend_runtime_ptr,
-    const std::unordered_set<std::string>& reparam_set)
+    TrendRuntime* trend_runtime_ptr)
 {
   static const std::unordered_set<std::string> empty_set;
 
@@ -62,6 +61,16 @@ PipelineCache make_pipeline_cache(
 
   Rcpp::CharacterVector dnames = designs.names();
   const int n_designs = dnames.size();
+
+  // Figure out which parameters are *targets* for reparameterisations
+  std::unordered_set<std::string> reparam_set;
+  for (int i = 0; i < n_designs; ++i) {
+    Rcpp::RObject dm = designs[i];
+    Rcpp::RObject pd_attr = dm.attr("parameter_design");
+    if (!Rf_isNull(pd_attr) && Rcpp::as<bool>(pd_attr)) {
+      reparam_set.insert(Rcpp::as<std::string>(dnames[i]));
+    }
+  }
 
   cache.mask_premap         = Rcpp::LogicalVector(n_designs, false);
   cache.mask_premap_reparam = Rcpp::LogicalVector(n_designs, false);
@@ -525,12 +534,8 @@ NumericVector calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVect
   CharacterVector mm_names = colnames(minmax);
   std::vector<BoundSpec> bound_specs = make_bound_specs_pt(minmax, mm_names, ctx.param_table, bounds);
 
-  // Pipeline cache — calc_ll never uses reparam_targets so far.
-  // cache holds the logical masks for run_ipeline
-  static const std::unordered_set<std::string> empty_reparam_set;
   PipelineCache cache = make_pipeline_cache(ctx.param_table, designs,
-                                            ctx.transform_specs, trend_runtime_ptr,
-                                            empty_reparam_set);
+                                            ctx.transform_specs, trend_runtime_ptr);
 
 
   // -----------------------------------------------------------------------
@@ -669,16 +674,15 @@ NumericVector calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVect
 // [[Rcpp::export]]
 NumericMatrix get_pars_c_wrapper(NumericMatrix particle_matrix,
                                  DataFrame data,
-                                    NumericVector constants,
-                                    List designs,
-                                    List bounds,
-                                    List transforms,
-                                    List pretransforms,
-                                    Rcpp::Nullable<Rcpp::List> trend = R_NilValue,
-                                    bool return_kernel_matrix = false,
-                                    bool return_all_pars = false,
-                                    IntegerVector kernel_output_codes = 1,
-                                    Rcpp::Nullable<Rcpp::CharacterVector> reparam_targets = R_NilValue)
+                                 NumericVector constants,
+                                 List designs,
+                                 List bounds,
+                                 List transforms,
+                                 List pretransforms,
+                                 Rcpp::Nullable<Rcpp::List> trend = R_NilValue,
+                                 bool return_kernel_matrix = false,
+                                 bool return_all_pars = false,
+                                 IntegerVector kernel_output_codes = 1)
 {
   if (Rf_isNull(colnames(particle_matrix))) {
     stop("p_matrix must have column names for pretransforms/transform specs");
@@ -689,18 +693,8 @@ NumericMatrix get_pars_c_wrapper(NumericMatrix particle_matrix,
                                               designs, transforms, pretransforms, trend);
   TrendRuntime* trend_runtime_ptr = ctx.trend_runtime ? ctx.trend_runtime.get() : nullptr;
 
-  // Reparam set -- do to by SM
-  std::unordered_set<std::string> reparam_set;
-  if (!reparam_targets.isNull()) {
-    Rcpp::CharacterVector reparam_target = reparam_targets.as();
-    for (int i = 0; i < reparam_target.size(); ++i) {
-      reparam_set.insert(Rcpp::as<std::string>(reparam_target[i]));
-    }
-  }
-
   // Pipeline cache
-  PipelineCache cache = make_pipeline_cache(
-    ctx.param_table, designs, ctx.transform_specs, trend_runtime_ptr, reparam_set);
+  PipelineCache cache = make_pipeline_cache(ctx.param_table, designs, ctx.transform_specs, trend_runtime_ptr);
 
   // kernel_output_codes: IntegerVector -> std::vector<int>
   std::vector<int> kernel_codes(kernel_output_codes.begin(), kernel_output_codes.end());

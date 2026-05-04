@@ -82,6 +82,9 @@ struct TrendOpSpec {
   // Union of all trend parameter names for this op
   Rcpp::CharacterVector trend_pnames;
 
+  // new - probably makes the previous outdated
+  Rcpp::DataFrame kernel_pnames;  // rows = slots, cols = generic param names
+
   // Kernels belonging to this TrendOp
   std::vector<KernelSlotSpec> kernels;
 

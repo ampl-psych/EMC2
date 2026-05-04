@@ -18,8 +18,11 @@
     }
 
     expanded <- design_mat[expand_idx, , drop = FALSE]
+    attr(expanded, "parameter_design") <- attr(design_mat, "parameter_design")
+
     if (!is.null(row_idx)) {
       expanded <- expanded[row_idx, , drop = FALSE]
+      attr(expanded, "parameter_design") <- attr(design_mat, "parameter_design")
     }
     expanded
   })

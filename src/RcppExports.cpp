@@ -504,8 +504,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // get_pars_c_wrapper
-NumericMatrix get_pars_c_wrapper(NumericMatrix particle_matrix, DataFrame data, NumericVector constants, List designs, List bounds, List transforms, List pretransforms, Rcpp::Nullable<Rcpp::List> trend, bool return_kernel_matrix, bool return_all_pars, IntegerVector kernel_output_codes, Rcpp::Nullable<Rcpp::CharacterVector> reparam_targets);
-RcppExport SEXP _EMC2_get_pars_c_wrapper(SEXP particle_matrixSEXP, SEXP dataSEXP, SEXP constantsSEXP, SEXP designsSEXP, SEXP boundsSEXP, SEXP transformsSEXP, SEXP pretransformsSEXP, SEXP trendSEXP, SEXP return_kernel_matrixSEXP, SEXP return_all_parsSEXP, SEXP kernel_output_codesSEXP, SEXP reparam_targetsSEXP) {
+NumericMatrix get_pars_c_wrapper(NumericMatrix particle_matrix, DataFrame data, NumericVector constants, List designs, List bounds, List transforms, List pretransforms, Rcpp::Nullable<Rcpp::List> trend, bool return_kernel_matrix, bool return_all_pars, IntegerVector kernel_output_codes);
+RcppExport SEXP _EMC2_get_pars_c_wrapper(SEXP particle_matrixSEXP, SEXP dataSEXP, SEXP constantsSEXP, SEXP designsSEXP, SEXP boundsSEXP, SEXP transformsSEXP, SEXP pretransformsSEXP, SEXP trendSEXP, SEXP return_kernel_matrixSEXP, SEXP return_all_parsSEXP, SEXP kernel_output_codesSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -520,8 +520,7 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< bool >::type return_kernel_matrix(return_kernel_matrixSEXP);
     Rcpp::traits::input_parameter< bool >::type return_all_pars(return_all_parsSEXP);
     Rcpp::traits::input_parameter< IntegerVector >::type kernel_output_codes(kernel_output_codesSEXP);
-    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::CharacterVector> >::type reparam_targets(reparam_targetsSEXP);
-    rcpp_result_gen = Rcpp::wrap(get_pars_c_wrapper(particle_matrix, data, constants, designs, bounds, transforms, pretransforms, trend, return_kernel_matrix, return_all_pars, kernel_output_codes, reparam_targets));
+    rcpp_result_gen = Rcpp::wrap(get_pars_c_wrapper(particle_matrix, data, constants, designs, bounds, transforms, pretransforms, trend, return_kernel_matrix, return_all_pars, kernel_output_codes));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -570,7 +569,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_EMC2_construct_design_matrix", (DL_FUNC) &_EMC2_construct_design_matrix, 13},
     {"_EMC2_do_transform", (DL_FUNC) &_EMC2_do_transform, 2},
     {"_EMC2_calc_ll", (DL_FUNC) &_EMC2_calc_ll, 11},
-    {"_EMC2_get_pars_c_wrapper", (DL_FUNC) &_EMC2_get_pars_c_wrapper, 12},
+    {"_EMC2_get_pars_c_wrapper", (DL_FUNC) &_EMC2_get_pars_c_wrapper, 11},
     {"_EMC2_c_add_charvectors", (DL_FUNC) &_EMC2_c_add_charvectors, 2},
     {NULL, NULL, 0}
 };

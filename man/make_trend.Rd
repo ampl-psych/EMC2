@@ -17,7 +17,8 @@ make_trend(
   maps = NULL,
   custom_trend = NULL,
   ffill_na = NULL,
-  kernel_args = NULL
+  kernel_args = NULL,
+  per_covariate_pars = NULL
 )
 }
 \arguments{

@@ -125,8 +125,8 @@ calc_ll <- function(particle_matrix, data, constants, designs, type, bounds, tra
     .Call(`_EMC2_calc_ll`, particle_matrix, data, constants, designs, type, bounds, transforms, pretransforms, p_types, min_ll, trend)
 }
 
-get_pars_c_wrapper <- function(particle_matrix, data, constants, designs, bounds, transforms, pretransforms, trend = NULL, return_kernel_matrix = FALSE, return_all_pars = FALSE, kernel_output_codes = 1L, reparam_targets = NULL) {
-    .Call(`_EMC2_get_pars_c_wrapper`, particle_matrix, data, constants, designs, bounds, transforms, pretransforms, trend, return_kernel_matrix, return_all_pars, kernel_output_codes, reparam_targets)
+get_pars_c_wrapper <- function(particle_matrix, data, constants, designs, bounds, transforms, pretransforms, trend = NULL, return_kernel_matrix = FALSE, return_all_pars = FALSE, kernel_output_codes = 1L) {
+    .Call(`_EMC2_get_pars_c_wrapper`, particle_matrix, data, constants, designs, bounds, transforms, pretransforms, trend, return_kernel_matrix, return_all_pars, kernel_output_codes)
 }
 
 c_add_charvectors <- function(x, y) {

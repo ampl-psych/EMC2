@@ -484,6 +484,11 @@ TrendPlan::TrendPlan(Rcpp::Nullable<Rcpp::List> trend_,
       op.at = Rcpp::as<std::string>(tr_i["at"]);
     }
 
+    //
+    if (tr_i.containsElementNamed("kernel_pnames") && !Rf_isNull(tr_i["kernel_pnames"])) {
+      op.kernel_pnames = Rcpp::as<Rcpp::DataFrame>(tr_i["kernel_pnames"]);
+    }
+
     // trend_pnames from this spec
     op.trend_pnames = Rcpp::CharacterVector(0);
     if (tr_i.containsElementNamed("trend_pnames")) {
@@ -747,25 +752,45 @@ void TrendRuntime::bind_all_ops_to_paramtable(const ParamTable& pt) {
       // Rprintf("n_base_pars = %d, base_par_indices[0] = %d\n", n_base_pars, op_rt.base_par_idx);
 
 
-      // ---- 2) Kernel parameter indices (shared across all kernels in this TrendOp) ----
-      std::vector<int> kernel_indices;
-      kernel_indices.reserve(std::max(0, n_tp - n_base_pars));
-      for (int k = n_base_pars; k < n_tp; ++k) {
-        std::string kn = Rcpp::as<std::string>(spec.trend_pnames[k]);
-        // Rprintf("Identified kernel parameter name: %s\n", kn.c_str());
-        int idx = pt.base_index_for(kn);
-        kernel_indices.push_back(idx);
-      }
+      // ---- 2) Build KernelSlotRuntime for each kernel slot ----
+      // kernel_pnames is a DataFrame: rows = slots, cols = generic param names.
+      // Row k gives the actual parameter names for slot k — base params first,
+      // then kernel params. We read columns [n_base_pars .. ncol) for each slot.
+      Rcpp::DataFrame kp_df = Rcpp::as<Rcpp::DataFrame>(spec.kernel_pnames);
+      const int n_kp_cols   = kp_df.size();           // number of generic params
+      const int n_kp_rows   = kp_df.nrows();          // number of slots
+      const int n_kernel_cols = n_kp_cols - n_base_pars; // kernel-param columns
 
-      // ---- 3) Build KernelSlotRuntime for each kernel spec ----
       op_rt.kernels.clear();
       op_rt.kernels.reserve(spec.kernels.size());
-      for (const auto& kspec : spec.kernels) {
+
+      for (size_t k = 0; k < spec.kernels.size(); ++k) {
+        const KernelSlotSpec& kspec = spec.kernels[k];
         KernelSlotRuntime k_rt;
-        k_rt.spec         = &kspec;
-        k_rt.kernel_ptr   = make_kernel(kspec.kernel_type, kspec.custom_fun);
+        k_rt.spec       = &kspec;
+        k_rt.kernel_ptr = make_kernel(kspec.kernel_type, kspec.custom_fun);
         k_rt.kernel_ptr->set_kernel_args(kspec.kernel_args);
-        k_rt.kernel_par_indices = kernel_indices;
+
+        // Read kernel parameter names for this slot from kernel_pnames row k
+        std::vector<int> slot_indices;
+        slot_indices.reserve(n_kernel_cols);
+
+        if (n_kp_rows > 0 && (int)k < n_kp_rows) {
+          // Row k, columns [n_base_pars .. n_kp_cols)
+          for (int c = n_base_pars; c < n_kp_cols; ++c) {
+            Rcpp::CharacterVector col = Rcpp::as<Rcpp::CharacterVector>(kp_df[c]);
+            std::string pname = Rcpp::as<std::string>(col[k]);
+            slot_indices.push_back(pt.base_index_for(pname));
+          }
+        } else {
+          // No kernel_pnames (no slots): fall back to shared trend_pnames
+          for (int j = n_base_pars; j < n_tp; ++j) {
+            std::string pname = Rcpp::as<std::string>(spec.trend_pnames[j]);
+            slot_indices.push_back(pt.base_index_for(pname));
+          }
+        }
+
+        k_rt.kernel_par_indices = std::move(slot_indices);
         op_rt.kernels.push_back(std::move(k_rt));
       }
 
@@ -1307,69 +1332,3 @@ Rcpp::NumericMatrix TrendRuntime::all_kernel_outputs(ParamTable& pt,
 Rcpp::NumericMatrix TrendRuntime::all_kernel_outputs(ParamTable& pt) {
   return all_kernel_outputs(pt, std::vector<int>{1}); // only main trajectories
 }
-
-// Rcpp::NumericMatrix TrendRuntime::all_kernel_outputs(ParamTable& pt) {
-//   using namespace Rcpp;
-//
-//   const int n = pt.n_trials;
-//
-//   // Count total number of kernel slots
-//   int n_slots = 0;
-//   for (const auto& op : premap_ops)        n_slots += op.kernels.size();
-//   for (const auto& op : pretransform_ops)  n_slots += op.kernels.size();
-//   for (const auto& op : posttransform_ops) n_slots += op.kernels.size();
-//
-//   NumericMatrix out(n, n_slots);
-//   CharacterVector cn(n_slots);
-//
-//   int col = 0;
-//
-//   auto fill_for_ops = [&](std::vector<TrendOpRuntime>& ops) {
-//     for (auto& op : ops) {
-//       const TrendOpSpec& spec = *op.spec;
-//
-//       for (auto& k_rt : op.kernels) {
-//         const KernelSlotSpec& kspec = *k_rt.spec;
-//         const std::vector<double>& traj = k_rt.kernel_ptr->get_output();
-//
-//         if ((int)traj.size() != n) {
-//           stop("TrendRuntime::all_kernel_outputs('%s'): trajectory length (%d) != n_trials (%d)",
-//                spec.target_param.c_str(), (int)traj.size(), n);
-//         }
-//
-//         for (int r = 0; r < n; ++r) {
-//           out(r, col) = traj[r];
-//         }
-//
-//         // Build a column name: target_param + "." + input_name
-//         std::string input_name;
-//         if (kspec.input_kind == InputKind::Covariate) {
-//           // try to get column name from attributes if available
-//           if (kspec.kernel_input.hasAttribute("names")) {
-//             // optional; often covariate is directly from data[cov_name],
-//             // so we don't have the name here. You can store the cov_name in KernelSlotSpec if needed.
-//             input_name = "cov";
-//           } else {
-//             input_name = "cov";
-//           }
-//         } else if (kspec.input_kind == InputKind::ParInput) {
-//           input_name = kspec.par_input_name;
-//         } else {
-//           input_name = "noinput";
-//         }
-//
-//         std::string cname = spec.target_param + "." + input_name;
-//         cn[col] = cname;
-//
-//         ++col;
-//       }
-//     }
-//   };
-//
-//   fill_for_ops(premap_ops);
-//   fill_for_ops(pretransform_ops);
-//   fill_for_ops(posttransform_ops);
-//
-//   colnames(out) = cn;
-//   return out;
-// }
