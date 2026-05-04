@@ -36,7 +36,7 @@ plot_ss_srrt(
 
 \item{prior_predict}{Optional prior predictive data (matching columns) or list thereof.}
 
-\item{probs}{Numeric vector of probabilities with values in 0,1 that defines SSD bins/categories.}
+\item{probs}{Strictly increasing numeric vector from 0 to 1 that defines SSD quantile bins/categories.}
 
 \item{factors}{Character vector of factor names to aggregate over; defaults to plotting full data set ungrouped by factors if NULL.}
 

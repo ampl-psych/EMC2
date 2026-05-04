@@ -67,6 +67,27 @@ message_ignored_value_binning_args <- function() {
           "are ignored when `ssd_binning = \"value\"`.")
 }
 
+validate_stop_signal_probs <- function(probs) {
+  if (!is.numeric(probs) || length(probs) < 2 ||
+      anyNA(probs) || any(!is.finite(probs))) {
+    stop("`probs` must be a numeric vector with at least two finite values.")
+  }
+  if (any(probs < 0 | probs > 1)) {
+    stop("`probs` must contain values between 0 and 1.")
+  }
+  if (any(duplicated(probs))) {
+    stop("`probs` must not contain duplicate values.")
+  }
+  if (is.unsorted(probs, strictly = TRUE)) {
+    stop("`probs` must be sorted in strictly increasing order.")
+  }
+  if (!isTRUE(all.equal(probs[1], 0)) || !isTRUE(all.equal(probs[length(probs)], 1))) {
+    stop("`probs` must start at 0 and end at 1.")
+  }
+
+  invisible(NULL)
+}
+
 draw_stop_signal_se <- function(x, y, se) {
   # Base graphics warns on zero-height arrows; skip those while keeping all
   # finite, nonzero SE intervals.
@@ -263,7 +284,7 @@ draw_stop_signal_x_axis <- function(tick_data, bin_mode, global_title, participa
 #' @param input Either an emc object or a stop-signal data frame, or a *list* of such objects. SSD column in data required.
 #' @param post_predict Optional posterior predictive data (matching columns) or *list* thereof.
 #' @param prior_predict Optional prior predictive data (matching columns) or list thereof.
-#' @param probs Numeric vector of probabilities with values on the unit interval that defines SSD bins/categories.
+#' @param probs Strictly increasing numeric vector from 0 to 1 that defines SSD quantile bins/categories.
 #' @param factors Character vector of factor names to aggregate over; defaults to plotting full data set ungrouped by factors if NULL.
 #' @param within_plot Character indicating factor for which inhibition functions are plotted in the same panel
 #' @param use_global_quantiles If set to `TRUE`, SSDs are pooled over participants before calculating quantiles, so
@@ -319,6 +340,7 @@ plot_ss_if <- function(input,
     stop("`ssd_round` must be NULL or a single positive numeric value.")
   }
   if (ssd_binning == "value") message_ignored_value_binning_args()
+  if (ssd_binning == "quantile") validate_stop_signal_probs(probs)
 
   # 1) prep_data_plot
   check <- prep_data_plot(input, post_predict, prior_predict, to_plot, use_lim,
@@ -934,7 +956,7 @@ get_response_probability_by_ssd_value <- function(x, group_factor, probs, dots) 
 #' @param input Either an emc object or a stop-signal data frame, or a list of such objects. SSD column in data required.
 #' @param post_predict Optional posterior predictive data (matching columns) or list thereof.
 #' @param prior_predict Optional prior predictive data (matching columns) or list thereof.
-#' @param probs Numeric vector of probabilities with values in 0,1 that defines SSD bins/categories.
+#' @param probs Strictly increasing numeric vector from 0 to 1 that defines SSD quantile bins/categories.
 #' @param factors Character vector of factor names to aggregate over; defaults to plotting full data set ungrouped by factors if NULL.
 #' @param within_plot Character indicating factor for which inhibition functions are plotted in the same panel
 #' @param use_global_quantiles If set to FALSE, the SSD-categories are defined in terms of the quantiles of the
@@ -989,6 +1011,7 @@ plot_ss_srrt <- function(input,
     stop("`ssd_round` must be NULL or a single positive numeric value.")
   }
   if (ssd_binning == "value") message_ignored_value_binning_args()
+  if (ssd_binning == "quantile") validate_stop_signal_probs(probs)
 
   # 1) prep_data_plot
   check <- prep_data_plot(input, post_predict, prior_predict, to_plot, use_lim,
