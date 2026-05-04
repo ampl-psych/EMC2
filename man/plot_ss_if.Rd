@@ -14,7 +14,7 @@ plot_ss_if(
   use_global_quantiles = FALSE,
   ssd_binning = c("quantile", "value"),
   ssd_round = NULL,
-  on_duplicate_quantiles = c("error", "value"),
+  on_duplicate_quantiles = c("error", "value", "reduce"),
   subject = NULL,
   quants = c(0.025, 0.975),
   functions = NULL,
@@ -48,11 +48,12 @@ and then these probabilities are averaged over participants.}
 
 \item{ssd_binning}{Character. \code{"quantile"} uses SSD quantile bins; \code{"value"} groups by SSD values.}
 
-\item{ssd_round}{Optional numeric bin width for rounding SSD values before value-based binning.}
+\item{ssd_round}{Optional numeric bin width for rounding SSD values before stop-signal binning.}
 
 \item{on_duplicate_quantiles}{Character. What to do when quantile breaks are duplicated:
 \code{"error"} stops with a message; \code{"value"} falls back to value-based SSD bins
-for all plotted sources.}
+for all plotted sources; \code{"reduce"} uses the largest evenly spaced quantile
+grid without duplicated breaks.}
 
 \item{subject}{Subset the data to a single subject (by index or name).}
 
