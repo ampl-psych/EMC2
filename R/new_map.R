@@ -352,7 +352,7 @@ par_data_map <- function(par_mcmc, design, n_trials = NULL, data = NULL,
     }
 
     rownames(parameters) <- design$Ffactors$subjects
-    pars <- get_pars_matrix_oo(parameters, data, model())
+    pars <- get_pars_matrix_oo(parameters, data, model(), return_all_pars=TRUE)
     if(!add_recalculated){
       base_names <- intersect(names(model()$p_types), colnames(pars))
       pars <- pars[, base_names, drop = FALSE]

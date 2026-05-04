@@ -173,9 +173,9 @@ get_pars_oo <- function(p, dadm, model,
   out
 }
 
-get_pars_matrix_oo <- function(p_vector, dadm, model) {
+get_pars_matrix_oo <- function(p_vector, dadm, model, return_all_pars=FALSE) {
   model_list <- .oo_model_list(model)
-  pars <- get_pars_oo(p_vector, dadm, model_list)
+  pars <- get_pars_oo(p_vector, dadm, model_list, return_all_pars=return_all_pars)
   pars <- model_list$Ttransform(pars, dadm)
   pars <- add_bound(pars, model_list$bound, dadm$lR)
   .oo_reorder_public_pars(pars, model_list)
