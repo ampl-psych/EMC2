@@ -88,6 +88,24 @@ validate_stop_signal_probs <- function(probs) {
   invisible(NULL)
 }
 
+validate_stop_signal_quants <- function(quants) {
+  if (!is.numeric(quants) || length(quants) != 2 ||
+      anyNA(quants) || any(!is.finite(quants))) {
+    stop("`quants` must be a numeric vector of exactly two finite values.")
+  }
+  if (any(quants < 0 | quants > 1)) {
+    stop("`quants` must contain values between 0 and 1.")
+  }
+  if (quants[1] >= quants[2]) {
+    stop("`quants` must be in strictly increasing order.")
+  }
+  if (!(quants[1] < 0.5 && quants[2] > 0.5)) {
+    stop("`quants` must bracket 0.5.")
+  }
+
+  invisible(NULL)
+}
+
 draw_stop_signal_se <- function(x, y, se) {
   # Base graphics warns on zero-height arrows; skip those while keeping all
   # finite, nonzero SE intervals.
@@ -297,7 +315,7 @@ draw_stop_signal_x_axis <- function(tick_data, bin_mode, global_title, participa
 #'   for all plotted sources; `"reduce"` uses the largest evenly spaced quantile
 #'   grid without duplicated breaks.
 #' @param subject Subset the data to a single subject (by index or name).
-#' @param quants Numeric vector of credible interval bounds (e.g. c(0.025, 0.975)).
+#' @param quants Numeric vector of exactly two credible interval bounds that bracket 0.5 (e.g. c(0.025, 0.975)).
 #' @param functions A function (or list of functions) that create new columns in the datasets or predictives
 #' @param n_cores Number of CPU cores to use if generating predictives from an emc object.
 #' @param n_post Number of posterior draws to simulate if needed for predictives.
@@ -341,6 +359,7 @@ plot_ss_if <- function(input,
   }
   if (ssd_binning == "value") message_ignored_value_binning_args()
   if (ssd_binning == "quantile") validate_stop_signal_probs(probs)
+  validate_stop_signal_quants(quants)
 
   # 1) prep_data_plot
   check <- prep_data_plot(input, post_predict, prior_predict, to_plot, use_lim,
@@ -968,7 +987,7 @@ get_response_probability_by_ssd_value <- function(x, group_factor, probs, dots) 
 #'   for all plotted sources; `"reduce"` uses the largest evenly spaced quantile
 #'   grid without duplicated breaks.
 #' @param subject Subset the data to a single subject (by index or name).
-#' @param quants Numeric vector of credible interval bounds (e.g. c(0.025, 0.975)).
+#' @param quants Numeric vector of exactly two credible interval bounds that bracket 0.5 (e.g. c(0.025, 0.975)).
 #' @param functions A function (or list of functions) that create new columns in the datasets or predictives
 #' @param n_cores Number of CPU cores to use if generating predictives from an emc object.
 #' @param n_post Number of posterior draws to simulate if needed for predictives.
@@ -1012,6 +1031,7 @@ plot_ss_srrt <- function(input,
   }
   if (ssd_binning == "value") message_ignored_value_binning_args()
   if (ssd_binning == "quantile") validate_stop_signal_probs(probs)
+  validate_stop_signal_quants(quants)
 
   # 1) prep_data_plot
   check <- prep_data_plot(input, post_predict, prior_predict, to_plot, use_lim,

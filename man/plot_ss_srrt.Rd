@@ -56,7 +56,7 @@ grid without duplicated breaks.}
 
 \item{subject}{Subset the data to a single subject (by index or name).}
 
-\item{quants}{Numeric vector of credible interval bounds (e.g. c(0.025, 0.975)).}
+\item{quants}{Numeric vector of exactly two credible interval bounds that bracket 0.5 (e.g. c(0.025, 0.975)).}
 
 \item{functions}{A function (or list of functions) that create new columns in the datasets or predictives}
 
