@@ -1,0 +1,6 @@
+# src/Makevars.in — processed by ./configure into src/Makevars
+# Do not edit src/Makevars directly; edit this file instead.
+
+PKG_CPPFLAGS = $(RCPP_ARMA_CXXFLAGS) -I../inst/include -DPNORM_MODE=@PNORM_MODE@
+PKG_LIBS     = $(RCPP_ARMA_LIBS) @ACCELERATE_LIBS@
+PKG_CXXFLAGS = @EXTRA_CXXFLAGS@

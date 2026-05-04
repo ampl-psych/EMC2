@@ -1,3 +1,9 @@
+# src/Makevars.dev — developer reference, NOT used by R CMD INSTALL.
+#
+# Copy the desired block manually to src/Makevars for local dev builds,
+# or use configure options (see ./configure --help).
+#
+
 PKG_CPPFLAGS = $(RCPP_ARMA_CXXFLAGS) -I../inst/include
 PKG_LIBS     = $(RCPP_ARMA_LIBS)
 
