@@ -209,6 +209,11 @@ draw_stop_signal_se <- function(x, y, se) {
   invisible(NULL)
 }
 
+get_stop_signal_x_range_values <- function(x) {
+  x <- as.numeric(x)
+  x[is.finite(x)]
+}
+
 get_stop_signal_y_range_values <- function(df, value_col) {
   if (is.null(df[[value_col]])) return(numeric(0))
 
@@ -539,8 +544,8 @@ plot_ss_if <- function(input,
   y_max <- 0
   y_min <- 0
 
-  x_min <- 0
-  x_max <- 1
+  x_min <- Inf
+  x_max <- -Inf
 
   # -------------------------------------------------------------------
   # 2) FIRST BIG LOOP: compute p_resp or p_resp-quantiles for each dataset
@@ -605,15 +610,16 @@ plot_ss_if <- function(input,
 
       # If this dataset is used to define y-limit
       if (styp %in% use_lim) {
-        # maximum of x_plot row
-        possible_vals <- unlist(lapply(p_resp_quants_list[[sname]], function(group_val) {
+        # x-limits from the plotted x positions
+        x_vals <- unlist(lapply(p_resp_quants_list[[sname]], function(group_val) {
           # group_val => list( factor_level => matrix(4 x length-of-probs) )
           sapply(group_val, function(mat4) {
-            if (is.null(mat4)) return(0)
-            max(mat4[nrow(mat4), ], na.rm=TRUE)
+            if (is.null(mat4)) return(NULL)
+            get_stop_signal_x_range_values(mat4[nrow(mat4), ])
           })
         }))
-        x_max <- max(x_max, possible_vals, na.rm=TRUE)
+        x_min <- min(x_min, x_vals, na.rm = TRUE)
+        x_max <- max(x_max, x_vals, na.rm = TRUE)
 
         # y-limits (min/max across y_lower and y_upper)
         y_vals <- unlist(lapply(p_resp_quants_list[[sname]], function(group_val) {
@@ -645,7 +651,7 @@ plot_ss_if <- function(input,
             for (draw in p_resp_grp) {
               # extract x_plot and p_response if present
               if (!is.null(draw[["x_plot"]]) && !is.null(draw[["p_response"]])) {
-                all_x_vals <- c(all_x_vals, draw$x_plot)
+                all_x_vals <- c(all_x_vals, get_stop_signal_x_range_values(draw$x_plot))
                 all_y_vals <- c(all_y_vals, get_stop_signal_y_range_values(draw, "p_response"))
               }
             }
@@ -1221,8 +1227,8 @@ plot_ss_srrt <- function(input,
   y_max <- -Inf
   y_min <- Inf
 
-  x_min <- 0
-  x_max <- 1
+  x_min <- Inf
+  x_max <- -Inf
 
   # -------------------------------------------------------------------
   # 2) FIRST BIG LOOP: compute p_resp or p_resp-quantiles for each dataset
@@ -1288,14 +1294,15 @@ plot_ss_srrt <- function(input,
 
       # If this dataset is used to define y-limit
       if (styp %in% use_lim) {
-        possible_vals <- unlist(lapply(p_resp_quants_list[[sname]], function(group_val) {
+        x_vals <- unlist(lapply(p_resp_quants_list[[sname]], function(group_val) {
           # group_val => list( factor_level => matrix(4 x length-of-probs) )
           sapply(group_val, function(mat4) {
-            if (is.null(mat4)) return(0)
-            max(mat4[nrow(mat4), ], na.rm=TRUE)
+            if (is.null(mat4)) return(NULL)
+            get_stop_signal_x_range_values(mat4[nrow(mat4), ])
           })
         }))
-        x_max <- max(x_max, possible_vals, na.rm=TRUE)
+        x_min <- min(x_min, x_vals, na.rm = TRUE)
+        x_max <- max(x_max, x_vals, na.rm = TRUE)
 
         # y-limits (min/max across y_lower and y_upper)
         y_vals <- unlist(lapply(p_resp_quants_list[[sname]], function(group_val) {
@@ -1327,7 +1334,7 @@ plot_ss_srrt <- function(input,
             for (draw in p_resp_grp) {
               # extract x_plot and srrt if present
               if (!is.null(draw[["x_plot"]]) && !is.null(draw[["srrt"]])) {
-                all_x_vals <- c(all_x_vals, draw$x_plot)
+                all_x_vals <- c(all_x_vals, get_stop_signal_x_range_values(draw$x_plot))
                 all_y_vals <- c(all_y_vals, get_stop_signal_y_range_values(draw, "srrt"))
               }
             }
