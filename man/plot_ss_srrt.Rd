@@ -26,6 +26,9 @@ plot_ss_srrt(
   legendpos = c("topleft", "bottomright"),
   posterior_args = list(),
   prior_args = list(),
+  predictive_points = FALSE,
+  predictive_point_args = list(),
+  print_plot_data = FALSE,
   ...
 )
 }
@@ -56,7 +59,8 @@ grid without duplicated breaks.}
 
 \item{subject}{Subset the data to a single subject (by index or name).}
 
-\item{quants}{Numeric vector of exactly two credible interval bounds that bracket 0.5 (e.g. c(0.025, 0.975)).}
+\item{quants}{Numeric vector of exactly two predictive interval quantile bounds
+that bracket 0.5 (e.g. c(0.025, 0.975)).}
 
 \item{functions}{A function (or list of functions) that create new columns in the datasets or predictives}
 
@@ -76,10 +80,19 @@ grid without duplicated breaks.}
 
 \item{prior_args}{Optional list of graphical parameters for prior lines/ribbons.}
 
+\item{predictive_points}{Logical. If \code{TRUE}, plot the draw-level posterior/prior
+predictive summaries as points.}
+
+\item{predictive_point_args}{Optional list of graphical parameters for
+predictive points. Supports \code{jitter} for deterministic horizontal jitter.}
+
+\item{print_plot_data}{Logical. If \code{TRUE}, print the plotted summary data and
+count columns used to form each plotted point/bin.}
+
 \item{...}{Other graphical parameters for the real data lines.}
 }
 \value{
-Returns NULL invisibly
+Invisibly returns the plotted summary data.
 }
 \description{
 Plots panels of the mean signal-respond response time (SRRT) as a function of user-defined
@@ -91,6 +104,12 @@ Per default, SSDs are pooled over participants before calculating quantiles, so
 the same absolute SSD range is used to get mean SRRT for each participant,
 and then these probabilities are averaged over participants (see \code{use_global_quantiles}).
 
-If credible regions are not plotted, the data is plotted with error bars
-(plus/minus the standard error per SSD bin/category)
+Posterior/prior predictive intervals are quantile intervals of the plotted
+summary across predictive draws. Observed data are plotted with error bars
+(plus/minus the standard error per SSD bin/category).
+
+For SRRT summaries, the number of signal-respond RTs contributing to a
+predictive draw can vary across SSD bins because response occurrence is itself
+simulated. Sparse high-SSD bins can therefore produce predictive intervals based
+on fewer contributing draw-level summaries.
 }

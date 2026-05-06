@@ -225,6 +225,234 @@ get_stop_signal_y_range_values <- function(df, value_col) {
   y[is.finite(y)]
 }
 
+draw_stop_signal_predictive_points <- function(postn_list, level, value_col,
+                                               src_args, point_args = list()) {
+  if (is.null(postn_list) || !length(postn_list)) return(invisible(NULL))
+
+  # Draw-level points make the empirical distribution behind the predictive
+  # ribbon visible. They are deliberately opt-in because dense posterior draws
+  # can otherwise dominate the plot.
+  point_args <- add_defaults(point_args,
+                             pch = 16,
+                             cex = 0.35,
+                             alpha.f = 0.35,
+                             jitter = 0)
+  jitter <- point_args$jitter
+  if (!is.numeric(jitter) || length(jitter) != 1 || is.na(jitter) || jitter < 0) {
+    stop("`predictive_point_args$jitter` must be a single non-negative numeric value.")
+  }
+
+  pts <- do.call(rbind, lapply(postn_list, function(draw) {
+    df <- draw[[level]]
+    if (is.null(df) || !all(c("x_plot", value_col) %in% names(df))) return(NULL)
+    data.frame(x = as.numeric(df$x_plot),
+               y = as.numeric(df[[value_col]]))
+  }))
+  if (is.null(pts) || !nrow(pts)) return(invisible(NULL))
+
+  pts <- pts[is.finite(pts$x) & is.finite(pts$y), , drop = FALSE]
+  if (!nrow(pts)) return(invisible(NULL))
+
+  if (jitter > 0) {
+    # Deterministic jitter spreads points that share an SSD/bin x-position
+    # without adding random variation to reproduced plots.
+    point_idx <- split(seq_len(nrow(pts)), pts$x)
+    for (idx in point_idx) {
+      if (length(idx) > 1) {
+        pts$x[idx] <- pts$x[idx] + seq(-jitter, jitter, length.out = length(idx))
+      }
+    }
+  }
+
+  point_args$col <- do.call(adjustcolor,
+                            fix_dots(add_defaults(point_args,
+                                                  col = src_args$col[1]),
+                                     adjustcolor))
+  point_args$alpha.f <- NULL
+  point_args$jitter <- NULL
+  point_args <- fix_dots_plot(point_args)
+  do.call(points, c(list(x = pts$x, y = pts$y), point_args))
+
+  invisible(NULL)
+}
+
+get_stop_signal_predictive_count_summary <- function(postn_list, level, value_col, x_plot) {
+  # Count how many posterior/prior draws contribute a finite plotted summary at
+  # this x-position. For SRRT, this is useful because high SSD bins can have few
+  # or no signal responses in some predictive draws.
+  y_vals <- numeric(0)
+  n_vals <- numeric(0)
+  n_obs_vals <- numeric(0)
+
+  for (draw in postn_list) {
+    df <- draw[[level]]
+    if (is.null(df) || !all(c("x_plot", value_col) %in% names(df))) next
+    match_idx <- match(x_plot, df$x_plot)
+    if (is.na(match_idx)) next
+
+    y <- as.numeric(df[[value_col]][match_idx])
+    if (!is.finite(y)) next
+
+    y_vals <- c(y_vals, y)
+    if ("n" %in% names(df)) {
+      n <- as.numeric(df$n[match_idx])
+      if (is.finite(n)) n_vals <- c(n_vals, n)
+    }
+    if ("n_obs" %in% names(df)) {
+      n_obs <- as.numeric(df$n_obs[match_idx])
+      if (is.finite(n_obs)) n_obs_vals <- c(n_obs_vals, n_obs)
+    }
+  }
+
+  out <- data.frame(n_draws = length(y_vals),
+                    n_min = NA_real_,
+                    n_median = NA_real_,
+                    n_max = NA_real_,
+                    n_obs_min = NA_real_,
+                    n_obs_median = NA_real_,
+                    n_obs_max = NA_real_)
+  if (length(n_vals)) {
+    out$n_min <- min(n_vals, na.rm = TRUE)
+    out$n_median <- median(n_vals, na.rm = TRUE)
+    out$n_max <- max(n_vals, na.rm = TRUE)
+  }
+  if (length(n_obs_vals)) {
+    out$n_obs_min <- min(n_obs_vals, na.rm = TRUE)
+    out$n_obs_median <- median(n_obs_vals, na.rm = TRUE)
+    out$n_obs_max <- max(n_obs_vals, na.rm = TRUE)
+  }
+
+  out
+}
+
+stop_signal_rbind_fill <- function(x) {
+  # Combine observed and predictive summaries even though they have different
+  # columns: observed rows have value/se, predictive rows have lower/median/upper.
+  all_names <- unique(unlist(lapply(x, names)))
+  x <- lapply(x, function(df) {
+    missing_names <- setdiff(all_names, names(df))
+    for (nm in missing_names) df[[nm]] <- NA
+    df[all_names]
+  })
+
+  do.call(rbind, x)
+}
+
+drop_all_na_columns <- function(x) {
+  # Printing diagnostics should be compact, but the returned object keeps the
+  # full schema for programmatic consistency across plot types.
+  if (!nrow(x)) return(x)
+  x[, !vapply(x, function(col) all(is.na(col)), logical(1)), drop = FALSE]
+}
+
+print_stop_signal_plot_data <- function(x) {
+  # Print observed and predictive rows separately so columns that are meaningful
+  # for only one row type do not appear as long runs of NA in the other.
+  predictive_rows <- "median" %in% names(x) & !is.na(x$median)
+  observed_rows <- "value" %in% names(x) & !is.na(x$value)
+
+  if (any(predictive_rows)) {
+    cat("Predictive plotted summaries:\n")
+    print(drop_all_na_columns(x[predictive_rows, , drop = FALSE]), row.names = FALSE)
+  }
+  if (any(observed_rows)) {
+    if (any(predictive_rows)) cat("\n")
+    cat("Observed plotted summaries:\n")
+    print(drop_all_na_columns(x[observed_rows, , drop = FALSE]), row.names = FALSE)
+  }
+  if (!any(predictive_rows) && !any(observed_rows)) {
+    print(drop_all_na_columns(x), row.names = FALSE)
+  }
+
+  invisible(NULL)
+}
+
+get_stop_signal_bin_label <- function(x_plot, binning, ssd = NULL) {
+  # Participant-quantile plots do not have a single shared absolute SSD interval,
+  # so the diagnostic table reports the quantile-bin label separately from SSD.
+  if (identical(unname(binning), "individual_quantile")) {
+    return(format_stop_signal_quantile_intervals(c(0, x_plot)))
+  }
+  if (!is.null(ssd)) return(as.character(ssd))
+
+  NA_character_
+}
+
+get_stop_signal_plot_data <- function(p_resp_list, p_resp_quants_list, sources,
+                                      source_bin_modes, value_col) {
+  # Build the table that mirrors what is actually drawn. This is returned
+  # invisibly and optionally printed for checking sparse bins or draw counts.
+  out <- list()
+
+  for (sname in names(sources)) {
+    group_names <- names(p_resp_list[[sname]])
+    if (is.null(group_names)) next
+
+    for (group_key in group_names) {
+      source_group <- p_resp_list[[sname]][[group_key]]
+      if (is.null(source_group)) next
+
+      if (!is.null(p_resp_quants_list[[sname]])) {
+        quant_group <- p_resp_quants_list[[sname]][[group_key]]
+        if (is.null(quant_group)) next
+
+        for (level in names(quant_group)) {
+          mat <- quant_group[[level]]
+          if (is.null(mat)) next
+
+          for (i in seq_len(ncol(mat))) {
+            ssd <- if (!is.null(colnames(mat))) colnames(mat)[i] else NA_character_
+            counts <- get_stop_signal_predictive_count_summary(
+              source_group, level, value_col, unname(mat[nrow(mat), i])
+            )
+            out[[length(out) + 1]] <- cbind(
+              data.frame(source = unname(sources[sname]),
+                         dataset = sname,
+                         binning = unname(source_bin_modes[sname]),
+                         group_key = group_key,
+                         within_level = level,
+                         x_plot = unname(mat[nrow(mat), i]),
+                         bin_label = get_stop_signal_bin_label(unname(mat[nrow(mat), i]),
+                                                               source_bin_modes[sname],
+                                                               ssd),
+                         ssd = ssd,
+                         lower = unname(mat[1, i]),
+                         median = unname(mat[2, i]),
+                         upper = unname(mat[3, i])),
+              counts
+            )
+          }
+        }
+      } else {
+        for (level in names(source_group)) {
+          df <- source_group[[level]]
+          if (is.null(df) || !all(c("x_plot", value_col) %in% names(df))) next
+
+          out[[length(out) + 1]] <- data.frame(
+            source = unname(sources[sname]),
+            dataset = sname,
+            binning = unname(source_bin_modes[sname]),
+            group_key = group_key,
+            within_level = level,
+            x_plot = df$x_plot,
+            bin_label = get_stop_signal_bin_label(df$x_plot,
+                                                  source_bin_modes[sname],
+                                                  if ("ssd" %in% names(df)) df$ssd else NULL),
+            ssd = if ("ssd" %in% names(df)) as.character(df$ssd) else NA_character_,
+            value = df[[value_col]],
+            se = if ("se" %in% names(df)) df$se else NA_real_,
+            n = if ("n" %in% names(df)) df$n else NA_real_,
+            n_obs = if ("n_obs" %in% names(df)) df$n_obs else NA_real_
+          )
+        }
+      }
+    }
+  }
+
+  if (!length(out)) return(data.frame())
+  stop_signal_rbind_fill(out)
+}
+
 has_duplicate_individual_ssd_quantiles <- function(df, probs, within_plot = NULL,
                                                    ssd_round = NULL) {
   # Individual quantile bins are computed separately within each panel,
@@ -240,12 +468,23 @@ has_duplicate_individual_ssd_quantiles <- function(df, probs, within_plot = NULL
     }
 
     any(vapply(within_groups, function(within_df) {
-      subjects <- unique(within_df$subjects)
-      any(vapply(subjects, function(s) {
-        SSD <- get_stop_signal_bin_ssd(within_df, ssd_round)
-        SSD <- SSD[within_df$subjects == s & is.finite(SSD)]
-        if (!length(SSD)) return(FALSE)
-        any(duplicated(quantile(SSD, probs = probs, na.rm = TRUE)))
+      # Posterior/prior predictives are summarized per draw. Check duplicate
+      # quantile breaks at the same postn level where binning is later applied,
+      # otherwise sparse draw-level SRRT data can be hidden by pooled draws.
+      postn_groups <- if ("postn" %in% names(within_df)) {
+        split(within_df, within_df$postn)
+      } else {
+        list(within_df)
+      }
+
+      any(vapply(postn_groups, function(postn_df) {
+        subjects <- unique(postn_df$subjects)
+        SSD_all <- get_stop_signal_bin_ssd(postn_df, ssd_round)
+        any(vapply(subjects, function(s) {
+          SSD <- SSD_all[postn_df$subjects == s & is.finite(SSD_all)]
+          if (!length(SSD)) return(FALSE)
+          any(duplicated(quantile(SSD, probs = probs, na.rm = TRUE)))
+        }, logical(1)))
       }, logical(1)))
     }, logical(1)))
   }, logical(1)))
@@ -412,8 +651,9 @@ draw_stop_signal_x_axis <- function(tick_data, bin_mode, global_title, participa
 #' Per default, the SSD-categories are defined in terms of the quantiles of the
 #' SSD distribution for each participant, and then averaged over participants (see `use_global_quantiles`).
 #'
-#' If credible regions are not plotted, the data is plotted with error bars
-#' (plus/minus the standard error per SSD bin/category)
+#' Posterior/prior predictive intervals are quantile intervals of the plotted
+#' summary across predictive draws. Observed data are plotted with error bars
+#' (plus/minus the standard error per SSD bin/category).
 #'
 #' @param input Either an emc object or a stop-signal data frame, or a *list* of such objects. SSD column in data required.
 #' @param post_predict Optional posterior predictive data (matching columns) or *list* thereof.
@@ -431,7 +671,8 @@ draw_stop_signal_x_axis <- function(tick_data, bin_mode, global_title, participa
 #'   for all plotted sources; `"reduce"` uses the largest evenly spaced quantile
 #'   grid without duplicated breaks.
 #' @param subject Subset the data to a single subject (by index or name).
-#' @param quants Numeric vector of exactly two credible interval bounds that bracket 0.5 (e.g. c(0.025, 0.975)).
+#' @param quants Numeric vector of exactly two predictive interval quantile bounds
+#'   that bracket 0.5 (e.g. c(0.025, 0.975)).
 #' @param functions A function (or list of functions) that create new columns in the datasets or predictives
 #' @param n_cores Number of CPU cores to use if generating predictives from an emc object.
 #' @param n_post Number of posterior draws to simulate if needed for predictives.
@@ -441,9 +682,15 @@ draw_stop_signal_x_axis <- function(tick_data, bin_mode, global_title, participa
 #' @param legendpos Character vector controlling the positions of the legends
 #' @param posterior_args Optional list of graphical parameters for posterior lines/ribbons.
 #' @param prior_args Optional list of graphical parameters for prior lines/ribbons.
+#' @param predictive_points Logical. If `TRUE`, plot the draw-level posterior/prior
+#'   predictive summaries as points.
+#' @param predictive_point_args Optional list of graphical parameters for
+#'   predictive points. Supports `jitter` for deterministic horizontal jitter.
+#' @param print_plot_data Logical. If `TRUE`, print the plotted summary data and
+#'   count columns used to form each plotted point/bin.
 #' @param ... Other graphical parameters for the real data lines.
 #'
-#' @return Returns NULL invisibly
+#' @return Invisibly returns the plotted summary data.
 #' @export
 plot_ss_if <- function(input,
                     post_predict = NULL,
@@ -465,6 +712,9 @@ plot_ss_if <- function(input,
                     legendpos = c('topleft', 'bottomright'),
                     posterior_args = list(),
                     prior_args = list(),
+                    predictive_points = FALSE,
+                    predictive_point_args = list(),
+                    print_plot_data = FALSE,
                     ...) {
 
   ssd_binning <- match.arg(ssd_binning)
@@ -477,6 +727,14 @@ plot_ss_if <- function(input,
   if (ssd_binning == "quantile") validate_stop_signal_probs(probs)
   validate_stop_signal_quants(quants)
   validate_stop_signal_sources(to_plot, use_lim)
+  if (!is.logical(predictive_points) || length(predictive_points) != 1 ||
+      is.na(predictive_points)) {
+    stop("`predictive_points` must be TRUE or FALSE.")
+  }
+  if (!is.logical(print_plot_data) || length(print_plot_data) != 1 ||
+      is.na(print_plot_data)) {
+    stop("`print_plot_data` must be TRUE or FALSE.")
+  }
   validate_stop_signal_predictive_request(input, post_predict, prior_predict,
                                           to_plot, missing(to_plot))
   layout <- normalize_stop_signal_layout(layout)
@@ -776,7 +1034,6 @@ plot_ss_if <- function(input,
 
                   lines_args <- add_defaults(src_args, lty=line_types[ilev])
                   lines_args <- fix_dots_plot(lines_args)
-                  do.call(lines, c(list(x=x_plot, y=y_med), lines_args))
 
                   # polygon for the ribbon
                   adj_color <- do.call(adjustcolor, fix_dots(add_defaults(src_args, alpha.f=0.2), adjustcolor))
@@ -788,6 +1045,13 @@ plot_ss_if <- function(input,
                     x = c(x_plot, rev(x_plot)),
                     border = NA
                   ), poly_args))
+                  if (predictive_points) {
+                    draw_stop_signal_predictive_points(
+                      p_resp_list[[sname]][[group_key]], lev, "p_response",
+                      src_args, predictive_point_args
+                    )
+                  }
+                  do.call(lines, c(list(x=x_plot, y=y_med), lines_args))
                 }
                 ilev <- ilev+1
               }
@@ -847,7 +1111,13 @@ plot_ss_if <- function(input,
     }
   } # end for each group_key
 
-  invisible(NULL)
+  plot_data <- get_stop_signal_plot_data(p_resp_list, p_resp_quants_list, sources,
+                                         source_bin_modes, "p_response")
+  # Return the same data used for plotting so users can inspect bin counts and
+  # predictive draw support without recomputing the summaries.
+  if (print_plot_data) print_stop_signal_plot_data(plot_data)
+
+  invisible(plot_data)
 }
 
 get_response_probability_by_individual_ssd_quantile <- function(x, group_factor, probs, dots) {
@@ -891,7 +1161,8 @@ get_response_probability_by_individual_ssd_quantile <- function(x, group_factor,
 
       bin_stats$ssd <- as.numeric(gsub(".*,", "", gsub("\\[|\\]|\\(|\\)", "", bin_stats$ssd_bin)))
       bin_stats$subject <- s
-      bin_stats$x_plot <- probs[-1]
+      bin_stats$x_plot <- probs[-1][match(as.character(bin_stats$ssd_bin),
+                                          levels(df$ssd_bin))]
 
       return(bin_stats)
     })
@@ -910,8 +1181,13 @@ get_response_probability_by_individual_ssd_quantile <- function(x, group_factor,
 
       summary_stats <- summary_stats[order(summary_stats$x_plot), ]
       names(summary_stats) <- c("x_plot", "p_response", "se", "n")
+      n_obs_lookup <- aggregate(n ~ x_plot, data = all_stats, sum, na.rm = TRUE)
+      names(n_obs_lookup) <- c("x_plot", "n_obs")
+      summary_stats <- merge(summary_stats, n_obs_lookup, by = "x_plot", all.x = TRUE)
+      summary_stats <- summary_stats[order(summary_stats$x_plot), ]
     } else {
       summary_stats <- subj_stats[[1]]
+      summary_stats$n_obs <- summary_stats$n
     }
 
     return(summary_stats)
@@ -999,8 +1275,13 @@ get_response_probability_by_global_ssd_quantile <- function(x, group_factor, pro
 
       summary_stats <- summary_stats[order(summary_stats$x_plot), ]
       names(summary_stats) <- c("ssd", "p_response", "se", "n", "x_plot")
+      n_obs_lookup <- aggregate(n ~ ssd, data = all_stats, sum, na.rm = TRUE)
+      names(n_obs_lookup) <- c("ssd", "n_obs")
+      summary_stats <- merge(summary_stats, n_obs_lookup, by = "ssd", all.x = TRUE)
+      summary_stats <- summary_stats[order(summary_stats$x_plot), ]
     } else {
       summary_stats <- subj_stats[[1]]
+      summary_stats$n_obs <- summary_stats$n
     }
     return(summary_stats)
   }
@@ -1064,10 +1345,14 @@ get_response_probability_by_ssd_value <- function(x, group_factor, probs, dots) 
                                  na.action = na.pass)
       summary_stats <- do.call(data.frame, summary_stats)
       names(summary_stats) <- c("x_plot", "p_response", "se", "n")
+      n_obs_lookup <- aggregate(n ~ x_plot, data = all_stats, sum, na.rm = TRUE)
+      names(n_obs_lookup) <- c("x_plot", "n_obs")
+      summary_stats <- merge(summary_stats, n_obs_lookup, by = "x_plot", all.x = TRUE)
       summary_stats$ssd <- format_ssd_values(summary_stats$x_plot)
       summary_stats <- summary_stats[order(summary_stats$x_plot), ]
     } else {
       summary_stats <- subj_stats[[1]]
+      summary_stats$n_obs <- summary_stats$n
     }
 
     summary_stats
@@ -1096,8 +1381,14 @@ get_response_probability_by_ssd_value <- function(x, group_factor, probs, dots) 
 #' the same absolute SSD range is used to get mean SRRT for each participant,
 #' and then these probabilities are averaged over participants (see `use_global_quantiles`).
 #'
-#' If credible regions are not plotted, the data is plotted with error bars
-#' (plus/minus the standard error per SSD bin/category)
+#' Posterior/prior predictive intervals are quantile intervals of the plotted
+#' summary across predictive draws. Observed data are plotted with error bars
+#' (plus/minus the standard error per SSD bin/category).
+#'
+#' For SRRT summaries, the number of signal-respond RTs contributing to a
+#' predictive draw can vary across SSD bins because response occurrence is itself
+#' simulated. Sparse high-SSD bins can therefore produce predictive intervals based
+#' on fewer contributing draw-level summaries.
 #'
 #' @param input Either an emc object or a stop-signal data frame, or a list of such objects. SSD column in data required.
 #' @param post_predict Optional posterior predictive data (matching columns) or list thereof.
@@ -1114,7 +1405,8 @@ get_response_probability_by_ssd_value <- function(x, group_factor, probs, dots) 
 #'   for all plotted sources; `"reduce"` uses the largest evenly spaced quantile
 #'   grid without duplicated breaks.
 #' @param subject Subset the data to a single subject (by index or name).
-#' @param quants Numeric vector of exactly two credible interval bounds that bracket 0.5 (e.g. c(0.025, 0.975)).
+#' @param quants Numeric vector of exactly two predictive interval quantile bounds
+#'   that bracket 0.5 (e.g. c(0.025, 0.975)).
 #' @param functions A function (or list of functions) that create new columns in the datasets or predictives
 #' @param n_cores Number of CPU cores to use if generating predictives from an emc object.
 #' @param n_post Number of posterior draws to simulate if needed for predictives.
@@ -1124,9 +1416,15 @@ get_response_probability_by_ssd_value <- function(x, group_factor, probs, dots) 
 #' @param legendpos Character vector controlling the positions of the legends
 #' @param posterior_args Optional list of graphical parameters for posterior lines/ribbons.
 #' @param prior_args Optional list of graphical parameters for prior lines/ribbons.
+#' @param predictive_points Logical. If `TRUE`, plot the draw-level posterior/prior
+#'   predictive summaries as points.
+#' @param predictive_point_args Optional list of graphical parameters for
+#'   predictive points. Supports `jitter` for deterministic horizontal jitter.
+#' @param print_plot_data Logical. If `TRUE`, print the plotted summary data and
+#'   count columns used to form each plotted point/bin.
 #' @param ... Other graphical parameters for the real data lines.
 #'
-#' @return Returns NULL invisibly
+#' @return Invisibly returns the plotted summary data.
 #' @export
 plot_ss_srrt <- function(input,
                       post_predict = NULL,
@@ -1148,6 +1446,9 @@ plot_ss_srrt <- function(input,
                       legendpos = c('topleft', 'bottomright'),
                       posterior_args = list(),
                       prior_args = list(),
+                      predictive_points = FALSE,
+                      predictive_point_args = list(),
+                      print_plot_data = FALSE,
                       ...) {
 
   ssd_binning <- match.arg(ssd_binning)
@@ -1160,6 +1461,14 @@ plot_ss_srrt <- function(input,
   if (ssd_binning == "quantile") validate_stop_signal_probs(probs)
   validate_stop_signal_quants(quants)
   validate_stop_signal_sources(to_plot, use_lim)
+  if (!is.logical(predictive_points) || length(predictive_points) != 1 ||
+      is.na(predictive_points)) {
+    stop("`predictive_points` must be TRUE or FALSE.")
+  }
+  if (!is.logical(print_plot_data) || length(print_plot_data) != 1 ||
+      is.na(print_plot_data)) {
+    stop("`print_plot_data` must be TRUE or FALSE.")
+  }
   validate_stop_signal_predictive_request(input, post_predict, prior_predict,
                                           to_plot, missing(to_plot))
   layout <- normalize_stop_signal_layout(layout)
@@ -1457,7 +1766,6 @@ plot_ss_srrt <- function(input,
 
                   lines_args <- add_defaults(src_args, lty=line_types[ilev])
                   lines_args <- fix_dots_plot(lines_args)
-                  do.call(lines, c(list(x=x_plot, y=y_med), lines_args))
 
                   # polygon for the ribbon
                   adj_color <- do.call(adjustcolor, fix_dots(add_defaults(src_args, alpha.f=0.2), adjustcolor))
@@ -1469,6 +1777,13 @@ plot_ss_srrt <- function(input,
                     x = c(x_plot, rev(x_plot)),
                     border = NA
                   ), poly_args))
+                  if (predictive_points) {
+                    draw_stop_signal_predictive_points(
+                      p_resp_list[[sname]][[group_key]], lev, "srrt",
+                      src_args, predictive_point_args
+                    )
+                  }
+                  do.call(lines, c(list(x=x_plot, y=y_med), lines_args))
                 }
                 ilev <- ilev+1
               }
@@ -1525,7 +1840,13 @@ plot_ss_srrt <- function(input,
     }
   } # end for each group_key
 
-  invisible(NULL)
+  plot_data <- get_stop_signal_plot_data(p_resp_list, p_resp_quants_list, sources,
+                                         source_bin_modes, "srrt")
+  # Return the same data used for plotting so users can inspect sparse SRRT bins,
+  # especially when posterior/prior response counts vary across predictive draws.
+  if (print_plot_data) print_stop_signal_plot_data(plot_data)
+
+  invisible(plot_data)
 }
 
 get_srrt_by_individual_ssd_quantile <- function(x, group_factor, probs, dots) {
@@ -1569,7 +1890,8 @@ get_srrt_by_individual_ssd_quantile <- function(x, group_factor, probs, dots) {
 
       bin_stats$ssd <- as.numeric(gsub(".*,", "", gsub("\\[|\\]|\\(|\\)", "", bin_stats$ssd_bin)))
       bin_stats$subject <- s
-      bin_stats$x_plot <- probs[-1]
+      bin_stats$x_plot <- probs[-1][match(as.character(bin_stats$ssd_bin),
+                                          levels(df$ssd_bin))]
 
       return(bin_stats)
     })
@@ -1585,8 +1907,13 @@ get_srrt_by_individual_ssd_quantile <- function(x, group_factor, probs, dots) {
       na.action = na.pass)
       summary_stats <- do.call(data.frame, summary_stats)
       names(summary_stats) <- c("x_plot", "srrt", "se", "n")
+      n_obs_lookup <- aggregate(n ~ x_plot, data = all_stats, sum, na.rm = TRUE)
+      names(n_obs_lookup) <- c("x_plot", "n_obs")
+      summary_stats <- merge(summary_stats, n_obs_lookup, by = "x_plot", all.x = TRUE)
+      summary_stats <- summary_stats[order(summary_stats$x_plot), ]
     } else {
-      summary_stats <- subj_stats[[1]][, c("x_plot", "srrt", "ssd", "se")]
+      summary_stats <- subj_stats[[1]][, c("x_plot", "srrt", "ssd", "se", "n")]
+      summary_stats$n_obs <- summary_stats$n
     }
 
     return(summary_stats)
@@ -1676,8 +2003,13 @@ get_srrt_by_global_ssd_quantile <- function(x, group_factor, probs, dots) {
       summary_stats <- merge(summary_stats, x_plot_lookup, by = "ssd")
 
       summary_stats <- summary_stats[order(summary_stats$x_plot), ]
+      n_obs_lookup <- aggregate(n ~ ssd, data = all_stats, sum, na.rm = TRUE)
+      names(n_obs_lookup) <- c("ssd", "n_obs")
+      summary_stats <- merge(summary_stats, n_obs_lookup, by = "ssd", all.x = TRUE)
+      summary_stats <- summary_stats[order(summary_stats$x_plot), ]
     } else {
-      summary_stats <- subj_stats[[1]][, c("x_plot", "srrt", "ssd", "se")]
+      summary_stats <- subj_stats[[1]][, c("x_plot", "srrt", "ssd", "se", "n")]
+      summary_stats$n_obs <- summary_stats$n
       summary_stats <- summary_stats[order(summary_stats$x_plot), ]
     }
 
@@ -1744,10 +2076,14 @@ get_srrt_by_ssd_value <- function(x, group_factor, probs, dots) {
       na.action = na.pass)
       summary_stats <- do.call(data.frame, summary_stats)
       names(summary_stats) <- c("x_plot", "srrt", "se", "n")
+      n_obs_lookup <- aggregate(n ~ x_plot, data = all_stats, sum, na.rm = TRUE)
+      names(n_obs_lookup) <- c("x_plot", "n_obs")
+      summary_stats <- merge(summary_stats, n_obs_lookup, by = "x_plot", all.x = TRUE)
       summary_stats$ssd <- format_ssd_values(summary_stats$x_plot)
       summary_stats <- summary_stats[order(summary_stats$x_plot), ]
     } else {
       summary_stats <- subj_stats[[1]]
+      summary_stats$n_obs <- summary_stats$n
     }
 
     summary_stats
