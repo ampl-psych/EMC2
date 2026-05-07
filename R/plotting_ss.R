@@ -581,6 +581,49 @@ get_reduced_stop_signal_probs <- function(data_sources, sources, probs, use_glob
        "Please set `on_duplicate_quantiles = \"value\"`.")
 }
 
+resolve_stop_signal_binning <- function(data_sources, sources, probs, ssd_binning,
+                                        use_global_quantiles, within_plot,
+                                        ssd_round, on_duplicate_quantiles) {
+  # Choose one SSD binning rule for all plotted sources. If quantile breaks are
+  # duplicated anywhere, the requested fallback is applied globally so observed
+  # and predictive summaries are drawn on the same x scale.
+  effective_ssd_binning <- ssd_binning
+  effective_probs <- probs
+
+  if (ssd_binning == "quantile") {
+    has_duplicate_breaks <- has_duplicate_stop_signal_quantiles(
+      data_sources, sources, probs, use_global_quantiles, within_plot, ssd_round
+    )
+
+    if (has_duplicate_breaks) {
+      if (on_duplicate_quantiles == "value") {
+        effective_ssd_binning <- "value"
+      } else if (on_duplicate_quantiles == "reduce") {
+        effective_probs <- get_reduced_stop_signal_probs(
+          data_sources, sources, probs, use_global_quantiles, within_plot, ssd_round
+        )
+      } else {
+        stop("Duplicate quantile values detected, or plotted sources have different ",
+             "SSD support for a shared global quantile grid. Please use fewer bins, ",
+             "match the SSD design across sources, or set `on_duplicate_quantiles` ",
+             "to \"value\" or \"reduce\".")
+      }
+    }
+  }
+
+  plot_global_ssd_breaks <- NULL
+  if (effective_ssd_binning == "quantile" && use_global_quantiles) {
+    plot_global_ssd_breaks <- get_reference_global_ssd_breaks(data_sources, sources,
+                                                              effective_probs, ssd_round)
+  }
+
+  list(
+    ssd_binning = effective_ssd_binning,
+    probs = effective_probs,
+    global_ssd_breaks = plot_global_ssd_breaks
+  )
+}
+
 draw_stop_signal_x_axis <- function(tick_data, bin_mode, global_title, participant_title,
                                     value_title = "SSD Value (sec.)",
                                     probs = NULL) {
@@ -721,36 +764,13 @@ plot_stop_signal_summary <- function(input,
   draw_quantiles_by_source <- list()
   source_bin_modes <- character()
 
-  # Choose one SSD binning rule for all plotted sources. If quantile breaks are
-  # duplicated anywhere, the requested fallback is applied globally so observed
-  # and predictive summaries are drawn on the same x scale.
-  effective_ssd_binning <- ssd_binning
-  effective_probs <- probs
-  plot_global_ssd_breaks <- NULL
-  if (ssd_binning == "quantile") {
-    has_duplicate_breaks <- has_duplicate_stop_signal_quantiles(
-      data_sources, sources, probs, use_global_quantiles, within_plot, ssd_round
-    )
-
-    if (has_duplicate_breaks) {
-      if (on_duplicate_quantiles == "value") {
-        effective_ssd_binning <- "value"
-      } else if (on_duplicate_quantiles == "reduce") {
-        effective_probs <- get_reduced_stop_signal_probs(
-          data_sources, sources, probs, use_global_quantiles, within_plot, ssd_round
-        )
-      } else {
-        stop("Duplicate quantile values detected, or plotted sources have different ",
-             "SSD support for a shared global quantile grid. Please use fewer bins, ",
-             "match the SSD design across sources, or set `on_duplicate_quantiles` ",
-             "to \"value\" or \"reduce\".")
-      }
-    }
-  }
-  if (effective_ssd_binning == "quantile" && use_global_quantiles) {
-    plot_global_ssd_breaks <- get_reference_global_ssd_breaks(data_sources, sources,
-                                                              effective_probs, ssd_round)
-  }
+  binning <- resolve_stop_signal_binning(
+    data_sources, sources, probs, ssd_binning, use_global_quantiles,
+    within_plot, ssd_round, on_duplicate_quantiles
+  )
+  effective_ssd_binning <- binning$ssd_binning
+  effective_probs <- binning$probs
+  plot_global_ssd_breaks <- binning$global_ssd_breaks
 
   y_min <- initial_y_min
   y_max <- initial_y_max
