@@ -640,6 +640,383 @@ draw_stop_signal_x_axis <- function(tick_data, bin_mode, global_title, participa
   invisible(NULL)
 }
 
+plot_stop_signal_summary <- function(input,
+                                     post_predict = NULL,
+                                     prior_predict = NULL,
+                                     probs = seq(0, 1, length.out = 5),
+                                     factors = NULL,
+                                     within_plot = NULL,
+                                     use_global_quantiles = FALSE,
+                                     ssd_binning = c("quantile", "value"),
+                                     ssd_round = NULL,
+                                     on_duplicate_quantiles = c("error", "value", "reduce"),
+                                     subject = NULL,
+                                     quants = c(0.025, 0.975),
+                                     functions = NULL,
+                                     n_cores = 1,
+                                     n_post = 50,
+                                     layout = NA,
+                                     to_plot = c("data", "posterior", "prior")[1:2],
+                                     use_lim = c("data", "posterior", "prior")[1:2],
+                                     legendpos = c("topleft", "bottomright"),
+                                     posterior_args = list(),
+                                     prior_args = list(),
+                                     predictive_points = FALSE,
+                                     predictive_point_args = list(),
+                                     print_plot_data = FALSE,
+                                     dots,
+                                     value_col,
+                                     y_label,
+                                     summary_funs,
+                                     default_ylim = NULL,
+                                     initial_y_min = Inf,
+                                     initial_y_max = -Inf,
+                                     to_plot_missing = FALSE) {
+  # Shared plotting engine for plot_ss_if() and plot_ss_srrt(). The wrappers
+  # supply the metric-specific summary functions and y-axis label; this helper
+  # owns validation, predictive handling, bin fallback selection, axis limits,
+  # panel drawing, and the returned plot-data table.
+  ssd_binning <- match.arg(ssd_binning)
+  on_duplicate_quantiles <- match.arg(on_duplicate_quantiles)
+  if (!is.null(ssd_round) &&
+      (!is.numeric(ssd_round) || length(ssd_round) != 1 || is.na(ssd_round) || ssd_round <= 0)) {
+    stop("`ssd_round` must be NULL or a single positive numeric value.")
+  }
+  if (ssd_binning == "value") message_ignored_value_binning_args()
+  if (ssd_binning == "quantile") validate_stop_signal_probs(probs)
+  validate_stop_signal_quants(quants)
+  validate_stop_signal_sources(to_plot, use_lim)
+  if (!is.logical(predictive_points) || length(predictive_points) != 1 ||
+      is.na(predictive_points)) {
+    stop("`predictive_points` must be TRUE or FALSE.")
+  }
+  if (!is.logical(print_plot_data) || length(print_plot_data) != 1 ||
+      is.na(print_plot_data)) {
+    stop("`print_plot_data` must be TRUE or FALSE.")
+  }
+  validate_stop_signal_predictive_request(input, post_predict, prior_predict,
+                                          to_plot, to_plot_missing)
+  layout <- normalize_stop_signal_layout(layout)
+  legendpos <- normalize_stop_signal_legendpos(legendpos)
+
+  check <- prep_data_plot(input, post_predict, prior_predict, to_plot, use_lim,
+                          factors, within_plot, subject, n_cores, n_post,
+                          remove_na = FALSE, functions)
+  data_sources <- check$datasets
+  sources <- check$sources
+
+  dots <- add_defaults(dots, col = c("black", "#A9A9A9", "#666666"))
+  posterior_args <- add_defaults(posterior_args, col = c("darkgreen", "#0000FF", "#008B8B"))
+  prior_args <- add_defaults(prior_args, col = c("red", "#800080", "#CC00FF"))
+
+  unique_group_keys <- levels(factor(data_sources[[1]]$group_key))
+  if (is.null(within_plot)) {
+    within_levels <- "All"
+  } else {
+    within_levels <- levels(factor(data_sources[[1]][[within_plot]]))
+  }
+  line_types <- seq_along(within_levels)
+
+  p_resp_list <- list()
+  p_resp_quants_list <- list()
+  source_bin_modes <- character()
+
+  # Choose one SSD binning rule for all plotted sources. If quantile breaks are
+  # duplicated anywhere, the requested fallback is applied globally so observed
+  # and predictive summaries are drawn on the same x scale.
+  effective_ssd_binning <- ssd_binning
+  effective_probs <- probs
+  plot_global_ssd_breaks <- NULL
+  if (ssd_binning == "quantile") {
+    has_duplicate_breaks <- has_duplicate_stop_signal_quantiles(
+      data_sources, sources, probs, use_global_quantiles, within_plot, ssd_round
+    )
+
+    if (has_duplicate_breaks) {
+      if (on_duplicate_quantiles == "value") {
+        effective_ssd_binning <- "value"
+      } else if (on_duplicate_quantiles == "reduce") {
+        effective_probs <- get_reduced_stop_signal_probs(
+          data_sources, sources, probs, use_global_quantiles, within_plot, ssd_round
+        )
+      } else {
+        stop("Duplicate quantile values detected, or plotted sources have different ",
+             "SSD support for a shared global quantile grid. Please use fewer bins, ",
+             "match the SSD design across sources, or set `on_duplicate_quantiles` ",
+             "to \"value\" or \"reduce\".")
+      }
+    }
+  }
+  if (effective_ssd_binning == "quantile" && use_global_quantiles) {
+    plot_global_ssd_breaks <- get_reference_global_ssd_breaks(data_sources, sources,
+                                                              effective_probs, ssd_round)
+  }
+
+  y_min <- initial_y_min
+  y_max <- initial_y_max
+  x_min <- Inf
+  x_max <- -Inf
+
+  # First pass: summarize every source. Observed data produce one summary per
+  # group/within level; predictive sources first summarize each postn draw and
+  # then take quantiles across those draw-level summaries.
+  for (k in seq_along(data_sources)) {
+    df <- data_sources[[k]]
+    styp <- sources[k]
+    sname <- names(sources)[k]
+
+    if (is.null(df) || !nrow(df)) next
+    if (is.null(df$SSD)) stop("No SSD column in data.")
+
+    splitted <- split(df, df$group_key)
+    dots$ssd_round <- ssd_round
+
+    if (effective_ssd_binning == "value") {
+      quantile_fun <- summary_funs$value
+      source_bin_modes[sname] <- "value"
+    } else if (use_global_quantiles) {
+      quantile_fun <- summary_funs$global
+      dots$global_ssd_breaks <- plot_global_ssd_breaks
+      source_bin_modes[sname] <- "global_quantile"
+    } else {
+      quantile_fun <- summary_funs$individual
+      source_bin_modes[sname] <- "individual_quantile"
+    }
+
+    if ("postn" %in% names(df)) {
+      p_resp_list[[sname]] <- lapply(splitted, function(sub_grp) {
+        postn_splits <- split(sub_grp, sub_grp$postn)
+        lapply(postn_splits, quantile_fun,
+               group_factor = within_plot, probs = effective_probs, dots = dots)
+      })
+
+      p_resp_quants_list[[sname]] <- lapply(p_resp_list[[sname]], function(postn_list) {
+        out <- list()
+        for (lev in within_levels) {
+          out[[lev]] <- get_stop_signal_postn_quantiles(
+            postn_list = postn_list,
+            level = lev,
+            value_col = value_col,
+            quants = quants
+          )
+        }
+        out
+      })
+
+      if (styp %in% use_lim) {
+        x_vals <- unlist(lapply(p_resp_quants_list[[sname]], function(group_val) {
+          sapply(group_val, function(mat4) {
+            if (is.null(mat4)) return(NULL)
+            get_stop_signal_x_range_values(mat4[nrow(mat4), ])
+          })
+        }))
+        x_min <- min(x_min, x_vals, na.rm = TRUE)
+        x_max <- max(x_max, x_vals, na.rm = TRUE)
+
+        y_vals <- unlist(lapply(p_resp_quants_list[[sname]], function(group_val) {
+          lapply(group_val, function(mat4) {
+            if (is.null(mat4)) return(NULL)
+            range(c(mat4[1, ], mat4[3, ]), na.rm = TRUE)
+          })
+        }))
+        y_min <- min(y_min, y_vals, na.rm = TRUE)
+        y_max <- max(y_max, y_vals, na.rm = TRUE)
+      }
+    } else {
+      p_resp_list[[sname]] <- lapply(splitted, quantile_fun,
+                                     group_factor = within_plot,
+                                     probs = effective_probs,
+                                     dots = dots)
+
+      if (styp %in% use_lim) {
+        all_x_vals <- c()
+        all_y_vals <- c()
+        for (grp_name in names(p_resp_list[[sname]])) {
+          p_resp_grp <- p_resp_list[[sname]][[grp_name]]
+          if (!is.null(p_resp_grp)) {
+            for (draw in p_resp_grp) {
+              if (!is.null(draw[["x_plot"]]) && !is.null(draw[[value_col]])) {
+                all_x_vals <- c(all_x_vals, get_stop_signal_x_range_values(draw$x_plot))
+                all_y_vals <- c(all_y_vals, get_stop_signal_y_range_values(draw, value_col))
+              }
+            }
+          }
+        }
+
+        x_min <- min(x_min, all_x_vals, na.rm = TRUE)
+        x_max <- max(x_max, all_x_vals, na.rm = TRUE)
+        y_min <- min(y_min, all_y_vals, na.rm = TRUE)
+        y_max <- max(y_max, all_y_vals, na.rm = TRUE)
+      }
+    }
+  }
+
+  oldpar <- par(no.readonly = TRUE)
+  on.exit(par(oldpar))
+  if (any(is.na(layout))) {
+    par(mfrow = coda_setmfrow(Nchains = 1, Nparms = length(unique_group_keys), nplots = 1))
+  } else {
+    par(mfrow = layout)
+  }
+
+  if (!is.finite(y_min) || !is.finite(y_max) || y_min >= y_max) {
+    ylim <- default_ylim
+  } else {
+    y_buffer <- 0.05 * (y_max - y_min)
+    ylim <- c(y_min - y_buffer, y_max + y_buffer)
+  }
+
+  if (!is.finite(x_min) || !is.finite(x_max) || x_min >= x_max) {
+    xlim <- NULL
+  } else {
+    x_buffer <- 0.05 * (x_max - x_min)
+    xlim <- c(x_min - x_buffer, x_max + x_buffer)
+  }
+
+  # Second pass: draw one panel per factor combination, reusing the summaries
+  # from the first pass. The same loop handles IF and SRRT via value_col.
+  for (group_key in unique_group_keys) {
+    tmp_dots <- dots
+    tmp_posterior_args <- posterior_args
+    tmp_prior_args <- prior_args
+
+    plot_args <- add_defaults(dots, ylim = ylim, xlim = xlim,
+                              main = group_key, xlab = "", ylab = "")
+    plot_args <- fix_dots_plot(plot_args)
+    plot_args$axes <- FALSE
+    do.call(plot, c(list(NA), plot_args))
+    axis(2)
+    mtext(y_label, side = 2, line = 3)
+
+    legend_map <- character(0)
+    lwd_map <- numeric()
+    for (k in seq_along(data_sources)) {
+      styp <- sources[k]
+      sname <- names(sources)[k]
+      if (styp == "data") {
+        src_args <- tmp_dots
+        tmp_dots$col <- tmp_dots$col[-1]
+      } else if (styp == "posterior") {
+        src_args <- tmp_posterior_args
+        tmp_posterior_args$col <- tmp_posterior_args$col[-1]
+      } else if (styp == "prior") {
+        src_args <- tmp_prior_args
+        tmp_prior_args$col <- tmp_prior_args$col[-1]
+      }
+      legend_map[sname] <- src_args$col[1]
+      lwd_map[sname] <- ifelse(is.null(src_args$lwd), 1, src_args$lwd)
+
+      if (!is.null(p_resp_list[[sname]])) {
+        if (!("postn" %in% names(data_sources[[k]]))) {
+          p_resp_df <- p_resp_list[[sname]][[group_key]]
+          if (!is.null(p_resp_df)) {
+            ilev <- 1
+            for (df in p_resp_df) {
+              lines_args <- add_defaults(src_args, lty = line_types[ilev])
+              lines_args <- fix_dots_plot(lines_args)
+              do.call(lines, c(list(x = df$x_plot, y = df[[value_col]]), lines_args))
+              do.call(points, c(list(x = df$x_plot, y = df[[value_col]]), lines_args))
+              if (!any(sources == "posterior")) {
+                draw_stop_signal_se(df$x_plot, df[[value_col]], df$se)
+              }
+              ilev <- ilev + 1
+            }
+          }
+        } else {
+          if (!is.null(p_resp_quants_list[[sname]])) {
+            p_resp_quants_for_group <- p_resp_quants_list[[sname]][[group_key]]
+            if (!is.null(p_resp_quants_for_group)) {
+              ilev <- 1
+              for (lev in within_levels) {
+                mat4 <- p_resp_quants_for_group[[lev]]
+                if (!is.null(mat4)) {
+                  y_lower <- mat4[1, ]
+                  y_med <- mat4[2, ]
+                  y_upper <- mat4[3, ]
+                  x_plot <- mat4[4, ]
+
+                  lines_args <- add_defaults(src_args, lty = line_types[ilev])
+                  lines_args <- fix_dots_plot(lines_args)
+                  adj_color <- do.call(adjustcolor,
+                                       fix_dots(add_defaults(src_args, alpha.f = 0.2),
+                                                adjustcolor))
+                  poly_args <- src_args
+                  poly_args$col <- adj_color
+                  poly_args <- fix_dots_plot(poly_args)
+                  do.call(polygon, c(list(
+                    y = c(y_lower, rev(y_upper)),
+                    x = c(x_plot, rev(x_plot)),
+                    border = NA
+                  ), poly_args))
+                  if (predictive_points) {
+                    draw_stop_signal_predictive_points(
+                      p_resp_list[[sname]][[group_key]], lev, value_col,
+                      src_args, predictive_point_args
+                    )
+                  }
+                  do.call(lines, c(list(x = x_plot, y = y_med), lines_args))
+                }
+                ilev <- ilev + 1
+              }
+            }
+          }
+        }
+      }
+    }
+
+    for (k in seq_along(data_sources)) {
+      sname <- names(sources)[k]
+      if (!("postn" %in% names(data_sources[[k]]))) {
+        tick_group <- p_resp_list[[sname]][[group_key]]
+        if (!is.null(tick_group)) {
+          tick_data <- tick_group[[names(tick_group)[1]]]
+          draw_stop_signal_x_axis(tick_data, source_bin_modes[sname],
+                                  "Global SSD Quantile Bin (%, sec.)",
+                                  "Participant SSD Quantile Bin (%)",
+                                  probs = effective_probs)
+          break
+        }
+      } else {
+        tick_group <- p_resp_quants_list[[sname]][[group_key]]
+        if (!is.null(tick_group)) {
+          tick_mat <- tick_group[[names(tick_group)[1]]]
+          if (!is.null(tick_mat)) {
+            tick_data <- data.frame(x_plot = unname(tick_mat[nrow(tick_mat), ]))
+            tick_labels <- names(tick_mat[nrow(tick_mat), ])
+            if (source_bin_modes[sname] %in% c("value", "global_quantile") &&
+                !is.null(tick_labels)) {
+              tick_data$ssd <- tick_labels
+            }
+            draw_stop_signal_x_axis(tick_data, source_bin_modes[sname],
+                                    "Global SSD Quantile Bin (%, sec.)",
+                                    "Participant SSD Quantile Bin (%)",
+                                    probs = effective_probs)
+            break
+          }
+        }
+      }
+    }
+
+    if (!is.na(legendpos[1]) && !(length(within_levels) == 1 && within_levels == "All")) {
+      legend(legendpos[1], legend = within_levels, lty = line_types, col = "black",
+             title = within_plot, bty = "n")
+    }
+
+    if (length(data_sources) > 1) {
+      if (!is.na(legendpos[2])) {
+        legend(legendpos[2], legend = names(legend_map), lty = 1, col = legend_map,
+               title = "Source", bty = "n", lwd = lwd_map)
+      }
+    }
+  }
+
+  plot_data <- get_stop_signal_plot_data(p_resp_list, p_resp_quants_list, sources,
+                                         source_bin_modes, value_col)
+  if (print_plot_data) print_stop_signal_plot_data(plot_data)
+
+  invisible(plot_data)
+}
+
 #' Plot Inhibition Functions
 #'
 
@@ -717,407 +1094,44 @@ plot_ss_if <- function(input,
                     print_plot_data = FALSE,
                     ...) {
 
-  ssd_binning <- match.arg(ssd_binning)
-  on_duplicate_quantiles <- match.arg(on_duplicate_quantiles)
-  if (!is.null(ssd_round) &&
-      (!is.numeric(ssd_round) || length(ssd_round) != 1 || is.na(ssd_round) || ssd_round <= 0)) {
-    stop("`ssd_round` must be NULL or a single positive numeric value.")
-  }
-  if (ssd_binning == "value") message_ignored_value_binning_args()
-  if (ssd_binning == "quantile") validate_stop_signal_probs(probs)
-  validate_stop_signal_quants(quants)
-  validate_stop_signal_sources(to_plot, use_lim)
-  if (!is.logical(predictive_points) || length(predictive_points) != 1 ||
-      is.na(predictive_points)) {
-    stop("`predictive_points` must be TRUE or FALSE.")
-  }
-  if (!is.logical(print_plot_data) || length(print_plot_data) != 1 ||
-      is.na(print_plot_data)) {
-    stop("`print_plot_data` must be TRUE or FALSE.")
-  }
-  validate_stop_signal_predictive_request(input, post_predict, prior_predict,
-                                          to_plot, missing(to_plot))
-  layout <- normalize_stop_signal_layout(layout)
-  legendpos <- normalize_stop_signal_legendpos(legendpos)
-
-  # 1) prep_data_plot
-  check <- prep_data_plot(input, post_predict, prior_predict, to_plot, use_lim,
-                          factors, within_plot, subject, n_cores, n_post, remove_na = FALSE, functions)
-  data_sources <- check$datasets
-  sources <- check$sources
-
-  # Basic definitions
-  dots <- add_defaults(list(...), col = c("black",  "#A9A9A9", "#666666"))
-  posterior_args <- add_defaults(posterior_args, col = c("darkgreen",  "#0000FF", "#008B8B"))
-  prior_args <- add_defaults(prior_args, col = c("red", "#800080", "#CC00FF"))
-
-  unique_group_keys <- levels(factor(data_sources[[1]]$group_key))
-
-  if (is.null(within_plot)) {
-    within_levels <- "All"  # fallback
-  } else {
-    within_levels <- levels(factor(data_sources[[1]][[within_plot]]))
-
-  }
-  line_types <- seq_along(within_levels)
-
-  # Single-p_resp results or multi-postn quantile results are stored in these:
-  p_resp_list        <- list() # single
-  p_resp_quants_list <- list() # multi
-  source_bin_modes <- character()
-
-  # Pick one binning method for the whole plot. If any plotted source has
-  # duplicate quantile breaks, the selected fallback is applied to all sources
-  # so lines and axes stay on the same x scale.
-  effective_ssd_binning <- ssd_binning
-  effective_probs <- probs
-  plot_global_ssd_breaks <- NULL
-  if (ssd_binning == "quantile") {
-    has_duplicate_breaks <- has_duplicate_stop_signal_quantiles(
-      data_sources, sources, probs, use_global_quantiles, within_plot, ssd_round
-    )
-
-    if (has_duplicate_breaks) {
-      if (on_duplicate_quantiles == "value") {
-        effective_ssd_binning <- "value"
-      } else if (on_duplicate_quantiles == "reduce") {
-        effective_probs <- get_reduced_stop_signal_probs(
-          data_sources, sources, probs, use_global_quantiles, within_plot, ssd_round
-        )
-      } else {
-        stop("Duplicate quantile values detected, or plotted sources have different ",
-             "SSD support for a shared global quantile grid. Please use fewer bins, ",
-             "match the SSD design across sources, or set `on_duplicate_quantiles` ",
-             "to \"value\" or \"reduce\".")
-      }
-    }
-  }
-  if (effective_ssd_binning == "quantile" && use_global_quantiles) {
-    plot_global_ssd_breaks <- get_reference_global_ssd_breaks(data_sources, sources, effective_probs,
-                                                              ssd_round)
-  }
-
-  # keep track of a global maximum in the vertical dimension
-  # so that we can set a consistent y-lim across all panels
-  y_max <- 0
-  y_min <- 0
-
-  x_min <- Inf
-  x_max <- -Inf
-
-  # -------------------------------------------------------------------
-  # 2) FIRST BIG LOOP: compute p_resp or p_resp-quantiles for each dataset
-  # -------------------------------------------------------------------
-  for (k in seq_along(data_sources)) {
-    df   <- data_sources[[k]]
-    styp <- sources[k]       # "data","posterior","prior"
-    sname <- names(sources)[k]  # the name of this dataset in the list
-
-    if (is.null(df) || !nrow(df)) {
-      # skip empty
-      next
-    }
-
-    # group by group_key
-    splitted <- split(df, df$group_key)
-
-    # Check if stop-signal dataset
-    if(is.null(df$SSD)){
-      stop("No SSD column in data.")
-    }
-
-    dots$ssd_round <- ssd_round
-
-    # set type of SSD binning method
-    if (effective_ssd_binning == "value") {
-      quantile_fun <- get_response_probability_by_ssd_value
-      source_bin_modes[sname] <- "value"
-    } else if(use_global_quantiles){
-      quantile_fun <- get_response_probability_by_global_ssd_quantile
-      dots$global_ssd_breaks <- plot_global_ssd_breaks
-      source_bin_modes[sname] <- "global_quantile"
-    } else {
-      quantile_fun <- get_response_probability_by_individual_ssd_quantile
-      source_bin_modes[sname] <- "individual_quantile"
-    }
-
-    # If there's a "postn" column => multiple draws => compute quantiles
-    if ("postn" %in% names(df)) {
-      # p_resp_list[[sname]] => list of (group_key => list of postn => single-p_resp)
-      p_resp_list[[sname]] <- lapply(splitted, function(sub_grp) {
-        #  further split by postn
-        postn_splits <- split(sub_grp, sub_grp$postn)
-        lapply(postn_splits, quantile_fun,
-               group_factor = within_plot, probs = effective_probs, dots = dots)
-      })
-
-      # derive p_resp_quants_list from p_resp_list
-      p_resp_quants_list[[sname]] <- lapply(p_resp_list[[sname]], function(postn_list) {
-        # postn_list => e.g. 100 draws => each draw is a named list of factor-level => cbind(x,y)
-        out <- list()
-        for (lev in within_levels) {
-          out[[lev]] <- get_stop_signal_postn_quantiles(
-            postn_list = postn_list,
-            level = lev,
-            value_col = "p_response",
-            quants = quants
-          )
-        }
-        out
-      })
-
-      # If this dataset is used to define y-limit
-      if (styp %in% use_lim) {
-        # x-limits from the plotted x positions
-        x_vals <- unlist(lapply(p_resp_quants_list[[sname]], function(group_val) {
-          # group_val => list( factor_level => matrix(4 x length-of-probs) )
-          sapply(group_val, function(mat4) {
-            if (is.null(mat4)) return(NULL)
-            get_stop_signal_x_range_values(mat4[nrow(mat4), ])
-          })
-        }))
-        x_min <- min(x_min, x_vals, na.rm = TRUE)
-        x_max <- max(x_max, x_vals, na.rm = TRUE)
-
-        # y-limits (min/max across y_lower and y_upper)
-        y_vals <- unlist(lapply(p_resp_quants_list[[sname]], function(group_val) {
-          lapply(group_val, function(mat4) {
-            if (is.null(mat4)) return(NULL)
-            range(c(mat4[1, ], mat4[3, ]), na.rm = TRUE)  # y_lower and y_upper
-          })
-        }))
-        y_min <- min(y_min, y_vals, na.rm = TRUE)
-        y_max <- max(y_max, y_vals, na.rm = TRUE)
-      }
-
-    } else {
-
-      # single dataset => p_resp_list[[sname]] => group_key => get_def_cdf => named list by factor level
-      p_resp_list[[sname]] <- lapply(splitted, quantile_fun,
-                                     group_factor = within_plot, probs = effective_probs, dots = dots)
-
-      # If this dataset is used for y-limit, find max
-      if (styp %in% use_lim) {
-        # find max y across all group_keys & factor-levels
-        all_x_vals <- c()
-        all_y_vals <- c()
-
-        for (grp_name in names(p_resp_list[[sname]])) {
-          p_resp_grp <- p_resp_list[[sname]][[grp_name]]
-
-          if (!is.null(p_resp_grp)) {
-            for (draw in p_resp_grp) {
-              # extract x_plot and p_response if present
-              if (!is.null(draw[["x_plot"]]) && !is.null(draw[["p_response"]])) {
-                all_x_vals <- c(all_x_vals, get_stop_signal_x_range_values(draw$x_plot))
-                all_y_vals <- c(all_y_vals, get_stop_signal_y_range_values(draw, "p_response"))
-              }
-            }
-          }
-        }
-
-        # Now calculate global min/max
-        x_min <- min(x_min, all_x_vals, na.rm = TRUE)
-        x_max <- max(x_max, all_x_vals, na.rm = TRUE)
-        y_min <- min(y_min, all_y_vals, na.rm = TRUE)
-        y_max <- max(y_max, all_y_vals, na.rm = TRUE)
-      }
-    }
-  }
-
-  # -------------------------------------------------------------------
-  # 3) SECOND BIG LOOP: Plot one panel per group_key
-  # -------------------------------------------------------------------
-  if(!is.null(layout)){
-    oldpar <- par(no.readonly = TRUE)
-    on.exit(par(oldpar))
-  }
-  # layout
-  if (any(is.na(layout))) {
-    par(mfrow = coda_setmfrow(Nchains=1, Nparms=length(unique_group_keys), nplots=1))
-  } else {
-    par(mfrow = layout)
-  }
-
-  # define a global y-limit (with a bit of headroom)
-  if (!is.finite(y_min) || !is.finite(y_max) || y_min >= y_max) {
-    ylim <- c(0, 1)
-  } else {
-    y_buffer <- 0.05 * (y_max - y_min)
-    ylim <- c(y_min - y_buffer, y_max + y_buffer)
-  }
-
-  if (!is.finite(x_min) || !is.finite(x_max) || x_min >= x_max) {
-    xlim <- NULL  # let R handle it if bad limits
-  } else {
-    x_buffer <- 0.05 * (x_max - x_min)
-    xlim <- c(x_min - x_buffer, x_max + x_buffer)
-  }
-
-  for (group_key in unique_group_keys) {
-    tmp_dots <- dots
-    tmp_posterior_args <- posterior_args
-    tmp_prior_args <- prior_args
-
-    # blank plot
-    plot_args <- add_defaults(dots, ylim=ylim, xlim=xlim,
-                              main=group_key, xlab="", ylab="")
-    plot_args <- fix_dots_plot(plot_args)
-    plot_args$axes <- FALSE  # prevent auto-drawing axes
-    do.call(plot, c(list(NA), plot_args))
-    # Draw y-axis manually (left side)
-    axis(2)
-
-    mtext("Pr(R)", side=2, line=3)
-
-    # draw lines for each dataset
-    legend_map <- character(0)  # to store source name -> color
-    lwd_map <- numeric()
-    for (k in seq_along(data_sources)) {
-      styp  <- sources[k]       # "data","posterior","prior"
-      sname <- names(sources)[k]
-      if(styp == "data") {
-        src_args <- tmp_dots
-        tmp_dots$col <- tmp_dots$col[-1]
-      } else if (styp == "posterior") {
-        src_args <- tmp_posterior_args
-        tmp_posterior_args$col <- tmp_posterior_args$col[-1]
-      } else if (styp == "prior") {
-        src_args <- tmp_prior_args
-        tmp_prior_args$col <- tmp_prior_args$col[-1]
-      }
-      legend_map[sname] <- src_args$col[1]
-      lwd_map[sname] <- ifelse(is.null(src_args$lwd), 1, src_args$lwd)
-      # if no postn => single p_resp => p_resp_list[[sname]][[group_key]] => factor-level => matrix(x,y)
-      # if postn => p_resp_quants_list[[sname]][[group_key]] => factor-level => matrix(4 x length-probs)
-
-      # There might be no p_resp if that group_key wasn't present in the data
-      # so check if p_resp_list has an entry
-      if (!is.null(p_resp_list[[sname]])) {
-        # check for group group_key
-        if (!("postn" %in% names(data_sources[[k]]))) {
-          # single
-          p_resp_df <- p_resp_list[[sname]][[group_key]]
-          if (!is.null(p_resp_df)) {
-            ilev <- 1
-            for (df in p_resp_df) {
-              lines_args <- add_defaults(src_args, lty = line_types[ilev])
-              lines_args <- fix_dots_plot(lines_args)
-
-              do.call(lines, c(list(x = df$x_plot, y = df$p_response), lines_args))
-              do.call(points, c(list(x = df$x_plot, y = df$p_response), lines_args))
-
-              if(!any(sources == "posterior")){
-                # Add standard errors
-                draw_stop_signal_se(df$x_plot, df$p_response, df$se)
-              }
-
-
-              ilev <- ilev + 1
-            }
-          }
-
-        } else {
-          # multi draws => p_resp_quants_list
-          if (!is.null(p_resp_quants_list[[sname]])) {
-            p_resp_quants_for_group <- p_resp_quants_list[[sname]][[group_key]]
-            if (!is.null(p_resp_quants_for_group)) {
-              ilev <- 1
-              for (lev in within_levels) {
-                mat4 <- p_resp_quants_for_group[[lev]]
-                if (!is.null(mat4)) {
-                  # mat4 => e.g. 4 rows x (length(probs)) columns
-                  y_lower <- mat4[1,]
-                  y_med   <- mat4[2,]
-                  y_upper <- mat4[3,]
-                  x_plot<- mat4[4,]
-
-                  lines_args <- add_defaults(src_args, lty=line_types[ilev])
-                  lines_args <- fix_dots_plot(lines_args)
-
-                  # polygon for the ribbon
-                  adj_color <- do.call(adjustcolor, fix_dots(add_defaults(src_args, alpha.f=0.2), adjustcolor))
-                  poly_args <- src_args
-                  poly_args$col <- adj_color
-                  poly_args <- fix_dots_plot(poly_args)
-                  do.call(polygon, c(list(
-                    y = c(y_lower, rev(y_upper)),
-                    x = c(x_plot, rev(x_plot)),
-                    border = NA
-                  ), poly_args))
-                  if (predictive_points) {
-                    draw_stop_signal_predictive_points(
-                      p_resp_list[[sname]][[group_key]], lev, "p_response",
-                      src_args, predictive_point_args
-                    )
-                  }
-                  do.call(lines, c(list(x=x_plot, y=y_med), lines_args))
-                }
-                ilev <- ilev+1
-              }
-            }
-          }
-        }
-      }
-    }
-
-    axis_drawn <- FALSE
-    for (k in seq_along(data_sources)) {
-      sname <- names(sources)[k]
-      if (!("postn" %in% names(data_sources[[k]]))) {
-        tick_group <- p_resp_list[[sname]][[group_key]]
-        if (!is.null(tick_group)) {
-          tick_data <- tick_group[[names(tick_group)[1]]]
-          draw_stop_signal_x_axis(tick_data, source_bin_modes[sname],
-                                  "Global SSD Quantile Bin (%, sec.)", "Participant SSD Quantile Bin (%)",
-                                  probs = effective_probs)
-          axis_drawn <- TRUE
-          break
-        }
-      } else {
-        tick_group <- p_resp_quants_list[[sname]][[group_key]]
-        if (!is.null(tick_group)) {
-          tick_mat <- tick_group[[names(tick_group)[1]]]
-          if (!is.null(tick_mat)) {
-            tick_data <- data.frame(x_plot = unname(tick_mat[nrow(tick_mat), ]))
-            tick_labels <- names(tick_mat[nrow(tick_mat), ])
-            if (source_bin_modes[sname] %in% c("value", "global_quantile") &&
-                !is.null(tick_labels)) {
-              tick_data$ssd <- tick_labels
-            }
-            draw_stop_signal_x_axis(tick_data, source_bin_modes[sname],
-                                    "Global SSD Quantile Bin (%, sec.)", "Participant SSD Quantile Bin (%)",
-                                    probs = effective_probs)
-            axis_drawn <- TRUE
-            break
-          }
-        }
-      }
-    }
-
-    # Factor-level legend, only if more than one defective level
-    if (!is.na(legendpos[1]) && !(length(within_levels) == 1 && within_levels == "All")) {
-      legend(legendpos[1], legend=within_levels, lty=line_types, col="black",
-             title=within_plot, bty="n")
-    }
-
-
-    # If multiple data sources, show source legend
-    if (length(data_sources) > 1) {
-      if(!is.na(legendpos[2])){
-        legend(legendpos[2], legend=names(legend_map), lty=1, col=legend_map,
-               title="Source", bty="n", lwd = lwd_map)
-      }
-    }
-  } # end for each group_key
-
-  plot_data <- get_stop_signal_plot_data(p_resp_list, p_resp_quants_list, sources,
-                                         source_bin_modes, "p_response")
-  # Return the same data used for plotting so users can inspect bin counts and
-  # predictive draw support without recomputing the summaries.
-  if (print_plot_data) print_stop_signal_plot_data(plot_data)
-
-  invisible(plot_data)
+  plot_stop_signal_summary(
+    input = input,
+    post_predict = post_predict,
+    prior_predict = prior_predict,
+    probs = probs,
+    factors = factors,
+    within_plot = within_plot,
+    use_global_quantiles = use_global_quantiles,
+    ssd_binning = ssd_binning,
+    ssd_round = ssd_round,
+    on_duplicate_quantiles = on_duplicate_quantiles,
+    subject = subject,
+    quants = quants,
+    functions = functions,
+    n_cores = n_cores,
+    n_post = n_post,
+    layout = layout,
+    to_plot = to_plot,
+    use_lim = use_lim,
+    legendpos = legendpos,
+    posterior_args = posterior_args,
+    prior_args = prior_args,
+    predictive_points = predictive_points,
+    predictive_point_args = predictive_point_args,
+    print_plot_data = print_plot_data,
+    dots = list(...),
+    value_col = "p_response",
+    y_label = "Pr(R)",
+    summary_funs = list(
+      individual = get_response_probability_by_individual_ssd_quantile,
+      global = get_response_probability_by_global_ssd_quantile,
+      value = get_response_probability_by_ssd_value
+    ),
+    default_ylim = c(0, 1),
+    initial_y_min = 0,
+    initial_y_max = 0,
+    to_plot_missing = missing(to_plot)
+  )
 }
 
 get_response_probability_by_individual_ssd_quantile <- function(x, group_factor, probs, dots) {
@@ -1451,402 +1465,44 @@ plot_ss_srrt <- function(input,
                       print_plot_data = FALSE,
                       ...) {
 
-  ssd_binning <- match.arg(ssd_binning)
-  on_duplicate_quantiles <- match.arg(on_duplicate_quantiles)
-  if (!is.null(ssd_round) &&
-      (!is.numeric(ssd_round) || length(ssd_round) != 1 || is.na(ssd_round) || ssd_round <= 0)) {
-    stop("`ssd_round` must be NULL or a single positive numeric value.")
-  }
-  if (ssd_binning == "value") message_ignored_value_binning_args()
-  if (ssd_binning == "quantile") validate_stop_signal_probs(probs)
-  validate_stop_signal_quants(quants)
-  validate_stop_signal_sources(to_plot, use_lim)
-  if (!is.logical(predictive_points) || length(predictive_points) != 1 ||
-      is.na(predictive_points)) {
-    stop("`predictive_points` must be TRUE or FALSE.")
-  }
-  if (!is.logical(print_plot_data) || length(print_plot_data) != 1 ||
-      is.na(print_plot_data)) {
-    stop("`print_plot_data` must be TRUE or FALSE.")
-  }
-  validate_stop_signal_predictive_request(input, post_predict, prior_predict,
-                                          to_plot, missing(to_plot))
-  layout <- normalize_stop_signal_layout(layout)
-  legendpos <- normalize_stop_signal_legendpos(legendpos)
-
-  # 1) prep_data_plot
-  check <- prep_data_plot(input, post_predict, prior_predict, to_plot, use_lim,
-                          factors, within_plot, subject, n_cores, n_post, remove_na = FALSE, functions)
-  data_sources <- check$datasets
-  sources <- check$sources
-
-  # Basic definitions
-  dots <- add_defaults(list(...), col = c("black",  "#A9A9A9", "#666666"))
-  posterior_args <- add_defaults(posterior_args, col = c("darkgreen",  "#0000FF", "#008B8B"))
-  prior_args <- add_defaults(prior_args, col = c("red", "#800080", "#CC00FF"))
-
-  unique_group_keys <- levels(factor(data_sources[[1]]$group_key))
-
-  if (is.null(within_plot)) {
-    within_levels <- "All"  # fallback
-  } else {
-    within_levels <- levels(factor(data_sources[[1]][[within_plot]]))
-
-  }
-  line_types <- seq_along(within_levels)
-
-  # store single-p_resp results or multi-postn quantile results in these:
-  p_resp_list        <- list() # single
-  p_resp_quants_list <- list() # multi
-  source_bin_modes <- character()
-
-  # Pick one binning method for the whole plot. If any plotted source has
-  # duplicate quantile breaks, the selected fallback is applied to all sources
-  # so lines and axes stay on the same x scale.
-  effective_ssd_binning <- ssd_binning
-  effective_probs <- probs
-  plot_global_ssd_breaks <- NULL
-  if (ssd_binning == "quantile") {
-    has_duplicate_breaks <- has_duplicate_stop_signal_quantiles(
-      data_sources, sources, probs, use_global_quantiles, within_plot, ssd_round
-    )
-
-    if (has_duplicate_breaks) {
-      if (on_duplicate_quantiles == "value") {
-        effective_ssd_binning <- "value"
-      } else if (on_duplicate_quantiles == "reduce") {
-        effective_probs <- get_reduced_stop_signal_probs(
-          data_sources, sources, probs, use_global_quantiles, within_plot, ssd_round
-        )
-      } else {
-        stop("Duplicate quantile values detected, or plotted sources have different ",
-             "SSD support for a shared global quantile grid. Please use fewer bins, ",
-             "match the SSD design across sources, or set `on_duplicate_quantiles` ",
-             "to \"value\" or \"reduce\".")
-      }
-    }
-  }
-  if (effective_ssd_binning == "quantile" && use_global_quantiles) {
-    plot_global_ssd_breaks <- get_reference_global_ssd_breaks(data_sources, sources, effective_probs,
-                                                              ssd_round)
-  }
-
-  # keep track of a global maximum in the vertical dimension
-  # so a consistent y-lim across all panels can be set
-  y_max <- -Inf
-  y_min <- Inf
-
-  x_min <- Inf
-  x_max <- -Inf
-
-  # -------------------------------------------------------------------
-  # 2) FIRST BIG LOOP: compute p_resp or p_resp-quantiles for each dataset
-  # -------------------------------------------------------------------
-  for (k in seq_along(data_sources)) {
-    df   <- data_sources[[k]]
-    styp <- sources[k]       # "data","posterior","prior"
-    sname <- names(sources)[k]  # the name of this dataset in the list
-
-    if (is.null(df) || !nrow(df)) {
-      # skip empty
-      next
-    }
-
-    # group by group_key
-    splitted <- split(df, df$group_key)
-
-    # Check if it is a stop-signal dataset
-    if(is.null(df$SSD)){
-      stop("No SSD column in data.")
-    }
-
-    dots$ssd_round <- ssd_round
-
-    # type of SSD binning method
-    if (effective_ssd_binning == "value") {
-      quantile_fun <- get_srrt_by_ssd_value
-      source_bin_modes[sname] <- "value"
-    } else if(use_global_quantiles){
-      quantile_fun <- get_srrt_by_global_ssd_quantile
-      dots$global_ssd_breaks <- plot_global_ssd_breaks
-      source_bin_modes[sname] <- "global_quantile"
-    } else {
-      quantile_fun <- get_srrt_by_individual_ssd_quantile
-      source_bin_modes[sname] <- "individual_quantile"
-    }
-
-    # If there's a "postn" column => multiple draws => compute quantiles
-    if ("postn" %in% names(df)) {
-      # p_resp_list[[sname]] => list of (group_key => list of postn => single-p_resp)
-      p_resp_list[[sname]] <- lapply(splitted, function(sub_grp) {
-        # sub_grp is all rows for a single group_key
-        # further split by postn
-        postn_splits <- split(sub_grp, sub_grp$postn)
-        lapply(postn_splits, quantile_fun,
-               group_factor = within_plot, probs = effective_probs, dots = dots)
-      })
-
-      # derive p_resp_quants_list from p_resp_list
-      p_resp_quants_list[[sname]] <- lapply(p_resp_list[[sname]], function(postn_list) {
-        # postn_list => e.g. 100 draws => each draw is a named list of factor-level => cbind(x,y)
-        out <- list()
-        for (lev in within_levels) {
-          out[[lev]] <- get_stop_signal_postn_quantiles(
-            postn_list = postn_list,
-            level = lev,
-            value_col = "srrt",
-            quants = quants
-          )
-        }
-        out
-      })
-
-      # If this dataset is used to define y-limit
-      if (styp %in% use_lim) {
-        x_vals <- unlist(lapply(p_resp_quants_list[[sname]], function(group_val) {
-          # group_val => list( factor_level => matrix(4 x length-of-probs) )
-          sapply(group_val, function(mat4) {
-            if (is.null(mat4)) return(NULL)
-            get_stop_signal_x_range_values(mat4[nrow(mat4), ])
-          })
-        }))
-        x_min <- min(x_min, x_vals, na.rm = TRUE)
-        x_max <- max(x_max, x_vals, na.rm = TRUE)
-
-        # y-limits (min/max across y_lower and y_upper)
-        y_vals <- unlist(lapply(p_resp_quants_list[[sname]], function(group_val) {
-          lapply(group_val, function(mat4) {
-            if (is.null(mat4)) return(NULL)
-            range(c(mat4[1, ], mat4[3, ]), na.rm = TRUE)  # y_lower and y_upper
-          })
-        }))
-        y_min <- min(y_min, y_vals, na.rm = TRUE)
-        y_max <- max(y_max, y_vals, na.rm = TRUE)
-      }
-
-    } else {
-
-      # single dataset => p_resp_list[[sname]] => group_key => get_def_cdf => named list by factor level
-      p_resp_list[[sname]] <- lapply(splitted, quantile_fun,
-                                     group_factor = within_plot, probs = effective_probs, dots = dots)
-
-      # If this dataset for y-limit, find max
-      if (styp %in% use_lim) {
-        # find max y across all group_keys & factor-levels
-        all_x_vals <- c()
-        all_y_vals <- c()
-
-        for (grp_name in names(p_resp_list[[sname]])) {
-          p_resp_grp <- p_resp_list[[sname]][[grp_name]]
-
-          if (!is.null(p_resp_grp)) {
-            for (draw in p_resp_grp) {
-              # extract x_plot and srrt if present
-              if (!is.null(draw[["x_plot"]]) && !is.null(draw[["srrt"]])) {
-                all_x_vals <- c(all_x_vals, get_stop_signal_x_range_values(draw$x_plot))
-                all_y_vals <- c(all_y_vals, get_stop_signal_y_range_values(draw, "srrt"))
-              }
-            }
-          }
-        }
-
-        # calculate global min/max
-        x_min <- min(x_min, all_x_vals, na.rm = TRUE)
-        x_max <- max(x_max, all_x_vals, na.rm = TRUE)
-        y_min <- min(y_min, all_y_vals, na.rm = TRUE)
-        y_max <- max(y_max, all_y_vals, na.rm = TRUE)
-      }
-    }
-  }
-
-  # -------------------------------------------------------------------
-  # 3) SECOND BIG LOOP: Plot one panel per group_key
-  # -------------------------------------------------------------------
-  if(!is.null(layout)){
-    oldpar <- par(no.readonly = TRUE)
-    on.exit(par(oldpar))
-  }
-  # layout
-  if (any(is.na(layout))) {
-    par(mfrow = coda_setmfrow(Nchains=1, Nparms=length(unique_group_keys), nplots=1))
-  } else {
-    par(mfrow = layout)
-  }
-
-  # define a global y-limit (with a bit of headroom)
-  if (!is.finite(y_min) || !is.finite(y_max) || y_min >= y_max) {
-    ylim <- NULL
-  } else {
-    y_buffer <- 0.05 * (y_max - y_min)
-    ylim <- c(y_min - y_buffer, y_max + y_buffer)
-  }
-
-  if (!is.finite(x_min) || !is.finite(x_max) || x_min >= x_max) {
-    xlim <- NULL  # let R handle it if bad limits
-  } else {
-    x_buffer <- 0.05 * (x_max - x_min)
-    xlim <- c(x_min - x_buffer, x_max + x_buffer)
-  }
-
-  for (group_key in unique_group_keys) {
-    tmp_dots <- dots
-    tmp_posterior_args <- posterior_args
-    tmp_prior_args <- prior_args
-
-    # blank plot
-    plot_args <- add_defaults(dots, ylim=ylim, xlim=xlim,
-                              main=group_key, xlab="", ylab="")
-    plot_args <- fix_dots_plot(plot_args)
-    plot_args$axes <- FALSE  # prevent auto-drawing axes
-    do.call(plot, c(list(NA), plot_args))
-    # Draw y-axis manually (left side)
-    axis(2)
-    mtext("Mean SRRT (sec.)", side=2, line=3)
-
-    # draw lines for each dataset
-    legend_map <- character(0)  # to store source name -> color
-    lwd_map <- numeric()
-    for (k in seq_along(data_sources)) {
-      styp  <- sources[k]       # "data","posterior","prior"
-      sname <- names(sources)[k]
-      if(styp == "data") {
-        src_args <- tmp_dots
-        tmp_dots$col <- tmp_dots$col[-1]
-      } else if (styp == "posterior") {
-        src_args <- tmp_posterior_args
-        tmp_posterior_args$col <- tmp_posterior_args$col[-1]
-      } else if (styp == "prior") {
-        src_args <- tmp_prior_args
-        tmp_prior_args$col <- tmp_prior_args$col[-1]
-      }
-      legend_map[sname] <- src_args$col[1]
-      lwd_map[sname] <- ifelse(is.null(src_args$lwd), 1, src_args$lwd)
-      # if no postn => single p_resp => p_resp_list[[sname]][[group_key]] => factor-level => matrix(x,y)
-      # if postn => p_resp_quants_list[[sname]][[group_key]] => factor-level => matrix(4 x length-probs)
-
-      # THere might not be p_resp if that group_key wasn't present in the data
-      # so check if p_resp_list has an entry
-      if (!is.null(p_resp_list[[sname]])) {
-        # check for group group_key
-        if (!("postn" %in% names(data_sources[[k]]))) {
-          # single
-          p_resp_df <- p_resp_list[[sname]][[group_key]]
-          if (!is.null(p_resp_df)) {
-            ilev <- 1
-            for (df in p_resp_df) {
-              lines_args <- add_defaults(src_args, lty = line_types[ilev])
-              lines_args <- fix_dots_plot(lines_args)
-
-              do.call(lines, c(list(x = df$x_plot, y = df$srrt), lines_args))
-              do.call(points, c(list(x = df$x_plot, y = df$srrt), lines_args))
-
-              if(!any(sources == "posterior")){
-                # Add standard errors
-                draw_stop_signal_se(df$x_plot, df$srrt, df$se)
-              }
-
-
-              ilev <- ilev + 1
-            }
-          }
-
-        } else {
-          # multi draws => p_resp_quants_list
-          if (!is.null(p_resp_quants_list[[sname]])) {
-            p_resp_quants_for_group <- p_resp_quants_list[[sname]][[group_key]]
-            if (!is.null(p_resp_quants_for_group)) {
-              ilev <- 1
-              for (lev in within_levels) {
-                mat4 <- p_resp_quants_for_group[[lev]]
-                if (!is.null(mat4)) {
-                  y_lower <- mat4[1,]
-                  y_med   <- mat4[2,]
-                  y_upper <- mat4[3,]
-                  x_plot<- mat4[4,]
-
-                  lines_args <- add_defaults(src_args, lty=line_types[ilev])
-                  lines_args <- fix_dots_plot(lines_args)
-
-                  # polygon for the ribbon
-                  adj_color <- do.call(adjustcolor, fix_dots(add_defaults(src_args, alpha.f=0.2), adjustcolor))
-                  poly_args <- src_args
-                  poly_args$col <- adj_color
-                  poly_args <- fix_dots_plot(poly_args)
-                  do.call(polygon, c(list(
-                    y = c(y_lower, rev(y_upper)),
-                    x = c(x_plot, rev(x_plot)),
-                    border = NA
-                  ), poly_args))
-                  if (predictive_points) {
-                    draw_stop_signal_predictive_points(
-                      p_resp_list[[sname]][[group_key]], lev, "srrt",
-                      src_args, predictive_point_args
-                    )
-                  }
-                  do.call(lines, c(list(x=x_plot, y=y_med), lines_args))
-                }
-                ilev <- ilev+1
-              }
-            }
-          }
-        }
-      }
-    }
-
-    for (k in seq_along(data_sources)) {
-      sname <- names(sources)[k]
-      if (!("postn" %in% names(data_sources[[k]]))) {
-        tick_group <- p_resp_list[[sname]][[group_key]]
-        if (!is.null(tick_group)) {
-          tick_data <- tick_group[[names(tick_group)[1]]]
-          draw_stop_signal_x_axis(tick_data, source_bin_modes[sname],
-                                  "Global SSD Quantile Bin (%, sec.)", "Participant SSD Quantile Bin (%)",
-                                  probs = effective_probs)
-          break
-        }
-      } else {
-        tick_group <- p_resp_quants_list[[sname]][[group_key]]
-        if (!is.null(tick_group)) {
-          tick_mat <- tick_group[[names(tick_group)[1]]]
-          if (!is.null(tick_mat)) {
-            tick_data <- data.frame(x_plot = unname(tick_mat[nrow(tick_mat), ]))
-            tick_labels <- names(tick_mat[nrow(tick_mat), ])
-            if (source_bin_modes[sname] %in% c("value", "global_quantile") &&
-                !is.null(tick_labels)) {
-              tick_data$ssd <- tick_labels
-            }
-            draw_stop_signal_x_axis(tick_data, source_bin_modes[sname],
-                                    "Global SSD Quantile Bin (%, sec.)", "Participant SSD Quantile Bin (%)",
-                                    probs = effective_probs)
-            break
-          }
-        }
-      }
-    }
-
-    # Factor-level legend, only if more than one defective level
-    if (!is.na(legendpos[1]) && !(length(within_levels) == 1 && within_levels == "All")) {
-      legend(legendpos[1], legend=within_levels, lty=line_types, col="black",
-             title=within_plot, bty="n")
-    }
-
-
-    # If multiple data sources, show source legend
-    if (length(data_sources) > 1) {
-      if(!is.na(legendpos[2])){
-        legend(legendpos[2], legend=names(legend_map), lty=1, col=legend_map,
-               title="Source", bty="n", lwd = lwd_map)
-      }
-    }
-  } # end for each group_key
-
-  plot_data <- get_stop_signal_plot_data(p_resp_list, p_resp_quants_list, sources,
-                                         source_bin_modes, "srrt")
-  # Return the same data used for plotting so users can inspect sparse SRRT bins,
-  # especially when posterior/prior response counts vary across predictive draws.
-  if (print_plot_data) print_stop_signal_plot_data(plot_data)
-
-  invisible(plot_data)
+  plot_stop_signal_summary(
+    input = input,
+    post_predict = post_predict,
+    prior_predict = prior_predict,
+    probs = probs,
+    factors = factors,
+    within_plot = within_plot,
+    use_global_quantiles = use_global_quantiles,
+    ssd_binning = ssd_binning,
+    ssd_round = ssd_round,
+    on_duplicate_quantiles = on_duplicate_quantiles,
+    subject = subject,
+    quants = quants,
+    functions = functions,
+    n_cores = n_cores,
+    n_post = n_post,
+    layout = layout,
+    to_plot = to_plot,
+    use_lim = use_lim,
+    legendpos = legendpos,
+    posterior_args = posterior_args,
+    prior_args = prior_args,
+    predictive_points = predictive_points,
+    predictive_point_args = predictive_point_args,
+    print_plot_data = print_plot_data,
+    dots = list(...),
+    value_col = "srrt",
+    y_label = "Mean SRRT (sec.)",
+    summary_funs = list(
+      individual = get_srrt_by_individual_ssd_quantile,
+      global = get_srrt_by_global_ssd_quantile,
+      value = get_srrt_by_ssd_value
+    ),
+    default_ylim = NULL,
+    initial_y_min = Inf,
+    initial_y_max = -Inf,
+    to_plot_missing = missing(to_plot)
+  )
 }
 
 get_srrt_by_individual_ssd_quantile <- function(x, group_factor, probs, dots) {

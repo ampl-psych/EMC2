@@ -296,6 +296,118 @@ test_that("posterior-only stop-signal plot summaries are stable", {
     layout = c(1, 2),
     legendpos = c(NA, NA)
   ))
+
+  observed_if <- plot_ss_if(
+    tiny_ss_data,
+    probs = c(0, 0.5, 1),
+    to_plot = "data",
+    use_lim = "data",
+    factors = "E",
+    within_plot = "S",
+    layout = c(1, 2),
+    legendpos = c(NA, NA)
+  )
+  expect_s3_class(observed_if, "data.frame")
+  expect_named(observed_if, c("source", "dataset", "binning", "group_key",
+                              "within_level", "x_plot", "bin_label", "ssd",
+                              "value", "se", "n", "n_obs"))
+  expect_true(all(observed_if$source == "data"))
+  expect_true(all(observed_if$binning == "individual_quantile"))
+  expect_true(all(observed_if$x_plot %in% c(0.5, 1)))
+  expect_true(all(!is.na(observed_if$bin_label)))
+  expect_true(all(observed_if$n_obs >= observed_if$n))
+  expect_true(all(is.finite(observed_if$value)))
+
+  observed_srrt <- plot_ss_srrt(
+    tiny_ss_data,
+    probs = c(0, 0.5, 1),
+    use_global_quantiles = FALSE,
+    to_plot = "data",
+    use_lim = "data",
+    factors = "E",
+    within_plot = "S",
+    layout = c(1, 2),
+    legendpos = c(NA, NA)
+  )
+  expect_s3_class(observed_srrt, "data.frame")
+  expect_true(all(observed_srrt$source == "data"))
+  expect_true(all(observed_srrt$binning == "individual_quantile"))
+  expect_true(all(observed_srrt$x_plot %in% c(0.5, 1)))
+  expect_true(all(!is.na(observed_srrt$bin_label)))
+  expect_true(all(is.finite(observed_srrt$value)))
+
+  posterior_if <- plot_ss_if(
+    tiny_ss_data,
+    post_predict = tiny_post,
+    probs = c(0, 0.5, 1),
+    use_global_quantiles = TRUE,
+    to_plot = "posterior",
+    use_lim = "posterior",
+    factors = "E",
+    within_plot = "S",
+    layout = c(1, 2),
+    legendpos = c(NA, NA)
+  )
+  expect_true(all(posterior_if$source == "posterior"))
+  expect_true(all(posterior_if$binning == "global_quantile"))
+  expect_true(all(c("lower", "median", "upper", "n_draws") %in% names(posterior_if)))
+  expect_true(all(is.finite(posterior_if$median)))
+  expect_true(all(posterior_if$n_draws > 0))
+
+  mixed_value <- NULL
+  expect_message(
+    mixed_value <- plot_ss_if(
+      tiny_ss_data,
+      post_predict = tiny_post,
+      ssd_binning = "value",
+      to_plot = c("data", "posterior"),
+      use_lim = c("data", "posterior"),
+      factors = "E",
+      within_plot = "S",
+      layout = c(1, 2),
+      legendpos = c(NA, NA)
+    ),
+    "ignored when `ssd_binning = \"value\"`",
+    fixed = TRUE
+  )
+  expect_setequal(unique(mixed_value$source), c("data", "posterior"))
+  expect_true(all(mixed_value$binning == "value"))
+  expect_true(all(!is.na(mixed_value$ssd)))
+  expect_true(all(!is.na(mixed_value$bin_label)))
+
+  reduced_srrt <- plot_ss_srrt(
+    tiny_ss_data,
+    post_predict = tiny_post,
+    probs = seq(0, 1, length.out = 7),
+    use_global_quantiles = TRUE,
+    on_duplicate_quantiles = "reduce",
+    to_plot = "posterior",
+    use_lim = "posterior",
+    factors = "E",
+    within_plot = "S",
+    layout = c(1, 2),
+    legendpos = c(NA, NA)
+  )
+  expect_true(all(reduced_srrt$source == "posterior"))
+  expect_true(all(reduced_srrt$binning == "global_quantile"))
+  expect_true(length(unique(reduced_srrt$x_plot)) < length(seq(0, 1, length.out = 7)) - 1)
+  expect_true(all(reduced_srrt$n_draws > 0))
+
+  printed_if <- capture.output(plot_ss_if(
+    tiny_ss_data,
+    post_predict = tiny_post,
+    probs = c(0, 0.5, 1),
+    use_global_quantiles = TRUE,
+    to_plot = c("data", "posterior"),
+    use_lim = c("data", "posterior"),
+    factors = "E",
+    within_plot = "S",
+    layout = c(1, 2),
+    legendpos = c(NA, NA),
+    print_plot_data = TRUE
+  ))
+  expect_true(any(grepl("Predictive plotted summaries:", printed_if, fixed = TRUE)))
+  expect_true(any(grepl("Observed plotted summaries:", printed_if, fixed = TRUE)))
   expect_no_error(plot_ss_srrt(
     tiny_ss_data,
     post_predict = tiny_post,
