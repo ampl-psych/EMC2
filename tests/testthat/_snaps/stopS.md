@@ -1,31 +1,11 @@
-# exG
+# posterior-only stop-signal plot summaries are stable
 
     Code
-      init_chains(emc, particles = 10, cores_for_chains = 1)[[1]]$samples
+      writeLines(summary_lines)
     Output
-      $alpha
-      , , 1
-      
-                         1
-      mu        -1.5893918
-      mu_lMTRUE  1.4782962
-      sigma     -0.5735943
-      tau        0.0156615
-      muS        1.0346306
-      sigmaS    -0.3834257
-      tauS       0.6978071
-      gf         0.1615480
-      tf         0.6371548
-      
-      
-      $stage
-      [1] "init"
-      
-      $subj_ll
-             [,1]
-      1 -38.55015
-      
-      $idx
-      [1] 1
-      
+      sources: posterior
+      datasets: posterior
+      labels: [0.1,0.2] | (0.2,0.3] | (0.3,0.4] | (0.4,0.5]
+      x_plot: 0.25, 0.50, 0.75, 1.00
+      median: 0.410, 0.450, 0.475, 0.505
 

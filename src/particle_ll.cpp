@@ -7,6 +7,8 @@
 #include "model_RDM.h"
 #include "model_DDM.h"
 #include "model_MRI.h"
+#include "model_SS_EXG.h"
+#include "model_SS_RDEX.h"
 #include "transform_utils.h"
 #include "ParamTable.h"
 #include "TrendEngine.h"
@@ -327,6 +329,37 @@ double c_log_likelihood_multinomial_logit(NumericMatrix pars, DataFrame data,
   return sum(ll_exp);
 }
 
+double c_log_likelihood_stop_signal(NumericMatrix pars, DataFrame data,
+                                    IntegerVector expand, double min_ll,
+                                    LogicalVector is_ok, const String& type) {
+  NumericVector RT = data["rt"];
+  IntegerVector R = data["R"];
+  NumericVector SSD = data["SSD"];
+  NumericVector lR = data["lR"];
+  LogicalVector winner = data["winner"];
+  NumericVector unique_lR = unique(lR);
+  const int n_acc = unique_lR.length();
+  const int n_trials = lR.length() / n_acc;
+
+  LogicalVector trial_ok(n_trials);
+  for (int trial = 0; trial < n_trials; ++trial) {
+    trial_ok[trial] = is_ok[trial * n_acc];
+  }
+
+  NumericVector ll_trial;
+  if (type == "SSEXG") {
+    ll_trial = ss_texg_lpdf(RT, R, SSD, lR, winner, pars, trial_ok, min_ll);
+  } else {
+    ll_trial = ss_rdex_lpdf(RT, R, SSD, lR, winner, pars, trial_ok, min_ll);
+  }
+
+  NumericVector ll_exp = c_expand(ll_trial, expand);
+  ll_exp[is_na(ll_exp)] = min_ll;
+  ll_exp[is_infinite(ll_exp)] = min_ll;
+  ll_exp[ll_exp < min_ll] = min_ll;
+  return sum(ll_exp);
+}
+
 // [[Rcpp::export]]
 NumericVector calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVector constants,
                       List designs, String type, List bounds, List transforms, List pretransforms,
@@ -492,6 +525,27 @@ NumericVector calc_ll(NumericMatrix particle_matrix, DataFrame data, NumericVect
       } else{
         lls[i] = c_log_likelihood_MRI_white(pars, y, is_ok, n_trials, n_pars, min_ll);
       }
+    }
+  } else if(type == "SSEXG" || type == "SSRDEX"){
+    IntegerVector expand = data.attr("expand");
+    NumericVector lR = data["lR"];
+    int n_lR = unique(lR).length();
+    for (int i = 0; i < n_particles; ++i) {
+      if(i > 0) {
+        param_table_template.fill_from_particle_row(particle_matrix, i,
+                                                    pm_col_to_base_idx);
+      }
+      pars = get_pars_matrix(param_table_template,
+                             designs,
+                             tend_runtime_ptr,
+                             transform_specs,
+                             keep_names);
+      if (i == 0) {
+        bound_specs = make_bound_specs_pt(minmax,mm_names,param_table_template,bounds);
+      }
+      is_ok = c_do_bound_pt(param_table_template, bound_specs);
+      is_ok = lr_all(is_ok, n_lR);
+      lls[i] = c_log_likelihood_stop_signal(pars, data, expand, min_ll, is_ok, type);
     }
   } else{
     IntegerVector expand = data.attr("expand");
