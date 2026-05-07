@@ -378,22 +378,22 @@ get_stop_signal_bin_label <- function(x_plot, binning, ssd = NULL) {
   NA_character_
 }
 
-get_stop_signal_plot_data <- function(p_resp_list, p_resp_quants_list, sources,
+get_stop_signal_plot_data <- function(summary_by_source, draw_quantiles_by_source, sources,
                                       source_bin_modes, value_col) {
   # Build the table that mirrors what is actually drawn. This is returned
   # invisibly and optionally printed for checking sparse bins or draw counts.
   out <- list()
 
   for (sname in names(sources)) {
-    group_names <- names(p_resp_list[[sname]])
+    group_names <- names(summary_by_source[[sname]])
     if (is.null(group_names)) next
 
     for (group_key in group_names) {
-      source_group <- p_resp_list[[sname]][[group_key]]
+      source_group <- summary_by_source[[sname]][[group_key]]
       if (is.null(source_group)) next
 
-      if (!is.null(p_resp_quants_list[[sname]])) {
-        quant_group <- p_resp_quants_list[[sname]][[group_key]]
+      if (!is.null(draw_quantiles_by_source[[sname]])) {
+        quant_group <- draw_quantiles_by_source[[sname]][[group_key]]
         if (is.null(quant_group)) next
 
         for (level in names(quant_group)) {
@@ -717,8 +717,8 @@ plot_stop_signal_summary <- function(input,
   }
   line_types <- seq_along(within_levels)
 
-  p_resp_list <- list()
-  p_resp_quants_list <- list()
+  summary_by_source <- list()
+  draw_quantiles_by_source <- list()
   source_bin_modes <- character()
 
   # Choose one SSD binning rule for all plotted sources. If quantile breaks are
@@ -784,13 +784,13 @@ plot_stop_signal_summary <- function(input,
     }
 
     if ("postn" %in% names(df)) {
-      p_resp_list[[sname]] <- lapply(splitted, function(sub_grp) {
+      summary_by_source[[sname]] <- lapply(splitted, function(sub_grp) {
         postn_splits <- split(sub_grp, sub_grp$postn)
         lapply(postn_splits, quantile_fun,
                group_factor = within_plot, probs = effective_probs, dots = dots)
       })
 
-      p_resp_quants_list[[sname]] <- lapply(p_resp_list[[sname]], function(postn_list) {
+      draw_quantiles_by_source[[sname]] <- lapply(summary_by_source[[sname]], function(postn_list) {
         out <- list()
         for (lev in within_levels) {
           out[[lev]] <- get_stop_signal_postn_quantiles(
@@ -804,7 +804,7 @@ plot_stop_signal_summary <- function(input,
       })
 
       if (styp %in% use_lim) {
-        x_vals <- unlist(lapply(p_resp_quants_list[[sname]], function(group_val) {
+        x_vals <- unlist(lapply(draw_quantiles_by_source[[sname]], function(group_val) {
           sapply(group_val, function(mat4) {
             if (is.null(mat4)) return(NULL)
             get_stop_signal_x_range_values(mat4[nrow(mat4), ])
@@ -813,7 +813,7 @@ plot_stop_signal_summary <- function(input,
         x_min <- min(x_min, x_vals, na.rm = TRUE)
         x_max <- max(x_max, x_vals, na.rm = TRUE)
 
-        y_vals <- unlist(lapply(p_resp_quants_list[[sname]], function(group_val) {
+        y_vals <- unlist(lapply(draw_quantiles_by_source[[sname]], function(group_val) {
           lapply(group_val, function(mat4) {
             if (is.null(mat4)) return(NULL)
             range(c(mat4[1, ], mat4[3, ]), na.rm = TRUE)
@@ -823,7 +823,7 @@ plot_stop_signal_summary <- function(input,
         y_max <- max(y_max, y_vals, na.rm = TRUE)
       }
     } else {
-      p_resp_list[[sname]] <- lapply(splitted, quantile_fun,
+      summary_by_source[[sname]] <- lapply(splitted, quantile_fun,
                                      group_factor = within_plot,
                                      probs = effective_probs,
                                      dots = dots)
@@ -831,10 +831,10 @@ plot_stop_signal_summary <- function(input,
       if (styp %in% use_lim) {
         all_x_vals <- c()
         all_y_vals <- c()
-        for (grp_name in names(p_resp_list[[sname]])) {
-          p_resp_grp <- p_resp_list[[sname]][[grp_name]]
-          if (!is.null(p_resp_grp)) {
-            for (draw in p_resp_grp) {
+        for (grp_name in names(summary_by_source[[sname]])) {
+          summary_group <- summary_by_source[[sname]][[grp_name]]
+          if (!is.null(summary_group)) {
+            for (draw in summary_group) {
               if (!is.null(draw[["x_plot"]]) && !is.null(draw[[value_col]])) {
                 all_x_vals <- c(all_x_vals, get_stop_signal_x_range_values(draw$x_plot))
                 all_y_vals <- c(all_y_vals, get_stop_signal_y_range_values(draw, value_col))
@@ -906,12 +906,12 @@ plot_stop_signal_summary <- function(input,
       legend_map[sname] <- src_args$col[1]
       lwd_map[sname] <- ifelse(is.null(src_args$lwd), 1, src_args$lwd)
 
-      if (!is.null(p_resp_list[[sname]])) {
+      if (!is.null(summary_by_source[[sname]])) {
         if (!("postn" %in% names(data_sources[[k]]))) {
-          p_resp_df <- p_resp_list[[sname]][[group_key]]
-          if (!is.null(p_resp_df)) {
+          summary_df <- summary_by_source[[sname]][[group_key]]
+          if (!is.null(summary_df)) {
             ilev <- 1
-            for (df in p_resp_df) {
+            for (df in summary_df) {
               lines_args <- add_defaults(src_args, lty = line_types[ilev])
               lines_args <- fix_dots_plot(lines_args)
               do.call(lines, c(list(x = df$x_plot, y = df[[value_col]]), lines_args))
@@ -923,12 +923,12 @@ plot_stop_signal_summary <- function(input,
             }
           }
         } else {
-          if (!is.null(p_resp_quants_list[[sname]])) {
-            p_resp_quants_for_group <- p_resp_quants_list[[sname]][[group_key]]
-            if (!is.null(p_resp_quants_for_group)) {
+          if (!is.null(draw_quantiles_by_source[[sname]])) {
+            draw_quantiles_for_group <- draw_quantiles_by_source[[sname]][[group_key]]
+            if (!is.null(draw_quantiles_for_group)) {
               ilev <- 1
               for (lev in within_levels) {
-                mat4 <- p_resp_quants_for_group[[lev]]
+                mat4 <- draw_quantiles_for_group[[lev]]
                 if (!is.null(mat4)) {
                   y_lower <- mat4[1, ]
                   y_med <- mat4[2, ]
@@ -950,7 +950,7 @@ plot_stop_signal_summary <- function(input,
                   ), poly_args))
                   if (predictive_points) {
                     draw_stop_signal_predictive_points(
-                      p_resp_list[[sname]][[group_key]], lev, value_col,
+                      summary_by_source[[sname]][[group_key]], lev, value_col,
                       src_args, predictive_point_args
                     )
                   }
@@ -967,7 +967,7 @@ plot_stop_signal_summary <- function(input,
     for (k in seq_along(data_sources)) {
       sname <- names(sources)[k]
       if (!("postn" %in% names(data_sources[[k]]))) {
-        tick_group <- p_resp_list[[sname]][[group_key]]
+        tick_group <- summary_by_source[[sname]][[group_key]]
         if (!is.null(tick_group)) {
           tick_data <- tick_group[[names(tick_group)[1]]]
           draw_stop_signal_x_axis(tick_data, source_bin_modes[sname],
@@ -977,7 +977,7 @@ plot_stop_signal_summary <- function(input,
           break
         }
       } else {
-        tick_group <- p_resp_quants_list[[sname]][[group_key]]
+        tick_group <- draw_quantiles_by_source[[sname]][[group_key]]
         if (!is.null(tick_group)) {
           tick_mat <- tick_group[[names(tick_group)[1]]]
           if (!is.null(tick_mat)) {
@@ -1010,7 +1010,7 @@ plot_stop_signal_summary <- function(input,
     }
   }
 
-  plot_data <- get_stop_signal_plot_data(p_resp_list, p_resp_quants_list, sources,
+  plot_data <- get_stop_signal_plot_data(summary_by_source, draw_quantiles_by_source, sources,
                                          source_bin_modes, value_col)
   if (print_plot_data) print_stop_signal_plot_data(plot_data)
 
