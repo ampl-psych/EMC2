@@ -598,10 +598,14 @@ resolve_stop_signal_binning <- function(data_sources, sources, probs, ssd_binnin
     if (has_duplicate_breaks) {
       if (on_duplicate_quantiles == "value") {
         effective_ssd_binning <- "value"
+        message("Duplicate quantile values detected; switching to SSD value bins.")
       } else if (on_duplicate_quantiles == "reduce") {
         effective_probs <- get_reduced_stop_signal_probs(
           data_sources, sources, probs, use_global_quantiles, within_plot, ssd_round
         )
+        message("Duplicate quantile values detected; reducing SSD quantile grid from ",
+                length(probs) - 1, " to ", length(effective_probs) - 1,
+                " bins.")
       } else {
         stop("Duplicate quantile values detected, or plotted sources have different ",
              "SSD support for a shared global quantile grid. Please use fewer bins, ",
