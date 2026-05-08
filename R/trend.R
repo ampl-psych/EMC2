@@ -1527,11 +1527,16 @@ make_data_unconditional <- function(data, pars, design, model,
       } else list()
 
       all_designs <- c(cache[[key]], fresh_regular, fresh_pd)
-      # Preserve original p_types order, then append pd names
-      pd_names <- c(names(fresh_pd), cached_pd_pars)
+      pd_names    <- c(names(fresh_pd), cached_pd_pars)
       all_designs[c(p_types, pd_names[pd_names %in% names(all_designs)])]
+      # message("p_types: ", paste(p_types, collapse=", "))
+      # message("names(all_designs): ", paste(names(all_designs), collapse=", "))
+      # message("ffun_cols: ", paste(ffun_cols, collapse=", "))
+      # message("cached_pars: ", paste(cached_pars, collapse=", "))
+      # message("uncached_pars: ", paste(uncached_pars, collapse=", "))
     }
   })
+
 
   # Identify whether any trend has covariate maps
   has_covariate_maps <- !is.null(model_list$trend) &&
@@ -1631,6 +1636,10 @@ make_data_unconditional <- function(data, pars, design, model,
       key <- paste(vapply(factor_cols, function(fc)
         as.integer(dadm_subj_df[[fc]][idx_curr[1]]),
         integer(1)), collapse = "_")
+      if (nchar(key) == 0) key <- "intercept_only"
+      # key <- paste(vapply(factor_cols, function(fc)
+      #   as.integer(dadm_subj_df[[fc]][idx_curr[1]]),
+      #   integer(1)), collapse = "_")
 
       # 4. Get current-trial designs (cached + fresh) and write into prefix
       designs_current <- make_designs_cached(dadm_current, key)

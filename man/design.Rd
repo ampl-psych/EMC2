@@ -113,22 +113,6 @@ components:
                       c("alphaMean", "alphaDiff"))
     )
   )
-  }
-
-Example — a trial-varying reparameterisation using a function:
-\preformatted{
-  parameter_design = list(
-    weights = matrix(
-      c(1,  1,
-        1, -1),
-      nrow = 2, byrow = TRUE,
-      dimnames = list(c("v_chosen", "v_unchosen"),
-                      c("vMean", "isChosen"))
-    ),
-    functions = list(
-      isChosen = function(da, covariate) as.numeric(da$lR == da$prevChoice)
-    )
-  )
   }}
 
 \item{...}{Additional, optional arguments}

@@ -159,6 +159,7 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
   }
 
   if(!is.null(parameter_design)) {
+    parameter_design <- parse_parameter_design(parameter_design)  # translate once here
     formula <- check_parameter_design(parameter_design, formula, constants)
   }
   if(!is.null(trend)) {
@@ -694,6 +695,7 @@ design_model <- function(data,design,model=NULL,
   )
   names(out) <- names(design$Flist)
   if (!is.null(design$parameter_design)) {
+    design$parameter_design <- parse_parameter_design(design$parameter_design)
     pd_dms <- expand_parameter_design(design$parameter_design, da, compress_dms = compress_dms)
     out <- c(out, pd_dms)
   }
@@ -752,6 +754,111 @@ design_model <- function(data,design,model=NULL,
   dadm
 }
 
+
+
+#' Parse parameter_design: handles both new (list of blocks) and old (weights/functions) formats
+#'
+#' @param parameter_design A list, either in the new block format or old internal format
+#' @return parameter_design in the internal format (weights, functions, expand_over)
+parse_parameter_design <- function(parameter_design) {
+  if (is.matrix(parameter_design$weights)) return(parameter_design)  # old format passthrough
+
+  parsed <- lapply(parameter_design, parse_parameter_design_block)
+  list(
+    weights     = do.call(rbind, lapply(parsed, `[[`, "weights")),
+    functions   = do.call(c,     lapply(parsed, `[[`, "functions")),
+    expand_over = parsed[[1]]$expand_over
+  )
+}
+
+
+#' Parse a single parameter_design block into the internal representation
+#'
+#' @param block A list with:
+#'   - parameters:  character vector, e.g. c('v.alphaPos', 'v.alphaNeg')
+#'   - contrasts:   named list of contrast matrices; 'parameters' for the output
+#'                  parameter contrast, one entry per trial_var for factor trial_vars
+#'   - formula:     one-sided formula over contrast column names and trial_var names
+#'   - expand_over: character vector of covariate names
+parse_parameter_design_block <- function(block) {
+  parameters  <- block$parameters
+  formula     <- block$formula
+  expand_over <- block$expand_over
+  par_contrast  <- block$contrasts[["parameters"]]
+  trial_var_contrasts <- block$contrasts[names(block$contrasts) != "parameters"]
+
+  prefix          <- get_common_prefix(parameters)
+  bare_parameters <- sub(paste0("^", prefix), "", parameters)
+
+  # --- 1. Build small data frame, one row per output parameter --------------
+  # contrast-derived columns get their actual values; trial_vars get placeholder 1
+  par_factor <- factor(bare_parameters, levels = bare_parameters)
+  contrasts(par_factor) <- par_contrast
+  meta_df <- as.data.frame(model.matrix(~ par_factor)[, -1, drop = FALSE])  # drop intercept
+  colnames(meta_df) <- colnames(par_contrast)  # use contrast column names directly
+
+  trial_var_names <- all.vars(formula)[!all.vars(formula) %in% colnames(meta_df)]
+  for (tv in trial_var_names) meta_df[[tv]] <- 1.0  # placeholder; structure only
+
+  # --- 2. model.matrix gives us the weight matrix directly ------------------
+  weight_mat <- model.matrix(formula, meta_df)
+  rownames(weight_mat) <- parameters
+  colnames(weight_mat) <- paste0(prefix, colnames(weight_mat))
+  colnames(weight_mat)[colnames(weight_mat) == paste0(prefix, "(Intercept)")] <- paste0(prefix, "mean")
+
+  # --- 3. Build functions list for trial-varying columns --------------------
+  # A column is dynamic if it involves any trial_var
+  is_dynamic <- vapply(colnames(weight_mat), function(col)
+    any(vapply(trial_var_names, function(tv) grepl(tv, col, fixed=TRUE), logical(1))),
+    logical(1))
+
+  functions_list <- lapply(
+    setNames(names(is_dynamic)[is_dynamic], names(is_dynamic)[is_dynamic]),
+    function(col) {
+      tv <- trial_var_names[vapply(trial_var_names,
+                                   function(tv) grepl(tv, col, fixed=TRUE), logical(1))][1]
+      make_trial_var_function(tv, trial_var_contrasts[[tv]])
+    }
+  )
+
+  list(weights = weight_mat, functions = functions_list, expand_over = expand_over)
+}
+
+
+#' Build a function(da, covariate) that looks up <trial_var>.<covariate> in da
+#' and applies an optional contrast matrix
+make_trial_var_function <- function(tv, tv_contrast) {
+  force(tv); force(tv_contrast)
+  function(da, covariate) {
+    col_name <- paste0(tv, ".", covariate)
+    if (!col_name %in% names(da))
+      stop("Column '", col_name, "' not found in da. ",
+           "Supply functions = list(", col_name, " = ...) to design().")
+    vals <- da[[col_name]]
+    if (!is.null(tv_contrast)) {
+      vals <- factor(vals, levels = rownames(tv_contrast))
+      tmp  <- data.frame(x = vals)
+      contrasts(tmp$x) <- tv_contrast
+      as.numeric(model.matrix(~ x, tmp)[, -1, drop = TRUE])
+    } else {
+      as.numeric(vals)
+    }
+  }
+}
+
+
+#' Extract common prefix up to and including the last '.'
+#' e.g. c('v.alphaPos', 'v.alphaNeg') -> 'v.'
+get_common_prefix <- function(x) {
+  chars  <- strsplit(x, "")
+  common <- Reduce(function(a, b) {
+    n <- min(length(a), which(a != b)[1] - 1L)
+    a[seq_len(n)]
+  }, chars)
+  prefix <- paste(common, collapse = "")
+  m <- regmatches(prefix, regexpr("^.*\\.", prefix))
+  if (length(m)) m else ""
+}
 
 
 #' Check and update formula list for parameter_design
@@ -834,6 +941,12 @@ expand_parameter_design <- function(parameter_design, da, compress_dms=TRUE) {
   expand_over <- parameter_design$expand_over
   fun_names   <- names(functions)
   n_trials    <- nrow(da)
+
+  # DEBUG
+  # message("weight colnames: ", paste(colnames(weights), collapse = ", "))
+  # message("fun_names: ", paste(fun_names, collapse = ", "))
+  # message("expand_over: ", paste(expand_over, collapse = ", "))
+  # message("da cols matching isChosen: ", paste(grep("isChosen", names(da), value=TRUE), collapse = ", "))
 
   # If no expand_over, use a single dummy covariate with name NULL
   if (is.null(expand_over)) expand_over <- list(NULL)
