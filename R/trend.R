@@ -1291,7 +1291,8 @@ verbal_trend <- function(design_matrix, trend) {
 make_data_unconditional <- function(data, pars, design, model,
                                     return_trialwise_parameters,
                                     kernel_output_codes = c(1L),
-                                    optionals = NULL) {
+                                    optionals = NULL,
+                                    n_context_trials = 1L) {
   model_fun  <- model
   model_list <- model()
   includeColumns <- colnames(data)
