@@ -1482,6 +1482,7 @@ make_data_unconditional <- function(data, pars, design, model,
     for (j in seq_along(trial_vals)) {
       current_trial        <- trial_vals[j]
       idx_curr             <- idx_by_trial[[as.character(current_trial)]]
+      idx_ctx              <- get_context_idx(j)
       is_last_trial        <- j == length(trial_vals)
       tmp_return_trialwise <- is_last_trial && return_trialwise_parameters
 
