@@ -1287,6 +1287,7 @@ verbal_trend <- function(design_matrix, trend) {
 }
 
 
+
 make_data_unconditional <- function(data, pars, design, model,
                                     return_trialwise_parameters,
                                     kernel_output_codes = c(1L),
@@ -1399,6 +1400,15 @@ make_data_unconditional <- function(data, pars, design, model,
 
     idx_by_trial <- split(seq_len(n_rows_subj), dadm_subj$trials)
 
+    # Helper: returns indices for up to n_context_trials previous trials
+    # concatenated with the current trial's indices.
+    get_context_idx <- function(j) {
+      if (j == 1L || n_context_trials == 0L) return(idx_by_trial[[j]])
+      lookback  <- seq(max(1L, j - n_context_trials), j - 1L)
+      ctx_idx   <- unlist(idx_by_trial[lookback], use.names = FALSE)
+      c(ctx_idx, idx_by_trial[[j]])
+    }
+
     particle_matrix <- matrix(
       as.numeric(pars[which(subj == subj_levels), , drop = FALSE]),
       nrow = 1
@@ -1485,13 +1495,27 @@ make_data_unconditional <- function(data, pars, design, model,
       #    previous trial's R/rt/feedback, or purely on design factors).
       #    Updates dadm_current and dadm_subj_df so key + make_designs_cached
       #    see the correct values.
+      # if (has_ffunctions) {
+      #   for (i in names(design$Ffunctions)) {
+      #     result <- design$Ffunctions[[i]](dadm_current)
+      #     dadm_current[[i]]           <- result
+      #     dadm_subj_df[[i]][idx_curr] <- result
+      #   }
+      # }
+      # 2. Ffunction pass 1 (context-aware)
       if (has_ffunctions) {
+        dadm_ctx <- lapply(dadm_subj_df, `[`, idx_ctx)
+        class(dadm_ctx) <- "data.frame"
+        attr(dadm_ctx, "row.names") <- .set_row_names(length(idx_ctx))
+
         for (i in names(design$Ffunctions)) {
-          result <- design$Ffunctions[[i]](dadm_current)
-          dadm_current[[i]]           <- result
-          dadm_subj_df[[i]][idx_curr] <- result
+          result_full             <- design$Ffunctions[[i]](dadm_ctx)
+          result_curr             <- tail(result_full, length(idx_curr))
+          dadm_current[[i]]       <- result_curr
+          dadm_subj_df[[i]][idx_curr] <- result_curr
         }
       }
+
 
       # 3. Compute condition key from updated dadm_subj_df
       key <- paste(vapply(factor_cols, function(fc)
@@ -1595,12 +1619,15 @@ make_data_unconditional <- function(data, pars, design, model,
       #     feedback values. Updates dadm_subj_df only (dadm_current is no
       #     longer needed this trial); results are available to pass 1 of
       #     the next trial.
+      #     Now context-aware
       if (has_ffunctions) {
-        dadm_current <- lapply(dadm_subj_df, `[`, idx_curr, drop=FALSE)
-        class(dadm_current) <- "data.frame"
-        attr(dadm_current, "row.names") <- .set_row_names(length(idx_curr))
+        dadm_ctx <- lapply(dadm_subj_df, `[`, idx_ctx)
+        class(dadm_ctx) <- "data.frame"
+        attr(dadm_ctx, "row.names") <- .set_row_names(length(idx_ctx))
+
         for (i in names(design$Ffunctions)) {
-          dadm_subj_df[[i]][idx_curr] <- design$Ffunctions[[i]](dadm_current)
+          result_full             <- design$Ffunctions[[i]](dadm_ctx)
+          dadm_subj_df[[i]][idx_curr] <- tail(result_full, length(idx_curr))
         }
       }
 
