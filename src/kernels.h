@@ -355,10 +355,12 @@ struct LinIncrKernel : BaseKernel {
              int n_comp = comp_idx.size();
              out_.assign(n_comp, 0);    // compressed output
 
-             const double* cov_col = covariate.begin(); // column-major, col 0
              for (int j = 0; j < n_comp; ++j) {
-               double x = cov_col[comp_idx[j]];
-               out_[j] = is_nan(x) ? 0.0 : x;
+               int r = comp_idx[j];
+               double x = covariate(r,0);
+               if (!is_nan(x)) {
+                 out_[j] = x;  // compressed index
+               }
              }
 
              mark_run_complete();
@@ -374,10 +376,14 @@ struct LinDecrKernel : BaseKernel {
              int n_comp = comp_idx.size();
              out_.assign(n_comp, 0);
 
-             const double* cov_col = covariate.begin(); // column-major, col 0
+             // double last = NA_REAL;
              for (int j = 0; j < n_comp; ++j) {
-               double x = cov_col[comp_idx[j]];
-               out_[j] = is_nan(x) ? 0.0 : -x;
+               int r = comp_idx[j];
+               double x = covariate(r,0);
+               if (!is_nan(x)) {
+                 out_[j] = -x;
+               }
+               // out_[j] = last;
              }
 
              mark_run_complete();
@@ -397,12 +403,16 @@ struct ExpDecrKernel : BaseKernel {
              int n_comp = comp_idx.size();
              out_.assign(n_comp, 0);
 
-             const double* cov_col    = covariate.begin();
              const double* lambda_col = kernel_pars.cols[0];
+             // double last = NA_REAL;
              for (int j = 0; j < n_comp; ++j) {
-               int    r = comp_idx[j];
-               double x = cov_col[r];
-               out_[j] = is_nan(x) ? 0.0 : std::exp(-lambda_col[r] * x);
+               int r = comp_idx[j];
+               double x = covariate(r,0);
+               if (!is_nan(x)) {
+                 double lambda = lambda_col[r];
+                 out_[j] = std::exp(-lambda * x);
+               }
+               // out_[j] = last;
              }
 
              mark_run_complete();
@@ -422,14 +432,17 @@ struct ExpIncrKernel : BaseKernel {
              int n_comp = comp_idx.size();
              out_.assign(n_comp, 0);
 
-             const double* cov_col    = covariate.begin();
              const double* lambda_col = kernel_pars.cols[0];
+             // double last = NA_REAL;
              for (int j = 0; j < n_comp; ++j) {
-               int    r = comp_idx[j];
-               double x = cov_col[r];
-               out_[j] = is_nan(x) ? 0.0 : 1.0 - std::exp(-lambda_col[r] * x);
+               int r = comp_idx[j];
+               double x = covariate(r,0);
+               if (!is_nan(x)) {
+                 double lambda = lambda_col[r];
+                 out_[j] = 1.0 - std::exp(-lambda * x);
+               }
+               // out_[j] = last;
              }
-
 
              mark_run_complete();
            }
@@ -448,12 +461,16 @@ struct PowDecrKernel : BaseKernel {
              int n_comp = comp_idx.size();
              out_.assign(n_comp, 0);
 
-             const double* cov_col   = covariate.begin();
              const double* alpha_col = kernel_pars.cols[0];
+             // double last = NA_REAL;
              for (int j = 0; j < n_comp; ++j) {
-               int    r = comp_idx[j];
-               double x = cov_col[r];
-               out_[j] = is_nan(x) ? 0.0 : std::pow(1.0 + x, -alpha_col[r]);
+               int r = comp_idx[j];
+               double x = covariate(r,0);
+               if (!is_nan(x)) {
+                 double alpha = alpha_col[r];
+                 out_[j] = std::pow(1.0 + x, -alpha);
+               }
+               // out_[j] = last;
              }
 
              mark_run_complete();
@@ -473,12 +490,16 @@ struct PowIncrKernel : BaseKernel {
              int n_comp = comp_idx.size();
              out_.assign(n_comp, 0);
 
-             const double* cov_col   = covariate.begin();
              const double* alpha_col = kernel_pars.cols[0];
+             // double last = NA_REAL;
              for (int j = 0; j < n_comp; ++j) {
-               int    r = comp_idx[j];
-               double x = cov_col[r];
-               out_[j] = is_nan(x) ? 0.0 : 1.0 - std::pow(1.0 + x, -alpha_col[r]);
+               int r = comp_idx[j];
+               double x = covariate(r,0);
+               if (!is_nan(x)) {
+                 double alpha = alpha_col[r];
+                 out_[j] = 1.0 - std::pow(1.0 + x, -alpha);
+               }
+               // out_[j] = last;
              }
 
              mark_run_complete();
@@ -497,16 +518,20 @@ struct Poly2Kernel : BaseKernel {
              int n_comp = comp_idx.size();
              out_.assign(n_comp, 0);
 
-             const double* cov_col = covariate.begin();
-             const double* a1_col  = kernel_pars.cols[0];
-             const double* a2_col  = kernel_pars.cols[1];
+             const double* a1_col = kernel_pars.cols[0];
+             const double* a2_col = kernel_pars.cols[1];
+
+             // double last = NA_REAL;
              for (int j = 0; j < n_comp; ++j) {
-               int    r  = comp_idx[j];
-               double x  = cov_col[r];
+               int r = comp_idx[j];
+               double x = covariate(r,0);
                if (!is_nan(x)) {
+                 double a1 = a1_col[r];
+                 double a2 = a2_col[r];
                  double x2 = x * x;
-                 out_[j] = a1_col[r] * x + a2_col[r] * x2;
+                 out_[j] = a1 * x + a2 * x2;
                }
+               // out_[j] = last;
              }
 
              mark_run_complete();
@@ -525,17 +550,23 @@ struct Poly3Kernel : BaseKernel {
              int n_comp = comp_idx.size();
              out_.assign(n_comp, 0);
 
-             const double* cov_col = covariate.begin();
-             const double* a1_col  = kernel_pars.cols[0];
-             const double* a2_col  = kernel_pars.cols[1];
-             const double* a3_col  = kernel_pars.cols[2];
+             const double* a1_col = kernel_pars.cols[0];
+             const double* a2_col = kernel_pars.cols[1];
+             const double* a3_col = kernel_pars.cols[2];
+
+             // double last = NA_REAL;
              for (int j = 0; j < n_comp; ++j) {
-               int    r  = comp_idx[j];
-               double x  = cov_col[r];
+               int r = comp_idx[j];
+               double x = covariate(r,0);
                if (!is_nan(x)) {
+                 double a1 = a1_col[r];
+                 double a2 = a2_col[r];
+                 double a3 = a3_col[r];
                  double x2 = x * x;
-                 out_[j] = a1_col[r] * x + a2_col[r] * x2 + a3_col[r] * x2 * x;
+                 double x3 = x2 * x;
+                 out_[j] = a1 * x + a2 * x2 + a3 * x3;
                }
+               // out_[j] = last;
              }
 
              mark_run_complete();
@@ -554,19 +585,27 @@ struct Poly4Kernel : BaseKernel {
              int n_comp = comp_idx.size();
              out_.assign(n_comp, 0);
 
-             const double* cov_col = covariate.begin();
-             const double* a1_col  = kernel_pars.cols[0];
-             const double* a2_col  = kernel_pars.cols[1];
-             const double* a3_col  = kernel_pars.cols[2];
-             const double* a4_col  = kernel_pars.cols[3];
+             const double* a1_col = kernel_pars.cols[0];
+             const double* a2_col = kernel_pars.cols[1];
+             const double* a3_col = kernel_pars.cols[2];
+             const double* a4_col = kernel_pars.cols[3];
+
+             // double last = NA_REAL;
              for (int j = 0; j < n_comp; ++j) {
-               int    r  = comp_idx[j];
-               double x  = cov_col[r];
+               int r = comp_idx[j];
+               double x = covariate(r,0);
                if (!is_nan(x)) {
+                 double a1 = a1_col[r];
+                 double a2 = a2_col[r];
+                 double a3 = a3_col[r];
+                 double a4 = a4_col[r];
+
                  double x2 = x * x;
+                 double x3 = x2 * x;
                  double x4 = x2 * x2;
-                 out_[j] = a1_col[r] * x + a2_col[r] * x2 + a3_col[r] * x2 * x + a4_col[r] * x4;
+                 out_[j] = a1 * x + a2 * x2 + a3 * x3 + a4 * x4;
                }
+               // out_[j] = last;
              }
 
              mark_run_complete();
