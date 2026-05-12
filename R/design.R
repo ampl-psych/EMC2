@@ -756,10 +756,10 @@ design_model <- function(data,design,model=NULL,
 
 
 
-#' Parse parameter_design: handles both new (list of blocks) and old (weights/functions) formats
-#'
-#' @param parameter_design A list, either in the new block format or old internal format
-#' @return parameter_design in the internal format (weights, functions, expand_over)
+# Parse parameter_design: handles both new (list of blocks) and old (weights/functions) formats
+#
+# @param parameter_design A list, either in the new block format or old internal format
+# @return parameter_design in the internal format (weights, functions, expand_over)
 parse_parameter_design <- function(parameter_design) {
   if (is.matrix(parameter_design$weights)) return(parameter_design)  # old format passthrough
 
@@ -772,14 +772,14 @@ parse_parameter_design <- function(parameter_design) {
 }
 
 
-#' Parse a single parameter_design block into the internal representation
-#'
-#' @param block A list with:
-#'   - parameters:  character vector, e.g. c('v.alphaPos', 'v.alphaNeg')
-#'   - contrasts:   named list of contrast matrices; 'parameters' for the output
-#'                  parameter contrast, one entry per trial_var for factor trial_vars
-#'   - formula:     one-sided formula over contrast column names and trial_var names
-#'   - expand_over: character vector of covariate names
+# Parse a single parameter_design block into the internal representation
+#
+# @param block A list with:
+#   - parameters:  character vector, e.g. c('v.alphaPos', 'v.alphaNeg')
+#   - contrasts:   named list of contrast matrices; 'parameters' for the output
+#                  parameter contrast, one entry per trial_var for factor trial_vars
+#   - formula:     one-sided formula over contrast column names and trial_var names
+#   - expand_over: character vector of covariate names
 parse_parameter_design_block <- function(block) {
   parameters  <- block$parameters
   formula     <- block$formula
@@ -825,8 +825,8 @@ parse_parameter_design_block <- function(block) {
 }
 
 
-#' Build a function(da, covariate) that looks up <trial_var>.<covariate> in da
-#' and applies an optional contrast matrix
+# Build a function(da, covariate) that looks up <trial_var>.<covariate> in da
+# and applies an optional contrast matrix
 make_trial_var_function <- function(tv, tv_contrast) {
   force(tv); force(tv_contrast)
   function(da, covariate) {
@@ -847,8 +847,8 @@ make_trial_var_function <- function(tv, tv_contrast) {
 }
 
 
-#' Extract common prefix up to and including the last '.'
-#' e.g. c('v.alphaPos', 'v.alphaNeg') -> 'v.'
+# Extract common prefix up to and including the last '.'
+# e.g. c('v.alphaPos', 'v.alphaNeg') -> 'v.'
 get_common_prefix <- function(x) {
   chars  <- strsplit(x, "")
   common <- Reduce(function(a, b) {
@@ -861,15 +861,15 @@ get_common_prefix <- function(x) {
 }
 
 
-#' Check and update formula list for parameter_design
-#'
-#' @param parameter_design A list with elements:
-#'   - weights: matrix with rownames = output parameters, colnames = sampled parameters + function names
-#'   - functions: named list of functions(da, covariate) for trial-varying columns
-#'   - expand_over: character vector of covariate names to expand over
-#' @param formula List of formulas (LHS = model parameter names)
-#' @param constants Named vector/list of constants, or NULL
-#' @return Updated formula list with source parameters added as intercept-only formulas where missing
+# Check and update formula list for parameter_design
+#
+# @param parameter_design A list with elements:
+#   - weights: matrix with rownames = output parameters, colnames = sampled parameters + function names
+#   - functions: named list of functions(da, covariate) for trial-varying columns
+#   - expand_over: character vector of covariate names to expand over
+# @param formula List of formulas (LHS = model parameter names)
+# @param constants Named vector/list of constants, or NULL
+# @return Updated formula list with source parameters added as intercept-only formulas where missing
 check_parameter_design <- function(parameter_design, formula, constants = NULL) {
   if (is.null(parameter_design)) return(formula)
 
@@ -928,13 +928,13 @@ check_parameter_design <- function(parameter_design, formula, constants = NULL) 
 }
 
 
-#' Expand a parameter_design into a named list of n_trials design matrices
-#'
-#' @param parameter_design A list with elements weights, functions, expand_over
-#' @param da The augmented data frame (n_trials rows)
-#' @param compress_dms Return compressed design matrix?
-#' @return Named list of n_trials x ncol(weights) matrices, one per output parameter,
-#'   each flagged with attr(x, "parameter_design") = TRUE
+# Expand a parameter_design into a named list of n_trials design matrices
+#
+# @param parameter_design A list with elements weights, functions, expand_over
+# @param da The augmented data frame (n_trials rows)
+# @param compress_dms Return compressed design matrix?
+# @return Named list of n_trials x ncol(weights) matrices, one per output parameter,
+#   each flagged with attr(x, "parameter_design") = TRUE
 expand_parameter_design <- function(parameter_design, da, compress_dms=TRUE) {
   weights     <- parameter_design$weights
   functions   <- parameter_design$functions
