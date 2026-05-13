@@ -99,6 +99,7 @@ calculate_implied_means <- function(mean_designs, beta_params, n_pars) {
 }
 
 .standard_theta_var_draws <- function(theta_var, idx) {
+  if (is.logical(idx)) idx <- which(idx)
   theta_var <- theta_var[idx, idx, , drop = FALSE]
   n_pars <- length(idx)
   n_iter <- dim(theta_var)[3]
@@ -826,9 +827,14 @@ last_sample_standard <- function(store) {
 get_conditionals_standard <- function(s, samples, n_pars, iteration = NULL, idx = NULL) {
   iteration <- ifelse(is.null(iteration), samples$iteration, iteration)
   if(is.null(idx)) idx <- 1:n_pars
+  if(is.logical(idx)) idx <- which(idx)
   n_idx <- length(idx)
-  alpha_samples <- matrix(samples$alpha[idx, s, , drop = FALSE], nrow = length(idx))
-  theta_mu_samples <- matrix(samples$theta_mu[idx, , drop = FALSE], nrow = length(idx))
+  alpha_samples <- matrix(samples$alpha[idx, s, , drop = FALSE], nrow = n_idx)
+  theta_mu_samples <- if (!is.null(samples$subj_mu)) {
+    matrix(samples$subj_mu[idx, s, , drop = FALSE], nrow = n_idx)
+  } else {
+    matrix(samples$theta_mu[idx, , drop = FALSE], nrow = n_idx)
+  }
   pts2_unwound <- .standard_theta_var_draws(samples$theta_var, idx)
   all_samples <- rbind(alpha_samples, theta_mu_samples, pts2_unwound)
   mu_tilde <- rowMeans(all_samples)
@@ -839,7 +845,7 @@ get_conditionals_standard <- function(s, samples, n_pars, iteration = NULL, idx 
   }
   theta_var_iteration <- .standard_square_matrix(
     samples$theta_var[idx, idx, iteration, drop = FALSE],
-    length(idx),
+    n_idx,
     rownames(theta_mu_samples)
   )
   condmvn <- condMVN(mean = mu_tilde, sigma = var_tilde,
@@ -861,6 +867,29 @@ filtered_samples_standard <- function(sampler, filter, ...) {
     alpha = sampler$samples$alpha[, , filter, drop = F],
     iteration = length(filter)
   )
+  if (!is.null(sampler$group_designs)) {
+    par_names <- dimnames(out$alpha)[[1]]
+    n_subjects <- dim(out$alpha)[2]
+    fixed_designs <- add_group_design(par_names, sampler$group_designs, n_subjects)
+    random_designs <- add_group_design_random(par_names, sampler$group_designs)
+    random_maps <- add_group_design_map(par_names, sampler$group_designs)
+    theta_u <- if (!is.null(sampler$samples$theta_u)) {
+      sampler$samples$theta_u[, filter, drop = FALSE]
+    } else {
+      NULL
+    }
+    out$subj_mu <- array(NA_real_,
+                         dim = dim(out$alpha),
+                         dimnames = dimnames(out$alpha))
+    for (i in seq_len(out$iteration)) {
+      u <- if (!is.null(theta_u)) theta_u[, i, drop = TRUE] else NULL
+      out$subj_mu[, , i] <- calculate_subject_means_RE(
+        fixed_designs, out$theta_mu[, i, drop = TRUE],
+        random_designs, u, random_maps
+      )
+    }
+  }
+  out
 }
 
 
