@@ -5,7 +5,15 @@
   model
 }
 
-.oo_expanded_designs <- function(dadm, row_idx = NULL) {
+.oo_expanded_designs <- function(dadm, row_idx = NULL, model = NULL) {
+  if (!is.null(attr(dadm, "design_pool"))) {
+    out <- get_designs_expanded(dadm, model, order = "stored")
+    if (!is.null(row_idx)) {
+      out <- lapply(out, function(x) x[row_idx, , drop = FALSE])
+    }
+    return(out)
+  }
+
   designs <- attr(dadm, "designs")
   if (is.null(designs)) {
     stop("dadm must have a 'designs' attribute")
@@ -123,7 +131,7 @@ get_pars_oo <- function(p, dadm, model,
       particle_matrix = cur_particles,
       data = cur_dadm,
       constants = constants,
-      designs = .oo_expanded_designs(dadm, row_idx),
+      designs = .oo_expanded_designs(dadm, row_idx, model_list),
       bounds = model_list$bound,
       transforms = model_list$transform,
       pretransforms = pretransforms,

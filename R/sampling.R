@@ -698,10 +698,7 @@ calc_ll_manager <- function(proposals, dadm, model, component = NULL, r_cores = 
       lls <- apply(proposals,1, calc_ll_R, model, dadm = dadm)
     } else {
       p_types <- names(model$p_types)
-      designs <- list()
-      for(p in p_types){
-        designs[[p]] <- attr(dadm,"designs")[[p]][attr(attr(dadm,"designs")[[p]],"expand"),,drop=FALSE]
-      }
+      designs <- get_designs_expanded(dadm, model)
       constants <- attr(dadm, "constants")
       if(is.null(constants)) constants <- NA
       lls <- calc_ll(proposals, dadm, constants = constants, designs = designs, type = model$c_name,
