@@ -121,7 +121,7 @@ design <- function(formula = NULL,factors = NULL,Rlevels = NULL,model,data=NULL,
     facs <- facs[!unlist(lapply(facs,is.null))]
     Rlevels <- facs[["R"]]
     factors <- facs[names(facs)!="R"]
-    nfacs <- nfacs[!(names(nfacs) %in% c("trials","rt"))]
+    nfacs <- nfacs[!(names(nfacs) %in% c("trials", "trial", "rt"))]
     all_preds <- unlist(lapply(lapply(formula, `[[`, 3L), all.vars))
     if (length(nfacs)>0){
       covariates <- names(nfacs)

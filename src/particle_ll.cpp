@@ -23,36 +23,20 @@ Rcpp::NumericMatrix do_transform(Rcpp::NumericMatrix pars, Rcpp::List transform)
 
 static inline Rcpp::LogicalVector ok_accumulatR(const Rcpp::LogicalVector& ok_row,
                                                 const Rcpp::DataFrame& data) {
-  Rcpp::IntegerVector trial = data["trial"];
+  Rcpp::IntegerVector trial_starts =
+    Rcpp::IntegerVector(data.attr("trial_start_rows"));
+  const int n_trials = trial_starts.size();
   const int n_rows = ok_row.size();
-  int unique_trials = 0;
-  int last_label = NA_INTEGER;
+  Rcpp::LogicalVector out(n_trials, true);
 
-  for (int i = 0; i < n_rows; ++i) {
-    int t = trial[i];
-    if (t == NA_INTEGER) {
-      continue;
-    }
-    if (i == 0 || t != last_label) {
-      ++unique_trials;
-      last_label = t;
-    }
-  }
-
-  Rcpp::LogicalVector out(unique_trials, true);
-  int current_label = NA_INTEGER;
-  int trial_idx = -1;
-  for (int i = 0; i < n_rows; ++i) {
-    int t = trial[i];
-    if (t == NA_INTEGER) {
-      continue;
-    }
-    if (i == 0 || t != current_label) {
-      current_label = t;
-      ++trial_idx;
-    }
-    if (ok_row[i] == FALSE && trial_idx >= 0 && trial_idx < out.size()) {
-      out[trial_idx] = false;
+  for (int trial = 0; trial < n_trials; ++trial) {
+    const int start = trial_starts[trial] - 1;
+    const int end = (trial + 1 < n_trials) ? trial_starts[trial + 1] - 1 : n_rows;
+    for (int row = start; row < end; ++row) {
+      if (ok_row[row] != TRUE) {
+        out[trial] = false;
+        break;
+      }
     }
   }
   return out;
@@ -504,11 +488,11 @@ NumericVector calc_ll_oo(NumericMatrix particle_matrix, DataFrame data, NumericV
   // Ready for looping
   if (type == "AccumulatR") {
     Rcpp::List likelihood_ctx(likelihood_context);
-    SEXP native_ctx = likelihood_ctx["native_ctx"];
+    SEXP native_ctx = likelihood_ctx["native"];
     AccumulatRBridgeRecipe bridge_recipe =
       make_accumulatr_bridge_recipe(Rcpp::List(likelihood_ctx["bridge"]), keep_names);
-
-    IntegerVector expand = data.attr("expand");
+    Rcpp::IntegerVector expand = data.attr("expand");
+    Rcpp::NumericVector trial_loglik(Rf_length(data.attr("trial_start_rows")));
 
     for (int i = 0; i < n_particles; ++i) {
       if (i > 0) {
@@ -527,12 +511,17 @@ NumericVector calc_ll_oo(NumericMatrix particle_matrix, DataFrame data, NumericV
       }
       is_ok = c_do_bound_pt(param_table_template, bound_specs);
       is_ok = ok_accumulatR(is_ok, data);
-      lls[i] = accumulatr::cpp_loglik(native_ctx,
-                                      runtime_pars,
-                                      data,
-                                      is_ok,
-                                      expand,
-                                      min_ll);
+      accumulatr::loglik_trials(native_ctx,
+                                runtime_pars,
+                                data,
+                                is_ok,
+                                min_ll,
+                                REAL(trial_loglik));
+      double total = 0.0;
+      for (int j = 0; j < expand.size(); ++j) {
+        total += trial_loglik[expand[j] - 1];
+      }
+      lls[i] = total;
     }
   } else if(type == "DDM"){
     IntegerVector expand = data.attr("expand");

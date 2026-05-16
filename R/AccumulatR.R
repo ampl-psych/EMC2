@@ -226,7 +226,7 @@ AccumulatR_bridge_spec <- function(model_spec) {
   target_info <- accumulatr_internal_profiles(model_spec, internal_names)
   hidden_internal <- accumulatr_shared_trigger_member_q_names(model_spec)
 
-  public_order <- AccumulatR::sampled_pars(model_spec)
+  public_order <- AccumulatR::par_names(model_spec)
   if (length(hidden_internal) > 0L) {
     public_order <- public_order[vapply(public_order, function(nm) {
       targets <- names(internal_to_public)[unname(internal_to_public) %in% nm]
@@ -453,6 +453,19 @@ accumulatr_sim_runtime_params <- function(model_spec, trial_df, public_pars, bri
   )
 }
 
+accumulatr_trial_column <- function(data) {
+  if (!is.null(data$trials)) {
+    if (!is.null(data$subjects)) {
+      data$trial <- as.integer(interaction(data$subjects, data$trials, drop = TRUE))
+    } else {
+      data$trial <- as.integer(data$trials)
+    }
+  } else {
+    data$trial <- seq_len(nrow(data))
+  }
+  data
+}
+
 AccumulatR_model <- function(model_spec){
   bridge <- AccumulatR_bridge_spec(model_spec)
   model_list <- list(
@@ -488,7 +501,8 @@ AccumulatR_expand_data <- function(model_spec, data){
     }
   }
   if(is.null(data$rt)) data$rt <- rnorm(nrow(data))
-  datar <- prepare_data(model_spec, data)
+  data <- accumulatr_trial_column(data)
+  datar <- AccumulatR::prepare_data(model_spec, data)
   return(datar)
 }
 
@@ -502,13 +516,15 @@ AccumulatR_add_context <- function(dadm){
   if(is.null(dadm$accumulator) && !is.null(dadm$lR)){
     dadm$accumulator <- as.character(dadm$lR)
   }
+  dadm <- accumulatr_trial_column(dadm)
   dadm <- AccumulatR::prepare_data(model_spec, dadm)
   if(!is.null(expand)) attr(dadm, "expand") <- expand
-  ctx <- make_context(model_spec)
   bridge <- model_list$accumulatr_bridge
-  ctx$native_ctx <- ctx$cpp$native
-  ctx$bridge <- accumulatr_build_runtime_recipe(model_spec, dadm, bridge)
-  attr(dadm, "AccumulatR_context") <- ctx
+  ctx <- AccumulatR::make_context(model_spec)
+  attr(dadm, "AccumulatR_context") <- list(
+    native = ctx$cpp$native,
+    bridge = accumulatr_build_runtime_recipe(model_spec, dadm, bridge)
+  )
   return(dadm)
 }
 
