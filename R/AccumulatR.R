@@ -95,14 +95,6 @@ accumulatr_component_members <- function(component) {
   as.character(members)
 }
 
-accumulatr_component_weight_param <- function(component) {
-  weight_param <- component$weight_param %||% component$attrs$weight_param %||% NULL
-  if (is.null(weight_param) || !nzchar(weight_param)) {
-    return(NULL)
-  }
-  as.character(weight_param)
-}
-
 accumulatr_model_spec <- function(model_spec) {
   model_spec$model_spec %||% model_spec
 }
@@ -110,6 +102,11 @@ accumulatr_model_spec <- function(model_spec) {
 accumulatr_internal_lookup <- function(model_spec) {
   spec <- accumulatr_model_spec(model_spec)
   AccumulatR:::.parameter_name_lookup(spec)
+}
+
+accumulatr_mixture_weight_parameter_names <- function(model_spec) {
+  spec <- accumulatr_model_spec(model_spec)
+  get(".mixture_weight_parameter_names", envir = asNamespace("AccumulatR"))(spec)
 }
 
 accumulatr_trigger_ids <- function(model_spec) {
@@ -126,7 +123,6 @@ accumulatr_shared_trigger_sources <- function(model_spec) {
   for (trig in spec$triggers %||% list()) {
     trig_id <- trig$id %||% NA_character_
     if (is.na(trig_id) || !nzchar(trig_id)) next
-    if (!identical(trig$draw %||% "shared", "shared")) next
     for (member in as.character(trig$members %||% character(0))) {
       out[[member]] <- trig_id
     }
@@ -142,12 +138,8 @@ accumulatr_shared_trigger_member_q_names <- function(model_spec) {
 
 accumulatr_internal_runtime_family <- function(model_spec, internal_name) {
   spec <- accumulatr_model_spec(model_spec)
-  components <- spec$components %||% list()
-  for (component in components) {
-    weight_param <- accumulatr_component_weight_param(component)
-    if (!is.null(weight_param) && identical(internal_name, weight_param)) {
-      return("w")
-    }
+  if (internal_name %in% accumulatr_mixture_weight_parameter_names(spec)) {
+    return("w")
   }
 
   if (internal_name %in% accumulatr_trigger_ids(spec)) {
@@ -302,31 +294,13 @@ AccumulatR_bridge_spec <- function(model_spec) {
   )
 }
 
-accumulatr_trigger_map <- function(model_spec) {
-  trig_map <- list()
-  triggers <- model_spec$triggers %||% list()
-  for (trig in triggers) {
-    members <- trig$members %||% character(0)
-    if (!length(members)) next
-    q_val <- if (!is.null(trig$q)) as.numeric(trig$q) else NA_real_
-    draw_mode <- trig$draw %||% "shared"
-    for (member in members) {
-      trig_map[[member]] <- list(q = q_val, draw = draw_mode)
-    }
-  }
-  trig_map
-}
-
 accumulatr_runtime_columns <- function(model_spec) {
-  acc_defs <- accumulatr_model_spec(model_spec)$accumulators %||% list()
+  spec <- accumulatr_model_spec(model_spec)
+  acc_defs <- spec$accumulators %||% list()
   max_p <- max(vapply(acc_defs, function(acc) {
     length(get("dist_param_names", envir = asNamespace("AccumulatR"))(acc$dist))
   }, integer(1)), 0L)
-  comp_defs <- accumulatr_model_spec(model_spec)$components %||% list()
-  weight_params <- unique(vapply(comp_defs, function(component) {
-    accumulatr_component_weight_param(component) %||% NA_character_
-  }, character(1)))
-  weight_params <- weight_params[!is.na(weight_params)]
+  weight_params <- accumulatr_mixture_weight_parameter_names(spec)
   c("q", "t0", paste0("p", seq_len(max_p)), weight_params)
 }
 
@@ -351,7 +325,7 @@ accumulatr_build_runtime_recipe <- function(model_spec, dadm, bridge) {
   colnames(defaults) <- runtime_cols
   sources <- matrix(NA_character_, nrow = nrow(dadm), ncol = length(runtime_cols))
   colnames(sources) <- runtime_cols
-  comp_defs <- accumulatr_model_spec(model_spec)$components %||% list()
+  weight_params <- accumulatr_mixture_weight_parameter_names(model_spec)
   shared_trigger_sources <- accumulatr_shared_trigger_sources(model_spec)
 
   for (i in seq_len(nrow(dadm))) {
@@ -388,10 +362,11 @@ accumulatr_build_runtime_recipe <- function(model_spec, dadm, bridge) {
     sources[i, "t0"] <- accumulatr_internal_source_name(bridge, t0_name)
   }
 
-  for (component in comp_defs) {
-    weight_param <- accumulatr_component_weight_param(component)
-    if (is.null(weight_param) || !weight_param %in% colnames(defaults)) next
-    defaults[, weight_param] <- component$weight %||% 0
+  for (weight_param in weight_params) {
+    if (!weight_param %in% colnames(defaults)) next
+    profile <- bridge$internal_profiles[[weight_param]] %||%
+      accumulatr_param_profile(weight_param, "w")
+    defaults[, weight_param] <- accumulatr_actual_default(profile)
     sources[, weight_param] <- accumulatr_internal_source_name(bridge, weight_param)
   }
 
@@ -421,6 +396,45 @@ accumulatr_runtime_params <- function(model_spec, trial_df, public_pars, bridge 
   accumulatr_apply_runtime_recipe(public_pars, recipe)
 }
 
+accumulatr_component_weight_by_row <- function(model_spec, runtime) {
+  spec <- accumulatr_model_spec(model_spec)
+  components <- spec$components %||% list()
+  ids <- vapply(components, function(component) component$id %||% NA_character_, character(1))
+  ids <- ids[!is.na(ids) & nzchar(ids)]
+  if (length(ids) == 0L) {
+    return(list())
+  }
+
+  mode <- (spec$mixture_options %||% list())$mode %||% "fixed"
+  weights <- stats::setNames(vector("list", length(ids)), ids)
+  n <- nrow(runtime)
+
+  if (identical(mode, "sample")) {
+    reference <- (spec$mixture_options %||% list())$reference %||% ids[[length(ids)]]
+    non_reference <- setdiff(ids, reference)
+    total_non_reference <- numeric(n)
+    for (id in non_reference) {
+      col <- paste0("p.", id)
+      value <- if (col %in% colnames(runtime)) runtime[, col] else numeric(n)
+      weights[[id]] <- value
+      total_non_reference <- total_non_reference + value
+    }
+    if (reference %in% ids) {
+      weights[[reference]] <- pmax(0, 1 - total_non_reference)
+    }
+    return(weights)
+  }
+
+  fixed <- (spec$mixture_options %||% list())$weights %||% NULL
+  if (is.null(fixed)) {
+    fixed <- stats::setNames(rep(1 / length(ids), length(ids)), ids)
+  }
+  for (id in ids) {
+    weights[[id]] <- rep(as.numeric(fixed[[id]] %||% 0), n)
+  }
+  weights
+}
+
 accumulatr_sim_runtime_params <- function(model_spec, trial_df, public_pars, bridge = NULL) {
   runtime <- accumulatr_runtime_params(model_spec, trial_df, public_pars, bridge)
   if ("w" %in% colnames(runtime)) return(runtime)
@@ -428,20 +442,24 @@ accumulatr_sim_runtime_params <- function(model_spec, trial_df, public_pars, bri
   w <- rep(1, nrow(runtime))
   comp_defs <- accumulatr_model_spec(model_spec)$components %||% list()
   if (length(comp_defs) > 0L && "accumulator" %in% names(trial_df)) {
-    acc_weight <- list()
+    component_weights <- accumulatr_component_weight_by_row(model_spec, runtime)
+    acc_component <- list()
     for (component in comp_defs) {
-      weight_param <- accumulatr_component_weight_param(component)
-      weight <- component$weight %||% 1
-      if (!is.null(weight_param) && weight_param %in% colnames(runtime)) {
-        weight <- runtime[, weight_param]
-      }
       for (member in accumulatr_component_members(component)) {
-        acc_weight[[member]] <- weight
+        acc_component[[member]] <- component$id
       }
     }
     acc <- as.character(trial_df$accumulator)
     for (i in seq_along(acc)) {
-      weight <- acc_weight[[acc[[i]]]]
+      component <- if ("component" %in% names(trial_df)) {
+        as.character(trial_df$component[[i]])
+      } else {
+        NA_character_
+      }
+      if (is.na(component) || !nzchar(component)) {
+        component <- acc_component[[acc[[i]]]] %||% NA_character_
+      }
+      weight <- component_weights[[component]]
       if (!is.null(weight)) w[[i]] <- weight[[min(i, length(weight))]]
     }
   }
