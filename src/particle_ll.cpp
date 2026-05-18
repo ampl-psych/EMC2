@@ -24,17 +24,17 @@ Rcpp::NumericMatrix do_transform(Rcpp::NumericMatrix pars, Rcpp::List transform)
 static inline Rcpp::LogicalVector ok_accumulatR(const Rcpp::LogicalVector& ok_row,
                                                 const Rcpp::DataFrame& data) {
   Rcpp::IntegerVector trial_starts =
-    Rcpp::IntegerVector(data.attr("trial_start_rows"));
+    Rcpp::IntegerVector(data.attr("trials_start_rows"));
   const int n_trials = trial_starts.size();
   const int n_rows = ok_row.size();
   Rcpp::LogicalVector out(n_trials, true);
 
-  for (int trial = 0; trial < n_trials; ++trial) {
-    const int start = trial_starts[trial] - 1;
-    const int end = (trial + 1 < n_trials) ? trial_starts[trial + 1] - 1 : n_rows;
+  for (int trial_index = 0; trial_index < n_trials; ++trial_index) {
+    const int start = trial_starts[trial_index] - 1;
+    const int end = (trial_index + 1 < n_trials) ? trial_starts[trial_index + 1] - 1 : n_rows;
     for (int row = start; row < end; ++row) {
       if (ok_row[row] != TRUE) {
-        out[trial] = false;
+        out[trial_index] = false;
         break;
       }
     }
@@ -295,8 +295,8 @@ NumericVector c_expand_ordered_cut(NumericVector raw_cut, int n_lR) {
   NumericVector cut = clone(raw_cut);
   const int n_trials = cut.size() / n_lR;
 
-  for (int trial = 0; trial < n_trials; ++trial) {
-    const int base = trial * n_lR;
+  for (int trial_index = 0; trial_index < n_trials; ++trial_index) {
+    const int base = trial_index * n_lR;
     if (n_lR == 2) {
       cut[base + 1] = cut[base];
       continue;
@@ -372,10 +372,10 @@ double c_log_likelihood_multinomial_logit(NumericMatrix pars, DataFrame data,
   const int n_trials = pars.nrow() / n_lR;
   NumericVector ll_trial(n_trials);
 
-  for (int trial = 0; trial < n_trials; ++trial) {
-    const int base = trial * n_lR;
+  for (int trial_index = 0; trial_index < n_trials; ++trial_index) {
+    const int base = trial_index * n_lR;
     if (is_ok[base] != TRUE) {
-      ll_trial[trial] = min_ll;
+      ll_trial[trial_index] = min_ll;
       continue;
     }
 
@@ -398,7 +398,7 @@ double c_log_likelihood_multinomial_logit(NumericMatrix pars, DataFrame data,
       ll = std::log(chosen / denom);
       if (!R_FINITE(ll) || ll < min_ll) ll = min_ll;
     }
-    ll_trial[trial] = ll;
+    ll_trial[trial_index] = ll;
   }
 
   NumericVector ll_exp = c_expand(ll_trial, expand);
@@ -492,7 +492,7 @@ NumericVector calc_ll_oo(NumericMatrix particle_matrix, DataFrame data, NumericV
     AccumulatRBridgeRecipe bridge_recipe =
       make_accumulatr_bridge_recipe(Rcpp::List(likelihood_ctx["bridge"]), keep_names);
     Rcpp::IntegerVector expand = data.attr("expand");
-    Rcpp::NumericVector trial_loglik(Rf_length(data.attr("trial_start_rows")));
+    Rcpp::NumericVector trial_loglik(Rf_length(data.attr("trials_start_rows")));
 
     for (int i = 0; i < n_particles; ++i) {
       if (i > 0) {

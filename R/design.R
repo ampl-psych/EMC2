@@ -384,7 +384,7 @@ compress_dadm <- function(da,designs,Fcov,Ffun)
     # R, lR and rt (at given resolution) from full data set
   {
     if(is.null(da$lR)) {
-      da$lR <- da$accumulator
+      da$lR <- da$racer
     }
     accumulator <- factor(da$lR)
     nacc <- length(unique(accumulator))

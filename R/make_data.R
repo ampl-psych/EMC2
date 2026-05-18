@@ -280,8 +280,8 @@ make_data <- function(parameters,design = NULL,n_trials=NULL,data=NULL,expand=1,
     }
     if(model()$type == "AccumulatR"){
       res <- model()$rfun(data, pars)
-      data <- data[!duplicated(data$trial),]
-      dropNames <- c("accumulator")
+      data <- data[!duplicated(data$trials),]
+      dropNames <- c("racer")
       if (!return_Ffunctions && !is.null(design$Ffunctions))
         dropNames <- c(dropNames,names(design$Ffunctions))
       data <- data[,!(names(data) %in% dropNames)]
