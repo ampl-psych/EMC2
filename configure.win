@@ -1,0 +1,3 @@
+@echo off
+copy inst\include\build_info.h.win inst\include\build_info.h
+echo configure.win: inst/include/build_info.h written
