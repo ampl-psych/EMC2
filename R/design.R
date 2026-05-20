@@ -652,6 +652,20 @@ design_model <- function(data,design,model=NULL,
     }
   }
 
+  # check for NAs in covariate if trend is passed. NAs are only allowed for sequential kernels
+  if(!is.null(model_info$trend)) {
+    trend_list <- model_info$trend
+    for(i in 1:length(trend_list)) {
+      current_trend <- trend_list[[i]]
+      if(current_trend$kernel %in% c('lin_incr', 'lin_decr', 'exp_incr', 'exp_decr', 'pow_incr', 'pow_decr', 'poly2', 'poly3', 'poly4')) {
+        # check if any NAs exist in the covariate
+        for(covariate in current_trend$covariate) {
+          if(any(is.na(da[,covariate]))) stop(paste0('NA value found in covariate ', covariate, '. Cannot apply ', current_trend$kernel, ' kernel.'))
+        }
+      }
+    }
+  }
+
   if (is.null(model_info$p_types) | is.null(model_info$Ttransform))
     stop("p_types and Ttransform must be supplied")
   if (!all(unlist(lapply(design$Flist,class))=="formula"))
