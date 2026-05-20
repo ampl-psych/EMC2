@@ -60,6 +60,8 @@ Currently supported arguments:
 trials on which the Q-value should be reset to \code{q0} before the prediction error
 is computed. \code{TRUE}/\code{1} triggers a reset; \code{FALSE}/\code{0} does not.}
 }}
+
+\item{per_covariate_pars}{Optional vector of parameter names that should be estimated separately for each covariate}
 }
 \value{
 A list containing the trend specifications for each parameter
