@@ -235,8 +235,16 @@ check.emc <- function(emc, selection = c('mu', 'sigma2', 'alpha'), digits = 3,
   print(chain_n(emc))
   if(emc[[1]]$type == "single") selection <- "alpha"
   if(plot_worst){
-    mfrow <- coda_setmfrow(Nchains = length(emc), Nparms = length(selection),nplots = 1)
-    par(mfrow = mfrow)
+    ## allow user to override mfrow or mfcol
+    if(!is.null(dots$mfrow) || !is.null(dots$mfcol)){
+      par_args <- list()
+      if(!is.null(dots$mfrow)) { par_args$mfrow <- dots$mfrow; dots$mfrow <- NULL }
+      if(!is.null(dots$mfcol)) { par_args$mfcol <- dots$mfcol; dots$mfcol <- NULL }
+      do.call(par, par_args)
+    } else {
+      mfrow <- coda_setmfrow(Nchains = length(emc), Nparms = length(selection), nplots = 1)
+      par(mfrow = mfrow)
+    }
   }
   for(select in selection){
     dots$flatten <- ifelse(select == "alpha", FALSE, TRUE)
