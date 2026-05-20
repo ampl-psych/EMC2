@@ -856,7 +856,7 @@ make_dm <- function(form,da,Clist=NULL,Fcovariates=NULL, add_da = FALSE, all_cel
       out <- out_dm
     }
 
-    attr(out, "expand")    <- as.numeric(factor(cells, levels = unique(cells)))
+    attr(out, "expand")    <- as.integer(factor(cells, levels = unique(cells)))
     attr(out, "assign")    <- ass
     attr(out, "contrasts") <- contr
 

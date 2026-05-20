@@ -519,7 +519,7 @@ AccumulatR_add_context <- function(dadm){
   }
   dadm <- accumulatr_trial_column(dadm)
   dadm <- AccumulatR::prepare_data(model_spec, dadm)
-  if(!is.null(expand)) attr(dadm, "expand") <- expand
+  if(!is.null(expand)) attr(dadm, "expand") <- as.integer(expand)
   bridge <- model_list$accumulatr_bridge
   ctx <- AccumulatR::make_context(model_spec)
   attr(dadm, "AccumulatR_context") <- list(
