@@ -784,6 +784,7 @@ make_emc <- function(data,design,model=NULL,
   if(compress_passed & any(has_delta_rule)) {
     if(length(model) == 1) message('Because the model contains a delta rule, data will not be compressed.')
     else message(paste0('Models ', which(has_delta_rule), ' contain a delta rule; the corresponding data will not be compressed.'))
+    rt_resolution <- 0.001   # no need to downsample resolution when not compressing
   }
   ## SM END
 
