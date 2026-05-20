@@ -498,6 +498,7 @@ trend_help <- function(kernel = NULL, base = NULL, ...){
     return(list(kernels = kernels, bases = bases))
   }
 
+  # don't print experimental kernels
   experimental_kernels <- c('rescorlawagner')
   kernels <- kernels[!names(kernels) %in% experimental_kernels]
 
