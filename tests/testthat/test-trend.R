@@ -331,7 +331,7 @@ test_that("trend_multiple", {
 
 # covariate maps
 trend <- make_trend(par_names = "m", cov_names = list(c("covariate1", "covariate2")),
-                    kernels = "delta", ffill_na=TRUE,
+                    kernels = "delta",
                     maps=list('map1'=function(dadm, covs) {
                       d <- matrix(rnorm(nrow(dadm)*2), ncol=2)
                       colnames(d) <- covs

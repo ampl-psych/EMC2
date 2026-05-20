@@ -16,7 +16,6 @@ make_trend(
   at = "lR",
   maps = NULL,
   custom_trend = NULL,
-  ffill_na = NULL,
   kernel_args = NULL,
   per_covariate_pars = NULL
 )
@@ -45,11 +44,6 @@ corresponding to the first level of that factor, and fed forward to the other le
 \item{maps}{List of functions that create matrices with which to multiply the covariates before applying the base. See details.}
 
 \item{custom_trend}{A trend registered with \code{register_trend}}
-
-\item{ffill_na}{Determines how missing covariate values are handled.
-If \code{TRUE}, missing values are forward-filled using the last known non-\code{NA} value after
-applying the kernel. If \code{FALSE}, trials with missing covariates contribute \code{0} instead.
-The default (NULL) is interpreted as \code{TRUE} for delta-rule models and \code{FALSE} otherwise.}
 
 \item{kernel_args}{Optional named list of kernel-specific arguments, aligned with \code{par_names}.
 Can be \code{NULL} (no arguments) or a single named list applied to all parameters.
