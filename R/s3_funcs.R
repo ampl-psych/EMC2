@@ -264,8 +264,9 @@ check.emc <- function(emc, selection = c('mu', 'sigma2', 'alpha'), digits = 3,
   if(emc[[1]]$type == "single") selection <- "alpha"
   if(plot_worst){
     ## allow user to override mfrow or mfcol
-    if(!is.null(dots$mfrow) || !is.null(dots$mfcol)){
+    if(!is.null(dots$mfrow) || !is.null(dots$mfcol) || !is.null(dots$layout)){
       par_args <- list()
+      if(!is.null(dots$layout)) { par_args$mfrow <- dots$layout; dots$layout <- NULL }
       if(!is.null(dots$mfrow)) { par_args$mfrow <- dots$mfrow; dots$mfrow <- NULL }
       if(!is.null(dots$mfcol)) { par_args$mfcol <- dots$mfcol; dots$mfcol <- NULL }
       do.call(par, par_args)
