@@ -1213,7 +1213,6 @@ make_dm <- function(form,da,Clist=NULL,Fcovariates=NULL, add_da = FALSE, all_cel
       attr(out, "assign") <- ass
     }
     attr(out,"expand") <- as.integer(factor(cells,levels=unique(cells)))
-    attr(out,"assign") <- ass
     attr(out,"contrasts") <- contr
     out
   }
