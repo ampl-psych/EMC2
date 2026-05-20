@@ -221,21 +221,28 @@ run_emc <- function(emc, stage, stop_criteria,
 
     elapsed <- Sys.time() - t0
     if (verbose) {
+      # get Gelman's diagnostic
       gd <- progress$gd$gd
       gd_message <- NULL
       if(!is.null(stop_criteria$mean_gd)) gd_message <- paste0("Mean Rhat=", round(mean(gd), 3))
       if(!is.null(stop_criteria$max_gd)) gd_message <- paste0("Max Rhat=", round(max(gd), 3))
-
+      # get min effective sample size (ESS)
+      ess_message <- NULL
+      if(stage == 'sample' & !is.null(progress$curr_min_es)) {
+        ess_message <- paste0(" | min ESS=", round(progress$curr_min_es))
+      }
       # Get current iteration count for the sample stage
       current_iters <- if (stage == "sample") chain_n(emc)[1, stage] else NULL
       target_iters  <- if (stage == "sample") stop_criteria[["iter"]] else NULL
 
+      # this one is still a little buggy, should fix
       rem <- estimate_remaining_total_time(stage= stage,tries_done = progress$trys, elapsed_dt = elapsed, max_tries = max_tries,
                                            current_iters = current_iters, target_iters = target_iters, step_size = progress$step_size)
-#      rem <- estimate_remaining_total_time(stage=stage, tries_done=progress$trys, elapsed_dt=elapsed, max_tries=max_tries)
-      message(sprintf("[%s | try=%d | iters=%d%s] Duration: %s - ETA: %s-%s",
+
+      message(sprintf("[%s | try=%d | iters=%d%s%s] Duration: %s - ETA: %s-%s",
                       stage, progress$trys, progress$total_iters,
                       ifelse(!is.null(gd_message), paste0(" | ", gd_message), ""),
+                      ifelse(!is.null(ess_message), ess_message, ""),
                       format_duration(elapsed),
                       format_duration(rem$min_time),
                       format_duration(rem$max_time)))
@@ -320,8 +327,8 @@ check_progress <- function (emc, stage, iter, stop_criteria,
       curr_min_es <- min(c(ess_summary(emc, selection = select,
                                                 stage = stage, stat_only = TRUE), curr_min_es))
     }
-    if (verbose)
-      message("Smallest effective size = ", round(curr_min_es))
+    # if (verbose)
+    #   message("Smallest effective size = ", round(curr_min_es))
     es_done <- ifelse(!emc[[1]]$init, FALSE, curr_min_es >
                         min_es)
   }
@@ -357,7 +364,8 @@ check_progress <- function (emc, stage, iter, stop_criteria,
   }
   return(list(emc = gd$emc, done = done, step_size = step_size,
               trys = trys, n_blocks = gd$n_blocks, gd=gd,
-              total_iters_stage=total_iters_stage))
+              total_iters_stage=total_iters_stage,
+              curr_min_es = if (min_es > 0 && total_iters_stage != 0) curr_min_es else NULL))
 }
 
 check_gd <- function(emc, stage, max_gd, mean_gd, omit_mpsrf, trys, verbose,
